@@ -144,7 +144,7 @@ begin
   Acc := THeaderAccess.Create(FForm);
   Acc.Parent := FForm;
   try
-    AssertEquals('TyTreeHeader', Acc.StyleTypeKey);
+    AssertEquals('TyHeaderControl', Acc.StyleTypeKey);
   finally
     Acc.Free;
   end;

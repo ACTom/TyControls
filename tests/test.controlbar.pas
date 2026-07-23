@@ -172,7 +172,7 @@ begin
   CB := TControlBarAccess.Create(FForm);
   CB.Parent := FForm;
   CB.Font.PixelsPerInch := 96;
-  AssertEquals('reuses TyPanel typeKey', 'TyPanel', CB.StyleTypeKey);
+  AssertEquals('owns TyControlBar', 'TyControlBar', CB.StyleTypeKey);
 end;
 
 procedure TControlBarControlTest.TestArrangesChildrenOnOneBand;

@@ -125,23 +125,23 @@
 
 /* Window + unified title bar (flat system grey, hairline-rounded top). */
 TyForm          { background: var(--surface); }
-TyTitleBar      { background: var(--titlebar-bg); color: var(--titlebar-ink); border-radius: 6 6 0 0; }
+TyTitleBar, TyRibbonQuickAccess      { background: var(--titlebar-bg); color: var(--titlebar-ink); border-radius: 6 6 0 0; }
 TyCaptionButton { background: transparent; color: var(--caption-ink); border-radius: 4; }
 TyCaptionButton:hover  { background: alpha(var(--overlay), 0.08); color: var(--caption-ink-hover); }
 TyCaptionButton:active { background: alpha(var(--overlay), 0.14); }
 
-TyLabel         { color: var(--ink); }
+TyLabel, TyHtmlLabel, TyLinkLabel, TyShadowLabel, TyGlowLabel, TyDivider, TyCharImage         { color: var(--ink); }
 
 /* Default button: white→grey vertical gloss, hairline, 6px corners, soft shadow, tight padding. */
-TyButton, TySpeedButton, TyGlyphContainerButton, TyRibbonAppMenu                { background: linear-gradient(90deg, var(--btn-face-top), var(--btn-face-bot)); color: var(--btn-ink); border: 1px solid var(--border); border-radius: 6; padding: 4px 10px; font-weight: normal; shadow: 0 1 1 var(--btn-shadow); }
-TyButton:hover, TySpeedButton:hover, TyGlyphContainerButton:hover, TyRibbonAppMenu:hover          { background: linear-gradient(90deg, var(--btn-hover-top), var(--btn-hover-bot)); }
-TyButton:active, TySpeedButton:active, TyGlyphContainerButton:active, TyRibbonAppMenu:active         { background: linear-gradient(90deg, var(--btn-active-top), var(--btn-active-bot)); border-color: var(--btn-active-border); shadow: 0 0 0 transparent; }
-TyButton:focus, TySpeedButton:focus, TyGlyphContainerButton:focus, TyRibbonAppMenu:focus          { border-color: var(--accent); outline: 3 alpha(var(--accent), 0.35); outline-offset: 1; }
+TyButton, TySpeedButton, TyGlyphContainerButton, TyRibbonAppMenu, TyButtonGroup, TyUpDown                { background: linear-gradient(90deg, var(--btn-face-top), var(--btn-face-bot)); color: var(--btn-ink); border: 1px solid var(--border); border-radius: 6; padding: 4px 10px; font-weight: normal; shadow: 0 1 1 var(--btn-shadow); }
+TyButton:hover, TySpeedButton:hover, TyGlyphContainerButton:hover, TyRibbonAppMenu:hover, TyButtonGroup:hover, TyUpDown:hover          { background: linear-gradient(90deg, var(--btn-hover-top), var(--btn-hover-bot)); }
+TyButton:active, TySpeedButton:active, TyGlyphContainerButton:active, TyRibbonAppMenu:active, TyButtonGroup:active, TyUpDown:active         { background: linear-gradient(90deg, var(--btn-active-top), var(--btn-active-bot)); border-color: var(--btn-active-border); shadow: 0 0 0 transparent; }
+TyButton:focus, TySpeedButton:focus, TyGlyphContainerButton:focus, TyRibbonAppMenu:focus, TyButtonGroup:focus, TyUpDown:focus          { border-color: var(--accent); outline: 3 alpha(var(--accent), 0.35); outline-offset: 1; }
 TyButton:disabled, TySpeedButton:disabled, TyGlyphContainerButton:disabled,
 TyRibbonAppMenu:disabled       { background: var(--btn-disabled-bg); color: var(--btn-disabled-ink); border-color: var(--btn-disabled-border); opacity: 0.55; shadow: 0 0 0 transparent; }
 
 /* Primary (the default macOS action button): accent gloss, white ink, NOT bold. */
-TyButton.primary, TySpeedButton.primary, TyGlyphContainerButton.primary, TyRibbonAppMenu.primary        { background: linear-gradient(90deg, lighten(var(--accent), 8%), var(--accent)); color: on(var(--accent)); border: 1px solid darken(var(--accent), 8%); border-radius: 6; padding: 4px 10px; font-weight: normal; shadow: 0 1 2 var(--primary-shadow); }
+TyButton.primary, TySpeedButton.primary, TyGlyphContainerButton.primary, TyRibbonAppMenu.primary, TyButtonGroup.primary, TyUpDown.primary        { background: linear-gradient(90deg, lighten(var(--accent), 8%), var(--accent)); color: on(var(--accent)); border: 1px solid darken(var(--accent), 8%); border-radius: 6; padding: 4px 10px; font-weight: normal; shadow: 0 1 2 var(--primary-shadow); }
 TyButton.primary:hover, TySpeedButton.primary:hover, TyGlyphContainerButton.primary:hover,
 TyRibbonAppMenu.primary:hover  { background: linear-gradient(90deg, lighten(var(--accent), 12%), lighten(var(--accent), 4%)); }
 TyButton.primary:active, TySpeedButton.primary:active, TyGlyphContainerButton.primary:active,
@@ -153,7 +153,7 @@ TyGlyphContainerButton.primary:disabled, TyRibbonAppMenu.primary:disabled { back
 
 /* Danger (a destructive macOS action button): systemRed gloss, white ink, NOT bold —
    the primary material driven by --danger, so it shares primary's shadow/disabled recipe. */
-TyButton.danger, TySpeedButton.danger, TyGlyphContainerButton.danger, TyRibbonAppMenu.danger         { background: linear-gradient(90deg, lighten(var(--danger), 8%), var(--danger)); color: on(var(--danger)); border: 1px solid darken(var(--danger), 8%); border-radius: 6; padding: 4px 10px; font-weight: normal; shadow: 0 1 2 var(--primary-shadow); }
+TyButton.danger, TySpeedButton.danger, TyGlyphContainerButton.danger, TyRibbonAppMenu.danger, TyButtonGroup.danger, TyUpDown.danger         { background: linear-gradient(90deg, lighten(var(--danger), 8%), var(--danger)); color: on(var(--danger)); border: 1px solid darken(var(--danger), 8%); border-radius: 6; padding: 4px 10px; font-weight: normal; shadow: 0 1 2 var(--primary-shadow); }
 TyButton.danger:hover, TySpeedButton.danger:hover, TyGlyphContainerButton.danger:hover,
 TyRibbonAppMenu.danger:hover   { background: linear-gradient(90deg, lighten(var(--danger), 12%), lighten(var(--danger), 4%)); }
 TyButton.danger:active, TySpeedButton.danger:active, TyGlyphContainerButton.danger:active,
@@ -164,7 +164,7 @@ TyButton.danger:disabled, TySpeedButton.danger:disabled, TyGlyphContainerButton.
 TyRibbonAppMenu.danger:disabled { background: mix(var(--danger), var(--primary-disabled-mix), 55%); color: var(--primary-disabled-ink); border-color: mix(var(--danger), var(--primary-disabled-mix), 40%); opacity: 0.6; shadow: 0 0 0 transparent; }
 
 /* Ghost: transparent accent-text button, faint accent wash on interaction. */
-TyButton.ghost, TySpeedButton.ghost, TyGlyphContainerButton.ghost, TyRibbonAppMenu.ghost          { background: transparent; color: var(--accent); border: 1px solid transparent; border-radius: 6; padding: 4px 10px; font-weight: normal; shadow: 0 0 0 transparent; }
+TyButton.ghost, TySpeedButton.ghost, TyGlyphContainerButton.ghost, TyRibbonAppMenu.ghost, TyButtonGroup.ghost, TyUpDown.ghost          { background: transparent; color: var(--accent); border: 1px solid transparent; border-radius: 6; padding: 4px 10px; font-weight: normal; shadow: 0 0 0 transparent; }
 TyButton.ghost:hover, TySpeedButton.ghost:hover, TyGlyphContainerButton.ghost:hover,
 TyRibbonAppMenu.ghost:hover    { background: alpha(var(--accent), 0.10); color: darken(var(--accent), 6%); }
 TyButton.ghost:active, TySpeedButton.ghost:active, TyGlyphContainerButton.ghost:active,

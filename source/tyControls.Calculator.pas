@@ -216,7 +216,10 @@ end;
 
 function TTyCalculator.GetStyleTypeKey: string;
 begin
-  Result := 'TyPanel';
+  { Own key rather than the borrowed 'TyPanel': the keypad's display band is not a panel surface — it even reached for TTyEdit's key to draw it.
+    Added to 'TyPanel's rule block as an extra selector, so every resolved value is
+    unchanged — this opens a hook, it does not restyle anything. }
+  Result := 'TyCalculator';
 end;
 
 procedure TTyCalculator.SetController(AValue: TTyStyleController);

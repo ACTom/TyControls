@@ -103,8 +103,10 @@ end;
 
 function TTyCharImage.GetStyleTypeKey: string;
 begin
-  // Reuse the label token — no new .tycss rule; color/opacity come from TyLabel.
-  Result := 'TyLabel';
+  { Own key rather than the borrowed 'TyLabel': it draws no text at all: it composites a rasterised icon-font glyph.
+    Added to 'TyLabel's rule block as an extra selector, so every resolved value is
+    unchanged — this opens a hook, it does not restyle anything. }
+  Result := 'TyCharImage';
 end;
 
 procedure TTyCharImage.SetIconFont(AValue: TTyIconFont);

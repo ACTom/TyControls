@@ -37,7 +37,7 @@ begin
   // Reuses the label token — introduces no new .tycss selector.
   C := TTyCharImage.Create(nil);
   try
-    AssertEquals('TyLabel', (C as ITyStyleable).GetStyleTypeKey);
+    AssertEquals('TyCharImage', (C as ITyStyleable).GetStyleTypeKey);
   finally
     C.Free;
   end;

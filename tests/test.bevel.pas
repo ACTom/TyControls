@@ -179,7 +179,7 @@ begin
   try
     B := TBevelAccess.Create(F);
     B.Parent := F;
-    AssertEquals('reuses the TyPanel typeKey', 'TyPanel', B.StyleTypeKey);
+    AssertEquals('owns TyBevel', 'TyBevel', B.StyleTypeKey);
   finally
     F.Free;
   end;

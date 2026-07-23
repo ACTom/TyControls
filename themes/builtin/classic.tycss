@@ -51,7 +51,7 @@
 }
 
 TyForm          { background: var(--face); }
-TyTitleBar      { background: linear-gradient(0deg, var(--accent), var(--title-mid), var(--title-light)); color: var(--title-ink); border-radius: 0; }
+TyTitleBar, TyRibbonQuickAccess      { background: linear-gradient(0deg, var(--accent), var(--title-mid), var(--title-light)); color: var(--title-ink); border-radius: 0; }
 
 /* Caption buttons: raised grey 3D squares (the Win9x look), FLOATING with gaps — the title bar
    shows between and around them (--caption-button-margin / --caption-button-gap in :root).
@@ -59,17 +59,17 @@ TyTitleBar      { background: linear-gradient(0deg, var(--accent), var(--title-m
 TyCaptionButton        { render-style: bevel3d; background: var(--face); color: var(--ink); }
 TyCaptionButton:active { render-style: inset3d; background: var(--face); color: var(--ink); }
 
-TyLabel         { color: var(--ink); }
+TyLabel, TyHtmlLabel, TyLinkLabel, TyShadowLabel, TyGlowLabel, TyDivider, TyCharImage         { color: var(--ink); }
 
 /* Buttons: raised bevel at rest, sunken (pressed) on :active — the classic push-button feel.
    'render-style: bevel3d' alone gives the outset bevel, square corners and edge colours
    derived from the grey face; no need to spell out border-style/width/color/radius. */
-TyButton, TySpeedButton, TyGlyphContainerButton, TyRibbonAppMenu                { render-style: bevel3d; background: var(--face); color: var(--ink); font-weight: normal; padding: 6px; }
-TyButton:hover, TySpeedButton:hover, TyGlyphContainerButton:hover, TyRibbonAppMenu:hover          { render-style: bevel3d; background: var(--face-hover); color: var(--ink); }
-TyButton:active, TySpeedButton:active, TyGlyphContainerButton:active, TyRibbonAppMenu:active         { render-style: inset3d;  background: var(--face); color: var(--ink); }
+TyButton, TySpeedButton, TyGlyphContainerButton, TyRibbonAppMenu, TyButtonGroup, TyUpDown                { render-style: bevel3d; background: var(--face); color: var(--ink); font-weight: normal; padding: 6px; }
+TyButton:hover, TySpeedButton:hover, TyGlyphContainerButton:hover, TyRibbonAppMenu:hover, TyButtonGroup:hover, TyUpDown:hover          { render-style: bevel3d; background: var(--face-hover); color: var(--ink); }
+TyButton:active, TySpeedButton:active, TyGlyphContainerButton:active, TyRibbonAppMenu:active, TyButtonGroup:active, TyUpDown:active         { render-style: inset3d;  background: var(--face); color: var(--ink); }
 TyButton:disabled, TySpeedButton:disabled, TyGlyphContainerButton:disabled,
 TyRibbonAppMenu:disabled       { render-style: bevel3d; background: var(--face); color: var(--ink-disabled); }
-TyButton.primary, TySpeedButton.primary, TyGlyphContainerButton.primary, TyRibbonAppMenu.primary        { render-style: bevel3d; background: var(--face); color: var(--ink); }
+TyButton.primary, TySpeedButton.primary, TyGlyphContainerButton.primary, TyRibbonAppMenu.primary, TyButtonGroup.primary, TyUpDown.primary        { render-style: bevel3d; background: var(--face); color: var(--ink); }
 TyButton.primary:hover, TySpeedButton.primary:hover, TyGlyphContainerButton.primary:hover,
 TyRibbonAppMenu.primary:hover  { render-style: bevel3d; background: var(--face-hover); }
 TyButton.primary:active, TySpeedButton.primary:active, TyGlyphContainerButton.primary:active,
@@ -78,12 +78,12 @@ TyRibbonAppMenu.primary:active { render-style: inset3d;  background: var(--face)
    destructive variant speaks through maroon label ink instead. Each state restates the ink:
    the plain TyButton:hover/:active rules above also set 'color' and are applied AFTER
    TyButton.danger, so an unstated colour would fall back to --ink. */
-TyButton.danger, TySpeedButton.danger, TyGlyphContainerButton.danger, TyRibbonAppMenu.danger         { render-style: bevel3d; background: var(--face); color: var(--danger); }
+TyButton.danger, TySpeedButton.danger, TyGlyphContainerButton.danger, TyRibbonAppMenu.danger, TyButtonGroup.danger, TyUpDown.danger         { render-style: bevel3d; background: var(--face); color: var(--danger); }
 TyButton.danger:hover, TySpeedButton.danger:hover, TyGlyphContainerButton.danger:hover,
 TyRibbonAppMenu.danger:hover   { render-style: bevel3d; background: var(--face-hover); color: var(--danger); }
 TyButton.danger:active, TySpeedButton.danger:active, TyGlyphContainerButton.danger:active,
 TyRibbonAppMenu.danger:active  { render-style: inset3d;  background: var(--face); color: var(--danger); }
-TyButton.ghost, TySpeedButton.ghost, TyGlyphContainerButton.ghost, TyRibbonAppMenu.ghost          { render-style: bevel3d; background: var(--face); color: var(--ink); }
+TyButton.ghost, TySpeedButton.ghost, TyGlyphContainerButton.ghost, TyRibbonAppMenu.ghost, TyButtonGroup.ghost, TyUpDown.ghost          { render-style: bevel3d; background: var(--face); color: var(--ink); }
 TyButton.ghost:active, TySpeedButton.ghost:active, TyGlyphContainerButton.ghost:active,
 TyRibbonAppMenu.ghost:active   { render-style: inset3d;  background: var(--face); }
 

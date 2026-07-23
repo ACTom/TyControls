@@ -87,7 +87,10 @@ end;
 
 function TTyGlowLabel.GetStyleTypeKey: string;
 begin
-  Result := 'TyLabel';
+  { Own key rather than the borrowed 'TyLabel': the blurred glow layer is a mark a plain label never draws.
+    Added to 'TyLabel's rule block as an extra selector, so every resolved value is
+    unchanged — this opens a hook, it does not restyle anything. }
+  Result := 'TyGlowLabel';
 end;
 
 function TTyGlowLabel.ResolveFontSize(const AStyle: TTyStyleSet): Integer;

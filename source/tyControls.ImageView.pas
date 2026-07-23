@@ -311,7 +311,10 @@ end;
 
 function TTyImageView.GetStyleTypeKey: string;
 begin
-  Result := 'TyPanel';   // reuse the panel surface — no new .tycss rule
+  { Own key rather than the borrowed 'TyPanel': the letterbox matte behind a photo is not the app's panel colour.
+    Added to 'TyPanel's rule block as an extra selector, so every resolved value is
+    unchanged — this opens a hook, it does not restyle anything. }
+  Result := 'TyImageView';   // reuse the panel surface — no new .tycss rule
 end;
 
 function TTyImageView.ViewW: Integer;

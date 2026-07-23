@@ -140,7 +140,10 @@ end;
 
 function TTyButtonGroup.GetStyleTypeKey: string;
 begin
-  Result := 'TyButton';   // REUSE the button token; no new .tycss rule
+  { Own key rather than the borrowed 'TyButton': a segmented bar with asymmetric per-cell corners is not one button.
+    Added to 'TyButton's rule block as an extra selector, so every resolved value is
+    unchanged — this opens a hook, it does not restyle anything. }
+  Result := 'TyButtonGroup';   // REUSE the button token; no new .tycss rule
 end;
 
 function TTyButtonGroup.Count: Integer;

@@ -80,7 +80,10 @@ end;
 
 function TTyColorGrid.GetStyleTypeKey: string;
 begin
-  Result := 'TyPanel';   // reuse the panel surface — no new .tycss rule
+  { Own key rather than the borrowed 'TyPanel': a swatch matrix with a selection ring is not a panel surface.
+    Added to 'TyPanel's rule block as an extra selector, so every resolved value is
+    unchanged — this opens a hook, it does not restyle anything. }
+  Result := 'TyColorGrid';   // reuse the panel surface — no new .tycss rule
 end;
 
 function TTyColorGrid.ColorCount: Integer;

@@ -155,7 +155,10 @@ end;
 
 function TTyControlBar.GetStyleTypeKey: string;
 begin
-  Result := 'TyPanel';   // reuse the panel frame + tokens — NO new tycss
+  { Own key rather than the borrowed 'TyPanel': the per-band grippers are marks a panel never draws.
+    Added to 'TyPanel's rule block as an extra selector, so every resolved value is
+    unchanged — this opens a hook, it does not restyle anything. }
+  Result := 'TyControlBar';   // reuse the panel frame + tokens — NO new tycss
 end;
 
 { Effective band height in logical px: an explicit BandHeight wins; otherwise follow the

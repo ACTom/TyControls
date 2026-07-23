@@ -185,7 +185,7 @@ begin
   Acc.Parent := FForm;
   try
     // Reuses the TyLabel typeKey (no new theme token this batch).
-    AssertEquals('TyLabel', Acc.StyleTypeKey);
+    AssertEquals('TyDivider', Acc.StyleTypeKey);
   finally
     Acc.Free;
   end;
@@ -227,7 +227,7 @@ begin
   try
     // Accent border => the rule takes the border colour; no padding so it spans edge-to-edge.
     Ctl.LoadThemeCss(
-      'TyLabel { color: #CCCCCC; border-color: #3B82F6; border-width: 1px; padding: 0px; }');
+      'TyLabel, TyDivider { color: #CCCCCC; border-color: #3B82F6; border-width: 1px; padding: 0px; }');
     D := TDividerAccess.Create(F);
     D.Parent := F;
     D.Controller := Ctl;
@@ -288,7 +288,7 @@ begin
   try
     // Distinct green text colour so we can find caption glyphs against a white bg.
     Ctl.LoadThemeCss(
-      'TyLabel { color: #10B981; border-color: #D1D5DB; border-width: 1px; padding: 0px; font-size: 12px; }');
+      'TyLabel, TyDivider { color: #10B981; border-color: #D1D5DB; border-width: 1px; padding: 0px; font-size: 12px; }');
     D := TDividerAccess.Create(F);
     D.Parent := F;
     D.Controller := Ctl;

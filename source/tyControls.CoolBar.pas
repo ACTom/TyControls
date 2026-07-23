@@ -150,8 +150,10 @@ end;
 
 function TTyCoolBar.GetStyleTypeKey: string;
 begin
-  // Reuse the base's TyPanel token — NO new .tycss (hard rule).
-  Result := 'TyPanel';
+  { Own key rather than the borrowed 'TyPanel': same as its TTyControlBar ancestor — band grippers are not panel chrome.
+    Added to 'TyPanel's rule block as an extra selector, so every resolved value is
+    unchanged — this opens a hook, it does not restyle anything. }
+  Result := 'TyCoolBar';
 end;
 
 function TTyCoolBar.GripperWidthPx: Integer;

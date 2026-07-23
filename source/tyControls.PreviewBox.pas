@@ -186,7 +186,10 @@ end;
 
 function TTyPreviewBox.GetStyleTypeKey: string;
 begin
-  Result := 'TyPanel';   { reuse the panel surface -- no new .tycss rule }
+  { Own key rather than the borrowed 'TyPanel': a preview well is a different role from a generic panel.
+    Added to 'TyPanel's rule block as an extra selector, so every resolved value is
+    unchanged — this opens a hook, it does not restyle anything. }
+  Result := 'TyPreviewBox';   { reuse the panel surface -- no new .tycss rule }
 end;
 
 procedure TTyPreviewBox.SetController(AValue: TTyStyleController);

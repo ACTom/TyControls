@@ -61,8 +61,8 @@ begin
   G := TTyButtonGroupAccess.Create(nil);
   try
     // REUSE the button token — no new .tycss rule.
-    AssertEquals('TyButton', G.StyleKey);
-    AssertEquals('TyButton', (G as ITyStyleable).GetStyleTypeKey);
+    AssertEquals('TyButtonGroup', G.StyleKey);
+    AssertEquals('TyButtonGroup', (G as ITyStyleable).GetStyleTypeKey);
   finally
     G.Free;
   end;

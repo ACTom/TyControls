@@ -138,8 +138,10 @@ end;
 
 function TTySizeBox.GetStyleTypeKey: string;
 begin
-  // Reuse the panel typeKey: the grip is a small surface swatch; no new token.
-  Result := 'TyPanel';
+  { Own key rather than the borrowed 'TyPanel': the engraved size grip is a mark a panel never draws.
+    Added to 'TyPanel's rule block as an extra selector, so every resolved value is
+    unchanged — this opens a hook, it does not restyle anything. }
+  Result := 'TySizeBox';
 end;
 
 procedure TTySizeBox.SetTarget(AValue: TControl);

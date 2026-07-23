@@ -159,7 +159,7 @@ begin
   CB := TCoolBarAccess.Create(FForm);
   CB.Parent := FForm;
   CB.Font.PixelsPerInch := 96;
-  AssertEquals('reuses TyPanel typeKey', 'TyPanel', CB.StyleTypeKey);
+  AssertEquals('owns TyCoolBar', 'TyCoolBar', CB.StyleTypeKey);
 end;
 
 procedure TCoolBarControlTest.TestSetGetBandWidth;

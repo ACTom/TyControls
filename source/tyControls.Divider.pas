@@ -141,9 +141,10 @@ end;
 
 function TTyDivider.GetStyleTypeKey: string;
 begin
-  // Reuse the TyLabel typeKey: the caption is a label and the rule derives its
-  // colour from the resolved TyLabel text/border tokens (no new theme token).
-  Result := 'TyLabel';
+  { Own key rather than the borrowed 'TyLabel': this is a RULE, not text chrome — it strokes solid bands around an optional caption.
+    Added to 'TyLabel's rule block as an extra selector, so every resolved value is
+    unchanged — this opens a hook, it does not restyle anything. }
+  Result := 'TyDivider';
 end;
 
 function TTyDivider.ResolveFontSize(const AStyle: TTyStyleSet): Integer;

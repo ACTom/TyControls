@@ -65,7 +65,7 @@ TyForm { background: var(--surface); border-color: var(--accent); border-width: 
 
 /* Caption: glossy Luna blue that STAYS blue — a bright highlight at the very top, the body
    blue, then a subtle lower gloss band and a slightly darker bottom edge. Accent-derived. */
-TyTitleBar {
+TyTitleBar, TyRibbonQuickAccess {
   background: linear-gradient(90deg,
     lighten(var(--accent), 30%) 0%,
     lighten(var(--accent), 6%)  7%,
@@ -93,12 +93,12 @@ TyCaptionButton.close        { background: linear-gradient(90deg, var(--close-to
 TyCaptionButton.close:hover  { background: linear-gradient(90deg, #F9C4AF 0%, #EE6046 46%, #CB3B1E 100%); }
 TyCaptionButton.close:active { background: linear-gradient(90deg, #B23018 0%, #8C2310 100%); }
 
-TyLabel          { color: var(--on-surface); }
-TyLabel:disabled { opacity: 0.5; }
+TyLabel, TyHtmlLabel, TyLinkLabel, TyShadowLabel, TyGlowLabel, TyDivider, TyCharImage          { color: var(--on-surface); }
+TyLabel:disabled, TyHtmlLabel:disabled, TyLinkLabel:disabled, TyShadowLabel:disabled, TyGlowLabel:disabled, TyDivider:disabled, TyCharImage:disabled { opacity: 0.5; }
 
 /* Default button: silver-white rounded gradient, soft blue-grey edge; orange Luna glow on hover,
    pressed silver, blue+orange focus. */
-TyButton, TySpeedButton, TyGlyphContainerButton, TyRibbonAppMenu {
+TyButton, TySpeedButton, TyGlyphContainerButton, TyRibbonAppMenu, TyButtonGroup, TyUpDown {
   background: linear-gradient(90deg, #FDFEFF 0%, #F4F5F1 48%, #E4E6DE 100%);
   color: var(--on-surface);
   border-color: var(--btn-border);
@@ -107,13 +107,13 @@ TyButton, TySpeedButton, TyGlyphContainerButton, TyRibbonAppMenu {
   padding: 5px 12px;
   font-weight: normal;
 }
-TyButton:hover, TySpeedButton:hover, TyGlyphContainerButton:hover, TyRibbonAppMenu:hover    { background: linear-gradient(90deg, #FFF7E9 0%, #FDE7C4 100%); border-color: #E0A020; }
-TyButton:active, TySpeedButton:active, TyGlyphContainerButton:active, TyRibbonAppMenu:active   { background: linear-gradient(90deg, #DDE1DA 0%, #ECEEE8 100%); border-color: #6A84A5; }
-TyButton:focus, TySpeedButton:focus, TyGlyphContainerButton:focus, TyRibbonAppMenu:focus    { border-color: var(--accent); outline: 2px var(--focus); outline-offset: 1px; }
-TyButton:disabled, TySpeedButton:disabled, TyGlyphContainerButton:disabled, TyRibbonAppMenu:disabled { opacity: 0.5; }
+TyButton:hover, TySpeedButton:hover, TyGlyphContainerButton:hover, TyRibbonAppMenu:hover, TyButtonGroup:hover, TyUpDown:hover    { background: linear-gradient(90deg, #FFF7E9 0%, #FDE7C4 100%); border-color: #E0A020; }
+TyButton:active, TySpeedButton:active, TyGlyphContainerButton:active, TyRibbonAppMenu:active, TyButtonGroup:active, TyUpDown:active   { background: linear-gradient(90deg, #DDE1DA 0%, #ECEEE8 100%); border-color: #6A84A5; }
+TyButton:focus, TySpeedButton:focus, TyGlyphContainerButton:focus, TyRibbonAppMenu:focus, TyButtonGroup:focus, TyUpDown:focus    { border-color: var(--accent); outline: 2px var(--focus); outline-offset: 1px; }
+TyButton:disabled, TySpeedButton:disabled, TyGlyphContainerButton:disabled, TyRibbonAppMenu:disabled, TyButtonGroup:disabled, TyUpDown:disabled { opacity: 0.5; }
 
 /* Primary = the glossy blue Luna action button (pale-blue top -> accent -> darker bottom). */
-TyButton.primary, TySpeedButton.primary, TyGlyphContainerButton.primary, TyRibbonAppMenu.primary {
+TyButton.primary, TySpeedButton.primary, TyGlyphContainerButton.primary, TyRibbonAppMenu.primary, TyButtonGroup.primary, TyUpDown.primary {
   background: linear-gradient(90deg, lighten(var(--accent), 24%) 0%, var(--accent) 55%, darken(var(--accent), 12%) 100%);
   color: var(--on-accent);
   border-color: darken(var(--accent), 22%);
@@ -132,7 +132,7 @@ TyButton.primary:disabled, TySpeedButton.primary:disabled,
 TyGlyphContainerButton.primary:disabled, TyRibbonAppMenu.primary:disabled { opacity: 0.5; }
 
 /* Danger = the primary button cut from the glossy Luna close-button red instead of the blue. */
-TyButton.danger, TySpeedButton.danger, TyGlyphContainerButton.danger, TyRibbonAppMenu.danger {
+TyButton.danger, TySpeedButton.danger, TyGlyphContainerButton.danger, TyRibbonAppMenu.danger, TyButtonGroup.danger, TyUpDown.danger {
   background: linear-gradient(90deg, lighten(var(--danger), 24%) 0%, var(--danger) 55%, darken(var(--danger), 12%) 100%);
   color: var(--on-danger);
   border-color: darken(var(--danger), 22%);
@@ -151,7 +151,7 @@ TyButton.danger:disabled, TySpeedButton.danger:disabled, TyGlyphContainerButton.
 TyRibbonAppMenu.danger:disabled { opacity: 0.5; }
 
 /* Ghost: transparent with accent text; a soft blue wash on touch. */
-TyButton.ghost, TySpeedButton.ghost, TyGlyphContainerButton.ghost, TyRibbonAppMenu.ghost {
+TyButton.ghost, TySpeedButton.ghost, TyGlyphContainerButton.ghost, TyRibbonAppMenu.ghost, TyButtonGroup.ghost, TyUpDown.ghost {
   background: alpha(var(--accent), 0);
   color: var(--accent);
   border-color: alpha(var(--accent), 0);

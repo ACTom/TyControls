@@ -53,7 +53,10 @@ end;
 
 function TTyTabSet.GetStyleTypeKey: string;
 begin
-  Result := 'TyTabControl';
+  { Own key rather than the borrowed 'TyTabControl': 'TyTabControl' names no control at all, and a caption-only strip is not a page container.
+    Added to 'TyTabControl's rule block as an extra selector, so every resolved value is
+    unchanged — this opens a hook, it does not restyle anything. }
+  Result := 'TyTabSet';
 end;
 
 function TTyTabSet.HasPageBody: Boolean;

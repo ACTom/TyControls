@@ -248,7 +248,7 @@ begin
     '/* Window/form backdrop — a soft off-white behind the white controls. */' + LineEnding +
     'TyForm { background: var(--form-bg); }' + LineEnding +
     '' + LineEnding +
-    'TyButton, TySpeedButton, TyGlyphContainerButton, TyRibbonAppMenu {' + LineEnding +
+    'TyButton, TySpeedButton, TyGlyphContainerButton, TyRibbonAppMenu, TyButtonGroup, TyUpDown {' + LineEnding +
     '  background: var(--surface);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
     '  border-color: var(--border);' + LineEnding +
@@ -258,24 +258,24 @@ begin
     '  font-size: var(--font-size-base);' + LineEnding +
     '  font-weight: var(--font-weight-normal);' + LineEnding +
     '}' + LineEnding +
-    'TyButton:hover, TySpeedButton:hover, TyGlyphContainerButton:hover, TyRibbonAppMenu:hover    { background: var(--surface-hover); border-color: var(--input-border-hover); }' + LineEnding +
-    'TyButton:focus, TySpeedButton:focus, TyGlyphContainerButton:focus, TyRibbonAppMenu:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
-    'TyButton:active, TySpeedButton:active, TyGlyphContainerButton:active, TyRibbonAppMenu:active   { background: var(--surface-active); }' + LineEnding +
+    'TyButton:hover, TySpeedButton:hover, TyGlyphContainerButton:hover, TyRibbonAppMenu:hover, TyButtonGroup:hover, TyUpDown:hover    { background: var(--surface-hover); border-color: var(--input-border-hover); }' + LineEnding +
+    'TyButton:focus, TySpeedButton:focus, TyGlyphContainerButton:focus, TyRibbonAppMenu:focus, TyButtonGroup:focus, TyUpDown:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
+    'TyButton:active, TySpeedButton:active, TyGlyphContainerButton:active, TyRibbonAppMenu:active, TyButtonGroup:active, TyUpDown:active   { background: var(--surface-active); }' + LineEnding +
     'TyButton:disabled, TySpeedButton:disabled, TyGlyphContainerButton:disabled,' + LineEnding +
     'TyRibbonAppMenu:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
-    'TyButton.primary, TySpeedButton.primary, TyGlyphContainerButton.primary, TyRibbonAppMenu.primary  { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }' + LineEnding +
+    'TyButton.primary, TySpeedButton.primary, TyGlyphContainerButton.primary, TyRibbonAppMenu.primary, TyButtonGroup.primary, TyUpDown.primary  { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }' + LineEnding +
     'TyButton.primary:hover, TySpeedButton.primary:hover, TyGlyphContainerButton.primary:hover,' + LineEnding +
     'TyRibbonAppMenu.primary:hover    { background: var(--accent-hover); }' + LineEnding +
     'TyButton.primary:active, TySpeedButton.primary:active, TyGlyphContainerButton.primary:active,' + LineEnding +
     'TyRibbonAppMenu.primary:active   { background: var(--accent-active); }' + LineEnding +
-    'TyButton.danger, TySpeedButton.danger, TyGlyphContainerButton.danger, TyRibbonAppMenu.danger   { background: var(--danger); color: var(--on-danger); border-color: var(--danger); }' + LineEnding +
+    'TyButton.danger, TySpeedButton.danger, TyGlyphContainerButton.danger, TyRibbonAppMenu.danger, TyButtonGroup.danger, TyUpDown.danger   { background: var(--danger); color: var(--on-danger); border-color: var(--danger); }' + LineEnding +
     'TyButton.danger:hover, TySpeedButton.danger:hover, TyGlyphContainerButton.danger:hover,' + LineEnding +
     'TyRibbonAppMenu.danger:hover     { background: var(--danger-hover); }' + LineEnding +
     'TyButton.danger:active, TySpeedButton.danger:active, TyGlyphContainerButton.danger:active,' + LineEnding +
     'TyRibbonAppMenu.danger:active    { background: var(--danger-active); }' + LineEnding +
     '/* Ghost (VS Code 风格): 平时透明,仅 hover/active/选中显示底色与边框。透明用 alpha(...,0)' + LineEnding +
     '   保持纯色,使现有 hover 背景 alpha 淡入有效;边框透明但保留宽度,避免 hover 尺寸跳动。 */' + LineEnding +
-    'TyButton.ghost, TySpeedButton.ghost, TyGlyphContainerButton.ghost, TyRibbonAppMenu.ghost {' + LineEnding +
+    'TyButton.ghost, TySpeedButton.ghost, TyGlyphContainerButton.ghost, TyRibbonAppMenu.ghost, TyButtonGroup.ghost, TyUpDown.ghost {' + LineEnding +
     '  background: alpha(var(--surface-hover), 0);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
     '  border-color: alpha(var(--border), 0);' + LineEnding +
@@ -296,13 +296,13 @@ begin
     'TyButton.ghost:disabled, TySpeedButton.ghost:disabled, TyGlyphContainerButton.ghost:disabled,' + LineEnding +
     'TyRibbonAppMenu.ghost:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     '' + LineEnding +
-    'TyLabel {' + LineEnding +
+    'TyLabel, TyHtmlLabel, TyLinkLabel, TyShadowLabel, TyGlowLabel, TyDivider, TyCharImage {' + LineEnding +
     '  background: alpha(#FFFFFF, 0);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
     '  font-size: var(--font-size-base);' + LineEnding +
     '  font-weight: var(--font-weight-normal);' + LineEnding +
     '}' + LineEnding +
-    'TyLabel:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
+    'TyLabel:disabled, TyHtmlLabel:disabled, TyLinkLabel:disabled, TyShadowLabel:disabled, TyGlowLabel:disabled, TyDivider:disabled, TyCharImage:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     '' + LineEnding +
     'TyEdit {' + LineEnding +
     '  background: var(--input-bg);' + LineEnding +
@@ -347,7 +347,7 @@ begin
     '   TyExPanel (a collapsible card) used to render as plain panels because they returned' + LineEnding +
     '   ''TyPanel''. Same values, three separable names. TTyScrollPanel and TTyPaintPanel are' + LineEnding +
     '   deliberately NOT here: they add no chrome of their own and keep inheriting. */' + LineEnding +
-    'TyPanel, TyScrollBox, TyExPanel {' + LineEnding +
+    'TyPanel, TyScrollBox, TyExPanel, TyChart, TyCalculator, TyBevel, TySizeBox, TyControlBar, TyCoolBar, TyColorGrid, TyShape, TyStarShape, TyArrow, TyImageView, TyImage, TyPreviewBox, TyListGroupPanel {' + LineEnding +
     '  background: var(--surface);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
     '  border-color: var(--border);' + LineEnding +
@@ -389,7 +389,7 @@ begin
     'TyScrollBar:focus  { outline: 2px var(--focus-ring); }' + LineEnding +
     'TyScrollBar:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     '' + LineEnding +
-    'TyTitleBar {' + LineEnding +
+    'TyTitleBar, TyRibbonQuickAccess {' + LineEnding +
     '  background: var(--titlebar-bg);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
     '  font-size: var(--font-size-title);' + LineEnding +
@@ -415,7 +415,7 @@ begin
     '   two — they really are lists of strings). Its remaining parts — TyValueListEditorKey,' + LineEnding +
     '   -Value, -Expander, -Divider — are deliberately left undefined; see the note at the end' + LineEnding +
     '   of this file. */' + LineEnding +
-    'TyListBox, TyValueListEditor {' + LineEnding +
+    'TyListBox, TyValueListEditor, TyRibbonGallery {' + LineEnding +
     '  background: var(--input-bg);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
     '  border-color: var(--border);' + LineEnding +
@@ -423,9 +423,9 @@ begin
     '  border-radius: var(--radius);' + LineEnding +
     '  padding: var(--pad-tight);' + LineEnding +
     '}' + LineEnding +
-    'TyListBox:hover, TyValueListEditor:hover   { border-color: var(--input-border-hover); }' + LineEnding +
-    'TyListBox:focus, TyValueListEditor:focus   { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
-    'TyListBox:disabled, TyValueListEditor:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
+    'TyListBox:hover, TyValueListEditor:hover, TyRibbonGallery:hover   { border-color: var(--input-border-hover); }' + LineEnding +
+    'TyListBox:focus, TyValueListEditor:focus, TyRibbonGallery:focus   { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
+    'TyListBox:disabled, TyValueListEditor:disabled, TyRibbonGallery:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     '' + LineEnding +
     'TyListItem, TyValueListEditorRow {' + LineEnding +
     '  background: alpha(#000000, 0);' + LineEnding +
@@ -497,7 +497,7 @@ begin
     '}' + LineEnding +
     '' + LineEnding +
     '/* Ribbon (Phase-3): the command band surface + the labelled group box. */' + LineEnding +
-    'TyRibbon {' + LineEnding +
+    'TyRibbon, TyRibbonBackstage {' + LineEnding +
     '  background: var(--surface);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
     '  border-color: var(--border);' + LineEnding +
@@ -559,16 +559,16 @@ begin
     '' + LineEnding +
     '/* ── v1.2 controls ─────────────────────────────────────────────────────── */' + LineEnding +
     '' + LineEnding +
-    'TyTabControl {' + LineEnding +
+    'TyTabControl, TyTabSet {' + LineEnding +
     '  background: var(--surface);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
     '  border-color: var(--border);' + LineEnding +
     '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
     '}' + LineEnding +
-    'TyTabControl:hover  { border-color: var(--input-border-hover); }' + LineEnding +
-    'TyTabControl:focus  { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
-    'TyTabControl:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
+    'TyTabControl:hover, TyTabSet:hover  { border-color: var(--input-border-hover); }' + LineEnding +
+    'TyTabControl:focus, TyTabSet:focus  { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
+    'TyTabControl:disabled, TyTabSet:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     '' + LineEnding +
     '/* TTyPageControl mirrors TyTabControl (the tab container); TyTabSheet is the page' + LineEnding +
     '   body inside the frame — opaque surface fill only (no border) so it never leaves' + LineEnding +
@@ -746,7 +746,7 @@ begin
     'TyTreeNode:hover, TyListViewItem:hover { background: var(--surface-hover); }' + LineEnding +
     'TyTreeNode:selected, TyListViewItem:selected { background: var(--accent); color: var(--on-accent); }' + LineEnding +
     'TyTreeNode:disabled, TyListViewItem:disabled { color: var(--muted); }' + LineEnding +
-    'TyTreeHeader, TyListViewHeader, TyListViewGroupHeader { background: var(--surface-chrome); border-color: var(--border); border-width: var(--input-border-width); color: var(--on-surface); font-size: var(--font-size-base); font-weight: var(--font-weight-bold); }' + LineEnding +
+    'TyTreeHeader, TyListViewHeader, TyListViewGroupHeader, TyHeaderControl { background: var(--surface-chrome); border-color: var(--border); border-width: var(--input-border-width); color: var(--on-surface); font-size: var(--font-size-base); font-weight: var(--font-weight-bold); }' + LineEnding +
     'TyTreeHeaderSection, TyListViewHeaderSection { background: none; color: var(--on-surface); border-color: var(--border); }' + LineEnding +
     'TyTreeHeaderSection:hover, TyListViewHeaderSection:hover { background: var(--surface-hover); }' + LineEnding +
     'TyTreeHeaderSection:selected, TyListViewHeaderSection:selected { background: var(--surface-active); }' + LineEnding +

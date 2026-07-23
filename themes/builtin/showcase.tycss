@@ -48,7 +48,7 @@
 /* Window/form backdrop — a slightly deeper tint of the lavender surface. */
 TyForm { background: var(--form-bg); }
 
-TyButton, TySpeedButton, TyGlyphContainerButton, TyRibbonAppMenu {
+TyButton, TySpeedButton, TyGlyphContainerButton, TyRibbonAppMenu, TyButtonGroup, TyUpDown {
   background: linear-gradient(90deg, var(--surface), darken(--surface, 6%));
   color: var(--on-surface);
   border-color: var(--border);
@@ -59,23 +59,23 @@ TyButton, TySpeedButton, TyGlyphContainerButton, TyRibbonAppMenu {
   font-weight: var(--font-weight-bold);
   shadow: 0px 2px 4px #0000002E;
 }
-TyButton:hover, TySpeedButton:hover, TyGlyphContainerButton:hover, TyRibbonAppMenu:hover    { background: linear-gradient(90deg, lighten(--surface, 3%), darken(--surface, 4%)); border-color: var(--input-border-hover); }
-TyButton:focus, TySpeedButton:focus, TyGlyphContainerButton:focus, TyRibbonAppMenu:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
-TyButton:active, TySpeedButton:active, TyGlyphContainerButton:active, TyRibbonAppMenu:active   { background: var(--surface-active); }
+TyButton:hover, TySpeedButton:hover, TyGlyphContainerButton:hover, TyRibbonAppMenu:hover, TyButtonGroup:hover, TyUpDown:hover    { background: linear-gradient(90deg, lighten(--surface, 3%), darken(--surface, 4%)); border-color: var(--input-border-hover); }
+TyButton:focus, TySpeedButton:focus, TyGlyphContainerButton:focus, TyRibbonAppMenu:focus, TyButtonGroup:focus, TyUpDown:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
+TyButton:active, TySpeedButton:active, TyGlyphContainerButton:active, TyRibbonAppMenu:active, TyButtonGroup:active, TyUpDown:active   { background: var(--surface-active); }
 TyButton:disabled, TySpeedButton:disabled, TyGlyphContainerButton:disabled,
 TyRibbonAppMenu:disabled { opacity: var(--disabled-opacity); }
-TyButton.primary, TySpeedButton.primary, TyGlyphContainerButton.primary, TyRibbonAppMenu.primary  { background: linear-gradient(90deg, lighten(--accent, 10%), var(--accent)); color: var(--on-accent); border-color: var(--accent); }
+TyButton.primary, TySpeedButton.primary, TyGlyphContainerButton.primary, TyRibbonAppMenu.primary, TyButtonGroup.primary, TyUpDown.primary  { background: linear-gradient(90deg, lighten(--accent, 10%), var(--accent)); color: var(--on-accent); border-color: var(--accent); }
 TyButton.primary:hover, TySpeedButton.primary:hover, TyGlyphContainerButton.primary:hover,
 TyRibbonAppMenu.primary:hover    { background: linear-gradient(90deg, lighten(--accent, 16%), lighten(--accent, 4%)); }
 TyButton.primary:active, TySpeedButton.primary:active, TyGlyphContainerButton.primary:active,
 TyRibbonAppMenu.primary:active   { background: var(--accent-active); }
-TyButton.danger, TySpeedButton.danger, TyGlyphContainerButton.danger, TyRibbonAppMenu.danger   { background: linear-gradient(90deg, lighten(--danger, 10%), var(--danger)); color: var(--on-danger); border-color: var(--danger); }
+TyButton.danger, TySpeedButton.danger, TyGlyphContainerButton.danger, TyRibbonAppMenu.danger, TyButtonGroup.danger, TyUpDown.danger   { background: linear-gradient(90deg, lighten(--danger, 10%), var(--danger)); color: var(--on-danger); border-color: var(--danger); }
 TyButton.danger:hover, TySpeedButton.danger:hover, TyGlyphContainerButton.danger:hover,
 TyRibbonAppMenu.danger:hover     { background: linear-gradient(90deg, lighten(--danger, 16%), lighten(--danger, 4%)); }
 TyButton.danger:active, TySpeedButton.danger:active, TyGlyphContainerButton.danger:active,
 TyRibbonAppMenu.danger:active    { background: var(--danger-active); }
 /* Ghost (VS Code 风格): 平时透明,仅 hover/active/选中显示。用纯色 surface 令牌(非渐变)使 alpha 淡入有效。 */
-TyButton.ghost, TySpeedButton.ghost, TyGlyphContainerButton.ghost, TyRibbonAppMenu.ghost {
+TyButton.ghost, TySpeedButton.ghost, TyGlyphContainerButton.ghost, TyRibbonAppMenu.ghost, TyButtonGroup.ghost, TyUpDown.ghost {
   background: alpha(var(--surface-hover), 0);
   color: var(--on-surface);
   border-color: alpha(var(--border), 0);
@@ -96,13 +96,13 @@ TyRibbonAppMenu.ghost:focus    { outline: 2px var(--focus-ring); }
 TyButton.ghost:disabled, TySpeedButton.ghost:disabled, TyGlyphContainerButton.ghost:disabled,
 TyRibbonAppMenu.ghost:disabled { opacity: var(--disabled-opacity); }
 
-TyLabel {
+TyLabel, TyHtmlLabel, TyLinkLabel, TyShadowLabel, TyGlowLabel, TyDivider, TyCharImage {
   background: alpha(#FFFFFF,0);
   color: var(--on-surface);
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-normal);
 }
-TyLabel:disabled { opacity: var(--disabled-opacity); }
+TyLabel:disabled, TyHtmlLabel:disabled, TyLinkLabel:disabled, TyShadowLabel:disabled, TyGlowLabel:disabled, TyDivider:disabled, TyCharImage:disabled { opacity: var(--disabled-opacity); }
 
 TyEdit {
   background: var(--input-bg);
@@ -143,7 +143,7 @@ TyRadioButton:active   { background: var(--accent); color: var(--on-accent); }
 TyRadioButton:focus { outline: 2px var(--focus-ring); }
 TyRadioButton:disabled { opacity: var(--disabled-opacity); }
 
-TyPanel, TyScrollBox, TyExPanel {
+TyPanel, TyScrollBox, TyExPanel, TyChart, TyCalculator, TyBevel, TySizeBox, TyControlBar, TyCoolBar, TyColorGrid, TyShape, TyStarShape, TyArrow, TyImageView, TyImage, TyPreviewBox, TyListGroupPanel {
   background: var(--surface);
   color: var(--on-surface);
   border-color: var(--border);
@@ -176,7 +176,7 @@ TyScrollBar:active { color: darken(--accent, 8%); }
 TyScrollBar:focus  { outline: 2px var(--focus-ring); }
 TyScrollBar:disabled { opacity: var(--disabled-opacity); }
 
-TyTitleBar {
+TyTitleBar, TyRibbonQuickAccess {
   background: linear-gradient(90deg, lighten(--accent, 8%), var(--accent));
   color: #FFFFFF;
   font-size: var(--font-size-title);
@@ -197,7 +197,7 @@ TyCaptionButton.max:hover    { background: var(--surface-caption-hover); }
 
 /* ── v1.1 controls ─────────────────────────────────────────────────────── */
 
-TyListBox, TyValueListEditor {
+TyListBox, TyValueListEditor, TyRibbonGallery {
   background: var(--input-bg);
   color: var(--on-surface);
   border-color: var(--border);
@@ -206,9 +206,9 @@ TyListBox, TyValueListEditor {
   padding: 2px;
   shadow: 0px 1px 3px #0000001F;
 }
-TyListBox:hover, TyValueListEditor:hover   { border-color: var(--input-border-hover); }
-TyListBox:focus, TyValueListEditor:focus   { border-color: var(--accent); outline: 2px var(--focus-ring); }
-TyListBox:disabled, TyValueListEditor:disabled { opacity: var(--disabled-opacity); }
+TyListBox:hover, TyValueListEditor:hover, TyRibbonGallery:hover   { border-color: var(--input-border-hover); }
+TyListBox:focus, TyValueListEditor:focus, TyRibbonGallery:focus   { border-color: var(--accent); outline: 2px var(--focus-ring); }
+TyListBox:disabled, TyValueListEditor:disabled, TyRibbonGallery:disabled { opacity: var(--disabled-opacity); }
 
 TyListItem, TyValueListEditorRow {
   background: alpha(#FFFFFF, 0);
@@ -265,7 +265,7 @@ TyHint {
 }
 
 /* Ribbon (Phase-3): the command band surface + the labelled group box. */
-TyRibbon {
+TyRibbon, TyRibbonBackstage {
   background: var(--surface);
   color: var(--on-surface);
   border-color: var(--border);
@@ -318,7 +318,7 @@ TyGroupBox, TyToolGroupPanel {
 
 /* ── v1.2 controls ─────────────────────────────────────────────────────── */
 
-TyTabControl {
+TyTabControl, TyTabSet {
   background: var(--surface);
   color: var(--on-surface);
   border-color: var(--border);
@@ -326,9 +326,9 @@ TyTabControl {
   border-radius: var(--radius);
   shadow: 0px 1px 3px #0000001F;
 }
-TyTabControl:hover  { border-color: var(--input-border-hover); }
-TyTabControl:focus  { border-color: var(--accent); outline: 2px var(--focus-ring); }
-TyTabControl:disabled { opacity: var(--disabled-opacity); }
+TyTabControl:hover, TyTabSet:hover  { border-color: var(--input-border-hover); }
+TyTabControl:focus, TyTabSet:focus  { border-color: var(--accent); outline: 2px var(--focus-ring); }
+TyTabControl:disabled, TyTabSet:disabled { opacity: var(--disabled-opacity); }
 
 /* TTyPageControl mirrors TyTabControl (incl. the container shadow); TyTabSheet is
    the opaque page body inside the frame. */
@@ -501,7 +501,7 @@ TyTreeNode, TyListViewItem { background: none; color: var(--on-surface); }
 TyTreeNode:hover, TyListViewItem:hover { background: var(--surface-hover); }
 TyTreeNode:selected, TyListViewItem:selected { background: var(--accent); color: var(--on-accent); }
 TyTreeNode:disabled, TyListViewItem:disabled { color: var(--muted); }
-TyTreeHeader, TyListViewHeader, TyListViewGroupHeader { background: var(--surface-chrome); border-color: var(--border); border-width: var(--input-border-width); color: var(--on-surface); font-size: var(--font-size-base); font-weight: var(--font-weight-bold); }
+TyTreeHeader, TyListViewHeader, TyListViewGroupHeader, TyHeaderControl { background: var(--surface-chrome); border-color: var(--border); border-width: var(--input-border-width); color: var(--on-surface); font-size: var(--font-size-base); font-weight: var(--font-weight-bold); }
 TyTreeHeaderSection, TyListViewHeaderSection { background: none; color: var(--on-surface); border-color: var(--border); }
 TyTreeHeaderSection:hover, TyListViewHeaderSection:hover { background: var(--surface-hover); }
 TyTreeHeaderSection:selected, TyListViewHeaderSection:selected { background: var(--surface-active); }

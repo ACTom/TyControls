@@ -855,7 +855,10 @@ end;
 
 function TTyChart.GetStyleTypeKey: string;
 begin
-  Result := 'TyPanel';
+  { Own key rather than the borrowed 'TyPanel': a chart is not a panel: it draws a title, axes, gridlines, a legend and series over the surface, none of which a panel has any concept of.
+    Added to 'TyPanel's rule block as an extra selector, so every resolved value is
+    unchanged — this opens a hook, it does not restyle anything. }
+  Result := 'TyChart';
 end;
 
 procedure TTyChart.SetChartType(AValue: TTyChartType);

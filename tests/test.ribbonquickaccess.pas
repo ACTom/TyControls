@@ -50,7 +50,7 @@ begin
   try
     // The QAT reads as the TITLE-BAR surface (it sits on the caption bar), so its child
     // buttons resolve the title-bar colour and blend instead of showing a white box.
-    AssertEquals('typeKey', 'TyTitleBar', Qat.TypeKey);
+    AssertEquals('typeKey', 'TyRibbonQuickAccess', Qat.TypeKey);
   finally
     Qat.Free;
   end;

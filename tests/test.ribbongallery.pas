@@ -162,7 +162,7 @@ begin
   // REUSE the TyListBox surface token — no new .tycss selector.
   G := TTyRibbonGallery.Create(nil);
   try
-    AssertEquals('gallery reuses TyListBox', 'TyListBox',
+    AssertEquals('gallery owns TyRibbonGallery', 'TyRibbonGallery',
       (G as ITyStyleable).GetStyleTypeKey);
   finally
     G.Free;

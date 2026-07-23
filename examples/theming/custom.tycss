@@ -7,7 +7,7 @@
   --radius:     8px;
 }
 
-TyButton, TyGlyphContainerButton, TyRibbonAppMenu, TySpeedButton {
+TyButton, TyGlyphContainerButton, TyRibbonAppMenu, TySpeedButton, TyButtonGroup, TyUpDown {
   background: var(--surface);
   color: var(--on-surface);
   border-color: var(--border);
@@ -17,21 +17,21 @@ TyButton, TyGlyphContainerButton, TyRibbonAppMenu, TySpeedButton {
   font-size: 10px;
   font-weight: 400;
 }
-TyButton:hover, TyGlyphContainerButton:hover, TyRibbonAppMenu:hover, TySpeedButton:hover    { background: darken(--surface, 4%); }
-TyButton:focus, TyGlyphContainerButton:focus, TyRibbonAppMenu:focus, TySpeedButton:focus    { border-color: var(--accent); }
-TyButton:active, TyGlyphContainerButton:active, TyRibbonAppMenu:active, TySpeedButton:active   { background: darken(--surface, 10%); }
-TyButton:disabled, TyGlyphContainerButton:disabled, TyRibbonAppMenu:disabled, TySpeedButton:disabled { opacity: 0.4; }
-TyButton.primary, TyGlyphContainerButton.primary, TyRibbonAppMenu.primary, TySpeedButton.primary  { background: var(--accent); color: #FFFFFF; border-color: var(--accent); }
-TyButton.primary:hover, TyGlyphContainerButton.primary:hover, TyRibbonAppMenu.primary:hover, TySpeedButton.primary:hover  { background: lighten(--accent, 8%); }
-TyButton.primary:active, TyGlyphContainerButton.primary:active, TyRibbonAppMenu.primary:active, TySpeedButton.primary:active { background: darken(--accent, 8%); }
+TyButton:hover, TyGlyphContainerButton:hover, TyRibbonAppMenu:hover, TySpeedButton:hover, TyButtonGroup:hover, TyUpDown:hover    { background: darken(--surface, 4%); }
+TyButton:focus, TyGlyphContainerButton:focus, TyRibbonAppMenu:focus, TySpeedButton:focus, TyButtonGroup:focus, TyUpDown:focus    { border-color: var(--accent); }
+TyButton:active, TyGlyphContainerButton:active, TyRibbonAppMenu:active, TySpeedButton:active, TyButtonGroup:active, TyUpDown:active   { background: darken(--surface, 10%); }
+TyButton:disabled, TyGlyphContainerButton:disabled, TyRibbonAppMenu:disabled, TySpeedButton:disabled, TyButtonGroup:disabled, TyUpDown:disabled { opacity: 0.4; }
+TyButton.primary, TyGlyphContainerButton.primary, TyRibbonAppMenu.primary, TySpeedButton.primary, TyButtonGroup.primary, TyUpDown.primary  { background: var(--accent); color: #FFFFFF; border-color: var(--accent); }
+TyButton.primary:hover, TyGlyphContainerButton.primary:hover, TyRibbonAppMenu.primary:hover, TySpeedButton.primary:hover, TyButtonGroup.primary:hover, TyUpDown.primary:hover  { background: lighten(--accent, 8%); }
+TyButton.primary:active, TyGlyphContainerButton.primary:active, TyRibbonAppMenu.primary:active, TySpeedButton.primary:active, TyButtonGroup.primary:active, TyUpDown.primary:active { background: darken(--accent, 8%); }
 
-TyLabel {
+TyLabel, TyHtmlLabel, TyLinkLabel, TyShadowLabel, TyGlowLabel, TyDivider, TyCharImage {
   background: alpha(#FFFFFF, 0);
   color: var(--on-surface);
   font-size: 10px;
   font-weight: 400;
 }
-TyLabel:disabled { opacity: 0.4; }
+TyLabel:disabled, TyHtmlLabel:disabled, TyLinkLabel:disabled, TyShadowLabel:disabled, TyGlowLabel:disabled, TyDivider:disabled, TyCharImage:disabled { opacity: 0.4; }
 
 TyEdit {
   background: var(--surface);
@@ -57,7 +57,7 @@ TyCheckBox:hover   { border-color: var(--accent); }
 TyCheckBox:active  { background: var(--accent); }
 TyCheckBox:disabled { opacity: 0.4; }
 
-TyPanel, TyExPanel, TyScrollBox {
+TyPanel, TyExPanel, TyScrollBox, TyChart, TyCalculator, TyBevel, TySizeBox, TyControlBar, TyCoolBar, TyColorGrid, TyShape, TyStarShape, TyArrow, TyImageView, TyImage, TyPreviewBox, TyListGroupPanel {
   background: var(--surface);
   color: var(--on-surface);
   border-color: var(--border);

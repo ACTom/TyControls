@@ -43,7 +43,7 @@ begin
   I := TTyImage.Create(nil);
   try
     // Reuses the panel surface token — no new .tycss rule.
-    AssertEquals('TyPanel', (I as ITyStyleable).GetStyleTypeKey);
+    AssertEquals('TyImage', (I as ITyStyleable).GetStyleTypeKey);
   finally
     I.Free;
   end;

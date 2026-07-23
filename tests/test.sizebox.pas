@@ -191,7 +191,7 @@ begin
   try
     Acc := TSizeBoxAccess.Create(F);
     Acc.Parent := F;
-    AssertEquals('reuses the TyPanel typeKey', 'TyPanel', Acc.StyleTypeKey);
+    AssertEquals('owns TySizeBox', 'TySizeBox', Acc.StyleTypeKey);
   finally
     F.Free;
   end;
@@ -396,7 +396,7 @@ begin
   try
     // A blue border, no background fill, so the white pre-fill shows through and the
     // derived blue highlight dots stand out.
-    Ctl.LoadThemeCss('TyPanel { background: none; border-width: 0px; border-color: #2060E0; }');
+    Ctl.LoadThemeCss('TyPanel, TySizeBox { background: none; border-width: 0px; border-color: #2060E0; }');
     seed := $FF2060E0;                 // #2060E0 as $AARRGGBB
     expectHi := TyLighten(seed, 55);
 

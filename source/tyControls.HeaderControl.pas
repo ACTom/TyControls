@@ -252,7 +252,10 @@ end;
 
 function TTyHeaderControl.GetStyleTypeKey: string;
 begin
-  Result := 'TyTreeHeader';   // REUSE — the strip bg/border comes from this token
+  { Own key rather than the borrowed 'TyTreeHeader': a standalone header control was wearing the tree's clothes, so the same tokens meant two different things to two consumers.
+    Added to 'TyTreeHeader's rule block as an extra selector, so every resolved value is
+    unchanged — this opens a hook, it does not restyle anything. }
+  Result := 'TyHeaderControl';   // REUSE — the strip bg/border comes from this token
 end;
 
 function TTyHeaderControl.GetSectionCount: Integer;

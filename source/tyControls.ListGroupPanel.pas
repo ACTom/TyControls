@@ -316,7 +316,10 @@ end;
 
 function TTyListGroupPanel.GetStyleTypeKey: string;
 begin
-  Result := 'TyPanel';
+  { Own key rather than the borrowed 'TyPanel': it already owns its header/item keys; the box it sits in deserves the same reachability.
+    Added to 'TyPanel's rule block as an extra selector, so every resolved value is
+    unchanged — this opens a hook, it does not restyle anything. }
+  Result := 'TyListGroupPanel';
 end;
 
 { ONE source of truth for the band heights. Hit-testing / scrolling (via BuildLayout) and the

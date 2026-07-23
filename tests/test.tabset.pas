@@ -91,7 +91,7 @@ procedure TTabSetTest.TestStyleTypeKey;
 var t: TTyTabSet;
 begin
   t := TTyTabSet.Create(nil);
-  try AssertEquals('TyTabControl', t.StyleTypeKeyForTest); finally t.Free; end;
+  try AssertEquals('TyTabSet', t.StyleTypeKeyForTest); finally t.Free; end;
 end;
 
 procedure TTabSetTest.TestRemoveBeforeSelected;
@@ -200,7 +200,7 @@ const
     StrokeBorder is antialiased and a hairline lands as a ~50% blend no tolerance can
     tell from its backdrop — 3px guarantees an opaque core pixel to find. }
   BodyCss =
-    'TyTabControl { background: #00FF00; border: 3px solid #FF0000; border-radius: 0px; }' +
+    'TyTabControl, TyTabSet { background: #00FF00; border: 3px solid #FF0000; border-radius: 0px; }' +
     'TyPageControl { background: #00FF00; border: 3px solid #FF0000; border-radius: 0px; }' +
     'TyTab { background: #DDDDDD; color: #000000; font-size: 12px; padding: 0px 8px; }';
   STRIP_W  = 200;

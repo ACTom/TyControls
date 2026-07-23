@@ -298,7 +298,10 @@ end;
 
 function TTyRibbonBackstage.GetStyleTypeKey: string;
 begin
-  Result := 'TyRibbon';   // content surface; the sidebar resolves the accent separately
+  { Own key rather than the borrowed 'TyRibbon': a full-window overlay with an accent sidebar and command rows is not the ribbon strip.
+    Added to 'TyRibbon's rule block as an extra selector, so every resolved value is
+    unchanged — this opens a hook, it does not restyle anything. }
+  Result := 'TyRibbonBackstage';   // content surface; the sidebar resolves the accent separately
 end;
 
 procedure TTyRibbonBackstage.SetCommands(AValue: TStrings);

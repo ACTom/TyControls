@@ -146,7 +146,7 @@ begin
   P := TPanelAccess.Create(FForm);
   P.Parent := FForm;
   P.Font.PixelsPerInch := 96;
-  AssertEquals('reuses the TyPanel typeKey', 'TyPanel', P.StyleTypeKey);
+  AssertEquals('owns TyListGroupPanel', 'TyListGroupPanel', P.StyleTypeKey);
 end;
 
 procedure TTyListGroupMathTest.TestSomeExpandedContributeItems;

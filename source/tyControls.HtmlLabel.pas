@@ -369,7 +369,10 @@ end;
 
 function TTyHtmlLabel.GetStyleTypeKey: string;
 begin
-  Result := 'TyLabel';
+  { Own key rather than the borrowed 'TyLabel': it paints per-run fragments plus link underlines — marks a plain label has no concept of.
+    Added to 'TyLabel's rule block as an extra selector, so every resolved value is
+    unchanged — this opens a hook, it does not restyle anything. }
+  Result := 'TyHtmlLabel';
 end;
 
 procedure TTyHtmlLabel.SetHtml(const AValue: string);

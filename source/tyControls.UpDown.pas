@@ -142,7 +142,10 @@ end;
 
 function TTyUpDown.GetStyleTypeKey: string;
 begin
-  Result := 'TyButton';
+  { Own key rather than the borrowed 'TyButton': two arrow halves split by a hairline divider is not one button face.
+    Added to 'TyButton's rule block as an extra selector, so every resolved value is
+    unchanged — this opens a hook, it does not restyle anything. }
+  Result := 'TyUpDown';
 end;
 
 function TTyUpDown.IsVertical: Boolean;

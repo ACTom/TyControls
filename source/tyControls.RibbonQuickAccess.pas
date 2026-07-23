@@ -115,10 +115,10 @@ end;
 
 function TTyRibbonQuickAccess.GetStyleTypeKey: string;
 begin
-  // The QAT sits on the TITLE-BAR row, so it reads as the title-bar surface — this also
-  // makes its child buttons' TyResolveParentBg pick the title-bar colour, so flat/ghost
-  // QAT buttons blend with the bar instead of showing a white box.
-  Result := 'TyTitleBar';
+  { Own key rather than the borrowed 'TyTitleBar': the QAT is not the title bar; borrowing it meant the QAT inherited the window chrome's shadow, radius and border stroke.
+    Added to 'TyTitleBar's rule block as an extra selector, so every resolved value is
+    unchanged — this opens a hook, it does not restyle anything. }
+  Result := 'TyRibbonQuickAccess';
 end;
 
 procedure TTyRibbonQuickAccess.SetIndent(AValue: Integer);

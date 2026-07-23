@@ -83,7 +83,7 @@ var B: TTyRibbonBackstage;
 begin
   B := TTyRibbonBackstage.Create(nil);
   try
-    AssertEquals('typeKey', 'TyRibbon', (B as ITyStyleable).GetStyleTypeKey);
+    AssertEquals('typeKey', 'TyRibbonBackstage', (B as ITyStyleable).GetStyleTypeKey);
   finally
     B.Free;
   end;

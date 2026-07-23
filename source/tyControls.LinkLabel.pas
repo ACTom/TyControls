@@ -93,7 +93,10 @@ end;
 
 function TTyLinkLabel.GetStyleTypeKey: string;
 begin
-  Result := 'TyLabel';
+  { Own key rather than the borrowed 'TyLabel': an always-on accent underline is a mark a plain label never draws.
+    Added to 'TyLabel's rule block as an extra selector, so every resolved value is
+    unchanged — this opens a hook, it does not restyle anything. }
+  Result := 'TyLinkLabel';
 end;
 
 function TTyLinkLabel.ResolveFontSize(const AStyle: TTyStyleSet): Integer;

@@ -49,7 +49,7 @@
 TyForm { background: var(--surface); }
 
 /* Title bar: the accent caption band — the whole identity, white text in BOTH modes. */
-TyTitleBar {
+TyTitleBar, TyRibbonQuickAccess {
   background: var(--accent);
   color: on(var(--accent));
   border-radius: 0;
@@ -63,11 +63,11 @@ TyCaptionButton:hover  { background: alpha(on(var(--accent)), 0.18); color: on(v
 TyCaptionButton:active { background: alpha(on(var(--accent)), 0.30); color: on(var(--accent)); }
 
 /* Labels: theme ink on the canvas. */
-TyLabel { color: var(--ink); }
+TyLabel, TyHtmlLabel, TyLinkLabel, TyShadowLabel, TyGlowLabel, TyDivider, TyCharImage { color: var(--ink); }
 
 /* Default button: white face, thin field-strength border, tight command-bar padding.
    Hover recedes to the neutral window tone; pressed reads a touch deeper. Flat, quiet. */
-TyButton, TySpeedButton, TyGlyphContainerButton, TyRibbonAppMenu {
+TyButton, TySpeedButton, TyGlyphContainerButton, TyRibbonAppMenu, TyButtonGroup, TyUpDown {
   background: var(--field);
   color: var(--ink);
   border: 1px solid var(--line-field);
@@ -75,25 +75,25 @@ TyButton, TySpeedButton, TyGlyphContainerButton, TyRibbonAppMenu {
   font-weight: normal;
   padding: 5px 10px;
 }
-TyButton:hover, TySpeedButton:hover, TyGlyphContainerButton:hover, TyRibbonAppMenu:hover {
+TyButton:hover, TySpeedButton:hover, TyGlyphContainerButton:hover, TyRibbonAppMenu:hover, TyButtonGroup:hover, TyUpDown:hover {
   background: var(--surface);
   color: var(--ink);
   border: 1px solid var(--line);
 }
-TyButton:active, TySpeedButton:active, TyGlyphContainerButton:active, TyRibbonAppMenu:active {
+TyButton:active, TySpeedButton:active, TyGlyphContainerButton:active, TyRibbonAppMenu:active, TyButtonGroup:active, TyUpDown:active {
   background: var(--pressed);
   color: var(--ink);
   border: 1px solid var(--line-field);
 }
-TyButton:focus, TySpeedButton:focus, TyGlyphContainerButton:focus, TyRibbonAppMenu:focus  { outline: 2px var(--accent); outline-offset: 1px; }
-TyButton:disabled, TySpeedButton:disabled, TyGlyphContainerButton:disabled, TyRibbonAppMenu:disabled {
+TyButton:focus, TySpeedButton:focus, TyGlyphContainerButton:focus, TyRibbonAppMenu:focus, TyButtonGroup:focus, TyUpDown:focus  { outline: 2px var(--accent); outline-offset: 1px; }
+TyButton:disabled, TySpeedButton:disabled, TyGlyphContainerButton:disabled, TyRibbonAppMenu:disabled, TyButtonGroup:disabled, TyUpDown:disabled {
   background: var(--surface);
   color: var(--muted);
   border: 1px solid var(--line);
 }
 
 /* Primary: solid accent, white ink, Fluent's semibold weight + a hairline shadow. */
-TyButton.primary, TySpeedButton.primary, TyGlyphContainerButton.primary, TyRibbonAppMenu.primary {
+TyButton.primary, TySpeedButton.primary, TyGlyphContainerButton.primary, TyRibbonAppMenu.primary, TyButtonGroup.primary, TyUpDown.primary {
   background: var(--accent);
   color: on(var(--accent));
   border: 1px solid var(--accent);
@@ -116,7 +116,7 @@ TyGlyphContainerButton.primary:disabled, TyRibbonAppMenu.primary:disabled {
 
 /* Danger: the primary chip inked with Office's error red — same solid Fluent face,
    semibold weight and hairline shadow, but fixed, so the accent-picker can't soften it. */
-TyButton.danger, TySpeedButton.danger, TyGlyphContainerButton.danger, TyRibbonAppMenu.danger {
+TyButton.danger, TySpeedButton.danger, TyGlyphContainerButton.danger, TyRibbonAppMenu.danger, TyButtonGroup.danger, TyUpDown.danger {
   background: var(--danger);
   color: on(var(--danger));
   border: 1px solid var(--danger);
@@ -138,7 +138,7 @@ TyRibbonAppMenu.danger:disabled {
 }
 
 /* Ghost: chrome-less until touched — a command-bar affordance, faint neutral wash. */
-TyButton.ghost, TySpeedButton.ghost, TyGlyphContainerButton.ghost, TyRibbonAppMenu.ghost {
+TyButton.ghost, TySpeedButton.ghost, TyGlyphContainerButton.ghost, TyRibbonAppMenu.ghost, TyButtonGroup.ghost, TyUpDown.ghost {
   background: transparent;
   color: var(--accent);
   border: 1px solid transparent;
