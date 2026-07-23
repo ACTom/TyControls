@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-TTyBevel 是 TyControls 的**装饰性线条 / 边框控件**(TBevel 的主题化重制),继承自 `TTyGraphicControl`(叶子图形控件,无焦点 / 子控件)。它用一条**高光线**(基色朝白色混合)配一条**阴影线**(朝黑色混合)营造 3D 凹陷 / 凸起观感;`Style` 决定这两条线的位置互换。基色来自主题解析结果(复用 `TyPanel` 的 border / surface / text token),因此 bevel 会跟随当前主题——**不硬编码任何颜色**。
+TTyBevel 是 TyControls 的**装饰性线条 / 边框控件**(TBevel 的主题化重制),继承自 `TTyGraphicControl`(叶子图形控件,无焦点 / 子控件)。它用一条**高光线**(基色朝白色混合)配一条**阴影线**(朝黑色混合)营造 3D 凹陷 / 凸起观感;`Style` 决定这两条线的位置互换。基色来自本控件自己的 typeKey `TyBevel` 的 border / surface / text token,因此 bevel 会跟随当前主题——**不硬编码任何颜色**。
 
 典型用途:表单分区分隔线、分组框边、纯装饰性的凹槽 / 凸脊边框,以及不可见的占位间隔(spacer)。
 
@@ -13,9 +13,15 @@ TTyBevel 是 TyControls 的**装饰性线条 / 边框控件**(TBevel 的主题�
 | 项目 | 值 |
 |------|-----|
 | 单元 | `tyControls.Bevel` |
-| `GetStyleTypeKey` 返回值 | `'TyPanel'`(复用面板 typeKey,本批次不新增主题 token)|
+| `GetStyleTypeKey` 返回值 | `'TyBevel'`(**自有 typeKey**)|
 
-高光 / 阴影的基色按优先级从解析后的 `TyPanel` 样式取:`border-color` → 纯色 `background` → `color`(文字色)→ 中灰兜底(有真实主题时不会走到)。
+bevel 曾经返回 `'TyPanel'`,但它压根不画面板——没有填充、没有边框、没有标题,只有高光 / 阴影两条导轨——那意味着想调一条分隔线的颜色就得把全应用的面板边框一起改。现在它有自己的键:`TyBevel` 已作为附加选择器加进主题里 `TyPanel` 的规则块,取值与从前逐字节相同,**这一步只是开出钩子,不改任何像素**。
+
+高光 / 阴影的基色按优先级从解析后的 `TyBevel` 样式取:`border-color` → 纯色 `background` → `color`(文字色)→ 中灰兜底(有真实主题时不会走到)。
+
+### 子部件 typeKey
+
+**没有。** 高光线与阴影线不是各自可寻址的子部件:它们的颜色由上面那个基色在代码里混合而成(朝白 55% / 朝黑 45%,两个比例是 Pascal 字面量)。子部件键的扩展(`TyBevelHighlight` / `TyBevelShadow`)已被**刻意推迟**,这两个键当前**并不存在**,写进 `.tycss` 不会解析到任何东西。因此像"把两条导轨设成同一个颜色以得到一条扁平细线"这样的需求,今天还表达不出来。
 
 ```pascal
 uses tyControls.Bevel;
@@ -45,7 +51,7 @@ uses tyControls.Bevel;
 
 | 属性 | 类型 | 说明 |
 |------|------|------|
-| `StyleClass` | `string` | `.tycss` 类名(作用于 `TyPanel` 解析)。 |
+| `StyleClass` | `string` | `.tycss` 类名(作用于 `TyBevel` 解析)。 |
 | `StyleOverride` | `string` | 每实例 CSS 覆盖块(可用 `var(--...)`),例如把边线基色改为强调色。 |
 | `Controller` | `TTyStyleController` | 指定样式控制器(nil 时用全局默认)。 |
 | `Align` / `Anchors` | — | 布局。 |
@@ -66,7 +72,7 @@ TTyBevel 暴露 `TTyGraphicControl` 的**基线事件集**(Tier A 鼠标 / 通�
 
 | 伪类 | 触发条件 |
 |------|----------|
-| `:disabled` | `Enabled = False`(`TyPanel` 若定义 `opacity` 则整体变淡)。 |
+| `:disabled` | `Enabled = False`(`TyBevel` 若定义 `opacity` 则整体变淡)。 |
 
 （无 hover / focus / active——纯展示控件。）
 
@@ -79,7 +85,7 @@ bevel 不使用 `DrawFrame` 的背景 / 边框绘制,而是自行在 `TyPainter.
 - `tbsRaised` 时高光在上 / 左边、阴影在下 / 右边;`tbsLowered` 时互换。
 - `tbsFrame` 画外圈 + 内缩 1px 的内圈,两圈颜色互换,得到凹槽 / 凸脊错觉。
 
-因基色取自 `TyPanel` 主题规则,更换主题即更换 bevel 颜色。若要单独调色,用 `StyleOverride`(例如 `'border-color: var(--accent);'`)。
+因基色取自 `TyBevel` 主题规则,更换主题即更换 bevel 颜色。要**只**改 bevel 而不动别的容器,在主题里写 `TyBevel { border-color: ...; }` 即可;单个实例调色用 `StyleOverride`(例如 `'border-color: var(--accent);'`)。
 
 ---
 
@@ -124,4 +130,5 @@ Ridge.StyleOverride := 'border-color: var(--accent);';
 - **spacer 完全不可见:** `Shape = tbsSpacer` 时 `RenderTo` 直接返回,一个像素都不画;用作纯布局间隔。
 - **纯几何可测:** `TyBevelEdges(Shape)` 返回该形状占用的边集合(`TTyBevelEdges`),`TyBevelLighten` / `TyBevelDarken` 为纯颜色混合函数,三者均已 headless 单元测试。
 - **HiDPI:** 线宽为 1 逻辑像素,绘制时经 `Painter.Scale` 缩放;高 DPI 下线条按比例加粗。
-- **主题驱动:** 高光 / 阴影颜色全部由 `TyPanel` 主题规则推导,控件不硬编码任何颜色(库的硬性规则)。
+- **主题驱动:** 高光 / 阴影颜色全部由 `TyBevel` 主题规则推导,控件不硬编码任何**颜色令牌**(库的硬性规则)。注意两个混合比例(0.55 / 0.45)仍是代码字面量,主题目前改不了——它们等子部件键那一批。
+- **第三方主题需补选择器:** 主题层按 typeKey 全有全无地回落。只覆盖了 `TyPanel` 而没写 `TyBevel` 的旧主题,bevel 会掉回内置 light 取值(在图片主题上会读成一块不透明灰)。库内 15 套皮肤与示例主题都已补齐。

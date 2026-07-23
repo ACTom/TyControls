@@ -4,7 +4,7 @@
 
 `TTyListView` 是 TyControls 的**平铺项视图**——TreeView 的非层级兄弟。它提供报表(带列、排序、拖拽改列宽)、列表、大图标、小图标、平铺共五种视图模式,单选与多选,以及一个**虚拟模式**:控件不拥有任何行对象,数据由回调按需提供。十万个文件的目录因此不会产生十万个对象。
 
-它不继承 `TTyTreeView`,也不与它共享绘制核心 —— TreeView 的 `RenderTo` 是一个绑死节点树的非虚方法,且只会自上而下堆叠整宽行,表达不了图标/平铺模式的流式布局。两者共享的是**列模型**(`tyControls.Columns`)与**主题 token**。
+它不继承 `TTyTreeView`,也不与它共享绘制核心 —— TreeView 的 `RenderTo` 是一个绑死节点树的非虚方法,且只会自上而下堆叠整宽行,表达不了图标/平铺模式的流式布局。两者共享的只有**列模型**(`tyControls.Columns`);**主题 token 各归各的**,见下一节。
 
 ---
 
@@ -13,10 +13,23 @@
 | 项目 | 值 |
 |------|-----|
 | 单元 | `tyControls.ListView`(几何在 `tyControls.ListView.Layout`,列/表头模型在 `tyControls.Columns`) |
-| `GetStyleTypeKey` 返回值 | `'TyTreeView'` |
+| `GetStyleTypeKey` 返回值 | `'TyListView'` |
 | 基类 | `TTyCustomControl` |
 
-**本控件不引入任何新的主题 token。** 外框解析 `TyTreeView`,行解析 `TyTreeNode`,表头带解析 `TyTreeHeader`,表头分区解析 `TyTreeHeaderSection`,网格线取外框的 `border-color`。换主题时它与 TreeView 一起变。
+**本控件自成一套 typeKey,不再借用树的键。** 它画的是图标 / 平铺 / 小图标流式格、可横向滚动的报表列带、网格线、可折叠的分组带和框选橡皮筋 —— 树没有这些部件。此前它整体解析 `TyTreeView`,皮肤既没法让一个资源管理器式的文件列表与大纲树长得不一样,连**列头带**和**分组带**都分不开(两者曾解析同一个 `TyTreeHeader` 字面量)。现在的部件表:
+
+| typeKey | 画什么 |
+|---|---|
+| `TyListView` | 外框:背景、边框、圆角、内边距、基准字号 |
+| `TyListViewItem` | 一行 / 一个流式格,按 `:hover` / `:selected` / `:disabled` 取状态 |
+| `TyListViewHeader` | 报表模式的列头**带**(整条) |
+| `TyListViewHeaderSection` | 列头带里的**单个**列头格,含 `:hover` / `:selected` |
+| `TyListViewGroupHeader` | 可折叠的分组带(与列头带彻底分开) |
+| `TyListViewCheckBox` | 行首复选框,勾选态取 `:active` |
+| `TyListViewLine` | `GridLines` 的行/列格线 |
+| `TyListViewMarquee` | 空白处拖拽的框选橡皮筋 |
+
+> `TyListViewLine` 与 `TyListViewMarquee` 是**可选钩子**:`themes/light.tycss` 有意不定义它们,绘制侧各有一条后备链 —— 格线回落到外框的 `border-color`,橡皮筋回落到 `TyListViewItem:selected` 的背景、再回落到外框边框色。皮肤想改就写一条 `background:`,不写则维持原样。橡皮筋的**色相**来自主题,只有半透明度是固定常数。
 
 ```pascal
 uses tyControls.ListView, tyControls.ListView.Layout, tyControls.Columns;
@@ -153,7 +166,7 @@ LV.Sort;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `Checkboxes` | `Boolean` | `False` | 每行左侧画一个复选框(复用 `TyTreeCheckBox` 主题 token) |
+| `Checkboxes` | `Boolean` | `False` | 每行左侧画一个复选框(自己的 `TyListViewCheckBox` token,与树的复选框可分开配色) |
 | `ReadOnly` | `Boolean` | `True` | **默认禁止改名**。这与 LCL `TListView.ReadOnly = False` 相反,是有意的:文件对话框的文件面板不该因为误按 F2 就进入改名。设 `False` 才能 F2 重命名 |
 
 | 成员 | 说明 |
@@ -229,7 +242,7 @@ protected
     const AStyle: TTyStyleSet; AStates: TTyStateSet); virtual;
 ```
 
-后代重写它即可接管单项的绘制。`ACell` 是客户区坐标,`AStyle` 是已按 `AStates` 解析好的 `TyTreeNode` 样式。这是 `TTyTreeView` 一直没有的 per-item 接缝(它的 `RenderTo` 非虚且绑死节点)。
+后代重写它即可接管单项的绘制。`ACell` 是客户区坐标,`AStyle` 是已按 `AStates` 解析好的 `TyListViewItem` 样式。这是 `TTyTreeView` 一直没有的 per-item 接缝(它的 `RenderTo` 非虚且绑死节点)。
 
 ---
 

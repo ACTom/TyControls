@@ -12,9 +12,20 @@ TTyGauge 是 TyControls 的**数值仪表控件**,继承自 `TTyGraphicControl`(
 |------|-----|
 | 单元 | `tyControls.Gauge` |
 | `GetStyleTypeKey` 返回值 | `'TyGauge'`(轨道 / 文字)|
-| 值填充 typeKey | `'TyGaugeFill'`(单独解析,承载填充色,可渐变)|
 
-轨道与文字来自 `TyGauge` 规则,值填充来自 `TyGaugeFill` 规则——与 `TyProgressBar` / `TyProgressFill` 同一套路,主题可分别定制。
+### 子部件 typeKey
+
+| typeKey | 绘制什么 | 读取的样式属性 |
+|---------|----------|----------------|
+| `TyGauge` | 线性样式的轨道背景 + 边框(`DrawFrame`);弧 / 环样式的整段 track;中央数值文字 | `background` / `border-color` / `border-width` / `border-radius` / `color`(文字) |
+| `TyGaugeFill` | 按比例的值填充(线性填充块 / 值弧) | `background`(可为渐变)/ `border-radius` |
+
+与其它子部件键不同,`TyGaugeFill` 是**写死的字面量**而不是由 `GetStyleTypeKey + 'Fill'` 拼出的——TTyGauge 是这两个键的**定义者**。
+
+**TTyGauge 保留 `TyGauge` / `TyGaugeFill`,不是「复用」。** 3.0 之前有十三个互不相干的控件(指针表、电平表、旋钮、齿轮旋钮、时钟、进度环、两种 spinner、齿轮 spinner、sparkline、评分、两个取色器)也硬返回 `'TyGauge'`、并且全都解析同一个 `'TyGaugeFill'`,结果是**一个星级评分、一根时钟秒针和一个进度环在构造上就必须同色**。它们现在各自拥有自己的盒键与子部件键,详见各自文档;`TyGauge` / `TyGaugeFill` 从此只属于本控件。
+
+> 主题作者注意:base 层按 typeKey **全有或全无**地回落。旧皮肤里只写了 `TyGauge` / `TyGaugeFill` 的那一段,现在**只影响 TTyGauge**;那十三个控件的键需要在皮肤里各自补上,否则它们回落到内置 light 值(在图片主题上会显示成一块不透明的灰底)。完整键名清单见本次发版的 CHANGELOG。
+> `TyGaugeFill` 以**空状态集**解析,`TyGaugeFill:disabled` 之类的选择器不会生效;伪类只对盒键 `TyGauge` 有效。
 
 ```pascal
 uses tyControls.Gauge;
@@ -65,7 +76,7 @@ TTyGauge 暴露 `TTyGraphicControl` 的**基线事件集**(Tier A 鼠标 / 通�
 
 | 伪类 | 触发条件 |
 |------|----------|
-| `:disabled` | `Enabled = False`(整体 `opacity` 降低)。 |
+| `:disabled` | `Enabled = False`(整体 `opacity` 降低;**仅线性样式**,见下方渲染细节)。 |
 
 （无 hover/focus/active——纯展示控件。）
 
@@ -87,7 +98,7 @@ TyGaugeFill {
 }
 ```
 
-**渲染细节:** 线性样式经 `DrawFrame` 画轨道背景+边框,再在内缩后的轨道上按比例填充(左锚 / 底锚),四角圆角来自 `TyGaugeFill.border-radius`。弧/环样式用 `Painter.Bitmap.Canvas2D` 以 `Thickness` 笔宽、圆头端帽先画整段 track 弧(`TyGauge.background.color`),再画 `Value` 比例的 fill 弧(`TyGaugeFill.background.color`);`ShowValue` 时在中央绘制数值。**弧形填充为纯色**——若主题给 `TyGaugeFill` 指定了渐变,弧形取其基色,线性样式则完整呈现渐变。green 主题给轨道用半透明色(它无 `--surface-sunk` 且是照片背景)。
+**渲染细节:** 线性样式经 `DrawFrame` 画轨道背景+边框,再在内缩后的轨道上按比例填充(左锚 / 底锚),四角圆角来自 `TyGaugeFill.border-radius`。弧/环样式用 `Painter.Bitmap.Canvas2D` 以 `Thickness` 笔宽、圆头端帽先画整段 track 弧(`TyGauge.background.color`),再画 `Value` 比例的 fill 弧(`TyGaugeFill.background.color`);`ShowValue` 时在中央绘制数值。注意 `opacity` 是在 `DrawFrame` 里落地的,因此上表的 `:disabled` 只在**线性样式**上生效,`gsArc` / `gsRing` 不走 `DrawFrame`。**弧形填充为纯色**——若主题给 `TyGaugeFill` 指定了渐变,弧形取其基色,线性样式则完整呈现渐变。green 主题给轨道用半透明色(它无 `--surface-sunk` 且是照片背景)。
 
 ---
 
@@ -126,3 +137,4 @@ R.Value := 45;
 - **厚度 HiDPI:** `Thickness` 是逻辑像素,绘制时经 `Painter.Scale` 缩放。
 - **纯几何可测:** `TyGaugeFraction` / `TyGaugeSweepEnd` / `TyGaugeLinearFill` 为纯函数,已单元测试;比例在 `Max<=Min` 时安全返回 0。
 - **主题驱动:** 轨道 / 填充 / 文字全部取自 `TyGauge` / `TyGaugeFill` 主题规则,控件不硬编码任何颜色。
+- **改 `TyGauge` 只会改到本控件:** 3.0 起 `TyGauge` / `TyGaugeFill` 不再被别的控件借用。想改指针表、电平表、时钟、评分、sparkline、取色器等的外观,请改它们**各自**的键(`TyMeter*` / `TyLevelMeter*` / `TyAnalogClock*` / `TyRating*` / `TySparkline*` / `TyHSColorPicker` / `TyLColorPicker` …)。

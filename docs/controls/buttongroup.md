@@ -16,11 +16,11 @@
 | 项目 | 值 |
 |------|-----|
 | 单元 | `tyControls.ButtonGroup` |
-| `GetStyleTypeKey` 返回值 | `'TyButton'` |
+| `GetStyleTypeKey` 返回值 | `'TyButtonGroup'`（**自有键**） |
 | 基类 | `TTyCustomControl`（`tyControls.Base`） |
 | 默认尺寸 | 240 × 30（逻辑像素，`Create` 中设置） |
 
-> **复用 `TyButton` 令牌：** `GetStyleTypeKey` 刻意返回 `'TyButton'`，**不新增** `.tycss` 选择器——每个分段直接用按钮主题绘制，选中段解析为 `TyButton:selected`（等价 `:checked`），悬停段 `TyButton:hover`，`Enabled = False` 时全段 `TyButton:disabled`。因此配合 [TTyButton](button.md) 的现有主题（含 `primary` / `danger` / `ghost` 变体，经 `StyleClass` 应用到整条）开箱即用。
+> **自有 `TyButtonGroup` 键：** 从前它返回 `'TyButton'`，于是「一个按钮」和「一条选择条」在主题层是同一样东西——皮肤给按钮设了胶囊圆角，这条分段条就变成两头圆、接缝方，而皮肤**没有任何选择器**能纠正它。现在每段解析的都是 `TyButtonGroup`：选中段 `TyButtonGroup:selected`（等价 `:checked`），悬停段 `TyButtonGroup:hover`，`Enabled = False` 时全段 `TyButtonGroup:disabled`。`themes/light.tycss` 把 `TyButtonGroup` 并列写进了 `TyButton` 那条规则的选择器列表，所以默认外观与从前一致；但**要调它的外观请写 `TyButtonGroup`，不要改 `TyButton`**——那会改掉全应用的每一个按钮。
 
 ```pascal
 uses tyControls.ButtonGroup;
@@ -87,7 +87,30 @@ uses tyControls.ButtonGroup;
 | `:disabled` | `Enabled = False`（优先级最高，全段禁用，不叠加其它状态） |
 | `:normal` | 既未选中也未悬停的普通段 |
 
-> **依赖 `TyButton:selected` 规则：** 选中段解析为 `[tysSelected]`，因此主题里需有 `TyButton:selected`（所有内置主题在 ghost 变体下均已提供，如 `TyButton.ghost:selected`；默认变体如未定义 `:selected` 则选中段回退到普通按钮外观）。若需要明显的选中反馈，建议对本控件设 `StyleClass := 'ghost'` 或在主题中为所需变体补 `:selected` 规则。
+### 解析的主题键
+
+| typeKey | 画什么 |
+|---------|--------|
+| `TyButtonGroup` | **每一段**都用它解析：段背景 `background`、段边框 `border-color` / `border-width`、标题 `color` / `font-*` / `padding`；整条的外圆角取自它的 `border-radius`（只作用于最左段左侧两角、最右段右侧两角）。 |
+
+**没有子部件键。** 分段没有自己的 typeKey——形如 `TyButtonGroupItem` 的键**并不存在**（子部件拆键属于本轮有意推迟的扩展，别往主题里写）。整条也没有独立的「轨道」底色：`Items` 为空时控件只填父背景，不画自己的底。段与段的区分完全靠每段自身的边框在接缝处叠合。
+
+> **随库主题的覆盖情况：** 选中段解析为 `TyButtonGroup` + `[tysSelected]`。全部 20 份随库样式表
+> 都已把 `TyButtonGroup` 列进 `TyButton` 的每一条规则——含 `.ghost:selected` 与 `:disabled`，
+> 所以 `StyleClass := 'ghost'` 的选中反馈和 `Enabled := False` 的变淡都是开箱可用的。
+> （唯一例外 `system.tycss` 没有 `:disabled`，但那是因为它**连 `TyButton:disabled` 都没写**，
+> 两者一致，非本控件特有。）
+>
+> **裸 `TyButtonGroup:selected` 仍未定义**——随库主题只给 `.ghost` 变体写了选中态。想让默认变体
+> 也有可见选中反馈，在自己的主题里补一条：
+>
+> ```css
+> TyButtonGroup:selected { background: var(--surface-active); border-color: var(--accent); }
+> ```
+>
+> **第三方主题注意：** base 层是**按 typeKey 全有全无**的。你的 `.tycss` 只要写过 `TyButtonGroup`，
+> 内置基础层对这个键就整体不再兜底——上面那些状态你得自己写全，或者干脆一条别写、让它完全继承。
+> 详见 [tycss-reference §8.1](../tycss-reference.md)。
 
 ### 渲染细节
 
@@ -147,7 +170,7 @@ var ViewSwitch: TTyButtonGroup;
 ViewSwitch := TTyButtonGroup.Create(Self);
 ViewSwitch.Parent := Self;
 ViewSwitch.SetBounds(20, 20, 240, 30);
-ViewSwitch.StyleClass := 'ghost';           // 选中态更明显（TyButton.ghost:selected）
+ViewSwitch.StyleClass := 'ghost';           // 需主题里有 TyButtonGroup.ghost:selected 才有可见选中态
 ViewSwitch.Items.Add('列表');
 ViewSwitch.Items.Add('网格');
 ViewSwitch.Items.Add('详情');
@@ -189,8 +212,8 @@ end;
 
 ## 9. 注意事项
 
-- **复用 `TyButton` 主题：** 分段用按钮令牌绘制，`StyleClass` 作用于整条（全部分段同一变体）；主题化时写 `TyButton` / `TyButton:selected` / `TyButton:hover` 选择器，`.tycss` 中不存在 `TyButtonGroup`。
-- **选中反馈依赖 `:selected` 规则：** 若当前变体的主题未定义 `TyButton:selected`，选中段与普通段外观相同——用 `ghost` 变体或补齐主题规则以获得可见反馈。
+- **主题化写 `TyButtonGroup`，别写 `TyButton`：** 分段用本控件自己的令牌绘制，`StyleClass` 作用于整条（全部分段同一变体）；主题化时写 `TyButtonGroup` / `TyButtonGroup:selected` / `TyButtonGroup:hover`。去改 `TyButton` 只会波及全应用的按钮，改不动这条分段条。
+- **选中反馈依赖 `:selected` 规则：** 若主题未为当前变体定义 `TyButtonGroup:selected`，选中段与普通段外观相同；随库的 light / dark / auto 目前正是这种情况，需自行补规则（见第 5 节）。
 - **`Items` 赋值用 `Assign`：** 写入 `Items` 属性时内部 `Assign` 整体替换；`ItemIndex` 不自动重置，仅在超过新上界时被夹到 `-1`（多选位集同步重设长度）。
 - **`ItemIndex` 与多选：** 多选模式下 `ItemIndex` 不表达选中集（切模式时已复位为 `-1`）；请用 `IsSelected` / `SetSelected`。
 - **末段吸收余数：** 当客户区宽度不能被段数整除时，最后一段略宽以吸收余数，保证无缝拼贴。
@@ -199,4 +222,4 @@ end;
 
 ---
 
-参见 [[TTyButton]] —— 分段复用其 `TyButton` 主题令牌与状态样式。
+参见 [[TTyButton]] —— 视觉原型相同，但两者是各自独立的 typeKey（`TyButton` / `TyButtonGroup`），主题里要分别定义。语义更接近的近亲是分段控件 `TySegmented` / `TySegmentedItem`。

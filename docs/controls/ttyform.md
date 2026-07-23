@@ -15,12 +15,23 @@ type
 
 > **要原生 → 用 `TForm`；要自绘窗框 → 继承 `TTyForm`。**
 
-`TTyForm` 自出生即为无边框窗口（`BorderStyle = bsNone`），并在构造时**代码创建**两个子组件：
+`TTyForm` 自出生即为无边框窗口（`BorderStyle = bsNone`）。窗体上有两样东西：
 
-- `TitleBar: TTyTitleBar`——停靠在顶部（`alTop`）的标题栏（"band 0"，条带 0）。
-- `ContentPanel: TTyContentPanel`——填充其余区域（`alClient`）的保留内容区。
+- **`Surface: TTyFormSurface`**——铺满窗体（`alClient`）的内容承载容器，**每个窗体有且只有一个**，
+  固定名为 `Surface`。它**不是构造时创建的**，而是从 `.lfm` 流式化出来的：File > New 的
+  *TyControls Form / Application* 模板已经带好它，设计器里拖控件本来就落进它。
+- **`TitleBar: TTyTitleBar`**——可关联的标题栏，走的是 `Form.Menu` 那种「属性指向一个组件」的模式，
+  不是硬塞的子组件。它本身也放在 `Surface` 里。
 
-**你的应用控件放在内容区里**（在设计器中直接拖到内容面板上）。由于内容面板的原点已经落在标题栏条带**下方**，控件永远不会被标题栏覆盖——无论设计期还是运行期。这从**构造上**消除了旧 `TTyFormChrome` 把标题栏画到既有控件之上的"覆盖 bug"。
+**你的应用控件都放在 `Surface` 里。** 尤其是 `TTyLabel`、`TTyShape` 这类**无窗口的图形控件**——
+它们画在父控件身上，直接放在窗体上会被 `Surface` 挡住、**根本看不见**（设计器会提示）。
+非可视组件（样式控制器、定时器、对话框组件、图像列表、菜单）不受影响，仍留在窗体上。
+
+> **为什么需要 `Surface`：** 无边框可缩放窗口画不到自己最外圈的像素——合成器给的后备表面比窗口小，
+> 右边和下边会留一条没画上的细边。而**子窗口**能画到真正的边缘，所以窗体的主题背景改由 `Surface` 画。
+> 在设计器里选中它，`Purpose` 属性里有完整说明。
+>
+> **`TTyDialog` 没有 `Surface`**：它不可缩放，不需要；控件照常直接放在对话框上。
 
 > **历史变更：** 旧的窗框控制器 `TTyFormChrome`（挂在普通 `TForm` 上的非可视 `TComponent`）已被**移除**，由 `TTyForm` 取代。若你在迁移旧代码，请参见 [formchrome.md](formchrome.md)。
 
@@ -40,9 +51,12 @@ TTyForm = class(TForm)                      // 构造时即 bsNone
   ├─ TitleBar : TTyTitleBar  (alTop)        // 条带 0：标题栏
   │     ├─ 系统按钮（最小化/最大化/关闭）—— 代码持有，位于右侧空槽
   │     └─ 可定制内容区（左侧标题/图标 + AdjustClientRect 中间条）
-  ├─ （未来条带：菜单 / ribbon / 工具栏 —— alTop，在 ContentPanel 之前创建）
-  └─ ContentPanel : TTyContentPanel (alClient)   // 保留的客户区
-        └─ 你的控件放这里（它们的 (0,0) 已在标题栏下方）
+  └─ Surface : TTyFormSurface (alClient)     // 内容承载容器，从 .lfm 流式化
+        ├─ TitleBar : TTyTitleBar  (alTop)   // 条带 0：标题栏（由 Form.TitleBar 关联）
+        │     ├─ 系统按钮（最小化/最大化/关闭）—— 代码持有，位于右侧空槽
+        │     └─ 可定制内容区（左侧标题/图标 + AdjustClientRect 中间条）
+        ├─ （其他条带：菜单 / ribbon / 工具栏 —— alTop，按自上而下顺序创建）
+        └─ 你的控件放这里
 
 TTyChromeEngine（由 TTyForm 拥有/释放）     // 与窗体无关的窗口行为
   拖动移动 · 边缘缩放 + 悬停光标 · 自绘无边框最大化/还原 · 跨屏 DPI 重缩放
@@ -69,8 +83,8 @@ TTyChromeEngine（由 TTyForm 拥有/释放）     // 与窗体无关的窗口�
 
 | 属性 | 类型 | 说明 |
 |------|------|------|
-| `TitleBar` | `TTyTitleBar` | 自绘标题栏子组件（构造时创建，`SetSubComponent(True)`，名为 `TyTitleBar`）。 |
-| `ContentPanel` | `TTyContentPanel` | 保留的内容区子组件（构造时创建，`SetSubComponent(True)`，名为 `TyContent`，`Align = alClient`）。 |
+| `TitleBar` | `TTyTitleBar` | **可关联**的标题栏——指向窗体上某个 `TTyTitleBar` 实例（`Form.Menu` 模式），不是构造时硬创建的子组件。流式化的 `.lfm` **必须显式写 `TitleBar = <名字>`**，否则窗口拖不动。 |
+| `Surface` | `TTyFormSurface` | 内容承载容器（`alClient`，固定名 `Surface`）。由 `.lfm` 流式化，不在构造函数里创建。 |
 
 ### 继承的标准 TForm 生命周期事件
 
@@ -113,9 +127,12 @@ end;
 - **几何/布局是真实的**——标题栏占据顶部条带，内容面板填充其下方区域；你拖到内容面板上的控件在设计期就位于条带**下方**，与运行期一致。这正是用 `TTyForm` 取代控制器方案的核心收益。
 - **标题栏皮肤在设计期是未换肤（unthemed）的**——和**所有**其它 tyControl 一样，设计器没有运行期主题上下文，因此标题栏的自绘**皮肤**在设计期以内置默认外观呈现，而非你运行时加载的 `.tycss` 主题。**这不是 bug**，请勿把设计期未换肤的标题栏当成缺陷。
 
-> **流式化（streaming）说明：** `TitleBar` 与 `ContentPanel` 用 `SetSubComponent(True)` + 固定 `Name`（`TyTitleBar` / `TyContent`）创建。你的窗体继承自 `TTyForm`，其 `.lfm` 是**继承式（inherited）**流，读取器按名字把这两个子控件匹配到活动实例上，**不会**重复创建它们。
+> **流式化（streaming）说明：** `Surface` 与标题栏都来自 `.lfm`，不是构造函数创建的。这一点很要紧：
+> **`.lfm` 必须显式写 `TitleBar = <标题栏名字>`**——那是一个关联属性，不写则窗体没有标题栏可拖，
+> 窗口拖不动。新建窗体用 File > New 的模板即可，模板已经把两者写好。
 >
-> **防御式 `Loaded`：** `TTyForm` 覆写了 `Loaded`，把任何错误地以**窗体**为父（而非内容面板）的用户控件重新归位（reparent）到 `ContentPanel`（跳过 `TitleBar`/`ContentPanel` 自身；幂等、运行期无害）。这中和了唯一无法从 LCL 源码证明的一点——IDE 设计器在放置控件时究竟选了哪个父容器。
+> **迁移既有窗体：** 把原本直接放在窗体上的控件移进 `Surface`（非可视组件不动）。
+> 参考 [examples/button/umain.lfm](../../examples/button/umain.lfm)。
 
 ## 7. 状态与主题
 
@@ -124,7 +141,7 @@ end;
 | typeKey | 子组件 | 内置默认 |
 |---------|--------|----------|
 | `TyTitleBar` | `TitleBar`（`TTyTitleBar`） | 略深于窗体背景的标题条 —— 详见 [titlebar.md](titlebar.md) |
-| `TyContentPanel` | `ContentPanel`（`TTyContentPanel`） | `background: var(--surface)`（内容区表面色，与 `TyPanel` 一致；比窗体背景 `darken(--surface, 4%)` 略浅） |
+| `TyFormSurface` | `Surface`（`TTyFormSurface`） | **随库主题刻意不定义**——`Surface` 画的就是窗体自己的主题背景（`TyForm` 令牌），它自身不该再叠一层表面色。见 [tycss-reference §8.4](../tycss-reference.md) |
 | `TyCaptionButton` | 标题栏系统按钮 | 透明背景，hover/active 着色；`close` 变体 hover 变红 —— 详见 [captionbutton.md](captionbutton.md) |
 
 `TyForm` 令牌在内置主题中为 `background: darken(--surface, 4%)`（窗体背景）。
@@ -166,8 +183,8 @@ TyForm {
 
 `TTyForm` 的条带模型为**纯增量式（additive）**地添加菜单栏 / ribbon / 工具栏预留了清晰的接缝：
 
-1. **保留的客户区已存在**——`ContentPanel`（由本架构提供）。
-2. **条带就是停靠在内容面板之上的 `alTop` 普通控件**，按从上到下的顺序创建，使每个条带先占据自己的条带区、再由 `ContentPanel` 填充剩余区域。**标题栏是条带 0**；ribbon 只是其下方"又一条条带"。条带的创建/对齐顺序是**承重（load-bearing）**的——必须自上而下，每个条带先占据其条带区，再由内容面板填充。
+1. **内容承载容器已存在**——`Surface`（由 `.lfm` 提供）。
+2. **条带就是 `Surface` 里停靠在顶部的 `alTop` 普通控件**，按自上而下的顺序创建，每个条带先占据自己的条带区，剩余区域留给内容。**标题栏是条带 0**；ribbon 只是其下方"又一条条带"。条带的创建/对齐顺序是**承重（load-bearing）**的。
 3. **预留主题 typeKey** `TyRibbon`、`TyRibbonTab`、`TyRibbonGroup`——**这是命名决策，请勿把这三个名字用于其它任何用途**。
 
 未来的 `TTyRibbon` 将是一个与窗框无关（chrome-agnostic）的、基于 `TTyCustomTabStrip` 的 `alTop` 控件，通过 `AdjustClientRect` 预留自身的主体区，docked 在内容面板之上、标题栏之下——**不**焊死在标题栏里。它在原生有边框的 `TForm` 上也能工作。
@@ -177,7 +194,7 @@ TyForm {
 ## 10. 注意事项
 
 1. **唯一自绘窗框路径：** 自绘窗框只通过继承 `TTyForm` 获得；普通 `TForm` 是原生（无窗框）路径。不存在"把窗框挂到既有 `TForm` 上"的控制器（旧 `TTyFormChrome` 已移除）。
-2. **控件放内容区：** 应用控件应放在 `ContentPanel` 上（设计期直接拖到内容面板）。防御式 `Loaded` 会把误放在窗体根上的控件归位到内容面板，但仍建议直接拖入内容面板以获得正确的设计期 WYSIWYG。
+2. **控件放 `Surface` 里：** 设计器里拖控件本来就落进它。图形控件（`TTyLabel` / `TTyShape` 等）**必须**放进去——放在窗体上会被 `Surface` 挡住、看不见。
 3. **标题文本独立：** `TitleBar.Caption` 与窗体 `Caption` 是独立属性；修改窗体 `Caption` 不会自动更新标题栏，需手动 `TitleBar.Caption := Caption`。
 4. **背景来自主题：** 用 `ApplyChromeTheme` 让窗体背景取自 `TyForm` 令牌，不要在代码里写死颜色。
 5. **缩放最小尺寸：** 边缘缩放硬编码最小宽度 80px、高度 60px（在引擎中），不可经属性配置。

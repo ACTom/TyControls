@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-`TTyToolGroupPanel` 是 TyControls 库中的**工具按钮分组面板**，继承自 [`TTyGroupBox`](groupbox.md)。它的外观是一个带标题的圆角边框盒子（复用分组框的主题令牌），内部横向**流式排布**一排工具按钮（`TTyButton`），当一行放不下时**自动换行**到下一行——即一个可以放在 **Ribbon 之外**使用的“Ribbon 分组”式命令盒。
+`TTyToolGroupPanel` 是 TyControls 库中的**工具按钮分组面板**，继承自 [`TTyGroupBox`](groupbox.md)。它的外观是一个带标题的圆角边框盒子（**用自己的主题令牌**，见 §2），内部横向**流式排布**一排工具按钮（`TTyButton`），当一行放不下时**自动换行**到下一行——即一个可以放在 **Ribbon 之外**使用的“Ribbon 分组”式命令盒。
 
 因为继承自 `TTyGroupBox`（进而 `TTyCustomControl`），它**免费获得**：
 
@@ -24,11 +24,25 @@
 | 项目 | 值 |
 |------|-----|
 | 单元 | `tyControls.ToolGroupPanel` |
-| `GetStyleTypeKey` 返回值 | `'TyGroupBox'`（**继承自 `TTyGroupBox`，未重写**） |
+| `GetStyleTypeKey` 返回值 | `'TyToolGroupPanel'`（**重写了**，不再沿用父类的 `'TyGroupBox'`） |
 | 基类 | `TTyGroupBox`（`tyControls.GroupBox`） → `TTyCustomControl` |
 | 默认尺寸 | 220 × 92（逻辑像素，`Create` 中设置） |
 
-> **复用 `TyGroupBox` 令牌：** 本控件刻意**不重写** `GetStyleTypeKey`，直接沿用父类的 `'TyGroupBox'`——因此**不新增任何 `.tycss` 规则**，边框/标题带/背景全部走现有分组框主题。内部工具按钮各自解析 `TyButton.ghost` 令牌。
+| typeKey | 画什么 |
+|---|---|
+| `TyToolGroupPanel` | 面板自身：`background`、`border-color` / `border-width` / `border-radius`、`padding`、标题带的文字色与字体 |
+| `TyButton` + `.ghost` | 每个流式子按钮（`AddButton` 把 `StyleClass` 设为 `'ghost'`） |
+
+> **它现在有自己的键。** 这是"复用父类代码"而非"就是一个分组框"：设计体系本来就把这两个概念分开
+> ——`TyRibbonGroup` 刻意与 `TyGroupBox` 长得不一样（透明底、淡标题、发丝边 vs. 表单分组框那种
+> 带内边距的圆角框）。钉在 `TyGroupBox` 上时，主题**没法**让一个独立的工具组去贴合自己的 ribbon 分组，
+> 除非把全窗体的分组框一起重画。
+>
+> 内建主题里 `TyGroupBox, TyToolGroupPanel` 共写一条规则，所以解析值一个没变；要单独调本控件，
+> 写 `TyToolGroupPanel` 选择器——**别去改 `TyGroupBox`**。
+>
+> 这个键买到的是**颜色 / 边框 / 内边距 / 字体**，买不到**标题位置**：标题带永远在顶部，那是
+> `TTyGroupBox.RenderTo` 写死的，不是主题能挪的。
 
 ```pascal
 uses tyControls.ToolGroupPanel;
@@ -63,7 +77,7 @@ uses tyControls.ToolGroupPanel;
 
 | 属性 | 说明 |
 |------|------|
-| `StyleClass` | CSS 变体类名（作用于面板自身的 `TyGroupBox` 令牌）。 |
+| `StyleClass` | CSS 变体类名（作用于面板自身的 `TyToolGroupPanel` 令牌）。 |
 | `Controller` | 关联的样式控制器；`nil` 时回退到全局 `TyDefaultController`。 |
 | `Align` / `Anchors` / `Enabled` / `Font` | 标准布局与状态属性。 |
 
@@ -135,7 +149,7 @@ end;
 
 ## 7. 注意事项
 
-1. **不新增 `.tycss`：** 复用父类 `TyGroupBox` 令牌绘制边框与标题带；主题化时写 `TyGroupBox` 选择器即可，`.tycss` 中不存在 `TyToolGroupPanel`。内部按钮走 `TyButton.ghost`。
+1. **有独立 typeKey `TyToolGroupPanel`：** 主题化时写 `TyToolGroupPanel` 选择器；内建主题让它与 `TyGroupBox` 共写一条规则（默认观感不变），但改 `TyGroupBox` 会连全窗体的分组框一起改。内部按钮走 `TyButton.ghost`。
 2. **子按钮是用户控件：** `AddButton` 创建的按钮**不**标记 `csNoDesignVisible`——本控件是真容器，不是自动填充的辅助控件族（对比 `TTyRadioGroup` 一类的隐藏子控件）。因此它们会正常出现在 IDE 设计器中。
 3. **客户区自动内缩：** 继承 `TTyGroupBox.AdjustClientRect`，子按钮从标题带下方开始排布，`ClientRect` 已内缩，无需手动加顶部偏移。
 4. **换行按客户区宽度：** 流式布局以 `ClientRect` 宽度为界；面板变窄会触发换行、变宽会回流。行高恒为 `ButtonHeight`。
@@ -144,4 +158,4 @@ end;
 
 ---
 
-参见 [[TTyGroupBox]]（父类，提供带标题边框 + 客户区内缩）与 [[TTyButton]]（流式子按钮，复用其 `ghost` 变体主题）。
+参见 [[TTyGroupBox]]（父类，提供带标题边框的绘制代码 + 客户区内缩；主题令牌各归各的）与 [[TTyButton]]（流式子按钮，复用其 `ghost` 变体主题）。

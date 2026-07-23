@@ -189,7 +189,7 @@ TyControls 内置了一套**默认皮肤**(浅色,与 `themes/light.tycss` 一�
 |---|---|
 | `themes/light.tycss` | 浅色主题(白底,蓝色强调色) |
 | `themes/dark.tycss` | 深色主题 |
-| `themes/showcase.tycss` | 门面展示主题,突出库的外观辨识度 |
+| `themes/builtin/showcase.tycss` | 门面展示主题,突出库的外观辨识度 |
 
 ### 加载主题
 
@@ -212,7 +212,7 @@ TyDefaultController.LoadThemeCss('TyButton { background: #222; color: #FFF; }');
 ```pascal
 // 代码方式
 LocalCtrl := TTyStyleController.Create(Self);
-LocalCtrl.LoadTheme('themes/showcase.tycss');
+LocalCtrl.LoadTheme('themes/builtin/showcase.tycss');
 
 MyButton.Controller := LocalCtrl;
 MyEdit.Controller   := LocalCtrl;
@@ -267,7 +267,7 @@ TyButton:disabled         { opacity: 0.5; }
 | `toggleswitch/` | `TTyToggleSwitch` 开关切换、ON/OFF 主题 | `lazbuild examples/toggleswitch/toggleswitch_example.lpi` |
 | `trackbar/` | `TTyTrackBar` 拖动滑块、方向键步进 | `lazbuild examples/trackbar/trackbar_example.lpi` |
 | `groupbox/` | `TTyGroupBox` 分组容器、RadioButton 分组 | `lazbuild examples/groupbox/groupbox_example.lpi` |
-| `tabcontrol/` | `TTyTabControl` 标签页切换、AddTab、键盘 ←/→ 导航、溢出表头滚动、拖拽重排序、设计期 `Tabs` 集合 | `lazbuild examples/tabcontrol/tabcontrol_example.lpi` |
+| `tabcontrol/` | `TTyPageControl` + `TTyTabSheet` 多页容器：切换 `ActivePage`、键盘 ←/→ 导航、溢出表头滚动、拖拽重排序 | `lazbuild examples/tabcontrol/tabcontrol_example.lpi` |
 | `spinedit/` | `TTySpinEdit` 数值微调、上/下箭头、方向键/滚轮步进、Min/Max/Increment | `lazbuild examples/spinedit/spinedit_example.lpi` |
 | `memo/` | `TTyMemo` 多行文本编辑、回车换行、跨行退格/删除、导航、垂直滚动条/滚轮 | `lazbuild examples/memo/memo_example.lpi` |
 | `formchrome/` | `TTyForm` 无边框自绘窗框窗口（继承 `TTyForm`） | `lazbuild examples/formchrome/formchrome_example.lpi` |

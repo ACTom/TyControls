@@ -4,7 +4,7 @@
 
 `TTyScrollBox` 是 TyControls 库中的主题化**滚动视口容器**，继承自 [`TTyPanel`](panel.md)。典型用途：承载尺寸超过自身可视区域的子控件集合（例如一整块表单、一张大图、一组排布很长的控件），当内容在某个方向上溢出时，在该方向自动出现一个内嵌的 `TTyScrollBar`，用户拖动滚动条即可平移内容；内容能完整放下时，对应滚动条自动隐藏。
 
-它是**真正的 LCL 容器**（有窗口句柄），子控件直接以其为 `Parent`，坐标系以视口左上角为原点。与 [`TTyPanel`](panel.md) 的区别仅在于「内容超出视口时可滚动」——外观、边框、圆角、内边距等全部沿用 `TyPanel` 主题。
+它是**真正的 LCL 容器**（有窗口句柄），子控件直接以其为 `Parent`，坐标系以视口左上角为原点。行为上与 [`TTyPanel`](panel.md) 的区别在于「内容超出视口时可滚动」；主题上它有**自己的 typeKey** `TyScrollBox`——滚动井在视觉惯例上是**下沉**的，而面板是**抬起**的，二者必须能分开表达。
 
 ---
 
@@ -13,8 +13,8 @@
 | 项目 | 值 |
 |------|-----|
 | 单元 | `tyControls.ScrollBox` |
-| `GetStyleTypeKey` 返回值 | `'TyPanel'`（**复用** `TyPanel`，不新增 `.tycss` 选择器） |
-| 基类 | `TTyPanel`（继承自 `TTyCustomControl` → `TCustomControl`） |
+| `GetStyleTypeKey` 返回值 | `'TyScrollBox'`（**自有 typeKey**） |
+| 基类 | `TTyPanel`（继承自 `TTyCustomControl` → `TCustomControl`；只继承框架与容器管道，不再共用它的键） |
 | 默认尺寸 | 200 × 150（逻辑像素） |
 | 内嵌滚动条 typeKey | `TyScrollBar` / `TyScrollThumb`（见 [scrollbar.md](scrollbar.md)） |
 
@@ -22,7 +22,16 @@
 uses tyControls.ScrollBox;
 ```
 
-> **主题说明：** `TTyScrollBox` 刻意复用 `TyPanel` 的 typeKey，因此在 `.tycss` 中给 `TyPanel` 写的所有规则（`background` / `border` / `radius` / `padding` …）都会应用到滚动框本体；无需为它单独写样式。滚动条本身按 `TyScrollBar` 主题绘制。
+### 这些键各画什么
+
+| 键 | 画什么 |
+|----|--------|
+| `TyScrollBox` | 视口本体的框：`background` / `border-color` / `border-width` / `border-radius` / `padding`（`padding` 只影响本体绘制，不约束子控件） |
+| `TyScrollBar` / `TyScrollThumb` | 两条内嵌滚动条的轨道与缩略块，由 `TTyScrollBar` 自身解析（见 [scrollbar.md](scrollbar.md)） |
+
+> **主题说明：** 早期版本里 `TTyScrollBox` 返回 `'TyPanel'`，于是滚动井与面板在主题层完全无法分辨；那时文档给出的变通办法是"用 `StyleClass` 加个类选择器（如 `TyPanel.scroll`）"。**这个变通已经不需要了，也不该再用**——直接写 `TyScrollBox { ... }` 就只作用于滚动框。内置主题把 `TyScrollBox` 与 `TyPanel` 等键写在同一条规则里（取值相同、名字独立），所以默认观感不变；第三方主题若只覆盖了 `TyPanel`，需要补上 `TyScrollBox`（主题层按 typeKey 全有全无地回落，否则会掉回内置 light 取值）。
+>
+> **子部件 typeKey：没有。** 视口本身只有这一个盒子样式；两条滚动条是真正的 `TTyScrollBar` 子控件，走它们自己的键。
 
 ---
 
@@ -43,7 +52,7 @@ uses tyControls.ScrollBox;
 |------|------|--------|------|
 | `Align` | `TAlign` | `alNone` | 父容器内的停靠方式；常设为 `alClient` 让滚动框填满宿主区域。 |
 | `Anchors` | `TAnchors` | `[akLeft, akTop]` | 锚点布局。 |
-| `StyleClass` | `string` | `''` | CSS 类名，对应 `.tycss` 中 `TyPanel.classname` 选择器。 |
+| `StyleClass` | `string` | `''` | CSS 类名，对应 `.tycss` 中 `TyScrollBox.classname` 选择器。 |
 | `Controller` | `TTyStyleController` | `nil`（全局 `TyDefaultController`） | 指定样式控制器；该值会自动传播给两个内嵌滚动条。 |
 
 > `Caption` / `Alignment` 从 `TTyPanel` 继承而来，滚动框场景一般不使用（若设置了 `Caption`，它会被子控件覆盖）。
@@ -121,4 +130,4 @@ Box.UpdateScrollRange;
 - **两个滚动条是内部子控件：** 它们由滚动框自身拥有并创建，标记为 `csNoDesignVisible`，不会出现在 IDE 设计器的子控件列表里，也不会被流式化。请勿在设计器里手动摆放滚动条。
 - **`Controller` 自动传播：** 给滚动框设置 `Controller` 后，两个内嵌滚动条会在下次 `UpdateScrollRange` 时继承同一控制器，保证主题一致。
 - **偏移永远非负：** `ScrollX/ScrollY` 始终 `≥ 0`，且被夹取在 `[0, 内容-视口]`；当宿主放大到内容可完整容纳时，偏移自动归零、滚动条自动隐藏。
-- **复用 `TyPanel` 主题：** 由于 typeKey 复用，改 `TyPanel` 的样式会同时影响普通面板和滚动框；如需区分，用 `StyleClass` 给滚动框加一个类选择器（如 `TyPanel.scroll { … }`）。
+- **有自己的主题键：** 滚动框走 `TyScrollBox`，与 `TyPanel` 互不影响。要让滚动井下沉（例如更深的底色、无圆角、内描边），直接写 `TyScrollBox { … }`——**不要**改 `TyPanel`，那会重涂全应用的面板。旧文档建议的 `StyleClass` 变通（`TyPanel.scroll`）已经过时，只在需要同一控件的多种变体时才用得上。

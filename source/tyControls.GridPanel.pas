@@ -659,7 +659,7 @@ end;
 
 function TTyGridCell.GetStyleTypeKey: string;
 begin
-  Result := 'TyGridCell';   // has no themed rule today; transparent by design
+  Result := 'TyGridCell';
 end;
 
 procedure TTyGridCell.SetPadding(AValue: Integer);

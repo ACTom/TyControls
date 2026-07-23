@@ -12,12 +12,21 @@
 |------|-----|
 | 单元 | `tyControls.ToolBar` |
 | `GetStyleTypeKey` 返回值（`TTyToolBar`） | `'TyToolBar'` |
-| `GetStyleTypeKey` 返回值（`TTyToolSeparator`） | `'TyToolBar'`（**刻意复用**工具条的 typeKey，借用其边框色，见注释 *"borrows the bar's border color"*） |
+| `GetStyleTypeKey` 返回值（`TTyToolSeparator`） | `'TyToolSeparator'`（**自己的键**，不再借工具条的） |
 | 基类 | `TTyCustomControl`（继承自 `TCustomControl`） |
 | 默认尺寸（`TTyToolBar`） | 300 × 30（逻辑像素） |
-| 默认尺寸（`TTyToolSeparator`） | 8 × 24（逻辑像素） |
+| 默认尺寸（`TTyToolSeparator`） | 8 × 24（宽固定 8；高走密度轴 `TyDensityHeight(…, 24)`，现代密度下更高） |
 
-在 `.tycss` 文件中，两个控件都对应选择器前缀 `TyToolBar`。
+| typeKey | 画什么 |
+|---|---|
+| `TyToolBar` | 工具条：`background` 铺满整块（图片主题下叠在照片上），`border-color` + `border-width` 画**底部一条 hairline**（无四周边框） |
+| `TyToolSeparator` | 分隔线：`background` 用来与工具条底色无缝衔接，`border-color` 是那条 1px 竖线的颜色 |
+
+> **分隔线从"借用"变成了"自有"。** 它画的是工具条不画的墨迹——一条内缩的竖线；借 `TyToolBar` 时，
+> 这条竖线**必然**与工具条自己的底部 hairline 同色，主题想做"有边框的工具条 + 更淡的内嵌分隔线"
+> 这种经典搭配根本做不到。现在两者可分开配。
+> 内建主题里 `TyToolBar, TyToolSeparator` 仍共写一条规则（观感不变），要单独调分隔线请写
+> `TyToolSeparator` 选择器——**别去改 `TyToolBar`**，那会连整条工具条的底色和底线一起改。
 
 ```pascal
 uses tyControls.ToolBar, tyControls.Button;
@@ -31,7 +40,7 @@ uses tyControls.ToolBar, tyControls.Button;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `ButtonHeight` | `Integer` | `24` | 所有子按钮的统一逻辑高度；排布时每个子控件的高度被强制设为此值（`AlignControls` 中 `SetBounds(..., FButtonHeight)`）。改值触发 `Relayout`。 |
+| `ButtonHeight` | `Integer` | 跟随密度轴 | 所有子按钮的统一逻辑高度；排布时每个子控件的高度被强制设为此值（`AlignControls` 中 `SetBounds(..., bh)`）。**未显式赋值时跟随主题的 `--control-height`**（经典 24 / 现代 38），一经写入即固定并写进 `.lfm`。改值触发 `Relayout`。 |
 | `ButtonSpacing` | `Integer` | `2` | 相邻工具项之间的水平间距（换行时也用作行间距）。改值触发 `Relayout`。 |
 | `Indent` | `Integer` | `4` | 首项 / 顶边留白（左、上内缩）。改值触发 `Relayout`。 |
 | `Wrapable` | `Boolean` | `True` | 为 `True` 时，一行放不下的工具项自动折到下一行；`Align in [alTop, alBottom]` 时工具条随行数自动增高。改值触发 `Relayout`。 |
@@ -62,7 +71,7 @@ uses tyControls.ToolBar, tyControls.Button;
 | `StyleClass` | `string` | `''` | CSS 类名。 |
 | `Controller` | `TTyStyleController` | `nil` | 样式控制器。 |
 
-竖线颜色取当前样式的 `BorderColor`（因其 typeKey 与工具条相同），竖线上下各内缩 3 逻辑像素（`P.Scale(3)`）。
+竖线颜色取 `TyToolSeparator` 样式的 `BorderColor`，竖线上下各内缩 3 逻辑像素（`P.Scale(3)`）；同一样式的 `background` 用于铺底，好让它与所在工具条无缝衔接。
 
 ---
 
@@ -83,7 +92,8 @@ uses tyControls.ToolBar, tyControls.Button;
 ### light.tycss 内置规则
 
 ```css
-TyToolBar {
+/* 两个键共写一条规则：解析值完全相同，但现在可以各写各的 */
+TyToolBar, TyToolSeparator {
   background: var(--surface-chrome);
   border-color: var(--border);
   border-width: var(--input-border-width);
@@ -94,7 +104,7 @@ TyToolBar {
 
 - **工具条背景：** 先铺一层 `FillSharpBackdrop`（图片主题下透出照片，纯色主题为 no-op），再在存在 `background` 令牌时用 `S.Background` 直接填充整块——alpha 背景会叠加在照片之上（毛玻璃效果），与 `TTyPanel` 一致。
 - **底部发丝线：** 存在 `border-color` 令牌时，在工具条底部画一条高度为 `Scale(BorderWidth)`（最小 1px）的水平线（`Rect(0, H-bw, W, H)`）；工具条**只有底边一条 hairline**，无四周边框。
-- **分隔线：** `TTyToolSeparator` 同样先铺 backdrop、再（若有）填 `background` 与工具条无缝衔接，最后在中央画一条 `BorderColor` 的 1px 竖线（上下内缩 `Scale(3)`）。
+- **分隔线：** `TTyToolSeparator` 同样先铺 backdrop、再（若有）填自身样式的 `background` 与工具条无缝衔接，最后在中央画一条自身 `BorderColor` 的 1px 竖线（上下内缩 `Scale(3)`）。
 - **子按钮 ghost 变体：** 当 `Flat = True`（默认）时，工具条在排布阶段把每个子 `TTyButton.StyleClass` 覆写为 `'ghost'`，使按钮呈平面外观；`Flat = False` 时覆写为 `''`（常规按钮）。**工具条完全接管子按钮的 ghost/非 ghost StyleClass**，不保留子按钮加入前原有的 `StyleClass`（见源码注释）。
 
 ---
@@ -151,5 +161,5 @@ end;
 - **重入守卫：** `AlignControls` 末尾对 `Height` 的赋值会再次触发 `AlignControls`，`FInLayout` 守卫防止无限递归。
 - **ShowCaptions / Images 暂未接线：** 二者已 published 但**当前无效果**——复用 `TTyButton` 的模型下每个子按钮自带 caption/image。它们仅为将来 LCL 对齐保留，可安全忽略。
 - **无四周边框：** 主题的 `border-color` / `border-width` 只画工具条**底部一条 hairline**，不绘制四周边框；工具条不参与任何伪类状态。
-- **分隔线借用工具条 typeKey：** `TTyToolSeparator.GetStyleTypeKey` 返回 `'TyToolBar'`，因此它没有独立的 tycss 选择器，竖线色跟随工具条的 `border-color`。
+- **分隔线有独立 typeKey：** `TTyToolSeparator.GetStyleTypeKey` 返回 `'TyToolSeparator'`。内建主题让它与 `TyToolBar` 共写一条规则，所以默认观感不变；但要调竖线的颜色/底色，请写 `TyToolSeparator` 选择器，改 `TyToolBar` 会顺带改掉整条工具条。
 - **DFM 序列化：** `Align` 声明了 `default alTop`，`ButtonHeight`/`ButtonSpacing`/`Indent`/`Wrapable`/`ShowCaptions`/`Flat` 均声明了默认值，等于默认值时不写入 `.lfm`/`.dfm`。

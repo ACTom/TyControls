@@ -8,7 +8,13 @@
 它是**纯适配器**:`TTyListView` 的 OwnerData 模式,唯一后备存储是 `tyControls.FileSystem` 的
 `TTyFsEntryArray`(item index == 数组下标)。只 override 五个取值方法 + `CommitEdit`(重命名)+
 `DoCompare`(原始值排序),其余(绘制/滚动/命中/多选/首字母/表头排序/F2 编辑器/列/分组)全部**继承不动**。
-**零新增主题 token**(继承 `GetStyleTypeKey = 'TyTreeView'`)。
+主题也一并继承:它不 override `GetStyleTypeKey`,因此解析的是 `TTyListView` 自己的那套键
+(`TyListView` 外框 + `TyListViewItem` / `TyListViewHeader` / `TyListViewHeaderSection` /
+`TyListViewGroupHeader` / `TyListViewCheckBox` / `TyListViewLine` / `TyListViewMarquee`,
+逐项说明见 [listview.md](listview.md))。**这个"借用"是刻意的**:适配器只换数据源,一个像素都不自己画,
+凭空多一个键只会多出一份必须与 `TyListView` 手工同步的规则。给文件列表换皮肤 = 改 `TyListView*` 规则;
+`StyleClass` 只作用于**外框**(各部件是按空类名解析的),想单独区分文件面板与普通列表,只能靠 `StyleClass`
+改外框,或给本控件加一个自己的键 —— 后者目前没有。
 
 ## 用法
 

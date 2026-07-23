@@ -137,7 +137,7 @@ begin
   { Own key rather than the borrowed 'TyPanel': a bevel draws NO panel: no fill, no border, no caption — only highlight/shadow rails.
     Added to 'TyPanel's rule block as an extra selector, so every resolved value is
     unchanged — this opens a hook, it does not restyle anything. }
-  Result := 'TyBevel';   // reuse the panel typeKey (no new theme token this batch)
+  Result := 'TyBevel';
 end;
 
 procedure TTyBevel.SetShape(AValue: TTyBevelShape);

@@ -8,7 +8,14 @@
 深目录树不会一次读满整块盘。
 
 它把 `TTySelectPathForm` 里早已跑通的那套目录树接线抽成了**可复用控件**,数据源换成 `tyControls.FileSystem`。
-**零新增主题 token**(继承 `GetStyleTypeKey = 'TyTreeView'`)。
+
+主题完全继承:它不 override `GetStyleTypeKey`,解析的就是树自己那套键 —— `TyTreeView`(外框)、
+`TyTreeNode`(节点行,含 `:hover` / `:selected` / `:disabled`)、`TyTreeHeader` / `TyTreeHeaderSection`
+(列头带与列头格)、`TyTreeCheckBox`(节点复选框)。**这一次"借用"是刻意保留的**:适配器只换数据源,
+自己不画任何一个像素,一棵目录树在视觉上就是一棵树。给它换皮肤 = 改 `TyTreeView*` 规则。
+
+> 注意区分:同一批审计里 `TTyListView` **不再**借树的键了(它画的图标流式格、分组带、橡皮筋树没有),
+> 见 [listview.md](listview.md);而 `TTyShellTreeView` 属于"借得对"的那一类。
 
 ## 用法
 

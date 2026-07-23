@@ -13,10 +13,14 @@ TTyScrollPanel 是 TyControls 库中的**自动平移滚动容器**，继承自 
 | 项目 | 值 |
 |------|-----|
 | 单元 | `tyControls.ScrollPanel` |
-| `GetStyleTypeKey` 返回值 | `'TyPanel'`（**继承自 `TTyScrollBox`，不重写**；复用 TyPanel 令牌，不引入新的 `.tycss`） |
+| `GetStyleTypeKey` 返回值 | `'TyScrollBox'`（**继承自 `TTyScrollBox`，刻意不重写**） |
 | 基类 | `TTyScrollBox`（滚动容器，继承自 `TTyPanel` = `TTyCustomControl`，有窗口句柄、可作父容器） |
 
-在 `.tycss` 文件中，本控件复用 `TyPanel` 选择器着色（背景/边框/内边距令牌），与 `TTyScrollBox`、`TTyPanel` 完全一致。
+在 `.tycss` 文件中，本控件走 `TyScrollBox` 选择器着色（背景/边框/内边距令牌），与 [`TTyScrollBox`](scrollbox.md) 完全一致——**注意它不再是 `TyPanel`**：`TTyScrollBox` 在 2026-07 的 typeKey 审计中拿到了自己的键（滚动井下沉、面板抬起，两者观感相反），本控件作为它的子类自动继承了新键。
+
+**这个借用是刻意保留的、也是正确的：** 一个会边缘自动平移的面板**就是一个滚动井**——它加的是一个**手势**，不是一个新表面；它一个额外的像素都不画，`AutoPanTo` / `AutoPanStep` 只改滚动偏移。让它和 `TTyScrollBox` 共用一个键，正是"改滚动井的皮肤，两者一起变"这个应有的行为。源码单元头也这么写着。
+
+**子部件 typeKey：没有。** 视口只有一个盒子样式，两条内嵌滚动条是真正的 `TTyScrollBar` 子控件，走 `TyScrollBar` / `TyScrollThumb`。
 
 ```pascal
 uses tyControls.ScrollPanel;
@@ -94,7 +98,7 @@ TTyScrollPanel 未在 `published` 节声明专有事件。自动平移逻辑通�
 
 ## 6. 状态与主题
 
-沿用 `TTyScrollBox` / `TTyPanel` 的着色（复用 `TyPanel` 令牌），支持基础的 `:hover` / `:active` / `:disabled` / `:focus` 伪类。自动平移本身**不绘制任何额外视觉**——它只改变滚动偏移，外观与一个普通 `TTyScrollBox` 无异。因此**没有新增主题令牌**，无 golden 变更。
+沿用 `TTyScrollBox` 的着色（`TyScrollBox` 令牌），支持基础的 `:hover` / `:active` / `:disabled` / `:focus` 伪类。自动平移本身**不绘制任何额外视觉**——它只改变滚动偏移，外观与一个普通 `TTyScrollBox` 无异。因此它**没有自己的键**，也不需要。
 
 ---
 
@@ -133,7 +137,7 @@ end;
 
 ## 8. 注意事项
 
-- **薄壳子类，复用 TyPanel 令牌：** `GetStyleTypeKey` 不重写，直接继承 `TTyScrollBox` 的 `'TyPanel'`。本控件只加行为、不加表面，无新令牌、无 golden churn。
+- **薄壳子类，刻意共用滚动井的键：** `GetStyleTypeKey` 不重写，直接继承 `TTyScrollBox` 的 `'TyScrollBox'`（该键在 2026-07 审计中已从 `'TyPanel'` 拆出）。本控件只加行为、不加表面，因此不该有自己的键；要改它的外观，改 `TyScrollBox` 规则（会同时作用于普通滚动框，这是预期的）。
 - **纯数学是被测核心：** `TyEdgeAutoPan` 是完全 headless 的纯函数（斜坡 / 钳制 / 薄视口分裂 / 禁用守卫都在此），单测直接调用；定时器 + 拖拽接线是真机路径。
 - **坐标系一致：** `AutoPanTo` 的指针位置必须与 `AutoPanViewport`（默认 `ClientRect`）**同一坐标系**（客户区 px）。从屏幕坐标来时先 `ScreenToClient`。
 - **指针停在边缘也持续滚：** 定时器从 `FLastPanPos` 每帧续滚，因此拖拽对象“压在边缘不动”时列表仍持续滚动，符合直觉；指针回到中间平静区则暂停（仍武装），拖拽结束需显式 `StopAutoPan`。

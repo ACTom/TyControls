@@ -11,10 +11,22 @@ TTyActivityIndicator 是**不确定态忙碌指示器**(spinner),继承自 `TTyG
 | 项目 | 值 |
 |------|-----|
 | 单元 | `tyControls.ActivityIndicator` |
-| `GetStyleTypeKey` 返回值 | `'TyGauge'`(**复用**仪表轨道 / 文字)|
-| 旋转弧 typeKey | `'TyGaugeFill'`(复用仪表填充色)|
+| `GetStyleTypeKey` 返回值 | `'TyActivityIndicator'`(轨道环)|
 
-复用 `TTyGauge` 主题规则,无新增 `.tycss`。
+### 子部件 typeKey
+
+子部件键在代码里由 `GetStyleTypeKey + 'Fill'` 拼出,与盒键绑死、不会各自漂移。
+
+| typeKey | 绘制什么 | 读取的样式属性 |
+|---------|----------|----------------|
+| `TyActivityIndicator` | 淡色整环 track | `background` |
+| `TyActivityIndicatorFill` | 旋转的 accent 弧 | `background` |
+
+本控件**不再复用** `TyGauge` / `TyGaugeFill`。忙碌指示器与数据展示是两类东西:它常被调暗、常画在模态遮罩上需要浅色压深色、扁平风格还常要求 track **完全透明**——轨道被钉死在仪表的 sunk-track token 上时这些都写不出来。
+
+> 主题作者注意:base 层按 typeKey **全有或全无**地回落。只覆盖了 `TyGauge` 的第三方主题**不会**覆盖到 `TyActivityIndicator` / `TyActivityIndicatorFill`;需要在皮肤里补上这两条选择器。
+> 子部件以**空状态集**解析,`TyActivityIndicatorFill:hover` / `:disabled` 之类的选择器不会生效;伪类只对盒键有效。
+> 本控件不画外框(不走 `DrawFrame`),因此盒键的 `border-*` 目前**不参与绘制**——它只提供 track 环的 `background`。
 
 ```pascal
 uses tyControls.ActivityIndicator;
@@ -44,7 +56,7 @@ uses tyControls.ActivityIndicator;
 
 ## 5. 状态与主题
 
-复用 `TyGauge`(轨道)/ `TyGaugeFill`(旋转弧)。**渲染**:先画整环 track,再画从 `Angle` 起、长 `Sweep` 的 accent 弧;`Angle` 由内部 `TTimer` 以 ~1.1s / 圈连续推进。
+轨道来自 `TyActivityIndicator`,旋转弧来自 `TyActivityIndicatorFill`。**渲染**:先画整环 track,再画从 `Angle` 起、长 `Sweep` 的 accent 弧;`Angle` 由内部 `TTimer` 以 ~1.1s / 圈连续推进。
 
 **旋转条件:** 只有 `Active` **且**控件正在绘制(父窗口有句柄)时才转;**无句柄(headless / 渲染测试)时静止**——保证像素测试稳定。
 
@@ -72,4 +84,4 @@ Spin.Active := Working;
 - **确定 vs 不确定:** 已知进度用 [TTyCircularProgress](circularprogress.md);未知时长用本控件。
 - **纯逻辑可测:** 角度推进 `TyActivityAdvance(cur, ms, periodMs)` 是纯函数(环绕到 `[0,360)`),已单元测试(`test.activityindicator`)。
 - **停转即省电:** `Active := False` 会停掉内部计时器。
-- **主题驱动:** 颜色取自 `TyGauge` / `TyGaugeFill`,不硬编码。
+- **主题驱动:** 颜色取自 `TyActivityIndicator` / `TyActivityIndicatorFill`,不硬编码。改本控件外观请改这两个键——**不要**去改 `TyGauge`,那会连带改掉仪表 / 时钟 / 评分等一整族控件。

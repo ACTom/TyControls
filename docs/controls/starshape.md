@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-TTyStarShape 是 TyControls 的**装饰性矢量星形控件**,继承自 `TTyGraphicControl`(叶子图形控件,无焦点 / 子控件)。它用 BGRABitmap `Canvas2D` 抗锯齿绘制一个 N 角星:星形居中,外半径 = `min(宽,高)/2` 减去一个小边距,内半径 = 外半径 × `InnerRatio`,第一个外顶点指向**正上方**。填充色 / 边框色全部来自主题解析(复用 `TyPanel` token),因此星形跟随当前主题——**不硬编码任何颜色**。
+TTyStarShape 是 TyControls 的**装饰性矢量星形控件**,继承自 `TTyGraphicControl`(叶子图形控件,无焦点 / 子控件)。它用 BGRABitmap `Canvas2D` 抗锯齿绘制一个 N 角星:星形居中,外半径 = `min(宽,高)/2` 减去一个小边距,内半径 = 外半径 × `InnerRatio`,第一个外顶点指向**正上方**。填充色 / 边框色全部来自本控件自有 typeKey `TyStarShape` 的解析结果,因此星形跟随当前主题——**不硬编码任何颜色**。
 
 典型用途:评级 / 收藏 / 奖励类装饰徽标、加载 / 空状态占位图形、纯装饰性的角标。
 
@@ -13,9 +13,17 @@ TTyStarShape 是 TyControls 的**装饰性矢量星形控件**,继承自 `TTyGra
 | 项目 | 值 |
 |------|-----|
 | 单元 | `tyControls.StarShape` |
-| `GetStyleTypeKey` 返回值 | `'TyPanel'`(复用面板 typeKey,不新增主题 token)|
+| `GetStyleTypeKey` 返回值 | `'TyStarShape'`(**自有 typeKey**)|
 
-**填充** = 解析后 `TyPanel` 样式的 `background`(纯色且非全透明时才填);**边框** = 其 `border-color`,线宽 `max(1, Scale(border-width))`,`border-style: none` 或 `border-width: 0` 会关掉描边。要单独调色用 `StyleClass` / `StyleOverride`(如 `StyleOverride := 'background: #E11; border-color: #700;'`)。
+它从前返回 `'TyPanel'`:一颗装饰星不是容器表面,而借用面板键的实际后果是——想给徽标星换个金色,就必须把全应用里每一个容器一起重涂。现在 `TyStarShape` 已作为附加选择器并入主题里 `TyPanel` 的规则块,解析值与从前逐字节相同,**开钩子而不动像素**;第三方主题若只覆盖了 `TyPanel`,需要补上 `TyStarShape`(主题层按 typeKey 全有全无地回落)。
+
+> 注意区分:[`TTyRating`](rating.md) 的星星走的是它自己的 `TyRatingStar`,与本控件无关——这里是一颗**装饰**星,那里是一个评分部件的星。
+
+**填充** = 解析后 `TyStarShape` 样式的 `background`(纯色且非全透明时才填);**边框** = 其 `border-color`,线宽 `max(1, Scale(border-width))`,`border-style: none` 或 `border-width: 0` 会关掉描边。要单独调色用 `StyleClass` / `StyleOverride`(如 `StyleOverride := 'background: #E11; border-color: #700;'`)。
+
+### 子部件 typeKey
+
+**没有。** 星形只有一个盒子样式。仍在代码里写死、主题够不着的两处:边缘内缩常量 `TyStarMargin = 2`(逻辑像素),以及固定的圆角拐点(`lineJoin = 'round'`)——所以"尖角星"目前无法通过主题表达。
 
 ```pascal
 uses tyControls.StarShape;
@@ -36,7 +44,7 @@ uses tyControls.StarShape;
 
 | 属性 | 类型 | 说明 |
 |------|------|------|
-| `StyleClass` | `string` | `.tycss` 类名(作用于 `TyPanel` 解析)。 |
+| `StyleClass` | `string` | `.tycss` 类名(作用于 `TyStarShape` 解析)。 |
 | `StyleOverride` | `string` | 每实例 CSS 覆盖块(可用 `var(--...)`),用于单独指定填充 / 边框色。 |
 | `Controller` | `TTyStyleController` | 指定样式控制器(nil 时用全局默认)。 |
 | `Align` / `Anchors` | — | 布局。 |
@@ -55,7 +63,7 @@ TTyStarShape 暴露 `TTyGraphicControl` 的**基线事件集**(Tier A 鼠标 / �
 
 | 伪类 | 触发条件 |
 |------|----------|
-| `:disabled` | `Enabled = False`(`TyPanel` 若定义 `opacity` 则整体变淡)。 |
+| `:disabled` | `Enabled = False`(`TyStarShape` 若定义 `opacity` 则整体变淡)。 |
 
 （无 hover / focus / active——纯展示控件。）
 
@@ -66,7 +74,7 @@ TTyStarShape 暴露 `TTyGraphicControl` 的**基线事件集**(Tier A 鼠标 / �
 3. **填充**:`background` 为纯色且非全透明时 `fill`(否则跳过——星形透明,底下内容透出)。
 4. **描边**:仅当 `TyBorderVisible` 为真(声明了 `border-color`、`border-width > 0`、且未显式 `border-style: none`)时,以 `max(1, Scale(border-width))` 的线宽 `stroke`。
 
-因颜色取自 `TyPanel` 主题规则,更换主题即更换星形配色。
+因颜色取自 `TyStarShape` 主题规则,更换主题即更换星形配色;要让星形与容器分道扬镳,写一条 `TyStarShape { background: gold; border-color: ...; }` 即可,不必也不应去动 `TyPanel`。
 
 ---
 
@@ -102,4 +110,4 @@ Burst.StyleOverride := 'background: #E11; border-color: #700;';
 - **无自身矩形填充:** 只填充 / 描边星形本身,矩形其余区域保持透明——叠在其他背景之上不会遮挡。
 - **纯几何可测:** `TyStarPolygon` 是纯函数(输入 `TRect` + 参数,返回顶点数组),已 headless 单元测试(顶点数 = `2*max(3,Points)`、内外半径交替、全部落在 `ARect` 内、`Points<3` 与 `InnerRatio` 越界均夹紧、左右对称)。
 - **HiDPI:** 边距与边框线宽经 `Painter.Scale` 缩放。
-- **主题驱动:** 填充 / 边框颜色全部由 `TyPanel` 主题规则推导,控件不硬编码任何颜色(库的硬性规则)。
+- **主题驱动:** 填充 / 边框颜色全部由 `TyStarShape` 主题规则推导,控件不硬编码任何颜色(库的硬性规则)。拐角样式与 `TyStarMargin` 边距仍是代码字面量。

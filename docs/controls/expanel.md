@@ -20,7 +20,8 @@
 | 项目 | 值 |
 |------|-----|
 | 单元 | `tyControls.ExPanel` |
-| typeKey | `TyPanel`（**复用**基类 `TTyPanel` 的 typeKey，不新增 `.tycss`） |
+| 盒子 typeKey | `TyExPanel`（**自有 typeKey**） |
+| 标题栏 typeKey | `TyExPanelHeader`（**自有子部件键**，支持 `:hover`） |
 | 基类 | `TTyPanel`（继承自 `TTyCustomControl` → `TCustomControl`） |
 | 默认尺寸 | 200 × 140（逻辑像素） |
 | 默认标题栏高度 | 26 逻辑像素（常量 `TyExPanelDefaultHeaderHeight`） |
@@ -30,7 +31,18 @@
 uses tyControls.ExPanel;
 ```
 
-因为复用 `TyPanel` typeKey，`TTyExPanel` 直接沿用主题中 `TyPanel` 规则的背景、边框、圆角、字体与文字颜色——标题栏文字与三角形箭头均使用 `TyPanel` 解析出的 `TextColor`，全部主题驱动，无硬编码颜色。
+### 这两个键各画什么
+
+| 键 | 画什么 | 读哪些属性 |
+|----|--------|-----------|
+| `TyExPanel` | 整个控件的框（`DrawFrame`：背景 + 边框 + 圆角），标题栏与主体共用这一张表面；标题文字的**右内缩**也取它的 `padding.right` | `background` / `border-color` / `border-width` / `border-radius` / `padding` / `color` / `font-*` |
+| `TyExPanelHeader` | 标题栏band 的**墨色与字体**（chevron 三角与 `Caption` 一起上色），以及**可选的**band 底色 | `color` / `font-name` / `font-size` / `font-weight`；`background` 是**opt-in**：声明了才填底（band 会自动从边框内缩、外圆角跟随面板），不声明则完全不填，面板那一张表面原样透出。支持 `:hover`——band 是唯一可点区域，因此悬停只作用于它，而不是整个客户区 |
+
+> **早期版本返回 `'TyPanel'`，那份文档还写着"不应为 `TTyExPanel` 新增 `.tycss` 规则；调整外观请修改主题中的 `TyPanel` 规则"——照做会重涂全应用的每一个面板。`TTyExPanel` 之所以存在自己的键，正是为了不必那样做。** 现在：改折叠面板的框写 `TyExPanel { … }`，改标题栏的字色 / band 底 / 悬停写 `TyExPanelHeader { … }`，两者都不会波及普通面板。
+>
+> `TyExPanel` 已作为附加选择器并入主题里 `TyPanel` 的规则块，解析值与从前逐字节相同，**开钩子而不动像素**；第三方主题若只覆盖了 `TyPanel`，需要补上 `TyExPanel`（主题层按 typeKey 全有全无地回落，否则会掉回内置 light 取值）。内置主题只给 `TyExPanelHeader` 声明了 `color`，故意不给 `background` / `font-size` / `font-weight`——band 保持无底色带、字体跟随面板，正是今天的观感。
+>
+> 除这两个键外**没有更细的子部件键**：chevron 三角与 `Caption` 共用 `TyExPanelHeader` 的墨色（真实折叠头就是这么联动的），三角形的顶点是纯几何函数算出来的，不单独可着色。
 
 ---
 
@@ -92,7 +104,7 @@ function TyExPanelHeightAt(ACollapsedH, AExpandedH: Integer; t: Single): Integer
 ### MouseDown / MouseMove / MouseLeave（protected override）
 
 - `MouseDown`：左键点击且落在标题栏矩形内时切换 `Collapsed`（`Enabled = False` 时忽略）。
-- `MouseMove` / `MouseLeave`：跟踪鼠标是否悬停在标题栏上（用于将来的悬停高亮，当前仅置标志并重绘）。
+- `MouseMove` / `MouseLeave`：跟踪鼠标是否悬停在**标题栏**上。这个标志会替换掉控件级的 hover 参与 `TyExPanelHeader` 的状态解析——只有 band 可点，所以也只有 band 该读作 hot；主题写 `TyExPanelHeader:hover { … }` 即可生效。
 
 ### 事件
 
@@ -114,26 +126,33 @@ function TyExPanelHeightAt(ACollapsedH, AExpandedH: Integer; t: Single): Integer
 
 ## 7. 状态与主题
 
-因复用 `TyPanel` typeKey，`TTyExPanel` 直接使用主题中的 `TyPanel` 规则：
+`TTyExPanel` 用自己的两个键：
 
 ```css
-TyPanel {
+/* 盒子：内置主题里与 TyPanel 等键同值同块（名字各自独立） */
+TyExPanel {
   background: var(--surface);
   color: var(--on-surface);
   border-color: var(--border);
   border-width: 1px;
   border-radius: var(--radius);
-  font-size: 10px;
 }
+
+/* 标题栏：内置主题只声明 color，band 底色故意留空（不填 = 面板表面透出） */
+TyExPanelHeader        { color: var(--on-surface); }
+/* 想要一条有底色、悬停会亮的标题栏，加这两条即可——不影响任何普通面板 */
+TyExPanelHeader        { background: var(--surface-hover); }
+TyExPanelHeader:hover  { background: var(--selection); color: var(--accent); }
 ```
 
 ### 渲染细节
 
 绘制顺序（`RenderTo`）：
 
-1. **整体框架**：`DrawFrame` 以 `TyPanel` 样式绘制整个控件的背景 + 边框（标题栏与主体共用同一主题化表面，标题栏即其顶部一段）；
-2. **箭头三角形**：用 `TyPanel` 的 `TextColor` 填充，展开时向下、折叠时向右（顶点由纯函数 `TyExPanelChevronPoints` 计算，与命中测试同源）；
-3. **标题文字**：`Caption` 非空时以 `TextColor` 绘制在箭头右侧、标题栏内垂直居中。
+1. **整体框架**：`DrawFrame` 以 `TyExPanel` 样式绘制整个控件的背景 + 边框（标题栏与主体共用同一主题化表面，标题栏即其顶部一段）；
+2. **band 底色（opt-in）**：仅当 `TyExPanelHeader` 声明了 `background` 才填——band 会从边框内缩、上方两角跟随面板圆角，避免二次填充糊掉抗锯齿的角弧；不声明则一笔不画；
+3. **箭头三角形**：用 `TyExPanelHeader` 叠加在面板样式之上后的 `TextColor` 填充（主题两边都没声明时，落回面板的墨色，与从前一致），展开时向下、折叠时向右（顶点由纯函数 `TyExPanelChevronPoints` 计算，与命中测试同源）；
+4. **标题文字**：`Caption` 非空时以同一墨色 / 字体绘制在箭头右侧、标题栏内垂直居中（右内缩仍取**面板**的 `padding.right`——band 的盒子就是面板的盒子，标题栏键只管墨色与字体）。
 
 ---
 
@@ -190,7 +209,7 @@ Panel.OnCollapse := @PanelCollapse;
 
 ## 9. 注意事项
 
-1. **复用 `TyPanel` typeKey**：不需要、也不应为 `TTyExPanel` 新增 `.tycss` 规则；调整外观请修改主题中的 `TyPanel` 规则或用 `StyleClass` / `StyleOverride`。
+1. **它有自己的 typeKey，请用它**：调整外观写 `TyExPanel`（框）/ `TyExPanelHeader`（标题栏墨色、band 底、悬停），单实例差异化才用 `StyleClass` / `StyleOverride`。**不要**为了改折叠面板去改 `TyPanel`——那会重涂全应用的每一个面板。
 2. **`ExpandedHeight` 在折叠瞬间捕获**：展开恢复的是**折叠时**的高度，而非构造时的尺寸。若在折叠态直接改 `Height` 无意义（下次展开仍恢复 `ExpandedHeight`）；需要改变展开高度请在展开态设 `Height`，或直接写 `ExpandedHeight`。
 3. **headless 高度即时到位**：测试 / 无句柄环境中 `Collapsed` 切换后 `Height` 立即是最终值；真机上是逐帧缓动。
 4. **只有标题栏自绘**：标题栏是面板绘制出来的一段区域，不是子控件；`AdjustClientRect` 已把主体客户区下移一个标题栏高度，子控件不会遮住标题。

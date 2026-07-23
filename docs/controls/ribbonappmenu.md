@@ -6,7 +6,18 @@
 
 它继承自 [[TTyMenuButton]]（单元 `tyControls.DropButtons`）——整颗按钮即下拉触发器，天然获得标题 + 尾随箭头的绘制，`Click` 会先触发 `OnDropDown` 再（有窗口句柄时）弹出下拉菜单。
 
-> **复用 TyButton 主题，无新增 `.tycss`**：`GetStyleTypeKey` 保持返回 `'TyButton'`（继承而来）。强调外观**完全**来自 `StyleClass := 'primary'`——不引入任何新 typeKey。构造时默认 `Caption := 'File'`、`StyleClass := 'primary'`、尺寸约 64×26（逻辑像素，随 PPI 缩放）。
+> **它有自己的 typeKey `TyRibbonAppMenu`**（3.0 起；此前借用 `'TyButton'`）。构造时默认
+> `Caption := 'File'`、`StyleClass := 'primary'`、尺寸约 64×26（逻辑像素，随 PPI 缩放）。
+>
+> **为什么必须拆出来**：它不是一颗按钮，而是 ribbon 条上的一个「页签位」——左上角那颗
+> File 按钮，视觉上属于 ribbon 而不属于表单里的其他按钮。借 `TyButton` 时，皮肤作者想
+> 单独给它上色只能连带改掉全应用的按钮。
+>
+> **对第三方主题是破坏性的**：类规则是**按 typeKey** 匹配的，不存在裸 `.primary`——写
+> `TyButton.primary` 只影响 `TyButton`。要让 File 按钮跟随，主题必须**显式声明**
+> `TyRibbonAppMenu.primary`。随库主题已经在同一条规则里同时列出两个键，解析值一个没变；
+> 但你自己的 `.tycss` 若只写了 `TyButton.primary`，本控件会回落到内置 light 的取值
+> （base 层是**按 typeKey 全有全无**的，见 [tycss-reference §8.1](../tycss-reference.md)）。
 
 核心价值：应用只需分别设置 **`Commands`**（他们的「文件」菜单）和 **`RecentItems`**（一份字符串列表），本控件负责**组合**二者——且**绝不修改用户拥有的任何对象**。
 
@@ -18,7 +29,14 @@
 |------|-----|
 | 单元 | `tyControls.RibbonAppMenu` |
 | 类 | `TTyRibbonAppMenu`（继承 [[TTyMenuButton]]） |
-| `GetStyleTypeKey` 返回值 | `'TyButton'`（**继承复用**，见 [button.md](button.md)） |
+| `GetStyleTypeKey` 返回值 | `'TyRibbonAppMenu'`（自己的键；3.0 前借 `'TyButton'`） |
+
+| typeKey | 画什么 |
+|---|---|
+| `TyRibbonAppMenu` | 按钮外框：背景 / 边框 / 圆角 / 文字色 / 各状态。支持与 `TyButton` 相同的变体与伪类（`.primary` / `.danger` / `.ghost` × `:hover` / `:active` / `:focus` / `:disabled` / `:selected`），随库主题里两个键同规则同值 |
+
+> 尾随的下拉箭头与标题由继承来的 [[TTyMenuButton]] 绘制路径画出，取的是**本键**解析出的
+> `TextColor`——不再是 `TyButton` 的。箭头字形本身目前没有独立子部件键。
 
 ```pascal
 uses tyControls.Menu, tyControls.DropButtons, tyControls.RibbonAppMenu;

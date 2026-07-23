@@ -16,6 +16,9 @@
 的属性也不会从内置层渗漏)。因此完整主题与未引入本特性前渲染一致,而部分主题不会导致
 未覆盖控件不可见。
 
+> **升级既有主题的人先读 §8.1。** v3 把 51 个"借用别人 typeKey"的控件拆成了自己的键;
+> 由于覆盖语义是**按 typeKey 全有全无**,你的主题没提过的新键会**整键**回落到内置 light 值。
+
 ---
 
 ## 1. 概览与完整示例
@@ -87,7 +90,7 @@ TyPanel {
 }
 ```
 
-更完整的实例见仓库内置主题:`themes/light.tycss`、`themes/dark.tycss`、`themes/showcase.tycss`。
+更完整的实例见仓库内置主题:`themes/light.tycss`、`themes/dark.tycss`、`themes/builtin/showcase.tycss`。
 
 ---
 
@@ -208,8 +211,9 @@ typeKey 与文本类控件引用。它们都是普通 `--变量`,可被主题作
 - **类型名**:控件的 typeKey(见第 8 节),如 `TyButton`;
 - **变体名**(可选):任意标识符,对应控件 `StyleClass` 属性中的某个 token,如 `.primary`;
   每个选择器**最多一个**变体;
-- **状态名**(可选):只能是 `hover`、`active`、`focus`、`disabled` 四个之一,
-  其他伪类名直接解析报错。每个选择器最多一个状态。
+- **状态名**(可选):只能是 `hover`、`active`、`focus`、`disabled`、`selected` 五个之一
+  (`checked` 是 `selected` 的别名,解析成同一个状态),其他伪类名直接解析报错。
+  每个选择器最多一个状态 —— **不能链式书写** `:selected:disabled`。
 
 ```css
 TyButton { ... }                 /* 类型基础样式 */
@@ -227,7 +231,9 @@ TyEdit:focus, TyComboBox:focus { ... }   /* 逗号列表:同一组声明注册�
 - 通配符:`*`
 - 多变体:`TyButton.primary.large`(一个选择器只允许一个 `.变体`)
 - 纯类 / 纯状态选择器:`.primary`、`:hover`(必须以类型名开头)
-- 属性选择器、`!important`、`@media`、`@import` 等一概不支持
+- 属性选择器、`!important`、`@media` 一概不支持
+  (`@import` 与 `@mode` **是支持的** at-规则,只是它们不是选择器;`@import` 必须出现在
+  所有 `:root` 与规则**之前**)
 
 ### 4.3 控件状态从哪里来
 
@@ -237,10 +243,14 @@ TyEdit:focus, TyComboBox:focus { ... }   /* 逗号列表:同一组声明注册�
   hover / focus / active 均被忽略;
 - `hover`:鼠标位于控件上;
 - `active`:鼠标左键按下未释放(对 CheckBox 等也是"按住"而非"选中");
-- `focus`:控件拥有键盘焦点。`TyLabel` 基于 GraphicControl,**没有** focus 状态,
-  其余 9 个 typeKey 均支持 focus。
+- `focus`:控件拥有键盘焦点。基于 `TTyGraphicControl` 的控件(`TTyLabel` 一族、
+  `TTyProgressBar`、仪表族等)**没有** focus 状态;能取得焦点的窗口化控件都支持它;
+- `selected`:条目/单元格/页签一类**可选中的部件**处于选中态。它由子部件的解析点给出
+  (如 `TyListViewItem`、`TyCalendarCell`、`TyGridCell`、`TySegmentedItem`),而不是控件整体的瞬时状态。
 
 多个状态可同时成立(如鼠标悬停在已聚焦的按钮上 = hover + focus)。
+一个键支持哪些状态,取决于**它的解析点传了什么** —— 第 8 节逐键列出内置主题实际写过的伪类,
+并点名那些解析时传**空状态集**、因而伪类选择器是死的键(如 `TyLinkLabelLink`)。
 
 ### 4.4 样式解析与合并顺序(ResolveStyle)
 
@@ -249,8 +259,11 @@ TyEdit:focus, TyComboBox:focus { ... }   /* 逗号列表:同一组声明注册�
 1. **类型基础层**:`Type { }`;
 2. **变体层**:控件 `StyleClass` 中的每个空格分隔 token,按其在 `StyleClass`
    字符串中的文本顺序依次应用 `Type.变体 { }`(`StyleClass` 可含多个变体,如 `"primary large"`);
-3. **状态层**:对当前成立的每个状态,按固定顺序 **hover → focus → active → disabled**
-   依次处理;每个状态内先应用 `Type:状态 { }`,再按变体顺序应用 `Type.变体:状态 { }`。
+3. **状态层**:对当前成立的每个状态,按固定顺序
+   **selected → hover → focus → active → disabled** 依次处理;
+   每个状态内先应用 `Type:状态 { }`,再按变体顺序应用 `Type.变体:状态 { }`。
+   `selected` 排在最前是有意的:它是**静态的驻留层**,让 hover/active 能逐属性盖掉它冲突的部分,
+   而 selected 独有的属性(例如只有它声明的 `border-color`)仍然留下来。
 
 由此可见:**带状态的规则永远晚于(强于)不带状态的规则,带变体的状态规则永远晚于
 同状态的纯类型规则**。
@@ -273,24 +286,29 @@ TyButton.primary  { background: var(--accent); }        /* 变体层 */
 TyButton.primary:hover { background: lighten(--accent, 8%); }
 ```
 
-#### 重复选择器:先写者胜
+#### 重复选择器:后写者胜(逐属性合并)
 
-引擎为每个 `(类型, 变体, 状态)` 组合查找规则时返回**文件中第一条**匹配的规则,
-与浏览器 CSS"后写覆盖"相反:
+引擎对每个 `(类型, 变体, 状态)` 组合**正序应用所有**命中的规则,后一条按属性覆盖前一条
+—— 与浏览器 CSS 一致,也是 `@import` / 追加加载能逐属性叠加的原因:
 
 ```css
-TyButton { background: #FF0000; }   /* 生效 */
-TyButton { background: #00FF00; }   /* 被忽略 */
+TyButton { background: #FF0000; color: #111111; }
+TyButton { background: #00FF00; }   /* 只覆盖 background;color 仍是 #111111 */
 ```
 
-请勿重复定义同一选择器;需要并列声明时把它们写进同一个规则块
-(块内同名属性才是后写覆盖)。
+这条行为由 `tests/test.StyleModel.pas` 的 `TestDuplicateRuleLastWins` 守住。
+即便如此,仍不建议在**同一个文件里**重复定义同一选择器 —— 需要并列声明时把它们写进同一个规则块,
+读起来才不用满文件找覆盖。
 
 ---
 
 ## 5. 属性参考
 
-引擎可识别的属性共 16 个(另有 `background-color` 作为 `background` 的别名),其余属性名一律被静默忽略。
+引擎可识别的属性共 23 个(另有 `background-color` 作为 `background` 的别名),其余属性名一律被静默忽略。
+本节展开其中通用的 16 个。另外 7 个是窗框 / 材质专用,本手册尚未逐条展开
+(`render-style` 见 §9 第 17 条,`window-shadow` 见 [KNOWN_GAPS.md](KNOWN_GAPS.md);
+其余 `background-size`、`background-blur`、`glass-blur`、`glass-tint`、
+`background-under-titlebar` 目前只有源码 `TyApplyDeclaration` 为准)。
 所有长度均为**逻辑像素**(96 DPI 基准),绘制时按控件实际 DPI 缩放。
 长度值可写 `6px` 或裸 `6`(`px` 后缀可省略),也可用 `var(--x)` / 裸 `--x`。
 
@@ -344,14 +362,14 @@ color: <颜色表达式> ;
 ```
 
 用于文字以及 tier-b 单色字形(CheckBox 勾选符、ComboBox 下拉箭头、SpinEdit/ScrollBar 箭头、
-Tab 关闭 × 等,见 §8.3)。
+Tab 关闭 × 等,见 §8.7)。
 
 ```css
 TyButton.primary { color: #FFFFFF; }
 ```
 
 注:滑块/旋钮等 tier-a **着色面**不再借用本控件的 `color`,而由各自的子部件 typeKey
-(`TyScrollThumb`、`TyToggleKnob` 等)的 `background` 决定——详见第 8.2 / 8.3 节。轨道/轨条背景仍来自父控件 `background`。
+(`TyScrollThumb`、`TyToggleKnob` 等)的 `background` 决定——详见 §8.2 / §8.7。轨道/轨条背景仍来自父控件 `background`。
 
 ### 5.4 `border-color` / `border-width` / `border-style` — 边框
 
@@ -679,59 +697,513 @@ TyButton.primary {
 
 ## 8. typeKey 与内置变体清单
 
-选择器中的类型名即控件 `GetStyleTypeKey` 返回的 typeKey（含子部件 typeKey）:
+选择器中的类型名即控件 `GetStyleTypeKey` 返回的 typeKey（含子部件 typeKey）。
 
-> **保留（未来 ribbon）：** typeKey `TyRibbon`、`TyRibbonTab`、`TyRibbonGroup` 已为未来的 ribbon 条带**预留命名**——目前不对应任何控件，也不应把这三个名字用于其它用途。未来的 `TTyRibbon`（基于 `TTyTabControl`、与窗框无关、docked `alTop`）落地时会启用它们。详见 [controls/ttyform.md](controls/ttyform.md) 第 8 节。
+本节是主题作者的**权威键表**。清单逐条取自 `themes/light.tycss` —— 该文件是唯一事实来源,
+`source/tyControls.DefaultTheme.pas`(编译进库的内置基础层)由它生成并逐字节同步。
 
-### 8.1 控件 typeKey
+当前规模:
 
-| typeKey | 控件类 | focus 状态 | 内置主题用到的变体 | 备注 |
-|---|---|---|---|---|
-| `TyButton` | `TTyButton` | ✓ | `primary`、`danger` | |
-| `TyLabel` | `TTyLabel` | ✗（GraphicControl，无焦点） | — | |
-| `TyEdit` | `TTyEdit` | ✓ | — | 选区底色用 `:focus` 的 `border-color` 加 35% alpha |
-| `TyCheckBox` | `TTyCheckBox` | ✓ | — | `background`/`border` 作用于小方块；控件整体透明；`opacity`/`shadow` v1.1 起生效 |
-| `TyRadioButton` | `TTyRadioButton` | ✓ | — | 同上，`background`/`border` 作用于圆圈 |
-| `TyPanel` | `TTyPanel` | ✓ | — | 容器，`padding` 决定内容区内缩 |
-| `TyComboBox` | `TTyComboBox` | ✓ | — | 下拉箭头用 `color` 绘制 |
-| `TyScrollBar` | `TTyScrollBar` | ✓ | — | 滑块样式由子部件 typeKey `TyScrollThumb` 决定(tier-a)；轨道背景来自 `background`；端部箭头墨色用 `color`(tier-b) |
-| `TyListBox` | `TTyListBox` | ✓ | — | 行条目样式由子部件 typeKey `TyListItem` 决定 |
-| `TyProgressBar` | `TTyProgressBar` | ✗（GraphicControl，无交互） | — | 填充段样式由子部件 typeKey `TyProgressFill` 决定 |
-| `TyToggleSwitch` | `TTyToggleSwitch` | ✓ | — | `Checked=True` 时追加 `:active` 状态；旋钮样式由子部件 typeKey `TyToggleKnob` 决定(tier-a) |
-| `TyTrackBar` | `TTyTrackBar` | ✓ | — | 滑块样式由子部件 typeKey `TyTrackThumb` 决定 |
-| `TyGroupBox` | `TTyGroupBox` | ✓ | — | **必须声明 `background`**（用于遮盖标题处边框线） |
-| `TyForm` | `TTyForm` | — | — | 自绘窗框窗体背景；经 `ApplyChromeTheme` 应用到窗体 `Color`；内置 `background: darken(--surface, 4%)` |
-| `TyContentPanel` | `TTyContentPanel` | ✓ | — | `TTyForm` 的保留内容区背景；内置 `background: var(--surface)`（内容区表面色，比窗体背景 `darken(--surface, 4%)` 略浅） |
-| `TyTitleBar` | `TTyTitleBar` | ✓ | — | 自绘窗体标题栏（`TTyForm` 子组件，"条带 0"） |
-| `TyCaptionButton` | `TTyCaptionButton` | ✓ | `close`、`min`、`max` | 标题栏关闭/最小化/最大化系统按钮（`TTyTitleBar` 代码持有） |
-| `TyTabControl` | `TTyTabControl` | ✓ | — | 标签页控件外框；页签子部件样式由 `TyTab` 决定 |
+| | 数量 |
+|---|---|
+| `light.tycss` 已定义的 typeKey | **183** |
+| 控件解析、但基础层**刻意不定义**的键（§8.4） | 8 |
+| 主题里有定义、但**没有任何代码解析**的死键（§8.6） | 3 |
 
-### 8.2 子部件 typeKey（不对应独立控件，由父控件内部解析）
+> **v3 起的重大变化。** 此前 51 个控件解析的是**别的控件**的 typeKey,主题层根本够不着它们
+> (commit `b824a49`、`d58eada`)。这些控件现在各有自己的键,并作为**并列选择器**加进原捐赠者
+> 的规则块 —— 所以内置主题下像素一动不动,但每一个都变成可单独换肤的钩子。
+> **既有第三方 `.tycss` 必须补新选择器**,原因见下一小节。
 
-| typeKey | 父控件 | 支持的状态 | 说明 / 内置默认 |
+### 8.1 最重要的一条:基础层是「整键替换」,不是「逐属性级联」
+
+`ResolveStyle` 的默认行为(`PropertyCascade` 关闭时)是**按 typeKey 全有全无**:
+
+- 主题对某 typeKey **一条规则都没写** → 该键整体回落到内置 light 基础层;
+- 主题对该 typeKey 写了**任意一条**规则(基础态、变体、状态,任一即可)→ 内置层对这个键
+  **整体失效**,主题没写的属性也**不会**从内置层渗漏。
+
+判据是 `TTyStyleModel.UserHasTypeKey`,只看**键名**,不看你覆盖了哪些属性。
+
+这条规则正是升级时最容易踩的坑,也是本节最需要告诉你的一件事:
+
+> **拆键 = 你的主题多了一批没写过的键。**
+> 从前 `TyGauge { background: url(...) }` 一条规则同时管住十四个仪表控件;现在
+> `TTyMeter` 解析 `TyMeter`,你的主题从没提过这个名字,于是 `TyMeter` **整键**回落到
+> 内置 light 值 —— 在一张图片皮肤上就是照片中间一块不透明的灰方块。
+> 所以**给 `TyGauge` 换过肤,就必须把 `TyMeter`、`TyRating`、`TyDial`……一起点名**。
+
+内置主题用**并列选择器**处理这件事,第三方主题照抄这个写法即可:
+
+```css
+/* 一条规则,十八个可分别覆盖的名字 */
+TyGauge, TyMeter, TyLevelMeter, TyDial, TyGearDial, TyAnalogClock, TyCircularProgress,
+TyActivityIndicator, TyActivityBar, TyGearActivityIndicator, TySparkline, TyRating,
+TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth, TyColorArea {
+  background: var(--surface-sunk);
+  border-color: var(--border);
+}
+```
+
+排查手段:`tests/test.themes.pas` 里的 alias guard 会把每个新键与它拆自的捐赠键逐条比对,
+`themes/` 与 `examples/theming/` 下所有样式表都在其覆盖范围内。自制主题可照它的做法自查。
+
+### 8.2 怎么读下面的表
+
+- **画什么** —— 该键在控件上负责哪一块像素。写「文字色」意味着该键只被读 `color`,
+  写 `background` 意味着只被读背景,不写则表示整套盒模型属性都生效。
+- **谁解析** —— 解析这个键的控件类。一个键可能被多个控件解析(共用是有意的,见 §8.5)。
+- **状态 / 变体** —— **内置 light 主题实际写过的**伪类与 `.变体`。
+  未列出不等于控件不上报该状态:任何键都可以写 `:hover`/`:active`/`:focus`/`:disabled`/`:selected`,
+  只要控件在重绘时上报了对应状态就会命中(§4.3)。反过来,少数键的解析点传的是**空状态集**
+  (如 `TyLinkLabelLink`),那么它的伪类选择器是**死的** —— 表里会点名。
+
+#### 8.2.1 窗体与窗框
+
+| typeKey | 画什么 | 谁解析 | 状态 / 变体 |
 |---|---|---|---|
-| `TyListItem` | `TTyListBox` | `:hover`（悬停行）、`:active`（选中行）、无伪类（普通行） | 每行条目的独立样式，`background` 决定行背景，`color` 决定文字颜色；内置 `border-radius:var(--radius)` + `padding:4px`，使行呈圆角并内缩 |
-| `TyProgressFill` | `TTyProgressBar` | 无状态（始终正常） | 进度条填充段，`background` 决定填充色（默认 `var(--accent)`）；部分填充时只圆**起始(左)角**、保留前缘直角（详见 [controls/progressbar.md](controls/progressbar.md)） |
-| `TyTrackThumb` | `TTyTrackBar` | `:hover`（鼠标在滑块上）、`:active`（拖动中）、无伪类（正常） | 滑块的独立样式，`background` 决定滑块颜色（默认 `var(--accent)`） |
-| `TyTab` | `TTyTabControl` | `:hover`（鼠标悬停在该页签上）、`:active`（该页签当前被选中）、无伪类（普通未选中） | 单个页签头的独立样式；注意 `:active` 在此表示"选中态"而非"鼠标按下" |
-| `TyScrollThumb` | `TTyScrollBar` | `:hover`（鼠标悬停滚动条上）、`:active`（按下）、无伪类（正常） | 滚动条滑块(thumb)的独立填充与圆角；`background` 决定滑块色、`border-radius` 决定滑块圆角。内置默认 `background:var(--border)`（hover→`darken(--border,15%)`、active→`var(--accent)`）、`border-radius:4px`——与旧版借用 `TyScrollBar` 的 `color` 渲染结果**逐字一致** |
-| `TyToggleKnob` | `TTyToggleSwitch` | 无状态（始终正常） | 开关旋钮的独立填充与圆角；`background` 决定旋钮色（默认 `#FFFFFF`）、`border-radius` 决定旋钮圆角(默认 `12px`，绘制时按 `TyClampRadius` 钳到旋钮半径,圆形不变) |
-| `TyTextSelection` | `TTyEdit` / `TTyMemo` | 无状态（始终正常） | 文本选区高亮带底色；只取 `background`(默认 `var(--selection)`，accent 着色的半透明)。与 `TyListItem:active` 视觉同源 |
-| `TyTextHint` | `TTyEdit` | 无状态（始终正常） | 占位符 / 提示文字颜色；只取 `color`（默认 `var(--muted)`，弱化前景） |
-| `TyTabClose` | `TTyTabControl` | 无状态（始终正常） | 页签关闭 × 悬停时其后的圆角底片；`background` 决定底片色(默认 `var(--overlay-hover)`)、`border-radius` 决定底片圆角(默认 `var(--radius)`)。× 字形本身仍用 `TyTab` 的 `color` 绘制(tier-b，见 §8.3) |
+| `TyForm` | 窗体背景;经 `ApplyChromeTheme` 写进窗体 `Color`。内置 `background: var(--form-bg)`,比内容表面略深 | `TTyForm` | — |
+| `TyFormSurface` | **刻意不定义**(§8.4) | `TTyFormSurface` | — |
+| `TyTitleBar` | 自绘标题栏条带(与 `TyRibbonQuickAccess` 共用一个规则块) | `TTyTitleBar` | — |
+| `TyCaptionButton` | 标题栏系统按钮 | `TTyCaptionButton` | `:hover` `:active`;变体 `.close`(`:hover`/`:active`)、`.min`(`:hover`)、`.max`(`:hover`) |
 
-- 所有控件 typeKey 都支持 `hover`、`active`、`disabled` 三个状态；除 `TyLabel`、`TyProgressBar` 外都支持 `focus`；
-- **变体不是封闭集合**：任何标识符都可以作为变体，只要控件的 `StyleClass` 属性包含对应 token（空格分隔，可多个）即可匹配；
-- 表中"内置变体"只是三个内置主题实际定义过的：`TyButton` 的 `primary` / `danger`，`TyCaptionButton` 的 `close` / `min` / `max`（由窗体镶边自动赋给三个标题栏按钮）。
+#### 8.2.2 按钮族
 
-### 8.3 子部件着色的两层约定（tier-a / tier-b）
+下面六个键**共用同一个规则块**,取值逐字节相同,但可分别覆盖:
 
-控件内部那些不属于"控件本体框"的小部件，按其是不是一块**独立的着色面**分两类处理颜色,
+| typeKey | 画什么 | 谁解析 |
+|---|---|---|
+| `TyButton` | 普通按钮外框 + 文字 | `TTyButton`(及未重写键的后代:`TTyGlyphButton`、`TTyColorButton`、`TTyDropDownButton`、`TTyMenuButton`、`TTyTransferArrowButton`) |
+| `TySpeedButton` | 工具条上的快捷按钮 | `TTySpeedButton` |
+| `TyGlyphContainerButton` | 带图标容器的按钮 | `TTyGlyphContainerButton` |
+| `TyRibbonAppMenu` | Ribbon 左上角的应用菜单按钮 | `TTyRibbonAppMenu` |
+| `TyButtonGroup` | 分段按钮组的整体外框 | `TTyButtonGroup` |
+| `TyUpDown` | 上下微调器外框、中缝与箭头墨色 | `TTyUpDown` |
+
+状态:`:hover` `:focus` `:active` `:disabled`。
+变体:`.primary`(`:hover`/`:active`)、`.danger`(`:hover`/`:active`)、
+`.ghost`(平时透明,`:hover`/`:active`/`:selected`/`:focus`/`:disabled` 齐全)。
+
+同族但独立成块的还有一个:
+
+| typeKey | 画什么 | 谁解析 | 状态 |
+|---|---|---|---|
+| `TyBadge` | 按钮右上角的数字角标胶囊 | `TTyBadge`、`TTyButton` | 无状态 |
+
+#### 8.2.3 文本与静态标签族
+
+下面七个键共用同一个规则块(透明底 + `--on-surface` 墨色 + 基准字号):
+
+| typeKey | 画什么 | 谁解析 |
+|---|---|---|
+| `TyLabel` | 静态标题文字 | `TTyLabel` |
+| `TyHtmlLabel` | 富文本块(逐 run 绘制、下划线/删除线带) | `TTyHtmlLabel` |
+| `TyLinkLabel` | 超链接标签的**盒子**(字体/内容,不含链接墨色) | `TTyLinkLabel` |
+| `TyShadowLabel` | 带投影的文字 | `TTyShadowLabel` |
+| `TyGlowLabel` | 带光晕的文字 | `TTyGlowLabel` |
+| `TyDivider` | 分隔线及其嵌入标题 | `TTyDivider` |
+| `TyCharImage` | 字形/图标字符块 | `TTyCharImage` |
+
+状态:仅 `:disabled`(`opacity`)。
+
+| typeKey | 画什么 | 谁解析 | 注意 |
+|---|---|---|---|
+| `TyLinkLabelLink` | 链接墨色,只读 `color` | `TTyLinkLabel` | 解析时传**空状态集**,`TyLinkLabelLink:hover` / `:disabled` 是**死选择器**;悬停色由代码 `TyLighten(col, 15)` 合成 |
+
+> `TTyHtmlLabel` 里 `<a>` 的墨色**不经任何 typeKey** —— `RenderTo` 直接
+> `ResolveOverride('color: var(--accent);')`,钉死在 `--accent`。想改只能改 `--accent`。
+> `TyHtmlLabelLink` 是推迟项,**不存在**(§8.4)。
+
+#### 8.2.4 输入框族
+
+| typeKey | 画什么 | 谁解析 | 状态 / 变体 |
+|---|---|---|---|
+| `TyEdit` | 单行输入框 | `TTyEdit` 及未重写键的后代(`TTyMaskEdit`/`TTyCurrencyEdit`/`TTyURLEdit`/`TTyNumericEdit`/`TTyCalcEdit`/`TTyValueEdit`/`TTyComboEdit`/`TTyTrackEdit`);`TTyCalculator` 的显示条也显式解析它 | `:hover` `:focus` `:disabled` |
+| `TySpinEdit` | 数字微调输入框 | `TTySpinEdit` | `:hover` `:focus` `:disabled` |
+| `TyMemo` | 多行文本框 | `TTyMemo` | `:hover` `:focus` `:disabled` |
+| `TyComboBox` | 下拉框字段(下拉箭头用 `color`) | `TTyComboBox` 及其 11 个后代;`TTyTreeSelect` 刻意共用(§8.5) | `:hover` `:focus` `:disabled` |
+| `TyCascader` | 级联选择字段 | `TTyCascader` | `:hover` `:focus` `:disabled` |
+| `TyDateTimePicker` | 日期时间字段 | `TTyDateTimePicker` | `:hover` `:focus` `:disabled` |
+| `TyTextSelection` | 文本选区高亮带,只读 `background` | `TTyEdit` / `TTyMemo` / `TTyDateTimePicker` | 无状态 |
+| `TyTextHint` | 占位符 / 提示文字,只读 `color` | `TTyEdit` / `TTyTreeSelect` | 无状态 |
+
+#### 8.2.5 勾选、开关、滑杆、进度
+
+| typeKey | 画什么 | 谁解析 | 状态 |
+|---|---|---|---|
+| `TyCheckBox` | 复选框的小方块(控件整体透明) | `TTyCheckBox`、`TTyCheckListBox`、`TTyDateTimePicker` | `:hover` `:active` `:focus` `:disabled` |
+| `TyRadioButton` | 单选钮的圆圈 | `TTyRadioButton` | `:hover` `:active` `:focus` `:disabled` |
+| `TyToggleSwitch` | 开关的轨道(`Checked=True` 时追加 `:active`) | `TTyToggleSwitch` | `:hover` `:active` `:focus` `:disabled` |
+| `TyToggleKnob` | 开关旋钮(tier-a 着色面) | `TTyToggleSwitch` | 无状态 |
+| `TyTrackBar` | 滑杆轨道 | `TTyTrackBar` | `:focus` `:disabled` |
+| `TyTrackThumb` | 滑杆滑块(tier-a) | `TTyTrackBar`、`TTyTrackEdit` | `:hover` `:active` |
+| `TyProgressBar` | 进度条轨道 | `TTyProgressBar` | `:disabled` |
+| `TyProgressFill` | 进度条填充段(tier-a);部分填充时只圆起始角 | `TTyProgressBar` | 无状态 |
+
+#### 8.2.6 容器与面板
+
+下面十七个键**共用同一个规则块**(表面色 + 1px 边框 + `--radius` + `--pad-container`)。
+`TyPanel` 之外的每一个,从前都只能通过改 `TyPanel` 来影响 —— 也就是会牵动全应用的容器:
+
+| typeKey | 画什么 | 谁解析 |
+|---|---|---|
+| `TyPanel` | 通用容器面板 | `TTyPanel`;`TTyRelativePanel` / `TTyPaintPanel` 刻意共用(§8.5) |
+| `TyScrollBox` | 滚动**井**(约定上比面板下沉) | `TTyScrollBox`;`TTyScrollPanel` 继承 |
+| `TyExPanel` | 可折叠卡片的外框(其 `padding.right` 同时决定标题右内缩) | `TTyExPanel` |
+| `TyChart` | 图表外框、标题、图例、刻度标签、两轴与网格线 | `TTyChart` |
+| `TyCalculator` | 计算器背板(显示条另解析 `TyEdit`,按键是真的 `TTyButton`) | `TTyCalculator` |
+| `TyBevel` | 凹凸装饰线(只画高光/阴影两条轨,不画面) | `TTyBevel` |
+| `TySizeBox` | 右下角尺寸夹点 | `TTySizeBox` |
+| `TyControlBar` | 可停靠工具条容器与其装饰性握把 | `TTyControlBar` |
+| `TyCoolBar` | 可拖拽分带工具条(握把可交互) | `TTyCoolBar` |
+| `TyColorGrid` | 色块矩阵与选中环 | `TTyColorGrid` |
+| `TyShape` | 矢量图元(椭圆/矩形/三角/线) | `TTyShape` |
+| `TyStarShape` | 星形图元 | `TTyStarShape` |
+| `TyArrow` | 箭头图元 | `TTyArrow` |
+| `TyImageView` | 缩放/平移图片背后的**信箱底衬** | `TTyImageView` |
+| `TyImage` | 图片框(`Transparent=False` 时才画框) | `TTyImage` |
+| `TyPreviewBox` | 文件对话框的预览井 + 空态提示文字 | `TTyPreviewBox` |
+| `TyListGroupPanel` | 导航手风琴的**侧栏底面** | `TTyListGroupPanel` |
+
+该块**无状态规则**。想让图片 `:disabled` 变淡,得自己写
+`TyImage:disabled { opacity: 0.5; }` —— 内置主题没有为这一族声明任何状态规则。
+
+| typeKey | 画什么 | 谁解析 | 状态 |
+|---|---|---|---|
+| `TyExPanelHeader` | 折叠面板的标题带:箭头 + 标题墨色与字体;`background` **是选择性的**(写了才填带底,不写则透出面板表面) | `TTyExPanel` | `:hover`(带内悬停,内置未写,写了即生效) |
+| `TyGroupBox` | 分组框(**必须声明 `background`**,用于遮盖标题处的边框线) | `TTyGroupBox`、`TTyRadioGroup`、`TTyCheckGroup`;`TTyOfficeListBox`/`TTyOfficeComboBox` 的分组标题带也解析它 | — |
+| `TyToolGroupPanel` | Ribbon 风格的命令簇(与 `TyGroupBox` 共块) | `TTyToolGroupPanel` | — |
+| `TyGridPanel` | **刻意不定义**(§8.4) | `TTyGridPanel` | — |
+
+#### 8.2.7 滚动条、分隔条、状态栏、工具条
+
+| typeKey | 画什么 | 谁解析 | 状态 |
+|---|---|---|---|
+| `TyScrollBar` | 滚动条轨道背景;端部箭头墨色用 `color`(tier-b) | `TTyScrollBar` | `:hover` `:active` `:focus` `:disabled` |
+| `TyScrollThumb` | 滑块的独立填充与圆角(tier-a) | `TTyScrollBar` | `:hover` `:active` |
+| `TySplitter` | 分隔条(内置 `background: none`,只有握把墨色) | `TTySplitter` | `:hover` |
+| `TyStatusBar` | 状态栏条带 | `TTyStatusBar` | — |
+| `TyToolBar` | 工具条条带 | `TTyToolBar`、`TTyToolBarEx` | — |
+| `TyToolSeparator` | 工具条分隔线:`border-color` 画线、`background` 让它与条带无缝(与 `TyToolBar` 共块) | `TTyToolSeparator` | — |
+
+#### 8.2.8 列表框族
+
+| typeKey | 画什么 | 谁解析 | 状态 |
+|---|---|---|---|
+| `TyListBox` | 列表外框 | `TTyListBox` 及 14 个未重写键的后代;`TTyComboBox`/`TTyValueListEditor` 的下拉体、`TTyPopupSurface`、`TTyGalleryGrid`(画廊弹出网格)也解析它 | `:hover` `:focus` `:disabled` |
+| `TyValueListEditor` | 属性网格外框(与 `TyListBox` 共块) | `TTyValueListEditor` | `:hover` `:focus` `:disabled` |
+| `TyRibbonGallery` | Ribbon 画廊的内嵌行外框(与 `TyListBox` 共块) | `TTyRibbonGallery` | `:hover` `:focus` `:disabled` |
+| `TyListItem` | 单行条目:`background` 决定行底、`color` 决定文字 | `TTyListBox`;`TTyRibbonGallery` 的图块也仍解析它 | `:hover` `:active`(=选中行) |
+| `TyValueListEditorRow` | 属性网格的一行(与 `TyListItem` 共块) | `TTyValueListEditor` | `:hover` `:active` |
+
+`TyValueListEditorKey` / `-Value` / `-Divider` / `-Expander` 由代码解析但**基础层刻意不定义**,见 §8.4。
+
+#### 8.2.9 树、列表视图、列头
+
+| typeKey | 画什么 | 谁解析 | 状态 |
+|---|---|---|---|
+| `TyTreeView` | 树外框(与 `TyListView` 共块) | `TTyTreeView`;`TTyShellTreeView`、`TTyTreeSelect` 的下拉树继承 | — |
+| `TyListView` | 列表视图外框 | `TTyListView`;`TTyShellListView` 继承 | — |
+| `TyTreeNode` | 一个树节点行 | `TTyTreeView` | `:hover` `:selected` `:disabled` |
+| `TyListViewItem` | 一个列表视图条目(与 `TyTreeNode` 共块) | `TTyListView` | `:hover` `:selected` `:disabled` |
+| `TyTreeHeader` | 树的列头**带**(画在自己框内,不描边) | `TTyTreeView` | — |
+| `TyListViewHeader` | 列表视图的列头带 | `TTyListView` | — |
+| `TyListViewGroupHeader` | 列表视图的**分组**带(从前与列头带同键,无法分开配) | `TTyListView` | — |
+| `TyHeaderControl` | 独立表头条:它**就是**外框,故 `border-radius`/`shadow` 在这里有意义(与上面三个共块) | `TTyHeaderControl` | — |
+| `TyTreeHeaderSection` | 一个列头单元格 | `TTyTreeView`;`TTyHeaderControl` **仍共用**(其专属 section 键是推迟项) | `:hover` `:selected` |
+| `TyListViewHeaderSection` | 列表视图的列头单元格(与上共块) | `TTyListView` | `:hover` `:selected` |
+| `TyTreeCheckBox` | 树节点勾选框 | `TTyTreeView` | `:active` `:selected` `:disabled` |
+| `TyListViewCheckBox` | 列表视图勾选框(与上共块) | `TTyListView` | `:active` `:selected` `:disabled` |
+
+`TyListViewLine` / `TyListViewMarquee` 由代码解析但**基础层刻意不定义**,见 §8.4。
+
+#### 8.2.10 数据网格 `TTyGrid`
+
+网格自成一整套键,**不借用树/列表的键**。基础层给全套定义,所以新皮肤一条网格规则不写也能正常显示。
+`TTyDrawGrid` / `TTyStringGrid` 刻意共用 `TyGrid`(§8.5)。网格的每一次解析都会带上控件的
+`StyleClass`,所以 `.变体` 在**子部件键上也有效** —— 这一点与 ListView / ValueListEditor 不同。
+
+| typeKey | 画什么 | 状态 |
+|---|---|---|
+| `TyGrid` | 网格外框 | — |
+| `TyGridCell` | 正文单元格(内置 `background: none`,让表面透出) | `:hover` `:selected` |
+| `TyGridCellSelectedInactive` | 失焦时的选区(`HideSelectionWhenInactive`) | — |
+| `TyGridActiveCell` | 焦点格(整行选中模式下指示光标所在格) | — |
+| `TyGridCellMarked` | 选区盖在**用户显式着色**的格上时的半透明层 | — |
+| `TyGridSelectionFrame` | 选区外框 + 右下角填充柄(`color` = 柄的描边色) | — |
+| `TyGridCellAlt` | 斑马纹隔行底色 | — |
+| `TyGridFixed` | 冻结行列区 | — |
+| `TyGridIndicator` | 行头槽 | — |
+| `TyGridHeader` | 列头带 | — |
+| `TyGridHeaderSection` | 一个列头单元格 | `:hover` `:selected` |
+| `TyGridHeaderGroup` | 分组表头带(横跨若干列的上层标题) | — |
+| `TyGridFilterRow` | 内嵌筛选行(底色跟表面走、边框跟输入框走,以示"这里能打字") | — |
+| `TyGridGroupRow` | 分组带。内置 `background: none` **是刻意的**当前观感;想要 chrome 底色自行声明 | — |
+| `TyGridSummaryRow` | 汇总/页脚带。**刻意没有 `border-color`** —— `RenderFooter` 不读,写了是死属性 | — |
+| `TyGridLine` | 格线,只读 `background`;设成透明即可去掉格子 | — |
+| `TyGridCheckBox` | 勾选框单元格 | `:selected` |
+| `TyGridHyperlink` | 超链接单元格墨色 | — |
+| `TyGridCommentMark` | 批注角标墨色 | — |
+| `TyGridProgress` | 进度条单元格轨道 | — |
+| `TyGridProgressFill` | 进度条单元格填充 | — |
+| `TyGridRating` | 评分单元格的实心星 | — |
+| `TyGridRatingEmpty` | 评分单元格的空心星 | — |
+| `TyGridButton` | 按钮单元格(自己的键,免得改网格按钮波及全库按钮) | `:hover` `:active` |
+
+> **同名警告:`TyGridCell` 被两个不相干的东西认领。**
+> 除数据网格的正文格外,`TTyGridPanel` 的布局格子 `TTyGridCell` 的 `GetStyleTypeKey` 也返回
+> `'TyGridCell'`。后者的 `Paint` **什么都不画**,所以今天没有可见冲突;但它并不是一个
+> 单独可寻址的钩子 —— 你写给数据网格的 `TyGridCell` 规则名义上也罩着它。
+
+#### 8.2.11 标签页族
+
+| typeKey | 画什么 | 谁解析 | 状态 |
+|---|---|---|---|
+| `TyPageControl` | 多页控件的页容器外框 | `TTyPageControl` | `:hover` `:focus` `:disabled` |
+| `TyTabSheet` | 页体:只有不透明表面填充,**无边框**,以免透出 OS 窗体背景 | `TTyTabSheet` | — |
+| `TyTabSet` | 只有页签条、**没有页体**的标签条 | `TTyTabSet` | `:hover` `:focus` `:disabled` |
+| `TyTab` | 单个页签头(`:active` 在此表示**选中**而非按下) | 页签条引擎(`TTyPageControl` / `TTyTabSet`);Ribbon 的页签头也解析它 | `:hover` `:active` |
+| `TyTabClose` | 关闭 × 悬停时的圆角底片(× 笔画本身用 `TyTab` 的 `color`,tier-b) | 页签条引擎 | 无状态 |
+
+> `TyTabSet` 因为 `HasPageBody = False` 而**跳过 `DrawFrame`**,只画一条基线导轨,
+> 所以它实际只消费 `border-color` 与 `border-width`;写 `background` / `border-radius` /
+> `shadow` 不会被画出来。专属的 `TyTabSetRail` 是推迟项,不存在(§8.4)。
+
+#### 8.2.12 菜单
+
+| typeKey | 画什么 | 谁解析 | 状态 |
+|---|---|---|---|
+| `TyMenuBar` | 顶部应用菜单条 | `TTyMenuBar` | — |
+| `TyMenuView` | 下拉/右键弹出体 | `TTyMenuView` | — |
+| `TyMenuPopup` | 弹出宿主(与 `TyMenuView` 同值的镜像键) | `TTyMenuView` | — |
+| `TyMenuItem` | 一行菜单项 / 菜单条单元;基础态的 `border-color` 就是分隔线墨色 | `TTyMenuBar` / `TTyMenuView` | `:hover` `:active` `:disabled` |
+
+#### 8.2.13 日历与日期
+
+| typeKey | 画什么 | 谁解析 | 状态 |
+|---|---|---|---|
+| `TyCalendar` | 日历外框 | `TTyCalendar`、`TTyDateTimePicker` 的下拉日历 | — |
+| `TyCalendarTitle` | 顶部年月标题(粗体) | `TTyCalendar` | `:hover` |
+| `TyCalendarWeekday` | 星期行表头(弱化墨色) | `TTyCalendar` | — |
+| `TyCalendarCell` | 一个日期格 | `TTyCalendar` | `:hover` `:selected` `:disabled` |
+| `TyDateTimePicker` | 见 §8.2.4 | `TTyDateTimePicker` | `:hover` `:focus` `:disabled` |
+
+#### 8.2.14 Ribbon 族
+
+| typeKey | 画什么 | 谁解析 | 状态 |
+|---|---|---|---|
+| `TyRibbon` | 命令带表面 | `TTyRibbon`;`TTyRibbonPage` 刻意共用(§8.5);`TTyPopupSurface` 的默认 `StyleKey` 也是它 | — |
+| `TyRibbonGroup` | 带标题的命令分组框 | `TTyRibbonGroup` | — |
+| `TyRibbonBackstage` | 后台视图的**内容面**(与 `TyRibbon` 共块) | `TTyRibbonBackstage` | — |
+| `TyRibbonQuickAccess` | 快速访问条(与 `TyTitleBar` 共块) | `TTyRibbonQuickAccess` | — |
+| `TyRibbonAppMenu` | 见 §8.2.2 | `TTyRibbonAppMenu` | 同按钮族 |
+| `TyRibbonGallery` | 见 §8.2.8 | `TTyRibbonGallery` | `:hover` `:focus` `:disabled` |
+
+> **两处仍在借用,是推迟不是设计。** 后台视图的**侧栏与命令行**解析
+> `ResolveStyle('TyButton', 'primary')`(含 `:hover`/`:active`),所以侧栏只能是主按钮色;
+> 画廊的**图块**仍解析 `TyListItem`、弹出网格仍解析 `TyListBox`。
+> `TyRibbonBackstageSidebar` / `-Item` / `-Back` / `-Separator`、`TyRibbonGalleryItem` /
+> `TyRibbonGalleryPopup` 都**不存在**(§8.4)。
+>
+> 另:`TyRibbonTab` 这个名字**从未被使用** —— Ribbon 的页签头解析的是 `TyTab`。
+> 早先文档把它列为"预留",现已无此保留;不要为它写规则。
+
+#### 8.2.15 仪表与指示器族
+
+从前**十四个**互不相干的控件全部硬返回 `TyGauge`、并且都解析同一个 `TyGaugeFill`,
+于是星级评分、模拟钟秒针与进度环**按构造**是同一个颜色。现在各有其键,共用一个规则块。
+
+**表盘/底面**(与 `TyGauge` 共块:下沉底 + 边框):
+
+| typeKey | 画什么 | 谁解析 | 状态 |
+|---|---|---|---|
+| `TyGauge` | 仪表底面(本族的**定义者**,不是借用者) | `TTyGauge` | `:disabled` |
+| `TyMeter` | 仪表读数区与文字 | `TTyMeter` | `:disabled` |
+| `TyLevelMeter` | 电平表轨道 | `TTyLevelMeter` | `:disabled` |
+| `TyDial` | 旋钮底面 | `TTyDial` | `:disabled` |
+| `TyGearDial` | 齿轮旋钮底面 | `TTyGearDial` | `:disabled` |
+| `TyAnalogClock` | 表盘与刻度(`color`) | `TTyAnalogClock` | `:disabled` |
+| `TyCircularProgress` | 环形进度的轨道环 | `TTyCircularProgress` | `:disabled` |
+| `TyActivityIndicator` | 忙碌指示器的轨道环 | `TTyActivityIndicator` | `:disabled` |
+| `TyActivityBar` | 跑马灯进度条的轨道框 | `TTyActivityBar` | `:disabled` |
+| `TyGearActivityIndicator` | 齿轮忙碌指示器**挖空的孔**(角色与仪表相反:这里画的是孔不是轨道) | `TTyGearActivityIndicator` | `:disabled` |
+| `TySparkline` | 迷你折线图底面 | `TTySparkline` | `:disabled` |
+| `TyRating` | 评分控件底面 | `TTyRating` | `:disabled` |
+| `TyLColorPicker` | 亮度条外框与游标(条身是 HSV 生成像素,无子部件键) | `TTyLColorPicker` | `:disabled` |
+| `TyHSColorPicker` | 色相/饱和度方块外框与十字游标 | `TTyHSColorPicker` | `:disabled` |
+| `TyMeterTick` | 仪表刻度,只读 `color` | `TTyMeter` | 空状态集 |
+| `TyAnalogClockHand` | 时针 + 分针,只读 `color` | `TTyAnalogClock` | 空状态集 |
+| `TyGearDialTeeth` | 齿轮齿,只读 `background` | `TTyGearDial` | 空状态集 |
+| `TyColorArea` | 颜色对话框的 HSV 方块 / 色相条的边框与游标 | `TTyHSVSquare` / `TTyHueBar` | 空状态集 |
+
+**点亮部分**(与 `TyGaugeFill` 共块:`background: var(--accent)`):
+
+| typeKey | 画什么 | 谁解析 |
+|---|---|---|
+| `TyGaugeFill` | 仪表填充。**唯一一个硬写字面量的子部件键**(`ResolveStyle('TyGaugeFill', …)`),其余都是 `GetStyleTypeKey + '后缀'` | `TTyGauge` |
+| `TyMeterNeedle` | 仪表指针 | `TTyMeter` |
+| `TyLevelMeterFill` | 电平条 | `TTyLevelMeter` |
+| `TyLevelMeterPeak` | 峰值标线 —— **给它一个对比色**,从前它与它要标示的条同色 | `TTyLevelMeter` |
+| `TyDialPointer` | 旋钮指针 | `TTyDial` |
+| `TyGearDialPointer` | 齿轮旋钮指针 | `TTyGearDial` |
+| `TyAnalogClockSecondHand` | 秒针 + 中心轴 | `TTyAnalogClock` |
+| `TyCircularProgressFill` | 环形进度的进度弧 | `TTyCircularProgress` |
+| `TyActivityIndicatorFill` | 旋转弧 | `TTyActivityIndicator` |
+| `TyActivityBarFill` | 行进中的色块 | `TTyActivityBar` |
+| `TyGearActivityIndicatorFill` | 齿与盘体 | `TTyGearActivityIndicator` |
+| `TySparklineFill` | 折线 | `TTySparkline` |
+| `TySparklineDot` | 折线端点 | `TTySparkline` |
+| `TyRatingStar` | 星形 | `TTyRating` |
+
+> `TyRatingStar` 是本族唯一带**新状态轴**的键:预览悬停时它是**带 `:hover` 解析**的
+> (`Rating.pas`),而内置主题**刻意不写** `TyRatingStar:hover`,好让像素不动;
+> 皮肤补上这一条即可给预览上色。
+>
+> `:disabled { opacity }` 在本族**大部分成员上是空转的** —— `Opacity` 只在 `DrawFrame`
+> 里推进画笔,而本族只有 ActivityBar、LevelMeter、Sparkline 与 `TTyGauge` 的**线性**样式
+> 走 `DrawFrame`。上表照实列出了主题里写了的 `:disabled` 规则,但其中多数今天渲染不出效果。
+
+#### 8.2.16 卡片、标签、提示、浮层
+
+| typeKey | 画什么 | 谁解析 | 状态 / 变体 |
+|---|---|---|---|
+| `TyCard` | 卡片表面(头/尾是画在其上的带) | `TTyCard` | `:hover` `:disabled` |
+| `TyCardHeader` | 标题带:只有分隔线与标题墨色,**无背景**故透出卡片自身表面 | `TTyCard` | — |
+| `TyCardActions` | 底部动作带的分隔线 | `TTyCard` | — |
+| `TyTag` | 标签胶囊 | `TTyTag` | `:disabled`;变体 `.accent` `.danger` |
+| `TyTagClose` | 标签的关闭 × | `TTyTag` | `:hover` |
+| `TyAlert` | 内嵌提示条 | `TTyAlert` | `:disabled`;变体 `.info` `.success` `.warning` `.error`(**硬契约**:`AlertType` 直接映射到这四个名字) |
+| `TyAlertClose` | 提示条的关闭 × | `TTyAlert` | `:hover` |
+| `TyNotification` | 角落浮层通知 | `TTyNotification` | `:hover`;变体 `.info` `.success` `.warning` `.error`(变体的 `color` 是**图标墨色**) |
+| `TyNotificationClose` | 通知的关闭 × | `TTyNotification` | `:hover` |
+| `TyEmpty` | 空状态占位(透明,躺在空列表自己的表面上) | `TTyEmpty` | `:disabled` |
+| `TyEmptyImage` | 空状态插图的墨色(比正文更淡,故单独成键) | `TTyEmpty` | — |
+| `TyHint` | 主题化的 tooltip 表面(替代原生 LCL 提示) | `TTyHintWindow`、`TTyBalloonHint` | — |
+| `TyPopover` | 可**承载控件**的浮层表面(箭头是从同一表面切出的,故无需单独的键) | `TTyPopover` | — |
+| `TyPopoverTitle` | 浮层标题 | `TTyPopover` | — |
+| `TyChartTooltip` | 图表内的悬停提示框。图表**不画这个框**除非这个键给了背景 | `TTyChart` | — |
+
+#### 8.2.17 导航与数据录入
+
+| typeKey | 画什么 | 谁解析 | 状态 |
+|---|---|---|---|
+| `TySegmented` | 分段控件的凹槽 | `TTySegmented` | `:focus` `:disabled` |
+| `TySegmentedItem` | 一个分段(圆角**刻意小于**凹槽,读作"槽里的一片") | `TTySegmented` | `:hover` `:selected` `:disabled` |
+| `TyPagination` | 分页条(透明,页码本身才是 chrome) | `TTyPagination` | `:disabled` |
+| `TyPaginationItem` | 一个页码格 | `TTyPagination` | `:hover` `:selected` `:disabled` |
+| `TySteps` | 步骤条 | `TTySteps` | `:disabled` |
+| `TyStepsItem` | 步骤标记。**状态即语义**:已完成 = 无伪类、当前 = `:selected`、未走到 = `:disabled`,所以基础规则画的是**已完成**的样子 | `TTySteps` | `:hover` `:selected` `:disabled` |
+| `TyStepsConnector` | 步骤间连线,只读 `background`(**刻意不声明 `color`**);取它**通向**的那一步的状态 | `TTySteps` | `:selected` `:disabled` |
+| `TyBreadcrumb` | 面包屑条(分隔符取条带自己的墨色) | `TTyBreadcrumb` | `:disabled` |
+| `TyBreadcrumbItem` | 一节面包屑;`:selected` = 最后一节(当前位置,读作普通墨色而非链接) | `TTyBreadcrumb` | `:hover` `:selected` `:disabled` |
+| `TyTransfer` | 穿梭框外框(两个列表面与移动键复用 `TyListBox` / `TyButton`) | `TTyTransfer` | `:disabled` |
+| `TyTransferTitle` | 穿梭框每一侧的标题带 | `TTyTransfer` | — |
+| `TyCascaderPanel` | 级联多列面板 | `TTyCascaderPanel` | — |
+| `TyCascaderItem` | 级联面板中的一行 | `TTyCascaderPanel` | `:hover` `:selected` `:disabled` |
+| `TyListGroupHeader` | 导航手风琴的分组行(**无底色**,只有弱化墨色 + 右侧箭头;`:selected` = 该组已展开) | `TTyListGroupPanel` | `:hover` `:selected` |
+| `TyListGroupItem` | 导航项;`:active` = 选中,画成柔和内缩圆角药丸 | `TTyListGroupPanel` | `:hover` `:active` `:disabled` |
+
+> `TTyTreeSelect` **没有**自己的键,也不该有:它解析 `TyComboBox`(它就是一个下拉树的组合框),
+> 弹出体是真的 `TTyTreeView`、由 `TyTreeView` 着色。写 `TyTreeSelect { … }` 是**永不命中的死 CSS**。
+
+### 8.3 变体不是封闭集合
+
+任何标识符都可以当变体,只要控件的 `StyleClass` 属性包含对应 token(空格分隔、可多个)即可匹配。
+上表里的"变体"列只是**内置主题实际定义过的**那些:
+
+- 按钮族的 `.primary` / `.danger` / `.ghost`;
+- `TyCaptionButton` 的 `.close` / `.min` / `.max`(由窗体镶边自动赋给三个标题栏按钮);
+- `TyTag` 的 `.accent` / `.danger`;
+- `TyAlert` / `TyNotification` 的 `.info` / `.success` / `.warning` / `.error`
+  —— 这四个是**硬契约**,控件的 `AlertType` / `NotificationType` 直接映射到这四个名字并据此画图标。
+
+注意 §4.4:变体层在状态层**之前**应用,所以变体的悬停必须写成 `Ty….变体:hover`。
+
+### 8.4 刻意不定义的键
+
+下面这些键**代码会解析,基础层刻意不给定义**。它们不是漏网,而是**可选钩子**:
+每一个在绘制侧都有明确的兜底,而且兜底是**依状态而变**的 —— 在这里写死一个值会**移动像素**,
+而不是保持像素。皮肤可以任意声明它们,基础层保持沉默好让兜底继续生效。
+
+| typeKey | 谁解析 | 不定义的理由 / 兜底 |
+|---|---|---|
+| `TyGridPanel` | `TTyGridPanel` | **格子布局宿主不是一块面。**没有主题背景时 `DrawFrame` 走 `TyFillParentBg`,于是格子之间的间隔取父容器的颜色,而不是在承载它的东西上戳出一块白面板。`tests/test.gridpanel.pas` 断言**没有任何内置主题**给这个键背景。想要可见的网格面,自己写 `TyGridPanel { background: …; border: … }` 即可 |
+| `TyFormSurface` | `TTyFormSurface` | **它没有自己的 CSS。**Surface 渲染的是宿主窗体的 `form` 背景(见其 `Paint`),并承载各自解析样式的子控件。中性键的意义是:不要让 `TyForm` 的 padding / border 意外套到 surface 自己的布局上 |
+| `TyListViewLine` | `TTyListView` | `background` → 否则取列表视图外框的 `border-color` |
+| `TyListViewMarquee` | `TTyListView` | `background` → 否则取 `TyListViewItem:selected` 的背景(色相跟主题走、alpha 是常数) |
+| `TyValueListEditorKey` | `TTyValueListEditor` | `color` → 否则取**该行当前状态**下的行色 |
+| `TyValueListEditorValue` | `TTyValueListEditor` | 同上 |
+| `TyValueListEditorExpander` | `TTyValueListEditor` | 同上 |
+| `TyValueListEditorDivider` | `TTyValueListEditor` | `background` → 否则取行色的 alpha `0x28` |
+
+> **后四个是锋利边缘**:选中行的兜底墨色是 `--on-accent`,所以在这里写一句平的
+> `color: var(--on-surface)` 会让选中行的键名**变得读不出来**。要声明就把 `:active` / `:hover`
+> 变体一起声明。
+
+#### 已推迟、因而**并不存在**的子部件键
+
+`b824a49` / `d58eada` 只做了**盒子键**。审计同时提出的一批**子部件键**被**刻意推迟**——
+它们是可换肤性的**扩展**而不是覆盖缺口,而且其中数个**会移动像素**(代码目前在本该由键供色的
+地方自己发明了一个颜色)。逐条理由见
+[superpowers/plans/2026-07-23-typekey-explicit-borrowers.md](superpowers/plans/2026-07-23-typekey-explicit-borrowers.md)。
+
+**不要为下面这些名字写规则,它们今天什么都不匹配:**
+
+`TyHtmlLabelLink`、`TyButtonGroupItem`、`TyUpDownButton`、
+`TyChartTitle` / `TyChartLegend` / `TyChartAxis` / `TyChartGrid` / `TyChartLabel` / `TyChartSeries1..8`、
+`TyCalculatorDisplay` / `TyCalculatorExpression`、`TyBevelHighlight` / `TyBevelShadow`、
+`TySizeBoxDot`、`TyControlBarGripper`、`TyCoolBarGripper`、`TyColorGridCell`、
+`TyRibbonBackstageSidebar` / `-Item` / `-Back` / `-Separator`、
+`TyRibbonGalleryItem` / `TyRibbonGalleryPopup`、`TyTabSetRail`、
+`TyHeaderControlSection` / `-SortMark` / `-Divider`。
+
+这些控件的对应部位**目前不可单独换肤**;它们要么借用上表里已有的键,要么颜色/几何是 Pascal 常量。
+
+### 8.5 刻意共用的键:借用是设计,不是漏网
+
+约四十个控件仍然共用别的控件的 typeKey,**这些是逐个审过、有据可查的**
+(理由见上面那份 plan 文档与两条 commit message)。判据是:*皮肤是否应该能把它们分开看待*。
+不要"修"它们。
+
+| 共用者 | 用的键 | 为什么共用是对的 |
+|---|---|---|
+| `TTyMaskEdit`、`TTyCurrencyEdit`、`TTyURLEdit`、`TTyNumericEdit`、`TTyCalcEdit`、`TTyCalcCurrencyEdit`、`TTyValueEdit`、`TTyComboEdit` | `TyEdit` | 一个带掩码/带计算器下拉的输入框**就是**一个输入框。盒子、边框、内距、状态全是 `TyEdit` 的,差别只在输入过滤与尾部按钮的行为。共用键正是它们在同一行表单里不"起缝"的原因,也让 `TyEdit.small` 一次穿好全部 |
+| `TTyFontComboBox`、`TTyFontSizeComboBox`、`TTyMRUComboBox`、`TTyColorComboBox`、`TTyCheckComboBox`、`TTyComboBoxEx` 等 11 个 | `TyComboBox` | 同上,它们都是组合框字段 |
+| `TTyTreeSelect` | `TyComboBox` | 它画的三个记号与 `TTyComboBox` 逐一相同;下拉体是真的 `TTyTreeView`,由 `TyTreeView` 着色 |
+| `TTyRadioGroup`、`TTyCheckGroup` | `TyGroupBox` | 分组框就是"一圈带标题的框",框里是各自有键的真控件 |
+| `TTyShellTreeView` | `TyTreeView`(整族) | 外壳适配器自己不画一个像素;目录树**就是**树 |
+| `TTyShellListView` | `TyListView`(整族) | 同上 |
+| `TTyDrawGrid`、`TTyStringGrid` | `TyGrid`(整族) | 三层结构里只有 `TTyCustomGrid` 画像素 |
+| `TTyRibbonPage` | `TyRibbon` | 页面画的是 ribbon 盒子的**严格子集**,且刻意不画边框;给它另一种颜色会在每一页周围露出 1px 的 ribbon 本色 |
+| `TTyRelativePanel` | `TyPanel` | 它**一个像素都不画**(无 `Paint`、无 `RenderTo`),全部来自 `TTyPanel.RenderTo`;它只是一种**布局策略**,而布局策略不是皮肤需要区分的视觉身份 |
+| `TTyPaintPanel` | `TyPanel` | 与普通面板逐字节兼容,它**就是**面板 |
+| `TTyScrollPanel` | `TyScrollBox`(继承) | 它加的是**手势**不是表面;不多画任何东西,共用滚动井的键就是正确结果。注意它**不再是** `TyPanel` —— 基类已经拆走 |
+| `TTyGlyphButton` | `TyButton` | 它就是一个内容区被切开的按下式按钮 |
+| `TTyGalleryGrid`(画廊弹出网格) | `TyListBox` | 见 §8.2.14 的推迟说明 |
+| `TTyHeaderControl` 的**列头单元格** | `TyTreeHeaderSection` | 见 §8.2.9 —— 尚未拆分,不是"设计如此" |
+
+### 8.6 死键:主题里有、但没有任何代码解析
+
+下列名字在部分随库样式表里有定义,但 `source/` 里**没有任何解析点**。给它们写规则不会有任何效果。
+(注意覆盖面并不一致:`TyGridSelection` 只出现在 `light.tycss` 一份里,`TyTabControl` 与
+`TyDateTimeButton` 各出现在 6 份里 —— 所以"每份主题都有"这句是不成立的。)
+
+| typeKey | 情况 |
+|---|---|
+| `TyTabControl` | `TTyTabControl` 这个类**已被删除**(commit `d201419`);该键只作为 `TyTabSet` 的并列选择器残留 |
+| `TyDateTimeButton` | `TTyDateTimePicker` 的下拉按钮从不解析它 |
+| `TyGridSelection` | 网格实际用的是 `TyGridSelectionFrame` |
+| `TyTreeSelect` | `TTyTreeSelect` 返回 `'TyComboBox'`(有意共用,见 §8.5)。该规则块 3.0 起已从 `light.tycss` 删除,现在连"有定义"都谈不上 —— 纯死名字 |
+
+### 8.7 子部件着色的两层约定（tier-a / tier-b）
+
+控件内部那些不属于"控件本体框"的小部件,按其是不是一块**独立的着色面**分两类处理颜色,
 这是**官方约定**而非遗留缺口:
 
-- **tier-a — 着色面（colored surfaces）：** thumb / knob / fill / progress 等本身就是一块需要
+- **tier-a — 着色面（colored surfaces）：** thumb / knob / fill / pointer / needle 等本身就是一块需要
   独立配色的实心面。它们各有**专属子部件 typeKey**(`TyScrollThumb`、`TyToggleKnob`、
-  `TyTrackThumb`、`TyProgressFill`),颜色取该 typeKey 的 `background`、圆角取其 `border-radius`,
+  `TyTrackThumb`、`TyProgressFill`,以及 §8.2.15 里那十四个 `…Fill` / 指针键),
+  颜色取该 typeKey 的 `background`、圆角取其 `border-radius`,
   与父控件本体的 `background`/`color` 互不干扰。主题作者可单独为它们(及其 `:hover`/`:active`)配色。
 
 - **tier-b — 单色字形（monochrome glyphs）：** 复选框勾号 / 单选圆点、ComboBox 下拉箭头、
@@ -750,7 +1222,9 @@ TyButton.primary {
 引擎层限制(均已在上文相应小节展开,另见 [KNOWN_GAPS.md](KNOWN_GAPS.md)):
 
 1. **无组合选择器**:不支持后代/子/通配/多变体/纯类/纯状态选择器(§4.2)。
-2. **重复选择器先写者胜**,与浏览器相反(§4.4)。
+2. **重复选择器后写者胜**,且是**逐属性**合并(§4.4)——与浏览器一致。
+   真正与直觉相反的是**基础层的全有全无**:主题只要提到某 typeKey 一次,
+   内置默认层对该键**整体**失效(§8.1),所以拆出来的新键必须逐个点名。
 3. **`url()` 路径不能含空格**:重建文件名时空格被无条件删除(§5.2);
    路径相对进程工作目录解析,缺失文件静默跳过。
 4. **`shadow` 颜色必须单 token**:`#hex` / `var(--x)` / 裸 `--x`,不能用带逗号的
@@ -763,9 +1237,11 @@ TyButton.primary {
 8. **`font-size` 数值按 pt 解释**,`px` 后缀只是装饰(§5.9);`font-weight`
    渲染只分 ≥600 粗体 / 其余常规两档(§5.10)。
 9. **`font-family` 不要加引号**,引号会保留进字体名(§5.8)。
-10. **子部件着色分 tier-a / tier-b（Batch ④）**：thumb / knob / fill 等着色面由专属子部件 typeKey（`TyScrollThumb`、`TyToggleKnob`、`TyTrackThumb`、`TyProgressFill`）的 `background` 着色；勾号 / 箭头 / 关闭 × 等单色字形借用所属控件的 `color`(`TextColor`)作墨色。二者均为官方约定（§8.3）。`TyScrollThumb` / `TyToggleKnob` 的默认值与早前借用 `color` 渲染时**逐字一致**。
-11. **`TyTabControl` 页签溢出可横向滚动（v1.10）**：所有页签头宽度之和超过控件宽度时，页签头条带进入溢出模式可横向滚动——条带左右两端渲染 `tgArrowLeft` / `tgArrowRight` 箭头按钮，鼠标在条带上滚轮也能滚动，且切换选中页时会自动把目标页签滚入可见区。绘制时页签头被裁剪到两个箭头之间的可见带（箭头始终绘制在最上层）。详见 [controls/tabcontrol.md](controls/tabcontrol.md) 第 13 节。
-12. 不支持 `@media`、`@import`、`!important`、转义字符串、`//` 行注释。
+10. **子部件着色分 tier-a / tier-b（Batch ④）**：thumb / knob / fill 等着色面由专属子部件 typeKey（`TyScrollThumb`、`TyToggleKnob`、`TyTrackThumb`、`TyProgressFill`）的 `background` 着色；勾号 / 箭头 / 关闭 × 等单色字形借用所属控件的 `color`(`TextColor`)作墨色。二者均为官方约定（§8.7）。`TyScrollThumb` / `TyToggleKnob` 的默认值与早前借用 `color` 渲染时**逐字一致**。
+11. **页签溢出可横向滚动（v1.10）**:所有页签头宽度之和超过控件宽度时，页签头条带进入溢出模式可横向滚动——条带左右两端渲染 `tgArrowLeft` / `tgArrowRight` 箭头按钮，鼠标在条带上滚轮也能滚动，且切换选中页时会自动把目标页签滚入可见区。绘制时页签头被裁剪到两个箭头之间的可见带（箭头始终绘制在最上层）。这套条带引擎由 `TTyPageControl` 与 `TTyTabSet` 共用;详见 [controls/pagecontrol.md](controls/pagecontrol.md)。
+    (原文此处写的是 `TyTabControl` —— 该控件类已删除,该 typeKey 现为死键,见 §8.6。)
+12. 不支持 `@media`、`!important`、转义字符串、`//` 行注释。
+    `@import`(必须先于所有 `:root`/规则)与 `@mode` 是**支持**的。
 13. **边框/盒模型的取舍(v1.6,v3 起加 3D 斜角)**:`border-style` 支持 `none` / `solid` /
     `outset` / `inset`(后两者为两色 3D 斜角,见 5.4),**无** `dashed`、`dotted`、`groove`、
     `ridge`;**不存在 `margin` 属性**(外边距请用容器布局实现)。`border` 简写只是

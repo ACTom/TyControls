@@ -11,10 +11,21 @@ TTyActivityBar 是**不确定态线性进度条**(marching band),继承自 `TTyG
 | 项目 | 值 |
 |------|-----|
 | 单元 | `tyControls.ActivityBar` |
-| `GetStyleTypeKey` 返回值 | `'TyGauge'`(**复用**仪表轨道 / 边框)|
-| 行进色块 typeKey | `'TyGaugeFill'`(复用仪表填充色)|
+| `GetStyleTypeKey` 返回值 | `'TyActivityBar'`(轨道 / 边框)|
 
-复用 `TTyGauge` 主题规则,无新增 `.tycss`。
+### 子部件 typeKey
+
+子部件键在代码里由 `GetStyleTypeKey + 'Fill'` 拼出,与盒键绑死、不会各自漂移。
+
+| typeKey | 绘制什么 | 读取的样式属性 |
+|---------|----------|----------------|
+| `TyActivityBar` | 轨道:圆角背景 + 边框(`DrawFrame`) | `background` / `border-color` / `border-width` / `border-radius` |
+| `TyActivityBarFill` | 两段行进色块 | `background` / `border-radius` |
+
+本控件**不再复用** `TyGauge` / `TyGaugeFill`——它是 [TTyProgressBar](progressbar.md) 的不确定态兄弟而非仪表的变体:它占的是对话框里同一个槽位,主题把 `TyProgressBar` / `TyProgressFill` 做成胶囊形时(多个内置皮肤如此),本控件必须跟着走,挂在仪表键上时这做不到。
+
+> 主题作者注意:base 层按 typeKey **全有或全无**地回落。只覆盖了 `TyGauge` 的第三方主题**不会**覆盖到 `TyActivityBar` / `TyActivityBarFill`,这两个键会回落到内置 light 值;需要在皮肤里补上这两条选择器。
+> 子部件是以**空状态集**解析的,因此 `TyActivityBarFill:hover` / `:disabled` 之类的选择器不会生效;伪类只对盒键 `TyActivityBar` 有效。
 
 ```pascal
 uses tyControls.ActivityBar;
@@ -42,7 +53,7 @@ uses tyControls.ActivityBar;
 
 ## 5. 状态与主题
 
-复用 `TyGauge`(轨道 + 边框)/ `TyGaugeFill`(行进色块)。**渲染**:先用 `DrawFrame` 画圆角轨道(背景 + 边框),再在轨道内画两段宽约轨道 35% 的 accent 色块——两段相隔半个周期,因此**总有一段可见,行进无断点**。相位由内部 `TTimer` 以 ~1.6s / 圈连续推进。
+轨道 + 边框来自 `TyActivityBar`,行进色块来自 `TyActivityBarFill`。**渲染**:先用 `DrawFrame` 画圆角轨道(背景 + 边框),再在轨道内画两段宽约轨道 35% 的 accent 色块——两段相隔半个周期,因此**总有一段可见,行进无断点**。相位由内部 `TTimer` 以 ~1.6s / 圈连续推进。
 
 **行进条件:** 只有 `Active` **且**控件正在绘制(父窗口有句柄)时才动;**无句柄(headless / 渲染测试)时静止**——保证像素测试稳定。
 
@@ -70,4 +81,4 @@ Busy.Active := Working;
 - **确定 vs 不确定:** 已知进度用 [TTyProgressBar](progressbar.md);未知时长用本控件(线性)或 [TTyActivityIndicator](activityindicator.md)(圆形)。
 - **纯逻辑可测:** 相位推进 `TyActivityBarAdvance(phase, ms, periodMs)`(环绕到 `[0,1)`)与色块跨度 `TyActivityBarSpan(phase, left, right, segW)`(夹紧到轨道内)都是纯函数,已单元测试(`test.activitybar`)。
 - **停下即省电:** `Active := False` 会停掉内部计时器。
-- **主题驱动:** 颜色取自 `TyGauge` / `TyGaugeFill`,不硬编码。
+- **主题驱动:** 颜色取自 `TyActivityBar` / `TyActivityBarFill`,不硬编码。改本控件外观请改这两个键——**不要**去改 `TyGauge`,那会连带改掉仪表 / 时钟 / 评分等一整族控件。

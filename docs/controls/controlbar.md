@@ -15,11 +15,17 @@
 | 项目 | 值 |
 |------|-----|
 | 单元 | `tyControls.ControlBar` |
-| `GetStyleTypeKey` 返回值 | `'TyPanel'`（**刻意复用** `TTyPanel` 的 typeKey，借用其主题化边框 / 令牌，**不新增任何 .tycss**） |
+| `GetStyleTypeKey` 返回值 | `'TyControlBar'`（**自有 typeKey**） |
 | 基类 | `TTyPanel`（继承自 `TTyCustomControl` → `TCustomControl`） |
 | 默认尺寸 | 320 × 32（逻辑像素） |
 
-在 `.tycss` 文件中，本控件对应选择器前缀 `TyPanel`（与普通面板共用规则）。
+在 `.tycss` 文件中，本控件对应选择器 `TyControlBar`。
+
+它从前返回 `'TyPanel'`，单元头部甚至把这条写成硬性规则（"reuse the 'TyPanel' typeKey — no new .tycss"）——正是那条规则造出了 bug：band 抓手不是面板会画的东西，而借用面板键让主题层既无法单独给工具带上色，也无法给抓手换色 / 加粗 / 隐藏。现在 `TyControlBar` 已作为附加选择器并入主题里 `TyPanel` 的规则块，解析值与从前逐字节相同，**开钩子而不动像素**；第三方主题若只覆盖了 `TyPanel`，需要补上 `TyControlBar`（主题层按 typeKey 全有全无地回落）。
+
+### 子部件 typeKey
+
+**没有。** band 抓手的两条导轨没有自己的键：`DrawGripper` 直接从盒子样式取色（有 `border-color` 用之，否则回落 `color`），线宽 `Scale(1)`、间距 `Scale(3)`、上下内缩 `Scale(3)` 都是代码字面量。子部件键 `TyControlBarGripper` 的扩展已被**刻意推迟**（它会真的移动像素——今天的代码在主题该给色的地方自己发明了一个颜色），该键当前**并不存在**，写进 `.tycss` 解析不到任何东西。
 
 ```pascal
 uses tyControls.ControlBar;
@@ -95,12 +101,12 @@ function TyControlBarPack(const AChildSizes: array of TSize;
 
 作为容器，`TTyControlBar` 不跟踪 hover / pressed / focus，渲染时始终使用 `CurrentStyle`（`tysNormal` 基础样式），因此内置主题**未为它定义任何伪类规则**。
 
-### 内置规则（复用 TyPanel）
+### 内置规则
 
-本控件复用 `TyPanel` 选择器，无独立规则：
+内置主题把 `TyControlBar` 与 `TyPanel` 等键写在同一条规则里（取值相同，名字各自独立）：
 
 ```css
-TyPanel {
+TyPanel, TyControlBar, /* ... */ {
   background: var(--surface);
   border-color: var(--border);
   border-radius: var(--radius);
@@ -108,11 +114,13 @@ TyPanel {
 }
 ```
 
+要单独给工具带换一套外观（例如比面板更暗、无圆角、无边框），另写一条 `TyControlBar { ... }` 即可，**不要**去改 `TyPanel`——那会重涂全应用的面板。
+
 ### 渲染细节
 
-- **面板框架：** `Paint` 先调用 `inherited Paint`（`TTyPanel` 的框架绘制，走 `CurrentStyle`），画出主题化背景 / 边框。
+- **面板框架：** `Paint` 先调用 `inherited Paint`（`TTyPanel` 的框架绘制，走 `CurrentStyle`，解析的是本控件自己的 `TyControlBar` 键），画出主题化背景 / 边框。
 - **band 抓手：** 随后为每条**已占用**的 band 在其左侧抓手列内绘制两条竖直导轨；颜色取当前样式的 `border-color`（缺省时回落 `text-color`），上下各内缩若干像素。band 行数由存储的子控件分配推导。
-- 抓手颜色**完全由主题令牌驱动**，控件代码不硬编码任何颜色（遵循库的主题可定制原则）。
+- 抓手颜色**由盒子样式令牌派生**，控件代码不硬编码颜色（遵循库的主题可定制原则）；但导轨的粗细、间距与内缩是代码里的 `Scale(1)`/`Scale(3)`/`Scale(3)`，且抓手没有自己的键，因此"只改抓手不改工具带底色"目前做不到（见 2 节）。
 
 ---
 
@@ -157,6 +165,6 @@ ShowMessage(Format('TB3 在第 %d 条 band', [Bar.BandIndexOf(TB3)]));
 - **重入守卫：** `AlignControls` 末尾对 `Height` 的赋值会再次触发 `AlignControls`，`FInLayout` 守卫防止无限递归。
 - **band 分配以子控件为键：** 每个子控件所属 band 索引存于以子控件为键的并行数组，跨重排保留；子控件被释放时经 `Notification(opRemove)` 从数组中剔除并压实，不会留下悬挂键。
 - **超宽子控件：** 比一行可用宽度还宽的子控件被钳制到可用宽度并独占其 band（不会死循环）；如需完整显示，请增大宿主宽度或减小 `GripperWidth`。
-- **复用 TyPanel typeKey：** 本控件 `GetStyleTypeKey` 返回 `'TyPanel'`，与普通面板共用 tycss 规则，**未新增任何主题令牌**；抓手 / band 分隔色取 `border-color`。
+- **自有 typeKey：** 本控件 `GetStyleTypeKey` 返回 `'TyControlBar'`；抓手 / band 分隔色取该键的 `border-color`。改工具带外观请写 `TyControlBar` 规则，改 `TyPanel` 会波及全应用的面板。
 - **实时拖拽换带：** band 间拖拽换带属于真机交互，当前版本的排布是纯几何的（`TyControlBarPack`）；`BandIndexOf` 提供只读的 band 归属查询，供拖拽逻辑将来更新分配。
 - **DFM 序列化：** `BandHeight`/`RowSize`/`GripperWidth`/`BandSpacing` 均声明了默认值，等于默认值时不写入 `.lfm`/`.dfm`。

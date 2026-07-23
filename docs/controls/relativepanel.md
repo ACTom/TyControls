@@ -6,7 +6,7 @@
 
 核心价值是一套**纯布局数学**：把子控件的规则集拓扑排序后逐个定位，被引用的兄弟先定位、再定位引用它的子控件；对**依赖环**做了保护（环中的子控件回退到父容器原点，永不死循环）。这套求解逻辑以纯函数 `TyRelativeSolve` 暴露，可脱离窗口句柄直接单元测试。
 
-它是**真正的 LCL 容器**（有窗口句柄，`csAcceptsControls`），子控件直接以其为 `Parent`。外观、边框、圆角、内边距全部沿用 `TyPanel` 主题——**不新增任何 `.tycss` 选择器**。
+它是**真正的 LCL 容器**（有窗口句柄，`csAcceptsControls`），子控件直接以其为 `Parent`。外观、边框、圆角、内边距全部沿用 `TyPanel` 主题——它自己一个像素都不画，因此**刻意不设独立 typeKey**（理由见第 2 节）。
 
 ---
 
@@ -15,7 +15,7 @@
 | 项目 | 值 |
 |------|-----|
 | 单元 | `tyControls.RelativePanel` |
-| `GetStyleTypeKey` 返回值 | `'TyPanel'`（**复用** `TyPanel`，不新增 `.tycss` 选择器） |
+| `GetStyleTypeKey` 返回值 | `'TyPanel'`（**刻意借用**，见下） |
 | 基类 | `TTyPanel`（继承自 `TTyCustomControl` → `TCustomControl`） |
 | 默认尺寸 | 240 × 160（逻辑像素） |
 
@@ -23,7 +23,13 @@
 uses tyControls.RelativePanel;
 ```
 
-> **主题说明：** 与 [`TTyScrollBox`](scrollbox.md) 一样，`TTyRelativePanel` 刻意复用 `TyPanel` 的 typeKey；在 `.tycss` 中给 `TyPanel` 写的规则（`background` / `border` / `radius` / `padding` …）都会作用到它。子控件的定位以「内容区」（本体扣除主题 `padding` 后的内部矩形）为坐标系原点。
+> **为什么这个借用是对的：** 2026-07 的 typeKey 审计把 51 个借别人键的控件改成了各自持有自己的键，`TTyRelativePanel` 是**明确判定为不该改**的三个之一。它**一个像素都不自己画**——整个单元里没有 `Paint`、没有 `RenderTo`，全部输出来自 `TTyPanel.RenderTo`；它的全部内容是纯求解器 `TyRelativeSolve` 加 `PerformLayout` 里的 `SetBounds`。也就是说它**就是一个面板**：同样的框、同样的可选标题、同样的内边距，差别只在**布局策略**——而布局策略不是皮肤需要区分的视觉身份。给它一个独立的键，只会造出一个任何渲染差异都分辨不出来的选择器。
+>
+> 同类仍然借用 `TyPanel` 的还有 [`TTyPaintPanel`](paintpanel.md)（它是面板，只是把画笔交给了调用方）。**注意：[`TTyScrollBox`](scrollbox.md) 已经不再是同类**——它现在有自己的 `TyScrollBox` 键（滚动井的观感与面板相反），别再拿它当"刻意借用"的例子。
+>
+> 因此：在 `.tycss` 中给 `TyPanel` 写的规则（`background` / `border` / `radius` / `padding` …）都会作用到它，这是预期行为。子控件的定位以「内容区」（本体扣除主题 `padding` 后的内部矩形）为坐标系原点。
+>
+> **子部件 typeKey：没有。** 本控件不绘制任何子部件。
 
 ---
 
@@ -177,5 +183,5 @@ end;
 - **锚点必须是本容器的子控件：** `SetRules` 的 `AAnchor` 应当是同一 `TTyRelativePanel` 下、且已通过 `SetRules` 登记过的兄弟；否则该兄弟不在求解输入里，兄弟规则会被当作「未知锚点」忽略。
 - **空规则集 = 清除：** `SetRules(child, [])` 等价于 `ClearRules(child)`，该子控件此后保持自身位置。
 - **不做尺寸自适应：** 与 `TTyPanel` 一致，容器不会根据子控件内容自动改变自身或子控件的大小；求解器只摆放位置。
-- **复用 `TyPanel` 主题：** typeKey 复用意味着改 `TyPanel` 样式会同时影响普通面板与相对布局面板；需区分时用 `StyleClass` 加类选择器（如 `TyPanel.form { … }`）。
+- **刻意借用 `TyPanel` 主题：** 本控件自己不画任何东西，共用面板的键是有意为之（见第 2 节）；因此改 `TyPanel` 样式会同时影响普通面板与相对布局面板。需要区分时用 `StyleClass` 加类选择器（如 `TyPanel.form { … }`）——这是本控件**唯一**的区分手段，它没有自己的 typeKey 可写。
 ```

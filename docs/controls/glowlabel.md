@@ -11,9 +11,13 @@ TTyGlowLabel 是**带柔光(Vista 风格辉光)的静态文本标签**,继承自
 | 项目 | 值 |
 |------|-----|
 | 单元 | `tyControls.GlowLabel` |
-| `GetStyleTypeKey` 返回值 | `'TyLabel'`(**复用**标签主题:文字颜色 / 字体 / 字重取自 `TyLabel` 规则)|
+| `GetStyleTypeKey` 返回值 | `'TyGlowLabel'`(**自有键**:清晰文字的颜色 / 字体 / 字重取自它)|
 
-复用 `TTyLabel` 主题规则,**无新增 `.tycss`**。光晕颜色由控件自有的 `GlowColor` 属性提供,不走主题(它是控件特效,非文本色)。
+`TyGlowLabel` 在 `themes/light.tycss` 中与 `TyLabel` 并列写在同一条规则的选择器列表里,所以解析值
+与从前逐字节相同 —— 这一步开的是钩子,不改外观。要让发光标题用与静态标签不同的字号/字重,单写
+`TyGlowLabel { ... }`;**不要**改 `TyLabel`,那会一并改掉全应用的每个静态标签。
+
+光晕本身(`GlowColor` / `GlowRadius`)是控件自有属性,**不走主题**,见下文「状态与主题」。
 
 ```pascal
 uses tyControls.GlowLabel;
@@ -60,9 +64,20 @@ uses tyControls.GlowLabel;
 
 ## 5. 状态与主题
 
-复用 `TyLabel`(文字颜色 / 字体 / 字重)。**渲染:** 若 `Caption` 非空,先把文字以 `GlowColor` 画到一张与画布等大的透明 BGRA 图层,`FilterBlurRadial(P.Scale(GlowRadius))` 高斯模糊后,按半径叠加 `1 + min(3, blurDev div 4)` 遍以加厚光晕(径向模糊会摊薄 alpha);随后在其上用 `CurrentStyle.TextColor` 绘制清晰文字。`GlowRadius = 0` 时跳过模糊,直接把 `GlowColor` 文字作为轻微底衬。`:disabled` 的 `opacity` 会作用于整帧(文字与光晕一并变淡)。
+### 解析的主题键
 
-支持伪类:`:hover` / `:active` / `:disabled`(不支持 `:focus`)。
+| typeKey | 画什么 |
+|---------|--------|
+| `TyGlowLabel` | 整个控件:背景(默认透明)、**清晰那一层**文字的 `color`、`font-family` / `font-size` / `font-weight`、`opacity`(`:disabled` 时文字与光晕一并变淡)。 |
+
+**没有子部件键 —— 光晕层暂不可主题化。** 光晕的颜色与半径来自控件自有属性 `GlowColor`(默认半透明白)
+与 `GlowRadius`(默认 4),构造函数里写死,主题层够不着:任何深色或扁平皮肤都关不掉这层 Vista 白光。
+样式模型其实已有 `shadow: dx dy blur color` 令牌可以承载它(偏移取 0 即为光晕),但本控件尚未接线。
+这属于本轮**有意推迟**的扩展,别在主题里写 `TyGlowLabelGlow` 之类的键 —— 它不存在。
+
+**渲染:** 若 `Caption` 非空,先把文字以 `GlowColor` 画到一张与画布等大的透明 BGRA 图层,`FilterBlurRadial(P.Scale(GlowRadius))` 高斯模糊后,按半径叠加 `1 + min(3, blurDev div 4)` 遍以加厚光晕(径向模糊会摊薄 alpha);随后在其上用 `CurrentStyle.TextColor` 绘制清晰文字。`GlowRadius = 0` 时跳过模糊,直接把 `GlowColor` 文字作为轻微底衬。`:disabled` 的 `opacity` 会作用于整帧(文字与光晕一并变淡)。
+
+支持伪类:`:hover` / `:active` / `:disabled`(不支持 `:focus`)。另注:本控件**不读 `padding`**,内容区取整个矩形(与 `TTyLabel` 不同)。
 
 ---
 
@@ -90,5 +105,5 @@ G.Alignment := taCenter;
 - **光晕在图层上模糊,不污染背景:** 光晕画在独立的透明图层再叠加,背景保持透明,透出父 / 窗体内容。
 - **GlowColor 带 alpha 更自然:** 叠加多遍时半透明色会平滑堆积;纯不透明色可能显得生硬。
 - **半径夹紧:** `GlowRadius` 经 setter 夹紧到 `0..64`;`0` = 不模糊。`TyGlowClampRadius` 为纯函数并已单元测试。
-- **主题驱动:** 文字颜色 / 字体 / 字重取自 `TyLabel` 主题,**从不硬编码**;仅光晕颜色是控件自有特效属性。
+- **主题驱动:** 文字颜色 / 字体 / 字重取自本控件自己的 `TyGlowLabel` 规则,**从不硬编码**;仅光晕颜色 / 半径是控件自有特效属性,目前主题够不着。
 - **不可聚焦:** 基类是 `TGraphicControl`,无 HWND,`:focus` 永不生效。

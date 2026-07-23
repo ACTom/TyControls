@@ -11,10 +11,22 @@ TTyMeter 是**模拟指针仪表**(表盘 + 刻度 + 指针),继承自 `TTyGraph
 | 项目 | 值 |
 |------|-----|
 | 单元 | `tyControls.Meter` |
-| `GetStyleTypeKey` 返回值 | `'TyGauge'`(**复用**:表盘刻度 / 文字取其 `color`)|
-| 指针 typeKey | `'TyGaugeFill'`(指针 / 轴心取其 `background` = accent)|
+| `GetStyleTypeKey` 返回值 | `'TyMeter'`(表盘 + 数值读数)|
 
-复用 `TTyGauge` 主题规则,无新增 `.tycss`。
+### 子部件 typeKey
+
+两个子部件键在代码里由 `GetStyleTypeKey + 'Tick'` / `+ 'Needle'` 拼出,与盒键绑死、不会各自漂移。
+
+| typeKey | 绘制什么 | 读取的样式属性 |
+|---------|----------|----------------|
+| `TyMeter` | `ShowValue` 时底部居中的数值读数 | `color` |
+| `TyMeterTick` | 沿刻度弧的短径向刻度线 | `color`(即 `TextColor`) |
+| `TyMeterNeedle` | 指针 + 中央轴心 | `background` |
+
+本控件**不再复用** `TyGauge` / `TyGaugeFill`。旧安排把三种互不相干的墨色焊在了一起:刻度与读数共用一个颜色(于是「淡刻度 + 深数字」这一档写不出来),指针又跟 spinner 共用 accent。现在三者各自可写。
+
+> 主题作者注意:base 层按 typeKey **全有或全无**地回落。只覆盖了 `TyGauge` 的第三方主题**不会**覆盖到这三个键;需要在皮肤里补上。
+> 子部件以**空状态集**解析,`TyMeterNeedle:disabled` 之类的选择器不会生效;伪类只对盒键 `TyMeter` 有效。注意 `TyMeterTick` 在 light.tycss 里挂在**表盘那条规则块**(读 `color`)而不是填充块。
 
 ```pascal
 uses tyControls.Meter;
@@ -47,7 +59,7 @@ uses tyControls.Meter;
 
 ## 5. 状态与主题
 
-复用 `TyGauge`(刻度 / 文字取 `color`)/ `TyGaugeFill`(指针 / 轴心取 `background`)。**渲染:** 沿刻度弧画 `Ticks` 根短径向刻度线,再从中央轴心画一根指针指到 `Value` 对应角度,轴心为实心圆点;`ShowValue` 时在底部居中绘制数值。
+刻度取 `TyMeterTick.color`,指针 / 轴心取 `TyMeterNeedle.background`,读数取 `TyMeter.color`。**渲染:** 沿刻度弧画 `Ticks` 根短径向刻度线(**刻度色**,已与读数色解耦),再从中央轴心画一根指针指到 `Value` 对应角度,轴心为同色实心圆点;`ShowValue` 时在底部居中绘制数值。本控件不画表盘底板(无 `DrawFrame`),`TyMeter` 的 `background` / `border-*` 目前不参与绘制。
 
 ---
 
@@ -74,4 +86,4 @@ M.Value := 88;               // 指针缓动到 88
 - **弧 vs 指针:** 需要"填充弧"式的进度用 [TTyGauge](gauge.md)(`gsArc`);需要"指针指向刻度"式的表盘用本控件。
 - **表盘变体:** `StartAngle` / `SweepAngle` 覆盖 90° / 120° / 240° 等不同张角(无需单独控件)。
 - **纯逻辑可测:** 比例 `TyGaugeFraction`、指针角 `TyGaugeSweepEnd`(见 gauge 单元)、刻度角 `TyMeterTickAngle`(本单元)均为纯函数并已单元测试。
-- **主题驱动:** 颜色取自 `TyGauge` / `TyGaugeFill`,不硬编码。
+- **主题驱动:** 颜色取自 `TyMeter` / `TyMeterTick` / `TyMeterNeedle`,不硬编码。改表盘外观请改这三个键——**不要**去改 `TyGauge`,那会连带改掉时钟 / 评分 / 进度环等一整族控件。

@@ -7,7 +7,7 @@
 也可由调用方**交出位图/文本**自定义显示,或用低层 `OnPaintPreview` 钩子完全自绘。
 
 它是 Phase 7 文件对话框预览窗格的底座 —— 图片对话框和通用预览对话框([filedialog](filedialog.md))都用它。
-**零新增主题 token**(`GetStyleTypeKey = 'TyPanel'`)。
+主题上它有**自有 typeKey** `'TyPreviewBox'`(见下文《主题与 typeKey》)。
 
 ## 用法
 
@@ -50,6 +50,19 @@ Box.Clear;
 - **加载安全**:图片/文本加载都包 `try/except`,坏文件回落占位,不崩。`ShowImage` 经 `TBitmap` 桥接进
   `TTyImage.Picture`(BGRA 3.2.2 无 `Create(TGraphic)`)。
 - **纯分类** `TyPreviewClassify(name): (pkImage, pkText, pkOther)` 按扩展名(大小写无关)分类,可无头测。
+
+## 主题与 typeKey
+
+| 项目 | 值 |
+|---|---|
+| `GetStyleTypeKey` 返回值 | `'TyPreviewBox'`(**自有 typeKey**) |
+| 该键画什么 | 预览井的**框**(`DrawFrame`:背景 + 边框 + 圆角 + 阴影)、按 `padding` 内缩出的内容矩形,以及居中的**占位文字**("无法预览")——后者用该键的 `color` / `font-name` / `font-size` / `font-weight`。 |
+
+它从前返回 `'TyPanel'`。这个控件画的图元(一个框 + 一行居中文字)确实和面板一样,但它的**角色**不同:它是文件对话框的预览井,那行字是**空状态**文案。空状态按惯例要比正文更淡,而在借用面板键的年代,把它调淡就等于把全应用面板的标题一起调淡。现在 `TyPreviewBox { color: var(--muted); }` 只作用于这里。`TyPreviewBox` 已作为附加选择器并入主题里 `TyPanel` 的规则块,解析值与从前逐字节相同,**开钩子而不动像素**;第三方主题若只覆盖了 `TyPanel`,需要补上 `TyPreviewBox`(主题层按 typeKey 全有全无地回落)。
+
+**子部件 typeKey:没有,也不需要。** 占位文字是本控件绘制的唯一文本,它的 `color` 已经由盒子键直接寻址;内嵌的图片 / 文本预览是真正的 [`TTyImage`](image.md) / [`TTyMemo`](memo.md) 子控件,各走各自的键。
+
+> 对照:[`TTyPaintPanel`](paintpanel.md) 刻意仍用 `TyPanel`——它就是一个面板,只是把画笔交给了调用方;预览井不是。
 
 ## 消费者
 

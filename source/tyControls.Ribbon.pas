@@ -1003,7 +1003,7 @@ end;
 
 function TTyRibbonPage.GetStyleTypeKey: string;
 begin
-  Result := 'TyRibbon';   // the page body is the ribbon surface below the tabs
+  Result := 'TyRibbon';
 end;
 
 procedure TTyRibbonPage.SetCaption(const AValue: string);

@@ -4,11 +4,9 @@
 
 `TTyRibbonGallery` 是 Ribbon 的**标志性控件**：一行**内联缩略格**（每格一个标题，若有图标字体则再加一个字形），行右侧有一个**下拉箭头**，点击后弹出一个更高的**网格**列出**全部**条目。样式（如字体样式、边框、段落、颜色主题）、色板等就地可选。
 
-它的实现思路直接对照 [[TTyListBox]]：一个自绘的窗口化表面，命中测试每一格、跟踪悬停格/选中格、把每一格当作一个带状态的**格子瓷砖**来绘制。画廊无非是把"格子列表"排成一行（内联）或一网格（弹出），所以它**复用** `TyListBox` 主题作为自身表面、复用 `TyListItem` 作为每一格的填充/状态——**不新增任何 `.tycss` 规则**。
+它的实现思路直接对照 [[TTyListBox]]：一个自绘的窗口化表面，命中测试每一格、跟踪悬停格/选中格、把每一格当作一个带状态的**格子瓷砖**来绘制。但它画的东西列表框没有：一个下拉箭头、一片由 `--gallery-cell-width` 定宽的定尺瓷砖、每格标题左侧的图标字体缩略图。所以**内联行的表面已经有自己的 typeKey `TyRibbonGallery`**，不再借 `TyListBox`。
 
 展开网格由共享的 `TTyDropdownPopup` 托管；弹窗内容是一个**内部**轻量控件 `TTyGalleryGrid`（**不注册到组件面板**），它把全部条目画成网格，并把格子点击回传给画廊（设 `ItemIndex`、触发 `OnSelect`、关闭弹窗）。该内部控件由画廊**按需创建、拥有并释放**。
-
-> **复用 TyListBox / TyListItem 主题**：`GetStyleTypeKey` 返回 `'TyListBox'`（与 [[TTyListBox]] 同一表面 token）。每一格用 `TyListItem` 解析填充与 `:selected` / `:hover` / `:normal` 状态——与列表框行完全相同的 token。因此框架、格子高亮全部**免费**获得。
 
 ---
 
@@ -18,8 +16,24 @@
 |------|-----|
 | 单元 | `tyControls.RibbonGallery` |
 | 注册类 | `TTyRibbonGallery`（`TTyGalleryGrid` 是**内部**弹窗内容，不注册） |
-| `GetStyleTypeKey` 返回值 | `'TyListBox'`（**复用**，见 [listbox.md](listbox.md)） |
-| 每格解析 | `'TyListItem'`（同列表框行的填充/选中/悬停 token） |
+| `GetStyleTypeKey` 返回值 | `'TyRibbonGallery'`（自己的键） |
+
+绘制路径实际解析这几个键：
+
+| typeKey | 画什么 |
+|---|---|
+| `TyRibbonGallery` | 内联行的外框：背景、边框、圆角、焦点环，以及下拉箭头的颜色（取其 `color`） |
+| `TyListBox` | **弹窗网格**（内部的 `TTyGalleryGrid`）的表面——**仍然借用**，见下 |
+| `TyListItem` | 每一格瓷砖的填充：`:active` = 选中、`:hover` = 悬停、`:normal` = 常态——**仍然借用**，见下 |
+
+> **只拆了内联行的盒子键。** 弹窗网格表面与每一格瓷砖目前**仍解析列表框的键**，也就是说：改 `TyListItem`
+> 会同时改到全库的列表行，改 `TyListBox` 会同时改到弹窗网格与全库列表框。这是"尚未拆分"，不是"设计如此"——
+> `TyRibbonGalleryItem`(+`:hover`/`:active`) 与 `TyRibbonGalleryPopup` 是**有意推迟**的子部件键，
+> 现在**并不存在**，写进皮肤不会被解析。清单见
+> `docs/superpowers/plans/2026-07-23-typekey-explicit-borrowers.md`。
+
+尺寸走 metric token,不是样式属性:`--gallery-cell-width`(格宽)、`--gallery-arrow-width`(右侧箭头区宽)、
+`--gallery-glyph-pad`(字形四周留白)。
 
 ```pascal
 uses tyControls.IconFont, tyControls.RibbonGallery;
@@ -113,7 +127,7 @@ Gallery.OnSelect := @GalleryStyleSelected;
 
 ## 7. 注意事项
 
-- **复用 TyListBox 表面 / TyListItem 格子**：不新增 `.tycss` 规则。要区分画廊与列表框，用 `StyleClass`（如 `TyListBox.gallery { ... }` / `TyListItem.gallery:selected { ... }`）。
+- **改画廊外观写 `TyRibbonGallery` 规则**，不要去改 `TyListBox`——那会顺手重绘全库的列表框。但**格子瓷砖仍是 `TyListItem`**，改它同样会波及所有列表行；在瓷砖键拆出来之前，只能靠 `StyleClass` 在外框这一层做区分（各部件是按空类名解析的，`StyleClass` 到不了格子）。
 - **`GlyphNames` 与 `Items` 平行、可短可缺**：某项无对应字形名（或未映射/无 `IconFont`）时该格只画标题，不报错。
 - **`ItemIndex` 语义**：越界收敛为 `-1`；仅在**真正改变**时触发一次 `OnSelect`，重复设同值不触发。列表缩短到选中项之下会自动收敛并触发一次。
 - **字形像素需真机 + 真实字体**：`RenderGlyph` 依赖已加载/安装的图标字体；无头/单测环境返回空透明位图（逻辑正确但无可见字形），且绘制以窗口句柄为门控——此时格子仍正常显示标题。
@@ -124,7 +138,7 @@ Gallery.OnSelect := @GalleryStyleSelected;
 ## 相关
 
 - [[TTyRibbon]] —— 命令带宿主；画廊是放进 Ribbon 分组的标志性命令控件。
-- [[TTyListBox]] —— 复用其 `TyListBox` / `TyListItem` 表面与格子 token、以及命中测试 + 逐格绘制的范式。
+- [[TTyListBox]] —— 命中测试 + 逐格绘制范式的来源；弹窗网格表面与格子瓷砖目前仍解析它的 `TyListBox` / `TyListItem`。
 - [[TTyIconFont]] —— 可选字形来源，`RenderGlyph` 光栅化每格的缩略字形。
 - [[TTyDropdownPopup]] —— 托管展开网格的共享弹窗宿主。
 ```

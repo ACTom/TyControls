@@ -8,13 +8,32 @@
 
 ## 外观与主题
 
-- `GetStyleTypeKey` **复用** `TyTreeHeader`:整条的背景/边框来自该 token。
-- 每一节用 `TyTreeHeaderSection` 解析出的样式绘制(标题文字颜色、字体);
-  鼠标悬停的那一节使用 `TyTreeHeaderSection:hover` 的背景高亮。
-- 排序时在该节右侧画一个排序指示三角:升序朝上、降序朝下。
-- 节与节之间画一条分隔线,颜色取自整条样式的 `border-color`。
+`GetStyleTypeKey` 现在返回**自己的** `TyHeaderControl`,不再借树的 `TyTreeHeader`。
+原因是同一批 token 对两个消费者含义不同:树把 `TyTreeHeader` 当作**自己框内的一条带**(只铺底色 +
+画一条底线,从不描外框),而独立的列头条**本身就是那个框** —— 它走 `DrawFrame`,会用到
+`border-radius`、`border` 描边和 `shadow`。同一个 `border-color`,在树里是列分隔线/表头下沿,
+在这里是整条的外框线,两者调不开。
 
-以上颜色**全部来自主题**,控件代码不硬编码任何视觉数值,也**不新增任何 `.tycss`**。
+| typeKey | 画什么 |
+|---|---|
+| `TyHeaderControl` | 整条:背景、边框描边、圆角、阴影(`DrawFrame`),以及分隔线取的 `border-color` |
+| `TyTreeHeaderSection` | 每一节的标题文字色与字体;`:hover` 的背景用于鼠标所在那一节 |
+
+- 排序时在该节右侧画一个排序指示三角:升序朝上、降序朝下,**填充色取该节的文字色**。
+- 节与节之间画一条分隔线,颜色取整条样式的 `border-color`。
+
+> **节的 typeKey 仍与树共享,这是"尚未拆分",不是"设计如此"。** `TyTreeHeaderSection` 目前同时被
+> 树的列头和本控件使用,改它会同时改到树。本轮只拆了**盒子键**;`TyHeaderControlSection` /
+> `TyHeaderControlSortMark` / `TyHeaderControlDivider` 这几个子部件键是**有意推迟**的,
+> 现在**并不存在** —— 别在皮肤里写它们,写了也不会被解析。推迟原因与清单见
+> `docs/superpowers/plans/2026-07-23-typekey-explicit-borrowers.md`。
+>
+> 顺带一提,本控件是 `TyTreeHeaderSection:hover` 的**唯一**真实消费者:树里那条 hover 分支是死代码。
+
+**并非所有视觉数值都走了主题。** 目前仍写死在绘制代码里的有:节的左右内边距(`P.Scale(6)` —— 解析出的
+`secStyle.Padding` 取到了却没用)、排序三角的尺寸(`P.Scale(9)`)与它预留的右侧留白(`sortSize * 2`)、
+节间分隔线的固定 1px(不读 `S.BorderWidth`)、以及调宽感应区 `TyHeaderResizeGrip = 4`。要改这些,
+现在只能改代码。
 
 ## 交互
 

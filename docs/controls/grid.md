@@ -178,33 +178,58 @@ end;
 
 ## 主题 token
 
-网格自成一套键,**不借用树/列表的键**:
+`GetStyleTypeKey` 返回 **`'TyGrid'`**。网格自成一套键,**不借用树/列表的键** —— 借来的键在外观主题层
+够不着,而且改它会波及那些控件。
+
+`TTyDrawGrid` 与 `TTyStringGrid` **都不重写** `GetStyleTypeKey`,三个类一律解析 `TyGrid` 及下面这套
+子部件键。这个"借用"是对的:它们是同一个网格的三层能力切片,画的是同一批部件,拆成三个键只会逼着
+皮肤把同一套规则抄三遍。
+
+下面每个键都是绘制路径**真的会解析**的(解析时**带上本控件的 `StyleClass`**,所以 `TyGridCell.compact`
+这类变体在子部件上一样管用):
 
 ```
-TyGrid                 整体表面 / 边框 / 字体
-TyGridCell             正文单元格(:hover / :selected)
-TyGridCellAlt          斑马纹的隔行底色(AlternateRows)
-TyGridActiveCell       焦点格(光标所在)—— 整行选中模式下靠它看出光标在哪一格
-TyGridFixed            冻结区(固定行列)
-TyGridIndicator        行头 / 行号槽
-TyGridHeader           列头带
-TyGridHeaderSection    列头分段
-TyGridHeaderGroup      分组表头带(横跨若干列的上层标题)
-TyGridLine             格线
-TyGridCellMarked       选区盖在"用户显式指定了底色"的格上时用的半透明层
-TyGridSelectionFrame   选区外框 + 填充柄(color: 是柄的描边色)
-TyGridCheckBox         勾选框单元格
-TyGridProgress / TyGridProgressFill   进度条单元格
-TyGridRating           评分单元格
-TyGridButton           按钮单元格(:hover / :active)
-TyGridGroupRow         分组行
-TyGridSummaryRow       汇总带
+TyGrid                      整体表面 / 边框 / 字体
+TyGridCell                  正文单元格(:hover / :selected)
+TyGridCellAlt               斑马纹的隔行底色(AlternateRows)
+TyGridCellSelectedInactive  失焦时的选区底色(HideSelectionWhenInactive)—— 独立的键,
+                            不写成 TyGridCell:selected:disabled,因为一个选择器只认一个 :state
+TyGridActiveCell            焦点格(光标所在)—— 整行选中模式下靠它看出光标在哪一格
+TyGridCellMarked            选区盖在"用户显式指定了底色"的格上时用的半透明层
+TyGridFixed                 冻结区(固定行列)
+TyGridIndicator             行头 / 行号槽
+TyGridHeader                列头带
+TyGridHeaderSection         列头分段(:hover / :selected)
+TyGridHeaderGroup           分组表头带(横跨若干列的上层标题)
+TyGridFilterRow             内嵌筛选行的底色与文字色
+TyGridLine                  格线(读 background)
+TyGridSelectionFrame        选区外框 + 填充柄(color: 是柄的描边色)
+TyGridGroupRow              分组行的底色与文字色(折叠三角也用这个文字色)
+TyGridSummaryRow            汇总带的文字色与字体(带底走 FillRegion 的同一个键)
+TyGridCheckBox              勾选框单元格(:selected = 已勾选)
+TyGridProgress / TyGridProgressFill   进度条单元格的槽与填充
+TyGridRating                评分单元格里**已评**的星(读 color)
+TyGridRatingEmpty           评分单元格里**未评**的空星(读 color)—— 配成淡色,
+                            用户才看得出"第 5 颗还能点"
+TyGridHyperlink             gcdHyperlink 单元格的链接文字色
+TyGridCommentMark           批注格右上角那个小三角的颜色
+TyGridButton                按钮单元格(:hover / :active)
 ```
 
 度量:`--grid-row-height` / `--grid-header-height` / `--grid-indicator-width` /
 `--grid-line-width` / `--grid-cell-padding`。
 
 基层(`themes/light.tycss`)已给全套键,所以**新皮肤一条网格规则都不写也能正常显示**。
+
+> **`TyGridGroupRow` / `TyGridSummaryRow` 现在真的被定义了。** 这两个键网格从支持分组那天起就在解析,
+> 但**没有任何主题定义过它们**,于是解析出一个空样式:分组带/汇总带根本不铺底,文字色也只能回落去借
+> 网格外框的颜色。现在 `themes/light.tycss` 把这件事**写出来**了,而不是留给一次静默回落。
+> 两条规则目前都写成 `background: none` —— 这是**刻意保持现状**(给它们上惯例的 chrome 色调是外观变更,
+> 而那一轮是纯粹的可主题化重构);皮肤想要那层底色,自己写 `background: var(--surface-chrome)` 即可。
+> 字体一律不声明(与 `TyGridCell` 一致),两条带因此跟着网格自身的字体走;但**只要皮肤声明了**
+> `font-name` / `font-size` / `font-weight`,两个键都会读。
+> `TyGridSummaryRow` **有意不给 `border-color`**:`RenderFooter` 压根不读它,写了也是死规则 ——
+> 汇总带要一条分隔发丝线,得先改代码。
 
 ## 能力一览
 

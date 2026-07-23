@@ -18,7 +18,18 @@
 | TTyCalcEdit | `tyControls.CalcEdit` |
 | TTyCalcCurrencyEdit | `tyControls.CalcCurrencyEdit` |
 
-typeKey 同各自基类(`'TyEdit'`);弹出的计算器用 `'TyPanel'` / `'TyEdit'` / `'TyButton'`。无新增 `.tycss`。
+**两者的 typeKey 都是 `'TyEdit'`,这是刻意保留的借用。** `TTyCalcEdit` / `TTyCalcCurrencyEdit` 都没有覆写 `GetStyleTypeKey`,沿着 `TTyNumericEdit` → `TTyEdit` 继承下来。理由:一个带计算器下拉的数值框**就是一个编辑框**——框体、边框、内边距、文字、`:hover` / `:focus` / `:disabled` 全部与 `TTyEdit` 逐像素相同,差别只在输入过滤与尾部那颗按钮的行为。它们与普通编辑框同排出现在表单里,共用一个键才不会串色;`TyEdit.small` 之类的变体也自动同时作用于两者。
+
+尾部按钮(2×2 键盘图标)走的是 `TTyEdit` 的尾部小部件钩子,用同一份 `TyEdit` 样式绘制,**没有**自己的键。
+
+弹出的计算器是一个真正的 [TTyCalculator](calculator.md) 实例,它有**自己的** `'TyCalculator'` 键(背板);其显示条仍解析 `'TyEdit'`,键盘阵是真正的 `TTyButton` 子控件,走 `'TyButton'`。
+
+| 部件 | typeKey | 自有 / 借用 |
+|------|---------|------------|
+| 编辑框本体 + 尾部按钮 | `'TyEdit'` | 借用(刻意:它就是一个编辑框) |
+| 下拉里的计算器背板 | `'TyCalculator'` | 计算器自有 |
+| 下拉里的显示条 | `'TyEdit'` | 计算器借用(遗留,见 [calculator.md](calculator.md)) |
+| 下拉里的按键 | `'TyButton'` | 真实按钮子控件自有 |
 
 ```pascal
 uses tyControls.CalcEdit, tyControls.CalcCurrencyEdit;

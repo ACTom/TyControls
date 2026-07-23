@@ -294,7 +294,7 @@ DeptSelect.DropDownHeight := 160;   // 逻辑像素；0 = 主题的 --treeselect
 
 ## 8. 注意事项
 
-- **主题里的 `TyTreeSelect` 规则块是「死」的（重要陷阱）：** `themes/light.tycss`（及 `source/tyControls.DefaultTheme.pas` 中的同一份）确实声明了一个 `TyTreeSelect { … }` 块，但本控件的 `GetStyleTypeKey` 返回的是 **`'TyComboBox'`**，**永远不会去解析 `TyTreeSelect`**（`tests/test.treeselect.pas` 的 `TestTypeKeyIsComboBox` 就钉死了这一点）。之所以一直没被发现，是因为那个块的内容与 `TyComboBox` 块**逐条相同**，改不改都看不出差别。**后果：想把树形选择器与普通组合框在视觉上区分开、于是去改 `TyTreeSelect { … }` 的主题作者，会发现毫无效果**——请改 `TyComboBox`（会同时影响整个组合框家族），或用 `StyleClass` / `StyleOverride` 给这一个实例上妆。该块目前由 `tests/test.builtinthemes.pas` 的内置主题覆盖检查（要求 14 个控件的 surface 键都有背景）维持存在。
+- **主题里的 `TyTreeSelect` 规则块是「死」的（重要陷阱）：** `themes/light.tycss` 曾经声明过一个 `TyTreeSelect { … }` 块（3.0 起已删除，原处只留一条解释性注释），但本控件的 `GetStyleTypeKey` 返回的是 **`'TyComboBox'`**，**永远不会去解析 `TyTreeSelect`**（`tests/test.treeselect.pas` 的 `TestTypeKeyIsComboBox` 就钉死了这一点）。之所以一直没被发现，是因为那个块的内容与 `TyComboBox` 块**逐条相同**，改不改都看不出差别。**后果：想把树形选择器与普通组合框在视觉上区分开、于是去改 `TyTreeSelect { … }` 的主题作者，会发现毫无效果**——请改 `TyComboBox`（会同时影响整个组合框家族），或用 `StyleClass` / `StyleOverride` 给这一个实例上妆。那个块已经删掉了，所以现在**连找都找不到**——`TyTreeSelect` 是一个纯粹的死名字，写进主题不会被任何代码解析。
 - **变体是组合框的变体：** 因为共用 `'TyComboBox'` 键，`StyleClass := 'small'` 命中的是 `TyComboBox.small`——TreeSelect 与 ComboBox 会被**打扮得完全一样**。这是共用键的**目的**，也是它的**代价**。
 - **`Text` 是选中时缓存的，绘制时绝不解引用节点：** 节点指针是宿主的，宿主随时可以释放（`TTyTreeView` 是虚拟树），绘制时再去读一个已删节点，会变成每次 `Invalidate` 都悬空读。所以**宿主背着控件改了标题，字段不会自己知道**——改完请调 `UpdateText`。
 - **`SelectedNode` 会悬空：** 把节点从树里删掉，这个指针就悬空了，和宿主自己持有的任何 `PTyTreeNode` 一样。**删之前先 `ClearSelection` 或改设**。

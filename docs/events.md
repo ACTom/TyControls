@@ -78,8 +78,8 @@ TyControls 的全部控件继承自两个基类之一（`tyControls.Base`）：
 | `TTyRadioButton` | `OnChange` | `TNotifyEvent` | `Checked` 实际改变时；选中某个单选钮时，被**取消选中的同组兄弟**各自经过自己的 `SetChecked` 也会**各自触发**其 `OnChange` |
 | `TTyScrollBar` | `OnScroll` | `TScrollEvent` | 键盘 / 轨道点击 / 按钮触发的滚动；签名为 `(Sender; ScrollCode: TScrollCode; var ScrollPos: Integer)`，可在 handler 中改写 `ScrollPos` 覆盖目标位置 |
 | `TTyTrackBar` | `OnChange` | `TNotifyEvent` | `Position` 变化时（含滚轮步进） |
-| `TTyTabControl` | `OnChanging` | `TTyTabChangingEvent` | 切换页签**之前**；签名 `(Sender; ANewIndex: Integer; var AllowChange: Boolean)`，把 `AllowChange := False` 即可**否决**切换 |
-| `TTyTabControl` | `OnReorder` | `TTyTabReorderEvent` | 拖拽重排松手后触发一次；签名 `(Sender; AFromIndex, AToIndex: Integer)` |
+| `TTyCustomTabStrip`(`TTyTabSet` / `TTyPageControl` 继承) | `OnChanging` | `TTyTabChangingEvent` | 切换页签**之前**；签名 `(Sender; ANewIndex: Integer; var AllowChange: Boolean)`，把 `AllowChange := False` 即可**否决**切换 |
+| `TTyCustomTabStrip`(同上) | `OnReorder` | `TTyTabReorderEvent` | 拖拽重排松手后触发一次；签名 `(Sender; AFromIndex, AToIndex: Integer)` |
 | `TTyProgressBar` | `OnChange` | `TNotifyEvent` | `Position` / `Min` / `Max` 实际变化后 |
 
 > **`TTyForm` 使用标准 `TForm` 生命周期事件：** 自绘窗框窗口现在通过继承 `TTyForm = class(TForm)` 获得（旧的非可视控制器 `TTyFormChrome` 已**移除**）。`TTyForm` *就是*一个 `TForm`，因此 `OnCloseQuery` / `OnClose` / `OnShow` / `OnActivate` / `WindowState` 等都是标准的、已 published 的窗体事件，直接在对象查看器里挂接即可。旧 `TTyFormChrome` 的自定义 `OnMinimize` / `OnMaximize` / `OnRestore` 事件**已废弃**——标题栏最小化按钮设 `WindowState := wsMinimized`、最大化由引擎 `ToggleMaximize` 处理、关闭走标准 `Close`（`OnCloseQuery` → `OnClose`）。详见 [controls/ttyform.md](controls/ttyform.md)。

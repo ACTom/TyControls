@@ -4,7 +4,7 @@
 
 TTyImage 是 TyControls 库中的**主题化位图图像控件**，继承自 `TTyGraphicControl`（叶子图形控件，无窗口句柄、不可聚焦）。它显示一个 `TPicture`（任意 LCL 图形——PNG / BMP / JPG，支持 alpha 透明），并通过 `TTyPainter` 自绘，从而与主题化界面无缝融合。功能对标 LCL `TImage`，提供**拉伸 / 等比 / 居中**三种摆放模式。
 
-> 复用面板主题：`GetStyleTypeKey` 返回 `'TyPanel'`，**不新增任何 `.tycss` 规则**。默认 `Transparent = True` 时**不绘制背景**；置为 `False` 时先用 `DrawFrame` 画出 `TyPanel` 表面（填充 + 边框）再叠加图像。
+> 主题：`GetStyleTypeKey` 返回 `'TyImage'`（本控件**自有**的键）。默认 `Transparent = True` 时**不绘制背景**；置为 `False` 时先用 `DrawFrame` 画出 `TyImage` 表面（填充 + 边框）再叠加图像。
 
 ---
 
@@ -13,7 +13,13 @@ TTyImage 是 TyControls 库中的**主题化位图图像控件**，继承自 `TT
 | 项目 | 值 |
 |------|-----|
 | 单元 | `tyControls.Image` |
-| `GetStyleTypeKey` 返回值 | `'TyPanel'`（**复用**面板表面，不引入新选择器） |
+| `GetStyleTypeKey` 返回值 | `'TyImage'`（**自有 typeKey**） |
+
+它从前返回 `'TyPanel'`。这里借用面板键的代价最直观：本控件在默认透明模式下唯一读取的样式属性就是 `opacity`（源码注释承诺"禁用的图片会变淡"），而 `light.tycss` 给 `TyPanel` **没有**定义任何状态规则，所以那句承诺当时并不成立——而唯一的补法 `TyPanel:disabled { opacity }` 会让全应用的容器一起变淡。现在写 `TyImage:disabled { opacity: 0.5 }` 就只作用于图片。`TyImage` 已作为附加选择器并入主题里 `TyPanel` 的规则块，解析值与从前逐字节相同，**开钩子而不动像素**；第三方主题若只覆盖了 `TyPanel`，需要补上 `TyImage`（主题层按 typeKey 全有全无地回落）。
+
+### 子部件 typeKey
+
+**没有。** 控件只解析这一个盒子样式：`Transparent = False` 时它是图片的衬底（填充 + 边框 + 圆角），`Transparent = True` 时只取其中的 `opacity`。
 
 ```pascal
 uses tyControls.Image;
@@ -31,7 +37,7 @@ uses tyControls.Image;
 | `Stretch` | `Boolean` | `False` | `True` 时图像**填满**客户区（不保持宽高比）；`Proportional=True` 时本项被忽略。 |
 | `Proportional` | `Boolean` | `False` | `True` 时**等比缩放**以完整装入客户区（letterbox 留边），保持宽高比。 |
 | `Center` | `Boolean` | `True` | 图像未填满时是否居中（`False` 则左上角对齐）。 |
-| `Transparent` | `Boolean` | `True` | `True`（默认）不画背景，透出下层；`False` 先画 `TyPanel` 表面。 |
+| `Transparent` | `Boolean` | `True` | `True`（默认）不画背景，透出下层；`False` 先画 `TyImage` 表面。 |
 | `Enabled` | `Boolean` | `True` | 为 `False` 时触发 `:disabled` 主题状态（通常降低不透明度，图像一并变淡）。 |
 | `AutoSize` | `Boolean` | `False` | `True` 时控件尺寸跟随图像原始尺寸（`CalculatePreferredSize` 返回 `Picture.Width/Height`）。 |
 | `Align` | `TAlign` | `alNone` | 父容器内的停靠方式。 |
@@ -97,17 +103,19 @@ function TyImageFitRect(ASrcW, ASrcH, ADstW, ADstH: Integer;
 
 ### 主题来源
 
-复用 `TyPanel` 选择器（见 [panel.md](panel.md)）。默认 `Transparent = True` 时背景完全不绘制，图像浮在下层内容之上；仅当 `Transparent = False` 时才画出 `TyPanel` 的填充 + 圆角边框作为图像衬底。无论透明与否，`:disabled` 的 `opacity` 都会作用到最终像素上（图像随之变淡）。
+走 `TyImage` 选择器（默认取值与 [panel.md](panel.md) 相同，但名字独立）。默认 `Transparent = True` 时背景完全不绘制，图像浮在下层内容之上；仅当 `Transparent = False` 时才画出 `TyImage` 的填充 + 圆角边框作为图像衬底。无论透明与否，`:disabled` 的 `opacity` 都会作用到最终像素上（图像随之变淡）——**但内置主题并未声明这条状态规则**，要让禁用的图片真的变淡，需要主题自己写：
 
 ```css
-/* 复用的规则（来自 light.tycss 的 TyPanel），仅在 Transparent=False 时可见 */
-TyPanel {
+/* 盒子样式（内置主题中与 TyPanel 同值同块），仅在 Transparent=False 时可见 */
+TyImage {
   background: var(--surface);
   border-color: var(--border);
   border-width: 1px;
   border-radius: var(--radius);
   padding: 8px;
 }
+/* 想要"禁用即变淡"就加这一条——只影响图片，不影响任何容器 */
+TyImage:disabled { opacity: 0.5; }
 ```
 
 ---
@@ -133,7 +141,7 @@ Img.Center := True;
 // 或：拉伸填满（可能变形）
 // Img.Stretch := True;
 
-// 带衬底：画出 TyPanel 表面再叠加图像
+// 带衬底：画出 TyImage 表面再叠加图像
 Img.Transparent := False;
 ```
 

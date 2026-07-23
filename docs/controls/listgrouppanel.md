@@ -18,7 +18,7 @@
 | 项目 | 值 |
 |------|-----|
 | 单元 | `tyControls.ListGroupPanel` |
-| 外框 typeKey | `TyPanel`（**复用**：背景+边框+圆角，同 `TTyExPanel`） |
+| 外框 typeKey | `TyListGroupPanel`（**自有**：背景+边框+圆角） |
 | 分组标题 typeKey | `TyListGroupHeader`（自己的键） |
 | 条目行 typeKey | `TyListGroupItem`（自己的键） |
 | 基类 | `TTyCustomControl`（→ `TCustomControl`，windowed，可获取焦点/鼠标捕获） |
@@ -30,11 +30,11 @@
 uses tyControls.ListGroupPanel;
 ```
 
-**它有自己的 typeKey**：早期版本借了 `TyTreeHeaderSection` / `TyListItem`——但这两个键**同时被 `TTyTreeView` / `TTyListView` 的列头/行用着**，导致想给侧边导航换装就会毁掉数据控件的列头,侧边栏的观感**主题根本够不着**。现在拆成自己的键：
+**三个键全部是自己的**：早期版本里,分组标题/条目行借了 `TyTreeHeaderSection` / `TyListItem`——但这两个键**同时被 `TTyTreeView` / `TTyListView` 的列头/行用着**，导致想给侧边导航换装就会毁掉数据控件的列头,侧边栏的观感**主题根本够不着**。那两个已经拆开了;剩下的**外框**直到本次才拆:它从前返回 `'TyPanel'`,于是"行能调、承载行的侧边栏本身调不了"——`TyPanel { border-radius }` 会把导航栏像卡片一样抠圆,而"贴边、无圆角"这句话无处可说。现在三层各有其名:
 
 | 视觉元素 | typeKey | 用到的状态 |
 |----------|---------|-----------|
-| 控件外框（背景/边框/圆角） | `TyPanel` | — |
+| 控件外框（背景/边框/圆角，即侧边栏的底） | `TyListGroupPanel` | — |
 | 分组标题（**仅当设了 `background` 才填底**；右侧 chevron 取其 `TextColor`；可选左侧图标） | `TyListGroupHeader` | `:hover` / `:selected`（该分组**已展开**） |
 | 条目行（选中态画成**内缩圆角药丸**，非满宽色条；可选左侧图标） | `TyListGroupItem` | `:hover` / `:active`（**选中**） / `:disabled` |
 
@@ -43,6 +43,8 @@ uses tyControls.ListGroupPanel;
 **图标**:`AddGroup(caption, AImageIndex)` / `AddItem(gi, caption, AImageIndex)` 带图标索引,`Images: TTyVirtualImageList` 供图(同 `TTyComboBoxEx`)。索引 < 0 或未设 `Images` = 纯文字。
 
 **尺寸令牌**(均可选,未设走兜底常量/已发布属性):`--listgroup-header-height`、`--listgroup-item-height`、`--listgroup-chevron-size`(14)、`--listgroup-icon-size`(16)、`--listgroup-icon-gap`(6)、`--listgroup-item-inset`(4)。高度令牌**优先于**已发布的 `HeaderHeight`/`ItemHeight`——"行距留白"是皮肤的决定,单实例仍可覆盖。
+
+**没有更细的子部件键**:chevron 三角、图标槽、药丸的内缩都由上表三个键 + `--listgroup-*` 尺寸令牌控制,不存在第四个键。外框键 `TyListGroupPanel` 在内置主题里与 `TyPanel` 等键写在同一条规则中(取值相同、名字独立),所以默认观感不变;第三方主题若只覆盖了 `TyPanel`,需要补上 `TyListGroupPanel`(主题层按 typeKey 全有全无地回落)。要让侧边栏贴边平铺,写 `TyListGroupPanel { border-radius: 0px; border-width: 0px; }`,**不要**去改 `TyPanel`。
 
 ```css
 /* base(light.tycss)给的中性外观,每个主题继承: */

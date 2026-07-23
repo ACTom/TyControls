@@ -11,9 +11,21 @@ TTyTrackEdit 是**数值编辑框 + 内嵌迷你滑块**,继承自 [TTyNumericEd
 | 项目 | 值 |
 |------|-----|
 | 单元 | `tyControls.TrackEdit` |
-| `GetStyleTypeKey` | `'TyEdit'`(经继承);滑块 accent 取 `'TyGaugeFill'` |
+| `GetStyleTypeKey` | `'TyEdit'`(经继承) |
 
-无新增 `.tycss`。
+| typeKey | 画什么 |
+|---|---|
+| `TyEdit` | 字段外框、内边距、文字、光标、选区——整个左半边就是一个普通的编辑框 |
+| `TyTrackThumb` | 尾随内嵌滑块的**拇指**(取其 `background`) |
+
+> **3.0 起滑块拇指改读 `TyTrackThumb`**(此前是 `'TyGaugeFill'`)。旧接法意味着调一下仪表的
+> 填充色就会连带改掉每一个 track-edit 的拇指,而拇指本身根本无法单独主题化。`TyTrackThumb`
+> 正是 `TTyTrackBar` 拇指用的键——内嵌滑块本来就是个滑块,两者理应一致。
+>
+> **这是整轮 typeKey 改造里唯一真正移动了像素的地方**:showcase 皮肤给 `TyTrackThumb` 上了渐变,
+> 所以该皮肤下拇指颜色差一个色阶。反过来说,现在改 `TyTrackThumb` 会**同时**改到 `TTyTrackBar`。
+>
+> 轨道仍取字段样式的 `BorderColor`,拇指半径等几何量目前是代码常量,尚不可主题化。
 
 ```pascal
 uses tyControls.TrackEdit;

@@ -13,10 +13,16 @@ TTySizeBox 是 TyControls 库中的主题化**尺寸手柄（size grip）**控�
 | 项目 | 值 |
 |------|-----|
 | 单元 | `tyControls.SizeBox` |
-| `GetStyleTypeKey` 返回值 | `'TyPanel'`（**复用** TyPanel 令牌，本控件不引入新的 `.tycss` 主题令牌） |
+| `GetStyleTypeKey` 返回值 | `'TySizeBox'`（**自有 typeKey**） |
 | 基类 | `TTyGraphicControl`（继承自 `TGraphicControl`，无窗口句柄、不能作父容器） |
 
-在 `.tycss` 文件中，该控件复用 `TyPanel` 选择器着色（背景/边框/文字令牌）。
+在 `.tycss` 文件中，该控件对应选择器 `TySizeBox`（背景/边框/文字令牌）。
+
+它从前返回 `'TyPanel'`：点阵握把根本不是面板会画的东西，而借用面板键意味着主题层完全够不着它——想调握把只能连带重涂全应用的面板。现在 `TySizeBox` 已作为附加选择器并入主题里 `TyPanel` 的规则块，解析值与从前逐字节相同，**开钩子而不动像素**；第三方主题若只覆盖了 `TyPanel`，需要补上 `TySizeBox`（主题层按 typeKey 全有全无地回落，否则会掉回内置 light 取值）。
+
+### 子部件 typeKey
+
+**没有。** 6 个握把点不是可单独寻址的子部件：它们的高光/阴影色在代码里从上面那个盒子样式派生（`TyLighten(seed, 55)` / `TyDarken(seed, 30)`），点边长/间距/内边距（逻辑 2 / 4 / 3 px）也是 Pascal 常量而非主题 metric。子部件键与相应 metric（`TySizeBoxDot`、`--sizebox-dot-size` / `-step` / `-pad`）的扩展已被**刻意推迟**，这些名字当前**并不存在**，写进 `.tycss` 解析不到任何东西。
 
 ```pascal
 uses tyControls.SizeBox;
@@ -79,17 +85,17 @@ TTySizeBox 未在 `published` 节声明专有事件；作为 `TTyGraphicControl`
 
 ### 支持的伪类状态
 
-沿用 `TTyGraphicControl` 的基础状态机制（`:hover` / `:active` / `:disabled`）。因复用 `TyPanel` 令牌，具体着色由主题的 `TyPanel` 规则决定。
+沿用 `TTyGraphicControl` 的基础状态机制（`:hover` / `:active` / `:disabled`）。具体着色由主题的 `TySizeBox` 规则决定。
 
 ### 渲染细节
 
-`RenderTo` 先走 `DrawFrame` 路径（应用 `TyPanel` 的 `background`/`border`，若主题设了的话），再在右下角绘制握把点阵：
+`RenderTo` 先走 `DrawFrame` 路径（应用 `TySizeBox` 的 `background`/`border`，若主题设了的话），再在右下角绘制握把点阵：
 
 1. **颜色派生（主题驱动，不硬编码）**：种子色取 `border-color`（`tpBorderColor in Present`）否则取 `color`（`TextColor`）；高光 = `TyLighten(seed, 55)`，阴影 = `TyDarken(seed, 30)`。
 2. **立体点**：先在每个点右下偏移 `+1` 设备像素处画阴影方点，再在原位画高光方点，形成经典“凸起/雕刻”观感。
 3. 点阵位置、边长、间距全部经 `MulDiv(logical, APPI, 96)` 做 DPI 缩放。
 
-> 由于复用 `TyPanel`，若不希望握把带面板背景框，可在主题里给 `TyPanel`（或用 `StyleClass` 细分）设 `background: none; border-width: 0px;`——握把点阵仍会绘制，颜色从 `border-color`/`color` 派生。
+> 若不希望握把带背景框，在主题里给 `TySizeBox` 设 `background: none; border-width: 0px;` 即可——握把点阵仍会绘制，颜色从 `border-color`/`color` 派生。这条规则只作用于本控件，不会波及任何面板。
 
 ---
 
@@ -121,8 +127,8 @@ end;
 
 ## 8. 注意事项
 
-- **复用 TyPanel 令牌，不新增主题令牌：** `GetStyleTypeKey` 返回 `'TyPanel'`。握把是右下角的一小片“表面”，视觉上并入其容器角落即可，无需独立令牌。
-- **颜色必须主题驱动：** 高光/阴影两层都由 `border-color`（或 `color`）经 `TyLighten`/`TyDarken` 派生，切勿在控件代码里写死颜色；换主题即换握把色。
+- **自有 typeKey：** `GetStyleTypeKey` 返回 `'TySizeBox'`。要单独把握把做扁平（去框、去 3D），改 `TySizeBox` 规则；**不要**去改 `TyPanel`——那会重涂全应用的面板。
+- **颜色必须主题驱动：** 高光/阴影两层都由 `border-color`（或 `color`）经 `TyLighten`/`TyDarken` 派生，切勿在控件代码里写死颜色；换主题即换握把色。两个混合量（55 / 30）以及 +1 设备像素的阴影偏移目前仍是代码字面量，主题改不了。
 - **Target 回退顺序：** `nil` → 拥有者窗体（`Owner is TCustomForm`）→ `Parent`。若既无窗体拥有者也无父控件，拖动无效果（安全 no-op）。
 - **仅在握把命中区起拖：** `MouseDown` 先用 `TySizeGripHit` 判定命中，只有落在右下三角握把区才开始拖动；点在左上等区域按下不触发缩放。
 - **屏幕坐标测 delta：** 记录 `FMouseStart` 为屏幕坐标，拖动时以屏幕坐标求位移——容器随缩放在指针下伸缩时仍 1:1 跟随（本地坐标会漂移）。

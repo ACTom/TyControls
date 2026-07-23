@@ -18,10 +18,18 @@
 | 项目 | 值 |
 |------|-----|
 | 单元 | `tyControls.CoolBar` |
-| `GetStyleTypeKey` 返回值 | `'TyPanel'`（**刻意复用**基类的 TyPanel 令牌，**不新增任何 .tycss**） |
-| 基类 | `TTyControlBar`（带打包容器；同样 `GetStyleTypeKey='TyPanel'`） |
+| `GetStyleTypeKey` 返回值 | `'TyCoolBar'`（**自有 typeKey**） |
+| 基类 | `TTyControlBar`（带打包容器；其 `GetStyleTypeKey` 为 `'TyControlBar'`） |
 | 默认夹具宽度 | 10（逻辑像素） |
 | 默认带最小宽度 | 24（逻辑像素） |
+
+它从前和基类一样返回 `'TyPanel'`，主题层因此够不着它。现在两者各有其名：`TyCoolBar` 已作为附加选择器并入主题里 `TyPanel` 的规则块，解析值与从前逐字节相同，**开钩子而不动像素**；第三方主题若只覆盖了 `TyPanel`，需要补上 `TyCoolBar`（主题层按 typeKey 全有全无地回落）。
+
+与基类分名是有实质理由的：`TTyCoolBar` 的夹具是**可交互**的（`MouseDown` 经 `TyCoolGripperHit` 命中后拖动即改宽 / 重排），而 `TTyControlBar` 的夹具只是装饰；一套皮肤完全有理由让"能拖的导轨"和"只是好看的导轨"读起来不一样。
+
+### 子部件 typeKey
+
+**没有。** 本控件没有自己的 `Paint`——像素全部来自 `TTyControlBar`（面板框架 + 每条带一个夹具），夹具颜色从盒子样式的 `border-color`（缺省回落 `color`）派生，粗细 / 间距 / 内缩是代码里的 `Scale()` 字面量。子部件键 `TyCoolBarGripper` 的扩展已被**刻意推迟**，该键当前**并不存在**，写进 `.tycss` 解析不到任何东西。
 
 ```pascal
 uses tyControls.CoolBar, tyControls.ControlBar, tyControls.Panel;
@@ -84,7 +92,9 @@ function TyCoolGripperHit(const ABandRect: TRect; AGripperW: Integer; const APt:
 
 ## 6. 状态与主题
 
-`TTyCoolBar` 复用 `'TyPanel'` 令牌，外观（背景 / 边框）完全由主题的 `TyPanel` 规则决定，**无新增 tycss**。夹具本身用 painter 图元（点列 / 短线）在带左缘绘制（真机可见），颜色取自当前样式的文本 / 边框色，仍为主题令牌驱动。
+`TTyCoolBar` 的外观（背景 / 边框）由主题的 `TyCoolBar` 规则决定。内置主题把它与 `TyPanel`、`TyControlBar` 等键写在同一条规则里（取值相同、名字各自独立），所以默认观感与面板一致；想让 rebar 单独换一套（更暗的底、无圆角、无边框），另写一条 `TyCoolBar { ... }` 即可，**不要**去改 `TyPanel`——那会重涂全应用的面板。
+
+夹具本身用 painter 图元（两条竖直导轨）在带左缘绘制（真机可见），颜色取自当前样式的边框 / 文本色，仍为主题令牌驱动；但夹具没有独立的键，"只改夹具不改带底色"目前做不到（见 2 节）。
 
 ---
 
@@ -127,5 +137,5 @@ end;
 - **元数据按控件键控：** `Width` / `MinWidth` / `MaxWidth` 以子控件为键存储；重排、删除其它带不串位，子控件 free 时条目自动丢弃（`Notification/opRemove`）。切勿假设它按位置索引。
 - **拖动分辨（真机）：** `MouseDown` 命中夹具后进入拖动；横向位移 → 改宽（`TyCoolBandResize` 钳制），纵向位移 → 重排（真机细化）。当前实现以横向改宽为主，重排的方向消歧属真机 refinement。
 - **改宽是逻辑像素：** 拖动位移从设备像素折算为逻辑像素（`MulDiv(dx,96,PPI)`）再钳制，带宽以逻辑像素存储。
-- **无新增 tycss：** 复用 `'TyPanel'` 令牌，主题只需定义 `TyPanel` 规则。
+- **自有 typeKey：** `GetStyleTypeKey` 返回 `'TyCoolBar'`（基类为 `'TyControlBar'`）。主题需要各自定义这些键——只写 `TyPanel` 不再覆盖 rebar。
 - **DFM 序列化：** `GripperWidth`（`default 10`）/ `DefaultBandMinWidth`（`default 24`）声明了默认值，等于默认值时不写入 `.lfm`/`.dfm`。

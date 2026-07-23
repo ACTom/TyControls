@@ -11,10 +11,22 @@ TTyLevelMeter 是**电平条 / VU 表**(音频风格),继承自 `TTyGraphicContr
 | 项目 | 值 |
 |------|-----|
 | 单元 | `tyControls.LevelMeter` |
-| `GetStyleTypeKey` 返回值 | `'TyGauge'`(**复用**:轨道背景 / 边框 / 文字)|
-| 点亮段 typeKey | `'TyGaugeFill'`(点亮部分 / 峰值线取其 `background` = accent)|
+| `GetStyleTypeKey` 返回值 | `'TyLevelMeter'`(轨道背景 / 边框 / 文字)|
 
-复用 `TTyGauge` 主题规则,无新增 `.tycss`。
+### 子部件 typeKey
+
+两个子部件键在代码里由 `GetStyleTypeKey + 'Fill'` / `+ 'Peak'` 拼出,与盒键绑死、不会各自漂移。
+
+| typeKey | 绘制什么 | 读取的样式属性 |
+|---------|----------|----------------|
+| `TyLevelMeter` | 轨道:圆角背景 + 边框(`DrawFrame`);`ShowValue` 的叠加数值 | `background` / `border-color` / `border-width` / `border-radius` / `color`(文字) |
+| `TyLevelMeterFill` | 点亮的一段(连续填充或离散段) | `background` |
+| `TyLevelMeterPeak` | 峰值保持标记线 | `background` |
+
+本控件**不再复用** `TyGauge` / `TyGaugeFill`。VU 表是皮肤最典型要从「通用仪表」里拆出来单独做的控件;更要命的是**峰值标记**:它是画**在**点亮条上的,跟填充共用一个颜色就等于在信号真正到顶的那一刻它变得看不见,而且没有任何主题规则能补救。现在它有自己的键。
+
+> 主题作者注意:base 层按 typeKey **全有或全无**地回落。只覆盖了 `TyGauge` 的第三方主题**不会**覆盖到这三个键;需要在皮肤里补上。
+> 子部件以**空状态集**解析,`TyLevelMeterFill:disabled` 之类的选择器不会生效;伪类只对盒键 `TyLevelMeter` 有效。
 
 ```pascal
 uses tyControls.LevelMeter;
@@ -49,7 +61,7 @@ uses tyControls.LevelMeter;
 
 ## 5. 状态与主题
 
-复用 `TyGauge`(轨道 `background` / 边框 / 文字 `color`)/ `TyGaugeFill`(点亮部分 / 峰值线取 `background`)。**渲染:** 先按 `DrawFrame` 画轨道圆角矩形背景与边框;再在轨道内按 `Value` 比例点亮:`Segments=0` 为单块圆角填充(水平左锚 / 垂直底锚),`Segments>0` 为 N 个带间隙的等分段点亮到 `ceil(比例*段数)`;`PeakHold` 时在历史最高比例处画一根强调色细线;`ShowValue` 时居中叠加数值。
+轨道 `TyLevelMeter.background` / 边框 / 文字 `color`;点亮段 `TyLevelMeterFill.background`;峰值线 `TyLevelMeterPeak.background`。**渲染:** 先按 `DrawFrame` 画轨道圆角矩形背景与边框;再在轨道内按 `Value` 比例点亮:`Segments=0` 为单块圆角填充(水平左锚 / 垂直底锚),`Segments>0` 为 N 个带间隙的等分段点亮到 `ceil(比例*段数)`;`PeakHold` 时在历史最高比例处画一根**峰值色**细线(与点亮段各自取色);`ShowValue` 时居中叠加数值。
 
 ---
 
@@ -76,6 +88,6 @@ L.Value := 72;         // 缓动点亮到 72%
 
 - **连续 vs 分段:** `Segments=0` 为平滑填充;`Segments>0` 为离散段(经典 VU 表观感)。段数变更立即重绘。
 - **方向:** `Orientation` 切换水平(左→右)/ 垂直(下→上),无需单独控件。
-- **峰值保持:** `PeakHold` 只随更高值上移,不自动衰减;需归零时调用 `ResetPeak`。
+- **峰值保持:** `PeakHold` 只随更高值上移,不自动衰减;需归零时调用 `ResetPeak`。峰值线走 `TyLevelMeterPeak`,与点亮段的 `TyLevelMeterFill` 分开配色才看得见(内置 light 主题里两者取值相同,皮肤应当把峰值线改成对比色)。
 - **纯逻辑可测:** 比例 `TyGaugeFraction`(见 gauge 单元)与点亮段数 `TyLevelSegmentsLit`(本单元)均为纯函数并已单元测试。
-- **主题驱动:** 颜色取自 `TyGauge` / `TyGaugeFill`,不硬编码。
+- **主题驱动:** 颜色取自 `TyLevelMeter` / `TyLevelMeterFill` / `TyLevelMeterPeak`,不硬编码。改本控件外观请改这三个键——**不要**去改 `TyGauge`,那会连带改掉仪表 / 时钟 / 评分等一整族控件。

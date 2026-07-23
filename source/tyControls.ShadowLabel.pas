@@ -67,7 +67,7 @@ begin
   { Own key rather than the borrowed 'TyLabel': it draws the caption twice, and the shadow pass is chrome a plain label has no notion of.
     Added to 'TyLabel's rule block as an extra selector, so every resolved value is
     unchanged — this opens a hook, it does not restyle anything. }
-  Result := 'TyShadowLabel';   // reuse the label theme rules
+  Result := 'TyShadowLabel';
 end;
 
 function TTyShadowLabel.ResolveFontSize(const AStyle: TTyStyleSet): Integer;

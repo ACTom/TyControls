@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-这三个控件把 [[TTyIconFont]] 的**图标字体字形**和按钮标题配对，全部继承自 [[TTyButton]]，共享同一套框架、悬停背景淡入、状态、焦点环与数字角标——**不新增任何 `.tycss` 规则**：
+这三个控件把 [[TTyIconFont]] 的**图标字体字形**和按钮标题配对，全部继承自 [[TTyButton]]，共享同一套框架、悬停背景淡入、状态、焦点环与数字角标（主题令牌见 §2，三者**并不共用一个键**）：
 
 | 控件 | 布局 | 典型用途 | 默认尺寸 |
 |------|------|----------|----------|
@@ -12,7 +12,7 @@
 
 它们共用一个基类 **`TTyGlyphButtonBase`**（本身不注册到组件面板），基类只做三件事：加上图标字体接线、按 `GlyphLayout` 放置字形、然后把标题交给继承的 `DrawContent` 画在剩余矩形里。字形的光栅化完全委托给 `TTyIconFont.RenderGlyph`（与 [[TTyCharImage]] 完全一致，返回调用方拥有的透明 BGRA 位图，用完释放）。
 
-> **复用 TyButton 主题**：`GetStyleTypeKey` 保持返回 `'TyButton'`（继承而来）。因此框架、`:hover`/`:active`/`:focus`/`:disabled`/`:selected` 状态、悬停背景渐变和角标都**免费**获得；字形默认与标题同色（取解析后的 `TextColor`）。
+> 三者的框架、`:hover`/`:active`/`:focus`/`:disabled`/`:selected` 状态、悬停背景渐变和角标都由 [[TTyButton]] 的绘制路径**免费**提供；字形默认与标题同色（取解析后的 `TextColor`）。但**主题令牌不是同一个**——见下节。
 
 ---
 
@@ -21,7 +21,19 @@
 | 项目 | 值 |
 |------|-----|
 | 单元 | `tyControls.GlyphButtons` |
-| `GetStyleTypeKey` 返回值 | `'TyButton'`（**三者均复用**，见 [button.md](button.md)） |
+
+| 控件 | `GetStyleTypeKey` 返回值 |
+|------|-----|
+| `TTyGlyphButton` | `'TyButton'`（**继承未重写** —— 它就是一个带图标的普通按钮，框、内边距、各状态与 [[TTyButton]] 完全同义，唯一区别是内容区被切成"字形 + 标题"两块，这个借用是对的） |
+| `TTyGlyphContainerButton` | `'TyGlyphContainerButton'`（自己的键） |
+| `TTySpeedButton` | `'TySpeedButton'`（自己的键） |
+
+后两者各自成键的原因：
+
+- **`TTyGlyphContainerButton` 是 ribbon 的一块**瓷砖**（`glTop`、字形 24、72×64，`examples/ribbon` 就是把它丢进 `TyRibbonGroup`），不是一个按压按钮。**借 `TyButton` 时，瓷砖的背景/边框/圆角/内边距与对话框上那个"确定"按钮出自同一条规则**——主题想给瓷砖那种"常态无框透明、悬停才上色"的常规观感，就必须把全库按钮一起压平。`TyRibbon` 与 `TyRibbonGroup` 早就各有其键，这是那条命令带缺的第三个键。
+- **`TTySpeedButton` 是扁平的工具栏切换钮**：它常态无框，而按压按钮常态有框，**这该由主题决定，不该由应用代码决定**。借 `TyButton` 时只剩一个杠杆——给每个 speed button 挂一个 `'ghost'`/`'toolbar'` 的 `StyleClass`；这既把样式决策推给了每个应用，又**不可靠**:`TTyToolBar.ApplyToButton` 会**整体覆写**子按钮的 `StyleClass`(ghost 与否由工具条独占),而工具栏**之外**用的 speed button 则拿到完整的按压按钮外框,主题无从干预。有了自己的键,皮肤只需声明一次"speed button 常态扁平",到处生效。
+
+内建主题把 `TyButton, TySpeedButton, TyGlyphContainerButton, TyRibbonAppMenu, TyButtonGroup, TyUpDown` 写在同一组规则里(含 `.primary` / `.danger` / `.ghost` 变体与全部伪类),所以**解析值一个没变**;变的是你现在能只改其中一个。
 
 ```pascal
 uses tyControls.IconFont, tyControls.GlyphButtons;
@@ -39,6 +51,8 @@ uses tyControls.IconFont, tyControls.GlyphButtons;
 | `GlyphName` | `string` | `''` | 要绘制的字形名（对应 IconFont 的 `Glyphs` 映射，如 `save`）。为空或未映射 → 不画字形，标题占满内容区（退化为普通按钮）。 |
 | `GlyphSize` | `Integer` | `0` | 字形边长（**逻辑像素**，随 PPI 经 `TTyPainter.Scale` 缩放）。`0` = 自动：glyph-top 取内容区短边，glyph-left 取内容区高度。 |
 | `GlyphColor` | `TTyColor` | `TyGlyphButtonColorDefault` | 字形填充色。默认哨兵值 `TyGlyphButtonColorDefault`（即全透明 `$00000000`，表示“**用主题**”）→ 取 `TextColor`，与标题同色；设为其他值则覆盖。 |
+| `Images` | `TTyImageCollection` | `nil` | **跨平台图像**字形源（一组 BGRA 图标）。同样用 `FreeNotification` 置 `nil`。 |
+| `ImageName` | `string` | `''` | 要画的图标名。`Images` + `ImageName` **同时**设定时**优先于** `IconFont`/`GlyphName`（图标按 `GlyphColor`/`TextColor` 染色）；与系统图标字体不同，它在每个 OS 上渲染一致。为空则回落到图标字体。 |
 
 ### 3.2 `TTySpeedButton` 额外新增
 
@@ -84,14 +98,29 @@ procedure TyGlyphButtonSplit(const AContentRect: TRect; AGlyphPx, AGapPx: Intege
 
 伪类状态与 [[TTyButton]] 完全一致：`:hover` / `:focus` / `:active` / `:disabled` / `:selected`（由 `Down` 驱动，`TTySpeedButton` 分组用它做单选高亮）。
 
-由于复用 `TyButton` 选择器，**默认外观就是一个普通按钮**。要让 `TTySpeedButton` 呈现扁平/工具栏观感，给它一个自定义 `StyleClass`（如 `'ghost'`，见 button.md 的 ghost 变体），无需新增 typeKey：
+内建主题让三者与 `TyButton` 共写规则，所以**默认外观就是一个普通按钮**。要改扁平/瓷砖观感，有两条路：
+
+**① 写各自的 typeKey（推荐，一次配置到处生效）** —— 这正是它们各自成键的意义：
 
 ```css
-/* 复用内置的 ghost 变体即可得到扁平、仅 hover/选中显底的工具栏按钮 */
-TyButton.ghost           { background: alpha(--surface, 0); border-color: alpha(--border, 0); }
-TyButton.ghost:hover     { background: var(--surface-hover); }
-TyButton.ghost:selected  { background: var(--surface-active); }
+/* 全库的 speed button 常态扁平,只在悬停/选中时显底 */
+TySpeedButton           { background: alpha(--surface, 0); border-color: alpha(--border, 0); }
+TySpeedButton:hover     { background: var(--surface-hover); }
+TySpeedButton:selected  { background: var(--surface-active); }
+/* ribbon 瓷砖同理,与对话框按钮互不相干 */
+TyGlyphContainerButton  { background: alpha(--surface, 0); border-color: alpha(--border, 0); }
 ```
+
+**② 挂 `StyleClass`（逐实例）** —— 内置的 `ghost` 变体对三个键都有定义：
+
+```css
+TyButton.ghost, TySpeedButton.ghost, TyGlyphContainerButton.ghost { background: alpha(--surface, 0); border-color: alpha(--border, 0); }
+```
+
+> ⚠️ 放在 `TTyToolBar` 里的 speed button **不能靠 `StyleClass` 定妆**：工具条会按自己的 `Flat` 属性
+> 整体覆写子按钮的 `StyleClass`。这种场合请走第 ① 条。
+>
+> 另外，`TTyGlyphButton` 没有自己的键（它解析 `TyButton`），所以改它的外观 = 改 `TyButton` = 改全库按钮。
 
 ---
 

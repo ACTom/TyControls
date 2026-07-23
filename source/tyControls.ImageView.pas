@@ -78,7 +78,7 @@ type
     procedure StartAnim(ATargetZoom, ATargetOffX, ATargetOffY: Double);
     procedure DoZoomChange;
   protected
-    function GetStyleTypeKey: string; override;   // 'TyPanel' — reuse the panel surface
+    function GetStyleTypeKey: string; override;   // 'TyImageView' — its own key: the letterbox matte behind a photo is not the app's panel colour
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure Resize; override;
@@ -314,7 +314,7 @@ begin
   { Own key rather than the borrowed 'TyPanel': the letterbox matte behind a photo is not the app's panel colour.
     Added to 'TyPanel's rule block as an extra selector, so every resolved value is
     unchanged — this opens a hook, it does not restyle anything. }
-  Result := 'TyImageView';   // reuse the panel surface — no new .tycss rule
+  Result := 'TyImageView';
 end;
 
 function TTyImageView.ViewW: Integer;

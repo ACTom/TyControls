@@ -228,7 +228,7 @@ end;
 
 function TTyGalleryGrid.GetStyleTypeKey: string;
 begin
-  Result := 'TyListBox';   // same surface as the gallery / listbox
+  Result := 'TyListBox';
 end;
 
 procedure TTyGalleryGrid.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -381,7 +381,7 @@ begin
   { Own key rather than the borrowed 'TyListBox': gallery tiles and a floating popup grid are not list-box rows.
     Added to 'TyListBox's rule block as an extra selector, so every resolved value is
     unchanged — this opens a hook, it does not restyle anything. }
-  Result := 'TyRibbonGallery';   // REUSE — the gallery is a list-of-cells surface
+  Result := 'TyRibbonGallery';
 end;
 
 function TTyRibbonGallery.GetItemsProp: TStrings;

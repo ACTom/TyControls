@@ -6,7 +6,7 @@
 
 典型用途：流程图 / 引导图中的指向标记、"下一步 / 上一步"装饰箭头、方向指示徽标等。形状用 BGRABitmap 的 `Canvas2D` 抗锯齿矢量路径绘制，跨平台像素一致。
 
-**颜色全部来自主题**：控件复用解析后的 `TyPanel` 样式——填充取 `TyPanel` 的 `background`（纯色），描边取其 `border-color` / `border-width`。控件代码里**不硬编码任何颜色**；要给某个箭头单独换色，用 `StyleClass` / `StyleOverride`。
+**颜色全部来自主题**：控件解析自己的 `TyArrow` 样式——填充取 `TyArrow` 的 `background`（纯色），描边取其 `border-color` / `border-width`。控件代码里**不硬编码任何颜色**；要给某个箭头单独换色，用 `StyleClass` / `StyleOverride`。
 
 ---
 
@@ -15,9 +15,15 @@
 | 项目 | 值 |
 |------|-----|
 | 单元 | `tyControls.Arrow` |
-| `GetStyleTypeKey` 返回值 | `'TyPanel'`（**复用**面板 typeKey，不新增任何 `.tycss` 令牌）|
+| `GetStyleTypeKey` 返回值 | `'TyArrow'`（**自有 typeKey**）|
 | 基类 | `TTyGraphicControl`（继承自 `TGraphicControl`）|
 | 默认尺寸 | 120 × 64（逻辑像素，构造时设置）|
+
+它从前返回 `'TyPanel'`。箭头既不画框也不画标题，它只是一块有向的示意图墨迹；借用面板键让示意图家族（[`TTyShape`](shape.md) / [`TTyStarShape`](starshape.md) / `TTyArrow`，在组件面板上就是并排注册的）与全应用的容器共用一个颜色，于是"示意图用强调色、容器保持中性"这句话根本无法表达。现在三者各有其名。`TyArrow` 已作为附加选择器并入主题里 `TyPanel` 的规则块，解析值与从前逐字节相同，**开钩子而不动像素**；第三方主题若只覆盖了 `TyPanel`，需要补上 `TyArrow`（主题层按 typeKey 全有全无地回落）。
+
+### 子部件 typeKey
+
+**没有。** 箭头只有一个盒子样式。仍在代码里写死、主题够不着的一处：拐角为固定尖角（`lineJoin = 'miter'`），因此描边一旦加粗，箭尾的倒角会长出尖刺，而主题无从干预。
 
 ```pascal
 uses tyControls.Arrow;
@@ -41,7 +47,7 @@ uses tyControls.Arrow;
 
 | 属性 | 类型 | 说明 |
 |------|------|------|
-| `StyleClass` | `string` | `.tycss` 类名（作用于 `TyPanel` 解析，可给某些箭头单独换色）。 |
+| `StyleClass` | `string` | `.tycss` 类名（作用于 `TyArrow` 解析，可给某些箭头单独换色）。 |
 | `StyleOverride` | `string` | 单实例内联 CSS 覆盖块（可引用 `var(--...)`），例如 `'background: var(--accent); border-color: var(--accent);'`。 |
 | `Controller` | `TTyStyleController` | 指定样式控制器（`nil` 时用全局默认）。 |
 | `Align` / `Anchors` | — | 父容器内布局 / 锚点。 |
@@ -73,7 +79,7 @@ function TyArrowPolygon(const ARect: TRect; ADir: TTyArrowDirection;
 - **填充** = 解析样式的 `background`，仅当 `Kind` 为纯色且不透明时绘制（否则跳过填充，保持透明）。
 - **描边** = 解析样式的 `border-color`，线宽 `max(1, Scale(border-width))`，仅当 `TyBorderVisible` 为真（声明了 `border-color`、`border-width > 0`、且未显式 `border-style: none`）时绘制。
 
-两者都直接来自解析后的 `TyPanel` 样式，控件代码不含任何字面颜色值。
+两者都直接来自解析后的 `TyArrow` 样式，控件代码不含任何字面颜色值。
 
 ---
 
@@ -83,21 +89,21 @@ function TyArrowPolygon(const ARect: TRect; ADir: TTyArrowDirection;
 
 | 伪类 | 触发条件 |
 |------|----------|
-| `:disabled` | `Enabled = False`（`TyPanel` 若定义 `opacity` 则整体变淡）。 |
+| `:disabled` | `Enabled = False`（`TyArrow` 若定义 `opacity` 则整体变淡）。 |
 
 （无 hover / focus / active——纯展示控件。）
 
-### 复用 TyPanel 令牌摘要
+### TyArrow 令牌摘要
 
 ```css
-TyPanel {
+TyArrow {
   background: var(--surface);      /* 箭头填充色 */
   border-color: var(--border);     /* 箭头描边色 */
   border-width: 1px;               /* 描边线宽（经 Scale 做 HiDPI 缩放）*/
 }
 ```
 
-要让某个箭头换色，给它设 `StyleClass`（对应 `.tycss` 里 `TyPanel.myclass { background: ...; }`），或用 `StyleOverride`。
+内置主题把 `TyArrow` 与 `TyPanel` 等键写在同一条规则里（取值相同、名字各自独立），所以默认观感仍与面板一致；要让示意图整体换色，单独写一条 `TyArrow { ... }`——**别去改 `TyPanel`**，那会重涂全应用的容器。要让某个箭头换色，给它设 `StyleClass`（对应 `.tycss` 里 `TyArrow.myclass { background: ...; }`），或用 `StyleOverride`。
 
 ---
 
@@ -133,6 +139,6 @@ Up.StyleOverride := 'background: var(--accent); border-color: var(--accent);';
 - **图形控件，非容器：** `TTyArrow` 继承自 `TGraphicControl`，**没有窗口句柄，不能作为父容器**（子控件不能以它为 `Parent`）。
 - **7 顶点纯几何可测：** `TyArrowPolygon` 是纯函数（返回 7 个 `TPointF`），已 headless 单元测试覆盖顶点数、在矩形内、箭尖落在指向边中点、比例夹紧、对称性等（`tests/test.arrow.pas`）。
 - **比例自动夹紧：** `HeadRatio` / `ShaftRatio` 越界（如设 `0` 或 `2.0`）会夹紧到 `0.1..0.9`，不会画出畸形或超框的箭头。
-- **主题驱动、绝不写死颜色：** 填充与描边全部由 `TyPanel` 主题规则推导，换主题即换箭头颜色；单独调色用 `StyleClass` / `StyleOverride`（视觉值必须由主题驱动，是库的硬性规则）。
+- **主题驱动、绝不写死颜色：** 填充与描边全部由 `TyArrow` 主题规则推导，换主题即换箭头颜色；单独调色用 `StyleClass` / `StyleOverride`（视觉值必须由主题驱动，是库的硬性规则）。拐角样式仍是代码字面量。
 - **HiDPI：** 描边线宽为逻辑像素，经 `Painter.Scale` 缩放；高 DPI 下描边按比例加粗，矢量路径抗锯齿。
 - **透明填充：** 若解析样式的背景不是可见纯色，箭头**不填充**（只描边或完全透明），直接叠在宿主表面上。

@@ -4,7 +4,7 @@
 
 TTyLColorPicker 是一个**竖直的 HSV 明度(V / 亮度)选择条**。在固定的 Hue + Sat 下,画一条从上到下的明度渐变(**顶部 V=1 最亮,底部 V=0 最暗**),并带一个可拖动的标记。它选出一个位于 `[0..1]` 的标量 `Position`(即 V 值),并把对应的颜色暴露为 `SelectedColor`。
 
-继承自 [TTyCustomControl](../../source/tyControls.Base.pas)(带自有窗口句柄的图形控件),按库标准的 `TTyPainter` 方式绘制。复用 `'TyGauge'` 主题(条身背景 / 边框 / 标记文字色),**无需新增 `.tycss` 规则**。
+继承自 [TTyCustomControl](../../source/tyControls.Base.pas)(带自有窗口句柄的图形控件),按库标准的 `TTyPainter` 方式绘制,主题上归属自己的 `'TyLColorPicker'` 键(条身边框 / 标记色)。
 
 ---
 
@@ -13,9 +13,20 @@ TTyLColorPicker 是一个**竖直的 HSV 明度(V / 亮度)选择条**。在固�
 | 项目 | 值 |
 |------|-----|
 | 单元 | `tyControls.LColorPicker` |
-| typeKey | `'TyGauge'`(条身背景 `Background` / 边框 `BorderColor` / 标记 `TextColor`)|
+| `GetStyleTypeKey` 返回值 | `'TyLColorPicker'`(边框 `BorderColor` / `BorderWidth`、标记 `TextColor`)|
 
-无新增 `.tycss`。
+### 子部件 typeKey
+
+**本控件没有子部件键。** 它只解析盒键这一个键——条身内部是**算出来的颜色数据**,不由主题提供:
+
+| typeKey | 绘制什么 | 读取的样式属性 |
+|---------|----------|----------------|
+| `TyLColorPicker` | 渐变条四周的描边;当前 `Position` 处的水平标记线 | `border-color` / `border-width`(描边)/ `color`(标记) |
+
+本控件**不再复用** `TyGauge`。条身每一行都是 `TyHSVToRGB` 算出来的,仪表的 `background` / fill token 在这里毫无意义;它真正消费的只有 `color`(标记要压在整条满饱和渐变上都能读出来,通常是白色配深边)和 `border-color`。颜色对话框内部的同类控件早就有自己的 `TyColorArea` 键(见 `tyControls.Dialogs.Color`),公开版控件还挂着 `TyGauge` 属于前后不一致。
+
+> 主题作者注意:base 层按 typeKey **全有或全无**地回落。只覆盖了 `TyGauge` 的第三方主题**不会**覆盖到 `TyLColorPicker`;需要在皮肤里补上这条选择器。
+> 标记线的**厚度**不在本次拆键范围内(绘制代码里是常量),暂时不可主题化。
 
 ```pascal
 uses tyControls.LColorPicker;
@@ -46,13 +57,13 @@ uses tyControls.LColorPicker;
 
 ## 5. 主题
 
-条身、边框与标记全部取自 `'TyGauge'` 样式:
+本控件是**窗口化控件**(自有 HWND),先用 `TyFillParentBg` 把整个矩形铺成父窗体背景,条身四周的留白才会露出窗体(或图片主题的照片)而不是 HWND 的白刷。之后:
 
-- **条身渐变** — 每一行按当前 V 值调用 `TyHSVToRGB(Hue, Sat, v)` 逐扫描线填充。
-- **边框** — `BorderColor` / `BorderWidth`(存在且宽度 > 0 时才描边)。
-- **标记** — 一条细的水平线,用 `TextColor`。
+- **条身渐变** — **不走主题**:每一行按当前 V 值调用 `TyHSVToRGB(Hue, Sat, v)` 逐扫描线填充,是算出来的数据像素。
+- **边框** — `TyLColorPicker` 的 `BorderColor` / `BorderWidth`(存在且宽度 > 0 时才描边)。
+- **标记** — 一条细的水平线,用 `TyLColorPicker` 的 `TextColor`。
 
-所有 chrome 颜色 / 尺寸均由主题 token 驱动,未硬编码。
+所有 chrome 颜色均由主题 token 驱动,未硬编码;条身像素则是 HSV 计算结果。
 
 ---
 

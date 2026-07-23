@@ -8,7 +8,7 @@ TTyCharImage 是一个**叶子图形控件**，把 [[TTyIconFont]] 中的**单�
 
 继承自 `TTyGraphicControl`（`TGraphicControl` 的子类），**没有窗口句柄**，因此**不可获得键盘焦点**，也就没有 `:focus` 伪类状态。
 
-> 复用标签主题：`GetStyleTypeKey` 返回 `'TyLabel'`，因此**不新增任何 `.tycss` 规则**。背景默认透明（与标签一致），字形颜色回退到主题解析出的文字色 `TextColor`，`:disabled` 的不透明度会像标签文字变淡一样让字形一并变淡。
+> `GetStyleTypeKey` 返回它**自己的** `'TyCharImage'`。背景默认透明（与标签一致），字形颜色回退到主题解析出的文字色 `TextColor`，`:disabled` 的不透明度会像标签文字变淡一样让字形一并变淡。它从前借 `'TyLabel'`，于是「图标用 `--muted`、正文用 `--on-surface`」这种最常见的皮肤手法根本写不出来——除非把全应用的标签一起改色。现在写 `TyCharImage { color: var(--muted); }` 就只染图标。
 
 ---
 
@@ -17,7 +17,7 @@ TTyCharImage 是一个**叶子图形控件**，把 [[TTyIconFont]] 中的**单�
 | 项目 | 值 |
 |------|-----|
 | 单元 | `tyControls.CharImage` |
-| `GetStyleTypeKey` 返回值 | `'TyLabel'`（**复用** TyLabel 主题，不引入新选择器） |
+| `GetStyleTypeKey` 返回值 | `'TyCharImage'`（**自有键**；字形回退色 / `:disabled` 透明度取自它） |
 
 ```pascal
 uses tyControls.IconFont, tyControls.CharImage;
@@ -73,17 +73,26 @@ uses tyControls.IconFont, tyControls.CharImage;
 
 > `:focus` **不支持**（`TTyGraphicControl` 无窗口句柄，不可聚焦）。
 
-### 主题来源
+### 解析的主题键
 
-复用 `TyLabel` 选择器（见 [label.md](label.md)）：透明背景、无边框、文字颜色 `--on-surface`。字形颜色取自 `CurrentStyle.TextColor`（即 `TyLabel` 的 `color`），除非用 `GlyphColor` 显式覆盖。`:disabled` 的 `opacity` 会让字形一并半透明。
+| typeKey | 画什么 |
+|---------|--------|
+| `TyCharImage` | 整个控件：`color` 是 `GlyphColor` 未设时的**字形回退色**；`opacity`（`:disabled` 时字形变淡）。背景默认透明且控件**不画**主题背景填充。 |
+
+**没有子部件键。** 字形本身由 `TTyIconFont.RenderGlyph` 光栅化后整块合成，字形槽的内边距用的是代码常量 `TyCharImagePad = 2`（**不读**解析出的 `padding`）。形如 `TyCharImageGlyph` 的子部件键**不存在**——子部件拆键属于本轮有意推迟的扩展，别往主题里写。
 
 ```css
-/* 复用的规则（来自 light.tycss 的 TyLabel） */
-TyLabel {
+/* light.tycss 中本控件所在的那条规则（与 TyLabel 等同列） */
+TyLabel, TyHtmlLabel, TyLinkLabel, TyShadowLabel, TyGlowLabel, TyDivider, TyCharImage {
   background: alpha(#FFFFFF, 0);
   color: var(--on-surface);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-normal);
 }
-TyLabel:disabled { opacity: 0.5; }
+TyLabel:disabled, ..., TyCharImage:disabled { opacity: var(--disabled-opacity); }
+
+/* 让图标比正文淡一档，而不动任何标签： */
+TyCharImage { color: var(--muted); }
 ```
 
 ---

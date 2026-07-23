@@ -6,7 +6,7 @@
 
 **鼠标悬停在数据点 / 柱 / 扇区上会弹出 tooltip**，显示该数据的分类、系列名与数值（饼 / 环形还带占比）。tooltip 是**画在图表内部的覆盖层**，不是 LCL 提示窗口——理由见第 8 节。
 
-图表自身的面板外观（背景 / 坐标轴文字 / 网格线）完全走 `TyPanel` 主题样式；tooltip 走它自己的 `TyChartTooltip` typeKey；**系列颜色**用内置雅致调色板（`TyChartPalette`，Tableau-10 色相），可按系列用 `TTyChartSeriesItem.Color` 覆盖。
+图表自身的外观（背景 / 标题 / 坐标轴文字 / 网格线）走它**自己的** `TyChart` 主题样式；tooltip 走 `TyChartTooltip`；**系列颜色**用内置雅致调色板（`TyChartPalette`，Tableau-10 色相），可按系列用 `TTyChartSeriesItem.Color` 覆盖。
 
 ---
 
@@ -15,10 +15,23 @@
 | 项目 | 值 |
 |------|-----|
 | 单元 | `tyControls.Chart` |
-| `GetStyleTypeKey` 返回值 | `'TyPanel'`（面板本体：`background` / `border-*` / `color`；坐标轴与网格取其 `color` / `border-color`） |
+| `GetStyleTypeKey` 返回值 | `'TyChart'`（**自有 typeKey**；见下表：图表外框 + 标题 / 图例 / 刻度文字 / 坐标轴 / 网格线全部从这一个键取色） |
 | tooltip typeKey | `'TyChartTooltip'`（悬停提示框的 `background` / `border-*` / `color` / `padding` / `font-*` / `shadow`） |
 | 基类 | `TTyGraphicControl`（继承自 `TGraphicControl`） |
 | 默认尺寸 | 260 × 180（逻辑像素，构造时设置） |
+
+图表从前返回 `'TyPanel'`——一个画着整套数据可视化的控件，却只能通过「全应用的面板」被主题触及：想把网格线调淡就得改所有面板的边框色，想让图表底比卡片深一点则根本无从表达。现在它有了自己的键。`TyChart` 已作为附加选择器并入主题里 `TyPanel` 的规则块，解析值与从前逐字节相同，**开钩子而不动像素**；第三方主题若只覆盖了 `TyPanel`，需要补上 `TyChart`（主题层按 typeKey 全有全无地回落）。
+
+### 这两个键各画什么
+
+| 键 | 画什么 | 读哪些属性 |
+|----|--------|-----------|
+| `TyChart` | 图表外框（`DrawFrame`）；标题；图例文字；X/Y 刻度标签；左 + 下坐标轴折线；水平网格线 | `background` / `border-color` / `border-width` / `border-radius` / `color`。**坐标轴**用 `border-color` 原色，**网格线**用同一颜色但 alpha 被代码固定压到 70，**所有文字**（标题 / 图例 / 刻度）用 `color` |
+| `TyChartTooltip` | 悬停提示框 | `background` / `border-*` / `color` / `padding` / `font-*` / `shadow` |
+
+### 子部件 typeKey
+
+**目前只有 `TyChartTooltip` 一个。** 标题、图例、坐标轴、网格、刻度标签**没有**各自的键——它们的字号 / 字重是代码里的字面量（标题 `11/700`、图例 `9/400`、刻度 `8/400`，且都用控件的 `Font.Name` 而非样式的 `font-name`），网格线的 70 alpha 也是字面量。子部件键（`TyChartTitle` / `TyChartLegend` / `TyChartAxis` / `TyChartGrid` / `TyChartLabel` / `TyChartSeries1..8`）的扩展已被**刻意推迟**——其中系列色那一组一旦落地会真的改变像素——这些名字当前**并不存在**，写进 `.tycss` 解析不到任何东西。
 
 ```pascal
 uses tyControls.Chart;
@@ -48,7 +61,7 @@ uses tyControls.Chart;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `StyleClass` | `string` | `''` | 对应 `.tycss` 里 `TyPanel.<classname>`；**tooltip 用同一个 `StyleClass` 解析**，所以 `TyChartTooltip.compact` 能跟随 `TyChart.compact`。 |
+| `StyleClass` | `string` | `''` | 对应 `.tycss` 里 `TyChart.<classname>`；**tooltip 用同一个 `StyleClass` 解析**，所以 `TyChartTooltip.compact` 能跟随 `TyChart.compact`。 |
 | `StyleOverride` | `string` | `''` | 单实例内联 CSS 声明块。 |
 | `Controller` | `TTyStyleController` | `nil`（用全局 `TyDefaultController`） | 指定样式控制器。 |
 
@@ -173,7 +186,7 @@ function HitTestAt(X, Y: Integer): TTyChartHit;   // 客户区设备像素 -> �
 
 ### 主题令牌摘要
 
-图表自身没有新 typeKey（走 `TyPanel`）；**唯一**新增的是 tooltip：
+图表本体走 `TyChart`（内置主题里与 `TyPanel` 等键同值同块，见第 2 节）；除它以外，图表**唯一**拥有的键是 tooltip：
 
 ```css
 /* themes/light.tycss —— 基础层，所有主题继承 */
@@ -195,7 +208,7 @@ TyChartTooltip {
 | 缺什么 | 结果 |
 |--------|------|
 | 整个 `TyChartTooltip` 未定义 | 无 `background` → **不画框**（图表其余部分照常） |
-| 只缺 `color` | 文字用面板自己的 `color` |
+| 只缺 `color` | 文字用图表自身（`TyChart`）的 `color` |
 | 只缺 `shadow` | 不画阴影 |
 | 只缺 `border-*` | 不描边 |
 

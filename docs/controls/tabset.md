@@ -11,13 +11,34 @@
 | 项目 | 值 |
 |------|-----|
 | 单元 | `tyControls.TabSet` |
-| `GetStyleTypeKey` 返回值 | `'TyTabControl'` |
+| `GetStyleTypeKey` 返回值 | `'TyTabSet'`（自己的键） |
 | 基类 | `TTyCustomTabStrip`（`tyControls.TabStrip`，继承自 `TTyCustomControl`） |
 | 默认尺寸 | 240 × 32（逻辑像素，`Create` 中设置） |
 
-在 `.tycss` 文件中，该控件对应的选择器前缀为 **`TyTabControl`**（外框），页签头本身用子部件选择器 **`TyTab`** / **`TyTab:hover`** / **`TyTab:active`**，关闭 × 悬停片用 **`TyTabClose`**。
+| typeKey | 画什么 |
+|---|---|
+| `TyTabSet` | 外框键。**但本控件是"纯标题条"，只用到它的 `border-color` + `border-width`**——那条页签下方的基线。见下方说明 |
+| `TyTab` | 每个页签头：`:normal` / `:hover` / `:active`（选中）。溢出时的左右滚动箭头也取 `TyTab:normal` 的文字色 |
+| `TyTabClose` | 关闭 × 悬停时垫在字形下的底片 |
 
-> **注意：** `GetStyleTypeKey` 刻意返回 `'TyTabControl'`（与 `TTyTabControl` 复用同一套外框主题令牌），而非 `'TyTabSet'`——`.tycss` 中并没有 `TyTabSet` 选择器。
+> **它此前借的 `'TyTabControl'` 是一个不对应任何控件的名字。** 全库只有三个页签族键声明：
+> `TyPageControl`（`TTyPageControl`）、`TyTabSheet`（`TTyTabSheet`）、以及本控件——库里根本没有
+> `TTyTabControl` 这个类。也就是说，皮肤作者最自然会去写的 `TyTabSet` 从前解析不到任何东西，
+> 而真正生效的键叫着一个不存在的控件的名。现在两者归一。
+> 内建主题把 `TyTabControl, TyTabSet` 写在同一条规则里，解析值一个没变。
+
+> **纯标题条只吃 `border-color` / `border-width`。** 因为 `HasPageBody = False`，
+> 引擎会**跳过 `DrawFrame`**，只用外框的边框色与边框宽在页签条底部铺一条基线轨。
+> 所以写在 `TyTabSet` 上的 `background` / `border-radius` / `shadow` / `outline` **不会被画出来**
+> （图片主题下的 `glass` 是例外，它参与内容区的玻璃底）。
+> 想做 Material 那种"2px 强调色下划线"，现在改 `TyTabSet { border-width; border-color }` 即可，
+> 不必再去加粗 `TyTabControl` 从而连页面容器的外框一起改。
+>
+> 那条基线轨目前还**没有**自己的键：`TyTabSetRail` 属于**有意推迟**的子部件键，现在**并不存在**，
+> 写进皮肤不会被解析。见 `docs/superpowers/plans/2026-07-23-typekey-explicit-borrowers.md`。
+>
+> `TyTab` / `TyTabClose` 与 `TTyPageControl` **共享**（同一个页签头引擎画的就是同一种页签头），
+> 这是刻意的：改它们会同时改到 PageControl 的页签。
 
 ```pascal
 uses tyControls.TabSet;
@@ -93,33 +114,35 @@ uses tyControls.TabSet;
 
 ### 支持的伪类状态
 
-外框（`TyTabControl`）与页签头（`TyTab`）使用不同的状态：
+外框（`TyTabSet`）与页签头（`TyTab`）使用不同的状态：
 
 | 选择器 | 伪类 | 触发条件 |
 |--------|------|----------|
-| `TyTabControl` | `:hover` | 鼠标悬停控件 |
-| `TyTabControl` | `:focus` | 获得键盘焦点 |
-| `TyTabControl` | `:disabled` | `Enabled = False` |
+| `TyTabSet` | `:hover` | 鼠标悬停控件 |
+| `TyTabSet` | `:focus` | 获得键盘焦点 |
+| `TyTabSet` | `:disabled` | `Enabled = False` |
 | `TyTab` | `:hover` | 鼠标悬停在该页签头（`FHoverTab`） |
 | `TyTab` | `:active` | 该页签为当前选中项（`I = FTabIndex`） |
+
+> 外框那三个伪类里，只有会改到 `border-color` / `border-width` 的部分对本控件可见（见上一节）。
 
 > **`TyTab:active` = 选中态：** 引擎渲染时把 `I = FTabIndex` 的页签头解析为 `[tysActive]`，因此"选中"用 `:active` 表达；悬停但未选中的页签用 `:hover`，其余用 `:normal`。切换页签时新激活头的背景从 inactive 交叉淡入到 active（约 120ms，`AnimationsEnabled` 控制，无句柄时吸附）。
 
 ### light.tycss 内置规则摘要
 
-外框（复用 `TyTabControl` 令牌）：
+外框（`TyTabSet` 与 `TyTabControl` 目前共写一条规则，值完全相同）：
 
 ```css
-TyTabControl {
-  background: var(--surface);
+TyTabControl, TyTabSet {
+  background: var(--surface);          /* 本控件不画 —— 无页面容器 */
   color: var(--on-surface);
-  border-color: var(--border);
-  border-width: var(--input-border-width);
-  border-radius: var(--radius);
+  border-color: var(--border);         /* ← 基线轨的颜色 */
+  border-width: var(--input-border-width);  /* ← 基线轨的粗细 */
+  border-radius: var(--radius);        /* 本控件不画 */
 }
-TyTabControl:hover    { border-color: var(--input-border-hover); }
-TyTabControl:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
-TyTabControl:disabled { opacity: var(--disabled-opacity); }
+TyTabControl:hover, TyTabSet:hover    { border-color: var(--input-border-hover); }
+TyTabControl:focus, TyTabSet:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
+TyTabControl:disabled, TyTabSet:disabled { opacity: var(--disabled-opacity); }
 ```
 
 页签头与关闭片：
@@ -136,7 +159,7 @@ TyTab:active { background: var(--surface); color: var(--accent); }  /* 选中：
 /* TyTabClose：关闭 × 悬停时的令牌驱动底片（--overlay-hover 填充 + --radius 圆角） */
 ```
 
-**渲染细节：** 控件顶部为高 `TabHeight` 的页签条，其下**只画一条基线**（用 `TyTabControl` 的 `border-color` / `border-width`，落在页签条底部上叠 1px 处），**不画内容区外框** —— 本控件不承载页面，画框只会在页签下方留一个空盒子（`Height > TabHeight` 时尤其明显）。托管页面的 `TTyPageControl` 仍然画完整外框，两者由基类 `HasPageBody` 区分。因此把 `Height` 设成等于 `TabHeight` 最干净：页签条就是控件本身，下方内容由宿主自己摆放。页签头宽度 = 文本宽度 + `2×padding`，最小 `TyTabMinWidth`；可关闭时右侧预留关闭 × 槽位。页签总宽超过控件宽度时，两端出现左右箭头（`tgArrowLeft`/`tgArrowRight`），支持点击箭头、滚轮、`ScrollTabIntoView` 横向滚动。关闭 × 用 `tgClose` 字形以 `TextColor` 绘制，悬停时其下垫一块 `TyTabClose` 令牌片。**只有页签头背景参与淡入动画**，文本 / 字形 / 几何不受影响。
+**渲染细节：** 控件顶部为高 `TabHeight` 的页签条，其下**只画一条基线**（用 `TyTabSet` 的 `border-color` / `border-width`，落在页签条底部上叠 1px 处），**不画内容区外框** —— 本控件不承载页面，画框只会在页签下方留一个空盒子（`Height > TabHeight` 时尤其明显）。托管页面的 `TTyPageControl` 仍然画完整外框，两者由基类 `HasPageBody` 区分。因此把 `Height` 设成等于 `TabHeight` 最干净：页签条就是控件本身，下方内容由宿主自己摆放。页签头宽度 = 文本宽度 + `2×padding`，最小 `TyTabMinWidth`；可关闭时右侧预留关闭 × 槽位。页签总宽超过控件宽度时，两端出现左右箭头（`tgArrowLeft`/`tgArrowRight`），支持点击箭头、滚轮、`ScrollTabIntoView` 横向滚动。关闭 × 用 `tgClose` 字形以 `TextColor` 绘制，悬停时其下垫一块 `TyTabClose` 令牌片。**只有页签头背景参与淡入动画**，文本 / 字形 / 几何不受影响。
 
 ---
 
@@ -196,6 +219,6 @@ end;
 - **关闭页签的 `OnChange` 语义：** 关闭**选中且非末尾**的页签时，`TabIndex` 数值不变（只是底层标题变了），此时**刻意不触发** `OnChange`，仅重绘；关闭会导致 `TabIndex` 变化的情形才通过 `SetTabIndex` 触发 `OnChange`。
 - **直接 `Tabs.Delete` 低于选中项的已知失同步：** 通过关闭 × 走 `RemoveTabData` 会正确调整高亮；但**直接**对 `Tabs` 在选中项**之下**做 `Delete`，因裸 `TStringList.OnChange` 不携带索引，高亮会错位一格（源码标注的已知、不常见 desync）。删除位于或高于选中项时只夹紧上界。
 - **重排后选中钉在位置：** `DoReorderTabs` 后 `FTabIndex` 不随被拖动的页签调整——**选中态钉在位置索引上**（与 `TTyPageControl` 一致）。
-- **typeKey 为 `TyTabControl`：** 主题化时写 `TyTabControl` / `TyTab` 选择器，`.tycss` 中不存在 `TyTabSet`。
+- **typeKey 为 `TyTabSet`：** 主题化时写 `TyTabSet` / `TyTab` / `TyTabClose` 选择器。它此前借的 `TyTabControl` 不对应库里任何控件；两个键现在共写一条内建规则，但**要单独调本控件请写 `TyTabSet`**。另注意本控件只吃外框的 `border-color` / `border-width`（见 §5）。
 - **DFM 序列化：** `TabIndex` 声明 `default -1`、`TabHeight` 声明 `default 28`、`TabsClosable` 声明 `default False`，取默认值时不写入 `.lfm`/`.dfm`。
 - **Alt+助记符：** 页签标题支持 `&` 助记符——`DialogChar` 在 `Enabled` 时扫描标题的加速键并 `SetTabIndex` 切换到匹配页签。

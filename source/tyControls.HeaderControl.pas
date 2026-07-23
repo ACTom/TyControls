@@ -79,7 +79,7 @@ type
     { Device-px widths (scaled) — what the pure geometry actually tiles. }
     function DeviceWidths: TIntegerDynArray;
   protected
-    function GetStyleTypeKey: string; override;   // reuse 'TyTreeHeader'
+    function GetStyleTypeKey: string; override;   // 'TyHeaderControl' — its own key: a standalone header control is not the tree's header band
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -255,7 +255,7 @@ begin
   { Own key rather than the borrowed 'TyTreeHeader': a standalone header control was wearing the tree's clothes, so the same tokens meant two different things to two consumers.
     Added to 'TyTreeHeader's rule block as an extra selector, so every resolved value is
     unchanged — this opens a hook, it does not restyle anything. }
-  Result := 'TyHeaderControl';   // REUSE — the strip bg/border comes from this token
+  Result := 'TyHeaderControl';
 end;
 
 function TTyHeaderControl.GetSectionCount: Integer;

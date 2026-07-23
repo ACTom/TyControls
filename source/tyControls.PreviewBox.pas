@@ -60,7 +60,7 @@ type
     { Hide both children + leave custom mode (a common prelude to every Show*). }
     procedure HideChildren;
   protected
-    function  GetStyleTypeKey: string; override;   { 'TyPanel' -- reuse, no new token }
+    function  GetStyleTypeKey: string; override;   { 'TyPreviewBox' -- its own key: a preview well is not a generic panel }
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     { Push a per-instance controller down to the embedded panes so a standalone box
@@ -189,7 +189,7 @@ begin
   { Own key rather than the borrowed 'TyPanel': a preview well is a different role from a generic panel.
     Added to 'TyPanel's rule block as an extra selector, so every resolved value is
     unchanged — this opens a hook, it does not restyle anything. }
-  Result := 'TyPreviewBox';   { reuse the panel surface -- no new .tycss rule }
+  Result := 'TyPreviewBox';
 end;
 
 procedure TTyPreviewBox.SetController(AValue: TTyStyleController);

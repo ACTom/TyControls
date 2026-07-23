@@ -112,10 +112,13 @@ TyDateTimePicker:hover    { border-color: var(--input-border-hover); }
 TyDateTimePicker:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
 TyDateTimePicker:disabled { opacity: var(--disabled-opacity); }
 
-/* 右侧按钮区域的独立选择器 */
-TyDateTimeButton        { background: var(--surface-chrome); color: var(--on-surface); }
-TyDateTimeButton:hover  { background: var(--surface-hover);  color: var(--accent); }
 ```
+
+> **`TyDateTimeButton` 是一个死键,别写它。** 它在几份随库样式表里还留着定义,但 `source/` 里
+> **没有任何解析点** —— 右侧的下拉箭头与上下微调箭头都用字段自己(`TyDateTimePicker`)解析出的
+> `TextColor` 画(`tyControls.DateTimePicker.pas` 里画的是 `tgChevronDown` / `tgArrowUp` /
+> `tgArrowDown` 三个字形)。想改按钮区的字形颜色,改 `TyDateTimePicker` 的 `color`。
+> 见 [tycss-reference §8.6](../tycss-reference.md)。
 
 **渲染细节：**
 
@@ -195,4 +198,4 @@ if DatePicker.DroppedDown then
 - **下拉仅 `dtkDate` 有：** `OpenDropDown` 对 `dtkTime` 直接返回；`dtkTime` 的右侧是上/下步进按钮而非 chevron。下拉的开合在 `Click` 而非 `MouseDown` 中完成（配合 200 ms 重开守卫），以避免 mouse-up 立即失活关闭刚弹出的日历。
 - **键盘：** ←/→ 切换字段，Home/End 跳到首/末段，↑/↓ 步进当前段，Enter 提交缓冲，Esc 关闭下拉或丢弃缓冲，`Alt+↓` / `F4` 开合下拉（仅 `dtkDate`）。
 - **DFM 序列化：** `Kind`（`default dtkDate`）、`ReadOnly`（`default False`）、`ShowCheckBox`（`default False`）、`Checked`（`default True`）、`TabStop`（`default True`）声明了默认值，等于默认值时不写入 `.lfm`/`.dfm`。`DateTime` / `MinDate` / `MaxDate` / `DateFormat` / `TimeFormat` 无 `default`，始终按当前值流式保存。
-- **主题一致性：** 弹出日历与右侧按钮区分别对应 `TyCalendar` 与 `TyDateTimeButton` 选择器，复选框复用 `TyCheckBox` 令牌——自定义主题时应一并覆盖，才能保持整体外观一致。
+- **主题一致性：** 弹出日历对应 `TyCalendar` 选择器，复选框复用 `TyCheckBox` 令牌——自定义主题时应一并覆盖，才能保持整体外观一致。右侧按钮区**没有**自己的键（`TyDateTimeButton` 是死键，见上），它跟随字段的 `color`。

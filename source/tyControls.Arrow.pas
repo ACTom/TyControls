@@ -179,7 +179,7 @@ begin
   { Own key rather than the borrowed 'TyPanel': a directional marker on a diagram is not a panel surface.
     Added to 'TyPanel's rule block as an extra selector, so every resolved value is
     unchanged — this opens a hook, it does not restyle anything. }
-  Result := 'TyArrow';   // reuse the panel typeKey (no new theme token)
+  Result := 'TyArrow';
 end;
 
 procedure TTyArrow.SetDirection(AValue: TTyArrowDirection);

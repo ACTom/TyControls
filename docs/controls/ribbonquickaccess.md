@@ -13,12 +13,26 @@
 | 项目 | 值 |
 |------|-----|
 | 单元 | `tyControls.RibbonQuickAccess` |
-| `GetStyleTypeKey` 返回值 | `'TyRibbon'`（**刻意复用** Ribbon 命令带的表面令牌） |
+| `GetStyleTypeKey` 返回值 | `'TyRibbonQuickAccess'`（自己的键） |
 | 基类 | `TTyCustomControl`（继承自 `TCustomControl`） |
-| 默认尺寸 | 120 × 26（逻辑像素） |
+| 默认尺寸 | 120 × 26（逻辑像素；实为 `--qat-width` / `--qat-height` 的内建回落值） |
 | 默认 `Align` | `alNone`（标题栏条带由应用定位，不停靠） |
 
-> **复用 TyRibbon 令牌，不新增 .tycss 规则**：QAT 坐落在 Ribbon / 标题命令带上，理应读作同一表面，因此其 `GetStyleTypeKey` 复用现有的 `'TyRibbon'` 令牌（与 `TTyRibbon` 命令带同色），**不引入任何新的 tycss 选择器**。若你的主题只在 `TyToolBar` 上定义了合适的条带样式，也可自行改用该令牌——但请只复用一个**已存在**的令牌。
+| typeKey | 画什么 |
+|---|---|
+| `TyRibbonQuickAccess` | 整条：`FillSharpBackdrop` 之上的 `DrawFrame`——背景、边框描边、圆角、阴影 |
+
+> **它现在有自己的键了；此前它借的是 `TyTitleBar`。** 内建主题把 `TyRibbonQuickAccess` 与
+> `TyTitleBar` 写在同一条规则里（`themes/light.tycss` 的 `TyTitleBar, TyRibbonQuickAccess { ... }`），
+> 所以解析出的值一个没变——QAT 仍与标题栏同色、仍与 caption 融为一体。变的是**你现在能单独调它**。
+>
+> 这一条很要紧：QAT 是**贴在**标题栏上的一小条 `alNone` 子控件，而 `DrawFrame` 会把标题栏样式的
+> 阴影 / 圆角 / 边框在这条 20 多像素高的小条上**重画一遍**。多个随包皮肤因此出过洋相——
+> QAT 周围多出 1px 方框、底下多出一条横线、条带顶部两个圆角悬在 caption 中间、
+> 竖向渐变在条带内重新起跑。现在这些可以只针对 `TyRibbonQuickAccess` 关掉，而不动窗口 chrome。
+>
+> **注意本文档此前的记载是错的**：它写着 `GetStyleTypeKey` 返回 `'TyRibbon'`，而代码从来返回的是
+> `'TyTitleBar'`（单元头注释同样过时）。
 
 ```pascal
 uses tyControls.RibbonQuickAccess, tyControls.GlyphButtons;
@@ -81,7 +95,7 @@ QAT 还暴露 `TTyCustomControl` 的基线事件集（Tier A 鼠标 / 通用事�
 
 ## 7. 渲染
 
-`Paint` → `RenderTo(Canvas, ClientRect, PPI)`：先铺 `FillSharpBackdrop`（图片主题下透出照片，纯色主题为 no-op），再经共享的 `DrawFrame` 用解析后的 `'TyRibbon'` 样式绘制主题条带（背景 + 任意边框 / 圆角）。**0 子控件时也安全，不会抛异常**（headless 单测覆盖）。
+`Paint` → `RenderTo(Canvas, ClientRect, PPI)`：先铺 `FillSharpBackdrop`（图片主题下透出照片，纯色主题为 no-op），再经共享的 `DrawFrame` 用解析后的 `'TyRibbonQuickAccess'` 样式绘制主题条带（背景 + 任意边框 / 圆角 / 阴影）。**0 子控件时也安全，不会抛异常**（headless 单测覆盖）。
 
 ---
 
@@ -111,7 +125,7 @@ end;
 
 - **子控件即命令项，且需 `Align=alLeft`**：`AddButton` 已自动设好；若自行添加子控件，务必设 `Align := alLeft` 才能参与自左向右的流式排布。
 - **专为标题栏行设计**：默认 `Align=alNone`，位置由应用给定；它与下方的 [[TTyRibbon]] 命令带配对使用。
-- **复用 TyRibbon 令牌**：`GetStyleTypeKey` 返回 `'TyRibbon'`，没有独立的 tycss 选择器；条带外观跟随 Ribbon 命令带的主题。**不新增任何令牌**。
+- **有独立令牌 `TyRibbonQuickAccess`**：默认与 `TyTitleBar` 共写一条规则（观感不变），但要调条带外观请写 `TyRibbonQuickAccess` 选择器——**别去改 `TyTitleBar`**，那会连整个窗口标题栏一起改。小条带上尤其要留意 `border` / `border-radius` / `shadow`：标题栏上合适的值，在一条 20 多像素高的子条带上通常是错的。
 - **命令响应走子按钮**：QAT 自身无 `OnClick` 语义的专有事件；请挂接各 [[TTyGlyphButton]] 的 `OnClick`。
 - **`Indent` / `Spacing` 仅供测量**：它们喂给 `TyQatContentWidth` 帮宿主算条带宽度，本身不移动 `alLeft` 子控件。
 - **DFM 序列化**：`Indent`（`3`）/ `Spacing`（`2`）声明了默认值，等于默认值时不写入 `.lfm` / `.dfm`。

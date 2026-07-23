@@ -11,10 +11,15 @@ TTyLinkLabel 是**主题化超链接标签**,继承自 `TTyGraphicControl`(非�
 | 项目 | 值 |
 |------|-----|
 | 单元 | `tyControls.LinkLabel` |
-| `GetStyleTypeKey` 返回值 | `'TyLabel'`(**复用**标签主题:字体族 / 字号 / 字重 / `:disabled` 透明度取自它)|
-| 链接颜色 typeKey | `'TyGaugeFill'`(**复用**:取其 `background` = accent 作为链接色 / 下划线色)|
+| `GetStyleTypeKey` 返回值 | `'TyLinkLabel'`(**自有键**:字体族 / 字号 / 字重 / `:disabled` 透明度取自它)|
+| 链接墨色 typeKey | `'TyLinkLabelLink'`(**自有键**:取其 `color` 作为链接色 + 下划线色)|
 
-复用现有主题规则,**无新增 `.tycss`**。
+两个键都是本控件自己的。`TyLinkLabel` 在 `themes/light.tycss` 里与 `TyLabel` 并列写在同一条规则的
+选择器列表中,`TyLinkLabelLink` 则是一条独立规则(`TyLinkLabelLink { color: var(--accent); }`),
+因此解析值与从前完全一致 —— 拆键开的是钩子,不改外观。
+
+链接墨色从前借 `'TyGaugeFill'`:那意味着**给仪表盘换个填充色就会把全应用的超链接一起换掉**,
+而链接色本身反倒无法单独主题化。现在改链接色写 `TyLinkLabelLink`,别碰 `TyGaugeFill`。
 
 ```pascal
 uses tyControls.LinkLabel;
@@ -71,12 +76,24 @@ uses tyControls.LinkLabel;
 
 > `:focus` **不支持**(`TTyGraphicControl` 无窗口句柄,不可聚焦)。
 
-### 复用的主题规则
+### 解析的主题键
 
-- 文字字体族 / 字号 / 字重 / `:disabled { opacity }` 取自 **`TyLabel`** 规则。
-- 链接色 / 下划线色取自 **`TyGaugeFill`** 规则的 `background`(= 主题 accent)。
+| typeKey | 画什么 |
+|---------|--------|
+| `TyLinkLabel` | 控件盒子:背景(默认透明)、`font-family` / `font-size` / `font-weight`、`opacity`(`:disabled` 时整体变淡)。 |
+| `TyLinkLabelLink` | 链接墨色:它的 `color` 同时用于**文字**和那条 1px 下划线。 |
 
-无需为 TTyLinkLabel 新增任何 `.tycss` 选择器。
+两条都要写才算把这个控件主题化完:字号字重在 `TyLinkLabel`,颜色在 `TyLinkLabelLink`。
+
+```css
+TyLinkLabel     { font-size: 12px; font-weight: 500; }
+TyLinkLabelLink { color: #0A66C2; }
+```
+
+> **状态在链接墨色上不生效(现状,非设计):** `LinkColor` 解析 `TyLinkLabelLink` 时传的是**空状态集**,
+> 所以 `TyLinkLabelLink:hover` / `:disabled` 是**死选择器**;悬停提亮是代码里的 `TyLighten(col, 15)`,
+> 不走主题。此外本控件**不读 `padding`**(内容区取整个矩形),下划线的下沉量 `P.Scale(3)` 与
+> 1px 厚度也是代码字面量 —— 这些都是已知待补项,不要指望用主题去调。
 
 ---
 
@@ -107,6 +124,6 @@ Link.OnClick := @DoCustomNavigate;
 
 - **无键盘焦点:** 基类是 `TGraphicControl`,没有 HWND,`:focus` 伪类永不生效。
 - **下划线绘制:** `TTyPainter.DrawText` 不带下划线参数,故先绘制文字,再用 `P.FillBackground` 在实测文字宽度下方补一条 1px accent 线(宽度夹紧到内容宽度,不会溢出)。
-- **颜色主题化:** 链接色不硬编码,始终从 `TyGaugeFill` 的 `background` 解析(悬停态再经 `TyLighten` 提亮),更换主题即换色。
+- **颜色主题化:** 链接色不硬编码,始终从 `TyLinkLabelLink` 的 `color` 解析(悬停态再经 `TyLighten` 提亮),更换主题即换色;要单独改链接色只改这一条规则,不会波及别的控件。
 - **单元名:** 单元名是 `tyControls.LinkLabel`。
 - **几何辅助:** 下划线定位逻辑抽为纯函数 `TyLinkUnderlineRect`,已单元测试(左 / 右 / 居中 / 越界夹紧 / 负宽)。

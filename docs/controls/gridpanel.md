@@ -28,7 +28,15 @@ uses tyControls.GridPanel, tyControls.GridCell;
 
 `TTyGridCell` 默认**不画背景、不画边框**——它只负责定位 + 裁剪 + 逐格内边距。可见内容由你放进去的控件(卡片、输入框等)提供。
 
-> **主题说明:** `TTyGridPanel` 复用 `TyPanel` 的 typeKey,`.tycss` 里给 `TyPanel` 写的规则都会应用到网格本体;无需为它单独写样式。
+> **主题说明:** `TTyGridPanel` 有自己的 typeKey `TyGridPanel`,而**随库主题刻意不定义它**——
+> 网格本体是个纯布局宿主,间隔区应当透明地露出父容器,而不是自己涂一层面板底色
+> (`tests/test.gridpanel.pas` 断言没有任何内置主题给它背景)。
+> 想给网格本体上色,写 `TyGridPanel { … }` 即可;**不要**去改 `TyPanel`——那会重涂全应用的面板,
+> 而网格本体纹丝不动(它已经不借那个键了)。
+>
+> 另注意**撞名**:格子的 typeKey `TyGridCell` 与数据网格(`TTyStringGrid`)正文单元格用的是**同一个名字**,
+> 而后者在 `light.tycss` 里是有规则的。今天视觉上不冲突(`TTyGridCell.Paint` 是空实现),
+> 但给 `TyGridCell` 写规则会同时影响两者。
 
 ---
 
@@ -191,7 +199,7 @@ Ed.Align := alClient;                          // 约束在该格内
 
 ## 9. 注意事项
 
-1. **不新增 `.tycss`:** 网格本体复用 `TyPanel` 令牌;格子透明不绘制。主题化写 `TyPanel` 选择器即可。
+1. **网格本体与格子默认都不画:** `TyGridPanel` 被随库主题刻意留空(间隔透明),`TTyGridCell.Paint` 为空实现。要上色就写 `TyGridPanel` 选择器——**别改 `TyPanel`**,它已经不借那个键了。
 2. **格子是真组件、进 `.lfm`:** 布局(格子 + 内容)全部可在设计器编辑并保存;不再有代码优先的 `SetCell`。
 3. **`Spacing`(格间) vs 每格 `Padding`(格内)** 各司其职。
 4. **加载不翻倍:** 构造播种的临时格子在有流式格子时于 `Loaded` 丢弃(见 [§5](#5-单元格模型与设计器集成))。

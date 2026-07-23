@@ -131,7 +131,7 @@ begin
   { Own key rather than the borrowed 'TyPanel': a filled vector path is not a panel surface; a skin that restyles panels must not repaint every diagram shape.
     Added to 'TyPanel's rule block as an extra selector, so every resolved value is
     unchanged — this opens a hook, it does not restyle anything. }
-  Result := 'TyShape';   // reuse the panel typeKey (no new theme token this batch)
+  Result := 'TyShape';
 end;
 
 procedure TTyShape.SetShape(AValue: TTyShapeKind);

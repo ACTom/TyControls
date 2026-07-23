@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-TTyValueListEditor 是**属性检查器级的名/值两列编辑器**:左列是**键**(可展开的多级树,带三角),右列是**可编辑的值**,中间是**可拖动的分隔条**。每行是一个 `TTyValueRow` 对象——`Key`/`DisplayKey`、`Value`/`DisplayValue`、值类型 `EditorKind`、`ReadOnly`、逐行样式(`Bold`/`TextColor`/`ImageIndex`)以及**子行**(嵌套)。用 `AddRow`(返回行对象,便于嵌套 / 定类型 / 设样式)构建,或用简单的 `InsertRow(key, value)`。行布局、选择、滚动来自 [TTyListBox](listbox.md);值单元用主题化 [TTyEdit](edit.md) 覆盖层就地编辑。
+TTyValueListEditor 是**属性检查器级的名/值两列编辑器**:左列是**键**(可展开的多级树,带三角),右列是**可编辑的值**,中间是**可拖动的分隔条**。每行是一个 `TTyValueRow` 对象——`Key`/`DisplayKey`、`Value`/`DisplayValue`、值类型 `EditorKind`、`ReadOnly`、逐行样式(`Bold`/`TextColor`/`ImageIndex`)以及**子行**(嵌套)。用 `AddRow`(返回行对象,便于嵌套 / 定类型 / 设样式)构建,或用简单的 `InsertRow(key, value)`。行布局、选择、滚动的**代码**来自 [TTyListBox](listbox.md)(但主题令牌自成一套,见 §2);值单元用主题化 [TTyEdit](edit.md) 覆盖层就地编辑。
 
 **按 `EditorKind` 分派的值编辑器:**
 
@@ -29,9 +29,30 @@ TTyValueListEditor 是**属性检查器级的名/值两列编辑器**:左列是*
 |------|-----|
 | 单元 | `tyControls.ValueListEditor` |
 | 类型 | `TTyValueListEditor` + `TTyValueRow` + `TTyValueEditorKind` |
-| typeKey | `'TyListBox'` / `'TyListItem'`(行)+ 值编辑器用 `'TyEdit'` |
+| `GetStyleTypeKey` 返回值 | `'TyValueListEditor'`(自己的键,不是祖先 `TTyListBox` 的) |
 
-无新增 `.tycss`。
+它**只是复用**了 `TTyListBox` 的虚拟化行循环,并不是一个列表框:它画的两列 + 可拖分隔条、带缩进的键列、
+逐行展开三角、带色块和"…"按钮的值列,列表框一样都没有。挂在 `TyListBox`/`TyListItem` 上时,皮肤既没法
+给键列单独上色、没法给分隔条定色、没法改三角样式,也没法让检查器的选中行读起来与普通列表的选中行不同。
+现在的部件表:
+
+| typeKey | 画什么 |
+|---|---|
+| `TyValueListEditor` | 外框:背景、边框、圆角、内边距 |
+| `TyValueListEditorRow` | 一根行(`GetItemStyleTypeKey`),含 `:hover` / `:active`(选中) |
+| `TyValueListEditorKey` | 键列文字色 |
+| `TyValueListEditorValue` | 值列**默认**文字色(逐行的 `TextColor` 覆盖仍然优先) |
+| `TyValueListEditorDivider` | 键/值分隔线(读 `background`) |
+| `TyValueListEditorExpander` | 展开/收起三角的填充色 |
+
+> 后四个是**可选钩子**:`themes/light.tycss` 有意不定义它们,因为它们的后备值**随行状态而变**——
+> 都回落到**当前行**解析出的颜色(分隔线回落到该颜色的 alpha `0x28`)。在基层写一个固定值反而会动像素:
+> 选中行的后备墨色是 `--on-accent`,若在这里写死 `color: var(--on-surface)`,选中行的键名会直接看不清。
+> **要用就连 `:hover` / `:active` 变体一起写。**
+
+值编辑器是一个内嵌的 [TTyEdit](edit.md)(`TTyValueEdit`),解析 `TyEdit`——这个借用是对的:
+它就是一个输入框,盒子、内边距和各状态都该与全库输入框一致,不同的只有输入过滤和尾部的"…"。
+布尔/枚举/颜色下拉的弹出列表是 `TTyListBox`,解析 `TyListBox`,同理。
 
 ```pascal
 uses tyControls.ValueListEditor;
