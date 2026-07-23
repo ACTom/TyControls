@@ -1712,6 +1712,17 @@ end;
 
 procedure TTyForm.Paint;
 begin
+  { DESIGN SURFACE: skip the full-client fill. On the Lazarus main IDE design surface the designer
+    ends up drawing the form's children into the SAME DC before this runs, and this fill is a BGRA
+    blit that overwrites whatever is already on the DC — so it painted OVER every child. The symptom
+    was brutal and misleading: EVERY control inside a TTyForm vanished in the designer, including
+    plain LCL ones (a bare TButton), while the identical form rendered perfectly at run time and
+    under a headless csDesigning render, and TTy controls dropped on a plain TForm were fine.
+    (Lazarus 4.4's designer paints in an order where this was harmless, which is why it only showed
+    up on main.) At run time children are separate HWNDs clipped out of the parent DC, so the fill
+    can't reach them and the themed background is still painted normally. The design-time background
+    then comes from the form's ordinary LCL Color erase, which participates in child clipping. }
+  if csDesigning in ComponentState then Exit;
   // Keep the glass snapshot current and paint the themed background on the form's own DC. Once
   // TTyFormSurface is installed it covers the client and repaints this SAME background edge-to-edge
   // (via RenderBackgroundTo) so the form's own Paint becomes a harmless fallback behind it.
