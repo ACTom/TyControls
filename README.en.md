@@ -19,8 +19,27 @@ Not one control hardcodes a colour, corner radius or line width; every visual va
 a theme token. Look at `classic`: it isn't just recoloured — the 3D button bevels, the gradient
 header band and the square corners changed too.
 
-> Screenshots are from the Ant Design Pro example. Its UI is currently Chinese; an English
-> render will land once the examples are internationalised.
+### Light / dark / image themes
+
+The gallery example (`examples/demo`), same form:
+
+| Light | Dark | `green` (image theme) |
+|---|---|---|
+| ![light](docs/images/demo-light.png) | ![dark](docs/images/demo-dark.png) | ![green image theme](docs/images/demo-green.png) |
+
+Light and dark are two sets of `@mode` values in one `.tycss`, and can follow the OS. `green`
+shows how far a theme can go — translucent controls floating over a photo background, built from
+9-slice images and the `alpha()` colour function, with not one line of control code changed for it.
+
+### A few of the controls
+
+| | |
+|---|---|
+| **`TTyStringGrid`** — frozen columns, row-number gutter, summary band, cell mark colours<br>![data grid](docs/images/grid.png) | **`TTyTreeView`** — virtual tree, multi-column, tri-state checks<br>![virtual tree](docs/images/treeview.png) |
+| **Rich input controls** — numeric / currency / mask / slider / calculator edits<br>![rich input](docs/images/inputs.png) | |
+
+> Some screenshots still show Chinese UI; an English render will land once the examples are
+> internationalised.
 
 ---
 
@@ -38,9 +57,9 @@ header band and the square corners changed too.
 - **Follows the OS** — light/dark mode and accent colour can track the operating system; a
   single-file `@mode` carries both sets of values.
 - **160 droppable controls** across 16 component-palette pages — see the [control list](#control-list).
-- **Designer-first** — every control has a palette icon, a read-only `Version` property and a
-  `StyleClass` dropdown. `TTyPageControl`'s pages and `TTyGridPanel`'s cells are **real designer
-  containers**: drop controls straight into them and they persist to the `.lfm`.
+- **Designer-first** — `TTyPageControl`'s pages and `TTyGridPanel`'s cells are **real designer
+  containers**: drop controls straight in, see the finished look in the designer, and it persists
+  to the `.lfm` with no layout code. Theme changes show up in the designer too.
 - **HiDPI** — every length scales by PPI; vector drawing stays crisp.
 - **Internationalised** — the library's own UI strings go through `resourcestring` + `.po`,
   shipped in English and Simplified Chinese.
@@ -94,13 +113,19 @@ form, named `Surface`, filling the whole window. **Put your controls inside it.*
 - **Dialogs (`TTyDialog`) have no `Surface`**: they are not resizable and do not need one;
   place controls directly on them.
 
-Why it exists: a borderless resizable window cannot paint its own outermost pixels, leaving an
-unpainted band along the right/bottom edge — but a child window can paint edge to edge, so the
-form's themed background is rendered by `Surface`. Select it in the designer; its `Purpose`
-property explains the rest.
+**Why it exists — the root cause is Windows.** A resizable top-level window carries
+`WS_THICKFRAME`, and Windows gives it a DWM backing surface *smaller* than its visible rect (only
+`windowHeight - 2*frame` tall). Its own GDI client DC is therefore clipped short, leaving a dead
+band along the right and bottom edges that simply cannot be painted. A child window has no thick
+frame, its backing surface spans its full rect, and it paints edge to edge — so `TTyForm` renders
+its themed background onto `Surface` rather than onto itself.
 
-**Migrating an existing form**: move the controls that sat directly on the form into `Surface`
-(leave non-visual components alone). See [examples/button/umain.lfm](examples/button/umain.lfm).
+The container is harmless on every widgetset, so it is not forked per platform. It also solves a
+second problem: because your controls are `Surface`'s **children**, windowless controls such as
+`TTyLabel` paint onto `Surface`'s own canvas and stay visible — a plain back-most layer would
+occlude them instead.
+
+Select `Surface` in the designer; its `Purpose` property says the same thing.
 
 ---
 
@@ -110,52 +135,244 @@ property explains the rest.
 properties / events / states / theme keys are in **[docs/controls/](docs/controls/)**.
 
 ### Core · `TyControls` (2)
-`TTyStyleController` the style controller · `TTyNativeStyler` themes native / third-party LCL controls
+
+| Control | What it is for |
+|---|---|
+| `TTyStyleController` | The style controller: loads themes, switches density, follows the OS light/dark. Controls read their style through it |
+| `TTyNativeStyler` | Themes native / third-party LCL controls to match |
 
 ### Buttons · `TyControls Buttons` (8)
-`TTyButton` · `TTyGlyphButton` icon button · `TTyGlyphContainerButton` · `TTySpeedButton` · `TTyDropDownButton` split · `TTyMenuButton` · `TTyColorButton` · `TTyButtonGroup` segmented bar
+
+| Control | What it is for |
+|---|---|
+| `TTyButton` | The base button; primary / danger / ghost variants and a numeric badge |
+| `TTyGlyphButton` | Button with an icon from an icon font or image collection |
+| `TTyGlyphContainerButton` | Square icon-only button, typical on toolbars |
+| `TTySpeedButton` | Shortcut button that can stay pressed |
+| `TTyDropDownButton` | Split button: the left half acts, the right half opens a menu |
+| `TTyMenuButton` | The whole button is the dropdown trigger |
+| `TTyColorButton` | Button showing and picking a colour |
+| `TTyButtonGroup` | Segmented bar; adjacent segments share edges, one selected |
 
 ### Labels & marks · `TyControls Labels` (7)
-`TTyLabel` · `TTyHtmlLabel` inline HTML subset · `TTyLinkLabel` · `TTyShadowLabel` · `TTyGlowLabel` · `TTyTag` closable tag · `TTyBadge` numeric / dot badge
+
+| Control | What it is for |
+|---|---|
+| `TTyLabel` | Text label with word wrap (including per-glyph CJK breaking) and mnemonics |
+| `TTyHtmlLabel` | Label supporting an inline HTML subset (bold / italic / link / colour) |
+| `TTyLinkLabel` | Hyperlink text with underline and hover highlight |
+| `TTyShadowLabel` | Label with a drop shadow |
+| `TTyGlowLabel` | Label with a blurred glow |
+| `TTyTag` | Closable tag pill, for filters and status marks |
+| `TTyBadge` | Numeric / dot badge that can anchor to any control's corner |
 
 ### Text & numeric input · `TyControls Edits` (13)
-`TTyEdit` · `TTyMemo` multiline · `TTySpinEdit` · `TTyNumericEdit` · `TTyCurrencyEdit` · `TTyMaskEdit` · `TTyURLEdit` · `TTyComboEdit` · `TTyTrackEdit` inline slider · `TTyCalcEdit` / `TTyCalcCurrencyEdit` inline calculator · `TTyCalculator` · `TTyUpDown`
+
+| Control | What it is for |
+|---|---|
+| `TTyEdit` | Single-line edit: selection, clipboard, word navigation, horizontal scroll |
+| `TTyMemo` | Multi-line edit: 2D navigation, cross-line editing, vertical scroll |
+| `TTySpinEdit` | Numeric field with up/down arrows |
+| `TTyNumericEdit` | Digits-only field, group-formatted on blur |
+| `TTyCurrencyEdit` | Currency field that adds the symbol |
+| `TTyMaskEdit` | Input constrained by a mask (phone, ID, date) |
+| `TTyURLEdit` | URL field with a trailing open button |
+| `TTyComboEdit` | Edit plus a dropdown arrow; you decide what drops down |
+| `TTyTrackEdit` | Edit with an inline slider - type it or drag it |
+| `TTyCalcEdit` | Edit with an inline calculator button |
+| `TTyCalcCurrencyEdit` | The currency flavour of the calculator edit |
+| `TTyCalculator` | Standalone calculator panel |
+| `TTyUpDown` | Standalone up/down spinner, bindable to another control |
 
 ### Choices & switches · `TyControls Choices` (6)
-`TTyCheckBox` tri-state · `TTyRadioButton` · `TTyToggleSwitch` · `TTyRadioGroup` · `TTyCheckGroup` · `TTySegmented`
+
+| Control | What it is for |
+|---|---|
+| `TTyCheckBox` | Check box, tri-state capable |
+| `TTyRadioButton` | Radio button |
+| `TTyToggleSwitch` | Switch whose knob slides between states |
+| `TTyRadioGroup` | Titled frame of auto-laid-out radio buttons |
+| `TTyCheckGroup` | Titled frame of check boxes |
+| `TTySegmented` | Segmented control: pick one value from a row, not one page |
 
 ### Lists & dropdowns · `TyControls Lists` (14)
-`TTyComboBox` editable + prefix autocomplete · `TTyListBox` · `TTyCheckListBox` · `TTyMRUComboBox` · `TTyComboBoxEx` with images · `TTyOfficeComboBox` / `TTyOfficeListBox` grouped · `TTyAdvancedComboBox` / `TTyAdvancedListBox` two-line · `TTyCheckComboBox` · `TTyValueListEditor` property grid · `TTyTransfer` · `TTyTreeSelect` · `TTyCascader`
+
+| Control | What it is for |
+|---|---|
+| `TTyComboBox` | Dropdown, editable, with prefix autocomplete |
+| `TTyListBox` | Item list with keyboard navigation and an embedded scrollbar |
+| `TTyCheckListBox` | List with a check box per row |
+| `TTyMRUComboBox` | Dropdown that promotes recent entries to the top |
+| `TTyComboBoxEx` | Dropdown with a per-item image |
+| `TTyOfficeComboBox` | Dropdown with group header bands |
+| `TTyOfficeListBox` | List with group header bands |
+| `TTyAdvancedComboBox` | Two-line items (title + subtitle + image) |
+| `TTyAdvancedListBox` | Rich two-line list |
+| `TTyCheckComboBox` | Multi-select dropdown; the field shows a summary |
+| `TTyValueListEditor` | Property grid: key on the left, value on the right, editor kind per row |
+| `TTyTransfer` | Two lists with move-between buttons |
+| `TTyTreeSelect` | Selector whose dropdown is a tree |
+| `TTyCascader` | Cascading multi-column selector |
 
 ### Colour / font / file pickers · `TyControls Pickers` (11)
-`TTyColorBox` · `TTyColorComboBox` · `TTyColorListBox` · `TTyColorGrid` palette · `TTyLColorPicker` / `TTyHSColorPicker` · `TTyFontComboBox` / `TTyFontListBox` / `TTyFontSizeComboBox` · `TTyFilterComboBox` · `TTyShellComboBox`
+
+| Control | What it is for |
+|---|---|
+| `TTyColorBox` | Colour dropdown with a swatch per item |
+| `TTyColorComboBox` | Colour dropdown with a trailing More... entry opening the colour dialog |
+| `TTyColorListBox` | Colour list |
+| `TTyColorGrid` | Swatch grid palette |
+| `TTyLColorPicker` | Lightness bar picker |
+| `TTyHSColorPicker` | Hue / saturation plane picker |
+| `TTyFontComboBox` | Font dropdown; each item previews in its own typeface |
+| `TTyFontListBox` | Font list |
+| `TTyFontSizeComboBox` | Font-size dropdown |
+| `TTyFilterComboBox` | File-type filter dropdown |
+| `TTyShellComboBox` | Directory dropdown, pairs with the file views |
 
 ### Gauges & indicators · `TyControls Gauges` (12)
-`TTyGauge` linear / arc / ring · `TTyMeter` needle · `TTyLevelMeter` · `TTyDial` / `TTyGearDial` knobs · `TTyAnalogClock` · `TTyCircularProgress` · `TTyActivityIndicator` / `TTyActivityBar` / `TTyGearActivityIndicator` busy · `TTySparkline` · `TTyRating`
+
+| Control | What it is for |
+|---|---|
+| `TTyGauge` | Gauge in linear, arc or ring form |
+| `TTyMeter` | Needle gauge with tick marks |
+| `TTyLevelMeter` | VU meter: lit segments plus a peak-hold marker |
+| `TTyDial` | Rotary knob |
+| `TTyGearDial` | Decorative knob with a toothed rim |
+| `TTyAnalogClock` | Analogue clock face |
+| `TTyCircularProgress` | Ring progress with a centred percentage |
+| `TTyActivityIndicator` | Spinning busy ring |
+| `TTyActivityBar` | Indeterminate marching bar |
+| `TTyGearActivityIndicator` | Gear-shaped busy indicator |
+| `TTySparkline` | Mini trend chart for cards and table cells |
+| `TTyRating` | Star rating with hover preview |
 
 ### Bars · `TyControls Bars` (14)
-`TTyTrackBar` · `TTyProgressBar` · `TTyScrollBar` · `TTyStatusBar` · `TTyToolBar` + `TTyToolSeparator` · `TTyToolBarEx` overflow · `TTyControlBar` / `TTyCoolBar` draggable bands · `TTyAlert` inline banner · `TTyPagination` · `TTySteps` · `TTyBreadcrumb` · `TTyHeaderControl`
+
+| Control | What it is for |
+|---|---|
+| `TTyTrackBar` | Slider |
+| `TTyProgressBar` | Progress bar |
+| `TTyScrollBar` | Scroll bar |
+| `TTyStatusBar` | Bottom status bar with panels |
+| `TTyToolBar` | Tool bar |
+| `TTyToolSeparator` | Tool bar separator |
+| `TTyToolBarEx` | Tool bar that folds what does not fit into an overflow menu |
+| `TTyControlBar` | Container of draggable, re-orderable bands |
+| `TTyCoolBar` | Windows-style draggable band bar |
+| `TTyAlert` | Inline banner: info / success / warning / error |
+| `TTyPagination` | Pager |
+| `TTySteps` | Wizard step bar, horizontal or vertical |
+| `TTyBreadcrumb` | Breadcrumb trail |
+| `TTyHeaderControl` | Standalone column header strip; resizable and sortable |
 
 ### Containers & layout · `TyControls Containers` (20)
-`TTyPanel` · `TTyGroupBox` · `TTyCard` · `TTyExPanel` collapsible · `TTyScrollBox` / `TTyScrollPanel` · `TTyGridPanel` **designer grid** · `TTyRelativePanel` · `TTyPageControl` + `TTyTabSheet` **designer pager** · `TTyTabSet` pure tab strip · `TTySplitter` · `TTyBevel` · `TTyDivider` · `TTyPaintPanel` · `TTySizeBox` · `TTyToolGroupPanel` · `TTyListGroupPanel` · `TTyTitleBar` · `TTyEmpty`
+
+| Control | What it is for |
+|---|---|
+| `TTyPanel` | Base panel |
+| `TTyGroupBox` | Titled group frame |
+| `TTyCard` | Card: title / content / actions |
+| `TTyExPanel` | Collapsible panel with an expander arrow in its header |
+| `TTyScrollBox` | Scrollable container |
+| `TTyScrollPanel` | Container that auto-scrolls when you drag near its edge |
+| `TTyGridPanel` | **Designer grid**: set rows x columns and get that many cells; drop controls straight into them |
+| `TTyRelativePanel` | Lays out by relative rules (right of X, aligned with Y) |
+| `TTyPageControl` | **Designer pager** whose pages are real drop targets |
+| `TTyTabSheet` | One page of a `TTyPageControl` |
+| `TTyTabSet` | Pure tab strip; it hosts no pages, you switch content yourself |
+| `TTySplitter` | Draggable splitter between panels |
+| `TTyBevel` | Raised / lowered decorative rails |
+| `TTyDivider` | Rule, optionally with a centred caption |
+| `TTyPaintPanel` | Panel that hands you its canvas |
+| `TTySizeBox` | Bottom-right size grip |
+| `TTyToolGroupPanel` | Tool group container |
+| `TTyListGroupPanel` | List container with group headers |
+| `TTyTitleBar` | Custom-drawn title bar, pairs with `TTyForm` |
+| `TTyEmpty` | Empty state: illustration + text + optional action |
 
 ### Data views · `TyControls Data Views` (10)
-`TTyStringGrid` / `TTyDrawGrid` **data grid** · `TTyTreeView` **virtual tree** · `TTyListView` five views · `TTyShellTreeView` / `TTyShellListView` file system · `TTyCalendar` · `TTyDateTimePicker` · `TTyImageView` pan/zoom + filters · `TTyPreviewBox`
+
+| Control | What it is for |
+|---|---|
+| `TTyStringGrid` | **Data grid**: freeze, virtualize, edit, filter, group, undo/redo |
+| `TTyDrawGrid` | Grid whose contents come from events and are drawn by you |
+| `TTyTreeView` | **Virtual tree**: lazy-loaded, million-node capable; multi-column, checks, inline edit, drag-drop |
+| `TTyListView` | Report / icon / tile / list / small-icon views, grouping, virtual mode |
+| `TTyShellTreeView` | File-system directory tree |
+| `TTyShellListView` | File-system file list |
+| `TTyCalendar` | Calendar with day / month / year drill-down |
+| `TTyDateTimePicker` | Date-time picker: dropdown calendar and segmented time spinner |
+| `TTyImageView` | Image viewer: pan, zoom, BGRA filters |
+| `TTyPreviewBox` | File preview pane for the file dialogs |
 
 ### Menus · `TyControls Menus` (4)
-`TTyMenuBar` · `TTyPopupMenu` · `TTyImagesMenu` · `TTyMenuEx`
+
+| Control | What it is for |
+|---|---|
+| `TTyMenuBar` | Main menu bar |
+| `TTyPopupMenu` | Context menu |
+| `TTyImagesMenu` | Menu with a per-item icon |
+| `TTyMenuEx` | Extended menu with richer item styling |
 
 ### Ribbon · `TyControls Ribbon` (7)
-`TTyRibbon` + `TTyRibbonPage` + `TTyRibbonGroup` · `TTyRibbonAppMenu` · `TTyRibbonQuickAccess` · `TTyRibbonGallery` · `TTyRibbonBackstage`
+
+| Control | What it is for |
+|---|---|
+| `TTyRibbon` | The ribbon itself, hosting pages |
+| `TTyRibbonPage` | One ribbon page |
+| `TTyRibbonGroup` | A group within a page |
+| `TTyRibbonAppMenu` | The top-left application (File) button |
+| `TTyRibbonQuickAccess` | Quick access toolbar |
+| `TTyRibbonGallery` | Gallery: a row of visual choices that expands into a popup grid |
+| `TTyRibbonBackstage` | Full-window backstage view (the screen behind File) |
 
 ### Images & hints · `TyControls Images` (9)
-`TTyIconFont` icon font · `TTyCharImage` · `TTyImage` · `TTyGlyphImageList` · `TTyImageCollection` · `TTyVirtualImageList` · `TTyHint` · `TTyBalloonHint` · `TTyPopover` control-hosting popover
+
+| Control | What it is for |
+|---|---|
+| `TTyIconFont` | Icon font: vector icons by codepoint, coloured by the theme |
+| `TTyCharImage` | Uses one icon-font glyph as an image |
+| `TTyImage` | Image control with transparency and stretch modes |
+| `TTyGlyphImageList` | Image list driven by an icon font |
+| `TTyImageCollection` | Multi-resolution image set; picks the right one per DPI |
+| `TTyVirtualImageList` | Generates a sized image list on demand from a collection |
+| `TTyHint` | Themed tooltip |
+| `TTyBalloonHint` | Balloon tooltip with a pointer |
+| `TTyPopover` | Popover that **hosts controls**, not just text |
 
 ### Shapes & charts · `TyControls Shapes & Charts` (4)
-`TTyShape` · `TTyStarShape` · `TTyArrow` · `TTyChart` line / bar / pie
+
+| Control | What it is for |
+|---|---|
+| `TTyShape` | Vector shape: rectangle / circle / ellipse / triangle / diamond / rounded / line |
+| `TTyStarShape` | Star with a configurable point count |
+| `TTyArrow` | Directional arrow |
+| `TTyChart` | Chart: line / bar / pie |
 
 ### Dialogs · `TyControls Dialogs` (19)
-`TTyMessage` · `TTyInputDialog` · `TTyPasswordDialog` · `TTyTextDialog` · `TTySelectValueDialog` · `TTySelectPathDialog` · `TTyColorDialog` · `TTyFontDialog` · `TTyFindDialog` / `TTyReplaceDialog` modeless · `TTyProgressDialog` · `TTyAboutDialog` · `TTyOpenDialog` / `TTySaveDialog` + picture + preview variants · `TTyNotification` corner toast
+
+| Control | What it is for |
+|---|---|
+| `TTyMessage` | Message box (information / warning / error / confirmation) |
+| `TTyInputDialog` | Single-line input dialog |
+| `TTyPasswordDialog` | Masked password dialog |
+| `TTyTextDialog` | Resizable multi-line text dialog |
+| `TTySelectValueDialog` | Pick-one-from-a-list dialog |
+| `TTySelectPathDialog` | Folder picker |
+| `TTyColorDialog` | Colour picker: HSV / RGB / CMYK / alpha, all two-way |
+| `TTyFontDialog` | Font dialog with live preview |
+| `TTyFindDialog` | Find dialog (modeless) |
+| `TTyReplaceDialog` | Find-and-replace dialog (modeless) |
+| `TTyProgressDialog` | Progress dialog |
+| `TTyAboutDialog` | About box |
+| `TTyOpenDialog` | Open-file dialog |
+| `TTySaveDialog` | Save-file dialog |
+| `TTyOpenPictureDialog` | Open-picture dialog with thumbnails |
+| `TTySavePictureDialog` | Save-picture dialog |
+| `TTyOpenPreviewDialog` | Open dialog with a custom preview pane |
+| `TTySavePreviewDialog` | Save dialog with a custom preview pane |
+| `TTyNotification` | Corner toast that fades away on its own |
 
 > Three controls do far more than one list line can say:
 > **[`TTyStringGrid`](docs/controls/grid.md)** — frozen rows/cols, million-row virtualization,

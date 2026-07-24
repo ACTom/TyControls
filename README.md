@@ -14,6 +14,23 @@
 
 上面四张图是**同一份 `.lfm`、同一份业务代码**,区别只有一个主题名。控件里没有任何一个硬编码的颜色、圆角或线宽 —— 全部来自主题令牌。注意 `classic` 那张:变的不只是配色,连按钮的立体边框、标题带的渐变、方角都变了。
 
+### 亮 / 暗 / 图片主题
+
+综合 gallery 示例(`examples/demo`),同一个窗体:
+
+| 亮色 | 暗色 | `green`(图片主题) |
+|---|---|---|
+| ![亮色](docs/images/demo-light.png) | ![暗色](docs/images/demo-dark.png) | ![绿色图片主题](docs/images/demo-green.png) |
+
+亮/暗是同一份 `.tycss` 里的两套 `@mode` 取值,可以跟随操作系统。`green` 演示的是主题能做到什么程度 —— 半透明控件浮在一张照片背景上,9-slice 贴图 + `alpha()` 颜色函数,没有一行控件代码为它改动过。
+
+### 几个控件的样子
+
+| | |
+|---|---|
+| **`TTyStringGrid`** —— 冻结列、行号槽、汇总带、单元格标记色<br>![数据网格](docs/images/grid.png) | **`TTyTreeView`** —— 虚拟树、多列、三态复选<br>![虚拟树](docs/images/treeview.png) |
+| **富输入控件** —— 数值 / 货币 / 掩码 / 滑块 / 计算器编辑<br>![富输入](docs/images/inputs.png) | |
+
 ---
 
 ## 特性
@@ -24,7 +41,7 @@
 - **两代密度** —— 经典(Win32 尺度)与现代(Web 尺度)是一条与配色**正交**的轴,`Controller.Density` 一个属性切换。
 - **跟随系统** —— 亮/暗模式与强调色可跟随操作系统;单文件 `@mode` 同时携带两套值。
 - **160 个可拖放控件**,分 16 个组件面板分页 —— 见[控件清单](#控件清单)。
-- **设计器优先** —— 每个控件都有面板图标、只读 `Version` 属性、`StyleClass` 下拉。`TTyPageControl` 的页与 `TTyGridPanel` 的格子是**真正的设计器容器**:直接往里拖控件,随 `.lfm` 存盘。
+- **设计器优先** —— `TTyPageControl` 的页与 `TTyGridPanel` 的格子是**真正的设计器容器**:直接往里拖控件、在设计器里看到最终效果、随 `.lfm` 存盘,不需要写一行布局代码。换主题在设计器里就能看到。
 - **HiDPI** —— 所有长度按 PPI 缩放,矢量绘制天然清晰。
 - **国际化** —— 库自身的界面字符串走 `resourcestring` + `.po`,随库提供英文与简体中文。
 - **3949 个单元测试**,全套件内存零泄漏(heaptrc 验证)。外观另有像素级 golden 守卫 —— 主题解析结果的任何一次变动都必须是有意的。
@@ -64,9 +81,11 @@ Lazarus 里打开 `tycontrols_dt.lpk`(设计期包)→ **Use → Install**,IDE �
 - **非可视组件仍留在窗体上**:样式控制器、定时器、对话框组件、图像列表、菜单等不受影响。
 - **对话框(`TTyDialog`)没有 `Surface`**:它不可缩放,不需要;控件照常直接放上去。
 
-它为什么存在:无边框可缩放窗口画不到自己最外圈的像素,右/下边会留一条没画上的细边;而子窗口能画到真正的边缘,所以窗体的主题背景改由 `Surface` 来画。设计器里选中它,`Purpose` 属性有完整说明。
+**它为什么存在 —— 根源是 Windows。** 可缩放的顶层窗口带 `WS_THICKFRAME`,而 Windows 给它的 DWM 后备表面比窗口可见区**小一圈**(高度只有 `窗口高 - 2×边框`),于是窗体自己的 GDI 客户区 DC 被裁短,右边和下边会留一条**画不上去**的死带。子窗口没有这层边框,后备表面覆盖它的完整矩形,能一直画到边缘 —— 所以 `TTyForm` 把主题背景交给 `Surface` 画,而不是画在自己身上。
 
-**迁移现有窗体**:把原本直接放在窗体上的控件移进 `Surface` 即可(非可视组件不动)。参考 [examples/button/umain.lfm](examples/button/umain.lfm)。
+这个容器在所有 widgetset 上都是无害的,所以不为 Windows 单独分叉。它还顺带解决了第二件事:因为控件是 `Surface` 的**子控件**,`TTyLabel` 这类无窗口控件画在 `Surface` 的画布上、正常可见 —— 如果只是在窗体最底层垫一张图,它们反而会被盖住。
+
+设计器里选中 `Surface`,`Purpose` 属性里有同样的说明。
 
 ---
 
@@ -75,52 +94,244 @@ Lazarus 里打开 `tycontrols_dt.lpk`(设计期包)→ **Use → Install**,IDE �
 160 个可从组件面板拖放的控件,分 16 个分页。逐控件的属性 / 事件 / 状态 / 主题键说明见 **[docs/controls/](docs/controls/)**。
 
 ### 核心 · `TyControls`(2)
-`TTyStyleController` 样式控制器 · `TTyNativeStyler` 让原生 / 第三方 LCL 控件跟随当前主题
+
+| 控件 | 用来干嘛 |
+|---|---|
+| `TTyStyleController` | 样式控制器:加载主题、切换密度、跟随系统亮暗;控件通过它取样式 |
+| `TTyNativeStyler` | 让原生 / 第三方 LCL 控件跟随当前主题着色 |
 
 ### 按钮 · `TyControls Buttons`(8)
-`TTyButton` · `TTyGlyphButton` 图标按钮 · `TTyGlyphContainerButton` · `TTySpeedButton` · `TTyDropDownButton` 分裂下拉 · `TTyMenuButton` · `TTyColorButton` · `TTyButtonGroup` 分段按钮条
+
+| 控件 | 用来干嘛 |
+|---|---|
+| `TTyButton` | 基础按钮,支持 primary / danger / ghost 变体与数字徽标 |
+| `TTyGlyphButton` | 带图标的按钮,图标来自图标字体或图像集 |
+| `TTyGlyphContainerButton` | 只放一个图标的方形按钮,常用于工具条 |
+| `TTySpeedButton` | 可保持按下态的快捷按钮 |
+| `TTyDropDownButton` | 分裂按钮:左半执行、右半展开菜单 |
+| `TTyMenuButton` | 整颗按钮都是下拉触发器 |
+| `TTyColorButton` | 显示并选择一个颜色的按钮 |
+| `TTyButtonGroup` | 分段按钮条,相邻段共边、单选 |
 
 ### 标签与标记 · `TyControls Labels`(7)
-`TTyLabel` · `TTyHtmlLabel` 行内 HTML 子集 · `TTyLinkLabel` · `TTyShadowLabel` · `TTyGlowLabel` · `TTyTag` 可关闭标签 · `TTyBadge` 数字 / 圆点角标
+
+| 控件 | 用来干嘛 |
+|---|---|
+| `TTyLabel` | 文本标签,支持自动换行(含中日韩逐字断行)与助记符 |
+| `TTyHtmlLabel` | 支持行内 HTML 子集(粗体 / 斜体 / 链接 / 颜色)的标签 |
+| `TTyLinkLabel` | 超链接文字,带下划线与悬停高亮 |
+| `TTyShadowLabel` | 带投影的标签 |
+| `TTyGlowLabel` | 带发光描边的标签 |
+| `TTyTag` | 可关闭的标签胶囊,用于筛选条件、状态标记 |
+| `TTyBadge` | 数字 / 圆点角标,可吸附到任意控件的右上角 |
 
 ### 文本与数值输入 · `TyControls Edits`(13)
-`TTyEdit` · `TTyMemo` 多行 · `TTySpinEdit` · `TTyNumericEdit` · `TTyCurrencyEdit` · `TTyMaskEdit` 掩码 · `TTyURLEdit` · `TTyComboEdit` · `TTyTrackEdit` 内嵌滑块 · `TTyCalcEdit` / `TTyCalcCurrencyEdit` 内嵌计算器 · `TTyCalculator` · `TTyUpDown`
+
+| 控件 | 用来干嘛 |
+|---|---|
+| `TTyEdit` | 单行文本框:选区、剪贴板、词级导航、水平滚动 |
+| `TTyMemo` | 多行文本框:二维导航、跨行编辑、垂直滚动 |
+| `TTySpinEdit` | 数值微调框,带上下箭头 |
+| `TTyNumericEdit` | 只接受数字的输入框,失焦时按千分位格式化 |
+| `TTyCurrencyEdit` | 货币输入框,自动加货币符号 |
+| `TTyMaskEdit` | 按掩码约束输入(电话、身份证、日期等) |
+| `TTyURLEdit` | 网址输入框,尾部带打开按钮 |
+| `TTyComboEdit` | 文本框 + 下拉箭头,下拉内容由你决定 |
+| `TTyTrackEdit` | 文本框内嵌一条滑块,数值可拖可输 |
+| `TTyCalcEdit` | 文本框内嵌计算器按钮,点开即算 |
+| `TTyCalcCurrencyEdit` | 货币版的计算器输入框 |
+| `TTyCalculator` | 独立的计算器面板 |
+| `TTyUpDown` | 独立的上下微调按钮,可绑定到别的控件 |
 
 ### 勾选与开关 · `TyControls Choices`(6)
-`TTyCheckBox` 三态 · `TTyRadioButton` · `TTyToggleSwitch` · `TTyRadioGroup` · `TTyCheckGroup` · `TTySegmented` 分段控制器
+
+| 控件 | 用来干嘛 |
+|---|---|
+| `TTyCheckBox` | 复选框,支持三态 |
+| `TTyRadioButton` | 单选按钮 |
+| `TTyToggleSwitch` | 开关,旋钮在两态间滑动 |
+| `TTyRadioGroup` | 带标题框的单选组,自动排布 |
+| `TTyCheckGroup` | 带标题框的复选组 |
+| `TTySegmented` | 分段控制器:一排互斥选项,选一个值而不是切一页 |
 
 ### 列表与下拉 · `TyControls Lists`(14)
-`TTyComboBox` 可编辑 + 前缀补全 · `TTyListBox` · `TTyCheckListBox` · `TTyMRUComboBox` 历史 · `TTyComboBoxEx` 带图 · `TTyOfficeComboBox` / `TTyOfficeListBox` 分组 · `TTyAdvancedComboBox` / `TTyAdvancedListBox` 双行 · `TTyCheckComboBox` 多选 · `TTyValueListEditor` 属性检视 · `TTyTransfer` 穿梭框 · `TTyTreeSelect` 树形下拉 · `TTyCascader` 级联
+
+| 控件 | 用来干嘛 |
+|---|---|
+| `TTyComboBox` | 下拉框,可编辑并支持前缀自动补全 |
+| `TTyListBox` | 条目列表,键盘导航 + 内嵌滚动条 |
+| `TTyCheckListBox` | 每行带复选框的列表 |
+| `TTyMRUComboBox` | 记住最近输入并置顶的下拉框 |
+| `TTyComboBoxEx` | 每项可带图标的下拉框 |
+| `TTyOfficeComboBox` | 带分组标题带的下拉框 |
+| `TTyOfficeListBox` | 带分组标题带的列表 |
+| `TTyAdvancedComboBox` | 每项两行(标题 + 副标题 + 图标)的下拉框 |
+| `TTyAdvancedListBox` | 每项两行的富列表 |
+| `TTyCheckComboBox` | 可多选的下拉框,字段显示已选摘要 |
+| `TTyValueListEditor` | 属性检视表:左键右值,每行可指定编辑器类型 |
+| `TTyTransfer` | 双列表穿梭框,在两侧之间搬条目 |
+| `TTyTreeSelect` | 下拉里是一棵树的选择器 |
+| `TTyCascader` | 级联选择:逐级展开的多列选择器 |
 
 ### 颜色 / 字体 / 文件选择器 · `TyControls Pickers`(11)
-`TTyColorBox` · `TTyColorComboBox` · `TTyColorListBox` · `TTyColorGrid` 调色板 · `TTyLColorPicker` / `TTyHSColorPicker` · `TTyFontComboBox` / `TTyFontListBox` / `TTyFontSizeComboBox` · `TTyFilterComboBox` · `TTyShellComboBox`
+
+| 控件 | 用来干嘛 |
+|---|---|
+| `TTyColorBox` | 颜色下拉框,每项一个色块 |
+| `TTyColorComboBox` | 颜色下拉框,末尾带「更多…」打开取色对话框 |
+| `TTyColorListBox` | 颜色列表 |
+| `TTyColorGrid` | 方格调色板 |
+| `TTyLColorPicker` | 亮度条取色器 |
+| `TTyHSColorPicker` | 色相 / 饱和度平面取色器 |
+| `TTyFontComboBox` | 字体下拉框,每项用该字体自身预览 |
+| `TTyFontListBox` | 字体列表 |
+| `TTyFontSizeComboBox` | 字号下拉框 |
+| `TTyFilterComboBox` | 文件类型过滤器下拉框 |
+| `TTyShellComboBox` | 目录下拉框,配合文件视图使用 |
 
 ### 仪表与指示器 · `TyControls Gauges`(12)
-`TTyGauge` 线性 / 弧形 / 环形 · `TTyMeter` 指针表 · `TTyLevelMeter` 电平 · `TTyDial` / `TTyGearDial` 旋钮 · `TTyAnalogClock` · `TTyCircularProgress` · `TTyActivityIndicator` / `TTyActivityBar` / `TTyGearActivityIndicator` 忙碌指示 · `TTySparkline` 迷你趋势 · `TTyRating` 评分
+
+| 控件 | 用来干嘛 |
+|---|---|
+| `TTyGauge` | 仪表:线性 / 弧形 / 环形三种形态 |
+| `TTyMeter` | 指针式仪表盘,带刻度 |
+| `TTyLevelMeter` | 电平表,分段点亮 + 峰值保持 |
+| `TTyDial` | 旋钮 |
+| `TTyGearDial` | 带齿轮外圈的装饰旋钮 |
+| `TTyAnalogClock` | 模拟时钟 |
+| `TTyCircularProgress` | 环形进度,中心显示百分比 |
+| `TTyActivityIndicator` | 旋转的忙碌指示环 |
+| `TTyActivityBar` | 不确定进度的滚动条 |
+| `TTyGearActivityIndicator` | 齿轮造型的忙碌指示 |
+| `TTySparkline` | 迷你趋势图,嵌在卡片或表格里 |
+| `TTyRating` | 星级评分,支持悬停预览 |
 
 ### 条状控件 · `TyControls Bars`(14)
-`TTyTrackBar` · `TTyProgressBar` · `TTyScrollBar` · `TTyStatusBar` · `TTyToolBar` + `TTyToolSeparator` · `TTyToolBarEx` 溢出折叠 · `TTyControlBar` / `TTyCoolBar` 可拖动带 · `TTyAlert` 内联警告条 · `TTyPagination` 分页器 · `TTySteps` 步骤条 · `TTyBreadcrumb` 面包屑 · `TTyHeaderControl` 列头条
+
+| 控件 | 用来干嘛 |
+|---|---|
+| `TTyTrackBar` | 滑块 |
+| `TTyProgressBar` | 进度条 |
+| `TTyScrollBar` | 滚动条 |
+| `TTyStatusBar` | 底部多分区状态栏 |
+| `TTyToolBar` | 工具条 |
+| `TTyToolSeparator` | 工具条分隔符 |
+| `TTyToolBarEx` | 装不下的按钮自动折进溢出菜单的工具条 |
+| `TTyControlBar` | 可拖动重排的多带容器 |
+| `TTyCoolBar` | Windows 风格的可拖动带条 |
+| `TTyAlert` | 内联警告条:信息 / 成功 / 警告 / 错误 |
+| `TTyPagination` | 分页器 |
+| `TTySteps` | 步骤条,横竖两向 |
+| `TTyBreadcrumb` | 面包屑导航 |
+| `TTyHeaderControl` | 独立的列头条,可调宽、可排序 |
 
 ### 容器与布局 · `TyControls Containers`(20)
-`TTyPanel` · `TTyGroupBox` · `TTyCard` 卡片 · `TTyExPanel` 可折叠 · `TTyScrollBox` / `TTyScrollPanel` · `TTyGridPanel` **设计器网格** · `TTyRelativePanel` · `TTyPageControl` + `TTyTabSheet` **设计器多页容器** · `TTyTabSet` 纯页签条 · `TTySplitter` · `TTyBevel` · `TTyDivider` · `TTyPaintPanel` 自绘面 · `TTySizeBox` · `TTyToolGroupPanel` · `TTyListGroupPanel` · `TTyTitleBar` · `TTyEmpty` 空状态
+
+| 控件 | 用来干嘛 |
+|---|---|
+| `TTyPanel` | 基础面板 |
+| `TTyGroupBox` | 带标题的分组框 |
+| `TTyCard` | 卡片:标题 / 内容 / 操作三段式 |
+| `TTyExPanel` | 可折叠面板,标题栏带展开箭头 |
+| `TTyScrollBox` | 可滚动容器 |
+| `TTyScrollPanel` | 拖到边缘自动滚动的容器 |
+| `TTyGridPanel` | **设计器网格**:设几行几列就出几个格子,直接往格子里拖控件 |
+| `TTyRelativePanel` | 按相对关系(在谁右边、与谁对齐)布局的容器 |
+| `TTyPageControl` | **设计器多页容器**,页是真正可拖入控件的容器 |
+| `TTyTabSheet` | `TTyPageControl` 的一页 |
+| `TTyTabSet` | 纯页签条,不承载页面;内容切换由你自己处理 |
+| `TTySplitter` | 可拖拽的面板分隔条 |
+| `TTyBevel` | 凹凸装饰线 |
+| `TTyDivider` | 分隔线,可带居中标题 |
+| `TTyPaintPanel` | 把画布交给你自己画的面板 |
+| `TTySizeBox` | 右下角的尺寸手柄 |
+| `TTyToolGroupPanel` | 工具分组容器 |
+| `TTyListGroupPanel` | 带分组标题的列表容器 |
+| `TTyTitleBar` | 自绘标题栏,配合 `TTyForm` 使用 |
+| `TTyEmpty` | 空状态:插画 + 文案 + 可选操作按钮 |
 
 ### 数据视图 · `TyControls Data Views`(10)
-`TTyStringGrid` / `TTyDrawGrid` **数据网格** · `TTyTreeView` **虚拟树** · `TTyListView` 五视图 · `TTyShellTreeView` / `TTyShellListView` 文件系统 · `TTyCalendar` · `TTyDateTimePicker` · `TTyImageView` 平移缩放 + 滤镜 · `TTyPreviewBox`
+
+| 控件 | 用来干嘛 |
+|---|---|
+| `TTyStringGrid` | **数据网格**:冻结、虚拟化、编辑、筛选、分组、撤销重做 |
+| `TTyDrawGrid` | 数据由事件提供的网格,内容自绘 |
+| `TTyTreeView` | **虚拟树**:按需加载,可承载百万节点;多列、复选、内联编辑、拖放 |
+| `TTyListView` | 列表视图:报表 / 图标 / 平铺 / 列表 / 小图标五视图 + 分组 + 虚拟模式 |
+| `TTyShellTreeView` | 文件系统目录树 |
+| `TTyShellListView` | 文件系统文件列表 |
+| `TTyCalendar` | 日历:日 / 月 / 年下钻 |
+| `TTyDateTimePicker` | 日期时间选择器,下拉日历 + 分段时间微调 |
+| `TTyImageView` | 图片查看器:平移、缩放、BGRA 滤镜 |
+| `TTyPreviewBox` | 文件预览框,配合文件对话框使用 |
 
 ### 菜单 · `TyControls Menus`(4)
-`TTyMenuBar` · `TTyPopupMenu` · `TTyImagesMenu` · `TTyMenuEx`
+
+| 控件 | 用来干嘛 |
+|---|---|
+| `TTyMenuBar` | 主菜单栏 |
+| `TTyPopupMenu` | 右键弹出菜单 |
+| `TTyImagesMenu` | 每项带图标的菜单 |
+| `TTyMenuEx` | 扩展菜单,支持更丰富的项样式 |
 
 ### Ribbon · `TyControls Ribbon`(7)
-`TTyRibbon` + `TTyRibbonPage` + `TTyRibbonGroup` · `TTyRibbonAppMenu` · `TTyRibbonQuickAccess` · `TTyRibbonGallery` · `TTyRibbonBackstage`
+
+| 控件 | 用来干嘛 |
+|---|---|
+| `TTyRibbon` | Ribbon 主体,承载多个页 |
+| `TTyRibbonPage` | Ribbon 的一页 |
+| `TTyRibbonGroup` | 页内的一个功能组 |
+| `TTyRibbonAppMenu` | 左上角的应用菜单(File)按钮 |
+| `TTyRibbonQuickAccess` | 快速访问工具栏 |
+| `TTyRibbonGallery` | 图库:一排可视化选项,可展开成弹出网格 |
+| `TTyRibbonBackstage` | 全窗口的后台视图(File 展开后那一屏) |
 
 ### 图像与提示 · `TyControls Images`(9)
-`TTyIconFont` 图标字体 · `TTyCharImage` · `TTyImage` · `TTyGlyphImageList` · `TTyImageCollection` · `TTyVirtualImageList` · `TTyHint` · `TTyBalloonHint` · `TTyPopover` 可放控件的气泡
+
+| 控件 | 用来干嘛 |
+|---|---|
+| `TTyIconFont` | 图标字体:按码点取矢量图标,随主题着色 |
+| `TTyCharImage` | 把一个图标字体字形当图片用 |
+| `TTyImage` | 图片控件,支持透明与缩放模式 |
+| `TTyGlyphImageList` | 图标字体驱动的图像列表 |
+| `TTyImageCollection` | 多分辨率图像集,按 DPI 取最合适的一张 |
+| `TTyVirtualImageList` | 从图像集按需生成指定尺寸的图像列表 |
+| `TTyHint` | 主题化的提示气泡 |
+| `TTyBalloonHint` | 带箭头的气球提示 |
+| `TTyPopover` | **能放控件**的气泡浮层,不只是文字 |
 
 ### 图形与图表 · `TyControls Shapes & Charts`(4)
-`TTyShape` · `TTyStarShape` · `TTyArrow` · `TTyChart` 折线 / 柱 / 饼
+
+| 控件 | 用来干嘛 |
+|---|---|
+| `TTyShape` | 矢量形状:矩形 / 圆 / 椭圆 / 三角 / 菱形 / 圆角矩形 / 线 |
+| `TTyStarShape` | 星形,角数可调 |
+| `TTyArrow` | 方向箭头 |
+| `TTyChart` | 图表:折线 / 柱状 / 饼图 |
 
 ### 对话框 · `TyControls Dialogs`(19)
-`TTyMessage` · `TTyInputDialog` · `TTyPasswordDialog` · `TTyTextDialog` · `TTySelectValueDialog` · `TTySelectPathDialog` · `TTyColorDialog` · `TTyFontDialog` · `TTyFindDialog` / `TTyReplaceDialog` 无模态 · `TTyProgressDialog` · `TTyAboutDialog` · `TTyOpenDialog` / `TTySaveDialog` + 图片版 + 预览版 · `TTyNotification` 角落浮出
+
+| 控件 | 用来干嘛 |
+|---|---|
+| `TTyMessage` | 消息框(信息 / 警告 / 错误 / 确认) |
+| `TTyInputDialog` | 单行文本输入对话框 |
+| `TTyPasswordDialog` | 掩码密码输入对话框 |
+| `TTyTextDialog` | 可缩放的多行文本对话框 |
+| `TTySelectValueDialog` | 列表单选对话框 |
+| `TTySelectPathDialog` | 文件夹选择对话框 |
+| `TTyColorDialog` | 取色对话框:HSV / RGB / CMYK / Alpha 全双向 |
+| `TTyFontDialog` | 字体对话框,带实时预览 |
+| `TTyFindDialog` | 查找对话框(无模态) |
+| `TTyReplaceDialog` | 查找替换对话框(无模态) |
+| `TTyProgressDialog` | 进度对话框 |
+| `TTyAboutDialog` | 关于对话框 |
+| `TTyOpenDialog` | 打开文件对话框 |
+| `TTySaveDialog` | 保存文件对话框 |
+| `TTyOpenPictureDialog` | 打开图片对话框,带缩略图 |
+| `TTySavePictureDialog` | 保存图片对话框 |
+| `TTyOpenPreviewDialog` | 打开对话框 + 右侧自定义预览 |
+| `TTySavePreviewDialog` | 保存对话框 + 右侧自定义预览 |
+| `TTyNotification` | 角落浮出的通知,自动消失 |
 
 > 有三个控件的能力远超一行清单能写下的:
 > **[`TTyStringGrid`](docs/controls/grid.md)** —— 冻结行列、百万行虚拟化、16 种内建编辑器、Excel 式列筛选、分组小计、撤销/重做、剪贴板与 CSV 导入导出;
