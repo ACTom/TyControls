@@ -3,7 +3,7 @@ object MainForm: TMainForm
   Height = 320
   Top = 0
   Width = 520
-  Caption = 'TTyComboBox 示例'
+  Caption = 'TTyComboBox example'
   ClientHeight = 320
   ClientWidth = 520
   Position = poScreenCenter
@@ -30,7 +30,7 @@ object MainForm: TMainForm
         Top = 5
         Width = 74
         Anchors = [akTop, akRight]
-        Caption = '暗色'
+        Caption = 'Dark'
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
@@ -47,7 +47,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 52
       Width = 224
-      Caption = '只读下拉（Sorted 排序，可键盘 type-ahead）：'
+      Caption = 'Read-only dropdown (Sorted, keyboard type-ahead):'
     end
     object ListCombo: TTyComboBox
       Left = 24
@@ -67,7 +67,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 52
       Width = 224
-      Caption = '可编辑（前缀自动完成 / 大写 / 限长 10）：'
+      Caption = 'Editable (prefix autocomplete / uppercase / max length 10):'
     end
     object EditCombo: TTyComboBox
       Left = 272
@@ -88,7 +88,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 140
       Width = 472
-      Caption = '事件状态：（等待操作，尝试展开或键入前缀）'
+      Caption = 'Event state: (awaiting action, try expanding or typing a prefix)'
     end
   end
 end

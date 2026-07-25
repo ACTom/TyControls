@@ -3,7 +3,7 @@ object MainForm: TMainForm
   Height = 620
   Top = 0
   Width = 900
-  Caption = 'TyControls 文本编辑器'
+  Caption = 'TyControls text editor'
   ClientHeight = 620
   ClientWidth = 900
   Position = poScreenCenter
@@ -30,7 +30,7 @@ object MainForm: TMainForm
         Top = 5
         Width = 74
         Anchors = [akTop, akRight]
-        Caption = '暗色'
+        Caption = 'Dark'
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox

@@ -3,7 +3,7 @@ object MainForm: TMainForm
   Height = 690
   Top = 90
   Width = 1200
-  Caption = 'TyControls — 容器与布局(Phase 5)'
+  Caption = 'TyControls — containers & layout (Phase 5)'
   ClientHeight = 690
   ClientWidth = 1200
   Font.Height = -12
@@ -23,7 +23,7 @@ object MainForm: TMainForm
       Top = 0
       Width = 1200
       Align = alTop
-      Caption = '容器与布局  ·  TyControls'
+      Caption = 'Containers & layout  ·  TyControls'
       TitleAlignment = taLeftJustify
       object DarkSwitch: TTyToggleSwitch
         Left = 852
@@ -31,7 +31,7 @@ object MainForm: TMainForm
         Top = 5
         Width = 74
         Anchors = [akTop, akRight]
-        Caption = '暗色'
+        Caption = 'Dark'
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
@@ -48,7 +48,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 42
       Width = 530
-      Caption = '分割线 TTyDivider — 左对齐(标题 + 右侧线)'
+      Caption = 'Divider TTyDivider — left-aligned (title + line on the right)'
       Alignment = taLeftJustify
     end
     object DivCenter: TTyDivider
@@ -56,7 +56,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 68
       Width = 530
-      Caption = '居中标题'
+      Caption = 'Centered title'
       Alignment = taCenter
     end
     object DivRight: TTyDivider
@@ -64,7 +64,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 94
       Width = 530
-      Caption = '右对齐'
+      Caption = 'Right align'
       Alignment = taRightJustify
     end
     object DivBevel: TTyDivider
@@ -72,7 +72,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 126
       Width = 530
-      Caption = '装饰边框 TTyBevel'
+      Caption = 'Decorative border TTyBevel'
       Alignment = taLeftJustify
     end
     object LblBox: TTyLabel
@@ -80,7 +80,7 @@ object MainForm: TMainForm
       Height = 18
       Top = 152
       Width = 300
-      Caption = 'Box / Frame(凹陷 / 凸起)'
+      Caption = 'Box / Frame (sunken / raised)'
     end
     object BevelBox: TTyBevel
       Left = 20
@@ -111,7 +111,7 @@ object MainForm: TMainForm
       Height = 18
       Top = 152
       Width = 140
-      Caption = '单边线'
+      Caption = 'Single edge line'
     end
     object BevelTopLine: TTyBevel
       Left = 410
@@ -134,7 +134,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 240
       Width = 530
-      Caption = '自绘表面 TTyPaintPanel(OnPaintSurface)'
+      Caption = 'Custom-drawn surface TTyPaintPanel (OnPaintSurface)'
       Alignment = taLeftJustify
     end
     object PaintSurface1: TTyPaintPanel
@@ -149,7 +149,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 42
       Width = 290
-      Caption = '分组容器 Radio / Check / ToolGroup'
+      Caption = 'Group container Radio / Check / ToolGroup'
       Alignment = taLeftJustify
     end
     object RadioSize: TTyRadioGroup
@@ -157,13 +157,13 @@ object MainForm: TMainForm
       Height = 94
       Top = 68
       Width = 290
-      Caption = '尺寸(2 列 · 互斥单选)'
+      Caption = 'Size (2 columns · exclusive single-select)'
       Columns = 2
       Items.Strings = (
-        '特小'
-        '小'
-        '中'
-        '大'
+        'Extra small'
+        'Small'
+        'Medium'
+        'Large'
       )
       ItemIndex = 1
     end
@@ -172,15 +172,15 @@ object MainForm: TMainForm
       Height = 128
       Top = 170
       Width = 290
-      Caption = '启用功能(2 列 · 独立多选)'
+      Caption = 'Enable features (2 columns · independent multi-select)'
       Columns = 2
       Items.Strings = (
-        '自动保存'
-        '拼写检查'
-        '深色模式'
-        '行号'
-        '自动缩进'
-        '代码折叠'
+        'Auto-save'
+        'Spell check'
+        'Dark'
+        'Row number'
+        'Auto indent'
+        'Code folding'
       )
     end
     object ToolClip: TTyToolGroupPanel
@@ -188,13 +188,13 @@ object MainForm: TMainForm
       Height = 88
       Top = 306
       Width = 290
-      Caption = '剪贴板(流式工具按钮)'
+      Caption = 'Clipboard (streaming toolbar button)'
       object BtnCut: TTyButton
         Left = 0
         Height = 26
         Top = 0
         Width = 64
-        Caption = '剪切'
+        Caption = 'Cut'
         StyleClass = 'ghost'
       end
       object BtnCopy: TTyButton
@@ -202,7 +202,7 @@ object MainForm: TMainForm
         Height = 26
         Top = 0
         Width = 64
-        Caption = '复制'
+        Caption = 'Copy'
         StyleClass = 'ghost'
       end
       object BtnPaste: TTyButton
@@ -210,7 +210,7 @@ object MainForm: TMainForm
         Height = 26
         Top = 0
         Width = 64
-        Caption = '粘贴'
+        Caption = 'Paste'
         StyleClass = 'ghost'
       end
       object BtnFormat: TTyButton
@@ -218,7 +218,7 @@ object MainForm: TMainForm
         Height = 26
         Top = 0
         Width = 72
-        Caption = '格式刷'
+        Caption = 'Format painter'
         StyleClass = 'ghost'
       end
     end
@@ -227,7 +227,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 42
       Width = 300
-      Caption = '滚动 / 折叠容器'
+      Caption = 'Scroll / collapse containers'
       Alignment = taLeftJustify
     end
     object ExAdvanced: TTyExPanel
@@ -235,27 +235,27 @@ object MainForm: TMainForm
       Height = 116
       Top = 68
       Width = 300
-      Caption = '高级选项(点标题折叠)'
+      Caption = 'Advanced options (click title to collapse)'
       object ChkWrap: TTyCheckBox
         Left = 16
         Height = 22
         Top = 34
         Width = 200
-        Caption = '自动换行'
+        Caption = 'Word wrap'
       end
       object ChkMinimap: TTyCheckBox
         Left = 16
         Height = 22
         Top = 60
         Width = 200
-        Caption = '显示小地图'
+        Caption = 'Show minimap'
       end
       object ChkWhitespace: TTyCheckBox
         Left = 16
         Height = 22
         Top = 86
         Width = 200
-        Caption = '显示空白字符'
+        Caption = 'Show whitespace'
       end
     end
     object ScrollDemo: TTyScrollBox
@@ -268,70 +268,70 @@ object MainForm: TMainForm
         Height = 32
         Top = 10
         Width = 244
-        Caption = '第 1 项'
+        Caption = 'Item 1'
       end
       object SbBtn2: TTyButton
         Left = 12
         Height = 32
         Top = 50
         Width = 244
-        Caption = '第 2 项'
+        Caption = 'Item 2'
       end
       object SbBtn3: TTyButton
         Left = 12
         Height = 32
         Top = 90
         Width = 244
-        Caption = '第 3 项'
+        Caption = 'Item 3'
       end
       object SbBtn4: TTyButton
         Left = 12
         Height = 32
         Top = 130
         Width = 244
-        Caption = '第 4 项'
+        Caption = 'Item 4'
       end
       object SbBtn5: TTyButton
         Left = 12
         Height = 32
         Top = 170
         Width = 244
-        Caption = '第 5 项'
+        Caption = 'Item 5'
       end
       object SbBtn6: TTyButton
         Left = 12
         Height = 32
         Top = 210
         Width = 244
-        Caption = '第 6 项'
+        Caption = 'Item 6'
       end
       object SbBtn7: TTyButton
         Left = 12
         Height = 32
         Top = 250
         Width = 244
-        Caption = '第 7 项'
+        Caption = 'Item 7'
       end
       object SbBtn8: TTyButton
         Left = 12
         Height = 32
         Top = 290
         Width = 244
-        Caption = '第 8 项'
+        Caption = 'Item 8'
       end
       object SbBtn9: TTyButton
         Left = 12
         Height = 32
         Top = 330
         Width = 244
-        Caption = '第 9 项'
+        Caption = 'Item 9'
       end
       object SbBtn10: TTyButton
         Left = 12
         Height = 32
         Top = 370
         Width = 244
-        Caption = '第 10 项'
+        Caption = 'Item 10'
       end
     end
     object DivLayout: TTyDivider
@@ -339,7 +339,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 404
       Width = 1160
-      Caption = '网格布局 TTyGridPanel / 相对布局 TTyRelativePanel / 分组列表 TTyListGroupPanel / 列头条 TTyHeaderControl'
+      Caption = 'Grid layout TTyGridPanel / relative layout TTyRelativePanel / grouped list TTyListGroupPanel / header strip TTyHeaderControl'
       Alignment = taLeftJustify
     end
     object GridForm: TTyGridPanel
@@ -357,7 +357,7 @@ object MainForm: TMainForm
         Padding = 2
         object LblUser: TTyLabel
           Align = alClient
-          Caption = '用户名'
+          Caption = 'Username'
         end
       end
       object GfEditCell0: TTyGridCell
@@ -366,7 +366,7 @@ object MainForm: TMainForm
         Padding = 2
         object EditUser: TTyEdit
           Align = alClient
-          TextHint = '登录名'
+          TextHint = 'Login name'
         end
       end
       object GfLabelCell1: TTyGridCell
@@ -375,7 +375,7 @@ object MainForm: TMainForm
         Padding = 2
         object LblMail: TTyLabel
           Align = alClient
-          Caption = '邮箱'
+          Caption = 'Mailbox'
         end
       end
       object GfEditCell1: TTyGridCell
@@ -393,7 +393,7 @@ object MainForm: TMainForm
         Padding = 2
         object LblPhone: TTyLabel
           Align = alClient
-          Caption = '电话'
+          Caption = 'Phone'
         end
       end
       object GfEditCell2: TTyGridCell
@@ -402,7 +402,7 @@ object MainForm: TMainForm
         Padding = 2
         object EditPhone: TTyEdit
           Align = alClient
-          TextHint = '手机号'
+          TextHint = 'Phone number'
         end
       end
     end
@@ -416,7 +416,7 @@ object MainForm: TMainForm
         Height = 26
         Top = 0
         Width = 120
-        Caption = '登录'
+        Caption = 'Sign in'
         StyleClass = 'ghost'
       end
       object BtnCancel: TTyButton
@@ -424,14 +424,14 @@ object MainForm: TMainForm
         Height = 30
         Top = 0
         Width = 90
-        Caption = '取消'
+        Caption = 'Cancel'
       end
       object BtnOK: TTyButton
         Left = 0
         Height = 30
         Top = 0
         Width = 90
-        Caption = '确定'
+        Caption = 'OK'
       end
     end
     object ListGroups: TTyListGroupPanel
@@ -451,14 +451,14 @@ object MainForm: TMainForm
       Height = 18
       Top = 432
       Width = 230
-      Caption = '列头:点标题排序 · 拖边界调宽'
+      Caption = 'Header: click a title to sort · drag the border to resize'
     end
     object DivBands: TTyDivider
       Left = 20
       Height = 22
       Top = 592
       Width = 1160
-      Caption = '溢出工具条 TTyToolBarEx / Rebar TTyCoolBar'
+      Caption = 'Overflow toolbar TTyToolBarEx / Rebar TTyCoolBar'
       Alignment = taLeftJustify
     end
     object BarTools: TTyToolBarEx
@@ -474,84 +474,84 @@ object MainForm: TMainForm
         Height = 26
         Top = 0
         Width = 74
-        Caption = '命令 1'
+        Caption = 'Command 1'
       end
       object BarBtn2: TTyButton
         Left = 0
         Height = 26
         Top = 0
         Width = 74
-        Caption = '命令 2'
+        Caption = 'Command 2'
       end
       object BarBtn3: TTyButton
         Left = 0
         Height = 26
         Top = 0
         Width = 74
-        Caption = '命令 3'
+        Caption = 'Command 3'
       end
       object BarBtn4: TTyButton
         Left = 0
         Height = 26
         Top = 0
         Width = 74
-        Caption = '命令 4'
+        Caption = 'Command 4'
       end
       object BarBtn5: TTyButton
         Left = 0
         Height = 26
         Top = 0
         Width = 74
-        Caption = '命令 5'
+        Caption = 'Command 5'
       end
       object BarBtn6: TTyButton
         Left = 0
         Height = 26
         Top = 0
         Width = 74
-        Caption = '命令 6'
+        Caption = 'Command 6'
       end
       object BarBtn7: TTyButton
         Left = 0
         Height = 26
         Top = 0
         Width = 74
-        Caption = '命令 7'
+        Caption = 'Command 7'
       end
       object BarBtn8: TTyButton
         Left = 0
         Height = 26
         Top = 0
         Width = 74
-        Caption = '命令 8'
+        Caption = 'Command 8'
       end
       object BarBtn9: TTyButton
         Left = 0
         Height = 26
         Top = 0
         Width = 74
-        Caption = '命令 9'
+        Caption = 'Command 9'
       end
       object BarBtn10: TTyButton
         Left = 0
         Height = 26
         Top = 0
         Width = 74
-        Caption = '命令 10'
+        Caption = 'Command 10'
       end
       object BarBtn11: TTyButton
         Left = 0
         Height = 26
         Top = 0
         Width = 74
-        Caption = '命令 11'
+        Caption = 'Command 11'
       end
       object BarBtn12: TTyButton
         Left = 0
         Height = 26
         Top = 0
         Width = 74
-        Caption = '命令 12'
+        Caption = 'Command 12'
       end
     end
     object Rebar: TTyCoolBar
@@ -565,14 +565,14 @@ object MainForm: TMainForm
         Height = 26
         Top = 0
         Width = 220
-        Caption = '带 1(拖抓手改宽)'
+        Caption = 'Band 1 (drag the grip to resize)'
       end
       object Band2: TTyPanel
         Left = 0
         Height = 26
         Top = 0
         Width = 260
-        Caption = '带 2(拖抓手改宽)'
+        Caption = 'Band 2 (drag the grip to resize)'
       end
     end
     object LblGrip: TTyLabel
@@ -580,7 +580,7 @@ object MainForm: TMainForm
       Height = 18
       Top = 660
       Width = 540
-      Caption = '右下角 → 尺寸手柄 TTySizeBox(拖动改变窗口大小)'
+      Caption = 'Bottom-right → size grip TTySizeBox (drag to resize the window)'
     end
     object Grip: TTySizeBox
       Left = 1180

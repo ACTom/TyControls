@@ -1,0 +1,41 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols-statusbar_example 2.99\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+# --- .lfm captions/text/hints (auto-generated, msgid=English source) ---
+
+#: tmainform.caption
+msgid "TTyStatusBar example"
+msgstr "TTyStatusBar 示例"
+
+#: tmainform.darkswitch.caption
+msgid "Dark"
+msgstr "暗色"
+
+#: tmainform.hintlbl.caption
+msgid "Bottom status bar: multiple panels + size grip. Click a button to update the panel text."
+msgstr "底部状态栏:多面板 + 尺寸手柄。点击按钮更新面板文本。"
+
+#: tmainform.btnupdate.caption
+msgid "Update the status panel"
+msgstr "更新状态面板"
+
+#: tmainform.btnsimple.caption
+msgid "Toggle SimplePanel mode"
+msgstr "切换 SimplePanel 模式"
+
+#: tmainform.statusbar.text
+msgid "Ready"
+msgstr "就绪"
+
+#: tmainform.surface.text
+msgid "Clicks: 0"
+msgstr "点击:0"
+

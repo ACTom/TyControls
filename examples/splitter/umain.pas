@@ -78,14 +78,14 @@ end;
 
 procedure TMainForm.HandleMoved(Sender: TObject);
 begin
-  LblStatus.Caption := Format('拖动完成 · 左栏宽 %d px · 上区高 %d px',
+  LblStatus.Caption := Format('Drag complete · left column %d px · top band %d px',
     [LeftPanel.Width, TopPanel.Height]);
 end;
 
 procedure TMainForm.HandleCanResize(Sender: TObject; var ANewSize: Integer; var AAccept: Boolean);
 begin
   // OnCanResize: veto or clamp the new size here. This just does a live preview.
-  LblStatus.Caption := Format('拖动中 · 目标尺寸 %d px', [ANewSize]);
+  LblStatus.Caption := Format('Dragging · target size %d px', [ANewSize]);
 end;
 
 end.

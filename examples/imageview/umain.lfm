@@ -3,7 +3,7 @@ object MainForm: TMainForm
   Height = 640
   Top = 90
   Width = 900
-  Caption = 'TyControls — 图片查看器(TTyImageView)'
+  Caption = 'TyControls — image viewer (TTyImageView)'
   ClientHeight = 640
   ClientWidth = 900
   Font.Height = -12
@@ -31,7 +31,7 @@ object MainForm: TMainForm
         Top = 5
         Width = 74
         Anchors = [akTop, akRight]
-        Caption = '暗色'
+        Caption = 'Dark'
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
@@ -48,7 +48,7 @@ object MainForm: TMainForm
       Height = 30
       Top = 46
       Width = 100
-      Caption = '打开图片'
+      Caption = 'Open picture'
       OnClick = BtnOpenClick
     end
     object BtnZoomOut: TTyButton
@@ -72,7 +72,7 @@ object MainForm: TMainForm
       Height = 30
       Top = 46
       Width = 72
-      Caption = '适配'
+      Caption = 'Fit'
       OnClick = BtnFitClick
     end
     object BtnActual: TTyButton
@@ -88,7 +88,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 51
       Width = 120
-      Caption = '缩放:—'
+      Caption = 'Zoom: —'
     end
     object Div1: TTyDivider
       Left = 16
@@ -96,7 +96,7 @@ object MainForm: TMainForm
       Top = 84
       Width = 868
       Anchors = [akTop, akLeft, akRight]
-      Caption = '非破坏性滤镜(源图不变)'
+      Caption = 'Non-destructive filter (source image unchanged)'
       Alignment = taLeftJustify
     end
     object ChkGray: TTyCheckBox
@@ -104,7 +104,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 112
       Width = 80
-      Caption = '灰度'
+      Caption = 'Grayscale'
       OnChange = ChkGrayChange
     end
     object ChkSharpen: TTyCheckBox
@@ -112,7 +112,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 112
       Width = 80
-      Caption = '锐化'
+      Caption = 'Sharpen'
       OnChange = ChkSharpenChange
     end
     object ChkInvert: TTyCheckBox
@@ -120,7 +120,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 112
       Width = 80
-      Caption = '反相'
+      Caption = 'Invert'
       OnChange = ChkInvertChange
     end
     object ChkBlur: TTyCheckBox
@@ -128,7 +128,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 112
       Width = 80
-      Caption = '模糊'
+      Caption = 'Blur'
       OnChange = ChkBlurChange
     end
     object View: TTyImageView

@@ -1,0 +1,45 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols-progressbar_example 2.99\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+# --- .lfm captions/text/hints (auto-generated, msgid=English source) ---
+
+#: tmainform.caption
+msgid "TTyProgressBar example"
+msgstr "TTyProgressBar 示例"
+
+#: tmainform.darkswitch.caption
+msgid "Dark"
+msgstr "暗色"
+
+#: tmainform.lbldesc.caption
+msgid "Progress bar: Min=0  Max=100, Position driven by button / timer"
+msgstr "进度条：Min=0  Max=100，按钮 / 定时器驱动 Position"
+
+#: tmainform.lblreadout.caption
+msgid "Progress: 0 / 100  (0%)"
+msgstr "进度：0 / 100  (0%)"
+
+#: tmainform.animchk.caption
+msgid "Enable fill animation (AnimationsEnabled)"
+msgstr "启用填充动画 (AnimationsEnabled)"
+
+#: tmainform.btnstart.caption
+msgid "Start / Pause"
+msgstr "开始 / 暂停"
+
+#: tmainform.btnstep.caption
+msgid "Forward +10"
+msgstr "前进 +10"
+
+#: tmainform.btnreset.caption
+msgid "Reset to zero"
+msgstr "归零"
+

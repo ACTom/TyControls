@@ -393,15 +393,15 @@ uses
 
 const
   cRegions: array[0..5] of string =
-    ('华东', '华北', '华南', '西南', '东北', '西北');
+    ('East China', 'North China', 'South China', 'Southwest', 'Northeast', 'Northwest');
   cProducts: array[0..4] of string =
-    ('云主机', '对象存储', '数据库', 'CDN', '负载均衡');
+    ('Cloud host', 'Object storage', 'Database', 'CDN', 'Load balancing');
   cMarkColors: array[0..3] of string =
     ('#3B82F6', '#22C55E', '#F59E0B', '#EF4444');
   cNotes: array[0..3] of string =
-    ('客户要求分批发货,第一批本周内到仓,余下的等下月排产;联系人已换成王工。',
-     '合同附件缺少盖章页,已退回补件。',
-     '这条走加急通道,物流费由我方承担;需要在发票备注里注明加急原因。',
+    ('The customer requested split shipment; the first batch arrives this week, the rest scheduled for next month; the contact has changed to Engineer Wang.',
+     'The contract attachment is missing the stamped page and has been returned for completion.',
+     'This one goes express, freight on us; note the express reason in the invoice remarks.',
      '');
 
   { 列索引 —— 用常量而不是散落的魔数,否则加一列就要满文件找 3、4、7。 }
@@ -466,23 +466,23 @@ procedure TMainForm.BuildOrderColumns(AGrid: TTyStringGrid; AWithNote: Boolean;
 begin
   AGrid.Header.Columns.BeginUpdate;
   try
-    AddCol('订单号', 108, taLeftJustify);
-    AddCol('大区',    70, taLeftJustify);
-    AddCol('产品',   100, taLeftJustify);
+    AddCol('Order No.', 108, taLeftJustify);
+    AddCol('Region',    70, taLeftJustify);
+    AddCol('Product',   100, taLeftJustify);
     { 数值列必须按**数值**排,否则会排出 '100' < '9'。这是列的属性,不是全表开关。 }
-    AddCol('数量',    70, taRightJustify).SortKind := gskNumber;
-    AddCol('金额',    96, taRightJustify).SortKind := gskNumber;
-    AddCol('日期',    96, taLeftJustify).SortKind := gskDate;
-    AddCol('已结算',  70, taCenter);
-    AddCol('评分',    86, taLeftJustify);
-    AddCol('标记色',  76, taCenter);
-    if AWithNote then AddCol('备注', 300, taLeftJustify);
+    AddCol('Quantity',    70, taRightJustify).SortKind := gskNumber;
+    AddCol('Amount',    96, taRightJustify).SortKind := gskNumber;
+    AddCol('Date',    96, taLeftJustify).SortKind := gskDate;
+    AddCol('Settled',  70, taCenter);
+    AddCol('Rating',    86, taLeftJustify);
+    AddCol('Mark colour',  76, taCenter);
+    if AWithNote then AddCol('Notes', 300, taLeftJustify);
     if AWithEditorCols then
     begin
-      AddCol('折扣%', 70, taRightJustify).SortKind := gskNumber;
-      AddCol('进度%', 96, taLeftJustify).SortKind := gskNumber;
-      AddCol('交期',   80, taCenter);
-      AddCol('口令',   90, taLeftJustify);
+      AddCol('Discount%', 70, taRightJustify).SortKind := gskNumber;
+      AddCol('Progress%', 96, taLeftJustify).SortKind := gskNumber;
+      AddCol('Lead time',   80, taCenter);
+      AddCol('Passcode',   90, taLeftJustify);
     end;
   finally
     AGrid.Header.Columns.EndUpdate;
@@ -561,7 +561,7 @@ begin
   SetupView;
   SetupIo;
 
-  Status('每一页演示一组特性 —— 从左到右依次看下来即可');
+  Status('Each page demonstrates one feature set — read them left to right');
 end;
 
 function TMainForm.ActiveGrid: TTyStringGrid;
@@ -592,12 +592,12 @@ var
 begin
   G := ActiveGrid;
   if G.SelectedCellCount > 1 then
-    Status(Format('当前 (列 %d, 行 %d)  ·  共 %d 行 / 显示 %d 行 / 已存 %d 格'
-      + '  ·  已选 %d 格,合计 %.2f,平均 %.2f',
+    Status(Format('Current (col %d, row %d)  ·  %d rows / %d shown / %d cells stored'
+      + '  ·  %d cells selected, sum %.2f, average %.2f',
       [G.Col, G.Row, G.RowCount, G.DisplayRowCount, G.StoredCellCount,
        G.SelectedCellCount, G.SelectionSum, G.SelectionAvg]))
   else
-    Status(Format('当前 (列 %d, 行 %d) = %s  ·  共 %d 行 / 显示 %d 行 / 已存 %d 格',
+    Status(Format('Current (col %d, row %d) = %s  ·  %d rows / %d shown / %d cells stored',
       [G.Col, G.Row, G.Cells[G.Col, G.Row], G.RowCount, G.DisplayRowCount,
        G.StoredCellCount]));
 end;
@@ -622,14 +622,14 @@ procedure TMainForm.BtnRows1WClick(Sender: TObject);
 begin
   GridBasic.OnGetCellText := nil;   { 摘掉虚拟数据源 }
   FillOrders(GridBasic, 10000, False);
-  Status('1 万行 —— 只绘制可视窗口内的几十行,滚动一下试试');
+  Status('10k rows — only the few dozen rows in the visible window are drawn; try scrolling');
 end;
 
 procedure TMainForm.BtnRows10WClick(Sender: TObject);
 begin
   GridBasic.OnGetCellText := nil;   { 摘掉虚拟数据源 }
   FillOrders(GridBasic, 100000, False);
-  Status('10 万行 —— 这次是**真写满**了 90 万格,对比上面那个百万行看"已存格数"');
+  Status('100k rows — this time all 900k cells are **really filled**; compare "stored cells" against the million-row page above');
 end;
 
 { 一百万行:**一格都不写**,内容由 OnGetCellText 按需生成。
@@ -668,7 +668,7 @@ begin
   GridBasic.OnGetCellText := @VirtualCellText;
   GridBasic.RowCount := 1000000;
   GridBasic.MoveCursor(0, 0);
-  Status('100 万行 —— 内容由回调按需生成,"已存格数"仍是 0:这就是虚拟化 + 稀疏存储');
+  Status('1M rows — content is generated on demand by a callback, "stored cells" is still 0: that is virtualization + sparse storage');
 end;
 
 procedure TMainForm.BtnRowsResetClick(Sender: TObject);
@@ -677,7 +677,7 @@ begin
   GridBasic.ClearCells;
   FillOrders(GridBasic, 200, False);
   GridBasic.MoveCursor(0, 0);
-  Status('已恢复 200 行');
+  Status('Restored 200 rows');
 end;
 
 { 跳转:MoveCursor 之后显式 ScrollIntoView。横向滚动会**跳过冻结列**。 }
@@ -687,7 +687,7 @@ begin
   if GridBasic.RowCount < 5001 then FillOrders(GridBasic, 10000, False);
   GridBasic.MoveCursor(2, 5000);
   GridBasic.ScrollIntoView(2, 5000);
-  Status('已跳到 (列 2, 行 5000)');
+  Status('Jumped to (col 2, row 5000)');
 end;
 
 procedure TMainForm.ChkBasicChange(Sender: TObject);
@@ -797,31 +797,31 @@ var
   c: TTyColor;
 begin
   c := TyRGB(255, 236, 179);
-  if TySelectColor('给选中的格选个底色', c) then
-    Status(Format('%d 格已上色 —— 这是**落盘**的颜色,排序后跟着数据行走',
+  if TySelectColor('Pick a background colour for the selected cells', c) then
+    Status(Format('%d cells coloured — this colour is **persisted** and follows the data row when sorted',
       [ColorSelectedCells(c)]));
 end;
 
 procedure TMainForm.BtnCellUncolorClick(Sender: TObject);
 begin
-  Status(Format('已清除 %d 格的底色', [ColorSelectedCells(0)]));
+  Status(Format('Cleared the background of %d cell(s)', [ColorSelectedCells(0)]));
 end;
 
 procedure TMainForm.BtnRowColorClick(Sender: TObject);
 begin
   GridLook.SetRowColor(GridLook.Row, TyRGB(209, 250, 229));
-  Status(Format('第 %d 行已整行标色', [GridLook.Row]));
+  Status(Format('Row %d whole-row coloured', [GridLook.Row]));
 end;
 
 procedure TMainForm.BtnAutoFitRowsClick(Sender: TObject);
 begin
   if not GridLook.WordWrap then
   begin
-    Status('先勾上「换行」再点自动行高 —— 不换行的话每行都只有一行字,没什么可撑的');
+    Status('Tick "word wrap" first, then click auto row height — without wrapping every row has a single line and there is nothing to expand');
     Exit;
   end;
   GridLook.AutoFitRows;
-  Status('行高已按换行后的实际高度自适应(受 MinRowHeight / MaxRowHeight 约束)');
+  Status('Row height auto-fitted to the wrapped content (bounded by MinRowHeight / MaxRowHeight)');
 end;
 
 procedure TMainForm.BtnResetRowsClick(Sender: TObject);
@@ -838,7 +838,7 @@ begin
   finally
     GridLook.EndUpdate;
   end;
-  Status('行高已恢复默认');
+  Status('Row height restored to default');
 end;
 
 { 条件着色:负数金额标红加粗、空日期那行标黄。
@@ -909,13 +909,13 @@ end;
 procedure TMainForm.BtnSortQtyClick(Sender: TObject);
 begin
   GridSort.SortByColumn(cQty, sdAscending);
-  Status('按「数量」升序 —— 列级 SortKind = gskNumber,所以 9 排在 100 前面');
+  Status('Sort "Qty" ascending — column-level SortKind = gskNumber, so 9 comes before 100');
 end;
 
 procedure TMainForm.BtnSortQtyDClick(Sender: TObject);
 begin
   GridSort.SortByColumn(cQty, sdDescending);
-  Status('按「数量」降序');
+  Status('Sort "Qty" descending');
 end;
 
 { 追加次级排序列:数量相同的行,再按大区排。表头会出现 1 / 2 的顺位徽标。 }
@@ -923,14 +923,14 @@ procedure TMainForm.BtnSortAddClick(Sender: TObject);
 begin
   if GridSort.SortColumnCount = 0 then GridSort.SortByColumn(cQty, sdAscending);
   GridSort.AddSortColumn(cRegion, sdAscending);
-  Status(Format('已追加次级排序列 —— 现在有 %d 个排序键,表头显示顺位徽标',
+  Status(Format('Added a secondary sort column — there are now %d sort keys, the header shows order badges',
     [GridSort.SortColumnCount]));
 end;
 
 procedure TMainForm.BtnSortClearClick(Sender: TObject);
 begin
   GridSort.ClearSortColumns;
-  Status('已取消排序 —— 行序弹回原始导入顺序');
+  Status('Sort cleared — the row order jumps back to the original import order');
 end;
 
 procedure TMainForm.ChkSortChange(Sender: TObject);
@@ -941,7 +941,7 @@ begin
   { 重排一次让改动立刻可见。 }
   if GridSort.SortColumn >= 0 then
     GridSort.SortByColumn(GridSort.SortColumn, sdAscending);
-  Status('空值位置与升降序**无关** —— 翻向排序,空日期那几行仍停在同一端');
+  Status('The null position is **independent** of ascending/descending — flip the sort and the empty-date rows stay at the same end');
 end;
 
 procedure TMainForm.CbFilterChange(Sender: TObject);
@@ -961,7 +961,7 @@ begin
   end;
   GridSort.ClearFilters;
   GridSort.SetColumnFilterEx(CbFilterCol.ItemIndex, op, EdFilterVal.Text);
-  Status(Format('筛选后 %d 行 / 共 %d 行 —— 该列的漏斗已点亮',
+  Status(Format('%d rows after filtering / %d total — the column''s funnel is lit',
     [GridSort.FilteredRowCount, GridSort.RowCount]));
 end;
 
@@ -969,7 +969,7 @@ procedure TMainForm.BtnFilterClearClick(Sender: TObject);
 begin
   GridSort.ClearFilters;
   EdFilterVal.Text := '';
-  Status('已清除筛选 —— 漏斗灭掉');
+  Status('Filter cleared — the funnel goes dark');
 end;
 
 procedure TMainForm.BtnGroupClick(Sender: TObject);
@@ -977,14 +977,14 @@ begin
   if GridSort.GroupColumn >= 0 then
   begin
     GridSort.UngroupRows;
-    BtnGroup.Caption := '按大区分组';
-    Status('已取消分组');
+    BtnGroup.Caption := 'Group by region';
+    Status('Ungrouped');
   end
   else
   begin
     GridSort.GroupByColumn(cRegion);
-    BtnGroup.Caption := '取消分组';
-    Status('已按大区分组 —— 点分组行可折叠;注意排序列没有被分组吃掉');
+    BtnGroup.Caption := 'Ungroup';
+    Status('Grouped by region — click a group row to collapse; note the sort column was not swallowed by grouping');
   end;
 end;
 
@@ -995,15 +995,15 @@ begin
   if Length(GridSort.GroupColumns) > 1 then
   begin
     GridSort.UngroupRows;
-    BtnGroup2.Caption := '按大区 + 产品分组';
-    Status('已取消分组');
+    BtnGroup2.Caption := 'Group by region + product';
+    Status('Ungrouped');
   end
   else
   begin
     GridSort.GroupByColumns([cRegion, cProduct]);
-    BtnGroup2.Caption := '取消多级分组';
-    Status('两级分组 —— 小计按层级各算各的;折叠状态按**路径**记,' +
-      '所以不同大区下的同名产品互不影响');
+    BtnGroup2.Caption := 'Remove multi-level grouping';
+    Status('Two-level grouping — subtotals are computed per level; collapse state is tracked by **path**,' +
+      'so the same-named product under different regions does not interfere');
   end;
 end;
 
@@ -1015,13 +1015,13 @@ begin
   if ChkPhysicalSort.Checked then
   begin
     GridSort.SortMode := gsmData;
-    Status('排序会真的搬数据(可撤销)—— 排完之后合并和拖行不再被拒绝;' +
-      '一挂上筛选或分组会自动退回普通排序');
+    Status('Sorting really moves the data (undoable) — after sorting, merge and row-drag are no longer refused;' +
+      'attaching a filter or grouping falls back to ordinary sort automatically');
   end
   else
   begin
     GridSort.SortMode := gsmDisplay;
-    Status('排序只换显示顺序,数据不动(默认)');
+    Status('Sort only changes the display order, the data does not move (default)');
   end;
 end;
 
@@ -1032,22 +1032,22 @@ end;
 procedure TMainForm.BtnSaveLayoutClick(Sender: TObject);
 begin
   FSavedLayout := GridBasic.SaveLayoutToString;
-  Status('版式已记下 —— 现在随便拖列宽、换列序、改冻结数,再点「还原版式」');
+  Status('Layout recorded — now drag column widths, reorder columns, change the freeze count, then click "Restore layout"');
 end;
 
 procedure TMainForm.BtnLoadLayoutClick(Sender: TObject);
 begin
   if FSavedLayout = '' then
   begin
-    Status('还没记过版式 —— 先点「记住版式」');
+    Status('No layout recorded yet — click "Remember layout" first');
     Exit;
   end;
   { 读回来是**全有或全无**:整串先校验完才动控件。
     半套版式(列宽还原了、列序没还原)比完全不还原更难排查。 }
   if GridBasic.LoadLayoutFromString(FSavedLayout) then
-    Status('版式已还原(列宽 / 列序 / 可见性 / 排序键 / 冻结数)')
+    Status('Layout restored (column width / order / visibility / sort keys / freeze count)')
   else
-    Status('这串版式不认识 —— 什么都没动');
+    Status('This layout string is unrecognized — nothing changed');
 end;
 
 { 拖行之前问一句。返回 False 就否决这一次移动。 }
@@ -1056,7 +1056,7 @@ procedure TMainForm.HandleRowMoveVeto(Sender: TObject; AFrom, ATo: Integer;
 begin
   AAllow := ATo > 0;
   if not AAllow then
-    Status(Format('OnRowMove 否决了:不许把第 %d 行拖到首行', [AFrom]));
+    Status(Format('OnRowMove vetoed: row %d may not be dragged to the first row', [AFrom]));
 end;
 
 { 编辑器建好之后、交回调用方之前触发,拿到的是**真正那个控件**。
@@ -1067,7 +1067,7 @@ begin
   if AEditor is TTyEdit then
   begin
     TTyEdit(AEditor).Font.Color := clRed;
-    Status(Format('OnGetEditorProp:把 (%d, %d) 的编辑器染红了', [ACol, ARow]));
+    Status(Format('OnGetEditorProp: tinted the editor at (%d, %d) red', [ACol, ARow]));
   end;
 end;
 
@@ -1078,10 +1078,10 @@ procedure TMainForm.ChkFilterRowChange(Sender: TObject);
 begin
   GridSort.ShowFilterRow := ChkFilterRow.Checked;
   if ChkFilterRow.Checked then
-    Status('筛选行开了 —— 在「数量」列打 >20,或在「大区」列打 华东;华北 试试' +
-      '(; 是或,a..b 是区间)')
+    Status('Filter row on — try typing >20 in the "Qty" column, or East China;North China in the "Region" column' +
+      '(; means OR, a..b means a range)')
   else
-    Status('筛选行关了');
+    Status('Filter row off');
 end;
 
 { 树形单元格:**控件不持有树** —— 层级和"有没有孩子"由这两个回调回答。
@@ -1105,28 +1105,28 @@ begin
     GridSort.OnGetNodeLevel := @TreeNodeLevel;
     GridSort.OnGetHasChildren := @TreeHasChildren;
     GridSort.TreeColumn := cOrderNo;
-    Status('树形列开了 —— 点第一列的三角折叠/展开;' +
-      '层级由宿主给,控件不持有树');
+    Status('Tree column on — click the triangle in the first column to collapse/expand;' +
+      'The hierarchy is supplied by the host; the control does not own the tree');
   end
   else
   begin
     GridSort.TreeColumn := -1;
     GridSort.OnGetNodeLevel := nil;
     GridSort.OnGetHasChildren := nil;
-    Status('树形列关了');
+    Status('Tree column off');
   end;
 end;
 
 procedure TMainForm.BtnExpandAllClick(Sender: TObject);
 begin
   GridSort.ExpandAllGroups;
-  Status('全部展开');
+  Status('Expand all');
 end;
 
 procedure TMainForm.BtnCollapseAllClick(Sender: TObject);
 begin
   GridSort.CollapseAllGroups;
-  Status('全部折叠 —— 折叠状态按**分组值**记账,重排后仍然对得上');
+  Status('Collapse all — collapse state is kept by **group value**, so it still matches after reordering');
 end;
 
 { ============ 页 4:编辑与单元格类型 ============ }
@@ -1144,7 +1144,7 @@ begin
 
   c := TTyGridColumn(GridEdit.Header.Columns.Items[cRegion]);
   c.EditorKind := gekPickList;              { 下拉,候选项也挂在列上 }
-  c.PickList.CommaText := '华东,华北,华南,西南,东北,西北';
+  c.PickList.CommaText := 'East China, North China, South China, Southwest, Northeast, Northwest';
 
   c := TTyGridColumn(GridEdit.Header.Columns.Items[cQty]);
   c.EditorKind := gekSpin;                  { 数值微调:带上下按钮 }
@@ -1234,14 +1234,14 @@ var
   v: string;
 begin
   v := AText;
-  AAccept := TyInputQuery('选择产品',
-    Format('第 %d 行的产品(可用:%s)', [ARow + 1, string.Join('/', cProducts)]), v);
+  AAccept := TyInputQuery('Choose product',
+    Format('Product for row %d (available: %s)', [ARow + 1, string.Join('/', cProducts)]), v);
   if AAccept then AText := v;
 end;
 
 procedure TMainForm.EditCellButtonClick(Sender: TObject; ACol, ARow: Integer);
 begin
-  Status(Format('按钮格被点击:(列 %d, 行 %d) —— 按下后拖出按钮再松手是不算数的',
+  Status(Format('Button cell clicked: (col %d, row %d) — pressing then dragging off the button before releasing does not count',
     [ACol, ARow]));
 end;
 
@@ -1262,14 +1262,14 @@ end;
 procedure TMainForm.BtnCellROClick(Sender: TObject);
 begin
   GridEdit.CellReadOnly[GridEdit.Col, GridEdit.Row] := True;
-  Status(Format('(列 %d, 行 %d) 已设为只读 —— 比"整列只读"更细一层',
+  Status(Format('(col %d, row %d) set read-only — one level finer than "whole column read-only"',
     [GridEdit.Col, GridEdit.Row]));
 end;
 
 procedure TMainForm.BtnCellRWClick(Sender: TObject);
 begin
   GridEdit.CellReadOnly[GridEdit.Col, GridEdit.Row] := False;
-  Status('本格已恢复可编辑');
+  Status('This cell is editable again');
 end;
 
 { ============ 页 5:选择 · 数据 · 剪贴板 ============ }
@@ -1287,7 +1287,7 @@ begin
     2: GridData.SelectionMode := gsmColumn;
   else GridData.SelectionMode := gsmCell;
   end;
-  Status('整行/整列模式下,焦点格仍有自己的底色 —— 看得出光标停在哪一格');
+  Status('In whole-row/whole-column mode the focused cell still has its own background — you can see which cell the cursor is on');
 end;
 
 procedure TMainForm.BtnSelAllClick(Sender: TObject);
@@ -1307,34 +1307,34 @@ begin
     两个数据行下标之差在任何空间里都不是"几行"(排过序的表上这么算,
     会吞掉几十行)。 }
   if GridData.MergeSelection then
-    Status('已合并 —— 注意合并区**内部没有格线穿过**,外沿仍然有')
+    Status('Merged — note there are **no grid lines running through the inside** of the merged area, the outer edge still has them')
   else
-    Status('没合并:要么没拖选出一块区域,'
-      + '要么这几行在数据里并不相邻(排过序/藏过行)—— 那样合成一块,换个排序就散了');
+    Status('Not merged: either you did not drag out a region,'
+      + 'or these rows are not actually adjacent in the data (sorted / rows hidden) — merged into one block, they scatter on a different sort');
 end;
 
 procedure TMainForm.BtnUnmergeClick(Sender: TObject);
 begin
   GridData.UnmergeCells(GridData.Col, GridData.Row);
-  Status('已取消合并(格上原有的底色不会被连坐清掉)');
+  Status('Unmerged (an existing background colour on the cells is not cleared by association)');
 end;
 
 procedure TMainForm.BtnCopyClick(Sender: TObject);
 begin
   GridData.CopySelectionToClipboard;
-  Status('已复制 —— 导出走**显示序**,排序筛选后复制的就是屏幕上那块');
+  Status('Copied — export follows **display order**, so what you copy after sorting/filtering is that block on screen');
 end;
 
 procedure TMainForm.BtnCutClick(Sender: TObject);
 begin
   GridData.CutToClipboard;
-  Status('已剪切(只读格的内容不会被清掉)');
+  Status('Cut (the content of read-only cells is not removed)');
 end;
 
 procedure TMainForm.BtnPasteClick(Sender: TObject);
 begin
   GridData.PasteFromClipboard;
-  Status(Format('已粘贴 —— 现在 %d 行 x %d 列',
+  Status(Format('Pasted — now %d rows x %d columns',
     [GridData.RowCount, GridData.Header.Columns.Count]));
 end;
 
@@ -1342,21 +1342,21 @@ procedure TMainForm.ChkDataChange(Sender: TObject);
 begin
   GridData.AutoGrowOnPaste := ChkAutoGrow.Checked;
   if ChkAutoGrow.Checked then
-    Status('粘贴时表格会自动长大到装得下')
+    Status('On paste the table grows to fit')
   else
-    Status('已关掉自动扩表 —— 超出的行会被丢掉(这正是从前的静默丢数据行为)');
+    Status('Auto table growth is off — rows beyond the range are dropped (this is the old silent data-loss behaviour)');
 end;
 
 procedure TMainForm.BtnInsRowClick(Sender: TObject);
 begin
   GridData.InsertRow(GridData.Row);
-  Status('已在当前行上方插入一行');
+  Status('Inserted a row above the current row');
 end;
 
 procedure TMainForm.BtnDelRowClick(Sender: TObject);
 begin
   GridData.DeleteRow(GridData.Row);
-  Status('已删除当前行');
+  Status('Current row deleted');
 end;
 
 { 上移/下移会把底色、行高、合并跨度一起搬走,不是只换文字。
@@ -1381,14 +1381,14 @@ end;
 procedure TMainForm.BtnHideRowClick(Sender: TObject);
 begin
   GridData.HideRow(GridData.Row);
-  Status(Format('已隐藏第 %d 行 —— 共隐藏 %d 行。清筛选不会把它放出来',
+  Status(Format('Hid row %d — %d row(s) hidden in total. Clearing the filter will not bring it back',
     [GridData.Row, GridData.NumHiddenRows]));
 end;
 
 procedure TMainForm.BtnUnhideAllClick(Sender: TObject);
 begin
   GridData.UnHideAllRows;
-  Status('已全部取消隐藏');
+  Status('All unhidden');
 end;
 
 { 撤销覆盖的不只是格里的字。给某行涂个底色、拖高它、再上移一格,
@@ -1400,7 +1400,7 @@ end;
 procedure TMainForm.BtnInsColClick(Sender: TObject);
 begin
   GridData.InsertColumn(GridData.Col);
-  Status(Format('在第 %d 列前插了一列 —— Ctrl+Z 可以撤销', [GridData.Col]));
+  Status(Format('Inserted a column before column %d — Ctrl+Z can undo it', [GridData.Col]));
 end;
 
 procedure TMainForm.BtnDelColClick(Sender: TObject);
@@ -1409,12 +1409,12 @@ var
 begin
   if GridData.Header.Columns.Count <= 1 then
   begin
-    Status('只剩一列了,不删');
+    Status('Only one column left, will not delete');
     Exit;
   end;
   c := TTyColumn(GridData.Header.Columns.Items[GridData.Col]);
-  Status(Format('删掉了「%s」(宽 %d)—— 按 Ctrl+Z,它连同宽度/标题/' +
-    '编辑器种类/筛选一起回来', [c.Text, c.Width]));
+  Status(Format('Deleted "%s" (width %d) — press Ctrl+Z and it comes back together with its width / title /' +
+    'Editor kind / filter come back together', [c.Text, c.Width]));
   GridData.DeleteColumn(GridData.Col);
 end;
 
@@ -1422,33 +1422,33 @@ procedure TMainForm.BtnMoveColClick(Sender: TObject);
 begin
   if GridData.Col >= GridData.Header.Columns.Count - 1 then
   begin
-    Status('已经是最后一列了');
+    Status('Already the last column');
     Exit;
   end;
   GridData.MoveColumn(GridData.Col, GridData.Col + 1);
-  Status('本列与右邻换了位置 —— 换位也能撤销');
+  Status('This column swapped places with its right neighbour — swapping can be undone too');
 end;
 
 procedure TMainForm.BtnUndoClick(Sender: TObject);
 begin
   if not GridData.CanUndo then
   begin
-    Status('没有可撤销的操作了');
+    Status('Nothing left to undo');
     Exit;
   end;
   GridData.Undo;
-  Status('已撤销 —— 底色、行高、合并跨度会跟着一起回来');
+  Status('Undone — background colour, row height and merge span come back with it');
 end;
 
 procedure TMainForm.BtnRedoClick(Sender: TObject);
 begin
   if not GridData.CanRedo then
   begin
-    Status('没有可重做的操作了');
+    Status('Nothing left to redo');
     Exit;
   end;
   GridData.Redo;
-  Status('已重做');
+  Status('Redone');
 end;
 
 procedure TMainForm.BtnExportCsvClick(Sender: TObject);
@@ -1457,7 +1457,7 @@ var
 begin
   fn := ExtractFilePath(ParamStr(0)) + 'grid-export.csv';
   GridData.SaveToCSVFile(fn);
-  Status(Format('已导出 %d 行到 %s(走显示序:筛掉的行不出现)',
+  Status(Format('Exported %d rows to %s (display order: filtered-out rows do not appear)',
     [GridData.DisplayRowCount, fn]));
 end;
 
@@ -1467,7 +1467,7 @@ var
 begin
   fn := ExtractFilePath(ParamStr(0)) + 'grid-export.html';
   GridData.SaveToHTMLFile(fn);
-  Status('已导出 HTML 到 ' + fn);
+  Status('Exported HTML to ' + fn);
 end;
 
 
@@ -1564,9 +1564,9 @@ procedure TMainForm.EvGetCellHint(Sender: TObject; ACol, ARow: Integer;
   var AHint: string);
 begin
   case ACol of
-    cAmount: AHint := Format('金额 %s(含税)', [GridEvents.Cells[cAmount, ARow]]);
-    cDate:   if GridEvents.Cells[cDate, ARow] = '' then AHint := '这一单还没排期'
-             else AHint := '交货日期:' + GridEvents.Cells[cDate, ARow];
+    cAmount: AHint := Format('Amount %s (tax incl.)', [GridEvents.Cells[cAmount, ARow]]);
+    cDate:   if GridEvents.Cells[cDate, ARow] = '' then AHint := 'This order is not scheduled yet'
+             else AHint := 'Delivery date:' + GridEvents.Cells[cDate, ARow];
   else       AHint := '';      { 空串 = 这一列不弹提示 }
   end;
 end;
@@ -1583,13 +1583,13 @@ end;
   先左键选中某格,再右键别处 —— 选中框不会跑。 }
 procedure TMainForm.EvRightClickCell(Sender: TObject; ACol, ARow: Integer);
 begin
-  Status(Format('右键点在 (列 %d, 行 %d) —— 注意左边的选中框没有跟着跑',
+  Status(Format('Right-clicked at (col %d, row %d) — note the selection box on the left did not follow',
     [ACol, ARow]));
 end;
 
 procedure TMainForm.EvHeaderClick(Sender: TObject; ACol: Integer);
 begin
-  Status(Format('表头点击:列 %d —— 事件先发,内建的排序照常进行(宿主搭车,不夺走默认行为)',
+  Status(Format('Header click: column %d — the event fires first, the built-in sort proceeds as usual (the host rides along, it does not take over the default)',
     [ACol]));
 end;
 
@@ -1597,7 +1597,7 @@ procedure TMainForm.EvHeaderRightClick(Sender: TObject; ACol: Integer);
 begin
   { 表头右键的典型用途:自适应列宽 / 隐藏列 / 清除排序。这里演示自适应。 }
   GridEvents.AutoFitColumn(ACol);
-  Status(Format('表头右键:列 %d 已按内容自适应宽度', [ACol]));
+  Status(Format('Header right-click: column %d auto-fitted to its content width', [ACol]));
 end;
 
 { 拖动过程中每一帧都发 Sizing(可改写尺寸、也可否决),松手才发一次 EndSize。
@@ -1611,8 +1611,8 @@ end;
 
 procedure TMainForm.EvEndColumnSize(Sender: TObject; AIndex, ANewSize: Integer);
 begin
-  Status(Format('列 %d 宽度定为 %d —— 拖动中发了 %d 次 Sizing,松手只发这 1 次 EndSize'
-    + '(宿主拿它保存列宽偏好)', [AIndex, ANewSize, FSizingCount]));
+  Status(Format('Column %d width set to %d — dragging fired %d Sizing events, release fires this single EndSize'
+    + '(the host uses it to save column-width preferences)', [AIndex, ANewSize, FSizingCount]));
   FSizingCount := 0;
 end;
 
@@ -1625,7 +1625,7 @@ end;
 procedure TMainForm.EvEndRowSize(Sender: TObject; AIndex, ANewSize: Integer);
 begin
   { AIndex 是**数据行** —— 排序/筛选之后它仍然指向同一条记录。 }
-  Status(Format('数据行 %d 高度定为 %d(拖行高要在左侧行号槽里拖)',
+  Status(Format('Data row %d height set to %d (drag row height in the row-number gutter on the left)',
     [AIndex, ANewSize]));
   FSizingCount := 0;
 end;
@@ -1637,10 +1637,10 @@ begin
   if (AFromCol = 0) or (AToCol = 0) then
   begin
     AAllow := False;
-    Status('第 0 列被钉住了 —— 拖不动它,也没法把别的列拖到它前面');
+    Status('Column 0 is pinned — you cannot drag it, nor drag another column in front of it');
   end
   else
-    Status(Format('列换位:%d → %d', [AFromCol, AToCol]));
+    Status(Format('Column moved: %d → %d', [AFromCol, AToCol]));
 end;
 
 { 勾选框否决:点得中、光标会移过去,但勾不上 —— 与 OnCanClickCell 挡住整格不同。 }
@@ -1650,7 +1650,7 @@ begin
   if ARow mod 5 = 0 then
   begin
     AAllow := False;
-    Status(Format('第 %d 行已锁定,勾不动(但光标是能移过去的)', [ARow]));
+    Status(Format('Row %d is locked and cannot be checked (but the cursor can still move over it)', [ARow]));
   end;
 end;
 
@@ -1658,16 +1658,16 @@ end;
 procedure TMainForm.EvCheckBoxChange(Sender: TObject; ACol, ARow: Integer;
   AChecked: Boolean);
 begin
-  if AChecked then Status(Format('第 %d 行已勾选', [ARow]))
-  else Status(Format('第 %d 行已取消勾选', [ARow]));
+  if AChecked then Status(Format('Row %d checked', [ARow]))
+  else Status(Format('Row %d unchecked', [ARow]));
 end;
 
 { 复制前改写将要进剪贴板的文本。 }
 procedure TMainForm.EvClipboardCopy(Sender: TObject; var AText: string;
   var AAllow: Boolean);
 begin
-  AText := '// 来自 TTyStringGrid' + LineEnding + AText;
-  Status('复制的内容已被钩子加上一行注释 —— 粘到记事本里看看');
+  AText := '// from TTyStringGrid' + LineEnding + AText;
+  Status('The copied content had a comment line added by a hook — paste it into Notepad and look');
 end;
 
 { 逐格校验:数量列只收数字,非法的格直接跳过(不是整块放弃)。 }
@@ -1685,17 +1685,17 @@ procedure TMainForm.EvAfterPasteCell(Sender: TObject; ACol, ARow: Integer);
 begin
   Inc(FPasteCount);
   GridEvents.CellColors[ACol, ARow] := TyRGB(254, 240, 138);
-  Status(Format('本次粘贴写入 %d 格(被改的格已染色)', [FPasteCount]));
+  Status(Format('This paste wrote %d cell(s) (changed cells are tinted)', [FPasteCount]));
 end;
 
 { 从光标下一格起环绕查找,自动把命中处滚进视野;连按能不重不漏走遍全表。 }
 procedure TMainForm.BtnEvFindClick(Sender: TObject);
 begin
   if GridEvents.FindNext(EdEvFind.Text, False, False) then
-    Status(Format('找到 —— 光标已跳到 (列 %d, 行 %d) 并滚进视野',
+    Status(Format('Found — the cursor jumped to (col %d, row %d) and scrolled into view',
       [GridEvents.Col, GridEvents.Row]))
   else
-    Status('没有更多匹配');
+    Status('No more matches');
 end;
 
 procedure TMainForm.BtnEvReplaceClick(Sender: TObject);
@@ -1703,7 +1703,7 @@ var
   n: Integer;
 begin
   n := GridEvents.ReplaceCells(EdEvFind.Text, EdEvRepl.Text, True, False, False);
-  Status(Format('已替换 %d 处(只读格会被自动跳过)', [n]));
+  Status(Format('Replaced %d occurrence(s) (read-only cells are skipped automatically)', [n]));
 end;
 
 { 导入:第一行当表头自动建列、清空旧数据、并复位筛选与排序。
@@ -1711,13 +1711,13 @@ end;
 procedure TMainForm.BtnEvImportCsvClick(Sender: TObject);
 const
   cSample =
-    '编号,客户,备注' + LineEnding +
-    '1,阿里,"第一行' + LineEnding + '第二行"' + LineEnding +
-    '2,腾讯,"含,逗号的备注"' + LineEnding +
-    '3,字节,普通备注';
+    'No.,Customer,Note' + LineEnding +
+    '1,Alibaba,"first row' + LineEnding + 'second row"' + LineEnding +
+    '2,Tencent,"note with, a comma"' + LineEnding +
+    '3,ByteDance,plain note';
 begin
   GridEvents.LoadFromCSVText(cSample, ',');
-  Status('已导入 —— 注意第 1 行的备注里**含换行**却没有把行数撑乱,逗号也没把字段切开');
+  Status('Imported — note that the first row''s note **contains a line break** but did not scramble the row count, and the comma did not split the field');
 end;
 
 { ============ 换肤 ============ }
@@ -1739,15 +1739,15 @@ begin
   begin
     TyDefaultController.ResetAccent;
     ApplyChromeTheme(TyDefaultController);
-    Status('已恢复主题自带的强调色');
+    Status('Restored the theme''s own accent colour');
     Exit;
   end;
   c := TyDefaultController.Model.ResolveStyle('TyButton', 'primary', []).Background.Color;
-  if TySelectColor('选择主题色', c) then
+  if TySelectColor('Choose accent colour', c) then
   begin
     TyDefaultController.SetAccent(TyColorToHex(c, False));
     ApplyChromeTheme(TyDefaultController);
-    Status('主题色已改为 ' + TyColorToHex(c, False) + '(再点一次恢复)');
+    Status('Accent colour changed to ' + TyColorToHex(c, False) + '(click again to restore)');
   end;
 end;
 
@@ -1778,15 +1778,15 @@ begin
   { 候选列:**非编辑态也会画一个下拉箭头** —— 不点进去也看得出这格有候选项。 }
   c := TTyGridColumn(GridCells.Header.Columns.Items[cRegion]);
   c.EditorKind := gekPickList;
-  c.PickList.CommaText := '华东,华北,华南,西南,东北,西北';
+  c.PickList.CommaText := 'East China, North China, South China, Southwest, Northeast, Northwest';
 
   GridCells.OnCellLinkClick := @CellsLinkClick;
 
   { 开局先放一条批注和一处加粗,免得用户对着一张干净的表猜"该点哪儿"。 }
-  GridCells.CellComment[cNote, 2] := '这条是样例批注 —— 鼠标停在右上角小三角上就会显示';
+  GridCells.CellComment[cNote, 2] := 'This is a sample comment — hover the small triangle in the top-right to show it';
   GridCells.CellFontStyles[cProduct, 2] := [fsBold];
 
-  Status('页 7:批注/加粗/显示类型都存在逐格属性里 —— 排序、插行之后它们仍跟着原来那条记录');
+  Status('Page 7: comments/bold/display type all live in per-cell properties — after sorting and inserting rows they still follow the original record');
 end;
 
 procedure TMainForm.ChkCellsChange(Sender: TObject);
@@ -1815,38 +1815,38 @@ begin
   else c.ValidChars := '';
 
   GridCells.Invalidate;
-  Status('三态=' + BoolToStr(ChkTriState.Checked, '开', '关')
-    + ' · 格式化=' + BoolToStr(ChkFormat.Checked, '开', '关')
-    + ' · 链接列=' + BoolToStr(ChkLinkCol.Checked, '开', '关'));
+  Status('tri-state=' + BoolToStr(ChkTriState.Checked, 'On', 'Off')
+    + ' · formatting=' + BoolToStr(ChkFormat.Checked, 'On', 'Off')
+    + ' · link column=' + BoolToStr(ChkLinkCol.Checked, 'On', 'Off'));
 end;
 
 procedure TMainForm.BtnCommentClick(Sender: TObject);
 var
   txt: string;
 begin
-  txt := '在 ' + FormatDateTime('hh:nn:ss', Now) + ' 加的批注';
+  txt := 'In ' + FormatDateTime('hh:nn:ss', Now) + ' comment added';
   GridCells.CellComment[GridCells.Col, GridCells.Row] := txt;
-  Status(Format('(%d, %d) 加了批注 —— 右上角多出一个小三角,悬停显示;Ctrl+Z 可撤销',
+  Status(Format('(%d, %d) got a comment — a small triangle appears top-right, shown on hover; Ctrl+Z to undo',
     [GridCells.Col, GridCells.Row]));
 end;
 
 procedure TMainForm.BtnCommentClearClick(Sender: TObject);
 begin
   GridCells.CellComment[GridCells.Col, GridCells.Row] := '';
-  Status('批注已清 —— 小三角随之消失');
+  Status('Comment cleared — the small triangle disappears with it');
 end;
 
 procedure TMainForm.BtnBoldClick(Sender: TObject);
 begin
   GridCells.CellFontStyles[GridCells.Col, GridCells.Row] := [fsBold];
-  Status(Format('(%d, %d) 加粗 —— 逐格字体样式,同样进撤销栈',
+  Status(Format('(%d, %d) bolded — per-cell font style, also on the undo stack',
     [GridCells.Col, GridCells.Row]));
 end;
 
 procedure TMainForm.BtnBoldClearClick(Sender: TObject);
 begin
   GridCells.CellFontStyles[GridCells.Col, GridCells.Row] := [];
-  Status('已取消加粗');
+  Status('Unbolded');
 end;
 
 { 逐格显示类型:比列级更具体,压过列级。 }
@@ -1858,7 +1858,7 @@ begin
   if CbCellDisp.ItemIndex < 0 then Exit;
   GridCells.CellDisplays[GridCells.Col, GridCells.Row] :=
     kinds[CbCellDisp.ItemIndex];
-  Status(Format('(%d, %d) 的显示类型改了 —— 逐格比列级更具体,压过列级声明',
+  Status(Format('(%d, %d) changed its display type — per-cell beats per-column and overrides the column-level declaration',
     [GridCells.Col, GridCells.Row]));
 end;
 
@@ -1871,7 +1871,7 @@ begin
   if CbCase.ItemIndex < 0 then Exit;
   c := TTyGridColumn(GridCells.Header.Columns.Items[cOrderNo]);
   c.CharCase := cases[CbCase.ItemIndex];
-  Status('订单号列的大小写规则改了 —— 双击进编辑输入就看得出来');
+  Status('The case rule of the order-no. column changed — double-click into edit to see it');
 end;
 
 procedure TMainForm.SpMaxLenChange(Sender: TObject);
@@ -1880,8 +1880,8 @@ var
 begin
   c := TTyGridColumn(GridCells.Header.Columns.Items[cNote]);
   c.MaxEditLength := SpMaxLen.Value;
-  if SpMaxLen.Value = 0 then Status('备注列不限长度')
-  else Status(Format('备注列最多输入 %d 个字符', [SpMaxLen.Value]));
+  if SpMaxLen.Value = 0 then Status('The notes column has no length limit')
+  else Status(Format('The notes column allows up to %d characters', [SpMaxLen.Value]));
 end;
 
 { 只作用于显示。**别在这里改数据** —— 编辑器、导出、排序拿到的都必须是原值。 }
@@ -1896,7 +1896,7 @@ end;
 
 procedure TMainForm.CellsLinkClick(Sender: TObject; ACol, ARow: Integer);
 begin
-  Status(Format('点了链接:%s(第 %d 行)—— 真实应用里这里会打开明细',
+  Status(Format('Clicked link: %s (row %d) — in a real app this opens the detail',
     [GridCells.Cells[ACol, ARow], ARow]));
 end;
 
@@ -1907,7 +1907,7 @@ begin
   BuildOrderColumns(GridView, True, False);
   FillOrders(GridView, 40, True, False);
   GridView.Header.Options := GridView.Header.Options + [hoVisible];
-  Status('页 8:滚动条三态、背景图、焦点/选区显示、表头换行与分组');
+  Status('Page 8: scrollbar tri-state, background image, focus/selection display, header wrap and grouping');
 end;
 
 { 分组带按勾选重建。**每次重建而不是增量改** —— 组是"哪几列属于同一类"的声明,
@@ -1924,22 +1924,22 @@ begin
   end;
 
   g := GridView.HeaderGroups.Add;
-  g.Text := '订单信息';
+  g.Text := 'Order info';
   g.FirstCol := cOrderNo; g.LastCol := cProduct; g.Level := 0;
 
   g := GridView.HeaderGroups.Add;
-  g.Text := '金额与进度';
+  g.Text := 'Amount & progress';
   g.FirstCol := cQty; g.LastCol := cRate; g.Level := 0;
 
   { 第二级:Level=1 画在 0 级下面那一条里。分组带会自动长高一条。 }
   if ChkHdrGroups2.Checked then
   begin
     g := GridView.HeaderGroups.Add;
-    g.Text := '主键与归属';
+    g.Text := 'Key & ownership';
     g.FirstCol := cOrderNo; g.LastCol := cRegion; g.Level := 1;
 
     g := GridView.HeaderGroups.Add;
-    g.Text := '数量/金额';
+    g.Text := 'Qty / amount';
     g.FirstCol := cQty; g.LastCol := cAmount; g.Level := 1;
   end;
   GridView.Invalidate;
@@ -1967,11 +1967,11 @@ begin
   else GridView.FixedColsRight := 0;
 
   ApplyHeaderGroups;
-  Status('表头换行=' + BoolToStr(ChkHdrWrap.Checked, '开', '关')
-    + ' · 自适应高度=' + BoolToStr(ChkHdrAuto.Checked, '开', '关')
+  Status('Header wrap=' + BoolToStr(ChkHdrWrap.Checked, 'On', 'Off')
+    + ' · auto row height=' + BoolToStr(ChkHdrAuto.Checked, 'On', 'Off')
     { 级数由**宿主自己**算 —— 分组是宿主建的,它本来就知道有几级;
       为了一句状态文案去扩控件的公开面是本末倒置。 }
-    + ' · 分组级数=' + IntToStr(HeaderGroupLevels));
+    + ' · grouping levels=' + IntToStr(HeaderGroupLevels));
 end;
 
 procedure TMainForm.CbScrollChange(Sender: TObject);
@@ -1982,7 +1982,7 @@ begin
     GridView.VertScrollBarMode := modes[CbVScroll.ItemIndex];
   if CbHScroll.ItemIndex >= 0 then
     GridView.HorzScrollBarMode := modes[CbHScroll.ItemIndex];
-  Status('滚动条「隐藏」只是不显示 —— 滚轮、方向键、PageDown 照样走得到底');
+  Status('The scrollbar "hidden" only means it is not shown — the wheel, arrow keys and PageDown still reach the bottom');
 end;
 
 procedure TMainForm.CbBackChange(Sender: TObject);
@@ -1994,7 +1994,7 @@ begin
     GridView.BackgroundMode := bmodes[CbBackMode.ItemIndex];
   if CbBackScope.ItemIndex >= 0 then
     GridView.BackgroundScope := scopes[CbBackScope.ItemIndex];
-  Status('范围决定图被**适配到哪个矩形** —— 列头带每帧都被重画,底下铺什么都看不见');
+  Status('The range decides **which rectangle the image is fitted to** — the header band is repainted every frame, whatever is laid under it is invisible');
 end;
 
 procedure TMainForm.BtnLongCaptionClick(Sender: TObject);
@@ -2002,10 +2002,10 @@ var
   c: TTyColumn;
 begin
   c := TTyColumn(GridView.Header.Columns.Items[cNote]);
-  if Pos('换行', c.Text) > 0 then c.Text := '备注'
-  else c.Text := '这是一个很长的列标题 用来演示换行与自适应高度';
+  if Pos('Word wrap', c.Text) > 0 then c.Text := 'Notes'
+  else c.Text := 'This is a very long column title used to demonstrate wrapping and auto height';
   GridView.Invalidate;
-  Status('再勾「表头换行」和「表头高度自适应」看效果');
+  Status('Also tick "header wrap" and "auto header height" to see the effect');
 end;
 
 function TMainForm.HeaderGroupLevels: Integer;
@@ -2045,7 +2045,7 @@ begin
   FillOrders(GridIo, 25, True, False);
   GridIo.SetColumnAggregate(cQty, gagSum);
   GridIo.SetColumnAggregate(cAmount, gagSum);
-  Status('页 9:导出/导入/流往返/页脚接管');
+  Status('Page 9: export/import/stream round-trip/footer takeover');
 end;
 
 procedure TMainForm.ChkIoChange(Sender: TObject);
@@ -2057,8 +2057,8 @@ begin
   else GridIo.OnColumnCalc := nil;
 
   GridIo.Invalidate;
-  Status('页脚钩子=' + BoolToStr(ChkIoFooterHook.Checked, '开', '关')
-    + ' · 金额列接管=' + BoolToStr(ChkIoColCalc.Checked, '开', '关'));
+  Status('Footer hook=' + BoolToStr(ChkIoFooterHook.Checked, 'On', 'Off')
+    + ' · amount column takeover=' + BoolToStr(ChkIoColCalc.Checked, 'On', 'Off'));
 end;
 
 procedure TMainForm.BtnIoJsonClick(Sender: TObject);
@@ -2066,8 +2066,8 @@ var
   js: string;
 begin
   js := GridIo.SaveToJSONText;
-  TyShowMessage('JSON 导出(前 800 字):' + LineEnding + LineEnding + Copy(js, 1, 800));
-  Status(Format('导出了 %d 字节 JSON —— 键取列标题,只导可见行', [Length(js)]));
+  TyShowMessage('JSON export (first 800 chars):' + LineEnding + LineEnding + Copy(js, 1, 800));
+  Status(Format('Exported %d bytes of JSON — keys are the column titles, only visible rows exported', [Length(js)]));
 end;
 
 procedure TMainForm.BtnIoHtmlClick(Sender: TObject);
@@ -2075,8 +2075,8 @@ var
   h: string;
 begin
   h := GridIo.SaveToHTMLText;
-  TyShowMessage('HTML 导出(前 800 字):' + LineEnding + LineEnding + Copy(h, 1, 800));
-  Status(Format('导出了 %d 字节 HTML', [Length(h)]));
+  TyShowMessage('HTML export (first 800 chars):' + LineEnding + LineEnding + Copy(h, 1, 800));
+  Status(Format('Exported %d bytes of HTML', [Length(h)]));
 end;
 
 { 同一个方法,加上行列范围参数就是"只导选区"。 }
@@ -2088,8 +2088,8 @@ begin
   sel := GridIo.Selection;
   csv := GridIo.SaveToCSVText(',', sel.Top, sel.Bottom - sel.Top + 1,
                                    sel.Left, sel.Right - sel.Left + 1);
-  TyShowMessage('选区 CSV:' + LineEnding + LineEnding + Copy(csv, 1, 800));
-  Status(Format('导出了选区 %d 行 x %d 列',
+  TyShowMessage('Selection CSV:' + LineEnding + LineEnding + Copy(csv, 1, 800));
+  Status(Format('Exported %d rows x %d columns of the selection',
     [sel.Bottom - sel.Top + 1, sel.Right - sel.Left + 1]));
 end;
 
@@ -2105,7 +2105,7 @@ begin
     GridIo.SaveToStream(st);
     st.Position := 0;
     GridIo.LoadFromStream(st);
-    Status(Format('流往返一圈:%d 行 → %d 字节 → %d 行',
+    Status(Format('Stream round trip: %d rows → %d bytes → %d rows',
       [before, st.Size, GridIo.RowCount]));
   finally
     st.Free;
@@ -2114,17 +2114,17 @@ end;
 
 procedure TMainForm.BtnIoSelTextClick(Sender: TObject);
 begin
-  TyShowMessage('选区文本(制表符分隔,没碰剪贴板):' + LineEnding + LineEnding
+  TyShowMessage('Selection text (tab-separated, clipboard untouched):' + LineEnding + LineEnding
     + Copy(GridIo.SelectionAsText, 1, 800));
 end;
 
 { 不经过剪贴板直接粘一块进来 —— 这样粘贴钩子在没有外部剪贴板的环境也演示得了。 }
 procedure TMainForm.BtnIoPasteTextClick(Sender: TObject);
 const
-  blk = 'AAA'#9'华东'#9'甲产品'#13#10'BBB'#9'华北'#9'乙产品';
+  blk = 'AAA'#9'East China'#9'Product A'#13#10'BBB'#9'North China'#9'Product B';
 begin
   GridIo.PasteFromText(blk);
-  Status('从一段硬编码文本粘进来了 2 行 —— 走的是与剪贴板同一条路径');
+  Status('Pasted 2 lines from a hardcoded text — via the same path as the clipboard');
 end;
 
 procedure TMainForm.BtnIoClearRowsClick(Sender: TObject);
@@ -2133,25 +2133,25 @@ var
 begin
   sel := GridIo.Selection;
   GridIo.ClearRows(sel.Top, sel.Bottom - sel.Top + 1);
-  Status(Format('清空了 %d 行的内容 —— 整批算**一条**撤销记录,按一次 Ctrl+Z 就回来',
+  Status(Format('Cleared the content of %d row(s) — the whole batch counts as **one** undo record, one Ctrl+Z brings it back',
     [sel.Bottom - sel.Top + 1]));
 end;
 
 procedure TMainForm.BtnIoClearColsClick(Sender: TObject);
 begin
   GridIo.ClearCols(GridIo.Col, 1);
-  Status(Format('清空了第 %d 列 —— 同样是一条撤销记录', [GridIo.Col]));
+  Status(Format('Cleared column %d — also a single undo record', [GridIo.Col]));
 end;
 
 { 追加 / 最多读几行 / 跳过前几行,三个参数一起演示。 }
 procedure TMainForm.BtnIoImportClick(Sender: TObject);
 const
-  csv = '订单号,大区,产品,数量,金额' + LineEnding
-      + '# 这一行是说明,不是数据' + LineEnding
-      + 'IMP-001,华东,甲产品,10,1285.00' + LineEnding
-      + 'IMP-002,华北,乙产品,20,2570.00' + LineEnding
-      + 'IMP-003,华南,丙产品,30,3855.00' + LineEnding
-      + 'IMP-004,西南,丁产品,40,5140.00';
+  csv = 'Order No.,Region,Product,Qty,Amount' + LineEnding
+      + '# This line is a note, not data' + LineEnding
+      + 'IMP-001,East China,Product A,10,1285.00' + LineEnding
+      + 'IMP-002,North China,Product B,20,2570.00' + LineEnding
+      + 'IMP-003,South China,Product C,30,3855.00' + LineEnding
+      + 'IMP-004,Southwest,Product D,40,5140.00';
 var
   before, maxRows: Integer;
 begin
@@ -2159,23 +2159,23 @@ begin
   maxRows := SpIoMax.Value;
   if maxRows = 0 then maxRows := -1;      { 0 = 不限 }
   GridIo.LoadFromCSVText(csv, ',', ChkIoAppend.Checked, maxRows, SpIoSkip.Value);
-  Status(Format('导入:%d 行 → %d 行(%s,最多 %s 行,跳过 %d 行说明)',
+  Status(Format('Import: %d rows → %d rows (%s, up to %s rows, %d note rows skipped)',
     [before, GridIo.RowCount,
-     BoolToStr(ChkIoAppend.Checked, '追加', '替换'),
-     BoolToStr(maxRows < 0, '不限', IntToStr(maxRows)), SpIoSkip.Value]));
+     BoolToStr(ChkIoAppend.Checked, 'Append', 'Replace'),
+     BoolToStr(maxRows < 0, 'any', IntToStr(maxRows)), SpIoSkip.Value]));
 end;
 
 procedure TMainForm.BtnIoRecalcClick(Sender: TObject);
 begin
   GridIo.CalcFooter(cAmount);
   GridIo.Invalidate;
-  Status('只让金额那一列重算 —— 整表失效(InvalidateAggregates)对这件事太钝');
+  Status('Recompute only the amount column — invalidating the whole table (InvalidateAggregates) is too blunt for this');
 end;
 
 procedure TMainForm.IoGetFooterText(Sender: TObject; ACol: Integer;
   var AText: string);
 begin
-  if (ACol = cAmount) and (AText <> '') then AText := '合计 ¥' + AText;
+  if (ACol = cAmount) and (AText <> '') then AText := 'Total ¥' + AText;
 end;
 
 { 宿主接管这一列的汇总。**不进缓存** —— 外部数据变了控件收不到通知,
@@ -2295,24 +2295,24 @@ begin
   else GridEvents.OnGetPickList := nil;
 
   GridEvents.Invalidate;
-  Status('钩子开关已应用 —— 去操作网格,这一行会说出钩子介入了什么');
+  Status('Hook switches applied — go operate the grid, this line will say what the hook intervened in');
 end;
 
 procedure TMainForm.EvReturn(Sender: TObject; ACol, ARow: Integer);
 begin
-  Status(Format('回车:打开第 %d 行的明细(编辑态的回车仍是"提交并下移",没被改掉)',
+  Status(Format('Enter: open the detail of row %d (Enter while editing still means "commit and move down", unchanged)',
     [ARow]));
 end;
 
 procedure TMainForm.EvCtrlReturn(Sender: TObject; ACol, ARow: Integer);
 begin
-  Status(Format('Ctrl+回车:第 %d 行 —— 另一个动作,与普通回车分开', [ARow]));
+  Status(Format('Ctrl+Enter: row %d — a separate action, distinct from plain Enter', [ARow]));
 end;
 
 procedure TMainForm.EvScrollHint(Sender: TObject; ARow: Integer;
   var AHint: string);
 begin
-  AHint := Format('第 %d 行 / 共 %d 行', [ARow + 1, GridEvents.RowCount]);
+  AHint := Format('Row %d / %d total', [ARow + 1, GridEvents.RowCount]);
 end;
 
 { 与"只读"的区别:被拦下的格子**照样按原来的样子显示**(勾选框还是勾选框),
@@ -2323,14 +2323,14 @@ begin
   if ARow = 2 then
   begin
     AAllow := False;
-    Status('第 2 行禁改 —— 注意它的勾选框仍然画成勾选框,只是点不动');
+    Status('Row 2 is not editable — note its checkbox is still drawn as a checkbox, it just cannot be clicked');
   end;
 end;
 
 procedure TMainForm.EvEditChange(Sender: TObject; ACol, ARow: Integer;
   const AText: string);
 begin
-  Status(Format('正在输入 (%d, %d):「%s」—— 每敲一下就发一次,不是提交时',
+  Status(Format('Typing at (%d, %d): "%s" — fired on every keystroke, not on commit',
     [ACol, ARow, AText]));
 end;
 
@@ -2340,7 +2340,7 @@ begin
   if Trim(ANewText) = '' then
   begin
     AAccept := False;
-    Status(Format('(%d, %d) 不许清空 —— 提交被否决,格子还是「%s」',
+    Status(Format('(%d, %d) may not be cleared — the commit was vetoed, the cell still holds "%s"',
       [ACol, ARow, AOldText]));
   end
   else
@@ -2351,14 +2351,14 @@ procedure TMainForm.EvCanInsertRow(Sender: TObject; ARow: Integer;
   var AAllow: Boolean);
 begin
   AAllow := False;
-  Status('插入被否决 —— 一行都没插进去(复数版里任何一行被否决就整批不做)');
+  Status('Insertion vetoed — not a single row was inserted (in the plural version, if any row is vetoed the whole batch is skipped)');
 end;
 
 procedure TMainForm.EvCanDeleteRow(Sender: TObject; ARow: Integer;
   var AAllow: Boolean);
 begin
   AAllow := False;
-  Status('删除被否决');
+  Status('Deletion vetoed');
 end;
 
 procedure TMainForm.EvSelectCell(Sender: TObject; ACol, ARow: Integer;
@@ -2367,24 +2367,24 @@ begin
   if ACol = 0 then
   begin
     ACanSelect := False;
-    Status('光标进不了第 0 列 —— 方向键会直接跳过它');
+    Status('The cursor cannot enter column 0 — the arrow keys skip straight over it');
   end;
 end;
 
 procedure TMainForm.EvClickCell(Sender: TObject; ACol, ARow: Integer);
 begin
-  Status(Format('单击 (%d, %d)', [ACol, ARow]));
+  Status(Format('Click (%d, %d)', [ACol, ARow]));
 end;
 
 procedure TMainForm.EvDblClickCell(Sender: TObject; ACol, ARow: Integer);
 begin
-  Status(Format('双击 (%d, %d) —— 真实应用里这里通常是"打开明细"', [ACol, ARow]));
+  Status(Format('Double-click (%d, %d) — in a real app this usually "opens the detail"', [ACol, ARow]));
 end;
 
 procedure TMainForm.EvRatingChange(Sender: TObject; ACol, ARow: Integer;
   AValue: Integer);
 begin
-  Status(Format('评分改成 %d 星(第 %d 行)—— 点第几颗星就是几分,不弹编辑器',
+  Status(Format('Rating changed to %d star(s) (row %d) — the star you click is the score, no editor pops up',
     [AValue, ARow]));
 end;
 
@@ -2395,7 +2395,7 @@ begin
   if ACol = cRegion then
   begin
     AAllow := False;
-    Status('大区列不许本地排序 —— 真实场景里这里会转成一次服务端请求');
+    Status('The region column may not be sorted locally — in a real scenario this would become a server request');
   end;
 end;
 
@@ -2403,7 +2403,7 @@ end;
 procedure TMainForm.EvCompareCells(Sender: TObject; ACol, ARow1, ARow2: Integer;
   var AResult: Integer);
 const
-  order: array[0..5] of string = ('华东', '华北', '华南', '西南', '东北', '西北');
+  order: array[0..5] of string = ('East China', 'North China', 'South China', 'Southwest', 'Northeast', 'Northwest');
 
   function Rank(const AText: string): Integer;
   var i: Integer;
@@ -2433,9 +2433,9 @@ procedure TMainForm.EvGetFilterValues(Sender: TObject; ACol: Integer;
 begin
   if ACol <> cRegion then Exit;
   AItems.Clear;
-  AItems.Add('华东');
-  AItems.Add('华北');
-  AItems.Add('(服务端还有更多)');
+  AItems.Add('East China');
+  AItems.Add('North China');
+  AItems.Add('(more on the server)');
   AHandled := True;
 end;
 
@@ -2445,8 +2445,8 @@ begin
   if ACol <> cRegion then Exit;
   AItems.Clear;
   { 逐格给不同的候选 —— 静态 PickList 做不到这件事。 }
-  if ARow mod 2 = 0 then AItems.CommaText := '华东,华北,华南'
-  else AItems.CommaText := '西南,东北,西北';
+  if ARow mod 2 = 0 then AItems.CommaText := 'East China, North China, South China'
+  else AItems.CommaText := 'Southwest, Northeast, Northwest';
 end;
 
 end.

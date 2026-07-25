@@ -47,7 +47,7 @@ implementation
 
 function OnOff(B: Boolean): string;
 begin
-  if B then Result := '开' else Result := '关';
+  if B then Result := 'On' else Result := 'Off';
 end;
 
 procedure TMainForm.FormCreate(Sender: TObject);
@@ -91,7 +91,7 @@ end;
 
 procedure TMainForm.UpdateStatus;
 begin
-  LblStatus.Caption := Format('深色模式：%s   接收通知：%s   自动保存：%s',
+  LblStatus.Caption := Format('Dark mode: %s   Receive notifications: %s   Auto-save: %s',
     [OnOff(SwitchDark.Checked), OnOff(SwitchNotify.Checked),
      OnOff(SwitchCaption.Checked)]);
 end;

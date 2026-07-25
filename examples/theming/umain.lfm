@@ -3,7 +3,7 @@ object MainForm: TMainForm
   Height = 388
   Top = 0
   Width = 470
-  Caption = '主题系统 示例'
+  Caption = 'Theme system example'
   ClientHeight = 388
   ClientWidth = 470
   Position = poScreenCenter
@@ -22,7 +22,7 @@ object MainForm: TMainForm
       Top = 0
       Width = 470
       Align = alTop
-      Caption = '主题系统  · TyControls'
+      Caption = 'Theme system  · TyControls'
       TitleAlignment = taLeftJustify
       object ThemeCombo: TTyComboBox
         Left = 202
@@ -38,7 +38,7 @@ object MainForm: TMainForm
       Height = 34
       Top = 52
       Width = 116
-      Caption = '亮色 Light'
+      Caption = 'Light'
       StyleClass = 'primary'
       OnClick = SwitchLight
     end
@@ -47,7 +47,7 @@ object MainForm: TMainForm
       Height = 34
       Top = 52
       Width = 116
-      Caption = '暗色 Dark'
+      Caption = 'Dark'
       OnClick = SwitchDark
     end
     object BtnGreen: TTyButton
@@ -55,7 +55,7 @@ object MainForm: TMainForm
       Height = 34
       Top = 52
       Width = 116
-      Caption = '绿色 Green'
+      Caption = 'Green'
       OnClick = SwitchGreen
     end
     object BtnAccent: TTyButton
@@ -63,7 +63,7 @@ object MainForm: TMainForm
       Height = 34
       Top = 96
       Width = 140
-      Caption = '主题色…'
+      Caption = 'Accent colour…'
       OnClick = PickAccent
     end
     object BtnAccentReset: TTyButton
@@ -71,7 +71,7 @@ object MainForm: TMainForm
       Height = 34
       Top = 96
       Width = 116
-      Caption = '复位默认'
+      Caption = 'Reset to default'
       StyleClass = 'ghost'
       Enabled = False
       OnClick = ResetAccentClick
@@ -81,21 +81,21 @@ object MainForm: TMainForm
       Height = 20
       Top = 144
       Width = 430
-      Caption = '当前主题：default'
+      Caption = 'Current theme: default'
     end
     object LblSample: TTyLabel
       Left = 16
       Height = 20
       Top = 176
       Width = 300
-      Caption = '示例标签 TTyLabel'
+      Caption = 'Sample label TTyLabel'
     end
     object BtnSample: TTyButton
       Left = 16
       Height = 34
       Top = 204
       Width = 120
-      Caption = '主要按钮'
+      Caption = 'Primary button'
       StyleClass = 'primary'
     end
     object BtnGhost: TTyButton
@@ -103,7 +103,7 @@ object MainForm: TMainForm
       Height = 34
       Top = 204
       Width = 100
-      Caption = '幽灵按钮'
+      Caption = 'Ghost button'
       StyleClass = 'ghost'
     end
     object BtnDisabled: TTyButton
@@ -111,7 +111,7 @@ object MainForm: TMainForm
       Height = 34
       Top = 204
       Width = 100
-      Caption = '禁用态'
+      Caption = 'Disabled'
       Enabled = False
     end
     object EdSample: TTyEdit
@@ -119,14 +119,14 @@ object MainForm: TMainForm
       Height = 30
       Top = 252
       Width = 220
-      Text = '可编辑文本框'
+      Text = 'Editable text box'
     end
     object ChkSample: TTyCheckBox
       Left = 260
       Height = 24
       Top = 256
       Width = 160
-      Caption = '复选框示例'
+      Caption = 'Checkbox example'
       Checked = True
     end
     object ProgSample: TTyProgressBar

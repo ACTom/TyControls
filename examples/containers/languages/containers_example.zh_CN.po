@@ -1,0 +1,241 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols-containers_example 2.99\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+# --- .lfm captions/text/hints (auto-generated, msgid=English source) ---
+
+#: tmainform.caption
+msgid "TyControls — containers & layout (Phase 5)"
+msgstr "TyControls — 容器与布局(Phase 5)"
+
+#: tmainform.titlebar1.caption
+msgid "Containers & layout  ·  TyControls"
+msgstr "容器与布局  ·  TyControls"
+
+#: tmainform.darkswitch.caption
+msgid "Dark"
+msgstr "暗色"
+
+#: tmainform.divleft.caption
+msgid "Divider TTyDivider — left-aligned (title + line on the right)"
+msgstr "分割线 TTyDivider — 左对齐(标题 + 右侧线)"
+
+#: tmainform.divcenter.caption
+msgid "Centered title"
+msgstr "居中标题"
+
+#: tmainform.divright.caption
+msgid "Right align"
+msgstr "右对齐"
+
+#: tmainform.divbevel.caption
+msgid "Decorative border TTyBevel"
+msgstr "装饰边框 TTyBevel"
+
+#: tmainform.lblbox.caption
+msgid "Box / Frame (sunken / raised)"
+msgstr "Box / Frame(凹陷 / 凸起)"
+
+#: tmainform.lbllines.caption
+msgid "Single edge line"
+msgstr "单边线"
+
+#: tmainform.divpaint.caption
+msgid "Custom-drawn surface TTyPaintPanel (OnPaintSurface)"
+msgstr "自绘表面 TTyPaintPanel(OnPaintSurface)"
+
+#: tmainform.divgroups.caption
+msgid "Group container Radio / Check / ToolGroup"
+msgstr "分组容器 Radio / Check / ToolGroup"
+
+#: tmainform.radiosize.caption
+msgid "Size (2 columns · exclusive single-select)"
+msgstr "尺寸(2 列 · 互斥单选)"
+
+#: tmainform.checkfeatures.caption
+msgid "Enable features (2 columns · independent multi-select)"
+msgstr "启用功能(2 列 · 独立多选)"
+
+#: tmainform.toolclip.caption
+msgid "Clipboard (streaming toolbar button)"
+msgstr "剪贴板(流式工具按钮)"
+
+#: tmainform.btncut.caption
+msgid "Cut"
+msgstr "剪切"
+
+#: tmainform.btncopy.caption
+msgid "Copy"
+msgstr "复制"
+
+#: tmainform.btnpaste.caption
+msgid "Paste"
+msgstr "粘贴"
+
+#: tmainform.btnformat.caption
+msgid "Format painter"
+msgstr "格式刷"
+
+#: tmainform.divscroll.caption
+msgid "Scroll / collapse containers"
+msgstr "滚动 / 折叠容器"
+
+#: tmainform.exadvanced.caption
+msgid "Advanced options (click title to collapse)"
+msgstr "高级选项(点标题折叠)"
+
+#: tmainform.chkwrap.caption
+msgid "Word wrap"
+msgstr "自动换行"
+
+#: tmainform.chkminimap.caption
+msgid "Show minimap"
+msgstr "显示小地图"
+
+#: tmainform.chkwhitespace.caption
+msgid "Show whitespace"
+msgstr "显示空白字符"
+
+#: tmainform.sbbtn1.caption
+msgid "Item 1"
+msgstr "第 1 项"
+
+#: tmainform.sbbtn2.caption
+msgid "Item 2"
+msgstr "第 2 项"
+
+#: tmainform.sbbtn3.caption
+msgid "Item 3"
+msgstr "第 3 项"
+
+#: tmainform.sbbtn4.caption
+msgid "Item 4"
+msgstr "第 4 项"
+
+#: tmainform.sbbtn5.caption
+msgid "Item 5"
+msgstr "第 5 项"
+
+#: tmainform.sbbtn6.caption
+msgid "Item 6"
+msgstr "第 6 项"
+
+#: tmainform.sbbtn7.caption
+msgid "Item 7"
+msgstr "第 7 项"
+
+#: tmainform.sbbtn8.caption
+msgid "Item 8"
+msgstr "第 8 项"
+
+#: tmainform.sbbtn9.caption
+msgid "Item 9"
+msgstr "第 9 项"
+
+#: tmainform.sbbtn10.caption
+msgid "Item 10"
+msgstr "第 10 项"
+
+#: tmainform.divlayout.caption
+msgid "Grid layout TTyGridPanel / relative layout TTyRelativePanel / grouped list TTyListGroupPanel / header strip TTyHeaderControl"
+msgstr "网格布局 TTyGridPanel / 相对布局 TTyRelativePanel / 分组列表 TTyListGroupPanel / 列头条 TTyHeaderControl"
+
+#: tmainform.lbluser.caption
+msgid "Username"
+msgstr "用户名"
+
+#: tmainform.lblmail.caption
+msgid "Mailbox"
+msgstr "邮箱"
+
+#: tmainform.lblphone.caption
+msgid "Phone"
+msgstr "电话"
+
+#: tmainform.btntitle.caption
+msgid "Sign in"
+msgstr "登录"
+
+#: tmainform.btncancel.caption
+msgid "Cancel"
+msgstr "取消"
+
+#: tmainform.btnok.caption
+msgid "OK"
+msgstr "确定"
+
+#: tmainform.lblheader.caption
+msgid "Header: click a title to sort · drag the border to resize"
+msgstr "列头:点标题排序 · 拖边界调宽"
+
+#: tmainform.divbands.caption
+msgid "Overflow toolbar TTyToolBarEx / Rebar TTyCoolBar"
+msgstr "溢出工具条 TTyToolBarEx / Rebar TTyCoolBar"
+
+#: tmainform.barbtn1.caption
+msgid "Command 1"
+msgstr "命令 1"
+
+#: tmainform.barbtn2.caption
+msgid "Command 2"
+msgstr "命令 2"
+
+#: tmainform.barbtn3.caption
+msgid "Command 3"
+msgstr "命令 3"
+
+#: tmainform.barbtn4.caption
+msgid "Command 4"
+msgstr "命令 4"
+
+#: tmainform.barbtn5.caption
+msgid "Command 5"
+msgstr "命令 5"
+
+#: tmainform.barbtn6.caption
+msgid "Command 6"
+msgstr "命令 6"
+
+#: tmainform.barbtn7.caption
+msgid "Command 7"
+msgstr "命令 7"
+
+#: tmainform.barbtn8.caption
+msgid "Command 8"
+msgstr "命令 8"
+
+#: tmainform.barbtn9.caption
+msgid "Command 9"
+msgstr "命令 9"
+
+#: tmainform.barbtn10.caption
+msgid "Command 10"
+msgstr "命令 10"
+
+#: tmainform.barbtn11.caption
+msgid "Command 11"
+msgstr "命令 11"
+
+#: tmainform.barbtn12.caption
+msgid "Command 12"
+msgstr "命令 12"
+
+#: tmainform.band1.caption
+msgid "Band 1 (drag the grip to resize)"
+msgstr "带 1(拖抓手改宽)"
+
+#: tmainform.band2.caption
+msgid "Band 2 (drag the grip to resize)"
+msgstr "带 2(拖抓手改宽)"
+
+#: tmainform.lblgrip.caption
+msgid "Bottom-right → size grip TTySizeBox (drag to resize the window)"
+msgstr "右下角 → 尺寸手柄 TTySizeBox(拖动改变窗口大小)"
+

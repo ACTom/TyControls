@@ -3,7 +3,7 @@ object MainForm: TMainForm
   Height = 520
   Top = 120
   Width = 720
-  Caption = 'TyControls — 过渡动画(Transitions)'
+  Caption = 'TyControls — transitions (Transitions)'
   ClientHeight = 520
   ClientWidth = 720
   Font.Height = -12
@@ -23,13 +23,13 @@ object MainForm: TMainForm
       Top = 0
       Width = 720
       Align = alTop
-      Caption = '过渡动画  ·  TyControls'
+      Caption = 'Transitions  ·  TyControls'
       object DarkSwitch: TTyToggleSwitch
         Left = 462
         Height = 24
         Top = 5
         Width = 74
-        Caption = '暗色'
+        Caption = 'Dark'
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
@@ -45,7 +45,7 @@ object MainForm: TMainForm
       Height = 30
       Top = 46
       Width = 90
-      Caption = '淡入'
+      Caption = 'Fade in'
       OnClick = BtnFadeClick
     end
     object BtnUp: TTyButton
@@ -53,7 +53,7 @@ object MainForm: TMainForm
       Height = 30
       Top = 46
       Width = 90
-      Caption = '上滑入'
+      Caption = 'Slide in from top'
       OnClick = BtnUpClick
     end
     object BtnDown: TTyButton
@@ -61,7 +61,7 @@ object MainForm: TMainForm
       Height = 30
       Top = 46
       Width = 90
-      Caption = '下滑入'
+      Caption = 'Slide in from bottom'
       OnClick = BtnDownClick
     end
     object BtnLeft: TTyButton
@@ -69,7 +69,7 @@ object MainForm: TMainForm
       Height = 30
       Top = 46
       Width = 90
-      Caption = '左滑入'
+      Caption = 'Slide in from left'
       OnClick = BtnLeftClick
     end
     object BtnRight: TTyButton
@@ -77,7 +77,7 @@ object MainForm: TMainForm
       Height = 30
       Top = 46
       Width = 90
-      Caption = '右滑入'
+      Caption = 'Slide in from right'
       OnClick = BtnRightClick
     end
     object Target: TTyPanel
@@ -90,7 +90,7 @@ object MainForm: TMainForm
         Height = 24
         Top = 24
         Width = 352
-        Caption = '这个面板会以选定的过渡重新出现'
+        Caption = 'This panel reappears with the chosen transition'
       end
     end
   end

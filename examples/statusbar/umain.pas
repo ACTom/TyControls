@@ -81,12 +81,12 @@ begin
   Inc(FClicks);
   if StatusBar.SimplePanel then
     // simple mode: update the whole-bar text (SetSimpleText triggers a repaint)
-    StatusBar.SimpleText := Format('SimplePanel 模式 · 已点击 %d 次', [FClicks])
+    StatusBar.SimpleText := Format('SimplePanel mode · clicked %d time(s)', [FClicks])
   else
   begin
     // multi-panel mode: update the fill panel and the count panel separately
-    StatusBar.Panels[0].Text := Format('已更新 · %s', [FormatDateTime('hh:nn:ss', Now)]);
-    StatusBar.Panels[1].Text := Format('点击:%d', [FClicks]);
+    StatusBar.Panels[0].Text := Format('Updated · %s', [FormatDateTime('hh:nn:ss', Now)]);
+    StatusBar.Panels[1].Text := Format('Clicks: %d', [FClicks]);
   end;
 end;
 
@@ -94,9 +94,9 @@ procedure TMainForm.ToggleSimple(Sender: TObject);
 begin
   StatusBar.SimplePanel := not StatusBar.SimplePanel;   // switch between multi-panel and whole-bar text
   if StatusBar.SimplePanel then
-    StatusBar.SimpleText := 'SimplePanel:单一整条状态文本'
+    StatusBar.SimpleText := 'SimplePanel: a single full-width status text'
   else
-    StatusBar.Panels[0].Text := '就绪';
+    StatusBar.Panels[0].Text := 'Ready';
 end;
 
 end.

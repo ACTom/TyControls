@@ -108,12 +108,12 @@ begin
   if CheckPicker.Checked then
     CheckState := FormatDateTime('yyyy/mm/dd', CheckPicker.DateTime)
   else
-    CheckState := '(空)';
+    CheckState := '(empty)';
   LblStatus.Caption :=
-    '日期：' + FormatDateTime('yyyy-mm-dd', DatePicker.DateTime) + sLineBreak +
-    '时间：' + FormatDateTime('hh:nn:ss',   TimePicker.DateTime) + sLineBreak +
-    '可空：' + CheckState + sLineBreak +
-    '提示：←/→ 切换字段，↑/↓ 或滚轮步进，直接键入数字，chevron 打开日历。';
+    'Date:' + FormatDateTime('yyyy-mm-dd', DatePicker.DateTime) + sLineBreak +
+    'Time:' + FormatDateTime('hh:nn:ss',   TimePicker.DateTime) + sLineBreak +
+    'Nullable:' + CheckState + sLineBreak +
+    'Tip: ←/→ switch field, ↑/↓ or wheel to step, type a digit directly, chevron opens the calendar.';
 end;
 
 procedure TMainForm.DateChanged(Sender: TObject);
@@ -138,7 +138,7 @@ end;
 
 procedure TMainForm.DropDownOpened(Sender: TObject);
 begin
-  LblStatus.Caption := '日历已打开：点击日期或回车确认，Esc 取消。';
+  LblStatus.Caption := 'Calendar opened: click a date or press Enter to confirm, Esc to cancel.';
 end;
 
 procedure TMainForm.DropDownClosed(Sender: TObject);

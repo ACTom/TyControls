@@ -49,12 +49,12 @@ begin
 
   Rich.OnLinkClick := @RichLinkClick;
   Rich.Html :=
-    '<b>TyControls</b> 是一套 <i>自绘</i> 的 Lazarus 控件库,' +
-    '主题化、跨平台。<br>' +
-    '这个标签支持 <u>下划线</u>、<s>删除线</s>、' +
-    '<font color=#c0392b>红色</font> 与 <font size=16>大字号</font>,' +
-    '以及 <a href="https://github.com/ACTom/TyControls">可点击的链接</a>。<br>' +
-    '实体也可以:&lt;tag&gt; &amp; &quot;引号&quot;。';
+    '<b>TyControls</b> is a set of <i>custom-drawn</i> Lazarus controls,' +
+    'Themed, cross-platform.<br>' +
+    'This label supports <u>underline</u>, <s>strikethrough</s>,' +
+    '<font color=#c0392b>red</font> and <font size=16>large text</font>,' +
+    'and <a href="https://github.com/ACTom/TyControls">a clickable link</a>.<br>' +
+    'Entities work too: &lt;tag&gt; &amp; &quot;quotes&quot;.';
 
   ApplyChromeTheme(TyDefaultController);
 end;
@@ -78,7 +78,7 @@ end;
 
 procedure TMainForm.RichLinkClick(Sender: TObject; const AHref: string);
 begin
-  LblStatus.Caption := '点击了链接:' + AHref;
+  LblStatus.Caption := 'Clicked link:' + AHref;
 end;
 
 end.

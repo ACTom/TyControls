@@ -1,0 +1,45 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols-listbox_example 2.99\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+# --- .lfm captions/text/hints (auto-generated, msgid=English source) ---
+
+#: tmainform.caption
+msgid "TTyListBox example"
+msgstr "TTyListBox 示例"
+
+#: tmainform.darkswitch.caption
+msgid "Dark"
+msgstr "暗色"
+
+#: tmainform.lbltitle.caption
+msgid "City list (Up/Down / PageUp/Down / mouse wheel to scroll):"
+msgstr "城市列表（上下键 / PageUp/Down / 滚轮可滚动）："
+
+#: tmainform.chkmulti.caption
+msgid "Multi-select mode"
+msgstr "多选模式"
+
+#: tmainform.chksorted.caption
+msgid "Sort ascending"
+msgstr "升序排序"
+
+#: tmainform.btnheight.caption
+msgid "Row height 24 / 32"
+msgstr "行高 24 / 32"
+
+#: tmainform.btnselall.caption
+msgid "Select all"
+msgstr "全选"
+
+#: tmainform.btnclear.caption
+msgid "Clear selection"
+msgstr "清空选择"
+

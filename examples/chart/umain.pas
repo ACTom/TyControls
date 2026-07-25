@@ -47,11 +47,11 @@ var
   names: TStringArray;
   i: Integer;
 begin
-  Chart.Title := '季度销量';
+  Chart.Title := 'Quarterly sales';
   Chart.Categories.Text := 'Q1' + LineEnding + 'Q2' + LineEnding + 'Q3' + LineEnding + 'Q4';
-  with Chart.Series.Add do begin Name := '华东'; Values := '12, 19, 15, 22'; end;
-  with Chart.Series.Add do begin Name := '华南'; Values := '9, 14, 18, 16'; end;
-  with Chart.Series.Add do begin Name := '华北'; Values := '7, 11, 13, 20'; end;
+  with Chart.Series.Add do begin Name := 'East China'; Values := '12, 19, 15, 22'; end;
+  with Chart.Series.Add do begin Name := 'South China'; Values := '9, 14, 18, 16'; end;
+  with Chart.Series.Add do begin Name := 'North China'; Values := '7, 11, 13, 20'; end;
   Chart.ChartType := ctBar;
 
   // Built-in themes are compiled in, so the switcher works without locating a themes/ folder.

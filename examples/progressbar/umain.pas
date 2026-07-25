@@ -94,7 +94,7 @@ begin
     Pct := Round((ProgBar.Position - ProgBar.Min) * 100 / Span)
   else
     Pct := 0;
-  LblReadout.Caption := Format('进度：%d / %d  (%d%%)',
+  LblReadout.Caption := Format('Progress: %d / %d  (%d%%)',
     [ProgBar.Position, ProgBar.Max, Pct]);
 end;
 

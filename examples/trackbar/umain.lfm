@@ -3,7 +3,7 @@ object MainForm: TMainForm
   Height = 380
   Top = 0
   Width = 460
-  Caption = 'TrackBar 示例'
+  Caption = 'TrackBar example'
   ClientHeight = 380
   ClientWidth = 460
   Position = poScreenCenter
@@ -30,7 +30,7 @@ object MainForm: TMainForm
         Top = 5
         Width = 74
         Anchors = [akTop, akRight]
-        Caption = '暗色'
+        Caption = 'Dark'
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
@@ -47,7 +47,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 48
       Width = 320
-      Caption = '音量（0..100，Min/Max/Position）：'
+      Caption = 'Volume (0..100, Min/Max/Position):'
     end
     object Track1: TTyTrackBar
       Left = 16
@@ -65,7 +65,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 108
       Width = 320
-      Caption = '平衡（-50..50）：'
+      Caption = 'Balance (-50..50):'
     end
     object Track2: TTyTrackBar
       Left = 16
@@ -82,7 +82,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 168
       Width = 320
-      Caption = '亮度（0..200，PageSize/Frequency=25）：'
+      Caption = 'Brightness (0..200, PageSize/Frequency=25):'
     end
     object Track4: TTyTrackBar
       Left = 16
@@ -101,7 +101,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 48
       Width = 100
-      Caption = '垂直：'
+      Caption = 'Vertical:'
     end
     object Track3: TTyTrackBar
       Left = 380
@@ -119,7 +119,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 236
       Width = 320
-      Caption = '音量：50'
+      Caption = 'Volume: 50'
     end
   end
 end

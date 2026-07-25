@@ -1,0 +1,49 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols-gauge_example 2.99\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+# --- .lfm captions/text/hints (auto-generated, msgid=English source) ---
+
+#: tmainform.caption
+msgid "Gauge example"
+msgstr "Gauge 示例"
+
+#: tmainform.darkswitch.caption
+msgid "Dark"
+msgstr "暗色"
+
+#: tmainform.lblarc.caption
+msgid "Arc (gsArc):"
+msgstr "弧形(gsArc):"
+
+#: tmainform.lblring.caption
+msgid "Ring (gsRing):"
+msgstr "环形(gsRing):"
+
+#: tmainform.lblcirc.caption
+msgid "Ring progress:"
+msgstr "环形进度:"
+
+#: tmainform.lblbars.caption
+msgid "Linear (gsLinearH / gsLinearV):"
+msgstr "线性(gsLinearH / gsLinearV):"
+
+#: tmainform.lblbusy.caption
+msgid "Indeterminate (TTyActivityBar):"
+msgstr "不确定态(TTyActivityBar):"
+
+#: tmainform.updownlbl.caption
+msgid "Spinner (TTyUpDown) = 5"
+msgstr "微调(TTyUpDown) = 5"
+
+#: tmainform.lblstatus.caption
+msgid "Every 1.2s the value changes at random (drag the knob / gear / wheel, click the stars) — watch the easing animation."
+msgstr "每 1.2s 随机改变数值(旋钮 / 齿轮可拖动 / 滚轮,星星可点),观察缓动动画。"
+

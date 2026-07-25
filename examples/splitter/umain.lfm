@@ -3,7 +3,7 @@ object MainForm: TMainForm
   Height = 520
   Top = 0
   Width = 760
-  Caption = 'Splitter 示例'
+  Caption = 'Splitter example'
   ClientHeight = 520
   ClientWidth = 760
   Position = poScreenCenter
@@ -30,7 +30,7 @@ object MainForm: TMainForm
         Top = 5
         Width = 74
         Anchors = [akTop, akRight]
-        Caption = '暗色'
+        Caption = 'Dark'
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
@@ -49,7 +49,7 @@ object MainForm: TMainForm
       Width = 760
       Align = alBottom
       Alignment = taCenter
-      Caption = '拖动竖直分隔条改变左栏宽度；拖动水平分隔条改变上区高度'
+      Caption = 'Drag the vertical splitter to change the left column width; drag the horizontal splitter to change the top band height'
     end
     object ClientHost: TTyPanel
       Left = 0
@@ -63,7 +63,7 @@ object MainForm: TMainForm
         Top = 0
         Width = 220
         Align = alLeft
-        Caption = '左栏 (alLeft)'
+        Caption = 'Left column (alLeft)'
       end
       object VSplit: TTySplitter
         Left = 220
@@ -88,7 +88,7 @@ object MainForm: TMainForm
           Top = 0
           Width = 534
           Align = alTop
-          Caption = '上区 (alTop)'
+          Caption = 'Top band (alTop)'
         end
         object HSplit: TTySplitter
           Left = 0
@@ -106,7 +106,7 @@ object MainForm: TMainForm
           Top = 206
           Width = 534
           Align = alClient
-          Caption = '下区 (alClient)'
+          Caption = 'Bottom band (alClient)'
         end
       end
     end

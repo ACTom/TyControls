@@ -3,7 +3,7 @@ object MainForm: TMainForm
   Height = 420
   Top = 0
   Width = 480
-  Caption = 'TTyMemo 示例'
+  Caption = 'TTyMemo example'
   ClientHeight = 420
   ClientWidth = 480
   Position = poScreenCenter
@@ -30,7 +30,7 @@ object MainForm: TMainForm
         Top = 5
         Width = 74
         Anchors = [akTop, akRight]
-        Caption = '暗色'
+        Caption = 'Dark'
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
@@ -47,7 +47,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 46
       Width = 448
-      Caption = '多行文本编辑器（回车换行、方向键导航、滚轮滚动）：'
+      Caption = 'Multiline text editor (Enter for a new line, arrow keys to navigate, wheel to scroll):'
     end
     object Memo: TTyMemo
       Left = 16
@@ -57,14 +57,14 @@ object MainForm: TMainForm
       ScrollBars = ssAutoVertical
       WordWrap = False
       Lines.Strings = (
-        '第一行：欢迎使用 TyControls TTyMemo 多行编辑控件。'
-        '第二行：按回车换行，退格/删除可跨行合并。'
-        '第三行：方向键、Home/End 用于光标导航，支持选择与复制粘贴。'
-        '第四行：内容超出可见区域时右侧出现垂直滚动条。'
-        '第五行：也可以用鼠标滚轮上下滚动。'
-        '第六行：勾选下方“自动换行”后，超长的一行会按词边界折行为多个视觉行——这是一条足够长用于演示软换行效果的文字。'
-        '第七行：勾选“只读”后将无法编辑，但仍可导航与复制。'
-        '第八行：最后一行。'
+        'Line 1: Welcome to the TyControls TTyMemo multi-line editor.'
+        'Line 2: press Enter for a new line, Backspace/Delete can merge across lines.'
+        'Line 3: arrow keys and Home/End move the cursor; selection, copy and paste are supported.'
+        'Line 4: when the content exceeds the visible area a vertical scrollbar appears on the right.'
+        'Line 5: you can also scroll up and down with the mouse wheel.'
+        'Line 6: after ticking "word wrap" below, an over-long line breaks at word boundaries into several visual lines — this is a line long enough to demonstrate soft wrapping.'
+        'Line 7: after ticking "read-only" it can no longer be edited, but you can still navigate and copy.'
+        'Line 8: the last line.'
       )
       OnChange = MemoChange
     end
@@ -73,7 +73,7 @@ object MainForm: TMainForm
       Height = 24
       Top = 322
       Width = 120
-      Caption = '只读 (ReadOnly)'
+      Caption = 'Read-only (ReadOnly)'
       OnClick = ReadOnlyClick
     end
     object ChkWordWrap: TTyCheckBox
@@ -81,7 +81,7 @@ object MainForm: TMainForm
       Height = 24
       Top = 322
       Width = 140
-      Caption = '自动换行 (WordWrap)'
+      Caption = 'Word wrap (WordWrap)'
       OnClick = WordWrapClick
     end
     object LblInfo: TTyLabel

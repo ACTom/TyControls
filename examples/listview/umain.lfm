@@ -3,7 +3,7 @@ object MainForm: TMainForm
   Height = 700
   Top = 90
   Width = 1200
-  Caption = 'TyControls — TTyListView(报表 / 图标 / 平铺 · 排序 · 多选 · 虚拟模式)'
+  Caption = 'TyControls — TTyListView (report / icon / tile · sorting · multi-select · virtual mode)'
   ClientHeight = 700
   ClientWidth = 1200
   Font.Height = -12
@@ -30,7 +30,7 @@ object MainForm: TMainForm
         Top = 5
         Width = 74
         Anchors = [akTop, akRight]
-        Caption = '暗色'
+        Caption = 'Dark'
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
@@ -47,7 +47,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 44
       Width = 700
-      Caption = '集合模式 — 点表头排序 · 多选 · 框选 · 敲字母定位 · 勾「分组」按类型折叠'
+      Caption = 'Set mode — click a header to sort · multi-select · marquee · type letters to locate · tick "Group" to fold by type'
       Alignment = taLeftJustify
     end
     object BtnReport: TTyButton
@@ -55,7 +55,7 @@ object MainForm: TMainForm
       Height = 30
       Top = 72
       Width = 74
-      Caption = '报表'
+      Caption = 'Report'
       OnClick = BtnReportClick
     end
     object BtnList: TTyButton
@@ -63,7 +63,7 @@ object MainForm: TMainForm
       Height = 30
       Top = 72
       Width = 74
-      Caption = '列表'
+      Caption = 'List'
       OnClick = BtnListClick
     end
     object BtnIcon: TTyButton
@@ -71,7 +71,7 @@ object MainForm: TMainForm
       Height = 30
       Top = 72
       Width = 74
-      Caption = '大图标'
+      Caption = 'Large icons'
       OnClick = BtnIconClick
     end
     object BtnSmallIcon: TTyButton
@@ -79,7 +79,7 @@ object MainForm: TMainForm
       Height = 30
       Top = 72
       Width = 74
-      Caption = '小图标'
+      Caption = 'Small icons'
       OnClick = BtnSmallIconClick
     end
     object BtnTile: TTyButton
@@ -87,7 +87,7 @@ object MainForm: TMainForm
       Height = 30
       Top = 72
       Width = 74
-      Caption = '平铺'
+      Caption = 'Tile'
       OnClick = BtnTileClick
     end
     object ChkGrid: TTyCheckBox
@@ -95,7 +95,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 76
       Width = 74
-      Caption = '网格线'
+      Caption = 'Grid lines'
       OnChange = ChkGridChange
     end
     object ChkMulti: TTyCheckBox
@@ -103,7 +103,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 76
       Width = 66
-      Caption = '多选'
+      Caption = 'Multi-select'
       Checked = True
       State = cbChecked
       OnChange = ChkMultiChange
@@ -113,7 +113,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 76
       Width = 66
-      Caption = '复选框'
+      Caption = 'Checkbox'
       OnChange = ChkBoxesChange
     end
     object ChkGroup: TTyCheckBox
@@ -121,7 +121,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 76
       Width = 78
-      Caption = '分组'
+      Caption = 'Group'
       OnChange = ChkGroupChange
     end
     object LV1: TTyListView
@@ -141,21 +141,21 @@ object MainForm: TMainForm
       Height = 18
       Top = 618
       Width = 700
-      Caption = '未选中'
+      Caption = 'Unchecked'
     end
     object LblHint: TTyLabel
       Left = 16
       Height = 18
       Top = 644
       Width = 700
-      Caption = '按「大小」降序排,文件夹仍在最后;F2 重命名焦点项;双击表头分隔线自适应列宽'
+      Caption = 'Sort by "Size" descending, folders still last; F2 renames the focused item; double-click a header separator to auto-fit the column'
     end
     object DivRight: TTyDivider
       Left = 736
       Height = 22
       Top = 44
       Width = 448
-      Caption = '虚拟模式 — 100,000 行'
+      Caption = 'Virtual mode — 100,000 rows'
       Alignment = taLeftJustify
     end
     object BtnSortVirtual: TTyButton
@@ -163,7 +163,7 @@ object MainForm: TMainForm
       Height = 30
       Top = 72
       Width = 130
-      Caption = '按「值」排序'
+      Caption = 'Sort by "Value"'
       OnClick = BtnSortVirtualClick
     end
     object BtnJumpEnd: TTyButton
@@ -171,7 +171,7 @@ object MainForm: TMainForm
       Height = 30
       Top = 72
       Width = 130
-      Caption = '跳到第 99999 行'
+      Caption = 'Jump to row 99999'
       OnClick = BtnJumpEndClick
     end
     object LV2: TTyListView
@@ -190,14 +190,14 @@ object MainForm: TMainForm
       Height = 18
       Top = 618
       Width = 448
-      Caption = 'ItemCount = 100000,行对象 = 0'
+      Caption = 'ItemCount = 100000, row objects = 0'
     end
     object LblVirtualNote: TTyLabel
       Left = 736
       Height = 18
       Top = 644
       Width = 448
-      Caption = '勾选态存在 app 自己的数组里 —— OwnerData 模式下控件不缓存任何状态'
+      Caption = 'The checked state lives in the app''s own array — in OwnerData mode the control caches no state'
     end
   end
 end

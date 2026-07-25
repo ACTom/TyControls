@@ -3,7 +3,7 @@ object MainForm: TMainForm
   Height = 360
   Top = 0
   Width = 480
-  Caption = '滚动条 示例'
+  Caption = 'Scrollbar example'
   ClientHeight = 360
   ClientWidth = 480
   Position = poScreenCenter
@@ -30,7 +30,7 @@ object MainForm: TMainForm
         Top = 5
         Width = 74
         Anchors = [akTop, akRight]
-        Caption = '暗色'
+        Caption = 'Dark'
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
@@ -47,7 +47,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 48
       Width = 432
-      Caption = '拖动滑块、点击轨道/箭头，或用方向键/PageUp/PageDown 滚动'
+      Caption = 'Drag the slider, click the track/arrows, or use arrow keys / PageUp / PageDown to scroll'
     end
     object VBar: TTyScrollBar
       Left = 28

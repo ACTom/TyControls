@@ -1,0 +1,57 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols-edit_example 2.99\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+# --- .lfm captions/text/hints (auto-generated, msgid=English source) ---
+
+#: tmainform.caption
+msgid "TTyEdit example"
+msgstr "TTyEdit 示例"
+
+#: tmainform.darkswitch.caption
+msgid "Dark"
+msgstr "暗色"
+
+#: tmainform.lblhint.caption
+msgid "Placeholder hint + OnChange"
+msgstr "占位提示 + OnChange"
+
+#: tmainform.lblpassword.caption
+msgid "Password mask"
+msgstr "密码遮罩"
+
+#: tmainform.lblupper.caption
+msgid "Force uppercase"
+msgstr "强制大写"
+
+#: tmainform.lblmaxlen.caption
+msgid "Max length 8"
+msgstr "最大长度 8"
+
+#: tmainform.lblnumbers.caption
+msgid "Digits only"
+msgstr "仅数字"
+
+#: tmainform.lblreadonly.caption
+msgid "Read-only"
+msgstr "只读"
+
+#: tmainform.edreadonly.text
+msgid "Read-only content, cannot be edited"
+msgstr "只读内容，无法编辑"
+
+#: tmainform.lblright.caption
+msgid "Right align"
+msgstr "右对齐"
+
+#: tmainform.lblstatus.caption
+msgid "(the first edit box's content will show here)"
+msgstr "（第一个输入框内容将在此显示）"
+

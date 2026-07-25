@@ -1,0 +1,45 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols-hint_example 2.99\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+# --- .lfm captions/text/hints (auto-generated, msgid=English source) ---
+
+#: tmainform.caption
+msgid "Hint example"
+msgstr "Hint 示例"
+
+#: tmainform.darkswitch.caption
+msgid "Dark"
+msgstr "暗色"
+
+#: tmainform.lblintro.caption
+msgid "Hover the button for the themed tooltip; click \"Show popover\" for a pointer popover."
+msgstr "悬停按钮看主题化 tooltip;点“显示气泡”看带指针气泡。"
+
+#: tmainform.btnsave.caption
+msgid "Save"
+msgstr "保存"
+
+#: tmainform.btnsave.hint
+msgid "Save the current document (Ctrl+S)"
+msgstr "保存当前文档 (Ctrl+S)"
+
+#: tmainform.btndel.caption
+msgid "Delete"
+msgstr "删除"
+
+#: tmainform.btnballoon.caption
+msgid "Show popover"
+msgstr "显示气泡"
+
+#: tmainform.balloon.title
+msgid "Saved"
+msgstr "已保存"
+

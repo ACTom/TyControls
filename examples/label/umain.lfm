@@ -3,7 +3,7 @@ object MainForm: TMainForm
   Height = 440
   Top = 0
   Width = 480
-  Caption = 'TTyLabel 示例'
+  Caption = 'TTyLabel example'
   ClientHeight = 440
   ClientWidth = 480
   Position = poScreenCenter
@@ -30,7 +30,7 @@ object MainForm: TMainForm
         Top = 5
         Width = 74
         Anchors = [akTop, akRight]
-        Caption = '暗色'
+        Caption = 'Dark'
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
@@ -47,7 +47,7 @@ object MainForm: TMainForm
       Height = 26
       Top = 46
       Width = 440
-      Caption = '标签特性一览'
+      Caption = 'Tag features at a glance'
     end
     object LblLeft: TTyLabel
       Left = 20
@@ -56,7 +56,7 @@ object MainForm: TMainForm
       Width = 440
       AutoSize = False
       Alignment = taLeftJustify
-      Caption = '左对齐（taLeftJustify）'
+      Caption = 'Left align (taLeftJustify)'
     end
     object LblCenter: TTyLabel
       Left = 20
@@ -65,7 +65,7 @@ object MainForm: TMainForm
       Width = 440
       AutoSize = False
       Alignment = taCenter
-      Caption = '居中对齐（taCenter）'
+      Caption = 'Center align (taCenter)'
     end
     object LblRight: TTyLabel
       Left = 20
@@ -74,7 +74,7 @@ object MainForm: TMainForm
       Width = 440
       AutoSize = False
       Alignment = taRightJustify
-      Caption = '右对齐（taRightJustify）'
+      Caption = 'Right align (taRightJustify)'
     end
     object LblFilled: TTyLabel
       Left = 20
@@ -84,7 +84,7 @@ object MainForm: TMainForm
       AutoSize = False
       Alignment = taCenter
       Transparent = False
-      Caption = 'Transparent=False：带填充背景'
+      Caption = 'Transparent=False: filled background'
     end
     object LblAuto: TTyLabel
       Left = 20
@@ -92,7 +92,7 @@ object MainForm: TMainForm
       Top = 194
       Width = 10
       AutoSize = True
-      Caption = 'AutoSize=True：宽高随文字自适应'
+      Caption = 'AutoSize=True: width and height fit the text'
     end
     object LblWrap: TTyLabel
       Left = 20
@@ -102,7 +102,7 @@ object MainForm: TMainForm
       AutoSize = False
       WordWrap = True
       Alignment = taLeftJustify
-      Caption = 'WordWrap=True : this label wraps onto several lines because the words are separated by spaces — 中文 与 English 混排 也 能 在 空格 处 换行，超出 控件 宽度 就 自动 折行。'
+      Caption = 'WordWrap=True : this label wraps onto several lines because the words are separated by spaces — 中文 and English mixed also wrap at spaces, and lines that exceed the control width wrap automatically.'
     end
     object EdName: TTyEdit
       Left = 180
@@ -115,7 +115,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 304
       Width = 150
-      Caption = '姓名(&N)：'
+      Caption = 'Name(&N):'
       FocusControl = EdName
     end
   end

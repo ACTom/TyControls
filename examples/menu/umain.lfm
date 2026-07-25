@@ -3,7 +3,7 @@ object MainForm: TMainForm
   Height = 380
   Top = 0
   Width = 560
-  Caption = 'TTyMenuEx / 窗口卷起 示例'
+  Caption = 'TTyMenuEx / window roll-up example'
   ClientHeight = 380
   ClientWidth = 560
   Position = poScreenCenter
@@ -25,7 +25,7 @@ object MainForm: TMainForm
       Top = 0
       Width = 560
       Align = alTop
-      Caption = '增强菜单 + 双击标题栏卷起  · TyControls'
+      Caption = 'Enhanced menu + double-click title bar to roll up  · TyControls'
       TitleAlignment = taLeftJustify
       object DarkSwitch: TTyToggleSwitch
         Left = 212
@@ -33,7 +33,7 @@ object MainForm: TMainForm
         Top = 5
         Width = 74
         Anchors = [akTop, akRight]
-        Caption = '暗色'
+        Caption = 'Dark'
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
@@ -58,7 +58,7 @@ object MainForm: TMainForm
       Height = 200
       Top = 80
       Width = 528
-      Caption = '右键此面板 → 增强菜单(分节标题 + 图标列 + 勾选项)'
+      Caption = 'Right-click this panel → enhanced menu (section headers + icon column + check items)'
       PopupMenu = Popup
     end
     object StatusLabel: TTyLabel
@@ -66,73 +66,73 @@ object MainForm: TMainForm
       Height = 24
       Top = 296
       Width = 528
-      Caption = '就绪：右键面板试增强菜单；双击标题栏可卷起窗口（再双击还原）'
+      Caption = 'Ready: right-click the panel to try the enhanced menu; double-click the title bar to roll up the window (double-click again to restore)'
     end
   end
   object MainMenu1: TMainMenu
     object MnuFile: TMenuItem
-      Caption = '文件(&F)'
+      Caption = 'File(&F)'
       object MnuFileNew: TMenuItem
-        Caption = '新建(&N)'
+        Caption = 'New(&N)'
         OnClick = MenuItemClicked
       end
       object MnuFileOpen: TMenuItem
-        Caption = '打开…(&O)'
+        Caption = 'Open…(&O)'
         OnClick = MenuItemClicked
       end
       object MnuFileSave: TMenuItem
-        Caption = '保存(&S)'
+        Caption = 'Save(&S)'
         OnClick = MenuItemClicked
       end
       object MnuFileSep1: TMenuItem
         Caption = '-'
       end
       object MnuFileExit: TMenuItem
-        Caption = '退出(&X)'
+        Caption = 'Exit(&X)'
         OnClick = MenuItemClicked
       end
     end
     object MnuEdit: TMenuItem
-      Caption = '编辑(&E)'
+      Caption = 'Edit(&E)'
       object MnuEditUndo: TMenuItem
-        Caption = '撤销(&U)'
+        Caption = 'Undo(&U)'
         OnClick = MenuItemClicked
       end
       object MnuEditRedo: TMenuItem
-        Caption = '重做(&R)'
+        Caption = 'Redo(&R)'
         OnClick = MenuItemClicked
       end
       object MnuEditSep1: TMenuItem
         Caption = '-'
       end
       object MnuEditCut: TMenuItem
-        Caption = '剪切(&T)'
+        Caption = 'Cut(&T)'
         OnClick = MenuItemClicked
       end
       object MnuEditCopy: TMenuItem
-        Caption = '复制(&C)'
+        Caption = 'Copy(&C)'
         OnClick = MenuItemClicked
       end
       object MnuEditPaste: TMenuItem
-        Caption = '粘贴(&P)'
+        Caption = 'Paste(&P)'
         OnClick = MenuItemClicked
       end
     end
     object MnuView: TMenuItem
-      Caption = '视图(&V)'
+      Caption = 'View(&V)'
       object MnuViewZoomIn: TMenuItem
-        Caption = '放大(&I)'
+        Caption = 'Zoom in(&I)'
         OnClick = MenuItemClicked
       end
       object MnuViewZoomOut: TMenuItem
-        Caption = '缩小(&O)'
+        Caption = 'Zoom out(&O)'
         OnClick = MenuItemClicked
       end
       object MnuViewSep1: TMenuItem
         Caption = '-'
       end
       object MnuViewFull: TMenuItem
-        Caption = '全屏(&F)'
+        Caption = 'Full screen(&F)'
         OnClick = MenuItemClicked
       end
     end
@@ -142,20 +142,20 @@ object MainForm: TMainForm
     BannerWidth = 26
     Images = MenuImages
     object PopHdrClip: TMenuItem
-      Caption = '-剪贴板'
+      Caption = '-Clipboard'
     end
     object PopCut: TMenuItem
-      Caption = '剪切(&T)'
+      Caption = 'Cut(&T)'
       ImageIndex = 0
       OnClick = MenuItemClicked
     end
     object PopCopy: TMenuItem
-      Caption = '复制(&C)'
+      Caption = 'Copy(&C)'
       ImageIndex = 1
       OnClick = MenuItemClicked
     end
     object PopPaste: TMenuItem
-      Caption = '粘贴(&P)'
+      Caption = 'Paste(&P)'
       ImageIndex = 2
       OnClick = MenuItemClicked
     end
@@ -163,23 +163,23 @@ object MainForm: TMainForm
       Caption = '-'
     end
     object PopHdrView: TMenuItem
-      Caption = '-视图'
+      Caption = '-View'
     end
     object PopGrid: TMenuItem
       AutoCheck = True
-      Caption = '显示网格'
+      Caption = 'Show grid'
       Checked = True
       OnClick = MenuItemClicked
     end
     object PopRefresh: TMenuItem
-      Caption = '刷新(&R)'
+      Caption = 'Refresh(&R)'
       OnClick = MenuItemClicked
     end
     object PopSep2: TMenuItem
       Caption = '-'
     end
     object PopProps: TMenuItem
-      Caption = '属性(&P)'
+      Caption = 'Properties(&P)'
       OnClick = MenuItemClicked
     end
   end

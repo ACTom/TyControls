@@ -93,7 +93,7 @@ end;
 procedure TMainForm.EditChanged(Sender: TObject);
 begin
   // read TTyEdit.Text live
-  LblStatus.Caption := '当前输入：' + (Sender as TTyEdit).Text;
+  LblStatus.Caption := 'Current input:' + (Sender as TTyEdit).Text;
 end;
 
 end.

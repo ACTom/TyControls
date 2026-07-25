@@ -48,10 +48,10 @@ implementation
 function StateName(AState: TCheckBoxState): string;
 begin
   case AState of
-    cbChecked: Result := '选中 (cbChecked)';
-    cbGrayed:  Result := '半选 (cbGrayed)';
+    cbChecked: Result := 'Checked (cbChecked)';
+    cbGrayed:  Result := 'Grayed (cbGrayed)';
   else
-    Result := '未选 (cbUnchecked)';
+    Result := 'Unchecked (cbUnchecked)';
   end;
 end;
 
@@ -93,15 +93,15 @@ end;
 
 procedure TMainForm.TriChange(Sender: TObject);
 begin
-  LblTriStatus.Caption := '三态状态：' + StateName(CbTri.State);
+  LblTriStatus.Caption := 'Tri-state:' + StateName(CbTri.State);
 end;
 
 procedure TMainForm.PlainChange(Sender: TObject);
 begin
   if CbPlain.Checked then
-    LblStatus.Caption := '两态状态：已勾选'
+    LblStatus.Caption := 'Two-state: checked'
   else
-    LblStatus.Caption := '两态状态：未勾选';
+    LblStatus.Caption := 'Two-state: unchecked';
 end;
 
 end.

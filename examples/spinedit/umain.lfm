@@ -3,7 +3,7 @@ object MainForm: TMainForm
   Height = 420
   Top = 0
   Width = 440
-  Caption = 'TTySpinEdit 示例'
+  Caption = 'TTySpinEdit example'
   ClientHeight = 420
   ClientWidth = 440
   Position = poScreenCenter
@@ -31,7 +31,7 @@ object MainForm: TMainForm
         Top = 5
         Width = 74
         Anchors = [akTop, akRight]
-        Caption = '暗色'
+        Caption = 'Dark'
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
@@ -48,7 +48,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 52
       Width = 380
-      Caption = '数量（0..100，步进 1；箭头/方向键/滚轮/键入）：'
+      Caption = 'Quantity (0..100, step 1; arrow keys / wheel / typing):'
     end
     object SpinQty: TTySpinEdit
       Left = 24
@@ -66,7 +66,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 120
       Width = 380
-      Caption = '偏移（-50..50，步进 5，含负值范围）：'
+      Caption = 'Offset (-50..50, step 5, includes negatives):'
     end
     object SpinOfs: TTySpinEdit
       Left = 24
@@ -84,7 +84,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 188
       Width = 380
-      Caption = '年份（右对齐 Alignment，MaxLength=4）：'
+      Caption = 'Year (right-aligned Alignment, MaxLength=4):'
     end
     object SpinYear: TTySpinEdit
       Left = 24
@@ -103,7 +103,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 256
       Width = 380
-      Caption = '锁定（ReadOnly=True：不可编辑/步进/滚轮）：'
+      Caption = 'Locked (ReadOnly=True: no edit/step/wheel):'
     end
     object SpinLock: TTySpinEdit
       Left = 24
@@ -121,14 +121,14 @@ object MainForm: TMainForm
       Height = 20
       Top = 332
       Width = 60
-      Caption = '状态：'
+      Caption = 'Status:'
     end
     object LblStatus: TTyLabel
       Left = 84
       Height = 20
       Top = 332
       Width = 336
-      Caption = '（改变任一数值以查看 OnChange 输出）'
+      Caption = '(change any value to see the OnChange output)'
     end
   end
 end

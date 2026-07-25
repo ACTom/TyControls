@@ -91,13 +91,13 @@ end;
 procedure TMainForm.SpinChange(Sender: TObject);
 begin
   if Sender = SpinQty then
-    UpdateStatus('数量', SpinQty)
+    UpdateStatus('Quantity', SpinQty)
   else if Sender = SpinOfs then
-    UpdateStatus('偏移', SpinOfs)
+    UpdateStatus('Offset', SpinOfs)
   else if Sender = SpinYear then
-    UpdateStatus('年份', SpinYear)
+    UpdateStatus('Year', SpinYear)
   else if Sender = SpinLock then
-    UpdateStatus('锁定', SpinLock);
+    UpdateStatus('Locked', SpinLock);
 end;
 
 end.

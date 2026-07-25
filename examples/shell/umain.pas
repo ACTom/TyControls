@@ -110,9 +110,9 @@ begin
   { Filter presets: a segment Caption + its ';'-separated pattern list. Selecting one sets
     List1.Mask via OnFilterChange. Directories are always shown regardless of the mask. }
   FilterCombo.Filter :=
-    '所有文件 (*.*)|*.*|' +
-    '代码 (*.pas;*.lpr;*.inc)|*.pas;*.lpr;*.inc|' +
-    '文档 (*.md;*.txt)|*.md;*.txt';
+    'All files (*.*)|*.*|' +
+    'Code (*.pas;*.lpr;*.inc)|*.pas;*.lpr;*.inc|' +
+    'Document (*.md;*.txt)|*.md;*.txt';
   FilterCombo.FilterIndex := 1;
 
   Tree1.PopulateRoots;
@@ -135,7 +135,7 @@ end;
   never fires OnSelectPath, so this is safe to call outside the FSyncing guard. }
 procedure TMainForm.ShowCurrent(const APath: string);
 begin
-  LblStatus.Caption := '当前目录:' + APath;
+  LblStatus.Caption := 'Current directory:' + APath;
   LookIn.Directory := APath;
 end;
 
@@ -185,7 +185,7 @@ end;
 procedure TMainForm.List1FileActivate(Sender: TObject; AIndex: Integer);
 begin
   { Only files reach here -- a folder double-click navigates instead (handled by the control). }
-  LblStatus.Caption := '打开文件:' + List1.FileAt(AIndex);
+  LblStatus.Caption := 'Open file:' + List1.FileAt(AIndex);
 end;
 
 procedure TMainForm.BtnUpClick(Sender: TObject);

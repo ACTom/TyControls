@@ -1,0 +1,89 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols-listview_example 2.99\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+# --- .lfm captions/text/hints (auto-generated, msgid=English source) ---
+
+#: tmainform.caption
+msgid "TyControls — TTyListView (report / icon / tile · sorting · multi-select · virtual mode)"
+msgstr "TyControls — TTyListView(报表 / 图标 / 平铺 · 排序 · 多选 · 虚拟模式)"
+
+#: tmainform.darkswitch.caption
+msgid "Dark"
+msgstr "暗色"
+
+#: tmainform.divleft.caption
+msgid "Set mode — click a header to sort · multi-select · marquee · type letters to locate · tick \"Group\" to fold by type"
+msgstr "集合模式 — 点表头排序 · 多选 · 框选 · 敲字母定位 · 勾「分组」按类型折叠"
+
+#: tmainform.btnreport.caption
+msgid "Report"
+msgstr "报表"
+
+#: tmainform.btnlist.caption
+msgid "List"
+msgstr "列表"
+
+#: tmainform.btnicon.caption
+msgid "Large icons"
+msgstr "大图标"
+
+#: tmainform.btnsmallicon.caption
+msgid "Small icons"
+msgstr "小图标"
+
+#: tmainform.btntile.caption
+msgid "Tile"
+msgstr "平铺"
+
+#: tmainform.chkgrid.caption
+msgid "Grid lines"
+msgstr "网格线"
+
+#: tmainform.chkmulti.caption
+msgid "Multi-select"
+msgstr "多选"
+
+#: tmainform.chkboxes.caption
+msgid "Checkbox"
+msgstr "复选框"
+
+#: tmainform.chkgroup.caption
+msgid "Group"
+msgstr "分组"
+
+#: tmainform.lblstatus.caption
+msgid "Unchecked"
+msgstr "未选中"
+
+#: tmainform.lblhint.caption
+msgid "Sort by \"Size\" descending, folders still last; F2 renames the focused item; double-click a header separator to auto-fit the column"
+msgstr "按「大小」降序排,文件夹仍在最后;F2 重命名焦点项;双击表头分隔线自适应列宽"
+
+#: tmainform.divright.caption
+msgid "Virtual mode — 100,000 rows"
+msgstr "虚拟模式 — 100,000 行"
+
+#: tmainform.btnsortvirtual.caption
+msgid "Sort by \"Value\""
+msgstr "按「值」排序"
+
+#: tmainform.btnjumpend.caption
+msgid "Jump to row 99999"
+msgstr "跳到第 99999 行"
+
+#: tmainform.lblvirtual.caption
+msgid "ItemCount = 100000, row objects = 0"
+msgstr "ItemCount = 100000,行对象 = 0"
+
+#: tmainform.lblvirtualnote.caption
+msgid "The checked state lives in the app's own array — in OwnerData mode the control caches no state"
+msgstr "勾选态存在 app 自己的数组里 —— OwnerData 模式下控件不缓存任何状态"
+

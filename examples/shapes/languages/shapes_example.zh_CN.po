@@ -1,0 +1,89 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols-shapes_example 2.99\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+# --- .lfm captions/text/hints (auto-generated, msgid=English source) ---
+
+#: tmainform.caption
+msgid "TyControls — vector shapes (TTyShape / TTyStarShape / TTyArrow)"
+msgstr "TyControls — 矢量形状(TTyShape / TTyStarShape / TTyArrow)"
+
+#: tmainform.titlebar1.caption
+msgid "Vector shapes  ·  TyControls"
+msgstr "矢量形状  ·  TyControls"
+
+#: tmainform.divkinds.caption
+msgid "TTyShape — eight shapes (fill from TyPanel background, stroke from its border, all follow the theme)"
+msgstr "TTyShape — 八种形状(填充取 TyPanel 背景,描边取其边框,均随主题变化)"
+
+#: tmainform.divstyle.caption
+msgid "Per-instance recolour and border toggle — all via StyleOverride, the control code contains no colours"
+msgstr "单实例改色与边框开关 — 全部通过 StyleOverride,控件代码不含任何颜色"
+
+#: tmainform.lblover1.caption
+msgid "Literal colour"
+msgstr "字面色"
+
+#: tmainform.lblthick.caption
+msgid "6px thick border (no edge clipping)"
+msgstr "6px 粗边(不裁边)"
+
+#: tmainform.lbllinethick.caption
+msgid "tskLine thick line"
+msgstr "tskLine 粗线"
+
+#: tmainform.divstar.caption
+msgid "TTyStarShape — drag the slider to change point count / inner-outer radius ratio live"
+msgstr "TTyStarShape — 拖滑块实时改点数 / 内外半径比"
+
+#: tmainform.lblpoints.caption
+msgid "Point count Points = 5"
+msgstr "角数 Points = 5"
+
+#: tmainform.lblinner.caption
+msgid "Inner radius ratio InnerRatio = 0.42"
+msgstr "内半径比 InnerRatio = 0.42"
+
+#: tmainform.lblstarhint.caption
+msgid "Points<3 and an out-of-range InnerRatio are clamped by the setter"
+msgstr "Points<3 与越界的 InnerRatio 会被 setter 夹紧"
+
+#: tmainform.divarrow.caption
+msgid "TTyArrow — four directions + adjustable head / shaft ratio"
+msgstr "TTyArrow — 四个方向 + 可调头部 / 箭杆比例"
+
+#: tmainform.lblhead.caption
+msgid "Head-length ratio HeadRatio = 0.45"
+msgstr "头部占长度 HeadRatio = 0.45"
+
+#: tmainform.lblshaft.caption
+msgid "Shaft-width ratio ShaftRatio = 0.50"
+msgstr "箭杆占宽度 ShaftRatio = 0.50"
+
+#: tmainform.divtheme.caption
+msgid "Switch theme — shapes not using StyleOverride recolour together"
+msgstr "换主题 — 未用 StyleOverride 的形状会整体跟着变色"
+
+#: tmainform.btnlight.caption
+msgid "Light"
+msgstr "浅色"
+
+#: tmainform.btndark.caption
+msgid "Dark"
+msgstr "深色"
+
+#: tmainform.btngreen.caption
+msgid "Green"
+msgstr "绿色"
+
+#: tmainform.lblthemehint.caption
+msgid "The controls added this batch introduce no theme token: all three return TyPanel from GetStyleTypeKey"
+msgstr "本批新增控件不引入任何主题 token:三者的 GetStyleTypeKey 都返回 TyPanel"
+

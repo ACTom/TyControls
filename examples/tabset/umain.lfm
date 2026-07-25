@@ -3,7 +3,7 @@ object MainForm: TMainForm
   Height = 220
   Top = 0
   Width = 520
-  Caption = 'TTyTabSet 示例'
+  Caption = 'TTyTabSet example'
   ClientHeight = 220
   ClientWidth = 520
   Position = poScreenCenter
@@ -30,7 +30,7 @@ object MainForm: TMainForm
         Top = 5
         Width = 74
         Anchors = [akTop, akRight]
-        Caption = '暗色'
+        Caption = 'Dark'
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
@@ -49,11 +49,11 @@ object MainForm: TMainForm
       Width = 480
       TabHeight = 32
       Tabs.Strings = (
-        '概览'
-        '详情'
-        '通知(锁定)'
-        '设置'
-        '关于'
+        'Overview'
+        'Detail'
+        'Notice (locked)'
+        'Settings'
+        'About'
       )
       TabIndex = 0
       TabsClosable = True
@@ -67,7 +67,7 @@ object MainForm: TMainForm
       Height = 66
       Top = 110
       Width = 480
-      Caption = '当前页签：概览'#13#10'提示：点击切换 · 拖拽可重排 · 点 × 关闭 · "通知(锁定)"页禁止选中'
+      Caption = 'Current tab: Overview'#13#10'Tip: click to switch · drag to reorder · click × to close · the "Notice (locked)" tab cannot be selected'
       WordWrap = True
     end
   end

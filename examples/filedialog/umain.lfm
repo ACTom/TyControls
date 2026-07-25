@@ -3,7 +3,7 @@ object MainForm: TMainForm
   Height = 560
   Top = 100
   Width = 720
-  Caption = 'TyControls — 文件对话框(普通 / 图片 / 预览,六个变体)'
+  Caption = 'TyControls — file dialogs (plain / picture / preview, six variants)'
   ClientHeight = 560
   ClientWidth = 720
   Font.Height = -12
@@ -24,7 +24,7 @@ object MainForm: TMainForm
       Top = 0
       Width = 720
       Align = alTop
-      Caption = '文件对话框  ·  TyControls'
+      Caption = 'File dialogs  ·  TyControls'
       TitleAlignment = taLeftJustify
       object DarkSwitch: TTyToggleSwitch
         Left = 372
@@ -32,7 +32,7 @@ object MainForm: TMainForm
         Top = 5
         Width = 74
         Anchors = [akTop, akRight]
-        Caption = '暗色'
+        Caption = 'Dark'
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
@@ -49,7 +49,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 44
       Width = 688
-      Caption = '普通文件对话框'
+      Caption = 'Plain file dialog'
       Alignment = taLeftJustify
     end
     object BtnOpen: TTyButton
@@ -57,7 +57,7 @@ object MainForm: TMainForm
       Height = 32
       Top = 72
       Width = 130
-      Caption = '打开(多选)'
+      Caption = 'Open (multi-select)'
       OnClick = BtnOpenClick
     end
     object BtnSave: TTyButton
@@ -65,7 +65,7 @@ object MainForm: TMainForm
       Height = 32
       Top = 72
       Width = 130
-      Caption = '保存'
+      Caption = 'Save'
       OnClick = BtnSaveClick
     end
     object DivPic: TTyDivider
@@ -73,7 +73,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 116
       Width = 688
-      Caption = '图片对话框(右侧图片预览)'
+      Caption = 'Picture dialog (picture preview on the right)'
       Alignment = taLeftJustify
     end
     object BtnOpenPic: TTyButton
@@ -81,7 +81,7 @@ object MainForm: TMainForm
       Height = 32
       Top = 144
       Width = 130
-      Caption = '打开图片'
+      Caption = 'Open picture'
       OnClick = BtnOpenPicClick
     end
     object BtnSavePic: TTyButton
@@ -89,7 +89,7 @@ object MainForm: TMainForm
       Height = 32
       Top = 144
       Width = 130
-      Caption = '保存图片'
+      Caption = 'Save picture'
       OnClick = BtnSavePicClick
     end
     object DivPrev: TTyDivider
@@ -97,7 +97,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 188
       Width = 688
-      Caption = '预览对话框(图片 + 文本 + 自定义 OnPreview)'
+      Caption = 'Preview dialog (picture + text + custom OnPreview)'
       Alignment = taLeftJustify
     end
     object BtnOpenPrev: TTyButton
@@ -105,7 +105,7 @@ object MainForm: TMainForm
       Height = 32
       Top = 216
       Width = 130
-      Caption = '打开预览'
+      Caption = 'Open preview'
       OnClick = BtnOpenPrevClick
     end
     object BtnSavePrev: TTyButton
@@ -113,7 +113,7 @@ object MainForm: TMainForm
       Height = 32
       Top = 216
       Width = 130
-      Caption = '保存预览'
+      Caption = 'Save preview'
       OnClick = BtnSavePrevClick
     end
     object ResultMemo: TTyMemo

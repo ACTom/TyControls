@@ -3,7 +3,7 @@ object MainForm: TMainForm
   Height = 720
   Top = 80
   Width = 1024
-  Caption = 'TyControls — 文件浏览器(Shell 树 + 列表 + 查找范围 + 过滤下拉)'
+  Caption = 'TyControls — file browser (Shell tree + list + look-in scope + filter dropdown)'
   ClientHeight = 720
   ClientWidth = 1024
   Font.Height = -12
@@ -24,14 +24,14 @@ object MainForm: TMainForm
       Top = 0
       Width = 1024
       Align = alTop
-      Caption = '文件浏览器  ·  TyControls'
+      Caption = 'File browser  ·  TyControls'
       object DarkSwitch: TTyToggleSwitch
         Left = 676
         Height = 24
         Top = 5
         Width = 74
         Anchors = [akTop, akRight]
-        Caption = '暗色'
+        Caption = 'Dark'
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
@@ -48,7 +48,7 @@ object MainForm: TMainForm
       Height = 30
       Top = 46
       Width = 90
-      Caption = '上一级'
+      Caption = 'Up one level'
       OnClick = BtnUpClick
     end
     object ChkHidden: TTyCheckBox
@@ -56,7 +56,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 50
       Width = 100
-      Caption = '显示隐藏'
+      Caption = 'Show/hide'
       OnChange = ChkHiddenChange
     end
     object ChkGroup: TTyCheckBox
@@ -64,7 +64,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 50
       Width = 120
-      Caption = '按类型分组'
+      Caption = 'Group by type'
       OnChange = ChkGroupChange
     end
     object LblLookIn: TTyLabel
@@ -72,7 +72,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 90
       Width = 62
-      Caption = '查找范围:'
+      Caption = 'Look in:'
     end
     object LookIn: TTyShellComboBox
       Left = 84
@@ -105,7 +105,7 @@ object MainForm: TMainForm
       Top = 668
       Width = 62
       Anchors = [akLeft, akBottom]
-      Caption = '文件类型:'
+      Caption = 'File type:'
     end
     object FilterCombo: TTyFilterComboBox
       Left = 84
@@ -121,7 +121,7 @@ object MainForm: TMainForm
       Top = 698
       Width = 992
       Anchors = [akLeft, akRight, akBottom]
-      Caption = '双击文件夹进入,双击文件打开,F2 重命名'
+      Caption = 'Double-click a folder to enter, double-click a file to open, F2 to rename'
     end
   end
 end

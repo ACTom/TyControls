@@ -3,7 +3,7 @@ object MainForm: TMainForm
   Height = 320
   Top = 0
   Width = 520
-  Caption = 'TTyStatusBar 示例'
+  Caption = 'TTyStatusBar example'
   ClientHeight = 320
   ClientWidth = 520
   Position = poScreenCenter
@@ -31,7 +31,7 @@ object MainForm: TMainForm
         Top = 5
         Width = 74
         Anchors = [akTop, akRight]
-        Caption = '暗色'
+        Caption = 'Dark'
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
@@ -48,14 +48,14 @@ object MainForm: TMainForm
       Height = 24
       Top = 56
       Width = 472
-      Caption = '底部状态栏:多面板 + 尺寸手柄。点击按钮更新面板文本。'
+      Caption = 'Bottom status bar: multiple panels + size grip. Click a button to update the panel text.'
     end
     object BtnUpdate: TTyButton
       Left = 24
       Height = 34
       Top = 100
       Width = 200
-      Caption = '更新状态面板'
+      Caption = 'Update the status panel'
       StyleClass = 'primary'
       OnClick = UpdatePanel
     end
@@ -64,7 +64,7 @@ object MainForm: TMainForm
       Height = 34
       Top = 144
       Width = 200
-      Caption = '切换 SimplePanel 模式'
+      Caption = 'Toggle SimplePanel mode'
       OnClick = ToggleSimple
     end
     object StatusBar: TTyStatusBar
@@ -76,12 +76,12 @@ object MainForm: TMainForm
       SizeGrip = True
       Panels = <
         item
-          Text = '就绪'
+          Text = 'Ready'
           Width = 0
           Alignment = taLeftJustify
         end
         item
-          Text = '点击:0'
+          Text = 'Clicks: 0'
           Width = 110
           Alignment = taCenter
         end

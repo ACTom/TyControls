@@ -89,7 +89,7 @@ end;
 
 function TMainForm.SelectedRadio: string;
 begin
-  Result := '（未选）';
+  Result := '(none selected)';
   if RadioA.Checked then Result := RadioA.Caption
   else if RadioB.Checked then Result := RadioB.Caption
   else if RadioC.Checked then Result := RadioC.Caption;
@@ -115,13 +115,13 @@ var
   Styles: string;
 begin
   Styles := '';
-  if CheckBold.Checked then Styles := Styles + '加粗 ';
-  if CheckItalic.Checked then Styles := Styles + '斜体 ';
-  if Styles = '' then Styles := '（无）';
+  if CheckBold.Checked then Styles := Styles + 'Bold ';
+  if CheckItalic.Checked then Styles := Styles + 'Italic';
+  if Styles = '' then Styles := '(none)';
 
-  LblStatus.Caption := Format('字体大小：%s    样式：%s    名称：%s',
+  LblStatus.Caption := Format('Font size: %s    Style: %s    Name: %s',
     [SelectedRadio, Trim(Styles),
-     IfThen(NameEdit.Text = '', '（空）', NameEdit.Text)]);
+     IfThen(NameEdit.Text = '', '(empty)', NameEdit.Text)]);
 end;
 
 end.

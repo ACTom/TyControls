@@ -3,7 +3,7 @@ object MainForm: TMainForm
   Height = 420
   Top = 0
   Width = 460
-  Caption = 'TTyButton 示例'
+  Caption = 'TTyButton example'
   ClientHeight = 420
   ClientWidth = 460
   Position = poScreenCenter
@@ -34,7 +34,7 @@ object MainForm: TMainForm
         Width = 74
         TabOrder = 3
         TabStop = True
-        Caption = '暗色'
+        Caption = 'Dark'
         OnChange = DarkSwitchChange
         Anchors = [akTop, akRight]
       end
@@ -56,7 +56,7 @@ object MainForm: TMainForm
       Width = 168
       TabOrder = 1
       OnClick = ButtonClicked
-      Caption = '默认按钮(&D)'
+      Caption = 'Default button(&D)'
     end
     object BtnPrimary: TTyButton
       Left = 24
@@ -66,7 +66,7 @@ object MainForm: TMainForm
       TabOrder = 2
       OnClick = ButtonClicked
       StyleClass = 'primary'
-      Caption = '主要按钮(&P)'
+      Caption = 'Primary button(&P)'
     end
     object BtnDanger: TTyButton
       Left = 24
@@ -76,7 +76,7 @@ object MainForm: TMainForm
       TabOrder = 3
       OnClick = ButtonClicked
       StyleClass = 'danger'
-      Caption = '危险按钮(&X)'
+      Caption = 'Danger button(&X)'
     end
     object BtnDisabled: TTyButton
       Left = 24
@@ -87,7 +87,7 @@ object MainForm: TMainForm
       TabOrder = 4
       OnClick = ButtonClicked
       StyleClass = 'primary'
-      Caption = '禁用按钮'
+      Caption = 'Disabled button'
     end
     object BtnGhost: TTyButton
       Left = 24
@@ -98,7 +98,7 @@ object MainForm: TMainForm
       OnClick = GhostToggle
       StyleClass = 'ghost'
       Down = True
-      Caption = 'Ghost / 选中'
+      Caption = 'Ghost / selected'
     end
     object BtnMsg: TTyButton
       Left = 256
@@ -110,7 +110,7 @@ object MainForm: TMainForm
       ShowBadge = True
       BadgeValue = 128
       BadgePosition = bpTopRight
-      Caption = '消息'
+      Caption = 'Message'
     end
     object BtnNotify: TTyButton
       Left = 256
@@ -121,7 +121,7 @@ object MainForm: TMainForm
       OnClick = ButtonClicked
       ShowBadge = True
       BadgeValue = 3
-      Caption = '通知'
+      Caption = 'Notification'
     end
     object BtnOK: TTyButton
       Left = 256
@@ -133,7 +133,7 @@ object MainForm: TMainForm
       StyleClass = 'primary'
       Default = True
       ModalResult = 1
-      Caption = '确定(回车)'
+      Caption = 'OK (Enter)'
     end
     object BtnCancel: TTyButton
       Left = 256
@@ -144,14 +144,14 @@ object MainForm: TMainForm
       OnClick = CancelClicked
       Cancel = True
       ModalResult = 2
-      Caption = '取消(Esc)'
+      Caption = 'Cancel (Esc)'
     end
     object LblStatus: TTyLabel
       Left = 24
       Height = 24
       Top = 356
       Width = 412
-      Caption = '点击次数:0'
+      Caption = 'Click count: 0'
     end
   end
 end

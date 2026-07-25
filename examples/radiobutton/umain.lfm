@@ -3,7 +3,7 @@ object MainForm: TMainForm
   Height = 320
   Top = 0
   Width = 440
-  Caption = 'RadioButton 示例'
+  Caption = 'RadioButton example'
   ClientHeight = 320
   ClientWidth = 440
   Position = poScreenCenter
@@ -30,7 +30,7 @@ object MainForm: TMainForm
         Top = 5
         Width = 74
         Anchors = [akTop, akRight]
-        Caption = '暗色'
+        Caption = 'Dark'
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
@@ -47,14 +47,14 @@ object MainForm: TMainForm
       Height = 168
       Top = 52
       Width = 190
-      Caption = '水果'
+      Caption = 'Fruit'
       Alignment = taLeftJustify
       object FFruitApple: TTyRadioButton
         Left = 10
         Height = 26
         Top = 24
         Width = 160
-        Caption = '苹果'
+        Caption = 'Apple'
         OnChange = RadioChanged
       end
       object FFruitBanana: TTyRadioButton
@@ -62,7 +62,7 @@ object MainForm: TMainForm
         Height = 26
         Top = 56
         Width = 160
-        Caption = '香蕉'
+        Caption = 'Banana'
         OnChange = RadioChanged
       end
       object FFruitMango: TTyRadioButton
@@ -70,7 +70,7 @@ object MainForm: TMainForm
         Height = 26
         Top = 88
         Width = 160
-        Caption = '芒果（缺货）'
+        Caption = 'Mango (out of stock)'
         Enabled = False
         OnChange = RadioChanged
       end
@@ -80,14 +80,14 @@ object MainForm: TMainForm
       Height = 168
       Top = 52
       Width = 190
-      Caption = '颜色'
+      Caption = 'Colour'
       Alignment = taCenter
       object FColorRed: TTyRadioButton
         Left = 10
         Height = 26
         Top = 24
         Width = 160
-        Caption = '红色'
+        Caption = 'Red'
         OnChange = RadioChanged
       end
       object FColorGreen: TTyRadioButton
@@ -95,7 +95,7 @@ object MainForm: TMainForm
         Height = 26
         Top = 56
         Width = 160
-        Caption = '绿色'
+        Caption = 'Green'
         OnChange = RadioChanged
       end
       object FColorBlue: TTyRadioButton
@@ -103,7 +103,7 @@ object MainForm: TMainForm
         Height = 26
         Top = 88
         Width = 160
-        Caption = '蓝色'
+        Caption = 'Blue'
         OnChange = RadioChanged
       end
     end

@@ -1,0 +1,49 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols-transitions_example 2.99\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+# --- .lfm captions/text/hints (auto-generated, msgid=English source) ---
+
+#: tmainform.caption
+msgid "TyControls — transitions (Transitions)"
+msgstr "TyControls — 过渡动画(Transitions)"
+
+#: tmainform.titlebar1.caption
+msgid "Transitions  ·  TyControls"
+msgstr "过渡动画  ·  TyControls"
+
+#: tmainform.darkswitch.caption
+msgid "Dark"
+msgstr "暗色"
+
+#: tmainform.btnfade.caption
+msgid "Fade in"
+msgstr "淡入"
+
+#: tmainform.btnup.caption
+msgid "Slide in from top"
+msgstr "上滑入"
+
+#: tmainform.btndown.caption
+msgid "Slide in from bottom"
+msgstr "下滑入"
+
+#: tmainform.btnleft.caption
+msgid "Slide in from left"
+msgstr "左滑入"
+
+#: tmainform.btnright.caption
+msgid "Slide in from right"
+msgstr "右滑入"
+
+#: tmainform.lblin.caption
+msgid "This panel reappears with the chosen transition"
+msgstr "这个面板会以选定的过渡重新出现"
+

@@ -63,9 +63,9 @@ procedure TMainForm.BuildMenu;
 begin
   FMenu := TTyPopupMenu.Create(Self);
   FMenu.Controller := TyDefaultController;
-  AddItem('保存副本');
-  AddItem('导出为 PDF');
-  AddItem('打印…');
+  AddItem('Save a copy');
+  AddItem('Export as PDF');
+  AddItem('Print…');
 end;
 
 procedure TMainForm.FormCreate(Sender: TObject);

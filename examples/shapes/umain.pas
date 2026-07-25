@@ -157,25 +157,25 @@ end;
 procedure TMainForm.TrackPointsChange(Sender: TObject);
 begin
   StarBig.Points := TrackPoints.Position;
-  LblPoints.Caption := Format('角数 Points = %d', [StarBig.Points]);
+  LblPoints.Caption := Format('Point count Points = %d', [StarBig.Points]);
 end;
 
 procedure TMainForm.TrackInnerChange(Sender: TObject);
 begin
   StarBig.InnerRatio := TrackInner.Position / 100;
-  LblInner.Caption := Format('内半径比 InnerRatio = %.2f', [StarBig.InnerRatio]);
+  LblInner.Caption := Format('Inner radius ratio InnerRatio = %.2f', [StarBig.InnerRatio]);
 end;
 
 procedure TMainForm.TrackHeadChange(Sender: TObject);
 begin
   ArrowBig.HeadRatio := TrackHead.Position / 100;
-  LblHead.Caption := Format('头部占长度 HeadRatio = %.2f', [ArrowBig.HeadRatio]);
+  LblHead.Caption := Format('Head-length ratio HeadRatio = %.2f', [ArrowBig.HeadRatio]);
 end;
 
 procedure TMainForm.TrackShaftChange(Sender: TObject);
 begin
   ArrowBig.ShaftRatio := TrackShaft.Position / 100;
-  LblShaft.Caption := Format('箭杆占宽度 ShaftRatio = %.2f', [ArrowBig.ShaftRatio]);
+  LblShaft.Caption := Format('Shaft-width ratio ShaftRatio = %.2f', [ArrowBig.ShaftRatio]);
 end;
 
 procedure TMainForm.BtnLightClick(Sender: TObject);

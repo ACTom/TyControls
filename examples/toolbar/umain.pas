@@ -84,7 +84,7 @@ end;
 
 procedure TMainForm.ToolClicked(Sender: TObject);
 begin
-  LblStatus.Caption := Format('已触发工具:%s', [(Sender as TTyButton).Caption]);
+  LblStatus.Caption := Format('Fired tool: %s', [(Sender as TTyButton).Caption]);
 end;
 
 end.

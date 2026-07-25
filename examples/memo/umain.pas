@@ -83,7 +83,7 @@ end;
 
 procedure TMainForm.UpdateInfo;
 begin
-  LblInfo.Caption := Format('行数：%d    字符数：%d',
+  LblInfo.Caption := Format('Line count: %d    Char count: %d',
     [Memo.Lines.Count, Length(Memo.Text)]);
 end;
 

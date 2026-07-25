@@ -96,12 +96,12 @@ begin
   if A.Checked then Result := A.Caption
   else if B.Checked then Result := B.Caption
   else if C.Checked then Result := C.Caption
-  else Result := '（无）';
+  else Result := '(none)';
 end;
 
 procedure TMainForm.UpdateStatus;
 begin
-  LblStatus.Caption := Format('当前选中  →  水果：%s     颜色：%s',
+  LblStatus.Caption := Format('Currently selected  →  Fruit: %s     Colour: %s',
     [SelectedIn(FFruitApple, FFruitBanana, FFruitMango),
      SelectedIn(FColorRed, FColorGreen, FColorBlue)]);
 end;

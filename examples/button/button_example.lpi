@@ -10,6 +10,10 @@
       <Scaled Value="True"/>
       <UseXPManifest Value="True"/>
     </General>
+    <i18n>
+      <EnableI18N Value="True"/>
+      <OutDir Value="languages"/>
+    </i18n>
     <BuildModes Active="Default">
       <Item Name="Default" Default="True"/>
     </BuildModes>

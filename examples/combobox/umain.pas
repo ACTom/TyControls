@@ -86,7 +86,7 @@ begin
   EditCombo.Items.Add('MANGO');
 
   // Restore the initial "waiting" status (setting ItemIndex above fires OnChange)
-  LblStatus.Caption := '事件状态：（等待操作，尝试展开或键入前缀）';
+  LblStatus.Caption := 'Event state: (awaiting action, try expanding or typing a prefix)';
 end;
 
 procedure TMainForm.ThemeComboChange(Sender: TObject);
@@ -111,10 +111,10 @@ var
   Which: string;
 begin
   if ACombo = ListCombo then
-    Which := '只读'
+    Which := 'Read-only'
   else
-    Which := '可编辑';
-  LblStatus.Caption := Format('事件状态：[%s] %s → Text="%s" (ItemIndex=%d)',
+    Which := 'Editable';
+  LblStatus.Caption := Format('Event state: [%s] %s → Text="%s" (ItemIndex=%d)',
     [Which, AEvt, ACombo.Text, ACombo.ItemIndex]);
 end;
 
@@ -130,12 +130,12 @@ end;
 
 procedure TMainForm.ComboDropDown(Sender: TObject);
 begin
-  SetStatus('OnDropDown（展开）', Sender as TTyComboBox);
+  SetStatus('OnDropDown (expand)', Sender as TTyComboBox);
 end;
 
 procedure TMainForm.ComboCloseUp(Sender: TObject);
 begin
-  SetStatus('OnCloseUp（收起）', Sender as TTyComboBox);
+  SetStatus('OnCloseUp (collapse)', Sender as TTyComboBox);
 end;
 
 end.

@@ -1,0 +1,33 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols-memo_example 2.99\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+# --- .lfm captions/text/hints (auto-generated, msgid=English source) ---
+
+#: tmainform.caption
+msgid "TTyMemo example"
+msgstr "TTyMemo 示例"
+
+#: tmainform.darkswitch.caption
+msgid "Dark"
+msgstr "暗色"
+
+#: tmainform.lblprompt.caption
+msgid "Multiline text editor (Enter for a new line, arrow keys to navigate, wheel to scroll):"
+msgstr "多行文本编辑器（回车换行、方向键导航、滚轮滚动）："
+
+#: tmainform.chkreadonly.caption
+msgid "Read-only (ReadOnly)"
+msgstr "只读 (ReadOnly)"
+
+#: tmainform.chkwordwrap.caption
+msgid "Word wrap (WordWrap)"
+msgstr "自动换行 (WordWrap)"
+

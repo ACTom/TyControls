@@ -3,7 +3,7 @@ object MainForm: TMainForm
   Height = 300
   Top = 0
   Width = 420
-  Caption = 'TTyProgressBar 示例'
+  Caption = 'TTyProgressBar example'
   ClientHeight = 300
   ClientWidth = 420
   Position = poScreenCenter
@@ -30,7 +30,7 @@ object MainForm: TMainForm
         Top = 5
         Width = 74
         Anchors = [akTop, akRight]
-        Caption = '暗色'
+        Caption = 'Dark'
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
@@ -47,7 +47,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 50
       Width = 380
-      Caption = '进度条：Min=0  Max=100，按钮 / 定时器驱动 Position'
+      Caption = 'Progress bar: Min=0  Max=100, Position driven by button / timer'
     end
     object ProgBar: TTyProgressBar
       Left = 20
@@ -65,14 +65,14 @@ object MainForm: TMainForm
       Height = 20
       Top = 108
       Width = 380
-      Caption = '进度：0 / 100  (0%)'
+      Caption = 'Progress: 0 / 100  (0%)'
     end
     object AnimChk: TTyCheckBox
       Left = 20
       Height = 22
       Top = 140
       Width = 260
-      Caption = '启用填充动画 (AnimationsEnabled)'
+      Caption = 'Enable fill animation (AnimationsEnabled)'
       Checked = True
       OnClick = AnimToggle
     end
@@ -81,7 +81,7 @@ object MainForm: TMainForm
       Height = 34
       Top = 180
       Width = 110
-      Caption = '开始 / 暂停'
+      Caption = 'Start / Pause'
       OnClick = StartClick
     end
     object BtnStep: TTyButton
@@ -89,7 +89,7 @@ object MainForm: TMainForm
       Height = 34
       Top = 180
       Width = 110
-      Caption = '前进 +10'
+      Caption = 'Forward +10'
       OnClick = StepClick
     end
     object BtnReset: TTyButton
@@ -97,7 +97,7 @@ object MainForm: TMainForm
       Height = 34
       Top = 180
       Width = 110
-      Caption = '归零'
+      Caption = 'Reset to zero'
       OnClick = ResetClick
     end
   end

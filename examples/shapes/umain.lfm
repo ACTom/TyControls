@@ -3,7 +3,7 @@ object MainForm: TMainForm
   Height = 690
   Top = 90
   Width = 1180
-  Caption = 'TyControls — 矢量形状(TTyShape / TTyStarShape / TTyArrow)'
+  Caption = 'TyControls — vector shapes (TTyShape / TTyStarShape / TTyArrow)'
   ClientHeight = 690
   ClientWidth = 1180
   Font.Height = -12
@@ -23,7 +23,7 @@ object MainForm: TMainForm
       Top = 0
       Width = 1180
       Align = alTop
-      Caption = '矢量形状  ·  TyControls'
+      Caption = 'Vector shapes  ·  TyControls'
       TitleAlignment = taLeftJustify
       object ThemeCombo: TTyComboBox
         Left = 1006
@@ -38,7 +38,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 44
       Width = 1132
-      Caption = 'TTyShape — 八种形状(填充取 TyPanel 背景,描边取其边框,均随主题变化)'
+      Caption = 'TTyShape — eight shapes (fill from TyPanel background, stroke from its border, all follow the theme)'
       Alignment = taLeftJustify
     end
     object ShRect: TTyShape
@@ -158,7 +158,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 194
       Width = 1132
-      Caption = '单实例改色与边框开关 — 全部通过 StyleOverride,控件代码不含任何颜色'
+      Caption = 'Per-instance recolour and border toggle — all via StyleOverride, the control code contains no colours'
       Alignment = taLeftJustify
     end
     object ShOver1: TTyShape
@@ -214,7 +214,7 @@ object MainForm: TMainForm
       Height = 18
       Top = 306
       Width = 140
-      Caption = '字面色'
+      Caption = 'Literal colour'
     end
     object LblOver2: TTyLabel
       Left = 176
@@ -242,21 +242,21 @@ object MainForm: TMainForm
       Height = 18
       Top = 306
       Width = 140
-      Caption = '6px 粗边(不裁边)'
+      Caption = '6px thick border (no edge clipping)'
     end
     object LblLineThick: TTyLabel
       Left = 784
       Height = 18
       Top = 306
       Width = 140
-      Caption = 'tskLine 粗线'
+      Caption = 'tskLine thick line'
     end
     object DivStar: TTyDivider
       Left = 24
       Height = 22
       Top = 334
       Width = 550
-      Caption = 'TTyStarShape — 拖滑块实时改点数 / 内外半径比'
+      Caption = 'TTyStarShape — drag the slider to change point count / inner-outer radius ratio live'
       Alignment = taLeftJustify
     end
     object StarBig: TTyStarShape
@@ -273,7 +273,7 @@ object MainForm: TMainForm
       Height = 18
       Top = 370
       Width = 320
-      Caption = '角数 Points = 5'
+      Caption = 'Point count Points = 5'
     end
     object TrackPoints: TTyTrackBar
       Left = 248
@@ -290,7 +290,7 @@ object MainForm: TMainForm
       Height = 18
       Top = 438
       Width = 320
-      Caption = '内半径比 InnerRatio = 0.42'
+      Caption = 'Inner radius ratio InnerRatio = 0.42'
     end
     object TrackInner: TTyTrackBar
       Left = 248
@@ -307,14 +307,14 @@ object MainForm: TMainForm
       Height = 18
       Top = 508
       Width = 320
-      Caption = 'Points<3 与越界的 InnerRatio 会被 setter 夹紧'
+      Caption = 'Points<3 and an out-of-range InnerRatio are clamped by the setter'
     end
     object DivArrow: TTyDivider
       Left = 604
       Height = 22
       Top = 334
       Width = 552
-      Caption = 'TTyArrow — 四个方向 + 可调头部 / 箭杆比例'
+      Caption = 'TTyArrow — four directions + adjustable head / shaft ratio'
       Alignment = taLeftJustify
     end
     object ArrRight: TTyArrow
@@ -388,7 +388,7 @@ object MainForm: TMainForm
       Height = 18
       Top = 470
       Width = 284
-      Caption = '头部占长度 HeadRatio = 0.45'
+      Caption = 'Head-length ratio HeadRatio = 0.45'
     end
     object TrackHead: TTyTrackBar
       Left = 872
@@ -405,7 +405,7 @@ object MainForm: TMainForm
       Height = 18
       Top = 534
       Width = 284
-      Caption = '箭杆占宽度 ShaftRatio = 0.50'
+      Caption = 'Shaft-width ratio ShaftRatio = 0.50'
     end
     object TrackShaft: TTyTrackBar
       Left = 872
@@ -422,7 +422,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 594
       Width = 1132
-      Caption = '换主题 — 未用 StyleOverride 的形状会整体跟着变色'
+      Caption = 'Switch theme — shapes not using StyleOverride recolour together'
       Alignment = taLeftJustify
     end
     object BtnLight: TTyButton
@@ -430,7 +430,7 @@ object MainForm: TMainForm
       Height = 32
       Top = 624
       Width = 104
-      Caption = '浅色'
+      Caption = 'Light'
       OnClick = BtnLightClick
     end
     object BtnDark: TTyButton
@@ -438,7 +438,7 @@ object MainForm: TMainForm
       Height = 32
       Top = 624
       Width = 104
-      Caption = '深色'
+      Caption = 'Dark'
       OnClick = BtnDarkClick
     end
     object BtnGreen: TTyButton
@@ -446,7 +446,7 @@ object MainForm: TMainForm
       Height = 32
       Top = 624
       Width = 104
-      Caption = '绿色'
+      Caption = 'Green'
       OnClick = BtnGreenClick
     end
     object LblThemeHint: TTyLabel
@@ -454,7 +454,7 @@ object MainForm: TMainForm
       Height = 18
       Top = 630
       Width = 780
-      Caption = '本批新增控件不引入任何主题 token:三者的 GetStyleTypeKey 都返回 TyPanel'
+      Caption = 'The controls added this batch introduce no theme token: all three return TyPanel from GetStyleTypeKey'
     end
   end
 end

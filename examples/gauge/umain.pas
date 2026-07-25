@@ -117,12 +117,12 @@ begin
   Meter.Value := b / 100 * 220;   // map 0..100 -> 0..220
   Level.Value := a;
   Circ.Position := Round(r);
-  LblStatus.Caption := Format('弧=%.0f%%  环=%.0f  线=%.0f%%', [a, r, b]);
+  LblStatus.Caption := Format('Arc=%.0f%%  Ring=%.0f  Linear=%.0f%%', [a, r, b]);
 end;
 
 procedure TMainForm.UpDownChange(Sender: TObject);
 begin
-  UpDownLbl.Caption := Format('微调(TTyUpDown) = %d', [UpDown.Position]);
+  UpDownLbl.Caption := Format('Spinner (TTyUpDown) = %d', [UpDown.Position]);
 end;
 
 end.

@@ -3,7 +3,7 @@ object MainForm: TMainForm
   Height = 320
   Top = 0
   Width = 420
-  Caption = 'TTyDateTimePicker 示例'
+  Caption = 'TTyDateTimePicker example'
   ClientHeight = 320
   ClientWidth = 420
   Position = poScreenCenter
@@ -30,7 +30,7 @@ object MainForm: TMainForm
         Top = 5
         Width = 74
         Anchors = [akTop, akRight]
-        Caption = '暗色'
+        Caption = 'Dark'
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
@@ -47,7 +47,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 56
       Width = 120
-      Caption = '日期 (dtkDate)：'
+      Caption = 'Date (dtkDate):'
     end
     object DatePicker: TTyDateTimePicker
       Left = 150
@@ -65,7 +65,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 96
       Width = 120
-      Caption = '时间 (dtkTime)：'
+      Caption = 'Time (dtkTime):'
     end
     object TimePicker: TTyDateTimePicker
       Left = 150
@@ -81,7 +81,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 136
       Width = 120
-      Caption = '可空日期：'
+      Caption = 'Nullable date:'
     end
     object CheckPicker: TTyDateTimePicker
       Left = 150

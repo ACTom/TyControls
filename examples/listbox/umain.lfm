@@ -3,7 +3,7 @@ object MainForm: TMainForm
   Height = 420
   Top = 0
   Width = 420
-  Caption = 'TTyListBox 示例'
+  Caption = 'TTyListBox example'
   ClientHeight = 420
   ClientWidth = 420
   Position = poScreenCenter
@@ -31,7 +31,7 @@ object MainForm: TMainForm
         Top = 5
         Width = 74
         Anchors = [akTop, akRight]
-        Caption = '暗色'
+        Caption = 'Dark'
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
@@ -48,7 +48,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 46
       Width = 388
-      Caption = '城市列表（上下键 / PageUp/Down / 滚轮可滚动）：'
+      Caption = 'City list (Up/Down / PageUp/Down / mouse wheel to scroll):'
     end
     object ListBox: TTyListBox
       Left = 16
@@ -62,7 +62,7 @@ object MainForm: TMainForm
       Height = 24
       Top = 300
       Width = 130
-      Caption = '多选模式'
+      Caption = 'Multi-select mode'
       OnChange = MultiChange
     end
     object ChkSorted: TTyCheckBox
@@ -70,7 +70,7 @@ object MainForm: TMainForm
       Height = 24
       Top = 300
       Width = 130
-      Caption = '升序排序'
+      Caption = 'Sort ascending'
       OnChange = SortedChange
     end
     object BtnHeight: TTyButton
@@ -78,7 +78,7 @@ object MainForm: TMainForm
       Height = 30
       Top = 332
       Width = 120
-      Caption = '行高 24 / 32'
+      Caption = 'Row height 24 / 32'
       OnClick = ToggleHeight
     end
     object BtnSelAll: TTyButton
@@ -86,7 +86,7 @@ object MainForm: TMainForm
       Height = 30
       Top = 332
       Width = 120
-      Caption = '全选'
+      Caption = 'Select all'
       OnClick = DoSelectAll
     end
     object BtnClear: TTyButton
@@ -94,7 +94,7 @@ object MainForm: TMainForm
       Height = 30
       Top = 332
       Width = 120
-      Caption = '清空选择'
+      Caption = 'Clear selection'
       OnClick = DoClear
     end
     object LblStatus: TTyLabel

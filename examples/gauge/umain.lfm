@@ -3,7 +3,7 @@ object MainForm: TMainForm
   Height = 660
   Top = 0
   Width = 540
-  Caption = 'Gauge 示例'
+  Caption = 'Gauge example'
   ClientHeight = 660
   ClientWidth = 540
   Position = poScreenCenter
@@ -31,7 +31,7 @@ object MainForm: TMainForm
         Top = 5
         Width = 74
         Anchors = [akTop, akRight]
-        Caption = '暗色'
+        Caption = 'Dark'
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
@@ -48,7 +48,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 46
       Width = 160
-      Caption = '弧形(gsArc):'
+      Caption = 'Arc (gsArc):'
     end
     object Arc: TTyGauge
       Left = 24
@@ -64,7 +64,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 46
       Width = 160
-      Caption = '环形(gsRing):'
+      Caption = 'Ring (gsRing):'
     end
     object Ring: TTyGauge
       Left = 230
@@ -81,7 +81,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 46
       Width = 140
-      Caption = '环形进度:'
+      Caption = 'Ring progress:'
     end
     object Circ: TTyCircularProgress
       Left = 400
@@ -109,7 +109,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 244
       Width = 200
-      Caption = '线性(gsLinearH / gsLinearV):'
+      Caption = 'Linear (gsLinearH / gsLinearV):'
     end
     object BarH: TTyGauge
       Left = 24
@@ -126,7 +126,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 306
       Width = 320
-      Caption = '不确定态(TTyActivityBar):'
+      Caption = 'Indeterminate (TTyActivityBar):'
     end
     object Busy: TTyActivityBar
       Left = 24
@@ -149,7 +149,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 356
       Width = 260
-      Caption = '微调(TTyUpDown) = 5'
+      Caption = 'Spinner (TTyUpDown) = 5'
     end
     object Meter: TTyMeter
       Left = 348
@@ -216,7 +216,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 596
       Width = 460
-      Caption = '每 1.2s 随机改变数值(旋钮 / 齿轮可拖动 / 滚轮,星星可点),观察缓动动画。'
+      Caption = 'Every 1.2s the value changes at random (drag the knob / gear / wheel, click the stars) — watch the easing animation.'
     end
   end
   object Timer: TTimer

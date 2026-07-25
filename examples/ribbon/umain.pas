@@ -179,7 +179,7 @@ end;
 
 procedure TMainForm.DoLauncher(Sender: TTyRibbonGroup);
 begin
-  TyShowMessage('“' + Sender.Caption + '”对话框(占位)');
+  TyShowMessage('“' + Sender.Caption + '" dialog (placeholder)');
 end;
 
 function TMainForm.Big(AGroup: TTyRibbonGroup; const ACap, AGlyph: string; AX, AW: Integer;
@@ -288,29 +288,29 @@ begin
   // Groups are added RIGHT-to-LEFT so they flow Clipboard | Font | Paragraph | Editing left->right.
 
   // Editing
-  g := NewGroup(APage, '编辑', 96, False);
-  Small(g, '查找', 'find', 6, 4, 88, @DoFind);
-  Small(g, '替换', 'replace', 6, 30, 88, @DoReplace);
-  Small(g, '全选', 'selectall', 6, 56, 88, @DoSelectAll);
+  g := NewGroup(APage, 'Edit', 96, False);
+  Small(g, 'Find', 'find', 6, 4, 88, @DoFind);
+  Small(g, 'Replace', 'replace', 6, 30, 88, @DoReplace);
+  Small(g, 'Select all', 'selectall', 6, 56, 88, @DoSelectAll);
 
   // Paragraph
-  g := NewGroup(APage, '段落', 150, True);
+  g := NewGroup(APage, 'Paragraph', 150, True);
   alignGrp := TTyButtonGroup.Create(Self);
   alignGrp.Parent := g;
   alignGrp.StyleClass := 'ghost';
   alignGrp.SetBounds(6, 6, 138, 26);
-  alignGrp.Items.Add('左'); alignGrp.Items.Add('中'); alignGrp.Items.Add('右'); alignGrp.Items.Add('两端');
+  alignGrp.Items.Add('Left'); alignGrp.Items.Add('Medium'); alignGrp.Items.Add('Right'); alignGrp.Items.Add('both ends');
   alignGrp.ItemIndex := 0;
-  Small(g, '项目符号', 'bullets', 6, 40, 66, @DoNoop);
-  Small(g, '编号', 'number', 76, 40, 66, @DoNoop);
+  Small(g, 'Bullet list', 'bullets', 6, 40, 66, @DoNoop);
+  Small(g, 'No.', 'number', 76, 40, 66, @DoNoop);
 
   // Font
-  g := NewGroup(APage, '字体', 240, True);
+  g := NewGroup(APage, 'Font', 240, True);
   fontc := TTyComboBox.Create(Self);
   fontc.Parent := g;
   fontc.Style := csDropDown;
   fontc.SetBounds(6, 6, 150, 26);
-  fontc.Items.Add('等线'); fontc.Items.Add('宋体'); fontc.Items.Add('微软雅黑');
+  fontc.Items.Add('DengXian'); fontc.Items.Add('SimSun'); fontc.Items.Add('Microsoft YaHei');
   fontc.Items.Add('Consolas'); fontc.Items.Add('Arial');
   fontc.ItemIndex := 0;
   sizec := TTyComboBox.Create(Self);
@@ -331,11 +331,11 @@ begin
   col.OnColorChange := @DoFontColor;
 
   // Clipboard (with a dialog launcher, like Word)
-  g := NewGroup(APage, '剪贴板', 150, True);
-  Big(g, '粘贴', 'paste', 6, 56, @DoPaste);
-  Small(g, '剪切', 'cut', 66, 4, 78, @DoCut);
-  Small(g, '复制', 'copy', 66, 30, 78, @DoCopy);
-  Small(g, '格式刷', 'painter', 66, 56, 78, @DoNoop);
+  g := NewGroup(APage, 'Clipboard', 150, True);
+  Big(g, 'Paste', 'paste', 6, 56, @DoPaste);
+  Small(g, 'Cut', 'cut', 66, 4, 78, @DoCut);
+  Small(g, 'Copy', 'copy', 66, 30, 78, @DoCopy);
+  Small(g, 'Format painter', 'painter', 66, 56, 78, @DoNoop);
 end;
 
 procedure TMainForm.BuildInsertTab(APage: TTyRibbonPage);
@@ -345,25 +345,25 @@ var
   dd: TTyDropDownButton;
 begin
   // Symbol
-  g := NewGroup(APage, '符号', 130, False);
-  Small(g, '符号', 'symbol', 6, 4, 116, @DoNoop);
-  Small(g, '日期时间', 'datetime', 6, 30, 116, @DoInsertDate);
+  g := NewGroup(APage, 'Symbol', 130, False);
+  Small(g, 'Symbol', 'symbol', 6, 4, 116, @DoNoop);
+  Small(g, 'Date-time', 'datetime', 6, 30, 116, @DoInsertDate);
 
   // Illustrations (a styles gallery + picture)
-  g := NewGroup(APage, '样式库', 230, False);
+  g := NewGroup(APage, 'Style library', 230, False);
   gal := TTyRibbonGallery.Create(Self);
   gal.Parent := g;
   gal.SetBounds(6, 6, 216, 60);
-  gal.Items.Add('样式 1'); gal.Items.Add('样式 2'); gal.Items.Add('样式 3');
-  gal.Items.Add('样式 4'); gal.Items.Add('样式 5'); gal.Items.Add('样式 6');
+  gal.Items.Add('Style 1'); gal.Items.Add('Style 2'); gal.Items.Add('Style 3');
+  gal.Items.Add('Style 4'); gal.Items.Add('Style 5'); gal.Items.Add('Style 6');
   gal.ItemIndex := 0;
 
   // Table (a drop-down button)
-  g := NewGroup(APage, '表格', 90, False);
+  g := NewGroup(APage, 'Grid', 90, False);
   dd := TTyDropDownButton.Create(Self);
   dd.Parent := g;
   dd.SetBounds(6, 6, 78, 60);
-  dd.Caption := '表格';
+  dd.Caption := 'Grid';
 end;
 
 procedure TMainForm.BuildViewTab(APage: TTyRibbonPage);
@@ -372,27 +372,27 @@ var
   wrap, statusbar, ctx: TTyCheckBox;
 begin
   // Window
-  g := NewGroup(APage, '窗口', 110, False);
-  Small(g, '新建窗口', 'newwindow', 6, 4, 98, @DoNoop);
-  Small(g, '并排', 'arrange', 6, 30, 98, @DoNoop);
+  g := NewGroup(APage, 'Window', 110, False);
+  Small(g, 'New window', 'newwindow', 6, 4, 98, @DoNoop);
+  Small(g, 'Side by side', 'arrange', 6, 30, 98, @DoNoop);
 
   // Zoom
-  g := NewGroup(APage, '缩放', 130, False);
-  Small(g, '放大', 'zoomin', 6, 4, 60, @DoNoop);
-  Small(g, '缩小', 'zoomout', 68, 4, 60, @DoNoop);
+  g := NewGroup(APage, 'Zoom', 130, False);
+  Small(g, 'Zoom in', 'zoomin', 6, 4, 60, @DoNoop);
+  Small(g, 'Zoom out', 'zoomout', 68, 4, 60, @DoNoop);
   Small(g, '100%', 'zoom100', 6, 30, 122, @DoNoop);
 
   // View options
-  g := NewGroup(APage, '显示', 140, False);
+  g := NewGroup(APage, 'Show', 140, False);
   wrap := TTyCheckBox.Create(Self);
   wrap.Parent := g; wrap.SetBounds(6, 6, 128, 22);
-  wrap.Caption := '自动换行'; wrap.OnClick := @DoWordWrap;
+  wrap.Caption := 'Word wrap'; wrap.OnClick := @DoWordWrap;
   statusbar := TTyCheckBox.Create(Self);
   statusbar.Parent := g; statusbar.SetBounds(6, 30, 128, 22);
-  statusbar.Caption := '状态栏'; statusbar.Checked := True;
+  statusbar.Caption := 'Status bar'; statusbar.Checked := True;
   ctx := TTyCheckBox.Create(Self);
   ctx.Parent := g; ctx.SetBounds(6, 54, 128, 22);
-  ctx.Caption := '图片工具(上下文)'; ctx.OnClick := @DoToggleContext;
+  ctx.Caption := 'Picture tools (contextual)'; ctx.OnClick := @DoToggleContext;
 end;
 
 // ===========================================================================
@@ -440,7 +440,7 @@ begin
   begin
     dlg := TTyColorDialog.Create(nil);
     try
-      dlg.Caption := '选择主题色';
+      dlg.Caption := 'Choose accent colour';
       if dlg.Execute then
         TyDefaultController.SetAccent('#' + IntToHex(TyRedOf(dlg.Color), 2)
           + IntToHex(TyGreenOf(dlg.Color), 2) + IntToHex(TyBlueOf(dlg.Color), 2));
@@ -513,18 +513,18 @@ begin
   // Top block (Office File menu) — some show a content page, some act immediately.
   FBackstage.Commands.Clear;
   FBackstage.CommandGlyphs.Clear;
-  FBackstage.Commands.Add('信息');   FBackstage.CommandGlyphs.Add('info');   // 0 -> content page
-  FBackstage.Commands.Add('新建');   FBackstage.CommandGlyphs.Add('new');    // 1 -> content page
-  FBackstage.Commands.Add('打开');   FBackstage.CommandGlyphs.Add('open');   // 2 -> content page
-  FBackstage.Commands.Add('保存');   FBackstage.CommandGlyphs.Add('save');   // 3 -> act
-  FBackstage.Commands.Add('另存为'); FBackstage.CommandGlyphs.Add('saveas'); // 4 -> act
-  FBackstage.Commands.Add('关闭');   FBackstage.CommandGlyphs.Add('close');  // 5 -> act
+  FBackstage.Commands.Add('Information');   FBackstage.CommandGlyphs.Add('info');   // 0 -> content page
+  FBackstage.Commands.Add('New');   FBackstage.CommandGlyphs.Add('new');    // 1 -> content page
+  FBackstage.Commands.Add('Open');   FBackstage.CommandGlyphs.Add('open');   // 2 -> content page
+  FBackstage.Commands.Add('Save');   FBackstage.CommandGlyphs.Add('save');   // 3 -> act
+  FBackstage.Commands.Add('Save as'); FBackstage.CommandGlyphs.Add('saveas'); // 4 -> act
+  FBackstage.Commands.Add('Close');   FBackstage.CommandGlyphs.Add('close');  // 5 -> act
   // Bottom-pinned block (with a separator above it) — caller-defined, not hardcoded.
   FBackstage.BottomCommands.Clear;
   FBackstage.BottomCommandGlyphs.Clear;
-  FBackstage.BottomCommands.Add('关于'); FBackstage.BottomCommandGlyphs.Add('info');     // 6
-  FBackstage.BottomCommands.Add('选项'); FBackstage.BottomCommandGlyphs.Add('settings'); // 7
-  FBackstage.BottomCommands.Add('退出'); FBackstage.BottomCommandGlyphs.Add('exit');     // 8
+  FBackstage.BottomCommands.Add('About'); FBackstage.BottomCommandGlyphs.Add('info');     // 6
+  FBackstage.BottomCommands.Add('Option'); FBackstage.BottomCommandGlyphs.Add('settings'); // 7
+  FBackstage.BottomCommands.Add('Sign out'); FBackstage.BottomCommandGlyphs.Add('exit');     // 8
   FBackstage.ItemIndex := -1;
 end;
 
@@ -547,27 +547,27 @@ procedure TMainForm.BuildBackstageContent;
 var i: Integer;
 begin
   // Info
-  FPgInfo := NewPage('信息');
+  FPgInfo := NewPage('Information');
   FBsInfoLbl := TTyLabel.Create(Self);
   FBsInfoLbl.Parent := FPgInfo;
   FBsInfoLbl.SetBounds(28, 68, 520, 140);
 
   // New -- a "blank document" template button (placeholder for a template gallery)
-  FPgNew := NewPage('新建');
+  FPgNew := NewPage('New');
   FBsNewBlank := TTyGlyphButton.Create(Self);
   FBsNewBlank.Parent := FPgNew;
   FBsNewBlank.SetBounds(28, 68, 160, 40);
-  FBsNewBlank.Caption := '空白文档';
+  FBsNewBlank.Caption := 'Blank document';
   FBsNewBlank.Images := FImgColl;
   FBsNewBlank.ImageName := 'new';
   FBsNewBlank.OnClick := @DoNew;
 
   // Open -- Browse + recent-file rows
-  FPgOpen := NewPage('打开');
+  FPgOpen := NewPage('Open');
   FBsBrowse := TTyGlyphButton.Create(Self);
   FBsBrowse.Parent := FPgOpen;
   FBsBrowse.SetBounds(28, 68, 200, 34);
-  FBsBrowse.Caption := '浏览…';
+  FBsBrowse.Caption := 'Browse…';
   FBsBrowse.Images := FImgColl;
   FBsBrowse.ImageName := 'folder';
   FBsBrowse.OnClick := @DoOpen;
@@ -585,18 +585,18 @@ begin
   end;
 
   // About
-  FPgAbout := NewPage('关于');
+  FPgAbout := NewPage('About');
   FBsAboutLbl := TTyLabel.Create(Self);
   FBsAboutLbl.Parent := FPgAbout;
   FBsAboutLbl.SetBounds(28, 68, 520, 180);
   FBsAboutLbl.Caption :=
-    'TyControls 文本编辑器'#10 +
-    'Ribbon 综合示例'#10#10 +
-    '基于 ty-controls(BGRABitmap + .tycss 主题)'#10 +
-    '跨平台矢量图标 · 主题化 ScreenTips · 内置主题切换';
+    'TyControls text editor'#10 +
+    'Ribbon overview example'#10#10 +
+    'Built on ty-controls (BGRABitmap + .tycss themes)'#10 +
+    'Cross-platform vector icons · themed ScreenTips · built-in theme switching';
 
   // Options (placeholder)
-  FPgOptions := NewPage('选项');
+  FPgOptions := NewPage('Option');
 end;
 
 procedure TMainForm.ShowBsPage(APage: TTyPanel);
@@ -640,12 +640,12 @@ var d: TEditorDoc; s: string;
 begin
   d := ActiveDoc;
   if d = nil then
-    s := '(无打开的文档)'
+    s := '(no open document)'
   else
   begin
-    if d.FilePath <> '' then s := '路径:' + d.FilePath else s := '(尚未保存)';
-    s := s + #10 + Format('字符数:%d', [Length(d.Memo.Lines.Text)]);
-    s := s + #10 + Format('行数:%d', [d.Memo.Lines.Count]);
+    if d.FilePath <> '' then s := 'Path:' + d.FilePath else s := '(not saved yet)';
+    s := s + #10 + Format('Char count: %d', [Length(d.Memo.Lines.Text)]);
+    s := s + #10 + Format('Row count: %d', [d.Memo.Lines.Count]);
   end;
   if FBsInfoLbl <> nil then FBsInfoLbl.Caption := s;
 end;
@@ -676,14 +676,14 @@ begin
   m := ActiveMemo;
   if d <> nil then
     if d.FilePath <> '' then FStatus.Panels[0].Text := d.FilePath
-    else FStatus.Panels[0].Text := '未保存'
+    else FStatus.Panels[0].Text := 'Not saved'
   else
-    FStatus.Panels[0].Text := '就绪';
+    FStatus.Panels[0].Text := 'Ready';
   if m <> nil then
-    FStatus.Panels[1].Text := Format('字符 %d', [Length(m.Lines.Text)])
+    FStatus.Panels[1].Text := Format('Char %d', [Length(m.Lines.Text)])
   else
     FStatus.Panels[1].Text := '';
-  FStatus.Panels[2].Text := '缩放 100%';
+  FStatus.Panels[2].Text := 'Zoom 100%';
 end;
 
 // ===========================================================================
@@ -692,7 +692,7 @@ end;
 procedure TMainForm.DoNew(Sender: TObject);
 begin
   Inc(FNewCount);
-  NewDoc(Format('新文档 %d', [FNewCount]));
+  NewDoc(Format('New document %d', [FNewCount]));
 end;
 
 procedure TMainForm.DoOpen(Sender: TObject);
@@ -700,7 +700,7 @@ var dlg: TOpenDialog;
 begin
   dlg := TOpenDialog.Create(Self);
   try
-    dlg.Filter := '文本文件 (*.txt)|*.txt|所有文件 (*.*)|*.*';
+    dlg.Filter := 'Text file (*.txt)|*.txt|All files (*.*)|*.*';
     if dlg.Execute then OpenFile(dlg.FileName);
   finally
     dlg.Free;
@@ -728,7 +728,7 @@ begin
   if d = nil then Exit;
   dlg := TSaveDialog.Create(Self);
   try
-    dlg.Filter := '文本文件 (*.txt)|*.txt|所有文件 (*.*)|*.*';
+    dlg.Filter := 'Text file (*.txt)|*.txt|All files (*.*)|*.*';
     dlg.DefaultExt := 'txt';
     if dlg.Execute then
     begin
@@ -890,13 +890,13 @@ begin
   TyDefaultController.ThemeName := 'office';   // default to Office
 
   // Office-app accent presets (item order MUST match ACCENT_HEX in AccentComboChange).
-  AccentCombo.Items.Add('跟随主题');
-  AccentCombo.Items.Add('Word 蓝');
-  AccentCombo.Items.Add('Excel 绿');
-  AccentCombo.Items.Add('PowerPoint 橙');
-  AccentCombo.Items.Add('OneNote 紫');
-  AccentCombo.Items.Add('Outlook 蓝');
-  AccentCombo.Items.Add('自定义…');
+  AccentCombo.Items.Add('Follow theme');
+  AccentCombo.Items.Add('Word Blue');
+  AccentCombo.Items.Add('Excel Green');
+  AccentCombo.Items.Add('PowerPoint Orange');
+  AccentCombo.Items.Add('OneNote Purple');
+  AccentCombo.Items.Add('Outlook Blue');
+  AccentCombo.Items.Add('Custom…');
   AccentCombo.ItemIndex := 0;
 
   ApplyChromeTheme(TyDefaultController);   // theme the window chrome + background
@@ -957,20 +957,20 @@ begin
   FRibbon.Controller := TyDefaultController;   // register as a theme listener (live re-theme)
   FRibbon.Height := 140;   // room for 3 small-button rows above the group caption band
   FRibbon.FileTab := True;
-  FRibbon.FileTabCaption := '文件';
+  FRibbon.FileTabCaption := 'File';
   FRibbon.Backstage := FBackstage;
 
-  PgHome := FRibbon.AddPage('开始');
+  PgHome := FRibbon.AddPage('Start');
   BuildHomeTab(PgHome);
-  PgInsert := FRibbon.AddPage('插入');
+  PgInsert := FRibbon.AddPage('Insert');
   BuildInsertTab(PgInsert);
-  PgView := FRibbon.AddPage('视图');
+  PgView := FRibbon.AddPage('View');
   BuildViewTab(PgView);
   // Contextual "picture tools" tab (toggled on the View tab).
-  PgPic := FRibbon.AddPage('图片工具');
+  PgPic := FRibbon.AddPage('Picture tools');
   PgPic.Context := 'pic';
-  g := NewGroup(PgPic, '调整', 120, False);
-  Big(g, '裁剪', 'crop', 6, 56, @DoNoop);
+  g := NewGroup(PgPic, 'Adjust', 120, False);
+  Big(g, 'Clip', 'crop', 6, 56, @DoNoop);
 
   // Icon-only Quick Access Toolbar (like Office) on the title bar: New / Open / Save /
   // Undo / Redo. Width = 5 buttons flush (alLeft, no layout spacing); Left is glued right
@@ -979,11 +979,11 @@ begin
   FQat.Parent := Bar;
   FQat.SetBounds(Bar.ClientWidth, 3, 5 * 28 + 8, 28);   // 5 flush buttons + tiny slack; Left set by LayoutQat
   // Two-line hints (title + description) render as Office-style ScreenTips.
-  AddQat(FQat, '新建'#10'新建一个空白文档', 'new',  @DoNew);
-  AddQat(FQat, '打开'#10'打开已有文本文件', 'open', @DoOpen);
-  AddQat(FQat, '保存'#10'把当前文档写入磁盘', 'save', @DoSave);
-  AddQat(FQat, '撤销'#10'撤销上一步操作', 'undo', @DoUndo);
-  AddQat(FQat, '重做'#10'重做被撤销的操作', 'redo', @DoRedo);
+  AddQat(FQat, 'New'#10'Create a new blank document', 'new',  @DoNew);
+  AddQat(FQat, 'Open'#10'Open an existing text file', 'open', @DoOpen);
+  AddQat(FQat, 'Save'#10'Write the current document to disk', 'save', @DoSave);
+  AddQat(FQat, 'Undo'#10'Undo the last action', 'undo', @DoUndo);
+  AddQat(FQat, 'Redo'#10'Redo the undone action', 'redo', @DoRedo);
 
   // The document tab area fills the middle (alClient).
   FDocPages := TTyPageControl.Create(Self);

@@ -136,7 +136,7 @@ begin
   if not (Sender is TMenuItem) then Exit;
   Item := TMenuItem(Sender);
   // echo with the mnemonic '&' stripped (StripHotkey is provided by the Menus unit)
-  StatusLabel.Caption := Format('已选择菜单命令：%s', [StripHotkey(Item.Caption)]);
+  StatusLabel.Caption := Format('Menu command selected: %s', [StripHotkey(Item.Caption)]);
 end;
 
 end.

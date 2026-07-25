@@ -1,0 +1,37 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols-icons_example 2.99\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+# --- .lfm captions/text/hints (auto-generated, msgid=English source) ---
+
+#: tmainform.caption
+msgid "Icons & Images example"
+msgstr "Icons & Images 示例"
+
+#: tmainform.darkswitch.caption
+msgid "Dark"
+msgstr "暗色"
+
+#: tmainform.cap1.caption
+msgid "Stretch"
+msgstr "拉伸 Stretch"
+
+#: tmainform.cap2.caption
+msgid "Proportional"
+msgstr "等比 Proportional"
+
+#: tmainform.cap3.caption
+msgid "Center"
+msgstr "居中 Center"
+
+#: tmainform.note.caption
+msgid "TTyIconFont/TTyCharImage: point FontFile at an icon .ttf (such as FontAwesome), set FontFamily to its family name, then render vector icons via a name→codepoint map. On the left it tries to render a star (★) with the system symbol font; the family differs per platform, so the result may vary."
+msgstr "TTyIconFont/TTyCharImage:把 FontFile 指向图标 .ttf(如 FontAwesome)、FontFamily 设为其族名,再用 name→codepoint 映射即可渲染矢量图标。左侧尝试用系统符号字体渲染一个星形(★),不同平台字体族不同,显示效果可能不一。"
+

@@ -1,0 +1,53 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols-label_example 2.99\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+# --- .lfm captions/text/hints (auto-generated, msgid=English source) ---
+
+#: tmainform.caption
+msgid "TTyLabel example"
+msgstr "TTyLabel 示例"
+
+#: tmainform.darkswitch.caption
+msgid "Dark"
+msgstr "暗色"
+
+#: tmainform.lblhead.caption
+msgid "Tag features at a glance"
+msgstr "标签特性一览"
+
+#: tmainform.lblleft.caption
+msgid "Left align (taLeftJustify)"
+msgstr "左对齐（taLeftJustify）"
+
+#: tmainform.lblcenter.caption
+msgid "Center align (taCenter)"
+msgstr "居中对齐（taCenter）"
+
+#: tmainform.lblright.caption
+msgid "Right align (taRightJustify)"
+msgstr "右对齐（taRightJustify）"
+
+#: tmainform.lblfilled.caption
+msgid "Transparent=False: filled background"
+msgstr "Transparent=False：带填充背景"
+
+#: tmainform.lblauto.caption
+msgid "AutoSize=True: width and height fit the text"
+msgstr "AutoSize=True：宽高随文字自适应"
+
+#: tmainform.lblwrap.caption
+msgid "WordWrap=True : this label wraps onto several lines because the words are separated by spaces — 中文 and English mixed also wrap at spaces, and lines that exceed the control width wrap automatically."
+msgstr "WordWrap=True : this label wraps onto several lines because the words are separated by spaces — 中文 与 English 混排 也 能 在 空格 处 换行，超出 控件 宽度 就 自动 折行。"
+
+#: tmainform.lblfocus.caption
+msgid "Name(&N):"
+msgstr "姓名(&N)："
+

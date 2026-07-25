@@ -3,7 +3,7 @@ object MainForm: TMainForm
   Height = 760
   Top = 140
   Width = 1180
-  Caption = 'TTyStringGrid 示例'
+  Caption = 'TTyStringGrid example'
   ClientHeight = 760
   ClientWidth = 1180
   TitleBar = Bar
@@ -21,13 +21,13 @@ object MainForm: TMainForm
       Top = 0
       Width = 1180
       Align = alTop
-      Caption = 'TTyStringGrid  · 自绘数据网格 · TyControls'
+      Caption = 'TTyStringGrid  · custom-drawn data grid · TyControls'
       object BtnAccent: TTyButton
         Left = 710
         Height = 26
         Top = 4
         Width = 70
-        Caption = '主题色'
+        Caption = 'Accent colour'
         OnClick = BtnAccentClick
       end
       object DarkSwitch: TTyToggleSwitch
@@ -35,7 +35,7 @@ object MainForm: TMainForm
         Height = 22
         Top = 6
         Width = 88
-        Caption = '暗色'
+        Caption = 'Dark'
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
@@ -51,7 +51,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 734
       Width = 1164
-      Caption = '就绪'
+      Caption = 'Ready'
       Align = alBottom
     end
     object Pages: TTyPageControl
@@ -62,13 +62,13 @@ object MainForm: TMainForm
       Align = alClient
       ActivePageIndex = 0
       object PgBasic: TTyTabSheet
-        Caption = '基础与虚拟化'
+        Caption = 'Basics & virtualization'
         object LblBasicHint: TTyLabel
           Left = 8
           Height = 34
           Top = 4
           Width = 1150
-          Caption = '鼠标划过单元格看 hover 高亮 · 拖底部横向滚动条,左侧两列钉住不动(冻结列) · 方向键/Home/End/PageUp/PageDown 导航 · 勾上「固定 1 行」再点列头排序:冻结带里换成排在最前的那一行,内容照画不空白'
+          Caption = 'Hover a cell for the hover highlight · drag the bottom horizontal scrollbar, the left two columns stay pinned (frozen columns) · arrow keys / Home/End / PageUp/PageDown to navigate · tick "Freeze 1 row" then click a header to sort: the frozen band shows the top-ranked row, content still drawn with no blank'
         end
         object TbBasic: TTyPanel
           Left = 0
@@ -81,7 +81,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 84
-            Caption = '1 万行'
+            Caption = '10k rows'
             OnClick = BtnRows1WClick
           end
           object BtnRows10W: TTyButton
@@ -89,7 +89,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 84
-            Caption = '10 万行'
+            Caption = '100k rows'
             OnClick = BtnRows10WClick
           end
           object BtnRows100W: TTyButton
@@ -97,7 +97,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 84
-            Caption = '100 万行'
+            Caption = '1M rows'
             OnClick = BtnRows100WClick
           end
           object BtnRowsReset: TTyButton
@@ -105,7 +105,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 96
-            Caption = '恢复 200 行'
+            Caption = 'Restore 200 rows'
             OnClick = BtnRowsResetClick
           end
           object BtnGoto: TTyButton
@@ -113,7 +113,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 110
-            Caption = '跳到 (2, 5000)'
+            Caption = 'Jump to (2, 5000)'
             OnClick = BtnGotoClick
           end
           object ChkFrozenCols: TTyCheckBox
@@ -121,7 +121,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 96
-            Caption = '冻结 2 列'
+            Caption = 'Freeze 2 columns'
             Checked = True
             OnChange = ChkBasicChange
           end
@@ -130,7 +130,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 96
-            Caption = '固定 1 行'
+            Caption = 'Freeze 1 row'
             OnChange = ChkBasicChange
           end
           object ChkIndicator: TTyCheckBox
@@ -138,7 +138,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 84
-            Caption = '行号槽'
+            Caption = 'Row-number gutter'
             Checked = True
             OnChange = ChkBasicChange
           end
@@ -147,7 +147,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 84
-            Caption = '汇总带'
+            Caption = 'Summary band'
             Checked = True
             OnChange = ChkBasicChange
           end
@@ -156,7 +156,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 108
-            Caption = '记住版式'
+            Caption = 'Remember layout'
             OnClick = BtnSaveLayoutClick
           end
           object BtnLoadLayout: TTyButton
@@ -164,7 +164,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 108
-            Caption = '还原版式'
+            Caption = 'Restore layout'
             OnClick = BtnLoadLayoutClick
           end
         end
@@ -184,13 +184,13 @@ object MainForm: TMainForm
         end
       end
       object PgLook: TTyTabSheet
-        Caption = '外观'
+        Caption = 'Appearance'
         object LblLookHint: TTyLabel
           Left = 8
           Height = 34
           Top = 4
           Width = 1150
-          Caption = '「条件着色」把负数金额标红、超期行标黄(OnGetCellStyle,按数据行判断,排序后仍跟着记录走) · 「逐格边框」给小计行加粗上边线 · 加粗格线时列宽**不变**,只是内容内缩'
+          Caption = '"Conditional colouring" marks negative amounts red and overdue rows yellow (OnGetCellStyle, judged per data row, follows the record after sorting) · "Per-cell border" thickens the subtotal row''s top line · thickening grid lines does **not** change column width, it only insets the content'
         end
         object TbLook1: TTyPanel
           Left = 0
@@ -203,7 +203,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 84
-            Caption = '斑马纹'
+            Caption = 'Zebra stripes'
             Checked = True
             OnChange = ChkLookChange
           end
@@ -212,7 +212,7 @@ object MainForm: TMainForm
             Height = 20
             Top = 10
             Width = 48
-            Caption = '格线:'
+            Caption = 'Grid lines:'
           end
           object CbLines: TTyComboBox
             Left = 146
@@ -220,10 +220,10 @@ object MainForm: TMainForm
             Top = 6
             Width = 96
             Items.Strings = (
-              '无'
-              '只横线'
-              '只竖线'
-              '横竖都有'
+              'None'
+              'Horizontal lines only'
+              'Vertical lines only'
+              'Both horizontal and vertical'
             )
             ItemIndex = 3
             OnChange = CbLinesChange
@@ -233,7 +233,7 @@ object MainForm: TMainForm
             Height = 20
             Top = 10
             Width = 48
-            Caption = '线宽:'
+            Caption = 'Line width:'
           end
           object SpLineWidth: TTySpinEdit
             Left = 298
@@ -250,7 +250,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 108
-            Caption = '条件着色'
+            Caption = 'Conditional colouring'
             OnChange = ChkLookChange
           end
           object ChkCellBorder: TTyCheckBox
@@ -258,7 +258,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 108
-            Caption = '逐格边框'
+            Caption = 'Per-cell border'
             OnChange = ChkLookChange
           end
           object ChkHdrHilite: TTyCheckBox
@@ -266,7 +266,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 132
-            Caption = '排序列表头高亮'
+            Caption = 'Sorted headers highlighted'
             OnChange = ChkLookChange
           end
           object ChkHdrIcons: TTyCheckBox
@@ -274,7 +274,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 108
-            Caption = '列头图标'
+            Caption = 'Header icon'
             OnChange = ChkLookChange
           end
         end
@@ -289,7 +289,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 108
-            Caption = '本格上色'
+            Caption = 'Colour this cell'
             OnClick = BtnCellColorClick
           end
           object BtnCellUncolor: TTyButton
@@ -297,7 +297,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 108
-            Caption = '清除本格色'
+            Caption = 'Clear this cell''s colour'
             OnClick = BtnCellUncolorClick
           end
           object BtnRowColor: TTyButton
@@ -305,7 +305,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 108
-            Caption = '整行标色'
+            Caption = 'Colour whole row'
             OnClick = BtnRowColorClick
           end
           object ChkWordWrap: TTyCheckBox
@@ -313,7 +313,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 84
-            Caption = '换行'
+            Caption = 'Word wrap'
             OnChange = ChkLookChange
           end
           object BtnAutoFitRows: TTyButton
@@ -321,7 +321,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 108
-            Caption = '自动行高'
+            Caption = 'Auto row height'
             OnClick = BtnAutoFitRowsClick
           end
           object BtnResetRows: TTyButton
@@ -329,7 +329,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 108
-            Caption = '恢复行高'
+            Caption = 'Restore row height'
             OnClick = BtnResetRowsClick
           end
           object LblLookTip: TTyLabel
@@ -337,7 +337,7 @@ object MainForm: TMainForm
             Height = 20
             Top = 10
             Width = 460
-            Caption = '「备注」列内容很长 —— 先勾换行,再点自动行高'
+            Caption = 'The "Notes" column content is long — tick word wrap first, then click auto row height'
           end
         end
         object GridLook: TTyStringGrid
@@ -356,13 +356,13 @@ object MainForm: TMainForm
         end
       end
       object PgSort: TTyTabSheet
-        Caption = '排序 · 筛选 · 分组'
+        Caption = 'Sort · filter · group'
         object LblSortHint: TTyLabel
           Left = 8
           Height = 34
           Top = 4
           Width = 1150
-          Caption = '点列头排序(升→降→取消) · **Shift+点**列头追加次级排序列,表头出现 1/2/3 顺位徽标 · 「数量」「金额」按数值排、「日期」按日期排(列级 SortKind) · 正在过滤的列漏斗会点亮'
+          Caption = 'Click a header to sort (asc → desc → clear) · **Shift+click** a header to add a secondary sort column, the header shows 1/2/3 order badges · "Qty" and "Amount" sort numerically, "Date" sorts by date (column-level SortKind) · the funnel lights up on a column being filtered'
         end
         object TbSort1: TTyPanel
           Left = 0
@@ -375,7 +375,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 110
-            Caption = '数量 ↑'
+            Caption = 'Qty ↑'
             OnClick = BtnSortQtyClick
           end
           object BtnSortQtyD: TTyButton
@@ -383,7 +383,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 110
-            Caption = '数量 ↓'
+            Caption = 'Qty ↓'
             OnClick = BtnSortQtyDClick
           end
           object BtnSortAdd: TTyButton
@@ -391,7 +391,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 132
-            Caption = '追加:大区'
+            Caption = 'Append: region'
             OnClick = BtnSortAddClick
           end
           object BtnSortClear: TTyButton
@@ -399,7 +399,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 110
-            Caption = '取消排序'
+            Caption = 'Clear sort'
             OnClick = BtnSortClearClick
           end
           object ChkBlanksFirst: TTyCheckBox
@@ -407,7 +407,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 120
-            Caption = '空值排最前'
+            Caption = 'Nulls first'
             OnChange = ChkSortChange
           end
           object ChkCaseSens: TTyCheckBox
@@ -415,7 +415,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 132
-            Caption = '排序区分大小写'
+            Caption = 'Sort is case-sensitive'
             OnChange = ChkSortChange
           end
           object ChkPhysicalSort: TTyCheckBox
@@ -423,7 +423,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 130
-            Caption = '排序真的搬数据'
+            Caption = 'Sorting really moves the data'
             OnChange = ChkPhysicalSortChange
           end
         end
@@ -438,7 +438,7 @@ object MainForm: TMainForm
             Height = 20
             Top = 10
             Width = 48
-            Caption = '筛选:'
+            Caption = 'Filter:'
           end
           object CbFilterCol: TTyComboBox
             Left = 56
@@ -446,12 +446,12 @@ object MainForm: TMainForm
             Top = 6
             Width = 110
             Items.Strings = (
-              '订单号'
-              '大区'
-              '产品'
-              '数量'
-              '金额'
-              '日期'
+              'Order No.'
+              'Region'
+              'Product'
+              'Quantity'
+              'Amount'
+              'Date'
             )
             ItemIndex = 3
             OnChange = CbFilterChange
@@ -462,15 +462,15 @@ object MainForm: TMainForm
             Top = 6
             Width = 110
             Items.Strings = (
-              '包含'
-              '等于'
-              '不等于'
-              '开头是'
-              '结尾是'
-              '大于'
-              '大于等于'
-              '小于'
-              '小于等于'
+              'contains'
+              'equal'
+              'not equal'
+              'starts with'
+              'ends with'
+              'greater than'
+              'greater than or equal'
+              'less than'
+              'less than or equal'
             )
             ItemIndex = 5
             OnChange = CbFilterChange
@@ -488,7 +488,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 96
-            Caption = '清除筛选'
+            Caption = 'Clear filter'
             OnClick = BtnFilterClearClick
           end
           object BtnGroup: TTyButton
@@ -496,7 +496,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 104
-            Caption = '按大区分组'
+            Caption = 'Group by region'
             OnClick = BtnGroupClick
           end
           object BtnExpandAll: TTyButton
@@ -504,7 +504,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 72
-            Caption = '全部展开'
+            Caption = 'Expand all'
             OnClick = BtnExpandAllClick
           end
           object BtnCollapseAll: TTyButton
@@ -512,7 +512,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 72
-            Caption = '全部折叠'
+            Caption = 'Collapse all'
             OnClick = BtnCollapseAllClick
           end
           object BtnGroup2: TTyButton
@@ -520,7 +520,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 138
-            Caption = '按大区 + 产品分组'
+            Caption = 'Group by region + product'
             OnClick = BtnGroup2Click
           end
           object ChkFilterRow: TTyCheckBox
@@ -528,7 +528,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 84
-            Caption = '筛选行'
+            Caption = 'Filter row'
             OnChange = ChkFilterRowChange
           end
           object ChkTree: TTyCheckBox
@@ -536,7 +536,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 76
-            Caption = '树形列'
+            Caption = 'Tree column'
             OnChange = ChkTreeChange
           end
         end
@@ -556,13 +556,13 @@ object MainForm: TMainForm
         end
       end
       object PgEdit: TTyTabSheet
-        Caption = '编辑与单元格类型'
+        Caption = 'Editing & cell types'
         object LblEditHint: TTyLabel
           Left = 8
           Height = 34
           Top = 4
           Width = 1150
-          Caption = '**直接敲字**就进编辑(这一笔即第一个字符) · Enter 向下 · Tab 按格推进并折行 · F2 也行 · 「数量」微调 · 「金额」滑动条 · 「订单号」掩码 · 「大区」下拉 · 「日期」日历 · 「评分」点星 · 「备注」多行 —— 全在**列上**声明,没接事件'
+          Caption = '**Just start typing** to edit (that keystroke is the first character) · Enter moves down · Tab advances by cell and wraps · F2 works too · "Qty" spinner · "Amount" slider · "Order No." mask · "Region" dropdown · "Date" calendar · "Rating" star click · "Notes" multiline — all declared **on the columns**, no events wired'
         end
         object TbEdit: TTyPanel
           Left = 0
@@ -575,7 +575,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 132
-            Caption = '导航跳过只读格'
+            Caption = 'Navigation skips read-only cells'
             OnChange = ChkEditChange
           end
           object BtnCellRO: TTyButton
@@ -583,7 +583,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 120
-            Caption = '本格设只读'
+            Caption = 'Set this cell read-only'
             OnClick = BtnCellROClick
           end
           object BtnCellRW: TTyButton
@@ -591,7 +591,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 120
-            Caption = '本格可编辑'
+            Caption = 'This cell is editable'
             OnClick = BtnCellRWClick
           end
           object ChkEditLink: TTyCheckBox
@@ -599,7 +599,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 168
-            Caption = '备注列用自定义编辑器'
+            Caption = 'The notes column uses a custom editor'
             OnChange = ChkEditChange
           end
           object LblEditTip: TTyLabel
@@ -607,7 +607,7 @@ object MainForm: TMainForm
             Height = 20
             Top = 10
             Width = 550
-            Caption = '「完成度」进度条 · 「评分」星标 · 「已结算」勾选框 · 「标记色」点开取色 · 「操作」按钮'
+            Caption = '"Completion" progress bar · "Rating" stars · "Settled" checkbox · "Mark colour" click to pick · "Actions" button'
           end
         end
         object GridEdit: TTyStringGrid
@@ -623,13 +623,13 @@ object MainForm: TMainForm
         end
       end
       object PgData: TTyTabSheet
-        Caption = '选择 · 数据 · 剪贴板'
+        Caption = 'Selection · data · clipboard'
         object LblDataHint: TTyLabel
           Left = 8
           Height = 34
           Top = 4
           Width = 1150
-          Caption = '拖动可框选 · **Ctrl+点**追加不相邻的块(离散多选) · Ctrl+A 全选 · Ctrl+C/V 与 Excel 互粘,粘贴时不够的行列会自动补上 · 撤销覆盖的不只是文字:上移/下移之后按 Ctrl+Z,底色、行高、合并跨度都跟着回来'
+          Caption = 'Drag to marquee-select · **Ctrl+click** to add non-adjacent blocks (discrete multi-select) · Ctrl+A select all · Ctrl+C/V interops with Excel, missing rows/columns are filled on paste · undo covers more than text: after move up/down, Ctrl+Z brings back background colour, row height and merge span too'
         end
         object TbData1: TTyPanel
           Left = 0
@@ -642,7 +642,7 @@ object MainForm: TMainForm
             Height = 20
             Top = 10
             Width = 62
-            Caption = '选择:'
+            Caption = 'Select:'
           end
           object CbSelMode: TTyComboBox
             Left = 70
@@ -650,9 +650,9 @@ object MainForm: TMainForm
             Top = 6
             Width = 110
             Items.Strings = (
-              '单元格'
-              '整行'
-              '整列'
+              'Cell'
+              'Whole row'
+              'Whole column'
             )
             ItemIndex = 0
             OnChange = CbSelModeChange
@@ -662,7 +662,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 84
-            Caption = '全选'
+            Caption = 'Select all'
             OnClick = BtnSelAllClick
           end
           object BtnSelNone: TTyButton
@@ -670,7 +670,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 96
-            Caption = '清除选择'
+            Caption = 'Clear selection'
             OnClick = BtnSelNoneClick
           end
           object BtnMerge: TTyButton
@@ -678,7 +678,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 108
-            Caption = '合并选区'
+            Caption = 'Merge selection'
             OnClick = BtnMergeClick
           end
           object BtnUnmerge: TTyButton
@@ -686,7 +686,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 108
-            Caption = '取消合并'
+            Caption = 'Unmerge'
             OnClick = BtnUnmergeClick
           end
           object BtnCopy: TTyButton
@@ -694,7 +694,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 84
-            Caption = '复制'
+            Caption = 'Copy'
             OnClick = BtnCopyClick
           end
           object BtnCut: TTyButton
@@ -702,7 +702,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 84
-            Caption = '剪切'
+            Caption = 'Cut'
             OnClick = BtnCutClick
           end
           object BtnPaste: TTyButton
@@ -710,7 +710,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 84
-            Caption = '粘贴'
+            Caption = 'Paste'
             OnClick = BtnPasteClick
           end
           object ChkAutoGrow: TTyCheckBox
@@ -718,7 +718,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 132
-            Caption = '粘贴时自动扩表'
+            Caption = 'Auto-grow table on paste'
             Checked = True
             OnChange = ChkDataChange
           end
@@ -734,7 +734,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 96
-            Caption = '插入行'
+            Caption = 'Insert row'
             OnClick = BtnInsRowClick
           end
           object BtnDelRow: TTyButton
@@ -742,7 +742,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 96
-            Caption = '删除行'
+            Caption = 'Delete row'
             OnClick = BtnDelRowClick
           end
           object BtnRowUp: TTyButton
@@ -750,7 +750,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 84
-            Caption = '上移'
+            Caption = 'Move up'
             OnClick = BtnRowUpClick
           end
           object BtnRowDown: TTyButton
@@ -758,7 +758,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 84
-            Caption = '下移'
+            Caption = 'Move down'
             OnClick = BtnRowDownClick
           end
           object BtnHideRow: TTyButton
@@ -766,7 +766,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 108
-            Caption = '隐藏本行'
+            Caption = 'Hide this row'
             OnClick = BtnHideRowClick
           end
           object BtnUnhideAll: TTyButton
@@ -774,7 +774,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 120
-            Caption = '全部取消隐藏'
+            Caption = 'Unhide all'
             OnClick = BtnUnhideAllClick
           end
           object BtnExportCsv: TTyButton
@@ -782,7 +782,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 108
-            Caption = '导出 CSV'
+            Caption = 'Export CSV'
             OnClick = BtnExportCsvClick
           end
           object BtnExportHtml: TTyButton
@@ -790,7 +790,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 108
-            Caption = '导出 HTML'
+            Caption = 'Export HTML'
             OnClick = BtnExportHtmlClick
           end
           object BtnUndo: TTyButton
@@ -798,7 +798,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 92
-            Caption = '撤销'
+            Caption = 'Undo'
             OnClick = BtnUndoClick
           end
           object BtnRedo: TTyButton
@@ -806,7 +806,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 92
-            Caption = '重做'
+            Caption = 'Redo'
             OnClick = BtnRedoClick
           end
           object LblDataTip: TTyLabel
@@ -828,7 +828,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 108
-            Caption = '插入一列'
+            Caption = 'Insert a column'
             OnClick = BtnInsColClick
           end
           object BtnDelCol: TTyButton
@@ -836,7 +836,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 108
-            Caption = '删除本列'
+            Caption = 'Delete this column'
             OnClick = BtnDelColClick
           end
           object BtnMoveCol: TTyButton
@@ -844,7 +844,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 132
-            Caption = '本列与右邻换位'
+            Caption = 'Swap this column with the one on its right'
             OnClick = BtnMoveColClick
           end
           object LblColTip: TTyLabel
@@ -852,7 +852,7 @@ object MainForm: TMainForm
             Height = 20
             Top = 10
             Width = 640
-            Caption = '列的增删与换位现在也能撤销 —— 连宽度、标题、编辑器种类、只读、那一列上的筛选一起回来'
+            Caption = 'Adding and moving columns can now be undone too — width, title, editor kind, read-only and that column''s filter all come back together'
           end
         end
         object GridData: TTyStringGrid
@@ -868,13 +868,13 @@ object MainForm: TMainForm
         end
       end
       object PgEvents: TTyTabSheet
-        Caption = '事件与钩子'
+        Caption = 'Events & hooks'
         object LblEvHint: TTyLabel
           Left = 8
           Height = 34
           Top = 4
           Width = 1150
-          Caption = '每个开关对应一个钩子 —— 勾上再去操作,状态栏会说出它介入了什么 · 「禁止点第 3 行」那条会让整行点不动(光标都不移),这是 OnCanClickCell 的克制之处'
+          Caption = 'Each switch maps to a hook — tick it, then act, and the status bar tells you what it intervened in · "Forbid clicking row 3" makes the whole row unclickable (the cursor does not even move), which is OnCanClickCell showing restraint'
         end
         object TbEv1: TTyPanel
           Left = 0
@@ -887,7 +887,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 120
-            Caption = '悬停出提示'
+            Caption = 'Hover for a hint'
             OnChange = ChkEvChange
           end
           object ChkEvLockRow: TTyCheckBox
@@ -895,7 +895,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 132
-            Caption = '禁止点第 3 行'
+            Caption = 'Forbid clicking row 3'
             OnChange = ChkEvChange
           end
           object ChkEvRightClick: TTyCheckBox
@@ -903,7 +903,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 132
-            Caption = '右键报告位置'
+            Caption = 'Right-click reports position'
             Checked = True
             OnChange = ChkEvChange
           end
@@ -912,7 +912,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 144
-            Caption = '表头点击/右键'
+            Caption = 'Header click / right-click'
             Checked = True
             OnChange = ChkEvChange
           end
@@ -921,7 +921,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 156
-            Caption = '列宽/行高事件'
+            Caption = 'Column width / row height events'
             Checked = True
             OnChange = ChkEvChange
           end
@@ -930,7 +930,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 132
-            Caption = '钉住第 0 列'
+            Caption = 'Pin column 0'
             OnChange = ChkEvChange
           end
         end
@@ -945,7 +945,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 156
-            Caption = '勾选框事件/否决'
+            Caption = 'Checkbox events / veto'
             Checked = True
             OnChange = ChkEvChange
           end
@@ -954,7 +954,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 156
-            Caption = '剪贴板钩子'
+            Caption = 'Clipboard hook'
             OnChange = ChkEvChange
           end
           object BtnEvFind: TTyButton
@@ -962,7 +962,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 96
-            Caption = '查找下一个'
+            Caption = 'Find next'
             OnClick = BtnEvFindClick
           end
           object EdEvFind: TTyEdit
@@ -970,14 +970,14 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 120
-            Text = '云主机'
+            Text = 'Cloud host'
           end
           object BtnEvReplace: TTyButton
             Left = 570
             Height = 26
             Top = 6
             Width = 108
-            Caption = '全部替换为'
+            Caption = 'Replace all with'
             OnClick = BtnEvReplaceClick
           end
           object EdEvRepl: TTyEdit
@@ -985,14 +985,14 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 120
-            Text = '云服务器'
+            Text = 'Cloud server'
           end
           object BtnEvImportCsv: TTyButton
             Left = 816
             Height = 26
             Top = 6
             Width = 108
-            Caption = '导入 CSV'
+            Caption = 'Import CSV'
             OnClick = BtnEvImportCsvClick
           end
           object ChkEvRowMove: TTyCheckBox
@@ -1000,7 +1000,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 118
-            Caption = '禁止拖到首行'
+            Caption = 'Forbid dragging to the first row'
             OnChange = ChkEvChange
           end
           object ChkEvEditorProp: TTyCheckBox
@@ -1008,7 +1008,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 108
-            Caption = '编辑器变红'
+            Caption = 'Editor turns red'
             OnChange = ChkEvChange
           end
         end
@@ -1023,7 +1023,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 144
-            Caption = '回车打开明细'
+            Caption = 'Enter opens detail'
             OnChange = ChkEv3Change
           end
           object ChkEvScrollHint: TTyCheckBox
@@ -1031,7 +1031,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 132
-            Caption = '拖滚动条提示'
+            Caption = 'Drag-scrollbar hint'
             OnChange = ChkEv3Change
           end
           object ChkEvCanEdit: TTyCheckBox
@@ -1039,7 +1039,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 156
-            Caption = '禁改第 2 行(仍显示)'
+            Caption = 'Row 2 not editable (still shown)'
             OnChange = ChkEv3Change
           end
           object ChkEvEditChange: TTyCheckBox
@@ -1047,7 +1047,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 144
-            Caption = '边打字边校验'
+            Caption = 'Validate as you type'
             OnChange = ChkEv3Change
           end
           object ChkEvCellEdited: TTyCheckBox
@@ -1055,7 +1055,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 156
-            Caption = '否决空值提交'
+            Caption = 'Veto empty-value commit'
             OnChange = ChkEv3Change
           end
           object ChkEvRowVeto: TTyCheckBox
@@ -1063,7 +1063,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 156
-            Caption = '禁止增删行'
+            Caption = 'Forbid adding/removing rows'
             OnChange = ChkEv3Change
           end
           object ChkEvSelectCell: TTyCheckBox
@@ -1071,7 +1071,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 144
-            Caption = '光标不进第 0 列'
+            Caption = 'The cursor does not enter column 0'
             OnChange = ChkEv3Change
           end
         end
@@ -1086,7 +1086,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 156
-            Caption = '单击/双击报告'
+            Caption = 'Single/double click report'
             OnChange = ChkEv3Change
           end
           object ChkEvRating: TTyCheckBox
@@ -1094,7 +1094,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 132
-            Caption = '评分变化事件'
+            Caption = 'Rating change event'
             OnChange = ChkEv3Change
           end
           object ChkEvCanSort: TTyCheckBox
@@ -1102,7 +1102,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 156
-            Caption = '大区列不许排序'
+            Caption = 'The region column may not be sorted'
             OnChange = ChkEv3Change
           end
           object ChkEvCompare: TTyCheckBox
@@ -1110,7 +1110,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 168
-            Caption = '大区按业务序排'
+            Caption = 'Region sorted in business order'
             OnChange = ChkEv3Change
           end
           object ChkEvFilterRow: TTyCheckBox
@@ -1118,7 +1118,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 144
-            Caption = '只留负数金额'
+            Caption = 'Keep negative amounts only'
             OnChange = ChkEv3Change
           end
           object ChkEvFilterVals: TTyCheckBox
@@ -1126,7 +1126,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 168
-            Caption = '筛选候选值接管'
+            Caption = 'Filter candidate values takeover'
             OnChange = ChkEv3Change
           end
           object ChkEvPickList: TTyCheckBox
@@ -1134,7 +1134,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 132
-            Caption = '动态候选项'
+            Caption = 'Dynamic candidates'
             OnChange = ChkEv3Change
           end
         end
@@ -1155,13 +1155,13 @@ object MainForm: TMainForm
         end
       end
       object PgView: TTyTabSheet
-        Caption = '呈现与表头'
+        Caption = 'Rendering & headers'
         object LblViewHint: TTyLabel
           Left = 8
           Height = 34
           Top = 4
           Width = 1150
-          Caption = '滚动条「隐藏」只是不显示 —— 滚轮和方向键照样走得到底 · 「失焦时选区变淡」要点到别的控件上才看得出来 · 先点「换成长列标题」,再勾表头换行与自适应 · 分组带每多一级就长高一条'
+          Caption = 'The scrollbar "hidden" only means it is not shown — the wheel and arrow keys still reach the bottom · "Selection dims on blur" only shows when you click onto another control · click "Switch to a long column title" first, then tick header wrap and auto height · each extra grouping level adds a band of height'
         end
         object TbView1: TTyPanel
           Left = 0
@@ -1174,7 +1174,7 @@ object MainForm: TMainForm
             Height = 20
             Top = 9
             Width = 60
-            Caption = '纵滚条:'
+            Caption = 'Vertical scrollbar:'
           end
           object CbVScroll: TTyComboBox
             Left = 72
@@ -1182,9 +1182,9 @@ object MainForm: TMainForm
             Top = 6
             Width = 100
             Items.Strings = (
-              '按需'
-              '常显'
-              '隐藏'
+              'On demand'
+              'Always shown'
+              'Hide'
             )
             ItemIndex = 0
             OnChange = CbScrollChange
@@ -1194,7 +1194,7 @@ object MainForm: TMainForm
             Height = 20
             Top = 9
             Width = 60
-            Caption = '横滚条:'
+            Caption = 'Horizontal scrollbar:'
           end
           object CbHScroll: TTyComboBox
             Left = 246
@@ -1202,9 +1202,9 @@ object MainForm: TMainForm
             Top = 6
             Width = 100
             Items.Strings = (
-              '按需'
-              '常显'
-              '隐藏'
+              'On demand'
+              'Always shown'
+              'Hide'
             )
             ItemIndex = 0
             OnChange = CbScrollChange
@@ -1214,7 +1214,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 120
-            Caption = '背景图'
+            Caption = 'Background image'
             OnChange = ChkViewChange
           end
           object CbBackMode: TTyComboBox
@@ -1223,9 +1223,9 @@ object MainForm: TMainForm
             Top = 6
             Width = 100
             Items.Strings = (
-              '平铺'
-              '拉伸'
-              '居中'
+              'Tile'
+              'Stretch'
+              'Center'
             )
             ItemIndex = 1
             OnChange = CbBackChange
@@ -1236,8 +1236,8 @@ object MainForm: TMainForm
             Top = 6
             Width = 132
             Items.Strings = (
-              '整表'
-              '仅正文窗格'
+              'Whole table'
+              'Text pane only'
             )
             ItemIndex = 0
             OnChange = CbBackChange
@@ -1247,7 +1247,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 132
-            Caption = '焦点格外框'
+            Caption = 'Focused-cell outline'
             Checked = True
             OnChange = ChkViewChange
           end
@@ -1256,7 +1256,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 156
-            Caption = '失焦时选区变淡'
+            Caption = 'Selection dims on blur'
             OnChange = ChkViewChange
           end
         end
@@ -1271,7 +1271,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 120
-            Caption = '表头换行'
+            Caption = 'Header wrap'
             OnChange = ChkViewChange
           end
           object ChkHdrAuto: TTyCheckBox
@@ -1279,7 +1279,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 144
-            Caption = '表头高度自适应'
+            Caption = 'Auto header height'
             OnChange = ChkViewChange
           end
           object ChkHdrGroups: TTyCheckBox
@@ -1287,7 +1287,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 120
-            Caption = '表头分组'
+            Caption = 'Header grouping'
             OnChange = ChkViewChange
           end
           object ChkHdrGroups2: TTyCheckBox
@@ -1295,7 +1295,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 132
-            Caption = '再加一级分组'
+            Caption = 'Add one more grouping level'
             OnChange = ChkViewChange
           end
           object ChkFixBottom: TTyCheckBox
@@ -1303,7 +1303,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 132
-            Caption = '底部固定 1 行'
+            Caption = 'Freeze 1 row at the bottom'
             OnChange = ChkViewChange
           end
           object ChkFixRight: TTyCheckBox
@@ -1311,7 +1311,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 132
-            Caption = '右侧冻结 1 列'
+            Caption = 'Freeze 1 column on the right'
             OnChange = ChkViewChange
           end
           object BtnLongCaption: TTyButton
@@ -1319,7 +1319,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 132
-            Caption = '换成长列标题'
+            Caption = 'Switch to a long column title'
             OnClick = BtnLongCaptionClick
           end
         end
@@ -1340,13 +1340,13 @@ object MainForm: TMainForm
         end
       end
       object PgIo: TTyTabSheet
-        Caption = '数据进出'
+        Caption = 'Data in/out'
         object LblIoHint: TTyLabel
           Left = 8
           Height = 34
           Top = 4
           Width = 1150
-          Caption = '导出**只导可见行**:排序、筛选、折叠之后导出的就是屏幕上那些 · 「只导出选区」用的是同一个方法的行列范围参数 · 「追加导入」不动列标题,只往后接数据 · 宿主接管的页脚值不进缓存 —— 外部数据变了控件收不到通知'
+          Caption = 'Export **only exports visible rows**: after sorting, filtering and collapsing, what you export is what is on screen · "Export selection only" uses the same method''s row/column range arguments · "Append import" does not touch column titles, it only appends data · host-managed footer values are not cached — the control is not notified when the external data changes'
         end
         object TbIo1: TTyPanel
           Left = 0
@@ -1359,7 +1359,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 108
-            Caption = '导出 JSON'
+            Caption = 'Export JSON'
             OnClick = BtnIoJsonClick
           end
           object BtnIoHtml: TTyButton
@@ -1367,7 +1367,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 108
-            Caption = '导出 HTML'
+            Caption = 'Export HTML'
             OnClick = BtnIoHtmlClick
           end
           object BtnIoCsvSel: TTyButton
@@ -1375,7 +1375,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 132
-            Caption = '只导出选区 CSV'
+            Caption = 'Export selection as CSV only'
             OnClick = BtnIoCsvSelClick
           end
           object BtnIoStream: TTyButton
@@ -1383,7 +1383,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 132
-            Caption = '流往返一圈'
+            Caption = 'Stream round trip'
             OnClick = BtnIoStreamClick
           end
           object BtnIoSelText: TTyButton
@@ -1391,7 +1391,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 120
-            Caption = '选区文本'
+            Caption = 'Selection text'
             OnClick = BtnIoSelTextClick
           end
           object BtnIoPasteText: TTyButton
@@ -1399,7 +1399,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 132
-            Caption = '粘一块文本进来'
+            Caption = 'Paste a block of text in'
             OnClick = BtnIoPasteTextClick
           end
           object BtnIoClearRows: TTyButton
@@ -1407,7 +1407,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 120
-            Caption = '清空选中行'
+            Caption = 'Clear selected rows'
             OnClick = BtnIoClearRowsClick
           end
           object BtnIoClearCols: TTyButton
@@ -1415,7 +1415,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 120
-            Caption = '清空本列'
+            Caption = 'Clear this column'
             OnClick = BtnIoClearColsClick
           end
         end
@@ -1430,7 +1430,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 108
-            Caption = '追加导入'
+            Caption = 'Append import'
             OnChange = ChkIoChange
           end
           object LblIoMax: TTyLabel
@@ -1438,7 +1438,7 @@ object MainForm: TMainForm
             Height = 20
             Top = 9
             Width = 72
-            Caption = '最多读:'
+            Caption = 'Read at most:'
           end
           object SpIoMax: TTySpinEdit
             Left = 196
@@ -1454,7 +1454,7 @@ object MainForm: TMainForm
             Height = 20
             Top = 9
             Width = 84
-            Caption = '跳过前几行:'
+            Caption = 'Skip leading rows:'
           end
           object SpIoSkip: TTySpinEdit
             Left = 368
@@ -1470,7 +1470,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 108
-            Caption = '导入 CSV'
+            Caption = 'Import CSV'
             OnClick = BtnIoImportClick
           end
           object ChkIoFooterHook: TTyCheckBox
@@ -1478,7 +1478,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 156
-            Caption = '页脚文案钩子'
+            Caption = 'Footer text hook'
             OnChange = ChkIoChange
           end
           object ChkIoColCalc: TTyCheckBox
@@ -1486,7 +1486,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 168
-            Caption = '金额列改算中位数'
+            Caption = 'Amount column switched to median'
             OnChange = ChkIoChange
           end
           object BtnIoRecalc: TTyButton
@@ -1494,7 +1494,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 120
-            Caption = '强制重算'
+            Caption = 'Force recompute'
             OnClick = BtnIoRecalcClick
           end
         end
@@ -1517,13 +1517,13 @@ object MainForm: TMainForm
         end
       end
       object PgCells: TTyTabSheet
-        Caption = '单元格能力'
+        Caption = 'Cell abilities'
         object LblCellsHint: TTyLabel
           Left = 8
           Height = 34
           Top = 4
           Width = 1150
-          Caption = '这一页的东西**都挂在格子或列上**,不接绘制事件 · 批注在格子右上角留一个小三角,鼠标停上去才显示 · 「金额加货币符号」只改显示:双击进编辑看到的、导出的都还是原值 · 三态勾选框的循环是 空→勾→灰,与 TTyCheckBox 一致'
+          Caption = 'Everything on this page **hangs on the cells or the columns**, no paint events · a comment leaves a small triangle in the cell''s top-right, shown only on hover · "Add currency symbol to amount" changes display only: double-clicking into edit, and exporting, still show the raw value · the tri-state checkbox cycles unchecked→checked→grayed, consistent with TTyCheckBox'
         end
         object TbCells1: TTyPanel
           Left = 0
@@ -1536,7 +1536,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 132
-            Caption = '勾选框三态'
+            Caption = 'Checkbox tri-state'
             OnChange = ChkCellsChange
           end
           object BtnComment: TTyButton
@@ -1544,7 +1544,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 108
-            Caption = '加批注'
+            Caption = 'Add comment'
             OnClick = BtnCommentClick
           end
           object BtnCommentClear: TTyButton
@@ -1552,7 +1552,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 96
-            Caption = '清批注'
+            Caption = 'Clear comment'
             OnClick = BtnCommentClearClick
           end
           object BtnBold: TTyButton
@@ -1560,7 +1560,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 96
-            Caption = '本格加粗'
+            Caption = 'Bold this cell'
             OnClick = BtnBoldClick
           end
           object BtnBoldClear: TTyButton
@@ -1568,7 +1568,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 96
-            Caption = '取消加粗'
+            Caption = 'Unbold'
             OnClick = BtnBoldClearClick
           end
           object ChkFormat: TTyCheckBox
@@ -1576,7 +1576,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 144
-            Caption = '金额加货币符号'
+            Caption = 'Add currency symbol to amount'
             OnChange = ChkCellsChange
           end
           object ChkLinkCol: TTyCheckBox
@@ -1584,7 +1584,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 132
-            Caption = '订单号变链接'
+            Caption = 'Order No. becomes a link'
             OnChange = ChkCellsChange
           end
         end
@@ -1599,7 +1599,7 @@ object MainForm: TMainForm
             Height = 20
             Top = 9
             Width = 76
-            Caption = '本格显示:'
+            Caption = 'This cell shows:'
           end
           object CbCellDisp: TTyComboBox
             Left = 88
@@ -1607,11 +1607,11 @@ object MainForm: TMainForm
             Top = 6
             Width = 120
             Items.Strings = (
-              '文字'
-              '进度条'
-              '评分'
-              '超链接'
-              '色块'
+              'Text'
+              'Progress bar'
+              'Rating'
+              'Hyperlink'
+              'Colour block'
             )
             ItemIndex = 0
             OnChange = CbCellDispChange
@@ -1621,7 +1621,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 168
-            Caption = '列级声明:进度列'
+            Caption = 'Column-level declaration: progress column'
             OnChange = ChkCellsChange
           end
           object LblCase: TTyLabel
@@ -1629,7 +1629,7 @@ object MainForm: TMainForm
             Height = 20
             Top = 9
             Width = 72
-            Caption = '订单号:'
+            Caption = 'Order No.:'
           end
           object CbCase: TTyComboBox
             Left = 470
@@ -1637,9 +1637,9 @@ object MainForm: TMainForm
             Top = 6
             Width = 110
             Items.Strings = (
-              '原样'
-              '大写'
-              '小写'
+              'As-is'
+              'Uppercase'
+              'Lowercase'
             )
             ItemIndex = 0
             OnChange = CbCaseChange
@@ -1649,7 +1649,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 156
-            Caption = '数量列只收数字'
+            Caption = 'The quantity column takes numbers only'
             OnChange = ChkCellsChange
           end
           object LblMaxLen: TTyLabel
@@ -1657,7 +1657,7 @@ object MainForm: TMainForm
             Height = 20
             Top = 9
             Width = 84
-            Caption = '备注上限:'
+            Caption = 'Notes limit:'
           end
           object SpMaxLen: TTySpinEdit
             Left = 842

@@ -229,21 +229,21 @@ begin
   { Columns are code-created, like examples/treeview: a TCollection streams as anonymous
     `item ... end` blocks, so hand-writing them into the .lfm buys nothing. }
   c := LV1.Header.Columns.Add as TTyColumn;
-  c.Text := '名称';  c.Width := 260;
+  c.Text := 'Name';  c.Width := 260;
   c := LV1.Header.Columns.Add as TTyColumn;
-  c.Text := '大小';  c.Width := 110;  c.Alignment := taRightJustify;
+  c.Text := 'Size';  c.Width := 110;  c.Alignment := taRightJustify;
   c := LV1.Header.Columns.Add as TTyColumn;
-  c.Text := '类型';  c.Width := 120;
+  c.Text := 'Type';  c.Width := 120;
   c := LV1.Header.Columns.Add as TTyColumn;
-  c.Text := '修改时间'; c.Width := 180;
+  c.Text := 'Modified time'; c.Width := 180;
 
   LV1.Header.Options := LV1.Header.Options + [hoVisible, hoColumnResize,
     hoShowSortGlyphs, hoHeaderClickAutoSort, hoHotTrack];
 
   c := LV2.Header.Columns.Add as TTyColumn;
-  c.Text := '行号';  c.Width := 120;  c.Alignment := taRightJustify;
+  c.Text := 'Row number';  c.Width := 120;  c.Alignment := taRightJustify;
   c := LV2.Header.Columns.Add as TTyColumn;
-  c.Text := '值';    c.Width := 300;
+  c.Text := 'Value';    c.Width := 300;
   LV2.Header.Options := LV2.Header.Options + [hoVisible, hoColumnResize, hoShowSortGlyphs];
 end;
 
@@ -256,10 +256,10 @@ procedure TMainForm.BuildGroups;
 
 begin
   { One group per kind; the index lines up with the item's ImageIndex/GroupIndex. }
-  AddGroup('文件夹');       // 0
-  AddGroup('文本文档');     // 1
-  AddGroup('电子表格');     // 2
-  AddGroup('图像');         // 3
+  AddGroup('Folder');       // 0
+  AddGroup('Text document');     // 1
+  AddGroup('Spreadsheet');     // 2
+  AddGroup('Image');         // 3
 end;
 
 procedure TMainForm.BuildRows;
@@ -286,7 +286,7 @@ procedure TMainForm.BuildRows;
     begin
       Caption := AName;
       SubItems.Add('');
-      SubItems.Add('文件夹');
+      SubItems.Add('Folder');
       SubItems.Add('');
       ImageIndex := 0;
       GroupIndex := 0;   { folders group }
@@ -294,7 +294,7 @@ procedure TMainForm.BuildRows;
   end;
 
 const
-  Kinds: array[0..2] of string = ('文本文档', '电子表格', '图像');
+  Kinds: array[0..2] of string = ('Text document', 'Spreadsheet', 'Image');
 var
   i: Integer;
 begin
@@ -302,12 +302,12 @@ begin
   AddFolder('build');
   AddFolder('docs');
 
-  AddFile('README.md',        '4096',    '文本文档', '2026-07-10 08:30', 1);
-  AddFile('CHANGELOG.md',     '18944',   '文本文档', '2026-07-09 17:02', 1);
-  AddFile('budget-2026.xlsx', '284672',  '电子表格', '2026-06-28 11:45', 2);
-  AddFile('logo.png',         '90112',   '图像',     '2026-05-14 09:12', 3);
-  AddFile('screenshot.png',   '1638400', '图像',     '2026-07-08 21:37', 3);
-  AddFile('notes.txt',        '512',     '文本文档', '2026-07-01 07:05', 1);
+  AddFile('README.md',        '4096',    'Text document', '2026-07-10 08:30', 1);
+  AddFile('CHANGELOG.md',     '18944',   'Text document', '2026-07-09 17:02', 1);
+  AddFile('budget-2026.xlsx', '284672',  'Spreadsheet', '2026-06-28 11:45', 2);
+  AddFile('logo.png',         '90112',   'Image',     '2026-05-14 09:12', 3);
+  AddFile('screenshot.png',   '1638400', 'Image',     '2026-07-08 21:37', 3);
+  AddFile('notes.txt',        '512',     'Text document', '2026-07-01 07:05', 1);
 
   for i := 1 to 21 do
     AddFile(Format('sample-%.2d.%s', [i, Copy('txtxlspng', 1 + (i mod 3) * 3, 3)]),
@@ -417,7 +417,7 @@ procedure TMainForm.LV1Edited(Sender: TObject; AIndex: Integer; var AText: strin
 begin
   { AIndex is an ITEM index and stays valid across a re-sort. Returning AText unchanged
     lets the control write it into Items[AIndex].Caption. Blank it to abandon. }
-  LblStatus.Caption := Format('重命名 item index %d → %s', [AIndex, AText]);
+  LblStatus.Caption := Format('Renamed item index %d → %s', [AIndex, AText]);
 end;
 
 procedure TMainForm.LV1ColumnClick(Sender: TObject; AColumn: Integer);
@@ -447,7 +447,7 @@ end;
 procedure TMainForm.LV1ItemActivate(Sender: TObject; AIndex: Integer);
 begin
   { AIndex is an ITEM index and stays valid across a re-sort. }
-  LblStatus.Caption := Format('双击打开:%s(item index = %d)',
+  LblStatus.Caption := Format('Double-click opened: %s (item index = %d)',
     [LV1.Items[AIndex].Caption, AIndex]);
 end;
 
@@ -458,8 +458,8 @@ begin
   if (LV1.ItemIndex >= 0) and (LV1.ItemIndex < LV1.Items.Count) then
     focus := Format('%s(item index = %d)', [LV1.Items[LV1.ItemIndex].Caption, LV1.ItemIndex])
   else
-    focus := '无';
-  LblStatus.Caption := Format('焦点:%s   已选中:%d 项   排序:第 %d 列',
+    focus := 'None';
+  LblStatus.Caption := Format('Focus: %s   Selected: %d item(s)   Sort: column %d',
     [focus, LV1.SelCount, LV1.SortColumn]);
 end;
 
@@ -474,14 +474,14 @@ begin
     sort cannot make this return the wrong row's text. }
   case AColumn of
     0: AText := IntToStr(AIndex);
-    1: AText := Format('第 %d 行 · 值 %.6d', [AIndex, (AIndex * 7919) mod 1000000]);
+    1: AText := Format('Row %d · value %.6d', [AIndex, (AIndex * 7919) mod 1000000]);
   end;
 end;
 
 procedure TMainForm.LV2SelectItem(Sender: TObject; AIndex: Integer);
 begin
   if AIndex >= 0 then
-    LblVirtual.Caption := Format('ItemCount = %d,行对象 = 0   ·   焦点 item index = %d',
+    LblVirtual.Caption := Format('ItemCount = %d, row objects = 0   ·   focused item index = %d',
       [LV2.ItemCount, AIndex]);
 end;
 
@@ -504,7 +504,7 @@ begin
   n := 0;
   for i := 0 to High(FVChecked) do
     if FVChecked[i] then Inc(n);
-  LblVirtual.Caption := Format('ItemCount = %d,行对象 = 0   ·   已勾选 %d 项',
+  LblVirtual.Caption := Format('ItemCount = %d, row objects = 0   ·   %d item(s) checked',
     [LV2.ItemCount, n]);
 end;
 

@@ -198,19 +198,19 @@ procedure TMainForm.WireLists;
 var g: Integer;
 begin
   // Header bar: click a title to toggle sorting, drag a section boundary to resize.
-  HeaderCols.AddSection('名称', 96);
-  HeaderCols.AddSection('大小', 60);
-  HeaderCols.AddSection('修改日期', 64);
+  HeaderCols.AddSection('Name', 96);
+  HeaderCols.AddSection('Size', 60);
+  HeaderCols.AddSection('Modified date', 64);
 
   // Outlook-style collapsible grouped list (accordion).
-  g := ListGroups.AddGroup('联系人');
+  g := ListGroups.AddGroup('Contact');
   ListGroups.AddItem(g, 'Alice');
   ListGroups.AddItem(g, 'Bob');
   ListGroups.AddItem(g, 'Carol');
   ListGroups.Expanded[g] := True;
-  g := ListGroups.AddGroup('任务');
-  ListGroups.AddItem(g, '写报告');
-  ListGroups.AddItem(g, '发布版本');
+  g := ListGroups.AddGroup('Task');
+  ListGroups.AddItem(g, 'Write report');
+  ListGroups.AddItem(g, 'Publish version');
 end;
 
 procedure TMainForm.WireBands;
@@ -231,7 +231,7 @@ begin
   ctx.beginPath;
   ctx.arc(AContent.Left + 96, AContent.Top + 36, 22, 0, 2 * Pi, False);
   ctx.fill;
-  APainter.DrawText(AContent, 'OnPaintSurface — 应用用 TTyPainter 自绘', 'Segoe UI', 12, 500,
+  APainter.DrawText(AContent, 'OnPaintSurface — the app draws it itself with TTyPainter', 'Segoe UI', 12, 500,
     TyColorFromLCL(clWhite, 255), taCenter, tlBottom, True);
 end;
 

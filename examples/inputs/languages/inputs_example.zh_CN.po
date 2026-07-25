@@ -1,0 +1,133 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols-inputs_example 2.99\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+# --- .lfm captions/text/hints (auto-generated, msgid=English source) ---
+
+#: tmainform.caption
+msgid "Rich Inputs example"
+msgstr "Rich Inputs 示例"
+
+#: tmainform.darkswitch.caption
+msgid "Dark"
+msgstr "暗色"
+
+#: tmainform.l1.caption
+msgid "Quantity (integer, Decimals=0):"
+msgstr "数量(整数,Decimals=0):"
+
+#: tmainform.l2.caption
+msgid "Amount (2 decimals + thousands separator):"
+msgstr "金额(2 位小数 + 千分位):"
+
+#: tmainform.l3.caption
+msgid "Clamp (MinValue=0 / MaxValue=100):"
+msgstr "限幅(MinValue=0 / MaxValue=100):"
+
+#: tmainform.l4.caption
+msgid "Currency (TTyCurrencyEdit, ¥):"
+msgstr "货币(TTyCurrencyEdit,¥):"
+
+#: tmainform.l5.caption
+msgid "Date mask (##/##/####):"
+msgstr "日期掩码(##/##/####):"
+
+#: tmainform.l6.caption
+msgid "URL (TTyURLEdit, click →):"
+msgstr "URL(TTyURLEdit,点 →):"
+
+#: tmainform.l7.caption
+msgid "Dropdown (TTyComboEdit):"
+msgstr "下拉(TTyComboEdit):"
+
+#: tmainform.l8.caption
+msgid "Slider value (TTyTrackEdit, 0..255):"
+msgstr "滑块数值(TTyTrackEdit,0..255):"
+
+#: tmainform.l9.caption
+msgid "Colour (TTyColorBox):"
+msgstr "颜色(TTyColorBox):"
+
+#: tmainform.l10.caption
+msgid "Font (TTyFontComboBox):"
+msgstr "字体(TTyFontComboBox):"
+
+#: tmainform.l11.caption
+msgid "Colour list (TTyColorListBox):"
+msgstr "颜色列表(TTyColorListBox):"
+
+#: tmainform.l12.caption
+msgid "Font list (TTyFontListBox):"
+msgstr "字体列表(TTyFontListBox):"
+
+#: tmainform.l13.caption
+msgid "Check list (TTyCheckListBox):"
+msgstr "勾选列表(TTyCheckListBox):"
+
+#: tmainform.l14.caption
+msgid "Colour + more (TTyColorComboBox):"
+msgstr "颜色 + 更多(TTyColorComboBox):"
+
+#: tmainform.l23.caption
+msgid "Checkable dropdown (TTyCheckComboBox):"
+msgstr "勾选下拉(TTyCheckComboBox):"
+
+#: tmainform.l15.caption
+msgid "Recently used (TTyMRUComboBox):"
+msgstr "最近使用(TTyMRUComboBox):"
+
+#: tmainform.l16.caption
+msgid "Image + text (TTyComboBoxEx):"
+msgstr "图文组合(TTyComboBoxEx):"
+
+#: tmainform.l17.caption
+msgid "Grouped combo (TTyOfficeComboBox):"
+msgstr "分组组合(TTyOfficeComboBox):"
+
+#: tmainform.l18.caption
+msgid "Grouped list (TTyOfficeListBox):"
+msgstr "分组列表(TTyOfficeListBox):"
+
+#: tmainform.l19.caption
+msgid "Swatch grid ColorGrid + lightness LColorPicker:"
+msgstr "色板 ColorGrid + 明度 LColorPicker:"
+
+#: tmainform.l20.caption
+msgid "HS colour square (TTyHSColorPicker):"
+msgstr "HS 取色方块(TTyHSColorPicker):"
+
+#: tmainform.l21.caption
+msgid "Rich-row list (TTyAdvancedListBox):"
+msgstr "富行列表(TTyAdvancedListBox):"
+
+#: tmainform.l22.caption
+msgid "Rich-row combo (TTyAdvancedComboBox):"
+msgstr "富行组合(TTyAdvancedComboBox):"
+
+#: tmainform.l24.caption
+msgid "Name/value editor (TTyValueListEditor, click the value column / F2 to edit):"
+msgstr "名/值编辑器(TTyValueListEditor,点值列 / F2 编辑):"
+
+#: tmainform.l25.caption
+msgid "Calculator value (TTyCalcEdit, click the small button at the end):"
+msgstr "计算器数值(TTyCalcEdit,点尾部小按钮):"
+
+#: tmainform.l26.caption
+msgid "Calculator currency (TTyCalcCurrencyEdit):"
+msgstr "计算器货币(TTyCalcCurrencyEdit):"
+
+#: tmainform.fecho.caption
+msgid "Clamped value = 42.00"
+msgstr "限幅值 = 42.00"
+
+#: tmainform.lhint.caption
+msgid "Try: digits / minus / decimal point only; the thousands separator is dropped on focus for easy editing and regrouped on blur; enter a value >100 in the clamped field and it clamps to 100 on blur."
+msgstr "试试:只能输数字 / 负号 / 小数点;聚焦时去掉千分位方便编辑,失焦后重新分组;限幅框输入 >100 的值,失焦后夹紧到 100。"
+

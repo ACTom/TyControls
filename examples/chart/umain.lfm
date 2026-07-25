@@ -3,7 +3,7 @@ object MainForm: TMainForm
   Height = 600
   Top = 100
   Width = 820
-  Caption = 'TyControls — 图表(TTyChart)'
+  Caption = 'TyControls — chart (TTyChart)'
   ClientHeight = 600
   ClientWidth = 820
   Font.Height = -12
@@ -31,7 +31,7 @@ object MainForm: TMainForm
         Top = 5
         Width = 74
         Anchors = [akTop, akRight]
-        Caption = '暗色'
+        Caption = 'Dark'
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
@@ -48,7 +48,7 @@ object MainForm: TMainForm
       Height = 30
       Top = 46
       Width = 72
-      Caption = '折线'
+      Caption = 'Line'
       OnClick = BtnLineClick
     end
     object BtnBar: TTyButton
@@ -56,7 +56,7 @@ object MainForm: TMainForm
       Height = 30
       Top = 46
       Width = 72
-      Caption = '柱状'
+      Caption = 'Bar'
       OnClick = BtnBarClick
     end
     object BtnPie: TTyButton
@@ -64,7 +64,7 @@ object MainForm: TMainForm
       Height = 30
       Top = 46
       Width = 72
-      Caption = '饼图'
+      Caption = 'Pie'
       OnClick = BtnPieClick
     end
     object ChkLegend: TTyCheckBox
@@ -72,7 +72,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 50
       Width = 90
-      Caption = '图例'
+      Caption = 'Legend'
       Checked = True
       State = cbChecked
       OnChange = ChkLegendChange
@@ -82,7 +82,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 50
       Width = 100
-      Caption = '数值标注'
+      Caption = 'Value annotation'
       OnChange = ChkValuesChange
     end
     object Chart: TTyChart

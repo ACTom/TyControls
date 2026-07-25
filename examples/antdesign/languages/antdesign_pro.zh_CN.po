@@ -1,0 +1,469 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols-antdesign_pro 2.99\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+# --- .lfm captions/text/hints (auto-generated, msgid=English source) ---
+
+#: tmainform.bar.caption
+msgid "TyControls Pro  ·  Ant Design Pro layout"
+msgstr "TyControls Pro  ·  Ant Design Pro 布局"
+
+#: tmainform.darkswitch.caption
+msgid "Dark"
+msgstr "暗色"
+
+#: tmainform.btnuser.caption
+msgid "Administrator"
+msgstr "管理员"
+
+#: tmainform.pgdashboard.caption
+msgid "Dashboard"
+msgstr "仪表盘"
+
+#: tmainform.cardvisits.title
+msgid "Visits today"
+msgstr "今日访问"
+
+#: tmainform.cardorders.title
+msgid "Order volume"
+msgstr "订单量"
+
+#: tmainform.cardcpu.title
+msgid "CPU usage"
+msgstr "CPU 占用"
+
+#: tmainform.cardhealth.title
+msgid "Service health"
+msgstr "服务健康度"
+
+#: tmainform.cardchart.title
+msgid "Turnover / refunds, last six months"
+msgstr "近半年成交额 / 退款"
+
+#: tmainform.cardstatus.title
+msgid "System status"
+msgstr "系统状态"
+
+#: tmainform.tagonline.caption
+msgid "Running"
+msgstr "运行中"
+
+#: tmainform.tagrisk.caption
+msgid "Pending"
+msgstr "待处理"
+
+#: tmainform.lblqueue.caption
+msgid "Backlog tasks (the badge is attached to the button, not built into it)"
+msgstr "积压任务(徽标挂在按钮上,不是按钮内置的)"
+
+#: tmainform.btnqueue.caption
+msgid "Task queue"
+msgstr "任务队列"
+
+#: tmainform.lblstatusnote.caption
+msgid "TTyCard / TTyTag / TTyBadge are the controls that landed in batch 1; this page is where they are checked out."
+msgstr "TTyCard / TTyTag / TTyBadge 是批 1 新落地的控件,这一页就是它们的验收面。"
+
+#: tmainform.btnstatusdetail.caption
+msgid "View details"
+msgstr "查看详情"
+
+#: tmainform.lbldashnote.caption
+msgid "Dashboard: card content blocks · mini trend charts · ring progress · gauge dials · bar charts — all driven by theme tokens, they change with the skin."
+msgstr "仪表盘:卡片承载区块 · 迷你趋势图 · 环形进度 · 仪表盘刻度 · 柱状图 —— 全部走主题令牌,换肤即变。"
+
+#: tmainform.pglist.caption
+msgid "List / grid"
+msgstr "列表 / 表格"
+
+#: tmainform.tagfilterall.caption
+msgid "All"
+msgstr "全部"
+
+#: tmainform.tagfilterpub.caption
+msgid "Published"
+msgstr "已发布"
+
+#: tmainform.tagfilterdraft.caption
+msgid "Draft"
+msgstr "草稿"
+
+#: tmainform.btnselcount.caption
+msgid "Selected record"
+msgstr "已选记录"
+
+#: tmainform.btntoggleempty.caption
+msgid "Toggle empty state"
+msgstr "切换空态"
+
+#: tmainform.btnemptynew.caption
+msgid "New work order"
+msgstr "新建工单"
+
+#: tmainform.lblpageinfo.caption
+msgid "Page 1 / 195 · 3900 total"
+msgstr "第 1 / 195 页 · 共 3900 条"
+
+#: tmainform.lbllistnote.caption
+msgid "A real data table with TTyStringGrid: TTyTag filters on top, the grid in the middle, TTyPagination below — the web three-section layout. The status column is coloured by meaning, whole-row selection uses TTyBadge."
+msgstr "真·数据表用 TTyStringGrid:上方 TTyTag 筛选、中间表格、下方 TTyPagination —— Web 三段式。状态列按语义上色,选中整行走 TTyBadge。"
+
+#: tmainform.pgform.caption
+msgid "Form / entry"
+msgstr "表单 / 录入"
+
+#: tmainform.cardform.title
+msgid "New work order"
+msgstr "新建工单"
+
+#: tmainform.lblname.caption
+msgid "Title"
+msgstr "标题"
+
+#: tmainform.lblamount.caption
+msgid "Amount"
+msgstr "金额"
+
+#: tmainform.lblkind.caption
+msgid "Type"
+msgstr "类型"
+
+#: tmainform.cbkind.text
+msgid "Feature request"
+msgstr "功能需求"
+
+#: tmainform.lbldue.caption
+msgid "Due date"
+msgstr "截止日期"
+
+#: tmainform.lblurgent.caption
+msgid "Urgent"
+msgstr "加急"
+
+#: tmainform.swurgent.caption
+msgid "On"
+msgstr "开"
+
+#: tmainform.lblweight.caption
+msgid "Weight"
+msgstr "权重"
+
+#: tmainform.lblscore.caption
+msgid "Satisfaction"
+msgstr "满意度"
+
+#: tmainform.chknotify.caption
+msgid "Notify me when done"
+msgstr "完成后通知我"
+
+#: tmainform.rgchannel.caption
+msgid "Notification channel"
+msgstr "通知渠道"
+
+#: tmainform.lblcolor.caption
+msgid "Mark colour"
+msgstr "标记颜色"
+
+#: tmainform.btnsubmit.caption
+msgid "Submit(&S)"
+msgstr "提交(&S)"
+
+#: tmainform.btnreset.caption
+msgid "Reset(&R)"
+msgstr "重置(&R)"
+
+#: tmainform.cardformtodo.title
+msgid "Advanced entry"
+msgstr "高级录入"
+
+#: tmainform.lbldept.caption
+msgid "Owning department (tree dropdown)"
+msgstr "归属部门(树形下拉)"
+
+#: tmainform.lblregion.caption
+msgid "Location (cascading select)"
+msgstr "所在地区(级联选择)"
+
+#: tmainform.casregion.caption
+msgid "East China"
+msgstr "华东"
+
+#: tmainform.cardformtodo.caption
+msgid "Ningbo"
+msgstr "宁波"
+
+#: tmainform.content.caption
+msgid "Suzhou"
+msgstr "苏州"
+
+#: tmainform.surface.caption
+msgid "North China"
+msgstr "华北"
+
+#: tmainform.caption
+msgid "Haidian District"
+msgstr "海淀区"
+
+#: tmainform.lblmembers.caption
+msgid "Notify (transfer box)"
+msgstr "通知人(穿梭框)"
+
+#: tmainform.lbladvpick.caption
+msgid "The current selection will show here."
+msgstr "当前选择会显示在这里。"
+
+#: tmainform.lblformtodonote.caption
+msgid "The tree dropdown's hierarchy is built in code (a virtual tree's nodes are pointers, the .lfm cannot hold them); the cascader's option tree is a nested collection in the .lfm."
+msgstr "树形下拉的层级建在代码里(虚拟树的节点是指针,.lfm 存不下);级联的选项树是 .lfm 里的嵌套集合。"
+
+#: tmainform.pgfeedback.caption
+msgid "Feedback"
+msgstr "反馈"
+
+#: tmainform.cardmodal.title
+msgid "Modal feedback (existing)"
+msgstr "模态反馈(现有)"
+
+#: tmainform.btnmsg.caption
+msgid "Message prompt"
+msgstr "消息提示"
+
+#: tmainform.btnconfirm.caption
+msgid "Confirmation dialog"
+msgstr "确认对话"
+
+#: tmainform.btninput.caption
+msgid "Input dialog"
+msgstr "输入对话"
+
+#: tmainform.lblfeedback.caption
+msgid "The dialog result will show here."
+msgstr "对话框结果会显示在这里。"
+
+#: tmainform.cardprogress.title
+msgid "Progress & busy"
+msgstr "进度与忙碌"
+
+#: tmainform.lblprogress.caption
+msgid "Task progress: 45%"
+msgstr "任务进度:45%"
+
+#: tmainform.lblspinner.caption
+msgid "TTyActivityIndicator means \"busy but no definite progress\"; TTyProgressBar means definite progress."
+msgstr "TTyActivityIndicator 表示\"忙但没有确定进度\";TTyProgressBar 表示确定进度。"
+
+#: tmainform.cardinline.title
+msgid "Inline alert bar (TTyAlert)"
+msgstr "内联提示条(TTyAlert)"
+
+#: tmainform.lblalertnote.caption
+msgid "The alert bar stays on the page without interrupting; each of the four meanings picks its own icon + theme variant. Clicking × fires OnClose first, and it only hides if not vetoed."
+msgstr "警告条常驻在页面里,不打断人;四种语义各自选图标 + 主题变体。点 x 先发 OnClose,未被否决才隐藏。"
+
+#: tmainform.cardfloat.title
+msgid "Popover feedback"
+msgstr "浮出反馈"
+
+#: tmainform.btntoast.caption
+msgid "Show notification"
+msgstr "弹出通知"
+
+#: tmainform.btntoasterr.caption
+msgid "Persistent error notification"
+msgstr "常驻错误通知"
+
+#: tmainform.btnpopover.caption
+msgid "Open popover"
+msgstr "打开浮层"
+
+#: tmainform.lblfloatnote.caption
+msgid "TTyNotification is a corner toast: non-intrusive, dismisses itself (the Duration=0 one stays until you close it; two of them stack in the same corner). TTyPopover is an overlay that can host controls — the two buttons inside it are real controls."
+msgstr "TTyNotification 是角落 toast:不打断、会自己消失(Duration=0 的那条留到你关它,两条会在同一角落堆叠)。TTyPopover 是能装控件的浮层 —— 里面那两个按钮是真控件。"
+
+#: tmainform.lblpopbody.caption
+msgid "All subscribers will be notified after publishing. Continue?"
+msgstr "发布后所有订阅者都会收到通知,确定吗?"
+
+#: tmainform.btnpopok.caption
+msgid "Confirm publish"
+msgstr "确定发布"
+
+#: tmainform.btnpopcancel.caption
+msgid "Reconsider"
+msgstr "再想想"
+
+#: tmainform.pgnav.caption
+msgid "Navigation"
+msgstr "导航"
+
+#: tmainform.btnnavnew.caption
+msgid "New"
+msgstr "新建"
+
+#: tmainform.btnnavopen.caption
+msgid "Open"
+msgstr "打开"
+
+#: tmainform.btnnavsave.caption
+msgid "Save"
+msgstr "保存"
+
+#: tmainform.cardtabs.title
+msgid "Tab strip (TTyTabSet)"
+msgstr "标签页(TTyTabSet)"
+
+#: tmainform.cardseg.title
+msgid "Segmented control (TTySegmented)"
+msgstr "分段控制器(TTySegmented)"
+
+#: tmainform.lblsegvalue.caption
+msgid "1,330 transactions today · MoM +4.2%"
+msgstr "今日成交 1,330 笔 · 环比 +4.2%"
+
+#: tmainform.lblsegtitle.caption
+msgid "Switch a value, not a page — the segmented control \"picks one\", it hosts no page."
+msgstr "切一个值,不是切一页 —— 分段控制器是\"选一个\",不承载页面。"
+
+#: tmainform.cardsteps.title
+msgid "Step bar (TTySteps)"
+msgstr "步骤条(TTySteps)"
+
+#: tmainform.lblstepstitle.caption
+msgid "Clickable is on — click or use the arrow keys."
+msgstr "Clickable 打开了,可以点 / 方向键走。"
+
+#: tmainform.cardcrumb.title
+msgid "Breadcrumb (TTyBreadcrumb)"
+msgstr "面包屑(TTyBreadcrumb)"
+
+#: tmainform.lblcrumbtitle.caption
+msgid "Same as the top bar; the last segment is \"where you are\", not a link, and does not respond to clicks."
+msgstr "与顶部条同款;最后一节是\"你在哪\",不是链接,点不动。"
+
+#: tmainform.lblnavnote.caption
+msgid "TTyPageControl is this content area itself — the tab strip is hidden (TabHeight=0) and the page is switched by the selected item in the left Sider. TTyTabSet is different: it is a pure tab strip that hosts no page — the content panel above is swapped by the host itself according to TabIndex."
+msgstr "TTyPageControl 就是这块内容区本身 —— 页签条已隐藏(TabHeight=0),由左侧 Sider 的选中项切页。TTyTabSet 语义不同:它是纯页签条,不承载页面 —— 上面那块内容面板是宿主自己按 TabIndex 换的。"
+
+#: tmainform.pgdata.caption
+msgid "Data display"
+msgstr "数据展示"
+
+#: tmainform.cardtree.title
+msgid "Org tree"
+msgstr "组织树"
+
+#: tmainform.cardtags.title
+msgid "Tags & badges"
+msgstr "标签与徽标"
+
+#: tmainform.tagpublished.caption
+msgid "Published"
+msgstr "已发布"
+
+#: tmainform.tagdraft.caption
+msgid "Draft"
+msgstr "草稿"
+
+#: tmainform.tagbroken.caption
+msgid "Risk"
+msgstr "风险"
+
+#: tmainform.tagregion.caption
+msgid "East China region"
+msgstr "华东区"
+
+#: tmainform.tagowner.caption
+msgid "I own"
+msgstr "我负责"
+
+#: tmainform.lblbadgehint.caption
+msgid "Standalone badge (Target = nil):"
+msgstr "独立徽标(Target = nil):"
+
+#: tmainform.btninbox.caption
+msgid "Inbox"
+msgstr "收件箱"
+
+#: tmainform.lbltagsnote.caption
+msgid "The variant is a StyleClass (accent / danger), not an enum; a badge > 99 shows 99+."
+msgstr "变体是 StyleClass(accent / danger),不是枚举;徽标 > 99 显示 99+。"
+
+#: tmainform.cardimage.title
+msgid "Picture"
+msgstr "图片"
+
+#: tmainform.expdata.caption
+msgid "Collapse panel (≈ Ant Design's Collapse)"
+msgstr "折叠面板(≈ Ant Design 的 Collapse)"
+
+#: tmainform.lblexpbody.caption
+msgid "TTyExPanel carries the Collapse semantics: click the header to expand / collapse, the content area hosts child controls. We do not build a separate control for Ant Design's Collapse."
+msgstr "TTyExPanel 承担 Collapse 的语义:点标题条展开 / 收起,内容区托管子控件。Ant Design 里的 Collapse 我们不新做控件。"
+
+#: tmainform.toast.title
+msgid "Operation succeeded"
+msgstr "操作成功"
+
+#: tmainform.toasterr.title
+msgid "Settlement service unavailable"
+msgstr "结算服务不可用"
+
+#: tmainform.pop.title
+msgid "Confirm publish?"
+msgstr "确认发布?"
+
+#: tmainform.mnuuserprofile.caption
+msgid "Personal settings"
+msgstr "个人设置"
+
+#: tmainform.mnuusertheme.caption
+msgid "Theme settings"
+msgstr "主题设置"
+
+#: tmainform.mnuuserlogout.caption
+msgid "Sign out"
+msgstr "退出登录"
+
+#: tmainform.mnufile.caption
+msgid "File(&F)"
+msgstr "文件(&F)"
+
+#: tmainform.mnufilenew.caption
+msgid "New(&N)"
+msgstr "新建(&N)"
+
+#: tmainform.mnufileopen.caption
+msgid "Open…(&O)"
+msgstr "打开…(&O)"
+
+#: tmainform.mnufileexit.caption
+msgid "Exit(&X)"
+msgstr "退出(&X)"
+
+#: tmainform.mnuview.caption
+msgid "View(&V)"
+msgstr "视图(&V)"
+
+#: tmainform.mnuviewsider.caption
+msgid "Collapse / expand the side navigation(&S)"
+msgstr "折叠 / 展开侧边导航(&S)"
+
+#: tmainform.mnuviewrefresh.caption
+msgid "Refresh(&R)"
+msgstr "刷新(&R)"
+
+#: tmainform.mnuhelp.caption
+msgid "Help(&H)"
+msgstr "帮助(&H)"
+
+#: tmainform.mnuhelpabout.caption
+msgid "About(&A)"
+msgstr "关于(&A)"
+

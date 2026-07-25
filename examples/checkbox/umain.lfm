@@ -3,7 +3,7 @@ object MainForm: TMainForm
   Height = 420
   Top = 0
   Width = 460
-  Caption = 'CheckBox 示例'
+  Caption = 'CheckBox example'
   ClientHeight = 420
   ClientWidth = 460
   Position = poScreenCenter
@@ -30,7 +30,7 @@ object MainForm: TMainForm
         Top = 5
         Width = 74
         Anchors = [akTop, akRight]
-        Caption = '暗色'
+        Caption = 'Dark'
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
@@ -47,14 +47,14 @@ object MainForm: TMainForm
       Height = 22
       Top = 52
       Width = 420
-      Caption = '三态复选框（点击循环 未选 → 选中 → 半选）：'
+      Caption = 'Tri-state check box (click cycles unchecked → checked → grayed):'
     end
     object CbTri: TTyCheckBox
       Left = 24
       Height = 24
       Top = 78
       Width = 280
-      Caption = '包含全部子项(&A)'
+      Caption = 'Include all children(&A)'
       AllowGrayed = True
       State = cbGrayed
       OnChange = TriChange
@@ -70,14 +70,14 @@ object MainForm: TMainForm
       Height = 22
       Top = 148
       Width = 420
-      Caption = '普通两态复选框（OnChange 回显）：'
+      Caption = 'Plain two-state checkbox (OnChange echo):'
     end
     object CbPlain: TTyCheckBox
       Left = 24
       Height = 24
       Top = 174
       Width = 280
-      Caption = '接收邮件通知(&N)'
+      Caption = 'Receive email notifications(&N)'
       OnChange = PlainChange
     end
     object LblStatus: TTyLabel
@@ -91,7 +91,7 @@ object MainForm: TMainForm
       Height = 24
       Top = 244
       Width = 280
-      Caption = '默认已勾选 (Checked)'
+      Caption = 'Checked by default (Checked)'
       Checked = True
       State = cbChecked
     end
@@ -100,7 +100,7 @@ object MainForm: TMainForm
       Height = 24
       Top = 274
       Width = 280
-      Caption = '禁用且勾选 (Enabled=False)'
+      Caption = 'Disabled and checked (Enabled=False)'
       Checked = True
       State = cbChecked
       Enabled = False
@@ -110,7 +110,7 @@ object MainForm: TMainForm
       Height = 24
       Top = 304
       Width = 280
-      Caption = '禁用且未勾选'
+      Caption = 'Disabled and unchecked'
       Enabled = False
     end
   end

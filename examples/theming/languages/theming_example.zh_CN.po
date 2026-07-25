@@ -1,0 +1,69 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols-theming_example 2.99\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+# --- .lfm captions/text/hints (auto-generated, msgid=English source) ---
+
+#: tmainform.caption
+msgid "Theme system example"
+msgstr "主题系统 示例"
+
+#: tmainform.bar.caption
+msgid "Theme system  · TyControls"
+msgstr "主题系统  · TyControls"
+
+#: tmainform.btnlight.caption
+msgid "Light"
+msgstr "亮色 Light"
+
+#: tmainform.btndark.caption
+msgid "Dark"
+msgstr "暗色 Dark"
+
+#: tmainform.btngreen.caption
+msgid "Green"
+msgstr "绿色 Green"
+
+#: tmainform.btnaccent.caption
+msgid "Accent colour…"
+msgstr "主题色…"
+
+#: tmainform.btnaccentreset.caption
+msgid "Reset to default"
+msgstr "复位默认"
+
+#: tmainform.lblstatus.caption
+msgid "Current theme: default"
+msgstr "当前主题：default"
+
+#: tmainform.lblsample.caption
+msgid "Sample label TTyLabel"
+msgstr "示例标签 TTyLabel"
+
+#: tmainform.btnsample.caption
+msgid "Primary button"
+msgstr "主要按钮"
+
+#: tmainform.btnghost.caption
+msgid "Ghost button"
+msgstr "幽灵按钮"
+
+#: tmainform.btndisabled.caption
+msgid "Disabled"
+msgstr "禁用态"
+
+#: tmainform.edsample.text
+msgid "Editable text box"
+msgstr "可编辑文本框"
+
+#: tmainform.chksample.caption
+msgid "Checkbox example"
+msgstr "复选框示例"
+

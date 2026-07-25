@@ -311,11 +311,11 @@ const
     The old tree carried a flat 9-entry list + a parent-link column to fake this shape;
     the accordion IS the shape, so the parent column is gone. }
   NavGroups: array[0..2] of string = (
-    '工作台', '内容管理', '交互');
+    'Workbench', 'Content management', 'Interaction');
   NavItems: array[0..2, 0..1] of string = (
-    ('仪表盘',       '数据展示'),
-    ('列表 / 表格',  '表单 / 录入'),
-    ('反馈',         '导航'));
+    ('Dashboard',       'Data display'),
+    ('List / grid',  'Form / entry'),
+    ('Feedback',         'Navigation'));
   { The TTyPageControl page each item opens. Same index pair as NavItems. }
   NavItemPage: array[0..2, 0..1] of Integer = (
     (0, 5),
@@ -335,10 +335,10 @@ const
   { The org tree, used TWICE: spread across a panel (数据展示) and folded into a form
     row's drop (表单页 · TTyTreeSelect) — same data, two ways of spending screen. }
   OrgCaptions: array[0..8] of string = (
-    'TyControls 公司',
-    '研发中心', '控件组', '主题组',
-    '市场部',   '渠道',   '内容',
-    '支持部',   '一线支持');
+    'TyControls Inc.',
+    'R&D center', 'Control group', 'Theme group',
+    'Marketing dept.',   'Channel',   'Content',
+    'Support dept.',   'front-line support');
   OrgParent: array[0..8] of Integer = (
     -1,
     0, 1, 1,
@@ -645,7 +645,7 @@ begin
   Crumb.Items.BeginUpdate;
   try
     Crumb.Items.Clear;
-    Crumb.Items.Add('首页');
+    Crumb.Items.Add('Home');
     Crumb.Items.Add(NavGroups[AGroup]);
     Crumb.Items.Add(NavItems[AGroup, AItem]);
   finally
@@ -680,8 +680,8 @@ end;
 
 procedure TMainForm.StatusDetailClick(Sender: TObject);
 begin
-  TyShowMessage('系统状态:全部服务运行中。' + LineEnding +
-    '(这张卡片开了 ShowActions,按钮就摆在操作条里)');
+  TyShowMessage('System status: all services running.' + LineEnding +
+    '(this card turned on ShowActions, so the buttons sit in the action bar)');
 end;
 
 { 标题栏右上角的用户菜单(TTyMenuButton + TTyPopupMenu):对标 Ant Design Pro 头像下拉的
@@ -689,7 +689,7 @@ end;
   让下拉在示例里真的做点事。 }
 procedure TMainForm.UserProfileClick(Sender: TObject);
 begin
-  TyShowMessage('个人设置' + LineEnding + '当前用户:管理员 · 角色:超级管理员');
+  TyShowMessage('Personal settings' + LineEnding + 'Current user: Administrator · role: Super Admin');
 end;
 
 procedure TMainForm.UserThemeClick(Sender: TObject);
@@ -697,14 +697,14 @@ begin
   { 主题设置就在标题栏右侧(皮肤下拉 + 暗色开关)—— 直接把焦点交给皮肤下拉。 }
   if ThemeCombo.CanFocus then ThemeCombo.SetFocus;
   Toast.NotificationType := atInfo;
-  Toast.Title := '主题设置';
-  Toast.Message := '皮肤下拉与「暗色」开关就在标题栏右侧,已聚焦皮肤下拉。';
+  Toast.Title := 'Theme settings';
+  Toast.Message := 'The skin dropdown and the "Dark" toggle are on the right of the title bar; the skin dropdown is focused.';
   Toast.Show;
 end;
 
 procedure TMainForm.UserLogoutClick(Sender: TObject);
 begin
-  if TyMessageDlg('确定要退出登录吗?', mtConfirmation, [mbYes, mbNo]) = mrYes then
+  if TyMessageDlg('Sign out?', mtConfirmation, [mbYes, mbNo]) = mrYes then
     Close;
 end;
 
@@ -718,7 +718,7 @@ var
 begin
   AllowClose := True;
   t := Sender as TTyTag;
-  msg := '已移除标签:' + t.Caption;
+  msg := 'Removed tag:' + t.Caption;
   if t.Parent = CardStatus then
     LblStatusNote.Caption := msg
   else if t.Parent = PgList then
@@ -752,11 +752,11 @@ procedure TMainForm.BuildList;
 begin
   GridOrders.Header.Columns.BeginUpdate;
   try
-    AddCol('编号',     140, taLeftJustify);
-    AddCol('标题',     400, taLeftJustify);
-    AddCol('负责人',   120, taLeftJustify);
-    AddCol('状态',     130, taLeftJustify);
-    AddCol('更新时间', 230, taLeftJustify);
+    AddCol('No.',     140, taLeftJustify);
+    AddCol('Title',     400, taLeftJustify);
+    AddCol('Owner',   120, taLeftJustify);
+    AddCol('Status',     130, taLeftJustify);
+    AddCol('Updated time', 230, taLeftJustify);
   finally
     GridOrders.Header.Columns.EndUpdate;
   end;
@@ -769,20 +769,20 @@ begin
   GridOrders.BeginUpdate;
   try
     GridOrders.RowCount := 14;
-    Row( 0, 'TY-2041', '卡片容器 TTyCard 落地',        '张三', '已发布', '2026-07-16 10:12');
-    Row( 1, 'TY-2042', '标签 TTyTag 落地',             '李四', '已发布', '2026-07-16 11:03');
-    Row( 2, 'TY-2043', '徽标 TTyBadge 独立成控件',     '王五', '已发布', '2026-07-16 15:47');
-    Row( 3, 'TY-2044', '内联警告条 TTyAlert',          '张三', '草稿',   '2026-07-17 09:20');
-    Row( 4, 'TY-2045', '角落 toast TTyNotification',   '赵六', '草稿',   '2026-07-17 09:22');
-    Row( 5, 'TY-2046', '空态 TTyEmpty',                '李四', '草稿',   '2026-07-17 09:25');
-    Row( 6, 'TY-2047', '分段控制器 TTySegmented',      '王五', '草稿',   '2026-07-17 09:31');
-    Row( 7, 'TY-2048', '分页器 TTyPagination',         '赵六', '待排期', '2026-07-17 09:40');
-    Row( 8, 'TY-2049', '步骤条 TTySteps',              '张三', '待排期', '2026-07-17 09:41');
-    Row( 9, 'TY-2050', '面包屑 TTyBreadcrumb',         '李四', '待排期', '2026-07-17 09:42');
-    Row(10, 'TY-2051', '穿梭框 TTyTransfer',           '王五', '待排期', '2026-07-17 09:50');
-    Row(11, 'TY-2052', '树形下拉 TTyTreeSelect',       '赵六', '待排期', '2026-07-17 09:51');
-    Row(12, 'TY-2053', '级联选择 TTyCascader',         '张三', '待排期', '2026-07-17 09:52');
-    Row(13, 'TY-2054', '浮层 TTyPopover',              '李四', '待排期', '2026-07-17 09:53');
+    Row( 0, 'TY-2041', 'Card container TTyCard landed',        'Zhang San', 'Published', '2026-07-16 10:12');
+    Row( 1, 'TY-2042', 'Tag TTyTag landed',             'Li Si', 'Published', '2026-07-16 11:03');
+    Row( 2, 'TY-2043', 'Badge TTyBadge split into its own control',     'Wang Wu', 'Published', '2026-07-16 15:47');
+    Row( 3, 'TY-2044', 'Inline alert bar TTyAlert',          'Zhang San', 'Draft',   '2026-07-17 09:20');
+    Row( 4, 'TY-2045', 'Corner toast TTyNotification',   'Zhao Liu', 'Draft',   '2026-07-17 09:22');
+    Row( 5, 'TY-2046', 'Empty state TTyEmpty',                'Li Si', 'Draft',   '2026-07-17 09:25');
+    Row( 6, 'TY-2047', 'Segmented control TTySegmented',      'Wang Wu', 'Draft',   '2026-07-17 09:31');
+    Row( 7, 'TY-2048', 'Pager TTyPagination',         'Zhao Liu', 'Awaiting scheduling', '2026-07-17 09:40');
+    Row( 8, 'TY-2049', 'Step bar TTySteps',              'Zhang San', 'Awaiting scheduling', '2026-07-17 09:41');
+    Row( 9, 'TY-2050', 'Breadcrumb TTyBreadcrumb',         'Li Si', 'Awaiting scheduling', '2026-07-17 09:42');
+    Row(10, 'TY-2051', 'Transfer box TTyTransfer',           'Wang Wu', 'Awaiting scheduling', '2026-07-17 09:50');
+    Row(11, 'TY-2052', 'Tree dropdown TTyTreeSelect',       'Zhao Liu', 'Awaiting scheduling', '2026-07-17 09:51');
+    Row(12, 'TY-2053', 'Cascading select TTyCascader',         'Zhang San', 'Awaiting scheduling', '2026-07-17 09:52');
+    Row(13, 'TY-2054', 'Popover TTyPopover',              'Li Si', 'Awaiting scheduling', '2026-07-17 09:53');
   finally
     GridOrders.EndUpdate;
   end;
@@ -800,9 +800,9 @@ var
 begin
   if ACol <> 3 then Exit;             { 只染状态列 }
   s := GridOrders.Cells[3, ARow];
-  if s = '已发布' then ATextColor := TyRGB(22, 163, 74)       { 绿 }
-  else if s = '草稿' then ATextColor := TyRGB(217, 119, 6)    { 橙 }
-  else if s = '待排期' then ATextColor := TyRGB(37, 99, 235); { 蓝 }
+  if s = 'Published' then ATextColor := TyRGB(22, 163, 74)       { 绿 }
+  else if s = 'Draft' then ATextColor := TyRGB(217, 119, 6)    { 橙 }
+  else if s = 'Awaiting scheduling' then ATextColor := TyRGB(37, 99, 235); { 蓝 }
 end;
 
 { 整行选中(gsmRow):徽标显示当前选中的是第几行。选中态走 TTyBadge,数据仍归宿主。 }
@@ -833,8 +833,8 @@ begin
   // The action band's button is a REAL control parented into the placeholder.
   ShowEmptyState(False);
   Toast.NotificationType := atInfo;
-  Toast.Title := '空态的操作按钮';
-  Toast.Message := '它是 TTyEmpty 操作带里的真控件,不是画上去的。';
+  Toast.Title := 'The empty state''s action button';
+  Toast.Message := 'It is a real control in TTyEmpty''s action bar, not painted on.';
   Toast.Show;
 end;
 
@@ -843,7 +843,7 @@ end;
   counter beside it. }
 procedure TMainForm.PageChange(Sender: TObject);
 begin
-  LblPageInfo.Caption := Format('第 %d / %d 页 · 共 %d 条',
+  LblPageInfo.Caption := Format('Page %d / %d · %d total',
     [PagOrders.PageIndex + 1, PagOrders.PageCount, PagOrders.PageCount * 20]);
 end;
 
@@ -851,27 +851,27 @@ end;
 
 procedure TMainForm.MsgClick(Sender: TObject);
 begin
-  TyShowMessage('这是 TyShowMessage —— 一个自绘的模态提示,它拦住你、要一个答复。' + LineEnding +
-    '常驻页面内的提示条是左下角的 TTyAlert,角落自己会走的是 TTyNotification —— 三件事,不是三个尺寸。');
+  TyShowMessage('This is TyShowMessage — a custom-drawn modal prompt; it blocks you and asks for an answer.' + LineEnding +
+    'The alert bar that stays on the page is TTyAlert in the bottom-left; the one that walks off on its own in the corner is TTyNotification — three different things, not three sizes.');
 end;
 
 procedure TMainForm.ConfirmClick(Sender: TObject);
 begin
-  if TyMessageDlg('确定要提交这张工单吗?', mtConfirmation, [mbYes, mbNo]) = mrYes then
-    LblFeedback.Caption := '确认对话框:选择了「是」。'
+  if TyMessageDlg('Submit this work order?', mtConfirmation, [mbYes, mbNo]) = mrYes then
+    LblFeedback.Caption := 'Confirmation dialog: chose "Yes".'
   else
-    LblFeedback.Caption := '确认对话框:选择了「否」。';
+    LblFeedback.Caption := 'Confirmation dialog: chose "No".';
 end;
 
 procedure TMainForm.InputClick(Sender: TObject);
 var
   s: string;
 begin
-  s := '运维值班';
-  if TyInputQuery('输入对话框', '请输入分组名称:', s) then
-    LblFeedback.Caption := '输入对话框:得到「' + s + '」。'
+  s := 'Ops on-call';
+  if TyInputQuery('Input dialog', 'Enter a group name:', s) then
+    LblFeedback.Caption := 'Input dialog: got "' + s + '」。'
   else
-    LblFeedback.Caption := '输入对话框:已取消。';
+    LblFeedback.Caption := 'Input dialog: cancelled.';
 end;
 
 procedure TMainForm.StepClick(Sender: TObject);
@@ -880,7 +880,7 @@ begin
     PbTask.Position := PbTask.Min
   else
     PbTask.Position := PbTask.Position + 10;
-  LblProgress.Caption := Format('任务进度:%d%%', [PbTask.Position]);
+  LblProgress.Caption := Format('Task progress: %d%%', [PbTask.Position]);
 end;
 
 { 点警告条的 x:控件先发 OnClose,未被否决才执行默认动作(Visible := False)——
@@ -888,16 +888,16 @@ end;
 procedure TMainForm.AlertClosed(Sender: TObject; var AllowClose: Boolean);
 begin
   AllowClose := True;
-  LblAlertNote.Caption := '已关闭警告条:「' + (Sender as TTyAlert).Message + '」' +
-    LineEnding + '(不否决 AllowClose,控件就自己隐藏了)';
+  LblAlertNote.Caption := 'Alert bar closed: "' + (Sender as TTyAlert).Message + '」' +
+    LineEnding + '(without vetoing AllowClose, the control just hides itself)';
 end;
 
 procedure TMainForm.ToastClick(Sender: TObject);
 begin
   Toast.NotificationType := atInfo;
-  Toast.Title := '有 3 条新工单';
-  Toast.Message := '来自「渠道」分组。' + LineEnding +
-    '这条 4.5 秒后自己消失;鼠标停上去会暂停倒计时。';
+  Toast.Title := '3 new work orders';
+  Toast.Message := 'from the "Channel" group.' + LineEnding +
+    'This one dismisses itself after 4.5s; hovering pauses the countdown.';
   Toast.Show;
 end;
 
@@ -916,8 +916,8 @@ procedure TMainForm.PopOkClick(Sender: TObject);
 begin
   Pop.Hide;
   Toast.NotificationType := atSuccess;
-  Toast.Title := '已发布';
-  Toast.Message := '浮层里的按钮是真控件 —— 它点完还回到卡片里待着。';
+  Toast.Title := 'Published';
+  Toast.Message := 'The buttons inside the popover are real controls — after clicking, one returns to the card and stays.';
   Toast.Show;
 end;
 
@@ -936,21 +936,21 @@ end;
 procedure TMainForm.TabsDemoChange(Sender: TObject);
 begin
   case TabsDemo.TabIndex of
-    0: LblTabsBody.Caption := '概览' + LineEnding +
-         '本月成交 1,330 笔 · 退款 230 笔 · 履约率 82.7%' + LineEnding +
-         '较上月 +12.4%,主要来自「渠道」分组。';
-    1: LblTabsBody.Caption := '详情' + LineEnding +
-         '工单 TY-2041「卡片容器 TTyCard 落地」' + LineEnding +
-         '负责人 张三 · 已发布 · 2026-07-16 10:12';
-    2: LblTabsBody.Caption := '日志' + LineEnding +
-         '10:12 TY-2041 已发布' + LineEnding +
-         '11:03 TY-2042 已发布' + LineEnding +
-         '15:47 TY-2043 徽标独立成控件';
+    0: LblTabsBody.Caption := 'Overview' + LineEnding +
+         '1,330 transactions this month · 230 refunds · fulfilment rate 82.7%' + LineEnding +
+         'vs last month +12.4%, mainly from the "Channel" group.';
+    1: LblTabsBody.Caption := 'Detail' + LineEnding +
+         'Work order TY-2041 "Card container TTyCard landed"' + LineEnding +
+         'Owner Zhang San · published · 2026-07-16 10:12';
+    2: LblTabsBody.Caption := 'Log' + LineEnding +
+         '10:12 TY-2041 published' + LineEnding +
+         '11:03 TY-2042 published' + LineEnding +
+         '15:47 TY-2043 badge split into its own control';
   else
-    LblTabsBody.Caption := '(未选中页签)';
+    LblTabsBody.Caption := '(no tab selected)';
   end;
-  LblNavNote.Caption := '页签条:切到了「' + TabsDemo.Tabs[TabsDemo.TabIndex] +
-    '」—— TTyTabSet 只报告选中项,下面那块内容是宿主自己换的(它不承载页面)。';
+  LblNavNote.Caption := 'Tab strip: switched to "' + TabsDemo.Tabs[TabsDemo.TabIndex] +
+    '" — TTyTabSet only reports the selected item; the content below is swapped by the host (it hosts no page).';
 end;
 
 procedure TMainForm.SegRangeChange(Sender: TObject);
@@ -959,34 +959,34 @@ begin
   { 分段控制器切的是一个**值**(视图范围),所以它换的是同一个指标的口径 —— 就地给出
     那个值,而不是只在页尾写一句"你点了周"。 }
   case SegRange.ItemIndex of
-    0: LblSegValue.Caption := '今日成交 1,330 笔 · 环比 +4.2%';
-    1: LblSegValue.Caption := '本周成交 8,214 笔 · 环比 +9.7%';
-    2: LblSegValue.Caption := '本月成交 33,908 笔 · 环比 +12.4%';
+    0: LblSegValue.Caption := '1,330 transactions today · MoM +4.2%';
+    1: LblSegValue.Caption := '8,214 transactions this week · MoM +9.7%';
+    2: LblSegValue.Caption := '33,908 transactions this month · MoM +12.4%';
   end;
-  LblNavNote.Caption := '分段控制器:切到了「' + SegRange.Items[SegRange.ItemIndex] +
-    '」—— 它切的是一个值(视图范围),不是一页:右边那行数字跟着换了口径。';
+  LblNavNote.Caption := 'Segmented control: switched to "' + SegRange.Items[SegRange.ItemIndex] +
+    '" — it switches a value (the view range), not a page: the numbers on the right just changed their basis.';
 end;
 
 procedure TMainForm.StepsFlowChange(Sender: TObject);
 begin
   if (StepsFlow.StepIndex < 0) or (StepsFlow.StepIndex >= StepsFlow.Count) then
   begin
-    LblNavNote.Caption := '步骤条:走到了列表之外(-1 = 未开始 / Count = 已完成,都是真状态)。';
+    LblNavNote.Caption := 'Step bar: moved outside the list (-1 = not started / Count = finished, both are real states).';
     Exit;
   end;
-  LblNavNote.Caption := Format('步骤条:走到了第 %d 步「%s」—— 之前的都算完成,之后的都在等。',
+  LblNavNote.Caption := Format('Step bar: moved to step %d "%s" — everything before is done, everything after is waiting.',
     [StepsFlow.StepIndex + 1, StepsFlow.Items[StepsFlow.StepIndex]]);
 end;
 
 procedure TMainForm.NavCrumbClick(Sender: TObject; AIndex: Integer);
 begin
-  LblNavNote.Caption := '面包屑:点了「' + NavCrumb.Items[AIndex] +
-    '」—— 最后一节是当前位置,不是链接,它根本不发这个事件。';
+  LblNavNote.Caption := 'Breadcrumb: clicked "' + NavCrumb.Items[AIndex] +
+    '" — the last segment is the current location, not a link; it does not fire this event at all.';
 end;
 
 procedure TMainForm.NavToolClick(Sender: TObject);
 begin
-  LblNavNote.Caption := '工具栏:点了「' + (Sender as TTyButton).Caption + '」。';
+  LblNavNote.Caption := 'Toolbar: clicked "' + (Sender as TTyButton).Caption + '」。';
 end;
 
 procedure TMainForm.MenuItemClick(Sender: TObject);
@@ -1001,7 +1001,7 @@ begin
     SiderSplit.Visible := Sider.Visible;
   end
   else
-    LblNavNote.Caption := '菜单:点了「' +
+    LblNavNote.Caption := 'Menu: clicked "' +
       StringReplace((Sender as TMenuItem).Caption, '&', '', [rfReplaceAll]) + '」。';
 end;
 
@@ -1182,11 +1182,11 @@ end;
 procedure TMainForm.SubmitClick(Sender: TObject);
 begin
   Toast.NotificationType := atSuccess;
-  Toast.Title := '工单已提交';
+  Toast.Title := 'Work order submitted';
   Toast.Message :=
-    Format('%s · 金额 %.2f · %s', [EdName.Text, EdAmount.Value, CbKind.Text]) + LineEnding +
-    Format('权重 %d · 满意度 %.1f', [TrkWeight.Position, RateScore.Value]) + LineEnding +
-    Format('部门 %s · 地区 %s · 通知 %d 人',
+    Format('%s · amount %.2f · %s', [EdName.Text, EdAmount.Value, CbKind.Text]) + LineEnding +
+    Format('Weight %d · satisfaction %.1f', [TrkWeight.Position, RateScore.Value]) + LineEnding +
+    Format('Dept %s · region %s · notify %d people',
       [TsDept.Text, CasRegion.Text, TrfMembers.Selected.Count]);
   Toast.Show;
 end;
@@ -1210,11 +1210,11 @@ procedure TMainForm.AdvancedPickChange(Sender: TObject);
 
   function Pick(const AText: string): string;
   begin
-    if AText = '' then Result := '(未选)' else Result := AText;
+    if AText = '' then Result := '(none selected)' else Result := AText;
   end;
 
 begin
-  LblAdvPick.Caption := Format('当前选择:部门 %s · 地区 %s · 通知人 %d 位',
+  LblAdvPick.Caption := Format('Current selection: dept %s · region %s · %d notified',
     [Pick(TsDept.Text), Pick(CasRegion.Text), TrfMembers.Selected.Count]);
 end;
 

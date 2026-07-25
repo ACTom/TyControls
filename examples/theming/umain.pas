@@ -127,7 +127,7 @@ begin
   if ThemeCombo.ItemIndex < 0 then Exit;
   TyDefaultController.ThemeName := ThemeCombo.Items[ThemeCombo.ItemIndex];
   ApplyChromeTheme(TyDefaultController);   // re-theme the shell on every skin change
-  LblStatus.Caption := '当前主题：' + ThemeCombo.Items[ThemeCombo.ItemIndex];
+  LblStatus.Caption := 'Current theme:' + ThemeCombo.Items[ThemeCombo.ItemIndex];
   UpdateAccentBtn;   // a theme switch clears any accent override (D2)
 end;
 
@@ -137,14 +137,14 @@ procedure TMainForm.SwitchLight(Sender: TObject);
 begin
   TyDefaultController.Mode := 'light';
   ApplyChromeTheme(TyDefaultController);
-  LblStatus.Caption := '模式：浅色';
+  LblStatus.Caption := 'Mode: Light';
 end;
 
 procedure TMainForm.SwitchDark(Sender: TObject);
 begin
   TyDefaultController.Mode := 'dark';
   ApplyChromeTheme(TyDefaultController);
-  LblStatus.Caption := '模式：深色';
+  LblStatus.Caption := 'Mode: Dark';
 end;
 
 procedure TMainForm.SwitchGreen(Sender: TObject);
@@ -154,7 +154,7 @@ begin
     themes/. Loading it as a FILE resolves its url(assets/background.jpg) relative to that copy. }
   TyDefaultController.ThemeFile := LocalThemeFile('green.tycss');
   ApplyChromeTheme(TyDefaultController);
-  LblStatus.Caption := '当前主题：green（图片背景）';
+  LblStatus.Caption := 'Current theme: green (image background)';
   UpdateAccentBtn;
 end;
 
@@ -172,7 +172,7 @@ var
 begin
   dlg := TTyColorDialog.Create(nil);
   try
-    dlg.Caption := '选择主题色';
+    dlg.Caption := 'Choose accent colour';
     // Seed the picker with the current override, if any.
     if TyDefaultController.AccentOverride <> '' then
       dlg.Color := TyParseColor(TyDefaultController.AccentOverride);
@@ -182,7 +182,7 @@ begin
                  + IntToHex(TyBlueOf(dlg.Color), 2);
       TyDefaultController.SetAccent(hex);          // recolours every registered control + chrome
       ApplyChromeTheme(TyDefaultController);
-      LblStatus.Caption := '主题色：' + hex + '（叠加在当前主题上）';
+      LblStatus.Caption := 'Accent colour:' + hex + '(overlaid on the current theme)';
     end;
   finally
     dlg.Free;
@@ -194,7 +194,7 @@ procedure TMainForm.ResetAccentClick(Sender: TObject);
 begin
   TyDefaultController.ResetAccent;                 // back to the theme's own accent
   ApplyChromeTheme(TyDefaultController);
-  LblStatus.Caption := '主题色：已恢复主题默认';
+  LblStatus.Caption := 'Accent colour: restored to theme default';
   UpdateAccentBtn;
 end;
 

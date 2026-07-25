@@ -52,11 +52,11 @@ implementation
 function ViewName(AView: TTyCalView): string;
 begin
   case AView of
-    cvmMonths:  Result := '月视图 (cvmMonths)';
-    cvmYears:   Result := '年视图 (cvmYears)';
-    cvmDecades: Result := '十年视图 (cvmDecades)';
+    cvmMonths:  Result := 'Month view (cvmMonths)';
+    cvmYears:   Result := 'Year view (cvmYears)';
+    cvmDecades: Result := 'Decade view (cvmDecades)';
   else
-    Result := '日视图 (cvmDays)';
+    Result := 'Day view (cvmDays)';
   end;
 end;
 
@@ -84,10 +84,10 @@ begin
   Cal.MinDate := IncDay(Today, -20);
   Cal.MaxDate := IncDay(Today, 20);
 
-  LblRange.Caption := '可选区间：' +
+  LblRange.Caption := 'Range available:' +
     FormatDateTime('yyyy-mm-dd', Cal.MinDate) + ' ~ ' +
     FormatDateTime('yyyy-mm-dd', Cal.MaxDate) + sLineBreak +
-    '键盘：方向键移动，PageUp/Down 换月，Home/End 月首末。';
+    'Keyboard: arrow keys move, PageUp/Down change month, Home/End go to month start/end.';
 
   { Read-only calendar: show today, selection disabled }
   ROCal.Date := Today;
@@ -95,7 +95,7 @@ begin
   // initialize the status echo
   CalChange(nil);
   CalViewChange(nil);
-  LblAccepted.Caption := '尚未确认（点击一个日期格或按回车）';
+  LblAccepted.Caption := 'Not confirmed yet (click a date cell or press Enter)';
 end;
 
 procedure TMainForm.ThemeComboChange(Sender: TObject);
@@ -117,19 +117,19 @@ end;
 
 procedure TMainForm.CalChange(Sender: TObject);
 begin
-  LblPicked.Caption := '已选日期：' + FormatDateTime('yyyy-mm-dd', Cal.Date);
+  LblPicked.Caption := 'Selected date:' + FormatDateTime('yyyy-mm-dd', Cal.Date);
 end;
 
 procedure TMainForm.CalAccept(Sender: TObject);
 begin
-  LblAccepted.Caption := '已确认：' + FormatDateTime('yyyy-mm-dd', Cal.Date) +
-    '（点击日期格 / 回车触发 OnAccept）';
+  LblAccepted.Caption := 'Confirmed:' + FormatDateTime('yyyy-mm-dd', Cal.Date) +
+    '(click a date cell / Enter fires OnAccept)';
 end;
 
 procedure TMainForm.CalViewChange(Sender: TObject);
 begin
-  LblView.Caption := '当前视图：' + ViewName(Cal.ViewMode) +
-    '（点标题下钻，点日期格上钻）';
+  LblView.Caption := 'Current view:' + ViewName(Cal.ViewMode) +
+    '(click a header to drill down, click a date cell to drill up)';
 end;
 
 end.

@@ -1,0 +1,53 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols-groupbox_example 2.99\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+# --- .lfm captions/text/hints (auto-generated, msgid=English source) ---
+
+#: tmainform.caption
+msgid "TTyGroupBox example"
+msgstr "TTyGroupBox 示例"
+
+#: tmainform.darkswitch.caption
+msgid "Dark"
+msgstr "暗色"
+
+#: tmainform.groupsize.caption
+msgid "Font size (left aligned)"
+msgstr "字体大小（左对齐）"
+
+#: tmainform.radioa.caption
+msgid "Small (12pt)"
+msgstr "小（12pt）"
+
+#: tmainform.radiob.caption
+msgid "Medium (14pt)"
+msgstr "中（14pt）"
+
+#: tmainform.radioc.caption
+msgid "Large (18pt)"
+msgstr "大（18pt）"
+
+#: tmainform.groupopt.caption
+msgid "Style (centered)"
+msgstr "样式（居中）"
+
+#: tmainform.checkbold.caption
+msgid "Bold"
+msgstr "加粗"
+
+#: tmainform.checkitalic.caption
+msgid "Italic"
+msgstr "斜体"
+
+#: tmainform.groupname.caption
+msgid "Name (right aligned)"
+msgstr "名称（右对齐）"
+

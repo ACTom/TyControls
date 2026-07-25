@@ -3,7 +3,7 @@ object MainForm: TMainForm
   Height = 400
   Top = 0
   Width = 560
-  Caption = 'TTyPanel 示例'
+  Caption = 'TTyPanel example'
   ClientHeight = 400
   ClientWidth = 560
   Position = poScreenCenter
@@ -30,7 +30,7 @@ object MainForm: TMainForm
         Top = 5
         Width = 74
         Anchors = [akTop, akRight]
-        Caption = '暗色'
+        Caption = 'Dark'
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
@@ -47,14 +47,14 @@ object MainForm: TMainForm
       Height = 190
       Top = 50
       Width = 340
-      Caption = '用户信息（Caption 左对齐）'
+      Caption = 'User info (Caption left-aligned)'
       Alignment = taLeftJustify
       object NameLabel: TTyLabel
         Left = 12
         Height = 24
         Top = 40
         Width = 64
-        Caption = '姓名：'
+        Caption = 'Name:'
       end
       object NameEdit: TTyEdit
         Left = 80
@@ -67,7 +67,7 @@ object MainForm: TMainForm
         Height = 32
         Top = 80
         Width = 120
-        Caption = '打招呼'
+        Caption = 'Say hello'
         StyleClass = 'primary'
         OnClick = GreetClicked
       end
@@ -76,7 +76,7 @@ object MainForm: TMainForm
         Height = 52
         Top = 124
         Width = 316
-        Caption = '嵌套子面板（居中）'
+        Caption = 'Nested sub-panel (centered)'
         Alignment = taCenter
       end
     end
@@ -85,13 +85,13 @@ object MainForm: TMainForm
       Height = 190
       Top = 50
       Width = 172
-      Caption = '说明'
+      Caption = 'Description'
       object DescLabel: TTyLabel
         Left = 12
         Height = 140
         Top = 40
         Width = 148
-        Caption = '面板的背景、边框与圆角均来自主题 TyPanel 规则，无需手写颜色。'
+        Caption = 'The panel''s background, border and corners all come from the theme''s TyPanel rule, no hand-written colours.'
       end
     end
     object ResultLabel: TTyLabel
@@ -99,7 +99,7 @@ object MainForm: TMainForm
       Height = 24
       Top = 252
       Width = 528
-      Caption = '点击“打招呼”按钮试试…'
+      Caption = 'Click the "Say hello" button…'
     end
     object BottomPanel: TTyPanel
       Left = 0

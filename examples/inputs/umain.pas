@@ -151,27 +151,27 @@ begin
   FSize.FontSize := 14;   // FontSize is a public (not published) property → set it here.
 
   // Check list (CheckListBox: click the box / Space to toggle; checked state stored in Objects)
-  FCheckList.Items.Add('粗体 Bold');
-  FCheckList.Items.Add('斜体 Italic');
-  FCheckList.Items.Add('下划线 Underline');
-  FCheckList.Items.Add('删除线 Strikeout');
-  FCheckList.Items.Add('自动换行 Word wrap');
-  FCheckList.Items.Add('显示行号 Line numbers');
+  FCheckList.Items.Add('Bold');
+  FCheckList.Items.Add('Italic');
+  FCheckList.Items.Add('Underline');
+  FCheckList.Items.Add('Strikeout');
+  FCheckList.Items.Add('Word wrap');
+  FCheckList.Items.Add('Line numbers');
   FCheckList.Checked[0] := True;
   FCheckList.Checked[2] := True;
 
   // Check dropdown (CheckComboBox: multi-select, popup stays open, field shows a summary of the checks)
-  FCheckCombo.Items.Add('粗体');
-  FCheckCombo.Items.Add('斜体');
-  FCheckCombo.Items.Add('下划线');
-  FCheckCombo.Items.Add('删除线');
+  FCheckCombo.Items.Add('Bold');
+  FCheckCombo.Items.Add('Italic');
+  FCheckCombo.Items.Add('Underline');
+  FCheckCombo.Items.Add('Strikethrough');
   FCheckCombo.Checked[0] := True;
   FCheckCombo.Checked[2] := True;
 
   // Most-recently-used combo (MRUComboBox: editable; selecting/typing auto-dedupes and moves to top)
-  FMRU.AddToHistory('第一次搜索');
-  FMRU.AddToHistory('第二次搜索');
-  FMRU.AddToHistory('最近这次(在最上)');
+  FMRU.AddToHistory('First search');
+  FMRU.AddToHistory('Second search');
+  FMRU.AddToHistory('Most recent (on top)');
 
   // Combo with icons (ComboBoxEx: every item carries an icon). Icon source = 3 symbols rendered from the icon font → image collection → virtual image list.
   Icf := TTyIconFont.Create(Self);
@@ -184,58 +184,58 @@ begin
   AddGlyph('print', $2699, clMaroon);  // ⚙ print
 
   FComboEx.Images := Imgs;
-  FComboEx.AddItem('保存', 0);
-  FComboEx.AddItem('打开', 1);
-  FComboEx.AddItem('打印', 2);
+  FComboEx.AddItem('Save', 0);
+  FComboEx.AddItem('Open', 1);
+  FComboEx.AddItem('Print', 2);
   FComboEx.ItemIndex := 0;
 
   // Grouped combo (OfficeComboBox: dropdown split into sections by group, header rows not selectable)
-  FOfficeCombo.AddHeader('水果');
-  FOfficeCombo.AddItem('苹果');
-  FOfficeCombo.AddItem('芒果');
-  FOfficeCombo.AddHeader('蔬菜');
-  FOfficeCombo.AddItem('胡萝卜');
+  FOfficeCombo.AddHeader('Fruit');
+  FOfficeCombo.AddItem('Apple');
+  FOfficeCombo.AddItem('Mango');
+  FOfficeCombo.AddHeader('Vegetables');
+  FOfficeCombo.AddItem('Carrot');
   FOfficeCombo.ItemIndex := 1;
 
   // Grouped list (OfficeListBox: header rows bold and not selectable)
-  FOfficeList.AddHeader('收件箱');
-  FOfficeList.AddItem('会议纪要');
-  FOfficeList.AddItem('周报');
-  FOfficeList.AddHeader('已发送');
-  FOfficeList.AddItem('给客户的报价');
-  FOfficeList.AddItem('回执确认');
+  FOfficeList.AddHeader('Inbox');
+  FOfficeList.AddItem('Meeting minutes');
+  FOfficeList.AddItem('Weekly report');
+  FOfficeList.AddHeader('Sent');
+  FOfficeList.AddItem('Quote for the customer');
+  FOfficeList.AddItem('Receipt confirmation');
 
   // Luminance bar drives the HS square's brightness (classic HSL linkage); wire after all controls exist.
   FLColor.OnChange := @LumChange;
 
   // Rich-row list (AdvancedListBox: each row has icon + bold title + dimmed subtitle; reuses the Imgs above)
   FAdvList.Images := Imgs;
-  FAdvList.AddItem('保存草稿', '未同步 · 2 分钟前', 0);
-  FAdvList.AddItem('打开项目', 'D:\work\ty-controls', 1);
-  FAdvList.AddItem('打印报表', '默认打印机', 2);
-  FAdvList.AddItem('无图标项', '副标题可留空', -1);
+  FAdvList.AddItem('Save draft', 'Not synced · 2 minutes ago', 0);
+  FAdvList.AddItem('Open project', 'D:\work\ty-controls', 1);
+  FAdvList.AddItem('Print report', 'Default printer', 2);
+  FAdvList.AddItem('Item with no icon', 'Subtitle may be left blank', -1);
 
   // Rich-row combo (AdvancedComboBox: two-line rich items in the dropdown, field shows icon + title)
   FAdvCombo.Images := Imgs;
-  FAdvCombo.AddItem('保存', '写入磁盘', 0);
-  FAdvCombo.AddItem('打开', '选择文件', 1);
-  FAdvCombo.AddItem('打印', '发送到打印机', 2);
+  FAdvCombo.AddItem('Save', 'Write to disk', 0);
+  FAdvCombo.AddItem('Open', 'Choose file', 1);
+  FAdvCombo.AddItem('Print', 'Send to printer', 2);
   FAdvCombo.ItemIndex := 0;
 
   // Name/value editor (ValueListEditor: property sheet, inline editing in the value column)
-  FVLE.AddRow('宽度', '1280').EditorKind := vekInteger;
-  FVLE.AddRow('标题', 'Rich Inputs 示例');         // plain text
-  VR := FVLE.AddRow('对齐', 'taCenter');           // enum → dropdown
+  FVLE.AddRow('Width', '1280').EditorKind := vekInteger;
+  FVLE.AddRow('Title', 'Rich Inputs example');         // plain text
+  VR := FVLE.AddRow('Align', 'taCenter');           // enum → dropdown
   VR.EditorKind := vekEnum;
   VR.EnumValues := 'taLeftJustify'#10'taCenter'#10'taRightJustify';
-  FVLE.AddRow('前景色', 'clNavy').EditorKind := vekColor;    // color → swatch dropdown (last "More…" row opens the dialog)
-  FVLE.AddRow('字体', 'Segoe UI, 9').EditorKind := vekFont;  // leaf font → text + "…" opens the font dialog
-  VR := FVLE.AddRow('数据路径', 'D:\data');         // text + "…" → the library's own path dialog (OnEditRow)
+  FVLE.AddRow('Foreground colour', 'clNavy').EditorKind := vekColor;    // color → swatch dropdown (last "More…" row opens the dialog)
+  FVLE.AddRow('Font', 'Segoe UI, 9').EditorKind := vekFont;  // leaf font → text + "…" opens the font dialog
+  VR := FVLE.AddRow('Data path', 'D:\data');         // text + "…" → the library's own path dialog (OnEditRow)
   VR.EditorKind := vekDialog;
-  VR := FVLE.AddRow('关于', 'TyControls ' + TyVersion);   // user-side custom: "…" opens a read-only About dialog, no write-back
+  VR := FVLE.AddRow('About', 'TyControls ' + TyVersion);   // user-side custom: "…" opens a read-only About dialog, no write-back
   VR.EditorKind := vekDialog;
-  VR := FVLE.AddRow('主题', 'light.tycss');        // read-only + display-name override (i18n)
-  VR.DisplayKey := '主题(只读)';
+  VR := FVLE.AddRow('Theme', 'light.tycss');        // read-only + display-name override (i18n)
+  VR.DisplayKey := 'Theme (read-only)';
   VR.ReadOnly := True;
   VR := FVLE.AddRow('Font', 'Segoe UI, 9');        // expandable multi-level + vekFont: "…" opens the font dialog and writes back the child properties
   VR.EditorKind := vekFont;
@@ -275,13 +275,13 @@ end;
 
 procedure TMainForm.RangedChange(Sender: TObject);
 begin
-  FEcho.Caption := Format('限幅值 = %.2f  (失焦后夹紧到 0..100)', [FRanged.Value]);
+  FEcho.Caption := Format('Clamped value = %.2f  (clamped to 0..100 on blur)', [FRanged.Value]);
 end;
 
 procedure TMainForm.ComboDrop(Sender: TObject);
 begin
   // Real-world use: pop a color grid / calculator / date picker here, then write the result back into FCombo.Text.
-  FCombo.Text := '你点了下拉按钮!';
+  FCombo.Text := 'You clicked the dropdown button!';
 end;
 
 procedure TMainForm.LumChange(Sender: TObject);
@@ -292,26 +292,26 @@ end;
 
 procedure TMainForm.VleChange(Sender: TObject; ARow: TTyValueRow);
 begin
-  FEcho.Caption := Format('改了「%s」= %s', [ARow.Key, ARow.Value]);
+  FEcho.Caption := Format('Changed "%s" = %s', [ARow.Key, ARow.Value]);
 end;
 
 procedure TMainForm.VleEditDialog(Sender: TObject; ARow: TTyValueRow);
 var dir: string;
 begin
   // vekDialog = fully user-side custom: clicking "…" fires this event; each row decides what to pop up and whether to write the value back.
-  if SameText(ARow.Key, '关于') then
+  if SameText(ARow.Key, 'About') then
     // Informational only (read-only content): pop the library's own read-only About dialog; leave ARow.Value unchanged.
-    TyShowAbout('关于', 'TyControls Rich Inputs 示例', 'v' + TyVersion,
-      'ValueListEditor 用户侧自定义行处理演示', '© 2026 ACTom', 'MIT 许可',
+    TyShowAbout('About', 'TyControls Rich Inputs example', 'v' + TyVersion,
+      'ValueListEditor host-side custom row-handling demo', '© 2026 ACTom', 'MIT License',
       'https://github.com/ACTom/TyControls')
   else
   begin
     // Pop the [library's own] path dialog (not the native one), then write the result back into ARow.Value (which updates the display).
     dir := ARow.Value;
-    if TySelectDirectory('选择数据路径', '', dir) then
+    if TySelectDirectory('Choose data path', '', dir) then
     begin
       ARow.Value := dir;
-      FEcho.Caption := Format('改了「%s」= %s', [ARow.Key, ARow.Value]);
+      FEcho.Caption := Format('Changed "%s" = %s', [ARow.Key, ARow.Value]);
     end;
   end;
 end;

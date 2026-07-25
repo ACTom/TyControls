@@ -73,7 +73,7 @@ begin
   View.OnZoomChange := @ViewZoomChange;
 
   FOpenPic := TTyOpenPictureDialog.Create(Self);
-  FOpenPic.Title := '打开图片';
+  FOpenPic.Title := 'Open picture';
   FOpenPic.InitialDir := ExcludeTrailingPathDelimiter(GetUserDir);
 
   ApplyChromeTheme(TyDefaultController);
@@ -125,7 +125,7 @@ end;
 
 procedure TMainForm.ViewZoomChange(Sender: TObject);
 begin
-  LblZoom.Caption := Format('缩放:%.0f%%', [View.Zoom * 100]);
+  LblZoom.Caption := Format('Zoom: %.0f%%', [View.Zoom * 100]);
 end;
 
 end.

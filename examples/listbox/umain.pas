@@ -64,10 +64,10 @@ implementation
 procedure TMainForm.FormCreate(Sender: TObject);
 const
   Cities: array[0..29] of string = (
-    '北京', '上海', '广州', '深圳', '成都', '杭州', '武汉', '西安',
-    '南京', '天津', '重庆', '苏州', '长沙', '郑州', '青岛', '大连',
-    '厦门', '宁波', '无锡', '合肥', '福州', '济南', '昆明', '南昌',
-    '贵阳', '哈尔滨', '沈阳', '石家庄', '太原', '兰州');
+    'Beijing', 'Shanghai', 'Guangzhou', 'Shenzhen', 'Chengdu', 'Hangzhou', 'Wuhan', 'Xi''an',
+    'Nanjing', 'Tianjin', 'Chongqing', 'Suzhou', 'Changsha', 'Zhengzhou', 'Qingdao', 'Dalian',
+    'Xiamen', 'Ningbo', 'Wuxi', 'Hefei', 'Fuzhou', 'Jinan', 'Kunming', 'Nanchang',
+    'Guiyang', 'Harbin', 'Shenyang', 'Shijiazhuang', 'Taiyuan', 'Lanzhou');
 var
   names: TStringArray;
   i: Integer;
@@ -110,14 +110,14 @@ end;
 procedure TMainForm.UpdateStatus;
 begin
   if ListBox.MultiSelect then
-    LblStatus.Caption := Format('多选模式：已选 %d 项（Ctrl 点选 / Shift 连选 / 空格切换）',
+    LblStatus.Caption := Format('Multi-select mode: %d item(s) selected (Ctrl-click / Shift-click / Space toggles)',
       [ListBox.SelCount])
   else if ListBox.ItemIndex >= 0 then
-    LblStatus.Caption := Format('当前选中：%s（第 %d 项，共 %d 项）',
+    LblStatus.Caption := Format('Currently selected: %s (item %d of %d)',
       [ListBox.Items[ListBox.ItemIndex], ListBox.ItemIndex + 1,
        ListBox.Items.Count])
   else
-    LblStatus.Caption := '当前选中：（无）';
+    LblStatus.Caption := 'Currently selected: (none)';
 end;
 
 procedure TMainForm.ListBoxChange(Sender: TObject);

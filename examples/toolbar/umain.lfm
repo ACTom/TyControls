@@ -3,7 +3,7 @@ object MainForm: TMainForm
   Height = 340
   Top = 0
   Width = 520
-  Caption = 'TTyToolBar 示例'
+  Caption = 'TTyToolBar example'
   ClientHeight = 340
   ClientWidth = 520
   Position = poScreenCenter
@@ -30,7 +30,7 @@ object MainForm: TMainForm
         Top = 5
         Width = 74
         Anchors = [akTop, akRight]
-        Caption = '暗色'
+        Caption = 'Dark'
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
@@ -56,7 +56,7 @@ object MainForm: TMainForm
         Height = 28
         Top = 6
         Width = 72
-        Caption = '新建'
+        Caption = 'New'
         OnClick = ToolClicked
       end
       object BtnOpen: TTyButton
@@ -64,7 +64,7 @@ object MainForm: TMainForm
         Height = 28
         Top = 6
         Width = 72
-        Caption = '打开'
+        Caption = 'Open'
         OnClick = ToolClicked
       end
       object BtnSave: TTyButton
@@ -72,7 +72,7 @@ object MainForm: TMainForm
         Height = 28
         Top = 6
         Width = 72
-        Caption = '保存'
+        Caption = 'Save'
         OnClick = ToolClicked
       end
       object Sep1: TTyToolSeparator
@@ -86,7 +86,7 @@ object MainForm: TMainForm
         Height = 28
         Top = 6
         Width = 72
-        Caption = '剪切'
+        Caption = 'Cut'
         OnClick = ToolClicked
       end
       object BtnCopy: TTyButton
@@ -94,7 +94,7 @@ object MainForm: TMainForm
         Height = 28
         Top = 38
         Width = 72
-        Caption = '复制'
+        Caption = 'Copy'
         OnClick = ToolClicked
       end
       object BtnPaste: TTyButton
@@ -102,7 +102,7 @@ object MainForm: TMainForm
         Height = 28
         Top = 38
         Width = 72
-        Caption = '粘贴'
+        Caption = 'Paste'
         OnClick = ToolClicked
       end
       object Sep2: TTyToolSeparator
@@ -116,7 +116,7 @@ object MainForm: TMainForm
         Height = 28
         Top = 38
         Width = 72
-        Caption = '查找'
+        Caption = 'Find'
         OnClick = ToolClicked
       end
       object BtnReplace: TTyButton
@@ -124,7 +124,7 @@ object MainForm: TMainForm
         Height = 28
         Top = 38
         Width = 72
-        Caption = '替换'
+        Caption = 'Replace'
         OnClick = ToolClicked
       end
       object BtnSelectAll: TTyButton
@@ -132,7 +132,7 @@ object MainForm: TMainForm
         Height = 28
         Top = 70
         Width = 72
-        Caption = '全选'
+        Caption = 'Select all'
         OnClick = ToolClicked
       end
     end
@@ -141,7 +141,7 @@ object MainForm: TMainForm
       Height = 24
       Top = 190
       Width = 312
-      Caption = '就绪:点击任一工具按钮'
+      Caption = 'Ready: click any toolbar button'
     end
   end
 end

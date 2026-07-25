@@ -82,22 +82,22 @@ end;
 
 procedure TMainForm.Track1Change(Sender: TObject);
 begin
-  LblStatus.Caption := Format('音量：%d', [(Sender as TTyTrackBar).Position]);
+  LblStatus.Caption := Format('Volume: %d', [(Sender as TTyTrackBar).Position]);
 end;
 
 procedure TMainForm.Track2Change(Sender: TObject);
 begin
-  LblStatus.Caption := Format('平衡：%d', [(Sender as TTyTrackBar).Position]);
+  LblStatus.Caption := Format('Balance: %d', [(Sender as TTyTrackBar).Position]);
 end;
 
 procedure TMainForm.Track3Change(Sender: TObject);
 begin
-  LblStatus.Caption := Format('垂直：%d', [(Sender as TTyTrackBar).Position]);
+  LblStatus.Caption := Format('Vertical: %d', [(Sender as TTyTrackBar).Position]);
 end;
 
 procedure TMainForm.Track4Change(Sender: TObject);
 begin
-  LblStatus.Caption := Format('亮度：%d', [(Sender as TTyTrackBar).Position]);
+  LblStatus.Caption := Format('Brightness: %d', [(Sender as TTyTrackBar).Position]);
 end;
 
 end.

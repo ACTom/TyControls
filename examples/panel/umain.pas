@@ -86,9 +86,9 @@ var
 begin
   UserName := NameEdit.Text;
   if UserName = '' then
-    ResultLabel.Caption := '请先输入姓名！'
+    ResultLabel.Caption := 'Please enter a name first!'
   else
-    ResultLabel.Caption := Format('你好，%s！欢迎使用 TyControls。', [UserName]);
+    ResultLabel.Caption := Format('Hello, %s! Welcome to TyControls.', [UserName]);
 end;
 
 end.

@@ -3,7 +3,7 @@ object MainForm: TMainForm
   Height = 320
   Top = 0
   Width = 620
-  Caption = 'TTyGroupBox 示例'
+  Caption = 'TTyGroupBox example'
   ClientHeight = 320
   ClientWidth = 620
   Position = poScreenCenter
@@ -30,7 +30,7 @@ object MainForm: TMainForm
         Top = 5
         Width = 74
         Anchors = [akTop, akRight]
-        Caption = '暗色'
+        Caption = 'Dark'
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
@@ -47,14 +47,14 @@ object MainForm: TMainForm
       Height = 130
       Top = 52
       Width = 185
-      Caption = '字体大小（左对齐）'
+      Caption = 'Font size (left aligned)'
       Alignment = taLeftJustify
       object RadioA: TTyRadioButton
         Left = 10
         Height = 26
         Top = 24
         Width = 160
-        Caption = '小（12pt）'
+        Caption = 'Small (12pt)'
         OnClick = RadioClick
       end
       object RadioB: TTyRadioButton
@@ -62,7 +62,7 @@ object MainForm: TMainForm
         Height = 26
         Top = 54
         Width = 160
-        Caption = '中（14pt）'
+        Caption = 'Medium (14pt)'
         Checked = True
         OnClick = RadioClick
       end
@@ -71,7 +71,7 @@ object MainForm: TMainForm
         Height = 26
         Top = 84
         Width = 160
-        Caption = '大（18pt）'
+        Caption = 'Large (18pt)'
         OnClick = RadioClick
       end
     end
@@ -80,14 +80,14 @@ object MainForm: TMainForm
       Height = 130
       Top = 52
       Width = 185
-      Caption = '样式（居中）'
+      Caption = 'Style (centered)'
       Alignment = taCenter
       object CheckBold: TTyCheckBox
         Left = 10
         Height = 26
         Top = 24
         Width = 160
-        Caption = '加粗'
+        Caption = 'Bold'
         OnClick = CheckClick
       end
       object CheckItalic: TTyCheckBox
@@ -95,7 +95,7 @@ object MainForm: TMainForm
         Height = 26
         Top = 54
         Width = 160
-        Caption = '斜体'
+        Caption = 'Italic'
         OnClick = CheckClick
       end
     end
@@ -104,14 +104,14 @@ object MainForm: TMainForm
       Height = 130
       Top = 52
       Width = 185
-      Caption = '名称（右对齐）'
+      Caption = 'Name (right aligned)'
       Alignment = taRightJustify
       object NameEdit: TTyEdit
         Left = 10
         Height = 30
         Top = 28
         Width = 160
-        TextHint = '请输入名称…'
+        TextHint = 'Enter a name…'
         OnChange = NameChange
       end
     end

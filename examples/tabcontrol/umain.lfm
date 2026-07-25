@@ -3,7 +3,7 @@ object MainForm: TMainForm
   Height = 420
   Top = 0
   Width = 560
-  Caption = 'TTyPageControl 示例'
+  Caption = 'TTyPageControl example'
   ClientHeight = 420
   ClientWidth = 560
   Position = poScreenCenter
@@ -30,7 +30,7 @@ object MainForm: TMainForm
         Top = 5
         Width = 74
         Anchors = [akTop, akRight]
-        Caption = '暗色'
+        Caption = 'Dark'
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
@@ -55,13 +55,13 @@ object MainForm: TMainForm
         Height = 264
         Top = 32
         Width = 528
-        Caption = '常规'
+        Caption = 'Normal'
         object LblUser: TTyLabel
           Left = 16
           Height = 22
           Top = 20
           Width = 80
-          Caption = '用户名：'
+          Caption = 'Username:'
         end
         object EdUser: TTyEdit
           Left = 100
@@ -75,7 +75,7 @@ object MainForm: TMainForm
           Height = 30
           Top = 60
           Width = 90
-          Caption = '确定'
+          Caption = 'OK'
           StyleClass = 'primary'
         end
         object BtnCancel1: TTyButton
@@ -83,7 +83,7 @@ object MainForm: TMainForm
           Height = 30
           Top = 60
           Width = 90
-          Caption = '取消'
+          Caption = 'Cancel'
         end
       end
       object PgAppearance: TTyTabSheet
@@ -91,27 +91,27 @@ object MainForm: TMainForm
         Height = 264
         Top = 32
         Width = 528
-        Caption = '外观'
+        Caption = 'Appearance'
         object LblAppearance: TTyLabel
           Left = 16
           Height = 22
           Top = 20
           Width = 460
-          Caption = '这里是「外观」页，可放置主题相关选项。'
+          Caption = 'This is the "Appearance" page, where theme-related options can go.'
         end
         object BtnLight: TTyButton
           Left = 16
           Height = 30
           Top = 56
           Width = 90
-          Caption = '浅色'
+          Caption = 'Light'
         end
         object BtnDark: TTyButton
           Left = 116
           Height = 30
           Top = 56
           Width = 90
-          Caption = '深色'
+          Caption = 'Dark'
         end
       end
       object PgAbout: TTyTabSheet
@@ -119,27 +119,27 @@ object MainForm: TMainForm
         Height = 264
         Top = 32
         Width = 528
-        Caption = '关于'
+        Caption = 'About'
         object LblAboutTitle: TTyLabel
           Left = 16
           Height = 22
           Top = 20
           Width = 300
-          Caption = 'TyControls 页控件示例'
+          Caption = 'TyControls page-control example'
         end
         object LblAboutCopy: TTyLabel
           Left = 16
           Height = 22
           Top = 48
           Width = 300
-          Caption = '版权所有 © 2026 TyControls'
+          Caption = 'Copyright © 2026 TyControls'
         end
         object BtnLicense: TTyButton
           Left = 16
           Height = 30
           Top = 84
           Width = 120
-          Caption = '查看许可证'
+          Caption = 'View licence'
         end
       end
     end
@@ -148,7 +148,7 @@ object MainForm: TMainForm
       Height = 30
       Top = 356
       Width = 84
-      Caption = '常规'
+      Caption = 'Normal'
       OnClick = GotoGeneral
     end
     object BtnAppearance: TTyButton
@@ -156,7 +156,7 @@ object MainForm: TMainForm
       Height = 30
       Top = 356
       Width = 84
-      Caption = '外观'
+      Caption = 'Appearance'
       OnClick = GotoAppearance
     end
     object BtnAbout: TTyButton
@@ -164,7 +164,7 @@ object MainForm: TMainForm
       Height = 30
       Top = 356
       Width = 84
-      Caption = '关于'
+      Caption = 'About'
       OnClick = GotoAbout
     end
     object BtnAddPage: TTyButton
@@ -172,7 +172,7 @@ object MainForm: TMainForm
       Height = 30
       Top = 356
       Width = 120
-      Caption = '＋ 新增页面'
+      Caption = '＋ Add page'
       StyleClass = 'primary'
       OnClick = AddNewPage
     end
@@ -181,7 +181,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 394
       Width = 528
-      Caption = '当前页：常规（索引 0，共 3 页）'
+      Caption = 'Current page: General (index 0 of 3 pages)'
     end
   end
 end

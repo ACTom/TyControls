@@ -1,0 +1,61 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols-button_example 2.99\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+# --- .lfm captions/text/hints (auto-generated, msgid=English source) ---
+
+#: tmainform.caption
+msgid "TTyButton example"
+msgstr "TTyButton 示例"
+
+#: tmainform.darkswitch.caption
+msgid "Dark"
+msgstr "暗色"
+
+#: tmainform.btndefault.caption
+msgid "Default button(&D)"
+msgstr "默认按钮(&D)"
+
+#: tmainform.btnprimary.caption
+msgid "Primary button(&P)"
+msgstr "主要按钮(&P)"
+
+#: tmainform.btndanger.caption
+msgid "Danger button(&X)"
+msgstr "危险按钮(&X)"
+
+#: tmainform.btndisabled.caption
+msgid "Disabled button"
+msgstr "禁用按钮"
+
+#: tmainform.btnghost.caption
+msgid "Ghost / selected"
+msgstr "Ghost / 选中"
+
+#: tmainform.btnmsg.caption
+msgid "Message"
+msgstr "消息"
+
+#: tmainform.btnnotify.caption
+msgid "Notification"
+msgstr "通知"
+
+#: tmainform.btnok.caption
+msgid "OK (Enter)"
+msgstr "确定(回车)"
+
+#: tmainform.btncancel.caption
+msgid "Cancel (Esc)"
+msgstr "取消(Esc)"
+
+#: tmainform.lblstatus.caption
+msgid "Click count: 0"
+msgstr "点击次数:0"
+

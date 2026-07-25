@@ -72,9 +72,9 @@ end;
 procedure TMainForm.UpdateStatus;
 begin
   LblStatus.Caption := Format(
-    '垂直:  Position = %d   (Min %d / Max %d / PageSize %d / SmallChange %d)' + LineEnding +
+    'Vertical:  Position = %d   (Min %d / Max %d / PageSize %d / SmallChange %d)' + LineEnding +
     LineEnding +
-    '水平:  Position = %d   (Min %d / Max %d / PageSize %d / SmallChange %d)',
+    'Horizontal:  Position = %d   (Min %d / Max %d / PageSize %d / SmallChange %d)',
     [VBar.Position, VBar.Min, VBar.Max, VBar.PageSize, VBar.SmallChange,
      HBar.Position, HBar.Min, HBar.Max, HBar.PageSize, HBar.SmallChange]);
 end;

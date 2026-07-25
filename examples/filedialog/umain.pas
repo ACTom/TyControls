@@ -98,34 +98,34 @@ begin
   home := ExcludeTrailingPathDelimiter(GetUserDir);
 
   FOpen := TTyOpenDialog.Create(Self);
-  FOpen.Title := '打开文件';
-  FOpen.Filter := '文本 (*.txt;*.md)|*.txt;*.md|所有文件 (*.*)|*.*';
+  FOpen.Title := 'Open file';
+  FOpen.Filter := 'Text (*.txt;*.md)|*.txt;*.md|All files (*.*)|*.*';
   FOpen.InitialDir := home;
   FOpen.Options := [fdoFileMustExist, fdoAllowMultiSelect];
 
   FSave := TTySaveDialog.Create(Self);
-  FSave.Title := '保存文件';
-  FSave.Filter := '文本 (*.txt)|*.txt|所有文件 (*.*)|*.*';
+  FSave.Title := 'Save file';
+  FSave.Filter := 'Text (*.txt)|*.txt|All files (*.*)|*.*';
   FSave.DefaultExt := 'txt';
   FSave.InitialDir := home;
   FSave.Options := [fdoOverwritePrompt];
 
   FOpenPic := TTyOpenPictureDialog.Create(Self);
-  FOpenPic.Title := '打开图片';
+  FOpenPic.Title := 'Open picture';
   FOpenPic.InitialDir := home;
 
   FSavePic := TTySavePictureDialog.Create(Self);
-  FSavePic.Title := '保存图片';
+  FSavePic.Title := 'Save picture';
   FSavePic.DefaultExt := 'png';
   FSavePic.InitialDir := home;
 
   FOpenPrev := TTyOpenPreviewDialog.Create(Self);
-  FOpenPrev.Title := '打开(带预览)';
+  FOpenPrev.Title := 'Open (with preview)';
   FOpenPrev.InitialDir := home;
   FOpenPrev.OnPreview := @PreviewCustom;   { custom: handle formats with no built-in previewer }
 
   FSavePrev := TTySavePreviewDialog.Create(Self);
-  FSavePrev.Title := '保存(带预览)';
+  FSavePrev.Title := 'Save (with preview)';
   FSavePrev.InitialDir := home;
 
   ApplyChromeTheme(TyDefaultController);
@@ -141,11 +141,11 @@ begin
   if TyPreviewClassify(AFileName) = pkOther then
   begin
     APreview.ShowText(
-      '自定义预览(OnPreview)' + LineEnding + LineEnding +
-      '文件:' + ExtractFileName(AFileName) + LineEnding +
-      '扩展名:' + ExtractFileExt(AFileName) + LineEnding + LineEnding +
-      '这个格式没有内建预览器,由应用的 OnPreview 处理。' + LineEnding +
-      '真实场景里你可以把它解码成位图(ShowImage)或文本(ShowText)。');
+      'Custom preview (OnPreview)' + LineEnding + LineEnding +
+      'File:' + ExtractFileName(AFileName) + LineEnding +
+      'Extension:' + ExtractFileExt(AFileName) + LineEnding + LineEnding +
+      'This format has no built-in previewer; it is handled by the app''s OnPreview.' + LineEnding +
+      'In a real scenario you could decode it into a bitmap (ShowImage) or text (ShowText).');
     AHandled := True;
   end;
   { other formats stay un-handled -> built-in: image -> text -> "cannot preview" }
@@ -157,12 +157,12 @@ var
 begin
   if not AOk then
   begin
-    ResultMemo.Lines.Add(ATitle + ':(取消)');
+    ResultMemo.Lines.Add(ATitle + ':(cancel)');
     Exit;
   end;
   if ADlg.Files.Count > 1 then
   begin
-    ResultMemo.Lines.Add(Format('%s:选中 %d 项', [ATitle, ADlg.Files.Count]));
+    ResultMemo.Lines.Add(Format('%s: %d item(s) selected', [ATitle, ADlg.Files.Count]));
     for i := 0 to ADlg.Files.Count - 1 do
       ResultMemo.Lines.Add('    ' + ADlg.Files[i]);
   end
@@ -172,32 +172,32 @@ end;
 
 procedure TMainForm.BtnOpenClick(Sender: TObject);
 begin
-  Report('打开', FOpen.Execute, FOpen);
+  Report('Open', FOpen.Execute, FOpen);
 end;
 
 procedure TMainForm.BtnSaveClick(Sender: TObject);
 begin
-  Report('保存', FSave.Execute, FSave);
+  Report('Save', FSave.Execute, FSave);
 end;
 
 procedure TMainForm.BtnOpenPicClick(Sender: TObject);
 begin
-  Report('打开图片', FOpenPic.Execute, FOpenPic);
+  Report('Open picture', FOpenPic.Execute, FOpenPic);
 end;
 
 procedure TMainForm.BtnSavePicClick(Sender: TObject);
 begin
-  Report('保存图片', FSavePic.Execute, FSavePic);
+  Report('Save picture', FSavePic.Execute, FSavePic);
 end;
 
 procedure TMainForm.BtnOpenPrevClick(Sender: TObject);
 begin
-  Report('打开预览', FOpenPrev.Execute, FOpenPrev);
+  Report('Open preview', FOpenPrev.Execute, FOpenPrev);
 end;
 
 procedure TMainForm.BtnSavePrevClick(Sender: TObject);
 begin
-  Report('保存预览', FSavePrev.Execute, FSavePrev);
+  Report('Save preview', FSavePrev.Execute, FSavePrev);
 end;
 
 procedure TMainForm.ThemeComboChange(Sender: TObject);

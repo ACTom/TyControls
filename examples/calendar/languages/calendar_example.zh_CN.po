@@ -1,0 +1,29 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols-calendar_example 2.99\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+# --- .lfm captions/text/hints (auto-generated, msgid=English source) ---
+
+#: tmainform.caption
+msgid "Calendar example"
+msgstr "Calendar 示例"
+
+#: tmainform.darkswitch.caption
+msgid "Dark"
+msgstr "暗色"
+
+#: tmainform.lblmainhdr.caption
+msgid "Interactive calendar (week starts Monday · shows week numbers · today highlighted):"
+msgstr "可交互日历（周一起始 · 显示周数 · 今日高亮）："
+
+#: tmainform.lblreadonlyhdr.caption
+msgid "Read-only calendar (ReadOnly=True · week starts Sunday):"
+msgstr "只读日历 (ReadOnly=True · 周日起始)："
+

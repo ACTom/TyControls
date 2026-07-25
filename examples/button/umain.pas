@@ -86,7 +86,7 @@ end;
 procedure TMainForm.ButtonClicked(Sender: TObject);
 begin
   Inc(FCount);
-  LblStatus.Caption := Format('点击次数:%d(%s)',
+  LblStatus.Caption := Format('Click count: %d (%s)',
     [FCount, (Sender as TTyButton).Caption]);
 end;
 
@@ -100,13 +100,13 @@ end;
 procedure TMainForm.DefaultClicked(Sender: TObject);
 begin
   Inc(FCount);
-  LblStatus.Caption := Format('点击次数:%d(默认按钮 · 回车/ModalResult=mrOk)', [FCount]);
+  LblStatus.Caption := Format('Click count: %d (Default button · Enter/ModalResult=mrOk)', [FCount]);
 end;
 
 procedure TMainForm.CancelClicked(Sender: TObject);
 begin
   Inc(FCount);
-  LblStatus.Caption := Format('点击次数:%d(取消按钮 · Esc/ModalResult=mrCancel)', [FCount]);
+  LblStatus.Caption := Format('Click count: %d (Cancel button · Esc/ModalResult=mrCancel)', [FCount]);
 end;
 
 end.

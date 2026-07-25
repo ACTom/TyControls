@@ -3,7 +3,7 @@ object MainForm: TMainForm
   Height = 400
   Top = 0
   Width = 460
-  Caption = 'TTyEdit 示例'
+  Caption = 'TTyEdit example'
   ClientHeight = 400
   ClientWidth = 460
   Position = poScreenCenter
@@ -31,7 +31,7 @@ object MainForm: TMainForm
         Top = 5
         Width = 74
         Anchors = [akTop, akRight]
-        Caption = '暗色'
+        Caption = 'Dark'
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
@@ -48,14 +48,14 @@ object MainForm: TMainForm
       Height = 22
       Top = 57
       Width = 130
-      Caption = '占位提示 + OnChange'
+      Caption = 'Placeholder hint + OnChange'
     end
     object EdHint: TTyEdit
       Left = 160
       Height = 30
       Top = 52
       Width = 260
-      TextHint = '在此输入，下方实时回显…'
+      TextHint = 'Type here, echoed live below…'
       OnChange = EditChanged
     end
     object LblPassword: TTyLabel
@@ -63,7 +63,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 97
       Width = 130
-      Caption = '密码遮罩'
+      Caption = 'Password mask'
     end
     object EdPassword: TTyEdit
       Left = 160
@@ -78,14 +78,14 @@ object MainForm: TMainForm
       Height = 22
       Top = 137
       Width = 130
-      Caption = '强制大写'
+      Caption = 'Force uppercase'
     end
     object EdUpper: TTyEdit
       Left = 160
       Height = 30
       Top = 132
       Width = 260
-      TextHint = '输入将转为大写'
+      TextHint = 'Input will be converted to uppercase'
       CharCase = ecUppercase
     end
     object LblMaxLen: TTyLabel
@@ -93,7 +93,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 177
       Width = 130
-      Caption = '最大长度 8'
+      Caption = 'Max length 8'
     end
     object EdMaxLen: TTyEdit
       Left = 160
@@ -101,21 +101,21 @@ object MainForm: TMainForm
       Top = 172
       Width = 260
       MaxLength = 8
-      TextHint = '最多 8 字'
+      TextHint = 'Up to 8 chars'
     end
     object LblNumbers: TTyLabel
       Left = 24
       Height = 22
       Top = 217
       Width = 130
-      Caption = '仅数字'
+      Caption = 'Digits only'
     end
     object EdNumbers: TTyEdit
       Left = 160
       Height = 30
       Top = 212
       Width = 260
-      TextHint = '只能输入 0-9'
+      TextHint = 'Only 0-9 allowed'
       NumbersOnly = True
     end
     object LblReadOnly: TTyLabel
@@ -123,14 +123,14 @@ object MainForm: TMainForm
       Height = 22
       Top = 257
       Width = 130
-      Caption = '只读'
+      Caption = 'Read-only'
     end
     object EdReadOnly: TTyEdit
       Left = 160
       Height = 30
       Top = 252
       Width = 260
-      Text = '只读内容，无法编辑'
+      Text = 'Read-only content, cannot be edited'
       ReadOnly = True
     end
     object LblRight: TTyLabel
@@ -138,7 +138,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 297
       Width = 130
-      Caption = '右对齐'
+      Caption = 'Right align'
     end
     object EdRight: TTyEdit
       Left = 160
@@ -153,7 +153,7 @@ object MainForm: TMainForm
       Height = 24
       Top = 348
       Width = 412
-      Caption = '（第一个输入框内容将在此显示）'
+      Caption = '(the first edit box''s content will show here)'
     end
   end
 end

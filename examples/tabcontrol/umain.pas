@@ -79,7 +79,7 @@ begin
   ApplyChromeTheme(TyDefaultController);   // theme the window chrome + background
 
   { Reflect the initially active page in the status bar (OnChange is not fired during load) }
-  LblStatus.Caption := Format('当前页：%s（索引 %d，共 %d 页）',
+  LblStatus.Caption := Format('Current page: %s (index %d of %d pages)',
     [PageCtrl.ActivePage.Caption, PageCtrl.ActivePageIndex, PageCtrl.PageCount]);
 end;
 
@@ -106,7 +106,7 @@ end;
 procedure TMainForm.PageChanged(Sender: TObject);
 begin
   if LblStatus = nil then Exit;   { the status bar isn't streamed yet during the initial auto-select }
-  LblStatus.Caption := Format('当前页：%s（索引 %d，共 %d 页）',
+  LblStatus.Caption := Format('Current page: %s (index %d of %d pages)',
     [PageCtrl.ActivePage.Caption, PageCtrl.ActivePageIndex, PageCtrl.PageCount]);
 end;
 
@@ -134,11 +134,11 @@ var
   NewPage: TTyTabSheet;
 begin
   Inc(FExtraCount);
-  NewPage := PageCtrl.AddPage(Format('新页 %d', [FExtraCount]));
+  NewPage := PageCtrl.AddPage(Format('New page %d', [FExtraCount]));
   with TTyLabel.Create(Self) do
   begin
     Parent  := NewPage;
-    Caption := Format('这是运行期第 %d 次新增的页面。', [FExtraCount]);
+    Caption := Format('This is the %dth page added at runtime.', [FExtraCount]);
     SetBounds(16, 20, 460, 22);
   end;
   { switch to the page just added (it's the last one) }

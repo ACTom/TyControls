@@ -3,7 +3,7 @@ object MainForm: TMainForm
   Height = 800
   Top = 0
   Width = 1300
-  Caption = 'Rich Inputs 示例'
+  Caption = 'Rich Inputs example'
   ClientHeight = 800
   ClientWidth = 1300
   Position = poScreenCenter
@@ -31,7 +31,7 @@ object MainForm: TMainForm
         Top = 5
         Width = 74
         Anchors = [akTop, akRight]
-        Caption = '暗色'
+        Caption = 'Dark'
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
@@ -48,7 +48,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 56
       Width = 200
-      Caption = '数量(整数,Decimals=0):'
+      Caption = 'Quantity (integer, Decimals=0):'
     end
     object FQty: TTyNumericEdit
       Left = 240
@@ -62,7 +62,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 100
       Width = 200
-      Caption = '金额(2 位小数 + 千分位):'
+      Caption = 'Amount (2 decimals + thousands separator):'
     end
     object FPrice: TTyNumericEdit
       Left = 240
@@ -75,7 +75,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 144
       Width = 200
-      Caption = '限幅(MinValue=0 / MaxValue=100):'
+      Caption = 'Clamp (MinValue=0 / MaxValue=100):'
     end
     object FRanged: TTyNumericEdit
       Left = 240
@@ -90,7 +90,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 188
       Width = 200
-      Caption = '货币(TTyCurrencyEdit,¥):'
+      Caption = 'Currency (TTyCurrencyEdit, ¥):'
     end
     object FMoney: TTyCurrencyEdit
       Left = 240
@@ -104,7 +104,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 232
       Width = 200
-      Caption = '日期掩码(##/##/####):'
+      Caption = 'Date mask (##/##/####):'
     end
     object FDate: TTyMaskEdit
       Left = 240
@@ -118,7 +118,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 276
       Width = 200
-      Caption = 'URL(TTyURLEdit,点 →):'
+      Caption = 'URL (TTyURLEdit, click →):'
     end
     object FUrl: TTyURLEdit
       Left = 240
@@ -132,7 +132,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 320
       Width = 200
-      Caption = '下拉(TTyComboEdit):'
+      Caption = 'Dropdown (TTyComboEdit):'
     end
     object FCombo: TTyComboEdit
       Left = 240
@@ -146,7 +146,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 364
       Width = 200
-      Caption = '滑块数值(TTyTrackEdit,0..255):'
+      Caption = 'Slider value (TTyTrackEdit, 0..255):'
     end
     object FTrack: TTyTrackEdit
       Left = 240
@@ -161,7 +161,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 408
       Width = 200
-      Caption = '颜色(TTyColorBox):'
+      Caption = 'Colour (TTyColorBox):'
     end
     object FColor: TTyColorBox
       Left = 240
@@ -174,7 +174,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 452
       Width = 200
-      Caption = '字体(TTyFontComboBox):'
+      Caption = 'Font (TTyFontComboBox):'
     end
     object FFont: TTyFontComboBox
       Left = 240
@@ -193,7 +193,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 52
       Width = 190
-      Caption = '颜色列表(TTyColorListBox):'
+      Caption = 'Colour list (TTyColorListBox):'
     end
     object FColorList: TTyColorListBox
       Left = 440
@@ -206,7 +206,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 380
       Width = 190
-      Caption = '字体列表(TTyFontListBox):'
+      Caption = 'Font list (TTyFontListBox):'
     end
     object FFontList: TTyFontListBox
       Left = 440
@@ -219,7 +219,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 52
       Width = 190
-      Caption = '勾选列表(TTyCheckListBox):'
+      Caption = 'Check list (TTyCheckListBox):'
     end
     object FCheckList: TTyCheckListBox
       Left = 640
@@ -232,35 +232,35 @@ object MainForm: TMainForm
       Height = 20
       Top = 380
       Width = 190
-      Caption = '颜色 + 更多(TTyColorComboBox):'
+      Caption = 'Colour + more (TTyColorComboBox):'
     end
     object FColorCombo: TTyColorComboBox
       Left = 640
       Height = 28
       Top = 404
       Width = 180
-      MoreCaption = '更多颜色…'
+      MoreCaption = 'More colours…'
     end
     object L23: TTyLabel
       Left = 640
       Height = 20
       Top = 452
       Width = 190
-      Caption = '勾选下拉(TTyCheckComboBox):'
+      Caption = 'Checkable dropdown (TTyCheckComboBox):'
     end
     object FCheckCombo: TTyCheckComboBox
       Left = 640
       Height = 28
       Top = 476
       Width = 190
-      EmptyText = '(未选择样式)'
+      EmptyText = '(no style selected)'
     end
     object L15: TTyLabel
       Left = 840
       Height = 20
       Top = 52
       Width = 200
-      Caption = '最近使用(TTyMRUComboBox):'
+      Caption = 'Recently used (TTyMRUComboBox):'
     end
     object FMRU: TTyMRUComboBox
       Left = 840
@@ -274,7 +274,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 116
       Width = 200
-      Caption = '图文组合(TTyComboBoxEx):'
+      Caption = 'Image + text (TTyComboBoxEx):'
     end
     object FComboEx: TTyComboBoxEx
       Left = 840
@@ -287,7 +287,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 180
       Width = 200
-      Caption = '分组组合(TTyOfficeComboBox):'
+      Caption = 'Grouped combo (TTyOfficeComboBox):'
     end
     object FOfficeCombo: TTyOfficeComboBox
       Left = 840
@@ -300,7 +300,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 244
       Width = 200
-      Caption = '分组列表(TTyOfficeListBox):'
+      Caption = 'Grouped list (TTyOfficeListBox):'
     end
     object FOfficeList: TTyOfficeListBox
       Left = 840
@@ -313,7 +313,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 428
       Width = 220
-      Caption = '色板 ColorGrid + 明度 LColorPicker:'
+      Caption = 'Swatch grid ColorGrid + lightness LColorPicker:'
     end
     object FColorGrid: TTyColorGrid
       Left = 840
@@ -337,7 +337,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 52
       Width = 220
-      Caption = 'HS 取色方块(TTyHSColorPicker):'
+      Caption = 'HS colour square (TTyHSColorPicker):'
     end
     object FHS: TTyHSColorPicker
       Left = 1080
@@ -353,7 +353,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 218
       Width = 220
-      Caption = '富行列表(TTyAdvancedListBox):'
+      Caption = 'Rich-row list (TTyAdvancedListBox):'
     end
     object FAdvList: TTyAdvancedListBox
       Left = 1080
@@ -366,7 +366,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 404
       Width = 220
-      Caption = '富行组合(TTyAdvancedComboBox):'
+      Caption = 'Rich-row combo (TTyAdvancedComboBox):'
     end
     object FAdvCombo: TTyAdvancedComboBox
       Left = 1080
@@ -379,7 +379,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 600
       Width = 340
-      Caption = '名/值编辑器(TTyValueListEditor,点值列 / F2 编辑):'
+      Caption = 'Name/value editor (TTyValueListEditor, click the value column / F2 to edit):'
     end
     object FVLE: TTyValueListEditor
       Left = 24
@@ -393,7 +393,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 600
       Width = 260
-      Caption = '计算器数值(TTyCalcEdit,点尾部小按钮):'
+      Caption = 'Calculator value (TTyCalcEdit, click the small button at the end):'
     end
     object FCalcEdit: TTyCalcEdit
       Left = 410
@@ -406,7 +406,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 662
       Width = 260
-      Caption = '计算器货币(TTyCalcCurrencyEdit):'
+      Caption = 'Calculator currency (TTyCalcCurrencyEdit):'
     end
     object FCalcCurr: TTyCalcCurrencyEdit
       Left = 410
@@ -420,14 +420,14 @@ object MainForm: TMainForm
       Height = 20
       Top = 496
       Width = 400
-      Caption = '限幅值 = 42.00'
+      Caption = 'Clamped value = 42.00'
     end
     object LHint: TTyLabel
       Left = 24
       Height = 40
       Top = 536
       Width = 400
-      Caption = '试试:只能输数字 / 负号 / 小数点;聚焦时去掉千分位方便编辑,失焦后重新分组;限幅框输入 >100 的值,失焦后夹紧到 100。'
+      Caption = 'Try: digits / minus / decimal point only; the thousands separator is dropped on focus for easy editing and regrouped on blur; enter a value >100 in the clamped field and it clamps to 100 on blur.'
     end
   end
 end

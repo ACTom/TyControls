@@ -79,7 +79,7 @@ end;
 { Tab-switch callback: update the status label to show the current tab caption }
 procedure TMainForm.TabChanged(Sender: TObject);
 begin
-  LblStatus.Caption := Format('当前页签：%s（TabIndex=%d）',
+  LblStatus.Caption := Format('Current tab: %s (TabIndex=%d)',
     [TabStrip.TabCaption(TabStrip.TabIndex), TabStrip.TabIndex]);
 end;
 
@@ -91,7 +91,7 @@ begin
   if ANewIndex = 2 then
   begin
     AllowChange := False;
-    LblStatus.Caption := '"通知(锁定)"页已被 OnChanging 否决，无法选中。';
+    LblStatus.Caption := 'The "Notice (locked)" tab was vetoed by OnChanging and cannot be selected.';
   end;
 end;
 
@@ -104,16 +104,16 @@ begin
   if AIndex = 0 then
   begin
     AllowClose := False;
-    LblStatus.Caption := '"概览"页被 OnTabClose 否决，不予关闭。';
+    LblStatus.Caption := 'The "Overview" tab was vetoed by OnTabClose and will not close.';
   end
   else
-    LblStatus.Caption := Format('正在关闭页签：%s', [TabStrip.TabCaption(AIndex)]);
+    LblStatus.Caption := Format('Closing tab: %s', [TabStrip.TabCaption(AIndex)]);
 end;
 
 { Drag-reorder commit callback: fires once after a clean drag gesture completes }
 procedure TMainForm.TabReordered(Sender: TObject; AFromIndex, AToIndex: Integer);
 begin
-  LblStatus.Caption := Format('页签已重排：%d → %d（当前：%s）',
+  LblStatus.Caption := Format('Tabs reordered: %d → %d (current: %s)',
     [AFromIndex, AToIndex, TabStrip.TabCaption(TabStrip.TabIndex)]);
 end;
 

@@ -3,7 +3,7 @@ object MainForm: TMainForm
   Height = 300
   Top = 0
   Width = 420
-  Caption = 'Labels 示例'
+  Caption = 'Labels example'
   ClientHeight = 300
   ClientWidth = 420
   Position = poScreenCenter
@@ -30,7 +30,7 @@ object MainForm: TMainForm
         Top = 5
         Width = 74
         Anchors = [akTop, akRight]
-        Caption = '暗色'
+        Caption = 'Dark'
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
@@ -47,14 +47,14 @@ object MainForm: TMainForm
       Height = 24
       Top = 56
       Width = 360
-      Caption = '普通标签 TTyLabel'
+      Caption = 'Plain label TTyLabel'
     end
     object LblLink: TTyLinkLabel
       Left = 24
       Height = 24
       Top = 100
       Width = 360
-      Caption = '超链接标签 TTyLinkLabel(点击打开主页)'
+      Caption = 'Hyperlink label TTyLinkLabel (click to open the homepage)'
       URL = 'https://github.com/ACTom/TyControls'
     end
     object LblShadow: TTyShadowLabel
@@ -62,7 +62,7 @@ object MainForm: TMainForm
       Height = 30
       Top = 144
       Width = 360
-      Caption = '投影标签 TTyShadowLabel'
+      Caption = 'Shadow label TTyShadowLabel'
       ShadowOffsetX = 2
       ShadowOffsetY = 2
     end
@@ -71,7 +71,7 @@ object MainForm: TMainForm
       Height = 32
       Top = 192
       Width = 360
-      Caption = '发光标签 TTyGlowLabel'
+      Caption = 'Glow label TTyGlowLabel'
       GlowRadius = 5
     end
   end

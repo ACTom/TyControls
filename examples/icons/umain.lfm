@@ -3,7 +3,7 @@ object MainForm: TMainForm
   Height = 320
   Top = 0
   Width = 460
-  Caption = 'Icons & Images 示例'
+  Caption = 'Icons & Images example'
   ClientHeight = 320
   ClientWidth = 460
   Position = poScreenCenter
@@ -30,7 +30,7 @@ object MainForm: TMainForm
         Top = 5
         Width = 74
         Anchors = [akTop, akRight]
-        Caption = '暗色'
+        Caption = 'Dark'
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
@@ -47,7 +47,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 52
       Width = 120
-      Caption = '拉伸 Stretch'
+      Caption = 'Stretch'
     end
     object Img1: TTyImage
       Left = 16
@@ -62,7 +62,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 52
       Width = 120
-      Caption = '等比 Proportional'
+      Caption = 'Proportional'
     end
     object Img2: TTyImage
       Left = 168
@@ -77,7 +77,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 52
       Width = 120
-      Caption = '居中 Center'
+      Caption = 'Center'
     end
     object Img3: TTyImage
       Left = 320
@@ -99,7 +99,7 @@ object MainForm: TMainForm
       Height = 60
       Top = 196
       Width = 380
-      Caption = 'TTyIconFont/TTyCharImage:把 FontFile 指向图标 .ttf(如 FontAwesome)、FontFamily 设为其族名,再用 name→codepoint 映射即可渲染矢量图标。左侧尝试用系统符号字体渲染一个星形(★),不同平台字体族不同,显示效果可能不一。'
+      Caption = 'TTyIconFont/TTyCharImage: point FontFile at an icon .ttf (such as FontAwesome), set FontFamily to its family name, then render vector icons via a name→codepoint map. On the left it tries to render a star (★) with the system symbol font; the family differs per platform, so the result may vary.'
       WordWrap = True
     end
   end
