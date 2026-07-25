@@ -43,6 +43,7 @@ type
     procedure TestHeaderSeparatorPaintedAtBandBottom;
     procedure TestNoHeaderSeparatorWhenHeaderHidden;
     procedure TestTitleAlignmentMovesTitleInk;
+    procedure TestTitleAlignsWithContentRect;
     procedure TestActionsStripTintPaintedAtBottom;
     procedure TestTitleVisibleWhenThemeOmitsHeaderKey;
     procedure TestBorderlessCardKeepsFullBandRadius;
@@ -637,6 +638,73 @@ begin
   AssertTrue('left-aligned title ink present', cl > 0);
   AssertTrue('right-aligned title ink present', cr > 0);
   AssertTrue('right-aligned title sits further right', cr > cl + 100);
+end;
+
+procedure TTyCardTest.TestTitleAlignsWithContentRect;
+{ The card's promise (see ContentRect's doc): a left-aligned title lines up with the body
+  content, i.e. its ink starts at ContentRect.Left plus only the glyph's small left
+  bearing — NOT a whole extra padding. Guards against the title path double-insetting
+  (once for the header band, again for the title) while hand-placed children, which read
+  ContentRect, get a single inset. Rendered at 96 PPI with a border-less probe theme so
+  the numbers are exact. }
+var
+  Ctl: TTyStyleController;
+  Acc: TCardAccess;
+  bmp: TBitmap;
+  reread: TBGRABitmap;
+  x, y, inkLeft: Integer;
+  hasInk: Boolean;
+  px: TBGRAPixel;
+  content: TRect;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(ProbeCss);   // card border 0, padding 10, black title on a white card
+    Acc := TCardAccess.Create(nil);
+    try
+      Acc.Controller := Ctl;
+      Acc.Title := 'HH';          // near-zero left side bearing, so ink ~ textRect.Left
+      Acc.TitleAlignment := taLeftJustify;
+      Acc.ShowHeader := True;
+      Acc.Font.PixelsPerInch := 96;
+      Acc.SetBounds(0, 0, 240, 160);
+      content := Acc.ContentRect;
+      bmp.PixelFormat := pf32bit;
+      bmp.SetSize(240, 160);
+      bmp.Canvas.Brush.Color := clWhite;
+      bmp.Canvas.FillRect(0, 0, 240, 160);
+      Acc.DoRenderTo(bmp.Canvas, Rect(0, 0, 240, 160), 96);
+      reread := TBGRABitmap.Create(bmp);
+      try
+        inkLeft := 240;
+        for x := 0 to 239 do
+        begin
+          hasInk := False;
+          for y := 0 to TyCardHeaderHeight - 4 do   // header band, above the separator
+          begin
+            px := reread.GetPixel(x, y);
+            if (px.red < 160) and (px.green < 160) and (px.blue < 160) then
+            begin hasInk := True; Break; end;
+          end;
+          if hasInk then begin inkLeft := x; Break; end;
+        end;
+      finally
+        reread.Free;
+      end;
+      AssertTrue('title drew some ink', inkLeft < 240);
+      // Single inset: ink at ContentRect.Left (+ tiny bearing). A double inset would land
+      // near 2*padding = 20, well outside this window.
+      AssertTrue(Format('title ink left %d lines up with ContentRect.Left %d (not double-inset)',
+        [inkLeft, content.Left]),
+        (inkLeft >= content.Left - 1) and (inkLeft <= content.Left + 5));
+    finally
+      Acc.Free;
+    end;
+  finally
+    bmp.Free;
+    Ctl.Free;
+  end;
 end;
 
 procedure TTyCardTest.TestActionsStripTintPaintedAtBottom;
