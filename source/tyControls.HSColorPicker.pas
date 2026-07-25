@@ -212,6 +212,7 @@ begin
   try
     R := Rect(0, 0, ClientWidth, ClientHeight);
     P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
+    TyApplyStyleOpacity(Self, P, CurrentStyle);   // :disabled { opacity } — this control self-draws (no DrawFrame)
     bodyS := CurrentStyle;                         // TyHSColorPicker frame + crosshair colour
     // Windowed control: fill the full rect with the parent/form background first,
     // so the margin around the square shows the form (or image-theme photo).

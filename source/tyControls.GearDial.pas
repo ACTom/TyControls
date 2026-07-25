@@ -235,6 +235,7 @@ begin
   try
     R := Rect(0, 0, ClientWidth, ClientHeight);
     P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
+    TyApplyStyleOpacity(Self, P, CurrentStyle);   // :disabled { opacity } — this control self-draws (no DrawFrame)
     bodyS := CurrentStyle;                                              // TyGearDial body/border/text
     { Sub-part keys derived from the box key so the three can never drift apart. }
     teethS := ActiveController.Model.ResolveStyle(GetStyleTypeKey + 'Teeth', StyleClass, []);

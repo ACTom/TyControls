@@ -189,6 +189,7 @@ begin
   try
     R := Rect(0, 0, ClientWidth, ClientHeight);
     P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
+    TyApplyStyleOpacity(Self, P, CurrentStyle);   // :disabled { opacity } — this control self-draws (no DrawFrame)
     faceS := CurrentStyle;                                             // TyAnalogClock face + rim ticks
     { Sub-part keys derived from the box key so the three can never drift apart. }
     handS := ActiveController.Model.ResolveStyle(GetStyleTypeKey + 'Hand', StyleClass, []);

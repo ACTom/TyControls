@@ -230,6 +230,14 @@ function TyResolveParentBg(AChild: TControl; out AColor: TTyColor): Boolean;
   group box caption band) can fill them opaque instead of leaving transparent pixels. }
 procedure TyFillParentBg(AControl: TControl; APainter: TTyPainter; const ARect: TRect;
   const AStyle: TTyStyleSet);
+{ Push AStyle's opacity onto APainter so EndPaint dims the whole control when it carries
+  one — chiefly ':disabled { opacity }'. DrawFrame already does this; controls that PAINT
+  THEIR OWN frame (the instruments: Dial, Rating, Meter, clocks, colour pickers…) must call
+  this from their Paint with the state-resolved style, or their disabled opacity is dead.
+  Dims TOWARD the opaque parent background (not toward transparency) — see TTyPainter.EndPaint
+  and DrawFrame's note. A no-op when AStyle has no opacity. }
+procedure TyApplyStyleOpacity(AControl: TControl; APainter: TTyPainter;
+  const AStyle: TTyStyleSet);
 { v3/C5. Draw a control glyph: if the active theme sets ATokenName (e.g. '--glyph-check')
   to a valid override '"Family" "\cp"', render that icon-font glyph; otherwise draw the
   built-in vector AVectorKind. A valid override is honoured even if it yields no ink (the
@@ -542,6 +550,19 @@ begin
   end;
 end;
 
+procedure TyApplyStyleOpacity(AControl: TControl; APainter: TTyPainter;
+  const AStyle: TTyStyleSet);
+var pc: TTyColor;
+begin
+  if tpOpacity in AStyle.Present then
+  begin
+    APainter.Opacity := AStyle.Opacity;
+    // Dim TOWARD the opaque parent/surface bg, not toward transparency (see EndPaint):
+    // a disabled control must not expose the Win10 DWM glass. 0 base = plain alpha-reduce.
+    if TyResolveParentBg(AControl, pc) then APainter.OpacityBase := pc;
+  end;
+end;
+
 { v3/B2. Draw an outset/inset two-tone 3D bevel for the border, deriving the light/dark edge
   colours from border-color (lighten TL / darken BR for a raised outset; swapped for a sunken
   inset). Bevels are square by nature — the fill's corner radius is not applied to the edges. }
@@ -661,18 +682,10 @@ var
   corners, ringCorners: TTyCorners;
   off: Integer;
   ringRect: TRect;
-  pc: TTyColor;
   effStyle: TTyStyleSet;
 begin
   TyFillParentBg(Self, APainter, ARect, AStyle);
-  if tpOpacity in AStyle.Present then
-  begin
-    APainter.Opacity := AStyle.Opacity;
-    // Dim TOWARD the opaque parent/surface bg (not toward transparency) so a disabled control
-    // never exposes the Win10 DWM sheet-of-glass (blurry text / white bg / white on deactivate).
-    // See TTyPainter.EndPaint. 0 base = fall back to plain alpha-reduce.
-    if TyResolveParentBg(Self, pc) then APainter.OpacityBase := pc;
-  end;
+  TyApplyStyleOpacity(Self, APainter, AStyle);
   if (tpShadow in AStyle.Present) and (TyAlphaOf(AStyle.ShadowColor) > 0) then
     APainter.DropShadow(ARect, AStyle.BorderRadius, AStyle.ShadowColor, AStyle.ShadowBlur, AStyle.ShadowOffset);
   corners := TyEffectiveCorners(AStyle);
@@ -898,14 +911,7 @@ var
   effStyle: TTyStyleSet;
 begin
   TyFillParentBg(Self, APainter, ARect, AStyle);
-  if tpOpacity in AStyle.Present then
-  begin
-    APainter.Opacity := AStyle.Opacity;
-    // Dim TOWARD the opaque parent/surface bg (not toward transparency) so a disabled control
-    // never exposes the Win10 DWM sheet-of-glass (blurry text / white bg / white on deactivate).
-    // See TTyPainter.EndPaint. 0 base = fall back to plain alpha-reduce.
-    if TyResolveParentBg(Self, pc) then APainter.OpacityBase := pc;
-  end;
+  TyApplyStyleOpacity(Self, APainter, AStyle);
   if (tpShadow in AStyle.Present) and (TyAlphaOf(AStyle.ShadowColor) > 0) then
     APainter.DropShadow(ARect, AStyle.BorderRadius, AStyle.ShadowColor, AStyle.ShadowBlur, AStyle.ShadowOffset);
   corners := TyEffectiveCorners(AStyle);

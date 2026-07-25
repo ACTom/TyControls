@@ -18,6 +18,7 @@ type
   published
     procedure TestSolidBackgroundCenterPixel;
     procedure TestOpacityDimsControl;
+    procedure TestApplyStyleOpacityDimsSelfDrawn;
     procedure TestBorderStyleNoneSuppressesBorder;
     procedure TestPerCornerBackgroundViaDrawFrame;
     procedure TestFocusRingDrawnWhenOutlinePresent;
@@ -125,6 +126,59 @@ begin
         So G > 50 proves dimming happened. }
       AssertTrue('opacity dims: green channel > 50 (white bleeds through)', px.green > 50);
       AssertTrue('opacity dims: blue channel > 50 (white bleeds through)', px.blue > 50);
+    finally
+      reread.Free;
+    end;
+  finally
+    painter.Free;
+    probe.Free;
+    bmp.Free;
+  end;
+end;
+
+procedure TDrawFrameTest.TestApplyStyleOpacityDimsSelfDrawn;
+{ #12: the self-drawing instruments (Dial / Meter / Rating / clocks / colour pickers) have
+  no DrawFrame, so :disabled { opacity } was dead on them. They now call the shared seam
+  TyApplyStyleOpacity directly. Prove that path dims WITHOUT DrawFrame: push a 50% opacity
+  through the helper, then hand-paint a red fill the way an instrument paints its face, and
+  check EndPaint blended it toward the white backdrop. Drop the helper call and the fill
+  stays fully opaque (green channel 0) — the exact regression this guards. }
+var
+  probe: TDrawFrameProbe;
+  painter: TTyPainter;
+  bmp: TBitmap;
+  style: TTyStyleSet;
+  r: TRect;
+  px: TBGRAPixel;
+  reread: TBGRABitmap;
+  f: TTyFill;
+begin
+  bmp := TBitmap.Create;
+  probe := TDrawFrameProbe.Create(nil);
+  painter := TTyPainter.Create;
+  try
+    bmp.SetSize(40, 40);
+    r := Rect(0, 0, 40, 40);
+    bmp.Canvas.Brush.Color := clWhite;
+    bmp.Canvas.FillRect(r);
+
+    style := EmptyStyleSet;
+    style.Opacity := 0.5;
+    Include(style.Present, tpOpacity);
+
+    painter.BeginPaint(bmp.Canvas, r, 96);
+    TyApplyStyleOpacity(probe, painter, style);   // the instrument seam, NOT DrawFrame
+    f := Default(TTyFill);
+    f.Kind := tfkSolid;
+    f.Color := TyRGBA($FF, $00, $00, $FF);         // opaque red, self-drawn
+    painter.FillBackground(r, f, 0);
+    painter.EndPaint;
+
+    reread := TBGRABitmap.Create(bmp);
+    try
+      px := reread.GetPixel(20, 20);
+      AssertTrue('helper dims a self-drawn fill: green > 50 (white bleeds through)', px.green > 50);
+      AssertTrue('helper dims a self-drawn fill: blue > 50 (white bleeds through)', px.blue > 50);
     finally
       reread.Free;
     end;

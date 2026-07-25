@@ -226,6 +226,7 @@ begin
   try
     R := Rect(0, 0, ClientWidth, ClientHeight);
     P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
+    TyApplyStyleOpacity(Self, P, CurrentStyle);   // :disabled { opacity } — this control self-draws (no DrawFrame)
     faceS := CurrentStyle;                                              // TyRating face/border/text
     { Sub-part key derived from the box key so the two can never drift apart. The :hover
       state is asked for only while the preview is live (FHoverValue >= 0), which is what
