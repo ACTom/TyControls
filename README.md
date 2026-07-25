@@ -29,7 +29,7 @@
 | | |
 |---|---|
 | **`TTyStringGrid`** —— 冻结列、行号槽、汇总带、单元格标记色<br>![数据网格](docs/images/grid.png) | **`TTyTreeView`** —— 虚拟树、多列、三态复选<br>![虚拟树](docs/images/treeview.png) |
-| **富输入控件** —— 数值 / 货币 / 掩码 / 滑块 / 计算器编辑<br>![富输入](docs/images/inputs.png) | |
+| **富输入控件** —— 数值 / 货币 / 掩码 / 滑块 / 计算器编辑<br>![富输入](docs/images/inputs.png) | **自绘对话框** —— 取色器:HSV + RGB / CMYK / Alpha 全双向<br>![取色对话框](docs/images/colordialog.png) |
 
 ---
 

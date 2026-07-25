@@ -36,7 +36,7 @@ shows how far a theme can go — translucent controls floating over a photo back
 | | |
 |---|---|
 | **`TTyStringGrid`** — frozen columns, row-number gutter, summary band, cell mark colours<br>![data grid](docs/images/grid.png) | **`TTyTreeView`** — virtual tree, multi-column, tri-state checks<br>![virtual tree](docs/images/treeview.png) |
-| **Rich input controls** — numeric / currency / mask / slider / calculator edits<br>![rich input](docs/images/inputs.png) | |
+| **Rich input controls** — numeric / currency / mask / slider / calculator edits<br>![rich input](docs/images/inputs.png) | **Custom-drawn dialogs** — colour picker: HSV + RGB / CMYK / Alpha, all two-way<br>![colour dialog](docs/images/colordialog.png) |
 
 ---
 
