@@ -38,9 +38,6 @@ shows how far a theme can go — translucent controls floating over a photo back
 | **`TTyStringGrid`** — frozen columns, row-number gutter, summary band, cell mark colours<br>![data grid](docs/images/grid.png) | **`TTyTreeView`** — virtual tree, multi-column, tri-state checks<br>![virtual tree](docs/images/treeview.png) |
 | **Rich input controls** — numeric / currency / mask / slider / calculator edits<br>![rich input](docs/images/inputs.png) | |
 
-> Some screenshots still show Chinese UI; an English render will land once the examples are
-> internationalised.
-
 ---
 
 ## Features
