@@ -161,6 +161,12 @@ type
     procedure FormMouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
     procedure FormMouseMove(Shift: TShiftState; X, Y: Integer);
     procedure FormMouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+    { Drop the border-resize cursor back to the default. FormMouseMove sets crSizeNS/WE while
+      the pointer is over the resize gutter and only clears it on the NEXT move; on GTK/Qt no
+      move is delivered after a popup menu closes, so the resize cursor sticks over the whole
+      form. Callers fire this from events that DO arrive after a menu closes (re-activate,
+      mouse re-enter). No-op while an actual resize drag is in progress. }
+    procedure ClearResizeCursor;
     procedure HandleChangeBounds;
     procedure ToggleMaximize;
     property Form: TCustomForm read FForm write FForm;
@@ -260,6 +266,13 @@ type
       Windows (native NC border) and Cocoa (resizable styleMask) need no gutter — the
       IFDEF leaves their build with inherited only. }
     procedure AdjustClientRect(var ARect: TRect); override;
+    { #15 candidate: after a popup menu closes, GTK/Qt deliver no mouse-move, so a border-
+      resize cursor set while hovering the gutter sticks over the whole form. Both events
+      DO arrive on menu-close — the pointer re-enters the form, and (for a modal/native menu)
+      the window re-activates — so clear the resize cursor here. Harmless: the next real move
+      re-derives the correct cursor. NEEDS Qt/GTK verification. }
+    procedure CMMouseEnter(var Message: TLMessage); message CM_MOUSEENTER;
+    procedure Activate; override;
     {$ENDIF}
     procedure DoShow; override;   // first show: apply window corners + shadow once the handle exists
   public
@@ -1092,6 +1105,12 @@ begin
   FResizeHit := bhNone;
 end;
 
+procedure TTyChromeEngine.ClearResizeCursor;
+begin
+  if (FForm <> nil) and not FResizing and (FForm.Cursor <> crDefault) then
+    FForm.Cursor := crDefault;
+end;
+
 procedure TTyChromeEngine.HandleChangeBounds;
 var
   CurPPI: Integer;
@@ -1483,6 +1502,20 @@ begin
     maxed := False;
   end;
   ARect := TyResizeGutterRect(ARect, zone, FResizable, maxed, True);
+end;
+
+procedure TTyForm.CMMouseEnter(var Message: TLMessage);
+begin
+  inherited;
+  if (FEngine <> nil) and not (csDesigning in ComponentState) then
+    FEngine.ClearResizeCursor;   // #15: drop a resize cursor left stuck by a closed popup menu
+end;
+
+procedure TTyForm.Activate;
+begin
+  inherited Activate;
+  if (FEngine <> nil) and not (csDesigning in ComponentState) then
+    FEngine.ClearResizeCursor;   // #15: same, for a menu that briefly took window activation
 end;
 {$ENDIF}
 
