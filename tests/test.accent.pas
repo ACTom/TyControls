@@ -340,7 +340,9 @@ procedure TAccentTest.TestHotReloadPreservesAccent;
 var c: TTyStyleController; fn: string; sl: TStringList; s: TTyStyleSet;
 begin
   // A same-file HOT-RELOAD is not a theme switch, so D2 must NOT reset the accent pick.
-  fn := GetTempDir(False) + 'ty_accent_hotreload_test.tycss';
+  // Process-unique: two test binaries run concurrently (CI shards, a probe build) must not
+  // race on one shared path — GetProcessID keeps each run on its own file.
+  fn := GetTempDir(False) + 'ty_accent_hotreload_' + IntToStr(GetProcessID) + '.tycss';
   sl := TStringList.Create;
   try
     sl.Text := DualModeCss('#111111', '#222222');

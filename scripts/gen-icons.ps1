@@ -56,7 +56,9 @@ $classes = @(
 # a blank palette icon) or an icon exists for an unregistered class.
 Write-Host '== checking icon set vs RegisterComponents =='
 $designPas = Join-Path $root 'designtime/tyControls.Design.pas'
-$design = Get-Content $designPas -Raw
+# Read as real UTF-8: PS 5.1 `Get-Content -Raw` decodes via the ANSI codepage and mangles
+# the em-dashes / CJK in Design.pas (the repo-wide rule — see other scripts).
+$design = [System.IO.File]::ReadAllText($designPas)
 $groups = [regex]::Matches($design, "RegisterComponents\s*\(\s*'TyControls[^']*'\s*,\s*\[(?<list>[^\]]+)\]")
 if ($groups.Count -eq 0) { throw "could not find any RegisterComponents('TyControls...', [...]) in $designPas" }
 $registered = @($groups | ForEach-Object {

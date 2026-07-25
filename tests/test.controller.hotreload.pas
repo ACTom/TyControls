@@ -70,7 +70,10 @@ end;
 
 procedure TControllerHotReloadTest.SetUp;
 begin
-  FPath := GetTempDir(False) + 'ty_hotreload_' + IntToStr(PtrUInt(Self)) + '.tycss';
+  // GetProcessID: unique across concurrent test binaries; PtrUInt(Self): unique across the
+  // suite's instances within this process. Both, so no run — same or parallel — collides.
+  FPath := GetTempDir(False) + 'ty_hotreload_' + IntToStr(GetProcessID) + '_' +
+           IntToStr(PtrUInt(Self)) + '.tycss';
 end;
 
 procedure TControllerHotReloadTest.TearDown;
