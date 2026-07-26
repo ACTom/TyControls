@@ -1023,9 +1023,9 @@ begin
     'TyPopoverTitle { color: var(--on-surface); font-size: var(--font-size-title);' + LineEnding +
     '                 font-weight: var(--font-weight-bold); }' + LineEnding +
     '' + LineEnding +
-    '/* Chart: the chart''s own chrome resolves TyPanel and its series ride a fixed code palette,' + LineEnding +
-    '   so the hover tooltip is the ONE key it owns. It reads exactly like TyHint because that is' + LineEnding +
-    '   what it is — a hint — only painted inside the chart instead of in an OS window. The chart' + LineEnding +
+    '/* Chart: the chart''s own chrome resolves TyPanel; the hover tooltip and the eight series' + LineEnding +
+    '   slots are the keys it owns. The tooltip reads exactly like TyHint because that is what it' + LineEnding +
+    '   is — a hint — only painted inside the chart instead of in an OS window. The chart' + LineEnding +
     '   paints NO box without this key (no background = nothing to draw on), so it lives here in' + LineEnding +
     '   the base for every theme to inherit and then restyle. A skin wanting the box to float can' + LineEnding +
     '   add `shadow:` — the control honours it; the base layer stays flat like the rest of light. */' + LineEnding +
@@ -1038,6 +1038,21 @@ begin
     '  padding: var(--pad-tooltip);' + LineEnding +
     '  font-size: var(--font-size-base);' + LineEnding +
     '}' + LineEnding +
+    '' + LineEnding +
+    '/* The series palette. A series with no explicit Color rides slot (index mod 8), and each slot' + LineEnding +
+    '   is a KEY so a skin can retint the data itself — previously these eight hues were a const' + LineEnding +
+    '   array in the control and no theme could reach them. The values are the Tableau-10 hues the' + LineEnding +
+    '   code carried, so the base layer draws exactly what it always drew; a skin overrides only the' + LineEnding +
+    '   slots it cares about. Pie slices use the same slots. `background` is the ink (a series is a' + LineEnding +
+    '   filled shape); the control keeps its own const as a last-resort fallback. */' + LineEnding +
+    'TyChartSeries1 { background: #4E79A7; }   /* blue   */' + LineEnding +
+    'TyChartSeries2 { background: #F28E2B; }   /* orange */' + LineEnding +
+    'TyChartSeries3 { background: #E15759; }   /* red    */' + LineEnding +
+    'TyChartSeries4 { background: #76B7B2; }   /* teal   */' + LineEnding +
+    'TyChartSeries5 { background: #59A14F; }   /* green  */' + LineEnding +
+    'TyChartSeries6 { background: #EDC948; }   /* yellow */' + LineEnding +
+    'TyChartSeries7 { background: #B07AA1; }   /* purple */' + LineEnding +
+    'TyChartSeries8 { background: #FF9DA7; }   /* pink   */' + LineEnding +
     '' + LineEnding +
     '/* ── ListGroupPanel (navigation accordion; own keys, not the tree column header''s) ────── */' + LineEnding +
     '/* A modern sider: group rows carry NO fill (just muted ink + a right chevron; the OPEN group' + LineEnding +

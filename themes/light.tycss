@@ -990,9 +990,9 @@ TyPopover {
 TyPopoverTitle { color: var(--on-surface); font-size: var(--font-size-title);
                  font-weight: var(--font-weight-bold); }
 
-/* Chart: the chart's own chrome resolves TyPanel and its series ride a fixed code palette,
-   so the hover tooltip is the ONE key it owns. It reads exactly like TyHint because that is
-   what it is — a hint — only painted inside the chart instead of in an OS window. The chart
+/* Chart: the chart's own chrome resolves TyPanel; the hover tooltip and the eight series
+   slots are the keys it owns. The tooltip reads exactly like TyHint because that is what it
+   is — a hint — only painted inside the chart instead of in an OS window. The chart
    paints NO box without this key (no background = nothing to draw on), so it lives here in
    the base for every theme to inherit and then restyle. A skin wanting the box to float can
    add `shadow:` — the control honours it; the base layer stays flat like the rest of light. */
@@ -1005,6 +1005,21 @@ TyChartTooltip {
   padding: var(--pad-tooltip);
   font-size: var(--font-size-base);
 }
+
+/* The series palette. A series with no explicit Color rides slot (index mod 8), and each slot
+   is a KEY so a skin can retint the data itself — previously these eight hues were a const
+   array in the control and no theme could reach them. The values are the Tableau-10 hues the
+   code carried, so the base layer draws exactly what it always drew; a skin overrides only the
+   slots it cares about. Pie slices use the same slots. `background` is the ink (a series is a
+   filled shape); the control keeps its own const as a last-resort fallback. */
+TyChartSeries1 { background: #4E79A7; }   /* blue   */
+TyChartSeries2 { background: #F28E2B; }   /* orange */
+TyChartSeries3 { background: #E15759; }   /* red    */
+TyChartSeries4 { background: #76B7B2; }   /* teal   */
+TyChartSeries5 { background: #59A14F; }   /* green  */
+TyChartSeries6 { background: #EDC948; }   /* yellow */
+TyChartSeries7 { background: #B07AA1; }   /* purple */
+TyChartSeries8 { background: #FF9DA7; }   /* pink   */
 
 /* ── ListGroupPanel (navigation accordion; own keys, not the tree column header's) ────── */
 /* A modern sider: group rows carry NO fill (just muted ink + a right chevron; the OPEN group

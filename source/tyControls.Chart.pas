@@ -291,6 +291,9 @@ type
     { Drop a parked hover hit (and repaint if one was showing). Called whenever the data or
       the chart type changes under the pointer: the old hit indexes data that may be gone. }
     procedure ClearHover;
+    { The themed colour of palette slot (AIndex mod 8): the 'TyChartSeries1'..'8' keys, so a
+      skin can retint the DATA. Falls back to the built-in TyChartPalette hue. }
+    function PaletteColor(AIndex: Integer): TColor;
     { Palette-resolved colour for series AIndex (its own Color, or the cycled palette). }
     function SeriesColor(AItem: TTyChartSeriesItem; AIndex: Integer): TColor;
     { The colour of one pie/donut SLICE (slices are palette-cycled by slice, not by series —
@@ -941,17 +944,35 @@ begin
   Invalidate;
 end;
 
+function TTyChart.PaletteColor(AIndex: Integer): TColor;
+var
+  slot: Integer;
+  S: TTyStyleSet;
+begin
+  slot := AIndex mod Length(TyChartPalette);
+  // Each slot is a theme key ('TyChartSeries1'..'TyChartSeries8'), so a skin can retint the
+  // DATA and not just the chrome. The base layer defines all eight with the palette's own
+  // hues, so this normally resolves; the const stays as the last-resort fallback for a theme
+  // that somehow reaches here with no background at all.
+  S := ActiveController.Model.ResolveStyle(
+    GetStyleTypeKey + 'Series' + IntToStr(slot + 1), StyleClass, []);
+  if (tpBackground in S.Present) and (TyAlphaOf(S.Background.Color) > 0) then
+    Result := TyColorToLCL(S.Background.Color)
+  else
+    Result := TyChartPalette[slot];
+end;
+
 function TTyChart.SeriesColor(AItem: TTyChartSeriesItem; AIndex: Integer): TColor;
 begin
   if AItem.Color = clDefault then
-    Result := TyChartPalette[AIndex mod Length(TyChartPalette)]
+    Result := PaletteColor(AIndex)
   else
     Result := AItem.Color;
 end;
 
 function TTyChart.SliceColor(AIndex: Integer): TColor;
 begin
-  Result := TyChartPalette[AIndex mod Length(TyChartPalette)];
+  Result := PaletteColor(AIndex);
 end;
 
 function TTyChart.SeriesDisplayName(AIndex: Integer): string;

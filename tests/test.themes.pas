@@ -423,7 +423,7 @@ begin
 end;
 
 const
-  GGRID: array[0..194] of string = (
+  GGRID: array[0..202] of string = (
     'TyForm|', 'TyButton|', 'TyButton|primary', 'TyButton|danger', 'TyLabel|',
     'TyEdit|', 'TyCheckBox|', 'TyRadioButton|', 'TyPanel|', 'TyComboBox|',
     'TyScrollBar|', 'TyScrollThumb|', 'TyTitleBar|', 'TyCaptionButton|',
@@ -449,6 +449,8 @@ const
     'TyAlert|', 'TyAlertClose|', 'TyBadge|', 'TyBreadcrumb|',
     'TyBreadcrumbItem|', 'TyCard|', 'TyCardActions|', 'TyCardHeader|',
     'TyCascader|', 'TyCascaderItem|', 'TyCascaderPanel|', 'TyChartTooltip|',
+    'TyChartSeries1|', 'TyChartSeries2|', 'TyChartSeries3|', 'TyChartSeries4|',
+    'TyChartSeries5|', 'TyChartSeries6|', 'TyChartSeries7|', 'TyChartSeries8|',
     'TyEmpty|', 'TyEmptyImage|', 'TyGrid|', 'TyGridActiveCell|',
     'TyGridButton|', 'TyGridCell|', 'TyGridCellAlt|', 'TyGridCellMarked|',
     'TyGridCellSelectedInactive|', 'TyGridCheckBox|', 'TyGridCommentMark|', 'TyGridFilterRow|',
