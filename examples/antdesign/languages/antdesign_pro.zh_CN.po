@@ -499,3 +499,87 @@ msgstr "状态"
 msgid "Updated time"
 msgstr "更新时间"
 
+#: umain.rsmsgsysstatus1
+msgid "System status: all services running."
+msgstr "系统状态:所有服务运行正常。"
+
+#: umain.rsmsgsysstatus2
+msgid "(this card turned on ShowActions, so the buttons sit in the action bar)"
+msgstr "(这张卡开启了 ShowActions,所以按钮落在操作条里)"
+
+#: umain.rsmsgpersonal2
+msgid "Current user: Administrator · role: Super Admin"
+msgstr "当前用户:管理员 · 角色:超级管理员"
+
+#: umain.rstoastthememsg
+msgid "The skin dropdown and the "Dark" toggle are on the right of the title bar; the skin dropdown is focused."
+msgstr "皮肤下拉和“暗色”开关在标题栏右侧;已聚焦皮肤下拉。"
+
+#: umain.rsdlgsignout
+msgid "Sign out?"
+msgstr "退出登录?"
+
+#: umain.rstagremoved
+msgid "Removed tag: "
+msgstr "已移除标签:"
+
+#: umain.rstoastempty
+msgid "The empty state's action button"
+msgstr "空状态的操作按钮"
+
+#: umain.rstoastemptymsg
+msgid "It is a real control in TTyEmpty's action bar, not painted on."
+msgstr "它是 TTyEmpty 操作条里的真实控件,不是画上去的。"
+
+#: umain.rsmsgshow1
+msgid "This is TyShowMessage — a custom-drawn modal prompt; it blocks you and asks for an answer."
+msgstr "这是 TyShowMessage —— 一个自绘的模态提示,会挡住你并要一个回答。"
+
+#: umain.rsmsgshow2
+msgid "The alert bar that stays on the page is TTyAlert in the bottom-left; the one that walks off on its own in the corner is TTyNotification — three different things, not three sizes."
+msgstr "停在页面上的警告条是左下角的 TTyAlert;自己从角落走掉的是 TTyNotification —— 三种不同的东西,不是三种尺寸。"
+
+#: umain.rsdlgsubmit
+msgid "Submit this work order?"
+msgstr "提交这条工单?"
+
+#: umain.rsfbconfirmyes
+msgid "Confirmation dialog: chose "Yes"."
+msgstr "确认对话框:选择了“是”。"
+
+#: umain.rsfbconfirmno
+msgid "Confirmation dialog: chose "No"."
+msgstr "确认对话框:选择了“否”。"
+
+#: umain.rsdlginputprompt
+msgid "Enter a group name:"
+msgstr "输入分组名称:"
+
+#: umain.rsfbinputgot
+msgid "Input dialog: got "%s"."
+msgstr "输入对话框:得到“%s”。"
+
+#: umain.rsfbinputcancel
+msgid "Input dialog: cancelled."
+msgstr "输入对话框:已取消。"
+
+#: umain.rsfbtaskprogress
+msgid "Task progress: %d%%"
+msgstr "任务进度:%d%%"
+
+#: umain.rstoast3orders
+msgid "3 new work orders"
+msgstr "3 条新工单"
+
+#: umain.rstoast3ordersmsg1
+msgid "from the "Channel" group."
+msgstr "来自“渠道”分组。"
+
+#: umain.rstoast3ordersmsg2
+msgid "This one dismisses itself after 4.5s; hovering pauses the countdown."
+msgstr "这条 4.5 秒后自动消失;悬停会暂停倒计时。"
+
+#: umain.rstoastpublishedmsg
+msgid "The buttons inside the popover are real controls — after clicking, one returns to the card and stays."
+msgstr "弹出层里的按钮是真实控件 —— 点一下会回到卡片并留下。"
+

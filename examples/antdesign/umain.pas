@@ -392,6 +392,33 @@ resourcestring
   rsColOwner   = 'Owner';
   rsColStatus  = 'Status';
   rsColUpdated = 'Updated time';
+  { Interaction text — toasts, dialogs, feedback. Multi-line messages are split into one
+    resourcestring per line and rejoined with LineEnding, so every .po entry stays single-line. }
+  rsMsgSysStatus1 = 'System status: all services running.';
+  rsMsgSysStatus2 = '(this card turned on ShowActions, so the buttons sit in the action bar)';
+  rsMsgPersonal1  = 'Personal settings';
+  rsMsgPersonal2  = 'Current user: Administrator · role: Super Admin';
+  rsToastTheme    = 'Theme settings';
+  rsToastThemeMsg = 'The skin dropdown and the "Dark" toggle are on the right of the title bar; the skin dropdown is focused.';
+  rsDlgSignOut    = 'Sign out?';
+  rsTagRemoved    = 'Removed tag: ';
+  rsToastEmpty    = 'The empty state''s action button';
+  rsToastEmptyMsg = 'It is a real control in TTyEmpty''s action bar, not painted on.';
+  rsMsgShow1      = 'This is TyShowMessage — a custom-drawn modal prompt; it blocks you and asks for an answer.';
+  rsMsgShow2      = 'The alert bar that stays on the page is TTyAlert in the bottom-left; the one that walks off on its own in the corner is TTyNotification — three different things, not three sizes.';
+  rsDlgSubmit     = 'Submit this work order?';
+  rsFbConfirmYes  = 'Confirmation dialog: chose "Yes".';
+  rsFbConfirmNo   = 'Confirmation dialog: chose "No".';
+  rsDlgInputTitle = 'Input dialog';
+  rsDlgInputPrompt= 'Enter a group name:';
+  rsFbInputGot    = 'Input dialog: got "%s".';
+  rsFbInputCancel = 'Input dialog: cancelled.';
+  rsFbTaskProgress= 'Task progress: %d%%';
+  rsToast3Orders  = '3 new work orders';
+  rsToast3OrdersMsg1 = 'from the "Channel" group.';
+  rsToast3OrdersMsg2 = 'This one dismisses itself after 4.5s; hovering pauses the countdown.';
+  rsToastPublished = 'Published';
+  rsToastPublishedMsg = 'The buttons inside the popover are real controls — after clicking, one returns to the card and stays.';
 
 procedure TMainForm.LocalizeTexts;
 begin
@@ -751,8 +778,7 @@ end;
 
 procedure TMainForm.StatusDetailClick(Sender: TObject);
 begin
-  TyShowMessage('System status: all services running.' + LineEnding +
-    '(this card turned on ShowActions, so the buttons sit in the action bar)');
+  TyShowMessage(rsMsgSysStatus1 + LineEnding + rsMsgSysStatus2);
 end;
 
 { 标题栏右上角的用户菜单(TTyMenuButton + TTyPopupMenu):对标 Ant Design Pro 头像下拉的
@@ -760,7 +786,7 @@ end;
   让下拉在示例里真的做点事。 }
 procedure TMainForm.UserProfileClick(Sender: TObject);
 begin
-  TyShowMessage('Personal settings' + LineEnding + 'Current user: Administrator · role: Super Admin');
+  TyShowMessage(rsMsgPersonal1 + LineEnding + rsMsgPersonal2);
 end;
 
 procedure TMainForm.UserThemeClick(Sender: TObject);
@@ -768,14 +794,14 @@ begin
   { 主题设置就在标题栏右侧(皮肤下拉 + 暗色开关)—— 直接把焦点交给皮肤下拉。 }
   if ThemeCombo.CanFocus then ThemeCombo.SetFocus;
   Toast.NotificationType := atInfo;
-  Toast.Title := 'Theme settings';
-  Toast.Message := 'The skin dropdown and the "Dark" toggle are on the right of the title bar; the skin dropdown is focused.';
+  Toast.Title := rsToastTheme;
+  Toast.Message := rsToastThemeMsg;
   Toast.Show;
 end;
 
 procedure TMainForm.UserLogoutClick(Sender: TObject);
 begin
-  if TyMessageDlg('Sign out?', mtConfirmation, [mbYes, mbNo]) = mrYes then
+  if TyMessageDlg(rsDlgSignOut, mtConfirmation, [mbYes, mbNo]) = mrYes then
     Close;
 end;
 
@@ -789,7 +815,7 @@ var
 begin
   AllowClose := True;
   t := Sender as TTyTag;
-  msg := 'Removed tag:' + t.Caption;
+  msg := rsTagRemoved + t.Caption;
   if t.Parent = CardStatus then
     LblStatusNote.Caption := msg
   else if t.Parent = PgList then
@@ -904,8 +930,8 @@ begin
   // The action band's button is a REAL control parented into the placeholder.
   ShowEmptyState(False);
   Toast.NotificationType := atInfo;
-  Toast.Title := 'The empty state''s action button';
-  Toast.Message := 'It is a real control in TTyEmpty''s action bar, not painted on.';
+  Toast.Title := rsToastEmpty;
+  Toast.Message := rsToastEmptyMsg;
   Toast.Show;
 end;
 
@@ -922,16 +948,15 @@ end;
 
 procedure TMainForm.MsgClick(Sender: TObject);
 begin
-  TyShowMessage('This is TyShowMessage — a custom-drawn modal prompt; it blocks you and asks for an answer.' + LineEnding +
-    'The alert bar that stays on the page is TTyAlert in the bottom-left; the one that walks off on its own in the corner is TTyNotification — three different things, not three sizes.');
+  TyShowMessage(rsMsgShow1 + LineEnding + rsMsgShow2);
 end;
 
 procedure TMainForm.ConfirmClick(Sender: TObject);
 begin
-  if TyMessageDlg('Submit this work order?', mtConfirmation, [mbYes, mbNo]) = mrYes then
-    LblFeedback.Caption := 'Confirmation dialog: chose "Yes".'
+  if TyMessageDlg(rsDlgSubmit, mtConfirmation, [mbYes, mbNo]) = mrYes then
+    LblFeedback.Caption := rsFbConfirmYes
   else
-    LblFeedback.Caption := 'Confirmation dialog: chose "No".';
+    LblFeedback.Caption := rsFbConfirmNo;
 end;
 
 procedure TMainForm.InputClick(Sender: TObject);
@@ -939,10 +964,10 @@ var
   s: string;
 begin
   s := 'Ops on-call';
-  if TyInputQuery('Input dialog', 'Enter a group name:', s) then
-    LblFeedback.Caption := 'Input dialog: got "' + s + '」。'
+  if TyInputQuery(rsDlgInputTitle, rsDlgInputPrompt, s) then
+    LblFeedback.Caption := Format(rsFbInputGot, [s])
   else
-    LblFeedback.Caption := 'Input dialog: cancelled.';
+    LblFeedback.Caption := rsFbInputCancel;
 end;
 
 procedure TMainForm.StepClick(Sender: TObject);
@@ -951,7 +976,7 @@ begin
     PbTask.Position := PbTask.Min
   else
     PbTask.Position := PbTask.Position + 10;
-  LblProgress.Caption := Format('Task progress: %d%%', [PbTask.Position]);
+  LblProgress.Caption := Format(rsFbTaskProgress, [PbTask.Position]);
 end;
 
 { 点警告条的 x:控件先发 OnClose,未被否决才执行默认动作(Visible := False)——
@@ -966,9 +991,8 @@ end;
 procedure TMainForm.ToastClick(Sender: TObject);
 begin
   Toast.NotificationType := atInfo;
-  Toast.Title := '3 new work orders';
-  Toast.Message := 'from the "Channel" group.' + LineEnding +
-    'This one dismisses itself after 4.5s; hovering pauses the countdown.';
+  Toast.Title := rsToast3Orders;
+  Toast.Message := rsToast3OrdersMsg1 + LineEnding + rsToast3OrdersMsg2;
   Toast.Show;
 end;
 
@@ -987,8 +1011,8 @@ procedure TMainForm.PopOkClick(Sender: TObject);
 begin
   Pop.Hide;
   Toast.NotificationType := atSuccess;
-  Toast.Title := 'Published';
-  Toast.Message := 'The buttons inside the popover are real controls — after clicking, one returns to the card and stays.';
+  Toast.Title := rsToastPublished;
+  Toast.Message := rsToastPublishedMsg;
   Toast.Show;
 end;
 
