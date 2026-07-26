@@ -419,6 +419,18 @@ resourcestring
   rsToast3OrdersMsg2 = 'This one dismisses itself after 4.5s; hovering pauses the countdown.';
   rsToastPublished = 'Published';
   rsToastPublishedMsg = 'The buttons inside the popover are real controls — after clicking, one returns to the card and stays.';
+  { Interaction/Navigation demo echoes (the footnote labels) + segmented metric readouts.
+    Echoes take a runtime widget caption, so they are Format strings with %s/%d. }
+  rsSegDay   = '1,330 transactions today · MoM +4.2%';
+  rsSegWeek  = '8,214 transactions this week · MoM +9.7%';
+  rsSegMonth = '33,908 transactions this month · MoM +12.4%';
+  rsEchoTab  = 'Tab strip: switched to "%s" — TTyTabSet only reports the selected item; the content below is swapped by the host (it hosts no page).';
+  rsEchoSeg  = 'Segmented control: switched to "%s" — it switches a value (the view range), not a page: the numbers on the right just changed their basis.';
+  rsEchoStepOut = 'Step bar: moved outside the list (-1 = not started / Count = finished, both are real states).';
+  rsEchoStep = 'Step bar: moved to step %d "%s" — everything before is done, everything after is waiting.';
+  rsEchoCrumb = 'Breadcrumb: clicked "%s" — the last segment is the current location, not a link; it does not fire this event at all.';
+  rsEchoTool = 'Toolbar: clicked "%s".';
+  rsEchoMenu = 'Menu: clicked "%s".';
 
 procedure TMainForm.LocalizeTexts;
 begin
@@ -1044,8 +1056,7 @@ begin
   else
     LblTabsBody.Caption := '(no tab selected)';
   end;
-  LblNavNote.Caption := 'Tab strip: switched to "' + TabsDemo.Tabs[TabsDemo.TabIndex] +
-    '" — TTyTabSet only reports the selected item; the content below is swapped by the host (it hosts no page).';
+  LblNavNote.Caption := Format(rsEchoTab, [TabsDemo.Tabs[TabsDemo.TabIndex]]);
 end;
 
 procedure TMainForm.SegRangeChange(Sender: TObject);
@@ -1054,34 +1065,32 @@ begin
   { 分段控制器切的是一个**值**(视图范围),所以它换的是同一个指标的口径 —— 就地给出
     那个值,而不是只在页尾写一句"你点了周"。 }
   case SegRange.ItemIndex of
-    0: LblSegValue.Caption := '1,330 transactions today · MoM +4.2%';
-    1: LblSegValue.Caption := '8,214 transactions this week · MoM +9.7%';
-    2: LblSegValue.Caption := '33,908 transactions this month · MoM +12.4%';
+    0: LblSegValue.Caption := rsSegDay;
+    1: LblSegValue.Caption := rsSegWeek;
+    2: LblSegValue.Caption := rsSegMonth;
   end;
-  LblNavNote.Caption := 'Segmented control: switched to "' + SegRange.Items[SegRange.ItemIndex] +
-    '" — it switches a value (the view range), not a page: the numbers on the right just changed their basis.';
+  LblNavNote.Caption := Format(rsEchoSeg, [SegRange.Items[SegRange.ItemIndex]]);
 end;
 
 procedure TMainForm.StepsFlowChange(Sender: TObject);
 begin
   if (StepsFlow.StepIndex < 0) or (StepsFlow.StepIndex >= StepsFlow.Count) then
   begin
-    LblNavNote.Caption := 'Step bar: moved outside the list (-1 = not started / Count = finished, both are real states).';
+    LblNavNote.Caption := rsEchoStepOut;
     Exit;
   end;
-  LblNavNote.Caption := Format('Step bar: moved to step %d "%s" — everything before is done, everything after is waiting.',
+  LblNavNote.Caption := Format(rsEchoStep,
     [StepsFlow.StepIndex + 1, StepsFlow.Items[StepsFlow.StepIndex]]);
 end;
 
 procedure TMainForm.NavCrumbClick(Sender: TObject; AIndex: Integer);
 begin
-  LblNavNote.Caption := 'Breadcrumb: clicked "' + NavCrumb.Items[AIndex] +
-    '" — the last segment is the current location, not a link; it does not fire this event at all.';
+  LblNavNote.Caption := Format(rsEchoCrumb, [NavCrumb.Items[AIndex]]);
 end;
 
 procedure TMainForm.NavToolClick(Sender: TObject);
 begin
-  LblNavNote.Caption := 'Toolbar: clicked "' + (Sender as TTyButton).Caption + '」。';
+  LblNavNote.Caption := Format(rsEchoTool, [(Sender as TTyButton).Caption]);
 end;
 
 procedure TMainForm.MenuItemClick(Sender: TObject);
@@ -1096,8 +1105,8 @@ begin
     SiderSplit.Visible := Sider.Visible;
   end
   else
-    LblNavNote.Caption := 'Menu: clicked "' +
-      StringReplace((Sender as TMenuItem).Caption, '&', '', [rfReplaceAll]) + '」。';
+    LblNavNote.Caption := Format(rsEchoMenu,
+      [StringReplace((Sender as TMenuItem).Caption, '&', '', [rfReplaceAll])]);
 end;
 
 { ============================== 数据展示 =================================== }

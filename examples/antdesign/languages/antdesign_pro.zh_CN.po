@@ -583,3 +583,39 @@ msgstr "这条 4.5 秒后自动消失;悬停会暂停倒计时。"
 msgid "The buttons inside the popover are real controls — after clicking, one returns to the card and stays."
 msgstr "弹出层里的按钮是真实控件 —— 点一下会回到卡片并留下。"
 
+#: umain.rssegweek
+msgid "8,214 transactions this week · MoM +9.7%"
+msgstr "本周 8,214 笔成交 · 环比 +9.7%"
+
+#: umain.rssegmonth
+msgid "33,908 transactions this month · MoM +12.4%"
+msgstr "本月 33,908 笔成交 · 环比 +12.4%"
+
+#: umain.rsechotab
+msgid "Tab strip: switched to "%s" — TTyTabSet only reports the selected item; the content below is swapped by the host (it hosts no page)."
+msgstr "页签条:切到了“%s” —— TTyTabSet 只报告选中项;下面的内容由宿主自己换(它不承载页面)。"
+
+#: umain.rsechoseg
+msgid "Segmented control: switched to "%s" — it switches a value (the view range), not a page: the numbers on the right just changed their basis."
+msgstr "分段控制器:切到了“%s” —— 它切的是一个值(视图范围),不是页面:右侧的数字刚换了口径。"
+
+#: umain.rsechostepout
+msgid "Step bar: moved outside the list (-1 = not started / Count = finished, both are real states)."
+msgstr "步骤条:移到了列表之外(-1 = 未开始 / Count = 已完成,两个都是真实状态)。"
+
+#: umain.rsechostep
+msgid "Step bar: moved to step %d "%s" — everything before is done, everything after is waiting."
+msgstr "步骤条:移到第 %d 步“%s” —— 之前的都已完成,之后的都在等待。"
+
+#: umain.rsechocrumb
+msgid "Breadcrumb: clicked "%s" — the last segment is the current location, not a link; it does not fire this event at all."
+msgstr "面包屑:点了“%s” —— 末节是当前所在位置,不是链接;它根本不触发这个事件。"
+
+#: umain.rsechotool
+msgid "Toolbar: clicked "%s"."
+msgstr "工具条:点了“%s”。"
+
+#: umain.rsechomenu
+msgid "Menu: clicked "%s"."
+msgstr "菜单:点了“%s”。"
+
