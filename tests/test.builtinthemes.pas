@@ -37,6 +37,7 @@ type
     procedure TestModePersistsAcrossThemeSwitch;
     procedure TestLightSkinChromeBarsAreFlush;
     procedure TestChromeKeysKeepTheirBaseProperties;
+    procedure TestAntDesignGhostIsAFlatTextButton;
   end;
 implementation
 
@@ -369,6 +370,45 @@ begin
         AssertTrue(Format('%s/%s: scrollbar keeps its handle colour', [names[i], mode]),
           (tpTextColor in s.Present) and (TyAlphaOf(s.TextColor) > 0));
       end;
+  finally c.Free; end;
+end;
+
+procedure TControllerThemeNameTest.TestAntDesignGhostIsAFlatTextButton;
+{ 'ghost' is wired by library CODE to Ant's type="text" role, not type="link": TTyToolBar
+  forces every flat button to it (tyControls.ToolBar.pas), as do the calculator keypad and the
+  dialog button bar, and no 'link' StyleClass exists anywhere. Two things follow, and both
+  were wrong under antdesign:
+    - the ink is colorText (--ink), NOT the brand blue (Ant reserves colorPrimary for links);
+    - a text button carries NO shadow. A variant inherits the base TyButton rule inside the
+      same layer, so ghost was picking up 'shadow: 0 1 0 var(--shadow-soft)'. On a transparent
+      button that whisper washes the whole face — measured #F9F9F9 on the white tool bar, the
+      "grey pill" a flat button must not have. }
+var
+  c: TTyStyleController;
+  ghost, plain: TTyStyleSet;
+  m: Integer;
+  mode: string;
+begin
+  TyRegisterBuiltinThemes;
+  c := TTyStyleController.Create(nil);
+  try
+    for m := 0 to 1 do
+    begin
+      if m = 0 then mode := 'light' else mode := 'dark';
+      c.ThemeName := 'antdesign';
+      c.Mode := mode;
+      ghost := c.Model.ResolveStyle('TyButton', 'ghost', []);
+      plain := c.Model.ResolveStyle('TyButton', '', []);
+
+      // Flat: nothing painted behind it, and no shadow washing the face.
+      AssertEquals(mode + ': ghost rests fully transparent', 0, TyAlphaOf(ghost.Background.Color));
+      AssertEquals(mode + ': a text button casts no shadow', 0, TyAlphaOf(ghost.ShadowColor));
+
+      // Text ink, not link blue: it matches the ordinary button's ink.
+      AssertEquals(mode + ': ghost ink R = the text ink', TyRedOf(plain.TextColor), TyRedOf(ghost.TextColor));
+      AssertEquals(mode + ': ghost ink G = the text ink', TyGreenOf(plain.TextColor), TyGreenOf(ghost.TextColor));
+      AssertEquals(mode + ': ghost ink B = the text ink', TyBlueOf(plain.TextColor), TyBlueOf(ghost.TextColor));
+    end;
   finally c.Free; end;
 end;
 
