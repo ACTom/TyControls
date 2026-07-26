@@ -362,6 +362,7 @@ type
     FHoverColumn: Integer;
     FHoverRow: Integer;
     FOnPick: TNotifyEvent;
+    FOnColumnsChanged: TNotifyEvent;
     procedure SetRoot(AValue: TTyCascaderNodes);
     function GetPath: TTyCascaderPath;
     procedure SetPath(const AValue: TTyCascaderPath);
@@ -380,6 +381,9 @@ type
     function RowStyle(AColumn, AIndex: Integer): TTyStyleSet;
     function RowStates(AColumn, AIndex: Integer): TTyStateSet;
     procedure SetHover(AColumn, AIndex: Integer);
+    { The tail EVERY draft change shares: re-fit the per-column scroll array, repaint, and
+      tell the host that the column count may have moved. }
+    procedure DraftChanged;
   protected
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -408,6 +412,11 @@ type
     { Fires after a user pick (mouse or keyboard) changed the draft. Read Path for the new
       draft; the field commits it when it is a leaf. }
     property OnPick: TNotifyEvent read FOnPick write FOnPick;
+    { Fires after ANY draft change -- a pick OR a keyboard browse. The panel lays itself out
+      for ColumnCount columns but does not own the window it lives in, so only the host can
+      grow the popup to fit a newly-revealed column. See TTyCascader.PanelColumnsChanged. }
+    property OnColumnsChanged: TNotifyEvent
+      read FOnColumnsChanged write FOnColumnsChanged;
     { How many columns the draft reveals. }
     function ColumnCount: Integer;
     { The panel size that shows every column with at most AMaxRows rows visible, DEVICE px
@@ -463,6 +472,10 @@ type
       DropDownPanel can hand out a fully-seeded panel with no window in sight. }
     procedure SyncPanel;
     procedure PanelPick(Sender: TObject);
+    { The panel revealed (or dropped) a column. The popup window was sized for the OLD column
+      count, so without this a newly-opened sub-column is laid out past the window's right
+      edge and the user sees a branch that never expands. }
+    procedure PanelColumnsChanged(Sender: TObject);
     procedure PopupClosed(Sender: TObject);
     procedure PopupKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure DeferredCloseUp(Data: PtrInt);
@@ -1218,8 +1231,7 @@ begin
   FRoot := AValue;
   // A different tree invalidates the draft outright.
   FPath := TyCascaderValidPath(FRoot, FPath);
-  SyncScroll;
-  Invalidate;
+  DraftChanged;
 end;
 
 function TTyCascaderPanel.GetPath: TTyCascaderPath;
@@ -1234,8 +1246,14 @@ begin
   norm := TyCascaderValidPath(FRoot, AValue);   // a fresh array: never an alias of AValue
   if TyCascaderPathsEqual(norm, FPath) then Exit;
   FPath := norm;
+  DraftChanged;
+end;
+
+procedure TTyCascaderPanel.DraftChanged;
+begin
   SyncScroll;
   Invalidate;
+  if Assigned(FOnColumnsChanged) then FOnColumnsChanged(Self);
 end;
 
 function TTyCascaderPanel.ColumnCount: Integer;
@@ -1415,8 +1433,7 @@ begin
   want := TyCascaderValidPath(FRoot, TyCascaderPickPath(FPath, AColumn, AIndex));
   if TyCascaderPathsEqual(want, FPath) then Exit;
   FPath := want;
-  SyncScroll;
-  Invalidate;
+  DraftChanged;
   if Assigned(FOnPick) then FOnPick(Self);
 end;
 
@@ -1427,12 +1444,11 @@ begin
   want := TyCascaderStepPath(FRoot, FPath, ADelta);
   if TyCascaderPathsEqual(want, FPath) then Exit;
   FPath := want;
-  SyncScroll;
+  DraftChanged;
   // Keep the option the keyboard just landed on in view — the one place scroll follows the
   // selection (a click can only ever land on a row that is already visible). The step always
   // lands in the path's LAST column, on the row that IS its last entry.
   EnsureVisible(High(want), want[High(want)]);
-  Invalidate;
   // NO FOnPick here: the arrow keys BROWSE the draft, they do not commit. Committing is a
   // mouse leaf-pick (PickAt -> FOnPick) or Enter (the VK_RETURN branch, which commits
   // directly). Firing FOnPick on every keyboard landing made a single Down commit + close the
@@ -1446,8 +1462,7 @@ begin
   want := TyCascaderEnterPath(FRoot, FPath);
   if TyCascaderPathsEqual(want, FPath) then Exit;
   FPath := want;
-  SyncScroll;
-  Invalidate;
+  DraftChanged;
   // NO FOnPick: keyboard browsing, not a commit (see StepDraft).
 end;
 
@@ -1458,8 +1473,7 @@ begin
   want := TyCascaderLeavePath(FPath);
   if TyCascaderPathsEqual(want, FPath) then Exit;
   FPath := want;
-  SyncScroll;
-  Invalidate;
+  DraftChanged;
   // NO FOnPick: keyboard browsing, not a commit (see StepDraft).
 end;
 
@@ -1850,6 +1864,7 @@ begin
   FPopup.OnClose := @PopupClosed;
   FPanel := TTyCascaderPanel.Create(Self);
   FPanel.OnPick := @PanelPick;
+  FPanel.OnColumnsChanged := @PanelColumnsChanged;
   FPopup.SetContent(FPanel);
   FPopup.Form.KeyPreview := True;
   FPopup.Form.OnKeyDown := @PopupKeyDown;
@@ -1929,6 +1944,19 @@ begin
   if FPopup <> nil then FCloseUpTick := FPopup.CloseUpTick;
   Invalidate;
   DoCloseUp;
+end;
+
+procedure TTyCascader.PanelColumnsChanged(Sender: TObject);
+var
+  sz: TSize;
+begin
+  // Only while it is actually on screen: SyncPanel seeds the draft BEFORE Popup sizes the
+  // window, and resizing a closed popup would move a window nobody is looking at.
+  if (FPopup = nil) or not FPopup.IsOpen then Exit;
+  sz := FPanel.TyPanelSize(FDropDownRows, Font.PixelsPerInch);
+  // Resize, not Popup: it re-derives the drop/flip rect from the same anchor and re-applies
+  // the rounded region WITHOUT re-showing, so the popup neither steals activation nor blinks.
+  FPopup.Resize(sz.cx, sz.cy);
 end;
 
 procedure TTyCascader.PanelPick(Sender: TObject);

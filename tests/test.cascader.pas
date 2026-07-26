@@ -82,7 +82,9 @@ type
     FCtl: TTyStyleController;
     FForm: TForm;
     FChanged: Integer;   // OnChange fire count
+    FColumns: Integer;   // OnColumnsChanged fire count
     procedure HandleChange(Sender: TObject);
+    procedure HandleColumnsChanged(Sender: TObject);
     { A cascader on FForm wired to FCtl, holding the standard fixture tree. }
     function MakeCascader: TTyCascader;
   protected
@@ -105,6 +107,7 @@ type
     procedure TestDisabledOptionIsNotPickable;
     procedure TestPanelHitTestIsTheInverseOfItsRects;
     procedure TestColumnWidthMetricRetunesThePanelSize;
+    procedure TestRevealingAColumnAsksTheHostToGrowThePopup;
     procedure TestPanelSizeIsCappedByDropDownRows;
     procedure TestFieldRendersTheThemeBackground;
     procedure TestSelectedRowTakesTheSelectedStyle;
@@ -838,6 +841,7 @@ begin
   FCtl := TTyStyleController.Create(nil);
   FForm := TForm.CreateNew(nil);
   FChanged := 0;
+  FColumns := 0;
 end;
 
 procedure TTyCascaderControlTest.TearDown;
@@ -849,6 +853,11 @@ end;
 procedure TTyCascaderControlTest.HandleChange(Sender: TObject);
 begin
   Inc(FChanged);
+end;
+
+procedure TTyCascaderControlTest.HandleColumnsChanged(Sender: TObject);
+begin
+  Inc(FColumns);
 end;
 
 function TTyCascaderControlTest.MakeCascader: TTyCascader;
@@ -1193,6 +1202,63 @@ begin
     AssertEquals('and the column rect took the metric', 90, R.Right - R.Left);
     R := P.TyPanelRowRect(0, 1);
     AssertEquals('and the row rect took the metric', 20, R.Bottom - R.Top);
+  finally
+    C.Free;
+  end;
+end;
+
+{ TestRevealingAColumnAsksTheHostToGrowThePopup
+  The reported bug: in the antdesign example the region cascader dropped, every root option
+  showed its '>' branch marker, and picking one did nothing visible -- the second column
+  never appeared.
+
+  Nothing was wrong with the pick: PickAt grew the draft and the panel laid out two columns
+  exactly as asked. But the POPUP WINDOW is sized once, in DropDown, for the column count at
+  that moment -- one. So column 1 was laid out past the window's right edge, where no pixels
+  exist. The panel cannot fix that itself (it does not own the window), so the fix is a
+  notification the host resizes on, and this test guards the notification.
+
+  Deliberately not a popup test: asserting on a real dropped window needs a widgetset, and
+  the defect is entirely "the host is never told". Fire count + the size the host would
+  compute is the whole contract. }
+procedure TTyCascaderControlTest.TestRevealingAColumnAsksTheHostToGrowThePopup;
+var
+  C: TTyCascader;
+  P: TTyCascaderPanel;
+  wasWide, nowWide: Integer;
+begin
+  FCtl.LoadThemeCss(
+    ':root { --cascader-column-width: 100px; --cascader-row-height: 24px; }' +
+    'TyCascaderPanel { background: #FFFFFF; color: #111111; padding: 4px; }' +
+    'TyCascaderItem { padding: 0px 6px; }');
+  C := MakeCascader;
+  try
+    P := BoundPanel(C, 308, 200);
+    P.OnColumnsChanged := @HandleColumnsChanged;
+    FColumns := 0;   // BoundPanel/SyncPanel already seeded the draft
+    AssertEquals('one column before anything is picked', 1, P.ColumnCount);
+    wasWide := P.TyPanelSize(8, 96).cx;
+
+    P.PickAt(0, 0);                       // a BRANCH: reveals its children in column 1
+    AssertEquals('two columns now', 2, P.ColumnCount);
+    nowWide := P.TyPanelSize(8, 96).cx;
+    AssertEquals('and the panel wants one more column of room',
+      wasWide + 100, nowWide);
+    AssertEquals('the host was told exactly once', 1, FColumns);
+
+    { It must fire when a column goes AWAY too, or the popup keeps the wider window and
+      leaves a dead band beside the last column. }
+    P.PickAt(0, 2);                       // a LEAF at the root: back to one column
+    AssertEquals('back to one column', 1, P.ColumnCount);
+    AssertEquals('and the host was told again', 2, FColumns);
+
+    { Keyboard browsing changes the column count without ever firing OnPick -- it has to
+      reach the host through this channel as well, or arrowing into a sub-level would hit
+      the very same invisible-column wall the mouse did. }
+    P.PickAt(0, 0);        // back onto the branch: 2 columns
+    P.EnterDraft;          // Right: descend into column 1 -> a THIRD column
+    AssertEquals('a keyboard descent opened a third column', 3, P.ColumnCount);
+    AssertEquals('and notified too', 4, FColumns);
   finally
     C.Free;
   end;
