@@ -15,6 +15,7 @@
     --danger:            #DC3545;   /* $danger — BS red-500                       */
     --window:            #FFFFFF;   /* body-bg — BS default is white              */
     --surface:           #FFFFFF;   /* title bar / cards / field wells            */
+    --chrome-bar-bg: var(--surface);   /* tool/status bars + scroll track sit flush on the surface */
     --field-border:      #CED4DA;   /* gray-400 input border                      */
     --border:            #DEE2E6;   /* gray-300 dividers / btn-light border       */
     --ink:               #212529;   /* gray-900 body text                         */
@@ -38,6 +39,7 @@
     --danger:            #DC3545;   /* SAME $danger — BS 5.3 dark keeps red-500   */
     --window:            #212529;   /* dark body-bg                               */
     --surface:           #2B3035;   /* field wells / slightly-elevated title bar  */
+    --chrome-bar-bg: var(--surface);   /* tool/status bars + scroll track sit flush on the surface */
     --field-border:      #495057;   /* gray-700 input border                      */
     --border:            #495057;   /* dividers / button border                   */
     --ink:               #DEE2E6;   /* light body text                           */
@@ -66,10 +68,6 @@ TyTitleBar, TyRibbonQuickAccess {
   border-radius: 0;
 }
 
-/* Chrome BARS sit flush on the surface. Without this they take the base layer's derived
-   --surface-chrome (darken(--surface,6%)); on this white skin that tinted band reads as a
-   grey frame around the content. Headers keep the derived tint — that is what it is for. */
-TyToolBar, TyToolSeparator, TyStatusBar, TyScrollBar { background: var(--surface); }
 
 TyCaptionButton {
   background: var(--surface);

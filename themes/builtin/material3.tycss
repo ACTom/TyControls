@@ -17,6 +17,7 @@
     --primary:    var(--accent); /* visible primary; light == the seed           */
     --on-primary: #FFFFFF;   /* ink on filled primary / checked check-mark        */
     --surface:    #FAFAFA;   /* window + top app bar: near-white surface          */
+    --chrome-bar-bg: var(--surface);   /* tool/status bars + scroll track sit flush on the surface */
     --card:       #F7F2FA;   /* card container: M3 surface-container-low          */
     --field:      #FFFFFF;   /* outlined text-field / checkbox well               */
     --outline:    #79747E;   /* M3 outline: field / checkbox / radio stroke       */
@@ -37,6 +38,7 @@
     --primary:    #D0BCFF;   /* M3 primary, brightened for dark contrast          */
     --on-primary: #381E72;   /* dark ink on the light-purple filled primary       */
     --surface:    #141218;   /* window + top app bar: darkest tonal surface       */
+    --chrome-bar-bg: var(--surface);   /* tool/status bars + scroll track sit flush on the surface */
     --card:       #1D1B20;   /* card container: M3 surface-container-low (dark)   */
     --field:      #1D1B20;   /* outlined text-field / checkbox well               */
     --outline:    #938F99;   /* M3 outline (dark)                                 */
@@ -55,10 +57,6 @@ TyForm          { background: var(--surface); }
 
 /* Top app bar: flat surface, on-surface ink, circular icon-button state layers. */
 TyTitleBar, TyRibbonQuickAccess      { background: var(--surface); color: var(--ink); border-radius: 0; }
-/* Chrome BARS sit flush on the surface. Without this they take the base layer's derived
-   --surface-chrome (darken(--surface,6%)); on this near-white skin that tinted band reads as
-   a grey frame around the content. Headers keep the derived tint — that is what it is for. */
-TyToolBar, TyToolSeparator, TyStatusBar, TyScrollBar { background: var(--surface); }
 TyCaptionButton { background: transparent; color: var(--ink-muted); border-radius: 20px; }
 TyCaptionButton:hover  { background: alpha(var(--primary), 0.10); color: var(--ink); }
 TyCaptionButton:active { background: alpha(var(--primary), 0.16); color: var(--ink); }

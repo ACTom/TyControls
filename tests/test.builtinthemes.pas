@@ -36,6 +36,7 @@ type
     procedure TestThemeNameLoadsBuiltinCss;
     procedure TestModePersistsAcrossThemeSwitch;
     procedure TestLightSkinChromeBarsAreFlush;
+    procedure TestChromeKeysKeepTheirBaseProperties;
   end;
 implementation
 
@@ -324,6 +325,50 @@ begin
         (TyGreenOf(hdr.Background.Color) <> surfG) or
         (TyBlueOf(hdr.Background.Color) <> surfB));
     end;
+  finally c.Free; end;
+end;
+
+procedure TControllerThemeNameTest.TestChromeKeysKeepTheirBaseProperties;
+{ THE guard the previous round was missing. A skin that writes ANY rule for a typeKey
+  suppresses the base layer's ENTIRE rule for it (TTyStyleModel.UserHasTypeKey) — so making
+  the chrome bars flush by adding `TyStatusBar { background: ... }` silently threw away the
+  base's `color`, border and font as well. The status bar then drew its text in an unset
+  colour ($00000000, fully transparent): a completely blank status bar.
+
+  The bars are flush via the --chrome-bar-bg TOKEN precisely so no skin needs such a rule.
+  Assert the consequence directly: across every built-in skin and BOTH modes, the chrome
+  keys must still resolve a usable ink — present, opaque, and not equal to their own fill. }
+var
+  c: TTyStyleController;
+  names: TStringArray;
+  s: TTyStyleSet;
+  i, m: Integer;
+  mode: string;
+begin
+  TyRegisterBuiltinThemes;
+  names := TyBuiltinThemeNames;
+  c := TTyStyleController.Create(nil);
+  try
+    for i := 0 to High(names) do
+      for m := 0 to 1 do
+      begin
+        if m = 0 then mode := 'light' else mode := 'dark';
+        c.ThemeName := names[i];
+        c.Mode := mode;
+        s := c.Model.ResolveStyle('TyStatusBar', '', []);
+        AssertTrue(Format('%s/%s: status bar has an ink colour at all', [names[i], mode]),
+          tpTextColor in s.Present);
+        AssertTrue(Format('%s/%s: status bar ink is not fully transparent', [names[i], mode]),
+          TyAlphaOf(s.TextColor) > 0);
+        AssertTrue(Format('%s/%s: status bar ink differs from its own fill', [names[i], mode]),
+          (TyRedOf(s.TextColor) <> TyRedOf(s.Background.Color)) or
+          (TyGreenOf(s.TextColor) <> TyGreenOf(s.Background.Color)) or
+          (TyBlueOf(s.TextColor) <> TyBlueOf(s.Background.Color)));
+        // The scroll track's handle colour rides the same rule and vanished the same way.
+        s := c.Model.ResolveStyle('TyScrollBar', '', []);
+        AssertTrue(Format('%s/%s: scrollbar keeps its handle colour', [names[i], mode]),
+          (tpTextColor in s.Present) and (TyAlphaOf(s.TextColor) > 0));
+      end;
   finally c.Free; end;
 end;
 

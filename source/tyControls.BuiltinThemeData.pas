@@ -1732,7 +1732,8 @@ begin
     '       title band read as a grey frame around the content. Ant''s chrome is white and its' + LineEnding +
     '       neutral fill (table headers, tag chips) is #FAFAFA, so split them the way Ant does. */' + LineEnding +
     '    --titlebar-bg:    var(--surface);  /* Ant''s Layout.Header is white — as this file''s --surface note says */' + LineEnding +
-    '    --surface-chrome: #FAFAFA;   /* Ant''s neutral fill: table/tree headers (the BARS are flush, below)   */' + LineEnding +
+    '    --surface-chrome: #FAFAFA;   /* Ant''s neutral fill for the HEADERS (table/tree/list)                 */' + LineEnding +
+    '    --chrome-bar-bg:  var(--surface);  /* tool/status bars + scroll track sit flush on the white surface  */' + LineEnding +
     '    --ink:            #000000E0;  /* near-black 88% primary text                                        */' + LineEnding +
     '    --muted:          #000000A6;  /* caption-button ink                                                 */' + LineEnding +
     '    --ink-disabled:   #00000040;  /* disabled text                                                      */' + LineEnding +
@@ -1759,7 +1760,8 @@ begin
     '    --window:         #141414;   /* deep neutral canvas                                    */' + LineEnding +
     '    --surface:        #1F1F1F;   /* title bar, button face, field wells, checkbox         */' + LineEnding +
     '    --titlebar-bg:    var(--surface);  /* white-equivalent chrome on dark: the elevated surface */' + LineEnding +
-    '    --surface-chrome: #262626;   /* Ant''s dark neutral fill: headers (bars are flush)     */' + LineEnding +
+    '    --surface-chrome: #262626;   /* Ant''s dark neutral fill for the HEADERS               */' + LineEnding +
+    '    --chrome-bar-bg:  var(--surface);  /* bars + scroll track flush on the dark surface    */' + LineEnding +
     '    --ink:            #FFFFFFD9;  /* light 85% primary text                                */' + LineEnding +
     '    --muted:          #FFFFFFA6;  /* caption-button ink                                    */' + LineEnding +
     '    --ink-disabled:   #FFFFFF40;  /* disabled text                                         */' + LineEnding +
@@ -1783,11 +1785,6 @@ begin
     '' + LineEnding +
     '/* Title bar: flat surface header with primary ink (Ant''s title area is borderless — flat). */' + LineEnding +
     'TyTitleBar, TyRibbonQuickAccess      { background: var(--surface); color: var(--ink); border-radius: 0; }' + LineEnding +
-    '/* Chrome BARS sit flush on the surface. Without this they take --surface-chrome, and on an' + LineEnding +
-    '   all-white skin that tinted band reads as a grey frame around the white content (tool bar +' + LineEnding +
-    '   status bar + scroll tracks together). --surface-chrome still tints the HEADERS, which is' + LineEnding +
-    '   what it is for — see the token''s note. */' + LineEnding +
-    'TyToolBar, TyToolSeparator, TyStatusBar, TyScrollBar { background: var(--surface); }' + LineEnding +
     'TyCaptionButton { background: transparent; color: var(--muted); border-radius: 0; }' + LineEnding +
     'TyCaptionButton:hover  { background: var(--cap-hover); color: var(--ink); }' + LineEnding +
     'TyCaptionButton:active { background: var(--cap-active); color: var(--ink); }' + LineEnding +
@@ -1952,6 +1949,7 @@ begin
     '    --danger:            #DC3545;   /* $danger — BS red-500                       */' + LineEnding +
     '    --window:            #FFFFFF;   /* body-bg — BS default is white              */' + LineEnding +
     '    --surface:           #FFFFFF;   /* title bar / cards / field wells            */' + LineEnding +
+    '    --chrome-bar-bg: var(--surface);   /* tool/status bars + scroll track sit flush on the surface */' + LineEnding +
     '    --field-border:      #CED4DA;   /* gray-400 input border                      */' + LineEnding +
     '    --border:            #DEE2E6;   /* gray-300 dividers / btn-light border       */' + LineEnding +
     '    --ink:               #212529;   /* gray-900 body text                         */' + LineEnding +
@@ -1975,6 +1973,7 @@ begin
     '    --danger:            #DC3545;   /* SAME $danger — BS 5.3 dark keeps red-500   */' + LineEnding +
     '    --window:            #212529;   /* dark body-bg                               */' + LineEnding +
     '    --surface:           #2B3035;   /* field wells / slightly-elevated title bar  */' + LineEnding +
+    '    --chrome-bar-bg: var(--surface);   /* tool/status bars + scroll track sit flush on the surface */' + LineEnding +
     '    --field-border:      #495057;   /* gray-700 input border                      */' + LineEnding +
     '    --border:            #495057;   /* dividers / button border                   */' + LineEnding +
     '    --ink:               #DEE2E6;   /* light body text                           */' + LineEnding +
@@ -2003,10 +2002,6 @@ begin
     '  border-radius: 0;' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
-    '/* Chrome BARS sit flush on the surface. Without this they take the base layer''s derived' + LineEnding +
-    '   --surface-chrome (darken(--surface,6%)); on this white skin that tinted band reads as a' + LineEnding +
-    '   grey frame around the content. Headers keep the derived tint — that is what it is for. */' + LineEnding +
-    'TyToolBar, TyToolSeparator, TyStatusBar, TyScrollBar { background: var(--surface); }' + LineEnding +
     '' + LineEnding +
     'TyCaptionButton {' + LineEnding +
     '  background: var(--surface);' + LineEnding +
@@ -3206,6 +3201,7 @@ begin
     '    --primary:    var(--accent); /* visible primary; light == the seed           */' + LineEnding +
     '    --on-primary: #FFFFFF;   /* ink on filled primary / checked check-mark        */' + LineEnding +
     '    --surface:    #FAFAFA;   /* window + top app bar: near-white surface          */' + LineEnding +
+    '    --chrome-bar-bg: var(--surface);   /* tool/status bars + scroll track sit flush on the surface */' + LineEnding +
     '    --card:       #F7F2FA;   /* card container: M3 surface-container-low          */' + LineEnding +
     '    --field:      #FFFFFF;   /* outlined text-field / checkbox well               */' + LineEnding +
     '    --outline:    #79747E;   /* M3 outline: field / checkbox / radio stroke       */' + LineEnding +
@@ -3226,6 +3222,7 @@ begin
     '    --primary:    #D0BCFF;   /* M3 primary, brightened for dark contrast          */' + LineEnding +
     '    --on-primary: #381E72;   /* dark ink on the light-purple filled primary       */' + LineEnding +
     '    --surface:    #141218;   /* window + top app bar: darkest tonal surface       */' + LineEnding +
+    '    --chrome-bar-bg: var(--surface);   /* tool/status bars + scroll track sit flush on the surface */' + LineEnding +
     '    --card:       #1D1B20;   /* card container: M3 surface-container-low (dark)   */' + LineEnding +
     '    --field:      #1D1B20;   /* outlined text-field / checkbox well               */' + LineEnding +
     '    --outline:    #938F99;   /* M3 outline (dark)                                 */' + LineEnding +
@@ -3244,10 +3241,6 @@ begin
     '' + LineEnding +
     '/* Top app bar: flat surface, on-surface ink, circular icon-button state layers. */' + LineEnding +
     'TyTitleBar, TyRibbonQuickAccess      { background: var(--surface); color: var(--ink); border-radius: 0; }' + LineEnding +
-    '/* Chrome BARS sit flush on the surface. Without this they take the base layer''s derived' + LineEnding +
-    '   --surface-chrome (darken(--surface,6%)); on this near-white skin that tinted band reads as' + LineEnding +
-    '   a grey frame around the content. Headers keep the derived tint — that is what it is for. */' + LineEnding +
-    'TyToolBar, TyToolSeparator, TyStatusBar, TyScrollBar { background: var(--surface); }' + LineEnding +
     'TyCaptionButton { background: transparent; color: var(--ink-muted); border-radius: 20px; }' + LineEnding +
     'TyCaptionButton:hover  { background: alpha(var(--primary), 0.10); color: var(--ink); }' + LineEnding +
     'TyCaptionButton:active { background: alpha(var(--primary), 0.16); color: var(--ink); }' + LineEnding +
@@ -4239,6 +4232,7 @@ begin
     '    --accent:     #E95420;   /* Ubuntu orange — brand seed; runtime picker recolours from here */' + LineEnding +
     '    --danger:     #C7162B;   /* Ubuntu/Yaru destructive red */' + LineEnding +
     '    --surface:    #FAFAFA;   /* window */' + LineEnding +
+    '    --chrome-bar-bg: var(--surface);   /* tool/status bars + scroll track sit flush on the surface */' + LineEnding +
     '    --card-face:  #FFFFFF;   /* raised card sheet over the window */' + LineEnding +
     '    --headerbar:  #F5F5F5;   /* Yaru headerbar */' + LineEnding +
     '    --title-ink:  #1D1D1D;   /* caption text */' + LineEnding +
@@ -4261,6 +4255,7 @@ begin
     '    --accent:     #E95420;   /* Ubuntu orange — brand seed, unchanged in dark */' + LineEnding +
     '    --danger:     #ED333B;   /* destructive red — lifted for dark contrast */' + LineEnding +
     '    --surface:    #1E1E1E;   /* window — Yaru dark neutral */' + LineEnding +
+    '    --chrome-bar-bg: var(--surface);   /* tool/status bars + scroll track sit flush on the surface */' + LineEnding +
     '    --card-face:  #2C2C2C;   /* raised card sheet — lifted off the window */' + LineEnding +
     '    --headerbar:  #2C2C2C;   /* dark headerbar */' + LineEnding +
     '    --title-ink:  #FFFFFF;   /* caption text */' + LineEnding +
@@ -4283,11 +4278,6 @@ begin
     '' + LineEnding +
     '/* Title bar — light headerbar matching the window, flat and square. */' + LineEnding +
     'TyTitleBar, TyRibbonQuickAccess      { background: var(--headerbar); color: var(--title-ink); border-radius: 0; }' + LineEnding +
-    '/* Chrome BARS sit flush on the window surface (the header bar keeps its own Yaru shade' + LineEnding +
-    '   above). Without this they take the base layer''s derived --surface-chrome' + LineEnding +
-    '   (darken(--surface,6%)), which on this near-white skin reads as a grey frame around the' + LineEnding +
-    '   content. Headers keep the derived tint — that is what it is for. */' + LineEnding +
-    'TyToolBar, TyToolSeparator, TyStatusBar, TyScrollBar { background: var(--surface); }' + LineEnding +
     'TyCaptionButton { background: transparent; color: var(--title-ink); border-radius: 5px; }' + LineEnding +
     'TyCaptionButton:hover  { background: alpha(var(--title-ink), 0.10); color: var(--title-ink); }' + LineEnding +
     'TyCaptionButton:active { background: var(--accent); color: on(var(--accent)); }' + LineEnding +

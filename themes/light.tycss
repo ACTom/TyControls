@@ -13,6 +13,13 @@
   --surface-hover:            darken(--surface, 4%);
   --surface-active:           darken(--surface, 10%);
   --surface-chrome:           darken(--surface, 6%);
+  /* The fill of the chrome BARS (tool bar, status bar, scroll track), split out from
+     --surface-chrome so a skin can sit them flush on the surface WITHOUT writing a rule for
+     those typeKeys. That matters: any rule a skin writes for a typeKey suppresses the whole
+     base layer for it (see UserHasTypeKey), so a skin that set only `background` on
+     TyStatusBar silently lost its colour/border/font too — an invisible status bar. Retuning
+     one token has no such cliff. Defaults to --surface-chrome, so nothing moves by itself. */
+  --chrome-bar-bg:            var(--surface-chrome);
   /* 斑马纹的隔行底色。比 chrome 淡得多 —— 它是让长表读起来更顺的辅助,不是分区。 */
   --surface-alt:              darken(--surface, 3%);
   /* 评分星的金色。评分是少数几个有约定俗成颜色的元素,但仍走 token —— 皮肤能改。 */
@@ -327,7 +334,7 @@ TyComboBox:focus    { border-color: var(--accent); outline: 2px var(--focus-ring
 TyComboBox:disabled { opacity: var(--disabled-opacity); }
 
 TyScrollBar {
-  background: var(--surface-chrome);
+  background: var(--chrome-bar-bg);
   color: var(--scroll-handle);
   border-radius: var(--radius-scroll);
 }
@@ -645,7 +652,7 @@ TySplitter:hover {
 }
 
 TyStatusBar {
-  background: var(--surface-chrome);
+  background: var(--chrome-bar-bg);
   color: var(--on-surface);
   border-color: var(--border);
   border-width: var(--input-border-width);
@@ -657,7 +664,7 @@ TyStatusBar {
    `background` is what keeps it seamless with the bar behind it. Sharing the block is what
    makes that automatic; owning the name is what lets a skin dot/fade/hide just the rule. */
 TyToolBar, TyToolSeparator {
-  background: var(--surface-chrome);
+  background: var(--chrome-bar-bg);
   border-color: var(--border);
   border-width: var(--input-border-width);
 }

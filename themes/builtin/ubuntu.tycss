@@ -11,6 +11,7 @@
     --accent:     #E95420;   /* Ubuntu orange — brand seed; runtime picker recolours from here */
     --danger:     #C7162B;   /* Ubuntu/Yaru destructive red */
     --surface:    #FAFAFA;   /* window */
+    --chrome-bar-bg: var(--surface);   /* tool/status bars + scroll track sit flush on the surface */
     --card-face:  #FFFFFF;   /* raised card sheet over the window */
     --headerbar:  #F5F5F5;   /* Yaru headerbar */
     --title-ink:  #1D1D1D;   /* caption text */
@@ -33,6 +34,7 @@
     --accent:     #E95420;   /* Ubuntu orange — brand seed, unchanged in dark */
     --danger:     #ED333B;   /* destructive red — lifted for dark contrast */
     --surface:    #1E1E1E;   /* window — Yaru dark neutral */
+    --chrome-bar-bg: var(--surface);   /* tool/status bars + scroll track sit flush on the surface */
     --card-face:  #2C2C2C;   /* raised card sheet — lifted off the window */
     --headerbar:  #2C2C2C;   /* dark headerbar */
     --title-ink:  #FFFFFF;   /* caption text */
@@ -55,11 +57,6 @@ TyLabel, TyHtmlLabel, TyLinkLabel, TyShadowLabel, TyGlowLabel, TyDivider, TyChar
 
 /* Title bar — light headerbar matching the window, flat and square. */
 TyTitleBar, TyRibbonQuickAccess      { background: var(--headerbar); color: var(--title-ink); border-radius: 0; }
-/* Chrome BARS sit flush on the window surface (the header bar keeps its own Yaru shade
-   above). Without this they take the base layer's derived --surface-chrome
-   (darken(--surface,6%)), which on this near-white skin reads as a grey frame around the
-   content. Headers keep the derived tint — that is what it is for. */
-TyToolBar, TyToolSeparator, TyStatusBar, TyScrollBar { background: var(--surface); }
 TyCaptionButton { background: transparent; color: var(--title-ink); border-radius: 5px; }
 TyCaptionButton:hover  { background: alpha(var(--title-ink), 0.10); color: var(--title-ink); }
 TyCaptionButton:active { background: var(--accent); color: on(var(--accent)); }
