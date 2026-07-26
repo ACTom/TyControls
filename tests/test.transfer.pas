@@ -85,6 +85,8 @@ type
     procedure TestMoveOfNothingIsSilent;
     procedure TestMoveFiresOnChangeOnce;
     procedure TestClickingTheRailMoves;
+    procedure TestClickingARowThenTheRailMoves;
+    procedure TestRailIgnoresTheOtherPanesSelection;
     procedure TestControllerReachesTheChildren;
     procedure TestFrameRendersThemeBackground;
     procedure TestTitleBandRendersThemeBackground;
@@ -110,6 +112,13 @@ type
     function StyleTypeKey: string;
   end;
 
+  { Reaches TTyListBox's protected MouseDown + row geometry so a test can click a ROW the way
+    a user does, instead of setting Selected[] through the API. }
+  TPaneAccess = class(TTyListBox)
+  public
+    procedure ClickRow(ARow: Integer);
+  end;
+
   TArrowRender = class(TTyButton)
   public
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -123,6 +132,17 @@ end;
 function TArrowAccess.StyleTypeKey: string;
 begin
   Result := GetStyleTypeKey;
+end;
+
+procedure TPaneAccess.ClickRow(ARow: Integer);
+var
+  h: Integer;
+begin
+  // ScaledItemHeight is private; at the 96 PPI these tests pin, the scaled height IS
+  // ItemHeight. Aim at the row's vertical middle, mirroring MouseDown's own row maths.
+  h := ItemHeight;
+  if h < 1 then h := 1;
+  MouseDown(mbLeft, [], 4, ContentTopOffset + ARow * h + h div 2);
 end;
 
 procedure TArrowRender.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -1036,6 +1056,56 @@ begin
     AssertEquals('the click moved the row', 'e', T.Selected.CommaText);
     AssertEquals('a,b,c,d', T.Items.CommaText);
     AssertEquals('and announced it once', 1, FChanged);
+  finally
+    T.Free;
+  end;
+end;
+
+procedure TTyTransferControlTest.TestClickingARowThenTheRailMoves;
+{ The USER's path end to end: click a row with the mouse, then click the arrow. Every other
+  move test seeds the highlight through Selected[] (the API), which skips TTyListBox's mouse
+  handler entirely — so a regression that stopped a real click from registering a highlight
+  would leave the rail dead (button never enables, nothing moves) with all of them still green. }
+var
+  T: TTyTransfer;
+begin
+  FCtl.LoadThemeCss(FlatFrame);
+  T := NewTransfer;
+  try
+    T.OnChange := @HandleChange;
+    AssertFalse('rail starts inert with nothing picked', T.MoveButton[tmMoveRight].Enabled);
+    TPaneAccess(T.LeftPane).ClickRow(0);          // the user clicks the FIRST name
+    AssertTrue('the click registered a highlight', T.LeftPane.Selected[0]);
+    AssertTrue('and that enabled the rightward arrow', T.MoveButton[tmMoveRight].Enabled);
+    T.MoveButton[tmMoveRight].Click;
+    AssertEquals('the row moved across', 'a', T.Selected.CommaText);
+    AssertEquals('and left the source', 'b,c,d,e', T.Items.CommaText);
+  finally
+    T.Free;
+  end;
+end;
+
+procedure TTyTransferControlTest.TestRailIgnoresTheOtherPanesSelection;
+{ Each arrow reads ONLY its own source pane. Picking on the left must not arm the leftward
+  arrow — otherwise clicking it would move whatever the right pane happened to have. }
+var
+  T: TTyTransfer;
+begin
+  FCtl.LoadThemeCss(FlatFrame);
+  T := NewTransfer;
+  try
+    TPaneAccess(T.LeftPane).ClickRow(0);
+    AssertTrue('rightward arrow armed by the left pick', T.MoveButton[tmMoveRight].Enabled);
+    AssertFalse('leftward arrow stays inert: the RIGHT pane has no pick',
+      T.MoveButton[tmMoveLeft].Enabled);
+    // Move it across, then pick it over there: now the leftward arrow is the live one.
+    T.MoveButton[tmMoveRight].Click;
+    TPaneAccess(T.RightPane).ClickRow(0);
+    AssertTrue('leftward arrow armed by the right pick', T.MoveButton[tmMoveLeft].Enabled);
+    T.MoveButton[tmMoveLeft].Click;
+    // A move APPENDS to the target, so the returning row lands last — not back in its old slot.
+    AssertEquals('the row came back (appended)', 'b,c,d,e,a', T.Items.CommaText);
+    AssertEquals('and left the right pane', '', T.Selected.CommaText);
   finally
     T.Free;
   end;
