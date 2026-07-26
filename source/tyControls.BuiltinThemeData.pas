@@ -1732,7 +1732,7 @@ begin
     '       title band read as a grey frame around the content. Ant''s chrome is white and its' + LineEnding +
     '       neutral fill (table headers, tag chips) is #FAFAFA, so split them the way Ant does. */' + LineEnding +
     '    --titlebar-bg:    var(--surface);  /* Ant''s Layout.Header is white — as this file''s --surface note says */' + LineEnding +
-    '    --surface-chrome: #FAFAFA;   /* Ant''s neutral fill: table/tree headers, tool + status bar            */' + LineEnding +
+    '    --surface-chrome: #FAFAFA;   /* Ant''s neutral fill: table/tree headers (the BARS are flush, below)   */' + LineEnding +
     '    --ink:            #000000E0;  /* near-black 88% primary text                                        */' + LineEnding +
     '    --muted:          #000000A6;  /* caption-button ink                                                 */' + LineEnding +
     '    --ink-disabled:   #00000040;  /* disabled text                                                      */' + LineEnding +
@@ -1759,7 +1759,7 @@ begin
     '    --window:         #141414;   /* deep neutral canvas                                    */' + LineEnding +
     '    --surface:        #1F1F1F;   /* title bar, button face, field wells, checkbox         */' + LineEnding +
     '    --titlebar-bg:    var(--surface);  /* white-equivalent chrome on dark: the elevated surface */' + LineEnding +
-    '    --surface-chrome: #262626;   /* Ant''s dark neutral fill: headers, tool + status bar    */' + LineEnding +
+    '    --surface-chrome: #262626;   /* Ant''s dark neutral fill: headers (bars are flush)     */' + LineEnding +
     '    --ink:            #FFFFFFD9;  /* light 85% primary text                                */' + LineEnding +
     '    --muted:          #FFFFFFA6;  /* caption-button ink                                    */' + LineEnding +
     '    --ink-disabled:   #FFFFFF40;  /* disabled text                                         */' + LineEnding +
@@ -1783,6 +1783,11 @@ begin
     '' + LineEnding +
     '/* Title bar: flat surface header with primary ink (Ant''s title area is borderless — flat). */' + LineEnding +
     'TyTitleBar, TyRibbonQuickAccess      { background: var(--surface); color: var(--ink); border-radius: 0; }' + LineEnding +
+    '/* Chrome BARS sit flush on the surface. Without this they take --surface-chrome, and on an' + LineEnding +
+    '   all-white skin that tinted band reads as a grey frame around the white content (tool bar +' + LineEnding +
+    '   status bar + scroll tracks together). --surface-chrome still tints the HEADERS, which is' + LineEnding +
+    '   what it is for — see the token''s note. */' + LineEnding +
+    'TyToolBar, TyToolSeparator, TyStatusBar, TyScrollBar { background: var(--surface); }' + LineEnding +
     'TyCaptionButton { background: transparent; color: var(--muted); border-radius: 0; }' + LineEnding +
     'TyCaptionButton:hover  { background: var(--cap-hover); color: var(--ink); }' + LineEnding +
     'TyCaptionButton:active { background: var(--cap-active); color: var(--ink); }' + LineEnding +
@@ -1997,6 +2002,11 @@ begin
     '  color: var(--ink);' + LineEnding +
     '  border-radius: 0;' + LineEnding +
     '}' + LineEnding +
+    '' + LineEnding +
+    '/* Chrome BARS sit flush on the surface. Without this they take the base layer''s derived' + LineEnding +
+    '   --surface-chrome (darken(--surface,6%)); on this white skin that tinted band reads as a' + LineEnding +
+    '   grey frame around the content. Headers keep the derived tint — that is what it is for. */' + LineEnding +
+    'TyToolBar, TyToolSeparator, TyStatusBar, TyScrollBar { background: var(--surface); }' + LineEnding +
     '' + LineEnding +
     'TyCaptionButton {' + LineEnding +
     '  background: var(--surface);' + LineEnding +
@@ -3234,6 +3244,10 @@ begin
     '' + LineEnding +
     '/* Top app bar: flat surface, on-surface ink, circular icon-button state layers. */' + LineEnding +
     'TyTitleBar, TyRibbonQuickAccess      { background: var(--surface); color: var(--ink); border-radius: 0; }' + LineEnding +
+    '/* Chrome BARS sit flush on the surface. Without this they take the base layer''s derived' + LineEnding +
+    '   --surface-chrome (darken(--surface,6%)); on this near-white skin that tinted band reads as' + LineEnding +
+    '   a grey frame around the content. Headers keep the derived tint — that is what it is for. */' + LineEnding +
+    'TyToolBar, TyToolSeparator, TyStatusBar, TyScrollBar { background: var(--surface); }' + LineEnding +
     'TyCaptionButton { background: transparent; color: var(--ink-muted); border-radius: 20px; }' + LineEnding +
     'TyCaptionButton:hover  { background: alpha(var(--primary), 0.10); color: var(--ink); }' + LineEnding +
     'TyCaptionButton:active { background: alpha(var(--primary), 0.16); color: var(--ink); }' + LineEnding +
@@ -4269,6 +4283,11 @@ begin
     '' + LineEnding +
     '/* Title bar — light headerbar matching the window, flat and square. */' + LineEnding +
     'TyTitleBar, TyRibbonQuickAccess      { background: var(--headerbar); color: var(--title-ink); border-radius: 0; }' + LineEnding +
+    '/* Chrome BARS sit flush on the window surface (the header bar keeps its own Yaru shade' + LineEnding +
+    '   above). Without this they take the base layer''s derived --surface-chrome' + LineEnding +
+    '   (darken(--surface,6%)), which on this near-white skin reads as a grey frame around the' + LineEnding +
+    '   content. Headers keep the derived tint — that is what it is for. */' + LineEnding +
+    'TyToolBar, TyToolSeparator, TyStatusBar, TyScrollBar { background: var(--surface); }' + LineEnding +
     'TyCaptionButton { background: transparent; color: var(--title-ink); border-radius: 5px; }' + LineEnding +
     'TyCaptionButton:hover  { background: alpha(var(--title-ink), 0.10); color: var(--title-ink); }' + LineEnding +
     'TyCaptionButton:active { background: var(--accent); color: on(var(--accent)); }' + LineEnding +

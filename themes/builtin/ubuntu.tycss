@@ -55,6 +55,11 @@ TyLabel, TyHtmlLabel, TyLinkLabel, TyShadowLabel, TyGlowLabel, TyDivider, TyChar
 
 /* Title bar — light headerbar matching the window, flat and square. */
 TyTitleBar, TyRibbonQuickAccess      { background: var(--headerbar); color: var(--title-ink); border-radius: 0; }
+/* Chrome BARS sit flush on the window surface (the header bar keeps its own Yaru shade
+   above). Without this they take the base layer's derived --surface-chrome
+   (darken(--surface,6%)), which on this near-white skin reads as a grey frame around the
+   content. Headers keep the derived tint — that is what it is for. */
+TyToolBar, TyToolSeparator, TyStatusBar, TyScrollBar { background: var(--surface); }
 TyCaptionButton { background: transparent; color: var(--title-ink); border-radius: 5px; }
 TyCaptionButton:hover  { background: alpha(var(--title-ink), 0.10); color: var(--title-ink); }
 TyCaptionButton:active { background: var(--accent); color: on(var(--accent)); }

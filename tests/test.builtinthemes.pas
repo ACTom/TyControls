@@ -35,7 +35,7 @@ type
   published
     procedure TestThemeNameLoadsBuiltinCss;
     procedure TestModePersistsAcrossThemeSwitch;
-    procedure TestAntDesignChromeIsNotDerivedGrey;
+    procedure TestLightSkinChromeBarsAreFlush;
   end;
 implementation
 
@@ -272,34 +272,58 @@ begin
   finally c.Free; end;
 end;
 
-procedure TControllerThemeNameTest.TestAntDesignChromeIsNotDerivedGrey;
-{ antdesign defines --surface = #FFFFFF but used to define neither --surface-chrome nor
-  --titlebar-bg, so both fell back to the BASE layer's darken(--surface,6%) ~ #F0F0F0. On an
-  all-white skin that turned the tool bar, status bar, scrollbars and the title band into a
-  grey frame around the content — the reported bug. Lock the two tokens down: the title band
-  is Ant's white header, and the neutral chrome fill is Ant's #FAFAFA (its real table-header
-  fill), not a derived grey. }
-var c: TTyStyleController; s: TTyStyleSet;
+procedure TControllerThemeNameTest.TestLightSkinChromeBarsAreFlush;
+{ A skin that sets a light --surface but no --surface-chrome inherits the BASE layer's
+  darken(--surface,6%). On a white/near-white skin that tinted band turns the tool bar,
+  status bar and scroll tracks into a grey frame around the content — the reported bug
+  ("工具条很突兀" + "四周灰色边框"). The four light skins now pin those BARS flush to the
+  surface. Headers deliberately keep a tint, so assert that too: flush bars must not have
+  been achieved by flattening --surface-chrome itself. }
+const
+  { skin, and the --surface it declares (the value the bars must sit flush with). Not read off
+    another control: a skin may give buttons/panels their own fill (bootstrap does), so the
+    surface is asserted against the documented token value. }
+  SKINS: array[0..3] of string = ('antdesign', 'bootstrap', 'material3', 'ubuntu');
+  SURF:  array[0..3] of Integer = ($FFFFFF, $FFFFFF, $FAFAFA, $FAFAFA);
+var
+  c: TTyStyleController;
+  s, hdr: TTyStyleSet;
+  i, k: Integer;
+  surfR, surfG, surfB: Integer;
 begin
   TyRegisterBuiltinThemes;
   c := TTyStyleController.Create(nil);
   try
-    c.ThemeName := 'antdesign';
-    c.Mode := 'light';
+    for i := Low(SKINS) to High(SKINS) do
+    begin
+      c.ThemeName := SKINS[i];
+      c.Mode := 'light';
+      surfR := (SURF[i] shr 16) and $FF;
+      surfG := (SURF[i] shr 8) and $FF;
+      surfB := SURF[i] and $FF;
 
-    s := c.Model.ResolveStyle('TyToolBar', '', []);
-    AssertEquals('toolbar fill R is Ant neutral #FAFAFA', $FA, TyRedOf(s.Background.Color));
-    AssertEquals('toolbar fill G', $FA, TyGreenOf(s.Background.Color));
-    AssertEquals('toolbar fill B', $FA, TyBlueOf(s.Background.Color));
+      for k := 0 to 2 do
+      begin
+        case k of
+          0: s := c.Model.ResolveStyle('TyToolBar', '', []);
+          1: s := c.Model.ResolveStyle('TyStatusBar', '', []);
+        else s := c.Model.ResolveStyle('TyScrollBar', '', []);
+        end;
+        AssertEquals(SKINS[i] + ': chrome bar ' + IntToStr(k) + ' R is flush with the surface',
+          surfR, TyRedOf(s.Background.Color));
+        AssertEquals(SKINS[i] + ': chrome bar ' + IntToStr(k) + ' G is flush with the surface',
+          surfG, TyGreenOf(s.Background.Color));
+        AssertEquals(SKINS[i] + ': chrome bar ' + IntToStr(k) + ' B is flush with the surface',
+          surfB, TyBlueOf(s.Background.Color));
+      end;
 
-    s := c.Model.ResolveStyle('TyStatusBar', '', []);
-    AssertEquals('status bar shares that neutral fill', $FA, TyRedOf(s.Background.Color));
-
-    // The title band is Ant's white Layout.Header — this file's own --surface note says so.
-    s := c.Model.ResolveStyle('TyTitleBar', '', []);
-    AssertEquals('title bar is white R', $FF, TyRedOf(s.Background.Color));
-    AssertEquals('title bar is white G', $FF, TyGreenOf(s.Background.Color));
-    AssertEquals('title bar is white B', $FF, TyBlueOf(s.Background.Color));
+      // ...but a grid header still reads as a header: it keeps --surface-chrome's tint.
+      hdr := c.Model.ResolveStyle('TyGridHeader', '', []);
+      AssertTrue(SKINS[i] + ': the grid header keeps a tint distinct from the surface',
+        (TyRedOf(hdr.Background.Color) <> surfR) or
+        (TyGreenOf(hdr.Background.Color) <> surfG) or
+        (TyBlueOf(hdr.Background.Color) <> surfB));
+    end;
   finally c.Free; end;
 end;
 

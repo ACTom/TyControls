@@ -66,6 +66,11 @@ TyTitleBar, TyRibbonQuickAccess {
   border-radius: 0;
 }
 
+/* Chrome BARS sit flush on the surface. Without this they take the base layer's derived
+   --surface-chrome (darken(--surface,6%)); on this white skin that tinted band reads as a
+   grey frame around the content. Headers keep the derived tint — that is what it is for. */
+TyToolBar, TyToolSeparator, TyStatusBar, TyScrollBar { background: var(--surface); }
+
 TyCaptionButton {
   background: var(--surface);
   color: var(--muted);

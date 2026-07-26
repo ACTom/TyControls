@@ -786,7 +786,7 @@ object MainForm: TMainForm
                 'Sun Ba'
               )
               Selected.Strings = (
-                'Week Nine'
+                'Zhou Jiu'
               )
               OnChange = AdvancedPickChange
               LeftTitle = 'candidate'

@@ -55,6 +55,10 @@ TyForm          { background: var(--surface); }
 
 /* Top app bar: flat surface, on-surface ink, circular icon-button state layers. */
 TyTitleBar, TyRibbonQuickAccess      { background: var(--surface); color: var(--ink); border-radius: 0; }
+/* Chrome BARS sit flush on the surface. Without this they take the base layer's derived
+   --surface-chrome (darken(--surface,6%)); on this near-white skin that tinted band reads as
+   a grey frame around the content. Headers keep the derived tint — that is what it is for. */
+TyToolBar, TyToolSeparator, TyStatusBar, TyScrollBar { background: var(--surface); }
 TyCaptionButton { background: transparent; color: var(--ink-muted); border-radius: 20px; }
 TyCaptionButton:hover  { background: alpha(var(--primary), 0.10); color: var(--ink); }
 TyCaptionButton:active { background: alpha(var(--primary), 0.16); color: var(--ink); }
