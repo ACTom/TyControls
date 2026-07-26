@@ -619,3 +619,71 @@ msgstr "工具条:点了“%s”。"
 msgid "Menu: clicked "%s"."
 msgstr "菜单:点了“%s”。"
 
+#: umain.rstaboverview
+msgid "Overview"
+msgstr "概览"
+
+#: umain.rstabdetail
+msgid "Detail"
+msgstr "明细"
+
+#: umain.rstablog
+msgid "Log"
+msgstr "日志"
+
+#: umain.rssegdayitem
+msgid "Day"
+msgstr "日"
+
+#: umain.rssegweekitem
+msgid "Week"
+msgstr "周"
+
+#: umain.rssegmonthitem
+msgid "Month"
+msgstr "月"
+
+#: umain.rsstepfill
+msgid "Fill in the details"
+msgstr "填写信息"
+
+#: umain.rsstepconfirm
+msgid "Confirm information"
+msgstr "确认信息"
+
+#: umain.rsstepdone
+msgid "Done"
+msgstr "完成"
+
+#: umain.rstabbodyoverview1
+msgid "1,330 transactions this month · 230 refunds · fulfilment rate 82.7%"
+msgstr "本月 1,330 笔成交 · 230 笔退款 · 履约率 82.7%"
+
+#: umain.rstabbodyoverview2
+msgid "vs last month +12.4%, mainly from the "Channel" group."
+msgstr "环比 +12.4%,主要来自“渠道”分组。"
+
+#: umain.rstabbodydetail1
+msgid "Work order TY-2041 "Card container TTyCard landed""
+msgstr "工单 TY-2041“卡片容器 TTyCard 已落地”"
+
+#: umain.rstabbodydetail2
+msgid "Owner Zhang San · published · 2026-07-16 10:12"
+msgstr "负责人 张三 · 已发布 · 2026-07-16 10:12"
+
+#: umain.rstabbodylog1
+msgid "10:12 TY-2041 published"
+msgstr "10:12 TY-2041 已发布"
+
+#: umain.rstabbodylog2
+msgid "11:03 TY-2042 published"
+msgstr "11:03 TY-2042 已发布"
+
+#: umain.rstabbodylog3
+msgid "15:47 TY-2043 badge split into its own control"
+msgstr "15:47 TY-2043 徽标拆成独立控件"
+
+#: umain.rstabbodynone
+msgid "(no tab selected)"
+msgstr "(未选中页签)"
+

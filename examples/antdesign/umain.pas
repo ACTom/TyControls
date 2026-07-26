@@ -431,6 +431,29 @@ resourcestring
   rsEchoCrumb = 'Breadcrumb: clicked "%s" — the last segment is the current location, not a link; it does not fire this event at all.';
   rsEchoTool = 'Toolbar: clicked "%s".';
   rsEchoMenu = 'Menu: clicked "%s".';
+  { Item lists shown by the Navigation-page demos. These live in the .lfm as TStrings
+    collections, which the LFM translator cannot reach at all (it only walks TCaption
+    string properties), so LocalizeTexts refills them from resourcestrings. }
+  rsTabOverview = 'Overview';
+  rsTabDetail   = 'Detail';
+  rsTabLog      = 'Log';
+  rsSegDayItem   = 'Day';
+  rsSegWeekItem  = 'Week';
+  rsSegMonthItem = 'Month';
+  rsStepFill    = 'Fill in the details';
+  rsStepConfirm = 'Confirm information';
+  rsStepDone    = 'Done';
+  rsCrumbInteraction = 'Interaction';
+  rsCrumbNavigation  = 'Navigation';
+  { The tab bodies the host swaps in — one resourcestring per line. }
+  rsTabBodyOverview1 = '1,330 transactions this month · 230 refunds · fulfilment rate 82.7%';
+  rsTabBodyOverview2 = 'vs last month +12.4%, mainly from the "Channel" group.';
+  rsTabBodyDetail1   = 'Work order TY-2041 "Card container TTyCard landed"';
+  rsTabBodyDetail2   = 'Owner Zhang San · published · 2026-07-16 10:12';
+  rsTabBodyLog1      = '10:12 TY-2041 published';
+  rsTabBodyLog2      = '11:03 TY-2042 published';
+  rsTabBodyLog3      = '15:47 TY-2043 badge split into its own control';
+  rsTabBodyNone      = '(no tab selected)';
 
 procedure TMainForm.LocalizeTexts;
 begin
@@ -461,6 +484,44 @@ begin
   NavItems[0, 0] := rsNavDashboard; NavItems[0, 1] := rsNavDataDisplay;
   NavItems[1, 0] := rsNavListGrid;  NavItems[1, 1] := rsNavFormEntry;
   NavItems[2, 0] := rsNavFeedback;  NavItems[2, 1] := rsNavNavigation;
+  { The Navigation demos' item LISTS: TStrings in the .lfm, which the translator never
+    walks. Refill them (same order) so the strips read translated. }
+  TabsDemo.Tabs.BeginUpdate;
+  try
+    TabsDemo.Tabs.Clear;
+    TabsDemo.Tabs.Add(rsTabOverview);
+    TabsDemo.Tabs.Add(rsTabDetail);
+    TabsDemo.Tabs.Add(rsTabLog);
+  finally
+    TabsDemo.Tabs.EndUpdate;
+  end;
+  SegRange.Items.BeginUpdate;
+  try
+    SegRange.Items.Clear;
+    SegRange.Items.Add(rsSegDayItem);
+    SegRange.Items.Add(rsSegWeekItem);
+    SegRange.Items.Add(rsSegMonthItem);
+  finally
+    SegRange.Items.EndUpdate;
+  end;
+  StepsFlow.Items.BeginUpdate;
+  try
+    StepsFlow.Items.Clear;
+    StepsFlow.Items.Add(rsStepFill);
+    StepsFlow.Items.Add(rsStepConfirm);
+    StepsFlow.Items.Add(rsStepDone);
+  finally
+    StepsFlow.Items.EndUpdate;
+  end;
+  NavCrumb.Items.BeginUpdate;
+  try
+    NavCrumb.Items.Clear;
+    NavCrumb.Items.Add(rsCrumbHome);
+    NavCrumb.Items.Add(rsCrumbInteraction);
+    NavCrumb.Items.Add(rsCrumbNavigation);
+  finally
+    NavCrumb.Items.EndUpdate;
+  end;
 end;
 
 procedure TMainForm.FormCreate(Sender: TObject);
@@ -1043,18 +1104,14 @@ end;
 procedure TMainForm.TabsDemoChange(Sender: TObject);
 begin
   case TabsDemo.TabIndex of
-    0: LblTabsBody.Caption := 'Overview' + LineEnding +
-         '1,330 transactions this month · 230 refunds · fulfilment rate 82.7%' + LineEnding +
-         'vs last month +12.4%, mainly from the "Channel" group.';
-    1: LblTabsBody.Caption := 'Detail' + LineEnding +
-         'Work order TY-2041 "Card container TTyCard landed"' + LineEnding +
-         'Owner Zhang San · published · 2026-07-16 10:12';
-    2: LblTabsBody.Caption := 'Log' + LineEnding +
-         '10:12 TY-2041 published' + LineEnding +
-         '11:03 TY-2042 published' + LineEnding +
-         '15:47 TY-2043 badge split into its own control';
+    0: LblTabsBody.Caption := rsTabOverview + LineEnding +
+         rsTabBodyOverview1 + LineEnding + rsTabBodyOverview2;
+    1: LblTabsBody.Caption := rsTabDetail + LineEnding +
+         rsTabBodyDetail1 + LineEnding + rsTabBodyDetail2;
+    2: LblTabsBody.Caption := rsTabLog + LineEnding +
+         rsTabBodyLog1 + LineEnding + rsTabBodyLog2 + LineEnding + rsTabBodyLog3;
   else
-    LblTabsBody.Caption := '(no tab selected)';
+    LblTabsBody.Caption := rsTabBodyNone;
   end;
   LblNavNote.Caption := Format(rsEchoTab, [TabsDemo.Tabs[TabsDemo.TabIndex]]);
 end;
