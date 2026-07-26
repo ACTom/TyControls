@@ -59,6 +59,7 @@ type
     procedure TestAutoSizeFitsTheCaption;
     procedure TestAutoSizeRefitsWhenTheCaptionGrows;
     procedure TestAutoSizeSurvivesAHeightPinningParent;
+    procedure TestAutoSizeRefitsOnThemeChange;
   end;
 implementation
 
@@ -605,6 +606,45 @@ begin
     AssertTrue('and the button is still a sane size', (B.Width > 0) and (B.Height > 0));
   finally
     F.Free;
+  end;
+end;
+
+procedure TButtonTest.TestAutoSizeRefitsOnThemeChange;
+{ Regression: switching the SKIN changed the font and padding, but an AutoSize button kept
+  the width the previous theme gave it — so the demo's tool-bar captions were ellipsised
+  again the moment the skin changed. A theme switch reaches controls as a bare Invalidate,
+  which is where the re-fit has to happen (TTyBadge re-measures the same way).
+  Asserted through CalculatePreferredSize, since AutoSizeDelayed blocks a real resize while
+  the parent form has no handle. }
+var
+  Ctl: TTyStyleController;
+  B: TTyButtonAccess;
+  tight, roomy, h: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    B := TTyButtonAccess.Create(nil);
+    try
+      B.Controller := Ctl;
+      B.Font.PixelsPerInch := 96;
+      B.AutoSize := True;
+      B.Caption := 'Save';
+
+      Ctl.LoadThemeCss('TyButton { background: #FFFFFF; color: #000000; padding: 4px 4px; font-size: 12px; }');
+      B.CallPreferred(tight, h);
+
+      // A roomier theme: same caption, much more padding — the button must want more width.
+      Ctl.LoadThemeCss('TyButton { background: #FFFFFF; color: #000000; padding: 4px 30px; font-size: 12px; }');
+      B.CallPreferred(roomy, h);
+      AssertTrue(Format('a roomier theme widens the button (%d -> %d)', [tight, roomy]),
+        roomy > tight);
+      // 26px more padding per side = 52px more width, and nothing else changed.
+      AssertEquals('the extra width is exactly the extra padding', tight + 52, roomy);
+    finally
+      B.Free;
+    end;
+  finally
+    Ctl.Free;
   end;
 end;
 

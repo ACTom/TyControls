@@ -23,6 +23,7 @@ type
     FModalResult: TModalResult;
     FDown: Boolean;
     FShowBadge: Boolean;
+    FRefitting: Boolean;   // guards the AutoSize re-fit in Invalidate against re-entry
     FBadgeValue: Integer;
     FBadgePosition: TTyBadgePosition;
     FOnBadgeDisplay: TTyBadgeDisplayEvent;
@@ -71,6 +72,9 @@ type
       re-measure to the new text (mirrors TTyTag / TTyLabel). }
     procedure TextChanged; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    { A theme switch arrives as a bare Invalidate, and the new theme's font/padding change the
+      width the caption needs — so an AutoSize button must re-fit here too. }
+    procedure Invalidate; override;
     procedure Paint; override;
     function DialogChar(var Message: TLMKey): Boolean; override;
     procedure MouseEnter; override;
@@ -538,6 +542,28 @@ begin
     AdjustSize;
   end;
   Invalidate;
+end;
+
+procedure TTyButton.Invalidate;
+begin
+  inherited Invalidate;
+  { A theme switch reaches every control as a bare Invalidate (TTyStyleController broadcasts
+    one to each registered control), and the new theme brings a different font and padding —
+    so the width an AutoSize button needs changed too. Without re-fitting here the button
+    keeps the old theme's width and the caption is ellipsised, which is exactly what the
+    demo's tool-bar buttons did when the skin was switched to antdesign.
+    TTyBadge re-measures from its own Invalidate override for the same reason.
+    FRefitting guards the re-entry: AdjustSize -> SetBounds -> Invalidate would recurse. }
+  if AutoSize and not FRefitting and not (csDestroying in ComponentState) then
+  begin
+    FRefitting := True;
+    try
+      InvalidatePreferredSize;
+      AdjustSize;
+    finally
+      FRefitting := False;
+    end;
+  end;
 end;
 
 procedure TTyButton.MeasureCaption(APPI: Integer; out AWidth, AHeight: Integer);
