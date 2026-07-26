@@ -245,6 +245,11 @@ type
     LblExpBody: TTyLabel;
 
     procedure FormCreate(Sender: TObject);
+    { Assign the code-set / string-typed captions from resourcestrings, which SetDefaultLang
+      DOES translate — LCL's LFM translator only touches TCaption/TTranslateString properties,
+      so TTyCard.Title, TTyToggleSwitch.Caption, and every caption built in code stay English
+      unless we push a translated resourcestring into them here. }
+    procedure LocalizeTexts;
     procedure FormResize(Sender: TObject);
     { 换肤 }
     procedure ThemeComboChange(Sender: TObject);
@@ -306,16 +311,6 @@ type
   end;
 
 const
-  { The Sider's nav model. A collapsible MENU is (group -> items), so the model is too:
-    an item is addressed by the (group, item) pair the panel hands back in OnItemClick.
-    The old tree carried a flat 9-entry list + a parent-link column to fake this shape;
-    the accordion IS the shape, so the parent column is gone. }
-  NavGroups: array[0..2] of string = (
-    'Workbench', 'Content', 'Interaction');
-  NavItems: array[0..2, 0..1] of string = (
-    ('Dashboard',       'Data display'),
-    ('List / grid',  'Form / entry'),
-    ('Feedback',         'Navigation'));
   { The TTyPageControl page each item opens. Same index pair as NavItems. }
   NavItemPage: array[0..2, 0..1] of Integer = (
     (0, 5),
@@ -347,6 +342,11 @@ const
 
 var
   MainForm: TMainForm;
+  { The Sider's nav model (group -> items), addressed by the (group, item) pair OnItemClick
+    hands back. VAR, not const: LocalizeTexts fills them from resourcestrings so the Sider and
+    breadcrumb read translated text (they are code-built, not TCaption LFM properties). }
+  NavGroups: array[0..2] of string;
+  NavItems: array[0..2, 0..1] of string;
 
 implementation
 
@@ -354,11 +354,82 @@ implementation
 
 { ============================ 主题装配 / 换肤 ============================== }
 
+resourcestring
+  { Values match the .po msgids exactly, so SetDefaultLang translates them at startup and the
+    assignments below push the translated text into the string-typed / code-built captions. }
+  rsCardVisits   = 'Visits today';
+  rsCardOrders   = 'Order volume';
+  rsCardCpu      = 'CPU usage';
+  rsCardHealth   = 'Service health';
+  rsCardChart    = 'Turnover / refunds, last six months';
+  rsCardStatus   = 'System status';
+  rsCardForm     = 'New work order';
+  rsCardFormTodo = 'Advanced entry';
+  rsCardModal    = 'Modal feedback (existing)';
+  rsCardProgress = 'Progress & busy';
+  rsCardInline   = 'Inline alert bar (TTyAlert)';
+  rsCardFloat    = 'Popover feedback';
+  rsCardTabs     = 'Tab strip (TTyTabSet)';
+  rsCardSeg      = 'Segmented control (TTySegmented)';
+  rsCardSteps    = 'Step bar (TTySteps)';
+  rsCardCrumb    = 'Breadcrumb (TTyBreadcrumb)';
+  rsCardTree     = 'Org tree';
+  rsCardTags     = 'Tags & badges';
+  rsCardImage    = 'Picture';
+  rsDark         = 'Dark';
+  rsNavWorkbench   = 'Workbench';
+  rsNavContent     = 'Content';
+  rsNavInteraction = 'Interaction';
+  rsNavDashboard   = 'Dashboard';
+  rsNavDataDisplay = 'Data display';
+  rsNavListGrid    = 'List / grid';
+  rsNavFormEntry   = 'Form / entry';
+  rsNavFeedback    = 'Feedback';
+  rsNavNavigation  = 'Navigation';
+  rsCrumbHome  = 'Home';
+  rsColNo      = 'No.';
+  rsColTitle   = 'Title';
+  rsColOwner   = 'Owner';
+  rsColStatus  = 'Status';
+  rsColUpdated = 'Updated time';
+
+procedure TMainForm.LocalizeTexts;
+begin
+  // Card titles (TTyCard.Title is a plain string, so LCL never translates it — do it here).
+  CardVisits.Title   := rsCardVisits;
+  CardOrders.Title   := rsCardOrders;
+  CardCpu.Title      := rsCardCpu;
+  CardHealth.Title   := rsCardHealth;
+  CardChart.Title    := rsCardChart;
+  CardStatus.Title   := rsCardStatus;
+  CardForm.Title     := rsCardForm;
+  CardFormTodo.Title := rsCardFormTodo;
+  CardModal.Title    := rsCardModal;
+  CardProgress.Title := rsCardProgress;
+  CardInline.Title   := rsCardInline;
+  CardFloat.Title    := rsCardFloat;
+  CardTabs.Title     := rsCardTabs;
+  CardSeg.Title      := rsCardSeg;
+  CardSteps.Title    := rsCardSteps;
+  CardCrumb.Title    := rsCardCrumb;
+  CardTree.Title     := rsCardTree;
+  CardTags.Title     := rsCardTags;
+  CardImage.Title    := rsCardImage;
+  DarkSwitch.Caption := rsDark;
+  // Nav groups + items are consts built into the Sider + breadcrumb; fill the (now var) arrays
+  // from resourcestrings BEFORE BuildSider runs.
+  NavGroups[0] := rsNavWorkbench;  NavGroups[1] := rsNavContent;    NavGroups[2] := rsNavInteraction;
+  NavItems[0, 0] := rsNavDashboard; NavItems[0, 1] := rsNavDataDisplay;
+  NavItems[1, 0] := rsNavListGrid;  NavItems[1, 1] := rsNavFormEntry;
+  NavItems[2, 0] := rsNavFeedback;  NavItems[2, 1] := rsNavNavigation;
+end;
+
 procedure TMainForm.FormCreate(Sender: TObject);
 var
   names: TStringArray;
   i: Integer;
 begin
+  LocalizeTexts;
   { Built-in themes are compiled in, so the switcher works without locating a
     themes/ folder. This example's home skin is 'antdesign' (not 'default'). }
   TyRegisterBuiltinThemes;
@@ -645,7 +716,7 @@ begin
   Crumb.Items.BeginUpdate;
   try
     Crumb.Items.Clear;
-    Crumb.Items.Add('Home');
+    Crumb.Items.Add(rsCrumbHome);
     Crumb.Items.Add(NavGroups[AGroup]);
     Crumb.Items.Add(NavItems[AGroup, AItem]);
   finally
@@ -752,11 +823,11 @@ procedure TMainForm.BuildList;
 begin
   GridOrders.Header.Columns.BeginUpdate;
   try
-    AddCol('No.',     140, taLeftJustify);
-    AddCol('Title',     400, taLeftJustify);
-    AddCol('Owner',   120, taLeftJustify);
-    AddCol('Status',     130, taLeftJustify);
-    AddCol('Updated time', 230, taLeftJustify);
+    AddCol(rsColNo,      140, taLeftJustify);
+    AddCol(rsColTitle,   400, taLeftJustify);
+    AddCol(rsColOwner,   120, taLeftJustify);
+    AddCol(rsColStatus,  130, taLeftJustify);
+    AddCol(rsColUpdated, 230, taLeftJustify);
   finally
     GridOrders.Header.Columns.EndUpdate;
   end;

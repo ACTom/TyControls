@@ -467,3 +467,35 @@ msgstr "帮助(&H)"
 msgid "About(&A)"
 msgstr "关于(&A)"
 
+#: umain.rsnavworkbench
+msgid "Workbench"
+msgstr "工作台"
+
+#: umain.rsnavcontent
+msgid "Content"
+msgstr "内容管理"
+
+#: umain.rsnavinteraction
+msgid "Interaction"
+msgstr "交互"
+
+#: umain.rscrumbhome
+msgid "Home"
+msgstr "首页"
+
+#: umain.rscolno
+msgid "No."
+msgstr "编号"
+
+#: umain.rscolowner
+msgid "Owner"
+msgstr "负责人"
+
+#: umain.rscolstatus
+msgid "Status"
+msgstr "状态"
+
+#: umain.rscolupdated
+msgid "Updated time"
+msgstr "更新时间"
+
