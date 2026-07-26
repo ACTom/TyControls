@@ -691,3 +691,87 @@ msgstr "(未选中页签)"
 msgid "Awaiting scheduling"
 msgstr "待排期"
 
+#: umain.rsorgroot
+msgid "TyControls Inc."
+msgstr "TyControls 公司"
+
+#: umain.rsorgrnd
+msgid "R&D center"
+msgstr "研发中心"
+
+#: umain.rsorgctlgroup
+msgid "Control group"
+msgstr "控件组"
+
+#: umain.rsorgthemeteam
+msgid "Theme group"
+msgstr "主题组"
+
+#: umain.rsorgmarketing
+msgid "Marketing dept."
+msgstr "市场部"
+
+#: umain.rsorgchannel
+msgid "Channel"
+msgstr "渠道"
+
+#: umain.rsorgcontent
+msgid "Content"
+msgstr "内容"
+
+#: umain.rsorgsupport
+msgid "Support dept."
+msgstr "支持部"
+
+#: umain.rsorgfrontline
+msgid "front-line support"
+msgstr "一线支持"
+
+#: umain.rshinttitle
+msgid "Enter the work order title"
+msgstr "请输入工单标题"
+
+#: umain.rshintdept
+msgid "Please choose an owning department"
+msgstr "请选择归属部门"
+
+#: umain.rschanemail
+msgid "Email"
+msgstr "邮件"
+
+#: umain.rschansms
+msgid "SMS"
+msgstr "短信"
+
+#: umain.rschaninternal
+msgid "Internal message"
+msgstr "站内信"
+
+#: umain.rstypedefect
+msgid "Defect"
+msgstr "缺陷"
+
+#: umain.rstypeconsulting
+msgid "Consulting"
+msgstr "咨询"
+
+#: umain.rstypeother
+msgid "Other"
+msgstr "其他"
+
+#: umain.rstrflefttitle
+msgid "candidate"
+msgstr "待选"
+
+#: umain.rstrfrighttitle
+msgid "Selected"
+msgstr "已选"
+
+#: umain.rsadvpick
+msgid "Current selection: dept %s · region %s · %d notified"
+msgstr "当前选择:部门 %s · 地区 %s · 通知 %d 人"
+
+#: umain.rsnoneselected
+msgid "(none selected)"
+msgstr "(未选择)"
+

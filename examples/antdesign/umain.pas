@@ -329,11 +329,6 @@ const
 
   { The org tree, used TWICE: spread across a panel (数据展示) and folded into a form
     row's drop (表单页 · TTyTreeSelect) — same data, two ways of spending screen. }
-  OrgCaptions: array[0..8] of string = (
-    'TyControls Inc.',
-    'R&D center', 'Control group', 'Theme group',
-    'Marketing dept.',   'Channel',   'Content',
-    'Support dept.',   'front-line support');
   OrgParent: array[0..8] of Integer = (
     -1,
     0, 1, 1,
@@ -347,6 +342,9 @@ var
     breadcrumb read translated text (they are code-built, not TCaption LFM properties). }
   NavGroups: array[0..2] of string;
   NavItems: array[0..2, 0..1] of string;
+  { The org tree's node captions — VAR for the same reason: LocalizeTexts fills them from
+    resourcestrings (OrgParent stays a const; only the text is translatable). }
+  OrgCaptions: array[0..8] of string;
 
 implementation
 
@@ -460,6 +458,35 @@ resourcestring
   rsStatePublished = 'Published';
   rsStateDraft     = 'Draft';
   rsStateAwaiting  = 'Awaiting scheduling';
+  { TTyExPanel.Caption is another string-typed (untranslatable) property. }
+  rsExpDataCaption = 'Collapse panel (≈ Ant Design''s Collapse)';
+  { The org tree's node captions — a const array built in code. }
+  rsOrgRoot      = 'TyControls Inc.';
+  rsOrgRnd       = 'R&D center';
+  rsOrgCtlGroup  = 'Control group';
+  rsOrgThemeTeam = 'Theme group';
+  rsOrgMarketing = 'Marketing dept.';
+  rsOrgChannel   = 'Channel';
+  rsOrgContent   = 'Content';
+  rsOrgSupport   = 'Support dept.';
+  rsOrgFrontline = 'front-line support';
+  { Form page. TextHint / GroupBox.Caption / ToggleSwitch.Caption are string-typed, and the
+    combo + check-group items are TStrings collections — none of them translate from the .lfm. }
+  rsHintTitle      = 'Enter the work order title';
+  rsHintDept       = 'Please choose an owning department';
+  rsUrgentOn       = 'On';
+  rsGrpNotifyChan  = 'Notification channel';
+  rsChanEmail      = 'Email';
+  rsChanSms        = 'SMS';
+  rsChanInternal   = 'Internal message';
+  rsTypeFeature    = 'Feature request';
+  rsTypeDefect     = 'Defect';
+  rsTypeConsulting = 'Consulting';
+  rsTypeOther      = 'Other';
+  rsTrfLeftTitle   = 'candidate';
+  rsTrfRightTitle  = 'Selected';
+  rsAdvPick        = 'Current selection: dept %s · region %s · %d notified';
+  rsNoneSelected   = '(none selected)';
 
 procedure TMainForm.LocalizeTexts;
 begin
@@ -528,6 +555,40 @@ begin
   finally
     NavCrumb.Items.EndUpdate;
   end;
+  ExpData.Caption := rsExpDataCaption;
+  { Form page: string-typed hints/captions + TStrings item lists. }
+  EdName.TextHint := rsHintTitle;
+  TsDept.TextHint := rsHintDept;
+  SwUrgent.Caption := rsUrgentOn;
+  RgChannel.Caption := rsGrpNotifyChan;
+  RgChannel.Items.BeginUpdate;
+  try
+    RgChannel.Items.Clear;
+    RgChannel.Items.Add(rsChanEmail);
+    RgChannel.Items.Add(rsChanSms);
+    RgChannel.Items.Add(rsChanInternal);
+  finally
+    RgChannel.Items.EndUpdate;
+  end;
+  RgChannel.ItemIndex := 0;
+  CbKind.Items.BeginUpdate;
+  try
+    CbKind.Items.Clear;
+    CbKind.Items.Add(rsTypeFeature);
+    CbKind.Items.Add(rsTypeDefect);
+    CbKind.Items.Add(rsTypeConsulting);
+    CbKind.Items.Add(rsTypeOther);
+  finally
+    CbKind.Items.EndUpdate;
+  end;
+  CbKind.ItemIndex := 0;
+  TrfMembers.LeftTitle := rsTrfLeftTitle;
+  TrfMembers.RightTitle := rsTrfRightTitle;
+  // Org tree node captions (same order as OrgParent) — filled before BuildOrgTree runs.
+  OrgCaptions[0] := rsOrgRoot;
+  OrgCaptions[1] := rsOrgRnd;       OrgCaptions[2] := rsOrgCtlGroup; OrgCaptions[3] := rsOrgThemeTeam;
+  OrgCaptions[4] := rsOrgMarketing; OrgCaptions[5] := rsOrgChannel;  OrgCaptions[6] := rsOrgContent;
+  OrgCaptions[7] := rsOrgSupport;   OrgCaptions[8] := rsOrgFrontline;
 end;
 
 procedure TMainForm.FormCreate(Sender: TObject);
@@ -1377,11 +1438,11 @@ procedure TMainForm.AdvancedPickChange(Sender: TObject);
 
   function Pick(const AText: string): string;
   begin
-    if AText = '' then Result := '(none selected)' else Result := AText;
+    if AText = '' then Result := rsNoneSelected else Result := AText;
   end;
 
 begin
-  LblAdvPick.Caption := Format('Current selection: dept %s · region %s · %d notified',
+  LblAdvPick.Caption := Format(rsAdvPick,
     [Pick(TsDept.Text), Pick(CasRegion.Text), TrfMembers.Selected.Count]);
 end;
 
