@@ -52,7 +52,6 @@ type
     procedure SetStyleClass(const AValue: string);
     procedure SetStyleOverride(const AValue: string);
     procedure SetController(AValue: TTyStyleController);
-    procedure CMEnabledChanged(var Msg: TLMessage); message CM_ENABLEDCHANGED;
   protected
     FHover, FPressed: Boolean;
     function _AddRef: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
@@ -120,7 +119,6 @@ type
     FOvrCacheValid: Boolean;
     procedure SetStyleClass(const AValue: string);
     procedure SetStyleOverride(const AValue: string);
-    procedure CMEnabledChanged(var Msg: TLMessage); message CM_ENABLEDCHANGED;
   protected
     FHover, FPressed: Boolean;
     procedure SetController(AValue: TTyStyleController); virtual;
@@ -371,11 +369,6 @@ begin
   if FController <> nil then
     FController.FreeNotification(Self);
   ActiveController.RegisterStyleable(Self);
-  Invalidate;
-end;
-
-procedure TTyGraphicControl.CMEnabledChanged(var Msg{%H-}: TLMessage);
-begin
   Invalidate;
 end;
 
@@ -815,11 +808,6 @@ begin
   if FController <> nil then
     FController.FreeNotification(Self);
   ActiveController.RegisterStyleable(Self);
-  Invalidate;
-end;
-
-procedure TTyCustomControl.CMEnabledChanged(var Msg{%H-}: TLMessage);
-begin
   Invalidate;
 end;
 

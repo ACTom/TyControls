@@ -267,6 +267,11 @@ begin
     FCombo.PopupList.SelectItem(2);
     AssertEquals('combo Text updated after popup selection', 'Cherry', FCombo.Text);
     AssertEquals('combo ItemIndex updated', 2, FCombo.ItemIndex);
+    { DoPopupPick commits the row and QUEUES the close (QueueAsyncCall), so the dropdown
+      only shuts once the queue is pumped. Pump it, or this asserts nothing: with no
+      widgetset the popup never opened at all and DroppedDown was False for that reason
+      instead of this one. }
+    Forms.Application.ProcessMessages;
     AssertFalse('DroppedDown=False after selection', FCombo.DroppedDown);
     AssertEquals('OnChange fired exactly once', 1, Probe.Count);
   finally
