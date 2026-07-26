@@ -86,6 +86,8 @@ type
     procedure TestMoveFiresOnChangeOnce;
     procedure TestClickingTheRailMoves;
     procedure TestClickingARowThenTheRailMoves;
+    procedure TestSecondMoveAfterAMoveBack;
+    procedure TestPickAndMoveAfterMoveAllRoundTrip;
     procedure TestRailIgnoresTheOtherPanesSelection;
     procedure TestControllerReachesTheChildren;
     procedure TestFrameRendersThemeBackground;
@@ -1080,6 +1082,71 @@ begin
     T.MoveButton[tmMoveRight].Click;
     AssertEquals('the row moved across', 'a', T.Selected.CommaText);
     AssertEquals('and left the source', 'b,c,d,e', T.Items.CommaText);
+  finally
+    T.Free;
+  end;
+end;
+
+procedure TTyTransferControlTest.TestSecondMoveAfterAMoveBack;
+{ The reported repro, read off the user's screenshot: the right pane's row had already been
+  moved LEFT (left pane holds it, right pane is empty), it is highlighted there, the rightward
+  arrow LOOKS enabled — and clicking it does nothing. So: does a move still work AFTER an
+  earlier move, when the row is picked by a real mouse click on its new home? }
+var
+  T: TTyTransfer;
+begin
+  FCtl.LoadThemeCss(FlatFrame);
+  T := NewTransfer;
+  try
+    // Seed the screenshot's starting shape: one row on the right, the rest on the left.
+    T.Selected.Add('x');
+    // 1) bring it back leftwards, the way the user did.
+    TPaneAccess(T.RightPane).ClickRow(0);
+    AssertTrue('the right row registered', T.RightPane.Selected[0]);
+    AssertTrue('leftward arrow armed', T.MoveButton[tmMoveLeft].Enabled);
+    T.MoveButton[tmMoveLeft].Click;
+    AssertEquals('it came back to the left', 'a,b,c,d,e,x', T.Items.CommaText);
+    AssertEquals('right pane is now empty', '', T.Selected.CommaText);
+
+    // 2) now pick it in its NEW home and send it right again.
+    TPaneAccess(T.LeftPane).ClickRow(5);          // 'x' is last on the left
+    AssertTrue('the click registered on the moved row', T.LeftPane.Selected[5]);
+    AssertTrue('rightward arrow armed again', T.MoveButton[tmMoveRight].Enabled);
+    T.MoveButton[tmMoveRight].Click;
+    AssertEquals('the second move DID move it', 'x', T.Selected.CommaText);
+    AssertEquals('and it left the left pane', 'a,b,c,d,e', T.Items.CommaText);
+  finally
+    T.Free;
+  end;
+end;
+
+procedure TTyTransferControlTest.TestPickAndMoveAfterMoveAllRoundTrip;
+{ THE reported repro, reconstructed from the user's screenshot: the left pane held the RIGHT
+  pane's row FIRST, ahead of the original left rows, and the right pane was empty. That exact
+  ordering can only come from "move all right" followed by "move all left" — the round trip
+  re-appends the right pane's contents ahead of the originals. From that state the user picked
+  a row and pressed the rightward arrow, and nothing moved.
+  So: after a move-all round trip, does a plain pick + move still work? }
+var
+  T: TTyTransfer;
+begin
+  FCtl.LoadThemeCss(FlatFrame);
+  T := NewTransfer;
+  try
+    T.Selected.Add('x');                       // start: left a..e, right x
+    T.MoveButton[tmMoveAllRight].Click;        // -> left empty, right x,a..e
+    AssertEquals('all went right', '', T.Items.CommaText);
+    T.MoveButton[tmMoveAllLeft].Click;         // -> left x,a..e   right empty
+    AssertEquals('and all came back, right-pane rows first', 'x,a,b,c,d,e', T.Items.CommaText);
+    AssertEquals('right pane empty', '', T.Selected.CommaText);
+
+    // The screenshot's state. Now pick the first row and send it across.
+    TPaneAccess(T.LeftPane).ClickRow(0);
+    AssertTrue('the pick registered after the round trip', T.LeftPane.Selected[0]);
+    AssertTrue('rightward arrow is armed', T.MoveButton[tmMoveRight].Enabled);
+    T.MoveButton[tmMoveRight].Click;
+    AssertEquals('the row moved across', 'x', T.Selected.CommaText);
+    AssertEquals('and left the source', 'a,b,c,d,e', T.Items.CommaText);
   finally
     T.Free;
   end;

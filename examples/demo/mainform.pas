@@ -148,6 +148,13 @@ type
       var ChildCount: Cardinal);
     procedure TyTree1GetText(Sender: TTyTreeView; Node: PTyTreeNode;
       var AText: string);
+    { Fills the NATIVE LCL TreeView on the 'Native' tab. Built in code, not streamed:
+      TTreeNodes stores design-time nodes as an `Items.Data` binary blob and, although LCL
+      does define that pseudo-property (TTreeNodes.DefineProperties), the IDE's LFM checker
+      does not honour DefineProperties — it rejects the whole form with "identifier Data not
+      found in class TTreeNodes" and offers to strip it, so the demo would not open in the
+      IDE. Building here also keeps the labels translatable; the blob hid untranslated text. }
+    procedure BuildNativeTree;
     { Multi-column sortable tree handlers }
     procedure TyColTreeInitNode(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
       var InitStates: TTyNodeInitStates);
@@ -220,6 +227,7 @@ resourcestring
   rsDemoTabCmd   = 'Command buttons';
   rsDemoTabIcons = 'Icons · text';
   rsDemoOptions  = 'Options';
+  rsDemoNativeNode = 'Item %d';
 
 function TDemoMainForm.ThemeDir: string;
 var
@@ -259,6 +267,7 @@ end;
 procedure TDemoMainForm.FormCreate(Sender: TObject);
 begin
   LocalizeTexts;
+  BuildNativeTree;            // the 'Native' tab's LCL TreeView — see BuildNativeTree's note
   Randomize;                  // seed the "random theme" button
   // Controls (incl. the title bar/tabs/spin/memo AND the theme switcher) come from the
   // .lfm. Associate the themed menu bar (shortcut dispatch / macOS global menu), then
@@ -582,6 +591,26 @@ procedure TDemoMainForm.TyTree1InitChildren(Sender: TTyTreeView; Node: PTyTreeNo
   var ChildCount: Cardinal);
 begin
   ChildCount := 10;
+end;
+
+procedure TDemoMainForm.BuildNativeTree;
+var
+  i, j: Integer;
+  root: TTreeNode;
+begin
+  TreeView1.Items.BeginUpdate;
+  try
+    TreeView1.Items.Clear;
+    for i := 1 to 4 do
+    begin
+      root := TreeView1.Items.Add(nil, Format(rsDemoNativeNode, [i]));
+      for j := 1 to 3 do
+        TreeView1.Items.AddChild(root, Format(rsDemoNativeNode, [i * 10 + j]));
+    end;
+    if TreeView1.Items.Count > 0 then TreeView1.Items[0].Expand(False);
+  finally
+    TreeView1.Items.EndUpdate;
+  end;
 end;
 
 procedure TDemoMainForm.TyTree1GetText(Sender: TTyTreeView; Node: PTyTreeNode;
