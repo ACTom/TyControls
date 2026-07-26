@@ -35,6 +35,7 @@ type
   published
     procedure TestThemeNameLoadsBuiltinCss;
     procedure TestModePersistsAcrossThemeSwitch;
+    procedure TestAntDesignChromeIsNotDerivedGrey;
   end;
 implementation
 
@@ -268,6 +269,37 @@ begin
     AssertEquals('mode persists after theme switch', 'dark', c.Mode);
     AssertEquals('nord dark surface R', $2E,
       TyRedOf(c.Model.ResolveStyle('TyButton', '', []).Background.Color));
+  finally c.Free; end;
+end;
+
+procedure TControllerThemeNameTest.TestAntDesignChromeIsNotDerivedGrey;
+{ antdesign defines --surface = #FFFFFF but used to define neither --surface-chrome nor
+  --titlebar-bg, so both fell back to the BASE layer's darken(--surface,6%) ~ #F0F0F0. On an
+  all-white skin that turned the tool bar, status bar, scrollbars and the title band into a
+  grey frame around the content — the reported bug. Lock the two tokens down: the title band
+  is Ant's white header, and the neutral chrome fill is Ant's #FAFAFA (its real table-header
+  fill), not a derived grey. }
+var c: TTyStyleController; s: TTyStyleSet;
+begin
+  TyRegisterBuiltinThemes;
+  c := TTyStyleController.Create(nil);
+  try
+    c.ThemeName := 'antdesign';
+    c.Mode := 'light';
+
+    s := c.Model.ResolveStyle('TyToolBar', '', []);
+    AssertEquals('toolbar fill R is Ant neutral #FAFAFA', $FA, TyRedOf(s.Background.Color));
+    AssertEquals('toolbar fill G', $FA, TyGreenOf(s.Background.Color));
+    AssertEquals('toolbar fill B', $FA, TyBlueOf(s.Background.Color));
+
+    s := c.Model.ResolveStyle('TyStatusBar', '', []);
+    AssertEquals('status bar shares that neutral fill', $FA, TyRedOf(s.Background.Color));
+
+    // The title band is Ant's white Layout.Header — this file's own --surface note says so.
+    s := c.Model.ResolveStyle('TyTitleBar', '', []);
+    AssertEquals('title bar is white R', $FF, TyRedOf(s.Background.Color));
+    AssertEquals('title bar is white G', $FF, TyGreenOf(s.Background.Color));
+    AssertEquals('title bar is white B', $FF, TyBlueOf(s.Background.Color));
   finally c.Free; end;
 end;
 

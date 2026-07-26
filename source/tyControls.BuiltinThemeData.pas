@@ -1727,6 +1727,12 @@ begin
     '    --danger:         #FF4D4F;   /* Ant error red — danger-button fill                                  */' + LineEnding +
     '    --window:         #F0F2F5;   /* AntD layout gray — white cards float on it (the demo IS cards)       */' + LineEnding +
     '    --surface:        #FFFFFF;   /* title bar, button face, field wells, checkbox                       */' + LineEnding +
+    '    /* Chrome fill. WITHOUT these two the base layer derives darken(--surface,6%) = a ~#F0F0F0' + LineEnding +
+    '       grey, which on this all-white skin makes the tool bar / status bar / scrollbars and the' + LineEnding +
+    '       title band read as a grey frame around the content. Ant''s chrome is white and its' + LineEnding +
+    '       neutral fill (table headers, tag chips) is #FAFAFA, so split them the way Ant does. */' + LineEnding +
+    '    --titlebar-bg:    var(--surface);  /* Ant''s Layout.Header is white — as this file''s --surface note says */' + LineEnding +
+    '    --surface-chrome: #FAFAFA;   /* Ant''s neutral fill: table/tree headers, tool + status bar            */' + LineEnding +
     '    --ink:            #000000E0;  /* near-black 88% primary text                                        */' + LineEnding +
     '    --muted:          #000000A6;  /* caption-button ink                                                 */' + LineEnding +
     '    --ink-disabled:   #00000040;  /* disabled text                                                      */' + LineEnding +
@@ -1752,6 +1758,8 @@ begin
     '    --danger:         #DC4446;   /* Ant error red, deepened for dark-mode contrast         */' + LineEnding +
     '    --window:         #141414;   /* deep neutral canvas                                    */' + LineEnding +
     '    --surface:        #1F1F1F;   /* title bar, button face, field wells, checkbox         */' + LineEnding +
+    '    --titlebar-bg:    var(--surface);  /* white-equivalent chrome on dark: the elevated surface */' + LineEnding +
+    '    --surface-chrome: #262626;   /* Ant''s dark neutral fill: headers, tool + status bar    */' + LineEnding +
     '    --ink:            #FFFFFFD9;  /* light 85% primary text                                */' + LineEnding +
     '    --muted:          #FFFFFFA6;  /* caption-button ink                                    */' + LineEnding +
     '    --ink-disabled:   #FFFFFF40;  /* disabled text                                         */' + LineEnding +
