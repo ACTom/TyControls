@@ -29,10 +29,10 @@ object MainForm: TMainForm
       Align = alTop
       ButtonWidth = 46
       object DarkSwitch: TTyToggleSwitch
-        Left = 740
+        Left = 718
         Height = 28
         Top = 5
-        Width = 96
+        Width = 114
         TabOrder = 3
         TabStop = True
         Caption = 'Dark'
@@ -50,10 +50,10 @@ object MainForm: TMainForm
         Anchors = [akTop, akRight]
       end
       object BtnUser: TTyMenuButton
-        Left = 604
+        Left = 526
         Height = 38
         Top = 2
-        Width = 118
+        Width = 184
         TabOrder = 2
         Caption = 'Administrator'
         StyleClass = 'ghost'
@@ -65,7 +65,7 @@ object MainForm: TMainForm
       Left = 0
       Height = 726
       Top = 34
-      Width = 216
+      Width = 224
       TabOrder = 1
       HeaderHeight = 48
       ItemHeight = 44
@@ -264,12 +264,12 @@ object MainForm: TMainForm
                   Left = 16
                   Height = 30
                   Top = 74
-                  Width = 88
+                  Width = 104
                   StyleClass = 'accent'
                   Caption = 'Running'
                 end
                 object TagBeta: TTyTag
-                  Left = 110
+                  Left = 126
                   Height = 30
                   Top = 74
                   Width = 82
@@ -278,10 +278,10 @@ object MainForm: TMainForm
                   OnClose = TagClosed
                 end
                 object TagRisk: TTyTag
-                  Left = 198
+                  Left = 214
                   Height = 30
                   Top = 74
-                  Width = 88
+                  Width = 104
                   StyleClass = 'danger'
                   Caption = 'Pending'
                 end
@@ -291,7 +291,7 @@ object MainForm: TMainForm
                   Top = 114
                   Width = 288
                   WordWrap = True
-                  Caption = 'Backlog tasks (the badge is attached to the button, not built into it)'
+                  Caption = 'Backlog tasks — the badge is attached, not built in'
                 end
                 object BtnQueue: TTyButton
                   Left = 16
@@ -318,7 +318,7 @@ object MainForm: TMainForm
                   Top = 232
                   Width = 288
                   WordWrap = True
-                  Caption = 'TTyCard / TTyTag / TTyBadge are the controls that landed in batch 1; this page is where they are checked out.'
+                  Caption = 'TTyCard / TTyTag / TTyBadge landed in batch 1 — checked out on this page.'
                   Layout = tlTop
                   WordWrap = True
                 end
@@ -326,7 +326,7 @@ object MainForm: TMainForm
                   Left = 16
                   Height = 38
                   Top = 336
-                  Width = 112
+                  Width = 132
                   TabOrder = 1
                   OnClick = StatusDetailClick
                   StyleClass = 'primary'

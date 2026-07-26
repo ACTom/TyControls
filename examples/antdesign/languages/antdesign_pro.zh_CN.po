@@ -60,7 +60,7 @@ msgid "Pending"
 msgstr "待处理"
 
 #: tmainform.lblqueue.caption
-msgid "Backlog tasks (the badge is attached to the button, not built into it)"
+msgid "Backlog tasks — the badge is attached, not built in"
 msgstr "积压任务(徽标挂在按钮上,不是按钮内置的)"
 
 #: tmainform.btnqueue.caption
@@ -68,7 +68,7 @@ msgid "Task queue"
 msgstr "任务队列"
 
 #: tmainform.lblstatusnote.caption
-msgid "TTyCard / TTyTag / TTyBadge are the controls that landed in batch 1; this page is where they are checked out."
+msgid "TTyCard / TTyTag / TTyBadge landed in batch 1 — checked out on this page."
 msgstr "TTyCard / TTyTag / TTyBadge 是批 1 新落地的控件,这一页就是它们的验收面。"
 
 #: tmainform.btnstatusdetail.caption

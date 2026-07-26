@@ -311,7 +311,7 @@ const
     The old tree carried a flat 9-entry list + a parent-link column to fake this shape;
     the accordion IS the shape, so the parent column is gone. }
   NavGroups: array[0..2] of string = (
-    'Workbench', 'Content management', 'Interaction');
+    'Workbench', 'Content', 'Interaction');
   NavItems: array[0..2, 0..1] of string = (
     ('Dashboard',       'Data display'),
     ('List / grid',  'Form / entry'),
