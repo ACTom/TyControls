@@ -775,3 +775,39 @@ msgstr "当前选择:部门 %s · 地区 %s · 通知 %d 人"
 msgid "(none selected)"
 msgstr "(未选择)"
 
+#: umain.rsalertinfo
+msgid "The system will undergo routine maintenance tonight from 23:00 to 23:30."
+msgstr "系统将于今晚 23:00 至 23:30 进行例行维护。"
+
+#: umain.rsalertsuccess
+msgid "Work order TY-2041 published."
+msgstr "工单 TY-2041 已发布。"
+
+#: umain.rsalertwarning
+msgid "Archive disk usage has reached 86%"
+msgstr "归档磁盘使用率已达 86%"
+
+#: umain.rsalertwarndesc
+msgid "Above 90% will stop writing; please clean up in time."
+msgstr "超过 90% 将停止写入,请及时清理。"
+
+#: umain.rsalerterror
+msgid "The connection to the settlement service has been lost."
+msgstr "与结算服务的连接已断开。"
+
+#: umain.rsemptydesc
+msgid "No work orders — try a different filter, or create a new one"
+msgstr "暂无工单 —— 换个筛选条件,或新建一条"
+
+#: umain.rstoastcorner
+msgid "This is a corner toast."
+msgstr "这是一条角落通知。"
+
+#: umain.rstoasterrmsg1
+msgid "Still failed after 3 retries."
+msgstr "重试 3 次后仍然失败。"
+
+#: umain.rstoasterrmsg2
+msgid "This one has Duration = 0 and stays until you close it."
+msgstr "这条 Duration = 0,会一直留到你关闭它。"
+

@@ -487,6 +487,19 @@ resourcestring
   rsTrfRightTitle  = 'Selected';
   rsAdvPick        = 'Current selection: dept %s · region %s · %d notified';
   rsNoneSelected   = '(none selected)';
+  { Feedback page. TTyAlert.Message/Description, TTyEmpty.Description and
+    TTyNotification.Title/Message are all string-typed too. }
+  rsAlertInfo     = 'The system will undergo routine maintenance tonight from 23:00 to 23:30.';
+  rsAlertSuccess  = 'Work order TY-2041 published.';
+  rsAlertWarning  = 'Archive disk usage has reached 86%';
+  rsAlertWarnDesc = 'Above 90% will stop writing; please clean up in time.';
+  rsAlertError    = 'The connection to the settlement service has been lost.';
+  rsEmptyDesc     = 'No work orders — try a different filter, or create a new one';
+  rsToastOpOk     = 'Operation succeeded';
+  rsToastErrTitle = 'Settlement service unavailable';
+  rsToastCorner   = 'This is a corner toast.';
+  rsToastErrMsg1  = 'Still failed after 3 retries.';
+  rsToastErrMsg2  = 'This one has Duration = 0 and stays until you close it.';
 
 procedure TMainForm.LocalizeTexts;
 begin
@@ -584,6 +597,17 @@ begin
   CbKind.ItemIndex := 0;
   TrfMembers.LeftTitle := rsTrfLeftTitle;
   TrfMembers.RightTitle := rsTrfRightTitle;
+  { Feedback page: the alert bars, the empty state and the two toasts. }
+  AlertInfo.Message := rsAlertInfo;
+  AlertSuccess.Message := rsAlertSuccess;
+  AlertWarning.Message := rsAlertWarning;
+  AlertWarning.Description := rsAlertWarnDesc;
+  AlertError.Message := rsAlertError;
+  EmptyOrders.Description := rsEmptyDesc;
+  Toast.Title := rsToastOpOk;
+  Toast.Message := rsToastCorner;
+  ToastErr.Title := rsToastErrTitle;
+  ToastErr.Message := rsToastErrMsg1 + LineEnding + rsToastErrMsg2;
   // Org tree node captions (same order as OrgParent) — filled before BuildOrgTree runs.
   OrgCaptions[0] := rsOrgRoot;
   OrgCaptions[1] := rsOrgRnd;       OrgCaptions[2] := rsOrgCtlGroup; OrgCaptions[3] := rsOrgThemeTeam;
