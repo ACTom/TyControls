@@ -454,6 +454,12 @@ resourcestring
   rsTabBodyLog2      = '11:03 TY-2042 published';
   rsTabBodyLog3      = '15:47 TY-2043 badge split into its own control';
   rsTabBodyNone      = '(no tab selected)';
+  { Work-order states. These are UI vocabulary, not sample data: they are also the KEY the
+    cell-style callback matches on, so both the rows and the matcher use these constants —
+    translate one and the colouring follows. }
+  rsStatePublished = 'Published';
+  rsStateDraft     = 'Draft';
+  rsStateAwaiting  = 'Awaiting scheduling';
 
 procedure TMainForm.LocalizeTexts;
 begin
@@ -925,7 +931,7 @@ begin
     AddCol(rsColNo,      140, taLeftJustify);
     AddCol(rsColTitle,   400, taLeftJustify);
     AddCol(rsColOwner,   120, taLeftJustify);
-    AddCol(rsColStatus,  130, taLeftJustify);
+    AddCol(rsColStatus,  170, taLeftJustify);   // wide enough for 'Awaiting scheduling' in English
     AddCol(rsColUpdated, 230, taLeftJustify);
   finally
     GridOrders.Header.Columns.EndUpdate;
@@ -939,20 +945,20 @@ begin
   GridOrders.BeginUpdate;
   try
     GridOrders.RowCount := 14;
-    Row( 0, 'TY-2041', 'Card container TTyCard landed',        'Zhang San', 'Published', '2026-07-16 10:12');
-    Row( 1, 'TY-2042', 'Tag TTyTag landed',             'Li Si', 'Published', '2026-07-16 11:03');
-    Row( 2, 'TY-2043', 'Badge TTyBadge split into its own control',     'Wang Wu', 'Published', '2026-07-16 15:47');
-    Row( 3, 'TY-2044', 'Inline alert bar TTyAlert',          'Zhang San', 'Draft',   '2026-07-17 09:20');
-    Row( 4, 'TY-2045', 'Corner toast TTyNotification',   'Zhao Liu', 'Draft',   '2026-07-17 09:22');
-    Row( 5, 'TY-2046', 'Empty state TTyEmpty',                'Li Si', 'Draft',   '2026-07-17 09:25');
-    Row( 6, 'TY-2047', 'Segmented control TTySegmented',      'Wang Wu', 'Draft',   '2026-07-17 09:31');
-    Row( 7, 'TY-2048', 'Pager TTyPagination',         'Zhao Liu', 'Awaiting scheduling', '2026-07-17 09:40');
-    Row( 8, 'TY-2049', 'Step bar TTySteps',              'Zhang San', 'Awaiting scheduling', '2026-07-17 09:41');
-    Row( 9, 'TY-2050', 'Breadcrumb TTyBreadcrumb',         'Li Si', 'Awaiting scheduling', '2026-07-17 09:42');
-    Row(10, 'TY-2051', 'Transfer box TTyTransfer',           'Wang Wu', 'Awaiting scheduling', '2026-07-17 09:50');
-    Row(11, 'TY-2052', 'Tree dropdown TTyTreeSelect',       'Zhao Liu', 'Awaiting scheduling', '2026-07-17 09:51');
-    Row(12, 'TY-2053', 'Cascading select TTyCascader',         'Zhang San', 'Awaiting scheduling', '2026-07-17 09:52');
-    Row(13, 'TY-2054', 'Popover TTyPopover',              'Li Si', 'Awaiting scheduling', '2026-07-17 09:53');
+    Row( 0, 'TY-2041', 'Card container TTyCard landed',        'Zhang San', rsStatePublished, '2026-07-16 10:12');
+    Row( 1, 'TY-2042', 'Tag TTyTag landed',             'Li Si', rsStatePublished, '2026-07-16 11:03');
+    Row( 2, 'TY-2043', 'Badge TTyBadge split into its own control',     'Wang Wu', rsStatePublished, '2026-07-16 15:47');
+    Row( 3, 'TY-2044', 'Inline alert bar TTyAlert',          'Zhang San', rsStateDraft,   '2026-07-17 09:20');
+    Row( 4, 'TY-2045', 'Corner toast TTyNotification',   'Zhao Liu', rsStateDraft,   '2026-07-17 09:22');
+    Row( 5, 'TY-2046', 'Empty state TTyEmpty',                'Li Si', rsStateDraft,   '2026-07-17 09:25');
+    Row( 6, 'TY-2047', 'Segmented control TTySegmented',      'Wang Wu', rsStateDraft,   '2026-07-17 09:31');
+    Row( 7, 'TY-2048', 'Pager TTyPagination',         'Zhao Liu', rsStateAwaiting, '2026-07-17 09:40');
+    Row( 8, 'TY-2049', 'Step bar TTySteps',              'Zhang San', rsStateAwaiting, '2026-07-17 09:41');
+    Row( 9, 'TY-2050', 'Breadcrumb TTyBreadcrumb',         'Li Si', rsStateAwaiting, '2026-07-17 09:42');
+    Row(10, 'TY-2051', 'Transfer box TTyTransfer',           'Wang Wu', rsStateAwaiting, '2026-07-17 09:50');
+    Row(11, 'TY-2052', 'Tree dropdown TTyTreeSelect',       'Zhao Liu', rsStateAwaiting, '2026-07-17 09:51');
+    Row(12, 'TY-2053', 'Cascading select TTyCascader',         'Zhang San', rsStateAwaiting, '2026-07-17 09:52');
+    Row(13, 'TY-2054', 'Popover TTyPopover',              'Li Si', rsStateAwaiting, '2026-07-17 09:53');
   finally
     GridOrders.EndUpdate;
   end;
@@ -970,9 +976,9 @@ var
 begin
   if ACol <> 3 then Exit;             { 只染状态列 }
   s := GridOrders.Cells[3, ARow];
-  if s = 'Published' then ATextColor := TyRGB(22, 163, 74)       { 绿 }
-  else if s = 'Draft' then ATextColor := TyRGB(217, 119, 6)    { 橙 }
-  else if s = 'Awaiting scheduling' then ATextColor := TyRGB(37, 99, 235); { 蓝 }
+  if s = rsStatePublished then ATextColor := TyRGB(22, 163, 74)       { 绿 }
+  else if s = rsStateDraft then ATextColor := TyRGB(217, 119, 6)    { 橙 }
+  else if s = rsStateAwaiting then ATextColor := TyRGB(37, 99, 235); { 蓝 }
 end;
 
 { 整行选中(gsmRow):徽标显示当前选中的是第几行。选中态走 TTyBadge,数据仍归宿主。 }

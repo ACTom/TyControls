@@ -687,3 +687,7 @@ msgstr "15:47 TY-2043 徽标拆成独立控件"
 msgid "(no tab selected)"
 msgstr "(未选中页签)"
 
+#: umain.rsstateawaiting
+msgid "Awaiting scheduling"
+msgstr "待排期"
+
