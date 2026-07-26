@@ -57,6 +57,19 @@ type
     // bg-fade, states and badge are handled by RenderTo around this hook.
     procedure DrawContent(APainter: TTyPainter; const AContentRect: TRect;
       const AStyle: TTyStyleSet); virtual;
+    { The size the caption actually needs: measured text plus the THEME's padding — the very
+      inset RenderTo applies before DrawContent, so what AutoSize reserves and what gets
+      drawn cannot drift. Without this a button keeps its designed width and a caption that
+      outgrows it (a longer translation, a bigger density, a heavier font) is ellipsised.
+      Descendants that draw more than the caption (a glyph, an arrow, a swatch) add their
+      slot by overriding and calling inherited first. }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
+    { The caption's drawn size in DEVICE px at APPI, mnemonic markers removed. }
+    procedure MeasureCaption(APPI: Integer; out AWidth, AHeight: Integer);
+    { Caption changes at runtime route here (CM_TEXTCHANGED); with AutoSize the button must
+      re-measure to the new text (mirrors TTyTag / TTyLabel). }
+    procedure TextChanged; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     function DialogChar(var Message: TLMKey): Boolean; override;
@@ -97,6 +110,12 @@ type
     // handler (and headless tests) route through here.
     function WantsDialogKey(ACharCode: Word): Boolean;
   published
+    { Off by default (a designed button keeps the width the .lfm gave it). Switch it on and
+      the button WIDENS to hug its caption plus the theme's padding, so a caption that grows
+      — a longer translation, a denser scale, a heavier font — lengthens the button instead
+      of being ellipsised. Height is left alone (see CalculatePreferredSize): it belongs to
+      whoever lays out the row, which is what makes this safe inside a TTyToolBar. }
+    property AutoSize;
     // On by default. When enabled and the control has a window handle, hovering
     // fades the background between the normal and hover styles; with no handle
     // (every render test) it snaps, preserving the existing exact-pixel paint tests.
@@ -507,6 +526,70 @@ begin
   finally
     P.Free;
   end;
+end;
+
+procedure TTyButton.TextChanged;
+begin
+  inherited TextChanged;
+  // The new caption needs a different width, so an auto-sized button must re-fit.
+  if AutoSize then
+  begin
+    InvalidatePreferredSize;
+    AdjustSize;
+  end;
+  Invalidate;
+end;
+
+procedure TTyButton.MeasureCaption(APPI: Integer; out AWidth, AHeight: Integer);
+var
+  S: TTyStyleSet;
+  Meas: TBitmap;
+  disp: string;
+  mp: Integer;
+begin
+  S := CurrentStyle;
+  // The '&' markers are not drawn, so they must not be measured either.
+  TyParseMnemonic(Caption, disp, mp);
+  Meas := TBitmap.Create;
+  try
+    Meas.SetSize(1, 1);
+    Meas.Canvas.Font.Name := TyEffectiveFontName(S.FontName);
+    Meas.Canvas.Font.Size := MulDiv(ResolveFontSize(S), APPI, 96);
+    if S.FontWeight >= 600 then
+      Meas.Canvas.Font.Style := [fsBold]
+    else
+      Meas.Canvas.Font.Style := [];
+    AWidth := Meas.Canvas.TextWidth(disp);
+    // A stable reference glyph: an empty caption still sizes to one line.
+    AHeight := Meas.Canvas.TextHeight('Ag');
+    if AWidth < 0 then AWidth := 0;
+    if AHeight < 1 then AHeight := 1;
+  finally
+    Meas.Free;
+  end;
+end;
+
+procedure TTyButton.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+var
+  S: TTyStyleSet;
+  ppi, tw, th: Integer;
+begin
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  S := CurrentStyle;
+  MeasureCaption(ppi, tw, th);
+  // The SAME padding RenderTo insets ContentRect by before handing it to DrawContent.
+  PreferredWidth := tw + MulDiv(S.Padding.Left + S.Padding.Right, ppi, 96);
+  if PreferredWidth < 1 then PreferredWidth := 1;
+  { WIDTH ONLY — 0 is LCL's "no preference on this axis", so the button keeps its height.
+    A button grows sideways to fit a longer caption; its height is a LAYOUT decision, owned
+    by whoever arranges the row. Proposing a height as well makes the button fight any
+    container that pins one: TTyToolBar sizes every child to its ButtonHeight, so a button
+    asking for a taller one bounced between the two forever and LCL aborted with
+    "TControl.ChangeBounds loop detected". Callers who want the caption's natural height can
+    read it from MeasureCaption plus the style's vertical padding. }
+  PreferredHeight := 0;
 end;
 
 procedure TTyButton.DrawContent(APainter: TTyPainter; const AContentRect: TRect;

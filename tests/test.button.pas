@@ -4,7 +4,7 @@ interface
 uses
   Classes, SysUtils, TypInfo, fpcunit, testregistry, Forms, Controls, Graphics, LCLType,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Base, tyControls.Button, tyControls.Types, tyControls.Controller;
+  tyControls.Base, tyControls.Button, tyControls.Types, tyControls.Controller, tyControls.ToolBar;
 type
   // Expose protected RenderTo for testing
   TTyButtonAccess = class(TTyButton)
@@ -25,6 +25,8 @@ type
     function AdvanceAnim(AMs: Integer): Boolean;
     // Expose the protected badge display decision.
     function CallResolveBadge(out AText: string): Boolean;
+    // Expose the protected preferred-size calculation (what AutoSize resizes to).
+    procedure CallPreferred(out AW, AH: Integer);
   end;
 
   TButtonTest = class(TTestCase)
@@ -54,6 +56,9 @@ type
     procedure TestHoverBlendUsesRestingState;
     procedure TestBadgeDisplayRules;
     procedure TestBadgeRendersAtCorner;
+    procedure TestAutoSizeFitsTheCaption;
+    procedure TestAutoSizeRefitsWhenTheCaptionGrows;
+    procedure TestAutoSizeSurvivesAHeightPinningParent;
   end;
 implementation
 
@@ -100,6 +105,12 @@ end;
 function TTyButtonAccess.CallResolveBadge(out AText: string): Boolean;
 begin
   Result := ResolveBadgeDisplay(AText);
+end;
+
+procedure TTyButtonAccess.CallPreferred(out AW, AH: Integer);
+begin
+  AW := 0; AH := 0;
+  CalculatePreferredSize(AW, AH, True);
 end;
 
 procedure TButtonTest.HandleClick(Sender: TObject);
@@ -471,6 +482,129 @@ begin
     AssertEquals('default height', 30, B.Height);
   finally
     B.Free;
+  end;
+end;
+
+procedure TButtonTest.TestAutoSizeFitsTheCaption;
+{ A button with AutoSize hugs its caption plus the THEME's padding — the same inset RenderTo
+  applies before drawing, so what AutoSize reserves is exactly what the caption gets. Without
+  this a caption that outgrows the designed width is silently ellipsised. }
+var
+  Ctl: TTyStyleController;
+  B: TTyButtonAccess;
+  w, h, wLong, hLong: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    // Known padding so the arithmetic is exact rather than theme-dependent.
+    Ctl.LoadThemeCss('TyButton { background: #FFFFFF; color: #000000; padding: 5px 9px; font-size: 12px; }');
+    B := TTyButtonAccess.Create(nil);
+    try
+      B.Controller := Ctl;
+      B.Font.PixelsPerInch := 96;
+      AssertTrue('AutoSize is published so a .lfm / the OI can set it',
+        IsPublishedProp(B, 'AutoSize'));
+      AssertFalse('but it stays OFF by default — a designed button keeps its width', B.AutoSize);
+
+      B.Caption := 'OK';
+      B.CallPreferred(w, h);
+      // Width = measured text + both horizontal paddings.
+      AssertTrue('preferred width leaves room for the 9px paddings', w > 2 * 9);
+      { Height is deliberately UNSET (0 = "no preference on this axis" in LCL): a button
+        widens for its caption but its height belongs to whoever lays out the row. Proposing
+        one made it fight TTyToolBar, which pins every child to its ButtonHeight, until LCL
+        aborted with "TControl.ChangeBounds loop detected". }
+      AssertEquals('height is left to the layout, not proposed', 0, h);
+
+      // A longer caption must want a wider button — that is the whole point.
+      B.Caption := 'A considerably longer caption';
+      B.CallPreferred(wLong, hLong);
+      AssertTrue(Format('a longer caption wants more width (%d -> %d)', [w, wLong]), wLong > w);
+      AssertEquals('and still proposes no height', 0, hLong);
+    finally
+      B.Free;
+    end;
+  finally
+    Ctl.Free;
+  end;
+end;
+
+procedure TButtonTest.TestAutoSizeRefitsWhenTheCaptionGrows;
+{ The reported case: a caption swapped at RUNTIME (a longer translation pushed in after the
+  .lfm sized the button) must make the button want more width, not get ellipsised.
+  Measured through CalculatePreferredSize rather than through Width, for the same reason
+  TTyTag's tests do: LCL's AutoSizeDelayed suppresses every re-fit while the parent form has
+  no handle, and the headless runner never realises one. }
+var
+  Ctl: TTyStyleController;
+  B: TTyButtonAccess;
+  narrow, wide, h1, h2: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Ctl.LoadThemeCss('TyButton { background: #FFFFFF; color: #000000; padding: 5px 9px; font-size: 12px; }');
+    B := TTyButtonAccess.Create(nil);
+    try
+      B.Controller := Ctl;
+      B.Font.PixelsPerInch := 96;
+      B.AutoSize := True;
+      B.Caption := 'New';
+      B.CallPreferred(narrow, h1);
+
+      // The translated caption is much longer than the one the button was sized for.
+      B.Caption := 'New work order (a much longer translated caption)';
+      B.CallPreferred(wide, h2);
+      AssertTrue(Format('the button now wants more width (%d -> %d)', [narrow, wide]),
+        wide > narrow);
+      AssertEquals('and never proposes a height', 0, h2);
+
+      // The '&' marker is drawn as an underline, not as a character: it must not be measured.
+      B.Caption := 'Save';
+      B.CallPreferred(narrow, h1);
+      B.Caption := '&Save';
+      B.CallPreferred(wide, h2);
+      AssertEquals('a mnemonic marker adds no width', narrow, wide);
+    finally
+      B.Free;
+    end;
+  finally
+    Ctl.Free;
+  end;
+end;
+
+procedure TButtonTest.TestAutoSizeSurvivesAHeightPinningParent;
+{ Regression: an AutoSize button on a TTyToolBar aborted the app at startup with
+  "TControl.ChangeBounds loop detected". The bar pins every child to its ButtonHeight, the
+  button proposed its own (taller) height, and the two bounced forever. Putting one on a real
+  toolbar must simply settle — and settle at the BAR's height, not the button's idea of one. }
+var
+  F: TForm;
+  Bar: TTyToolBar;
+  B: TTyButton;
+  hBefore: Integer;
+begin
+  F := TForm.CreateNew(nil);
+  try
+    Bar := TTyToolBar.Create(F);
+    Bar.Parent := F;
+    Bar.Align := alTop;
+    Bar.ButtonHeight := 24;
+
+    B := TTyButton.Create(F);
+    B.Parent := Bar;
+    B.Font.PixelsPerInch := 96;
+    B.Caption := '&New';
+    B.AutoSize := True;          // this is what used to loop
+    hBefore := B.Height;
+
+    // Grow the caption the way a translation does: it must not start a bounds war.
+    B.Caption := 'New work order (a much longer translated caption)';
+    Bar.Realign;
+
+    AssertEquals('the bar still owns the height', hBefore, B.Height);
+    AssertTrue('and the button is still a sane size', (B.Width > 0) and (B.Height > 0));
+  finally
+    F.Free;
   end;
 end;
 
