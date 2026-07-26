@@ -736,7 +736,7 @@ object DemoMainForm: TDemoMainForm
           Width = 604
           TabOrder = 5
           Controller = TyController
-          Caption = '命令按钮'
+          Caption = 'Command buttons'
           object DemoGlyphBtn: TTyGlyphButton
             Left = 16
             Height = 34
@@ -746,7 +746,7 @@ object DemoMainForm: TDemoMainForm
             Controller = TyController
             IconFont = DemoIconFont
             GlyphName = 'star'
-            Caption = '新建'
+            Caption = 'New'
           end
           object DemoGlyphContainer: TTyGlyphContainerButton
             Left = 148
@@ -757,7 +757,7 @@ object DemoMainForm: TDemoMainForm
             Controller = TyController
             IconFont = DemoIconFont
             GlyphName = 'star'
-            Caption = '打开'
+            Caption = 'Open'
           end
           object DemoSpeed1: TTySpeedButton
             Left = 248
@@ -769,7 +769,7 @@ object DemoMainForm: TDemoMainForm
             Controller = TyController
             Down = True
             GroupIndex = 1
-            Caption = '左'
+            Caption = 'Left'
           end
           object DemoSpeed2: TTySpeedButton
             Left = 300
@@ -780,7 +780,7 @@ object DemoMainForm: TDemoMainForm
             StyleClass = 'ghost'
             Controller = TyController
             GroupIndex = 1
-            Caption = '中'
+            Caption = 'Centre'
           end
           object DemoSpeed3: TTySpeedButton
             Left = 352
@@ -791,7 +791,7 @@ object DemoMainForm: TDemoMainForm
             StyleClass = 'ghost'
             Controller = TyController
             GroupIndex = 1
-            Caption = '右'
+            Caption = 'Right'
           end
           object DemoDropBtn: TTyDropDownButton
             Left = 16
@@ -801,7 +801,7 @@ object DemoMainForm: TDemoMainForm
             TabOrder = 5
             Controller = TyController
             DropDownMenu = PopupCtx
-            Caption = '保存'
+            Caption = 'Save'
           end
           object DemoMenuBtn: TTyMenuButton
             Left = 158
@@ -811,7 +811,7 @@ object DemoMainForm: TDemoMainForm
             TabOrder = 6
             Controller = TyController
             DropDownMenu = PopupCtx
-            Caption = '更多'
+            Caption = 'More'
           end
           object DemoColorBtn: TTyColorButton
             Left = 16
@@ -831,9 +831,9 @@ object DemoMainForm: TDemoMainForm
             StyleClass = 'ghost'
             Controller = TyController
             Items.Strings = (
-              '日'
-              '周'
-              '月'
+              'Day'
+              'Week'
+              'Month'
             )
             ItemIndex = 0
           end
@@ -845,14 +845,14 @@ object DemoMainForm: TDemoMainForm
           Width = 604
           TabOrder = 6
           Controller = TyController
-          Caption = '图标 · 文字'
+          Caption = 'Icons · text'
           object DemoLinkLabel: TTyLinkLabel
             Left = 16
             Height = 20
             Top = 20
             Width = 220
             Controller = TyController
-            Caption = '访问项目主页'
+            Caption = 'Visit the project home page'
             URL = 'https://github.com/ACTom/TyControls'
           end
           object DemoShadowLabel: TTyShadowLabel
@@ -861,7 +861,7 @@ object DemoMainForm: TDemoMainForm
             Top = 56
             Width = 240
             Controller = TyController
-            Caption = '投影文字 ShadowLabel'
+            Caption = 'Shadowed text (ShadowLabel)'
           end
           object DemoGlowLabel: TTyGlowLabel
             Left = 16
@@ -869,7 +869,7 @@ object DemoMainForm: TDemoMainForm
             Top = 92
             Width = 240
             Controller = TyController
-            Caption = '发光文字 GlowLabel'
+            Caption = 'Glowing text (GlowLabel)'
           end
           object DemoCharImage: TTyCharImage
             Left = 16
@@ -888,8 +888,8 @@ object DemoMainForm: TDemoMainForm
             Controller = TyController
             WordWrap = True
             ShowHint = True
-            Hint = '这是主题化气泡提示(TTyHint)——悬停任意带 Hint 的控件即可看到。'
-            Caption = '← CharImage(图标字体字形)。把鼠标停在这行文字上看主题化 tooltip。'
+            Hint = 'This is the themed balloon hint (TTyHint) — hover any control with a Hint to see it.'
+            Caption = '← CharImage (an icon-font glyph). Hover this line to see the themed tooltip.'
           end
         end
       end

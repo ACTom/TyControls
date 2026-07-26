@@ -138,6 +138,9 @@ type
     HintNote: TTyLabel;
     procedure BtnDlgAboutClick(Sender: TObject);
     procedure FormCreate(Sender: TObject);
+    { Assign the string-typed captions (tab sheets, group box) from resourcestrings — the
+      LFM translator cannot reach them. See the resourcestring block. }
+    procedure LocalizeTexts;
     procedure TyButton4Click(Sender: TObject);
     procedure TyTree1InitNode(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
       var InitStates: TTyNodeInitStates);
@@ -206,6 +209,17 @@ resourcestring
   rsDemoGreetingShown   = 'Hello TyControls';
   rsDemoGreetingHidden  = 'Greeting hidden';
   rsDemoGreetingFromCtx = 'Hello from the context menu';
+  { TTyTabSheet.Caption and TTyGroupBox.Caption are declared `string`, not TCaption, and LCL's
+    LFM translator only walks TCaption properties — so these never translate from the .lfm no
+    matter what the .po says. Push them in from resourcestrings instead (LocalizeTexts). }
+  rsDemoTab1     = 'Tab 1';
+  rsDemoTab2     = 'Tab 2';
+  rsDemoTab3     = 'Tab 3';
+  rsDemoTabTree  = 'Tree';
+  rsDemoTabNative = 'Native';
+  rsDemoTabCmd   = 'Command buttons';
+  rsDemoTabIcons = 'Icons · text';
+  rsDemoOptions  = 'Options';
 
 function TDemoMainForm.ThemeDir: string;
 var
@@ -230,8 +244,21 @@ begin
     Progress1.Position := TrackBar1.Position;
 end;
 
+procedure TDemoMainForm.LocalizeTexts;
+begin
+  TyTabSheet1.Caption := rsDemoTab1;
+  TyTabSheet2.Caption := rsDemoTab2;
+  TyTabSheet3.Caption := rsDemoTab3;
+  TyTabSheet4.Caption := rsDemoTabTree;
+  TyTabSheet5.Caption := rsDemoTabNative;
+  TyTabSheet6.Caption := rsDemoTabCmd;
+  TyTabSheet7.Caption := rsDemoTabIcons;
+  GroupBox1.Caption := rsDemoOptions;
+end;
+
 procedure TDemoMainForm.FormCreate(Sender: TObject);
 begin
+  LocalizeTexts;
   Randomize;                  // seed the "random theme" button
   // Controls (incl. the title bar/tabs/spin/memo AND the theme switcher) come from the
   // .lfm. Associate the themed menu bar (shortcut dispatch / macOS global menu), then
