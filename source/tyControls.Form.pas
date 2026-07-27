@@ -112,6 +112,9 @@ type
     property MaxButton: TTyCaptionButton read FMaxButton;
     property CloseButton: TTyCaptionButton read FCloseButton;
     function RightInset: Integer;
+    { The horizontal span the caption may use: the bar minus the caption-button inset, minus
+      whatever the host's own child controls occupy. }
+    procedure CaptionSpan(AWidth: Integer; out ALeft, ARight: Integer);
   published
     property Caption: string read FCaption write SetCaption;
     { Left (default) or centered title text. Centered lays out within the content
@@ -840,12 +843,81 @@ begin
   if ARect.Right < ARect.Left then ARect.Right := ARect.Left;
 end;
 
+{ A title bar is a CONTAINER: hosts drop theme pickers, appearance buttons and menu bars on
+  it. The caption used to be drawn across the whole bar (minus only the caption-button inset)
+  regardless, so with TitleAlignment = taRightJustify it ran leftwards UNDER those children
+  and they painted over it -- the demo's title read "ntrols Demo" as soon as a skin with
+  roomier buttons (xp) pushed the cluster further right. Clipping is not the answer either;
+  the caption simply has to live in the space the children leave.
+
+  So: take the widest contiguous gap the children do not cover. Scanning gaps rather than
+  assuming children sit on the left keeps this correct for a host that anchors something to
+  the right instead. }
+procedure TTyTitleBar.CaptionSpan(AWidth: Integer; out ALeft, ARight: Integer);
+var
+  i, bl, br, gl, gr, bestL, bestR, scan: Integer;
+  c: TControl;
+  edges: array of Integer;
+  n, j, tmp: Integer;
+begin
+  ALeft := LeftInsetPx;
+  ARight := AWidth - RightInset;
+  if ARight < ALeft then ARight := ALeft;
+
+  { Collect the children's spans, clipped to the caption band. }
+  n := 0;
+  SetLength(edges, ControlCount * 2);
+  for i := 0 to ControlCount - 1 do
+  begin
+    c := Controls[i];
+    if (c = nil) or not c.Visible then Continue;
+    bl := c.Left;
+    br := c.Left + c.Width;
+    if br <= ALeft then Continue;
+    if bl >= ARight then Continue;
+    if bl < ALeft then bl := ALeft;
+    if br > ARight then br := ARight;
+    edges[n] := bl; edges[n + 1] := br; Inc(n, 2);
+  end;
+  if n = 0 then Exit;
+
+  { Sort the spans by left edge (few children: an insertion sort is plenty). }
+  for i := 2 to n - 2 do
+    if (i mod 2) = 0 then
+    begin
+      j := i;
+      while (j >= 2) and (edges[j - 2] > edges[j]) do
+      begin
+        tmp := edges[j - 2]; edges[j - 2] := edges[j]; edges[j] := tmp;
+        tmp := edges[j - 1]; edges[j - 1] := edges[j + 1]; edges[j + 1] := tmp;
+        Dec(j, 2);
+      end;
+    end;
+
+  { Widest gap between the covered spans. }
+  bestL := ALeft; bestR := ALeft; scan := ALeft;
+  i := 0;
+  while i < n do
+  begin
+    gl := scan;
+    gr := edges[i];
+    if gr - gl > bestR - bestL then begin bestL := gl; bestR := gr; end;
+    if edges[i + 1] > scan then scan := edges[i + 1];
+    Inc(i, 2);
+  end;
+  if ARight - scan > bestR - bestL then begin bestL := scan; bestR := ARight; end;
+
+  ALeft := bestL;
+  ARight := bestR;
+  if ARight < ALeft then ARight := ALeft;
+end;
+
 procedure TTyTitleBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
   R, TextRect: TRect;
-  W, H: Integer;
+  W, H, tl, tr: Integer;
 begin
   W := ARect.Right - ARect.Left;
   H := ARect.Bottom - ARect.Top;
@@ -855,8 +927,8 @@ begin
     P.BeginPaint(ACanvas, ARect, APPI);
     S := CurrentStyle;
     DrawFrame(P, R, S);
-    TextRect := Rect(R.Left + P.Scale(ActiveController.Metric('--titlebar-padding', TyTitleBarPad)), R.Top,
-                     R.Left + W - RightInset, R.Top + H);
+    CaptionSpan(W, tl, tr);
+    TextRect := Rect(R.Left + tl, R.Top, R.Left + tr, R.Top + H);
     P.DrawText(TextRect, FCaption, S.FontName, ResolveFontSize(S), S.FontWeight,
       S.TextColor, FTitleAlignment, tlCenter, True);
     P.EndPaint;
