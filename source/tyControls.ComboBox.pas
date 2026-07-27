@@ -17,7 +17,7 @@ type
   private
     FItems: TStringList;
     FItemIndex: Integer;
-    FText: string;
+    FText: TCaption;
     FDropDownCount: Integer;
     FSorted: Boolean;
     FMaxLength: Integer;
@@ -40,7 +40,7 @@ type
     FTypeAheadTick: QWord;
     procedure SetItems(const AValue: TStringList);
     procedure SetItemIndex(const AValue: Integer);
-    procedure SetText(const AValue: string);
+    procedure SetText(const AValue: TCaption);
     procedure SetDropDownCount(const AValue: Integer);
     procedure SetSorted(const AValue: Boolean);
     procedure SetMaxLength(const AValue: Integer);
@@ -127,7 +127,7 @@ type
   published
     property Items: TStringList read FItems write SetItems;
     property ItemIndex: Integer read FItemIndex write SetItemIndex;
-    property Text: string read FText write SetText;
+    property Text: TCaption read FText write SetText;
     { Max number of rows visible in the dropdown before it scrolls (LCL default 8). }
     property DropDownCount: Integer read FDropDownCount write SetDropDownCount default 8;
     { When True, Items are kept in ascending (case-insensitive) order and the
@@ -299,7 +299,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyComboBox.SetText(const AValue: string);
+procedure TTyComboBox.SetText(const AValue: TCaption);
 begin
   if FText = AValue then Exit;
   FText := AValue;

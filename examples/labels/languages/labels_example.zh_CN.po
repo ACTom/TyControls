@@ -62,3 +62,7 @@ msgstr ""
 #: tmainform.lblglow14.caption
 msgid "GlowRadius = 14 — a wide soft halo (bigger values clamp at 64)"
 msgstr ""
+
+#: tmainform.bar.caption
+msgid "Labels  · TyControls"
+msgstr ""

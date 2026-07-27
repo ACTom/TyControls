@@ -68,8 +68,8 @@ msgid "Blank cells always sort last · F2 renames — folders are refused by OnE
 msgstr "空单元格恒排在最后 · F2 重命名 —— 文件夹会被 OnEditing 拒绝 · 点击分组条可折叠"
 
 #: tmainform.divright.caption
-msgid "Virtual mode — 100,000 rows"
-msgstr "虚拟模式 — 100,000 行"
+msgid "Virtual mode — 100,000 rows · text AND icons made on demand"
+msgstr ""
 
 #: tmainform.btnsortvirtual.caption
 msgid "Sort by \"Value\""
@@ -113,4 +113,12 @@ msgstr ""
 
 #: tmainform.lblextras.caption
 msgid "Select all / Clear selection never touch the mouse · OnCompare outranks SortKind · the virtual list pins RowHeight = 28, the left one follows the theme"
+msgstr ""
+
+#: tmainform.titlebar1.caption
+msgid "TTyListView  ·  TyControls"
+msgstr ""
+
+#: tmainform.divextras.caption
+msgid "Driving the list from code — selection API, header band, custom comparator, virtual grouping and growth"
 msgstr ""

@@ -7,9 +7,9 @@ uses
 type
   TTyGroupBox = class(TTyCustomControl)
   private
-    FCaption: string;
+    FCaption: TCaption;
     FAlignment: TAlignment;
-    procedure SetCaption(const AValue: string);
+    procedure SetCaption(const AValue: TCaption);
     procedure SetAlignment(AValue: TAlignment);
     { Shared caption-band height: 16 logical px scaled to APPI.
       Used by both RenderTo and AdjustClientRect so they stay in sync. }
@@ -24,7 +24,7 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
   published
-    property Caption: string read FCaption write SetCaption;
+    property Caption: TCaption read FCaption write SetCaption;
     property Alignment: TAlignment read FAlignment write SetAlignment default taLeftJustify;
     property Align;
     property Anchors;
@@ -100,7 +100,7 @@ begin
   Result := 'TyGroupBox';
 end;
 
-procedure TTyGroupBox.SetCaption(const AValue: string);
+procedure TTyGroupBox.SetCaption(const AValue: TCaption);
 begin
   if FCaption = AValue then Exit;
   FCaption := AValue;

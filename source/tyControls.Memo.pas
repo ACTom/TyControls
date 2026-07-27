@@ -192,8 +192,8 @@ type
     procedure SetSelText(const AValue: string);
     procedure SetCaretPos(AValue: Integer);
     // Whole-string Text accessor over Lines (TStrings.Text get/set semantics).
-    function GetText: string;
-    procedure SetText(const AValue: string);
+    function GetText: TCaption;
+    procedure SetText(const AValue: TCaption);
     // Total content codepoints across all logical lines (line breaks excluded).
     function ContentCodepointCount: Integer;
     function GetLines: TStrings;
@@ -506,7 +506,7 @@ type
     // Whole-document text as one string with platform line breaks (TStrings.Text
     // get/set). Writing replaces all lines, collapses the caret to the origin and
     // fires OnChange.
-    property Text: string read GetText write SetText;
+    property Text: TCaption read GetText write SetText;
     // When True, a Tab key inserts a literal tab char into the text; when False
     // (default) Tab navigates between controls (native TMemo default).
     property WantTabs: Boolean read FWantTabs write SetWantTabs default False;
@@ -1013,13 +1013,13 @@ begin
   SetCaret(L, C);  // collapses the selection onto the caret (native semantics)
 end;
 
-function TTyMemo.GetText: string;
+function TTyMemo.GetText: TCaption;
 begin
   // Whole-document string with platform line breaks (TStrings.Text semantics).
   Result := FLines.Text;
 end;
 
-procedure TTyMemo.SetText(const AValue: string);
+procedure TTyMemo.SetText(const AValue: TCaption);
 begin
   // Replace all lines from the string (split on line breaks by TStrings.Text),
   // collapse the caret/selection to the origin, refresh layout + fire OnChange.

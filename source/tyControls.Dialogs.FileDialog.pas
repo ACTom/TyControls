@@ -179,7 +179,7 @@ type
     { build -> seed -> ShowModal -> read back -> free (leak-safe). }
     function Execute: Boolean;
   published
-    property Title: string read FTitle write FTitle;
+    property Title: TCaption read FTitle write FTitle;
     property Filter: string read FFilter write FFilter;
     property FilterIndex: Integer read FFilterIndex write FFilterIndex default DefaultFilterIndex;
     property FileName: string read FFileName write FFileName;

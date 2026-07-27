@@ -74,3 +74,15 @@ msgstr ""
 #: tmainform.lblstatus.caption
 msgid "Click the star or the stretched picture — TTyImage and TTyCharImage both publish OnClick."
 msgstr ""
+
+#: tmainform.bar.caption
+msgid "Icons & Images  · TyControls"
+msgstr ""
+
+#: tmainform.fontfamilyedit.text
+msgid "Segoe UI Symbol"
+msgstr ""
+
+#: tmainform.fontfamilyedit.texthint
+msgid "Font family name…"
+msgstr ""

@@ -54,3 +54,7 @@ msgstr ""
 #: tmainform.btnremovepanel.caption
 msgid "Remove the last panel"
 msgstr ""
+
+#: tmainform.bar.caption
+msgid "TTyStatusBar  ·  TyControls"
+msgstr ""

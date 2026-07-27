@@ -68,11 +68,11 @@ type
 
   TTyCard = class(TTyCustomControl)
   private
-    FTitle: string;
+    FTitle: TCaption;
     FTitleAlignment: TAlignment;
     FShowHeader: Boolean;
     FShowActions: Boolean;
-    procedure SetTitle(const AValue: string);
+    procedure SetTitle(const AValue: TCaption);
     procedure SetTitleAlignment(AValue: TAlignment);
     procedure SetShowHeader(AValue: Boolean);
     procedure SetShowActions(AValue: Boolean);
@@ -101,7 +101,7 @@ type
   published
     { The header strip's title. Drawn literally (no mnemonic parsing — a card titles
       a surface, it does not activate anything), ellipsised when it does not fit. }
-    property Title: string read FTitle write SetTitle;
+    property Title: TCaption read FTitle write SetTitle;
     property TitleAlignment: TAlignment read FTitleAlignment write SetTitleAlignment
       default taLeftJustify;
     { Whether the title strip is drawn AND carved out of the child area. The flag is
@@ -229,7 +229,7 @@ begin
   if ARect.Bottom < ARect.Top then ARect.Bottom := ARect.Top;
 end;
 
-procedure TTyCard.SetTitle(const AValue: string);
+procedure TTyCard.SetTitle(const AValue: TCaption);
 begin
   if FTitle = AValue then Exit;
   FTitle := AValue;

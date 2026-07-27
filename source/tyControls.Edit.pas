@@ -12,7 +12,7 @@ type
 
   TTyEdit = class(TTyCustomControl)
   private
-    FText: string;
+    FText: TCaption;
     FCaret: Integer;      // codepoint index 0..UTF8Length(FText)
     FSelAnchor: Integer;  // codepoint index; no selection <=> FSelAnchor = FCaret
     FMouseSelecting: Boolean;  // true while left button held for drag-select
@@ -32,7 +32,7 @@ type
     FReadOnly: Boolean;
     FMaxLength: Integer;
     FPasswordChar: string;
-    FTextHint: string;
+    FTextHint: TCaption;
     FAlignment: TAlignment;
     FCharCase: TEditCharCase;
     FNumbersOnly: Boolean;
@@ -43,8 +43,8 @@ type
     procedure HandleImeCommit(const ACommitUtf8: string);
     // Caret rect (client device px) for the Qt IME candidate window; empty when not focused.
     function GetImeCaretRect: TRect;
-    procedure SetText(const AValue: string);
-    procedure SetTextHint(const AValue: string);
+    procedure SetText(const AValue: TCaption);
+    procedure SetTextHint(const AValue: TCaption);
     procedure SetCaretPos(AValue: Integer);
     procedure SetReadOnly(const AValue: Boolean);
     procedure SetMaxLength(const AValue: Integer);
@@ -173,11 +173,11 @@ type
     property SelLength: Integer read GetSelLength write SetSelLength;
     property SelText: string read GetSelText write SetSelText;
   published
-    property Text: string read FText write SetText;
+    property Text: TCaption read FText write SetText;
     property ReadOnly: Boolean read FReadOnly write SetReadOnly default False;
     property MaxLength: Integer read FMaxLength write SetMaxLength default 0;
     property PasswordChar: string read FPasswordChar write SetPasswordChar;
-    property TextHint: string read FTextHint write SetTextHint;
+    property TextHint: TCaption read FTextHint write SetTextHint;
     property Alignment: TAlignment read FAlignment write SetAlignment default taLeftJustify;
     property CharCase: TEditCharCase read FCharCase write SetCharCase default ecNormal;
     property NumbersOnly: Boolean read FNumbersOnly write FNumbersOnly default False;
@@ -550,7 +550,7 @@ begin
   DoChange;
 end;
 
-procedure TTyEdit.SetText(const AValue: string);
+procedure TTyEdit.SetText(const AValue: TCaption);
 var
   APPI: Integer;
 begin
@@ -607,7 +607,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyEdit.SetTextHint(const AValue: string);
+procedure TTyEdit.SetTextHint(const AValue: TCaption);
 begin
   if FTextHint = AValue then Exit;
   FTextHint := AValue;

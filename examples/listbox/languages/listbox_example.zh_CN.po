@@ -54,3 +54,7 @@ msgstr ""
 #: tmainform.lblhint.caption
 msgid "Row height follows the theme (--item-height) until you pin ItemHeight — switch skin first and watch it change on its own. In multi-select, Ctrl-click / Shift-click / Space toggle rows."
 msgstr ""
+
+#: tmainform.bar.caption
+msgid "TTyListBox  ·  TyControls"
+msgstr ""

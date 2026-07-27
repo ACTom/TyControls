@@ -106,3 +106,11 @@ msgstr ""
 #: tmainform.lblevents.caption
 msgid "OnChange x0, OnClick x0 - one pick fires OnChange twice"
 msgstr ""
+
+#: tmainform.bar.caption
+msgid "RadioButton  · TyControls"
+msgstr ""
+
+#: tmainform.groupc.caption
+msgid "Size = GroupIndex 0        Delivery = GroupIndex 1"
+msgstr ""

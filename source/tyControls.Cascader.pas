@@ -86,11 +86,11 @@ type
     A node with NO children is a LEAF — picking it is a complete selection. }
   TTyCascaderNode = class(TCollectionItem)
   private
-    FCaption: string;
+    FCaption: TCaption;
     FChildren: TTyCascaderNodes;
     FEnabled: Boolean;
     FTag: NativeInt;
-    procedure SetCaption(const AValue: string);
+    procedure SetCaption(const AValue: TCaption);
     procedure SetChildren(AValue: TTyCascaderNodes);
     procedure SetEnabled(AValue: Boolean);
   protected
@@ -107,7 +107,7 @@ type
   published
     { The option's text. Drawn with the resolved TyCascaderItem style (never the LCL Font),
       and joined into the field's Text by the cascader's Separator. }
-    property Caption: string read FCaption write SetCaption;
+    property Caption: TCaption read FCaption write SetCaption;
     { This option's sub-options. Empty => this is a leaf. A nested collection: the .lfm
       streams the whole tree recursively with no custom streaming code. }
     property Children: TTyCascaderNodes read FChildren write SetChildren;
@@ -465,7 +465,7 @@ type
     procedure SetPath(const AValue: TTyCascaderPath);
     procedure SetSeparator(const AValue: string);
     procedure SetDropDownRows(AValue: Integer);
-    function GetPathText: string;
+    function GetPathText: TCaption;
     function ButtonWidthPx(APPI: Integer): Integer;
     procedure EnsurePopup;
     { Push the current tree / value / controller into the panel. Split from EnsurePopup so
@@ -531,7 +531,7 @@ type
       derived — write SelectByText (or Path) instead. This deliberately shadows TControl.Text
       for the TTyCascader static type, the way TTyComboBox.Text already does; LCL code, which
       sees the control as a TControl, still gets the inherited Caption text. }
-    property Text: string read GetPathText;
+    property Text: TCaption read GetPathText;
   published
     { The option tree. Editing it anywhere re-validates the selection SILENTLY (see
       NodesChanged) and re-lays an open panel. }
@@ -604,7 +604,7 @@ begin
   Result := (FChildren = nil) or (FChildren.Count = 0);
 end;
 
-procedure TTyCascaderNode.SetCaption(const AValue: string);
+procedure TTyCascaderNode.SetCaption(const AValue: TCaption);
 begin
   if FCaption = AValue then Exit;
   FCaption := AValue;
@@ -1787,7 +1787,7 @@ begin
   // window out from under a click is worse than waiting for the next open.
 end;
 
-function TTyCascader.GetPathText: string;
+function TTyCascader.GetPathText: TCaption;
 begin
   Result := TyCascaderPathText(FNodes, FPath, FSeparator);
 end;

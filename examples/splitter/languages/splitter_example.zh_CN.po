@@ -28,10 +28,17 @@ msgid "Left column (alLeft)"
 msgstr "左栏 (alLeft)"
 
 #: tmainform.toppanel.caption
-msgid "Top band (alTop)"
-msgstr "上区 (alTop)"
+msgid "Top band (alTop) · rsLine: lands on mouse-up"
+msgstr ""
 
 #: tmainform.bottompanel.caption
 msgid "Bottom band (alClient)"
 msgstr "下区 (alClient)"
 
+#: tmainform.bar.caption
+msgid "Splitter  · TyControls"
+msgstr ""
+
+#: tmainform.inspectorpanel.caption
+msgid "Inspector (alRight)"
+msgstr ""

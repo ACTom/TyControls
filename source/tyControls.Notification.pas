@@ -194,8 +194,8 @@ type
 
   TTyNotification = class(TTyComponent)
   private
-    FTitle: string;
-    FMessage: string;
+    FTitle: TCaption;
+    FMessage: TCaption;
     FNotificationType: TTyNotificationType;
     FDuration: Integer;
     FPosition: TTyNotificationPosition;
@@ -212,8 +212,8 @@ type
     FHoverClose: Boolean;      // pointer is precisely over the x
     FClosePressed: Boolean;    // this press STARTED on the x (so it is a close, not a card click)
     FPointerInside: Boolean;   // pointer is over the card (drives :hover and the pause)
-    procedure SetTitle(const AValue: string);
-    procedure SetMessage(const AValue: string);
+    procedure SetTitle(const AValue: TCaption);
+    procedure SetMessage(const AValue: TCaption);
     procedure SetNotificationType(AValue: TTyNotificationType);
     procedure SetDuration(AValue: Integer);
     procedure SetPosition(AValue: TTyNotificationPosition);
@@ -330,10 +330,10 @@ type
   published
     { The headline, drawn in the card font at --notification-title-weight. Empty = no title:
       the message then takes the whole text column. }
-    property Title: string read FTitle write SetTitle;
+    property Title: TCaption read FTitle write SetTitle;
     { The body. Split on line breaks only — the card is a fixed themed width and does NOT
       auto-wrap, so the author owns the line ends. }
-    property Message: string read FMessage write SetMessage;
+    property Message: TCaption read FMessage write SetMessage;
     { The semantic kind: picks the mark and, through 'TyNotification.<type>', its ink. }
     property NotificationType: TTyNotificationType read FNotificationType
       write SetNotificationType default atInfo;
@@ -1204,14 +1204,14 @@ end;
 // ---------------------------------------------------------------------------
 // Property setters
 // ---------------------------------------------------------------------------
-procedure TTyNotification.SetTitle(const AValue: string);
+procedure TTyNotification.SetTitle(const AValue: TCaption);
 begin
   if FTitle = AValue then Exit;
   FTitle := AValue;
   Restyle;
 end;
 
-procedure TTyNotification.SetMessage(const AValue: string);
+procedure TTyNotification.SetMessage(const AValue: TCaption);
 begin
   if FMessage = AValue then Exit;
   FMessage := AValue;

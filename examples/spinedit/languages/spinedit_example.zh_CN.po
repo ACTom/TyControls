@@ -62,3 +62,7 @@ msgstr ""
 #: tmainform.lblclick.caption
 msgid "(click the quantity box to see OnClick)"
 msgstr ""
+
+#: tmainform.bar.caption
+msgid "TTySpinEdit  ·  TyControls"
+msgstr ""

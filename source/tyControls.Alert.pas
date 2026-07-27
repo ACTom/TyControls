@@ -130,7 +130,7 @@ type
   TTyAlert = class(TTyGraphicControl)
   private
     FAlertType: TTyAlertType;
-    FMessage: string;
+    FMessage: TCaption;
     FDescription: string;
     FShowIcon: Boolean;
     FClosable: Boolean;
@@ -144,7 +144,7 @@ type
     FOvrVer: Cardinal;
     FOvrValid: Boolean;
     procedure SetAlertType(AValue: TTyAlertType);
-    procedure SetMessage(const AValue: string);
+    procedure SetMessage(const AValue: TCaption);
     procedure SetDescription(const AValue: string);
     procedure SetShowIcon(AValue: Boolean);
     procedure SetClosable(AValue: Boolean);
@@ -208,7 +208,7 @@ type
     { The headline. Drawn with the resolved TyAlert style (NOT the LCL Font.*), left
       aligned, ellipsised when it does not fit, and never wrapped. No mnemonic parsing —
       a banner activates nothing, so an '&' is literal text. }
-    property Message: string read FMessage write SetMessage;
+    property Message: TCaption read FMessage write SetMessage;
     { The optional second line. Setting it switches the banner to the taller two-line
       form; clearing it goes back to one line. Same drawing rules as Message. }
     property Description: string read FDescription write SetDescription;
@@ -469,7 +469,7 @@ begin
   Refit;
 end;
 
-procedure TTyAlert.SetMessage(const AValue: string);
+procedure TTyAlert.SetMessage(const AValue: TCaption);
 begin
   if FMessage = AValue then Exit;
   FMessage := AValue;

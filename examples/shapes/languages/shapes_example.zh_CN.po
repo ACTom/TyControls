@@ -162,3 +162,7 @@ msgstr ""
 #: tmainform.lblthemecss.caption
 msgid "e.g. in a .tycss:  TyStarShape { background: #E8C547; border-color: #6B5310; }"
 msgstr ""
+
+#: tmainform.darkswitch.caption
+msgid "Dark"
+msgstr ""

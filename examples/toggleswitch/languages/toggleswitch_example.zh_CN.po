@@ -58,3 +58,15 @@ msgstr ""
 #: tmainform.lblstatus.caption
 msgid ""
 msgstr ""
+
+#: tmainform.bar.caption
+msgid "ToggleSwitch  · TyControls"
+msgstr ""
+
+#: tmainform.switchevents.caption
+msgid "OnChange vs OnClick"
+msgstr ""
+
+#: tmainform.switchnoanim.caption
+msgid "AnimationsEnabled = False (the knob snaps)"
+msgstr ""

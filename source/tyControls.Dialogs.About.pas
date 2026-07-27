@@ -57,7 +57,7 @@ type
   public
     procedure Execute;
   published
-    property Title: string read FTitle write FTitle;
+    property Title: TCaption read FTitle write FTitle;
     property AppName: string read FAppName write FAppName;
     property Version: string read FVersion write FVersion;
     property Description: string read FDescription write FDescription;

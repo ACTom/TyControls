@@ -682,3 +682,11 @@ msgstr ""
 #: tmainform.lbldrawtip.caption
 msgid "TTyDrawGrid stores nothing at all: every cell comes from OnGetCellText, so a million rows cost no memory"
 msgstr ""
+
+#: tmainform.edfilterval.text
+msgid "20"
+msgstr ""
+
+#: tmainform.pgdraw.caption
+msgid "Draw grid"
+msgstr ""

@@ -86,3 +86,27 @@ msgstr ""
 #: tmainform.btnscreen.caption
 msgid "Popover at the bottom of the screen"
 msgstr ""
+
+#: tmainform.bar.caption
+msgid "Hint  ·  TyControls"
+msgstr ""
+
+#: tmainform.hintswitch.caption
+msgid "Themed hints"
+msgstr ""
+
+#: tmainform.balloonwarn.title
+msgid "Low disk space"
+msgstr ""
+
+#: tmainform.balloonerr.title
+msgid "Save failed"
+msgstr ""
+
+#: tmainform.balloonplain.title
+msgid "Copied"
+msgstr ""
+
+#: tmainform.balloonsticky.title
+msgid "Sticky popover"
+msgstr ""

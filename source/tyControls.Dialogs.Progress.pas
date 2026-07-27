@@ -35,8 +35,8 @@ type
     repaints and a Cancel click is seen. OnCancel MUST NOT Free this component. }
   TTyProgressDialog = class(TTyComponent)
   private
-    FCaption: string;
-    FText: string;
+    FCaption: TCaption;
+    FText: TCaption;
     FMin, FMax, FPosition: Integer;
     FCancelable, FCancelled: Boolean;
     FOnCancel: TNotifyEvent;
@@ -57,8 +57,8 @@ type
     procedure DoCancel;                    // seam: fired by the Cancel button / Esc
     property Cancelled: Boolean read FCancelled;
   published
-    property Caption: string read FCaption write FCaption;
-    property Text: string read FText write FText;
+    property Caption: TCaption read FCaption write FCaption;
+    property Text: TCaption read FText write FText;
     property Min: Integer read FMin write FMin default 0;
     property Max: Integer read FMax write FMax default 100;
     property Position: Integer read FPosition write FPosition default 0;

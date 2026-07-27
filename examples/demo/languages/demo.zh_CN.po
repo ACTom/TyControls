@@ -379,3 +379,31 @@ msgstr ""
 #: tdemomainform.mnufilesep.caption
 msgid "-"
 msgstr ""
+
+#: tdemomainform.densitycombo.text
+msgid "Classic"
+msgstr ""
+
+#: tdemomainform.combokind.text
+msgid "Alpha"
+msgstr ""
+
+#: tdemomainform.tytabsheetgauges.caption
+msgid "Gauges"
+msgstr ""
+
+#: tdemomainform.demochart.title
+msgid "Weekly load"
+msgstr ""
+
+#: tdemomainform.tytabsheetgrid.caption
+msgid "Grid"
+msgstr ""
+
+#: tdemomainform.tymessage1.title
+msgid "Demo"
+msgstr ""
+
+#: tdemomainform.tyaboutdlg.title
+msgid "TyControls About"
+msgstr ""

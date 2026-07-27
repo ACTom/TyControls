@@ -153,7 +153,7 @@ type
   { One ribbon tab page — hosts groups. }
   TTyRibbonPage = class(TTyCustomControl)
   private
-    FCaption: string;
+    FCaption: TCaption;
     FContext: string;
     // Group-overflow (F3): the trailing groups that don't fit collapse into a "more" popup.
     FVisualGroups: array of TTyRibbonGroup;   // groups in stable left-to-right (visual) order
@@ -162,7 +162,7 @@ type
     FOverflowFrom: Integer;                     // FVisualGroups index where the overflow set begins
     FInLayout: Boolean;
     FCaptured: Boolean;
-    procedure SetCaption(const AValue: string);
+    procedure SetCaption(const AValue: TCaption);
     procedure SetContext(const AValue: string);
     procedure CaptureGroups;
     procedure LayoutOverflow;
@@ -178,7 +178,7 @@ type
   public
     constructor Create(AOwner: TComponent); override;
   published
-    property Caption: string read FCaption write SetCaption;
+    property Caption: TCaption read FCaption write SetCaption;
     { When non-empty, this page is a CONTEXTUAL tab: shown only while its host ribbon's
       context of this name is active (TTyRibbon.ShowContext/HideContext). Empty = a
       normal always-visible tab. }
@@ -192,11 +192,11 @@ type
   { A labelled group box inside a ribbon page. }
   TTyRibbonGroup = class(TTyCustomControl)
   private
-    FCaption: string;
+    FCaption: TCaption;
     FShowCaption: Boolean;
     FShowDialogLauncher: Boolean;
     FOnDialogLauncher: TTyRibbonLauncherEvent;
-    procedure SetCaption(const AValue: string);
+    procedure SetCaption(const AValue: TCaption);
     procedure SetShowCaption(AValue: Boolean);
     procedure SetShowDialogLauncher(AValue: Boolean);
     { The launcher arrow's client rect (device px) — computed from the current size,
@@ -211,7 +211,7 @@ type
   public
     constructor Create(AOwner: TComponent); override;
   published
-    property Caption: string read FCaption write SetCaption;
+    property Caption: TCaption read FCaption write SetCaption;
     { Show the bottom caption band (the group name). False = the content fills the full
       height and no caption/launcher is drawn (a caption-less group). }
     property ShowCaption: Boolean read FShowCaption write SetShowCaption default True;
@@ -1006,7 +1006,7 @@ begin
   Result := 'TyRibbon';
 end;
 
-procedure TTyRibbonPage.SetCaption(const AValue: string);
+procedure TTyRibbonPage.SetCaption(const AValue: TCaption);
 begin
   if FCaption = AValue then Exit;
   FCaption := AValue;
@@ -1223,7 +1223,7 @@ begin
   Result := 'TyRibbonGroup';
 end;
 
-procedure TTyRibbonGroup.SetCaption(const AValue: string);
+procedure TTyRibbonGroup.SetCaption(const AValue: TCaption);
 begin
   if FCaption = AValue then Exit;
   FCaption := AValue;

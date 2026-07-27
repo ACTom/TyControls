@@ -66,3 +66,39 @@ msgstr ""
 #: tmainform.paneleventlabel.caption
 msgid "Panel mouse events show up here…"
 msgstr ""
+
+#: tmainform.bar.caption
+msgid "TTyPanel  ·  TyControls"
+msgstr ""
+
+#: tmainform.alignleftpanel.caption
+msgid "taLeftJustify"
+msgstr ""
+
+#: tmainform.aligncenterpanel.caption
+msgid "taCenter (default)"
+msgstr ""
+
+#: tmainform.alignrightpanel.caption
+msgid "taRightJustify"
+msgstr ""
+
+#: tmainform.accentpanel.caption
+msgid "Accent tint, thicker edge, 12px corners"
+msgstr ""
+
+#: tmainform.plainpanel.caption
+msgid "No override — plain theme values"
+msgstr ""
+
+#: tmainform.hotpanel.caption
+msgid "Hover and click me"
+msgstr ""
+
+#: tmainform.disabledpanel.caption
+msgid "Enabled = False"
+msgstr ""
+
+#: tmainform.bottompanel.caption
+msgid "Align = alBottom"
+msgstr ""

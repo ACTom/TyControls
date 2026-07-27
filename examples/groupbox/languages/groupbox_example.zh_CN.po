@@ -20,8 +20,8 @@ msgid "Dark"
 msgstr "暗色"
 
 #: tmainform.groupsize.caption
-msgid "Font size (left aligned)"
-msgstr "字体大小（左对齐）"
+msgid "&Font size (left aligned)"
+msgstr ""
 
 #: tmainform.radioa.caption
 msgid "Small (12pt)"
@@ -36,8 +36,8 @@ msgid "Large (18pt)"
 msgstr "大（18pt）"
 
 #: tmainform.groupopt.caption
-msgid "Style (centered)"
-msgstr "样式（居中）"
+msgid "&Style (centered)"
+msgstr ""
 
 #: tmainform.checkbold.caption
 msgid "Bold"
@@ -48,8 +48,8 @@ msgid "Italic"
 msgstr "斜体"
 
 #: tmainform.groupname.caption
-msgid "Name (right aligned)"
-msgstr "名称（右对齐）"
+msgid "&Name (right aligned)"
+msgstr ""
 
 #: tmainform.lblfit.caption
 msgid "alBottom stops at the frame"
@@ -68,5 +68,17 @@ msgid "A child still starts below the caption band the box always reserves."
 msgstr ""
 
 #: tmainform.lblstatus.caption
+msgid ""
+msgstr ""
+
+#: tmainform.bar.caption
+msgid "GroupBox  ·  TyControls"
+msgstr ""
+
+#: tmainform.nameedit.texthint
+msgid "Enter a name…"
+msgstr ""
+
+#: tmainform.groupplain.caption
 msgid ""
 msgstr ""

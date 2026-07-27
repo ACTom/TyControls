@@ -24,8 +24,8 @@ msgid "Dark"
 msgstr "暗色"
 
 #: tmainform.hintpanel.caption
-msgid "Right-click this panel → enhanced menu (section headers + icon column + check items)"
-msgstr "右键此面板 → 增强菜单(分节标题 + 图标列 + 勾选项)"
+msgid "Right-click: enhanced menu"
+msgstr ""
 
 #: tmainform.statuslabel.caption
 msgid "Ready: shortcuts fire with the menu closed - press Ctrl+N. Submenus open on hover (Right walks in, Left walks back out). Greyed rows (Redo, Paste) are Enabled = False."
@@ -257,4 +257,8 @@ msgstr ""
 
 #: tmainform.plainpaste.caption
 msgid "Paste(&P)"
+msgstr ""
+
+#: tmainform.hintpanel2.caption
+msgid "Right-click: plain themed menu"
 msgstr ""

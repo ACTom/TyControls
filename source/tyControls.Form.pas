@@ -62,7 +62,7 @@ type
 
   TTyTitleBar = class(TTyCustomControl, ITyTitleBarTag)
   private
-    FCaption: string;
+    FCaption: TCaption;
     FMinButton: TTyCaptionButton;
     FMaxButton: TTyCaptionButton;
     FCloseButton: TTyCaptionButton;
@@ -70,7 +70,7 @@ type
     FButtonWidthExplicit: Boolean;   // True once ButtonWidth is set in code/OI (overrides the theme metric)
     FTitleAlignment: TAlignment;
     FEngine: TTyChromeEngine;
-    procedure SetCaption(const AValue: string);
+    procedure SetCaption(const AValue: TCaption);
     procedure SetButtonWidth(AValue: Integer);
     procedure SetTitleAlignment(AValue: TAlignment);
     function VisibleButtonCount: Integer;
@@ -116,7 +116,7 @@ type
       whatever the host's own child controls occupy. }
     procedure CaptionSpan(AWidth: Integer; out ALeft, ARight: Integer);
   published
-    property Caption: string read FCaption write SetCaption;
+    property Caption: TCaption read FCaption write SetCaption;
     { Left (default) or centered title text. Centered lays out within the content
       zone (left pad .. start of the caption buttons), so it never overlaps them. }
     property TitleAlignment: TAlignment read FTitleAlignment write SetTitleAlignment default taLeftJustify;
@@ -700,7 +700,7 @@ begin
   Result := 'TyTitleBar';
 end;
 
-procedure TTyTitleBar.SetCaption(const AValue: string);
+procedure TTyTitleBar.SetCaption(const AValue: TCaption);
 begin
   if FCaption = AValue then
     Exit;

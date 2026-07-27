@@ -42,3 +42,11 @@ msgstr ""
 #: tmainform.lbldensity.caption
 msgid "TabHeight unset there: it follows the theme — 28 classic, 38 modern."
 msgstr ""
+
+#: tmainform.bar.caption
+msgid "TTyTabSet  · TyControls"
+msgstr ""
+
+#: tmainform.div1.caption
+msgid "Header overflow · TabHeight unset"
+msgstr ""

@@ -66,3 +66,7 @@ msgstr ""
 #: tmainform.lblkeys.caption
 msgid "Keyboard: Alt+A / Alt+N activate the &&-marked boxes (the underline shows while Alt is held); Space toggles the focused box."
 msgstr ""
+
+#: tmainform.bar.caption
+msgid "TTyCheckBox  ·  TyControls"
+msgstr ""

@@ -20,8 +20,8 @@ msgid "Dark"
 msgstr "暗色"
 
 #: tmainform.pggeneral.caption
-msgid "Normal"
-msgstr "常规"
+msgid "&Normal"
+msgstr ""
 
 #: tmainform.lbluser.caption
 msgid "Username:"
@@ -36,8 +36,8 @@ msgid "Cancel"
 msgstr "取消"
 
 #: tmainform.pgappearance.caption
-msgid "Appearance"
-msgstr "外观"
+msgid "A&ppearance"
+msgstr ""
 
 #: tmainform.lblappearance.caption
 msgid "This is the \"Appearance\" page, where theme-related options can go."
@@ -52,8 +52,8 @@ msgid "Dark"
 msgstr "深色"
 
 #: tmainform.pgabout.caption
-msgid "About"
-msgstr "关于"
+msgid "A&bout"
+msgstr ""
 
 #: tmainform.lblabouttitle.caption
 msgid "TyControls page-control example"
@@ -117,4 +117,12 @@ msgstr ""
 
 #: tmainform.lbloverflowhint.caption
 msgid "Add pages until the headers overflow: arrows appear, the wheel scrolls."
+msgstr ""
+
+#: tmainform.bar.caption
+msgid "TTyPageControl  · TyControls"
+msgstr ""
+
+#: tmainform.eduser.text
+msgid "admin"
 msgstr ""

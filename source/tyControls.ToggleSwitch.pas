@@ -16,14 +16,14 @@ type
   TTyToggleSwitch = class(TTyCustomControl)
   private
     FChecked: Boolean;
-    FCaption: string;
+    FCaption: TCaption;
     FOnChange: TNotifyEvent;
     FKnobAnim: TTyAnimator;
     FAnimationsEnabled: Boolean;
     FTimer: TTimer;
     FRefitting: Boolean;   // guards the AutoSize re-fit in Invalidate against re-entry
     procedure SetChecked(const AValue: Boolean);
-    procedure SetCaption(const AValue: string);
+    procedure SetCaption(const AValue: TCaption);
     procedure EnsureTimer;
     procedure HandleTimer(Sender: TObject);
     function GetKnobAnimProgress: Single;
@@ -77,7 +77,7 @@ type
     property Checked: Boolean read FChecked write SetChecked default False;
     // Optional text label drawn to the RIGHT of the switch (TToggleBox parity).
     // Empty (the default) renders the bare switch unchanged.
-    property Caption: string read FCaption write SetCaption;
+    property Caption: TCaption read FCaption write SetCaption;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
     property Align;
     property Anchors;
@@ -159,7 +159,7 @@ begin
     FOnChange(Self);
 end;
 
-procedure TTyToggleSwitch.SetCaption(const AValue: string);
+procedure TTyToggleSwitch.SetCaption(const AValue: TCaption);
 begin
   if FCaption = AValue then Exit;
   FCaption := AValue;

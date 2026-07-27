@@ -46,3 +46,79 @@ msgstr ""
 #: tmainform.appmenu.caption
 msgid "File menu"
 msgstr ""
+
+#: tmainform.bar.caption
+msgid "TTyRibbon  ·  TyControls"
+msgstr ""
+
+#: tmainform.pghome.caption
+msgid "Start"
+msgstr ""
+
+#: tmainform.grpclipboard.caption
+msgid "Clipboard"
+msgstr ""
+
+#: tmainform.grpfont.caption
+msgid "Font"
+msgstr ""
+
+#: tmainform.grpparagraph.caption
+msgid "Paragraph"
+msgstr ""
+
+#: tmainform.grpedit.caption
+msgid "Edit"
+msgstr ""
+
+#: tmainform.pginsert.caption
+msgid "Insert"
+msgstr ""
+
+#: tmainform.grptable.caption
+msgid "Grid"
+msgstr ""
+
+#: tmainform.grpstyles.caption
+msgid "Style library"
+msgstr ""
+
+#: tmainform.grpsymbol.caption
+msgid "Symbol"
+msgstr ""
+
+#: tmainform.grppicture.caption
+msgid "Picture"
+msgstr ""
+
+#: tmainform.pgview.caption
+msgid "View"
+msgstr ""
+
+#: tmainform.grpshow.caption
+msgid "Show"
+msgstr ""
+
+#: tmainform.grpzoom.caption
+msgid "Zoom"
+msgstr ""
+
+#: tmainform.grpwindow.caption
+msgid "Window"
+msgstr ""
+
+#: tmainform.grpribbon.caption
+msgid "Ribbon itself"
+msgstr ""
+
+#: tmainform.grpappmenu.caption
+msgid "App menu"
+msgstr ""
+
+#: tmainform.pgpictools.caption
+msgid "Picture tools"
+msgstr ""
+
+#: tmainform.grpadjust.caption
+msgid "Adjust"
+msgstr ""

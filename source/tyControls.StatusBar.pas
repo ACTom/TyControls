@@ -7,16 +7,16 @@ uses
 type
   TTyStatusPanel = class(TCollectionItem)
   private
-    FText: string;
+    FText: TCaption;
     FWidth: Integer;
     FAlignment: TAlignment;
-    procedure SetText(const AValue: string);
+    procedure SetText(const AValue: TCaption);
     procedure SetWidth(AValue: Integer);
     procedure SetAlignment(AValue: TAlignment);
   public
     constructor Create(ACollection: TCollection); override;
   published
-    property Text: string read FText write SetText;
+    property Text: TCaption read FText write SetText;
     property Width: Integer read FWidth write SetWidth default 50;
     property Alignment: TAlignment read FAlignment write SetAlignment default taLeftJustify;
   end;
@@ -113,7 +113,7 @@ begin
   FWidth := 50;
   FAlignment := taLeftJustify;
 end;
-procedure TTyStatusPanel.SetText(const AValue: string);
+procedure TTyStatusPanel.SetText(const AValue: TCaption);
 begin if FText = AValue then Exit; FText := AValue; Changed(False); end;
 procedure TTyStatusPanel.SetWidth(AValue: Integer);
 begin if FWidth = AValue then Exit; FWidth := AValue; Changed(False); end;

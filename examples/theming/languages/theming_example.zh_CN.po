@@ -118,3 +118,7 @@ msgstr ""
 #: tmainform.lbllistener.caption
 msgid "Every theme, mode, accent, density or hot-reload change fires the change listeners on the controller - this window hooks one to re-skin its chrome."
 msgstr ""
+
+#: tmainform.switchdensity.caption
+msgid "Modern density"
+msgstr ""

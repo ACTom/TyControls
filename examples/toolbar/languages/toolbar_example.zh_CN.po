@@ -118,3 +118,7 @@ msgstr ""
 #: tmainform.lblreserved.caption
 msgid "ShowCaptions and Images are published for LCL parity but are not wired: in the reuse-TTyButton model each tool owns its own caption and glyph."
 msgstr ""
+
+#: tmainform.bar.caption
+msgid "TTyToolBar  · TyControls"
+msgstr ""

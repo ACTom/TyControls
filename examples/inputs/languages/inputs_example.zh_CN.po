@@ -166,3 +166,7 @@ msgstr ""
 #: tmainform.chksheetlock.caption
 msgid "Lock the whole sheet — ValueListEditor.ReadOnly blocks every value cell"
 msgstr ""
+
+#: tmainform.bar.caption
+msgid "Rich Inputs  · TyControls"
+msgstr ""

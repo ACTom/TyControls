@@ -34,3 +34,11 @@ msgstr ""
 #: tmainform.lbllimithint.caption
 msgid "Off = both bounds are 0 (the documented no-bound sentinel): every month is reachable, so PageUp/PageDown really walk the grid. On = only the 3 months either side of today stay selectable."
 msgstr ""
+
+#: tmainform.bar.caption
+msgid "TTyCalendar  ·  TyControls"
+msgstr ""
+
+#: tmainform.swlimit.caption
+msgid "Limit the range to 3 months"
+msgstr ""

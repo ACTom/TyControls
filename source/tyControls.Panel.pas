@@ -7,9 +7,9 @@ uses
 type
   TTyPanel = class(TTyCustomControl)
   private
-    FCaption: string;
+    FCaption: TCaption;
     FAlignment: TAlignment;
-    procedure SetCaption(const AValue: string);
+    procedure SetCaption(const AValue: TCaption);
     procedure SetAlignment(AValue: TAlignment);
   protected
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -18,7 +18,7 @@ type
     constructor Create(AOwner: TComponent); override;
     function GetStyleTypeKey: string; override;
   published
-    property Caption: string read FCaption write SetCaption;
+    property Caption: TCaption read FCaption write SetCaption;
     property Alignment: TAlignment read FAlignment write SetAlignment default taCenter;
     property Align;
     property Anchors;
@@ -40,7 +40,7 @@ function TTyPanel.GetStyleTypeKey: string;
 begin
   Result := 'TyPanel';
 end;
-procedure TTyPanel.SetCaption(const AValue: string);
+procedure TTyPanel.SetCaption(const AValue: TCaption);
 begin
   if FCaption = AValue then Exit;
   FCaption := AValue;

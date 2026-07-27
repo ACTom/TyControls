@@ -50,7 +50,7 @@ type
   { The balloon component. }
   TTyBalloonHint = class(TTyComponent)
   private
-    FTitle: string;
+    FTitle: TCaption;
     FDescription: string;
     FIcon: TTyBalloonIcon;
     FHideInterval: Integer;
@@ -71,7 +71,7 @@ type
     { Hide immediately (also called by the auto-hide timer). }
     procedure HideHint;
   published
-    property Title: string read FTitle write FTitle;
+    property Title: TCaption read FTitle write FTitle;
     property Description: string read FDescription write FDescription;
     property Icon: TTyBalloonIcon read FIcon write FIcon default biNone;
     { Auto-hide delay in ms (0 = stay until HideHint). Default 4000. }

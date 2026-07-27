@@ -80,7 +80,7 @@ type
   public
     function Execute: Boolean;
   published
-    property Caption: string read FCaption write FCaption;
+    property Caption: TCaption read FCaption write FCaption;
     property Root: string read FRoot write FRoot;
     property Directory: string read FDirectory write FDirectory;
     property OnShow: TNotifyEvent read FOnShow write FOnShow;

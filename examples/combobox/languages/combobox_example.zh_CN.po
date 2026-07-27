@@ -38,3 +38,11 @@ msgstr ""
 #: tmainform.btntogglelist.caption
 msgid "Open / close the list"
 msgstr ""
+
+#: tmainform.bar.caption
+msgid "TTyComboBox  ·  TyControls"
+msgstr ""
+
+#: tmainform.editcombo.text
+msgid "MANGO"
+msgstr ""

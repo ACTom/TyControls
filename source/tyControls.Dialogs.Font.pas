@@ -45,7 +45,7 @@ function TyFontDialog(AFont: TFont): Boolean;
 type
   TTyFontDialog = class(TTyComponent)
   private
-    FFont: TFont; FCaption: string;
+    FFont: TFont; FCaption: TCaption;
     FOnShow: TNotifyEvent;
     FOnClose: TCloseEvent;
     FOnCanClose: TCloseQueryEvent;
@@ -55,7 +55,7 @@ type
     destructor Destroy; override;
     function Execute: Boolean;
   published
-    property Caption: string read FCaption write FCaption;
+    property Caption: TCaption read FCaption write FCaption;
     property Font: TFont read FFont write SetFont;
     property OnShow: TNotifyEvent read FOnShow write FOnShow;
     property OnClose: TCloseEvent read FOnClose write FOnClose;

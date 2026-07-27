@@ -24,8 +24,8 @@ msgid "Dark"
 msgstr "暗色"
 
 #: tmainform.divfile.caption
-msgid "Plain file dialog"
-msgstr "普通文件对话框"
+msgid "Plain file dialog (all six dialogs are non-visual components — settings live in the .lfm)"
+msgstr ""
 
 #: tmainform.btnopen.caption
 msgid "Open (multi-select)"
@@ -97,4 +97,32 @@ msgstr ""
 
 #: tmainform.btnglobsaveprev.caption
 msgid "TySavePreviewDialog()"
+msgstr ""
+
+#: tmainform.divglobal.caption
+msgid "One-liner globals (no component needed — a var, a call, a Boolean)"
+msgstr ""
+
+#: tmainform.dlgopen.title
+msgid "Open file"
+msgstr ""
+
+#: tmainform.dlgsave.title
+msgid "Save file"
+msgstr ""
+
+#: tmainform.dlgopenpic.title
+msgid "Open picture"
+msgstr ""
+
+#: tmainform.dlgsavepic.title
+msgid "Save picture"
+msgstr ""
+
+#: tmainform.dlgopenprev.title
+msgid "Open (with preview)"
+msgstr ""
+
+#: tmainform.dlgsaveprev.title
+msgid "Save (with preview)"
 msgstr ""

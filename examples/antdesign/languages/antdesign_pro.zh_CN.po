@@ -834,3 +834,35 @@ msgstr ""
 #: tmainform.mnufilesep1.caption
 msgid "-"
 msgstr ""
+
+#: tmainform.edname.texthint
+msgid "Enter the work order title"
+msgstr ""
+
+#: tmainform.tsdept.texthint
+msgid "Please choose an owning department"
+msgstr ""
+
+#: tmainform.alertinfo.message
+msgid "The system will undergo routine maintenance tonight from 23:00 to 23:30."
+msgstr ""
+
+#: tmainform.alertsuccess.message
+msgid "Work order TY-2041 published."
+msgstr ""
+
+#: tmainform.alertwarning.message
+msgid "Archive disk usage has reached 86%"
+msgstr ""
+
+#: tmainform.alerterror.message
+msgid "The connection to the settlement service has been lost."
+msgstr ""
+
+#: tmainform.toast.message
+msgid "This is a corner toast."
+msgstr ""
+
+#: tmainform.toasterr.message
+msgid "Still failed after 3 retries.'#13#10'This one has Duration = 0 and stays until you close it."
+msgstr ""

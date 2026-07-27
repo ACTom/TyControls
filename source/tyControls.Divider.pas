@@ -36,9 +36,9 @@ function TyDividerLayout(AClientWidth, AClientHeight, ACaptionWidth: Integer;
 type
   TTyDivider = class(TTyGraphicControl)
   private
-    FCaption: string;
+    FCaption: TCaption;
     FAlignment: TAlignment;
-    procedure SetCaption(const AValue: string);
+    procedure SetCaption(const AValue: TCaption);
     procedure SetAlignment(AValue: TAlignment);
     { TTyGraphicControl has no ResolveFontSize helper (that lives on
       TTyCustomControl); mirror TTyLabel and resolve it locally. }
@@ -50,7 +50,7 @@ type
   public
     constructor Create(AOwner: TComponent); override;
   published
-    property Caption: string read FCaption write SetCaption;
+    property Caption: TCaption read FCaption write SetCaption;
     { Where the caption sits relative to the rule:
         taLeftJustify  — caption at the left, rule fills the space to its right;
         taRightJustify — mirror (caption at the right, rule to its left);
@@ -152,7 +152,7 @@ begin
   Result := TyResolveFontSize(AStyle, ParentFont, Font.Size, ActiveController);
 end;
 
-procedure TTyDivider.SetCaption(const AValue: string);
+procedure TTyDivider.SetCaption(const AValue: TCaption);
 begin
   if FCaption = AValue then Exit;
   FCaption := AValue;

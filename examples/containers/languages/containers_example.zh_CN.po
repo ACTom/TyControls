@@ -84,8 +84,8 @@ msgid "Format painter"
 msgstr "格式刷"
 
 #: tmainform.divscroll.caption
-msgid "Scroll / collapse containers"
-msgstr "滚动 / 折叠容器"
+msgid "Scroll / collapse containers (the box below scrolls on BOTH axes)"
+msgstr ""
 
 #: tmainform.exadvanced.caption
 msgid "Advanced options (click title to collapse)"
@@ -361,4 +361,20 @@ msgstr ""
 
 #: tmainform.lbllog.caption
 msgid "Status — group / header / list / panel events report here"
+msgstr ""
+
+#: tmainform.edituser.texthint
+msgid "Login name"
+msgstr ""
+
+#: tmainform.editmail.texthint
+msgid "name@example.com"
+msgstr ""
+
+#: tmainform.editphone.texthint
+msgid "Phone number"
+msgstr ""
+
+#: tmainform.divmore.caption
+msgid "More container modes — wrapping toolbar · auto-pan scroll container · a panel that starts collapsed · vertical edge lines · an invisible spacer"
 msgstr ""

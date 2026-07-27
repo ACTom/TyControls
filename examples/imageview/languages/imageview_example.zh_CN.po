@@ -32,8 +32,8 @@ msgid "Zoom: —"
 msgstr "缩放:—"
 
 #: tmainform.div1.caption
-msgid "Non-destructive filter (source image unchanged)"
-msgstr "非破坏性滤镜(源图不变)"
+msgid "Non-destructive filters: grayscale · blur · sharpen · invert · tint (source image unchanged)"
+msgstr ""
 
 #: tmainform.chkgray.caption
 msgid "Grayscale"
@@ -89,4 +89,12 @@ msgstr ""
 
 #: tmainform.lblview.caption
 msgid "Uncheck either one, then zoom or resize the window, and compare."
+msgstr ""
+
+#: tmainform.titlebar1.caption
+msgid "TTyImageView  ·  TyControls"
+msgstr ""
+
+#: tmainform.div2.caption
+msgid "View behaviour — wheel zoom stops at ZoomMin 10% and ZoomMax 800%"
 msgstr ""

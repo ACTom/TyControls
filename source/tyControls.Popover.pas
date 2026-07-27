@@ -225,7 +225,7 @@ type
     FTarget: TControl;
     FContent: TWinControl;
     FPlacement: TTyPopoverPlacement;
-    FTitle: string;
+    FTitle: TCaption;
     FShowArrow: Boolean;
     FCloseOnClickOutside: Boolean;
     FCloseOnEscape: Boolean;
@@ -246,7 +246,7 @@ type
     procedure SetTarget(AValue: TControl);
     procedure SetContent(AValue: TWinControl);
     procedure SetPlacement(AValue: TTyPopoverPlacement);
-    procedure SetTitle(const AValue: string);
+    procedure SetTitle(const AValue: TCaption);
     procedure SetShowArrow(AValue: Boolean);
     procedure SetStyleClass(const AValue: string);
     procedure SetController(AValue: TTyStyleController);
@@ -342,7 +342,7 @@ type
     { An optional headline above the content, drawn with the resolved TyPopoverTitle style.
       Empty = no title, and the content takes the whole body. Single-line and ellipsised; no
       mnemonic parsing — a title activates nothing, so an '&' is literal text. }
-    property Title: string read FTitle write SetTitle;
+    property Title: TCaption read FTitle write SetTitle;
     { Draw the arrow pointing at Target. Off = a plain floating card that still places and
       flips by the same rules, just without the strip (and without its thickness). }
     property ShowArrow: Boolean read FShowArrow write SetShowArrow default True;
@@ -1233,7 +1233,7 @@ begin
   // pointer mid-gesture is how a user loses the button they were reaching for.
 end;
 
-procedure TTyPopover.SetTitle(const AValue: string);
+procedure TTyPopover.SetTitle(const AValue: TCaption);
 begin
   if FTitle = AValue then Exit;
   FTitle := AValue;

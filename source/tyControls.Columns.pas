@@ -11,7 +11,7 @@ unit tyControls.Columns;
   thin compatibility shim. }
 interface
 uses
-  Classes, SysUtils, Math, ImgList;
+  Classes, SysUtils, Math, ImgList, Controls;
 
 const
   NoColumn = -1;   { sentinel: "no column" / not found }
@@ -56,7 +56,7 @@ type
     FMaxWidth:         Integer;
     FAlignment:        TAlignment;
     FCaptionAlignment: TAlignment;
-    FText:             string;
+    FText:             TCaption;
     FImageIndex:       Integer;
     FOptions:          TTyColumnOptions;
     FTag:              NativeInt;
@@ -72,7 +72,7 @@ type
     procedure SetOptions(AValue: TTyColumnOptions);
     procedure SetAlignment(AValue: TAlignment);
     procedure SetCaptionAlignment(AValue: TAlignment);
-    procedure SetText(const AValue: string);
+    procedure SetText(const AValue: TCaption);
     procedure SetImageIndex(AValue: Integer);
     function  GetOwnerColumns: TTyColumns;
     procedure NotifyOwner;
@@ -91,7 +91,7 @@ type
     property Position:         Cardinal             read FPosition         write SetPosition;
     property Alignment:        TAlignment           read FAlignment        write SetAlignment        default taLeftJustify;
     property CaptionAlignment: TAlignment           read FCaptionAlignment write SetCaptionAlignment default taLeftJustify;
-    property Text:             string               read FText             write SetText;
+    property Text:             TCaption               read FText             write SetText;
     property ImageIndex:       Integer              read FImageIndex       write SetImageIndex       default -1;
     property Options:          TTyColumnOptions read FOptions          write SetOptions;
     property Tag:              NativeInt            read FTag              write FTag                default 0;
@@ -365,7 +365,7 @@ begin
   NotifyOwner;
 end;
 
-procedure TTyColumn.SetText(const AValue: string);
+procedure TTyColumn.SetText(const AValue: TCaption);
 begin
   if FText = AValue then Exit;
   FText := AValue;

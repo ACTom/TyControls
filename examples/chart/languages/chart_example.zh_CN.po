@@ -62,3 +62,11 @@ msgstr ""
 #: tmainform.lblhit.caption
 msgid "Click a bar, marker or slice — HitTestAt names the datum here"
 msgstr ""
+
+#: tmainform.titlebar1.caption
+msgid "TTyChart  ·  TyControls"
+msgstr ""
+
+#: tmainform.chart.title
+msgid "Quarterly sales"
+msgstr ""

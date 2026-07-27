@@ -118,3 +118,39 @@ msgstr ""
 #: tmainform.btnselectrange.caption
 msgid "Select chars 3-7"
 msgstr ""
+
+#: tmainform.bar.caption
+msgid "TTyEdit  ·  TyControls"
+msgstr ""
+
+#: tmainform.edhint.texthint
+msgid "Type here, echoed live below…"
+msgstr ""
+
+#: tmainform.edpassword.text
+msgid "secret"
+msgstr ""
+
+#: tmainform.edupper.texthint
+msgid "Input will be converted to uppercase"
+msgstr ""
+
+#: tmainform.edmaxlen.texthint
+msgid "Up to 8 chars"
+msgstr ""
+
+#: tmainform.ednumbers.texthint
+msgid "Only 0-9 allowed"
+msgstr ""
+
+#: tmainform.edright.text
+msgid "1234.56"
+msgstr ""
+
+#: tmainform.edlower.texthint
+msgid "Input will be converted to lowercase"
+msgstr ""
+
+#: tmainform.edcenter.text
+msgid "42"
+msgstr ""

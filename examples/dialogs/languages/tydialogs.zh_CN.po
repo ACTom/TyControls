@@ -300,3 +300,19 @@ msgstr ""
 #: tdialogsmainform.btncompcolor.caption
 msgid "Color (component)"
 msgstr ""
+
+#: tdialogsmainform.darkswitch.caption
+msgid "Dark"
+msgstr ""
+
+#: tdialogsmainform.dlgmessage.title
+msgid "Delete"
+msgstr ""
+
+#: tdialogsmainform.dlginput.caption
+msgid "Rename"
+msgstr ""
+
+#: tdialogsmainform.dlgcolor.caption
+msgid "Select a colour"
+msgstr ""

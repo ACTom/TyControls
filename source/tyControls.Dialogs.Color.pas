@@ -85,7 +85,7 @@ function TySelectColor(const ACaption: string; var AColor: TColor; var AAlpha: B
 type
   TTyColorDialog = class(TTyComponent)
   private
-    FColor: TTyColor; FCaption: string;
+    FColor: TTyColor; FCaption: TCaption;
     FOnShow: TNotifyEvent;
     FOnClose: TCloseEvent;
     FOnCanClose: TCloseQueryEvent;
@@ -96,7 +96,7 @@ type
     function Execute: Boolean;
     property LCLColor: TColor read GetLCL write SetLCL;
   published
-    property Caption: string read FCaption write FCaption;
+    property Caption: TCaption read FCaption write FCaption;
     property Color: TTyColor read FColor write FColor default $FF000000;
     property Alpha: Byte read GetAlpha write SetAlpha default $FF;
     property OnShow: TNotifyEvent read FOnShow write FOnShow;

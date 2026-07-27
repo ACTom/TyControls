@@ -66,3 +66,11 @@ msgstr ""
 #: tmainform.lblupdownh.caption
 msgid "Horizontal spinner: Increment 5, Wrap 20 -> 0 (Position = 5)"
 msgstr ""
+
+#: tmainform.bar.caption
+msgid "Gauge  · TyControls"
+msgstr ""
+
+#: tmainform.busyswitch.caption
+msgid "Running"
+msgstr ""

@@ -11,8 +11,8 @@ type
     the IDE treats it as a fixed, droppable, hide-on-inactive design surface. }
   TTyTabSheet = class(TTyCustomControl)
   private
-    FCaption: string;
-    procedure SetCaption(const AValue: string);
+    FCaption: TCaption;
+    procedure SetCaption(const AValue: TCaption);
   protected
     procedure SetParent(AParent: TWinControl); override;
     function GetStyleTypeKey: string; override;
@@ -21,7 +21,7 @@ type
   public
     constructor Create(AOwner: TComponent); override;
   published
-    property Caption: string read FCaption write SetCaption;
+    property Caption: TCaption read FCaption write SetCaption;
     property StyleClass;
     property Controller;
   end;
@@ -46,7 +46,7 @@ begin
   Result := 'TyTabSheet';
 end;
 
-procedure TTyTabSheet.SetCaption(const AValue: string);
+procedure TTyTabSheet.SetCaption(const AValue: TCaption);
 begin
   if FCaption = AValue then Exit;
   FCaption := AValue;

@@ -34,3 +34,7 @@ msgstr ""
 #: tmainform.lblheadautosize.caption
 msgid "AutoSize = True — drag the window narrower and watch this label grow taller on its own"
 msgstr ""
+
+#: tmainform.titlebar1.caption
+msgid "TTyHtmlLabel  ·  TyControls"
+msgstr ""

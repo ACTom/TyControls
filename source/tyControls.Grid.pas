@@ -155,20 +155,20 @@ type
     这是对的:组的含义是"这几列属于同一类",顺序变了就不再是同一类。 }
   TTyGridHeaderGroup = class(TCollectionItem)
   private
-    FText:      string;
+    FText:      TCaption;
     FFirstCol:  Integer;
     FLastCol:   Integer;
     FLevel:     Integer;
     FAlignment: TAlignment;
     procedure Changed;
-    procedure SetText(const AValue: string);
+    procedure SetText(const AValue: TCaption);
     procedure SetFirstCol(AValue: Integer);
     procedure SetLastCol(AValue: Integer);
   public
     constructor Create(ACollection: TCollection); override;
     procedure Assign(ASource: TPersistent); override;
   published
-    property Text: string read FText write SetText;
+    property Text: TCaption read FText write SetText;
     property FirstCol: Integer read FFirstCol write SetFirstCol default 0;
     property LastCol: Integer read FLastCol write SetLastCol default 0;
     { 第几级(0 = 最上面那条带)。目前只画 0 级。 }
@@ -2550,7 +2550,7 @@ begin
       TTyGridHeaderGroups(Collection).OnChange(Collection);
 end;
 
-procedure TTyGridHeaderGroup.SetText(const AValue: string);
+procedure TTyGridHeaderGroup.SetText(const AValue: TCaption);
 begin
   if FText = AValue then Exit;
   FText := AValue;

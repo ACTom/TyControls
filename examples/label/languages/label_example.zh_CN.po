@@ -82,3 +82,7 @@ msgstr ""
 #: tmainform.lblaccent.caption
 msgid "StyleOverride = color: var(--accent) - still theme-aware"
 msgstr ""
+
+#: tmainform.bar.caption
+msgid "TTyLabel  ·  TyControls"
+msgstr ""

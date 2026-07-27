@@ -82,3 +82,7 @@ msgstr ""
 #: tmainform.btnauto.caption
 msgid "AutoSize=True: I grow to fit this long caption"
 msgstr ""
+
+#: tmainform.bar.caption
+msgid "TTyButton  ·  TyControls"
+msgstr ""

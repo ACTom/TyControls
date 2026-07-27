@@ -54,13 +54,13 @@ type
     =================================================================== }
   TTyListItem = class(TCollectionItem)
   private
-    FCaption:    string;
+    FCaption:    TCaption;
     FSubItems:   TStrings;
     FImageIndex: Integer;
     FData:       Pointer;
     FStates:     TTyListItemStates;
     FGroupIndex: Integer;
-    procedure SetCaption(const AValue: string);
+    procedure SetCaption(const AValue: TCaption);
     procedure SetSubItems(AValue: TStrings);
     procedure SetImageIndex(AValue: Integer);
     procedure SetStates(AValue: TTyListItemStates);
@@ -78,7 +78,7 @@ type
       GetItemState reads it; the design-time contract only publishes text/image. }
     property States: TTyListItemStates read FStates write SetStates;
   published
-    property Caption:    string  read FCaption    write SetCaption;
+    property Caption:    TCaption  read FCaption    write SetCaption;
     { Columns 1..N (column 0 is Caption). }
     property SubItems:   TStrings read FSubItems  write SetSubItems;
     property ImageIndex: Integer read FImageIndex write SetImageIndex default -1;
@@ -118,16 +118,16 @@ type
     =================================================================== }
   TTyListGroup = class(TCollectionItem)
   private
-    FCaption:   string;
+    FCaption:   TCaption;
     FCollapsed: Boolean;
-    procedure SetCaption(const AValue: string);
+    procedure SetCaption(const AValue: TCaption);
     procedure SetCollapsed(AValue: Boolean);
   protected
     function GetDisplayName: string; override;
   public
     procedure Assign(ASource: TPersistent); override;
   published
-    property Caption:   string  read FCaption   write SetCaption;
+    property Caption:   TCaption  read FCaption   write SetCaption;
     property Collapsed: Boolean read FCollapsed write SetCollapsed default False;
   end;
 
@@ -620,7 +620,7 @@ begin
     Result := inherited GetDisplayName;
 end;
 
-procedure TTyListItem.SetCaption(const AValue: string);
+procedure TTyListItem.SetCaption(const AValue: TCaption);
 begin
   if FCaption = AValue then Exit;
   FCaption := AValue;
@@ -729,7 +729,7 @@ begin
     inherited Assign(ASource);
 end;
 
-procedure TTyListGroup.SetCaption(const AValue: string);
+procedure TTyListGroup.SetCaption(const AValue: TCaption);
 begin
   if FCaption = AValue then Exit;
   FCaption := AValue;

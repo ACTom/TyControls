@@ -70,3 +70,7 @@ msgstr ""
 #: tmainform.lbldock.caption
 msgid "Align = alBottom - a strip that stretches with the window"
 msgstr ""
+
+#: tmainform.bar.caption
+msgid "TTyProgressBar  ·  TyControls"
+msgstr ""

@@ -90,3 +90,7 @@ msgstr ""
 #: tmainform.lblstatus.caption
 msgid "(click a button, a segment or the colour button)"
 msgstr ""
+
+#: tmainform.bar.caption
+msgid "Buttons  · TyControls"
+msgstr ""

@@ -268,7 +268,7 @@ type
     FChartType: TTyChartType;
     FSeries: TTyChartSeries;
     FCategories: TStrings;
-    FTitle: string;
+    FTitle: TCaption;
     FShowLegend: Boolean;
     FShowGrid: Boolean;
     FShowValues: Boolean;
@@ -281,7 +281,7 @@ type
     procedure SetChartType(AValue: TTyChartType);
     procedure SetSeries(AValue: TTyChartSeries);
     procedure SetCategories(AValue: TStrings);
-    procedure SetTitle(const AValue: string);
+    procedure SetTitle(const AValue: TCaption);
     procedure SetShowLegend(AValue: Boolean);
     procedure SetShowGrid(AValue: Boolean);
     procedure SetShowValues(AValue: Boolean);
@@ -347,7 +347,7 @@ type
     property ChartType: TTyChartType read FChartType write SetChartType default ctLine;
     property Series: TTyChartSeries read FSeries write SetSeries;
     property Categories: TStrings read FCategories write SetCategories;
-    property Title: string read FTitle write SetTitle;
+    property Title: TCaption read FTitle write SetTitle;
     property ShowLegend: Boolean read FShowLegend write SetShowLegend default True;
     property ShowGrid: Boolean read FShowGrid write SetShowGrid default True;
     property ShowValues: Boolean read FShowValues write SetShowValues default False;
@@ -888,7 +888,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyChart.SetTitle(const AValue: string);
+procedure TTyChart.SetTitle(const AValue: TCaption);
 begin
   if FTitle = AValue then Exit;
   FTitle := AValue;

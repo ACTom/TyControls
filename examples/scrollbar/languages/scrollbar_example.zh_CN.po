@@ -54,3 +54,11 @@ msgstr ""
 #: tmainform.lblfull.caption
 msgid "Max = Min: nothing to scroll, so the thumb fills the whole track"
 msgstr ""
+
+#: tmainform.bar.caption
+msgid "TTyScrollBar  ·  TyControls"
+msgstr ""
+
+#: tmainform.swanim.caption
+msgid "Animated thumb"
+msgstr ""

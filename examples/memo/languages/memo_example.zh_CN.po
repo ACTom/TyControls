@@ -90,3 +90,7 @@ msgstr ""
 #: tmainform.lblscrollhint.caption
 msgid "horizontal bar needs WordWrap off"
 msgstr ""
+
+#: tmainform.bar.caption
+msgid "TTyMemo  · TyControls"
+msgstr ""

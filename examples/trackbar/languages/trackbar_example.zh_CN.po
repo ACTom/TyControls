@@ -70,3 +70,11 @@ msgstr ""
 #: tmainform.lblkeys3.caption
 msgid "The wheel steps by LineSize; a click jumps the thumb there."
 msgstr ""
+
+#: tmainform.bar.caption
+msgid "TrackBar  · TyControls"
+msgstr ""
+
+#: tmainform.animswitch.caption
+msgid "Animate thumb"
+msgstr ""

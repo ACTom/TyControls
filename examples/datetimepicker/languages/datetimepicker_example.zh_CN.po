@@ -70,3 +70,7 @@ msgstr ""
 #: tmainform.lbldrophint.caption
 msgid "Open sets DatePicker.DroppedDown := True; closing reads it back"
 msgstr ""
+
+#: tmainform.bar.caption
+msgid "TTyDateTimePicker  ·  TyControls"
+msgstr ""

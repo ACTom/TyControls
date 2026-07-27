@@ -147,7 +147,7 @@ type
       paint that re-read a deleted node would be a dangling read on every Invalidate. See
       UpdateText for the "the caption changed under us" case. }
     FText: string;
-    FTextHint: string;
+    FTextHint: TCaption;
     FDropDownWidth: Integer;
     FDropDownHeight: Integer;
     FCloseUpTick: QWord;           // tick at last CloseUp — the reopen-race guard
@@ -155,10 +155,10 @@ type
     FOnDropDown: TNotifyEvent;
     FOnCloseUp: TNotifyEvent;
     procedure SetSelectedNode(AValue: PTyTreeNode);
-    procedure SetTextHint(const AValue: string);
+    procedure SetTextHint(const AValue: TCaption);
     procedure SetDropDownWidth(AValue: Integer);
     procedure SetDropDownHeight(AValue: Integer);
-    function GetFieldText: string;
+    function GetFieldText: TCaption;
     { A property's read must name a field of its OWN type, and FTree is the descendant —
       hence the getter for a plain TTyTreeView view of it. }
     function GetTree: TTyTreeView;
@@ -229,12 +229,12 @@ type
     property SelectedNode: PTyTreeNode read FSelectedNode write SetSelectedNode;
     { The pick's caption; '' when nothing is selected. Read-only: the value here is a NODE —
       text is what it looks like, not what it is, and writing a caption could not name one. }
-    property Text: string read GetFieldText;
+    property Text: TCaption read GetFieldText;
   published
     { Drawn in the 'TyTextHint' ink while nothing is selected (the same key, and so the same
       dim colour, as TTyEdit.TextHint). A selected node's blank caption is NOT the empty
       state and does not bring it back. }
-    property TextHint: string read FTextHint write SetTextHint;
+    property TextHint: TCaption read FTextHint write SetTextHint;
     { The drop's width in LOGICAL px; 0 (default) = as wide as the field. }
     property DropDownWidth: Integer read FDropDownWidth write SetDropDownWidth default 0;
     { The drop's height in LOGICAL px; 0 (default) = the theme's --treeselect-drop-height. }
@@ -428,7 +428,7 @@ begin
   Result := FTree;
 end;
 
-function TTyTreeSelect.GetFieldText: string;
+function TTyTreeSelect.GetFieldText: TCaption;
 begin
   Result := FText;
 end;
@@ -612,7 +612,7 @@ end;
 
 { --- property setters --------------------------------------------------------- }
 
-procedure TTyTreeSelect.SetTextHint(const AValue: string);
+procedure TTyTreeSelect.SetTextHint(const AValue: TCaption);
 begin
   if FTextHint = AValue then Exit;
   FTextHint := AValue;
