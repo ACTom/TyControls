@@ -240,6 +240,12 @@ begin
   m := TTyStyleModel.Create;
   try
     m.LoadFromFile(fn);   // raises on any syntax/value error
+    { classic is DUAL-MODE: --face and the rest of its palette live in the @mode blocks, so a
+      bare model with Mode = '' (the documented "no mode override" state) leaves them
+      undefined and ResolveStyle raises. A real app never sees this -- TTyStyleController
+      seeds DefaultModeName for exactly this reason -- but a model loaded directly has to say
+      which mode it wants, the same way test.themes.pas does. }
+    m.Mode := 'light';
     s := m.ResolveStyle('TyButton', '', []);
     AssertEquals('classic TyButton uses render-style bevel3d', Ord(trsBevel3D), Ord(s.RenderStyle));
     s := m.ResolveStyle('TyEdit', '', []);
