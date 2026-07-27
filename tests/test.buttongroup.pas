@@ -4,7 +4,8 @@ interface
 uses
   Classes, SysUtils, TypInfo, fpcunit, testregistry, Types, Forms, Controls, Graphics,
   BGRABitmap,
-  tyControls.Base, tyControls.ButtonGroup, tyControls.Types, tyControls.Controller;
+  tyControls.Base, tyControls.ButtonGroup, tyControls.Types, tyControls.Controller,
+  tyControls.ToolBar;
 type
   // Expose the protected SelectAt/RenderTo seams for headless testing.
   TTyButtonGroupAccess = class(TTyButtonGroup)
@@ -12,6 +13,8 @@ type
     procedure DoSelectAt(AX: Integer);
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     function StyleKey: string;
+    // Expose the protected preferred-size calculation (what AutoSize resizes to).
+    procedure CallPreferred(out AW, AH: Integer);
   end;
 
   TButtonGroupTest = class(TTestCase)
@@ -33,6 +36,21 @@ type
     procedure TestPaintSmokeEmpty;
     procedure TestPaintSmokePopulated;
   end;
+
+  { AutoSize / preferred-size suite. Every assertion goes through CalculatePreferredSize
+    rather than through Width: LCL's AutoSizeDelayed suppresses auto-sizing while the parent
+    form has no handle, and the headless runner never realises one — so reading Width here
+    would measure nothing. }
+  TButtonGroupAutoSizeTest = class(TTestCase)
+  published
+    procedure TestAutoSizePublishedAndOffByDefault;
+    procedure TestEmptyGroupProposesNothing;
+    procedure TestPreferredWidthIsCountTimesTheWidestCell;
+    procedure TestPreferredWidthGrowsWithTheWidestCaption;
+    procedure TestMnemonicMarkerCostsNoWidth;
+    procedure TestRoomierThemePaddingWidensPreferredWidth;
+    procedure TestAutoSizeSurvivesAHeightPinningParent;
+  end;
 implementation
 
 procedure TTyButtonGroupAccess.DoSelectAt(AX: Integer);
@@ -48,6 +66,12 @@ end;
 function TTyButtonGroupAccess.StyleKey: string;
 begin
   Result := GetStyleTypeKey;
+end;
+
+procedure TTyButtonGroupAccess.CallPreferred(out AW, AH: Integer);
+begin
+  AW := 0; AH := 0;
+  CalculatePreferredSize(AW, AH, True);
 end;
 
 procedure TButtonGroupTest.HandleChange(Sender: TObject);
@@ -313,6 +337,241 @@ begin
   end;
 end;
 
+{ TButtonGroupAutoSizeTest }
+
+const
+  // One stylesheet shape reused across the suite: only the padding / font-size digits move,
+  // so any width difference an assertion sees can only have come from what changed.
+  cCssFmt = 'TyButtonGroup { background: #FFFFFF; color: #000000; border-width: 0px; ' +
+            'padding: %dpx %dpx; font-size: %dpx; }';
+
+procedure TButtonGroupAutoSizeTest.TestAutoSizePublishedAndOffByDefault;
+{ AutoSize has to be settable from a .lfm and from the object inspector, and it has to stay
+  OFF by default — every existing layout keeps the width it was designed with. }
+var
+  G: TTyButtonGroup;
+begin
+  G := TTyButtonGroup.Create(nil);
+  try
+    AssertTrue('AutoSize is published so a .lfm / the OI can set it',
+      IsPublishedProp(G, 'AutoSize'));
+    AssertFalse('but it stays OFF by default — a designed bar keeps its width', G.AutoSize);
+  finally
+    G.Free;
+  end;
+end;
+
+procedure TButtonGroupAutoSizeTest.TestEmptyGroupProposesNothing;
+{ An empty bar draws nothing (RenderTo returns after the background), so it has no opinion on
+  either axis: 0 is LCL's "no preference", which leaves the designed 240px alone. Answering 1px
+  here would collapse an empty group in the designer the moment AutoSize was switched on. }
+var
+  Ctl: TTyStyleController;
+  G: TTyButtonGroupAccess;
+  w, h: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Ctl.LoadThemeCss(Format(cCssFmt, [4, 10, 12]));
+    G := TTyButtonGroupAccess.Create(nil);
+    try
+      G.Controller := Ctl;
+      G.Font.PixelsPerInch := 96;
+      G.CallPreferred(w, h);
+      AssertEquals('an empty bar proposes no width', 0, w);
+      AssertEquals('an empty bar proposes no height', 0, h);
+    finally
+      G.Free;
+    end;
+  finally
+    Ctl.Free;
+  end;
+end;
+
+procedure TButtonGroupAutoSizeTest.TestPreferredWidthIsCountTimesTheWidestCell;
+{ RenderTo tiles the bar into EQUAL cells and centres each caption inside its cell minus the
+  style's left/right padding — so the bar needs count x (widest caption + both paddings).
+  Adding one more item no wider than the current widest must therefore add exactly one cell:
+  that is the arithmetic this asserts (2 cells x 3 = 3 cells x 2), and it is what stops the
+  last segment from being the only one that fits. }
+var
+  Ctl: TTyStyleController;
+  G: TTyButtonGroupAccess;
+  w2, w3, h: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Ctl.LoadThemeCss(Format(cCssFmt, [4, 10, 12]));
+    G := TTyButtonGroupAccess.Create(nil);
+    try
+      G.Controller := Ctl;
+      G.Font.PixelsPerInch := 96;
+      G.Items.Add('Alpha');           // the widest caption throughout
+      G.Items.Add('Beta');
+      G.CallPreferred(w2, h);
+      AssertTrue('two cells want a real width', w2 > 0);
+      { Height is deliberately UNSET (0 = "no preference on this axis" in LCL): the bar widens
+        for its captions, but its height belongs to whoever lays out the row. Proposing one
+        makes it fight any container that pins a height (TTyToolBar pins every child to its
+        ButtonHeight) until LCL aborts with "TControl.ChangeBounds loop detected". }
+      AssertEquals('height is left to the layout, not proposed', 0, h);
+
+      G.Items.Add('Beta');            // no wider than 'Alpha' -> one more identical cell
+      G.CallPreferred(w3, h);
+      AssertEquals('three cells are exactly one and a half times two cells', w2 * 3, w3 * 2);
+      AssertEquals('and still no height', 0, h);
+
+      // The cell really carries BOTH paddings: 10px a side x 3 cells = 60px of the total.
+      AssertTrue(Format('the width includes each cell''s padding (3 cells, got %d)', [w3]),
+        w3 > 3 * (2 * 10));
+    finally
+      G.Free;
+    end;
+  finally
+    Ctl.Free;
+  end;
+end;
+
+procedure TButtonGroupAutoSizeTest.TestPreferredWidthGrowsWithTheWidestCaption;
+{ The reported case: a caption swapped at runtime (a longer translation pushed in after the
+  .lfm sized the bar) must make the bar want more width, not get ellipsised. Every cell is the
+  same width, so it is the WIDEST caption that sets the cell — a single long item widens all
+  of them. }
+var
+  Ctl: TTyStyleController;
+  G: TTyButtonGroupAccess;
+  narrow, wide, h: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Ctl.LoadThemeCss(Format(cCssFmt, [4, 10, 12]));
+    G := TTyButtonGroupAccess.Create(nil);
+    try
+      G.Controller := Ctl;
+      G.Font.PixelsPerInch := 96;
+      G.AutoSize := True;
+      G.Items.Add('New');
+      G.Items.Add('Open');
+      G.CallPreferred(narrow, h);
+
+      G.Items[1] := 'Open a recent work order';
+      G.CallPreferred(wide, h);
+      AssertTrue(Format('the widest caption sets every cell (%d -> %d)', [narrow, wide]),
+        wide > narrow);
+      AssertEquals('and never proposes a height', 0, h);
+    finally
+      G.Free;
+    end;
+  finally
+    Ctl.Free;
+  end;
+end;
+
+procedure TButtonGroupAutoSizeTest.TestMnemonicMarkerCostsNoWidth;
+{ RenderTo strips the '&' with TyParseMnemonic and draws it as an underline, not as a
+  character — so measuring it would reserve width for ink that is never drawn. }
+var
+  Ctl: TTyStyleController;
+  G: TTyButtonGroupAccess;
+  plain, marked, h: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Ctl.LoadThemeCss(Format(cCssFmt, [4, 10, 12]));
+    G := TTyButtonGroupAccess.Create(nil);
+    try
+      G.Controller := Ctl;
+      G.Font.PixelsPerInch := 96;
+      G.Items.Add('Save');
+      G.CallPreferred(plain, h);
+      G.Items[0] := '&Save';
+      G.CallPreferred(marked, h);
+      AssertEquals('a mnemonic marker adds no width', plain, marked);
+    finally
+      G.Free;
+    end;
+  finally
+    Ctl.Free;
+  end;
+end;
+
+procedure TButtonGroupAutoSizeTest.TestRoomierThemePaddingWidensPreferredWidth;
+{ THE bug this work exists for: the 'xp' skin asks for 12px of horizontal button padding where
+  the default asks 6px, so every hand-sized bar clipped its captions under xp. A theme switch
+  reaches the control as a bare Invalidate, which is where the re-fit has to happen (TTyButton
+  and TTyBadge re-measure the same way). Asserted through CalculatePreferredSize, since
+  AutoSizeDelayed blocks a real resize while the parent form has no handle. }
+var
+  Ctl: TTyStyleController;
+  G: TTyButtonGroupAccess;
+  tight, roomy, h: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    G := TTyButtonGroupAccess.Create(nil);
+    try
+      G.Controller := Ctl;
+      G.Font.PixelsPerInch := 96;
+      G.AutoSize := True;
+      G.Items.Add('Day'); G.Items.Add('Week'); G.Items.Add('Month');
+
+      Ctl.LoadThemeCss(Format(cCssFmt, [4, 4, 12]));
+      G.CallPreferred(tight, h);
+
+      // Same captions, same font — only the padding is roomier.
+      Ctl.LoadThemeCss(Format(cCssFmt, [4, 30, 12]));
+      G.CallPreferred(roomy, h);
+      AssertTrue(Format('a roomier theme widens the bar (%d -> %d)', [tight, roomy]),
+        roomy > tight);
+      // 26px more padding per side, both sides, on each of the 3 cells.
+      AssertEquals('the extra width is exactly the extra padding',
+        tight + 3 * 2 * 26, roomy);
+      AssertEquals('and no height is ever proposed', 0, h);
+    finally
+      G.Free;
+    end;
+  finally
+    Ctl.Free;
+  end;
+end;
+
+procedure TButtonGroupAutoSizeTest.TestAutoSizeSurvivesAHeightPinningParent;
+{ The regression that killed the demo at startup for TTyButton: a bar pins every child's
+  height, the child proposes its own, and the two bounce until LCL aborts with
+  "TControl.ChangeBounds loop detected". An AutoSize group on a real TTyToolBar must simply
+  settle — and settle at the BAR's height, not its own idea of one. }
+var
+  F: TForm;
+  Bar: TTyToolBar;
+  G: TTyButtonGroup;
+  hBefore: Integer;
+begin
+  F := TForm.CreateNew(nil);
+  try
+    Bar := TTyToolBar.Create(F);
+    Bar.Parent := F;
+    Bar.Align := alTop;
+    Bar.ButtonHeight := 24;
+
+    G := TTyButtonGroup.Create(F);
+    G.Parent := Bar;
+    G.Font.PixelsPerInch := 96;
+    G.Items.Add('Day'); G.Items.Add('Week');
+    G.AutoSize := True;          // this is the shape that used to loop
+    hBefore := G.Height;
+
+    // Grow a caption the way a translation does: it must not start a bounds war.
+    G.Items[1] := 'The whole working week';
+    Bar.Realign;
+
+    AssertEquals('the bar still owns the height', hBefore, G.Height);
+    AssertTrue('and the group is still a sane size', (G.Width > 0) and (G.Height > 0));
+  finally
+    F.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TButtonGroupTest);
+  RegisterTest(TButtonGroupAutoSizeTest);
 end.

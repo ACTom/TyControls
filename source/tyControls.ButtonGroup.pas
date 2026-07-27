@@ -19,6 +19,7 @@ type
     FItemIndex: Integer;
     FSelected: array of Boolean;   // multi-select bit-set (kept sized to Items.Count)
     FHoverSeg: Integer;            // -1 = none; tracked in MouseMove for :hover styling
+    FRefitting: Boolean;           // guards the AutoSize re-fit in Invalidate against re-entry
     FOnSelectionChange: TNotifyEvent;
     procedure SetItems(AValue: TStrings);
     procedure ItemsChanged(Sender: TObject);
@@ -33,7 +34,22 @@ type
       Multi-select: toggles that segment (always fires OnSelectionChange on a valid
       segment). A hit outside any segment is a no-op. Exposed to tests as a seam. }
     procedure SelectAt(AX: Integer);
+    { The widest item caption and the reference line height, in DEVICE px at APPI, measured
+      with AStyle's font. Mnemonic markers are stripped first — they are drawn as an underline,
+      not as a character, so measuring them would over-reserve. }
+    procedure MeasureItems(APPI: Integer; const AStyle: TTyStyleSet;
+      out AWidestPx, ALineHeightPx: Integer);
+    { The width the bar needs: every cell is the same width (RenderTo tiles them evenly), so
+      the bar needs COUNT x (widest caption + the style's left/right padding) — the very inset
+      RenderTo applies before drawing each caption. Without this the bar keeps its designed
+      width and a theme with roomier padding (xp asks for 12px where the default asks 6px, i.e.
+      24px more per cell) ellipsises every segment. }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    { A theme switch reaches every control as a bare Invalidate, and the new theme's font and
+      padding change the width the captions need — so an AutoSize bar must re-fit here too. }
+    procedure Invalidate; override;
     procedure Paint; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
@@ -50,6 +66,12 @@ type
     procedure SetSelected(AIndex: Integer; AValue: Boolean);
     function Count: Integer;
   published
+    { Off by default (a designed bar keeps the width the .lfm gave it). Switch it on and the bar
+      WIDENS so every cell fits its caption plus the theme's padding — a longer translation, a
+      denser scale, a heavier font or a roomier skin lengthens the bar instead of ellipsising
+      each segment. Height is left alone (see CalculatePreferredSize): it belongs to whoever
+      lays out the row. }
+    property AutoSize;
     property Items: TStrings read FItems write SetItems;
     property MultiSelect: Boolean read FMultiSelect write SetMultiSelect default False;
     property ItemIndex: Integer read FItemIndex write SetItemIndex default -1;
@@ -179,7 +201,34 @@ begin
   for i := 0 to High(FSelected) do FSelected[i] := False;
   FItemIndex := -1;
   if FHoverSeg >= FItems.Count then FHoverSeg := -1;
+  // 条目变了(数量、文字)→ 要的宽度也变了,AutoSize 的分段条必须重新贴合。
+  // 这是本控件的"标题改变"钩子(标题住在 Items 里,不在 TControl.Caption 上)。
+  if AutoSize then
+  begin
+    InvalidatePreferredSize;
+    AdjustSize;
+  end;
   Invalidate;
+end;
+
+procedure TTyButtonGroup.Invalidate;
+begin
+  inherited Invalidate;
+  { 换肤时每个控件收到的只是一个裸 Invalidate(TTyStyleController 向注册控件广播),而新主题
+    带来的是另一套字体和 padding —— 每格要的宽度也就跟着变了。不在这里重新贴合,分段条就会
+    留着旧主题的宽度,每个分段的文字都被省略号截断;TTyButton / TTyBadge 出于同样的理由也在
+    自己的 Invalidate 里重量。FRefitting 挡住重入:AdjustSize -> SetBounds -> Invalidate
+    会递归。 }
+  if AutoSize and not FRefitting and not (csDestroying in ComponentState) then
+  begin
+    FRefitting := True;
+    try
+      InvalidatePreferredSize;
+      AdjustSize;
+    finally
+      FRefitting := False;
+    end;
+  end;
 end;
 
 procedure TTyButtonGroup.SetMultiSelect(AValue: Boolean);
@@ -284,6 +333,78 @@ begin
     FHoverSeg := -1;
     Invalidate;
   end;
+end;
+
+procedure TTyButtonGroup.MeasureItems(APPI: Integer; const AStyle: TTyStyleSet;
+  out AWidestPx, ALineHeightPx: Integer);
+{ 用 TTyPainter 量,而不是 LCL canvas:每格文字是 P.DrawText 以 BGRA 字体度量画出来的,只有
+  同一个度量器给出的宽度才等于这些字形真正占的位置。画布传 nil —— BeginPaint 只建内部位图,
+  EndPaint 见 canvas 为 nil 就不 blit、直接释放,所以在 paint 周期之外调用安全且不泄漏
+  (TTySegmented / TTyBadge 用的是同一套写法)。 }
+var
+  P: TTyPainter;
+  sz: TSize;
+  i, fs, mp: Integer;
+  disp: string;
+begin
+  AWidestPx := 0;
+  ALineHeightPx := 0;
+  P := TTyPainter.Create;
+  try
+    P.BeginPaint(nil, Rect(0, 0, 1, 1), APPI);   // 1x1:什么都不画,只量
+    fs := ResolveFontSize(AStyle);
+    // 稳定的参考字形:一个空条目也给出一行的高度。
+    sz := P.MeasureText('Ag', AStyle.FontName, fs, AStyle.FontWeight);
+    ALineHeightPx := sz.cy;
+    for i := 0 to FItems.Count - 1 do
+    begin
+      // '&' 记号画成下划线而不是字符,RenderTo 也是先 TyParseMnemonic 再画 —— 量的必须是
+      // 同一个字符串,否则每格都会多预留一个 '&' 的宽度。
+      TyParseMnemonic(FItems[i], disp, mp);
+      sz := P.MeasureText(disp, AStyle.FontName, fs, AStyle.FontWeight);
+      if sz.cx > AWidestPx then AWidestPx := sz.cx;
+    end;
+    P.EndPaint;   // nil canvas -> 不 blit,只释放度量位图
+  finally
+    P.Free;
+  end;
+  if AWidestPx < 0 then AWidestPx := 0;
+  if ALineHeightPx < 1 then ALineHeightPx := 1;
+end;
+
+procedure TTyButtonGroup.CalculatePreferredSize(var PreferredWidth,
+  PreferredHeight: Integer; WithThemeSpace: Boolean);
+var
+  S: TTyStyleSet;
+  ppi, n, widest, lineH, cellW: Integer;
+begin
+  n := FItems.Count;
+  if n <= 0 then
+  begin
+    // 空分段条什么都不画(RenderTo 同样提前退出),所以两个轴上都"没有意见":0 让 LCL
+    // 保留它设计时的尺寸,而不是把它缩成 1px。
+    PreferredWidth := 0;
+    PreferredHeight := 0;
+    Exit;
+  end;
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  { 按**静止态**的分段样式来量:主题可以把选中格写成粗体,但分段条的宽度不该取决于此刻选中
+    的是哪一格 —— 否则每次点击都会让整条抖动。这和 RenderTo 解析未选中格用的是同一条
+    (typeKey + StyleClass + [tysNormal])路径,也和它一样不叠 StyleOverride。 }
+  S := ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass, [tysNormal]);
+  MeasureItems(ppi, S, widest, lineH);
+  { 每格 = 最宽的文字 + 该样式的左右 padding —— RenderTo 交给 DrawText 之前对每格做的正是这个
+    内缩。分段是均分的(最后一格吃掉余数),所以整条 = 格数 x 每格;少算一格就是每格都被截。
+    padding 按 MulDiv(...,ppi,96) 缩放,和绘制路径里的 P.Scale 一致。 }
+  cellW := widest + MulDiv(S.Padding.Left + S.Padding.Right, ppi, 96);
+  if cellW < 1 then cellW := 1;
+  PreferredWidth := n * cellW;
+  { 只管宽度 —— 0 是 LCL 的"这个轴上没有意见",高度就留给排版方。分段条同时提议高度,就会和
+    任何钉死高度的容器打架(TTyToolBar 把每个子控件都压到 ButtonHeight),两边来回弹到 LCL
+    以 "TControl.ChangeBounds loop detected" 中止。想要文字自然高度的调用方可以自己读
+    MeasureItems 再加上下 padding。 }
+  PreferredHeight := 0;
 end;
 
 procedure TTyButtonGroup.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);

@@ -2,10 +2,10 @@ unit test.toggleswitch;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Graphics, Forms, Controls, LCLType, fpcunit, testregistry,
+  Classes, SysUtils, Types, TypInfo, Graphics, Forms, Controls, LCLType, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.Base,
-  tyControls.ToggleSwitch;
+  tyControls.ToggleSwitch, tyControls.ToolBar;
 type
   { Probe subclass: exposes protected CurrentStates and RenderTo }
   TTyToggleSwitchProbe = class(TTyToggleSwitch)
@@ -13,6 +13,8 @@ type
     function ExposedCurrentStates: TTyStateSet;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure SimulateKeyDown(var Key: Word);
+    // Expose the protected preferred-size calculation (what AutoSize resizes to).
+    procedure CallPreferred(out AW, AH: Integer);
   end;
 
   TChangeCounter = class
@@ -45,6 +47,19 @@ type
     procedure TestCurrentStatesContainsActiveWhenChecked;
     procedure TestCurrentStatesNoActiveWhenUnchecked;
     procedure TestDisabledIgnoresToggle;
+  end;
+
+  { AutoSize / preferred-size suite. Every assertion goes through CalculatePreferredSize
+    rather than through Width: LCL's AutoSizeDelayed suppresses auto-sizing while the parent
+    form has no handle, and the headless runner never realises one — so reading Width here
+    would measure nothing. }
+  TTyToggleSwitchAutoSizeTest = class(TTestCase)
+  published
+    procedure TestAutoSizePublishedAndOffByDefault;
+    procedure TestPreferredWidthIsTheSwitchSlotWhenCaptionless;
+    procedure TestPreferredWidthIncludesTheGapAndTheCaption;
+    procedure TestBiggerThemeFontWidensPreferredWidth;
+    procedure TestAutoSizeSurvivesAHeightPinningParent;
   end;
 
   TTyToggleSwitchPixelTest = class(TTestCase)
@@ -89,6 +104,12 @@ var
 begin
   Shift := [];
   KeyDown(Key, Shift);
+end;
+
+procedure TTyToggleSwitchProbe.CallPreferred(out AW, AH: Integer);
+begin
+  AW := 0; AH := 0;
+  CalculatePreferredSize(AW, AH, True);
 end;
 
 { TTyToggleSwitchTest }
@@ -241,6 +262,194 @@ begin
     AssertFalse('disabled click toggle ignored', Sw.Checked);
   finally
     Sw.Free;
+  end;
+end;
+
+{ TTyToggleSwitchAutoSizeTest }
+
+procedure TTyToggleSwitchAutoSizeTest.TestAutoSizePublishedAndOffByDefault;
+{ AutoSize has to be settable from a .lfm and from the object inspector, and it has to stay
+  OFF by default — every existing layout keeps the width it was designed with. }
+var
+  Sw: TTyToggleSwitch;
+begin
+  Sw := TTyToggleSwitch.Create(nil);
+  try
+    AssertTrue('AutoSize is published so a .lfm / the OI can set it',
+      IsPublishedProp(Sw, 'AutoSize'));
+    AssertFalse('but it stays OFF by default — a designed switch keeps its width', Sw.AutoSize);
+  finally
+    Sw.Free;
+  end;
+end;
+
+procedure TTyToggleSwitchAutoSizeTest.TestPreferredWidthIsTheSwitchSlotWhenCaptionless;
+{ With no caption the switch is just its pill, and RenderTo derives the pill's width from the
+  device HEIGHT (the 44:24 aspect). The preferred width must include that slot — a control that
+  only reserved its text would collapse the pill to nothing. And it must propose NO height. }
+var
+  Ctl: TTyStyleController;
+  Sw: TTyToggleSwitchProbe;
+  w, h: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Ctl.LoadThemeCss('TyToggleSwitch { background: #444444; color: #000000; font-size: 12px; }');
+    Sw := TTyToggleSwitchProbe.Create(nil);
+    try
+      Sw.Controller := Ctl;
+      Sw.Font.PixelsPerInch := 96;
+      Sw.Height := 24;
+      Sw.CallPreferred(w, h);
+      AssertEquals('a bare switch wants exactly its 44:24 pill', 44, w);
+      { Height is deliberately UNSET (0 = "no preference on this axis" in LCL): the switch
+        widens for its caption, but its height belongs to whoever lays out the row. Proposing
+        one makes it fight any container that pins a height (TTyToolBar pins every child to its
+        ButtonHeight) until LCL aborts with "TControl.ChangeBounds loop detected". }
+      AssertEquals('height is left to the layout, not proposed', 0, h);
+
+      // The slot really is height-derived, exactly as the paint computes it.
+      Sw.Height := 48;
+      Sw.CallPreferred(w, h);
+      AssertEquals('a taller switch wants a proportionally wider pill', 88, w);
+      AssertEquals('and still proposes no height', 0, h);
+    finally
+      Sw.Free;
+    end;
+  finally
+    Ctl.Free;
+  end;
+end;
+
+procedure TTyToggleSwitchAutoSizeTest.TestPreferredWidthIncludesTheGapAndTheCaption;
+{ With a caption, RenderTo draws it into [pill right edge + TyCheckBoxGap, client right edge],
+  left-justified and CLIPPED to that strip — so the preferred width must be pill + gap + text.
+  A caption swapped in at runtime (the longer translation pushed in after the .lfm sized the
+  control) must make the switch want more width, not lose its last glyphs. }
+var
+  Ctl: TTyStyleController;
+  Sw: TTyToggleSwitchProbe;
+  bare, short, long, plain, amp, h: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Ctl.LoadThemeCss('TyToggleSwitch { background: #444444; color: #000000; font-size: 12px; }');
+    Sw := TTyToggleSwitchProbe.Create(nil);
+    try
+      Sw.Controller := Ctl;
+      Sw.Font.PixelsPerInch := 96;
+      Sw.Height := 24;
+      Sw.AutoSize := True;
+      Sw.CallPreferred(bare, h);          // no caption yet: pill only
+
+      Sw.Caption := 'On';
+      Sw.CallPreferred(short, h);
+      AssertTrue(Format('a caption adds the %dpx gap AND its own ink (%d -> %d)',
+        [TyCheckBoxGap, bare, short]), short > bare + TyCheckBoxGap);
+      AssertEquals('still no height proposed', 0, h);
+
+      Sw.Caption := 'Enable background synchronisation';
+      Sw.CallPreferred(long, h);
+      AssertTrue(Format('a longer caption wants more width (%d -> %d)', [short, long]),
+        long > short);
+
+      { The switch draws FCaption verbatim (it is not an accelerator target), so a '&' is a
+        real character here and DOES cost width — the point of this pair is that measuring and
+        drawing agree, whichever string the caption is. }
+      Sw.Caption := 'Save';
+      Sw.CallPreferred(plain, h);
+      Sw.Caption := '&Save';
+      Sw.CallPreferred(amp, h);
+      AssertTrue('the measured string is the drawn string, character for character',
+        amp >= plain);
+    finally
+      Sw.Free;
+    end;
+  finally
+    Ctl.Free;
+  end;
+end;
+
+procedure TTyToggleSwitchAutoSizeTest.TestBiggerThemeFontWidensPreferredWidth;
+{ The reported bug in its cross-platform half: a skin (or another platform's default font)
+  measures the SAME caption wider, and a fixed-width switch clips it. A theme switch reaches
+  the control as a bare Invalidate, which is where the re-fit has to happen.
+  Note what is NOT asserted here: padding. TyToggleSwitch's paint path never insets by the
+  padding token (the theme does not give it one), so reserving padding would over-reserve and
+  make AutoSize lie about where the caption starts — the preferred width mirrors the paint,
+  and nothing else. TTyButtonGroup, whose cells ARE padded, carries that half of the story. }
+var
+  Ctl: TTyStyleController;
+  Sw: TTyToggleSwitchProbe;
+  small, big, padA, padB, h: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Sw := TTyToggleSwitchProbe.Create(nil);
+    try
+      Sw.Controller := Ctl;
+      Sw.Font.PixelsPerInch := 96;
+      Sw.Height := 24;
+      Sw.AutoSize := True;
+      Sw.Caption := 'Synchronise automatically';
+
+      Ctl.LoadThemeCss('TyToggleSwitch { background: #444444; color: #000000; font-size: 9px; }');
+      Sw.CallPreferred(small, h);
+      Ctl.LoadThemeCss('TyToggleSwitch { background: #444444; color: #000000; font-size: 20px; }');
+      Sw.CallPreferred(big, h);
+      AssertTrue(Format('a bigger theme font widens the switch (%d -> %d)', [small, big]),
+        big > small);
+      AssertEquals('and still proposes no height', 0, h);
+
+      // Padding is not part of this control's geometry: same font, wildly different padding,
+      // same answer. If the paint ever starts honouring it, this pair fails and points here.
+      Ctl.LoadThemeCss('TyToggleSwitch { background: #444444; color: #000000; font-size: 12px; padding: 0px 0px; }');
+      Sw.CallPreferred(padA, h);
+      Ctl.LoadThemeCss('TyToggleSwitch { background: #444444; color: #000000; font-size: 12px; padding: 0px 40px; }');
+      Sw.CallPreferred(padB, h);
+      AssertEquals('the toggle reserves what it draws: no padding in the paint, none reserved',
+        padA, padB);
+    finally
+      Sw.Free;
+    end;
+  finally
+    Ctl.Free;
+  end;
+end;
+
+procedure TTyToggleSwitchAutoSizeTest.TestAutoSizeSurvivesAHeightPinningParent;
+{ The regression that killed the demo at startup for TTyButton: a bar pins every child's
+  height, the child proposes its own, and the two bounce until LCL aborts with
+  "TControl.ChangeBounds loop detected". An AutoSize switch on a real TTyToolBar must simply
+  settle — and settle at the BAR's height, not its own idea of one. }
+var
+  F: TForm;
+  Bar: TTyToolBar;
+  Sw: TTyToggleSwitch;
+  hBefore: Integer;
+begin
+  F := TForm.CreateNew(nil);
+  try
+    Bar := TTyToolBar.Create(F);
+    Bar.Parent := F;
+    Bar.Align := alTop;
+    Bar.ButtonHeight := 24;
+
+    Sw := TTyToggleSwitch.Create(F);
+    Sw.Parent := Bar;
+    Sw.Font.PixelsPerInch := 96;
+    Sw.Caption := 'Wrap';
+    Sw.AutoSize := True;          // this is the shape that used to loop
+    hBefore := Sw.Height;
+
+    // Grow the caption the way a translation does: it must not start a bounds war.
+    Sw.Caption := 'Wrap long lines in the editor pane';
+    Bar.Realign;
+
+    AssertEquals('the bar still owns the height', hBefore, Sw.Height);
+    AssertTrue('and the switch is still a sane size', (Sw.Width > 0) and (Sw.Height > 0));
+  finally
+    F.Free;
   end;
 end;
 
@@ -589,5 +798,6 @@ end;
 
 initialization
   RegisterTest(TTyToggleSwitchTest);
+  RegisterTest(TTyToggleSwitchAutoSizeTest);
   RegisterTest(TTyToggleSwitchPixelTest);
 end.

@@ -9,11 +9,16 @@ unit test.dropbuttons;
       recording RequestedPopup).
     - Split-button routing: a click in the arrow zone -> DoDropDown, NOT primary
       OnClick; a click in the primary area -> OnClick, NOT DoDropDown.
-    - Property round-trip + FreeNotification nils DropDownMenu. }
+    - Property round-trip + FreeNotification nils DropDownMenu.
+    - AutoSize:首选宽度必须装得下**画出来的**全部东西(标题 + 主题内边距 + 箭头区),
+      并且随皮肤的字体/内边距/箭头度量一起变。断言一律走 CalculatePreferredSize,不走
+      Width——父窗体没有句柄时 LCL 的 AutoSizeDelayed 会把自动调整整个吞掉,读 Width
+      等于什么都没测。 }
 interface
 uses
   Classes, SysUtils, TypInfo, Types, Controls, Graphics, Forms, LCLType, fpcunit, testregistry,
-  tyControls.Base, tyControls.Types, tyControls.Menu, tyControls.DropButtons;
+  tyControls.Base, tyControls.Types, tyControls.Controller, tyControls.Menu,
+  tyControls.DropButtons;
 
 type
   { Probe subclass: drives a full headless "press then click" at a device-x. LCL
@@ -28,12 +33,15 @@ type
       later keyboard-style Click. Verifies FDownX is cleared so the key click is primary. }
     procedure AbortedArrowPressThenKeyClick(AArrowX: Integer);
     procedure DoRenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    { The protected preferred-size calculation — what AutoSize would resize to. }
+    procedure CallPreferred(out AW, AH: Integer);
   end;
 
   { Probe subclass exposing TTyMenuButton's protected RenderTo. }
   TMenuButtonAccess = class(TTyMenuButton)
   public
     procedure DoRenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    procedure CallPreferred(out AW, AH: Integer);
   end;
 
   TDropDownButtonTest = class(TTestCase)
@@ -71,7 +79,37 @@ type
     procedure TestPaintSmoke;
   end;
 
+  { AutoSize / 首选宽度。两个下拉按钮画的都是「标题 + 箭头区」,所以量出来的宽度必须
+    把箭头区也算进去——不然 AutoSize 会按纯标题收窄,箭头把标题挤没,省略号照旧。
+    (一个会说谎的 AutoSize 比没有 AutoSize 更糟。) }
+  TDropButtonsAutoSizeTest = class(TTestCase)
+  published
+    procedure TestAutoSizePublishedButOffByDefault;
+    procedure TestSplitPreferredReservesTheArrowZone;
+    procedure TestSplitPreferredGrowsWithTheCaption;
+    procedure TestSplitRoomierThemeWidensPreferredWidth;
+    procedure TestMenuPreferredReservesTheThemeArrowZone;
+    procedure TestMenuPreferredGrowsWithTheCaption;
+    procedure TestMenuRoomierThemeWidensPreferredWidth;
+    procedure TestPreferredHeightIsAlwaysZero;
+  end;
+
 implementation
+
+const
+  { 内边距和字号都写死,断言才能算出确定的数字,而不是跟着当前主题走。border-width:0
+    是为了让宽度里只剩「文字 + 内边距 + 箭头区」这三项。 }
+  cDropTightCss =
+    ':root { --drop-arrow-width: 18px; }' +
+    'TyButton { background: #FFFFFF; color: #000000; border-width: 0px; padding: 4px 4px; font-size: 12px; }';
+  { 同上,只是左右内边距 4px -> 30px(每边 +26,共 +52)。 }
+  cDropRoomyCss =
+    ':root { --drop-arrow-width: 18px; }' +
+    'TyButton { background: #FFFFFF; color: #000000; border-width: 0px; padding: 4px 30px; font-size: 12px; }';
+  { 同 cDropTightCss,只是箭头度量 18px -> 40px(+22),字体和内边距一个没动。 }
+  cDropWideArrowCss =
+    ':root { --drop-arrow-width: 40px; }' +
+    'TyButton { background: #FFFFFF; color: #000000; border-width: 0px; padding: 4px 4px; font-size: 12px; }';
 
 procedure TDropDownAccess.PressAndClickAt(X: Integer);
 begin
@@ -91,9 +129,21 @@ begin
   RenderTo(ACanvas, ARect, APPI);
 end;
 
+procedure TDropDownAccess.CallPreferred(out AW, AH: Integer);
+begin
+  AW := 0; AH := 0;
+  CalculatePreferredSize(AW, AH, True);
+end;
+
 procedure TMenuButtonAccess.DoRenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   RenderTo(ACanvas, ARect, APPI);
+end;
+
+procedure TMenuButtonAccess.CallPreferred(out AW, AH: Integer);
+begin
+  AW := 0; AH := 0;
+  CalculatePreferredSize(AW, AH, True);
 end;
 
 { TDropDownButtonTest }
@@ -441,7 +491,279 @@ begin
   end;
 end;
 
+{ TDropButtonsAutoSizeTest }
+
+procedure TDropButtonsAutoSizeTest.TestAutoSizePublishedButOffByDefault;
+{ AutoSize 必须是 published(.lfm 和对象查看器里能设),但默认仍是 False —— 已经排好版
+  的按钮不会因为这次改动挪一个像素,想要自适应的人自己打开。 }
+var
+  D: TTyDropDownButton;
+  M: TTyMenuButton;
+begin
+  D := TTyDropDownButton.Create(nil);
+  M := TTyMenuButton.Create(nil);
+  try
+    AssertTrue('split button: AutoSize is published', IsPublishedProp(D, 'AutoSize'));
+    AssertFalse('split button: but OFF by default', D.AutoSize);
+    AssertTrue('menu button: AutoSize is published', IsPublishedProp(M, 'AutoSize'));
+    AssertFalse('menu button: but OFF by default', M.AutoSize);
+  finally
+    D.Free;
+    M.Free;
+  end;
+end;
+
+procedure TDropButtonsAutoSizeTest.TestSplitPreferredReservesTheArrowZone;
+{ 分割按钮把标题画在箭头区左边,所以首选宽度必须整条箭头区都算进去。用同一个标题、同一
+  套主题,只改 ArrowWidth:宽度差必须**正好**等于箭头区的差,证明量的和画的是同一段。 }
+var
+  Ctl: TTyStyleController;
+  B: TDropDownAccess;
+  bare, w18, w40, h: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Ctl.LoadThemeCss(cDropTightCss);
+    B := TDropDownAccess.Create(nil);
+    try
+      B.Controller := Ctl;
+      B.Font.PixelsPerInch := 96;
+      B.Caption := 'Save';
+
+      B.ArrowWidth := 0;    // 没有箭头区 = 纯基类宽度(标题 + 内边距)
+      B.CallPreferred(bare, h);
+      AssertTrue('a caption plus paddings is a positive width', bare > 0);
+
+      B.ArrowWidth := 18;
+      B.CallPreferred(w18, h);
+      AssertEquals('the 18px arrow zone is reserved in full', bare + 18, w18);
+
+      B.ArrowWidth := 40;
+      B.CallPreferred(w40, h);
+      AssertEquals('a wider arrow zone widens the button by exactly that much',
+        bare + 40, w40);
+    finally
+      B.Free;
+    end;
+  finally
+    Ctl.Free;
+  end;
+end;
+
+procedure TDropButtonsAutoSizeTest.TestSplitPreferredGrowsWithTheCaption;
+{ 长标题要更宽——这正是整件事的目的。顺带守一条:'&' 是画成下划线的,不占宽度,所以
+  量的时候也不能算进去。 }
+var
+  Ctl: TTyStyleController;
+  B: TDropDownAccess;
+  short, long, plain, mnemonic, h: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Ctl.LoadThemeCss(cDropTightCss);
+    B := TDropDownAccess.Create(nil);
+    try
+      B.Controller := Ctl;
+      B.Font.PixelsPerInch := 96;
+
+      B.Caption := 'OK';
+      B.CallPreferred(short, h);
+      B.Caption := 'Save the current work order as a template';
+      B.CallPreferred(long, h);
+      AssertTrue(Format('a longer caption wants more width (%d -> %d)', [short, long]),
+        long > short);
+
+      B.Caption := 'Save';
+      B.CallPreferred(plain, h);
+      B.Caption := '&Save';
+      B.CallPreferred(mnemonic, h);
+      AssertEquals('a mnemonic marker is drawn as an underline, so it adds no width',
+        plain, mnemonic);
+    finally
+      B.Free;
+    end;
+  finally
+    Ctl.Free;
+  end;
+end;
+
+procedure TDropButtonsAutoSizeTest.TestSplitRoomierThemeWidensPreferredWidth;
+{ 这就是这轮要修的那个 bug:'xp' 皮肤把 TyButton 的左右内边距从 6px 提到 12px,按 default
+  皮肤量好宽度的按钮就把标题挤掉了。换一套内边距更大的主题,首选宽度必须跟着变大——而且
+  差值正好是多出来的内边距。 }
+var
+  Ctl: TTyStyleController;
+  B: TDropDownAccess;
+  tight, roomy, h: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    B := TDropDownAccess.Create(nil);
+    try
+      B.Controller := Ctl;
+      B.Font.PixelsPerInch := 96;
+      B.AutoSize := True;
+      B.ArrowWidth := 18;
+      B.Caption := 'Save';
+
+      Ctl.LoadThemeCss(cDropTightCss);
+      B.CallPreferred(tight, h);
+
+      Ctl.LoadThemeCss(cDropRoomyCss);
+      B.CallPreferred(roomy, h);
+
+      AssertTrue(Format('a roomier skin widens the split button (%d -> %d)', [tight, roomy]),
+        roomy > tight);
+      // 每边多 26px,共 +52;字体、标题、箭头区都没动。
+      AssertEquals('the extra width is exactly the extra padding', tight + 52, roomy);
+    finally
+      B.Free;
+    end;
+  finally
+    Ctl.Free;
+  end;
+end;
+
+procedure TDropButtonsAutoSizeTest.TestMenuPreferredReservesTheThemeArrowZone;
+{ TTyMenuButton 的箭头区宽度来自主题度量 '--drop-arrow-width'(不是 published 属性)。
+  只改这一个度量、别的全不动,首选宽度必须跟着变——证明量的读的是画的那个度量,而不是
+  代码里写死的常量。 }
+var
+  Ctl: TTyStyleController;
+  B: TMenuButtonAccess;
+  narrow, wide, h: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    B := TMenuButtonAccess.Create(nil);
+    try
+      B.Controller := Ctl;
+      B.Font.PixelsPerInch := 96;
+      B.Caption := 'Options';
+
+      Ctl.LoadThemeCss(cDropTightCss);        // --drop-arrow-width: 18px
+      B.CallPreferred(narrow, h);
+
+      Ctl.LoadThemeCss(cDropWideArrowCss);    // --drop-arrow-width: 40px
+      B.CallPreferred(wide, h);
+
+      AssertEquals('a skin that widens the arrow metric widens the button by that delta',
+        narrow + 22, wide);
+    finally
+      B.Free;
+    end;
+  finally
+    Ctl.Free;
+  end;
+end;
+
+procedure TDropButtonsAutoSizeTest.TestMenuPreferredGrowsWithTheCaption;
+var
+  Ctl: TTyStyleController;
+  B: TMenuButtonAccess;
+  short, long, h: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Ctl.LoadThemeCss(cDropTightCss);
+    B := TMenuButtonAccess.Create(nil);
+    try
+      B.Controller := Ctl;
+      B.Font.PixelsPerInch := 96;
+
+      B.Caption := 'File';
+      B.CallPreferred(short, h);
+      B.Caption := 'Recently opened documents';
+      B.CallPreferred(long, h);
+      AssertTrue(Format('a longer caption wants more width (%d -> %d)', [short, long]),
+        long > short);
+      // 箭头区在两次里是同一个值,所以差的只可能是文字。
+      AssertTrue('and the arrow zone is still reserved on top of the caption',
+        short > 18);
+    finally
+      B.Free;
+    end;
+  finally
+    Ctl.Free;
+  end;
+end;
+
+procedure TDropButtonsAutoSizeTest.TestMenuRoomierThemeWidensPreferredWidth;
+var
+  Ctl: TTyStyleController;
+  B: TMenuButtonAccess;
+  tight, roomy, h: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    B := TMenuButtonAccess.Create(nil);
+    try
+      B.Controller := Ctl;
+      B.Font.PixelsPerInch := 96;
+      B.AutoSize := True;
+      B.Caption := 'Options';
+
+      Ctl.LoadThemeCss(cDropTightCss);
+      B.CallPreferred(tight, h);
+
+      Ctl.LoadThemeCss(cDropRoomyCss);
+      B.CallPreferred(roomy, h);
+
+      AssertTrue(Format('a roomier skin widens the menu button (%d -> %d)', [tight, roomy]),
+        roomy > tight);
+      AssertEquals('the extra width is exactly the extra padding', tight + 52, roomy);
+    finally
+      B.Free;
+    end;
+  finally
+    Ctl.Free;
+  end;
+end;
+
+procedure TDropButtonsAutoSizeTest.TestPreferredHeightIsAlwaysZero;
+{ 0 = LCL 的「本轴无意见」。按钮只横向长;高度归排版的人管。控件再报一个高度,就会和
+  钉高度的父容器(TTyToolBar 把每个子控件钉到 ButtonHeight)来回顶,最后 LCL 以
+  "TControl.ChangeBounds loop detected" 中止——demo 曾经就是这样开机即死。 }
+var
+  Ctl: TTyStyleController;
+  D: TDropDownAccess;
+  M: TMenuButtonAccess;
+  w, h: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Ctl.LoadThemeCss(cDropTightCss);
+    D := TDropDownAccess.Create(nil);
+    M := TMenuButtonAccess.Create(nil);
+    try
+      D.Controller := Ctl;
+      M.Controller := Ctl;
+      D.Caption := '';
+      M.Caption := '';
+      D.CallPreferred(w, h);
+      AssertEquals('split button proposes no height (empty caption)', 0, h);
+      M.CallPreferred(w, h);
+      AssertEquals('menu button proposes no height (empty caption)', 0, h);
+
+      D.Caption := 'A very long caption indeed';
+      M.Caption := 'A very long caption indeed';
+      D.AutoSize := True;
+      M.AutoSize := True;
+      D.CallPreferred(w, h);
+      AssertEquals('split button still proposes no height', 0, h);
+      M.CallPreferred(w, h);
+      AssertEquals('menu button still proposes no height', 0, h);
+    finally
+      D.Free;
+      M.Free;
+    end;
+  finally
+    Ctl.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TDropDownButtonTest);
   RegisterTest(TMenuButtonTest);
+  RegisterTest(TDropButtonsAutoSizeTest);
 end.

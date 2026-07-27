@@ -47,7 +47,11 @@ function TyDropArrowHit(AClickX, AWidthPx, AArrowWidthPx: Integer): Boolean;
 
 type
   { SPLIT drop-down button: caption (left, fires OnClick) + arrow zone (right, opens
-    the menu), divided by a 1px line. }
+    the menu), divided by a 1px line.
+
+    AutoSize(继承自 TTyButton,默认 False)在这里同样有效:打开后按钮的宽度 = 标题 +
+    主题内边距 + ArrowWidth。换皮肤会改字体和内边距,基类的 Invalidate 会重新量一遍,
+    所以按钮跟着皮肤长宽,而不是抱着上一套皮肤的宽度把标题省略掉。 }
   TTyDropDownButton = class(TTyButton)
   private
     FDropDownMenu: TTyPopupMenu;
@@ -77,6 +81,12 @@ type
       zone (AStyle.TextColor); a 1px divider (AStyle.BorderColor) between them. }
     procedure DrawContent(APainter: TTyPainter; const AContentRect: TRect;
       const AStyle: TTyStyleSet); override;
+    { 基类给出的是「标题 + 主题内边距」的宽度;分割按钮把标题画在箭头区**左边**的
+      子矩形里(见 DrawContent),所以它还得多让出整条箭头区,否则 AutoSize 报出来的
+      宽度装不下自己画的东西——标题被箭头挤掉、省略号照旧。会说谎的 AutoSize 比没有
+      更糟,所以这里加的必须正好是 DrawContent 让出的那一段(同一个 ArrowZoneWidth)。 }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
@@ -103,7 +113,12 @@ type
   end;
 
   { WHOLE-button drop-down: caption + trailing downward arrow; ANY click drops the
-    menu (Click itself routes to the drop). No split, no divider. }
+    menu (Click itself routes to the drop). No split, no divider.
+
+    AutoSize(继承自 TTyButton,默认仍是 False)在这里同样有效:宽度 = 标题 + 主题
+    内边距 + 尾部箭头区。皮肤换了字体/内边距/--drop-arrow-width 之后,基类的
+    Invalidate 会重新量一遍,所以按钮跟着皮肤长宽,而不是抱着上一套皮肤的宽度把标题
+    省略掉。 }
   TTyMenuButton = class(TTyButton)
   private
     FDropDownMenu: TTyPopupMenu;
@@ -114,9 +129,19 @@ type
     { Fire OnDropDown, then record intent + (with a live window) pop DropDownMenu at
       the button's bottom-left. Same headless contract as the split button's version. }
     procedure DoDropDown; virtual;
+    { Device-px width of the trailing arrow zone at APPI. The zone is a THEME metric
+      ('--drop-arrow-width'), not a published property, so a skin can retune it —
+      which is exactly why the preferred width has to be recomputed on a theme switch
+      (the base class's Invalidate does that). Mirrors the value DrawContent reserves
+      via APainter.Scale of the same metric; keep the two in step. }
+    function ArrowZoneWidth(APPI: Integer): Integer;
     { Caption on the left, a trailing downward arrow on the right (AStyle.TextColor). }
     procedure DrawContent(APainter: TTyPainter; const AContentRect: TRect;
       const AStyle: TTyStyleSet); override;
+    { 标题只占箭头区左边的子矩形,所以在基类的「标题 + 内边距」之上还要加一整条箭头区,
+      否则 AutoSize 量出来的宽度装不下自己画的箭头。 }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   public
     constructor Create(AOwner: TComponent); override;
@@ -291,6 +316,25 @@ begin
   APainter.DrawDropChevron(arrowRect, AStyle.TextColor);
 end;
 
+procedure TTyDropDownButton.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+var
+  ppi: Integer;
+begin
+  // 基类量的是「标题 + 主题内边距」——即 RenderTo 内缩出来的那块内容区。
+  inherited CalculatePreferredSize(PreferredWidth, PreferredHeight, WithThemeSpace);
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  // DrawContent 在同一块内容区里先切走右侧 APainter.Scale(FArrowWidth) 给箭头,标题
+  // 只剩左边那半。ArrowZoneWidth 是同一个 MulDiv(...,ppi,96) 换算(命中测试也用它),
+  // 所以「量到的」「画出来的」「点得到的」三者不会漂移。
+  Inc(PreferredWidth, ArrowZoneWidth(ppi));
+  if PreferredWidth < 1 then PreferredWidth := 1;
+  { 高度依旧是 0 = LCL 的「本轴无意见」(基类已置 0,这里不碰):按钮只横向长,高度归
+    排版的人管——工具条会把每个子控件钉到 ButtonHeight,控件再报一个高度就会来回顶,
+    最后 LCL 以 "TControl.ChangeBounds loop detected" 收场。 }
+end;
+
 { TTyMenuButton }
 
 constructor TTyMenuButton.Create(AOwner: TComponent);
@@ -345,6 +389,29 @@ begin
   // last, so DoDropDown goes before inherited Click.
   DoDropDown;
   inherited Click;
+end;
+
+function TTyMenuButton.ArrowZoneWidth(APPI: Integer): Integer;
+begin
+  // 与 DrawContent 里 APainter.Scale(Metric('--drop-arrow-width', ...)) 同值:同一个
+  // 主题度量、同一个 96 基线换算。皮肤调了这个度量,两边一起动。
+  Result := MulDiv(ActiveController.Metric('--drop-arrow-width', TyDefaultDropArrowWidth),
+    APPI, 96);
+  if Result < 0 then Result := 0;
+end;
+
+procedure TTyMenuButton.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+var
+  ppi: Integer;
+begin
+  inherited CalculatePreferredSize(PreferredWidth, PreferredHeight, WithThemeSpace);
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  // 标题只画在箭头区左边(DrawContent 先切走尾部箭头区),所以宽度得把这一段算进来。
+  Inc(PreferredWidth, ArrowZoneWidth(ppi));
+  if PreferredWidth < 1 then PreferredWidth := 1;
+  // 高度保持基类的 0(无意见),理由同 TTyButton:高度是排版的事,不是控件的事。
 end;
 
 procedure TTyMenuButton.DrawContent(APainter: TTyPainter; const AContentRect: TRect;

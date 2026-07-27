@@ -9,6 +9,7 @@ type
   private
     FState: TCheckBoxState;
     FAllowGrayed: Boolean;
+    FRefitting: Boolean;   // guards the AutoSize re-fit in Invalidate against re-entry
     FOnChange: TNotifyEvent;
     function GetChecked: Boolean;
     procedure SetState(const AValue: TCheckBoxState);
@@ -16,6 +17,22 @@ type
   protected
     function GetStyleTypeKey: string; override;
     function CurrentStates: TTyStateSet; override;
+    { 控件真正需要的宽度:主题 padding + 指示框 + 间距 + 量出来的标题 —— 也就是 RenderTo
+      排的那几段,所以 AutoSize 预留的宽度和实际画出来的宽度不会走偏。没有这个,复选框就
+      一直是 .lfm 给的宽度,标题一旦变长(更长的译文、padding 更宽松的皮肤、更重的字体)
+      就被省略号截掉。
+      注意指示框和间距是主题可调的(--checkbox-size / --checkbox-gap),换皮肤会变,
+      所以两边必须读同一个 Metric,不能写死常量。 }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
+    { 标题在 APPI 下画出来的尺寸(设备像素),已去掉 & 助记符标记。 }
+    procedure MeasureCaption(APPI: Integer; out AWidth, AHeight: Integer);
+    { 运行期改 Caption 走这里(CM_TEXTCHANGED);开了 AutoSize 就得按新文字重新量。 }
+    procedure TextChanged; override;
+    { 换主题是以一个裸 Invalidate 的形式传到控件的,而新主题的字体、padding 和
+      --checkbox-size/--checkbox-gap 都可能不同 —— 需要的宽度也就变了,所以
+      AutoSize 的复选框必须在这里重新贴合。 }
+    procedure Invalidate; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
@@ -25,6 +42,11 @@ type
     destructor Destroy; override;
     procedure Click; override;
   published
+    { 默认关(设计好的复选框保持 .lfm 给的宽度)。打开后控件会横向撑开,刚好裹住
+      指示框 + 间距 + 标题 + 主题 padding,标题变长时是控件变长而不是文字被截。
+      高度不参与(见 CalculatePreferredSize):行高是排版方的事,这样放进任何会钉死
+      子控件高度的容器里都不会打架。 }
+    property AutoSize;
     property State: TCheckBoxState read FState write SetState default cbUnchecked;
     property AllowGrayed: Boolean read FAllowGrayed write FAllowGrayed default False;
     property Checked: Boolean read GetChecked write SetChecked default False;
@@ -43,12 +65,24 @@ type
   private
     FChecked: Boolean;
     FGroupIndex: Integer;
+    FRefitting: Boolean;   // guards the AutoSize re-fit in Invalidate against re-entry
     FOnChange: TNotifyEvent;
     procedure SetChecked(const AValue: Boolean);
     procedure UncheckSiblings;
   protected
     function GetStyleTypeKey: string; override;
     function CurrentStates: TTyStateSet; override;
+    { 与 TTyCheckBox.CalculatePreferredSize 同理,只是指示器读的是 --radio-size /
+      --radio-gap 这两个令牌(RenderTo 用的也是它们)。 }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
+    { 标题在 APPI 下画出来的尺寸(设备像素),已去掉 & 助记符标记。 }
+    procedure MeasureCaption(APPI: Integer; out AWidth, AHeight: Integer);
+    { 运行期改 Caption 走这里;开了 AutoSize 就得按新文字重新量。 }
+    procedure TextChanged; override;
+    { 换主题以裸 Invalidate 的形式到达控件,新主题的字体/padding/指示器令牌都可能不同,
+      AutoSize 的单选钮必须在这里重新贴合。见 TTyCheckBox.Invalidate。 }
+    procedure Invalidate; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
@@ -58,6 +92,9 @@ type
     destructor Destroy; override;
     procedure Click; override;
   published
+    { 默认关。打开后控件横向撑开到刚好裹住圆点 + 间距 + 标题 + 主题 padding;
+      高度不参与,交给排版方。见 TTyCheckBox.AutoSize。 }
+    property AutoSize;
     property Checked: Boolean read FChecked write SetChecked default False;
     property GroupIndex: Integer read FGroupIndex write FGroupIndex default 0;
     property Caption;
@@ -226,6 +263,96 @@ begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
+procedure TTyCheckBox.MeasureCaption(APPI: Integer; out AWidth, AHeight: Integer);
+var
+  S: TTyStyleSet;
+  Meas: TBitmap;
+  disp: string;
+  mp: Integer;
+begin
+  // RenderTo 画标题用的是 S(盒子那份样式)的字体,CaptionS 只提供墨色 —— 所以这里也
+  // 必须用 S 量,否则 :active 一旦带了自己的字体,量出来的和画出来的就对不上。
+  S := CurrentStyle;
+  // & 标记画成下划线,不是字符,所以不能算进宽度里。
+  TyParseMnemonic(Caption, disp, mp);
+  Meas := TBitmap.Create;
+  try
+    Meas.SetSize(1, 1);
+    Meas.Canvas.Font.Name := TyEffectiveFontName(S.FontName);
+    Meas.Canvas.Font.Size := MulDiv(ResolveFontSize(S), APPI, 96);
+    if S.FontWeight >= 600 then
+      Meas.Canvas.Font.Style := [fsBold]
+    else
+      Meas.Canvas.Font.Style := [];
+    AWidth := Meas.Canvas.TextWidth(disp);
+    // 用固定的参考字形取行高:标题为空时也仍然是一行的高度。
+    AHeight := Meas.Canvas.TextHeight('Ag');
+    if AWidth < 0 then AWidth := 0;
+    if AHeight < 1 then AHeight := 1;
+  finally
+    Meas.Free;
+  end;
+end;
+
+procedure TTyCheckBox.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+var
+  S: TTyStyleSet;
+  ppi, tw, th, boxSize, gap: Integer;
+begin
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  S := CurrentStyle;
+  MeasureCaption(ppi, tw, th);
+  // 和 RenderTo 完全一样的两个主题令牌(P.Scale 就是 MulDiv(x, ppi, 96)),所以预留的
+  // 指示框宽度和真正画出来的那一块是同一个数。
+  boxSize := MulDiv(ActiveController.Metric('--checkbox-size', TyCheckBoxBox), ppi, 96);
+  gap := MulDiv(ActiveController.Metric('--checkbox-gap', TyCheckBoxGap), ppi, 96);
+  if boxSize < 0 then boxSize := 0;
+  if gap < 0 then gap := 0;
+  // RenderTo 的排布:padding.Left | 指示框 | gap | 标题 | padding.Right。
+  PreferredWidth := MulDiv(S.Padding.Left + S.Padding.Right, ppi, 96) + boxSize + gap + tw;
+  if PreferredWidth < 1 then PreferredWidth := 1;
+  { 只管宽度 —— 0 是 LCL 的"这个轴上没有意见",高度保持原样。控件横向长出来去装更长的
+    标题,高度则是排版决定的,归摆这一行的人管。连高度一起提议会让控件跟任何钉死高度的
+    容器打架:TTyToolBar 把每个子控件都设成自己的 ButtonHeight,子控件却要另一个高度,
+    两边来回弹到 LCL 抛 "TControl.ChangeBounds loop detected"。需要标题自然高度的调用方
+    可以自己用 MeasureCaption 加上样式的上下 padding 算。 }
+  PreferredHeight := 0;
+end;
+
+procedure TTyCheckBox.TextChanged;
+begin
+  inherited TextChanged;
+  // 新标题需要的宽度变了,AutoSize 的控件得重新贴合。
+  if AutoSize then
+  begin
+    InvalidatePreferredSize;
+    AdjustSize;
+  end;
+  Invalidate;
+end;
+
+procedure TTyCheckBox.Invalidate;
+begin
+  inherited Invalidate;
+  { 换主题时 TTyStyleController 给每个注册控件广播一个裸 Invalidate,而新主题的字体、
+    padding 和 --checkbox-size/--checkbox-gap 都可能不同 —— AutoSize 需要的宽度也就跟着
+    变了。不在这里重新量,控件就留着旧皮肤的宽度,标题被省略号截掉(TTyButton 的工具条
+    按钮当初换到 antdesign 皮肤时就是这个症状)。
+    FRefitting 挡住重入:AdjustSize -> SetBounds -> Invalidate 会绕回来。 }
+  if AutoSize and not FRefitting and not (csDestroying in ComponentState) then
+  begin
+    FRefitting := True;
+    try
+      InvalidatePreferredSize;
+      AdjustSize;
+    finally
+      FRefitting := False;
+    end;
+  end;
+end;
+
 { TTyRadioButton }
 
 constructor TTyRadioButton.Create(AOwner: TComponent);
@@ -379,6 +506,85 @@ end;
 procedure TTyRadioButton.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
+end;
+
+procedure TTyRadioButton.MeasureCaption(APPI: Integer; out AWidth, AHeight: Integer);
+var
+  S: TTyStyleSet;
+  Meas: TBitmap;
+  disp: string;
+  mp: Integer;
+begin
+  // 见 TTyCheckBox.MeasureCaption:字体取自 S(圆点那份样式),CaptionS 只给墨色。
+  S := CurrentStyle;
+  TyParseMnemonic(Caption, disp, mp);   // & 画成下划线,不占宽度
+  Meas := TBitmap.Create;
+  try
+    Meas.SetSize(1, 1);
+    Meas.Canvas.Font.Name := TyEffectiveFontName(S.FontName);
+    Meas.Canvas.Font.Size := MulDiv(ResolveFontSize(S), APPI, 96);
+    if S.FontWeight >= 600 then
+      Meas.Canvas.Font.Style := [fsBold]
+    else
+      Meas.Canvas.Font.Style := [];
+    AWidth := Meas.Canvas.TextWidth(disp);
+    AHeight := Meas.Canvas.TextHeight('Ag');
+    if AWidth < 0 then AWidth := 0;
+    if AHeight < 1 then AHeight := 1;
+  finally
+    Meas.Free;
+  end;
+end;
+
+procedure TTyRadioButton.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+var
+  S: TTyStyleSet;
+  ppi, tw, th, boxSize, gap: Integer;
+begin
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  S := CurrentStyle;
+  MeasureCaption(ppi, tw, th);
+  // RenderTo 用的就是这两个令牌;单选钮有自己的一套(--radio-*),别借复选框的。
+  boxSize := MulDiv(ActiveController.Metric('--radio-size', TyCheckBoxBox), ppi, 96);
+  gap := MulDiv(ActiveController.Metric('--radio-gap', TyCheckBoxGap), ppi, 96);
+  if boxSize < 0 then boxSize := 0;
+  if gap < 0 then gap := 0;
+  // RenderTo 的排布:padding.Left | 圆点 | gap | 标题 | padding.Right。
+  PreferredWidth := MulDiv(S.Padding.Left + S.Padding.Right, ppi, 96) + boxSize + gap + tw;
+  if PreferredWidth < 1 then PreferredWidth := 1;
+  { 只管宽度,高度交给排版方 —— 理由见 TTyCheckBox.CalculatePreferredSize。 }
+  PreferredHeight := 0;
+end;
+
+procedure TTyRadioButton.TextChanged;
+begin
+  inherited TextChanged;
+  if AutoSize then
+  begin
+    InvalidatePreferredSize;
+    AdjustSize;
+  end;
+  Invalidate;
+end;
+
+procedure TTyRadioButton.Invalidate;
+begin
+  inherited Invalidate;
+  { 见 TTyCheckBox.Invalidate:换主题是一个裸 Invalidate,新主题的字体/padding/指示器
+    令牌都变了,AutoSize 必须在这里重新贴合;FRefitting 挡住
+    AdjustSize -> SetBounds -> Invalidate 的重入。 }
+  if AutoSize and not FRefitting and not (csDestroying in ComponentState) then
+  begin
+    FRefitting := True;
+    try
+      InvalidatePreferredSize;
+      AdjustSize;
+    finally
+      FRefitting := False;
+    end;
+  end;
 end;
 
 end.

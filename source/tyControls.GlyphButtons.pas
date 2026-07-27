@@ -30,12 +30,21 @@ unit tyControls.GlyphButtons;
   renders the glyph (delegating rasterization to TTyIconFont.RenderGlyph, exactly
   like TTyCharImage), places it per the layout, then calls the inherited caption
   draw in the leftover rect. With no IconFont / an unmapped glyph / no window
-  handle it degrades to a plain caption button — headless-safe, never crashes. }
+  handle it degrades to a plain caption button — headless-safe, never crashes.
+
+  AutoSize (inherited from TTyButton, still off by default) is taught about the
+  glyph here: TTyButton only knows about the caption plus the theme's padding, but
+  these buttons draw a glyph too, so an AutoSize glyph button that reserved only the
+  caption's width would push the caption out of the box the moment the skin grew the
+  padding or the font. CalculatePreferredSize below therefore mirrors DrawContent's
+  own geometry — same glyph size, same gap metric, same layout — because a preferred
+  size that disagrees with the paint is worse than none at all: AutoSize would then
+  report a fit while the caption still clips. }
 
 interface
 
 uses
-  Classes, SysUtils, Types, Controls, Graphics,
+  Classes, SysUtils, Types, Controls, Graphics, LCLType,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Button, tyControls.Controller, tyControls.IconFont,
   tyControls.ImageCollection;
@@ -83,11 +92,34 @@ type
     { Draw the glyph (if any) then the inherited caption in the leftover rect. }
     procedure DrawContent(APainter: TTyPainter; const AContentRect: TRect;
       const AStyle: TTyStyleSet); override;
+    { True exactly when DrawContent will really paint a glyph: an image icon
+      (Images + ImageName, which wins) or a font glyph (IconFont + GlyphName).
+      The preferred width may only reserve a slot the paint actually uses —
+      otherwise an AutoSize button with a GlyphName but no font would sit on a
+      pocket of empty space its plain-caption paint never fills. }
+    function HasGlyphSource: Boolean;
+    { The glyph square's edge in DEVICE px at APPI under AStyle, mirroring the choice
+      DrawContent makes: an explicit GlyphSize (scaled) wins, otherwise auto-fit. }
+    function MeasureGlyphSlot(APPI: Integer; const AStyle: TTyStyleSet): Integer;
+    { The caption's width plus the theme padding (TTyButton's answer), WIDENED by the
+      glyph slot — and, for glyph-left, by the gap between glyph and caption — so the
+      box AutoSize asks for is the box DrawContent paints into. Width only: the
+      inherited PreferredHeight of 0 is kept deliberately (see TTyButton), because a
+      speed button in a tool bar must take the bar's row height, not argue for its own. }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     property GlyphLayout: TTyGlyphLayout read FGlyphLayout write FGlyphLayout;
   public
     constructor Create(AOwner: TComponent); override;
   published
+    { Inherited from TTyButton and still off by default (a designed button keeps the
+      width its .lfm gave it). Re-published only to record what it hugs HERE: the glyph
+      slot and the glyph/caption gap count too, so switching to a skin with roomier
+      padding — or raising GlyphSize, or a longer translated caption — lengthens the
+      button instead of ellipsising its text. Every glyph property setter already ends
+      in Invalidate, which is where TTyButton re-fits an auto-sized button. }
+    property AutoSize;
     { Icon-font source for the glyph. Nilled automatically (FreeNotification) when
       the referenced font is freed, so no dangling reference remains. }
     property IconFont: TTyIconFont read FIconFont write SetIconFont;
@@ -299,6 +331,75 @@ begin
     Result := FIconFont.RenderGlyph(FGlyphName, ASizePx, AColor)
   else
     Result := TBGRABitmap.Create(ASizePx, ASizePx);   // empty (guarded by DrawContent)
+end;
+
+function TTyGlyphButtonBase.HasGlyphSource: Boolean;
+begin
+  // The exact negation of the condition DrawContent falls through to the plain
+  // caption on — the two must never disagree about whether a glyph exists.
+  Result := ((FImages <> nil) and (FImageName <> ''))
+         or ((FIconFont <> nil) and (FGlyphName <> ''));
+end;
+
+function TTyGlyphButtonBase.MeasureGlyphSlot(APPI: Integer; const AStyle: TTyStyleSet): Integer;
+var
+  scaledSize: Integer;
+begin
+  scaledSize := MulDiv(FGlyphSize, APPI, 96);
+  if scaledSize > 0 then
+    Result := scaledSize
+  else
+    { Auto (GlyphSize = 0). DrawContent derives the square from the CONTENT box — the
+      client rect minus the theme's padding, the very inset RenderTo applies — so the
+      measurement has to start from the same place. glyph-left takes that box's HEIGHT
+      (a caption-height icon beside the text); glyph-top takes min(width, height), and
+      the width we are about to ask for is at least this square plus the padding, so
+      that min settles on the same number. One expression is therefore honest for both
+      layouts. Height is used, not proposed: it stays whatever the layout gave us. }
+    Result := ClientHeight - MulDiv(AStyle.Padding.Top + AStyle.Padding.Bottom, APPI, 96);
+  if Result < 0 then Result := 0;
+end;
+
+procedure TTyGlyphButtonBase.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+var
+  S: TTyStyleSet;
+  ppi, glyphPx, padX: Integer;
+begin
+  // TTyButton contributes the caption plus the theme's horizontal padding, and leaves
+  // PreferredHeight at 0 ("no preference on this axis") — both are kept as they are.
+  inherited CalculatePreferredSize(PreferredWidth, PreferredHeight, WithThemeSpace);
+  // No glyph source: DrawContent paints a plain centered caption over the whole content
+  // rect, so the inherited width already IS the truth. Same for a slot that scales away
+  // to nothing — DrawContent takes the plain path there too (glyphPx < 1).
+  if not HasGlyphSource then Exit;
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  S := CurrentStyle;
+  glyphPx := MeasureGlyphSlot(ppi, S);
+  if glyphPx < 1 then Exit;
+  padX := MulDiv(S.Padding.Left + S.Padding.Right, ppi, 96);
+  if FGlyphLayout = glTop then
+  begin
+    // Ribbon tile: the glyph sits ABOVE the caption, so the two SHARE the width instead
+    // of adding up, and the gap between them is vertical — it costs nothing sideways.
+    // The tile still may not be narrower than its own icon plus the padding.
+    if glyphPx + padX > PreferredWidth then
+      PreferredWidth := glyphPx + padX;
+  end
+  else
+  begin
+    // glyph-left: glyph, gap and caption stand side by side exactly as TyGlyphButtonSplit
+    // lays them out, so all three plus the padding is what the button needs.
+    Inc(PreferredWidth, glyphPx);
+    // The gap is only paid for when a caption is actually drawn: DrawContent skips the
+    // caption rect entirely when Caption is empty, and a pure-icon toolbar button must
+    // not carry a gap to nothing (that would be a visibly off-centre glyph).
+    if Caption <> '' then
+      Inc(PreferredWidth,
+        MulDiv(ActiveController.Metric('--glyph-button-gap', TyGlyphButtonGap), ppi, 96));
+  end;
+  if PreferredWidth < 1 then PreferredWidth := 1;
 end;
 
 procedure TTyGlyphButtonBase.Notification(AComponent: TComponent; Operation: TOperation);

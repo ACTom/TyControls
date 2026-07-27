@@ -5,17 +5,27 @@ uses
   Classes, SysUtils, Types, TypInfo, fpcunit, testregistry, Forms, Controls, Graphics,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Base, tyControls.Types, tyControls.Button, tyControls.IconFont,
-  tyControls.GlyphButtons;
+  tyControls.GlyphButtons, tyControls.Controller, tyControls.ToolBar;
 type
-  { Exposes the protected RenderTo so the glyph paint path is exercisable headlessly. }
+  { Exposes the protected RenderTo so the glyph paint path is exercisable headlessly,
+    and the protected CalculatePreferredSize so AutoSize can be asserted DIRECTLY.
+    Reading Width instead would measure nothing: LCL's AutoSizeDelayed suppresses every
+    re-fit while the parent form has no handle, and the headless runner never makes one. }
   TGlyphButtonAccess = class(TTyGlyphButton)
   public
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    procedure CallPreferred(out AW, AH: Integer);
   end;
 
   TContainerButtonAccess = class(TTyGlyphContainerButton)
   public
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    procedure CallPreferred(out AW, AH: Integer);
+  end;
+
+  TSpeedButtonAccess = class(TTySpeedButton)
+  public
+    procedure CallPreferred(out AW, AH: Integer);
   end;
 
   TGlyphButtonTest = class(TTestCase)
@@ -32,6 +42,16 @@ type
     procedure TestPaintWithGlyphSafe;
     procedure TestPaintContainerSafe;
     procedure TestPaintNoFontSafe;
+    procedure TestAutoSizePublishedOnAllThree;
+    procedure TestPreferredWidthGrowsWithTheCaption;
+    procedure TestPreferredWidthReservesTheGlyphSlot;
+    procedure TestPreferredWidthDropsTheGapWithoutACaption;
+    procedure TestPreferredWidthGrowsWithGlyphSize;
+    procedure TestAutoGlyphSlotFollowsTheContentBox;
+    procedure TestRoomierThemeWidensTheButton;
+    procedure TestContainerSharesTheWidthWithItsCaption;
+    procedure TestContainerGlyphSetsTheWidthFloor;
+    procedure TestPreferredHeightStaysZero;
   end;
 
   TSpeedButtonTest = class(TTestCase)
@@ -41,6 +61,8 @@ type
     procedure TestAllowAllUpToggle;
     procedure TestUngroupedClickJustFires;
     procedure TestDisabledClickNoChange;
+    procedure TestRoomierThemeWidensThroughItsOwnKey;
+    procedure TestAutoSizeSurvivesAHeightPinningToolBar;
   end;
 implementation
 
@@ -49,9 +71,27 @@ begin
   inherited RenderTo(ACanvas, ARect, APPI);
 end;
 
+procedure TGlyphButtonAccess.CallPreferred(out AW, AH: Integer);
+begin
+  AW := 0; AH := 0;
+  CalculatePreferredSize(AW, AH, True);
+end;
+
 procedure TContainerButtonAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   inherited RenderTo(ACanvas, ARect, APPI);
+end;
+
+procedure TContainerButtonAccess.CallPreferred(out AW, AH: Integer);
+begin
+  AW := 0; AH := 0;
+  CalculatePreferredSize(AW, AH, True);
+end;
+
+procedure TSpeedButtonAccess.CallPreferred(out AW, AH: Integer);
+begin
+  AW := 0; AH := 0;
+  CalculatePreferredSize(AW, AH, True);
 end;
 
 { ---- TGlyphButtonTest ---- }
@@ -313,6 +353,359 @@ begin
   end;
 end;
 
+{ ---- TGlyphButtonTest: AutoSize / preferred width ----
+
+  Why these exist: a skin may legitimately change the font AND the padding. The 'xp' skin
+  asks TyButton for 5px 12px where the default asks 6px — 24px of horizontal padding instead
+  of 12 — so every glyph button whose Width was hand-fitted to the default skin clipped its
+  caption the moment the skin changed. The fix is for the button to size ITSELF, which means
+  its preferred width must account for exactly what it paints: caption AND glyph AND gap. }
+
+procedure TGlyphButtonTest.TestAutoSizePublishedOnAllThree;
+var
+  B: TTyGlyphButton;
+  C: TTyGlyphContainerButton;
+  S: TTySpeedButton;
+begin
+  // Published so a .lfm and the object inspector can switch it on; the default stays
+  // False, so nothing that exists today moves.
+  B := TTyGlyphButton.Create(nil);
+  C := TTyGlyphContainerButton.Create(nil);
+  S := TTySpeedButton.Create(nil);
+  try
+    AssertTrue('glyph button publishes AutoSize', IsPublishedProp(B, 'AutoSize'));
+    AssertTrue('container button publishes AutoSize', IsPublishedProp(C, 'AutoSize'));
+    AssertTrue('speed button publishes AutoSize', IsPublishedProp(S, 'AutoSize'));
+    AssertFalse('glyph button AutoSize still off by default', B.AutoSize);
+    AssertFalse('container button AutoSize still off by default', C.AutoSize);
+    AssertFalse('speed button AutoSize still off by default', S.AutoSize);
+  finally
+    B.Free; C.Free; S.Free;
+  end;
+end;
+
+procedure TGlyphButtonTest.TestPreferredWidthGrowsWithTheCaption;
+var
+  Ctl: TTyStyleController;
+  Font: TTyIconFont;
+  B: TGlyphButtonAccess;
+  narrow, wide, h1, h2: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Font := TTyIconFont.Create(nil);
+  B := TGlyphButtonAccess.Create(nil);
+  try
+    Ctl.LoadThemeCss('TyButton { background: #FFFFFF; color: #000000; padding: 5px 9px; font-size: 12px; }');
+    Font.MapGlyph('save', $F0C7);
+    B.Controller := Ctl;
+    B.Font.PixelsPerInch := 96;
+    B.IconFont := Font;
+    B.GlyphName := 'save';
+    B.GlyphSize := 16;
+    B.AutoSize := True;
+    B.Caption := 'Save';
+    B.CallPreferred(narrow, h1);
+
+    // A longer translation must lengthen the button, not get ellipsised.
+    B.Caption := 'Save the current work order as a template';
+    B.CallPreferred(wide, h2);
+    AssertTrue(Format('a longer caption wants more width (%d -> %d)', [narrow, wide]),
+      wide > narrow);
+    AssertEquals('and still proposes no height', 0, h2);
+  finally
+    B.Free; Font.Free; Ctl.Free;
+  end;
+end;
+
+procedure TGlyphButtonTest.TestPreferredWidthReservesTheGlyphSlot;
+var
+  Ctl: TTyStyleController;
+  Font: TTyIconFont;
+  B: TGlyphButtonAccess;
+  plain, withGlyph, h: Integer;
+begin
+  // The load-bearing part: glyph-left paints glyph + gap + caption (TyGlyphButtonSplit),
+  // so the preferred width must reserve the glyph AND the gap. A preferred size that only
+  // counted the caption would make AutoSize lie and the caption would still clip.
+  Ctl := TTyStyleController.Create(nil);
+  Font := TTyIconFont.Create(nil);
+  B := TGlyphButtonAccess.Create(nil);
+  try
+    Ctl.LoadThemeCss('TyButton { background: #FFFFFF; color: #000000; padding: 5px 9px; font-size: 12px; }');
+    Font.MapGlyph('save', $F0C7);
+    B.Controller := Ctl;
+    B.Font.PixelsPerInch := 96;
+    B.Caption := 'Save';
+    B.GlyphSize := 16;
+    // No glyph SOURCE yet: DrawContent falls through to the plain caption, so must the width.
+    B.CallPreferred(plain, h);
+
+    B.IconFont := Font;
+    B.GlyphName := 'save';
+    B.CallPreferred(withGlyph, h);
+    // 16px glyph + the 6px '--glyph-button-gap' default (this theme sets no metric).
+    AssertEquals('the glyph slot and its gap are both reserved', plain + 16 + 6, withGlyph);
+
+    // An unmapped/absent source must not reserve anything: the paint would not draw it.
+    B.IconFont := nil;
+    B.CallPreferred(withGlyph, h);
+    AssertEquals('no icon font -> no reserved slot', plain, withGlyph);
+  finally
+    B.Free; Font.Free; Ctl.Free;
+  end;
+end;
+
+procedure TGlyphButtonTest.TestPreferredWidthDropsTheGapWithoutACaption;
+var
+  Ctl: TTyStyleController;
+  Font: TTyIconFont;
+  B: TGlyphButtonAccess;
+  bare, iconOnly, h: Integer;
+begin
+  // DrawContent skips the caption rect entirely when Caption is empty, so a pure-icon
+  // toolbar button must not pay for a gap to nothing — it would sit visibly off-centre.
+  Ctl := TTyStyleController.Create(nil);
+  Font := TTyIconFont.Create(nil);
+  B := TGlyphButtonAccess.Create(nil);
+  try
+    Ctl.LoadThemeCss('TyButton { background: #FFFFFF; color: #000000; padding: 5px 9px; font-size: 12px; }');
+    Font.MapGlyph('save', $F0C7);
+    B.Controller := Ctl;
+    B.Font.PixelsPerInch := 96;
+    B.Caption := '';
+    B.GlyphSize := 20;
+    B.CallPreferred(bare, h);           // padding only: no caption, no glyph source
+
+    B.IconFont := Font;
+    B.GlyphName := 'save';
+    B.CallPreferred(iconOnly, h);
+    AssertEquals('a pure-icon button pays for the glyph and NOT for the gap',
+      bare + 20, iconOnly);
+  finally
+    B.Free; Font.Free; Ctl.Free;
+  end;
+end;
+
+procedure TGlyphButtonTest.TestPreferredWidthGrowsWithGlyphSize;
+var
+  Ctl: TTyStyleController;
+  Font: TTyIconFont;
+  B: TGlyphButtonAccess;
+  small, big, h: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Font := TTyIconFont.Create(nil);
+  B := TGlyphButtonAccess.Create(nil);
+  try
+    Ctl.LoadThemeCss('TyButton { background: #FFFFFF; color: #000000; padding: 5px 9px; font-size: 12px; }');
+    Font.MapGlyph('save', $F0C7);
+    B.Controller := Ctl;
+    B.Font.PixelsPerInch := 96;
+    B.IconFont := Font;
+    B.GlyphName := 'save';
+    B.Caption := 'Save';
+
+    B.GlyphSize := 16;
+    B.CallPreferred(small, h);
+    B.GlyphSize := 32;
+    B.CallPreferred(big, h);
+    AssertEquals('a bigger glyph widens the button by exactly that much', small + 16, big);
+  finally
+    B.Free; Font.Free; Ctl.Free;
+  end;
+end;
+
+procedure TGlyphButtonTest.TestAutoGlyphSlotFollowsTheContentBox;
+var
+  Ctl: TTyStyleController;
+  Font: TTyIconFont;
+  B: TGlyphButtonAccess;
+  auto, explicitSize, plain, box, h: Integer;
+begin
+  // GlyphSize 0 = auto: DrawContent derives the square from the content box (the client
+  // rect minus the theme padding), so the measurement must derive it from the same place.
+  Ctl := TTyStyleController.Create(nil);
+  Font := TTyIconFont.Create(nil);
+  B := TGlyphButtonAccess.Create(nil);
+  try
+    Ctl.LoadThemeCss('TyButton { background: #FFFFFF; color: #000000; padding: 5px 9px; font-size: 12px; }');
+    Font.MapGlyph('save', $F0C7);
+    B.Controller := Ctl;
+    B.Font.PixelsPerInch := 96;
+    B.IconFont := Font;
+    B.GlyphName := 'save';
+    B.Caption := 'Save';
+
+    B.GlyphSize := 0;
+    B.CallPreferred(auto, h);
+    box := B.ClientHeight - 10;      // 5px padding top + 5px bottom
+    AssertTrue('the content box must be non-degenerate for this test', box > 0);
+    // An auto glyph is still a reserved slot, not a free ride.
+    B.GlyphName := '';
+    B.CallPreferred(plain, h);
+    AssertEquals('an auto glyph reserves its square plus the gap', plain + box + 6, auto);
+    // ...and it is exactly the square an explicit GlyphSize of that size would ask for.
+    B.GlyphName := 'save';
+    B.GlyphSize := box;
+    B.CallPreferred(explicitSize, h);
+    AssertEquals('the auto glyph measures as the content box height', explicitSize, auto);
+  finally
+    B.Free; Font.Free; Ctl.Free;
+  end;
+end;
+
+procedure TGlyphButtonTest.TestRoomierThemeWidensTheButton;
+var
+  Ctl: TTyStyleController;
+  Font: TTyIconFont;
+  B: TGlyphButtonAccess;
+  tight, roomy, h: Integer;
+begin
+  { THE bug: the same caption under a skin with roomier padding needs a wider button. A theme
+    switch reaches the control as a bare Invalidate, where TTyButton re-fits an auto-sized
+    button — asserted through CalculatePreferredSize because AutoSizeDelayed blocks a real
+    resize while the parent form has no handle. }
+  Ctl := TTyStyleController.Create(nil);
+  Font := TTyIconFont.Create(nil);
+  B := TGlyphButtonAccess.Create(nil);
+  try
+    Font.MapGlyph('save', $F0C7);
+    B.Controller := Ctl;
+    B.Font.PixelsPerInch := 96;
+    B.IconFont := Font;
+    B.GlyphName := 'save';
+    B.GlyphSize := 16;               // explicit, so only the padding moves below
+    B.AutoSize := True;
+    B.Caption := 'Save';
+
+    Ctl.LoadThemeCss('TyButton { background: #FFFFFF; color: #000000; padding: 4px 4px; font-size: 12px; }');
+    B.CallPreferred(tight, h);
+
+    Ctl.LoadThemeCss('TyButton { background: #FFFFFF; color: #000000; padding: 4px 30px; font-size: 12px; }');
+    B.CallPreferred(roomy, h);
+    AssertTrue(Format('a roomier theme widens the glyph button (%d -> %d)', [tight, roomy]),
+      roomy > tight);
+    // 26px more padding per side = 52px more width; the glyph and gap did not move.
+    AssertEquals('the extra width is exactly the extra padding', tight + 52, roomy);
+  finally
+    B.Free; Font.Free; Ctl.Free;
+  end;
+end;
+
+procedure TGlyphButtonTest.TestContainerSharesTheWidthWithItsCaption;
+var
+  Ctl: TTyStyleController;
+  Font: TTyIconFont;
+  C: TContainerButtonAccess;
+  plainLong, withGlyph, hugeGlyph, h: Integer;
+begin
+  // A ribbon tile stacks the glyph ABOVE the caption, so the two SHARE the width instead
+  // of adding up, and the gap between them is vertical — it costs nothing sideways.
+  Ctl := TTyStyleController.Create(nil);
+  Font := TTyIconFont.Create(nil);
+  C := TContainerButtonAccess.Create(nil);
+  try
+    Ctl.LoadThemeCss('TyGlyphContainerButton { background: #FFFFFF; color: #000000; padding: 4px 8px; font-size: 12px; }');
+    Font.MapGlyph('save', $F0C7);
+    C.Controller := Ctl;
+    C.Font.PixelsPerInch := 96;
+    C.IconFont := Font;
+    C.GlyphSize := 24;
+    C.Caption := 'A considerably longer ribbon caption';
+
+    C.GlyphName := '';               // no glyph source
+    C.CallPreferred(plainLong, h);
+    C.GlyphName := 'save';
+    C.CallPreferred(withGlyph, h);
+    AssertEquals('glyph-top does not add the glyph to the caption width',
+      plainLong, withGlyph);
+    // ...and the max() is live, not a no-op: a glyph wider than the caption does raise it.
+    C.GlyphSize := 400;
+    C.CallPreferred(hugeGlyph, h);
+    AssertTrue(Format('an oversized glyph raises the floor (%d -> %d)', [plainLong, hugeGlyph]),
+      hugeGlyph > plainLong);
+  finally
+    C.Free; Font.Free; Ctl.Free;
+  end;
+end;
+
+procedure TGlyphButtonTest.TestContainerGlyphSetsTheWidthFloor;
+var
+  Ctl: TTyStyleController;
+  Font: TTyIconFont;
+  C: TContainerButtonAccess;
+  plainShort, withBig, bigger, h: Integer;
+begin
+  // ...and when the glyph is the wider of the two, IT sets the floor: a tile with a big
+  // icon and a two-letter caption must still be wide enough for the icon.
+  Ctl := TTyStyleController.Create(nil);
+  Font := TTyIconFont.Create(nil);
+  C := TContainerButtonAccess.Create(nil);
+  try
+    Ctl.LoadThemeCss('TyGlyphContainerButton { background: #FFFFFF; color: #000000; padding: 4px 8px; font-size: 12px; }');
+    Font.MapGlyph('save', $F0C7);
+    C.Controller := Ctl;
+    C.Font.PixelsPerInch := 96;
+    C.IconFont := Font;
+    C.Caption := 'Go';
+
+    C.GlyphName := '';
+    C.CallPreferred(plainShort, h);
+    C.GlyphName := 'save';
+    C.GlyphSize := 48;
+    C.CallPreferred(withBig, h);
+    AssertTrue(Format('a big ribbon glyph widens the tile past its short caption (%d -> %d)',
+      [plainShort, withBig]), withBig > plainShort);
+    C.GlyphSize := 58;
+    C.CallPreferred(bigger, h);
+    AssertEquals('the tile then tracks the glyph 1:1', withBig + 10, bigger);
+  finally
+    C.Free; Font.Free; Ctl.Free;
+  end;
+end;
+
+procedure TGlyphButtonTest.TestPreferredHeightStaysZero;
+var
+  Ctl: TTyStyleController;
+  Font: TTyIconFont;
+  B: TGlyphButtonAccess;
+  C: TContainerButtonAccess;
+  S: TSpeedButtonAccess;
+  w, h: Integer;
+begin
+  { 0 is LCL's "no preference on this axis". Proposing a height makes the control fight any
+    container that pins one — TTyToolBar sizes every child to its ButtonHeight, and a button
+    asking for a different height bounced between the two until LCL aborted the app with
+    "TControl.ChangeBounds loop detected". Width only; the row owns the height. }
+  Ctl := TTyStyleController.Create(nil);
+  Font := TTyIconFont.Create(nil);
+  B := TGlyphButtonAccess.Create(nil);
+  C := TContainerButtonAccess.Create(nil);
+  S := TSpeedButtonAccess.Create(nil);
+  try
+    Ctl.LoadThemeCss(
+      'TyButton { background: #FFFFFF; color: #000000; padding: 5px 9px; font-size: 12px; }' +
+      'TySpeedButton { background: #FFFFFF; color: #000000; padding: 3px 5px; font-size: 12px; }' +
+      'TyGlyphContainerButton { background: #FFFFFF; color: #000000; padding: 4px 8px; font-size: 12px; }');
+    Font.MapGlyph('save', $F0C7);
+    B.Controller := Ctl; B.Font.PixelsPerInch := 96; B.IconFont := Font; B.GlyphName := 'save'; B.Caption := 'Save';
+    C.Controller := Ctl; C.Font.PixelsPerInch := 96; C.IconFont := Font; C.GlyphName := 'save'; C.Caption := 'Save';
+    S.Controller := Ctl; S.Font.PixelsPerInch := 96; S.IconFont := Font; S.GlyphName := 'save'; S.Caption := 'Cut';
+
+    B.CallPreferred(w, h);
+    AssertEquals('glyph button proposes no height', 0, h);
+    AssertTrue('glyph button still proposes a width', w > 0);
+    C.CallPreferred(w, h);
+    AssertEquals('container button proposes no height', 0, h);
+    AssertTrue('container button still proposes a width', w > 0);
+    S.CallPreferred(w, h);
+    AssertEquals('speed button proposes no height', 0, h);
+    AssertTrue('speed button still proposes a width', w > 0);
+  finally
+    S.Free; C.Free; B.Free; Font.Free; Ctl.Free;
+  end;
+end;
+
 { ---- TSpeedButtonTest ---- }
 
 procedure TSpeedButtonTest.TestDefaults;
@@ -419,6 +812,78 @@ begin
     B.Click;
     AssertFalse('disabled button did not press', B.Down);
     AssertTrue('disabled click did not release the sibling', A.Down);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TSpeedButtonTest.TestRoomierThemeWidensThroughItsOwnKey;
+var
+  Ctl: TTyStyleController;
+  Font: TTyIconFont;
+  S: TSpeedButtonAccess;
+  tight, roomy, h: Integer;
+begin
+  { The speed button owns the 'TySpeedButton' key, so its padding — and therefore the width
+    it needs — must be read from THAT rule, not from TyButton. If the measurement borrowed
+    another control's key the theme layer could not reach it and a roomier skin would clip
+    the caption exactly as before. }
+  Ctl := TTyStyleController.Create(nil);
+  Font := TTyIconFont.Create(nil);
+  S := TSpeedButtonAccess.Create(nil);
+  try
+    Font.MapGlyph('cut', $F0C4);
+    S.Controller := Ctl;
+    S.Font.PixelsPerInch := 96;
+    S.IconFont := Font;
+    S.GlyphName := 'cut';
+    S.GlyphSize := 16;
+    S.AutoSize := True;
+    S.Caption := 'Cut';
+
+    Ctl.LoadThemeCss('TySpeedButton { background: #FFFFFF; color: #000000; padding: 3px 5px; font-size: 12px; }');
+    S.CallPreferred(tight, h);
+    Ctl.LoadThemeCss('TySpeedButton { background: #FFFFFF; color: #000000; padding: 3px 25px; font-size: 12px; }');
+    S.CallPreferred(roomy, h);
+    AssertTrue(Format('a roomier skin widens the speed button (%d -> %d)', [tight, roomy]),
+      roomy > tight);
+    AssertEquals('the extra width is exactly the extra padding', tight + 40, roomy);
+    AssertEquals('and it never proposes a height', 0, h);
+  finally
+    S.Free; Font.Free; Ctl.Free;
+  end;
+end;
+
+procedure TSpeedButtonTest.TestAutoSizeSurvivesAHeightPinningToolBar;
+var
+  F: TForm;
+  Bar: TTyToolBar;
+  S: TTySpeedButton;
+  hBefore: Integer;
+begin
+  { The reason PreferredHeight is 0: a tool bar pins every child to its ButtonHeight. A speed
+    button that also proposed a height bounced against the bar until LCL aborted with
+    "TControl.ChangeBounds loop detected" and the app died at startup. Growing the caption on
+    a real bar must simply settle — at the BAR's height, not the button's idea of one. }
+  F := TForm.CreateNew(nil);
+  try
+    Bar := TTyToolBar.Create(F);
+    Bar.Parent := F;
+    Bar.Align := alTop;
+    Bar.ButtonHeight := 24;
+
+    S := TTySpeedButton.Create(F);
+    S.Parent := Bar;
+    S.Font.PixelsPerInch := 96;
+    S.Caption := 'Cut';
+    S.AutoSize := True;
+    hBefore := S.Height;
+
+    S.Caption := 'Cut the selection to the clipboard';
+    Bar.Realign;
+
+    AssertEquals('the bar still owns the height', hBefore, S.Height);
+    AssertTrue('and the speed button is still a sane size', (S.Width > 0) and (S.Height > 0));
   finally
     F.Free;
   end;

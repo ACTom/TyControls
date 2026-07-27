@@ -2,7 +2,7 @@ unit test.checkbox;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, StdCtrls, fpcunit, testregistry, Forms, Controls, Graphics, LCLType,
+  Classes, SysUtils, StdCtrls, TypInfo, fpcunit, testregistry, Forms, Controls, Graphics, LCLType,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.Base, tyControls.CheckBox;
 type
@@ -11,6 +11,16 @@ type
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure DoKeyDown(var Key: Word; Shift: TShiftState);
     function States: TTyStateSet;
+    { CalculatePreferredSize is protected; the AutoSize tests must ask it DIRECTLY.
+      Going through Width would measure nothing: LCL's AutoSizeDelayed suppresses every
+      auto-size while the parent form has no handle, and the headless runner never
+      realises one. }
+    procedure CallPreferred(out AW, AH: Integer);
+  end;
+
+  TTyRadioAccess = class(TTyRadioButton)
+  public
+    procedure CallPreferred(out AW, AH: Integer);
   end;
 
   TCheckBoxFontAccess = class(TTyCheckBox)
@@ -60,11 +70,43 @@ type
     procedure TestGrayedRendersIndeterminateGlyph;
     procedure TestAllowGrayedFalseStillAllowsProgrammaticGrayed;
   end;
+
+  { A skin may legitimately change the font AND the padding, and the checkbox/radio
+    indicator size and caption gap are themable metrics too — so a control whose Width
+    was hand-fitted to one skin clips its caption under another. These cover the way
+    out: AutoSize + a preferred width that mirrors what RenderTo actually lays out. }
+  TCheckBoxAutoSizeTest = class(TTestCase)
+  published
+    procedure TestAutoSizeIsPublished;
+    procedure TestPreferredWidthGrowsWithCaption;
+    procedure TestPreferredWidthIncludesIndicatorAndGap;
+    procedure TestRoomierThemeWidensPreferredWidth;
+    procedure TestBiggerIndicatorMetricWidensPreferredWidth;
+    procedure TestPreferredHeightIsAlwaysZero;
+    procedure TestMnemonicMarkerAddsNoWidth;
+    procedure TestRadioPreferredWidthGrowsWithCaption;
+    procedure TestRadioPreferredWidthIncludesDotAndGap;
+    procedure TestRadioRoomierThemeWidensPreferredWidth;
+    procedure TestRadioUsesItsOwnIndicatorMetrics;
+    procedure TestRadioPreferredHeightIsAlwaysZero;
+  end;
 implementation
 
 procedure TTyCheckBoxAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   inherited RenderTo(ACanvas, ARect, APPI);
+end;
+
+procedure TTyCheckBoxAccess.CallPreferred(out AW, AH: Integer);
+begin
+  AW := 0; AH := 0;
+  CalculatePreferredSize(AW, AH, True);
+end;
+
+procedure TTyRadioAccess.CallPreferred(out AW, AH: Integer);
+begin
+  AW := 0; AH := 0;
+  CalculatePreferredSize(AW, AH, True);
 end;
 
 procedure TTyCheckBoxAccess.DoKeyDown(var Key: Word; Shift: TShiftState);
@@ -777,7 +819,368 @@ begin
   finally cb.Free; end;
 end;
 
+{ TCheckBoxAutoSizeTest }
+
+const
+  { A fully-specified skin so the numbers below are exact: no padding, a known font size,
+    and the two indicator metrics pinned to their built-in values. }
+  cCbTightCss =
+    ':root { --checkbox-size: 16px; --checkbox-gap: 6px; }' +
+    'TyCheckBox { background: #FFFFFF; color: #000000; border-width: 0px; padding: 0px; font-size: 12px; }';
+  cRbTightCss =
+    ':root { --radio-size: 16px; --radio-gap: 6px; }' +
+    'TyRadioButton { background: #FFFFFF; color: #000000; border-width: 0px; padding: 0px; font-size: 12px; }';
+
+procedure TCheckBoxAutoSizeTest.TestAutoSizeIsPublished;
+{ AutoSize must be PUBLISHED on both, or it cannot be switched on from a .lfm or the
+  object inspector — which is the whole point of the opt-in. }
+var
+  C: TTyCheckBox;
+  R: TTyRadioButton;
+begin
+  C := TTyCheckBox.Create(nil);
+  try
+    AssertTrue('TTyCheckBox.AutoSize is published', IsPublishedProp(C, 'AutoSize'));
+    AssertFalse('and still defaults to False (purely additive)', C.AutoSize);
+  finally C.Free; end;
+  R := TTyRadioButton.Create(nil);
+  try
+    AssertTrue('TTyRadioButton.AutoSize is published', IsPublishedProp(R, 'AutoSize'));
+    AssertFalse('and still defaults to False (purely additive)', R.AutoSize);
+  finally R.Free; end;
+end;
+
+procedure TCheckBoxAutoSizeTest.TestPreferredWidthGrowsWithCaption;
+{ The reported case: a caption swapped at RUNTIME (a longer translation pushed in after the
+  .lfm sized the control) must make the checkbox want more width, not get ellipsised. }
+var
+  Ctl: TTyStyleController;
+  C: TTyCheckBoxAccess;
+  short, long, h1, h2: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Ctl.LoadThemeCss(cCbTightCss);
+    C := TTyCheckBoxAccess.Create(nil);
+    try
+      C.Controller := Ctl;
+      C.Font.PixelsPerInch := 96;
+      C.AutoSize := True;
+      C.Caption := 'On';
+      C.CallPreferred(short, h1);
+      C.Caption := 'Send me the whole newsletter every single morning';
+      C.CallPreferred(long, h2);
+      AssertTrue(Format('a longer caption wants more width (%d -> %d)', [short, long]),
+        long > short);
+      AssertEquals('and never proposes a height', 0, h2);
+    finally C.Free; end;
+  finally Ctl.Free; end;
+end;
+
+procedure TCheckBoxAutoSizeTest.TestPreferredWidthIncludesIndicatorAndGap;
+{ The preferred width must cover the control's OWN slots, not just the text: RenderTo lays
+  out padding | box | gap | caption, so with zero padding and an empty caption the width is
+  exactly box + gap. A preferred size that forgot the box would make AutoSize lie and the
+  caption would still clip. }
+var
+  Ctl: TTyStyleController;
+  C: TTyCheckBoxAccess;
+  wEmpty, wText, h: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Ctl.LoadThemeCss(cCbTightCss);
+    C := TTyCheckBoxAccess.Create(nil);
+    try
+      C.Controller := Ctl;
+      C.Font.PixelsPerInch := 96;
+      C.Caption := '';
+      C.CallPreferred(wEmpty, h);
+      AssertEquals('empty caption still reserves box(16) + gap(6)', 22, wEmpty);
+      // And the caption is added on top of that slot, never instead of it.
+      C.Caption := 'Yes';
+      C.CallPreferred(wText, h);
+      AssertTrue(Format('a caption adds to the slot (%d -> %d)', [wEmpty, wText]),
+        wText > wEmpty);
+    finally C.Free; end;
+  finally Ctl.Free; end;
+end;
+
+procedure TCheckBoxAutoSizeTest.TestRoomierThemeWidensPreferredWidth;
+{ THE ACTUAL BUG. The 'xp' skin asks for padding 5px 12px where the default asks 6px, so a
+  control hand-fitted to one skin clips under the other. Same control, same caption, two
+  themes through one controller: the roomier padding must yield a wider preferred width,
+  and the delta must be exactly the extra padding (nothing else changed). }
+var
+  Ctl: TTyStyleController;
+  C: TTyCheckBoxAccess;
+  tight, roomy, h: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    C := TTyCheckBoxAccess.Create(nil);
+    try
+      C.Controller := Ctl;
+      C.Font.PixelsPerInch := 96;
+      C.AutoSize := True;
+      C.Caption := 'Remember me';
+
+      Ctl.LoadThemeCss(':root { --checkbox-size: 16px; --checkbox-gap: 6px; }' +
+        'TyCheckBox { background: #FFFFFF; color: #000000; border-width: 0px; padding: 4px 4px; font-size: 12px; }');
+      C.CallPreferred(tight, h);
+
+      Ctl.LoadThemeCss(':root { --checkbox-size: 16px; --checkbox-gap: 6px; }' +
+        'TyCheckBox { background: #FFFFFF; color: #000000; border-width: 0px; padding: 4px 30px; font-size: 12px; }');
+      C.CallPreferred(roomy, h);
+
+      AssertTrue(Format('a roomier theme widens the checkbox (%d -> %d)', [tight, roomy]),
+        roomy > tight);
+      // 26px more padding per side = 52px more width.
+      AssertEquals('the extra width is exactly the extra padding', tight + 52, roomy);
+    finally C.Free; end;
+  finally Ctl.Free; end;
+end;
+
+procedure TCheckBoxAutoSizeTest.TestBiggerIndicatorMetricWidensPreferredWidth;
+{ The box and the gap are skin-tunable (--checkbox-size / --checkbox-gap), so a skin that
+  enlarges them must enlarge the preferred width by the same amount — proof the measure
+  reads the SAME metrics the paint does instead of the built-in constants. }
+var
+  Ctl: TTyStyleController;
+  C: TTyCheckBoxAccess;
+  small, big, h: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    C := TTyCheckBoxAccess.Create(nil);
+    try
+      C.Controller := Ctl;
+      C.Font.PixelsPerInch := 96;
+      C.Caption := 'Enable';
+
+      Ctl.LoadThemeCss(cCbTightCss);
+      C.CallPreferred(small, h);
+
+      // box 16 -> 30 (+14), gap 6 -> 10 (+4) = +18, caption untouched.
+      Ctl.LoadThemeCss(':root { --checkbox-size: 30px; --checkbox-gap: 10px; }' +
+        'TyCheckBox { background: #FFFFFF; color: #000000; border-width: 0px; padding: 0px; font-size: 12px; }');
+      C.CallPreferred(big, h);
+
+      AssertEquals('a bigger indicator + gap widens by exactly their delta', small + 18, big);
+    finally C.Free; end;
+  finally Ctl.Free; end;
+end;
+
+procedure TCheckBoxAutoSizeTest.TestPreferredHeightIsAlwaysZero;
+{ WIDTH ONLY. 0 is LCL's "no preference on this axis"; proposing a height makes the control
+  fight any container that pins one (that is what aborted the demo with
+  "TControl.ChangeBounds loop detected"). }
+var
+  Ctl: TTyStyleController;
+  C: TTyCheckBoxAccess;
+  w, h: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Ctl.LoadThemeCss(cCbTightCss);
+    C := TTyCheckBoxAccess.Create(nil);
+    try
+      C.Controller := Ctl;
+      C.Font.PixelsPerInch := 96;
+      C.Caption := '';
+      C.CallPreferred(w, h);
+      AssertEquals('empty caption: no height preference', 0, h);
+      C.Caption := 'A rather long caption indeed';
+      C.CallPreferred(w, h);
+      AssertEquals('long caption: still no height preference', 0, h);
+      // A vertically-padded theme must not start proposing one either.
+      Ctl.LoadThemeCss('TyCheckBox { background: #FFFFFF; color: #000000; padding: 20px 4px; font-size: 12px; }');
+      C.CallPreferred(w, h);
+      AssertEquals('tall padding: still no height preference', 0, h);
+    finally C.Free; end;
+  finally Ctl.Free; end;
+end;
+
+procedure TCheckBoxAutoSizeTest.TestMnemonicMarkerAddsNoWidth;
+{ '&' is drawn as an underline, not as a character, so measuring it would over-reserve. }
+var
+  Ctl: TTyStyleController;
+  C: TTyCheckBoxAccess;
+  R: TTyRadioAccess;
+  plain, marked, h: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Ctl.LoadThemeCss(
+      ':root { --checkbox-size: 16px; --checkbox-gap: 6px; --radio-size: 16px; --radio-gap: 6px; }' +
+      'TyCheckBox { background: #FFFFFF; color: #000000; border-width: 0px; padding: 0px; font-size: 12px; }' +
+      'TyRadioButton { background: #FFFFFF; color: #000000; border-width: 0px; padding: 0px; font-size: 12px; }');
+    C := TTyCheckBoxAccess.Create(nil);
+    try
+      C.Controller := Ctl;
+      C.Font.PixelsPerInch := 96;
+      C.Caption := 'Save';
+      C.CallPreferred(plain, h);
+      C.Caption := '&Save';
+      C.CallPreferred(marked, h);
+      AssertEquals('checkbox: a mnemonic marker adds no width', plain, marked);
+    finally C.Free; end;
+    R := TTyRadioAccess.Create(nil);
+    try
+      R.Controller := Ctl;
+      R.Font.PixelsPerInch := 96;
+      R.Caption := 'Save';
+      R.CallPreferred(plain, h);
+      R.Caption := '&Save';
+      R.CallPreferred(marked, h);
+      AssertEquals('radio: a mnemonic marker adds no width', plain, marked);
+    finally R.Free; end;
+  finally Ctl.Free; end;
+end;
+
+procedure TCheckBoxAutoSizeTest.TestRadioPreferredWidthGrowsWithCaption;
+var
+  Ctl: TTyStyleController;
+  R: TTyRadioAccess;
+  short, long, h1, h2: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Ctl.LoadThemeCss(cRbTightCss);
+    R := TTyRadioAccess.Create(nil);
+    try
+      R.Controller := Ctl;
+      R.Font.PixelsPerInch := 96;
+      R.AutoSize := True;
+      R.Caption := 'A';
+      R.CallPreferred(short, h1);
+      R.Caption := 'Deliver on the first working day of every month';
+      R.CallPreferred(long, h2);
+      AssertTrue(Format('a longer caption wants more width (%d -> %d)', [short, long]),
+        long > short);
+      AssertEquals('and never proposes a height', 0, h2);
+    finally R.Free; end;
+  finally Ctl.Free; end;
+end;
+
+procedure TCheckBoxAutoSizeTest.TestRadioPreferredWidthIncludesDotAndGap;
+{ Same slot rule as the checkbox: padding | dot | gap | caption. }
+var
+  Ctl: TTyStyleController;
+  R: TTyRadioAccess;
+  wEmpty, wText, h: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Ctl.LoadThemeCss(cRbTightCss);
+    R := TTyRadioAccess.Create(nil);
+    try
+      R.Controller := Ctl;
+      R.Font.PixelsPerInch := 96;
+      R.Caption := '';
+      R.CallPreferred(wEmpty, h);
+      AssertEquals('empty caption still reserves dot(16) + gap(6)', 22, wEmpty);
+      R.Caption := 'Yes';
+      R.CallPreferred(wText, h);
+      AssertTrue(Format('a caption adds to the slot (%d -> %d)', [wEmpty, wText]),
+        wText > wEmpty);
+    finally R.Free; end;
+  finally Ctl.Free; end;
+end;
+
+procedure TCheckBoxAutoSizeTest.TestRadioRoomierThemeWidensPreferredWidth;
+var
+  Ctl: TTyStyleController;
+  R: TTyRadioAccess;
+  tight, roomy, h: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    R := TTyRadioAccess.Create(nil);
+    try
+      R.Controller := Ctl;
+      R.Font.PixelsPerInch := 96;
+      R.AutoSize := True;
+      R.Caption := 'Monthly';
+
+      Ctl.LoadThemeCss(':root { --radio-size: 16px; --radio-gap: 6px; }' +
+        'TyRadioButton { background: #FFFFFF; color: #000000; border-width: 0px; padding: 4px 4px; font-size: 12px; }');
+      R.CallPreferred(tight, h);
+
+      Ctl.LoadThemeCss(':root { --radio-size: 16px; --radio-gap: 6px; }' +
+        'TyRadioButton { background: #FFFFFF; color: #000000; border-width: 0px; padding: 4px 30px; font-size: 12px; }');
+      R.CallPreferred(roomy, h);
+
+      AssertTrue(Format('a roomier theme widens the radio (%d -> %d)', [tight, roomy]),
+        roomy > tight);
+      AssertEquals('the extra width is exactly the extra padding', tight + 52, roomy);
+    finally R.Free; end;
+  finally Ctl.Free; end;
+end;
+
+procedure TCheckBoxAutoSizeTest.TestRadioUsesItsOwnIndicatorMetrics;
+{ The radio has its OWN tokens (--radio-size / --radio-gap); it must not borrow the
+  checkbox's. Bumping only the checkbox tokens must leave the radio's width alone,
+  and bumping the radio tokens must move it. }
+var
+  Ctl: TTyStyleController;
+  R: TTyRadioAccess;
+  base, cbOnly, rbBig, h: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    R := TTyRadioAccess.Create(nil);
+    try
+      R.Controller := Ctl;
+      R.Font.PixelsPerInch := 96;
+      R.Caption := 'Weekly';
+
+      Ctl.LoadThemeCss(cRbTightCss);
+      R.CallPreferred(base, h);
+
+      // Only the CHECKBOX tokens move -> the radio must be unaffected.
+      Ctl.LoadThemeCss(':root { --radio-size: 16px; --radio-gap: 6px; --checkbox-size: 40px; --checkbox-gap: 20px; }' +
+        'TyRadioButton { background: #FFFFFF; color: #000000; border-width: 0px; padding: 0px; font-size: 12px; }');
+      R.CallPreferred(cbOnly, h);
+      AssertEquals('checkbox metrics do not move the radio', base, cbOnly);
+
+      // dot 16 -> 30 (+14), gap 6 -> 10 (+4) = +18.
+      Ctl.LoadThemeCss(':root { --radio-size: 30px; --radio-gap: 10px; }' +
+        'TyRadioButton { background: #FFFFFF; color: #000000; border-width: 0px; padding: 0px; font-size: 12px; }');
+      R.CallPreferred(rbBig, h);
+      AssertEquals('its own metrics widen it by exactly their delta', base + 18, rbBig);
+    finally R.Free; end;
+  finally Ctl.Free; end;
+end;
+
+procedure TCheckBoxAutoSizeTest.TestRadioPreferredHeightIsAlwaysZero;
+var
+  Ctl: TTyStyleController;
+  R: TTyRadioAccess;
+  w, h: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Ctl.LoadThemeCss(cRbTightCss);
+    R := TTyRadioAccess.Create(nil);
+    try
+      R.Controller := Ctl;
+      R.Font.PixelsPerInch := 96;
+      R.Caption := '';
+      R.CallPreferred(w, h);
+      AssertEquals('empty caption: no height preference', 0, h);
+      R.Caption := 'A rather long caption indeed';
+      R.CallPreferred(w, h);
+      AssertEquals('long caption: still no height preference', 0, h);
+      Ctl.LoadThemeCss('TyRadioButton { background: #FFFFFF; color: #000000; padding: 20px 4px; font-size: 12px; }');
+      R.CallPreferred(w, h);
+      AssertEquals('tall padding: still no height preference', 0, h);
+    finally R.Free; end;
+  finally Ctl.Free; end;
+end;
+
 initialization
   RegisterTest(TCheckBoxTest);
   RegisterTest(TCheckBoxTriStateTest);
+  RegisterTest(TCheckBoxAutoSizeTest);
 end.

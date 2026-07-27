@@ -2,8 +2,18 @@ unit tyControls.ColorButton;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Graphics,
+  Classes, SysUtils, Types, Graphics, LCLType,
   tyControls.Types, tyControls.Painter, tyControls.Button, tyControls.Dialogs.Color;
+
+const
+  { Logical px (96-PPI baseline), scaled at every call site.
+    SwatchGap  — the gap between the swatch and the '#RRGGBB' text when ShowText.
+    MinSwatch  — the swatch never shrinks below this, however tight the content rect is.
+    Named rather than inline because DrawContent DRAWS with them and
+    CalculatePreferredSize MEASURES with them: an AutoSize width that does not match the
+    paint is worse than no AutoSize at all, so the two must read the same number. }
+  TyColorButtonSwatchGap = 6;
+  TyColorButtonMinSwatch = 8;
 
 // Pure helper: '#RRGGBB' (upper-case, alpha ignored). Unit-tested.
 function TyColorHex(AColor: TTyColor): string;
@@ -25,6 +35,19 @@ type
     // the left of AContentRect; when ShowText, draw the '#RRGGBB' hex to its right.
     procedure DrawContent(APainter: TTyPainter; const AContentRect: TRect;
       const AStyle: TTyStyleSet); override;
+    { '#RRGGBB' 这串**实际画出来的**文字在 APPI 下的设备像素宽度(用 AStyle 的字体)。
+      注意这里量的不是 Caption:TTyColorButton.DrawContent 从不调用基类的
+      DrawContent,Caption 一个像素都不画,量它只会凭空撑宽按钮。 }
+    function MeasureHexText(APPI: Integer; const AStyle: TTyStyleSet): Integer;
+    { 色块按钮的宽度和别的按钮不一样,所以**不**走基类的实现(基类量 Caption,而这里
+      Caption 不画)。它要装下 DrawContent 真正画的东西:
+        ShowText=True  -> 方形色块(边长 = 内容区高度)+ 间隙 + '#RRGGBB' 文字 + 内边距
+        ShowText=False -> 色块本来是铺满内容区的,没有天然宽度;取一个正方形色块
+                          (边长 = 内容区高度)作为它的自然尺寸,这样 AutoSize 给出的
+                          是一个方方正正的取色块,而不是一条被压扁的色带。
+      高度同 TTyButton:保持 0(本轴无意见),交给排版决定。 }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
   public
     constructor Create(AOwner: TComponent); override;
     // The button's click IS "open the colour dialog": pick a colour via TySelectColor,
@@ -95,14 +118,14 @@ begin
   // Degenerate rect (headless zero-size render) — nothing to draw, stay crash-safe.
   if (AContentRect.Right <= AContentRect.Left) or (AContentRect.Bottom <= AContentRect.Top) then
     Exit;
-  gap := APainter.Scale(6);
+  gap := APainter.Scale(TyColorButtonSwatchGap);
   if FShowText then
     // Fixed square swatch on the left, its side = content height (a small min floor).
     cw := AContentRect.Bottom - AContentRect.Top
   else
     // No text: the swatch fills the whole content area.
     cw := AContentRect.Right - AContentRect.Left;
-  if cw < APainter.Scale(8) then cw := APainter.Scale(8);
+  if cw < APainter.Scale(TyColorButtonMinSwatch) then cw := APainter.Scale(TyColorButtonMinSwatch);
   if cw > (AContentRect.Right - AContentRect.Left) then
     cw := AContentRect.Right - AContentRect.Left;
   swatch := Rect(AContentRect.Left, AContentRect.Top, AContentRect.Left + cw, AContentRect.Bottom);
@@ -127,6 +150,61 @@ begin
       APainter.DrawText(capRect, TyColorHex(FSelectedColor), AStyle.FontName,
         ResolveFontSize(AStyle), AStyle.FontWeight, AStyle.TextColor, taLeftJustify, tlCenter, True);
   end;
+end;
+
+function TTyColorButton.MeasureHexText(APPI: Integer; const AStyle: TTyStyleSet): Integer;
+var
+  Meas: TBitmap;
+begin
+  // 与 TTyButton.MeasureCaption 同一套量法(同样的字体名回落、同样的 MulDiv 字号缩放、
+  // 同样的粗体阈值),只是量的字符串换成了真正会被画出来的十六进制色值。
+  Meas := TBitmap.Create;
+  try
+    Meas.SetSize(1, 1);
+    Meas.Canvas.Font.Name := TyEffectiveFontName(AStyle.FontName);
+    Meas.Canvas.Font.Size := MulDiv(ResolveFontSize(AStyle), APPI, 96);
+    if AStyle.FontWeight >= 600 then
+      Meas.Canvas.Font.Style := [fsBold]
+    else
+      Meas.Canvas.Font.Style := [];
+    Result := Meas.Canvas.TextWidth(TyColorHex(FSelectedColor));
+    if Result < 0 then Result := 0;
+  finally
+    Meas.Free;
+  end;
+end;
+
+procedure TTyColorButton.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+var
+  S: TTyStyleSet;
+  ppi, padH, padV, swatch, minSwatch: Integer;
+begin
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  S := CurrentStyle;
+  // RenderTo 用这四条内边距把客户区内缩成 DrawContent 拿到的内容区,所以量的时候
+  // 必须用同一组数、同一个换算。
+  padH := MulDiv(S.Padding.Left + S.Padding.Right, ppi, 96);
+  padV := MulDiv(S.Padding.Top + S.Padding.Bottom, ppi, 96);
+  // 色块是正方形,边长 = 内容区高度(DrawContent 里的 cw := 内容区高)。高度不归我们
+  // 管(见下面的 PreferredHeight),所以直接读当前的客户区高度——排版把行高定成多少,
+  // 色块就是多大的方块。
+  minSwatch := MulDiv(TyColorButtonMinSwatch, ppi, 96);
+  swatch := ClientHeight - padV;
+  if swatch < minSwatch then swatch := minSwatch;
+  if FShowText then
+    // 方块 + 间隙 + '#RRGGBB',正是 DrawContent 摆的三件东西。
+    PreferredWidth := swatch + MulDiv(TyColorButtonSwatchGap, ppi, 96) +
+      MeasureHexText(ppi, S) + padH
+  else
+    // 没有文字时色块铺满内容区,本身没有天然宽度;给一个正方形色块。
+    PreferredWidth := swatch + padH;
+  if PreferredWidth < 1 then PreferredWidth := 1;
+  { 0 = LCL 的「本轴无意见」。理由与 TTyButton 完全相同:高度是容器的决定,控件再报一个
+    就会和钉高度的父容器(如 TTyToolBar)互相顶,直到 LCL 抛
+    "TControl.ChangeBounds loop detected"。 }
+  PreferredHeight := 0;
 end;
 
 procedure TTyColorButton.Click;
