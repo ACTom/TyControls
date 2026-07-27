@@ -25,40 +25,40 @@ msgstr "拖动滑块、点击轨道/箭头、滚轮、方向键、PageUp/PageDow
 
 #: tmainform.lblcodetitle.caption
 msgid "OnScroll reports which gesture moved the bar, and can overrule the proposed value"
-msgstr ""
+msgstr "OnScroll 报告是哪种手势移动了滚动条，并可改写建议值"
 
 #: tmainform.lblcode.caption
 msgid "Press Home on the vertical bar: the handler forces 10, not Min"
-msgstr ""
+msgstr "在垂直条上按 Home：处理程序强制为 10，而不是 Min"
 
 #: tmainform.lblviewtitle.caption
 msgid "The vertical bar scrolls this block of text; the buttons contrast eased vs snapped"
-msgstr ""
+msgstr "垂直条滚动这段文本；两个按钮对比缓动与瞬时"
 
 #: tmainform.btnsnap.caption
 msgid "Top (snapped)"
-msgstr ""
+msgstr "顶部（瞬时）"
 
 #: tmainform.btnease.caption
 msgid "Middle (eased)"
-msgstr ""
+msgstr "中部（缓动）"
 
 #: tmainform.lblsnaphint.caption
 msgid "SetPositionSnapped lands at once; a plain Position write glides the thumb there"
-msgstr ""
+msgstr "SetPositionSnapped 立即到位；直接写 Position 则让滑块滑过去"
 
 #: tmainform.lblanim.caption
 msgid "Turn it off, then click the track: the thumb jumps instead of gliding"
-msgstr ""
+msgstr "关掉它再点击轨道：滑块直接跳过去，不再滑行"
 
 #: tmainform.lblfull.caption
 msgid "Max = Min: nothing to scroll, so the thumb fills the whole track"
-msgstr ""
+msgstr "Max = Min：没有可滚动的量，滑块铺满整条轨道"
 
 #: tmainform.bar.caption
 msgid "TTyScrollBar  ·  TyControls"
-msgstr ""
+msgstr "TTyScrollBar  ·  TyControls"
 
 #: tmainform.swanim.caption
 msgid "Animated thumb"
-msgstr ""
+msgstr "滑块动画"

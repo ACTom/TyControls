@@ -49,28 +49,28 @@ msgstr "这个面板会以选定的过渡重新出现"
 
 #: tmainform.btnnone.caption
 msgid "None (instant)"
-msgstr ""
+msgstr "无（立即显示）"
 
 #: tmainform.btnhide.caption
 msgid "Hide panel"
-msgstr ""
+msgstr "隐藏面板"
 
 #: tmainform.lblduration.caption
 msgid "Duration (ms)"
-msgstr ""
+msgstr "时长（毫秒）"
 
 #: tmainform.lbldurationhint.caption
 msgid "0 = snap, no animation. API default: 200"
-msgstr ""
+msgstr "0 = 直接显示，无动画。API 默认：200"
 
 #: tmainform.lblfadenote.caption
 msgid "Watch the whole WINDOW, not the panel, on \"Fade in (window)\": ttFade animates a FORM's AlphaBlend, is Windows-only, and degrades to a plain show on any other control."
-msgstr ""
+msgstr "点 \"淡入（整窗）\" 时要看整个窗口，而不是面板：ttFade 动的是窗体的 AlphaBlend，仅 Windows 可用，用在其他控件上会退化为直接显示。"
 
 #: tmainform.lblcancelnote.caption
 msgid "Set Duration to 1000, then click a second direction mid-slide: the in-flight transition is cancelled and replaced — one control never runs two at once."
-msgstr ""
+msgstr "把 Duration 设为 1000，滑动途中再点另一个方向：进行中的过渡会被取消替换 —— 同一控件绝不会同时跑两个。"
 
 #: tmainform.lblhint.caption
 msgid "Press \"Hide panel\", then any direction button: the panel is revealed from hidden. TyPlayTransition sets Visible itself."
-msgstr ""
+msgstr "先按 \"隐藏面板\"，再点任一方向按钮：面板会从隐藏状态显现。TyPlayTransition 会自己设置 Visible。"

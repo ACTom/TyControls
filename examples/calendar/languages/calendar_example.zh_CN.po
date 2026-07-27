@@ -29,16 +29,16 @@ msgstr "只读日历（ReadOnly=True · 周日起始 · ShowToday=False —— �
 
 #: tmainform.lbllimithdr.caption
 msgid "MinDate / MaxDate - watch which cells grey out:"
-msgstr ""
+msgstr "MinDate / MaxDate —— 看哪些单元格变灰："
 
 #: tmainform.lbllimithint.caption
 msgid "Off = both bounds are 0 (the documented no-bound sentinel): every month is reachable, so PageUp/PageDown really walk the grid. On = only the 3 months either side of today stay selectable."
-msgstr ""
+msgstr "关 = 两个边界都为 0（文档规定的无边界哨兵值）：任意月份都可达，PageUp/PageDown 能真正走遍网格。开 = 只有今天前后 3 个月可选。"
 
 #: tmainform.bar.caption
 msgid "TTyCalendar  ·  TyControls"
-msgstr ""
+msgstr "TTyCalendar  ·  TyControls"
 
 #: tmainform.swlimit.caption
 msgid "Limit the range to 3 months"
-msgstr ""
+msgstr "范围限制为 3 个月"

@@ -45,16 +45,16 @@ msgstr "清空选择"
 
 #: tmainform.btnscroll.caption
 msgid "Scroll to row 20"
-msgstr ""
+msgstr "滚动到第 20 行"
 
 #: tmainform.btnalternate.caption
 msgid "Select every 2nd"
-msgstr ""
+msgstr "隔行选中"
 
 #: tmainform.lblhint.caption
 msgid "Row height follows the theme (--item-height) until you pin ItemHeight — switch skin first and watch it change on its own. In multi-select, Ctrl-click / Shift-click / Space toggle rows."
-msgstr ""
+msgstr "行高跟随主题（--item-height），直到你固定 ItemHeight —— 先换个皮肤，看它自己变。多选模式下，Ctrl+点 / Shift+点 / 空格 切换行选中。"
 
 #: tmainform.bar.caption
 msgid "TTyListBox  ·  TyControls"
-msgstr ""
+msgstr "TTyListBox  ·  TyControls"

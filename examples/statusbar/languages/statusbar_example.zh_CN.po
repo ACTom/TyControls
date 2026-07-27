@@ -41,20 +41,20 @@ msgstr "点击:0"
 
 #: tmainform.btngrip.caption
 msgid "Toggle the size grip"
-msgstr ""
+msgstr "切换尺寸手柄"
 
 #: tmainform.lblpanels.caption
 msgid "Panels is a live collection - watch the bar re-lay itself out:"
-msgstr ""
+msgstr "Panels 是实时集合，看状态栏重新排布："
 
 #: tmainform.btnaddpanel.caption
 msgid "Add a panel"
-msgstr ""
+msgstr "添加面板"
 
 #: tmainform.btnremovepanel.caption
 msgid "Remove the last panel"
-msgstr ""
+msgstr "删除最后一个面板"
 
 #: tmainform.bar.caption
 msgid "TTyStatusBar  ·  TyControls"
-msgstr ""
+msgstr "TTyStatusBar  ·  TyControls"

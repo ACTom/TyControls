@@ -49,56 +49,56 @@ msgstr "点击“打招呼”按钮试试…"
 
 #: tmainform.alignheader.caption
 msgid "Alignment — watch the caption slide from edge to edge across these three"
-msgstr ""
+msgstr "Alignment —— 看标题在这三个面板里从左移到右"
 
 #: tmainform.overrideheader.caption
 msgid "StyleOverride — only the left panel is restyled; switch skins, both still follow"
-msgstr ""
+msgstr "StyleOverride —— 只有左边面板改了样式；换皮肤两个都仍跟随"
 
 #: tmainform.interactheader.caption
 msgid "A panel is a real control — hover it for a Hint, click it, or switch it off"
-msgstr ""
+msgstr "面板是真正的控件 —— 悬停出 Hint、点击它，或把它禁用"
 
 #: tmainform.hotpanel.hint
 msgid "ShowHint = True: panels carry hints like any other control"
-msgstr ""
+msgstr "ShowHint = True：面板和其他控件一样能带提示"
 
 #: tmainform.paneleventlabel.caption
 msgid "Panel mouse events show up here…"
-msgstr ""
+msgstr "面板鼠标事件显示在这里…"
 
 #: tmainform.bar.caption
 msgid "TTyPanel  ·  TyControls"
-msgstr ""
+msgstr "TTyPanel  ·  TyControls"
 
 #: tmainform.alignleftpanel.caption
 msgid "taLeftJustify"
-msgstr ""
+msgstr "taLeftJustify"
 
 #: tmainform.aligncenterpanel.caption
 msgid "taCenter (default)"
-msgstr ""
+msgstr "taCenter（默认）"
 
 #: tmainform.alignrightpanel.caption
 msgid "taRightJustify"
-msgstr ""
+msgstr "taRightJustify"
 
 #: tmainform.accentpanel.caption
 msgid "Accent tint, thicker edge, 12px corners"
-msgstr ""
+msgstr "强调色底、更粗边框、12px 圆角"
 
 #: tmainform.plainpanel.caption
 msgid "No override — plain theme values"
-msgstr ""
+msgstr "无覆盖 —— 纯主题取值"
 
 #: tmainform.hotpanel.caption
 msgid "Hover and click me"
-msgstr ""
+msgstr "悬停并点我"
 
 #: tmainform.disabledpanel.caption
 msgid "Enabled = False"
-msgstr ""
+msgstr "Enabled = False"
 
 #: tmainform.bottompanel.caption
 msgid "Align = alBottom"
-msgstr ""
+msgstr "Align = alBottom"

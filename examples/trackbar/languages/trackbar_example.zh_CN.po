@@ -41,40 +41,40 @@ msgstr "音量：50"
 
 #: tmainform.lblshowvaluehint.caption
 msgid "ShowValue = True: the number is drawn by the bar itself."
-msgstr ""
+msgstr "ShowValue = True：数字由控件自己绘制。"
 
 #: tmainform.lblverticalhint.caption
 msgid "Vertical: ticks (Frequency = 10) right, its number below."
-msgstr ""
+msgstr "垂直：刻度（Frequency = 10）在右，数字在下。"
 
 #: tmainform.lbllinesize.caption
 msgid "Fine step (LineSize = 5 - arrows and the wheel move by 5):"
-msgstr ""
+msgstr "微调步进（LineSize = 5，方向键与滚轮每次走 5）："
 
 #: tmainform.lblanimhint.caption
 msgid "Flips AnimationsEnabled (code only)."
-msgstr ""
+msgstr "切换 AnimationsEnabled（仅代码可设）。"
 
 #: tmainform.lblkeystitle.caption
 msgid "Keyboard and wheel (click a bar to focus it first):"
-msgstr ""
+msgstr "键盘与滚轮（先点滑杆使其获得焦点）："
 
 #: tmainform.lblkeys1.caption
 msgid "Left/Right (Up/Down when vertical) step by LineSize."
-msgstr ""
+msgstr "左/右（垂直时为上/下）按 LineSize 步进。"
 
 #: tmainform.lblkeys2.caption
 msgid "PageUp/PageDown step by PageSize; Home/End jump to Min/Max."
-msgstr ""
+msgstr "PageUp/PageDown 按 PageSize 步进；Home/End 跳到 Min/Max。"
 
 #: tmainform.lblkeys3.caption
 msgid "The wheel steps by LineSize; a click jumps the thumb there."
-msgstr ""
+msgstr "滚轮按 LineSize 步进；点击轨道滑块直接跳过去。"
 
 #: tmainform.bar.caption
 msgid "TrackBar  · TyControls"
-msgstr ""
+msgstr "TrackBar  · TyControls"
 
 #: tmainform.animswitch.caption
 msgid "Animate thumb"
-msgstr ""
+msgstr "滑块动画"

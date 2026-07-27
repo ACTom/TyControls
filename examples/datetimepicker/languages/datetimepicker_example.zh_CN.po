@@ -33,44 +33,44 @@ msgstr "可空日期："
 
 #: tmainform.btnopen.caption
 msgid "Open"
-msgstr ""
+msgstr "打开"
 
 #: tmainform.lblreadonly.caption
 msgid "Read-only:"
-msgstr ""
+msgstr "只读："
 
 #: tmainform.lblreadonlyhint.caption
 msgid "ReadOnly: typing and Up/Down are ignored, the calendar still opens"
-msgstr ""
+msgstr "ReadOnly：键入与 Up/Down 无效，日历仍可打开"
 
 #: tmainform.lblrange.caption
 msgid "Limited range:"
-msgstr ""
+msgstr "受限范围："
 
 #: tmainform.lblrangehint.caption
 msgid "MinDate/MaxDate = today +/-3 days: stepping stops at the edge"
-msgstr ""
+msgstr "MinDate/MaxDate = 今天 +/-3 天：步进到边界即停"
 
 #: tmainform.lblampm.caption
 msgid "12-hour time:"
-msgstr ""
+msgstr "12 小时制："
 
 #: tmainform.lblampmhint.caption
 msgid "TimeFormat hh:nn am/pm: Up/Down flips the AM/PM segment"
-msgstr ""
+msgstr "TimeFormat hh:nn am/pm：Up/Down 切换 AM/PM 段"
 
 #: tmainform.lbllocale.caption
 msgid "Locale format:"
-msgstr ""
+msgstr "区域格式："
 
 #: tmainform.lbllocalehint.caption
 msgid "DateFormat left empty: follows the OS short-date format"
-msgstr ""
+msgstr "DateFormat 留空：跟随系统短日期格式"
 
 #: tmainform.lbldrophint.caption
 msgid "Open sets DatePicker.DroppedDown := True; closing reads it back"
-msgstr ""
+msgstr "打开按钮设 DatePicker.DroppedDown := True；关闭后回读"
 
 #: tmainform.bar.caption
 msgid "TTyDateTimePicker  ·  TyControls"
-msgstr ""
+msgstr "TTyDateTimePicker  ·  TyControls"

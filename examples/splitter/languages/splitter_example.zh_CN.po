@@ -29,7 +29,7 @@ msgstr "左栏 (alLeft)"
 
 #: tmainform.toppanel.caption
 msgid "Top band (alTop) · rsLine: lands on mouse-up"
-msgstr ""
+msgstr "上区 (alTop) · rsLine：松开鼠标才改尺寸"
 
 #: tmainform.bottompanel.caption
 msgid "Bottom band (alClient)"
@@ -37,8 +37,8 @@ msgstr "下区 (alClient)"
 
 #: tmainform.bar.caption
 msgid "Splitter  · TyControls"
-msgstr ""
+msgstr "Splitter  · TyControls"
 
 #: tmainform.inspectorpanel.caption
 msgid "Inspector (alRight)"
-msgstr ""
+msgstr "检查器 (alRight)"

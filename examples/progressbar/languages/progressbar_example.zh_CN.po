@@ -45,32 +45,32 @@ msgstr "归零"
 
 #: tmainform.lblorient.caption
 msgid "Orientation = tpoVertical - fills bottom-up, same Position"
-msgstr ""
+msgstr "Orientation = tpoVertical —— 自下而上填充，Position 相同"
 
 #: tmainform.vertbar.hint
 msgid "Same Position as the wide bar, but the fill grows upward"
-msgstr ""
+msgstr "与宽条的 Position 相同，但填充向上增长"
 
 #: tmainform.lblrange.caption
 msgid "Min / Max are free - this one runs 20..60"
-msgstr ""
+msgstr "Min / Max 可自由设定 —— 这条跑 20..60"
 
 #: tmainform.lblrangereadout.caption
 msgid "Position 20 in 20..60  (0%)"
-msgstr ""
+msgstr "位置 20，范围 20..60  (0%)"
 
 #: tmainform.lbloverride.caption
 msgid "StyleOverride - square accent track. Click to seek."
-msgstr ""
+msgstr "StyleOverride —— 直角强调色轨道。点击可定位。"
 
 #: tmainform.lbldisabled.caption
 msgid "Enabled = False - the theme dims track and fill together"
-msgstr ""
+msgstr "Enabled = False —— 主题把轨道与填充一起变暗"
 
 #: tmainform.lbldock.caption
 msgid "Align = alBottom - a strip that stretches with the window"
-msgstr ""
+msgstr "Align = alBottom —— 随窗口拉伸的条带"
 
 #: tmainform.bar.caption
 msgid "TTyProgressBar  ·  TyControls"
-msgstr ""
+msgstr "TTyProgressBar  ·  TyControls"

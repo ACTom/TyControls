@@ -49,28 +49,28 @@ msgstr "每 1.2s 随机改变数值(旋钮 / 齿轮可拖动 / 滚轮,星星可�
 
 #: tmainform.lblknobs.caption
 msgid "Dial, gear and rating report here (wheel / arrows step by 5 and 10)."
-msgstr ""
+msgstr "旋钮、齿轮与评分在此回显(滚轮 / 方向键按 5 和 10 步进)。"
 
 #: tmainform.lblrowa.caption
 msgid "gsLinearV bar, loVertical meter, half arc (180/180), static clock:"
-msgstr ""
+msgstr "gsLinearV 条,loVertical 仪表,半弧(180/180),静态时钟:"
 
 #: tmainform.lblbusysw.caption
 msgid "Busy indicators:"
-msgstr ""
+msgstr "忙碌指示:"
 
 #: tmainform.lblrowb.caption
 msgid "ssBar sparkline, fixed range 0-20, no last dot / read-only 10-star rating:"
-msgstr ""
+msgstr "ssBar 迷你图,固定范围 0-20,无末点 / 只读 10 星评分:"
 
 #: tmainform.lblupdownh.caption
 msgid "Horizontal spinner: Increment 5, Wrap 20 -> 0 (Position = 5)"
-msgstr ""
+msgstr "水平微调:Increment 5,Wrap 20 -> 0 (Position = 5)"
 
 #: tmainform.bar.caption
 msgid "Gauge  · TyControls"
-msgstr ""
+msgstr "Gauge  · TyControls"
 
 #: tmainform.busyswitch.caption
 msgid "Running"
-msgstr ""
+msgstr "运行中"

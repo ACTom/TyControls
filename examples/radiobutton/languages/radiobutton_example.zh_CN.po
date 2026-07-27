@@ -57,60 +57,60 @@ msgstr ""
 
 #: tmainform.lblgroupidxhead.caption
 msgid "GroupIndex - one box, two selections that ignore each other"
-msgstr ""
+msgstr "GroupIndex - 一个分组框，两组互不影响的选择"
 
 #: tmainform.sizesmall.caption
 msgid "&Small"
-msgstr ""
+msgstr "小(&S)"
 
 #: tmainform.sizemedium.caption
 msgid "&Medium"
-msgstr ""
+msgstr "中(&M)"
 
 #: tmainform.sizelarge.caption
 msgid "&Large"
-msgstr ""
+msgstr "大(&L)"
 
 #: tmainform.shipstandard.caption
 msgid "S&tandard post"
-msgstr ""
+msgstr "标准邮寄(&T)"
 
 #: tmainform.shipexpress.caption
 msgid "&Express courier"
-msgstr ""
+msgstr "快递(&E)"
 
 #: tmainform.shipexpress.hint
 msgid "GroupIndex 1: picking here never clears the Size column"
-msgstr ""
+msgstr "GroupIndex 1: 在这里选择不会清空尺寸那一列"
 
 #: tmainform.lblgroupidxstatus.caption
 msgid "GroupIndex 0: (none)     GroupIndex 1: (none)"
-msgstr ""
+msgstr "GroupIndex 0:（无）     GroupIndex 1:（无）"
 
 #: tmainform.lblmnemonic.caption
 msgid "Hold Alt - each caption underlines its mnemonic; Alt+key picks"
-msgstr ""
+msgstr "按住 Alt - 每个标题显示助记符下划线；Alt+字母 直接选中"
 
 #: tmainform.lblstyle.caption
 msgid "StyleOverride - square indicator; these two group by Parent"
-msgstr ""
+msgstr "StyleOverride - 方形指示点；这两个按 Parent 分组"
 
 #: tmainform.styleradioa.caption
 msgid "Square dot A"
-msgstr ""
+msgstr "方点 A"
 
 #: tmainform.styleradiob.caption
 msgid "Square dot B"
-msgstr ""
+msgstr "方点 B"
 
 #: tmainform.lblevents.caption
 msgid "OnChange x0, OnClick x0 - one pick fires OnChange twice"
-msgstr ""
+msgstr "OnChange x0，OnClick x0 - 选中一次会触发两次 OnChange"
 
 #: tmainform.bar.caption
 msgid "RadioButton  · TyControls"
-msgstr ""
+msgstr "RadioButton  · TyControls"
 
 #: tmainform.groupc.caption
 msgid "Size = GroupIndex 0        Delivery = GroupIndex 1"
-msgstr ""
+msgstr "尺寸 = GroupIndex 0        配送 = GroupIndex 1"

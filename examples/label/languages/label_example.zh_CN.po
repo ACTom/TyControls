@@ -53,36 +53,36 @@ msgstr "姓名(&N)："
 
 #: tmainform.lbllayouthead.caption
 msgid "Layout: three 56px boxes, three vertical placements"
-msgstr ""
+msgstr "Layout：三个 56px 方框，三种垂直位置"
 
 #: tmainform.lbllayouttop.caption
 msgid "Layout = tlTop (text sits at the top of a 56px box)"
-msgstr ""
+msgstr "Layout = tlTop（文字贴在 56px 框的顶部）"
 
 #: tmainform.lbllayoutcenter.caption
 msgid "Layout = tlCenter (the default - vertically centred)"
-msgstr ""
+msgstr "Layout = tlCenter（默认值，垂直居中）"
 
 #: tmainform.lbllayoutbottom.caption
 msgid "Layout = tlBottom (text sits on the bottom edge)"
-msgstr ""
+msgstr "Layout = tlBottom（文字贴在底边）"
 
 #: tmainform.lblwrapautohead.caption
 msgid "AutoSize + WordWrap: the box keeps its width and grows its height"
-msgstr ""
+msgstr "AutoSize + WordWrap：宽度不变，高度自增"
 
 #: tmainform.lblwrapauto.caption
 msgid "AutoSize=True + WordWrap=True: the label keeps its width and grows its HEIGHT to fit however many lines the text needs - widen the window and watch the box re-wrap and re-fit by itself."
-msgstr ""
+msgstr "AutoSize=True + WordWrap=True：标签保持宽度不变，按文字所需行数增长高度 —— 拉宽窗口，看它自己重新折行、重新适配。"
 
 #: tmainform.lblclick.caption
 msgid "Click me: TTyLabel fires OnClick like any other control"
-msgstr ""
+msgstr "点我：TTyLabel 和其他控件一样会触发 OnClick"
 
 #: tmainform.lblaccent.caption
 msgid "StyleOverride = color: var(--accent) - still theme-aware"
-msgstr ""
+msgstr "StyleOverride = color: var(--accent) —— 仍跟随主题"
 
 #: tmainform.bar.caption
 msgid "TTyLabel  ·  TyControls"
-msgstr ""
+msgstr "TTyLabel  ·  TyControls"

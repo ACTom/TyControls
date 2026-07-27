@@ -49,24 +49,24 @@ msgstr "禁用且未勾选"
 
 #: tmainform.lbleventshdr.caption
 msgid "OnClick vs OnChange (OnChange also fires on a code write):"
-msgstr ""
+msgstr "OnClick 与 OnChange（代码写入也会触发 OnChange）："
 
 #: tmainform.cbevents.caption
 msgid "OnClick vs OnChange"
-msgstr ""
+msgstr "OnClick 与 OnChange"
 
 #: tmainform.btntoggle.caption
 msgid "Toggle in code"
-msgstr ""
+msgstr "用代码切换"
 
 #: tmainform.lblevents.caption
 msgid "(no event yet - click the box, then press the button)"
-msgstr ""
+msgstr "（暂无事件 - 先点复选框，再按按钮）"
 
 #: tmainform.lblkeys.caption
 msgid "Keyboard: Alt+A / Alt+N activate the &&-marked boxes (the underline shows while Alt is held); Space toggles the focused box."
-msgstr ""
+msgstr "键盘：Alt+A / Alt+N 激活标有 && 的复选框（按住 Alt 时显示下划线）；空格键切换当前焦点复选框。"
 
 #: tmainform.bar.caption
 msgid "TTyCheckBox  ·  TyControls"
-msgstr ""
+msgstr "TTyCheckBox  ·  TyControls"

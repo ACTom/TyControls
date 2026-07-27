@@ -89,80 +89,80 @@ msgstr "每个控件都有自己的主题键（TyShape / TyStarShape / TyArrow�
 
 #: tmainform.lblrect.caption
 msgid "tskRectangle"
-msgstr ""
+msgstr "tskRectangle"
 
 #: tmainform.lblround.caption
 msgid "tskRoundRect"
-msgstr ""
+msgstr "tskRoundRect"
 
 #: tmainform.lblsquare.caption
 msgid "tskSquare"
-msgstr ""
+msgstr "tskSquare"
 
 #: tmainform.lblellipse.caption
 msgid "tskEllipse"
-msgstr ""
+msgstr "tskEllipse"
 
 #: tmainform.lblcircle.caption
 msgid "tskCircle"
-msgstr ""
+msgstr "tskCircle"
 
 #: tmainform.lbltriangle.caption
 msgid "tskTriangle"
-msgstr ""
+msgstr "tskTriangle"
 
 #: tmainform.lbldiamond.caption
 msgid "tskDiamond"
-msgstr ""
+msgstr "tskDiamond"
 
 #: tmainform.lblline.caption
 msgid "tskLine"
-msgstr ""
+msgstr "tskLine"
 
 #: tmainform.lblover2.caption
 msgid "var(--accent)"
-msgstr ""
+msgstr "var(--accent)"
 
 #: tmainform.lblnoborder.caption
 msgid "border-style: none"
-msgstr ""
+msgstr "border-style: none"
 
 #: tmainform.lblzerowidth.caption
 msgid "border-width: 0"
-msgstr ""
+msgstr "border-width: 0"
 
 #: tmainform.lbloutline.caption
 msgid "background: transparent (outline only)"
-msgstr ""
+msgstr "background: transparent (仅描边)"
 
 #: tmainform.lblradius.caption
 msgid "border-radius: 28px — overrides the theme radius (max half the shorter side)"
-msgstr ""
+msgstr "border-radius: 28px — 覆盖主题圆角(最大为短边一半)"
 
 #: tmainform.btnclamp.caption
 msgid "Try Points = 1, InnerRatio = 2.0"
-msgstr ""
+msgstr "试试 Points = 1, InnerRatio = 2.0"
 
 #: tmainform.lblarrright.caption
 msgid "tadRight"
-msgstr ""
+msgstr "tadRight"
 
 #: tmainform.lblarrleft.caption
 msgid "tadLeft"
-msgstr ""
+msgstr "tadLeft"
 
 #: tmainform.lblarrup.caption
 msgid "tadUp"
-msgstr ""
+msgstr "tadUp"
 
 #: tmainform.lblarrdown.caption
 msgid "tadDown"
-msgstr ""
+msgstr "tadDown"
 
 #: tmainform.lblthemecss.caption
 msgid "e.g. in a .tycss:  TyStarShape { background: #E8C547; border-color: #6B5310; }"
-msgstr ""
+msgstr "例如在 .tycss 里:  TyStarShape { background: #E8C547; border-color: #6B5310; }"
 
 #: tmainform.darkswitch.caption
 msgid "Dark"
-msgstr ""
+msgstr "深色"

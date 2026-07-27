@@ -69,56 +69,56 @@ msgstr "复选框示例"
 
 #: tmainform.lbladvanced.caption
 msgid "Four more layers of the same theme system"
-msgstr ""
+msgstr "同一主题系统的另外四个层次"
 
 #: tmainform.btnauto.caption
 msgid "Auto (follow OS)"
-msgstr ""
+msgstr "自动（跟随系统）"
 
 #: tmainform.lblfollowhint.caption
 msgid "Auto re-checks the OS scheme every 750 ms - flip Windows dark mode and the window follows."
-msgstr ""
+msgstr "自动模式每 750 ms 重查一次系统明暗 - 切换 Windows 暗色模式，窗口随之切换。"
 
 #: tmainform.lbldensityhint.caption
 msgid "Modern density keeps the skin colours but re-resolves radius, padding and control sizes."
-msgstr ""
+msgstr "现代密度保留皮肤配色，只重算圆角、内边距与控件尺寸。"
 
 #: tmainform.chkhotreload.caption
 msgid "Hot-reload"
-msgstr ""
+msgstr "热重载"
 
 #: tmainform.lblhothint.caption
 msgid "Watches ThemeFile only: ticking this loads green.tycss - edit and save it to see it reload."
-msgstr ""
+msgstr "只监视 ThemeFile：勾选后加载 green.tycss - 编辑并保存即可看到重载。"
 
 #: tmainform.btnoverlay.caption
 msgid "Overlay a tweak"
-msgstr ""
+msgstr "叠加一层微调"
 
 #: tmainform.lbllayerhint.caption
 msgid "Adds a CSS layer over the live theme: accent and radius change, the skin stays."
-msgstr ""
+msgstr "在当前主题上叠一层 CSS：主题色与圆角改变，皮肤不变。"
 
 #: tmainform.btncustom.caption
 msgid "Custom file"
-msgstr ""
+msgstr "自定义文件"
 
 #: tmainform.lblcustomhint.caption
 msgid "Loads custom.tycss from this example folder - the write-your-own-theme-file path."
-msgstr ""
+msgstr "从本示例目录加载 custom.tycss - 这就是自己写主题文件的用法。"
 
 #: tmainform.btnoverride.caption
 msgid "Overridden"
-msgstr ""
+msgstr "已覆盖"
 
 #: tmainform.lblovrhint.caption
 msgid "StyleOverride pins per-instance CSS above the theme; var(--accent) still tracks a skin switch."
-msgstr ""
+msgstr "StyleOverride 把单实例 CSS 钉在主题之上；var(--accent) 仍随皮肤切换。"
 
 #: tmainform.lbllistener.caption
 msgid "Every theme, mode, accent, density or hot-reload change fires the change listeners on the controller - this window hooks one to re-skin its chrome."
-msgstr ""
+msgstr "主题、模式、主题色、密度或热重载的任何变化都会触发控制器上的变更监听 - 本窗口挂了一个监听来重刷自身外框。"
 
 #: tmainform.switchdensity.caption
 msgid "Modern density"
-msgstr ""
+msgstr "现代密度"

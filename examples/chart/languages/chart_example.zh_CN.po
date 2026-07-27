@@ -41,32 +41,32 @@ msgstr "数值标注"
 
 #: tmainform.btndonut.caption
 msgid "Donut"
-msgstr ""
+msgstr "环形"
 
 #: tmainform.chkgrid.caption
 msgid "Grid lines"
-msgstr ""
+msgstr "网格线"
 
 #: tmainform.chktooltip.caption
 msgid "Hover tooltip"
-msgstr ""
+msgstr "悬停提示"
 
 #: tmainform.lblpalette.caption
 msgid "Series 3 (North China) sets Color explicitly; the others cycle the palette"
-msgstr ""
+msgstr "第 3 组(North China)显式设置了 Color,其余按调色板轮换"
 
 #: tmainform.lblnegative.caption
 msgid "The Net change bars are negative in Q1 / Q3 — they hang below the zero baseline"
-msgstr ""
+msgstr "Net change 在 Q1 / Q3 为负值 — 柱子垂在零基线下方"
 
 #: tmainform.lblhit.caption
 msgid "Click a bar, marker or slice — HitTestAt names the datum here"
-msgstr ""
+msgstr "点击柱子、标记点或扇区 — HitTestAt 在这里报出该数据点"
 
 #: tmainform.titlebar1.caption
 msgid "TTyChart  ·  TyControls"
-msgstr ""
+msgstr "TTyChart  ·  TyControls"
 
 #: tmainform.chart.title
 msgid "Quarterly sales"
-msgstr ""
+msgstr "季度销售额"

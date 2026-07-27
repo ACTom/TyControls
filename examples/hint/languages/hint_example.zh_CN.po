@@ -45,68 +45,68 @@ msgstr "已保存"
 
 #: tmainform.btndel.hint
 msgid "Delete selected items'#13#10'This action cannot be undone"
-msgstr ""
+msgstr "删除选中的项目'#13#10'此操作无法撤销"
 
 #: tmainform.lblhintnote.caption
 msgid "Switch \"Themed hints\" off and hover Save: the OS tooltip returns."
-msgstr ""
+msgstr "关掉“主题化提示”再悬停“保存”:系统 tooltip 就回来了。"
 
 #: tmainform.lblballoons.caption
 msgid "Popovers: \"Show popover\" is the biInfo icon; the next three are biWarning, biError and biNone."
-msgstr ""
+msgstr "气泡:“显示气泡”是 biInfo 图标;后三个分别是 biWarning、biError 和 biNone。"
 
 #: tmainform.btnwarn.caption
 msgid "Warning popover"
-msgstr ""
+msgstr "警告气泡"
 
 #: tmainform.btnerr.caption
 msgid "Error popover"
-msgstr ""
+msgstr "错误气泡"
 
 #: tmainform.btnplain.caption
 msgid "No-icon popover"
-msgstr ""
+msgstr "无图标气泡"
 
 #: tmainform.lblsticky.caption
 msgid "HideInterval: those four fade out after 2 s; the sticky popover sets 0, so only HideHint closes it."
-msgstr ""
+msgstr "HideInterval:那四个 2 秒后淡出;常驻气泡设为 0,只有 HideHint 能关掉。"
 
 #: tmainform.btnsticky.caption
 msgid "Sticky popover"
-msgstr ""
+msgstr "常驻气泡"
 
 #: tmainform.btnhide.caption
 msgid "Hide it (HideHint)"
-msgstr ""
+msgstr "隐藏它 (HideHint)"
 
 #: tmainform.lblscreen.caption
 msgid "ShowAt aims at any screen rect - with no room below, the body flips above and the pointer moves to its bottom edge."
-msgstr ""
+msgstr "ShowAt 可指向任意屏幕矩形 - 下方没空间时主体翻到上方,指针移到下边缘。"
 
 #: tmainform.btnscreen.caption
 msgid "Popover at the bottom of the screen"
-msgstr ""
+msgstr "屏幕底部的气泡"
 
 #: tmainform.bar.caption
 msgid "Hint  ·  TyControls"
-msgstr ""
+msgstr "Hint  ·  TyControls"
 
 #: tmainform.hintswitch.caption
 msgid "Themed hints"
-msgstr ""
+msgstr "主题化提示"
 
 #: tmainform.balloonwarn.title
 msgid "Low disk space"
-msgstr ""
+msgstr "磁盘空间不足"
 
 #: tmainform.balloonerr.title
 msgid "Save failed"
-msgstr ""
+msgstr "保存失败"
 
 #: tmainform.balloonplain.title
 msgid "Copied"
-msgstr ""
+msgstr "已复制"
 
 #: tmainform.balloonsticky.title
 msgid "Sticky popover"
-msgstr ""
+msgstr "常驻气泡"

@@ -57,100 +57,100 @@ msgstr "（第一个输入框内容将在此显示）"
 
 #: tmainform.lbllower.caption
 msgid "Force lowercase"
-msgstr ""
+msgstr "强制小写"
 
 #: tmainform.lblcenter.caption
 msgid "Center align"
-msgstr ""
+msgstr "居中对齐"
 
 #: tmainform.lblruntime.caption
 msgid "Runtime API - undo and clipboard act on the top box, the selection row on the read-only box."
-msgstr ""
+msgstr "运行时 API - 撤销与剪贴板作用于顶部输入框，选择一行作用于只读输入框。"
 
 #: tmainform.lblundo.caption
 msgid "Undo / redo"
-msgstr ""
+msgstr "撤销 / 重做"
 
 #: tmainform.btnundo.caption
 msgid "Undo"
-msgstr ""
+msgstr "撤销"
 
 #: tmainform.btnredo.caption
 msgid "Redo"
-msgstr ""
+msgstr "重做"
 
 #: tmainform.lblundohint.caption
 msgid "Ctrl+Z / Ctrl+Y"
-msgstr ""
+msgstr "Ctrl+Z / Ctrl+Y"
 
 #: tmainform.lblclip.caption
 msgid "Clipboard"
-msgstr ""
+msgstr "剪贴板"
 
 #: tmainform.btncopy.caption
 msgid "Copy"
-msgstr ""
+msgstr "复制"
 
 #: tmainform.btncut.caption
 msgid "Cut"
-msgstr ""
+msgstr "剪切"
 
 #: tmainform.btnpaste.caption
 msgid "Paste"
-msgstr ""
+msgstr "粘贴"
 
 #: tmainform.lblmask.caption
 msgid "Masked copy"
-msgstr ""
+msgstr "遮罩复制"
 
 #: tmainform.btncopypwd.caption
 msgid "Copy the password box (nothing leaves it)"
-msgstr ""
+msgstr "复制密码框（内容不会外泄）"
 
 #: tmainform.lblsel.caption
 msgid "Selection API"
-msgstr ""
+msgstr "选择 API"
 
 #: tmainform.btnselectall.caption
 msgid "Select all"
-msgstr ""
+msgstr "全选"
 
 #: tmainform.btnselectrange.caption
 msgid "Select chars 3-7"
-msgstr ""
+msgstr "选中第 3-7 个字符"
 
 #: tmainform.bar.caption
 msgid "TTyEdit  ·  TyControls"
-msgstr ""
+msgstr "TTyEdit  ·  TyControls"
 
 #: tmainform.edhint.texthint
 msgid "Type here, echoed live below…"
-msgstr ""
+msgstr "在此输入，下方实时回显…"
 
 #: tmainform.edpassword.text
 msgid "secret"
-msgstr ""
+msgstr "秘密"
 
 #: tmainform.edupper.texthint
 msgid "Input will be converted to uppercase"
-msgstr ""
+msgstr "输入将转换为大写"
 
 #: tmainform.edmaxlen.texthint
 msgid "Up to 8 chars"
-msgstr ""
+msgstr "最多 8 个字符"
 
 #: tmainform.ednumbers.texthint
 msgid "Only 0-9 allowed"
-msgstr ""
+msgstr "只允许 0-9"
 
 #: tmainform.edright.text
 msgid "1234.56"
-msgstr ""
+msgstr "1234.56"
 
 #: tmainform.edlower.texthint
 msgid "Input will be converted to lowercase"
-msgstr ""
+msgstr "输入将转换为小写"
 
 #: tmainform.edcenter.text
 msgid "42"
-msgstr ""
+msgstr "42"

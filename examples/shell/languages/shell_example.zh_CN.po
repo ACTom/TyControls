@@ -49,24 +49,24 @@ msgstr "双击文件夹进入,双击文件打开,F2 重命名"
 
 #: tmainform.chkfoldersfirst.caption
 msgid "Folders first"
-msgstr ""
+msgstr "文件夹优先"
 
 #: tmainform.chkmulti.caption
 msgid "Multi-select"
-msgstr ""
+msgstr "多选"
 
 #: tmainform.btnrefresh.caption
 msgid "Refresh"
-msgstr ""
+msgstr "刷新"
 
 #: tmainform.lblview.caption
 msgid "View:"
-msgstr ""
+msgstr "视图:"
 
 #: tmainform.lblhint.caption
 msgid "Pick a View style; clear \"Folders first\" and click Name twice to drop folders below files; Refresh keeps the selection"
-msgstr ""
+msgstr "选一种视图样式;取消\"文件夹优先\"再点两次 Name 列头,文件夹就排到文件下面;刷新会保留选中项"
 
 #: tmainform.lblselection.caption
 msgid "Ctrl/Shift-click rows: SelCount and SelectedFile report the selection here"
-msgstr ""
+msgstr "Ctrl/Shift 点击行:SelCount 与 SelectedFile 在这里报告选中情况"

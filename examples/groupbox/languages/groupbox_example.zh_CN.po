@@ -21,7 +21,7 @@ msgstr "暗色"
 
 #: tmainform.groupsize.caption
 msgid "&Font size (left aligned)"
-msgstr ""
+msgstr "字号(&F)（左对齐）"
 
 #: tmainform.radioa.caption
 msgid "Small (12pt)"
@@ -37,7 +37,7 @@ msgstr "大（18pt）"
 
 #: tmainform.groupopt.caption
 msgid "&Style (centered)"
-msgstr ""
+msgstr "样式(&S)（居中）"
 
 #: tmainform.checkbold.caption
 msgid "Bold"
@@ -49,23 +49,23 @@ msgstr "斜体"
 
 #: tmainform.groupname.caption
 msgid "&Name (right aligned)"
-msgstr ""
+msgstr "姓名(&N)（右对齐）"
 
 #: tmainform.lblfit.caption
 msgid "alBottom stops at the frame"
-msgstr ""
+msgstr "alBottom 子控件止于边框"
 
 #: tmainform.lblaccel.caption
 msgid "Hold Alt to reveal the access keys — Alt+N jumps straight into the Name box."
-msgstr ""
+msgstr "按住 Alt 显示访问键 —— Alt+N 直接跳到姓名框。"
 
 #: tmainform.lblplainhdr.caption
 msgid "Caption = '' — the untitled variant: the top border runs unbroken, no gap cut for a title."
-msgstr ""
+msgstr "Caption = '' —— 无标题变体：上边框连续，不为标题留缺口。"
 
 #: tmainform.lblplain.caption
 msgid "A child still starts below the caption band the box always reserves."
-msgstr ""
+msgstr "子控件仍从分组框始终保留的标题带下方开始。"
 
 #: tmainform.lblstatus.caption
 msgid ""
@@ -73,11 +73,11 @@ msgstr ""
 
 #: tmainform.bar.caption
 msgid "GroupBox  ·  TyControls"
-msgstr ""
+msgstr "GroupBox  ·  TyControls"
 
 #: tmainform.nameedit.texthint
 msgid "Enter a name…"
-msgstr ""
+msgstr "请输入姓名…"
 
 #: tmainform.groupplain.caption
 msgid ""

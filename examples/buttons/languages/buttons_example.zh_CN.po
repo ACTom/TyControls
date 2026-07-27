@@ -65,32 +65,32 @@ msgstr "颜色按钮 / 分段条"
 
 #: tmainform.lblgrouphint.caption
 msgid "AllowAllUp: click the pressed segment to release it."
-msgstr ""
+msgstr "AllowAllUp：再点一下按下的分段即可弹起。"
 
 #: tmainform.lblswatch.caption
 msgid "ShowText = False"
-msgstr ""
+msgstr "ShowText = False"
 
 #: tmainform.lblmulti.caption
 msgid "MultiSelect (several stay down)"
-msgstr ""
+msgstr "MultiSelect（可多个同时按下）"
 
 #: tmainform.lblimg.caption
 msgid "Image glyph (Images, same on every OS) - GlyphSize + GlyphColor"
-msgstr ""
+msgstr "图片图标（Images，各系统一致）- GlyphSize + GlyphColor"
 
 #: tmainform.btnimg.caption
 msgid "Save"
-msgstr ""
+msgstr "保存"
 
 #: tmainform.btnbigglyph.caption
 msgid "GlyphSize 20"
-msgstr ""
+msgstr "GlyphSize 20"
 
 #: tmainform.lblstatus.caption
 msgid "(click a button, a segment or the colour button)"
-msgstr ""
+msgstr "（点击按钮、分段或颜色按钮）"
 
 #: tmainform.bar.caption
 msgid "Buttons  · TyControls"
-msgstr ""
+msgstr "Buttons  · TyControls"

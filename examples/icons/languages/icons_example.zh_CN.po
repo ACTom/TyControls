@@ -37,52 +37,52 @@ msgstr "TTyIconFont/TTyCharImage:把 FontFile 指向图标 .ttf(如 FontAwesome)
 
 #: tmainform.cap4.caption
 msgid "Center = False"
-msgstr ""
+msgstr "居中 Center = False"
 
 #: tmainform.lbltrans.caption
 msgid "Transparent: left True (default, no surface) · right False"
-msgstr ""
+msgstr "Transparent:左 True(默认,无表面) · 右 False"
 
 #: tmainform.lblauto.caption
 msgid "AutoSize: the box shrinks to the 120x80 picture"
-msgstr ""
+msgstr "AutoSize:框体缩到 120x80 图片大小"
 
 #: tmainform.lblicon.caption
 msgid "TTyIconFont: glyph names map to codepoints, rendered from one font family"
-msgstr ""
+msgstr "TTyIconFont:字形名映射到码点,由同一字体族渲染"
 
 #: tmainform.lblcolor.caption
 msgid "GlyphColor: left explicit blue, right unset → follows the theme text colour (try Dark)"
-msgstr ""
+msgstr "GlyphColor:左侧显式设蓝色,右侧未设 → 跟随主题文字色(试试暗色)"
 
 #: tmainform.lblsizes.caption
 msgid "GlyphSize 12 / 24 / 40 in identical 48x48 boxes — 0 (the default) auto-fits the box"
-msgstr ""
+msgstr "GlyphSize 12 / 24 / 40 放在相同的 48x48 框里 — 0(默认)自动适应框"
 
 #: tmainform.lbllist.caption
 msgid "TTyGlyphImageList: the same ordered list drawn twice below — DefaultSize, then half size"
-msgstr ""
+msgstr "TTyGlyphImageList:同一有序列表在下方画两次 — 先 DefaultSize,再一半大小"
 
 #: tmainform.lblfontfile.caption
 msgid "FontFile: register a .ttf PRIVATE to this process — no OS install needed. Type the family, then load the file."
-msgstr ""
+msgstr "FontFile:把 .ttf 注册为本进程私有 — 无需安装到系统。先填字体族名,再加载文件。"
 
 #: tmainform.btnloadfont.caption
 msgid "Load icon font (.ttf)…"
-msgstr ""
+msgstr "加载图标字体 (.ttf)…"
 
 #: tmainform.lblstatus.caption
 msgid "Click the star or the stretched picture — TTyImage and TTyCharImage both publish OnClick."
-msgstr ""
+msgstr "点击星形或拉伸的图片 — TTyImage 与 TTyCharImage 都发布了 OnClick。"
 
 #: tmainform.bar.caption
 msgid "Icons & Images  · TyControls"
-msgstr ""
+msgstr "Icons & Images  · TyControls"
 
 #: tmainform.fontfamilyedit.text
 msgid "Segoe UI Symbol"
-msgstr ""
+msgstr "Segoe UI Symbol"
 
 #: tmainform.fontfamilyedit.texthint
 msgid "Font family name…"
-msgstr ""
+msgstr "字体族名…"

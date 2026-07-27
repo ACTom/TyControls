@@ -381,7 +381,7 @@ msgstr "勾选框事件/否决"
 
 #: tmainform.chkevclip.caption
 msgid "Clipboard hooks"
-msgstr ""
+msgstr "剪贴板钩子"
 
 #: tmainform.btnevfind.caption
 msgid "Find next"
@@ -649,44 +649,44 @@ msgstr "备注上限:"
 
 #: tmainform.chkeditbyrow.caption
 msgid "Editor kind depends on the row"
-msgstr ""
+msgstr "编辑器种类随行而变"
 
 #: tmainform.lbledittip2.caption
 msgid "OnGetEditorKind is asked per cell and beats the kind declared on the column — the same column can edit differently row by row"
-msgstr ""
+msgstr "OnGetEditorKind 逐格来问,压过列上声明的种类 —— 同一列可以逐行用不同编辑器"
 
 #: tmainform.lbldatatip.caption
 msgid "Ctrl+Z / Ctrl+Y"
-msgstr ""
+msgstr "Ctrl+Z / Ctrl+Y"
 
 #: tmainform.chkfillseries.caption
 msgid "Fill: weekdays"
-msgstr ""
+msgstr "填充:星期名"
 
 #: tmainform.chkevdrawcell.caption
 msgid "Paint the amount cells myself"
-msgstr ""
+msgstr "金额格自己画"
 
 #: tmainform.chkcolimage.caption
 msgid "Mark column shows an icon"
-msgstr ""
+msgstr "标记列显示图标"
 
 #: tmainform.btndrawend.caption
 msgid "Jump to the last row"
-msgstr ""
+msgstr "跳到最后一行"
 
 #: tmainform.btndrawtop.caption
 msgid "Back to the top"
-msgstr ""
+msgstr "回到顶部"
 
 #: tmainform.lbldrawtip.caption
 msgid "TTyDrawGrid stores nothing at all: every cell comes from OnGetCellText, so a million rows cost no memory"
-msgstr ""
+msgstr "TTyDrawGrid 什么都不存:每个格子都由 OnGetCellText 现给,百万行也不占内存"
 
 #: tmainform.edfilterval.text
 msgid "20"
-msgstr ""
+msgstr "20"
 
 #: tmainform.pgdraw.caption
 msgid "Draw grid"
-msgstr ""
+msgstr "纯自绘网格"

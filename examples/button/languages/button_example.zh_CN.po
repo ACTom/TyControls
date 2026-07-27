@@ -61,28 +61,28 @@ msgstr "点击次数:0"
 
 #: tmainform.btninbox.caption
 msgid "Inbox (badge hidden at 0)"
-msgstr ""
+msgstr "收件箱(值为 0 时隐藏徽标)"
 
 #: tmainform.lblanimbadgehint.caption
 msgid "AnimationsEnabled = False makes the left button snap on hover instead of fading; OnBadgeDisplay keeps the Inbox badge hidden until its value passes 0."
-msgstr ""
+msgstr "AnimationsEnabled = False 让左侧按钮悬停时直接切换而非淡入;OnBadgeDisplay 让收件箱徽标在值大于 0 前保持隐藏。"
 
 #: tmainform.btnnoanim.caption
 msgid "No hover fade"
-msgstr ""
+msgstr "无悬停淡入"
 
 #: tmainform.btninboxadd.caption
 msgid "Add one to Inbox"
-msgstr ""
+msgstr "收件箱 +1"
 
 #: tmainform.lblautohint.caption
 msgid "AutoSize = True: the designed Width = 100 is overrun at run time so the whole caption fits, where a fixed-width button ellipsises it."
-msgstr ""
+msgstr "AutoSize = True:运行时会突破设计的 Width = 100 以显示完整标题,定宽按钮则用省略号截断。"
 
 #: tmainform.btnauto.caption
 msgid "AutoSize=True: I grow to fit this long caption"
-msgstr ""
+msgstr "AutoSize=True:我会撑大以显示这段长标题"
 
 #: tmainform.bar.caption
 msgid "TTyButton  ·  TyControls"
-msgstr ""
+msgstr "TTyButton  ·  TyControls"

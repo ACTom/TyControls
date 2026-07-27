@@ -33,7 +33,7 @@ msgstr "缩放:—"
 
 #: tmainform.div1.caption
 msgid "Non-destructive filters: grayscale · blur · sharpen · invert · tint (source image unchanged)"
-msgstr ""
+msgstr "无损滤镜:灰度 · 模糊 · 锐化 · 反相 · 着色(源图不变)"
 
 #: tmainform.chkgray.caption
 msgid "Grayscale"
@@ -53,48 +53,48 @@ msgstr "模糊"
 
 #: tmainform.btnzoomout.caption
 msgid "−"
-msgstr ""
+msgstr "−"
 
 #: tmainform.btnzoomin.caption
 msgid "+"
-msgstr ""
+msgstr "+"
 
 #: tmainform.btnactual.caption
 msgid "100%"
-msgstr ""
+msgstr "100%"
 
 #: tmainform.btngenerated.caption
 msgid "Generated image"
-msgstr ""
+msgstr "生成图片"
 
 #: tmainform.btnclear.caption
 msgid "Clear"
-msgstr ""
+msgstr "清空"
 
 #: tmainform.chktint.caption
 msgid "Tint"
-msgstr ""
+msgstr "着色"
 
 #: tmainform.lbltint.caption
 msgid "Tint is the last stage: TintColor washed over at TintAmount 35."
-msgstr ""
+msgstr "着色是最后一级:按 TintAmount 35 叠上 TintColor。"
 
 #: tmainform.chkanim.caption
 msgid "Animate zoom"
-msgstr ""
+msgstr "缩放动画"
 
 #: tmainform.chkautofit.caption
 msgid "Auto-fit on resize"
-msgstr ""
+msgstr "窗口变化时自动适配"
 
 #: tmainform.lblview.caption
 msgid "Uncheck either one, then zoom or resize the window, and compare."
-msgstr ""
+msgstr "取消任一勾选,再缩放或调整窗口大小对比。"
 
 #: tmainform.titlebar1.caption
 msgid "TTyImageView  ·  TyControls"
-msgstr ""
+msgstr "TTyImageView  ·  TyControls"
 
 #: tmainform.div2.caption
 msgid "View behaviour — wheel zoom stops at ZoomMin 10% and ZoomMax 800%"
-msgstr ""
+msgstr "视图行为 — 滚轮缩放止于 ZoomMin 10% 与 ZoomMax 800%"

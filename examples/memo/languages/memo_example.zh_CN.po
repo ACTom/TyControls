@@ -33,64 +33,64 @@ msgstr "自动换行 (WordWrap)"
 
 #: tmainform.btnselectall.caption
 msgid "Select all"
-msgstr ""
+msgstr "全选"
 
 #: tmainform.btncopy.caption
 msgid "Copy"
-msgstr ""
+msgstr "复制"
 
 #: tmainform.btncut.caption
 msgid "Cut"
-msgstr ""
+msgstr "剪切"
 
 #: tmainform.btnpaste.caption
 msgid "Paste"
-msgstr ""
+msgstr "粘贴"
 
 #: tmainform.btnundo.caption
 msgid "Undo"
-msgstr ""
+msgstr "撤销"
 
 #: tmainform.btnredo.caption
 msgid "Redo"
-msgstr ""
+msgstr "重做"
 
 #: tmainform.lblkeys.caption
 msgid "Same edits from the keyboard: Ctrl+Z undo, Ctrl+Y or Ctrl+Shift+Z redo."
-msgstr ""
+msgstr "键盘上同样可用：Ctrl+Z 撤销，Ctrl+Y 或 Ctrl+Shift+Z 重做。"
 
 #: tmainform.lbloptions.caption
 msgid "Tick a property, then type in the memo (HideSelection dims the band on blur):"
-msgstr ""
+msgstr "勾一个属性，再到编辑框里打字（HideSelection 让失焦时选区变淡）："
 
 #: tmainform.chkhidesel.caption
 msgid "HideSelection"
-msgstr ""
+msgstr "HideSelection"
 
 #: tmainform.chkwanttabs.caption
 msgid "WantTabs - on: Tab inserts a tab; off: Tab jumps to the next control"
-msgstr ""
+msgstr "WantTabs - 开：Tab 插入制表符；关：Tab 跳到下一个控件"
 
 #: tmainform.chkwantreturns.caption
 msgid "WantReturns - untick it and Enter fires the OK button"
-msgstr ""
+msgstr "WantReturns - 取消勾选后，回车触发「确定」按钮"
 
 #: tmainform.btndefault.caption
 msgid "OK"
-msgstr ""
+msgstr "确定"
 
 #: tmainform.chklimit.caption
 msgid "MaxLength = 800 - typing stops at the cap, a paste is truncated to fit"
-msgstr ""
+msgstr "MaxLength = 800 - 打到上限就停，粘贴超出的部分被截断"
 
 #: tmainform.lblscroll.caption
 msgid "ScrollBars"
-msgstr ""
+msgstr "ScrollBars"
 
 #: tmainform.lblscrollhint.caption
 msgid "horizontal bar needs WordWrap off"
-msgstr ""
+msgstr "横向滚动条需关 WordWrap"
 
 #: tmainform.bar.caption
 msgid "TTyMemo  · TyControls"
-msgstr ""
+msgstr "TTyMemo  · TyControls"

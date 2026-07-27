@@ -37,32 +37,32 @@ msgstr "GlowRadius = 5 —— 文字周围一圈柔光"
 
 #: tmainform.lblhdrlink.caption
 msgid "TTyLinkLabel — AutoOpen picks who handles the click; Alignment aligns it"
-msgstr ""
+msgstr "TTyLinkLabel —— AutoOpen 决定谁处理点击；Alignment 负责对齐"
 
 #: tmainform.lblaction.caption
 msgid "In-app link (AutoOpen = False) — click me, no browser opens"
-msgstr ""
+msgstr "应用内链接（AutoOpen = False）—— 点我，不会打开浏览器"
 
 #: tmainform.lblhdrshadow.caption
 msgid "TTyShadowLabel — ShadowOffsetX/Y aim the shadow; ShadowColor set in code"
-msgstr ""
+msgstr "TTyShadowLabel —— ShadowOffsetX/Y 定投影方向；ShadowColor 在代码里设"
 
 #: tmainform.lblshadowup.caption
 msgid "ShadowOffset = (-2, -2): the shadow can fall up-left too"
-msgstr ""
+msgstr "ShadowOffset = (-2, -2)：投影也能落向左上"
 
 #: tmainform.lblhdrglow.caption
 msgid "TTyGlowLabel — GlowRadius scales the halo (clamped to 0..64)"
-msgstr ""
+msgstr "TTyGlowLabel —— GlowRadius 缩放光晕（钳制在 0..64）"
 
 #: tmainform.lblglow0.caption
 msgid "GlowRadius = 0 — no blur, a crisp colour backing under the text"
-msgstr ""
+msgstr "GlowRadius = 0 —— 不模糊，文字下是一块清晰底色"
 
 #: tmainform.lblglow14.caption
 msgid "GlowRadius = 14 — a wide soft halo (bigger values clamp at 64)"
-msgstr ""
+msgstr "GlowRadius = 14 —— 一圈宽而柔的光晕（更大的值钳到 64）"
 
 #: tmainform.bar.caption
 msgid "Labels  · TyControls"
-msgstr ""
+msgstr "Labels  · TyControls"

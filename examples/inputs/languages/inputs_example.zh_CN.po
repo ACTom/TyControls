@@ -133,40 +133,40 @@ msgstr "试试:只能输数字 / 负号 / 小数点;聚焦时去掉千分位方�
 
 #: tmainform.furl.text
 msgid "https://github.com/ACTom/TyControls"
-msgstr ""
+msgstr "https://github.com/ACTom/TyControls"
 
 #: tmainform.l27.caption
 msgid "Every picker reports through OnChange — read Selected / SelectedColor:"
-msgstr ""
+msgstr "每个拾取器都通过 OnChange 回报,读取 Selected / SelectedColor:"
 
 #: tmainform.lblpick.caption
 msgid "Picked: (click a swatch)"
-msgstr ""
+msgstr "已选:(点击色块)"
 
 #: tmainform.l28.caption
 msgid "SelectedFont + FontSize drive this preview (size capped at 28 to fit):"
-msgstr ""
+msgstr "SelectedFont + FontSize 驱动此预览(字号上限 28 以适配):"
 
 #: tmainform.lblfontpreview.caption
 msgid "Handgloves"
-msgstr ""
+msgstr "Handgloves"
 
 #: tmainform.lblfontecho.caption
 msgid "SelectedFont / FontSize land here"
-msgstr ""
+msgstr "SelectedFont / FontSize 在此回显"
 
 #: tmainform.l29.caption
 msgid "OnClickCheck / OnChange fire; read CheckedCount:"
-msgstr ""
+msgstr "OnClickCheck / OnChange 触发;读取 CheckedCount:"
 
 #: tmainform.lblchecks.caption
 msgid "CheckListBox: 0 · CheckComboBox: 0"
-msgstr ""
+msgstr "CheckListBox: 0 · CheckComboBox: 0"
 
 #: tmainform.chksheetlock.caption
 msgid "Lock the whole sheet — ValueListEditor.ReadOnly blocks every value cell"
-msgstr ""
+msgstr "锁定整张表 —— ValueListEditor.ReadOnly 禁掉所有值单元格"
 
 #: tmainform.bar.caption
 msgid "Rich Inputs  · TyControls"
-msgstr ""
+msgstr "Rich Inputs  · TyControls"

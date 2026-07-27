@@ -25,7 +25,7 @@ msgstr "暗色"
 
 #: tmainform.hintpanel.caption
 msgid "Right-click: enhanced menu"
-msgstr ""
+msgstr "右键：增强菜单"
 
 #: tmainform.statuslabel.caption
 msgid "Ready: shortcuts fire with the menu closed - press Ctrl+N. Submenus open on hover (Right walks in, Left walks back out). Greyed rows (Redo, Paste) are Enabled = False."
@@ -125,140 +125,140 @@ msgstr "属性(&P)"
 
 #: tmainform.lblmenuhint.caption
 msgid "Menu bar: View has a Theme submenu (hover opens it; Right walks in, Left walks back out) and radio icon-size rows; Edit draws right-aligned shortcuts and greys out Redo."
-msgstr ""
+msgstr "菜单栏：视图里有主题子菜单（悬停即开；→ 进入，← 退出）和单选的图标尺寸项；编辑里快捷键右对齐、重做置灰。"
 
 #: tmainform.lblpopupa.caption
 msgid "TTyMenuEx: side banner, section headers, icon column, a check item, a \"Send to\" submenu and a bold Default row."
-msgstr ""
+msgstr "TTyMenuEx：侧边横幅、分节标题、图标列、勾选项、\"发送到\" 子菜单和加粗的默认项。"
 
 #: tmainform.lblpopupb.caption
 msgid "TTyPopupMenu: the same themed renderer with no images, no headers and no banner."
-msgstr ""
+msgstr "TTyPopupMenu：同一套主题渲染，只是没有图标、没有分节标题、没有横幅。"
 
 #: tmainform.lblminibar.caption
 msgid "AutoSizeWidth = True shrinks a non-docked bar to fit its top items:"
-msgstr ""
+msgstr "AutoSizeWidth = True 让未停靠的菜单栏收窄到刚好容纳顶层项："
 
 #: tmainform.lblrollup.caption
 msgid "Window roll-up: CaptionAction decides what a double-click on the title bar does."
-msgstr ""
+msgstr "窗口卷起：CaptionAction 决定双击标题栏做什么。"
 
 #: tmainform.btnrollup.caption
 msgid "Roll up / restore"
-msgstr ""
+msgstr "卷起 / 还原"
 
 #: tmainform.lblcaptionaction.caption
 msgid "CaptionAction:"
-msgstr ""
+msgstr "CaptionAction："
 
 #: tmainform.mnufilesep1.caption
 msgid "-"
-msgstr ""
+msgstr "-"
 
 #: tmainform.mnueditsep1.caption
 msgid "-"
-msgstr ""
+msgstr "-"
 
 #: tmainform.mnuviewsep1.caption
 msgid "-"
-msgstr ""
+msgstr "-"
 
 #: tmainform.mnuviewsep2.caption
 msgid "-"
-msgstr ""
+msgstr "-"
 
 #: tmainform.mnuviewsmall.caption
 msgid "Small icons"
-msgstr ""
+msgstr "小图标"
 
 #: tmainform.mnuviewmedium.caption
 msgid "Medium icons"
-msgstr ""
+msgstr "中图标"
 
 #: tmainform.mnuviewlarge.caption
 msgid "Large icons"
-msgstr ""
+msgstr "大图标"
 
 #: tmainform.mnuviewsep3.caption
 msgid "-"
-msgstr ""
+msgstr "-"
 
 #: tmainform.mnuviewtheme.caption
 msgid "Theme(&T)"
-msgstr ""
+msgstr "主题(&T)"
 
 #: tmainform.mnuthemelight.caption
 msgid "Light(&L)"
-msgstr ""
+msgstr "亮色(&L)"
 
 #: tmainform.mnuthemedark.caption
 msgid "Dark(&D)"
-msgstr ""
+msgstr "暗色(&D)"
 
 #: tmainform.mnuthemesystem.caption
 msgid "System(&S)"
-msgstr ""
+msgstr "系统(&S)"
 
 #: tmainform.mnutools.caption
 msgid "Tools(&T)"
-msgstr ""
+msgstr "工具(&T)"
 
 #: tmainform.mnutoolsoptions.caption
 msgid "Options"
-msgstr ""
+msgstr "选项"
 
 #: tmainform.mnutoolsmacros.caption
 msgid "Macros"
-msgstr ""
+msgstr "宏"
 
 #: tmainform.mnuhelp.caption
 msgid "Help(&H)"
-msgstr ""
+msgstr "帮助(&H)"
 
 #: tmainform.mnuhelpcontents.caption
 msgid "Contents"
-msgstr ""
+msgstr "目录"
 
 #: tmainform.mnuhelpabout.caption
 msgid "About"
-msgstr ""
+msgstr "关于"
 
 #: tmainform.popsep1.caption
 msgid "-"
-msgstr ""
+msgstr "-"
 
 #: tmainform.popsendto.caption
 msgid "Send to"
-msgstr ""
+msgstr "发送到"
 
 #: tmainform.popsenddesktop.caption
 msgid "Desktop"
-msgstr ""
+msgstr "桌面"
 
 #: tmainform.popsendmail.caption
 msgid "Mail recipient"
-msgstr ""
+msgstr "邮件收件人"
 
 #: tmainform.popsendzip.caption
 msgid "Compressed folder"
-msgstr ""
+msgstr "压缩文件夹"
 
 #: tmainform.popsep2.caption
 msgid "-"
-msgstr ""
+msgstr "-"
 
 #: tmainform.plaincut.caption
 msgid "Cut(&T)"
-msgstr ""
+msgstr "剪切(&T)"
 
 #: tmainform.plaincopy.caption
 msgid "Copy(&C)"
-msgstr ""
+msgstr "复制(&C)"
 
 #: tmainform.plainpaste.caption
 msgid "Paste(&P)"
-msgstr ""
+msgstr "粘贴(&P)"
 
 #: tmainform.hintpanel2.caption
 msgid "Right-click: plain themed menu"
-msgstr ""
+msgstr "右键：普通主题菜单"

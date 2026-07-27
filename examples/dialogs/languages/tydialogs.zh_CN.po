@@ -251,68 +251,68 @@ msgstr "关于：已显示对话框"
 
 #: tdialogsmainform.lblmsgtypes.caption
 msgid "Message types and more global entry points: watch the icon and button order change."
-msgstr ""
+msgstr "消息类型与更多全局入口：注意图标和按钮顺序的变化。"
 
 #: tdialogsmainform.btnmsginfo.caption
 msgid "Information"
-msgstr ""
+msgstr "信息"
 
 #: tdialogsmainform.btnmsgwarning.caption
 msgid "Warning"
-msgstr ""
+msgstr "警告"
 
 #: tdialogsmainform.btnmsgerror.caption
 msgid "Error (3 buttons)"
-msgstr ""
+msgstr "错误（3 个按钮）"
 
 #: tdialogsmainform.btnshowmessage.caption
 msgid "Show message"
-msgstr ""
+msgstr "显示消息"
 
 #: tdialogsmainform.btnmessagepos.caption
 msgid "Message at 40,40"
-msgstr ""
+msgstr "消息定位 40,40"
 
 #: tdialogsmainform.btnselectpathrooted.caption
 msgid "Select path (root)"
-msgstr ""
+msgstr "选择路径（根）"
 
 #: tdialogsmainform.btnclosefind.caption
 msgid "Close find"
-msgstr ""
+msgstr "关闭查找"
 
 #: tdialogsmainform.btncustomdialog.caption
 msgid "Custom dialog"
-msgstr ""
+msgstr "自定义对话框"
 
 #: tdialogsmainform.lblcomponents.caption
 msgid "Component API: dialogs dropped on the form, configured as properties, run by Execute."
-msgstr ""
+msgstr "组件式 API：对话框放在窗体上，用属性配置，由 Execute 运行。"
 
 #: tdialogsmainform.btncompmessage.caption
 msgid "Message (component)"
-msgstr ""
+msgstr "消息（组件）"
 
 #: tdialogsmainform.btncompinput.caption
 msgid "Input (component)"
-msgstr ""
+msgstr "输入（组件）"
 
 #: tdialogsmainform.btncompcolor.caption
 msgid "Color (component)"
-msgstr ""
+msgstr "颜色（组件）"
 
 #: tdialogsmainform.darkswitch.caption
 msgid "Dark"
-msgstr ""
+msgstr "暗色"
 
 #: tdialogsmainform.dlgmessage.title
 msgid "Delete"
-msgstr ""
+msgstr "删除"
 
 #: tdialogsmainform.dlginput.caption
 msgid "Rename"
-msgstr ""
+msgstr "重命名"
 
 #: tdialogsmainform.dlgcolor.caption
 msgid "Select a colour"
-msgstr ""
+msgstr "选择颜色"

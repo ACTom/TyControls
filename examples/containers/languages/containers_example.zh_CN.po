@@ -85,7 +85,7 @@ msgstr "格式刷"
 
 #: tmainform.divscroll.caption
 msgid "Scroll / collapse containers (the box below scrolls on BOTH axes)"
-msgstr ""
+msgstr "滚动 / 折叠容器(下面的框双向都能滚)"
 
 #: tmainform.exadvanced.caption
 msgid "Advanced options (click title to collapse)"
@@ -241,140 +241,140 @@ msgstr "右下角 → 尺寸手柄 TTySizeBox(拖动改变窗口大小)"
 
 #: tmainform.lblwrap.caption
 msgid "Wrapable = True — the same 12 commands wrap to a second row instead of collapsing into »"
-msgstr ""
+msgstr "Wrapable = True — 同样 12 个命令换到第二行,不再收进 »"
 
 #: tmainform.wrapbtn1.caption
 msgid "Command 1"
-msgstr ""
+msgstr "命令 1"
 
 #: tmainform.wrapbtn2.caption
 msgid "Command 2"
-msgstr ""
+msgstr "命令 2"
 
 #: tmainform.wrapbtn3.caption
 msgid "Command 3"
-msgstr ""
+msgstr "命令 3"
 
 #: tmainform.wrapbtn4.caption
 msgid "Command 4"
-msgstr ""
+msgstr "命令 4"
 
 #: tmainform.wrapbtn5.caption
 msgid "Command 5"
-msgstr ""
+msgstr "命令 5"
 
 #: tmainform.wrapbtn6.caption
 msgid "Command 6"
-msgstr ""
+msgstr "命令 6"
 
 #: tmainform.wrapbtn7.caption
 msgid "Command 7"
-msgstr ""
+msgstr "命令 7"
 
 #: tmainform.wrapbtn8.caption
 msgid "Command 8"
-msgstr ""
+msgstr "命令 8"
 
 #: tmainform.wrapbtn9.caption
 msgid "Command 9"
-msgstr ""
+msgstr "命令 9"
 
 #: tmainform.wrapbtn10.caption
 msgid "Command 10"
-msgstr ""
+msgstr "命令 10"
 
 #: tmainform.wrapbtn11.caption
 msgid "Command 11"
-msgstr ""
+msgstr "命令 11"
 
 #: tmainform.wrapbtn12.caption
 msgid "Command 12"
-msgstr ""
+msgstr "命令 12"
 
 #: tmainform.lblvlines.caption
 msgid "Vertical edge lines — tbsLeftLine (sunken) then tbsRightLine (raised):"
-msgstr ""
+msgstr "竖边线 — tbsLeftLine(凹陷)、tbsRightLine(凸起):"
 
 #: tmainform.lblspacer.caption
 msgid "tbsSpacer = invisible gap"
-msgstr ""
+msgstr "tbsSpacer = 不可见间隔"
 
 #: tmainform.lblpan.caption
 msgid "TTyScrollPanel — press in the empty strip and drag toward the top/bottom edge: it keeps scrolling."
-msgstr ""
+msgstr "TTyScrollPanel — 在空白条上按住并拖向上/下边缘:会一直滚。"
 
 #: tmainform.panbtn1.caption
 msgid "Row 1"
-msgstr ""
+msgstr "第 1 行"
 
 #: tmainform.panbtn2.caption
 msgid "Row 2"
-msgstr ""
+msgstr "第 2 行"
 
 #: tmainform.panbtn3.caption
 msgid "Row 3"
-msgstr ""
+msgstr "第 3 行"
 
 #: tmainform.panbtn4.caption
 msgid "Row 4"
-msgstr ""
+msgstr "第 4 行"
 
 #: tmainform.panbtn5.caption
 msgid "Row 5"
-msgstr ""
+msgstr "第 5 行"
 
 #: tmainform.panbtn6.caption
 msgid "Row 6"
-msgstr ""
+msgstr "第 6 行"
 
 #: tmainform.panbtn7.caption
 msgid "Row 7"
-msgstr ""
+msgstr "第 7 行"
 
 #: tmainform.panbtn8.caption
 msgid "Row 8"
-msgstr ""
+msgstr "第 8 行"
 
 #: tmainform.panbtn9.caption
 msgid "Row 9"
-msgstr ""
+msgstr "第 9 行"
 
 #: tmainform.panbtn10.caption
 msgid "Row 10"
-msgstr ""
+msgstr "第 10 行"
 
 #: tmainform.lblex2.caption
 msgid "Starts collapsed · slow 500 ms open/close ease:"
-msgstr ""
+msgstr "初始折叠 · 500 ms 缓慢展开/收起:"
 
 #: tmainform.exdisplay.caption
 msgid "Display options (click to expand)"
-msgstr ""
+msgstr "显示选项(点击展开)"
 
 #: tmainform.chkruler.caption
 msgid "Show ruler"
-msgstr ""
+msgstr "显示标尺"
 
 #: tmainform.chkguides.caption
 msgid "Show guides"
-msgstr ""
+msgstr "显示参考线"
 
 #: tmainform.lbllog.caption
 msgid "Status — group / header / list / panel events report here"
-msgstr ""
+msgstr "状态 — 分组 / 列头 / 列表 / 面板事件在此显示"
 
 #: tmainform.edituser.texthint
 msgid "Login name"
-msgstr ""
+msgstr "登录名"
 
 #: tmainform.editmail.texthint
 msgid "name@example.com"
-msgstr ""
+msgstr "name@example.com"
 
 #: tmainform.editphone.texthint
 msgid "Phone number"
-msgstr ""
+msgstr "电话号码"
 
 #: tmainform.divmore.caption
 msgid "More container modes — wrapping toolbar · auto-pan scroll container · a panel that starts collapsed · vertical edge lines · an invisible spacer"
-msgstr ""
+msgstr "更多容器形态 — 换行工具条 · 自动平移滚动容器 · 初始折叠面板 · 竖边线 · 不可见间隔"

@@ -25,16 +25,16 @@ msgstr "点击上面任一链接"
 
 #: tmainform.lblheadmarkup.caption
 msgid "Markup and links, all set at design time in the .lfm — nothing here is assigned in code"
-msgstr ""
+msgstr "标记与链接全部在 .lfm 设计期设定 —— 此处无一由代码赋值"
 
 #: tmainform.lblheadnowrap.caption
 msgid "WordWrap = False — watch the line run straight off the right edge instead of reflowing"
-msgstr ""
+msgstr "WordWrap = False —— 该行直接冲出右边缘，不再折行"
 
 #: tmainform.lblheadautosize.caption
 msgid "AutoSize = True — drag the window narrower and watch this label grow taller on its own"
-msgstr ""
+msgstr "AutoSize = True —— 把窗口拖窄，看这个标签自己变高"
 
 #: tmainform.titlebar1.caption
 msgid "TTyHtmlLabel  ·  TyControls"
-msgstr ""
+msgstr "TTyHtmlLabel  ·  TyControls"

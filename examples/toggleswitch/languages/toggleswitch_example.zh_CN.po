@@ -37,23 +37,23 @@ msgstr "试验功能（禁用）"
 
 #: tmainform.lblsecevents.caption
 msgid "OnChange vs OnClick — click the switch, then press the button:"
-msgstr ""
+msgstr "OnChange 与 OnClick —— 点开关，再按按钮："
 
 #: tmainform.btntoggleall.caption
 msgid "Toggle from code"
-msgstr ""
+msgstr "用代码切换"
 
 #: tmainform.lblevents.caption
 msgid "Last gesture: (none yet)"
-msgstr ""
+msgstr "最近操作：（暂无）"
 
 #: tmainform.lblsecanim.caption
 msgid "AnimationsEnabled — public, so it is set in code, not here:"
-msgstr ""
+msgstr "AnimationsEnabled 是 public，只能在代码里设，不在这里："
 
 #: tmainform.lblhint.caption
 msgid "Keyboard: Tab to a switch, then press Space or Enter — it toggles and draws the theme focus ring."
-msgstr ""
+msgstr "键盘：Tab 到某个开关，按空格或回车 —— 切换并画出主题焦点环。"
 
 #: tmainform.lblstatus.caption
 msgid ""
@@ -61,12 +61,12 @@ msgstr ""
 
 #: tmainform.bar.caption
 msgid "ToggleSwitch  · TyControls"
-msgstr ""
+msgstr "ToggleSwitch  · TyControls"
 
 #: tmainform.switchevents.caption
 msgid "OnChange vs OnClick"
-msgstr ""
+msgstr "OnChange 与 OnClick"
 
 #: tmainform.switchnoanim.caption
 msgid "AnimationsEnabled = False (the knob snaps)"
-msgstr ""
+msgstr "AnimationsEnabled = False（滑块直接跳）"

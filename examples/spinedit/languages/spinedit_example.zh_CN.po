@@ -45,24 +45,24 @@ msgstr "（改变任一数值以查看 OnChange 输出）"
 
 #: tmainform.btnpoke.caption
 msgid "Value := 999 in code"
-msgstr ""
+msgstr "代码里 Value := 999"
 
 #: tmainform.lblcentre.caption
 msgid "Centred text (Alignment=taCenter):"
-msgstr ""
+msgstr "文本居中（Alignment=taCenter）："
 
 #: tmainform.lblcommit.caption
 msgid "Type digits into any box: Enter commits them, Esc reverts to the last value. An out-of-range number is clamped into the range, never rejected."
-msgstr ""
+msgstr "在任一框中键入数字：Enter 提交，Esc 还原为上一个值。超出范围的数字会被钳制回范围内，而不会被拒绝。"
 
 #: tmainform.lblclickcap.caption
 msgid "Click:"
-msgstr ""
+msgstr "点击："
 
 #: tmainform.lblclick.caption
 msgid "(click the quantity box to see OnClick)"
-msgstr ""
+msgstr "（点击数量框以查看 OnClick）"
 
 #: tmainform.bar.caption
 msgid "TTySpinEdit  ·  TyControls"
-msgstr ""
+msgstr "TTySpinEdit  ·  TyControls"

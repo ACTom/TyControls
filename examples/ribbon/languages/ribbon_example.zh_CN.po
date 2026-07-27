@@ -21,104 +21,104 @@ msgstr "暗色"
 
 #: tmainform.gallery.hint
 msgid "Gallery: VisibleColumns = 4, so 4 of the 12 cells show inline - click the arrow on the right to drop all 12 in a 4-column grid. Every cell is a glyph plus a caption."
-msgstr ""
+msgstr "Gallery：VisibleColumns = 4，12 个格子只内联显示 4 个——点右端箭头把 12 个全部展开成 4 列网格。每个格子都是一个图标加一段标题。"
 
 #: tmainform.chkkeytips.hint
 msgid "KeyTips: with this on, tapping Alt paints Office access-key badges over the tabs; the badge letter switches tab, Escape hides them."
-msgstr ""
+msgstr "KeyTips：开启后按一下 Alt，标签上会画出 Office 式的访问键角标；按角标上的字母切换标签，Escape 隐藏。"
 
 #: tmainform.chkkeytips.caption
 msgid "Alt shows KeyTips"
-msgstr ""
+msgstr "Alt 显示 KeyTips"
 
 #: tmainform.chkcollapse.hint
 msgid "Sets Ribbon.Minimized: the group band folds away and only the tab strip is left. The chevron at the right end of the strip (or a double-click on a tab) brings it back."
-msgstr ""
+msgstr "设置 Ribbon.Minimized：分组带收起，只剩标签条。点标签条右端的箭头(或双击标签)可还原。"
 
 #: tmainform.chkcollapse.caption
 msgid "Collapse the ribbon"
-msgstr ""
+msgstr "折叠功能区"
 
 #: tmainform.appmenu.hint
 msgid "TTyRibbonAppMenu: drops the Commands menu, then a separator, then one row per recent file (open something first to fill the list)."
-msgstr ""
+msgstr "TTyRibbonAppMenu：下拉出 Commands 菜单，接一条分隔线，再是每个最近文件一行(先打开文件列表才会有内容)。"
 
 #: tmainform.appmenu.caption
 msgid "File menu"
-msgstr ""
+msgstr "文件菜单"
 
 #: tmainform.bar.caption
 msgid "TTyRibbon  ·  TyControls"
-msgstr ""
+msgstr "TTyRibbon  ·  TyControls"
 
 #: tmainform.pghome.caption
 msgid "Start"
-msgstr ""
+msgstr "开始"
 
 #: tmainform.grpclipboard.caption
 msgid "Clipboard"
-msgstr ""
+msgstr "剪贴板"
 
 #: tmainform.grpfont.caption
 msgid "Font"
-msgstr ""
+msgstr "字体"
 
 #: tmainform.grpparagraph.caption
 msgid "Paragraph"
-msgstr ""
+msgstr "段落"
 
 #: tmainform.grpedit.caption
 msgid "Edit"
-msgstr ""
+msgstr "编辑"
 
 #: tmainform.pginsert.caption
 msgid "Insert"
-msgstr ""
+msgstr "插入"
 
 #: tmainform.grptable.caption
 msgid "Grid"
-msgstr ""
+msgstr "表格"
 
 #: tmainform.grpstyles.caption
 msgid "Style library"
-msgstr ""
+msgstr "样式库"
 
 #: tmainform.grpsymbol.caption
 msgid "Symbol"
-msgstr ""
+msgstr "符号"
 
 #: tmainform.grppicture.caption
 msgid "Picture"
-msgstr ""
+msgstr "图片"
 
 #: tmainform.pgview.caption
 msgid "View"
-msgstr ""
+msgstr "视图"
 
 #: tmainform.grpshow.caption
 msgid "Show"
-msgstr ""
+msgstr "显示"
 
 #: tmainform.grpzoom.caption
 msgid "Zoom"
-msgstr ""
+msgstr "缩放"
 
 #: tmainform.grpwindow.caption
 msgid "Window"
-msgstr ""
+msgstr "窗口"
 
 #: tmainform.grpribbon.caption
 msgid "Ribbon itself"
-msgstr ""
+msgstr "功能区自身"
 
 #: tmainform.grpappmenu.caption
 msgid "App menu"
-msgstr ""
+msgstr "应用菜单"
 
 #: tmainform.pgpictools.caption
 msgid "Picture tools"
-msgstr ""
+msgstr "图片工具"
 
 #: tmainform.grpadjust.caption
 msgid "Adjust"
-msgstr ""
+msgstr "调整"

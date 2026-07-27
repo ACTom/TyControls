@@ -21,32 +21,32 @@ msgstr "暗色"
 
 #: tmainform.lblkeys.caption
 msgid "Hold Alt to reveal the mnemonic underlines, then Alt+O / Alt+D / Alt+S / Alt+A jump to a tab (Alt+N lands on the vetoed one). Ctrl+Tab wraps; Home and End go to the ends."
-msgstr ""
+msgstr "按住 Alt 显示助记下划线，再用 Alt+O / Alt+D / Alt+S / Alt+A 跳到对应标签（Alt+N 落在被否决的那个）。Ctrl+Tab 循环；Home 与 End 到首尾。"
 
 #: tmainform.btnadd.caption
 msgid "+ Add tab"
-msgstr ""
+msgstr "+ 添加标签"
 
 #: tmainform.lbladd.caption
 msgid "Tabs is a live TStrings: closed tabs come back."
-msgstr ""
+msgstr "Tabs 是实时 TStrings：关掉的标签能加回来。"
 
 #: tmainform.lblstatus.caption
 msgid "Current tab: Overview'#13#10'Tip: click to switch · drag to reorder · click × to close · the \"Notice (locked)\" tab cannot be selected"
-msgstr ""
+msgstr "当前标签：Overview'#13#10'提示：点击切换 · 拖动重排 · 点 × 关闭 · \"Notice (locked)\" 标签不可选中"
 
 #: tmainform.lblnarrow.caption
 msgid "Eight tabs in 200 px: click the arrows at each end, or roll the wheel over the strip."
-msgstr ""
+msgstr "200 px 里放八个标签：点两端的箭头，或在标签条上滚滚轮。"
 
 #: tmainform.lbldensity.caption
 msgid "TabHeight unset there: it follows the theme — 28 classic, 38 modern."
-msgstr ""
+msgstr "那里未设 TabHeight：跟随主题 —— 经典 28，现代 38。"
 
 #: tmainform.bar.caption
 msgid "TTyTabSet  · TyControls"
-msgstr ""
+msgstr "TTyTabSet  · TyControls"
 
 #: tmainform.div1.caption
 msgid "Header overflow · TabHeight unset"
-msgstr ""
+msgstr "标签头溢出 · TabHeight 未设"
