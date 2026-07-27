@@ -495,8 +495,12 @@ begin
   { RTTI rather than a cast per host class: see the type declaration. GetObjectProp returns
     nil both when there is no such property and when it is unset, which is the same answer
     here — nothing to list. }
-  if GetPropInfo(comp, 'IconFont') = nil then Exit;
-  fnt := GetObjectProp(comp, 'IconFont');
+  { TypInfo. is REQUIRED here, not decoration: TPropertyEditor (propedits.pp) has its own
+    parameterless GetPropInfo member, which shadows the unit-level one inside any editor
+    method and fails with "wrong number of parameters". It only bites when the design-time
+    package is compiled, which is why a green test build says nothing about it. }
+  if TypInfo.GetPropInfo(comp, 'IconFont') = nil then Exit;
+  fnt := TypInfo.GetObjectProp(comp, 'IconFont');
   if not (fnt is TTyIconFont) then Exit;
   { Glyphs is a 'name=HEX' map. Names[] is the key half; an entry typed without '=' has no
     name and is skipped rather than offered as a value that CodepointOf would reject. }
