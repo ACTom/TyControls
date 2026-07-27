@@ -112,6 +112,7 @@ resourcestring
   rsDlgHex             = 'Hex';
   rsDlgAlpha           = 'Alpha';
   rsDlgPreview         = 'Preview';
+  rsDlgBasicColors     = 'Basic colors';
 
   // --- Font picker dialog (S3) — section labels, user-facing, translated ---
   rsDlgFontFamily      = 'Family';

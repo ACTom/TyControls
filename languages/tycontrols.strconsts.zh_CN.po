@@ -316,6 +316,10 @@ msgstr "透明度"
 msgid "Preview"
 msgstr "预览"
 
+#: tycontrols.strconsts.rsdlgbasiccolors
+msgid "Basic colors"
+msgstr "基本颜色"
+
 #: tycontrols.strconsts.rsdlgfontfamily
 msgid "Family"
 msgstr "字体"

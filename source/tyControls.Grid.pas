@@ -23,7 +23,7 @@ interface
 
 uses
   Classes, SysUtils, Types, Math, contnrs, Clipbrd, Controls, Graphics, LCLType, LMessages, StdCtrls,
-  ExtCtrls,
+  ExtCtrls, LazUTF8,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Columns,
   tyControls.ScrollBar, tyControls.Edit, tyControls.ComboBox, tyControls.DateTimePicker, tyControls.Popover, tyControls.CheckListBox, tyControls.ColorMath,
@@ -1636,6 +1636,16 @@ type
     { 直接敲可打印字符就进编辑并把这个字符当作第一笔 —— 表格录入的基本手感。
       从前只有 KeyDown、没有 KeyPress 覆写,必须先按 F2 或双击才能输入。 }
     procedure KeyPress(var Key: Char); override;
+    { 多字节按键(中日韩输入法提交的字)**只能**从这里进来。LCL 递给 KeyPress 的是
+      Char(Message.CharCode),而 CharCode 是一个 UTF-16 码元:'中'(U+4E2D)在这一步
+      被压成单字节,按系统代码页转不出来就成了 '?' —— 敲中文开编辑,格子里躺着的就是
+      那个 '?'。UTF8KeyPress 拿到的才是完整的 UTF-8 字。
+      单字节仍旧走 KeyPress(那边 Key := #0 的吞键语义原封不动),这里只补它接不住的
+      那一半;接住之后 FEditing 已经是 True,随后到达的 KeyPress 第一句就退出去了。 }
+    procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
+    { 用 AChar 作为第一笔开编辑。KeyPress 与 UTF8KeyPress 共用,免得"覆盖原值"
+      这条与 Excel 对齐的规则写两遍、走两样。 }
+    function  TypeIntoCell(const AChar: string): Boolean; virtual;
     { 这一格允许输入哪些字符(空 = 不限)。取自列级 ValidChars。 }
     { gekSpin / gekSlider 的范围与 gekMask 的掩码,取自列;列没配就用默认。 }
     function  EditorMinFor(ACol: Integer): Integer; virtual;
@@ -2324,6 +2334,19 @@ function TyGridEncodeFilter(AOp: TTyGridFilterOp; const AText: string): string;
 procedure TyGridDecodeFilter(const AEncoded: string; out AOp: TTyGridFilterOp;
   out AText: string);
 
+{ 把 AText 砍到在 ABmp 当前字体下画得进 AMaxWidthPx,砍过就在末尾补 '...';
+  放得下就原样还回去。ABmp 必须已经配好目标字体(TyConfigureTextFont),
+  否则量的不是要画的那支字。
+
+  砍的单位是**字符**不是字节:一个汉字占三个字节,按字节砍必然留下半截 UTF-8
+  序列,真机把它画成一个 '?'。列宽窄、中文格几乎必被截,所以这是网格上最常撞见的
+  那个 '?'。
+
+  独立成一个函数、放进 interface,是为了能直接断言**字符串**:headless 的 BGRA
+  会把半截序列悄悄吞掉,像素比不出来。 }
+function TyGridEllipsisFit(ABmp: TBGRABitmap; const AText: string;
+  AMaxWidthPx: Integer): string;
+
 implementation
 
 const
@@ -2480,6 +2503,28 @@ begin
     if Result <> '' then Result := Result + TyFilterOrSep;
     Result := Result + one1;
   end;
+end;
+
+function TyGridEllipsisFit(ABmp: TBGRABitmap; const AText: string;
+  AMaxWidthPx: Integer): string;
+{ 与 TTyPainter.DrawText 用同一套规则 —— 连"砍到几个字"这一步都调它那支
+  TyEllipsisPrefix,免得两条路径排出来的字不一样。
+  从前这里是 Delete(txt, Length(txt), 1):砍掉的是一个**字节**。 }
+var
+  cpN: Integer;
+  tsz: TSize;
+begin
+  Result := AText;
+  if (ABmp = nil) or (AText = '') then Exit;
+  cpN := UTF8Length(Result);
+  tsz := ABmp.TextSize(Result);
+  while (cpN > 1) and (tsz.cx > AMaxWidthPx) do
+  begin
+    Dec(cpN);
+    Result := TyEllipsisPrefix(AText, cpN);
+    tsz := ABmp.TextSize(Result + '...');
+  end;
+  if Result <> AText then Result := Result + '...';
 end;
 
 { 一段文字在给定宽度下会占几行 —— 与 BGRA 的 Wordbreak 断法保持一致:
@@ -3696,7 +3741,6 @@ var
   key, fname, txt: string;
   bmp: TBGRABitmap;
   st: TTextStyle;
-  tsz: TSize;
 begin
   w := ARect.Right - ARect.Left;
   h := ARect.Bottom - ARect.Top;
@@ -3728,15 +3772,10 @@ begin
     txt := AText;
     if not AWordWrap then
     begin
-      { 省略号截断:与 TTyPainter.DrawText 用同一套规则,免得两条路径排出来的字不一样。
+      { 省略号截断走 TyGridEllipsisFit —— 那里连"砍到几个字"都用 TTyPainter 的
+        TyEllipsisPrefix,两条路径排出来的字因此一模一样,而且砍的是字不是字节。
         换行时**不截断** —— 放不下就往下一行走,这正是换行的意义。 }
-      tsz := bmp.TextSize(txt);
-      while (Length(txt) > 1) and (tsz.cx > w) do
-      begin
-        Delete(txt, Length(txt), 1);
-        tsz := bmp.TextSize(txt + '...');
-      end;
-      if txt <> AText then txt := txt + '...';
+      txt := TyGridEllipsisFit(bmp, txt, w);
     end;
 
     st := Default(TTextStyle);
@@ -7126,15 +7165,41 @@ begin
     Exit;
   end;
 
-  if not BeginEdit then Exit;
+  if not TypeIntoCell(Key) then Exit;
+  Key := #0;
+end;
+
+function TTyStringGrid.TypeIntoCell(const AChar: string): Boolean;
+begin
+  Result := BeginEdit;
+  if not Result then Exit;
   { 这一笔就是新内容的第一个字符 —— 覆盖原值,与 Excel 一致。 }
   if FEditor.Visible then
   begin
-    FEditor.Text := Key;
+    FEditor.Text := AChar;
     FEditor.MaxLength := MaxEditLengthFor(FCol, FRow);
+    { AChar 按约定就是**一个**字符,所以光标位置是 1 —— TTyEdit 的 SelStart 数的是
+      码点不是字节,一个汉字在这里同样只算 1。 }
     FEditor.SelStart := 1;
   end;
-  Key := #0;
+end;
+
+procedure TTyStringGrid.UTF8KeyPress(var UTF8Key: TUTF8Char);
+var
+  vc: string;
+begin
+  inherited UTF8KeyPress(UTF8Key);
+  { 单字节留给 KeyPress —— 那条路上的吞键语义(Key := #0)这里给不出来,
+    而且两条都跑一遍会开两次编辑。 }
+  if Length(UTF8Key) <= 1 then Exit;
+  if not Enabled then Exit;
+  if FEditing then Exit;              { 编辑器自己收键 }
+  if EditorKindFor(FCol, FRow) in [gekNone, gekCheckBox] then Exit;
+  { ValidChars 是一串**字符**,所以用整字去找:一个汉字要么整个在里面,要么不在。
+    逐字节找会把汉字的某个字节当成 ASCII 命中。 }
+  vc := ValidCharsFor(FCol, FRow);
+  if (vc <> '') and (Pos(string(UTF8Key), vc) = 0) then Exit;
+  TypeIntoCell(UTF8Key);
 end;
 
 { 按住 Shift 的导航键是**扩选**:锚点不动,选区从锚点拉到新光标。

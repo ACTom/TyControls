@@ -319,7 +319,7 @@ Lazarus 里打开 `tycontrols_dt.lpk`(设计期包)→ **Use → Install**,IDE �
 | `TTyTextDialog` | 可缩放的多行文本对话框 |
 | `TTySelectValueDialog` | 列表单选对话框 |
 | `TTySelectPathDialog` | 文件夹选择对话框 |
-| `TTyColorDialog` | 取色对话框:HSV / RGB / CMYK / Alpha 全双向 |
+| `TTyColorDialog` | 取色对话框:HSV / RGB / CMYK / Alpha 全双向,附常用色速取网格 |
 | `TTyFontDialog` | 字体对话框,带实时预览 |
 | `TTyFindDialog` | 查找对话框(无模态) |
 | `TTyReplaceDialog` | 查找替换对话框(无模态) |

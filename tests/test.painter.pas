@@ -5,7 +5,7 @@ unit test.painter;
 interface
 
 uses
-  Classes, SysUtils, Types, Graphics, fpcunit, testregistry,
+  Classes, SysUtils, Types, Graphics, LazUTF8, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter;
 
@@ -38,6 +38,7 @@ type
     procedure TestZeroFontSizeFallsBack;
     procedure TestClampRadiusPx;
     procedure TestLargeRadiusRendersPillNotLens;
+    procedure TestEllipsisCutsWholeCharactersNotBytes;
   end;
 
 implementation
@@ -362,6 +363,40 @@ begin
   FPainter.FillBackground(Rect(0, 0, 200, 20), fill, 100);
   px := FPainter.Bitmap.GetPixel(5, 3);
   AssertEquals('near-end pixel filled (pill), not cut to a point (lens)', 255, px.alpha);
+end;
+
+{ Ellipsising used to shorten the string one BYTE at a time (Delete(s, Length(s), 1)).
+  Every CJK character is three bytes in UTF-8, so that left a half-cut sequence: the real GUI
+  drew a replacement glyph, which is what the maintainer saw in title bars, buttons, list
+  rows and tab headers -- they all funnel through this one DrawText.
+
+  A pixel comparison cannot guard it. The headless BGRA path silently swallows the stray
+  trailing byte, so the broken and the correct render come out IDENTICAL here (verified: with
+  the byte-wise cut restored, a bitmap-equality test still passed). So assert the STRING
+  invariant instead, on the function DrawText actually calls: every prefix the fitter can
+  produce is a whole number of characters. }
+procedure TPainterTest.TestEllipsisCutsWholeCharactersNotBytes;
+const
+  CJK = '积压任务徽标挂在按钮上不是按钮内置的';
+var
+  i, n: Integer;
+  prefix: string;
+begin
+  n := UTF8Length(CJK);
+  AssertTrue('the sample really is multi-byte', Length(CJK) = n * 3);
+
+  for i := 0 to n do
+  begin
+    prefix := TyEllipsisPrefix(CJK, i);
+    AssertEquals(Format('prefix of %d chars holds %d characters', [i, i]),
+      i, UTF8Length(prefix));
+    { The load-bearing one: a byte count that is not a multiple of three here means a
+      character was cut through the middle. }
+    AssertEquals(Format('prefix of %d chars ends on a character boundary', [i]),
+      i * 3, Length(prefix));
+  end;
+
+  AssertEquals('a negative count yields nothing', '', TyEllipsisPrefix(CJK, -1));
 end;
 
 initialization

@@ -40,7 +40,7 @@
         <IsPartOfProject Value="True"/>
         <EditorIndex Value="-1"/>
         <CursorPos Y="15"/>
-        <UsageCount Value="24"/>
+        <UsageCount Value="25"/>
       </Unit>
       <Unit>
         <Filename Value="umain.pas"/>
@@ -48,9 +48,8 @@
         <ComponentName Value="MainForm"/>
         <HasResources Value="True"/>
         <ResourceBaseClass Value="Form"/>
-        <IsVisibleTab Value="True"/>
         <CursorPos X="64" Y="26"/>
-        <UsageCount Value="24"/>
+        <UsageCount Value="25"/>
         <Loaded Value="True"/>
         <LoadedDesigner Value="True"/>
       </Unit>
@@ -61,10 +60,35 @@
         <CursorPos X="21" Y="720"/>
         <UsageCount Value="11"/>
       </Unit>
+      <Unit>
+        <Filename Value="../../designtime/tyControls.Design.pas"/>
+        <IsVisibleTab Value="True"/>
+        <EditorIndex Value="1"/>
+        <TopLine Value="473"/>
+        <CursorPos X="42" Y="501"/>
+        <UsageCount Value="10"/>
+        <Loaded Value="True"/>
+      </Unit>
     </Units>
-    <JumpHistory>
+    <JumpHistory HistoryIndex="4">
       <Position>
         <Filename Value="umain.pas"/>
+      </Position>
+      <Position>
+        <Filename Value="umain.pas"/>
+        <Caret Line="26" Column="64"/>
+      </Position>
+      <Position>
+        <Filename Value="../../designtime/tyControls.Design.pas"/>
+        <Caret Line="498" Column="36" TopLine="473"/>
+      </Position>
+      <Position>
+        <Filename Value="../../designtime/tyControls.Design.pas"/>
+        <Caret Line="499" Column="45" TopLine="473"/>
+      </Position>
+      <Position>
+        <Filename Value="../../designtime/tyControls.Design.pas"/>
+        <Caret Line="498" Column="36" TopLine="473"/>
       </Position>
     </JumpHistory>
   </ProjectOptions>

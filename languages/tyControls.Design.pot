@@ -38,6 +38,14 @@ msgstr ""
 msgid "Preview"
 msgstr ""
 
+#: tycontrols.design.rsdtfontfilefilter
+msgid "Font files (*.ttf;*.otf;*.ttc)|*.ttf;*.otf;*.ttc|All files|*"
+msgstr ""
+
+#: tycontrols.design.rsdtfontfiletitle
+msgid "Select an icon-font file"
+msgstr ""
+
 #: tycontrols.design.rsdtformdescription
 msgid "A borderless form descending from TTyForm, with a top-aligned TTyTitleBar already attached (drag to move, double-click to maximize). Point its Controller at your main window's style controller to theme it, or lay out your controls below the bar."
 msgstr ""
@@ -83,5 +91,21 @@ msgstr ""
 
 #: tycontrols.design.rsdtsurfacepurposetitle
 msgid "Why this control exists"
+msgstr ""
+
+#: tycontrols.design.rsdtthemefilefilter
+msgid "TyControls stylesheets (*.tycss)|*.tycss|All files|*"
+msgstr ""
+
+#: tycontrols.design.rsdtthemefiletitle
+msgid "Select a .tycss stylesheet"
+msgstr ""
+
+#: tycontrols.design.rsdtthememodehint
+msgid "Which \"@mode NAME\" block of the loaded theme is active. The list holds the modes THIS theme declares — the blank entry is the empty string, meaning no mode override at all. A single-mode theme therefore offers only the blank entry."
+msgstr ""
+
+#: tycontrols.design.rsdtthemenamehint
+msgid "The theme to load by name. The list offers the themes compiled into TyControls plus any registered in this IDE; a name your application registers at run time is equally valid, so you may type one that is not listed. Setting this clears ThemeFile."
 msgstr ""
 

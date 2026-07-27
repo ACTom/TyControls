@@ -357,7 +357,7 @@ properties / events / states / theme keys are in **[docs/controls/](docs/control
 | `TTyTextDialog` | Resizable multi-line text dialog |
 | `TTySelectValueDialog` | Pick-one-from-a-list dialog |
 | `TTySelectPathDialog` | Folder picker |
-| `TTyColorDialog` | Colour picker: HSV / RGB / CMYK / alpha, all two-way |
+| `TTyColorDialog` | Colour picker: HSV / RGB / CMYK / alpha, all two-way, plus a quick-pick swatch grid |
 | `TTyFontDialog` | Font dialog with live preview |
 | `TTyFindDialog` | Find dialog (modeless) |
 | `TTyReplaceDialog` | Find-and-replace dialog (modeless) |

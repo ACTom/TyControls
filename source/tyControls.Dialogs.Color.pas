@@ -4,7 +4,7 @@ interface
 uses Classes, SysUtils, Types, Math, Graphics, Controls, Forms, BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Base, tyControls.Painter, tyControls.ColorMath,
   tyControls.Controller, tyControls.Dialogs, tyControls.Edit, tyControls.SpinEdit,
-  tyControls.TyLabel, tyControls.Component, tyControls.StrConsts;
+  tyControls.TyLabel, tyControls.ColorGrid, tyControls.Component, tyControls.StrConsts;
 type
   TTyHSVSquare = class(TTyCustomControl)
   private
@@ -49,25 +49,34 @@ type
   end;
 
   { TTyColorForm — a single-model (FColor) dialog driving many synced views:
-    an HSV square + hue bar picker, Hex edit, R/G/B spins, C/M/Y/K spins, an
-    Alpha spin, and a preview swatch. Any view change flows through ApplyColor
-    (FColor := c; SyncViewsFromColor), which re-seeds every OTHER view under the
-    FUpdating guard so the programmatic OnChange fired by each editor is ignored
-    (no infinite cascade). }
+    an HSV square + hue bar picker, a quick-pick swatch grid, Hex edit, R/G/B spins,
+    C/M/Y/K spins, an Alpha spin, and a preview swatch. Any view change flows through
+    ApplyColor (FColor := c; SyncViewsFromColor), which re-seeds every OTHER view under
+    the FUpdating guard so the programmatic OnChange fired by each editor is ignored
+    (no infinite cascade).
+
+    The one thing FColor is NOT the sole owner of is hue and saturation: RGB cannot carry
+    them at the edges (black and every grey have no hue), so the square + hue bar keep
+    their own H/S and are only re-seeded from a colour that came from OUTSIDE the picker.
+    See SyncViewsFromColor. }
   TTyColorForm = class(TTyDialog)
   private
     FColor: TTyColor;
     FUpdating: Boolean;
     FPreviewRect: TRect;
     FSquare: TTyHSVSquare; FHueBar: TTyHueBar;
+    FSwatches: TTyColorGrid;
     FHex: TTyEdit; FR, FG, FB, FA: TTySpinEdit; FC, FM, FY, FK: TTySpinEdit;
-    procedure SyncViewsFromColor;
+    procedure SyncViewsFromColor(AFromPicker: Boolean = False);
     procedure PickerChanged(Sender: TObject);
+    procedure SwatchChanged(Sender: TObject);
     procedure RGBChanged(Sender: TObject);
     procedure CMYKChanged(Sender: TObject);
     procedure AlphaChanged(Sender: TObject);
     procedure HexChanged(Sender: TObject);
-    procedure ApplyColor(AColor: TTyColor);   // set FColor + resync (guarded)
+    // set FColor + resync (guarded). AFromPicker = the square/hue bar is the source, so
+    // its H/S is authoritative and must not be written back from the RGB round trip.
+    procedure ApplyColor(AColor: TTyColor; AFromPicker: Boolean = False);
   protected
     procedure Paint; override;                 // draws the preview swatch (GUI)
   public
@@ -76,6 +85,16 @@ type
     function HexText: string;
     procedure SetColorValue(AColor: TTyColor);   // public seam
     procedure ApplyHexText(const AHex: string);  // public seam
+    { Drive the picker as a drag would: both commit through ApplyColor, so every other
+      view follows. Public seams (a host can pre-position the picker; tests can pick
+      without a window). }
+    procedure SetPickerHue(AHue: Single);
+    procedure SetPickerSV(ASat, AVal: Single);
+    function PickerHue: Single;
+    function PickerSat: Single;
+    function PickerVal: Single;
+    { The quick-pick grid, so a host can extend the palette (AddColor). }
+    property Swatches: TTyColorGrid read FSwatches;
   end;
 
 function TyBuildColorDialog(const ACaption: string; ASeed: TTyColor): TTyColorForm;
@@ -229,6 +248,32 @@ begin inherited MouseMove(Shift, X, Y); if FDragging then ApplyY(Y); end;
 procedure TTyHueBar.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin inherited MouseUp(Button, Shift, X, Y); if Button = mbLeft then FDragging := False; end;
 
+{ The quick-pick grid's second row. TTyColorGrid seeds itself with the classic 16-colour
+  VGA palette; the everyday tints it has no name for (orange, brown, pink) and a grey ramp
+  are exactly what a quick-pick grid is for, so a second row of 16 completes the matrix.
+  These literals are DATA, not chrome — a swatch IS the colour it stands for, the same
+  distinction the HSV square's pixels are drawn under — so they are spelled out here
+  instead of coming from a theme token. }
+procedure AddQuickPickColors(AGrid: TTyColorGrid);
+var i: Integer; g: Byte;
+begin
+  AGrid.AddColor(RGBToColor(255, 128,   0));   // orange
+  AGrid.AddColor(RGBToColor(255, 192,   0));   // gold
+  AGrid.AddColor(RGBToColor(128,  64,   0));   // brown
+  AGrid.AddColor(RGBToColor(255, 128, 192));   // pink
+  AGrid.AddColor(RGBToColor(128,   0, 255));   // violet
+  AGrid.AddColor(RGBToColor( 64, 160, 255));   // sky
+  AGrid.AddColor(RGBToColor(  0, 160, 128));   // sea
+  AGrid.AddColor(RGBToColor(128, 160,   0));   // moss
+  // An even grey ramp; black and white are already in the VGA row, so it runs strictly
+  // between them (28..224).
+  for i := 1 to 8 do
+  begin
+    g := i * 28;
+    AGrid.AddColor(RGBToColor(g, g, g));
+  end;
+end;
+
 { TTyColorForm }
 
 constructor TTyColorForm.CreateNew(AOwner: TComponent; Num: Integer);
@@ -240,12 +285,19 @@ const
   CellGap   = 10;    // gap between adjacent channel cells (label+spin)
   RowGap    = 10;    // vertical gap between editor rows
   LblGap    = 6;     // gap between a channel label and its spin
-  PrevGap   = 12;    // picker -> preview-section gap
+  SecGap    = 12;    // gap above each stacked section (swatch grid, preview)
+  SecLblH   = 24;    // a section label (20px tall) plus its gap to the content below
+  SecLblW   = 160;   // section-label width — room for a translated caption
+  SwCols    = 16;    // quick-pick swatch columns; the palette fills whole rows
+  SwCellH   = 24;    // quick-pick swatch cell height (the width follows the content width)
   PrevH     = 44;    // preview swatch height
 var
   r: TRect;
   x0, y0, colX, spinW, spinH, rowH, labelW: Integer;
   labelTop, cellW, colRight, contentRight, pickerBottom, previewTop: Integer;
+  swTop, swBottom, swCellW, swRows: Integer;
+  hexLbl: TTyLabel;
+  hexLblW, hexLblH: Integer;
 
   function MkLabel(const ACaption: string; ALeft, ATop, AWidth: Integer): TTyLabel;
   begin
@@ -267,7 +319,8 @@ var
   // Place one channel cell (single-char label + spin) at grid column AIndex within the
   // right editor column, at vertical row-top ATop; returns the created spin.
   function MkCell(const ACaption: string; AMin, AMax, AIndex, ATop: Integer): TTySpinEdit;
-  var cx: Integer;
+  var
+  cx: Integer;
   begin
     cx := colX + AIndex * (cellW + CellGap);
     MkLabel(ACaption, cx, ATop + labelTop, labelW);
@@ -299,11 +352,23 @@ begin
   // 4-cell grid so Hex / RGB / CMYK / Alpha align on the same left edges.
   colX := x0 + SquareSz + PickGap + HueW + ColGap;
 
-  // Hex row: label + a wide edit spanning three cells.
-  MkLabel(rsDlgHex, colX, y0 + labelTop, labelW);
+  { Hex row: label + a wide edit spanning three cells.
+    The label CANNOT reuse labelW. That is 14px, sized for the single letters R/G/B/C/M/Y/K,
+    and 'Hex' does not fit in it even in English -- translated it is worse: zh_CN renders
+    十六进制 and the box clipped it to a single 十. So this one label sizes itself, and the
+    edit starts after whatever width it actually took. }
+  hexLbl := MkLabel(rsDlgHex, colX, y0 + labelTop, labelW);
+  { MEASURE, do not switch AutoSize on and read Width: this runs while the dialog is being
+    constructed, so the form has no handle yet and LCL's AutoSizeDelayed suppresses the
+    re-fit -- Width would still be the 14 it was created with, which is how the label first
+    came out clipped to a single 十. }
+  hexLbl.MeasureCaption(Font.PixelsPerInch, 0, hexLblW, hexLblH);
+  hexLblW := Max(labelW, hexLblW + 2);
+  hexLbl.Width := hexLblW;
   FHex := TTyEdit.Create(Self);
   FHex.Parent := Self;
-  FHex.SetBounds(colX + labelW + LblGap, y0, 3 * cellW + 2 * CellGap - labelW - LblGap, spinH);
+  FHex.SetBounds(colX + hexLblW + LblGap, y0,
+    3 * cellW + 2 * CellGap - hexLblW - LblGap, spinH);
 
   // RGB row.
   FR := MkCell('R', 0, 255, 0, y0 + rowH);
@@ -325,16 +390,34 @@ begin
   // is from the left edge to whichever of the picker / editor column reaches further.
   colRight := colX + 4 * cellW + 3 * CellGap;
   contentRight := Max(x0 + SquareSz + PickGap + HueW, colRight);
+  // Bottom of the top band: the taller of the fixed-size picker and the four editor rows
+  // (a modern --control-height can push the Alpha row past the square).
+  pickerBottom := Max(y0 + SquareSz, y0 + 3*rowH + spinH);
 
-  // Preview: a full-width labelled swatch band beneath the picker.
-  pickerBottom := y0 + SquareSz;
-  MkLabel(rsDlgPreview, x0, pickerBottom + PrevGap, 80);
-  previewTop := pickerBottom + PrevGap + 24;
+  // Quick-pick swatches: a full-width labelled grid of common colours beneath the picker.
+  // TTyColorGrid divides its client rect into cells (ClientWidth div Columns by
+  // ClientHeight div rows), so size it to exact multiples of both — a leftover strip
+  // would be dead space that still swallows clicks.
+  MkLabel(rsDlgBasicColors, x0, pickerBottom + SecGap, SecLblW);
+  swTop := pickerBottom + SecGap + SecLblH;
+  FSwatches := TTyColorGrid.Create(Self);
+  FSwatches.Parent := Self;
+  FSwatches.Columns := SwCols;
+  AddQuickPickColors(FSwatches);
+  swRows := (FSwatches.ColorCount + SwCols - 1) div SwCols;
+  swCellW := (contentRight - x0) div SwCols;
+  FSwatches.SetBounds(x0, swTop, swCellW * SwCols, SwCellH * swRows);
+  swBottom := swTop + SwCellH * swRows;
+
+  // Preview: a full-width labelled swatch band beneath the quick-pick grid.
+  MkLabel(rsDlgPreview, x0, swBottom + SecGap, SecLblW);
+  previewTop := swBottom + SecGap + SecLblH;
   FPreviewRect := Rect(x0, previewTop, contentRight, previewTop + PrevH);
 
   // Wire change handlers AFTER creation so no premature fires occur.
   FSquare.OnChange := @PickerChanged;
   FHueBar.OnChange := @PickerChanged;
+  FSwatches.OnChange := @SwatchChanged;
   FHex.OnChange := @HexChanged;
   FR.OnChange := @RGBChanged;
   FG.OnChange := @RGBChanged;
@@ -356,8 +439,8 @@ end;
 procedure TTyColorForm.SetColorValue(AColor: TTyColor);
 begin FColor := AColor; SyncViewsFromColor; end;
 
-procedure TTyColorForm.ApplyColor(AColor: TTyColor);
-begin FColor := AColor; SyncViewsFromColor; end;
+procedure TTyColorForm.ApplyColor(AColor: TTyColor; AFromPicker: Boolean);
+begin FColor := AColor; SyncViewsFromColor(AFromPicker); end;
 
 function TTyColorForm.CurrentColor: TTyColor;
 begin Result := FColor; end;
@@ -368,7 +451,42 @@ begin Result := TyColorToHex(FColor, False); end;   // RGB-only (no alpha)
 procedure TTyColorForm.ApplyHexText(const AHex: string);
 begin FHex.Text := AHex; HexChanged(FHex); end;
 
-procedure TTyColorForm.SyncViewsFromColor;
+procedure TTyColorForm.SetPickerHue(AHue: Single);
+begin FHueBar.Hue := AHue; end;   // the bar's setter fires OnChange -> PickerChanged
+
+procedure TTyColorForm.SetPickerSV(ASat, AVal: Single);
+begin
+  // Mirrors a drag inside the square: it writes S/V, invalidates, then fires OnChange.
+  FSquare.SetHSV(FSquare.Hue, ASat, AVal);
+  PickerChanged(FSquare);
+end;
+
+function TTyColorForm.PickerHue: Single;
+begin Result := FHueBar.Hue; end;
+
+function TTyColorForm.PickerSat: Single;
+begin Result := FSquare.Sat; end;
+
+function TTyColorForm.PickerVal: Single;
+begin Result := FSquare.Val; end;
+
+{ Re-seed every view from FColor.
+
+  AFromPicker says the change came FROM the HSV square / hue bar. Those two then own the
+  authoritative hue and saturation and must not be written back, because RGB cannot carry
+  them: RGB->HSV is not injective at the edges. Black is (any hue, any sat, 0) and every
+  grey is (any hue, 0, v), and TyRGBToHSV — like every other implementation — reports the
+  conventional hue 0 (red) there. Taking that literally is what used to make the hue bar
+  snap back to red the instant the colour went black: click the bar, recompute red-ish
+  black, derive hue 0, jump. It also lost the hue on the way down and back up through
+  value, so a colour never came back the same.
+
+  When the colour DID arrive from outside the picker (hex, RGB, CMYK, alpha, a swatch, or
+  Execute seeding a value) the H/S/V is re-derived, but only the parts that mean anything:
+  a derived hue is trusted only when the colour actually has one (v and s both non-zero),
+  and a derived saturation only when the colour has a value at all. The rest is kept from
+  where the user last left the picker. }
+procedure TTyColorForm.SyncViewsFromColor(AFromPicker: Boolean);
 var cc, mm, yy, kk, h, s, v: Single;
 begin
   FUpdating := True;
@@ -383,9 +501,21 @@ begin
     FY.Value := Round(yy * 100);
     FK.Value := Round(kk * 100);
     FHex.Text := TyColorToHex(FColor, True);
-    TyRGBToHSV(FColor, h, s, v);
-    FSquare.SetHSV(h, s, v);
-    FHueBar.Hue := h;
+    if not AFromPicker then
+    begin
+      TyRGBToHSV(FColor, h, s, v);
+      if v <= 0 then
+      begin
+        h := FHueBar.Hue;       // black: neither hue nor saturation survived the trip
+        s := FSquare.Sat;
+      end
+      else if s <= 0 then
+        h := FHueBar.Hue;       // grey / white: the saturation is real, the hue is not
+      FSquare.SetHSV(h, s, v);
+      FHueBar.Hue := h;
+    end;
+    // Rings the matching swatch, or clears the ring when the colour is not in the palette.
+    FSwatches.Selected := TyColorToLCL(FColor);
     Invalidate;   // repaint the preview swatch
   finally
     FUpdating := False;
@@ -395,7 +525,24 @@ end;
 procedure TTyColorForm.PickerChanged(Sender: TObject);
 begin
   if FUpdating then Exit;
-  ApplyColor(TyHSVToRGB(FHueBar.Hue, FSquare.Sat, FSquare.Val, FA.Value));
+  // The hue bar owns hue; hand it to the square so its gradient follows. (The square's
+  // Hue setter is a bare field write by design — the writer invalidates.)
+  if FSquare.Hue <> FHueBar.Hue then
+  begin
+    FSquare.Hue := FHueBar.Hue;
+    FSquare.Invalidate;
+  end;
+  ApplyColor(TyHSVToRGB(FHueBar.Hue, FSquare.Sat, FSquare.Val, FA.Value), True);
+end;
+
+procedure TTyColorForm.SwatchChanged(Sender: TObject);
+begin
+  if FUpdating then Exit;
+  if FSwatches.Selected = clNone then Exit;   // no cell rung (empty grid / cleared)
+  // A swatch is an outside source exactly like the hex box: it commits through the same
+  // ApplyColor path, so the hex text, the spinners and the preview all follow. The palette
+  // carries no alpha, so the dialog's current alpha is kept.
+  ApplyColor(TyColorFromLCL(FSwatches.Selected, FA.Value));
 end;
 
 procedure TTyColorForm.RGBChanged(Sender: TObject);

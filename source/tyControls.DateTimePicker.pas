@@ -68,7 +68,7 @@ unit tyControls.DateTimePicker;
 interface
 
 uses
-  Classes, SysUtils, Types, DateUtils,
+  Classes, SysUtils, Types, DateUtils, LazUTF8,
   Controls, Graphics, LCLType, LCLIntf,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.Animation,
@@ -140,6 +140,17 @@ function TySegmentRange(const ASeg: TTySegment;
   resulting character offset here. }
 function TyDateTimeActiveSegAt(const ASegs: TTySegmentArray;
   ACharIndex: Integer): Integer;
+
+{ The next offset the click hit-test may stop at, walking forward from the 0-based BYTE
+  offset AOffset in AText. Offsets are bytes because that is what the segment table holds
+  (TTySegment.StartCh counts the format string's bytes, and the fixed-width fields make the
+  format's offsets equal the rendered text's), but they must only ever land BETWEEN
+  characters: the walk this replaced stepped one byte at a time, so with a Chinese format
+  ('yyyy年mm月dd日' — every separator three bytes) it measured prefixes that cut a separator
+  in half. What a renderer makes of a partial sequence's width is anyone's guess, so the
+  click could resolve to the neighbouring field. A named function purely so the invariant —
+  every offset the walk visits is a character boundary — is testable without a mouse. }
+function TyDateTimeNextCharOffset(const AText: string; AOffset: Integer): Integer;
 
 { TTyDateTimePicker — field render + segment editing (Task C2).
   Dropdown/time-spin/ShowCheckBox behavior is wired in Task C3. }
@@ -647,6 +658,23 @@ begin
       Result := i;
       Exit;
     end;
+end;
+
+{ ── TyDateTimeNextCharOffset ─────────────────────────────────────────────── }
+
+function TyDateTimeNextCharOffset(const AText: string; AOffset: Integer): Integer;
+{ AOffset is 0-based and assumed to sit on a character boundary (the walk starts at 0 and
+  only ever advances by this function, so it stays on one). A malformed byte advances by
+  one so a broken string can never spin the caller's loop forever. }
+var
+  n: Integer;
+begin
+  if AOffset < 0 then Exit(0);
+  if AOffset >= Length(AText) then Exit(Length(AText));
+  n := UTF8CodepointSize(@AText[AOffset + 1]);
+  if n < 1 then n := 1;
+  Result := AOffset + n;
+  if Result > Length(AText) then Result := Length(AText);
 end;
 
 { ── Button geometry helpers ──────────────────────────────────────────────── }
@@ -1403,6 +1431,7 @@ var
   Bmp:      TBGRABitmap;
   TextX:    Integer;
   CharIdx:  Integer;
+  NextIdx:  Integer;
   HitSeg:   Integer;
   TxtLen:   Integer;
   PaddingL: Integer;
@@ -1478,7 +1507,9 @@ begin
       TxtLen   := Length(Txt);
 
       { Convert click X to a character offset by finding the character
-        whose right edge passes the click coordinate. }
+        whose right edge passes the click coordinate. The step is a whole CHARACTER
+        (TyDateTimeNextCharOffset), so the measured prefix is never a Chinese separator
+        cut down the middle — see that function for why the offset stays in bytes. }
       if (Txt <> '') and (TxtLen > 0) then
       begin
         Bmp := TBGRABitmap.Create(1, 1);
@@ -1489,9 +1520,10 @@ begin
           CharIdx := 0;
           while CharIdx < TxtLen do
           begin
-            if Bmp.TextSize(Copy(Txt, 1, CharIdx + 1)).cx >= TextX then
+            NextIdx := TyDateTimeNextCharOffset(Txt, CharIdx);
+            if Bmp.TextSize(Copy(Txt, 1, NextIdx)).cx >= TextX then
               Break;
-            Inc(CharIdx);
+            CharIdx := NextIdx;
           end;
           HitSeg := TyDateTimeActiveSegAt(FSegments, CharIdx);
           if HitSeg >= 0 then

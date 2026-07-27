@@ -24,7 +24,10 @@ type
     FPreviewRect: TRect;
     FSeedDisplay: Integer;   // display value shown in the spin at seed time
     FSeedSize: Integer;      // caller's original Size (may be <= 0 for "default")
+    FSeedName: string;       // caller's family; the preview falls back to it (see PreviewFamily)
+    FPreviewChanges: Integer;  // test seam, see PreviewChangeCount
     procedure ColorBtnClick(Sender: TObject);
+    procedure PreviewChanged(Sender: TObject);
   protected
     procedure LayoutContent; override;
     procedure Paint; override;             // preview
@@ -37,6 +40,8 @@ type
     function BoldChecked: Boolean; function ItalicChecked: Boolean;
     function UnderlineChecked: Boolean; function StrikeChecked: Boolean;
     function FamilyCount: Integer; function SelectedFamily: string;
+    function PreviewFamily: string;
+    function PreviewChangeCount: Integer;
   end;
 
 function TyBuildFontDialog(const ACaption: string; AFont: TFont; AFamilies: TStrings): TTyFontForm;
@@ -174,6 +179,18 @@ begin
     r.Right - TyDlgPad,
     y0 + cLabelH + cLabelGap + cListMinH + cSectionGap + cPreviewH);
 
+  // The sample text is drawn by the FORM's Paint, so a child control invalidating
+  // itself repaints none of it — every input that feeds the sample has to ask the
+  // form for the repaint. Miss one and that control silently does nothing on screen
+  // (the colour button used to be the only one wired, so the preview never changed
+  // family, size or style while the user picked them).
+  FList.OnChange := @PreviewChanged;
+  FSize.OnChange := @PreviewChanged;
+  FBold.OnChange := @PreviewChanged;
+  FItalic.OnChange := @PreviewChanged;
+  FUnderline.OnChange := @PreviewChanged;
+  FStrike.OnChange := @PreviewChanged;
+
   AddButton(rsMsgBtnOK, mrOK, True, False);
   AddButton(rsMsgBtnCancel, mrCancel, False, True);
 
@@ -194,6 +211,7 @@ begin
   else FSize.Value := 9;          // display a sane default for a "use default" (Size<=0) font
   FSeedDisplay := FSize.Value;     // what the user sees
   FSeedSize := AFont.Size;         // the caller's original (may be <= 0)
+  FSeedName := AFont.Name;         // survives a family that isn't installed (list stays unselected)
   ch := TyFontStyleToChecks(AFont.Style);
   FBold.Checked := ch.Bold;
   FItalic.Checked := ch.Italic;
@@ -224,8 +242,18 @@ begin
   if TySelectColor(rsDlgFontColor, c, a) then
   begin
     FColorValue := c;
-    Invalidate;
+    PreviewChanged(Sender);   // same funnel as every other input
   end;
+end;
+
+{ Single repaint funnel for every input the sample text depends on — family, size, the
+  four styles, colour. It only has to invalidate: Paint re-reads each control, so there
+  is no derived state to keep in step. FPreviewChanges exists because the repaint itself
+  is observable only on a GUI, and this wiring is exactly what was missing once already. }
+procedure TTyFontForm.PreviewChanged(Sender: TObject);
+begin
+  Inc(FPreviewChanges);
+  Invalidate;
 end;
 
 procedure TTyFontForm.LayoutContent;
@@ -245,8 +273,9 @@ end;
 procedure TTyFontForm.Paint;
 { Preview strip: TyConfigureTextFont seeds family+size+bold, then the bitmap's
   FontStyle is extended with italic/underline/strikeout (DrawText only honors
-  bold, so the sample text is drawn straight onto the BGRA bitmap). GUI-only;
-  guarded crash-safe. }
+  bold, so the sample text is drawn straight onto the BGRA bitmap). The family is
+  PreviewFamily — the user's pick — NOT this form's own Font.Name, which would show
+  every family as the dialog's own face. GUI-only; guarded crash-safe. }
 var
   P: TTyPainter;
   style: TTextStyle;
@@ -258,7 +287,7 @@ begin
   P := TTyPainter.Create;
   try
     P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
-    TyConfigureTextFont(P.Bitmap, Font.Name, FSize.Value,
+    TyConfigureTextFont(P.Bitmap, PreviewFamily, FSize.Value,
       IfThen(FBold.Checked, 700, 400), Font.PixelsPerInch);
     extra := [];
     if FItalic.Checked then Include(extra, fsItalic);
@@ -301,6 +330,22 @@ begin
   else
     Result := '';
 end;
+
+{ The family the sample text is drawn in — deliberately the same answer WriteTo gives,
+  so the preview can never advertise a face the dialog won't return. The list selection
+  wins; with nothing selected (a seeded family that isn't installed leaves ItemIndex at
+  -1) it is the caller's own family, which is precisely what WriteTo then leaves alone.
+  The form font is a last resort for a font seeded with no name at all. }
+function TTyFontForm.PreviewFamily: string;
+begin
+  Result := SelectedFamily;
+  if Result = '' then Result := FSeedName;
+  if Result = '' then Result := Font.Name;
+end;
+
+{ How many times a family/size/style change has asked the preview to repaint. }
+function TTyFontForm.PreviewChangeCount: Integer;
+begin Result := FPreviewChanges; end;
 
 { Font-dialog globals }
 

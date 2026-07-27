@@ -402,3 +402,7 @@ msgstr "文件夹路径(输入或粘贴后回车)"
 #: tycontrols.strconsts.rsdlgabouttitle
 msgid "About"
 msgstr "关于"
+
+#: tycontrols.strconsts.rsdlgbasiccolors
+msgid "Basic colors"
+msgstr "基本颜色"

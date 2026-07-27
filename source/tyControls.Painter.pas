@@ -5,7 +5,7 @@ unit tyControls.Painter;
 interface
 
 uses
-  Classes, SysUtils, Types, Math, Graphics, LCLType, BGRABitmap, BGRABitmapTypes,
+  Classes, SysUtils, Types, Math, Graphics, LCLType, LazUTF8, BGRABitmap, BGRABitmapTypes,
   BGRAGradientScanner, BGRACanvas2D,
   FPReadJPEG, FPReadPNG, FPReadBMP,  // register FPImage readers so url() jpg/png/bmp load
   tyControls.Types;
@@ -104,6 +104,12 @@ function TyEffectiveFontName(const AName: string): string;
   measures the drawn glyphs. Shared by TTyLabel and TTyNotification. }
 procedure TyWrapTextCJK(const AText: string; AMaxWidthPx: Integer;
   ACanvas: TCanvas; ALines: TStrings);
+{ The prefix the ellipsis fitter uses when it has narrowed the text to ACharCount CHARACTERS.
+  A named function purely so the invariant is testable: the version this replaced shortened by
+  one BYTE, which cuts a three-byte CJK character in half. The headless BGRA path silently
+  swallows the stray byte, so a pixel comparison cannot see it -- the real GUI draws a
+  replacement glyph, which is what the maintainer saw. Assert the string, not the pixels. }
+function TyEllipsisPrefix(const AText: string; ACharCount: Integer): string;
 { Clamp a device-px corner radius to half the shorter side of a WxH rect, so an oversized
   "pill" radius (e.g. border-radius:100 on a short progress track) renders as a rounded pill
   instead of overshooting the corner arcs into a pointed lens. Exposed for tests. }
@@ -138,6 +144,12 @@ end;
 { Wraps ONE authored line (no CR/LF inside). ABase is ALines.Count at entry, so the
   "never return nothing" guard below is about THIS segment and not about lines an earlier
   segment already contributed. }
+function TyEllipsisPrefix(const AText: string; ACharCount: Integer): string;
+begin
+  if ACharCount <= 0 then Exit('');
+  Result := UTF8Copy(AText, 1, ACharCount);
+end;
+
 procedure TyWrapSegmentCJK(const AText: string; AMaxWidthPx: Integer;
   ACanvas: TCanvas; ALines: TStrings; ABase: Integer);
 var
@@ -670,6 +682,7 @@ end;
 
 procedure TTyPainter.DrawText(const ARect: TRect; const AText, AFontName: string; AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout; AEllipsis: Boolean; AMnemonicPos: Integer = 0; ASmallCrisp: Boolean = False);
 var
+  n: Integer;
   style: TTextStyle;
   s: string;
   sz, full: TSize;
@@ -696,10 +709,17 @@ begin
   s := AText;
   if AEllipsis then
   begin
+    { Shorten by one CODEPOINT at a time. Delete(s, Length(s), 1) took one BYTE, which for
+      any non-ASCII text cuts a UTF-8 sequence in half: every CJK character is three bytes, so
+      an ellipsised Chinese caption ended in a broken sequence and the renderer drew a '?'.
+      That is the one path nearly every control's text goes through -- title-bar captions,
+      button labels, list rows, tab headers -- so it showed up everywhere at once. }
+    n := UTF8Length(s);
     sz := FBmp.TextSize(s);
-    while (Length(s) > 1) and (sz.cx > (ARect.Right - ARect.Left)) do
+    while (n > 1) and (sz.cx > (ARect.Right - ARect.Left)) do
     begin
-      Delete(s, Length(s), 1);
+      Dec(n);
+      s := TyEllipsisPrefix(AText, n);
       sz := FBmp.TextSize(s + '...');
     end;
     if s <> AText then

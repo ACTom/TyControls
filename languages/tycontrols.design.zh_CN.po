@@ -99,3 +99,27 @@ msgstr ""
 #: tycontrols.design.rsdtsurfacepurposetitle
 msgid "Why this control exists"
 msgstr "为什么需要这个控件"
+
+#: tycontrols.design.rsdtthemefiletitle
+msgid "Select a .tycss stylesheet"
+msgstr "选择一个 .tycss 样式表"
+
+#: tycontrols.design.rsdtthemefilefilter
+msgid "TyControls stylesheets (*.tycss)|*.tycss|All files|*"
+msgstr "TyControls 样式表 (*.tycss)|*.tycss|所有文件|*"
+
+#: tycontrols.design.rsdtfontfiletitle
+msgid "Select an icon-font file"
+msgstr "选择一个图标字体文件"
+
+#: tycontrols.design.rsdtfontfilefilter
+msgid "Font files (*.ttf;*.otf;*.ttc)|*.ttf;*.otf;*.ttc|All files|*"
+msgstr "字体文件 (*.ttf;*.otf;*.ttc)|*.ttf;*.otf;*.ttc|所有文件|*"
+
+#: tycontrols.design.rsdtthemenamehint
+msgid "The theme to load by name. The list offers the themes compiled into TyControls plus any registered in this IDE; a name your application registers at run time is equally valid, so you may type one that is not listed. Setting this clears ThemeFile."
+msgstr "按名称加载的主题。下拉列表给出编译进 TyControls 的内置主题,以及本 IDE 中已注册的主题;你的程序在运行期注册的名称同样合法,所以列表之外的名字也可以直接输入。设置本属性会清空 ThemeFile。"
+
+#: tycontrols.design.rsdtthememodehint
+msgid "Which \"@mode NAME\" block of the loaded theme is active. The list holds the modes THIS theme declares — the blank entry is the empty string, meaning no mode override at all. A single-mode theme therefore offers only the blank entry."
+msgstr "当前生效的是所加载主题的哪个 \"@mode 名称\" 区块。下拉列表列出的是「这个主题自己声明」的模式;其中的空白项就是空字符串,表示完全不套用模式覆盖。因此单模式主题只会给出那一个空白项。"

@@ -118,6 +118,10 @@ msgstr ""
 msgid "Alpha"
 msgstr ""
 
+#: tycontrols.strconsts.rsdlgbasiccolors
+msgid "Basic colors"
+msgstr ""
+
 #: tycontrols.strconsts.rsdlgcolortitle
 msgctxt "tycontrols.strconsts.rsdlgcolortitle"
 msgid "Color"
