@@ -135,8 +135,11 @@ begin
     Result := AName;
 end;
 
-procedure TyWrapTextCJK(const AText: string; AMaxWidthPx: Integer;
-  ACanvas: TCanvas; ALines: TStrings);
+{ Wraps ONE authored line (no CR/LF inside). ABase is ALines.Count at entry, so the
+  "never return nothing" guard below is about THIS segment and not about lines an earlier
+  segment already contributed. }
+procedure TyWrapSegmentCJK(const AText: string; AMaxWidthPx: Integer;
+  ACanvas: TCanvas; ALines: TStrings; ABase: Integer);
 var
   cur, buf: string;
   bufSpaceBefore, pendingSpace, firstAtom: Boolean;
@@ -206,7 +209,9 @@ var
   end;
 
 begin
-  ALines.Clear;
+  { NO Clear here. This is called once per authored line now, so clearing would wipe the
+    segments already wrapped -- which is exactly what it did: every caption came out as its
+    LAST line only. Emptying the list is the public entry point's job, once. }
   if AText = '' then
   begin
     ALines.Add('');
@@ -247,8 +252,43 @@ begin
   FlushBuf;
   if cur <> '' then
     ALines.Add(cur);
-  if ALines.Count = 0 then
+  if ALines.Count = ABase then
     ALines.Add(AText);
+end;
+
+{ Greedy CJK-aware wrap of a whole caption.
+
+  Authored line breaks come FIRST. The wrapper only ever knew about spaces and CJK codepoints,
+  so a caption written with an explicit #13#10 in it came out as one run: TTyLabel with
+  WordWrap on silently swallowed every line the author put there. TTyNotification looked
+  correct only because its caller split the message on CR/LF before calling in -- doing it
+  here makes that pre-split redundant rather than load-bearing, and fixes every other caller
+  at the same time.
+
+  An empty segment is kept as an empty line: a blank line between paragraphs is content. }
+procedure TyWrapTextCJK(const AText: string; AMaxWidthPx: Integer;
+  ACanvas: TCanvas; ALines: TStrings);
+var
+  seg: TStringList;
+  i: Integer;
+begin
+  ALines.Clear;
+  if Pos(#10, AText) + Pos(#13, AText) = 0 then
+  begin
+    TyWrapSegmentCJK(AText, AMaxWidthPx, ACanvas, ALines, ALines.Count);
+    Exit;
+  end;
+  seg := TStringList.Create;
+  try
+    seg.Text := AText;          // splits on CR, LF and CRLF alike
+    for i := 0 to seg.Count - 1 do
+      if seg[i] = '' then
+        ALines.Add('')
+      else
+        TyWrapSegmentCJK(seg[i], AMaxWidthPx, ACanvas, ALines, ALines.Count);
+  finally
+    seg.Free;
+  end;
 end;
 
 procedure TyConfigureTextFont(ABmp: TBGRABitmap; const AFontName: string;

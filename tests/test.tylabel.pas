@@ -4,7 +4,7 @@ interface
 uses
   Classes, SysUtils, Types, fpcunit, testregistry, Forms, Controls, StdCtrls,
   Graphics, BGRABitmap, BGRABitmapTypes,
-  tyControls.Base, tyControls.TyLabel;
+  tyControls.Base, tyControls.TyLabel, tyControls.Painter;
 type
   TTyLabelAccess = class(TTyLabel)
   public
@@ -32,6 +32,7 @@ type
     procedure TestAutoSizeRefiresOnRuntimeCaption;
     procedure TestWordWrapWraps;
     procedure TestWordWrapCJK;
+    procedure TestWordWrapKeepsAuthoredLineBreaks;
     procedure TestWordWrapLayoutBottom;
     procedure TestFocusControlOnClick;
     procedure TestTransparentDefault;
@@ -259,6 +260,59 @@ end;
   between CJK characters. Measured headlessly via the public MeasureCaption:
   at a width well under the single-line extent the wrapped block must be taller
   (more than one line) and each line must stay within the constraint. }
+{ The wrapper only knew about spaces and CJK codepoints, so a caption carrying an explicit
+  line break came out as ONE run: WordWrap silently swallowed every line the author wrote.
+  TTyNotification looked correct only because its caller pre-split the message on CR/LF.
+
+  The measurement has to be CONSTRAINED to exercise it: MeasureCaption only calls the wrapper
+  when AAvailWidthPx > 0, and takes `Lines.Text := caption` otherwise -- which splits on
+  authored breaks all by itself. Aiming an unconstrained measurement at this bug tests the
+  path that never had it. The width used here is deliberately generous, so the joined
+  'one two' fits on a single line and any extra height can only come from the break. }
+{ The wrapper only knew about spaces and CJK codepoints, so a caption carrying an explicit
+  line break came out as ONE run: WordWrap silently swallowed every line the author wrote.
+  TTyNotification looked correct only because its caller pre-split the message on CR/LF.
+
+  Driven through TyWrapTextCJK, the shared algorithm, rather than through MeasureCaption:
+  MeasureCaption only reaches the wrapper when AAvailWidthPx > 0 and takes
+  `Lines.Text := caption` otherwise -- which honours authored breaks by itself -- so an
+  unconstrained measurement tests the path that never had the bug. (TTyLabel.WrapText is
+  private, and it is a one-line forward to this function anyway.) }
+procedure TLabelTest.TestWordWrapKeepsAuthoredLineBreaks;
+var
+  bmp: TBitmap;
+  L: TStringList;
+begin
+  bmp := TBitmap.Create;
+  L := TStringList.Create;
+  try
+    bmp.SetSize(8, 8);
+    bmp.Canvas.Font.Name := 'Tahoma';
+    bmp.Canvas.Font.Size := 9;
+
+    TyWrapTextCJK('one' + LineEnding + 'two', 400, bmp.Canvas, L);
+    AssertEquals('an authored break makes two lines', 2, L.Count);
+    AssertEquals('first', 'one', L[0]);
+    AssertEquals('second', 'two', L[1]);
+
+    L.Clear;
+    TyWrapTextCJK('a' + LineEnding + 'b' + LineEnding + 'c', 400, bmp.Canvas, L);
+    AssertEquals('three authored lines stay three', 3, L.Count);
+
+    L.Clear;
+    TyWrapTextCJK('one' + LineEnding + LineEnding + 'two', 400, bmp.Canvas, L);
+    AssertEquals('a blank line between paragraphs is content', 3, L.Count);
+    AssertEquals('and it is the empty one', '', L[1]);
+
+    L.Clear;
+    TyWrapTextCJK('aaa bbb ccc ddd eee fff ggg hhh', 40, bmp.Canvas, L);
+    AssertTrue('width still folds a long segment', L.Count > 1);
+  finally
+    L.Free;
+    bmp.Free;
+  end;
+end;
+
 procedure TLabelTest.TestWordWrapCJK;
 var
   L: TTyLabel;
