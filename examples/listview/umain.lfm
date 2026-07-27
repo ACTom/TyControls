@@ -1,10 +1,10 @@
 object MainForm: TMainForm
   Left = 200
-  Height = 700
+  Height = 780
   Top = 90
   Width = 1200
   Caption = 'TyControls — TTyListView (report / icon / tile · sorting · multi-select · virtual mode)'
-  ClientHeight = 700
+  ClientHeight = 780
   ClientWidth = 1200
   Font.Height = -12
   Position = poScreenCenter
@@ -13,7 +13,7 @@ object MainForm: TMainForm
   TitleBar = TitleBar1
   object Surface: TTyFormSurface
     Left = 0
-    Height = 700
+    Height = 780
     Top = 0
     Width = 1200
     Align = alClient
@@ -148,14 +148,14 @@ object MainForm: TMainForm
       Height = 18
       Top = 644
       Width = 700
-      Caption = 'Sort by "Size" descending, folders still last; F2 renames the focused item; double-click a header separator to auto-fit the column'
+      Caption = 'Blank cells always sort last · F2 renames — folders are refused by OnEditing · click a group band to fold it'
     end
     object DivRight: TTyDivider
       Left = 736
       Height = 22
       Top = 44
       Width = 448
-      Caption = 'Virtual mode — 100,000 rows'
+      Caption = 'Virtual mode — 100,000 rows · text AND icons made on demand'
       Alignment = taLeftJustify
     end
     object BtnSortVirtual: TTyButton
@@ -174,11 +174,20 @@ object MainForm: TMainForm
       Caption = 'Jump to row 99999'
       OnClick = BtnJumpEndClick
     end
+    object BtnGrow: TTyButton
+      Left = 1012
+      Height = 30
+      Top = 72
+      Width = 130
+      Caption = 'Add 50,000 rows'
+      OnClick = BtnGrowClick
+    end
     object LV2: TTyListView
       Left = 736
       Height = 496
       Top = 112
       Width = 448
+      RowHeight = 28
       OwnerData = True
       GridLines = True
       HotTrack = True
@@ -198,6 +207,63 @@ object MainForm: TMainForm
       Top = 644
       Width = 448
       Caption = 'The checked state lives in the app''s own array — in OwnerData mode the control caches no state'
+    end
+    object DivExtras: TTyDivider
+      Left = 16
+      Height = 22
+      Top = 668
+      Width = 1168
+      Caption = 'Driving the list from code — selection API, header band, custom comparator, virtual grouping and growth'
+      Alignment = taLeftJustify
+    end
+    object BtnSelectAll: TTyButton
+      Left = 16
+      Height = 30
+      Top = 700
+      Width = 90
+      Caption = 'Select all'
+      OnClick = BtnSelectAllClick
+    end
+    object BtnClearSel: TTyButton
+      Left = 112
+      Height = 30
+      Top = 700
+      Width = 110
+      Caption = 'Clear selection'
+      OnClick = BtnClearSelClick
+    end
+    object ChkHeaders: TTyCheckBox
+      Left = 240
+      Height = 22
+      Top = 704
+      Width = 130
+      Caption = 'Column headers'
+      Checked = True
+      State = cbChecked
+      OnChange = ChkHeadersChange
+    end
+    object ChkCustomSort: TTyCheckBox
+      Left = 384
+      Height = 22
+      Top = 704
+      Width = 320
+      Caption = 'Custom comparator — folders always first'
+      OnChange = ChkCustomSortChange
+    end
+    object ChkGroupVirtual: TTyCheckBox
+      Left = 736
+      Height = 22
+      Top = 704
+      Width = 290
+      Caption = 'Group the virtual list (OnGetItemGroup)'
+      OnChange = ChkGroupVirtualChange
+    end
+    object LblExtras: TTyLabel
+      Left = 16
+      Height = 18
+      Top = 740
+      Width = 1168
+      Caption = 'Select all / Clear selection never touch the mouse · OnCompare outranks SortKind · the virtual list pins RowHeight = 28, the left one follows the theme'
     end
   end
 end

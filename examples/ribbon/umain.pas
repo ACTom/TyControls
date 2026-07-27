@@ -9,29 +9,36 @@ unit umain;
   Undo/Redo/Select All/Find act on the current document; everything else (format painter,
   B/I/U, alignment, table, symbol...) is a placeholder but the UI is complete.
 
-  The window, title bar and theme switcher are designed in umain.lfm (a TTyForm + TTyTitleBar).
-  Everything else -- the ribbon, its pages/groups/command buttons, the QAT, the backstage, the
-  document tabs and the status bar -- is a dynamic control tree that cannot be expressed as .lfm
-  objects (icons assigned from a code-built collection, command lists filled in loops, ribbon
-  pages/groups created via method calls), so it is built in FormCreate code (see BuildEditor).
+  The window, title bar, theme switcher AND the whole ribbon SKELETON are designed in umain.lfm
+  (a TTyForm + TTyTitleBar + a TTyRibbon holding its TTyRibbonPage / TTyRibbonGroup children,
+  plus the style gallery, the app-menu button and the two ribbon-behaviour check boxes) --
+  the same objects the IDE designer produces, since TTyRibbonPage/TTyRibbonGroup mirror
+  TTyTabSheet's design-time flags and self-register with their host while streaming.
+  Only what genuinely cannot be expressed as .lfm objects is built in FormCreate code (see
+  BuildEditor): the command buttons (their icons come from a code-built BGRA collection),
+  the loop-filled combo lists, the QAT, the backstage and its content pages, the document
+  tabs and the status bar.
 
-  WARNING LCL layout pitfall: the title bar and the ribbon are both alTop siblings. The title
-  bar now streams from the .lfm FIRST, so the ribbon is given an explicit Top to dock BELOW it;
-  ribbon groups are likewise added right-to-left. See memory lcl-code-created-align-order. }
+  WARNING LCL layout pitfall: the title bar and the ribbon are both alTop siblings, and the
+  ribbon groups are alLeft siblings. Same-align siblings are ordered by their Left/Top, and
+  code-created ones (all at 0) end up in REVERSE creation order -- which is why every .lfm
+  group carries an explicit Left. See memory lcl-code-created-align-order. }
 
 {$mode objfpc}{$H+}
 
 interface
 
 uses
-  Classes, SysUtils, StrUtils, Forms, Controls, Dialogs, Graphics,
+  Classes, SysUtils, StrUtils, Forms, Controls, Dialogs, Graphics, Menus,
   tyControls.Types, tyControls.Controller, tyControls.BuiltinThemes,
   tyControls.ThemeRegistry, tyControls.Base, tyControls.Painter,
   tyControls.Form, tyControls.Hint, tyControls.Panel,
   tyControls.TyLabel, tyControls.Button, tyControls.CheckBox, tyControls.ComboBox, tyControls.ToggleSwitch,
-  tyControls.ImageCollection, tyControls.GlyphButtons, tyControls.DropButtons,
+  tyControls.ImageCollection, tyControls.IconFont, tyControls.Menu,
+  tyControls.GlyphButtons, tyControls.DropButtons,
   tyControls.ColorButton, tyControls.ButtonGroup, tyControls.Ribbon,
   tyControls.RibbonQuickAccess, tyControls.RibbonGallery, tyControls.RibbonBackstage,
+  tyControls.RibbonAppMenu,
   tyControls.PageControl, tyControls.TabSheet, tyControls.Memo, tyControls.StatusBar,
   tyControls.Dialogs, tyControls.Dialogs.Find, tyControls.Dialogs.Color,
   uicons;
@@ -50,10 +57,42 @@ type
     DarkSwitch: TTyToggleSwitch;
     ThemeCombo: TTyComboBox;                   // title-bar built-in skin switcher
     AccentCombo: TTyComboBox;                  // Office-app accent presets (Word/Excel/PPT/…) + custom
+    // ---- the ribbon skeleton, authored in umain.lfm ----------------------------------
+    // Ribbon > page > group is a real design-time object tree: the pages self-register with
+    // the ribbon while streaming, the groups flow left->right by their explicit Left.
+    Ribbon: TTyRibbon;
+    PgHome: TTyRibbonPage;
+    PgInsert: TTyRibbonPage;
+    PgView: TTyRibbonPage;
+    PgPicTools: TTyRibbonPage;                 // contextual: Context='pic', hidden until shown
+    GrpClipboard: TTyRibbonGroup;
+    GrpFont: TTyRibbonGroup;
+    GrpParagraph: TTyRibbonGroup;
+    GrpEdit: TTyRibbonGroup;
+    GrpTable: TTyRibbonGroup;
+    GrpStyles: TTyRibbonGroup;
+    GrpSymbol: TTyRibbonGroup;
+    GrpPicture: TTyRibbonGroup;                // ShowCaption=False -> no caption band at all
+    GrpShow: TTyRibbonGroup;
+    GrpZoom: TTyRibbonGroup;
+    GrpWindow: TTyRibbonGroup;
+    GrpRibbon: TTyRibbonGroup;
+    GrpAppMenu: TTyRibbonGroup;
+    GrpAdjust: TTyRibbonGroup;
+    Gallery: TTyRibbonGallery;                 // 12 glyph+caption cells, 4 columns when dropped
+    GalleryIcons: TTyIconFont;                 // the gallery cells' glyph source
+    AppMenu: TTyRibbonAppMenu;                 // dropdown File button (commands + recent list)
+    ChkKeyTips: TTyCheckBox;
+    ChkCollapse: TTyCheckBox;
     procedure FormCreate(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
     procedure DarkSwitchChange(Sender: TObject);
     procedure AccentComboChange(Sender: TObject);
+    procedure RibbonFileTab(Sender: TObject);
+    procedure GalleryStyleSelect(Sender: TObject);
+    procedure AppMenuRecentClick(Sender: TObject; AIndex: Integer);
+    procedure ChkKeyTipsClick(Sender: TObject);
+    procedure ChkCollapseClick(Sender: TObject);
   private
     FImgColl: TTyImageCollection;   // cross-platform BGRA command icons (uicons)
     FRibbon: TTyRibbon;
@@ -74,6 +113,9 @@ type
     FFindDlg: TTyFindDialog;
     FReplaceDlg: TTyReplaceDialog;
     FRecent: TStringList;
+    // The app-menu button's Commands source: a plain TTyPopupMenu whose TOP-LEVEL items are
+    // cloned into the dropdown on every drop (a '-' caption stays a separator line).
+    FFileMenu: TTyPopupMenu;
     FDocList: TList;
     FNewCount: Integer;
     FFontColor: TTyColor;
@@ -114,23 +156,24 @@ type
     procedure DoWordWrap(Sender: TObject);
     procedure DoToggleContext(Sender: TObject);
     procedure DoLauncher(Sender: TTyRibbonGroup);
+    procedure DoQuit(Sender: TObject);
     procedure DoNoop(Sender: TObject);
     // ---- events ----
     procedure BackstageSelect(Sender: TObject; AIndex: Integer);
     procedure MemoChanged(Sender: TObject);
     procedure PageChanged(Sender: TObject);
-    // ---- ribbon builders ----
-    function  NewGroup(APage: TTyRibbonPage; const ACaption: string; AWidth: Integer;
-      ALauncher: Boolean): TTyRibbonGroup;
+    // ---- ribbon builders (the GROUPS come from umain.lfm; these fill them) ----
     function  Big(AGroup: TTyRibbonGroup; const ACap, AGlyph: string; AX, AW: Integer;
       AHandler: TNotifyEvent): TTyGlyphContainerButton;
     function  Small(AGroup: TTyRibbonGroup; const ACap, AGlyph: string; AX, AY, AW: Integer;
       AHandler: TNotifyEvent): TTyGlyphButton;
     function  AddQat(AQat: TTyRibbonQuickAccess; const AHint, AGlyph: string;
       AHandler: TNotifyEvent): TTyGlyphButton;
-    procedure BuildHomeTab(APage: TTyRibbonPage);
-    procedure BuildInsertTab(APage: TTyRibbonPage);
-    procedure BuildViewTab(APage: TTyRibbonPage);
+    function  AddCommand(AMenu: TTyPopupMenu; const ACaption: string;
+      AHandler: TNotifyEvent): TMenuItem;
+    procedure BuildHomeTab;
+    procedure BuildInsertTab;
+    procedure BuildViewTab;
     // Re-tint the title-bar-hosted controls (QAT icons + dark switch) to the caption's text colour.
     procedure ReinkTitleBar;
     // Position the QAT strip immediately after the (measured) caption text — re-run on theme change.
@@ -166,15 +209,16 @@ end;
 // ===========================================================================
 // Ribbon builders
 // ===========================================================================
-function TMainForm.NewGroup(APage: TTyRibbonPage; const ACaption: string; AWidth: Integer;
-  ALauncher: Boolean): TTyRibbonGroup;
+{ One TOP-LEVEL item of the app-menu's Commands menu. A '-' caption is a separator row
+  (pass nil for its handler); every other row carries the command's own OnClick, which the
+  app-menu clones onto its dropdown row so the click still lands here. }
+function TMainForm.AddCommand(AMenu: TTyPopupMenu; const ACaption: string;
+  AHandler: TNotifyEvent): TMenuItem;
 begin
-  Result := TTyRibbonGroup.Create(Self);
-  Result.Parent := APage;      // alLeft (add right-to-left)
+  Result := TMenuItem.Create(AMenu);
   Result.Caption := ACaption;
-  Result.Width := AWidth;
-  Result.ShowDialogLauncher := ALauncher;
-  if ALauncher then Result.OnDialogLauncher := @DoLauncher;   // the launcher IS clickable
+  Result.OnClick := AHandler;
+  AMenu.Items.Add(Result);
 end;
 
 procedure TMainForm.DoLauncher(Sender: TTyRibbonGroup);
@@ -277,122 +321,115 @@ begin
   FQat.Left := leftPad + capW + gap;
 end;
 
-procedure TMainForm.BuildHomeTab(APage: TTyRibbonPage);
+{ The GROUPS (caption, width, order, dialog launcher, ShowCaption) are authored in umain.lfm;
+  these three routines only fill them with command controls, which need the code-built icon
+  collection and loop-filled item lists. }
+procedure TMainForm.BuildHomeTab;
 var
-  g: TTyRibbonGroup;
   fontc, sizec: TTyComboBox;
   col: TTyColorButton;
   alignGrp: TTyButtonGroup;
   i: Integer;
 begin
-  // Groups are added RIGHT-to-LEFT so they flow Clipboard | Font | Paragraph | Editing left->right.
-
   // Editing
-  g := NewGroup(APage, 'Edit', 96, False);
-  Small(g, 'Find', 'find', 6, 4, 88, @DoFind);
-  Small(g, 'Replace', 'replace', 6, 30, 88, @DoReplace);
-  Small(g, 'Select all', 'selectall', 6, 56, 88, @DoSelectAll);
+  Small(GrpEdit, 'Find', 'find', 6, 4, 88, @DoFind);
+  Small(GrpEdit, 'Replace', 'replace', 6, 30, 88, @DoReplace);
+  Small(GrpEdit, 'Select all', 'selectall', 6, 56, 88, @DoSelectAll);
 
   // Paragraph
-  g := NewGroup(APage, 'Paragraph', 150, True);
   alignGrp := TTyButtonGroup.Create(Self);
-  alignGrp.Parent := g;
+  alignGrp.Parent := GrpParagraph;
   alignGrp.StyleClass := 'ghost';
   alignGrp.SetBounds(6, 6, 138, 26);
   alignGrp.Items.Add('Left'); alignGrp.Items.Add('Medium'); alignGrp.Items.Add('Right'); alignGrp.Items.Add('both ends');
   alignGrp.ItemIndex := 0;
-  Small(g, 'Bullet list', 'bullets', 6, 40, 66, @DoNoop);
-  Small(g, 'No.', 'number', 76, 40, 66, @DoNoop);
+  Small(GrpParagraph, 'Bullet list', 'bullets', 6, 40, 66, @DoNoop);
+  Small(GrpParagraph, 'No.', 'number', 76, 40, 66, @DoNoop);
 
   // Font
-  g := NewGroup(APage, 'Font', 240, True);
   fontc := TTyComboBox.Create(Self);
-  fontc.Parent := g;
+  fontc.Parent := GrpFont;
   fontc.Style := csDropDown;
   fontc.SetBounds(6, 6, 150, 26);
   fontc.Items.Add('DengXian'); fontc.Items.Add('SimSun'); fontc.Items.Add('Microsoft YaHei');
   fontc.Items.Add('Consolas'); fontc.Items.Add('Arial');
   fontc.ItemIndex := 0;
   sizec := TTyComboBox.Create(Self);
-  sizec.Parent := g;
+  sizec.Parent := GrpFont;
   sizec.Style := csDropDown;
   sizec.SetBounds(162, 6, 60, 26);
   for i := 8 to 16 do sizec.Items.Add(IntToStr(i));
   sizec.Items.Add('18'); sizec.Items.Add('24'); sizec.Items.Add('36');
   sizec.Text := '11';
   // B / I / U show as styled letters (no glyph), like Office.
-  Small(g, 'B', '', 6, 40, 26, @DoNoop);
-  Small(g, 'I', '', 36, 40, 26, @DoNoop);
-  Small(g, 'U', '', 66, 40, 26, @DoNoop);
+  Small(GrpFont, 'B', '', 6, 40, 26, @DoNoop);
+  Small(GrpFont, 'I', '', 36, 40, 26, @DoNoop);
+  Small(GrpFont, 'U', '', 66, 40, 26, @DoNoop);
   col := TTyColorButton.Create(Self);
-  col.Parent := g;
+  col.Parent := GrpFont;
   col.SetBounds(100, 40, 48, 26);
   col.SelectedColor := FFontColor;
   col.OnColorChange := @DoFontColor;
 
   // Clipboard (with a dialog launcher, like Word)
-  g := NewGroup(APage, 'Clipboard', 150, True);
-  Big(g, 'Paste', 'paste', 6, 56, @DoPaste);
-  Small(g, 'Cut', 'cut', 66, 4, 78, @DoCut);
-  Small(g, 'Copy', 'copy', 66, 30, 78, @DoCopy);
-  Small(g, 'Format painter', 'painter', 66, 56, 78, @DoNoop);
+  Big(GrpClipboard, 'Paste', 'paste', 6, 56, @DoPaste);
+  Small(GrpClipboard, 'Cut', 'cut', 66, 4, 78, @DoCut);
+  Small(GrpClipboard, 'Copy', 'copy', 66, 30, 78, @DoCopy);
+  Small(GrpClipboard, 'Format painter', 'painter', 66, 56, 78, @DoNoop);
 end;
 
-procedure TMainForm.BuildInsertTab(APage: TTyRibbonPage);
+procedure TMainForm.BuildInsertTab;
 var
-  g: TTyRibbonGroup;
-  gal: TTyRibbonGallery;
   dd: TTyDropDownButton;
+  pic: TTyGlyphContainerButton;
 begin
   // Symbol
-  g := NewGroup(APage, 'Symbol', 130, False);
-  Small(g, 'Symbol', 'symbol', 6, 4, 116, @DoNoop);
-  Small(g, 'Date-time', 'datetime', 6, 30, 116, @DoInsertDate);
+  Small(GrpSymbol, 'Symbol', 'symbol', 6, 4, 116, @DoNoop);
+  Small(GrpSymbol, 'Date-time', 'datetime', 6, 30, 116, @DoInsertDate);
 
-  // Illustrations (a styles gallery + picture)
-  g := NewGroup(APage, 'Style library', 230, False);
-  gal := TTyRibbonGallery.Create(Self);
-  gal.Parent := g;
-  gal.SetBounds(6, 6, 216, 60);
-  gal.Items.Add('Style 1'); gal.Items.Add('Style 2'); gal.Items.Add('Style 3');
-  gal.Items.Add('Style 4'); gal.Items.Add('Style 5'); gal.Items.Add('Style 6');
-  gal.ItemIndex := 0;
+  // Style library: the gallery itself (12 items, their glyph names, the icon font, the
+  // 4-column dropped grid and OnSelect) is entirely authored in umain.lfm.
 
   // Table (a drop-down button)
-  g := NewGroup(APage, 'Grid', 90, False);
   dd := TTyDropDownButton.Create(Self);
-  dd.Parent := g;
+  dd.Parent := GrpTable;
   dd.SetBounds(6, 6, 78, 60);
   dd.Caption := 'Grid';
+
+  // The caption-LESS group (GrpPicture has ShowCaption=False in the .lfm): no bottom caption
+  // band and no dialog launcher, so its content owns the group's full height. Compare its
+  // bottom edge with the captioned groups beside it.
+  pic := Big(GrpPicture, 'Picture', 'crop', 6, 58, @DoNoop);
+  pic.Hint := 'This group has ShowCaption = False'#10 +
+    'No caption band, no dialog launcher - the content fills the whole group height.';
 end;
 
-procedure TMainForm.BuildViewTab(APage: TTyRibbonPage);
+procedure TMainForm.BuildViewTab;
 var
-  g: TTyRibbonGroup;
   wrap, statusbar, ctx: TTyCheckBox;
 begin
   // Window
-  g := NewGroup(APage, 'Window', 110, False);
-  Small(g, 'New window', 'newwindow', 6, 4, 98, @DoNoop);
-  Small(g, 'Side by side', 'arrange', 6, 30, 98, @DoNoop);
+  Small(GrpWindow, 'New window', 'newwindow', 6, 4, 98, @DoNoop);
+  Small(GrpWindow, 'Side by side', 'arrange', 6, 30, 98, @DoNoop);
 
   // Zoom
-  g := NewGroup(APage, 'Zoom', 130, False);
-  Small(g, 'Zoom in', 'zoomin', 6, 4, 60, @DoNoop);
-  Small(g, 'Zoom out', 'zoomout', 68, 4, 60, @DoNoop);
-  Small(g, '100%', 'zoom100', 6, 30, 122, @DoNoop);
+  Small(GrpZoom, 'Zoom in', 'zoomin', 6, 4, 60, @DoNoop);
+  Small(GrpZoom, 'Zoom out', 'zoomout', 68, 4, 60, @DoNoop);
+  Small(GrpZoom, '100%', 'zoom100', 6, 30, 122, @DoNoop);
 
   // View options
-  g := NewGroup(APage, 'Show', 140, False);
   wrap := TTyCheckBox.Create(Self);
-  wrap.Parent := g; wrap.SetBounds(6, 6, 128, 22);
+  wrap.Parent := GrpShow; wrap.SetBounds(6, 6, 128, 22);
   wrap.Caption := 'Word wrap'; wrap.OnClick := @DoWordWrap;
   statusbar := TTyCheckBox.Create(Self);
-  statusbar.Parent := g; statusbar.SetBounds(6, 30, 128, 22);
+  statusbar.Parent := GrpShow; statusbar.SetBounds(6, 30, 128, 22);
   statusbar.Caption := 'Status bar'; statusbar.Checked := True;
   ctx := TTyCheckBox.Create(Self);
-  ctx.Parent := g; ctx.SetBounds(6, 54, 128, 22);
+  ctx.Parent := GrpShow; ctx.SetBounds(6, 54, 128, 22);
   ctx.Caption := 'Picture tools (contextual)'; ctx.OnClick := @DoToggleContext;
+
+  // 'Ribbon itself' (ChkKeyTips / ChkCollapse) and 'App menu' (AppMenu) are .lfm objects;
+  // the app menu's command list is filled in BuildEditor, next to the recent-files list.
 end;
 
 // ===========================================================================
@@ -506,6 +543,9 @@ begin
   FRecent.Insert(0, APath);
   while FRecent.Count > 8 do FRecent.Delete(FRecent.Count - 1);
   // The recent list is read live by ShowOpenContent — no sidebar rebuild needed.
+  // TTyRibbonAppMenu.RecentItems COPIES what you assign (it never aliases a list you may
+  // free), so hand it the new contents whenever the list changes.
+  if AppMenu <> nil then AppMenu.RecentItems := FRecent;
 end;
 
 procedure TMainForm.RebuildBackstage;
@@ -524,7 +564,10 @@ begin
   FBackstage.BottomCommandGlyphs.Clear;
   FBackstage.BottomCommands.Add('About'); FBackstage.BottomCommandGlyphs.Add('info');     // 6
   FBackstage.BottomCommands.Add('Option'); FBackstage.BottomCommandGlyphs.Add('settings'); // 7
-  FBackstage.BottomCommands.Add('Sign out'); FBackstage.BottomCommandGlyphs.Add('exit');     // 8
+  // A row whose text is a lone '-' draws as a NON-SELECTABLE divider line. It still takes a
+  // unified index, so everything below it shifts by one (Sign out is 9, not 8).
+  FBackstage.BottomCommands.Add('-'); FBackstage.BottomCommandGlyphs.Add('');              // 8 = divider
+  FBackstage.BottomCommands.Add('Sign out'); FBackstage.BottomCommandGlyphs.Add('exit');     // 9
   FBackstage.ItemIndex := -1;
 end;
 
@@ -824,6 +867,11 @@ begin
     FRibbon.HideContext('pic');
 end;
 
+procedure TMainForm.DoQuit(Sender: TObject);
+begin
+  Close;   // the app menu's last command row
+end;
+
 procedure TMainForm.DoNoop(Sender: TObject);
 begin
   // placeholder command (looks complete; no action wired)
@@ -845,8 +893,42 @@ begin
     5: begin HideBsContent; DoCloseDoc(Sender); FBackstage.Close; end; // Close
     6: ShowBsPage(FPgAbout);                                           // About
     7: ShowBsPage(FPgOptions);                                         // Options
-    8: begin FBackstage.Close; Close; end;                             // Exit
+    // 8 is the '-' divider row — never selectable, so it never reaches here.
+    9: begin FBackstage.Close; Close; end;                             // Exit
   end;
+end;
+
+{ OnFileTab fires on EVERY File-tab click, whether or not a Backstage is assigned — it is the
+  hook an app WITHOUT a backstage uses to open its own File view. Here the backstage opens on
+  top of the window a moment later, so the status text is the proof the event ran first. }
+procedure TMainForm.RibbonFileTab(Sender: TObject);
+begin
+  if FStatus <> nil then
+    FStatus.Panels[0].Text := 'File tab clicked - backstage opening';
+end;
+
+{ Picking a gallery thumbnail — inline or from the dropped 4-column grid — lands here. }
+procedure TMainForm.GalleryStyleSelect(Sender: TObject);
+begin
+  if FStatus <> nil then
+    FStatus.Panels[3].Text := Format('Style %d', [Gallery.ItemIndex + 1]);
+end;
+
+{ A recent-files row of the app menu's dropdown: AIndex indexes RecentItems, not the menu. }
+procedure TMainForm.AppMenuRecentClick(Sender: TObject; AIndex: Integer);
+begin
+  if (AIndex >= 0) and (AIndex < FRecent.Count) then
+    OpenFile(FRecent[AIndex]);
+end;
+
+procedure TMainForm.ChkKeyTipsClick(Sender: TObject);
+begin
+  Ribbon.KeyTips := ChkKeyTips.Checked;
+end;
+
+procedure TMainForm.ChkCollapseClick(Sender: TObject);
+begin
+  Ribbon.Minimized := ChkCollapse.Checked;
 end;
 
 procedure TMainForm.MemoChanged(Sender: TObject);
@@ -901,16 +983,14 @@ begin
 
   ApplyChromeTheme(TyDefaultController);   // theme the window chrome + background
 
-  // The rest of the editor is a dynamic control tree that can't live in the .lfm.
+  // Everything the .lfm cannot express (icon-fed command buttons, the QAT, the backstage,
+  // the document tabs, the status bar) is wired onto the streamed skeleton here.
   BuildEditor;
 end;
 
-{ Build the whole editor shell in code (was the old constructor body). Runs from FormCreate,
-  AFTER the .lfm (Bar + ThemeCombo) has streamed and the built-in 'default' theme is active. }
+{ Fill in the streamed shell. Runs from FormCreate, AFTER umain.lfm (title bar + the whole
+  ribbon/page/group skeleton) has streamed and the built-in 'default' theme is active. }
 procedure TMainForm.BuildEditor;
-var
-  PgHome, PgInsert, PgView, PgPic: TTyRibbonPage;
-  g: TTyRibbonGroup;
 begin
   // Themed ScreenTips: installing a TTyHint swaps LCL's tooltip for the themed
   // TTyHintWindow app-wide, so every button's Hint (set in Big/Small/AddQat) shows
@@ -947,30 +1027,39 @@ begin
   FStatus.Panels.Add.Width := 320;
   FStatus.Panels.Add.Width := 140;
   FStatus.Panels.Add.Width := 100;
+  FStatus.Panels.Add.Width := 140;   // 3 = the gallery's last pick (GalleryStyleSelect)
+  FStatus.Panels.Add.Width := 180;   // 4 = a standing reminder that KeyTips are on
+  FStatus.Panels[3].Text := 'Style 1';
+  FStatus.Panels[4].Text := 'Press Alt for KeyTips';
 
-  // The ribbon docks below the title bar. Both are alTop siblings; because the title bar
-  // now streams from the .lfm FIRST, give the ribbon an explicit Top so LCL stacks it
-  // BELOW the bar rather than on top of it (see memory lcl-code-created-align-order).
-  FRibbon := TTyRibbon.Create(Self);
-  FRibbon.Parent := Surface;
-  FRibbon.Top := Bar.Height;
+  // The ribbon, its four pages and their groups all stream from umain.lfm — including the
+  // contextual "Picture tools" page (Context='pic', hidden until DoToggleContext shows it).
+  // Only the theme controller, the backstage link and the dialog-launcher handler are wired
+  // here; the launcher ARROWS themselves are switched on in the .lfm (ShowDialogLauncher).
+  FRibbon := Ribbon;
   FRibbon.Controller := TyDefaultController;   // register as a theme listener (live re-theme)
-  FRibbon.Height := 140;   // room for 3 small-button rows above the group caption band
-  FRibbon.FileTab := True;
-  FRibbon.FileTabCaption := 'File';
   FRibbon.Backstage := FBackstage;
+  GrpClipboard.OnDialogLauncher := @DoLauncher;
+  GrpFont.OnDialogLauncher := @DoLauncher;
+  GrpParagraph.OnDialogLauncher := @DoLauncher;
 
-  PgHome := FRibbon.AddPage('Start');
-  BuildHomeTab(PgHome);
-  PgInsert := FRibbon.AddPage('Insert');
-  BuildInsertTab(PgInsert);
-  PgView := FRibbon.AddPage('View');
-  BuildViewTab(PgView);
-  // Contextual "picture tools" tab (toggled on the View tab).
-  PgPic := FRibbon.AddPage('Picture tools');
-  PgPic.Context := 'pic';
-  g := NewGroup(PgPic, 'Adjust', 120, False);
-  Big(g, 'Clip', 'crop', 6, 56, @DoNoop);
+  BuildHomeTab;
+  BuildInsertTab;
+  BuildViewTab;
+  Big(GrpAdjust, 'Clip', 'crop', 6, 56, @DoNoop);   // the contextual page's only group
+
+  // TTyRibbonAppMenu (View tab) composes its OWN dropdown out of two sources it never
+  // mutates: the top-level items of Commands, then a separator, then one row per
+  // RecentItems entry. That is the alternative to the FileTab+Backstage route above —
+  // the same app, one big File view vs one small File menu.
+  FFileMenu := TTyPopupMenu.Create(Self);
+  AddCommand(FFileMenu, 'New', @DoNew);
+  AddCommand(FFileMenu, 'Open...', @DoOpen);
+  AddCommand(FFileMenu, 'Save', @DoSave);
+  AddCommand(FFileMenu, '-', nil);          // a separator row inside the commands block
+  AddCommand(FFileMenu, 'Exit', @DoQuit);
+  AppMenu.Commands := FFileMenu;
+  AppMenu.RecentItems := FRecent;           // re-assigned by AddRecent (RecentItems copies)
 
   // Icon-only Quick Access Toolbar (like Office) on the title bar: New / Open / Save /
   // Undo / Redo. Width = 5 buttons flush (alLeft, no layout spacing); Left is glued right

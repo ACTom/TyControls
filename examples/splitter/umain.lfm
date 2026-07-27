@@ -49,7 +49,7 @@ object MainForm: TMainForm
       Width = 760
       Align = alBottom
       Alignment = taCenter
-      Caption = 'Drag the vertical splitter to change the left column width; drag the horizontal splitter to change the top band height'
+      Caption = 'Drag any splitter · OnCanResize caps a pane at 400 px · the top band only resizes on mouse-up (rsLine)'
     end
     object ClientHost: TTyPanel
       Left = 0
@@ -80,34 +80,54 @@ object MainForm: TMainForm
         Left = 226
         Height = 456
         Top = 0
-        Width = 534
+        Width = 348
         Align = alClient
         object TopPanel: TTyPanel
           Left = 0
           Height = 200
           Top = 0
-          Width = 534
+          Width = 348
           Align = alTop
-          Caption = 'Top band (alTop)'
+          Caption = 'Top band (alTop) · rsLine: lands on mouse-up'
         end
         object HSplit: TTySplitter
           Left = 0
           Height = 6
           Top = 200
-          Width = 534
+          Width = 348
           Align = alTop
           MinSize = 80
-          ResizeStyle = rsUpdate
+          ResizeStyle = rsLine
+          OnCanResize = HandleCanResize
           OnMoved = HandleMoved
         end
         object BottomPanel: TTyPanel
           Left = 0
           Height = 250
           Top = 206
-          Width = 534
+          Width = 348
           Align = alClient
           Caption = 'Bottom band (alClient)'
         end
+      end
+      object InspectorPanel: TTyPanel
+        Left = 580
+        Height = 456
+        Top = 0
+        Width = 180
+        Align = alRight
+        Caption = 'Inspector (alRight)'
+      end
+      object RSplit: TTySplitter
+        Left = 574
+        Height = 456
+        Top = 0
+        Width = 6
+        Align = alRight
+        MinSize = 100
+        ResizeStyle = rsUpdate
+        OnCanResize = HandleCanResize
+        OnMoved = HandleMoved
       end
     end
   end

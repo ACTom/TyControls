@@ -1,10 +1,10 @@
 object MainForm: TMainForm
   Left = 200
-  Height = 690
+  Height = 890
   Top = 90
   Width = 1200
   Caption = 'TyControls — containers & layout (Phase 5)'
-  ClientHeight = 690
+  ClientHeight = 890
   ClientWidth = 1200
   Font.Height = -12
   Position = poScreenCenter
@@ -13,7 +13,7 @@ object MainForm: TMainForm
   TitleBar = TitleBar1
   object Surface: TTyFormSurface
     Left = 0
-    Height = 690
+    Height = 890
     Top = 0
     Width = 1200
     Align = alClient
@@ -166,6 +166,7 @@ object MainForm: TMainForm
         'Large'
       )
       ItemIndex = 1
+      OnSelectionChanged = RadioSizeSelectionChanged
     end
     object CheckFeatures: TTyCheckGroup
       Left = 570
@@ -182,6 +183,7 @@ object MainForm: TMainForm
         'Auto indent'
         'Code folding'
       )
+      OnItemChange = CheckFeaturesItemChange
     end
     object ToolClip: TTyToolGroupPanel
       Left = 570
@@ -227,7 +229,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 42
       Width = 300
-      Caption = 'Scroll / collapse containers'
+      Caption = 'Scroll / collapse containers (the box below scrolls on BOTH axes)'
       Alignment = taLeftJustify
     end
     object ExAdvanced: TTyExPanel
@@ -236,6 +238,8 @@ object MainForm: TMainForm
       Top = 68
       Width = 300
       Caption = 'Advanced options (click title to collapse)'
+      OnExpand = ExPanelExpand
+      OnCollapse = ExPanelCollapse
       object ChkWrap: TTyCheckBox
         Left = 16
         Height = 22
@@ -267,70 +271,70 @@ object MainForm: TMainForm
         Left = 12
         Height = 32
         Top = 10
-        Width = 244
+        Width = 420
         Caption = 'Item 1'
       end
       object SbBtn2: TTyButton
         Left = 12
         Height = 32
         Top = 50
-        Width = 244
+        Width = 420
         Caption = 'Item 2'
       end
       object SbBtn3: TTyButton
         Left = 12
         Height = 32
         Top = 90
-        Width = 244
+        Width = 420
         Caption = 'Item 3'
       end
       object SbBtn4: TTyButton
         Left = 12
         Height = 32
         Top = 130
-        Width = 244
+        Width = 420
         Caption = 'Item 4'
       end
       object SbBtn5: TTyButton
         Left = 12
         Height = 32
         Top = 170
-        Width = 244
+        Width = 420
         Caption = 'Item 5'
       end
       object SbBtn6: TTyButton
         Left = 12
         Height = 32
         Top = 210
-        Width = 244
+        Width = 420
         Caption = 'Item 6'
       end
       object SbBtn7: TTyButton
         Left = 12
         Height = 32
         Top = 250
-        Width = 244
+        Width = 420
         Caption = 'Item 7'
       end
       object SbBtn8: TTyButton
         Left = 12
         Height = 32
         Top = 290
-        Width = 244
+        Width = 420
         Caption = 'Item 8'
       end
       object SbBtn9: TTyButton
         Left = 12
         Height = 32
         Top = 330
-        Width = 244
+        Width = 420
         Caption = 'Item 9'
       end
       object SbBtn10: TTyButton
         Left = 12
         Height = 32
         Top = 370
-        Width = 244
+        Width = 420
         Caption = 'Item 10'
       end
     end
@@ -439,12 +443,16 @@ object MainForm: TMainForm
       Height = 148
       Top = 434
       Width = 290
+      OnGroupToggle = ListGroupsGroupToggle
+      OnItemClick = ListGroupsItemClick
     end
     object HeaderCols: TTyHeaderControl
       Left = 950
       Height = 26
       Top = 456
       Width = 230
+      OnSectionClick = HeaderColsSectionClick
+      OnSectionResize = HeaderColsSectionResize
     end
     object LblHeader: TTyLabel
       Left = 950
@@ -582,10 +590,271 @@ object MainForm: TMainForm
       Width = 540
       Caption = 'Bottom-right → size grip TTySizeBox (drag to resize the window)'
     end
+    object DivMore: TTyDivider
+      Left = 20
+      Height = 22
+      Top = 690
+      Width = 1160
+      Caption = 'More container modes — wrapping toolbar · auto-pan scroll container · a panel that starts collapsed · vertical edge lines'
+      Alignment = taLeftJustify
+    end
+    object LblWrap: TTyLabel
+      Left = 20
+      Height = 18
+      Top = 716
+      Width = 560
+      Caption = 'Wrapable = True — the same 12 commands wrap to a second row instead of collapsing into »'
+    end
+    object BarWrap: TTyToolBarEx
+      Left = 20
+      Height = 64
+      Top = 738
+      Width = 560
+      Align = alNone
+      Wrapable = True
+      ButtonHeight = 26
+      object WrapBtn1: TTyButton
+        Left = 0
+        Height = 26
+        Top = 0
+        Width = 74
+        Caption = 'Command 1'
+      end
+      object WrapBtn2: TTyButton
+        Left = 0
+        Height = 26
+        Top = 0
+        Width = 74
+        Caption = 'Command 2'
+      end
+      object WrapBtn3: TTyButton
+        Left = 0
+        Height = 26
+        Top = 0
+        Width = 74
+        Caption = 'Command 3'
+      end
+      object WrapBtn4: TTyButton
+        Left = 0
+        Height = 26
+        Top = 0
+        Width = 74
+        Caption = 'Command 4'
+      end
+      object WrapBtn5: TTyButton
+        Left = 0
+        Height = 26
+        Top = 0
+        Width = 74
+        Caption = 'Command 5'
+      end
+      object WrapBtn6: TTyButton
+        Left = 0
+        Height = 26
+        Top = 0
+        Width = 74
+        Caption = 'Command 6'
+      end
+      object WrapBtn7: TTyButton
+        Left = 0
+        Height = 26
+        Top = 0
+        Width = 74
+        Caption = 'Command 7'
+      end
+      object WrapBtn8: TTyButton
+        Left = 0
+        Height = 26
+        Top = 0
+        Width = 74
+        Caption = 'Command 8'
+      end
+      object WrapBtn9: TTyButton
+        Left = 0
+        Height = 26
+        Top = 0
+        Width = 74
+        Caption = 'Command 9'
+      end
+      object WrapBtn10: TTyButton
+        Left = 0
+        Height = 26
+        Top = 0
+        Width = 74
+        Caption = 'Command 10'
+      end
+      object WrapBtn11: TTyButton
+        Left = 0
+        Height = 26
+        Top = 0
+        Width = 74
+        Caption = 'Command 11'
+      end
+      object WrapBtn12: TTyButton
+        Left = 0
+        Height = 26
+        Top = 0
+        Width = 74
+        Caption = 'Command 12'
+      end
+    end
+    object LblVLines: TTyLabel
+      Left = 20
+      Height = 18
+      Top = 812
+      Width = 400
+      Caption = 'Vertical edge lines — tbsLeftLine (sunken) then tbsRightLine (raised):'
+    end
+    object BevelLeftLine: TTyBevel
+      Left = 20
+      Height = 30
+      Top = 834
+      Width = 3
+      Shape = tbsLeftLine
+      Style = tbsLowered
+    end
+    object BevelRightLine: TTyBevel
+      Left = 80
+      Height = 30
+      Top = 834
+      Width = 3
+      Shape = tbsRightLine
+      Style = tbsRaised
+    end
+    object LblPan: TTyLabel
+      Left = 600
+      Height = 34
+      Top = 716
+      Width = 280
+      Caption = 'TTyScrollPanel — press in the empty strip and drag toward the top/bottom edge: it keeps scrolling.'
+      Layout = tlTop
+      WordWrap = True
+    end
+    object PanDemo: TTyScrollPanel
+      Left = 600
+      Height = 110
+      Top = 754
+      Width = 280
+      OnMouseDown = PanDemoMouseDown
+      OnMouseMove = PanDemoMouseMove
+      OnMouseUp = PanDemoMouseUp
+      AutoScroll = True
+      EdgeMargin = 24
+      MaxSpeed = 16
+      object PanBtn1: TTyButton
+        Left = 12
+        Height = 32
+        Top = 10
+        Width = 130
+        Caption = 'Row 1'
+      end
+      object PanBtn2: TTyButton
+        Left = 12
+        Height = 32
+        Top = 50
+        Width = 130
+        Caption = 'Row 2'
+      end
+      object PanBtn3: TTyButton
+        Left = 12
+        Height = 32
+        Top = 90
+        Width = 130
+        Caption = 'Row 3'
+      end
+      object PanBtn4: TTyButton
+        Left = 12
+        Height = 32
+        Top = 130
+        Width = 130
+        Caption = 'Row 4'
+      end
+      object PanBtn5: TTyButton
+        Left = 12
+        Height = 32
+        Top = 170
+        Width = 130
+        Caption = 'Row 5'
+      end
+      object PanBtn6: TTyButton
+        Left = 12
+        Height = 32
+        Top = 210
+        Width = 130
+        Caption = 'Row 6'
+      end
+      object PanBtn7: TTyButton
+        Left = 12
+        Height = 32
+        Top = 250
+        Width = 130
+        Caption = 'Row 7'
+      end
+      object PanBtn8: TTyButton
+        Left = 12
+        Height = 32
+        Top = 290
+        Width = 130
+        Caption = 'Row 8'
+      end
+      object PanBtn9: TTyButton
+        Left = 12
+        Height = 32
+        Top = 330
+        Width = 130
+        Caption = 'Row 9'
+      end
+      object PanBtn10: TTyButton
+        Left = 12
+        Height = 32
+        Top = 370
+        Width = 130
+        Caption = 'Row 10'
+      end
+    end
+    object LblEx2: TTyLabel
+      Left = 900
+      Height = 18
+      Top = 716
+      Width = 280
+      Caption = 'Starts collapsed · slow 500 ms open/close ease:'
+    end
+    object ExDisplay: TTyExPanel
+      Left = 900
+      Height = 100
+      Top = 738
+      Width = 280
+      Caption = 'Display options (click to expand)'
+      Collapsed = True
+      AnimationDuration = 500
+      OnExpand = ExPanelExpand
+      OnCollapse = ExPanelCollapse
+      object ChkRuler: TTyCheckBox
+        Left = 16
+        Height = 22
+        Top = 34
+        Width = 200
+        Caption = 'Show ruler'
+      end
+      object ChkGuides: TTyCheckBox
+        Left = 16
+        Height = 22
+        Top = 60
+        Width = 200
+        Caption = 'Show guides'
+      end
+    end
+    object LblLog: TTyLabel
+      Left = 20
+      Height = 18
+      Top = 868
+      Width = 1100
+      Caption = 'Status — group / header / list / panel events report here'
+    end
     object Grip: TTySizeBox
       Left = 1180
       Height = 16
-      Top = 668
+      Top = 866
       Width = 16
       Anchors = [akRight, akBottom]
     end

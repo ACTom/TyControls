@@ -67,7 +67,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 52
       Width = 224
-      Caption = 'Editable (prefix autocomplete / uppercase / max length 10):'
+      Caption = 'Editable (Text preset, prefix autocomplete / uppercase / max length 10):'
     end
     object EditCombo: TTyComboBox
       Left = 272
@@ -78,6 +78,17 @@ object MainForm: TMainForm
       DropDownCount = 6
       MaxLength = 10
       CharCase = ecUppercase
+      Items.Strings = (
+        'APPLE'
+        'APRICOT'
+        'AVOCADO'
+        'BANANA'
+        'BLUEBERRY'
+        'CHERRY'
+        'GRAPE'
+        'MANGO'
+      )
+      Text = 'MANGO'
       OnChange = ComboChange
       OnSelect = ComboSelect
       OnDropDown = ComboDropDown
@@ -89,6 +100,21 @@ object MainForm: TMainForm
       Top = 140
       Width = 472
       Caption = 'Event state: (awaiting action, try expanding or typing a prefix)'
+    end
+    object LblApi: TTyLabel
+      Left = 24
+      Height = 20
+      Top = 180
+      Width = 472
+      Caption = 'Programmatic DropDown / CloseUp — watch the same events fire:'
+    end
+    object BtnToggleList: TTyButton
+      Left = 24
+      Height = 28
+      Top = 206
+      Width = 160
+      Caption = 'Open / close the list'
+      OnClick = BtnToggleListClick
     end
   end
 end

@@ -1,10 +1,10 @@
 object MainForm: TMainForm
   Left = 0
-  Height = 420
+  Height = 500
   Top = 0
   Width = 460
   Caption = 'TTyButton example'
-  ClientHeight = 420
+  ClientHeight = 500
   ClientWidth = 460
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
@@ -13,7 +13,7 @@ object MainForm: TMainForm
   TitleHeight = 34
   object Surface: TTyFormSurface
     Left = 0
-    Height = 420
+    Height = 500
     Top = 0
     Width = 460
     TabOrder = 0
@@ -146,10 +146,67 @@ object MainForm: TMainForm
       ModalResult = 2
       Caption = 'Cancel (Esc)'
     end
+    object BtnInbox: TTyButton
+      Left = 256
+      Height = 32
+      Top = 212
+      Width = 168
+      TabOrder = 10
+      OnBadgeDisplay = InboxBadgeDisplay
+      ShowBadge = True
+      BadgeValue = 0
+      BadgePosition = bpTopLeft
+      Caption = 'Inbox (badge hidden at 0)'
+    end
+    object LblAnimBadgeHint: TTyLabel
+      Left = 24
+      Height = 54
+      Top = 252
+      Width = 412
+      WordWrap = True
+      Caption = 'AnimationsEnabled = False makes the left button snap on hover instead of fading; OnBadgeDisplay keeps the Inbox badge hidden until its value passes 0.'
+    end
+    object BtnNoAnim: TTyButton
+      Left = 24
+      Height = 32
+      Top = 314
+      Width = 168
+      TabOrder = 11
+      OnClick = ButtonClicked
+      AnimationsEnabled = False
+      Caption = 'No hover fade'
+    end
+    object BtnInboxAdd: TTyButton
+      Left = 256
+      Height = 32
+      Top = 314
+      Width = 168
+      TabOrder = 12
+      OnClick = AddInbox
+      Caption = 'Add one to Inbox'
+    end
+    object LblAutoHint: TTyLabel
+      Left = 24
+      Height = 54
+      Top = 356
+      Width = 412
+      WordWrap = True
+      Caption = 'AutoSize = True: the designed Width = 100 is overrun at run time so the whole caption fits, where a fixed-width button ellipsises it.'
+    end
+    object BtnAuto: TTyButton
+      Left = 24
+      Height = 32
+      Top = 418
+      Width = 100
+      TabOrder = 13
+      OnClick = ButtonClicked
+      AutoSize = True
+      Caption = 'AutoSize=True: I grow to fit this long caption'
+    end
     object LblStatus: TTyLabel
       Left = 24
       Height = 24
-      Top = 356
+      Top = 460
       Width = 412
       Caption = 'Click count: 0'
     end

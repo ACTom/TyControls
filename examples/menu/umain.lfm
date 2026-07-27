@@ -1,10 +1,10 @@
 object MainForm: TMainForm
   Left = 0
-  Height = 380
+  Height = 470
   Top = 0
   Width = 560
   Caption = 'TTyMenuEx / window roll-up example'
-  ClientHeight = 380
+  ClientHeight = 470
   ClientWidth = 560
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
@@ -14,7 +14,7 @@ object MainForm: TMainForm
   CaptionAction = tcaRollUp
   object Surface: TTyFormSurface
     Left = 0
-    Height = 380
+    Height = 470
     Top = 0
     Width = 560
     TabOrder = 0
@@ -53,20 +53,103 @@ object MainForm: TMainForm
       Align = alTop
       Menu = MainMenu1
     end
+    object LblMenuHint: TTyLabel
+      Left = 16
+      Height = 54
+      Top = 70
+      Width = 528
+      WordWrap = True
+      Caption = 'Menu bar: View has a Theme submenu (hover opens it; Right walks in, Left walks back out) and radio icon-size rows; Edit draws right-aligned shortcuts and greys out Redo.'
+    end
+    object LblPopupA: TTyLabel
+      Left = 16
+      Height = 54
+      Top = 130
+      Width = 260
+      WordWrap = True
+      Caption = 'TTyMenuEx: side banner, section headers, icon column, a check item, a "Send to" submenu and a bold Default row.'
+    end
+    object LblPopupB: TTyLabel
+      Left = 284
+      Height = 54
+      Top = 130
+      Width = 260
+      WordWrap = True
+      Caption = 'TTyPopupMenu: the same themed renderer with no images, no headers and no banner.'
+    end
     object HintPanel: TTyPanel
       Left = 16
-      Height = 200
-      Top = 80
-      Width = 528
-      Caption = 'Right-click this panel → enhanced menu (section headers + icon column + check items)'
+      Height = 64
+      Top = 190
+      Width = 260
+      Caption = 'Right-click: enhanced menu'
       PopupMenu = Popup
+    end
+    object HintPanel2: TTyPanel
+      Left = 284
+      Height = 64
+      Top = 190
+      Width = 260
+      Caption = 'Right-click: plain themed menu'
+      PopupMenu = PlainPopup
+    end
+    object LblMiniBar: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 266
+      Width = 528
+      Caption = 'AutoSizeWidth = True shrinks a non-docked bar to fit its top items:'
+    end
+    object TyMenuBar2: TTyMenuBar
+      Left = 16
+      Height = 30
+      Top = 290
+      Width = 200
+      Menu = MiniMenu
+      AutoSizeWidth = True
+    end
+    object LblRollUp: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 330
+      Width = 528
+      Caption = 'Window roll-up: CaptionAction decides what a double-click on the title bar does.'
+    end
+    object BtnRollUp: TTyButton
+      Left = 16
+      Height = 32
+      Top = 354
+      Width = 140
+      Caption = 'Roll up / restore'
+      OnClick = RollUpClick
+    end
+    object LblCaptionAction: TTyLabel
+      Left = 170
+      Height = 32
+      Top = 354
+      Width = 110
+      Caption = 'CaptionAction:'
+    end
+    object CmbCaptionAction: TTyComboBox
+      Left = 286
+      Height = 26
+      Top = 357
+      Width = 150
+      Items.Strings = (
+        'tcaMaximize'
+        'tcaRollUp'
+        'tcaNone'
+      )
+      ItemIndex = 1
+      OnChange = CaptionActionChange
     end
     object StatusLabel: TTyLabel
       Left = 16
-      Height = 24
-      Top = 296
+      Height = 54
+      Top = 398
       Width = 528
-      Caption = 'Ready: right-click the panel to try the enhanced menu; double-click the title bar to roll up the window (double-click again to restore)'
+      WordWrap = True
+      Caption = 'Ready: shortcuts fire with the menu closed - press Ctrl+N. Submenus open on hover (Right walks in, Left walks back out). Greyed rows (Redo, Paste) are Enabled = False.'
     end
   end
   object MainMenu1: TMainMenu
@@ -74,14 +157,17 @@ object MainForm: TMainForm
       Caption = 'File(&F)'
       object MnuFileNew: TMenuItem
         Caption = 'New(&N)'
+        ShortCut = 16462
         OnClick = MenuItemClicked
       end
       object MnuFileOpen: TMenuItem
         Caption = 'Open…(&O)'
+        ShortCut = 16463
         OnClick = MenuItemClicked
       end
       object MnuFileSave: TMenuItem
         Caption = 'Save(&S)'
+        ShortCut = 16467
         OnClick = MenuItemClicked
       end
       object MnuFileSep1: TMenuItem
@@ -96,10 +182,13 @@ object MainForm: TMainForm
       Caption = 'Edit(&E)'
       object MnuEditUndo: TMenuItem
         Caption = 'Undo(&U)'
+        ShortCut = 16474
         OnClick = MenuItemClicked
       end
       object MnuEditRedo: TMenuItem
         Caption = 'Redo(&R)'
+        Enabled = False
+        ShortCut = 16473
         OnClick = MenuItemClicked
       end
       object MnuEditSep1: TMenuItem
@@ -107,14 +196,17 @@ object MainForm: TMainForm
       end
       object MnuEditCut: TMenuItem
         Caption = 'Cut(&T)'
+        ShortCut = 16472
         OnClick = MenuItemClicked
       end
       object MnuEditCopy: TMenuItem
         Caption = 'Copy(&C)'
+        ShortCut = 16451
         OnClick = MenuItemClicked
       end
       object MnuEditPaste: TMenuItem
         Caption = 'Paste(&P)'
+        ShortCut = 16470
         OnClick = MenuItemClicked
       end
     end
@@ -133,6 +225,73 @@ object MainForm: TMainForm
       end
       object MnuViewFull: TMenuItem
         Caption = 'Full screen(&F)'
+        OnClick = MenuItemClicked
+      end
+      object MnuViewSep2: TMenuItem
+        Caption = '-'
+      end
+      object MnuViewSmall: TMenuItem
+        AutoCheck = True
+        Caption = 'Small icons'
+        GroupIndex = 1
+        RadioItem = True
+        OnClick = MenuItemClicked
+      end
+      object MnuViewMedium: TMenuItem
+        AutoCheck = True
+        Caption = 'Medium icons'
+        Checked = True
+        GroupIndex = 1
+        RadioItem = True
+        OnClick = MenuItemClicked
+      end
+      object MnuViewLarge: TMenuItem
+        AutoCheck = True
+        Caption = 'Large icons'
+        GroupIndex = 1
+        RadioItem = True
+        OnClick = MenuItemClicked
+      end
+      object MnuViewSep3: TMenuItem
+        Caption = '-'
+      end
+      object MnuViewTheme: TMenuItem
+        Caption = 'Theme(&T)'
+        object MnuThemeLight: TMenuItem
+          Caption = 'Light(&L)'
+          OnClick = MenuItemClicked
+        end
+        object MnuThemeDark: TMenuItem
+          Caption = 'Dark(&D)'
+          OnClick = MenuItemClicked
+        end
+        object MnuThemeSystem: TMenuItem
+          Caption = 'System(&S)'
+          OnClick = MenuItemClicked
+        end
+      end
+    end
+  end
+  object MiniMenu: TMainMenu
+    object MnuTools: TMenuItem
+      Caption = 'Tools(&T)'
+      object MnuToolsOptions: TMenuItem
+        Caption = 'Options'
+        OnClick = MenuItemClicked
+      end
+      object MnuToolsMacros: TMenuItem
+        Caption = 'Macros'
+        OnClick = MenuItemClicked
+      end
+    end
+    object MnuHelp: TMenuItem
+      Caption = 'Help(&H)'
+      object MnuHelpContents: TMenuItem
+        Caption = 'Contents'
+        OnClick = MenuItemClicked
+      end
+      object MnuHelpAbout: TMenuItem
+        Caption = 'About'
         OnClick = MenuItemClicked
       end
     end
@@ -156,6 +315,7 @@ object MainForm: TMainForm
     end
     object PopPaste: TMenuItem
       Caption = 'Paste(&P)'
+      Enabled = False
       ImageIndex = 2
       OnClick = MenuItemClicked
     end
@@ -173,13 +333,44 @@ object MainForm: TMainForm
     end
     object PopRefresh: TMenuItem
       Caption = 'Refresh(&R)'
+      Default = True
+      ShortCut = 116
       OnClick = MenuItemClicked
+    end
+    object PopSendTo: TMenuItem
+      Caption = 'Send to'
+      object PopSendDesktop: TMenuItem
+        Caption = 'Desktop'
+        OnClick = MenuItemClicked
+      end
+      object PopSendMail: TMenuItem
+        Caption = 'Mail recipient'
+        OnClick = MenuItemClicked
+      end
+      object PopSendZip: TMenuItem
+        Caption = 'Compressed folder'
+        OnClick = MenuItemClicked
+      end
     end
     object PopSep2: TMenuItem
       Caption = '-'
     end
     object PopProps: TMenuItem
       Caption = 'Properties(&P)'
+      OnClick = MenuItemClicked
+    end
+  end
+  object PlainPopup: TTyPopupMenu
+    object PlainCut: TMenuItem
+      Caption = 'Cut(&T)'
+      OnClick = MenuItemClicked
+    end
+    object PlainCopy: TMenuItem
+      Caption = 'Copy(&C)'
+      OnClick = MenuItemClicked
+    end
+    object PlainPaste: TMenuItem
+      Caption = 'Paste(&P)'
       OnClick = MenuItemClicked
     end
   end

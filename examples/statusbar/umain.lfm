@@ -45,10 +45,11 @@ object MainForm: TMainForm
     end
     object HintLbl: TTyLabel
       Left = 24
-      Height = 24
+      Height = 40
       Top = 56
       Width = 472
-      Caption = 'Bottom status bar: multiple panels + size grip. Click a button to update the panel text.'
+      Caption = 'Bottom status bar: multiple panels + size grip. Click a panel to see PanelAtPos report its index; the buttons edit the bar at run time.'
+      WordWrap = True
     end
     object BtnUpdate: TTyButton
       Left = 24

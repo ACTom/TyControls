@@ -21,11 +21,13 @@ unit showcasemain;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Forms, Controls, Graphics, ImgList,
+  Classes, SysUtils, Types, Math, Forms, Controls, Graphics, ImgList,
   tyControls.Controller, tyControls.Form, tyControls.Button,
   tyControls.TyLabel, tyControls.PageControl, tyControls.TabSheet,
   tyControls.StatusBar, tyControls.ComboBox, tyControls.BuiltinThemes,
-  tyControls.TreeView, tyControls.Columns;
+  tyControls.Panel, tyControls.CheckBox, tyControls.TrackBar,
+  tyControls.TreeView, tyControls.Columns,
+  tyControls.Types, tyControls.StyleModel;
 
 { -----------------------------------------------------------------------
   Stable per-node data for the Columns tab (mirrors demo TColNode).
@@ -55,28 +57,73 @@ type
     Pages:       TTyPageControl;
     PgVirtual:   TTyTabSheet;
     LblVirtual:  TTyLabel;
+    VirtualBar:  TTyPanel;
+    BtnGoToNode: TTyButton;
     VirtualTree: TTyTreeView;   // Tab 1: Virtual
     PgCol:       TTyTabSheet;
     LblCol:      TTyLabel;
+    ColBar:         TTyPanel;
+    BtnExpandAll:   TTyButton;
+    BtnCollapseAll: TTyButton;
     ColTree:     TTyTreeView;   // Tab 2: Columns + sort
     PgCheck:     TTyTabSheet;
     LblCheck:    TTyLabel;
     CheckTree:   TTyTreeView;   // Tab 3: Checkboxes
     PgMulti:     TTyTabSheet;
     LblMulti:    TTyLabel;
+    MultiBar:    TTyPanel;
+    ChkButtons:  TTyCheckBox;
+    ChkLines:    TTyCheckBox;
+    ChkRoot:     TTyCheckBox;
+    LblIndent:   TTyLabel;
+    TrkIndent:   TTyTrackBar;
     MultiTree:   TTyTreeView;   // Tab 4: Multi-select
     PgDrag:      TTyTabSheet;
     LblDrag:     TTyLabel;
+    DragBar:        TTyPanel;
+    BtnDragDelete:  TTyButton;
+    BtnDragClear:   TTyButton;
+    BtnDragRebuild: TTyButton;
     DragTree:    TTyTreeView;   // Tab 5: Drag to move
+    PgOwnerDraw: TTyTabSheet;
+    LblDraw:     TTyLabel;
+    DrawTree:    TTyTreeView;   // Tab 6: Owner-draw
     StatusBar:   TTyStatusBar;
     { .lfm-bound handlers (must stay published) }
     procedure FormCreate(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
     procedure LightClick(Sender: TObject);
     procedure DarkClick (Sender: TObject);
+    { .lfm-bound button / strip handlers (public API + display-property demos) }
+    procedure BtnGoToNodeClick   (Sender: TObject);
+    procedure BtnExpandAllClick  (Sender: TObject);
+    procedure BtnCollapseAllClick(Sender: TObject);
+    procedure MultiLookChange    (Sender: TObject);
+    procedure TrkIndentChange    (Sender: TObject);
+    procedure BtnDragDeleteClick (Sender: TObject);
+    procedure BtnDragClearClick  (Sender: TObject);
+    procedure BtnDragRebuildClick(Sender: TObject);
+    { .lfm-bound Tab 6 (Owner-draw) tree handlers }
+    procedure DrawInitNode    (Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+                               var InitStates: TTyNodeInitStates);
+    procedure DrawInitChildren(Sender: TTyTreeView; Node: PTyTreeNode;
+                               var ChildCount: Cardinal);
+    procedure DrawGetText     (Sender: TTyTreeView; Node: PTyTreeNode;
+                               var AText: string);
+    procedure DrawMeasureItem (Sender: TTyTreeView; ACanvas: TCanvas;
+                               Node: PTyTreeNode; var ANodeHeight: Integer);
+    procedure DrawDrawNode    (Sender: TTyTreeView; ACanvas: TCanvas;
+                               Node: PTyTreeNode; Column: Integer;
+                               const ACellRect: TRect);
+    procedure DrawAfterCellPaint(Sender: TTyTreeView; ACanvas: TCanvas;
+                               Node: PTyTreeNode; Column: Integer;
+                               const ACellRect: TRect);
+    procedure DrawChange      (Sender: TTyTreeView; Node: PTyTreeNode);
   private
     { Explorer-style row icons for the Columns tab (owned by the form) }
     FFileIcons:   TImageList;
+    { Running total of nodes released through DragTree.OnFreeNode. }
+    FFreedNodes:  Integer;
 
     { Per-tab tree configuration (kept in code — columns / options / images /
       node-data population are not simple published properties). }
@@ -86,6 +133,13 @@ type
     procedure InitCheckTab;
     procedure InitMultiTab;
     procedure InitDragTab;
+    procedure BuildDragNodes;
+
+    { Status-bar helpers: panel 0 carries the running commentary, panel 1 the
+      focused row (so OnFocusChanged and OnSelectionChanged don't overwrite
+      each other). }
+    procedure SetStatus   (const AText: string);
+    procedure SetFocusInfo(const AText: string);
 
     { Tab 1 — Virtual }
     procedure VirtualInitNode    (Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
@@ -94,6 +148,12 @@ type
                                   var ChildCount: Cardinal);
     procedure VirtualGetText     (Sender: TTyTreeView; Node: PTyTreeNode;
                                   var AText: string);
+    procedure VirtualExpanding   (Sender: TTyTreeView; Node: PTyTreeNode;
+                                  var Allowed: Boolean);
+    procedure VirtualExpanded    (Sender: TTyTreeView; Node: PTyTreeNode);
+    procedure VirtualCollapsed   (Sender: TTyTreeView; Node: PTyTreeNode);
+    procedure VirtualNodeClick   (Sender: TTyTreeView; Node: PTyTreeNode);
+    procedure VirtualNodeDblClick(Sender: TTyTreeView; Node: PTyTreeNode);
 
     { Tab 2 — Columns + sort }
     procedure ColInitNode    (Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
@@ -112,6 +172,12 @@ type
                               Column: Integer; const NewText: string);
     procedure ColEditing     (Sender: TTyTreeView; Node: PTyTreeNode;
                               Column: Integer; var Allowed: Boolean);
+    procedure ColEditCancelled(Sender: TTyTreeView; Node: PTyTreeNode;
+                              Column: Integer);
+    procedure ColHeaderClick (Sender: TTyTreeView; Column: Integer);
+    procedure ColColumnResized(Sender: TTyTreeView; Column: Integer);
+    procedure ColColumnReorder(Sender: TTyTreeView;
+                              OldPosition, NewPosition: Integer);
 
     { Tab 3 — Checkboxes }
     procedure CheckInitNode    (Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
@@ -121,6 +187,8 @@ type
     procedure CheckGetText     (Sender: TTyTreeView; Node: PTyTreeNode;
                                 var AText: string);
     procedure CheckOnChecked   (Sender: TTyTreeView; Node: PTyTreeNode);
+    procedure CheckChecking     (Sender: TTyTreeView; Node: PTyTreeNode;
+                                 var Allowed: Boolean);
 
     { Tab 4 — Multi-select }
     procedure MultiInitNode    (Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
@@ -130,11 +198,23 @@ type
     procedure MultiGetText     (Sender: TTyTreeView; Node: PTyTreeNode;
                                 var AText: string);
     procedure MultiSelectionChanged(Sender: TObject);
+    procedure MultiFocusChanged(Sender: TTyTreeView; Node: PTyTreeNode);
+    procedure MultiIncrementalSearch(Sender: TTyTreeView; Node: PTyTreeNode;
+                                const ASearchText: string; var AMatch: Boolean);
 
     { Tab 5 — Drag to move (small, reparent-safe) }
     procedure DragGetText   (Sender: TTyTreeView; Node: PTyTreeNode;
                              var AText: string);
     procedure DragNodeMoved (Sender: TTyTreeView; Node: PTyTreeNode);
+    procedure DragDragOver  (Sender: TTyTreeView; Src, Target: PTyTreeNode;
+                             Mode: TTyTreeDropMode; var Allowed: Boolean);
+    procedure DragFreeNode  (Sender: TTyTreeView; Node: PTyTreeNode);
+
+    { Tab 6 — Owner-draw helpers (shared geometry / colours for the two
+      per-cell paint hooks). }
+    function  DrawRowPercent(Sender: TTyTreeView; Node: PTyTreeNode): Integer;
+    function  DrawPillRect(const ACellRect: TRect): TRect;
+    function  OwnerDrawInk: TColor;
   end;
 
 var
@@ -184,6 +264,50 @@ const
     ('game_a',      'game_b',      'game_c',     'launcher.exe')
   );
 
+{ OnFocusChanged is not OnSelectionChanged: the FOCUSED row is the one the keyboard acts
+  on, and with toMultiSelect it moves independently of the selection (Ctrl+arrows move
+  focus without selecting; Ctrl+Space then toggles that row into the set). Panel 1 keeps
+  it so the two never overwrite each other. }
+procedure TShowcaseForm.MultiFocusChanged(Sender: TTyTreeView; Node: PTyTreeNode);
+begin
+  if Node = nil then
+    SetFocusInfo('')
+  else
+    SetFocusInfo(Format('Focused: item %d (level %d)',
+      [Node^.Index, Sender.GetNodeLevel(Node)]));
+end;
+
+{ The built-in incremental search matches a PREFIX. Handling the event replaces that
+  test wholesale -- here with a substring match, so typing "23" also finds "Item 123". }
+procedure TShowcaseForm.MultiIncrementalSearch(Sender: TTyTreeView;
+  Node: PTyTreeNode; const ASearchText: string; var AMatch: Boolean);
+var
+  rowText: string;
+begin
+  rowText := '';
+  MultiGetText(Sender, Node, rowText);
+  AMatch := (ASearchText <> '') and
+            (Pos(LowerCase(ASearchText), LowerCase(rowText)) > 0);
+end;
+
+{ The three checkboxes drive display properties that are usually set once at design time
+  and then never seen changing. Flipping them live is the point. }
+procedure TShowcaseForm.MultiLookChange(Sender: TObject);
+begin
+  MultiTree.ShowButtons   := ChkButtons.Checked;
+  MultiTree.ShowTreeLines := ChkLines.Checked;
+  MultiTree.ShowRoot      := ChkRoot.Checked;
+  SetStatus(Format('ShowButtons = %s, ShowTreeLines = %s, ShowRoot = %s',
+    [BoolToStr(ChkButtons.Checked, True), BoolToStr(ChkLines.Checked, True),
+     BoolToStr(ChkRoot.Checked, True)]));
+end;
+
+procedure TShowcaseForm.TrkIndentChange(Sender: TObject);
+begin
+  MultiTree.Indent := TrkIndent.Position;
+  SetStatus(Format('Indent = %d px per level', [TrkIndent.Position]));
+end;
+
 { =======================================================================
   Form bootstrap — all controls stream from the .lfm; FormCreate wires the
   theme, adds the status panel and configures each streamed tree.
@@ -210,10 +334,17 @@ begin
   TyDefaultController.Mode      := 'light';
   ApplyChromeTheme(TyDefaultController);   // theme the window chrome + background
 
-  { Status bar: one panel (the bar is streamed; the panel is data, added here). }
+  { Status bar: two panels (the bar is streamed; the panels are data, added
+    here). Panel 0 is the running commentary every handler writes to; panel 1
+    is reserved for the focused row, so OnFocusChanged and OnSelectionChanged
+    can both stay visible instead of overwriting one another. }
   Panel := StatusBar.Panels.Add;
-  Panel.Width := 600;
+  Panel.Width := 580;
   Panel.Text  := 'Ready';
+
+  Panel := StatusBar.Panels.Add;
+  Panel.Width := 300;
+  Panel.Text  := '';
 
   { Configure each streamed tree (columns / options / images / node-data
     population stay in code, exactly as before). }
@@ -224,6 +355,21 @@ begin
   InitDragTab;
 
   Pages.ActivePageIndex := 0;
+end;
+
+{ -----------------------------------------------------------------------
+  Status-bar plumbing
+  ----------------------------------------------------------------------- }
+procedure TShowcaseForm.SetStatus(const AText: string);
+begin
+  if (StatusBar <> nil) and (StatusBar.Panels.Count > 0) then
+    StatusBar.Panels[0].Text := AText;
+end;
+
+procedure TShowcaseForm.SetFocusInfo(const AText: string);
+begin
+  if (StatusBar <> nil) and (StatusBar.Panels.Count > 1) then
+    StatusBar.Panels[1].Text := AText;
 end;
 
 procedure TShowcaseForm.ThemeComboChange(Sender: TObject);
@@ -266,6 +412,16 @@ begin
   VirtualTree.OnInitChildren := @VirtualInitChildren;
   VirtualTree.OnGetText      := @VirtualGetText;
 
+  { Expand/collapse lifecycle. OnExpanding is the VETO hook (it runs before any
+    child is materialised, so a refused expansion costs nothing); OnExpanded /
+    OnCollapsed are the after-the-fact notifications. OnNodeClick /
+    OnNodeDblClick are the plain interaction hooks. }
+  VirtualTree.OnExpanding    := @VirtualExpanding;
+  VirtualTree.OnExpanded     := @VirtualExpanded;
+  VirtualTree.OnCollapsed    := @VirtualCollapsed;
+  VirtualTree.OnNodeClick    := @VirtualNodeClick;
+  VirtualTree.OnNodeDblClick := @VirtualNodeDblClick;
+
   { 1 million root nodes — the virtual engine creates no child structure until
     a node is expanded; memory stays constant until the user expands nodes. }
   VirtualTree.RootNodeCount := 1000000;
@@ -288,6 +444,78 @@ procedure TShowcaseForm.VirtualGetText(Sender: TTyTreeView;
   Node: PTyTreeNode; var AText: string);
 begin
   AText := Format('Node %d  (L%d)', [Node^.Index, Sender.GetNodeLevel(Node)]);
+end;
+
+{ OnExpanding runs BEFORE OnInitChildren, so a veto here is free: the ten child
+  nodes are never allocated. Level 3 is the last expandable level (VirtualInitNode
+  stops flagging children at level 4), so refusing it makes level 4 unreachable —
+  exactly the shape of an app that gates a branch behind a permission check. }
+procedure TShowcaseForm.VirtualExpanding(Sender: TTyTreeView;
+  Node: PTyTreeNode; var Allowed: Boolean);
+begin
+  if (Node <> nil) and (Sender.GetNodeLevel(Node) = 3) then
+  begin
+    Allowed := False;
+    SetStatus(Format('Level-3 expansion vetoed (OnExpanding) — Node %d stays shut',
+      [Node^.Index]));
+  end;
+end;
+
+procedure TShowcaseForm.VirtualExpanded(Sender: TTyTreeView; Node: PTyTreeNode);
+begin
+  if Node = nil then Exit;
+  SetStatus(Format('Expanded Node %d  (OnExpanded)', [Node^.Index]));
+end;
+
+procedure TShowcaseForm.VirtualCollapsed(Sender: TTyTreeView; Node: PTyTreeNode);
+begin
+  if Node = nil then Exit;
+  SetStatus(Format('Collapsed Node %d  (OnCollapsed)', [Node^.Index]));
+end;
+
+procedure TShowcaseForm.VirtualNodeClick(Sender: TTyTreeView; Node: PTyTreeNode);
+var
+  s: string;
+begin
+  if Node = nil then Exit;
+  s := '';
+  VirtualGetText(Sender, Node, s);
+  SetStatus('Clicked ' + s + '  (OnNodeClick)');
+end;
+
+procedure TShowcaseForm.VirtualNodeDblClick(Sender: TTyTreeView; Node: PTyTreeNode);
+var
+  s: string;
+begin
+  if Node = nil then Exit;
+  s := '';
+  VirtualGetText(Sender, Node, s);
+  SetStatus('Double-clicked ' + s + '  (OnNodeDblClick)');
+end;
+
+{ ScrollIntoView on a 1M-row list: walk the ROOT sibling chain (never GetNext —
+  that descends into whatever the user has expanded) to the 1000th node, focus
+  it and let the control bring it into view. }
+procedure TShowcaseForm.BtnGoToNodeClick(Sender: TObject);
+var
+  n: PTyTreeNode;
+  i: Integer;
+begin
+  n := VirtualTree.GetFirstChild(nil);
+  i := 0;
+  while (n <> nil) and (i < 999) do
+  begin
+    n := VirtualTree.GetNextSibling(n);
+    Inc(i);
+  end;
+  if n = nil then
+  begin
+    SetStatus('Node 1000 not found');
+    Exit;
+  end;
+  VirtualTree.FocusedNode := n;
+  VirtualTree.ScrollIntoView(n);
+  SetStatus('ScrollIntoView: jumped to root node 1000 (Index 999)');
 end;
 
 { =======================================================================
@@ -443,6 +671,13 @@ begin
   ColTree.OnCompareNodes  := @ColCompareNodes;
   ColTree.OnNewText       := @ColNewText;
   ColTree.OnEditing       := @ColEditing;   { FIX 8: only the Name column edits }
+  ColTree.OnEditCancelled := @ColEditCancelled;
+
+  { Header notifications: the tab already ENABLES the sort / resize / reorder
+    gestures — these report what the user actually did with them. }
+  ColTree.OnHeaderClick    := @ColHeaderClick;
+  ColTree.OnColumnResized  := @ColColumnResized;
+  ColTree.OnColumnReorder  := @ColColumnReorder;
 
   { Per-row icons in the main (Name) column }
   ColTree.Images          := FFileIcons;
@@ -451,13 +686,19 @@ begin
   { Build header }
   with ColTree.Header do
   begin
+    { hoHotTrack highlights the header section under the cursor (the body's own
+      row hover comes from ColTree.HotTrack, set in the .lfm); hoAutoResize makes
+      AutoSizeIndex's column absorb whatever width is left over. }
     Options := [hoVisible, hoColumnResize, hoShowSortGlyphs,
-                hoHeaderClickAutoSort, hoDrag];
+                hoHeaderClickAutoSort, hoDrag, hoAutoResize, hoHotTrack];
 
     col := Columns.Add as TTyColumn;
     col.Text := 'Name';
     col.Width := 200;
     col.Alignment := taLeftJustify;
+    { Pinned: the default set includes coDraggable — drop it and this column can
+      no longer be dragged out of first place (it still resizes and still sorts). }
+    col.Options := [coVisible, coResizable, coAllowClick];
 
     col := Columns.Add as TTyColumn;
     col.Text := 'Type';
@@ -468,6 +709,10 @@ begin
     col.Text := 'Size';
     col.Width := 90;
     col.Alignment := taRightJustify;
+    { Clamped drag range + a caption that follows the (right-aligned) data. }
+    col.MinWidth := 60;
+    col.MaxWidth := 140;
+    col.CaptionAlignment := taRightJustify;
 
     col := Columns.Add as TTyColumn;
     col.Text := 'Modified';
@@ -475,8 +720,10 @@ begin
     col.Alignment := taLeftJustify;
 
     { Set the main (tree) column AFTER the columns exist — SetMainColumn clamps to
-      NoColumn(-1) when assigned while Columns.Count = 0. }
-    MainColumn := 0;
+      NoColumn(-1) when assigned while Columns.Count = 0. Same for AutoSizeIndex:
+      it names the LAST column, which only exists once the Adds above have run. }
+    MainColumn    := 0;
+    AutoSizeIndex := 3;
   end;
 
   ColTree.RootNodeCount := 3;
@@ -706,6 +953,57 @@ begin
   Allowed := (Column = 0);
 end;
 
+{ The other half of the edit lifecycle: Esc (or a programmatic CancelEdit) closes
+  the editor WITHOUT firing OnNewText, so the node blob is left untouched. }
+procedure TShowcaseForm.ColEditCancelled(Sender: TTyTreeView; Node: PTyTreeNode;
+  Column: Integer);
+begin
+  SetStatus('Rename cancelled (Esc) — OnEditCancelled, nothing written to the node');
+end;
+
+{ Header notifications. OnHeaderClick fires AFTER the automatic sort has run
+  (hoHeaderClickAutoSort), so the header already carries the new SortColumn /
+  SortDirection when we read them here. }
+procedure TShowcaseForm.ColHeaderClick(Sender: TTyTreeView; Column: Integer);
+var
+  dir: string;
+begin
+  if (Column < 0) or (Column >= ColTree.Header.Columns.Count) then Exit;
+  if ColTree.Header.SortDirection = sdAscending then dir := 'ascending'
+  else dir := 'descending';
+  SetStatus(Format('Sorted by %s, %s  (OnHeaderClick)',
+    [TTyColumn(ColTree.Header.Columns.Items[Column]).Text, dir]));
+end;
+
+procedure TShowcaseForm.ColColumnResized(Sender: TTyTreeView; Column: Integer);
+begin
+  if (Column < 0) or (Column >= ColTree.Header.Columns.Count) then Exit;
+  SetStatus(Format('Column %d resized to %d px  (OnColumnResized)',
+    [Column, TTyColumn(ColTree.Header.Columns.Items[Column]).Width]));
+end;
+
+procedure TShowcaseForm.ColColumnReorder(Sender: TTyTreeView;
+  OldPosition, NewPosition: Integer);
+begin
+  SetStatus(Format('Column moved %d -> %d  (OnColumnReorder)',
+    [OldPosition, NewPosition]));
+end;
+
+{ FullExpand / FullCollapse: the programmatic counterparts of clicking every
+  expand button. Safe here because the tab's tree is tiny — never call FullExpand
+  on the 1M-node tab. }
+procedure TShowcaseForm.BtnExpandAllClick(Sender: TObject);
+begin
+  ColTree.FullExpand(nil);
+  SetStatus('FullExpand(nil) — every branch open');
+end;
+
+procedure TShowcaseForm.BtnCollapseAllClick(Sender: TObject);
+begin
+  ColTree.FullCollapse(nil);
+  SetStatus('FullCollapse(nil) — back to the three root folders');
+end;
+
 { =======================================================================
   TAB 3 — Checkboxes
   - Level 0 folders: ctTriStateCheckBox (auto-tri-state tracking)
@@ -722,6 +1020,7 @@ begin
   CheckTree.OnInitChildren := @CheckInitChildren;
   CheckTree.OnGetText      := @CheckGetText;
   CheckTree.OnChecked      := @CheckOnChecked;
+  CheckTree.OnChecking     := @CheckChecking;
 
   CheckTree.RootNodeCount := 3;
 end;
@@ -779,6 +1078,19 @@ end;
   Options = [toMultiSelect, toFullRowSelect]
   OnSelectionChanged updates the status bar with the selected count.
   ======================================================================= }
+{ OnChecking is the VETO half of the check pair: it runs before the state flips and can
+  refuse it, while OnChecked only reports what already happened. Here the first root is
+  a locked branch -- a permission-gated group in a real app. }
+procedure TShowcaseForm.CheckChecking(Sender: TTyTreeView; Node: PTyTreeNode;
+  var Allowed: Boolean);
+begin
+  if (Sender.GetNodeLevel(Node) = 0) and (Node^.Index = 0) then
+  begin
+    Allowed := False;
+    SetStatus('Group 0 is locked - OnChecking refused the toggle');
+  end;
+end;
+
 procedure TShowcaseForm.InitMultiTab;
 begin
   MultiTree.Options := [toMultiSelect, toFullRowSelect];
@@ -787,6 +1099,12 @@ begin
   MultiTree.OnInitChildren    := @MultiInitChildren;
   MultiTree.OnGetText         := @MultiGetText;
   MultiTree.OnSelectionChanged := @MultiSelectionChanged;
+  { toIncrementalSearch makes the control type-to-find; OnIncrementalSearch then
+    decides what "matches" means (the default is a prefix test). SearchTimeout comes
+    from the .lfm. }
+  MultiTree.Options := MultiTree.Options + [toIncrementalSearch];
+  MultiTree.OnFocusChanged      := @MultiFocusChanged;
+  MultiTree.OnIncrementalSearch := @MultiIncrementalSearch;
 
   MultiTree.RootNodeCount := 200;
 end;
@@ -842,20 +1160,32 @@ type
   end;
 
 procedure TShowcaseForm.InitDragTab;
+begin
+  DragTree.Options := [toNodeDrag];
+  DragTree.NodeDataSize := SizeOf(TDragRec);
+  DragTree.OnGetText   := @DragGetText;
+  DragTree.OnNodeMoved := @DragNodeMoved;
+  { OnDragOver vets every hover position, so a drop can be refused before it happens;
+    OnFreeNode fires for every node the control releases, however it dies (Delete,
+    Clear, or the form going away). }
+  DragTree.OnDragOver  := @DragDragOver;
+  DragTree.OnFreeNode  := @DragFreeNode;
+
+  BuildDragNodes;
+end;
+
+{ Split out of InitDragTab so the Rebuild button can put the tree back after Clear. }
+procedure TShowcaseForm.BuildDragNodes;
 var
   group:   PTyTreeNode;
   child:   PTyTreeNode;
   data:    PDragRec;
   g, c, id: Integer;
 begin
-  DragTree.Options := [toNodeDrag];
-  DragTree.NodeDataSize := SizeOf(TDragRec);
-  DragTree.OnGetText   := @DragGetText;
-  DragTree.OnNodeMoved := @DragNodeMoved;
-
   { Build the small tree eagerly (no lazy init needed at this size). Three groups,
     each with three children; the label id is just the node's position in
     DragLabels at build time and never changes thereafter. }
+  DragTree.Clear;
   for g := 0 to 2 do
   begin
     group := DragTree.AddChild(nil);
@@ -887,6 +1217,61 @@ end;
 
 { Announce a completed move in the status bar (the stable label travels with the
   node, so we just re-read its caption). }
+{ OnDragOver runs for every hover position, so the tree can refuse a drop before it
+  happens rather than undoing it afterwards. dmOn means "make it a CHILD of the
+  target", which only makes sense for a branch -- so it is refused on a leaf, while
+  dmAbove / dmBelow (pure reordering) always pass. }
+procedure TShowcaseForm.DragDragOver(Sender: TTyTreeView; Src, Target: PTyTreeNode;
+  Mode: TTyTreeDropMode; var Allowed: Boolean);
+begin
+  if (Mode = dmOn) and (Target <> nil) and (Sender.GetNodeLevel(Target) > 0) then
+  begin
+    Allowed := False;
+    SetStatus('OnDragOver: refused - a leaf cannot take children (drop ABOVE or BELOW instead)');
+  end;
+end;
+
+{ Fires for EVERY node the control releases, whoever caused it: Delete, Clear, or the
+  form closing. A real app frees managed node data here; the showcase just counts. }
+procedure TShowcaseForm.DragFreeNode(Sender: TTyTreeView; Node: PTyTreeNode);
+begin
+  Inc(FFreedNodes);
+end;
+
+procedure TShowcaseForm.BtnDragDeleteClick(Sender: TObject);
+var
+  node: PTyTreeNode;
+  before: Integer;
+begin
+  node := DragTree.FocusedNode;
+  if node = nil then
+  begin
+    SetStatus('Nothing to delete - click a row first');
+    Exit;
+  end;
+  before := FFreedNodes;
+  DragTree.DeleteNode(node);   // a branch takes its children with it
+  SetStatus(Format('Deleted - OnFreeNode released %d node(s), %d in total',
+    [FFreedNodes - before, FFreedNodes]));
+end;
+
+procedure TShowcaseForm.BtnDragClearClick(Sender: TObject);
+var
+  before: Integer;
+begin
+  before := FFreedNodes;
+  DragTree.Clear;
+  SetStatus(Format('Cleared - OnFreeNode released %d node(s), %d in total. '
+    + 'The centred text is the control''s own EmptyListMessage.',
+    [FFreedNodes - before, FFreedNodes]));
+end;
+
+procedure TShowcaseForm.BtnDragRebuildClick(Sender: TObject);
+begin
+  BuildDragNodes;
+  SetStatus('Rebuilt the three groups');
+end;
+
 procedure TShowcaseForm.DragNodeMoved(Sender: TTyTreeView; Node: PTyTreeNode);
 var
   s: string;
@@ -896,5 +1281,146 @@ begin
   if (StatusBar <> nil) and (StatusBar.Panels.Count > 0) then
     StatusBar.Panels[0].Text := 'Moved ' + s;
 end;
+
+
+{ =======================================================================
+  Tab 6 — Owner-draw
+  toOwnerDraw hands each CELL to OnDrawNode after the theme has painted the row
+  background, the expand button and the tree lines, so the example only replaces the
+  CONTENT. OnAfterCellPaint then runs for every cell whether or not the option is on,
+  which makes it the place for an overlay that must survive either mode.
+  ======================================================================= }
+
+{ Level 0 = a build (tall row, progress pill), level 1 = a stage (short row). }
+procedure TShowcaseForm.DrawInitNode(Sender: TTyTreeView;
+  ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates);
+begin
+  if Sender.GetNodeLevel(Node) = 0 then
+    Include(InitStates, ivsHasChildren);
+end;
+
+procedure TShowcaseForm.DrawInitChildren(Sender: TTyTreeView;
+  Node: PTyTreeNode; var ChildCount: Cardinal);
+begin
+  ChildCount := 4;
+end;
+
+{ Still needed with toOwnerDraw: the control uses it for incremental search, for
+  accessibility and as the fallback if the paint hook does nothing. }
+procedure TShowcaseForm.DrawGetText(Sender: TTyTreeView; Node: PTyTreeNode;
+  var AText: string);
+begin
+  if Sender.GetNodeLevel(Node) = 0 then
+    AText := Format('Build #%d', [Node^.Index + 1])
+  else
+    AText := Format('Stage %d', [Node^.Index + 1]);
+end;
+
+{ toVariableNodeHeight makes the control ask per row instead of using one height. }
+procedure TShowcaseForm.DrawMeasureItem(Sender: TTyTreeView; ACanvas: TCanvas;
+  Node: PTyTreeNode; var ANodeHeight: Integer);
+begin
+  if Sender.GetNodeLevel(Node) = 0 then ANodeHeight := 40 else ANodeHeight := 22;
+end;
+
+{ A deterministic 0..100 per build, so the pills do not dance on every repaint. }
+function TShowcaseForm.DrawRowPercent(Sender: TTyTreeView; Node: PTyTreeNode): Integer;
+begin
+  Result := ((Node^.Index * 37) mod 101);
+end;
+
+{ The pill occupies the right end of the cell, vertically centred. }
+function TShowcaseForm.DrawPillRect(const ACellRect: TRect): TRect;
+const
+  PillW = 120;
+  PillH = 10;
+begin
+  Result.Right  := ACellRect.Right - 12;
+  Result.Left   := Result.Right - PillW;
+  Result.Top    := (ACellRect.Top + ACellRect.Bottom - PillH) div 2;
+  Result.Bottom := Result.Top + PillH;
+end;
+
+{ Read the ink from the THEME rather than hard-coding one, so the owner-drawn text
+  follows every skin and both modes exactly like the rows around it. }
+function TShowcaseForm.OwnerDrawInk: TColor;
+begin
+  Result := TyColorToLCL(
+    TyDefaultController.Model.ResolveStyle('TyTreeView', '', []).TextColor);
+end;
+
+procedure TShowcaseForm.DrawDrawNode(Sender: TTyTreeView; ACanvas: TCanvas;
+  Node: PTyTreeNode; Column: Integer; const ACellRect: TRect);
+var
+  txt:  string;
+  pill: TRect;
+  pct:  Integer;
+  ink:  TColor;
+begin
+  ink := OwnerDrawInk;
+  DrawGetText(Sender, Node, txt);
+
+  ACanvas.Brush.Style := bsClear;
+  ACanvas.Font.Color  := ink;
+  ACanvas.Font.Bold   := Sender.GetNodeLevel(Node) = 0;
+  ACanvas.TextOut(ACellRect.Left + 4,
+    (ACellRect.Top + ACellRect.Bottom - ACanvas.TextHeight('Hg')) div 2, txt);
+  ACanvas.Font.Bold := False;
+
+  { Only builds carry a progress pill; the stages are plain text rows. }
+  if Sender.GetNodeLevel(Node) <> 0 then Exit;
+  pill := DrawPillRect(ACellRect);
+  if pill.Left <= ACellRect.Left + ACanvas.TextWidth(txt) + 16 then Exit;  // no room
+
+  pct := DrawRowPercent(Sender, Node);
+  ACanvas.Brush.Style := bsSolid;
+  ACanvas.Brush.Color := TyColorToLCL(
+    TyDefaultController.Model.ResolveStyle('TyProgressBar', '', []).Background.Color);
+  ACanvas.FillRect(pill);
+  ACanvas.Brush.Color := TyColorToLCL(
+    TyDefaultController.Model.ResolveStyle('TyButton', 'primary', []).Background.Color);
+  ACanvas.FillRect(Rect(pill.Left, pill.Top,
+    pill.Left + Round((pill.Right - pill.Left) * pct / 100), pill.Bottom));
+  ACanvas.Brush.Style := bsClear;
+end;
+
+{ Runs for EVERY cell, with or without toOwnerDraw -- an overlay hook rather than a
+  replacement one. Every fifth build gets a NEW badge. }
+procedure TShowcaseForm.DrawAfterCellPaint(Sender: TTyTreeView; ACanvas: TCanvas;
+  Node: PTyTreeNode; Column: Integer; const ACellRect: TRect);
+var
+  badge: TRect;
+begin
+  if Sender.GetNodeLevel(Node) <> 0 then Exit;
+  if (Node^.Index mod 5) <> 0 then Exit;
+
+  badge.Left   := ACellRect.Left + 4;
+  badge.Top    := ACellRect.Top + 2;
+  badge.Right  := badge.Left + 34;
+  badge.Bottom := badge.Top + 14;
+  if badge.Right > ACellRect.Right then Exit;
+
+  ACanvas.Brush.Style := bsSolid;
+  ACanvas.Brush.Color := TyColorToLCL(
+    TyDefaultController.Model.ResolveStyle('TyBadge', '', []).Background.Color);
+  ACanvas.FillRect(badge);
+  ACanvas.Brush.Style := bsClear;
+  ACanvas.Font.Color  := clWhite;
+  ACanvas.TextOut(badge.Left + 5, badge.Top, 'NEW');
+end;
+
+procedure TShowcaseForm.DrawChange(Sender: TTyTreeView; Node: PTyTreeNode);
+var
+  txt: string;
+begin
+  if Node = nil then Exit;
+  DrawGetText(Sender, Node, txt);
+  if Sender.GetNodeLevel(Node) = 0 then
+    SetStatus(Format('%s - %d%% (owner-drawn pill), OnChange',
+      [txt, DrawRowPercent(Sender, Node)]))
+  else
+    SetStatus(Format('%s - OnChange', [txt]));
+end;
+
 
 end.

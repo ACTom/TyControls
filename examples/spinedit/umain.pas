@@ -5,9 +5,14 @@ unit umain;
   (the implementation is integer-only; decimals are not supported):
     - Value / MinValue / MaxValue / Increment, with OnChange writing live to the status bar
     - Negative range (-50..50, step 5)
-    - Alignment (right-justified), MaxLength (limits the number of digits entered)
+    - Alignment: right-justified (Year) and centred (the taCenter box; the caret tracks the centre)
+    - MaxLength (limits the number of digits entered)
     - ReadOnly (locked: no editing/stepping/wheel)
-  Interaction: up/down arrow buttons, keyboard ↑/↓, mouse wheel, or typing then Enter to commit.
+    - The Value setter CLAMPS into MinValue..MaxValue and only fires OnChange on a real change:
+      the 'Value := 999 in code' button writes 999 and the status line reports 100
+  Interaction: up/down arrow buttons, keyboard ↑/↓, mouse wheel, or typing then Enter to commit
+  (Esc abandons the typed digits and puts Value back). OnClick fires on the field and on the
+  +/- buttons alike, and has its own readout so it never hides the OnChange one.
   The UI (window, every spin box, labels and the live theme switcher) is designed in umain.lfm
   (a TTyForm + TTyTitleBar); the code here is theme setup + event handlers only. }
 
@@ -18,7 +23,8 @@ interface
 uses
   Classes, SysUtils, Forms, Controls,
   tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes,
-  tyControls.SpinEdit, tyControls.TyLabel, tyControls.ComboBox, tyControls.ToggleSwitch;
+  tyControls.SpinEdit, tyControls.TyLabel, tyControls.ComboBox, tyControls.ToggleSwitch,
+  tyControls.Button;
 
 type
   TMainForm = class(TTyForm)
@@ -36,8 +42,16 @@ type
     SpinLock: TTySpinEdit;     // ReadOnly locked
     LblStatusCap: TTyLabel;
     LblStatus: TTyLabel;       // OnChange status output
+    BtnPoke: TTyButton;        // programmatic out-of-range write (clamp demo)
+    LblCentre: TTyLabel;
+    SpinCentre: TTySpinEdit;   // Alignment = taCenter
+    LblCommit: TTyLabel;
+    LblClickCap: TTyLabel;
+    LblClick: TTyLabel;        // OnClick output
     procedure FormCreate(Sender: TObject);
     procedure SpinChange(Sender: TObject);
+    procedure SpinClick(Sender: TObject);
+    procedure PokeClick(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
     procedure DarkSwitchChange(Sender: TObject);
   private
@@ -97,7 +111,25 @@ begin
   else if Sender = SpinYear then
     UpdateStatus('Year', SpinYear)
   else if Sender = SpinLock then
-    UpdateStatus('Locked', SpinLock);
+    UpdateStatus('Locked', SpinLock)
+  else if Sender = SpinCentre then
+    UpdateStatus('Centred', SpinCentre);
+end;
+
+procedure TMainForm.SpinClick(Sender: TObject);
+begin
+  // The only published event besides OnChange. It fires on a click anywhere in the
+  // control, including the +/- buttons (which step the value first, so the status
+  // line above shows the new value and this line shows the click).
+  LblClick.Caption := 'Quantity clicked (field or +/- button)';
+end;
+
+procedure TMainForm.PokeClick(Sender: TObject);
+begin
+  // 999 is far outside 0..100: the setter CLAMPS instead of rejecting, so Value
+  // lands on 100 and OnChange fires exactly once (and not at all on a second click,
+  // because 100 is no longer a change).
+  SpinQty.Value := 999;
 end;
 
 end.

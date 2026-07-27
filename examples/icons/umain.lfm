@@ -1,31 +1,31 @@
 object MainForm: TMainForm
   Left = 0
-  Height = 320
+  Height = 780
   Top = 0
-  Width = 460
+  Width = 620
   Caption = 'Icons & Images example'
-  ClientHeight = 320
-  ClientWidth = 460
+  ClientHeight = 780
+  ClientWidth = 620
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
   TitleBar = Bar
   object Surface: TTyFormSurface
     Left = 0
-    Height = 320
+    Height = 780
     Top = 0
-    Width = 460
+    Width = 620
     Align = alClient
     object Bar: TTyTitleBar
       Left = 0
       Height = 34
       Top = 0
-      Width = 460
+      Width = 620
       Align = alTop
       Caption = 'Icons & Images  · TyControls'
       TitleAlignment = taLeftJustify
       object DarkSwitch: TTyToggleSwitch
-        Left = 112
+        Left = 272
         Height = 24
         Top = 5
         Width = 74
@@ -34,7 +34,7 @@ object MainForm: TMainForm
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
-        Left = 194
+        Left = 354
         Height = 26
         Top = 4
         Width = 120
@@ -56,6 +56,7 @@ object MainForm: TMainForm
       Width = 120
       Stretch = True
       Transparent = False
+      OnClick = IconClick
     end
     object Cap2: TTyLabel
       Left = 168
@@ -86,27 +87,198 @@ object MainForm: TMainForm
       Width = 120
       Transparent = False
     end
+    object Cap4: TTyLabel
+      Left = 472
+      Height = 20
+      Top = 52
+      Width = 132
+      Caption = 'Center = False'
+    end
+    object Img5: TTyImage
+      Left = 472
+      Height = 100
+      Top = 74
+      Width = 120
+      Center = False
+      Transparent = False
+    end
+    object LblTrans: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 186
+      Width = 290
+      Caption = 'Transparent: left True (default, no surface) · right False'
+    end
+    object Img4: TTyImage
+      Left = 16
+      Height = 100
+      Top = 208
+      Width = 120
+      Proportional = True
+    end
+    object Img7: TTyImage
+      Left = 152
+      Height = 100
+      Top = 208
+      Width = 120
+      Proportional = True
+      Transparent = False
+    end
+    object LblAuto: TTyLabel
+      Left = 320
+      Height = 20
+      Top = 186
+      Width = 284
+      Caption = 'AutoSize: the box shrinks to the 120x80 picture'
+    end
+    object Img6: TTyImage
+      Left = 320
+      Height = 90
+      Top = 208
+      Width = 90
+      AutoSize = True
+      Transparent = False
+    end
+    object LblIcon: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 320
+      Width = 588
+      Caption = 'TTyIconFont: glyph names map to codepoints, rendered from one font family'
+    end
+    object Note: TTyLabel
+      Left = 16
+      Height = 76
+      Top = 342
+      Width = 588
+      Caption = 'TTyIconFont/TTyCharImage: point FontFile at an icon .ttf (such as FontAwesome), set FontFamily to its family name, then render vector icons via a name→codepoint map. On the left it tries to render a star (★) with the system symbol font; the family differs per platform, so the result may vary.'
+      WordWrap = True
+    end
+    object LblColor: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 428
+      Width = 588
+      Caption = 'GlyphColor: left explicit blue, right unset → follows the theme text colour (try Dark)'
+    end
     object Ch: TTyCharImage
       Left = 16
       Height = 40
-      Top = 196
+      Top = 450
+      Width = 40
+      IconFont = Icons
+      GlyphName = 'star'
+      OnClick = IconClick
+    end
+    object ChThemed: TTyCharImage
+      Left = 64
+      Height = 40
+      Top = 450
       Width = 40
       IconFont = Icons
       GlyphName = 'star'
     end
-    object Note: TTyLabel
-      Left = 64
-      Height = 60
-      Top = 196
-      Width = 380
-      Caption = 'TTyIconFont/TTyCharImage: point FontFile at an icon .ttf (such as FontAwesome), set FontFamily to its family name, then render vector icons via a name→codepoint map. On the left it tries to render a star (★) with the system symbol font; the family differs per platform, so the result may vary.'
-      WordWrap = True
+    object LblSizes: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 498
+      Width = 588
+      Caption = 'GlyphSize 12 / 24 / 40 in identical 48x48 boxes — 0 (the default) auto-fits the box'
+    end
+    object ChS1: TTyCharImage
+      Left = 16
+      Height = 48
+      Top = 520
+      Width = 48
+      IconFont = Icons
+      GlyphName = 'star'
+      GlyphSize = 12
+    end
+    object ChS2: TTyCharImage
+      Left = 72
+      Height = 48
+      Top = 520
+      Width = 48
+      IconFont = Icons
+      GlyphName = 'star'
+      GlyphSize = 24
+    end
+    object ChS3: TTyCharImage
+      Left = 128
+      Height = 48
+      Top = 520
+      Width = 48
+      IconFont = Icons
+      GlyphName = 'star'
+      GlyphSize = 40
+    end
+    object LblList: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 580
+      Width = 588
+      Caption = 'TTyGlyphImageList: the same ordered list drawn twice below — DefaultSize, then half size'
+    end
+    object GlyphStrip: TTyPaintPanel
+      Left = 16
+      Height = 64
+      Top = 602
+      Width = 588
+      OnPaintSurface = GlyphStripPaint
+    end
+    object LblFontFile: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 678
+      Width = 588
+      Caption = 'FontFile: register a .ttf PRIVATE to this process — no OS install needed. Type the family, then load the file.'
+    end
+    object FontFamilyEdit: TTyEdit
+      Left = 16
+      Height = 30
+      Top = 700
+      Width = 200
+      Text = 'Segoe UI Symbol'
+      TextHint = 'Font family name…'
+      OnChange = FontFamilyEditChange
+    end
+    object BtnLoadFont: TTyButton
+      Left = 228
+      Height = 30
+      Top = 700
+      Width = 190
+      Caption = 'Load icon font (.ttf)…'
+      OnClick = BtnLoadFontClick
+    end
+    object LblStatus: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 740
+      Width = 588
+      Caption = 'Click the star or the stretched picture — TTyImage and TTyCharImage both publish OnClick.'
     end
   end
   object Icons: TTyIconFont
     FontFamily = 'Segoe UI Symbol'
     Glyphs.Strings = (
       'star=2605'
+      'heart=2665'
+      'check=2714'
+      'cross=2716'
+      'gear=2699'
+      'mail=2709'
+    )
+  end
+  object GlyphList: TTyGlyphImageList
+    IconFont = Icons
+    DefaultSize = 24
+    Glyphs.Strings = (
+      'star'
+      'heart'
+      'check'
+      'cross'
+      'gear'
+      'mail'
     )
   end
 end

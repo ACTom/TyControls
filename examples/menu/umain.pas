@@ -20,7 +20,7 @@ uses
   Classes, SysUtils, Types, Forms, Controls, Menus, BGRABitmap, BGRABitmapTypes,
   tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes,
   tyControls.ImageCollection, tyControls.Menu, tyControls.Panel, tyControls.TyLabel,
-  tyControls.ComboBox, tyControls.ToggleSwitch;
+  tyControls.ComboBox, tyControls.ToggleSwitch, tyControls.Button;
 
 type
   TMainForm = class(TTyForm)
@@ -29,7 +29,17 @@ type
     Surface: TTyFormSurface;
     ThemeCombo: TTyComboBox;
     TyMenuBar1: TTyMenuBar;
+    TyMenuBar2: TTyMenuBar;        // AutoSizeWidth=True, Align=alNone: shrinks to fit its tops
     HintPanel: TTyPanel;
+    HintPanel2: TTyPanel;          // right-click target for the PLAIN themed popup
+    LblMenuHint: TTyLabel;
+    LblPopupA: TTyLabel;
+    LblPopupB: TTyLabel;
+    LblMiniBar: TTyLabel;
+    LblRollUp: TTyLabel;
+    LblCaptionAction: TTyLabel;
+    BtnRollUp: TTyButton;
+    CmbCaptionAction: TTyComboBox; // picks TTyCaptionAction for the title-bar double-click
     StatusLabel: TTyLabel;
     MainMenu1: TMainMenu;
     MnuFile: TMenuItem;
@@ -50,6 +60,22 @@ type
     MnuViewZoomOut: TMenuItem;
     MnuViewSep1: TMenuItem;
     MnuViewFull: TMenuItem;
+    MnuViewSep2: TMenuItem;
+    MnuViewSmall: TMenuItem;       // RadioItem + GroupIndex=1: the radio-dot glyph
+    MnuViewMedium: TMenuItem;
+    MnuViewLarge: TMenuItem;
+    MnuViewSep3: TMenuItem;
+    MnuViewTheme: TMenuItem;       // has children -> submenu arrow + cascading dropdown
+    MnuThemeLight: TMenuItem;
+    MnuThemeDark: TMenuItem;
+    MnuThemeSystem: TMenuItem;
+    MiniMenu: TMainMenu;           // model for the AutoSizeWidth bar
+    MnuTools: TMenuItem;
+    MnuToolsOptions: TMenuItem;
+    MnuToolsMacros: TMenuItem;
+    MnuHelp: TMenuItem;
+    MnuHelpContents: TMenuItem;
+    MnuHelpAbout: TMenuItem;
     Popup: TTyMenuEx;              // enhanced context menu: section headers + icon column
     PopHdrClip: TMenuItem;
     PopCut: TMenuItem;
@@ -59,8 +85,16 @@ type
     PopHdrView: TMenuItem;
     PopGrid: TMenuItem;
     PopRefresh: TMenuItem;
+    PopSendTo: TMenuItem;            // submenu inside the enhanced popup
+    PopSendDesktop: TMenuItem;
+    PopSendMail: TMenuItem;
+    PopSendZip: TMenuItem;
     PopSep2: TMenuItem;
     PopProps: TMenuItem;
+    PlainPopup: TTyPopupMenu;        // the plain themed popup (no images/headers/banner)
+    PlainCut: TMenuItem;
+    PlainCopy: TMenuItem;
+    PlainPaste: TMenuItem;
     IconColl: TTyImageCollection;    // icon bitmap source
     MenuImages: TTyVirtualImageList; // Images for the menu's icon column
     procedure FormCreate(Sender: TObject);
@@ -68,6 +102,11 @@ type
     procedure DarkSwitchChange(Sender: TObject);
     { Generic menu-item click: echo the item's Caption to the status label }
     procedure MenuItemClicked(Sender: TObject);
+    { Roll the window down to its title bar and back (the same thing a title-bar
+      double-click does while CaptionAction = tcaRollUp). }
+    procedure RollUpClick(Sender: TObject);
+    { Re-point the title-bar double-click at maximize / roll-up / nothing. }
+    procedure CaptionActionChange(Sender: TObject);
   end;
 
 var
@@ -136,7 +175,29 @@ begin
   if not (Sender is TMenuItem) then Exit;
   Item := TMenuItem(Sender);
   // echo with the mnemonic '&' stripped (StripHotkey is provided by the Menus unit)
-  StatusLabel.Caption := Format('Menu command selected: %s', [StripHotkey(Item.Caption)]);
+  if Item.RadioItem then
+    StatusLabel.Caption := Format('Radio item selected: %s (the other two in GroupIndex 1 turned off)',
+      [StripHotkey(Item.Caption)])
+  else if Item.Checked then
+    StatusLabel.Caption := Format('Menu command selected: %s (now checked)', [StripHotkey(Item.Caption)])
+  else
+    StatusLabel.Caption := Format('Menu command selected: %s', [StripHotkey(Item.Caption)]);
+end;
+
+procedure TMainForm.RollUpClick(Sender: TObject);
+begin
+  ToggleRollUp;   // TTyForm's window-shade toggle -- same entry point as the caption double-click
+  StatusLabel.Caption := Format('RolledUp = %s (double-click the title bar to toggle it too)',
+    [BoolToStr(RolledUp, True)]);
+end;
+
+procedure TMainForm.CaptionActionChange(Sender: TObject);
+begin
+  if CmbCaptionAction.ItemIndex < 0 then Exit;
+  // The combo's rows are in TTyCaptionAction order: tcaMaximize, tcaRollUp, tcaNone.
+  CaptionAction := TTyCaptionAction(CmbCaptionAction.ItemIndex);
+  StatusLabel.Caption := Format('CaptionAction = %s -- double-click the title bar to see it',
+    [CmbCaptionAction.Items[CmbCaptionAction.ItemIndex]]);
 end;
 
 end.

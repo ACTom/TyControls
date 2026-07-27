@@ -1,10 +1,10 @@
 object DialogsMainForm: TDialogsMainForm
   Left = 240
-  Height = 520
+  Height = 664
   Top = 140
   Width = 640
   Caption = 'TyControls Dialogs'
-  ClientHeight = 520
+  ClientHeight = 664
   ClientWidth = 640
   Font.Height = -12
   LCLVersion = '4.4.0.0'
@@ -12,7 +12,7 @@ object DialogsMainForm: TDialogsMainForm
   TitleBar = TyTitleBar1
   object Surface: TTyFormSurface
     Left = 0
-    Height = 520
+    Height = 664
     Top = 0
     Width = 640
     TabOrder = 0
@@ -24,9 +24,30 @@ object DialogsMainForm: TDialogsMainForm
       Width = 640
       TabOrder = 0
       Caption = 'TyControls Dialogs'
-      TitleAlignment = taCenter
+      TitleAlignment = taLeftJustify
       Align = alTop
       ButtonWidth = 46
+      object DarkSwitch: TTyToggleSwitch
+        Left = 292
+        Height = 24
+        Top = 4
+        Width = 74
+        TabOrder = 0
+        OnChange = DarkSwitchChange
+        Controller = TyController
+        Anchors = [akTop, akRight]
+        Caption = 'Dark'
+      end
+      object ThemeCombo: TTyComboBox
+        Left = 374
+        Height = 26
+        Top = 3
+        Width = 120
+        TabOrder = 1
+        OnChange = ThemeComboChange
+        Controller = TyController
+        Anchors = [akTop, akRight]
+      end
     end
     object LblIntro: TTyLabel
       Left = 16
@@ -165,10 +186,154 @@ object DialogsMainForm: TDialogsMainForm
         Caption = 'About'
       end
     end
+    object LblMsgTypes: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 260
+      Width = 608
+      Controller = TyController
+      Caption = 'Message types and more global entry points: watch the icon and button order change.'
+      Alignment = taLeftJustify
+    end
+    object Panel2: TTyPanel
+      Left = 16
+      Height = 100
+      Top = 288
+      Width = 608
+      TabOrder = 3
+      Controller = TyController
+      object BtnMsgInfo: TTyButton
+        Left = 12
+        Height = 32
+        Top = 12
+        Width = 140
+        TabOrder = 0
+        OnClick = BtnMsgInfoClick
+        Controller = TyController
+        Caption = 'Information'
+      end
+      object BtnMsgWarning: TTyButton
+        Left = 160
+        Height = 32
+        Top = 12
+        Width = 140
+        TabOrder = 1
+        OnClick = BtnMsgWarningClick
+        Controller = TyController
+        Caption = 'Warning'
+      end
+      object BtnMsgError: TTyButton
+        Left = 308
+        Height = 32
+        Top = 12
+        Width = 140
+        TabOrder = 2
+        OnClick = BtnMsgErrorClick
+        Controller = TyController
+        Caption = 'Error (3 buttons)'
+      end
+      object BtnShowMessage: TTyButton
+        Left = 456
+        Height = 32
+        Top = 12
+        Width = 140
+        TabOrder = 3
+        OnClick = BtnShowMessageClick
+        Controller = TyController
+        Caption = 'Show message'
+      end
+      object BtnMessagePos: TTyButton
+        Left = 12
+        Height = 32
+        Top = 56
+        Width = 140
+        TabOrder = 4
+        OnClick = BtnMessagePosClick
+        Controller = TyController
+        Caption = 'Message at 40,40'
+      end
+      object BtnSelectPathRooted: TTyButton
+        Left = 160
+        Height = 32
+        Top = 56
+        Width = 140
+        TabOrder = 5
+        OnClick = BtnSelectPathRootedClick
+        Controller = TyController
+        Caption = 'Select path (root)'
+      end
+      object BtnCloseFind: TTyButton
+        Left = 308
+        Height = 32
+        Top = 56
+        Width = 140
+        TabOrder = 6
+        OnClick = BtnCloseFindClick
+        Controller = TyController
+        Caption = 'Close find'
+      end
+      object BtnCustomDialog: TTyButton
+        Left = 456
+        Height = 32
+        Top = 56
+        Width = 140
+        TabOrder = 7
+        OnClick = BtnCustomDialogClick
+        Controller = TyController
+        Caption = 'Custom dialog'
+      end
+    end
+    object LblComponents: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 400
+      Width = 608
+      Controller = TyController
+      Caption = 'Component API: dialogs dropped on the form, configured as properties, run by Execute.'
+      Alignment = taLeftJustify
+    end
+    object Panel3: TTyPanel
+      Left = 16
+      Height = 56
+      Top = 428
+      Width = 608
+      TabOrder = 4
+      Controller = TyController
+      object BtnCompMessage: TTyButton
+        Left = 12
+        Height = 32
+        Top = 12
+        Width = 180
+        TabOrder = 0
+        OnClick = BtnCompMessageClick
+        Controller = TyController
+        Caption = 'Message (component)'
+      end
+      object BtnCompInput: TTyButton
+        Left = 204
+        Height = 32
+        Top = 12
+        Width = 180
+        TabOrder = 1
+        OnClick = BtnCompInputClick
+        Controller = TyController
+        Caption = 'Input (component)'
+      end
+      object BtnCompColor: TTyButton
+        Left = 396
+        Height = 32
+        Top = 12
+        Width = 180
+        TabOrder = 2
+        OnClick = BtnCompColorClick
+        Controller = TyController
+        Caption = 'Color (component)'
+      end
+    end
     object Memo1: TTyMemo
       Left = 16
-      Height = 248
-      Top = 256
+      Height = 152
+      Top = 496
       Width = 608
       TabOrder = 2
       Controller = TyController
@@ -179,5 +344,31 @@ object DialogsMainForm: TDialogsMainForm
   object TyController: TTyStyleController
     Left = 560
     Top = 44
+  end
+  object DlgMessage: TTyMessage
+    Title = 'Delete'
+    Msg = 'Delete the selected item?'
+    DlgType = mtWarning
+    Buttons = [mbYes, mbNo]
+    OnShow = DlgComponentShow
+    OnCanClose = DlgComponentCanClose
+    Left = 480
+    Top = 44
+  end
+  object DlgInput: TTyInputDialog
+    Caption = 'Rename'
+    Prompt = 'Enter a new name:'
+    Value = 'Untitled'
+    OnShow = DlgComponentShow
+    OnCanClose = DlgComponentCanClose
+    Left = 480
+    Top = 100
+  end
+  object DlgColor: TTyColorDialog
+    Caption = 'Select a colour'
+    OnShow = DlgComponentShow
+    OnCanClose = DlgComponentCanClose
+    Left = 560
+    Top = 100
   end
 end

@@ -49,12 +49,28 @@ type
     Rating: TTyRating;
     Gear: TTyGearDial;
     LblStatus: TTyLabel;
+    LblKnobs: TTyLabel;
+    LblRowA: TTyLabel;
+    BarV: TTyGauge;
+    LevelV: TTyLevelMeter;
+    HalfArc: TTyGauge;
+    ClockStatic: TTyAnalogClock;
+    LblBusySw: TTyLabel;
+    BusySwitch: TTyToggleSwitch;
+    LblRowB: TTyLabel;
+    SparkBar: TTySparkline;
+    RatingRO: TTyRating;
+    UpDownH: TTyUpDown;
+    LblUpDownH: TTyLabel;
     Timer: TTimer;
     procedure FormCreate(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
     procedure DarkSwitchChange(Sender: TObject);
     procedure Tick(Sender: TObject);
     procedure UpDownChange(Sender: TObject);
+    procedure UpDownHChange(Sender: TObject);
+    procedure KnobChange(Sender: TObject);
+    procedure BusyChange(Sender: TObject);
   private
     FTick: Integer;
   end;
@@ -84,6 +100,9 @@ begin
 
   // Sparkline data can't be a .lfm property (SetValues is a method).
   Spark.SetValues([3, 5, 4, 8, 6, 9, 7, 11, 9, 13, 10, 14]);
+  // Same samples, ssBar style on a FIXED 0..20 range: the bars sit low and flat where
+  // the auto-ranged line above fills the whole box — that is what AutoRange buys you.
+  SparkBar.SetValues([3, 5, 4, 8, 6, 9, 7, 11, 9, 13, 10, 14]);
 end;
 
 procedure TMainForm.ThemeComboChange(Sender: TObject);
@@ -112,17 +131,42 @@ begin
   r := 50 + 45 * Sin(FTick * 0.41 + 1.3);
   b := 50 + 45 * Sin(FTick * 0.9 + 2.1);
   Arc.Value := a;
+  HalfArc.Value := a;             // same value, StartAngle/SweepAngle 180 instead of 135/270
   Ring.Value := r;
   BarH.Value := b;
+  BarV.Value := b;                // same value, gsLinearV instead of gsLinearH
   Meter.Value := b / 100 * 220;   // map 0..100 -> 0..220
   Level.Value := a;
-  Circ.Position := Round(r);
+  LevelV.Value := a;              // same value, loVertical instead of loHorizontal
+  Circ.Position := Round(r / 100 * 250);   // map 0..100 -> the ring's 0..250 scale
   LblStatus.Caption := Format('Arc=%.0f%%  Ring=%.0f  Linear=%.0f%%', [a, r, b]);
 end;
 
 procedure TMainForm.UpDownChange(Sender: TObject);
 begin
   UpDownLbl.Caption := Format('Spinner (TTyUpDown) = %d', [UpDown.Position]);
+end;
+
+procedure TMainForm.UpDownHChange(Sender: TObject);
+begin
+  // Increment = 5 with Wrap = True: 5, 10, 15, 20, then straight back to 0.
+  LblUpDownH.Caption := Format('Horizontal spinner: Increment 5, Wrap 20 -> 0 (Position = %d)',
+    [UpDownH.Position]);
+end;
+
+procedure TMainForm.KnobChange(Sender: TObject);
+begin
+  // One handler for all three interactive instruments (Dial / GearDial / Rating).
+  LblKnobs.Caption := Format('Dial = %.0f   Gear = %.0f   Rating = %.1f',
+    [Dial.Value, Gear.Value, Rating.Value]);
+end;
+
+procedure TMainForm.BusyChange(Sender: TObject);
+begin
+  // Active is the only thing you ever do to an indeterminate indicator — stop all three.
+  Spin.Active := BusySwitch.Checked;
+  GearSpin.Active := BusySwitch.Checked;
+  Busy.Active := BusySwitch.Checked;
 end;
 
 end.

@@ -1,11 +1,16 @@
 unit umain;
 
 { TTySplitter demo -- nested docking: a vertical splitter (Align=alLeft) resizes the left
-  column, and a horizontal splitter (Align=alTop) nested in the right container resizes the
-  top pane. MinSize clamps, ResizeStyle=rsUpdate gives a live drag, and OnMoved / OnCanResize
-  report the drag readout. The window, panels, splitters and the live theme switcher are
-  designed in umain.lfm (a TTyForm + TTyTitleBar); the code here is event handlers + theme
-  setup only. }
+  column, a horizontal splitter (Align=alTop) nested in the right container resizes the top
+  pane, and a third one (Align=alRight) resizes the Inspector from the TRAILING edge, where
+  the delta inverts: dragging left GROWS the pane. MinSize clamps every one of them.
+
+  The two ResizeStyles sit side by side: VSplit is rsUpdate, so the pane follows the mouse
+  live; HSplit is rsLine, so nothing moves until the button comes up and the whole resize
+  lands at once. OnCanResize vetoes any pane past 400 px, and OnMoved reports the result.
+
+  The window, panels, splitters and the live theme switcher are designed in umain.lfm
+  (a TTyForm + TTyTitleBar); the code here is event handlers + theme setup only. }
 
 {$mode objfpc}{$H+}
 
@@ -30,6 +35,8 @@ type
     TopPanel: TTyPanel;
     HSplit: TTySplitter;
     BottomPanel: TTyPanel;
+    InspectorPanel: TTyPanel;
+    RSplit: TTySplitter;
     procedure FormCreate(Sender: TObject);
     procedure HandleMoved(Sender: TObject);
     procedure HandleCanResize(Sender: TObject; var ANewSize: Integer; var AAccept: Boolean);
@@ -78,13 +85,27 @@ end;
 
 procedure TMainForm.HandleMoved(Sender: TObject);
 begin
-  LblStatus.Caption := Format('Drag complete · left column %d px · top band %d px',
-    [LeftPanel.Width, TopPanel.Height]);
+  // Fires once per drag, and only when the target's size actually changed. All three
+  // splitters share it -- the readout simply reports every pane.
+  LblStatus.Caption := Format('Drag complete · left column %d px · top band %d px · inspector %d px',
+    [LeftPanel.Width, TopPanel.Height, InspectorPanel.Width]);
 end;
 
 procedure TMainForm.HandleCanResize(Sender: TObject; var ANewSize: Integer; var AAccept: Boolean);
 begin
-  // OnCanResize: veto or clamp the new size here. This just does a live preview.
+  // OnCanResize is the veto: clear AAccept and the resize simply does not land -- the pane
+  // stops dead at 400 px however far the mouse keeps going. (ANewSize is a var parameter
+  // too, so writing to it instead would move the edge somewhere of your choosing.)
+  if ANewSize > 400 then
+  begin
+    AAccept := False;
+    LblStatus.Caption := Format('Rejected · %d px exceeds the 400 px cap', [ANewSize]);
+    Exit;
+  end;
+  // All three splitters share this handler, but they reach it very differently: VSplit and
+  // RSplit are rsUpdate, so this runs on every mouse move and the caption reads as a live
+  // preview; HSplit is rsLine, so the whole drag is deferred and this runs exactly once,
+  // on mouse-up.
   LblStatus.Caption := Format('Dragging · target size %d px', [ANewSize]);
 end;
 

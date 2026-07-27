@@ -50,5 +50,220 @@ object MainForm: TMainForm
         OnChange = AccentComboChange
       end
     end
+    object Ribbon: TTyRibbon
+      Left = 0
+      Height = 140
+      Top = 34
+      Width = 900
+      Align = alTop
+      FileTab = True
+      FileTabCaption = 'File'
+      OnFileTab = RibbonFileTab
+      object PgHome: TTyRibbonPage
+        Caption = 'Start'
+        object GrpClipboard: TTyRibbonGroup
+          Left = 0
+          Height = 104
+          Top = 0
+          Width = 150
+          Caption = 'Clipboard'
+          ShowDialogLauncher = True
+        end
+        object GrpFont: TTyRibbonGroup
+          Left = 150
+          Height = 104
+          Top = 0
+          Width = 240
+          Caption = 'Font'
+          ShowDialogLauncher = True
+        end
+        object GrpParagraph: TTyRibbonGroup
+          Left = 390
+          Height = 104
+          Top = 0
+          Width = 150
+          Caption = 'Paragraph'
+          ShowDialogLauncher = True
+        end
+        object GrpEdit: TTyRibbonGroup
+          Left = 540
+          Height = 104
+          Top = 0
+          Width = 96
+          Caption = 'Edit'
+        end
+      end
+      object PgInsert: TTyRibbonPage
+        Caption = 'Insert'
+        object GrpTable: TTyRibbonGroup
+          Left = 0
+          Height = 104
+          Top = 0
+          Width = 90
+          Caption = 'Grid'
+        end
+        object GrpStyles: TTyRibbonGroup
+          Left = 90
+          Height = 104
+          Top = 0
+          Width = 274
+          Caption = 'Style library'
+          object Gallery: TTyRibbonGallery
+            Left = 6
+            Height = 60
+            Top = 6
+            Width = 260
+            Hint = 'Gallery: VisibleColumns = 4, so 4 of the 12 cells show inline - click the arrow on the right to drop all 12 in a 4-column grid. Every cell is a glyph plus a caption.'
+            ShowHint = True
+            IconFont = GalleryIcons
+            VisibleColumns = 4
+            Items.Strings = (
+              'Style 1'
+              'Style 2'
+              'Style 3'
+              'Style 4'
+              'Style 5'
+              'Style 6'
+              'Style 7'
+              'Style 8'
+              'Style 9'
+              'Style 10'
+              'Style 11'
+              'Style 12'
+            )
+            GlyphNames.Strings = (
+              'square'
+              'squareo'
+              'circle'
+              'circleo'
+              'triangle'
+              'triangleo'
+              'diamond'
+              'diamondo'
+              'star'
+              'staro'
+              'bar'
+              'baro'
+            )
+            ItemIndex = 0
+            OnSelect = GalleryStyleSelect
+          end
+        end
+        object GrpSymbol: TTyRibbonGroup
+          Left = 320
+          Height = 104
+          Top = 0
+          Width = 130
+          Caption = 'Symbol'
+        end
+        object GrpPicture: TTyRibbonGroup
+          Left = 450
+          Height = 104
+          Top = 0
+          Width = 70
+          Caption = 'Picture'
+          ShowCaption = False
+        end
+      end
+      object PgView: TTyRibbonPage
+        Caption = 'View'
+        object GrpShow: TTyRibbonGroup
+          Left = 0
+          Height = 104
+          Top = 0
+          Width = 140
+          Caption = 'Show'
+        end
+        object GrpZoom: TTyRibbonGroup
+          Left = 140
+          Height = 104
+          Top = 0
+          Width = 130
+          Caption = 'Zoom'
+        end
+        object GrpWindow: TTyRibbonGroup
+          Left = 270
+          Height = 104
+          Top = 0
+          Width = 110
+          Caption = 'Window'
+        end
+        object GrpRibbon: TTyRibbonGroup
+          Left = 380
+          Height = 104
+          Top = 0
+          Width = 170
+          Caption = 'Ribbon itself'
+          object ChkKeyTips: TTyCheckBox
+            Left = 6
+            Height = 22
+            Top = 6
+            Width = 158
+            Hint = 'KeyTips: with this on, tapping Alt paints Office access-key badges over the tabs; the badge letter switches tab, Escape hides them.'
+            ShowHint = True
+            Caption = 'Alt shows KeyTips'
+            Checked = True
+            OnClick = ChkKeyTipsClick
+          end
+          object ChkCollapse: TTyCheckBox
+            Left = 6
+            Height = 22
+            Top = 32
+            Width = 158
+            Hint = 'Sets Ribbon.Minimized: the group band folds away and only the tab strip is left. The chevron at the right end of the strip (or a double-click on a tab) brings it back.'
+            ShowHint = True
+            Caption = 'Collapse the ribbon'
+            OnClick = ChkCollapseClick
+          end
+        end
+        object GrpAppMenu: TTyRibbonGroup
+          Left = 550
+          Height = 104
+          Top = 0
+          Width = 170
+          Caption = 'App menu'
+          object AppMenu: TTyRibbonAppMenu
+            Left = 6
+            Height = 26
+            Top = 6
+            Width = 158
+            Hint = 'TTyRibbonAppMenu: drops the Commands menu, then a separator, then one row per recent file (open something first to fill the list).'
+            ShowHint = True
+            Caption = 'File menu'
+            OnRecentItemClick = AppMenuRecentClick
+          end
+        end
+      end
+      object PgPicTools: TTyRibbonPage
+        Caption = 'Picture tools'
+        Context = 'pic'
+        object GrpAdjust: TTyRibbonGroup
+          Left = 0
+          Height = 104
+          Top = 0
+          Width = 120
+          Caption = 'Adjust'
+        end
+      end
+    end
+  end
+  object GalleryIcons: TTyIconFont
+    FontFamily = 'Segoe UI Symbol'
+    Glyphs.Strings = (
+      'square=25A0'
+      'squareo=25A1'
+      'circle=25CF'
+      'circleo=25CB'
+      'triangle=25B2'
+      'triangleo=25B3'
+      'diamond=25C6'
+      'diamondo=25C7'
+      'star=2605'
+      'staro=2606'
+      'bar=25AC'
+      'baro=25AD'
+    )
+    Left = 24
+    Top = 500
   end
 end

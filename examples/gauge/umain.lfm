@@ -1,10 +1,10 @@
 object MainForm: TMainForm
   Left = 0
-  Height = 660
+  Height = 900
   Top = 0
   Width = 540
   Caption = 'Gauge example'
-  ClientHeight = 660
+  ClientHeight = 900
   ClientWidth = 540
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
@@ -12,7 +12,7 @@ object MainForm: TMainForm
   TitleBar = Bar
   object Surface: TTyFormSurface
     Left = 0
-    Height = 660
+    Height = 900
     Top = 0
     Width = 540
     TabOrder = 0
@@ -77,18 +77,19 @@ object MainForm: TMainForm
       Value = 35
     end
     object LblCirc: TTyLabel
-      Left = 392
+      Left = 380
       Height = 20
       Top = 46
-      Width = 140
-      Caption = 'Ring progress:'
+      Width = 156
+      Caption = 'Ring progress (0..250):'
     end
     object Circ: TTyCircularProgress
       Left = 400
       Height = 110
       Top = 72
       Width = 110
-      Position = 68
+      Max = 250
+      Position = 170
       Thickness = 12
     end
     object Spin: TTyActivityIndicator
@@ -159,6 +160,7 @@ object MainForm: TMainForm
       Min = 0
       Max = 220
       Ticks = 12
+      ValueFormat = '%.0f km/h'
       Value = 88
     end
     object Level: TTyLevelMeter
@@ -170,6 +172,8 @@ object MainForm: TMainForm
       Max = 100
       Segments = 20
       PeakHold = True
+      ShowValue = True
+      ValueFormat = '%.0f dB'
       Value = 62
     end
     object Dial: TTyDial
@@ -180,6 +184,8 @@ object MainForm: TMainForm
       Min = 0
       Max = 100
       Value = 40
+      Step = 5
+      OnChange = KnobChange
     end
     object Clock: TTyAnalogClock
       Left = 436
@@ -201,6 +207,7 @@ object MainForm: TMainForm
       Width = 160
       AllowHalf = True
       Value = 3.5
+      OnChange = KnobChange
     end
     object Gear: TTyGearDial
       Left = 260
@@ -210,6 +217,9 @@ object MainForm: TMainForm
       Min = 0
       Max = 100
       Value = 55
+      Teeth = 20
+      Step = 10
+      OnChange = KnobChange
     end
     object LblStatus: TTyLabel
       Left = 24
@@ -217,6 +227,126 @@ object MainForm: TMainForm
       Top = 596
       Width = 460
       Caption = 'Every 1.2s the value changes at random (drag the knob / gear / wheel, click the stars) — watch the easing animation.'
+    end
+    object LblKnobs: TTyLabel
+      Left = 24
+      Height = 20
+      Top = 624
+      Width = 492
+      Caption = 'Dial, gear and rating report here (wheel / arrows step by 5 and 10).'
+    end
+    object LblRowA: TTyLabel
+      Left = 24
+      Height = 20
+      Top = 652
+      Width = 492
+      Caption = 'gsLinearV bar, loVertical meter, half arc (180/180), static clock:'
+    end
+    object BarV: TTyGauge
+      Left = 24
+      Height = 104
+      Top = 676
+      Width = 24
+      Style = gsLinearV
+      ShowValue = False
+      Thickness = 1
+      Value = 62
+    end
+    object LevelV: TTyLevelMeter
+      Left = 66
+      Height = 104
+      Top = 676
+      Width = 26
+      Min = 0
+      Max = 100
+      Orientation = loVertical
+      Segments = 20
+      PeakHold = True
+      Value = 62
+    end
+    object HalfArc: TTyGauge
+      Left = 112
+      Height = 104
+      Top = 676
+      Width = 160
+      Style = gsArc
+      ValueFormat = '%.0f%%'
+      StartAngle = 180
+      SweepAngle = 180
+      Value = 62
+    end
+    object ClockStatic: TTyAnalogClock
+      Left = 292
+      Height = 90
+      Top = 676
+      Width = 90
+      ShowSeconds = False
+      ShowTicks = False
+      Running = False
+      Time = 0.395833333333333
+    end
+    object LblBusySw: TTyLabel
+      Left = 400
+      Height = 20
+      Top = 676
+      Width = 116
+      Caption = 'Busy indicators:'
+    end
+    object BusySwitch: TTyToggleSwitch
+      Left = 400
+      Height = 24
+      Top = 700
+      Width = 96
+      Checked = True
+      Caption = 'Running'
+      OnChange = BusyChange
+    end
+    object LblRowB: TTyLabel
+      Left = 24
+      Height = 20
+      Top = 792
+      Width = 492
+      Caption = 'ssBar sparkline, fixed range 0-20, no last dot / read-only 10-star rating:'
+    end
+    object SparkBar: TTySparkline
+      Left = 24
+      Height = 40
+      Top = 816
+      Width = 220
+      Style = ssBar
+      ShowLast = False
+      AutoRange = False
+      MinValue = 0
+      MaxValue = 20
+    end
+    object RatingRO: TTyRating
+      Left = 270
+      Height = 28
+      Top = 822
+      Width = 240
+      Count = 10
+      Value = 7
+      ReadOnly = True
+    end
+    object UpDownH: TTyUpDown
+      Left = 24
+      Height = 22
+      Top = 862
+      Width = 48
+      Min = 0
+      Max = 20
+      Position = 5
+      Increment = 5
+      Orientation = udoHorizontal
+      Wrap = True
+      OnChange = UpDownHChange
+    end
+    object LblUpDownH: TTyLabel
+      Left = 84
+      Height = 20
+      Top = 862
+      Width = 432
+      Caption = 'Horizontal spinner: Increment 5, Wrap 20 -> 0 (Position = 5)'
     end
   end
   object Timer: TTimer

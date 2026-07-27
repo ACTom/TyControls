@@ -1,10 +1,10 @@
 object MainForm: TMainForm
   Left = 0
-  Height = 320
+  Height = 400
   Top = 0
   Width = 620
   Caption = 'TTyGroupBox example'
-  ClientHeight = 320
+  ClientHeight = 400
   ClientWidth = 620
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
@@ -12,7 +12,7 @@ object MainForm: TMainForm
   TitleBar = Bar
   object Surface: TTyFormSurface
     Left = 0
-    Height = 320
+    Height = 400
     Top = 0
     Width = 620
     Align = alClient
@@ -47,7 +47,7 @@ object MainForm: TMainForm
       Height = 130
       Top = 52
       Width = 185
-      Caption = 'Font size (left aligned)'
+      Caption = '&Font size (left aligned)'
       Alignment = taLeftJustify
       object RadioA: TTyRadioButton
         Left = 10
@@ -80,7 +80,7 @@ object MainForm: TMainForm
       Height = 130
       Top = 52
       Width = 185
-      Caption = 'Style (centered)'
+      Caption = '&Style (centered)'
       Alignment = taCenter
       object CheckBold: TTyCheckBox
         Left = 10
@@ -104,7 +104,7 @@ object MainForm: TMainForm
       Height = 130
       Top = 52
       Width = 185
-      Caption = 'Name (right aligned)'
+      Caption = '&Name (right aligned)'
       Alignment = taRightJustify
       object NameEdit: TTyEdit
         Left = 10
@@ -114,11 +114,47 @@ object MainForm: TMainForm
         TextHint = 'Enter a name…'
         OnChange = NameChange
       end
+      object LblFit: TTyLabel
+        Left = 8
+        Height = 20
+        Top = 102
+        Width = 169
+        Align = alBottom
+        Caption = 'alBottom stops at the frame'
+      end
+    end
+    object LblAccel: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 188
+      Width = 588
+      Caption = 'Hold Alt to reveal the access keys — Alt+N jumps straight into the Name box.'
+    end
+    object LblPlainHdr: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 212
+      Width = 588
+      Caption = 'Caption = '''' — the untitled variant: the top border runs unbroken, no gap cut for a title.'
+    end
+    object GroupPlain: TTyGroupBox
+      Left = 16
+      Height = 80
+      Top = 236
+      Width = 588
+      Caption = ''
+      object LblPlain: TTyLabel
+        Left = 10
+        Height = 20
+        Top = 24
+        Width = 560
+        Caption = 'A child still starts below the caption band the box always reserves.'
+      end
     end
     object LblStatus: TTyLabel
       Left = 16
       Height = 60
-      Top = 200
+      Top = 326
       Width = 588
       Caption = ''
     end

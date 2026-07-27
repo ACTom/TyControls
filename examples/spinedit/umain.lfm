@@ -1,10 +1,10 @@
 object MainForm: TMainForm
   Left = 0
-  Height = 420
+  Height = 504
   Top = 0
   Width = 440
   Caption = 'TTySpinEdit example'
-  ClientHeight = 420
+  ClientHeight = 504
   ClientWidth = 440
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
@@ -12,7 +12,7 @@ object MainForm: TMainForm
   TitleBar = Bar
   object Surface: TTyFormSurface
     Left = 0
-    Height = 420
+    Height = 504
     Top = 0
     Width = 440
     TabOrder = 0
@@ -60,6 +60,7 @@ object MainForm: TMainForm
       Increment = 1
       Value = 10
       OnChange = SpinChange
+      OnClick = SpinClick
     end
     object LblOfs: TTyLabel
       Left = 24
@@ -119,16 +120,64 @@ object MainForm: TMainForm
     object LblStatusCap: TTyLabel
       Left = 24
       Height = 20
-      Top = 332
+      Top = 444
       Width = 60
       Caption = 'Status:'
     end
     object LblStatus: TTyLabel
       Left = 84
       Height = 20
-      Top = 332
+      Top = 444
       Width = 336
       Caption = '(change any value to see the OnChange output)'
+    end
+    object BtnPoke: TTyButton
+      Left = 180
+      Height = 28
+      Top = 76
+      Width = 180
+      Caption = 'Value := 999 in code'
+      OnClick = PokeClick
+    end
+    object LblCentre: TTyLabel
+      Left = 24
+      Height = 20
+      Top = 320
+      Width = 380
+      Caption = 'Centred text (Alignment=taCenter):'
+    end
+    object SpinCentre: TTySpinEdit
+      Left = 24
+      Height = 28
+      Top = 344
+      Width = 130
+      MinValue = 0
+      MaxValue = 100
+      Value = 50
+      Alignment = taCenter
+      OnChange = SpinChange
+    end
+    object LblCommit: TTyLabel
+      Left = 24
+      Height = 40
+      Top = 384
+      Width = 380
+      Caption = 'Type digits into any box: Enter commits them, Esc reverts to the last value. An out-of-range number is clamped into the range, never rejected.'
+      WordWrap = True
+    end
+    object LblClickCap: TTyLabel
+      Left = 24
+      Height = 20
+      Top = 468
+      Width = 60
+      Caption = 'Click:'
+    end
+    object LblClick: TTyLabel
+      Left = 84
+      Height = 20
+      Top = 468
+      Width = 336
+      Caption = '(click the quantity box to see OnClick)'
     end
   end
 end

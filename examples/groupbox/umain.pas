@@ -3,6 +3,11 @@ unit umain;
 { TTyGroupBox demo:
   - Caption: each group box carries a title
   - Alignment: title left / center / right (taLeftJustify / taCenter / taRightJustify)
+  - Caption mnemonics: an '&' in the title underlines that letter while Alt is held, and
+    Alt+letter drops focus straight into the first control inside the box
+  - Caption = '': the untitled variant — no gap is cut in the top border
+  - AdjustClientRect: an alBottom child inside GroupName stops at the themed inset, never
+    painting over the frame
   - Hosting child controls: TTyRadioButton / TTyCheckBox placed inside a group box
   - A TTyEdit embedded in a group box, showing that any child control can be a container member
   - Events funnel into the bottom TTyLabel status bar
@@ -34,6 +39,11 @@ type
     CheckItalic: TTyCheckBox;
     GroupName: TTyGroupBox;      // right-aligned title + embedded edit
     NameEdit: TTyEdit;
+    LblFit: TTyLabel;            // alBottom child -> proves AdjustClientRect insets the client area
+    LblAccel: TTyLabel;
+    LblPlainHdr: TTyLabel;
+    GroupPlain: TTyGroupBox;     // Caption = '' -> an unbroken frame
+    LblPlain: TTyLabel;
     LblStatus: TTyLabel;
     procedure FormCreate(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);

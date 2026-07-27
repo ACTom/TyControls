@@ -4,11 +4,14 @@ unit umain;
     Left column csDropDownList (read-only, selection only from the list) -- shows
       Sorted ordering, DropDownCount limiting the visible rows, and keyboard
       type-ahead prefix jumping.
-    Right column csDropDown (editable field + prefix auto-complete) -- typing a
-      prefix pops up the filtered candidate list; also demonstrates CharCase
-      (auto-uppercase) and MaxLength (length limit).
+    Right column csDropDown (editable field + prefix auto-complete) -- its Items and
+      its initial Text are authored in umain.lfm; typing a prefix pops up the
+      filtered candidate list; also demonstrates CharCase (auto-uppercase) and
+      MaxLength (length limit).
     A TTyLabel status bar below subscribes to four events:
       OnChange / OnSelect / OnDropDown / OnCloseUp.
+    A button drives the list open/closed in code (DropDown / CloseUp / DroppedDown),
+      so the same four events fire without the user touching the combo box.
   The window, both combo boxes, their labels, the status bar and the live theme
   switcher are designed in umain.lfm (a TTyForm + TTyTitleBar); the code here is
   the (Sorted-dependent) item population, the event handlers and the theme setup. }
@@ -20,7 +23,7 @@ interface
 uses
   Classes, SysUtils, Forms, Controls,
   tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes,
-  tyControls.ComboBox, tyControls.ToggleSwitch, tyControls.TyLabel;
+  tyControls.Button, tyControls.ComboBox, tyControls.ToggleSwitch, tyControls.TyLabel;
 
 type
   TMainForm = class(TTyForm)
@@ -33,6 +36,8 @@ type
     LblEdit: TTyLabel;
     EditCombo: TTyComboBox;       // csDropDown (editable + auto-complete)
     LblStatus: TTyLabel;          // event status bar
+    LblApi: TTyLabel;
+    BtnToggleList: TTyButton;     // drives ListCombo open/closed in code
     procedure FormCreate(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
     procedure DarkSwitchChange(Sender: TObject);
@@ -40,7 +45,9 @@ type
     procedure ComboSelect(Sender: TObject);
     procedure ComboDropDown(Sender: TObject);
     procedure ComboCloseUp(Sender: TObject);
+    procedure BtnToggleListClick(Sender: TObject);
   private
+    FLastCloseUp: QWord;   // tick of the last OnCloseUp; see BtnToggleListClick
     procedure SetStatus(const AEvt: string; ACombo: TTyComboBox);
   end;
 
@@ -76,14 +83,7 @@ begin
   ListCombo.Items.Add('Xian');
   ListCombo.ItemIndex := 0;            // preselect the first item (Beijing after sorting)
 
-  EditCombo.Items.Add('APPLE');
-  EditCombo.Items.Add('APRICOT');
-  EditCombo.Items.Add('AVOCADO');
-  EditCombo.Items.Add('BANANA');
-  EditCombo.Items.Add('BLUEBERRY');
-  EditCombo.Items.Add('CHERRY');
-  EditCombo.Items.Add('GRAPE');
-  EditCombo.Items.Add('MANGO');
+  // EditCombo needs no code: its Items and its initial Text are set in umain.lfm.
 
   // Restore the initial "waiting" status (setting ItemIndex above fires OnChange)
   LblStatus.Caption := 'Event state: (awaiting action, try expanding or typing a prefix)';
@@ -135,7 +135,21 @@ end;
 
 procedure TMainForm.ComboCloseUp(Sender: TObject);
 begin
+  FLastCloseUp := GetTickCount64;
   SetStatus('OnCloseUp (collapse)', Sender as TTyComboBox);
+end;
+
+procedure TMainForm.BtnToggleListClick(Sender: TObject);
+begin
+  { DroppedDown reports the popup's state; DropDown/CloseUp drive it. Both routes fire
+    OnDropDown/OnCloseUp, so the status bar cannot tell a code-driven open from a click.
+    The 200 ms guard is the same reopen-race guard the control applies to its own chevron:
+    clicking this button while the list is open deactivates the popup, so it has already
+    closed (DroppedDown = False) by the time we get here, and a bare else would reopen it. }
+  if ListCombo.DroppedDown then
+    ListCombo.CloseUp
+  else if GetTickCount64 - FLastCloseUp > 200 then
+    ListCombo.DropDown;
 end;
 
 end.

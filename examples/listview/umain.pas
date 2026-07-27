@@ -52,9 +52,18 @@ type
     DivRight: TTyDivider;
     BtnSortVirtual: TTyButton;
     BtnJumpEnd: TTyButton;
+    BtnGrow: TTyButton;
     LV2: TTyListView;
     LblVirtual: TTyLabel;
     LblVirtualNote: TTyLabel;
+
+    DivExtras: TTyDivider;
+    BtnSelectAll: TTyButton;
+    BtnClearSel: TTyButton;
+    ChkHeaders: TTyCheckBox;
+    ChkCustomSort: TTyCheckBox;
+    ChkGroupVirtual: TTyCheckBox;
+    LblExtras: TTyLabel;
 
     procedure FormCreate(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
@@ -79,8 +88,21 @@ type
     procedure LV2ItemChecked(Sender: TObject; AIndex: Integer);
     procedure LV1ItemChecked(Sender: TObject; AIndex: Integer);
     procedure LV1Edited(Sender: TObject; AIndex: Integer; var AText: string);
+    procedure LV1Editing(Sender: TObject; AIndex: Integer; var AAllow: Boolean);
+    procedure LV1Compare(Sender: TObject; AIndex1, AIndex2, AColumn: Integer;
+      var ACompare: Integer);
+    procedure LV1GroupCollapsed(Sender: TObject; AGroup: Integer);
+    procedure LV2GetItemImage(Sender: TObject; AIndex, AColumn: Integer;
+      var AImageIndex: Integer);
+    procedure LV2GetItemGroup(Sender: TObject; AIndex: Integer; var AGroup: Integer);
     procedure BtnSortVirtualClick(Sender: TObject);
     procedure BtnJumpEndClick(Sender: TObject);
+    procedure BtnGrowClick(Sender: TObject);
+    procedure BtnSelectAllClick(Sender: TObject);
+    procedure BtnClearSelClick(Sender: TObject);
+    procedure ChkHeadersChange(Sender: TObject);
+    procedure ChkCustomSortChange(Sender: TObject);
+    procedure ChkGroupVirtualChange(Sender: TObject);
   private
     FIcons: TTyImageCollection;
     FImages: TTyVirtualImageList;
@@ -94,6 +116,12 @@ type
     procedure BuildRows;
     procedure BuildVirtual;
     procedure UpdateStatus;
+    { Row helpers for the left list, shared by OnCompare and OnEditing. }
+    function IsFolderRow(AIndex: Integer): Boolean;
+    function CellText(AIndex, AColumn: Integer): string;
+    { The right list's synthetic value for a row. Int64 inside, so the multiply still fits
+      after "Add 50,000 rows" has pushed the count past 271,000. }
+    function VirtualValue(AIndex: Integer): Integer;
   end;
 
 var
@@ -220,6 +248,9 @@ begin
   { One list serves both: the collection scales (and caches) whatever size the view asks for. }
   LV1.LargeImages := FImages;
   LV1.SmallImages := FImages;
+  { The virtual list uses the SAME image list. It has no row objects to carry an ImageIndex,
+    so the index itself arrives from OnGetItemImage, row by row, as the rows come on screen. }
+  LV2.SmallImages := FImages;
 end;
 
 procedure TMainForm.BuildColumns;
@@ -260,6 +291,11 @@ begin
   AddGroup('Text document');     // 1
   AddGroup('Spreadsheet');     // 2
   AddGroup('Image');         // 3
+
+  { A band can start life folded: Collapsed is a plain published property of the group, so
+    the list opens with "Image" already closed the first time Group is ticked. Clicking a
+    band toggles it back and fires OnGroupCollapsed. }
+  LV1.Groups[3].Collapsed := True;
 end;
 
 procedure TMainForm.BuildRows;
@@ -298,27 +334,42 @@ const
 var
   i: Integer;
 begin
-  AddFolder('assets');
-  AddFolder('build');
-  AddFolder('docs');
+  { Every Items.Add would otherwise re-order, re-rank and re-sort the whole list. BeginUpdate
+    parks that until EndUpdate, which calls ItemsChanged once -- one relayout for thirty rows
+    instead of thirty. Always in a try..finally: an exception mid-load must not leave the
+    control permanently frozen. }
+  LV1.BeginUpdate;
+  try
+    AddFolder('assets');
+    AddFolder('build');
+    AddFolder('docs');
 
-  AddFile('README.md',        '4096',    'Text document', '2026-07-10 08:30', 1);
-  AddFile('CHANGELOG.md',     '18944',   'Text document', '2026-07-09 17:02', 1);
-  AddFile('budget-2026.xlsx', '284672',  'Spreadsheet', '2026-06-28 11:45', 2);
-  AddFile('logo.png',         '90112',   'Image',     '2026-05-14 09:12', 3);
-  AddFile('screenshot.png',   '1638400', 'Image',     '2026-07-08 21:37', 3);
-  AddFile('notes.txt',        '512',     'Text document', '2026-07-01 07:05', 1);
+    AddFile('README.md',        '4096',    'Text document', '2026-07-10 08:30', 1);
+    AddFile('CHANGELOG.md',     '18944',   'Text document', '2026-07-09 17:02', 1);
+    AddFile('budget-2026.xlsx', '284672',  'Spreadsheet', '2026-06-28 11:45', 2);
+    AddFile('logo.png',         '90112',   'Image',     '2026-05-14 09:12', 3);
+    AddFile('screenshot.png',   '1638400', 'Image',     '2026-07-08 21:37', 3);
+    AddFile('notes.txt',        '512',     'Text document', '2026-07-01 07:05', 1);
 
-  for i := 1 to 21 do
-    AddFile(Format('sample-%.2d.%s', [i, Copy('txtxlspng', 1 + (i mod 3) * 3, 3)]),
-            IntToStr(1024 * (i * i + 7)),
-            Kinds[i mod 3],
-            Format('2026-%.2d-%.2d %.2d:%.2d', [1 + (i mod 12), 1 + (i mod 27),
-                                                (i * 3) mod 24, (i * 7) mod 60]),
-            1 + (i mod 3));
+    for i := 1 to 21 do
+      AddFile(Format('sample-%.2d.%s', [i, Copy('txtxlspng', 1 + (i mod 3) * 3, 3)]),
+              IntToStr(1024 * (i * i + 7)),
+              Kinds[i mod 3],
+              Format('2026-%.2d-%.2d %.2d:%.2d', [1 + (i mod 12), 1 + (i mod 27),
+                                                  (i * 3) mod 24, (i * 7) mod 60]),
+              1 + (i mod 3));
+  finally
+    LV1.EndUpdate;
+  end;
 end;
 
 procedure TMainForm.BuildVirtual;
+
+  procedure AddGroup(const ACaption: string);
+  begin
+    LV2.Groups.Add.Caption := ACaption;
+  end;
+
 begin
   { 100,000 rows, zero row objects. The only allocation is our own check-state array. }
   LV2.OwnerData := True;
@@ -326,6 +377,15 @@ begin
   LV2.SortKind := lskText;
   LV2.Checkboxes := True;
   SetLength(FVChecked, LV2.ItemCount);
+
+  { Groups are NEVER virtualised -- there are only ever a handful of them, so they stay a
+    real collection even here. Only the mapping is virtual: OnGetItemGroup is asked, per row,
+    which band it belongs to. Bucketing by the value (not by the row number) keeps all four
+    bands meaningful after "Add 50,000 rows" has changed the count. }
+  AddGroup('Value 0 – 249,999');          // 0
+  AddGroup('Value 250,000 – 499,999');    // 1
+  AddGroup('Value 500,000 – 749,999');    // 2
+  AddGroup('Value 750,000 – 999,999');    // 3
 end;
 
 procedure TMainForm.FormCreate(Sender: TObject);
@@ -344,8 +404,12 @@ begin
   LV1.ReadOnly := False;        { F2 renames; the default is read-only on purpose }
   LV1.OnItemChecked := @LV1ItemChecked;
   LV1.OnEdited := @LV1Edited;
+  LV1.OnEditing := @LV1Editing;              { the veto half of the rename contract }
+  LV1.OnGroupCollapsed := @LV1GroupCollapsed;
   LV2.OnGetItemState := @LV2GetItemState;
   LV2.OnItemChecked := @LV2ItemChecked;
+  LV2.OnGetItemImage := @LV2GetItemImage;    { the only icon source OwnerData has }
+  LV2.OnGetItemGroup := @LV2GetItemGroup;
 
   BuildIcons;
   BuildColumns;
@@ -420,6 +484,115 @@ begin
   LblStatus.Caption := Format('Renamed item index %d → %s', [AIndex, AText]);
 end;
 
+{ The two row predicates the escape-hatch events share. A "folder" row is the one whose
+  Type cell (SubItems[1]) reads 'Folder'. }
+function TMainForm.IsFolderRow(AIndex: Integer): Boolean;
+begin
+  Result := (AIndex >= 0) and (AIndex < LV1.Items.Count) and
+            (LV1.Items[AIndex].SubItems.Count > 1) and
+            (LV1.Items[AIndex].SubItems[1] = 'Folder');
+end;
+
+{ Column 0 is the caption, columns 1..N are SubItems -- the same mapping the control's own
+  GetItemText uses, which is why a comparator can lean on it. }
+function TMainForm.CellText(AIndex, AColumn: Integer): string;
+begin
+  Result := '';
+  if (AIndex < 0) or (AIndex >= LV1.Items.Count) then Exit;
+  if AColumn <= 0 then
+    Result := LV1.Items[AIndex].Caption
+  else if AColumn - 1 < LV1.Items[AIndex].SubItems.Count then
+    Result := LV1.Items[AIndex].SubItems[AColumn - 1];
+end;
+
+procedure TMainForm.ChkCustomSortChange(Sender: TObject);
+begin
+  { Assigning OnCompare REPLACES the built-in comparator outright -- the control does not
+    fall back to SortKind for pairs the handler ignores. Clearing it hands sorting back. }
+  if ChkCustomSort.Checked then
+  begin
+    LV1.OnCompare := @LV1Compare;
+    { A comparator has nothing to compare until a column is chosen, and the list starts
+      unsorted -- so pick Name here, or ticking the box would appear to do nothing. }
+    if LV1.SortColumn < 0 then
+    begin
+      LV1.SortColumn := 0;
+      LV1.SortKind := lskText;
+    end;
+  end
+  else
+    LV1.OnCompare := nil;
+  LV1.Sort;
+end;
+
+{ Custom comparator: folders first, then whatever SortKind would have done.
+  Two traps live here, and both are the reason this is worth demonstrating:
+    1. Because OnCompare wins outright, "leave ACompare at 0 and let SortKind decide" does
+       NOT work -- 0 only means "tie", and the control breaks ties by item index. So the
+       fallback leg calls TyListCompareCells, the very function the built-in path uses.
+    2. The control NEGATES a user comparator's answer when SortDirection is descending
+       (the built-in one bakes direction in; this one does not). The fallback leg therefore
+       passes sdAscending and lets the control flip it -- while the folders-first leg
+       pre-flips itself, so folders stay on top in BOTH directions. }
+procedure TMainForm.LV1Compare(Sender: TObject; AIndex1, AIndex2, AColumn: Integer;
+  var ACompare: Integer);
+var
+  f1, f2: Boolean;
+begin
+  f1 := IsFolderRow(AIndex1);
+  f2 := IsFolderRow(AIndex2);
+  if f1 <> f2 then
+  begin
+    if f1 then ACompare := -1 else ACompare := 1;
+    if LV1.SortDirection = sdDescending then ACompare := -ACompare;
+    Exit;
+  end;
+  ACompare := TyListCompareCells(CellText(AIndex1, AColumn), CellText(AIndex2, AColumn),
+                                 LV1.SortKind, sdAscending);
+end;
+
+{ The veto half of the rename contract: BeginEdit asks BEFORE it opens the editor, so
+  AAllow := False means the editor never appears at all. }
+procedure TMainForm.LV1Editing(Sender: TObject; AIndex: Integer; var AAllow: Boolean);
+begin
+  AAllow := not IsFolderRow(AIndex);
+  if not AAllow then
+    LblStatus.Caption := 'OnEditing vetoed the rename — folders are not editable';
+end;
+
+{ Fires AFTER a band click flipped Collapsed and the order was rebuilt. AGroup is a GROUP
+  index into Groups -- never a display position, never an item index. }
+procedure TMainForm.LV1GroupCollapsed(Sender: TObject; AGroup: Integer);
+var
+  state: string;
+begin
+  if (AGroup < 0) or (AGroup >= LV1.Groups.Count) then Exit;
+  if LV1.Groups[AGroup].Collapsed then state := 'collapsed' else state := 'expanded';
+  LblStatus.Caption := Format('Group %d (%s) is now %s',
+    [AGroup, LV1.Groups[AGroup].Caption, state]);
+end;
+
+procedure TMainForm.ChkHeadersChange(Sender: TObject);
+begin
+  { A report list can run headerless -- the rows reclaim the whole band. }
+  LV1.ShowColumnHeaders := ChkHeaders.Checked;
+end;
+
+procedure TMainForm.BtnSelectAllClick(Sender: TObject);
+begin
+  { SelectAll is a deliberate no-op while MultiSelect is off: untick "Multi-select" and
+    nothing happens. }
+  LV1.SelectAll;
+  UpdateStatus;
+end;
+
+procedure TMainForm.BtnClearSelClick(Sender: TObject);
+begin
+  { ClearSelection drops the multi-selection AND the focused item (ItemIndex goes to -1). }
+  LV1.ClearSelection;
+  UpdateStatus;
+end;
+
 procedure TMainForm.LV1ColumnClick(Sender: TObject; AColumn: Integer);
 begin
   { AutoSort has already sorted once using the old SortKind; here we pick the right comparator
@@ -453,19 +626,40 @@ end;
 
 procedure TMainForm.UpdateStatus;
 var
-  focus: string;
+  focus, picks: string;
+  idx, shown: Integer;
 begin
   if (LV1.ItemIndex >= 0) and (LV1.ItemIndex < LV1.Items.Count) then
     focus := Format('%s(item index = %d)', [LV1.Items[LV1.ItemIndex].Caption, LV1.ItemIndex])
   else
     focus := 'None';
-  LblStatus.Caption := Format('Focus: %s   Selected: %d item(s)   Sort: column %d',
-    [focus, LV1.SelCount, LV1.SortColumn]);
+  { The selection iterator: seed it with -1 for "before the first", then keep calling until
+    it returns False. It yields ITEM indices in ascending order, whatever the sort order is,
+    so the names below never scramble when a header is clicked. }
+  picks := '';
+  idx := -1;
+  shown := 0;
+  while (shown < 3) and LV1.GetNextSelected(idx) do
+  begin
+    if picks <> '' then picks := picks + ', ';
+    picks := picks + LV1.Items[idx].Caption;
+    Inc(shown);
+  end;
+  if picks <> '' then picks := '   ·   ' + picks;
+  LblStatus.Caption := Format('Focus: %s   Selected: %d item(s)   Sort: column %d%s',
+    [focus, LV1.SelCount, LV1.SortColumn, picks]);
 end;
 
 { ---------------------------------------------------------------------------
   Right list — 100,000 rows, owner data
   --------------------------------------------------------------------------- }
+
+function TMainForm.VirtualValue(AIndex: Integer): Integer;
+begin
+  { Int64 for the multiply: at 271,000 rows a plain Integer product already overflows, and
+    "Add 50,000 rows" gets there in four clicks. }
+  Result := Integer((Int64(AIndex) * 7919) mod 1000000);
+end;
 
 procedure TMainForm.LV2GetItemText(Sender: TObject; AIndex, AColumn: Integer;
   var AText: string);
@@ -474,8 +668,27 @@ begin
     sort cannot make this return the wrong row's text. }
   case AColumn of
     0: AText := IntToStr(AIndex);
-    1: AText := Format('Row %d · value %.6d', [AIndex, (AIndex * 7919) mod 1000000]);
+    1: AText := Format('Row %d · value %.6d', [AIndex, VirtualValue(AIndex)]);
   end;
+end;
+
+{ The only icon source a virtual list has: there are no row objects to hold an ImageIndex,
+  so the index is produced on demand, exactly like the text, and only for the rows on
+  screen. AColumn is asked for the main column alone. }
+procedure TMainForm.LV2GetItemImage(Sender: TObject; AIndex, AColumn: Integer;
+  var AImageIndex: Integer);
+begin
+  if AColumn = 0 then
+    AImageIndex := AIndex mod 4;
+end;
+
+{ Grouping under OwnerData. The bands themselves are a real collection (built in
+  BuildVirtual); this event is the only thing that is virtual about them -- it answers, per
+  row, which band owns it. Returning a value outside 0..Groups.Count-1 drops the row into
+  the implicit headerless bucket at the bottom. }
+procedure TMainForm.LV2GetItemGroup(Sender: TObject; AIndex: Integer; var AGroup: Integer);
+begin
+  AGroup := VirtualValue(AIndex) div 250000;
 end;
 
 procedure TMainForm.LV2SelectItem(Sender: TObject; AIndex: Integer);
@@ -524,6 +737,36 @@ begin
   LV2.ItemIndex := LV2.ItemCount - 1;   { focus-selects, and scrolls it into view }
   LV2.ScrollIntoView(LV2.ItemIndex);
   LV2.SetFocus;
+end;
+
+procedure TMainForm.BtnGrowClick(Sender: TObject);
+var
+  n: Integer;
+begin
+  if LV2.ItemCount >= 1000000 then
+  begin
+    LblVirtual.Caption := Format('ItemCount = %d — that is enough rows for one demo',
+      [LV2.ItemCount]);
+    Exit;
+  end;
+  n := LV2.ItemCount + 50000;
+  { OUR store grows first: the control caches nothing and will read it on the next paint. }
+  SetLength(FVChecked, n);
+  LV2.ItemCount := n;
+  { ItemsChanged is what an OwnerData host calls after its own store changed shape: it
+    resizes the order / rank / selection arrays, clamps focus and re-applies the sort.
+    Setting ItemCount already triggered it -- this is the call you need when the count did
+    NOT change but the rows behind it did. }
+  LV2.ItemsChanged;
+  LblVirtual.Caption := Format('ItemCount = %d, row objects = 0   ·   still one relayout',
+    [LV2.ItemCount]);
+end;
+
+procedure TMainForm.ChkGroupVirtualChange(Sender: TObject);
+begin
+  { Same GroupView switch as the left list -- only the source of each row's band differs:
+    a real GroupIndex there, OnGetItemGroup here. }
+  LV2.GroupView := ChkGroupVirtual.Checked;
 end;
 
 end.

@@ -1,11 +1,11 @@
 object MainForm: TMainForm
   Left = 220
-  Height = 600
+  Height = 650
   Top = 100
-  Width = 820
+  Width = 900
   Caption = 'TyControls — chart (TTyChart)'
-  ClientHeight = 600
-  ClientWidth = 820
+  ClientHeight = 650
+  ClientWidth = 900
   Font.Height = -12
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
@@ -13,20 +13,20 @@ object MainForm: TMainForm
   TitleBar = TitleBar1
   object Surface: TTyFormSurface
     Left = 0
-    Height = 600
+    Height = 650
     Top = 0
-    Width = 820
+    Width = 900
     Align = alClient
     object TitleBar1: TTyTitleBar
       Left = 0
       Height = 34
       Top = 0
-      Width = 820
+      Width = 900
       Align = alTop
       Caption = 'TTyChart  ·  TyControls'
       TitleAlignment = taLeftJustify
       object DarkSwitch: TTyToggleSwitch
-        Left = 472
+        Left = 552
         Height = 24
         Top = 5
         Width = 74
@@ -35,7 +35,7 @@ object MainForm: TMainForm
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
-        Left = 554
+        Left = 634
         Height = 26
         Top = 4
         Width = 120
@@ -67,8 +67,16 @@ object MainForm: TMainForm
       Caption = 'Pie'
       OnClick = BtnPieClick
     end
+    object BtnDonut: TTyButton
+      Left = 256
+      Height = 30
+      Top = 46
+      Width = 72
+      Caption = 'Donut'
+      OnClick = BtnDonutClick
+    end
     object ChkLegend: TTyCheckBox
-      Left = 280
+      Left = 344
       Height = 22
       Top = 50
       Width = 90
@@ -78,19 +86,91 @@ object MainForm: TMainForm
       OnChange = ChkLegendChange
     end
     object ChkValues: TTyCheckBox
-      Left = 372
+      Left = 442
       Height = 22
       Top = 50
       Width = 100
       Caption = 'Value annotation'
       OnChange = ChkValuesChange
     end
+    object ChkGrid: TTyCheckBox
+      Left = 550
+      Height = 22
+      Top = 50
+      Width = 110
+      Caption = 'Grid lines'
+      Checked = True
+      State = cbChecked
+      OnChange = ChkGridChange
+    end
+    object ChkTooltip: TTyCheckBox
+      Left = 668
+      Height = 22
+      Top = 50
+      Width = 150
+      Caption = 'Hover tooltip'
+      Checked = True
+      State = cbChecked
+      OnChange = ChkTooltipChange
+    end
     object Chart: TTyChart
       Left = 16
-      Height = 508
+      Height = 474
       Top = 84
-      Width = 788
+      Width = 868
       Anchors = [akTop, akLeft, akRight, akBottom]
+      ChartType = ctBar
+      Title = 'Quarterly sales'
+      Categories.Strings = (
+        'Q1'
+        'Q2'
+        'Q3'
+        'Q4'
+      )
+      Series = <
+        item
+          Name = 'East China'
+          Values = '12, 19, 15, 22'
+        end
+        item
+          Name = 'South China'
+          Values = '9, 14, 18, 16'
+        end
+        item
+          Name = 'North China'
+          Color = clFuchsia
+          Values = '7, 11, 13, 20'
+        end
+        item
+          Name = 'Net change'
+          Values = '-4, 6, -2, 9'
+        end>
+      OnGetTooltip = ChartGetTooltip
+      OnMouseDown = ChartMouseDown
+    end
+    object LblPalette: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 566
+      Width = 640
+      Anchors = [akLeft, akBottom]
+      Caption = 'Series 3 (North China) sets Color explicitly; the others cycle the palette'
+    end
+    object LblNegative: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 590
+      Width = 640
+      Anchors = [akLeft, akBottom]
+      Caption = 'The Net change bars are negative in Q1 / Q3 — they hang below the zero baseline'
+    end
+    object LblHit: TTyLabel
+      Left = 16
+      Height = 22
+      Top = 614
+      Width = 868
+      Anchors = [akLeft, akRight, akBottom]
+      Caption = 'Click a bar, marker or slice — HitTestAt names the datum here'
     end
   end
 end

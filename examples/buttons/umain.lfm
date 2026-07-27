@@ -1,10 +1,10 @@
 object MainForm: TMainForm
   Left = 0
-  Height = 360
+  Height = 480
   Top = 0
   Width = 480
   Caption = 'Buttons example'
-  ClientHeight = 360
+  ClientHeight = 480
   ClientWidth = 480
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
@@ -12,7 +12,7 @@ object MainForm: TMainForm
   TitleBar = Bar
   object Surface: TTyFormSurface
     Left = 0
-    Height = 360
+    Height = 480
     Top = 0
     Width = 480
     TabOrder = 0
@@ -72,8 +72,8 @@ object MainForm: TMainForm
       Left = 250
       Height = 18
       Top = 48
-      Width = 200
-      Caption = 'Group toggle (SpeedButton)'
+      Width = 210
+      Caption = 'Group toggle (GroupIndex = 1)'
     end
     object Speed1: TTySpeedButton
       Left = 250
@@ -84,6 +84,7 @@ object MainForm: TMainForm
       Down = True
       StyleClass = 'ghost'
       GroupIndex = 1
+      AllowAllUp = True
     end
     object Speed2: TTySpeedButton
       Left = 306
@@ -93,6 +94,7 @@ object MainForm: TMainForm
       Caption = 'Medium'
       StyleClass = 'ghost'
       GroupIndex = 1
+      AllowAllUp = True
     end
     object Speed3: TTySpeedButton
       Left = 362
@@ -102,13 +104,22 @@ object MainForm: TMainForm
       Caption = 'Right'
       StyleClass = 'ghost'
       GroupIndex = 1
+      AllowAllUp = True
+    end
+    object LblGroupHint: TTyLabel
+      Left = 250
+      Height = 36
+      Top = 106
+      Width = 210
+      Caption = 'AllowAllUp: click the pressed segment to release it.'
+      WordWrap = True
     end
     object LblDrop: TTyLabel
       Left = 20
       Height = 18
       Top = 150
-      Width = 200
-      Caption = 'Dropdown / menu button'
+      Width = 440
+      Caption = 'Split dropdown (arrow drops) vs menu button (any click drops)'
     end
     object BtnSave: TTyDropDownButton
       Left = 20
@@ -116,6 +127,9 @@ object MainForm: TMainForm
       Top = 170
       Width = 130
       Caption = 'Save'
+      ArrowWidth = 26
+      OnClick = SaveClicked
+      OnDropDown = SaveDropDown
     end
     object BtnMore: TTyMenuButton
       Left = 162
@@ -137,6 +151,8 @@ object MainForm: TMainForm
       Top = 252
       Width = 150
       ShowText = True
+      DialogCaption = 'Pick a highlight colour'
+      OnColorChange = ColorChanged
     end
     object Grp: TTyButtonGroup
       Left = 190
@@ -150,6 +166,75 @@ object MainForm: TMainForm
       )
       ItemIndex = 0
       StyleClass = 'ghost'
+      OnSelectionChange = GrpChange
+    end
+    object LblSwatch: TTyLabel
+      Left = 20
+      Height = 18
+      Top = 296
+      Width = 165
+      Caption = 'ShowText = False'
+    end
+    object BtnColorSwatch: TTyColorButton
+      Left = 20
+      Height = 34
+      Top = 316
+      Width = 44
+      ShowText = False
+    end
+    object LblMulti: TTyLabel
+      Left = 190
+      Height = 18
+      Top = 296
+      Width = 250
+      Caption = 'MultiSelect (several stay down)'
+    end
+    object GrpMulti: TTyButtonGroup
+      Left = 190
+      Height = 34
+      Top = 316
+      Width = 210
+      Items.Strings = (
+        'Bold'
+        'Italic'
+        'Underline'
+      )
+      MultiSelect = True
+      StyleClass = 'ghost'
+      OnSelectionChange = GrpMultiChange
+    end
+    object LblImg: TTyLabel
+      Left = 20
+      Height = 18
+      Top = 364
+      Width = 440
+      Caption = 'Image glyph (Images, same on every OS) - GlyphSize + GlyphColor'
+    end
+    object BtnImg: TTyGlyphButton
+      Left = 20
+      Height = 34
+      Top = 384
+      Width = 140
+      Caption = 'Save'
+      Images = Pics
+      ImageName = 'save'
+    end
+    object BtnBigGlyph: TTyGlyphButton
+      Left = 176
+      Height = 34
+      Top = 384
+      Width = 150
+      Caption = 'GlyphSize 20'
+      GlyphName = 'star'
+      GlyphSize = 20
+      IconFont = Icons
+    end
+    object LblStatus: TTyLabel
+      Left = 20
+      Height = 22
+      Top = 432
+      Width = 440
+      Caption = '(click a button, a segment or the colour button)'
     end
   end
   object Icons: TTyIconFont
@@ -159,5 +244,9 @@ object MainForm: TMainForm
     )
     Left = 424
     Top = 300
+  end
+  object Pics: TTyImageCollection
+    Left = 424
+    Top = 356
   end
 end

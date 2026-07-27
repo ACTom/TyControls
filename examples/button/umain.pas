@@ -32,6 +32,12 @@ type
     BtnNotify: TTyButton;
     BtnOK: TTyButton;
     BtnCancel: TTyButton;
+    BtnInbox: TTyButton;       // OnBadgeDisplay policy + the bpTopLeft badge corner
+    BtnInboxAdd: TTyButton;
+    BtnNoAnim: TTyButton;      // AnimationsEnabled = False
+    BtnAuto: TTyButton;        // AutoSize = True
+    LblAnimBadgeHint: TTyLabel;
+    LblAutoHint: TTyLabel;
     LblStatus: TTyLabel;
     procedure FormCreate(Sender: TObject);
     procedure ButtonClicked(Sender: TObject);
@@ -40,6 +46,12 @@ type
     procedure CancelClicked(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
     procedure DarkSwitchChange(Sender: TObject);
+    { Badge display policy for BtnInbox: hide the badge entirely while the count is 0
+      (the built-in default shows a '0' badge). }
+    procedure InboxBadgeDisplay(Sender: TObject; AValue: Integer;
+      var AText: string; var AVisible: Boolean);
+    { Bump BtnInbox.BadgeValue so the hidden-at-0 badge is watched appearing at 1. }
+    procedure AddInbox(Sender: TObject);
   private
     FCount: Integer;
   end;
@@ -107,6 +119,22 @@ procedure TMainForm.CancelClicked(Sender: TObject);
 begin
   Inc(FCount);
   LblStatus.Caption := Format('Click count: %d (Cancel button · Esc/ModalResult=mrCancel)', [FCount]);
+end;
+
+procedure TMainForm.InboxBadgeDisplay(Sender: TObject; AValue: Integer;
+  var AText: string; var AVisible: Boolean);
+begin
+  // The default policy shows the badge even for 0; this one suppresses an empty inbox.
+  // (AText could be rewritten here too -- the badge text is not forced to be the number.)
+  AVisible := AValue > 0;
+end;
+
+procedure TMainForm.AddInbox(Sender: TObject);
+begin
+  BtnInbox.BadgeValue := BtnInbox.BadgeValue + 1;   // 0 -> 1 makes the badge appear
+  Inc(FCount);
+  LblStatus.Caption := Format('Click count: %d (Inbox badge value = %d)',
+    [FCount, BtnInbox.BadgeValue]);
 end;
 
 end.

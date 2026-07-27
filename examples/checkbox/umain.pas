@@ -6,6 +6,8 @@ unit umain;
   - Plain two-state checkbox, OnChange echoes Checked
   - Pre-checked (Checked:=True)
   - Disabled (Enabled:=False)
+  - OnClick vs OnChange: OnChange also fires when code writes Checked/State, OnClick only on a
+    real activation (mouse, Space, Alt+mnemonic) -- the two counters make the difference visible
   The window, every checkbox, the labels and the live theme switcher are designed in umain.lfm
   (a TTyForm + TTyTitleBar); the code here is event handlers + theme setup only. }
 
@@ -14,7 +16,8 @@ interface
 uses
   Classes, SysUtils, StdCtrls, Forms, Controls,
   tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes,
-  tyControls.CheckBox, tyControls.TyLabel, tyControls.ComboBox, tyControls.ToggleSwitch;
+  tyControls.CheckBox, tyControls.TyLabel, tyControls.ComboBox, tyControls.ToggleSwitch,
+  tyControls.Button;
 
 type
   TMainForm = class(TTyForm)
@@ -31,11 +34,26 @@ type
     CbChecked: TTyCheckBox;
     CbDisabledChecked: TTyCheckBox;
     CbDisabled: TTyCheckBox;
+    LblEventsHdr: TTyLabel;
+    CbEvents: TTyCheckBox;
+    BtnToggle: TTyButton;
+    LblEvents: TTyLabel;
+    LblKeys: TTyLabel;
     procedure FormCreate(Sender: TObject);
     procedure TriChange(Sender: TObject);
     procedure PlainChange(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
     procedure DarkSwitchChange(Sender: TObject);
+    procedure EventsChange(Sender: TObject);
+    procedure EventsClick(Sender: TObject);
+    procedure ToggleClick(Sender: TObject);
+  private
+    { How often each of the two events has fired so far. Counting (rather than showing
+      the last one) is what makes the difference readable: a code-driven write bumps
+      OnChange only, a real click bumps both. }
+    FChangeCount: Integer;
+    FClickCount: Integer;
+    procedure ShowEventCounts;
   end;
 
 var
@@ -102,6 +120,32 @@ begin
     LblStatus.Caption := 'Two-state: checked'
   else
     LblStatus.Caption := 'Two-state: unchecked';
+end;
+
+procedure TMainForm.ShowEventCounts;
+begin
+  LblEvents.Caption := Format('OnChange fired %d time(s), OnClick %d time(s)',
+    [FChangeCount, FClickCount]);
+end;
+
+procedure TMainForm.EventsChange(Sender: TObject);
+begin
+  // Fires on EVERY state change, including the button's programmatic write below.
+  Inc(FChangeCount);
+  ShowEventCounts;
+end;
+
+procedure TMainForm.EventsClick(Sender: TObject);
+begin
+  // Fires only when the box is really activated: mouse, Space, or Alt+mnemonic.
+  Inc(FClickCount);
+  ShowEventCounts;
+end;
+
+procedure TMainForm.ToggleClick(Sender: TObject);
+begin
+  // A code-driven write: watch only the OnChange counter move.
+  CbEvents.Checked := not CbEvents.Checked;
 end;
 
 end.

@@ -1,10 +1,10 @@
 object MainForm: TMainForm
   Left = 0
-  Height = 420
+  Height = 500
   Top = 0
   Width = 460
   Caption = 'CheckBox example'
-  ClientHeight = 420
+  ClientHeight = 500
   ClientWidth = 460
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
@@ -12,7 +12,7 @@ object MainForm: TMainForm
   TitleBar = Bar
   object Surface: TTyFormSurface
     Left = 0
-    Height = 420
+    Height = 500
     Top = 0
     Width = 460
     Align = alClient
@@ -112,6 +112,45 @@ object MainForm: TMainForm
       Width = 280
       Caption = 'Disabled and unchecked'
       Enabled = False
+    end
+    object LblEventsHdr: TTyLabel
+      Left = 20
+      Height = 22
+      Top = 344
+      Width = 420
+      Caption = 'OnClick vs OnChange (OnChange also fires on a code write):'
+    end
+    object CbEvents: TTyCheckBox
+      Left = 24
+      Height = 24
+      Top = 370
+      Width = 280
+      Caption = 'OnClick vs OnChange'
+      OnClick = EventsClick
+      OnChange = EventsChange
+    end
+    object BtnToggle: TTyButton
+      Left = 316
+      Height = 26
+      Top = 369
+      Width = 124
+      Caption = 'Toggle in code'
+      OnClick = ToggleClick
+    end
+    object LblEvents: TTyLabel
+      Left = 24
+      Height = 22
+      Top = 398
+      Width = 420
+      Caption = '(no event yet - click the box, then press the button)'
+    end
+    object LblKeys: TTyLabel
+      Left = 20
+      Height = 56
+      Top = 424
+      Width = 420
+      Caption = 'Keyboard: Alt+A / Alt+N activate the &&-marked boxes (the underline shows while Alt is held); Space toggles the focused box.'
+      WordWrap = True
     end
   end
 end
