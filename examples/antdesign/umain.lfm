@@ -359,6 +359,7 @@ object MainForm: TMainForm
             Width = 72
             StyleClass = 'accent'
             Caption = 'All'
+            OnClick = TagFilterClick
           end
           object TagFilterPub: TTyTag
             Left = 92
@@ -368,6 +369,7 @@ object MainForm: TMainForm
             Caption = 'Published'
             Closable = True
             OnClose = TagClosed
+            OnClick = TagFilterClick
           end
           object TagFilterDraft: TTyTag
             Left = 212
@@ -377,6 +379,7 @@ object MainForm: TMainForm
             Caption = 'Draft'
             Closable = True
             OnClose = TagClosed
+            OnClick = TagFilterClick
           end
           object BtnSelCount: TTyButton
             Left = 763
@@ -413,6 +416,7 @@ object MainForm: TMainForm
             Top = 58
             Width = 1041
             TabOrder = 0
+            ReadOnly = True
             SelectionMode = gsmRow
             GridLineStyle = glsHorizontal
             OnSelectionChanged = GridSelectionChanged
@@ -718,6 +722,7 @@ object MainForm: TMainForm
                     end                  
                     item
                       Caption = 'Jiangsu'
+                      Enabled = False
                       Children = <                      
                         item
                           Caption = 'Nanjing'
@@ -806,7 +811,7 @@ object MainForm: TMainForm
               Height = 96
               Top = 576
               Width = 491
-              Caption = 'The tree dropdown''s hierarchy is built in code (a virtual tree''s nodes are pointers, the .lfm cannot hold them); the cascader''s option tree is a nested collection in the .lfm.'
+              Caption = 'The tree dropdown''s hierarchy is built in code (a virtual tree''s nodes are pointers, the .lfm cannot hold them); the cascader''s option tree is a nested collection in the .lfm. One region in it is disabled: you can see Jiangsu but not pick it, and the column it would have opened never appears.'
               Layout = tlTop
               WordWrap = True
             end
@@ -997,12 +1002,27 @@ object MainForm: TMainForm
               StyleClass = 'primary'
               Caption = 'Open popover'
             end
+            object SegPopPlace: TTySegmented
+              Left = 148
+              Height = 44
+              Top = 121
+              Width = 352
+              TabOrder = 4
+              Items.Strings = (
+                'Top'
+                'Right'
+                'Bottom'
+                'Left'
+              )
+              ItemIndex = 1
+              OnChange = SegPopPlaceChange
+            end
             object LblFloatNote: TTyLabel
               Left = 12
               Height = 116
               Top = 174
               Width = 491
-              Caption = 'TTyNotification is a corner toast: non-intrusive, dismisses itself (the Duration=0 one stays until you close it; two of them stack in the same corner). TTyPopover is an overlay that can host controls — the two buttons inside it are real controls.'
+              Caption = 'TTyNotification is a corner toast: non-intrusive, dismisses itself (the Duration=0 one stays until you close it, and it sits in the bottom-right corner — toasts sharing a corner stack in it). TTyPopover is an overlay that can host controls: the two buttons inside it are real, and it stays open when you click away because its content is a question.'
               Layout = tlTop
               WordWrap = True
             end
@@ -1198,15 +1218,16 @@ object MainForm: TMainForm
                 'Done'
               )
               StepIndex = 1
+              ErrorIndex = 1
               Clickable = True
               OnChange = StepsFlowChange
             end
             object LblStepsTitle: TTyLabel
               Left = 16
-              Height = 40
+              Height = 56
               Top = 146
               Width = 482
-              Caption = 'Clickable is on — click or use the arrow keys.'
+              Caption = 'Clickable is on — click or use the arrow keys. Step 2 is marked failed (ErrorIndex): the error mark wins wherever it sits.'
               Layout = tlTop
               WordWrap = True
             end
@@ -1427,6 +1448,7 @@ object MainForm: TMainForm
     Message = 'Still failed after 3 retries.'#13#10'This one has Duration = 0 and stays until you close it.'
     NotificationType = atError
     Duration = 0
+    Position = npBottomRight
     Left = 400
     Top = 500
   end
@@ -1435,6 +1457,9 @@ object MainForm: TMainForm
     Content = PopBox
     Placement = ppRight
     Title = 'Confirm publish?'
+    CloseOnClickOutside = False
+    OnShow = PopShow
+    OnHide = PopHide
     Left = 480
     Top = 500
   end

@@ -610,9 +610,31 @@ object MainForm: TMainForm
             Caption = '"Completion" progress bar · "Rating" stars · "Settled" checkbox · "Mark colour" click to pick · "Actions" button'
           end
         end
+        object TbEdit2: TTyPanel
+          Left = 0
+          Height = 40
+          Top = 78
+          Width = 1172
+          Align = alTop
+          object ChkEditByRow: TTyCheckBox
+            Left = 8
+            Height = 22
+            Top = 8
+            Width = 210
+            Caption = 'Editor kind depends on the row'
+            OnChange = ChkEditChange
+          end
+          object LblEditTip2: TTyLabel
+            Left = 226
+            Height = 20
+            Top = 10
+            Width = 930
+            Caption = 'OnGetEditorKind is asked per cell and beats the kind declared on the column — the same column can edit differently row by row'
+          end
+        end
         object GridEdit: TTyStringGrid
           Left = 0
-          Height = 570
+          Height = 530
           Top = 0
           Width = 1172
           Align = alClient
@@ -854,6 +876,14 @@ object MainForm: TMainForm
             Width = 640
             Caption = 'Adding and moving columns can now be undone too — width, title, editor kind, read-only and that column''s filter all come back together'
           end
+          object ChkFillSeries: TTyCheckBox
+            Left = 1028
+            Height = 22
+            Top = 8
+            Width = 140
+            Caption = 'Fill: weekdays'
+            OnChange = ChkDataChange
+          end
         end
         object GridData: TTyStringGrid
           Left = 0
@@ -933,6 +963,14 @@ object MainForm: TMainForm
             Caption = 'Pin column 0'
             OnChange = ChkEvChange
           end
+          object ChkEvDrawCell: TTyCheckBox
+            Left = 860
+            Height = 22
+            Top = 8
+            Width = 220
+            Caption = 'Paint the amount cells myself'
+            OnChange = ChkEvChange
+          end
         end
         object TbEv2: TTyPanel
           Left = 0
@@ -954,7 +992,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 156
-            Caption = 'Clipboard hook'
+            Caption = 'Clipboard hooks'
             OnChange = ChkEvChange
           end
           object BtnEvFind: TTyButton
@@ -1612,6 +1650,7 @@ object MainForm: TMainForm
               'Rating'
               'Hyperlink'
               'Colour block'
+              'Image'
             )
             ItemIndex = 0
             OnChange = CbCellDispChange
@@ -1669,6 +1708,14 @@ object MainForm: TMainForm
             Value = 0
             OnChange = SpMaxLenChange
           end
+          object ChkColImage: TTyCheckBox
+            Left = 930
+            Height = 22
+            Top = 8
+            Width = 200
+            Caption = 'Mark column shows an icon'
+            OnChange = ChkCellsChange
+          end
         end
         object GridCells: TTyStringGrid
           Left = 0
@@ -1684,6 +1731,53 @@ object MainForm: TMainForm
           MinRowHeight = 20
           MaxRowHeight = 70
           OnSelectionChanged = AnyGridSelectionChanged
+        end
+      end
+      object PgDraw: TTyTabSheet
+        Caption = 'Draw grid'
+        object TbDraw: TTyPanel
+          Left = 0
+          Height = 40
+          Top = 0
+          Width = 1172
+          Align = alTop
+          object BtnDrawEnd: TTyButton
+            Left = 8
+            Height = 26
+            Top = 6
+            Width = 132
+            Caption = 'Jump to the last row'
+            OnClick = BtnDrawEndClick
+          end
+          object BtnDrawTop: TTyButton
+            Left = 146
+            Height = 26
+            Top = 6
+            Width = 108
+            Caption = 'Back to the top'
+            OnClick = BtnDrawTopClick
+          end
+          object LblDrawTip: TTyLabel
+            Left = 264
+            Height = 20
+            Top = 10
+            Width = 892
+            Caption = 'TTyDrawGrid stores nothing at all: every cell comes from OnGetCellText, so a million rows cost no memory'
+          end
+        end
+        object GridDraw: TTyDrawGrid
+          Left = 0
+          Height = 610
+          Top = 40
+          Width = 1172
+          Align = alClient
+          DefaultRowHeight = 24
+          ShowIndicator = True
+          ShowRowNumbers = True
+          IndicatorWidth = 84
+          AlternateRows = True
+          FixedCols = 1
+          OnGetCellText = DrawGridCellText
         end
       end
     end

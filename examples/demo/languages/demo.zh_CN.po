@@ -299,3 +299,83 @@ msgstr "重置"
 #: tdemomainform.btndlgabout.caption
 msgid "About"
 msgstr "关于"
+
+#: tdemomainform.btnapauto.caption
+msgid "Auto"
+msgstr ""
+
+#: tdemomainform.lbldensity.caption
+msgid "Density"
+msgstr ""
+
+#: tdemomainform.chkhotreload.hint
+msgid "TTyStyleController.HotReload — it watches a theme FILE, so it only arms after the theme box loads one via Custom…"
+msgstr ""
+
+#: tdemomainform.chkhotreload.caption
+msgid "Watch theme file"
+msgstr ""
+
+#: tdemomainform.tybutton4.hint
+msgid "The one button on this form with StyleOverride = border-radius: 14px — a per-instance CSS patch layered on the resolved theme. It still recolours with every skin."
+msgstr ""
+
+#: tdemomainform.btnmsgwarn.caption
+msgid "Warning"
+msgstr ""
+
+#: tdemomainform.btnmsgerror.caption
+msgid "Error"
+msgstr ""
+
+#: tdemomainform.btnmsgconfirm.caption
+msgid "Yes / No"
+msgstr ""
+
+#: tdemomainform.chknativefontname.caption
+msgid "Apply the theme font NAME to native controls (ApplyFontName)"
+msgstr ""
+
+#: tdemomainform.chknativefontsize.caption
+msgid "Apply the theme font SIZE to native controls (ApplyFontSize)"
+msgstr ""
+
+#: tdemomainform.chknativeskiptree.caption
+msgid "Opt this tree out in OnStyleControl — switch theme and it stays put"
+msgstr ""
+
+#: tdemomainform.demoglyphbtn.caption
+msgid "New"
+msgstr ""
+
+#: tdemomainform.demomenubtn.caption
+msgid "More"
+msgstr ""
+
+#: tdemomainform.lblgauge.caption
+msgid "Gauge (gsArc)"
+msgstr ""
+
+#: tdemomainform.lblmeter.caption
+msgid "Meter"
+msgstr ""
+
+#: tdemomainform.lblcircular.caption
+msgid "Circular"
+msgstr ""
+
+#: tdemomainform.lblactivity.caption
+msgid "Activity + rating"
+msgstr ""
+
+#: tdemomainform.lblspark.caption
+msgid "Sparkline (fed in code)"
+msgstr ""
+
+#: tdemomainform.lblgridhint.caption
+msgid "Click a column header to sort; the funnel button filters that column."
+msgstr ""
+
+#: tdemomainform.mnufilesep.caption
+msgid "-"
+msgstr ""

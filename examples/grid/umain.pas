@@ -95,10 +95,10 @@ type
     EdFilterVal: TTyEdit;
 
     PgEdit: TTyTabSheet;
-    LblEditHint, LblEditTip: TTyLabel;
-    TbEdit: TTyPanel;
+    LblEditHint, LblEditTip, LblEditTip2: TTyLabel;
+    TbEdit, TbEdit2: TTyPanel;
     GridEdit: TTyStringGrid;
-    ChkSkipRO, ChkEditLink: TTyCheckBox;
+    ChkSkipRO, ChkEditLink, ChkEditByRow: TTyCheckBox;
     BtnCellRO, BtnCellRW: TTyButton;
 
     PgData: TTyTabSheet;
@@ -111,7 +111,7 @@ type
       BtnInsRow, BtnDelRow, BtnRowUp, BtnRowDown, BtnHideRow, BtnUnhideAll,
       BtnExportCsv, BtnExportHtml, BtnUndo, BtnRedo,
       BtnInsCol, BtnDelCol, BtnMoveCol: TTyButton;
-    ChkAutoGrow: TTyCheckBox;
+    ChkAutoGrow, ChkFillSeries: TTyCheckBox;
 
     PgEvents: TTyTabSheet;
     LblEvHint, LblEvTip: TTyLabel;
@@ -123,7 +123,8 @@ type
       ChkEvReturn, ChkEvScrollHint, ChkEvCanEdit, ChkEvEditChange,
       ChkEvCellEdited, ChkEvRowVeto, ChkEvSelectCell,
       ChkEvClick, ChkEvRating, ChkEvCanSort, ChkEvCompare,
-      ChkEvFilterRow, ChkEvFilterVals, ChkEvPickList: TTyCheckBox;
+      ChkEvFilterRow, ChkEvFilterVals, ChkEvPickList,
+      ChkEvDrawCell: TTyCheckBox;
     TbEv3, TbEv4: TTyPanel;
     BtnEvFind, BtnEvReplace, BtnEvImportCsv: TTyButton;
     EdEvFind, EdEvRepl: TTyEdit;
@@ -133,7 +134,7 @@ type
     TbCells1, TbCells2: TTyPanel;
     GridCells: TTyStringGrid;
     ChkTriState, ChkFormat, ChkLinkCol, ChkColProgress,
-      ChkDigitsOnly: TTyCheckBox;
+      ChkDigitsOnly, ChkColImage: TTyCheckBox;
     BtnComment, BtnCommentClear, BtnBold, BtnBoldClear: TTyButton;
     CbCellDisp, CbCase: TTyComboBox;
     SpMaxLen: TTySpinEdit;
@@ -156,6 +157,12 @@ type
       BtnIoRecalc: TTyButton;
     ChkIoAppend, ChkIoFooterHook, ChkIoColCalc: TTyCheckBox;
     SpIoMax, SpIoSkip: TTySpinEdit;
+
+    PgDraw: TTyTabSheet;
+    TbDraw: TTyPanel;
+    LblDrawTip: TTyLabel;
+    GridDraw: TTyDrawGrid;
+    BtnDrawEnd, BtnDrawTop: TTyButton;
 
     procedure FormCreate(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
@@ -229,6 +236,8 @@ type
       var AText: string; var AAccept: Boolean);
     procedure EditCreateEditLink(Sender: TObject; ACol, ARow: Integer;
       var ALink: TTyGridEditLink);
+    procedure EditGetEditorKind(Sender: TObject; ACol, ARow: Integer;
+      var AKind: TTyGridEditorKind);
 
     { 页 5 }
     procedure CbSelModeChange(Sender: TObject);
@@ -253,6 +262,8 @@ type
     procedure BtnUndoClick(Sender: TObject);
     procedure BtnRedoClick(Sender: TObject);
     procedure ChkDataChange(Sender: TObject);
+    procedure EvFillCells(Sender: TObject; const ASource, ATarget: TRect;
+      var AHandled: Boolean);
 
     { 页 6 }
     procedure ChkEvChange(Sender: TObject);
@@ -348,6 +359,16 @@ type
     procedure EvBeforePasteCell(Sender: TObject; ACol, ARow: Integer;
       var ANewText: string; var AAllow: Boolean);
     procedure EvAfterPasteCell(Sender: TObject; ACol, ARow: Integer);
+    procedure EvClipboardPaste(Sender: TObject; var AText: string;
+      var AAllow: Boolean);
+    procedure EvDrawCell(Sender: TObject; ACol, ARow: Integer;
+      const ARect: TRect; APainter: TTyPainter; var AHandled: Boolean);
+
+    { 页 10 }
+    procedure DrawGridCellText(Sender: TObject; ACol, ARow: Integer;
+      var AText: string);
+    procedure BtnDrawEndClick(Sender: TObject);
+    procedure BtnDrawTopClick(Sender: TObject);
   private
     FNoteLink: TNoteEditLink;
     { 背景图由**宿主**持有并释放 —— 控件只借用(与 Images 同一约定,
@@ -373,6 +394,7 @@ type
     procedure SetupCells;
     procedure SetupView;
     procedure SetupIo;
+    procedure SetupDraw;
     procedure ApplyHeaderGroups;
     function  MakeWatermark: TBGRABitmap;
     function  HeaderGroupLevels: Integer;
@@ -560,6 +582,7 @@ begin
   SetupCells;
   SetupView;
   SetupIo;
+  SetupDraw;
 
   Status('Each page demonstrates one feature set — read them left to right');
 end;
@@ -903,6 +926,9 @@ begin
   FillOrders(GridSort, 120, False);
   GridSort.SetColumnAggregate(cOrderNo, gagCount);
   GridSort.SetColumnAggregate(cAmount, gagSum);
+  { 分组行的抬头是一条格式串,不是写死的 '值 (行数)':%s = 分组值,%d = 组内行数。
+    留空就用控件自带的那条。 }
+  GridSort.GroupRowFormat := '%s   —   %d orders';
   CbFilterChange(nil);
 end;
 
@@ -984,7 +1010,8 @@ begin
   begin
     GridSort.GroupByColumn(cRegion);
     BtnGroup.Caption := 'Ungroup';
-    Status('Grouped by region — click a group row to collapse; note the sort column was not swallowed by grouping');
+    Status('Grouped by region — click a group row to collapse; note the sort column was not swallowed by grouping'
+      + ' · the group row''s caption comes from GroupRowFormat (%s = the group value, %d = how many rows are in it)');
   end;
 end;
 
@@ -1250,6 +1277,23 @@ begin
   GridEdit.SkipReadOnlyCells := ChkSkipRO.Checked;
   if ChkEditLink.Checked then GridEdit.OnCreateEditLink := @EditCreateEditLink
   else GridEdit.OnCreateEditLink := nil;
+
+  { 逐格的编辑器种类 —— 本页其余部分全是**列级声明**,这是唯一让编辑器
+    随行内数据变的路子。 }
+  if ChkEditByRow.Checked then GridEdit.OnGetEditorKind := @EditGetEditorKind
+  else GridEdit.OnGetEditorKind := nil;
+  if (Sender = ChkEditByRow) and ChkEditByRow.Checked then
+    Status('OnGetEditorKind is on: double-click "Region" — a settled order gets the picker, an unsettled one a plain text box. The per-cell event beats the kind declared on the column');
+end;
+
+{ 编辑器随**行内数据**变:结清的订单只许从候选里选,其余的随便打。
+  进来的 AKind 已经是列级声明的结果 —— 这里改写它就等于压过列级。 }
+procedure TMainForm.EditGetEditorKind(Sender: TObject; ACol, ARow: Integer;
+  var AKind: TTyGridEditorKind);
+begin
+  if ACol <> cRegion then Exit;
+  if Trim(GridEdit.Cells[cDone, ARow]) <> '' then AKind := gekPickList
+  else AKind := gekText;
 end;
 
 { 宿主接管「备注」列的编辑器。给了 link 就整格交给它,内建的一概不出场。 }
@@ -1341,10 +1385,50 @@ end;
 procedure TMainForm.ChkDataChange(Sender: TObject);
 begin
   GridData.AutoGrowOnPaste := ChkAutoGrow.Checked;
-  if ChkAutoGrow.Checked then
-    Status('On paste the table grows to fit')
+
+  { 拖填充柄产生的那一次填充可以整个被宿主接管 —— 置 AHandled 之后
+    控件一格都不写。 }
+  if ChkFillSeries.Checked then GridData.OnFillCells := @EvFillCells
+  else GridData.OnFillCells := nil;
+
+  if Sender = ChkFillSeries then
+  begin
+    if ChkFillSeries.Checked then
+      Status('Select a block, then drag the small square at its bottom-right corner downwards: the fill is mine now — weekday names instead of the built-in "repeat / continue the arithmetic run"')
+    else
+      Status('The built-in fill is back: drag the small square at the bottom-right corner of the selection downwards and it repeats the block, or continues an arithmetic run');
+  end
+  else if ChkAutoGrow.Checked then
+    Status('On paste the table grows to fit · drag the small square at the bottom-right corner of the selection to fill downwards (Excel-style)')
   else
     Status('Auto table growth is off — rows beyond the range are dropped (this is the old silent data-loss behaviour)');
+end;
+
+{ 接管一次拖填充。ATarget 是控件算好的目标区(数据行坐标),源区不动。
+  写完置 AHandled := True,控件就不再套用它自己那套"等差/循环"规则。 }
+procedure TMainForm.EvFillCells(Sender: TObject; const ASource, ATarget: TRect;
+  var AHandled: Boolean);
+const
+  cWeekdays: array[0..6] of string =
+    ('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun');
+var
+  c, r, n: Integer;
+begin
+  n := 0;
+  GridData.BeginUpdate;
+  try
+    for c := ATarget.Left to ATarget.Right do
+      for r := ATarget.Top to ATarget.Bottom do
+      begin
+        GridData.Cells[c, r] := cWeekdays[(r - ATarget.Top) mod Length(cWeekdays)];
+        Inc(n);
+      end;
+  finally
+    GridData.EndUpdate;
+  end;
+  AHandled := True;
+  Status(Format('OnFillCells wrote %d cell(s) itself — the control did not touch the data (untick the switch to get its built-in series back)',
+    [n]));
 end;
 
 procedure TMainForm.BtnInsRowClick(Sender: TObject);
@@ -1548,15 +1632,27 @@ begin
   if ChkEvClip.Checked then
   begin
     GridEvents.OnClipboardCopy := @EvClipboardCopy;
+    { 整块粘贴的钩子:文本还没被切成行列**之前**先过一遍宿主。
+      逐格的 OnBeforePasteCell 到手时块已经拆开了,改不动块本身。 }
+    GridEvents.OnClipboardPaste := @EvClipboardPaste;
     GridEvents.OnBeforePasteCell := @EvBeforePasteCell;
     GridEvents.OnAfterPasteCell := @EvAfterPasteCell;
   end
   else
   begin
     GridEvents.OnClipboardCopy := nil;
+    GridEvents.OnClipboardPaste := nil;
     GridEvents.OnBeforePasteCell := nil;
     GridEvents.OnAfterPasteCell := nil;
   end;
+
+  { 逐格自绘:控件把背景与选中底色铺好之后问一句"这格你自己画吗"。 }
+  if ChkEvDrawCell.Checked then GridEvents.OnDrawCell := @EvDrawCell
+  else GridEvents.OnDrawCell := nil;
+  GridEvents.Invalidate;
+
+  if (Sender = ChkEvDrawCell) and ChkEvDrawCell.Checked then
+    Status('OnDrawCell took the amount column over completely — the control still painted the background and the selection, the host only drew the content');
 end;
 
 { 悬停提示:控件只在**换格**时才回调,所以气泡内容跟着格变而不卡顿。 }
@@ -1688,6 +1784,79 @@ begin
   Status(Format('This paste wrote %d cell(s) (changed cells are tinted)', [FPasteCount]));
 end;
 
+{ 整块粘贴:剪贴板文本**还没被切成行列**之前先过宿主一遍 ——
+  逐格的 OnBeforePasteCell 拿到手时块早拆开了,改不动块本身。
+  置 AAllow := False 可以把整次粘贴拦下。 }
+procedure TMainForm.EvClipboardPaste(Sender: TObject; var AText: string;
+  var AAllow: Boolean);
+var
+  i, lines: Integer;
+begin
+  lines := 0;
+  if AText <> '' then
+  begin
+    lines := 1;
+    for i := 1 to Length(AText) do
+      if AText[i] = #10 then Inc(lines);
+  end;
+  { 改写整块 —— 之后控件才去解析行列,所以逐格钩子看到的已经是改过的值。 }
+  AText := UpperCase(AText);
+  Status(Format('OnClipboardPaste saw the whole block first: %d line(s), uppercased before the grid parsed it',
+    [lines]));
+end;
+
+{ 完全接管「金额」那一列的绘制:画一条按比例的数据条,数字自己写。
+
+  背景与选中底色控件已经铺好了 —— 宿主只画自己那份内容,置 AHandled := True
+  之后控件就不再画这一格的内容(选中、hover、格线一样都不会丢)。
+
+  挑的是一列**普通文本**格。控件自带的进度条/色块/星级那几种画法走的是
+  另一趟遍历、在这个钩子**之前**,接管一个那样的列会得到两层叠画。 }
+procedure TMainForm.EvDrawCell(Sender: TObject; ACol, ARow: Integer;
+  const ARect: TRect; APainter: TTyPainter; var AHandled: Boolean);
+const
+  cBarFull = 5200.0;                 { 数据条满格对应的金额 }
+var
+  fill: TTyFill;
+  barR, textR: TRect;
+  txt: string;
+  ink: TTyColor;
+  v, f: Double;
+  pad, h, w: Integer;
+begin
+  if ACol <> cAmount then Exit;      { 只接管这一列,其余照走控件自己那条路 }
+  txt := Trim(GridEvents.Cells[cAmount, ARow]);
+  if txt = '' then Exit;
+  if not TryStrToFloat(txt, v) then Exit;
+
+  { 负数红、正数蓝。两个饱和色在明暗两套主题上都读得出来,所以条和数字
+    用同一个颜色 —— 示例里不必写死一个只在浅色主题上成立的墨色。 }
+  if v < 0 then ink := TyRGB(220, 38, 38) else ink := TyRGB(37, 99, 235);
+
+  pad := APainter.Scale(4);
+  h := APainter.Scale(4);
+  f := Abs(v) / cBarFull;
+  if f > 1 then f := 1;
+  w := Round((ARect.Right - ARect.Left - pad * 2) * f);
+  if w > 0 then
+  begin
+    barR := Rect(ARect.Left + pad, ARect.Bottom - pad - h,
+                ARect.Left + pad + w, ARect.Bottom - pad);
+    fill := Default(TTyFill);
+    fill.Kind := tfkSolid;
+    fill.Color := ink;
+    APainter.FillBackground(barR, fill, 2);
+  end;
+
+  textR := Rect(ARect.Left + pad, ARect.Top, ARect.Right - pad,
+                ARect.Bottom - pad - h);
+  if textR.Bottom > textR.Top then
+    APainter.DrawText(textR, txt, '', 0, 400, ink,
+      taRightJustify, tlCenter, True);
+
+  AHandled := True;
+end;
+
 { 从光标下一格起环绕查找,自动把命中处滚进视野;连按能不重不漏走遍全表。 }
 procedure TMainForm.BtnEvFindClick(Sender: TObject);
 begin
@@ -1765,11 +1934,43 @@ end;
   于是它们自动可撤销、自动跟着排序/插行走,宿主什么都不用管。 }
 
 procedure TMainForm.SetupCells;
+const
+  { gcdImage 那一列要用的四个图标 —— 与四种标记色一一对应。 }
+  cMarkGlyphs: array[0..3] of Cardinal = ($25CF, $25A0, $25B2, $2605);
+  cMarkInks:   array[0..3] of Cardinal = ($3B82F6, $22C55E, $F59E0B, $EF4444);
 var
   c: TTyGridColumn;
+  icf: TTyIconFont;
+  coll: TTyImageCollection;
+  imgs: TTyVirtualImageList;
+  b: TBGRABitmap;
+  i: Integer;
+  nm: string;
 begin
   BuildOrderColumns(GridCells, True, False);
   FillOrders(GridCells, 30, True, False);
+
+  { gcdImage 的格里存的是**索引**,图从网格的 Images 里取 —— 与列头图标同一个来源。
+    没有 Images 的话 gcdImage 是天然无效的(选了没反应就是这么来的)。 }
+  icf := TTyIconFont.Create(Self);
+  icf.FontFamily := 'Segoe UI Symbol';
+  coll := TTyImageCollection.Create(Self);
+  imgs := TTyVirtualImageList.Create(Self);
+  imgs.Collection := coll;
+  for i := 0 to High(cMarkGlyphs) do
+  begin
+    nm := 'mark' + IntToStr(i);
+    icf.MapGlyph(nm, cMarkGlyphs[i]);
+    b := icf.RenderGlyph(nm, 32, TyRGB((cMarkInks[i] shr 16) and $FF,
+      (cMarkInks[i] shr 8) and $FF, cMarkInks[i] and $FF));
+    try
+      coll.AddBitmap(nm, b);
+    finally
+      b.Free;
+    end;
+    imgs.Names.Add(nm);
+  end;
+  GridCells.Images := imgs;
 
   { 勾选框列 —— 三态开关就作用在它上面。 }
   c := TTyGridColumn(GridCells.Header.Columns.Items[cDone]);
@@ -1792,6 +1993,7 @@ end;
 procedure TMainForm.ChkCellsChange(Sender: TObject);
 var
   c: TTyGridColumn;
+  i: Integer;
 begin
   { 三态:关着时切换只在两态间走,灰显不会凭空冒出来。 }
   GridCells.AllowGrayed := ChkTriState.Checked;
@@ -1814,10 +2016,36 @@ begin
   if ChkDigitsOnly.Checked then c.ValidChars := '0123456789'
   else c.ValidChars := '';
 
+  { 图片格:格里存的是 Images 的**索引**,不是文字 —— 所以显示类型和值得一起换。
+    只改显示类型、值还留着 '#3B82F6' 的话,那一列会变成一片空白。
+    真变了才动数据:这个处理器是本页每个开关共用的,否则一勾别的也重写一遍。 }
+  c := TTyGridColumn(GridCells.Header.Columns.Items[cMark]);
+  if (c.CellDisplay = gcdImage) <> ChkColImage.Checked then
+  begin
+    GridCells.BeginUpdate;
+    try
+      if ChkColImage.Checked then
+      begin
+        c.CellDisplay := gcdImage;
+        for i := 0 to GridCells.RowCount - 1 do
+          GridCells.Cells[cMark, i] := IntToStr(i mod Length(cMarkColors));
+      end
+      else
+      begin
+        c.CellDisplay := gcdText;
+        for i := 0 to GridCells.RowCount - 1 do
+          GridCells.Cells[cMark, i] := cMarkColors[i mod Length(cMarkColors)];
+      end;
+    finally
+      GridCells.EndUpdate;
+    end;
+  end;
+
   GridCells.Invalidate;
   Status('tri-state=' + BoolToStr(ChkTriState.Checked, 'On', 'Off')
     + ' · formatting=' + BoolToStr(ChkFormat.Checked, 'On', 'Off')
-    + ' · link column=' + BoolToStr(ChkLinkCol.Checked, 'On', 'Off'));
+    + ' · link column=' + BoolToStr(ChkLinkCol.Checked, 'On', 'Off')
+    + ' · icon column=' + BoolToStr(ChkColImage.Checked, 'On', 'Off'));
 end;
 
 procedure TMainForm.BtnCommentClick(Sender: TObject);
@@ -1852,10 +2080,11 @@ end;
 { 逐格显示类型:比列级更具体,压过列级。 }
 procedure TMainForm.CbCellDispChange(Sender: TObject);
 const
-  kinds: array[0..4] of TTyGridCellDisplay =
-    (gcdText, gcdProgress, gcdRating, gcdHyperlink, gcdColor);
+  { 与 CbCellDisp.Items 一一对应 —— 加一项就得同时加一个枚举值。 }
+  kinds: array[0..5] of TTyGridCellDisplay =
+    (gcdText, gcdProgress, gcdRating, gcdHyperlink, gcdColor, gcdImage);
 begin
-  if CbCellDisp.ItemIndex < 0 then Exit;
+  if (CbCellDisp.ItemIndex < 0) or (CbCellDisp.ItemIndex > High(kinds)) then Exit;
   GridCells.CellDisplays[GridCells.Col, GridCells.Row] :=
     kinds[CbCellDisp.ItemIndex];
   Status(Format('(%d, %d) changed its display type — per-cell beats per-column and overrides the column-level declaration',
@@ -2043,9 +2272,14 @@ procedure TMainForm.SetupIo;
 begin
   BuildOrderColumns(GridIo, True, False);
   FillOrders(GridIo, 25, True, False);
-  GridIo.SetColumnAggregate(cQty, gagSum);
+  { 五种聚合口径各摆一列 —— 汇总带是**逐列**配的,不是全表一个开关。
+    非数值的格一律跳过,所以空日期、空备注不会把统计拉歪。 }
+  GridIo.SetColumnAggregate(cOrderNo, gagCount);
+  GridIo.SetColumnAggregate(cQty, gagAvg);
   GridIo.SetColumnAggregate(cAmount, gagSum);
-  Status('Page 9: export/import/stream round-trip/footer takeover');
+  GridIo.SetColumnAggregate(cRate, gagMin);
+  GridIo.SetColumnAggregate(cDone, gagMax);
+  Status('Page 9: export/import/stream round-trip/footer takeover · the summary band does count / average / sum / min / max — one aggregate per column');
 end;
 
 procedure TMainForm.ChkIoChange(Sender: TObject);
@@ -2447,6 +2681,66 @@ begin
   { 逐格给不同的候选 —— 静态 PickList 做不到这件事。 }
   if ARow mod 2 = 0 then AItems.CommaText := 'East China, North China, South China'
   else AItems.CommaText := 'Southwest, Northeast, Northwest';
+end;
+
+{ ============ 页 10:TTyDrawGrid ============
+
+  与前九页的 TTyStringGrid 是两个类:TTyDrawGrid **自己一格数据都不存**,
+  每个格子的文字现问 OnGetCellText 要。所以它天生就是虚拟的 ——
+  RowCount 写一百万也不占内存,而且没有"先把数据灌进去"这一步。
+
+  页 1 演示的是 TTyStringGrid **挂上**虚拟数据源之后能虚拟化;
+  这一页演示的是一个从设计上就不持有数据的网格。 }
+
+procedure TMainForm.SetupDraw;
+
+  function AddCol(const ACaption: string; AWidth: Integer;
+    AAlign: TAlignment): TTyGridColumn;
+  begin
+    Result := GridDraw.Header.Columns.Add as TTyGridColumn;
+    Result.Text := ACaption;
+    Result.Width := AWidth;
+    Result.Alignment := AAlign;
+  end;
+
+begin
+  GridDraw.Header.Columns.BeginUpdate;
+  try
+    AddCol('Order No.', 140, taLeftJustify);
+    AddCol('Region',    120, taLeftJustify);
+    AddCol('Product',   140, taLeftJustify);
+    AddCol('Amount',    120, taRightJustify);
+  finally
+    GridDraw.Header.Columns.EndUpdate;
+  end;
+  { 一百万行,零次写入。灌数据的那一步在这个类里根本不存在。 }
+  GridDraw.RowCount := 1000000;
+end;
+
+{ 网格要画哪一格就问哪一格 —— 只有视口里那几十行会走到这里。 }
+procedure TMainForm.DrawGridCellText(Sender: TObject; ACol, ARow: Integer;
+  var AText: string);
+begin
+  case ACol of
+    0: AText := Format('SO-2026%07d', [ARow + 1]);
+    1: AText := cRegions[ARow mod Length(cRegions)];
+    2: AText := cProducts[ARow mod Length(cProducts)];
+    3: AText := Format('%.2f', [(1 + (ARow * 7) mod 40) * 128.5]);
+  else
+    AText := '';
+  end;
+end;
+
+procedure TMainForm.BtnDrawEndClick(Sender: TObject);
+begin
+  GridDraw.ScrollIntoView(0, GridDraw.RowCount - 1);
+  Status('Row 1,000,000 — getting there cost nothing: no rows were ever built, the last screenful was simply asked for');
+end;
+
+procedure TMainForm.BtnDrawTopClick(Sender: TObject);
+begin
+  GridDraw.ScrollIntoView(0, 0);
+  Status('Back at the top — TTyDrawGrid holds no cells at all, so there is nothing to reload');
 end;
 
 end.

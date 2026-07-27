@@ -71,8 +71,19 @@ object DemoMainForm: TDemoMainForm
         Controller = TyController
         Caption = 'Dark'
       end
+      object BtnApAuto: TTyButton
+        Left = 361
+        Height = 28
+        Top = 4
+        Width = 44
+        TabOrder = 9
+        OnClick = ApAutoClick
+        StyleClass = 'ghost'
+        Controller = TyController
+        Caption = 'Auto'
+      end
       object BtnAccent: TTyButton
-        Left = 368
+        Left = 414
         Height = 28
         Top = 4
         Width = 64
@@ -83,7 +94,7 @@ object DemoMainForm: TDemoMainForm
         Caption = 'Accent'
       end
       object BtnAccentReset: TTyButton
-        Left = 436
+        Left = 482
         Height = 28
         Top = 4
         Width = 54
@@ -131,6 +142,59 @@ object DemoMainForm: TDemoMainForm
         StyleClass = 'ghost'
         Controller = TyController
         Caption = '&Open'
+      end
+      object TbSep2: TTyToolSeparator
+        Left = 132
+        Height = 24
+        Top = 4
+        Width = 8
+        TabOrder = 3
+        Controller = TyController
+      end
+      object LblDensity: TTyLabel
+        Left = 142
+        Height = 24
+        Top = 4
+        Width = 56
+        Controller = TyController
+        Caption = 'Density'
+      end
+      object DensityCombo: TTyComboBox
+        Left = 200
+        Height = 24
+        Top = 4
+        Width = 104
+        TabOrder = 4
+        Controller = TyController
+        Items.Strings = (
+          'Classic'
+          'Modern'
+        )
+        ItemIndex = 0
+        Text = 'Classic'
+        OnChange = DensityComboChange
+      end
+      object TbSep3: TTyToolSeparator
+        Left = 306
+        Height = 24
+        Top = 4
+        Width = 8
+        TabOrder = 5
+        Controller = TyController
+      end
+      object ChkHotReload: TTyCheckBox
+        Left = 316
+        Height = 24
+        Top = 4
+        Width = 150
+        TabOrder = 6
+        TabStop = True
+        Enabled = False
+        ShowHint = True
+        Hint = 'TTyStyleController.HotReload — it watches a theme FILE, so it only arms after the theme box loads one via Custom…'
+        Controller = TyController
+        Caption = 'Watch theme file'
+        OnChange = ChkHotReloadChange
       end
     end
     object StatusBar1: TTyStatusBar
@@ -254,7 +318,7 @@ object DemoMainForm: TDemoMainForm
       end
       object PanelBox: TTyPanel
         Left = 256
-        Height = 161
+        Height = 176
         Top = 25
         Width = 328
         TabOrder = 5
@@ -275,7 +339,10 @@ object DemoMainForm: TDemoMainForm
           Top = 48
           Width = 96
           TabOrder = 1
+          ShowHint = True
+          Hint = 'The one button on this form with StyleOverride = border-radius: 14px — a per-instance CSS patch layered on the resolved theme. It still recolours with every skin.'
           OnClick = TyButton4Click
+          StyleOverride = 'border-radius: 14px;'
           Controller = TyController
           Caption = 'SelectPath'
         end
@@ -378,6 +445,36 @@ object DemoMainForm: TDemoMainForm
           OnClick = BtnDlgAboutClick
           Controller = TyController
           Caption = 'About'
+        end
+        object BtnMsgWarn: TTyButton
+          Left = 24
+          Height = 28
+          Top = 144
+          Width = 96
+          TabOrder = 12
+          OnClick = BtnMsgWarnClick
+          Controller = TyController
+          Caption = 'Warning'
+        end
+        object BtnMsgError: TTyButton
+          Left = 126
+          Height = 28
+          Top = 144
+          Width = 96
+          TabOrder = 13
+          OnClick = BtnMsgErrorClick
+          Controller = TyController
+          Caption = 'Error'
+        end
+        object BtnMsgConfirm: TTyButton
+          Left = 228
+          Height = 28
+          Top = 144
+          Width = 96
+          TabOrder = 14
+          OnClick = BtnMsgConfirmClick
+          Controller = TyController
+          Caption = 'Yes / No'
         end
       end
       object ComboKind: TTyComboBox
@@ -673,10 +770,46 @@ object DemoMainForm: TDemoMainForm
           TabOrder = 4
           Controller = TyController
           Caption = 'Native'
+          object ChkNativeFontName: TTyCheckBox
+            Left = 0
+            Height = 24
+            Top = 0
+            Width = 604
+            TabOrder = 1
+            TabStop = True
+            Align = alTop
+            Controller = TyController
+            Caption = 'Apply the theme font NAME to native controls (ApplyFontName)'
+            OnChange = ChkNativeFontChange
+          end
+          object ChkNativeFontSize: TTyCheckBox
+            Left = 0
+            Height = 24
+            Top = 24
+            Width = 604
+            TabOrder = 2
+            TabStop = True
+            Align = alTop
+            Controller = TyController
+            Caption = 'Apply the theme font SIZE to native controls (ApplyFontSize)'
+            OnChange = ChkNativeFontChange
+          end
+          object ChkNativeSkipTree: TTyCheckBox
+            Left = 0
+            Height = 24
+            Top = 48
+            Width = 604
+            TabOrder = 3
+            TabStop = True
+            Align = alTop
+            Controller = TyController
+            Caption = 'Opt this tree out in OnStyleControl — switch theme and it stays put'
+            OnChange = ChkNativeSkipTreeChange
+          end
           object TreeView1: TTreeView
             Left = 0
-            Height = 334
-            Top = 0
+            Height = 262
+            Top = 72
             Width = 604
             Align = alClient
             ScrollBars = ssAutoBoth
@@ -846,6 +979,165 @@ object DemoMainForm: TDemoMainForm
             Caption = '← CharImage (an icon-font glyph). Hover this line to see the themed tooltip.'
           end
         end
+        object TyTabSheetGauges: TTyTabSheet
+          Left = 0
+          Height = 334
+          Top = 28
+          Width = 604
+          TabOrder = 7
+          Controller = TyController
+          Caption = 'Gauges'
+          object LblGauge: TTyLabel
+            Left = 16
+            Height = 18
+            Top = 8
+            Width = 132
+            Controller = TyController
+            Caption = 'Gauge (gsArc)'
+          end
+          object DemoGauge: TTyGauge
+            Left = 16
+            Height = 100
+            Top = 28
+            Width = 132
+            Controller = TyController
+            Style = gsArc
+            ValueFormat = '%.0f%%'
+            Value = 62
+          end
+          object LblMeter: TTyLabel
+            Left = 160
+            Height = 18
+            Top = 8
+            Width = 148
+            Controller = TyController
+            Caption = 'Meter'
+          end
+          object DemoMeter: TTyMeter
+            Left = 160
+            Height = 100
+            Top = 28
+            Width = 148
+            Controller = TyController
+            Min = 0
+            Max = 100
+            Ticks = 6
+            ValueFormat = '%.0f'
+            Value = 72
+          end
+          object LblCircular: TTyLabel
+            Left = 320
+            Height = 18
+            Top = 8
+            Width = 104
+            Controller = TyController
+            Caption = 'Circular'
+          end
+          object DemoCircular: TTyCircularProgress
+            Left = 320
+            Height = 100
+            Top = 28
+            Width = 100
+            Controller = TyController
+            Position = 40
+          end
+          object LblActivity: TTyLabel
+            Left = 436
+            Height = 18
+            Top = 8
+            Width = 152
+            Controller = TyController
+            Caption = 'Activity + rating'
+          end
+          object DemoActivity: TTyActivityIndicator
+            Left = 436
+            Height = 36
+            Top = 28
+            Width = 36
+            Controller = TyController
+            Thickness = 5
+          end
+          object DemoRating: TTyRating
+            Left = 436
+            Height = 28
+            Top = 76
+            Width = 152
+            TabOrder = 0
+            Controller = TyController
+            Value = 3
+          end
+          object LblSpark: TTyLabel
+            Left = 16
+            Height = 18
+            Top = 136
+            Width = 132
+            Controller = TyController
+            Caption = 'Sparkline (fed in code)'
+          end
+          object DemoSpark: TTySparkline
+            Left = 160
+            Height = 24
+            Top = 134
+            Width = 264
+            Controller = TyController
+          end
+          object DemoChart: TTyChart
+            Left = 16
+            Height = 160
+            Top = 166
+            Width = 572
+            Controller = TyController
+            ChartType = ctLine
+            Title = 'Weekly load'
+            Categories.Strings = (
+              'Mon'
+              'Tue'
+              'Wed'
+              'Thu'
+              'Fri'
+            )
+            Series = <
+              item
+                Name = 'Requests'
+                Values = '18, 24, 21, 30, 27'
+              end
+              item
+                Name = 'Errors'
+                Values = '3, 5, 2, 7, 4'
+              end>
+          end
+        end
+        object TyTabSheetGrid: TTyTabSheet
+          Left = 0
+          Height = 334
+          Top = 28
+          Width = 604
+          TabOrder = 8
+          Controller = TyController
+          Caption = 'Grid'
+          object LblGridHint: TTyLabel
+            Left = 0
+            Height = 20
+            Top = 0
+            Width = 604
+            Align = alTop
+            Controller = TyController
+            Caption = 'Click a column header to sort; the funnel button filters that column.'
+          end
+          object DemoGrid: TTyStringGrid
+            Left = 0
+            Height = 314
+            Top = 20
+            Width = 604
+            TabOrder = 0
+            Align = alClient
+            Controller = TyController
+            ShowIndicator = True
+            ShowRowNumbers = True
+            AlternateRows = True
+            ShowFilterButtons = True
+          end
+        end
       end
     end
   end
@@ -924,6 +1216,7 @@ object DemoMainForm: TDemoMainForm
   end
   object TyNativeStyler1: TTyNativeStyler
     Controller = TyController
+    OnStyleControl = NativeStylerStyleControl
     Left = 744
     Top = 424
   end

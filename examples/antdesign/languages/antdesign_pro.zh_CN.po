@@ -208,8 +208,8 @@ msgid "North China"
 msgstr "华北"
 
 #: tmainform.caption
-msgid "Haidian District"
-msgstr "海淀区"
+msgid "TyControls Pro"
+msgstr ""
 
 #: tmainform.lblmembers.caption
 msgid "Notify (transfer box)"
@@ -220,8 +220,8 @@ msgid "The current selection will show here."
 msgstr "当前选择会显示在这里。"
 
 #: tmainform.lblformtodonote.caption
-msgid "The tree dropdown's hierarchy is built in code (a virtual tree's nodes are pointers, the .lfm cannot hold them); the cascader's option tree is a nested collection in the .lfm."
-msgstr "树形下拉的层级建在代码里(虚拟树的节点是指针,.lfm 存不下);级联的选项树是 .lfm 里的嵌套集合。"
+msgid "The tree dropdown's hierarchy is built in code (a virtual tree's nodes are pointers, the .lfm cannot hold them); the cascader's option tree is a nested collection in the .lfm. One region in it is disabled: you can see Jiangsu but not pick it, and the column it would have opened never appears."
+msgstr ""
 
 #: tmainform.pgfeedback.caption
 msgid "Feedback"
@@ -284,8 +284,8 @@ msgid "Open popover"
 msgstr "打开浮层"
 
 #: tmainform.lblfloatnote.caption
-msgid "TTyNotification is a corner toast: non-intrusive, dismisses itself (the Duration=0 one stays until you close it; two of them stack in the same corner). TTyPopover is an overlay that can host controls — the two buttons inside it are real controls."
-msgstr "TTyNotification 是角落 toast:不打断、会自己消失(Duration=0 的那条留到你关它,两条会在同一角落堆叠)。TTyPopover 是能装控件的浮层 —— 里面那两个按钮是真控件。"
+msgid "TTyNotification is a corner toast: non-intrusive, dismisses itself (the Duration=0 one stays until you close it, and it sits in the bottom-right corner — toasts sharing a corner stack in it). TTyPopover is an overlay that can host controls: the two buttons inside it are real, and it stays open when you click away because its content is a question."
+msgstr ""
 
 #: tmainform.lblpopbody.caption
 msgid "All subscribers will be notified after publishing. Continue?"
@@ -336,8 +336,8 @@ msgid "Step bar (TTySteps)"
 msgstr "步骤条(TTySteps)"
 
 #: tmainform.lblstepstitle.caption
-msgid "Clickable is on — click or use the arrow keys."
-msgstr "Clickable 打开了,可以点 / 方向键走。"
+msgid "Clickable is on — click or use the arrow keys. Step 2 is marked failed (ErrorIndex): the error mark wins wherever it sits."
+msgstr ""
 
 #: tmainform.cardcrumb.title
 msgid "Breadcrumb (TTyBreadcrumb)"
@@ -811,3 +811,26 @@ msgstr "重试 3 次后仍然失败。"
 msgid "This one has Duration = 0 and stays until you close it."
 msgstr "这条 Duration = 0,会一直留到你关闭它。"
 
+#: tmainform.tagbeta.caption
+msgid "Beta"
+msgstr ""
+
+#: tmainform.edamount.text
+msgid "1280.00"
+msgstr ""
+
+#: tmainform.btnstep.caption
+msgid "+10%"
+msgstr ""
+
+#: tmainform.lbltabsbody.caption
+msgid "Overview'#13#10'1,330 transactions this month · 230 refunds · fulfilment rate 82.7%'#13#10'vs last month +12.4%, mainly from the \"Channel\" group."
+msgstr ""
+
+#: tmainform.mnuusersep.caption
+msgid "-"
+msgstr ""
+
+#: tmainform.mnufilesep1.caption
+msgid "-"
+msgstr ""

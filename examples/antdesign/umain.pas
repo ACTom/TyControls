@@ -193,6 +193,7 @@ type
     BtnToast: TTyButton;
     BtnToastErr: TTyButton;
     BtnPopover: TTyButton;
+    SegPopPlace: TTySegmented;
     LblFloatNote: TTyLabel;
     { 浮层的内容容器:在设计器里摆好,平时 Visible = False 待在卡片里,
       Show 的时候被 TTyPopover 收编进弹窗、Hide 的时候原样还回来。 }
@@ -260,6 +261,7 @@ type
     { 各页 }
     procedure DataTreeGetText(Sender: TTyTreeView; Node: PTyTreeNode; var AText: string);
     procedure TagClosed(Sender: TObject; var AllowClose: Boolean);
+    procedure TagFilterClick(Sender: TObject);
     procedure GridSelectionChanged(Sender: TObject);
     procedure OrdersGetCellStyle(Sender: TObject; ACol, ARow: Integer;
       var ABackground: TTyFill; var ATextColor: TTyColor;
@@ -286,6 +288,9 @@ type
     procedure PopoverClick(Sender: TObject);
     procedure PopOkClick(Sender: TObject);
     procedure PopCancelClick(Sender: TObject);
+    procedure SegPopPlaceChange(Sender: TObject);
+    procedure PopShow(Sender: TObject);
+    procedure PopHide(Sender: TObject);
     procedure TabsDemoChange(Sender: TObject);
     procedure SegRangeChange(Sender: TObject);
     procedure StepsFlowChange(Sender: TObject);
@@ -298,9 +303,14 @@ type
       颜色取自主题,换肤时整批重画。 }
     FSiderIcons: TTyImageCollection;
     FSiderImages: TTyVirtualImageList;
+    { 上方那排筛选片选中的是哪一档:-1 = 全部,否则就是 FillOrders 要匹配的状态码
+      (0 已发布 / 1 草稿 / 2 待排期)。片子本身就是这个模型 —— 表格按它 + 分页器
+      当前页重填。 }
+    FOrderFilter: Integer;
     procedure BuildSider;
     procedure BuildSiderIcons;
     procedure BuildList;
+    procedure FillOrders;
     procedure BuildOrgTree;
     procedure BuildOrgTreeInto(ATree: TTyTreeView);
     procedure FeedSparklines;
@@ -500,6 +510,19 @@ resourcestring
   rsToastCorner   = 'This is a corner toast.';
   rsToastErrMsg1  = 'Still failed after 3 retries.';
   rsToastErrMsg2  = 'This one has Duration = 0 and stays until you close it.';
+  { The filter chips' echo, and the two float controls' own echoes. Same shape as the
+    Navigation page's: a footnote label that says what the control just reported. }
+  rsEchoFilter    = 'Filter chip: showing %s work orders (%d rows on this page) — the table itself is a read-only data view.';
+  rsEchoPopPlace  = 'Popover: asked for the %s side. Placement is a PREFERENCE — with no room there the popup flips to the opposite side.';
+  rsEchoPopShown  = 'Popover opened (OnShow). CloseOnClickOutside is off, so clicking away leaves it up: its content is a question. Escape still closes it.';
+  rsEchoPopHidden = 'Popover closed (OnHide) — one event for every dismissal: a button inside it, Escape, or Hide.';
+  rsEchoToastErr  = 'The error toast is pinned to the BOTTOM-RIGHT corner (Position); the other one keeps the top right. A toast picks any of the four, and toasts sharing one stack in it.';
+  rsEchoStepErr   = 'Step %d stays marked failed (ErrorIndex): the error mark wins wherever it sits — on the step you are on, and on one you already walked past.';
+  { The placement strip's segments — a TStrings in the .lfm, so refilled here like the rest. }
+  rsPopPlaceTop    = 'Top';
+  rsPopPlaceRight  = 'Right';
+  rsPopPlaceBottom = 'Bottom';
+  rsPopPlaceLeft   = 'Left';
 
 procedure TMainForm.LocalizeTexts;
 begin
@@ -558,6 +581,18 @@ begin
     StepsFlow.Items.Add(rsStepDone);
   finally
     StepsFlow.Items.EndUpdate;
+  end;
+  { BeginUpdate/EndUpdate is not cosmetic here: the strip re-validates ItemIndex on every
+    list change, so a Clear OUTSIDE an update block would drop the .lfm's selection. }
+  SegPopPlace.Items.BeginUpdate;
+  try
+    SegPopPlace.Items.Clear;
+    SegPopPlace.Items.Add(rsPopPlaceTop);
+    SegPopPlace.Items.Add(rsPopPlaceRight);
+    SegPopPlace.Items.Add(rsPopPlaceBottom);
+    SegPopPlace.Items.Add(rsPopPlaceLeft);
+  finally
+    SegPopPlace.Items.EndUpdate;
   end;
   NavCrumb.Items.BeginUpdate;
   try
@@ -639,6 +674,7 @@ begin
 
   BuildSiderIcons;    // 先把图标集接上 Sider.Images,BuildSider 再按名给每行指定图标
   BuildSider;
+  FOrderFilter := -1;   // 起手是「全部」—— .lfm 里带 accent 的那一片
   BuildList;
   BuildOrgTree;
   FeedSparklines;
@@ -983,7 +1019,14 @@ begin
   if t.Parent = CardStatus then
     LblStatusNote.Caption := msg
   else if t.Parent = PgList then
-    LblListNote.Caption := msg
+  begin
+    { 关掉的正好是当前生效的那片:表还筛着、片却不在了 —— 退回「全部」,
+      不然筛选条件就没有任何一个控件在替它说话了。 }
+    if ((t = TagFilterPub) and (FOrderFilter = 0)) or
+       ((t = TagFilterDraft) and (FOrderFilter = 1)) then
+      TagFilterClick(TagFilterAll);
+    LblListNote.Caption := msg;
+  end
   else if t.Parent = CardTags then
     LblTagsNote.Caption := msg;
 end;
@@ -999,15 +1042,6 @@ procedure TMainForm.BuildList;
     Result.Text := ACaption;
     Result.Width := AWidth;
     Result.Alignment := AAlign;
-  end;
-
-  procedure Row(ARow: Integer; const ANo, ATitle, AOwner, AState, AWhen: string);
-  begin
-    GridOrders.Cells[0, ARow] := ANo;
-    GridOrders.Cells[1, ARow] := ATitle;
-    GridOrders.Cells[2, ARow] := AOwner;
-    GridOrders.Cells[3, ARow] := AState;
-    GridOrders.Cells[4, ARow] := AWhen;
   end;
 
 begin
@@ -1027,27 +1061,100 @@ begin
     整行高亮就是选中线索 —— 这才是 Web 表格的读法。 }
   GridOrders.ShowFocusCell := False;
 
+  { 列建一次就够(再调一次 AddCol 会又加五列);行归 FillOrders —— 筛选片和分页器
+    都从那里重填。 }
+  FillOrders;
+end;
+
+{ The rows the CHIPS and the PAGER ask for. Both of them own no list and no query: a chip
+  reports which state it wants, the pager reports which page it is on, and the host answers
+  with rows — this procedure is that answer, and the only place rows are written.
+
+  一页的模板是这 14 张工单(AntD-gap 三批落地的 14 个控件),编号与日期跟着页号走:
+  第 n 页 = TY-(2041 + n*20 + i)、日期后推 n 天 —— 翻页真的换数据,而不是换一个计数器。 }
+procedure TMainForm.FillOrders;
+const
+  OrderTitle: array[0..13] of string = (
+    'Card container TTyCard landed',
+    'Tag TTyTag landed',
+    'Badge TTyBadge split into its own control',
+    'Inline alert bar TTyAlert',
+    'Corner toast TTyNotification',
+    'Empty state TTyEmpty',
+    'Segmented control TTySegmented',
+    'Pager TTyPagination',
+    'Step bar TTySteps',
+    'Breadcrumb TTyBreadcrumb',
+    'Transfer box TTyTransfer',
+    'Tree dropdown TTyTreeSelect',
+    'Cascading select TTyCascader',
+    'Popover TTyPopover');
+  OrderOwner: array[0..13] of string = (
+    'Zhang San', 'Li Si', 'Wang Wu', 'Zhang San', 'Zhao Liu', 'Li Si', 'Wang Wu',
+    'Zhao Liu', 'Zhang San', 'Li Si', 'Wang Wu', 'Zhao Liu', 'Zhang San', 'Li Si');
+  { 状态码:0 已发布 / 1 草稿 / 2 待排期 —— 筛选片匹配的就是它。文字要到填格时才从
+    resourcestring 取(typed const 里放不下 resourcestring)。 }
+  OrderState: array[0..13] of Integer = (0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2);
+  OrderDay: array[0..13] of Integer = (0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1);
+  OrderTime: array[0..13] of string = (
+    '10:12', '11:03', '15:47', '09:20', '09:22', '09:25', '09:31',
+    '09:40', '09:41', '09:42', '09:50', '09:51', '09:52', '09:53');
+var
+  i, r, cnt, page: Integer;
+begin
+  page := PagOrders.PageIndex;
+  if page < 0 then page := 0;
+
+  cnt := 0;
+  for i := Low(OrderTitle) to High(OrderTitle) do
+    if (FOrderFilter < 0) or (OrderState[i] = FOrderFilter) then Inc(cnt);
+
   GridOrders.BeginUpdate;
   try
-    GridOrders.RowCount := 14;
-    Row( 0, 'TY-2041', 'Card container TTyCard landed',        'Zhang San', rsStatePublished, '2026-07-16 10:12');
-    Row( 1, 'TY-2042', 'Tag TTyTag landed',             'Li Si', rsStatePublished, '2026-07-16 11:03');
-    Row( 2, 'TY-2043', 'Badge TTyBadge split into its own control',     'Wang Wu', rsStatePublished, '2026-07-16 15:47');
-    Row( 3, 'TY-2044', 'Inline alert bar TTyAlert',          'Zhang San', rsStateDraft,   '2026-07-17 09:20');
-    Row( 4, 'TY-2045', 'Corner toast TTyNotification',   'Zhao Liu', rsStateDraft,   '2026-07-17 09:22');
-    Row( 5, 'TY-2046', 'Empty state TTyEmpty',                'Li Si', rsStateDraft,   '2026-07-17 09:25');
-    Row( 6, 'TY-2047', 'Segmented control TTySegmented',      'Wang Wu', rsStateDraft,   '2026-07-17 09:31');
-    Row( 7, 'TY-2048', 'Pager TTyPagination',         'Zhao Liu', rsStateAwaiting, '2026-07-17 09:40');
-    Row( 8, 'TY-2049', 'Step bar TTySteps',              'Zhang San', rsStateAwaiting, '2026-07-17 09:41');
-    Row( 9, 'TY-2050', 'Breadcrumb TTyBreadcrumb',         'Li Si', rsStateAwaiting, '2026-07-17 09:42');
-    Row(10, 'TY-2051', 'Transfer box TTyTransfer',           'Wang Wu', rsStateAwaiting, '2026-07-17 09:50');
-    Row(11, 'TY-2052', 'Tree dropdown TTyTreeSelect',       'Zhao Liu', rsStateAwaiting, '2026-07-17 09:51');
-    Row(12, 'TY-2053', 'Cascading select TTyCascader',         'Zhang San', rsStateAwaiting, '2026-07-17 09:52');
-    Row(13, 'TY-2054', 'Popover TTyPopover',              'Li Si', rsStateAwaiting, '2026-07-17 09:53');
+    GridOrders.RowCount := cnt;
+    r := 0;
+    for i := Low(OrderTitle) to High(OrderTitle) do
+    begin
+      if (FOrderFilter >= 0) and (OrderState[i] <> FOrderFilter) then Continue;
+      GridOrders.Cells[0, r] := Format('TY-%d', [2041 + page * 20 + i]);
+      GridOrders.Cells[1, r] := OrderTitle[i];
+      GridOrders.Cells[2, r] := OrderOwner[i];
+      case OrderState[i] of
+        0: GridOrders.Cells[3, r] := rsStatePublished;
+        1: GridOrders.Cells[3, r] := rsStateDraft;
+      else
+        GridOrders.Cells[3, r] := rsStateAwaiting;
+      end;
+      GridOrders.Cells[4, r] := FormatDateTime('yyyy-mm-dd ',
+        EncodeDate(2026, 7, 16) + page + OrderDay[i]) + OrderTime[i];
+      Inc(r);
+    end;
   finally
     GridOrders.EndUpdate;
   end;
   GridSelectionChanged(nil);
+end;
+
+{ 筛选片。标签是控件不是画上去的药丸:选中哪一片由 OnClick 说了算,选中的那片带
+  'accent' 变体 —— 给的是 StyleClass 而不是颜色,「被选中长什么样」由主题决定。
+  三片共用这一个处理器:发事件的那片就是选中的那片。 }
+procedure TMainForm.TagFilterClick(Sender: TObject);
+
+  procedure Mark(ATag: TTyTag);
+  begin
+    if ATag = Sender then ATag.StyleClass := 'accent' else ATag.StyleClass := '';
+  end;
+
+begin
+  if Sender = TagFilterPub then FOrderFilter := 0
+  else if Sender = TagFilterDraft then FOrderFilter := 1
+  else FOrderFilter := -1;              { 「全部」—— 也是任何其它来源的兜底 }
+  Mark(TagFilterAll);
+  Mark(TagFilterPub);
+  Mark(TagFilterDraft);
+  FillOrders;
+  LblListNote.Caption := Format(rsEchoFilter,
+    [(Sender as TTyTag).Caption, GridOrders.RowCount]);
 end;
 
 { 状态列的语义色 —— 数据里存的是"已发布/草稿/待排期"文字,这里只决定它画成什么颜色。
@@ -1100,10 +1207,11 @@ begin
 end;
 
 { The pagination drives NOTHING itself: it owns no list and no query — it reports a page and
-  the host re-fills from here. This showcase has 14 static rows, so all it re-fills is the
-  counter beside it. }
+  the host re-fills from here. So it re-fills the TABLE (FillOrders reads PageIndex: the
+  work-order numbers and dates advance with the page), and then the counter beside it. }
 procedure TMainForm.PageChange(Sender: TObject);
 begin
+  FillOrders;
   LblPageInfo.Caption := Format('Page %d / %d · %d total',
     [PagOrders.PageIndex + 1, PagOrders.PageCount, PagOrders.PageCount * 20]);
 end;
@@ -1162,8 +1270,10 @@ end;
 
 procedure TMainForm.ToastErrClick(Sender: TObject);
 begin
-  // Duration = 0 的那条留到你关它为止;两条共用右上角,会自己堆叠起来。
+  // Duration = 0 的那条留到你关它为止;它钉在**右下角**(Position),另一条占右上角 ——
+  // 四个角随便挑,同一个角里的卡片才互相堆叠。
   ToastErr.Show;
+  LblFloatNote.Caption := rsEchoToastErr;
 end;
 
 procedure TMainForm.PopoverClick(Sender: TObject);
@@ -1183,6 +1293,41 @@ end;
 procedure TMainForm.PopCancelClick(Sender: TObject);
 begin
   Pop.Hide;
+end;
+
+{ 浮层贴哪一边。Placement 是**偏好**不是命令:那边放不下就翻到对面 —— 12 个取值里
+  这里给了四个正位。控件在弹出的那一刻才读它(活着的浮层不会在指针底下跳走),所以
+  正开着的话就地关掉重开一次,让新方位立刻看得见。 }
+procedure TMainForm.SegPopPlaceChange(Sender: TObject);
+begin
+  if SegPopPlace.ItemIndex < 0 then Exit;
+  case SegPopPlace.ItemIndex of
+    0: Pop.Placement := ppTop;
+    1: Pop.Placement := ppRight;
+    2: Pop.Placement := ppBottom;
+  else
+    Pop.Placement := ppLeft;
+  end;
+  if Pop.Showing then
+  begin
+    Pop.Hide;
+    Pop.Show;
+  end;
+  { 放在最后:上面那次 Hide/Show 会经 OnHide/OnShow 各写一次这块标签。 }
+  LblFloatNote.Caption := Format(rsEchoPopPlace,
+    [SegPopPlace.Items[SegPopPlace.ItemIndex]]);
+end;
+
+{ 浮层自己的两个生命周期事件。OnShow 在内容已经被收编进弹窗之后才发(所以这时候
+  可以去 focus 里面的控件);OnHide 每次消失发一次,不管是谁让它消失的。 }
+procedure TMainForm.PopShow(Sender: TObject);
+begin
+  LblFloatNote.Caption := rsEchoPopShown;
+end;
+
+procedure TMainForm.PopHide(Sender: TObject);
+begin
+  LblFloatNote.Caption := rsEchoPopHidden;
 end;
 
 { ================================ 导航 ===================================== }
@@ -1221,14 +1366,21 @@ begin
 end;
 
 procedure TMainForm.StepsFlowChange(Sender: TObject);
+var
+  msg: string;
 begin
   if (StepsFlow.StepIndex < 0) or (StepsFlow.StepIndex >= StepsFlow.Count) then
   begin
     LblNavNote.Caption := rsEchoStepOut;
     Exit;
   end;
-  LblNavNote.Caption := Format(rsEchoStep,
+  msg := Format(rsEchoStep,
     [StepsFlow.StepIndex + 1, StepsFlow.Items[StepsFlow.StepIndex]]);
+  { 失败步是**状态**之一(sstError),而且是 ErrorIndex 一个整数说了算的 —— 走过它、
+    停在它上面,那个叉都还在,这是走一遍就能看见的规则。 }
+  if StepsFlow.ErrorIndex >= 0 then
+    msg := msg + LineEnding + Format(rsEchoStepErr, [StepsFlow.ErrorIndex + 1]);
+  LblNavNote.Caption := msg;
 end;
 
 procedure TMainForm.NavCrumbClick(Sender: TObject; AIndex: Integer);

@@ -20,7 +20,10 @@ uses
   tyControls.LinkLabel, tyControls.ShadowLabel, tyControls.GlowLabel,
   tyControls.IconFont, tyControls.CharImage, tyControls.GlyphButtons,
   tyControls.DropButtons, tyControls.ColorButton, tyControls.ButtonGroup,
-  tyControls.Hint;
+  tyControls.Hint,
+  tyControls.Gauge, tyControls.Meter, tyControls.CircularProgress,
+  tyControls.ActivityIndicator, tyControls.Rating, tyControls.Sparkline,
+  tyControls.Chart, tyControls.Grid;
 type
 
   { TDemoMainForm — ALL controls live in the designer (mainform.lfm), including the docked
@@ -70,6 +73,9 @@ type
     BtnDlgFind: TTyButton;
     BtnDlgReplace: TTyButton;
     BtnDlgProgress: TTyButton;
+    BtnMsgWarn: TTyButton;
+    BtnMsgError: TTyButton;
+    BtnMsgConfirm: TTyButton;
     FindDlg: TTyFindDialog;
     ReplaceDlg: TTyReplaceDialog;
     ProgressDlg: TTyProgressDialog;
@@ -88,12 +94,18 @@ type
     TbBtnNew: TTyButton;
     TbSep1: TTyToolSeparator;
     TbBtnOpen: TTyButton;
+    TbSep2: TTyToolSeparator;
+    LblDensity: TTyLabel;
+    DensityCombo: TTyComboBox;
+    TbSep3: TTyToolSeparator;
+    ChkHotReload: TTyCheckBox;
     StatusBar1: TTyStatusBar;
     SidePanel: TTyPanel;
     Splitter1: TTySplitter;
     ThemeCombo: TTyComboBox;
     BtnApLight: TTyButton;
     BtnApDark: TTyButton;
+    BtnApAuto: TTyButton;
     BtnAccent: TTyButton;
     BtnAccentReset: TTyButton;
     MainMenu1: TMainMenu;
@@ -136,6 +148,25 @@ type
     DemoGlowLabel: TTyGlowLabel;
     DemoCharImage: TTyCharImage;
     HintNote: TTyLabel;
+    ChkNativeFontName: TTyCheckBox;
+    ChkNativeFontSize: TTyCheckBox;
+    ChkNativeSkipTree: TTyCheckBox;
+    TyTabSheetGauges: TTyTabSheet;
+    LblGauge: TTyLabel;
+    DemoGauge: TTyGauge;
+    LblMeter: TTyLabel;
+    DemoMeter: TTyMeter;
+    LblCircular: TTyLabel;
+    DemoCircular: TTyCircularProgress;
+    LblActivity: TTyLabel;
+    DemoActivity: TTyActivityIndicator;
+    DemoRating: TTyRating;
+    LblSpark: TTyLabel;
+    DemoSpark: TTySparkline;
+    DemoChart: TTyChart;
+    TyTabSheetGrid: TTyTabSheet;
+    LblGridHint: TTyLabel;
+    DemoGrid: TTyStringGrid;
     procedure BtnDlgAboutClick(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     { Assign the string-typed captions (tab sheets, group box) from resourcestrings — the
@@ -173,6 +204,15 @@ type
     procedure PopupCtxAgreeClick(Sender: TObject);
     procedure TrackBar1Change(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
+    { The two other theme axes the controller owns, on the toolbar next to the theme box:
+      density (classic / modern geometry) and the theme-file watch. }
+    procedure DensityComboChange(Sender: TObject);
+    procedure ChkHotReloadChange(Sender: TObject);
+    { 'Native' tab: the styler's opt-in font propagation + its per-control hook. }
+    procedure ChkNativeFontChange(Sender: TObject);
+    procedure ChkNativeSkipTreeChange(Sender: TObject);
+    procedure NativeStylerStyleControl(Sender: TObject; AControl: TControl;
+      var AHandled: Boolean);
     procedure ApLightClick(Sender: TObject);
     procedure ApDarkClick(Sender: TObject);
     procedure ApAutoClick(Sender: TObject);
@@ -190,6 +230,9 @@ type
     procedure BtnDlgFindClick(Sender: TObject);
     procedure BtnDlgReplaceClick(Sender: TObject);
     procedure BtnDlgProgressClick(Sender: TObject);
+    procedure BtnMsgWarnClick(Sender: TObject);
+    procedure BtnMsgErrorClick(Sender: TObject);
+    procedure BtnMsgConfirmClick(Sender: TObject);
     procedure FindDlgFind(Sender: TObject);
     procedure ReplaceDlgReplace(Sender: TObject);
     procedure ProgressDlgCancel(Sender: TObject);
@@ -197,8 +240,15 @@ type
     function ThemeDir: string;
     procedure InitThemes;
     procedure InitColTree;
+    procedure InitInstruments;   // the sparkline series (no published Values property)
+    procedure InitDemoGrid;      // the 'Grid' tab's columns + rows
+    { One TTyMessage variant: set DlgType/Buttons, run it, then put the component back
+      exactly as the .lfm streamed it so the plain 'MessageBox' button is unaffected. }
+    procedure ShowMessageVariant(ADlgType: TMsgDlgType; AButtons: TMsgDlgButtons;
+      const AMsg: string);
     procedure ApplyBuiltin(const AName: string);
     procedure UpdateAccentBtn;   // enable "Reset" only while a user accent override is active
+    procedure UpdateHotReloadChk;  // the file watch only arms while a theme FILE is loaded
     procedure PickCustomTheme(Data: PtrInt);   // deferred: opening the modal file dialog straight from
                                                // the combo's OnChange crashes on Qt6 (the still-open
                                                // dropdown popup is the modal's focus-restore target)
@@ -226,8 +276,14 @@ resourcestring
   rsDemoTabNative = 'Native';
   rsDemoTabCmd   = 'Command buttons';
   rsDemoTabIcons = 'Icons · text';
+  rsDemoTabGauges = 'Gauges';
+  rsDemoTabGrid  = 'Grid';
   rsDemoOptions  = 'Options';
   rsDemoNativeNode = 'Item %d';
+  { Message-box variants — the text is what makes the DlgType icon read as the right one. }
+  rsDemoMsgWarn    = 'Disk space is running low.';
+  rsDemoMsgError   = 'The file could not be opened.';
+  rsDemoMsgConfirm = 'Save the changes before closing?';
 
 function TDemoMainForm.ThemeDir: string;
 var
@@ -261,6 +317,8 @@ begin
   TyTabSheet5.Caption := rsDemoTabNative;
   TyTabSheet6.Caption := rsDemoTabCmd;
   TyTabSheet7.Caption := rsDemoTabIcons;
+  TyTabSheetGauges.Caption := rsDemoTabGauges;
+  TyTabSheetGrid.Caption := rsDemoTabGrid;
   GroupBox1.Caption := rsDemoOptions;
 end;
 
@@ -281,6 +339,8 @@ begin
   {$ENDIF}
   InitThemes;
   InitColTree;
+  InitInstruments;            // the sparkline series — its samples are not a published property
+  InitDemoGrid;               // the 'Grid' tab's columns + rows (same reason as InitColTree)
 end;
 
 procedure TDemoMainForm.BtnDlgAboutClick(Sender: TObject);
@@ -321,7 +381,7 @@ begin
   ThemeCombo.Items.Add(rsDemoThemeCustom);
   ThemeCombo.ItemIndex := 0;                 // default
   ApplyBuiltin('default');
-  SetAppearance(tfFollowSystem, '', nil);   // initial appearance: follow the system
+  SetAppearance(tfFollowSystem, '', BtnApAuto);   // initial appearance: follow the system
 end;
 
 procedure TDemoMainForm.ApplyBuiltin(const AName: string);
@@ -330,11 +390,68 @@ begin
   TyController.ThemeName := AName;
   ApplyChromeTheme(TyController);
   UpdateAccentBtn;   // a theme switch clears any accent override (D2)
+  UpdateHotReloadChk;  // ThemeName clears ThemeFile, so there is nothing left to watch
 end;
 
 procedure TDemoMainForm.UpdateAccentBtn;
 begin
   BtnAccentReset.Enabled := TyController.AccentOverride <> '';
+end;
+
+{ HotReload polls a theme FILE, so a compiled-in built-in has nothing on disk to watch:
+  the switch arms only while ThemeFile is set, and disarms itself the moment a built-in
+  theme replaces the file. That dependency is the thing worth seeing. }
+procedure TDemoMainForm.UpdateHotReloadChk;
+begin
+  ChkHotReload.Enabled := TyController.ThemeFile <> '';
+  if (not ChkHotReload.Enabled) and ChkHotReload.Checked then
+    ChkHotReload.Checked := False;    // OnChange disarms the controller
+end;
+
+procedure TDemoMainForm.ChkHotReloadChange(Sender: TObject);
+begin
+  TyController.HotReload := ChkHotReload.Checked;
+  if ChkHotReload.Checked then
+    StatusBar1.Panels[0].Text := 'Watching ' + ExtractFileName(TyController.ThemeFile)
+  else
+    StatusBar1.Panels[0].Text := 'Theme watch off';
+end;
+
+{ The density axis: same skin, other geometry pack. Switching it reloads the theme layer, so
+  every control on the form re-measures (heights, paddings, tab and row bands) at once. }
+procedure TDemoMainForm.DensityComboChange(Sender: TObject);
+begin
+  // Streaming ItemIndex fires OnChange while the .lfm is still being read, and TyController
+  // is declared after the surface — so it is not there yet on that first call.
+  if TyController = nil then Exit;
+  if DensityCombo.ItemIndex = 1 then
+    TyController.Density := tdModern
+  else
+    TyController.Density := tdClassic;
+  ApplyChromeTheme(TyController);
+  StatusBar1.Panels[0].Text := 'Density: ' + DensityCombo.Text;
+end;
+
+{ 'Native' tab. The styler always recolours; family and size are opt-in because pushing a
+  theme font onto arbitrary third-party controls is the risky half. Apply re-walks now. }
+procedure TDemoMainForm.ChkNativeFontChange(Sender: TObject);
+begin
+  TyNativeStyler1.ApplyFontName := ChkNativeFontName.Checked;
+  TyNativeStyler1.ApplyFontSize := ChkNativeFontSize.Checked;
+  TyNativeStyler1.Apply;
+end;
+
+procedure TDemoMainForm.ChkNativeSkipTreeChange(Sender: TObject);
+begin
+  TyNativeStyler1.Apply;   // unticking it re-styles the tree; ticking it leaves it where it is
+end;
+
+{ The per-control hook, fired for every candidate BEFORE the styler touches it. Setting
+  AHandled opts that one control out — the rest of the form still follows the theme. }
+procedure TDemoMainForm.NativeStylerStyleControl(Sender: TObject; AControl: TControl;
+  var AHandled: Boolean);
+begin
+  AHandled := ChkNativeSkipTree.Checked and (AControl = TreeView1);
 end;
 
 { Runtime accent picker: recolour any theme on the fly (independent of light/dark). The whole
@@ -397,6 +514,7 @@ begin
       TyController.ThemeFile := dlg.FileName;   // custom file (REPLACE)
       ApplyChromeTheme(TyController);
       UpdateAccentBtn;                          // REPLACE clears the accent override (D2)
+      UpdateHotReloadChk;                       // a file theme is what HotReload can watch
     end;
   finally dlg.Free; end;
 end;
@@ -409,6 +527,7 @@ begin
   // Mutually exclusive tri-state: highlight the current appearance via the ghost buttons' Down state.
   BtnApLight.Down := (ASelected = BtnApLight);
   BtnApDark.Down  := (ASelected = BtnApDark);
+  BtnApAuto.Down  := (ASelected = BtnApAuto);
   ApplyChromeTheme(TyController);
 end;
 
@@ -418,9 +537,10 @@ begin SetAppearance(tfManual, 'light', BtnApLight); end;
 procedure TDemoMainForm.ApDarkClick(Sender: TObject);
 begin SetAppearance(tfManual, 'dark', BtnApDark); end;
 
+{ The third state the tri-state was always missing: hand the appearance back to the OS. From
+  here Mode is owned by the system scheme, and TTyForm's live hook re-pulls it when it flips. }
 procedure TDemoMainForm.ApAutoClick(Sender: TObject);
-begin
-end;
+begin SetAppearance(tfFollowSystem, '', BtnApAuto); end;
 
 procedure TDemoMainForm.RandomClick(Sender: TObject);
 begin
@@ -534,6 +654,54 @@ begin
     StatusBar1.Panels[0].Text := 'Progress: cancelled'
   else
     StatusBar1.Panels[0].Text := 'Progress: done';
+end;
+
+{ TTyMessage is streamed with the plain information/OK pair; DlgType picks the icon and
+  Buttons picks the row, and Execute hands back which one was pressed. }
+procedure TDemoMainForm.ShowMessageVariant(ADlgType: TMsgDlgType;
+  AButtons: TMsgDlgButtons; const AMsg: string);
+var
+  mr: TModalResult;
+  oldMsg, answer: string;
+begin
+  mr := mrNone;
+  oldMsg := TyMessage1.Msg;
+  TyMessage1.DlgType := ADlgType;
+  TyMessage1.Buttons := AButtons;
+  TyMessage1.Msg := AMsg;
+  try
+    mr := TyMessage1.Execute;
+  finally
+    // put the component back the way the .lfm streamed it, so the plain 'MessageBox'
+    // button next door keeps popping the information/OK box it always did
+    TyMessage1.Msg := oldMsg;
+    TyMessage1.DlgType := mtInformation;
+    TyMessage1.Buttons := [mbOK];
+  end;
+  case mr of
+    mrOk:     answer := 'OK';
+    mrCancel: answer := 'Cancel';
+    mrYes:    answer := 'Yes';
+    mrNo:     answer := 'No';
+  else
+    answer := IntToStr(mr);
+  end;
+  StatusBar1.Panels[0].Text := 'Message: ' + answer;
+end;
+
+procedure TDemoMainForm.BtnMsgWarnClick(Sender: TObject);
+begin
+  ShowMessageVariant(mtWarning, [mbOK], rsDemoMsgWarn);
+end;
+
+procedure TDemoMainForm.BtnMsgErrorClick(Sender: TObject);
+begin
+  ShowMessageVariant(mtError, [mbOK], rsDemoMsgError);
+end;
+
+procedure TDemoMainForm.BtnMsgConfirmClick(Sender: TObject);
+begin
+  ShowMessageVariant(mtConfirmation, [mbYes, mbNo], rsDemoMsgConfirm);
 end;
 
 procedure TDemoMainForm.FindDlgFind(Sender: TObject);
@@ -905,6 +1073,60 @@ begin
     StatusBar1.Panels[0].Text := 'Ready'
   else
     StatusBar1.Panels[0].Text := Format('Selected: %d item(s)', [n]);
+end;
+
+{ ---------------------------------------------------------------------------
+  'Gauges' and 'Grid' tabs — every control and every setting comes from the
+  .lfm; only the two things a .lfm cannot carry are built here.
+  --------------------------------------------------------------------------- }
+
+procedure TDemoMainForm.InitInstruments;
+{ The sparkline keeps its samples in a private array reached through SetValues — it has no
+  published series property, so this one series is the tab's only code-built data. }
+const
+  cSparkSeries: array[0..15] of Double =
+    (12, 15, 11, 18, 22, 19, 25, 21, 28, 24, 30, 27, 33, 29, 36, 31);
+begin
+  DemoSpark.SetValues(cSparkSeries);
+end;
+
+procedure TDemoMainForm.InitDemoGrid;
+{ Columns are a TCollection and the rows are data: same documented exception as InitColTree —
+  hand-writing a TPersistent hierarchy into the .lfm is error-prone, the code path is simpler
+  and equally correct as long as it runs before the first paint. }
+const
+  cGridRegions: array[0..3] of string = ('North', 'South', 'East', 'West');
+  cGridProducts: array[0..4] of string =
+    ('Widget', 'Gadget', 'Sprocket', 'Cog', 'Flange');
+var
+  col: TTyColumn;
+  r: Integer;
+begin
+  with DemoGrid.Header do
+  begin
+    Options := [hoVisible, hoColumnResize, hoShowSortGlyphs, hoHeaderClickAutoSort];
+    col := Columns.Add as TTyColumn;
+    col.Text := 'Order';
+    col.Width := 120;
+    col := Columns.Add as TTyColumn;
+    col.Text := 'Region';
+    col.Width := 100;
+    col := Columns.Add as TTyColumn;
+    col.Text := 'Product';
+    col.Width := 130;
+    col := Columns.Add as TTyColumn;
+    col.Text := 'Amount';
+    col.Width := 110;
+    col.Alignment := taRightJustify;
+  end;
+  DemoGrid.RowCount := 20;
+  for r := 0 to DemoGrid.RowCount - 1 do
+  begin
+    DemoGrid.Cells[0, r] := Format('SO-%d', [1001 + r]);
+    DemoGrid.Cells[1, r] := cGridRegions[r mod Length(cGridRegions)];
+    DemoGrid.Cells[2, r] := cGridProducts[r mod Length(cGridProducts)];
+    DemoGrid.Cells[3, r] := Format('%.2f', [120.5 + r * 37.25]);
+  end;
 end;
 
 end.

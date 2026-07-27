@@ -380,8 +380,8 @@ msgid "Checkbox events / veto"
 msgstr "勾选框事件/否决"
 
 #: tmainform.chkevclip.caption
-msgid "Clipboard hook"
-msgstr "剪贴板钩子"
+msgid "Clipboard hooks"
+msgstr ""
 
 #: tmainform.btnevfind.caption
 msgid "Find next"
@@ -647,3 +647,38 @@ msgstr "数量列只收数字"
 msgid "Notes limit:"
 msgstr "备注上限:"
 
+#: tmainform.chkeditbyrow.caption
+msgid "Editor kind depends on the row"
+msgstr ""
+
+#: tmainform.lbledittip2.caption
+msgid "OnGetEditorKind is asked per cell and beats the kind declared on the column — the same column can edit differently row by row"
+msgstr ""
+
+#: tmainform.lbldatatip.caption
+msgid "Ctrl+Z / Ctrl+Y"
+msgstr ""
+
+#: tmainform.chkfillseries.caption
+msgid "Fill: weekdays"
+msgstr ""
+
+#: tmainform.chkevdrawcell.caption
+msgid "Paint the amount cells myself"
+msgstr ""
+
+#: tmainform.chkcolimage.caption
+msgid "Mark column shows an icon"
+msgstr ""
+
+#: tmainform.btndrawend.caption
+msgid "Jump to the last row"
+msgstr ""
+
+#: tmainform.btndrawtop.caption
+msgid "Back to the top"
+msgstr ""
+
+#: tmainform.lbldrawtip.caption
+msgid "TTyDrawGrid stores nothing at all: every cell comes from OnGetCellText, so a million rows cost no memory"
+msgstr ""
