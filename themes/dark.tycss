@@ -278,6 +278,9 @@ TyToggleSwitch:disabled { opacity: var(--disabled-opacity); }
 
 TyTrackBar {
   background: var(--surface-track);
+  /* ShowValue's readout ink -- see light.tycss. Kept in step with auto.tycss's dark
+     mode, which must resolve byte-identically to this file. */
+  color: var(--on-surface);
   border-radius: var(--radius-sm);
   padding: 0px;
 }

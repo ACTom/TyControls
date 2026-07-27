@@ -37,6 +37,7 @@ type
     procedure TestModePersistsAcrossThemeSwitch;
     procedure TestLightSkinChromeBarsAreFlush;
     procedure TestChromeKeysKeepTheirBaseProperties;
+    procedure TestTrackBarShowValueHasVisibleInk;
     procedure TestAntDesignGhostIsAFlatTextButton;
   end;
 implementation
@@ -327,6 +328,51 @@ begin
         (TyBlueOf(hdr.Background.Color) <> surfB));
     end;
   finally c.Free; end;
+end;
+
+procedure TControllerThemeNameTest.TestTrackBarShowValueHasVisibleInk;
+{ TTyTrackBar.ShowValue paints its number with the control's OWN style TextColor. No theme
+  in the repo ever set one, so TextColor resolved to the unset default $00000000 -- alpha 0
+  -- and the readout was invisible in every skin, in both modes, since the property shipped.
+  It reserved the strip and shortened the track, so the layout moved and the number did not
+  appear: exactly the shape that makes a feature look absent rather than broken. (The
+  trackbar example had hand-rolled a readout out of a separate label to compensate.)
+
+  Same failure mode as the chrome keys above, so the same shape of guard: assert the ink is
+  present, opaque, and distinguishable from the track it is drawn over -- for every built-in
+  skin and both modes, since a skin that writes its own TyTrackBar rule suppresses the base
+  one and has to carry the colour itself. }
+var
+  c: TTyStyleController;
+  names: TStringArray;
+  s: TTyStyleSet;
+  i, m: Integer;
+  mode: string;
+begin
+  TyRegisterBuiltinThemes;
+  names := TyBuiltinThemeNames;
+  c := TTyStyleController.Create(nil);
+  try
+    for i := 0 to High(names) do
+      for m := 0 to 1 do
+      begin
+        if m = 0 then mode := 'light' else mode := 'dark';
+        c.ThemeName := names[i];
+        c.Mode := mode;
+        s := c.Model.ResolveStyle('TyTrackBar', '', []);
+        AssertTrue(Format('%s/%s: track bar has an ink colour at all', [names[i], mode]),
+          tpTextColor in s.Present);
+        AssertTrue(Format('%s/%s: track bar ink is not fully transparent', [names[i], mode]),
+          TyAlphaOf(s.TextColor) > 0);
+        AssertTrue(Format('%s/%s: track bar ink differs from its own track fill',
+          [names[i], mode]),
+          (TyRedOf(s.TextColor) <> TyRedOf(s.Background.Color)) or
+          (TyGreenOf(s.TextColor) <> TyGreenOf(s.Background.Color)) or
+          (TyBlueOf(s.TextColor) <> TyBlueOf(s.Background.Color)));
+      end;
+  finally
+    c.Free;
+  end;
 end;
 
 procedure TControllerThemeNameTest.TestChromeKeysKeepTheirBaseProperties;

@@ -233,6 +233,9 @@ TyToggleSwitch:disabled { opacity: var(--disabled-opacity); }
 
 TyTrackBar {
   background: var(--surface-track);
+  /* ShowValue's readout ink. A skin that writes any rule for a typeKey suppresses
+     the ENTIRE built-in rule for it, so this cannot be inherited from the base. */
+  color: var(--on-surface);
   border-radius: var(--radius-sm);
   padding: 0px;
 }

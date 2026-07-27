@@ -480,6 +480,12 @@ TyToggleSwitch:disabled { opacity: var(--disabled-opacity); }
 
 TyTrackBar {
   background: var(--surface-track);
+  /* The ShowValue readout's ink. Without it TextColor resolves to the unset default
+     $00000000 -- alpha 0 -- so ShowValue reserved the strip, shortened the track and then
+     painted the number in a fully transparent colour. It has never been visible in any
+     theme, which is why the trackbar example hand-rolled a readout out of a separate
+     label instead of using the one the control already has. */
+  color: var(--on-surface);
   border-radius: var(--radius-sm);
   padding: var(--pad-none);
 }

@@ -513,6 +513,12 @@ begin
     '' + LineEnding +
     'TyTrackBar {' + LineEnding +
     '  background: var(--surface-track);' + LineEnding +
+    '  /* The ShowValue readout''s ink. Without it TextColor resolves to the unset default' + LineEnding +
+    '     $00000000 -- alpha 0 -- so ShowValue reserved the strip, shortened the track and then' + LineEnding +
+    '     painted the number in a fully transparent colour. It has never been visible in any' + LineEnding +
+    '     theme, which is why the trackbar example hand-rolled a readout out of a separate' + LineEnding +
+    '     label instead of using the one the control already has. */' + LineEnding +
+    '  color: var(--on-surface);' + LineEnding +
     '  border-radius: var(--radius-sm);' + LineEnding +
     '  padding: var(--pad-none);' + LineEnding +
     '}' + LineEnding +

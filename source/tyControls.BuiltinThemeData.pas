@@ -256,6 +256,9 @@ begin
     '' + LineEnding +
     'TyTrackBar {' + LineEnding +
     '  background: var(--surface-track);' + LineEnding +
+    '  /* ShowValue''s readout ink. A skin that writes any rule for a typeKey suppresses' + LineEnding +
+    '     the ENTIRE built-in rule for it, so this cannot be inherited from the base. */' + LineEnding +
+    '  color: var(--on-surface);' + LineEnding +
     '  border-radius: var(--radius-sm);' + LineEnding +
     '  padding: 0px;' + LineEnding +
     '}' + LineEnding +
@@ -873,6 +876,9 @@ begin
     '' + LineEnding +
     'TyTrackBar {' + LineEnding +
     '  background: var(--surface-track);' + LineEnding +
+    '  /* ShowValue''s readout ink. A skin that writes any rule for a typeKey suppresses' + LineEnding +
+    '     the ENTIRE built-in rule for it, so this cannot be inherited from the base. */' + LineEnding +
+    '  color: var(--on-surface);' + LineEnding +
     '  border-radius: var(--radius-sm);' + LineEnding +
     '  padding: 0px;' + LineEnding +
     '}' + LineEnding +
@@ -3933,6 +3939,9 @@ begin
     '' + LineEnding +
     'TyTrackBar {' + LineEnding +
     '  background: var(--surface-track);' + LineEnding +
+    '  /* Needed here too: a skin that writes ANY rule for a typeKey suppresses the whole' + LineEnding +
+    '     built-in rule for it, so inheriting the base layer''s ink is not an option. */' + LineEnding +
+    '  color: var(--on-surface);' + LineEnding +
     '  border-radius: 3px;' + LineEnding +
     '  padding: 0px;' + LineEnding +
     '}' + LineEnding +
