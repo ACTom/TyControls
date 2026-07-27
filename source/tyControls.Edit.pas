@@ -183,6 +183,11 @@ type
     property NumbersOnly: Boolean read FNumbersOnly write FNumbersOnly default False;
     property Enabled;
     property Font;
+    { The constructor turns this on (an edit is always a tab stop); declaring the default
+      to match is what makes the OPT-OUT work — against the inherited `default False` a
+      designer's TabStop=False equals the declared default, is never written to the .lfm,
+      and the constructor's True silently wins again at run time. }
+    property TabStop default True;
     property Align;
     property Anchors;
     property StyleClass;

@@ -1642,6 +1642,9 @@ begin
       FScrollBar.Parent := Self;
       FScrollBar.Kind := sbVertical;
       FScrollBar.Align := alRight;
+      // A standalone TTyScrollBar is focusable; an embedded one must not be, or dragging
+      // the bar would take focus (and the caret) out of the memo it is scrolling.
+      FScrollBar.TabStop := False;
       FScrollBar.OnChange := @ScrollBarChange;
       FScrollBar.AnimationsEnabled := False;   // instant: scrolling never lags the wheel/keyboard
       FScrollBar.ControlStyle := FScrollBar.ControlStyle + [csNoDesignVisible];   // internal: never a designable child
@@ -1698,6 +1701,7 @@ begin
       FHScrollBar.Parent := Self;
       FHScrollBar.Kind := sbHorizontal;
       FHScrollBar.Align := alNone;   // manual: stops before the vbar so they don't fight for the corner
+      FHScrollBar.TabStop := False;  // embedded: never take the caret off the memo (see the vbar)
       FHScrollBar.OnChange := @HScrollBarChange;
       FHScrollBar.AnimationsEnabled := False;
       FHScrollBar.ControlStyle := FHScrollBar.ControlStyle + [csNoDesignVisible];   // internal: hide in the designer

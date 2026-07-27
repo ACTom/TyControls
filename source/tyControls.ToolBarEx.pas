@@ -152,6 +152,10 @@ begin
   if FMoreBtn <> nil then Exit;
   FMoreBtn := TTyButton.Create(Self);       // owned by Self -> freed with the bar
   FMoreBtn.Parent := Self;
+  // Not a tab stop: this chevron only exists while the bar overflows, and a stop that
+  // appears and disappears with the window width is worse than no stop at all. (TTyButton
+  // is a tab stop by default; the bar's own speed buttons are not either.)
+  FMoreBtn.TabStop := False;
   FMoreBtn.Caption := '»';
   FMoreBtn.Hint := '更多命令';
   FMoreBtn.ShowHint := True;

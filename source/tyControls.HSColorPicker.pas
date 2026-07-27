@@ -52,6 +52,8 @@ type
     property Sat: Single read FSat write SetSat;
     property Value: Single read FValue write SetValue;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
+    // Declared True to match the constructor, so a host's TabStop=False opt-out streams.
+    property TabStop default True;
     property Align;
     property Anchors;
     property StyleClass;
@@ -70,6 +72,10 @@ begin
   FSat := 1;
   FValue := 1;
   FDragging := False;
+  // A picker the user clicks and drags on, so the click must move focus onto it
+  // (TTyCustomControl.MouseDown gates that on TabStop) — otherwise picking a colour left
+  // focus, and the caret, on whatever edit the user came from.
+  TabStop := True;
   Width := 180;
   Height := 140;
 end;

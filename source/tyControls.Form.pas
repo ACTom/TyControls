@@ -144,6 +144,12 @@ type
     FResizeStartBounds: TRect;
     FResizeStartMouse: TPoint;
     FMaximized: Boolean;
+    { True when the MAXIMIZED state belongs to the window manager (Aero Snap to the top edge,
+      Win+Up, the taskbar/system menu) rather than to ToggleMaximize's own work-area resize.
+      It decides who owns the way back: the OS keeps its own restore rect (and, on Win32, its
+      caption-move loop restores the window under the cursor for free), whereas the engine's
+      maximize must be undone from FSavedBounds. }
+    FNativeMaximize: Boolean;
     FSavedBounds: TRect;
     { The form's Resizable opt-out, read off the associated TTyForm (FForm is typed
       TCustomForm for the generic engine; default True for a non-TTyForm host). The
@@ -154,13 +160,33 @@ type
       to avoid double-handling (see tyControls.Win32WS); elsewhere it follows FormResizable.
       Distinct from FormResizable so the maximize gate (which uses FormResizable) is unaffected. }
     function ManualResizeEnabled: Boolean;
+    { Push a maximize state onto the WHOLE chrome, not just the flag: the caption button's
+      glyph (max <-> restore), the OS window effects (a maximized window must lose its rounded
+      corners) and the native NC strategy (the WM_NCCALCSIZE inset differs when maximized).
+      Every path that maximizes or restores goes through here so none of them can drift. }
+    procedure ApplyMaximizedState(AMaximized, ANative: Boolean);
+    { Hand the in-progress title-bar drag to the platform's own window-move loop — Win32 caption
+      move, Qt startSystemMove, GTK begin_move_drag — so the drag gets Aero Snap / the snap
+      preview / free monitor crossing, none of which a hand-written Left/Top move can offer.
+      FDragging is cleared BEFORE the handoff because the Win32 loop is modal and blocking: any
+      mouse move it delivers must not re-enter here. Widgetsets with no system move (Cocoa, Qt5)
+      keep the manual drag, re-seeded at ACursor so it continues from the current position. }
+    procedure StartPlatformDrag(const ACursor: TPoint);
   public
     constructor Create;
     procedure CaptureInstalledPPI;
     procedure TitleBarMouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
     procedure TitleBarMouseMove(Shift: TShiftState; X, Y: Integer);
     procedure TitleBarMouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+    { The cursor-driven half of the title-bar drag, split out of the LCL mouse handlers above
+      (which just feed them Mouse.CursorPos) so the whole gesture — including the maximized
+      "tear loose and keep dragging" — can be driven from an explicit screen point in tests. }
+    procedure TitleBarDragBegin(const ACursor: TPoint);
+    procedure TitleBarDragUpdate(const ACursor: TPoint);
     procedure TitleBarDblClick;
+    { The window manager changed the maximize state behind the engine's back. See the
+      implementation for why only the OS's own transitions are honoured. }
+    procedure SyncNativeMaximized(AMaximized: Boolean);
     procedure FormMouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
     procedure FormMouseMove(Shift: TShiftState; X, Y: Integer);
     procedure FormMouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
@@ -176,6 +202,12 @@ type
     property TitleBar: TTyTitleBar read FTitleBar write FTitleBar;
     property BorderZone: Integer read FBorderZone write FBorderZone;
     property Maximized: Boolean read FMaximized write FMaximized;
+    { Whether the current maximize is the window manager's (see FNativeMaximize). }
+    property NativeMaximized: Boolean read FNativeMaximize;
+    { The rect an ENGINE maximize goes back to — captured when ToggleMaximize maximizes, and
+      the size a title-bar drag restores the window to when it tears it loose. (A native
+      maximize does not use it: the window manager keeps its own restore rect.) }
+    property SavedBounds: TRect read FSavedBounds write FSavedBounds;
     property Dragging: Boolean read FDragging;
     property Resizing: Boolean read FResizing;
   end;
@@ -263,6 +295,11 @@ type
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure DoOnChangeBounds; override;
+    { The widgetset reports the resulting window state after every size change it originated
+      (LM_SIZE -> TScrollingWinControl.WMSize -> here). This is the ONLY way a maximize the
+      chrome did not perform — Aero Snap to the top edge, Win+Up, the taskbar's system menu —
+      reaches the engine; see TTyChromeEngine.SyncNativeMaximized for what it does with it. }
+    procedure Resizing(State: TWindowState); override;
     {$IF DEFINED(LCLGtk2) or DEFINED(LCLQt5) or DEFINED(LCLQt6)}
     { GTK/Qt resize-reception gutter: inset the client rect by FBorderZone so alClient
       children stop short of the edge and the form's edge strip receives the mouse.
@@ -366,6 +403,16 @@ const
   TyHTBOTTOM      = 15;
   TyHTBOTTOMLEFT  = 16;
   TyHTBOTTOMRIGHT = 17;
+  { Codes we never WANT but must recognise to reject: DefWindowProc derives a caption band
+    (and the system-menu / min / max / close hot-spots inside it) from the window STYLES, so a
+    custom-frame window that carries WS_CAPTION purely to get Aero Snap (see ApplyThickFrame in
+    tyControls.Win32WS) is told its top strip is a caption it does not actually own. Clicking
+    such a phantom hot-spot would minimize / maximize / close the window. TyResolveNcHit drops
+    every code outside the TyHTLEFT..TyHTBOTTOMRIGHT sizing-frame range for exactly this reason. }
+  TyHTSYSMENU     = 3;
+  TyHTMINBUTTON   = 8;
+  TyHTMAXBUTTON   = 9;
+  TyHTCLOSE       = 20;
 
 { Pure Windows NC hit-test mapper (no window handle -> headless-testable on any platform).
   APt is in WINDOW-relative coords. Within AZone of an edge -> the matching HT* edge/corner
@@ -376,8 +423,28 @@ const
   bridge feeds its window-relative cursor point straight through this. }
 function TyNcHitTest(const AWinRect: TRect; const APt: TPoint;
   AZone, ACaptionH: Integer; AResizable: Boolean): Integer;
+{ Compose the OS's own WM_NCHITTEST answer with the mapper above — the whole hit-test policy of
+  the borderless window in one pure function (ADefHit is what DefWindowProc returned).
+  DefWindowProc is authoritative for ONE thing only: the real sizing frame it still owns
+  (left/right/bottom + corners survive the top-only WM_NCCALCSIZE), because only it knows where
+  that frame sits — it reaches into the invisible outer resize margin, which a mapper working
+  from the window rect cannot see. Every other answer is ours: HTCLIENT (the whole custom-drawn
+  window) and the phantom caption/sysmenu/min/max/close band DefWindowProc infers from
+  WS_CAPTION. A MAXIMIZED window drops the frame codes too and hit-tests as caption/client only:
+  it has no sizing border, and reporting the title band as HTCAPTION is precisely what makes the
+  OS run its "drag a maximized window -> restore it under the cursor and keep dragging" loop. }
+function TyResolveNcHit(ADefHit: Integer; const AWinRect: TRect; const APt: TPoint;
+  AZone, ACaptionH: Integer; AResizable, AMaximized: Boolean): Integer;
 function TyResizeCursor(AHit: TTyBorderHit): TCursor;
 function TyMaximizedBounds(const AWorkArea: TRect): TRect;
+{ Where a maximized window lands when the pointer tears it loose by its title bar. AMaxBounds is
+  its current (maximized) rect, ANormalBounds the size to go back to, ACursor the pointer in
+  screen coords. The restored window keeps ANormalBounds' SIZE and is placed so the pointer holds
+  the same PROPORTIONAL spot along the title bar (grab a maximized window at 20% of its width and
+  the restored one hangs 20% in from its left edge) at the same vertical offset — the native
+  Windows/GNOME/KDE behaviour. A degenerate saved size falls back to half the maximized one so the
+  window can never restore to nothing. Pure (no handle) -> unit-tested. }
+function TyRestoreDragBounds(const AMaxBounds, ANormalBounds: TRect; const ACursor: TPoint): TRect;
 function TyRescaleChromeMetric(AValue, AFromPPI, AToPPI: Integer): Integer;
 
 implementation
@@ -517,6 +584,20 @@ begin
     Result := TyHTCLIENT;
 end;
 
+function TyResolveNcHit(ADefHit: Integer; const AWinRect: TRect; const APt: TPoint;
+  AZone, ACaptionH: Integer; AResizable, AMaximized: Boolean): Integer;
+var
+  Sizable: Boolean;
+begin
+  // A maximized window has no sizing border (and a fixed one never had any), so in both cases
+  // the OS's frame codes are dropped and the mapper runs with resizing off — leaving the caption
+  // band and plain client, which is exactly what a maximized/fixed window should report.
+  Sizable := AResizable and not AMaximized;
+  if Sizable and (ADefHit >= TyHTLEFT) and (ADefHit <= TyHTBOTTOMRIGHT) then
+    Exit(ADefHit);
+  Result := TyNcHitTest(AWinRect, APt, AZone, ACaptionH, Sizable);
+end;
+
 function TyResizeCursor(AHit: TTyBorderHit): TCursor;
 begin
   case AHit of
@@ -535,6 +616,32 @@ begin
   Result.Top := AWorkArea.Top;
   Result.Right := AWorkArea.Right;
   Result.Bottom := AWorkArea.Bottom;
+end;
+
+function TyRestoreDragBounds(const AMaxBounds, ANormalBounds: TRect; const ACursor: TPoint): TRect;
+var
+  W, H, MaxW, GripX: Integer;
+begin
+  W := ANormalBounds.Right - ANormalBounds.Left;
+  H := ANormalBounds.Bottom - ANormalBounds.Top;
+  MaxW := AMaxBounds.Right - AMaxBounds.Left;
+  // No usable saved size (never maximized through the engine, or a zeroed rect): half the
+  // maximized window is a sane, always-visible fallback.
+  if W <= 0 then W := MaxW div 2;
+  if H <= 0 then H := (AMaxBounds.Bottom - AMaxBounds.Top) div 2;
+  if MaxW > 0 then
+    GripX := ((ACursor.X - AMaxBounds.Left) * W) div MaxW
+  else
+    GripX := W div 2;   // degenerate maximized rect: centre the window on the pointer
+  // Keep the pointer INSIDE the restored window even if it sat outside the maximized rect.
+  if GripX < 0 then GripX := 0;
+  if GripX > W then GripX := W;
+  Result.Left := ACursor.X - GripX;
+  // Vertically the pointer keeps its offset from the top edge, so it stays on the title bar:
+  // the restored top is simply the maximized top.
+  Result.Top := AMaxBounds.Top;
+  Result.Right := Result.Left + W;
+  Result.Bottom := Result.Top + H;
 end;
 
 function TyRescaleChromeMetric(AValue, AFromPPI, AToPPI: Integer): Integer;
@@ -1027,10 +1134,39 @@ begin
     FInstalledPPI := Screen.PixelsPerInch;
 end;
 
+procedure TTyChromeEngine.StartPlatformDrag(const ACursor: TPoint);
+var
+  WasDragging: Boolean;
+begin
+  if FForm = nil then Exit;
+  WasDragging := FDragging;
+  FDragging := False;   // clear BEFORE the (blocking, modal) Win32 loop — see the declaration
+  if TyWin32StartSystemMove(FForm) or TyQtStartSystemMove(FForm) or TyGtkStartSystemMove(FForm) then
+  begin
+    SetCaptureControl(nil);   // don't let LCL's capture fight the WM's move grab
+    Exit;
+  end;
+  // No system move on this widgetset: keep dragging by hand from where we are now.
+  FDragging := WasDragging;
+  FDragStart := ACursor;
+  FDragFormStart := Point(FForm.Left, FForm.Top);
+end;
+
 procedure TTyChromeEngine.TitleBarMouseDown(Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
 begin
-  if (Button = mbLeft) and (FForm <> nil) and not FMaximized then
+  if (Button = mbLeft) and (FForm <> nil) then
+    TitleBarDragBegin(Mouse.CursorPos);
+end;
+
+procedure TTyChromeEngine.TitleBarDragBegin(const ACursor: TPoint);
+begin
+  if FForm = nil then Exit;
+  { A MAXIMIZED window has no position to drag, so nothing is handed to the WM on the press —
+    it only ARMS the drag. TitleBarDragUpdate tears the window loose (restore under the pointer,
+    then carry on dragging) once the pointer has actually travelled, so a plain click and the
+    double-click-to-restore on a maximized caption still behave. }
+  if not FMaximized then
   begin
     // Linux: hand the drag to the window manager — a programmatic move() is ignored mid-grab on
     // Qt/X11, and gtk_window_move() gets clamped to the whole-screen bounds on GTK2 (so a window on
@@ -1038,56 +1174,82 @@ begin
     // GTK2 -> begin_move_drag; both let the WM cross monitors freely. When a system move starts we
     // release LCL's just-set mouse capture so it doesn't fight the WM's move grab (else after one
     // drag the capture leaks -> the whole window stays in move-mode). No per-move repositioning then
-    // (FDragging stays False -> TitleBarMouseMove no-ops). Win32/Qt5 -> False -> fallback below.
+    // (FDragging stays False -> TitleBarDragUpdate no-ops). Win32/Qt5 -> False -> fallback below.
     // Qt6 -> startSystemMove, GTK2 -> begin_move_drag: both are NON-BLOCKING (the WM takes the drag
     // asynchronously), so they can start on the press. Win32's caption move (WM_NCLBUTTONDOWN) is a
     // BLOCKING modal loop that would swallow a double-click's second press -> it is deferred to
-    // TitleBarMouseMove and armed only past a small drag threshold (so plain click / double-click to
+    // TitleBarDragUpdate and armed only past a small drag threshold (so plain click / double-click to
     // maximize still work). Win32 therefore falls through here to the manual-drag setup below.
     if TyQtStartSystemMove(FForm) or TyGtkStartSystemMove(FForm) then
     begin
       SetCaptureControl(nil);
       Exit;
     end;
-    FDragging := True;
-    // Use the GLOBAL cursor + the form's start origin, not client-relative deltas: on Qt/X11 a
-    // programmatic move during a mouse grab is flaky, so we set the ABSOLUTE target each move
-    // (mathematically identical to the old delta on Win32/GTK2, so those are unaffected).
-    FDragStart := Mouse.CursorPos;
-    FDragFormStart := Point(FForm.Left, FForm.Top);
   end;
+  FDragging := True;
+  // Use the GLOBAL cursor + the form's start origin, not client-relative deltas: on Qt/X11 a
+  // programmatic move during a mouse grab is flaky, so we set the ABSOLUTE target each move
+  // (mathematically identical to the old delta on Win32/GTK2, so those are unaffected).
+  FDragStart := ACursor;
+  FDragFormStart := Point(FForm.Left, FForm.Top);
 end;
 
 procedure TTyChromeEngine.TitleBarMouseMove(Shift: TShiftState; X, Y: Integer);
-{$IFDEF LCLWin32}
-const
-  DragThreshold = 4;   // px the pointer must travel before we hand off to the OS caption move
-{$ENDIF}
 begin
-  { Don't drag-move a maximized window (a maximized window has no movable position; a
-    post-maximize MouseMove with a still-armed drag would otherwise yank it back toward the
-    press origin — the double-click-to-maximize "grew in place" bug). }
-  if FDragging and (FForm <> nil) and not FMaximized then
+  TitleBarDragUpdate(Mouse.CursorPos);
+end;
+
+procedure TTyChromeEngine.TitleBarDragUpdate(const ACursor: TPoint);
+const
+  DragThreshold = 4;   // px the pointer must travel before the drag leaves the press site
+var
+  Moved: Boolean;
+begin
+  if (not FDragging) or (FForm = nil) then Exit;
+  Moved := (Abs(ACursor.X - FDragStart.X) > DragThreshold)
+        or (Abs(ACursor.Y - FDragStart.Y) > DragThreshold);
+  if FMaximized then
   begin
-    {$IFDEF LCLWin32}
-    // Win32: once the pointer has actually moved (so a plain click / double-click never triggers it),
-    // hand the rest of the drag to the OS caption-move loop -> native Aero Snap + snap preview. That
-    // SendMessage blocks until button-up, so clear FDragging first (later moves no-op) and drop LCL's
-    // capture the OS loop bypassed. A sub-threshold jiggle keeps the window still (no manual move).
-    if (Abs(Mouse.CursorPos.X - FDragStart.X) > DragThreshold)
-       or (Abs(Mouse.CursorPos.Y - FDragStart.Y) > DragThreshold) then
+    { Tearing a maximized window loose — what every native title bar does, and what this window
+      could not do before (the press used to be ignored outright, leaving a maximized window
+      undraggable). Gated on real pointer travel so a click / double-click still only toggles. }
+    if not Moved then Exit;
+    if FNativeMaximize then
     begin
-      FDragging := False;
-      if TyWin32StartSystemMove(FForm) then
-        SetCaptureControl(nil);
+      {$IFDEF LCLWin32}
+      // The OS owns this maximize AND its restore rect, and its caption-move loop already
+      // implements restore-under-the-cursor-then-keep-dragging for a zoomed window. Hand the
+      // gesture over untouched rather than second-guessing the geometry; the SIZE_RESTORED it
+      // produces syncs the engine back through TTyForm.Resizing.
+      {$ELSE}
+      // No such loop here: put the window back through the WM (which holds the restore rect)
+      // first, then drag the restored window.
+      FForm.WindowState := wsNormal;
+      ApplyMaximizedState(False, False);
+      {$ENDIF}
+    end
+    else
+    begin
+      // The engine's own work-area maximize: WE hold the restore rect, so place the window back
+      // under the pointer ourselves (it keeps its relative grip along the title bar).
+      FForm.BoundsRect := TyRestoreDragBounds(FForm.BoundsRect, FSavedBounds, ACursor);
+      ApplyMaximizedState(False, False);
     end;
-    {$ELSE}
-    // Cocoa (+ Qt5/other fallbacks): reposition manually to the absolute target each move. Qt6/GTK2
-    // never reach here (they took the async system move on the press -> FDragging stayed False).
-    FForm.Left := FDragFormStart.X + (Mouse.CursorPos.X - FDragStart.X);
-    FForm.Top  := FDragFormStart.Y + (Mouse.CursorPos.Y - FDragStart.Y);
-    {$ENDIF}
+    StartPlatformDrag(ACursor);
+    Exit;
   end;
+  {$IFDEF LCLWin32}
+  // Win32: once the pointer has actually moved (so a plain click / double-click never triggers it),
+  // hand the rest of the drag to the OS caption-move loop -> native Aero Snap + snap preview.
+  // A sub-threshold jiggle keeps the window still (no manual move).
+  if Moved then
+    StartPlatformDrag(ACursor);
+  {$ELSE}
+  // Cocoa (+ Qt5/other fallbacks): reposition manually to the absolute target each move. Qt6/GTK2
+  // never reach here (they took the async system move on the press -> FDragging stayed False).
+  FForm.Left := FDragFormStart.X + (ACursor.X - FDragStart.X);
+  FForm.Top  := FDragFormStart.Y + (ACursor.Y - FDragStart.Y);
+  {$ENDIF}
 end;
 
 procedure TTyChromeEngine.TitleBarMouseUp(Button: TMouseButton;
@@ -1206,6 +1368,53 @@ begin
   end;
 end;
 
+procedure TTyChromeEngine.ApplyMaximizedState(AMaximized, ANative: Boolean);
+begin
+  FMaximized := AMaximized;
+  FNativeMaximize := AMaximized and ANative;
+  if FTitleBar <> nil then
+  begin
+    if AMaximized then
+      FTitleBar.MaxButton.Kind := cbkRestore
+    else
+      FTitleBar.MaxButton.Kind := cbkMax;
+  end;
+  if FForm is TTyForm then
+  begin
+    // corners must go square when maximized and round again when restored
+    TTyForm(FForm).ApplyWindowEffects;
+    // refresh the NC strategy: when (un)maximized the WM_NCCALCSIZE inset must turn off/on
+    // (a maximized window must NOT keep the resize border, else content overhangs the work area).
+    TTyForm(FForm).ApplyResizeStrategy;
+  end;
+end;
+
+procedure TTyChromeEngine.SyncNativeMaximized(AMaximized: Boolean);
+begin
+  { Reconcile the chrome with a maximize/restore the ENGINE did not perform — Aero Snap to the
+    top edge, Win+Up, the taskbar's system menu, a WM keybinding. Without this the window sits
+    at maximized size while the chrome still believes it is normal: rounded corners on a
+    full-screen window, a "maximize" glyph that maximizes AGAIN instead of restoring, and a
+    saved-bounds rect that has been overwritten with the maximized rect — i.e. maximized but
+    not restorable.
+
+    Only the OS's own transitions count. A "restored" report that arrives while the ENGINE's
+    work-area maximize is active means nothing: that maximize is a plain SetBounds, so every
+    resize it causes is reported as restored, and honouring it would cancel the maximize the
+    instant it happened. }
+  if FForm = nil then Exit;
+  if AMaximized then
+  begin
+    if FMaximized and FNativeMaximize then Exit;
+    ApplyMaximizedState(True, True);
+  end
+  else
+  begin
+    if not (FMaximized and FNativeMaximize) then Exit;
+    ApplyMaximizedState(False, False);
+  end;
+end;
+
 procedure TTyChromeEngine.ToggleMaximize;
 var
   Wa: TRect;
@@ -1224,9 +1433,20 @@ begin
     Exit;
   if FMaximized then
   begin
-    FForm.BoundsRect := FSavedBounds;
-    FMaximized := False;
-    if FTitleBar <> nil then FTitleBar.MaxButton.Kind := cbkMax;
+    if FNativeMaximize then
+    begin
+      // The window manager owns this maximize and the restore rect that goes with it, so restore
+      // THROUGH it — it puts the window back exactly where it came from (with the native restore
+      // animation), which no rect we could invent would match. The chrome is reconciled first so
+      // the size change this triggers finds SyncNativeMaximized with nothing left to do.
+      ApplyMaximizedState(False, False);
+      FForm.WindowState := wsNormal;
+    end
+    else
+    begin
+      FForm.BoundsRect := FSavedBounds;
+      ApplyMaximizedState(False, False);
+    end;
   end
   else
   begin
@@ -1240,14 +1460,8 @@ begin
     else
       Wa := Screen.WorkAreaRect;
     FForm.BoundsRect := TyMaximizedBounds(Wa);
-    FMaximized := True;
-    if FTitleBar <> nil then FTitleBar.MaxButton.Kind := cbkRestore;
+    ApplyMaximizedState(True, False);
   end;
-  // corners must go square when maximized and round again when restored
-  if FForm is TTyForm then TTyForm(FForm).ApplyWindowEffects;
-  // refresh the NC strategy: when (un)maximized the WM_NCCALCSIZE inset must turn off/on
-  // (a maximized window must NOT keep the resize border, else content overhangs the work area).
-  if FForm is TTyForm then TTyForm(FForm).ApplyResizeStrategy;
 end;
 
 { TTyForm }
@@ -1292,7 +1506,9 @@ begin
   FreeAndNil(FSharpBackdrop);
   FreeAndNil(FGlassBackdrop);
   if FTitleBar <> nil then FTitleBar.FEngine := nil;
-  FEngine.Free;
+  // NIL it, don't just free it: the window is still alive until inherited Destroy, so a late
+  // size message (-> Resizing -> the engine) must find no engine rather than a dangling one.
+  FreeAndNil(FEngine);
   inherited Destroy;
 end;
 
@@ -1554,6 +1770,19 @@ begin
     FEngine.HandleChangeBounds;
 end;
 
+procedure TTyForm.Resizing(State: TWindowState);
+begin
+  inherited Resizing(State);
+  if (FEngine = nil) or (csDesigning in ComponentState) then Exit;
+  { wsMinimized / wsFullScreen are deliberately NOT forwarded: minimizing a maximized window
+    must not make the chrome forget it was maximized (Windows restores it straight back to
+    maximized, and reports wsMaximized again when it does). }
+  case State of
+    wsMaximized: FEngine.SyncNativeMaximized(True);
+    wsNormal:    FEngine.SyncNativeMaximized(False);
+  end;
+end;
+
 {$IF DEFINED(LCLGtk2) or DEFINED(LCLQt5) or DEFINED(LCLQt6)}
 procedure TTyForm.AdjustClientRect(var ARect: TRect);
 var
@@ -1655,6 +1884,10 @@ procedure TTyForm.SetBorderIconsTy(AValue: TBorderIcons);
 begin
   inherited BorderIcons := AValue;
   SyncCaptionButtons;
+  // biMaximize also drives the window's WS_MAXIMIZEBOX — which is what lets the OS maximize it
+  // (Aero Snap to the top edge, Win+Up). The inherited setter recomputes that bit from BorderIcons
+  // ALONE, ignoring Resizable, so re-assert our own combination on top of it.
+  ApplyResizeStrategy;
 end;
 
 procedure TTyForm.SyncCaptionButtons;

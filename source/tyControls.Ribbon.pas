@@ -1105,6 +1105,9 @@ begin
   if FMoreBtn <> nil then Exit;
   FMoreBtn := TTyButton.Create(Self);
   FMoreBtn.Parent := Self;
+  { 溢出角标不进 Tab 序。它只在分组放不下时才出现,是随窗口宽度来来去去的 —— 一个
+    忽有忽无的 tab stop 比没有更难用。TTyButton 默认是 tab stop,这里显式关掉。 }
+  FMoreBtn.TabStop := False;
   FMoreBtn.Caption := '»';
   FMoreBtn.Hint := '更多分组';
   FMoreBtn.ShowHint := True;

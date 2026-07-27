@@ -44,6 +44,8 @@ type
     // cell sets it AND fires OnChange.
     property Selected: TColor read GetSelected write SetSelected;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
+    // Declared True to match the constructor, so a host's TabStop=False opt-out streams.
+    property TabStop default True;
     property Align;
     property Anchors;
     property StyleClass;
@@ -60,6 +62,10 @@ var
   i: Integer;
 begin
   inherited Create(AOwner);
+  // A picker, not a swatch display: clicking a cell selects a colour, so the click has to
+  // move focus onto the grid too (TTyCustomControl.MouseDown gates that on TabStop) and
+  // Tab has to be able to reach it.
+  TabStop := True;
   FColumns := 8;
   FSelectedIndex := -1;
   // Seed the classic 16-colour VGA palette. Build it through the shared ColorBox helper

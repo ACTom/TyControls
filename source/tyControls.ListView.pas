@@ -826,10 +826,14 @@ begin
   FHeader := TTyHeader.Create;
   FHeader.OnChange := @HeaderChanged;
 
-  { Two embedded scrollbars, eager + hidden + non-designable (see TreeView 1835). }
+  { Two embedded scrollbars, eager + hidden + non-designable (see TreeView 1835).
+    TabStop=False: a standalone TTyScrollBar is focusable (it owns arrow/page keys), but a
+    bar living INSIDE a list must not be — dragging it would take focus off the list view,
+    which would then lose its focus ring and its keyboard navigation mid-scroll. }
   FVScroll := TTyScrollBar.Create(Self);
   FVScroll.Parent            := Self;
   FVScroll.Kind              := sbVertical;
+  FVScroll.TabStop           := False;
   FVScroll.AnimationsEnabled := False;
   FVScroll.OnChange          := @VScrollChange;
   FVScroll.ControlStyle      := FVScroll.ControlStyle + [csNoDesignVisible];
@@ -838,6 +842,7 @@ begin
   FHScroll := TTyScrollBar.Create(Self);
   FHScroll.Parent            := Self;
   FHScroll.Kind              := sbHorizontal;
+  FHScroll.TabStop           := False;
   FHScroll.AnimationsEnabled := False;
   FHScroll.OnChange          := @HScrollChange;
   FHScroll.ControlStyle      := FHScroll.ControlStyle + [csNoDesignVisible];

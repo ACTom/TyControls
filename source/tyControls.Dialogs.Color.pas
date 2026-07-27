@@ -112,8 +112,13 @@ uses tyControls.Css.Values;   // TyParseColor
 
 { TTyHSVSquare }
 
+{ TabStop: these two are the dialog's primary pickers, not decoration — a click has to move
+  focus onto them (TTyCustomControl.MouseDown gates that on TabStop) so the Hex/RGB editor
+  the user came from gets its OnExit and commits, instead of keeping the caret while the
+  square underneath it changes the colour. Their public twins (TTyHSColorPicker /
+  TTyLColorPicker) are focusable for the same reason. }
 constructor TTyHSVSquare.Create(AOwner: TComponent);
-begin inherited Create(AOwner); Width := 180; Height := 180; FHue := 0; FSat := 1; FVal := 1; end;
+begin inherited Create(AOwner); TabStop := True; Width := 180; Height := 180; FHue := 0; FSat := 1; FVal := 1; end;
 
 function TTyHSVSquare.GetStyleTypeKey: string; begin Result := 'TyColorArea'; end;
 
@@ -176,7 +181,7 @@ begin inherited MouseUp(Button, Shift, X, Y); if Button = mbLeft then FDragging 
 { TTyHueBar }
 
 constructor TTyHueBar.Create(AOwner: TComponent);
-begin inherited Create(AOwner); Width := 18; Height := 180; FHue := 0; end;
+begin inherited Create(AOwner); TabStop := True; Width := 18; Height := 180; FHue := 0; end;
 
 function TTyHueBar.GetStyleTypeKey: string; begin Result := 'TyColorArea'; end;
 

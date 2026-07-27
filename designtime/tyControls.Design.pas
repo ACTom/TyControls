@@ -52,9 +52,98 @@ uses
   tyControls.Pagination, tyControls.Steps, tyControls.Breadcrumb,
   tyControls.Transfer, tyControls.TreeSelect, tyControls.Cascader, tyControls.Popover,
   tyControls.ListView, tyControls.ShellListView, tyControls.ShellTreeView,
-  tyControls.FilterComboBox, tyControls.ShellComboBox;
+  tyControls.FilterComboBox, tyControls.ShellComboBox,
+  { The vocabularies the value-list editors below read: the compiled-in theme pack and the
+    process-wide named-theme registry. TypInfo is for the RTTI hop from a control to its
+    IconFont — two unrelated classes publish that property and share no ancestor carrying it. }
+  TypInfo, tyControls.BuiltinThemes, tyControls.ThemeRegistry;
 type
   TTyStyleClassPropertyEditor = class(TStringPropertyEditor)
+  public
+    function GetAttributes: TPropertyAttributes; override;
+    procedure GetValues(Proc: TGetStrProc); override;
+  end;
+
+  { WHY EVERY LIST BELOW IS ADVISORY, NEVER A FIXED PICK-LIST.
+
+    The Object Inspector only knows two shapes for a string property: a plain edit box, or a
+    combo. Which combo it builds is decided by GetAttributes — paValueList alone gives an
+    EDITABLE combo (csOwnerDrawEditableFixed), and adding paPickList turns it into a closed
+    drop-down list the user cannot type into. Every vocabulary in this file is open-ended: a
+    theme name may be one the app registers at runtime, a StyleClass may be a variant a theme
+    that is not loaded in the IDE defines, a glyph name may be added to the icon font later.
+    So these editors add paValueList and never paPickList: the list is a menu of what we can
+    prove is legal, not a fence around what is. tests/test.designeditors.pas guards that
+    (paPickList must not appear in this unit). paSortList is a separate question — purely
+    whether the offered order carries meaning — and each editor answers it for itself. }
+
+  { ThemeName: the compiled-in theme pack (default / system / every structural skin) plus
+    whatever the process's theme registry has been told about, e.g. an app or a package that
+    called TyRegisterThemeDir. Built-ins are listed FIRST and in their own order (no
+    paSortList) because that is the order a maintainer thinks in — 'default' and 'system'
+    before the skins — and registry extras follow, so a name added by someone else never
+    hides the pack. }
+  TTyThemeNamePropertyEditor = class(TStringPropertyEditor)
+  public
+    function GetAttributes: TPropertyAttributes; override;
+    procedure GetValues(Proc: TGetStrProc); override;
+    function GetHint(HintType: TPropEditHint; x, y: integer): string; override;
+  end;
+
+  { Mode: the '@mode NAME' blocks the CURRENTLY LOADED theme declares, read off the edited
+    controller's own model — a single-mode theme therefore offers nothing but the empty
+    string, which is the truth rather than a menu of modes that would resolve to nothing.
+    The empty entry comes first and is deliberately a BLANK row: it is the value itself
+    ('' = apply no mode overrides), and a readable stand-in like '(none)' would be written
+    into the .lfm verbatim and mean an unknown mode. GetHint carries the explanation. }
+  TTyThemeModePropertyEditor = class(TStringPropertyEditor)
+  public
+    function GetAttributes: TPropertyAttributes; override;
+    procedure GetValues(Proc: TGetStrProc); override;
+    function GetHint(HintType: TPropEditHint; x, y: integer): string; override;
+  end;
+
+  { ThemeFile: a .tycss stylesheet, picked with the IDE's standard file dialog (the '...'
+    button) instead of typed. Only the filter and the title differ from LCL's editor. }
+  TTyThemeFilePropertyEditor = class(TFileNamePropertyEditor)
+  public
+    function GetFilter: string; override;
+    function GetDialogTitle: string; override;
+  end;
+
+  { GlyphName: the keys of the associated TTyIconFont's Glyphs map ('name=HEX' lines). That
+    map is a published TStrings, so unlike an image collection — filled only by runtime code —
+    it is populated at DESIGN time and the list is real. Reached by RTTI rather than by a cast:
+    TTyCharImage and TTyGlyphButtonBase both publish IconFont but share no ancestor that
+    declares it, and a future control publishing the same pair gets the dropdown for free. }
+  TTyGlyphNamePropertyEditor = class(TStringPropertyEditor)
+  public
+    function GetAttributes: TPropertyAttributes; override;
+    procedure GetValues(Proc: TGetStrProc); override;
+  end;
+
+  { TTyIconFont.FontFamily: the font families this machine can render with. A family loaded
+    PRIVATELY from FontFile may legitimately not be among them (that is the whole point of a
+    private load), which is the second reason this list stays editable. }
+  TTyFontFamilyPropertyEditor = class(TStringPropertyEditor)
+  public
+    function GetAttributes: TPropertyAttributes; override;
+    procedure GetValues(Proc: TGetStrProc); override;
+  end;
+
+  { TTyIconFont.FontFile: a font file, picked rather than typed (same treatment as ThemeFile). }
+  TTyFontFilePropertyEditor = class(TFileNamePropertyEditor)
+  public
+    function GetFilter: string; override;
+    function GetDialogTitle: string; override;
+  end;
+
+  { TTyRibbonPage.Context: the contextual-tab group this page belongs to. The vocabulary is
+    the set of context names the SIBLING pages of the same ribbon already use, because that is
+    what TTyRibbon.ShowContext/HideContext will be called with — a page whose Context is a typo
+    of its neighbours' simply never appears, silently. Offering the neighbours' spellings is
+    the whole guard. }
+  TTyRibbonContextPropertyEditor = class(TStringPropertyEditor)
   public
     function GetAttributes: TPropertyAttributes; override;
     procedure GetValues(Proc: TGetStrProc); override;
@@ -194,6 +283,16 @@ resourcestring
     'onto their parent, so one placed directly on the form is hidden behind the surface.' +
     LineEnding + LineEnding +
     'Keep exactly one surface per form, leave it filling the form, and do not delete it.';
+  rsDtThemeFileFilter  = 'TyControls stylesheets (*.tycss)|*.tycss|All files|*';
+  rsDtThemeFileTitle   = 'Select a .tycss stylesheet';
+  rsDtFontFileFilter   = 'Font files (*.ttf;*.otf;*.ttc)|*.ttf;*.otf;*.ttc|All files|*';
+  rsDtFontFileTitle    = 'Select an icon-font file';
+  rsDtThemeNameHint    = 'The theme to load by name. The list offers the themes compiled into ' +
+    'TyControls plus any registered in this IDE; a name your application registers at run time ' +
+    'is equally valid, so you may type one that is not listed. Setting this clears ThemeFile.';
+  rsDtThemeModeHint    = 'Which "@mode NAME" block of the loaded theme is active. The list holds ' +
+    'the modes THIS theme declares — the blank entry is the empty string, meaning no mode ' +
+    'override at all. A single-mode theme therefore offers only the blank entry.';
 
 var
   // The themed main-form descriptor, reused by the TyControls Application project's
@@ -242,27 +341,241 @@ var
   ctrl: TTyStyleController;
   model: TTyStyleModel;
   list: TStringList;
+  key: string;
   i: Integer;
 begin
   // Dynamic + per control type: list exactly the variants the active theme defines for
   // THIS control's typeKey, read from its controller's model (else the global default,
   // which always carries the built-in defaults). No more hard-coded cross-control list.
   comp := GetComponent(0);
-  if not Supports(comp, ITyStyleable, sty) then Exit;
-  // Both base classes expose a published Controller but share no ancestor.
   ctrl := nil;
-  if comp is TTyGraphicControl then ctrl := TTyGraphicControl(comp).Controller
-  else if comp is TTyCustomControl then ctrl := TTyCustomControl(comp).Controller;
+  if Supports(comp, ITyStyleable, sty) then
+  begin
+    key := sty.GetStyleTypeKey;
+    // Both base classes expose a published Controller but share no ancestor.
+    if comp is TTyGraphicControl then ctrl := TTyGraphicControl(comp).Controller
+    else if comp is TTyCustomControl then ctrl := TTyCustomControl(comp).Controller;
+  end
+  else if comp is TTyPopover then
+  begin
+    { A popover is NOT ITyStyleable — the controller's styleable registry holds TControls and
+      a non-visual component is not one — so it publishes its typeKey as a class function
+      instead. Same StyleClass property, same variants, same dropdown; only the way in
+      differs. Its own title key (TyPopoverTitle) is resolved with the SAME StyleClass, so
+      there is nothing extra to offer. }
+    key := TTyPopover.StyleTypeKey;
+    ctrl := TTyPopover(comp).Controller;
+  end
+  else
+    Exit;
   if ctrl <> nil then model := ctrl.Model else model := TyDefaultController.Model;
   list := TStringList.Create;
   try
     list.Sorted := True;            // stable display order
     list.Duplicates := dupIgnore;
-    model.GetVariantsForType(sty.GetStyleTypeKey, list);
+    model.GetVariantsForType(key, list);
     for i := 0 to list.Count - 1 do
       Proc(list[i]);
   finally
     list.Free;
+  end;
+end;
+
+{ TTyThemeNamePropertyEditor }
+
+function TTyThemeNamePropertyEditor.GetAttributes: TPropertyAttributes;
+begin
+  { paValueList and NOTHING else added: no paPickList (the combo must stay typeable) and no
+    paSortList (GetValues' own order is the meaningful one). }
+  Result := (inherited GetAttributes) + [paValueList];
+end;
+
+procedure TTyThemeNamePropertyEditor.GetValues(Proc: TGetStrProc);
+var
+  seen: TStringList;
+  names: TStringArray;
+  i: Integer;
+begin
+  seen := TStringList.Create;
+  try
+    { Theme names resolve case-insensitively (TyResolveTheme / TyResolveThemeCss both fold
+      case), so the de-dup has to as well — otherwise a registry entry spelled 'Office' would
+      show up as a second, indistinguishable row next to the built-in 'office'. }
+    seen.CaseSensitive := False;
+    names := TyBuiltinThemeNames;                 // compiled in: always offerable
+    for i := 0 to High(names) do
+      if seen.IndexOf(names[i]) < 0 then
+      begin
+        seen.Add(names[i]);
+        Proc(names[i]);
+      end;
+    { Whatever else this process knows about — another design-time package, or a themes/
+      folder someone published with TyRegisterThemeDir. Register publishes the built-in pack
+      into this same registry, so most of what comes back here is the list above again and
+      the de-dup absorbs it; the pack is still enumerated from TyBuiltinThemeNames rather
+      than from the registry so the dropdown is complete even if that publication is ever
+      moved, deferred or removed. }
+    names := TyThemeNames;
+    for i := 0 to High(names) do
+      if seen.IndexOf(names[i]) < 0 then
+      begin
+        seen.Add(names[i]);
+        Proc(names[i]);
+      end;
+  finally
+    seen.Free;
+  end;
+end;
+
+function TTyThemeNamePropertyEditor.GetHint(HintType: TPropEditHint; x, y: integer): string;
+begin
+  Result := inherited GetHint(HintType, x, y) + LineEnding + LineEnding + rsDtThemeNameHint;
+end;
+
+{ TTyThemeModePropertyEditor }
+
+function TTyThemeModePropertyEditor.GetAttributes: TPropertyAttributes;
+begin
+  Result := (inherited GetAttributes) + [paValueList];
+end;
+
+procedure TTyThemeModePropertyEditor.GetValues(Proc: TGetStrProc);
+var
+  comp: TPersistent;
+  names: TStringArray;
+  i: Integer;
+begin
+  { '' first: it is a legal value (no mode override), and putting it at the top means the way
+    BACK from a mode is always one click away. }
+  Proc('');
+  comp := GetComponent(0);
+  if not (comp is TTyStyleController) then Exit;
+  { The modes are a property of the LOADED theme, not of the library, so they are read from
+    this controller's own model. A controller whose ThemeName/ThemeFile has not resolved in
+    the IDE has an unloaded model and offers nothing further — the honest answer, and better
+    than a list of modes that no theme here declares. }
+  names := TTyStyleController(comp).Model.ModeNames;
+  for i := 0 to High(names) do
+    Proc(names[i]);
+end;
+
+function TTyThemeModePropertyEditor.GetHint(HintType: TPropEditHint; x, y: integer): string;
+begin
+  Result := inherited GetHint(HintType, x, y) + LineEnding + LineEnding + rsDtThemeModeHint;
+end;
+
+{ TTyThemeFilePropertyEditor }
+
+function TTyThemeFilePropertyEditor.GetFilter: string;
+begin
+  Result := rsDtThemeFileFilter;
+end;
+
+function TTyThemeFilePropertyEditor.GetDialogTitle: string;
+begin
+  Result := rsDtThemeFileTitle;
+end;
+
+{ TTyGlyphNamePropertyEditor }
+
+function TTyGlyphNamePropertyEditor.GetAttributes: TPropertyAttributes;
+begin
+  Result := (inherited GetAttributes) + [paValueList];
+end;
+
+procedure TTyGlyphNamePropertyEditor.GetValues(Proc: TGetStrProc);
+var
+  comp: TPersistent;
+  fnt: TObject;
+  i: Integer;
+  nm: string;
+begin
+  comp := GetComponent(0);
+  if comp = nil then Exit;
+  { RTTI rather than a cast per host class: see the type declaration. GetObjectProp returns
+    nil both when there is no such property and when it is unset, which is the same answer
+    here — nothing to list. }
+  if GetPropInfo(comp, 'IconFont') = nil then Exit;
+  fnt := GetObjectProp(comp, 'IconFont');
+  if not (fnt is TTyIconFont) then Exit;
+  { Glyphs is a 'name=HEX' map. Names[] is the key half; an entry typed without '=' has no
+    name and is skipped rather than offered as a value that CodepointOf would reject. }
+  for i := 0 to TTyIconFont(fnt).Glyphs.Count - 1 do
+  begin
+    nm := TTyIconFont(fnt).Glyphs.Names[i];
+    if nm <> '' then Proc(nm);
+  end;
+end;
+
+{ TTyFontFamilyPropertyEditor }
+
+function TTyFontFamilyPropertyEditor.GetAttributes: TPropertyAttributes;
+begin
+  Result := (inherited GetAttributes) + [paValueList, paSortList];
+end;
+
+procedure TTyFontFamilyPropertyEditor.GetValues(Proc: TGetStrProc);
+var
+  i: Integer;
+begin
+  { Screen.Fonts is the machine's installed families. Sorted (paSortList above) because there
+    are hundreds of them and no other order is meaningful. Deliberately NOT prefixed with
+    LCL's 'default' pseudo-entry: TFont.Name understands it, this property does not — it is
+    matched against a real family name at render time. }
+  if Screen = nil then Exit;
+  for i := 0 to Screen.Fonts.Count - 1 do
+    Proc(Screen.Fonts[i]);
+end;
+
+{ TTyFontFilePropertyEditor }
+
+function TTyFontFilePropertyEditor.GetFilter: string;
+begin
+  Result := rsDtFontFileFilter;
+end;
+
+function TTyFontFilePropertyEditor.GetDialogTitle: string;
+begin
+  Result := rsDtFontFileTitle;
+end;
+
+{ TTyRibbonContextPropertyEditor }
+
+function TTyRibbonContextPropertyEditor.GetAttributes: TPropertyAttributes;
+begin
+  Result := (inherited GetAttributes) + [paValueList];
+end;
+
+procedure TTyRibbonContextPropertyEditor.GetValues(Proc: TGetStrProc);
+var
+  comp: TPersistent;
+  page: TTyRibbonPage;
+  host: TWinControl;
+  i: Integer;
+  seen: TStringList;
+  ctx: string;
+begin
+  comp := GetComponent(0);
+  if not (comp is TTyRibbonPage) then Exit;
+  page := TTyRibbonPage(comp);
+  host := page.Parent;
+  if host = nil then Exit;
+  seen := TStringList.Create;
+  try
+    seen.CaseSensitive := False;   // ShowContext matches case-insensitively; so must the list
+    for i := 0 to host.ControlCount - 1 do
+      if host.Controls[i] is TTyRibbonPage then
+      begin
+        ctx := TTyRibbonPage(host.Controls[i]).Context;
+        // '' is not a context, it is the absence of one — and it is already the default.
+        if (ctx <> '') and (seen.IndexOf(ctx) < 0) then
+        begin
+          seen.Add(ctx);
+          Proc(ctx);
+        end;
+      end;
+  finally
+    seen.Free;
   end;
 end;
 
@@ -634,6 +947,15 @@ end;
 
 procedure Register;
 begin
+  { Publish the compiled-in theme pack into THIS PROCESS (the IDE). An application does this
+    itself at startup; the IDE never did, which made a design-time ThemeName inert — the
+    controller resolved the name against an empty registry, loaded nothing, and the designer
+    went on drawing the base layer. Two things depend on it now: picking a theme in the Object
+    Inspector actually re-skins the form under the designer, and the Mode dropdown can list the
+    '@mode' blocks of the theme that is loaded (an unloaded model declares none). Design-time
+    only —nothing here runs in a built application, whose own TyRegisterBuiltinThemes call is
+    still what makes ThemeName resolve at run time. }
+  TyRegisterBuiltinThemes;
   // Register the component-palette icons (24x24 PNG per class, generated by
   // tools/genicons -> scripts/gen-icons.ps1). The IDE looks each up by class name;
   // this MUST run before RegisterComponents so the palette finds them.
@@ -753,6 +1075,51 @@ begin
     TTyStyleClassPropertyEditor);
   RegisterPropertyEditor(TypeInfo(string), TTyCustomControl, 'StyleClass',
     TTyStyleClassPropertyEditor);
+  // TTyPopover is the one class that publishes StyleClass off that tree: it is a non-visual
+  // TTyComponent (its window is created on Show), so neither control base reaches it and its
+  // variant list was plain free text. Same editor —it knows the popover's way in.
+  RegisterPropertyEditor(TypeInfo(string), TTyPopover, 'StyleClass',
+    TTyStyleClassPropertyEditor);
+  { === Guided string properties ===============================================================
+    A published string with a KNOWN vocabulary is unusable in the Object Inspector until an
+    editor offers it: the inspector shows a bare edit box, and nothing on screen says what may
+    be typed into it. Each registration below names the vocabulary in its comment; all of them
+    stay typeable (see the note above the editor declarations). }
+  // The three string properties of the style controller — the whole reason a controller is
+  // dropped on a form, and until now three empty boxes.
+  RegisterPropertyEditor(TypeInfo(string), TTyStyleController, 'ThemeName',
+    TTyThemeNamePropertyEditor);          // built-in pack + this process's theme registry
+  RegisterPropertyEditor(TypeInfo(string), TTyStyleController, 'Mode',
+    TTyThemeModePropertyEditor);          // the loaded theme's own @mode blocks, plus ''
+  RegisterPropertyEditor(TypeInfo(string), TTyStyleController, 'ThemeFile',
+    TTyThemeFilePropertyEditor);          // '...' opens a *.tycss file dialog
+  // Icon fonts: the family must name a renderable font, the file is a file, and a glyph name
+  // must be a key of the referenced font's Glyphs map.
+  RegisterPropertyEditor(TypeInfo(string), TTyIconFont, 'FontFamily',
+    TTyFontFamilyPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(string), TTyIconFont, 'FontFile',
+    TTyFontFilePropertyEditor);
+  RegisterPropertyEditor(TypeInfo(string), TTyCharImage, 'GlyphName',
+    TTyGlyphNamePropertyEditor);
+  RegisterPropertyEditor(TypeInfo(string), TTyGlyphButtonBase, 'GlyphName',
+    TTyGlyphNamePropertyEditor);          // covers TTyGlyphButton / GlyphContainer / SpeedButton
+  // A contextual ribbon tab, spelled the way its siblings spell it.
+  RegisterPropertyEditor(TypeInfo(string), TTyRibbonPage, 'Context',
+    TTyRibbonContextPropertyEditor);
+  { Paths and file filters. No value LIST is possible for these — the vocabulary is the file
+    system — so they get the other half of the same treatment: a picker behind the '...'
+    button instead of a path typed from memory. All three editors are LCL's own; only the
+    registrations are ours. TTyControls' file dialogs, folder picker and shell views mirror
+    the LCL components whose identical properties the IDE already registers these on. }
+  RegisterPropertyEditor(TypeInfo(string), TTyCustomFileDialog, 'Filter', TFileDlgFilterProperty);
+  RegisterPropertyEditor(TypeInfo(string), TTyFilterComboBox, 'Filter', TFileDlgFilterProperty);
+  RegisterPropertyEditor(TypeInfo(string), TTyCustomFileDialog, 'FileName', TFileNamePropertyEditor);
+  RegisterPropertyEditor(TypeInfo(string), TTyCustomFileDialog, 'InitialDir', TDirectoryPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(string), TTySelectPathDialog, 'Root', TDirectoryPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(string), TTySelectPathDialog, 'Directory', TDirectoryPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(string), TTyShellComboBox, 'Directory', TDirectoryPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(string), TTyShellListView, 'Directory', TDirectoryPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(string), TTyShellTreeView, 'Directory', TDirectoryPropertyEditor);
   // Version: read-only version display + design-time About dialog, on every registered class.
   // FIVE base classes cover the whole library through inheritance: the two control bases take
   // every visual control, TTyComponent every non-visual one (TTyStyleController included —

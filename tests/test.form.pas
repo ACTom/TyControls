@@ -80,6 +80,37 @@ type
     procedure TestZeroCaptionNeverCaption;
   end;
 
+  { Pure NC hit-test composition (TyResolveNcHit): DefWindowProc's answer + the mapper.
+    The OS keeps the sizing frame it still owns (HTLEFT..HTBOTTOMRIGHT); everything else it
+    reports is remapped by TyNcHitTest — including the phantom caption / sysmenu / min / max /
+    close band it infers from the WS_CAPTION the window only carries to get Aero Snap. A
+    maximized (or fixed) window keeps no frame codes at all and hit-tests caption/client only. }
+  TNcHitResolveTest = class(TTestCase)
+  published
+    procedure TestKeepsOsSizingFrame;
+    procedure TestKeepsOsCorner;
+    procedure TestPhantomCloseBecomesCaption;
+    procedure TestPhantomMinButtonBelowCaptionBecomesClient;
+    procedure TestPhantomCaptionBelowBandBecomesClient;
+    procedure TestClientTopStripBecomesTopResize;
+    procedure TestMaximizedDropsOsEdgeCode;
+    procedure TestMaximizedTopBandStaysCaption;
+    procedure TestNotResizableDropsOsEdgeCode;
+  end;
+
+  { Where a maximized window lands when a title-bar drag tears it loose (TyRestoreDragBounds):
+    the saved SIZE, positioned so the pointer keeps its proportional grip along the title bar. }
+  TRestoreDragBoundsTest = class(TTestCase)
+  published
+    procedure TestKeepsNormalSize;
+    procedure TestCentreGripStaysCentred;
+    procedure TestLeftGripStaysNearLeftEdge;
+    procedure TestRightGripStaysNearRightEdge;
+    procedure TestTopMatchesMaximizedTop;
+    procedure TestDegenerateSavedRectFallsBackToHalf;
+    procedure TestCursorOutsideClampsInside;
+  end;
+
   { Pure mapping from a border-resize hit zone to the native resize cursor.
     bhNone -> crDefault; left/right -> crSizeWE; top/bottom -> crSizeNS;
     topLeft/bottomRight -> crSizeNWSE; topRight/bottomLeft -> crSizeNESW. }
@@ -167,6 +198,25 @@ type
     procedure TestNonResizableEdgePressDoesNotStartResize;
     procedure TestNonResizableDisablesMaxButton;
     procedure TestNonResizableGatesMaximize;
+  end;
+
+  { Bugs #2 + #3 — the maximized window's chrome.
+      #2 the window manager can maximize the window itself (Aero Snap to the top edge, Win+Up,
+         the taskbar menu). The widgetset reports it through Resizing(), and the chrome must
+         adopt that state or the window is "maximized but not restorable".
+      #3 a maximized window must still be draggable: the drag tears it loose (restores it under
+         the pointer) and continues, which is what every native title bar does. }
+  TMaximizedChromeTest = class(TTestCase)
+  published
+    procedure TestMaximizedPressArmsDrag;
+    procedure TestMaximizedDragRestoresUnderPointer;
+    procedure TestMaximizedClickBelowThresholdKeepsMaximized;
+    procedure TestNativeMaximizeAdoptedByChrome;
+    procedure TestNativeRestoreClearsMaximized;
+    procedure TestMinimizeKeepsMaximizedState;
+    procedure TestEngineMaximizeSurvivesRestoredReport;
+    procedure TestNativeMaximizeRestoresThroughWindowState;
+    procedure TestDesigningIgnoresWindowStateReport;
   end;
 
   { FIX #1: the photo backdrop must (re)build on theme-apply WITHOUT a paint cycle.
@@ -290,6 +340,13 @@ type
     function EngineMaximized: Boolean;
     function EngineResizing: Boolean;
     procedure SetEngineMaximized(AValue: Boolean);
+    { The chrome engine itself, so a test can drive the cursor-parameterised drag entry points
+      (TitleBarDragBegin/Update) with synthetic screen points — Mouse.CursorPos, which the LCL
+      mouse handlers feed them, is whatever the real pointer happens to be doing. }
+    function Engine: TTyChromeEngine;
+    { Replay what the widgetset reports after an OS-driven size change (LM_SIZE ->
+      TScrollingWinControl.WMSize -> Resizing), which is how Aero Snap reaches the chrome. }
+    procedure InjectResizing(AState: TWindowState);
     { Drive the form's own (protected) mouse entry points headlessly — exactly the path
       the widgetset uses — so the engine's resize gating can be exercised without a handle. }
     procedure InjectFormMouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
@@ -345,6 +402,8 @@ function TTyFormAccess.EngineDragging: Boolean; begin Result := FEngine.Dragging
 function TTyFormAccess.EngineMaximized: Boolean; begin Result := FEngine.Maximized; end;
 function TTyFormAccess.EngineResizing: Boolean; begin Result := FEngine.Resizing; end;
 procedure TTyFormAccess.SetEngineMaximized(AValue: Boolean); begin FEngine.Maximized := AValue; end;
+function TTyFormAccess.Engine: TTyChromeEngine; begin Result := FEngine; end;
+procedure TTyFormAccess.InjectResizing(AState: TWindowState); begin Resizing(AState); end;
 
 procedure TTyFormAccess.InjectFormMouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin MouseDown(Button, Shift, X, Y); end;
@@ -647,6 +706,145 @@ begin
   { ACaptionH = 0 (no associated title bar): a near-top interior point is HTCLIENT,
     never HTCAPTION — there is no drag band. (The top edge zone still resizes.) }
   AssertEquals(TyHTCLIENT, TyNcHitTest(WR, Point(150, 10), ZONE, 0, True));
+end;
+
+{ TNcHitResolveTest — TyResolveNcHit over the same WR/CAPH/ZONE window as above. The first
+  argument is what DefWindowProc answered for that point. }
+
+procedure TNcHitResolveTest.TestKeepsOsSizingFrame;
+begin
+  { The OS owns the left/right/bottom sizing frame (it reaches into the invisible outer resize
+    margin), so its answer is passed straight through — even for a point the mapper would call
+    plain client. }
+  AssertEquals(TyHTLEFT,
+    TyResolveNcHit(TyHTLEFT, WR, Point(150, 100), ZONE, CAPH, True, False));
+end;
+
+procedure TNcHitResolveTest.TestKeepsOsCorner;
+begin
+  AssertEquals(TyHTBOTTOMRIGHT,
+    TyResolveNcHit(TyHTBOTTOMRIGHT, WR, Point(150, 100), ZONE, CAPH, True, False));
+end;
+
+procedure TNcHitResolveTest.TestPhantomCloseBecomesCaption;
+begin
+  { WS_CAPTION (carried only so the shell grants Aero Snap) makes DefWindowProc report caption
+    hot-spots for a caption we never draw — a click there would CLOSE the window. Inside our
+    title band the point must come back as an ordinary caption drag instead. }
+  AssertEquals(TyHTCAPTION,
+    TyResolveNcHit(TyHTCLOSE, WR, Point(280, 16), ZONE, CAPH, True, False));
+end;
+
+procedure TNcHitResolveTest.TestPhantomMinButtonBelowCaptionBecomesClient;
+begin
+  { Same phantom band, but on a form whose title bar is shorter than the OS caption it thinks
+    it has (here: none at all, ACaptionH = 0) -> plain client, never a minimize hot-spot. }
+  AssertEquals(TyHTCLIENT,
+    TyResolveNcHit(TyHTMINBUTTON, WR, Point(240, 20), ZONE, 0, True, False));
+end;
+
+procedure TNcHitResolveTest.TestPhantomCaptionBelowBandBecomesClient;
+begin
+  AssertEquals(TyHTCLIENT,
+    TyResolveNcHit(TyHTCAPTION, WR, Point(150, 100), ZONE, CAPH, True, False));
+end;
+
+procedure TNcHitResolveTest.TestClientTopStripBecomesTopResize;
+begin
+  { The flush title bar leaves the top edge inside the CLIENT (the OS says HTCLIENT there),
+    so the mapper has to re-add the top resize strip. }
+  AssertEquals(TyHTTOP,
+    TyResolveNcHit(TyHTCLIENT, WR, Point(150, 1), ZONE, CAPH, True, False));
+end;
+
+procedure TNcHitResolveTest.TestMaximizedDropsOsEdgeCode;
+begin
+  { A maximized window has no sizing border: even if the OS still reports one, the point is
+    client (here: well below the caption band). }
+  AssertEquals(TyHTCLIENT,
+    TyResolveNcHit(TyHTBOTTOM, WR, Point(150, 100), ZONE, CAPH, True, True));
+end;
+
+procedure TNcHitResolveTest.TestMaximizedTopBandStaysCaption;
+begin
+  { The whole title band of a maximized window is caption — including the strip that would be
+    the top resize edge when normal. Reporting HTCAPTION there is what makes the OS run its
+    "restore under the cursor and keep dragging" loop. }
+  AssertEquals(TyHTCAPTION,
+    TyResolveNcHit(TyHTCLIENT, WR, Point(150, 1), ZONE, CAPH, True, True));
+end;
+
+procedure TNcHitResolveTest.TestNotResizableDropsOsEdgeCode;
+begin
+  AssertEquals(TyHTCLIENT,
+    TyResolveNcHit(TyHTRIGHT, WR, Point(150, 100), ZONE, CAPH, False, False));
+end;
+
+{ TRestoreDragBoundsTest }
+
+const
+  MAXR: TRect = (Left: 0; Top: 40; Right: 1000; Bottom: 840);   // a "maximized" work-area rect
+  NORMR: TRect = (Left: 300; Top: 200; Right: 700; Bottom: 500); // 400 x 300 to restore to
+
+procedure TRestoreDragBoundsTest.TestKeepsNormalSize;
+var R: TRect;
+begin
+  R := TyRestoreDragBounds(MAXR, NORMR, Point(500, 50));
+  AssertEquals('width', 400, R.Right - R.Left);
+  AssertEquals('height', 300, R.Bottom - R.Top);
+end;
+
+procedure TRestoreDragBoundsTest.TestCentreGripStaysCentred;
+var R: TRect;
+begin
+  { Grabbed at the middle of the maximized width -> the restored window hangs from its middle. }
+  R := TyRestoreDragBounds(MAXR, NORMR, Point(500, 50));
+  AssertEquals('left', 500 - 200, R.Left);
+end;
+
+procedure TRestoreDragBoundsTest.TestLeftGripStaysNearLeftEdge;
+var R: TRect;
+begin
+  { 10% in from the left of the maximized window -> 10% in from the left of the restored one
+    (40px), NOT centred and NOT left-aligned with the old rect. }
+  R := TyRestoreDragBounds(MAXR, NORMR, Point(100, 50));
+  AssertEquals('left', 100 - 40, R.Left);
+end;
+
+procedure TRestoreDragBoundsTest.TestRightGripStaysNearRightEdge;
+var R: TRect;
+begin
+  R := TyRestoreDragBounds(MAXR, NORMR, Point(900, 50));
+  AssertEquals('left', 900 - 360, R.Left);
+end;
+
+procedure TRestoreDragBoundsTest.TestTopMatchesMaximizedTop;
+var R: TRect;
+begin
+  { Vertically the pointer keeps its offset from the top edge, so it stays on the title bar. }
+  R := TyRestoreDragBounds(MAXR, NORMR, Point(500, 50));
+  AssertEquals('top', MAXR.Top, R.Top);
+end;
+
+procedure TRestoreDragBoundsTest.TestDegenerateSavedRectFallsBackToHalf;
+var R: TRect;
+begin
+  { Never maximized through the engine (no saved rect): half the maximized window, still under
+    the pointer — a zero-size restore would make the window vanish. }
+  R := TyRestoreDragBounds(MAXR, Rect(0, 0, 0, 0), Point(500, 50));
+  AssertEquals('width', 500, R.Right - R.Left);
+  AssertEquals('height', 400, R.Bottom - R.Top);
+  AssertTrue('pointer inside', (R.Left <= 500) and (R.Right >= 500));
+end;
+
+procedure TRestoreDragBoundsTest.TestCursorOutsideClampsInside;
+var R: TRect;
+begin
+  { A pointer beyond the maximized rect (multi-monitor drag) must still end up ON the restored
+    window, not past its edge. }
+  R := TyRestoreDragBounds(MAXR, NORMR, Point(1400, 50));
+  AssertTrue('pointer not left of the window', R.Left <= 1400);
+  AssertTrue('pointer not right of the window', R.Right >= 1400);
 end;
 
 { TResizeCursorTest }
@@ -1506,6 +1704,182 @@ begin
   end;
 end;
 
+{ TMaximizedChromeTest }
+
+procedure TMaximizedChromeTest.TestMaximizedPressArmsDrag;
+var F: TTyFormAccess;
+begin
+  { Bug #3, first half: a press on a MAXIMIZED title bar must arm the drag. It used to be
+    dropped on the floor ("a maximized window has no position"), which is exactly why a
+    maximized window could not be dragged at all. Driven through the real mouse entry point so
+    the whole bar -> engine wiring is exercised; y=16 clears the top resize hot-zone. }
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.MakeTitleBar;
+    F.SetBounds(0, 0, 1000, 800);
+    F.SetEngineMaximized(True);
+    TTitleBarAccess(F.TitleBar).InjectMouseDown(mbLeft, [], 500, 16);
+    AssertTrue('press on a maximized caption must arm the drag', F.EngineDragging);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TMaximizedChromeTest.TestMaximizedDragRestoresUnderPointer;
+var F: TTyFormAccess; Expect: TRect;
+begin
+  { Bug #3, second half: once the pointer actually travels, the window is torn loose — restored
+    to its saved SIZE, placed so the pointer keeps its grip on the title bar — and the drag goes
+    on from there. Cursor points are passed explicitly (the LCL handlers read Mouse.CursorPos,
+    which no headless test can steer). }
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.MakeTitleBar;
+    F.SetBounds(0, 0, 1000, 800);                       // the maximized geometry
+    F.Engine.SavedBounds := Rect(120, 90, 520, 390);    // 400 x 300 to restore to
+    F.SetEngineMaximized(True);
+    F.Engine.TitleBarDragBegin(Point(500, 10));
+    AssertTrue('precondition: the press armed the drag', F.EngineDragging);
+    F.Engine.TitleBarDragUpdate(Point(560, 30));
+    AssertFalse('the drag tore the window loose', F.EngineMaximized);
+    Expect := TyRestoreDragBounds(Rect(0, 0, 1000, 800), Rect(120, 90, 520, 390), Point(560, 30));
+    AssertEquals('restored width', 400, F.Width);
+    AssertEquals('restored height', 300, F.Height);
+    AssertEquals('restored left keeps the pointer grip', Expect.Left, F.Left);
+    AssertTrue('max button back to the maximize glyph', F.TB.MaxButton.Kind = cbkMax);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TMaximizedChromeTest.TestMaximizedClickBelowThresholdKeepsMaximized;
+var F: TTyFormAccess;
+begin
+  { A click (or the first half of a double-click) on a maximized caption jiggles the pointer by
+    a pixel or two. That must NOT restore the window, or double-click-to-restore would fight a
+    spurious tear-loose. }
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.MakeTitleBar;
+    F.SetBounds(0, 0, 1000, 800);
+    F.Engine.SavedBounds := Rect(120, 90, 520, 390);
+    F.SetEngineMaximized(True);
+    F.Engine.TitleBarDragBegin(Point(500, 10));
+    F.Engine.TitleBarDragUpdate(Point(502, 11));
+    AssertTrue('still maximized below the drag threshold', F.EngineMaximized);
+    AssertEquals('window not moved', 1000, F.Width);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TMaximizedChromeTest.TestNativeMaximizeAdoptedByChrome;
+var F: TTyFormAccess;
+begin
+  { Bug #2: the window manager maximized the window itself (Aero Snap to the top edge, Win+Up,
+    the taskbar menu) and the widgetset reports it here. The chrome must adopt that state —
+    otherwise the window sits maximized with a "maximize" glyph that maximizes it AGAIN. }
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.MakeTitleBar;
+    AssertFalse('precondition: not maximized', F.EngineMaximized);
+    F.InjectResizing(wsMaximized);
+    AssertTrue('chrome adopted the OS maximize', F.EngineMaximized);
+    AssertTrue('recorded as the window manager''s', F.Engine.NativeMaximized);
+    AssertTrue('caption button shows restore', F.TB.MaxButton.Kind = cbkRestore);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TMaximizedChromeTest.TestNativeRestoreClearsMaximized;
+var F: TTyFormAccess;
+begin
+  { ..and the matching restore (Win+Down, dragging the snapped window off the top edge) must
+    put the chrome back. }
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.MakeTitleBar;
+    F.InjectResizing(wsMaximized);
+    F.InjectResizing(wsNormal);
+    AssertFalse('chrome followed the OS restore', F.EngineMaximized);
+    AssertFalse('native flag cleared', F.Engine.NativeMaximized);
+    AssertTrue('caption button back to maximize', F.TB.MaxButton.Kind = cbkMax);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TMaximizedChromeTest.TestMinimizeKeepsMaximizedState;
+var F: TTyFormAccess;
+begin
+  { Minimizing a maximized window must not make the chrome forget it was maximized: Windows
+    brings it back maximized, and a chrome that reset would show rounded corners + a maximize
+    glyph on a full-screen window. }
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.MakeTitleBar;
+    F.InjectResizing(wsMaximized);
+    F.InjectResizing(wsMinimized);
+    AssertTrue('still maximized after a minimize', F.EngineMaximized);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TMaximizedChromeTest.TestEngineMaximizeSurvivesRestoredReport;
+var F: TTyFormAccess;
+begin
+  { The engine's OWN maximize is a plain work-area SetBounds, so the widgetset reports every
+    resize it causes as "restored". Honouring those reports would cancel the maximize the
+    instant it happened — only a maximize the OS itself owns may be cleared this way. }
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.MakeTitleBar;
+    F.SetEngineMaximized(True);      // engine (work-area) maximize: not the OS's
+    F.InjectResizing(wsNormal);
+    AssertTrue('engine maximize not cancelled by a restored report', F.EngineMaximized);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TMaximizedChromeTest.TestNativeMaximizeRestoresThroughWindowState;
+var F: TTyFormAccess;
+begin
+  { The restore button on an OS-maximized window must go back THROUGH the OS (which holds the
+    restore rect), not through the engine's saved bounds — those belong to a maximize that
+    never happened. }
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.MakeTitleBar;
+    F.WindowState := wsMaximized;    // as the widgetset would have left it
+    F.InjectResizing(wsMaximized);
+    AssertTrue('precondition: chrome adopted the OS maximize', F.EngineMaximized);
+    F.Engine.ToggleMaximize;         // the caption button / double-click path
+    AssertFalse('no longer maximized', F.EngineMaximized);
+    AssertFalse('native flag cleared', F.Engine.NativeMaximized);
+    AssertEquals('restored through the window state', Ord(wsNormal), Ord(F.WindowState));
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TMaximizedChromeTest.TestDesigningIgnoresWindowStateReport;
+var F: TTyFormAccess;
+begin
+  { The designer must never drive the live chrome (it would square the corners of the design
+    surface and poke the IDE's window). }
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.SetDesigning(True, False);
+    F.InjectResizing(wsMaximized);
+    AssertFalse('design surface state left alone', F.EngineMaximized);
+  finally
+    F.Free;
+  end;
+end;
+
 { TTyFormBackdropTest }
 
 function TTyFormBackdropTest.GreenThemePath: string;
@@ -1909,6 +2283,8 @@ initialization
   RegisterTest(TResizeHitForTest);
   RegisterTest(TResizeGutterTest);
   RegisterTest(TNcHitTestTest);
+  RegisterTest(TNcHitResolveTest);
+  RegisterTest(TRestoreDragBoundsTest);
   RegisterTest(TResizeCursorTest);
   RegisterTest(TCaptionButtonTest);
   RegisterTest(TTitleBarTest);
@@ -1917,6 +2293,7 @@ initialization
   RegisterTest(TRescaleMetricTest);
   RegisterTest(TCaptionButtonHoverGlyphTest);
   RegisterTest(TTyFormTest);
+  RegisterTest(TMaximizedChromeTest);
   RegisterTest(TTyFormBackdropTest);
   RegisterTest(TTyMenuFormTest);
   RegisterTest(TCaptionButtonsTest);

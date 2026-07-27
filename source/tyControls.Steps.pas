@@ -259,6 +259,10 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+    { Re-establish the Clickable -> TabStop coupling that SetClickable has to skip while the
+      .lfm is streaming. See the body: a form that says `Clickable = True` and nothing about
+      TabStop used to load an unfocusable rail — no click focus, no arrow keys. }
+    procedure Loaded; override;
     { How many steps the rail holds. }
     function Count: Integer;
     { Step AIndex's status — the derived rule, for a host that wants to ask rather than
@@ -584,6 +588,23 @@ begin
   inherited Destroy;
 end;
 
+procedure TTySteps.Loaded;
+begin
+  inherited Loaded;
+  { SetClickable skips the TabStop coupling while csLoading is set, on the theory that the
+    .lfm already carries the TabStop the designer saved. It does not, and cannot: TabStop's
+    DECLARED default is False (TWinControl's), so a designer that turned Clickable on writes
+    `TabStop = True` only because the setter had already flipped it — and a HAND-WRITTEN
+    .lfm (every example in this repo is one) simply says `Clickable = True` and stops there.
+    The rail then streamed in with TabStop=False: unreachable by Tab, and unfocusable by
+    click too (TTyCustomControl.MouseDown gates click-to-focus on TabStop), so the arrow
+    keys — the half of Clickable that is not the mouse — never got a key to handle.
+    Re-assert the invariant here, once, with every streamed value in. A host that wants a
+    clickable-but-unfocusable rail still gets it by assigning TabStop after load, which is
+    the same escape hatch it had before. }
+  if FClickable then TabStop := True;
+end;
+
 function TTySteps.GetStyleTypeKey: string;
 begin
   Result := 'TySteps';
@@ -669,8 +690,10 @@ begin
   begin
     // Focusability follows clickability: a status display must not eat a tab stop, and a
     // navigable rail must take one (the arrow keys are half of what Clickable buys).
-    // Skipped while streaming, where the .lfm carries whatever TabStop the designer saved
-    // — which is already the right one, because this same setter ran in the designer.
+    // Skipped while streaming so this setter cannot fight the .lfm's own property order
+    // (TabStop, declared by the base, is read BEFORE Clickable). Loaded re-asserts the
+    // coupling once every streamed value is in — do NOT rely on the .lfm carrying TabStop
+    // itself; it usually does not. See TTySteps.Loaded.
     TabStop := AValue;
     Invalidate;
   end;

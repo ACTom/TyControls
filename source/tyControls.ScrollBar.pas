@@ -95,6 +95,11 @@ type
     property SmallChange: Integer read FSmallChange write SetSmallChange default 1;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
     property OnScroll: TScrollEvent read FOnScroll write FOnScroll;
+    { A standalone bar is a keyboard control (arrows / PgUp / PgDn / Home / End in
+      KeyDown), so it takes a tab stop like the native TScrollBar does. Declared True to
+      match the constructor, so a host's TabStop=False opt-out streams — which is exactly
+      what the bars EMBEDDED inside a list/grid/tree/scroll box do, in code. }
+    property TabStop default True;
     property Align;
     property Anchors;
     property StyleClass;
@@ -180,6 +185,11 @@ end;
 constructor TTyScrollBar.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  // KeyDown below implements the whole native keyboard: line, page and end-to-end. None of
+  // it could ever run, because LCL defaults TabStop to False and TTyCustomControl.MouseDown
+  // gates click-to-focus on it. Controls that EMBED a bar (list box, memo, grid, tree,
+  // scroll box) turn it back off on their instance — see the comments there.
+  TabStop := True;
   FKind := sbVertical;
   FMin := 0;
   FMax := 100;

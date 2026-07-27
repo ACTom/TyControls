@@ -48,6 +48,8 @@ type
     property Sat: Single read FSat write SetSat;
     property Position: Single read FPosition write SetPosition;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
+    // Declared True to match the constructor, so a host's TabStop=False opt-out streams.
+    property TabStop default True;
     property Align;
     property Anchors;
     property StyleClass;
@@ -66,6 +68,9 @@ begin
   FSat := 1;
   FPosition := 1;
   FDragging := False;
+  // A picker the user clicks and drags on, so the click must move focus onto it
+  // (TTyCustomControl.MouseDown gates that on TabStop). Mirrors its TTyHSColorPicker twin.
+  TabStop := True;
   Width := 28;
   Height := 160;
 end;

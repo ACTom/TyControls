@@ -200,6 +200,13 @@ begin
   begin
     b := TTyButton.Create(Self);
     b.Parent := Self;
+    { The KEYPAD is not the tab order. TTyButton is a tab stop by default, and letting that
+      through here would break the calculator twice over: Tab would crawl through twenty
+      keys, and — worse — a click on a key would move focus onto that key, so the very next
+      keystroke would go to the button (whose Space/Enter just re-presses it) instead of to
+      TTyCalculator.KeyDown, which is what types digits and operators. Focus belongs to the
+      calculator as a whole; the keys are its faces. }
+    b.TabStop := False;
     b.Caption := CKeys[i].Cap;
     b.Tag := i;
     { digits + utility keys are neutral 'ghost' outlines; operators / '=' are filled (primary). }

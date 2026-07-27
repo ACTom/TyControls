@@ -53,6 +53,10 @@ type
     property Caption;
     property Enabled;
     property Font;
+    { 构造函数把它打开(复选框天然是 tab stop);这里把**声明的默认值**也改成 True,
+      是为了让"关掉"这条路走得通 —— 继承来的声明默认值是 False,设计器里设成 False
+      就等于默认值,压根不会写进 .lfm,运行时又被构造函数的 True 盖回去。 }
+    property TabStop default True;
     property Align;
     property Anchors;
     property StyleClass;
@@ -100,6 +104,8 @@ type
     property Caption;
     property Enabled;
     property Font;
+    // 同 TTyCheckBox:声明的默认值必须和构造函数一致,否则 .lfm 里关不掉。
+    property TabStop default True;
     property Align;
     property Anchors;
     property StyleClass;

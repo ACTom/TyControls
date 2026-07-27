@@ -198,6 +198,11 @@ type
   published
     property GroupIndex: Integer read FGroupIndex write SetGroupIndex default 0;
     property AllowAllUp: Boolean read FAllowAllUp write FAllowAllUp default False;
+    { Back to False, matching what the constructor sets. The declared default has to agree
+      with the constructed value or the streamer writes the property into EVERY .lfm that
+      holds one of these (TTyButton declares it True); a host that wants a focusable speed
+      button still says TabStop=True and that one line streams. }
+    property TabStop default False;
   end;
 
 { Pure helper: split a content rect (device px) into a glyph rect + a caption rect
@@ -525,6 +530,13 @@ end;
 constructor TTySpeedButton.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  { A speed button is the one button that deliberately does NOT take focus — that is the
+    whole point of the classic TSpeedButton: you click the toolbar and the editor you were
+    typing in keeps its caret. TTyButton turns TabStop on for push buttons, so undo it
+    here: a bar of ten of these would otherwise put ten dead stops in the Tab cycle, and
+    a click on one would pull focus out of whatever the command acts upon. The keyboard
+    path to a speed button is its mnemonic (TyAccelRegister in TTyButton), not Tab. }
+  TabStop := False;
   FGlyphLayout := glLeft;
   FGroupIndex := 0;
   FAllowAllUp := False;

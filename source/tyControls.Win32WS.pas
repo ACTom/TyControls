@@ -15,10 +15,13 @@ unit tyControls.Win32WS;
     - WM_NCCALCSIZE (wParam=TRUE): return 0 -> the client rect is left equal to the whole window
       rect (the native caption/border chrome is not carved out), while the WS_THICKFRAME sizing
       border stays a hit-testable non-client region the OS resizes natively.
-    - WM_NCHITTEST: screen point -> window-relative -> TyNcHitTest (the pure mapper in Form.pas)
-      -> HTLEFT..HTBOTTOMRIGHT / HTCAPTION / HTCLIENT, gated by Resizable.
+    - WM_NCHITTEST: screen point -> window-relative -> TyResolveNcHit (the pure composer in
+      Form.pas), which keeps DefWindowProc's answer for the real sizing frame and maps the rest
+      itself -> HTLEFT..HTBOTTOMRIGHT / HTCAPTION / HTCLIENT, gated by Resizable + maximized.
     - WM_NCDESTROY: restore the original proc and drop the per-window state.
-  WS_THICKFRAME (stripped from a bsNone form) is (re)asserted per Resizable.
+  WS_THICKFRAME (stripped from a bsNone form) is (re)asserted per Resizable, and a resizable
+  top-level window trades LCL's WS_POPUP for WS_CAPTION so the shell treats it as an ordinary
+  window and gives it Aero Snap + the native maximize/minimize animations (see ApplyThickFrame).
 
   LIVE resize / DWM-corner interaction / native maximize+snap are REAL-MACHINE checkpoints —
   they cannot be verified headlessly (no window manager). This unit's contract is only that it
@@ -43,9 +46,11 @@ procedure TyWin32BeginTopResize(AForm: TCustomForm);
 
 { Hand a title-bar drag to the OS as a native caption move (WM_NCLBUTTONDOWN/HTCAPTION) so Windows
   runs its modal move loop — which provides Aero Snap (drag to a screen edge) + the snap preview,
-  none of which a manual Left/Top drag can trigger. Returns True when it took over the move (Win32
-  with a handle); the caller then skips its manual-drag fallback. Returns False off Windows / with no
-  handle so the caller keeps its existing per-move repositioning. Mirrors the Qt/GTK system-move. }
+  and, on a window the OS itself has maximized, the restore-under-the-cursor-and-keep-dragging that
+  every native title bar performs; none of it reachable from a manual Left/Top drag. Returns True
+  when it took over the move (Win32 with a handle); the caller then skips its manual-drag fallback.
+  Returns False off Windows / with no handle so the caller keeps its existing per-move
+  repositioning. Mirrors the Qt/GTK system-move. }
 function TyWin32StartSystemMove(AForm: TCustomForm): Boolean;
 
 implementation
@@ -55,7 +60,7 @@ uses
   Windows,
   SysUtils,          // Win32MajorVersion / Win32MinorVersion (RTL globals) for the Vista/Win7 check
   Types,             // listed AFTER Windows so Types.Rect/Point (functions) shadow Windows' TYPES
-  tyControls.Form;   // TyNcHitTest (pure mapper) + TyHT* — implementation-section cycle, legal
+  tyControls.Form;   // TyResolveNcHit (pure hit-test composer) — implementation-section cycle, legal
 
 type
   { Per-subclassed-window state. Keyed by HWND in a parallel array (a handful of TTyForms at
@@ -69,7 +74,7 @@ type
     BorderZone: Integer;
     CaptionH: Integer;
     Maximized: Boolean;   // engine (work-area) maximize -> suppress the NC resize inset
-    WorkArea: TRect;      // monitor work area (LCL-sourced) -> pin the client when maximized
+    WorkArea: TRect;      // last known monitor work area -> fallback pin for the maximized client
   end;
 
 var
@@ -127,7 +132,8 @@ var
   ncp: PNCCalcSizeParams;
   maxed: Boolean;
   savedTop: LongInt;   // WM_NCCALCSIZE: the flush-title-bar top to restore after DefWindowProc insets
-  hit: Integer;        // WM_NCHITTEST: pure-mapper result to graft the top edge/caption onto DefWindowProc
+  wa: TRect;           // WM_NCCALCSIZE: work area to pin the client to while maximized
+  mon: TMonitor;       // ..sourced from the monitor the window is on RIGHT NOW
 begin
   st := FindState(Wnd);
   if st = nil then
@@ -154,13 +160,20 @@ begin
           // overhang under the taskbar. Robust for BOTH maximize paths. A maximized window shows
           // no sizing band, so there is no edge strip to reason about here. (Empty work area ->
           // leave client = window: a safe fallback, since the engine already sized to the work area.)
-          if (st^.WorkArea.Right > st^.WorkArea.Left)
-             and (st^.WorkArea.Bottom > st^.WorkArea.Top) then
+          //
+          // Take the work area of the monitor the window is on RIGHT NOW, not the one cached at the
+          // last TyWin32ApplyNcResize: the window may have been dragged to another monitor since
+          // (a plain move refreshes nothing), and a NATIVE maximize — which Aero Snap now performs —
+          // sends this message BEFORE the WM_SIZE that would refresh the cache. Pinning to the wrong
+          // monitor's work area would put the client somewhere else entirely.
+          mon := Screen.MonitorFromWindow(Wnd);
+          if mon <> nil then wa := mon.WorkareaRect else wa := st^.WorkArea;
+          if (wa.Right > wa.Left) and (wa.Bottom > wa.Top) then
           begin
-            ncp^.rgrc[0].Left   := st^.WorkArea.Left;
-            ncp^.rgrc[0].Top    := st^.WorkArea.Top;
-            ncp^.rgrc[0].Right  := st^.WorkArea.Right;
-            ncp^.rgrc[0].Bottom := st^.WorkArea.Bottom;
+            ncp^.rgrc[0].Left   := wa.Left;
+            ncp^.rgrc[0].Top    := wa.Top;
+            ncp^.rgrc[0].Right  := wa.Right;
+            ncp^.rgrc[0].Bottom := wa.Bottom;
           end;
           Result := 0;
           Exit;
@@ -185,40 +198,25 @@ begin
       end;
     WM_NCHITTEST:
       begin
-        if st^.Resizable then
-        begin
-          // top-only NCCALCSIZE keeps left/right/bottom as the REAL OS sizing frame, so DefWindowProc
-          // hit-tests those resize edges + corners correctly (accounting for the invisible outer resize
-          // margin, which a full-window mapper cannot). Chain to it, then re-add ONLY the top: the flush
-          // title bar makes the top edge + caption band client (DefWindowProc returns HTCLIENT there), so
-          // we map HTTOP for the top resize strip and HTCAPTION for the title-bar drag band.
-          Result := CallWindowProc(orig, Wnd, Msg, WP, LP);
-          if Result = HTCLIENT then
-          begin
-            pt.X := SmallInt(LOWORD(DWORD(LP)));
-            pt.Y := SmallInt(HIWORD(DWORD(LP)));
-            if GetWindowRect(Wnd, @wr) then
-            begin
-              Dec(pt.X, wr.Left);
-              Dec(pt.Y, wr.Top);
-              hit := TyNcHitTest(Rect(0, 0, wr.Right - wr.Left, wr.Bottom - wr.Top),
-                pt, st^.BorderZone, st^.CaptionH, st^.Resizable);
-              if (hit = TyHTTOP) or (hit = TyHTTOPLEFT) or (hit = TyHTTOPRIGHT)
-                 or (hit = TyHTCAPTION) then
-                Result := hit;
-            end;
-          end;
-          Exit;
-        end;
-        // Fixed (non-resizable): no sizing frame; the pure mapper yields only HTCAPTION / HTCLIENT.
         pt.X := SmallInt(LOWORD(DWORD(LP)));
         pt.Y := SmallInt(HIWORD(DWORD(LP)));
         if GetWindowRect(Wnd, @wr) then
         begin
           Dec(pt.X, wr.Left);
           Dec(pt.Y, wr.Top);
-          Result := TyNcHitTest(Rect(0, 0, wr.Right - wr.Left, wr.Bottom - wr.Top),
-            pt, st^.BorderZone, st^.CaptionH, st^.Resizable);
+          maxed := st^.Maximized;                     // engine (work-area) maximize
+          if not maxed then maxed := IsZoomed(Wnd);   // native maximize / Aero Snap
+          // Ask the OS FIRST: top-only NCCALCSIZE keeps left/right/bottom as the REAL sizing
+          // frame, and only DefWindowProc knows where that frame sits — it includes the invisible
+          // outer resize margin, which a mapper working from the window rect cannot see.
+          // TyResolveNcHit keeps that answer for the sizing frame and maps everything else
+          // itself: the flush title bar makes the top edge + caption band client (HTTOP for the
+          // top resize strip, HTCAPTION for the drag band), and — now that ApplyThickFrame adds
+          // WS_CAPTION for Aero Snap — it also DISCARDS the phantom caption / sysmenu / min /
+          // max / close band DefWindowProc infers from that style for a caption we never draw.
+          Result := TyResolveNcHit(CallWindowProc(orig, Wnd, Msg, WP, LP),
+            Rect(0, 0, wr.Right - wr.Left, wr.Bottom - wr.Top),
+            pt, st^.BorderZone, st^.CaptionH, st^.Resizable, maxed);
           Exit;
         end;
         // GetWindowRect failed (degenerate): fall through to the original proc.
@@ -253,6 +251,32 @@ procedure ApplyThickFrame(Wnd: HWND; AResizable, AAllowMaximize: Boolean);
 var style: PtrInt;
 begin
   style := GetWindowLongPtr(Wnd, GWL_STYLE);
+  { Aero Snap, the native maximize, and the minimize/restore animations are all run by the OS's
+    own move loop, and it only offers them to a window that LOOKS like an ordinary top-level
+    window: WS_CAPTION present, WS_POPUP absent. LCL builds a bsNone form as a bare WS_POPUP with
+    no caption — exactly the combination the shell refuses to snap, which is why dragging to the
+    top edge merely RESIZED this window (the "snap up" fallback for a window it considers
+    non-maximizable) instead of maximizing it, and why a maximized window could not be dragged
+    back off. Trading WS_POPUP for WS_CAPTION is the standard custom-frame recipe (Chromium,
+    Electron, framelesshelper all do it): nothing native is DRAWN, because WM_NCCALCSIZE above
+    already collapses the non-client area to nothing at the top, but the window manager now runs
+    its full snap / maximize / animation logic for us.
+
+    Only for a resizable TOP-LEVEL window:
+      - WS_CHILD (an embedded form) must keep its child styles — a caption there is meaningless.
+      - a fixed or rolled-up window cannot snap or maximize anyway, and WS_CAPTION would add the
+        OS minimum window height that the roll-up (window-shade) deliberately sheds with
+        WS_THICKFRAME, so it goes back to being a plain popup.
+      - Vista/Win7 (the thick frosted Aero frame) keep the NON-CLIENT top strip — see the
+        WM_NCCALCSIZE branch above — so a WS_CAPTION there would give them a real, painted OS
+        title bar sitting above ours. They stay as they were, snap included. }
+  if (style and WS_CHILD) = 0 then
+  begin
+    if AResizable and (not TyOsThickAeroFrame) then
+      style := (style and (not WS_POPUP)) or WS_CAPTION
+    else
+      style := (style and (not WS_CAPTION)) or WS_POPUP;
+  end;
   if AResizable then
     style := style or WS_THICKFRAME
   else
@@ -292,7 +316,7 @@ begin
   st^.CaptionH := ACaptionHeight;
   st^.Maximized := AMaximized;
   if AForm.Monitor <> nil then
-    st^.WorkArea := AForm.Monitor.WorkareaRect;   // LCL-sourced; pins the client when maximized
+    st^.WorkArea := AForm.Monitor.WorkareaRect;   // LCL-sourced fallback for the maximized client pin
   ApplyThickFrame(Wnd, AResizable, AAllowMaximize);
 end;
 

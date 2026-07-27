@@ -200,7 +200,7 @@ TyForm {
 5. **缩放最小尺寸：** 边缘缩放硬编码最小宽度 80px、高度 60px（在引擎中），不可经属性配置。
 6. **设计期标题栏皮肤未换肤：** 见第 6 节——这是 tyControls 全库一致的设计期行为，不是缺陷。
 7. **最大化避让任务栏：** 引擎 `ToggleMaximize` 使用当前显示器工作区（`Screen.MonitorFromWindow(...).WorkareaRect`），最大化窗口自然避让任务栏。
-8. **原生窗口行为缺口：** Windows Aero Snap 仍未实现；Windows DWM 原生投影阴影与圆角**已实现**（见第 8 节「窗口圆角与原生投影阴影」）。详见 [KNOWN_GAPS.md](../KNOWN_GAPS.md)。
+8. **原生窗口行为：** Windows Aero Snap（贴边平铺 + 拖到顶端最大化）**已实现**——标题栏拖拽交给系统的原生标题栏移动循环，窗口样式也换成 shell 认可的普通顶层窗口样式；系统自己发起的最大化（Aero Snap / Win+↑ / 任务栏菜单）会被窗框采纳，最大化后仍可拖动（拖动即还原并继续跟随鼠标）。Vista/Win7 与固定尺寸（`Resizable := False`）窗口不参与。Windows DWM 原生投影阴影与圆角**已实现**（见第 8 节「窗口圆角与原生投影阴影」）。详见 [KNOWN_GAPS.md](../KNOWN_GAPS.md)。
 
 ## 11. 相关文档
 

@@ -290,7 +290,7 @@ TyControls 的所有长度令牌(圆角、边框宽度、内边距等)在绘制�
 
 1. **`TTyMemo` 编辑能力裁剪** — 多行编辑器提供可靠的逐码点编辑内核(回车换行、跨行退格/删除、二维方向键 + Home/End 导航、垂直滚动条/滚轮),但**有意推迟**以下能力到未来 Tier-2:无选区、无区段剪贴板、无自动换行、无横向滚动(超长行被右边裁剪)、无撤销/重做、无词级跳转(`Ctrl`/`Cmd` 仅把 `Home`/`End` 重定向到文档首尾)、无光标闪烁。注意:这些是 `TTyMemo` 的限制;单行的 `TTyEdit` **已支持**选区、剪贴板、水平滚动与词级导航。
 
-2. **窗框 Tier-2 缺口** — 自绘窗框现通过继承 `TTyForm = class(TForm)` 获得（旧控制器 `TTyFormChrome` 已移除）。其跨平台手动实现下,Windows Aero Snap 贴边分屏、Windows DWM 原生投影阴影、macOS 原生红绿灯按钮等原生窗口行为尚未实现。macOS 原生阴影与跨屏 DPI 重缩放已在 v1.1 解决。详见 [docs/controls/ttyform.md](controls/ttyform.md)。
+2. **窗框 Tier-2 缺口** — 自绘窗框现通过继承 `TTyForm = class(TForm)` 获得（旧控制器 `TTyFormChrome` 已移除）。其跨平台手动实现下,macOS 原生红绿灯按钮等原生窗口行为尚未实现;Windows Aero Snap(贴边平铺 + 拖到顶端最大化)与 DWM 原生投影阴影已实现,macOS 原生阴影与跨屏 DPI 重缩放已在 v1.1 解决。详见 [docs/controls/ttyform.md](controls/ttyform.md)。
 
 3. **设计期渲染** — 拖放到窗体上的 TyControls 控件在 Lazarus 设计器中会以**内置默认皮肤**
    呈现(零配置可见)。`TTyForm` 的**布局**在设计器中是 WYSIWYG 的(标题栏占顶部条带、

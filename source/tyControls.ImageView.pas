@@ -113,6 +113,8 @@ type
     property TintColor: TColor read FTintColor write SetTintColor default clNone;
     property TintAmount: Integer read FTintAmount write SetTintAmount default 0;
     property OnZoomChange: TNotifyEvent read FOnZoomChange write FOnZoomChange;
+    // Declared True to match the constructor, so a host's TabStop=False opt-out streams.
+    property TabStop default True;
     property Align;
     property Anchors;
     property Visible;
@@ -296,6 +298,11 @@ begin
   FPicture.OnChange := @PictureChanged;
   FAnim := TyAnimatorInit(FAnimMs, teEaseOutCubic);
   FAnim.SetTargetImmediate(1);   // settled (not mid-animation)
+  // A viewer is operated, not just looked at: drag pans it and the wheel zooms it. The
+  // click that starts a pan must therefore move focus here (TTyCustomControl.MouseDown
+  // gates that on TabStop) — on Windows the wheel notification goes to the FOCUSED window,
+  // so a viewer that can never hold focus is also a viewer the wheel can miss.
+  TabStop := True;
   SetBounds(0, 0, 320, 240);
 end;
 

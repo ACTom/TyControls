@@ -10,11 +10,29 @@ Custom window chrome is now obtained by descending from **`TTyForm = class(TForm
 [controls/ttyform.md](controls/ttyform.md)). `TTyForm` is born borderless
 (`BorderStyle := bsNone`) and delegates window behavior (drag-move, edge-resize,
 custom maximize/restore, DPI rescale) to a form-agnostic `TTyChromeEngine`. The
-following native behaviors remain intentionally NOT implemented and are tracked
-for a future Tier-2 native enhancement layer.
+native behaviors below are tracked here with their current status — the ones
+still marked as gaps belong to a future Tier-2 native enhancement layer.
 
-- Windows Aero Snap (edge tiling) is not supported; dragging to a screen edge
-  moves the form but does not trigger snap-to-half or snap-to-quadrant tiling.
+- Windows Aero Snap (edge tiling + snap-to-top maximize): **implemented** on the
+  Win32 widgetset. A title-bar drag is handed to the OS as a native caption move
+  (`WM_NCLBUTTONDOWN`/`HTCAPTION`), and `tyControls.Win32WS` gives the borderless
+  window the styles the shell requires before it will offer snapping at all — a
+  resizable top-level `TTyForm` trades LCL's `WS_POPUP` for `WS_CAPTION`
+  (`WS_THICKFRAME` + `WS_MAXIMIZEBOX` were already asserted). Nothing native is
+  drawn: `WM_NCCALCSIZE` still collapses the whole non-client area. So dragging
+  to a side/corner tiles the window, dragging to the top **maximizes** it, and
+  the resulting state is adopted by the chrome (`TTyForm.Resizing` →
+  `TTyChromeEngine.SyncNativeMaximized`: square corners, restore glyph, and a
+  restore that goes back through the OS's own restore rect). Dragging a
+  maximized window tears it loose — it restores under the pointer and the drag
+  continues, as on any native title bar. Exceptions: Vista/Win7 keep their
+  thick frosted Aero top frame and stay `WS_POPUP` (a caption style there would
+  paint a real OS title bar above ours), and a fixed (`Resizable := False`) or
+  rolled-up window is not snappable by design. GTK/Qt/Cocoa rely on the
+  widgetset's own system-move (`TyQt/TyGtkStartSystemMove`), so tiling there is
+  whatever the window manager offers. **Pending real-machine verification** of
+  the snap zones/animations (no window manager in the headless test rig); the
+  pure hit-test and restore-geometry logic is unit-tested.
 - Borderless-window rounded corners + native drop shadow: **implemented** in
   `tyControls.WindowEffects` (`TyApplyWindowEffects`), applied by `TTyForm` on
   show/theme/maximize. ON by default; opt out via `TyForm { border-radius: 0;

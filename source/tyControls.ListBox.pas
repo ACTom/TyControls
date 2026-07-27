@@ -543,6 +543,10 @@ begin
       FScrollBar.Parent := Self;
       FScrollBar.Kind := sbVertical;
       FScrollBar.Align := alRight;
+      // A standalone TTyScrollBar is focusable (it has its own arrow/page keys), but an
+      // EMBEDDED one must not be: dragging the bar would pull focus off the list box, which
+      // would then lose its focus ring and its arrow-key navigation mid-scroll.
+      FScrollBar.TabStop := False;
       FScrollBar.OnChange := @ScrollBarChange;
       // Embedded scrollbar drives content scrolling: keep it instant (no thumb
       // glide) so scrolling never lags behind the wheel/keyboard.

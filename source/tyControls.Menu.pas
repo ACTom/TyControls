@@ -337,6 +337,11 @@ type
       width and a content fit would be overridden anyway. Recomputed when Menu is
       (re)assigned, when this flag is set True, and on resize/relayout. }
     property AutoSizeWidth: Boolean read FAutoSizeWidth write SetAutoSizeWidth default False;
+    { The constructor turns this on (the bar walks its top cells with the arrow keys);
+      declaring the default to match is what lets a host turn it OFF in the .lfm — against
+      the inherited `default False` that value is dropped as "already the default" and the
+      constructor's True wins again at run time. }
+    property TabStop default True;
     property Align;
     property Anchors;
     property StyleClass;

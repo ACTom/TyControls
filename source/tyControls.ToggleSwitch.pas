@@ -79,6 +79,10 @@ type
     // Empty (the default) renders the bare switch unchanged.
     property Caption: TCaption read FCaption write SetCaption;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
+    { The constructor turns this on (Space toggles a focused switch); declaring the default
+      to match is what lets a host turn it OFF in the .lfm — against the inherited
+      `default False` that value is dropped as "already the default". }
+    property TabStop default True;
     property Align;
     property Anchors;
     property StyleClass;

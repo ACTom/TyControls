@@ -171,6 +171,10 @@ begin
     FVScrollBar.Parent := Self;
     FVScrollBar.Kind := sbVertical;
     FVScrollBar.Align := alNone;   // manual dock: ScrollBy moves it, we re-place it
+    // A standalone TTyScrollBar is focusable; the two bars a scroll box owns must not be —
+    // they are chrome around the CONTENT, and a Tab that stopped on them would land the
+    // user on a scrollbar instead of on the next control inside the box.
+    FVScrollBar.TabStop := False;
     FVScrollBar.OnChange := @VScrollBarChange;
     // Embedded bar drives content scrolling: keep it instant (no thumb glide) so
     // scrolling never lags behind the wheel/keyboard.
@@ -184,6 +188,7 @@ begin
     FHScrollBar.Parent := Self;
     FHScrollBar.Kind := sbHorizontal;
     FHScrollBar.Align := alNone;
+    FHScrollBar.TabStop := False;   // embedded chrome, not a stop — see the vertical bar
     FHScrollBar.OnChange := @HScrollBarChange;
     FHScrollBar.AnimationsEnabled := False;
     FHScrollBar.ControlStyle := FHScrollBar.ControlStyle + [csNoDesignVisible];

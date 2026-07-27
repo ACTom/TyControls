@@ -110,6 +110,10 @@ type
     property SidebarWidth: Integer read GetSidebarWidth write SetSidebarWidth stored FSidebarWidthExplicit;
     property OnCommandSelect: TTyBackstageSelectEvent read FOnCommandSelect write FOnCommandSelect;
     property OnClose: TNotifyEvent read FOnClose write FOnClose;
+    { The constructor turns this on (the sidebar walks with the arrow keys); declaring the
+      default to match is what lets a host turn it OFF in the .lfm — against the inherited
+      `default False` that value is dropped as "already the default". }
+    property TabStop default True;
     property Align;
     property Anchors;
     property StyleClass;

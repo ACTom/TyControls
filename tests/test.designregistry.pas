@@ -28,6 +28,11 @@ uses
 function RepoRoot: string;
 { Full path of the registration source everything here parses. }
 function DesignSourceFile: string;
+{ That source as CODE: comments blanked out (and, unless AKeepLiterals, string literals too), so
+  a caller searching for an identifier cannot be answered by prose ABOUT it. The collectors below
+  all read it through here; it is exported for the guards that ask a whole-file question rather
+  than a per-call one. }
+function DesignSourceCode(AKeepLiterals: Boolean = False): string;
 
 { The three ways into the IDE, each a distinct population with distinct obligations:
 
@@ -48,6 +53,34 @@ procedure CollectRegisteredClassNames(ADest: TStrings);
 { The classes a property editor is registered on for APropertyName, e.g. 'Version' -> the base
   classes whose Object Inspector entry opens the About dialog. }
 procedure CollectPropertyEditorBases(const APropertyName: string; ADest: TStrings);
+
+{ EVERY RegisterPropertyEditor call, one line each, as four '|'-separated fields:
+
+    <type expression>|<persistent class>|<property name>|<editor class>
+
+  verbatim from the source but with the property name's quotes stripped. A line is emitted only
+  when all four arguments are present, so an EMPTY property name (the blanket registrations that
+  match any property of a type) is unambiguous rather than indistinguishable from a short call.
+
+  Why the whole record and not just one field: the three arguments have to AGREE for an editor
+  to appear at all. RegisterPropertyEditor matches a registration to a property by comparing the
+  registered PTypeInfo with the property's own (kind AND type name — so a TypeInfo(string) editor
+  aimed at a TCaption property is simply never chosen) and the name case-insensitively against a
+  property the class really publishes. Get any of the three wrong and nothing happens: no error,
+  no warning, just a plain edit box where a dropdown was intended. Only a caller holding all four
+  fields can check that against RTTI, which is what tests/test.designeditors.pas does. }
+procedure CollectPropertyEditorRegistrations(ADest: TStrings);
+
+{ Every `TName = class(TAncestor)` declaration in the file, as <name>|<ancestor>. Lets a caller
+  follow a declared editor back to the LCL base it specialises — which is what says whether a
+  property is picked from a file dialog or typed into a box. }
+procedure CollectClassDeclarations(ADest: TStrings);
+
+{ Take one line of either collection apart again. False (and empty outputs) when the line does
+  not carry the expected field count — callers assert on that rather than reading a half-record. }
+function SplitEditorRegistration(const ALine: string;
+  out AType, ABase, AProp, AEditor: string): Boolean;
+function SplitClassDeclaration(const ALine: string; out AName, AAncestor: string): Boolean;
 
 implementation
 
@@ -131,6 +164,11 @@ begin
   finally
     sl.Free;
   end;
+end;
+
+function DesignSourceCode(AKeepLiterals: Boolean = False): string;
+begin
+  Result := LoadDesignSource(AKeepLiterals);
 end;
 
 { Every identifier starting with 'T' inside ASrc[AFrom..ATo], appended to ADest once. }
@@ -268,27 +306,25 @@ begin
   CollectDesignerBaseClassNames(ADest);
 end;
 
-{ The classes RegisterPropertyEditor actually hangs an editor on, read out of the registration
-  source rather than copied into a const somewhere.
+{ Every RegisterPropertyEditor call, read out of the registration source rather than copied into
+  a const somewhere.
 
   Why parse instead of listing: the Version set moved twice during the change that introduced
   it (a base class was added, another folded away). A hand-kept copy would have gone stale
   inside one session. Splitting on top-level commas — depth-counted, because the first argument
-  is itself a call, TypeInfo(string) — and keeping the second argument of every call whose third
-  is the wanted property literal makes the registrations themselves the source of truth. }
-procedure CollectPropertyEditorBases(const APropertyName: string; ADest: TStrings);
+  is itself a call, TypeInfo(string) — makes the registrations themselves the source of truth. }
+procedure CollectPropertyEditorRegistrations(ADest: TStrings);
 var
-  src, up, want: string;
+  src, up, prop: string;
   args: TStringList;
   p, i, depth, st, want2, got2: Integer;
 begin
   src := LoadDesignSource(True);
   up := UpperCase(src);
-  want := QuotedStr(APropertyName);
 
   { Whole-identifier match with the paren NOT glued on — the same discipline ParseCallLists
     documents a few dozen lines up. Spelling it 'REGISTERPROPERTYEDITOR(' would make a single
-    space before the paren yield an EMPTY base list, and an empty list makes the caller's
+    space before the paren yield an EMPTY list, and an empty list makes the caller's
     reachability check pass on everything: a silent shrink that reads as coverage. }
   want2 := CountBareIdentifier(up, 'REGISTERPROPERTYEDITOR');
   got2 := 0;
@@ -326,8 +362,15 @@ begin
         end;
         Inc(i);
       end;
-      if (args.Count >= 3) and (args[2] = want) and (ADest.IndexOf(args[1]) < 0) then
-        ADest.Add(args[1]);
+      { Four arguments or nothing: a short list means the walk lost the closing paren, and
+        emitting a partial record would hand the caller a registration that reads as valid. }
+      if args.Count >= 4 then
+      begin
+        prop := args[2];
+        if (Length(prop) >= 2) and (prop[1] = '''') then
+          prop := AnsiDequotedStr(prop, '''');
+        ADest.Add(args[0] + '|' + args[1] + '|' + prop + '|' + args[3]);
+      end;
     finally
       args.Free;
     end;
@@ -338,6 +381,115 @@ begin
       + ' it %d time(s) — the property-editor parser has drifted and would silently return an'
       + ' empty base list, which makes every reachability check pass vacuously',
       [got2, want2]);
+end;
+
+{ '|'-separated fields, exactly ACount of them or nothing. Written out rather than reached for
+  via TStringHelper.Split, which needs a modeswitch this unit does not enable. }
+function SplitFields(const ALine: string; ACount: Integer; out AFields: TStringArray): Boolean;
+var
+  i, st, n: Integer;
+begin
+  SetLength(AFields, ACount);
+  for i := 0 to ACount - 1 do AFields[i] := '';
+  n := 0; st := 1;
+  for i := 1 to Length(ALine) do
+    if ALine[i] = '|' then
+    begin
+      if n >= ACount then Exit(False);
+      AFields[n] := Copy(ALine, st, i - st);
+      Inc(n); st := i + 1;
+    end;
+  if n <> ACount - 1 then Exit(False);
+  AFields[n] := Copy(ALine, st, Length(ALine) - st + 1);
+  Result := True;
+end;
+
+function SplitEditorRegistration(const ALine: string;
+  out AType, ABase, AProp, AEditor: string): Boolean;
+var f: TStringArray;
+begin
+  AType := ''; ABase := ''; AProp := ''; AEditor := '';
+  Result := SplitFields(ALine, 4, f);
+  if not Result then Exit;
+  AType := f[0]; ABase := f[1]; AProp := f[2]; AEditor := f[3];
+end;
+
+function SplitClassDeclaration(const ALine: string; out AName, AAncestor: string): Boolean;
+var f: TStringArray;
+begin
+  AName := ''; AAncestor := '';
+  Result := SplitFields(ALine, 2, f);
+  if not Result then Exit;
+  AName := f[0]; AAncestor := f[1];
+end;
+
+{ The classes an editor is registered on for APropertyName, e.g. 'Version' -> the base classes
+  whose Object Inspector entry opens the About dialog. A view over the records above, so the
+  drift self-check that guards them guards this too. }
+procedure CollectPropertyEditorBases(const APropertyName: string; ADest: TStrings);
+var
+  regs: TStringList;
+  i: Integer;
+  ty, base, prop, ed: string;
+begin
+  regs := TStringList.Create;
+  try
+    CollectPropertyEditorRegistrations(regs);
+    for i := 0 to regs.Count - 1 do
+      if SplitEditorRegistration(regs[i], ty, base, prop, ed)
+         and (prop = APropertyName) and (ADest.IndexOf(base) < 0) then
+        ADest.Add(base);
+  finally
+    regs.Free;
+  end;
+end;
+
+procedure CollectClassDeclarations(ADest: TStrings);
+{ `TName = class(TAncestor)`. Walking backwards from the 'class' keyword rather than forwards
+  from an identifier is what keeps `class function` / `class procedure` / `class of` out: those
+  have no '=' behind them. A forward declaration (`TName = class;`) and an ancestor-less
+  `= class` have no '(' after the keyword and are skipped for the same reason — there is no
+  ancestor to report. }
+var
+  src, up, nm, anc: string;
+  p, e, s, a, b: Integer;
+begin
+  src := LoadDesignSource;          { comments AND literals blanked: the file builds .lfm text
+                                      containing 'class(TTyForm)' inside string literals }
+  up := UpperCase(src);
+  p := 1;
+  repeat
+    p := PosEx('CLASS', up, p);
+    if p = 0 then Break;
+    if IsWholeIdentifierAt(up, p, Length('CLASS')) then
+    begin
+      { back over whitespace to the '=' }
+      e := p - 1;
+      while (e >= 1) and (src[e] in [' ', #9, #13, #10]) do Dec(e);
+      if (e >= 1) and (src[e] = '=') then
+      begin
+        { back over whitespace again, then over the declared name }
+        s := e - 1;
+        while (s >= 1) and (src[s] in [' ', #9, #13, #10]) do Dec(s);
+        b := s;
+        while (s >= 1) and (src[s] in ['A'..'Z', 'a'..'z', '0'..'9', '_']) do Dec(s);
+        nm := Copy(src, s + 1, b - s);
+        { forward over whitespace to the ancestor's '(' }
+        a := p + Length('CLASS');
+        while (a <= Length(src)) and (src[a] in [' ', #9, #13, #10]) do Inc(a);
+        if (nm <> '') and (a <= Length(src)) and (src[a] = '(') then
+        begin
+          b := PosEx(')', src, a + 1);
+          if b > 0 then
+          begin
+            anc := Trim(Copy(src, a + 1, b - a - 1));
+            if anc <> '' then ADest.Add(nm + '|' + anc);
+          end;
+        end;
+      end;
+    end;
+    p := p + Length('CLASS');
+  until False;
 end;
 
 end.

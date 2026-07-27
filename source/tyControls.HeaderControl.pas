@@ -107,6 +107,8 @@ type
   published
     property OnSectionClick: TTyHeaderSectionEvent read FOnSectionClick write FOnSectionClick;
     property OnSectionResize: TTyHeaderResizeEvent read FOnSectionResize write FOnSectionResize;
+    // Declared True to match the constructor, so a host's TabStop=False opt-out streams.
+    property TabStop default True;
     property Align;
   end;
 
@@ -247,7 +249,14 @@ begin
   FResizeIndex := -1;
   Width := 300;
   Height := TyDensityHeight(ActiveController, TyHeaderDefaultHeight);
-  TabStop := False;
+  { A standalone strip is not chrome — it is the control the user acts on: a click on a
+    section cycles its sort and a drag on a boundary resizes it. So the click has to move
+    focus here too (TTyCustomControl.MouseDown gates that on TabStop), which is what makes
+    the sort the user just triggered show a focus ring and what lets the previously focused
+    editor commit. It used to be False, which read as "a header is decoration" — true of the
+    header BAND a grid/tree paints inside itself, but that band is not this control (this
+    one is never embedded; every user of it drops it on a form). }
+  TabStop := True;
 end;
 
 function TTyHeaderControl.GetStyleTypeKey: string;

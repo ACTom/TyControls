@@ -74,6 +74,25 @@ type
     procedure TestUndefinedConnectorKeyDrawsNoLine;
   end;
 
+  { The .lfm path, which is the one that shipped broken.
+
+    Clickable's setter couples TabStop to it, but skips that while csLoading is set — and a
+    form file that says `Clickable = True` does NOT have to carry `TabStop = True` with it
+    (TabStop's declared default is False, so a hand-written .lfm simply omits it; the
+    antdesign example is exactly this). The rail then loaded with TabStop=False: Tab could
+    not reach it and a click could not focus it either (TTyCustomControl.MouseDown gates
+    click-to-focus on TabStop), so its arrow keys — half of what Clickable buys — never got
+    a key to handle. TTySteps.Loaded re-asserts the coupling.
+
+    Note the assertion is on TabStop, not on an arrow key: KeyDown itself never looked at
+    TabStop, so sending VK_RIGHT here would pass with or without the fix. Reachability IS
+    the bug, and TabStop is what expresses it. }
+  TTyStepsStreamingTest = class(TTestCase)
+  published
+    procedure TestClickableRailStreamsInFocusable;
+    procedure TestInertRailStreamsInWithoutATabStop;
+  end;
+
 implementation
 
 type
@@ -1168,7 +1187,100 @@ begin
   end;
 end;
 
+{ --- streaming ------------------------------------------------------------------------ }
+
+type
+  { A streamable root that owns the rail (mirrors test.pagecontrol.streaming). }
+  TStepsHostForm = class(TForm)
+  published
+    Rail: TTySteps;
+  end;
+
+{ Load ALfm (LFM text) into a fresh TStepsHostForm and hand back the rail it created.
+  Goes through the REAL reader — csLoading set for the property assignments, Loaded called
+  once at the end — because that is the sequence the bug lived in. AForm is the caller's to
+  free (it owns the rail). }
+function LoadRailFromLfm(const ALfm: string; out AForm: TStepsHostForm): TTySteps;
+var
+  Text_, Bin: TMemoryStream;
+begin
+  AForm := TStepsHostForm.CreateNew(nil);
+  Text_ := TMemoryStream.Create;
+  Bin := TMemoryStream.Create;
+  try
+    Text_.Write(ALfm[1], Length(ALfm));
+    Text_.Position := 0;
+    ObjectTextToBinary(Text_, Bin);
+    Bin.Position := 0;
+    Bin.ReadComponent(AForm);
+  finally
+    Bin.Free;
+    Text_.Free;
+  end;
+  Result := AForm.FindComponent('Rail') as TTySteps;
+end;
+
+const
+  { Deliberately says nothing about TabStop — that IS the case under test. }
+  cClickableLfm =
+    'object StepsHost: TStepsHostForm' + LineEnding +
+    '  object Rail: TTySteps' + LineEnding +
+    '    Clickable = True' + LineEnding +
+    '    Items.Strings = (' + LineEnding +
+    '      ''One''' + LineEnding +
+    '      ''Two''' + LineEnding +
+    '    )' + LineEnding +
+    '  end' + LineEnding +
+    'end' + LineEnding;
+  cInertLfm =
+    'object StepsHost: TStepsHostForm' + LineEnding +
+    '  object Rail: TTySteps' + LineEnding +
+    '    Items.Strings = (' + LineEnding +
+    '      ''One''' + LineEnding +
+    '      ''Two''' + LineEnding +
+    '    )' + LineEnding +
+    '  end' + LineEnding +
+    'end' + LineEnding;
+
+procedure TTyStepsStreamingTest.TestClickableRailStreamsInFocusable;
+var
+  form_: TStepsHostForm;
+  rail: TTySteps;
+begin
+  { Guard against the fixture drifting into a test that cannot fail: the whole point is a
+    form file that carries Clickable and NOT TabStop. }
+  AssertTrue('the fixture must not mention TabStop', Pos('TabStop', cClickableLfm) = 0);
+  rail := LoadRailFromLfm(cClickableLfm, form_);
+  try
+    AssertNotNull('the rail streamed in', rail);
+    AssertTrue('Clickable survived streaming', rail.Clickable);
+    AssertEquals('and so did the items', 2, rail.Count);
+    AssertTrue('a clickable rail must load focusable, or its arrow keys are unreachable '
+      + '(nothing can give it focus: not Tab, not a click)', rail.TabStop);
+  finally
+    form_.Free;
+  end;
+end;
+
+procedure TTyStepsStreamingTest.TestInertRailStreamsInWithoutATabStop;
+var
+  form_: TStepsHostForm;
+  rail: TTySteps;
+begin
+  rail := LoadRailFromLfm(cInertLfm, form_);
+  try
+    AssertNotNull('the rail streamed in', rail);
+    AssertFalse('the default rail is an inert status display', rail.Clickable);
+    AssertFalse('so it must not eat a tab stop either', rail.TabStop);
+  finally
+    form_.Free;
+  end;
+end;
+
 initialization
+  { The reader instantiates the streamed child by class name — register it. }
+  RegisterClasses([TTySteps]);
   RegisterTest(TTyStepsRulesTest);
   RegisterTest(TTyStepsControlTest);
+  RegisterTest(TTyStepsStreamingTest);
 end.

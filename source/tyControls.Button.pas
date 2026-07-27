@@ -145,6 +145,14 @@ type
     property Caption;
     property Enabled;
     property Font;
+    { A push button is a tab stop, exactly as the native TButton is: Tab reaches it and
+      Space/Enter presses it (KeyDown below), and TTyCustomControl.MouseDown gates its
+      click-to-focus on this flag, so without it a click never moved focus off whatever
+      had it. Re-published with default True so a host that wants a particular button OUT
+      of the cycle can say TabStop=False in the .lfm and have it STREAM — with the
+      inherited `default False` a False was equal to the declared default and silently
+      dropped, leaving the constructor's True to win at run time. }
+    property TabStop default True;
     property Align;
     property Anchors;
     property StyleClass;
@@ -157,6 +165,11 @@ constructor TTyButton.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   TyAccelRegister(Self);
+  // LCL's TWinControl defaults TabStop to False, which for a button means the Space/Enter
+  // handling in KeyDown can never fire and a click cannot move focus onto it (see the
+  // gate in TTyCustomControl.MouseDown). Every descendant that must stay OUT of the tab
+  // cycle turns it back off explicitly (TTySpeedButton; TTyTransfer's rail buttons).
+  TabStop := True;
   FAnimationsEnabled := True;
   FBadgePosition := bpBottomRight;
   // Hover bg-fade animator: rest at 0 (normal), ~120ms full traversal,

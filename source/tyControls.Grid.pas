@@ -2828,6 +2828,11 @@ end;
 constructor TTyCustomGrid.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  { 网格要接键盘。这行以前只在 TTyStringGrid 里写,于是 TTyDrawGrid 明明 published 了
+    `TabStop default True`,构造出来却是 False —— 声明的默认值和实际值对不上,设计器
+    还会把 TabStop=False 写进每个 .lfm。焦点也一样收不到:TTyCustomControl.MouseDown
+    的点击取焦点是拿 TabStop 当闸门的。放到基类,两个派生网格一起对。 }
+  TabStop := True;
   { 让表头造网格自己的列类。 }
   FHeader := TTyHeader.Create(TTyGridColumn);
   FHeader.OnChange := @HeaderChanged;
@@ -2866,10 +2871,14 @@ begin
   FDragRow := -1;
   FResizeCol := -1;
 
-  { 两条内嵌滚动条。csNoDesignVisible:内部子控件不该出现在设计器的对象树里。 }
+  { 两条内嵌滚动条。csNoDesignVisible:内部子控件不该出现在设计器的对象树里。
+    TabStop:=False:独立摆放的 TTyScrollBar 是可聚焦的(它自己有方向键/翻页键),但
+    嵌在网格里的这两条不能是 —— 否则拖滚动条会把焦点从网格身上抢走,网格随即失去
+    焦点环和方向键导航,Tab 也会在一个网格里停三次。 }
   FVScroll := TTyScrollBar.Create(Self);
   FVScroll.Parent := Self;
   FVScroll.Kind := sbVertical;
+  FVScroll.TabStop := False;
   FVScroll.AnimationsEnabled := False;
   FVScroll.OnChange := @VScrollChange;
   FVScroll.ControlStyle := FVScroll.ControlStyle + [csNoDesignVisible];
@@ -2878,6 +2887,7 @@ begin
   FHScroll := TTyScrollBar.Create(Self);
   FHScroll.Parent := Self;
   FHScroll.Kind := sbHorizontal;
+  FHScroll.TabStop := False;
   FHScroll.AnimationsEnabled := False;
   FHScroll.OnChange := @HScrollChange;
   FHScroll.ControlStyle := FHScroll.ControlStyle + [csNoDesignVisible];

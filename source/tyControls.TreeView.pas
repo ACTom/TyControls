@@ -1844,9 +1844,13 @@ begin
   FDragStartPos     := Point(0, 0);
   FDropTarget       := nil;
   FDropMode         := dmNone;
+  { TabStop=False on both: a standalone TTyScrollBar is focusable (it owns arrow/page keys),
+    but a bar embedded in the tree must not be — dragging it would take focus off the tree,
+    which would then lose its focus ring and its keyboard navigation mid-scroll. }
   FVScroll := TTyScrollBar.Create(Self);
   FVScroll.Parent            := Self;
   FVScroll.Kind              := sbVertical;
+  FVScroll.TabStop           := False;
   FVScroll.AnimationsEnabled := False;
   FVScroll.OnChange          := @VScrollChange;
   FVScroll.Visible           := False;
@@ -1854,6 +1858,7 @@ begin
   FHScroll := TTyScrollBar.Create(Self);
   FHScroll.Parent            := Self;
   FHScroll.Kind              := sbHorizontal;
+  FHScroll.TabStop           := False;
   FHScroll.AnimationsEnabled := False;
   FHScroll.OnChange          := @HScrollChange;
   FHScroll.Visible           := False;

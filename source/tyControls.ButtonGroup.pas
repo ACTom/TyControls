@@ -76,6 +76,10 @@ type
     property MultiSelect: Boolean read FMultiSelect write SetMultiSelect default False;
     property ItemIndex: Integer read FItemIndex write SetItemIndex default -1;
     property OnSelectionChange: TNotifyEvent read FOnSelectionChange write FOnSelectionChange;
+    { Declared True to match the constructor, so that a host wanting this bar out of the
+      tab cycle writes TabStop=False and it actually STREAMS (against the inherited
+      `default False` that value looks like the default and is dropped). }
+    property TabStop default True;
     property Align;
     property Anchors;
     property StyleClass;
@@ -144,6 +148,10 @@ constructor TTyButtonGroup.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   TyAccelRegister(Self);
+  // A selection control, not a decoration: a click picks a segment, so the click must also
+  // move focus here (TTyCustomControl.MouseDown gates that on TabStop) and Tab must be able
+  // to reach the bar. Same call TTySegmented — the other segmented bar — already makes.
+  TabStop := True;
   FItems := TStringList.Create;
   TStringList(FItems).OnChange := @ItemsChanged;
   FMultiSelect := False;
