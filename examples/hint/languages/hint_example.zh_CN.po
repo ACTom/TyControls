@@ -43,3 +43,46 @@ msgstr "显示气泡"
 msgid "Saved"
 msgstr "已保存"
 
+#: tmainform.btndel.hint
+msgid "Delete selected items'#13#10'This action cannot be undone"
+msgstr ""
+
+#: tmainform.lblhintnote.caption
+msgid "Switch \"Themed hints\" off and hover Save: the OS tooltip returns."
+msgstr ""
+
+#: tmainform.lblballoons.caption
+msgid "Popovers: \"Show popover\" is the biInfo icon; the next three are biWarning, biError and biNone."
+msgstr ""
+
+#: tmainform.btnwarn.caption
+msgid "Warning popover"
+msgstr ""
+
+#: tmainform.btnerr.caption
+msgid "Error popover"
+msgstr ""
+
+#: tmainform.btnplain.caption
+msgid "No-icon popover"
+msgstr ""
+
+#: tmainform.lblsticky.caption
+msgid "HideInterval: those four fade out after 2 s; the sticky popover sets 0, so only HideHint closes it."
+msgstr ""
+
+#: tmainform.btnsticky.caption
+msgid "Sticky popover"
+msgstr ""
+
+#: tmainform.btnhide.caption
+msgid "Hide it (HideHint)"
+msgstr ""
+
+#: tmainform.lblscreen.caption
+msgid "ShowAt aims at any screen rect - with no room below, the body flips above and the pointer moves to its bottom edge."
+msgstr ""
+
+#: tmainform.btnscreen.caption
+msgid "Popover at the bottom of the screen"
+msgstr ""

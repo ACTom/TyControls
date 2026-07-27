@@ -51,3 +51,42 @@ msgstr "反相"
 msgid "Blur"
 msgstr "模糊"
 
+#: tmainform.btnzoomout.caption
+msgid "−"
+msgstr ""
+
+#: tmainform.btnzoomin.caption
+msgid "+"
+msgstr ""
+
+#: tmainform.btnactual.caption
+msgid "100%"
+msgstr ""
+
+#: tmainform.btngenerated.caption
+msgid "Generated image"
+msgstr ""
+
+#: tmainform.btnclear.caption
+msgid "Clear"
+msgstr ""
+
+#: tmainform.chktint.caption
+msgid "Tint"
+msgstr ""
+
+#: tmainform.lbltint.caption
+msgid "Tint is the last stage: TintColor washed over at TintAmount 35."
+msgstr ""
+
+#: tmainform.chkanim.caption
+msgid "Animate zoom"
+msgstr ""
+
+#: tmainform.chkautofit.caption
+msgid "Auto-fit on resize"
+msgstr ""
+
+#: tmainform.lblview.caption
+msgid "Uncheck either one, then zoom or resize the window, and compare."
+msgstr ""

@@ -32,8 +32,8 @@ msgid "Open"
 msgstr "打开"
 
 #: tmainform.lblgroup.caption
-msgid "Group toggle (SpeedButton)"
-msgstr "分组切换(SpeedButton)"
+msgid "Group toggle (GroupIndex = 1)"
+msgstr "分组切换（GroupIndex = 1）"
 
 #: tmainform.speed1.caption
 msgid "Left"
@@ -48,8 +48,8 @@ msgid "Right"
 msgstr "右"
 
 #: tmainform.lbldrop.caption
-msgid "Dropdown / menu button"
-msgstr "下拉 / 菜单按钮"
+msgid "Split dropdown (arrow drops) vs menu button (any click drops)"
+msgstr "分体下拉（点箭头才下拉）对比菜单按钮（点哪里都下拉）"
 
 #: tmainform.btnsave.caption
 msgid "Save"
@@ -63,3 +63,30 @@ msgstr "更多"
 msgid "Colour button / segmented bar"
 msgstr "颜色按钮 / 分段条"
 
+#: tmainform.lblgrouphint.caption
+msgid "AllowAllUp: click the pressed segment to release it."
+msgstr ""
+
+#: tmainform.lblswatch.caption
+msgid "ShowText = False"
+msgstr ""
+
+#: tmainform.lblmulti.caption
+msgid "MultiSelect (several stay down)"
+msgstr ""
+
+#: tmainform.lblimg.caption
+msgid "Image glyph (Images, same on every OS) - GlyphSize + GlyphColor"
+msgstr ""
+
+#: tmainform.btnimg.caption
+msgid "Save"
+msgstr ""
+
+#: tmainform.btnbigglyph.caption
+msgid "GlyphSize 20"
+msgstr ""
+
+#: tmainform.lblstatus.caption
+msgid "(click a button, a segment or the colour button)"
+msgstr ""

@@ -20,8 +20,8 @@ msgid "Dark"
 msgstr "暗色"
 
 #: tmainform.lblstatus.caption
-msgid "Drag the vertical splitter to change the left column width; drag the horizontal splitter to change the top band height"
-msgstr "拖动竖直分隔条改变左栏宽度；拖动水平分隔条改变上区高度"
+msgid "Drag any splitter · OnCanResize caps a pane at 400 px · the top band only resizes on mouse-up (rsLine)"
+msgstr "拖动任一分隔条 · OnCanResize 把窗格封顶在 400 px · 顶部区域松开鼠标才改尺寸（rsLine）"
 
 #: tmainform.leftpanel.caption
 msgid "Left column (alLeft)"

@@ -28,8 +28,8 @@ msgid "Ring (gsRing):"
 msgstr "环形(gsRing):"
 
 #: tmainform.lblcirc.caption
-msgid "Ring progress:"
-msgstr "环形进度:"
+msgid "Ring progress (0..250):"
+msgstr "环形进度（0..250）："
 
 #: tmainform.lblbars.caption
 msgid "Linear (gsLinearH / gsLinearV):"
@@ -47,3 +47,22 @@ msgstr "微调(TTyUpDown) = 5"
 msgid "Every 1.2s the value changes at random (drag the knob / gear / wheel, click the stars) — watch the easing animation."
 msgstr "每 1.2s 随机改变数值(旋钮 / 齿轮可拖动 / 滚轮,星星可点),观察缓动动画。"
 
+#: tmainform.lblknobs.caption
+msgid "Dial, gear and rating report here (wheel / arrows step by 5 and 10)."
+msgstr ""
+
+#: tmainform.lblrowa.caption
+msgid "gsLinearV bar, loVertical meter, half arc (180/180), static clock:"
+msgstr ""
+
+#: tmainform.lblbusysw.caption
+msgid "Busy indicators:"
+msgstr ""
+
+#: tmainform.lblrowb.caption
+msgid "ssBar sparkline, fixed range 0-20, no last dot / read-only 10-star rating:"
+msgstr ""
+
+#: tmainform.lblupdownh.caption
+msgid "Horizontal spinner: Increment 5, Wrap 20 -> 0 (Position = 5)"
+msgstr ""

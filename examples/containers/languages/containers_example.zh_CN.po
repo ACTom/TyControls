@@ -239,3 +239,126 @@ msgstr "带 2(拖抓手改宽)"
 msgid "Bottom-right → size grip TTySizeBox (drag to resize the window)"
 msgstr "右下角 → 尺寸手柄 TTySizeBox(拖动改变窗口大小)"
 
+#: tmainform.lblwrap.caption
+msgid "Wrapable = True — the same 12 commands wrap to a second row instead of collapsing into »"
+msgstr ""
+
+#: tmainform.wrapbtn1.caption
+msgid "Command 1"
+msgstr ""
+
+#: tmainform.wrapbtn2.caption
+msgid "Command 2"
+msgstr ""
+
+#: tmainform.wrapbtn3.caption
+msgid "Command 3"
+msgstr ""
+
+#: tmainform.wrapbtn4.caption
+msgid "Command 4"
+msgstr ""
+
+#: tmainform.wrapbtn5.caption
+msgid "Command 5"
+msgstr ""
+
+#: tmainform.wrapbtn6.caption
+msgid "Command 6"
+msgstr ""
+
+#: tmainform.wrapbtn7.caption
+msgid "Command 7"
+msgstr ""
+
+#: tmainform.wrapbtn8.caption
+msgid "Command 8"
+msgstr ""
+
+#: tmainform.wrapbtn9.caption
+msgid "Command 9"
+msgstr ""
+
+#: tmainform.wrapbtn10.caption
+msgid "Command 10"
+msgstr ""
+
+#: tmainform.wrapbtn11.caption
+msgid "Command 11"
+msgstr ""
+
+#: tmainform.wrapbtn12.caption
+msgid "Command 12"
+msgstr ""
+
+#: tmainform.lblvlines.caption
+msgid "Vertical edge lines — tbsLeftLine (sunken) then tbsRightLine (raised):"
+msgstr ""
+
+#: tmainform.lblspacer.caption
+msgid "tbsSpacer = invisible gap"
+msgstr ""
+
+#: tmainform.lblpan.caption
+msgid "TTyScrollPanel — press in the empty strip and drag toward the top/bottom edge: it keeps scrolling."
+msgstr ""
+
+#: tmainform.panbtn1.caption
+msgid "Row 1"
+msgstr ""
+
+#: tmainform.panbtn2.caption
+msgid "Row 2"
+msgstr ""
+
+#: tmainform.panbtn3.caption
+msgid "Row 3"
+msgstr ""
+
+#: tmainform.panbtn4.caption
+msgid "Row 4"
+msgstr ""
+
+#: tmainform.panbtn5.caption
+msgid "Row 5"
+msgstr ""
+
+#: tmainform.panbtn6.caption
+msgid "Row 6"
+msgstr ""
+
+#: tmainform.panbtn7.caption
+msgid "Row 7"
+msgstr ""
+
+#: tmainform.panbtn8.caption
+msgid "Row 8"
+msgstr ""
+
+#: tmainform.panbtn9.caption
+msgid "Row 9"
+msgstr ""
+
+#: tmainform.panbtn10.caption
+msgid "Row 10"
+msgstr ""
+
+#: tmainform.lblex2.caption
+msgid "Starts collapsed · slow 500 ms open/close ease:"
+msgstr ""
+
+#: tmainform.exdisplay.caption
+msgid "Display options (click to expand)"
+msgstr ""
+
+#: tmainform.chkruler.caption
+msgid "Show ruler"
+msgstr ""
+
+#: tmainform.chkguides.caption
+msgid "Show guides"
+msgstr ""
+
+#: tmainform.lbllog.caption
+msgid "Status — group / header / list / panel events report here"
+msgstr ""

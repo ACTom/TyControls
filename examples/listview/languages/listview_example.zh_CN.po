@@ -64,8 +64,8 @@ msgid "Unchecked"
 msgstr "未选中"
 
 #: tmainform.lblhint.caption
-msgid "Sort by \"Size\" descending, folders still last; F2 renames the focused item; double-click a header separator to auto-fit the column"
-msgstr "按「大小」降序排,文件夹仍在最后;F2 重命名焦点项;双击表头分隔线自适应列宽"
+msgid "Blank cells always sort last · F2 renames — folders are refused by OnEditing · click a group band to fold it"
+msgstr "空单元格恒排在最后 · F2 重命名 —— 文件夹会被 OnEditing 拒绝 · 点击分组条可折叠"
 
 #: tmainform.divright.caption
 msgid "Virtual mode — 100,000 rows"
@@ -87,3 +87,30 @@ msgstr "ItemCount = 100000,行对象 = 0"
 msgid "The checked state lives in the app's own array — in OwnerData mode the control caches no state"
 msgstr "勾选态存在 app 自己的数组里 —— OwnerData 模式下控件不缓存任何状态"
 
+#: tmainform.btngrow.caption
+msgid "Add 50,000 rows"
+msgstr ""
+
+#: tmainform.btnselectall.caption
+msgid "Select all"
+msgstr ""
+
+#: tmainform.btnclearsel.caption
+msgid "Clear selection"
+msgstr ""
+
+#: tmainform.chkheaders.caption
+msgid "Column headers"
+msgstr ""
+
+#: tmainform.chkcustomsort.caption
+msgid "Custom comparator — folders always first"
+msgstr ""
+
+#: tmainform.chkgroupvirtual.caption
+msgid "Group the virtual list (OnGetItemGroup)"
+msgstr ""
+
+#: tmainform.lblextras.caption
+msgid "Select all / Clear selection never touch the mouse · OnCompare outranks SortKind · the virtual list pins RowHeight = 28, the left one follows the theme"
+msgstr ""

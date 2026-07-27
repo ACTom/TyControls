@@ -248,3 +248,55 @@ msgstr "可换肤 / 可样式化的 Lazarus 控件库"
 #: mainform.rsaboutshown
 msgid "About: dialog shown"
 msgstr "关于：已显示对话框"
+
+#: tdialogsmainform.lblmsgtypes.caption
+msgid "Message types and more global entry points: watch the icon and button order change."
+msgstr ""
+
+#: tdialogsmainform.btnmsginfo.caption
+msgid "Information"
+msgstr ""
+
+#: tdialogsmainform.btnmsgwarning.caption
+msgid "Warning"
+msgstr ""
+
+#: tdialogsmainform.btnmsgerror.caption
+msgid "Error (3 buttons)"
+msgstr ""
+
+#: tdialogsmainform.btnshowmessage.caption
+msgid "Show message"
+msgstr ""
+
+#: tdialogsmainform.btnmessagepos.caption
+msgid "Message at 40,40"
+msgstr ""
+
+#: tdialogsmainform.btnselectpathrooted.caption
+msgid "Select path (root)"
+msgstr ""
+
+#: tdialogsmainform.btnclosefind.caption
+msgid "Close find"
+msgstr ""
+
+#: tdialogsmainform.btncustomdialog.caption
+msgid "Custom dialog"
+msgstr ""
+
+#: tdialogsmainform.lblcomponents.caption
+msgid "Component API: dialogs dropped on the form, configured as properties, run by Execute."
+msgstr ""
+
+#: tdialogsmainform.btncompmessage.caption
+msgid "Message (component)"
+msgstr ""
+
+#: tdialogsmainform.btncompinput.caption
+msgid "Input (component)"
+msgstr ""
+
+#: tdialogsmainform.btncompcolor.caption
+msgid "Color (component)"
+msgstr ""

@@ -31,3 +31,62 @@ msgstr "只读 (ReadOnly)"
 msgid "Word wrap (WordWrap)"
 msgstr "自动换行 (WordWrap)"
 
+#: tmainform.btnselectall.caption
+msgid "Select all"
+msgstr ""
+
+#: tmainform.btncopy.caption
+msgid "Copy"
+msgstr ""
+
+#: tmainform.btncut.caption
+msgid "Cut"
+msgstr ""
+
+#: tmainform.btnpaste.caption
+msgid "Paste"
+msgstr ""
+
+#: tmainform.btnundo.caption
+msgid "Undo"
+msgstr ""
+
+#: tmainform.btnredo.caption
+msgid "Redo"
+msgstr ""
+
+#: tmainform.lblkeys.caption
+msgid "Same edits from the keyboard: Ctrl+Z undo, Ctrl+Y or Ctrl+Shift+Z redo."
+msgstr ""
+
+#: tmainform.lbloptions.caption
+msgid "Tick a property, then type in the memo (HideSelection dims the band on blur):"
+msgstr ""
+
+#: tmainform.chkhidesel.caption
+msgid "HideSelection"
+msgstr ""
+
+#: tmainform.chkwanttabs.caption
+msgid "WantTabs - on: Tab inserts a tab; off: Tab jumps to the next control"
+msgstr ""
+
+#: tmainform.chkwantreturns.caption
+msgid "WantReturns - untick it and Enter fires the OK button"
+msgstr ""
+
+#: tmainform.btndefault.caption
+msgid "OK"
+msgstr ""
+
+#: tmainform.chklimit.caption
+msgid "MaxLength = 800 - typing stops at the cap, a paste is truncated to fit"
+msgstr ""
+
+#: tmainform.lblscroll.caption
+msgid "ScrollBars"
+msgstr ""
+
+#: tmainform.lblscrollhint.caption
+msgid "horizontal bar needs WordWrap off"
+msgstr ""

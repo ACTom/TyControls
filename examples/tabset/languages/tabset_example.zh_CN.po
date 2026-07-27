@@ -19,3 +19,26 @@ msgstr "TTyTabSet 示例"
 msgid "Dark"
 msgstr "暗色"
 
+#: tmainform.lblkeys.caption
+msgid "Hold Alt to reveal the mnemonic underlines, then Alt+O / Alt+D / Alt+S / Alt+A jump to a tab (Alt+N lands on the vetoed one). Ctrl+Tab wraps; Home and End go to the ends."
+msgstr ""
+
+#: tmainform.btnadd.caption
+msgid "+ Add tab"
+msgstr ""
+
+#: tmainform.lbladd.caption
+msgid "Tabs is a live TStrings: closed tabs come back."
+msgstr ""
+
+#: tmainform.lblstatus.caption
+msgid "Current tab: Overview'#13#10'Tip: click to switch · drag to reorder · click × to close · the \"Notice (locked)\" tab cannot be selected"
+msgstr ""
+
+#: tmainform.lblnarrow.caption
+msgid "Eight tabs in 200 px: click the arrows at each end, or roll the wheel over the strip."
+msgstr ""
+
+#: tmainform.lbldensity.caption
+msgid "TabHeight unset there: it follows the theme — 28 classic, 38 modern."
+msgstr ""

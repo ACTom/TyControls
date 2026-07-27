@@ -24,10 +24,17 @@ msgid "Read-only dropdown (Sorted, keyboard type-ahead):"
 msgstr "只读下拉（Sorted 排序，可键盘 type-ahead）："
 
 #: tmainform.lbledit.caption
-msgid "Editable (prefix autocomplete / uppercase / max length 10):"
-msgstr "可编辑（前缀自动完成 / 大写 / 限长 10）："
+msgid "Editable (Text preset, prefix autocomplete / uppercase / max length 10):"
+msgstr "可编辑（预置 Text，前缀自动完成 / 大写 / 限长 10）："
 
 #: tmainform.lblstatus.caption
 msgid "Event state: (awaiting action, try expanding or typing a prefix)"
 msgstr "事件状态：（等待操作，尝试展开或键入前缀）"
 
+#: tmainform.lblapi.caption
+msgid "Programmatic DropDown / CloseUp — watch the same events fire:"
+msgstr ""
+
+#: tmainform.btntogglelist.caption
+msgid "Open / close the list"
+msgstr ""

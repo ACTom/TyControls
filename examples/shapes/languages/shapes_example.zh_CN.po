@@ -84,6 +84,81 @@ msgid "Green"
 msgstr "绿色"
 
 #: tmainform.lblthemehint.caption
-msgid "The controls added this batch introduce no theme token: all three return TyPanel from GetStyleTypeKey"
-msgstr "本批新增控件不引入任何主题 token:三者的 GetStyleTypeKey 都返回 TyPanel"
+msgid "Each control has its own theme key (TyShape / TyStarShape / TyArrow), so a skin can restyle shapes without touching panels"
+msgstr "每个控件都有自己的主题键（TyShape / TyStarShape / TyArrow），所以皮肤可以只改形状而不碰面板"
 
+#: tmainform.lblrect.caption
+msgid "tskRectangle"
+msgstr ""
+
+#: tmainform.lblround.caption
+msgid "tskRoundRect"
+msgstr ""
+
+#: tmainform.lblsquare.caption
+msgid "tskSquare"
+msgstr ""
+
+#: tmainform.lblellipse.caption
+msgid "tskEllipse"
+msgstr ""
+
+#: tmainform.lblcircle.caption
+msgid "tskCircle"
+msgstr ""
+
+#: tmainform.lbltriangle.caption
+msgid "tskTriangle"
+msgstr ""
+
+#: tmainform.lbldiamond.caption
+msgid "tskDiamond"
+msgstr ""
+
+#: tmainform.lblline.caption
+msgid "tskLine"
+msgstr ""
+
+#: tmainform.lblover2.caption
+msgid "var(--accent)"
+msgstr ""
+
+#: tmainform.lblnoborder.caption
+msgid "border-style: none"
+msgstr ""
+
+#: tmainform.lblzerowidth.caption
+msgid "border-width: 0"
+msgstr ""
+
+#: tmainform.lbloutline.caption
+msgid "background: transparent (outline only)"
+msgstr ""
+
+#: tmainform.lblradius.caption
+msgid "border-radius: 28px — overrides the theme radius (max half the shorter side)"
+msgstr ""
+
+#: tmainform.btnclamp.caption
+msgid "Try Points = 1, InnerRatio = 2.0"
+msgstr ""
+
+#: tmainform.lblarrright.caption
+msgid "tadRight"
+msgstr ""
+
+#: tmainform.lblarrleft.caption
+msgid "tadLeft"
+msgstr ""
+
+#: tmainform.lblarrup.caption
+msgid "tadUp"
+msgstr ""
+
+#: tmainform.lblarrdown.caption
+msgid "tadDown"
+msgstr ""
+
+#: tmainform.lblthemecss.caption
+msgid "e.g. in a .tycss:  TyStarShape { background: #E8C547; border-color: #6B5310; }"
+msgstr ""

@@ -47,3 +47,22 @@ msgstr "禁用且勾选 (Enabled=False)"
 msgid "Disabled and unchecked"
 msgstr "禁用且未勾选"
 
+#: tmainform.lbleventshdr.caption
+msgid "OnClick vs OnChange (OnChange also fires on a code write):"
+msgstr ""
+
+#: tmainform.cbevents.caption
+msgid "OnClick vs OnChange"
+msgstr ""
+
+#: tmainform.btntoggle.caption
+msgid "Toggle in code"
+msgstr ""
+
+#: tmainform.lblevents.caption
+msgid "(no event yet - click the box, then press the button)"
+msgstr ""
+
+#: tmainform.lblkeys.caption
+msgid "Keyboard: Alt+A / Alt+N activate the &&-marked boxes (the underline shows while Alt is held); Space toggles the focused box."
+msgstr ""

@@ -59,3 +59,26 @@ msgstr "取消(Esc)"
 msgid "Click count: 0"
 msgstr "点击次数:0"
 
+#: tmainform.btninbox.caption
+msgid "Inbox (badge hidden at 0)"
+msgstr ""
+
+#: tmainform.lblanimbadgehint.caption
+msgid "AnimationsEnabled = False makes the left button snap on hover instead of fading; OnBadgeDisplay keeps the Inbox badge hidden until its value passes 0."
+msgstr ""
+
+#: tmainform.btnnoanim.caption
+msgid "No hover fade"
+msgstr ""
+
+#: tmainform.btninboxadd.caption
+msgid "Add one to Inbox"
+msgstr ""
+
+#: tmainform.lblautohint.caption
+msgid "AutoSize = True: the designed Width = 100 is overrun at run time so the whole caption fits, where a fixed-width button ellipsises it."
+msgstr ""
+
+#: tmainform.btnauto.caption
+msgid "AutoSize=True: I grow to fit this long caption"
+msgstr ""

@@ -51,3 +51,58 @@ msgstr "绿色"
 msgid "Blue"
 msgstr "蓝色"
 
+#: tmainform.lblstatus.caption
+msgid ""
+msgstr ""
+
+#: tmainform.lblgroupidxhead.caption
+msgid "GroupIndex - one box, two selections that ignore each other"
+msgstr ""
+
+#: tmainform.sizesmall.caption
+msgid "&Small"
+msgstr ""
+
+#: tmainform.sizemedium.caption
+msgid "&Medium"
+msgstr ""
+
+#: tmainform.sizelarge.caption
+msgid "&Large"
+msgstr ""
+
+#: tmainform.shipstandard.caption
+msgid "S&tandard post"
+msgstr ""
+
+#: tmainform.shipexpress.caption
+msgid "&Express courier"
+msgstr ""
+
+#: tmainform.shipexpress.hint
+msgid "GroupIndex 1: picking here never clears the Size column"
+msgstr ""
+
+#: tmainform.lblgroupidxstatus.caption
+msgid "GroupIndex 0: (none)     GroupIndex 1: (none)"
+msgstr ""
+
+#: tmainform.lblmnemonic.caption
+msgid "Hold Alt - each caption underlines its mnemonic; Alt+key picks"
+msgstr ""
+
+#: tmainform.lblstyle.caption
+msgid "StyleOverride - square indicator; these two group by Parent"
+msgstr ""
+
+#: tmainform.styleradioa.caption
+msgid "Square dot A"
+msgstr ""
+
+#: tmainform.styleradiob.caption
+msgid "Square dot B"
+msgstr ""
+
+#: tmainform.lblevents.caption
+msgid "OnChange x0, OnClick x0 - one pick fires OnChange twice"
+msgstr ""

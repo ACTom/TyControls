@@ -28,8 +28,8 @@ msgid "Right-click this panel → enhanced menu (section headers + icon column +
 msgstr "右键此面板 → 增强菜单(分节标题 + 图标列 + 勾选项)"
 
 #: tmainform.statuslabel.caption
-msgid "Ready: right-click the panel to try the enhanced menu; double-click the title bar to roll up the window (double-click again to restore)"
-msgstr "就绪：右键面板试增强菜单；双击标题栏可卷起窗口（再双击还原）"
+msgid "Ready: shortcuts fire with the menu closed - press Ctrl+N. Submenus open on hover (Right walks in, Left walks back out). Greyed rows (Redo, Paste) are Enabled = False."
+msgstr "就绪：菜单关闭时快捷键照样生效 —— 按 Ctrl+N 试试。子菜单悬停即开（→ 进入，← 退出）。变灰的项（重做、粘贴）是 Enabled = False。"
 
 #: tmainform.mnufile.caption
 msgid "File(&F)"
@@ -123,3 +123,138 @@ msgstr "刷新(&R)"
 msgid "Properties(&P)"
 msgstr "属性(&P)"
 
+#: tmainform.lblmenuhint.caption
+msgid "Menu bar: View has a Theme submenu (hover opens it; Right walks in, Left walks back out) and radio icon-size rows; Edit draws right-aligned shortcuts and greys out Redo."
+msgstr ""
+
+#: tmainform.lblpopupa.caption
+msgid "TTyMenuEx: side banner, section headers, icon column, a check item, a \"Send to\" submenu and a bold Default row."
+msgstr ""
+
+#: tmainform.lblpopupb.caption
+msgid "TTyPopupMenu: the same themed renderer with no images, no headers and no banner."
+msgstr ""
+
+#: tmainform.lblminibar.caption
+msgid "AutoSizeWidth = True shrinks a non-docked bar to fit its top items:"
+msgstr ""
+
+#: tmainform.lblrollup.caption
+msgid "Window roll-up: CaptionAction decides what a double-click on the title bar does."
+msgstr ""
+
+#: tmainform.btnrollup.caption
+msgid "Roll up / restore"
+msgstr ""
+
+#: tmainform.lblcaptionaction.caption
+msgid "CaptionAction:"
+msgstr ""
+
+#: tmainform.mnufilesep1.caption
+msgid "-"
+msgstr ""
+
+#: tmainform.mnueditsep1.caption
+msgid "-"
+msgstr ""
+
+#: tmainform.mnuviewsep1.caption
+msgid "-"
+msgstr ""
+
+#: tmainform.mnuviewsep2.caption
+msgid "-"
+msgstr ""
+
+#: tmainform.mnuviewsmall.caption
+msgid "Small icons"
+msgstr ""
+
+#: tmainform.mnuviewmedium.caption
+msgid "Medium icons"
+msgstr ""
+
+#: tmainform.mnuviewlarge.caption
+msgid "Large icons"
+msgstr ""
+
+#: tmainform.mnuviewsep3.caption
+msgid "-"
+msgstr ""
+
+#: tmainform.mnuviewtheme.caption
+msgid "Theme(&T)"
+msgstr ""
+
+#: tmainform.mnuthemelight.caption
+msgid "Light(&L)"
+msgstr ""
+
+#: tmainform.mnuthemedark.caption
+msgid "Dark(&D)"
+msgstr ""
+
+#: tmainform.mnuthemesystem.caption
+msgid "System(&S)"
+msgstr ""
+
+#: tmainform.mnutools.caption
+msgid "Tools(&T)"
+msgstr ""
+
+#: tmainform.mnutoolsoptions.caption
+msgid "Options"
+msgstr ""
+
+#: tmainform.mnutoolsmacros.caption
+msgid "Macros"
+msgstr ""
+
+#: tmainform.mnuhelp.caption
+msgid "Help(&H)"
+msgstr ""
+
+#: tmainform.mnuhelpcontents.caption
+msgid "Contents"
+msgstr ""
+
+#: tmainform.mnuhelpabout.caption
+msgid "About"
+msgstr ""
+
+#: tmainform.popsep1.caption
+msgid "-"
+msgstr ""
+
+#: tmainform.popsendto.caption
+msgid "Send to"
+msgstr ""
+
+#: tmainform.popsenddesktop.caption
+msgid "Desktop"
+msgstr ""
+
+#: tmainform.popsendmail.caption
+msgid "Mail recipient"
+msgstr ""
+
+#: tmainform.popsendzip.caption
+msgid "Compressed folder"
+msgstr ""
+
+#: tmainform.popsep2.caption
+msgid "-"
+msgstr ""
+
+#: tmainform.plaincut.caption
+msgid "Cut(&T)"
+msgstr ""
+
+#: tmainform.plaincopy.caption
+msgid "Copy(&C)"
+msgstr ""
+
+#: tmainform.plainpaste.caption
+msgid "Paste(&P)"
+msgstr ""

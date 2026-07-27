@@ -44,8 +44,8 @@ msgid "URL (TTyURLEdit, click →):"
 msgstr "URL(TTyURLEdit,点 →):"
 
 #: tmainform.l7.caption
-msgid "Dropdown (TTyComboEdit):"
-msgstr "下拉(TTyComboEdit):"
+msgid "Dropdown (TTyComboEdit hosts any popup):"
+msgstr "下拉（TTyComboEdit 可承载任意弹出层）："
 
 #: tmainform.l8.caption
 msgid "Slider value (TTyTrackEdit, 0..255):"
@@ -120,8 +120,8 @@ msgid "Calculator value (TTyCalcEdit, click the small button at the end):"
 msgstr "计算器数值(TTyCalcEdit,点尾部小按钮):"
 
 #: tmainform.l26.caption
-msgid "Calculator currency (TTyCalcCurrencyEdit):"
-msgstr "计算器货币(TTyCalcCurrencyEdit):"
+msgid "Calculator currency (SymbolBefore = False → 1,234.50 €):"
+msgstr "计算器货币（SymbolBefore = False → 1,234.50 €）："
 
 #: tmainform.fecho.caption
 msgid "Clamped value = 42.00"
@@ -131,3 +131,38 @@ msgstr "限幅值 = 42.00"
 msgid "Try: digits / minus / decimal point only; the thousands separator is dropped on focus for easy editing and regrouped on blur; enter a value >100 in the clamped field and it clamps to 100 on blur."
 msgstr "试试:只能输数字 / 负号 / 小数点;聚焦时去掉千分位方便编辑,失焦后重新分组;限幅框输入 >100 的值,失焦后夹紧到 100。"
 
+#: tmainform.furl.text
+msgid "https://github.com/ACTom/TyControls"
+msgstr ""
+
+#: tmainform.l27.caption
+msgid "Every picker reports through OnChange — read Selected / SelectedColor:"
+msgstr ""
+
+#: tmainform.lblpick.caption
+msgid "Picked: (click a swatch)"
+msgstr ""
+
+#: tmainform.l28.caption
+msgid "SelectedFont + FontSize drive this preview (size capped at 28 to fit):"
+msgstr ""
+
+#: tmainform.lblfontpreview.caption
+msgid "Handgloves"
+msgstr ""
+
+#: tmainform.lblfontecho.caption
+msgid "SelectedFont / FontSize land here"
+msgstr ""
+
+#: tmainform.l29.caption
+msgid "OnClickCheck / OnChange fire; read CheckedCount:"
+msgstr ""
+
+#: tmainform.lblchecks.caption
+msgid "CheckListBox: 0 · CheckComboBox: 0"
+msgstr ""
+
+#: tmainform.chksheetlock.caption
+msgid "Lock the whole sheet — ValueListEditor.ReadOnly blocks every value cell"
+msgstr ""

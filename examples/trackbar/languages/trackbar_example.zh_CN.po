@@ -28,8 +28,8 @@ msgid "Balance (-50..50):"
 msgstr "平衡（-50..50）："
 
 #: tmainform.lblbrightness.caption
-msgid "Brightness (0..200, PageSize/Frequency=25):"
-msgstr "亮度（0..200，PageSize/Frequency=25）："
+msgid "Brightness (Freq/PageSize 25, ShowValue on):"
+msgstr "亮度（Freq/PageSize 25，ShowValue 开）："
 
 #: tmainform.lblvertical.caption
 msgid "Vertical:"
@@ -39,3 +39,34 @@ msgstr "垂直："
 msgid "Volume: 50"
 msgstr "音量：50"
 
+#: tmainform.lblshowvaluehint.caption
+msgid "ShowValue = True: the number is drawn by the bar itself."
+msgstr ""
+
+#: tmainform.lblverticalhint.caption
+msgid "Vertical: ticks (Frequency = 10) right, its number below."
+msgstr ""
+
+#: tmainform.lbllinesize.caption
+msgid "Fine step (LineSize = 5 - arrows and the wheel move by 5):"
+msgstr ""
+
+#: tmainform.lblanimhint.caption
+msgid "Flips AnimationsEnabled (code only)."
+msgstr ""
+
+#: tmainform.lblkeystitle.caption
+msgid "Keyboard and wheel (click a bar to focus it first):"
+msgstr ""
+
+#: tmainform.lblkeys1.caption
+msgid "Left/Right (Up/Down when vertical) step by LineSize."
+msgstr ""
+
+#: tmainform.lblkeys2.caption
+msgid "PageUp/PageDown step by PageSize; Home/End jump to Min/Max."
+msgstr ""
+
+#: tmainform.lblkeys3.caption
+msgid "The wheel steps by LineSize; a click jumps the thumb there."
+msgstr ""

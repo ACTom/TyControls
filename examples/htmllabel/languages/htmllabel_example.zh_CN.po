@@ -20,6 +20,17 @@ msgid "Dark"
 msgstr "暗色"
 
 #: tmainform.lblstatus.caption
-msgid "Click the link above"
-msgstr "点击上面的链接试试"
+msgid "Click either link above"
+msgstr "点击上面任一链接"
 
+#: tmainform.lblheadmarkup.caption
+msgid "Markup and links, all set at design time in the .lfm — nothing here is assigned in code"
+msgstr ""
+
+#: tmainform.lblheadnowrap.caption
+msgid "WordWrap = False — watch the line run straight off the right edge instead of reflowing"
+msgstr ""
+
+#: tmainform.lblheadautosize.caption
+msgid "AutoSize = True — drag the window narrower and watch this label grow taller on its own"
+msgstr ""

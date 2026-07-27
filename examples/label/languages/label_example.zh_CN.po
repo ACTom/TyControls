@@ -20,8 +20,8 @@ msgid "Dark"
 msgstr "暗色"
 
 #: tmainform.lblhead.caption
-msgid "Tag features at a glance"
-msgstr "标签特性一览"
+msgid "Heading via StyleOverride (font-size 13px, weight 600)"
+msgstr "用 StyleOverride 做标题（font-size 13px，weight 600）"
 
 #: tmainform.lblleft.caption
 msgid "Left align (taLeftJustify)"
@@ -51,3 +51,34 @@ msgstr "WordWrap=True : this label wraps onto several lines because the words ar
 msgid "Name(&N):"
 msgstr "姓名(&N)："
 
+#: tmainform.lbllayouthead.caption
+msgid "Layout: three 56px boxes, three vertical placements"
+msgstr ""
+
+#: tmainform.lbllayouttop.caption
+msgid "Layout = tlTop (text sits at the top of a 56px box)"
+msgstr ""
+
+#: tmainform.lbllayoutcenter.caption
+msgid "Layout = tlCenter (the default - vertically centred)"
+msgstr ""
+
+#: tmainform.lbllayoutbottom.caption
+msgid "Layout = tlBottom (text sits on the bottom edge)"
+msgstr ""
+
+#: tmainform.lblwrapautohead.caption
+msgid "AutoSize + WordWrap: the box keeps its width and grows its height"
+msgstr ""
+
+#: tmainform.lblwrapauto.caption
+msgid "AutoSize=True + WordWrap=True: the label keeps its width and grows its HEIGHT to fit however many lines the text needs - widen the window and watch the box re-wrap and re-fit by itself."
+msgstr ""
+
+#: tmainform.lblclick.caption
+msgid "Click me: TTyLabel fires OnClick like any other control"
+msgstr ""
+
+#: tmainform.lblaccent.caption
+msgid "StyleOverride = color: var(--accent) - still theme-aware"
+msgstr ""

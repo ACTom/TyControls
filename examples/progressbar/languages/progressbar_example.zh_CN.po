@@ -43,3 +43,30 @@ msgstr "前进 +10"
 msgid "Reset to zero"
 msgstr "归零"
 
+#: tmainform.lblorient.caption
+msgid "Orientation = tpoVertical - fills bottom-up, same Position"
+msgstr ""
+
+#: tmainform.vertbar.hint
+msgid "Same Position as the wide bar, but the fill grows upward"
+msgstr ""
+
+#: tmainform.lblrange.caption
+msgid "Min / Max are free - this one runs 20..60"
+msgstr ""
+
+#: tmainform.lblrangereadout.caption
+msgid "Position 20 in 20..60  (0%)"
+msgstr ""
+
+#: tmainform.lbloverride.caption
+msgid "StyleOverride - square accent track. Click to seek."
+msgstr ""
+
+#: tmainform.lbldisabled.caption
+msgid "Enabled = False - the theme dims track and fill together"
+msgstr ""
+
+#: tmainform.lbldock.caption
+msgid "Align = alBottom - a strip that stretches with the window"
+msgstr ""

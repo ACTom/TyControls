@@ -47,3 +47,26 @@ msgstr "文件类型:"
 msgid "Double-click a folder to enter, double-click a file to open, F2 to rename"
 msgstr "双击文件夹进入,双击文件打开,F2 重命名"
 
+#: tmainform.chkfoldersfirst.caption
+msgid "Folders first"
+msgstr ""
+
+#: tmainform.chkmulti.caption
+msgid "Multi-select"
+msgstr ""
+
+#: tmainform.btnrefresh.caption
+msgid "Refresh"
+msgstr ""
+
+#: tmainform.lblview.caption
+msgid "View:"
+msgstr ""
+
+#: tmainform.lblhint.caption
+msgid "Pick a View style; clear \"Folders first\" and click Name twice to drop folders below files; Refresh keeps the selection"
+msgstr ""
+
+#: tmainform.lblselection.caption
+msgid "Ctrl/Shift-click rows: SelCount and SelectedFile report the selection here"
+msgstr ""

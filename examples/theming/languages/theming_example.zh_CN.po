@@ -67,3 +67,54 @@ msgstr "可编辑文本框"
 msgid "Checkbox example"
 msgstr "复选框示例"
 
+#: tmainform.lbladvanced.caption
+msgid "Four more layers of the same theme system"
+msgstr ""
+
+#: tmainform.btnauto.caption
+msgid "Auto (follow OS)"
+msgstr ""
+
+#: tmainform.lblfollowhint.caption
+msgid "Auto re-checks the OS scheme every 750 ms - flip Windows dark mode and the window follows."
+msgstr ""
+
+#: tmainform.lbldensityhint.caption
+msgid "Modern density keeps the skin colours but re-resolves radius, padding and control sizes."
+msgstr ""
+
+#: tmainform.chkhotreload.caption
+msgid "Hot-reload"
+msgstr ""
+
+#: tmainform.lblhothint.caption
+msgid "Watches ThemeFile only: ticking this loads green.tycss - edit and save it to see it reload."
+msgstr ""
+
+#: tmainform.btnoverlay.caption
+msgid "Overlay a tweak"
+msgstr ""
+
+#: tmainform.lbllayerhint.caption
+msgid "Adds a CSS layer over the live theme: accent and radius change, the skin stays."
+msgstr ""
+
+#: tmainform.btncustom.caption
+msgid "Custom file"
+msgstr ""
+
+#: tmainform.lblcustomhint.caption
+msgid "Loads custom.tycss from this example folder - the write-your-own-theme-file path."
+msgstr ""
+
+#: tmainform.btnoverride.caption
+msgid "Overridden"
+msgstr ""
+
+#: tmainform.lblovrhint.caption
+msgid "StyleOverride pins per-instance CSS above the theme; var(--accent) still tracks a skin switch."
+msgstr ""
+
+#: tmainform.lbllistener.caption
+msgid "Every theme, mode, accent, density or hot-reload change fires the change listeners on the controller - this window hooks one to re-skin its chrome."
+msgstr ""

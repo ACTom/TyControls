@@ -19,3 +19,30 @@ msgstr "TyControls 文本编辑器"
 msgid "Dark"
 msgstr "暗色"
 
+#: tmainform.gallery.hint
+msgid "Gallery: VisibleColumns = 4, so 4 of the 12 cells show inline - click the arrow on the right to drop all 12 in a 4-column grid. Every cell is a glyph plus a caption."
+msgstr ""
+
+#: tmainform.chkkeytips.hint
+msgid "KeyTips: with this on, tapping Alt paints Office access-key badges over the tabs; the badge letter switches tab, Escape hides them."
+msgstr ""
+
+#: tmainform.chkkeytips.caption
+msgid "Alt shows KeyTips"
+msgstr ""
+
+#: tmainform.chkcollapse.hint
+msgid "Sets Ribbon.Minimized: the group band folds away and only the tab strip is left. The chevron at the right end of the strip (or a double-click on a tab) brings it back."
+msgstr ""
+
+#: tmainform.chkcollapse.caption
+msgid "Collapse the ribbon"
+msgstr ""
+
+#: tmainform.appmenu.hint
+msgid "TTyRibbonAppMenu: drops the Commands menu, then a separator, then one row per recent file (open something first to fill the list)."
+msgstr ""
+
+#: tmainform.appmenu.caption
+msgid "File menu"
+msgstr ""

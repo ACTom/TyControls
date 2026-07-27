@@ -51,3 +51,22 @@ msgstr "斜体"
 msgid "Name (right aligned)"
 msgstr "名称（右对齐）"
 
+#: tmainform.lblfit.caption
+msgid "alBottom stops at the frame"
+msgstr ""
+
+#: tmainform.lblaccel.caption
+msgid "Hold Alt to reveal the access keys — Alt+N jumps straight into the Name box."
+msgstr ""
+
+#: tmainform.lblplainhdr.caption
+msgid "Caption = '' — the untitled variant: the top border runs unbroken, no gap cut for a title."
+msgstr ""
+
+#: tmainform.lblplain.caption
+msgid "A child still starts below the caption band the box always reserves."
+msgstr ""
+
+#: tmainform.lblstatus.caption
+msgid ""
+msgstr ""

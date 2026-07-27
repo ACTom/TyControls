@@ -47,3 +47,22 @@ msgstr "面板的背景、边框与圆角均来自主题 TyPanel 规则，无需
 msgid "Click the \"Say hello\" button…"
 msgstr "点击“打招呼”按钮试试…"
 
+#: tmainform.alignheader.caption
+msgid "Alignment — watch the caption slide from edge to edge across these three"
+msgstr ""
+
+#: tmainform.overrideheader.caption
+msgid "StyleOverride — only the left panel is restyled; switch skins, both still follow"
+msgstr ""
+
+#: tmainform.interactheader.caption
+msgid "A panel is a real control — hover it for a Hint, click it, or switch it off"
+msgstr ""
+
+#: tmainform.hotpanel.hint
+msgid "ShowHint = True: panels carry hints like any other control"
+msgstr ""
+
+#: tmainform.paneleventlabel.caption
+msgid "Panel mouse events show up here…"
+msgstr ""

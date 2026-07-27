@@ -20,8 +20,8 @@ msgid "Dark"
 msgstr "暗色"
 
 #: tmainform.hintlbl.caption
-msgid "Bottom status bar: multiple panels + size grip. Click a button to update the panel text."
-msgstr "底部状态栏:多面板 + 尺寸手柄。点击按钮更新面板文本。"
+msgid "Bottom status bar: multiple panels + size grip. Click a panel to see PanelAtPos report its index; the buttons edit the bar at run time."
+msgstr "底部状态栏：多面板 + 尺寸手柄。点击面板可看 PanelAtPos 报出它的序号；按钮在运行期改写状态栏。"
 
 #: tmainform.btnupdate.caption
 msgid "Update the status panel"
@@ -39,3 +39,18 @@ msgstr "就绪"
 msgid "Clicks: 0"
 msgstr "点击:0"
 
+#: tmainform.btngrip.caption
+msgid "Toggle the size grip"
+msgstr ""
+
+#: tmainform.lblpanels.caption
+msgid "Panels is a live collection - watch the bar re-lay itself out:"
+msgstr ""
+
+#: tmainform.btnaddpanel.caption
+msgid "Add a panel"
+msgstr ""
+
+#: tmainform.btnremovepanel.caption
+msgid "Remove the last panel"
+msgstr ""

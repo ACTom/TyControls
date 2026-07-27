@@ -55,3 +55,66 @@ msgstr "右对齐"
 msgid "(the first edit box's content will show here)"
 msgstr "（第一个输入框内容将在此显示）"
 
+#: tmainform.lbllower.caption
+msgid "Force lowercase"
+msgstr ""
+
+#: tmainform.lblcenter.caption
+msgid "Center align"
+msgstr ""
+
+#: tmainform.lblruntime.caption
+msgid "Runtime API - undo and clipboard act on the top box, the selection row on the read-only box."
+msgstr ""
+
+#: tmainform.lblundo.caption
+msgid "Undo / redo"
+msgstr ""
+
+#: tmainform.btnundo.caption
+msgid "Undo"
+msgstr ""
+
+#: tmainform.btnredo.caption
+msgid "Redo"
+msgstr ""
+
+#: tmainform.lblundohint.caption
+msgid "Ctrl+Z / Ctrl+Y"
+msgstr ""
+
+#: tmainform.lblclip.caption
+msgid "Clipboard"
+msgstr ""
+
+#: tmainform.btncopy.caption
+msgid "Copy"
+msgstr ""
+
+#: tmainform.btncut.caption
+msgid "Cut"
+msgstr ""
+
+#: tmainform.btnpaste.caption
+msgid "Paste"
+msgstr ""
+
+#: tmainform.lblmask.caption
+msgid "Masked copy"
+msgstr ""
+
+#: tmainform.btncopypwd.caption
+msgid "Copy the password box (nothing leaves it)"
+msgstr ""
+
+#: tmainform.lblsel.caption
+msgid "Selection API"
+msgstr ""
+
+#: tmainform.btnselectall.caption
+msgid "Select all"
+msgstr ""
+
+#: tmainform.btnselectrange.caption
+msgid "Select chars 3-7"
+msgstr ""

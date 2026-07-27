@@ -35,3 +35,26 @@ msgstr "自动保存"
 msgid "Experimental feature (disabled)"
 msgstr "试验功能（禁用）"
 
+#: tmainform.lblsecevents.caption
+msgid "OnChange vs OnClick — click the switch, then press the button:"
+msgstr ""
+
+#: tmainform.btntoggleall.caption
+msgid "Toggle from code"
+msgstr ""
+
+#: tmainform.lblevents.caption
+msgid "Last gesture: (none yet)"
+msgstr ""
+
+#: tmainform.lblsecanim.caption
+msgid "AnimationsEnabled — public, so it is set in code, not here:"
+msgstr ""
+
+#: tmainform.lblhint.caption
+msgid "Keyboard: Tab to a switch, then press Space or Enter — it toggles and draws the theme focus ring."
+msgstr ""
+
+#: tmainform.lblstatus.caption
+msgid ""
+msgstr ""

@@ -20,6 +20,37 @@ msgid "Dark"
 msgstr "暗色"
 
 #: tmainform.lbltip.caption
-msgid "Drag the slider, click the track/arrows, or use arrow keys / PageUp / PageDown to scroll"
-msgstr "拖动滑块、点击轨道/箭头，或用方向键/PageUp/PageDown 滚动"
+msgid "Drag the slider, click the track/arrows, spin the wheel, arrow keys, PageUp/PageDown, Home/End"
+msgstr "拖动滑块、点击轨道/箭头、滚轮、方向键、PageUp/PageDown、Home/End"
 
+#: tmainform.lblcodetitle.caption
+msgid "OnScroll reports which gesture moved the bar, and can overrule the proposed value"
+msgstr ""
+
+#: tmainform.lblcode.caption
+msgid "Press Home on the vertical bar: the handler forces 10, not Min"
+msgstr ""
+
+#: tmainform.lblviewtitle.caption
+msgid "The vertical bar scrolls this block of text; the buttons contrast eased vs snapped"
+msgstr ""
+
+#: tmainform.btnsnap.caption
+msgid "Top (snapped)"
+msgstr ""
+
+#: tmainform.btnease.caption
+msgid "Middle (eased)"
+msgstr ""
+
+#: tmainform.lblsnaphint.caption
+msgid "SetPositionSnapped lands at once; a plain Position write glides the thumb there"
+msgstr ""
+
+#: tmainform.lblanim.caption
+msgid "Turn it off, then click the track: the thumb jumps instead of gliding"
+msgstr ""
+
+#: tmainform.lblfull.caption
+msgid "Max = Min: nothing to scroll, so the thumb fills the whole track"
+msgstr ""

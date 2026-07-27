@@ -87,3 +87,34 @@ msgstr "＋ 新增页面"
 msgid "Current page: General (index 0 of 3 pages)"
 msgstr "当前页：常规（索引 0，共 3 页）"
 
+#: tmainform.btnremovepage.caption
+msgid "Remove page"
+msgstr ""
+
+#: tmainform.lblheadersection.caption
+msgid "Tab-header features - all of them live in the strip above:"
+msgstr ""
+
+#: tmainform.btntogglestrip.caption
+msgid "Hide tab strip"
+msgstr ""
+
+#: tmainform.lblstriphint.caption
+msgid "TabHeight = 0 removes the strip entirely."
+msgstr ""
+
+#: tmainform.lblclosehint.caption
+msgid "Click the x on a tab to close it; OnTabClose keeps the fixed pages."
+msgstr ""
+
+#: tmainform.lblreorderhint.caption
+msgid "Drag a tab header sideways to reorder the pages (OnReorder reports it)."
+msgstr ""
+
+#: tmainform.lblkeyshint.caption
+msgid "Alt+N / Alt+P / Alt+B jump to a page; Ctrl+Tab cycles; Home / End jump."
+msgstr ""
+
+#: tmainform.lbloverflowhint.caption
+msgid "Add pages until the headers overflow: arrows appear, the wheel scrolls."
+msgstr ""

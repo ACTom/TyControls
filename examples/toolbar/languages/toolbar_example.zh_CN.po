@@ -59,3 +59,62 @@ msgstr "全选"
 msgid "Ready: click any toolbar button"
 msgstr "就绪:点击任一工具按钮"
 
+#: tmainform.btnbold.caption
+msgid "Bold"
+msgstr ""
+
+#: tmainform.btnitalic.caption
+msgid "Italic"
+msgstr ""
+
+#: tmainform.btnunderline.caption
+msgid "Underline"
+msgstr ""
+
+#: tmainform.btnalignleft.caption
+msgid "Left"
+msgstr ""
+
+#: tmainform.btnaligncenter.caption
+msgid "Centre"
+msgstr ""
+
+#: tmainform.btnalignright.caption
+msgid "Right"
+msgstr ""
+
+#: tmainform.btnjustify.caption
+msgid "Justify"
+msgstr ""
+
+#: tmainform.btnbullets.caption
+msgid "Bullets"
+msgstr ""
+
+#: tmainform.btnnumbers.caption
+msgid "Numbers"
+msgstr ""
+
+#: tmainform.btnquote.caption
+msgid "Quote"
+msgstr ""
+
+#: tmainform.lblwraphint.caption
+msgid "Top bar — Wrapable = True (the default): the 12 tools wrap into 3 rows and the bar grows to 104 px to fit them. Flat = True hands every tool the ghost StyleClass."
+msgstr ""
+
+#: tmainform.lbldownhint.caption
+msgid "Down = True — a pressed tool keeps the ghost:selected look. Bold starts pressed; click Bold / Italic / Underline to toggle one."
+msgstr ""
+
+#: tmainform.lblglyphhint.caption
+msgid "New / Open / Save are TTyGlyphButtons — the bar accepts any TTyButton descendant and gives it the same ghost style and row metrics."
+msgstr ""
+
+#: tmainform.lblframedhint.caption
+msgid "Second bar — Flat = False: the bar clears the ghost class, so its tools are framed push buttons. Wrapable = False: they stay on one row, so the last tool runs off the right edge instead of wrapping. ButtonHeight is left unset, so its tool height follows the theme --control-height (classic 24 / modern 38) — switch skins and watch this bar alone change height."
+msgstr ""
+
+#: tmainform.lblreserved.caption
+msgid "ShowCaptions and Images are published for LCL parity but are not wired: in the reuse-TTyButton model each tool owns its own caption and glyph."
+msgstr ""

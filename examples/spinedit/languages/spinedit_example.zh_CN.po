@@ -43,3 +43,22 @@ msgstr "状态："
 msgid "(change any value to see the OnChange output)"
 msgstr "（改变任一数值以查看 OnChange 输出）"
 
+#: tmainform.btnpoke.caption
+msgid "Value := 999 in code"
+msgstr ""
+
+#: tmainform.lblcentre.caption
+msgid "Centred text (Alignment=taCenter):"
+msgstr ""
+
+#: tmainform.lblcommit.caption
+msgid "Type digits into any box: Enter commits them, Esc reverts to the last value. An out-of-range number is clamped into the range, never rejected."
+msgstr ""
+
+#: tmainform.lblclickcap.caption
+msgid "Click:"
+msgstr ""
+
+#: tmainform.lblclick.caption
+msgid "(click the quantity box to see OnClick)"
+msgstr ""

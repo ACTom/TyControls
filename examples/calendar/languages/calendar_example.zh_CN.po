@@ -24,6 +24,13 @@ msgid "Interactive calendar (week starts Monday · shows week numbers · today h
 msgstr "可交互日历（周一起始 · 显示周数 · 今日高亮）："
 
 #: tmainform.lblreadonlyhdr.caption
-msgid "Read-only calendar (ReadOnly=True · week starts Sunday):"
-msgstr "只读日历 (ReadOnly=True · 周日起始)："
+msgid "Read-only calendar (ReadOnly=True · Sunday start · ShowToday=False - today gets no outline here):"
+msgstr "只读日历（ReadOnly=True · 周日起始 · ShowToday=False —— 这里的今天不描边）："
 
+#: tmainform.lbllimithdr.caption
+msgid "MinDate / MaxDate - watch which cells grey out:"
+msgstr ""
+
+#: tmainform.lbllimithint.caption
+msgid "Off = both bounds are 0 (the documented no-bound sentinel): every month is reachable, so PageUp/PageDown really walk the grid. On = only the 3 months either side of today stay selectable."
+msgstr ""

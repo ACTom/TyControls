@@ -24,8 +24,8 @@ msgid "Dark"
 msgstr "暗色"
 
 #: tmainform.btnfade.caption
-msgid "Fade in"
-msgstr "淡入"
+msgid "Fade in (window)"
+msgstr "淡入（整窗）"
 
 #: tmainform.btnup.caption
 msgid "Slide in from top"
@@ -47,3 +47,30 @@ msgstr "右滑入"
 msgid "This panel reappears with the chosen transition"
 msgstr "这个面板会以选定的过渡重新出现"
 
+#: tmainform.btnnone.caption
+msgid "None (instant)"
+msgstr ""
+
+#: tmainform.btnhide.caption
+msgid "Hide panel"
+msgstr ""
+
+#: tmainform.lblduration.caption
+msgid "Duration (ms)"
+msgstr ""
+
+#: tmainform.lbldurationhint.caption
+msgid "0 = snap, no animation. API default: 200"
+msgstr ""
+
+#: tmainform.lblfadenote.caption
+msgid "Watch the whole WINDOW, not the panel, on \"Fade in (window)\": ttFade animates a FORM's AlphaBlend, is Windows-only, and degrades to a plain show on any other control."
+msgstr ""
+
+#: tmainform.lblcancelnote.caption
+msgid "Set Duration to 1000, then click a second direction mid-slide: the in-flight transition is cancelled and replaced — one control never runs two at once."
+msgstr ""
+
+#: tmainform.lblhint.caption
+msgid "Press \"Hide panel\", then any direction button: the panel is revealed from hidden. TyPlayTransition sets Visible itself."
+msgstr ""

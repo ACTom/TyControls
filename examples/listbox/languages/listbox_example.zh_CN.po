@@ -20,8 +20,8 @@ msgid "Dark"
 msgstr "暗色"
 
 #: tmainform.lbltitle.caption
-msgid "City list (Up/Down / PageUp/Down / mouse wheel to scroll):"
-msgstr "城市列表（上下键 / PageUp/Down / 滚轮可滚动）："
+msgid "City list (arrows / PageUp/Down / wheel; double-click a row):"
+msgstr "城市列表（方向键 / PageUp/Down / 滚轮；双击某一行）："
 
 #: tmainform.chkmulti.caption
 msgid "Multi-select mode"
@@ -32,8 +32,8 @@ msgid "Sort ascending"
 msgstr "升序排序"
 
 #: tmainform.btnheight.caption
-msgid "Row height 24 / 32"
-msgstr "行高 24 / 32"
+msgid "Pin height 24 / 32"
+msgstr "固定行高 24 / 32"
 
 #: tmainform.btnselall.caption
 msgid "Select all"
@@ -43,3 +43,14 @@ msgstr "全选"
 msgid "Clear selection"
 msgstr "清空选择"
 
+#: tmainform.btnscroll.caption
+msgid "Scroll to row 20"
+msgstr ""
+
+#: tmainform.btnalternate.caption
+msgid "Select every 2nd"
+msgstr ""
+
+#: tmainform.lblhint.caption
+msgid "Row height follows the theme (--item-height) until you pin ItemHeight — switch skin first and watch it change on its own. In multi-select, Ctrl-click / Shift-click / Space toggle rows."
+msgstr ""

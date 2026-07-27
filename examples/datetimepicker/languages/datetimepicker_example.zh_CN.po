@@ -31,3 +31,42 @@ msgstr "时间 (dtkTime)："
 msgid "Nullable date:"
 msgstr "可空日期："
 
+#: tmainform.btnopen.caption
+msgid "Open"
+msgstr ""
+
+#: tmainform.lblreadonly.caption
+msgid "Read-only:"
+msgstr ""
+
+#: tmainform.lblreadonlyhint.caption
+msgid "ReadOnly: typing and Up/Down are ignored, the calendar still opens"
+msgstr ""
+
+#: tmainform.lblrange.caption
+msgid "Limited range:"
+msgstr ""
+
+#: tmainform.lblrangehint.caption
+msgid "MinDate/MaxDate = today +/-3 days: stepping stops at the edge"
+msgstr ""
+
+#: tmainform.lblampm.caption
+msgid "12-hour time:"
+msgstr ""
+
+#: tmainform.lblampmhint.caption
+msgid "TimeFormat hh:nn am/pm: Up/Down flips the AM/PM segment"
+msgstr ""
+
+#: tmainform.lbllocale.caption
+msgid "Locale format:"
+msgstr ""
+
+#: tmainform.lbllocalehint.caption
+msgid "DateFormat left empty: follows the OS short-date format"
+msgstr ""
+
+#: tmainform.lbldrophint.caption
+msgid "Open sets DatePicker.DroppedDown := True; closing reads it back"
+msgstr ""

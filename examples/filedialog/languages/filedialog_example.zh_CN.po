@@ -59,3 +59,42 @@ msgstr "打开预览"
 msgid "Save preview"
 msgstr "保存预览"
 
+#: tmainform.chkvetosave.caption
+msgid "Veto the Save dialog: OnCanClose refuses the OK"
+msgstr ""
+
+#: tmainform.lblopennote.caption
+msgid "Open: FilterIndex = 2 starts on All files; Options include fdoPathMustExist; OnShow/OnClose are logged"
+msgstr ""
+
+#: tmainform.lblsavenote.caption
+msgid "Save: FileName is pre-filled with untitled.txt; tick the box above and OnCanClose keeps the dialog open"
+msgstr ""
+
+#: tmainform.lblprevnote.caption
+msgid "Preview pane: a 0-byte file draws ShowMessage, .exe/.zip draw ShowCustom, anything else ShowText"
+msgstr ""
+
+#: tmainform.btnglobopen.caption
+msgid "TyOpenDialog()"
+msgstr ""
+
+#: tmainform.btnglobsave.caption
+msgid "TySaveDialog()"
+msgstr ""
+
+#: tmainform.btnglobopenpic.caption
+msgid "TyOpenPictureDialog()"
+msgstr ""
+
+#: tmainform.btnglobsavepic.caption
+msgid "TySavePictureDialog()"
+msgstr ""
+
+#: tmainform.btnglobopenprev.caption
+msgid "TyOpenPreviewDialog()"
+msgstr ""
+
+#: tmainform.btnglobsaveprev.caption
+msgid "TySavePreviewDialog()"
+msgstr ""
