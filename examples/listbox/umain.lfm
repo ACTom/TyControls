@@ -78,12 +78,12 @@ object MainForm: TMainForm
       Left = 16
       Height = 30
       Top = 332
-      Width = 120
+      Width = 132
       Caption = 'Pin height 24 / 32'
       OnClick = ToggleHeight
     end
     object BtnSelAll: TTyButton
-      Left = 146
+      Left = 158
       Height = 30
       Top = 332
       Width = 120
@@ -91,7 +91,7 @@ object MainForm: TMainForm
       OnClick = DoSelectAll
     end
     object BtnClear: TTyButton
-      Left = 276
+      Left = 288
       Height = 30
       Top = 332
       Width = 120

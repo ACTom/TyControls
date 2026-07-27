@@ -280,12 +280,12 @@ object ShowcaseForm: TShowcaseForm
             Left = 8
             Height = 26
             Top = 5
-            Width = 112
+            Width = 114
             Caption = 'Delete selected'
             OnClick = BtnDragDeleteClick
           end
           object BtnDragClear: TTyButton
-            Left = 128
+            Left = 130
             Height = 26
             Top = 5
             Width = 72
@@ -293,7 +293,7 @@ object ShowcaseForm: TShowcaseForm
             OnClick = BtnDragClearClick
           end
           object BtnDragRebuild: TTyButton
-            Left = 208
+            Left = 210
             Height = 26
             Top = 5
             Width = 80

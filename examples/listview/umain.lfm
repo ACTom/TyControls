@@ -228,12 +228,12 @@ object MainForm: TMainForm
       Left = 112
       Height = 30
       Top = 700
-      Width = 110
+      Width = 114
       Caption = 'Clear selection'
       OnClick = BtnClearSelClick
     end
     object ChkHeaders: TTyCheckBox
-      Left = 240
+      Left = 244
       Height = 22
       Top = 704
       Width = 130
@@ -243,7 +243,7 @@ object MainForm: TMainForm
       OnChange = ChkHeadersChange
     end
     object ChkCustomSort: TTyCheckBox
-      Left = 384
+      Left = 388
       Height = 22
       Top = 704
       Width = 320
@@ -251,7 +251,7 @@ object MainForm: TMainForm
       OnChange = ChkCustomSortChange
     end
     object ChkGroupVirtual: TTyCheckBox
-      Left = 736
+      Left = 740
       Height = 22
       Top = 704
       Width = 290

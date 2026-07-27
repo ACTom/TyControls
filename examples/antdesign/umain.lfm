@@ -978,13 +978,13 @@ object MainForm: TMainForm
               Left = 12
               Height = 38
               Top = 74
-              Width = 125
+              Width = 126
               TabOrder = 0
               OnClick = ToastClick
               Caption = 'Show notification'
             end
             object BtnToastErr: TTyButton
-              Left = 148
+              Left = 149
               Height = 38
               Top = 74
               Width = 150
@@ -1045,14 +1045,14 @@ object MainForm: TMainForm
                 Left = 10
                 Height = 38
                 Top = 70
-                Width = 104
+                Width = 114
                 TabOrder = 0
                 OnClick = PopOkClick
                 StyleClass = 'primary'
                 Caption = 'Confirm publish'
               end
               object BtnPopCancel: TTyButton
-                Left = 124
+                Left = 134
                 Height = 38
                 Top = 70
                 Width = 96

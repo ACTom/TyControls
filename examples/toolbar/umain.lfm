@@ -141,6 +141,7 @@ object MainForm: TMainForm
         Height = 28
         Top = 38
         Width = 72
+        AutoSize = True
         Caption = 'Select all'
         OnClick = ToolClicked
       end

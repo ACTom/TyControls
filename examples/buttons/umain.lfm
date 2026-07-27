@@ -90,17 +90,17 @@ object MainForm: TMainForm
       Left = 306
       Height = 34
       Top = 68
-      Width = 52
+      Width = 60
       Caption = 'Medium'
       StyleClass = 'ghost'
       GroupIndex = 1
       AllowAllUp = True
     end
     object Speed3: TTySpeedButton
-      Left = 362
+      Left = 370
       Height = 34
       Top = 68
-      Width = 52
+      Width = 54
       Caption = 'Right'
       StyleClass = 'ghost'
       GroupIndex = 1

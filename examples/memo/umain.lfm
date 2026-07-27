@@ -95,12 +95,12 @@ object MainForm: TMainForm
       Left = 16
       Height = 26
       Top = 44
-      Width = 76
+      Width = 84
       Caption = 'Select all'
       OnClick = SelectAllClick
     end
     object BtnCopy: TTyButton
-      Left = 98
+      Left = 106
       Height = 26
       Top = 44
       Width = 60
@@ -108,7 +108,7 @@ object MainForm: TMainForm
       OnClick = CopyClick
     end
     object BtnCut: TTyButton
-      Left = 164
+      Left = 172
       Height = 26
       Top = 44
       Width = 52
@@ -116,7 +116,7 @@ object MainForm: TMainForm
       OnClick = CutClick
     end
     object BtnPaste: TTyButton
-      Left = 222
+      Left = 230
       Height = 26
       Top = 44
       Width = 62
@@ -124,7 +124,7 @@ object MainForm: TMainForm
       OnClick = PasteClick
     end
     object BtnUndo: TTyButton
-      Left = 290
+      Left = 298
       Height = 26
       Top = 44
       Width = 84
@@ -132,7 +132,7 @@ object MainForm: TMainForm
       OnClick = UndoClick
     end
     object BtnRedo: TTyButton
-      Left = 380
+      Left = 388
       Height = 26
       Top = 44
       Width = 84

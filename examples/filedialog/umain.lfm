@@ -56,12 +56,12 @@ object MainForm: TMainForm
       Left = 16
       Height = 32
       Top = 72
-      Width = 130
+      Width = 138
       Caption = 'Open (multi-select)'
       OnClick = BtnOpenClick
     end
     object BtnSave: TTyButton
-      Left = 156
+      Left = 164
       Height = 32
       Top = 72
       Width = 130
@@ -69,7 +69,7 @@ object MainForm: TMainForm
       OnClick = BtnSaveClick
     end
     object ChkVetoSave: TTyCheckBox
-      Left = 300
+      Left = 308
       Height = 24
       Top = 76
       Width = 404

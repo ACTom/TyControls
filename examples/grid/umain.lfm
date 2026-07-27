@@ -155,12 +155,12 @@ object MainForm: TMainForm
             Left = 896
             Height = 26
             Top = 6
-            Width = 108
+            Width = 114
             Caption = 'Remember layout'
             OnClick = BtnSaveLayoutClick
           end
           object BtnLoadLayout: TTyButton
-            Left = 1010
+            Left = 1016
             Height = 26
             Top = 6
             Width = 108
@@ -288,12 +288,12 @@ object MainForm: TMainForm
             Left = 8
             Height = 26
             Top = 6
-            Width = 108
+            Width = 120
             Caption = 'Colour this cell'
             OnClick = BtnCellColorClick
           end
           object BtnCellUncolor: TTyButton
-            Left = 122
+            Left = 134
             Height = 26
             Top = 6
             Width = 108
@@ -301,15 +301,15 @@ object MainForm: TMainForm
             OnClick = BtnCellUncolorClick
           end
           object BtnRowColor: TTyButton
-            Left = 236
+            Left = 248
             Height = 26
             Top = 6
-            Width = 108
+            Width = 120
             Caption = 'Colour whole row'
             OnClick = BtnRowColorClick
           end
           object ChkWordWrap: TTyCheckBox
-            Left = 356
+            Left = 380
             Height = 22
             Top = 8
             Width = 84
@@ -317,15 +317,15 @@ object MainForm: TMainForm
             OnChange = ChkLookChange
           end
           object BtnAutoFitRows: TTyButton
-            Left = 446
+            Left = 470
             Height = 26
             Top = 6
-            Width = 108
+            Width = 114
             Caption = 'Auto row height'
             OnClick = BtnAutoFitRowsClick
           end
           object BtnResetRows: TTyButton
-            Left = 560
+            Left = 590
             Height = 26
             Top = 6
             Width = 108
@@ -333,7 +333,7 @@ object MainForm: TMainForm
             OnClick = BtnResetRowsClick
           end
           object LblLookTip: TTyLabel
-            Left = 680
+            Left = 710
             Height = 20
             Top = 10
             Width = 460
@@ -495,20 +495,20 @@ object MainForm: TMainForm
             Left = 540
             Height = 26
             Top = 6
-            Width = 104
+            Width = 114
             Caption = 'Group by region'
             OnClick = BtnGroupClick
           end
           object BtnExpandAll: TTyButton
-            Left = 650
+            Left = 660
             Height = 26
             Top = 6
-            Width = 72
+            Width = 84
             Caption = 'Expand all'
             OnClick = BtnExpandAllClick
           end
           object BtnCollapseAll: TTyButton
-            Left = 726
+            Left = 748
             Height = 26
             Top = 6
             Width = 72
@@ -516,7 +516,7 @@ object MainForm: TMainForm
             OnClick = BtnCollapseAllClick
           end
           object BtnGroup2: TTyButton
-            Left = 804
+            Left = 826
             Height = 26
             Top = 6
             Width = 138
@@ -524,7 +524,7 @@ object MainForm: TMainForm
             OnClick = BtnGroup2Click
           end
           object ChkFilterRow: TTyCheckBox
-            Left = 948
+            Left = 970
             Height = 22
             Top = 8
             Width = 84
@@ -532,7 +532,7 @@ object MainForm: TMainForm
             OnChange = ChkFilterRowChange
           end
           object ChkTree: TTyCheckBox
-            Left = 1036
+            Left = 1058
             Height = 22
             Top = 8
             Width = 76
@@ -699,12 +699,12 @@ object MainForm: TMainForm
             Left = 384
             Height = 26
             Top = 6
-            Width = 108
+            Width = 114
             Caption = 'Merge selection'
             OnClick = BtnMergeClick
           end
           object BtnUnmerge: TTyButton
-            Left = 498
+            Left = 504
             Height = 26
             Top = 6
             Width = 108
@@ -712,7 +712,7 @@ object MainForm: TMainForm
             OnClick = BtnUnmergeClick
           end
           object BtnCopy: TTyButton
-            Left = 618
+            Left = 624
             Height = 26
             Top = 6
             Width = 84
@@ -720,7 +720,7 @@ object MainForm: TMainForm
             OnClick = BtnCopyClick
           end
           object BtnCut: TTyButton
-            Left = 708
+            Left = 714
             Height = 26
             Top = 6
             Width = 84
@@ -728,7 +728,7 @@ object MainForm: TMainForm
             OnClick = BtnCutClick
           end
           object BtnPaste: TTyButton
-            Left = 798
+            Left = 804
             Height = 26
             Top = 6
             Width = 84
@@ -736,7 +736,7 @@ object MainForm: TMainForm
             OnClick = BtnPasteClick
           end
           object ChkAutoGrow: TTyCheckBox
-            Left = 894
+            Left = 900
             Height = 22
             Top = 8
             Width = 132
@@ -849,12 +849,12 @@ object MainForm: TMainForm
             Left = 8
             Height = 26
             Top = 6
-            Width = 108
+            Width = 114
             Caption = 'Insert a column'
             OnClick = BtnInsColClick
           end
           object BtnDelCol: TTyButton
-            Left = 122
+            Left = 128
             Height = 26
             Top = 6
             Width = 108
@@ -862,7 +862,7 @@ object MainForm: TMainForm
             OnClick = BtnDelColClick
           end
           object BtnMoveCol: TTyButton
-            Left = 236
+            Left = 242
             Height = 26
             Top = 6
             Width = 132
@@ -870,14 +870,14 @@ object MainForm: TMainForm
             OnClick = BtnMoveColClick
           end
           object LblColTip: TTyLabel
-            Left = 384
+            Left = 390
             Height = 20
             Top = 10
             Width = 640
             Caption = 'Adding and moving columns can now be undone too — width, title, editor kind, read-only and that column''s filter all come back together'
           end
           object ChkFillSeries: TTyCheckBox
-            Left = 1028
+            Left = 1034
             Height = 22
             Top = 8
             Width = 140
@@ -1014,19 +1014,19 @@ object MainForm: TMainForm
             Left = 570
             Height = 26
             Top = 6
-            Width = 108
+            Width = 120
             Caption = 'Replace all with'
             OnClick = BtnEvReplaceClick
           end
           object EdEvRepl: TTyEdit
-            Left = 684
+            Left = 696
             Height = 26
             Top = 6
             Width = 120
             Text = 'Cloud server'
           end
           object BtnEvImportCsv: TTyButton
-            Left = 816
+            Left = 828
             Height = 26
             Top = 6
             Width = 108
@@ -1034,7 +1034,7 @@ object MainForm: TMainForm
             OnClick = BtnEvImportCsvClick
           end
           object ChkEvRowMove: TTyCheckBox
-            Left = 934
+            Left = 946
             Height = 22
             Top = 8
             Width = 118
@@ -1042,7 +1042,7 @@ object MainForm: TMainForm
             OnChange = ChkEvChange
           end
           object ChkEvEditorProp: TTyCheckBox
-            Left = 1058
+            Left = 1070
             Height = 22
             Top = 8
             Width = 108
@@ -1452,7 +1452,7 @@ object MainForm: TMainForm
             Left = 902
             Height = 26
             Top = 6
-            Width = 120
+            Width = 126
             Caption = 'Clear this column'
             OnClick = BtnIoClearColsClick
           end
@@ -1589,20 +1589,20 @@ object MainForm: TMainForm
             Left = 260
             Height = 26
             Top = 6
-            Width = 96
+            Width = 102
             Caption = 'Clear comment'
             OnClick = BtnCommentClearClick
           end
           object BtnBold: TTyButton
-            Left = 362
+            Left = 368
             Height = 26
             Top = 6
-            Width = 96
+            Width = 108
             Caption = 'Bold this cell'
             OnClick = BtnBoldClick
           end
           object BtnBoldClear: TTyButton
-            Left = 464
+            Left = 482
             Height = 26
             Top = 6
             Width = 96
@@ -1610,7 +1610,7 @@ object MainForm: TMainForm
             OnClick = BtnBoldClearClick
           end
           object ChkFormat: TTyCheckBox
-            Left = 568
+            Left = 586
             Height = 22
             Top = 8
             Width = 144
@@ -1618,7 +1618,7 @@ object MainForm: TMainForm
             OnChange = ChkCellsChange
           end
           object ChkLinkCol: TTyCheckBox
-            Left = 718
+            Left = 736
             Height = 22
             Top = 8
             Width = 132
@@ -1745,20 +1745,20 @@ object MainForm: TMainForm
             Left = 8
             Height = 26
             Top = 6
-            Width = 132
+            Width = 144
             Caption = 'Jump to the last row'
             OnClick = BtnDrawEndClick
           end
           object BtnDrawTop: TTyButton
-            Left = 146
+            Left = 158
             Height = 26
             Top = 6
-            Width = 108
+            Width = 114
             Caption = 'Back to the top'
             OnClick = BtnDrawTopClick
           end
           object LblDrawTip: TTyLabel
-            Left = 264
+            Left = 282
             Height = 20
             Top = 10
             Width = 892

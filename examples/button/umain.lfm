@@ -150,7 +150,7 @@ object MainForm: TMainForm
       Left = 256
       Height = 32
       Top = 212
-      Width = 168
+      Width = 174
       TabOrder = 10
       OnBadgeDisplay = InboxBadgeDisplay
       ShowBadge = True

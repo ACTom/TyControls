@@ -481,84 +481,84 @@ object MainForm: TMainForm
         Left = 0
         Height = 26
         Top = 0
-        Width = 74
+        Width = 78
         Caption = 'Command 1'
       end
       object BarBtn2: TTyButton
         Left = 0
         Height = 26
         Top = 0
-        Width = 74
+        Width = 78
         Caption = 'Command 2'
       end
       object BarBtn3: TTyButton
         Left = 0
         Height = 26
         Top = 0
-        Width = 74
+        Width = 78
         Caption = 'Command 3'
       end
       object BarBtn4: TTyButton
         Left = 0
         Height = 26
         Top = 0
-        Width = 74
+        Width = 78
         Caption = 'Command 4'
       end
       object BarBtn5: TTyButton
         Left = 0
         Height = 26
         Top = 0
-        Width = 74
+        Width = 78
         Caption = 'Command 5'
       end
       object BarBtn6: TTyButton
         Left = 0
         Height = 26
         Top = 0
-        Width = 74
+        Width = 78
         Caption = 'Command 6'
       end
       object BarBtn7: TTyButton
         Left = 0
         Height = 26
         Top = 0
-        Width = 74
+        Width = 78
         Caption = 'Command 7'
       end
       object BarBtn8: TTyButton
         Left = 0
         Height = 26
         Top = 0
-        Width = 74
+        Width = 78
         Caption = 'Command 8'
       end
       object BarBtn9: TTyButton
         Left = 0
         Height = 26
         Top = 0
-        Width = 74
+        Width = 78
         Caption = 'Command 9'
       end
       object BarBtn10: TTyButton
         Left = 0
         Height = 26
         Top = 0
-        Width = 74
+        Width = 84
         Caption = 'Command 10'
       end
       object BarBtn11: TTyButton
         Left = 0
         Height = 26
         Top = 0
-        Width = 74
+        Width = 84
         Caption = 'Command 11'
       end
       object BarBtn12: TTyButton
         Left = 0
         Height = 26
         Top = 0
-        Width = 74
+        Width = 84
         Caption = 'Command 12'
       end
     end
@@ -617,84 +617,84 @@ object MainForm: TMainForm
         Left = 0
         Height = 26
         Top = 0
-        Width = 74
+        Width = 78
         Caption = 'Command 1'
       end
       object WrapBtn2: TTyButton
         Left = 0
         Height = 26
         Top = 0
-        Width = 74
+        Width = 78
         Caption = 'Command 2'
       end
       object WrapBtn3: TTyButton
         Left = 0
         Height = 26
         Top = 0
-        Width = 74
+        Width = 78
         Caption = 'Command 3'
       end
       object WrapBtn4: TTyButton
         Left = 0
         Height = 26
         Top = 0
-        Width = 74
+        Width = 78
         Caption = 'Command 4'
       end
       object WrapBtn5: TTyButton
         Left = 0
         Height = 26
         Top = 0
-        Width = 74
+        Width = 78
         Caption = 'Command 5'
       end
       object WrapBtn6: TTyButton
         Left = 0
         Height = 26
         Top = 0
-        Width = 74
+        Width = 78
         Caption = 'Command 6'
       end
       object WrapBtn7: TTyButton
         Left = 0
         Height = 26
         Top = 0
-        Width = 74
+        Width = 78
         Caption = 'Command 7'
       end
       object WrapBtn8: TTyButton
         Left = 0
         Height = 26
         Top = 0
-        Width = 74
+        Width = 78
         Caption = 'Command 8'
       end
       object WrapBtn9: TTyButton
         Left = 0
         Height = 26
         Top = 0
-        Width = 74
+        Width = 78
         Caption = 'Command 9'
       end
       object WrapBtn10: TTyButton
         Left = 0
         Height = 26
         Top = 0
-        Width = 74
+        Width = 84
         Caption = 'Command 10'
       end
       object WrapBtn11: TTyButton
         Left = 0
         Height = 26
         Top = 0
-        Width = 74
+        Width = 84
         Caption = 'Command 11'
       end
       object WrapBtn12: TTyButton
         Left = 0
         Height = 26
         Top = 0
-        Width = 74
+        Width = 84
         Caption = 'Command 12'
       end
     end
