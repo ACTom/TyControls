@@ -1,10 +1,10 @@
 object MainForm: TMainForm
   Left = 0
-  Height = 400
+  Height = 636
   Top = 0
   Width = 560
   Caption = 'TTyPanel example'
-  ClientHeight = 400
+  ClientHeight = 636
   ClientWidth = 560
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
@@ -12,7 +12,7 @@ object MainForm: TMainForm
   TitleBar = Bar
   object Surface: TTyFormSurface
     Left = 0
-    Height = 400
+    Height = 636
     Top = 0
     Width = 560
     Align = alClient
@@ -101,10 +101,97 @@ object MainForm: TMainForm
       Width = 528
       Caption = 'Click the "Say hello" button…'
     end
+    object AlignHeader: TTyLabel
+      Left = 16
+      Height = 24
+      Top = 288
+      Width = 528
+      Caption = 'Alignment — watch the caption slide from edge to edge across these three'
+    end
+    object AlignLeftPanel: TTyPanel
+      Left = 16
+      Height = 40
+      Top = 316
+      Width = 168
+      Caption = 'taLeftJustify'
+      Alignment = taLeftJustify
+    end
+    object AlignCenterPanel: TTyPanel
+      Left = 196
+      Height = 40
+      Top = 316
+      Width = 168
+      Caption = 'taCenter (default)'
+    end
+    object AlignRightPanel: TTyPanel
+      Left = 376
+      Height = 40
+      Top = 316
+      Width = 168
+      Caption = 'taRightJustify'
+      Alignment = taRightJustify
+    end
+    object OverrideHeader: TTyLabel
+      Left = 16
+      Height = 24
+      Top = 368
+      Width = 528
+      Caption = 'StyleOverride — only the left panel is restyled; switch skins, both still follow'
+    end
+    object AccentPanel: TTyPanel
+      Left = 16
+      Height = 52
+      Top = 396
+      Width = 260
+      Caption = 'Accent tint, thicker edge, 12px corners'
+      StyleOverride = 'background: alpha(var(--accent), 0.14); border-color: var(--accent); border-width: 2px; border-radius: 12px;'
+    end
+    object PlainPanel: TTyPanel
+      Left = 284
+      Height = 52
+      Top = 396
+      Width = 260
+      Caption = 'No override — plain theme values'
+    end
+    object InteractHeader: TTyLabel
+      Left = 16
+      Height = 24
+      Top = 460
+      Width = 528
+      Caption = 'A panel is a real control — hover it for a Hint, click it, or switch it off'
+    end
+    object HotPanel: TTyPanel
+      Left = 16
+      Height = 52
+      Top = 488
+      Width = 340
+      Cursor = crHandPoint
+      Caption = 'Hover and click me'
+      Hint = 'ShowHint = True: panels carry hints like any other control'
+      ShowHint = True
+      OnClick = HotPanelClick
+      OnMouseEnter = HotPanelMouseEnter
+      OnMouseLeave = HotPanelMouseLeave
+    end
+    object DisabledPanel: TTyPanel
+      Left = 372
+      Height = 52
+      Top = 488
+      Width = 172
+      Caption = 'Enabled = False'
+      Enabled = False
+    end
+    object PanelEventLabel: TTyLabel
+      Left = 16
+      Height = 24
+      Top = 552
+      Width = 528
+      Caption = 'Panel mouse events show up here…'
+    end
     object BottomPanel: TTyPanel
       Left = 0
       Height = 44
-      Top = 356
+      Top = 592
       Width = 560
       Align = alBottom
       Caption = 'Align = alBottom'

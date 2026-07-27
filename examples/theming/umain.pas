@@ -7,6 +7,19 @@ unit umain;
   - switching internally re-Invalidates every registered control, so the sample buttons / edit /
     checkbox / progress bar recolor "live", and ApplyChromeTheme reskins the window chrome + background;
   - the status label shows the current theme in real time.
+  Below the sample strip the OTHER four layers of the same system are exercised:
+  - Follow: 'Auto' sets Follow := tfFollowSystem so the controller tracks the OS light/dark scheme
+    and accent (TTyForm arms a 750 ms poll); Light/Dark set Follow := tfManual back;
+  - Density: the toggle flips Density between tdClassic and tdModern -- orthogonal to the skin, it
+    re-resolves the geometry tokens (radius / padding / control heights) only;
+  - HotReload: the checkbox arms the ThemeFile watch (it loads green.tycss first, since HotReload
+    only watches a FILE theme) -- edit and save that file and the window re-themes within ~750 ms;
+  - LoadThemeCssAdditive: 'Overlay a tweak' composes a small CSS layer ON TOP of the live theme,
+    and 'Custom file' loads this example's own custom.tycss;
+  - StyleOverride: BtnOverride carries its own per-instance CSS block (the last cascade layer),
+    written in the .lfm -- it still uses var(--accent), so it recolours with the theme;
+  - AddChangeListener: FormCreate hooks ThemeChanged, which is what re-skins the window chrome
+    for changes NOTHING in this file triggers directly (a hot-reload save, an OS scheme flip).
   The window, every control and the theme switcher are designed in umain.lfm (a TTyForm + TTyTitleBar);
   the code here is theme setup + the switch handlers only. }
 
@@ -18,7 +31,7 @@ uses
   Classes, SysUtils, Types, Forms, Controls,
   tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes, tyControls.ThemeRegistry,
   tyControls.Button, tyControls.TyLabel, tyControls.ComboBox,
-  tyControls.Edit, tyControls.CheckBox, tyControls.ProgressBar,
+  tyControls.Edit, tyControls.CheckBox, tyControls.ProgressBar, tyControls.ToggleSwitch,
   tyControls.Types, tyControls.Css.Values, tyControls.Dialogs.Color;
 
 type
@@ -39,17 +52,43 @@ type
     EdSample: TTyEdit;
     ChkSample: TTyCheckBox;
     ProgSample: TTyProgressBar;
+    LblAdvanced: TTyLabel;
+    BtnAuto: TTyButton;
+    LblFollowHint: TTyLabel;
+    SwitchDensity: TTyToggleSwitch;
+    LblDensityHint: TTyLabel;
+    ChkHotReload: TTyCheckBox;
+    LblHotHint: TTyLabel;
+    BtnOverlay: TTyButton;
+    LblLayerHint: TTyLabel;
+    BtnCustom: TTyButton;
+    LblCustomHint: TTyLabel;
+    BtnOverride: TTyButton;
+    LblOvrHint: TTyLabel;
+    LblListener: TTyLabel;
     procedure FormCreate(Sender: TObject);
+    procedure FormDestroy(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
     procedure SwitchLight(Sender: TObject);
     procedure SwitchDark(Sender: TObject);
     procedure SwitchGreen(Sender: TObject);
+    procedure SwitchAuto(Sender: TObject);
+    procedure SwitchCustom(Sender: TObject);
+    procedure DensityChange(Sender: TObject);
+    procedure HotReloadChange(Sender: TObject);
+    procedure OverlayClick(Sender: TObject);
     procedure PickAccent(Sender: TObject);
     procedure ResetAccentClick(Sender: TObject);
   private
     { Enable the "复位默认" button only while a user accent override is active (it clears on a
       theme switch, so this keeps the button in sync with AccentOverride). }
     procedure UpdateAccentBtn;
+    { Registered with TyDefaultController.AddChangeListener: every theme / mode / accent /
+      density / hot-reload change funnels through the controller's Changed, which repaints the
+      registered CONTROLS but knows nothing about this window's chrome. Hooking it here is what
+      re-skins the title bar + background for the changes no handler in this unit triggers
+      directly -- a hot-reload save on disk, or the OS flipping to dark while Follow is on. }
+    procedure ThemeChanged(Sender: TObject);
   end;
 
 var
@@ -120,6 +159,24 @@ begin
   TyDefaultController.ThemeName := 'default';
   ApplyChromeTheme(TyDefaultController);   // theme the window chrome + background
   UpdateAccentBtn;
+  { Last, so the initial setup above stays a single explicit apply: from here on EVERY change to
+    the controller (whoever makes it) re-skins this window through the listener. }
+  TyDefaultController.AddChangeListener(@ThemeChanged);
+end;
+
+procedure TMainForm.FormDestroy(Sender: TObject);
+begin
+  { The default controller outlives this form, so unhook before the method pointer dangles --
+    and disarm the two watch timers this example may have armed on it. }
+  TyDefaultController.RemoveChangeListener(@ThemeChanged);
+  TyDefaultController.HotReload := False;
+  TyDefaultController.Follow := tfManual;
+end;
+
+procedure TMainForm.ThemeChanged(Sender: TObject);
+begin
+  ApplyChromeTheme(TyDefaultController);
+  UpdateAccentBtn;
 end;
 
 procedure TMainForm.ThemeComboChange(Sender: TObject);
@@ -127,24 +184,40 @@ begin
   if ThemeCombo.ItemIndex < 0 then Exit;
   TyDefaultController.ThemeName := ThemeCombo.Items[ThemeCombo.ItemIndex];
   ApplyChromeTheme(TyDefaultController);   // re-theme the shell on every skin change
-  LblStatus.Caption := 'Current theme:' + ThemeCombo.Items[ThemeCombo.ItemIndex];
+  LblStatus.Caption := 'Current theme: ' + ThemeCombo.Items[ThemeCombo.ItemIndex];
   UpdateAccentBtn;   // a theme switch clears any accent override (D2)
 end;
 
 { Light/Dark toggle the mode of the CURRENTLY-active theme (NOT a switch to the default theme),
-  so the picked skin stays and a custom accent survives (a mode change keeps the override). }
+  so the picked skin stays and a custom accent survives (a mode change keeps the override).
+  Picking a mode by hand is also what leaves OS-follow: Follow goes back to tfManual FIRST, so
+  the next poll tick cannot pull the OS scheme back over the choice just made. The explicit
+  ApplyChromeTheme is what disarms TTyForm's follow timer (UpdateFollowWatch runs inside it) --
+  the change listener alone would not, because a no-op Mode set fires no Changed. }
 procedure TMainForm.SwitchLight(Sender: TObject);
 begin
+  TyDefaultController.Follow := tfManual;
   TyDefaultController.Mode := 'light';
   ApplyChromeTheme(TyDefaultController);
-  LblStatus.Caption := 'Mode: Light';
+  LblStatus.Caption := 'Mode: Light (manual)';
 end;
 
 procedure TMainForm.SwitchDark(Sender: TObject);
 begin
+  TyDefaultController.Follow := tfManual;
   TyDefaultController.Mode := 'dark';
   ApplyChromeTheme(TyDefaultController);
-  LblStatus.Caption := 'Mode: Dark';
+  LblStatus.Caption := 'Mode: Dark (manual)';
+end;
+
+{ The third appearance state: hand the light/dark axis back to the OS. Setting Follow immediately
+  pulls the current OS scheme + accent in (SetFollow -> RefreshFromSystem), and ApplyChromeTheme
+  arms TTyForm's 750 ms poll so a LATER change to the OS setting is picked up too. }
+procedure TMainForm.SwitchAuto(Sender: TObject);
+begin
+  TyDefaultController.Follow := tfFollowSystem;
+  ApplyChromeTheme(TyDefaultController);
+  LblStatus.Caption := 'Appearance: follows the OS light/dark setting';
 end;
 
 procedure TMainForm.SwitchGreen(Sender: TObject);
@@ -156,6 +229,67 @@ begin
   ApplyChromeTheme(TyDefaultController);
   LblStatus.Caption := 'Current theme: green (image background)';
   UpdateAccentBtn;
+end;
+
+{ The "write your own theme file" path the README promises: custom.tycss ships beside this
+  example and only restyles a handful of typeKeys -- everything it leaves out keeps rendering,
+  because the built-in base layer sits under every user theme. }
+procedure TMainForm.SwitchCustom(Sender: TObject);
+begin
+  TyDefaultController.ThemeFile := LocalThemeFile('custom.tycss');
+  ApplyChromeTheme(TyDefaultController);
+  LblStatus.Caption := 'Current theme: custom.tycss (a hand-written file, partial by design)';
+  UpdateAccentBtn;
+end;
+
+{ The density axis is ORTHOGONAL to the skin: whatever theme is loaded keeps its colours, and
+  only the geometry tokens (radius, padding, control heights, icon and row sizes) re-resolve.
+  Switching it re-loads layer-1 and re-appends the modern pack, so it composes with any theme. }
+procedure TMainForm.DensityChange(Sender: TObject);
+begin
+  if SwitchDensity.Checked then
+  begin
+    TyDefaultController.Density := tdModern;
+    LblStatus.Caption := 'Density: modern (Web scale) - same skin, roomier geometry';
+  end
+  else
+  begin
+    TyDefaultController.Density := tdClassic;
+    LblStatus.Caption := 'Density: classic';
+  end;
+  ApplyChromeTheme(TyDefaultController);
+end;
+
+{ HotReload watches the theme FILE, so a compiled-in ThemeName has nothing to watch: arming it
+  switches to the file theme shipped here first. From then on the controller polls green.tycss
+  every 750 ms and reloads it on any save -- the chrome follows because ThemeChanged is hooked. }
+procedure TMainForm.HotReloadChange(Sender: TObject);
+begin
+  if ChkHotReload.Checked then
+  begin
+    if TyDefaultController.ThemeFile = '' then
+      TyDefaultController.ThemeFile := LocalThemeFile('green.tycss');
+    TyDefaultController.HotReload := True;
+    LblStatus.Caption := 'Hot-reload ON - save an edit to ' +
+      ExtractFileName(TyDefaultController.ThemeFile) + ' and the window re-themes';
+  end
+  else
+  begin
+    TyDefaultController.HotReload := False;
+    LblStatus.Caption := 'Hot-reload OFF';
+  end;
+  ApplyChromeTheme(TyDefaultController);
+  UpdateAccentBtn;
+end;
+
+{ The additive layer (A6). LoadThemeCss REPLACES layer-1; LoadThemeCssAdditive composes ON TOP
+  of it, so the skin, its images and every rule it defines survive and only the declarations
+  written here win. Pick another theme in the combo to drop the layer (a switch REPLACEs). }
+procedure TMainForm.OverlayClick(Sender: TObject);
+begin
+  TyDefaultController.LoadThemeCssAdditive(':root { --accent: #7C3AED; --radius: 12px; }');
+  ApplyChromeTheme(TyDefaultController);
+  LblStatus.Caption := 'Additive layer applied - skin kept, two tokens overridden';
 end;
 
 procedure TMainForm.UpdateAccentBtn;
@@ -182,7 +316,7 @@ begin
                  + IntToHex(TyBlueOf(dlg.Color), 2);
       TyDefaultController.SetAccent(hex);          // recolours every registered control + chrome
       ApplyChromeTheme(TyDefaultController);
-      LblStatus.Caption := 'Accent colour:' + hex + '(overlaid on the current theme)';
+      LblStatus.Caption := 'Accent colour: ' + hex + ' (overlaid on the current theme)';
     end;
   finally
     dlg.Free;

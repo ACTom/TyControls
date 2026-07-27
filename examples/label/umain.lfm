@@ -1,10 +1,10 @@
 object MainForm: TMainForm
   Left = 0
-  Height = 440
+  Height = 750
   Top = 0
   Width = 480
   Caption = 'TTyLabel example'
-  ClientHeight = 440
+  ClientHeight = 750
   ClientWidth = 480
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
@@ -12,7 +12,7 @@ object MainForm: TMainForm
   TitleBar = Bar
   object Surface: TTyFormSurface
     Left = 0
-    Height = 440
+    Height = 750
     Top = 0
     Width = 480
     Align = alClient
@@ -47,7 +47,8 @@ object MainForm: TMainForm
       Height = 26
       Top = 46
       Width = 440
-      Caption = 'Tag features at a glance'
+      Caption = 'Heading via StyleOverride (font-size 13px, weight 600)'
+      StyleOverride = 'font-size: 13px; font-weight: 600;'
     end
     object LblLeft: TTyLabel
       Left = 20
@@ -117,6 +118,82 @@ object MainForm: TMainForm
       Width = 150
       Caption = 'Name(&N):'
       FocusControl = EdName
+    end
+    object LblLayoutHead: TTyLabel
+      Left = 20
+      Height = 22
+      Top = 344
+      Width = 440
+      Caption = 'Layout: three 56px boxes, three vertical placements'
+    end
+    object LblLayoutTop: TTyLabel
+      Left = 20
+      Height = 56
+      Top = 372
+      Width = 440
+      AutoSize = False
+      Transparent = False
+      Layout = tlTop
+      StyleOverride = 'background: alpha(var(--on-surface), 0.06); border-color: var(--border); border-width: 1px; border-radius: 6px; padding: 6px;'
+      Caption = 'Layout = tlTop (text sits at the top of a 56px box)'
+    end
+    object LblLayoutCenter: TTyLabel
+      Left = 20
+      Height = 56
+      Top = 434
+      Width = 440
+      AutoSize = False
+      Transparent = False
+      Layout = tlCenter
+      StyleOverride = 'background: alpha(var(--on-surface), 0.06); border-color: var(--border); border-width: 1px; border-radius: 6px; padding: 6px;'
+      Caption = 'Layout = tlCenter (the default - vertically centred)'
+    end
+    object LblLayoutBottom: TTyLabel
+      Left = 20
+      Height = 56
+      Top = 496
+      Width = 440
+      AutoSize = False
+      Transparent = False
+      Layout = tlBottom
+      StyleOverride = 'background: alpha(var(--on-surface), 0.06); border-color: var(--border); border-width: 1px; border-radius: 6px; padding: 6px;'
+      Caption = 'Layout = tlBottom (text sits on the bottom edge)'
+    end
+    object LblWrapAutoHead: TTyLabel
+      Left = 20
+      Height = 22
+      Top = 564
+      Width = 440
+      Caption = 'AutoSize + WordWrap: the box keeps its width and grows its height'
+    end
+    object LblWrapAuto: TTyLabel
+      Left = 20
+      Height = 56
+      Top = 592
+      Width = 440
+      Anchors = [akTop, akLeft, akRight]
+      AutoSize = True
+      WordWrap = True
+      Transparent = False
+      StyleOverride = 'background: alpha(var(--on-surface), 0.06); border-color: var(--border); border-width: 1px; border-radius: 6px; padding: 6px;'
+      Caption = 'AutoSize=True + WordWrap=True: the label keeps its width and grows its HEIGHT to fit however many lines the text needs - widen the window and watch the box re-wrap and re-fit by itself.'
+    end
+    object LblClick: TTyLabel
+      Left = 20
+      Height = 24
+      Top = 668
+      Width = 440
+      Cursor = crHandPoint
+      Caption = 'Click me: TTyLabel fires OnClick like any other control'
+      OnClick = LblClickClick
+    end
+    object LblAccent: TTyLabel
+      Left = 20
+      Height = 22
+      Top = 704
+      Width = 440
+      StyleOverride = 'color: var(--accent);'
+      Caption = 'StyleOverride = color: var(--accent) - still theme-aware'
     end
   end
 end

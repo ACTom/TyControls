@@ -28,7 +28,8 @@ uses
   tyControls.Button, tyControls.CheckBox, tyControls.ComboBox, tyControls.ToggleSwitch,
   tyControls.BuiltinThemes,
   tyControls.FileSystem, tyControls.ShellListView, tyControls.ShellTreeView,
-  tyControls.ShellComboBox, tyControls.FilterComboBox, tyControls.ListView;
+  tyControls.ShellComboBox, tyControls.FilterComboBox,
+  tyControls.ListView.Layout, tyControls.ListView;
 
 type
   TMainForm = class(TTyForm)
@@ -40,6 +41,11 @@ type
     BtnUp:     TTyButton;
     ChkHidden: TTyCheckBox;
     ChkGroup:  TTyCheckBox;
+    ChkFoldersFirst: TTyCheckBox;
+    ChkMulti:        TTyCheckBox;
+    BtnRefresh:      TTyButton;
+    LblView:   TTyLabel;
+    ViewCombo: TTyComboBox;
 
     LblLookIn: TTyLabel;
     LookIn:    TTyShellComboBox;
@@ -47,18 +53,25 @@ type
     Tree1: TTyShellTreeView;
     List1: TTyShellListView;
 
+    LblHint:    TTyLabel;
     LblFilter:  TTyLabel;
     FilterCombo: TTyFilterComboBox;
+    LblSelection: TTyLabel;
     LblStatus:  TTyLabel;
 
     procedure FormCreate(Sender: TObject);
     procedure Tree1PathChange(Sender: TObject);
     procedure List1DirectoryChange(Sender: TObject);
     procedure List1FileActivate(Sender: TObject; AIndex: Integer);
+    procedure List1SelectItem(Sender: TObject; AIndex: Integer);
     procedure LookInSelectPath(Sender: TObject);
     procedure FilterComboFilterChange(Sender: TObject);
     procedure ChkHiddenChange(Sender: TObject);
     procedure ChkGroupChange(Sender: TObject);
+    procedure ChkFoldersFirstChange(Sender: TObject);
+    procedure ChkMultiChange(Sender: TObject);
+    procedure ViewComboChange(Sender: TObject);
+    procedure BtnRefreshClick(Sender: TObject);
     procedure BtnUpClick(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
     procedure DarkSwitchChange(Sender: TObject);
@@ -68,6 +81,7 @@ type
     FSyncing: Boolean;
     procedure NavigateTo(const APath: string);
     procedure ShowCurrent(const APath: string);
+    procedure ShowSelection;
   end;
 
 var
@@ -107,6 +121,16 @@ begin
   { The list renames on F2 (opt-in; the default is read-only so a stray F2 can't rename). }
   List1.ReadOnly := False;
 
+  { View styles, in TTyListViewStyle order for the case in ViewComboChange. The list already
+    feeds the SAME kind-glyph list to both SmallImages and LargeImages, so every mode has
+    icons without any extra wiring. }
+  ViewCombo.Items.Add('Report');
+  ViewCombo.Items.Add('List');
+  ViewCombo.Items.Add('Small icons');
+  ViewCombo.Items.Add('Icons');
+  ViewCombo.Items.Add('Tile');
+  ViewCombo.ItemIndex := 0;
+
   { Filter presets: a segment Caption + its ';'-separated pattern list. Selecting one sets
     List1.Mask via OnFilterChange. Directories are always shown regardless of the mask. }
   FilterCombo.Filter :=
@@ -139,6 +163,21 @@ begin
   LookIn.Directory := APath;
 end;
 
+{ The two "what is picked right now" queries a file dialog binds to: SelectedFile is the
+  FOCUSED entry's full path ('' when nothing is focused, e.g. straight after entering a
+  directory), SelCount is the size of the whole Ctrl/Shift-built selection. }
+procedure TMainForm.ShowSelection;
+var
+  cur: string;
+begin
+  cur := List1.SelectedFile;
+  if cur = '' then
+    LblSelection.Caption := 'SelectedFile: (none) - SelCount 0'
+  else
+    LblSelection.Caption := Format('SelectedFile: %s - SelCount %d',
+      [ExtractFileName(cur), List1.SelCount]);
+end;
+
 { Drive the list; its OnDirectoryChange then reveals the path in the tree + look-in. }
 procedure TMainForm.NavigateTo(const APath: string);
 begin
@@ -160,6 +199,9 @@ end;
 procedure TMainForm.List1DirectoryChange(Sender: TObject);
 begin
   ShowCurrent(List1.Directory);
+  { LoadDirectory deliberately drops focus + selection, and that reset does not route
+    through OnSelectItem -- so refresh the read-out here or it would show a stale name. }
+  ShowSelection;
   if FSyncing then Exit;
   FSyncing := True;
   try
@@ -188,6 +230,12 @@ begin
   LblStatus.Caption := 'Open file:' + List1.FileAt(AIndex);
 end;
 
+procedure TMainForm.List1SelectItem(Sender: TObject; AIndex: Integer);
+begin
+  { Fires on every focus move -- click, Ctrl/Shift-click, arrow key, type-ahead. }
+  ShowSelection;
+end;
+
 procedure TMainForm.BtnUpClick(Sender: TObject);
 var
   parentDir: string;
@@ -214,6 +262,42 @@ end;
 procedure TMainForm.ChkGroupChange(Sender: TObject);
 begin
   List1.GroupByKind := ChkGroup.Checked;
+end;
+
+procedure TMainForm.ChkFoldersFirstChange(Sender: TObject);
+begin
+  { On (the default), folders lead in BOTH directions -- click the Name header twice and
+    they stay on top. Off, they sort as plain names and fall to the bottom descending. }
+  List1.FoldersFirst := ChkFoldersFirst.Checked;
+end;
+
+procedure TMainForm.ChkMultiChange(Sender: TObject);
+begin
+  { Collapsing to single-select keeps the focused row and drops the rest. }
+  List1.MultiSelect := ChkMulti.Checked;
+  ShowSelection;
+end;
+
+procedure TMainForm.ViewComboChange(Sender: TObject);
+begin
+  { Only lvsReport shows the column header (and therefore the click-to-sort seam); the flow
+    modes lay the same entries out as icon cells using the very same glyph list. }
+  case ViewCombo.ItemIndex of
+    1: List1.ViewStyle := lvsList;
+    2: List1.ViewStyle := lvsSmallIcon;
+    3: List1.ViewStyle := lvsIcon;
+    4: List1.ViewStyle := lvsTile;
+  else
+    List1.ViewStyle := lvsReport;
+  end;
+end;
+
+procedure TMainForm.BtnRefreshClick(Sender: TObject);
+begin
+  { Re-reads the current directory in place and KEEPS the selection -- the F5 of a file
+    browser. LoadDirectory(same path) would clear focus + selection instead. }
+  List1.Refresh;
+  ShowSelection;
 end;
 
 procedure TMainForm.ThemeComboChange(Sender: TObject);

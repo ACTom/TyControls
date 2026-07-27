@@ -34,11 +34,25 @@ type
     RightPanel: TTyPanel;
     DescLabel: TTyLabel;
     ResultLabel: TTyLabel;
+    AlignHeader: TTyLabel;
+    AlignLeftPanel: TTyPanel;
+    AlignCenterPanel: TTyPanel;
+    AlignRightPanel: TTyPanel;
+    OverrideHeader: TTyLabel;
+    AccentPanel: TTyPanel;
+    PlainPanel: TTyPanel;
+    InteractHeader: TTyLabel;
+    HotPanel: TTyPanel;
+    DisabledPanel: TTyPanel;
+    PanelEventLabel: TTyLabel;
     BottomPanel: TTyPanel;
     procedure FormCreate(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
     procedure DarkSwitchChange(Sender: TObject);
     procedure GreetClicked(Sender: TObject);
+    procedure HotPanelClick(Sender: TObject);
+    procedure HotPanelMouseEnter(Sender: TObject);
+    procedure HotPanelMouseLeave(Sender: TObject);
   end;
 
 var
@@ -89,6 +103,21 @@ begin
     ResultLabel.Caption := 'Please enter a name first!'
   else
     ResultLabel.Caption := Format('Hello, %s! Welcome to TyControls.', [UserName]);
+end;
+
+procedure TMainForm.HotPanelClick(Sender: TObject);
+begin
+  PanelEventLabel.Caption := 'OnClick — a panel dispatches the whole mouse event set, not just paint.';
+end;
+
+procedure TMainForm.HotPanelMouseEnter(Sender: TObject);
+begin
+  PanelEventLabel.Caption := 'OnMouseEnter — the pointer is over the panel.';
+end;
+
+procedure TMainForm.HotPanelMouseLeave(Sender: TObject);
+begin
+  PanelEventLabel.Caption := 'OnMouseLeave — the pointer left the panel.';
 end;
 
 end.

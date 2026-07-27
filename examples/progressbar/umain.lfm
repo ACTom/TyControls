@@ -1,10 +1,10 @@
 object MainForm: TMainForm
   Left = 0
-  Height = 300
+  Height = 500
   Top = 0
   Width = 420
   Caption = 'TTyProgressBar example'
-  ClientHeight = 300
+  ClientHeight = 500
   ClientWidth = 420
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
@@ -12,7 +12,7 @@ object MainForm: TMainForm
   TitleBar = Bar
   object Surface: TTyFormSurface
     Left = 0
-    Height = 300
+    Height = 500
     Top = 0
     Width = 420
     Align = alClient
@@ -99,6 +99,100 @@ object MainForm: TMainForm
       Width = 110
       Caption = 'Reset to zero'
       OnClick = ResetClick
+    end
+    object LblOrient: TTyLabel
+      Left = 20
+      Height = 20
+      Top = 224
+      Width = 380
+      Caption = 'Orientation = tpoVertical - fills bottom-up, same Position'
+    end
+    object VertBar: TTyProgressBar
+      Left = 20
+      Height = 120
+      Top = 250
+      Width = 28
+      Min = 0
+      Max = 100
+      Position = 0
+      Orientation = tpoVertical
+      Hint = 'Same Position as the wide bar, but the fill grows upward'
+      ShowHint = True
+    end
+    object LblRange: TTyLabel
+      Left = 68
+      Height = 20
+      Top = 250
+      Width = 332
+      Caption = 'Min / Max are free - this one runs 20..60'
+    end
+    object RangeBar: TTyProgressBar
+      Left = 68
+      Height = 22
+      Top = 276
+      Width = 332
+      Min = 20
+      Max = 60
+    end
+    object LblRangeReadout: TTyLabel
+      Left = 68
+      Height = 20
+      Top = 304
+      Width = 332
+      Caption = 'Position 20 in 20..60  (0%)'
+    end
+    object LblOverride: TTyLabel
+      Left = 68
+      Height = 20
+      Top = 332
+      Width = 332
+      Caption = 'StyleOverride - square accent track. Click to seek.'
+    end
+    object OverrideBar: TTyProgressBar
+      Left = 68
+      Height = 22
+      Top = 358
+      Width = 332
+      Cursor = crHandPoint
+      Min = 0
+      Max = 100
+      Position = 35
+      StyleOverride = 'border-radius: 0; border-width: 2px; border-color: var(--accent);'
+      OnMouseDown = OverrideBarMouseDown
+    end
+    object LblDisabled: TTyLabel
+      Left = 20
+      Height = 20
+      Top = 392
+      Width = 380
+      Caption = 'Enabled = False - the theme dims track and fill together'
+    end
+    object DisabledBar: TTyProgressBar
+      Left = 20
+      Height = 22
+      Top = 418
+      Width = 380
+      Min = 0
+      Max = 100
+      Position = 45
+      Enabled = False
+    end
+    object LblDock: TTyLabel
+      Left = 20
+      Height = 20
+      Top = 452
+      Width = 380
+      Caption = 'Align = alBottom - a strip that stretches with the window'
+    end
+    object DockBar: TTyProgressBar
+      Left = 0
+      Height = 12
+      Top = 488
+      Width = 420
+      Align = alBottom
+      Min = 0
+      Max = 100
+      Position = 0
     end
   end
   object Timer: TTimer

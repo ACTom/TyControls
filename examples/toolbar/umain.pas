@@ -16,7 +16,8 @@ interface
 uses
   Classes, SysUtils, Types, Forms, Controls,
   tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes,
-  tyControls.ToolBar, tyControls.Button, tyControls.TyLabel, tyControls.ComboBox, tyControls.ToggleSwitch;
+  tyControls.ToolBar, tyControls.Button, tyControls.TyLabel, tyControls.ComboBox, tyControls.ToggleSwitch,
+  tyControls.GlyphButtons, tyControls.IconFont;
 
 type
   TMainForm = class(TTyForm)
@@ -24,10 +25,11 @@ type
     DarkSwitch: TTyToggleSwitch;
     Surface: TTyFormSurface;
     ThemeCombo: TTyComboBox;
+    Icons: TTyIconFont;
     ToolBar: TTyToolBar;
-    BtnNew: TTyButton;
-    BtnOpen: TTyButton;
-    BtnSave: TTyButton;
+    BtnNew: TTyGlyphButton;
+    BtnOpen: TTyGlyphButton;
+    BtnSave: TTyGlyphButton;
     Sep1: TTyToolSeparator;
     BtnCut: TTyButton;
     BtnCopy: TTyButton;
@@ -36,9 +38,30 @@ type
     BtnFind: TTyButton;
     BtnReplace: TTyButton;
     BtnSelectAll: TTyButton;
+    Sep3: TTyToolSeparator;
+    { Toggling tools: Down is the resting :selected state (TyButton.ghost:selected). }
+    BtnBold: TTyButton;
+    BtnItalic: TTyButton;
+    BtnUnderline: TTyButton;
+    { Second bar: Flat = False, Wrapable = False, ButtonHeight left unset. }
+    ToolBarFramed: TTyToolBar;
+    BtnAlignLeft: TTyButton;
+    BtnAlignCenter: TTyButton;
+    BtnAlignRight: TTyButton;
+    BtnJustify: TTyButton;
+    Sep4: TTyToolSeparator;
+    BtnBullets: TTyButton;
+    BtnNumbers: TTyButton;
+    BtnQuote: TTyButton;
+    LblWrapHint: TTyLabel;
+    LblDownHint: TTyLabel;
+    LblGlyphHint: TTyLabel;
+    LblFramedHint: TTyLabel;
+    LblReserved: TTyLabel;
     LblStatus: TTyLabel;
     procedure FormCreate(Sender: TObject);
     procedure ToolClicked(Sender: TObject);
+    procedure ToolToggle(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
     procedure DarkSwitchChange(Sender: TObject);
   end;
@@ -85,6 +108,18 @@ end;
 procedure TMainForm.ToolClicked(Sender: TObject);
 begin
   LblStatus.Caption := Format('Fired tool: %s', [(Sender as TTyButton).Caption]);
+end;
+
+procedure TMainForm.ToolToggle(Sender: TObject);
+var
+  B: TTyButton;
+begin
+  // A toggling tool: Down is the resting :selected state, so the tool keeps the
+  // pressed look after the mouse leaves. There is no built-in grouping — the app
+  // owns the state, which is why this flips it by hand.
+  B := Sender as TTyButton;
+  B.Down := not B.Down;
+  LblStatus.Caption := Format('%s: Down = %s', [B.Caption, BoolToStr(B.Down, True)]);
 end;
 
 end.

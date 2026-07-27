@@ -19,12 +19,14 @@ uses
   tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes,
   tyControls.TyLabel, tyControls.Divider,
   tyControls.Button, tyControls.TrackBar, tyControls.ComboBox,
+  tyControls.ToggleSwitch,
   tyControls.Shape, tyControls.StarShape, tyControls.Arrow;
 
 type
   TMainForm = class(TTyForm)
     Surface: TTyFormSurface;
     TitleBar1: TTyTitleBar;
+    DarkSwitch: TTyToggleSwitch;
     ThemeCombo: TTyComboBox;
 
     DivKinds: TTyDivider;
@@ -52,12 +54,16 @@ type
     ShZeroWidth: TTyShape;
     ShThick: TTyShape;
     ShLineThick: TTyShape;
+    ShOutline: TTyShape;       // transparent background -> the fill is skipped
+    ShRadius: TTyShape;        // border-radius overridden on a tskRoundRect
     LblOver1: TTyLabel;
     LblOver2: TTyLabel;
     LblNoBorder: TTyLabel;
     LblZeroWidth: TTyLabel;
     LblThick: TTyLabel;
     LblLineThick: TTyLabel;
+    LblOutline: TTyLabel;
+    LblRadius: TTyLabel;
 
     DivStar: TTyDivider;
     StarBig: TTyStarShape;
@@ -66,6 +72,7 @@ type
     LblInner: TTyLabel;
     TrackInner: TTyTrackBar;
     LblStarHint: TTyLabel;
+    BtnClamp: TTyButton;       // asks for out-of-range values, reads back the clamped ones
 
     DivArrow: TTyDivider;
     ArrRight: TTyArrow;
@@ -87,9 +94,12 @@ type
     BtnDark: TTyButton;
     BtnGreen: TTyButton;
     LblThemeHint: TTyLabel;
+    LblThemeCss: TTyLabel;
 
     procedure FormCreate(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
+    procedure DarkSwitchChange(Sender: TObject);
+    procedure BtnClampClick(Sender: TObject);
     procedure TrackPointsChange(Sender: TObject);
     procedure TrackInnerChange(Sender: TObject);
     procedure TrackHeadChange(Sender: TObject);
@@ -152,6 +162,32 @@ begin
   if ThemeCombo.ItemIndex < 0 then Exit;
   TyDefaultController.ThemeName := ThemeCombo.Items[ThemeCombo.ItemIndex];
   ApplyChromeTheme(TyDefaultController);   // re-theme the shell on every skin change
+end;
+
+procedure TMainForm.DarkSwitchChange(Sender: TObject);
+begin
+  // Flip the light/dark @mode axis — the same skin, recoloured (independent of which
+  // theme ThemeCombo picked).
+  if DarkSwitch.Checked then
+    TyDefaultController.Mode := 'dark'
+  else
+    TyDefaultController.Mode := 'light';
+  ApplyChromeTheme(TyDefaultController);
+end;
+
+procedure TMainForm.BtnClampClick(Sender: TObject);
+begin
+  // Both setters clamp on assignment, so the star never draws a value it cannot read
+  // back: Points floors at 3, InnerRatio caps at 0.95.
+  StarBig.Points := 1;
+  StarBig.InnerRatio := 2.0;
+  // Re-sync the sliders first (their OnChange rewrites the captions), then report what
+  // actually stuck.
+  TrackPoints.Position := StarBig.Points;
+  TrackInner.Position := Round(StarBig.InnerRatio * 100);
+  LblPoints.Caption := Format('Point count Points = %d (asked for 1)', [StarBig.Points]);
+  LblInner.Caption := Format('Inner radius ratio InnerRatio = %.2f (asked for 2.00)',
+    [StarBig.InnerRatio]);
 end;
 
 procedure TMainForm.TrackPointsChange(Sender: TObject);

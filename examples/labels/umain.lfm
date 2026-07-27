@@ -1,26 +1,26 @@
 object MainForm: TMainForm
   Left = 0
-  Height = 300
+  Height = 428
   Top = 0
-  Width = 420
+  Width = 520
   Caption = 'Labels example'
-  ClientHeight = 300
-  ClientWidth = 420
+  ClientHeight = 428
+  ClientWidth = 520
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
   TitleBar = Bar
   object Surface: TTyFormSurface
     Left = 0
-    Height = 300
+    Height = 428
     Top = 0
-    Width = 420
+    Width = 520
     Align = alClient
     object Bar: TTyTitleBar
       Left = 0
       Height = 34
       Top = 0
-      Width = 420
+      Width = 520
       Align = alTop
       Caption = 'Labels  · TyControls'
       TitleAlignment = taLeftJustify
@@ -49,30 +49,87 @@ object MainForm: TMainForm
       Width = 360
       Caption = 'Plain label TTyLabel'
     end
+    object LblHdrLink: TTyLabel
+      Left = 24
+      Height = 20
+      Top = 88
+      Width = 470
+      Caption = 'TTyLinkLabel — AutoOpen picks who handles the click; Alignment aligns it'
+    end
     object LblLink: TTyLinkLabel
       Left = 24
       Height = 24
-      Top = 100
-      Width = 360
-      Caption = 'Hyperlink label TTyLinkLabel (click to open the homepage)'
+      Top = 112
+      Width = 470
+      Caption = 'Right-aligned hyperlink (AutoOpen = True opens the browser)'
       URL = 'https://github.com/ACTom/TyControls'
+      Alignment = taRightJustify
+    end
+    object LblAction: TTyLinkLabel
+      Left = 24
+      Height = 24
+      Top = 140
+      Width = 470
+      Caption = 'In-app link (AutoOpen = False) — click me, no browser opens'
+      OnClick = LblActionClick
+      AutoOpen = False
+    end
+    object LblHdrShadow: TTyLabel
+      Left = 24
+      Height = 20
+      Top = 172
+      Width = 470
+      Caption = 'TTyShadowLabel — ShadowOffsetX/Y aim the shadow; ShadowColor set in code'
     end
     object LblShadow: TTyShadowLabel
       Left = 24
       Height = 30
-      Top = 144
-      Width = 360
-      Caption = 'Shadow label TTyShadowLabel'
+      Top = 196
+      Width = 470
+      Caption = 'Centred shadow label — ShadowOffset = (2, 2), falling down-right'
+      Alignment = taCenter
       ShadowOffsetX = 2
       ShadowOffsetY = 2
+    end
+    object LblShadowUp: TTyShadowLabel
+      Left = 24
+      Height = 30
+      Top = 230
+      Width = 470
+      Caption = 'ShadowOffset = (-2, -2): the shadow can fall up-left too'
+      ShadowOffsetX = -2
+      ShadowOffsetY = -2
+    end
+    object LblHdrGlow: TTyLabel
+      Left = 24
+      Height = 20
+      Top = 266
+      Width = 470
+      Caption = 'TTyGlowLabel — GlowRadius scales the halo (clamped to 0..64)'
     end
     object LblGlow: TTyGlowLabel
       Left = 24
       Height = 32
-      Top = 192
-      Width = 360
-      Caption = 'Glow label TTyGlowLabel'
+      Top = 290
+      Width = 470
+      Caption = 'GlowRadius = 5 — a soft halo around the text'
       GlowRadius = 5
+    end
+    object LblGlow0: TTyGlowLabel
+      Left = 24
+      Height = 32
+      Top = 328
+      Width = 470
+      Caption = 'GlowRadius = 0 — no blur, a crisp colour backing under the text'
+      GlowRadius = 0
+    end
+    object LblGlow14: TTyGlowLabel
+      Left = 24
+      Height = 40
+      Top = 366
+      Width = 470
+      Caption = 'GlowRadius = 14 — a wide soft halo (bigger values clamp at 64)'
+      GlowRadius = 14
     end
   end
 end

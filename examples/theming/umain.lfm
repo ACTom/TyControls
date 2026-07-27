@@ -1,18 +1,19 @@
 object MainForm: TMainForm
   Left = 0
-  Height = 388
+  Height = 760
   Top = 0
   Width = 470
   Caption = 'Theme system example'
-  ClientHeight = 388
+  ClientHeight = 760
   ClientWidth = 470
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
+  OnDestroy = FormDestroy
   TitleBar = Bar
   object Surface: TTyFormSurface
     Left = 0
-    Height = 388
+    Height = 760
     Top = 0
     Width = 470
     Align = alClient
@@ -137,6 +138,125 @@ object MainForm: TMainForm
       Min = 0
       Max = 100
       Position = 65
+    end
+    object LblAdvanced: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 330
+      Width = 438
+      Caption = 'Four more layers of the same theme system'
+    end
+    object BtnAuto: TTyButton
+      Left = 16
+      Height = 34
+      Top = 363
+      Width = 152
+      Caption = 'Auto (follow OS)'
+      StyleClass = 'ghost'
+      OnClick = SwitchAuto
+    end
+    object LblFollowHint: TTyLabel
+      Left = 180
+      Height = 48
+      Top = 356
+      Width = 274
+      AutoSize = False
+      WordWrap = True
+      Caption = 'Auto re-checks the OS scheme every 750 ms - flip Windows dark mode and the window follows.'
+    end
+    object SwitchDensity: TTyToggleSwitch
+      Left = 16
+      Height = 24
+      Top = 424
+      Width = 152
+      Caption = 'Modern density'
+      OnChange = DensityChange
+    end
+    object LblDensityHint: TTyLabel
+      Left = 180
+      Height = 48
+      Top = 412
+      Width = 274
+      AutoSize = False
+      WordWrap = True
+      Caption = 'Modern density keeps the skin colours but re-resolves radius, padding and control sizes.'
+    end
+    object ChkHotReload: TTyCheckBox
+      Left = 16
+      Height = 24
+      Top = 480
+      Width = 152
+      Caption = 'Hot-reload'
+      OnChange = HotReloadChange
+    end
+    object LblHotHint: TTyLabel
+      Left = 180
+      Height = 48
+      Top = 468
+      Width = 274
+      AutoSize = False
+      WordWrap = True
+      Caption = 'Watches ThemeFile only: ticking this loads green.tycss - edit and save it to see it reload.'
+    end
+    object BtnOverlay: TTyButton
+      Left = 16
+      Height = 34
+      Top = 531
+      Width = 152
+      Caption = 'Overlay a tweak'
+      OnClick = OverlayClick
+    end
+    object LblLayerHint: TTyLabel
+      Left = 180
+      Height = 48
+      Top = 524
+      Width = 274
+      AutoSize = False
+      WordWrap = True
+      Caption = 'Adds a CSS layer over the live theme: accent and radius change, the skin stays.'
+    end
+    object BtnCustom: TTyButton
+      Left = 16
+      Height = 34
+      Top = 587
+      Width = 152
+      Caption = 'Custom file'
+      OnClick = SwitchCustom
+    end
+    object LblCustomHint: TTyLabel
+      Left = 180
+      Height = 48
+      Top = 580
+      Width = 274
+      AutoSize = False
+      WordWrap = True
+      Caption = 'Loads custom.tycss from this example folder - the write-your-own-theme-file path.'
+    end
+    object BtnOverride: TTyButton
+      Left = 16
+      Height = 34
+      Top = 643
+      Width = 152
+      Caption = 'Overridden'
+      StyleOverride = 'background: var(--accent); color: #FFFFFF; border-radius: 14px;'
+    end
+    object LblOvrHint: TTyLabel
+      Left = 180
+      Height = 48
+      Top = 636
+      Width = 274
+      AutoSize = False
+      WordWrap = True
+      Caption = 'StyleOverride pins per-instance CSS above the theme; var(--accent) still tracks a skin switch.'
+    end
+    object LblListener: TTyLabel
+      Left = 16
+      Height = 44
+      Top = 692
+      Width = 438
+      AutoSize = False
+      WordWrap = True
+      Caption = 'Every theme, mode, accent, density or hot-reload change fires the change listeners on the controller - this window hooks one to re-skin its chrome.'
     end
   end
 end

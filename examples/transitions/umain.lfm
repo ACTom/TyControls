@@ -1,10 +1,10 @@
 object MainForm: TMainForm
   Left = 240
-  Height = 520
+  Height = 560
   Top = 120
   Width = 720
   Caption = 'TyControls — transitions (Transitions)'
-  ClientHeight = 520
+  ClientHeight = 560
   ClientWidth = 720
   Font.Height = -12
   Position = poScreenCenter
@@ -13,7 +13,7 @@ object MainForm: TMainForm
   TitleBar = TitleBar1
   object Surface: TTyFormSurface
     Left = 0
-    Height = 520
+    Height = 560
     Top = 0
     Width = 720
     Align = alClient
@@ -45,7 +45,7 @@ object MainForm: TMainForm
       Height = 30
       Top = 46
       Width = 90
-      Caption = 'Fade in'
+      Caption = 'Fade in (window)'
       OnClick = BtnFadeClick
     end
     object BtnUp: TTyButton
@@ -80,10 +80,68 @@ object MainForm: TMainForm
       Caption = 'Slide in from right'
       OnClick = BtnRightClick
     end
+    object BtnNone: TTyButton
+      Left = 516
+      Height = 30
+      Top = 46
+      Width = 90
+      Caption = 'None (instant)'
+      OnClick = BtnNoneClick
+    end
+    object BtnHide: TTyButton
+      Left = 616
+      Height = 30
+      Top = 46
+      Width = 90
+      Caption = 'Hide panel'
+      OnClick = BtnHideClick
+    end
+    object LblDuration: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 88
+      Width = 100
+      Caption = 'Duration (ms)'
+    end
+    object DurationBar: TTyTrackBar
+      Left = 122
+      Height = 28
+      Top = 84
+      Width = 210
+      Min = 0
+      Max = 1000
+      Position = 300
+      Frequency = 250
+      PageSize = 100
+      ShowValue = True
+    end
+    object LblDurationHint: TTyLabel
+      Left = 344
+      Height = 20
+      Top = 88
+      Width = 360
+      Caption = '0 = snap, no animation. API default: 200'
+    end
+    object LblFadeNote: TTyLabel
+      Left = 16
+      Height = 42
+      Top = 120
+      Width = 688
+      Caption = 'Watch the whole WINDOW, not the panel, on "Fade in (window)": ttFade animates a FORM''s AlphaBlend, is Windows-only, and degrades to a plain show on any other control.'
+      WordWrap = True
+    end
+    object LblCancelNote: TTyLabel
+      Left = 16
+      Height = 42
+      Top = 166
+      Width = 688
+      Caption = 'Set Duration to 1000, then click a second direction mid-slide: the in-flight transition is cancelled and replaced — one control never runs two at once.'
+      WordWrap = True
+    end
     object Target: TTyPanel
       Left = 160
-      Height = 380
-      Top = 96
+      Height = 330
+      Top = 216
       Width = 400
       object LblIn: TTyLabel
         Left = 24
@@ -91,6 +149,14 @@ object MainForm: TMainForm
         Top = 24
         Width = 352
         Caption = 'This panel reappears with the chosen transition'
+      end
+      object LblHint: TTyLabel
+        Left = 24
+        Height = 72
+        Top = 60
+        Width = 352
+        Caption = 'Press "Hide panel", then any direction button: the panel is revealed from hidden. TyPlayTransition sets Visible itself.'
+        WordWrap = True
       end
     end
   end

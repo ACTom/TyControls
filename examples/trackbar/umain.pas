@@ -3,8 +3,11 @@ unit umain;
 { TTyTrackBar demo:
   - Horizontal track bar (0..100), OnChange updates the status label live
   - Custom-range track bar (-50..50, shows a negative range)
-  - Vertical track bar (Orientation = toVertical)
+  - Vertical track bar (Orientation = toVertical) with ticks and its own readout
   - Fine-stepping track bar (PageSize / Frequency demo, its own range and readout)
+  - ShowValue: the bar paints its own number (right end horizontal, under the track vertical)
+  - LineSize: a bar whose arrow-key / wheel step is 5 instead of 1
+  - AnimationsEnabled toggled from code (it is public, not published, so no .lfm can set it)
   The main form (a TTyForm + TTyTitleBar), every track bar and the live theme switcher are
   designed in umain.lfm; the code here is event handlers + theme setup only. }
 
@@ -32,6 +35,16 @@ type
     LblVertical: TTyLabel;
     Track3: TTyTrackBar;
     LblStatus: TTyLabel;
+    LblShowValueHint: TTyLabel;
+    LblVerticalHint: TTyLabel;
+    LblLineSize: TTyLabel;
+    Track5: TTyTrackBar;
+    AnimSwitch: TTyToggleSwitch;
+    LblAnimHint: TTyLabel;
+    LblKeysTitle: TTyLabel;
+    LblKeys1: TTyLabel;
+    LblKeys2: TTyLabel;
+    LblKeys3: TTyLabel;
     procedure FormCreate(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
     procedure DarkSwitchChange(Sender: TObject);
@@ -39,6 +52,8 @@ type
     procedure Track2Change(Sender: TObject);
     procedure Track3Change(Sender: TObject);
     procedure Track4Change(Sender: TObject);
+    procedure Track5Change(Sender: TObject);
+    procedure AnimSwitchChange(Sender: TObject);
   end;
 
 var
@@ -98,6 +113,29 @@ end;
 procedure TMainForm.Track4Change(Sender: TObject);
 begin
   LblStatus.Caption := Format('Brightness: %d', [(Sender as TTyTrackBar).Position]);
+end;
+
+{ LineSize = 5: every arrow key and every wheel notch moves this bar by 5, while
+  PageUp/PageDown still move by PageSize (25). }
+procedure TMainForm.Track5Change(Sender: TObject);
+begin
+  LblStatus.Caption := Format('Fine: %d', [(Sender as TTyTrackBar).Position]);
+end;
+
+{ AnimationsEnabled is PUBLIC, not published, so no .lfm can reach it -- only code.
+  On (the default) the thumb eases ~120 ms to a keyboard/wheel change; off it jumps.
+  A live drag always tracks the mouse exactly, either way. }
+procedure TMainForm.AnimSwitchChange(Sender: TObject);
+begin
+  Track1.AnimationsEnabled := AnimSwitch.Checked;
+  Track2.AnimationsEnabled := AnimSwitch.Checked;
+  Track3.AnimationsEnabled := AnimSwitch.Checked;
+  Track4.AnimationsEnabled := AnimSwitch.Checked;
+  Track5.AnimationsEnabled := AnimSwitch.Checked;
+  if AnimSwitch.Checked then
+    LblStatus.Caption := 'AnimationsEnabled = True (thumb eases)'
+  else
+    LblStatus.Caption := 'AnimationsEnabled = False (thumb jumps)';
 end;
 
 end.

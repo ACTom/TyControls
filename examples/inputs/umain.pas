@@ -23,7 +23,8 @@ uses
   tyControls.LColorPicker, tyControls.HSColorPicker, tyControls.CheckComboBox,
   tyControls.AdvancedListBox, tyControls.AdvancedComboBox, tyControls.ValueListEditor,
   tyControls.CalcEdit, tyControls.CalcCurrencyEdit, tyControls.TyLabel,
-  tyControls.ComboBox, tyControls.ToggleSwitch, tyControls.Dialogs.SelectPath, tyControls.Dialogs.About, tyControls.Types;
+  tyControls.ComboBox, tyControls.CheckBox, tyControls.Shape, tyControls.Popup,
+  tyControls.ToggleSwitch, tyControls.Dialogs.SelectPath, tyControls.Dialogs.About, tyControls.Types;
 
 type
   TMainForm = class(TTyForm)
@@ -57,6 +58,9 @@ type
     L24: TTyLabel;
     L25: TTyLabel;
     L26: TTyLabel;
+    L27: TTyLabel;
+    L28: TTyLabel;
+    L29: TTyLabel;
     LHint: TTyLabel;
     FQty: TTyNumericEdit;
     FPrice: TTyNumericEdit;
@@ -87,6 +91,12 @@ type
     FCalcEdit: TTyCalcEdit;
     FCalcCurr: TTyCalcCurrencyEdit;
     FEcho: TTyLabel;
+    PickPreview: TTyShape;        // swatch that echoes the last colour pick
+    LblPick: TTyLabel;
+    LblFontPreview: TTyLabel;     // drawn with the picked family + size
+    LblFontEcho: TTyLabel;
+    LblChecks: TTyLabel;
+    ChkSheetLock: TTyCheckBox;    // drives FVLE.ReadOnly (whole-sheet lock)
     procedure FormCreate(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
     procedure DarkSwitchChange(Sender: TObject);
@@ -95,6 +105,18 @@ type
     procedure LumChange(Sender: TObject);
     procedure VleChange(Sender: TObject; ARow: TTyValueRow);
     procedure VleEditDialog(Sender: TObject; ARow: TTyValueRow);
+    procedure ShowPick(Sender: TObject);
+    procedure FontPickChange(Sender: TObject);
+    procedure ChecksChanged(Sender: TObject);
+    procedure SheetLockChange(Sender: TObject);
+  private
+    { The popup FCombo (TTyComboEdit) drops. The control itself only FIRES OnDropDown —
+      the HOST owns the window and writes the picked value back into the field. }
+    FDropPopup: TTyDropdownPopup;
+    FDropGrid: TTyColorGrid;      // its content; owned by the form, only parented by the popup
+    procedure DropGridPick(Sender: TObject);
+  public
+    destructor Destroy; override;
   end;
 
 var
@@ -223,7 +245,12 @@ begin
   FAdvCombo.ItemIndex := 0;
 
   // Name/value editor (ValueListEditor: property sheet, inline editing in the value column)
-  FVLE.AddRow('Width', '1280').EditorKind := vekInteger;
+  FVLE.Images := Imgs;                             // row images come from the same virtual image list
+  VR := FVLE.AddRow('Width', '1280');
+  VR.EditorKind := vekInteger;
+  VR.Bold := True;                                 // per-row value styling: bold + colour
+  VR.TextColor := clNavy;
+  FVLE.AddRow('Opacity', '0.85').EditorKind := vekFloat;   // float: digits, one '.', a leading '-'
   FVLE.AddRow('Title', 'Rich Inputs example');         // plain text
   VR := FVLE.AddRow('Align', 'taCenter');           // enum → dropdown
   VR.EditorKind := vekEnum;
@@ -232,6 +259,8 @@ begin
   FVLE.AddRow('Font', 'Segoe UI, 9').EditorKind := vekFont;  // leaf font → text + "…" opens the font dialog
   VR := FVLE.AddRow('Data path', 'D:\data');         // text + "…" → the library's own path dialog (OnEditRow)
   VR.EditorKind := vekDialog;
+  VR.ImageIndex := 1;                              // a row image (index into FVLE.Images)
+  FVLE.AddRow('Licence key', 'ABCD-1234-EFGH').DisplayValue := '(hidden)';   // DisplayValue masks the real Value
   VR := FVLE.AddRow('About', 'TyControls ' + TyVersion);   // user-side custom: "…" opens a read-only About dialog, no write-back
   VR.EditorKind := vekDialog;
   VR := FVLE.AddRow('Theme', 'light.tycss');        // read-only + display-name override (i18n)
@@ -253,7 +282,20 @@ begin
 
   // Calculator dropdown (CalcEdit / CalcCurrencyEdit): Value is public, set here.
   FCalcEdit.Value := 1000;
-  FCalcCurr.Value := 1234.5;
+  FCalcCurr.Value := 1234.5;   // SymbolBefore=False in the .lfm -> "1,234.50 €"
+
+  // Seed the three echo panels so the reader sees the shape of each report before clicking.
+  ShowPick(FColorGrid);
+  FontPickChange(FFont);
+  ChecksChanged(FCheckList);
+end;
+
+destructor TMainForm.Destroy;
+begin
+  { The popup only PARENTS its content (LCL never frees a control it does not own), so
+    freeing the popup is enough — FDropGrid is owned by this form. }
+  FreeAndNil(FDropPopup);
+  inherited Destroy;
 end;
 
 procedure TMainForm.ThemeComboChange(Sender: TObject);
@@ -279,15 +321,46 @@ begin
 end;
 
 procedure TMainForm.ComboDrop(Sender: TObject);
+var
+  w, h: Integer;
 begin
-  // Real-world use: pop a color grid / calculator / date picker here, then write the result back into FCombo.Text.
-  FCombo.Text := 'You clicked the dropdown button!';
+  { TTyComboEdit supplies the field and the chevron and NOTHING else — the host decides what
+    drops out of it. Here: a colour grid in a TTyDropdownPopup anchored to the edit. Swap the
+    content for a calculator / date picker / tree and the pattern is unchanged. }
+  if (FDropPopup <> nil) and FDropPopup.IsOpen then
+  begin
+    FDropPopup.Close;
+    Exit;
+  end;
+  { Clicking the chevron to CLOSE deactivates the popup first, so this runs with IsOpen
+    already False — suppress the immediate re-open (same guard the library's own uses). }
+  if (FDropPopup <> nil) and (GetTickCount64 - FDropPopup.CloseUpTick <= 200) then Exit;
+  if FDropPopup = nil then
+  begin
+    FDropPopup := TTyDropdownPopup.Create;
+    FDropPopup.Controller := TyDefaultController;   // theme the popup window like everything else
+    FDropGrid := TTyColorGrid.Create(Self);         // ships with the 16-colour VGA palette
+    FDropGrid.Columns := 8;
+    FDropGrid.OnChange := @DropGridPick;
+    FDropPopup.SetContent(FDropGrid);
+  end;
+  w := (180 * FCombo.Font.PixelsPerInch) div 96;
+  h := (96 * FCombo.Font.PixelsPerInch) div 96;
+  FDropPopup.Popup(FCombo, w, h);
+end;
+
+procedure TMainForm.DropGridPick(Sender: TObject);
+begin
+  // The host writes the popup's result back into the edit, then closes it.
+  FCombo.Text := ColorToString(FDropGrid.Selected);
+  FDropPopup.Close;
 end;
 
 procedure TMainForm.LumChange(Sender: TObject);
 begin
   // The luminance bar drives the HS square's brightness: the two controls together form a classic HSL color picker.
   FHS.Value := FLColor.Position;
+  ShowPick(FLColor);   // ...and it is a picker in its own right, so it reports too
 end;
 
 procedure TMainForm.VleChange(Sender: TObject; ARow: TTyValueRow);
@@ -314,6 +387,79 @@ begin
       FEcho.Caption := Format('Changed "%s" = %s', [ARow.Key, ARow.Value]);
     end;
   end;
+end;
+
+procedure TMainForm.ShowPick(Sender: TObject);
+var
+  c: TColor;
+  src: string;
+begin
+  { Every picker in the library reports the SAME way: it fires OnChange, and the host then
+    reads the control's own output property — Selected (TColor) on the swatch pickers,
+    SelectedColor (TTyColor, alpha included) on the HSV ones. }
+  c := clNone;
+  src := '';
+  if Sender = FColor then
+  begin c := FColor.Selected;                      src := 'ColorBox'; end
+  else if Sender = FColorList then
+  begin c := FColorList.Selected;                  src := 'ColorListBox'; end
+  else if Sender = FColorCombo then
+  begin c := FColorCombo.Selected;                 src := 'ColorComboBox'; end
+  else if Sender = FColorGrid then
+  begin c := FColorGrid.Selected;                  src := 'ColorGrid'; end
+  else if Sender = FHS then
+  begin c := TyColorToLCL(FHS.SelectedColor);      src := 'HSColorPicker'; end
+  else if Sender = FLColor then
+  begin c := TyColorToLCL(FLColor.SelectedColor);  src := 'LColorPicker'; end;
+
+  if c = clNone then
+  begin
+    PickPreview.StyleOverride := '';
+    LblPick.Caption := 'Picked: (none)';
+    Exit;
+  end;
+  { TTyShape has no Color property on purpose — its fill is a theme token. To tint ONE
+    instance, push a per-instance CSS declaration block through StyleOverride. }
+  PickPreview.StyleOverride := 'background: ' + TyColorToHex(TyColorFromLCL(c), False) + ';';
+  LblPick.Caption := Format('Picked: %s = %s', [src, ColorToString(c)]);
+end;
+
+procedure TMainForm.FontPickChange(Sender: TObject);
+var
+  fname: string;
+  sz: Integer;
+begin
+  { SelectedFont (combo AND list box) + FontSize are the output half of the WYSIWYG pickers.
+    TTyLabel takes its face and size from the THEME rather than from Font.*, so the picked
+    values reach the preview through the per-instance StyleOverride. }
+  if Sender = FFontList then
+    fname := FFontList.SelectedFont
+  else
+    fname := FFont.SelectedFont;
+  sz := FSize.FontSize;                       // FontSize parses the editable field, so a typed size counts too
+  if sz < 6 then sz := 6;
+  if sz > 28 then sz := 28;                   // capped: the preview label is only 56px tall
+  if fname = '' then
+    LblFontPreview.StyleOverride := Format('font-size: %dpx;', [sz])
+  else
+    LblFontPreview.StyleOverride := Format('font-family: %s; font-size: %dpx;', [fname, sz]);
+  LblFontEcho.Caption := Format('SelectedFont = %s · FontSize = %d', [fname, FSize.FontSize]);
+end;
+
+procedure TMainForm.ChecksChanged(Sender: TObject);
+begin
+  { Neither check control commits through ItemIndex: TTyCheckListBox reports via OnClickCheck
+    and TTyCheckComboBox via OnChange, and the host then reads CheckedCount / Checked[].
+    (The dropdown's own field already spells out CheckedText, so the counts suffice here.) }
+  LblChecks.Caption := Format('CheckListBox: %d · CheckComboBox: %d',
+    [FCheckList.CheckedCount, FCheckCombo.CheckedCount]);
+end;
+
+procedure TMainForm.SheetLockChange(Sender: TObject);
+begin
+  { Grid-level lock: no value cell can be edited at all. (A single row locks itself with its
+    own ReadOnly — the 'Theme' row above does exactly that.) }
+  FVLE.ReadOnly := ChkSheetLock.Checked;
 end;
 
 end.

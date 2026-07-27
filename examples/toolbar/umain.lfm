@@ -1,10 +1,10 @@
 object MainForm: TMainForm
   Left = 0
-  Height = 340
+  Height = 500
   Top = 0
   Width = 520
   Caption = 'TTyToolBar example'
-  ClientHeight = 340
+  ClientHeight = 500
   ClientWidth = 520
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
@@ -12,7 +12,7 @@ object MainForm: TMainForm
   TitleBar = Bar
   object Surface: TTyFormSurface
     Left = 0
-    Height = 340
+    Height = 500
     Top = 0
     Width = 520
     Align = alClient
@@ -51,38 +51,47 @@ object MainForm: TMainForm
       ButtonHeight = 28
       ButtonSpacing = 4
       Indent = 6
-      object BtnNew: TTyButton
+      object BtnNew: TTyGlyphButton
         Left = 6
         Height = 28
         Top = 6
-        Width = 72
+        Width = 88
         Caption = 'New'
+        IconFont = Icons
+        GlyphName = 'new'
+        GlyphSize = 16
         OnClick = ToolClicked
       end
-      object BtnOpen: TTyButton
-        Left = 82
+      object BtnOpen: TTyGlyphButton
+        Left = 98
         Height = 28
         Top = 6
-        Width = 72
+        Width = 88
         Caption = 'Open'
+        IconFont = Icons
+        GlyphName = 'open'
+        GlyphSize = 16
         OnClick = ToolClicked
       end
-      object BtnSave: TTyButton
-        Left = 158
+      object BtnSave: TTyGlyphButton
+        Left = 190
         Height = 28
         Top = 6
-        Width = 72
+        Width = 88
         Caption = 'Save'
+        IconFont = Icons
+        GlyphName = 'save'
+        GlyphSize = 16
         OnClick = ToolClicked
       end
       object Sep1: TTyToolSeparator
-        Left = 234
+        Left = 282
         Height = 28
         Top = 6
         Width = 8
       end
       object BtnCut: TTyButton
-        Left = 246
+        Left = 294
         Height = 28
         Top = 6
         Width = 72
@@ -90,15 +99,15 @@ object MainForm: TMainForm
         OnClick = ToolClicked
       end
       object BtnCopy: TTyButton
-        Left = 6
+        Left = 370
         Height = 28
-        Top = 38
+        Top = 6
         Width = 72
         Caption = 'Copy'
         OnClick = ToolClicked
       end
       object BtnPaste: TTyButton
-        Left = 82
+        Left = 6
         Height = 28
         Top = 38
         Width = 72
@@ -106,13 +115,13 @@ object MainForm: TMainForm
         OnClick = ToolClicked
       end
       object Sep2: TTyToolSeparator
-        Left = 158
+        Left = 82
         Height = 28
         Top = 38
         Width = 8
       end
       object BtnFind: TTyButton
-        Left = 170
+        Left = 94
         Height = 28
         Top = 38
         Width = 72
@@ -120,7 +129,7 @@ object MainForm: TMainForm
         OnClick = ToolClicked
       end
       object BtnReplace: TTyButton
-        Left = 246
+        Left = 170
         Height = 28
         Top = 38
         Width = 72
@@ -128,20 +137,172 @@ object MainForm: TMainForm
         OnClick = ToolClicked
       end
       object BtnSelectAll: TTyButton
-        Left = 6
+        Left = 246
         Height = 28
-        Top = 70
+        Top = 38
         Width = 72
         Caption = 'Select all'
         OnClick = ToolClicked
       end
+      object Sep3: TTyToolSeparator
+        Left = 322
+        Height = 28
+        Top = 38
+        Width = 8
+      end
+      object BtnBold: TTyButton
+        Left = 334
+        Height = 28
+        Top = 38
+        Width = 72
+        Caption = 'Bold'
+        Down = True
+        OnClick = ToolToggle
+      end
+      object BtnItalic: TTyButton
+        Left = 410
+        Height = 28
+        Top = 38
+        Width = 72
+        Caption = 'Italic'
+        OnClick = ToolToggle
+      end
+      object BtnUnderline: TTyButton
+        Left = 6
+        Height = 28
+        Top = 70
+        Width = 88
+        Caption = 'Underline'
+        OnClick = ToolToggle
+      end
+    end
+    object ToolBarFramed: TTyToolBar
+      Left = 0
+      Height = 36
+      Top = 138
+      Width = 520
+      Align = alTop
+      ButtonSpacing = 4
+      Indent = 6
+      Wrapable = False
+      Flat = False
+      object BtnAlignLeft: TTyButton
+        Left = 6
+        Height = 24
+        Top = 6
+        Width = 72
+        Caption = 'Left'
+        OnClick = ToolClicked
+      end
+      object BtnAlignCenter: TTyButton
+        Left = 82
+        Height = 24
+        Top = 6
+        Width = 72
+        Caption = 'Centre'
+        OnClick = ToolClicked
+      end
+      object BtnAlignRight: TTyButton
+        Left = 158
+        Height = 24
+        Top = 6
+        Width = 72
+        Caption = 'Right'
+        OnClick = ToolClicked
+      end
+      object BtnJustify: TTyButton
+        Left = 234
+        Height = 24
+        Top = 6
+        Width = 72
+        Caption = 'Justify'
+        OnClick = ToolClicked
+      end
+      object Sep4: TTyToolSeparator
+        Left = 310
+        Height = 24
+        Top = 6
+        Width = 8
+      end
+      object BtnBullets: TTyButton
+        Left = 322
+        Height = 24
+        Top = 6
+        Width = 72
+        Caption = 'Bullets'
+        OnClick = ToolClicked
+      end
+      object BtnNumbers: TTyButton
+        Left = 398
+        Height = 24
+        Top = 6
+        Width = 72
+        Caption = 'Numbers'
+        OnClick = ToolClicked
+      end
+      object BtnQuote: TTyButton
+        Left = 474
+        Height = 24
+        Top = 6
+        Width = 72
+        Caption = 'Quote'
+        OnClick = ToolClicked
+      end
+    end
+    object LblWrapHint: TTyLabel
+      Left = 24
+      Height = 36
+      Top = 200
+      Width = 472
+      Caption = 'Top bar — Wrapable = True (the default): the 12 tools wrap into 3 rows and the bar grows to 104 px to fit them. Flat = True hands every tool the ghost StyleClass.'
+      WordWrap = True
+    end
+    object LblDownHint: TTyLabel
+      Left = 24
+      Height = 36
+      Top = 242
+      Width = 472
+      Caption = 'Down = True — a pressed tool keeps the ghost:selected look. Bold starts pressed; click Bold / Italic / Underline to toggle one.'
+      WordWrap = True
+    end
+    object LblGlyphHint: TTyLabel
+      Left = 24
+      Height = 36
+      Top = 284
+      Width = 472
+      Caption = 'New / Open / Save are TTyGlyphButtons — the bar accepts any TTyButton descendant and gives it the same ghost style and row metrics.'
+      WordWrap = True
+    end
+    object LblFramedHint: TTyLabel
+      Left = 24
+      Height = 72
+      Top = 326
+      Width = 472
+      Caption = 'Second bar — Flat = False: the bar clears the ghost class, so its tools are framed push buttons. Wrapable = False: they stay on one row, so the last tool runs off the right edge instead of wrapping. ButtonHeight is left unset, so its tool height follows the theme --control-height (classic 24 / modern 38) — switch skins and watch this bar alone change height.'
+      WordWrap = True
+    end
+    object LblReserved: TTyLabel
+      Left = 24
+      Height = 36
+      Top = 404
+      Width = 472
+      Caption = 'ShowCaptions and Images are published for LCL parity but are not wired: in the reuse-TTyButton model each tool owns its own caption and glyph.'
+      WordWrap = True
     end
     object LblStatus: TTyLabel
       Left = 24
       Height = 24
-      Top = 190
-      Width = 312
+      Top = 450
+      Width = 472
       Caption = 'Ready: click any toolbar button'
     end
+  end
+  object Icons: TTyIconFont
+    FontFamily = 'Segoe UI Symbol'
+    Glyphs.Strings = (
+      'new=1F4C4'
+      'open=1F4C2'
+      'save=1F4BE'
+    )
   end
 end

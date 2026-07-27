@@ -1,10 +1,10 @@
 object MainForm: TMainForm
   Left = 200
-  Height = 690
+  Height = 802
   Top = 90
   Width = 1180
   Caption = 'TyControls — vector shapes (TTyShape / TTyStarShape / TTyArrow)'
-  ClientHeight = 690
+  ClientHeight = 802
   ClientWidth = 1180
   Font.Height = -12
   Position = poScreenCenter
@@ -13,7 +13,7 @@ object MainForm: TMainForm
   TitleBar = TitleBar1
   object Surface: TTyFormSurface
     Left = 0
-    Height = 690
+    Height = 802
     Top = 0
     Width = 1180
     Align = alClient
@@ -25,6 +25,14 @@ object MainForm: TMainForm
       Align = alTop
       Caption = 'Vector shapes  ·  TyControls'
       TitleAlignment = taLeftJustify
+      object DarkSwitch: TTyToggleSwitch
+        Left = 906
+        Height = 24
+        Top = 5
+        Width = 74
+        Caption = 'Dark'
+        OnChange = DarkSwitchChange
+      end
       object ThemeCombo: TTyComboBox
         Left = 1006
         Height = 26
@@ -251,10 +259,40 @@ object MainForm: TMainForm
       Width = 140
       Caption = 'tskLine thick line'
     end
+    object ShOutline: TTyShape
+      Left = 24
+      Height = 80
+      Top = 334
+      Width = 140
+      Shape = tskEllipse
+      StyleOverride = 'background: transparent; border-color: #2F6FB0; border-width: 3px;'
+    end
+    object ShRadius: TTyShape
+      Left = 328
+      Height = 80
+      Top = 334
+      Width = 140
+      Shape = tskRoundRect
+      StyleOverride = 'background: #4C7FBF; border-color: #24456B; border-radius: 28px;'
+    end
+    object LblOutline: TTyLabel
+      Left = 24
+      Height = 18
+      Top = 418
+      Width = 300
+      Caption = 'background: transparent (outline only)'
+    end
+    object LblRadius: TTyLabel
+      Left = 328
+      Height = 18
+      Top = 418
+      Width = 500
+      Caption = 'border-radius: 28px — overrides the theme radius (max half the shorter side)'
+    end
     object DivStar: TTyDivider
       Left = 24
       Height = 22
-      Top = 334
+      Top = 446
       Width = 550
       Caption = 'TTyStarShape — drag the slider to change point count / inner-outer radius ratio live'
       Alignment = taLeftJustify
@@ -262,7 +300,7 @@ object MainForm: TMainForm
     object StarBig: TTyStarShape
       Left = 24
       Height = 200
-      Top = 362
+      Top = 474
       Width = 200
       Points = 5
       InnerRatio = 0.42
@@ -271,14 +309,14 @@ object MainForm: TMainForm
     object LblPoints: TTyLabel
       Left = 248
       Height = 18
-      Top = 370
+      Top = 482
       Width = 320
       Caption = 'Point count Points = 5'
     end
     object TrackPoints: TTyTrackBar
       Left = 248
       Height = 28
-      Top = 394
+      Top = 506
       Width = 320
       Min = 3
       Max = 12
@@ -288,14 +326,14 @@ object MainForm: TMainForm
     object LblInner: TTyLabel
       Left = 248
       Height = 18
-      Top = 438
+      Top = 550
       Width = 320
       Caption = 'Inner radius ratio InnerRatio = 0.42'
     end
     object TrackInner: TTyTrackBar
       Left = 248
       Height = 28
-      Top = 462
+      Top = 574
       Width = 320
       Min = 5
       Max = 95
@@ -305,14 +343,22 @@ object MainForm: TMainForm
     object LblStarHint: TTyLabel
       Left = 248
       Height = 18
-      Top = 508
+      Top = 620
       Width = 320
       Caption = 'Points<3 and an out-of-range InnerRatio are clamped by the setter'
+    end
+    object BtnClamp: TTyButton
+      Left = 248
+      Height = 32
+      Top = 646
+      Width = 220
+      Caption = 'Try Points = 1, InnerRatio = 2.0'
+      OnClick = BtnClampClick
     end
     object DivArrow: TTyDivider
       Left = 604
       Height = 22
-      Top = 334
+      Top = 446
       Width = 552
       Caption = 'TTyArrow — four directions + adjustable head / shaft ratio'
       Alignment = taLeftJustify
@@ -320,63 +366,63 @@ object MainForm: TMainForm
     object ArrRight: TTyArrow
       Left = 604
       Height = 70
-      Top = 362
+      Top = 474
       Width = 120
       Direction = tadRight
     end
     object ArrLeft: TTyArrow
       Left = 736
       Height = 70
-      Top = 362
+      Top = 474
       Width = 120
       Direction = tadLeft
     end
     object ArrUp: TTyArrow
       Left = 868
       Height = 70
-      Top = 362
+      Top = 474
       Width = 120
       Direction = tadUp
     end
     object ArrDown: TTyArrow
       Left = 1000
       Height = 70
-      Top = 362
+      Top = 474
       Width = 120
       Direction = tadDown
     end
     object LblArrRight: TTyLabel
       Left = 604
       Height = 18
-      Top = 438
+      Top = 550
       Width = 120
       Caption = 'tadRight'
     end
     object LblArrLeft: TTyLabel
       Left = 736
       Height = 18
-      Top = 438
+      Top = 550
       Width = 120
       Caption = 'tadLeft'
     end
     object LblArrUp: TTyLabel
       Left = 868
       Height = 18
-      Top = 438
+      Top = 550
       Width = 120
       Caption = 'tadUp'
     end
     object LblArrDown: TTyLabel
       Left = 1000
       Height = 18
-      Top = 438
+      Top = 550
       Width = 120
       Caption = 'tadDown'
     end
     object ArrowBig: TTyArrow
       Left = 604
       Height = 120
-      Top = 470
+      Top = 582
       Width = 250
       Direction = tadRight
       HeadRatio = 0.45
@@ -386,14 +432,14 @@ object MainForm: TMainForm
     object LblHead: TTyLabel
       Left = 872
       Height = 18
-      Top = 470
+      Top = 582
       Width = 284
       Caption = 'Head-length ratio HeadRatio = 0.45'
     end
     object TrackHead: TTyTrackBar
       Left = 872
       Height = 28
-      Top = 494
+      Top = 606
       Width = 284
       Min = 10
       Max = 90
@@ -403,14 +449,14 @@ object MainForm: TMainForm
     object LblShaft: TTyLabel
       Left = 872
       Height = 18
-      Top = 534
+      Top = 646
       Width = 284
       Caption = 'Shaft-width ratio ShaftRatio = 0.50'
     end
     object TrackShaft: TTyTrackBar
       Left = 872
       Height = 28
-      Top = 558
+      Top = 670
       Width = 284
       Min = 10
       Max = 90
@@ -420,7 +466,7 @@ object MainForm: TMainForm
     object DivTheme: TTyDivider
       Left = 24
       Height = 22
-      Top = 594
+      Top = 706
       Width = 1132
       Caption = 'Switch theme — shapes not using StyleOverride recolour together'
       Alignment = taLeftJustify
@@ -428,7 +474,7 @@ object MainForm: TMainForm
     object BtnLight: TTyButton
       Left = 24
       Height = 32
-      Top = 624
+      Top = 736
       Width = 104
       Caption = 'Light'
       OnClick = BtnLightClick
@@ -436,7 +482,7 @@ object MainForm: TMainForm
     object BtnDark: TTyButton
       Left = 140
       Height = 32
-      Top = 624
+      Top = 736
       Width = 104
       Caption = 'Dark'
       OnClick = BtnDarkClick
@@ -444,7 +490,7 @@ object MainForm: TMainForm
     object BtnGreen: TTyButton
       Left = 256
       Height = 32
-      Top = 624
+      Top = 736
       Width = 104
       Caption = 'Green'
       OnClick = BtnGreenClick
@@ -452,9 +498,16 @@ object MainForm: TMainForm
     object LblThemeHint: TTyLabel
       Left = 376
       Height = 18
-      Top = 630
+      Top = 738
       Width = 780
-      Caption = 'The controls added this batch introduce no theme token: all three return TyPanel from GetStyleTypeKey'
+      Caption = 'Each control has its own theme key (TyShape / TyStarShape / TyArrow), so a skin can restyle shapes without touching panels'
+    end
+    object LblThemeCss: TTyLabel
+      Left = 376
+      Height = 18
+      Top = 762
+      Width = 780
+      Caption = 'e.g. in a .tycss:  TyStarShape { background: #E8C547; border-color: #6B5310; }'
     end
   end
 end

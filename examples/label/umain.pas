@@ -8,10 +8,17 @@ unit umain;
     - AutoSize: on = shrink/grow to fit the text; off = fixed bounds
     - Transparent: True = transparent background; False = filled with the theme panel color
     - FocusControl + & mnemonic: Alt+letter sends focus to the associated TTyEdit
+    - AutoSize + WordWrap together: the label keeps its width and re-heights itself to the
+      wrapped text (the window is resizable, so widening it re-wraps and re-fits the box)
+    - OnClick: a label raises it like any other control
+    - StyleOverride: per-instance CSS, the only way to make ONE label look different --
+      font size/weight come from the THEME (TyResolveFontSize consults the theme before
+      Font.Size), so LblHead overrides font-size/font-weight to read as a heading and
+      LblAccent overrides colour with var(--accent), which still tracks the theme.
+  The Layout / auto-wrap boxes also use StyleOverride for their frame: the themed TyLabel
+  background is fully transparent, so without it Transparent=False would draw no visible box.
   The window, every label and the live theme switcher are designed in umain.lfm (a TTyForm +
-  TTyTitleBar); the code here is theme setup only.
-  Note: font size/weight and StyleClass.primary are driven by the theme; TyLabel has no rule for
-  them, so this demo does not exercise those inapplicable properties. }
+  TTyTitleBar); the code here is theme setup + the click counter only. }
 
 {$mode objfpc}{$H+}
 
@@ -37,9 +44,20 @@ type
     LblWrap: TTyLabel;
     EdName: TTyEdit;
     LblFocus: TTyLabel;
+    LblLayoutHead: TTyLabel;
+    LblLayoutTop: TTyLabel;
+    LblLayoutCenter: TTyLabel;
+    LblLayoutBottom: TTyLabel;
+    LblWrapAutoHead: TTyLabel;
+    LblWrapAuto: TTyLabel;
+    LblClick: TTyLabel;
+    LblAccent: TTyLabel;
     procedure FormCreate(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
     procedure DarkSwitchChange(Sender: TObject);
+    procedure LblClickClick(Sender: TObject);
+  private
+    FClicks: Integer;   // how many times LblClick has been clicked
   end;
 
 var
@@ -79,6 +97,15 @@ begin
   else
     TyDefaultController.Mode := 'light';
   ApplyChromeTheme(TyDefaultController);
+end;
+
+{ A label is a full control, not decoration: TTyLabel.Click raises OnClick first and only then
+  hands focus to FocusControl -- so a label can be a clickable target on its own. }
+procedure TMainForm.LblClickClick(Sender: TObject);
+begin
+  Inc(FClicks);
+  LblClick.Caption := 'Clicked ' + IntToStr(FClicks) +
+    ' time(s) - labels raise OnClick too';
 end;
 
 end.

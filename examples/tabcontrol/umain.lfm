@@ -1,10 +1,10 @@
 object MainForm: TMainForm
   Left = 0
-  Height = 420
+  Height = 590
   Top = 0
   Width = 560
   Caption = 'TTyPageControl example'
-  ClientHeight = 420
+  ClientHeight = 590
   ClientWidth = 560
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
@@ -12,7 +12,7 @@ object MainForm: TMainForm
   TitleBar = Bar
   object Surface: TTyFormSurface
     Left = 0
-    Height = 420
+    Height = 590
     Top = 0
     Width = 560
     Align = alClient
@@ -48,14 +48,18 @@ object MainForm: TMainForm
       Top = 48
       Width = 528
       TabHeight = 32
+      TabsClosable = True
       ActivePageIndex = 0
       OnChange = PageChanged
+      OnChanging = PageChanging
+      OnTabClose = PageClosing
+      OnReorder = PagesReordered
       object PgGeneral: TTyTabSheet
         Left = 0
         Height = 264
         Top = 32
         Width = 528
-        Caption = 'Normal'
+        Caption = '&Normal'
         object LblUser: TTyLabel
           Left = 16
           Height = 22
@@ -91,7 +95,7 @@ object MainForm: TMainForm
         Height = 264
         Top = 32
         Width = 528
-        Caption = 'Appearance'
+        Caption = 'A&ppearance'
         object LblAppearance: TTyLabel
           Left = 16
           Height = 22
@@ -119,7 +123,7 @@ object MainForm: TMainForm
         Height = 264
         Top = 32
         Width = 528
-        Caption = 'About'
+        Caption = 'A&bout'
         object LblAboutTitle: TTyLabel
           Left = 16
           Height = 22
@@ -176,12 +180,70 @@ object MainForm: TMainForm
       StyleClass = 'primary'
       OnClick = AddNewPage
     end
+    object BtnRemovePage: TTyButton
+      Left = 428
+      Height = 30
+      Top = 356
+      Width = 116
+      Caption = 'Remove page'
+      OnClick = RemoveCurrentPage
+    end
     object LblStatus: TTyLabel
       Left = 16
       Height = 20
       Top = 394
       Width = 528
       Caption = 'Current page: General (index 0 of 3 pages)'
+    end
+    object LblHeaderSection: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 426
+      Width = 528
+      Caption = 'Tab-header features - all of them live in the strip above:'
+    end
+    object BtnToggleStrip: TTyButton
+      Left = 16
+      Height = 30
+      Top = 450
+      Width = 140
+      Caption = 'Hide tab strip'
+      OnClick = ToggleStrip
+    end
+    object LblStripHint: TTyLabel
+      Left = 164
+      Height = 20
+      Top = 455
+      Width = 380
+      Caption = 'TabHeight = 0 removes the strip entirely.'
+    end
+    object LblCloseHint: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 488
+      Width = 528
+      Caption = 'Click the x on a tab to close it; OnTabClose keeps the fixed pages.'
+    end
+    object LblReorderHint: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 510
+      Width = 528
+      Caption = 'Drag a tab header sideways to reorder the pages (OnReorder reports it).'
+    end
+    object LblKeysHint: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 532
+      Width = 528
+      Caption = 'Alt+N / Alt+P / Alt+B jump to a page; Ctrl+Tab cycles; Home / End jump.'
+    end
+    object LblOverflowHint: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 554
+      Width = 528
+      Caption = 'Add pages until the headers overflow: arrows appear, the wheel scrolls.'
     end
   end
 end

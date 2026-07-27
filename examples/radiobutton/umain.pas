@@ -33,12 +33,31 @@ type
     FColorGreen: TTyRadioButton;
     FColorBlue: TTyRadioButton;
     LblStatus: TTyLabel;
+    LblGroupIdxHead: TTyLabel;
+    GroupC: TTyGroupBox;
+    SizeSmall: TTyRadioButton;
+    SizeMedium: TTyRadioButton;
+    SizeLarge: TTyRadioButton;
+    ShipStandard: TTyRadioButton;
+    ShipExpress: TTyRadioButton;
+    LblGroupIdxStatus: TTyLabel;
+    LblMnemonic: TTyLabel;
+    LblStyle: TTyLabel;
+    StyleRadioA: TTyRadioButton;
+    StyleRadioB: TTyRadioButton;
+    LblEvents: TTyLabel;
     procedure FormCreate(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
     procedure DarkSwitchChange(Sender: TObject);
     procedure RadioChanged(Sender: TObject);
+    procedure StyleRadioChanged(Sender: TObject);
+    procedure StyleRadioClick(Sender: TObject);
   private
+    FChangeCount: Integer;
+    FClickCount: Integer;
     procedure UpdateStatus;
+    procedure UpdateEventCounts;
+    function PlainCaption(const AText: string): string;
     function SelectedIn(A, B, C: TTyRadioButton): string;
   end;
 
@@ -70,7 +89,15 @@ begin
     is streamed -- is the only safe point. }
   FFruitApple.Checked := True;              // fruit: first item by default
   FColorGreen.Checked := True;              // color: second item by default
+  SizeMedium.Checked := True;               // GroupIndex 0 inside the shared box
+  ShipStandard.Checked := True;             // GroupIndex 1 inside the SAME box
+  StyleRadioA.Checked := True;              // grouped by Parent (both sit on Surface)
+  { Those defaults each fired OnChange; zero the tallies so the on-screen counters
+    only count what the USER does. }
+  FChangeCount := 0;
+  FClickCount := 0;
   UpdateStatus;                             // all radios built, refresh the final readout once
+  UpdateEventCounts;
 end;
 
 procedure TMainForm.ThemeComboChange(Sender: TObject);
@@ -90,6 +117,12 @@ begin
   ApplyChromeTheme(TyDefaultController);
 end;
 
+{ Drop the '&' mnemonic markers so a caption reads naturally in the status line }
+function TMainForm.PlainCaption(const AText: string): string;
+begin
+  Result := StringReplace(AText, '&', '', [rfReplaceAll]);
+end;
+
 { Return the Caption of the currently selected item in a group }
 function TMainForm.SelectedIn(A, B, C: TTyRadioButton): string;
 begin
@@ -100,16 +133,47 @@ begin
 end;
 
 procedure TMainForm.UpdateStatus;
+var
+  Delivery: string;
 begin
   LblStatus.Caption := Format('Currently selected  →  Fruit: %s     Colour: %s',
     [SelectedIn(FFruitApple, FFruitBanana, FFruitMango),
      SelectedIn(FColorRed, FColorGreen, FColorBlue)]);
+  { GroupC holds all five of these, so the ONLY thing keeping the two columns apart
+    is GroupIndex -- UncheckSiblings ignores a sibling with a different index. }
+  if ShipStandard.Checked then Delivery := ShipStandard.Caption
+  else if ShipExpress.Checked then Delivery := ShipExpress.Caption
+  else Delivery := '(none)';
+  LblGroupIdxStatus.Caption := Format('GroupIndex 0: %s     GroupIndex 1: %s',
+    [PlainCaption(SelectedIn(SizeSmall, SizeMedium, SizeLarge)),
+     PlainCaption(Delivery)]);
+end;
+
+procedure TMainForm.UpdateEventCounts;
+begin
+  LblEvents.Caption := Format('OnChange x%d, OnClick x%d - one pick fires OnChange twice',
+    [FChangeCount, FClickCount]);
 end;
 
 procedure TMainForm.RadioChanged(Sender: TObject);
 begin
   { Any button's Checked change (including one cleared by UncheckSiblings) lands here }
   UpdateStatus;
+end;
+
+procedure TMainForm.StyleRadioChanged(Sender: TObject);
+begin
+  { Fires for the button that got checked AND for the sibling UncheckSiblings cleared,
+    which is why this counter climbs by two per pick. }
+  Inc(FChangeCount);
+  UpdateEventCounts;
+end;
+
+procedure TMainForm.StyleRadioClick(Sender: TObject);
+begin
+  { OnClick only reaches the button the user actually pressed. }
+  Inc(FClickCount);
+  UpdateEventCounts;
 end;
 
 end.

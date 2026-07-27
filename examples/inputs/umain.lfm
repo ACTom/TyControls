@@ -1,10 +1,10 @@
 object MainForm: TMainForm
   Left = 0
-  Height = 800
+  Height = 840
   Top = 0
   Width = 1300
   Caption = 'Rich Inputs example'
-  ClientHeight = 800
+  ClientHeight = 840
   ClientWidth = 1300
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
@@ -12,7 +12,7 @@ object MainForm: TMainForm
   TitleBar = Bar
   object Surface: TTyFormSurface
     Left = 0
-    Height = 800
+    Height = 840
     Top = 0
     Width = 1300
     TabOrder = 0
@@ -132,7 +132,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 320
       Width = 200
-      Caption = 'Dropdown (TTyComboEdit):'
+      Caption = 'Dropdown (TTyComboEdit hosts any popup):'
     end
     object FCombo: TTyComboEdit
       Left = 240
@@ -168,6 +168,7 @@ object MainForm: TMainForm
       Height = 28
       Top = 404
       Width = 180
+      OnChange = ShowPick
     end
     object L10: TTyLabel
       Left = 24
@@ -181,12 +182,14 @@ object MainForm: TMainForm
       Height = 28
       Top = 448
       Width = 128
+      OnChange = FontPickChange
     end
     object FSize: TTyFontSizeComboBox
       Left = 372
       Height = 28
       Top = 448
       Width = 48
+      OnChange = FontPickChange
     end
     object L11: TTyLabel
       Left = 440
@@ -200,6 +203,7 @@ object MainForm: TMainForm
       Height = 296
       Top = 76
       Width = 180
+      OnChange = ShowPick
     end
     object L12: TTyLabel
       Left = 440
@@ -213,6 +217,7 @@ object MainForm: TMainForm
       Height = 164
       Top = 404
       Width = 180
+      OnChange = FontPickChange
     end
     object L13: TTyLabel
       Left = 640
@@ -226,6 +231,7 @@ object MainForm: TMainForm
       Height = 280
       Top = 76
       Width = 180
+      OnClickCheck = ChecksChanged
     end
     object L14: TTyLabel
       Left = 640
@@ -240,6 +246,7 @@ object MainForm: TMainForm
       Top = 404
       Width = 180
       MoreCaption = 'More colours…'
+      OnChange = ShowPick
     end
     object L23: TTyLabel
       Left = 640
@@ -254,6 +261,7 @@ object MainForm: TMainForm
       Top = 476
       Width = 190
       EmptyText = '(no style selected)'
+      OnChange = ChecksChanged
     end
     object L15: TTyLabel
       Left = 840
@@ -322,6 +330,7 @@ object MainForm: TMainForm
       Width = 150
       Columns = 8
       Selected = clRed
+      OnChange = ShowPick
     end
     object FLColor: TTyLColorPicker
       Left = 1000
@@ -347,6 +356,7 @@ object MainForm: TMainForm
       Hue = 210
       Sat = 0.8
       Value = 0.6
+      OnChange = ShowPick
     end
     object L21: TTyLabel
       Left = 1080
@@ -406,14 +416,15 @@ object MainForm: TMainForm
       Height = 20
       Top = 662
       Width = 260
-      Caption = 'Calculator currency (TTyCalcCurrencyEdit):'
+      Caption = 'Calculator currency (SymbolBefore = False → 1,234.50 €):'
     end
     object FCalcCurr: TTyCalcCurrencyEdit
       Left = 410
       Height = 28
       Top = 686
       Width = 200
-      CurrencySymbol = '¥'
+      CurrencySymbol = ' €'
+      SymbolBefore = False
     end
     object FEcho: TTyLabel
       Left = 24
@@ -428,6 +439,75 @@ object MainForm: TMainForm
       Top = 536
       Width = 400
       Caption = 'Try: digits / minus / decimal point only; the thousands separator is dropped on focus for easy editing and regrouped on blur; enter a value >100 in the clamped field and it clamps to 100 on blur.'
+    end
+    object L27: TTyLabel
+      Left = 840
+      Height = 36
+      Top = 560
+      Width = 220
+      Caption = 'Every picker reports through OnChange — read Selected / SelectedColor:'
+      WordWrap = True
+    end
+    object PickPreview: TTyShape
+      Left = 840
+      Height = 40
+      Top = 602
+      Width = 40
+    end
+    object LblPick: TTyLabel
+      Left = 890
+      Height = 40
+      Top = 602
+      Width = 170
+      Caption = 'Picked: (click a swatch)'
+      WordWrap = True
+    end
+    object L28: TTyLabel
+      Left = 1080
+      Height = 36
+      Top = 470
+      Width = 220
+      Caption = 'SelectedFont + FontSize drive this preview (size capped at 28 to fit):'
+      WordWrap = True
+    end
+    object LblFontPreview: TTyLabel
+      Left = 1080
+      Height = 56
+      Top = 512
+      Width = 220
+      Caption = 'Handgloves'
+    end
+    object LblFontEcho: TTyLabel
+      Left = 1080
+      Height = 40
+      Top = 574
+      Width = 220
+      Caption = 'SelectedFont / FontSize land here'
+      WordWrap = True
+    end
+    object L29: TTyLabel
+      Left = 640
+      Height = 36
+      Top = 516
+      Width = 190
+      Caption = 'OnClickCheck / OnChange fire; read CheckedCount:'
+      WordWrap = True
+    end
+    object LblChecks: TTyLabel
+      Left = 640
+      Height = 40
+      Top = 554
+      Width = 190
+      Caption = 'CheckListBox: 0 · CheckComboBox: 0'
+      WordWrap = True
+    end
+    object ChkSheetLock: TTyCheckBox
+      Left = 24
+      Height = 24
+      Top = 796
+      Width = 520
+      Caption = 'Lock the whole sheet — ValueListEditor.ReadOnly blocks every value cell'
+      OnChange = SheetLockChange
     end
   end
 end

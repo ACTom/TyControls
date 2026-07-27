@@ -595,7 +595,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 690
       Width = 1160
-      Caption = 'More container modes — wrapping toolbar · auto-pan scroll container · a panel that starts collapsed · vertical edge lines'
+      Caption = 'More container modes — wrapping toolbar · auto-pan scroll container · a panel that starts collapsed · vertical edge lines · an invisible spacer'
       Alignment = taLeftJustify
     end
     object LblWrap: TTyLabel
@@ -719,6 +719,36 @@ object MainForm: TMainForm
       Top = 834
       Width = 3
       Shape = tbsRightLine
+      Style = tbsRaised
+    end
+    object LblSpacer: TTyLabel
+      Left = 430
+      Height = 18
+      Top = 812
+      Width = 170
+      Caption = 'tbsSpacer = invisible gap'
+    end
+    object BevelSpacerA: TTyBevel
+      Left = 430
+      Height = 30
+      Top = 834
+      Width = 62
+      Shape = tbsBox
+      Style = tbsLowered
+    end
+    object BevelSpacer: TTyBevel
+      Left = 492
+      Height = 30
+      Top = 834
+      Width = 46
+      Shape = tbsSpacer
+    end
+    object BevelSpacerB: TTyBevel
+      Left = 538
+      Height = 30
+      Top = 834
+      Width = 62
+      Shape = tbsBox
       Style = tbsRaised
     end
     object LblPan: TTyLabel

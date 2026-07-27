@@ -1,10 +1,10 @@
 object MainForm: TMainForm
   Left = 0
-  Height = 380
+  Height = 502
   Top = 0
   Width = 460
   Caption = 'TrackBar example'
-  ClientHeight = 380
+  ClientHeight = 502
   ClientWidth = 460
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
@@ -12,7 +12,7 @@ object MainForm: TMainForm
   TitleBar = Bar
   object Surface: TTyFormSurface
     Left = 0
-    Height = 380
+    Height = 502
     Top = 0
     Width = 460
     Align = alClient
@@ -82,7 +82,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 168
       Width = 320
-      Caption = 'Brightness (0..200, PageSize/Frequency=25):'
+      Caption = 'Brightness (Freq/PageSize 25, ShowValue on):'
     end
     object Track4: TTyTrackBar
       Left = 16
@@ -94,6 +94,7 @@ object MainForm: TMainForm
       Position = 120
       Frequency = 25
       PageSize = 25
+      ShowValue = True
       OnChange = Track4Change
     end
     object LblVertical: TTyLabel
@@ -112,6 +113,8 @@ object MainForm: TMainForm
       Min = 0
       Max = 100
       Position = 40
+      Frequency = 10
+      ShowValue = True
       OnChange = Track3Change
     end
     object LblStatus: TTyLabel
@@ -120,6 +123,85 @@ object MainForm: TMainForm
       Top = 236
       Width = 320
       Caption = 'Volume: 50'
+    end
+    object LblShowValueHint: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 272
+      Width = 430
+      Caption = 'ShowValue = True: the number is drawn by the bar itself.'
+    end
+    object LblVerticalHint: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 294
+      Width = 430
+      Caption = 'Vertical: ticks (Frequency = 10) right, its number below.'
+    end
+    object LblLineSize: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 320
+      Width = 430
+      Caption = 'Fine step (LineSize = 5 - arrows and the wheel move by 5):'
+    end
+    object Track5: TTyTrackBar
+      Left = 16
+      Height = 24
+      Top = 342
+      Width = 300
+      Min = 0
+      Max = 100
+      Position = 50
+      Frequency = 5
+      LineSize = 5
+      PageSize = 25
+      ShowValue = True
+      OnChange = Track5Change
+    end
+    object AnimSwitch: TTyToggleSwitch
+      Left = 16
+      Height = 24
+      Top = 374
+      Width = 160
+      Caption = 'Animate thumb'
+      Checked = True
+      OnChange = AnimSwitchChange
+    end
+    object LblAnimHint: TTyLabel
+      Left = 186
+      Height = 20
+      Top = 376
+      Width = 260
+      Caption = 'Flips AnimationsEnabled (code only).'
+    end
+    object LblKeysTitle: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 406
+      Width = 430
+      Caption = 'Keyboard and wheel (click a bar to focus it first):'
+    end
+    object LblKeys1: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 426
+      Width = 430
+      Caption = 'Left/Right (Up/Down when vertical) step by LineSize.'
+    end
+    object LblKeys2: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 446
+      Width = 430
+      Caption = 'PageUp/PageDown step by PageSize; Home/End jump to Min/Max.'
+    end
+    object LblKeys3: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 466
+      Width = 430
+      Caption = 'The wheel steps by LineSize; a click jumps the thumb there.'
     end
   end
 end

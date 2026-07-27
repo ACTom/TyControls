@@ -22,7 +22,8 @@ interface
 uses
   Classes, SysUtils, DateUtils, Forms, Controls,
   tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes,
-  tyControls.DateTimePicker, tyControls.TyLabel, tyControls.ComboBox, tyControls.ToggleSwitch;
+  tyControls.DateTimePicker, tyControls.TyLabel, tyControls.ComboBox, tyControls.ToggleSwitch,
+  tyControls.Button;
 
 type
   TMainForm = class(TTyForm)
@@ -32,14 +33,29 @@ type
     ThemeCombo:  TTyComboBox;
     LblDate:     TTyLabel;
     DatePicker:  TTyDateTimePicker;   // dtkDate + drop-down calendar
+    BtnOpen:     TTyButton;           // opens the calendar via DroppedDown := True
     LblTime:     TTyLabel;
     TimePicker:  TTyDateTimePicker;   // dtkTime + up/down stepping
     LblCheck:    TTyLabel;
     CheckPicker: TTyDateTimePicker;   // ShowCheckBox nullable date
+    LblReadOnly: TTyLabel;
+    ReadOnlyPicker: TTyDateTimePicker;   // ReadOnly = True
+    LblReadOnlyHint: TTyLabel;
+    LblRange:    TTyLabel;
+    RangePicker: TTyDateTimePicker;   // MinDate/MaxDate = today +/-3 days
+    LblRangeHint: TTyLabel;
+    LblAmPm:     TTyLabel;
+    AmPmPicker:  TTyDateTimePicker;   // 12-hour TimeFormat with an am/pm segment
+    LblAmPmHint: TTyLabel;
+    LblLocale:   TTyLabel;
+    LocalePicker: TTyDateTimePicker;  // DateFormat left empty -> OS short date
+    LblLocaleHint: TTyLabel;
+    LblDropHint: TTyLabel;
     LblStatus:   TTyLabel;
     procedure FormCreate(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
     procedure DarkSwitchChange(Sender: TObject);
+    procedure BtnOpenClick(Sender: TObject);
     procedure DateChanged(Sender: TObject);
     procedure TimeChanged(Sender: TObject);
     procedure CheckPickerChanged(Sender: TObject);
@@ -81,7 +97,27 @@ begin
 
   CheckPicker.DateTime := Now;
 
+  ReadOnlyPicker.DateTime := Now;
+
+  // A range the user can actually walk into: three days either side of today, so
+  // Up/Down on the day field (and the calendar) visibly stop at the edge.
+  RangePicker.DateTime := Now;
+  RangePicker.MinDate  := Date - 3;
+  RangePicker.MaxDate  := Date + 3;
+
+  AmPmPicker.DateTime := Now;
+
+  LocalePicker.DateTime := Now;
+
   RefreshStatus;
+end;
+
+procedure TMainForm.BtnOpenClick(Sender: TObject);
+begin
+  // DroppedDown is read/write: the calendar opens from code, not only from a
+  // click on the chevron.
+  if DatePicker.CanFocus then DatePicker.SetFocus;
+  DatePicker.DroppedDown := True;
 end;
 
 procedure TMainForm.ThemeComboChange(Sender: TObject);
@@ -144,6 +180,9 @@ end;
 procedure TMainForm.DropDownClosed(Sender: TObject);
 begin
   RefreshStatus;
+  // Read the state back: by the time OnCloseUp fires the popup is already shut.
+  LblStatus.Caption := LblStatus.Caption + sLineBreak +
+    'DroppedDown = ' + BoolToStr(DatePicker.DroppedDown, True);
 end;
 
 end.

@@ -17,7 +17,12 @@ type
     TitleBar1: TTyTitleBar;
     DarkSwitch: TTyToggleSwitch;
     ThemeCombo: TTyComboBox;
+    LblHeadMarkup:   TTyLabel;
     Rich:   TTyHtmlLabel;
+    LblHeadNoWrap:   TTyLabel;
+    RichNoWrap:      TTyHtmlLabel;
+    LblHeadAutoSize: TTyLabel;
+    RichAuto:        TTyHtmlLabel;
     LblStatus: TTyLabel;
 
     procedure FormCreate(Sender: TObject);
@@ -47,14 +52,8 @@ begin
     ThemeCombo.Items.Add(names[i]);
   ThemeCombo.ItemIndex := ThemeCombo.Items.IndexOf('default');
 
-  Rich.OnLinkClick := @RichLinkClick;
-  Rich.Html :=
-    '<b>TyControls</b> is a set of <i>custom-drawn</i> Lazarus controls,' +
-    'Themed, cross-platform.<br>' +
-    'This label supports <u>underline</u>, <s>strikethrough</s>,' +
-    '<font color=#c0392b>red</font> and <font size=16>large text</font>,' +
-    'and <a href="https://github.com/ACTom/TyControls">a clickable link</a>.<br>' +
-    'Entities work too: &lt;tag&gt; &amp; &quot;quotes&quot;.';
+  // Html and OnLinkClick are design-time properties: every label's markup and the link
+  // handler are set in umain.lfm, so nothing about the rich text is wired up here.
 
   ApplyChromeTheme(TyDefaultController);
 end;
@@ -78,7 +77,9 @@ end;
 
 procedure TMainForm.RichLinkClick(Sender: TObject; const AHref: string);
 begin
-  LblStatus.Caption := 'Clicked link:' + AHref;
+  // AHref is whatever the clicked <a href="..."> carried -- the two links in Rich
+  // report two different URLs through this one handler.
+  LblStatus.Caption := 'Clicked link: ' + AHref;
 end;
 
 end.

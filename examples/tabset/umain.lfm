@@ -1,10 +1,10 @@
 object MainForm: TMainForm
   Left = 0
-  Height = 220
+  Height = 372
   Top = 0
   Width = 520
   Caption = 'TTyTabSet example'
-  ClientHeight = 220
+  ClientHeight = 372
   ClientWidth = 520
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
@@ -12,7 +12,7 @@ object MainForm: TMainForm
   TitleBar = Bar
   object Surface: TTyFormSurface
     Left = 0
-    Height = 220
+    Height = 372
     Top = 0
     Width = 520
     Align = alClient
@@ -49,11 +49,11 @@ object MainForm: TMainForm
       Width = 480
       TabHeight = 32
       Tabs.Strings = (
-        'Overview'
-        'Detail'
-        'Notice (locked)'
-        'Settings'
-        'About'
+        '&Overview'
+        '&Detail'
+        '&Notice (locked)'
+        '&Settings'
+        '&About'
       )
       TabIndex = 0
       TabsClosable = True
@@ -62,13 +62,77 @@ object MainForm: TMainForm
       OnTabClose = TabClosing
       OnReorder = TabReordered
     end
+    object LblKeys: TTyLabel
+      Left = 20
+      Height = 40
+      Top = 94
+      Width = 480
+      Caption = 'Hold Alt to reveal the mnemonic underlines, then Alt+O / Alt+D / Alt+S / Alt+A jump to a tab (Alt+N lands on the vetoed one). Ctrl+Tab wraps; Home and End go to the ends.'
+      WordWrap = True
+    end
+    object BtnAdd: TTyButton
+      Left = 20
+      Height = 30
+      Top = 142
+      Width = 120
+      Caption = '+ Add tab'
+      OnClick = BtnAddClick
+    end
+    object LblAdd: TTyLabel
+      Left = 152
+      Height = 20
+      Top = 147
+      Width = 348
+      Caption = 'Tabs is a live TStrings: closed tabs come back.'
+    end
     object LblStatus: TTyLabel
       Left = 20
       Height = 66
-      Top = 110
+      Top = 180
       Width = 480
       Caption = 'Current tab: Overview'#13#10'Tip: click to switch · drag to reorder · click × to close · the "Notice (locked)" tab cannot be selected'
       WordWrap = True
+    end
+    object Div1: TTyDivider
+      Left = 20
+      Height = 22
+      Top = 254
+      Width = 480
+      Caption = 'Header overflow · TabHeight unset'
+      Alignment = taLeftJustify
+    end
+    object NarrowStrip: TTyTabSet
+      Left = 20
+      Height = 44
+      Top = 284
+      Width = 200
+      Tabs.Strings = (
+        'Overview'
+        'Detail'
+        'Notice'
+        'Settings'
+        'About'
+        'History'
+        'Export'
+        'Advanced'
+      )
+      TabIndex = 0
+      OnChange = NarrowTabChanged
+    end
+    object LblNarrow: TTyLabel
+      Left = 236
+      Height = 44
+      Top = 284
+      Width = 264
+      Caption = 'Eight tabs in 200 px: click the arrows at each end, or roll the wheel over the strip.'
+      WordWrap = True
+    end
+    object LblDensity: TTyLabel
+      Left = 20
+      Height = 20
+      Top = 336
+      Width = 480
+      Caption = 'TabHeight unset there: it follows the theme — 28 classic, 38 modern.'
     end
   end
 end

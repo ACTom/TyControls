@@ -1,10 +1,10 @@
 object MainForm: TMainForm
   Left = 0
-  Height = 400
+  Height = 691
   Top = 0
   Width = 460
   Caption = 'TTyEdit example'
-  ClientHeight = 400
+  ClientHeight = 691
   ClientWidth = 460
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
@@ -12,7 +12,7 @@ object MainForm: TMainForm
   TitleBar = Bar
   object Surface: TTyFormSurface
     Left = 0
-    Height = 400
+    Height = 691
     Top = 0
     Width = 460
     TabOrder = 0
@@ -132,6 +132,7 @@ object MainForm: TMainForm
       Width = 260
       Text = 'Read-only content, cannot be edited'
       ReadOnly = True
+      OnClick = ReadOnlyClicked
     end
     object LblRight: TTyLabel
       Left = 24
@@ -148,10 +149,149 @@ object MainForm: TMainForm
       Text = '1234.56'
       Alignment = taRightJustify
     end
+    object LblLower: TTyLabel
+      Left = 24
+      Height = 22
+      Top = 337
+      Width = 130
+      Caption = 'Force lowercase'
+    end
+    object EdLower: TTyEdit
+      Left = 160
+      Height = 30
+      Top = 332
+      Width = 260
+      TextHint = 'Input will be converted to lowercase'
+      CharCase = ecLowerCase
+    end
+    object LblCenter: TTyLabel
+      Left = 24
+      Height = 22
+      Top = 377
+      Width = 130
+      Caption = 'Center align'
+    end
+    object EdCenter: TTyEdit
+      Left = 160
+      Height = 30
+      Top = 372
+      Width = 260
+      Text = '42'
+      Alignment = taCenter
+    end
+    object LblRuntime: TTyLabel
+      Left = 24
+      Height = 40
+      Top = 414
+      Width = 412
+      Caption = 'Runtime API - undo and clipboard act on the top box, the selection row on the read-only box.'
+      WordWrap = True
+    end
+    object LblUndo: TTyLabel
+      Left = 24
+      Height = 22
+      Top = 471
+      Width = 130
+      Caption = 'Undo / redo'
+    end
+    object BtnUndo: TTyButton
+      Left = 160
+      Height = 30
+      Top = 466
+      Width = 80
+      Caption = 'Undo'
+      Enabled = False
+      OnClick = BtnUndoClick
+    end
+    object BtnRedo: TTyButton
+      Left = 248
+      Height = 30
+      Top = 466
+      Width = 80
+      Caption = 'Redo'
+      Enabled = False
+      OnClick = BtnRedoClick
+    end
+    object LblUndoHint: TTyLabel
+      Left = 336
+      Height = 22
+      Top = 471
+      Width = 100
+      Caption = 'Ctrl+Z / Ctrl+Y'
+    end
+    object LblClip: TTyLabel
+      Left = 24
+      Height = 22
+      Top = 511
+      Width = 130
+      Caption = 'Clipboard'
+    end
+    object BtnCopy: TTyButton
+      Left = 160
+      Height = 30
+      Top = 506
+      Width = 80
+      Caption = 'Copy'
+      OnClick = BtnCopyClick
+    end
+    object BtnCut: TTyButton
+      Left = 248
+      Height = 30
+      Top = 506
+      Width = 80
+      Caption = 'Cut'
+      OnClick = BtnCutClick
+    end
+    object BtnPaste: TTyButton
+      Left = 336
+      Height = 30
+      Top = 506
+      Width = 100
+      Caption = 'Paste'
+      OnClick = BtnPasteClick
+    end
+    object LblMask: TTyLabel
+      Left = 24
+      Height = 22
+      Top = 551
+      Width = 130
+      Caption = 'Masked copy'
+    end
+    object BtnCopyPwd: TTyButton
+      Left = 160
+      Height = 30
+      Top = 546
+      Width = 276
+      Caption = 'Copy the password box (nothing leaves it)'
+      OnClick = BtnCopyPwdClick
+    end
+    object LblSel: TTyLabel
+      Left = 24
+      Height = 22
+      Top = 591
+      Width = 130
+      Caption = 'Selection API'
+    end
+    object BtnSelectAll: TTyButton
+      Left = 160
+      Height = 30
+      Top = 586
+      Width = 130
+      Caption = 'Select all'
+      OnClick = BtnSelectAllClick
+    end
+    object BtnSelectRange: TTyButton
+      Left = 298
+      Height = 30
+      Top = 586
+      Width = 138
+      Caption = 'Select chars 3-7'
+      OnClick = BtnSelectRangeClick
+    end
     object LblStatus: TTyLabel
       Left = 24
       Height = 24
-      Top = 348
+      Top = 639
       Width = 412
       Caption = '(the first edit box''s content will show here)'
     end

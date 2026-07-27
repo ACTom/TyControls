@@ -1,31 +1,31 @@
 object MainForm: TMainForm
   Left = 0
-  Height = 360
+  Height = 720
   Top = 0
-  Width = 480
+  Width = 560
   Caption = 'Scrollbar example'
-  ClientHeight = 360
-  ClientWidth = 480
+  ClientHeight = 720
+  ClientWidth = 560
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
   TitleBar = Bar
   object Surface: TTyFormSurface
     Left = 0
-    Height = 360
+    Height = 720
     Top = 0
-    Width = 480
+    Width = 560
     Align = alClient
     object Bar: TTyTitleBar
       Left = 0
       Height = 34
       Top = 0
-      Width = 480
+      Width = 560
       Align = alTop
       Caption = 'TTyScrollBar  ·  TyControls'
       TitleAlignment = taLeftJustify
       object DarkSwitch: TTyToggleSwitch
-        Left = 132
+        Left = 212
         Height = 24
         Top = 5
         Width = 74
@@ -34,7 +34,7 @@ object MainForm: TMainForm
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
-        Left = 214
+        Left = 294
         Height = 26
         Top = 4
         Width = 120
@@ -46,8 +46,8 @@ object MainForm: TMainForm
       Left = 24
       Height = 20
       Top = 48
-      Width = 432
-      Caption = 'Drag the slider, click the track/arrows, or use arrow keys / PageUp / PageDown to scroll'
+      Width = 512
+      Caption = 'Drag the slider, click the track/arrows, spin the wheel, arrow keys, PageUp/PageDown, Home/End'
     end
     object VBar: TTyScrollBar
       Left = 28
@@ -61,6 +61,7 @@ object MainForm: TMainForm
       PageSize = 20
       SmallChange = 5
       OnChange = BarChange
+      OnScroll = BarScroll
     end
     object HBar: TTyScrollBar
       Left = 80
@@ -74,6 +75,7 @@ object MainForm: TMainForm
       PageSize = 10
       SmallChange = 2
       OnChange = BarChange
+      OnScroll = BarScroll
     end
     object LblStatus: TTyLabel
       Left = 80
@@ -81,6 +83,103 @@ object MainForm: TMainForm
       Top = 96
       Width = 372
       WordWrap = True
+    end
+    object LblCodeTitle: TTyLabel
+      Left = 24
+      Height = 20
+      Top = 332
+      Width = 512
+      Caption = 'OnScroll reports which gesture moved the bar, and can overrule the proposed value'
+    end
+    object LblCode: TTyLabel
+      Left = 24
+      Height = 40
+      Top = 356
+      Width = 512
+      WordWrap = True
+      Layout = tlTop
+      Caption = 'Press Home on the vertical bar: the handler forces 10, not Min'
+    end
+    object LblViewTitle: TTyLabel
+      Left = 24
+      Height = 20
+      Top = 408
+      Width = 512
+      Caption = 'The vertical bar scrolls this block of text; the buttons contrast eased vs snapped'
+    end
+    object Viewport: TTyPanel
+      Left = 24
+      Height = 160
+      Top = 432
+      Width = 340
+      object LblContent: TTyLabel
+        Left = 10
+        Height = 360
+        Top = 0
+        Width = 320
+        WordWrap = True
+        Layout = tlTop
+      end
+    end
+    object BtnSnap: TTyButton
+      Left = 380
+      Height = 30
+      Top = 432
+      Width = 156
+      Caption = 'Top (snapped)'
+      OnClick = BtnSnapClick
+    end
+    object BtnEase: TTyButton
+      Left = 380
+      Height = 30
+      Top = 472
+      Width = 156
+      Caption = 'Middle (eased)'
+      OnClick = BtnEaseClick
+    end
+    object LblSnapHint: TTyLabel
+      Left = 380
+      Height = 78
+      Top = 510
+      Width = 156
+      WordWrap = True
+      Layout = tlTop
+      Caption = 'SetPositionSnapped lands at once; a plain Position write glides the thumb there'
+    end
+    object SwAnim: TTyToggleSwitch
+      Left = 24
+      Height = 24
+      Top = 604
+      Width = 140
+      Caption = 'Animated thumb'
+      Checked = True
+      OnChange = SwAnimChange
+    end
+    object LblAnim: TTyLabel
+      Left = 24
+      Height = 20
+      Top = 632
+      Width = 512
+      Caption = 'Turn it off, then click the track: the thumb jumps instead of gliding'
+    end
+    object LblFull: TTyLabel
+      Left = 24
+      Height = 20
+      Top = 660
+      Width = 512
+      Caption = 'Max = Min: nothing to scroll, so the thumb fills the whole track'
+    end
+    object FullBar: TTyScrollBar
+      Left = 24
+      Height = 18
+      Top = 684
+      Width = 512
+      Kind = sbHorizontal
+      Min = 0
+      Max = 0
+      Position = 0
+      PageSize = 10
+      SmallChange = 1
     end
   end
 end

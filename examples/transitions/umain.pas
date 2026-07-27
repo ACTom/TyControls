@@ -13,7 +13,7 @@ uses
   Classes, SysUtils, Forms, Controls,
   tyControls.Controller, tyControls.Form, tyControls.Button, tyControls.TyLabel,
   tyControls.Panel, tyControls.Transitions, tyControls.BuiltinThemes,
-  tyControls.ComboBox, tyControls.ToggleSwitch;
+  tyControls.ComboBox, tyControls.ToggleSwitch, tyControls.TrackBar;
 
 type
   TMainForm = class(TTyForm)
@@ -26,8 +26,16 @@ type
     BtnDown:  TTyButton;
     BtnLeft:  TTyButton;
     BtnRight: TTyButton;
+    BtnNone:  TTyButton;
+    BtnHide:  TTyButton;
+    LblDuration:     TTyLabel;
+    DurationBar:     TTyTrackBar;
+    LblDurationHint: TTyLabel;
+    LblFadeNote:     TTyLabel;
+    LblCancelNote:   TTyLabel;
     Target:   TTyPanel;
     LblIn:    TTyLabel;
+    LblHint:  TTyLabel;
 
     procedure FormCreate(Sender: TObject);
     procedure BtnFadeClick(Sender: TObject);
@@ -35,6 +43,8 @@ type
     procedure BtnDownClick(Sender: TObject);
     procedure BtnLeftClick(Sender: TObject);
     procedure BtnRightClick(Sender: TObject);
+    procedure BtnNoneClick(Sender: TObject);
+    procedure BtnHideClick(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
     procedure DarkSwitchChange(Sender: TObject);
   private
@@ -95,22 +105,43 @@ begin
   ApplyChromeTheme(TyDefaultController);
 end;
 
-{ Re-show the panel with the chosen transition. }
+{ Re-show the panel with the chosen transition. No Visible := True here: the reveal is
+  TyPlayTransition's job -- it shows the control itself as the animation starts, which is
+  exactly what makes "Hide panel" then "Slide in from left" a real hidden->revealed cycle.
+  The duration comes from the slider, so 0 exercises the documented snap path. }
 procedure TMainForm.Replay(AKind: TTyTransitionKind);
 begin
-  Target.Visible := True;
-  TyPlayTransition(Target, AKind, 300);
+  TyPlayTransition(Target, AKind, DurationBar.Position);
 end;
 
 procedure TMainForm.BtnFadeClick(Sender: TObject);
 begin
   // ttFade animates a FORM's opacity via AlphaBlend (Windows; a plain show elsewhere), so it
   // applies to the WINDOW -- a TTyPanel has no AlphaBlend. The slide buttons animate the panel.
-  TyPlayTransition(Self, ttFade, 300);
+  // TyFadeIn / TySlideIn are thin aliases over TyPlayTransition.
+  TyFadeIn(Self, DurationBar.Position);
 end;
 procedure TMainForm.BtnUpClick(Sender: TObject);    begin Replay(ttSlideUp);    end;
 procedure TMainForm.BtnDownClick(Sender: TObject);  begin Replay(ttSlideDown);  end;
-procedure TMainForm.BtnLeftClick(Sender: TObject);  begin Replay(ttSlideLeft);  end;
+procedure TMainForm.BtnLeftClick(Sender: TObject);
+begin
+  // Same call as Replay(ttSlideLeft) -- TySlideIn is the named alias for it.
+  TySlideIn(Target, ttSlideLeft, DurationBar.Position);
+end;
 procedure TMainForm.BtnRightClick(Sender: TObject); begin Replay(ttSlideRight); end;
+
+procedure TMainForm.BtnNoneClick(Sender: TObject);
+begin
+  // ttNone is the documented no-op -- what an app stores when the user turns animation off.
+  // TyPlayTransition returns without touching the control, so the caller does the plain show.
+  Target.Visible := True;
+  TyPlayTransition(Target, ttNone, DurationBar.Position);
+end;
+
+procedure TMainForm.BtnHideClick(Sender: TObject);
+begin
+  // Give the transition buttons something to reveal.
+  Target.Visible := False;
+end;
 
 end.

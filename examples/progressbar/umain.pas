@@ -32,6 +32,17 @@ type
     BtnStart: TTyButton;
     BtnStep: TTyButton;
     BtnReset: TTyButton;
+    LblOrient: TTyLabel;
+    VertBar: TTyProgressBar;
+    LblRange: TTyLabel;
+    RangeBar: TTyProgressBar;
+    LblRangeReadout: TTyLabel;
+    LblOverride: TTyLabel;
+    OverrideBar: TTyProgressBar;
+    LblDisabled: TTyLabel;
+    DisabledBar: TTyProgressBar;
+    LblDock: TTyLabel;
+    DockBar: TTyProgressBar;
     Timer: TTimer;
     procedure FormCreate(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
@@ -42,6 +53,8 @@ type
     procedure StepClick(Sender: TObject);
     procedure AnimToggle(Sender: TObject);
     procedure TimerTick(Sender: TObject);
+    procedure OverrideBarMouseDown(Sender: TObject; Button: TMouseButton;
+      Shift: TShiftState; X, Y: Integer);
   end;
 
 var
@@ -96,6 +109,15 @@ begin
     Pct := 0;
   LblReadout.Caption := Format('Progress: %d / %d  (%d%%)',
     [ProgBar.Position, ProgBar.Max, Pct]);
+  // The vertical bar and the docked strip share this bar's Position outright, so the
+  // only difference on screen is Orientation / Align. RangeBar re-maps the same PERCENT
+  // onto its own 20..60 range, which is what Min/Max actually do.
+  VertBar.Position := ProgBar.Position;
+  DockBar.Position := ProgBar.Position;
+  RangeBar.Position := RangeBar.Min +
+    Round((RangeBar.Max - RangeBar.Min) * Pct / 100);
+  LblRangeReadout.Caption := Format('Position %d in %d..%d  (%d%%)',
+    [RangeBar.Position, RangeBar.Min, RangeBar.Max, Pct]);
 end;
 
 procedure TMainForm.StartClick(Sender: TObject);
@@ -117,6 +139,11 @@ end;
 procedure TMainForm.AnimToggle(Sender: TObject);
 begin
   ProgBar.AnimationsEnabled := AnimChk.Checked;
+  // Every bar rides the same switch, so the whole set snaps or eases together.
+  VertBar.AnimationsEnabled := AnimChk.Checked;
+  RangeBar.AnimationsEnabled := AnimChk.Checked;
+  OverrideBar.AnimationsEnabled := AnimChk.Checked;
+  DockBar.AnimationsEnabled := AnimChk.Checked;
 end;
 
 procedure TMainForm.TimerTick(Sender: TObject);
@@ -125,6 +152,19 @@ begin
     ProgBar.Position := 0
   else
     ProgBar.Position := ProgBar.Position + 5;
+end;
+
+procedure TMainForm.OverrideBarMouseDown(Sender: TObject; Button: TMouseButton;
+  Shift: TShiftState; X, Y: Integer);
+var
+  Span: Integer;
+begin
+  // A progress bar is a graphic control, so it still gets the full mouse event set:
+  // seek by clicking, and watch AnimationsEnabled ease the fill to the new spot.
+  Span := OverrideBar.Width;
+  if Span <= 0 then Exit;
+  OverrideBar.Position := OverrideBar.Min +
+    Round((OverrideBar.Max - OverrideBar.Min) * X / Span);
 end;
 
 end.

@@ -1,10 +1,10 @@
 object MainForm: TMainForm
   Left = 0
-  Height = 590
+  Height = 620
   Top = 0
   Width = 720
   Caption = 'Calendar example'
-  ClientHeight = 590
+  ClientHeight = 620
   ClientWidth = 720
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
@@ -12,7 +12,7 @@ object MainForm: TMainForm
   TitleBar = Bar
   object Surface: TTyFormSurface
     Left = 0
-    Height = 590
+    Height = 620
     Top = 0
     Width = 720
     TabOrder = 0
@@ -88,18 +88,44 @@ object MainForm: TMainForm
     end
     object LblReadOnlyHdr: TTyLabel
       Left = 360
-      Height = 22
+      Height = 60
       Top = 300
       Width = 340
-      Caption = 'Read-only calendar (ReadOnly=True · week starts Sunday):'
+      Caption = 'Read-only calendar (ReadOnly=True · Sunday start · ShowToday=False - today gets no outline here):'
+      WordWrap = True
     end
     object ROCal: TTyCalendar
       Left = 360
       Height = 230
-      Top = 326
+      Top = 364
       Width = 320
       FirstDayOfWeek = wdSunday
+      ShowToday = False
       ReadOnly = True
+    end
+    object LblLimitHdr: TTyLabel
+      Left = 20
+      Height = 22
+      Top = 386
+      Width = 320
+      Caption = 'MinDate / MaxDate - watch which cells grey out:'
+    end
+    object SwLimit: TTyToggleSwitch
+      Left = 20
+      Height = 24
+      Top = 412
+      Width = 250
+      Checked = True
+      Caption = 'Limit the range to 3 months'
+      OnChange = SwLimitChange
+    end
+    object LblLimitHint: TTyLabel
+      Left = 20
+      Height = 100
+      Top = 442
+      Width = 320
+      Caption = 'Off = both bounds are 0 (the documented no-bound sentinel): every month is reachable, so PageUp/PageDown really walk the grid. On = only the 3 months either side of today stay selectable.'
+      WordWrap = True
     end
   end
 end

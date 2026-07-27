@@ -1,10 +1,10 @@
 object MainForm: TMainForm
   Left = 0
-  Height = 320
+  Height = 636
   Top = 0
   Width = 420
   Caption = 'TTyDateTimePicker example'
-  ClientHeight = 320
+  ClientHeight = 636
   ClientWidth = 420
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
@@ -12,7 +12,7 @@ object MainForm: TMainForm
   TitleBar = Bar
   object Surface: TTyFormSurface
     Left = 0
-    Height = 320
+    Height = 636
     Top = 0
     Width = 420
     Align = alClient
@@ -60,6 +60,14 @@ object MainForm: TMainForm
       OnDropDown = DropDownOpened
       OnCloseUp = DropDownClosed
     end
+    object BtnOpen: TTyButton
+      Left = 340
+      Height = 26
+      Top = 54
+      Width = 62
+      Caption = 'Open'
+      OnClick = BtnOpenClick
+    end
     object LblTime: TTyLabel
       Left = 20
       Height = 22
@@ -95,10 +103,110 @@ object MainForm: TMainForm
       OnChange = CheckPickerChanged
       OnChecked = CheckPickerChecked
     end
+    object LblReadOnly: TTyLabel
+      Left = 20
+      Height = 22
+      Top = 176
+      Width = 120
+      Caption = 'Read-only:'
+    end
+    object ReadOnlyPicker: TTyDateTimePicker
+      Left = 150
+      Height = 26
+      Top = 174
+      Width = 180
+      Kind = dtkDate
+      DateFormat = 'yyyy-mm-dd'
+      ReadOnly = True
+    end
+    object LblReadOnlyHint: TTyLabel
+      Left = 20
+      Height = 32
+      Top = 204
+      Width = 380
+      Caption = 'ReadOnly: typing and Up/Down are ignored, the calendar still opens'
+      WordWrap = True
+    end
+    object LblRange: TTyLabel
+      Left = 20
+      Height = 22
+      Top = 244
+      Width = 120
+      Caption = 'Limited range:'
+    end
+    object RangePicker: TTyDateTimePicker
+      Left = 150
+      Height = 26
+      Top = 242
+      Width = 180
+      Kind = dtkDate
+      DateFormat = 'yyyy-mm-dd'
+    end
+    object LblRangeHint: TTyLabel
+      Left = 20
+      Height = 32
+      Top = 272
+      Width = 380
+      Caption = 'MinDate/MaxDate = today +/-3 days: stepping stops at the edge'
+      WordWrap = True
+    end
+    object LblAmPm: TTyLabel
+      Left = 20
+      Height = 22
+      Top = 312
+      Width = 120
+      Caption = '12-hour time:'
+    end
+    object AmPmPicker: TTyDateTimePicker
+      Left = 150
+      Height = 26
+      Top = 310
+      Width = 180
+      Kind = dtkTime
+      TimeFormat = 'hh:nn am/pm'
+    end
+    object LblAmPmHint: TTyLabel
+      Left = 20
+      Height = 32
+      Top = 340
+      Width = 380
+      Caption = 'TimeFormat hh:nn am/pm: Up/Down flips the AM/PM segment'
+      WordWrap = True
+    end
+    object LblLocale: TTyLabel
+      Left = 20
+      Height = 22
+      Top = 380
+      Width = 120
+      Caption = 'Locale format:'
+    end
+    object LocalePicker: TTyDateTimePicker
+      Left = 150
+      Height = 26
+      Top = 378
+      Width = 180
+      Kind = dtkDate
+    end
+    object LblLocaleHint: TTyLabel
+      Left = 20
+      Height = 32
+      Top = 408
+      Width = 380
+      Caption = 'DateFormat left empty: follows the OS short-date format'
+      WordWrap = True
+    end
+    object LblDropHint: TTyLabel
+      Left = 20
+      Height = 32
+      Top = 446
+      Width = 380
+      Caption = 'Open sets DatePicker.DroppedDown := True; closing reads it back'
+      WordWrap = True
+    end
     object LblStatus: TTyLabel
       Left = 20
-      Height = 110
-      Top = 180
+      Height = 130
+      Top = 486
       Width = 380
       WordWrap = True
     end

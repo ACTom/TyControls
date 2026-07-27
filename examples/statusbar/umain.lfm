@@ -68,6 +68,38 @@ object MainForm: TMainForm
       Caption = 'Toggle SimplePanel mode'
       OnClick = ToggleSimple
     end
+    object BtnGrip: TTyButton
+      Left = 24
+      Height = 34
+      Top = 188
+      Width = 200
+      Caption = 'Toggle the size grip'
+      OnClick = ToggleGrip
+    end
+    object LblPanels: TTyLabel
+      Left = 240
+      Height = 36
+      Top = 100
+      Width = 256
+      Caption = 'Panels is a live collection - watch the bar re-lay itself out:'
+      WordWrap = True
+    end
+    object BtnAddPanel: TTyButton
+      Left = 240
+      Height = 34
+      Top = 140
+      Width = 200
+      Caption = 'Add a panel'
+      OnClick = AddPanel
+    end
+    object BtnRemovePanel: TTyButton
+      Left = 240
+      Height = 34
+      Top = 184
+      Width = 200
+      Caption = 'Remove the last panel'
+      OnClick = RemovePanel
+    end
     object StatusBar: TTyStatusBar
       Left = 0
       Height = 24
@@ -75,6 +107,7 @@ object MainForm: TMainForm
       Width = 520
       Align = alBottom
       SizeGrip = True
+      OnMouseDown = StatusBarMouseDown
       Panels = <
         item
           Text = 'Ready'

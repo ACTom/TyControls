@@ -1,10 +1,10 @@
 object MainForm: TMainForm
   Left = 0
-  Height = 320
+  Height = 600
   Top = 0
   Width = 440
   Caption = 'RadioButton example'
-  ClientHeight = 320
+  ClientHeight = 600
   ClientWidth = 440
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
@@ -12,7 +12,7 @@ object MainForm: TMainForm
   TitleBar = Bar
   object Surface: TTyFormSurface
     Left = 0
-    Height = 320
+    Height = 600
     Top = 0
     Width = 440
     Align = alClient
@@ -113,6 +113,116 @@ object MainForm: TMainForm
       Top = 236
       Width = 408
       Caption = ''
+    end
+    object LblGroupIdxHead: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 276
+      Width = 408
+      Caption = 'GroupIndex - one box, two selections that ignore each other'
+    end
+    object GroupC: TTyGroupBox
+      Left = 16
+      Height = 140
+      Top = 302
+      Width = 408
+      Caption = 'Size = GroupIndex 0        Delivery = GroupIndex 1'
+      Alignment = taLeftJustify
+      object SizeSmall: TTyRadioButton
+        Left = 10
+        Height = 26
+        Top = 24
+        Width = 150
+        Caption = '&Small'
+        GroupIndex = 0
+        OnChange = RadioChanged
+      end
+      object SizeMedium: TTyRadioButton
+        Left = 10
+        Height = 26
+        Top = 56
+        Width = 150
+        Caption = '&Medium'
+        GroupIndex = 0
+        OnChange = RadioChanged
+      end
+      object SizeLarge: TTyRadioButton
+        Left = 10
+        Height = 26
+        Top = 88
+        Width = 150
+        Caption = '&Large'
+        GroupIndex = 0
+        OnChange = RadioChanged
+      end
+      object ShipStandard: TTyRadioButton
+        Left = 196
+        Height = 26
+        Top = 24
+        Width = 180
+        Caption = 'S&tandard post'
+        GroupIndex = 1
+        OnChange = RadioChanged
+      end
+      object ShipExpress: TTyRadioButton
+        Left = 196
+        Height = 26
+        Top = 56
+        Width = 180
+        Caption = '&Express courier'
+        GroupIndex = 1
+        Hint = 'GroupIndex 1: picking here never clears the Size column'
+        ShowHint = True
+        OnChange = RadioChanged
+      end
+    end
+    object LblGroupIdxStatus: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 452
+      Width = 408
+      Caption = 'GroupIndex 0: (none)     GroupIndex 1: (none)'
+    end
+    object LblMnemonic: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 478
+      Width = 408
+      Caption = 'Hold Alt - each caption underlines its mnemonic; Alt+key picks'
+    end
+    object LblStyle: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 508
+      Width = 408
+      Caption = 'StyleOverride - square indicator; these two group by Parent'
+    end
+    object StyleRadioA: TTyRadioButton
+      Left = 16
+      Height = 26
+      Top = 534
+      Width = 190
+      Caption = 'Square dot A'
+      StyleOverride = 'border-radius: 2px; border-width: 2px;'
+      OnChange = StyleRadioChanged
+      OnClick = StyleRadioClick
+    end
+    object StyleRadioB: TTyRadioButton
+      Left = 232
+      Height = 26
+      Top = 534
+      Width = 190
+      Caption = 'Square dot B'
+      StyleOverride = 'border-radius: 2px; border-width: 2px;'
+      OnChange = StyleRadioChanged
+      OnClick = StyleRadioClick
+    end
+    object LblEvents: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 566
+      Width = 408
+      Caption = 'OnChange x0, OnClick x0 - one pick fires OnChange twice'
     end
   end
 end

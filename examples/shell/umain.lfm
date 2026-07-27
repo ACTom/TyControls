@@ -1,10 +1,10 @@
 object MainForm: TMainForm
   Left = 200
-  Height = 720
+  Height = 800
   Top = 80
   Width = 1024
   Caption = 'TyControls — file browser (Shell tree + list + look-in scope + filter dropdown)'
-  ClientHeight = 720
+  ClientHeight = 800
   ClientWidth = 1024
   Font.Height = -12
   Position = poScreenCenter
@@ -13,7 +13,7 @@ object MainForm: TMainForm
   TitleBar = TitleBar1
   object Surface: TTyFormSurface
     Left = 0
-    Height = 720
+    Height = 800
     Top = 0
     Width = 1024
     TabOrder = 0
@@ -67,6 +67,46 @@ object MainForm: TMainForm
       Caption = 'Group by type'
       OnChange = ChkGroupChange
     end
+    object ChkFoldersFirst: TTyCheckBox
+      Left = 364
+      Height = 22
+      Top = 50
+      Width = 110
+      Caption = 'Folders first'
+      Checked = True
+      OnChange = ChkFoldersFirstChange
+    end
+    object ChkMulti: TTyCheckBox
+      Left = 486
+      Height = 22
+      Top = 50
+      Width = 110
+      Caption = 'Multi-select'
+      Checked = True
+      OnChange = ChkMultiChange
+    end
+    object BtnRefresh: TTyButton
+      Left = 608
+      Height = 30
+      Top = 46
+      Width = 90
+      Caption = 'Refresh'
+      OnClick = BtnRefreshClick
+    end
+    object LblView: TTyLabel
+      Left = 712
+      Height = 20
+      Top = 50
+      Width = 44
+      Caption = 'View:'
+    end
+    object ViewCombo: TTyComboBox
+      Left = 760
+      Height = 30
+      Top = 46
+      Width = 150
+      OnChange = ViewComboChange
+    end
     object LblLookIn: TTyLabel
       Left = 16
       Height = 20
@@ -84,7 +124,7 @@ object MainForm: TMainForm
     end
     object Tree1: TTyShellTreeView
       Left = 16
-      Height = 528
+      Height = 568
       Top = 124
       Width = 300
       Anchors = [akTop, akLeft, akBottom]
@@ -92,17 +132,27 @@ object MainForm: TMainForm
     end
     object List1: TTyShellListView
       Left = 328
-      Height = 528
+      Height = 568
       Top = 124
       Width = 680
       Anchors = [akTop, akLeft, akRight, akBottom]
+      MultiSelect = True
       OnFileActivate = List1FileActivate
       OnDirectoryChange = List1DirectoryChange
+      OnSelectItem = List1SelectItem
+    end
+    object LblHint: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 700
+      Width = 992
+      Anchors = [akLeft, akRight, akBottom]
+      Caption = 'Pick a View style; clear "Folders first" and click Name twice to drop folders below files; Refresh keeps the selection'
     end
     object LblFilter: TTyLabel
       Left = 16
       Height = 20
-      Top = 668
+      Top = 736
       Width = 62
       Anchors = [akLeft, akBottom]
       Caption = 'File type:'
@@ -110,15 +160,23 @@ object MainForm: TMainForm
     object FilterCombo: TTyFilterComboBox
       Left = 84
       Height = 30
-      Top = 662
+      Top = 730
       Width = 360
       Anchors = [akLeft, akBottom]
       OnFilterChange = FilterComboFilterChange
     end
+    object LblSelection: TTyLabel
+      Left = 456
+      Height = 20
+      Top = 736
+      Width = 552
+      Anchors = [akLeft, akRight, akBottom]
+      Caption = 'Ctrl/Shift-click rows: SelCount and SelectedFile report the selection here'
+    end
     object LblStatus: TTyLabel
       Left = 16
       Height = 20
-      Top = 698
+      Top = 770
       Width = 992
       Anchors = [akLeft, akRight, akBottom]
       Caption = 'Double-click a folder to enter, double-click a file to open, F2 to rename'

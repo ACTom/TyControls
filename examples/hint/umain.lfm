@@ -1,10 +1,10 @@
 object MainForm: TMainForm
   Left = 0
-  Height = 280
+  Height = 494
   Top = 0
   Width = 440
   Caption = 'Hint example'
-  ClientHeight = 280
+  ClientHeight = 494
   ClientWidth = 440
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
@@ -12,7 +12,7 @@ object MainForm: TMainForm
   TitleBar = Bar
   object Surface: TTyFormSurface
     Left = 0
-    Height = 280
+    Height = 494
     Top = 0
     Width = 440
     Align = alClient
@@ -67,13 +67,101 @@ object MainForm: TMainForm
       Hint = 'Delete selected items'#13#10'This action cannot be undone'
       ShowHint = True
     end
+    object HintSwitch: TTyToggleSwitch
+      Left = 296
+      Height = 24
+      Top = 97
+      Width = 130
+      Caption = 'Themed hints'
+      Checked = True
+      OnChange = HintSwitchChange
+    end
+    object LblHintNote: TTyLabel
+      Left = 24
+      Height = 22
+      Top = 134
+      Width = 392
+      Caption = 'Switch "Themed hints" off and hover Save: the OS tooltip returns.'
+    end
+    object LblBalloons: TTyLabel
+      Left = 24
+      Height = 40
+      Top = 168
+      Width = 392
+      Caption = 'Popovers: "Show popover" is the biInfo icon; the next three are biWarning, biError and biNone.'
+      WordWrap = True
+    end
     object BtnBalloon: TTyButton
       Left = 24
       Height = 34
-      Top = 150
-      Width = 160
+      Top = 214
+      Width = 186
       Caption = 'Show popover'
       OnClick = ShowBalloon
+    end
+    object BtnWarn: TTyButton
+      Left = 230
+      Height = 34
+      Top = 214
+      Width = 186
+      Caption = 'Warning popover'
+      OnClick = ShowWarnBalloon
+    end
+    object BtnErr: TTyButton
+      Left = 24
+      Height = 34
+      Top = 256
+      Width = 186
+      Caption = 'Error popover'
+      OnClick = ShowErrBalloon
+    end
+    object BtnPlain: TTyButton
+      Left = 230
+      Height = 34
+      Top = 256
+      Width = 186
+      Caption = 'No-icon popover'
+      OnClick = ShowPlainBalloon
+    end
+    object LblSticky: TTyLabel
+      Left = 24
+      Height = 40
+      Top = 300
+      Width = 392
+      Caption = 'HideInterval: those four fade out after 2 s; the sticky popover sets 0, so only HideHint closes it.'
+      WordWrap = True
+    end
+    object BtnSticky: TTyButton
+      Left = 24
+      Height = 34
+      Top = 346
+      Width = 186
+      Caption = 'Sticky popover'
+      OnClick = ShowStickyBalloon
+    end
+    object BtnHide: TTyButton
+      Left = 230
+      Height = 34
+      Top = 346
+      Width = 186
+      Caption = 'Hide it (HideHint)'
+      OnClick = HideStickyBalloon
+    end
+    object LblScreen: TTyLabel
+      Left = 24
+      Height = 40
+      Top = 390
+      Width = 392
+      Caption = 'ShowAt aims at any screen rect - with no room below, the body flips above and the pointer moves to its bottom edge.'
+      WordWrap = True
+    end
+    object BtnScreen: TTyButton
+      Left = 24
+      Height = 34
+      Top = 436
+      Width = 392
+      Caption = 'Popover at the bottom of the screen'
+      OnClick = ShowScreenBalloon
     end
   end
   object AppHint: TTyHint
@@ -82,5 +170,30 @@ object MainForm: TMainForm
     Title = 'Saved'
     Description = 'The document has been written to disk.'
     Icon = biInfo
+    HideInterval = 2000
+  end
+  object BalloonWarn: TTyBalloonHint
+    Title = 'Low disk space'
+    Description = 'Less than 1 GB remains on drive C:.'
+    Icon = biWarning
+    HideInterval = 2000
+  end
+  object BalloonErr: TTyBalloonHint
+    Title = 'Save failed'
+    Description = 'The file is read-only.'
+    Icon = biError
+    HideInterval = 2000
+  end
+  object BalloonPlain: TTyBalloonHint
+    Title = 'Copied'
+    Description = 'No icon - text only.'
+    Icon = biNone
+    HideInterval = 2000
+  end
+  object BalloonSticky: TTyBalloonHint
+    Title = 'Sticky popover'
+    Description = 'HideInterval = 0 - this one stays until you dismiss it.'
+    Icon = biInfo
+    HideInterval = 0
   end
 end

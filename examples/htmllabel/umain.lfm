@@ -1,10 +1,10 @@
 object MainForm: TMainForm
   Left = 240
-  Height = 400
+  Height = 470
   Top = 130
   Width = 680
   Caption = 'TyControls — mini HTML label (TTyHtmlLabel)'
-  ClientHeight = 400
+  ClientHeight = 470
   ClientWidth = 680
   Font.Height = -12
   Position = poScreenCenter
@@ -13,7 +13,7 @@ object MainForm: TMainForm
   TitleBar = TitleBar1
   object Surface: TTyFormSurface
     Left = 0
-    Height = 400
+    Height = 470
     Top = 0
     Width = 680
     Align = alClient
@@ -43,21 +43,66 @@ object MainForm: TMainForm
         OnChange = ThemeComboChange
       end
     end
+    object LblHeadMarkup: TTyLabel
+      Left = 24
+      Height = 20
+      Top = 42
+      Width = 632
+      Anchors = [akTop, akLeft, akRight]
+      Caption = 'Markup and links, all set at design time in the .lfm — nothing here is assigned in code'
+    end
     object Rich: TTyHtmlLabel
       Left = 24
-      Height = 260
-      Top = 52
+      Height = 150
+      Top = 66
       Width = 632
       Anchors = [akTop, akLeft, akRight]
       WordWrap = True
+      Html = '<b>TyControls</b> is a set of <i>custom-drawn</i> Lazarus controls. Themed, cross-platform.<br>This label supports <u>underline</u>, <s>strikethrough</s>, <font color=#c0392b>red</font> and <font size=16>large text</font>, and <a href="https://github.com/ACTom/TyControls">a clickable link</a> or <a href="https://gitee.com/actom/TyControls">the Gitee mirror</a> — two links, two different hrefs.<br>Entities work too: &lt;tag&gt; &amp; &quot;quotes&quot;, and &amp;nbsp; keeps&nbsp;these&nbsp;words&nbsp;together when the line wraps.'
+      OnLinkClick = RichLinkClick
+    end
+    object LblHeadNoWrap: TTyLabel
+      Left = 24
+      Height = 20
+      Top = 224
+      Width = 632
+      Anchors = [akTop, akLeft, akRight]
+      Caption = 'WordWrap = False — watch the line run straight off the right edge instead of reflowing'
+    end
+    object RichNoWrap: TTyHtmlLabel
+      Left = 24
+      Height = 28
+      Top = 248
+      Width = 632
+      Anchors = [akTop, akLeft, akRight]
+      WordWrap = False
+      Html = '<b>WordWrap = False</b> — one long line that never breaks: it keeps its natural single-line width and is simply clipped at the label edge.'
+    end
+    object LblHeadAutoSize: TTyLabel
+      Left = 24
+      Height = 20
+      Top = 286
+      Width = 632
+      Anchors = [akTop, akLeft, akRight]
+      Caption = 'AutoSize = True — drag the window narrower and watch this label grow taller on its own'
+    end
+    object RichAuto: TTyHtmlLabel
+      Left = 24
+      Height = 44
+      Top = 310
+      Width = 632
+      Anchors = [akTop, akLeft, akRight]
+      WordWrap = True
+      Html = '<b>AutoSize = True</b> — this label measures the wrapped rich text and sets its own height. Narrow the window: the text needs more lines, so the label makes itself taller to fit them.'
+      AutoSize = True
     end
     object LblStatus: TTyLabel
       Left = 24
       Height = 20
-      Top = 360
+      Top = 430
       Width = 632
       Anchors = [akLeft, akRight, akBottom]
-      Caption = 'Click the link above'
+      Caption = 'Click either link above'
     end
   end
 end

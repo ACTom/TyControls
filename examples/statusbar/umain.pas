@@ -5,6 +5,10 @@ unit umain;
   - A panel with Width <=0 auto-fills the remaining space (fill panel)
   - SizeGrip -- bottom-right resize handle
   - SimplePanel/SimpleText: switch to a single full-width text mode
+  - PanelAtPos: the bar's only hit-test -- there is no OnPanelClick, so a click on one specific
+    panel is resolved from OnMouseDown
+  - SizeGrip can be switched off at run time (the corner dots go, and so does the OS resize drag)
+  - Panels is a live collection: Add/Delete it while the app runs and the bar re-lays out
   - Clicking a button updates a panel's text (multi-panel mode) or the whole-bar text (simple mode)
   The window, the status bar (panels included) and the live theme switcher are designed in
   umain.lfm (a TTyForm + TTyTitleBar); the code here is event handlers + theme setup only. }
@@ -27,12 +31,21 @@ type
     HintLbl: TTyLabel;
     BtnUpdate: TTyButton;
     BtnSimple: TTyButton;
+    BtnGrip: TTyButton;
+    LblPanels: TTyLabel;
+    BtnAddPanel: TTyButton;
+    BtnRemovePanel: TTyButton;
     StatusBar: TTyStatusBar;
     procedure FormCreate(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
     procedure DarkSwitchChange(Sender: TObject);
     procedure UpdatePanel(Sender: TObject);       // update the left panel's text
     procedure ToggleSimple(Sender: TObject);      // toggle SimplePanel mode
+    procedure ToggleGrip(Sender: TObject);        // toggle the size grip on/off
+    procedure AddPanel(Sender: TObject);          // Panels.Add at run time
+    procedure RemovePanel(Sender: TObject);       // Panels.Delete at run time
+    procedure StatusBarMouseDown(Sender: TObject; Button: TMouseButton;
+      Shift: TShiftState; X, Y: Integer);         // hit-test the click with PanelAtPos
   private
     FClicks: Integer;
   end;
@@ -97,6 +110,51 @@ begin
     StatusBar.SimpleText := 'SimplePanel: a single full-width status text'
   else
     StatusBar.Panels[0].Text := 'Ready';
+end;
+
+procedure TMainForm.ToggleGrip(Sender: TObject);
+begin
+  // With the grip off the three corner dots disappear AND the bottom-right corner stops
+  // handing the drag to the OS window resize -- the bar is then purely informational.
+  StatusBar.SizeGrip := not StatusBar.SizeGrip;
+  if StatusBar.SimplePanel then
+    StatusBar.SimpleText := Format('SizeGrip = %s', [BoolToStr(StatusBar.SizeGrip, True)])
+  else
+    StatusBar.Panels[0].Text := Format('SizeGrip = %s', [BoolToStr(StatusBar.SizeGrip, True)]);
+end;
+
+procedure TMainForm.AddPanel(Sender: TObject);
+begin
+  // Panels is a plain TCollection, live at run time: TTyStatusPanels.Update repaints the
+  // owner on any change, so a new item shows up without touching the bar itself. The first
+  // panel has Width = 0 (the fill panel), so it simply shrinks to make room.
+  with StatusBar.Panels.Add do
+  begin
+    Text := Format('New %d', [StatusBar.Panels.Count - 1]);
+    Width := 80;
+    Alignment := taCenter;
+  end;
+end;
+
+procedure TMainForm.RemovePanel(Sender: TObject);
+begin
+  // Delete is just as live. Stop at the three designed panels so the other buttons -- which
+  // address Panels[0] and Panels[1] by index -- always have a target.
+  if StatusBar.Panels.Count > 3 then
+    StatusBar.Panels.Delete(StatusBar.Panels.Count - 1);
+end;
+
+procedure TMainForm.StatusBarMouseDown(Sender: TObject; Button: TMouseButton;
+  Shift: TShiftState; X, Y: Integer);
+var
+  i: Integer;
+begin
+  // PanelAtPos is the bar's only public API method: there is no OnPanelClick, so this is how
+  // a click is attributed to one panel. It answers -1 outside every panel and in SimplePanel
+  // mode (where there are no panel rectangles to hit).
+  i := StatusBar.PanelAtPos(X, Y);
+  if i >= 0 then
+    StatusBar.Panels[0].Text := Format('You clicked panel %d', [i]);
 end;
 
 end.

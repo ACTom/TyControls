@@ -126,6 +126,10 @@ type
     LblVLines: TTyLabel;
     BevelLeftLine: TTyBevel;
     BevelRightLine: TTyBevel;
+    LblSpacer: TTyLabel;
+    BevelSpacerA: TTyBevel;
+    BevelSpacer: TTyBevel;     // Shape = tbsSpacer: a real control that paints nothing
+    BevelSpacerB: TTyBevel;
     LblPan: TTyLabel;
     PanDemo: TTyScrollPanel;
     PanBtn1: TTyButton;

@@ -1,10 +1,10 @@
 object MainForm: TMainForm
   Left = 220
-  Height = 560
+  Height = 660
   Top = 100
   Width = 720
   Caption = 'TyControls — file dialogs (plain / picture / preview, six variants)'
-  ClientHeight = 560
+  ClientHeight = 660
   ClientWidth = 720
   Font.Height = -12
   Position = poScreenCenter
@@ -13,7 +13,7 @@ object MainForm: TMainForm
   TitleBar = TitleBar1
   object Surface: TTyFormSurface
     Left = 0
-    Height = 560
+    Height = 660
     Top = 0
     Width = 720
     TabOrder = 0
@@ -49,7 +49,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 44
       Width = 688
-      Caption = 'Plain file dialog'
+      Caption = 'Plain file dialog (all six dialogs are non-visual components — settings live in the .lfm)'
       Alignment = taLeftJustify
     end
     object BtnOpen: TTyButton
@@ -68,10 +68,31 @@ object MainForm: TMainForm
       Caption = 'Save'
       OnClick = BtnSaveClick
     end
+    object ChkVetoSave: TTyCheckBox
+      Left = 300
+      Height = 24
+      Top = 76
+      Width = 404
+      Caption = 'Veto the Save dialog: OnCanClose refuses the OK'
+    end
+    object LblOpenNote: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 104
+      Width = 688
+      Caption = 'Open: FilterIndex = 2 starts on All files; Options include fdoPathMustExist; OnShow/OnClose are logged'
+    end
+    object LblSaveNote: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 124
+      Width = 688
+      Caption = 'Save: FileName is pre-filled with untitled.txt; tick the box above and OnCanClose keeps the dialog open'
+    end
     object DivPic: TTyDivider
       Left = 16
       Height = 22
-      Top = 116
+      Top = 152
       Width = 688
       Caption = 'Picture dialog (picture preview on the right)'
       Alignment = taLeftJustify
@@ -79,7 +100,7 @@ object MainForm: TMainForm
     object BtnOpenPic: TTyButton
       Left = 16
       Height = 32
-      Top = 144
+      Top = 180
       Width = 130
       Caption = 'Open picture'
       OnClick = BtnOpenPicClick
@@ -87,7 +108,7 @@ object MainForm: TMainForm
     object BtnSavePic: TTyButton
       Left = 156
       Height = 32
-      Top = 144
+      Top = 180
       Width = 130
       Caption = 'Save picture'
       OnClick = BtnSavePicClick
@@ -95,7 +116,7 @@ object MainForm: TMainForm
     object DivPrev: TTyDivider
       Left = 16
       Height = 22
-      Top = 188
+      Top = 222
       Width = 688
       Caption = 'Preview dialog (picture + text + custom OnPreview)'
       Alignment = taLeftJustify
@@ -103,7 +124,7 @@ object MainForm: TMainForm
     object BtnOpenPrev: TTyButton
       Left = 16
       Height = 32
-      Top = 216
+      Top = 250
       Width = 130
       Caption = 'Open preview'
       OnClick = BtnOpenPrevClick
@@ -111,19 +132,124 @@ object MainForm: TMainForm
     object BtnSavePrev: TTyButton
       Left = 156
       Height = 32
-      Top = 216
+      Top = 250
       Width = 130
       Caption = 'Save preview'
       OnClick = BtnSavePrevClick
     end
+    object LblPrevNote: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 288
+      Width = 688
+      Caption = 'Preview pane: a 0-byte file draws ShowMessage, .exe/.zip draw ShowCustom, anything else ShowText'
+    end
+    object DivGlobal: TTyDivider
+      Left = 16
+      Height = 22
+      Top = 320
+      Width = 688
+      Caption = 'One-liner globals (no component needed — a var, a call, a Boolean)'
+      Alignment = taLeftJustify
+    end
+    object BtnGlobOpen: TTyButton
+      Left = 16
+      Height = 32
+      Top = 348
+      Width = 220
+      Caption = 'TyOpenDialog()'
+      OnClick = BtnGlobOpenClick
+    end
+    object BtnGlobSave: TTyButton
+      Left = 250
+      Height = 32
+      Top = 348
+      Width = 220
+      Caption = 'TySaveDialog()'
+      OnClick = BtnGlobSaveClick
+    end
+    object BtnGlobOpenPic: TTyButton
+      Left = 484
+      Height = 32
+      Top = 348
+      Width = 220
+      Caption = 'TyOpenPictureDialog()'
+      OnClick = BtnGlobOpenPicClick
+    end
+    object BtnGlobSavePic: TTyButton
+      Left = 16
+      Height = 32
+      Top = 388
+      Width = 220
+      Caption = 'TySavePictureDialog()'
+      OnClick = BtnGlobSavePicClick
+    end
+    object BtnGlobOpenPrev: TTyButton
+      Left = 250
+      Height = 32
+      Top = 388
+      Width = 220
+      Caption = 'TyOpenPreviewDialog()'
+      OnClick = BtnGlobOpenPrevClick
+    end
+    object BtnGlobSavePrev: TTyButton
+      Left = 484
+      Height = 32
+      Top = 388
+      Width = 220
+      Caption = 'TySavePreviewDialog()'
+      OnClick = BtnGlobSavePrevClick
+    end
     object ResultMemo: TTyMemo
       Left = 16
-      Height = 280
-      Top = 260
+      Height = 208
+      Top = 432
       Width = 688
       Anchors = [akTop, akLeft, akRight, akBottom]
       ReadOnly = True
       ScrollBars = ssAutoBoth
     end
+  end
+  object DlgOpen: TTyOpenDialog
+    Title = 'Open file'
+    Filter = 'Text (*.txt;*.md)|*.txt;*.md|All files (*.*)|*.*'
+    FilterIndex = 2
+    Options = [fdoFileMustExist, fdoPathMustExist, fdoAllowMultiSelect]
+    OnShow = DlgOpenShow
+    OnClose = DlgOpenClose
+    Left = 480
+    Top = 60
+  end
+  object DlgSave: TTySaveDialog
+    Title = 'Save file'
+    Filter = 'Text (*.txt)|*.txt|All files (*.*)|*.*'
+    FileName = 'untitled.txt'
+    DefaultExt = 'txt'
+    Options = [fdoOverwritePrompt]
+    OnCanClose = DlgSaveCanClose
+    Left = 560
+    Top = 60
+  end
+  object DlgOpenPic: TTyOpenPictureDialog
+    Title = 'Open picture'
+    Left = 480
+    Top = 116
+  end
+  object DlgSavePic: TTySavePictureDialog
+    Title = 'Save picture'
+    DefaultExt = 'png'
+    Left = 560
+    Top = 116
+  end
+  object DlgOpenPrev: TTyOpenPreviewDialog
+    Title = 'Open (with preview)'
+    OnPreview = PreviewCustom
+    Left = 480
+    Top = 172
+  end
+  object DlgSavePrev: TTySavePreviewDialog
+    Title = 'Save (with preview)'
+    Left = 560
+    Top = 172
   end
 end
