@@ -27,7 +27,8 @@
     --line:          #C8C6C4;   /* thin neutral hairline */
     --line-field:    #8A8886;   /* stronger field / default-button border */
     --hover-overlay: #0000000A; /* faint neutral wash for ghost hover */
-  }
+    --on-titlebar: on(var(--accent));   /* ink for controls hosted on the title bar */
+}
 }
 
 @mode dark {
@@ -42,7 +43,8 @@
     --line:          #3B3A39;   /* subtle hairline on dark */
     --line-field:    #484644;   /* stronger field / default-button border on dark */
     --hover-overlay: #FFFFFF14; /* faint light wash for ghost hover on dark */
-  }
+    --on-titlebar: on(var(--accent));   /* ink for controls hosted on the title bar */
+}
 }
 
 /* Window: flat neutral canvas. */
@@ -283,4 +285,16 @@ TyBadge {
   border-radius: 100px;
   font-weight: 600;
   padding: 0px 4px;
+}
+
+/* Controls hosted ON the title bar. A skin that paints the bar in a strong colour leaves an
+   ordinary button's surface-tuned ink nearly invisible there; the control appends the
+   'on-titlebar' variant automatically (TyStyleClassFor), so this is the only place a theme
+   has to say what belongs on its own bar. Composed with whatever class the host set, so a
+   ghost button on a title bar stays a ghost button and only its ink moves. */
+TyButton.on-titlebar, TySpeedButton.on-titlebar, TyGlyphButton.on-titlebar,
+TyGlyphContainerButton.on-titlebar, TyDropDownButton.on-titlebar,
+TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,
+TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {
+  color: var(--on-titlebar);
 }

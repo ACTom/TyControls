@@ -261,7 +261,44 @@ function TyTryDrawGlyphOverride(APainter: TTyPainter; AController: TTyStyleContr
   const ARect: TRect; const ATokenName: string; AColor: TTyColor): Boolean;
 function TyGlyphKindToken(AKind: TTyGlyphKind): string;
 
+{ Contextual styling for a control hosted ON a title bar. A title bar is a container, and
+  several skins paint it in a strong colour -- xp and classic use a blue gradient, office the
+  accent, showcase an accent gradient. A control dropped on such a bar resolves the ordinary
+  ink for its type, which is tuned for the SURFACE, and its caption then sits nearly
+  invisible. The bar's own caption stays readable because TyTitleBar carries its own
+  contrasting ink; a child has no way to reach it. So the child appends an 'on-titlebar'
+  variant and the theme says, once, what ink belongs on its own bar. }
+function TyOnTitleBar(AControl: TControl): Boolean;
+{ The control's own StyleClass, plus 'on-titlebar' when it is hosted on one. Appended LAST so
+  it wins on the properties it sets, and COMPOSED rather than replacing, so a ghost button on
+  a title bar stays a ghost button and only its ink moves. A theme that says nothing about
+  .on-titlebar is unaffected: the variant matches no rule. }
+function TyStyleClassFor(AControl: TControl; const AStyleClass: string): string;
+
 implementation
+
+function TyOnTitleBar(AControl: TControl): Boolean;
+var
+  p: TControl;
+  tag: ITyTitleBarTag;
+begin
+  Result := False;
+  if AControl = nil then Exit;
+  p := AControl.Parent;
+  while p <> nil do
+  begin
+    if Supports(p, ITyTitleBarTag, tag) then Exit(True);
+    p := p.Parent;
+  end;
+end;
+
+function TyStyleClassFor(AControl: TControl; const AStyleClass: string): string;
+begin
+  Result := AStyleClass;
+  if not TyOnTitleBar(AControl) then Exit;
+  if Result = '' then Result := 'on-titlebar'
+  else Result := Result + ' on-titlebar';
+end;
 
 {$IFDEF LCLWin32}   // IMM32 IME caret positioning is Win32-widgetset-only (HWND-based); Qt/GTK use their own IME path
 const
@@ -406,7 +443,8 @@ var
   model: TTyStyleModel;
 begin
   model := ActiveController.Model;
-  Result := model.ResolveStyle(GetStyleTypeKey, FStyleClass, CurrentStates);
+  Result := model.ResolveStyle(GetStyleTypeKey,
+    TyStyleClassFor(Self, FStyleClass), CurrentStates);
   // A9 layer 2: overlay the per-instance override last. Recompute only when stale —
   // the override text changed or the theme version bumped (so var(--...) re-binds).
   if FStyleOverride <> '' then
@@ -846,7 +884,8 @@ var
   model: TTyStyleModel;
 begin
   model := ActiveController.Model;
-  Result := model.ResolveStyle(GetStyleTypeKey, FStyleClass, CurrentStates);
+  Result := model.ResolveStyle(GetStyleTypeKey,
+    TyStyleClassFor(Self, FStyleClass), CurrentStates);
   // A9 layer 2: overlay the per-instance override last. Recompute only when stale —
   // the override text changed or the theme version bumped (so var(--...) re-binds).
   if FStyleOverride <> '' then

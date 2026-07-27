@@ -8,7 +8,8 @@
    is the Breeze-blue brand seed so the runtime picker still re-tints everything. */
 
 /* Mode-invariant seed: the Breeze blue brand accent (runtime-picker overridable). */
-:root { --accent: #3DAEE9; }
+:root { --accent: #3DAEE9;   --on-titlebar: var(--ink);   /* ink for controls hosted on the title bar */
+}
 
 /* LIGHT palette — Breeze-light. */
 @mode light {
@@ -35,7 +36,8 @@
     --btn-shadow:        #0000000F;   /* whisper-soft lift (Breeze is near-flat) */
     --caption-hover:     darken(#E3E5E7, 6);   /* caption hover wash           */
     --caption-active:    darken(#E3E5E7, 11);  /* caption press wash           */
-  }
+    --on-titlebar: var(--ink);   /* ink for controls hosted on the title bar */
+}
 }
 
 /* DARK palette — Breeze-dark. Same structure, only the colours flip; shadows off. */
@@ -63,7 +65,8 @@
     --btn-shadow:        #00000000;
     --caption-hover:     lighten(#2A2E32, 7);
     --caption-active:    lighten(#2A2E32, 12);
-  }
+    --on-titlebar: var(--ink);   /* ink for controls hosted on the title bar */
+}
 }
 
 /* Window: the flat Breeze surface. */
@@ -186,3 +189,15 @@ TyTagClose:disabled     { color: var(--ink-disabled); }
    the rest of this language stops at 3px — but its numerals are bold, and nothing here is
    bold except a heading. The tight 0/4 padding is the same air the whole skin runs on. */
 TyBadge { background: var(--accent); color: var(--on-accent); border-radius: var(--radius-round); font-weight: normal; padding: 0px 4px; }
+
+/* Controls hosted ON the title bar. A skin that paints the bar in a strong colour leaves an
+   ordinary button's surface-tuned ink nearly invisible there; the control appends the
+   'on-titlebar' variant automatically (TyStyleClassFor), so this is the only place a theme
+   has to say what belongs on its own bar. Composed with whatever class the host set, so a
+   ghost button on a title bar stays a ghost button and only its ink moves. */
+TyButton.on-titlebar, TySpeedButton.on-titlebar, TyGlyphButton.on-titlebar,
+TyGlyphContainerButton.on-titlebar, TyDropDownButton.on-titlebar,
+TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,
+TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {
+  color: var(--on-titlebar);
+}

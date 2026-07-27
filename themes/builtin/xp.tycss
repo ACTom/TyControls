@@ -14,6 +14,7 @@
   --caption-button-margin:    4;
   --caption-button-margin-y:  6;
   --caption-button-gap:       3;
+  --on-titlebar: var(--title-ink);   /* ink for controls hosted on the title bar */
 }
 
 /* Light palette = the authentic XP Luna look. */
@@ -35,7 +36,8 @@
     --close-top:    #F4AB92;
     --close-mid:    #DC4E31;
     --close-bot:    #B23018;
-  }
+    --on-titlebar: var(--title-ink);   /* ink for controls hosted on the title bar */
+}
 }
 
 /* Dark palette — IDENTICAL to light (no natural dark Luna variant). */
@@ -56,7 +58,8 @@
     --close-top:    #F4AB92;
     --close-mid:    #DC4E31;
     --close-bot:    #B23018;
-  }
+    --on-titlebar: var(--title-ink);   /* ink for controls hosted on the title bar */
+}
 }
 
 /* Window: the Luna beige client area, wrapped in the iconic blue XP window frame (drawn on the
@@ -285,4 +288,16 @@ TyBadge {
   border-radius: var(--radius);
   padding: 0px 5px;
   font-weight: bold;
+}
+
+/* Controls hosted ON the title bar. A skin that paints the bar in a strong colour leaves an
+   ordinary button's surface-tuned ink nearly invisible there; the control appends the
+   'on-titlebar' variant automatically (TyStyleClassFor), so this is the only place a theme
+   has to say what belongs on its own bar. Composed with whatever class the host set, so a
+   ghost button on a title bar stays a ghost button and only its ink moves. */
+TyButton.on-titlebar, TySpeedButton.on-titlebar, TyGlyphButton.on-titlebar,
+TyGlyphContainerButton.on-titlebar, TyDropDownButton.on-titlebar,
+TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,
+TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {
+  color: var(--on-titlebar);
 }

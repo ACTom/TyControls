@@ -38,6 +38,7 @@ type
     procedure TestLightSkinChromeBarsAreFlush;
     procedure TestChromeKeysKeepTheirBaseProperties;
     procedure TestTrackBarShowValueHasVisibleInk;
+    procedure TestOnTitleBarInkReadsOnTheBar;
     procedure TestAntDesignGhostIsAFlatTextButton;
   end;
 implementation
@@ -328,6 +329,73 @@ begin
         (TyBlueOf(hdr.Background.Color) <> surfB));
     end;
   finally c.Free; end;
+end;
+
+procedure TControllerThemeNameTest.TestOnTitleBarInkReadsOnTheBar;
+{ A title bar is a CONTAINER, and several skins paint it in a strong colour -- xp and classic
+  a blue gradient, office the accent, showcase an accent gradient. A control dropped on one
+  used to resolve the ordinary surface-tuned ink, and its caption then sat nearly invisible
+  there, while the bar's own caption stayed readable because TyTitleBar carries its own
+  contrasting ink that a child had no way to reach.
+
+  TyStyleClassFor now appends an 'on-titlebar' variant to any control hosted on a bar, and
+  every theme answers it. The contract is CONTRAST, not equality: a skin may legitimately
+  give its caption a different ink from a button's (antdesign's bar ink is pure black at 88%
+  alpha where its surface ink is #1F2937), so what has to hold is that the ink a control gets
+  ON the bar is readable ON the bar. }
+var
+  c: TTyStyleController;
+  names: TStringArray;
+  bar, onbar: TTyStyleSet;
+  i, m: Integer;
+  mode: string;
+
+  function Luma(AColor: TTyColor): Double;
+  begin   // Rec. 601, 0..255
+    Result := 0.299 * TyRedOf(AColor) + 0.587 * TyGreenOf(AColor)
+            + 0.114 * TyBlueOf(AColor);
+  end;
+
+  { A gradient bar leaves Fill.Color unset, so the caption sits on the gradient itself. Judge
+    against the MEAN of its ends: the text spans the whole band, so neither end alone is what
+    it reads against, and taking the worst end alone fails skins whose gradient merely
+    brightens at one edge -- classic runs from the accent up to a pale tint and its white
+    caption is perfectly readable. }
+  function BarLuma(const AFill: TTyFill): Double;
+  begin
+    if AFill.Kind = tfkLinearGradient then
+      Result := (Luma(AFill.GradFrom) + Luma(AFill.GradTo)) / 2
+    else
+      Result := Luma(AFill.Color);
+  end;
+
+begin
+  TyRegisterBuiltinThemes;
+  names := TyBuiltinThemeNames;
+  c := TTyStyleController.Create(nil);
+  try
+    for i := 0 to High(names) do
+      for m := 0 to 1 do
+      begin
+        if m = 0 then mode := 'light' else mode := 'dark';
+        c.ThemeName := names[i];
+        c.Mode := mode;
+        bar := c.Model.ResolveStyle('TyTitleBar', '', []);
+        onbar := c.Model.ResolveStyle('TyButton', 'on-titlebar', []);
+        AssertTrue(Format('%s/%s: a button on the title bar has an ink', [names[i], mode]),
+          tpTextColor in onbar.Present);
+        AssertTrue(Format('%s/%s: that ink is not fully transparent', [names[i], mode]),
+          TyAlphaOf(onbar.TextColor) > 0);
+        AssertTrue(Format('%s/%s: the title bar has a background to judge against',
+          [names[i], mode]), tpBackground in bar.Present);
+        AssertTrue(Format('%s/%s: the on-titlebar ink reads on the bar (ink luma %.0f, '
+          + 'bar luma %.0f)', [names[i], mode, Luma(onbar.TextColor),
+          BarLuma(bar.Background)]),
+          Abs(Luma(onbar.TextColor) - BarLuma(bar.Background)) >= 60);
+      end;
+  finally
+    c.Free;
+  end;
 end;
 
 procedure TControllerThemeNameTest.TestTrackBarShowValueHasVisibleInk;

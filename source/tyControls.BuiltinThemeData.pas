@@ -572,7 +572,8 @@ begin
     '    /* Card surface: light = the white surface, which lifts off the darkened' + LineEnding +
     '       --form-bg behind it (matches light.tycss). */' + LineEnding +
     '    --card-bg: var(--surface);' + LineEnding +
-    '  }' + LineEnding +
+    '    --on-titlebar: var(--on-surface);   /* ink for controls hosted on the title bar */' + LineEnding +
+    '}' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '@mode dark {' + LineEnding +
@@ -634,7 +635,20 @@ begin
     '       vanish into the backdrop; the card lifts on --input-bg (matches dark.tycss,' + LineEnding +
     '       and the TitleBar / MenuView approach). */' + LineEnding +
     '    --card-bg: var(--input-bg);' + LineEnding +
-    '  }' + LineEnding +
+    '    --on-titlebar: var(--on-surface);   /* ink for controls hosted on the title bar */' + LineEnding +
+    '}' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* Controls hosted ON the title bar. A skin that paints the bar in a strong colour leaves an' + LineEnding +
+    '   ordinary button''s surface-tuned ink nearly invisible there; the control appends the' + LineEnding +
+    '   ''on-titlebar'' variant automatically (TyStyleClassFor), so this is the only place a theme' + LineEnding +
+    '   has to say what belongs on its own bar. Composed with whatever class the host set, so a' + LineEnding +
+    '   ghost button on a title bar stays a ghost button and only its ink moves. */' + LineEnding +
+    'TyButton.on-titlebar, TySpeedButton.on-titlebar, TyGlyphButton.on-titlebar,' + LineEnding +
+    'TyGlyphContainerButton.on-titlebar, TyDropDownButton.on-titlebar,' + LineEnding +
+    'TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,' + LineEnding +
+    'TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {' + LineEnding +
+    '  color: var(--on-titlebar);' + LineEnding +
     '}' + LineEnding;
 end;
 
@@ -1142,7 +1156,8 @@ begin
     '  /* Card surface: light = the plain surface, which lifts off the elevated' + LineEnding +
     '     --form-bg behind it (matches light.tycss). */' + LineEnding +
     '  --card-bg: var(--surface);' + LineEnding +
-    '  }' + LineEnding +
+    '    --on-titlebar: var(--on-surface);   /* ink for controls hosted on the title bar */' + LineEnding +
+    '}' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '@mode dark {' + LineEnding +
@@ -1195,7 +1210,20 @@ begin
     '     vanish into the backdrop; the card lifts on --input-bg (matches dark.tycss,' + LineEnding +
     '     and the TitleBar / input-surface approach). */' + LineEnding +
     '  --card-bg: var(--input-bg);' + LineEnding +
-    '  }' + LineEnding +
+    '    --on-titlebar: var(--on-surface);   /* ink for controls hosted on the title bar */' + LineEnding +
+    '}' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* Controls hosted ON the title bar. A skin that paints the bar in a strong colour leaves an' + LineEnding +
+    '   ordinary button''s surface-tuned ink nearly invisible there; the control appends the' + LineEnding +
+    '   ''on-titlebar'' variant automatically (TyStyleClassFor), so this is the only place a theme' + LineEnding +
+    '   has to say what belongs on its own bar. Composed with whatever class the host set, so a' + LineEnding +
+    '   ghost button on a title bar stays a ghost button and only its ink moves. */' + LineEnding +
+    'TyButton.on-titlebar, TySpeedButton.on-titlebar, TyGlyphButton.on-titlebar,' + LineEnding +
+    'TyGlyphContainerButton.on-titlebar, TyDropDownButton.on-titlebar,' + LineEnding +
+    'TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,' + LineEnding +
+    'TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {' + LineEnding +
+    '  color: var(--on-titlebar);' + LineEnding +
     '}' + LineEnding;
 end;
 
@@ -1232,7 +1260,8 @@ begin
     '    --ghost-hover:  #0000000D; /* flat/ghost hover wash                        */' + LineEnding +
     '    --ghost-active: #0000001A; /* flat/ghost pressed wash                      */' + LineEnding +
     '    --shadow:       #0000001A; /* subtle button lift                           */' + LineEnding +
-    '  }' + LineEnding +
+    '    --on-titlebar: var(--ink);   /* ink for controls hosted on the title bar */' + LineEnding +
+    '}' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* --- palette: dark ------------------------------------------------------- */' + LineEnding +
@@ -1257,7 +1286,8 @@ begin
     '    --ghost-hover:  #FFFFFF14; /* flat/ghost hover wash                        */' + LineEnding +
     '    --ghost-active: #FFFFFF26; /* flat/ghost pressed wash                      */' + LineEnding +
     '    --shadow:       #00000040; /* subtle button lift                           */' + LineEnding +
-    '  }' + LineEnding +
+    '    --on-titlebar: var(--ink);   /* ink for controls hosted on the title bar */' + LineEnding +
+    '}' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* --- window + chrome ----------------------------------------------------- */' + LineEnding +
@@ -1354,7 +1384,19 @@ begin
     '/* The suggested-action button''s little sibling: same solid accent slab, same auto-contrast' + LineEnding +
     '   ink, same NORMAL weight (GNOME never bolds an accent — the inherited pill''s bold is not' + LineEnding +
     '   this desktop). Fully round, and no edge or lift: a badge is a marker, not a control. */' + LineEnding +
-    'TyBadge           { background: var(--accent); color: on(var(--accent)); border-radius: 100; font-weight: normal; padding: 0px 4px; }' + LineEnding;
+    'TyBadge           { background: var(--accent); color: on(var(--accent)); border-radius: 100; font-weight: normal; padding: 0px 4px; }' + LineEnding +
+    '' + LineEnding +
+    '/* Controls hosted ON the title bar. A skin that paints the bar in a strong colour leaves an' + LineEnding +
+    '   ordinary button''s surface-tuned ink nearly invisible there; the control appends the' + LineEnding +
+    '   ''on-titlebar'' variant automatically (TyStyleClassFor), so this is the only place a theme' + LineEnding +
+    '   has to say what belongs on its own bar. Composed with whatever class the host set, so a' + LineEnding +
+    '   ghost button on a title bar stays a ghost button and only its ink moves. */' + LineEnding +
+    'TyButton.on-titlebar, TySpeedButton.on-titlebar, TyGlyphButton.on-titlebar,' + LineEnding +
+    'TyGlyphContainerButton.on-titlebar, TyDropDownButton.on-titlebar,' + LineEnding +
+    'TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,' + LineEnding +
+    'TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {' + LineEnding +
+    '  color: var(--on-titlebar);' + LineEnding +
+    '}' + LineEnding;
 end;
 
 function SkinCss_aero: string;
@@ -1372,6 +1414,7 @@ begin
     '/* Mode-invariant derived value: focus ring is always the accent at 55% (accent is per-mode). */' + LineEnding +
     ':root {' + LineEnding +
     '  --focus-ring: alpha(var(--accent), 0.55);' + LineEnding +
+    '  --on-titlebar: var(--titlebar-ink);   /* ink for controls hosted on the title bar */' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* ---- LIGHT palette (authentic Aero glass) ---- */' + LineEnding +
@@ -1418,7 +1461,8 @@ begin
     '' + LineEnding +
     '    --primary-shadow:    #10467A33; /* deeper accent shadow under primary */' + LineEnding +
     '    --danger-shadow:     #7A101033; /* deeper red shadow under danger */' + LineEnding +
-    '  }' + LineEnding +
+    '    --on-titlebar: var(--titlebar-ink);   /* ink for controls hosted on the title bar */' + LineEnding +
+    '}' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* ---- DARK palette (Aero has no natural dark variant — IDENTICAL to light) ---- */' + LineEnding +
@@ -1465,7 +1509,8 @@ begin
     '' + LineEnding +
     '    --primary-shadow:    #10467A33;' + LineEnding +
     '    --danger-shadow:     #7A101033;' + LineEnding +
-    '  }' + LineEnding +
+    '    --on-titlebar: var(--titlebar-ink);   /* ink for controls hosted on the title bar */' + LineEnding +
+    '}' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* Window: light steel-glass wash, top lighter, bottom a touch deeper. */' + LineEnding +
@@ -1708,6 +1753,18 @@ begin
     '  border-radius: 999px;' + LineEnding +
     '  font-weight: bold;' + LineEnding +
     '  padding: 0px 4px;' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* Controls hosted ON the title bar. A skin that paints the bar in a strong colour leaves an' + LineEnding +
+    '   ordinary button''s surface-tuned ink nearly invisible there; the control appends the' + LineEnding +
+    '   ''on-titlebar'' variant automatically (TyStyleClassFor), so this is the only place a theme' + LineEnding +
+    '   has to say what belongs on its own bar. Composed with whatever class the host set, so a' + LineEnding +
+    '   ghost button on a title bar stays a ghost button and only its ink moves. */' + LineEnding +
+    'TyButton.on-titlebar, TySpeedButton.on-titlebar, TyGlyphButton.on-titlebar,' + LineEnding +
+    'TyGlyphContainerButton.on-titlebar, TyDropDownButton.on-titlebar,' + LineEnding +
+    'TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,' + LineEnding +
+    'TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {' + LineEnding +
+    '  color: var(--on-titlebar);' + LineEnding +
     '}' + LineEnding;
 end;
 
@@ -1755,7 +1812,8 @@ begin
     '    --shadow-soft:    #0000000A;  /* default-button drop shadow (0 1 0)                                  */' + LineEnding +
     '    --shadow-primary: #1677FF1A;  /* primary-button accent-tinted drop shadow (0 2 0)                    */' + LineEnding +
     '    --shadow-danger:  #FF4D4F1A;  /* danger-button red-tinted drop shadow (0 2 0)                        */' + LineEnding +
-    '  }' + LineEnding +
+    '    --on-titlebar: var(--on-surface);   /* ink for controls hosted on the title bar */' + LineEnding +
+    '}' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* --- palette: dark ------------------------------------------------------- */' + LineEnding +
@@ -1783,7 +1841,8 @@ begin
     '    --shadow-soft:    #00000030;  /* default-button drop shadow (deeper on dark)           */' + LineEnding +
     '    --shadow-primary: #1668DC40;  /* primary-button accent-tinted glow                     */' + LineEnding +
     '    --shadow-danger:  #DC444640;  /* danger-button red-tinted glow                         */' + LineEnding +
-    '  }' + LineEnding +
+    '    --on-titlebar: var(--on-surface);   /* ink for controls hosted on the title bar */' + LineEnding +
+    '}' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* Window: a plain surface canvas — no cards, so the window itself is white in light mode. */' + LineEnding +
@@ -1933,13 +1992,26 @@ begin
     ':root {' + LineEnding +
     '  --listgroup-header-height: 36;' + LineEnding +
     '  --listgroup-item-height:   40;' + LineEnding +
+    '  --on-titlebar: var(--on-surface);   /* ink for controls hosted on the title bar */' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* Ant Design Pro table: the selected row is a light accent TINT with normal ink,' + LineEnding +
     '   not a solid-blue fill — so the green/orange/blue status text still reads on it.' + LineEnding +
     '   */' + LineEnding +
     'TyGridCell:selected { background: alpha(var(--accent), 0.10); color: var(--on-surface); }' + LineEnding +
-    'TyGridCell:hover    { background: alpha(var(--accent), 0.05); }' + LineEnding;
+    'TyGridCell:hover    { background: alpha(var(--accent), 0.05); }' + LineEnding +
+    '' + LineEnding +
+    '/* Controls hosted ON the title bar. A skin that paints the bar in a strong colour leaves an' + LineEnding +
+    '   ordinary button''s surface-tuned ink nearly invisible there; the control appends the' + LineEnding +
+    '   ''on-titlebar'' variant automatically (TyStyleClassFor), so this is the only place a theme' + LineEnding +
+    '   has to say what belongs on its own bar. Composed with whatever class the host set, so a' + LineEnding +
+    '   ghost button on a title bar stays a ghost button and only its ink moves. */' + LineEnding +
+    'TyButton.on-titlebar, TySpeedButton.on-titlebar, TyGlyphButton.on-titlebar,' + LineEnding +
+    'TyGlyphContainerButton.on-titlebar, TyDropDownButton.on-titlebar,' + LineEnding +
+    'TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,' + LineEnding +
+    'TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {' + LineEnding +
+    '  color: var(--on-titlebar);' + LineEnding +
+    '}' + LineEnding;
 end;
 
 function SkinCss_bootstrap: string;
@@ -1976,7 +2048,8 @@ begin
     '    --btn-hover-border:  #C6C9CB;   /* btn-light :hover border                    */' + LineEnding +
     '    --btn-active:        #DDE0E3;   /* btn-light :active face                     */' + LineEnding +
     '    --btn-active-border: #BABDBF;   /* btn-light :active border                   */' + LineEnding +
-    '  }' + LineEnding +
+    '    --on-titlebar: var(--ink);   /* ink for controls hosted on the title bar */' + LineEnding +
+    '}' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* --- palette: dark (data-bs-theme=dark) ---------------------------------- */' + LineEnding +
@@ -2000,7 +2073,8 @@ begin
     '    --btn-hover-border:  #545B62;   /* :hover border                              */' + LineEnding +
     '    --btn-active:        #41474D;   /* :active face                               */' + LineEnding +
     '    --btn-active-border: #5C636A;   /* :active border                             */' + LineEnding +
-    '  }' + LineEnding +
+    '    --on-titlebar: var(--ink);   /* ink for controls hosted on the title bar */' + LineEnding +
+    '}' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* ---- Window & chrome ---------------------------------------------------- */' + LineEnding +
@@ -2264,6 +2338,7 @@ begin
     ':root {' + LineEnding +
     '  --card-header-height:   40;   /* .card-header: .5rem*2 + a 1.5rem line */' + LineEnding +
     '  --card-actions-height:  40;   /* .card-footer: BS caps it identically  */' + LineEnding +
+    '  --on-titlebar: var(--ink);   /* ink for controls hosted on the title bar */' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* .card: one flat well, a single 1px gray hairline, .375rem corners and 1rem of' + LineEnding +
@@ -2347,6 +2422,18 @@ begin
     '  border-radius: 6px;' + LineEnding +
     '  font-weight: bold;' + LineEnding +
     '  padding: 0px 5px;' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* Controls hosted ON the title bar. A skin that paints the bar in a strong colour leaves an' + LineEnding +
+    '   ordinary button''s surface-tuned ink nearly invisible there; the control appends the' + LineEnding +
+    '   ''on-titlebar'' variant automatically (TyStyleClassFor), so this is the only place a theme' + LineEnding +
+    '   has to say what belongs on its own bar. Composed with whatever class the host set, so a' + LineEnding +
+    '   ghost button on a title bar stays a ghost button and only its ink moves. */' + LineEnding +
+    'TyButton.on-titlebar, TySpeedButton.on-titlebar, TyGlyphButton.on-titlebar,' + LineEnding +
+    'TyGlyphContainerButton.on-titlebar, TyDropDownButton.on-titlebar,' + LineEnding +
+    'TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,' + LineEnding +
+    'TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {' + LineEnding +
+    '  color: var(--on-titlebar);' + LineEnding +
     '}' + LineEnding;
 end;
 
@@ -2363,7 +2450,8 @@ begin
     '   is the Breeze-blue brand seed so the runtime picker still re-tints everything. */' + LineEnding +
     '' + LineEnding +
     '/* Mode-invariant seed: the Breeze blue brand accent (runtime-picker overridable). */' + LineEnding +
-    ':root { --accent: #3DAEE9; }' + LineEnding +
+    ':root { --accent: #3DAEE9;   --on-titlebar: var(--ink);   /* ink for controls hosted on the title bar */' + LineEnding +
+    '}' + LineEnding +
     '' + LineEnding +
     '/* LIGHT palette — Breeze-light. */' + LineEnding +
     '@mode light {' + LineEnding +
@@ -2390,7 +2478,8 @@ begin
     '    --btn-shadow:        #0000000F;   /* whisper-soft lift (Breeze is near-flat) */' + LineEnding +
     '    --caption-hover:     darken(#E3E5E7, 6);   /* caption hover wash           */' + LineEnding +
     '    --caption-active:    darken(#E3E5E7, 11);  /* caption press wash           */' + LineEnding +
-    '  }' + LineEnding +
+    '    --on-titlebar: var(--ink);   /* ink for controls hosted on the title bar */' + LineEnding +
+    '}' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* DARK palette — Breeze-dark. Same structure, only the colours flip; shadows off. */' + LineEnding +
@@ -2418,7 +2507,8 @@ begin
     '    --btn-shadow:        #00000000;' + LineEnding +
     '    --caption-hover:     lighten(#2A2E32, 7);' + LineEnding +
     '    --caption-active:    lighten(#2A2E32, 12);' + LineEnding +
-    '  }' + LineEnding +
+    '    --on-titlebar: var(--ink);   /* ink for controls hosted on the title bar */' + LineEnding +
+    '}' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* Window: the flat Breeze surface. */' + LineEnding +
@@ -2540,7 +2630,19 @@ begin
     '   right shape — Plasma''s counters (task manager, Kickoff) really are circular even though' + LineEnding +
     '   the rest of this language stops at 3px — but its numerals are bold, and nothing here is' + LineEnding +
     '   bold except a heading. The tight 0/4 padding is the same air the whole skin runs on. */' + LineEnding +
-    'TyBadge { background: var(--accent); color: var(--on-accent); border-radius: var(--radius-round); font-weight: normal; padding: 0px 4px; }' + LineEnding;
+    'TyBadge { background: var(--accent); color: var(--on-accent); border-radius: var(--radius-round); font-weight: normal; padding: 0px 4px; }' + LineEnding +
+    '' + LineEnding +
+    '/* Controls hosted ON the title bar. A skin that paints the bar in a strong colour leaves an' + LineEnding +
+    '   ordinary button''s surface-tuned ink nearly invisible there; the control appends the' + LineEnding +
+    '   ''on-titlebar'' variant automatically (TyStyleClassFor), so this is the only place a theme' + LineEnding +
+    '   has to say what belongs on its own bar. Composed with whatever class the host set, so a' + LineEnding +
+    '   ghost button on a title bar stays a ghost button and only its ink moves. */' + LineEnding +
+    'TyButton.on-titlebar, TySpeedButton.on-titlebar, TyGlyphButton.on-titlebar,' + LineEnding +
+    'TyGlyphContainerButton.on-titlebar, TyDropDownButton.on-titlebar,' + LineEnding +
+    'TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,' + LineEnding +
+    'TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {' + LineEnding +
+    '  color: var(--on-titlebar);' + LineEnding +
+    '}' + LineEnding;
 end;
 
 function SkinCss_classic: string;
@@ -2562,6 +2664,7 @@ begin
     '  --caption-button-margin-y:  6;   /* vertical gap: buttons ↔ title-bar top & bottom */' + LineEnding +
     '  --caption-button-gap:       4;   /* gap between adjacent buttons */' + LineEnding +
     '  --card-header-height:      24;   /* the card''s caption band, sized like a Win9x caption */' + LineEnding +
+    '  --on-titlebar: var(--title-ink);   /* ink for controls hosted on the title bar */' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* --accent is the brand seed; the runtime accent-picker recolours the skin through it. */' + LineEnding +
@@ -2579,7 +2682,8 @@ begin
     '    --danger:       #800000;   /* destructive ink — the system-palette dark red (maroon) */' + LineEnding +
     '    --field:        #FFFFFF;   /* white input well */' + LineEnding +
     '    --border:       #808080;   /* stroked indicator / edge grey */' + LineEnding +
-    '  }' + LineEnding +
+    '    --on-titlebar: var(--title-ink);   /* ink for controls hosted on the title bar */' + LineEnding +
+    '}' + LineEnding +
     '}' + LineEnding +
     '@mode dark {' + LineEnding +
     '  :root {' + LineEnding +
@@ -2595,7 +2699,8 @@ begin
     '    --danger:       #800000;' + LineEnding +
     '    --field:        #FFFFFF;' + LineEnding +
     '    --border:       #808080;' + LineEnding +
-    '  }' + LineEnding +
+    '    --on-titlebar: var(--title-ink);   /* ink for controls hosted on the title bar */' + LineEnding +
+    '}' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     'TyForm          { background: var(--face); }' + LineEnding +
@@ -2684,7 +2789,19 @@ begin
     '   was this era''s one "look at me" pairing (it IS the selection highlight), so the badge borrows' + LineEnding +
     '   it: accent fill, inverse ink, bold, and no bevel — at this size a 3D edge would eat the' + LineEnding +
     '   digits. The default --badge-* metrics already give a tight box, so the skin leaves them. */' + LineEnding +
-    'TyBadge         { background: var(--accent); color: var(--ink-inverse); border-radius: 0; font-weight: bold; padding: 0px 4px; }' + LineEnding;
+    'TyBadge         { background: var(--accent); color: var(--ink-inverse); border-radius: 0; font-weight: bold; padding: 0px 4px; }' + LineEnding +
+    '' + LineEnding +
+    '/* Controls hosted ON the title bar. A skin that paints the bar in a strong colour leaves an' + LineEnding +
+    '   ordinary button''s surface-tuned ink nearly invisible there; the control appends the' + LineEnding +
+    '   ''on-titlebar'' variant automatically (TyStyleClassFor), so this is the only place a theme' + LineEnding +
+    '   has to say what belongs on its own bar. Composed with whatever class the host set, so a' + LineEnding +
+    '   ghost button on a title bar stays a ghost button and only its ink moves. */' + LineEnding +
+    'TyButton.on-titlebar, TySpeedButton.on-titlebar, TyGlyphButton.on-titlebar,' + LineEnding +
+    'TyGlyphContainerButton.on-titlebar, TyDropDownButton.on-titlebar,' + LineEnding +
+    'TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,' + LineEnding +
+    'TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {' + LineEnding +
+    '  color: var(--on-titlebar);' + LineEnding +
+    '}' + LineEnding;
 end;
 
 function SkinCss_fluent: string;
@@ -2705,6 +2822,7 @@ begin
     '  --radius-check: 3px;' + LineEnding +
     '  --radius-pill:  100px;' + LineEnding +
     '  --disabled:     0.45;' + LineEnding +
+    '  --on-titlebar: var(--ink);   /* ink for controls hosted on the title bar */' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* ── LIGHT palette — Windows 11 / Office web light ── */' + LineEnding +
@@ -2736,7 +2854,8 @@ begin
     '    --danger-hover:  darken(var(--danger), 7%);    /* ~#B6281A */' + LineEnding +
     '    --danger-active: darken(var(--danger), 15%);   /* ~#A72518 */' + LineEnding +
     '    --on-danger:     on(var(--danger));            /* readable ink -> #FFFFFF */' + LineEnding +
-    '  }' + LineEnding +
+    '    --on-titlebar: var(--ink);   /* ink for controls hosted on the title bar */' + LineEnding +
+    '}' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* ── DARK palette — Fluent 2 dark ── */' + LineEnding +
@@ -2768,7 +2887,8 @@ begin
     '    --danger-hover:  lighten(var(--danger), 9%);   /* ~#D5464A */' + LineEnding +
     '    --danger-active: darken(var(--danger), 8%);    /* ~#C03034 */' + LineEnding +
     '    --on-danger:     on(var(--danger));            /* readable ink on danger */' + LineEnding +
-    '  }' + LineEnding +
+    '    --on-titlebar: var(--ink);   /* ink for controls hosted on the title bar */' + LineEnding +
+    '}' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* Window backdrop. */' + LineEnding +
@@ -2965,6 +3085,18 @@ begin
     '  color: var(--on-accent);' + LineEnding +
     '  border-radius: var(--radius-pill);' + LineEnding +
     '  font-weight: 600;' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* Controls hosted ON the title bar. A skin that paints the bar in a strong colour leaves an' + LineEnding +
+    '   ordinary button''s surface-tuned ink nearly invisible there; the control appends the' + LineEnding +
+    '   ''on-titlebar'' variant automatically (TyStyleClassFor), so this is the only place a theme' + LineEnding +
+    '   has to say what belongs on its own bar. Composed with whatever class the host set, so a' + LineEnding +
+    '   ghost button on a title bar stays a ghost button and only its ink moves. */' + LineEnding +
+    'TyButton.on-titlebar, TySpeedButton.on-titlebar, TyGlyphButton.on-titlebar,' + LineEnding +
+    'TyGlyphContainerButton.on-titlebar, TyDropDownButton.on-titlebar,' + LineEnding +
+    'TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,' + LineEnding +
+    'TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {' + LineEnding +
+    '  color: var(--on-titlebar);' + LineEnding +
     '}' + LineEnding;
 end;
 
@@ -3034,7 +3166,8 @@ begin
     '' + LineEnding +
     '    /* card */' + LineEnding +
     '    --card-face:            #FFFFFF;   /* a card is a sheet ON the window, not a sunken well */' + LineEnding +
-    '  }' + LineEnding +
+    '    --on-titlebar: var(--on-surface);   /* ink for controls hosted on the title bar */' + LineEnding +
+    '}' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* --- palette: dark (macOS dark) ------------------------------------------ */' + LineEnding +
@@ -3093,7 +3226,8 @@ begin
     '' + LineEnding +
     '    /* card */' + LineEnding +
     '    --card-face:            #3A3A3C;   /* lifts above the chrome; --field (#1E1E1E) would sink */' + LineEnding +
-    '  }' + LineEnding +
+    '    --on-titlebar: var(--on-surface);   /* ink for controls hosted on the title bar */' + LineEnding +
+    '}' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* Window + unified title bar (flat system grey, hairline-rounded top). */' + LineEnding +
@@ -3189,7 +3323,19 @@ begin
     '/* Badge: the Dock''s count bubble — systemRed, white, bold, round. NOT --accent: on a Mac a' + LineEnding +
     '   number riding a control means unread / attention, and that colour is systemRed; the blue' + LineEnding +
     '   is the brand seed the user re-picks at runtime, which would say something else entirely. */' + LineEnding +
-    'TyBadge { background: var(--danger); color: on(var(--danger)); border-radius: 100; font-weight: bold; padding: 0px 4px; }' + LineEnding;
+    'TyBadge { background: var(--danger); color: on(var(--danger)); border-radius: 100; font-weight: bold; padding: 0px 4px; }' + LineEnding +
+    '' + LineEnding +
+    '/* Controls hosted ON the title bar. A skin that paints the bar in a strong colour leaves an' + LineEnding +
+    '   ordinary button''s surface-tuned ink nearly invisible there; the control appends the' + LineEnding +
+    '   ''on-titlebar'' variant automatically (TyStyleClassFor), so this is the only place a theme' + LineEnding +
+    '   has to say what belongs on its own bar. Composed with whatever class the host set, so a' + LineEnding +
+    '   ghost button on a title bar stays a ghost button and only its ink moves. */' + LineEnding +
+    'TyButton.on-titlebar, TySpeedButton.on-titlebar, TyGlyphButton.on-titlebar,' + LineEnding +
+    'TyGlyphContainerButton.on-titlebar, TyDropDownButton.on-titlebar,' + LineEnding +
+    'TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,' + LineEnding +
+    'TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {' + LineEnding +
+    '  color: var(--on-titlebar);' + LineEnding +
+    '}' + LineEnding;
 end;
 
 function SkinCss_material3: string;
@@ -3225,7 +3371,8 @@ begin
     '    --track:      #E7E0EC;   /* progress track (surface-variant)                  */' + LineEnding +
     '    --ink:        #1C1B1F;   /* primary on-surface ink                            */' + LineEnding +
     '    --ink-muted:  #49454F;   /* secondary on-surface ink (caption glyphs)         */' + LineEnding +
-    '  }' + LineEnding +
+    '    --on-titlebar: var(--on-surface);   /* ink for controls hosted on the title bar */' + LineEnding +
+    '}' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* --- palette: dark ------------------------------------------------------- */' + LineEnding +
@@ -3246,7 +3393,8 @@ begin
     '    --track:      #49454F;   /* progress track (surface-variant, dark)            */' + LineEnding +
     '    --ink:        #E6E1E5;   /* primary on-surface ink (light)                    */' + LineEnding +
     '    --ink-muted:  #CAC4D0;   /* secondary on-surface ink                          */' + LineEnding +
-    '  }' + LineEnding +
+    '    --on-titlebar: var(--on-surface);   /* ink for controls hosted on the title bar */' + LineEnding +
+    '}' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* Window: the M3 surface. */' + LineEnding +
@@ -3366,7 +3514,19 @@ begin
     '   simply the wrong role here (and this key also drives TyButton''s built-in badge, which' + LineEnding +
     '   is exactly where M3 puts red badges anyway). Fully round, 4px of horizontal air,' + LineEnding +
     '   label is M3 "label-small" = 500; the dot and inset keep the built-in metrics. */' + LineEnding +
-    'TyBadge         { background: var(--danger); color: var(--on-danger); border-radius: 100px; font-weight: 500; padding: 0px 4px; }' + LineEnding;
+    'TyBadge         { background: var(--danger); color: var(--on-danger); border-radius: 100px; font-weight: 500; padding: 0px 4px; }' + LineEnding +
+    '' + LineEnding +
+    '/* Controls hosted ON the title bar. A skin that paints the bar in a strong colour leaves an' + LineEnding +
+    '   ordinary button''s surface-tuned ink nearly invisible there; the control appends the' + LineEnding +
+    '   ''on-titlebar'' variant automatically (TyStyleClassFor), so this is the only place a theme' + LineEnding +
+    '   has to say what belongs on its own bar. Composed with whatever class the host set, so a' + LineEnding +
+    '   ghost button on a title bar stays a ghost button and only its ink moves. */' + LineEnding +
+    'TyButton.on-titlebar, TySpeedButton.on-titlebar, TyGlyphButton.on-titlebar,' + LineEnding +
+    'TyGlyphContainerButton.on-titlebar, TyDropDownButton.on-titlebar,' + LineEnding +
+    'TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,' + LineEnding +
+    'TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {' + LineEnding +
+    '  color: var(--on-titlebar);' + LineEnding +
+    '}' + LineEnding;
 end;
 
 function SkinCss_office: string;
@@ -3401,7 +3561,8 @@ begin
     '    --line:          #C8C6C4;   /* thin neutral hairline */' + LineEnding +
     '    --line-field:    #8A8886;   /* stronger field / default-button border */' + LineEnding +
     '    --hover-overlay: #0000000A; /* faint neutral wash for ghost hover */' + LineEnding +
-    '  }' + LineEnding +
+    '    --on-titlebar: on(var(--accent));   /* ink for controls hosted on the title bar */' + LineEnding +
+    '}' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '@mode dark {' + LineEnding +
@@ -3416,7 +3577,8 @@ begin
     '    --line:          #3B3A39;   /* subtle hairline on dark */' + LineEnding +
     '    --line-field:    #484644;   /* stronger field / default-button border on dark */' + LineEnding +
     '    --hover-overlay: #FFFFFF14; /* faint light wash for ghost hover on dark */' + LineEnding +
-    '  }' + LineEnding +
+    '    --on-titlebar: on(var(--accent));   /* ink for controls hosted on the title bar */' + LineEnding +
+    '}' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* Window: flat neutral canvas. */' + LineEnding +
@@ -3657,6 +3819,18 @@ begin
     '  border-radius: 100px;' + LineEnding +
     '  font-weight: 600;' + LineEnding +
     '  padding: 0px 4px;' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* Controls hosted ON the title bar. A skin that paints the bar in a strong colour leaves an' + LineEnding +
+    '   ordinary button''s surface-tuned ink nearly invisible there; the control appends the' + LineEnding +
+    '   ''on-titlebar'' variant automatically (TyStyleClassFor), so this is the only place a theme' + LineEnding +
+    '   has to say what belongs on its own bar. Composed with whatever class the host set, so a' + LineEnding +
+    '   ghost button on a title bar stays a ghost button and only its ink moves. */' + LineEnding +
+    'TyButton.on-titlebar, TySpeedButton.on-titlebar, TyGlyphButton.on-titlebar,' + LineEnding +
+    'TyGlyphContainerButton.on-titlebar, TyDropDownButton.on-titlebar,' + LineEnding +
+    'TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,' + LineEnding +
+    'TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {' + LineEnding +
+    '  color: var(--on-titlebar);' + LineEnding +
     '}' + LineEnding;
 end;
 
@@ -3708,6 +3882,7 @@ begin
     '  --radius-sm: 4px; --radius-pill: 9px; --radius-round: 12px; --radius-scroll: 6px;' + LineEnding +
     '  --font-size-base: 9px; --font-size-title: 11px;' + LineEnding +
     '  --font-weight-normal: 400; --font-weight-bold: 700;' + LineEnding +
+    '  --on-titlebar: #FFFFFF;   /* ink for controls hosted on the title bar */' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* Window/form backdrop — a slightly deeper tint of the lavender surface. */' + LineEnding +
@@ -4229,7 +4404,19 @@ begin
     'TyTagClose.danger { color: var(--on-danger); }' + LineEnding +
     'TyTagClose:hover        { background: var(--overlay-hover); color: var(--on-surface); border-radius: var(--radius); }' + LineEnding +
     'TyTagClose.accent:hover { color: var(--on-accent); }' + LineEnding +
-    'TyTagClose.danger:hover { color: var(--on-danger); }' + LineEnding;
+    'TyTagClose.danger:hover { color: var(--on-danger); }' + LineEnding +
+    '' + LineEnding +
+    '/* Controls hosted ON the title bar. A skin that paints the bar in a strong colour leaves an' + LineEnding +
+    '   ordinary button''s surface-tuned ink nearly invisible there; the control appends the' + LineEnding +
+    '   ''on-titlebar'' variant automatically (TyStyleClassFor), so this is the only place a theme' + LineEnding +
+    '   has to say what belongs on its own bar. Composed with whatever class the host set, so a' + LineEnding +
+    '   ghost button on a title bar stays a ghost button and only its ink moves. */' + LineEnding +
+    'TyButton.on-titlebar, TySpeedButton.on-titlebar, TyGlyphButton.on-titlebar,' + LineEnding +
+    'TyGlyphContainerButton.on-titlebar, TyDropDownButton.on-titlebar,' + LineEnding +
+    'TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,' + LineEnding +
+    'TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {' + LineEnding +
+    '  color: var(--on-titlebar);' + LineEnding +
+    '}' + LineEnding;
 end;
 
 function SkinCss_ubuntu: string;
@@ -4262,7 +4449,8 @@ begin
     '    --btn-active: #E6E6E6;   /* button pressed face */' + LineEnding +
     '    --check-border: #B0B0B0; /* unchecked checkbox border */' + LineEnding +
     '    --track:      #D8D8D8;   /* progress track */' + LineEnding +
-    '  }' + LineEnding +
+    '    --on-titlebar: var(--title-ink);   /* ink for controls hosted on the title bar */' + LineEnding +
+    '}' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* DARK — Yaru dark: neutral charcoal surfaces, light ink, orange kept vivid. */' + LineEnding +
@@ -4285,7 +4473,8 @@ begin
     '    --btn-active: #454545;   /* button pressed face */' + LineEnding +
     '    --check-border: #5A5A5A; /* unchecked checkbox border */' + LineEnding +
     '    --track:      #3D3D3D;   /* progress track */' + LineEnding +
-    '  }' + LineEnding +
+    '    --on-titlebar: var(--title-ink);   /* ink for controls hosted on the title bar */' + LineEnding +
+    '}' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* Window & text */' + LineEnding +
@@ -4372,7 +4561,19 @@ begin
     '   badge already sits on the accent, but it rounds to the base''s 12px; Shell''s counters' + LineEnding +
     '   are true pills, so restate the shape here (a skin that names a typeKey owns it whole)' + LineEnding +
     '   and keep the ink on the seed via on(). */' + LineEnding +
-    'TyBadge { background: var(--accent); color: on(var(--accent)); border-radius: 100px; font-weight: bold; padding: 0px 4px; }' + LineEnding;
+    'TyBadge { background: var(--accent); color: on(var(--accent)); border-radius: 100px; font-weight: bold; padding: 0px 4px; }' + LineEnding +
+    '' + LineEnding +
+    '/* Controls hosted ON the title bar. A skin that paints the bar in a strong colour leaves an' + LineEnding +
+    '   ordinary button''s surface-tuned ink nearly invisible there; the control appends the' + LineEnding +
+    '   ''on-titlebar'' variant automatically (TyStyleClassFor), so this is the only place a theme' + LineEnding +
+    '   has to say what belongs on its own bar. Composed with whatever class the host set, so a' + LineEnding +
+    '   ghost button on a title bar stays a ghost button and only its ink moves. */' + LineEnding +
+    'TyButton.on-titlebar, TySpeedButton.on-titlebar, TyGlyphButton.on-titlebar,' + LineEnding +
+    'TyGlyphContainerButton.on-titlebar, TyDropDownButton.on-titlebar,' + LineEnding +
+    'TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,' + LineEnding +
+    'TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {' + LineEnding +
+    '  color: var(--on-titlebar);' + LineEnding +
+    '}' + LineEnding;
 end;
 
 function SkinCss_win10: string;
@@ -4430,7 +4631,8 @@ begin
     '    /* disabled primary */' + LineEnding +
     '    --primary-disabled-bg:  #CCCCCC;' + LineEnding +
     '    --primary-disabled-ink: #FFFFFF;' + LineEnding +
-    '  }' + LineEnding +
+    '    --on-titlebar: var(--on-surface);   /* ink for controls hosted on the title bar */' + LineEnding +
+    '}' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* ---- DARK palette ---- */' + LineEnding +
@@ -4474,7 +4676,8 @@ begin
     '    /* disabled primary */' + LineEnding +
     '    --primary-disabled-bg:  #333333;' + LineEnding +
     '    --primary-disabled-ink: #777777;' + LineEnding +
-    '  }' + LineEnding +
+    '    --on-titlebar: var(--on-surface);   /* ink for controls hosted on the title bar */' + LineEnding +
+    '}' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* Window: solid, quiet surface. */' + LineEnding +
@@ -4577,7 +4780,19 @@ begin
     '/* Badge: a solid accent counter with SQUARE corners. The inherited base badge is a round' + LineEnding +
     '   modern pill; Win10''s badges (taskbar counters, live-tile markers) are hard-edged blocks' + LineEnding +
     '   like everything else in this language, and their numerals are not bold. */' + LineEnding +
-    'TyBadge { background: var(--accent); color: on(var(--accent)); border-radius: 0; font-weight: normal; padding: 0px 4px; }' + LineEnding;
+    'TyBadge { background: var(--accent); color: on(var(--accent)); border-radius: 0; font-weight: normal; padding: 0px 4px; }' + LineEnding +
+    '' + LineEnding +
+    '/* Controls hosted ON the title bar. A skin that paints the bar in a strong colour leaves an' + LineEnding +
+    '   ordinary button''s surface-tuned ink nearly invisible there; the control appends the' + LineEnding +
+    '   ''on-titlebar'' variant automatically (TyStyleClassFor), so this is the only place a theme' + LineEnding +
+    '   has to say what belongs on its own bar. Composed with whatever class the host set, so a' + LineEnding +
+    '   ghost button on a title bar stays a ghost button and only its ink moves. */' + LineEnding +
+    'TyButton.on-titlebar, TySpeedButton.on-titlebar, TyGlyphButton.on-titlebar,' + LineEnding +
+    'TyGlyphContainerButton.on-titlebar, TyDropDownButton.on-titlebar,' + LineEnding +
+    'TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,' + LineEnding +
+    'TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {' + LineEnding +
+    '  color: var(--on-titlebar);' + LineEnding +
+    '}' + LineEnding;
 end;
 
 function SkinCss_win11: string;
@@ -4632,7 +4847,8 @@ begin
     '    --check-disabled-bg:     #F0F0F0;' + LineEnding +
     '    --check-disabled-ink:    #BDBDBD;' + LineEnding +
     '    --check-disabled-border: #E0E0E0;' + LineEnding +
-    '  }' + LineEnding +
+    '    --on-titlebar: var(--on-surface);   /* ink for controls hosted on the title bar */' + LineEnding +
+    '}' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* ── palette: dark ───────────────────────────────────────────────────────── */' + LineEnding +
@@ -4673,7 +4889,8 @@ begin
     '    --check-disabled-bg:     #2A2A2A;' + LineEnding +
     '    --check-disabled-ink:    #5A5A5A;' + LineEnding +
     '    --check-disabled-border: #3A3A3A;' + LineEnding +
-    '  }' + LineEnding +
+    '    --on-titlebar: var(--on-surface);   /* ink for controls hosted on the title bar */' + LineEnding +
+    '}' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* ── mode-invariant: accent-derived inks + geometry ──────────────────────── */' + LineEnding +
@@ -4703,6 +4920,7 @@ begin
     '  --radius-sm:   4px;' + LineEnding +
     '  --radius-lg:   8px;    /* a LAYER (card / flyout) rounds softer than the controls on it */' + LineEnding +
     '  --radius-pill: 100px;' + LineEnding +
+    '  --on-titlebar: var(--on-surface);   /* ink for controls hosted on the title bar */' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* Window backdrop — the Mica surface. */' + LineEnding +
@@ -4813,7 +5031,19 @@ begin
     '   bold base pill. No font-size, like every other rule in this skin: a control with no theme' + LineEnding +
     '   font-size already falls back to --font-size-base on its own, so stating it here would only' + LineEnding +
     '   cost the badge an explicitly-set Font.Size (which outranks the token, but not a rule). */' + LineEnding +
-    'TyBadge { background: var(--accent); color: var(--on-accent); border-radius: var(--radius-pill); font-weight: normal; padding: 0px 4px; }' + LineEnding;
+    'TyBadge { background: var(--accent); color: var(--on-accent); border-radius: var(--radius-pill); font-weight: normal; padding: 0px 4px; }' + LineEnding +
+    '' + LineEnding +
+    '/* Controls hosted ON the title bar. A skin that paints the bar in a strong colour leaves an' + LineEnding +
+    '   ordinary button''s surface-tuned ink nearly invisible there; the control appends the' + LineEnding +
+    '   ''on-titlebar'' variant automatically (TyStyleClassFor), so this is the only place a theme' + LineEnding +
+    '   has to say what belongs on its own bar. Composed with whatever class the host set, so a' + LineEnding +
+    '   ghost button on a title bar stays a ghost button and only its ink moves. */' + LineEnding +
+    'TyButton.on-titlebar, TySpeedButton.on-titlebar, TyGlyphButton.on-titlebar,' + LineEnding +
+    'TyGlyphContainerButton.on-titlebar, TyDropDownButton.on-titlebar,' + LineEnding +
+    'TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,' + LineEnding +
+    'TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {' + LineEnding +
+    '  color: var(--on-titlebar);' + LineEnding +
+    '}' + LineEnding;
 end;
 
 function SkinCss_xp: string;
@@ -4835,6 +5065,7 @@ begin
     '  --caption-button-margin:    4;' + LineEnding +
     '  --caption-button-margin-y:  6;' + LineEnding +
     '  --caption-button-gap:       3;' + LineEnding +
+    '  --on-titlebar: var(--title-ink);   /* ink for controls hosted on the title bar */' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* Light palette = the authentic XP Luna look. */' + LineEnding +
@@ -4856,7 +5087,8 @@ begin
     '    --close-top:    #F4AB92;' + LineEnding +
     '    --close-mid:    #DC4E31;' + LineEnding +
     '    --close-bot:    #B23018;' + LineEnding +
-    '  }' + LineEnding +
+    '    --on-titlebar: var(--title-ink);   /* ink for controls hosted on the title bar */' + LineEnding +
+    '}' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* Dark palette — IDENTICAL to light (no natural dark Luna variant). */' + LineEnding +
@@ -4877,7 +5109,8 @@ begin
     '    --close-top:    #F4AB92;' + LineEnding +
     '    --close-mid:    #DC4E31;' + LineEnding +
     '    --close-bot:    #B23018;' + LineEnding +
-    '  }' + LineEnding +
+    '    --on-titlebar: var(--title-ink);   /* ink for controls hosted on the title bar */' + LineEnding +
+    '}' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* Window: the Luna beige client area, wrapped in the iconic blue XP window frame (drawn on the' + LineEnding +
@@ -5106,6 +5339,18 @@ begin
     '  border-radius: var(--radius);' + LineEnding +
     '  padding: 0px 5px;' + LineEnding +
     '  font-weight: bold;' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* Controls hosted ON the title bar. A skin that paints the bar in a strong colour leaves an' + LineEnding +
+    '   ordinary button''s surface-tuned ink nearly invisible there; the control appends the' + LineEnding +
+    '   ''on-titlebar'' variant automatically (TyStyleClassFor), so this is the only place a theme' + LineEnding +
+    '   has to say what belongs on its own bar. Composed with whatever class the host set, so a' + LineEnding +
+    '   ghost button on a title bar stays a ghost button and only its ink moves. */' + LineEnding +
+    'TyButton.on-titlebar, TySpeedButton.on-titlebar, TyGlyphButton.on-titlebar,' + LineEnding +
+    'TyGlyphContainerButton.on-titlebar, TyDropDownButton.on-titlebar,' + LineEnding +
+    'TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,' + LineEnding +
+    'TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {' + LineEnding +
+    '  color: var(--on-titlebar);' + LineEnding +
     '}' + LineEnding;
 end;
 

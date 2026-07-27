@@ -47,7 +47,8 @@
     --check-disabled-bg:     #F0F0F0;
     --check-disabled-ink:    #BDBDBD;
     --check-disabled-border: #E0E0E0;
-  }
+    --on-titlebar: var(--on-surface);   /* ink for controls hosted on the title bar */
+}
 }
 
 /* ── palette: dark ───────────────────────────────────────────────────────── */
@@ -88,7 +89,8 @@
     --check-disabled-bg:     #2A2A2A;
     --check-disabled-ink:    #5A5A5A;
     --check-disabled-border: #3A3A3A;
-  }
+    --on-titlebar: var(--on-surface);   /* ink for controls hosted on the title bar */
+}
 }
 
 /* ── mode-invariant: accent-derived inks + geometry ──────────────────────── */
@@ -118,6 +120,7 @@
   --radius-sm:   4px;
   --radius-lg:   8px;    /* a LAYER (card / flyout) rounds softer than the controls on it */
   --radius-pill: 100px;
+  --on-titlebar: var(--on-surface);   /* ink for controls hosted on the title bar */
 }
 
 /* Window backdrop — the Mica surface. */
@@ -229,3 +232,15 @@ TyTagClose:hover { background: var(--active-fill); }
    font-size already falls back to --font-size-base on its own, so stating it here would only
    cost the badge an explicitly-set Font.Size (which outranks the token, but not a rule). */
 TyBadge { background: var(--accent); color: var(--on-accent); border-radius: var(--radius-pill); font-weight: normal; padding: 0px 4px; }
+
+/* Controls hosted ON the title bar. A skin that paints the bar in a strong colour leaves an
+   ordinary button's surface-tuned ink nearly invisible there; the control appends the
+   'on-titlebar' variant automatically (TyStyleClassFor), so this is the only place a theme
+   has to say what belongs on its own bar. Composed with whatever class the host set, so a
+   ghost button on a title bar stays a ghost button and only its ink moves. */
+TyButton.on-titlebar, TySpeedButton.on-titlebar, TyGlyphButton.on-titlebar,
+TyGlyphContainerButton.on-titlebar, TyDropDownButton.on-titlebar,
+TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,
+TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {
+  color: var(--on-titlebar);
+}

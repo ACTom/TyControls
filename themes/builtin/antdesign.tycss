@@ -39,7 +39,8 @@
     --shadow-soft:    #0000000A;  /* default-button drop shadow (0 1 0)                                  */
     --shadow-primary: #1677FF1A;  /* primary-button accent-tinted drop shadow (0 2 0)                    */
     --shadow-danger:  #FF4D4F1A;  /* danger-button red-tinted drop shadow (0 2 0)                        */
-  }
+    --on-titlebar: var(--on-surface);   /* ink for controls hosted on the title bar */
+}
 }
 
 /* --- palette: dark ------------------------------------------------------- */
@@ -67,7 +68,8 @@
     --shadow-soft:    #00000030;  /* default-button drop shadow (deeper on dark)           */
     --shadow-primary: #1668DC40;  /* primary-button accent-tinted glow                     */
     --shadow-danger:  #DC444640;  /* danger-button red-tinted glow                         */
-  }
+    --on-titlebar: var(--on-surface);   /* ink for controls hosted on the title bar */
+}
 }
 
 /* Window: a plain surface canvas — no cards, so the window itself is white in light mode. */
@@ -217,6 +219,7 @@ TyListGroupItem:active   { background: alpha(var(--accent), 0.10); color: var(--
 :root {
   --listgroup-header-height: 36;
   --listgroup-item-height:   40;
+  --on-titlebar: var(--on-surface);   /* ink for controls hosted on the title bar */
 }
 
 /* Ant Design Pro table: the selected row is a light accent TINT with normal ink,
@@ -224,3 +227,15 @@ TyListGroupItem:active   { background: alpha(var(--accent), 0.10); color: var(--
    */
 TyGridCell:selected { background: alpha(var(--accent), 0.10); color: var(--on-surface); }
 TyGridCell:hover    { background: alpha(var(--accent), 0.05); }
+
+/* Controls hosted ON the title bar. A skin that paints the bar in a strong colour leaves an
+   ordinary button's surface-tuned ink nearly invisible there; the control appends the
+   'on-titlebar' variant automatically (TyStyleClassFor), so this is the only place a theme
+   has to say what belongs on its own bar. Composed with whatever class the host set, so a
+   ghost button on a title bar stays a ghost button and only its ink moves. */
+TyButton.on-titlebar, TySpeedButton.on-titlebar, TyGlyphButton.on-titlebar,
+TyGlyphContainerButton.on-titlebar, TyDropDownButton.on-titlebar,
+TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,
+TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {
+  color: var(--on-titlebar);
+}

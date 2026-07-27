@@ -499,7 +499,8 @@ TyTagClose:hover { background: var(--overlay-hover); color: var(--on-surface); b
   /* Card surface: light = the plain surface, which lifts off the elevated
      --form-bg behind it (matches light.tycss). */
   --card-bg: var(--surface);
-  }
+    --on-titlebar: var(--on-surface);   /* ink for controls hosted on the title bar */
+}
 }
 
 @mode dark {
@@ -552,5 +553,18 @@ TyTagClose:hover { background: var(--overlay-hover); color: var(--on-surface); b
      vanish into the backdrop; the card lifts on --input-bg (matches dark.tycss,
      and the TitleBar / input-surface approach). */
   --card-bg: var(--input-bg);
-  }
+    --on-titlebar: var(--on-surface);   /* ink for controls hosted on the title bar */
+}
+}
+
+/* Controls hosted ON the title bar. A skin that paints the bar in a strong colour leaves an
+   ordinary button's surface-tuned ink nearly invisible there; the control appends the
+   'on-titlebar' variant automatically (TyStyleClassFor), so this is the only place a theme
+   has to say what belongs on its own bar. Composed with whatever class the host set, so a
+   ghost button on a title bar stays a ghost button and only its ink moves. */
+TyButton.on-titlebar, TySpeedButton.on-titlebar, TyGlyphButton.on-titlebar,
+TyGlyphContainerButton.on-titlebar, TyDropDownButton.on-titlebar,
+TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,
+TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {
+  color: var(--on-titlebar);
 }

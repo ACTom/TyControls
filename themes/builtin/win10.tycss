@@ -50,7 +50,8 @@
     /* disabled primary */
     --primary-disabled-bg:  #CCCCCC;
     --primary-disabled-ink: #FFFFFF;
-  }
+    --on-titlebar: var(--on-surface);   /* ink for controls hosted on the title bar */
+}
 }
 
 /* ---- DARK palette ---- */
@@ -94,7 +95,8 @@
     /* disabled primary */
     --primary-disabled-bg:  #333333;
     --primary-disabled-ink: #777777;
-  }
+    --on-titlebar: var(--on-surface);   /* ink for controls hosted on the title bar */
+}
 }
 
 /* Window: solid, quiet surface. */
@@ -198,3 +200,15 @@ TyTagClose:hover { background: var(--danger); color: on(var(--danger)); border-r
    modern pill; Win10's badges (taskbar counters, live-tile markers) are hard-edged blocks
    like everything else in this language, and their numerals are not bold. */
 TyBadge { background: var(--accent); color: on(var(--accent)); border-radius: 0; font-weight: normal; padding: 0px 4px; }
+
+/* Controls hosted ON the title bar. A skin that paints the bar in a strong colour leaves an
+   ordinary button's surface-tuned ink nearly invisible there; the control appends the
+   'on-titlebar' variant automatically (TyStyleClassFor), so this is the only place a theme
+   has to say what belongs on its own bar. Composed with whatever class the host set, so a
+   ghost button on a title bar stays a ghost button and only its ink moves. */
+TyButton.on-titlebar, TySpeedButton.on-titlebar, TyGlyphButton.on-titlebar,
+TyGlyphContainerButton.on-titlebar, TyDropDownButton.on-titlebar,
+TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,
+TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {
+  color: var(--on-titlebar);
+}

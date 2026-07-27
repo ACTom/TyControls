@@ -61,7 +61,8 @@
 
     /* card */
     --card-face:            #FFFFFF;   /* a card is a sheet ON the window, not a sunken well */
-  }
+    --on-titlebar: var(--on-surface);   /* ink for controls hosted on the title bar */
+}
 }
 
 /* --- palette: dark (macOS dark) ------------------------------------------ */
@@ -120,7 +121,8 @@
 
     /* card */
     --card-face:            #3A3A3C;   /* lifts above the chrome; --field (#1E1E1E) would sink */
-  }
+    --on-titlebar: var(--on-surface);   /* ink for controls hosted on the title bar */
+}
 }
 
 /* Window + unified title bar (flat system grey, hairline-rounded top). */
@@ -217,3 +219,15 @@ TyTagClose:hover  { background: alpha(var(--overlay), 0.12); border-radius: 100;
    number riding a control means unread / attention, and that colour is systemRed; the blue
    is the brand seed the user re-picks at runtime, which would say something else entirely. */
 TyBadge { background: var(--danger); color: on(var(--danger)); border-radius: 100; font-weight: bold; padding: 0px 4px; }
+
+/* Controls hosted ON the title bar. A skin that paints the bar in a strong colour leaves an
+   ordinary button's surface-tuned ink nearly invisible there; the control appends the
+   'on-titlebar' variant automatically (TyStyleClassFor), so this is the only place a theme
+   has to say what belongs on its own bar. Composed with whatever class the host set, so a
+   ghost button on a title bar stays a ghost button and only its ink moves. */
+TyButton.on-titlebar, TySpeedButton.on-titlebar, TyGlyphButton.on-titlebar,
+TyGlyphContainerButton.on-titlebar, TyDropDownButton.on-titlebar,
+TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,
+TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {
+  color: var(--on-titlebar);
+}

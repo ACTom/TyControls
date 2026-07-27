@@ -13,6 +13,7 @@
   --radius-check: 3px;
   --radius-pill:  100px;
   --disabled:     0.45;
+  --on-titlebar: var(--ink);   /* ink for controls hosted on the title bar */
 }
 
 /* ── LIGHT palette — Windows 11 / Office web light ── */
@@ -44,7 +45,8 @@
     --danger-hover:  darken(var(--danger), 7%);    /* ~#B6281A */
     --danger-active: darken(var(--danger), 15%);   /* ~#A72518 */
     --on-danger:     on(var(--danger));            /* readable ink -> #FFFFFF */
-  }
+    --on-titlebar: var(--ink);   /* ink for controls hosted on the title bar */
+}
 }
 
 /* ── DARK palette — Fluent 2 dark ── */
@@ -76,7 +78,8 @@
     --danger-hover:  lighten(var(--danger), 9%);   /* ~#D5464A */
     --danger-active: darken(var(--danger), 8%);    /* ~#C03034 */
     --on-danger:     on(var(--danger));            /* readable ink on danger */
-  }
+    --on-titlebar: var(--ink);   /* ink for controls hosted on the title bar */
+}
 }
 
 /* Window backdrop. */
@@ -273,4 +276,16 @@ TyBadge {
   color: var(--on-accent);
   border-radius: var(--radius-pill);
   font-weight: 600;
+}
+
+/* Controls hosted ON the title bar. A skin that paints the bar in a strong colour leaves an
+   ordinary button's surface-tuned ink nearly invisible there; the control appends the
+   'on-titlebar' variant automatically (TyStyleClassFor), so this is the only place a theme
+   has to say what belongs on its own bar. Composed with whatever class the host set, so a
+   ghost button on a title bar stays a ghost button and only its ink moves. */
+TyButton.on-titlebar, TySpeedButton.on-titlebar, TyGlyphButton.on-titlebar,
+TyGlyphContainerButton.on-titlebar, TyDropDownButton.on-titlebar,
+TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,
+TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {
+  color: var(--on-titlebar);
 }

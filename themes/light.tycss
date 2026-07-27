@@ -217,6 +217,7 @@
   --transfer-title-height: 26px;
   --treeselect-drop-height: 220px;
   --font-weight-normal: 400; --font-weight-bold: 700;
+  --on-titlebar: var(--on-surface);   /* ink for controls hosted on the title bar */
 }
 
 /* Window/form backdrop — a soft off-white behind the white controls. */
@@ -1069,3 +1070,15 @@ TyListGroupItem:disabled { color: var(--muted); }
    Also undefined ON PURPOSE and NOT part of this list: TyGridPanel (transparent so the
    cell gutters are not white — tests/test.gridpanel.pas asserts no theme gives it a
    background) and TyFormSurface. */
+
+/* Controls hosted ON the title bar. A skin that paints the bar in a strong colour leaves an
+   ordinary button's surface-tuned ink nearly invisible there; the control appends the
+   'on-titlebar' variant automatically (TyStyleClassFor), so this is the only place a theme
+   has to say what belongs on its own bar. Composed with whatever class the host set, so a
+   ghost button on a title bar stays a ghost button and only its ink moves. */
+TyButton.on-titlebar, TySpeedButton.on-titlebar, TyGlyphButton.on-titlebar,
+TyGlyphContainerButton.on-titlebar, TyDropDownButton.on-titlebar,
+TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,
+TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {
+  color: var(--on-titlebar);
+}

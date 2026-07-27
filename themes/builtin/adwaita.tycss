@@ -28,7 +28,8 @@
     --ghost-hover:  #0000000D; /* flat/ghost hover wash                        */
     --ghost-active: #0000001A; /* flat/ghost pressed wash                      */
     --shadow:       #0000001A; /* subtle button lift                           */
-  }
+    --on-titlebar: var(--ink);   /* ink for controls hosted on the title bar */
+}
 }
 
 /* --- palette: dark ------------------------------------------------------- */
@@ -53,7 +54,8 @@
     --ghost-hover:  #FFFFFF14; /* flat/ghost hover wash                        */
     --ghost-active: #FFFFFF26; /* flat/ghost pressed wash                      */
     --shadow:       #00000040; /* subtle button lift                           */
-  }
+    --on-titlebar: var(--ink);   /* ink for controls hosted on the title bar */
+}
 }
 
 /* --- window + chrome ----------------------------------------------------- */
@@ -151,3 +153,15 @@ TyTagClose:hover  { background: var(--ghost-hover); border-radius: 100; }
    ink, same NORMAL weight (GNOME never bolds an accent — the inherited pill's bold is not
    this desktop). Fully round, and no edge or lift: a badge is a marker, not a control. */
 TyBadge           { background: var(--accent); color: on(var(--accent)); border-radius: 100; font-weight: normal; padding: 0px 4px; }
+
+/* Controls hosted ON the title bar. A skin that paints the bar in a strong colour leaves an
+   ordinary button's surface-tuned ink nearly invisible there; the control appends the
+   'on-titlebar' variant automatically (TyStyleClassFor), so this is the only place a theme
+   has to say what belongs on its own bar. Composed with whatever class the host set, so a
+   ghost button on a title bar stays a ghost button and only its ink moves. */
+TyButton.on-titlebar, TySpeedButton.on-titlebar, TyGlyphButton.on-titlebar,
+TyGlyphContainerButton.on-titlebar, TyDropDownButton.on-titlebar,
+TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,
+TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {
+  color: var(--on-titlebar);
+}

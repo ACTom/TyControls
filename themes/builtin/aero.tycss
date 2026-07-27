@@ -10,6 +10,7 @@
 /* Mode-invariant derived value: focus ring is always the accent at 55% (accent is per-mode). */
 :root {
   --focus-ring: alpha(var(--accent), 0.55);
+  --on-titlebar: var(--titlebar-ink);   /* ink for controls hosted on the title bar */
 }
 
 /* ---- LIGHT palette (authentic Aero glass) ---- */
@@ -56,7 +57,8 @@
 
     --primary-shadow:    #10467A33; /* deeper accent shadow under primary */
     --danger-shadow:     #7A101033; /* deeper red shadow under danger */
-  }
+    --on-titlebar: var(--titlebar-ink);   /* ink for controls hosted on the title bar */
+}
 }
 
 /* ---- DARK palette (Aero has no natural dark variant — IDENTICAL to light) ---- */
@@ -103,7 +105,8 @@
 
     --primary-shadow:    #10467A33;
     --danger-shadow:     #7A101033;
-  }
+    --on-titlebar: var(--titlebar-ink);   /* ink for controls hosted on the title bar */
+}
 }
 
 /* Window: light steel-glass wash, top lighter, bottom a touch deeper. */
@@ -346,4 +349,16 @@ TyBadge {
   border-radius: 999px;
   font-weight: bold;
   padding: 0px 4px;
+}
+
+/* Controls hosted ON the title bar. A skin that paints the bar in a strong colour leaves an
+   ordinary button's surface-tuned ink nearly invisible there; the control appends the
+   'on-titlebar' variant automatically (TyStyleClassFor), so this is the only place a theme
+   has to say what belongs on its own bar. Composed with whatever class the host set, so a
+   ghost button on a title bar stays a ghost button and only its ink moves. */
+TyButton.on-titlebar, TySpeedButton.on-titlebar, TyGlyphButton.on-titlebar,
+TyGlyphContainerButton.on-titlebar, TyDropDownButton.on-titlebar,
+TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,
+TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {
+  color: var(--on-titlebar);
 }
