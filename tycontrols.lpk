@@ -449,6 +449,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.QtWS"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.PlatformWS.pas"/>
+        <UnitName Value="tyControls.PlatformWS"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.GtkWS.pas"/>
         <UnitName Value="tyControls.GtkWS"/>
       </Item>

@@ -153,7 +153,7 @@ type
   end;
 implementation
 uses
-  Math, tyControls.QtWS;
+  Math, tyControls.QtWS, tyControls.PlatformWS;
 
 function TyComboTypeAheadMatch(AItems: TStrings; AStart: Integer; const APrefix: string): Integer;
 var n, i, idx: Integer; pfx: string;
@@ -567,7 +567,7 @@ begin
   FPopup.OnClose    := @PopupClosed;
 
   FPopupList := CreatePopupList;  // owned by the combo (virtual: a subclass may return a custom list)
-  FPopupList.ForceSquareSurface := TyQtIsWayland;
+  FPopupList.ForceSquareSurface := TyIsWayland;
   FPopupList.OnChange := @PopupListChange;
 
   { Wire the list into the helper's form (alClient; SetContent is one-shot). }

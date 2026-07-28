@@ -102,7 +102,7 @@ const
 implementation
 
 uses
-  Math, BGRABitmapTypes, BGRACanvas2D, tyControls.QtWS;
+  Math, BGRABitmapTypes, BGRACanvas2D, tyControls.QtWS, tyControls.PlatformWS;
 
 const
   CGapLogical     = 3;   // gap between title and description, logical px
@@ -185,6 +185,7 @@ constructor TTyBalloonWindow.CreateNew(AOwner: TComponent; Num: Integer);
 begin
   inherited CreateNew(AOwner, Num);
   BorderStyle := bsNone;
+  TyPreparePopupWindow(Self);   // GTK3: opt into a native POPUP window (switch, default off)
   ShowInTaskBar := stNever;
   FormStyle := fsStayOnTop;
   FPointerH := 8;
@@ -334,7 +335,7 @@ var
   pts: array[0..2] of TPoint;
 begin
   if not HandleAllocated then Exit;
-  if TyQtIsWayland then Exit;
+  if TyIsWayland then Exit;
   cW := ClientWidth; cH := ClientHeight;
   S := BalloonStyle;
   d := MulDiv(S.BorderRadius, Font.PixelsPerInch, 96) * 2;

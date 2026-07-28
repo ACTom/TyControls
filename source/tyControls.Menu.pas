@@ -3,7 +3,7 @@ unit tyControls.Menu;
 interface
 uses Classes, SysUtils, Types, Controls, Graphics, Forms, ExtCtrls, LCLType, LCLProc, LCLIntf, LMessages, Menus,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.Accel,
-  tyControls.QtWS, tyControls.ImageCollection;
+  tyControls.QtWS, tyControls.PlatformWS, tyControls.ImageCollection;
 
 const
   { Layout metrics (logical px, 96-PPI baseline). These are spacing/size tokens, not
@@ -1016,6 +1016,7 @@ begin
   if FForm <> nil then Exit;
   FForm := TForm.CreateNew(nil);
   FForm.BorderStyle := bsNone;
+  TyPreparePopupWindow(FForm);   // GTK3: opt into a native POPUP window (switch, default off)
   FForm.ShowInTaskBar := stNever;
   FForm.FormStyle := fsStayOnTop;
   FForm.PopupMode := pmExplicit;
@@ -1029,7 +1030,7 @@ begin
   FView.Images := FImages;   // icon-column source (set before the rows render)
   FView.BannerCaption := FBannerCaption;   // decorative left banner (this level only)
   FView.BannerWidth := FBannerWidth;
-  FView.ForceSquareSurface := TyQtIsWayland;   // Wayland can't shape-mask the window -> square paint
+  FView.ForceSquareSurface := TyIsWayland;   // Wayland can't shape-mask the window -> square paint
 
   FView.OnActivateRow := @HandleActivateRow;
   FView.OnOpenSubmenu := @HandleOpenSubmenu;
@@ -1139,7 +1140,7 @@ begin
     FForm.Color := TyColorToLCL(S.Background.Color);
   // Wayland ignores window masks (no XShape): skip shaping entirely — the view paints square corners
   // (ForceSquareSurface) so the popup is a clean rectangle instead of rounded-paint-on-square-window.
-  if TyQtIsWayland then Exit;
+  if TyIsWayland then Exit;
   d := MulDiv(S.BorderRadius, FForm.Font.PixelsPerInch, 96) * 2;
   if d <= 0 then
   begin

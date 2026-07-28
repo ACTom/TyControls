@@ -47,7 +47,7 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, Forms, LCLType,
   tyControls.Types, tyControls.Painter, tyControls.Base,
-  tyControls.Controller, tyControls.StyleModel, tyControls.Popup, tyControls.QtWS;
+  tyControls.Controller, tyControls.StyleModel, tyControls.Popup, tyControls.QtWS, tyControls.PlatformWS;
 
 const
   { Built-in logical-px defaults (96-PPI baseline) for this control's metrics. A skin
@@ -1884,7 +1884,7 @@ begin
     cannot (Wayland, no XShape) ForceSquareSurface removes the gaps instead. }
   FPopup.Controller := ActiveController;
   FPanel.Controller := Controller;
-  FPanel.ForceSquareSurface := TyQtIsWayland;
+  FPanel.ForceSquareSurface := TyIsWayland;
   FPanel.Root := FNodes;
   FPanel.Path := FPath;   // seed the DRAFT from the committed value
 end;

@@ -20,7 +20,7 @@ interface
 
 uses
   Classes, SysUtils, Types, Controls, Forms, Graphics, LCLType,
-  tyControls.Types, tyControls.Painter, tyControls.Controller;
+  tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.PlatformWS;
 
 type
   TTyPopupSurface = class(TForm)
@@ -81,6 +81,7 @@ constructor TTyPopupSurface.CreateNew(AOwner: TComponent; Num: Integer);
 begin
   inherited CreateNew(AOwner, Num);
   BorderStyle := bsNone;
+  TyPreparePopupWindow(Self);   // GTK3: opt into a native POPUP window (switch, default off)
   FormStyle := fsStayOnTop;
   ShowInTaskBar := stNever;
   Position := poDesigned;

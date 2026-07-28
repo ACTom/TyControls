@@ -17,7 +17,7 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Forms, LCLType, LCLIntf,
   {$IFDEF LCLWin32}Windows,{$ENDIF}
-  tyControls.Types, tyControls.Controller, tyControls.QtWS;
+  tyControls.Types, tyControls.Controller, tyControls.QtWS, tyControls.PlatformWS;
 
 // ---------------------------------------------------------------------------
 // TyPopupRect — screen rect for a dropdown of (AContentW x AContentH)
@@ -328,7 +328,7 @@ begin
   // Wayland ignores window masks (no XShape): the content must paint square
   // corners (ForceSquareSurface was set on the content control in Popup), so
   // we skip shaping and keep a clean rectangle.
-  if TyQtIsWayland then Exit;
+  if TyIsWayland then Exit;
 
   // Scale logical radius to device pixels; the rounded-rect region uses the
   // full corner diameter (2 × radius).

@@ -38,6 +38,16 @@ function TyGtkInstallIme(AControl: TWinControl; AOnCommit: TTyImeCommitEvent;
   only composes while focused. Safe on nil / non-GTK handles / off GTK2. }
 procedure TyGtkImeSetFocus(AHandle: TObject; AFocused: Boolean);
 
+{ True when this is a GTK3 build running on a Wayland compositor. False on GTK2 (which has no
+  Wayland backend at all) and off GTK entirely.
+
+  WHY it matters here rather than only in the Qt helper: Wayland forbids a client from placing
+  its own windows and has no shape extension, so every popup this library cuts to a rounded or
+  arrowed silhouette has to degrade to a square one. That rule used to be asked of
+  TyQtIsWayland, which answers False on every non-Qt widgetset -- correct while Linux meant Qt
+  or GTK2, and wrong the moment GTK3 became the default Linux widgetset. }
+function TyGtkIsWayland: Boolean;
+
 implementation
 
 {$IFDEF LCLGTK2}
@@ -209,6 +219,84 @@ begin
     TTyGtkImeHook(AHandle).SetFocused(AFocused);
 end;
 
+function TyGtkIsWayland: Boolean;
+begin
+  Result := False;   // GTK2 has no Wayland backend: an LCLGTK2 build is always X11.
+end;
+
+{$ELSE}
+{$IFDEF LCLGTK3}
+
+{ ------------------------------------------------------------------------------------
+  GTK3. Deliberately NOT a copy of the GTK2 block: only the two facilities that are both
+  needed and portable are here, and the GTK2 code above is untouched so the widgetset that
+  works today cannot regress.
+
+  The library's dependency on GTK3 comes in three tiers, and only one of them is a risk:
+    1. the LCL's own cross-platform API (SetWindowRgn and friends) -- backend-independent;
+    2. GTK3's native C entry points (gtk_window_begin_move_drag, ...) -- GTK3 is a
+       maintenance series, so this surface is effectively frozen;
+    3. LCL-GTK3's INTERNAL classes -- not public API, and the tier that actually moves.
+  Tier 3 is reached in exactly ONE place below (Gtk3NativeWidget), so an upstream change to
+  the backend's internals is a one-function repair rather than a sweep.
+  ------------------------------------------------------------------------------------ }
+
+uses
+  Types, LazGtk3, LazGdk3, LazGLib2, LazGObject2, gtk3int, gtk3procs, gtk3widgets;
+
+{ The native GtkWidget behind an LCL handle. This is the whole of tier 3: under GTK2 a
+  control's Handle IS the PGtkWidget and the library casts it directly, but under GTK3 the
+  Handle is a TGtk3Widget INSTANCE that owns the widget -- so the GTK2 cast would be reading
+  an object header as a widget. Anything needing a native widget goes through here. }
+function Gtk3NativeWidget(AControl: TWinControl): PGtkWidget;
+begin
+  Result := nil;
+  if (AControl = nil) or (not AControl.HandleAllocated) then Exit;
+  Result := TGtk3Widget(AControl.Handle).Widget;
+end;
+
+function TyGtkStartSystemMove(AForm: TCustomForm): Boolean;
+var
+  W, Top: PGtkWidget;
+  P: TPoint;
+begin
+  { Same rule as GTK2: hand the drag to the window manager instead of writing Left/Top per
+    mouse-move, which the WM clamps to the bounding box of the whole screen. }
+  Result := False;
+  W := Gtk3NativeWidget(AForm);
+  if W = nil then Exit;
+  Top := gtk_widget_get_toplevel(W);
+  if (Top = nil) or (not Gtk3IsGtkWindow(PGObject(Top))) then Exit;
+  P := Mouse.CursorPos;   // LCL screen coords == root-window coords
+  gtk_window_begin_move_drag(PGtkWindow(Top), 1, P.X, P.Y, gtk_get_current_event_time());
+  Result := True;
+end;
+
+function TyGtkInstallIme(AControl: TWinControl; AOnCommit: TTyImeCommitEvent;
+  ACaretQuery: TTyImeCaretQuery): TObject;
+begin
+  { NOT ported from the GTK2 block, for two reasons, both checked rather than assumed:
+    the GTK2 hook is driven by gtk_key_snooper_install, which GTK3 deprecated and the
+    Lazarus GTK3 bindings do not export at all; and LCL-GTK3 carries its own IM plumbing
+    (TGtk3WidgetSet.IMCommitStr / IMInFilter / IMTarget in gtk3procs), so the GTK2 premise
+    -- that stock LCL delivers no composed text -- may simply not hold here. Wiring an
+    own-context IME before establishing that it is needed would be inventing a problem.
+    Left as its own task; CJK input on GTK3 needs a real machine to assess. }
+  Result := nil;
+end;
+
+procedure TyGtkImeSetFocus(AHandle: TObject; AFocused: Boolean);
+begin
+  // No own IME context on GTK3 yet -- see TyGtkInstallIme.
+end;
+
+function TyGtkIsWayland: Boolean;
+begin
+  { The backend already knows, and it is the same answer its own window-creation code
+    branches on -- so asking it keeps our popups and its windows on one story. }
+  Result := (GTK3WidgetSet <> nil) and GTK3WidgetSet.IsWayland;
+end;
+
 {$ELSE}
 
 function TyGtkStartSystemMove(AForm: TCustomForm): Boolean;
@@ -227,6 +315,12 @@ begin
   // non-GTK2: nothing to do.
 end;
 
+function TyGtkIsWayland: Boolean;
+begin
+  Result := False;   // not a GTK build: Wayland is not reachable from here.
+end;
+
+{$ENDIF}
 {$ENDIF}
 
 end.

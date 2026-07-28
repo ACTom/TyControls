@@ -372,7 +372,7 @@ procedure TyNotify(const ATitle, AMessage: string; AType: TTyNotificationType = 
 implementation
 
 uses
-  tyControls.QtWS;   // TyQtIsWayland — the shape gate
+  tyControls.QtWS, tyControls.PlatformWS;   // TyIsWayland — the shape gate
 
 // ---------------------------------------------------------------------------
 // Pure rules / geometry
@@ -582,6 +582,7 @@ constructor TTyNotificationWindow.CreateNew(AOwner: TComponent; Num: Integer);
 begin
   inherited CreateNew(AOwner, Num);
   BorderStyle := bsNone;      // the card IS the chrome
+  TyPreparePopupWindow(Self);   // GTK3: opt into a native POPUP window (switch, default off)
   FormStyle := fsStayOnTop;   // it floats above the app it reports on
   ShowInTaskBar := stNever;   // a toast is not a window the user manages
   Position := poDesigned;     // Show must not re-centre a card we placed by rule
@@ -602,7 +603,7 @@ var
   rgn: HRGN;
 begin
   if (FOwnerNote = nil) or not HandleAllocated then Exit;
-  if TyQtIsWayland then Exit;   // no XShape: square corners, as TTyBalloonHint degrades
+  if TyIsWayland then Exit;   // no XShape: square corners, as TTyBalloonHint degrades
   S := FOwnerNote.CardStyle;
   d := MulDiv(TyEffectiveCorners(S).TL, Font.PixelsPerInch, 96) * 2;
   if d > 0 then

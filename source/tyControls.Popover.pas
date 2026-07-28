@@ -371,7 +371,7 @@ implementation
 
 uses
   BGRABitmapTypes, BGRACanvas2D,
-  tyControls.QtWS;   // TyQtIsWayland — the shape gate; TyQtMaskWindowDeep — Qt's child masks
+  tyControls.QtWS, tyControls.PlatformWS;   // TyIsWayland — the shape gate; TyQtMaskWindowDeep — Qt's child masks
 
 // ---------------------------------------------------------------------------
 // Pure rules / geometry
@@ -721,6 +721,7 @@ constructor TTyPopoverWindow.CreateNew(AOwner: TComponent; Num: Integer);
 begin
   inherited CreateNew(AOwner, Num);
   BorderStyle := bsNone;      // the body IS the chrome
+  TyPreparePopupWindow(Self);   // GTK3: opt into a native POPUP window (switch, default off)
   FormStyle := fsStayOnTop;   // it floats above the form it belongs to
   ShowInTaskBar := stNever;   // a popover is not a window the user manages
   Position := poDesigned;     // Show must not re-centre a window we placed by rule
@@ -763,7 +764,7 @@ var
   pts: array[0..2] of TPoint;
 begin
   if (FOwnerPop = nil) or not HandleAllocated then Exit;
-  if TyQtIsWayland then Exit;   // no XShape: square corners, as TTyBalloonHint degrades
+  if TyIsWayland then Exit;   // no XShape: square corners, as TTyBalloonHint degrades
   Lay := FOwnerPop.LayoutIn(ClientWidth, ClientHeight, FSide, FTipLocal, Font.PixelsPerInch);
   if Lay.BodyRect.Right <= Lay.BodyRect.Left then Exit;
   S := FOwnerPop.PopoverStyle;

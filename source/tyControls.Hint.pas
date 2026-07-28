@@ -62,7 +62,7 @@ function TyHintContentRect(ATextW, ATextH, APadL, APadT, APadR, APadB: Integer):
 implementation
 
 uses
-  tyControls.QtWS;
+  tyControls.QtWS, tyControls.PlatformWS;
 
 var
   USavedHintClass: THintWindowClass = nil;
@@ -214,7 +214,7 @@ var
   Rgn: HRGN;
 begin
   if not HandleAllocated then Exit;
-  if TyQtIsWayland then Exit;
+  if TyIsWayland then Exit;
   S := HintStyle;
   d := MulDiv(S.BorderRadius, Font.PixelsPerInch, 96) * 2;
   if d <= 0 then
