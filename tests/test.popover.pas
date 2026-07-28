@@ -87,6 +87,7 @@ type
     procedure TestTitleInkUsesItsOwnTypeKey;
     procedure TestBodyRendersThemeBackground;
     procedure TestArrowCarriesTheBodyFillPastItsEdge;
+    procedure TestNoBorderRunsAcrossTheArrowBase;
     procedure TestNoArrowLeavesNoStrip;
     procedure TestGradientBodyDrawsNoArrow;
     procedure TestTitleBandFillsItsThemeBackground;
@@ -1104,6 +1105,90 @@ begin
       Px := Reread.GetPixel(112, 64);   // well inside the body, clear of its rounded corners
       AssertTrue('body painted in the themed fill',
         (Px.blue > 180) and (Px.red < 120));
+    finally
+      Reread.Free;
+    end;
+  finally
+    P.Free;
+    Bmp.Free;
+  end;
+end;
+
+{ TestNoBorderRunsAcrossTheArrowBase
+  A balloon is ONE shape. Drawn as a rounded rect plus a triangle, the body's own border ran
+  straight across the wedge's base, so the arrow read as a separate sliver stuck onto a closed
+  box -- reported from the real machine against TTyBalloonHint, and TTyPopover shared the code
+  shape and the defect.
+
+  The fixture is deliberate: border-radius 0 so the top edge is straight all the way (a radius
+  would make "is this row border?" depend on the corner arc), a 4px border so there is an
+  opaque core rather than one antialiased hairline (StrokeBorder centres on an inset line, so
+  a 1px border lands as a ~50% blend and proves nothing), and colours that are neither the
+  clRed sentinel nor each other: lime body, blue border.
+
+  The claim: on the row just inside the body's top edge, the pixel under the APEX is body
+  fill, not border. Away from the wedge that same row IS border -- asserted too, so the test
+  cannot pass by the border having vanished everywhere. }
+procedure TTyPopoverComponentTest.TestNoBorderRunsAcrossTheArrowBase;
+var
+  P: TPopAccess;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  Px: TBGRAPixel;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap,
+    'TyPopover { background: #00FF00; color: #111111; border-radius: 0px;'
+    + ' border: 4px solid #0000FF; padding: 10px 12px; font-size: 12px; }'));
+  Bmp := TBitmap.Create;
+  P := TPopAccess(NewPopover);
+  try
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(224, 128);
+    Bmp.Canvas.Brush.Color := clRed;
+    Bmp.Canvas.FillRect(0, 0, 224, 128);
+    { psvBottom: the body hangs below the anchor, so its wedge is on TOP. Arrow size 8 =>
+      the strip is rows 0..7 and the body starts at y=8; the apex is at (112,0). }
+    P.RenderTo(Bmp.Canvas, Rect(0, 0, 224, 128), psvBottom, 112, 96);
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      { Row 9 is inside the 4px border band (rows 8..11) of the body's top edge. Under the
+        apex it must be the body's fill: the outline goes UP the wedge here, not across. }
+      Px := Reread.GetPixel(112, 9);
+      AssertTrue(Format('no border across the arrow base (got %d,%d,%d)',
+        [Px.red, Px.green, Px.blue]), (Px.green > 180) and (Px.blue < 120));
+      { The same row well clear of the wedge is the border -- otherwise the assertion above
+        would also pass on a popover that simply lost its border. }
+      Px := Reread.GetPixel(40, 9);
+      AssertTrue(Format('the body still has its top border away from the wedge (got %d,%d,%d)',
+        [Px.red, Px.green, Px.blue]), (Px.blue > 180) and (Px.green < 120));
+      { And the wedge itself still carries the fill out past the body edge -- sampled at y=6,
+        not at the apex: the two slanted sides converge there, so the tip is mostly stroke. }
+      Px := Reread.GetPixel(112, 6);
+      AssertTrue(Format('the wedge is still filled (got %d,%d,%d)',
+        [Px.red, Px.green, Px.blue]), (Px.green > 180) and (Px.blue < 120));
+    finally
+      Reread.Free;
+    end;
+
+    { The SAME claim on a horizontal wedge. This is not redundancy: the side the wedge leaves
+      is the OPPOSITE of the side of the anchor the body sits on, so psvRight must produce a
+      pointer on the body's LEFT edge. A mapping that mixed the axes up would still look
+      plausible on psvBottom and be wrong here. }
+    Bmp.Canvas.Brush.Color := clRed;
+    Bmp.Canvas.FillRect(0, 0, 224, 128);
+    P.RenderTo(Bmp.Canvas, Rect(0, 0, 224, 128), psvRight, 64, 96);
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      { Strip is columns 0..7, body starts at x=8, border band is columns 8..11. }
+      Px := Reread.GetPixel(9, 64);
+      AssertTrue(Format('no border across the horizontal arrow base (got %d,%d,%d)',
+        [Px.red, Px.green, Px.blue]), (Px.green > 180) and (Px.blue < 120));
+      Px := Reread.GetPixel(9, 110);
+      AssertTrue(Format('the left border survives away from the wedge (got %d,%d,%d)',
+        [Px.red, Px.green, Px.blue]), (Px.blue > 180) and (Px.green < 120));
+      Px := Reread.GetPixel(6, 64);
+      AssertTrue(Format('the horizontal wedge is filled (got %d,%d,%d)',
+        [Px.red, Px.green, Px.blue]), (Px.green > 180) and (Px.blue < 120));
     finally
       Reread.Free;
     end;

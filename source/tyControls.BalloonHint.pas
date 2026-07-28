@@ -185,7 +185,8 @@ var
   ctx: TBGRACanvas2D;
   Lines: TStringList;
   bodyRect, contentRect: TRect;
-  cW, cH, ppi, fs, iconPx, padL, padT, padR, tx, lh, tipX, i: Integer;
+  cW, cH, ppi, fs, iconPx, padL, padT, padR, tx, lh, tipX, i, bw: Integer;
+  pside: TTyPointerSide;
   bodyCol, disc: TTyColor;
   glyph: string;
 begin
@@ -215,32 +216,30 @@ begin
     else
       bodyRect := Rect(0, 0, cW, cH - FPointerH);
 
-    // Body surface.
-    if tpBackground in S.Present then
-      P.FillBackground(bodyRect, S.Background, S.BorderRadius);
+    { Body and pointer are ONE closed path. Drawn as two shapes -- a rounded rect, then a
+      triangle on top of it -- the body's own border ran straight across the pointer's base,
+      so the wedge read as a grey sliver stuck onto a closed box instead of the balloon
+      pointing at anything. One outline has no interior edge to stroke, and the pointer's two
+      slanted sides pick up the border they never had.
 
-    // Pointer triangle, filled with the body color.
-    ctx.beginPath;
-    if FPlacement.Below then
+      Only a SOLID body can do this: the wedge is the body's fill carried past its edge, and a
+      gradient / image body has no one colour to carry out there. Such a theme keeps the old
+      two-step (and, as before, no wedge colour to speak of). }
+    bw := 0;
+    if (tpBorderColor in S.Present) and (S.BorderWidth > 0) then bw := S.BorderWidth;
+    if S.Background.Kind = tfkSolid then
     begin
-      ctx.moveTo(tipX, 0);
-      ctx.lineTo(tipX - FPointerH, FPointerH);
-      ctx.lineTo(tipX + FPointerH, FPointerH);
+      if FPlacement.Below then pside := tpsTop else pside := tpsBottom;
+      P.FillPointerShape(bodyRect, TyUniformCorners(S.BorderRadius), pside,
+        tipX, FPointerH, FPointerH, S.Background.Color, S.BorderColor, bw);
     end
     else
     begin
-      ctx.moveTo(tipX, cH);
-      ctx.lineTo(tipX - FPointerH, cH - FPointerH);
-      ctx.lineTo(tipX + FPointerH, cH - FPointerH);
+      if tpBackground in S.Present then
+        P.FillBackground(bodyRect, S.Background, S.BorderRadius);
+      if bw > 0 then
+        P.StrokeBorder(bodyRect, S.BorderRadius, bw, S.BorderColor);
     end;
-    ctx.closePath;
-    ctx.fillStyle(TyColorToBGRA(bodyCol));
-    ctx.fill;
-
-    // Body border (rounded rect). The pointer keeps the body color; on themes with
-    // a border the base line where the pointer meets the body is a minor cosmetic.
-    if (tpBorderColor in S.Present) and (S.BorderWidth > 0) then
-      P.StrokeBorder(bodyRect, S.BorderRadius, S.BorderWidth, S.BorderColor);
 
     // Content layout.
     padL := P.Scale(S.Padding.Left);

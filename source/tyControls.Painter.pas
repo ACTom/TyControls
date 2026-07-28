@@ -19,6 +19,11 @@ type
     // two colours and would not tint with the caller's single AColor.
     tgInfo, tgSuccess, tgWarning, tgError);
 
+  { Which side of a body a speech-balloon pointer leaves from. Named for the BODY's edge, so
+    tpsTop means the wedge stands above the body -- which is what a balloon ANCHORED BELOW its
+    target looks like. }
+  TTyPointerSide = (tpsTop, tpsBottom, tpsLeft, tpsRight);
+
   TTyPainter = class
   private
     FBmp: TBGRABitmap;
@@ -59,6 +64,30 @@ type
     procedure FillBackground(const ARect: TRect; const AFill: TTyFill; const ACorners: TTyCorners); overload;
     procedure StrokeBorder(const ARect: TRect; ARadiusLogical, AWidthLogical: Integer; AColor: TTyColor); overload;
     procedure StrokeBorder(const ARect: TRect; const ACorners: TTyCorners; AWidthLogical: Integer; AColor: TTyColor); overload;
+    { A rounded body that carries a triangular POINTER out of one of its sides, filled and
+      stroked as ONE closed path.
+
+      WHY this exists rather than a rect plus a triangle: drawn as two shapes, the body's own
+      border runs straight across the pointer's base, so the wedge reads as a separate sliver
+      stuck onto a closed box -- the seam TTyBalloonHint and TTyPopover both documented as a
+      known cosmetic. One path has no interior edge to stroke, and the pointer's two slanted
+      sides get the border they were missing.
+
+      ABody      the body, DEVICE px. The pointer stands OUTSIDE this rect.
+      ACorners   the body's corner radii, LOGICAL px (scaled here, as StrokeBorder does).
+      ATipPos    the apex ALONG the pointer's side, device px: x for tpsTop/tpsBottom, y for
+                 tpsLeft/tpsRight.
+      AHalfBase  half the pointer's base; AHeight how far the apex stands off the body edge.
+      ABorderWidthLogical <= 0 (or a fully transparent colour) fills only.
+
+      Fill and stroke are built from DIFFERENT rects, matching the rest of the painter: the
+      fill covers the body verbatim, the stroke rides an inset centreline (Left+w/2 ..
+      Right-1-w/2) exactly like StrokeBorder, so a bordered balloon lines up with every other
+      bordered control. The pointer is TRANSLATED with that inset, never rescaled, so its
+      slope is identical in both passes. }
+    procedure FillPointerShape(const ABody: TRect; const ACorners: TTyCorners;
+      ASide: TTyPointerSide; ATipPos, AHalfBase, AHeight: Integer;
+      AFillColor, ABorderColor: TTyColor; ABorderWidthLogical: Integer);
     { v3/B2: a crisp, square, two-tone 3D bevel. The top+left edges get ATLColor and the
       bottom+right get ABRColor (light/dark for outset; swapped for inset). Corners: the
       light L-shape wins the shared corners. AWidthLogical is the (logical-px) edge width. }
@@ -652,6 +681,98 @@ begin
     tfkNineSlice: NineSlice(ARect, AFill.ImagePath, AFill.SliceInsets, AFill.SliceRepeat);
     tfkImage: DrawImageFill(ARect, AFill.ImagePath, AFill.ImageMode, AFill.Blur);
   end;
+end;
+
+procedure TTyPainter.FillPointerShape(const ABody: TRect; const ACorners: TTyCorners;
+  ASide: TTyPointerSide; ATipPos, AHalfBase, AHeight: Integer;
+  AFillColor, ABorderColor: TTyColor; ABorderWidthLogical: Integer);
+var
+  ctx: TBGRACanvas2D;
+  w: Integer;
+  half: Single;
+
+  { Emit the closed outline into ctx: the body's four rounded corners, with the pointer
+    spliced into ASide's straight run. AInset shifts every edge inward by that much (0 for
+    the fill, half the line width for the stroke) and carries the pointer along with it. }
+  procedure BuildPath(AInset: Single);
+  var
+    l, t, r, b, tp: Single;
+    rTL, rTR, rBR, rBL, maxR: Integer;
+
+    { Clamp one corner radius so two corners on the same side can never overlap. }
+    function Corner(ALogical: Integer): Single;
+    begin
+      Result := TyClampRadiusPx(Scale(ALogical), Round(r - l), Round(b - t));
+    end;
+
+  begin
+    l := ABody.Left + AInset;
+    t := ABody.Top + AInset;
+    r := ABody.Right - 1 - AInset;
+    b := ABody.Bottom - 1 - AInset;
+    if (r <= l) or (b <= t) then Exit;
+    maxR := ACorners.TL;
+    if ACorners.TR > maxR then maxR := ACorners.TR;
+    if ACorners.BR > maxR then maxR := ACorners.BR;
+    if ACorners.BL > maxR then maxR := ACorners.BL;
+    rTL := Round(Corner(ACorners.TL)); rTR := Round(Corner(ACorners.TR));
+    rBR := Round(Corner(ACorners.BR)); rBL := Round(Corner(ACorners.BL));
+    if maxR = 0 then begin rTL := 0; rTR := 0; rBR := 0; rBL := 0; end;
+    tp := ATipPos;
+
+    ctx.beginPath;
+    { Top edge, left to right. }
+    ctx.moveTo(l + rTL, t);
+    if ASide = tpsTop then
+    begin
+      ctx.lineTo(tp - AHalfBase, t);
+      ctx.lineTo(tp, t - AHeight);
+      ctx.lineTo(tp + AHalfBase, t);
+    end;
+    if rTR > 0 then ctx.arcTo(r, t, r, t + rTR, rTR) else ctx.lineTo(r, t);
+    { Right edge, top to bottom. }
+    if ASide = tpsRight then
+    begin
+      ctx.lineTo(r, tp - AHalfBase);
+      ctx.lineTo(r + AHeight, tp);
+      ctx.lineTo(r, tp + AHalfBase);
+    end;
+    if rBR > 0 then ctx.arcTo(r, b, r - rBR, b, rBR) else ctx.lineTo(r, b);
+    { Bottom edge, right to left. }
+    if ASide = tpsBottom then
+    begin
+      ctx.lineTo(tp + AHalfBase, b);
+      ctx.lineTo(tp, b + AHeight);
+      ctx.lineTo(tp - AHalfBase, b);
+    end;
+    if rBL > 0 then ctx.arcTo(l, b, l, b - rBL, rBL) else ctx.lineTo(l, b);
+    { Left edge, bottom to top. }
+    if ASide = tpsLeft then
+    begin
+      ctx.lineTo(l, tp + AHalfBase);
+      ctx.lineTo(l - AHeight, tp);
+      ctx.lineTo(l, tp - AHalfBase);
+    end;
+    if rTL > 0 then ctx.arcTo(l, t, l + rTL, t, rTL) else ctx.lineTo(l, t);
+    ctx.closePath;
+  end;
+
+begin
+  if FBmp = nil then Exit;
+  ctx := FBmp.Canvas2D;
+  BuildPath(0);
+  ctx.fillStyle(TyColorToBGRA(AFillColor));
+  ctx.fill;
+
+  w := Scale(ABorderWidthLogical);
+  if (w <= 0) or (TyAlphaOf(ABorderColor) = 0) then Exit;
+  half := w / 2;
+  { The pointer rides the SAME inset as the body edge, so the wedge is translated inward, not
+    reshaped -- its two sides keep the slope the fill drew. }
+  BuildPath(half);
+  ctx.strokeStyle(TyColorToBGRA(ABorderColor));
+  ctx.lineWidth := w;
+  ctx.stroke;
 end;
 
 procedure TTyPainter.StrokeBorder(const ARect: TRect; ARadiusLogical, AWidthLogical: Integer; AColor: TTyColor);

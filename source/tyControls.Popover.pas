@@ -1117,8 +1117,9 @@ var
   S, tS: TTyStyleSet;
   R: TRect;
   Lay: TTyPopoverLayout;
-  ctx: TBGRACanvas2D;
   tip, b1, b2: TPoint;
+  pside: TTyPointerSide;
+  ptip, phalf, pdepth, bw: Integer;
   nm: string;
   sz, wt: Integer;
 begin
@@ -1146,42 +1147,52 @@ begin
       Exit;
     end;
 
-    // No shadow: the window is cut to the body's silhouette, so a drop shadow would be cut
-    // off with everything else outside it. Elevation is the OS's business for a top-level.
-    P.FillBackground(Lay.BodyRect, S.Background, TyEffectiveCorners(S));
-
     { The arrow is the body carried out past its own edge, so it takes the body's SOLID fill.
       A gradient / image / nine-slice body gets NO arrow: there is no one colour to carry out
       there, and inventing one is exactly what this library does not do. (The strip is still
       reserved, so nothing shifts — such a theme simply reads as a floating card. A theme that
       wants an arrow on a gradient popup should set ShowArrow off, or a solid TyPopover.)
-      Known cosmetic, shared with TTyBalloonHint: on a bordered theme the body's own border
-      line still runs across the arrow's base. Verify the look on a real machine. }
+
+      With an arrow, body and wedge are ONE path: drawn as two shapes the body's own border
+      ran straight across the wedge's base, so the arrow read as a separate sliver stuck onto
+      a closed box. One outline has no interior edge to stroke.
+
+      No shadow either way: the window is cut to this silhouette, so a drop shadow would be
+      cut off with everything else outside it. Elevation is the OS's business for a top-level. }
+    bw := 0;
+    if TyBorderVisible(S) then bw := S.BorderWidth;
     if (S.Background.Kind = tfkSolid) and TyPopoverArrowPoints(Lay, ASide, tip, b1, b2) then
     begin
-      ctx := P.Bitmap.Canvas2D;
-      ctx.beginPath;
-      ctx.moveTo(tip.X, tip.Y);
-      ctx.lineTo(b1.X, b1.Y);
-      ctx.lineTo(b2.X, b2.Y);
-      ctx.closePath;
-      ctx.fillStyle(TyColorToBGRA(S.Background.Color));
-      ctx.fill;
-      if TyBorderVisible(S) then
-      begin
-        // Only the two SLANTED sides: the base belongs to the body, whose own border draws it.
-        ctx.beginPath;
-        ctx.moveTo(b1.X, b1.Y);
-        ctx.lineTo(tip.X, tip.Y);
-        ctx.lineTo(b2.X, b2.Y);
-        ctx.strokeStyle(TyColorToBGRA(S.BorderColor));
-        ctx.lineWidth := P.Scale(S.BorderWidth);
-        ctx.stroke;
+      { ASide names the side OF THE ANCHOR the body sits on, so the wedge leaves the OPPOSITE
+        edge of the body: a popup ABOVE its anchor points DOWN. }
+      case ASide of
+        psvTop:    pside := tpsBottom;
+        psvBottom: pside := tpsTop;
+        psvLeft:   pside := tpsRight;
+      else
+        pside := tpsLeft;
       end;
+      if pside in [tpsTop, tpsBottom] then
+      begin
+        ptip := tip.X;
+        phalf := (b2.X - b1.X) div 2;
+        pdepth := Abs(tip.Y - b1.Y);
+      end
+      else
+      begin
+        ptip := tip.Y;
+        phalf := (b2.Y - b1.Y) div 2;
+        pdepth := Abs(tip.X - b1.X);
+      end;
+      P.FillPointerShape(Lay.BodyRect, TyEffectiveCorners(S), pside, ptip, phalf, pdepth,
+        S.Background.Color, S.BorderColor, bw);
+    end
+    else
+    begin
+      P.FillBackground(Lay.BodyRect, S.Background, TyEffectiveCorners(S));
+      if bw > 0 then
+        P.StrokeBorder(Lay.BodyRect, TyEffectiveCorners(S), bw, S.BorderColor);
     end;
-
-    if TyBorderVisible(S) then
-      P.StrokeBorder(Lay.BodyRect, TyEffectiveCorners(S), S.BorderWidth, S.BorderColor);
 
     if Lay.TitleRect.Right > Lay.TitleRect.Left then
     begin
