@@ -44,6 +44,9 @@ begin
     '  --backstage-row-height: 59px;' + LineEnding +
     '  --backstage-sidebar-width: 228px;' + LineEnding +
     '  --backstage-text-inset: 64px;' + LineEnding +
+    { Matches --popover-arrow-size: the hint balloon and the popover put the same wedge on
+      screen, often in the same UI, and a reader cannot see why they would differ. }
+    '  --balloon-arrow-size: 10px;' + LineEnding +
     '  --badge-dot-size: 10px;' + LineEnding +
     '  --badge-inset: 4px;' + LineEnding +
     '  --breadcrumb-separator-gap: 4px;' + LineEnding +

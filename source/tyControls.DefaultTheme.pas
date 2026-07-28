@@ -155,6 +155,7 @@ begin
     '  --backstage-row-height: 42px;' + LineEnding +
     '  --backstage-sidebar-width: 190px;' + LineEnding +
     '  --backstage-text-inset: 40px;' + LineEnding +
+    '  --balloon-arrow-size: 8px;' + LineEnding +
     '  --badge-dot-size: 8px;' + LineEnding +
     '  --badge-inset: 2px;' + LineEnding +
     '  --breadcrumb-separator-gap: 2px;' + LineEnding +

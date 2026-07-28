@@ -122,6 +122,7 @@
   --backstage-row-height: 42px;
   --backstage-sidebar-width: 190px;
   --backstage-text-inset: 40px;
+  --balloon-arrow-size: 8px;
   --badge-dot-size: 8px;
   --badge-inset: 2px;
   --breadcrumb-separator-gap: 2px;

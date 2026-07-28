@@ -61,6 +61,10 @@ type
     function ActiveModel: TTyStyleModel;
     { Measure the body content (icon + title + description) in device px at APPI. }
     procedure MeasureBody(APPI: Integer; out ABodyW, ABodyH: Integer);
+  protected
+    { The wedge's half-base AND height in LOGICAL px, from the active theme. Protected so a
+      headless test can read what a theme resolved to without putting a window up. }
+    function ArrowSizeLogical: Integer;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -86,13 +90,21 @@ type
 function TyBalloonPlacement(const ATargetScreen: TRect;
   ABodyW, ABodyH, APointerH, AScreenW, AScreenH: Integer): TTyBalloonPlacement;
 
+const
+  { The pointer's HALF-BASE and its height in one number, logical px -- so the wedge is always
+    a right-angled 45 degree one, which is what makes it read as the body's own corner pulled
+    out. This is only the FALLBACK for the metric token beside it; a theme retunes it, and the
+    modern density pack already does (matching --popover-arrow-size, since the two wedges sit
+    side by side in the same UI and a reader cannot see why they would differ). }
+  TyBalloonArrowSize    = 8;
+  TyBalloonArrowSizeVar = '--balloon-arrow-size';
+
 implementation
 
 uses
   Math, BGRABitmapTypes, BGRACanvas2D, tyControls.QtWS;
 
 const
-  CPointerLogical = 8;   // pointer half-base / height, logical px
   CGapLogical     = 3;   // gap between title and description, logical px
   CIconLogical    = 16;  // icon box, logical px
 
@@ -381,6 +393,19 @@ begin
     Result := TyDefaultController.Model;
 end;
 
+function TTyBalloonHint.ArrowSizeLogical: Integer;
+begin
+  { Read from the controller that MEASURED this balloon, not from the default one: a hint
+    wired to its own controller would otherwise size its wedge off a different theme than the
+    body it hangs on. Negative is meaningless -- a theme that sets one gets no wedge, not an
+    inverted one. }
+  if FController <> nil then
+    Result := FController.Metric(TyBalloonArrowSizeVar, TyBalloonArrowSize)
+  else
+    Result := TyDefaultController.Metric(TyBalloonArrowSizeVar, TyBalloonArrowSize);
+  if Result < 0 then Result := 0;
+end;
+
 procedure TTyBalloonHint.MeasureBody(APPI: Integer; out ABodyW, ABodyH: Integer);
 var
   S: TTyStyleSet;
@@ -453,7 +478,7 @@ begin
 
   ppi := Screen.PixelsPerInch; if ppi <= 0 then ppi := 96;
   MeasureBody(ppi, bodyW, bodyH);
-  pointerPx := MulDiv(CPointerLogical, ppi, 96);
+  pointerPx := MulDiv(ArrowSizeLogical, ppi, 96);
   FWin.FPointerH := pointerPx;
 
   pl := TyBalloonPlacement(ATargetScreen, bodyW, bodyH, pointerPx,
