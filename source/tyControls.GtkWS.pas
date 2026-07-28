@@ -38,6 +38,29 @@ function TyGtkInstallIme(AControl: TWinControl; AOnCommit: TTyImeCommitEvent;
   only composes while focused. Safe on nil / non-GTK handles / off GTK2. }
 procedure TyGtkImeSetFocus(AHandle: TObject; AFocused: Boolean);
 
+{ The FULL input-method commit the GTK3 backend just delivered, when the string a control
+  received through UTF8KeyPress was a truncated copy of it; '' otherwise (including on every
+  non-GTK3 build, so the call site needs no IFDEF).
+
+  WHY this exists. LCL-GTK3 already runs a working IM: its commit handler puts the whole
+  composed string into TGtk3WidgetSet.IMCommitStr, a plain string. Both of the paths that
+  hand it to a control then copy it into a TUTF8Char -- which is String[7]. A CJK codepoint
+  is three bytes, so nine bytes of three characters arrive as two characters and an orphan
+  lead byte. That is the entire "only two characters commit" defect; native TEdit escapes it
+  because a GtkEntry does its own IM internally and never crosses that boundary.
+
+  So the fix is not to install another IM context, the way the GTK2 helper above does. That
+  is not even possible here: gtk_key_snooper_install is absent from every Lazarus GTK3
+  binding, and a key-press-event handler would sit BEHIND the backend's own, which already
+  returns True for each key its IM consumed. The untruncated string is simply still sitting
+  in IMCommitStr when the control's UTF8KeyPress runs, so the control reads it there.
+
+  ATruncated is what UTF8KeyPress was handed. A result is returned only when the pending
+  string is strictly longer AND starts with it -- the backend does not always clear
+  IMCommitStr (it skips the clear while Ctrl is held without Alt), so a stale value must not
+  be mistaken for this keystroke's. The field is consumed on a hit so it cannot be read twice. }
+function TyGtkTakeImeCommit(const ATruncated: string): string;
+
 { True when this is a GTK3 build running on a Wayland compositor. False on GTK2 (which has no
   Wayland backend at all) and off GTK entirely.
 
@@ -224,6 +247,11 @@ begin
   Result := False;   // GTK2 has no Wayland backend: an LCLGTK2 build is always X11.
 end;
 
+function TyGtkTakeImeCommit(const ATruncated: string): string;
+begin
+  Result := '';   // GTK2 delivers full commits through TyGtkInstallIme's own context.
+end;
+
 {$ELSE}
 {$IFDEF LCLGTK3}
 
@@ -309,6 +337,27 @@ begin
   Result := (GTK3WidgetSet <> nil) and GTK3WidgetSet.IsWayland;
 end;
 
+function TyGtkTakeImeCommit(const ATruncated: string): string;
+var
+  pending: string;
+begin
+  Result := '';
+  if GTK3WidgetSet = nil then Exit;
+  { Copy out first: the backend passes this same field BY REFERENCE into DeliverIMCommit, so
+    blanking the property while a caller still holds a reference to it would cut the string
+    out from under them. }
+  pending := GTK3WidgetSet.IMCommitStr;
+  if pending = '' then Exit;
+  { Staleness guard, both halves needed. Longer: equal length means nothing was truncated and
+    the control already has the whole thing. Prefix: a left-over value from an earlier key
+    (the backend skips its clear while Ctrl is held without Alt) would not begin with what
+    THIS keystroke delivered. }
+  if Length(pending) <= Length(ATruncated) then Exit;
+  if Copy(pending, 1, Length(ATruncated)) <> ATruncated then Exit;
+  GTK3WidgetSet.IMCommitStr := '';   // consumed: never let the same commit arrive twice
+  Result := pending;
+end;
+
 {$ELSE}
 
 function TyGtkStartSystemMove(AForm: TCustomForm): Boolean;
@@ -330,6 +379,11 @@ end;
 function TyGtkIsWayland: Boolean;
 begin
   Result := False;   // not a GTK build: Wayland is not reachable from here.
+end;
+
+function TyGtkTakeImeCommit(const ATruncated: string): string;
+begin
+  Result := '';   // not a GTK3 build: nothing truncated a commit here.
 end;
 
 {$ENDIF}

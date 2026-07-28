@@ -2893,9 +2893,22 @@ end;
 // ---- Input handlers ----
 
 procedure TTyMemo.UTF8KeyPress(var UTF8Key: TUTF8Char);
+var
+  imeFull: string;
 begin
   if not Enabled then Exit;          // v1.5 policy: ignore input when disabled
   if FReadOnly then Exit;            // ReadOnly: block printable typing
+  { GTK3: the backend truncated this commit into a TUTF8Char on its way here. The whole
+    string is still pending in the widgetset, so take it and insert THAT instead. Returns ''
+    on every other widgetset and whenever nothing was truncated, so the normal path below is
+    untouched. }
+  imeFull := TyGtkTakeImeCommit(UTF8Key);
+  if imeFull <> '' then
+  begin
+    HandleImeCommit(imeFull);
+    UTF8Key := '';   // consumed: stop the truncated copy being inserted as well
+    Exit;
+  end;
   inherited UTF8KeyPress(UTF8Key);
   // Printable codepoints only; control chars (Enter/Tab/etc.) are handled in
   // KeyDown or ignored here.

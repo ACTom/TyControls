@@ -1283,8 +1283,21 @@ begin
 end;
 
 procedure TTyEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
+var
+  imeFull: string;
 begin
   if not Enabled then Exit;
+  { GTK3: the backend truncated this commit into a TUTF8Char on its way here. The whole
+    string is still pending in the widgetset, so take it and insert THAT instead. Returns ''
+    on every other widgetset and whenever nothing was truncated, so the normal path below is
+    untouched. }
+  imeFull := TyGtkTakeImeCommit(UTF8Key);
+  if imeFull <> '' then
+  begin
+    HandleImeCommit(imeFull);
+    UTF8Key := '';   // consumed: stop the truncated copy being inserted as well
+    Exit;
+  end;
   inherited UTF8KeyPress(UTF8Key);
   InjectKey(UTF8Key);
 end;
