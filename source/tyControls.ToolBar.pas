@@ -166,6 +166,7 @@ end;
 
 procedure TTyToolBar.AlignControls(AControl: TControl; var ARect: TRect);
 var
+  ih: Integer;
   i, n, rows: Integer;
   sizes: array of TSize;
   rects: TTyRectArray;
@@ -191,10 +192,25 @@ begin
       sizes[i].cx := list[i].Width;
       sizes[i].cy := list[i].Height;  // cy is not used by TyToolbarLayout (AButtonHeight governs row height)
     end;
+    { ButtonHeight is what the bar ASKS for; a child may refuse to be that short. Controls
+      whose caption decides their size publish Constraints.MinHeight, and SetBounds clamps to
+      it -- so a row sized purely from ButtonHeight left the child overflowing DOWNWARD out
+      of its slot: it covered the bar's bottom border and stopped lining up with the children
+      that did fit. Take the tallest floor in the row first, then lay out against that. }
     bh := GetButtonHeight;
+    for i := 0 to n - 1 do
+      if list[i].Constraints.MinHeight > bh then bh := list[i].Constraints.MinHeight;
     rects := TyToolbarLayout(sizes, ClientWidth, FIndent, FButtonSpacing, bh, FWrapable, rows);
     for i := 0 to n - 1 do
-      list[i].SetBounds(rects[i].Left, rects[i].Top, list[i].Width, bh);
+    begin
+      { Centre each child in the row. A child SHORTER than the row (a separator, a combo that
+        is happy at 24 while a CJK caption needs 29) must sit on the row's centre line, or the
+        bar reads as ragged -- which is the second half of the same report. }
+      ih := list[i].Height;
+      if ih > bh then ih := bh;
+      if list[i].Constraints.MinHeight > ih then ih := list[i].Constraints.MinHeight;
+      list[i].SetBounds(rects[i].Left, rects[i].Top + (bh - ih) div 2, list[i].Width, ih);
+    end;
     // grow the bar to fit the rows when alTop/alBottom
     if (Align in [alTop, alBottom]) and (rows > 0) then
     begin

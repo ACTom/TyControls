@@ -1142,8 +1142,6 @@ object DemoMainForm: TDemoMainForm
     end
   end
   object TyController: TTyStyleController
-    ThemeName = 'default'
-    Mode = 'light'
     Left = 16
     Top = 16
   end

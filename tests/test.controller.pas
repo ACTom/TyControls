@@ -3,7 +3,7 @@ unit test.controller;
 interface
 uses
   Classes, SysUtils, Controls, fpcunit, testregistry,
-  tyControls.Types, tyControls.Controller, tyControls.Base;
+  tyControls.Types, tyControls.Controller, tyControls.Base, tyControls.ThemeRegistry;
 type
   { Minimal TTyCustomControl descendant that counts Invalidate calls }
   TCountingControl = class(TTyCustomControl)
@@ -17,6 +17,7 @@ type
   TControllerTest = class(TTestCase)
   published
     procedure TestLoadThemeCssResolves;
+    procedure TestThemeNameRetriesAfterAFailedResolve;
     procedure TestDefaultControllerIsSingleton;
     procedure TestDefaultControlRegisteredForHotReload;
     procedure TestFreeControllerFirstNocrash;
@@ -137,6 +138,43 @@ begin
   finally
     ctl.Free;
     ctrl.Free;
+  end;
+end;
+
+{ A .lfm sets ThemeName during STREAMING, which runs before the form's OnCreate -- so before
+  an app has had a chance to register its themes. The name was recorded regardless, and the
+  next attempt (the app's own ApplyBuiltin('default') in OnCreate, with the themes now
+  registered) early-outed on "same name" and never loaded anything. The model stayed on the
+  base layer permanently, which is single-mode: the demo's Dark button did nothing under
+  `default`, and only started working once a DIFFERENT skin was picked, because a different
+  name did not hit the early-out.
+
+  So: re-assigning the same name must RETRY while the previous attempt did not resolve. }
+procedure TControllerTest.TestThemeNameRetriesAfterAFailedResolve;
+const
+  CName = 'ty-test-late-registered';
+var
+  c: TTyStyleController;
+  before, after_: TTyColor;
+begin
+  TyUnregisterTheme(CName);            // make sure it is genuinely unknown first
+  c := TTyStyleController.Create(nil);
+  try
+    { Streaming order: the name is set while nothing can resolve it. }
+    c.ThemeName := CName;
+    before := c.Model.ResolveStyle('TyForm', '', []).Background.Color;
+
+    { What the app does next in its OnCreate -- register, then set the SAME name. This is the
+      assignment the early-out used to swallow. }
+    TyRegisterThemeCss(CName, 'TyForm { background: #123456; }');
+    c.ThemeName := CName;
+    after_ := c.Model.ResolveStyle('TyForm', '', []).Background.Color;
+
+    AssertTrue('the retry actually loaded the theme', after_ <> before);
+    AssertEquals('and it is the theme we registered', $FF123456, after_);
+  finally
+    c.Free;
+    TyUnregisterTheme(CName);
   end;
 end;
 

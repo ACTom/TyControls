@@ -31,6 +31,13 @@ type
   TTyStyleController = class(TTyComponent)
   private
     FModel: TTyStyleModel;
+    { False while FThemeName names a theme that could not be RESOLVED yet. A .lfm sets
+      ThemeName during streaming, which runs before the form's OnCreate — so before an app
+      has called TyRegisterBuiltinThemes. The name was recorded anyway, and the next attempt
+      (ApplyBuiltin('default') in OnCreate, with the themes now registered) early-outed on
+      "same name", leaving the model on the base layer for good: the demo's Dark button did
+      nothing under `default`, and only started working once a DIFFERENT skin was picked. }
+    FThemeApplied: Boolean;
     FThemeFile: string;
     FThemeName: string;
     FControls: TFPList;
@@ -231,8 +238,11 @@ procedure TTyStyleController.SetThemeName(const AValue: string);
 var
   src, css: string;
 begin
-  if FThemeName = AValue then Exit;
+  { Re-assigning the SAME name is a no-op only if that name was actually applied; see
+    FThemeApplied. }
+  if (FThemeName = AValue) and FThemeApplied then Exit;
   FThemeName := AValue;
+  FThemeApplied := False;
   FThemeFile := '';   // ThemeFile/ThemeName are mutually exclusive sources for layer-1
   // Switching to a named theme drops the file source: disarm the hot-reload watch
   // (nothing to watch — FThemeFile is now empty).
@@ -244,6 +254,7 @@ begin
     // from the string + bump ThemeVersion. No file -> no hot-reload watch.
     FModel.LoadFromCss(css);
     ApplyDensityPack;
+    FThemeApplied := True;
     Changed;
   end
   else if TyResolveTheme(AValue, src) and (src <> '') and FileExists(src) then
@@ -252,6 +263,7 @@ begin
     // ThemeVersion). Never additive: switching themes must not stack residual rules.
     FModel.LoadFromFile(src);
     ApplyDensityPack;
+    FThemeApplied := True;
     Changed;
   end;
 end;
