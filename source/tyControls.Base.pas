@@ -471,7 +471,8 @@ end;
 function TyResolveParentBg(AChild: TControl; out AColor: TTyColor): Boolean;
 var
   st: TTyStyleSet;
-  r, g, b: Byte;
+  r, g, b, a: Byte;
+  back: TTyColor;
   tb: ITyThemedBackground;
 begin
   Result := False;
@@ -490,6 +491,25 @@ begin
       tfkSolid:
         if TyAlphaOf(st.Background.Color) = 0 then
           Exit(TyResolveParentBg(AChild.Parent, AColor))
+        else if TyAlphaOf(st.Background.Color) < 255 then
+        begin
+          { A PARTLY transparent container shows the backdrop through itself, so the opaque
+            colour this function promises is that container COMPOSITED OVER what is behind
+            it. Returning its raw value instead breaks the promise in a way that only shows
+            up on a widgetset which never clears a damaged region: the child fills with a
+            non-opaque "background", its finished bitmap is therefore non-opaque, and every
+            repaint composites onto the previous one instead of replacing it. That is the
+            GTK3 smearing on exactly the controls that DO call TyFillParentBg. Throwing the
+            alpha away instead would keep it opaque but at the wrong hue. }
+          if not TyResolveParentBg(AChild.Parent, back) then
+            back := TyRGB(255, 255, 255);
+          a := TyAlphaOf(st.Background.Color);
+          AColor := TyRGB(
+            (TyRedOf(st.Background.Color)   * a + TyRedOf(back)   * (255 - a)) div 255,
+            (TyGreenOf(st.Background.Color) * a + TyGreenOf(back) * (255 - a)) div 255,
+            (TyBlueOf(st.Background.Color)  * a + TyBlueOf(back)  * (255 - a)) div 255);
+          Result := True;
+        end
         else
         begin AColor := st.Background.Color;  Result := True; end;
       tfkLinearGradient: begin AColor := st.Background.GradTo; Result := True; end; // representative

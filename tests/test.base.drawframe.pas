@@ -5,7 +5,7 @@ uses
   Classes, SysUtils, Types, Graphics, BGRABitmap, BGRABitmapTypes,
   fpcunit, testregistry,
   tyControls.Types, tyControls.Base, tyControls.Painter,
-  tyControls.Form, tyControls.Button;
+  tyControls.Form, tyControls.Button, tyControls.Panel, tyControls.Controller;
 type
   TDrawFrameProbe = class(TTyCustomControl)
   protected
@@ -23,6 +23,7 @@ type
     procedure TestPerCornerBackgroundViaDrawFrame;
     procedure TestFocusRingDrawnWhenOutlinePresent;
     procedure TestFormChildResolvesThemedParentBg;
+    procedure TestPartlyTransparentParentBgIsCompositedOpaque;
   end;
 implementation
 
@@ -388,6 +389,46 @@ begin
     AssertTrue('not the raw red form.Color', TyRedOf(c) < 250);
   finally
     form.Free;
+  end;
+end;
+
+procedure TDrawFrameTest.TestPartlyTransparentParentBgIsCompositedOpaque;
+{ TyResolveParentBg promises the OPAQUE background behind a child. A container whose own
+  background is PARTLY transparent shows the backdrop through itself, so the honest answer is
+  that container composited over what is behind it -- not its raw half-transparent value.
+
+  Why it matters beyond tidiness: a child that fills with a non-opaque "background" produces a
+  non-opaque bitmap, and on a widgetset that never clears a damaged region (GTK3 clears
+  nothing at all) every repaint then composites onto the previous one instead of replacing it.
+  That is the smearing seen on exactly the controls that DO fill their parent background.
+
+  Fixture: a panel at 50% black over a white form. The composite must be mid-grey and fully
+  opaque -- not black (alpha thrown away) and not half-transparent (raw value). }
+var
+  form: TTyForm;
+  panel: TTyPanel;
+  btn: TTyButton;
+  c: TTyColor;
+begin
+  form := TTyForm.CreateNew(nil);
+  try
+    { The user layer is SHARED, so it must be put back -- a TyPanel rule left behind here
+      re-coloured the panel suite's fixture and broke an unrelated assertion. }
+    TyDefaultController.LoadThemeCss(
+      'TyForm { background: #FFFFFF; }' +
+      'TyPanel { background: rgba(0, 0, 0, 0.5); }');
+    panel := TTyPanel.Create(form);
+    panel.Parent := form;
+    btn := TTyButton.Create(panel);
+    btn.Parent := panel;
+    c := 0;
+    AssertTrue('resolved a parent bg', TyResolveParentBg(btn, c));
+    AssertEquals('fully opaque', 255, TyAlphaOf(c));
+    AssertTrue(Format('composited toward mid-grey, not black (got %d)', [TyRedOf(c)]),
+      (TyRedOf(c) > 100) and (TyRedOf(c) < 155));
+  finally
+    form.Free;
+    TyDefaultController.LoadThemeCss('');   // drop the user layer; back to the base theme
   end;
 end;
 

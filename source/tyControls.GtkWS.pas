@@ -267,6 +267,18 @@ begin
   if W = nil then Exit;
   Top := gtk_widget_get_toplevel(W);
   if (Top = nil) or (not Gtk3IsGtkWindow(PGObject(Top))) then Exit;
+  { Gtk3IsGtkWindow only proves the GType is GtkWindow, which GTK_WINDOW_POPUP satisfies just
+    as well as GTK_WINDOW_TOPLEVEL -- and a POPUP has no move request to make. On X11 it is
+    override-redirect, so the WM never acts on _NET_WM_MOVERESIZE for a window it does not
+    manage; on Wayland a popup with a transient parent is an xdg_popup, which has no move
+    protocol at all. begin_move_drag is silently a no-op on either.
+
+    Reporting True there is worse than doing nothing: the caller reads it as "the system took
+    the drag" and stands down its own per-mouse-move fallback, so the window stops moving
+    altogether. That is exactly why dialogs could not be dragged while the main window could
+    -- LCL-GTK3 gives every borderless form a transient parent when one is active, and only
+    the FIRST form (created when there is no active window yet) escapes it. }
+  if gtk_window_get_window_type(PGtkWindow(Top)) <> GTK_WINDOW_TOPLEVEL then Exit;
   P := Mouse.CursorPos;   // LCL screen coords == root-window coords
   gtk_window_begin_move_drag(PGtkWindow(Top), 1, P.X, P.Y, gtk_get_current_event_time());
   Result := True;
