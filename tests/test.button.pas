@@ -27,6 +27,8 @@ type
     function CallResolveBadge(out AText: string): Boolean;
     // Expose the protected preferred-size calculation (what AutoSize resizes to).
     procedure CallPreferred(out AW, AH: Integer);
+    // Expose the protected caption measurement the size floor is derived from.
+    procedure CallMeasure(APPI: Integer; out AW, AH: Integer);
   end;
 
   TButtonTest = class(TTestCase)
@@ -60,8 +62,16 @@ type
     procedure TestAutoSizeRefitsWhenTheCaptionGrows;
     procedure TestAutoSizeSurvivesAHeightPinningParent;
     procedure TestAutoSizeRefitsOnThemeChange;
+    procedure TestMinimumHeightFitsTheCaption;
+    procedure TestMinimumSurvivesAHeightPinningParent;
+    procedure TestSmallerFontLowersTheMinimum;
   end;
 implementation
+
+procedure TTyButtonAccess.CallMeasure(APPI: Integer; out AW, AH: Integer);
+begin
+  MeasureCaption(APPI, AW, AH);
+end;
 
 procedure TTyButtonAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
@@ -645,6 +655,98 @@ begin
     end;
   finally
     Ctl.Free;
+  end;
+end;
+
+{ A hand-set Height and the theme's --control-height are REQUESTS. What is actually possible
+  is decided by the font and the padding, and only the control knows both -- which is why the
+  floor lives here and not in a paint-time clip. On Linux/Qt6 the same 9pt caption resolves a
+  CJK fallback face whose ink is taller than Windows', and a 24px button silently ate the
+  bottom of 新建/打开. }
+procedure TButtonTest.TestMinimumHeightFitsTheCaption;
+var
+  F: TForm;
+  B: TTyButtonAccess;
+  tw, th: Integer;
+begin
+  F := TForm.CreateNew(nil);
+  try
+    B := TTyButtonAccess.Create(F);
+    B.Parent := F;
+    B.Caption := '新建';
+    B.CallMeasure(96, tw, th);
+
+    AssertTrue('the height floor covers the measured text', B.Constraints.MinHeight >= th);
+    AssertTrue('the width floor covers it too', B.Constraints.MinWidth >= tw);
+
+    { Ask for something impossible; the clamp must win. }
+    B.Height := 4;
+    B.Width := 4;
+    AssertTrue('a too-short request is clamped up', B.Height >= th);
+    AssertTrue('a too-narrow request is clamped up', B.Width >= tw);
+  finally
+    F.Free;
+  end;
+end;
+
+{ The floor must NOT reopen the fight that CalculatePreferredSize's height once started: a
+  button on a TTyToolBar proposed its own height, the bar pinned its ButtonHeight back, and
+  LCL aborted with "ChangeBounds loop detected" -- the demo died at startup. Constraints
+  clamp inside SetBounds with no negotiation, so the bar keeps owning the height whenever the
+  height it asks for is possible at all. Reaching the end of this test IS the assertion. }
+procedure TButtonTest.TestMinimumSurvivesAHeightPinningParent;
+var
+  F: TForm;
+  Bar: TTyToolBar;
+  B: TTyButton;
+begin
+  F := TForm.CreateNew(nil);
+  try
+    Bar := TTyToolBar.Create(F);
+    Bar.Parent := F;
+    Bar.ButtonHeight := 40;            // comfortably above any caption's needs
+    B := TTyButton.Create(Bar);
+    B.Parent := Bar;
+    B.Caption := '新建';
+    B.AutoSize := True;
+    Bar.ButtonHeight := 41;            // a loop would abort the process here
+    AssertTrue('the bar asks for a height the floor can honour',
+      B.Constraints.MinHeight <= 40);
+  finally
+    F.Free;
+  end;
+end;
+
+{ The floor is DERIVED, not a wall: shrink the font and the padding and the minimum shrinks
+  with them. That is what makes "override the CSS if you want a smaller button" a coherent
+  answer instead of a refusal. }
+procedure TButtonTest.TestSmallerFontLowersTheMinimum;
+var
+  F: TForm;
+  C: TTyStyleController;
+  B: TTyButton;
+  big, small: Integer;
+begin
+  F := TForm.CreateNew(nil);
+  C := TTyStyleController.Create(nil);
+  try
+    C.LoadThemeCss('TyButton { font-size: 20px; padding: 8px; }');
+    B := TTyButton.Create(F);
+    B.Parent := F;
+    B.Controller := C;
+    B.Caption := '新建';
+    B.Invalidate;                      // the seam a theme switch arrives on
+    big := B.Constraints.MinHeight;
+
+    C.LoadThemeCss('TyButton { font-size: 8px; padding: 1px; }');
+    B.Invalidate;
+    small := B.Constraints.MinHeight;
+
+    AssertTrue(Format('a smaller font+padding lowers the floor (%d -> %d)', [big, small]),
+      small < big);
+  finally
+    C.Free;
+    F.Free;
   end;
 end;
 

@@ -68,6 +68,15 @@ type
       WithThemeSpace: Boolean); override;
     { The caption's drawn size in DEVICE px at APPI, mnemonic markers removed. }
     procedure MeasureCaption(APPI: Integer; out AWidth, AHeight: Integer);
+    { Clamp the control so it can never be smaller than the text it must draw. The theme's
+      --control-height and a hand-set Height are REQUESTS; the font and the padding decide
+      what is actually possible, and only the control knows both.
+
+      Constraints, deliberately, and NOT CalculatePreferredSize's height: proposing a height
+      makes the control negotiate with its parent, and a button on a TTyToolBar bounced
+      against the bar's ButtonHeight until LCL aborted with "ChangeBounds loop detected".
+      Constraints clamp inside SetBounds instead, with no negotiation. }
+    procedure UpdateSizeConstraints;
     { Caption changes at runtime route here (CM_TEXTCHANGED); with AutoSize the button must
       re-measure to the new text (mirrors TTyTag / TTyLabel). }
     procedure TextChanged; override;
@@ -545,9 +554,26 @@ begin
   end;
 end;
 
+procedure TTyButton.UpdateSizeConstraints;
+var
+  S: TTyStyleSet;
+  ppi, tw, th, padW, padH: Integer;
+begin
+  if csDestroying in ComponentState then Exit;
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  S := CurrentStyle;
+  MeasureCaption(ppi, tw, th);
+  padW := MulDiv(S.Padding.Left + S.Padding.Right, ppi, 96);
+  padH := MulDiv(S.Padding.Top + S.Padding.Bottom, ppi, 96);
+  Constraints.MinWidth  := tw + padW;
+  Constraints.MinHeight := th + padH;
+end;
+
 procedure TTyButton.TextChanged;
 begin
   inherited TextChanged;
+  UpdateSizeConstraints;
   // The new caption needs a different width, so an auto-sized button must re-fit.
   if AutoSize then
   begin
@@ -567,12 +593,17 @@ begin
     demo's tool-bar buttons did when the skin was switched to antdesign.
     TTyBadge re-measures from its own Invalidate override for the same reason.
     FRefitting guards the re-entry: AdjustSize -> SetBounds -> Invalidate would recurse. }
-  if AutoSize and not FRefitting and not (csDestroying in ComponentState) then
+  if not FRefitting and not (csDestroying in ComponentState) then
   begin
     FRefitting := True;
     try
-      InvalidatePreferredSize;
-      AdjustSize;
+      { The theme decides the font and the padding, so a theme switch moves the floor too. }
+      UpdateSizeConstraints;
+      if AutoSize then
+      begin
+        InvalidatePreferredSize;
+        AdjustSize;
+      end;
     finally
       FRefitting := False;
     end;
