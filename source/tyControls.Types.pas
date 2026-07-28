@@ -134,6 +134,14 @@ const
   TyBadgeMinSizeVar = '--badge-min-size';
   TyBadgeDotSizeVar = '--badge-dot-size';
 
+  // The line box a MULTI-LINE caption is laid out on, logical px. There is deliberately no
+  // fallback constant beside it: the default is the FONT's own line box, which only the
+  // measuring canvas knows, so the resolver returns 0 for "unset" and each consumer asks the
+  // font. Any extra leading over the font's own is a visual value and therefore the theme's
+  // to give -- hard-coding one here would be exactly the kind of value a skin cannot reach.
+  // Resolve it with TyLineHeight(ActiveController) (tyControls.Controller).
+  TyLineHeightVar   = '--line-height';
+
 function TyRGB(R, G, B: Byte): TTyColor;
 function TyRGBA(R, G, B, A: Byte): TTyColor;
 function TyAlphaOf(c: TTyColor): Byte;

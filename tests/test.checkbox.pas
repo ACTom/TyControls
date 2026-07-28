@@ -4,7 +4,8 @@ interface
 uses
   Classes, SysUtils, StdCtrls, TypInfo, fpcunit, testregistry, Forms, Controls, Graphics, LCLType,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Controller, tyControls.Base, tyControls.CheckBox;
+  tyControls.Types, tyControls.Controller, tyControls.Base, tyControls.CheckBox,
+  tyControls.ToolBar;
 type
   TTyCheckBoxAccess = class(TTyCheckBox)
   public
@@ -16,11 +17,14 @@ type
       auto-size while the parent form has no handle, and the headless runner never
       realises one. }
     procedure CallPreferred(out AW, AH: Integer);
+    { Expose the protected caption measurement the size floor is derived from. }
+    procedure CallMeasure(APPI: Integer; out AW, AH: Integer);
   end;
 
   TTyRadioAccess = class(TTyRadioButton)
   public
     procedure CallPreferred(out AW, AH: Integer);
+    procedure CallMeasure(APPI: Integer; out AW, AH: Integer);
   end;
 
   TCheckBoxFontAccess = class(TTyCheckBox)
@@ -90,6 +94,23 @@ type
     procedure TestRadioUsesItsOwnIndicatorMetrics;
     procedure TestRadioPreferredHeightIsAlwaysZero;
   end;
+
+  { A hand-set Height and the theme's --control-height are REQUESTS; what is actually
+    possible is decided by the font, the padding and the indicator size, and only the control
+    knows all three. On Linux/Qt6 the same 9pt CJK caption resolves a fallback face whose ink
+    is taller than Windows', and RenderTo draws the caption tlCenter WITH clipping — so a box
+    shorter than the ink loses the BOTTOM of it, which is exactly what the demo's toolbar did
+    to 新建/打开. These cover the floor the control publishes so that cannot happen. }
+  TCheckBoxSizeFloorTest = class(TTestCase)
+  published
+    procedure TestMinimumHeightFitsTheCaption;
+    procedure TestMinimumWidthIsThePreferredWidth;
+    procedure TestMinimumCoversTheIndicatorToo;
+    procedure TestMinimumSurvivesAHeightPinningParent;
+    procedure TestSmallerFontAndPaddingLowerTheMinimum;
+    procedure TestRadioMinimumHeightFitsTheCaption;
+    procedure TestRadioMinimumSurvivesAHeightPinningParent;
+  end;
 implementation
 
 procedure TTyCheckBoxAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -103,10 +124,20 @@ begin
   CalculatePreferredSize(AW, AH, True);
 end;
 
+procedure TTyCheckBoxAccess.CallMeasure(APPI: Integer; out AW, AH: Integer);
+begin
+  MeasureCaption(APPI, AW, AH);
+end;
+
 procedure TTyRadioAccess.CallPreferred(out AW, AH: Integer);
 begin
   AW := 0; AH := 0;
   CalculatePreferredSize(AW, AH, True);
+end;
+
+procedure TTyRadioAccess.CallMeasure(APPI: Integer; out AW, AH: Integer);
+begin
+  MeasureCaption(APPI, AW, AH);
 end;
 
 procedure TTyCheckBoxAccess.DoKeyDown(var Key: Word; Shift: TShiftState);
@@ -1179,8 +1210,213 @@ begin
   finally Ctl.Free; end;
 end;
 
+{ TCheckBoxSizeFloorTest }
+
+procedure TCheckBoxSizeFloorTest.TestMinimumHeightFitsTheCaption;
+{ The floor covers the ink, and an impossible request is clamped up instead of silently
+  cutting the bottom off the caption. }
+var
+  F: TForm;
+  C: TTyCheckBoxAccess;
+  tw, th: Integer;
+begin
+  F := TForm.CreateNew(nil);
+  try
+    C := TTyCheckBoxAccess.Create(F);
+    C.Parent := F;
+    C.Font.PixelsPerInch := 96;
+    C.Caption := '新建';
+    C.CallMeasure(96, tw, th);
+
+    AssertTrue('the height floor covers the measured caption',
+      C.Constraints.MinHeight >= th);
+    AssertTrue('the width floor covers it too', C.Constraints.MinWidth >= tw);
+
+    { Ask for something impossible; the clamp must win. }
+    C.Height := 4;
+    C.Width := 4;
+    AssertTrue('a too-short request is clamped up', C.Height >= th);
+    AssertTrue('a too-narrow request is clamped up', C.Width >= tw);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TCheckBoxSizeFloorTest.TestMinimumWidthIsThePreferredWidth;
+{ The floor must REUSE the preferred width rather than re-derive it: two copies of
+  "padding + indicator + gap + caption" are two things that can drift apart, and the drift
+  would show up as a caption clipped by exactly the term one of them forgot. }
+var
+  Ctl: TTyStyleController;
+  C: TTyCheckBoxAccess;
+  pw, ph: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    C := TTyCheckBoxAccess.Create(nil);
+    try
+      C.Controller := Ctl;
+      C.Font.PixelsPerInch := 96;
+      Ctl.LoadThemeCss(cCbTightCss);
+      C.Caption := 'Enable background sync';
+      C.Invalidate;                       // the seam a theme switch arrives on
+      C.CallPreferred(pw, ph);
+      AssertEquals('the width floor IS the preferred width', pw, C.Constraints.MinWidth);
+    finally C.Free; end;
+  finally Ctl.Free; end;
+end;
+
+procedure TCheckBoxSizeFloorTest.TestMinimumCoversTheIndicatorToo;
+{ A checkbox draws a box as well as a caption, and the box is centred on the control — so a
+  control shorter than the box clips the box. With the caption's ink deliberately tiny, the
+  indicator metric is what has to hold the floor up, and it is a THEME metric, so growing it
+  must grow the floor. }
+var
+  Ctl: TTyStyleController;
+  C: TTyCheckBox;
+  small, big: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    C := TTyCheckBox.Create(nil);
+    try
+      C.Controller := Ctl;
+      C.Font.PixelsPerInch := 96;
+      C.Caption := 'x';
+      Ctl.LoadThemeCss(':root { --checkbox-size: 16px; }' +
+        'TyCheckBox { background: #FFFFFF; color: #000000; padding: 0px; font-size: 6px; }');
+      C.Invalidate;
+      small := C.Constraints.MinHeight;
+      AssertTrue(Format('the box (16) holds the floor up when the text is tiny (%d)', [small]),
+        small >= 16);
+
+      Ctl.LoadThemeCss(':root { --checkbox-size: 40px; }' +
+        'TyCheckBox { background: #FFFFFF; color: #000000; padding: 0px; font-size: 6px; }');
+      C.Invalidate;
+      big := C.Constraints.MinHeight;
+      AssertTrue(Format('a bigger indicator raises the floor (%d -> %d)', [small, big]),
+        big > small);
+    finally C.Free; end;
+  finally Ctl.Free; end;
+end;
+
+procedure TCheckBoxSizeFloorTest.TestMinimumSurvivesAHeightPinningParent;
+{ The floor must NOT reopen the fight that a proposed HEIGHT once started: a child on a
+  TTyToolBar proposed its own height, the bar pinned its ButtonHeight back, and LCL aborted
+  with "ChangeBounds loop detected" — the demo died at startup. Constraints clamp inside
+  SetBounds with no negotiation, so the bar keeps owning the height whenever the height it
+  asks for is possible at all. Reaching the end of this test IS the assertion. }
+var
+  F: TForm;
+  Bar: TTyToolBar;
+  C: TTyCheckBox;
+begin
+  F := TForm.CreateNew(nil);
+  try
+    Bar := TTyToolBar.Create(F);
+    Bar.Parent := F;
+    Bar.ButtonHeight := 40;            // comfortably above any caption's needs
+    C := TTyCheckBox.Create(Bar);
+    C.Parent := Bar;
+    C.Caption := '新建';
+    C.AutoSize := True;
+    Bar.ButtonHeight := 41;            // a loop would abort the process here
+    AssertTrue('the bar asks for a height the floor can honour',
+      C.Constraints.MinHeight <= 40);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TCheckBoxSizeFloorTest.TestSmallerFontAndPaddingLowerTheMinimum;
+{ The floor is DERIVED, not a wall: shrink the font, the padding and the indicator and the
+  minimum shrinks with them. That is what makes "override the CSS if you want a smaller
+  checkbox" a coherent answer instead of a refusal. }
+var
+  F: TForm;
+  Ctl: TTyStyleController;
+  C: TTyCheckBox;
+  big, small: Integer;
+begin
+  F := TForm.CreateNew(nil);
+  Ctl := TTyStyleController.Create(nil);
+  try
+    C := TTyCheckBox.Create(F);
+    C.Parent := F;
+    C.Controller := Ctl;
+    C.Caption := '新建';
+
+    Ctl.LoadThemeCss(':root { --checkbox-size: 30px; }' +
+      'TyCheckBox { font-size: 20px; padding: 8px; }');
+    C.Invalidate;                      // the seam a theme switch arrives on
+    big := C.Constraints.MinHeight;
+
+    Ctl.LoadThemeCss(':root { --checkbox-size: 4px; }' +
+      'TyCheckBox { font-size: 8px; padding: 1px; }');
+    C.Invalidate;
+    small := C.Constraints.MinHeight;
+
+    AssertTrue(Format('a smaller font + padding + indicator lowers the floor (%d -> %d)',
+      [big, small]), small < big);
+  finally
+    Ctl.Free;
+    F.Free;
+  end;
+end;
+
+procedure TCheckBoxSizeFloorTest.TestRadioMinimumHeightFitsTheCaption;
+{ Same story on the radio button, whose indicator reads its own --radio-* metrics. }
+var
+  F: TForm;
+  R: TTyRadioAccess;
+  tw, th: Integer;
+begin
+  F := TForm.CreateNew(nil);
+  try
+    R := TTyRadioAccess.Create(F);
+    R.Parent := F;
+    R.Font.PixelsPerInch := 96;
+    R.Caption := '新建';
+    R.CallMeasure(96, tw, th);
+
+    AssertTrue('the height floor covers the measured caption',
+      R.Constraints.MinHeight >= th);
+    R.Height := 4;
+    R.Width := 4;
+    AssertTrue('a too-short request is clamped up', R.Height >= th);
+    AssertTrue('a too-narrow request is clamped up', R.Width >= tw);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TCheckBoxSizeFloorTest.TestRadioMinimumSurvivesAHeightPinningParent;
+{ See TestMinimumSurvivesAHeightPinningParent: reaching the end is the assertion. }
+var
+  F: TForm;
+  Bar: TTyToolBar;
+  R: TTyRadioButton;
+begin
+  F := TForm.CreateNew(nil);
+  try
+    Bar := TTyToolBar.Create(F);
+    Bar.Parent := F;
+    Bar.ButtonHeight := 40;
+    R := TTyRadioButton.Create(Bar);
+    R.Parent := Bar;
+    R.Caption := '新建';
+    R.AutoSize := True;
+    Bar.ButtonHeight := 41;
+    AssertTrue('the bar asks for a height the floor can honour',
+      R.Constraints.MinHeight <= 40);
+  finally
+    F.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TCheckBoxTest);
   RegisterTest(TCheckBoxTriStateTest);
   RegisterTest(TCheckBoxAutoSizeTest);
+  RegisterTest(TCheckBoxSizeFloorTest);
 end.

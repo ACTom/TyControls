@@ -27,6 +27,15 @@ type
       WithThemeSpace: Boolean); override;
     { 标题在 APPI 下画出来的尺寸(设备像素),已去掉 & 助记符标记。 }
     procedure MeasureCaption(APPI: Integer; out AWidth, AHeight: Integer);
+    { 把控件钳住,让它永远不会小于自己必须画出来的东西。主题的 --control-height 和 .lfm 里
+      写死的 Height 都只是**请求**;真正可能的尺寸由字体、padding 和指示框尺寸决定,而这三样
+      只有控件自己同时知道。Linux/Qt6 上同一句 9pt 中文标题走的是另一张回退字体,墨迹比
+      Windows 高,DrawText 又是 tlCenter + 裁剪画的 —— 盒子比墨迹矮一像素,少掉的就是**底部**。
+      刻意用 Constraints,而不是 CalculatePreferredSize 的高度:提议高度等于让控件跟父容器
+      谈判,TTyButton 当初就是这么在 TTyToolBar 上和 ButtonHeight 来回弹,直到 LCL 抛
+      "ChangeBounds loop detected" 把 demo 在启动时弄死的。Constraints 是在 SetBounds 内部
+      直接钳,不谈判 —— 只要容器要的高度本身放得下,高度就还是容器说了算。 }
+    procedure UpdateSizeConstraints;
     { 运行期改 Caption 走这里(CM_TEXTCHANGED);开了 AutoSize 就得按新文字重新量。 }
     procedure TextChanged; override;
     { 换主题是以一个裸 Invalidate 的形式传到控件的,而新主题的字体、padding 和
@@ -82,6 +91,8 @@ type
       WithThemeSpace: Boolean); override;
     { 标题在 APPI 下画出来的尺寸(设备像素),已去掉 & 助记符标记。 }
     procedure MeasureCaption(APPI: Integer; out AWidth, AHeight: Integer);
+    { 尺寸地板,理由见 TTyCheckBox.UpdateSizeConstraints;圆点读的是自己的 --radio-size。 }
+    procedure UpdateSizeConstraints;
     { 运行期改 Caption 走这里;开了 AutoSize 就得按新文字重新量。 }
     procedure TextChanged; override;
     { 换主题以裸 Invalidate 的形式到达控件,新主题的字体/padding/指示器令牌都可能不同,
@@ -327,9 +338,39 @@ begin
   PreferredHeight := 0;
 end;
 
+procedure TTyCheckBox.UpdateSizeConstraints;
+var
+  S: TTyStyleSet;
+  ppi, tw, th, padH, boxSize, prefW, prefH, minH: Integer;
+begin
+  if csDestroying in ComponentState then Exit;
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  S := CurrentStyle;
+  { 宽度直接问 CalculatePreferredSize —— 那里已经是 RenderTo 的排布
+    (padding.Left | 指示框 | gap | 标题 | padding.Right)。在这里把同一条式子再抄一遍,
+    就是给"预留的"和"画出来的"留下走偏的机会。 }
+  prefW := 0;
+  prefH := 0;
+  CalculatePreferredSize(prefW, prefH, True);
+  { 高度只能自己算:CalculatePreferredSize 在这个轴上故意不表态(见那里的注释)。
+    RenderTo 把标题画进上下 padding 之间,tlCenter + 裁剪 —— 这段比墨迹矮一像素,少的就是
+    底部那一行。指示框是按控件中线摆的(它可以占用 padding,一直如此),所以它只要求控件
+    本身别比它矮;两者取大的那个。 }
+  MeasureCaption(ppi, tw, th);
+  padH := MulDiv(S.Padding.Top + S.Padding.Bottom, ppi, 96);
+  boxSize := MulDiv(ActiveController.Metric('--checkbox-size', TyCheckBoxBox), ppi, 96);
+  minH := th + padH;
+  if boxSize > minH then minH := boxSize;
+  Constraints.MinWidth := prefW;
+  Constraints.MinHeight := minH;
+end;
+
 procedure TTyCheckBox.TextChanged;
 begin
   inherited TextChanged;
+  // 标题换了,它需要的地板也就换了(空标题也仍然是一行的高度)。
+  UpdateSizeConstraints;
   // 新标题需要的宽度变了,AutoSize 的控件得重新贴合。
   if AutoSize then
   begin
@@ -346,13 +387,19 @@ begin
     padding 和 --checkbox-size/--checkbox-gap 都可能不同 —— AutoSize 需要的宽度也就跟着
     变了。不在这里重新量,控件就留着旧皮肤的宽度,标题被省略号截掉(TTyButton 的工具条
     按钮当初换到 antdesign 皮肤时就是这个症状)。
+    地板同理,而且和 AutoSize 无关:主题决定字体、padding 和指示框尺寸,换主题就换了地板,
+    所以它在 AutoSize 之外也要更新。
     FRefitting 挡住重入:AdjustSize -> SetBounds -> Invalidate 会绕回来。 }
-  if AutoSize and not FRefitting and not (csDestroying in ComponentState) then
+  if not FRefitting and not (csDestroying in ComponentState) then
   begin
     FRefitting := True;
     try
-      InvalidatePreferredSize;
-      AdjustSize;
+      UpdateSizeConstraints;
+      if AutoSize then
+      begin
+        InvalidatePreferredSize;
+        AdjustSize;
+      end;
     finally
       FRefitting := False;
     end;
@@ -564,9 +611,32 @@ begin
   PreferredHeight := 0;
 end;
 
+procedure TTyRadioButton.UpdateSizeConstraints;
+{ 见 TTyCheckBox.UpdateSizeConstraints —— 同一套推导,只是圆点读的是 --radio-size。 }
+var
+  S: TTyStyleSet;
+  ppi, tw, th, padH, dotSize, prefW, prefH, minH: Integer;
+begin
+  if csDestroying in ComponentState then Exit;
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  S := CurrentStyle;
+  prefW := 0;
+  prefH := 0;
+  CalculatePreferredSize(prefW, prefH, True);
+  MeasureCaption(ppi, tw, th);
+  padH := MulDiv(S.Padding.Top + S.Padding.Bottom, ppi, 96);
+  dotSize := MulDiv(ActiveController.Metric('--radio-size', TyCheckBoxBox), ppi, 96);
+  minH := th + padH;
+  if dotSize > minH then minH := dotSize;
+  Constraints.MinWidth := prefW;
+  Constraints.MinHeight := minH;
+end;
+
 procedure TTyRadioButton.TextChanged;
 begin
   inherited TextChanged;
+  UpdateSizeConstraints;   // 标题换了,地板也换了
   if AutoSize then
   begin
     InvalidatePreferredSize;
@@ -579,14 +649,18 @@ procedure TTyRadioButton.Invalidate;
 begin
   inherited Invalidate;
   { 见 TTyCheckBox.Invalidate:换主题是一个裸 Invalidate,新主题的字体/padding/指示器
-    令牌都变了,AutoSize 必须在这里重新贴合;FRefitting 挡住
+    令牌都变了,地板要跟着动(与 AutoSize 无关),AutoSize 还要重新贴合;FRefitting 挡住
     AdjustSize -> SetBounds -> Invalidate 的重入。 }
-  if AutoSize and not FRefitting and not (csDestroying in ComponentState) then
+  if not FRefitting and not (csDestroying in ComponentState) then
   begin
     FRefitting := True;
     try
-      InvalidatePreferredSize;
-      AdjustSize;
+      UpdateSizeConstraints;
+      if AutoSize then
+      begin
+        InvalidatePreferredSize;
+        AdjustSize;
+      end;
     finally
       FRefitting := False;
     end;

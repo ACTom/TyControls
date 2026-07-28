@@ -51,6 +51,25 @@ type
     procedure TestRoomierThemePaddingWidensPreferredWidth;
     procedure TestAutoSizeSurvivesAHeightPinningParent;
   end;
+
+  { SIZE FLOOR (Constraints.Min*). A hand-set Height and the theme's --control-height are
+    REQUESTS; what is POSSIBLE is decided by the font and the padding, and only the control
+    knows both. On Linux/Qt6 a 9pt CJK caption resolves through a fallback face whose ink is
+    taller than Windows', and RenderTo draws each segment's text clipped and tlCenter, so a bar
+    shorter than the ink quietly loses the BOTTOM of every caption.
+    Unlike AutoSize, the floor is unconditional: it holds for a hand-sized bar too, which is
+    exactly the bar that gets caught out. Everything here asserts Constraints, because
+    AutoSizeDelayed suppresses real resizing while the parent form has no handle. }
+  TButtonGroupFloorTest = class(TTestCase)
+  published
+    procedure TestFloorIsTheSameMeasurementAsThePreferredWidth;
+    procedure TestFloorWidthScalesWithTheCellCount;
+    procedure TestVerticalPaddingIsNotPartOfTheHeightFloor;
+    procedure TestSmallerFontLowersTheFloor;
+    procedure TestEmptyBarHasNoFloor;
+    procedure TestFloorClampsAnImpossibleHeight;
+    procedure TestFloorSurvivesAHeightPinningToolBar;
+  end;
 implementation
 
 procedure TTyButtonGroupAccess.DoSelectAt(AX: Integer);
@@ -571,7 +590,232 @@ begin
   end;
 end;
 
+{ ---- TButtonGroupFloorTest ---- }
+
+procedure TButtonGroupFloorTest.TestFloorIsTheSameMeasurementAsThePreferredWidth;
+{ "What the bar asks for" and "what the bar refuses to go below" must be one measurement.
+  Two formulas would eventually disagree, and the one that disagrees with RenderTo is the one
+  that ellipsises captions while reporting a fit. }
+var
+  Ctl: TTyStyleController;
+  G: TTyButtonGroupAccess;
+  pref, h: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Ctl.LoadThemeCss(Format(cCssFmt, [4, 10, 12]));
+    G := TTyButtonGroupAccess.Create(nil);
+    try
+      G.Controller := Ctl;
+      G.Font.PixelsPerInch := 96;
+      G.Items.Add('Day'); G.Items.Add('Week'); G.Items.Add('Month');
+      G.Invalidate;                    // the seam a theme switch arrives on
+      G.CallPreferred(pref, h);
+
+      AssertEquals('the width floor IS the preferred width', pref, G.Constraints.MinWidth);
+      AssertTrue('and there is a real height floor', G.Constraints.MinHeight > 0);
+    finally
+      G.Free;
+    end;
+  finally
+    Ctl.Free;
+  end;
+end;
+
+procedure TButtonGroupFloorTest.TestFloorWidthScalesWithTheCellCount;
+{ RenderTo tiles the bar into equal cells, so the minimum is COUNT x cell. Under-count one cell
+  and every segment clips — which is why this asserts the exact 3 -> 4 step, not "bigger". }
+var
+  Ctl: TTyStyleController;
+  G: TTyButtonGroupAccess;
+  three: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Ctl.LoadThemeCss(Format(cCssFmt, [4, 10, 12]));
+    G := TTyButtonGroupAccess.Create(nil);
+    try
+      G.Controller := Ctl;
+      G.Font.PixelsPerInch := 96;
+      // Identical captions, so every cell is provably the same width.
+      G.Items.Add('Day'); G.Items.Add('Day'); G.Items.Add('Day');
+      three := G.Constraints.MinWidth;
+      AssertTrue('three cells must measure to something', three > 0);
+
+      G.Items.Add('Day');              // Items.OnChange is this control's "caption changed"
+      AssertEquals('a fourth identical cell costs exactly one more cell',
+        three + three div 3, G.Constraints.MinWidth);
+    finally
+      G.Free;
+    end;
+  finally
+    Ctl.Free;
+  end;
+end;
+
+procedure TButtonGroupFloorTest.TestVerticalPaddingIsNotPartOfTheHeightFloor;
+{ RenderTo insets each cell's text rect LEFT and RIGHT only — the text gets the segment's full
+  top-to-bottom span. So the height the captions need is the line itself, and adding the
+  theme's vertical padding on top would silently inflate every bar (and grow tool-bar rows)
+  for space the text never uses. Two themes differing ONLY in vertical padding must therefore
+  produce the SAME floor on both axes. }
+var
+  Ctl: TTyStyleController;
+  G: TTyButtonGroupAccess;
+  thinH, thinW: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    G := TTyButtonGroupAccess.Create(nil);
+    try
+      G.Controller := Ctl;
+      G.Font.PixelsPerInch := 96;
+      G.Items.Add('Day'); G.Items.Add('Week');
+
+      Ctl.LoadThemeCss(Format(cCssFmt, [2, 6, 12]));
+      G.Invalidate;
+      thinH := G.Constraints.MinHeight;
+      thinW := G.Constraints.MinWidth;
+
+      // 2px -> 20px of vertical padding; the font and the horizontal padding do not move.
+      Ctl.LoadThemeCss(Format(cCssFmt, [20, 6, 12]));
+      G.Invalidate;
+      AssertEquals('vertical padding is not part of what the captions need',
+        thinH, G.Constraints.MinHeight);
+      AssertEquals('and horizontal padding did not change either', thinW, G.Constraints.MinWidth);
+    finally
+      G.Free;
+    end;
+  finally
+    Ctl.Free;
+  end;
+end;
+
+procedure TButtonGroupFloorTest.TestSmallerFontLowersTheFloor;
+{ The floor is DERIVED, not a wall: shrink the font and the padding and the minimum shrinks
+  with them. That is what makes "override the CSS if you want it smaller" a coherent answer
+  instead of a refusal. }
+var
+  Ctl: TTyStyleController;
+  G: TTyButtonGroupAccess;
+  bigH, bigW: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    G := TTyButtonGroupAccess.Create(nil);
+    try
+      G.Controller := Ctl;
+      G.Font.PixelsPerInch := 96;
+      G.Items.Add('新建'); G.Items.Add('打开');
+
+      Ctl.LoadThemeCss(Format(cCssFmt, [4, 12, 20]));
+      G.Invalidate;
+      bigH := G.Constraints.MinHeight;
+      bigW := G.Constraints.MinWidth;
+
+      Ctl.LoadThemeCss(Format(cCssFmt, [1, 2, 8]));
+      G.Invalidate;
+      AssertTrue(Format('a smaller font lowers the height floor (%d -> %d)',
+        [bigH, G.Constraints.MinHeight]), G.Constraints.MinHeight < bigH);
+      AssertTrue(Format('a smaller font+padding lowers the width floor (%d -> %d)',
+        [bigW, G.Constraints.MinWidth]), G.Constraints.MinWidth < bigW);
+    finally
+      G.Free;
+    end;
+  finally
+    Ctl.Free;
+  end;
+end;
+
+procedure TButtonGroupFloorTest.TestEmptyBarHasNoFloor;
+{ An empty bar draws nothing at all (RenderTo bails), so it demands nothing — and clearing the
+  items has to RELEASE the floor, not leave the bar wedged at the width the old captions
+  needed. }
+var
+  Ctl: TTyStyleController;
+  G: TTyButtonGroupAccess;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Ctl.LoadThemeCss(Format(cCssFmt, [4, 10, 12]));
+    G := TTyButtonGroupAccess.Create(nil);
+    try
+      G.Controller := Ctl;
+      G.Font.PixelsPerInch := 96;
+      G.Items.Add('A considerably longer segment caption');
+      AssertTrue('a populated bar has a floor', G.Constraints.MinWidth > 0);
+
+      G.Items.Clear;
+      AssertEquals('clearing the items releases the width floor', 0, G.Constraints.MinWidth);
+      AssertEquals('and the height floor with it', 0, G.Constraints.MinHeight);
+    finally
+      G.Free;
+    end;
+  finally
+    Ctl.Free;
+  end;
+end;
+
+procedure TButtonGroupFloorTest.TestFloorClampsAnImpossibleHeight;
+{ The point of putting this in Constraints rather than in a proposed size: an impossible
+  request is clamped inside SetBounds, with nobody to negotiate with. }
+var
+  Ctl: TTyStyleController;
+  G: TTyButtonGroupAccess;
+  minH: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Ctl.LoadThemeCss(Format(cCssFmt, [4, 10, 20]));
+    G := TTyButtonGroupAccess.Create(nil);
+    try
+      G.Controller := Ctl;
+      G.Font.PixelsPerInch := 96;
+      G.Items.Add('新建'); G.Items.Add('打开');
+      G.Invalidate;
+      minH := G.Constraints.MinHeight;
+      AssertTrue('a 20px font needs a real line', minH > 1);
+
+      G.Height := 2;
+      AssertTrue(Format('a too-short request is clamped up to the floor (%d >= %d)',
+        [G.Height, minH]), G.Height >= minH);
+    finally
+      G.Free;
+    end;
+  finally
+    Ctl.Free;
+  end;
+end;
+
+procedure TButtonGroupFloorTest.TestFloorSurvivesAHeightPinningToolBar;
+{ The floor must NOT reopen the fight a proposed height once started: a child on a TTyToolBar
+  proposed its own height, the bar pinned its ButtonHeight back, and LCL aborted with
+  "ChangeBounds loop detected" — the demo died at startup. Constraints clamp inside SetBounds
+  with no negotiation. Reaching the end of this test IS the assertion. }
+var
+  F: TForm;
+  Bar: TTyToolBar;
+  G: TTyButtonGroup;
+begin
+  F := TForm.CreateNew(nil);
+  try
+    Bar := TTyToolBar.Create(F);
+    Bar.Parent := F;
+    Bar.ButtonHeight := 40;
+    G := TTyButtonGroup.Create(Bar);
+    G.Parent := Bar;
+    G.Items.Add('新建'); G.Items.Add('打开');
+    G.AutoSize := True;
+    Bar.ButtonHeight := 41;            // a loop would abort the process here
+    AssertTrue(Format('the bar asks for a height the floor can honour (min %d)',
+      [G.Constraints.MinHeight]), G.Constraints.MinHeight <= 40);
+  finally
+    F.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TButtonGroupTest);
   RegisterTest(TButtonGroupAutoSizeTest);
+  RegisterTest(TButtonGroupFloorTest);
 end.

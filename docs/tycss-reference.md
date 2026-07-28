@@ -1255,6 +1255,10 @@ TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth
     - `--checkbox-size` / `--checkbox-gap` — 复选框指示框边长 / 与标题的间距(默认 16 / 6);
     - `--radio-size` / `--radio-gap` — 单选钮同上(圆点随框尺寸等比缩放);
     - `--groupbox-caption-height` — GroupBox 顶部标题带高度(默认 16)。
+    - `--line-height` — **多行**标题的行框高度(logical px)。**没有内置常数**:未设时用字体
+      自己的行框,所以加上这个令牌之前一切不动;设了就是 `行数 × 该值`,多出来的部分作为行距
+      平分到每行上下。控件由此派生的**高度下限**(文字块高 + 上下 padding)也跟着走——
+      主题把 `font-size` 和 `--line-height` 一起调小,下限就一起降下来。
     值可为 `16`、`16px` 或 `var()`。(后续版本会陆续把更多写死几何提升为度量令牌。)
 16. **字形覆盖令牌(glyph override,v3)**:勾号/圆点等内置矢量字形可用图标字体码点替换。
     在 `:root` 里写 `--glyph-<槽>: "字体族名" "\<码点>";`——族名须为**系统已安装或应用已注册**

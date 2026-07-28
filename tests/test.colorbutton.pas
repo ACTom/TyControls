@@ -4,7 +4,7 @@ interface
 uses
   Classes, SysUtils, TypInfo, fpcunit, testregistry, Forms, Controls, Graphics,
   tyControls.Base, tyControls.Types, tyControls.Painter, tyControls.Controller,
-  tyControls.ColorButton;
+  tyControls.ColorButton, tyControls.ToolBar;
 type
   // Expose the protected DrawContent so a headless render can be exercised without
   // opening the (GUI-only) colour dialog.
@@ -16,6 +16,10 @@ type
       断言必须走这里而不是 Width:父窗体没句柄时 AutoSizeDelayed 会吞掉自动调整,
       读 Width 等于什么都没测。 }
     procedure CallPreferred(out AW, AH: Integer);
+    { 真正被画出来的那串 '#RRGGBB' 在当前样式下的设备像素宽度——宽度下限里的文字那一项。 }
+    function CallMeasureHex(APPI: Integer): Integer;
+    { 一行文字的高度(参考字形,与 Caption 无关):高度下限里的文字那一项。 }
+    procedure CallMeasure(APPI: Integer; out AW, AH: Integer);
   end;
 
   TColorButtonTest = class(TTestCase)
@@ -49,6 +53,22 @@ type
     procedure TestPreferredHeightIsAlwaysZero;
   end;
 
+  { SIZE FLOOR(Constraints.Min*)。手写的 Height 和主题的 --control-height 都只是**请求**;
+    做得到的尺寸由字体和内边距决定,而只有控件同时知道这两样。色块按钮的特别之处在于:它
+    **一个字都不画 Caption**——高度下限要是照基类量 Caption 的一行来算,就等于替一行根本不
+    存在的字留位置;而 ShowText 打开时画的那串 '#RRGGBB' 又确实需要一整行。
+    一律断言 Constraints:下限跟 AutoSize 开不开无关,而且没有窗体句柄时 AutoSizeDelayed
+    会把真正的 resize 吞掉。 }
+  TColorButtonFloorTest = class(TTestCase)
+  published
+    procedure TestFloorIgnoresTheNeverPaintedCaption;
+    procedure TestSwatchOnlyFloorIsNotATextLine;
+    procedure TestShowTextRaisesTheFloorToTheHexLine;
+    procedure TestHexSlotIsPartOfTheWidthFloor;
+    procedure TestSmallerFontLowersTheFloor;
+    procedure TestFloorSurvivesAHeightPinningToolBar;
+  end;
+
 implementation
 
 const
@@ -59,6 +79,10 @@ const
   { 同上,左右内边距 9px -> 35px(每边 +26,共 +52);上下不动,所以色块边长不变。 }
   cCbRoomyCss =
     'TyButton { background: #FFFFFF; color: #000000; border-width: 0px; padding: 4px 35px; font-size: 12px; }';
+  { 故意把字号放到 40px:一行文字比 TyColorButtonMinSwatch(8px)高出一大截,所以
+    「ShowText=False 时高度下限里有没有混进一行文字」这件事会响得刺耳,而不是刚好撞上。 }
+  cCbHugeFontCss =
+    'TyButton { background: #FFFFFF; color: #000000; border-width: 0px; padding: 4px 9px; font-size: 40px; }';
 
 procedure TTyColorButtonAccess.CallDrawContent(APainter: TTyPainter;
   const AContentRect: TRect; const AStyle: TTyStyleSet);
@@ -70,6 +94,16 @@ procedure TTyColorButtonAccess.CallPreferred(out AW, AH: Integer);
 begin
   AW := 0; AH := 0;
   CalculatePreferredSize(AW, AH, True);
+end;
+
+function TTyColorButtonAccess.CallMeasureHex(APPI: Integer): Integer;
+begin
+  Result := MeasureHexText(APPI, CurrentStyle);
+end;
+
+procedure TTyColorButtonAccess.CallMeasure(APPI: Integer; out AW, AH: Integer);
+begin
+  MeasureCaption(APPI, AW, AH);
 end;
 
 procedure TColorButtonTest.HandleColorChange(Sender: TObject);
@@ -416,7 +450,178 @@ begin
   finally Ctl.Free; end;
 end;
 
+{ ---- TColorButtonFloorTest ---- }
+
+procedure TColorButtonFloorTest.TestFloorIgnoresTheNeverPaintedCaption;
+var
+  Ctl: TTyStyleController;
+  B: TTyColorButtonAccess;
+  bare: Integer;
+begin
+  // DrawContent 从不调基类的 DrawContent,Caption 一个像素都不画。量它只会凭空撑宽按钮。
+  Ctl := TTyStyleController.Create(nil);
+  B := TTyColorButtonAccess.Create(nil);
+  try
+    Ctl.LoadThemeCss(cCbTightCss);
+    B.Controller := Ctl;
+    B.Font.PixelsPerInch := 96;
+    B.SetBounds(0, 0, 88, 30);
+    B.Caption := '';
+    B.Invalidate;
+    bare := B.Constraints.MinWidth;
+
+    B.Caption := 'A caption this button never draws a pixel of';
+    AssertEquals('a caption this button never paints is not in the width floor',
+      bare, B.Constraints.MinWidth);
+  finally
+    B.Free; Ctl.Free;
+  end;
+end;
+
+procedure TColorButtonFloorTest.TestSwatchOnlyFloorIsNotATextLine;
+var
+  Ctl: TTyStyleController;
+  B: TTyColorButtonAccess;
+  tw, th: Integer;
+begin
+  { ShowText=False 时内容只有色块。DrawContent 里唯一的硬底线是 TyColorButtonMinSwatch,
+    高度下限就该是「它 + 上下内边距」——40px 的字号在这里必须一点都不参与,否则一个纯色块
+    按钮会被一行它根本不画的字顶高。 }
+  Ctl := TTyStyleController.Create(nil);
+  B := TTyColorButtonAccess.Create(nil);
+  try
+    Ctl.LoadThemeCss(cCbHugeFontCss);
+    B.Controller := Ctl;
+    B.Font.PixelsPerInch := 96;
+    B.SetBounds(0, 0, 88, 30);
+    B.ShowText := False;
+    B.Invalidate;
+    B.CallMeasure(96, tw, th);
+
+    AssertTrue('premise: a 40px line is far taller than the 8px swatch minimum',
+      th > TyColorButtonMinSwatch);
+    AssertEquals('the height floor is the swatch minimum plus 4px+4px of padding',
+      TyColorButtonMinSwatch + 8, B.Constraints.MinHeight);
+  finally
+    B.Free; Ctl.Free;
+  end;
+end;
+
+procedure TColorButtonFloorTest.TestShowTextRaisesTheFloorToTheHexLine;
+var
+  Ctl: TTyStyleController;
+  B: TTyColorButtonAccess;
+  tw, th: Integer;
+begin
+  // 打开 ShowText 就真的画一行 '#RRGGBB' 了,那一行必须装得下——用的是和基类同一套字体度量。
+  Ctl := TTyStyleController.Create(nil);
+  B := TTyColorButtonAccess.Create(nil);
+  try
+    Ctl.LoadThemeCss(cCbHugeFontCss);
+    B.Controller := Ctl;
+    B.Font.PixelsPerInch := 96;
+    B.SetBounds(0, 0, 88, 30);
+    B.ShowText := True;
+    B.Invalidate;
+    B.CallMeasure(96, tw, th);
+
+    AssertEquals('the height floor is one hex line plus the vertical padding',
+      th + 8, B.Constraints.MinHeight);
+    AssertTrue('...and it really is above the swatch-only floor',
+      B.Constraints.MinHeight > TyColorButtonMinSwatch + 8);
+  finally
+    B.Free; Ctl.Free;
+  end;
+end;
+
+procedure TColorButtonFloorTest.TestHexSlotIsPartOfTheWidthFloor;
+var
+  Ctl: TTyStyleController;
+  B: TTyColorButtonAccess;
+  swatchOnly: Integer;
+begin
+  { 宽度下限走的是 CalculatePreferredSize 这一条(量的就是画的),所以「间隙 + '#RRGGBB'」
+    是最小宽度的一部分:少算这一段,色块和十六进制就会互相挤。12px 字号下两种模式的高度
+    下限都低于 30,控件不会变高,ClientHeight 不动,所以这里的差值可以断成精确值。 }
+  Ctl := TTyStyleController.Create(nil);
+  B := TTyColorButtonAccess.Create(nil);
+  try
+    Ctl.LoadThemeCss(cCbTightCss);
+    B.Controller := Ctl;
+    B.Font.PixelsPerInch := 96;
+    B.SetBounds(0, 0, 88, 30);
+    B.ShowText := False;
+    B.Invalidate;
+    swatchOnly := B.Constraints.MinWidth;
+
+    B.ShowText := True;
+    AssertEquals('the extra width is exactly the gap plus the hex string that gets drawn',
+      swatchOnly + TyColorButtonSwatchGap + B.CallMeasureHex(96),
+      B.Constraints.MinWidth);
+  finally
+    B.Free; Ctl.Free;
+  end;
+end;
+
+procedure TColorButtonFloorTest.TestSmallerFontLowersTheFloor;
+var
+  Ctl: TTyStyleController;
+  B: TTyColorButtonAccess;
+  bigH, bigW: Integer;
+begin
+  // 下限是推导出来的,不是一堵墙:字号和内边距调小,它就该跟着降。
+  Ctl := TTyStyleController.Create(nil);
+  B := TTyColorButtonAccess.Create(nil);
+  try
+    B.Controller := Ctl;
+    B.Font.PixelsPerInch := 96;
+    B.SetBounds(0, 0, 88, 30);
+    B.ShowText := True;
+
+    Ctl.LoadThemeCss('TyButton { font-size: 20px; padding: 8px; }');
+    B.Invalidate;
+    bigH := B.Constraints.MinHeight;
+    bigW := B.Constraints.MinWidth;
+
+    Ctl.LoadThemeCss('TyButton { font-size: 8px; padding: 1px; }');
+    B.Invalidate;
+    AssertTrue(Format('a smaller font+padding lowers the height floor (%d -> %d)',
+      [bigH, B.Constraints.MinHeight]), B.Constraints.MinHeight < bigH);
+    AssertTrue(Format('...and the width floor with it (%d -> %d)',
+      [bigW, B.Constraints.MinWidth]), B.Constraints.MinWidth < bigW);
+  finally
+    B.Free; Ctl.Free;
+  end;
+end;
+
+procedure TColorButtonFloorTest.TestFloorSurvivesAHeightPinningToolBar;
+var
+  F: TForm;
+  Bar: TTyToolBar;
+  B: TTyColorButton;
+begin
+  { 工具条把每个子控件钉到 ButtonHeight;子控件再提议一个自己的高度就会来回顶,LCL 以
+    "ChangeBounds loop detected" 中止。Constraints 在 SetBounds 里钳,不协商。
+    **跑到这一行本身就是断言**。 }
+  F := TForm.CreateNew(nil);
+  try
+    Bar := TTyToolBar.Create(F);
+    Bar.Parent := F;
+    Bar.ButtonHeight := 40;
+    B := TTyColorButton.Create(Bar);
+    B.Parent := Bar;
+    B.ShowText := True;
+    B.AutoSize := True;
+    Bar.ButtonHeight := 41;            // 真要是循环了,进程在这里就没了
+    AssertTrue(Format('the bar asks for a height the floor can honour (%d)',
+      [B.Constraints.MinHeight]), B.Constraints.MinHeight <= 40);
+  finally
+    F.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TColorButtonTest);
   RegisterTest(TColorButtonAutoSizeTest);
+  RegisterTest(TColorButtonFloorTest);
 end.

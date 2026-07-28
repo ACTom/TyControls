@@ -84,7 +84,12 @@ type
     { 基类给出的是「标题 + 主题内边距」的宽度;分割按钮把标题画在箭头区**左边**的
       子矩形里(见 DrawContent),所以它还得多让出整条箭头区,否则 AutoSize 报出来的
       宽度装不下自己画的东西——标题被箭头挤掉、省略号照旧。会说谎的 AutoSize 比没有
-      更糟,所以这里加的必须正好是 DrawContent 让出的那一段(同一个 ArrowZoneWidth)。 }
+      更糟,所以这里加的必须正好是 DrawContent 让出的那一段(同一个 ArrowZoneWidth)。
+
+      这个方法同时也是**尺寸下限**的宽度来源:TTyButton.UpdateSizeConstraints 就是调它来
+      算 Constraints.MinWidth 的。所以箭头区不是装饰,而是最小宽度的一部分——一条被压到
+      只装得下标题的分割按钮,箭头会直接吃掉标题。高度那半在 MeasureContentHeight 里,箭头
+      **不**参与:它画在标题**旁边**(同一个上下沿),挤的是宽度不是高度。 }
     procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
       WithThemeSpace: Boolean); override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -139,7 +144,11 @@ type
     procedure DrawContent(APainter: TTyPainter; const AContentRect: TRect;
       const AStyle: TTyStyleSet); override;
     { 标题只占箭头区左边的子矩形,所以在基类的「标题 + 内边距」之上还要加一整条箭头区,
-      否则 AutoSize 量出来的宽度装不下自己画的箭头。 }
+      否则 AutoSize 量出来的宽度装不下自己画的箭头。
+
+      同样地,这里也是**尾部箭头区进入尺寸下限**的地方:TTyButton.UpdateSizeConstraints
+      用本方法算 Constraints.MinWidth。皮肤改了 '--drop-arrow-width',换肤广播的那个裸
+      Invalidate 会带着基类重量一遍,下限跟着走——下限必须是**推导**出来的,不能写死。 }
     procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
       WithThemeSpace: Boolean); override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;

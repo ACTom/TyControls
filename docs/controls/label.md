@@ -27,7 +27,7 @@ uses tyControls.TyLabel;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `Caption` | `string` | `''` | 标签显示文字；默认左对齐、垂直居中渲染（对齐方式现由 `Alignment` / `Layout` 控制）。 |
+| `Caption` | `string` | `''` | 标签显示文字；默认左对齐、垂直居中渲染（对齐方式现由 `Alignment` / `Layout` 控制）。**文字里写的换行（CR / LF / CRLF）会真的换行**——不再被压成一行（度量一直是按多行算的，所以以前 `AutoSize` 留的高度是对的、画出来却挤成一行）。行框高度取字体自身行框，主题设了 `--line-height` 则用它。 |
 | `Alignment` | `TAlignment` | `taLeftJustify` | **（API parity 新增）** 每行文字的**水平**对齐（左 / 右 / 居中）。 |
 | `Layout` | `TTextLayout` | `tlCenter` | **（API parity 新增）** 整段文字块的**垂直**对齐（顶 / 居中 / 底）；在 `WordWrap = True` 时按每行块高计算统一垂直偏移后应用。 |
 | `WordWrap` | `Boolean` | `False` | **（API parity 新增）** 为 `True` 时文字按控件宽度自动换行；写入会触发重新度量首选尺寸并（在 `AutoSize` 开启时）调整大小。 |

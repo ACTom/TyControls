@@ -3,7 +3,8 @@ unit tyControls.TyLabel;
 interface
 uses
   Classes, SysUtils, Types, Math, Controls, Graphics, LCLType, LMessages,
-  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Accel;
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller,
+  tyControls.Accel;
 type
   TTyLabel = class(TTyGraphicControl)
   private
@@ -12,6 +13,7 @@ type
     FWordWrap: Boolean;
     FTransparent: Boolean;
     FFocusControl: TWinControl;
+    FRefitting: Boolean;   // guards the size-floor refresh in Invalidate against re-entry
     procedure SetAlignment(AValue: TAlignment);
     procedure SetLayout(AValue: TTextLayout);
     procedure SetWordWrap(AValue: Boolean);
@@ -33,6 +35,33 @@ type
     function DialogChar(var Message: TLMKey): Boolean; override;
     procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
       WithThemeSpace: Boolean); override;
+    { Clamp the label so it can never be smaller than the text it must draw. A hand-set
+      Height and the theme's metrics are REQUESTS; what is possible is decided by the font
+      and the padding, and only the control knows both — on Linux/Qt6 the same 9pt CJK
+      caption resolves a fallback face whose ink is taller than Windows', and both text
+      paths draw clipped, so a box shorter than the ink loses the BOTTOM of the text.
+
+      Constraints, deliberately, and NOT CalculatePreferredSize's height: a proposed height
+      is negotiated with the parent, and that negotiation is what once bounced a control
+      against a TTyToolBar's pinned height until LCL aborted with "ChangeBounds loop
+      detected". Constraints clamp inside SetBounds, with no negotiation.
+
+      WordWrap is the interesting case, and it gets a DIFFERENT floor:
+      - No width floor at all. A wrapping label is MEANT to be narrower than its text —
+        flooring it at the widest line would make wrapping impossible, and the message
+        dialog (which measures the block at a column it chooses, then pins that column)
+        would snap back into the single-line ribbon it used to be.
+      - The height floor is the block measured WITHOUT wrapping, i.e. only the breaks the
+        author wrote. That number is the one thing about a wrapped block that does not move
+        with the width: any width can only ADD breaks, never remove an authored one. The
+        block at the CURRENT width would have been the tempting answer and is a trap — it
+        is a different number for every width, so a label whose bounds are set width-and-
+        height together (again: the message dialog) would be clamped by a height measured
+        at the width it had a moment ago. }
+    procedure UpdateSizeConstraints;
+    { A theme switch reaches every control as a bare Invalidate, and the new theme owns the
+      font and the padding the floor is derived from — so it has to be recomputed here. }
+    procedure Invalidate; override;
     { Caption changes at runtime route here (CM_TEXTCHANGED). When AutoSize is on,
       re-measure so the label grows/shrinks to the new text (mirrors native
       TCustomLabel.TextChanged -> UpdateSize). }
@@ -127,6 +156,11 @@ procedure TTyLabel.SetWordWrap(AValue: Boolean);
 begin
   if FWordWrap = AValue then Exit;
   FWordWrap := AValue;
+  { The floor means a different thing on each side of this flag (see UpdateSizeConstraints),
+    so refresh it BEFORE AdjustSize — otherwise a label that is given its caption first and
+    wrapped second spends one layout pass floored at the width of its whole text on one
+    line, which is exactly the shape the message dialog builds. }
+  UpdateSizeConstraints;
   if AutoSize then
     InvalidatePreferredSize;
   AdjustSize;
@@ -164,9 +198,67 @@ begin
     FFocusControl.SetFocus;
 end;
 
+procedure TTyLabel.UpdateSizeConstraints;
+var
+  S: TTyStyleSet;
+  ppi, padH, w, h: Integer;
+begin
+  if csDestroying in ComponentState then Exit;
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  if FWordWrap then
+  begin
+    { AAvailWidthPx = 0 is MeasureCaption's "do not wrap", so this is the authored-breaks
+      block — the width-independent lower bound (see the declaration). }
+    MeasureCaption(ppi, 0, w, h);
+    S := CurrentStyle;
+    padH := MulDiv(S.Padding.Top + S.Padding.Bottom, ppi, 96);
+    Constraints.MinWidth := 0;
+    Constraints.MinHeight := h + padH;
+  end
+  else
+  begin
+    { No wrap: CalculatePreferredSize already measures exactly this block plus the style's
+      padding — the padding RenderTo insets by — so the floor asks IT rather than repeating
+      the arithmetic, and the two can never disagree. }
+    w := 0;
+    h := 0;
+    CalculatePreferredSize(w, h, True);
+    Constraints.MinHeight := h;
+  end;
+  { HEIGHT ONLY, for a label, in both branches. Clipping a caption vertically is never
+    something anyone asked for -- that is the bug this floor exists to stop. Being NARROWER
+    than the text is different: a label ellipsises, and a status strip or a fixed column that
+    deliberately shows 'Some very long value...' is an ordinary layout, not a mistake. A width
+    floor would silently overrule the Width its host set, which is exactly what it did: the
+    label test set Width := 60 and got the whole caption's width back.
+    Buttons are the opposite case and DO floor their width -- there the caption is the
+    affordance, and an ellipsised button label is a usability failure rather than a layout. }
+  Constraints.MinWidth := 0;
+end;
+
+procedure TTyLabel.Invalidate;
+begin
+  inherited Invalidate;
+  { A theme switch arrives as a bare Invalidate (the controller broadcasts one to every
+    registered control), and the new theme brings a different font and padding — so the
+    floor derived from them moved too. FRefitting guards the re-entry: setting a constraint
+    can trigger a resize, and a resize repaints. }
+  if not FRefitting and not (csDestroying in ComponentState) then
+  begin
+    FRefitting := True;
+    try
+      UpdateSizeConstraints;
+    finally
+      FRefitting := False;
+    end;
+  end;
+end;
+
 procedure TTyLabel.TextChanged;
 begin
   inherited TextChanged;
+  UpdateSizeConstraints;   // the new caption needs a different floor
   if AutoSize then
   begin
     InvalidatePreferredSize;
@@ -199,48 +291,24 @@ end;
 
 procedure TTyLabel.MeasureCaption(APPI, AAvailWidthPx: Integer;
   out AWidthPx, AHeightPx: Integer);
+{ The body of this used to live here: build a measuring bitmap, set the four font fields,
+  split or wrap, widest line x line count. It is now TyMeasureTextBlock in tyControls.Painter,
+  because a size FLOOR needs exactly this measurement and every control that grows one would
+  otherwise carry a near-copy — near-copies are how measuring and drawing drift apart.
+  Behaviour is unchanged: the same font, the same 'Ag' line box, the same wrap. }
 var
   S: TTyStyleSet;
-  Meas: TBitmap;
-  Lines: TStringList;
-  i, w, lineH, mpos: Integer;
+  mpos, wrapW: Integer;
   disp: string;
 begin
   S := CurrentStyle;
   TyParseMnemonic(Caption, disp, mpos);
-  AWidthPx := 0;
-  AHeightPx := 0;
-  Meas := TBitmap.Create;
-  Lines := TStringList.Create;
-  try
-    Meas.SetSize(1, 1);
-    Meas.Canvas.Font.Name := TyEffectiveFontName(S.FontName);
-    Meas.Canvas.Font.Size := MulDiv(ResolveFontSize(S), APPI, 96);
-    if S.FontWeight >= 600 then
-      Meas.Canvas.Font.Style := [fsBold]
-    else
-      Meas.Canvas.Font.Style := [];
-    lineH := Meas.Canvas.TextHeight('Ag');
-    if lineH < 1 then lineH := 1;
-
-    if FWordWrap and (AAvailWidthPx > 0) then
-      WrapText(disp, AAvailWidthPx, Meas.Canvas, Lines)
-    else
-      Lines.Text := disp; // splits on existing line breaks; usually one line
-
-    if Lines.Count = 0 then
-      Lines.Add(disp);
-
-    for i := 0 to Lines.Count - 1 do
-    begin
-      w := Meas.Canvas.TextWidth(Lines[i]);
-      if w > AWidthPx then AWidthPx := w;
-    end;
-    AHeightPx := Lines.Count * lineH;
-  finally
-    Lines.Free;
-    Meas.Free;
-  end;
+  if FWordWrap then
+    wrapW := AAvailWidthPx    // <=0 there already meant "unconstrained", and still does
+  else
+    wrapW := 0;
+  TyMeasureTextBlock(disp, S.FontName, ResolveFontSize(S), S.FontWeight, APPI,
+    wrapW, TyLineHeight(ActiveController), AWidthPx, AHeightPx);
 end;
 
 procedure TTyLabel.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
@@ -310,14 +378,14 @@ begin
       Lines := TStringList.Create;
       try
         Meas.SetSize(1, 1);
-        Meas.Canvas.Font.Name := TyEffectiveFontName(S.FontName);
-        Meas.Canvas.Font.Size := MulDiv(fontSize, APPI, 96);
-        if S.FontWeight >= 600 then
-          Meas.Canvas.Font.Style := [fsBold]
+        TyConfigureMeasureFont(Meas.Canvas, S.FontName, fontSize, S.FontWeight, APPI);
+        { The SAME line box MeasureCaption used, or the label draws its lines at the font's
+          natural spacing inside a box it sized for the theme's --line-height. }
+        lineH := TyLineHeight(ActiveController);
+        if lineH > 0 then
+          lineH := MulDiv(lineH, APPI, 96)
         else
-          Meas.Canvas.Font.Style := [];
-        lineH := Meas.Canvas.TextHeight('Ag');
-        if lineH < 1 then lineH := 1;
+          lineH := TyNaturalLineHeight(Meas.Canvas);
         availW := ContentRect.Right - ContentRect.Left;
         WrapText(dispCap, availW, Meas.Canvas, Lines);
         // Position the whole wrapped block per Layout (native vertically anchors
@@ -345,8 +413,13 @@ begin
       end;
     end
     else
+      { Multi-line even with WordWrap off: MeasureCaption has ALWAYS counted the author's
+        line breaks as lines (so an AutoSize label is already sized for them), but the draw
+        forced SingleLine and ran them together. Passing the line breaks through is what
+        makes the drawn label match the box it was measured into. }
       P.DrawText(ContentRect, dispCap, S.FontName, fontSize, S.FontWeight,
-        S.TextColor, FAlignment, FLayout, False, TyAccelGatePos(mp));
+        S.TextColor, FAlignment, FLayout, False, TyAccelGatePos(mp), False,
+        True, TyLineHeight(ActiveController));
     P.EndPaint;
   finally
     P.Free;

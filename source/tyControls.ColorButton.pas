@@ -45,9 +45,18 @@ type
         ShowText=False -> 色块本来是铺满内容区的,没有天然宽度;取一个正方形色块
                           (边长 = 内容区高度)作为它的自然尺寸,这样 AutoSize 给出的
                           是一个方方正正的取色块,而不是一条被压扁的色带。
-      高度同 TTyButton:保持 0(本轴无意见),交给排版决定。 }
+      高度同 TTyButton:保持 0(本轴无意见),交给排版决定。
+
+      本方法同时是**尺寸下限**的宽度来源(TTyButton.UpdateSizeConstraints 调它算
+      Constraints.MinWidth),所以「色块 + 间隙 + 文字」不是装饰,而是这个按钮的最小宽度。 }
     procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
       WithThemeSpace: Boolean); override;
+    { 高度下限里的「内容」。基类量的是一行 Caption,可这个按钮**一个字都不画 Caption**:
+      画的是色块,ShowText 时再加一串 '#RRGGBB'。所以下限从 DrawContent 里唯一那条硬底线
+      起算——TyColorButtonMinSwatch(色块再挤也不小于它);开了 ShowText 才还要装得下一行
+      十六进制文字,而那一行的高度和基类量的是同一套字体度量(同名字体、同 MulDiv 字号、
+      同粗体阈值),所以直接问基类要,不另起一套。 }
+    function MeasureContentHeight(APPI: Integer): Integer; override;
   public
     constructor Create(AOwner: TComponent); override;
     // The button's click IS "open the colour dialog": pick a colour via TySelectColor,
@@ -172,6 +181,20 @@ begin
   finally
     Meas.Free;
   end;
+end;
+
+function TTyColorButton.MeasureContentHeight(APPI: Integer): Integer;
+var
+  lineH: Integer;
+begin
+  // DrawContent 的硬底线:色块边长永远不小于 TyColorButtonMinSwatch(同一个常量、同一个
+  // 96 基线换算),所以内容至少这么高。
+  Result := MulDiv(TyColorButtonMinSwatch, APPI, 96);
+  if Result < 1 then Result := 1;
+  // 不显示文字时,内容就只有色块——不该替一行根本不画的字留位置。
+  if not FShowText then Exit;
+  lineH := inherited MeasureContentHeight(APPI);   // 一行文字的高度(参考字形,与 Caption 无关)
+  if lineH > Result then Result := lineH;
 end;
 
 procedure TTyColorButton.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;

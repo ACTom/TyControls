@@ -18,7 +18,7 @@ interface
 uses
   Classes, SysUtils, TypInfo, Types, Controls, Graphics, Forms, LCLType, fpcunit, testregistry,
   tyControls.Base, tyControls.Types, tyControls.Controller, tyControls.Menu,
-  tyControls.DropButtons;
+  tyControls.DropButtons, tyControls.ToolBar;
 
 type
   { Probe subclass: drives a full headless "press then click" at a device-x. LCL
@@ -35,6 +35,8 @@ type
     procedure DoRenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     { The protected preferred-size calculation — what AutoSize would resize to. }
     procedure CallPreferred(out AW, AH: Integer);
+    { The caption measurement the size floor's HEIGHT is derived from. }
+    procedure CallMeasure(APPI: Integer; out AW, AH: Integer);
   end;
 
   { Probe subclass exposing TTyMenuButton's protected RenderTo. }
@@ -42,6 +44,7 @@ type
   public
     procedure DoRenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure CallPreferred(out AW, AH: Integer);
+    procedure CallMeasure(APPI: Integer; out AW, AH: Integer);
   end;
 
   TDropDownButtonTest = class(TTestCase)
@@ -94,6 +97,21 @@ type
     procedure TestPreferredHeightIsAlwaysZero;
   end;
 
+  { SIZE FLOOR(Constraints.Min*)。手写的 Height 和主题的 --control-height 都只是**请求**;
+    真正**做得到**的尺寸由字体、内边距和箭头区决定,而这三样只有控件自己同时知道。
+    Linux/Qt6 上同一个 9pt 中文标题会走一张 ink 更高的回落字体,DrawText 又是裁剪 + tlCenter,
+    所以盒子矮了掉的是标题的**下半截**——只在那个平台上,而且悄无声息。
+    这里一律断言 Constraints,不断言 Width/Height:下限跟 AutoSize 开不开无关,而且父窗体
+    没句柄时 AutoSizeDelayed 会把真正的 resize 整个吞掉。 }
+  TDropButtonsFloorTest = class(TTestCase)
+  published
+    procedure TestSplitArrowZoneIsPartOfTheWidthFloor;
+    procedure TestMenuFloorTracksTheThemeArrowMetric;
+    procedure TestFloorFitsTheCaption;
+    procedure TestSmallerFontLowersTheFloor;
+    procedure TestFloorSurvivesAHeightPinningToolBar;
+  end;
+
 implementation
 
 const
@@ -133,6 +151,16 @@ procedure TDropDownAccess.CallPreferred(out AW, AH: Integer);
 begin
   AW := 0; AH := 0;
   CalculatePreferredSize(AW, AH, True);
+end;
+
+procedure TDropDownAccess.CallMeasure(APPI: Integer; out AW, AH: Integer);
+begin
+  MeasureCaption(APPI, AW, AH);
+end;
+
+procedure TMenuButtonAccess.CallMeasure(APPI: Integer; out AW, AH: Integer);
+begin
+  MeasureCaption(APPI, AW, AH);
 end;
 
 procedure TMenuButtonAccess.DoRenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -762,8 +790,169 @@ begin
   end;
 end;
 
+{ ---- TDropButtonsFloorTest ---- }
+
+procedure TDropButtonsFloorTest.TestSplitArrowZoneIsPartOfTheWidthFloor;
+var
+  Ctl: TTyStyleController;
+  D: TDropDownAccess;
+  w18, h18: Integer;
+begin
+  { 箭头区不是装饰:分割按钮把标题画在箭头区**左边**,所以一条被压到只装得下标题的按钮,
+    箭头会直接把标题吃掉。下限必须连箭头区一起守住,而且必须正好是 DrawContent 让出的那
+    一段——所以这里断的是差值,不是"大于"。 }
+  Ctl := TTyStyleController.Create(nil);
+  D := TDropDownAccess.Create(nil);
+  try
+    Ctl.LoadThemeCss(cDropTightCss);
+    D.Controller := Ctl;
+    D.Font.PixelsPerInch := 96;
+    D.Caption := 'Export';
+    D.ArrowWidth := 18;
+    D.Invalidate;                       // 换肤送到控件手上的就是一个裸 Invalidate
+    w18 := D.Constraints.MinWidth;
+    h18 := D.Constraints.MinHeight;
+
+    D.ArrowWidth := 0;                  // setter 自带 Invalidate,下限跟着重量
+    AssertEquals('dropping the arrow zone lowers the width floor by exactly 18',
+      w18 - 18, D.Constraints.MinWidth);
+    AssertEquals('the arrow sits BESIDE the caption, so the height floor does not move',
+      h18, D.Constraints.MinHeight);
+  finally
+    D.Free; Ctl.Free;
+  end;
+end;
+
+procedure TDropButtonsFloorTest.TestMenuFloorTracksTheThemeArrowMetric;
+var
+  Ctl: TTyStyleController;
+  M: TMenuButtonAccess;
+  narrow: Integer;
+begin
+  { TTyMenuButton 的箭头区是**主题度量**('--drop-arrow-width'),不是属性。皮肤把它调宽,
+    最小宽度就得跟着宽——下限必须是推导出来的,写死一个常数在这里就等于"换了皮肤照旧截"。 }
+  Ctl := TTyStyleController.Create(nil);
+  M := TMenuButtonAccess.Create(nil);
+  try
+    M.Controller := Ctl;
+    M.Font.PixelsPerInch := 96;
+    M.Caption := 'Export';
+
+    Ctl.LoadThemeCss(cDropTightCss);        // --drop-arrow-width: 18px
+    M.Invalidate;
+    narrow := M.Constraints.MinWidth;
+
+    Ctl.LoadThemeCss(cDropWideArrowCss);    // 同样的字体和内边距,只有箭头 18 -> 40
+    M.Invalidate;
+    AssertEquals('a 22px wider arrow metric raises the width floor by exactly 22',
+      narrow + 22, M.Constraints.MinWidth);
+  finally
+    M.Free; Ctl.Free;
+  end;
+end;
+
+procedure TDropButtonsFloorTest.TestFloorFitsTheCaption;
+var
+  Ctl: TTyStyleController;
+  D: TDropDownAccess;
+  M: TMenuButtonAccess;
+  tw, th: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  D := TDropDownAccess.Create(nil);
+  M := TMenuButtonAccess.Create(nil);
+  try
+    Ctl.LoadThemeCss(cDropTightCss);
+    D.Controller := Ctl; D.Font.PixelsPerInch := 96; D.Caption := '新建';
+    M.Controller := Ctl; M.Font.PixelsPerInch := 96; M.Caption := '新建';
+    D.Invalidate;
+    M.Invalidate;
+    D.CallMeasure(96, tw, th);
+
+    AssertTrue(Format('the split button''s height floor covers the caption ink (%d >= %d)',
+      [D.Constraints.MinHeight, th]), D.Constraints.MinHeight >= th);
+    AssertTrue(Format('and the menu button''s does too (%d >= %d)',
+      [M.Constraints.MinHeight, th]), M.Constraints.MinHeight >= th);
+
+    { 提一个不可能的尺寸,钳制必须赢——把下限放进 Constraints 而不是"提议尺寸",图的就是
+      这个:它在 SetBounds 里钳,不参与协商。 }
+    D.Height := 4;
+    D.Width := 4;
+    AssertTrue('a too-short request is clamped up', D.Height >= th);
+    AssertTrue('a too-narrow request is clamped up', D.Width >= tw);
+  finally
+    M.Free; D.Free; Ctl.Free;
+  end;
+end;
+
+procedure TDropButtonsFloorTest.TestSmallerFontLowersTheFloor;
+var
+  Ctl: TTyStyleController;
+  D: TDropDownAccess;
+  bigH, bigW: Integer;
+begin
+  { 下限必须是**推导**出来的,不是一堵墙:字号和内边距调小,它就该跟着降。不然"嫌大就改
+    CSS"这句话根本兑现不了。 }
+  Ctl := TTyStyleController.Create(nil);
+  D := TDropDownAccess.Create(nil);
+  try
+    D.Controller := Ctl;
+    D.Font.PixelsPerInch := 96;
+    D.Caption := '新建';
+
+    Ctl.LoadThemeCss('TyButton { font-size: 20px; padding: 8px; }');
+    D.Invalidate;
+    bigH := D.Constraints.MinHeight;
+    bigW := D.Constraints.MinWidth;
+
+    Ctl.LoadThemeCss('TyButton { font-size: 8px; padding: 1px; }');
+    D.Invalidate;
+    AssertTrue(Format('a smaller font+padding lowers the height floor (%d -> %d)',
+      [bigH, D.Constraints.MinHeight]), D.Constraints.MinHeight < bigH);
+    AssertTrue(Format('...and the width floor with it (%d -> %d)',
+      [bigW, D.Constraints.MinWidth]), D.Constraints.MinWidth < bigW);
+  finally
+    D.Free; Ctl.Free;
+  end;
+end;
+
+procedure TDropButtonsFloorTest.TestFloorSurvivesAHeightPinningToolBar;
+var
+  F: TForm;
+  Bar: TTyToolBar;
+  D: TTyDropDownButton;
+  M: TTyMenuButton;
+begin
+  { 下限绝不能把"提议高度"那场仗重新打起来:工具条把每个子控件钉到 ButtonHeight,子控件再
+    提议一个自己的高度,两边来回顶,LCL 最后以 "ChangeBounds loop detected" 中止 —— demo
+    当初就是这么在启动时死掉的。Constraints 在 SetBounds 里钳,不协商。
+    **跑到这一行本身就是断言**。 }
+  F := TForm.CreateNew(nil);
+  try
+    Bar := TTyToolBar.Create(F);
+    Bar.Parent := F;
+    Bar.ButtonHeight := 40;
+    D := TTyDropDownButton.Create(Bar);
+    D.Parent := Bar;
+    D.Caption := '新建';
+    D.AutoSize := True;
+    M := TTyMenuButton.Create(Bar);
+    M.Parent := Bar;
+    M.Caption := '打开';
+    M.AutoSize := True;
+    Bar.ButtonHeight := 41;            // 真要是循环了,进程在这里就没了
+    AssertTrue(Format('the bar asks for a height the split button''s floor can honour (%d)',
+      [D.Constraints.MinHeight]), D.Constraints.MinHeight <= 40);
+    AssertTrue(Format('and the menu button''s too (%d)', [M.Constraints.MinHeight]),
+      M.Constraints.MinHeight <= 40);
+  finally
+    F.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TDropDownButtonTest);
   RegisterTest(TMenuButtonTest);
   RegisterTest(TDropButtonsAutoSizeTest);
+  RegisterTest(TDropButtonsFloorTest);
 end.

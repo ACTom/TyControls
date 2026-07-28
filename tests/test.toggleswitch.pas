@@ -15,6 +15,8 @@ type
     procedure SimulateKeyDown(var Key: Word);
     // Expose the protected preferred-size calculation (what AutoSize resizes to).
     procedure CallPreferred(out AW, AH: Integer);
+    // Expose the protected caption measurement the size floor is derived from.
+    procedure CallMeasure(APPI: Integer; out AW, AH: Integer);
   end;
 
   TChangeCounter = class
@@ -60,6 +62,21 @@ type
     procedure TestPreferredWidthIncludesTheGapAndTheCaption;
     procedure TestBiggerThemeFontWidensPreferredWidth;
     procedure TestAutoSizeSurvivesAHeightPinningParent;
+  end;
+
+  { A hand-set size and the theme's --control-height are REQUESTS; what is possible is decided
+    by the font, and only the control knows it. On Linux/Qt6 the same 9pt CJK caption resolves
+    a fallback face whose ink is taller than Windows', and the caption is drawn tlCenter WITH
+    clipping — so a box shorter than the ink loses the BOTTOM of the text. These cover the
+    floor the switch publishes for that, and the deliberate absence of one when there is no
+    caption to protect. }
+  TTyToggleSwitchSizeFloorTest = class(TTestCase)
+  published
+    procedure TestMinimumFitsTheCaption;
+    procedure TestMinimumWidthIsThePreferredWidth;
+    procedure TestNoCaptionNoFloor;
+    procedure TestMinimumSurvivesAHeightPinningParent;
+    procedure TestSmallerFontLowersTheMinimum;
   end;
 
   TTyToggleSwitchPixelTest = class(TTestCase)
@@ -110,6 +127,11 @@ procedure TTyToggleSwitchProbe.CallPreferred(out AW, AH: Integer);
 begin
   AW := 0; AH := 0;
   CalculatePreferredSize(AW, AH, True);
+end;
+
+procedure TTyToggleSwitchProbe.CallMeasure(APPI: Integer; out AW, AH: Integer);
+begin
+  MeasureCaption(APPI, AW, AH);
 end;
 
 { TTyToggleSwitchTest }
@@ -796,8 +818,150 @@ begin
   end;
 end;
 
+{ TTyToggleSwitchSizeFloorTest }
+
+procedure TTyToggleSwitchSizeFloorTest.TestMinimumFitsTheCaption;
+{ The floor covers the caption's ink, and an impossible request is clamped up instead of
+  quietly cutting the bottom off the text. }
+var
+  F: TForm;
+  Sw: TTyToggleSwitchProbe;
+  tw, th: Integer;
+begin
+  F := TForm.CreateNew(nil);
+  try
+    Sw := TTyToggleSwitchProbe.Create(F);
+    Sw.Parent := F;
+    Sw.Font.PixelsPerInch := 96;
+    Sw.Caption := '同步';
+    Sw.CallMeasure(96, tw, th);
+
+    AssertTrue('the height floor covers the caption ink', Sw.Constraints.MinHeight >= th);
+    AssertTrue('the width floor covers the caption too', Sw.Constraints.MinWidth >= tw);
+
+    Sw.Height := 3;
+    Sw.Width := 3;
+    AssertTrue('a too-short request is clamped up', Sw.Height >= th);
+    AssertTrue('a too-narrow request is clamped up', Sw.Width >= tw);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TTyToggleSwitchSizeFloorTest.TestMinimumWidthIsThePreferredWidth;
+{ The floor must REUSE the preferred width, not re-derive it: the switch zone is height-
+  derived (the 44:24 pill) and the caption sits beyond a gap, and two copies of that sum
+  are two things that can drift — the drift would show as a caption cut by exactly the term
+  one copy forgot. }
+var
+  Ctl: TTyStyleController;
+  Sw: TTyToggleSwitchProbe;
+  pw, ph: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Sw := TTyToggleSwitchProbe.Create(nil);
+    try
+      Sw.Controller := Ctl;
+      Sw.Font.PixelsPerInch := 96;
+      Sw.Height := 24;
+      Ctl.LoadThemeCss('TyToggleSwitch { background: #444444; color: #000000; font-size: 12px; }');
+      Sw.Caption := 'Synchronise automatically';
+      Sw.Invalidate;                    // the seam a theme switch arrives on
+      Sw.CallPreferred(pw, ph);
+      AssertEquals('the width floor IS the preferred width', pw, Sw.Constraints.MinWidth);
+    finally Sw.Free; end;
+  finally Ctl.Free; end;
+end;
+
+procedure TTyToggleSwitchSizeFloorTest.TestNoCaptionNoFloor;
+{ With no caption there is no ink that can be clipped: the pill is drawn to the client rect
+  and the knob is derived from the height, so a small bare switch is a small bare switch, not
+  a broken one. Flooring it at its 44x24 default would invent a rule nobody asked for — and
+  would silently resize every bare switch a host deliberately made small. }
+var
+  F: TForm;
+  Sw: TTyToggleSwitch;
+begin
+  F := TForm.CreateNew(nil);
+  try
+    Sw := TTyToggleSwitch.Create(F);
+    Sw.Parent := F;
+    Sw.Caption := 'Something';          // floor goes up...
+    Sw.Caption := '';                   // ...and must come back down with the caption
+    AssertEquals('a bare switch publishes no width floor', 0, Sw.Constraints.MinWidth);
+    AssertEquals('nor a height one', 0, Sw.Constraints.MinHeight);
+    Sw.SetBounds(0, 0, 20, 14);
+    AssertEquals('so a deliberately small bare switch keeps its width', 20, Sw.Width);
+    AssertEquals('and its height', 14, Sw.Height);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TTyToggleSwitchSizeFloorTest.TestMinimumSurvivesAHeightPinningParent;
+{ The floor must not reopen the fight a proposed HEIGHT once started: a bar pins every child
+  to its ButtonHeight, and a child that answers back bounced until LCL aborted with
+  "ChangeBounds loop detected". Constraints clamp inside SetBounds with no negotiation.
+  Reaching the end of this test IS the assertion. }
+var
+  F: TForm;
+  Bar: TTyToolBar;
+  Sw: TTyToggleSwitch;
+begin
+  F := TForm.CreateNew(nil);
+  try
+    Bar := TTyToolBar.Create(F);
+    Bar.Parent := F;
+    Bar.ButtonHeight := 40;
+    Sw := TTyToggleSwitch.Create(Bar);
+    Sw.Parent := Bar;
+    Sw.Caption := '同步';
+    Sw.AutoSize := True;
+    Bar.ButtonHeight := 41;             // a loop would abort the process here
+    AssertTrue('the bar asks for a height the floor can honour',
+      Sw.Constraints.MinHeight <= 40);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TTyToggleSwitchSizeFloorTest.TestSmallerFontLowersTheMinimum;
+{ The floor is DERIVED, not a wall: a theme with a smaller font lowers it, which is what
+  makes "override the CSS if you want it smaller" a coherent answer instead of a refusal. }
+var
+  F: TForm;
+  Ctl: TTyStyleController;
+  Sw: TTyToggleSwitch;
+  big, small: Integer;
+begin
+  F := TForm.CreateNew(nil);
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Sw := TTyToggleSwitch.Create(F);
+    Sw.Parent := F;
+    Sw.Controller := Ctl;
+    Sw.Caption := '同步';
+
+    Ctl.LoadThemeCss('TyToggleSwitch { background: #444444; color: #000000; font-size: 24px; }');
+    Sw.Invalidate;
+    big := Sw.Constraints.MinHeight;
+
+    Ctl.LoadThemeCss('TyToggleSwitch { background: #444444; color: #000000; font-size: 8px; }');
+    Sw.Invalidate;
+    small := Sw.Constraints.MinHeight;
+
+    AssertTrue(Format('a smaller theme font lowers the floor (%d -> %d)', [big, small]),
+      small < big);
+  finally
+    Ctl.Free;
+    F.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTyToggleSwitchTest);
   RegisterTest(TTyToggleSwitchAutoSizeTest);
   RegisterTest(TTyToggleSwitchPixelTest);
+  RegisterTest(TTyToggleSwitchSizeFloorTest);
 end.

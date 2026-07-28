@@ -39,7 +39,17 @@ unit tyControls.GlyphButtons;
   padding or the font. CalculatePreferredSize below therefore mirrors DrawContent's
   own geometry — same glyph size, same gap metric, same layout — because a preferred
   size that disagrees with the paint is worse than none at all: AutoSize would then
-  report a fit while the caption still clips. }
+  report a fit while the caption still clips.
+
+  The SIZE FLOOR (TTyButton.UpdateSizeConstraints) rides on that same measurement, so it
+  needs no second geometry here: the width minimum simply IS what CalculatePreferredSize
+  asks for, glyph slot and gap included. Only the HEIGHT is stated separately, in
+  MeasureContentHeight below — and only for the ribbon tile, because glyph-TOP is the one layout
+  that stacks the glyph on the CAPTION's axis. That axis is where the bug lived: Qt6 resolves
+  a CJK caption through a fallback face whose ink is taller than the theme's --control-height
+  assumed, and DrawText clips with tlCenter, so it was the BOTTOM of 新建/打开 that silently
+  went missing. A hand-set Height is a request; the font and the padding decide what is
+  possible. }
 
 interface
 
@@ -101,6 +111,21 @@ type
     { The glyph square's edge in DEVICE px at APPI under AStyle, mirroring the choice
       DrawContent makes: an explicit GlyphSize (scaled) wins, otherwise auto-fit. }
     function MeasureGlyphSlot(APPI: Integer; const AStyle: TTyStyleSet): Integer;
+    { The glyph's edge in DEVICE px when — and only when — GlyphSize was set EXPLICITLY and
+      there is really a glyph to draw; 0 otherwise. Deliberately NOT MeasureGlyphSlot: that
+      one falls back to the AUTO square, which is derived FROM the content box, so feeding it
+      into a size FLOOR would pin the control at whatever height it happens to have and it
+      could never shrink again — the minimum would stop being a measurement and become a
+      ratchet. An auto glyph demands nothing; it takes the box it is given. }
+    function FixedGlyphPx(APPI: Integer): Integer;
+    { A ribbon tile (glyph-TOP) stacks glyph, gap and caption down the box — exactly what
+      TyGlyphButtonSplit lays out — so all three are part of the minimum HEIGHT: a shorter box
+      clamps the glyph and then collapses the caption rect to nothing, which is the vertical
+      twin of the clipped caption this floor exists to stop.
+      Glyph-LEFT adds nothing here. Its slot displaces the caption SIDEWAYS, and that cost is
+      already in CalculatePreferredSize's width; counting it again as height would quietly
+      grow every tool-bar row that carries an icon. }
+    function MeasureContentHeight(APPI: Integer): Integer; override;
     { The caption's width plus the theme padding (TTyButton's answer), WIDENED by the
       glyph slot — and, for glyph-left, by the gap between glyph and caption — so the
       box AutoSize asks for is the box DrawContent paints into. Width only: the
@@ -363,6 +388,42 @@ begin
       layouts. Height is used, not proposed: it stays whatever the layout gave us. }
     Result := ClientHeight - MulDiv(AStyle.Padding.Top + AStyle.Padding.Bottom, APPI, 96);
   if Result < 0 then Result := 0;
+end;
+
+function TTyGlyphButtonBase.FixedGlyphPx(APPI: Integer): Integer;
+begin
+  Result := 0;
+  // No source -> DrawContent paints a plain caption; nothing to reserve for.
+  if not HasGlyphSource then Exit;
+  // Auto (GlyphSize = 0): computed FROM the box, so it can never be a demand ON the box.
+  if FGlyphSize <= 0 then Exit;
+  Result := MulDiv(FGlyphSize, APPI, 96);
+  if Result < 0 then Result := 0;
+end;
+
+function TTyGlyphButtonBase.MeasureContentHeight(APPI: Integer): Integer;
+var
+  gpx, lineH, gapPx: Integer;
+begin
+  lineH := inherited MeasureContentHeight(APPI);   // the caption's own line
+  gpx := FixedGlyphPx(APPI);
+  if (gpx < 1) or (FGlyphLayout <> glTop) then
+  begin
+    // Glyph beside the caption, or no fixed glyph at all: the caption's line still decides.
+    Result := lineH;
+    Exit;
+  end;
+  Result := gpx;
+  { The gap — and the caption's line under it — are only paid for when a caption is really
+    drawn: DrawContent skips the caption rect entirely when Caption is empty, exactly as the
+    preferred WIDTH refuses to pay a glyph-left gap to nothing. The metric is the same
+    '--glyph-button-gap' DrawContent scales, so a skin retuning it moves both together. }
+  if Caption <> '' then
+  begin
+    gapPx := MulDiv(ActiveController.Metric('--glyph-button-gap', TyGlyphButtonGap), APPI, 96);
+    if gapPx < 0 then gapPx := 0;
+    Inc(Result, gapPx + lineH);
+  end;
 end;
 
 procedure TTyGlyphButtonBase.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;

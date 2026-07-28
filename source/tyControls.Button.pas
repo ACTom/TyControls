@@ -68,7 +68,19 @@ type
       WithThemeSpace: Boolean); override;
     { The caption's drawn size in DEVICE px at APPI, mnemonic markers removed. }
     procedure MeasureCaption(APPI: Integer; out AWidth, AHeight: Integer);
-    { Clamp the control so it can never be smaller than the text it must draw. The theme's
+    { The ink this control stacks INSIDE the padded content box, in device px at APPI — the
+      vertical half of the floor, the half CalculatePreferredSize deliberately refuses to
+      answer (it reports 0 on that axis so nothing negotiates a height with its parent).
+      The base is one line of the resolved font; an empty caption still gets a line, so a
+      button that is captioned later is not born flat.
+
+      Override it where the control STACKS ink vertically (a ribbon tile's glyph ABOVE its
+      caption) or draws something else entirely (a colour swatch instead of the caption). A
+      slot that sits BESIDE the caption — a glyph on the left, a drop-down's arrow zone —
+      displaces the caption sideways, not downwards: it costs WIDTH, it already lives in
+      CalculatePreferredSize, and the floor picks it up from there for free. }
+    function MeasureContentHeight(APPI: Integer): Integer; virtual;
+    { Clamp the control so it can never be smaller than the content it must draw. The theme's
       --control-height and a hand-set Height are REQUESTS; the font and the padding decide
       what is actually possible, and only the control knows both.
 
@@ -554,20 +566,40 @@ begin
   end;
 end;
 
+function TTyButton.MeasureContentHeight(APPI: Integer): Integer;
+var
+  tw, th: Integer;
+begin
+  // A push button is a single centred caption: one line of the resolved font, and no more.
+  MeasureCaption(APPI, tw, th);
+  Result := th;
+end;
+
 procedure TTyButton.UpdateSizeConstraints;
 var
   S: TTyStyleSet;
-  ppi, tw, th, padW, padH: Integer;
+  ppi, padH, pw, ph: Integer;
 begin
   if csDestroying in ComponentState then Exit;
   ppi := Font.PixelsPerInch;
   if ppi <= 0 then ppi := 96;
   S := CurrentStyle;
-  MeasureCaption(ppi, tw, th);
-  padW := MulDiv(S.Padding.Left + S.Padding.Right, ppi, 96);
+  { WIDTH — ask the control what it would want if it were auto-sizing, i.e. run the very
+    method that measures its own content beside the code that draws it. Going through
+    CalculatePreferredSize is what keeps the floor honest for every descendant without each
+    of them restating its geometry: a split button's arrow zone, a glyph button's icon slot
+    and gap, a colour button's swatch and hex are all already measured there, so the minimum
+    physically cannot drift away from the paint. }
+  pw := 0;
+  ph := 0;
+  CalculatePreferredSize(pw, ph, True);
+  if pw < 0 then pw := 0;
+  { HEIGHT — the axis CalculatePreferredSize answers 0 on (see there), so it is computed
+    here: the stacked ink plus the SAME top/bottom padding RenderTo insets by before
+    DrawContent ever sees the box. }
   padH := MulDiv(S.Padding.Top + S.Padding.Bottom, ppi, 96);
-  Constraints.MinWidth  := tw + padW;
-  Constraints.MinHeight := th + padH;
+  Constraints.MinWidth  := pw;
+  Constraints.MinHeight := MeasureContentHeight(ppi) + padH;
 end;
 
 procedure TTyButton.TextChanged;
@@ -620,23 +652,15 @@ begin
   S := CurrentStyle;
   // The '&' markers are not drawn, so they must not be measured either.
   TyParseMnemonic(Caption, disp, mp);
-  Meas := TBitmap.Create;
-  try
-    Meas.SetSize(1, 1);
-    Meas.Canvas.Font.Name := TyEffectiveFontName(S.FontName);
-    Meas.Canvas.Font.Size := MulDiv(ResolveFontSize(S), APPI, 96);
-    if S.FontWeight >= 600 then
-      Meas.Canvas.Font.Style := [fsBold]
-    else
-      Meas.Canvas.Font.Style := [];
-    AWidth := Meas.Canvas.TextWidth(disp);
-    // A stable reference glyph: an empty caption still sizes to one line.
-    AHeight := Meas.Canvas.TextHeight('Ag');
-    if AWidth < 0 then AWidth := 0;
-    if AHeight < 1 then AHeight := 1;
-  finally
-    Meas.Free;
-  end;
+  { Measure the BLOCK, not one line: a caption may carry authored breaks
+    (Caption := '你好' + #13#10 + '世界'), and DrawContent now renders them, so the size floor
+    has to cover every line or the second one is what gets clipped. TyMeasureTextBlock is the
+    shared measurement the label uses too, so the two can never disagree; for a caption with
+    no break it returns exactly the single line this used to compute by hand. }
+  TyMeasureTextBlock(disp, S.FontName, ResolveFontSize(S), S.FontWeight, APPI,
+    0, TyLineHeight(ActiveController), AWidth, AHeight);
+  if AWidth < 0 then AWidth := 0;
+  if AHeight < 1 then AHeight := 1;
 end;
 
 procedure TTyButton.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
@@ -669,8 +693,11 @@ var
   mp: Integer;
 begin
   TyParseMnemonic(Caption, disp, mp);
+  { AMultiLine: an authored break in the caption really renders. Costs nothing when there is
+    none -- the painter early-outs to the identical single-line path, mnemonic and all. }
   APainter.DrawText(AContentRect, disp, AStyle.FontName, ResolveFontSize(AStyle),
-    AStyle.FontWeight, AStyle.TextColor, taCenter, tlCenter, True, TyAccelGatePos(mp));
+    AStyle.FontWeight, AStyle.TextColor, taCenter, tlCenter, True, TyAccelGatePos(mp),
+    False, True, TyLineHeight(ActiveController));
 end;
 
 procedure TTyButton.Paint;

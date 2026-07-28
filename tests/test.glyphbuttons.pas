@@ -15,12 +15,15 @@ type
   public
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure CallPreferred(out AW, AH: Integer);
+    // The caption measurement the size floor's HEIGHT is derived from.
+    procedure CallMeasure(APPI: Integer; out AW, AH: Integer);
   end;
 
   TContainerButtonAccess = class(TTyGlyphContainerButton)
   public
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure CallPreferred(out AW, AH: Integer);
+    procedure CallMeasure(APPI: Integer; out AW, AH: Integer);
   end;
 
   TSpeedButtonAccess = class(TTySpeedButton)
@@ -54,6 +57,23 @@ type
     procedure TestPreferredHeightStaysZero;
   end;
 
+  { SIZE FLOOR (Constraints.Min*). A hand-set Height and the theme's --control-height are
+    REQUESTS; what is POSSIBLE is decided by the font, the padding and the glyph, and only the
+    control knows all three. On Linux/Qt6 the same 9pt CJK caption resolves through a fallback
+    face with taller ink than Windows', and DrawText draws clipped + tlCenter, so a box shorter
+    than the ink loses the caption's BOTTOM — silently, and only on that platform.
+    Everything here asserts Constraints, not Width/Height: the floor has to hold whether or
+    not AutoSize is on, and AutoSizeDelayed suppresses real resizing without a form handle. }
+  TGlyphButtonFloorTest = class(TTestCase)
+  published
+    procedure TestFloorFitsTheCaption;
+    procedure TestGlyphSlotIsPartOfTheWidthFloorNotTheHeight;
+    procedure TestContainerStacksTheGlyphIntoTheHeightFloor;
+    procedure TestContainerWithoutACaptionPaysNoGapNorLine;
+    procedure TestAutoGlyphNeverRatchetsTheFloor;
+    procedure TestSmallerFontAndPaddingLowerTheFloor;
+  end;
+
   TSpeedButtonTest = class(TTestCase)
   published
     procedure TestDefaults;
@@ -63,6 +83,7 @@ type
     procedure TestDisabledClickNoChange;
     procedure TestRoomierThemeWidensThroughItsOwnKey;
     procedure TestAutoSizeSurvivesAHeightPinningToolBar;
+    procedure TestFloorSurvivesAHeightPinningToolBar;
   end;
 implementation
 
@@ -82,10 +103,20 @@ begin
   inherited RenderTo(ACanvas, ARect, APPI);
 end;
 
+procedure TGlyphButtonAccess.CallMeasure(APPI: Integer; out AW, AH: Integer);
+begin
+  MeasureCaption(APPI, AW, AH);
+end;
+
 procedure TContainerButtonAccess.CallPreferred(out AW, AH: Integer);
 begin
   AW := 0; AH := 0;
   CalculatePreferredSize(AW, AH, True);
+end;
+
+procedure TContainerButtonAccess.CallMeasure(APPI: Integer; out AW, AH: Integer);
+begin
+  MeasureCaption(APPI, AW, AH);
 end;
 
 procedure TSpeedButtonAccess.CallPreferred(out AW, AH: Integer);
@@ -706,6 +737,235 @@ begin
   end;
 end;
 
+{ ---- TGlyphButtonFloorTest ---- }
+
+const
+  { Padding and font-size pinned so the assertions can be exact numbers instead of
+    "bigger than". border-width:0 keeps the frame out of the arithmetic. }
+  cGbFloorCss =
+    'TyButton { background: #FFFFFF; color: #000000; border-width: 0px; padding: 5px 9px; font-size: 12px; }';
+  { Ribbon tiles resolve their OWN key, so the tile tests state that one. 4px top + 4px
+    bottom = 8px of vertical padding, 8px+8px = 16px horizontal. }
+  cGbTileCss =
+    'TyGlyphContainerButton { background: #FFFFFF; color: #000000; border-width: 0px; padding: 4px 8px; font-size: 12px; }';
+
+procedure TGlyphButtonFloorTest.TestFloorFitsTheCaption;
+var
+  Ctl: TTyStyleController;
+  B: TGlyphButtonAccess;
+  tw, th: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  B := TGlyphButtonAccess.Create(nil);
+  try
+    Ctl.LoadThemeCss(cGbFloorCss);
+    B.Controller := Ctl;
+    B.Font.PixelsPerInch := 96;
+    B.Caption := '新建';
+    B.Invalidate;                       // the seam a theme switch arrives on
+    B.CallMeasure(96, tw, th);
+
+    AssertTrue(Format('the height floor covers the caption ink (%d >= %d)',
+      [B.Constraints.MinHeight, th]), B.Constraints.MinHeight >= th);
+    AssertTrue('the width floor covers it too', B.Constraints.MinWidth >= tw);
+
+    { Ask for something impossible; the clamp must win — that is the whole point of putting
+      this in Constraints rather than in a proposed size. }
+    B.Height := 4;
+    B.Width := 4;
+    AssertTrue('a too-short request is clamped up', B.Height >= th);
+    AssertTrue('a too-narrow request is clamped up', B.Width >= tw);
+  finally
+    B.Free; Ctl.Free;
+  end;
+end;
+
+procedure TGlyphButtonFloorTest.TestGlyphSlotIsPartOfTheWidthFloorNotTheHeight;
+var
+  Ctl: TTyStyleController;
+  Icons: TTyIconFont;
+  B: TGlyphButtonAccess;
+  w16, h16: Integer;
+begin
+  { The glyph is not decoration: a glyph-left button that could shrink to its caption would
+    have the icon eat the text. But it displaces the caption SIDEWAYS, so it belongs in the
+    WIDTH floor only — adding it to the height would quietly grow every tool-bar row that
+    carries an icon. }
+  Ctl := TTyStyleController.Create(nil);
+  Icons := TTyIconFont.Create(nil);
+  B := TGlyphButtonAccess.Create(nil);
+  try
+    Ctl.LoadThemeCss(cGbFloorCss);
+    Icons.MapGlyph('save', $F0C7);
+    B.Controller := Ctl;
+    B.Font.PixelsPerInch := 96;
+    B.IconFont := Icons;
+    B.GlyphName := 'save';
+    B.Caption := 'Save';
+    B.GlyphSize := 16;
+    B.Invalidate;
+    w16 := B.Constraints.MinWidth;
+    h16 := B.Constraints.MinHeight;
+
+    B.GlyphSize := 32;                  // the setter invalidates, which re-measures the floor
+    AssertEquals('a 16px bigger glyph raises the WIDTH floor by exactly 16',
+      w16 + 16, B.Constraints.MinWidth);
+    AssertEquals('...and leaves the HEIGHT floor alone', h16, B.Constraints.MinHeight);
+
+    { And the slot is only reserved when the paint really draws one: drop the source and the
+      floor gives back the 32px square AND the 6px '--glyph-button-gap' default. }
+    B.GlyphName := '';
+    AssertEquals('no glyph drawn -> no slot and no gap in the floor',
+      w16 - 16 - 6, B.Constraints.MinWidth);
+  finally
+    B.Free; Icons.Free; Ctl.Free;
+  end;
+end;
+
+procedure TGlyphButtonFloorTest.TestContainerStacksTheGlyphIntoTheHeightFloor;
+var
+  Ctl: TTyStyleController;
+  Icons: TTyIconFont;
+  C: TContainerButtonAccess;
+  tw, th: Integer;
+begin
+  { Glyph-TOP is the layout that stacks ink on the CAPTION's axis: TyGlyphButtonSplit puts the
+    glyph above, the gap under it, the caption below that — and a box shorter than the stack
+    clamps the glyph and then collapses the caption rect to nothing. That is the vertical twin
+    of the clipped caption, so all three terms are part of the minimum height. }
+  Ctl := TTyStyleController.Create(nil);
+  Icons := TTyIconFont.Create(nil);
+  C := TContainerButtonAccess.Create(nil);
+  try
+    Ctl.LoadThemeCss(cGbTileCss);
+    Icons.MapGlyph('save', $F0C7);
+    C.Controller := Ctl;
+    C.Font.PixelsPerInch := 96;
+    C.IconFont := Icons;
+    C.GlyphName := 'save';
+    C.Caption := 'Open';
+    C.GlyphSize := 24;
+    C.Invalidate;
+    C.CallMeasure(96, tw, th);
+
+    // 24px glyph + the 6px default gap + one caption line + 4px top and 4px bottom padding.
+    AssertEquals('glyph + gap + caption line + padding', 24 + 6 + th + 8, C.Constraints.MinHeight);
+    C.GlyphSize := 48;
+    AssertEquals('a 24px bigger glyph raises the floor by exactly 24',
+      24 + 6 + th + 8 + 24, C.Constraints.MinHeight);
+  finally
+    C.Free; Icons.Free; Ctl.Free;
+  end;
+end;
+
+procedure TGlyphButtonFloorTest.TestContainerWithoutACaptionPaysNoGapNorLine;
+var
+  Ctl: TTyStyleController;
+  Icons: TTyIconFont;
+  C: TContainerButtonAccess;
+begin
+  // DrawContent skips the caption rect entirely when Caption is empty, so a pure-icon tile
+  // must not be floored at a gap and a line it never draws.
+  Ctl := TTyStyleController.Create(nil);
+  Icons := TTyIconFont.Create(nil);
+  C := TContainerButtonAccess.Create(nil);
+  try
+    Ctl.LoadThemeCss(cGbTileCss);
+    Icons.MapGlyph('save', $F0C7);
+    C.Controller := Ctl;
+    C.Font.PixelsPerInch := 96;
+    C.IconFont := Icons;
+    C.GlyphName := 'save';
+    C.Caption := '';
+    C.GlyphSize := 24;
+    C.Invalidate;
+    AssertEquals('a pure-icon tile is floored at the glyph plus the padding, nothing else',
+      24 + 8, C.Constraints.MinHeight);
+  finally
+    C.Free; Icons.Free; Ctl.Free;
+  end;
+end;
+
+procedure TGlyphButtonFloorTest.TestAutoGlyphNeverRatchetsTheFloor;
+var
+  Ctl: TTyStyleController;
+  Icons: TTyIconFont;
+  C: TContainerButtonAccess;
+  atSixtyFour, tw, th: Integer;
+begin
+  { GlyphSize 0 (auto) derives the square FROM the content box. Feeding that back into the
+    floor would make the minimum equal whatever height the control currently has — the control
+    could then never shrink again, and the "floor" would be a ratchet rather than a
+    measurement. An auto glyph must demand nothing. }
+  Ctl := TTyStyleController.Create(nil);
+  Icons := TTyIconFont.Create(nil);
+  C := TContainerButtonAccess.Create(nil);
+  try
+    Ctl.LoadThemeCss(cGbTileCss);
+    Icons.MapGlyph('save', $F0C7);
+    C.Controller := Ctl;
+    C.Font.PixelsPerInch := 96;
+    C.IconFont := Icons;
+    C.GlyphName := 'save';
+    C.Caption := 'Open';
+    C.GlyphSize := 0;                   // auto
+
+    C.Height := 64;
+    C.Invalidate;
+    atSixtyFour := C.Constraints.MinHeight;
+    C.Height := 300;                    // a much taller box...
+    C.Invalidate;
+    AssertEquals('an auto glyph never raises the floor with the box it was given',
+      atSixtyFour, C.Constraints.MinHeight);
+
+    C.CallMeasure(96, tw, th);
+    AssertEquals('the floor is exactly the caption line plus the theme padding',
+      th + 8, atSixtyFour);
+  finally
+    C.Free; Icons.Free; Ctl.Free;
+  end;
+end;
+
+procedure TGlyphButtonFloorTest.TestSmallerFontAndPaddingLowerTheFloor;
+var
+  Ctl: TTyStyleController;
+  Icons: TTyIconFont;
+  B: TGlyphButtonAccess;
+  bigH, bigW: Integer;
+begin
+  { The floor must stay DERIVED, never a constant: shrinking font-size and padding in the theme
+    has to lower it, because "override the CSS if you want it smaller" is the answer we give. }
+  Ctl := TTyStyleController.Create(nil);
+  Icons := TTyIconFont.Create(nil);
+  B := TGlyphButtonAccess.Create(nil);
+  try
+    Icons.MapGlyph('save', $F0C7);
+    B.Controller := Ctl;
+    B.Font.PixelsPerInch := 96;
+    B.IconFont := Icons;
+    B.GlyphName := 'save';
+    { An EXPLICIT glyph size, so the only things moving between the two themes are the font and
+      the padding. An auto glyph would be derived from the control's own (by then already
+      re-clamped) height and would muddy the comparison. }
+    B.GlyphSize := 16;
+    B.Caption := '新建';
+
+    Ctl.LoadThemeCss('TyButton { font-size: 20px; padding: 8px; }');
+    B.Invalidate;
+    bigH := B.Constraints.MinHeight;
+    bigW := B.Constraints.MinWidth;
+
+    Ctl.LoadThemeCss('TyButton { font-size: 8px; padding: 1px; }');
+    B.Invalidate;
+    AssertTrue(Format('a smaller font+padding lowers the height floor (%d -> %d)',
+      [bigH, B.Constraints.MinHeight]), B.Constraints.MinHeight < bigH);
+    AssertTrue(Format('...and the width floor with it (%d -> %d)',
+      [bigW, B.Constraints.MinWidth]), B.Constraints.MinWidth < bigW);
+  finally
+    B.Free; Icons.Free; Ctl.Free;
+  end;
+end;
+
 { ---- TSpeedButtonTest ---- }
 
 procedure TSpeedButtonTest.TestDefaults;
@@ -889,7 +1149,43 @@ begin
   end;
 end;
 
+procedure TSpeedButtonTest.TestFloorSurvivesAHeightPinningToolBar;
+var
+  F: TForm;
+  Bar: TTyToolBar;
+  Icons: TTyIconFont;
+  S: TTySpeedButton;
+begin
+  { The floor must NOT reopen the fight a proposed height once started: a button on a
+    TTyToolBar proposed its own height, the bar pinned its ButtonHeight back, and LCL aborted
+    with "ChangeBounds loop detected" — the demo died at startup. Constraints clamp inside
+    SetBounds with no negotiation, so the bar keeps owning the height whenever the height it
+    asks for is possible at all. Reaching the end of this test IS the assertion. }
+  F := TForm.CreateNew(nil);
+  Icons := TTyIconFont.Create(nil);
+  try
+    Icons.MapGlyph('cut', $F0C4);
+    Bar := TTyToolBar.Create(F);
+    Bar.Parent := F;
+    Bar.ButtonHeight := 40;            // comfortably above any caption's needs
+    S := TTySpeedButton.Create(Bar);
+    S.Parent := Bar;
+    S.IconFont := Icons;
+    S.GlyphName := 'cut';
+    S.GlyphSize := 16;                 // an icon on the row must not raise its height
+    S.Caption := '新建';
+    S.AutoSize := True;
+    Bar.ButtonHeight := 41;            // a loop would abort the process here
+    AssertTrue(Format('the bar asks for a height the floor can honour (min %d)',
+      [S.Constraints.MinHeight]), S.Constraints.MinHeight <= 40);
+  finally
+    Icons.Free;
+    F.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TGlyphButtonTest);
+  RegisterTest(TGlyphButtonFloorTest);
   RegisterTest(TSpeedButtonTest);
 end.

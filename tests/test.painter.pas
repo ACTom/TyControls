@@ -18,6 +18,11 @@ type
     procedure FreePainter;
     function PixelAt(X, Y: Integer): TBGRAPixel;
     function WriteTempNineSlice: string;
+    { Vertical extent of the ink currently on the painter's bitmap: the first and last row
+      carrying any glyph pixel, and how many rows do. -1/-1/0 when nothing was drawn.
+      Rows rather than a centroid because what these tests are about is how FAR DOWN the
+      text reaches — the bug being guarded is a line that never gets drawn at all. }
+    procedure InkRows(out ATop, ABottom, ARows: Integer);
   protected
     procedure TearDown; override;
   published
@@ -39,6 +44,13 @@ type
     procedure TestClampRadiusPx;
     procedure TestLargeRadiusRendersPillNotLens;
     procedure TestEllipsisCutsWholeCharactersNotBytes;
+    procedure TestSplitTextLinesHonoursAuthoredBreaks;
+    procedure TestMultiLineDrawsTheSecondLine;
+    procedure TestMultiLineFlagLeavesASingleLineByteIdentical;
+    procedure TestLineHeightTokenSetsTheDrawnLineBox;
+    procedure TestMeasureTextBlockCountsAuthoredLines;
+    procedure TestMeasureTextBlockLineHeightIsDerivedNotFloored;
+    procedure TestMeasureTextBlockWrapsToAWidth;
   end;
 
 implementation
@@ -65,6 +77,32 @@ end;
 function TPainterTest.PixelAt(X, Y: Integer): TBGRAPixel;
 begin
   Result := FPainter.Bitmap.GetPixel(X, Y);
+end;
+
+procedure TPainterTest.InkRows(out ATop, ABottom, ARows: Integer);
+var
+  x, y: Integer;
+  inked: Boolean;
+begin
+  ATop := -1;
+  ABottom := -1;
+  ARows := 0;
+  for y := 0 to FPainter.Bitmap.Height - 1 do
+  begin
+    inked := False;
+    for x := 0 to FPainter.Bitmap.Width - 1 do
+      if FPainter.Bitmap.GetPixel(x, y).alpha > 100 then
+      begin
+        inked := True;
+        Break;
+      end;
+    if inked then
+    begin
+      if ATop < 0 then ATop := y;
+      ABottom := y;
+      Inc(ARows);
+    end;
+  end;
 end;
 
 procedure TPainterTest.TearDown;
@@ -397,6 +435,218 @@ begin
   end;
 
   AssertEquals('a negative count yields nothing', '', TyEllipsisPrefix(CJK, -1));
+end;
+
+{ ---- multi-line text, and the line box it is laid out on ---------------------------- }
+
+const
+  { Two lines of the SAME text: the width can then never explain a difference, only the
+    layout can. 'Ay' carries both an ascender and a descender, so the ink of one line is a
+    full line box worth. }
+  cTwoLines = 'Ay' + LineEnding + 'Ay';
+  cMeasureFont = 'Tahoma';
+
+type
+  TPixBuf = array of TBGRAPixel;
+
+function SnapshotOf(ABmp: TBGRABitmap): TPixBuf;
+var
+  x, y, i: Integer;
+begin
+  SetLength(Result, ABmp.Width * ABmp.Height);
+  i := 0;
+  for y := 0 to ABmp.Height - 1 do
+    for x := 0 to ABmp.Width - 1 do
+    begin
+      Result[i] := ABmp.GetPixel(x, y);
+      Inc(i);
+    end;
+end;
+
+function CountDifferingPixels(const A, B: TPixBuf): Integer;
+var
+  i: Integer;
+begin
+  Result := 0;
+  if Length(A) <> Length(B) then
+    Exit(MaxInt);
+  for i := 0 to High(A) do
+    if (A[i].red <> B[i].red) or (A[i].green <> B[i].green)
+       or (A[i].blue <> B[i].blue) or (A[i].alpha <> B[i].alpha) then
+      Inc(Result);
+end;
+
+procedure TPainterTest.TestSplitTextLinesHonoursAuthoredBreaks;
+{ The split is what both the drawing path and the measuring path ask "how many lines is
+  this?", so its edge cases are the edge cases of every size floor derived from it. }
+var
+  L: TStringList;
+begin
+  L := TStringList.Create;
+  try
+    TySplitTextLines('plain', L);
+    AssertEquals('no break at all is one line', 1, L.Count);
+    AssertEquals('and it is the text', 'plain', L[0]);
+
+    TySplitTextLines('a'#13#10'b', L);
+    AssertEquals('CRLF breaks', 2, L.Count);
+    TySplitTextLines('a'#10'b', L);
+    AssertEquals('a bare LF breaks', 2, L.Count);
+    TySplitTextLines('a'#13'b', L);
+    AssertEquals('a bare CR breaks', 2, L.Count);
+
+    TySplitTextLines('one' + LineEnding + LineEnding + 'two', L);
+    AssertEquals('a blank line between paragraphs is content', 3, L.Count);
+    AssertEquals('and it is the empty one', '', L[1]);
+
+    { Load-bearing: an empty caption must still be ONE line. Zero lines here would let a
+      height floor of "lines x line height" collapse a control to its padding. }
+    TySplitTextLines('', L);
+    AssertEquals('an empty caption is one empty line', 1, L.Count);
+    AssertEquals('', L[0]);
+  finally
+    L.Free;
+  end;
+end;
+
+procedure TPainterTest.TestMultiLineDrawsTheSecondLine;
+{ THE BUG. style.SingleLine was hard-coded, so a caption with an authored break drew as one
+  run — the second line simply did not exist. Both draws below get the same rect, the same
+  text and the same centring; only the opt-in flag differs, so any difference in how far the
+  ink reaches is the second line appearing. }
+var
+  t1, b1, r1, t2, b2, r2: Integer;
+begin
+  MakePainter(200, 140, 96);
+  FPainter.DrawText(Rect(0, 0, 200, 140), cTwoLines, cMeasureFont, 12, 400,
+    TyRGBA(0, 0, 0, 255), taLeftJustify, tlCenter, False);
+  InkRows(t1, b1, r1);
+  FreePainter;
+
+  MakePainter(200, 140, 96);
+  FPainter.DrawText(Rect(0, 0, 200, 140), cTwoLines, cMeasureFont, 12, 400,
+    TyRGBA(0, 0, 0, 255), taLeftJustify, tlCenter, False, 0, False, True);
+  InkRows(t2, b2, r2);
+
+  AssertTrue('the single-line path inked something to compare against', r1 > 0);
+  AssertTrue(Format('two lines reach lower than one (%d vs %d)', [b2, b1]), b2 > b1);
+  AssertTrue(Format('and start higher — the block is centred as a whole (%d vs %d)',
+    [t2, t1]), t2 < t1);
+  AssertTrue(Format('so the block grew by most of a line (%d vs %d)',
+    [b2 - t2, b1 - t1]), (b2 - t2) > (b1 - t1) + 8);
+end;
+
+procedure TPainterTest.TestMultiLineFlagLeavesASingleLineByteIdentical;
+{ The flag defaults to off so no existing caller changes; this pins the other half of that
+  promise — a caption with NO break in it is drawn by the same code either way, mnemonic
+  underline included, and a themed line box does not sneak into it. }
+var
+  flagOff, flagOn: TPixBuf;
+begin
+  MakePainter(200, 60, 96);
+  FPainter.DrawText(Rect(0, 0, 200, 60), 'Single', cMeasureFont, 12, 400,
+    TyRGBA(0, 0, 0, 255), taLeftJustify, tlCenter, False, 3);
+  flagOff := SnapshotOf(FPainter.Bitmap);
+  FreePainter;
+
+  MakePainter(200, 60, 96);
+  FPainter.DrawText(Rect(0, 0, 200, 60), 'Single', cMeasureFont, 12, 400,
+    TyRGBA(0, 0, 0, 255), taLeftJustify, tlCenter, False, 3, False, True, 40);
+  flagOn := SnapshotOf(FPainter.Bitmap);
+
+  AssertEquals('multi-line mode changes nothing when there is no break',
+    0, CountDifferingPixels(flagOff, flagOn));
+end;
+
+procedure TPainterTest.TestLineHeightTokenSetsTheDrawnLineBox;
+{ The extra leading is a VISUAL value, so it comes from the theme — and it has to work in
+  BOTH directions: a bigger line box spreads the block, a smaller one pulls it in. A floor
+  hard-coded at the font's line box would pass the first half and fail the second. }
+var
+  tNat, bNat, rNat, tBig, bBig, rBig, tSmall, bSmall, rSmall: Integer;
+begin
+  MakePainter(200, 200, 96);
+  FPainter.DrawText(Rect(0, 0, 200, 200), cTwoLines, cMeasureFont, 12, 400,
+    TyRGBA(0, 0, 0, 255), taLeftJustify, tlCenter, False, 0, False, True, 0);
+  InkRows(tNat, bNat, rNat);
+  FreePainter;
+
+  MakePainter(200, 200, 96);
+  FPainter.DrawText(Rect(0, 0, 200, 200), cTwoLines, cMeasureFont, 12, 400,
+    TyRGBA(0, 0, 0, 255), taLeftJustify, tlCenter, False, 0, False, True, 40);
+  InkRows(tBig, bBig, rBig);
+  FreePainter;
+
+  MakePainter(200, 200, 96);
+  FPainter.DrawText(Rect(0, 0, 200, 200), cTwoLines, cMeasureFont, 12, 400,
+    TyRGBA(0, 0, 0, 255), taLeftJustify, tlCenter, False, 0, False, True, 6);
+  InkRows(tSmall, bSmall, rSmall);
+
+  AssertTrue('the natural line box inked two lines', rNat > 0);
+  AssertTrue(Format('a 40px line box spreads the block (%d vs %d)',
+    [bBig - tBig, bNat - tNat]), (bBig - tBig) > (bNat - tNat) + 8);
+  AssertTrue(Format('a 6px line box pulls it in (%d vs %d)',
+    [bSmall - tSmall, bNat - tNat]), (bSmall - tSmall) < (bNat - tNat));
+end;
+
+procedure TPainterTest.TestMeasureTextBlockCountsAuthoredLines;
+{ The measurement a size floor is built from. Two identical lines make the arithmetic exact:
+  the width cannot move at all and the height must exactly double. }
+var
+  w1, h1, w2, h2, wEmpty, hEmpty: Integer;
+begin
+  TyMeasureTextBlock('one', cMeasureFont, 12, 400, 96, 0, 0, w1, h1);
+  AssertTrue('one line has width', w1 > 0);
+  AssertTrue('one line has height', h1 > 0);
+
+  TyMeasureTextBlock('one' + LineEnding + 'one', cMeasureFont, 12, 400, 96, 0, 0, w2, h2);
+  AssertEquals('the widest line is the width, not the sum', w1, w2);
+  AssertEquals('two lines are exactly twice as tall', h1 * 2, h2);
+
+  { An empty caption still occupies a line — otherwise a control sized from this could be
+    allowed to collapse to its padding the moment its caption is cleared. }
+  TyMeasureTextBlock('', cMeasureFont, 12, 400, 96, 0, 0, wEmpty, hEmpty);
+  AssertEquals('an empty caption measures no width', 0, wEmpty);
+  AssertEquals('but still one line of height', h1, hEmpty);
+end;
+
+procedure TPainterTest.TestMeasureTextBlockLineHeightIsDerivedNotFloored;
+{ "Override the CSS if you want it smaller" is only an honest answer while the height a
+  theme asks for is really the height it gets — in both directions — and while a logical-px
+  token still means logical px at 192 PPI. }
+var
+  w, hNat, h40, h6, h40Hi: Integer;
+begin
+  TyMeasureTextBlock(cTwoLines, cMeasureFont, 12, 400, 96, 0, 0, w, hNat);
+  TyMeasureTextBlock(cTwoLines, cMeasureFont, 12, 400, 96, 0, 40, w, h40);
+  TyMeasureTextBlock(cTwoLines, cMeasureFont, 12, 400, 96, 0, 6, w, h6);
+  TyMeasureTextBlock(cTwoLines, cMeasureFont, 12, 400, 192, 0, 40, w, h40Hi);
+
+  AssertEquals('two lines on a 40px line box', 80, h40);
+  AssertTrue(Format('which is taller than the font own box (%d vs %d)', [h40, hNat]),
+    h40 > hNat);
+  AssertEquals('two lines on a 6px line box', 12, h6);
+  AssertTrue(Format('which LOWERS the block (%d vs %d)', [h6, hNat]), h6 < hNat);
+  AssertEquals('the token is logical px: it doubles at 192 PPI', 160, h40Hi);
+end;
+
+procedure TPainterTest.TestMeasureTextBlockWrapsToAWidth;
+{ The wrap the measurement does is the same CJK-aware wrap the label draws with — a Chinese
+  run has no spaces, so a width-unaware measurer would report one very wide line and the
+  control would be sized for a line it never draws. }
+const
+  cCJK = '积压任务徽标挂在按钮上不是按钮内置的';
+var
+  wFull, hFull, wNarrow, hNarrow: Integer;
+begin
+  TyMeasureTextBlock(cCJK, cMeasureFont, 12, 400, 96, 0, 0, wFull, hFull);
+  AssertTrue('unconstrained is one wide line', wFull > 0);
+
+  TyMeasureTextBlock(cCJK, cMeasureFont, 12, 400, 96, wFull div 4, 0, wNarrow, hNarrow);
+  AssertTrue(Format('wrapping to a quarter of the width folds it (%d vs %d)',
+    [wNarrow, wFull]), wNarrow <= wFull div 4);
+  AssertTrue(Format('and makes it at least three lines tall (%d vs %d)',
+    [hNarrow, hFull]), hNarrow >= 3 * hFull);
 end;
 
 initialization

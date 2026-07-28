@@ -39,13 +39,34 @@ type
       not as a character, so measuring them would over-reserve. }
     procedure MeasureItems(APPI: Integer; const AStyle: TTyStyleSet;
       out AWidestPx, ALineHeightPx: Integer);
-    { The width the bar needs: every cell is the same width (RenderTo tiles them evenly), so
-      the bar needs COUNT x (widest caption + the style's left/right padding) — the very inset
-      RenderTo applies before drawing each caption. Without this the bar keeps its designed
-      width and a theme with roomier padding (xp asks for 12px where the default asks 6px, i.e.
-      24px more per cell) ellipsises every segment. }
+    { The size this bar actually needs, in DEVICE px, at the RESTING segment style.
+        width  = COUNT x (widest caption + that style's left/right padding) — every cell is
+                 the same width (RenderTo tiles them evenly) and each caption is drawn inside
+                 exactly that horizontal inset, so under-counting one cell clips them all.
+        height = ONE line of the resolved font, and no padding: RenderTo hands DrawText the
+                 segment's FULL top-to-bottom span (it insets left/right only), so vertical
+                 padding is not part of what the text needs — the line itself is.
+      Both the preferred size and the size FLOOR read this one method, so "what the bar asks
+      for" and "what the bar refuses to go below" are the same measurement and cannot drift
+      apart, nor drift away from RenderTo. Empty bar -> 0 on both axes: nothing is drawn
+      (RenderTo bails too), so there is nothing to demand. }
+    procedure MeasureNeeded(out AWidthPx, AHeightPx: Integer);
+    { The width the bar needs. Without this the bar keeps its designed width and a theme with
+      roomier padding (xp asks for 12px where the default asks 6px, i.e. 24px more per cell)
+      ellipsises every segment. }
     procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
       WithThemeSpace: Boolean); override;
+    { Clamp the bar so it can never be smaller than the captions it must draw. The theme's
+      --control-height and a hand-set Height are REQUESTS; what is POSSIBLE is decided by the
+      font and the padding, and only the control knows both — on Linux/Qt6 a 9pt CJK caption
+      resolves through a fallback face with taller metrics, and DrawText clips with tlCenter,
+      so a bar shorter than the ink loses the BOTTOM of every segment.
+
+      Constraints, deliberately, and NOT a proposed PreferredHeight: proposing one makes the
+      bar negotiate with its parent, and a child on a TTyToolBar bounced against the bar's
+      ButtonHeight until LCL aborted with "ChangeBounds loop detected". Constraints clamp
+      inside SetBounds instead, with no negotiation. }
+    procedure UpdateSizeConstraints;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     { A theme switch reaches every control as a bare Invalidate, and the new theme's font and
       padding change the width the captions need — so an AutoSize bar must re-fit here too. }
@@ -210,7 +231,10 @@ begin
   FItemIndex := -1;
   if FHoverSeg >= FItems.Count then FHoverSeg := -1;
   // 条目变了(数量、文字)→ 要的宽度也变了,AutoSize 的分段条必须重新贴合。
-  // 这是本控件的"标题改变"钩子(标题住在 Items 里,不在 TControl.Caption 上)。
+  // 这是本控件的"标题改变"钩子(标题住在 Items 里,不在 TControl.Caption 上),所以
+  // 下限也得先跟着走一遍(对应 TTyButton.TextChanged 里的那一步)——顺序要紧:
+  // AdjustSize 得在新的 Constraints 下跑,不然它按旧下限落一次、下一次 Invalidate 再纠。
+  UpdateSizeConstraints;
   if AutoSize then
   begin
     InvalidatePreferredSize;
@@ -226,13 +250,21 @@ begin
     带来的是另一套字体和 padding —— 每格要的宽度也就跟着变了。不在这里重新贴合,分段条就会
     留着旧主题的宽度,每个分段的文字都被省略号截断;TTyButton / TTyBadge 出于同样的理由也在
     自己的 Invalidate 里重量。FRefitting 挡住重入:AdjustSize -> SetBounds -> Invalidate
-    会递归。 }
-  if AutoSize and not FRefitting and not (csDestroying in ComponentState) then
+    会递归。
+    下限(UpdateSizeConstraints)**不**看 AutoSize:主题拥有字体和 padding,换肤同样会把
+    "文字装得下的最小尺寸"整个抬高或压低,而这跟这条分段条愿不愿意自动贴合无关。下限必须
+    始终是推导出来的——把字号和 padding 调小,它就该跟着降下去,不然"嫌大就改 CSS"这句话
+    就是空话。 }
+  if not FRefitting and not (csDestroying in ComponentState) then
   begin
     FRefitting := True;
     try
-      InvalidatePreferredSize;
-      AdjustSize;
+      UpdateSizeConstraints;
+      if AutoSize then
+      begin
+        InvalidatePreferredSize;
+        AdjustSize;
+      end;
     finally
       FRefitting := False;
     end;
@@ -380,24 +412,23 @@ begin
   if ALineHeightPx < 1 then ALineHeightPx := 1;
 end;
 
-procedure TTyButtonGroup.CalculatePreferredSize(var PreferredWidth,
-  PreferredHeight: Integer; WithThemeSpace: Boolean);
+procedure TTyButtonGroup.MeasureNeeded(out AWidthPx, AHeightPx: Integer);
 var
   S: TTyStyleSet;
   ppi, n, widest, lineH, cellW: Integer;
 begin
+  AWidthPx := 0;
+  AHeightPx := 0;
+  { 祖先的构造函数里那次 SetBounds 会广播 Invalidate,而 Invalidate 现在无条件重算下限 ——
+    那一刻 FItems 还没建出来。以前这里被 `if AutoSize` 挡着(构造期 AutoSize 恒为 False)
+    才碰不到,现在得自己挡。 }
+  if FItems = nil then Exit;
   n := FItems.Count;
-  if n <= 0 then
-  begin
-    // 空分段条什么都不画(RenderTo 同样提前退出),所以两个轴上都"没有意见":0 让 LCL
-    // 保留它设计时的尺寸,而不是把它缩成 1px。
-    PreferredWidth := 0;
-    PreferredHeight := 0;
-    Exit;
-  end;
+  // 空分段条什么都不画(RenderTo 同样提前退出),所以两个轴上都"没有意见"/没有下限。
+  if n <= 0 then Exit;
   ppi := Font.PixelsPerInch;
   if ppi <= 0 then ppi := 96;
-  { 按**静止态**的分段样式来量:主题可以把选中格写成粗体,但分段条的宽度不该取决于此刻选中
+  { 按**静止态**的分段样式来量:主题可以把选中格写成粗体,但分段条的尺寸不该取决于此刻选中
     的是哪一格 —— 否则每次点击都会让整条抖动。这和 RenderTo 解析未选中格用的是同一条
     (typeKey + StyleClass + [tysNormal])路径,也和它一样不叠 StyleOverride。 }
   S := ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass, [tysNormal]);
@@ -407,12 +438,36 @@ begin
     padding 按 MulDiv(...,ppi,96) 缩放,和绘制路径里的 P.Scale 一致。 }
   cellW := widest + MulDiv(S.Padding.Left + S.Padding.Right, ppi, 96);
   if cellW < 1 then cellW := 1;
-  PreferredWidth := n * cellW;
+  AWidthPx := n * cellW;
+  { 高度只算**一行文字本身**,不加上下 padding:RenderTo 给 DrawText 的矩形上下沿就是整格
+    (只内缩左右),所以上下 padding 不在"文字装得下"这件事里。多加一份就成了凭空抬高,
+    工具条上的分段条会莫名其妙变高。 }
+  AHeightPx := lineH;
+end;
+
+procedure TTyButtonGroup.CalculatePreferredSize(var PreferredWidth,
+  PreferredHeight: Integer; WithThemeSpace: Boolean);
+var
+  w, h: Integer;
+begin
+  MeasureNeeded(w, h);
+  PreferredWidth := w;
   { 只管宽度 —— 0 是 LCL 的"这个轴上没有意见",高度就留给排版方。分段条同时提议高度,就会和
     任何钉死高度的容器打架(TTyToolBar 把每个子控件都压到 ButtonHeight),两边来回弹到 LCL
-    以 "TControl.ChangeBounds loop detected" 中止。想要文字自然高度的调用方可以自己读
-    MeasureItems 再加上下 padding。 }
+    以 "TControl.ChangeBounds loop detected" 中止。装不下时兜底的是 UpdateSizeConstraints
+    的下限:它在 SetBounds 里钳,不参与协商,所以不会来回顶。 }
   PreferredHeight := 0;
+end;
+
+procedure TTyButtonGroup.UpdateSizeConstraints;
+var
+  w, h: Integer;
+begin
+  if csDestroying in ComponentState then Exit;
+  // 和 CalculatePreferredSize 同一次测量:报出去的宽度和守住的下限不会各说各话。
+  MeasureNeeded(w, h);
+  Constraints.MinWidth  := w;
+  Constraints.MinHeight := h;
 end;
 
 procedure TTyButtonGroup.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);

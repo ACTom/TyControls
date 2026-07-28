@@ -65,6 +65,7 @@ type
     procedure TestMinimumHeightFitsTheCaption;
     procedure TestMinimumSurvivesAHeightPinningParent;
     procedure TestSmallerFontLowersTheMinimum;
+    procedure TestAuthoredBreakMakesTwoLinesAndRaisesTheFloor;
   end;
 implementation
 
@@ -746,6 +747,37 @@ begin
       small < big);
   finally
     C.Free;
+    F.Free;
+  end;
+end;
+
+{ `Caption := '你好' + #13#10 + '世界'` is a real thing people write, and until now a button
+  could not render it at all: the painter hard-coded SingleLine, so the break was simply not
+  honoured. Now it renders, which means the size floor has to cover BOTH lines -- otherwise
+  the fix would trade "the second line is missing" for "the second line is clipped". }
+procedure TButtonTest.TestAuthoredBreakMakesTwoLinesAndRaisesTheFloor;
+var
+  F: TForm;
+  B: TTyButtonAccess;
+  w1, h1, w2, h2: Integer;
+begin
+  F := TForm.CreateNew(nil);
+  try
+    B := TTyButtonAccess.Create(F);
+    B.Parent := F;
+    B.Font.PixelsPerInch := 96;
+
+    B.Caption := '你好';
+    B.CallMeasure(96, w1, h1);
+
+    { The SAME text twice, so the width must not move and the height must exactly double. }
+    B.Caption := '你好' + LineEnding + '你好';
+    B.CallMeasure(96, w2, h2);
+
+    AssertEquals('two identical lines are no wider', w1, w2);
+    AssertEquals('and exactly twice as tall', h1 * 2, h2);
+    AssertTrue('the floor grew with them', B.Constraints.MinHeight >= h2);
+  finally
     F.Free;
   end;
 end;

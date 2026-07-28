@@ -168,6 +168,15 @@ function TyDensityHeight(AController: TTyStyleController; AClassicH: Integer): I
 function TyDensityMetric(AController: TTyStyleController; AClassicVal: Integer;
   const AToken: string): Integer;
 
+{ The theme's --line-height (TyLineHeightVar), in LOGICAL px, for laying out a caption that
+  has more than one line. 0 = UNSET, which every consumer reads as "use the font's own line
+  box" -- so the token moves nothing until a theme sets it, and a theme that shrinks the font
+  and the leading together really does lower the height floor derived from them (a constant
+  here would have frozen it). NOT density-keyed: extra leading is a typographic choice a
+  theme makes outright, not a classic/modern variant of a control's own default.
+  AController may be nil (falls back to the default controller). }
+function TyLineHeight(AController: TTyStyleController): Integer;
+
 implementation
 
 var
@@ -587,6 +596,16 @@ begin
     Result := c.Metric(AToken, AClassicVal)
   else
     Result := AClassicVal;   { classic: keep the caller's own default, byte-identical }
+end;
+
+function TyLineHeight(AController: TTyStyleController): Integer;
+var
+  c: TTyStyleController;
+begin
+  c := AController;
+  if c = nil then c := TyDefaultController;
+  Result := c.Metric(TyLineHeightVar, 0);
+  if Result < 0 then Result := 0;   // a negative leading is not a thing; treat it as unset
 end;
 
 function TyDensityHeight(AController: TTyStyleController; AClassicH: Integer): Integer;

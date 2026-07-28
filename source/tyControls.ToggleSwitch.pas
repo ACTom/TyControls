@@ -42,6 +42,16 @@ type
       translation, a bigger theme font, another platform's default font) is simply cut off. }
     procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
       WithThemeSpace: Boolean); override;
+    { Clamp the switch so it can never be smaller than the caption it must draw. A hand-set
+      size and the theme's --control-height are REQUESTS; what is actually possible is decided
+      by the font, and only the control knows it — on Linux/Qt6 the same 9pt CJK caption
+      resolves a fallback face whose ink is taller than Windows', and DrawText draws with
+      Clipping on and tlCenter, so a box shorter than the ink loses the BOTTOM of the text.
+      Constraints, deliberately, and NOT CalculatePreferredSize's height: proposing a height
+      makes the control negotiate with its parent, and that is what once bounced a TTyButton
+      against a TTyToolBar's ButtonHeight until LCL aborted with "ChangeBounds loop detected".
+      Constraints clamp inside SetBounds instead, with no negotiation. }
+    procedure UpdateSizeConstraints;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     { A theme switch reaches every control as a bare Invalidate, and the new theme's font
       changes the width the caption needs — so an AutoSize switch must re-fit here too. }
@@ -167,8 +177,9 @@ procedure TTyToggleSwitch.SetCaption(const AValue: TCaption);
 begin
   if FCaption = AValue then Exit;
   FCaption := AValue;
-  // 新标题要的宽度变了,所以 AutoSize 的开关必须重新贴合。
+  // 新标题要的宽度变了,所以 AutoSize 的开关必须重新贴合,地板也得跟着换。
   // (标题是本控件自己的字段,不走 TControl.Caption,所以钩子在这里而不是 TextChanged。)
+  UpdateSizeConstraints;
   if AutoSize then
   begin
     InvalidatePreferredSize;
@@ -183,13 +194,18 @@ begin
   { 换肤时每个控件收到的只是一个裸 Invalidate(TTyStyleController 向注册控件广播),而新主题
     带来的是另一套字体 —— 标题需要的宽度也就跟着变了。不在这里重新贴合,控件就会留着旧主题
     的宽度,标题被切掉;TTyButton / TTyBadge 出于同样的理由也在自己的 Invalidate 里重量。
+    地板同理,而且和 AutoSize 无关:字体是主题给的,换主题就换了标题的墨迹。
     FRefitting 挡住重入:AdjustSize -> SetBounds -> Invalidate 会递归。}
-  if AutoSize and not FRefitting and not (csDestroying in ComponentState) then
+  if not FRefitting and not (csDestroying in ComponentState) then
   begin
     FRefitting := True;
     try
-      InvalidatePreferredSize;
-      AdjustSize;
+      UpdateSizeConstraints;
+      if AutoSize then
+      begin
+        InvalidatePreferredSize;
+        AdjustSize;
+      end;
     finally
       FRefitting := False;
     end;
@@ -256,6 +272,36 @@ begin
     以 "TControl.ChangeBounds loop detected" 中止。想要标题自然高度的调用方可以自己读
     MeasureCaption。 }
   PreferredHeight := 0;
+end;
+
+procedure TTyToggleSwitch.UpdateSizeConstraints;
+var
+  ppi, tw, th, prefW, prefH: Integer;
+begin
+  if csDestroying in ComponentState then Exit;
+  if FCaption = '' then
+  begin
+    { 没有标题就没有会被裁掉的墨迹:药丸是照客户区画的(RenderTo 里 R = FullR),给多大画
+      多大,滑块也是从高度推的 —— 一个 20x14 的裸开关画出来仍然是一个完整的小开关,没有
+      任何东西"放不下"。所以这里不设地板,裸开关的尺寸完全还是宿主说了算(把它钉在 44x24
+      上等于凭空多出一条谁也没要求过的规矩)。 }
+    Constraints.MinWidth := 0;
+    Constraints.MinHeight := 0;
+    Exit;
+  end;
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  { 宽度直接问 CalculatePreferredSize:那已经是 RenderTo 的排布(开关区 | gap | 标题),
+    再抄一遍式子就是给"预留的"和"画出来的"留下走偏的机会。窄下去先被压扁的是标题那一段
+    (RenderTo 会把开关区钳在客户区里,剩下给标题的宽度就没了)。 }
+  prefW := 0;
+  prefH := 0;
+  CalculatePreferredSize(prefW, prefH, True);
+  MeasureCaption(ppi, tw, th);
+  Constraints.MinWidth := prefW;
+  { 高度就是标题的墨迹本身:这条绘制路径不用 padding 令牌(主题也没给它),而药丸和滑块
+    都是按高度推出来的 —— 只有标题的墨迹是字体定死的、不会跟着盒子缩。 }
+  Constraints.MinHeight := th;
 end;
 
 procedure TTyToggleSwitch.EnsureTimer;

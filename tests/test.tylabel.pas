@@ -4,7 +4,8 @@ interface
 uses
   Classes, SysUtils, Types, fpcunit, testregistry, Forms, Controls, StdCtrls,
   Graphics, BGRABitmap, BGRABitmapTypes,
-  tyControls.Base, tyControls.TyLabel, tyControls.Painter;
+  tyControls.Base, tyControls.TyLabel, tyControls.Painter, tyControls.Controller,
+  tyControls.ToolBar;
 type
   TTyLabelAccess = class(TTyLabel)
   public
@@ -36,6 +37,24 @@ type
     procedure TestWordWrapLayoutBottom;
     procedure TestFocusControlOnClick;
     procedure TestTransparentDefault;
+    procedure TestAuthoredBreakRendersASecondLine;
+    procedure TestLineHeightTokenSizesTheCaptionBlock;
+  end;
+
+  { A hand-set Height is a REQUEST; what is possible is decided by the font and the padding,
+    and only the control knows both. On Linux/Qt6 the same 9pt CJK caption resolves a fallback
+    face whose ink is taller than Windows', and the text is drawn clipped — so a box shorter
+    than the ink loses the BOTTOM of it. These cover the floor the label publishes, including
+    the two things it deliberately does DIFFERENTLY when wrapping: no width floor at all, and
+    a height floor that does not move with the width. }
+  TLabelSizeFloorTest = class(TTestCase)
+  published
+    procedure TestMinimumFitsTheCaption;
+    procedure TestMinimumIsThePreferredSize;
+    procedure TestWrappingLabelHasNoWidthFloor;
+    procedure TestWrappingFloorDoesNotMoveWithTheWidth;
+    procedure TestSmallerFontLowersTheMinimum;
+    procedure TestMinimumSurvivesAHeightPinningParent;
   end;
 implementation
 
@@ -427,6 +446,291 @@ begin
   finally Bmp.Free; G.Free; end;
 end;
 
+{ Vertical extent of the caption ink for a label rendered at 200x100: the first and last row
+  carrying dark pixels. The question these two tests ask is how far down the text reaches. }
+procedure RenderInkSpan(const ACaption: string; out ATop, ABottom: Integer);
+var
+  G: TTyLabelAccess; Bmp: TBitmap; Reread: TBGRABitmap;
+  x, y: Integer; px: TBGRAPixel; inked: Boolean;
+begin
+  ATop := -1; ABottom := -1;
+  G := TTyLabelAccess.Create(nil); Bmp := TBitmap.Create;
+  try
+    G.Caption := ACaption; G.Font.PixelsPerInch := 96;
+    Bmp.PixelFormat := pf32bit; Bmp.SetSize(200, 100);
+    Bmp.Canvas.Brush.Color := clWhite; Bmp.Canvas.FillRect(0, 0, 200, 100);
+    G.RenderTo(Bmp.Canvas, Rect(0, 0, 200, 100), 96);
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      for y := 0 to 99 do
+      begin
+        inked := False;
+        for x := 0 to 199 do
+        begin
+          px := Reread.GetPixel(x, y);
+          if (px.red < 160) and (px.green < 160) then
+          begin inked := True; Break; end;
+        end;
+        if inked then
+        begin
+          if ATop < 0 then ATop := y;
+          ABottom := y;
+        end;
+      end;
+    finally Reread.Free; end;
+  finally Bmp.Free; G.Free; end;
+end;
+
+procedure TLabelTest.TestAuthoredBreakRendersASecondLine;
+{ MeasureCaption has always counted the author's line breaks as lines, so an AutoSize label
+  was already given room for them — but the draw forced SingleLine and ran them together, so
+  the room went to nothing and the second line was never on screen. Same label, same box,
+  one caption with a break and one without: the broken one must reach further down. }
+var
+  t1, b1, t2, b2: Integer;
+begin
+  RenderInkSpan('Ay', t1, b1);
+  RenderInkSpan('Ay' + LineEnding + 'Ay', t2, b2);
+  AssertTrue('the one-line caption inked something to compare against', b1 > 0);
+  AssertTrue(Format('a break reaches further down (%d vs %d)', [b2, b1]), b2 > b1);
+  AssertTrue(Format('and starts higher — the block is centred (%d vs %d)', [t2, t1]),
+    t2 < t1);
+end;
+
+procedure TLabelTest.TestLineHeightTokenSizesTheCaptionBlock;
+{ The line box a multi-line caption sits on must be the THEME's to set, and derived rather
+  than floored: a theme asking for more leading gets a taller block, and one asking for less
+  gets a shorter one. Everything else about the rule is held constant across the three
+  loads, so only --line-height can explain the numbers. }
+const
+  cRule = 'TyLabel { background: #FFFFFF; color: #000000; border-width: 0px; ' +
+          'padding: 0px 0px; font-size: 12px; }';
+var
+  Ctl: TTyStyleController;
+  L: TTyLabel;
+  w, hNat, h40, h6: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    L := TTyLabel.Create(nil);
+    try
+      L.Controller := Ctl;
+      L.Font.PixelsPerInch := 96;
+      L.Caption := 'one' + LineEnding + 'two';
+
+      Ctl.LoadThemeCss(cRule);
+      L.MeasureCaption(96, 0, w, hNat);
+
+      Ctl.LoadThemeCss(':root { --line-height: 40px; }' + cRule);
+      L.MeasureCaption(96, 0, w, h40);
+
+      Ctl.LoadThemeCss(':root { --line-height: 6px; }' + cRule);
+      L.MeasureCaption(96, 0, w, h6);
+
+      AssertTrue('unset, the block is the font own two line boxes', hNat > 0);
+      AssertEquals('two lines on a 40px line box', 80, h40);
+      AssertTrue(Format('which is taller than unset (%d vs %d)', [h40, hNat]), h40 > hNat);
+      AssertEquals('two lines on a 6px line box', 12, h6);
+      AssertTrue(Format('a theme that shrinks the line box lowers the block (%d vs %d)',
+        [h6, hNat]), h6 < hNat);
+    finally
+      L.Free;
+    end;
+  finally
+    Ctl.Free;
+  end;
+end;
+
+{ TLabelSizeFloorTest }
+
+procedure TLabelSizeFloorTest.TestMinimumFitsTheCaption;
+{ The floor covers the block the label must draw, and an impossible request is clamped up
+  instead of silently cutting the bottom off the text. }
+var
+  F: TForm;
+  L: TTyLabel;
+  w, h: Integer;
+begin
+  F := TForm.CreateNew(nil);
+  try
+    L := TTyLabel.Create(F);
+    L.Parent := F;
+    L.Font.PixelsPerInch := 96;
+    L.Caption := '新建';
+    L.MeasureCaption(96, 0, w, h);
+
+    AssertTrue('the height floor covers the measured block', L.Constraints.MinHeight >= h);
+
+    L.Height := 2;
+    L.Width := 2;
+    AssertTrue('a too-short request is clamped up', L.Height >= h);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TLabelSizeFloorTest.TestMinimumIsThePreferredSize;
+{ HEIGHT only, and the height IS the preferred height: the label already measures its own
+  block plus the padding RenderTo insets by, and a second copy of that sum is a second thing
+  that can drift from what gets drawn.
+
+  There is deliberately NO width floor, wrapping or not. Clipping a caption vertically is
+  never what anyone wanted -- that is the bug this floor exists to stop -- but being NARROWER
+  than the text is ordinary for a label: it ellipsises, and a status strip or a fixed column
+  showing 'Some very long value...' is a layout, not a mistake. A width floor would silently
+  overrule the Width its host set. (Buttons are the opposite case and DO floor their width:
+  there the caption is the affordance, and an ellipsised button label is a usability failure.) }
+var
+  Ctl: TTyStyleController;
+  L: TTyLabelAccess;
+  pw, ph: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  L := TTyLabelAccess.Create(nil);
+  try
+    Ctl.LoadThemeCss('TyLabel { font-size: 12px; padding: 5px 7px; }');
+    L.Controller := Ctl;
+    L.Font.PixelsPerInch := 96;
+    L.Caption := 'Measured once';
+    L.Invalidate;
+
+    pw := 0; ph := 0;
+    L.CallPreferredSize(pw, ph);
+    AssertEquals('the height floor IS the preferred height', ph, L.Constraints.MinHeight);
+    AssertEquals('and there is no width floor', 0, L.Constraints.MinWidth);
+    AssertTrue('sanity: the preferred width was actually computed', pw > 0);
+  finally
+    L.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TLabelSizeFloorTest.TestWrappingLabelHasNoWidthFloor;
+{ A wrapping label is MEANT to be narrower than its text: flooring it at the widest line
+  would make wrapping impossible. The message dialog is the case that proves it — it measures
+  the block at a column it picks and then pins that column, so a width floor would snap it
+  back into the single-line ribbon it used to be. Caption first, WordWrap second: that is the
+  order the dialog builds it in, and the order in which a stale floor would bite. }
+var
+  F: TForm;
+  L: TTyLabel;
+begin
+  F := TForm.CreateNew(nil);
+  try
+    L := TTyLabel.Create(F);
+    L.Parent := F;
+    L.Font.PixelsPerInch := 96;
+    L.Caption := 'The operation could not be completed because the destination folder is '
+      + 'read-only and the source file is still open in another application.';
+    L.WordWrap := True;
+    AssertEquals('a wrapping label publishes no width floor', 0, L.Constraints.MinWidth);
+    L.Width := 120;
+    AssertEquals('so a narrow column sticks', 120, L.Width);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TLabelSizeFloorTest.TestWrappingFloorDoesNotMoveWithTheWidth;
+{ The height floor of a wrapping label is the block measured WITHOUT wrapping — the one thing
+  about a wrapped block that does not move with the width, since a width can only ADD breaks.
+  Flooring at the block AT THE CURRENT WIDTH would be a different number for every width, so
+  a caller that sets width and height in one SetBounds (the message dialog again) would be
+  clamped by a height measured at the width the label had a moment ago. }
+var
+  F: TForm;
+  L: TTyLabel;
+  wide, narrow, oneLineW, oneLineH: Integer;
+begin
+  F := TForm.CreateNew(nil);
+  try
+    L := TTyLabel.Create(F);
+    L.Parent := F;
+    L.Font.PixelsPerInch := 96;
+    L.WordWrap := True;
+    L.Caption := 'A caption long enough that a narrow label has to break it into several '
+      + 'lines, and a wide one does not.';
+
+    L.Width := 400;
+    L.Invalidate;
+    wide := L.Constraints.MinHeight;
+    L.Width := 60;                       // now it wraps into many lines
+    L.Invalidate;
+    narrow := L.Constraints.MinHeight;
+    AssertEquals('the wrap floor does not move with the width', wide, narrow);
+
+    { It is still a real floor: one line of ink must fit, whatever the width. }
+    L.MeasureCaption(96, 0, oneLineW, oneLineH);
+    AssertTrue('and it still covers one line', narrow >= oneLineH);
+    L.Height := 1;
+    AssertTrue('so a 1px wrapping label is clamped up', L.Height >= oneLineH);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TLabelSizeFloorTest.TestSmallerFontLowersTheMinimum;
+{ The floor is DERIVED, not a wall: shrink the font and the padding in the theme and the
+  minimum shrinks with them. That is what makes "override the CSS if you want it smaller" a
+  coherent answer instead of a refusal. }
+var
+  F: TForm;
+  Ctl: TTyStyleController;
+  L: TTyLabel;
+  big, small: Integer;
+begin
+  F := TForm.CreateNew(nil);
+  Ctl := TTyStyleController.Create(nil);
+  try
+    L := TTyLabel.Create(F);
+    L.Parent := F;
+    L.Controller := Ctl;
+    L.Caption := '新建';
+
+    Ctl.LoadThemeCss('TyLabel { color: #000000; font-size: 20px; padding: 8px; }');
+    L.Invalidate;
+    big := L.Constraints.MinHeight;
+
+    Ctl.LoadThemeCss('TyLabel { color: #000000; font-size: 8px; padding: 0px; }');
+    L.Invalidate;
+    small := L.Constraints.MinHeight;
+
+    AssertTrue(Format('a smaller font + padding lowers the floor (%d -> %d)', [big, small]),
+      small < big);
+  finally
+    Ctl.Free;
+    F.Free;
+  end;
+end;
+
+procedure TLabelSizeFloorTest.TestMinimumSurvivesAHeightPinningParent;
+{ A label can sit on a tool bar, and the bar pins every child to its ButtonHeight. A control
+  that answers back with a height of its own bounced against that until LCL aborted with
+  "ChangeBounds loop detected" — the demo died at startup. Constraints clamp inside SetBounds
+  with no negotiation. Reaching the end of this test IS the assertion. }
+var
+  F: TForm;
+  Bar: TTyToolBar;
+  L: TTyLabel;
+begin
+  F := TForm.CreateNew(nil);
+  try
+    Bar := TTyToolBar.Create(F);
+    Bar.Parent := F;
+    Bar.ButtonHeight := 40;
+    L := TTyLabel.Create(Bar);
+    L.Parent := Bar;
+    L.Caption := '新建';
+    L.AutoSize := True;
+    Bar.ButtonHeight := 41;              // a loop would abort the process here
+    AssertTrue('the bar asks for a height the floor can honour',
+      L.Constraints.MinHeight <= 40);
+  finally
+    F.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TLabelTest);
+  RegisterTest(TLabelSizeFloorTest);
 end.

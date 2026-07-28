@@ -32,6 +32,17 @@ type
     procedure DrawTextSupersampled(const ARect: TRect; const AText, AFontName: string;
       AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout);
     {$ENDIF}
+    { ONE line of text, drawn exactly as DrawText always drew: ellipsis fitting, mnemonic
+      underline, SingleLine + Clipping. The public DrawText is now only the dispatcher that
+      decides how many of these to draw, so the single-line path is literally the same code
+      it was before multi-line existed (and the pixel goldens with it). }
+    procedure DrawTextLine(const ARect: TRect; const AText, AFontName: string;
+      AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment;
+      AVAlign: TTextLayout; AEllipsis: Boolean; AMnemonicPos: Integer; ASmallCrisp: Boolean);
+    { The device-px height of one line box: the theme's --line-height (passed in as logical
+      px by the caller, who owns the controller) when set, else the font's own line box.
+      Assumes the font is already configured on FBmp. }
+    function LineBoxHeight(ALineHeightLogical: Integer): Integer;
   public
     Opacity: Single;
     OpacityBase: TTyColor;   // when Opacity<1, dim TOWARD this opaque colour (0 = old alpha-reduce)
@@ -56,7 +67,17 @@ type
       overrides; a nil/empty bitmap draws nothing). }
     procedure DrawGlyphBitmap(const ARect: TRect; ABmp: TBGRABitmap);
     procedure DropShadow(const ARect: TRect; ARadiusLogical: Integer; AColor: TTyColor; ABlurLogical: Integer; const AOffsetLogical: TPoint);
-    procedure DrawText(const ARect: TRect; const AText, AFontName: string; AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout; AEllipsis: Boolean; AMnemonicPos: Integer = 0; ASmallCrisp: Boolean = False);
+    { AMultiLine (default False = every existing caller, byte-identical) opts into honouring
+      the line breaks the AUTHOR wrote into the caption: without it the text path forced
+      SingleLine, so Caption := '你好'#13#10'世界' drew as one run on every control in the
+      library. The block is laid out line by line — each line box ALineHeightLogical tall
+      (logical px, 0 = the font's own line box) — and the WHOLE block is then anchored by
+      AVAlign, the way a paragraph moves as one thing rather than each line centering itself.
+      A caption with no break in it falls through to the single-line path unchanged, so
+      turning the flag on costs nothing until there IS a break.
+      AMnemonicPos is honoured on that single-line fall-through only: the index counts into
+      the whole caption, and mapping it onto a line is the caller's knowledge, not ours. }
+    procedure DrawText(const ARect: TRect; const AText, AFontName: string; AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout; AEllipsis: Boolean; AMnemonicPos: Integer = 0; ASmallCrisp: Boolean = False; AMultiLine: Boolean = False; ALineHeightLogical: Integer = 0);
     procedure DrawGlyph(const ARect: TRect; AGlyph: TTyGlyphKind; AColor: TTyColor; AThicknessLogical: Integer; APadLogical: Integer = 4);
     { A FIXED-SIZE dropdown chevron (a shallow wide "v"), centered in AZoneRect and NOT
       stretched to the zone height — so a tall combo/button keeps a small clean chevron
@@ -104,6 +125,38 @@ function TyEffectiveFontName(const AName: string): string;
   measures the drawn glyphs. Shared by TTyLabel and TTyNotification. }
 procedure TyWrapTextCJK(const AText: string; AMaxWidthPx: Integer;
   ACanvas: TCanvas; ALines: TStrings);
+{ Split AText on the line breaks the author wrote — CR, LF and CRLF alike — keeping a blank
+  line between paragraphs as content and never returning nothing (an empty caption is one
+  empty line, so it still measures as one line tall).
+  Factored OUT of TyWrapTextCJK rather than written beside it: the wrapping path and the
+  no-wrap multi-line path must agree on what a line break is, and two copies of the split
+  would eventually stop agreeing. }
+procedure TySplitTextLines(const AText: string; ALines: TStrings);
+{ Put the font a resolved style asks for onto a MEASUREMENT canvas: the effective family
+  (theme font-family, else TyFallbackFontName), the PPI-scaled size, bold above weight 600.
+  Every MeasureCaption in the library carries its own copy of these four lines; they are the
+  reason a measured width matches the drawn glyphs, so they belong in one place. }
+procedure TyConfigureMeasureFont(ACanvas: TCanvas; const AFontName: string;
+  AFontSizeLogical, AWeight, APPI: Integer);
+{ The font's own line box on an already-configured canvas. Measured from a fixed reference
+  pair ('Ag' — an ascender and a descender) and never from the caption, so an empty caption
+  and a caption of digits come out the same height, and floored at 1 so a degenerate font
+  cannot make a block zero-tall. }
+function TyNaturalLineHeight(ACanvas: TCanvas): Integer;
+{ Measure a caption BLOCK: width = the widest line, height = line count x line height.
+  - AWrapWidthPx > 0 also wraps to that width (CJK-aware, TyWrapTextCJK); <= 0 honours only
+    the breaks the author wrote.
+  - ALineHeightLogical is the theme's --line-height in LOGICAL px; 0 = the font's natural
+    line box, which is why adding the token moves nothing until a theme sets it. Resolve it
+    with TyLineHeight(ActiveController) — the controller lives a unit up from here.
+  This is the measurement a size FLOOR is built from: a control's minimum height is this
+  height plus its style's vertical padding, because the font and the padding are what decide
+  whether the ink fits, not the --control-height the theme asked for. Factored out of
+  TTyLabel.MeasureCaption (which now calls it) so every control measures a caption the same
+  way instead of each carrying its own near-copy. }
+procedure TyMeasureTextBlock(const AText, AFontName: string;
+  AFontSizeLogical, AWeight, APPI, AWrapWidthPx, ALineHeightLogical: Integer;
+  out AWidthPx, AHeightPx: Integer);
 { The prefix the ellipsis fitter uses when it has narrowed the text to ACharCount CHARACTERS.
   A named function purely so the invariant is testable: the version this replaced shortened by
   one BYTE, which cuts a three-byte CJK character in half. The headless BGRA path silently
@@ -268,6 +321,22 @@ begin
     ALines.Add(AText);
 end;
 
+procedure TySplitTextLines(const AText: string; ALines: TStrings);
+begin
+  ALines.Clear;
+  if Pos(#10, AText) + Pos(#13, AText) = 0 then
+  begin
+    { No break at all — one line, even when the caption is empty. Returning an EMPTY list
+      here would make an empty caption measure zero lines tall, and a control whose height
+      floor is "lines x line height" would then be allowed to collapse. }
+    ALines.Add(AText);
+    Exit;
+  end;
+  ALines.Text := AText;         // splits on CR, LF and CRLF alike
+  if ALines.Count = 0 then
+    ALines.Add('');
+end;
+
 { Greedy CJK-aware wrap of a whole caption.
 
   Authored line breaks come FIRST. The wrapper only ever knew about spaces and CJK codepoints,
@@ -275,7 +344,7 @@ end;
   WordWrap on silently swallowed every line the author put there. TTyNotification looked
   correct only because its caller split the message on CR/LF before calling in -- doing it
   here makes that pre-split redundant rather than load-bearing, and fixes every other caller
-  at the same time.
+  at the same time. The split itself is TySplitTextLines, shared with the no-wrap path.
 
   An empty segment is kept as an empty line: a blank line between paragraphs is content. }
 procedure TyWrapTextCJK(const AText: string; AMaxWidthPx: Integer;
@@ -285,14 +354,9 @@ var
   i: Integer;
 begin
   ALines.Clear;
-  if Pos(#10, AText) + Pos(#13, AText) = 0 then
-  begin
-    TyWrapSegmentCJK(AText, AMaxWidthPx, ACanvas, ALines, ALines.Count);
-    Exit;
-  end;
   seg := TStringList.Create;
   try
-    seg.Text := AText;          // splits on CR, LF and CRLF alike
+    TySplitTextLines(AText, seg);
     for i := 0 to seg.Count - 1 do
       if seg[i] = '' then
         ALines.Add('')
@@ -300,6 +364,66 @@ begin
         TyWrapSegmentCJK(seg[i], AMaxWidthPx, ACanvas, ALines, ALines.Count);
   finally
     seg.Free;
+  end;
+end;
+
+procedure TyConfigureMeasureFont(ACanvas: TCanvas; const AFontName: string;
+  AFontSizeLogical, AWeight, APPI: Integer);
+begin
+  // A missing font-size would measure at the canvas's own size, which is not what gets
+  // drawn -- TyConfigureTextFont falls back the same way on the drawing side.
+  if AFontSizeLogical <= 0 then AFontSizeLogical := TyFallbackFontSize;
+  ACanvas.Font.Name := TyEffectiveFontName(AFontName);
+  ACanvas.Font.Size := MulDiv(AFontSizeLogical, APPI, 96);
+  if AWeight >= 600 then
+    ACanvas.Font.Style := [fsBold]
+  else
+    ACanvas.Font.Style := [];
+end;
+
+function TyNaturalLineHeight(ACanvas: TCanvas): Integer;
+begin
+  Result := ACanvas.TextHeight('Ag');
+  if Result < 1 then Result := 1;
+end;
+
+procedure TyMeasureTextBlock(const AText, AFontName: string;
+  AFontSizeLogical, AWeight, APPI, AWrapWidthPx, ALineHeightLogical: Integer;
+  out AWidthPx, AHeightPx: Integer);
+var
+  Meas: TBitmap;
+  Lines: TStringList;
+  i, w, lineH: Integer;
+begin
+  AWidthPx := 0;
+  AHeightPx := 0;
+  Meas := TBitmap.Create;
+  Lines := TStringList.Create;
+  try
+    Meas.SetSize(1, 1);
+    TyConfigureMeasureFont(Meas.Canvas, AFontName, AFontSizeLogical, AWeight, APPI);
+    { The theme's line box wins when it set one, else the font's. Scaled here the same way
+      the font size was, so a --line-height authored in logical px survives a HiDPI PPI. }
+    if ALineHeightLogical > 0 then
+      lineH := MulDiv(ALineHeightLogical, APPI, 96)
+    else
+      lineH := TyNaturalLineHeight(Meas.Canvas);
+    if lineH < 1 then lineH := 1;
+
+    if AWrapWidthPx > 0 then
+      TyWrapTextCJK(AText, AWrapWidthPx, Meas.Canvas, Lines)
+    else
+      TySplitTextLines(AText, Lines);
+
+    for i := 0 to Lines.Count - 1 do
+    begin
+      w := Meas.Canvas.TextWidth(Lines[i]);
+      if w > AWidthPx then AWidthPx := w;
+    end;
+    AHeightPx := Lines.Count * lineH;
+  finally
+    Lines.Free;
+    Meas.Free;
   end;
 end;
 
@@ -680,7 +804,78 @@ begin
   end;
 end;
 
-procedure TTyPainter.DrawText(const ARect: TRect; const AText, AFontName: string; AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout; AEllipsis: Boolean; AMnemonicPos: Integer = 0; ASmallCrisp: Boolean = False);
+function TTyPainter.LineBoxHeight(ALineHeightLogical: Integer): Integer;
+begin
+  if ALineHeightLogical > 0 then
+    Result := Scale(ALineHeightLogical)
+  else if FBmp <> nil then
+    Result := FBmp.TextSize('Ag').cy   // same reference pair the measurer uses
+  else
+    Result := 0;
+  if Result < 1 then Result := 1;
+end;
+
+procedure TTyPainter.DrawText(const ARect: TRect; const AText, AFontName: string; AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout; AEllipsis: Boolean; AMnemonicPos: Integer = 0; ASmallCrisp: Boolean = False; AMultiLine: Boolean = False; ALineHeightLogical: Integer = 0);
+var
+  Lines: TStringList;
+  i, lineH, blockH, yOff, boxH: Integer;
+  LineRect: TRect;
+begin
+  if FBmp = nil then
+    Exit;
+  if not AMultiLine then
+  begin
+    DrawTextLine(ARect, AText, AFontName, AFontSizeLogical, AWeight, AColor,
+      AHAlign, AVAlign, AEllipsis, AMnemonicPos, ASmallCrisp);
+    Exit;
+  end;
+  Lines := TStringList.Create;
+  try
+    TySplitTextLines(AText, Lines);
+    if Lines.Count <= 1 then
+    begin
+      { Nothing to lay out: take the untouched single-line path, mnemonic underline and all,
+        so opting into multi-line never changes how an ordinary caption is drawn. }
+      DrawTextLine(ARect, AText, AFontName, AFontSizeLogical, AWeight, AColor,
+        AHAlign, AVAlign, AEllipsis, AMnemonicPos, ASmallCrisp);
+      Exit;
+    end;
+    // The line box has to be known before the block can be anchored, and it comes from the
+    // font unless the theme overrode it -- so configure the font first, then ask.
+    TyConfigureTextFont(FBmp, AFontName, AFontSizeLogical, AWeight, FPPI);
+    lineH := LineBoxHeight(ALineHeightLogical);
+    blockH := Lines.Count * lineH;
+    boxH := ARect.Bottom - ARect.Top;
+    { AVAlign anchors the WHOLE block, not each line — the way a paragraph moves as one
+      thing. Never negative: a block taller than its box starts at the top and loses its
+      tail, which is the same "the bottom is what disappears" behaviour a single clipped
+      line has, rather than losing the first line instead. }
+    case AVAlign of
+      tlCenter: yOff := (boxH - blockH) div 2;
+      tlBottom: yOff := boxH - blockH;
+    else
+      yOff := 0;   // tlTop
+    end;
+    if yOff < 0 then yOff := 0;
+    for i := 0 to Lines.Count - 1 do
+    begin
+      LineRect := Rect(ARect.Left, ARect.Top + yOff + i * lineH,
+        ARect.Right, ARect.Top + yOff + (i + 1) * lineH);
+      if LineRect.Top >= ARect.Bottom then Break;
+      { tlCenter INSIDE the line box: the block is already positioned, so each line only has
+        to sit in the middle of its own box — which is where extra leading from a themed
+        --line-height goes, half above and half below. }
+      DrawTextLine(LineRect, Lines[i], AFontName, AFontSizeLogical, AWeight, AColor,
+        AHAlign, tlCenter, AEllipsis, 0, ASmallCrisp);
+    end;
+  finally
+    Lines.Free;
+  end;
+end;
+
+procedure TTyPainter.DrawTextLine(const ARect: TRect; const AText, AFontName: string;
+  AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment;
+  AVAlign: TTextLayout; AEllipsis: Boolean; AMnemonicPos: Integer; ASmallCrisp: Boolean);
 var
   n: Integer;
   style: TTextStyle;
