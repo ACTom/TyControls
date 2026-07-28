@@ -55,10 +55,6 @@ msgstr "AnimationsEnabled 是 public，只能在代码里设，不在这里："
 msgid "Keyboard: Tab to a switch, then press Space or Enter — it toggles and draws the theme focus ring."
 msgstr "键盘：Tab 到某个开关，按空格或回车 —— 切换并画出主题焦点环。"
 
-#: tmainform.lblstatus.caption
-msgid ""
-msgstr ""
-
 #: tmainform.bar.caption
 msgid "ToggleSwitch  · TyControls"
 msgstr "ToggleSwitch  · TyControls"

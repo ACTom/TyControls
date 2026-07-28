@@ -67,10 +67,6 @@ msgstr "Caption = '' —— 无标题变体：上边框连续，不为标题留�
 msgid "A child still starts below the caption band the box always reserves."
 msgstr "子控件仍从分组框始终保留的标题带下方开始。"
 
-#: tmainform.lblstatus.caption
-msgid ""
-msgstr ""
-
 #: tmainform.bar.caption
 msgid "GroupBox  ·  TyControls"
 msgstr "GroupBox  ·  TyControls"
@@ -78,7 +74,3 @@ msgstr "GroupBox  ·  TyControls"
 #: tmainform.nameedit.texthint
 msgid "Enter a name…"
 msgstr "请输入姓名…"
-
-#: tmainform.groupplain.caption
-msgid ""
-msgstr ""

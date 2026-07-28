@@ -537,10 +537,6 @@ msgstr "计数 "
 msgid "Select colour"
 msgstr "选择颜色"
 
-#: tycontrols.strconsts.rsgridcheckedword
-msgid ""
-msgstr "是"
-
 #: tycontrols.strconsts.rsgridfilterblank
 msgid "(Blanks)"
 msgstr "(空白)"
@@ -562,3 +558,7 @@ msgstr "搜索"
 #: tycontrols.strconsts.rsgridfilterselectall
 msgid "(Select all)"
 msgstr "(全选)"
+
+#: tycontrols.strconsts.rsgridcheckedword
+msgid ""
+msgstr "是"

@@ -51,10 +51,6 @@ msgstr "绿色"
 msgid "Blue"
 msgstr "蓝色"
 
-#: tmainform.lblstatus.caption
-msgid ""
-msgstr ""
-
 #: tmainform.lblgroupidxhead.caption
 msgid "GroupIndex - one box, two selections that ignore each other"
 msgstr "GroupIndex - 一个分组框，两组互不影响的选择"
