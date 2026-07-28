@@ -117,6 +117,7 @@ const
   TyTabMargin        = 6;    // TabControl close-glyph right margin
   TyTabArrowBand     = 16;   // TabControl overflow scroll-arrow width
   TyTitleBarPad      = 8;    // TitleBar caption + content-zone left margin
+  TyTitleBarClassicHeight = 32;   // TitleBar height under classic density (modern: --titlebar-height)
   TyTitleButtonWidth = 46;   // TitleBar caption-button (min/max/close) width
 
   // Badge metrics, shared by TTyButton's built-in badge and the standalone TTyBadge so

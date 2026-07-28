@@ -18,6 +18,9 @@ type
   published
     procedure TestLoadThemeCssResolves;
     procedure TestThemeNameRetriesAfterAFailedResolve;
+    procedure TestThemeNameAppliesOnLateRegistrationAlone;
+    procedure TestLateRegistrationLeavesAnAppliedThemeAlone;
+    procedure TestFreedControllerIsNotNotified;
     procedure TestDefaultControllerIsSingleton;
     procedure TestDefaultControlRegisteredForHotReload;
     procedure TestFreeControllerFirstNocrash;
@@ -174,6 +177,81 @@ begin
     AssertEquals('and it is the theme we registered', $FF123456, after_);
   finally
     c.Free;
+    TyUnregisterTheme(CName);
+  end;
+end;
+
+procedure TControllerTest.TestThemeNameAppliesOnLateRegistrationAlone;
+const
+  CName = 'ty-test-never-reassigned';
+var
+  c: TTyStyleController;
+  before, after_: TTyColor;
+begin
+  { The .lfm case with NO second assignment: a form designed with ThemeName='x' and an
+    application whose OnCreate only calls TyRegisterBuiltinThemes. Nothing ever re-assigns
+    the name, so a retry-on-assignment is not enough -- the REGISTRATION has to drive it. }
+  TyUnregisterTheme(CName);
+  c := TTyStyleController.Create(nil);
+  try
+    c.ThemeName := CName;                // streaming: unresolvable at this point
+    before := c.Model.ResolveStyle('TyForm', '', []).Background.Color;
+
+    TyRegisterThemeCss(CName, 'TyForm { background: #654321; }');   // OnCreate, later
+
+    after_ := c.Model.ResolveStyle('TyForm', '', []).Background.Color;
+    AssertTrue('registration alone applied the pending name', after_ <> before);
+    AssertEquals('and it is the theme we registered', $FF654321, after_);
+  finally
+    c.Free;
+    TyUnregisterTheme(CName);
+  end;
+end;
+
+procedure TControllerTest.TestLateRegistrationLeavesAnAppliedThemeAlone;
+const
+  CWanted = 'ty-test-wanted';
+  COther  = 'ty-test-other';
+var
+  c: TTyStyleController;
+begin
+  { The listener must be a RETRY, not a re-apply: once a name is live, an unrelated
+    registration (TyRegisterBuiltinThemes registers ~15 in a row) must not disturb it. }
+  TyUnregisterTheme(CWanted);
+  TyUnregisterTheme(COther);
+  TyRegisterThemeCss(CWanted, 'TyForm { background: #0A0B0C; }');
+  c := TTyStyleController.Create(nil);
+  try
+    c.ThemeName := CWanted;
+    AssertEquals('applied up front', $FF0A0B0C,
+      c.Model.ResolveStyle('TyForm', '', []).Background.Color);
+
+    TyRegisterThemeCss(COther, 'TyForm { background: #FFFFFF; }');
+    AssertEquals('an unrelated registration changed nothing', $FF0A0B0C,
+      c.Model.ResolveStyle('TyForm', '', []).Background.Color);
+  finally
+    c.Free;
+    TyUnregisterTheme(CWanted);
+    TyUnregisterTheme(COther);
+  end;
+end;
+
+procedure TControllerTest.TestFreedControllerIsNotNotified;
+const
+  CName = 'ty-test-freed-listener';
+var
+  c: TTyStyleController;
+begin
+  { A controller that unsubscribes on destroy: registering afterwards must not reach the
+    freed instance. Without TyRemoveThemeRegistryListener this is a use-after-free. }
+  TyUnregisterTheme(CName);
+  c := TTyStyleController.Create(nil);
+  c.ThemeName := CName;    // pending -- exactly the state the listener acts on
+  c.Free;
+  try
+    TyRegisterThemeCss(CName, 'TyForm { background: #223344; }');
+    AssertTrue('registering after the controller died did not blow up', True);
+  finally
     TyUnregisterTheme(CName);
   end;
 end;

@@ -1147,12 +1147,20 @@ begin
 end;
 
 function TTyStyleModel.UserHasTypeKey(const ATypeKey: string): Boolean;
-{ True if the user layer has ANY rule for this typeKey (base, variant or state).
-  A single match suppresses the ENTIRE built-in layer for the typeKey — including
-  base-state defaults the user didn't override. This is intentional (the theme
-  owns the control's look once it touches it; no built-in property bleeds in).
-  Repo themes always ship a base rule per typeKey, so a variant-only/state-only
-  block — which would leave the plain base state empty — does not occur. }
+{ True if the user layer supplies a BASE rule for this typeKey — variant-less and
+  state-less, i.e. a rule that can stand as the control's plain look. That single match
+  suppresses the ENTIRE built-in layer for the typeKey, including base-state defaults the
+  user didn't override: the theme owns the control's look once it dresses it, and no
+  built-in property bleeds in.
+
+  WHY the base-rule requirement rather than "any rule at all": a variant-only or state-only
+  block is an ADD-ON to a look the theme never defined, so suppressing on it left the
+  control with NOTHING — no fill, no border, no ink. That is not hypothetical; e0e8d7c gave
+  14 built-in skins a `TyToggleSwitch.on-titlebar { color: … }` ink tweak and thereby
+  erased their toggle switches everywhere, which rendered as a blank white patch on the
+  Ant Design title bar. Every repo theme ships a base rule for the typeKeys it actually
+  dresses, so this narrowing is a no-op for them and only restores the base layer for the
+  add-on-only case. }
 var
   i: Integer;
   e: TTyStyleRuleEntry;
@@ -1161,7 +1169,7 @@ begin
   for i := 0 to FRules.Count - 1 do
   begin
     e := TTyStyleRuleEntry(FRules[i]);
-    if SameText(e.TypeName, ATypeKey) then
+    if SameText(e.TypeName, ATypeKey) and (e.Variant = '') and (not e.HasState) then
       Exit(True);
   end;
 end;

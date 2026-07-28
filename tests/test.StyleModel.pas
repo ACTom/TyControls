@@ -58,6 +58,9 @@ type
     procedure TestFlagOnThinThemeInheritsBase;
     procedure TestFlagOnUserOverridesPerProperty;
     procedure TestFlagOnUserLayerStillWinsLastDuplicate;
+    procedure TestVariantOnlyRuleDoesNotSuppressBase;
+    procedure TestStateOnlyRuleDoesNotSuppressBase;
+    procedure TestBaseRuleWithAVariantStillSuppresses;
   end;
 
   { Phase 2 (theme v2): @import (A8) — file-level compose, cycle guard, diamond dedup }
@@ -461,6 +464,40 @@ begin
   AssertFalse('base background suppressed (all-or-nothing)', tpBackground in s.Present);
   AssertFalse('base border-color suppressed (all-or-nothing)', tpBorderColor in s.Present);
   AssertFalse('base border-width suppressed (all-or-nothing)', tpBorderWidth in s.Present);
+end;
+
+procedure TTestStylePropertyCascade.TestVariantOnlyRuleDoesNotSuppressBase;
+var s: TTyStyleSet;
+begin
+  { A theme that only tweaks a VARIANT of a control it never dressed is adding to the base
+    look, not replacing it. Suppressing on it left the control with nothing at all -- how
+    e0e8d7c's `TyToggleSwitch.on-titlebar { color: ... }` erased the toggle switch in 14
+    built-in skins. The base must survive, and the variant must still apply on top. }
+  FModel.LoadFromCss('TyButton.on-titlebar { color: #FF0000; }');
+  s := FModel.ResolveStyle('TyButton', '', []);
+  AssertTrue('plain state keeps the base background', tpBackground in s.Present);
+  s := FModel.ResolveStyle('TyButton', 'on-titlebar', []);
+  AssertTrue('variant keeps the base background too', tpBackground in s.Present);
+  AssertEquals('and the variant ink is applied', $FF, TyRedOf(s.TextColor));
+end;
+
+procedure TTestStylePropertyCascade.TestStateOnlyRuleDoesNotSuppressBase;
+var s: TTyStyleSet;
+begin
+  // Same reasoning for a state-only add-on.
+  FModel.LoadFromCss('TyButton:hover { color: #FF0000; }');
+  s := FModel.ResolveStyle('TyButton', '', []);
+  AssertTrue('plain state keeps the base background', tpBackground in s.Present);
+end;
+
+procedure TTestStylePropertyCascade.TestBaseRuleWithAVariantStillSuppresses;
+var s: TTyStyleSet;
+begin
+  { The all-or-nothing contract is unchanged for a theme that DOES dress the control: one
+    variant-less rule and the built-in layer is gone, extra variant blocks or not. }
+  FModel.LoadFromCss('TyButton { color: #FF0000; } TyButton.ghost { color: #00FF00; }');
+  s := FModel.ResolveStyle('TyButton', '', []);
+  AssertFalse('base background still suppressed', tpBackground in s.Present);
 end;
 
 procedure TTestStylePropertyCascade.TestFlagOnThinThemeInheritsBase;

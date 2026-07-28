@@ -54,7 +54,68 @@ procedure TyUnregisterTheme(const AName: string);
 { True if NAME is registered (case-insensitive). }
 function TyThemeRegistered(const AName: string): Boolean;
 
+type
+  { Notified whenever a theme NAME becomes resolvable. }
+  TTyThemeRegisteredEvent = procedure(const AName: string) of object;
+
+{ Subscribe/unsubscribe to registration events. WHY this exists: a .lfm assigns
+  Controller.ThemeName during STREAMING, and streaming runs before the form's OnCreate —
+  i.e. before an application has called TyRegisterBuiltinThemes. Without a way to hear
+  about a late registration, that assignment resolves to nothing and the designed-in
+  theme is silently lost in the built application (while looking fine in the IDE, which
+  registers themes at package load). Adding the same handler twice is a no-op. }
+procedure TyAddThemeRegistryListener(const AHandler: TTyThemeRegisteredEvent);
+procedure TyRemoveThemeRegistryListener(const AHandler: TTyThemeRegisteredEvent);
+
 implementation
+
+var
+  GListeners: array of TMethod;   // TTyThemeRegisteredEvent subscribers (see interface)
+
+procedure TyAddThemeRegistryListener(const AHandler: TTyThemeRegisteredEvent);
+var
+  i: Integer;
+  m: TMethod;
+begin
+  if AHandler = nil then Exit;
+  m := TMethod(AHandler);
+  for i := 0 to High(GListeners) do
+    if (GListeners[i].Code = m.Code) and (GListeners[i].Data = m.Data) then Exit;
+  SetLength(GListeners, Length(GListeners) + 1);
+  GListeners[High(GListeners)] := m;
+end;
+
+procedure TyRemoveThemeRegistryListener(const AHandler: TTyThemeRegisteredEvent);
+var
+  i, j: Integer;
+  m: TMethod;
+begin
+  m := TMethod(AHandler);
+  for i := High(GListeners) downto 0 do
+    if (GListeners[i].Code = m.Code) and (GListeners[i].Data = m.Data) then
+    begin
+      for j := i to High(GListeners) - 1 do
+        GListeners[j] := GListeners[j + 1];
+      SetLength(GListeners, Length(GListeners) - 1);
+    end;
+end;
+
+procedure NotifyRegistered(const AName: string);
+var
+  snapshot: array of TMethod;
+  h: TTyThemeRegisteredEvent;
+  i: Integer;
+begin
+  if Length(GListeners) = 0 then Exit;
+  // Iterate a SNAPSHOT: a handler is free to subscribe or unsubscribe while it runs
+  // (a controller applying a theme can create or destroy controls).
+  snapshot := Copy(GListeners, 0, Length(GListeners));
+  for i := 0 to High(snapshot) do
+  begin
+    TMethod(h) := snapshot[i];
+    h(AName);
+  end;
+end;
 
 var
   GThemes: TStringList = nil;   // Name=Source map; CaseSensitive=False, Sorted
@@ -110,6 +171,7 @@ begin
     TTyThemeCssHolder(CssRegistry.Objects[idx]).Css := ACss   // last wins
   else
     CssRegistry.AddObject(nm, TTyThemeCssHolder.Create(ACss));
+  NotifyRegistered(nm);
 end;
 
 function TyResolveThemeCss(const AName: string; out ACss: string): Boolean;
@@ -129,6 +191,9 @@ begin
   // Values[] on a case-insensitive list does a case-insensitive name match and
   // replaces in place, giving "last registration wins" with no duplicates.
   Registry.Values[Trim(AName)] := AFileName;
+  // Folder/dir registration funnels through here, so this one call site covers every
+  // file-backed registration path.
+  NotifyRegistered(Trim(AName));
 end;
 
 procedure TyRegisterThemeFolder(const AName, ADir: string);
@@ -230,6 +295,7 @@ begin
 end;
 
 finalization
+  SetLength(GListeners, 0);
   FreeAndNil(GThemes);
   FreeAndNil(GCssThemes);   // OwnsObjects frees the CSS holders
 end.

@@ -11,7 +11,7 @@ uses
   tyControls.Types, tyControls.StyleModel, tyControls.Controller, tyControls.CheckBox,
   tyControls.GroupBox, tyControls.ListView, tyControls.Grid, tyControls.ExPanel,
   tyControls.Edit, tyControls.Button, tyControls.TreeView, tyControls.ToolBar,
-  tyControls.Segmented,
+  tyControls.Segmented, tyControls.Form,
   tyControls.BuiltinThemes;
 type
   TGridHdrProbe = class(TTyStringGrid)  // expose the protected header-band height for density guards
@@ -62,6 +62,7 @@ type
     procedure TestFieldHeightControlsFollowDensity;
     procedure TestGridHeaderHeightFollowsDensity;
     procedure TestSegmentedHeightFollowsDensity;
+    procedure TestTitleBarIsTallerThanTheControlsItHosts;
   end;
 
 implementation
@@ -522,6 +523,32 @@ begin
     AssertEquals('切回经典 16', 16, c.Metric('--checkbox-size', 99));
   finally
     c.Free;
+  end;
+end;
+
+{ A title bar HOSTS controls, so it must be taller than one. It used to follow
+  --control-height, making a modern bar exactly as tall as a full-height child: the Ant
+  Design example's theme combo met both edges and its 3px top offset pushed the bottom
+  edge out of the bar. Classic must not move (byte-identical 32). }
+procedure TMetricTest.TestTitleBarIsTallerThanTheControlsItHosts;
+var
+  savedDensity: TTyDensity;
+  ctrlH, barH: Integer;
+begin
+  TyRegisterBuiltinThemes;
+  TyDefaultController.ThemeName := 'default';
+  savedDensity := TyDefaultController.Density;
+  try
+    TyDefaultController.Density := tdClassic;
+    AssertEquals('classic title bar stays 32', 32, TyTitleBarHeightFor(TyDefaultController));
+
+    TyDefaultController.Density := tdModern;
+    ctrlH := TyDensityHeight(TyDefaultController, 32);
+    barH  := TyTitleBarHeightFor(TyDefaultController);
+    AssertTrue(Format('modern bar (%d) must clear a hosted control (%d) with room on both '
+      + 'sides', [barH, ctrlH]), barH >= ctrlH + 8);
+  finally
+    TyDefaultController.Density := savedDensity;
   end;
 end;
 

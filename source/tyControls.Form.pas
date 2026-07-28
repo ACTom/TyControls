@@ -373,6 +373,14 @@ type
       default [biSystemMenu, biMinimize, biMaximize];
   end;
 
+{ The title bar's height in LOGICAL px for the density AController is on: classic returns 32
+  verbatim (byte-identical -- the token is not consulted), modern reads --titlebar-height.
+  WHY a token of its own rather than --control-height, which is what the bar used to follow:
+  a title bar HOSTS controls, so a bar exactly one control tall leaves a full-height child
+  no room -- it meets both edges, and any top offset spills past the bottom. AController may
+  be nil (falls back to the default controller). }
+function TyTitleBarHeightFor(AController: TTyStyleController): Integer;
+
 function TyHitTestBorder(const AClient: TRect; const APt: TPoint; AZone: Integer): TTyBorderHit;
 { Resize-gated edge hit-test: bhNone when not AResizable, else TyHitTestBorder. A pure
   function (no window handle) so the gating is unit-testable; the chrome engine routes its
@@ -490,6 +498,11 @@ uses
   swallows WM_SETTINGCHANGE in its callback" lesson. ApplyResizeStrategy (below) drives it.
   ============================================================================ }
 {$ENDIF}
+
+function TyTitleBarHeightFor(AController: TTyStyleController): Integer;
+begin
+  Result := TyDensityMetric(AController, TyTitleBarClassicHeight, '--titlebar-height');
+end;
 
 function TyHitTestBorder(const AClient: TRect; const APt: TPoint; AZone: Integer): TTyBorderHit;
 var
@@ -781,10 +794,10 @@ begin
   // alNone, so existing .lfm files keep writing `Align = alTop` explicitly — no change for
   // them — but a freshly dropped/created bar now snaps to the top strip on its own.)
   Align := alTop;
-  // Height follows the density axis: classic 32 (byte-identical); modern --control-height (38) when a
+  // Height follows the density axis: classic 32 (byte-identical); modern --titlebar-height when a
   // modern controller is already active at construction. Streamed forms associate the controller AFTER
   // this ctor, so TTyForm.ApplyChromeTheme re-derives the bar height once its controller is applied.
-  SetBounds(0, 0, 200, TyDensityHeight(ActiveController, 32));
+  SetBounds(0, 0, 200, TyTitleBarHeightFor(ActiveController));
   FMinButton := TTyCaptionButton.Create(Self);
   FMinButton.Kind := cbkMin;
   FMinButton.Parent := Self;
@@ -2129,12 +2142,12 @@ begin
     FTitleBar.MaxButton.Controller := AController;
     FTitleBar.CloseButton.Controller := AController;
     { Density axis: with no explicit TitleHeight, re-derive the bar height from the active
-      controller -- classic keeps 32 (byte-identical no-op), modern grows to --control-height (38).
+      controller -- classic keeps 32 (byte-identical no-op), modern grows to --titlebar-height.
       Runtime only (the designer must not mutate the streamed bar's Height). DPI-scaled the same way
       EffectiveButtonWidthPx scales its metric (MulDiv by Font.PixelsPerInch), so it agrees with the
       HandleChangeBounds cross-monitor rescale instead of clobbering it. }
     if (not FTitleHeightExplicit) and not (csDesigning in ComponentState) then
-      FTitleBar.Height := MulDiv(TyDensityHeight(AController, 32), FTitleBar.Font.PixelsPerInch, 96);
+      FTitleBar.Height := MulDiv(TyTitleBarHeightFor(AController), FTitleBar.Font.PixelsPerInch, 96);
     { Theme the title bar's OWN LCL Color, not just the form's. A windowed control hosted on
       the bar (a theme switcher, a light/dark toggle, a ghost button in its transparent state)
       erases its unpainted background to its PARENT's LCL Color -- if that stays the default

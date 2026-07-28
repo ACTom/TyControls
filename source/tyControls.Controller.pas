@@ -59,6 +59,8 @@ type
     procedure ApplyDensityPack;   // 若 tdModern,追加现代包(在 layer-1 已装好之后)
     procedure SetThemeFile(const AValue: string);
     procedure SetThemeName(const AValue: string);
+    function TryApplyThemeName: Boolean;   // resolve+load FThemeName; False if not registered (yet)
+    procedure ThemeRegistryChanged(const AName: string);   // late-registration retry hook
     function GetMode: string;
     procedure SetMode(const AValue: string);
     procedure SetFollow(const AValue: TTyThemeFollow);
@@ -195,6 +197,8 @@ begin
   FModel := TTyStyleModel.Create;
   FControls := TFPList.Create;
   FChangeListeners := TMethodList.Create;
+  // Hear about themes registered AFTER we were handed a name (see ThemeRegistryChanged).
+  TyAddThemeRegistryListener(@ThemeRegistryChanged);
   // One-time: derive a concrete fallback font from the real system font when a
   // GUI app first creates a controller and the theme provides no font-family.
   // Only a FALLBACK (still token-driven: a themed font-family always wins). The
@@ -211,6 +215,7 @@ end;
 
 destructor TTyStyleController.Destroy;
 begin
+  TyRemoveThemeRegistryListener(@ThemeRegistryChanged);
   FWatchTimer.Free;   // nil-safe; disarms the hot-reload watch
   FChangeListeners.Free;
   FControls.Free;
@@ -234,9 +239,45 @@ begin
   end;
 end;
 
-procedure TTyStyleController.SetThemeName(const AValue: string);
+function TTyStyleController.TryApplyThemeName: Boolean;
 var
   src, css: string;
+begin
+  Result := False;
+  if FThemeName = '' then Exit;
+  if TyResolveThemeCss(FThemeName, css) then
+  begin
+    // Compile-in built-in theme (registered as an inline CSS source): REPLACE layer-1
+    // from the string + bump ThemeVersion. No file -> no hot-reload watch.
+    FModel.LoadFromCss(css);
+    ApplyDensityPack;
+    FThemeApplied := True;
+    Changed;
+    Result := True;
+  end
+  else if TyResolveTheme(FThemeName, src) and (src <> '') and FileExists(src) then
+  begin
+    // §3.8 switch = REPLACE layer-1 (LoadFromFile uses AReplace=True and bumps
+    // ThemeVersion). Never additive: switching themes must not stack residual rules.
+    FModel.LoadFromFile(src);
+    ApplyDensityPack;
+    FThemeApplied := True;
+    Changed;
+    Result := True;
+  end;
+end;
+
+procedure TTyStyleController.ThemeRegistryChanged(const AName: string);
+begin
+  { A name we are still waiting for just became resolvable — apply it now. This is what
+    makes a .lfm-designed ThemeName survive in a BUILT application, where streaming runs
+    before the app registers its themes (see FThemeApplied). }
+  if FThemeApplied or (FThemeName = '') then Exit;
+  if not SameText(FThemeName, AName) then Exit;
+  TryApplyThemeName;
+end;
+
+procedure TTyStyleController.SetThemeName(const AValue: string);
 begin
   { Re-assigning the SAME name is a no-op only if that name was actually applied; see
     FThemeApplied. }
@@ -248,24 +289,8 @@ begin
   // (nothing to watch — FThemeFile is now empty).
   UpdateWatch;
   if AValue = '' then Exit;
-  if TyResolveThemeCss(AValue, css) then
-  begin
-    // Compile-in built-in theme (registered as an inline CSS source): REPLACE layer-1
-    // from the string + bump ThemeVersion. No file -> no hot-reload watch.
-    FModel.LoadFromCss(css);
-    ApplyDensityPack;
-    FThemeApplied := True;
-    Changed;
-  end
-  else if TyResolveTheme(AValue, src) and (src <> '') and FileExists(src) then
-  begin
-    // §3.8 switch = REPLACE layer-1 (LoadFromFile uses AReplace=True and bumps
-    // ThemeVersion). Never additive: switching themes must not stack residual rules.
-    FModel.LoadFromFile(src);
-    ApplyDensityPack;
-    FThemeApplied := True;
-    Changed;
-  end;
+  // May fail (name not registered yet) — ThemeRegistryChanged retries when it appears.
+  TryApplyThemeName;
 end;
 
 function TTyStyleController.GetMode: string;

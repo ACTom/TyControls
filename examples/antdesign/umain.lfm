@@ -11,7 +11,7 @@ object MainForm: TMainForm
   OnCreate = FormCreate
   OnResize = FormResize
   TitleBar = Bar
-  TitleHeight = 34
+  TitleHeight = 48
   object Surface: TTyFormSurface
     Left = 0
     Height = 660
@@ -21,7 +21,7 @@ object MainForm: TMainForm
     Align = alClient
     object Bar: TTyTitleBar
       Left = 0
-      Height = 34
+      Height = 48
       Top = 0
       Width = 1300
       TabOrder = 0
@@ -31,7 +31,7 @@ object MainForm: TMainForm
       object DarkSwitch: TTyToggleSwitch
         Left = 718
         Height = 28
-        Top = 5
+        Top = 10
         Width = 114
         TabOrder = 3
         TabStop = True
@@ -42,7 +42,7 @@ object MainForm: TMainForm
       object ThemeCombo: TTyComboBox
         Left = 846
         Height = 38
-        Top = 3
+        Top = 5
         Width = 150
         TabOrder = 4
         ItemIndex = -1
@@ -52,7 +52,7 @@ object MainForm: TMainForm
       object BtnUser: TTyMenuButton
         Left = 526
         Height = 38
-        Top = 2
+        Top = 5
         Width = 184
         TabOrder = 2
         Caption = 'Administrator'
@@ -63,8 +63,8 @@ object MainForm: TMainForm
     end
     object Sider: TTyListGroupPanel
       Left = 0
-      Height = 726
-      Top = 34
+      Height = 712
+      Top = 48
       Width = 224
       TabOrder = 1
       HeaderHeight = 48
@@ -75,16 +75,16 @@ object MainForm: TMainForm
     object SiderSplit: TTySplitter
       Cursor = crHSplit
       Left = 216
-      Height = 726
-      Top = 34
+      Height = 712
+      Top = 48
       Width = 5
       TabOrder = 2
       MinSize = 80
     end
     object Content: TTyPanel
       Left = 221
-      Height = 726
-      Top = 34
+      Height = 712
+      Top = 48
       Width = 899
       TabOrder = 3
       Align = alClient
