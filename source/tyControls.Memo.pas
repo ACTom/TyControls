@@ -163,11 +163,17 @@ type
     // Enter is NOT consumed so the form's default button can handle it. Gated on
     // the VK_RETURN branch in KeyDown.
     FWantReturns: Boolean;
-    // ScrollBars: which scrollbars the (vertical, optionally word-wrapping) memo
-    // shows. Default ssAutoVertical = the historical behaviour (the embedded
-    // vertical bar appears on overflow). ssNone hides it entirely; ssVertical
-    // forces it always-visible. Horizontal variants degrade to the vertical
-    // policy (this memo has no horizontal scrollbar — flagged, not implemented).
+    // ScrollBars: which scrollbars the memo shows, on BOTH axes. Default ssAutoVertical
+    // keeps the historical behaviour (the embedded vertical bar appears on overflow);
+    // ssNone hides everything; ssVertical / ssHorizontal force one bar always-visible;
+    // ssAutoVertical / ssAutoHorizontal show one on overflow; ssBoth and ssAutoBoth do
+    // both. See UpdateScrollBar for the resolution, and the fuller note beside it.
+    //
+    // (This comment used to say the memo had no horizontal scrollbar and that the
+    // horizontal styles degraded to the vertical policy. That stopped being true when the
+    // horizontal bar landed -- FHScrollBar, the ssHorizontal/ssBoth arms of UpdateScrollBar
+    // and a whole test unit, test.memo.hscroll -- and a comment that denies a working
+    // feature costs as much as one that promises a missing one.)
     FScrollBars: TScrollStyle;
     procedure SetReadOnly(AValue: Boolean);
     procedure SetHideSelection(AValue: Boolean);
