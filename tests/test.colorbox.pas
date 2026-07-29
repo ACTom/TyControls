@@ -46,11 +46,10 @@ begin
     c.Selected := clRed;
     AssertEquals('picks red index', 9, c.ItemIndex);
     AssertTrue('selected red', c.Selected = clRed);
-    // A colour not in the palette is appended and selected.
+    // A colour not in the palette reports "not one of mine" and leaves the list alone.
     c.Selected := TColor($00123456);
-    AssertEquals('appended custom', 17, c.Items.Count);
-    AssertTrue('selected custom', c.Selected = TColor($00123456));
-    AssertEquals('custom is selected item', 16, c.ItemIndex);
+    AssertEquals('palette untouched', 16, c.Items.Count);
+    AssertEquals('nothing selected', -1, c.ItemIndex);
   finally c.Free; end;
 end;
 

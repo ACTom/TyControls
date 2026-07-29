@@ -64,7 +64,7 @@ end;
 
 procedure TTyColorListBox.SetSelected(const AValue: TColor);
 begin
-  ItemIndex := TySelectColorIndex(Items, AValue);
+  ItemIndex := TySelectColorIndex(Items, AValue, False);   // no silent palette growth
 end;
 
 end.

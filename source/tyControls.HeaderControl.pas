@@ -67,6 +67,12 @@ type
     FResizeStartW: Integer;         // logical width of FResizeIndex at drag start
     FOnSectionClick: TTyHeaderSectionEvent;
     FOnSectionResize: TTyHeaderResizeEvent;
+    FOnSectionTrack: TTyHeaderResizeEvent;
+    { A15: the hover handler used to hard-assign crDefault, which silently threw away
+      whatever Cursor the caller had set on the strip. Remember it instead. }
+    FSavedCursor: TCursor;
+    FCursorOverridden: Boolean;
+    procedure SetResizeCursor(AOn: Boolean);
     function GetSectionCount: Integer;
     function GetSection(AIndex: Integer): TTyHeaderSection;
     procedure SetSection(AIndex: Integer; const AValue: TTyHeaderSection);
@@ -106,7 +112,13 @@ type
     property Sort[AIndex: Integer]: TTyHeaderSortDirection read GetSortDirection write SetSortDirection;
   published
     property OnSectionClick: TTyHeaderSectionEvent read FOnSectionClick write FOnSectionClick;
+    { Fires ONCE, when the drag is released, with the settled width. It used to fire on
+      every mouse-move pixel as well, so a handler that did anything real (re-query, relayout
+      a grid, save a setting) ran hundreds of times per drag. LCL splits the two the same
+      way: OnSectionTrack is the continuous one, OnSectionResize the final one. }
     property OnSectionResize: TTyHeaderResizeEvent read FOnSectionResize write FOnSectionResize;
+    { Fires continuously while a divider is being dragged -- for live preview. }
+    property OnSectionTrack: TTyHeaderResizeEvent read FOnSectionTrack write FOnSectionTrack;
     // Declared True to match the constructor, so a host's TabStop=False opt-out streams.
     property TabStop default True;
     property Align;
@@ -538,7 +550,7 @@ begin
     if FSections[FResizeIndex].Width <> newW then
     begin
       FSections[FResizeIndex].Width := newW;
-      if Assigned(FOnSectionResize) then FOnSectionResize(Self, FResizeIndex, newW);
+      if Assigned(FOnSectionTrack) then FOnSectionTrack(Self, FResizeIndex, newW);
       Invalidate;
     end;
     Exit;
@@ -547,10 +559,7 @@ begin
   // horizontal resize; otherwise track the hot section for the highlight.
   widths := DeviceWidths;
   edge := TyHeaderResizeEdgeAtX(widths, ClientRect, X, ScaledGrip);
-  if edge >= 0 then
-    Cursor := crHSplit
-  else
-    Cursor := crDefault;
+  SetResizeCursor(edge >= 0);
   hit := TyHeaderSectionAtX(widths, ClientRect, X);
   if hit <> FHotIndex then
   begin
@@ -593,6 +602,21 @@ begin
   end;
 end;
 
+{ Swap in the resize cursor over a divider and put the caller's own cursor back on the
+  way out -- mirrors TTyListView.SetDividerCursor. }
+procedure TTyHeaderControl.SetResizeCursor(AOn: Boolean);
+begin
+  if AOn = FCursorOverridden then Exit;
+  if AOn then
+  begin
+    FSavedCursor := Cursor;
+    Cursor := crHSplit;
+  end
+  else
+    Cursor := FSavedCursor;
+  FCursorOverridden := AOn;
+end;
+
 procedure TTyHeaderControl.MouseLeave;
 begin
   inherited MouseLeave;
@@ -601,7 +625,7 @@ begin
     FHotIndex := -1;
     Invalidate;
   end;
-  Cursor := crDefault;
+  SetResizeCursor(False);
 end;
 
 end.

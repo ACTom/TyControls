@@ -275,6 +275,13 @@ type
     FDragStartPos:         TPoint;
     FDropTarget:           PTyTreeNode;
     FDropMode:             TTyTreeDropMode;
+    { A15: both the drag feedback (crDrag/crNoDrop) and the column-divider hint
+      (crHSplit) borrow Cursor for the duration of a gesture. They used to hand it
+      back as crDefault, which quietly destroyed a caller's own Cursor setting --
+      set crHandPoint on a tree, hover a divider once, and it is gone for good.
+      Remember what was there and restore THAT. }
+    FSavedCursor:          TCursor;
+    FCursorOverridden:     Boolean;
     FOnDragOver:           TTyTreeDragOverEvent;
     FOnNodeMoved:          TTyTreeNodeEvent;
     { C1: layout / display properties }
@@ -315,6 +322,7 @@ type
     FSortedDirection:  TTySortDirection;  //   change (same key) does NOT re-sort the tree
     { B1: tree option flags }
     FOptions:          TTyTreeOptions;
+    procedure OverrideCursor(AOn: Boolean; AWith: TCursor);
     procedure SetOptions(AValue: TTyTreeOptions);
     { density: stored-sentinel accessors for the default node/row height. Reading
       returns the pinned value when explicit, else the --item-height token. }
@@ -2437,7 +2445,7 @@ begin
     MouseMove is gated behind (Columns.Count>0) and hoColumnResize, so a 0-column
     tree (the VirtualTree case) would otherwise keep crDrag/crNoDrop forever after
     a drag. Also drop the node-drag mouse capture (FIX 5) if we took it. }
-  Cursor := crDefault;
+  OverrideCursor(False, crDefault);
   if HandleAllocated and MouseCapture then MouseCapture := False;
   Invalidate;
 end;
@@ -4679,6 +4687,27 @@ begin
   if Assigned(FOnNodeDblClick) then FOnNodeDblClick(Self, node);
 end;
 
+{ Borrow Cursor for the duration of a gesture and give the caller's own cursor back
+  when it ends. Mid-gesture swaps (crDrag <-> crNoDrop) go through without disturbing
+  the remembered one. Mirrors TTyListView.SetDividerCursor. }
+procedure TTyTreeView.OverrideCursor(AOn: Boolean; AWith: TCursor);
+begin
+  if AOn then
+  begin
+    if not FCursorOverridden then
+    begin
+      FSavedCursor := Cursor;
+      FCursorOverridden := True;
+    end;
+    if Cursor <> AWith then Cursor := AWith;
+  end
+  else if FCursorOverridden then
+  begin
+    FCursorOverridden := False;
+    Cursor := FSavedCursor;
+  end;
+end;
+
 procedure TTyTreeView.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   part: TTyTreeHitPart;
@@ -4733,8 +4762,8 @@ begin
         drag pointers (it only reads FDropMode and repaints). }
       if not allowed then FDropMode := dmNone;
 
-      if FDropMode <> dmNone then Cursor := crDrag
-      else                        Cursor := crNoDrop;
+      if FDropMode <> dmNone then OverrideCursor(True, crDrag)
+      else                        OverrideCursor(True, crNoDrop);
       Invalidate;
       Exit;   { skip the normal hover/hot-node update while a drag is active }
     end;
@@ -4817,10 +4846,8 @@ begin
   begin
     hPart := hpNowhere;
     hCol  := NoColumn;
-    if GetHeaderHitAt(X, Y, hPart, hCol) and (hPart = hpHeaderDivider) then
-      Cursor := crHSplit
-    else
-      Cursor := crDefault;
+    OverrideCursor(GetHeaderHitAt(X, Y, hPart, hCol) and (hPart = hpHeaderDivider),
+      crHSplit);
   end;
 
   if not FHotTrack then Exit;

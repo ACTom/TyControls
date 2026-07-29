@@ -438,7 +438,12 @@ begin
     if Assigned(FOnChange) then FOnChange(Self);
   end
   else if AValue then
-    SelectItem(AIndex);   // single mode: setting True selects it
+    SelectItem(AIndex)    // single mode: setting True selects it
+  else if FItemIndex = AIndex then
+    { ...and setting False DEselects it. Exiting here instead (which is what this did)
+      made Selected[i] := False a silent no-op in the mode most listboxes run in.
+      LCL: customlistbox.inc SetSelected -> else ItemIndex := -1. }
+    SelectItem(-1);
 end;
 
 procedure TTyListBox.SetMultiSelect(AValue: Boolean);
@@ -468,7 +473,14 @@ end;
 procedure TTyListBox.ClearSelection;
 var i: Integer; AnyChanged: Boolean;
 begin
-  if not FMultiSelect then Exit;
+  if not FMultiSelect then
+  begin
+    { A single-select listbox has exactly one selection, so "clear the selection"
+      is a meaningful request -- it means ItemIndex := -1. Returning early made the
+      method do nothing at all unless MultiSelect happened to be on. }
+    SelectItem(-1);
+    Exit;
+  end;
   EnsureSelectedLen;
   AnyChanged := False;
   for i := 0 to High(FSelected) do

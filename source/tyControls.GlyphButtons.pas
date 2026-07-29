@@ -198,6 +198,10 @@ type
   private
     FGroupIndex: Integer;
     FAllowAllUp: Boolean;
+    { True while the group is releasing this button, so the AllowAllUp guard in
+      SetDown -- which exists to stop the USER un-pressing the only down radio --
+      does not also block the group's own bookkeeping. }
+    FInGroupUpdate: Boolean;
     procedure SetGroupIndex(AValue: Integer);
     { Release (Down := False) every sibling TTySpeedButton in the same Parent that
       shares FGroupIndex, except Self. No-op when parentless. }
@@ -220,6 +224,12 @@ type
       release same-group siblings; AllowAllUp additionally lets a click on the
       down button toggle it back up. }
     procedure Click; override;
+  protected
+    { Grouping belongs HERE and not only in Click: `Btn.Down := True` from code is a
+      perfectly ordinary way to preselect a radio (restoring a saved toolbar mode, say),
+      and with the logic in Click it left every sibling pressed too. LCL routes the same
+      way -- SetDown -> UpdateExclusive (include/speedbutton.inc). }
+    procedure SetDown(AValue: Boolean); override;
   published
     property GroupIndex: Integer read FGroupIndex write SetGroupIndex default 0;
     property AllowAllUp: Boolean read FAllowAllUp write FAllowAllUp default False;
@@ -625,8 +635,26 @@ begin
     begin
       sib := TTySpeedButton(Parent.Controls[i]);
       if (sib.FGroupIndex = FGroupIndex) and sib.Down then
-        sib.Down := False;
+      begin
+        sib.FInGroupUpdate := True;
+        try
+          sib.Down := False;
+        finally
+          sib.FInGroupUpdate := False;
+        end;
+      end;
     end;
+end;
+
+procedure TTySpeedButton.SetDown(AValue: Boolean);
+begin
+  if (FGroupIndex > 0) and Down and (not AValue)
+     and (not FAllowAllUp) and (not FInGroupUpdate) then
+    Exit;   // a radio with AllowAllUp off cannot be released except by its group
+  if Down = AValue then Exit;
+  inherited SetDown(AValue);
+  if AValue and (FGroupIndex > 0) then
+    UnpressSiblings;
 end;
 
 procedure TTySpeedButton.Click;
@@ -643,8 +671,7 @@ begin
     end
     else
     begin
-      Down := True;
-      UnpressSiblings;
+      Down := True;   // SetDown releases the siblings
     end;
   end;
   inherited Click;   // fire OnClick / ModalResult after the group state settles

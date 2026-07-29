@@ -32,7 +32,7 @@ type
     procedure TestCheckedOutOfRangeSafe;
     procedure TestCheckedCount;
     procedure TestToggleFiresOnItemChange;
-    procedure TestSetCheckedFiresOnItemChange;
+    procedure TestSetCheckedIsSilent;
     procedure TestRebuildPreservesCheckedByIndex;
     procedure TestRebuildPreservesCheckedByIdentityOnDelete;
     procedure TestRebuildDoesNotFireOnItemChange;
@@ -313,7 +313,9 @@ begin
   end;
 end;
 
-procedure TCheckGroupTest.TestSetCheckedFiresOnItemChange;
+{ A programmatic write must NOT be reported as a user change -- this test used to
+  assert the opposite, which is how the re-entrancy went unnoticed. }
+procedure TCheckGroupTest.TestSetCheckedIsSilent;
 var
   F: TForm;
   G: TTyCheckGroup;
@@ -329,12 +331,12 @@ begin
     FItemChangeCount := 0;
     FLastItemChangeIdx := -99;
     G.Checked[0] := True;
-    AssertEquals('Checked[0]:=True fires OnItemChange once', 1, FItemChangeCount);
-    AssertEquals('event carries index 0', 0, FLastItemChangeIdx);
+    AssertTrue('the write lands', G.Checked[0]);
+    AssertEquals('Checked[0]:=True does not fire OnItemChange', 0, FItemChangeCount);
 
-    FItemChangeCount := 0;
-    G.Checked[0] := True;   // same value -> child OnChange has an early-out -> no fire
-    AssertEquals('setting the same value does not fire', 0, FItemChangeCount);
+    G.Checked[0] := False;
+    AssertFalse('and back off', G.Checked[0]);
+    AssertEquals('still silent', 0, FItemChangeCount);
   finally
     F.Free;
   end;

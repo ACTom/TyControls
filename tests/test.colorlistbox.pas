@@ -35,8 +35,8 @@ begin
     AssertEquals('picks red index', 9, c.ItemIndex);
     AssertTrue('selected red', c.Selected = clRed);
     c.Selected := TColor($00123456);
-    AssertEquals('appended custom', 17, c.Items.Count);
-    AssertTrue('selected custom', c.Selected = TColor($00123456));
+    AssertEquals('palette untouched', 16, c.Items.Count);
+    AssertEquals('nothing selected', -1, c.ItemIndex);
   finally c.Free; end;
 end;
 

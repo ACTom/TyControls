@@ -35,13 +35,15 @@ type
     function GetBgAnimProgress: Single;
     procedure SetCancel(AValue: Boolean);
     procedure SetDefault(AValue: Boolean);
-    procedure SetDown(AValue: Boolean);
     // Register/unregister Self as the host form's Default/Cancel control. No-op
     // when there is no parent form yet (e.g. Default/Cancel streamed from the LFM
     // before Parent); Loaded re-applies it once the parent is known.
     procedure RegisterDefaultWithForm;
     procedure RegisterCancelWithForm;
   protected
+    { Virtual so a grouped descendant (TTySpeedButton) can make `Down := True` from
+      code release its radio siblings, the way a click already does. }
+    procedure SetDown(AValue: Boolean); virtual;
     function GetStyleTypeKey: string; override;
     // Inject tysSelected when Down (and enabled), so ':selected' theme rules apply.
     function CurrentStates: TTyStateSet; override;

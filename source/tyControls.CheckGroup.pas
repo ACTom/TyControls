@@ -32,6 +32,11 @@ type
     procedure LayoutCheckBoxes;
     procedure ChildChanged(Sender: TObject);   // wired to each child's OnChange
   protected
+    { The AIndex-th hosted checkbox, or nil when out of range. Protected: the group owns
+      its children's lifetime and layout, so handing them out publicly would invite code
+      that reparents or frees one. A descendant (and a test probe) legitimately needs to
+      reach the child to simulate what a real click does. }
+    function CheckBoxAt(AIndex: Integer): TTyCheckBox;
     procedure SetParent(AParent: TWinControl); override;
     procedure Resize; override;
     procedure SetController(AValue: TTyStyleController); override;
@@ -255,9 +260,29 @@ begin
 end;
 
 procedure TTyCheckGroup.SetChecked(AIndex: Integer; AValue: Boolean);
+var
+  cb: TTyCheckBox;
+  saved: TNotifyEvent;
 begin
   if (AIndex < 0) or (AIndex > High(FCheckBoxes)) or (FCheckBoxes[AIndex] = nil) then Exit;
-  FCheckBoxes[AIndex].Checked := AValue;   // fires the child's OnChange -> OnItemChange
+  cb := FCheckBoxes[AIndex];
+  { OnItemChange reports what the USER did. Firing it for a programmatic write makes
+    the two indistinguishable, so a handler that writes back (the common "uncheck the
+    others" shape) re-enters itself. LCL suppresses the same way -- nil the child's
+    event, assign, restore (include/customcheckgroup.inc). }
+  saved := cb.OnChange;
+  cb.OnChange := nil;
+  try
+    cb.Checked := AValue;
+  finally
+    cb.OnChange := saved;
+  end;
+end;
+
+function TTyCheckGroup.CheckBoxAt(AIndex: Integer): TTyCheckBox;
+begin
+  if (AIndex < 0) or (AIndex > High(FCheckBoxes)) then Exit(nil);
+  Result := FCheckBoxes[AIndex];
 end;
 
 procedure TTyCheckGroup.SetParent(AParent: TWinControl);

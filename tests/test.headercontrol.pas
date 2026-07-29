@@ -413,7 +413,7 @@ end;
 procedure TTyHeaderControlTest.TestResizeDragChangesWidth;
 var
   Acc: THeaderAccess;
-  Probe: TResizeProbe;
+  Probe, Track: TResizeProbe;
 begin
   Acc := THeaderAccess.Create(FForm);
   Acc.Parent := FForm;
@@ -423,24 +423,32 @@ begin
   Acc.AddSection('B', 100);
   Acc.AddSection('C', 100);
   Probe := TResizeProbe.Create;
+  Track := TResizeProbe.Create;
   try
     Acc.OnSectionResize := @Probe.Handle;
+    Acc.OnSectionTrack := @Track.Handle;
     // Grab the boundary at x=100 (within grip) and drag +40 px to the right.
     Acc.PressDown([], 100, 12);
     Acc.PressMove([], 140, 12);
     AssertEquals('section A widened to 140', 140, Acc.SectionWidth[0]);
-    AssertTrue('resize fired during drag', Probe.Count >= 1);
+    // OnSectionTrack is the continuous one. OnSectionResize used to fire here too, so a
+    // handler that did anything real -- re-query, relayout a grid, save a setting -- ran
+    // once per mouse-move pixel.
+    AssertTrue('track fired during drag', Track.Count >= 1);
+    AssertEquals('track width is 140', 140, Track.LastWidth);
+    AssertEquals('resize did NOT fire during the drag', 0, Probe.Count);
+    Acc.PressUp([], 140, 12);
+    AssertEquals('width persists after release', 140, Acc.SectionWidth[0]);
+    AssertEquals('resize fires exactly once, on release', 1, Probe.Count);
     AssertEquals('resize index is 0', 0, Probe.LastIndex);
     AssertEquals('resize width is 140', 140, Probe.LastWidth);
-    Acc.PressUp([], 140, 12);
-    // Width stays; a final event fired on release.
-    AssertEquals('width persists after release', 140, Acc.SectionWidth[0]);
     // Dragging below the minimum clamps.
     Acc.PressDown([], 140, 12);          // boundary now at x=140
     Acc.PressMove([], 140 - 200, 12);    // way left, past the min
     AssertEquals('clamps to min width', TyHeaderMinSectionWidth, Acc.SectionWidth[0]);
     Acc.PressUp([], 140 - 200, 12);
   finally
+    Track.Free;
     Probe.Free;
   end;
 end;

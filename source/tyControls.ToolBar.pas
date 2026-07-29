@@ -39,8 +39,10 @@ type
     procedure SetImages(AValue: TImageList);
     procedure SetFlat(AValue: Boolean);
     procedure Relayout;
-    procedure ApplyToButton(B: TTyButton);
   protected
+    { Protected rather than private so a test can drive the one call a relayout makes
+      without needing a window handle and a live align pass. }
+    procedure ApplyToButton(B: TTyButton);
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
@@ -149,11 +151,16 @@ procedure TTyToolBar.SetFlat(AValue: Boolean); begin if FFlat = AValue then Exit
 
 procedure TTyToolBar.ApplyToButton(B: TTyButton);
 begin
-  // reuse the ghost/flat TTyButton; propagate the bar's button metrics.
-  // NOTE: the toolbar owns the ghost/non-ghost StyleClass entirely — it does NOT
-  // preserve whatever StyleClass a child button had before being added.
-  if FFlat then B.StyleClass := 'ghost'
-  else B.StyleClass := '';
+  // Reuse the ghost/flat TTyButton look, but only over a class the bar itself put
+  // there. Assigning unconditionally (which is what this did) meant every relayout
+  // wiped a caller's StyleClass := 'primary' -- and a relayout runs on any metric
+  // change, so the styling vanished at an unpredictable moment rather than at once.
+  if FFlat then
+  begin
+    if B.StyleClass = '' then B.StyleClass := 'ghost';
+  end
+  else
+    if B.StyleClass = 'ghost' then B.StyleClass := '';
   // (Images/ShowCaptions propagation hooks here if/when TTyButton exposes them.)
 end;
 

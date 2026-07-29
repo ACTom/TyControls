@@ -52,7 +52,7 @@ uses
   test.version,
   test.windoweffects,
   test.accel,
-  test.i18n, test.paintcost, test.memo.linesadd,
+  test.i18n, test.paintcost, test.memo.linesadd, test.parity,
   test.controller.changelistener,
   test.nativestyler,
   test.splitter,

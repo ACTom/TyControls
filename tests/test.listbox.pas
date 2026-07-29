@@ -33,7 +33,7 @@ type
     procedure TestEmbeddedScrollbarDragScrollsList;
     procedure TestMultiSelectSelectedAndSelCount;
     procedure TestSingleSelectSelectedReflectsItemIndex;
-    procedure TestClearSelectionNoOpInSingle;
+    procedure TestClearSelectionClearsInSingle;
     procedure TestMultiSelectMouseClicks;
     procedure TestPageKeysSingleSelect;
     procedure TestMultiSelectShiftDownExtends;
@@ -797,14 +797,17 @@ begin
   AssertEquals('SelectAll no-op single', 1, FList.SelCount);
 end;
 
-procedure TTyListBoxTest.TestClearSelectionNoOpInSingle;
+{ A single-select listbox has exactly one selection, so clearing it is a meaningful
+  request. This test used to pin the opposite -- ClearSelection returning early unless
+  MultiSelect happened to be on. }
+procedure TTyListBoxTest.TestClearSelectionClearsInSingle;
 begin
   FList.Items.Clear; FList.Items.Add('a'); FList.Items.Add('b');
   FList.MultiSelect := False;
   FList.ItemIndex := 1;
-  FList.ClearSelection;                 // no-op in single mode
-  AssertEquals('single ItemIndex unchanged by ClearSelection', 1, FList.ItemIndex);
-  AssertEquals('selcount still 1', 1, FList.SelCount);
+  FList.ClearSelection;
+  AssertEquals('ClearSelection clears in single mode too', -1, FList.ItemIndex);
+  AssertEquals('selcount 0', 0, FList.SelCount);
 end;
 
 procedure TTyListBoxTest.TestMultiSelectMouseClicks;

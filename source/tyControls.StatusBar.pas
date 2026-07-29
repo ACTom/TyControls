@@ -101,6 +101,12 @@ begin
     Result[i].Top := 0;
     if AWidths[i] > 0 then Inc(x, AWidths[i])
     else if i = fillIdx then Inc(x, fillW);   // later <=0 panels add 0
+    { The last panel always runs to the right edge, whatever width it was given --
+      the native status bar does this (win32wscomctrls sets the final right to -1),
+      and without it a bar whose widths do not happen to sum to the client width
+      shows a strip of bare parent between the last panel and the frame. }
+    if (i = High(AWidths)) and (x < ATotalWidth - APadding) then
+      x := ATotalWidth - APadding;
     Result[i].Right := x;
     Result[i].Bottom := 0;   // caller sets vertical extent
   end;

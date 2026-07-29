@@ -17,7 +17,13 @@ procedure TyAddDefaultColorPalette(AItems: TStrings);
 { Index to select for AColor: the matching item, or a freshly-appended '#RRGGBB' item;
   -1 for clNone (clear). The caller assigns the result to its ItemIndex. Shared by the
   colour combo + list so the (review-hardened) select-or-append logic lives in one place. }
-function TySelectColorIndex(AItems: TStrings; AColor: TColor): Integer;
+{ AAppendIfMissing: when the colour is not one of AItems, either add a hex-named entry
+  for it (what an EDITOR wants -- the cell's current value has to be showable) or report
+  -1 and leave the list alone (what a colour PICKER wants: LCL's TColorBox.Selected sets
+  ItemIndex := -1 rather than growing its palette, and a setter that silently extends the
+  list makes `Selected := X` non-idempotent -- twenty writes, twenty new rows). }
+function TySelectColorIndex(AItems: TStrings; AColor: TColor;
+  AAppendIfMissing: Boolean = True): Integer;
 { Draw a colour swatch (left) + name (right) into ARect; AFontSize is the caller's resolved
   size. Shared by the colour combo field, its popup list, and TTyColorListBox. }
 procedure TyDrawColorRow(P: TTyPainter; const ARect: TRect; AColor: TColor;
@@ -103,7 +109,7 @@ begin
   TyAddColorItem(AItems, 'White',   clWhite);
 end;
 
-function TySelectColorIndex(AItems: TStrings; AColor: TColor): Integer;
+function TySelectColorIndex(AItems: TStrings; AColor: TColor; AAppendIfMissing: Boolean): Integer;
 var
   i: Integer;
   target: LongInt;
@@ -112,6 +118,7 @@ begin
   target := ColorToRGB(AColor);
   for i := 0 to AItems.Count - 1 do
     if ColorToRGB(TyColorOfItem(AItems, i)) = target then Exit(i);
+  if not AAppendIfMissing then Exit(-1);
   // Not present: append a hex-named item and select it.
   TyAddColorItem(AItems, Format('#%.2x%.2x%.2x', [Red(target), Green(target), Blue(target)]), AColor);
   Result := AItems.Count - 1;
@@ -193,7 +200,7 @@ end;
 
 procedure TTyColorBox.SetSelected(const AValue: TColor);
 begin
-  ItemIndex := TySelectColorIndex(Items, AValue);   // matches / appends / -1 for clNone
+  ItemIndex := TySelectColorIndex(Items, AValue, False);   // matches, else -1
 end;
 
 function TTyColorBox.CreatePopupList: TTyListBox;

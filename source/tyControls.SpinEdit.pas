@@ -187,8 +187,15 @@ var
   Clamped: Integer;
 begin
   Clamped := AValue;
-  if Clamped < FMinValue then Clamped := FMinValue;
-  if Clamped > FMaxValue then Clamped := FMaxValue;
+  { An empty range (Max <= Min) means "no limit", not "pin everything to Min". With the
+    unconditional clamp, MinValue := 0 / MaxValue := 0 -- the way you say "unbounded" --
+    forced Value to 0 and nothing could ever be typed in. LCL guards the same way
+    (include/spinedit.inc GetLimitedValue: only clamps if FMaxValue > FMinValue). }
+  if FMaxValue > FMinValue then
+  begin
+    if Clamped < FMinValue then Clamped := FMinValue;
+    if Clamped > FMaxValue then Clamped := FMaxValue;
+  end;
   if FValue <> Clamped then
   begin
     FValue := Clamped;

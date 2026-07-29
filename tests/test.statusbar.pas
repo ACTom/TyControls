@@ -33,7 +33,9 @@ begin
   r := TyStatusPanelRects([50, 80], 200, 0);
   AssertEquals('count', 2, Length(r));
   AssertEquals('p0.left', 0, r[0].Left);   AssertEquals('p0.right', 50, r[0].Right);
-  AssertEquals('p1.left', 50, r[1].Left);  AssertEquals('p1.right', 130, r[1].Right);
+  // The LAST panel always runs to the right edge, whatever width it was given -- the
+  // native bar does this, and without it a strip of bare parent shows past it.
+  AssertEquals('p1.left', 50, r[1].Left);  AssertEquals('p1.right', 200, r[1].Right);
   AssertEquals('p0.top sentinel', 0, r[0].Top); AssertEquals('p0.bottom sentinel', 0, r[0].Bottom);
 end;
 procedure TStatusBarGeomTest.TestPanelRectsFillPanel;
@@ -49,7 +51,7 @@ var r: TTyRectArray;
 begin
   r := TyStatusPanelRects([50, 80], 200, 10);
   AssertEquals('p0.left', 10, r[0].Left);   AssertEquals('p0.right', 60, r[0].Right);
-  AssertEquals('p1.left', 60, r[1].Left);   AssertEquals('p1.right', 140, r[1].Right);
+  AssertEquals('p1.left', 60, r[1].Left);   AssertEquals('p1.right', 190, r[1].Right);
 end;
 procedure TStatusBarGeomTest.TestPanelRectsFillFirstOnly;
 var r: TTyRectArray;
