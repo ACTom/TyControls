@@ -81,6 +81,7 @@ type
     // that affects layout changes (WordWrap toggle, edits, resize, Lines assign).
     // FVisualRowsWidth records the content width the cache was built at so a
     // resize/scrollbar change forces a rebuild even when FVisualRowsValid was set.
+    FInLinesChange: Boolean;   // re-entrancy guard for the Lines change notification
     FVisualRows: TTyVisualRowArray;
     FVisualRowsValid: Boolean;
     FVisualRowsWidth: Integer;
@@ -350,6 +351,8 @@ type
     procedure EnsureVisualRows(APPI: Integer);
     // Mark the visual-row cache stale (next EnsureVisualRows rebuilds it).
     procedure InvalidateVisualRows;
+    { Fired by FLines itself, so a mutation made THROUGH the published Lines is seen. }
+    procedure LinesChanged(Sender: TObject);
     // Map a logical caret (ALine,ACol) to the visual row index that owns it plus
     // the device-x of the caret on that row. At a soft-wrap boundary column the
     // caret binds to the EARLIER (line-end) row (tie-break), so a caret typed at
@@ -591,6 +594,8 @@ begin
   TabStop := True;
   Cursor := crIBeam;
   FLines := TStringList.Create;
+  { The one line TTyComboBox already had and this control did not. }
+  TStringList(FLines).OnChange := @LinesChanged;
   FCaretLine := 0;
   FCaretCol := 0;
   FDesiredCol := 0;
@@ -1051,6 +1056,28 @@ begin
   Result := FLines;
 end;
 
+procedure TTyMemo.LinesChanged(Sender: TObject);
+begin
+  { Lines is handed out bare, so a mutation THROUGH it -- Lines.Add, Lines.Delete, Lines[i] :=,
+    Lines.Text := -- never reached the control: only the Lines SETTER invalidated. It looked
+    like it worked, because the visual-row cache starts invalid and lines added while the form
+    is still being built render fine; it broke on the append AFTER the first paint, which is the
+    running-log pattern two of our own demos are written in.
+
+    Reached the same way TTyComboBox reaches its own list (FItems.OnChange), which is what makes
+    the omission an oversight rather than a position.
+
+    Deliberately NOT an undo step: an undo step belongs to an edit the user made, and code
+    appending to a log is not that. The SETTER keeps pushing one, as it did. }
+  if FInLinesChange then Exit;   // our own Assign inside SetLines re-enters here
+  ClampCaret;
+  InvalidateVisualRows;
+  if FTopRow > MaxTopLine then FTopRow := MaxTopLine;
+  if FTopRow < 0 then FTopRow := 0;
+  UpdateScrollBar;
+  Invalidate;
+end;
+
 procedure TTyMemo.SetLines(AValue: TStrings);
 begin
   // Capture a fresh (non-typing) undo step only when the assignment actually
@@ -1058,7 +1085,12 @@ begin
   // TestSetLinesClampsCaret (which never touches undo) is unaffected.
   if (AValue = nil) or (AValue.Text <> FLines.Text) then
     BeginUndoStep(uskNone);
-  FLines.Assign(AValue);
+  FInLinesChange := True;      // the notification would duplicate what follows
+  try
+    FLines.Assign(AValue);
+  finally
+    FInLinesChange := False;
+  end;
   ClampCaret;
   // The text model changed: any cached wrap layout is stale.
   InvalidateVisualRows;
@@ -2170,8 +2202,11 @@ end;
 procedure TTyMemo.InvalidateVisualRows;
 begin
   FVisualRowsValid := False;
-  // Every text mutation funnels through here (SetText/SetLines/edits/undo/redo -> AfterEdit ->
-  // InvalidateVisualRows), so this is the one seam that must drop the memoised widest-line width;
+  // Every text mutation funnels through here -- edits, undo/redo (AfterEdit), the Lines setter,
+  // and now a mutation made THROUGH the published Lines as well (FLines.OnChange -> LinesChanged).
+  // That last route did not exist when this comment was written, and the comment is exactly what
+  // made the hole invisible: it asserted the invariant the code did not have.
+  // This is the one seam that must drop the memoised widest-line width;
   // otherwise a stale widest would drive the horizontal scroll range after the text changed.
   FWidestWidthValid := False;
 end;
