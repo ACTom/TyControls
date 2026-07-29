@@ -517,7 +517,19 @@ begin
   begin
     if Assigned(FCanvas) then
     begin
-      if (Opacity < 1.0) and (TyAlphaOf(OpacityBase) > 0) then
+      { GTK3: ALWAYS go through the opaque-base path when a base is known, not just when the
+        control is being dimmed. LCL-GTK3 makes a shaped window app-paintable with an RGBA
+        visual, and it never clears a damaged region, so any alpha this blit leaves behind
+        reaches the compositor: a half-opacity disabled button does not show the surface under
+        it, it shows the DESKTOP -- and the region keeps whatever was last composited there,
+        from above or below, flickering between frames. Laying the opaque base down first and
+        drawing over it makes our output alpha-255 everywhere we cover, which is what every
+        other widgetset gets for free from its own background erase.
+
+        Off GTK3 this is unchanged: the base path is still only for real dimming, so the
+        golden pixels do not move. }
+      if (TyAlphaOf(OpacityBase) > 0)
+         and ((Opacity < 1.0) {$IFDEF LCLGTK3} or True {$ENDIF}) then
       begin
         // Dim the control TOWARD an opaque base colour (its themed parent/surface background)
         // rather than reducing the whole bitmap's alpha. A disabled control on the Win10 DWM

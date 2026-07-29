@@ -602,6 +602,9 @@ begin
     f.Kind := tfkSolid;
     f.Color := c;
     APainter.FillBackground(ARect, f, 0);
+    { The controls that paint their own frame (the instruments) reach this instead of
+      DrawFrame, so this is where THEY publish the opaque backdrop EndPaint needs on GTK3. }
+    APainter.OpacityBase := c;
   end;
 end;
 
@@ -610,12 +613,13 @@ procedure TyApplyStyleOpacity(AControl: TControl; APainter: TTyPainter;
 var pc: TTyColor;
 begin
   if tpOpacity in AStyle.Present then
-  begin
     APainter.Opacity := AStyle.Opacity;
-    // Dim TOWARD the opaque parent/surface bg, not toward transparency (see EndPaint):
-    // a disabled control must not expose the Win10 DWM glass. 0 base = plain alpha-reduce.
-    if TyResolveParentBg(AControl, pc) then APainter.OpacityBase := pc;
-  end;
+  { Resolve the opaque backdrop whether or not this control is being dimmed. Dimming needs it
+    so a disabled control fades toward the surface rather than toward transparency (and never
+    exposes the Win10 DWM glass); GTK3 needs it on EVERY paint, because there the alpha our
+    blit leaves behind is what the compositor shows -- see TTyPainter.EndPaint. Setting it
+    when Opacity is 1 changes nothing off GTK3: EndPaint still only uses it while dimming. }
+  if TyResolveParentBg(AControl, pc) then APainter.OpacityBase := pc;
 end;
 
 { v3/B2. Draw an outset/inset two-tone 3D bevel for the border, deriving the light/dark edge
