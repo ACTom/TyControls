@@ -106,6 +106,44 @@ Linux and macOS.
   and the filter that was on it. Column structure previously could not enter the
   undo stack at all, so any column change simply cleared it.
 
+### Fixed -- parity with Delphi/Lazarus (each control read next to its namesake)
+
+What this batch has in common: the method ran, returned, and did nothing. No error,
+no log, nothing visible in a screenshot -- so the only thing to suspect was your own code.
+
+- **A context menu's `OnPopup` fires now.** `TTyPopupMenu.PopUp` skipped the whole LCL
+  popup protocol: `OnPopup` never fired -- and building a menu from whatever is under
+  the cursor is most of what a context menu is for -- `PopupPoint` kept its previous
+  value, `Close` was a silent no-op so `OnClose` never fired, and action-linked items
+  never refreshed before showing. The item snapshot is now taken **after** `OnPopup`,
+  so items added there actually appear.
+- **A masked edit no longer accepts whatever you paste into it.** `TTyMaskEdit` masked
+  TYPING only; Ctrl+V took a different path, so a phone mask would happily hold
+  "hello world" and `IsComplete` would answer about it. Delete had the same hole --
+  it removed mask literals.
+- **`TTyColorButton` paints its `Caption`.** Published, designer-editable, documented as
+  behaving like `TTyButton`'s -- and never drawn.
+- **Every control can be hidden from the designer or a `.lfm`**: `Visible` was published
+  on neither base class, so it was code-only.
+- **A splitter can drag a pane shut**: new `AutoSnap` (default on, as LCL). `MinSize` used
+  to be a floor no drag could get under, so no gesture closed a pane at all.
+- **Enter commits an edit** (fires `OnEditingDone`); the form's Default button still sees it.
+- **`SpeedButton.Down := True` releases its group.** Grouping used to live only in `Click`,
+  so restoring a saved toolbar mode from code left every button pressed.
+- **Single-select `ClearSelection` / `Selected[i] := False` actually deselect.**
+- **`TTyCheckGroup.Checked[i] := x` no longer fires `OnItemChange`**, so a handler that
+  writes back stops re-entering itself.
+- **A toolbar no longer overwrites its children's `StyleClass`.**
+- **The last status-bar panel reaches the right edge.**
+- **Writing an off-palette colour to a colour box no longer appends a row** (the setter
+  is idempotent again).
+- **A spin edit with `Min = Max = 0` ("unbounded") no longer pins every value to 0.**
+- **`OnSectionResize` fires once, on release**; the continuous one is the new `OnSectionTrack`.
+- **Header and tree no longer destroy a caller's `Cursor`.**
+- **`TTyTrackBar.Frequency` defaults to 1** (as LCL), so ticks show out of the box.
+- Name parity added: `TTyUpDown.OnArrowClick` (carries the direction),
+  `TTyCalendar.DateTime`, `TTyMaskEdit.EditMask`.
+
 ### Fixed -- data grid
 
 - **Paste no longer drops data silently**: pasting 100 rows into a 10-row grid used to
