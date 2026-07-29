@@ -50,19 +50,69 @@ type
   { What a gripper drag means once the pointer commits to an axis. }
   TTyCoolDrag = (cdNone, cdMove, cdResize);
 
-  TTyCoolBand = record
-    Ctl: TControl;      // the hosted child this band wraps
-    Width: Integer;     // the band's assigned/min logical width (0 = auto = child.Width)
-    MinWidth: Integer;  // clamp floor for a gripper resize (logical px)
-    MaxWidth: Integer;  // clamp ceiling for a gripper resize (0 = unbounded)
-    Break_: Boolean;    // start a new row at this band, even when it would fit on the current
-    Text_: string;      // the band's own caption, drawn between its gripper and its child
-    FixedSize: Boolean; // the band refuses a gripper resize (it may still be MOVED)
+  TTyCoolBar = class;
+
+  { One band. A COLLECTION ITEM rather than the record this used to be, because band metadata
+    that only exists at run time cannot be designed: a form could host the controls but not say
+    which of them breaks a row, what its caption is, or that it must not be resized. Delphi's
+    and Lazarus's TCoolBand are collection items for the same reason, and Control is the same
+    link back to the hosted control. }
+  TTyCoolBand = class(TCollectionItem)
+  private
+    FControl: TControl;
+    FText: string;
+    FBreak: Boolean;
+    FWidth: Integer;
+    FMinWidth: Integer;
+    FMaxWidth: Integer;
+    FFixedSize: Boolean;
+    FVisible: Boolean;
+    procedure SetControl(AValue: TControl);
+    procedure SetText(const AValue: string);
+    procedure SetBreak(AValue: Boolean);
+    procedure SetWidth(AValue: Integer);
+    procedure SetVisible(AValue: Boolean);
+  protected
+    function GetDisplayName: string; override;
+  public
+    constructor Create(ACollection: TCollection); override;
+    procedure Assign(ASource: TPersistent); override;
+  published
+    { The control this band wraps. A band with no control still occupies its place -- that is
+      how a caption-only separator band is expressed. }
+    property Control: TControl read FControl write SetControl;
+    property Text: string read FText write SetText;
+    { Start a new row at this band even when it would fit on the current one. }
+    property Break: Boolean read FBreak write SetBreak default False;
+    { Assigned logical width; 0 = auto, meaning the hosted control's own width. }
+    property Width: Integer read FWidth write SetWidth default 0;
+    property MinWidth: Integer read FMinWidth write FMinWidth default 0;
+    property MaxWidth: Integer read FMaxWidth write FMaxWidth default 0;
+    { Refuses a gripper RESIZE; the band can still be moved between rows. }
+    property FixedSize: Boolean read FFixedSize write FFixedSize default False;
+    property Visible: Boolean read FVisible write SetVisible default True;
+  end;
+
+  { The designable band list. Editing it in the Object Inspector re-lays the bar and fires the
+    bar's OnChange, so a design-time change behaves exactly like a run-time one. }
+  TTyCoolBands = class(TOwnedCollection)
+  private
+    function GetItem(AIndex: Integer): TTyCoolBand;
+    procedure SetItem(AIndex: Integer; AValue: TTyCoolBand);
+    function OwnerBar: TTyCoolBar;
+  protected
+    procedure Update(AItem: TCollectionItem); override;
+  public
+    constructor Create(AOwner: TPersistent);
+    function Add: TTyCoolBand;
+    { The band wrapping AControl, or nil. }
+    function FindBand(AControl: TControl): TTyCoolBand;
+    property Items[AIndex: Integer]: TTyCoolBand read GetItem write SetItem; default;
   end;
 
   TTyCoolBar = class(TTyControlBar)
   private
-    FBands: array of TTyCoolBand;      // per-child band metadata, keyed by Ctl
+    FBandList: TTyCoolBands;           // the designable band list; Control links each to its child
     FDefaultBandMinWidth: Integer;     // fallback min when a band has none of its own
     FDragStartY: Integer;
     FDragMode: TTyCoolDrag;
@@ -76,8 +126,9 @@ type
     function BandTextWidth(const AText: string; const AStyle: TTyStyleSet): Integer;
     procedure SetShowText(AValue: Boolean);
     procedure Changed;
-    function IndexOfBand(ACtl: TControl): Integer;
-    function EnsureBand(ACtl: TControl): Integer;   // find, or create, this child's band record
+    function EnsureBand(ACtl: TControl): TTyCoolBand;   // find, or create, this child's band
+    procedure SetBands(AValue: TTyCoolBands);
+    procedure BandsChanged;
     function BandAtPoint(AX, AY: Integer): TControl;   // the band whose gripper is under (X,Y)
   protected
     function GetStyleTypeKey: string; override;
@@ -97,6 +148,7 @@ type
     function GripperWidthPx: Integer;
   public
     constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
     { Assign / query a band's fixed-or-min width (logical px). Setting it re-lays the
       bands (via the inherited container relayout). AWidth <= 0 clears it (auto). The
       value is keyed by the child, so it survives reorders and other bands' removal. }
@@ -134,6 +186,9 @@ type
     property ShowText: Boolean read FShowText write SetShowText default False;
     { Fired after the band layout changes -- a band moved to another row, resized, or hidden. }
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
+    { The bands, editable in the designer. Every per-control helper below is a facade over
+      this, so code written against either sees the same state. }
+    property Bands: TTyCoolBands read FBandList write SetBands;
     property Align;
     property Anchors;
     property StyleClass;
@@ -263,11 +318,133 @@ begin
 end;
 
 // =============================================================================
+// TTyCoolBand / TTyCoolBands
+// =============================================================================
+constructor TTyCoolBand.Create(ACollection: TCollection);
+begin
+  inherited Create(ACollection);
+  FVisible := True;
+end;
+
+procedure TTyCoolBand.Assign(ASource: TPersistent);
+begin
+  if ASource is TTyCoolBand then
+  begin
+    FControl := TTyCoolBand(ASource).Control;
+    FText := TTyCoolBand(ASource).Text;
+    FBreak := TTyCoolBand(ASource).Break;
+    FWidth := TTyCoolBand(ASource).Width;
+    FMinWidth := TTyCoolBand(ASource).MinWidth;
+    FMaxWidth := TTyCoolBand(ASource).MaxWidth;
+    FFixedSize := TTyCoolBand(ASource).FixedSize;
+    FVisible := TTyCoolBand(ASource).Visible;
+    Changed(False);
+  end
+  else
+    inherited Assign(ASource);
+end;
+
+function TTyCoolBand.GetDisplayName: string;
+begin
+  { What the Object Inspector's collection editor lists. The caption if there is one, else the
+    control's name -- a list of "0,1,2" would make a band collection unusable to design. }
+  if FText <> '' then Result := FText
+  else if FControl <> nil then Result := FControl.Name
+  else Result := inherited GetDisplayName;
+end;
+
+procedure TTyCoolBand.SetControl(AValue: TControl);
+begin
+  if FControl = AValue then Exit;
+  FControl := AValue;
+  Changed(False);
+end;
+
+procedure TTyCoolBand.SetText(const AValue: string);
+begin
+  if FText = AValue then Exit;
+  FText := AValue;
+  Changed(False);
+end;
+
+procedure TTyCoolBand.SetBreak(AValue: Boolean);
+begin
+  if FBreak = AValue then Exit;
+  FBreak := AValue;
+  Changed(False);
+end;
+
+procedure TTyCoolBand.SetWidth(AValue: Integer);
+begin
+  if AValue < 0 then AValue := 0;
+  if FWidth = AValue then Exit;
+  FWidth := AValue;
+  { A given width IS the hosted control's width -- the packer measures children, so the two
+    must not drift apart. }
+  if (FControl <> nil) and (AValue > 0) then FControl.Width := AValue;
+  Changed(False);
+end;
+
+procedure TTyCoolBand.SetVisible(AValue: Boolean);
+begin
+  if FVisible = AValue then Exit;
+  FVisible := AValue;
+  { The hosted control's own Visible is the single source of truth the packer already reads. }
+  if FControl <> nil then FControl.Visible := AValue;
+  Changed(False);
+end;
+
+constructor TTyCoolBands.Create(AOwner: TPersistent);
+begin
+  inherited Create(AOwner, TTyCoolBand);
+end;
+
+function TTyCoolBands.OwnerBar: TTyCoolBar;
+begin
+  if GetOwner is TTyCoolBar then Result := TTyCoolBar(GetOwner) else Result := nil;
+end;
+
+function TTyCoolBands.GetItem(AIndex: Integer): TTyCoolBand;
+begin
+  Result := TTyCoolBand(inherited Items[AIndex]);
+end;
+
+procedure TTyCoolBands.SetItem(AIndex: Integer; AValue: TTyCoolBand);
+begin
+  inherited Items[AIndex] := AValue;
+end;
+
+function TTyCoolBands.Add: TTyCoolBand;
+begin
+  Result := TTyCoolBand(inherited Add);
+end;
+
+function TTyCoolBands.FindBand(AControl: TControl): TTyCoolBand;
+var i: Integer;
+begin
+  Result := nil;
+  if AControl = nil then Exit;
+  for i := 0 to Count - 1 do
+    if Items[i].Control = AControl then Exit(Items[i]);
+end;
+
+procedure TTyCoolBands.Update(AItem: TCollectionItem);
+var bar: TTyCoolBar;
+begin
+  inherited Update(AItem);
+  { Any edit -- from the designer or from code -- re-lays the bar and reports the change, so a
+    band designed in the Object Inspector behaves exactly like one set at run time. }
+  bar := OwnerBar;
+  if bar <> nil then bar.BandsChanged;
+end;
+
+// =============================================================================
 // TTyCoolBar
 // =============================================================================
 constructor TTyCoolBar.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  FBandList := TTyCoolBands.Create(Self);
   // The base already sets csAcceptsControls; a rebar hosts arbitrary band content.
   GripperWidth := 10;   // inherited property (the base packs with the same value we hit-test)
   FDefaultBandMinWidth := 24;
@@ -289,111 +466,63 @@ begin
   if Result < 0 then Result := 0;
 end;
 
-function TTyCoolBar.IndexOfBand(ACtl: TControl): Integer;
-var
-  i: Integer;
-begin
-  Result := -1;
-  if ACtl = nil then Exit;
-  for i := 0 to High(FBands) do
-    if FBands[i].Ctl = ACtl then Exit(i);
-end;
 
-function TTyCoolBar.EnsureBand(ACtl: TControl): Integer;
+function TTyCoolBar.EnsureBand(ACtl: TControl): TTyCoolBand;
 begin
   { Band metadata used to spring into existence only when a WIDTH was assigned, so setting any
     other band property on a band nobody had sized yet silently did nothing. Every setter goes
     through here instead. }
-  Result := -1;
+  Result := nil;
   if ACtl = nil then Exit;
-  Result := IndexOfBand(ACtl);
-  if Result >= 0 then Exit;
-  SetLength(FBands, Length(FBands) + 1);
-  Result := High(FBands);
-  FBands[Result].Ctl := ACtl;
-  FBands[Result].MinWidth := 0;
-  FBands[Result].MaxWidth := 0;
+  Result := FBandList.FindBand(ACtl);
+  if Result <> nil then Exit;
+  Result := FBandList.Add;
+  Result.Control := ACtl;
 end;
 
 procedure TTyCoolBar.SetBandWidth(ACtl: TControl; AWidth: Integer);
-var
-  idx: Integer;
+var b: TTyCoolBand;
 begin
-  if ACtl = nil then Exit;
-  if AWidth < 0 then AWidth := 0;
-  idx := EnsureBand(ACtl);
-  if idx < 0 then Exit;
-  FBands[idx].Width := AWidth;
-  // A given width should be honoured as the child's actual width; the base packs from
-  // the child bounds, so set the child width too (auto = leave it as-is).
-  if (AWidth > 0) and (ACtl.Width <> AWidth) then
-    ACtl.Width := AWidth;
-  Realign;
-  Changed;
+  b := EnsureBand(ACtl);
+  if b <> nil then b.Width := AWidth;
 end;
 
 function TTyCoolBar.GetBandWidth(ACtl: TControl): Integer;
-var
-  idx: Integer;
+var b: TTyCoolBand;
 begin
-  idx := IndexOfBand(ACtl);
-  if idx >= 0 then Result := FBands[idx].Width else Result := 0;
+  b := FBandList.FindBand(ACtl);
+  if b <> nil then Result := b.Width else Result := 0;
 end;
 
 procedure TTyCoolBar.SetBandMinWidth(ACtl: TControl; AMinWidth: Integer);
-var
-  idx: Integer;
+var b: TTyCoolBand;
 begin
-  if ACtl = nil then Exit;
-  if AMinWidth < 0 then AMinWidth := 0;
-  idx := IndexOfBand(ACtl);
-  if idx < 0 then
-  begin
-    SetLength(FBands, Length(FBands) + 1);
-    idx := High(FBands);
-    FBands[idx].Ctl := ACtl;
-    FBands[idx].Width := 0;
-    FBands[idx].MaxWidth := 0;
-  end;
-  FBands[idx].MinWidth := AMinWidth;
+  b := EnsureBand(ACtl);
+  if b <> nil then b.MinWidth := AMinWidth;
 end;
 
 procedure TTyCoolBar.SetBandMaxWidth(ACtl: TControl; AMaxWidth: Integer);
-var
-  idx: Integer;
+var b: TTyCoolBand;
 begin
-  if ACtl = nil then Exit;
-  if AMaxWidth < 0 then AMaxWidth := 0;
-  idx := IndexOfBand(ACtl);
-  if idx < 0 then
-  begin
-    SetLength(FBands, Length(FBands) + 1);
-    idx := High(FBands);
-    FBands[idx].Ctl := ACtl;
-    FBands[idx].Width := 0;
-    FBands[idx].MinWidth := 0;
-  end;
-  FBands[idx].MaxWidth := AMaxWidth;
+  b := EnsureBand(ACtl);
+  if b <> nil then b.MaxWidth := AMaxWidth;
 end;
 
 function TTyCoolBar.BandMinWidth(ACtl: TControl): Integer;
-var
-  idx: Integer;
+var b: TTyCoolBand;
 begin
-  idx := IndexOfBand(ACtl);
-  if (idx >= 0) and (FBands[idx].MinWidth > 0) then
-    Result := FBands[idx].MinWidth
+  b := FBandList.FindBand(ACtl);
+  if (b <> nil) and (b.MinWidth > 0) then
+    Result := b.MinWidth
   else
     Result := FDefaultBandMinWidth;
-  if Result < 1 then Result := 1;
 end;
 
 function TTyCoolBar.BandMaxWidth(ACtl: TControl): Integer;
-var
-  idx: Integer;
+var b: TTyCoolBand;
 begin
-  idx := IndexOfBand(ACtl);
-  if idx >= 0 then Result := FBands[idx].MaxWidth else Result := 0;   // 0 = unbounded
+  b := FBandList.FindBand(ACtl);
+  if b <> nil then Result := b.MaxWidth else Result := 0;
 end;
 
 function TTyCoolBar.BandRectFor(ACtl: TControl): TRect;
@@ -419,64 +548,52 @@ begin
 end;
 
 procedure TTyCoolBar.SetBandBreak(ACtl: TControl; AValue: Boolean);
-var i: Integer;
+var b: TTyCoolBand;
 begin
-  i := EnsureBand(ACtl);
-  if i < 0 then Exit;
-  if FBands[i].Break_ = AValue then Exit;
-  FBands[i].Break_ := AValue;
-  Relayout;
-  Changed;
+  b := EnsureBand(ACtl);
+  if b <> nil then b.Break := AValue;
 end;
 
 function TTyCoolBar.BandBreak(ACtl: TControl): Boolean;
-var i: Integer;
+var b: TTyCoolBand;
 begin
-  i := IndexOfBand(ACtl);
-  Result := (i >= 0) and FBands[i].Break_;
+  b := FBandList.FindBand(ACtl);
+  Result := (b <> nil) and b.Break;
 end;
 
 procedure TTyCoolBar.SetBandText(ACtl: TControl; const AValue: string);
-var i: Integer;
+var b: TTyCoolBand;
 begin
-  i := EnsureBand(ACtl);
-  if i < 0 then Exit;
-  if FBands[i].Text_ = AValue then Exit;
-  FBands[i].Text_ := AValue;
-  Relayout;
-  Changed;
+  b := EnsureBand(ACtl);
+  if b <> nil then b.Text := AValue;
 end;
 
 function TTyCoolBar.BandText(ACtl: TControl): string;
-var i: Integer;
+var b: TTyCoolBand;
 begin
-  i := IndexOfBand(ACtl);
-  if i >= 0 then Result := FBands[i].Text_ else Result := '';
+  b := FBandList.FindBand(ACtl);
+  if b <> nil then Result := b.Text else Result := '';
 end;
 
 procedure TTyCoolBar.SetBandFixedSize(ACtl: TControl; AValue: Boolean);
-var i: Integer;
+var b: TTyCoolBand;
 begin
-  i := EnsureBand(ACtl);
-  if i < 0 then Exit;
-  FBands[i].FixedSize := AValue;
+  b := EnsureBand(ACtl);
+  if b <> nil then b.FixedSize := AValue;
 end;
 
 function TTyCoolBar.BandFixedSize(ACtl: TControl): Boolean;
-var i: Integer;
+var b: TTyCoolBand;
 begin
-  i := IndexOfBand(ACtl);
-  Result := (i >= 0) and FBands[i].FixedSize;
+  b := FBandList.FindBand(ACtl);
+  Result := (b <> nil) and b.FixedSize;
 end;
 
 procedure TTyCoolBar.SetBandVisible(ACtl: TControl; AValue: Boolean);
+var b: TTyCoolBand;
 begin
-  { The child's Visible IS the band's visibility -- the packer already skips invisible children,
-    so there is no second flag to fall out of step with it. }
-  if (ACtl = nil) or (ACtl.Visible = AValue) then Exit;
-  ACtl.Visible := AValue;
-  Relayout;
-  Changed;
+  b := EnsureBand(ACtl);
+  if b <> nil then b.Visible := AValue;
 end;
 
 function TTyCoolBar.BandVisible(ACtl: TControl): Boolean;
@@ -504,6 +621,25 @@ begin
   if Result > 0 then Inc(Result, MulDiv(8, Font.PixelsPerInch, 96));   // a gap before the child
 end;
 
+destructor TTyCoolBar.Destroy;
+begin
+  FreeAndNil(FBandList);
+  inherited Destroy;
+end;
+
+procedure TTyCoolBar.SetBands(AValue: TTyCoolBands);
+begin
+  FBandList.Assign(AValue);
+end;
+
+procedure TTyCoolBar.BandsChanged;
+begin
+  { One place the collection reports into, so a designer edit and a run-time setter take the
+    same path: re-lay, then tell the application. }
+  Relayout;
+  Changed;
+end;
+
 procedure TTyCoolBar.SetShowText(AValue: Boolean);
 begin
   if FShowText = AValue then Exit;
@@ -522,7 +658,8 @@ var
   brks: array of Boolean;
   leads: array of Integer;
   S: TTyStyleSet;
-  i, bi: Integer;
+  bnd: TTyCoolBand;
+  i: Integer;
 begin
   { Every band carries its own gripper, and a band may force a row break -- the two things
     that make a CoolBar a CoolBar rather than a ControlBar. }
@@ -531,9 +668,9 @@ begin
   S := CurrentStyle;
   for i := 0 to High(ABands) do
   begin
-    bi := IndexOfBand(ABands[i]);
-    brks[i] := (bi >= 0) and FBands[bi].Break_;
-    if bi >= 0 then leads[i] := BandTextWidth(FBands[bi].Text_, S) else leads[i] := 0;
+    bnd := FBandList.FindBand(ABands[i]);
+    brks[i] := (bnd <> nil) and bnd.Break;
+    if bnd <> nil then leads[i] := BandTextWidth(bnd.Text, S) else leads[i] := 0;
   end;
   Result := TyCoolBarPack(ASizes, brks, leads, AAvail, ABandHeight, AGripperW, ASpacing);
 end;
@@ -541,7 +678,8 @@ end;
 procedure TTyCoolBar.PaintGrippers(APainter: TTyPainter; const AStyle: TTyStyleSet;
   ABandCount, ABandHeight, AGripperW, ASpacing: Integer);
 var
-  i, bi: Integer;
+  i: Integer;
+  bnd: TTyCoolBand;
   ctl: TControl;
   r: TRect;
 begin
@@ -555,10 +693,10 @@ begin
     if r.Right > r.Left then DrawGripper(APainter, r, AStyle);
     if FShowText then
     begin
-      bi := IndexOfBand(ctl);
-      if (bi >= 0) and (FBands[bi].Text_ <> '') then
+      bnd := FBandList.FindBand(ctl);
+      if (bnd <> nil) and (bnd.Text <> '') then
         { Between the gripper and the child -- the strip PackBands reserved for exactly this. }
-        APainter.DrawText(Rect(r.Right, r.Top, ctl.Left, r.Bottom), FBands[bi].Text_,
+        APainter.DrawText(Rect(r.Right, r.Top, ctl.Left, r.Bottom), bnd.Text,
           AStyle.FontName, ResolveFontSize(AStyle), AStyle.FontWeight, AStyle.TextColor,
           taLeftJustify, tlCenter, True);
     end;
@@ -662,19 +800,14 @@ end;
 
 procedure TTyCoolBar.Notification(AComponent: TComponent; Operation: TOperation);
 var
-  idx, j: Integer;
+  bnd: TTyCoolBand;
 begin
   inherited Notification(AComponent, Operation);
   if (Operation = opRemove) and (AComponent is TControl) then
   begin
-    // Drop the freed child's band metadata (keyed by control, never by position).
-    idx := IndexOfBand(TControl(AComponent));
-    if idx >= 0 then
-    begin
-      for j := idx to High(FBands) - 1 do
-        FBands[j] := FBands[j + 1];
-      SetLength(FBands, Length(FBands) - 1);
-    end;
+    // Drop the freed child's band (found by control, never by position).
+    bnd := FBandList.FindBand(TControl(AComponent));
+    if bnd <> nil then bnd.Free;
     if FDragCtl = AComponent then
     begin
       FDragging := False;

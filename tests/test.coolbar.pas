@@ -69,6 +69,11 @@ type
     procedure TestHidingABandTakesItOutOfTheLayout;
     procedure TestFixedBandRefusesAResize;
     procedure TestLayoutChangeFiresOnChange;
+    // the designable band collection
+    procedure TestPerControlApiAndCollectionAreOneState;
+    procedure TestEditingTheCollectionRelaysAndNotifies;
+    procedure TestFreeingAChildDropsItsBand;
+    procedure TestBandDisplayNamePrefersItsCaption;
     procedure TestGripperDragResizesBand;
     procedure TestGripperDragHonoursMinClamp;
   end;
@@ -493,6 +498,75 @@ begin
   FChangeCount := 0;
   CB.SetBandVisible(b, False);
   AssertTrue('hiding a band notifies', FChangeCount > 0);
+end;
+
+{ ── the designable band collection ─────────────────────────────────────────────
+  Band metadata that exists only at run time cannot be designed: a form could host the controls
+  but not say which one breaks a row, what its caption is, or that it must not be resized. The
+  collection is the state; the per-control helpers are a facade over it, and these pin that they
+  really are ONE state rather than two that drift. }
+
+procedure TCoolBarControlTest.TestPerControlApiAndCollectionAreOneState;
+var CB: TCoolBarAccess; b: TControl;
+begin
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  b := MakeBand(CB, 10, 0, 80, 30);
+  CB.SetBandText(b, 'Tools');
+  AssertEquals('the facade created a band in the collection', 1, CB.Bands.Count);
+  AssertSame('and it wraps that control', b, CB.Bands[0].Control);
+  AssertEquals('the collection sees what the facade set', 'Tools', CB.Bands[0].Text);
+  { ...and the other way round. }
+  CB.Bands[0].Break := True;
+  AssertTrue('the facade sees what the collection set', CB.BandBreak(b));
+end;
+
+procedure TCoolBarControlTest.TestEditingTheCollectionRelaysAndNotifies;
+var CB: TCoolBarAccess; b: TControl;
+begin
+  { A band edited in the Object Inspector has to behave exactly like one set at run time --
+    same relayout, same OnChange -- or a designed layout only comes true after the first
+    run-time poke. }
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  b := MakeBand(CB, 10, 0, 80, 30);
+  CB.SetBandText(b, 'x');
+  FChangeCount := 0;
+  CB.OnChange := @CountChange;
+  CB.Bands[0].Break := True;
+  AssertTrue('editing the collection notifies', FChangeCount > 0);
+end;
+
+procedure TCoolBarControlTest.TestFreeingAChildDropsItsBand;
+var CB: TCoolBarAccess; b: TControl;
+begin
+  // A band pointing at a freed control is a dangling reference the packer would read.
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  b := MakeBand(CB, 10, 0, 80, 30);
+  CB.SetBandWidth(b, 80);
+  AssertEquals('one band', 1, CB.Bands.Count);
+  b.Free;
+  AssertEquals('the band went with its control', 0, CB.Bands.Count);
+end;
+
+procedure TCoolBarControlTest.TestBandDisplayNamePrefersItsCaption;
+var CB: TCoolBarAccess; b: TControl;
+begin
+  { What the collection editor lists. A column of "0, 1, 2" makes a band collection unusable to
+    design, which is the entire reason for having one. }
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  b := MakeBand(CB, 10, 0, 80, 30);
+  b.Name := 'BandPanel';
+  CB.SetBandWidth(b, 80);
+  AssertEquals('falls back to the control name', 'BandPanel', CB.Bands[0].DisplayName);
+  CB.Bands[0].Text := 'Clipboard';
+  AssertEquals('but prefers the caption', 'Clipboard', CB.Bands[0].DisplayName);
 end;
 
 initialization
