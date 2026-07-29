@@ -8,11 +8,18 @@ unit tyControls.CoolBar;
   control onto a horizontal band with a left gripper; TTyCoolBar upgrades every band so
   it can be:
 
-    * REORDERED  — grab a band's gripper and drag it up/down to a new band index
-                   (real mouse-capture drag; the reorder decision is the base's band
-                   list, we just move the child), and
-    * RESIZED    — grab the gripper and drag horizontally to widen/narrow the band,
-                   honouring a per-band minimum / maximum width.
+    * MOVED   — grab a band's gripper and drag it DOWN to give the band a row of its own,
+                or UP to return it to the row above. Every band has its own gripper, drawn
+                immediately to its left, so every band can be grabbed.
+    * RESIZED — grab that gripper and drag HORIZONTALLY to widen/narrow the band, honouring
+                a per-band minimum / maximum width.
+
+    The pointer's direction picks between the two (TyCoolDragMode), as it does in Delphi's and
+    Lazarus's TCoolBar.
+
+    NOT implemented: reordering bands WITHIN a row. That needs a child-index primitive and the
+    LCL exposes only SetZOrder(TopMost), so a control cannot be placed at an arbitrary position
+    in its parent's list. Row membership is the whole of the model for now.
 
   Per-band metadata (a fixed/min Width the band is given) is stored keyed by the child
   TControl in FBands and dropped when the child is freed (Notification/opRemove) — never
@@ -40,17 +47,23 @@ uses
 
 type
   { One band's per-child metadata, keyed by the child control (position-independent). }
+  { What a gripper drag means once the pointer commits to an axis. }
+  TTyCoolDrag = (cdNone, cdMove, cdResize);
+
   TTyCoolBand = record
     Ctl: TControl;      // the hosted child this band wraps
     Width: Integer;     // the band's assigned/min logical width (0 = auto = child.Width)
     MinWidth: Integer;  // clamp floor for a gripper resize (logical px)
     MaxWidth: Integer;  // clamp ceiling for a gripper resize (0 = unbounded)
+    Break_: Boolean;    // start a new row at this band, even when it would fit on the current
   end;
 
   TTyCoolBar = class(TTyControlBar)
   private
     FBands: array of TTyCoolBand;      // per-child band metadata, keyed by Ctl
     FDefaultBandMinWidth: Integer;     // fallback min when a band has none of its own
+    FDragStartY: Integer;
+    FDragMode: TTyCoolDrag;
     // --- live drag state (real-machine) ---
     FDragging: Boolean;
     FDragCtl: TControl;                // the band being resized
@@ -68,6 +81,10 @@ type
       grown left by the gripper strip (so the gripper column is part of the band). If a
       future TTyControlBar exposes a real per-band rect, override/redirect here. }
     function BandRectFor(ACtl: TControl): TRect; virtual;
+    function PackBands(const ABands: array of TControl; const ASizes: array of TSize;
+      AAvail, ABandHeight, AGripperW, ASpacing: Integer): TTyRectArray; override;
+    procedure PaintGrippers(APainter: TTyPainter; const AStyle: TTyStyleSet;
+      ABandCount, ABandHeight, AGripperW, ASpacing: Integer); override;
     { The device-px width of the gripper strip at this control's PPI. }
     function GripperWidthPx: Integer;
   public
@@ -82,6 +99,11 @@ type
     procedure SetBandMaxWidth(ACtl: TControl; AMaxWidth: Integer);
     function BandMinWidth(ACtl: TControl): Integer;
     function BandMaxWidth(ACtl: TControl): Integer;
+    { A band with Break starts a new row even when it would fit on the current one -- what
+      dragging a band downward sets, and what Delphi's TCoolBand.Break means. Inert on the
+      first band: there is no row above it to leave. }
+    procedure SetBandBreak(ACtl: TControl; AValue: Boolean);
+    function BandBreak(ACtl: TControl): Boolean;
   published
     // GripperWidth is INHERITED from TTyControlBar (same field the band packing uses) — do NOT
     // redeclare it here, or the base would pack with one width while our hit-test used another.
@@ -101,6 +123,23 @@ type
   caller keeps units consistent) from a starting width AStartW, clamped to
   [AMinW .. AMaxW]. A non-positive AMaxW means "unbounded" (only the floor applies).
   AMinW is floored at 1 so a band never collapses to nothing. }
+{ Pack COOLBAR bands: unlike a ControlBar's one-gripper-per-row, every band carries its own
+  gripper immediately to its left -- that is what makes a band individually grabbable, and it is
+  what Delphi's and Lazarus's TCoolBar draw. A band starts a new row when its Break flag says so,
+  or when it would not fit on the current one.
+
+  ABreaks is parallel to AChildSizes; a missing entry reads as False. Returns the CHILD rects
+  (the band minus its gripper), so the gripper for band i is the AGripperW-wide strip immediately
+  left of Result[i]. Pure: no control, no canvas, no PPI -- device px in, device px out. }
+function TyCoolBarPack(const AChildSizes: array of TSize; const ABreaks: array of Boolean;
+  AAvail, ABandHeight, AGripperW, ASpacing: Integer): TTyRectArray;
+
+{ What a gripper drag MEANS, from the travel so far. A CoolBar grip does two jobs and the
+  pointer's direction picks between them -- the same disambiguation Delphi's and Lazarus's
+  TCoolBar use. Below the threshold the drag is still undecided, so a twitch does neither.
+  Pure so the rule is testable without a mouse. }
+function TyCoolDragMode(ADx, ADy, AThreshold: Integer): TTyCoolDrag;
+
 function TyCoolBandResize(AStartW, ADx, AMinW, AMaxW: Integer): Integer;
 
 { True when APt lies on the gripper strip of ABandRect: the leftmost AGripperW px
@@ -114,6 +153,63 @@ implementation
 // -----------------------------------------------------------------------------
 // Pure functions
 // -----------------------------------------------------------------------------
+function TyCoolBarPack(const AChildSizes: array of TSize; const ABreaks: array of Boolean;
+  AAvail, ABandHeight, AGripperW, ASpacing: Integer): TTyRectArray;
+var
+  n, i, x, y, w, rowStart: Integer;
+  brk, firstOnRow: Boolean;
+begin
+  Result := nil;
+  n := Length(AChildSizes);
+  SetLength(Result, n);
+  if n = 0 then Exit;
+  if ABandHeight < 0 then ABandHeight := 0;
+  if AGripperW < 0 then AGripperW := 0;
+  if ASpacing < 0 then ASpacing := 0;
+
+  x := 0;
+  y := 0;
+  firstOnRow := True;
+  for i := 0 to n - 1 do
+  begin
+    w := AChildSizes[i].cx;
+    if w < 0 then w := 0;
+    brk := (i < Length(ABreaks)) and ABreaks[i];
+    { A break is honoured even for a band that would have fitted -- that is the whole point of
+      dragging a band onto a row of its own. The first band can never break: there is no row
+      above it to leave. }
+    if (not firstOnRow) and (brk or (x + AGripperW + w > AAvail)) then
+    begin
+      Inc(y, ABandHeight + ASpacing);
+      x := 0;
+      firstOnRow := True;
+    end;
+    rowStart := x + AGripperW;            // the child begins after ITS OWN gripper
+    if rowStart + w > AAvail then         // a band wider than the row is clamped to it
+      w := AAvail - rowStart;
+    if w < 0 then w := 0;
+    Result[i].Left := rowStart;
+    Result[i].Top := y;
+    Result[i].Right := rowStart + w;
+    Result[i].Bottom := y + ABandHeight;
+    x := rowStart + w + ASpacing;
+    firstOnRow := False;
+  end;
+end;
+
+function TyCoolDragMode(ADx, ADy, AThreshold: Integer): TTyCoolDrag;
+begin
+  if AThreshold < 1 then AThreshold := 1;
+  { Vertical wins ties-with-intent: a band is MOVED between rows far more often than it is
+    resized, and a horizontal wobble during a downward drag must not flip the meaning. }
+  if (Abs(ADy) >= AThreshold) and (Abs(ADy) > Abs(ADx)) then
+    Result := cdMove
+  else if Abs(ADx) >= AThreshold then
+    Result := cdResize
+  else
+    Result := cdNone;
+end;
+
 function TyCoolBandResize(AStartW, ADx, AMinW, AMaxW: Integer): Integer;
 begin
   if AMinW < 1 then AMinW := 1;
@@ -271,9 +367,66 @@ begin
   // an empty rect. Device px, control-local.
   if ACtl = nil then Exit(Rect(0, 0, 0, 0));
   gw := GripperWidthPx;
-  if ACtl.Left > gw + 1 then Exit(Rect(0, 0, 0, 0));   // not the row's first child -> no gripper
+  if gw <= 0 then Exit(Rect(0, 0, 0, 0));
+  { EVERY band has its own gripper, immediately to its left -- the packer reserves it there.
+    The old rule returned an empty rect for anything that was not the row's first child, which
+    is a ControlBar's one-grip-per-row model: band 2 had no handle to grab and none drawn. }
   Result := ACtl.BoundsRect;
-  Result.Left := 0;   // the drawn gripper spans x = 0..gw at this row's Y range
+  Result.Right := Result.Left;
+  Dec(Result.Left, gw);
+  if Result.Left < 0 then Result.Left := 0;
+end;
+
+procedure TTyCoolBar.SetBandBreak(ACtl: TControl; AValue: Boolean);
+var i: Integer;
+begin
+  i := IndexOfBand(ACtl);
+  if i < 0 then Exit;
+  if FBands[i].Break_ = AValue then Exit;
+  FBands[i].Break_ := AValue;
+  Relayout;
+end;
+
+function TTyCoolBar.BandBreak(ACtl: TControl): Boolean;
+var i: Integer;
+begin
+  i := IndexOfBand(ACtl);
+  Result := (i >= 0) and FBands[i].Break_;
+end;
+
+function TTyCoolBar.PackBands(const ABands: array of TControl; const ASizes: array of TSize;
+  AAvail, ABandHeight, AGripperW, ASpacing: Integer): TTyRectArray;
+var
+  brks: array of Boolean;
+  i, bi: Integer;
+begin
+  { Every band carries its own gripper, and a band may force a row break -- the two things
+    that make a CoolBar a CoolBar rather than a ControlBar. }
+  SetLength(brks, Length(ABands));
+  for i := 0 to High(ABands) do
+  begin
+    bi := IndexOfBand(ABands[i]);
+    brks[i] := (bi >= 0) and FBands[bi].Break_;
+  end;
+  Result := TyCoolBarPack(ASizes, brks, AAvail, ABandHeight, AGripperW, ASpacing);
+end;
+
+procedure TTyCoolBar.PaintGrippers(APainter: TTyPainter; const AStyle: TTyStyleSet;
+  ABandCount, ABandHeight, AGripperW, ASpacing: Integer);
+var
+  i: Integer;
+  ctl: TControl;
+  r: TRect;
+begin
+  { One gripper per BAND, drawn immediately left of the child it belongs to -- not one per row.
+    Band 2 having no handle at all was this loop inherited unchanged from the base. }
+  for i := 0 to ControlCount - 1 do
+  begin
+    ctl := Controls[i];
+    if (ctl = nil) or (not ctl.Visible) then Continue;
+    r := BandRectFor(ctl);
+    if r.Right > r.Left then DrawGripper(APainter, r, AStyle);
+  end;
 end;
 
 function TTyCoolBar.BandAtPoint(AX, AY: Integer): TControl;
@@ -309,6 +462,8 @@ begin
   FDragging := True;
   FDragCtl := hit;
   FDragStartX := X;
+  FDragStartY := Y;
+  FDragMode := cdNone;   // undecided until the pointer commits to an axis
   if GetBandWidth(hit) > 0 then
     FDragStartW := GetBandWidth(hit)
   else
@@ -317,18 +472,44 @@ end;
 
 procedure TTyCoolBar.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
-  dxLogical, newW, minW, maxW: Integer;
+  dxLogical, newW, minW, maxW, ppi, step, curRow, wantRow: Integer;
 begin
   inherited MouseMove(Shift, X, Y);
   if not (FDragging and (FDragCtl <> nil)) then Exit;
-  // Convert the device-px mouse delta to logical px (band widths are logical), clamp,
-  // and apply. Resizing the child width is what the base re-packs from.
-  dxLogical := MulDiv(X - FDragStartX, 96, Font.PixelsPerInch);
-  minW := BandMinWidth(FDragCtl);
-  maxW := BandMaxWidth(FDragCtl);
-  newW := TyCoolBandResize(FDragStartW, dxLogical, minW, maxW);
-  if newW <> GetBandWidth(FDragCtl) then
-    SetBandWidth(FDragCtl, newW);
+  ppi := Font.PixelsPerInch;
+  if FDragMode = cdNone then
+    FDragMode := TyCoolDragMode(X - FDragStartX, Y - FDragStartY, MulDiv(4, ppi, 96));
+
+  case FDragMode of
+    cdResize:
+      begin
+        // Device-px delta -> logical (band widths are logical), clamped, then applied; the
+        // base re-packs from the child width.
+        dxLogical := MulDiv(X - FDragStartX, 96, ppi);
+        minW := BandMinWidth(FDragCtl);
+        maxW := BandMaxWidth(FDragCtl);
+        newW := TyCoolBandResize(FDragStartW, dxLogical, minW, maxW);
+        if newW <> GetBandWidth(FDragCtl) then
+          SetBandWidth(FDragCtl, newW);
+      end;
+    cdMove:
+      begin
+        { Which row the pointer is over, versus which row the band is on. Moving DOWN gives the
+          band a row of its own (Break); moving back UP returns it to the row above. That is the
+          whole of the row model -- a band either starts a row or continues one.
+
+          Reordering WITHIN a row is deliberately not attempted: it needs a child-index
+          primitive, and the LCL exposes only SetZOrder(TopMost), so there is no way to place a
+          control at an arbitrary position in its parent's list. }
+        step := MulDiv(BandHeight, ppi, 96) + MulDiv(BandSpacing, ppi, 96);
+        if step <= 0 then Exit;
+        curRow := FDragCtl.Top div step;
+        wantRow := Y div step;
+        if wantRow < 0 then wantRow := 0;
+        if wantRow > curRow then SetBandBreak(FDragCtl, True)
+        else if wantRow < curRow then SetBandBreak(FDragCtl, False);
+      end;
+  end;
 end;
 
 procedure TTyCoolBar.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
@@ -338,6 +519,7 @@ begin
   begin
     FDragging := False;
     FDragCtl := nil;
+    FDragMode := cdNone;
   end;
 end;
 

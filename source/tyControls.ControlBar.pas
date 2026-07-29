@@ -49,10 +49,19 @@ type
     procedure SetBandHeight(AValue: Integer);
     procedure SetGripperWidth(AValue: Integer);
     procedure SetBandSpacing(AValue: Integer);
+  protected
+    { Reachable by a subclass now that packing and gripper placement are overridable seams --
+      an override cannot re-lay-out or draw a grip without them. }
     procedure Relayout;
     function BandCount: Integer;
     procedure DrawGripper(P: TTyPainter; const ABandRect: TRect; const AStyle: TTyStyleSet);
-  protected
+    { Packing and gripper placement are the ONE thing a CoolBar does differently from a
+      ControlBar -- a grip per BAND rather than one per row -- so they are the seam a subclass
+      overrides instead of duplicating the whole layout. }
+    function PackBands(const ABands: array of TControl; const ASizes: array of TSize;
+      AAvail, ABandHeight, AGripperW, ASpacing: Integer): TTyRectArray; virtual;
+    procedure PaintGrippers(APainter: TTyPainter; const AStyle: TTyStyleSet;
+      ABandCount, ABandHeight, AGripperW, ASpacing: Integer); virtual;
     procedure Paint; override;
     procedure AlignControls(AControl: TControl; var ARect: TRect); override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
@@ -198,6 +207,26 @@ begin
   Relayout;
 end;
 
+function TTyControlBar.PackBands(const ABands: array of TControl; const ASizes: array of TSize;
+  AAvail, ABandHeight, AGripperW, ASpacing: Integer): TTyRectArray;
+begin
+  { A ControlBar reserves ONE gripper per row, at the row's left edge. ABands is unused here
+    and passed only so a subclass keying on per-band state can reach it. }
+  Result := TyControlBarPack(ASizes, AAvail, ABandHeight, AGripperW, ASpacing);
+end;
+
+procedure TTyControlBar.PaintGrippers(APainter: TTyPainter; const AStyle: TTyStyleSet;
+  ABandCount, ABandHeight, AGripperW, ASpacing: Integer);
+var
+  i, bandTop: Integer;
+begin
+  for i := 0 to ABandCount - 1 do
+  begin
+    bandTop := i * (ABandHeight + ASpacing);
+    DrawGripper(APainter, Rect(0, bandTop, AGripperW, bandTop + ABandHeight), AStyle);
+  end;
+end;
+
 procedure TTyControlBar.Relayout;
 begin
   if csDestroying in ComponentState then Exit;
@@ -261,7 +290,7 @@ begin
       sizes[I].cy := list[I].Height;
     end;
 
-    rects := TyControlBarPack(sizes, ClientWidth, bandH, gripW, spacing);
+    rects := PackBands(list, sizes, ClientWidth, bandH, gripW, spacing);
 
     // Rebuild the per-child band assignment from the packed rects (band index = the row
     // ordinal, derived from Top / (bandH + spacing)). Keyed by the child control so it
@@ -368,11 +397,7 @@ begin
   try
     P.BeginPaint(Canvas, ClientRect, ppi);
     S := CurrentStyle;
-    for I := 0 to bands - 1 do
-    begin
-      bandTop := I * (bandH + spacing);
-      DrawGripper(P, Rect(0, bandTop, gripW, bandTop + bandH), S);
-    end;
+    PaintGrippers(P, S, bands, bandH, gripW, spacing);
     P.EndPaint;
   finally
     P.Free;
