@@ -26,6 +26,7 @@ type
     procedure TestTypeKeyIsScrollBox;
     procedure TestNoBarsWhenContentFits;
     procedure TestVerticalBarWhenContentTaller;
+    procedure TestBarsStayAboveContentChildren;
     procedure TestHorizontalBarWhenContentWider;
     procedure TestBothBarsWhenContentBigger;
     procedure TestRangeIsChildBoundingBox;
@@ -461,6 +462,41 @@ begin
   AssertEquals('full height when nothing overflows', 200, area.Bottom - area.Top);
   AssertEquals('origin unshifted', 0, area.Left);
   AssertEquals('origin unshifted', 0, area.Top);
+end;
+
+procedure TTyScrollBoxTest.TestBarsStayAboveContentChildren;
+{ The bars are created in the constructor, so they start at the BOTTOM of the child z-order and
+  every control the application adds afterwards paints over them. A content child wider than the
+  viewport therefore buried the vertical bar, leaving it visible only in the gaps between rows --
+  reported from a running app and reproduced identically on Windows, so it is not a widgetset
+  quirk.
+
+  Z-order is the parent's control list, and it is deterministic without a window, so this is one
+  of the few layout facts that a headless test can actually pin. }
+var
+  SB: TScrollBoxAccess;
+  i, barIdx, contentIdx: Integer;
+  c: TControl;
+begin
+  SB := TScrollBoxAccess.Create(FForm);
+  SB.Parent := FForm;
+  SB.Font.PixelsPerInch := 96;
+  SB.SetBounds(0, 0, 300, 200);
+  { Wider AND taller than the viewport, so both bars show and the child spans the bar column. }
+  MakeChild(SB, 10, 10, 420, 500);
+  SB.UpdateScrollRange;
+  AssertTrue('the fixture shows a vertical bar', SB.VBar.Visible);
+
+  barIdx := -1; contentIdx := -1;
+  for i := 0 to SB.ControlCount - 1 do
+  begin
+    c := SB.Controls[i];
+    if c = SB.VBar then barIdx := i
+    else if not (c is TTyScrollBar) then contentIdx := i;
+  end;
+  AssertTrue('found both the bar and a content child', (barIdx >= 0) and (contentIdx >= 0));
+  AssertTrue(Format('the vertical bar must sit ABOVE the content in z-order '
+    + '(bar at %d, content at %d)', [barIdx, contentIdx]), barIdx > contentIdx);
 end;
 
 initialization

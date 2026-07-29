@@ -349,6 +349,12 @@ begin
   if wantV then
   begin
     FVScrollBar.Controller := Self.Controller;
+    { Keep the bars ABOVE the content. Both are created in the constructor, so they sit at the
+      bottom of the child z-order and every control the app adds afterwards paints over them --
+      a content child wider than the viewport buried the bar, leaving it visible only in the
+      gaps between rows. Raising them here rather than at construction is deliberate: children
+      stream in and get added after the fact, and this runs whenever the content changes. }
+    FVScrollBar.BringToFront;
     FVScrollBar.SetBounds(Width - thick, 0, thick, viewH);
     vMax := TyScrollMax(FContentH, viewH);
     FSyncing := True;
@@ -369,6 +375,7 @@ begin
   if wantH then
   begin
     FHScrollBar.Controller := Self.Controller;
+    FHScrollBar.BringToFront;
     FHScrollBar.SetBounds(0, Height - thick, viewW, thick);
     hMax := TyScrollMax(FContentW, viewW);
     FSyncing := True;
