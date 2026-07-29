@@ -300,9 +300,15 @@ type
       chrome did not perform — Aero Snap to the top edge, Win+Up, the taskbar's system menu —
       reaches the engine; see TTyChromeEngine.SyncNativeMaximized for what it does with it. }
     procedure Resizing(State: TWindowState); override;
-    {$IF DEFINED(LCLGtk2) or DEFINED(LCLQt5) or DEFINED(LCLQt6)}
+    {$IF DEFINED(LCLGtk2) or DEFINED(LCLGtk3) or DEFINED(LCLQt5) or DEFINED(LCLQt6)}
     { GTK/Qt resize-reception gutter: inset the client rect by FBorderZone so alClient
       children stop short of the edge and the form's edge strip receives the mouse.
+      GTK3 was missing from this list, which is not a style choice -- ManualResizeEnabled
+      returns True for every non-Win32 widgetset, so GTK3 was running the manual resize
+      hit-test on every mouse move against an edge strip that alClient children were
+      covering. The hit flipped as the pointer moved, taking the cursor and the chrome's
+      focus/hover rendering with it: the reported "flickers madly whenever the mouse moves,
+      stops the moment it stops".
       Windows (native NC border) and Cocoa (resizable styleMask) need no gutter — the
       IFDEF leaves their build with inherited only. }
     procedure AdjustClientRect(var ARect: TRect); override;
@@ -1796,7 +1802,7 @@ begin
   end;
 end;
 
-{$IF DEFINED(LCLGtk2) or DEFINED(LCLQt5) or DEFINED(LCLQt6)}
+{$IF DEFINED(LCLGtk2) or DEFINED(LCLGtk3) or DEFINED(LCLQt5) or DEFINED(LCLQt6)}
 procedure TTyForm.AdjustClientRect(var ARect: TRect);
 var
   zone: Integer;
