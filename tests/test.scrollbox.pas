@@ -35,6 +35,21 @@ type
     procedure TestScrollBarsAreNoDesignVisible;
     procedure TestBarInheritsController;
     procedure TestScrollByDeltaReclampsAfterContentShrinks;
+    { The container contract — a scroll box is a CONTAINER, so the LCL alignment engine
+      has to be told (a) that the bars own a gutter and (b) where the scrolled origin is.
+      Both were missing, and the pure math above stayed green throughout.
+
+      What is NOT here: whether ALIGNED children actually end up off the bar and actually
+      scroll. That needs the LCL align engine to run, and it never does in this suite —
+      TControl.AdjustSize walks to the top parent and bails out on AutoSizeDelayedHandle,
+      which is always true for a TForm.CreateNew that is never shown. Asserting on aligned
+      children here passes on the BROKEN code too. That coverage lives in the real-machine
+      probe tests/scrollverify (cases 3, 4, 10, 11). }
+    procedure TestClientRectExcludesBarGutters;
+    procedure TestChildAreaExcludesBarGutters;
+    procedure TestChildAreaGrowsToContentOnScrollingAxisOnly;
+    procedure TestChildAreaFollowsScrollOffset;
+    procedure TestChildAreaIsFullBoxWithoutBars;
   end;
 implementation
 
@@ -46,6 +61,8 @@ type
     function HBar: TTyScrollBar;
     procedure CallWheel(WheelDelta: Integer);
     procedure CallScrollByDelta(ADx, ADy: Integer);
+    { The rect the LCL alignment engine hands to child controls. }
+    function ChildArea: TRect;
   end;
 
 function TScrollBoxAccess.StyleTypeKey: string;
@@ -81,6 +98,16 @@ end;
 procedure TScrollBoxAccess.CallScrollByDelta(ADx, ADy: Integer);
 begin
   ScrollByDelta(ADx, ADy);
+end;
+
+{ Exactly what LCL does to lay children out:
+    TWinControl.AlignControl:  ARect := GetLogicalClientRect;
+    TWinControl.AlignControls: AdjustClientRect(ARect);
+  Measuring ClientRect instead would silently skip the grow-to-content half. }
+function TScrollBoxAccess.ChildArea: TRect;
+begin
+  Result := GetLogicalClientRect;
+  AdjustClientRect(Result);
 end;
 
 { helper: a plain child of a given size at a given position }
@@ -324,6 +351,116 @@ begin
   finally
     Ctl.Free;
   end;
+end;
+
+procedure TTyScrollBoxTest.TestClientRectExcludesBarGutters;
+var
+  SB: TScrollBoxAccess;
+  thick: Integer;
+begin
+  // Not cosmetic: LCL banks a child's anchor baseline from Parent.ClientWidth/ClientHeight
+  // (TControl.UpdateBaseBounds) but lays it out against the layout rect. Let those two
+  // disagree by a scrollbar and every ScrollBy re-banks the difference — an akRight child
+  // loses a bar's width per scroll until it is gone.
+  SB := TScrollBoxAccess.Create(FForm);
+  SB.Parent := FForm;
+  SB.Font.PixelsPerInch := 96;
+  SB.SetBounds(0, 0, 300, 200);
+  MakeChild(SB, 0, 0, 800, 600);        // overflows on both axes -> both bars
+  SB.UpdateScrollRange;
+  AssertTrue('both bars visible', SB.VBar.Visible and SB.HBar.Visible);
+  thick := SB.VBar.Width;
+  AssertEquals('ClientWidth gives up the vertical bar gutter', 300 - thick, SB.ClientWidth);
+  AssertEquals('ClientHeight gives up the horizontal bar gutter', 200 - thick, SB.ClientHeight);
+end;
+
+procedure TTyScrollBoxTest.TestChildAreaExcludesBarGutters;
+var
+  SB: TScrollBoxAccess;
+  area: TRect;
+  thick: Integer;
+begin
+  // A visible bar owns a gutter. If the child area still spans the full box, every
+  // alClient/alRight/alBottom child is sized over the bar and buries it. Measured on the
+  // non-scrolling axis, which never grows to the content.
+  SB := TScrollBoxAccess.Create(FForm);
+  SB.Parent := FForm;
+  SB.Font.PixelsPerInch := 96;
+  SB.SetBounds(0, 0, 300, 200);
+  MakeChild(SB, 0, 0, 100, 600);        // vertical overflow only -> vertical bar alone
+  SB.UpdateScrollRange;
+  AssertTrue('vertical bar visible', SB.VBar.Visible);
+  AssertTrue('no horizontal bar', not SB.HBar.Visible);
+  thick := SB.VBar.Width;
+  area := SB.ChildArea;
+  AssertEquals('child area gives up the vertical bar gutter', 300 - thick,
+    area.Right - area.Left);
+end;
+
+procedure TTyScrollBoxTest.TestChildAreaGrowsToContentOnScrollingAxisOnly;
+var
+  SB: TScrollBoxAccess;
+  area: TRect;
+begin
+  // The scrolling axis must grow to the content, or DoAlign(alTop) clamps its running
+  // offset and piles every row past the fold onto the last visible one. The OTHER axis
+  // must NOT grow: an aligned child's size comes from this rect and feeds back into the
+  // content extent, so growing it unconditionally latches the child at the full box width.
+  SB := TScrollBoxAccess.Create(FForm);
+  SB.Parent := FForm;
+  SB.Font.PixelsPerInch := 96;
+  SB.SetBounds(0, 0, 300, 200);
+  MakeChild(SB, 0, 0, 100, 600);        // vertical overflow only
+  SB.UpdateScrollRange;
+  AssertEquals('precondition: content measured', 600, SB.ContentHeight);
+  AssertTrue('precondition: vertical bar up', SB.VBar.Visible);
+  AssertEquals('precondition: ClientHeight untouched (no horizontal bar)', 200, SB.ClientHeight);
+  area := SB.ChildArea;
+  AssertEquals('scrolling axis grows to the content', 600, area.Bottom - area.Top);
+  AssertEquals('the still axis stays at the viewport', 300 - SB.VBar.Width,
+    area.Right - area.Left);
+end;
+
+procedure TTyScrollBoxTest.TestChildAreaFollowsScrollOffset;
+var
+  SB: TScrollBoxAccess;
+  area: TRect;
+begin
+  // Children are stored SCROLLED, so the layout origin must be the scrolled origin —
+  // otherwise the align engine keeps snapping aligned children back to the top.
+  SB := TScrollBoxAccess.Create(FForm);
+  SB.Parent := FForm;
+  SB.Font.PixelsPerInch := 96;
+  SB.SetBounds(0, 0, 300, 200);
+  MakeChild(SB, 0, 0, 100, 600);
+  SB.UpdateScrollRange;
+  area := SB.ChildArea;
+  AssertEquals('unscrolled origin is 0', 0, area.Top);
+
+  SB.VBar.Position := 120;
+  AssertEquals('offset followed the bar', 120, SB.ScrollY);
+  area := SB.ChildArea;
+  AssertEquals('layout origin moved with the scroll', -120, area.Top);
+end;
+
+procedure TTyScrollBoxTest.TestChildAreaIsFullBoxWithoutBars;
+var
+  SB: TScrollBoxAccess;
+  area: TRect;
+begin
+  // No overflow -> no gutters to reserve: a scroll box with content that fits must lay
+  // its children out exactly like the TTyPanel it descends from.
+  SB := TScrollBoxAccess.Create(FForm);
+  SB.Parent := FForm;
+  SB.Font.PixelsPerInch := 96;
+  SB.SetBounds(0, 0, 300, 200);
+  MakeChild(SB, 10, 10, 100, 80);
+  SB.UpdateScrollRange;
+  area := SB.ChildArea;
+  AssertEquals('full width when nothing overflows', 300, area.Right - area.Left);
+  AssertEquals('full height when nothing overflows', 200, area.Bottom - area.Top);
+  AssertEquals('origin unshifted', 0, area.Left);
+  AssertEquals('origin unshifted', 0, area.Top);
 end;
 
 initialization

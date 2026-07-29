@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <ProjectOptions>
+    <Version Value="12"/>
+    <General>
+      <Flags>
+        <MainUnitHasCreateFormStatements Value="False"/>
+        <MainUnitHasTitleStatement Value="False"/>
+      </Flags>
+      <Title Value="TyControls ScrollBox Verify"/>
+      <Scaled Value="True"/>
+      <UseXPManifest Value="True"/>
+    </General>
+    <BuildModes Count="1"><Item1 Name="Default" Default="True"/></BuildModes>
+    <RequiredPackages Count="2">
+      <Item1><PackageName Value="LCL"/></Item1>
+      <Item2><PackageName Value="tycontrols"/></Item2>
+    </RequiredPackages>
+    <Units Count="2">
+      <Unit0><Filename Value="scrollverify.lpr"/><IsPartOfProject Value="True"/></Unit0>
+      <Unit1>
+        <Filename Value="uscroll.pas"/>
+        <IsPartOfProject Value="True"/>
+        <ComponentName Value="ScrollForm"/>
+        <HasResources Value="True"/>
+        <ResourceBaseClass Value="Form"/>
+        <UnitName Value="uscroll"/>
+      </Unit1>
+    </Units>
+  </ProjectOptions>
+  <CompilerOptions>
+    <Version Value="11"/>
+    <SearchPaths>
+      <OtherUnitFiles Value=".;../../source"/>
+      <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
+    </SearchPaths>
+    <SyntaxOptions><SyntaxMode Value="ObjFPC"/></SyntaxOptions>
+    <Linking>
+      <Options>
+        <Win32>
+          <GraphicApplication Value="False"/>
+        </Win32>
+      </Options>
+    </Linking>
+  </CompilerOptions>
+</CONFIG>

@@ -842,6 +842,51 @@ object MainForm: TMainForm
         Caption = 'Row 10'
       end
     end
+    object LblAlignScroll: TTyLabel
+      Left = 950
+      Height = 18
+      Top = 490
+      Width = 230
+      Caption = 'TTyScrollBox with ALIGNED children'
+    end
+    object AlignScrollDemo: TTyScrollBox
+      Left = 950
+      Height = 76
+      Top = 512
+      Width = 230
+      object AsBtn1: TTyButton
+        Left = 0
+        Height = 28
+        Top = 0
+        Width = 230
+        Align = alTop
+        Caption = 'alTop row 1'
+      end
+      object AsBtn2: TTyButton
+        Left = 0
+        Height = 28
+        Top = 28
+        Width = 230
+        Align = alTop
+        Caption = 'alTop row 2'
+      end
+      object AsBtn3: TTyButton
+        Left = 0
+        Height = 28
+        Top = 56
+        Width = 230
+        Align = alTop
+        Caption = 'alTop row 3'
+      end
+      object AsBtn4: TTyButton
+        Left = 0
+        Height = 28
+        Top = 84
+        Width = 230
+        Align = alTop
+        Caption = 'alTop row 4'
+      end
+    end
     object LblEx2: TTyLabel
       Left = 900
       Height = 18

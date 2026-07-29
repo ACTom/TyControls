@@ -16,12 +16,19 @@ type
     when the content overflows on that axis.
 
     A scroll offset (FScrollX/FScrollY, both >= 0) tracks how far the content has been
-    scrolled. On a scrollbar change we compute the delta from the current offset and
-    call inherited ScrollBy(-dx,-dy) to move the child controls, then re-dock the two
-    scrollbars back to the right/bottom edge (ScrollBy moved them too) and commit the
-    new offset. The content RANGE is the bounding box of the NON-scrollbar children in
-    LOGICAL (un-scrolled) coordinates — each child's current position plus the current
-    offset. }
+    scrolled, and it is the SINGLE SOURCE OF TRUTH: on a scrollbar change we commit the
+    new offset first, then call inherited ScrollBy(-dx,-dy) to move the child controls,
+    then re-dock the two scrollbars back to the right/bottom edge (ScrollBy moved them
+    too). The content RANGE is the bounding box of the NON-scrollbar children in LOGICAL
+    (un-scrolled) coordinates — each child's current position plus the current offset.
+
+    Being a CONTAINER is the other half of the job, and it is all in AdjustClientRect
+    (see there): the LCL alignment engine has to know that a visible bar owns a gutter,
+    and that the layout origin is the SCROLLED origin. Without the first, an aligned
+    child is sized over the bar; without the second, every realign undoes the scroll for
+    aligned children. Re-measuring is likewise automatic — Resize, Loaded (the .lfm's
+    children arrive after the last Resize) and ControlsAligned (any child added, removed,
+    moved or resized) all funnel into UpdateScrollRange. }
   TTyScrollBox = class(TTyPanel)
   private
     FVScrollBar: TTyScrollBar;   // nil until first needed
@@ -32,13 +39,53 @@ type
     FContentH: Integer;
     FSyncing: Boolean;           // reentrancy guard while we drive the bars
     FInScrollBy: Boolean;        // guard so re-docking the bars is ignored by range calc
+    FInUpdate: Boolean;          // reentrancy guard for UpdateScrollRange (see there)
     procedure EnsureBars;
     procedure VScrollBarChange(Sender: TObject);
     procedure HScrollBarChange(Sender: TObject);
     procedure ScrollContentTo(ANewX, ANewY: Integer);
     function ScrollbarThick: Integer;
+    function MeasureAndDock: Boolean;
   protected
     procedure Resize; override;
+    procedure Loaded; override;
+    { Called by the LCL at the end of every child-layout pass — i.e. after a child was
+      inserted, removed, moved or resized. That is exactly when the content extent can
+      have changed, so this is where the box re-measures itself. Before this hook the
+      only automatic trigger was Resize, which a child change does NOT fire: a box whose
+      children came from a .lfm (or from runtime code) depended on some later, incidental
+      resize to ever notice its own content, and the docs had to tell hosts to call
+      UpdateScrollRange by hand — something no other LCL container asks for. }
+    procedure ControlsAligned; override;
+    { The viewport: the box minus whatever gutters the visible bars own.
+
+      This HAS to be on ClientRect and not just on the layout rect below. LCL records a
+      child's anchor baseline from Parent.ClientWidth/ClientHeight (TControl.UpdateBaseBounds)
+      but lays it out against GetLogicalClientRect/AdjustClientRect. If the two disagree by
+      the scrollbar thickness, every ScrollBy — which writes bounds to each child — banks that
+      difference again, and an akRight-anchored child loses a scrollbar's width on every
+      single scroll until it vanishes. }
+    function GetClientRect: TRect; override;
+    { The themed frame still covers the WHOLE control: ClientRect now stops at the gutters,
+      but the box's background/border must run under the bars and fill the corner square
+      where the two of them meet. }
+    procedure Paint; override;
+    { HOW BIG the child layout area is. Two jobs:
+
+      1) Take the visible bars' gutters off. Without this an alClient / alRight / alBottom /
+         alTop child is sized against the full width and simply covers the scrollbar — the
+         bar is there, drawn on top, but the content runs under it.
+      2) Grow to the CONTENT when the content is bigger than the viewport. This is the whole
+         point of a scroll box and it is not optional: DoAlign(alTop) clamps its running
+         offset to this rect's Bottom, so a column of alTop rows taller than the viewport
+         would pile every row past the fold on top of the last visible one. (LCL's own
+         TScrollingWinControl does exactly this, growing to the scrollbar Range.) }
+    function GetLogicalClientRect: TRect; override;
+    { WHERE the child layout area starts. Children live in SCROLLED coordinates (ScrollBy
+      moves their Left/Top), so the align engine has to agree: otherwise every realign snaps
+      the aligned children straight back to the unscrolled spot and undoes the scroll — the
+      thumb travels, the bar Position changes, and the content never moves. }
+    procedure AdjustClientRect(var ARect: TRect); override;
     { Nudge the scroll offset by (ADx, ADy), clamped to the current scrollable range (0 on an
       axis with no bar), and keep the bar thumbs in sync. For subclasses (e.g. TTyScrollPanel's
       edge auto-pan). Safe to call after the layout has settled (bars configured). }
@@ -46,6 +93,19 @@ type
     { A scrollbar is an internal child; keep it out of the range measurement and out of
       the streamed/designer child list. }
     function IsContentChild(AControl: TControl): Boolean;
+    { Does this child count toward the content extent on this axis?
+
+      Only if its size on that axis is its OWN — a child whose size comes FROM the layout
+      area must not feed back INTO it. An alTop row is as wide as the layout area, so
+      counting it horizontally makes: wide row -> wide content -> horizontal bar -> which
+      steals height, not width, so the row stays wide -> the bar never goes away, and the
+      rows sit under the vertical bar forever. Same story for alLeft/alRight vertically,
+      and alClient on both. (LCL sidesteps this by deriving its Range from GetPreferredSize
+      — the children's INTRINSIC sizes — rather than from their stretched bounds.)
+
+      An alTop row still counts VERTICALLY: the stack height is exactly the content height. }
+    function CountsInWidth(AControl: TControl): Boolean;
+    function CountsInHeight(AControl: TControl): Boolean;
     function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
       MousePos: TPoint): Boolean; override;
   public
@@ -163,6 +223,18 @@ begin
   Result := (AControl <> nil) and (AControl <> FVScrollBar) and (AControl <> FHScrollBar);
 end;
 
+function TTyScrollBox.CountsInWidth(AControl: TControl): Boolean;
+begin
+  Result := IsContentChild(AControl)
+        and not (AControl.Align in [alTop, alBottom, alClient]);
+end;
+
+function TTyScrollBox.CountsInHeight(AControl: TControl): Boolean;
+begin
+  Result := IsContentChild(AControl)
+        and not (AControl.Align in [alLeft, alRight, alClient]);
+end;
+
 procedure TTyScrollBox.EnsureBars;
 begin
   if FVScrollBar = nil then
@@ -198,6 +270,33 @@ end;
 
 procedure TTyScrollBox.UpdateScrollRange;
 var
+  pass: Integer;
+begin
+  // Re-docking the bars from inside ScrollBy must not re-trigger a measure.
+  if FInScrollBy or FInUpdate then Exit;
+  if csDestroying in ComponentState then Exit;
+  // Mid-stream the child set and the bounds are both half-read; Loaded re-runs this
+  // once the .lfm is fully in.
+  if csLoading in ComponentState then Exit;
+  FInUpdate := True;
+  try
+    EnsureBars;
+    // Showing/hiding a bar changes AdjustClientRect, so the align engine reflows every
+    // ALIGNED child right there — which can change the content extent we just measured.
+    // Re-measure until it settles (bounded: a pathological layout must not spin).
+    pass := 0;
+    repeat
+      Inc(pass);
+    until (not MeasureAndDock) or (pass >= 3);
+  finally
+    FInUpdate := False;
+  end;
+end;
+
+{ One measure + dock pass. Returns True when it changed something the NEXT pass would
+  measure differently (content extent or bar visibility), so the caller can settle. }
+function TTyScrollBox.MeasureAndDock: Boolean;
+var
   i: Integer;
   child: TControl;
   minL, minT, maxR, maxB: Integer;
@@ -205,50 +304,31 @@ var
   viewW, viewH, thick: Integer;
   wantV, wantH: Boolean;
   vMax, hMax: Integer;
+  oldW, oldH: Integer;
+  oldV, oldH2: Boolean;
 begin
-  if FInScrollBy then Exit;   // re-docking the bars must not re-trigger a measure
-  EnsureBars;
   thick := ScrollbarThick;
+  oldW := FContentW;
+  oldH := FContentH;
+  oldV := FVScrollBar.Visible;
+  oldH2 := FHScrollBar.Visible;
 
-  // 1) Content bounding box in LOGICAL (un-scrolled) coordinates. A child's current
-  //    (scrolled) Left/Top plus the current offset gives its logical position; the
-  //    box spans from the logical origin (0,0) out to the far edge of the children.
-  haveChild := False;
-  minL := 0; minT := 0; maxR := 0; maxB := 0;
+  // 1) Content extent in LOGICAL (un-scrolled) coordinates, measured from the viewport
+  //    origin (0,0) out to the far edge of the children. A child's current (scrolled)
+  //    Left/Top plus the current offset gives its logical position. Each axis only counts
+  //    the children whose size on that axis is their own — see CountsInWidth/Height.
+  maxR := 0; maxB := 0;
   for i := 0 to ControlCount - 1 do
   begin
     child := Controls[i];
     if not IsContentChild(child) then Continue;
-    if not haveChild then
-    begin
-      minL := child.Left + FScrollX;
-      minT := child.Top + FScrollY;
+    if CountsInWidth(child) and (child.Left + FScrollX + child.Width > maxR) then
       maxR := child.Left + FScrollX + child.Width;
+    if CountsInHeight(child) and (child.Top + FScrollY + child.Height > maxB) then
       maxB := child.Top + FScrollY + child.Height;
-      haveChild := True;
-    end
-    else
-    begin
-      if child.Left + FScrollX < minL then minL := child.Left + FScrollX;
-      if child.Top + FScrollY < minT then minT := child.Top + FScrollY;
-      if child.Left + FScrollX + child.Width > maxR then maxR := child.Left + FScrollX + child.Width;
-      if child.Top + FScrollY + child.Height > maxB then maxB := child.Top + FScrollY + child.Height;
-    end;
   end;
-  // Extent measured from the viewport origin (0,0); a child straddling negative
-  // logical space still contributes its far edge. Never negative.
-  if not haveChild then
-  begin
-    FContentW := 0;
-    FContentH := 0;
-  end
-  else
-  begin
-    FContentW := maxR;
-    FContentH := maxB;
-    if FContentW < 0 then FContentW := 0;
-    if FContentH < 0 then FContentH := 0;
-  end;
+  FContentW := maxR;   // never negative: maxR/maxB start at 0
+  FContentH := maxB;
 
   // 2) Decide which bars are needed. Each bar, when shown, steals viewport from the
   //    OTHER axis, which can in turn force the other bar (classic mutual dependency).
@@ -304,6 +384,73 @@ begin
   end
   else if FHScrollBar <> nil then
     FHScrollBar.Visible := False;
+
+  Result := (FContentW <> oldW) or (FContentH <> oldH)
+         or (FVScrollBar.Visible <> oldV) or (FHScrollBar.Visible <> oldH2);
+  // A bar that just appeared/vanished changed ClientRect, and LCL caches that. Drop the
+  // cache so the next anchor/align pass reads the new viewport instead of the stale one.
+  if (FVScrollBar.Visible <> oldV) or (FHScrollBar.Visible <> oldH2) then
+    InvalidateClientRectCache(True);
+end;
+
+function TTyScrollBox.GetClientRect: TRect;
+begin
+  Result := inherited GetClientRect;
+  if (FVScrollBar <> nil) and FVScrollBar.Visible then
+    Dec(Result.Right, FVScrollBar.Width);
+  if (FHScrollBar <> nil) and FHScrollBar.Visible then
+    Dec(Result.Bottom, FHScrollBar.Height);
+  if Result.Right < Result.Left then Result.Right := Result.Left;
+  if Result.Bottom < Result.Top then Result.Bottom := Result.Top;
+end;
+
+procedure TTyScrollBox.Paint;
+begin
+  RenderTo(Canvas, Rect(0, 0, Width, Height), Font.PixelsPerInch);
+end;
+
+function TTyScrollBox.GetLogicalClientRect: TRect;
+var
+  viewW, viewH: Integer;
+begin
+  Result := inherited GetLogicalClientRect;   // = ClientRect, already minus the gutters
+  viewW := Result.Right - Result.Left;
+  viewH := Result.Bottom - Result.Top;
+  // Grow to the content so overflowing aligned rows have somewhere to stack — but ONLY on
+  // an axis that actually scrolls. The condition is not a nicety: an aligned child's size
+  // comes FROM this rect and then feeds BACK into the content extent, so growing an axis
+  // unconditionally latches it — a column of alTop rows would keep the full box width, sit
+  // under the vertical bar forever, and never fall back to the viewport. (LCL's own
+  // TScrollingWinControl.GetLogicalClientRect guards on ScrollBar.Visible for the same reason.)
+  if (FHScrollBar <> nil) and FHScrollBar.Visible and (FContentW > viewW) then
+    Result.Right := Result.Left + FContentW;
+  if (FVScrollBar <> nil) and FVScrollBar.Visible and (FContentH > viewH) then
+    Result.Bottom := Result.Top + FContentH;
+end;
+
+procedure TTyScrollBox.AdjustClientRect(var ARect: TRect);
+begin
+  inherited AdjustClientRect(ARect);
+  // Size is GetLogicalClientRect's job; this only moves the origin to the scrolled origin.
+  Types.OffsetRect(ARect, -FScrollX, -FScrollY);
+end;
+
+procedure TTyScrollBox.Loaded;
+begin
+  inherited Loaded;
+  // The .lfm streams the content children in AFTER the Width/Height writes that fired the
+  // last Resize, so this is the first moment the real child set is measurable. Without it
+  // the box relies on some later, incidental resize to ever notice its own content.
+  UpdateScrollRange;
+end;
+
+procedure TTyScrollBox.ControlsAligned;
+begin
+  inherited ControlsAligned;
+  // Re-entrant by nature: docking the bars below moves children, which asks the align
+  // engine for another pass. UpdateScrollRange's own FInUpdate guard swallows those, and
+  // its settle loop picks up whatever the reflow changed.
+  UpdateScrollRange;
 end;
 
 procedure TTyScrollBox.ScrollByDelta(ADx, ADy: Integer);
@@ -344,6 +491,12 @@ begin
   dx := ANewX - FScrollX;
   dy := ANewY - FScrollY;
   if (dx = 0) and (dy = 0) then Exit;
+  // Commit the offset BEFORE moving anything. ScrollBy ends in EnableAutoSizing, which can
+  // realign the children on the spot; that realign reads AdjustClientRect, and if the offset
+  // were still the old one it would place every ALIGNED child back where it was and quietly
+  // eat the scroll. The offset is the single source of truth — ScrollBy just applies it.
+  FScrollX := ANewX;
+  FScrollY := ANewY;
   // Move the child controls. ScrollBy moves EVERY child (incl. our two scrollbars),
   // so guard the range recompute and re-dock the bars right after.
   FInScrollBy := True;
@@ -352,8 +505,6 @@ begin
   finally
     FInScrollBy := False;
   end;
-  FScrollX := ANewX;
-  FScrollY := ANewY;
   // Re-dock the bars to the edges (ScrollBy shifted them off): vbar on the right,
   // hbar on the bottom. Bounds/PageSize/Max stay as UpdateScrollRange set them.
   if (FVScrollBar <> nil) and FVScrollBar.Visible then
@@ -396,22 +547,17 @@ begin
   if inherited DoMouseWheel(Shift, WheelDelta, MousePos) then Exit(True);
   // Wheel scrolls the vertical axis when it overflows, else the horizontal one.
   step := ScrollbarThick;   // one "line" ~ a scrollbar thickness of content
+  if WheelDelta > 0 then step := -step;
+  // ScrollByDelta re-measures, clamps to the live range and syncs the thumbs, so the wheel
+  // can never park the content past its own end.
   if (FVScrollBar <> nil) and FVScrollBar.Visible then
   begin
-    if WheelDelta > 0 then
-      ScrollContentTo(FScrollX, FScrollY - step)
-    else
-      ScrollContentTo(FScrollX, FScrollY + step);
-    UpdateScrollRange;   // resync the bar position to the new offset
+    ScrollByDelta(0, step);
     Result := True;
   end
   else if (FHScrollBar <> nil) and FHScrollBar.Visible then
   begin
-    if WheelDelta > 0 then
-      ScrollContentTo(FScrollX - step, FScrollY)
-    else
-      ScrollContentTo(FScrollX + step, FScrollY);
-    UpdateScrollRange;
+    ScrollByDelta(step, 0);
     Result := True;
   end
   else

@@ -58,6 +58,15 @@ type
     ChkMinimap: TTyCheckBox;
     ChkWhitespace: TTyCheckBox;
     ScrollDemo: TTyScrollBox;
+    { The same viewport, but with ALIGNED children — the case where a scroll box has to
+      behave like a real container: the rows must stop at the scrollbar instead of running
+      under it, and dragging the bar must actually move them. }
+    LblAlignScroll: TTyLabel;
+    AlignScrollDemo: TTyScrollBox;
+    AsBtn1: TTyButton;
+    AsBtn2: TTyButton;
+    AsBtn3: TTyButton;
+    AsBtn4: TTyButton;
     SbBtn1: TTyButton;
     SbBtn2: TTyButton;
     SbBtn3: TTyButton;
@@ -239,8 +248,8 @@ begin
   WireLists;      // header sections + grouped lists
   WireBands;      // Rebar band widths
 
-  // Scroll viewport: the content children stream in from the .lfm (after the Resize that Width/Height
-  // trigger), so recompute the scroll range once more here.
+  // Scroll viewports: no longer required (the box re-measures itself on Loaded and after every
+  // child-layout pass), kept only as an explicit demonstration of the public method.
   ScrollDemo.UpdateScrollRange;
   PanDemo.UpdateScrollRange;
 
