@@ -46,7 +46,7 @@ type
   TColorButtonAutoSizeTest = class(TTestCase)
   published
     procedure TestAutoSizePublishedButOffByDefault;
-    procedure TestPreferredIgnoresTheNeverPaintedCaption;
+    procedure TestPreferredCountsThePaintedCaption;
     procedure TestPreferredIncludesTheHexTextSlot;
     procedure TestSwatchSlotTracksTheRowHeight;
     procedure TestRoomierThemeWidensPreferredWidth;
@@ -61,7 +61,7 @@ type
     会把真正的 resize 吞掉。 }
   TColorButtonFloorTest = class(TTestCase)
   published
-    procedure TestFloorIgnoresTheNeverPaintedCaption;
+    procedure TestFloorCountsThePaintedCaption;
     procedure TestSwatchOnlyFloorIsNotATextLine;
     procedure TestShowTextRaisesTheFloorToTheHexLine;
     procedure TestHexSlotIsPartOfTheWidthFloor;
@@ -281,10 +281,10 @@ begin
   finally B.Free; end;
 end;
 
-procedure TColorButtonAutoSizeTest.TestPreferredIgnoresTheNeverPaintedCaption;
-{ 关键一条:TTyColorButton.DrawContent 从不调用基类的 DrawContent,Caption 一个像素都不画
-  (设计期里它默认还是组件名,比如 'TyColorButton1')。所以量宽度时绝不能把它算进去,
-  否则按钮会为一段看不见的文字白白变胖。 }
+procedure TColorButtonAutoSizeTest.TestPreferredCountsThePaintedCaption;
+{ 这条以前钉的是相反的行为(名字就叫 IgnoresTheNeverPaintedCaption):Caption 一个像素
+  都不画,所以量宽度时被刻意排除。现在 Caption 会画了——量宽就必须跟着算,否则 AutoSize
+  正好把用户唯一填过的那个属性裁掉。两条分支(ShowText 开/关)都要算。 }
 var
   Ctl: TTyStyleController;
   B: TTyColorButtonAccess;
@@ -302,17 +302,17 @@ begin
 
       B.Caption := 'X';
       B.CallPreferred(wShort, h);
-      B.Caption := 'A ridiculously long caption that is never painted';
+      B.Caption := 'A ridiculously long caption that IS painted';
       B.CallPreferred(wLong, h);
-      AssertEquals('the never-painted Caption adds no width', wShort, wLong);
+      AssertTrue('长 Caption 要撑宽', wLong > wShort);
 
-      // ShowText=False 走的是另一条分支,同样不许把 Caption 算进去。
+      // ShowText=False 走的是另一条分支:以前那条分支根本没有文字位,Caption 同样看不见。
       B.ShowText := False;
       B.Caption := 'X';
       B.CallPreferred(wShort, h);
-      B.Caption := 'A ridiculously long caption that is never painted';
+      B.Caption := 'A ridiculously long caption that IS painted';
       B.CallPreferred(wLong, h);
-      AssertEquals('same with no hex text', wShort, wLong);
+      AssertTrue('没有 hex 时也一样(文字位归 Caption)', wLong > wShort);
     finally B.Free; end;
   finally Ctl.Free; end;
 end;
@@ -452,13 +452,14 @@ end;
 
 { ---- TColorButtonFloorTest ---- }
 
-procedure TColorButtonFloorTest.TestFloorIgnoresTheNeverPaintedCaption;
+procedure TColorButtonFloorTest.TestFloorCountsThePaintedCaption;
 var
   Ctl: TTyStyleController;
   B: TTyColorButtonAccess;
   bare: Integer;
 begin
-  // DrawContent 从不调基类的 DrawContent,Caption 一个像素都不画。量它只会凭空撑宽按钮。
+  { 宽度下限 = 「色块 + 间隙 + 真正会画的文字 + 内边距」。Caption 会画了,它就在下限里;
+    留在外面的话,一个钉了宽度的容器(工具条)会把 Caption 挤没,而且不报错。 }
   Ctl := TTyStyleController.Create(nil);
   B := TTyColorButtonAccess.Create(nil);
   try
@@ -470,9 +471,9 @@ begin
     B.Invalidate;
     bare := B.Constraints.MinWidth;
 
-    B.Caption := 'A caption this button never draws a pixel of';
-    AssertEquals('a caption this button never paints is not in the width floor',
-      bare, B.Constraints.MinWidth);
+    B.Caption := 'A caption this button DOES draw';
+    AssertTrue('会画的 Caption 必须进宽度下限',
+      B.Constraints.MinWidth > bare);
   finally
     B.Free; Ctl.Free;
   end;

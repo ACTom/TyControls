@@ -48,6 +48,19 @@ type
     function IsComplete: Boolean;
   published
     property Mask: string read FMask write SetMask;
+    { LCL and Delphi both call this property EditMask (maskedit.pp), so code ported
+      from either fails to compile on the name alone -- before anyone gets as far as
+      noticing that the mask LANGUAGE is different too. This is an alias on the same
+      field, not a second mask.
+
+      What it is NOT: LCL's mask language. This control understands three slot codes
+      ('#' digit, 'L' letter, 'C' any non-space) and treats every other character as a
+      fixed literal; it has no escape character, no optional-slot codes, and no
+      `mask;save;blank` triple. A Lazarus EditMask string will therefore be ACCEPTED
+      and will silently mean something else -- '!90:00;1;_' has no '#' in it, so every
+      character of it becomes a literal and the field takes no input at all. Not
+      streamed: Mask is the persisted name. }
+    property EditMask: string read FMask write SetMask stored False;
   end;
 
 implementation

@@ -14,7 +14,7 @@ uses
   tyControls.CheckGroup, tyControls.ToolBar, tyControls.StatusBar,
   tyControls.ColorBox, tyControls.SpinEdit, tyControls.CheckBox, tyControls.Menu,
   tyControls.UpDown, tyControls.TrackBar, tyControls.Base, tyControls.Panel,
-  tyControls.MaskEdit, tyControls.Calendar;
+  tyControls.MaskEdit, tyControls.Calendar, tyControls.ColorButton;
 
 type
   { Probes: ApplyToButton and the hosted checkboxes are protected, because the owning
@@ -85,6 +85,11 @@ type
     procedure MaskEditPasteKeepsOnlyWhatFits;
     { A31 }
     procedure CalendarAcceptsTheLclPropertyName;
+    { A8 }
+    procedure MaskEditAcceptsTheLclPropertyName;
+    { A1 }
+    procedure ColorButtonPaintsItsCaption;
+    procedure ColorButtonCaptionOutranksTheHex;
   end;
 
 implementation
@@ -517,6 +522,59 @@ begin
     AssertEquals('and it took', EncodeDate(2026, 7, 30), C.DateTime);
   finally
     C.Free;
+  end;
+end;
+
+{ ---------------------------------------------------------------- A8 ------- }
+
+procedure TParityTest.MaskEditAcceptsTheLclPropertyName;
+var
+  M: TTyMaskEdit;
+begin
+  M := TTyMaskEdit.Create(nil);
+  try
+    M.EditMask := '###';          { LCL and Delphi both call it this }
+    AssertEquals('EditMask is an alias on the same field', '###', M.Mask);
+  finally
+    M.Free;
+  end;
+end;
+
+{ ---------------------------------------------------------------- A1 ------- }
+
+{ Caption is published, settable in the designer, and documented as behaving like
+  TTyButton's -- and DrawContent never called the base, so it drew zero pixels of it.
+  No error, no warning: you set a Caption, you see a swatch, you go looking for a bug
+  in your own code. The measurement has to agree, or AutoSize clips the one property
+  the user actually filled in. }
+procedure TParityTest.ColorButtonPaintsItsCaption;
+var
+  B: TTyColorButton;
+begin
+  B := TTyColorButton.Create(nil);
+  try
+    AssertEquals('nothing set: no text at all', '', B.ContentText);
+    B.Caption := 'Pick...';
+    AssertEquals('a Caption is what gets drawn', 'Pick...', B.ContentText);
+  finally
+    B.Free;
+  end;
+end;
+
+procedure TParityTest.ColorButtonCaptionOutranksTheHex;
+var
+  B: TTyColorButton;
+begin
+  B := TTyColorButton.Create(nil);
+  try
+    B.ShowText := True;
+    AssertTrue('no Caption -> the hex, as before', Pos('#', B.ContentText) = 1);
+    B.Caption := 'Border';
+    AssertEquals('one text slot, and an explicit Caption owns it', 'Border', B.ContentText);
+    B.Caption := '';
+    AssertTrue('clearing it hands the slot back', Pos('#', B.ContentText) = 1);
+  finally
+    B.Free;
   end;
 end;
 

@@ -35,9 +35,8 @@ type
     // the left of AContentRect; when ShowText, draw the '#RRGGBB' hex to its right.
     procedure DrawContent(APainter: TTyPainter; const AContentRect: TRect;
       const AStyle: TTyStyleSet); override;
-    { '#RRGGBB' 这串**实际画出来的**文字在 APPI 下的设备像素宽度(用 AStyle 的字体)。
-      注意这里量的不是 Caption:TTyColorButton.DrawContent 从不调用基类的
-      DrawContent,Caption 一个像素都不画,量它只会凭空撑宽按钮。 }
+    { ContentText 在 APPI 下的设备像素宽度(用 AStyle 的字体)。画什么就量什么——
+      量错了 AutoSize 就会把文字裁掉,而裁掉的正是用户唯一填过的那个属性。 }
     function MeasureHexText(APPI: Integer; const AStyle: TTyStyleSet): Integer;
     { 色块按钮的宽度和别的按钮不一样,所以**不**走基类的实现(基类量 Caption,而这里
       Caption 不画)。它要装下 DrawContent 真正画的东西:
@@ -58,6 +57,14 @@ type
       同粗体阈值),所以直接问基类要,不另起一套。 }
     function MeasureContentHeight(APPI: Integer): Integer; override;
   public
+    { 这个按钮**实际会画出来**的那串文字。
+
+      Caption 优先:它是 published 的、能在设计器里填、文档也写着"语义与 TTyButton
+      一致",但以前**一个像素都不画**——填了 Caption 只会看见一个色块,没有任何报错,
+      于是只能怀疑自己的代码。LCL 的 TColorButton 是 TCustomSpeedButton 的后代,
+      Caption 一直是画的。
+      Caption 为空时退回 ShowText 的 '#RRGGBB';两者都没有就是空串(纯色块)。 }
+    function ContentText: string;
     constructor Create(AOwner: TComponent); override;
     // The button's click IS "open the colour dialog": pick a colour via TySelectColor,
     // and on an accepted change repaint + fire OnColorChange. inherited Click is still
@@ -123,12 +130,14 @@ var
   fill: TTyFill;
   cw, gap, radius: Integer;
   borderCol: TTyColor;
+  hasText: Boolean;
 begin
   // Degenerate rect (headless zero-size render) — nothing to draw, stay crash-safe.
   if (AContentRect.Right <= AContentRect.Left) or (AContentRect.Bottom <= AContentRect.Top) then
     Exit;
   gap := APainter.Scale(TyColorButtonSwatchGap);
-  if FShowText then
+  hasText := ContentText <> '';
+  if hasText then
     // Fixed square swatch on the left, its side = content height (a small min floor).
     cw := AContentRect.Bottom - AContentRect.Top
   else
@@ -151,20 +160,30 @@ begin
   APainter.FillBackground(swatch, fill, TyUniformCorners(radius));
   APainter.StrokeBorder(swatch, TyUniformCorners(radius), 1, borderCol);
 
-  // Optional hex caption to the right of the swatch.
-  if FShowText then
+  // Caption (or, with none, the optional hex) to the right of the swatch.
+  if hasText then
   begin
     capRect := Rect(swatch.Right + gap, AContentRect.Top, AContentRect.Right, AContentRect.Bottom);
     if capRect.Right > capRect.Left then
-      APainter.DrawText(capRect, TyColorHex(FSelectedColor), AStyle.FontName,
+      APainter.DrawText(capRect, ContentText, AStyle.FontName,
         ResolveFontSize(AStyle), AStyle.FontWeight, AStyle.TextColor, taLeftJustify, tlCenter, True);
   end;
+end;
+
+function TTyColorButton.ContentText: string;
+begin
+  if Caption <> '' then Result := Caption
+  else if FShowText then Result := TyColorHex(FSelectedColor)
+  else Result := '';
 end;
 
 function TTyColorButton.MeasureHexText(APPI: Integer; const AStyle: TTyStyleSet): Integer;
 var
   Meas: TBitmap;
+  txt: string;
 begin
+  txt := ContentText;
+  if txt = '' then Exit(0);
   // 与 TTyButton.MeasureCaption 同一套量法(同样的字体名回落、同样的 MulDiv 字号缩放、
   // 同样的粗体阈值),只是量的字符串换成了真正会被画出来的十六进制色值。
   Meas := TBitmap.Create;
@@ -176,7 +195,7 @@ begin
       Meas.Canvas.Font.Style := [fsBold]
     else
       Meas.Canvas.Font.Style := [];
-    Result := Meas.Canvas.TextWidth(TyColorHex(FSelectedColor));
+    Result := Meas.Canvas.TextWidth(txt);
     if Result < 0 then Result := 0;
   finally
     Meas.Free;
@@ -192,7 +211,7 @@ begin
   Result := MulDiv(TyColorButtonMinSwatch, APPI, 96);
   if Result < 1 then Result := 1;
   // 不显示文字时,内容就只有色块——不该替一行根本不画的字留位置。
-  if not FShowText then Exit;
+  if ContentText = '' then Exit;
   lineH := inherited MeasureContentHeight(APPI);   // 一行文字的高度(参考字形,与 Caption 无关)
   if lineH > Result then Result := lineH;
 end;
@@ -216,8 +235,8 @@ begin
   minSwatch := MulDiv(TyColorButtonMinSwatch, ppi, 96);
   swatch := ClientHeight - padV;
   if swatch < minSwatch then swatch := minSwatch;
-  if FShowText then
-    // 方块 + 间隙 + '#RRGGBB',正是 DrawContent 摆的三件东西。
+  if ContentText <> '' then
+    // 方块 + 间隙 + 文字(Caption 优先,否则 '#RRGGBB'),正是 DrawContent 摆的三件东西。
     PreferredWidth := swatch + MulDiv(TyColorButtonSwatchGap, ppi, 96) +
       MeasureHexText(ppi, S) + padH
   else

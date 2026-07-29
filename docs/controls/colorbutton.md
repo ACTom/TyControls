@@ -36,7 +36,7 @@ uses tyControls.ColorButton;
 
 ### 继承自 [[TTyButton]] 的成员
 
-`Caption`、`Default`、`Cancel`、`ModalResult`、`AnimationsEnabled`、`Down`、`ShowBadge` / `BadgeValue` / `BadgePosition`、`Enabled`、`Font`、`Align`、`Anchors`、`StyleClass`、`Controller`、`OnClick` 等一律可用，语义与 [[TTyButton]] 一致。注意：本控件的点击**即为"打开取色对话框"**，`OnClick` 仍会在对话框关闭后照常触发。
+`Caption`、`Default`、`Cancel`、`ModalResult`、`AnimationsEnabled`、`Down`、`ShowBadge` / `BadgeValue` / `BadgePosition`、`Enabled`、`Font`、`Align`、`Anchors`、`StyleClass`、`Controller`、`OnClick` 等一律可用，语义与 [[TTyButton]] 一致。`Caption` 非空时画在色块右侧，并**优先于** `ShowText` 的 `#RRGGBB`（两者共用同一个文字位；`ShowText` 只在没有 `Caption` 时才起作用）。注意：本控件的点击**即为"打开取色对话框"**，`OnClick` 仍会在对话框关闭后照常触发。
 
 ---
 
