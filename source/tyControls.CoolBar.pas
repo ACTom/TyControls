@@ -117,6 +117,7 @@ type
     FDragStartY: Integer;
     FDragMode: TTyCoolDrag;
     FShowText: Boolean;
+    FVertical: Boolean;
     FOnChange: TNotifyEvent;
     // --- live drag state (real-machine) ---
     FDragging: Boolean;
@@ -125,6 +126,7 @@ type
     FDragStartW: Integer;             // the band's logical width at grab
     function BandTextWidth(const AText: string; const AStyle: TTyStyleSet): Integer;
     procedure SetShowText(AValue: Boolean);
+    procedure SetVertical(AValue: Boolean);
     procedure Changed;
     function EnsureBand(ACtl: TControl): TTyCoolBand;   // find, or create, this child's band
     procedure SetBands(AValue: TTyCoolBands);
@@ -184,6 +186,9 @@ type
     property DefaultBandMinWidth: Integer read FDefaultBandMinWidth write FDefaultBandMinWidth default 24;
     { Draw each band's own caption between its gripper and its child, reserving room for it. }
     property ShowText: Boolean read FShowText write SetShowText default False;
+    { Bands run DOWN a column instead of across a row, with each gripper above its band. Every
+      axis swaps with it, including which way a drag means "move" and which means "resize". }
+    property Vertical: Boolean read FVertical write SetVertical default False;
     { Fired after the band layout changes -- a band moved to another row, resized, or hidden. }
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
     { The bands, editable in the designer. Every per-control helper below is a facade over
@@ -222,6 +227,14 @@ function TyCoolBarPack(const AChildSizes: array of TSize; const ABreaks: array o
   TCoolBar use. Below the threshold the drag is still undecided, so a twitch does neither.
   Pure so the rule is testable without a mouse. }
 function TyCoolDragMode(ADx, ADy, AThreshold: Integer): TTyCoolDrag;
+
+{ The same packing turned on its side: bands run DOWN a column, a column is ABandThick wide,
+  and each band's gripper is the AGripperW-tall strip immediately ABOVE it. Break starts a new
+  column. A vertical rebar is not a special case of the horizontal one -- every axis swaps --
+  so it is its own function rather than a flag threaded through the other. }
+function TyCoolBarPackVertical(const AChildSizes: array of TSize; const ABreaks: array of Boolean;
+  const ALeadExtra: array of Integer;
+  AAvail, ABandThick, AGripperW, ASpacing: Integer): TTyRectArray;
 
 function TyCoolBandResize(AStartW, ADx, AMinW, AMaxW: Integer): Integer;
 
@@ -294,6 +307,50 @@ begin
     Result := cdResize
   else
     Result := cdNone;
+end;
+
+function TyCoolBarPackVertical(const AChildSizes: array of TSize; const ABreaks: array of Boolean;
+  const ALeadExtra: array of Integer;
+  AAvail, ABandThick, AGripperW, ASpacing: Integer): TTyRectArray;
+var
+  n, i, x, y, h, colStart, lead: Integer;
+  brk, firstInCol: Boolean;
+begin
+  Result := nil;
+  n := Length(AChildSizes);
+  SetLength(Result, n);
+  if n = 0 then Exit;
+  if ABandThick < 0 then ABandThick := 0;
+  if AGripperW < 0 then AGripperW := 0;
+  if ASpacing < 0 then ASpacing := 0;
+
+  x := 0;
+  y := 0;
+  firstInCol := True;
+  for i := 0 to n - 1 do
+  begin
+    h := AChildSizes[i].cy;
+    if h < 0 then h := 0;
+    brk := (i < Length(ABreaks)) and ABreaks[i];
+    lead := AGripperW;
+    if (i < Length(ALeadExtra)) and (ALeadExtra[i] > 0) then Inc(lead, ALeadExtra[i]);
+    if (not firstInCol) and (brk or (y + lead + h > AAvail)) then
+    begin
+      Inc(x, ABandThick + ASpacing);
+      y := 0;
+      firstInCol := True;
+    end;
+    colStart := y + lead;               // the child begins below its own gripper
+    if colStart + h > AAvail then
+      h := AAvail - colStart;
+    if h < 0 then h := 0;
+    Result[i].Left := x;
+    Result[i].Top := colStart;
+    Result[i].Right := x + ABandThick;
+    Result[i].Bottom := colStart + h;
+    y := colStart + h + ASpacing;
+    firstInCol := False;
+  end;
 end;
 
 function TyCoolBandResize(AStartW, ADx, AMinW, AMaxW: Integer): Integer;
@@ -542,9 +599,18 @@ begin
     The old rule returned an empty rect for anything that was not the row's first child, which
     is a ControlBar's one-grip-per-row model: band 2 had no handle to grab and none drawn. }
   Result := ACtl.BoundsRect;
-  Result.Right := Result.Left;
-  Dec(Result.Left, gw);
-  if Result.Left < 0 then Result.Left := 0;
+  if FVertical then
+  begin
+    Result.Bottom := Result.Top;
+    Dec(Result.Top, gw);
+    if Result.Top < 0 then Result.Top := 0;
+  end
+  else
+  begin
+    Result.Right := Result.Left;
+    Dec(Result.Left, gw);
+    if Result.Left < 0 then Result.Left := 0;
+  end;
 end;
 
 procedure TTyCoolBar.SetBandBreak(ACtl: TControl; AValue: Boolean);
@@ -640,6 +706,14 @@ begin
   Changed;
 end;
 
+procedure TTyCoolBar.SetVertical(AValue: Boolean);
+begin
+  if FVertical = AValue then Exit;
+  FVertical := AValue;
+  Relayout;
+  Changed;
+end;
+
 procedure TTyCoolBar.SetShowText(AValue: Boolean);
 begin
   if FShowText = AValue then Exit;
@@ -672,7 +746,12 @@ begin
     brks[i] := (bnd <> nil) and bnd.Break;
     if bnd <> nil then leads[i] := BandTextWidth(bnd.Text, S) else leads[i] := 0;
   end;
-  Result := TyCoolBarPack(ASizes, brks, leads, AAvail, ABandHeight, AGripperW, ASpacing);
+  if FVertical then
+    { AAvail is the run the bands travel along, so vertically it is the bar's HEIGHT, and the
+      band's fixed extent is its width. The caller measures the horizontal case, so swap here. }
+    Result := TyCoolBarPackVertical(ASizes, brks, leads, Height, ABandHeight, AGripperW, ASpacing)
+  else
+    Result := TyCoolBarPack(ASizes, brks, leads, AAvail, ABandHeight, AGripperW, ASpacing);
 end;
 
 procedure TTyCoolBar.PaintGrippers(APainter: TTyPainter; const AStyle: TTyStyleSet;
@@ -718,7 +797,12 @@ begin
     ctl := Controls[i];
     if (ctl = nil) or not ctl.Visible then Continue;
     r := BandRectFor(ctl);
-    if TyCoolGripperHit(r, gw, Point(AX, AY)) then Exit(ctl);
+    { BandRectFor already returns the grip strip itself, on whichever axis it lives, so plain
+      containment is the right test -- TyCoolGripperHit's "leftmost gw px" rule only describes
+      the horizontal case. }
+    if (r.Right > r.Left) and (r.Bottom > r.Top)
+       and (AX >= r.Left) and (AX < r.Right) and (AY >= r.Top) and (AY < r.Bottom) then
+      Exit(ctl);
   end;
 end;
 
@@ -752,7 +836,15 @@ begin
   if not (FDragging and (FDragCtl <> nil)) then Exit;
   ppi := Font.PixelsPerInch;
   if FDragMode = cdNone then
-    FDragMode := TyCoolDragMode(X - FDragStartX, Y - FDragStartY, MulDiv(4, ppi, 96));
+  begin
+    { Vertically the axes swap meaning with the layout: bands travel DOWN a column, so moving a
+      band to another column is a SIDEWAYS drag, and resizing it (its height now) is vertical.
+      Passing the deltas in swapped keeps one rule for both orientations. }
+    if FVertical then
+      FDragMode := TyCoolDragMode(Y - FDragStartY, X - FDragStartX, MulDiv(4, ppi, 96))
+    else
+      FDragMode := TyCoolDragMode(X - FDragStartX, Y - FDragStartY, MulDiv(4, ppi, 96));
+  end;
 
   case FDragMode of
     cdResize:
@@ -760,7 +852,10 @@ begin
         if BandFixedSize(FDragCtl) then Exit;   // fixed: the drag simply does nothing
         // Device-px delta -> logical (band widths are logical), clamped, then applied; the
         // base re-packs from the child width.
-        dxLogical := MulDiv(X - FDragStartX, 96, ppi);
+        if FVertical then
+          dxLogical := MulDiv(Y - FDragStartY, 96, ppi)
+        else
+          dxLogical := MulDiv(X - FDragStartX, 96, ppi);
         minW := BandMinWidth(FDragCtl);
         maxW := BandMaxWidth(FDragCtl);
         newW := TyCoolBandResize(FDragStartW, dxLogical, minW, maxW);
@@ -778,8 +873,16 @@ begin
           control at an arbitrary position in its parent's list. }
         step := MulDiv(BandHeight, ppi, 96) + MulDiv(BandSpacing, ppi, 96);
         if step <= 0 then Exit;
-        curRow := FDragCtl.Top div step;
-        wantRow := Y div step;
+        if FVertical then
+        begin
+          curRow := FDragCtl.Left div step;
+          wantRow := X div step;
+        end
+        else
+        begin
+          curRow := FDragCtl.Top div step;
+          wantRow := Y div step;
+        end;
         if wantRow < 0 then wantRow := 0;
         if wantRow > curRow then SetBandBreak(FDragCtl, True)
         else if wantRow < curRow then SetBandBreak(FDragCtl, False);

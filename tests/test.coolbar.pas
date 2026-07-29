@@ -33,6 +33,10 @@ type
     procedure TestHorizontalDragResizes;
     procedure TestVerticalWinsAMixedDrag;
     procedure TestPackReservesRoomForABandCaption;
+    // vertical
+    procedure TestVerticalPackRunsBandsDownAColumn;
+    procedure TestVerticalPackWrapsIntoTheNextColumn;
+    procedure TestVerticalPackHonoursABreak;
   end;
 
   { A probe exposing the protected geometry + the private band map indirectly. }
@@ -74,6 +78,7 @@ type
     procedure TestEditingTheCollectionRelaysAndNotifies;
     procedure TestFreeingAChildDropsItsBand;
     procedure TestBandDisplayNamePrefersItsCaption;
+    procedure TestVerticalPutsTheGripAboveTheBand;
     procedure TestGripperDragResizesBand;
     procedure TestGripperDragHonoursMinClamp;
   end;
@@ -345,6 +350,19 @@ end;
 
 type TSizeArr = array of TSize;
 
+{ Vertical bands are sized on the OTHER axis, so the heights must go into cy -- putting them in
+  cx silently measured every band as the fixed 24 the horizontal helper fills in. }
+function SizesV(const AH: array of Integer): TSizeArr;
+var i: Integer;
+begin
+  SetLength(Result, Length(AH));
+  for i := 0 to High(AH) do
+  begin
+    Result[i].cx := 24;
+    Result[i].cy := AH[i];
+  end;
+end;
+
 function Sizes(const AW: array of Integer): TSizeArr;
 var i: Integer;
 begin
@@ -567,6 +585,57 @@ begin
   AssertEquals('falls back to the control name', 'BandPanel', CB.Bands[0].DisplayName);
   CB.Bands[0].Text := 'Clipboard';
   AssertEquals('but prefers the caption', 'Clipboard', CB.Bands[0].DisplayName);
+end;
+
+{ ── vertical ───────────────────────────────────────────────────────────────────
+  A vertical rebar is not the horizontal one with a flag: every axis swaps, including which
+  drag direction means "move" and which means "resize". Half a swap is the failure mode worth
+  guarding, so these check the geometry and the grip side independently. }
+
+procedure TCoolBarMathTest.TestVerticalPackRunsBandsDownAColumn;
+var r: TTyRectArray;
+begin
+  // avail = the HEIGHT the column runs down; band thickness = the column's width.
+  r := TyCoolBarPackVertical(SizesV([60, 50]), [], [], 400, 24, 10, 4);
+  AssertEquals('band 0 starts below its own gripper', 10, r[0].Top);
+  AssertEquals('and is one band thick', 24, r[0].Right - r[0].Left);
+  // band 1: 10 + 60 = 70, + spacing 4 = 74, then ITS gripper -> 84
+  AssertEquals('band 1 starts below its own gripper too', 84, r[1].Top);
+  AssertEquals('both in the same column', r[0].Left, r[1].Left);
+end;
+
+procedure TCoolBarMathTest.TestVerticalPackWrapsIntoTheNextColumn;
+var r: TTyRectArray;
+begin
+  r := TyCoolBarPackVertical(SizesV([100, 100]), [], [], 150, 24, 10, 4);
+  AssertEquals('band 0 in column 0', 0, r[0].Left);
+  AssertTrue('band 1 wrapped into the next column', r[1].Left > r[0].Left);
+  AssertEquals('and restarts at the column top, past its gripper', 10, r[1].Top);
+end;
+
+procedure TCoolBarMathTest.TestVerticalPackHonoursABreak;
+var r: TTyRectArray;
+begin
+  r := TyCoolBarPackVertical(SizesV([60, 50]), [False, True], [], 400, 24, 10, 4);
+  AssertTrue('the broken band moved to a new column', r[1].Left > r[0].Left);
+  AssertEquals('and starts at the column top', 10, r[1].Top);
+end;
+
+procedure TCoolBarControlTest.TestVerticalPutsTheGripAboveTheBand;
+var CB: TCoolBarAccess; b: TControl; r: TRect;
+begin
+  { The grip has to follow the layout round. Left of the band in a horizontal bar, ABOVE it in
+    a vertical one -- a grip still drawn to the left would be over the neighbouring column. }
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  b := MakeBand(CB, 0, 10, 24, 60);
+  CB.Vertical := True;
+  r := CB.BandRect(b);
+  AssertFalse('a vertical band is still grippable', IsRectEmpty(r));
+  AssertEquals('the grip ends where the band begins', 10, r.Bottom);
+  AssertEquals('and starts a grip-height above it', 0, r.Top);
+  AssertEquals('spanning the band width', b.Left, r.Left);
 end;
 
 initialization
