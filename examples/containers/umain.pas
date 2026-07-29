@@ -18,7 +18,7 @@ uses
   tyControls.ColorMath, tyControls.TyLabel, tyControls.Bevel, tyControls.Divider,
   tyControls.PaintPanel, tyControls.SizeBox,
   tyControls.RadioGroup, tyControls.CheckGroup, tyControls.ToolGroupPanel,
-  tyControls.ScrollBox, tyControls.ScrollPanel, tyControls.ExPanel, tyControls.Button,
+  tyControls.ScrollBox, tyControls.ScrollContent, tyControls.ScrollPanel, tyControls.ExPanel, tyControls.Button,
   tyControls.CheckBox,
   tyControls.GridPanel, tyControls.GridCell, tyControls.RelativePanel, tyControls.Edit,
   tyControls.ToolBarEx, tyControls.ControlBar, tyControls.CoolBar, tyControls.Panel,
@@ -141,6 +141,7 @@ type
     BevelSpacerB: TTyBevel;
     LblPan: TTyLabel;
     PanDemo: TTyScrollPanel;
+    PanView: TTyScrollContent;
     PanBtn1: TTyButton;
     PanBtn2: TTyButton;
     PanBtn3: TTyButton;

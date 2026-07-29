@@ -4,7 +4,7 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType,
   tyControls.Types, tyControls.Painter, tyControls.Base,
-  tyControls.Panel, tyControls.ScrollBar;
+  tyControls.Panel, tyControls.ScrollBar, tyControls.ScrollContent;
 
 type
   { TTyScrollBox — a scrolling viewport for oversized child content.
@@ -31,6 +31,7 @@ type
     moved or resized) all funnel into UpdateScrollRange. }
   TTyScrollBox = class(TTyPanel)
   private
+    FContent: TTyScrollContent;
     FVScrollBar: TTyScrollBar;   // nil until first needed
     FHScrollBar: TTyScrollBar;   // nil until first needed
     FScrollX: Integer;           // >= 0 : logical px the content is scrolled left
@@ -49,6 +50,7 @@ type
   protected
     procedure Resize; override;
     procedure Loaded; override;
+    procedure InsertControl(AControl: TControl; Index: Integer); override;
     { Called by the LCL at the end of every child-layout pass — i.e. after a child was
       inserted, removed, moved or resized. That is exactly when the content extent can
       have changed, so this is where the box re-measures itself. Before this hook the
@@ -94,6 +96,12 @@ type
     procedure ScrollByDelta(ADx, ADy: Integer);
     { A scrollbar is an internal child; keep it out of the range measurement and out of
       the streamed/designer child list. }
+    { Where the content actually lives. A box that has been given a TTyScrollContent scrolls
+      INSIDE it, so the viewport's window clips the content and it can never reach the frame.
+      A box without one keeps scrolling its own children exactly as before -- an existing form
+      does not change behaviour by being recompiled; it gains the clipping by being given a
+      viewport. }
+    function ContentHost: TWinControl;
     function IsContentChild(AControl: TControl): Boolean;
     { Does this child count toward the content extent on this axis?
 
@@ -219,10 +227,31 @@ begin
   if Result < 1 then Result := 1;
 end;
 
+function TTyScrollBox.ContentHost: TWinControl;
+begin
+  if FContent <> nil then Result := FContent else Result := Self;
+end;
+
+procedure TTyScrollBox.InsertControl(AControl: TControl; Index: Integer);
+begin
+  inherited InsertControl(AControl, Index);
+  { Claim the viewport here rather than in the viewport's SetParent: every path -- created in
+    code, dropped in the designer, streamed from a .lfm -- goes through InsertControl, and this
+    way the viewport unit needs no reference back to this one. }
+  if AControl is TTyScrollContent then
+  begin
+    FContent := TTyScrollContent(AControl);
+    UpdateScrollRange;
+  end;
+end;
+
 function TTyScrollBox.IsContentChild(AControl: TControl): Boolean;
 begin
-  // Everything that is NOT one of our two embedded scrollbars is content.
-  Result := (AControl <> nil) and (AControl <> FVScrollBar) and (AControl <> FHScrollBar);
+  { Not a scrollbar, and not the viewport -- the viewport is CHROME from the box's point of
+    view: its size comes from the box, so counting it as content would feed the layout back
+    into itself. }
+  Result := (AControl <> nil) and (AControl <> FVScrollBar) and (AControl <> FHScrollBar)
+        and (AControl <> FContent);
 end;
 
 function TTyScrollBox.CountsInWidth(AControl: TControl): Boolean;
@@ -299,6 +328,7 @@ end;
   measure differently (content extent or bar visibility), so the caller can settle. }
 function TTyScrollBox.MeasureAndDock: Boolean;
 var
+  host: TWinControl;
   bw: Integer;
   i: Integer;
   child: TControl;
@@ -321,9 +351,10 @@ begin
   //    Left/Top plus the current offset gives its logical position. Each axis only counts
   //    the children whose size on that axis is their own — see CountsInWidth/Height.
   maxR := 0; maxB := 0;
-  for i := 0 to ControlCount - 1 do
+  host := ContentHost;
+  for i := 0 to host.ControlCount - 1 do
   begin
-    child := Controls[i];
+    child := host.Controls[i];
     if not IsContentChild(child) then Continue;
     if CountsInWidth(child) and (child.Left + FScrollX + child.Width > maxR) then
       maxR := child.Left + FScrollX + child.Width;
@@ -402,6 +433,12 @@ begin
   end
   else if FHScrollBar <> nil then
     FHScrollBar.Visible := False;
+
+  { The viewport IS the visible content area: inside the frame, minus whichever bars showed.
+    Sizing it here rather than by Align keeps it in step with the very numbers the scroll range
+    was computed from. }
+  if FContent <> nil then
+    FContent.SetBounds(bw, bw, viewW, viewH);
 
   Result := (FContentW <> oldW) or (FContentH <> oldH)
          or (FVScrollBar.Visible <> oldV) or (FHScrollBar.Visible <> oldH2);
@@ -555,7 +592,13 @@ begin
   // so guard the range recompute and re-dock the bars right after.
   FInScrollBy := True;
   try
-    ScrollBy(-dx, -dy);
+    { Scroll INSIDE the viewport when there is one: moving its children is what the viewport's
+      window then clips. Scrolling the box itself would move the viewport, and the frame with
+      it. }
+    if FContent <> nil then
+      FContent.ScrollBy(-dx, -dy)
+    else
+      ScrollBy(-dx, -dy);
   finally
     FInScrollBy := False;
   end;

@@ -4,7 +4,8 @@ interface
 uses
   Classes, SysUtils, Types, Graphics, Forms, Controls, LCLType, fpcunit, testregistry,
   tyControls.Types, tyControls.Controller,
-  tyControls.Base, tyControls.Panel, tyControls.ScrollBar, tyControls.ScrollBox;
+  tyControls.Base, tyControls.Panel, tyControls.ScrollBar, tyControls.ScrollBox,
+  tyControls.ScrollContent;
 type
   { Pure scroll-math functions — the headless-tested core. }
   TTyScrollBoxMathTest = class(TTestCase)
@@ -27,6 +28,11 @@ type
     procedure TestNoBarsWhenContentFits;
     procedure TestVerticalBarWhenContentTaller;
     procedure TestBarsStayAboveContentChildren;
+    // the explicit viewport
+    procedure TestViewportSitsInsideTheFrame;
+    procedure TestViewportHostsTheMeasuredContent;
+    procedure TestViewportIsNotItselfContent;
+    procedure TestWithoutAViewportNothingChanges;
     procedure TestHorizontalBarWhenContentWider;
     procedure TestBothBarsWhenContentBigger;
     procedure TestRangeIsChildBoundingBox;
@@ -514,6 +520,89 @@ begin
   AssertTrue('found both the bar and a content child', (barIdx >= 0) and (contentIdx >= 0));
   AssertTrue(Format('the vertical bar must sit ABOVE the content in z-order '
     + '(bar at %d, content at %d)', [barIdx, contentIdx]), barIdx > contentIdx);
+end;
+
+{ ── the explicit viewport ──────────────────────────────────────────────────────
+  A child is clipped by its parent's window, and nothing reachable from Pascal moves that
+  boundary -- so on a container whose content MOVES the content necessarily crosses the frame.
+  The fix is a real window to clip against: a TTyScrollContent inset by the frame, hosting the
+  content. It is explicit, the shape TTyPageControl already uses for TTyTabSheet.
+
+  A box WITHOUT one keeps its old behaviour exactly, which is what lets an existing form gain
+  the clipping by being given a viewport rather than by being rewritten. }
+
+function MakeViewport(ABox: TTyScrollBox): TTyScrollContent;
+begin
+  Result := TTyScrollContent.Create(ABox);
+  Result.Parent := ABox;
+end;
+
+procedure TTyScrollBoxTest.TestViewportSitsInsideTheFrame;
+var
+  SB: TScrollBoxAccess;
+  vp: TTyScrollContent;
+begin
+  SB := TScrollBoxAccess.Create(FForm);
+  SB.Parent := FForm;
+  SB.Font.PixelsPerInch := 96;
+  SB.SetBounds(0, 0, 300, 200);
+  vp := MakeViewport(SB);
+  SB.UpdateScrollRange;
+  AssertEquals('viewport starts inside the left frame', SB.Frame, vp.Left);
+  AssertEquals('and inside the top frame', SB.Frame, vp.Top);
+  AssertEquals('and gives the frame back on the right too',
+    300 - 2 * SB.Frame, vp.Width);
+end;
+
+procedure TTyScrollBoxTest.TestViewportHostsTheMeasuredContent;
+var
+  SB: TScrollBoxAccess;
+  vp: TTyScrollContent;
+begin
+  { The content extent must be measured from the VIEWPORT's children once there is one --
+    measuring the box's own would find nothing and the bar would never appear. }
+  SB := TScrollBoxAccess.Create(FForm);
+  SB.Parent := FForm;
+  SB.Font.PixelsPerInch := 96;
+  SB.SetBounds(0, 0, 300, 200);
+  vp := MakeViewport(SB);
+  MakeChild(vp, 0, 0, 100, 600);      // taller than the viewport
+  SB.UpdateScrollRange;
+  AssertTrue('content inside the viewport still raises a bar', SB.VBar.Visible);
+  AssertTrue('and the extent came from it', SB.ContentHeight >= 600);
+end;
+
+procedure TTyScrollBoxTest.TestViewportIsNotItselfContent;
+var
+  SB: TScrollBoxAccess;
+begin
+  { The viewport's size comes FROM the box, so counting it as content would feed the layout
+    back into itself -- a full-size child would demand a bar, which shrinks the viewport, which
+    changes the child... }
+  SB := TScrollBoxAccess.Create(FForm);
+  SB.Parent := FForm;
+  SB.Font.PixelsPerInch := 96;
+  SB.SetBounds(0, 0, 300, 200);
+  MakeViewport(SB);
+  SB.UpdateScrollRange;
+  AssertFalse('an empty viewport raises no vertical bar', SB.VBar.Visible);
+  AssertFalse('nor a horizontal one', SB.HBar.Visible);
+end;
+
+procedure TTyScrollBoxTest.TestWithoutAViewportNothingChanges;
+var
+  SB: TScrollBoxAccess;
+begin
+  { The migration promise: an existing form that never heard of a viewport behaves exactly as
+    it did. }
+  SB := TScrollBoxAccess.Create(FForm);
+  SB.Parent := FForm;
+  SB.Font.PixelsPerInch := 96;
+  SB.SetBounds(0, 0, 300, 200);
+  MakeChild(SB, 0, 0, 100, 600);
+  SB.UpdateScrollRange;
+  AssertTrue('a bar still appears for direct children', SB.VBar.Visible);
+  AssertTrue('measured from them', SB.ContentHeight >= 600);
 end;
 
 initialization

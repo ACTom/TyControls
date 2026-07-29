@@ -771,75 +771,81 @@ object MainForm: TMainForm
       AutoScroll = True
       EdgeMargin = 24
       MaxSpeed = 16
-      object PanBtn1: TTyButton
-        Left = 12
-        Height = 32
-        Top = 10
-        Width = 130
-        Caption = 'Row 1'
-      end
-      object PanBtn2: TTyButton
-        Left = 12
-        Height = 32
-        Top = 50
-        Width = 130
-        Caption = 'Row 2'
-      end
-      object PanBtn3: TTyButton
-        Left = 12
-        Height = 32
-        Top = 90
-        Width = 130
-        Caption = 'Row 3'
-      end
-      object PanBtn4: TTyButton
-        Left = 12
-        Height = 32
-        Top = 130
-        Width = 130
-        Caption = 'Row 4'
-      end
-      object PanBtn5: TTyButton
-        Left = 12
-        Height = 32
-        Top = 170
-        Width = 130
-        Caption = 'Row 5'
-      end
-      object PanBtn6: TTyButton
-        Left = 12
-        Height = 32
-        Top = 210
-        Width = 130
-        Caption = 'Row 6'
-      end
-      object PanBtn7: TTyButton
-        Left = 12
-        Height = 32
-        Top = 250
-        Width = 130
-        Caption = 'Row 7'
-      end
-      object PanBtn8: TTyButton
-        Left = 12
-        Height = 32
-        Top = 290
-        Width = 130
-        Caption = 'Row 8'
-      end
-      object PanBtn9: TTyButton
-        Left = 12
-        Height = 32
-        Top = 330
-        Width = 130
-        Caption = 'Row 9'
-      end
-      object PanBtn10: TTyButton
-        Left = 12
-        Height = 32
-        Top = 370
-        Width = 130
-        Caption = 'Row 10'
+      object PanView: TTyScrollContent
+        Left = 1
+        Height = 108
+        Top = 1
+        Width = 278
+        object PanBtn1: TTyButton
+          Left = 12
+          Height = 32
+          Top = 10
+          Width = 130
+          Caption = 'Row 1'
+        end
+        object PanBtn2: TTyButton
+          Left = 12
+          Height = 32
+          Top = 50
+          Width = 130
+          Caption = 'Row 2'
+        end
+        object PanBtn3: TTyButton
+          Left = 12
+          Height = 32
+          Top = 90
+          Width = 130
+          Caption = 'Row 3'
+        end
+        object PanBtn4: TTyButton
+          Left = 12
+          Height = 32
+          Top = 130
+          Width = 130
+          Caption = 'Row 4'
+        end
+        object PanBtn5: TTyButton
+          Left = 12
+          Height = 32
+          Top = 170
+          Width = 130
+          Caption = 'Row 5'
+        end
+        object PanBtn6: TTyButton
+          Left = 12
+          Height = 32
+          Top = 210
+          Width = 130
+          Caption = 'Row 6'
+        end
+        object PanBtn7: TTyButton
+          Left = 12
+          Height = 32
+          Top = 250
+          Width = 130
+          Caption = 'Row 7'
+        end
+        object PanBtn8: TTyButton
+          Left = 12
+          Height = 32
+          Top = 290
+          Width = 130
+          Caption = 'Row 8'
+        end
+        object PanBtn9: TTyButton
+          Left = 12
+          Height = 32
+          Top = 330
+          Width = 130
+          Caption = 'Row 9'
+        end
+        object PanBtn10: TTyButton
+          Left = 12
+          Height = 32
+          Top = 370
+          Width = 130
+          Caption = 'Row 10'
+        end
       end
     end
     object LblAlignScroll: TTyLabel
