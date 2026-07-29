@@ -27,7 +27,7 @@ uses tyControls.Edit;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `Text` | `string` | `''` | 输入框当前内容；赋值会触发重绘，但**不**触发 `OnChange` 事件（见注意事项）。赋值时光标移动到文本末尾，选区收起。 |
+| `Text` | `string` | `''` | 输入框当前内容；赋值会触发重绘，**并触发** `OnChange`（`SetText` 末尾调用 `DoChange`，与 LCL `TCustomEdit` 一致）。赋值时光标移动到文本末尾，选区收起。 |
 | `ReadOnly` | `Boolean` | `False` | 为 `True` 时拦截用户编辑（打字/退格/删除/词级删除/粘贴），保留光标移动、选区、复制、全选；程序化 `Text :=` 仍可写；`CutToClipboard` 退化为 `CopyToClipboard`。 |
 | `MaxLength` | `Integer` | `0`（无限） | 按**码点**封顶；`0` 表示无限制；满则不再插入；粘贴时截断到余量。 |
 | `PasswordChar` | `string` | `''`（关闭） | 单个 UTF-8 码点（如 `'●'`）；渲染与宽度测量都用掩码字符替代实际内容；掩码激活时**禁用复制/剪切**（防明文外泄）。 |
@@ -96,12 +96,12 @@ TTyEdit 继承自 `TTyCustomControl`（`tyControls.Base`），与其他 TyContro
 | 事件 | 类型 | 触发时机 |
 |------|------|----------|
 | `OnClick` | `TNotifyEvent` | 鼠标点击控件时 |
-| `OnChange` | `TNotifyEvent` | **（v1.12 新增）** 文本内容因键盘编辑、剪贴板操作或撤销/重做发生变化时触发；通过 `Text :=` 直接赋值（`SetText`）**不**触发。 |
+| `OnChange` | `TNotifyEvent` | **（v1.12 新增）** 文本内容因键盘编辑、剪贴板操作或撤销/重做发生变化时触发；通过 `Text :=` 直接赋值（`SetText`）**同样触发**。 |
 | `OnEditingDone` | `TNotifyEvent` | **（API parity 基线 Tier B）** 编辑完成（失焦或回车提交）时触发。 |
 
 > **基线事件集：** 除上表外，TTyEdit 还暴露全部**基线事件**（Tier A 鼠标 / 通用 + Tier B 键盘 / 焦点，因其为可聚焦的 `TTyCustomControl`）。完整清单见 [../events.md](../events.md)。
 
-> **OnChange（v1.12 新增）：** 自 v1.12 起 TTyEdit 提供 published 的 `OnChange` 事件（早前版本没有）。它在文本因按键编辑、剪贴板或撤销/重做变化时触发；纯光标移动以及 `Text :=` 赋值不触发。详见上方「撤销 / 重做」节末的「`OnChange` 事件」小节。
+> **OnChange（v1.12 新增）：** 自 v1.12 起 TTyEdit 提供 published 的 `OnChange` 事件（早前版本没有）。它在文本因按键编辑、剪贴板或撤销/重做变化时触发；纯光标移动不触发；`Text :=` 赋值触发。详见上方「撤销 / 重做」节末的「`OnChange` 事件」小节。
 
 ### 键盘表
 

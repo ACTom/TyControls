@@ -19,13 +19,14 @@
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
+| `Style` | `TTyComboBoxStyle` | `csDropDownList` | 下拉模式。`csDropDownList` 为只读下拉（点击任意处均展开）；`csDropDown` 显示内嵌编辑器，文本可直接输入，此时只有点击右侧箭头才展开。切换会显示/隐藏编辑器并同步 `Text`。 |
 | `Items` | `TStringList` | `[]`（空列表） | 可选项列表。赋值时调用 `Assign` 复制内容并触发 `Invalidate`。 |
 | `ItemIndex` | `Integer` | `-1` | 当前选中项的索引。写入时等价于调用 `SelectItem(AValue)`。读取返回当前索引；-1 表示无选中项。 |
 | `Text` | `string` | `''` | 当前显示的文本。独立于 `Items`，可手动赋值（不触发 `OnChange`）；`SelectItem` 同步更新此字段。 |
 | `DropDownCount` | `Integer` | `8` | **（API parity 新增）** 下拉列表滚动前可见的最大行数；写入时夹紧到 `>= 1`。同时供无头度量（`ComputePopupHeight`）使用。 |
 | `Sorted` | `Boolean` | `False` | **（API parity 新增）** 为 `True` 时 `Items` 保持升序（不区分大小写）；切换时按**文本**重新定位先前选中项，保持同一逻辑选中。 |
-| `MaxLength` | `Integer` | `0` | **（API parity 新增，存储但不生效）** 直接字段写入，**无任何效果**。本控件为只读下拉（`csDropDownList`），无可编辑文本可截断；该属性仅为**原生 API 对齐 / 流式往返**而 published，留待将来可编辑模式。 |
-| `CharCase` | `TEditCharCase` | `ecNormal` | **（API parity 新增，存储但不生效）** `SetCharCase` 仅赋值字段，**不**改写显示文本（只读下拉无可编辑文本）；同样仅为 API 对齐保留。 |
+| `MaxLength` | `Integer` | `0` | 转发给内嵌编辑器。`Style = csDropDown`（可编辑）时生效，限制可输入的字符数；`csDropDownList`（只读下拉）下无可编辑文本，自然无影响。 |
+| `CharCase` | `TEditCharCase` | `ecNormal` | 转发给内嵌编辑器。`Style = csDropDown` 时对输入文本做大小写变换，并同步回 `Text`。 |
 | `OnChange` | `TNotifyEvent` | `nil` | 选中项变化时触发（仅当 `ItemIndex` 或 `Text` 实际改变时）。 |
 | `OnSelect` | `TNotifyEvent` | `nil` | **（API parity 新增）** 仅 **用户驱动** 的选择（下拉选取 / 键盘导航）后触发；程序化设置 `ItemIndex` **不**触发。 |
 | `OnDropDown` | `TNotifyEvent` | `nil` | **（API parity 新增）** 下拉列表打开时触发。 |
@@ -132,7 +133,7 @@ DroppedDown = False → DropDown
 
 > 除上表外，TTyComboBox 还暴露**基线事件集**（Tier A + Tier B，因其为可聚焦的 `TTyCustomControl`）。完整清单见 [../events.md](../events.md)。
 >
-> **`MaxLength` / `CharCase` 为何不生效：** 二者在原生组合框中作用于**可编辑文本框**。本控件是只读下拉（`csDropDownList`），没有可编辑文本，因此它们被 published 仅为**原生 API 对齐**与 DFM/LFM 流式往返，对显示的选中文本无任何影响，留作将来可编辑模式的预留接口。
+> **`MaxLength` / `CharCase` 何时生效：** 二者作用于**可编辑文本框**，因此只在 `Style = csDropDown` 时有意义——此时它们被转发给内嵌编辑器并正常工作。默认的 `csDropDownList` 是只读下拉，没有可编辑文本，赋值会被保存并在切到 `csDropDown` 后生效。
 
 ## 5. 状态与主题
 

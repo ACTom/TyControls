@@ -42,7 +42,7 @@ const
 
 type
   { Per-item state flags. lisChecked/lisCut are surfaced through GetItemState so a
-    theme/renderer can react; SP1 does not draw checkboxes (that is SP2). }
+    theme/renderer can react; checkboxes ARE drawn (RenderCheckBox); this note used to say they were not. }
   TTyListItemState  = (lisChecked, lisCut, lisDisabled);
   TTyListItemStates = set of TTyListItemState;
 

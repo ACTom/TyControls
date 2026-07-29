@@ -255,7 +255,7 @@ properties / events / states / theme keys are in **[docs/controls/](docs/control
 | `TTyToolBar` | Tool bar |
 | `TTyToolSeparator` | Tool bar separator |
 | `TTyToolBarEx` | Tool bar that folds what does not fit into an overflow menu |
-| `TTyControlBar` | Container of draggable, re-orderable bands |
+| `TTyControlBar` | Container that wraps child controls into bands (packing only -- no drag yet) |
 | `TTyCoolBar` | Windows-style draggable band bar |
 | `TTyAlert` | Inline banner: info / success / warning / error |
 | `TTyPagination` | Pager |

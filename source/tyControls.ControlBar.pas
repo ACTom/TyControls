@@ -7,8 +7,10 @@ unit tyControls.ControlBar;
   horizontal BANDS (rows). Each child sits on a band; a band may hold several children
   side by side; when the current row runs out of width the next child wraps down to a new
   band. Each band draws a left GRIPPER (a couple of vertical dotted rails, theme-derived)
-  and every child on the band is indented past that gripper, so a child can be grabbed by
-  its band's grip. This mirrors the classic Delphi/VCL TControlBar / an Office rebar.
+  and every child on the band is indented past that gripper. The gripper is DECORATIVE:
+  there are no mouse handlers in this unit, so nothing can be grabbed by it yet. This
+  mirrors the layout of the classic Delphi/VCL TControlBar / an Office rebar, not its drag.
+  (TTyCoolBar is the one that does implement band dragging.)
 
   It subclasses TTyPanel (GetStyleTypeKey='TyPanel') — reusing the panel's themed frame —
   and adds the band packing. The PACKING is a pure unit-level function (TyControlBarPack)
@@ -41,8 +43,9 @@ type
     FInLayout: Boolean;
     { Per-child band assignment, keyed by the child control. A parallel pair of arrays
       (FAssignCtl[i] -> FAssignBand[i]); dropped in Notification(opRemove). This is what a
-      live drag-to-reband would update; the packer honours it as the child's preferred band
-      when set (>= 0). }
+      live drag-to-reband would update. NOTE it is currently write-only from the layout's
+      point of view: AlignControls rebuilds it FROM the packing result, and TyControlBarPack
+      takes no preferred-band parameter, so setting it does not steer the packer. }
     FAssignCtl: array of TControl;
     FAssignBand: array of Integer;
     function GetBandHeight: Integer;

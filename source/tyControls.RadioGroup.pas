@@ -17,7 +17,9 @@ type
     child; OnSelectionChanged fires when the selection changes via a click.
 
     Layout is COLUMN-MAJOR (fill down column 0, then column 1, …) across Columns columns,
-    matching the classic VCL/LCL TRadioGroup. The geometry is a pure unit-level function
+    matching the classic VCL TRadioGroup. NOTE: LCL's own TRadioGroup defaults the other way --
+    ColumnLayout = clHorizontalThenVertical (extctrls.pp) -- so a form ported from Lazarus will
+    see its items in a different order here. The geometry is a pure unit-level function
     (TyRadioGroupCellRect) so it is headless-testable in isolation. }
   TTyRadioGroup = class(TTyGroupBox)
   private

@@ -217,7 +217,7 @@ Lazarus 里打开 `tycontrols_dt.lpk`(设计期包)→ **Use → Install**,IDE �
 | `TTyToolBar` | 工具条 |
 | `TTyToolSeparator` | 工具条分隔符 |
 | `TTyToolBarEx` | 装不下的按钮自动折进溢出菜单的工具条 |
-| `TTyControlBar` | 可拖动重排的多带容器 |
+| `TTyControlBar` | 按宽度自动折行分带的多带容器（仅排布，暂无拖动） |
 | `TTyCoolBar` | Windows 风格的可拖动带条 |
 | `TTyAlert` | 内联警告条:信息 / 成功 / 警告 / 错误 |
 | `TTyPagination` | 分页器 |
