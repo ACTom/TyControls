@@ -63,6 +63,7 @@ type
     procedure CallWheel(WheelDelta: Integer);
     procedure CallScrollByDelta(ADx, ADy: Integer);
     { The rect the LCL alignment engine hands to child controls. }
+    function Frame: Integer;   // the themed border the content area must stay inside
     function ChildArea: TRect;
   end;
 
@@ -105,6 +106,11 @@ end;
     TWinControl.AlignControl:  ARect := GetLogicalClientRect;
     TWinControl.AlignControls: AdjustClientRect(ARect);
   Measuring ClientRect instead would silently skip the grow-to-content half. }
+function TScrollBoxAccess.Frame: Integer;
+begin
+  Result := FrameInset;
+end;
+
 function TScrollBoxAccess.ChildArea: TRect;
 begin
   Result := GetLogicalClientRect;
@@ -394,8 +400,11 @@ begin
   AssertTrue('no horizontal bar', not SB.HBar.Visible);
   thick := SB.VBar.Width;
   area := SB.ChildArea;
-  AssertEquals('child area gives up the vertical bar gutter', 300 - thick,
-    area.Right - area.Left);
+  { The content area owes the bar its gutter AND the control its own painted border, on both
+    sides -- the border is chrome, not content, which is the whole reason scrolled rows used to
+    be drawn over it. }
+  AssertEquals('child area gives up the vertical bar gutter and the frame',
+    300 - thick - 2 * SB.Frame, area.Right - area.Left);
 end;
 
 procedure TTyScrollBoxTest.TestChildAreaGrowsToContentOnScrollingAxisOnly;
@@ -418,7 +427,11 @@ begin
   AssertEquals('precondition: ClientHeight untouched (no horizontal bar)', 200, SB.ClientHeight);
   area := SB.ChildArea;
   AssertEquals('scrolling axis grows to the content', 600, area.Bottom - area.Top);
-  AssertEquals('the still axis stays at the viewport', 300 - SB.VBar.Width,
+  { The scrolling axis grows to the CONTENT exactly -- the frame is added before the inset takes
+    it back, so children get the full 600 to stack in. The still axis is a viewport and owes both
+    the gutter and the frame. }
+  AssertEquals('the still axis stays at the viewport, less the frame',
+    300 - SB.VBar.Width - 2 * SB.Frame,
     area.Right - area.Left);
 end;
 
@@ -436,12 +449,13 @@ begin
   MakeChild(SB, 0, 0, 100, 600);
   SB.UpdateScrollRange;
   area := SB.ChildArea;
-  AssertEquals('unscrolled origin is 0', 0, area.Top);
+  { Unscrolled, the origin is the inside of the frame -- not 0, which was on the border line. }
+  AssertEquals('unscrolled origin sits inside the frame', SB.Frame, area.Top);
 
   SB.VBar.Position := 120;
   AssertEquals('offset followed the bar', 120, SB.ScrollY);
   area := SB.ChildArea;
-  AssertEquals('layout origin moved with the scroll', -120, area.Top);
+  AssertEquals('layout origin moved with the scroll', SB.Frame - 120, area.Top);
 end;
 
 procedure TTyScrollBoxTest.TestChildAreaIsFullBoxWithoutBars;
@@ -458,10 +472,13 @@ begin
   MakeChild(SB, 10, 10, 100, 80);
   SB.UpdateScrollRange;
   area := SB.ChildArea;
-  AssertEquals('full width when nothing overflows', 300, area.Right - area.Left);
-  AssertEquals('full height when nothing overflows', 200, area.Bottom - area.Top);
-  AssertEquals('origin unshifted', 0, area.Left);
-  AssertEquals('origin unshifted', 0, area.Top);
+  { "Exactly like the TTyPanel it descends from" still holds -- but a panel paints a themed
+    border too, and content has never belonged on top of it. With no bars the only thing owed
+    is that frame. }
+  AssertEquals('full width less the frame', 300 - 2 * SB.Frame, area.Right - area.Left);
+  AssertEquals('full height less the frame', 200 - 2 * SB.Frame, area.Bottom - area.Top);
+  AssertEquals('origin starts inside the frame', SB.Frame, area.Left);
+  AssertEquals('origin starts inside the frame', SB.Frame, area.Top);
 end;
 
 procedure TTyScrollBoxTest.TestBarsStayAboveContentChildren;

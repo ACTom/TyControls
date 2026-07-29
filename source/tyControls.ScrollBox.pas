@@ -65,6 +65,8 @@ type
       the scrollbar thickness, every ScrollBy — which writes bounds to each child — banks that
       difference again, and an akRight-anchored child loses a scrollbar's width on every
       single scroll until it vanishes. }
+    { The themed border width in device px -- the frame the viewport must stay inside. }
+    function FrameInset: Integer;
     function GetClientRect: TRect; override;
     { The themed frame still covers the WHOLE control: ClientRect now stops at the gutters,
       but the box's background/border must run under the bars and fill the corner square
@@ -297,6 +299,7 @@ end;
   measure differently (content extent or bar visibility), so the caller can settle. }
 function TTyScrollBox.MeasureAndDock: Boolean;
 var
+  bw: Integer;
   i: Integer;
   child: TControl;
   minL, minT, maxR, maxB: Integer;
@@ -332,14 +335,22 @@ begin
 
   // 2) Decide which bars are needed. Each bar, when shown, steals viewport from the
   //    OTHER axis, which can in turn force the other bar (classic mutual dependency).
-  viewW := Width;
-  viewH := Height;
+  { The viewport is what is left INSIDE the frame, not the whole control. Measuring the scroll
+    range against Width/Height put the maximum offset one border-width too far, so scrolling to
+    the end laid the last row exactly on the bottom border line. }
+  bw := FrameInset;
+  viewW := Width - 2 * bw;
+  viewH := Height - 2 * bw;
+  if viewW < 0 then viewW := 0;
+  if viewH < 0 then viewH := 0;
   wantV := TyScrollNeeded(FContentH, viewH);
   wantH := TyScrollNeeded(FContentW, viewW - Ord(wantV) * thick);
   wantV := TyScrollNeeded(FContentH, viewH - Ord(wantH) * thick);
 
-  viewW := Width - Ord(wantV) * thick;
-  viewH := Height - Ord(wantH) * thick;
+  viewW := Width - 2 * bw - Ord(wantV) * thick;
+  viewH := Height - 2 * bw - Ord(wantH) * thick;
+  if viewW < 0 then viewW := 0;
+  if viewH < 0 then viewH := 0;
 
   // 3) Clamp the offset to the (possibly reduced) viewport, moving content if needed.
   ScrollContentTo(TyClampScroll(FScrollX, FContentW, viewW),
@@ -355,7 +366,7 @@ begin
       gaps between rows. Raising them here rather than at construction is deliberate: children
       stream in and get added after the fact, and this runs whenever the content changes. }
     FVScrollBar.BringToFront;
-    FVScrollBar.SetBounds(Width - thick, 0, thick, viewH);
+    FVScrollBar.SetBounds(Width - thick - bw, bw, thick, viewH);
     vMax := TyScrollMax(FContentH, viewH);
     FSyncing := True;
     try
@@ -376,7 +387,7 @@ begin
   begin
     FHScrollBar.Controller := Self.Controller;
     FHScrollBar.BringToFront;
-    FHScrollBar.SetBounds(0, Height - thick, viewW, thick);
+    FHScrollBar.SetBounds(bw, Height - thick - bw, viewW, thick);
     hMax := TyScrollMax(FContentW, viewW);
     FSyncing := True;
     try
@@ -400,6 +411,25 @@ begin
     InvalidateClientRectCache(True);
 end;
 
+function TTyScrollBox.FrameInset: Integer;
+var
+  S: TTyStyleSet;
+begin
+  { The themed border, in device px. DrawFrame strokes it INSIDE the control's rect (Paint uses
+    Rect(0,0,Width,Height)), so without reserving it the viewport reaches the border line and
+    scrolled content is drawn straight over it -- the reported "content eats the container's
+    bottom border". Only the border: the theme's 8px container padding is TTyPanel's client-rect
+    semantics, and insetting by that too would silently re-lay-out every existing scroll box.
+    Same call and same reasoning as TTyExPanel.AdjustClientRect, the one container in the
+    library that already did this. }
+  S := CurrentStyle;
+  if TyBorderVisible(S) then
+    Result := MulDiv(S.BorderWidth, Font.PixelsPerInch, 96)
+  else
+    Result := 0;
+  if Result < 0 then Result := 0;
+end;
+
 function TTyScrollBox.GetClientRect: TRect;
 begin
   Result := inherited GetClientRect;
@@ -418,7 +448,7 @@ end;
 
 function TTyScrollBox.GetLogicalClientRect: TRect;
 var
-  viewW, viewH: Integer;
+  viewW, viewH, bw: Integer;
 begin
   Result := inherited GetLogicalClientRect;   // = ClientRect, already minus the gutters
   viewW := Result.Right - Result.Left;
@@ -429,15 +459,32 @@ begin
   // unconditionally latches it — a column of alTop rows would keep the full box width, sit
   // under the vertical bar forever, and never fall back to the viewport. (LCL's own
   // TScrollingWinControl.GetLogicalClientRect guards on ScrollBar.Visible for the same reason.)
+  { Grow by the content PLUS the frame AdjustClientRect is about to take back off both edges,
+    so what the children actually get laid out in is exactly the content. Growing to the bare
+    content would leave them a frame short of it and clip the last row by a border width. }
+  bw := 2 * FrameInset;
   if (FHScrollBar <> nil) and FHScrollBar.Visible and (FContentW > viewW) then
-    Result.Right := Result.Left + FContentW;
+    Result.Right := Result.Left + FContentW + bw;
   if (FVScrollBar <> nil) and FVScrollBar.Visible and (FContentH > viewH) then
-    Result.Bottom := Result.Top + FContentH;
+    Result.Bottom := Result.Top + FContentH + bw;
 end;
 
 procedure TTyScrollBox.AdjustClientRect(var ARect: TRect);
+var
+  bw: Integer;
 begin
   inherited AdjustClientRect(ARect);
+  // Keep the layout area inside the frame the control paints for itself.
+  bw := FrameInset;
+  if bw > 0 then
+  begin
+    Inc(ARect.Left, bw);
+    Inc(ARect.Top, bw);
+    Dec(ARect.Right, bw);
+    Dec(ARect.Bottom, bw);
+    if ARect.Right < ARect.Left then ARect.Right := ARect.Left;
+    if ARect.Bottom < ARect.Top then ARect.Bottom := ARect.Top;
+  end;
   // Size is GetLogicalClientRect's job; this only moves the origin to the scrolled origin.
   Types.OffsetRect(ARect, -FScrollX, -FScrollY);
 end;
