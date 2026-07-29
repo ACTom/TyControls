@@ -2030,7 +2030,6 @@ procedure TTyForm.RenderBackgroundTo(ACanvas: TCanvas; const ARect: TRect);
 var
   bg: TTyStyleSet;
   P: TTyPainter;
-  R: TRect;
 begin
   // Paint the themed `form` background (image / solid / gradient) OPAQUELY across ARect. Called BOTH
   // by the form's own Paint and by TTyFormSurface.Paint (onto the surface's edge-reaching canvas, so
@@ -2044,18 +2043,12 @@ begin
       P := TTyPainter.Create;
       try
         P.BeginPaint(ACanvas, ARect, Font.PixelsPerInch);
-        { LOCAL coordinates: BeginPaint made a bitmap the size of ARect and EndPaint blits it
-          back at ARect's origin, so everything in between starts at 0,0. Passing ARect itself
-          worked only because both callers happen to pass a ClientRect, which the LCL anchors
-          at 0,0 -- with any other origin the fill would land offset and leave the rest of the
-          window at alpha 0, which on GTK3 is a see-through hole rather than a harmless no-op. }
-        R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
-        P.FillBackground(R, bg.Background, 0);
+        P.FillBackground(ARect, bg.Background, 0);
         // Themed window frame (non-image themes; e.g. the XP Luna blue border). The title bar
         // covers the top run; the side + bottom runs show in the client margins.
         if (bg.Background.Kind <> tfkImage)
            and (tpBorderColor in bg.Present) and (bg.BorderWidth > 0) then
-          P.StrokeBorder(R, bg.BorderRadius, bg.BorderWidth, bg.BorderColor);
+          P.StrokeBorder(ARect, bg.BorderRadius, bg.BorderWidth, bg.BorderColor);
         P.EndPaint;
       finally
         P.Free;

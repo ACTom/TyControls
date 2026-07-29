@@ -128,10 +128,6 @@ type
     function ActiveController: TTyStyleController;
     function CurrentStates: TTyStateSet; virtual;
     function CurrentStyle: TTyStyleSet;
-    {$IFDEF LCLGTK3}
-    { Re-arm the widgetset's own background clear -- see the implementation. GTK3 only. }
-    procedure ApplyGtk3EraseColor(const AStyle: TTyStyleSet);
-    {$ENDIF}
     function ResolveFontSize(const AStyle: TTyStyleSet): Integer;
     procedure DrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);
     { Paint ARect with the form's sharp photo slice ONLY when an image-backed glass
@@ -602,9 +598,6 @@ begin
     f.Kind := tfkSolid;
     f.Color := c;
     APainter.FillBackground(ARect, f, 0);
-    { The controls that paint their own frame (the instruments) reach this instead of
-      DrawFrame, so this is where THEY publish the opaque backdrop EndPaint needs on GTK3. }
-    APainter.OpacityBase := c;
   end;
 end;
 
@@ -613,13 +606,12 @@ procedure TyApplyStyleOpacity(AControl: TControl; APainter: TTyPainter;
 var pc: TTyColor;
 begin
   if tpOpacity in AStyle.Present then
+  begin
     APainter.Opacity := AStyle.Opacity;
-  { Resolve the opaque backdrop whether or not this control is being dimmed. Dimming needs it
-    so a disabled control fades toward the surface rather than toward transparency (and never
-    exposes the Win10 DWM glass); GTK3 needs it on EVERY paint, because there the alpha our
-    blit leaves behind is what the compositor shows -- see TTyPainter.EndPaint. Setting it
-    when Opacity is 1 changes nothing off GTK3: EndPaint still only uses it while dimming. }
-  if TyResolveParentBg(AControl, pc) then APainter.OpacityBase := pc;
+    // Dim TOWARD the opaque parent/surface bg, not toward transparency (see EndPaint):
+    // a disabled control must not expose the Win10 DWM glass. 0 base = plain alpha-reduce.
+    if TyResolveParentBg(AControl, pc) then APainter.OpacityBase := pc;
+  end;
 end;
 
 { v3/B2. Draw an outset/inset two-tone 3D bevel for the border, deriving the light/dark edge
@@ -928,44 +920,7 @@ begin
     end;
     TyMergeStyleSet(Result, FOvrCache);   // override wins per Present flag (§3.3)
   end;
-  {$IFDEF LCLGTK3}
-  ApplyGtk3EraseColor(Result);
-  {$ENDIF}
 end;
-
-{$IFDEF LCLGTK3}
-procedure TTyCustomControl.ApplyGtk3EraseColor(const AStyle: TTyStyleSet);
-var
-  c: TTyColor;
-begin
-  { LCL-GTK3 clears NOTHING before a repaint. Its InvalidateRect drops bErase; the
-    LM_ERASEBKGND it does send is gated on wcfEraseBackground, which it never sets and cannot
-    (the field is private to TWinControl); TWinControl's own erase branch is unreachable
-    because GTK3 always supplies a DC. The one clear left standing is
-    TGtk3CustomControl.DoBeforeLCLPaint -- and it skips its fillRect whenever the control's
-    Color is clDefault, which {$DEFINE UseCLDefault} makes the default for every control that
-    never assigns one. That is us.
-
-    With nothing cleared, TTyPainter's alpha-OVER blit composites each frame onto the last:
-    the smearing, the cross-tab residue, and the flip between two stale states while dragging
-    (GDK keeps more than one frame buffer, each holding a different generation).
-
-    So give the control a real Colour and the backend's own clear comes back. The value is the
-    opaque background we are about to paint anyway -- our own solid fill when we have one,
-    else what is behind us -- so the erase can only ever agree with the paint.
-
-    GTK3-only on purpose: elsewhere the host already erases, and assigning Color would change
-    a brush other widgetsets actually use. }
-  c := 0;
-  if (tpBackground in AStyle.Present) and (AStyle.Background.Kind = tfkSolid)
-     and (TyAlphaOf(AStyle.Background.Color) = 255) then
-    c := AStyle.Background.Color
-  else if not TyResolveParentBg(Self, c) then
-    Exit;
-  if Color <> TyColorToLCL(c) then
-    Color := TyColorToLCL(c);   // SetColor short-circuits when equal; this only fires on change
-end;
-{$ENDIF}
 
 function TyResolveFontSize(const AStyle: TTyStyleSet; AParentFont: Boolean;
   AControlFontSize: Integer; AController: TTyStyleController): Integer;
