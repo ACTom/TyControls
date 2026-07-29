@@ -58,6 +58,7 @@ type
     ChkMinimap: TTyCheckBox;
     ChkWhitespace: TTyCheckBox;
     ScrollDemo: TTyScrollBox;
+    SbView: TTyScrollContent;
     { The same viewport, but with ALIGNED children — the case where a scroll box has to
       behave like a real container: the rows must stop at the scrollbar instead of running
       under it, and dragging the bar must actually move them. }
