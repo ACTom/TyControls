@@ -32,6 +32,7 @@ type
     procedure TestVerticalDragMovesTheBand;
     procedure TestHorizontalDragResizes;
     procedure TestVerticalWinsAMixedDrag;
+    procedure TestPackReservesRoomForABandCaption;
   end;
 
   { A probe exposing the protected geometry + the private band map indirectly. }
@@ -49,6 +50,8 @@ type
   TCoolBarControlTest = class(TTestCase)
   private
     FForm: TForm;
+    FChangeCount: Integer;
+    procedure CountChange(Sender: TObject);
     function MakeBand(AParent: TWinControl; AL, AT, AW, AH: Integer): TControl;
   protected
     procedure SetUp; override;
@@ -63,6 +66,9 @@ type
     procedure TestMaxWidthUnboundedByDefault;
     procedure TestBandRectIsRowLeftGripper;
     procedure TestEveryBandIsGrippable;
+    procedure TestHidingABandTakesItOutOfTheLayout;
+    procedure TestFixedBandRefusesAResize;
+    procedure TestLayoutChangeFiresOnChange;
     procedure TestGripperDragResizesBand;
     procedure TestGripperDragHonoursMinClamp;
   end;
@@ -291,6 +297,11 @@ begin
   AssertEquals('and ends where that band begins', 200, r1.Right);
 end;
 
+procedure TCoolBarControlTest.CountChange(Sender: TObject);
+begin
+  Inc(FChangeCount);
+end;
+
 procedure TCoolBarControlTest.TestGripperDragResizesBand;
 var CB: TCoolBarAccess; b: TControl;
 begin
@@ -344,7 +355,7 @@ procedure TCoolBarMathTest.TestPackGivesEveryBandItsOwnGripper;
 var r: TTyRectArray;
 begin
   // Two bands that fit on one row: each starts a gripper-width past where the previous ended.
-  r := TyCoolBarPack(Sizes([100, 80]), [], 400, 24, 10, 4);
+  r := TyCoolBarPack(Sizes([100, 80]), [], [], 400, 24, 10, 4);
   AssertEquals('band 0 starts after its own gripper', 10, r[0].Left);
   AssertEquals('band 0 ends where its width says', 110, r[0].Right);
   // band 1: 110 + spacing 4 = 114, then ITS gripper -> 124
@@ -355,7 +366,7 @@ end;
 procedure TCoolBarMathTest.TestPackWrapsWhenABandDoesNotFit;
 var r: TTyRectArray;
 begin
-  r := TyCoolBarPack(Sizes([100, 100]), [], 150, 24, 10, 4);
+  r := TyCoolBarPack(Sizes([100, 100]), [], [], 150, 24, 10, 4);
   AssertEquals('band 0 on row 0', 0, r[0].Top);
   AssertTrue('band 1 wrapped to the next row', r[1].Top > r[0].Top);
   AssertEquals('and restarts at the row left, past its gripper', 10, r[1].Left);
@@ -366,7 +377,7 @@ var r: TTyRectArray;
 begin
   { The point of dragging a band onto its own row: it must break even though it FITS where
     it was. Without this the packer would simply put it back. }
-  r := TyCoolBarPack(Sizes([100, 80]), [False, True], 400, 24, 10, 4);
+  r := TyCoolBarPack(Sizes([100, 80]), [False, True], [], 400, 24, 10, 4);
   AssertTrue('the broken band moved to a new row', r[1].Top > r[0].Top);
   AssertEquals('and starts at the row left', 10, r[1].Left);
 end;
@@ -375,7 +386,7 @@ procedure TCoolBarMathTest.TestPackFirstBandCannotBreak;
 var r: TTyRectArray;
 begin
   // There is no row above the first band to leave, so a Break on it must be inert.
-  r := TyCoolBarPack(Sizes([100]), [True], 400, 24, 10, 4);
+  r := TyCoolBarPack(Sizes([100]), [True], [], 400, 24, 10, 4);
   AssertEquals('first band stays on row 0', 0, r[0].Top);
 end;
 
@@ -383,7 +394,7 @@ procedure TCoolBarMathTest.TestPackClampsABandWiderThanTheRow;
 var r: TTyRectArray;
 begin
   // A band wider than the bar must fit its own row exactly rather than overflow it.
-  r := TyCoolBarPack(Sizes([500]), [], 200, 24, 10, 4);
+  r := TyCoolBarPack(Sizes([500]), [], [], 200, 24, 10, 4);
   AssertEquals('clamped to the row', 200, r[0].Right);
   AssertTrue('never negative', r[0].Right >= r[0].Left);
 end;
@@ -419,6 +430,69 @@ begin
     axis the user is actually travelling along. }
   AssertTrue('mostly down is a move', TyCoolDragMode(6, 20, 4) = cdMove);
   AssertTrue('mostly sideways is a resize', TyCoolDragMode(20, 6, 4) = cdResize);
+end;
+
+procedure TCoolBarMathTest.TestPackReservesRoomForABandCaption;
+var r: TTyRectArray;
+begin
+  { With ShowText on, a band's caption lives between its gripper and its child, so the packer
+    has to reserve it -- otherwise the caption is drawn over the control it labels. }
+  r := TyCoolBarPack(Sizes([100, 80]), [], [0, 40], 400, 24, 10, 4);
+  AssertEquals('band 0 has no caption, so grip only', 10, r[0].Left);
+  // band 1: 110 + spacing 4 = 114, then grip 10 + caption 40
+  AssertEquals('band 1 starts past its grip AND its caption', 164, r[1].Left);
+end;
+
+procedure TCoolBarControlTest.TestHidingABandTakesItOutOfTheLayout;
+var CB: TCoolBarAccess; b0, b1: TControl;
+begin
+  { Band visibility is the child's own Visible -- one source of truth, so the packer, the
+    hit-test and the painter cannot disagree about whether a band is there. }
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  b0 := MakeBand(CB, 10, 0, 80, 30);
+  b1 := MakeBand(CB, 200, 0, 80, 30);
+  AssertTrue('both start visible', CB.BandVisible(b0) and CB.BandVisible(b1));
+  CB.SetBandVisible(b1, False);
+  AssertFalse('hidden band reports hidden', CB.BandVisible(b1));
+  AssertFalse('and the child really is hidden', b1.Visible);
+  AssertTrue('a hidden band has no gripper to grab', IsRectEmpty(CB.BandRect(b1)) or (not b1.Visible));
+end;
+
+procedure TCoolBarControlTest.TestFixedBandRefusesAResize;
+var CB: TCoolBarAccess; b: TControl; w0: Integer;
+begin
+  { FixedSize stops a RESIZE, not a move: nailing a width down is not nailing the band down. }
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  b := MakeBand(CB, 10, 0, 80, 30);
+  CB.SetBandWidth(b, 80);
+  CB.SetBandFixedSize(b, True);
+  w0 := CB.GetBandWidth(b);
+  CB.CallMouseDown(5, 15);              // on the band's own gripper
+  CB.CallMouseMove(65, 15);             // clearly horizontal -> a resize attempt
+  CB.CallMouseUp(65, 15);
+  AssertEquals('a fixed band keeps its width', w0, CB.GetBandWidth(b));
+  AssertTrue('but it is still movable', CB.BandFixedSize(b));
+end;
+
+procedure TCoolBarControlTest.TestLayoutChangeFiresOnChange;
+var CB: TCoolBarAccess; b: TControl;
+begin
+  // An app that persists its band layout has to be told when the layout moved.
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  b := MakeBand(CB, 10, 0, 80, 30);
+  FChangeCount := 0;
+  CB.OnChange := @CountChange;
+  CB.SetBandBreak(b, True);
+  AssertTrue('moving a band to another row notifies', FChangeCount > 0);
+  FChangeCount := 0;
+  CB.SetBandVisible(b, False);
+  AssertTrue('hiding a band notifies', FChangeCount > 0);
 end;
 
 initialization

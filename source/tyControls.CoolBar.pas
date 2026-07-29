@@ -56,6 +56,8 @@ type
     MinWidth: Integer;  // clamp floor for a gripper resize (logical px)
     MaxWidth: Integer;  // clamp ceiling for a gripper resize (0 = unbounded)
     Break_: Boolean;    // start a new row at this band, even when it would fit on the current
+    Text_: string;      // the band's own caption, drawn between its gripper and its child
+    FixedSize: Boolean; // the band refuses a gripper resize (it may still be MOVED)
   end;
 
   TTyCoolBar = class(TTyControlBar)
@@ -64,12 +66,18 @@ type
     FDefaultBandMinWidth: Integer;     // fallback min when a band has none of its own
     FDragStartY: Integer;
     FDragMode: TTyCoolDrag;
+    FShowText: Boolean;
+    FOnChange: TNotifyEvent;
     // --- live drag state (real-machine) ---
     FDragging: Boolean;
     FDragCtl: TControl;                // the band being resized
     FDragStartX: Integer;             // mouse X (device px) at grab
     FDragStartW: Integer;             // the band's logical width at grab
+    function BandTextWidth(const AText: string; const AStyle: TTyStyleSet): Integer;
+    procedure SetShowText(AValue: Boolean);
+    procedure Changed;
     function IndexOfBand(ACtl: TControl): Integer;
+    function EnsureBand(ACtl: TControl): Integer;   // find, or create, this child's band record
     function BandAtPoint(AX, AY: Integer): TControl;   // the band whose gripper is under (X,Y)
   protected
     function GetStyleTypeKey: string; override;
@@ -104,11 +112,28 @@ type
       first band: there is no row above it to leave. }
     procedure SetBandBreak(ACtl: TControl; AValue: Boolean);
     function BandBreak(ACtl: TControl): Boolean;
+    { The band's own caption. Drawn between the gripper and the child when ShowText is on, and
+      the packer reserves room for it there -- a rebar band labels itself rather than relying on
+      whatever control happens to be inside it. }
+    procedure SetBandText(ACtl: TControl; const AValue: string);
+    function BandText(ACtl: TControl): string;
+    { A fixed band refuses a gripper RESIZE. It can still be moved between rows: fixing a size
+      is not the same as nailing a band down. }
+    procedure SetBandFixedSize(ACtl: TControl; AValue: Boolean);
+    function BandFixedSize(ACtl: TControl): Boolean;
+    { Show or hide one band. The hosted child's own Visible is the single source of truth, so
+      the packer, the hit-test and the painter cannot disagree about it. }
+    procedure SetBandVisible(ACtl: TControl; AValue: Boolean);
+    function BandVisible(ACtl: TControl): Boolean;
   published
     // GripperWidth is INHERITED from TTyControlBar (same field the band packing uses) — do NOT
     // redeclare it here, or the base would pack with one width while our hit-test used another.
     { Fallback resize floor for a band that has no MinWidth of its own (logical px). }
     property DefaultBandMinWidth: Integer read FDefaultBandMinWidth write FDefaultBandMinWidth default 24;
+    { Draw each band's own caption between its gripper and its child, reserving room for it. }
+    property ShowText: Boolean read FShowText write SetShowText default False;
+    { Fired after the band layout changes -- a band moved to another row, resized, or hidden. }
+    property OnChange: TNotifyEvent read FOnChange write FOnChange;
     property Align;
     property Anchors;
     property StyleClass;
@@ -128,10 +153,13 @@ type
   what Delphi's and Lazarus's TCoolBar draw. A band starts a new row when its Break flag says so,
   or when it would not fit on the current one.
 
-  ABreaks is parallel to AChildSizes; a missing entry reads as False. Returns the CHILD rects
+  ABreaks is parallel to AChildSizes; a missing entry reads as False. ALeadExtra is likewise
+  parallel and is the width reserved between a band's gripper and its child -- the band's own
+  caption when ShowText is on; a missing entry reads as 0. Returns the CHILD rects
   (the band minus its gripper), so the gripper for band i is the AGripperW-wide strip immediately
   left of Result[i]. Pure: no control, no canvas, no PPI -- device px in, device px out. }
 function TyCoolBarPack(const AChildSizes: array of TSize; const ABreaks: array of Boolean;
+  const ALeadExtra: array of Integer;
   AAvail, ABandHeight, AGripperW, ASpacing: Integer): TTyRectArray;
 
 { What a gripper drag MEANS, from the travel so far. A CoolBar grip does two jobs and the
@@ -154,9 +182,10 @@ implementation
 // Pure functions
 // -----------------------------------------------------------------------------
 function TyCoolBarPack(const AChildSizes: array of TSize; const ABreaks: array of Boolean;
+  const ALeadExtra: array of Integer;
   AAvail, ABandHeight, AGripperW, ASpacing: Integer): TTyRectArray;
 var
-  n, i, x, y, w, rowStart: Integer;
+  n, i, x, y, w, rowStart, lead: Integer;
   brk, firstOnRow: Boolean;
 begin
   Result := nil;
@@ -175,16 +204,18 @@ begin
     w := AChildSizes[i].cx;
     if w < 0 then w := 0;
     brk := (i < Length(ABreaks)) and ABreaks[i];
+    lead := AGripperW;
+    if (i < Length(ALeadExtra)) and (ALeadExtra[i] > 0) then Inc(lead, ALeadExtra[i]);
     { A break is honoured even for a band that would have fitted -- that is the whole point of
       dragging a band onto a row of its own. The first band can never break: there is no row
       above it to leave. }
-    if (not firstOnRow) and (brk or (x + AGripperW + w > AAvail)) then
+    if (not firstOnRow) and (brk or (x + lead + w > AAvail)) then
     begin
       Inc(y, ABandHeight + ASpacing);
       x := 0;
       firstOnRow := True;
     end;
-    rowStart := x + AGripperW;            // the child begins after ITS OWN gripper
+    rowStart := x + lead;                 // the child begins after its gripper (and caption)
     if rowStart + w > AAvail then         // a band wider than the row is clamped to it
       w := AAvail - rowStart;
     if w < 0 then w := 0;
@@ -268,27 +299,37 @@ begin
     if FBands[i].Ctl = ACtl then Exit(i);
 end;
 
+function TTyCoolBar.EnsureBand(ACtl: TControl): Integer;
+begin
+  { Band metadata used to spring into existence only when a WIDTH was assigned, so setting any
+    other band property on a band nobody had sized yet silently did nothing. Every setter goes
+    through here instead. }
+  Result := -1;
+  if ACtl = nil then Exit;
+  Result := IndexOfBand(ACtl);
+  if Result >= 0 then Exit;
+  SetLength(FBands, Length(FBands) + 1);
+  Result := High(FBands);
+  FBands[Result].Ctl := ACtl;
+  FBands[Result].MinWidth := 0;
+  FBands[Result].MaxWidth := 0;
+end;
+
 procedure TTyCoolBar.SetBandWidth(ACtl: TControl; AWidth: Integer);
 var
   idx: Integer;
 begin
   if ACtl = nil then Exit;
   if AWidth < 0 then AWidth := 0;
-  idx := IndexOfBand(ACtl);
-  if idx < 0 then
-  begin
-    SetLength(FBands, Length(FBands) + 1);
-    idx := High(FBands);
-    FBands[idx].Ctl := ACtl;
-    FBands[idx].MinWidth := 0;
-    FBands[idx].MaxWidth := 0;
-  end;
+  idx := EnsureBand(ACtl);
+  if idx < 0 then Exit;
   FBands[idx].Width := AWidth;
   // A given width should be honoured as the child's actual width; the base packs from
   // the child bounds, so set the child width too (auto = leave it as-is).
   if (AWidth > 0) and (ACtl.Width <> AWidth) then
     ACtl.Width := AWidth;
   Realign;
+  Changed;
 end;
 
 function TTyCoolBar.GetBandWidth(ACtl: TControl): Integer;
@@ -380,11 +421,12 @@ end;
 procedure TTyCoolBar.SetBandBreak(ACtl: TControl; AValue: Boolean);
 var i: Integer;
 begin
-  i := IndexOfBand(ACtl);
+  i := EnsureBand(ACtl);
   if i < 0 then Exit;
   if FBands[i].Break_ = AValue then Exit;
   FBands[i].Break_ := AValue;
   Relayout;
+  Changed;
 end;
 
 function TTyCoolBar.BandBreak(ACtl: TControl): Boolean;
@@ -394,27 +436,112 @@ begin
   Result := (i >= 0) and FBands[i].Break_;
 end;
 
+procedure TTyCoolBar.SetBandText(ACtl: TControl; const AValue: string);
+var i: Integer;
+begin
+  i := EnsureBand(ACtl);
+  if i < 0 then Exit;
+  if FBands[i].Text_ = AValue then Exit;
+  FBands[i].Text_ := AValue;
+  Relayout;
+  Changed;
+end;
+
+function TTyCoolBar.BandText(ACtl: TControl): string;
+var i: Integer;
+begin
+  i := IndexOfBand(ACtl);
+  if i >= 0 then Result := FBands[i].Text_ else Result := '';
+end;
+
+procedure TTyCoolBar.SetBandFixedSize(ACtl: TControl; AValue: Boolean);
+var i: Integer;
+begin
+  i := EnsureBand(ACtl);
+  if i < 0 then Exit;
+  FBands[i].FixedSize := AValue;
+end;
+
+function TTyCoolBar.BandFixedSize(ACtl: TControl): Boolean;
+var i: Integer;
+begin
+  i := IndexOfBand(ACtl);
+  Result := (i >= 0) and FBands[i].FixedSize;
+end;
+
+procedure TTyCoolBar.SetBandVisible(ACtl: TControl; AValue: Boolean);
+begin
+  { The child's Visible IS the band's visibility -- the packer already skips invisible children,
+    so there is no second flag to fall out of step with it. }
+  if (ACtl = nil) or (ACtl.Visible = AValue) then Exit;
+  ACtl.Visible := AValue;
+  Relayout;
+  Changed;
+end;
+
+function TTyCoolBar.BandVisible(ACtl: TControl): Boolean;
+begin
+  Result := (ACtl <> nil) and ACtl.Visible;
+end;
+
+{ Measure a band caption on a scratch canvas -- the pattern TTyCustomTabStrip and TTyGroupBox
+  use, so CJK and variable-width fonts measure correctly with no window. }
+function TTyCoolBar.BandTextWidth(const AText: string; const AStyle: TTyStyleSet): Integer;
+var
+  bmp: TBitmap;
+begin
+  Result := 0;
+  if (AText = '') or (not FShowText) then Exit;
+  bmp := TBitmap.Create;
+  try
+    bmp.SetSize(1, 1);
+    bmp.Canvas.Font.Name := TyEffectiveFontName(AStyle.FontName);
+    bmp.Canvas.Font.Size := MulDiv(ResolveFontSize(AStyle), Font.PixelsPerInch, 96);
+    Result := bmp.Canvas.TextWidth(AText);
+  finally
+    bmp.Free;
+  end;
+  if Result > 0 then Inc(Result, MulDiv(8, Font.PixelsPerInch, 96));   // a gap before the child
+end;
+
+procedure TTyCoolBar.SetShowText(AValue: Boolean);
+begin
+  if FShowText = AValue then Exit;
+  FShowText := AValue;
+  Relayout;   // the caption strip is packed, so turning it on/off moves every band
+end;
+
+procedure TTyCoolBar.Changed;
+begin
+  if Assigned(FOnChange) then FOnChange(Self);
+end;
+
 function TTyCoolBar.PackBands(const ABands: array of TControl; const ASizes: array of TSize;
   AAvail, ABandHeight, AGripperW, ASpacing: Integer): TTyRectArray;
 var
   brks: array of Boolean;
+  leads: array of Integer;
+  S: TTyStyleSet;
   i, bi: Integer;
 begin
   { Every band carries its own gripper, and a band may force a row break -- the two things
     that make a CoolBar a CoolBar rather than a ControlBar. }
   SetLength(brks, Length(ABands));
+  SetLength(leads, Length(ABands));
+  S := CurrentStyle;
   for i := 0 to High(ABands) do
   begin
     bi := IndexOfBand(ABands[i]);
     brks[i] := (bi >= 0) and FBands[bi].Break_;
+    if bi >= 0 then leads[i] := BandTextWidth(FBands[bi].Text_, S) else leads[i] := 0;
   end;
-  Result := TyCoolBarPack(ASizes, brks, AAvail, ABandHeight, AGripperW, ASpacing);
+  Result := TyCoolBarPack(ASizes, brks, leads, AAvail, ABandHeight, AGripperW, ASpacing);
 end;
 
 procedure TTyCoolBar.PaintGrippers(APainter: TTyPainter; const AStyle: TTyStyleSet;
   ABandCount, ABandHeight, AGripperW, ASpacing: Integer);
 var
-  i: Integer;
+  i, bi: Integer;
   ctl: TControl;
   r: TRect;
 begin
@@ -426,6 +553,15 @@ begin
     if (ctl = nil) or (not ctl.Visible) then Continue;
     r := BandRectFor(ctl);
     if r.Right > r.Left then DrawGripper(APainter, r, AStyle);
+    if FShowText then
+    begin
+      bi := IndexOfBand(ctl);
+      if (bi >= 0) and (FBands[bi].Text_ <> '') then
+        { Between the gripper and the child -- the strip PackBands reserved for exactly this. }
+        APainter.DrawText(Rect(r.Right, r.Top, ctl.Left, r.Bottom), FBands[bi].Text_,
+          AStyle.FontName, ResolveFontSize(AStyle), AStyle.FontWeight, AStyle.TextColor,
+          taLeftJustify, tlCenter, True);
+    end;
   end;
 end;
 
@@ -483,6 +619,7 @@ begin
   case FDragMode of
     cdResize:
       begin
+        if BandFixedSize(FDragCtl) then Exit;   // fixed: the drag simply does nothing
         // Device-px delta -> logical (band widths are logical), clamped, then applied; the
         // base re-packs from the child width.
         dxLogical := MulDiv(X - FDragStartX, 96, ppi);
