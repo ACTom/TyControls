@@ -10,6 +10,9 @@ type
     on the page body. The design-time ControlStyle flags mirror Lazarus TTabSheet so
     the IDE treats it as a fixed, droppable, hide-on-inactive design surface. }
   TTyTabSheet = class(TTyCustomControl)
+  protected
+    { protected, not private: a test drives the invalidation rule through it. }
+    FPaintCache: TTyPaintCache;
   private
     FCaption: TCaption;
     procedure SetCaption(const AValue: TCaption);
@@ -19,6 +22,8 @@ type
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
   public
+    destructor Destroy; override;
+    procedure Invalidate; override;
     constructor Create(AOwner: TComponent); override;
   published
     property Caption: TCaption read FCaption write SetCaption;
@@ -82,10 +87,38 @@ begin
   end;
 end;
 
-procedure TTyTabSheet.Paint;
+destructor TTyTabSheet.Destroy;
 begin
-  RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
+  FPaintCache.Free;
+  inherited Destroy;
 end;
+
+procedure TTyTabSheet.Invalidate;
+begin
+  { The one thing the cache keys on: our OWN look changed. A child's damage never reaches
+    here, which is exactly why the cache survives it. }
+  if FPaintCache <> nil then FPaintCache.Drop;
+  inherited Invalidate;
+end;
+
+procedure TTyTabSheet.Paint;
+var
+  w, h: Integer;
+begin
+  { The designer repaints rarely and streams while it does, so cache only at runtime. }
+  if csDesigning in ComponentState then
+  begin
+      RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
+    Exit;
+  end;
+  w := ClientWidth; h := ClientHeight;
+  if (w <= 0) or (h <= 0) then Exit;
+  if FPaintCache = nil then FPaintCache := TTyPaintCache.Create;
+  if FPaintCache.NeedsRender(w, h) then
+    RenderTo(FPaintCache.Canvas, Rect(0, 0, w, h), Font.PixelsPerInch);
+  FPaintCache.Blit(Canvas);
+end;
+
 
 initialization
   { Runtime LFM streaming resolves nested (non-field) page objects via the class

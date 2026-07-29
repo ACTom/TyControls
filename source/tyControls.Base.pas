@@ -37,6 +37,34 @@ type
     function ThemedBgColor(out AColor: TTyColor): Boolean;
   end;
 
+  { A container's own look does not change between the frames a moving CHILD forces out of it.
+    A graphic control's Invalidate damages its PARENT (that is how it gets a background), and
+    the parent's Paint then renders its WHOLE client area -- measured at ~23 ns/px once warm,
+    so 14.9 ms for a 900x700 page. Three 60 fps instruments on one page therefore ask for
+    ~190 full-page re-renders a second, or 282% of a core: unachievable, so frames are dropped
+    and the page visibly stutters.
+
+    This caches the rendered result in a DEVICE bitmap. A repaint that FOLLOWS an Invalidate
+    re-renders; a repaint that does not -- which is exactly the child-damage case -- blits the
+    cache instead, and the blit is clipped by the DC to the damaged rectangle, so it costs the
+    child's area rather than the page's.
+
+    The invalidation rule is the whole design: everything that can change a container's look
+    (theme, state, caption, font, enabled) already goes through Invalidate, and child damage by
+    construction does not. There is no key to enumerate and get wrong. }
+  TTyPaintCache = class
+  private
+    FBmp: TBitmap;
+    FValid: Boolean;
+  public
+    destructor Destroy; override;
+    procedure Drop;   // mark stale; the bitmap itself is kept for reuse
+    { True when the caller must render into Canvas at AW x AH; False when Blit alone will do. }
+    function NeedsRender(AW, AH: Integer): Boolean;
+    procedure Blit(ACanvas: TCanvas);
+    function Canvas: TCanvas;
+  end;
+
   TTyGraphicControl = class(TGraphicControl, ITyStyleable)
   private
     FStyleClass: string;
@@ -468,6 +496,47 @@ end;
   styleable tyControl, use its resolved style background; otherwise (a plain form or
   panel) use the parent's window colour. Returns False only with no parent (e.g. a
   control rendered offscreen in isolation), leaving that path untouched. }
+destructor TTyPaintCache.Destroy;
+begin
+  FBmp.Free;
+  inherited Destroy;
+end;
+
+procedure TTyPaintCache.Drop;
+begin
+  FValid := False;
+end;
+
+function TTyPaintCache.NeedsRender(AW, AH: Integer): Boolean;
+begin
+  Result := False;
+  if (AW <= 0) or (AH <= 0) then Exit;
+  if FBmp = nil then
+  begin
+    FBmp := TBitmap.Create;
+    FBmp.PixelFormat := pf32bit;
+  end;
+  if (FBmp.Width <> AW) or (FBmp.Height <> AH) then
+  begin
+    FBmp.SetSize(AW, AH);
+    FValid := False;   // a resized surface holds nothing usable
+  end;
+  Result := not FValid;
+  FValid := True;
+end;
+
+procedure TTyPaintCache.Blit(ACanvas: TCanvas);
+begin
+  { The destination DC is clipped to the invalid region, so this transfers the damaged
+    rectangle only -- which is the entire point. }
+  if FBmp <> nil then ACanvas.Draw(0, 0, FBmp);
+end;
+
+function TTyPaintCache.Canvas: TCanvas;
+begin
+  if FBmp <> nil then Result := FBmp.Canvas else Result := nil;
+end;
+
 function TyResolveParentBg(AChild: TControl; out AColor: TTyColor): Boolean;
 var
   st: TTyStyleSet;

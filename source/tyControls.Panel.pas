@@ -6,6 +6,9 @@ uses
   tyControls.Types, tyControls.Painter, tyControls.Base;
 type
   TTyPanel = class(TTyCustomControl)
+  protected
+    { protected, not private: a test drives the invalidation rule through it. }
+    FPaintCache: TTyPaintCache;
   private
     FCaption: TCaption;
     FAlignment: TAlignment;
@@ -15,6 +18,8 @@ type
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
   public
+    destructor Destroy; override;
+    procedure Invalidate; override;
     constructor Create(AOwner: TComponent); override;
     function GetStyleTypeKey: string; override;
   published
@@ -79,8 +84,36 @@ begin
     P.Free;
   end;
 end;
-procedure TTyPanel.Paint;
+destructor TTyPanel.Destroy;
 begin
-  RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
+  FPaintCache.Free;
+  inherited Destroy;
 end;
+
+procedure TTyPanel.Invalidate;
+begin
+  { The one thing the cache keys on: our OWN look changed. A child's damage never reaches
+    here, which is exactly why the cache survives it. }
+  if FPaintCache <> nil then FPaintCache.Drop;
+  inherited Invalidate;
+end;
+
+procedure TTyPanel.Paint;
+var
+  w, h: Integer;
+begin
+  { The designer repaints rarely and streams while it does, so cache only at runtime. }
+  if csDesigning in ComponentState then
+  begin
+      RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
+    Exit;
+  end;
+  w := ClientWidth; h := ClientHeight;
+  if (w <= 0) or (h <= 0) then Exit;
+  if FPaintCache = nil then FPaintCache := TTyPaintCache.Create;
+  if FPaintCache.NeedsRender(w, h) then
+    RenderTo(FPaintCache.Canvas, Rect(0, 0, w, h), Font.PixelsPerInch);
+  FPaintCache.Blit(Canvas);
+end;
+
 end.
