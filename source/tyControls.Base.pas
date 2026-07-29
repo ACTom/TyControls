@@ -136,6 +136,10 @@ type
 
   TTyCustomControl = class(TCustomControl, ITyStyleable)
   private
+    {$IFDEF LCLGTK3}
+    FEraseThemeVer: Cardinal;   // theme version the erase Colour was derived from; 0 = never
+    FInEraseRefresh: Boolean;
+    {$ENDIF}
     FStyleClass: string;
     FController: TTyStyleController;
     { A9 per-instance StyleOverride (mirrors the TTyGraphicControl twin — the two base
@@ -156,6 +160,14 @@ type
     function ActiveController: TTyStyleController;
     function CurrentStates: TTyStateSet; virtual;
     function CurrentStyle: TTyStyleSet;
+    {$IFDEF LCLGTK3}
+    { LCL-GTK3 is the only widgetset that never clears a damaged region -- see the body. This
+      hands its remaining clear a colour to work with, ONCE per theme change. }
+    procedure RefreshGtk3EraseColor;
+  public
+    procedure Invalidate; override;
+  protected
+    {$ENDIF}
     function ResolveFontSize(const AStyle: TTyStyleSet): Integer;
     procedure DrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);
     { Paint ARect with the form's sharp photo slice ONLY when an image-backed glass
@@ -918,6 +930,60 @@ begin
   FOvrCacheValid := False;   // force a re-parse on the next CurrentStyle
   Invalidate;
 end;
+
+{$IFDEF LCLGTK3}
+procedure TTyCustomControl.Invalidate;
+begin
+  RefreshGtk3EraseColor;
+  inherited Invalidate;
+end;
+
+procedure TTyCustomControl.RefreshGtk3EraseColor;
+var
+  st: TTyStyleSet;
+  c: TTyColor;
+  ver: Cardinal;
+begin
+  { LCL-GTK3 clears nothing before a repaint. InvalidateRect drops bErase; the LM_ERASEBKGND it
+    does send is gated on wcfEraseBackground, which it never sets and cannot (the field is
+    private to TWinControl); TWinControl's own erase branch is unreachable because GTK3 always
+    supplies a DC. The one clear still standing is TGtk3CustomControl.DoBeforeLCLPaint -- and it
+    skips its fillRect whenever the control's Color is clDefault, which {$DEFINE UseCLDefault}
+    makes the default for anything that never assigns one. That is every control here.
+
+    So nothing writes the pixels under a GRAPHIC child, which paints only its glyphs and leaves
+    the rest to whatever the host erased. On GTK3 nothing did, so the rectangle keeps the
+    PREVIOUS theme's pixels: a label sits in a pale block after a switch to dark, and its ink,
+    now light, vanishes into it. Giving the control a real Colour brings the backend's own clear
+    back, and the value is the opaque background we paint anyway, so it can only agree.
+
+    ONCE PER THEME CHANGE, and this is the part the first attempt got wrong. That version ran
+    from CurrentStyle -- a getter, called on every paint -- and assigning Color invalidates, so
+    each child's paint invalidated its parent and the parent's repaint invalidated it back: a
+    repaint storm that starved the GTK main loop, and windows that cannot finish a frame cannot
+    be dragged and popups cannot finish mapping. Keyed on the theme version, the assignment
+    happens once and the re-entrant Invalidate it triggers finds nothing left to do. The flag
+    is belt and braces. }
+  if FInEraseRefresh then Exit;
+  ver := ActiveController.Model.ThemeVersion;
+  if (ver = FEraseThemeVer) and (ver <> 0) then Exit;
+  FInEraseRefresh := True;
+  try
+    FEraseThemeVer := ver;
+    st := CurrentStyle;
+    c := 0;
+    if (tpBackground in st.Present) and (st.Background.Kind = tfkSolid)
+       and (TyAlphaOf(st.Background.Color) = 255) then
+      c := st.Background.Color
+    else if not TyResolveParentBg(Self, c) then
+      Exit;
+    if Color <> TyColorToLCL(c) then
+      Color := TyColorToLCL(c);
+  finally
+    FInEraseRefresh := False;
+  end;
+end;
+{$ENDIF}
 
 procedure TTyCustomControl.SetController(AValue: TTyStyleController);
 begin
