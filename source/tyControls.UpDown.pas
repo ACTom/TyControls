@@ -7,6 +7,17 @@ uses
 
 type
   TTyUpDownOrientation = (udoVertical, udoHorizontal);
+  { Which half was pressed. LCL calls these btPrev/btNext (TUDBtnType). }
+  TTyUpDownButton = (udbPrev, udbNext);
+  { The direction-carrying click event.
+
+    Why a second event and not OnClick: TTyUpDown inherits the base control's plain
+    TNotifyEvent OnClick under the SAME NAME that LCL's TUpDown gives to a
+    (Sender; Button: TUDBtnType) event. Code ported from Lazarus compiles against
+    ours, assigns the handler it expects to be told a direction, and is told nothing
+    -- with no diagnostic, because both sides are legal. Renaming the inherited one
+    is not on the table, so the direction-carrying event gets its own name. }
+  TTyUpDownClickEvent = procedure(Sender: TObject; AButton: TTyUpDownButton) of object;
 
 { Device rect of the up (increment) or down (decrement) half within [0,0,AW,AH].
   Vertical: up = top, down = bottom. Horizontal: up = right, down = left. }
@@ -28,6 +39,7 @@ type
     FOrientation: TTyUpDownOrientation;
     FWrap: Boolean;
     FOnChange: TNotifyEvent;
+    FOnArrowClick: TTyUpDownClickEvent;
     FHot, FHeldDir: Integer;     // -1 down, +1 up, 0 none
     FRepeatTimer: TTimer;        // lazy auto-repeat while a half is held
     FRepeatFast: Boolean;        // False = still in the initial delay, True = fast phase
@@ -61,6 +73,11 @@ type
     property Orientation: TTyUpDownOrientation read FOrientation write SetOrientation default udoVertical;
     property Wrap: Boolean read FWrap write SetWrap default False;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
+    { Fires per STEP -- including each auto-repeat tick while a half is held, which is
+      what LCL's TUpDown.OnClick does too -- and says which arrow caused it. Unlike
+      OnChange it fires even when the value did not move (already at Min or Max), so
+      "the user pressed down but nothing happened" is observable. }
+    property OnArrowClick: TTyUpDownClickEvent read FOnArrowClick write FOnArrowClick;
     property Align;
     property Anchors;
     property StyleClass;
@@ -156,6 +173,13 @@ end;
 procedure TTyUpDown.Step(ADir: Integer);
 var v: Integer;
 begin
+  { Announce the press before the early-out below: a press that changes nothing (already
+    pinned at Min or Max) is still a press, and a caller driving another control from
+    this one needs to see it. }
+  if Assigned(FOnArrowClick) then
+  begin
+    if ADir > 0 then FOnArrowClick(Self, udbNext) else FOnArrowClick(Self, udbPrev);
+  end;
   v := TyUpDownClamp(FPosition + ADir * FIncrement, FMin, FMax, FWrap);
   if v = FPosition then Exit;
   FPosition := v;

@@ -77,7 +77,10 @@ type
     property Max: Integer read FMax write SetMax default 100;
     property Position: Integer read FPosition write SetPosition default 0;
     property Orientation: TTyTrackOrientation read FOrientation write SetOrientation default toHorizontal;
-    property Frequency: Integer read FFrequency write SetFrequency default 0;
+    { One tick per value-unit, matching LCL's TTrackBar (comctrls.pp: default 1). It
+      was 0 here, and 0 means "no ticks" -- so a track bar dropped on a form showed a
+      bare groove and the tick marks looked unimplemented rather than switched off. }
+    property Frequency: Integer read FFrequency write SetFrequency default 1;
     property LineSize: Integer read FLineSize write SetLineSize default 1;
     property PageSize: Integer read FPageSize write SetPageSize default 10;
     { 在滑轨旁显示当前值(横向在右、纵向在下)。默认关 —— 打开会占掉一条空间,
@@ -131,7 +134,7 @@ begin
   FMax := 100;
   FPosition := 0;
   FOrientation := toHorizontal;
-  FFrequency := 0;
+  FFrequency := 1;
   FLineSize := 1;
   FPageSize := 10;
   FDragging := False;

@@ -9,10 +9,11 @@ unit test.parity;
   none of them would show up in a screenshot. That is why they survived so long. }
 interface
 uses
-  Classes, SysUtils, Types, Graphics, Controls, StdCtrls, fpcunit, testregistry,
+  Classes, SysUtils, TypInfo, Types, Graphics, Controls, StdCtrls, Menus, fpcunit, testregistry,
   tyControls.Types, tyControls.Button, tyControls.GlyphButtons, tyControls.ListBox,
   tyControls.CheckGroup, tyControls.ToolBar, tyControls.StatusBar,
-  tyControls.ColorBox, tyControls.SpinEdit, tyControls.CheckBox;
+  tyControls.ColorBox, tyControls.SpinEdit, tyControls.CheckBox, tyControls.Menu,
+  tyControls.UpDown, tyControls.TrackBar, tyControls.Base, tyControls.Panel;
 
 type
   { Probes: ApplyToButton and the hosted checkboxes are protected, because the owning
@@ -28,10 +29,20 @@ type
     procedure ProbeClick(AIndex: Integer; AValue: Boolean);
   end;
 
+  TUpDownProbe = class(TTyUpDown)
+  public
+    procedure ProbeDown(X, Y: Integer);
+    procedure ProbeUp(X, Y: Integer);
+  end;
+
   TParityTest = class(TTestCase)
   private
     FItemEvents: Integer;
+    FPopups: Integer;
+    FArrows: string;
     procedure CountItemChange(Sender: TObject; AIndex: Integer);
+    procedure CountPopup(Sender: TObject);
+    procedure RecordArrow(Sender: TObject; AButton: TTyUpDownButton);
   published
     { A2 }
     procedure SpeedButtonDownFromCodeReleasesSiblings;
@@ -53,6 +64,15 @@ type
     { A10 }
     procedure SpinEditEmptyRangeMeansUnbounded;
     procedure SpinEditRealRangeStillClamps;
+    { A32 }
+    procedure PopupMenuFiresOnPopup;
+    procedure PopupMenuRecordsThePopupPoint;
+    { A4 }
+    procedure UpDownArrowClickSaysWhichArrow;
+    { A27 }
+    procedure TrackBarShowsTicksOutOfTheBox;
+    { B1 }
+    procedure VisibleIsPublishedOnBothBaseClasses;
   end;
 
 implementation
@@ -60,6 +80,16 @@ implementation
 procedure TToolBarProbe.ProbeApply(B: TTyButton);
 begin
   ApplyToButton(B);
+end;
+
+procedure TUpDownProbe.ProbeDown(X, Y: Integer);
+begin
+  MouseDown(mbLeft, [], X, Y);
+end;
+
+procedure TUpDownProbe.ProbeUp(X, Y: Integer);
+begin
+  MouseUp(mbLeft, [], X, Y);
 end;
 
 procedure TCheckGroupProbe.ProbeClick(AIndex: Integer; AValue: Boolean);
@@ -315,6 +345,105 @@ begin
   finally
     S.Free;
   end;
+end;
+
+{ --------------------------------------------------------------- A32 ------- }
+
+procedure TParityTest.CountPopup(Sender: TObject);
+begin
+  Inc(FPopups);
+end;
+
+{ PopUp was EnsureRenderer + show, and nothing else -- so OnPopup never fired. That is
+  the event a context menu exists for: it is where you build the menu from whatever is
+  under the cursor. An empty menu is used here because LCL bails right after DoPopup
+  when there are no items, which keeps the test off the window-showing path. }
+procedure TParityTest.PopupMenuFiresOnPopup;
+var
+  M: TTyPopupMenu;
+begin
+  M := TTyPopupMenu.Create(nil);
+  try
+    FPopups := 0;
+    M.OnPopup := @CountPopup;
+    M.PopUp(10, 20);
+    AssertEquals('OnPopup must fire', 1, FPopups);
+  finally
+    M.Free;
+  end;
+end;
+
+procedure TParityTest.PopupMenuRecordsThePopupPoint;
+var
+  M: TTyPopupMenu;
+begin
+  M := TTyPopupMenu.Create(nil);
+  try
+    M.PopUp(37, 91);
+    AssertEquals('PopupPoint.X', 37, M.PopupPoint.X);
+    AssertEquals('PopupPoint.Y', 91, M.PopupPoint.Y);
+  finally
+    M.Free;
+  end;
+end;
+
+{ ---------------------------------------------------------------- A4 ------- }
+
+procedure TParityTest.RecordArrow(Sender: TObject; AButton: TTyUpDownButton);
+begin
+  if AButton = udbNext then FArrows := FArrows + 'N' else FArrows := FArrows + 'P';
+end;
+
+{ TTyUpDown inherits a plain TNotifyEvent OnClick under the same name LCL gives to a
+  direction-carrying one, so ported code assigns a handler and is silently told nothing. }
+procedure TParityTest.UpDownArrowClickSaysWhichArrow;
+var
+  U: TUpDownProbe;
+begin
+  U := TUpDownProbe.Create(nil);
+  try
+    U.SetBounds(0, 0, 20, 40);
+    U.Min := 0; U.Max := 10; U.Position := 5;
+    FArrows := '';
+    U.OnArrowClick := @RecordArrow;
+    U.ProbeDown(5, 5);    { top half = up }
+    U.ProbeUp(5, 5);
+    U.ProbeDown(5, 35);   { bottom half = down }
+    U.ProbeUp(5, 35);
+    AssertEquals('one event per press, carrying the direction', 'NP', FArrows);
+    AssertEquals('and the value moved with it', 5, U.Position);
+  finally
+    U.Free;
+  end;
+end;
+
+{ --------------------------------------------------------------- A27 ------- }
+
+{ Frequency = 0 means "no ticks", so the shipped default made a fresh track bar look
+  like tick marks were unimplemented rather than switched off. }
+procedure TParityTest.TrackBarShowsTicksOutOfTheBox;
+var
+  T: TTyTrackBar;
+begin
+  T := TTyTrackBar.Create(nil);
+  try
+    AssertEquals('LCL ships Frequency = 1', 1, T.Frequency);
+  finally
+    T.Free;
+  end;
+end;
+
+{ ---------------------------------------------------------------- B1 ------- }
+
+{ Visible was published on neither base class, so no TTy control could be hidden from
+  the designer or a .lfm -- only from code. TControl.Visible being public is what hid
+  it: it works everywhere except where you look for it. }
+procedure TParityTest.VisibleIsPublishedOnBothBaseClasses;
+begin
+  AssertTrue('graphic base publishes Visible (TTyUpDown is a TTyGraphicControl)',
+    GetPropInfo(TTyUpDown, 'Visible') <> nil);
+  AssertTrue('windowed base publishes Visible (TTyPanel is a TTyCustomControl)',
+    GetPropInfo(TTyPanel, 'Visible') <> nil);
 end;
 
 initialization

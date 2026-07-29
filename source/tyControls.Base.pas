@@ -103,6 +103,12 @@ type
       the About dialog. }
     property Version: string read GetVersion;
     property Enabled;
+    { Visible was never published anywhere in this library, on either base class, so
+      no TTy control could be hidden from the designer or from a .lfm -- only from
+      code. TControl.Visible is public, which is exactly why it went unnoticed: it
+      works everywhere except the one place you look for it. Default True, so it
+      streams only where someone actually hid something. }
+    property Visible;
     property Font;
     property Hint;
     property ShowHint;
@@ -192,6 +198,12 @@ type
       the About dialog. }
     property Version: string read GetVersion;
     property Enabled;
+    { Visible was never published anywhere in this library, on either base class, so
+      no TTy control could be hidden from the designer or from a .lfm -- only from
+      code. TControl.Visible is public, which is exactly why it went unnoticed: it
+      works everywhere except the one place you look for it. Default True, so it
+      streams only where someone actually hid something. }
+    property Visible;
     property Font;
     property Hint;
     property ShowHint;

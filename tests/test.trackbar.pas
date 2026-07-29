@@ -869,6 +869,9 @@ begin
     Bar.Min := 0;
     Bar.Max := 100;
     Bar.Position := 100;          { 拖到底 —— 滑块该贴在**滑轨**右端,不是控件右端 }
+    { 刻度关掉:本测量的是"打开读数后右侧多出墨",而刻度默认打开后右侧本来就有墨,
+      读数反而因滑轨缩短把那段刻度挤掉 —— 测的就不再是 ShowValue 了。 }
+    Bar.Frequency := 0;
 
     Bmp.PixelFormat := pf32bit;
     Bmp.SetSize(200, 40);

@@ -362,6 +362,10 @@ type
     FRenderer: TTyMenuPopup;     // lazy themed popup host; created on first PopUp
     FController: TTyStyleController;
     procedure EnsureRenderer;
+    { Wired to the renderer's OnClose so the LCL side of the protocol -- OnClose,
+      and clearing the global ActivePopupMenu -- runs when the themed popup goes
+      away, whichever way it went away (activation, Esc, click-outside). }
+    procedure HandleRendererClosed(Sender: TObject);
   protected
     { Hook for subclasses to configure the shared renderer (e.g. opt into section headers)
       after its controller is set and BEFORE its rows are built. Base does nothing. }
@@ -370,8 +374,15 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     { Show the themed context menu at screen point (X, Y) instead of the native menu.
-      Roots the shared renderer at the inherited Items and pops it (a zero-size anchor
-      at the cursor; the renderer measures its own size). Overrides the virtual seam. }
+
+      This runs the LCL popup protocol before handing off to the themed renderer, and
+      the ORDER is the point. It used to be EnsureRenderer + Popup and nothing else, so:
+      OnPopup never fired; PopupPoint stayed at whatever it was last set to; Close was a
+      silent no-op and OnClose never fired; and action-linked items never refreshed their
+      Enabled/Caption/Checked. Building the rows first also meant that even a handler
+      that DID fire could not usefully add or remove items -- the snapshot was already
+      taken. OnPopup exists to populate a context menu from the thing under the cursor;
+      that is most of what a context menu is for. }
     procedure PopUp(X, Y: Integer); override;
     { Test seam: activate the row at AIndex exactly as choosing it in the themed popup
       would (fires the source item's OnClick). Mirrors TTyMenuPopup.ActivateRowForTest. }
@@ -1854,6 +1865,7 @@ begin
   if FRenderer = nil then
     FRenderer := TTyMenuPopup.Create(Self);
   FRenderer.Controller := FController;
+  FRenderer.OnClose := @HandleRendererClosed;
   ConfigureRenderer(FRenderer);   // subclasses opt into headers/etc. BEFORE the rows are built
   // Root the shared renderer at this popup menu's items (the inherited LCL model).
   FRenderer.SetRoot(Items);
@@ -1892,15 +1904,36 @@ begin
   ARenderer.BannerWidth := FBannerWidth;
 end;
 
+type
+  { Reaches TMenuItem.InitiateActions, which is protected. }
+  TMenuItemAccess = class(TMenuItem);
+
 procedure TTyPopupMenu.PopUp(X, Y: Integer);
 var
   anchor: TRect;
 begin
+  // Mirrors popupmenu.inc, minus the native handle it does not need.
+  if (ActivePopupMenu <> nil) and (ActivePopupMenu <> Self) then
+    ActivePopupMenu.Close;
+  SetPopupPoint(Point(X, Y));       // so PopupPoint reads the cursor, not history
+  DoPopup(Self);                    // OnPopup -- may add, remove or re-enable items
+  if Items.Count = 0 then Exit;     // an empty menu shows nothing, as LCL decides here
+  ActivePopupMenu := Self;          // what makes Close/OnClose reachable at all
+  { TMenuItem.InitiateActions is protected and declared in another unit, so a
+    same-unit descendant is the way in -- LCL calls it from inside Menus itself. }
+  TMenuItemAccess(Items).InitiateActions;   // action-linked items refresh before we snapshot
+  // ...and only NOW take the snapshot: SetRoot walks Items, so a handler that populated
+  // the menu in OnPopup would otherwise have populated it into the void.
   EnsureRenderer;
   // A zero-size anchor at the cursor: the renderer hangs its dropdown below/right of
   // (X, Y) and measures its own size (ComputeBounds flips near screen edges).
   anchor := Types.Rect(X, Y, X, Y);
   FRenderer.Popup(anchor, False);
+end;
+
+procedure TTyPopupMenu.HandleRendererClosed(Sender: TObject);
+begin
+  Close;   { TPopupMenu.Close: DoClose -> OnClose, and ActivePopupMenu := nil }
 end;
 
 procedure TTyPopupMenu.ActivateRowForTest(AIndex: Integer);
