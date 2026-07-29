@@ -573,14 +573,14 @@ object MainForm: TMainForm
         Height = 26
         Top = 0
         Width = 220
-        Caption = 'Band 1 (drag the grip to resize)'
+        Caption = 'Band 1 (grip: drag down for its own row, sideways to resize)'
       end
       object Band2: TTyPanel
         Left = 0
         Height = 26
         Top = 0
         Width = 260
-        Caption = 'Band 2 (drag the grip to resize)'
+        Caption = 'Band 2 (grip: drag down for its own row, sideways to resize)'
       end
     end
     object LblGrip: TTyLabel

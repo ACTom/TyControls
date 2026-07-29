@@ -228,12 +228,12 @@ msgid "Command 12"
 msgstr "命令 12"
 
 #: tmainform.band1.caption
-msgid "Band 1 (drag the grip to resize)"
-msgstr "带 1(拖抓手改宽)"
+msgid "Band 1 (grip: drag down for its own row, sideways to resize)"
+msgstr "带 1(抓手:下拖独占一行·左右拖改宽)"
 
 #: tmainform.band2.caption
-msgid "Band 2 (drag the grip to resize)"
-msgstr "带 2(拖抓手改宽)"
+msgid "Band 2 (grip: drag down for its own row, sideways to resize)"
+msgstr "带 2(抓手:下拖独占一行·左右拖改宽)"
 
 #: tmainform.lblgrip.caption
 msgid "Bottom-right → size grip TTySizeBox (drag to resize the window)"
