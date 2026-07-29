@@ -117,7 +117,18 @@ type
     { Current view anchor year (transient UI state). }
     property ViewYear: Word read FViewYear;
   published
+    { NOTE the type. LCL's TCustomCalendar.Date is a STRING (calendar.pp) and its
+      TDateTime twin is called DateTime -- which is the one TCalendar publishes. So
+      `Cal.Date := Now` compiles here and fails there, and `Cal.DateTime` compiles
+      there and fails here: the same name means different types on the two controls,
+      which is the worst shape a difference can take. DateTime below is the alias that
+      lets code written against either one compile against this. }
     property Date: TDateTime read FDate write SetDate;
+    { LCL's name for the TDateTime accessor. Same storage as Date -- an alias, so a
+      form ported from Lazarus needs no edit and neither does one written here. Not
+      streamed (no stored flag would make sense for two names on one field): Date is
+      the persisted one. }
+    property DateTime: TDateTime read FDate write SetDate stored False;
     property MinDate: TDateTime read FMinDate write SetMinDate;
     property MaxDate: TDateTime read FMaxDate write SetMaxDate;
     property FirstDayOfWeek: TTyWeekDay read FFirstDayOfWeek write SetFirstDayOfWeek default wdSunday;

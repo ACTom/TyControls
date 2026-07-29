@@ -35,6 +35,14 @@ type
   protected
     procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    { The seam TTyEdit provides for exactly this, and the one path this control never
+      took. Typing was masked because UTF8KeyPress is overridden; PASTE is not typing --
+      it funnels through InjectStringAt -> FilterInsert, which was inherited unchanged.
+      So Ctrl+V put arbitrary text into a masked field: a phone mask happily held
+      "hello world", IsComplete then answered about a string the mask never approved,
+      and the caller's TyMaskExtract read back nonsense. LCL guards the same three
+      messages (LM_PASTE/LM_CUT/LM_CLEAR) for the same reason. }
+    function FilterInsert(const AText: string): string; override;
   public
     // True when every slot of the mask is filled (e.g. gate an OK button).
     function IsComplete: Boolean;
@@ -163,8 +171,12 @@ end;
 procedure TTyMaskEdit.KeyDown(var Key: Word; Shift: TShiftState);
 var raw: string;
 begin
-  if (FMask <> '') and (Key = VK_BACK) and (Shift = []) then
+  if (FMask <> '') and (Shift = []) and ((Key = VK_BACK) or (Key = VK_DELETE)) then
   begin
+    { Delete used to fall through to the plain edit, which removes the character at the
+      caret -- including a mask LITERAL, leaving Text no longer conforming to the mask
+      the control claims to enforce. This model has no mid-text hole, so both keys mean
+      the same thing: drop the last significant char. }
     raw := TyMaskExtract(FMask, Text);
     if raw <> '' then Delete(raw, Length(raw), 1);
     ApplyRaw(raw);
@@ -172,6 +184,33 @@ begin
     Exit;
   end;
   inherited KeyDown(Key, Shift);
+end;
+
+function TTyMaskEdit.FilterInsert(const AText: string): string;
+var
+  raw, keep: string;
+  i: Integer;
+  slot, c: Char;
+begin
+  if FMask = '' then Exit(inherited FilterInsert(AText));   // plain edit, unchanged
+  { Entry is append-only left-to-right, so an insertion is judged the same way a
+    keystroke is: feed the incoming chars through the next free slot in turn and keep
+    the ones it accepts. Literals in the pasted text are dropped rather than matched --
+    TyMaskApply re-inserts them itself, so pasting "2026-07-30" into '####-##-##'
+    lands the digits and rebuilds the dashes. }
+  raw := TyMaskExtract(FMask, Text);
+  keep := '';
+  for i := 1 to Length(AText) do
+  begin
+    slot := TyMaskNextSlot(FMask, Length(raw) + Length(keep));
+    if slot = #0 then Break;                  // every slot filled: ignore the rest
+    c := AText[i];
+    if TyMaskSlotAccepts(slot, c) then keep := keep + c;
+  end;
+  if keep <> '' then ApplyRaw(raw + keep);
+  { ApplyRaw has already rewritten Text through the mask, so there is nothing left for
+    the base insert to do -- '' is InjectStringAt's documented "insert nothing". }
+  Result := '';
 end;
 
 function TTyMaskEdit.IsComplete: Boolean;

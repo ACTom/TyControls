@@ -49,7 +49,14 @@ end;
 
 procedure TSplitterGeomTest.TestNewSizeClamps;
 begin
-  AssertEquals('floor at MinSize', 30, TySplitterNewSize(alLeft, 100, -500, 30, 1000));
+  { AutoSnap (the default, as in LCL): a drag that lands under MinSize CLOSES the pane.
+    Without it MinSize is a floor no drag can get under, so there is no gesture at all
+    that collapses a pane -- "drag the sidebar shut" was simply unavailable. }
+  AssertEquals('snaps shut under MinSize', 0, TySplitterNewSize(alLeft, 100, -500, 30, 1000));
+  AssertEquals('AutoSnap off: floors at MinSize instead', 30,
+    TySplitterNewSize(alLeft, 100, -500, 30, 1000, False));
+  AssertEquals('a drag that stays above MinSize is untouched either way', 70,
+    TySplitterNewSize(alLeft, 100, -30, 30, 1000));
   AssertEquals('ceil at MaxSize',  200, TySplitterNewSize(alLeft, 100, 500, 30, 200));
   // MaxSize < MinSize means "no max" (unknown) -> only the floor applies
   AssertEquals('no max when max<min', 600, TySplitterNewSize(alLeft, 100, 500, 30, -1));
@@ -102,7 +109,14 @@ begin
     // Restore it to just right of the panel so FindResizeTarget picks it up again.
     Sp.Left := Pan.Width;
 
-    // Large negative drag: floor the neighbour at MinSize (deterministic)
+    // Large negative drag: with AutoSnap on (the default) the neighbour closes.
+    Sp.FakeDrag(0, -1000, 100);
+    AssertEquals('left panel snapped shut', 0, Pan.Width);
+
+    // ...and with AutoSnap off it stops at MinSize, the old unconditional behaviour.
+    Pan.Width := 100;
+    Sp.Left := Pan.Width;
+    Sp.AutoSnap := False;
     Sp.FakeDrag(0, -1000, 100);
     AssertEquals('left panel floored at MinSize', 40, Pan.Width);
   finally

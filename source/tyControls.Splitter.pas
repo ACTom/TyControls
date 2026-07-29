@@ -10,6 +10,7 @@ type
   TTySplitter = class(TTyCustomControl)
   private
     FMinSize: Integer;
+    FAutoSnap: Boolean;
     FResizeStyle: TResizeStyle;
     FOnCanResize: TTySplitterCanResizeEvent;
     FOnMoved: TNotifyEvent;
@@ -36,6 +37,12 @@ type
     constructor Create(AOwner: TComponent); override;
   published
     property MinSize: Integer read FMinSize write SetMinSize default 30;
+    { Drag a pane past MinSize and it closes, instead of sticking at MinSize with the
+      pointer running on without it. Without this there is NO gesture that collapses a
+      pane -- MinSize is a floor the drag can never get under, so "drag the sidebar
+      shut", which is what a splitter is for half the time, was simply not available.
+      LCL ships it on (extctrls.pp AutoSnap default true). }
+    property AutoSnap: Boolean read FAutoSnap write FAutoSnap default True;
     property ResizeStyle: TResizeStyle read FResizeStyle write FResizeStyle default rsUpdate;
     property OnCanResize: TTySplitterCanResizeEvent read FOnCanResize write FOnCanResize;
     property OnMoved: TNotifyEvent read FOnMoved write FOnMoved;
@@ -45,18 +52,25 @@ type
     property Controller;
   end;
 
-function TySplitterNewSize(AAlign: TAlign; AStartSize, ADelta, AMinSize, AMaxSize: Integer): Integer;
+{ AAutoSnap: when the drag lands below AMinSize, collapse to 0 rather than pinning at
+  AMinSize. Off, the pane can never be closed by dragging. }
+function TySplitterNewSize(AAlign: TAlign; AStartSize, ADelta, AMinSize, AMaxSize: Integer;
+  AAutoSnap: Boolean = True): Integer;
 
 implementation
 
-function TySplitterNewSize(AAlign: TAlign; AStartSize, ADelta, AMinSize, AMaxSize: Integer): Integer;
+function TySplitterNewSize(AAlign: TAlign; AStartSize, ADelta, AMinSize, AMaxSize: Integer;
+  AAutoSnap: Boolean = True): Integer;
 begin
   case AAlign of
     alRight, alBottom: Result := AStartSize - ADelta;
   else
     Result := AStartSize + ADelta;
   end;
-  if Result < AMinSize then Result := AMinSize;
+  if Result < AMinSize then
+  begin
+    if AAutoSnap then Result := 0 else Result := AMinSize;
+  end;
   if (AMaxSize >= AMinSize) and (Result > AMaxSize) then Result := AMaxSize;
 end;
 
@@ -64,6 +78,7 @@ constructor TTySplitter.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FMinSize := 30;
+  FAutoSnap := True;
   FResizeStyle := rsUpdate;
   Align := alLeft;
   Width := 5;
@@ -152,7 +167,7 @@ var
 begin
   if FTarget = nil then Exit;
   if Vertical then maxSize := Parent.ClientWidth - Width else maxSize := Parent.ClientHeight - Height;
-  n := TySplitterNewSize(Align, FStartSize, ADelta, FMinSize, maxSize);
+  n := TySplitterNewSize(Align, FStartSize, ADelta, FMinSize, maxSize, FAutoSnap);
   accept := True;
   if Assigned(FOnCanResize) then FOnCanResize(Self, n, accept);
   if not accept then Exit;

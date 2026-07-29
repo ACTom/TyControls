@@ -13,7 +13,8 @@ uses
   tyControls.Types, tyControls.Button, tyControls.GlyphButtons, tyControls.ListBox,
   tyControls.CheckGroup, tyControls.ToolBar, tyControls.StatusBar,
   tyControls.ColorBox, tyControls.SpinEdit, tyControls.CheckBox, tyControls.Menu,
-  tyControls.UpDown, tyControls.TrackBar, tyControls.Base, tyControls.Panel;
+  tyControls.UpDown, tyControls.TrackBar, tyControls.Base, tyControls.Panel,
+  tyControls.MaskEdit, tyControls.Calendar;
 
 type
   { Probes: ApplyToButton and the hosted checkboxes are protected, because the owning
@@ -27,6 +28,12 @@ type
   public
     { Do to the child exactly what a mouse click does -- go through its own Checked. }
     procedure ProbeClick(AIndex: Integer; AValue: Boolean);
+  end;
+
+  TMaskProbe = class(TTyMaskEdit)
+  public
+    { The exact path a Ctrl+V takes: InjectStringAt -> FilterInsert. }
+    procedure ProbePaste(const S: string);
   end;
 
   TUpDownProbe = class(TTyUpDown)
@@ -73,6 +80,11 @@ type
     procedure TrackBarShowsTicksOutOfTheBox;
     { B1 }
     procedure VisibleIsPublishedOnBothBaseClasses;
+    { A7 }
+    procedure MaskEditPasteGoesThroughTheMask;
+    procedure MaskEditPasteKeepsOnlyWhatFits;
+    { A31 }
+    procedure CalendarAcceptsTheLclPropertyName;
   end;
 
 implementation
@@ -80,6 +92,11 @@ implementation
 procedure TToolBarProbe.ProbeApply(B: TTyButton);
 begin
   ApplyToButton(B);
+end;
+
+procedure TMaskProbe.ProbePaste(const S: string);
+begin
+  InjectStringAt(S);
 end;
 
 procedure TUpDownProbe.ProbeDown(X, Y: Integer);
@@ -444,6 +461,63 @@ begin
     GetPropInfo(TTyUpDown, 'Visible') <> nil);
   AssertTrue('windowed base publishes Visible (TTyPanel is a TTyCustomControl)',
     GetPropInfo(TTyPanel, 'Visible') <> nil);
+end;
+
+{ ---------------------------------------------------------------- A7 ------- }
+
+{ Typing was masked because UTF8KeyPress is overridden. Paste is not typing -- it goes
+  through InjectStringAt -> FilterInsert, which TTyMaskEdit never overrode. So Ctrl+V
+  put arbitrary text into a masked field, and IsComplete then answered about a string
+  the mask had never approved. }
+procedure TParityTest.MaskEditPasteGoesThroughTheMask;
+var
+  M: TMaskProbe;
+begin
+  M := TMaskProbe.Create(nil);
+  try
+    M.Mask := '###-###';
+    M.ProbePaste('hello world');
+    AssertEquals('nothing the mask rejects may land', '', M.Text);
+    AssertFalse('and it is certainly not complete', M.IsComplete);
+  finally
+    M.Free;
+  end;
+end;
+
+{ Literals in the pasted text are dropped rather than matched -- TyMaskApply re-inserts
+  them itself, so a pasted "123-456" and a pasted "123456" both land the same. }
+procedure TParityTest.MaskEditPasteKeepsOnlyWhatFits;
+var
+  M: TMaskProbe;
+begin
+  M := TMaskProbe.Create(nil);
+  try
+    M.Mask := '###-###';
+    M.ProbePaste('12a3-45x6789');
+    AssertEquals('digits laid into slots, literals rebuilt', '123-456', M.Text);
+    AssertTrue('all slots filled', M.IsComplete);
+  finally
+    M.Free;
+  end;
+end;
+
+{ --------------------------------------------------------------- A31 ------- }
+
+{ LCL's TCustomCalendar.Date is a STRING and its TDateTime twin is DateTime -- the one
+  TCalendar publishes. Same name, different type on the two controls, which is the worst
+  shape a difference can take: it compiles on one side and not the other. }
+procedure TParityTest.CalendarAcceptsTheLclPropertyName;
+var
+  C: TTyCalendar;
+begin
+  C := TTyCalendar.Create(nil);
+  try
+    C.DateTime := EncodeDate(2026, 7, 30);
+    AssertEquals('DateTime and Date are one field', C.Date, C.DateTime);
+    AssertEquals('and it took', EncodeDate(2026, 7, 30), C.DateTime);
+  finally
+    C.Free;
+  end;
 end;
 
 initialization

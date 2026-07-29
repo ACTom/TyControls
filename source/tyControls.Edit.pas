@@ -1369,6 +1369,17 @@ begin
   ResetCaretBlink;
   Len := UTF8Length(FText);
 
+  { Enter commits the field. The docs said so; the code had no VK_RETURN branch and
+    the unit contained no EditingDone call at all, so the one keystroke everybody uses
+    to say "done with this box" did nothing -- and OnEditingDone only ever ran on focus
+    loss. TTyMemo, where Enter means a newline, already handles VK_RETURN itself.
+    Key is NOT swallowed: a form's Default button must still see it. }
+  if (Key = VK_RETURN) and (Shift = []) then
+  begin
+    EditingDone;
+    Exit;
+  end;
+
   // Ctrl+A / Meta+A
   if (Key = VK_A) and ((ssCtrl in Shift) or (ssMeta in Shift)) then
   begin
