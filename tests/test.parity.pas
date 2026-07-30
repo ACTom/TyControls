@@ -14,7 +14,8 @@ uses
   tyControls.CheckGroup, tyControls.ToolBar, tyControls.StatusBar,
   tyControls.ColorBox, tyControls.SpinEdit, tyControls.CheckBox, tyControls.Menu,
   tyControls.UpDown, tyControls.TrackBar, tyControls.Base, tyControls.Panel,
-  tyControls.MaskEdit, tyControls.Calendar, tyControls.ColorButton;
+  tyControls.MaskEdit, tyControls.Calendar, tyControls.ColorButton,
+  tyControls.HeaderControl;
 
 type
   { Probes: ApplyToButton and the hosted checkboxes are protected, because the owning
@@ -90,6 +91,8 @@ type
     { A1 }
     procedure ColorButtonPaintsItsCaption;
     procedure ColorButtonCaptionOutranksTheHex;
+    { A18 }
+    procedure HeaderEffectiveWidthTellsTheTruthAboutTheLastSection;
   end;
 
 implementation
@@ -575,6 +578,31 @@ begin
     AssertTrue('clearing it hands the slot back', Pos('#', B.ContentText) = 1);
   finally
     B.Free;
+  end;
+end;
+
+{ --------------------------------------------------------------- A18 ------- }
+
+{ The last section absorbs any leftover client width -- deliberate, so the strip spans
+  the control -- but SectionWidth kept returning what you SET. Set 100, 250 gets painted,
+  read it back and it says 100, so anything laid out against it (a grid under the header,
+  a total-width sum) was wrong about the last column and only the last column. }
+procedure TParityTest.HeaderEffectiveWidthTellsTheTruthAboutTheLastSection;
+var
+  H: TTyHeaderControl;
+begin
+  H := TTyHeaderControl.Create(nil);
+  try
+    H.Font.PixelsPerInch := 96;
+    H.SetBounds(0, 0, 400, 26);
+    H.AddSection('A', 100);
+    H.AddSection('B', 100);
+    AssertEquals('SectionWidth still reports what was set', 100, H.SectionWidth[1]);
+    AssertEquals('a non-last section paints at its own width', 100, H.EffectiveSectionWidth[0]);
+    AssertEquals('the last one paints wider, and now says so',
+      300, H.EffectiveSectionWidth[1]);
+  finally
+    H.Free;
   end;
 end;
 

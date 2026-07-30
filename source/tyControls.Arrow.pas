@@ -24,6 +24,19 @@ uses
 
 type
   { Which way the arrow points. }
+  { NOT interchangeable with LCL's TArrow, in two ways that no compiler will tell you
+    about, because a form ported either direction compiles and just looks wrong:
+
+      SHAPE.  TArrow draws a three-point TRIANGLE (TTrianglePoints = array[ptA..ptC],
+      arrow.pp). TTyArrow draws a seven-point BLOCK arrow -- a shaft with a head. Same
+      component name, different glyph.
+
+      DEFAULT DIRECTION.  TArrow.ArrowType defaults to atLeft (arrow.pp). This defaults
+      to tadRight. So an arrow you never configured points the opposite way.
+
+    Both are deliberate -- a block arrow is what this library's look wants -- but they
+    are recorded here rather than left to be discovered on screen. The property is also
+    named Direction, not ArrowType. }
   TTyArrowDirection = (tadRight, tadLeft, tadUp, tadDown);
 
   TTyArrow = class(TTyGraphicControl)

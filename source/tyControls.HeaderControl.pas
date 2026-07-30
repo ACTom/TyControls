@@ -84,6 +84,7 @@ type
     procedure SetSortDirection(AIndex: Integer; AValue: TTyHeaderSortDirection);
     { Device-px widths (scaled) — what the pure geometry actually tiles. }
     function DeviceWidths: TIntegerDynArray;
+    function GetEffectiveSectionWidth(AIndex: Integer): Integer;
   protected
     function GetStyleTypeKey: string; override;   // 'TyHeaderControl' — its own key: a standalone header control is not the tree's header band
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -108,7 +109,18 @@ type
     property Sections[AIndex: Integer]: TTyHeaderSection read GetSection write SetSection;
     { Per-facet accessors (also drive Invalidate). }
     property SectionText[AIndex: Integer]: string read GetSectionText write SetSectionText;
+    { The width you SET. Note it is not always the width you SEE: the last section
+      absorbs any leftover client width so the strip spans the full control (LCL leaves
+      the remainder bare instead). That is deliberate, but it used to be invisible --
+      you set 100, 250 got painted, and reading it back said 100, so code that laid
+      anything out against this value (a grid under the header, a total-width sum) was
+      quietly wrong about the last column and only the last column. Read
+      EffectiveSectionWidth when you need the painted number. }
     property SectionWidth[AIndex: Integer]: Integer read GetSectionWidth write SetSectionWidth;
+    { The width actually PAINTED, in logical px -- equal to SectionWidth for every
+      section except the last, which may be wider. Read-only: it is a consequence of
+      the layout, not an input to it. }
+    property EffectiveSectionWidth[AIndex: Integer]: Integer read GetEffectiveSectionWidth;
     property Sort[AIndex: Integer]: TTyHeaderSortDirection read GetSortDirection write SetSortDirection;
   published
     property OnSectionClick: TTyHeaderSectionEvent read FOnSectionClick write FOnSectionClick;
@@ -299,6 +311,22 @@ begin
   if FSections[AIndex].Width < TyHeaderMinSectionWidth then
     FSections[AIndex].Width := TyHeaderMinSectionWidth;
   Invalidate;
+end;
+
+function TTyHeaderControl.GetEffectiveSectionWidth(AIndex: Integer): Integer;
+var
+  rects: TTyHeaderRectArray;
+  ppi: Integer;
+begin
+  Result := 0;
+  if (AIndex < 0) or (AIndex >= Length(FSections)) then Exit;
+  { Go through the SAME pure function the paint goes through, so the two can never
+    drift: anything else here would be a second implementation of the tiling. }
+  rects := TyHeaderSectionRects(DeviceWidths, ClientRect);
+  if AIndex >= Length(rects) then Exit;
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  Result := MulDiv(rects[AIndex].Right - rects[AIndex].Left, 96, ppi);
 end;
 
 function TTyHeaderControl.GetSectionText(AIndex: Integer): string;
