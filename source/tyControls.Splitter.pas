@@ -2,7 +2,7 @@ unit tyControls.Splitter;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType, ExtCtrls,
+  Classes, SysUtils, Types, Controls, Graphics, LCLType, LMessages, ExtCtrls,
   tyControls.Types, tyControls.Painter, tyControls.Base;
 type
   TTySplitterCanResizeEvent = procedure(Sender: TObject; var ANewSize: Integer; var AAccept: Boolean) of object;
@@ -28,6 +28,10 @@ type
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
+    { Enabled feeds the cursor now, so the cursor has to be re-derived when Enabled
+      changes -- otherwise the fix only lands on the next MouseEnter, and a splitter
+      disabled while the pointer is already over it keeps promising a drag. }
+    procedure CMEnabledChanged(var Message: TLMessage); message CM_ENABLEDCHANGED;
     procedure Loaded; override;      // re-derive the cursor after Align streams in
     procedure MouseEnter; override;  // re-derive the cursor when Align was set at RUNTIME (code-created)
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -100,7 +104,22 @@ end;
 
 procedure TTySplitter.UpdateCursor;
 begin
-  if Vertical then Cursor := crHSplit else Cursor := crVSplit;
+  { A disabled splitter must not advertise a drag it will refuse. It kept showing the
+    resize cursor, so the pointer promised a drag over a control that ignores MouseDown --
+    the user pulls, nothing moves, and there is nothing on screen saying why. LCL
+    re-derives the cursor from Enabled for the same reason. }
+  if not Enabled then
+    Cursor := crDefault
+  else if Vertical then
+    Cursor := crHSplit
+  else
+    Cursor := crVSplit;
+end;
+
+procedure TTySplitter.CMEnabledChanged(var Message: TLMessage);
+begin
+  inherited;
+  UpdateCursor;
 end;
 
 procedure TTySplitter.Loaded;

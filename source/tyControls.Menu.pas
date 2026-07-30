@@ -233,6 +233,10 @@ type
     { Close this level: free the child cascade first, then hide the form (with the
       OnDeactivate handler detached around Hide), and arm the reopen guard. }
     procedure CloseAll;
+    { The width this level WILL take when shown, in device px -- the same content-driven
+      measure Popup uses to size the form. Public so a host can place the popup relative
+      to its own right edge (TTyPopupMenu.Alignment) without duplicating the measure. }
+    function MeasuredWidth: Integer;
     function IsOpen: Boolean;
     { Test seam: activate a row as if it were clicked (same path as a real click). }
     procedure ActivateRowForTest(AIndex: Integer);
@@ -1192,6 +1196,16 @@ begin
   ApplyFormRegion(FPopupRect.Right - FPopupRect.Left, FPopupRect.Bottom - FPopupRect.Top);
 end;
 
+function TTyMenuPopup.MeasuredWidth: Integer;
+var
+  ppi: Integer;
+begin
+  if FView = nil then Exit(0);
+  ppi := FView.Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  Result := FView.MeasureWidth(ppi);
+end;
+
 procedure TTyMenuPopup.CloseAll;
 begin
   { Collapse the cascade from the leaf up: free the child first. }
@@ -1911,6 +1925,7 @@ type
 procedure TTyPopupMenu.PopUp(X, Y: Integer);
 var
   anchor: TRect;
+  w: Integer;
 begin
   // Mirrors popupmenu.inc, minus the native handle it does not need.
   if (ActivePopupMenu <> nil) and (ActivePopupMenu <> Self) then
@@ -1927,7 +1942,25 @@ begin
   EnsureRenderer;
   // A zero-size anchor at the cursor: the renderer hangs its dropdown below/right of
   // (X, Y) and measures its own size (ComputeBounds flips near screen edges).
+  { Honour Alignment. It is inherited from TPopupMenu, so the Object Inspector has always
+    offered paLeft/paRight/paCenter -- and nothing read it, which made a right-aligned
+    context menu (the normal choice for a menu opened from a right-hand toolbar, where a
+    left-aligned one runs off the edge) silently identical to a left-aligned one.
+    The renderer hangs its dropdown from the anchor's LEFT edge, so alignment is expressed
+    by moving that edge: the popup's own width is not known until it measures itself, so
+    paRight/paCenter shift the anchor by the width the renderer reports. }
   anchor := Types.Rect(X, Y, X, Y);
+  if Alignment <> paLeft then
+  begin
+    w := FRenderer.MeasuredWidth;
+    if w > 0 then
+    begin
+      if Alignment = paRight then
+        OffsetRect(anchor, -w, 0)
+      else
+        OffsetRect(anchor, -(w div 2), 0);
+    end;
+  end;
   FRenderer.Popup(anchor, False);
 end;
 

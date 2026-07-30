@@ -215,6 +215,7 @@ type
 
     { Returns True when the field is inert: ShowCheckBox=True AND Checked=False.
       All editing and dropdown must be blocked when this is True. }
+    function  HourOf(AValue: TDateTime): Integer;
     function  IsInert: Boolean;
     { Resolve the checkbox box rect within ATextR (left of text content) @APPI. }
     function  CheckBoxRect(const ATextR: TRect; APPI: Integer): TRect;
@@ -985,6 +986,16 @@ end;
 
 { ── IsInert / CheckBoxRect ───────────────────────────────────────────────── }
 
+{ Hour of the day, 0..23 -- so the A/P keys can tell whether the meridiem already reads
+  what was pressed and step only when it does not. }
+function TTyDateTimePicker.HourOf(AValue: TDateTime): Integer;
+var
+  h, m, sec, ms: Word;
+begin
+  DecodeTime(AValue, h, m, sec, ms);
+  Result := h;
+end;
+
 function TTyDateTimePicker.IsInert: Boolean;
 begin
   Result := FShowCheckBox and not FChecked;
@@ -1312,6 +1323,17 @@ begin
   end;
 
   { If field is inert (ShowCheckBox + not Checked), block all further editing }
+  { Space toggles the enable checkbox, and this MUST sit above the IsInert gate below.
+    IsInert is `ShowCheckBox and not Checked`, so an unchecked picker refuses every key --
+    which meant the one key that could switch it on was refused too. The box is a ~12px
+    mouse target, so with the gate in front of this branch a keyboard user could tab to
+    the control and had no way to make it editable at all. }
+  if (Key = VK_SPACE) and (Shift = []) and FShowCheckBox and not FReadOnly then
+  begin
+    Checked := not FChecked;
+    Key := 0;
+    Exit;
+  end;
   if IsInert then Exit;
 
   case Key of
@@ -1375,6 +1397,40 @@ begin
   inherited UTF8KeyPress(UTF8Key);
   if FReadOnly then Exit;
   if IsInert then Exit;
+  { A / P set AM / PM directly when the meridiem field is selected. Without this the
+    only way to change it was the up/down arrow or the wheel, so a touch-typist filling
+    the field left to right hit a dead stop at the last segment -- and 'A'/'P' is what
+    every native picker accepts. Set, not toggle: pressing A twice must leave AM. }
+  if (Length(UTF8Key) = 1) and (UpCase(UTF8Key[1]) in ['A', 'P'])
+     and (FActiveSeg >= 0) and (FActiveSeg <= High(FSegments))
+     and (FSegments[FActiveSeg].Kind = skAMPM) then
+  begin
+    if UpCase(UTF8Key[1]) = 'A' then
+    begin
+      if HourOf(FDateTime) >= 12 then StepActiveSeg(-1);
+    end
+    else
+      if HourOf(FDateTime) < 12 then StepActiveSeg(1);
+    UTF8Key := '';
+    Exit;
+  end;
+  { A date/time separator commits the field being typed and moves on, so a user can type
+    1/2/2026 straight through instead of reaching for the arrow key between fields. Every
+    native picker does this; ours only advanced when a field filled up, which means a
+    single-digit month left the caret parked. }
+  if (Length(UTF8Key) = 1) and (UTF8Key[1] in ['/', '-', '.', ',', ':', ' ']) then
+  begin
+    OldVal := FDateTime;
+    if FDigitBuffer <> '' then
+      FinalizeBuffer(OldVal, True)          { commit + advance }
+    else if FActiveSeg < High(FSegments) then
+    begin
+      Inc(FActiveSeg);
+      Invalidate;
+    end;
+    UTF8Key := '';
+    Exit;
+  end;
   if (Length(UTF8Key) = 1) and (UTF8Key[1] in ['0'..'9']) then
   begin
     OldVal  := FDateTime;

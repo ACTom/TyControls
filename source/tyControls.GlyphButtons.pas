@@ -203,6 +203,7 @@ type
       does not also block the group's own bookkeeping. }
     FInGroupUpdate: Boolean;
     procedure SetGroupIndex(AValue: Integer);
+    procedure SetAllowAllUp(AValue: Boolean);
     { Release (Down := False) every sibling TTySpeedButton in the same Parent that
       shares FGroupIndex, except Self. No-op when parentless. }
     procedure UnpressSiblings;
@@ -232,7 +233,11 @@ type
     procedure SetDown(AValue: Boolean); override;
   published
     property GroupIndex: Integer read FGroupIndex write SetGroupIndex default 0;
-    property AllowAllUp: Boolean read FAllowAllUp write FAllowAllUp default False;
+    { Setting this re-evaluates the group, as LCL's does. A raw field write left the
+      invariant broken in the one direction that matters: turn AllowAllUp OFF on a group
+      that is currently all-up and it stays all-up -- an exclusive group with nothing
+      selected -- until the user happens to click. }
+    property AllowAllUp: Boolean read FAllowAllUp write SetAllowAllUp default False;
     { Back to False, matching what the constructor sets. The declared default has to agree
       with the constructed value or the streamer writes the property into EVERY .lfm that
       holds one of these (TTyButton declares it True); a host that wants a focusable speed
@@ -644,6 +649,30 @@ begin
         end;
       end;
     end;
+end;
+
+procedure TTySpeedButton.SetAllowAllUp(AValue: Boolean);
+var
+  i: Integer;
+  anyDown: Boolean;
+begin
+  if FAllowAllUp = AValue then Exit;
+  FAllowAllUp := AValue;
+  { Turning it off means "this group must always have exactly one member down". If none
+    is, press Self -- it is the button the caller was configuring, so it is the least
+    surprising one to become the selection. }
+  if AValue or (FGroupIndex <= 0) or (Parent = nil) then Exit;
+  anyDown := Down;
+  if not anyDown then
+    for i := 0 to Parent.ControlCount - 1 do
+      if (Parent.Controls[i] is TTySpeedButton)
+         and (TTySpeedButton(Parent.Controls[i]).FGroupIndex = FGroupIndex)
+         and TTySpeedButton(Parent.Controls[i]).Down then
+      begin
+        anyDown := True;
+        Break;
+      end;
+  if not anyDown then Down := True;
 end;
 
 procedure TTySpeedButton.SetDown(AValue: Boolean);

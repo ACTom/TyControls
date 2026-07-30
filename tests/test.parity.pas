@@ -9,13 +9,15 @@ unit test.parity;
   none of them would show up in a screenshot. That is why they survived so long. }
 interface
 uses
-  Classes, SysUtils, TypInfo, Types, Graphics, Controls, StdCtrls, Menus, fpcunit, testregistry,
+  Classes, SysUtils, TypInfo, Types, Graphics, Controls, StdCtrls, Menus, LCLType, LCLProc,
+  fpcunit, testregistry,
   tyControls.Types, tyControls.Button, tyControls.GlyphButtons, tyControls.ListBox,
   tyControls.CheckGroup, tyControls.ToolBar, tyControls.StatusBar,
   tyControls.ColorBox, tyControls.SpinEdit, tyControls.CheckBox, tyControls.Menu,
   tyControls.UpDown, tyControls.TrackBar, tyControls.Base, tyControls.Panel,
   tyControls.MaskEdit, tyControls.Calendar, tyControls.ColorButton,
-  tyControls.HeaderControl, tyControls.ComboBox, tyControls.Edit, tyControls.Memo;
+  tyControls.HeaderControl, tyControls.ComboBox, tyControls.Edit, tyControls.Memo,
+  tyControls.DateTimePicker, tyControls.Splitter;
 
 type
   { Probes: ApplyToButton and the hosted checkboxes are protected, because the owning
@@ -35,6 +37,12 @@ type
   public
     { The exact path a Ctrl+V takes: InjectStringAt -> FilterInsert. }
     procedure ProbePaste(const S: string);
+  end;
+
+  TDtpProbe = class(TTyDateTimePicker)
+  public
+    procedure ProbeChar(C: Char);
+    procedure ProbeKey(K: Word);
   end;
 
   TUpDownProbe = class(TTyUpDown)
@@ -105,9 +113,25 @@ type
     { B4 -- geometry the designer could not reach }
     procedure AutoSizeAndContainerGeometryArePublished;
     procedure LyingPropertiesStayUnpublished;
+    { P0 -- semantic mismatches }
+    procedure DateTimePickerAmPmKeysSetTheMeridiem;
+    procedure DateTimePickerSpaceTogglesTheCheckBox;
+    procedure DateTimePickerSeparatorAdvancesTheField;
+    procedure SpeedButtonAllowAllUpOffRestoresTheInvariant;
+    procedure SplitterDisabledShowsNoResizeCursor;
   end;
 
 implementation
+
+{ Hour of the day 0..23 -- the meridiem assertions read this rather than a formatted
+  string, so a locale change cannot make them pass for the wrong reason. }
+function HourOf(AValue: TDateTime): Integer;
+var
+  h, m, sec, ms: Word;
+begin
+  DecodeTime(AValue, h, m, sec, ms);
+  Result := h;
+end;
 
 procedure TToolBarProbe.ProbeApply(B: TTyButton);
 begin
@@ -117,6 +141,22 @@ end;
 procedure TMaskProbe.ProbePaste(const S: string);
 begin
   InjectStringAt(S);
+end;
+
+procedure TDtpProbe.ProbeChar(C: Char);
+var
+  k: TUTF8Char;
+begin
+  k := C;
+  UTF8KeyPress(k);
+end;
+
+procedure TDtpProbe.ProbeKey(K: Word);
+var
+  w: Word;
+begin
+  w := K;
+  KeyDown(w, []);
 end;
 
 procedure TUpDownProbe.ProbeDown(X, Y: Integer);
@@ -822,6 +862,117 @@ begin
     GetPropInfo(TTyPanel, 'BiDiMode') = nil);
   AssertTrue('OnPaint must not be published until the paint chain calls it',
     GetPropInfo(TTyPanel, 'OnPaint') = nil);
+end;
+
+{ ---------------------------------------------------------------- P0 ------- }
+
+{ With the meridiem field selected, A and P used to do nothing: UTF8KeyPress accepted only
+  '0'..'9'. So a user typing a time left to right hit a dead stop at the last field and had
+  to reach for the arrow key. Set, not toggle -- pressing A twice must still read AM. }
+procedure TParityTest.DateTimePickerAmPmKeysSetTheMeridiem;
+var
+  D: TDtpProbe;
+  i: Integer;
+begin
+  D := TDtpProbe.Create(nil);
+  try
+    D.Kind := dtkTime;
+    D.TimeFormat := 'hh:nn AM/PM';
+    D.DateTime := EncodeTime(9, 30, 0, 0);          { 09:30 AM }
+    { VK_END parks on the last segment, which for this format is the meridiem. }
+    D.ProbeKey(VK_END);
+    i := D.ActiveSeg;
+    AssertTrue('the last field is the meridiem', (i >= 0) and (i <= High(D.Segments))
+      and (D.Segments[i].Kind = skAMPM));
+    D.ProbeChar('P');
+    AssertEquals('P moves it to PM', 21, HourOf(D.DateTime));
+    D.ProbeChar('P');
+    AssertEquals('and pressing P again leaves it there', 21, HourOf(D.DateTime));
+    D.ProbeChar('a');
+    AssertEquals('lower-case a moves it back to AM', 9, HourOf(D.DateTime));
+  finally
+    D.Free;
+  end;
+end;
+
+{ The checkbox was mouse-only on a ~12px target, and with ShowCheckBox on an unchecked
+  picker refuses every edit path (IsInert). So a keyboard user could reach the control and
+  had no way to switch it on. }
+procedure TParityTest.DateTimePickerSpaceTogglesTheCheckBox;
+var
+  D: TDtpProbe;
+begin
+  D := TDtpProbe.Create(nil);
+  try
+    D.ShowCheckBox := True;
+    D.Checked := False;
+    D.ProbeKey(VK_SPACE);
+    AssertTrue('Space switches it on', D.Checked);
+    D.ProbeKey(VK_SPACE);
+    AssertFalse('and off again', D.Checked);
+  finally
+    D.Free;
+  end;
+end;
+
+{ Typing a separator commits the field and moves on, so 1/2/2026 goes straight through.
+  Before, advance happened only when a field FILLED, so a single-digit month parked. }
+procedure TParityTest.DateTimePickerSeparatorAdvancesTheField;
+var
+  D: TDtpProbe;
+  before: Integer;
+begin
+  D := TDtpProbe.Create(nil);
+  try
+    D.Kind := dtkDate;
+    D.ProbeKey(VK_HOME);
+    before := D.ActiveSeg;
+    D.ProbeChar('/');
+    AssertEquals('the separator moved to the next field', before + 1, D.ActiveSeg);
+  finally
+    D.Free;
+  end;
+end;
+
+{ AllowAllUp was a raw field write, so turning it OFF on a group that happens to be all-up
+  left an exclusive group with nothing selected until the user clicked. }
+procedure TParityTest.SpeedButtonAllowAllUpOffRestoresTheInvariant;
+var
+  Host: TCustomControl;
+  A, B: TTySpeedButton;
+begin
+  Host := TCustomControl.Create(nil);
+  try
+    A := TTySpeedButton.Create(Host); A.Parent := Host;
+    B := TTySpeedButton.Create(Host); B.Parent := Host;
+    A.AllowAllUp := True; B.AllowAllUp := True;
+    A.GroupIndex := 1;    B.GroupIndex := 1;
+    AssertFalse('group starts all-up', A.Down or B.Down);
+    A.AllowAllUp := False;
+    AssertTrue('turning it off must leave the group with a selection', A.Down or B.Down);
+  finally
+    Host.Free;
+  end;
+end;
+
+{ A disabled splitter kept advertising the resize cursor, so the pointer promised a drag
+  over a control that ignores MouseDown. }
+procedure TParityTest.SplitterDisabledShowsNoResizeCursor;
+var
+  S: TTySplitter;
+begin
+  S := TTySplitter.Create(nil);
+  try
+    S.Align := alLeft;
+    AssertEquals('enabled: the resize cursor', Ord(crHSplit), Ord(S.Cursor));
+    { CM_ENABLEDCHANGED re-derives it, so no hover is needed to observe the change. }
+    S.Enabled := False;
+    AssertEquals('disabled: no promise of a drag', Ord(crDefault), Ord(S.Cursor));
+    S.Enabled := True;
+    AssertEquals('and back', Ord(crHSplit), Ord(S.Cursor));
+  finally
+    S.Free;
+  end;
 end;
 
 initialization
