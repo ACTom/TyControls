@@ -291,6 +291,9 @@ type
     procedure ApplyAutoSizeWidth;
     { Index of the AIndex-th VISIBLE top item back into Menu.Items, or -1. }
     function VisibleTopItem(AIndex: Integer): TMenuItem;
+    { Whether the AIndex-th visible top item is enabled. A missing item counts as
+      disabled -- nothing to open is the same as not being allowed to. }
+    function TopEnabled(AIndex: Integer): Boolean;
     procedure HandleNavigateAdjacent(Sender: TObject; ADelta: Integer);
     procedure HandlePopupClosed(Sender: TObject);
     procedure ClosePopup;
@@ -327,6 +330,14 @@ type
     { Alt+<mnemonic>: open the matching top menu (LCL broadcasts DialogChar to children). }
     function DialogChar(var Message: TLMKey): Boolean; override;
   public
+    { Test seams. OpenTop is the single door into a top-level item -- click, hover-switch
+      and Alt mnemonic all arrive there -- so driving it directly exercises the disabled
+      and childless rules without a window handle or a real menu grab. }
+    procedure OpenTopForTest(AIndex: Integer);
+    function TopEnabledForTest(AIndex: Integer): Boolean;
+    { Which top's dropdown is open, or -1. The observable that says whether OpenTop was
+      allowed to proceed -- a disabled top with children must leave this at -1. }
+    function OpenIndexForTest: Integer;
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
   published
@@ -1480,6 +1491,29 @@ begin
     if FMenu.Items[i].Visible then Inc(Result);
 end;
 
+function TTyMenuBar.OpenIndexForTest: Integer;
+begin
+  Result := FOpenIndex;
+end;
+
+procedure TTyMenuBar.OpenTopForTest(AIndex: Integer);
+begin
+  OpenTop(AIndex);
+end;
+
+function TTyMenuBar.TopEnabledForTest(AIndex: Integer): Boolean;
+begin
+  Result := TopEnabled(AIndex);
+end;
+
+function TTyMenuBar.TopEnabled(AIndex: Integer): Boolean;
+var
+  mi: TMenuItem;
+begin
+  mi := VisibleTopItem(AIndex);
+  Result := (mi <> nil) and mi.Enabled;
+end;
+
 function TTyMenuBar.VisibleTopItem(AIndex: Integer): TMenuItem;
 var i, n: Integer;
 begin
@@ -1672,7 +1706,21 @@ var
   anchor: TRect;
 begin
   mi := VisibleTopItem(AIndex);
-  if (mi = nil) or (mi.Count = 0) then begin ClosePopup; Exit; end;
+  if mi = nil then begin ClosePopup; Exit; end;
+  { A disabled top cannot be opened -- by click, by hover-switch, or by its Alt mnemonic.
+    All three routes come through here, which is why the check lives here and not in
+    MouseDown. }
+  if not mi.Enabled then begin ClosePopup; Exit; end;
+  { A childless top-level item is a COMMAND BUTTON, not a dead cell. In a native menu bar
+    clicking it fires its OnClick; here it silently closed whatever was open and returned,
+    so a bar with a bare "Help" top did nothing at all and there was no way to tell that
+    from a menu whose items had failed to load. }
+  if mi.Count = 0 then
+  begin
+    ClosePopup;
+    mi.Click;
+    Exit;
+  end;
 
   // Reuse the live host across adjacent-cell rotation; rebuild it only when needed.
   if FPopup = nil then
@@ -1816,7 +1864,13 @@ begin
 
       // A cell is active when its dropdown is open, hover when the mouse is over it.
       CellStates := [];
-      if i = FOpenIndex then
+      { Disabled wins over both. It was not resolved at all, so a disabled top-level menu
+        painted identically to an enabled one -- the user clicks, nothing opens, and the
+        bar has told them nothing. Disabled also suppresses the hover highlight, which
+        would otherwise invite exactly that click. }
+      if not TopEnabled(i) then
+        Include(CellStates, tysDisabled)
+      else if i = FOpenIndex then
         Include(CellStates, tysActive)
       else if i = FHotIndex then
         Include(CellStates, tysHover)

@@ -147,7 +147,19 @@ type
     // Selection API
     function HasSelection: Boolean;
     procedure SelectAll;
+    { BREAKING, and deliberately so. This used to COLLAPSE the selection (drop the
+      highlight, leave the text); LCL's and Delphi's TCustomEdit.ClearSelection DELETE the
+      selected text. Under one name, two opposite meanings -- and the silent direction was
+      the dangerous one: code ported from Lazarus called ClearSelection to remove what the
+      user had selected, the text stayed, and nothing said so.
+
+      Nothing inside this library called it (grep: every other ClearSelection hit is a
+      list/tree/grid deselecting ROWS, which is a different and correct meaning), so the
+      change breaks only callers who relied on the collapse. CollapseSelection below is
+      that behaviour, kept and named. }
     procedure ClearSelection;
+    { Drop the highlight without touching the text -- what ClearSelection used to do. }
+    procedure CollapseSelection;
     { Empty the control. One line, but the one LCL name for it -- `Ed.Clear` is what
       ported code writes, and `Text := ''` is what it had to be rewritten to. }
     procedure Clear;
@@ -480,6 +492,17 @@ begin
 end;
 
 procedure TTyEdit.ClearSelection;
+begin
+  { Deletes, as LCL does. DeleteSelection already exists and carries the undo step, the
+    caret move and the change notification, so this is a rename of intent, not a second
+    implementation. }
+  if HasSelection then
+    DeleteSelection
+  else
+    CollapseSelection;
+end;
+
+procedure TTyEdit.CollapseSelection;
 begin
   BreakCoalescing;
   FSelAnchor := FCaret;

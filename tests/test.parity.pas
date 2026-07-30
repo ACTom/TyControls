@@ -56,6 +56,8 @@ type
     FItemEvents: Integer;
     FPopups: Integer;
     FArrows: string;
+    FTopClicks: Integer;
+    procedure CountTopClick(Sender: TObject);
     procedure CountItemChange(Sender: TObject; AIndex: Integer);
     procedure CountPopup(Sender: TObject);
     procedure RecordArrow(Sender: TObject; AButton: TTyUpDownButton);
@@ -119,6 +121,9 @@ type
     procedure DateTimePickerSeparatorAdvancesTheField;
     procedure SpeedButtonAllowAllUpOffRestoresTheInvariant;
     procedure SplitterDisabledShowsNoResizeCursor;
+    procedure MenuBarChildlessTopFiresItsOnClick;
+    procedure MenuBarDisabledTopCannotBeOpened;
+    procedure EditClearSelectionDeletesTheSelectedText;
   end;
 
 implementation
@@ -865,6 +870,100 @@ begin
 end;
 
 { ---------------------------------------------------------------- P0 ------- }
+
+procedure TParityTest.CountTopClick(Sender: TObject);
+begin
+  Inc(FTopClicks);
+end;
+
+{ A childless top-level item is a COMMAND BUTTON, not a dead cell. OpenTop returned early
+  on Count = 0, so a bar with a bare "Help" top did nothing at all -- and there was no way
+  to tell that from a menu whose items had failed to load. }
+procedure TParityTest.MenuBarChildlessTopFiresItsOnClick;
+var
+  B: TTyMenuBar;
+  M: TMainMenu;
+  Top: TMenuItem;
+begin
+  B := TTyMenuBar.Create(nil);
+  M := TMainMenu.Create(B);
+  try
+    Top := TMenuItem.Create(M);
+    Top.Caption := 'Help';
+    Top.OnClick := @CountTopClick;
+    M.Items.Add(Top);
+    B.Menu := M;
+    FTopClicks := 0;
+    B.OpenTopForTest(0);
+    AssertEquals('a childless top fires OnClick', 1, FTopClicks);
+  finally
+    B.Free;
+  end;
+end;
+
+{ Disabled must block all three routes into a top -- click, hover-switch and Alt mnemonic --
+  which is why the check sits in OpenTop rather than in MouseDown. }
+procedure TParityTest.MenuBarDisabledTopCannotBeOpened;
+var
+  B: TTyMenuBar;
+  M: TMainMenu;
+  Top, Kid: TMenuItem;
+begin
+  B := TTyMenuBar.Create(nil);
+  M := TMainMenu.Create(B);
+  try
+    Top := TMenuItem.Create(M);
+    Top.Caption := 'File';
+    Top.OnClick := @CountTopClick;
+    M.Items.Add(Top);
+    { A child, deliberately: a disabled CHILDLESS top proves nothing, because
+      TMenuItem.Click already no-ops when disabled -- LCL guards that path for us. The
+      case that needs our guard is a disabled top WITH children, whose dropdown would
+      otherwise open. }
+    Kid := TMenuItem.Create(M);
+    Kid.Caption := 'Open';
+    Top.Add(Kid);
+    Top.Enabled := False;
+    B.Menu := M;
+    AssertFalse('the bar reports it disabled', B.TopEnabledForTest(0));
+    FTopClicks := 0;
+    B.OpenTopForTest(0);
+    AssertEquals('a disabled top must not open its dropdown', -1, B.OpenIndexForTest);
+    AssertEquals('and fires nothing', 0, FTopClicks);
+
+    Top.Enabled := True;
+    B.OpenTopForTest(0);
+    AssertEquals('enabled, it opens', 0, B.OpenIndexForTest);
+  finally
+    B.Free;
+  end;
+end;
+
+{ BREAKING and deliberate. LCL's and Delphi's ClearSelection DELETE the selected text; ours
+  collapsed the highlight and left it, so ported code asked for a removal, got none, and was
+  told nothing. CollapseSelection is the old behaviour, kept and named. }
+procedure TParityTest.EditClearSelectionDeletesTheSelectedText;
+var
+  E: TTyEdit;
+begin
+  E := TTyEdit.Create(nil);
+  try
+    E.Text := 'abcdef';
+    E.SelStart := 1;
+    E.SelLength := 3;                 { 'bcd' }
+    E.ClearSelection;
+    AssertEquals('ClearSelection removes it', 'aef', E.Text);
+
+    E.Text := 'abcdef';
+    E.SelStart := 1;
+    E.SelLength := 3;
+    E.CollapseSelection;
+    AssertEquals('CollapseSelection keeps it', 'abcdef', E.Text);
+    AssertEquals('and just drops the highlight', 0, E.SelLength);
+  finally
+    E.Free;
+  end;
+end;
 
 { With the meridiem field selected, A and P used to do nothing: UTF8KeyPress accepted only
   '0'..'9'. So a user typing a time left to right hit a dead stop at the last field and had

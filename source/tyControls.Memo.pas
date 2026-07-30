@@ -389,7 +389,6 @@ type
     // from SelText so the published flat property SelText can read it.
     function GetSelText: string;
     // Collapse the selection onto the caret (anchor := caret).
-    procedure ClearSelection;
     // Clipboard virtual hooks (override in tests to avoid the real OS clipboard;
     // verbatim from TTyEdit). SelText is already LineEnding-joined, so the same
     // copy/cut bodies as Edit work unchanged for the multi-line model.
@@ -474,6 +473,12 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+    { BREAKING and deliberate, mirroring TTyEdit: LCL's ClearSelection DELETES the
+      selected text; ours collapsed the highlight and left it. It was also PROTECTED
+      while LCL's is public, so the wrong behaviour was not even reachable to be noticed.
+      CollapseSelection is the old behaviour, kept and named. }
+    procedure ClearSelection;
+    procedure CollapseSelection;
     { Append one line. LCL's TCustomMemo publishes this and it is what the running-log
       pattern reaches for; without it the same thing had to be spelled Lines.Add -- which
       is fine now that Lines notifies, and was silent before it did. }
@@ -1382,6 +1387,16 @@ begin
 end;
 
 procedure TTyMemo.ClearSelection;
+begin
+  { Deletes, as LCL does. DeleteSelection already carries the undo step, the caret move
+    and the change notification. }
+  if HasSelection then
+    DeleteSelection
+  else
+    CollapseSelection;
+end;
+
+procedure TTyMemo.CollapseSelection;
 begin
   FSelAnchorLine := FCaretLine;
   FSelAnchorCol := FCaretCol;

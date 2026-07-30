@@ -15,6 +15,7 @@ type
     function ProbeSelText: string;
     procedure ProbeSelectAll;
     procedure ProbeClearSelection;
+    procedure ProbeCollapseSelection;
     procedure ProbeSetCaret(ALine, ACol: Integer);
     procedure ProbeSetAnchor(ALine, ACol: Integer);
     function ProbeCaretLine: Integer;
@@ -87,7 +88,8 @@ type
     procedure TestSelTextSingleLine;
     procedure TestSelTextMultiLineJoinedByLineEnding;
     procedure TestOrderedSelLexicographic;
-    procedure TestClearSelectionCollapses;
+    procedure TestCollapseSelectionKeepsTheText;
+    procedure TestClearSelectionDeletesTheText;
     // --- T2: DeleteSelection 2D + typing/Enter/Backspace/Delete routing ---
     procedure TestDeleteSelectionWithinLine;
     procedure TestDeleteSelectionMultiLineMergesHeadTail;
@@ -174,6 +176,11 @@ end;
 procedure TTyMemoSelProbe.ProbeClearSelection;
 begin
   ClearSelection;
+end;
+
+procedure TTyMemoSelProbe.ProbeCollapseSelection;
+begin
+  CollapseSelection;
 end;
 
 procedure TTyMemoSelProbe.ProbeSetCaret(ALine, ACol: Integer);
@@ -485,17 +492,38 @@ begin
   AssertEquals('SelEndCol=1', 1, EC);
 end;
 
-procedure TTyMemoSelectionTest.TestClearSelectionCollapses;
+{ CollapseSelection drops the highlight and leaves the text -- what ClearSelection used
+  to do, kept under a name that says which of the two it is. }
+procedure TTyMemoSelectionTest.TestCollapseSelectionKeepsTheText;
 begin
   SetUpMemo;
   LoadLines(['abcde', 'fghij']);
   FMemo.ProbeSetCaret(1, 2);
   FMemo.ProbeSetAnchor(0, 1);
+  AssertTrue('selection present before collapse', FMemo.ProbeHasSelection);
+  FMemo.ProbeCollapseSelection;
+  AssertFalse('no selection after collapse', FMemo.ProbeHasSelection);
+  AssertEquals('caret line unchanged', 1, FMemo.ProbeCaretLine);
+  AssertEquals('caret col unchanged', 2, FMemo.ProbeCaretCol);
+  AssertEquals('and the text is untouched', 'abcde', FMemo.Lines[0]);
+  AssertEquals('', 'fghij', FMemo.Lines[1]);
+end;
+
+{ BREAKING, and the point of the change: LCL's ClearSelection DELETES. Ours collapsed, so
+  code ported from Lazarus asked for the selected text to be removed, it stayed, and
+  nothing said so. This test used to assert the collapse -- its own name said
+  ...Collapses -- which is how the divergence went unquestioned. }
+procedure TTyMemoSelectionTest.TestClearSelectionDeletesTheText;
+begin
+  SetUpMemo;
+  LoadLines(['abcde', 'fghij']);
+  FMemo.ProbeSetCaret(1, 2);   { caret after 'fg' }
+  FMemo.ProbeSetAnchor(0, 1);  { anchor after 'a'  }
   AssertTrue('selection present before clear', FMemo.ProbeHasSelection);
   FMemo.ProbeClearSelection;
-  AssertFalse('no selection after clear', FMemo.ProbeHasSelection);
-  AssertEquals('caret line unchanged after clear', 1, FMemo.ProbeCaretLine);
-  AssertEquals('caret col unchanged after clear', 2, FMemo.ProbeCaretCol);
+  AssertFalse('no selection afterwards', FMemo.ProbeHasSelection);
+  AssertEquals('the two lines merged around the removed span', 1, FMemo.Lines.Count);
+  AssertEquals('head + tail survive, the selection does not', 'ahij', FMemo.Lines[0]);
 end;
 
 // --- T2: DeleteSelection 2D + typing/Enter/Backspace/Delete routing ---
