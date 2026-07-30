@@ -102,6 +102,9 @@ type
     procedure ListBoxSelectRangeAndSelectedText;
     procedure ComboBoxClearAlsoBlanksTheText;
     procedure EditAndMemoHaveTheirLclOneLiners;
+    { B4 -- geometry the designer could not reach }
+    procedure AutoSizeAndContainerGeometryArePublished;
+    procedure LyingPropertiesStayUnpublished;
   end;
 
 implementation
@@ -780,6 +783,45 @@ begin
   finally
     M.Free;
   end;
+end;
+
+{ ---------------------------------------------------------------- B4 ------- }
+
+{ 21 controls here override CalculatePreferredSize -- whose entire purpose is to answer
+  "how big do I want to be" -- and TControl.AutoSize is what asks. It was reachable from
+  code and absent from the designer, so the measurement work was done and could not be
+  switched on where forms are actually built. BorderWidth and ChildSizing are the
+  windowed base's container geometry, both fully implemented by TWinControl's align pass. }
+procedure TParityTest.AutoSizeAndContainerGeometryArePublished;
+begin
+  AssertTrue('graphic base publishes AutoSize',
+    GetPropInfo(TTyUpDown, 'AutoSize') <> nil);
+  AssertTrue('windowed base publishes AutoSize',
+    GetPropInfo(TTyPanel, 'AutoSize') <> nil);
+  AssertTrue('windowed base publishes BorderWidth',
+    GetPropInfo(TTyPanel, 'BorderWidth') <> nil);
+  AssertTrue('windowed base publishes ChildSizing',
+    GetPropInfo(TTyPanel, 'ChildSizing') <> nil);
+  { Container geometry is meaningless on a graphic control -- it hosts nothing. }
+  AssertTrue('graphic base does NOT publish ChildSizing',
+    GetPropInfo(TTyUpDown, 'ChildSizing') = nil);
+end;
+
+{ The counterpart guard, and the more important one. BiDiMode and OnPaint are also
+  TControl members that "work from code", and the same batch nearly republished them.
+  Neither may be published while the paint path ignores it: grep finds ZERO references to
+  BiDiMode/RightToLeft in tyControls.Painter.pas or tyControls.Base.pas, and there is no
+  OnPaint hook anywhere in the paint chain. Publishing either would manufacture exactly
+  the defect this whole pass has been removing -- a property the Object Inspector offers
+  and the control silently ignores, which is how TTyColorButton.Caption came to exist.
+  When the paint honours them, delete this test. Until then it is the thing stopping a
+  well-meaning "just republish the rest" commit. }
+procedure TParityTest.LyingPropertiesStayUnpublished;
+begin
+  AssertTrue('BiDiMode must not be published until the painter honours it',
+    GetPropInfo(TTyPanel, 'BiDiMode') = nil);
+  AssertTrue('OnPaint must not be published until the paint chain calls it',
+    GetPropInfo(TTyPanel, 'OnPaint') = nil);
 end;
 
 initialization

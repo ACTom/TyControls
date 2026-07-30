@@ -126,6 +126,13 @@ type
     property OnContextPopup;
     property OnResize;
     property OnChangeBounds;
+    { AutoSize, republished. 21 controls here already override CalculatePreferredSize --
+      the whole point of which is to answer "how big do I want to be" -- and TControl's
+      AutoSize is what asks. It was reachable from code and absent from the designer, so
+      the measurement work was done and could not be switched on where forms are built.
+      Default False, so no existing form changes; a control that does NOT implement a
+      preferred size simply keeps its bounds, exactly as in the LCL. }
+    property AutoSize;
     { Drag-and-drop, republished. Every one of these is a TControl member with the
       dispatch already implemented by the LCL -- DragMode := dmAutomatic and
       OnDragOver/OnDragDrop work on a self-drawn control exactly as on a native one,
@@ -249,6 +256,21 @@ type
     property OnContextPopup;
     property OnResize;
     property OnChangeBounds;
+    { AutoSize, republished. 21 controls here already override CalculatePreferredSize --
+      the whole point of which is to answer "how big do I want to be" -- and TControl's
+      AutoSize is what asks. It was reachable from code and absent from the designer, so
+      the measurement work was done and could not be switched on where forms are built.
+      Default False, so no existing form changes; a control that does NOT implement a
+      preferred size simply keeps its bounds, exactly as in the LCL. }
+    property AutoSize;
+    { Container geometry, republished for the windowed base only -- both are TWinControl
+      members and meaningless on a graphic control that hosts nothing.
+      BorderWidth insets the child area; ChildSizing is the LCL's per-container child
+      layout engine (Layout, ControlsPerLine, the spacings, EnlargeHorizontal and friends),
+      already fully implemented in TWinControl's align pass. Neither was published, so a
+      TTy container could not be given either from the designer. }
+    property BorderWidth;
+    property ChildSizing;
     { Drag-and-drop, republished. Every one of these is a TControl member with the
       dispatch already implemented by the LCL -- DragMode := dmAutomatic and
       OnDragOver/OnDragDrop work on a self-drawn control exactly as on a native one,
