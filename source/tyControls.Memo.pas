@@ -474,6 +474,12 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+    { Append one line. LCL's TCustomMemo publishes this and it is what the running-log
+      pattern reaches for; without it the same thing had to be spelled Lines.Add -- which
+      is fine now that Lines notifies, and was silent before it did. }
+    procedure Append(const AValue: string);
+    { Empty the memo. }
+    procedure Clear;
     // Headless input helpers (mirror TTyEdit.Inject*). InjectChar simulates a
     // printable keypress; InjectKey simulates a VK_* KeyDown.
     procedure InjectChar(const AChar: TUTF8Char);
@@ -1343,6 +1349,18 @@ begin
   else
     Head := '';
   Result := Result + LineEnding + Head;
+end;
+
+procedure TTyMemo.Append(const AValue: string);
+begin
+  { Straight through Lines, so it picks up the change hook and the visual-row cache
+    invalidation rather than reimplementing either. }
+  FLines.Add(AValue);
+end;
+
+procedure TTyMemo.Clear;
+begin
+  FLines.Clear;
 end;
 
 procedure TTyMemo.SelectAll;

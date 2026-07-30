@@ -97,6 +97,29 @@ type
     function SelCount: Integer;
     procedure ClearSelection;
     procedure SelectAll;
+    { The control-level list surface every LCL list control has and this one did not, so
+      list code ported from Lazarus failed to compile on the method name -- `Lb.Clear`,
+      `Lb.AddItem(s, obj)`, `Lb.Count`. Going through Items works, but only once you know
+      to; and Clear in particular is not the same call, because emptying the list has to
+      reset ItemIndex and the multi-select bitmap too. }
+    procedure Clear;
+    procedure AddItem(const AItem: string; AnObject: TObject);
+    function Count: Integer;
+    { Row geometry, published as the paint sees it. ItemRect is the device-px rect row
+      AIndex is painted in (empty when the row is scrolled out of view), GetIndexAtY the
+      inverse. Both route through the same RowAtY/ScaledItemHeight the painter uses, so a
+      caller placing an editor or a popup over a row lands where the row actually is. }
+    function ItemRect(AIndex: Integer): TRect;
+    function GetIndexAtY(AY: Integer): Integer;
+    { Delete every selected row (multi-select aware, back-to-front so the indices behind
+      the cursor stay valid) and return the number removed. }
+    function DeleteSelected: Integer;
+    { Select the inclusive range [ALow..AHigh]. No-op when not MultiSelect, because a
+      single-select box cannot hold a range and silently selecting only one end would be
+      worse than doing nothing. }
+    procedure SelectRange(ALow, AHigh: Integer; ASelected: Boolean);
+    { The selected rows' text, newline-joined -- what a "copy the selection" command wants. }
+    function GetSelectedText: string;
     property Selected[AIndex: Integer]: Boolean read GetSelected write SetSelected;
   public
     { When True, the box surface is painted with SQUARE corners (frame radius forced to 0). The
@@ -589,18 +612,18 @@ begin
 end;
 
 procedure TTyListBox.KeyDown(var Key: Word; Shift: TShiftState);
-var Count, NewFocus, VR: Integer; Extend: Boolean;
+var RowTotal, NewFocus, VR: Integer; Extend: Boolean;
   procedure MoveFocus(ATarget: Integer);
   begin
     if ATarget < 0 then ATarget := 0;
-    if ATarget > Count - 1 then ATarget := Count - 1;
+    if ATarget > RowTotal - 1 then ATarget := RowTotal - 1;
     NewFocus := ATarget;
   end;
 begin
   if not Enabled then Exit;
   inherited KeyDown(Key, Shift);
-  Count := FItems.Count;
-  if Count = 0 then Exit;
+  RowTotal := FItems.Count;
+  if RowTotal = 0 then Exit;
   VR := VisibleRows;
   Extend := (ssShift in Shift) and FMultiSelect;
   NewFocus := FItemIndex;
@@ -611,7 +634,7 @@ begin
     VK_PRIOR: MoveFocus(IfThenIdx(FItemIndex < 0, 0, FItemIndex - VR));   // PageUp
     VK_NEXT:  MoveFocus(IfThenIdx(FItemIndex < 0, 0, FItemIndex + VR));   // PageDown
     VK_HOME:  MoveFocus(0);
-    VK_END:   MoveFocus(Count - 1);
+    VK_END:   MoveFocus(RowTotal - 1);
     VK_SPACE:
       begin
         if FMultiSelect and (FItemIndex >= 0) then
@@ -901,6 +924,126 @@ begin
     AStyle.TextColor,
     taLeftJustify, tlCenter, True
   );
+end;
+
+procedure TTyListBox.Clear;
+begin
+  { A convenience alias, and honestly nothing more: Items.Clear fires ItemsChanged, which
+    already resizes the FSelected bitmap, clamps a now-out-of-range ItemIndex to -1 and
+    pulls TopIndex back. Re-doing any of that here would be dead code that reads like a
+    safeguard. What Clear buys is the NAME -- `Lb.Clear` is what ported code writes.
+    No OnChange: LCL's Clear does not report a selection change either, and a caller who
+    just emptied the list does not need to be told the selection went with it. }
+  FItems.Clear;
+  UpdateScrollBar;
+end;
+
+procedure TTyListBox.AddItem(const AItem: string; AnObject: TObject);
+begin
+  FItems.AddObject(AItem, AnObject);
+end;
+
+function TTyListBox.Count: Integer;
+begin
+  Result := FItems.Count;
+end;
+
+function TTyListBox.ItemRect(AIndex: Integer): TRect;
+var
+  SH, rowTop: Integer;
+begin
+  Result := Rect(0, 0, 0, 0);
+  if (AIndex < 0) or (AIndex >= FItems.Count) then Exit;
+  SH := ScaledItemHeight;
+  if SH <= 0 then Exit;
+  { The inverse of RowAtY, deliberately -- one formula, so what a caller is told and what
+    gets painted cannot drift. }
+  rowTop := ContentTopOffset + (AIndex - FTopIndex) * SH;
+  Result := Rect(0, rowTop, ClientWidth, rowTop + SH);
+end;
+
+function TTyListBox.GetIndexAtY(AY: Integer): Integer;
+begin
+  Result := RowAtY(AY);
+end;
+
+function TTyListBox.DeleteSelected: Integer;
+var
+  i: Integer;
+begin
+  Result := 0;
+  if FMultiSelect then
+  begin
+    EnsureSelectedLen;
+    { Back to front: deleting row i shifts every row after it, so forward iteration would
+      delete the wrong rows the moment it removed the first one. }
+    for i := High(FSelected) downto 0 do
+      if (i < FItems.Count) and FSelected[i] then
+      begin
+        FItems.Delete(i);
+        Inc(Result);
+      end;
+    SetLength(FSelected, 0);
+    EnsureSelectedLen;
+    FItemIndex := -1;
+  end
+  else if (FItemIndex >= 0) and (FItemIndex < FItems.Count) then
+  begin
+    FItems.Delete(FItemIndex);
+    FItemIndex := -1;
+    Result := 1;
+  end;
+  if Result > 0 then
+  begin
+    if FTopIndex > FItems.Count - 1 then FTopIndex := 0;
+    UpdateScrollBar;
+    Invalidate;
+    if Assigned(FOnChange) then FOnChange(Self);
+  end;
+end;
+
+procedure TTyListBox.SelectRange(ALow, AHigh: Integer; ASelected: Boolean);
+var
+  i, lo, hi: Integer;
+  moved: Boolean;
+begin
+  if not FMultiSelect then Exit;
+  lo := ALow; hi := AHigh;
+  if lo > hi then begin i := lo; lo := hi; hi := i; end;
+  if lo < 0 then lo := 0;
+  if hi > FItems.Count - 1 then hi := FItems.Count - 1;
+  EnsureSelectedLen;
+  moved := False;
+  for i := lo to hi do
+    if (i <= High(FSelected)) and (FSelected[i] <> ASelected) then
+    begin
+      FSelected[i] := ASelected;
+      moved := True;
+    end;
+  if moved then
+  begin
+    Invalidate;
+    if Assigned(FOnChange) then FOnChange(Self);
+  end;
+end;
+
+function TTyListBox.GetSelectedText: string;
+var
+  i: Integer;
+begin
+  Result := '';
+  if FMultiSelect then
+  begin
+    EnsureSelectedLen;
+    for i := 0 to FItems.Count - 1 do
+      if (i <= High(FSelected)) and FSelected[i] then
+      begin
+        if Result <> '' then Result := Result + LineEnding;
+        Result := Result + FItems[i];
+      end;
+  end
+  else if (FItemIndex >= 0) and (FItemIndex < FItems.Count) then
+    Result := FItems[FItemIndex];
 end;
 
 function TTyListBox.RowAtY(AY: Integer): Integer;

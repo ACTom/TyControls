@@ -126,6 +126,32 @@ type
     property OnContextPopup;
     property OnResize;
     property OnChangeBounds;
+    { Drag-and-drop, republished. Every one of these is a TControl member with the
+      dispatch already implemented by the LCL -- DragMode := dmAutomatic and
+      OnDragOver/OnDragDrop work on a self-drawn control exactly as on a native one,
+      because dragging is decided above the paint layer. They were simply never
+      republished on either base class, so NO control in this library could be made a
+      drag source or a drop target from the designer or a .lfm. Like Visible, the gap
+      was invisible from the code side: TControl declares them public, so
+      `Ctl.DragMode := dmAutomatic` always compiled. It was the Object Inspector and
+      the streamed form that had nothing. }
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    { Horizontal / tilt wheel. The vertical three were already here; these are what a
+      side-scrolling control (a non-wrapping memo, a wide grid, a long header strip) is
+      driven by, and a tilt wheel or a trackpad's horizontal gesture arrives through
+      them and nowhere else. }
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    { Per-instance hint customisation -- the seam for a row-dependent tooltip, which is
+      the only way to say "this hint depends on what the pointer is over". }
+    property OnShowHint;
     property PopupMenu;
     property Constraints;
     property BorderSpacing;
@@ -223,6 +249,32 @@ type
     property OnContextPopup;
     property OnResize;
     property OnChangeBounds;
+    { Drag-and-drop, republished. Every one of these is a TControl member with the
+      dispatch already implemented by the LCL -- DragMode := dmAutomatic and
+      OnDragOver/OnDragDrop work on a self-drawn control exactly as on a native one,
+      because dragging is decided above the paint layer. They were simply never
+      republished on either base class, so NO control in this library could be made a
+      drag source or a drop target from the designer or a .lfm. Like Visible, the gap
+      was invisible from the code side: TControl declares them public, so
+      `Ctl.DragMode := dmAutomatic` always compiled. It was the Object Inspector and
+      the streamed form that had nothing. }
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    { Horizontal / tilt wheel. The vertical three were already here; these are what a
+      side-scrolling control (a non-wrapping memo, a wide grid, a long header strip) is
+      driven by, and a tilt wheel or a trackpad's horizontal gesture arrives through
+      them and nowhere else. }
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    { Per-instance hint customisation -- the seam for a row-dependent tooltip, which is
+      the only way to say "this hint depends on what the pointer is over". }
+    property OnShowHint;
     property PopupMenu;
     property Constraints;
     property BorderSpacing;

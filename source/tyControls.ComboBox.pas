@@ -124,6 +124,13 @@ type
     procedure CloseUp;
     { Expose popup list for headless tests and internal use }
     function PopupList: TTyListBox;
+    { The three control-level list methods LCL's combo has. Clear empties Items AND blanks
+      Text -- doing only the first leaves the field displaying an item that is no longer in
+      the list, which is the bug you get from calling Items.Clear by hand. }
+    procedure Clear;
+    procedure ClearSelection;
+    procedure AddItem(const AItem: string; AnObject: TObject);
+    function Count: Integer;
   published
     property Items: TStringList read FItems write SetItems;
     property ItemIndex: Integer read FItemIndex write SetItemIndex;
@@ -387,6 +394,36 @@ begin
   finally
     FSyncingText := False;
   end;
+end;
+
+procedure TTyComboBox.Clear;
+begin
+  FItems.Clear;
+  { Items.Clear fires ItemsChanged -> ResyncIndexFromText, which drops ItemIndex and blanks
+    the display -- but only in csDropDownList; in csDropDown it deliberately leaves the
+    field's free text alone, because there the text is not required to be a list member.
+    Clear means "empty the control", so the editable mode needs blanking here. }
+  FItemIndex := -1;
+  FText := '';
+  if (FEditor <> nil) and (FEditor.Text <> '') then FEditor.Text := '';
+  Invalidate;
+end;
+
+procedure TTyComboBox.ClearSelection;
+begin
+  { Drops the selection without touching the list. LCL spells it this way; ItemIndex := -1
+    is the same thing, but only if you already know that -1 is the sentinel. }
+  SelectItem(-1);
+end;
+
+procedure TTyComboBox.AddItem(const AItem: string; AnObject: TObject);
+begin
+  FItems.AddObject(AItem, AnObject);
+end;
+
+function TTyComboBox.Count: Integer;
+begin
+  Result := FItems.Count;
 end;
 
 procedure TTyComboBox.SetStyle(AValue: TTyComboBoxStyle);

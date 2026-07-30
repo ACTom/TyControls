@@ -15,7 +15,7 @@ uses
   tyControls.ColorBox, tyControls.SpinEdit, tyControls.CheckBox, tyControls.Menu,
   tyControls.UpDown, tyControls.TrackBar, tyControls.Base, tyControls.Panel,
   tyControls.MaskEdit, tyControls.Calendar, tyControls.ColorButton,
-  tyControls.HeaderControl;
+  tyControls.HeaderControl, tyControls.ComboBox, tyControls.Edit, tyControls.Memo;
 
 type
   { Probes: ApplyToButton and the hosted checkboxes are protected, because the owning
@@ -93,6 +93,15 @@ type
     procedure ColorButtonCaptionOutranksTheHex;
     { A18 }
     procedure HeaderEffectiveWidthTellsTheTruthAboutTheLastSection;
+    { B2 -- the family-wide drag / tilt-wheel surface }
+    procedure DragAndWheelSurfaceIsPublishedOnBothBaseClasses;
+    { B3 -- the control-level list API }
+    procedure ListBoxClearTakesTheSelectionDownWithIt;
+    procedure ListBoxItemRectIsTheInverseOfTheHitTest;
+    procedure ListBoxDeleteSelectedGoesBackToFront;
+    procedure ListBoxSelectRangeAndSelectedText;
+    procedure ComboBoxClearAlsoBlanksTheText;
+    procedure EditAndMemoHaveTheirLclOneLiners;
   end;
 
 implementation
@@ -603,6 +612,173 @@ begin
       300, H.EffectiveSectionWidth[1]);
   finally
     H.Free;
+  end;
+end;
+
+{ ---------------------------------------------------------------- B2 ------- }
+
+{ Drag-and-drop and the horizontal wheel are TControl members whose dispatch the LCL
+  already implements -- they work on a self-drawn control exactly as on a native one,
+  because dragging is decided above the paint layer. Neither base class republished them,
+  so no control here could be made a drag source or drop target from the designer or a
+  .lfm. Same shape of gap as Visible: public on TControl, so code always compiled; it was
+  the Object Inspector and the streamed form that had nothing. }
+procedure TParityTest.DragAndWheelSurfaceIsPublishedOnBothBaseClasses;
+const
+  NAMES: array[0..10] of string = (
+    'DragMode', 'DragKind', 'DragCursor', 'OnDragOver', 'OnDragDrop', 'OnStartDrag',
+    'OnEndDrag', 'OnMouseWheelHorz', 'OnMouseWheelLeft', 'OnMouseWheelRight', 'OnShowHint');
+var
+  i: Integer;
+begin
+  for i := Low(NAMES) to High(NAMES) do
+  begin
+    AssertTrue('graphic base must publish ' + NAMES[i],
+      GetPropInfo(TTyUpDown, NAMES[i]) <> nil);
+    AssertTrue('windowed base must publish ' + NAMES[i],
+      GetPropInfo(TTyPanel, NAMES[i]) <> nil);
+  end;
+end;
+
+{ ---------------------------------------------------------------- B3 ------- }
+
+{ Clear is not Items.Clear: emptying the list has to bring the selection down with it, or
+  ItemIndex keeps pointing at a row that no longer exists. }
+procedure TParityTest.ListBoxClearTakesTheSelectionDownWithIt;
+var
+  L: TTyListBox;
+begin
+  L := TTyListBox.Create(nil);
+  try
+    L.AddItem('a', nil); L.AddItem('b', TObject(Self));
+    AssertEquals('AddItem appends', 2, L.Count);
+    AssertTrue('and carries the object', L.Items.Objects[1] = TObject(Self));
+    L.ItemIndex := 1;
+    L.Clear;
+    AssertEquals('list empty', 0, L.Count);
+    AssertEquals('and nothing is selected any more', -1, L.ItemIndex);
+  finally
+    L.Free;
+  end;
+end;
+
+{ ItemRect and the hit-test must be one formula, or an editor placed over a row lands
+  somewhere the row is not. }
+procedure TParityTest.ListBoxItemRectIsTheInverseOfTheHitTest;
+var
+  L: TTyListBox;
+  r: TRect;
+begin
+  L := TTyListBox.Create(nil);
+  try
+    L.Font.PixelsPerInch := 96;
+    L.SetBounds(0, 0, 160, 240);
+    L.Items.Add('0'); L.Items.Add('1'); L.Items.Add('2');
+    r := L.ItemRect(1);
+    AssertTrue('row 1 has a rect', r.Bottom > r.Top);
+    AssertEquals('and hit-testing its middle gives row 1 back',
+      1, L.GetIndexAtY((r.Top + r.Bottom) div 2));
+    AssertTrue('an out-of-range row has no rect', L.ItemRect(99).Bottom = 0);
+  finally
+    L.Free;
+  end;
+end;
+
+{ Back to front: deleting row i shifts every row after it, so forward iteration removes
+  the wrong rows the moment it removes the first one. }
+procedure TParityTest.ListBoxDeleteSelectedGoesBackToFront;
+var
+  L: TTyListBox;
+begin
+  L := TTyListBox.Create(nil);
+  try
+    L.Items.Add('0'); L.Items.Add('1'); L.Items.Add('2'); L.Items.Add('3');
+    L.MultiSelect := True;
+    L.Selected[0] := True;
+    L.Selected[2] := True;
+    AssertEquals('two removed', 2, L.DeleteSelected);
+    AssertEquals('two left', 2, L.Count);
+    AssertEquals('and they are the RIGHT two', '1', L.Items[0]);
+    AssertEquals('', '3', L.Items[1]);
+  finally
+    L.Free;
+  end;
+end;
+
+procedure TParityTest.ListBoxSelectRangeAndSelectedText;
+var
+  L: TTyListBox;
+begin
+  L := TTyListBox.Create(nil);
+  try
+    L.Items.Add('a'); L.Items.Add('b'); L.Items.Add('c'); L.Items.Add('d');
+    L.MultiSelect := True;
+    L.SelectRange(2, 1, True);            { reversed bounds are still a range }
+    AssertEquals('two selected', 2, L.SelCount);
+    AssertEquals('and read back in list order', 'b' + LineEnding + 'c', L.GetSelectedText);
+    L.SelectRange(0, 3, False);
+    AssertEquals('cleared', 0, L.SelCount);
+  finally
+    L.Free;
+  end;
+end;
+
+{ Clearing only Items leaves the field displaying an item that is no longer in the list --
+  which is the bug you get from calling Items.Clear by hand. }
+procedure TParityTest.ComboBoxClearAlsoBlanksTheText;
+var
+  C: TTyComboBox;
+begin
+  C := TTyComboBox.Create(nil);
+  try
+    C.AddItem('one', nil); C.AddItem('two', nil);
+    AssertEquals('two items', 2, C.Count);
+    C.ItemIndex := 1;
+    AssertEquals('text follows the selection', 'two', C.Text);
+    C.Clear;
+    AssertEquals('list empty', 0, C.Count);
+    AssertEquals('and the field is blank, not showing a vanished item', '', C.Text);
+    AssertEquals('nothing selected', -1, C.ItemIndex);
+
+    { The mode that matters. Items.Clear alone blanks the text ONLY in csDropDownList --
+      ResyncIndexFromText leaves an editable field's free text deliberately alone, since
+      there it need not be a list member. So csDropDown is where Clear has real work to
+      do, and testing only the default mode would have proved nothing. }
+    C.Style := csDropDown;
+    C.AddItem('three', nil);
+    C.ItemIndex := 0;
+    AssertEquals('editable field shows it', 'three', C.Text);
+    C.Clear;
+    AssertEquals('editable list empty', 0, C.Count);
+    AssertEquals('and the editable field is blank too', '', C.Text);
+  finally
+    C.Free;
+  end;
+end;
+
+procedure TParityTest.EditAndMemoHaveTheirLclOneLiners;
+var
+  E: TTyEdit;
+  M: TTyMemo;
+begin
+  E := TTyEdit.Create(nil);
+  try
+    E.Text := 'xyz';
+    E.Clear;
+    AssertEquals('Edit.Clear empties it', '', E.Text);
+  finally
+    E.Free;
+  end;
+  M := TTyMemo.Create(nil);
+  try
+    M.Append('one');
+    M.Append('two');
+    AssertEquals('Memo.Append appends', 2, M.Lines.Count);
+    AssertEquals('', 'two', M.Lines[1]);
+    M.Clear;
+    AssertEquals('Memo.Clear empties it', 0, M.Lines.Count);
+  finally
+    M.Free;
   end;
 end;
 

@@ -148,6 +148,9 @@ type
     function HasSelection: Boolean;
     procedure SelectAll;
     procedure ClearSelection;
+    { Empty the control. One line, but the one LCL name for it -- `Ed.Clear` is what
+      ported code writes, and `Text := ''` is what it had to be rewritten to. }
+    procedure Clear;
     // Mouse hit test
     function CaretIndexAtX(AX: Integer): Integer;
     // Clipboard API
@@ -469,6 +472,11 @@ begin
   EnsureCaretVisible(Font.PixelsPerInch);
   ResetCaretBlink;
   Invalidate;
+end;
+
+procedure TTyEdit.Clear;
+begin
+  Text := '';
 end;
 
 procedure TTyEdit.ClearSelection;
