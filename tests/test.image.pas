@@ -122,21 +122,33 @@ procedure TImageTest.TestFitProportionalCentered;
 var
   R: TRect;
 begin
-  // src 100x50 into 200x200, proportional -> scale 2.0 -> 200x100, centered
-  // -> Rect(0,50,200,150).
-  R := TyImageFitRect(100, 50, 200, 200, False, True, True);
+  // Proportional ALONE only shrinks (LCL's rule): a 400x200 source into 200x200 scales
+  // by 0.5 -> 200x100, centered -> Rect(0,50,200,150).
+  R := TyImageFitRect(400, 200, 200, 200, False, True, True);
   AssertEquals('prop+center left', 0, R.Left);
   AssertEquals('prop+center top', 50, R.Top);
   AssertEquals('prop+center right', 200, R.Right);
   AssertEquals('prop+center bottom', 150, R.Bottom);
+
+  // ...and a source SMALLER than the control keeps its natural size. It used to be blown
+  // up, so a 16x16 icon on a 200x200 image looked like a broken icon rather than a
+  // property doing what it said.
+  R := TyImageFitRect(16, 16, 200, 200, False, True, True);
+  AssertEquals('small source keeps its width', 16, R.Right - R.Left);
+  AssertEquals('small source keeps its height', 16, R.Bottom - R.Top);
+  AssertEquals('and is centered', 92, R.Left);
+
+  // Enlargement is opt-in: Proportional + Stretch scales up, aspect preserved.
+  R := TyImageFitRect(16, 16, 200, 200, True, True, True);
+  AssertEquals('prop+stretch enlarges', 200, R.Right - R.Left);
 end;
 
 procedure TImageTest.TestFitProportionalTopLeft;
 var
   R: TRect;
 begin
-  // Same fit as above but top-left -> Rect(0,0,200,100).
-  R := TyImageFitRect(100, 50, 200, 200, False, True, False);
+  // Same shrink fit as above but top-left -> Rect(0,0,200,100).
+  R := TyImageFitRect(400, 200, 200, 200, False, True, False);
   AssertEquals('prop+topleft left', 0, R.Left);
   AssertEquals('prop+topleft top', 0, R.Top);
   AssertEquals('prop+topleft right', 200, R.Right);
@@ -147,9 +159,9 @@ procedure TImageTest.TestFitProportionalWideSource;
 var
   R: TRect;
 begin
-  // src 50x100 (portrait) into 200x200: limiting axis is height, scale 2.0 -> 100x200,
+  // src 200x400 (portrait) into 200x200: limiting axis is height, scale 0.5 -> 100x200,
   // centered horizontally -> Rect(50,0,150,200).
-  R := TyImageFitRect(50, 100, 200, 200, False, True, True);
+  R := TyImageFitRect(200, 400, 200, 200, False, True, True);
   AssertEquals('prop portrait left', 50, R.Left);
   AssertEquals('prop portrait top', 0, R.Top);
   AssertEquals('prop portrait right', 150, R.Right);

@@ -32,6 +32,7 @@ type
     procedure SetProportional(AValue: Boolean);
     procedure SetCenter(AValue: Boolean);
     procedure SetTransparent(AValue: Boolean);
+    procedure ApplyTransparentToGraphic;
     procedure PictureChanged(Sender: TObject);
   protected
     function GetStyleTypeKey: string; override;   // 'TyPanel' -- reuse panel surface
@@ -88,10 +89,16 @@ begin
 
   if AProportional then
   begin
-    // Contain: scale down/up to fit within the dest, preserving aspect.
+    // Contain: fit within the dest, preserving aspect.
     scW := ADstW / ASrcW;
     scH := ADstH / ASrcH;
     if scW < scH then sc := scW else sc := scH;
+    { Proportional ALONE only ever shrinks. It used to scale up as well, so a 16x16 icon
+      dropped on a 200x200 image control was blown up to 200x200 and looked like a bug in
+      the icon rather than a property doing what it said. LCL draws the same line: its
+      Proportional engages only when the picture is bigger than the control, and you opt
+      into enlargement by ALSO setting Stretch. }
+    if (sc > 1.0) and (not AStretch) then sc := 1.0;
     w := Round(ASrcW * sc);
     h := Round(ASrcH * sc);
     if w < 1 then w := 1;
@@ -180,11 +187,25 @@ procedure TTyImage.SetTransparent(AValue: Boolean);
 begin
   if FTransparent = AValue then Exit;
   FTransparent := AValue;
+  ApplyTransparentToGraphic;
   Invalidate;
+end;
+
+{ On LCL, Transparent means "honour the GRAPHIC's own mask / transparent colour" and is
+  pushed into Picture.Graphic.Transparent. Here it only ever meant "skip the panel surface
+  so what is behind shows through", so a bitmap with a real mask was drawn opaque however
+  the property was set -- the one thing a reader of the LCL docs would expect it to do.
+  It now does both: the surface behaviour it always had, and the graphic's mask. }
+procedure TTyImage.ApplyTransparentToGraphic;
+begin
+  if (FPicture <> nil) and (FPicture.Graphic <> nil) then
+    FPicture.Graphic.Transparent := FTransparent;
 end;
 
 procedure TTyImage.PictureChanged(Sender: TObject);
 begin
+  { A new graphic arrives without knowing what Transparent is set to. }
+  ApplyTransparentToGraphic;
   if AutoSize then
   begin
     InvalidatePreferredSize;
@@ -237,6 +258,12 @@ begin
     if (FPicture.Graphic = nil) or FPicture.Graphic.Empty
        or (FPicture.Width <= 0) or (FPicture.Height <= 0) then
     begin
+      { An empty image control drew NOTHING, which at design time means an invisible
+        control: nothing to see, nothing to click, nothing to drag. LCL outlines an empty
+        TImage for exactly this reason. Design time only -- at run time an empty image
+        must stay invisible, because a placeholder frame in a shipped app is a defect. }
+      if csDesigning in ComponentState then
+        P.StrokeBorder(ClientR, 0, 1, TyRGBA(128, 128, 128, 160));
       P.EndPaint;
       Exit;
     end;

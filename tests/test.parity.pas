@@ -18,7 +18,8 @@ uses
   tyControls.MaskEdit, tyControls.Calendar, tyControls.ColorButton,
   tyControls.HeaderControl, tyControls.ComboBox, tyControls.Edit, tyControls.Memo,
   tyControls.DateTimePicker, tyControls.Splitter,
-  tyControls.ShellTreeView, tyControls.ShellListView, tyControls.TreeView;
+  tyControls.ShellTreeView, tyControls.ShellListView, tyControls.TreeView,
+  tyControls.Image;
 
 type
   { Probes: ApplyToButton and the hosted checkboxes are protected, because the owning
@@ -137,6 +138,7 @@ type
     procedure ShellControlsLeaveTheirEventSlotsToTheApp;
     procedure ShellListRefreshMeansRepaintAgain;
     procedure ShellTreeAppHandlerActuallyRuns;
+    procedure ImageTransparentReachesTheGraphicMask;
   end;
 
 implementation
@@ -1163,6 +1165,31 @@ begin
     AssertTrue('and the shell still supplied a name', txt <> '');
   finally
     T.Free;
+  end;
+end;
+
+{ On LCL, Transparent means "honour the GRAPHIC's own mask" and is pushed into
+  Picture.Graphic.Transparent. Here it only ever meant "skip the panel surface", so a
+  bitmap with a real mask was drawn opaque however the property was set -- the one thing a
+  reader of the LCL docs expects it to do. It now does both. }
+procedure TParityTest.ImageTransparentReachesTheGraphicMask;
+var
+  I: TTyImage;
+  B: TBitmap;
+begin
+  I := TTyImage.Create(nil);
+  B := TBitmap.Create;
+  try
+    B.SetSize(4, 4);
+    I.Transparent := False;
+    I.Picture.Assign(B);
+    AssertFalse('a freshly assigned graphic takes the current setting',
+      I.Picture.Graphic.Transparent);
+    I.Transparent := True;
+    AssertTrue('and follows a later change', I.Picture.Graphic.Transparent);
+  finally
+    B.Free;
+    I.Free;
   end;
 end;
 
