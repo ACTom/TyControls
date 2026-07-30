@@ -395,7 +395,7 @@ begin
   AssertEquals('GetItemCount unchanged without LoadDirectory (no per-call disk read)',
     before, afterWrite);
 
-  FLV.Refresh;
+  FLV.UpdateView;
   afterRefresh := FLV.XGetItemCount;
   AssertEquals('Refresh picks up the new file', before + 1, afterRefresh);
 end;
@@ -513,7 +513,7 @@ begin
   AssertTrue('old name gone on disk',   not FileExistsUTF8(oldPath));
   AssertTrue('new name present on disk',    FileExistsUTF8(newPath));
 
-  FLV.Refresh;
+  FLV.UpdateView;
   AssertTrue('after Refresh the new name is an entry',  HasItemNamed('renamed.zzz'));
   AssertTrue('after Refresh the old name is gone',  not HasItemNamed('a.txt'));
 end;
@@ -531,7 +531,7 @@ begin
   FLV.XCommitEdit(i, '');
 
   AssertTrue('empty new name leaves the file on disk', FileExistsUTF8(path));
-  FLV.Refresh;
+  FLV.UpdateView;
   AssertTrue('b.txt still an entry after an empty-name commit', HasItemNamed('b.txt'));
 end;
 

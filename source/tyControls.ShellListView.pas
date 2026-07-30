@@ -69,14 +69,17 @@ type
       streaming / designer states so it never touches disk mid-stream or in the IDE. }
     procedure ReloadEntries;
     procedure RebuildKindGroups;
-    procedure DoCompare(Sender: TObject; AIndex1, AIndex2, AColumn: Integer;
+    procedure ShellCompare(AIndex1, AIndex2, AColumn: Integer;
       var ACompare: Integer);
-    procedure HandleItemActivate(Sender: TObject; AIndex: Integer);
+    procedure ShellActivate(AIndex: Integer);
     procedure SetMask(const AValue: string);
     procedure SetShowHidden(AValue: Boolean);
     procedure SetFoldersFirst(AValue: Boolean);
     procedure SetGroupByKind(AValue: Boolean);
   protected
+    { The shell's ordering and activation, as overrides of the base virtuals. }
+    function  CompareItems(AItemA, AItemB: Integer): Integer; override;
+    procedure DoItemActivate(AIndex: Integer); override;
     { The five inherited data accessors, all backed by FEntries -- never disk. }
     function GetItemCount: Integer; override;
     function GetItemText(AIndex, AColumn: Integer): string; override;
@@ -92,8 +95,15 @@ type
 
     { Read APath from disk into FEntries and refresh (re-sorts under AutoSort). }
     procedure LoadDirectory(const APath: string);
-    { Re-read the current directory. }
-    procedure Refresh; reintroduce;
+    { Re-read the current directory from disk.
+
+      BREAKING: this used to be called Refresh, with `reintroduce` hiding TControl.Refresh.
+      Refresh means "repaint now" (Invalidate + Update) on every other control in the LCL
+      and in this library, so a shell list was the one control where a routine repaint call
+      hit the filesystem -- and a caller who wanted a repaint had no way to ask for one.
+      UpdateView is LCL's own name for the re-enumerate, and Refresh now means what it
+      means everywhere else. }
+    procedure UpdateView;
     { The focused entry's FullPath, or '' when nothing is focused. }
     function  SelectedFile: string;
     { The FullPath of the entry at ITEM index AIndex, or '' when out of range. }
@@ -215,14 +225,11 @@ begin
   BuildColumns;
   Header.Options := [hoVisible, hoColumnResize, hoShowSortGlyphs, hoHeaderClickAutoSort];
 
-  { Sort on the RAW values, never the display strings (the whole point of the adapter). }
-  OnCompare := @DoCompare;
-  { Route the base's guarded activation (double-click on a row, or Enter) through our
-    own handler: a folder navigates, a file fires OnFileActivate. Reusing the inherited
-    OnItemActivate reuses the base's press-hit guard for free (a header double-click does
-    not activate). This means TTyShellListView OWNS OnItemActivate internally -- apps use
-    OnFileActivate and must not reassign OnItemActivate. }
-  OnItemActivate := @HandleItemActivate;
+  { Sorting and activation are OVERRIDES now (CompareItems / DoItemActivate), not handlers
+    wired to the published OnCompare / OnItemActivate slots. Claiming those slots meant an
+    application that assigned either one silently replaced the shell behaviour -- the list
+    stopped sorting folders first, or stopped navigating on double-click -- with nothing to
+    indicate the two uses were fighting over one slot. }
 
   BuildGlyphs;
 
@@ -412,7 +419,7 @@ begin
     FOnDirectoryChange(Self);
 end;
 
-procedure TTyShellListView.Refresh;
+procedure TTyShellListView.UpdateView;
 begin
   ReloadEntries;
 end;
@@ -487,7 +494,27 @@ end;
   Sort -- RAW values through TyFsCompareEntries
   --------------------------------------------------------------------------- }
 
-procedure TTyShellListView.DoCompare(Sender: TObject; AIndex1, AIndex2,
+{ Sort on the RAW values, never the display strings (the whole point of the adapter). }
+function TTyShellListView.CompareItems(AItemA, AItemB: Integer): Integer;
+begin
+  Result := 0;
+  ShellCompare(AItemA, AItemB, SortColumn, Result);
+  { The base's stable tie-break, which an override replaces and therefore has to redo:
+    equal keys must fall back to item index or the merge sort is not stable and two
+    same-named entries can swap places between sorts. }
+  if Result = 0 then
+    Result := AItemA - AItemB;
+end;
+
+{ A folder navigates; a file fires OnFileActivate. inherited last, so an application that
+  also wants the raw OnItemActivate still gets it. }
+procedure TTyShellListView.DoItemActivate(AIndex: Integer);
+begin
+  ShellActivate(AIndex);
+  inherited DoItemActivate(AIndex);
+end;
+
+procedure TTyShellListView.ShellCompare(AIndex1, AIndex2,
   AColumn: Integer; var ACompare: Integer);
 var
   asc: Boolean;
@@ -503,23 +530,19 @@ begin
     direction itself. }
   ACompare := TyFsCompareEntries(FEntries[AIndex1], FEntries[AIndex2],
                 TyColumnSortKey(AColumn), asc, FFoldersFirst);
-  { SUBTLETY the plan's pseudocode omitted: the base (TTyListView.CompareItems) negates
-    an OnCompare result whenever SortDirection = sdDescending, on the assumption that a
-    user handler is direction-AGNOSTIC. Ours is not -- TyFsCompareEntries already honoured
-    the direction, and its folders-first placement must survive it. Pre-negating here
-    cancels the base's upcoming flip, so the final order is exactly what TyFsCompareEntries
-    produced: folders first in BOTH directions, files in the requested order. Passing the
-    direction straight through WITHOUT this cancel double-flips descending (folders would
-    fall to the bottom and files would come out ascending). }
-  if not asc then
-    ACompare := -ACompare;
+  { There used to be a pre-negation here, cancelling a flip the base applied to any
+    OnCompare result on the assumption that a user handler is direction-agnostic. Ours is
+    not -- TyFsCompareEntries honours the direction itself and its folders-first placement
+    has to survive it. Now that this is reached through a CompareItems OVERRIDE there is no
+    base flip to cancel, so the cancellation is gone with it. Leaving it in double-flipped
+    descending: folders fell to the bottom and files came out ascending. }
 end;
 
 { ---------------------------------------------------------------------------
   Activation -- folder navigates, file fires OnFileActivate
   --------------------------------------------------------------------------- }
 
-procedure TTyShellListView.HandleItemActivate(Sender: TObject; AIndex: Integer);
+procedure TTyShellListView.ShellActivate(AIndex: Integer);
 begin
   if (AIndex < 0) or (AIndex > High(FEntries)) then Exit;
   if FEntries[AIndex].IsDir then

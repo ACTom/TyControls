@@ -296,7 +296,7 @@ procedure TMainForm.BtnRefreshClick(Sender: TObject);
 begin
   { Re-reads the current directory in place and KEEPS the selection -- the F5 of a file
     browser. LoadDirectory(same path) would clear focus + selection instead. }
-  List1.Refresh;
+  List1.UpdateView;   { was Refresh, which now means 'repaint' as it does everywhere else }
   ShowSelection;
 end;
 

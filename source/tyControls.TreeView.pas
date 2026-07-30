@@ -323,6 +323,7 @@ type
     { B1: tree option flags }
     FOptions:          TTyTreeOptions;
     procedure OverrideCursor(AOn: Boolean; AWith: TCursor);
+
     procedure SetOptions(AValue: TTyTreeOptions);
     { density: stored-sentinel accessors for the default node/row height. Reading
       returns the pinned value when explicit, else the --item-height token. }
@@ -332,7 +333,7 @@ type
     function  GetNodeHeight(Node: PTyTreeNode): Integer;
     procedure SetNodeHeight(Node: PTyTreeNode; AValue: Integer);
     { ③d C1: incremental-search internals }
-    function  GetNodeSearchText(Node: PTyTreeNode): string;        // main-column text (mirrors the caption)
+
     function  NodeMatchesSearch(Node: PTyTreeNode; const ASearchText: string): Boolean;
     procedure DoIncrementalSearch;                                 // walk visible nodes from focus (wrapping)
     { B1: check property raw accessors }
@@ -412,6 +413,30 @@ type
       via the SAME path the painter uses (OnGetTextWithType / OnGetText,
       Column-aware) so the editor seeds with exactly what's on screen; FinishEdit
       hides + clears the edit state. }
+    { Virtual dispatch seams for the five events a subclass legitimately needs to
+      IMPLEMENT rather than merely observe.
+
+      Why they exist: TTyShellTreeView's constructor used to grab OnGetText, OnInitNode,
+      OnExpanding, OnGetImageIndex and OnChange for its own handlers. Those five are
+      PUBLISHED, so an application that assigned any of them silently replaced the shell
+      behaviour -- the tree stopped showing filenames, or stopped populating on expand --
+      with nothing to indicate that the two uses were fighting over one slot. LCL avoids
+      it the same way: the shell behaviour lives in overridden virtuals and the events
+      stay free for the app.
+
+      Each default implementation fires the event, so an override that wants both calls
+      inherited. }
+    procedure DoGetText(Node: PTyTreeNode; var AText: string); virtual;
+    procedure DoInitNode(AParent, Node: PTyTreeNode; var AStates: TTyNodeInitStates); virtual;
+    procedure DoExpanding(Node: PTyTreeNode; var AAllowed: Boolean); virtual;
+    procedure DoGetImageIndex(Node: PTyTreeNode; AKind: TTyVTImageKind; AColumn: Integer;
+      var AGhosted: Boolean; var AIndex: Integer); virtual;
+    procedure DoTreeChange(Node: PTyTreeNode); virtual;
+    { A node's MAIN-column text, resolved exactly the way the caption is. Protected rather
+      than private: "what does this node display" is a question a descendant legitimately
+      asks (and the one a test asks to prove the caption path still reaches the app's
+      OnGetText). Read-only, no side effects -- it never inits the node. }
+    function  GetNodeSearchText(Node: PTyTreeNode): string;
     function  CellTextRect(Node: PTyTreeNode; Column: Integer; const ACellRect: TRect): TRect;
     function  EditorBoundsFromCell(Node: PTyTreeNode; Column: Integer; const r: TRect): TRect;
     function  CurrentCellText(Node: PTyTreeNode; Column: Integer): string;
@@ -721,8 +746,8 @@ begin
     if FSelectionCount > 0 then Dec(FSelectionCount);  { A3: keep count consistent }
   end;
 
-  if didChange and Assigned(FOnChange) then
-    FOnChange(Self, Node);
+  if didChange then
+    DoTreeChange(Node);
   Invalidate;
 end;
 
@@ -761,9 +786,9 @@ begin
   FSelectedNode   := nil;
   FSelectionCount := 0;
   if prev <> nil then
-    if Assigned(FOnChange) then FOnChange(Self, prev)
+    DoTreeChange(prev)
   else
-    if Assigned(FOnChange) then FOnChange(Self, nil);
+    DoTreeChange(nil);
   Invalidate;
 end;
 
@@ -1044,8 +1069,8 @@ begin
   if (Node = nil) or (Node = FRoot) then Exit;
   if Assigned(FOnGetTextWithType) then
     FOnGetTextWithType(Self, Node, FHeader.MainColumn, ttNormal, Result)
-  else if Assigned(FOnGetText) then
-    FOnGetText(Self, Node, Result);
+  else
+    DoGetText(Node, Result);
 end;
 
 { NodeMatchesSearch — the match predicate for one candidate node.
@@ -2595,8 +2620,7 @@ begin
   if (Node = nil) or (Node = FRoot) or (nsInitialized in Node^.States) then Exit;
   Include(Node^.States, nsInitialized);
   initStates := [];
-  if Assigned(FOnInitNode) then
-    FOnInitNode(Self, Node^.Parent, Node, initStates);
+  DoInitNode(Node^.Parent, Node, initStates);
   if ivsHasChildren in initStates then
     Include(Node^.States, nsHasChildren);
   if ivsSelected in initStates then
@@ -2666,7 +2690,7 @@ begin
   begin
     // ── Expanding ──
     allowed := True;
-    if Assigned(FOnExpanding) then FOnExpanding(Self, Node, allowed);
+    DoExpanding(Node, allowed);
     if not allowed then Exit;
 
     InitChildren(Node);
@@ -3809,8 +3833,7 @@ begin
               usedImgSlotW := imgSlotW;
               imgIdx  := -1;
               ghosted := False;
-              if Assigned(FOnGetImageIndex) then
-                FOnGetImageIndex(Self, node, ikNormal, colIdx, ghosted, imgIdx);
+              DoGetImageIndex(node, ikNormal, colIdx, ghosted, imgIdx);
               { ③d D1: when this cell is owner-drawn the app owns the image too —
                 do NOT collect it into pendingIcons (slot still reserved so the
                 row width / chrome layout is unchanged). }
@@ -3834,8 +3857,8 @@ begin
               colTxt := '';
               if Assigned(FOnGetTextWithType) then
                 FOnGetTextWithType(Self, node, colIdx, ttNormal, colTxt)
-              else if Assigned(FOnGetText) then
-                FOnGetText(Self, node, colTxt);
+              else
+                DoGetText(node, colTxt);
 
               textRect := Rect(captionX + P.Scale(2), rowTop,
                                colCellRight - P.Scale(2), rowTop + rowH);
@@ -3860,8 +3883,8 @@ begin
               colTxt := '';
               if Assigned(FOnGetTextWithType) then
                 FOnGetTextWithType(Self, node, colIdx, ttNormal, colTxt)
-              else if Assigned(FOnGetText) then
-                FOnGetText(Self, node, colTxt);   // fallback for compat
+              else
+                DoGetText(node, colTxt);   // fallback for compat
 
               colAlign := col.Alignment;
               textRect := Rect(colCaptionX, rowTop,
@@ -4063,8 +4086,7 @@ begin
           usedImgSlotW := imgSlotW;
           imgIdx  := -1;
           ghosted := False;
-          if Assigned(FOnGetImageIndex) then
-            FOnGetImageIndex(Self, node, ikNormal, -1, ghosted, imgIdx);
+          DoGetImageIndex(node, ikNormal, -1, ghosted, imgIdx);
           { ③d D1: owner-drawn cell owns its image — do not collect it. }
           if (not ownerDrawCell) and (imgIdx >= 0) and (imgIdx < FImages.Count) then
           begin
@@ -4082,8 +4104,8 @@ begin
         { ── Caption ─────────────────────────────────────────────────────── }
         { ③d D1: skipped for an owner-drawn cell (app fully replaces it). }
         txt := '';
-        if (not ownerDrawCell) and Assigned(FOnGetText) then
-          FOnGetText(Self, node, txt);
+        if not ownerDrawCell then
+          DoGetText(node, txt);
 
         if not ownerDrawCell then
         begin
@@ -4690,6 +4712,34 @@ end;
 { Borrow Cursor for the duration of a gesture and give the caller's own cursor back
   when it ends. Mid-gesture swaps (crDrag <-> crNoDrop) go through without disturbing
   the remembered one. Mirrors TTyListView.SetDividerCursor. }
+procedure TTyTreeView.DoGetText(Node: PTyTreeNode; var AText: string);
+begin
+  if Assigned(FOnGetText) then FOnGetText(Self, Node, AText);
+end;
+
+procedure TTyTreeView.DoInitNode(AParent, Node: PTyTreeNode;
+  var AStates: TTyNodeInitStates);
+begin
+  if Assigned(FOnInitNode) then FOnInitNode(Self, AParent, Node, AStates);
+end;
+
+procedure TTyTreeView.DoExpanding(Node: PTyTreeNode; var AAllowed: Boolean);
+begin
+  if Assigned(FOnExpanding) then FOnExpanding(Self, Node, AAllowed);
+end;
+
+procedure TTyTreeView.DoGetImageIndex(Node: PTyTreeNode; AKind: TTyVTImageKind;
+  AColumn: Integer; var AGhosted: Boolean; var AIndex: Integer);
+begin
+  if Assigned(FOnGetImageIndex) then
+    FOnGetImageIndex(Self, Node, AKind, AColumn, AGhosted, AIndex);
+end;
+
+procedure TTyTreeView.DoTreeChange(Node: PTyTreeNode);
+begin
+  if Assigned(FOnChange) then FOnChange(Self, Node);
+end;
+
 procedure TTyTreeView.OverrideCursor(AOn: Boolean; AWith: TCursor);
 begin
   if AOn then
@@ -5666,8 +5716,8 @@ begin
     effCol := FHeader.MainColumn;
   if Assigned(FOnGetTextWithType) then
     FOnGetTextWithType(Self, Node, effCol, ttNormal, Result)
-  else if Assigned(FOnGetText) then
-    FOnGetText(Self, Node, Result);
+  else
+    DoGetText(Node, Result);
 end;
 
 { FinishEdit — tear down the active edit: hide the editor, clear the edit state,

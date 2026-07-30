@@ -347,7 +347,7 @@ type
     procedure FillMetrics(out AMetrics: TTyListMetrics; AViewW, AViewH: Integer);
 
     { compare + stable sort of FOrder }
-    function  CompareItems(AItemA, AItemB: Integer): Integer;
+
     procedure MergeSortOrder(ALo, AHi: Integer);
 
     { rendering helpers }
@@ -386,6 +386,14 @@ type
       a descendant has no business reshuffling the display order -- but reading the map
       is exactly what a descendant (and a test) needs: TTyShellListView wants to know
       which item a display row is showing, without ever seeing the arrays. }
+    { Virtual so a subclass whose ORDER is part of what it is (TTyShellListView sorts
+      folders before files on raw values, not display strings) can implement it instead of
+      claiming the published OnCompare slot. Claiming that slot meant an application which
+      assigned OnCompare silently replaced the shell's ordering, with nothing to say so. }
+    function  CompareItems(AItemA, AItemB: Integer): Integer; virtual;
+    { Same reasoning for activation: a shell list navigates folders and fires
+      OnFileActivate for files, which it used to do by owning OnItemActivate. }
+    procedure DoItemActivate(AIndex: Integer); virtual;
     function  DisplayToItem(APos: Integer): Integer;   { display pos -> item index, -1 if out of range }
     function  ItemToDisplay(AItem: Integer): Integer;  { item index -> display pos, -1 if out of range }
     { How far a flow cell's icon+label shift right to clear the checkbox. lvsIcon overlays
@@ -1527,6 +1535,11 @@ end;
 { ---------------------------------------------------------------------------
   Sorting
   --------------------------------------------------------------------------- }
+
+procedure TTyListView.DoItemActivate(AIndex: Integer);
+begin
+  if Assigned(FOnItemActivate) then FOnItemActivate(Self, AIndex);
+end;
 
 function TTyListView.CompareItems(AItemA, AItemB: Integer): Integer;
 var
@@ -3370,8 +3383,7 @@ begin
     double-click in the header band -- including the auto-fit gesture -- activates whatever
     item happens to be focused. }
   if not (FPressHit in [lhpIcon, lhpLabel]) then Exit;
-  if (FItemIndex >= 0) and Assigned(FOnItemActivate) then
-    FOnItemActivate(Self, FItemIndex);
+  if FItemIndex >= 0 then DoItemActivate(FItemIndex);
 end;
 
 { ---------------------------------------------------------------------------
@@ -3408,8 +3420,7 @@ begin
   end;
   if Key = VK_RETURN then
   begin
-    if (FItemIndex >= 0) and Assigned(FOnItemActivate) then
-      FOnItemActivate(Self, FItemIndex);
+    if FItemIndex >= 0 then DoItemActivate(FItemIndex);
     Key := 0;
     Exit;
   end;

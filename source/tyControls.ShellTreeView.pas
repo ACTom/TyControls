@@ -56,16 +56,23 @@ type
     function  AddPathNode(AParent: PTyTreeNode; const AFullPath: string): PTyTreeNode;
     { Lazy child fill: enumerate NodePath(Node)'s subdirectories (folders only). }
     procedure PopulateChildren(Node: PTyTreeNode);
-    { Tree event handlers (mirror SelectPath's, generalised onto FileSystem). }
-    procedure TreeGetText(Sender: TTyTreeView; Node: PTyTreeNode; var AText: string);
-    procedure TreeInitNode(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
-      var InitStates: TTyNodeInitStates);
-    procedure TreeExpanding(Sender: TTyTreeView; Node: PTyTreeNode; var Allowed: Boolean);
-    procedure TreeGetImageIndex(Sender: TTyTreeView; Node: PTyTreeNode;
-      Kind: TTyVTImageKind; Column: Integer; var Ghosted: Boolean; var ImageIndex: Integer);
-    procedure TreeChange(Sender: TTyTreeView; Node: PTyTreeNode);
     procedure SetShowHidden(AValue: Boolean);
   protected
+    { The shell behaviour, as OVERRIDES of the base's virtuals.
+
+      These five used to be handlers wired to the PUBLISHED OnGetText / OnInitNode /
+      OnExpanding / OnGetImageIndex / OnChange slots in the constructor, so the shell and
+      the application were fighting over one slot each: assign OnGetText on a shell tree
+      and it stopped showing filenames, with nothing to say why. As overrides the events
+      belong to the app, which is how LCL's TShellTreeView is built. Each calls inherited,
+      so an app handler runs AFTER the shell has filled its answer in and can replace it. }
+    procedure DoGetText(Node: PTyTreeNode; var AText: string); override;
+    procedure DoInitNode(AParent, Node: PTyTreeNode;
+      var AStates: TTyNodeInitStates); override;
+    procedure DoExpanding(Node: PTyTreeNode; var AAllowed: Boolean); override;
+    procedure DoGetImageIndex(Node: PTyTreeNode; AKind: TTyVTImageKind; AColumn: Integer;
+      var AGhosted: Boolean; var AIndex: Integer); override;
+    procedure DoTreeChange(Node: PTyTreeNode); override;
     { The absolute path a node maps to (its Integer node-data indexes FPaths).
       Protected so a subclass/test can observe the node<->path mapping. }
     function  NodePath(Node: PTyTreeNode): string;
@@ -107,11 +114,8 @@ begin
 
   { node data = one Integer index into FPaths; no managed types in raw node memory. }
   NodeDataSize    := SizeOf(Integer);
-  OnGetText       := @TreeGetText;
-  OnInitNode      := @TreeInitNode;
-  OnExpanding     := @TreeExpanding;
-  OnGetImageIndex := @TreeGetImageIndex;
-  OnChange        := @TreeChange;
+  { No published event slot is claimed here any more -- the shell behaviour is in the
+    DoXxx overrides, leaving all five events to the application. }
 
   { A 16px glyph needs a little more than the default 18px row; HotTrack + the
     (already-default) ShowRoot give root nodes their own expand triangle. }
@@ -273,8 +277,7 @@ end;
   Tree event handlers
   --------------------------------------------------------------------------- }
 
-procedure TTyShellTreeView.TreeGetText(Sender: TTyTreeView; Node: PTyTreeNode;
-  var AText: string);
+procedure TTyShellTreeView.DoGetText(Node: PTyTreeNode; var AText: string);
 var
   p: string;
   i: Integer;
@@ -282,55 +285,69 @@ begin
   p := NodePath(Node);
   { A root node renders its curated Display ('C:', '/', a volume/home name)
     rather than the bare path. }
+  AText := '';
   for i := 0 to High(FRoots) do
     if SameFileName(FRoots[i].Path, p) then
     begin
       AText := FRoots[i].Display;
-      Exit;
+      Break;
     end;
-  AText := ExtractFileName(ExcludeTrailingPathDelimiter(p));
   if AText = '' then
-    AText := p;   { defensive: a rooted path that collapses to '' }
+  begin
+    AText := ExtractFileName(ExcludeTrailingPathDelimiter(p));
+    if AText = '' then
+      AText := p;   { defensive: a rooted path that collapses to '' }
+  end;
+  { inherited unconditionally. The root branch used to Exit here, so on exactly the nodes
+    a shell tree shows FIRST -- the drives and places -- an application's OnGetText was
+    never reached. Half a fix reads worse than none: the event works on some rows and not
+    others, which is harder to diagnose than not working at all. }
+  inherited DoGetText(Node, AText);
 end;
 
-procedure TTyShellTreeView.TreeInitNode(Sender: TTyTreeView;
-  ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates);
+procedure TTyShellTreeView.DoInitNode(AParent, Node: PTyTreeNode;
+  var AStates: TTyNodeInitStates);
 begin
   { Show an expand arrow iff this directory has at least one subdirectory. The
     probe stops at the first hit -- it never enumerates the children (that waits
     for the first expand). }
   if TyFsHasSubdir(NodePath(Node)) then
-    Include(InitStates, ivsHasChildren);
+    Include(AStates, ivsHasChildren);
+  { inherited LAST so an application handler sees -- and may change -- what the shell
+    decided, rather than being overwritten by it. }
+  inherited DoInitNode(AParent, Node, AStates);
 end;
 
-procedure TTyShellTreeView.TreeExpanding(Sender: TTyTreeView; Node: PTyTreeNode;
-  var Allowed: Boolean);
+procedure TTyShellTreeView.DoExpanding(Node: PTyTreeNode; var AAllowed: Boolean);
 begin
-  Allowed := True;
+  AAllowed := True;
   { Lazy population: enumerate subdirs on the first expand only. AddChild bumps
     ChildCount, so the base's InitChildren no-ops (its ChildCount>0 guard). }
   if Node^.ChildCount = 0 then
     PopulateChildren(Node);
+  inherited DoExpanding(Node, AAllowed);   { an app handler may still veto }
 end;
 
-procedure TTyShellTreeView.TreeGetImageIndex(Sender: TTyTreeView; Node: PTyTreeNode;
-  Kind: TTyVTImageKind; Column: Integer; var Ghosted: Boolean; var ImageIndex: Integer);
+procedure TTyShellTreeView.DoGetImageIndex(Node: PTyTreeNode; AKind: TTyVTImageKind;
+  AColumn: Integer; var AGhosted: Boolean; var AIndex: Integer);
 begin
   { Top-level nodes are the TyFsRoots "places" -> drive glyph; everything below
     is a folder. (Kind is ignored: the same glyph serves normal/selected.) }
   if (Node <> nil) and (Node^.Parent = RootNode) then
-    ImageIndex := TyShellTreeDriveGlyph
+    AIndex := TyShellTreeDriveGlyph
   else
-    ImageIndex := TyShellTreeFolderGlyph;
+    AIndex := TyShellTreeFolderGlyph;
+  inherited DoGetImageIndex(Node, AKind, AColumn, AGhosted, AIndex);
 end;
 
-procedure TTyShellTreeView.TreeChange(Sender: TTyTreeView; Node: PTyTreeNode);
+procedure TTyShellTreeView.DoTreeChange(Node: PTyTreeNode);
 begin
   { OnChange fires on every focus/selection move (mouse, keyboard, or a
     programmatic FocusedNode from SelectPath). Cache the path + notify. }
   FSelectedPath := NodePath(Node);
   if Assigned(FOnPathChange) then
     FOnPathChange(Self);
+  inherited DoTreeChange(Node);            { OnChange belongs to the app now }
 end;
 
 { ---------------------------------------------------------------------------

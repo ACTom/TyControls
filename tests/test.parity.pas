@@ -17,7 +17,8 @@ uses
   tyControls.UpDown, tyControls.TrackBar, tyControls.Base, tyControls.Panel,
   tyControls.MaskEdit, tyControls.Calendar, tyControls.ColorButton,
   tyControls.HeaderControl, tyControls.ComboBox, tyControls.Edit, tyControls.Memo,
-  tyControls.DateTimePicker, tyControls.Splitter;
+  tyControls.DateTimePicker, tyControls.Splitter,
+  tyControls.ShellTreeView, tyControls.ShellListView, tyControls.TreeView;
 
 type
   { Probes: ApplyToButton and the hosted checkboxes are protected, because the owning
@@ -39,6 +40,13 @@ type
     procedure ProbePaste(const S: string);
   end;
 
+  TShellTreeProbe = class(TTyShellTreeView)
+  public
+    { GetNodeSearchText is protected -- it is the main-column text obtained exactly the
+      way the caption is, so it is what "what does this node display" means here. }
+    function ProbeText(Node: PTyTreeNode): string;
+  end;
+
   TDtpProbe = class(TTyDateTimePicker)
   public
     procedure ProbeChar(C: Char);
@@ -57,7 +65,9 @@ type
     FPopups: Integer;
     FArrows: string;
     FTopClicks: Integer;
+    FGetTextCalls: Integer;
     procedure CountTopClick(Sender: TObject);
+    procedure CountGetText(Sender: TTyTreeView; Node: PTyTreeNode; var AText: string);
     procedure CountItemChange(Sender: TObject; AIndex: Integer);
     procedure CountPopup(Sender: TObject);
     procedure RecordArrow(Sender: TObject; AButton: TTyUpDownButton);
@@ -124,6 +134,9 @@ type
     procedure MenuBarChildlessTopFiresItsOnClick;
     procedure MenuBarDisabledTopCannotBeOpened;
     procedure EditClearSelectionDeletesTheSelectedText;
+    procedure ShellControlsLeaveTheirEventSlotsToTheApp;
+    procedure ShellListRefreshMeansRepaintAgain;
+    procedure ShellTreeAppHandlerActuallyRuns;
   end;
 
 implementation
@@ -146,6 +159,11 @@ end;
 procedure TMaskProbe.ProbePaste(const S: string);
 begin
   InjectStringAt(S);
+end;
+
+function TShellTreeProbe.ProbeText(Node: PTyTreeNode): string;
+begin
+  Result := GetNodeSearchText(Node);
 end;
 
 procedure TDtpProbe.ProbeChar(C: Char);
@@ -1071,6 +1089,80 @@ begin
     AssertEquals('and back', Ord(crHSplit), Ord(S.Cursor));
   finally
     S.Free;
+  end;
+end;
+
+{ The five tree events and the two list events were CLAIMED by the shell controls'
+  constructors. They are published, so an application that assigned any of them silently
+  replaced the shell behaviour -- the tree stopped showing filenames, the list stopped
+  navigating on double-click -- with nothing to indicate two uses were fighting over one
+  slot. The behaviour lives in overridden virtuals now, so every slot starts nil. }
+procedure TParityTest.ShellControlsLeaveTheirEventSlotsToTheApp;
+var
+  T: TTyShellTreeView;
+  L: TTyShellListView;
+begin
+  T := TTyShellTreeView.Create(nil);
+  try
+    AssertTrue('OnGetText is the app''s', T.OnGetText = nil);
+    AssertTrue('OnInitNode is the app''s', T.OnInitNode = nil);
+    AssertTrue('OnExpanding is the app''s', T.OnExpanding = nil);
+    AssertTrue('OnGetImageIndex is the app''s', T.OnGetImageIndex = nil);
+    AssertTrue('OnChange is the app''s', T.OnChange = nil);
+  finally
+    T.Free;
+  end;
+  L := TTyShellListView.Create(nil);
+  try
+    AssertTrue('OnCompare is the app''s', L.OnCompare = nil);
+    AssertTrue('OnItemActivate is the app''s', L.OnItemActivate = nil);
+  finally
+    L.Free;
+  end;
+end;
+
+{ Refresh means "repaint now" on every other control in the LCL and in this library. The
+  shell list was the one place where a routine repaint call hit the filesystem, and a caller
+  who wanted an actual repaint had no way to ask. UpdateView is LCL's name for the re-read. }
+procedure TParityTest.ShellListRefreshMeansRepaintAgain;
+begin
+  { A compile-level assertion: UpdateView must exist as the re-read, and Refresh must no
+    longer be reintroduced on the shell list -- if either changes back, this stops building
+    rather than failing quietly at run time. }
+  AssertTrue('UpdateView is the re-read',
+    @TTyShellListView.UpdateView <> nil);
+  AssertTrue('Refresh is TControl''s again',
+    TMethod(@TTyShellListView(nil).Refresh).Code = TMethod(@TControl(nil).Refresh).Code);
+end;
+
+procedure TParityTest.CountGetText(Sender: TTyTreeView; Node: PTyTreeNode;
+  var AText: string);
+begin
+  Inc(FGetTextCalls);
+end;
+
+{ The behavioural half of the same finding, and the one that matters: an application
+  handler on a slot the shell used to own must actually run. The shell fills its answer in
+  first and calls inherited last, so both happen -- which is the whole point of moving the
+  behaviour into a virtual rather than a handler. }
+procedure TParityTest.ShellTreeAppHandlerActuallyRuns;
+var
+  T: TShellTreeProbe;
+  n: PTyTreeNode;
+  txt: string;
+begin
+  T := TShellTreeProbe.Create(nil);
+  try
+    FGetTextCalls := 0;
+    T.OnGetText := @CountGetText;
+    n := T.RootNode;
+    if n <> nil then n := n^.FirstChild;
+    if n = nil then Exit;          { no drives enumerated here -- nothing to ask about }
+    txt := T.ProbeText(n);
+    AssertTrue('the app''s OnGetText ran', FGetTextCalls > 0);
+    AssertTrue('and the shell still supplied a name', txt <> '');
+  finally
+    T.Free;
   end;
 end;
 
