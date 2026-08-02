@@ -38,6 +38,8 @@ type
     procedure RebuildButtons;
     procedure LayoutButtons;
     procedure ChildChanged(Sender: TObject);
+    procedure NotifySelection;
+    procedure UpdateTabStops;
   protected
     procedure SetParent(AParent: TWinControl); override;
     procedure DoOnResize; override;
@@ -236,6 +238,9 @@ begin
   finally
     FRebuilding := False;
   end;
+  { A rebuild makes fresh children, each of which starts as a tab stop. Without this the
+    group goes back to N tab stops the moment Items changes. }
+  UpdateTabStops;
   Invalidate;
 end;
 
@@ -260,6 +265,32 @@ begin
   end;
 end;
 
+{ The group's selection changed, however it changed. OnClick as well as
+  OnSelectionChanged: TCustomRadioGroup redeclares FOnClick and fires it on any selection
+  change, so code ported from Lazarus hangs its logic there and would otherwise get
+  nothing -- TControl's OnClick only fires when the GROUP BOX itself is clicked, which on
+  a control whose whole surface is covered by its children is never. }
+procedure TTyRadioGroup.NotifySelection;
+begin
+  if Assigned(FOnSelectionChanged) then FOnSelectionChanged(Self);
+  if Assigned(OnClick) then OnClick(Self);
+end;
+
+{ Only the checked radio is a tab stop, so Tab enters the group once, lands on the current
+  choice, and leaves. Every child was a tab stop, so tabbing through a form with a
+  five-item radio group meant five stops inside one logical control -- and arrow keys, the
+  keys that actually move a radio selection, had nothing to do. LCL: UpdateTabStops. }
+procedure TTyRadioGroup.UpdateTabStops;
+var
+  i, sel: Integer;
+begin
+  sel := GetItemIndex;
+  if (sel < 0) and (Length(FButtons) > 0) then sel := 0;   { nothing chosen: the first }
+  for i := 0 to High(FButtons) do
+    if FButtons[i] <> nil then
+      FButtons[i].TabStop := (i = sel);
+end;
+
 procedure TTyRadioGroup.ChildChanged(Sender: TObject);
 begin
   // A child's Checked flipped. When a radio becomes checked it unchecks its siblings,
@@ -271,7 +302,8 @@ begin
   if not TTyRadioButton(Sender).Checked then Exit;   // ignore the uncheck half
   FUpdatingIndex := True;
   try
-    if Assigned(FOnSelectionChanged) then FOnSelectionChanged(Self);
+    UpdateTabStops;
+    NotifySelection;
   finally
     FUpdatingIndex := False;
   end;
@@ -292,8 +324,12 @@ var
   i: Integer;
 begin
   if GetItemIndex = AValue then Exit;
-  // Silent programmatic set: check the target, uncheck the rest, without firing
-  // OnSelectionChanged (that is a user-click event).
+  { The guard collapses the child-event storm (checking one radio unchecks its siblings,
+    each of which fires) into ONE notification -- it is not there to make a programmatic
+    set silent. It used to do both, so `RG.ItemIndex := 2` changed the selection and told
+    nobody: a handler that keeps a detail panel in step with the choice worked when the
+    user clicked and silently did not when the app restored a saved selection. LCL
+    deliberately notifies either way (radiogroup.inc, "to be delphi compat"). }
   FUpdatingIndex := True;
   try
     if (AValue >= 0) and (AValue < Length(FButtons)) then
@@ -307,7 +343,9 @@ begin
   finally
     FUpdatingIndex := False;
   end;
+  UpdateTabStops;
   Invalidate;
+  NotifySelection;
 end;
 
 procedure TTyRadioGroup.SetParent(AParent: TWinControl);

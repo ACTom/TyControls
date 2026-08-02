@@ -43,7 +43,7 @@ type
     procedure TestControllerPropagatesToChildren;
     // events
     procedure TestClickFiresSelectionChanged;
-    procedure TestProgrammaticSetIsSilent;
+    procedure TestProgrammaticSetNotifiesToo;
     // designer hygiene
     procedure TestChildrenAreNoDesignVisible;
     procedure TestChildrenOwnedByGroup;
@@ -342,15 +342,23 @@ begin
   AssertEquals('exactly one fire for the gesture', 1, FSelCount);
 end;
 
-procedure TRadioGroupTest.TestProgrammaticSetIsSilent;
+{ This used to assert silence -- its own name said IsSilent -- and that was the bug: the
+  selection changed and nobody was told, so a handler keeping a detail panel in step with
+  the choice worked when the user clicked and silently did not when the app restored a
+  saved selection. LCL notifies either way, deliberately ("to be delphi compat"). The
+  re-entrancy guard is still doing its job: ONE notification, not one per child. }
+procedure TRadioGroupTest.TestProgrammaticSetNotifiesToo;
 begin
   FGrp.Items.Add('A');
   FGrp.Items.Add('B');
   FGrp.OnSelectionChanged := @OnSel;
   FSelCount := 0;
-  FGrp.ItemIndex := 1;   // programmatic -> must NOT fire OnSelectionChanged
-  AssertEquals('programmatic set is silent', 0, FSelCount);
-  AssertEquals('but the index still took', 1, FGrp.ItemIndex);
+  FGrp.ItemIndex := 1;
+  AssertEquals('a programmatic set notifies', 1, FSelCount);
+  AssertEquals('exactly once, not once per child', 1, FSelCount);
+  AssertEquals('and the index took', 1, FGrp.ItemIndex);
+  FGrp.ItemIndex := 1;
+  AssertEquals('an unchanged write stays silent', 1, FSelCount);
 end;
 
 { ---- designer hygiene ---------------------------------------------------- }

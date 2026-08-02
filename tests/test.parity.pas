@@ -20,7 +20,7 @@ uses
   tyControls.DateTimePicker, tyControls.Splitter,
   tyControls.ShellTreeView, tyControls.ShellListView, tyControls.TreeView,
   tyControls.Image, tyControls.TabSheet, tyControls.Divider, tyControls.Gauge,
-  tyControls.PageControl, tyControls.ColorListBox;
+  tyControls.PageControl, tyControls.ColorListBox, tyControls.RadioGroup;
 
 type
   { Probes: ApplyToButton and the hosted checkboxes are protected, because the owning
@@ -166,6 +166,8 @@ type
     procedure TrackBarOrientationSwapsTheAxis;
     procedure HeadlinePropertiesArePublished;
     procedure ColorButtonFiresOnAnyColourChange;
+    procedure RadioGroupIsOneTabStop;
+    procedure RadioGroupOnClickFiresOnSelection;
   end;
 
 implementation
@@ -1355,6 +1357,51 @@ begin
     AssertEquals('and an unchanged write does not', 1, FColourChanges);
   finally
     B.Free;
+  end;
+end;
+
+{ Every child was a tab stop, so tabbing a form with a five-item radio group meant five
+  stops inside ONE logical control -- and the arrow keys, which are what actually move a
+  radio selection, had nothing to do. LCL keeps TabStop on the checked radio only. }
+procedure TParityTest.RadioGroupIsOneTabStop;
+var
+  G: TTyRadioGroup;
+  i, stops: Integer;
+begin
+  G := TTyRadioGroup.Create(nil);
+  try
+    G.Items.Add('a'); G.Items.Add('b'); G.Items.Add('c');
+    G.ItemIndex := 1;
+    stops := 0;
+    for i := 0 to G.ControlCount - 1 do
+      if (G.Controls[i] is TTyRadioButton) and TTyRadioButton(G.Controls[i]).TabStop then
+        Inc(stops);
+    AssertEquals('the group is one tab stop', 1, stops);
+    AssertTrue('and it is the chosen one',
+      (G.ControlCount > 1) and (G.Controls[1] is TTyRadioButton)
+      and TTyRadioButton(G.Controls[1]).TabStop);
+  finally
+    G.Free;
+  end;
+end;
+
+{ TCustomRadioGroup redeclares FOnClick and fires it on any selection change, so ported
+  code hangs its logic there. TControl's OnClick fires when the control ITSELF is clicked,
+  which on a group whose whole surface is covered by its children is never -- so the
+  handler was simply dead. }
+procedure TParityTest.RadioGroupOnClickFiresOnSelection;
+var
+  G: TTyRadioGroup;
+begin
+  G := TTyRadioGroup.Create(nil);
+  try
+    G.Items.Add('a'); G.Items.Add('b');
+    FTopClicks := 0;
+    G.OnClick := @CountTopClick;
+    G.ItemIndex := 1;
+    AssertEquals('OnClick reports the selection change', 1, FTopClicks);
+  finally
+    G.Free;
   end;
 end;
 
