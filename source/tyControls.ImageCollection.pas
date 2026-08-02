@@ -197,8 +197,16 @@ type
       mutate the bitmap. ASizePx <= 0 is clamped to a 1px square. }
     function CachedIndex(AIndex, ASizePx: Integer): TBGRABitmap;
     { Render item AIndex and paint it onto ACanvas at (AX, AY). Guards every edge
-      case (nil canvas/Collection, bad index, ASizePx <= 0) so it never raises. }
-    procedure Draw(ACanvas: TCanvas; AIndex, AX, AY, ASizePx: Integer);
+      case (nil canvas/Collection, bad index, ASizePx <= 0) so it never raises.
+
+      AGhosted draws the icon DIMMED -- the cut / unavailable / disabled look. It exists
+      because callers already had the information and nowhere to put it: TTyTreeView's
+      OnGetImageIndex hands the app a `var Ghosted: Boolean`, collected it, and dropped it,
+      so the one thing that flag says had no effect anywhere. Alpha only: the icon keeps
+      its colours and loses its presence, which is what "unavailable" should look like --
+      recolouring would say "different", not "faded". }
+    procedure Draw(ACanvas: TCanvas; AIndex, AX, AY, ASizePx: Integer;
+      AGhosted: Boolean = False);
   published
     { The raster image source. Setting it registers a FreeNotification so the
       reference is nil'd automatically if the collection is freed first. }
@@ -209,7 +217,34 @@ type
     property DefaultSize: Integer read FDefaultSize write FDefaultSize default 16;
   end;
 
+const
+  { How much of an icon's alpha survives the ghosted draw. 96/255 is faint enough to read
+    as "unavailable" and solid enough that the glyph is still identifiable -- an icon you
+    cannot recognise says "broken", not "disabled". }
+  TyGhostedAlpha = 96;
+
+{ Scale every pixel's alpha by AFactor/255. Exported because the ghosted draw is the
+  library's one "unavailable" look and other painters should reach for the same one. }
+procedure TyFadeBitmapAlpha(ABmp: TBGRABitmap; AFactor: Byte);
+
 implementation
+
+{ Scale every pixel's alpha by AFactor/255, so a masked icon fades evenly and its
+  antialiased edges fade with it. }
+procedure TyFadeBitmapAlpha(ABmp: TBGRABitmap; AFactor: Byte);
+var
+  p: PBGRAPixel;
+  i: Integer;
+begin
+  if (ABmp = nil) or (ABmp.NbPixels <= 0) then Exit;
+  p := ABmp.Data;
+  for i := 0 to ABmp.NbPixels - 1 do
+  begin
+    p^.alpha := (p^.alpha * AFactor) div 255;
+    Inc(p);
+  end;
+  ABmp.InvalidateBitmap;
+end;
 
 procedure TyTintBitmapAlpha(ABmp: TBGRABitmap; AColor: TTyColor);
 var
@@ -602,9 +637,10 @@ begin
   Result := FCollection.GetCachedBitmap(nm, ASizePx);
 end;
 
-procedure TTyVirtualImageList.Draw(ACanvas: TCanvas; AIndex, AX, AY, ASizePx: Integer);
+procedure TTyVirtualImageList.Draw(ACanvas: TCanvas; AIndex, AX, AY, ASizePx: Integer;
+  AGhosted: Boolean);
 var
-  bmp: TBGRABitmap;
+  bmp, dim: TBGRABitmap;
 begin
   if ACanvas = nil then Exit;
   if ASizePx < 1 then ASizePx := 1;
@@ -612,8 +648,21 @@ begin
   // index / missing name) — where we previously blitted a fully transparent square,
   // which was a visual no-op anyway. The False keeps the icon's alpha.
   bmp := CachedIndex(AIndex, ASizePx);
-  if bmp <> nil then
+  if bmp = nil then Exit;
+  if not AGhosted then
+  begin
     bmp.Draw(ACanvas, AX, AY, False);
+    Exit;
+  end;
+  { The cached bitmap is SHARED -- dimming it in place would ghost the icon everywhere it
+    is drawn from then on, including in other controls. Copy, dim the copy, free it. }
+  dim := bmp.Duplicate as TBGRABitmap;
+  try
+    TyFadeBitmapAlpha(dim, TyGhostedAlpha);
+    dim.Draw(ACanvas, AX, AY, False);
+  finally
+    dim.Free;
+  end;
 end;
 
 end.

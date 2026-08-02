@@ -3302,7 +3302,11 @@ var
     worked on Windows (the LCL RawImage→bitmap conversion aliases the BGRA data
     buffer there) but was silently dropped on Qt/GTK, where the bitmap is a
     separate buffer the EndPaint rebuild-from-data discards. }
-  pendingIcons: array of record X, Y, Idx: Integer; end;
+  { Ghost travels with the icon: the OnGetImageIndex handler answers per NODE, and the
+    icons are drawn later in one post-EndPaint GDI pass, so the flag has to be carried
+    rather than re-asked. It used to be collected into a local and dropped, which is why
+    a `var Ghosted := True` from an app had no effect anywhere. }
+  pendingIcons: array of record X, Y, Idx: Integer; Ghost: Boolean; end;
   pendingCount: Integer;
   iIcon, savedDC: Integer;
   { ③d D1: per-cell owner-draw — collected during the row loop, drawn onto
@@ -3845,6 +3849,7 @@ begin
                 pendingIcons[pendingCount].X   := ARect.Left + captionX;
                 pendingIcons[pendingCount].Y   := ARect.Top  + rowTop + (rowH - FImages.Height) div 2;
                 pendingIcons[pendingCount].Idx := imgIdx;
+                pendingIcons[pendingCount].Ghost := ghosted;
                 Inc(pendingCount);
               end;
               Inc(captionX, imgSlotW);
@@ -4242,8 +4247,14 @@ begin
           ARect.Left + CR.Left,  ARect.Top + CR.Top,
           ARect.Left + CR.Right, ARect.Top + CR.Bottom);
         for iIcon := 0 to pendingCount - 1 do
+          { NOTE the fifth argument. FImages here is LCL's TImageList, whose Draw is
+            Draw(Canvas, X, Y, Index, Enabled) -- Enabled, not Ghosted, and it happens to
+            accept a Boolean in that position either way, so passing the flag straight
+            through compiled cleanly and drew EVERY icon disabled. Ghosted is the negation
+            of Enabled, and the greyed rendering LCL does for a disabled icon is exactly
+            the "unavailable" look Ghosted asks for. }
           FImages.Draw(ACanvas, pendingIcons[iIcon].X, pendingIcons[iIcon].Y,
-            pendingIcons[iIcon].Idx);
+            pendingIcons[iIcon].Idx, not pendingIcons[iIcon].Ghost);
       finally
         RestoreDC(ACanvas.Handle, savedDC);
       end;

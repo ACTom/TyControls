@@ -22,7 +22,8 @@ uses
   tyControls.Image, tyControls.TabSheet, tyControls.Divider, tyControls.Gauge,
   tyControls.StrConsts,
   tyControls.PageControl, tyControls.ColorListBox, tyControls.RadioGroup,
-  tyControls.ScrollBox, tyControls.ScrollPanel;
+  tyControls.ScrollBox, tyControls.ScrollPanel, tyControls.ImageCollection,
+  BGRABitmap, BGRABitmapTypes;
 
 type
   { Probes: ApplyToButton and the hosted checkboxes are protected, because the owning
@@ -182,6 +183,7 @@ type
     procedure MenuBarRightJustifiesFromTheRightEdge;
     procedure ScrollPanelAutoPanIsNotCalledAutoScroll;
     procedure ShellFileSizeUnitsAreTranslatable;
+    procedure GhostedDrawFadesWithoutRecolouring;
   end;
 
 implementation
@@ -1538,6 +1540,32 @@ begin
   AssertEquals('', 'KB', rsTyFileSizeKB);
   AssertTrue('and the formatter uses it',
     Pos(rsTyFileSizeKB, TyFormatFileSize(2048)) > 0);
+end;
+
+{ TTyTreeView's OnGetImageIndex hands the app a `var Ghosted: Boolean`, collected it, and
+  dropped it -- so the one thing that flag says (draw this node's icon dimmed: the cut /
+  unavailable look) had no effect anywhere. The collection had no dimmed path at all, which
+  is why this was a MEDIUM rather than a line. Alpha only: the icon keeps its colours and
+  loses its presence. Recolouring would say "different", not "faded". }
+procedure TParityTest.GhostedDrawFadesWithoutRecolouring;
+var
+  b: TBGRABitmap;
+  before, after: TBGRAPixel;
+begin
+  b := TBGRABitmap.Create(4, 4, BGRA(200, 60, 30, 255));
+  try
+    before := b.GetPixel(1, 1);
+    TyFadeBitmapAlpha(b, TyGhostedAlpha);
+    after := b.GetPixel(1, 1);
+    AssertTrue('alpha comes down', after.alpha < before.alpha);
+    AssertTrue('but not to nothing -- an invisible icon says broken, not disabled',
+      after.alpha > 0);
+    AssertEquals('and the colours are untouched', before.red, after.red);
+    AssertEquals('', before.green, after.green);
+    AssertEquals('', before.blue, after.blue);
+  finally
+    b.Free;
+  end;
 end;
 
 initialization
