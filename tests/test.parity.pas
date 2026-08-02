@@ -20,7 +20,8 @@ uses
   tyControls.DateTimePicker, tyControls.Splitter,
   tyControls.ShellTreeView, tyControls.ShellListView, tyControls.TreeView,
   tyControls.Image, tyControls.TabSheet, tyControls.Divider, tyControls.Gauge,
-  tyControls.PageControl, tyControls.ColorListBox, tyControls.RadioGroup;
+  tyControls.PageControl, tyControls.ColorListBox, tyControls.RadioGroup,
+  tyControls.ScrollBox;
 
 type
   { Probes: ApplyToButton and the hosted checkboxes are protected, because the owning
@@ -58,6 +59,13 @@ type
   TDividerTextProbe = class(TTyDivider)
   public
     function ProbeText: string;
+  end;
+
+  { ContentHost is protected: the viewport is the box's own business, and content is
+    parented to it deliberately (the TTyPageControl shape). A probe is how a test reaches it. }
+  TScrollBoxProbe = class(TTyScrollBox)
+  public
+    function ProbeHost: TWinControl;
   end;
 
   TShellTreeProbe = class(TTyShellTreeView)
@@ -169,6 +177,8 @@ type
     procedure RadioGroupIsOneTabStop;
     procedure RadioGroupOnClickFiresOnSelection;
     procedure MenuRowsCarryHintAndCheckability;
+    procedure ScrollBoxExposesTheViewScroll;
+    procedure MenuBarRightJustifiesFromTheRightEdge;
   end;
 
 implementation
@@ -211,6 +221,11 @@ end;
 function TDividerTextProbe.ProbeText: string;
 begin
   Result := Text;
+end;
+
+function TScrollBoxProbe.ProbeHost: TWinControl;
+begin
+  Result := ContentHost;
 end;
 
 function TShellTreeProbe.ProbeText(Node: PTyTreeNode): string;
@@ -1437,6 +1452,65 @@ begin
     AssertFalse('a plain command does not', rows[1].AlwaysCheckable);
   finally
     M.Free;
+  end;
+end;
+
+{ Both operations already existed and were PROTECTED, so the one thing a caller most wants
+  from a scrolling container -- "show me a bit further down" -- was reachable only by
+  writing the scrollbar's Position and hoping. }
+procedure TParityTest.ScrollBoxExposesTheViewScroll;
+var
+  B: TScrollBoxProbe;
+  Tall: TTyPanel;
+begin
+  B := TScrollBoxProbe.Create(nil);
+  try
+    B.SetBounds(0, 0, 100, 100);
+    { Real content, or there is no scrollable range and every offset legitimately clamps
+      to 0 -- which would make this test pass for the wrong reason. }
+    Tall := TTyPanel.Create(B);
+    Tall.Parent := B.ProbeHost;
+    Tall.SetBounds(0, 0, 80, 400);
+    B.UpdateScrollRange;
+
+    B.ScrollTo(0, 40);
+    AssertEquals('ScrollTo moves the view', 40, B.ScrollY);
+    B.ScrollByDelta(0, -15);
+    AssertEquals('ScrollByDelta is relative', 25, B.ScrollY);
+    B.ScrollTo(0, -5);
+    AssertEquals('a negative offset clamps at the top', 0, B.ScrollY);
+    B.ScrollTo(0, 99999);
+    AssertTrue('and ScrollTo clamps at the end, like ScrollByDelta',
+      B.ScrollY < 400);
+  finally
+    B.Free;
+  end;
+end;
+
+{ TMenuItem.RightJustify is published, the designer offers it, and the bar read it nowhere:
+  every cell packed left to right, so the classic right-aligned Help / Window menu could not
+  be built at all. A right-justified top and everything after it measure from the RIGHT
+  edge, which is what keeps the group glued there as the bar resizes. }
+procedure TParityTest.MenuBarRightJustifiesFromTheRightEdge;
+var
+  B: TTyMenuBar;
+  M: TMainMenu;
+  Left0, Help: TMenuItem;
+begin
+  B := TTyMenuBar.Create(nil);
+  M := TMainMenu.Create(B);
+  try
+    B.SetBounds(0, 0, 400, 24);
+    Left0 := TMenuItem.Create(M); Left0.Caption := 'File'; M.Items.Add(Left0);
+    Help := TMenuItem.Create(M);  Help.Caption := 'Help'; M.Items.Add(Help);
+    B.Menu := M;
+    AssertFalse('nothing is right-justified yet', B.TopRightJustifiedForTest(1));
+    Help.RightJustify := True;
+    AssertTrue('the bar now sees the flag', B.TopRightJustifiedForTest(1));
+    AssertTrue('and Help sits in the right half of a 400px bar',
+      B.TopLeftForTest(1, 96) > 200);
+  finally
+    B.Free;
   end;
 end;
 

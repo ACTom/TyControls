@@ -293,6 +293,11 @@ type
     procedure ApplyAutoSizeWidth;
     { Index of the AIndex-th VISIBLE top item back into Menu.Items, or -1. }
     function VisibleTopItem(AIndex: Integer): TMenuItem;
+    { True when the AIndex-th visible top item is right-justified (TMenuItem.RightJustify).
+      Ours packed every cell left to right and ignored the flag, so the classic
+      right-aligned Help / Window menu could not be built at all -- the property is
+      published on TMenuItem, the designer offers it, and nothing read it. }
+    function TopRightJustified(AIndex: Integer): Boolean;
     { Whether the AIndex-th visible top item is enabled. A missing item counts as
       disabled -- nothing to open is the same as not being allowed to. }
     function TopEnabled(AIndex: Integer): Boolean;
@@ -337,6 +342,8 @@ type
       and childless rules without a window handle or a real menu grab. }
     procedure OpenTopForTest(AIndex: Integer);
     function TopEnabledForTest(AIndex: Integer): Boolean;
+    function TopRightJustifiedForTest(AIndex: Integer): Boolean;
+    function TopLeftForTest(AIndex, APPI: Integer): Integer;
     { Which top's dropdown is open, or -1. The observable that says whether OpenTop was
       allowed to proceed -- a disabled top with children must leave this at -1. }
     function OpenIndexForTest: Integer;
@@ -1522,6 +1529,16 @@ begin
   Result := FOpenIndex;
 end;
 
+function TTyMenuBar.TopRightJustifiedForTest(AIndex: Integer): Boolean;
+begin
+  Result := TopRightJustified(AIndex);
+end;
+
+function TTyMenuBar.TopLeftForTest(AIndex, APPI: Integer): Integer;
+begin
+  Result := TopLeft(AIndex, APPI);
+end;
+
 procedure TTyMenuBar.OpenTopForTest(AIndex: Integer);
 begin
   OpenTop(AIndex);
@@ -1602,13 +1619,31 @@ begin
   if Result < 1 then Result := 1;
 end;
 
+function TTyMenuBar.TopRightJustified(AIndex: Integer): Boolean;
+var
+  mi: TMenuItem;
+begin
+  mi := VisibleTopItem(AIndex);
+  Result := (mi <> nil) and mi.RightJustify;
+end;
+
 function TTyMenuBar.TopLeft(AIndex, APPI: Integer): Integer;
 var
   S: TTyStyleSet;
   i: Integer;
 begin
-  // The bar's own left padding offsets the first cell; cells then pack edge-to-edge.
   S := CurrentStyle;
+  if TopRightJustified(AIndex) then
+  begin
+    { A right-justified top and everything after it pack against the RIGHT edge, in order.
+      Measuring from the right rather than the left is the whole point: the group has to
+      stay glued to the edge as the bar resizes, which a left-packed offset cannot do. }
+    Result := Width - MulDiv(S.Padding.Right, APPI, 96);
+    for i := AIndex to TopCount - 1 do
+      Dec(Result, TopCellWidth(i, APPI));
+    Exit;
+  end;
+  // The bar's own left padding offsets the first cell; cells then pack edge-to-edge.
   Result := MulDiv(S.Padding.Left, APPI, 96);
   for i := 0 to AIndex - 1 do
     Inc(Result, TopCellWidth(i, APPI));

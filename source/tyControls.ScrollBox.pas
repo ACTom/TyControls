@@ -93,7 +93,7 @@ type
     { Nudge the scroll offset by (ADx, ADy), clamped to the current scrollable range (0 on an
       axis with no bar), and keep the bar thumbs in sync. For subclasses (e.g. TTyScrollPanel's
       edge auto-pan). Safe to call after the layout has settled (bars configured). }
-    procedure ScrollByDelta(ADx, ADy: Integer);
+
     { A scrollbar is an internal child; keep it out of the range measurement and out of
       the streamed/designer child list. }
     { Where the content actually lives. A box that has been given a TTyScrollContent scrolls
@@ -133,6 +133,16 @@ type
       show/hide/position the two scrollbars and clamp the offset. Call on Resize and
       whenever the child set changes (add/remove/move). }
     procedure UpdateScrollRange;
+    { Scroll the VIEW by a delta / to an absolute offset.
+
+      Both already existed and were protected, so the one thing a caller most wants from a
+      scrolling container -- "show me a bit further down" -- was reachable only by writing
+      the scrollbar's Position and hoping. Note the names: TWinControl.ScrollBy MOVES CHILD
+      CONTROLS and this class calls it internally to do exactly that, so overriding it to
+      mean "scroll the view" would have it call itself. ScrollByDelta is the view operation;
+      ScrollBy keeps TWinControl's meaning. }
+    procedure ScrollByDelta(ADx, ADy: Integer);
+    procedure ScrollTo(AX, AY: Integer);
     { The logical content extent (bounding box of the non-scrollbar children), valid
       after UpdateScrollRange. Exposed for tests. }
     property ContentWidth: Integer read FContentW;
@@ -297,6 +307,14 @@ begin
     FHScrollBar.ControlStyle := FHScrollBar.ControlStyle + [csNoDesignVisible];
     FHScrollBar.Visible := False;
   end;
+end;
+
+procedure TTyScrollBox.ScrollTo(AX, AY: Integer);
+begin
+  { Through ScrollByDelta, not ScrollContentTo: the delta path re-measures and clamps to
+    the real scrollable range, and ScrollContentTo does not. Two entry points with two
+    clamping rules is how a public ScrollTo ends up able to scroll past the content end. }
+  ScrollByDelta(AX - FScrollX, AY - FScrollY);
 end;
 
 procedure TTyScrollBox.UpdateScrollRange;
