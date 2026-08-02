@@ -14,9 +14,9 @@ type
     { protected, not private: a test drives the invalidation rule through it. }
     FPaintCache: TTyPaintCache;
   private
-    FCaption: TCaption;
-    procedure SetCaption(const AValue: TCaption);
   protected
+    { Repaint when Caption/Text changes -- the LCL hook that replaces our old setter. }
+    procedure TextChanged; override;
     procedure SetParent(AParent: TWinControl); override;
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -26,7 +26,15 @@ type
     procedure Invalidate; override;
     constructor Create(AOwner: TComponent); override;
   published
-    property Caption: TCaption read FCaption write SetCaption;
+    { Caption is TControl's, not a second string of our own.
+
+      It used to be a field-backed property shadowing TControl.Caption, so a control had
+      TWO captions: `P.Caption := 'x'` set ours and left TControl.Text empty, while
+      anything reading Text -- an action link, an accessibility query, TControl's own
+      csSetCaption wiring, generic code that walks TControl -- saw ''. On LCL these are one
+      string: Caption IS Text, routed through RealSetText, and a repaint is arranged by
+      overriding TextChanged. That is what this does now. }
+    property Caption;
     property StyleClass;
     property Controller;
   end;
@@ -43,7 +51,6 @@ begin
     csNoDesignVisible, csNoFocus];
   Align := alClient;
   Visible := False;
-  FCaption := '';
 end;
 
 function TTyTabSheet.GetStyleTypeKey: string;
@@ -51,12 +58,12 @@ begin
   Result := 'TyTabSheet';
 end;
 
-procedure TTyTabSheet.SetCaption(const AValue: TCaption);
+procedure TTyTabSheet.TextChanged;
 begin
-  if FCaption = AValue then Exit;
-  FCaption := AValue;
+  inherited TextChanged;
+  { The tab LABEL changed, so it is the host header that has to re-lay, not us. }
   if Parent <> nil then
-    Parent.Invalidate;   // the tab label changed — re-lay the host header
+    Parent.Invalidate;
 end;
 
 procedure TTyTabSheet.SetParent(AParent: TWinControl);

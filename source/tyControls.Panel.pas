@@ -10,9 +10,9 @@ type
     { protected, not private: a test drives the invalidation rule through it. }
     FPaintCache: TTyPaintCache;
   private
-    FCaption: TCaption;
     FAlignment: TAlignment;
-    procedure SetCaption(const AValue: TCaption);
+    { Repaint when Caption/Text changes -- the LCL hook that replaces our old setter. }
+    procedure TextChanged; override;
     procedure SetAlignment(AValue: TAlignment);
   protected
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -23,7 +23,15 @@ type
     constructor Create(AOwner: TComponent); override;
     function GetStyleTypeKey: string; override;
   published
-    property Caption: TCaption read FCaption write SetCaption;
+    { Caption is TControl's, not a second string of our own.
+
+      It used to be a field-backed property shadowing TControl.Caption, so a control had
+      TWO captions: `P.Caption := 'x'` set ours and left TControl.Text empty, while
+      anything reading Text -- an action link, an accessibility query, TControl's own
+      csSetCaption wiring, generic code that walks TControl -- saw ''. On LCL these are one
+      string: Caption IS Text, routed through RealSetText, and a repaint is arranged by
+      overriding TextChanged. That is what this does now. }
+    property Caption;
     property Alignment: TAlignment read FAlignment write SetAlignment default taCenter;
     property Align;
     property Anchors;
@@ -36,7 +44,6 @@ begin
   inherited Create(AOwner);
   // Designer container: the IDE drops child controls INTO the panel.
   ControlStyle := ControlStyle + [csAcceptsControls];
-  FCaption := '';
   FAlignment := taCenter;
   Width := 185;
   Height := 41;
@@ -45,10 +52,9 @@ function TTyPanel.GetStyleTypeKey: string;
 begin
   Result := 'TyPanel';
 end;
-procedure TTyPanel.SetCaption(const AValue: TCaption);
+procedure TTyPanel.TextChanged;
 begin
-  if FCaption = AValue then Exit;
-  FCaption := AValue;
+  inherited TextChanged;
   Invalidate;
 end;
 procedure TTyPanel.SetAlignment(AValue: TAlignment);
@@ -76,8 +82,8 @@ begin
       ContentRect.Right  - P.Scale(S.Padding.Right),
       ContentRect.Bottom - P.Scale(S.Padding.Bottom)
     );
-    if FCaption <> '' then
-      P.DrawText(ContentRect, FCaption, S.FontName, ResolveFontSize(S), S.FontWeight,
+    if Caption <> '' then
+      P.DrawText(ContentRect, Caption, S.FontName, ResolveFontSize(S), S.FontWeight,
         S.TextColor, FAlignment, tlCenter, True);
     P.EndPaint;
   finally

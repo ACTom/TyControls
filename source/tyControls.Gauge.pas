@@ -65,7 +65,6 @@ type
     property StartAngle: Integer read FStartAngle write SetStartAngle default 135;
     property SweepAngle: Integer read FSweepAngle write SetSweepAngle default 270;
     property AnimationsEnabled: Boolean read FAnimEnabled write FAnimEnabled default True;
-    property Caption;
     property Font;
     property Align;
     property Anchors;
@@ -110,6 +109,12 @@ end;
 constructor TTyGauge.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  { An instrument has no caption. Caption used to be PUBLISHED here and grep found exactly
+    one hit -- that declaration; Paint never read it, so the Object Inspector offered a
+    knob the control ignored. Unpublished, and csSetCaption dropped with it so a gauge
+    stops acquiring its own Name as invisible caption text and streaming it into the .lfm
+    for nothing. LCL's industrial family drops csSetCaption for the same reason. }
+  ControlStyle := ControlStyle - [csSetCaption];
   FMin := 0;
   FMax := 100;
   FValue := 0;

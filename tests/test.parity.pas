@@ -19,7 +19,7 @@ uses
   tyControls.HeaderControl, tyControls.ComboBox, tyControls.Edit, tyControls.Memo,
   tyControls.DateTimePicker, tyControls.Splitter,
   tyControls.ShellTreeView, tyControls.ShellListView, tyControls.TreeView,
-  tyControls.Image;
+  tyControls.Image, tyControls.TabSheet, tyControls.Divider, tyControls.Gauge;
 
 type
   { Probes: ApplyToButton and the hosted checkboxes are protected, because the owning
@@ -39,6 +39,24 @@ type
   public
     { The exact path a Ctrl+V takes: InjectStringAt -> FilterInsert. }
     procedure ProbePaste(const S: string);
+  end;
+
+  { TControl.Text is protected, and it is exactly the string these tests are about: the
+    one TControl itself, action links and accessibility read. A descendant is the way in. }
+  TPanelTextProbe = class(TTyPanel)
+  public
+    function ProbeText: string;
+    procedure SetProbeText(const S: string);
+  end;
+
+  TTabTextProbe = class(TTyTabSheet)
+  public
+    function ProbeText: string;
+  end;
+
+  TDividerTextProbe = class(TTyDivider)
+  public
+    function ProbeText: string;
   end;
 
   TShellTreeProbe = class(TTyShellTreeView)
@@ -139,6 +157,8 @@ type
     procedure ShellListRefreshMeansRepaintAgain;
     procedure ShellTreeAppHandlerActuallyRuns;
     procedure ImageTransparentReachesTheGraphicMask;
+    procedure CaptionAndTextAreOneString;
+    procedure GaugeDoesNotOfferACaptionItIgnores;
   end;
 
 implementation
@@ -161,6 +181,26 @@ end;
 procedure TMaskProbe.ProbePaste(const S: string);
 begin
   InjectStringAt(S);
+end;
+
+function TPanelTextProbe.ProbeText: string;
+begin
+  Result := Text;
+end;
+
+procedure TPanelTextProbe.SetProbeText(const S: string);
+begin
+  Text := S;
+end;
+
+function TTabTextProbe.ProbeText: string;
+begin
+  Result := Text;
+end;
+
+function TDividerTextProbe.ProbeText: string;
+begin
+  Result := Text;
 end;
 
 function TShellTreeProbe.ProbeText(Node: PTyTreeNode): string;
@@ -1190,6 +1230,58 @@ begin
   finally
     B.Free;
     I.Free;
+  end;
+end;
+
+{ Three controls declared a field-backed Caption that SHADOWED TControl.Caption, so each
+  had two captions: `P.Caption := 'x'` set theirs and left TControl.Text empty, while
+  anything reading Text -- an action link, an accessibility query, generic code walking
+  TControl -- saw ''. On LCL they are one string. }
+procedure TParityTest.CaptionAndTextAreOneString;
+var
+  P: TPanelTextProbe;
+  T: TTabTextProbe;
+  D: TDividerTextProbe;
+begin
+  P := TPanelTextProbe.Create(nil);
+  try
+    P.Caption := 'panel';
+    AssertEquals('panel: Caption reaches Text', 'panel', P.ProbeText);
+    P.SetProbeText('via text');
+    AssertEquals('panel: and Text reaches Caption', 'via text', P.Caption);
+  finally
+    P.Free;
+  end;
+  T := TTabTextProbe.Create(nil);
+  try
+    T.Caption := 'tab';
+    AssertEquals('tabsheet: Caption reaches Text', 'tab', T.ProbeText);
+  finally
+    T.Free;
+  end;
+  D := TDividerTextProbe.Create(nil);
+  try
+    D.Caption := 'div';
+    AssertEquals('divider: Caption reaches Text', 'div', D.ProbeText);
+  finally
+    D.Free;
+  end;
+end;
+
+{ An instrument has no caption. Caption was published and grep found exactly one hit --
+  that declaration -- so the Object Inspector offered a knob the control ignored. }
+procedure TParityTest.GaugeDoesNotOfferACaptionItIgnores;
+var
+  G: TTyGauge;
+begin
+  AssertTrue('Caption must not be published on an instrument that never paints one',
+    GetPropInfo(TTyGauge, 'Caption') = nil);
+  G := TTyGauge.Create(nil);
+  try
+    AssertFalse('and it must not acquire its Name as invisible caption text',
+      csSetCaption in G.ControlStyle);
+  finally
+    G.Free;
   end;
 end;
 

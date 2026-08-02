@@ -36,21 +36,29 @@ function TyDividerLayout(AClientWidth, AClientHeight, ACaptionWidth: Integer;
 type
   TTyDivider = class(TTyGraphicControl)
   private
-    FCaption: TCaption;
     FAlignment: TAlignment;
-    procedure SetCaption(const AValue: TCaption);
     procedure SetAlignment(AValue: TAlignment);
     { TTyGraphicControl has no ResolveFontSize helper (that lives on
       TTyCustomControl); mirror TTyLabel and resolve it locally. }
     function ResolveFontSize(const AStyle: TTyStyleSet): Integer;
   protected
+    { Repaint when Caption/Text changes -- the LCL hook that replaces our old setter. }
+    procedure TextChanged; override;
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
   public
     constructor Create(AOwner: TComponent); override;
   published
-    property Caption: TCaption read FCaption write SetCaption;
+    { Caption is TControl's, not a second string of our own.
+
+      It used to be a field-backed property shadowing TControl.Caption, so a control had
+      TWO captions: `P.Caption := 'x'` set ours and left TControl.Text empty, while
+      anything reading Text -- an action link, an accessibility query, TControl's own
+      csSetCaption wiring, generic code that walks TControl -- saw ''. On LCL these are one
+      string: Caption IS Text, routed through RealSetText, and a repaint is arranged by
+      overriding TextChanged. That is what this does now. }
+    property Caption;
     { Where the caption sits relative to the rule:
         taLeftJustify  — caption at the left, rule fills the space to its right;
         taRightJustify — mirror (caption at the right, rule to its left);
@@ -133,7 +141,6 @@ end;
 constructor TTyDivider.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
-  FCaption := '';
   FAlignment := taLeftJustify;
   Width := 150;
   Height := TyDensityHeight(ActiveController, 24);
@@ -152,10 +159,9 @@ begin
   Result := TyResolveFontSize(AStyle, ParentFont, Font.Size, ActiveController);
 end;
 
-procedure TTyDivider.SetCaption(const AValue: TCaption);
+procedure TTyDivider.TextChanged;
 begin
-  if FCaption = AValue then Exit;
-  FCaption := AValue;
+  inherited TextChanged;
   Invalidate;
 end;
 
@@ -219,8 +225,8 @@ begin
 
     // Measure the caption in the SAME font DrawText will use.
     capW := 0;
-    if FCaption <> '' then
-      capW := P.MeasureText(FCaption, S.FontName, fontSize, S.FontWeight).cx;
+    if Caption <> '' then
+      capW := P.MeasureText(Caption, S.FontName, fontSize, S.FontWeight).cx;
 
     gap := P.Scale(6);
     minRule := P.Scale(4);
@@ -236,11 +242,11 @@ begin
     StrokeSeg(Rect(ContentRect.Left + Lay.RightRule.Left, ContentRect.Top + Lay.RightRule.Top,
       ContentRect.Left + Lay.RightRule.Right, ContentRect.Top + Lay.RightRule.Bottom));
 
-    if (FCaption <> '') and (Lay.CaptionRect.Right > Lay.CaptionRect.Left) then
+    if (Caption <> '') and (Lay.CaptionRect.Right > Lay.CaptionRect.Left) then
       P.DrawText(
         Rect(ContentRect.Left + Lay.CaptionRect.Left, ContentRect.Top + Lay.CaptionRect.Top,
           ContentRect.Left + Lay.CaptionRect.Right, ContentRect.Top + Lay.CaptionRect.Bottom),
-        FCaption, S.FontName, fontSize, S.FontWeight, S.TextColor,
+        Caption, S.FontName, fontSize, S.FontWeight, S.TextColor,
         FAlignment, tlCenter, True);
 
     P.EndPaint;
