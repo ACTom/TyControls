@@ -329,9 +329,21 @@ begin
 end;
 
 procedure TTyTrackBar.SetOrientation(const AValue: TTyTrackOrientation);
+var
+  w, h: Integer;
 begin
   if FOrientation = AValue then Exit;
   FOrientation := AValue;
+  { Swap the axis with the orientation, as LCL does. Without it, switching a 200x30 bar to
+    vertical left a bar 200 wide and 30 tall drawing a vertical track inside it -- a
+    horizontal box containing a vertical control, which every caller then had to fix by
+    hand. Not during streaming: the .lfm carries explicit bounds and they must win. }
+  if not (csLoading in ComponentState) then
+  begin
+    w := Width; h := Height;
+    if ((AValue = toVertical) and (w > h)) or ((AValue = toHorizontal) and (h > w)) then
+      SetBounds(Left, Top, h, w);
+  end;
   Invalidate;
 end;
 

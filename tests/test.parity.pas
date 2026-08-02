@@ -19,7 +19,8 @@ uses
   tyControls.HeaderControl, tyControls.ComboBox, tyControls.Edit, tyControls.Memo,
   tyControls.DateTimePicker, tyControls.Splitter,
   tyControls.ShellTreeView, tyControls.ShellListView, tyControls.TreeView,
-  tyControls.Image, tyControls.TabSheet, tyControls.Divider, tyControls.Gauge;
+  tyControls.Image, tyControls.TabSheet, tyControls.Divider, tyControls.Gauge,
+  tyControls.PageControl, tyControls.ColorListBox;
 
 type
   { Probes: ApplyToButton and the hosted checkboxes are protected, because the owning
@@ -85,6 +86,8 @@ type
     FArrows: string;
     FTopClicks: Integer;
     FGetTextCalls: Integer;
+    FColourChanges: Integer;
+    procedure CountColourChange(Sender: TObject);
     procedure CountTopClick(Sender: TObject);
     procedure CountGetText(Sender: TTyTreeView; Node: PTyTreeNode; var AText: string);
     procedure CountItemChange(Sender: TObject; AIndex: Integer);
@@ -159,6 +162,10 @@ type
     procedure ImageTransparentReachesTheGraphicMask;
     procedure CaptionAndTextAreOneString;
     procedure GaugeDoesNotOfferACaptionItIgnores;
+    procedure UpDownWrapCarriesTheOvershoot;
+    procedure TrackBarOrientationSwapsTheAxis;
+    procedure HeadlinePropertiesArePublished;
+    procedure ColorButtonFiresOnAnyColourChange;
   end;
 
 implementation
@@ -1282,6 +1289,72 @@ begin
       csSetCaption in G.ControlStyle);
   finally
     G.Free;
+  end;
+end;
+
+procedure TParityTest.CountColourChange(Sender: TObject);
+begin
+  Inc(FColourChanges);
+end;
+
+{ Snapping straight to the opposite bound discards the overshoot, so a step bigger than 1
+  turned a wrapping up-down from an adder into a reset. }
+procedure TParityTest.UpDownWrapCarriesTheOvershoot;
+begin
+  AssertEquals('step of 1 still wraps to the bound', 0, TyUpDownClamp(11, 0, 10, True));
+  AssertEquals('overshoot of 3 carries round', 2, TyUpDownClamp(13, 0, 10, True));
+  AssertEquals('and downward too', 9, TyUpDownClamp(-2, 0, 10, True));
+  AssertEquals('no wrap: still clamps', 10, TyUpDownClamp(13, 0, 10, False));
+end;
+
+{ Switching a 200x30 bar to vertical used to leave it 200 wide with a vertical track drawn
+  inside -- a horizontal box containing a vertical control. }
+procedure TParityTest.TrackBarOrientationSwapsTheAxis;
+var
+  T: TTyTrackBar;
+begin
+  T := TTyTrackBar.Create(nil);
+  try
+    T.SetBounds(0, 0, 200, 30);
+    T.Orientation := toVertical;
+    AssertEquals('vertical is taller than wide', 200, T.Height);
+    AssertEquals('', 30, T.Width);
+    T.Orientation := toHorizontal;
+    AssertEquals('and back', 200, T.Width);
+  finally
+    T.Free;
+  end;
+end;
+
+{ Three controls kept their headline property PUBLIC only, so the one thing each control is
+  for could not be set in the designer or streamed to the .lfm. }
+procedure TParityTest.HeadlinePropertiesArePublished;
+begin
+  AssertTrue('page control publishes ActivePage',
+    GetPropInfo(TTyPageControl, 'ActivePage') <> nil);
+  AssertTrue('colour box publishes Selected',
+    GetPropInfo(TTyColorBox, 'Selected') <> nil);
+  AssertTrue('colour list box publishes Selected',
+    GetPropInfo(TTyColorListBox, 'Selected') <> nil);
+end;
+
+{ OnColorChange fired only for a DIALOG-driven change, so a handler keeping something in
+  step with the colour worked when the user picked and silently did not when the app
+  restored a saved value -- the case nobody tests. }
+procedure TParityTest.ColorButtonFiresOnAnyColourChange;
+var
+  B: TTyColorButton;
+begin
+  B := TTyColorButton.Create(nil);
+  try
+    FColourChanges := 0;
+    B.OnColorChange := @CountColourChange;
+    B.SelectedColor := TyRGBA(1, 2, 3, 255);
+    AssertEquals('a programmatic change fires it too', 1, FColourChanges);
+    B.SelectedColor := TyRGBA(1, 2, 3, 255);
+    AssertEquals('and an unchanged write does not', 1, FColourChanges);
+  finally
+    B.Free;
   end;
 end;
 

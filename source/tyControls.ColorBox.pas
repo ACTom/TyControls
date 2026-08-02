@@ -60,9 +60,12 @@ type
     procedure AddColor(const AName: string; AColor: TColor);
     // Colour of item AIndex (clNone if out of range).
     function ColorAt(AIndex: Integer): TColor;
-    // The selected colour. Reading returns the current item's colour (clNone if none);
-    // writing selects the matching item, or (clNone -> clear; otherwise) appends a '#RRGGBB'
-    // item and selects it.
+  published
+    { PUBLISHED, as TColorBox does -- it is the control's headline property and it was
+      public-only, so the one thing a colour box is for could not be set in the designer
+      or streamed to the .lfm. Reading returns the current item's colour (clNone if none);
+      writing selects the matching item, or reports clNone when the colour is not in the
+      palette. }
     property Selected: TColor read GetSelected write SetSelected;
   end;
 

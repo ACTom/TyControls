@@ -38,8 +38,12 @@ type
     procedure RemovePage(AIndex: Integer);
     function PageCount: Integer;
     property Pages[AIndex: Integer]: TTyTabSheet read GetPage;
-    property ActivePage: TTyTabSheet read GetActivePage write SetActivePage;
   published
+    { PUBLISHED, as TPageControl does. It was public-only, so the designer and the .lfm
+      could pick the shown page only by INDEX -- and an index silently points at a
+      different page the moment someone reorders the tabs, while a page reference does
+      not. ActivePageIndex stays for code that prefers it; both address one selection. }
+    property ActivePage: TTyTabSheet read GetActivePage write SetActivePage;
     property ActivePageIndex: Integer read FTabIndex write SetTabIndex default -1;
   end;
 

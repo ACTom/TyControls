@@ -32,7 +32,7 @@ type
     procedure TestHexIgnoresAlpha;
     procedure TestDefaultSelectedColor;
     procedure TestSelectedColorRoundTrips;
-    procedure TestProgrammaticSetDoesNotFireOnColorChange;
+    procedure TestAnyColourChangeFiresOnColorChange;
     procedure TestShowTextTogglePublished;
     procedure TestDialogCaptionDefault;
     procedure TestDrawContentSafeNoText;
@@ -158,18 +158,24 @@ begin
   finally B.Free; end;
 end;
 
-procedure TColorButtonTest.TestProgrammaticSetDoesNotFireOnColorChange;
+{ This used to assert the opposite -- its own name said DoesNotFire -- and that split was
+  the bug: OnColorChange fired for a dialog-driven change and stayed silent for a
+  programmatic one, so a handler keeping something in step with the colour worked when the
+  user picked and silently did not when the app restored a saved value. LCL fires on any
+  change. }
+procedure TColorButtonTest.TestAnyColourChangeFiresOnColorChange;
 var B: TTyColorButton;
 begin
-  // OnColorChange is dialog-driven only; a programmatic setter must not fire it.
   FChanged := 0;
   B := TTyColorButton.Create(nil);
   try
     B.OnColorChange := @HandleColorChange;
     B.SelectedColor := TyRGB(10, 20, 30);
+    AssertEquals('a programmatic change fires it', 1, FChanged);
     B.SelectedColor := TyRGB(10, 20, 30);   // no-op (same value)
+    AssertEquals('an unchanged write does not', 1, FChanged);
     B.SelectedColor := TyRGB(40, 50, 60);
-    AssertEquals('programmatic set never fires OnColorChange', 0, FChanged);
+    AssertEquals('and the next real change does', 2, FChanged);
     AssertTrue('OnColorChange published', IsPublishedProp(B, 'OnColorChange'));
   finally B.Free; end;
 end;

@@ -23,6 +23,9 @@ type
     procedure ClearColors;
     procedure AddColor(const AName: string; AColor: TColor);
     function ColorAt(AIndex: Integer): TColor;
+  published
+    { PUBLISHED, as TColorListBox does. It was public-only, so the control's headline
+      property could not be set in the designer or streamed. }
     property Selected: TColor read GetSelected write SetSelected;
   end;
 

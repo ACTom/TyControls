@@ -113,7 +113,14 @@ procedure TTyColorButton.SetSelectedColor(AValue: TTyColor);
 begin
   if FSelectedColor = AValue then Exit;
   FSelectedColor := AValue;
-  Invalidate;   // programmatic set: repaint only, no OnColorChange (dialog-driven only)
+  Invalidate;
+  { Fire on ANY change, as LCL does -- it used to fire only for a dialog-driven one. That
+    split meant a handler that keeps something in step with the colour (a preview, a
+    document property) worked when the user picked and silently did not when the app
+    restored a saved value, which is exactly the case nobody tests. Suppressed while
+    streaming, or every .lfm load would fire it before the form exists. }
+  if not (csLoading in ComponentState) then
+    if Assigned(FOnColorChange) then FOnColorChange(Self);
 end;
 
 procedure TTyColorButton.SetShowText(AValue: Boolean);
@@ -255,19 +262,19 @@ var
   didChange: Boolean;
 begin
   if not Enabled then Exit;
+  { inherited FIRST, so OnClick observes the PRE-dialog colour and can still cancel or
+    reconfigure -- LCL runs the click before opening the picker. Ours opened the dialog
+    first, so an OnClick handler was told about a decision the user had already made and
+    could do nothing about. }
+  inherited Click;
   newColor := FSelectedColor;
   // TySelectColor updates newColor in place; True iff the user accepted (OK).
   if TySelectColor(FDialogCaption, newColor) then
   begin
     didChange := newColor <> FSelectedColor;
-    FSelectedColor := newColor;
     if didChange then
-    begin
-      Invalidate;
-      if Assigned(FOnColorChange) then FOnColorChange(Self);
-    end;
+      SelectedColor := newColor;   { one path for the repaint + OnColorChange }
   end;
-  inherited Click;   // fire OnClick too (and honour any ModalResult, per TTyButton)
 end;
 
 end.

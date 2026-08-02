@@ -124,8 +124,14 @@ begin
   Result := AValue;
   if AWrap then
   begin
-    if Result > AMax then Result := AMin
-    else if Result < AMin then Result := AMax;
+    { Carry the overshoot around, do not discard it. Snapping straight to the opposite
+      bound means a step of more than 1 loses whatever was left over: with Min=0, Max=10
+      and Increment=4, stepping up from 9 gave 0 instead of 3, so a wrapping up-down
+      quietly stopped being an adder and became a reset. LCL carries the remainder. }
+    if Result > AMax then
+      Result := AMin + ((Result - AMax - 1) mod (AMax - AMin + 1))
+    else if Result < AMin then
+      Result := AMax - ((AMin - Result - 1) mod (AMax - AMin + 1));
   end
   else
   begin
