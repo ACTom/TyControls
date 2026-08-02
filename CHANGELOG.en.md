@@ -106,43 +106,93 @@ Linux and macOS.
   and the filter that was on it. Column structure previously could not enter the
   undo stack at all, so any column change simply cleared it.
 
-### Fixed -- parity with Delphi/Lazarus (each control read next to its namesake)
+### Changed -- parity with Delphi/Lazarus (**includes breaking changes**)
 
-What this batch has in common: the method ran, returned, and did nothing. No error,
-no log, nothing visible in a screenshot -- so the only thing to suspect was your own code.
+A pass over every control against the LCL/Delphi control it is named after. **The items
+below change the behaviour of existing code -- read before upgrading.**
 
-- **A context menu's `OnPopup` fires now.** `TTyPopupMenu.PopUp` skipped the whole LCL
-  popup protocol: `OnPopup` never fired -- and building a menu from whatever is under
-  the cursor is most of what a context menu is for -- `PopupPoint` kept its previous
-  value, `Close` was a silent no-op so `OnClose` never fired, and action-linked items
-  never refreshed before showing. The item snapshot is now taken **after** `OnPopup`,
-  so items added there actually appear.
-- **A masked edit no longer accepts whatever you paste into it.** `TTyMaskEdit` masked
-  TYPING only; Ctrl+V took a different path, so a phone mask would happily hold
-  "hello world" and `IsComplete` would answer about it. Delete had the same hole --
-  it removed mask literals.
-- **`TTyColorButton` paints its `Caption`.** Published, designer-editable, documented as
-  behaving like `TTyButton`'s -- and never drawn.
-- **Every control can be hidden from the designer or a `.lfm`**: `Visible` was published
-  on neither base class, so it was code-only.
-- **A splitter can drag a pane shut**: new `AutoSnap` (default on, as LCL). `MinSize` used
-  to be a floor no drag could get under, so no gesture closed a pane at all.
-- **Enter commits an edit** (fires `OnEditingDone`); the form's Default button still sees it.
-- **`SpeedButton.Down := True` releases its group.** Grouping used to live only in `Click`,
-  so restoring a saved toolbar mode from code left every button pressed.
+- **`TTyEdit.ClearSelection` / `TTyMemo.ClearSelection` now DELETE the selected text.**
+  They used to collapse the selection and leave the text; LCL's and Delphi's methods of
+  the same name have always deleted it. One name, two opposite meanings -- and the silent
+  direction was the dangerous one: code ported from Lazarus asked for a removal, got none,
+  and was told nothing. The old behaviour is kept as **`CollapseSelection`**.
+- **`TTyShellListView.Refresh` is renamed `UpdateView`.** `Refresh` means "repaint now"
+  everywhere else in the LCL and in this library; here it re-read the filesystem, so a
+  shell list was the one control where a routine repaint call hit the disk -- and a caller
+  who wanted an actual repaint had no way to ask.
+- **The shell controls no longer claim seven published event slots.**
+  `TTyShellTreeView`'s OnGetText / OnInitNode / OnExpanding / OnGetImageIndex / OnChange
+  and `TTyShellListView`'s OnCompare / OnItemActivate were taken by their constructors, so
+  assigning any of them silently replaced the shell behaviour. Those behaviours are
+  overrides now and every slot belongs to the application.
+- **`Caption` and `Text` are one string on `TTyPanel`, `TTyTabSheet` and `TTyDivider`.**
+  Each used to carry a shadow Caption, so writing Caption left `TControl.Text` empty and
+  anything reading Text saw ''. `.lfm` files are unaffected.
+- **`TTyScrollPanel.AutoScroll` is renamed `AutoPan`** -- on every LCL scrolling container
+  AutoScroll means "manage the scrollbars", while ours means "pan near an edge". The new
+  name matches the control's own AutoPanTo / AutoPanActive / StopAutoPan.
+- **`TTyGauge` no longer publishes `Caption`** -- it never painted one.
+- **`TTyRadioGroup` reports selection changes.** Setting `ItemIndex` from code used to be
+  silent, so a handler tracking the choice worked when the user clicked and not when the
+  app restored a saved value. `OnClick` now fires on selection change (matching
+  `TCustomRadioGroup`), and the group is **one tab stop** instead of one per item.
+- **`TTyColorButton.OnColorChange` fires on any colour change** (it was dialog-only), and
+  `OnClick` now runs BEFORE the picker opens so a handler sees the pre-dialog value.
+- **`TTyImage.Proportional` no longer enlarges.** A 16x16 icon on a 200x200 image used to
+  be blown up; Proportional alone shrinks only, and enlargement is opt-in via `Stretch`.
+- **`TTySplitter` gains `AutoSnap` (default on)**: dragging past `MinSize` closes the pane.
+  MinSize used to be a floor no drag could get under, so no gesture closed a pane at all.
+- **`TTySpinEdit`**: `MinValue = MaxValue` means "unbounded" and no longer pins every value.
+- **`TTyTrackBar.Frequency` defaults to 1** (ticks visible out of the box) and
+  `Orientation` swaps the axis.
+- **`TTyHeaderControl.OnSectionResize` fires once, on release**; the continuous one is the
+  new `OnSectionTrack`.
+
+### Fixed -- knobs the Object Inspector offered and the control ignored
+
+What these share: the member was there, it ran, it returned, and nothing happened. No
+error, no log, nothing visible in a screenshot.
+
+- **A context menu's `OnPopup` fires**, `PopupPoint` updates, and `Close`/`OnClose` are no
+  longer silent no-ops. The item snapshot is taken AFTER `OnPopup`, so items added there
+  actually appear.
+- **`TTyColorButton.Caption` is painted** -- published, designer-editable, and never drawn.
+- **Every control can now be hidden, dragged and given a horizontal wheel from the designer
+  or a `.lfm`**: `Visible`, the whole `DragMode` / `OnDragOver` / `OnDragDrop` surface,
+  `OnMouseWheelHorz|Left|Right`, `OnShowHint`, plus `AutoSize`, `BorderWidth` and
+  `ChildSizing` were published on neither base class.
+- **A masked edit no longer accepts whatever you paste into it** (Ctrl+V bypassed the mask
+  entirely), and Delete no longer removes mask literals.
+- **Menu bar**: a disabled top paints greyed and cannot be opened; **a childless top fires
+  its `OnClick`** (it used to do nothing at all, indistinguishable from a menu that failed
+  to load); `RightJustify` works, for the classic right-aligned Help / Window menu.
+- **A menu item's `Hint` reaches `Application.Hint`**, so a status bar can describe the
+  command under the cursor; an `AutoCheck` item draws an empty check box before it is
+  checked, so you can see it is a toggle without clicking it first.
+- **Date/time picker**: A/P set AM/PM, separator keys advance the field, Space toggles the
+  check box -- which was mouse-only, and an unchecked picker refuses every key, so a
+  keyboard user could not enable it at all.
+- **`ActivePage`, `ColorBox.Selected` and `ColorListBox.Selected` are published** -- the one
+  thing each control exists for could not be set in the designer or streamed.
+- **The last header section's width stops lying**: new `EffectiveSectionWidth` reports the
+  width actually painted.
+- **`TTyScrollBox`'s view scroll is callable** (`ScrollByDelta` / `ScrollTo`, both protected
+  before).
+- **A disabled splitter no longer shows the resize cursor**; header and tree no longer
+  destroy a caller's `Cursor`.
+- **`SpeedButton.Down := True` releases its group**; turning `AllowAllUp` off restores the
+  "exactly one down" invariant.
 - **Single-select `ClearSelection` / `Selected[i] := False` actually deselect.**
-- **`TTyCheckGroup.Checked[i] := x` no longer fires `OnItemChange`**, so a handler that
-  writes back stops re-entering itself.
-- **A toolbar no longer overwrites its children's `StyleClass`.**
-- **The last status-bar panel reaches the right edge.**
-- **Writing an off-palette colour to a colour box no longer appends a row** (the setter
-  is idempotent again).
-- **A spin edit with `Min = Max = 0` ("unbounded") no longer pins every value to 0.**
-- **`OnSectionResize` fires once, on release**; the continuous one is the new `OnSectionTrack`.
-- **Header and tree no longer destroy a caller's `Cursor`.**
-- **`TTyTrackBar.Frequency` defaults to 1** (as LCL), so ticks show out of the box.
-- Name parity added: `TTyUpDown.OnArrowClick` (carries the direction),
-  `TTyCalendar.DateTime`, `TTyMaskEdit.EditMask`.
+- **`TTyCheckGroup.Checked[i] := x` no longer fires `OnItemChange`.**
+- **A toolbar no longer overwrites its children's `StyleClass`**; **the last status-bar
+  panel reaches the right edge.**
+- **Writing an off-palette colour to a colour box no longer appends a row.**
+- **`TTyUpDown.Wrap` carries the overshoot** instead of discarding it (an Increment above 1
+  had turned it into a reset); new direction-carrying `OnArrowClick`.
+- **`TTyShellListView`'s Size column units are translatable** (they were hard-coded English).
+- Name parity: `TTyCalendar.DateTime`, `TTyMaskEdit.EditMask`, `TTyMemo.Append`,
+  `TTyEdit.Clear`, and the whole `Clear` / `AddItem` / `Count` / `ItemRect` list surface on
+  `TTyListBox` and `TTyComboBox`.
 
 ### Fixed -- data grid
 

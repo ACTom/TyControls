@@ -79,42 +79,75 @@
   宽度、标题、对齐、编辑器种类、只读、候选项、那一列上的筛选……
   从前列的结构进不了撤销栈,只能靠"一改列就清空撤销栈"兜底。
 
-### 修复 — 与 Delphi/Lazarus 对齐(逐个控件比对同名控件后)
+### 变更 — 与 Delphi/Lazarus 对齐(**含不兼容变更**)
 
-这一批的共同点:方法都**执行了、返回了、什么也没发生**。不报错、不打日志、截图上也看不见,
-所以只会让人回头怀疑自己的代码。
+逐个控件把本库与 LCL/Delphi 同名控件并排比对后的一批修正。**下面这些会改变现有代码的行为,
+升级前请读完。**
 
-- **右键菜单的 `OnPopup` 现在会触发** —— 以前 `TTyPopupMenu.PopUp` 完全跳过了 LCL 的弹出流程:
-  `OnPopup` 从不触发(而"根据鼠标下的东西现场组装菜单"正是右键菜单一多半的用途)、
-  `PopupPoint` 停在上一次的值、`Close` 是空操作因此 `OnClose` 也不触发、
-  绑了 Action 的菜单项弹出前不刷新可用状态。菜单项快照现在也改到 `OnPopup` **之后**才取,
-  所以在 `OnPopup` 里加的菜单项真的会出现。
-- **掩码输入框不再接受粘贴进来的任意文本** —— `TTyMaskEdit` 只拦了**键盘输入**;
-  Ctrl+V 走的是另一条路,于是电话号码掩码里可以躺着 "hello world",
-  而 `IsComplete` 还会对这串东西作答。Delete 键同理:以前会把掩码的分隔符本身删掉。
-- **`TTyColorButton` 的 `Caption` 现在画出来了** —— 它一直是 published 的、设计器里能填、
-  文档也写着"和 TTyButton 一致",但从来一个像素都不画。
-- **所有控件现在能在设计器/`.lfm` 里隐藏** —— `Visible` 此前在两个基类上都没有 published,
-  只能从代码里设。
-- **分隔条可以把面板拖关了** —— 新增 `AutoSnap`(默认开,同 LCL):拖过 `MinSize` 即收起。
-  以前 `MinSize` 是一道拖不过去的地板,等于没有任何手势能关掉一个面板。
-- **输入框按回车会提交了**(触发 `OnEditingDone`)—— 以前只有失焦才触发,不影响窗体默认按钮。
-- **速度按钮 `Down := True` 会松开同组的其他按钮** —— 以前只有点击才分组,
-  用代码恢复工具条状态会让整组按钮全部按下。
-- **单选列表框的 `ClearSelection` / `Selected[i] := False` 真的会取消选中** —— 以前在单选模式下是空操作。
-- **`TTyCheckGroup.Checked[i] := x` 不再触发 `OnItemChange`** —— 程序赋值以前会被当成用户操作,
-  于是"取消其他项"这类回写处理器会自己套自己。
-- **工具条不再覆盖子按钮的 `StyleClass`** —— 以前每次重排都会抹掉调用方设的 `'primary'`,
-  而重排在任意度量变化时都会发生,所以样式是在一个说不准的时刻突然消失的。
-- **状态栏最后一格现在铺到右边缘** —— 以前各格宽度加起来不等于客户区宽时,末尾会露出一条父窗底色。
-- **取色下拉框写入调色板里没有的颜色不再往列表里加一行** —— 以前 `Selected := X` 不幂等,写二十次多二十行。
-- **数值框 `Min = Max = 0`(表示"不限")不再把值钉死在 0**。
-- **列头拖动分隔线不再每移动一个像素就触发 `OnSectionResize`** —— 连续过程改由新的
-  `OnSectionTrack` 报告,`OnSectionResize` 只在松手时触发一次。
-- **列头 / 树控件不再吃掉调用方设的 `Cursor`** —— 以前悬停一次就永久变回默认光标。
-- **滑块 `Frequency` 默认改为 1**(同 LCL),刻度开箱即见。
-- 新增名称对齐:`TTyUpDown.OnArrowClick`(带方向,LCL 的 `OnClick` 是带方向的)、
-  `TTyCalendar.DateTime`、`TTyMaskEdit.EditMask`。
+- **`TTyEdit.ClearSelection` / `TTyMemo.ClearSelection` 现在会删除选中的文本。**
+  以前它们只是收起选区、保留文字,而 LCL 和 Delphi 的同名方法一直是删除。同一个名字两个相反
+  语义,而且**静默的那个方向更危险**:从 Lazarus 移植来的代码调它删除用户选中的内容,文字留着,
+  什么提示都没有。旧行为保留为 **`CollapseSelection`**。
+- **`TTyShellListView.Refresh` 改名为 `UpdateView`。** `Refresh` 在整个 LCL 和本库都是"立刻重画",
+  这里却被改成了重新读盘 —— 于是它是唯一一个"顺手重画一下"会打到文件系统的控件,而真想重画的人
+  没有办法要。
+- **shell 控件不再占用 7 个 published 事件槽。** `TTyShellTreeView` 的 `OnGetText`/`OnInitNode`/
+  `OnExpanding`/`OnGetImageIndex`/`OnChange` 与 `TTyShellListView` 的 `OnCompare`/`OnItemActivate`
+  以前被构造函数占用,应用装上任何一个都会**静默替换掉 shell 行为**(树不再显示文件名、双击不再
+  进目录)。现在这些行为改用覆写实现,事件槽全部归应用。
+- **`TTyPanel` / `TTyTabSheet` / `TTyDivider` 的 `Caption` 与 `Text` 合一。** 以前它们各自有一个
+  影子 `Caption`,写 `Caption` 不会写到 `TControl.Text`,于是读 `Text` 的东西(action link、
+  无障碍、遍历 `TControl` 的通用代码)看到的是空串。`.lfm` 不受影响。
+- **`TTyScrollPanel.AutoScroll` 改名为 `AutoPan`。** LCL 里所有滚动容器的 `AutoScroll` 都是
+  "自动管理滚动条";我们的是"指针靠近边缘时自动平移"。新名字与该控件自己的
+  `AutoPanTo`/`AutoPanActive`/`StopAutoPan` 一致。
+- **`TTyGauge` 不再 published `Caption`** —— 它从来不画。
+- **`TTyRadioGroup` 现在会通知选择变化。** 用代码写 `ItemIndex` 以前是静默的,于是跟着选择联动的
+  处理器在用户点击时正常、在应用恢复保存值时失效。同时 `OnClick` 现在会在选择变化时触发
+  (对齐 `TCustomRadioGroup`),并且**整个组只占一个 Tab 停靠点**(以前每个选项各占一个)。
+- **`TTyColorButton.OnColorChange` 现在任何改色都触发**(以前只有对话框改色才触发);
+  `OnClick` 现在在打开取色对话框**之前**触发,处理器因此能看到改动前的值。
+- **`TTyImage.Proportional` 不再放大图片。** 以前 16×16 图标放进 200×200 会被吹大;现在只缩不放,
+  要放大请同时开 `Stretch`(与 LCL 一致)。
+- **`TTySplitter` 新增 `AutoSnap`(默认开)**:拖过 `MinSize` 即收起面板。以前 `MinSize` 是一道
+  拖不过去的地板,等于没有任何手势能关掉一个面板。
+- **`TTySpinEdit`**:`MinValue = MaxValue` 表示"不限",不再把值钳死在最小值。
+- **`TTyTrackBar.Frequency` 默认改为 1**(刻度开箱即见),`Orientation` 现在会交换宽高。
+- **`TTyHeaderControl.OnSectionResize` 只在松手时触发一次**;拖动过程改由新的 `OnSectionTrack` 报告。
+
+### 修复 — 属性面板给了旋钮,控件却不看
+
+这一批的共同点:成员都在那儿,**执行了、返回了、什么也没发生**。不报错、不打日志、截图上也看不见。
+
+- **右键菜单的 `OnPopup` 现在会触发**,`PopupPoint` 会更新,`Close`/`OnClose` 不再是空操作。
+  菜单项快照改到 `OnPopup` **之后**才取,所以在里面动态加的菜单项真的会出现。
+- **`TTyColorButton.Caption` 现在画出来了** —— 它一直是 published、设计器能填,但从来一个像素都不画。
+- **所有控件都能在设计器/`.lfm` 里隐藏、拖放、接横向滚轮了** —— `Visible`、整套
+  `DragMode`/`OnDragOver`/`OnDragDrop`…、`OnMouseWheelHorz|Left|Right`、`OnShowHint`
+  以前在两个基类上都没 published,只能从代码里设。`AutoSize`、`BorderWidth`、`ChildSizing` 同理。
+- **掩码输入框不再接受粘贴进来的任意文本**(以前 Ctrl+V 绕过掩码,电话号码栏里能躺 "hello world"),
+  Delete 键也不再删掉掩码分隔符本身。
+- **菜单栏**:禁用的顶级菜单画成灰且点不开;**无子项的顶级项现在会触发 `OnClick`**(以前完全没反应,
+  和"菜单加载失败"看起来一模一样);支持 `RightJustify`(右对齐的 Help/Window 菜单)。
+- **菜单项的 `Hint` 现在会发布到 `Application.Hint`**(状态栏可以描述光标下的命令);
+  `AutoCheck` 的项在未勾选时也画出空勾选框,不必先点一次才知道它是开关。
+- **日期时间选择器**:A/P 键设 AM/PM、分隔符键跳下一段、空格切换勾选框
+  (以前勾选框只能鼠标点,而未勾选时控件拒绝一切按键 —— 键盘用户根本无法启用它)。
+- **`ActivePage`、`ColorBox.Selected`、`ColorListBox.Selected` 现在是 published 的** ——
+  这些控件存在的那个理由本身,以前没法在设计器里设、也不进 `.lfm`。
+- **列头最后一段的宽度不再说谎**:新增 `EffectiveSectionWidth` 报告真正画出来的宽度。
+- **`TTyScrollBox` 的视图滚动可以调用了**(`ScrollByDelta` / `ScrollTo`,以前是 protected)。
+- **禁用的分隔条不再显示拖动光标**;列头/树控件不再吃掉调用方设的 `Cursor`。
+- **速度按钮 `Down := True` 会松开同组其他按钮**;`AllowAllUp` 关掉时会恢复"必须有一个按下"的约束。
+- **单选列表框的 `ClearSelection` / `Selected[i] := False` 真的会取消选中**。
+- **`TTyCheckGroup.Checked[i] := x` 不再触发 `OnItemChange`**(程序赋值不该被当成用户操作)。
+- **工具条不再覆盖子按钮的 `StyleClass`**;**状态栏最后一格铺到右边缘**。
+- **取色下拉框写入调色板外的颜色不再往列表里追加一行**。
+- **`TTyUpDown.Wrap` 现在进位而不是丢弃溢出**(Increment > 1 时不再变成"归零器");
+  新增带方向的 `OnArrowClick`。
+- **`TTyShellListView` 大小列的单位可翻译了**(以前写死英文)。
+- 名称对齐:`TTyCalendar.DateTime`、`TTyMaskEdit.EditMask`、`TTyMemo.Append`、`TTyEdit.Clear`、
+  `TTyListBox` 与 `TTyComboBox` 的 `Clear`/`AddItem`/`Count`/`ItemRect` 等一整套列表方法。
 
 ### 修复 — 数据网格
 
