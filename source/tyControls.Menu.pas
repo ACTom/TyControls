@@ -40,6 +40,8 @@ type
     HasSubmenu: Boolean;
     DefaultItem: Boolean;   // render bold
     ImageIndex: Integer;    // icon-column index into the menu's Images (-1 = none)
+    Hint: string;           // published to Application.Hint while the row is highlighted
+    AlwaysCheckable: Boolean;  // draw an empty check slot even when unchecked
   end;
   TTyMenuRowArray = array of TTyMenuRow;
 
@@ -488,6 +490,12 @@ begin
       Result[n].HasSubmenu := mi.Count > 0;
       Result[n].DefaultItem := mi.Default;
       Result[n].ImageIndex := mi.ImageIndex;
+      Result[n].Hint := mi.Hint;
+      { A menu item that can be toggled should LOOK toggleable before it is toggled --
+        otherwise "View > Toolbar" and "File > Open" are indistinguishable until you have
+        already clicked one. LCL spells this ShowAlwaysCheckable; TMenuItem.AutoCheck is
+        the per-item statement of the same thing, so an AutoCheck item reserves its slot. }
+      Result[n].AlwaysCheckable := mi.AutoCheck;
     end;
     Inc(n);
   end;
@@ -737,6 +745,15 @@ begin
   if not IsSelectable(AIndex) then AIndex := -1;
   if FHighlight = AIndex then Exit;
   FHighlight := AIndex;
+  { Publish the highlighted item's Hint, which is how a status bar or a long-hint panel
+    describes the command under the cursor. TMenuItem.Hint was carried on the row and read
+    by nobody, so setting it in the designer did exactly nothing. Clearing on -1 matters as
+    much as setting: a stale description of a command no longer under the pointer is worse
+    than none. }
+  if (FHighlight >= 0) and (FHighlight <= High(FRows)) then
+    Application.Hint := FRows[FHighlight].Hint
+  else
+    Application.Hint := '';
   Invalidate;
 end;
 
@@ -956,6 +973,15 @@ begin
           P.DrawGlyph(Types.Rect(RowRect.Left + padL, RowRect.Top, RowRect.Left + padL + leftSlot,
             RowRect.Bottom), tgCheck, RowStyle.TextColor, 2);
       end
+      else if FRows[i].AlwaysCheckable then
+        { An UNCHECKED but checkable item draws an empty box, so the user can see that this
+          command toggles BEFORE clicking it -- otherwise "View > Toolbar" and "File > Open"
+          look identical until one of them has already been used. LCL calls the opt-in
+          ShowAlwaysCheckable; TMenuItem.AutoCheck is the per-item form of the same thing. }
+        P.StrokeBorder(Types.Rect(RowRect.Left + padL + P.Scale(3),
+          RowRect.Top + (itemH - leftSlot) div 2 + P.Scale(3),
+          RowRect.Left + padL + leftSlot - P.Scale(3),
+          RowRect.Top + (itemH + leftSlot) div 2 - P.Scale(3)), 2, 1, RowStyle.TextColor)
       else if (FImages <> nil) and (FRows[i].ImageIndex >= 0)
               and (FRows[i].ImageIndex < FImages.Count) then
       begin

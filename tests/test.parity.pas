@@ -168,6 +168,7 @@ type
     procedure ColorButtonFiresOnAnyColourChange;
     procedure RadioGroupIsOneTabStop;
     procedure RadioGroupOnClickFiresOnSelection;
+    procedure MenuRowsCarryHintAndCheckability;
   end;
 
 implementation
@@ -1402,6 +1403,40 @@ begin
     AssertEquals('OnClick reports the selection change', 1, FTopClicks);
   finally
     G.Free;
+  end;
+end;
+
+{ TMenuItem.Hint was carried on the render row and read by nobody, so setting it in the
+  designer did exactly nothing -- a status bar had no way to describe the command under the
+  cursor. AutoCheck likewise: a toggleable item looked identical to a plain one until it had
+  already been clicked once. Both are on the row now, which is what the paint and the
+  highlight read. }
+procedure TParityTest.MenuRowsCarryHintAndCheckability;
+var
+  M: TMainMenu;
+  Root, A, B: TMenuItem;
+  rows: TTyMenuRowArray;
+begin
+  M := TMainMenu.Create(nil);
+  try
+    Root := TMenuItem.Create(M);
+    M.Items.Add(Root);
+    A := TMenuItem.Create(M);
+    A.Caption := 'Toolbar';
+    A.Hint := 'Show or hide the toolbar';
+    A.AutoCheck := True;
+    Root.Add(A);
+    B := TMenuItem.Create(M);
+    B.Caption := 'Open';
+    Root.Add(B);
+
+    rows := TyBuildMenuRows(Root, False);
+    AssertEquals('two rows', 2, Length(rows));
+    AssertEquals('the hint reaches the row', 'Show or hide the toolbar', rows[0].Hint);
+    AssertTrue('an AutoCheck item reserves its check slot', rows[0].AlwaysCheckable);
+    AssertFalse('a plain command does not', rows[1].AlwaysCheckable);
+  finally
+    M.Free;
   end;
 end;
 
