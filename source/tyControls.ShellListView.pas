@@ -27,7 +27,7 @@ uses
   Classes, SysUtils, Graphics, LazFileUtils,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Columns, tyControls.ImageCollection, tyControls.FileSystem,
-  tyControls.ListView;
+  tyControls.ListView, tyControls.StrConsts;
 
 const
   { The default filter: every file (directories are always shown regardless). }
@@ -128,6 +128,11 @@ type
     property OnDirectoryChange: TNotifyEvent read FOnDirectoryChange write FOnDirectoryChange;
   end;
 
+{ bytes -> '512 B' / '1.2 KB' / '3.4 MB' / ... . Pure and exported: the unit words come
+  from the resourcestring table, and a test that cannot call this cannot prove they are
+  actually used rather than merely declared. }
+function TyFormatFileSize(ABytes: Int64): string;
+
 implementation
 
 { ---------------------------------------------------------------------------
@@ -154,12 +159,15 @@ const
   GB = MB * 1024;
   TB = GB * 1024;
 begin
+  { The unit words are USER-FACING TEXT and were hard-coded English, so a Chinese or
+    German build showed '1.2 KB' in a column of otherwise translated headers. LCL renders
+    this column through LCLStrConsts for the same reason. }
   if ABytes < 0 then ABytes := 0;
-  if ABytes < KB then Result := IntToStr(ABytes) + ' B'
-  else if ABytes < MB then Result := TyFmtScaled(ABytes, KB, 'KB')
-  else if ABytes < GB then Result := TyFmtScaled(ABytes, MB, 'MB')
-  else if ABytes < TB then Result := TyFmtScaled(ABytes, GB, 'GB')
-  else                     Result := TyFmtScaled(ABytes, TB, 'TB');
+  if ABytes < KB then Result := IntToStr(ABytes) + ' ' + rsTyFileSizeBytes
+  else if ABytes < MB then Result := TyFmtScaled(ABytes, KB, rsTyFileSizeKB)
+  else if ABytes < GB then Result := TyFmtScaled(ABytes, MB, rsTyFileSizeMB)
+  else if ABytes < TB then Result := TyFmtScaled(ABytes, GB, rsTyFileSizeGB)
+  else                     Result := TyFmtScaled(ABytes, TB, rsTyFileSizeTB);
 end;
 
 { True when AExt (lowercase, no leading dot) is in AList (space-separated, lowercase). }

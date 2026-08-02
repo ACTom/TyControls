@@ -35,7 +35,7 @@ const
 type
   TTyScrollPanel = class(TTyScrollBox)
   private
-    FAutoScroll: Boolean;
+    FAutoPan: Boolean;
     FEdgeMargin: Integer;
     FMaxSpeed: Integer;
     FAutoPanActive: Boolean;    // a drag/DnD is arming the auto-pan
@@ -43,7 +43,7 @@ type
     FPanTimer: TTimer;          // lazy; only created when auto-pan actually runs
     procedure SetEdgeMargin(AValue: Integer);
     procedure SetMaxSpeed(AValue: Integer);
-    procedure SetAutoScroll(AValue: Boolean);
+    procedure SetAutoPan(AValue: Boolean);
     procedure EnsurePanTimer;
     procedure PanTimerTick(Sender: TObject);
     function ScaledEdgeMargin: Integer;
@@ -77,9 +77,15 @@ type
     { True while the auto-pan timer is live. }
     property AutoPanActive: Boolean read FAutoPanActive;
   published
-    { Master switch. When False AutoPanTo is a no-op (the panel still scrolls by
-      wheel / scrollbar exactly like its TTyScrollBox base). Default True. }
-    property AutoScroll: Boolean read FAutoScroll write SetAutoScroll default True;
+    { Master switch for the EDGE AUTO-PAN. When False AutoPanTo is a no-op (the panel
+      still scrolls by wheel / scrollbar exactly like its TTyScrollBox base). Default True.
+
+      BREAKING: this was called AutoScroll. On every scrolling container in the LCL,
+      AutoScroll means "manage the scrollbars automatically" -- a completely different
+      thing from "pan when the pointer nears an edge" -- so the name promised scrollbar
+      behaviour and delivered drag-panning. AutoPan also matches the rest of this
+      control's own API: AutoPanTo, AutoPanActive, StopAutoPan, EdgeMargin. }
+    property AutoPan: Boolean read FAutoPan write SetAutoPan default True;
     { Logical width (px @96ppi) of the edge band that arms the auto-pan; wider =
       the pan kicks in further from the edge. Default 24. }
     property EdgeMargin: Integer read FEdgeMargin write SetEdgeMargin
@@ -177,7 +183,7 @@ end;
 constructor TTyScrollPanel.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
-  FAutoScroll := True;
+  FAutoPan := True;
   FEdgeMargin := TyAutoPanEdgeMargin;
   FMaxSpeed := TyAutoPanMaxSpeed;
   FAutoPanActive := False;
@@ -206,11 +212,11 @@ begin
   FMaxSpeed := AValue;
 end;
 
-procedure TTyScrollPanel.SetAutoScroll(AValue: Boolean);
+procedure TTyScrollPanel.SetAutoPan(AValue: Boolean);
 begin
-  if FAutoScroll = AValue then Exit;
-  FAutoScroll := AValue;
-  if not FAutoScroll then StopAutoPan;   // turning it off stops any live pan
+  if FAutoPan = AValue then Exit;
+  FAutoPan := AValue;
+  if not FAutoPan then StopAutoPan;   // turning it off stops any live pan
 end;
 
 function TTyScrollPanel.ScaledEdgeMargin: Integer;
@@ -251,7 +257,7 @@ var
   d: TPoint;
 begin
   Result := False;
-  if not FAutoScroll then Exit;
+  if not FAutoPan then Exit;
   d := TyEdgeAutoPan(AClientPos, AutoPanViewport, ScaledEdgeMargin, ScaledMaxSpeed);
   if (d.X = 0) and (d.Y = 0) then Exit;
   Result := ApplyAutoPanDelta(d.X, d.Y);
@@ -282,7 +288,7 @@ procedure TTyScrollPanel.AutoPanTo(const AClientPos: TPoint);
 var
   d: TPoint;
 begin
-  if not FAutoScroll then Exit;
+  if not FAutoPan then Exit;
   FLastPanPos := AClientPos;
   d := TyEdgeAutoPan(AClientPos, AutoPanViewport, ScaledEdgeMargin, ScaledMaxSpeed);
   if (d.X <> 0) or (d.Y <> 0) then

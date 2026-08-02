@@ -20,8 +20,9 @@ uses
   tyControls.DateTimePicker, tyControls.Splitter,
   tyControls.ShellTreeView, tyControls.ShellListView, tyControls.TreeView,
   tyControls.Image, tyControls.TabSheet, tyControls.Divider, tyControls.Gauge,
+  tyControls.StrConsts,
   tyControls.PageControl, tyControls.ColorListBox, tyControls.RadioGroup,
-  tyControls.ScrollBox;
+  tyControls.ScrollBox, tyControls.ScrollPanel;
 
 type
   { Probes: ApplyToButton and the hosted checkboxes are protected, because the owning
@@ -179,6 +180,8 @@ type
     procedure MenuRowsCarryHintAndCheckability;
     procedure ScrollBoxExposesTheViewScroll;
     procedure MenuBarRightJustifiesFromTheRightEdge;
+    procedure ScrollPanelAutoPanIsNotCalledAutoScroll;
+    procedure ShellFileSizeUnitsAreTranslatable;
   end;
 
 implementation
@@ -1512,6 +1515,29 @@ begin
   finally
     B.Free;
   end;
+end;
+
+{ On every scrolling container in the LCL, AutoScroll means "manage the scrollbars
+  automatically" -- a different thing from "pan when the pointer nears an edge". The old
+  name promised scrollbar behaviour and delivered drag-panning; AutoPan also matches this
+  control's own AutoPanTo / AutoPanActive / StopAutoPan / EdgeMargin. }
+procedure TParityTest.ScrollPanelAutoPanIsNotCalledAutoScroll;
+begin
+  AssertTrue('the edge-pan switch is AutoPan',
+    GetPropInfo(TTyScrollPanel, 'AutoPan') <> nil);
+  AssertTrue('and no longer claims the LCL scrollbar name',
+    GetPropInfo(TTyScrollPanel, 'AutoScroll') = nil);
+end;
+
+{ The Size column's unit words were hard-coded English, so a translated build showed
+  '1.2 KB' among otherwise translated headers. They are resourcestrings now, which is what
+  makes them reachable from a .po. }
+procedure TParityTest.ShellFileSizeUnitsAreTranslatable;
+begin
+  AssertEquals('the byte unit comes from the resourcestring table', 'B', rsTyFileSizeBytes);
+  AssertEquals('', 'KB', rsTyFileSizeKB);
+  AssertTrue('and the formatter uses it',
+    Pos(rsTyFileSizeKB, TyFormatFileSize(2048)) > 0);
 end;
 
 initialization

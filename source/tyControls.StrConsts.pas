@@ -10,6 +10,14 @@ interface
   docs/superpowers/specs/2026-06-25-i18n-design.md. Deep CSS-syntax errors keep an English
   msgid (their .po msgstr == msgid) per spec decision 5. }
 resourcestring
+  // --- Shell list view: file-size units ---
+  // Shown in the Size column. Hard-coded English before, so a translated build showed
+  // '1.2 KB' among otherwise translated headers.
+  rsTyFileSizeBytes = 'B';
+  rsTyFileSizeKB    = 'KB';
+  rsTyFileSizeMB    = 'MB';
+  rsTyFileSizeGB    = 'GB';
+  rsTyFileSizeTB    = 'TB';
   // --- Grid ---
   // Group row caption: %s = the group value, %d = how many rows in it.
   // Used to be hard-coded as '%s  (%d)' inside RenderGroupRow: untranslatable

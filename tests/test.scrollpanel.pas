@@ -239,7 +239,7 @@ begin
   try
     P := TTyScrollPanel.Create(F);
     P.Parent := F;
-    AssertTrue('AutoScroll default True', P.AutoScroll);
+    AssertTrue('AutoPan default True', P.AutoPan);
     AssertEquals('EdgeMargin default 24', 24, P.EdgeMargin);
     AssertEquals('MaxSpeed default 16', 16, P.MaxSpeed);
     AssertFalse('AutoPan not active at rest', P.AutoPanActive);
@@ -333,9 +333,9 @@ begin
     Acc.Font.PixelsPerInch := 96;
     Acc.UseViewportOverride := True;
     Acc.ViewportOverride := Rect(0, 0, 200, 200);
-    Acc.AutoScroll := False;
-    // Even on the edge, AutoScroll off means the step is a no-op.
-    AssertFalse('AutoScroll off: no scroll on edge', Acc.CallAutoPanStep(Point(0, 100)));
+    Acc.AutoPan := False;
+    // Even on the edge, AutoPan off means the step is a no-op.
+    AssertFalse('AutoPan off: no scroll on edge', Acc.CallAutoPanStep(Point(0, 100)));
     AssertEquals('AutoScroll off: apply never called', 0, Acc.ApplyCount);
   finally
     F.Free;
