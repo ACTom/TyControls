@@ -176,7 +176,7 @@ uses tyControls.TreeView, tyControls.Columns;
 |------|------|----------|
 | `OnGetText` | `TTyTreeGetTextEvent` | 取节点文本（简单签名 `var Text`；单列 / 主列常用） |
 | `OnGetTextWithType` | `TTyTreeGetTextWithTypeEvent` | 取单元格文本（完整签名，带 `Column` + `TextType: ttNormal/ttStatic`；多列用） |
-| `OnGetImageIndex` | `TTyTreeGetImageIndexEvent` | 取节点图标索引（带 `Kind` + `Column` + `var Ghosted`） |
+| `OnGetImageIndex` | `TTyTreeGetImageIndexEvent` | 取节点图标索引（带 `Kind` + `Column` + `var Ghosted`）。`Ghosted := True` **会被采纳**：该行图标按"不可用"绘制（走 `TImageList.Draw` 的禁用灰化）。以前这个标志被收下就丢掉，于是应用唯一能表达"这一项不可用"的开关在任何地方都没有效果 |
 | `OnPaintText` | `TTyTreePaintTextEvent` | 文本绘制后的钩子 |
 | `OnMeasureItem` | `TTyTreeMeasureItemEvent` | 从 `InitNode` 触发（仅 `toVariableNodeHeight`），app 通过 `var ANodeHeight` 返回逐行高度（逻辑像素） |
 | `OnDrawNode` | `TTyTreeDrawNodeEvent` | 逐单元格**完全自绘**（仅 `toOwnerDraw`）；在 BGRA 合成后、裁剪到单元格设备矩形时触发，跳过默认单元格内容 |
@@ -223,7 +223,7 @@ uses tyControls.TreeView, tyControls.Columns;
 | `TyTreeNode` | `:hover` | 该行被鼠标悬停（`HotTrack = True` 时的 `FHotNode`） |
 | `TyTreeNode` | `:selected` | 该节点 `nsSelected` |
 | `TyTreeNode` | `:disabled` | 该节点不可用 |
-| `TyTreeHeaderSection` | `:hover` / `:selected` | 悬停 / 当前排序的表头分区 |
+| `TyTreeHeaderSection` | 无 | 表头分区的底色 / 文字色 / 字体，**以空状态集解析**——树的表头不做悬停或排序列高亮，写 `TyTreeHeaderSection:hover` / `:selected` 不会生效（独立的 [`TTyHeaderControl`](headercontrol.md) 才消费 `:hover`） |
 | `TyTreeCheckBox` | `:active` / `:selected` / `:disabled` | 已勾选 / 选中行内 / 禁用的复选槽 |
 
 ### light.tycss 内置规则摘要
@@ -385,5 +385,7 @@ Tree.OnNodeMoved := @OnMoved;
 - **`toCheckSupport` 是复选框总开关**：未加入 `Options` 时，即使给节点设了 `CheckType`，`ToggleCheck` 也直接返回、不绘制复选槽。三态自动传播还额外需要 `toAutoTristateTracking`。
 - **单选 vs 多选事件**：单选走 `OnChange`（`FSelectedNode` 变化）；多选走 `OnSelectionChanged`（每次手势后一次）。二者是不同的通道。
 - **`Enabled = False` 不响应输入**：与全库一致，禁用时不触发点击 / 键盘 / 滚轮驱动的事件。
+- **你设的 `Cursor` 不会被吞掉**：拖放反馈（`crDrag` / `crNoDrop`）与列分隔线提示（`crHSplit`）都只是**临时借用** `Cursor`，手势结束后还原成你原本设的那个。以前是硬还原成 `crDefault`——给树设了 `crHandPoint`，只要在分隔线上划过一次就永久没了。
+- **五个事件同时是子类的重写点**：`OnGetText` / `OnInitNode` / `OnExpanding` / `OnGetImageIndex` / `OnChange` 各有一个 protected 虚方法（`DoGetText` / `DoInitNode` / `DoExpanding` / `DoGetImageIndex` / `DoTreeChange`），默认实现就是"发这个事件"。像 [`TTyShellTreeView`](shelltreeview.md) 这样自带行为的子类**重写虚方法**而不是抢占事件槽，因此应用照常可以挂这些事件，不会把子类的行为顶掉（重写里调 `inherited` 即可两者兼得）。
 - **DFM / LFM 序列化**：声明了 `default` 的属性（`Options=[]`、`NodeDataSize=-1`、`DefaultNodeHeight=18`、`RootNodeCount=0`、`Indent=16`、`ShowButtons/ShowTreeLines/ShowRoot/ToggleOnDblClick=True`、`HotTrack=False`、`SearchTimeout=1000`、`TabStop=True`）等于默认值时不写入文件。`Header` / `Columns` 作为子对象随控件流式保存（列类已在单元 `initialization` 中 `RegisterClass`）。
 - **内嵌滚动条是私有的**：`VScroll` / `HScroll` 只读可访问（供测试 / 布局），不暴露 `OnScroll`，且不做缓动动画。应监听宿主树自身的事件。

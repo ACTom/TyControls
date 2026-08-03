@@ -25,7 +25,7 @@ uses tyControls.ColorBox;
 
 | 成员 | 类型 | 说明 |
 |------|------|------|
-| `Selected` | `TColor` | 当前选中色;读=当前项的色(无则 `clNone`),写=选中匹配项,板里没有则追加一个 `#RRGGBB` 项并选中。 |
+| `Selected` | `TColor` | **published**(对齐 `TColorBox`,可在对象查看器里设、可流式保存)。当前选中色;读=当前项的色(无则 `clNone`),写=选中板里的匹配项,**板里没有则 `ItemIndex := -1`,不再往列表里追加行**。 |
 | `AddColor(AName, AColor)` | — | 追加一个(名, 色)项。 |
 | `ClearColors` | — | 清空所有项与颜色。 |
 | `ColorAt(AIndex)` | `TColor` | 第 i 项的色(越界 `clNone`)。 |
@@ -57,7 +57,7 @@ var CB: TTyColorBox;
 CB := TTyColorBox.Create(Self);
 CB.Parent := Self;
 CB.SetBounds(20, 20, 180, 28);
-CB.Selected := clRed;        // 选中红;不在板里的色会自动追加
+CB.Selected := clRed;        // 选中红;不在板里的色 -> ItemIndex = -1(不追加)
 // 读取:MyColor := CB.Selected;
 ```
 
@@ -66,6 +66,7 @@ CB.Selected := clRed;        // 选中红;不在板里的色会自动追加
 ## 6. 注意事项
 
 - **地基控件:** 它证明并建立了逐项自绘钩子;`ColorListBox` / `FontComboBox` 等会复用同一套。
+- **写 `Selected` 不再撑大色板:** 选色器的语义是"从板里挑",不是"往板里加"——`TColorBox.Selected` 同样是写不匹配的色就置 `ItemIndex := -1`。会追加的 setter 还不幂等:写二十次就多二十行。要把色**加进**板里请显式调 `AddColor`。共用函数 `TySelectColorIndex` 保留了 `AAppendIfMissing` 参数(默认 `True`),供确实需要"当前值必须可显示"的**编辑器**类调用方使用;两个选色控件都传 `False`。
 - **颜色存在 `Items.Objects[i]`:** 与名称**天然对齐**——`Sorted:=True` 重排名称、`Items.Delete` 删除、直接改 `Items` 都不会让色块错位(没有并行数组)。
 - **锁定只选不编辑:** `Style` 被强制为 `csDropDownList`(覆写 `SetStyle` 忽略 `csDropDown`)——可编辑模式的下拉是**前缀过滤**的,会打乱行索引→色块映射,所以禁掉。
 - **色块轮廓:** 用主题的文字色描 1px 边,浅色色块(白等)也可见——不硬编码。

@@ -36,6 +36,7 @@ uses tyControls.Button;
 | `ShowBadge` | `Boolean` | `False` | **（v1.11 新增）** 角标总开关。详见第 9 节。 |
 | `BadgeValue` | `Integer` | `0` | **（v1.11 新增）** 角标数值；仅数字，`>99` 显示 `99+`。 |
 | `BadgePosition` | `TTyBadgePosition` | `bpBottomRight` | **（v1.11 新增）** 角标所在角：`bpTopLeft / bpTopRight / bpBottomLeft / bpBottomRight`。窗口控件不能越界,角标内嵌于按钮内并稍作内缩。 |
+| `AutoSize` | `Boolean` | `False` | 打开后按钮**横向**加宽到刚好容下 `Caption` + 主题内边距，于是标题变长（换了更长的译文、更大的密度、更粗的字体）时按钮跟着变长，而不是把文字省略掉。**只管宽度不管高度**——高度属于排布这一行的那一方，这正是它放进 [`TTyToolBar`](toolbar.md) 也安全的原因。`Caption` 改变、主题切换时都会重新测量。 |
 | `Enabled` | `Boolean` | `True` | 为 `False` 时触发 `:disabled` 主题状态，控件不响应交互 |
 | `Font` | `TFont` | 系统默认 | 传递 PPI 给渲染器；字体族与大小优先由主题控制 |
 | `Align` | `TAlign` | `alNone` | 父容器内的停靠方式 |
@@ -200,7 +201,8 @@ Btn.Caption := '悬停我';
 
 ## 8. 注意事项
 
-- `Caption` 文字在渲染时水平和垂直均居中，文本超出宽度时会裁剪（`clipping = True`）。
+- `Caption` 文字在渲染时水平和垂直均居中；标题里手写的换行（`#13#10`）会真的换行绘制。
+- **尺寸下限由标题决定**：控件把 `Constraints.MinWidth` / `MinHeight` 钉在"标题 + 主题内边距"上，因此把按钮设得比它要画的内容还小是做不到的——主题的 `--control-height` 和你手设的 `Height` 都只是**请求**，字体与内边距才决定实际可能的最小值。用 `Constraints` 而不是 preferred size，是因为提出高度就得跟父容器协商，而 `TTyToolBar` 会把每个子控件压到自己的 `ButtonHeight`，两边来回顶到 LCL 报 `ChangeBounds loop detected`。下限对派生按钮（图标按钮的图标槽、拆分按钮的箭头区、色块按钮的色块）自动成立：它们各自的测量本来就在同一处。
 - `StyleClass` 区分大小写，须与 `.tycss` 文件中的类名完全一致（如 `'primary'`、`'danger'`）。
 - `Font` 属性中的 `PixelsPerInch` 用于 HiDPI 缩放；字体族（`FontName`）和大小（`FontSize`）优先从主题读取，`Font.Name`、`Font.Size` 作为备用。
 - 控件不需要背景擦除（继承自 `TCustomControl`），由 `Paint` 完整重绘整个区域，不会出现闪烁。

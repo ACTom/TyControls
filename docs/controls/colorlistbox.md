@@ -25,7 +25,7 @@ uses tyControls.ColorListBox;
 
 | 成员 | 说明 |
 |------|------|
-| `Selected: TColor` | 当前选中色(读=当前行色,`clNone` 清空;写=选匹配项,没有则追加 `#RRGGBB`)。 |
+| `Selected: TColor` | **published**(对齐 `TColorListBox`,可在对象查看器里设、可流式保存)。当前选中色:读=当前行色,写 `clNone` 清空选择;写其他色=选板里的匹配行,**没有则 `ItemIndex := -1`,不再追加行**(与 [TTyColorBox](colorbox.md) 同一套逻辑,要加色请显式调 `AddColor`)。 |
 | `AddColor(AName, AColor)` | 追加一项。 |
 | `ClearColors` | 清空。 |
 | `ColorAt(AIndex): TColor` | 第 i 行的色(越界 `clNone`)。 |

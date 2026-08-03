@@ -54,7 +54,6 @@ uses tyControls.Gauge;
 
 | 属性 | 类型 | 说明 |
 |------|------|------|
-| `Caption` | `string` | 见 `TTyGraphicControl`(本控件当前不绘制 Caption,预留)。 |
 | `Font` | `TFont` | 传递 PPI;数值文字大小由控件尺寸推导。 |
 | `StyleClass` | `string` | `.tycss` 类名(同时作用于 `TyGauge` 与 `TyGaugeFill` 的解析)。 |
 | `Controller` | `TTyStyleController` | 指定样式控制器(nil 时用全局默认)。 |
@@ -132,6 +131,7 @@ R.Value := 45;
 
 ## 7. 注意事项
 
+- **仪表没有标题:** `Caption` 不再 published——它从前挂在对象检查器上,而 `Paint` 一个字都不读,等于给了一个拧了没反应的旋钮。控件同时去掉了 `csSetCaption`,因此仪表不会再把自己的 `Name` 当作看不见的标题文字白白写进 `.lfm`。要给仪表配文字说明,在旁边放一个 [[TTyLabel]]。
 - **值缓动:** `Value` 变化时按 ~240ms 缓出动画过渡;无窗口句柄(headless 渲染 / 测试)时直接吸附,保证像素测试稳定(与 `TTyProgressBar` 同机制)。
 - **弧形角度:** 角度为度、顺时针、0=正东。默认 `StartAngle=135` + `SweepAngle=270` 得到底部开口的速度表样式;`gsRing` 固定从顶端起整圈,忽略 `StartAngle/SweepAngle`。
 - **厚度 HiDPI:** `Thickness` 是逻辑像素,绘制时经 `Painter.Scale` 缩放。

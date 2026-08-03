@@ -57,7 +57,14 @@ uses tyControls.Edit;
 | `SelText` | `string`（读写） | 选区内容的 UTF-8 字符串；无选区时为空串。写入时以新文本替换当前选区。 |
 | `function HasSelection: Boolean` | — | 当前是否有非空选区（`FCaret <> FSelAnchor`）。 |
 | `procedure SelectAll` | 全选：将选区锚点设为 0，光标移到末尾。 |
-| `procedure ClearSelection` | 收起选区：将 `FSelAnchor := FCaret`。 |
+| `procedure ClearSelection` | **（API parity 变更，破坏性）删除选区文本**——与 LCL / Delphi `TCustomEdit.ClearSelection` 一致（内部转发 `DeleteSelection`，因此带撤销步、移动光标并触发 `OnChange`）；无选区时退化为收起选区。**早前它只收起选区、不删文本**：同一个名字两种相反含义，而沉默的那种更危险——从 Lazarus 移植来的代码调用它想删掉用户选中的内容，文本却纹丝不动，也没有任何提示。 |
+| `procedure CollapseSelection` | **（API parity 新增）** 收起选区、**不动文本**：将 `FSelAnchor := FCaret`。即 `ClearSelection` 的旧行为，保留并单独命名。 |
+
+### public 文本方法
+
+| 方法 | 说明 |
+|------|------|
+| `procedure Clear` | **（API parity 新增）** 清空内容，等价于 `Text := ''`——移植代码写的是 `Ed.Clear`，从前只能改写成 `Text := ''`。走 `SetText` 路径，因此记一个撤销步并触发 `OnChange`。 |
 
 ### public 剪贴板方法
 
@@ -111,6 +118,7 @@ TTyEdit 继承自 `TTyCustomControl`（`tyControls.Base`），与其他 TyContro
 | `→` | 移动光标右移一码点；若有选区则折叠到选区右端 | 向右扩展/收缩选区 | **词级右移**：光标跳到下一词边界并收起选区 | **词级向右扩展选区**（保持锚点，仅移动光标到下一词边界） | 不拦截（透传） |
 | `Home` | 光标移到文本开头，收起选区 | 扩展选区到文本开头 | 不拦截（透传） | 扩展选区到文本开头 | 不拦截（透传） |
 | `End` | 光标移到文本末尾，收起选区 | 扩展选区到文本末尾 | 不拦截（透传） | 扩展选区到文本末尾 | 不拦截（透传） |
+| `Enter` | **提交编辑**：调用 `EditingDone`（触发 `OnEditingDone`）。**不消费按键**（`Key` 不置 0），窗体的默认按钮仍能收到它 | — | — | — | — |
 | `Backspace` | 删除光标前一码点；有选区则删除选区 | — | **删除前一个词**（无选区时）；有选区则只删除选区 | — | — |
 | `Delete` | 删除光标后一码点；有选区则删除选区 | — | **删除后一个词**（无选区时）；有选区则只删除选区 | — | — |
 | `A` | — | — | 全选（`SelectAll`，Ctrl/Cmd+A） | — | 全选（`SelectAll`） |
@@ -219,7 +227,7 @@ CJK 示例 `你好 世界`（5 个码点，每个汉字 1 码点）：光标在 
 
 ### `OnChange` 事件（v1.12 新增）
 
-> **v1.12 新增：** 早前版本的 TTyEdit **没有** `OnChange`（见旧版「注意事项」）。自 v1.12 起新增 published 事件 `OnChange: TNotifyEvent`，在文本内容因键盘编辑、剪贴板操作、撤销/重做等发生变化时触发。**注意：** 通过 `Text :=` 直接赋值（`SetText`）**不**触发 `OnChange`（仅更新字段、记一个撤销步并重绘），与历史行为保持一致；若需在赋值后得到通知请自行调用。
+> **v1.12 新增：** 早前版本的 TTyEdit **没有** `OnChange`（见旧版「注意事项」）。自 v1.12 起新增 published 事件 `OnChange: TNotifyEvent`，在文本内容因键盘编辑、剪贴板操作、撤销/重做等发生变化时触发。**注意：** 通过 `Text :=` 直接赋值（`SetText`）**同样触发** `OnChange`——`SetText` 末尾调用 `DoChange`，与 LCL `TCustomEdit` 一致。
 
 ---
 
@@ -306,7 +314,7 @@ end;
 - **PasswordChar：** 赋值超过 1 个码点时自动截取首个码点；掩码激活时 `CopyToClipboard`/`CutToClipboard` 为空操作（防止明文外泄）；光标位置测量基于掩码字符串，保持与显示一致。
 - **TextHint：** 仅在 `FText = ''` 时绘制；颜色取子部件 typeKey `TyTextHint` 的 `color`（默认 `var(--muted)`，弱化前景）——见上方「占位符颜色」。
 - **光标闪烁：** 聚焦时以约 530 ms 间隔启动闪烁；`TTimer` 懒创建，仅在 `HandleAllocated` 后启动，因此无头测试与设计器中光标静态、像素测试确定性不变。
-- **OnChange 事件（v1.12 新增）：** 自 v1.12 起提供 published `OnChange`，文本因键盘编辑/剪贴板/撤销/重做变化时触发；`Text :=` 赋值不触发。详见「撤销 / 重做」节。
+- **OnChange 事件（v1.12 新增）：** 自 v1.12 起提供 published `OnChange`，文本因键盘编辑/剪贴板/撤销/重做变化时触发；`Text :=` 赋值**同样触发**（`SetText` 末尾调用 `DoChange`，与 LCL `TCustomEdit` 一致）。详见「撤销 / 重做」节。
 - **鼠标操作：** 单击定位光标（`CaretIndexAtX` 计算最近码点边界）；左键按住拖动扩展选区；双击全选（`SelectAll`）。
 - **选区底色：** 选区底色取子部件 typeKey `TyTextSelection` 的 `background`（默认 `var(--selection)`，即 accent 着色的半透明），在浅色主题下表现为半透明蓝色带；与列表选中行（`TyListItem:active`）视觉同源。见上方「选区底色（Batch ④）」。
 - **粘贴剥离换行：** `PasteFromClipboard` 会过滤掉剪贴板文本中所有的 CR（`#13`）和 LF（`#10`）字符，因为这是单行控件。
@@ -314,5 +322,7 @@ end;
 - **`Cmd`/Meta+方向键透传：** 仅 `Cmd`（macOS Command，`ssMeta`，无 Shift）+方向键以及 `Ctrl/Alt/Meta`（无 Shift）+`Home`/`End` 不被消费（`Key` 不置 0），透传给父窗口/系统，留作整行移动等用途。
 - **横向自动滚动（v1.2）：** 文本超宽时自动横向滚动保持光标可见；HOME 键将视口还原至文本起始端，鼠标点击坐标已计入滚动偏移。
 - **Tab 导航：** 构造时自动启用 `TabStop`，可与其他 `TTyCustomControl` 子类一起参与 Tab 键顺序导航。
-- **Text 赋值不触发回调：** `SetText` 仅更新内部字段并重绘，不会触发任何事件。
+- **Text 赋值触发 `OnChange`：** `SetText` 更新字段、把光标移到末尾、记一个非输入类撤销步、重绘，并在末尾调用 `DoChange` 触发 `OnChange`。
+- **`ClearSelection` 会删字（API parity 破坏性变更）：** 它现在删除选区文本（LCL / Delphi 语义）；只想去掉高亮而保留文本请改用新增的 `CollapseSelection`。
+- **`Enter` 提交字段：** 无修饰键的回车调用 `EditingDone`（触发 `OnEditingDone`），但**不消费按键**，窗体的默认按钮仍能收到；`Enabled = False` 时同其他按键一样不生效。
 - **I-beam 光标（batch⑤+⑥）：** 构造时把 `Cursor` 设为 `crIBeam`，鼠标移到文本区域时呈现标准的文本输入「I 形」光标，与原生单行编辑框观感一致。

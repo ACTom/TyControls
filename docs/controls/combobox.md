@@ -67,12 +67,23 @@
 - 若 `Items.Count = 0`，为空操作（无弹出）。
 - 首次调用时懒创建弹出 `TForm`（`BorderStyle=bsNone`，`ShowInTaskBar=stNever`，`PopupParent` 指向父窗体）。
 - 弹出窗口内嵌一个 `TTyListBox`（`Align=alClient`），内容从 `Items` 复制，`ItemIndex` 与当前选中项同步。
-- 弹出高度 = `Min(8, Items.Count)` 行 × 缩放后行高 + 2px 边距；宽度等于控件宽度；位置在控件下方（`ControlToScreen` 计算）。
+- 弹出高度 = `Min(Items.Count, DropDownCount)` 行 × 缩放后行高 + 2px 边距（唯一实现在 `ComputePopupHeight`，无头计算与真实弹层共用）；宽度等于控件宽度；位置在控件下方（`ControlToScreen` 计算）。
 - 调用 `FPopup.Show` 显示弹出窗口（非模态）。
 
 #### `procedure CloseUp`
 
 关闭下拉弹出列表。幂等操作，在弹出窗口未打开时调用安全无副作用。
+
+#### 控件级列表方法（API parity 新增）
+
+LCL 的组合框在**控件本身**上提供的一组列表方法，本控件从前只能经 `Items` 绕行——移植代码光是方法名就编译不过。
+
+| 方法 | 说明 |
+|------|------|
+| `procedure Clear` | 清空 `Items`，**并且**把 `ItemIndex` 置 `-1`、`Text` 置 `''`（含内嵌编辑器）。手工调 `Items.Clear` 不等价：`ItemsChanged` → `ResyncIndexFromText` 只在 `csDropDownList` 下清空显示，`csDropDown` 下会**故意**保留字段里的自由文本，于是字段还显示着一个已经不在列表里的项。 |
+| `procedure ClearSelection` | 只丢选择、不动列表，等价于 `SelectItem(-1)`（LCL 的叫法；`ItemIndex := -1` 同义，但前提是你已经知道 `-1` 是哨兵值）。 |
+| `procedure AddItem(const AItem: string; AnObject: TObject)` | 追加一项及其关联对象，转发 `Items.AddObject`。 |
+| `function Count: Integer` | 项数，转发 `Items.Count`。 |
 
 #### `procedure Click`（override，protected）
 
@@ -102,7 +113,7 @@ DroppedDown = False → DropDown
 | `Alt+↓` 或 `F4` | 打开下拉列表（已打开则关闭） |
 | `ESC` | 关闭下拉列表（未打开时无操作） |
 
-以上导航键直接调用 `SelectItem`，因此会触发 `OnChange`（仅当选项实际变化时）。此控件为**只读下拉**——关闭态不支持直接文本输入编辑（可编辑模式留后续 spec）。
+以上导航键直接调用 `SelectItem`，因此会触发 `OnChange`（仅当选项实际变化时）。上表描述的是默认的 `csDropDownList`（只读下拉）；`Style = csDropDown` 时字段由内嵌 `TTyEdit` 承担，关闭态可直接键入文本（带前缀自动补全，见第 3 节 `Style`）。
 
 #### 类型超前（Type-ahead，`UTF8KeyPress` override）
 
@@ -231,9 +242,9 @@ Combo.StyleClass := 'compact';
 ## 7. 注意事项
 
 1. **单击切换弹出层：** 单击控件会打开或关闭下拉列表，不再循环切换 `Items`。
-2. **只读下拉：** 当前实现为只读模式，关闭态不接受任意文本输入；可编辑模式留后续 spec 实现。
+2. **两种模式：** 默认 `Style = csDropDownList` 为只读下拉，关闭态不接受任意文本输入；`Style = csDropDown` 显示内嵌编辑器，可直接键入（前缀自动补全），此时只有点击右侧箭头才展开完整列表。
 3. **Text 与 Items 独立：** 直接写 `Text` 属性不会修改 `ItemIndex`，也不触发 `OnChange`；应优先使用 `SelectItem` 或写 `ItemIndex`。
-4. **Items 赋值用 Assign：** 写入 `Items` 属性时内部调用 `FItems.Assign(AValue)`，原有内容被替换，`ItemIndex` 和 `Text` 不自动重置，需手动调用 `SelectItem(-1)` 清空选中状态。
+4. **Items 赋值用 Assign：** 写入 `Items` 属性时内部调用 `FItems.Assign(AValue)`，原有内容被替换，`ItemIndex` 和 `Text` 不自动重置，需手动调用 `SelectItem(-1)`（或 `ClearSelection`）清空选中状态。要连列表一起清空并同步字段显示，用控件自己的 `Clear` 而非 `Items.Clear`（见第 4 节）。
 5. **OnChange 防重入：** 若 `SelectItem` 被调用但新值与旧值完全相同，则不触发 `OnChange`，无需在回调中判断是否重复。
 6. **TabStop 默认 True：** 控件默认可获得键盘焦点，会渲染 `:focus` 状态样式。
 7. **弹出窗口生命周期：** `FPopup` 在首次 `DropDown` 时懒创建，在控件 `Destroy` 时释放。`FPopupList` 由 `FPopup` 拥有，随之释放。

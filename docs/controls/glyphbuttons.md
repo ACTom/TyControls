@@ -31,7 +31,7 @@
 后两者各自成键的原因：
 
 - **`TTyGlyphContainerButton` 是 ribbon 的一块**瓷砖**（`glTop`、字形 24、72×64，`examples/ribbon` 就是把它丢进 `TyRibbonGroup`），不是一个按压按钮。**借 `TyButton` 时，瓷砖的背景/边框/圆角/内边距与对话框上那个"确定"按钮出自同一条规则**——主题想给瓷砖那种"常态无框透明、悬停才上色"的常规观感，就必须把全库按钮一起压平。`TyRibbon` 与 `TyRibbonGroup` 早就各有其键，这是那条命令带缺的第三个键。
-- **`TTySpeedButton` 是扁平的工具栏切换钮**：它常态无框，而按压按钮常态有框，**这该由主题决定，不该由应用代码决定**。借 `TyButton` 时只剩一个杠杆——给每个 speed button 挂一个 `'ghost'`/`'toolbar'` 的 `StyleClass`；这既把样式决策推给了每个应用，又**不可靠**:`TTyToolBar.ApplyToButton` 会**整体覆写**子按钮的 `StyleClass`(ghost 与否由工具条独占),而工具栏**之外**用的 speed button 则拿到完整的按压按钮外框,主题无从干预。有了自己的键,皮肤只需声明一次"speed button 常态扁平",到处生效。
+- **`TTySpeedButton` 是扁平的工具栏切换钮**：它常态无框，而按压按钮常态有框，**这该由主题决定，不该由应用代码决定**。借 `TyButton` 时只剩一个杠杆——给每个 speed button 挂一个 `'ghost'`/`'toolbar'` 的 `StyleClass`；这把样式决策推给了每个应用,而工具栏**之外**用的 speed button 则拿到完整的按压按钮外框,主题无从干预。有了自己的键,皮肤只需声明一次"speed button 常态扁平",到处生效。
 
 内建主题把 `TyButton, TySpeedButton, TyGlyphContainerButton, TyRibbonAppMenu, TyButtonGroup, TyUpDown` 写在同一组规则里(含 `.primary` / `.danger` / `.ghost` 变体与全部伪类),所以**解析值一个没变**;变的是你现在能只改其中一个。
 
@@ -53,13 +53,24 @@ uses tyControls.IconFont, tyControls.GlyphButtons;
 | `GlyphColor` | `TTyColor` | `TyGlyphButtonColorDefault` | 字形填充色。默认哨兵值 `TyGlyphButtonColorDefault`（即全透明 `$00000000`，表示“**用主题**”）→ 取 `TextColor`，与标题同色；设为其他值则覆盖。 |
 | `Images` | `TTyImageCollection` | `nil` | **跨平台图像**字形源（一组 BGRA 图标）。同样用 `FreeNotification` 置 `nil`。 |
 | `ImageName` | `string` | `''` | 要画的图标名。`Images` + `ImageName` **同时**设定时**优先于** `IconFont`/`GlyphName`（图标按 `GlyphColor`/`TextColor` 染色）；与系统图标字体不同，它在每个 OS 上渲染一致。为空则回落到图标字体。 |
+| `ShowCaption` | `Boolean` | `True` | `False` 让按钮**只显示图标**：字形在整个内容盒里两轴居中，完全不画标题。**解析不出字形的按钮（既无 `Images`+`ImageName` 也无 `IconFont`+`GlyphName`）不受影响，照旧显示标题**——没有东西能顶替标题的位置，藏掉它只会画出一个空盒子。`ShowCaption` 只做"拿图标换标题"这一件事。 |
+
+> **`ShowCaption` 与工具条的关系。** [`TTyToolBar.ShowCaptions`](toolbar.md#31-ttytoolbar-自有-published-属性) 通过
+> `AdoptShowCaption` 把自己的值当作**容器默认值**下发给每个工具项；**一旦宿主自己写过这个按钮的
+> `ShowCaption`，容器就不再动它**（哪怕写进去的值恰好和容器的一样）。容器在工具项加入、以及它自己的
+> 标志变化时都会重下发一遍，无条件覆盖会静默抹掉逐按钮的选择——这正是 `Flat` 从前覆写 `StyleClass`
+> 踩过的坑。
+>
+> 属性声明上**刻意不写 `default True`**，改用 `stored`：显式写下的 `ShowCaption := True` 必须能过一趟
+> `.lfm` 往返，而 `default True` 恰好会把这一种情况省掉不写——按钮重新加载后就成了"没人写过"，容器
+> 会拿自己的值盖上去。
 
 ### 3.2 `TTySpeedButton` 额外新增
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `GroupIndex` | `Integer` | `0` | `0` = 普通按钮（`Click` 仅触发 `OnClick`）。`>0` 时点击表现为**单选**：按下自己（`Down := True`）并抬起**同 Parent、同 GroupIndex** 的其它 `TTySpeedButton`。 |
-| `AllowAllUp` | `Boolean` | `False` | `True` 时，点击**已按下**的按钮会把它切回抬起（整组可全部抬起）；`False`（默认）时已按下的按钮再点保持按下（严格单选）。 |
+| `GroupIndex` | `Integer` | `0` | `0` = 普通按钮（`Click` 仅触发 `OnClick`）。`>0` 时表现为**单选**：按下自己并抬起**同 Parent、同 GroupIndex** 的其它 `TTySpeedButton`。**代码里写 `Down := True` 与用户点击等效**——互斥逻辑在 `SetDown` 里，不是只在 `Click` 里（与 LCL 的 `SetDown → UpdateExclusive` 一致），所以"恢复上次保存的工具模式"这类代码不会留下一组全按下的按钮。 |
+| `AllowAllUp` | `Boolean` | `False` | `True` 时，点击**已按下**的按钮会把它切回抬起（整组可全部抬起）；`False`（默认）时已按下的按钮再点保持按下（严格单选），代码写 `Down := False` 同样被拒绝——只有分组自己的换选能放开它。**把它从 `True` 改回 `False` 会当场重建约束**：若此时整组无人按下，就按下正在配置的这一个（否则会留下一个"什么都没选"的单选组，直到用户碰巧点一下）。 |
 
 ### 3.3 继承自 [[TTyButton]] 的常用成员
 
@@ -69,14 +80,16 @@ uses tyControls.IconFont, tyControls.GlyphButtons;
 
 ## 4. 绘制机制（DrawContent + 字形）
 
-三者都**只重写** `DrawContent`（`TTySpeedButton` 另重写 `Click`，各自重写 `Create` 设默认值），不触碰框架/状态/角标绘制路径：
+三者都**只重写** `DrawContent`（`TTySpeedButton` 另重写 `Click` / `SetDown`，各自重写 `Create` 设默认值），不触碰框架/状态/角标绘制路径：
 
 1. 基类 `RenderTo`（继承自 TTyButton）先画框架、算内边距，再把已内缩的内容矩形交给 `DrawContent`。
 2. `TTyGlyphButtonBase.DrawContent`：
-   - 若 `IconFont = nil`、`GlyphName` 为空或内容区退化 → 直接 `inherited DrawContent`（居中标题，即普通按钮）。
-   - 否则算出字形像素大小（显式 `GlyphSize` 优先，否则按布局自动适配），用纯函数 **`TyGlyphButtonSplit`** 把内容矩形切成 **字形矩形 + 标题矩形**（中间隔 `TyGlyphButtonGap` 逻辑像素）。
+   - 若 `IconFont = nil`、`GlyphName` 为空或内容区退化 → 直接 `inherited DrawContent`（居中标题，即普通按钮）。**这几条提前返回在 `ShowCaption` 之前，正是"没有图标的按钮永远不会被藏掉标题"的实现所在。**
+   - 否则算出字形像素大小（显式 `GlyphSize` 优先，否则按布局自动适配），再按 `ShowCaption` 分两路切内容矩形：
+     - `True`（默认）→ 纯函数 **`TyGlyphButtonSplit`** 切成 **字形矩形 + 标题矩形**（中间隔 `TyGlyphButtonGap` 逻辑像素）；
+     - `False` → 纯函数 **`TyGlyphButtonIconOnlyRect`** 给出两轴居中的字形矩形，标题矩形为空。
    - `IconFont.RenderGlyph(GlyphName, px, color)` 光栅化字形，居中合成进字形矩形，释放位图。
-   - 最后 `inherited DrawContent(APainter, 标题矩形, AStyle)` 在剩余矩形里画标题（空标题时跳过）。
+   - 最后 `inherited DrawContent(APainter, 标题矩形, AStyle)` 在剩余矩形里画标题（`ShowCaption = False`、空标题或无空间时跳过）。
 
 ### 纯函数 `TyGlyphButtonSplit`（可无头单测）
 
@@ -91,6 +104,19 @@ procedure TyGlyphButtonSplit(const AContentRect: TRect; AGlyphPx, AGapPx: Intege
 - 字形被**钳制**在内容盒内，超大字形绝不会把标题挤成负宽/负高矩形。
 
 例（内容区 100×40、字形 20px、间隔 6px、glyph-left）：字形 `(0,10)-(20,30)`，标题 `(26,0)-(100,40)`。
+
+### 纯函数 `TyGlyphButtonIconOnlyRect`（可无头单测）
+
+```pascal
+function TyGlyphButtonIconOnlyRect(const AContentRect: TRect; AGlyphPx: Integer): TRect;
+```
+
+`ShowCaption = False` 时的字形矩形：内容区里**两轴居中**的 `AGlyphPx` 见方正方形，并钳制到内容盒的短边，
+超大字形绝不会探出盒外。`AGlyphPx <= 0` 或内容区退化 → 返回内容区原点处的空矩形（绝不返回负矩形）。
+
+> **它不是"标题矩形为空的 `TyGlyphButtonSplit`"。** `TyGlyphButtonSplit` 把字形**贴边**放
+> （`glLeft` 靠左、`glTop` 靠上），正是因为后面跟着标题；标题一旦没有了，这个贴边就让图标歪在一侧、
+> 原先放文字的地方空出一片，一排只显示图标的工具项看上去参差不齐。
 
 ---
 
@@ -117,8 +143,9 @@ TyGlyphContainerButton  { background: alpha(--surface, 0); border-color: alpha(-
 TyButton.ghost, TySpeedButton.ghost, TyGlyphContainerButton.ghost { background: alpha(--surface, 0); border-color: alpha(--border, 0); }
 ```
 
-> ⚠️ 放在 `TTyToolBar` 里的 speed button **不能靠 `StyleClass` 定妆**：工具条会按自己的 `Flat` 属性
-> 整体覆写子按钮的 `StyleClass`。这种场合请走第 ① 条。
+> ⚠️ 放在 [`TTyToolBar`](toolbar.md) 里的 speed button：工具条的 `Flat` 只在 `StyleClass` **为空**时写入
+> `'ghost'`，所以宿主自己设的变体现在能保留下来。但 [`TTyToolBarEx`](toolbarex.md) 仍然整体覆写——
+> 在溢出工具条上请走第 ① 条。
 >
 > 另外，`TTyGlyphButton` 没有自己的键（它解析 `TyButton`），所以改它的外观 = 改 `TyButton` = 改全库按钮。
 
@@ -185,7 +212,8 @@ end;
 - **无字形即普通按钮：** `IconFont = nil` 或 `GlyphName` 未映射时，`DrawContent` 干净退化为居中标题的普通 [[TTyButton]]，绝不崩溃。
 - **`GlyphColor` 哨兵：** 默认 `TyGlyphButtonColorDefault`（全透明 `$00000000`）表示“用主题 `TextColor`”，与标题同色；设为任意其它 `TTyColor`（`$AARRGGBB`）即覆盖。
 - **尺寸随 PPI 缩放：** `GlyphSize` 与字形-标题间隔 `TyGlyphButtonGap` 都是逻辑像素，渲染时经 `TTyPainter.Scale` 按目标 DPI 缩放。
-- **`TTySpeedButton` 分组：** 单选/互斥完全在 `Click` 里实现（同 Parent 扫描同 `GroupIndex` 的兄弟），因此**直接调用 `Click` 或用户点击**都会触发分组逻辑；`Enabled = False` 时 `Click` 为空操作（不按下、不影响兄弟）。选中高亮复用 `Down` 的 `:selected` 状态。
+- **`TTySpeedButton` 分组：** 单选/互斥在 `SetDown` 里实现（同 Parent 扫描同 `GroupIndex` 的兄弟），因此**代码写 `Down := True`、直接调用 `Click`、用户点击**三条路都会触发分组逻辑；`Enabled = False` 时 `Click` 为空操作（不按下、不影响兄弟）。选中高亮复用 `Down` 的 `:selected` 状态。
+- **`ShowCaption` 不会画出空按钮：** 无字形源时它不生效（标题照画）；这条规则让 `TTyToolBar.ShowCaptions` 那个与 LCL 对齐的 `False` 默认值不至于把现有应用里的纯文字工具条全部抹白。
 - **基类不注册面板：** `TTyGlyphButtonBase` 仅作共享父类，不出现在组件面板;面板上注册的是三个具体类。
 
 ---

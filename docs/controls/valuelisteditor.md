@@ -70,7 +70,9 @@ uses tyControls.ValueListEditor;
 | `InsertRow(AKey, AValue)` | 简单形式,追加纯文本根行。 |
 | `Row(AIndex): TTyValueRow` / `RowCount` | 第 i 根行 / 根行数。 |
 | `VisibleRowCount` | 可见(展开后)行数。 |
-| `Keys[i]` / `Values[i]` / `ValueOf[key]` | 根行的键/值读写(`Values[]` 写会触发 `OnValueChanged`)。 |
+| `Keys[i]` | 第 i 根行的键(只读)。 |
+| `Values[key]` | **按键**读写根行的值(与 LCL / Delphi 的 `TValueListEditor.Values[const Key: string]` 同义)。查找**不分大小写**;写一个**不存在的键会追加一行**——移植过来的代码正是这样填这个控件的。 |
+| `ValueFromIndex[i]` | **按行号**读写根行的值,与 `Keys[i]` 配对(名字取自 RTL 自己的 `TStrings.Values[Name]` / `ValueFromIndex[Index]` 一对)。 |
 | `DeleteRow(i)` / `Clear` | 删根行 / 清空。 |
 | `SetExpanded(ARow, bool)` | 展开/收起。 |
 | `UpdateRows` | 直接 `AddChild` 加了子行后调用,刷新可见列表。 |
@@ -123,6 +125,8 @@ VLE.OnValueChanged := @HandleChange;   // (Sender; ARow: TTyValueRow)
 
 ## 6. 注意事项
 
+- **`Values[]` 按键取用,`ValueFromIndex[]` 按行号:** 与 LCL / Delphi 的 `TValueListEditor` 一致。**从前 `Values[]` 是按行号的、按键的那个叫 `ValueOf[]`**,于是 `VLE.Values['Name'] := 'Bob'`(几乎每个移植过来的程序都有这一行)编译不过,报的还是一句指不到症结的 "Incompatible type for arg no. 1";而 `Values[0]` 在两个库上都能编译、含义却不同。两者**刻意不做成同名重载**——整数/字符串重载正是移植代码打错成员还照样编译的路子。
+- **写 `Values[]` 的两种结果:** 键存在 → 改值并触发 `OnValueChanged`;键不存在 → **追加一行**(与 LCL 的 `SetValue` 落到 `Strings.Add` 一致),这一路**不触发** `OnValueChanged`——它是新增,不是改动。查找不分大小写。
 - **`AddChild` 后要 `UpdateRows`:** 行对象是直接被你改的,控件观察不到;`AddRow` / `InsertRow` / `DeleteRow` / `SetExpanded` 会自己刷新,只有直接 `AddChild` 需要手动 `UpdateRows`。
 - **`DisplayKey`/`DisplayValue`:** 仅影响显示,不改实际 `Key`/`Value`(供 i18n / 格式化);值单元还可带 `ImageIndex`(图文)+ `Bold` / `TextColor`。
 - **内联编辑器是内部子控件:** `csNoDesignVisible`,不漏进设计器;`Enter`/失焦提交、`Esc` 取消,主题跟随 `Controller`;滚动会先提交并关闭。

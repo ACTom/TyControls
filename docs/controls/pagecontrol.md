@@ -30,7 +30,7 @@
 | 成员 | 类型 | 说明 |
 |---|---|---|
 | `ActivePageIndex` | `Integer`（published, 默认 -1） | 当前活动页零基索引；-1 表示无；赋值裁剪越界；真变化才触发 `OnChange`；随 `.lfm` 往返（载入期写入的值在 `Loaded` 应用） |
-| `ActivePage` | `TTyTabSheet`（public） | 当前活动页（读/写；写入即切到该页） |
+| `ActivePage` | `TTyTabSheet`（published） | 当前活动页（读/写；写入即切到该页）。与 `TPageControl` 一致已 published：设计器与 `.lfm` 从此能按**页引用**指定显示哪一页——按索引指定的话，一旦有人重排页签，索引就悄悄指向了另一页。二者指的是同一个选择，`ActivePageIndex` 保留给更方便用索引的代码 |
 | `Pages[i]` | `TTyTabSheet`（public, 只读 indexed） | 第 i 页；越界返回 `nil` |
 | `PageCount` | `Integer` | 页数 |
 | `AddPage(caption)` / `AddTab(caption)` | `: TTyTabSheet` | 追加一页（`Owner` = 控件的 Owner，即窗体；`Parent` = 控件），返回该页；首次追加自动选中 |
@@ -46,7 +46,7 @@
 
 | 成员 | 说明 |
 |---|---|
-| `Caption`（published） | 该页的**标签文字**；改动时通知宿主重排标签头；**不**画在页面体上 |
+| `Caption`（published） | 该页的**标签文字**；改动时通知宿主重排标签头（经重写 `TextChanged`）；**不**画在页面体上。**它就是 `TControl.Caption`**：`Caption` 与 `Text` 是同一个字符串，早先的 `FCaption` 影子字段已去掉 |
 | `ControlStyle` | 构造时加 `csAcceptsControls, csDesignFixedBounds, csNoDesignVisible, csNoFocus`；`Align = alClient` |
 
 ## 4. 设计器里使用
@@ -56,7 +56,7 @@
    - **Add Page** —— 新建一页（窗体拥有、自动命名、设为活动页）。
    - **Delete Page** —— 删除当前活动页。
    - **Show Next Page / Show Previous Page** —— 切换活动页。
-   - 也可在对象检查器改 `ActivePageIndex` 切页。
+   - 也可在对象检查器改 `ActivePageIndex` 或 `ActivePage` 切页（两者都已 published）。
 3. 把控件拖到**当前可见页**的主体上——落在该 `TTyTabSheet` 上，随 `.lfm` 持久化（嵌套在该页的 `object` 块里）。切到别的页继续拖，逐页布局。
 
 > **没有“点页签头切页”**：本控件是自绘的，不像原生 `TPageControl` 能靠 OS 原生控件在设计期点 tab 切页；自绘控件无法既让设计器转发点击切页、又保留正常的选中/拖放（详见设计的根因分析）。因此设计期切页一律用组件编辑器动词 / 对象检查器。

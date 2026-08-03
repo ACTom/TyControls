@@ -136,6 +136,7 @@ Up.StyleOverride := 'background: var(--accent); border-color: var(--accent);';
 
 ## 7. 注意事项
 
+- **与 LCL `TArrow` 不可互换：** 同名不同物，而且两个方向的移植都能编译通过、只是看着不对。① **形状**：`TArrow` 画的是三顶点**三角形**，本控件画的是七顶点**块状箭头**（箭杆 + 箭头）；② **默认朝向**：`TArrow.ArrowType` 默认 `atLeft`，本控件默认 `tadRight`——一个没配置过的箭头指的是反方向；③ 属性名是 `Direction`，不是 `ArrowType`。前两条是刻意的（块状箭头才是本库要的观感），记在这里免得留给读者在屏幕上自己发现。
 - **图形控件，非容器：** `TTyArrow` 继承自 `TGraphicControl`，**没有窗口句柄，不能作为父容器**（子控件不能以它为 `Parent`）。
 - **7 顶点纯几何可测：** `TyArrowPolygon` 是纯函数（返回 7 个 `TPointF`），已 headless 单元测试覆盖顶点数、在矩形内、箭尖落在指向边中点、比例夹紧、对称性等（`tests/test.arrow.pas`）。
 - **比例自动夹紧：** `HeadRatio` / `ShaftRatio` 越界（如设 `0` 或 `2.0`）会夹紧到 `0.1..0.9`，不会画出畸形或超框的箭头。

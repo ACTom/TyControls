@@ -84,6 +84,25 @@
 逐个控件把本库与 LCL/Delphi 同名控件并排比对后的一批修正。**下面这些会改变现有代码的行为,
 升级前请读完。**
 
+- **`TTyMemo.SelStart` / `SelLength` 现在按完整的换行符计数。** 以前一个换行只算 1 个码点,
+  而 `Text` 在 Windows 上吐出的是 CRLF 两个字符 —— 于是这两个偏移**指的根本是另一个字符串**:
+  `Memo.SelStart := Pos(needle, Memo.Text) - 1` 每多一条前置行就多错一位,**而在第 1 行上永远是对的,
+  也就是大家试它的地方**。现在 `SelText` 恒等于 `UTF8Copy(Text, SelStart + 1, SelLength)`;
+  落在 CRLF 中间的偏移会被钳到该行行尾。**如果你以前为这个偏差做过补偿,请把补偿去掉。**
+- **`TTyValueListEditor.Values` 改为按键取用,`ValueOf` 取消。** 行号形式叫 `ValueFromIndex`。
+  `Values['Name'] := 'Bob'` —— 几乎每个移植过来的程序都有这一行 —— 以前编译不过,报的还是一句
+  指不到症结的"参数 1 类型不兼容";而 `Values[0]` 在两个库上都能编译、含义却不同。
+  两者**刻意不做成同名重载**:整数/字符串重载正是让移植代码打错成员还照样编译的路子。
+  另外两条行为也一并对齐了 LCL:查找**不分大小写**,写一个不存在的键会**追加一行**。
+- **`TTyListView` 的 `OnChange` / `OnChanging` / `OnSelectItem` 签名变了。** 从 Delphi/Lazarus
+  移植的代码**不用改**(这三个就是 LCL 的形状);写给**本库旧签名**的代码要改。
+  `OnChange` 从只有 `Sender` 变成带上是哪一项、变的是什么(`ctText` / `ctImage` / `ctState`);
+  新增的 `OnChanging` 让你能**否决**一次选择变化;`OnSelectItem` 多了 `ASelected`,于是"第 3 行被选中"
+  和"第 3 行被放开"终于分得清 —— 后者以前根本收不到任何事件。
+  随之而来:`OnSelectItem` 现在是状态**增量**,重复选中一个已选中的行不再触发它(这是 LCL 的行为)。
+- **`TTyToolBar.Images` 的类型由 `TImageList` 改为 `TTyImageCollection`。** 本库所有图标都出自
+  按名字取用的 BGRA 集合,没有任何一处从按下标取用的 `TImageList` 渲染 —— 所以那个类型的属性
+  无论宿主怎么赋值都到不了工具按钮。这正是它从前"存下来什么也不做"的原因。
 - **`TTyEdit.ClearSelection` / `TTyMemo.ClearSelection` 现在会删除选中的文本。**
   以前它们只是收起选区、保留文字,而 LCL 和 Delphi 的同名方法一直是删除。同一个名字两个相反
   语义,而且**静默的那个方向更危险**:从 Lazarus 移植来的代码调它删除用户选中的内容,文字留着,
@@ -94,7 +113,10 @@
 - **shell 控件不再占用 7 个 published 事件槽。** `TTyShellTreeView` 的 `OnGetText`/`OnInitNode`/
   `OnExpanding`/`OnGetImageIndex`/`OnChange` 与 `TTyShellListView` 的 `OnCompare`/`OnItemActivate`
   以前被构造函数占用,应用装上任何一个都会**静默替换掉 shell 行为**(树不再显示文件名、双击不再
-  进目录)。现在这些行为改用覆写实现,事件槽全部归应用。
+  进目录)。现在这些行为改用覆写实现,事件槽归应用 —— 覆写跑完再调基类,所以应用的处理器看得到
+  shell 给出的答案、也能改掉它。
+  **一个例外:`TTyShellListView.OnCompare` 目前仍收不到调用**(排序覆写没有回调基类),文件列表的
+  排序还不能由应用接管。
 - **`TTyPanel` / `TTyTabSheet` / `TTyDivider` 的 `Caption` 与 `Text` 合一。** 以前它们各自有一个
   影子 `Caption`,写 `Caption` 不会写到 `TControl.Text`,于是读 `Text` 的东西(action link、
   无障碍、遍历 `TControl` 的通用代码)看到的是空串。`.lfm` 不受影响。
@@ -119,6 +141,21 @@
 
 这一批的共同点:成员都在那儿,**执行了、返回了、什么也没发生**。不报错、不打日志、截图上也看不见。
 
+- **`TTySplitter` 的 `ResizeStyle` 四个取值现在全部生效。** 从前只有 `rsUpdate` 真的会改尺寸:
+  选 `rsPattern` 或 `rsNone` 的分隔条**可以拖到天荒地老,什么都不会动**;`rsLine` 会动,但不画任何反馈。
+  换句话说,选中默认值以外的任何一项就等于把这个控件关掉了。现在三种延迟样式都在松手时提交,
+  `rsLine` / `rsPattern` 还会在拖动过程中画一条实时预览带(实心 / 虚线)。
+  预览带的颜色取握把点用的同一个 `color` 令牌,`TySplitter { color: ... }` 一改改两处。
+- **工具条的 `ShowCaptions` 现在真的能只显示图标了。** 它连同 `Images` 一起下发到每个能画图标的
+  工具项(新增的 `TTyGlyphButtonBase.ShowCaption` 也可以逐个按钮设)。**解析不出图标的工具项保留标题**,
+  所以这个与 LCL 对齐的 `False` 默认值不会把现有应用里的纯文字工具条抹白。
+  工具条把自己的图标集合**借**给没有 `Images` 的工具项,自带集合的工具项不受影响。
+- **`TTyMemo.ScrollBy` 现在滚动的是文本。** 从前调这个"备忘录滚动 API"拿到的是 `TWinControl` 的
+  搬子控件版本:它把备忘录自己内嵌的滚动条从停靠边上拖走,而文字纹丝不动。
+- **`TTyTreeView` 的 `Ghosted` 终于有了用处。** `OnGetImageIndex` 一直递给应用一个
+  `var Ghosted: Boolean`,拿到手就丢了 —— 它想表达的"这个节点的图标画淡一点"(剪切 / 不可用的观感)
+  在库里没有任何地方能实现。现在 `TTyVirtualImageList.Draw` 支持淡显:只降透明度、不改颜色,
+  因为"改颜色"说的是**另一个东西**,而不是**不可用**。
 - **右键菜单的 `OnPopup` 现在会触发**,`PopupPoint` 会更新,`Close`/`OnClose` 不再是空操作。
   菜单项快照改到 `OnPopup` **之后**才取,所以在里面动态加的菜单项真的会出现。
 - **`TTyColorButton.Caption` 现在画出来了** —— 它一直是 published、设计器能填,但从来一个像素都不画。
@@ -141,7 +178,8 @@
 - **速度按钮 `Down := True` 会松开同组其他按钮**;`AllowAllUp` 关掉时会恢复"必须有一个按下"的约束。
 - **单选列表框的 `ClearSelection` / `Selected[i] := False` 真的会取消选中**。
 - **`TTyCheckGroup.Checked[i] := x` 不再触发 `OnItemChange`**(程序赋值不该被当成用户操作)。
-- **工具条不再覆盖子按钮的 `StyleClass`**;**状态栏最后一格铺到右边缘**。
+- **`TTyToolBar` 不再覆盖子按钮的 `StyleClass`**(宿主设的 `'primary'` 等变体会保留;
+  `TTyToolBarEx` 上暂时仍会被覆盖);**状态栏最后一格铺到右边缘**。
 - **取色下拉框写入调色板外的颜色不再往列表里追加一行**。
 - **`TTyUpDown.Wrap` 现在进位而不是丢弃溢出**(Increment > 1 时不再变成"归零器");
   新增带方向的 `OnArrowClick`。

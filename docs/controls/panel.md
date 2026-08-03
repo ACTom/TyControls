@@ -27,12 +27,12 @@ uses tyControls.Panel;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `Caption` | `string` | `''` | 面板标题文字，显示在内容区顶部（按 `Alignment` 水平对齐、垂直居中）；为空字符串时不绘制文字 |
+| `Caption` | `TCaption` | `''` | 面板标题文字，显示在内容区顶部（按 `Alignment` 水平对齐、垂直居中）；为空字符串时不绘制文字。**它就是 `TControl.Caption`**：`Caption` 与 `Text` 是同一个字符串（早先本控件另有一个自己的 `FCaption` 影子字段，写 `Caption` 时 `Text` 仍是空的），重绘经重写 `TextChanged` 触发 |
 | `Alignment` | `TAlignment` | `taCenter` | 标题文字在内容区内的水平对齐方式：`taLeftJustify`（左对齐）/ `taCenter`（居中，默认）/ `taRightJustify`（右对齐）；赋值时触发 `Invalidate` |
 | `Align` | `TAlign` | `alNone` | 父容器内的停靠方式 |
 | `Anchors` | `TAnchors` | `[akLeft, akTop]` | 随父控件调整大小时的锚点 |
 
-> **注意：** TTyPanel 没有 published `Enabled`、`Font` 属性（未在 `published` 节显式重声明），但作为 `TCustomControl` 子类，这些属性在对象层面仍然存在，只是不在对象检视器中显示。
+> **注意：** 上表只列 TTyPanel **自己**声明的属性。`Enabled` / `Visible` / `Font` / `Hint` / `AutoSize` / `BorderWidth` / `ChildSizing` / 拖放族等由基类 `TTyCustomControl` 统一 published，在对象检视器里同样可见（完整清单见 [../events.md](../events.md)）。
 
 ### 继承的通用成员
 
@@ -58,7 +58,7 @@ TTyPanel 继承自 `TTyCustomControl`（`tyControls.Base`）：
 
 ## 4. 事件
 
-TTyPanel 当前版本没有在 `published` 节声明任何事件（包括 `OnClick`）。作为容器，通常不需要直接处理面板的点击事件；子控件各自处理自己的事件。
+TTyPanel 自身没有声明专有事件，但作为 `TTyCustomControl` 子类，它暴露**基线事件集**（Tier A 鼠标 / 通用事件 + Tier B 键盘 / 焦点事件，含 `OnClick` 与 `OnDragOver` / `OnDragDrop` 拖放族，完整清单见 [../events.md](../events.md)）。作为容器，通常不需要直接处理面板的点击事件；子控件各自处理自己的事件。
 
 ---
 
@@ -145,4 +145,4 @@ R1.Checked := True;
 - **单选分组的关键：** `TTyRadioButton` 的互斥范围由 `Parent` 决定，将不同组的单选按钮放在不同 `TTyPanel` 内，是实现多个独立单选组的标准做法。
 - **Caption vs 子控件重叠：** 若同时使用 `Caption` 和子控件，需注意标题文字绘制在内容区域（经 `padding` 内缩后）顶部、按 `Alignment` 水平对齐、垂直居中的位置（默认 `taCenter` 居中），子控件的 `Top` 值应给标题文字留出足够空间。
 - **默认尺寸较小：** 构造时 `Width=185, Height=41`，通常需要在创建后通过 `SetBounds` 调整为实际所需大小。
-- **无 Enabled/Font published：** `Enabled` 和 `Font` 未在 TTyPanel 的 `published` 节重声明，不会出现在 IDE 对象检视器中，但可在代码中通过继承的属性访问。
+- **`Caption` 就是 `Text`：** 二者是同一个 `TControl` 字符串，写哪个另一个都跟着变；不存在"设了 `Caption` 而 `Text` 仍为空"的旧行为（那会让 action link、无障碍查询等一切读 `Text` 的通用代码看到空串）。

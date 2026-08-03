@@ -217,9 +217,27 @@ LV.Sort;
 | `OnGetItemText` / `OnGetItemImage` / `OnGetItemState` | 虚拟模式取数 |
 | `OnCompare` | 自定义比较,收两个 item index |
 | `OnColumnClick` | 点击表头分区 |
-| `OnSelectItem` | 焦点/选中变化,收 item index |
-| `OnChange` | 选择集变化 |
+| `OnSelectItem(Sender; AIndex: Integer; ASelected: Boolean)` | 某一项的选中状态**翻转**了:被选上 → `ASelected = True`,被放开 → `False`。**一次操作会为每一个翻转的项各触发一次** |
+| `OnChanging(Sender; AIndex; AChange: TTyItemChange; var AAllowChange: Boolean)` | 选择变化**之前**触发,置 `AAllowChange := False` 即否决——控件不动选择位,后续的 `OnChange` / `OnSelectItem` 也都不发 |
+| `OnChange(Sender; AIndex: Integer; AChange: TTyItemChange)` | 变化**之后**触发,说明是哪一项、变的是什么 |
 | `OnItemActivate` | 双击 / Enter |
+
+`TTyItemChange = (ctText, ctImage, ctState)`——与 LCL 的 `TItemChange` 逐值对应,所以从 `TListView`
+处理器里搬过来的 `case AChange of` 不用改就能编译。`ctImage` 是为这份对齐而声明的,**内建数据路径
+从不发它**:本控件没有逐项的图像可改(图像是数据源对 `GetItemImageIndex` 的回答),自带图像存储的
+后代可以通过 protected 的 `DoChange` 发出来。
+
+`AIndex = -1` 表示**一次没有单一主语的批量变化**(全选、清空选择、框选一片、`MultiSelect` 关闭时的
+选择集折叠),对应 LCL 的 `Item = nil`。
+
+> **三个事件槽永远属于应用。** 库内部的行为挂在 protected 虚方法 `DoChange` / `CanChange` /
+> `DoSelectItem` 上,不占用 published 的事件——否则应用赋值上去的处理器会静默地什么也不做。
+>
+> **`OnSelectItem` 现在是状态增量**:重复选中一个已选中的行**不再**触发它(这是 LCL 的行为)。
+> 从前它只在"选上"时发,应用**分辨不出"第 3 行被选中了"和"第 3 行被放开了"**——后者根本收不到事件。
+> 改选一行现在会收到两次:旧行 `False`、新行 `True`。
+>
+> **重命名与勾选框有各自的否决口**(`OnEditing` / `OnItemChecked`),不走 `OnChanging`,不会被否决两次。
 
 ---
 

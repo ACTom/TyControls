@@ -194,8 +194,10 @@ if DatePicker.DroppedDown then
 - **分段无进位（roll-within-field）：** ↑/↓ 步进只改动当前字段并在其自身范围内回绕，**不**向相邻字段进位（如「月 12 +1 → 月 1，年不变」「时 23 +1 → 时 0，日不变」）。月/年滚动后日会被钳到当月天数。
 - **数字录入是"离开时提交"模型：** 键入的数字先进入 `FDigitBuffer` 并直接显示，直到该段填满（长度足够或再乘 10 会越界）、按 ←/→/Home/End/Enter、↑/↓ 步进、或失焦时才写入 `DateTime`。Esc 丢弃当前缓冲。
 - **`OnChange` 防重触发：** 仅当夹紧后的新值真正不同于旧值才触发；程序化设为当前值不触发。日历方向键导航（`OnChange` 路径）实时更新字段但**不**关闭弹层；点击日期或回车（`OnAccept` 路径）才提交并关闭。
-- **ShowCheckBox 空态（inert）：** `ShowCheckBox=True` 且 `Checked=False` 时控件进入 inert——所有编辑、步进、滚轮、下拉一律屏蔽，文字置灰。点击复选框区域切换 `Checked` 并触发 `OnChecked`（程序化 `Checked :=` 不触发）。`ShowCheckBox=False` 时 `Checked` 无意义、控件永不 inert。
+- **ShowCheckBox 空态（inert）：** `ShowCheckBox=True` 且 `Checked=False` 时控件进入 inert——所有编辑、步进、滚轮、下拉一律屏蔽，文字置灰。点击复选框区域切换 `Checked` 并触发 `OnChecked`（程序化 `Checked :=` 不触发）。**`Space` 键同样切换 `Checked`**：这个分支**排在 inert 拦截之前**，否则未勾选的控件会拒掉所有按键——连唯一能把它打开的那一个也拒掉，而复选框只有约 12px 的鼠标靶面，键盘用户 Tab 过来就再没有办法让它可编辑。`Space` 走的是 `Checked` 属性 setter，因此**不**触发 `OnChecked`（只有鼠标点击复选框区域才触发）。`ReadOnly=True` 时 `Space` 不生效。`ShowCheckBox=False` 时 `Checked` 无意义、控件永不 inert。
 - **下拉仅 `dtkDate` 有：** `OpenDropDown` 对 `dtkTime` 直接返回；`dtkTime` 的右侧是上/下步进按钮而非 chevron。下拉的开合在 `Click` 而非 `MouseDown` 中完成（配合 200 ms 重开守卫），以避免 mouse-up 立即失活关闭刚弹出的日历。
-- **键盘：** ←/→ 切换字段，Home/End 跳到首/末段，↑/↓ 步进当前段，Enter 提交缓冲，Esc 关闭下拉或丢弃缓冲，`Alt+↓` / `F4` 开合下拉（仅 `dtkDate`）。
+- **键盘：** ←/→ 切换字段，Home/End 跳到首/末段，↑/↓ 步进当前段，Enter 提交缓冲，Esc 关闭下拉或丢弃缓冲，`Alt+↓` / `F4` 开合下拉（仅 `dtkDate`），`Space` 切换 `Checked`（仅 `ShowCheckBox=True`，见上一条）。
+- **`A` / `P` 直接设 AM / PM：** 激活段是 AM/PM 段时，`A` 设为上午、`P` 设为下午——是**设定**不是切换，连按两次 `A` 仍是 AM。从前该段只能靠 ↑/↓ 或滚轮改，从左往右打字的用户填到最后一段会撞上死路，而 `A`/`P` 是各原生选择器都接受的键。
+- **分隔符键提交当前段并前移：** `/` `-` `.` `,` `:` 与空格会提交正在录入的段并跳到下一段，于是可以一路打 `1/2/2026`。从前只有在某段"填满"时才自动前移，单个数字的月份会把光标卡在原地。（`ShowCheckBox=True` 时空格已被上面的 `Checked` 切换消费，不再作分隔符用。）
 - **DFM 序列化：** `Kind`（`default dtkDate`）、`ReadOnly`（`default False`）、`ShowCheckBox`（`default False`）、`Checked`（`default True`）、`TabStop`（`default True`）声明了默认值，等于默认值时不写入 `.lfm`/`.dfm`。`DateTime` / `MinDate` / `MaxDate` / `DateFormat` / `TimeFormat` 无 `default`，始终按当前值流式保存。
 - **主题一致性：** 弹出日历对应 `TyCalendar` 选择器，复选框复用 `TyCheckBox` 令牌——自定义主题时应一并覆盖，才能保持整体外观一致。右侧按钮区**没有**自己的键（`TyDateTimeButton` 是死键，见上），它跟随字段的 `color`。

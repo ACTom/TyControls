@@ -29,24 +29,30 @@ uses tyControls.ColorButton;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `SelectedColor` | `TTyColor` | `$FF3B82F6`（accent 蓝，`TyRGB(59,130,246)`） | 当前色块颜色。**以代码方式设置只会重绘、不触发 `OnColorChange`**（该事件仅用于对话框驱动的变更）。 |
-| `ShowText` | `Boolean` | `False` | 为 `True` 时在色块右侧绘制 `#RRGGBB` 十六进制文字（取 `AStyle.TextColor`）；为 `False` 时色块占满内容区。 |
+| `SelectedColor` | `TTyColor` | `$FF3B82F6`（accent 蓝，`TyRGB(59,130,246)`） | 当前色块颜色。**任何**方式的变更（代码赋值、对话框接受）都会重绘并触发 `OnColorChange`；仅流式载入期间（`csLoading`）抑制，否则每次载入 `.lfm` 都会在窗体建成前发一次事件。 |
+| `ShowText` | `Boolean` | `False` | 为 `True` 时在色块右侧绘制 `#RRGGBB` 十六进制文字（取 `AStyle.TextColor`）；为 `False` 时色块占满内容区。**`Caption` 非空时它不起作用**——两者共用同一个文字位，`Caption` 优先。 |
 | `DialogCaption` | `string` | `'Select Color'` | 点击后弹出的取色对话框标题栏文字。 |
-| `OnColorChange` | `TNotifyEvent` | `nil` | **仅当**用户在对话框中点击"确定"**且颜色确实发生变化**时触发。 |
+| `OnColorChange` | `TNotifyEvent` | `nil` | `SelectedColor` **实际发生变化**时触发，不区分来源。 |
+
+### 自有 public 方法
+
+| 方法 | 返回 | 说明 |
+|------|------|------|
+| `ContentText` | `string` | 这个按钮**实际会画出来**的那串文字：`Caption` 非空时返回 `Caption`，否则 `ShowText` 时返回 `#RRGGBB`，两者都没有则为空串（纯色块）。`AutoSize` 的宽度测量量的就是它——画什么就量什么，否则被裁掉的正是用户唯一填过的那个属性。 |
 
 ### 继承自 [[TTyButton]] 的成员
 
-`Caption`、`Default`、`Cancel`、`ModalResult`、`AnimationsEnabled`、`Down`、`ShowBadge` / `BadgeValue` / `BadgePosition`、`Enabled`、`Font`、`Align`、`Anchors`、`StyleClass`、`Controller`、`OnClick` 等一律可用，语义与 [[TTyButton]] 一致。`Caption` 非空时画在色块右侧，并**优先于** `ShowText` 的 `#RRGGBB`（两者共用同一个文字位；`ShowText` 只在没有 `Caption` 时才起作用）。注意：本控件的点击**即为"打开取色对话框"**，`OnClick` 仍会在对话框关闭后照常触发。
+`Caption`、`Default`、`Cancel`、`ModalResult`、`AnimationsEnabled`、`Down`、`ShowBadge` / `BadgeValue` / `BadgePosition`、`Enabled`、`Font`、`Align`、`Anchors`、`StyleClass`、`Controller`、`OnClick` 等一律可用，语义与 [[TTyButton]] 一致。`Caption` 非空时画在色块右侧，并**优先于** `ShowText` 的 `#RRGGBB`（两者共用同一个文字位；`ShowText` 只在没有 `Caption` 时才起作用）。注意：本控件的点击**即为"打开取色对话框"**，`OnClick` 在**对话框弹出之前**触发。
 
 ---
 
 ## 4. 事件语义
 
-- `SelectedColor := someColor`（代码 / 设计器 / 流式载入）：仅重绘，**不**触发 `OnColorChange`。
-- 用户点击 → 弹出对话框 → 点击"确定"且颜色改变：先重绘并触发 `OnColorChange`，随后调用 `inherited Click` 触发 `OnClick`。
-- 用户点击 → 对话框"取消"，或选了与原值相同的颜色：不触发 `OnColorChange`（`OnClick` 仍会触发）。
+- `SelectedColor := someColor`（代码 / 设计器）：重绘并触发 `OnColorChange`；只有流式载入（`csLoading`）期间静默。
+- 用户点击：**先**触发 `OnClick`（此时读到的还是**变更前**的颜色，处理器可以据此否决或改配置），**再**弹出取色对话框；点击"确定"且颜色改变时走与代码赋值同一条路径——重绘并触发 `OnColorChange`。
+- 用户点击 → 对话框"取消"，或选了与原值相同的颜色：不触发 `OnColorChange`（`OnClick` 已经触发过了）。
 
-这样应用可以用 `OnColorChange` 只响应"真正的颜色变更"，用 `OnClick` 响应"用户点了这个按钮"。
+以前 `OnColorChange` 只认对话框驱动的变更，于是"让某个预览跟着颜色走"这类处理器在用户挑色时有效、在程序恢复一个存档值时静默失效——恰好是没人会去测的那一半。现在两条路径合一：`OnColorChange` 表示"颜色变了"，`OnClick` 表示"用户点了这个按钮"。
 
 ---
 
@@ -66,7 +72,7 @@ BtnFill.OnColorChange := @FillColorChanged;
 
 procedure TForm1.FillColorChanged(Sender: TObject);
 begin
-  // 仅在对话框接受且颜色改变时到达这里
+  // 颜色只要真的变了就到这里（含代码赋值），流式载入期间除外
   MyShape.FillColor := (Sender as TTyColorButton).SelectedColor;
 end;
 ```

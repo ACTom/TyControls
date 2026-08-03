@@ -15,7 +15,7 @@ TyControls 的全部控件继承自两个基类之一（`tyControls.Base`）：
 | `TTyGraphicControl` | `TGraphicControl` | **非窗口化**轻量控件（无句柄、不可获得键盘焦点） | 仅 **Tier A** |
 | `TTyCustomControl` | `TCustomControl` | **窗口化**可聚焦控件（有句柄、可 Tab 导航、接收键盘） | **Tier A + Tier B** |
 
-当前仅 **`TTyLabel`** 与 **`TTyProgressBar`** 继承自 `TTyGraphicControl`（因此只有 Tier A 事件）；**其余所有控件**（Button / Edit / Memo / SpinEdit / ComboBox / CheckBox / RadioButton / ScrollBar / TrackBar / TabControl / ToggleSwitch / ListBox / Panel / GroupBox / ContentPanel / 以及 `TTyForm` 标题栏的 TitleBar/CaptionButton 等）继承自 `TTyCustomControl`，**Tier A + Tier B 全部具备**。
+继承自 `TTyGraphicControl` 的是纯展示 / 无需焦点的那一批（`TTyLabel` / `TTyProgressBar` / `TTyDivider` / `TTyImage` / `TTyShape` / `TTyBadge` / `TTyTag` / `TTyGauge` / `TTyMeter` / `TTyChart` / `TTySparkline` / `TTyArrow` / `TTyBevel` 等，共约 28 个），**因此只有 Tier A 事件**；**其余所有控件**（Button / Edit / Memo / SpinEdit / ComboBox / CheckBox / RadioButton / ScrollBar / TrackBar / TabControl / ToggleSwitch / ListBox / Panel / GroupBox / ContentPanel / 以及 `TTyForm` 标题栏的 TitleBar/CaptionButton 等）继承自 `TTyCustomControl`，**Tier A + Tier B 全部具备**。
 
 ### Tier A —— 鼠标 / 通用事件与属性（两个基类都有，**全控件可用**）
 
@@ -31,9 +31,22 @@ TyControls 的全部控件继承自两个基类之一（`tyControls.Base`）：
 | `OnMouseWheel` | 事件 | 滚轮（带 delta） |
 | `OnMouseWheelUp` | 事件 | 滚轮上滚 |
 | `OnMouseWheelDown` | 事件 | 滚轮下滚 |
+| `OnMouseWheelHorz` | 事件 | 横向滚轮（带 delta）；倾斜轮 / 触控板横向手势只从这里到达 |
+| `OnMouseWheelLeft` | 事件 | 横向滚轮左滚 |
+| `OnMouseWheelRight` | 事件 | 横向滚轮右滚 |
 | `OnContextPopup` | 事件 | 右键 / 上下文菜单触发 |
 | `OnResize` | 事件 | 尺寸变化 |
 | `OnChangeBounds` | 事件 | 位置或尺寸（BoundsRect）变化 |
+| `OnShowHint` | 事件 | 提示即将显示时；用于按指针所在位置给出不同的 Hint 文本 |
+| `OnDragOver` | 事件 | 拖动经过本控件（决定是否接受放置） |
+| `OnDragDrop` | 事件 | 在本控件上放下 |
+| `OnStartDrag` | 事件 | 本控件作为拖动源开始拖动 |
+| `OnEndDrag` | 事件 | 拖动结束 |
+| `Visible` | 属性 | 是否可见（`default True`；此前只能从代码设，对象查看器与 `.lfm` 里都没有） |
+| `AutoSize` | 属性 | 是否按控件自己的首选尺寸（`CalculatePreferredSize`）自动调整大小；`default False`，未实现首选尺寸的控件保持原有 bounds |
+| `DragMode` | 属性 | `dmManual` / `dmAutomatic`；置 `dmAutomatic` 即可让控件成为拖动源 |
+| `DragKind` | 属性 | 拖动种类（`dkDrag` / `dkDock`） |
+| `DragCursor` | 属性 | 拖动过程中的指针形状 |
 | `PopupMenu` | 属性 | 关联的右键菜单 |
 | `Constraints` | 属性 | 尺寸约束（min/max width/height） |
 | `BorderSpacing` | 属性 | 自动布局留白 |
@@ -42,6 +55,8 @@ TyControls 的全部控件继承自两个基类之一（`tyControls.Base`）：
 | `Action` | 属性 | 关联的 `TAction` |
 
 > 这些成员只是把 LCL 父类**已有**的 published 成员重新 published（声明在基类的 `published` 段）；事件分发链路全部走 `inherited`，与原生行为一致——基类**没有**改写任何分发逻辑，仅打开了对象查看器中的可见性。
+>
+> **拖放为什么"白捡"：** `DragMode` / `OnDragOver` / `OnDragDrop` 等全部由 `TControl` 声明、由 LCL 完成分发，拖放的判定发生在绘制层**之上**，所以自绘控件与原生控件的拖放行为完全一致。它们此前只是没被重新 published——`Ctl.DragMode := dmAutomatic` 从代码里一直编得过，缺的是对象查看器与流式化的那一份。`Visible` 同理。
 
 ### Tier B —— 键盘 / 焦点事件（仅 `TTyCustomControl`，即可聚焦控件）
 
@@ -55,7 +70,9 @@ TyControls 的全部控件继承自两个基类之一（`tyControls.Base`）：
 | `OnExit` | 失去焦点 |
 | `OnEditingDone` | 编辑完成（失焦或回车提交时） |
 
-> Tier B 事件由 `TWinControl` 声明，因此只有窗口化的 `TTyCustomControl` 子类暴露。`TTyLabel` / `TTyProgressBar`（`TTyGraphicControl`）**不**暴露键盘 / 焦点事件——它们不可获得焦点。
+> Tier B 事件由 `TWinControl` 声明，因此只有窗口化的 `TTyCustomControl` 子类暴露。`TTyLabel` / `TTyDivider` 等 `TTyGraphicControl` 子类**不**暴露键盘 / 焦点事件——它们不可获得焦点。
+
+> **仅窗口化基类的两个容器属性：** `BorderWidth`（把子控件区域整体内缩若干像素）与 `ChildSizing`（LCL 的每容器子控件布局引擎：`Layout` / `ControlsPerLine` / 各方向间距 / `EnlargeHorizontal` 等）也只在 `TTyCustomControl` 上 published——二者都是 `TWinControl` 成员，对不承载子控件的图形控件没有意义。两者的分发同样全在 `TWinControl` 的对齐流程里，基类只是打开了可见性。
 
 ---
 
@@ -101,8 +118,9 @@ TyControls 的硬性原则是**视觉由主题（.tycss）拥有**：颜色、�
 | `Brush` | 填充由 Painter + 主题决定 |
 | `Bevel*`（BevelInner/Outer/Kind/Width/Edges） | 立体边框是原生外观，与主题边框语义冲突 |
 | `BorderStyle` | 边框样式由主题 `border-*` 令牌决定 |
-| 原生 `BorderWidth` | 边框宽度由主题 `border-width` 令牌决定 |
 | `DoubleBuffered` | **强制开启**（BGRABitmap 离屏合成），不允许关闭——关闭会导致闪烁与绘制撕裂 |
+
+> **别把 `BorderWidth` 当边框宽度。** `TWinControl.BorderWidth` 已在 `TTyCustomControl` 上 published，但它是**布局**属性（子控件区域的内缩量），与画出来的那条边无关；边框的粗细仍然只由主题的 `border-width` 令牌决定，控件不暴露任何覆盖它的原生属性。
 
 此外 **`OnPaint` 未暴露**：绘制完全由控件内部经 Painter + 主题完成，不开放用户自绘钩子（自绘会绕过主题层，破坏跨平台一致性）。
 

@@ -74,7 +74,7 @@ TTyListBox 继承自 `TTyCustomControl`（`tyControls.Base`）的通用状态机
 读取或设置第 `AIndex` 行的选中位。
 
 - **多选模式（`MultiSelect = True`）：** 直接读写内部 `FSelected` 位数组；写入时若值有变化则触发 `Invalidate` 和 `OnChange`。
-- **单选模式（`MultiSelect = False`）：** 读取返回 `AIndex = ItemIndex`；写入 `True` 等价于 `SelectItem(AIndex)`；写入 `False` 无操作。
+- **单选模式（`MultiSelect = False`）：** 读取返回 `AIndex = ItemIndex`；写入 `True` 等价于 `SelectItem(AIndex)`；写入 `False` 时，**若该行正是当前选中行则取消选中**（`SelectItem(-1)`，对齐 LCL `customlistbox.inc`），否则无操作。早前写 `False` 一律直接返回，于是 `Selected[i] := False` 在大多数列表框实际运行的模式里是个静默空操作。
 
 索引越界时读取返回 `False`，写入无操作。
 
@@ -84,11 +84,26 @@ TTyListBox 继承自 `TTyCustomControl`（`tyControls.Base`）的通用状态机
 
 #### `procedure ClearSelection`
 
-清除所有选中位（仅多选模式有效；单选模式下直接返回）。若有任何位被清除则触发 `Invalidate` 和 `OnChange`。
+清除选择，**两种模式都有效**：多选模式下清掉所有选中位（有位被清除才触发 `Invalidate` 和 `OnChange`）；单选模式下等价于 `SelectItem(-1)`。单选列表框也有"一个选择"，"清除选择"是个有意义的请求；早前它在单选模式下直接返回，于是这个方法**只有恰好开了 `MultiSelect` 时才做事**。
 
 #### `procedure SelectAll`
 
-选中所有行（仅多选模式有效；单选模式下直接返回）。若有任何位被设置则触发 `Invalidate` 和 `OnChange`。
+选中所有行（仅多选模式有效；单选模式下直接返回——单选框装不下"全部"）。若有任何位被设置则触发 `Invalidate` 和 `OnChange`。
+
+#### 控件级列表方法（API parity 新增）
+
+每个 LCL 列表控件都有、而本控件从前没有的一组控件级方法——移植代码光是方法名就编译不过。
+
+| 方法 | 说明 |
+|------|------|
+| `procedure Clear` | 清空 `Items` 并刷新滚动条。`Items.Clear` 触发的 `ItemsChanged` 已经负责重整 `FSelected` 位图、把越界的 `ItemIndex` 夹回 `-1`、拉回 `TopIndex`，所以这里买到的主要是**名字**。**不**触发 `OnChange`（LCL 的 `Clear` 同样不报告选择变化）。 |
+| `procedure AddItem(const AItem: string; AnObject: TObject)` | 追加一行及其关联对象，转发 `Items.AddObject`。 |
+| `function Count: Integer` | 行数，转发 `Items.Count`。 |
+| `function ItemRect(AIndex: Integer): TRect` | 第 `AIndex` 行**实际绘制**所在的设备像素矩形（相对客户区，含滚动偏移）。索引越界返回空矩形 `(0,0,0,0)`；**滚出视野的行返回的是客户区之外的坐标（可能为负），不是空矩形**——要判断是否可见请自行与 `ClientRect` 相交。与绘制共用同一套 `ScaledItemHeight` / `ContentTopOffset`，因此在行上叠编辑器或弹层不会与实际行错位。 |
+| `function GetIndexAtY(AY: Integer): Integer` | `ItemRect` 的逆运算：设备 y 坐标 → 行索引（转发命中测试用的同一个 `RowAtY`）；落到任何行之外返回 `-1`。 |
+| `function DeleteSelected: Integer` | 删除所有选中行并返回删除条数。多选模式下**从后往前**删（否则删掉第一行后后面的索引全部错位）；单选模式下删当前 `ItemIndex` 行。删过就把 `ItemIndex` 置 `-1`、更新滚动条并触发 `OnChange`。 |
+| `procedure SelectRange(ALow, AHigh: Integer; ASelected: Boolean)` | 把闭区间 `[ALow..AHigh]` 整体设为选中 / 未选中（顺序颠倒会自动交换，端点自动夹紧）。**非多选模式下为空操作**——单选框装不下一个区间，而"悄悄只选一端"比什么都不做更糟。有位变化才触发 `Invalidate` 和 `OnChange`。 |
+| `function GetSelectedText: string` | 选中行的文本，按行序以换行连接（单选模式返回当前行文本，无选中则空串）——"复制选区"这类命令要的就是它。 |
 
 ---
 
@@ -225,6 +240,6 @@ end;
 3. **VisibleRows 使用 Height 而非 ClientHeight：** 在无原生句柄的测试或离屏渲染环境中，`ClientHeight` 可能滞后；`VisibleRows` 始终使用 `Height`，两者在运行时 `BorderStyle = bsNone` 的控件上相等。
 4. **滚动条宽度影响条目宽度：** 条目绘制区域会减去滚动条宽度（12 逻辑像素），确保文字不被遮盖。
 5. **MultiSelect 切换重置选择：** 将 `MultiSelect` 从 `True` 改回 `False`（或反之）会清空所有 `FSelected` 位，但不重置 `ItemIndex`。
-6. **ClearSelection / SelectAll 仅在多选模式有效：** 单选模式下这两个方法直接返回不做任何操作。
+6. **SelectAll / SelectRange 仅在多选模式有效：** 单选模式下这两个方法直接返回不做任何操作。`ClearSelection` **两种模式都有效**（单选模式下等价于 `ItemIndex := -1`）。
 7. **Selected[] 非 published：** `Selected` 属性数组为 `public`，不可在 `.lfm` 中序列化；需在运行时代码中访问。
-8. **OnChange 在多选操作时亦触发：** 鼠标 Ctrl/Shift 点击、键盘 Shift 扩展选区、Space 切换、`ClearSelection`、`SelectAll` 均在选择实际变化时触发 `OnChange`。
+8. **OnChange 在多选操作时亦触发：** 鼠标 Ctrl/Shift 点击、键盘 Shift 扩展选区、Space 切换、`ClearSelection`、`SelectAll`、`SelectRange`、`DeleteSelected` 均在选择实际变化时触发 `OnChange`。控件级的 `Clear` 是例外——它不报告选择变化。

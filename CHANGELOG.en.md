@@ -111,6 +111,33 @@ Linux and macOS.
 A pass over every control against the LCL/Delphi control it is named after. **The items
 below change the behaviour of existing code -- read before upgrading.**
 
+- **`TTyMemo.SelStart` / `SelLength` now count the full line break.** A newline used to charge
+  one codepoint, while the string `Text` returns separates lines with a full CRLF on Windows
+  -- so the offsets **named a different string**:
+  `Memo.SelStart := Pos(needle, Memo.Text) - 1` landed one character further wrong per
+  preceding line, **and was silently correct on line 1, which is where people test it**.
+  `SelText` now always equals `UTF8Copy(Text, SelStart + 1, SelLength)`, and an offset landing
+  inside a CRLF binds to the end of that line. **If you compensated for the old drift, remove
+  the compensation.**
+- **`TTyValueListEditor.Values` takes a key, not a row number, and `ValueOf` is gone.** The
+  row-indexed accessor is `ValueFromIndex`. `Values['Name'] := 'Bob'` -- the line every ported
+  program contains -- used to fail to build, with an error that points nowhere near the real
+  cause; and `Values[0]` was valid-but-different code on the two libraries. The two forms are
+  deliberately **not** an overload of one name: an Integer/string overload pair is exactly how
+  a ported call lands on the wrong member and still compiles. Two more LCL behaviours came
+  along: lookup **folds case**, and writing an unknown key **appends a row**.
+- **`TTyListView.OnChange`, `OnChanging` and `OnSelectItem` change signature.** Code ported
+  from Delphi/Lazarus needs no edit -- these are LCL's own shapes; code written against OURS
+  does. `OnChange` was Sender-only and now carries which item and what changed
+  (`ctText` / `ctImage` / `ctState`); the new `OnChanging` can **veto** a selection change;
+  and `OnSelectItem` carries `ASelected`, so "row 3 was chosen" is finally distinguishable
+  from "row 3 was abandoned" -- the latter raised no event at all before. Consequently
+  `OnSelectItem` is a state DELTA now: re-selecting an already-selected row is silent, as it
+  is on LCL.
+- **`TTyToolBar.Images` is retyped `TImageList` -> `TTyImageCollection`.** Every icon in this
+  library comes from the name-keyed BGRA collection and nothing renders from an index-keyed
+  `TImageList`, so a property of that type could never reach a tool button no matter what a
+  host assigned -- which is exactly why it used to do nothing.
 - **`TTyEdit.ClearSelection` / `TTyMemo.ClearSelection` now DELETE the selected text.**
   They used to collapse the selection and leave the text; LCL's and Delphi's methods of
   the same name have always deleted it. One name, two opposite meanings -- and the silent
@@ -124,7 +151,10 @@ below change the behaviour of existing code -- read before upgrading.**
   `TTyShellTreeView`'s OnGetText / OnInitNode / OnExpanding / OnGetImageIndex / OnChange
   and `TTyShellListView`'s OnCompare / OnItemActivate were taken by their constructors, so
   assigning any of them silently replaced the shell behaviour. Those behaviours are
-  overrides now and every slot belongs to the application.
+  overrides now and the slots belong to the application -- each override calls the base
+  last, so an application handler sees the shell's answer and can change it.
+  **One exception: `TTyShellListView.OnCompare` is still never called** (the sort override
+  does not chain to the base), so a file list's ordering cannot yet be taken over.
 - **`Caption` and `Text` are one string on `TTyPanel`, `TTyTabSheet` and `TTyDivider`.**
   Each used to carry a shadow Caption, so writing Caption left `TControl.Text` empty and
   anything reading Text saw ''. `.lfm` files are unaffected.
@@ -153,6 +183,26 @@ below change the behaviour of existing code -- read before upgrading.**
 What these share: the member was there, it ran, it returned, and nothing happened. No
 error, no log, nothing visible in a screenshot.
 
+- **All four `TTySplitter.ResizeStyle` values do something now.** Only `rsUpdate` ever moved
+  anything: a splitter set to `rsPattern` or `rsNone` **could be dragged forever and nothing
+  happened**, and `rsLine` moved but drew no feedback. Picking any style other than the
+  default turned the control off. All three deferred styles commit on release, and
+  `rsLine` / `rsPattern` draw a live preview band -- solid and dashed respectively. The band
+  borrows the same `color` token as the grip dots, so `TySplitter { color: ... }` recolours
+  both.
+- **A toolbar's `ShowCaptions` really makes its tools icon-only.** It reaches every tool that
+  can draw an icon, along with `Images` (and the new `TTyGlyphButtonBase.ShowCaption` sets it
+  per button). **A tool with no resolvable icon keeps its caption**, so the LCL-parity `False`
+  default cannot blank an existing caption-only toolbar. The bar LENDS its collection to tools
+  that have none; a tool carrying its own is left alone.
+- **`TTyMemo.ScrollBy` scrolls the text.** Reaching for the documented memo scroll API used to
+  get `TWinControl`'s child-mover: it dragged the memo's own embedded scrollbars off their
+  docked edges and left the text where it was.
+- **`TTyTreeView`'s `Ghosted` flag finally does something.** `OnGetImageIndex` has always
+  handed the application a `var Ghosted: Boolean` and then dropped it -- the one thing it says,
+  "draw this node's icon dimmed" (the cut / unavailable look), had no effect anywhere.
+  `TTyVirtualImageList.Draw` can dim now: alpha only, so the icon keeps its colours and loses
+  its presence -- recolouring would say "different", not "unavailable".
 - **A context menu's `OnPopup` fires**, `PopupPoint` updates, and `Close`/`OnClose` are no
   longer silent no-ops. The item snapshot is taken AFTER `OnPopup`, so items added there
   actually appear.
@@ -184,7 +234,8 @@ error, no log, nothing visible in a screenshot.
   "exactly one down" invariant.
 - **Single-select `ClearSelection` / `Selected[i] := False` actually deselect.**
 - **`TTyCheckGroup.Checked[i] := x` no longer fires `OnItemChange`.**
-- **A toolbar no longer overwrites its children's `StyleClass`**; **the last status-bar
+- **`TTyToolBar` no longer overwrites its children's `StyleClass`** (a host's `'primary'` and
+  other variants survive; `TTyToolBarEx` still overwrites for now); **the last status-bar
   panel reaches the right edge.**
 - **Writing an off-palette colour to a colour box no longer appends a row.**
 - **`TTyUpDown.Wrap` carries the overshoot** instead of discarding it (an Increment above 1

@@ -70,7 +70,7 @@ still marked as gaps belong to a future Tier-2 native enhancement layer.
   cross-line merge, 2-D arrow + Home/End navigation, vertical scrollbar/wheel) and
   — as of **v1.11** — a full 2-D **text selection** layer mirroring `TTyEdit`:
   selection anchor (`Shift`+arrows/Home/End extend, mouse-drag highlight, per-line
-  selection band, `SelText`/`SelectAll`/`ClearSelection`), **range clipboard**
+  selection band, `SelText`/`SelectAll`/`CollapseSelection`), **range clipboard**
   (`Ctrl/Cmd+A/C/X/V`; paste splits on CR/LF into multiple lines; copy/cut via the
   same virtual `ReadClipboardText`/`WriteClipboardText` hooks as `TTyEdit`), and
   **word navigation** (`Ctrl/Alt+Left/Right` move by word, crossing line
@@ -79,17 +79,19 @@ still marked as gaps belong to a future Tier-2 native enhancement layer.
   ship snapshot-based **undo/redo** (`Ctrl/Cmd+Z` undo; `Ctrl/Cmd+Y` or
   `Ctrl/Cmd+Shift+Z` redo) with a bounded (~200-step) history and typing
   coalescing — `TTyEdit` additionally gained an `OnChange` event, which (like
-  `TTyMemo.OnChange`) fires on undo/redo. The following remain intentionally
-  **deferred** to a future Tier-2 layer:
-  - **No word-wrap**: lines render with `WordBreak=False`; one logical line is
-    always one visual row, never reflowed to the control width.
-  - **No horizontal scroll / long lines clipped**: no horizontal scrollbar or
-    auto-scroll; lines wider than the content area are clipped at the right
-    edge and the caret can move off-screen horizontally without following.
-  - **No caret blink**: the caret is a static 1px bar drawn only when focused
-    and the caret line is visible; there is no `TTimer`-driven blink.
-  See [controls/memo.md](controls/memo.md) §10 (gaps) and §11 (undo/redo) for
-  the per-control writeup.
+  `TTyMemo.OnChange`) fires on undo/redo. The three items this entry used to list
+  as deferred have all since shipped, and the text saying otherwise outlived the
+  implementations by several releases — recorded here so the next reader knows the
+  old wording was wrong rather than describing another version:
+  - **Word-wrap**: `WordWrap` (default `False`) reflows a long logical line into
+    several visual rows at word boundaries.
+  - **Horizontal scroll**: with `WordWrap = False` a long line scrolls sideways —
+    a real embedded horizontal scrollbar plus a `ScrollX` offset the caret drags
+    along. All four horizontal `ScrollBars` values are honoured.
+  - **Caret blink**: a `TTimer`-driven blink (~530 ms), created lazily once the
+    handle exists, so the caret stays static headless and in the designer.
+  See [controls/memo.md](controls/memo.md) §10 and §11 (undo/redo) for the
+  per-control writeup.
 - **Drop shadows / elevation on embedded controls — deliberately deferred.**
   Batch⑤+⑥ shipped per-control motion (cursors, hover-fade, knob-slide, eased
   progress/scrollbar/trackbar position, tab-header cross-fade) but intentionally

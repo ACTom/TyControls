@@ -40,8 +40,8 @@
 | 操作 | 结果 |
 | --- | --- |
 | 点击某一节的**主体**(非边界) | 循环切换该节排序 none → asc → desc → asc,并触发 `OnSectionClick` |
-| 在**节边界**附近按下并拖动 | 调整该边界左侧那一节的宽度(使用 `MouseCapture`),拖动中持续触发 `OnSectionResize`,松开时再触发一次 |
-| 鼠标移到边界 | 光标变为水平调整光标(`crHSplit`) |
+| 在**节边界**附近按下并拖动 | 调整该边界左侧那一节的宽度(使用 `MouseCapture`),拖动中持续触发 `OnSectionTrack`,**松开时触发一次** `OnSectionResize` |
+| 鼠标移到边界 | 光标变为水平调整光标(`crHSplit`);移开后**还原为调用方自己设的 `Cursor`**,不再被抹成 `crDefault` |
 
 排序是**单列排序**:某一节开始排序时,会清除其余各节的排序状态。
 
@@ -56,9 +56,16 @@ procedure ToggleSort(AIndex: Integer);           // 循环该节排序(并清除
 property SectionCount: Integer;
 property Sections[AIndex: Integer]: TTyHeaderSection;        // 整条记录读写
 property SectionText[AIndex: Integer]: string;              // 单独读写标题
-property SectionWidth[AIndex: Integer]: Integer;           // 单独读写宽度(逻辑像素)
+property SectionWidth[AIndex: Integer]: Integer;           // 你**设**的宽度(逻辑像素),可读写
+property EffectiveSectionWidth[AIndex: Integer]: Integer;  // 实际**画**出来的宽度(逻辑像素),只读
 property Sort[AIndex: Integer]: TTyHeaderSortDirection;    // 单独读写排序状态
 ```
+
+**`SectionWidth` 不总等于你看到的宽度。** 最后一节会吸收剩余的客户区宽度,好让整条铺满控件
+(LCL 的做法是把余量留白)。这是有意的,但它从前是看不见的:你设 100、画出来 250、读回来还是 100,
+于是任何拿这个值去排版的代码(表头下方的列表、宽度求和)都在最后一节上、且只在最后一节上悄悄算错。
+需要"画出来的那个数"时读 `EffectiveSectionWidth` —— 它走的是绘制用的同一个纯几何函数,
+两者不可能对不上。它是布局的**结果**而非输入,因此只读。
 
 节记录 `TTyHeaderSection` 含 `Text` / `Width`(逻辑像素) / `Alignment` / `SortDirection`。
 排序方向枚举 `TTyHeaderSortDirection = (hsdNone, hsdAscending, hsdDescending)`。
@@ -69,8 +76,13 @@ property Sort[AIndex: Integer]: TTyHeaderSortDirection;    // 单独读写排序
 
 ```pascal
 property OnSectionClick: procedure(Sender: TObject; AIndex: Integer) of object;
+property OnSectionTrack:  procedure(Sender: TObject; AIndex, AWidth: Integer) of object;
 property OnSectionResize: procedure(Sender: TObject; AIndex, AWidth: Integer) of object;
 ```
+
+`OnSectionTrack` 是**拖动过程中**的连续事件(用于实时预览),`OnSectionResize` 在**松开鼠标时只发一次**,
+带最终宽度。以前两者合一,于是一个做实事的处理器(重新查询、重排下方表格、写配置)在一次拖动里
+要跑几百遍。LCL 的 `THeaderControl` 也是这样分的。
 
 ## 纯几何函数(可脱离窗口直接测试)
 

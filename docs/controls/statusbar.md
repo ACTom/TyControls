@@ -43,7 +43,7 @@ uses tyControls.StatusBar;
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `Text` | `string` | `''` | 该面板显示的文本。 |
-| `Width` | `Integer` | `50` | 面板逻辑宽度（`default 50`）。**`Width <= 0` 的面板为"填充面板"**：占据其余固定宽度面板之外的全部剩余空间；若有多个 `<= 0` 面板，只有**第一个**吃掉剩余空间，其后的 `<= 0` 面板宽度为 0。 |
+| `Width` | `Integer` | `50` | 面板逻辑宽度（`default 50`）。**`Width <= 0` 的面板为"填充面板"**：占据其余固定宽度面板之外的全部剩余空间；若有多个 `<= 0` 面板，只有**第一个**吃掉剩余空间，其后的 `<= 0` 面板宽度为 0。**最后一个面板的 `Width` 只是下限**：它总是延伸到右侧内边距处（见 §7）。 |
 | `Alignment` | `TAlignment` | `taLeftJustify` | 面板内文本的水平对齐（`taLeftJustify` / `taCenter` / `taRightJustify`，`default taLeftJustify`）。垂直方向固定居中。 |
 
 > `TTyStatusPanels` 额外提供 `function Add: TTyStatusPanel;` 与默认索引器 `Items[AIndex]: TTyStatusPanel`（即 `Panels[i]`）以便按类型访问面板项。
@@ -93,7 +93,7 @@ TyStatusBar {
 **渲染细节：**
 
 - **背景与顶部边线：** 先铺一层 `FillSharpBackdrop`（让 alpha 背景可透出窗体照片，形成玻璃感；纯色 / 非图片主题无影响），再用 `background` 令牌整条填充，然后在**顶部**画一条 `border-color` 的 1px 细线（`border-width` 缩放，最小 1px）——是"状态栏顶线"外观，**不是完整边框**。
-- **多面板模式：** 面板矩形由 `TyStatusPanelRects` 依据各面板 `Width` 计算（左右各留 6 逻辑像素内边距 `CStatusBarPadX`）。第一个之后的每个面板左侧画一条 1px 分隔线（仅当主题存在 `border-color` 时；上下各内缩 3 逻辑像素）。面板文字用 `color`（`TextColor`）绘制，水平按各面板 `Alignment`、垂直居中，左右各再内缩 2 逻辑像素。
+- **多面板模式：** 面板矩形由 `TyStatusPanelRects` 依据各面板 `Width` 计算（左右各留 6 逻辑像素内边距 `CStatusBarPadX`）；**最后一个面板的右边界一律拉到 `总宽 - 内边距`**（见 §7）。第一个之后的每个面板左侧画一条 1px 分隔线（仅当主题存在 `border-color` 时；上下各内缩 3 逻辑像素）。面板文字用 `color`（`TextColor`）绘制，水平按各面板 `Alignment`、垂直居中，左右各再内缩 2 逻辑像素。
 - **SimplePanel 模式：** 忽略面板，直接在 `[padX, W-padX]` 区域绘制 `SimpleText`，左对齐、垂直居中。
 - **SizeGrip：** `SizeGrip = True` 时在右下角用 `TextColor` 画 3 个对角排列的 2×2 小点（间距 4 逻辑像素）。
 
@@ -151,6 +151,7 @@ Bar.SimpleText := '正在保存…';
 
 - **默认停靠底部：** `Align` 默认值即 `alBottom`（既在 published 声明处 `default alBottom`，构造函数也显式赋值），因此值为 `alBottom` 时不写入 `.lfm`/`.dfm`。放到窗体上默认贴底，无需手动设置。
 - **填充面板规则：** `Width <= 0` 的面板吃掉剩余空间，但**只有第一个** `<= 0` 面板生效，其后的 `<= 0` 面板宽度为 0（会退化成零宽面板）。若剩余空间为负则夹紧到 0。
+- **最后一个面板顶到右边缘：** 无论给它设了多宽，最后一个面板的右边界都会拉到 `总宽 - 内边距`（与原生状态栏一致，win32 把末个面板的 right 设为 -1）。否则各面板宽度之和凑不满客户区时，末个面板与边框之间会露出一条父窗体底色的空带。
 - **SimplePanel 屏蔽面板：** `SimplePanel = True` 时完全忽略 `Panels` 集合，只画 `SimpleText`；此时 `PanelAtPos` 恒返回 `-1`。切回多面板模式时面板内容仍在（未被清空）。
 - **面板变更即重绘：** `TTyStatusPanel` 的 `Text`/`Width`/`Alignment` setter 调用 `Changed(False)`，经 `TTyStatusPanels.Update` 触发宿主 `Invalidate`——运行时改面板文本会自动刷新，无需手动 `Invalidate`。
 - **无面板点击事件：** 控件没有内建的面板点击事件；需要时用基线 `OnMouseDown`/`OnClick` 配合 `PanelAtPos(X, Y)` 自行判定被点面板索引。

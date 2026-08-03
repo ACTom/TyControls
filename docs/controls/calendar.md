@@ -30,6 +30,7 @@ uses tyControls.Calendar;
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `Date` | `TDateTime` | 构造时为 `DateOf(Now)`（今天） | 当前选中日期。写入时先按 `[MinDate, MaxDate]` 夹紧并取 `DateOf`（丢弃时间部分）；仅当日期实际变化时更新并 `Invalidate`。**无 `default`，始终写入 DFM/LFM。** |
+| `DateTime` | `TDateTime` | 同 `Date` | **（API parity 新增）** `Date` 的别名——同一个字段、同一个 setter，`stored False` 不重复流式保存（持久化的是 `Date`）。加它是因为**同名不同类型**是最坏的一种差异：LCL 的 `TCustomCalendar.Date` 是 `string`，它的 `TDateTime` 版叫 `DateTime`（`calendar.pp`），于是 `Cal.Date := Now` 在这里能编译、在 Lazarus 编译不过，`Cal.DateTime` 反之。有了这个别名，两边写法都能编过。 |
 | `MinDate` | `TDateTime` | `0`（无下界） | 可选日期下界。`0` 表示不限制。写入后重新夹紧 `Date` 并始终重绘（越界格子的灰显外观会变化）。 |
 | `MaxDate` | `TDateTime` | `0`（无上界） | 可选日期上界。`0` 表示不限制。写入后重新夹紧 `Date` 并始终重绘。 |
 | `FirstDayOfWeek` | `TTyWeekDay` | `wdSunday` | 每周第一列的星期（`wdSunday`..`wdSaturday`），决定星期名行与网格列的排列顺序。 |
@@ -175,6 +176,7 @@ Cal.ReadOnly := True;   // 禁止选择；表头翻页/下钻仍可用
 
 - **`Date` 只保留日期部分：** 写入 `Date` 时内部做 `DateOf`（丢弃时间），并按 `[MinDate, MaxDate]` 夹紧。若赋一个越界值，会被夹到最近的边界。
 - **`Date` 无 `default`：** 始终写入 `.lfm`/`.dfm`（与有 `default False/True` 的布尔属性不同）。`MinDate`/`MaxDate` 亦无 `default`，`0` 表示该侧无界。
+- **`DateTime` 只是 `Date` 的别名：** 两者共用同一字段与 setter（同样夹紧 + `DateOf`），不是两份状态；`DateTime` 声明为 `stored False`，`.lfm`/`.dfm` 里只出现 `Date` 一份。注意 LCL 的 `TCustomCalendar.Date` 是 `string` 类型，本控件的 `Date` 是 `TDateTime`——移植时按类型对齐，别按名字对齐。
 - **`OnAccept` vs `OnChange` 的分工：** `OnChange` 只在日期**改变**时发；`OnAccept` 是"确认"手势（回车 / 空格 / 点日期格），**即便日期没变**点击日期格也会触发。做下拉选择器时请用 `OnAccept` 决定何时关闭弹窗，避免方向键导航误关。
 - **`ReadOnly` 只锁选择：** `ReadOnly=True` 拦截 `SelectDate`、日期格点击与键盘选择，但表头的 ←/→ 翻月、标题下钻 / 上钻仍然工作（只浏览不选择）。
 - **下钻状态是瞬态的：** `ViewMode` / `ViewMonth` / `ViewYear` 为只读运行时状态，不 published、不序列化；每次运行从 `Date` 派生初值（`FViewMode := cvmDays`）。

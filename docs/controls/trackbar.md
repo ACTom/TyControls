@@ -31,11 +31,11 @@ uses tyControls.TrackBar;
 | `Min` | `Integer` | `0` | 最小值。赋值时若 `Position < Min` 则静默夹紧，触发重绘。 |
 | `Max` | `Integer` | `100` | 最大值。赋值时若 `Position > Max` 则静默夹紧，触发重绘。 |
 | `Position` | `Integer` | `0` | 当前值，范围 `[Min, Max]`，赋值时自动夹紧；若值真正变化则触发 `OnChange` 和重绘。 |
-| `Orientation` | `TTyTrackOrientation` | `toHorizontal` | 滑块方向：`toHorizontal`（水平，默认；左=Min、右=Max）/ `toVertical`（垂直）。**垂直约定：顶部为 `Max`，值向上增大**（即向上拖动/方向键增大 `Position`）。赋值时触发重绘。 |
-| `Frequency` | `Integer` | `0` | 刻度线（tick marks）间隔，单位为值（value-units）。`0`（默认）= **不绘制刻度**；`>0` 时每隔 `Frequency` 个值单位绘制一条刻度线。负值被夹为 0。 |
+| `Orientation` | `TTyTrackOrientation` | `toHorizontal` | 滑块方向：`toHorizontal`（水平，默认；左=Min、右=Max）/ `toVertical`（垂直）。**垂直约定：顶部为 `Max`，值向上增大**（即向上拖动/方向键增大 `Position`）。赋值时若当前宽高与新方向不符会**自动对调宽高**（与 LCL 一致），随后重绘；流式载入期间（`csLoading`）不动，`.lfm` 里写死的尺寸优先。 |
+| `Frequency` | `Integer` | `1` | 刻度线（tick marks）间隔，单位为值（value-units）。默认 `1` = 每个值单位一条刻度（与原生 `TTrackBar` 一致，开箱即可见刻度）；`0` = **不绘制刻度**。负值被夹为 0。 |
 | `LineSize` | `Integer` | `1` | 方向键单步步进量（每次 ±`LineSize`）。最小为 1（赋值 <1 被夹为 1）。 |
 | `PageSize` | `Integer` | `10` | `PageUp`/`PageDown` 翻页步进量（每次 ±`PageSize`）。最小为 1（赋值 <1 被夹为 1）。 |
-| `ShowValue` | 在滑轨旁显示当前值(横向在右、纵向在下)。默认关 —— 打开会占掉一条空间,滑轨相应变短(几何与命中都跟着变) |
+| `ShowValue` | `Boolean` | `False` | 在滑轨旁显示当前值（横向在右、纵向在下），字体与颜色取轨道样式 `TyTrackBar` 的 `color`。默认关——打开会占掉一条空间，滑轨相应变短（几何与命中都跟着变）。 |
 | `OnChange` | `TNotifyEvent` | `nil` | `Position` 真实变化时触发（含拖动、点击定位、方向键/翻页键步进、直接赋值）。 |
 | `TabStop` | `Boolean` | `True` | 是否参与 Tab 键导航（构造时自动置为 `True`）。 |
 | `Align` | `TAlign` | — | 父容器内的停靠方式。 |
@@ -134,7 +134,7 @@ TyTrackThumb:active { background: var(--accent); }
 
 ### 刻度线（ticks）
 
-当 `Frequency > 0` 且 `Max > Min` 时，控件从 `Min` 起每隔 `Frequency` 个值单位绘制一条短刻度线，刻度对齐到该值下滑块中心所在的主轴位置（水平绘于轨道底缘、垂直绘于轨道右缘，长约 4 逻辑像素 / 粗 1 逻辑像素）。刻度颜色取轨道样式 `TyTrackBar` 的 `TextColor`（即 CSS `color`，主题驱动），可在 `.tycss` 中为 `TyTrackBar` 声明 `color` 控制刻度颜色。`Frequency = 0`（默认）时完全不绘制刻度。
+当 `Frequency > 0` 且 `Max > Min` 时，控件从 `Min` 起每隔 `Frequency` 个值单位绘制一条短刻度线，刻度对齐到该值下滑块中心所在的主轴位置（水平绘于轨道底缘、垂直绘于轨道右缘，长约 4 逻辑像素 / 粗 1 逻辑像素）。刻度颜色取轨道样式 `TyTrackBar` 的 `TextColor`（即 CSS `color`，主题驱动），可在 `.tycss` 中为 `TyTrackBar` 声明 `color` 控制刻度颜色——`ShowValue` 的读数用的也是这一条 `color`。默认 `Frequency = 1`（每个值单位一条）；置 `0` 才完全不绘制刻度。
 
 ---
 
@@ -206,6 +206,6 @@ end;
 3. **OnChange 防重入：** `SetPosition` 先夹紧值，若夹紧后与原值相同则不调用 `OnChange`，回调中无需过滤重复值。
 4. **Min/Max 修改时 Position 静默校正：** 修改范围后 `Position` 会被自动校正，但不触发 `OnChange`（仅触发 `Invalidate`）。
 5. **滑块沿主轴厚度固定：** 滑块沿主轴的厚度固定为 12 逻辑像素（DPI 缩放后），不可通过属性调整；横向尺寸跟随控件另一边（水平=控件高、垂直=控件宽）。如需更宽的滑块，需继承并重写渲染逻辑。
-6. **垂直方向约定：** `Orientation = toVertical` 时，**顶部为 `Max`、底部为 `Min`，值向上增大**——向上拖动、`↑`、`PageUp` 都增大 `Position`。切换 `Orientation` 后控件宽/高不会自动对调，需手动交换尺寸（垂直通常应高大于宽）。
-7. **刻度由 Frequency 驱动：** `Frequency = 0`（默认）不绘制刻度；`>0` 时每隔该值单位画一条刻度线，颜色取自主题 `TyTrackBar` 的 `color`。
+6. **垂直方向约定：** `Orientation = toVertical` 时，**顶部为 `Max`、底部为 `Min`，值向上增大**——向上拖动、`↑`、`PageUp` 都增大 `Position`。切换 `Orientation` 时控件的宽/高会**自动对调**（仅当当前尺寸与新方向不符时）：以前不换，于是一个 200×30 的横条切成垂直后仍是 200 宽 30 高、里面画着一条竖轨道，每个调用方都得自己再改一次尺寸。流式载入期间不动，`.lfm` 里的显式尺寸优先。
+7. **刻度由 Frequency 驱动：** 默认 `Frequency = 1`（每个值单位一条刻度，与原生 `TTrackBar` 一致）；置 `0` 才不绘制刻度。颜色取自主题 `TyTrackBar` 的 `color`。以前默认是 `0`，于是拖一个滑块到窗体上看到的是一条光秃秃的轨道，刻度看起来像没实现，而不像被关掉了。
 8. **滑块过渡动画（batch⑤+⑥）：** `AnimationsEnabled` 默认 `True`，程序化 `Position` 变化（方向键/翻页/Home/End/赋值）时滑块缓动到新位置（约 120ms），**拖动 / 点击定位则始终瞬时跟手**；headless / 设计器下瞬间吸附。详见上文「状态过渡动画」。

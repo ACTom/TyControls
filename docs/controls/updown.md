@@ -35,8 +35,9 @@ uses tyControls.UpDown;
 | `Position` | `Integer` | `0` | 当前值(夹紧到 `[Min,Max]`)。 |
 | `Increment` | `Integer` | `1` | 每步增量(下限 1)。 |
 | `Orientation` | `TTyUpDownOrientation` | `udoVertical` | `udoVertical` / `udoHorizontal`。 |
-| `Wrap` | `Boolean` | `False` | 越界时是否回绕到另一端(而非停在边界)。 |
+| `Wrap` | `Boolean` | `False` | 越界时是否回绕到另一端(而非停在边界)。**回绕会带着溢出量继续走,不丢弃**:`Min=0` / `Max=10` / `Increment=4` 时从 9 往上一步得 **2**(9→10→0→1→2),而不是直接跳到 `Min`。早前是直接贴到对端,于是步长大于 1 的回绕微调器悄悄从"加法器"变成了"复位钮"。 |
 | `OnChange` | `TNotifyEvent` | — | `Position` 变化时触发。 |
+| `OnArrowClick` | `TTyUpDownClickEvent` | — | **(API parity 新增)** 每一"步"触发一次,并告诉你按的是哪半边:`procedure(Sender: TObject; AButton: TTyUpDownButton) of object`,`AButton` 取 `udbPrev`(下 / 减)或 `udbNext`(上 / 加)。 |
 
 继承:`Align` / `Anchors` / `StyleClass` / `Controller`。
 
@@ -47,6 +48,12 @@ uses tyControls.UpDown;
 | 事件 | 说明 |
 |------|------|
 | `OnChange` | `Position` 改变(点击 / 连发 / 代码设值)后触发。 |
+| `OnArrowClick` | **每一步**触发一次(含按住时的每一次连发 tick,与 LCL `TUpDown.OnClick` 一致),并带上方向 `udbPrev` / `udbNext`。与 `OnChange` 不同,**值没动也照发**(已经顶到 `Min` 或 `Max` 时),所以"用户按了但没反应"是可观测的;反过来,代码直接写 `Position` 没有"按下"可言,不触发它。 |
+
+> **为什么另起一个名字,而不是用 `OnClick`:** TTyUpDown 从基类继承来的 `OnClick` 是普通的
+> `TNotifyEvent`,而 LCL 的 `TUpDown` 把**同一个名字**给了 `(Sender; Button: TUDBtnType)` 事件。
+> 从 Lazarus 移植过来的代码能编译、能把那个"以为会收到方向"的处理器挂上去,然后什么方向也收不到
+> ——两边都合法,没有任何诊断。改继承来的那个不在选项内,于是带方向的事件用自己的名字。
 
 ---
 
@@ -89,7 +96,8 @@ Ud.OnChange := @UpDownChanged;   // 在处理器里:Ed.Text := IntToStr(Ud.Posit
 ## 7. 注意事项
 
 - **分离 vs 一体:** 一体式数值框用 [TTySpinEdit](spinedit.md);需要把上下按钮贴到别处(如自定义布局)时用 TTyUpDown。
-- **自动连发:** 按住某一半会先延迟 ~0.4s 再以 ~60ms 间隔连续步进,松开 / 移出即停。
+- **自动连发:** 按住某一半会先延迟 ~0.4s 再以 ~60ms 间隔连续步进,松开 / 移出即停。连发的每一 tick 都会发 `OnArrowClick`。
+- **`Wrap` 带进位:** 回绕不丢溢出量(见第 3 节 `Wrap`);`Wrap=False` 时仍是贴到边界停住。
 - **纯逻辑可测:** 半区命中 `TyUpDownHit`、半区矩形 `TyUpDownButtonRect`、夹紧 / 回绕 `TyUpDownClamp` 都是纯函数,已单元测试(`test.updown`)。
 - **主题驱动:** 颜色取自 `TyUpDown`,不硬编码;唯一例外是悬停 / 按下半边的背景仍解析 `TyButton`(见第 5 节)。
 - **`:disabled` 在随库主题下不变淡:** `light` / `dark` / `auto` 的 `:disabled` 选择器列表里没有 `TyUpDown`,而主题一旦定义过某 typeKey,内置基础层对该键就整体不再兜底,所以禁用时不会降透明度。需要就在自己的主题里补一条 `TyUpDown:disabled { opacity: var(--disabled-opacity); }`(`green.tycss` 与 `aero` / `bootstrap` / `office` / `xp` 四套 builtin 已有)。

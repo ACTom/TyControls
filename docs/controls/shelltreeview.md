@@ -42,9 +42,17 @@ Tree.OnPathChange := @DirChosen;    // 焦点目录变化(对话框据此刷新�
 
 ## 关键设计
 
-- **懒加载。** `PopulateRoots` 只铺根、不读任何子目录;展开箭头由 `OnInitNode` 用轻量的
-  `TyFsHasSubdir`(找到**第一个**子目录即返回,不枚举全部)盖;子目录只在 `OnExpanding`
+- **懒加载。** `PopulateRoots` 只铺根、不读任何子目录;展开箭头由 `DoInitNode` 用轻量的
+  `TyFsHasSubdir`(找到**第一个**子目录即返回,不枚举全部)盖;子目录只在 `DoExpanding`
   首次展开(`ChildCount = 0`)时用 `TyFsReadDirectory[fotFolders]` 读一次。深树不会预读每一层。
+- **published 事件槽位归应用,不归控件。** 节点文字 / 初始化 / 展开 / 图标 / 焦点变化这五件事现在是**覆写基类虚方法**
+  (`DoGetText` / `DoInitNode` / `DoExpanding` / `DoGetImageIndex` / `DoTreeChange`),不再是构造函数里接到 published
+  `OnGetText` / `OnInitNode` / `OnExpanding` / `OnGetImageIndex` / `OnChange` 上的 handler。以前控件占着这五个槽位,
+  应用一赋 `OnGetText` 目录树就不显示文件名了,而且没有任何迹象说明为什么 —— shell 与应用在抢同一个槽。
+  现在五个事件全归应用(与 LCL 的 `TShellTreeView` 同构),**每个覆写都调 `inherited`,而且放在最后**:
+  应用的 handler 在 shell 把答案填好之后才跑,因此看得到、也改得动 shell 的决定(`DoExpanding` 里应用仍可否决展开)。
+  `DoGetText` 的根节点分支尤其要注意这条 —— 它以前在根节点上直接 `Exit`,于是恰恰在一棵 shell 树**最先**显示的那批行
+  (盘符与"位置")上,应用的 `OnGetText` 永远到不了;修一半比不修更难查:事件在一部分行上灵、另一部分不灵。
 - **只文件夹,永不文件。** 枚举恒用 `[fotFolders]`(加 `[fotHidden]` 当 `ShowHidden`),从不 `[fotFiles]`。
 - **节点 ↔ 路径。** 节点数据是一个 Integer 索引,指向控件持有的 `FPaths` 路径数组(`NodeDataSize := SizeOf(Integer)`),
   `NodePath(node)` 读回。这是 `TTyTreeView` 数据-按需模式的标准用法。

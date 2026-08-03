@@ -37,7 +37,7 @@ uses tyControls.Divider;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `Caption` | `string` | `''` | 标题文字，用解析后的 `TyDivider` 样式绘制（**不**读取 LCL `Font.*`）；为空时绘制一条贯穿整宽的细线。赋值触发 `Invalidate`。 |
+| `Caption` | `TCaption` | `''` | 标题文字，用解析后的 `TyDivider` 样式绘制（**不**读取 LCL `Font.*`）；为空时绘制一条贯穿整宽的细线。**它就是 `TControl.Caption`**：`Caption` 与 `Text` 是同一个字符串（早先本控件另有一个自己的 `FCaption` 影子字段，写 `Caption` 时 `Text` 仍是空的），重绘经重写 `TextChanged` 触发。 |
 | `Alignment` | `TAlignment` | `taLeftJustify` | 标题相对细线的位置：`taLeftJustify`（标题在左 + 右侧细线）/ `taRightJustify`（镜像）/ `taCenter`（标题居中 + 两侧细线，`default taLeftJustify`）。赋值触发 `Invalidate`。 |
 | `Align` | `TAlign` | `alNone` | 父容器内的停靠方式（常用 `alTop` 让分割线横贯一栏）。 |
 | `Anchors` | `TAnchors` | `[akLeft, akTop]` | 随父控件调整大小时的锚点。 |

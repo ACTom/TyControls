@@ -34,7 +34,7 @@ uses tyControls.ScrollPanel;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `AutoScroll` | `Boolean` | `True` | 自动平移总开关。为 `False` 时 `AutoPanTo` 变为 no-op（面板仍可用滚轮 / 滚动条滚动，行为等同其 `TTyScrollBox` 基类）；置 `False` 会立即停止任何正在进行的自动平移 |
+| `AutoPan` | `Boolean` | `True` | **边缘自动平移**总开关。为 `False` 时 `AutoPanTo` 变为 no-op（面板仍可用滚轮 / 滚动条滚动，行为等同其 `TTyScrollBox` 基类）；置 `False` 会立即停止任何正在进行的自动平移。**破坏性改名：** 它原名 `AutoScroll`——LCL 里每一个滚动容器上的 `AutoScroll` 都表示"自动管理滚动条"，与"指针靠近边缘时平移"完全是两回事，那个名字承诺的是滚动条行为、给的却是拖动平移。`AutoPan` 也与本控件自己的其余 API（`AutoPanTo` / `AutoPanActive` / `StopAutoPan` / `EdgeMargin`）对齐 |
 | `EdgeMargin` | `Integer` | `24` | 触发自动平移的边缘带**逻辑**宽度（px@96ppi）；越大则离边越远就开始平移。使用时按 `MulDiv(值, PPI, 96)` 做 DPI 缩放；赋负值钳制为 `0` |
 | `MaxSpeed` | `Integer` | `16` | 到达（或越过）边缘时每帧的**逻辑**最大滚动增量（px@96ppi）；增量从边缘带内边界处的 `0` 线性升到此值。DPI 缩放同上；赋负值钳制为 `0` |
 
@@ -58,7 +58,7 @@ TTyScrollPanel 继承自 `TTyScrollBox` → `TTyPanel` → `TTyCustomControl`（
 | `FLastPanPos` | `TPoint` | 最近一次喂给平移的指针位置（客户区 px）——定时器每帧从此位置继续，故指针“停在边缘不动”时也能持续滚 |
 | `FPanTimer` | `TTimer` | 懒创建，仅在自动平移真正运行时才建立；`~16ms`（约 60fps）。析构里先 `FreeAndNil`，避免拆卸期回调 |
 
-**构造时默认值：** `AutoScroll = True`，`EdgeMargin = 24`，`MaxSpeed = 16`。
+**构造时默认值：** `AutoPan = True`，`EdgeMargin = 24`，`MaxSpeed = 16`。
 
 ---
 
@@ -115,7 +115,7 @@ var
 Pane := TTyScrollPanel.Create(Self);
 Pane.Parent := Self;
 Pane.Align := alClient;
-// 默认 AutoScroll=True, EdgeMargin=24, MaxSpeed=16；如需更“灵敏”可加大边缘带：
+// 默认 AutoPan=True, EdgeMargin=24, MaxSpeed=16；如需更“灵敏”可加大边缘带：
 // Pane.EdgeMargin := 40;
 
 // 在拖放处理器里，把指针位置喂给自动平移（客户区坐标）：
@@ -142,7 +142,7 @@ end;
 - **坐标系一致：** `AutoPanTo` 的指针位置必须与 `AutoPanViewport`（默认 `ClientRect`）**同一坐标系**（客户区 px）。从屏幕坐标来时先 `ScreenToClient`。
 - **指针停在边缘也持续滚：** 定时器从 `FLastPanPos` 每帧续滚，因此拖拽对象“压在边缘不动”时列表仍持续滚动，符合直觉；指针回到中间平静区则暂停（仍武装），拖拽结束需显式 `StopAutoPan`。
 - **DPI 缩放：** `EdgeMargin` / `MaxSpeed` 是逻辑值（96ppi 基准），使用时按 `MulDiv(值, Font.PixelsPerInch, 96)` 缩放；负值钳为 `0`。
-- **AutoScroll 关闭即退化：** `AutoScroll := False` 时 `AutoPanTo`/`AutoPanStep` 均为 no-op，面板仍是一个可用滚轮 / 滚动条滚动的普通 `TTyScrollBox`。
+- **AutoPan 关闭即退化：** `AutoPan := False` 时 `AutoPanTo`/`AutoPanStep` 均为 no-op，面板仍是一个可用滚轮 / 滚动条滚动的普通 `TTyScrollBox`。该属性**原名 `AutoScroll`**，升级时需要改名：老名字与 LCL 滚动容器上"自动管理滚动条"的语义撞车。
 - **定时器安全：** `FPanTimer` 由 `Self` 拥有但析构里先 `FreeAndNil`，避免拆卸期 `OnTimer` 触发（沿用 `TTyScrollBar` 的定时器拆卸约定）。
-- **滚动落地接缝：** 每帧增量经受保护的 `ApplyAutoPanDelta` 落到基类偏移；此钩子被刻意隔离在一处，由批次控制器接到 `TTyScrollBox` 暴露的公共滚动接口（见集成说明）。在接线完成前它是安全的 no-op，不影响纯核心与武装逻辑的可测性。
+- **滚动落地接缝：** 每帧增量经受保护的 `ApplyAutoPanDelta` 落到基类偏移——它调 `TTyScrollBox.ScrollByDelta`（夹取到滚动范围 + 同步缩略块），并返回偏移是否**真的动了**，好让已经滚到头的空转帧停下来。此钩子被刻意隔离在一处，测试用访问子类覆写它即可在无实时偏移的情况下观察请求的增量。
 </content>

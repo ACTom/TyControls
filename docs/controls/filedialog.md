@@ -62,7 +62,9 @@ if Dlg.Execute then
 
 - **一个 form 两个标志 = 四变体**;`FBtnNewFolder` 仅 SaveMode 建,`FPreview` 仅 PreviewMode 建(标志 setter 懒建)。
 - **四方联动**(树↔列表↔查找范围)靠一个 `FSyncing` 防回环;查找范围字段是纯显示同步(写 `Directory` 不触发事件)。
-  过滤下拉 `OnFilterChange` → `List.Mask`。选中文件 → 填文件名框;双击文件(Open)→ 直接接受。
+  过滤下拉 `OnFilterChange` → `List.Mask`。选中文件 → 填文件名框(**只认选中,不认取消选中** ——
+  列表的 `OnSelectItem` 现在也会报告刚被**离开**的那一行,拿它去填名字会写进一个用户已经不在的文件名,
+  Save 模式下还会盖掉用户刚敲进去的名字);双击文件(Open)→ 直接接受。
 - **OK 在 `CloseQuery` 里校验**(不是按钮 OnClick):Save 走 `TyFsResolveSaveName` 解析 + `TyMessageDlg` 覆盖确认;
   Open 收集选中集 + `fdoFileMustExist` 校验;不通过返回 False 把对话框留住。
 - **Open 手敲优先**:文件名框非空时以它为准(带路径原样、裸名对当前目录展开),空框才回落到列表选中项。
@@ -101,5 +103,6 @@ end;
 
 ## 待办 / 后续
 
-- 真机眼验(六变体组装/联动/Save 覆盖流/图片+文本预览/自定义 `OnPreview`);i18n 集中化到
-  `tyControls.StrConsts`(合并回 main 时统一做)。
+- 真机眼验(六变体组装/联动/Save 覆盖流/图片+文本预览/自定义 `OnPreview`)。
+- i18n 已完成:全部面向用户的文案(标题/按钮/"查找范围:"/过滤器名/"无法预览"等)走
+  `tyControls.StrConsts` 的 `rsFd*` / `rsPv*` 资源串。

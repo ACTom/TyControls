@@ -86,7 +86,16 @@ uses tyControls.ImageCollection;
 | `function IndexOf(const AName: string): Integer` | 名字索引;不存在返回 `-1`。 |
 | `function RenderIndex(AIndex, ASizePx: Integer): TBGRABitmap` | 从 `Collection` 渲染第 `AIndex` 项到 `ASizePx` 见方。**调用方拥有**返回位图。`Collection` 未设 / 索引越界 / 名字缺失时返回空透明方块(**永不为 `nil`**);`ASizePx <= 0` 夹紧为 1px。 |
 | `function CachedIndex(AIndex, ASizePx: Integer): TBGRABitmap` | 第 `AIndex` 项在 `Collection` 渲染缓存中的结果——**借用引用**:**不要 `Free`、不要改像素**,也不要跨下一次调用继续持有。没什么可画时(`Collection` 未设 / 索引越界 / 名字缺失)返回 `nil`。这是绘制代码的**零分配**路径;需要拥有或修改位图时才用 `RenderIndex`。`ASizePx <= 0` 夹紧为 1px。 |
-| `procedure Draw(ACanvas: TCanvas; AIndex, AX, AY, ASizePx: Integer)` | 绘制第 `AIndex` 项到 `ACanvas` 的 `(AX, AY)`(走 `CachedIndex`,无临时位图)。守护所有边界情况(`nil` 画布 / 集合、坏索引、`ASizePx <= 0`),**永不抛异常**。 |
+| `procedure Draw(ACanvas: TCanvas; AIndex, AX, AY, ASizePx: Integer; AGhosted: Boolean = False)` | 绘制第 `AIndex` 项到 `ACanvas` 的 `(AX, AY)`(走 `CachedIndex`,无临时位图)。守护所有边界情况(`nil` 画布 / 集合、坏索引、`ASizePx <= 0`),**永不抛异常**。`AGhosted = True` 时画**变淡**的一版(不可用 / 禁用观感,见下)——这一条会复制一份缓存位图再淡化,因此比常规绘制多一次分配。 |
+
+### 变淡(ghosted)绘制
+
+| 成员 | 说明 |
+|------|------|
+| `const TyGhostedAlpha = 96` | 变淡后保留的 alpha 比例(`96/255`)。淡到读得出"不可用",又浓到字形仍认得出——认不出的图标传达的是"坏了"而不是"禁用"。 |
+| `procedure TyFadeBitmapAlpha(ABmp: TBGRABitmap; AFactor: Byte)` | 把每个像素的 alpha 按 `AFactor/255` 缩放(**就地修改**),连抗锯齿边缘一起均匀变淡。单元级导出,因为这是全库唯一的"不可用"观感,别的绘制代码也应当用它。 |
+
+只改 alpha、不改颜色:图标保留自己的配色而失去存在感,这才是"不可用"该有的样子——换色说的是"另一个东西",不是"淡出"。`Draw` 内部会先 `Duplicate` 再淡化:缓存位图是**共享**的,就地淡化会让这个图标从此在所有地方(包括别的控件里)都变淡。
 
 ---
 
@@ -96,7 +105,7 @@ uses tyControls.ImageCollection;
 - **集合拥有 master** —— 每张 master 由集合持有,`Clear` / 析构时全部释放,无泄漏。
 - **`GetBitmap` / `RenderIndex` 返回值归调用方** —— 用完必须 `Free`(见示例)。它们返回的是缓存渲染的**副本**,可以随意就地修改。
 - **`GetCachedBitmap` / `CachedIndex` 返回值是借用的** —— 归集合的渲染缓存所有:**不要 `Free`、不要改像素**,blit 完即弃,别跨下一次调用继续持有(可能已被 LRU 淘汰或因变更失效)。绘制路径用它可以做到每个图标零分配、零重采样。
-- **`Draw` 自行管理** —— 走借用路径直接绘制,调用方无需理会。
+- **`Draw` 自行管理** —— 走借用路径直接绘制,调用方无需理会;`AGhosted = True` 时内部自建并释放一份副本,缓存不受污染。
 
 ---
 
@@ -140,6 +149,9 @@ begin
 
   // 直接绘制第 0 项(内部渲染→绘制→释放)
   VList.Draw(Canvas, 0, 40, 8, 32);
+
+  // 同一项的"不可用"观感(剪切 / 禁用):只淡 alpha,不改颜色
+  VList.Draw(Canvas, 0, 80, 8, 32, True);
 end;
 ```
 

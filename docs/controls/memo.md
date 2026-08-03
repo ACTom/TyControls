@@ -33,7 +33,9 @@ uses tyControls.Memo;
 | `MaxLength` | `Integer` | `0`（无限） | 按**全模型内容码点数**（所有逻辑行 `UTF8Length` 之和，**换行不计**）封顶；`0` 表示无限制；打字满则拒插；粘贴时截断到余量；回车/退格/删除/合并不受限。 |
 | `WantTabs` | `Boolean` | `False` | **（API parity 新增）** 为 `True` 时 Tab 键插入制表符（字面量）；为 `False` 时 Tab 用于焦点导航。 |
 | `WantReturns` | `Boolean` | `True` | **（API parity 新增）** 为 `True` 时回车插入换行；为 `False` 时回车不换行（留作提交语义）。 |
-| `ScrollBars` | `TScrollStyle` | `ssAutoVertical` | **（API parity 新增）** 滚动条策略。仅**垂直**策略被尊重（内嵌垂直滚动条按需出现）；横向变体退化为垂直策略——**横向滚动条尚未实现**（见 §10 缺口）。 |
+| `ScrollBars` | `TScrollStyle` | `ssAutoVertical` | 滚动条策略，与 `TMemo` 同义：`ssNone` 两条都不要；`ssVertical` / `ssBoth` 强制显示竖条，`ssAutoVertical` / `ssAutoBoth` 溢出才出现；`ssHorizontal` / `ssBoth` 强制显示横条，`ssAutoHorizontal` / `ssAutoBoth` 溢出才出现。横条只在 `WordWrap = False` 时有意义（回绕模式不会横向滚动）。 |
+| `WordWrap` | `Boolean` | `False` | 软回绕开关。`True` 时长逻辑行按词边界折成多条可见行；`False`（默认）时长行改为横向滚动。 |
+| `HideSelection` | `Boolean` | `True` | 失去焦点时是否隐藏选区高亮。 |
 | `OnChange` | `TNotifyEvent` | `nil` | 文本模型变化（插入/拆分/退格/删除/合并）后触发；纯光标移动不触发。 |
 | `OnSelectionChange` | `TNotifyEvent` | `nil` | **（API parity 新增）** 光标位置**或**选区范围变化时触发（方向键 / 点击 / Shift 选区 / 程序化设置光标 / 编辑导致光标移动）；自带去抖——caret 与 anchor 都未变则不触发。 |
 | `Enabled` | `Boolean` | `True` | 为 `False` 时键盘与滚轮输入一律被忽略（v1.5 策略：禁用时不消费按键、`DoMouseWheel` 返回 `False`）。 |
@@ -46,14 +48,43 @@ uses tyControls.Memo;
 
 ### public 扁平选区属性（非 published，API parity 新增）
 
-> 这些属性以**扁平码点偏移**（跨所有逻辑行的单一索引，换行计 1）表达光标与选区，对齐原生 `TMemo` 的扁平 `Sel*` 模型，与内部二维 `(CaretLine, CaretCol)` 之间自动换算。
+> 这些属性以**扁平码点偏移**表达光标与选区，对齐原生 `TMemo` 的扁平 `Sel*` 模型，与内部二维
+> `(CaretLine, CaretCol)` 之间自动换算。**偏移索引的是 `Text` 返回的那一个字符串**，行与行之间按
+> **完整的换行符**计数——Windows 上 CRLF 就是 **2** 个码点。于是原生写法逐字成立：
+>
+> ```pascal
+> Memo.SelStart := Pos(Needle, Memo.Text) - 1;
+> Memo.SelLength := Length(Needle);
+> ```
+>
+> **换行以前只计 1**，这不只是差一个字符的不便——那样的偏移**指的是另一个字符串**：每多一条前置行就
+> 多错一位，而在第 1 行上永远是对的,也就是大家试它的地方。分隔符取自 `Text` 用的同一个 `LineBreak`
+> 选择,重新赋过 `Lines.LineBreak` 也不会让两者漂开。落在 CRLF **内部**的偏移被钳到该行行尾,所以谁也
+> 没法把光标塞进一个换行符中间。
 
 | 属性 | 类型 | 说明 |
 |------|------|------|
 | `SelStart` | `Integer`（读写） | 选区起始的扁平码点偏移；写入时收起选区到该处。 |
 | `SelLength` | `Integer`（读写） | 选区长度（扁平码点数）；写入时从 `SelStart` 起扩展光标。 |
-| `SelText` | `string`（读写） | 选区内容；写入时以新文本替换选区，仅触发一次 `OnChange`。 |
+| `SelText` | `string`（读写） | 选区内容；恒等于 `UTF8Copy(Text, SelStart + 1, SelLength)`。写入时以新文本替换选区，仅触发一次 `OnChange`。 |
 | `CaretPos` | `Integer`（读写） | 光标的扁平码点偏移。 |
+
+> `SelectAll` 之后 `SelLength` 是 `UTF8Length(Text)` **减去** `TStrings.Text` 在最后一行之后补的那个
+> 尾随换行符——那个位置不是一个光标能落脚的地方（LCL 自己的 `TCustomEdit.SelectAll` 把它算进去了）。
+
+### public 方法（API parity 新增）
+
+| 方法 | 说明 |
+|------|------|
+| `ClearSelection` | **删除**选中的文本（与 LCL / Delphi 同名方法一致）。**这是不兼容变更**——它从前只是收起高亮、把文字留着。 |
+| `CollapseSelection` | 旧的 `ClearSelection` 行为：只收起选区，不动文字。 |
+| `Append(AValue)` | 追加一条逻辑行（跑日志的那种写法）。 |
+| `Clear` | 清空。 |
+| `ScrollBy(DeltaX, DeltaY)` | 按设备像素滚动**文本视图**——这是 `TCustomMemo` 赋予 `ScrollBy` 的含义。**正**的 delta 把内容往下/往右推（露出更靠前的行/列，符号跟随 `TWinControl`）；纵向按整个可视行量化，不足一行的 `DeltaY` 是空操作，要按行走请用 `TopLine` / `SetTopLine`。 |
+
+> **`ScrollBy` 从前是 `TWinControl` 的那个"搬子控件"版本**：调用它的人拿到的是把备忘录自己内嵌的
+> 滚动条从停靠边上拖走，而文字纹丝不动。这里重写是安全的,也只有这里安全——`TTyScrollBox` 的
+> `ScrollByDelta` 正是调 `ScrollBy` 要那个搬子控件的语义,在那儿重写会变成自己调自己。
 
 ### 继承的通用成员
 
@@ -188,12 +219,13 @@ end;
 
 ## 10. v1 限制 / 缺口（Gaps）
 
-`TTyMemo` 在可靠的多行编辑核心（逐码点编辑、跨行合并、二维导航、垂直滚动）之上，于 **v1.11** 补齐了对标 `TTyEdit` 的**二维文本选区**层：选区锚点（`Shift`+方向键/Home/End 扩展、鼠标拖拽高亮、逐行选区带、`SelText`/`SelectAll`/`ClearSelection`）、**区间剪贴板**（`Ctrl/Cmd+A/C/X/V`，粘贴按 CR/LF 拆分为多行，复制/剪切经与 `TTyEdit` 同源的虚方法 `ReadClipboardText`/`WriteClipboardText`）、以及**按词导航**（`Ctrl/Alt+←/→` 跨行按词移动，`Ctrl/Alt+Backspace/Delete` 按词删除并在行边界退化为跨行合并）。下列条目仍被**有意推迟**（deferred），当前版本**尚未**实现，下游开发者在选型/集成时应知悉：
+`TTyMemo` 在可靠的多行编辑核心（逐码点编辑、跨行合并、二维导航、垂直滚动）之上，于 **v1.11** 补齐了对标 `TTyEdit` 的**二维文本选区**层：选区锚点（`Shift`+方向键/Home/End 扩展、鼠标拖拽高亮、逐行选区带、`SelText`/`SelectAll`/`CollapseSelection`）、**区间剪贴板**（`Ctrl/Cmd+A/C/X/V`，粘贴按 CR/LF 拆分为多行，复制/剪切经与 `TTyEdit` 同源的虚方法 `ReadClipboardText`/`WriteClipboardText`）、以及**按词导航**（`Ctrl/Alt+←/→` 跨行按词移动，`Ctrl/Alt+Backspace/Delete` 按词删除并在行边界退化为跨行合并）。本节曾登记的缺口现已全部补齐：
 
-| 缺口 | 说明 / 当前行为 |
-|------|------|
-| **无自动换行（no word-wrap）** | 渲染时 `WordBreak = False`：一条逻辑行始终绘制为一行，不会按控件宽度回绕到下一行。逻辑行与可见行严格一一对应。 |
-| **无水平滚动条（no horizontal scrollbar，deferred）** | `ScrollBars` 属性（API parity 新增）仅尊重**垂直**策略；横向变体（`ssHorizontal`/`ssBoth`/`ssAutoHorizontal`/`ssAutoBoth`）退化为垂直策略——横向滚动条**尚未实现**。超出内容区宽度的长行在右缘被裁剪（`WordWrap = False` 时）。仅垂直方向有内嵌滚动条 / 滚轮。 |
+> **自动换行与水平滚动条都已交付**，不再是缺口：`WordWrap`（默认 `False`）按词边界把长逻辑行折成多条
+> 可见行；`WordWrap = False` 时长行改由内嵌**横向**滚动条 + `ScrollX` 承载（`ScrollBars` 的
+> `ssHorizontal` / `ssBoth` / `ssAutoHorizontal` / `ssAutoBoth` 四个横向取值都是真的生效的）。
+> 本节此前那两行"尚未实现"写在实现落地之前，一直没有人回来改——记在这里，好让下一位读者知道旧文
+> 是错的，而不是在描述另一个版本。
 
 > **v1.11 已交付：** 文本选区、区间剪贴板（`Ctrl/Cmd+A/C/X/V`）、以及按词 / `Shift` 扩展导航均已落地（见 §5），不再是缺口。
 > **v1.12 已交付：** 基于快照的**撤销 / 重做**（`Ctrl/Cmd+Z`、`Ctrl/Cmd+Y` / `Ctrl/Cmd+Shift+Z`）已落地（见 §11），不再是缺口。

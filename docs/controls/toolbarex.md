@@ -30,7 +30,15 @@ uses tyControls.ToolBarEx, tyControls.Button;
 
 ## 3. 属性表
 
-`TTyToolBarEx` **不新增任何 published 属性**——它复用基类 [`TTyToolBar` 的全部属性](toolbar.md#3-属性表)（`ButtonHeight` / `ButtonSpacing` / `Indent` / `Wrapable` / `ShowCaptions` / `Flat` / `Images` / `Align` / `Anchors` / `StyleClass` / `Controller` 等）。唯一区别是本控件把 `Wrapable` 重新 published 了一次以声明其新默认值语义（默认 `False`）。
+`TTyToolBarEx` **不新增任何 published 属性**——它复用基类 [`TTyToolBar` 的全部属性](toolbar.md#3-属性表)（`ButtonHeight` / `ButtonSpacing` / `Indent` / `Wrapable` / `ShowCaptions` / `Flat` / `Images`（`TTyImageCollection`）/ `Align` / `Anchors` / `StyleClass` / `Controller` 等）。唯一区别是本控件把 `Wrapable` 重新 published 了一次以声明其新默认值语义（默认 `False`）。
+
+`ShowCaptions` 与 `Images` 在这里同样生效：它们由基类在**工具项加入工具条时**（`InsertControl`）和两个 setter 里下发，
+不依赖排布过程——而本控件重写了 `AlignControls`，正好绕开排布路径，所以这条下发时机是它能拿到图标的原因。
+
+> **例外：`Flat` 在本控件上仍然整体覆写子按钮的 `StyleClass`。** 基类已改成只动它自己设过的那一份
+> （空串 ↔ `'ghost'`），但本控件重写的 `AlignControls` 里还是无条件赋值，于是宿主写的
+> `StyleClass := 'primary'` 会在下一次重排时被抹掉。要在 `TTyToolBarEx` 上做自定义按钮变体，
+> 请改走主题选择器（见 [glyphbuttons.md 第 5 节](glyphbuttons.md#5-状态与主题)）。
 
 ### 3.1 溢出相关（非 published，供代码 / 测试查询）
 

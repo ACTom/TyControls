@@ -17,6 +17,7 @@
 | 基类 | `TTyPanel`（继承自 `TTyCustomControl` → `TCustomControl`；只继承框架与容器管道，不再共用它的键） |
 | 默认尺寸 | 200 × 150（逻辑像素） |
 | 内嵌滚动条 typeKey | `TyScrollBar` / `TyScrollThumb`（见 [scrollbar.md](scrollbar.md)） |
+| 视口 typeKey | `TyScrollContent`（`TTyScrollContent`，可选的显式视口，见 §5） |
 
 ```pascal
 uses tyControls.ScrollBox;
@@ -26,12 +27,13 @@ uses tyControls.ScrollBox;
 
 | 键 | 画什么 |
 |----|--------|
-| `TyScrollBox` | 视口本体的框：`background` / `border-color` / `border-width` / `border-radius` / `padding`（`padding` 只影响本体绘制，不约束子控件） |
+| `TyScrollBox` | 滚动框本体的框：`background` / `border-color` / `border-width` / `border-radius` / `padding`（`padding` 只影响本体绘制，不约束子控件） |
 | `TyScrollBar` / `TyScrollThumb` | 两条内嵌滚动条的轨道与缩略块，由 `TTyScrollBar` 自身解析（见 [scrollbar.md](scrollbar.md)） |
+| `TyScrollContent` | 显式视口 `TTyScrollContent` 的**表面**（只画 `background`，**不画边框**——框归外面的滚动框画，视口再画一条会正好压在内容该穿过去的地方） |
 
 > **主题说明：** 早期版本里 `TTyScrollBox` 返回 `'TyPanel'`，于是滚动井与面板在主题层完全无法分辨；那时文档给出的变通办法是"用 `StyleClass` 加个类选择器（如 `TyPanel.scroll`）"。**这个变通已经不需要了，也不该再用**——直接写 `TyScrollBox { ... }` 就只作用于滚动框。内置主题把 `TyScrollBox` 与 `TyPanel` 等键写在同一条规则里（取值相同、名字独立），所以默认观感不变；第三方主题若只覆盖了 `TyPanel`，需要补上 `TyScrollBox`（主题层按 typeKey 全有全无地回落，否则会掉回内置 light 取值）。
 >
-> **子部件 typeKey：没有。** 视口本身只有这一个盒子样式；两条滚动条是真正的 `TTyScrollBar` 子控件，走它们自己的键。
+> **子部件 typeKey：** 滚动框本体只有这一个盒子样式；两条滚动条是真正的 `TTyScrollBar` 子控件、走它们自己的键，显式视口是真正的 `TTyScrollContent` 子控件、走 `TyScrollContent`。
 
 ---
 
@@ -64,6 +66,10 @@ uses tyControls.ScrollBox;
 | 方法 | 说明 |
 |------|------|
 | `procedure UpdateScrollRange` | 重新测量子控件包围盒，据此显示 / 隐藏 / 定位两个滚动条，并把滚动偏移夹取到合法范围。**通常不需要你调用**：控件在 `Resize`、`.lfm` 流式化结束（`Loaded`）、以及**每一轮子控件布局之后**（`ControlsAligned`，涵盖增删子控件、改子控件位置 / 大小）都会自动重算。留作 public 是给"绕过 LCL 布局直接改了子控件几何"这类特殊场景兜底。 |
+| `procedure ScrollByDelta(ADx, ADy)` | 把**视图**按 `(ADx, ADy)` 挪一段，夹取到当前滚动范围（该轴没有滚动条时为 0），并同步两个缩略块。 |
+| `procedure ScrollTo(AX, AY)` | 把**视图**滚到绝对偏移 `(AX, AY)`；内部走 `ScrollByDelta`，因此与增量路径共用同一套重新测量与夹取规则。 |
+
+> **`ScrollByDelta` 不是 `ScrollBy`。** 二者原先都是 protected，于是"再往下看一点"这个滚动容器最常见的诉求，只能靠去写内嵌滚动条的 `Position` 来碰运气；现在两个方法都是 public。注意别把它们混起来：`TWinControl.ScrollBy` 的语义是**平移子控件**，本类内部正是用它来干这件事，所以重写 `ScrollBy` 让它表示"滚动视图"会变成自我递归。`ScrollByDelta` / `ScrollTo` 才是视图操作，`ScrollBy` 保持 `TWinControl` 的原意。
 
 ---
 
@@ -96,6 +102,16 @@ uses tyControls.ScrollBox;
 > **主题框仍然画满整框。** `TTyScrollBox` 重写了 `Paint`：`ClientRect` 已经缩到视口，但背景/边框要铺满整个控件，包括两条槽和它们相交的那个角。
 
 > **无窗口句柄下的行为（headless / 测试）：** 纯滚动数学（范围 / 夹取 / 可见性阈值 / 缩略块 PageSize）是单元级纯函数，可直接验证；对齐子控件的实际布局需要 LCL 对齐引擎真的跑起来，而 `TForm.CreateNew` 且从不 `Show` 的窗体会命中 `AutoSizeDelayedHandle`，对齐被整体推迟——所以这一层要在真机验收探针 `tests/scrollverify` 里验，headless 断言会假绿。
+
+### 显式视口 `TTyScrollContent`（可选）
+
+子控件是被**父窗口的客户区**裁剪的，而自绘容器的边框画在客户区**里面**——重写 `GetClientRect` 只改 LCL 的计算，动不了 widgetset 真正裁剪的那条边界。于是内容一滚就会压过上下边框；这不是谁用错了，而是每次滚动都会发生的常态（LCL 自己的 `TScrollBox` 看不到这个问题，因为它用 `BorderStyle := bsSingle` 把边框放进**非客户区**，由 OS 先裁子控件——主题化的边框住不进那里）。
+
+所以裁剪边界必须是一个**真窗口**，这就是 `TTyScrollContent`（单元 `tyControls.ScrollContent`）：一个按边框内缩的普通容器，托住内容并在各 widgetset 上原生裁剪。它是**显式**的——内容要 `Parent` 到视口上，不是 `Parent` 到滚动框上，与 `TTyPageControl` 里的 `TTyTabSheet` 同构；隐式改写 `Parent` 会留下"`Parent` 不是你赋的那个、`ControlCount` 数不到内容、坐标悄悄挪了位"这一串隐规则。
+
+- **可选，不改旧行为。** 没有给视口的滚动框照旧滚自己的子控件，重编译不会改变现有窗体的行为；裁剪是"给了它一个视口"之后才获得的。
+- **视口是 chrome，不是内容。** 它的 bounds 由滚动框根据边框与可见滚动条算出（`csDesignFixedBounds`，设计器拖不动），因此不计入内容范围——否则布局会自锁。
+- **认领时机：** 滚动框在 `InsertControl` 里认领视口，代码创建 / 设计器拖放 / `.lfm` 流式化三条路径都经过那里。`ContentHost` 返回视口（没有则返回滚动框自身）。
 
 ---
 

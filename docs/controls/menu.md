@@ -49,7 +49,13 @@ uses tyControls.Menu;
 | `Version` | `string`（只读） | `TyVersion` | 只读库版本号；设计期编辑器打开 About 对话框。 |
 | `Controller` | `TTyStyleController` | `nil` | 主题化弹出解析令牌所用的样式控制器。 |
 
-> `TTyPopupMenu` 的菜单项模型直接用**继承自 `TPopupMenu` 的 `Items`**（标准 `TMenuItem` 树），无需另设属性——把 `TMenuItem` 加到 `Items` 即可。它同时继承 `TPopupMenu` 的全部标准成员（`Items`、`OnPopup` 等）。
+> `TTyPopupMenu` 的菜单项模型直接用**继承自 `TPopupMenu` 的 `Items`**（标准 `TMenuItem` 树），无需另设属性——把 `TMenuItem` 加到 `Items` 即可。它同时继承 `TPopupMenu` 的全部标准成员（`Items`、`Alignment`、`PopupPoint`、`Close`、`OnPopup`、`OnClose` 等），并且这些成员**真的在跑**：
+>
+> | 继承成员 | 行为 |
+> |------|------|
+> | `Alignment` | `paLeft`（默认）/ `paRight` / `paCenter`：弹出体相对 `PopUp(X, Y)` 那个点左对齐 / 右对齐 / 居中。右对齐是"从右侧工具条唤起的上下文菜单"的正常选择（左对齐会滑出屏幕）。渲染器是按锚点**左边缘**挂下拉的，所以对齐靠平移锚点表达——弹出体自己的宽度要测过才知道，故 `paRight`/`paCenter` 按渲染器报出的实测宽度偏移 |
+> | `PopupPoint` | 每次 `PopUp(X, Y)` 都会写入，因此读到的是本次唤起的位置而不是历史值 |
+> | `Close` / `OnClose` | 弹出体以任何方式消失（选中项、`Esc`、点到外面）都会走到 `TPopupMenu.Close` → `DoClose` → `OnClose`，并清掉全局 `ActivePopupMenu` |
 
 ### 3.3 继承的通用成员
 
@@ -79,8 +85,9 @@ uses tyControls.Menu;
 
 | 来源 | 事件 | 说明 |
 |------|------|------|
-| `TMenuItem.OnClick` | `TNotifyEvent` | 激活某个叶子菜单项（点击 / Enter / 空格 / 助记符）时，触发**该 `TMenuItem` 自己**的 `OnClick`。菜单栏与右键菜单都通过 `TMenuItem.Click` 分发到此事件。 |
-| `TPopupMenu.OnPopup` | `TNotifyEvent` | `TTyPopupMenu` 继承自 `TPopupMenu`，其标准弹出事件仍可用。 |
+| `TMenuItem.OnClick` | `TNotifyEvent` | 激活某个叶子菜单项（点击 / Enter / 空格 / 助记符）时，触发**该 `TMenuItem` 自己**的 `OnClick`。菜单栏与右键菜单都通过 `TMenuItem.Click` 分发到此事件。**菜单栏上没有子项的顶层项也算叶子**：点它直接触发它的 `OnClick`（见 §7）。 |
+| `TPopupMenu.OnPopup` | `TNotifyEvent` | 每次 `PopUp(X, Y)` 弹出**之前**触发，且**早于行快照**——所以在这个 handler 里增删菜单项是有效的，这正是"按光标下的东西现拼上下文菜单"的做法。触发后若 `Items.Count = 0` 则什么也不弹（与 LCL 同）。 |
+| `TPopupMenu.OnClose` | `TNotifyEvent` | 弹出体关闭后触发（选中项 / `Esc` / 点到外面都算），同时清掉全局 `ActivePopupMenu`。 |
 
 > `TTyMenuBar` 作为 `TTyCustomControl` 子类，仍暴露**基线事件集**（Tier A 鼠标 / 通用事件 + Tier B 键盘 / 焦点事件）。但对菜单而言，命令响应应挂在**各 `TMenuItem` 的 `OnClick`** 上，而不是菜单栏本身的 `OnClick`。完整基线清单见 [../events.md](../events.md)。
 
@@ -96,7 +103,7 @@ uses tyControls.Menu;
 |------|----------|
 | `:hover` | **菜单栏单元格**：鼠标悬停在该顶层单元格上（`FHotIndex`）。<br>（下拉/弹出的**行**内部用高亮 `FHighlight` 表达"当前行"，映射为下方的 `:active`，不单独用 `:hover`。） |
 | `:active` | **菜单栏单元格**：该单元格的下拉已打开（`FOpenIndex`）。<br>**弹出行**：该行被键盘/鼠标高亮选中（`FHighlight`）。 |
-| `:disabled` | 对应 `TMenuItem.Enabled = False` 的行（`TyBuildMenuRows` 中读取 `mi.Enabled`）。 |
+| `:disabled` | 对应 `TMenuItem.Enabled = False` 的**行**（`TyBuildMenuRows` 中读取 `mi.Enabled`），以及 `Enabled = False` 的**顶层单元格**。禁用**压过** `:hover` / `:active`：禁用的顶层不给悬停高亮，免得那层高亮反过来邀请用户去点一个点不开的东西。 |
 
 ### 5.2 light.tycss 内置规则摘要
 
@@ -148,8 +155,10 @@ TyMenuItem:disabled { color: var(--muted); }                          /* 禁用�
 - **布局度量常量**（逻辑像素，96-PPI 基线，各调用点用 `TTyPainter.Scale` / `MulDiv` 缩放到设备 PPI）：`TyMenuSeparatorHeight = 7`（分隔线槽高）、`TyMenuArrowSlot = 16`（右侧子菜单 ▸ 箭头预留宽）、`TyMenuCheckSlot = 18`（左侧勾选/单选字形预留宽）、`TyMenuShortcutGap = 24`（标题与右对齐快捷键文本间最小间距）、`TyMenuHoverOpenDelay = 350`（子菜单悬停自动展开的毫秒延迟）。这些是**尺寸/间距令牌，不是颜色**——颜色一律来自 `.tycss`。
 - **分隔线：** `TMenuItem.Caption = '-'`（`IsLine`）渲染为一条居中于分隔槽的 1px 主题线，颜色取 `TyMenuItem` 的 `border-color`。
 - **勾选/单选字形：** `TMenuItem.Checked` 为 `True` 时在左槽绘制字形——`RadioItem` 为 `True` 用圆点（`tgRadioDot`），否则用勾号（`tgCheck`），颜色跟随行的 `TextColor`。
+- **可切换项的空勾选框：** `TMenuItem.AutoCheck = True` 但当前 `Checked = False` 的行，在左槽画一个**空方框**（`StrokeBorder`），让用户在点之前就看出这是个开关——否则"视图 &gt; 工具栏"和"文件 &gt; 打开"长得一模一样，非要点过一次才知道。LCL 里对应的是 `ShowAlwaysCheckable`，`AutoCheck` 是它的逐项版本。空框只在没有勾选字形时画，且**优先于图标列**（`ImageIndex`）。
 - **子菜单箭头 / 快捷键：** 有子项（`mi.Count > 0`）的行在右槽绘制 `tgArrowRight` 箭头；否则若 `mi.ShortCut <> 0`，在右槽右对齐绘制 `ShortCutToText(mi.ShortCut)`。（`ShortCutToText(0)` 返回 `'Unknown'`，故仅当 `ShortCut <> 0` 才渲染快捷键文本。）
 - **默认项加粗：** `TMenuItem.Default = True` 的行以 `font-weight: 700`（粗体）渲染。
+- **高亮行的 Hint 发布到 `Application.Hint`：** 高亮移到某行时把该 `TMenuItem.Hint` 写进 `Application.Hint`（状态栏 / 长提示面板据此描述光标下的命令）；高亮移开（索引 `-1`）时**清空**——留着一条已经不在指针下的命令的描述，比什么都不显示更糟。
 - **助记符下划线：** 标题中的 `&` 由 `TyParseMnemonic` 解析（共享设施 `tyControls.Accel`），`&` 从显示文本移除，其后字符在**按住 Alt 时**显示下划线；菜单栏的下划线经 `TyAccelGatePos` 门控（仅 Alt 态显示）。
 - **弹出圆角：** 弹出窗体用与 `TyMenuPopup` 的 `border-radius` 匹配的圆角区域做窗口遮罩（`SetWindowRgn`/`CreateRoundRectRgn`，跨 win32/gtk2/qt）；半径为 0 或非 Windows 时留矩形；Wayland 无法遮罩窗口，改为方角绘制（`ForceSquareSurface`）。
 
@@ -223,8 +232,12 @@ end;
 
 ## 7. 注意事项
 
-- **数据模型是标准 LCL：** 菜单结构完全用原生 `TMainMenu` / `TPopupMenu` + `TMenuItem` 描述——`Caption`、`Enabled`、`Checked`、`RadioItem`、`ShortCut`、`Default`、`Visible`、子项（`Add`）都是标准 LCL 语义。TyControls 只接管**外观**（重绘），不改数据模型。
+- **数据模型是标准 LCL：** 菜单结构完全用原生 `TMainMenu` / `TPopupMenu` + `TMenuItem` 描述——`Caption`、`Enabled`、`Checked`、`RadioItem`、`AutoCheck`、`ShortCut`、`Default`、`Hint`、`RightJustify`、`Visible`、子项（`Add`）都是标准 LCL 语义，且都**真的被读**。TyControls 只接管**外观**（重绘），不改数据模型。
 - **命令挂在 `TMenuItem.OnClick`：** 激活叶子项会调用 `TMenuItem.Click` 触发**该项自己**的 `OnClick`；不要指望菜单栏/弹出菜单类上有汇总的选择事件（它们没有）。
+- **禁用的顶层项打不开：** `Enabled = False` 的顶层项，点击、悬停切换、Alt+助记符三条路都打不开它的下拉（三者都汇到同一个 `OpenTop`，所以判定就写在那里）；它同时按 `:disabled` 绘制，用户看得出来点不动。
+- **没有子项的顶层项是一个命令按钮：** 与原生菜单栏一致，点一个没有子项的顶层项直接触发它的 `OnClick`（先收起已打开的下拉）。这就是"帮助"这类单条命令能直接摆在菜单栏上的做法。
+- **`RightJustify` 让顶层项贴右：** 某个顶层项的 `TMenuItem.RightJustify = True` 时，它贴着菜单栏右边缘排布（经典的右对齐"帮助"/"窗口"菜单）。位置是**从右往左**量出来的——右边缘减去「它自己及其之后所有顶层项」的宽度之和——所以菜单栏拉伸时这一组始终咬着右边缘。**惯例是从要右对齐的那一项起，后面每一项都设 `RightJustify`**：没设的那些仍按左侧打包排布，而右侧会替它们留出空位。
+- **`TTyPopupMenu.PopUp` 走完整的 LCL 弹出协议：** 顺序是——先 `Close` 掉别的 `ActivePopupMenu` → 写 `PopupPoint` → 触发 `OnPopup` → `Items.Count = 0` 则直接返回 → 认领 `ActivePopupMenu`（`Close`/`OnClose` 靠它才够得着）→ `InitiateActions`（action 关联项刷新 `Enabled`/`Caption`/`Checked`）→ **最后**才做行快照并弹出。顺序是重点：快照如果先做，即使 `OnPopup` 触发了，在里面增删的项也进不了这一次弹出。
 - **`Caption = '-'` 即分隔线：** 遵循 LCL 约定，`IsLine` 的项渲染为分隔线（不可选中、不可高亮）。
 - **只渲染可见项：** `TyBuildMenuRows` 跳过 `Visible = False` 的项；菜单栏顶层单元格同样只计可见顶层项（`VisibleTopItem`）。设 `Visible := False` 可动态隐藏项。
 - **`AutoSizeWidth` 受 `Align` 制约：** 仅当 `Align` **不是** `alTop`/`alBottom` 时才收缩到内容宽度——那两种对齐下 LCL 强制拉伸到父宽度，自适应会被覆盖。默认 `False`（声明了 `default False`，值为 `False` 时不写入 `.lfm`/`.dfm`）。

@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-`TTySpinEdit` 是 TyControls 库中的主题化**可内联编辑的整数微调控件**，继承自 `TTyCustomControl`。控件显示一个整数值，右侧有上/下两个小箭头按钮。用户既可以**直接键入数字与前导 `-`**（轻量内联编辑缓冲，无选区/剪贴板），也可以点击箭头按钮、使用上/下方向键、或滚动鼠标滚轮来按 `Increment` 步进改变 `Value`。`Enter` 或失焦时**提交**编辑缓冲（解析 → 夹紧 `[MinValue, MaxValue]` → 写 `Value`）；`Esc` **还原**到当前 `Value`；非法输入（空串或仅 `-`）提交时退回当前 `Value`。值始终被夹紧到 `[MinValue, MaxValue]` 区间，`Value` 真实变化时触发 `OnChange`。
+`TTySpinEdit` 是 TyControls 库中的主题化**可内联编辑的整数微调控件**，继承自 `TTyCustomControl`。控件显示一个整数值，右侧有上/下两个小箭头按钮。用户既可以**直接键入数字与前导 `-`**（轻量内联编辑缓冲，无选区/剪贴板），也可以点击箭头按钮、使用上/下方向键、或滚动鼠标滚轮来按 `Increment` 步进改变 `Value`。`Enter` 或失焦时**提交**编辑缓冲（解析 → 夹紧 `[MinValue, MaxValue]` → 写 `Value`）；`Esc` **还原**到当前 `Value`；非法输入（空串或仅 `-`）提交时退回当前 `Value`。值在**区间非空（`MaxValue > MinValue`）时**被夹紧到 `[MinValue, MaxValue]`，`MaxValue <= MinValue` 表示不限制；`Value` 真实变化时触发 `OnChange`。
 
 ---
 
@@ -29,7 +29,7 @@ uses tyControls.SpinEdit;
 |------|------|--------|------|
 | `MinValue` | `Integer` | `0` | 最小值。赋值时若 `Value < MinValue` 则静默夹紧，触发重绘（不触发 `OnChange`）。 |
 | `MaxValue` | `Integer` | `100` | 最大值。赋值时若 `Value > MaxValue` 则静默夹紧，触发重绘（不触发 `OnChange`）。 |
-| `Value` | `Integer` | `0` | 当前值，范围 `[MinValue, MaxValue]`，赋值时自动夹紧；若值真正变化则触发 `OnChange` 和重绘。 |
+| `Value` | `Integer` | `0` | 当前值。**仅当 `MaxValue > MinValue`（区间非空）时才夹紧到 `[MinValue, MaxValue]`；`MaxValue <= MinValue` 表示"不限制"，任何值原样写入**（与 LCL `spinedit.inc` 的 `GetLimitedValue` 一致）。若值真正变化则触发 `OnChange` 和重绘。 |
 | `Increment` | `Integer` | `1` | 每步步进量。赋值小于 1 时被强制置为 1。 |
 | `ReadOnly` | `Boolean` | `False` | **（API parity 新增）** 为 `True` 时拦截内联文本编辑**与** ± 步进（箭头按钮 / 方向键 / 滚轮）；程序化 `Value :=` 不受限。 |
 | `Alignment` | `TAlignment` | `taLeftJustify` | **（API parity 新增）** 内联文本的水平对齐（左 / 右 / 居中）；光标随对齐偏移（`AlignOffset`）。 |
@@ -84,6 +84,8 @@ function TySpinDownButtonRect(const ALocal: TRect; APPI: Integer): TRect;
 | 失焦（`DoExit`） | 等同 `Enter`：自动提交当前缓冲 |
 
 > **注意：** 当 `Enabled = False` 时，`KeyDown` 不消费按键、`DoMouseWheel` 返回 `False`、`MouseDown` 直接返回——即禁用状态下所有输入都不生效。滚轮处理会先调用 `inherited`（即用户的 `OnMouseWheel`），若用户已消费事件则不再步进。
+>
+> **上表中的"到达 `MinValue`/`MaxValue` 后停止"以及提交时的夹紧，都只在 `MaxValue > MinValue` 时成立**：空区间（`MaxValue <= MinValue`）表示不限制，步进与提交都不再夹紧（见第 8 节第 1 条）。
 
 ---
 
@@ -151,7 +153,7 @@ end;
 
 ## 8. 注意事项
 
-1. **值始终夹紧：** 任何修改 `Value` 的路径（属性赋值、按钮、方向键、滚轮、`Enter`/失焦提交）都通过同一 setter，自动夹紧到 `[MinValue, MaxValue]`。
+1. **值夹紧走同一条路径：** 任何修改 `Value` 的路径（属性赋值、按钮、方向键、滚轮、`Enter`/失焦提交）都通过同一 setter。但**空区间（`MaxValue <= MinValue`）表示"无限制"而非"全部钉到最小值"**：早前无条件夹紧，于是 `MinValue := 0` / `MaxValue := 0`——正是"不设限"的写法——把 `Value` 强按成 0，键入什么都进不去。
 2. **OnChange 防重入：** setter 先夹紧值，若夹紧后与原值相同则不调用 `OnChange`，回调中无需过滤重复值。
 3. **Min/Max 修改时 Value 静默校正：** 修改范围后 `Value` 会被自动校正到新区间，但**不**触发 `OnChange`（仅触发 `Invalidate`）。
 4. **Increment 下限为 1：** 给 `Increment` 赋小于 1 的值会被强制置为 1。

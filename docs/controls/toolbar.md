@@ -44,11 +44,20 @@ uses tyControls.ToolBar, tyControls.Button;
 | `ButtonSpacing` | `Integer` | `2` | 相邻工具项之间的水平间距（换行时也用作行间距）。改值触发 `Relayout`。 |
 | `Indent` | `Integer` | `4` | 首项 / 顶边留白（左、上内缩）。改值触发 `Relayout`。 |
 | `Wrapable` | `Boolean` | `True` | 为 `True` 时，一行放不下的工具项自动折到下一行；`Align in [alTop, alBottom]` 时工具条随行数自动增高。改值触发 `Relayout`。 |
-| `ShowCaptions` | `Boolean` | `False` | **（保留，暂未接线）** 复用 `TTyButton` 的模型下每个子按钮各自持有 caption/image，此属性当前**无任何效果**，仅为将来 LCL 对齐保留。改值触发 `Relayout`。 |
-| `Flat` | `Boolean` | `True` | 为 `True` 时，工具条把每个子 `TTyButton` 的 `StyleClass` 统一改为 `'ghost'`（平面外观）；为 `False` 时改为 `''`。改值触发 `Relayout`。 |
-| `Images` | `TImageList` | `nil` | **（存储但暂未接线）** 图像列表；当前不向子按钮传播（预留 hook）。`Notification` 中随 `opRemove` 置 `nil`。改值触发 `Relayout`。 |
+| `ShowCaptions` | `Boolean` | `False` | 与 LCL 一致：`False`（默认）让工具项**只显示图标**，`True` 才画标题。它下发到每个**能画图标**的子控件（`TTyGlyphButtonBase` 一族：`TTyGlyphButton` / `TTySpeedButton` / `TTyGlyphContainerButton`），走 `AdoptShowCaption`——对已被宿主自己写过 `ShowCaption` 的工具项是空操作。普通 `TTyButton` 没有图标模型，不受影响；**解析不出图标的工具项保留标题**（否则画出来是个空盒子），所以 `False` 这个默认值不会把现有的纯文字工具条抹白。改值触发 `Relayout`。 |
+| `Flat` | `Boolean` | `True` | 为 `True` 时，工具条把子 `TTyButton` 的 `StyleClass` 设为 `'ghost'`（平面外观）——但**只在它还是空串时**；为 `False` 时只把 `'ghost'` 改回 `''`。宿主自己写的 `StyleClass := 'primary'` 会保留下来。改值触发 `Relayout`。 |
+| `Images` | `TTyImageCollection` | `nil` | 工具项的图标来源：**没有自己 `Images` 的子图标按钮由工具条把这个集合借给它**，于是工具项只需设 `ImageName`。已经自带集合的工具项不受影响——工具条只管自己借出去的那一份引用（重新指向或收回）。用 `FreeNotification` 挂钩，集合被释放时连同"借出标记"一起置 `nil`。改值触发 `Relayout`。 |
 | `Align` | `TAlign` | `alTop` | 停靠方式（**默认 `alTop`**，与原生工具条一致）。 |
 | `Anchors` | `TAnchors` | — | 锚点布局（继承）。 |
+
+> **`Images` 是 `TTyImageCollection`，不是 LCL 的 `TImageList`。** 本库所有图标都出自按名字取用的 BGRA
+> 集合（见 [imagecollection.md](imagecollection.md)），没有任何一处从按下标取用的 `TImageList` 渲染——
+> 所以这里放一个 `TImageList` 无论宿主怎么赋值都到不了工具按钮。这正是它从前"存下来什么也不做"的原因。
+>
+> 工具条**借**而不**夺**：`ApplyToolProperties` 只写那些 `Images = nil` 或仍持有工具条上次借出那份集合的
+> 工具项，自带集合的工具项永远不动。它在三个时机跑——两个 setter，以及工具项加入工具条时
+> （`InsertControl`）——**刻意不放在排布过程里**：排布一次 resize 要跑很多遍，那样反复覆写宿主可见的状态，
+> 正是 `Flat` 从前覆写 `StyleClass` 会出事的原因。
 
 ### 3.2 继承的通用成员
 
@@ -105,7 +114,8 @@ TyToolBar, TyToolSeparator {
 - **工具条背景：** 先铺一层 `FillSharpBackdrop`（图片主题下透出照片，纯色主题为 no-op），再在存在 `background` 令牌时用 `S.Background` 直接填充整块——alpha 背景会叠加在照片之上（毛玻璃效果），与 `TTyPanel` 一致。
 - **底部发丝线：** 存在 `border-color` 令牌时，在工具条底部画一条高度为 `Scale(BorderWidth)`（最小 1px）的水平线（`Rect(0, H-bw, W, H)`）；工具条**只有底边一条 hairline**，无四周边框。
 - **分隔线：** `TTyToolSeparator` 同样先铺 backdrop、再（若有）填自身样式的 `background` 与工具条无缝衔接，最后在中央画一条自身 `BorderColor` 的 1px 竖线（上下内缩 `Scale(3)`）。
-- **子按钮 ghost 变体：** 当 `Flat = True`（默认）时，工具条在排布阶段把每个子 `TTyButton.StyleClass` 覆写为 `'ghost'`，使按钮呈平面外观；`Flat = False` 时覆写为 `''`（常规按钮）。**工具条完全接管子按钮的 ghost/非 ghost StyleClass**，不保留子按钮加入前原有的 `StyleClass`（见源码注释）。
+- **子按钮 ghost 变体：** 当 `Flat = True`（默认）时，工具条在排布阶段把 `StyleClass` **为空**的子 `TTyButton` 设为 `'ghost'`，使按钮呈平面外观；`Flat = False` 时把 `'ghost'` 改回 `''`。**宿主自己设的 `StyleClass` 会保留**——从前这里是无条件赋值，于是每次排布都抹掉调用方写的 `StyleClass := 'primary'`，而排布随任何一次尺寸变化触发，样式是在一个说不准的时刻消失的。
+- **工具项图标：** `Images` + `ShowCaptions` 由 `ApplyToolProperties` 下发给子图标按钮（见 [第 3.1 节](#31-ttytoolbar-自有-published-属性)），**不在排布阶段做**。
 
 ---
 
@@ -155,11 +165,12 @@ end;
 ## 7. 注意事项
 
 - **子控件即工具项：** 把 `TTyButton`（及 `TTyToolSeparator`）的 `Parent` 设为工具条即完成停靠；工具条是 `csAcceptsControls` 容器，在 `AlignControls` 里按子控件顺序（仅可见者）逐个排布。子按钮**只需设 `Width`**，高度被 `ButtonHeight` 统一覆盖。
-- **Flat 覆写 StyleClass：** 工具条完全接管子 `TTyButton` 的 `StyleClass`（`Flat=True → 'ghost'`，否则 `''`），**不保留**子按钮加入前的 `StyleClass`。若需自定义按钮变体，此处会被覆盖。
+- **Flat 只动它自己设过的 StyleClass：** `Flat=True` 把**空** `StyleClass` 设为 `'ghost'`，`Flat=False` 把 `'ghost'` 改回 `''`；子按钮上宿主写的其它变体（`'primary'`、`'danger'`…）**会保留**。
 - **命令响应走子按钮：** 工具条自身无 `OnClick` 语义的专有事件；请挂接各子按钮的 `OnClick`（Tier A 基线事件）。
 - **Wrapable 自动增高：** 当 `Align in [alTop, alBottom]` 且 `Wrapable=True` 时，一行放不下的工具项换行，工具条高度按 `Indent*2 + rows*ButtonHeight + (rows-1)*ButtonSpacing` 自动调整——不要在代码里硬设一个与之冲突的 `Height`。
 - **重入守卫：** `AlignControls` 末尾对 `Height` 的赋值会再次触发 `AlignControls`，`FInLayout` 守卫防止无限递归。
-- **ShowCaptions / Images 暂未接线：** 二者已 published 但**当前无效果**——复用 `TTyButton` 的模型下每个子按钮自带 caption/image。它们仅为将来 LCL 对齐保留，可安全忽略。
+- **ShowCaptions 的默认值是 `False`（与 LCL 一致）：** 它只对**能画图标**的工具项（`TTyGlyphButtonBase` 一族）生效，且只把标题换成图标——**解析不出图标的工具项照旧显示标题**，所以给一条纯文字工具条打开这个默认值不会把它抹白。工具项上一旦有人写过 `ShowCaption`，工具条就不再管它。
+- **Images 借给工具项：** 工具条把自己的 `TTyImageCollection` 借给**没有 `Images` 的**子图标按钮，于是工具项只需设 `ImageName`；自带集合的工具项不受影响。工具项**加入工具条之后**才设 `Images` 也有效（`InsertControl` 里也会下发一次）。
 - **无四周边框：** 主题的 `border-color` / `border-width` 只画工具条**底部一条 hairline**，不绘制四周边框；工具条不参与任何伪类状态。
 - **分隔线有独立 typeKey：** `TTyToolSeparator.GetStyleTypeKey` 返回 `'TyToolSeparator'`。内建主题让它与 `TyToolBar` 共写一条规则，所以默认观感不变；但要调竖线的颜色/底色，请写 `TyToolSeparator` 选择器，改 `TyToolBar` 会顺带改掉整条工具条。
 - **DFM 序列化：** `Align` 声明了 `default alTop`，`ButtonHeight`/`ButtonSpacing`/`Indent`/`Wrapable`/`ShowCaptions`/`Flat` 均声明了默认值，等于默认值时不写入 `.lfm`/`.dfm`。

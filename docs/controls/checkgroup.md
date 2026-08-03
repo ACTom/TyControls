@@ -42,7 +42,7 @@ uses tyControls.CheckGroup;
 
 | 成员 | 签名 | 说明 |
 |------|------|------|
-| `Checked[AIndex]` | `property Checked[AIndex: Integer]: Boolean`（**索引属性，可读写**） | 读/写第 `AIndex` 个复选框的勾选状态。**越界读**返回 `False`；**越界写**为安全空操作（不崩溃）。写入会触发对应子控件的 `OnChange`，进而触发 `OnItemChange`。 |
+| `Checked[AIndex]` | `property Checked[AIndex: Integer]: Boolean`（**索引属性，可读写**） | 读/写第 `AIndex` 个复选框的勾选状态。**越界读**返回 `False`；**越界写**为安全空操作（不崩溃）。写入期间对应子控件的 `OnChange` 被临时摘掉，因此**不会触发 `OnItemChange`**（见 [§4 事件](#4-事件)）。 |
 | `Count` | `function Count: Integer` | 子复选框数量（`= Items.Count`）。 |
 | `CheckedCount` | `function CheckedCount: Integer` | 当前处于勾选状态的项数。 |
 
@@ -64,9 +64,11 @@ uses tyControls.CheckGroup;
 
 | 事件 | 类型 | 触发时机 |
 |------|------|----------|
-| `OnItemChange` | `TCheckGroupItemEvent = procedure(Sender: TObject; AIndex: Integer) of object` | 某个复选框的勾选状态**实际改变**时触发，`AIndex` 为该项索引。用户点击、键盘空格、或通过 `Checked[i] :=` 编程改变均会触发；设为相同值不触发（子复选框内部有 early-out 守卫）。 |
+| `OnItemChange` | `TCheckGroupItemEvent = procedure(Sender: TObject; AIndex: Integer) of object` | 某个复选框被**用户**切换（点击、键盘空格）且状态**实际改变**时触发，`AIndex` 为该项索引。设为相同值不触发（子复选框内部有 early-out 守卫）。 |
 
-> **重建期不误触发：** `Items` 变化引发重建时，代码在恢复各项勾选状态**之后**才挂接子控件的 `OnChange`，因此“重建恢复状态”这一步**不会**误触发 `OnItemChange`——只有真正的用户/编程切换才会。
+> **`Checked[i] :=` 不触发：** `OnItemChange` 报告的是"用户做了什么"。程序化赋值也发这个事件的话，两者就无从区分，于是"勾了这个就取消其余"这种最常见的写法会在处理器里递归回自己。写入时代码把子控件的 `OnChange` 临时置 `nil`、赋值、再还原（与 LCL `TCustomCheckGroup` 同样的抑制手法）。
+
+> **重建期不误触发：** `Items` 变化引发重建时，代码在恢复各项勾选状态**之后**才挂接子控件的 `OnChange`，因此“重建恢复状态”这一步同样**不会**误触发 `OnItemChange`。
 
 > 除 `OnItemChange` 外，`TTyCheckGroup` 还暴露继承自 `TTyCustomControl` 的**基线事件集**（Tier A 鼠标 / 通用事件 + Tier B 键盘 / 焦点事件）。完整清单见 [../events.md](../events.md)。
 
