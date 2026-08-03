@@ -131,6 +131,7 @@ uses
   test.shape,
   test.starshape,
   test.arrow,
+  test.parity.shapearrow,
   test.card, test.tag, test.badge,
   test.grid.layout, test.grid, test.grid.streaming,
   test.alert, test.notification, test.empty, test.segmented,

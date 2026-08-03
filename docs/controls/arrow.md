@@ -2,7 +2,10 @@
 
 ## 1. 概述
 
-`TTyArrow` 是 TyControls 的**方向性块状箭头**矢量形状控件，继承自 `TTyGraphicControl`（图形控件，无窗口句柄，不能作为父容器）。它绘制经典的 **7 顶点块状箭头**——一段矩形箭杆在末端展宽成三角箭头，指向上 / 下 / 左 / 右四个方向之一。箭头头部长度（占总长度的比例）与箭杆粗细（占宽度的比例）可分别通过 `HeadRatio` / `ShaftRatio` 调整。
+`TTyArrow` 是 TyControls 的**方向性箭头**矢量形状控件，继承自 `TTyGraphicControl`（图形控件，无窗口句柄，不能作为父容器）。它有两种字形，由 `Shape` 选择：
+
+- **`tasBlock`（默认）**——经典的 **7 顶点块状箭头**：一段矩形箭杆在末端展宽成三角箭头，指向上 / 下 / 左 / 右四个方向之一。箭头头部长度（占总长度的比例）与箭杆粗细（占宽度的比例）可分别通过 `HeadRatio` / `ShaftRatio` 调整。
+- **`tasTriangle`**——LCL `TArrow` 的字形：光秃的 **3 顶点三角形**，顶角由 `ArrowPointerAngle`（度，默认 60 即等边）决定，按该角度拟合进客户区并居中。本库此前画不出这个字形，别的控件也没有一个能画有方向的三角形。
 
 典型用途：流程图 / 引导图中的指向标记、"下一步 / 上一步"装饰箭头、方向指示徽标等。形状用 BGRABitmap 的 `Canvas2D` 抗锯齿矢量路径绘制，跨平台像素一致。
 
@@ -23,7 +26,7 @@
 
 ### 子部件 typeKey
 
-**没有。** 箭头只有一个盒子样式。仍在代码里写死、主题够不着的一处：拐角为固定尖角（`lineJoin = 'miter'`），因此描边一旦加粗，箭尾的倒角会长出尖刺，而主题无从干预。
+**没有。** 箭头只有一个盒子样式。仍在代码里写死、主题够不着的一处：拐角为固定尖角（`lineJoin = 'miter'`），因此描边一旦加粗，箭尾的倒角会长出尖刺，而主题无从干预。`tasTriangle` 用同一套描边设置，所以顶角很锐（接近下限 20°）且边框较粗时，尖端同样会拉出 miter 尖刺。
 
 ```pascal
 uses tyControls.Arrow;
@@ -38,10 +41,14 @@ uses tyControls.Arrow;
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `Direction` | `TTyArrowDirection` | `tadRight` | 箭头指向：`tadRight` / `tadLeft` / `tadUp` / `tadDown`。赋值触发 `Invalidate`。 |
-| `HeadRatio` | `Single` | `0.45` | 三角箭头占**总长度**（沿指向轴的方向）的比例，**夹紧到 0.1..0.9**。越大箭头越长、箭杆越短。赋值触发 `Invalidate`。 |
-| `ShaftRatio` | `Single` | `0.5` | 箭杆粗细占**宽度**（垂直于指向轴的方向）的比例，**夹紧到 0.1..0.9**。越大箭杆越粗。赋值触发 `Invalidate`。 |
+| `Shape` | `TTyArrowShape` | `tasBlock` | 画哪种字形：`tasBlock` = 7 顶点块状箭头（本库观感，**默认不变**）；`tasTriangle` = LCL `TArrow` 的 3 顶点三角形。赋值触发 `Invalidate`。 |
+| `ArrowPointerAngle` | `Integer` | `60` | **仅 `tasTriangle` 生效**：三角形的**顶角**度数，**夹紧到 20..160**。60° 即等边三角形。名字、默认值、上下限均与 LCL `TArrow` 逐字一致。赋值触发 `Invalidate`。 |
+| `HeadRatio` | `Single` | `0.45` | **仅 `tasBlock` 生效**：三角箭头占**总长度**（沿指向轴的方向）的比例，**夹紧到 0.1..0.9**。越大箭头越长、箭杆越短。赋值触发 `Invalidate`。 |
+| `ShaftRatio` | `Single` | `0.5` | **仅 `tasBlock` 生效**：箭杆粗细占**宽度**（垂直于指向轴的方向）的比例，**夹紧到 0.1..0.9**。越大箭杆越粗。赋值触发 `Invalidate`。 |
 
-**枚举：** `TTyArrowDirection = (tadRight, tadLeft, tadUp, tadDown)`。
+**枚举：** `TTyArrowDirection = (tadRight, tadLeft, tadUp, tadDown)`、`TTyArrowShape = (tasBlock, tasTriangle)`。
+
+> 两组比例互不干扰：`HeadRatio` / `ShaftRatio` 只描述块状箭头，`ArrowPointerAngle` 只描述三角形，在另一种字形下各自静默失效。它们都是**几何**而非绘制值，因此与 `HeadRatio` 一样走单元常量 + published 属性，**不走主题令牌**——皮肤给箭头换色，不重新设计它。
 
 ### 继承的通用成员
 
@@ -70,9 +77,21 @@ function TyArrowPolygon(const ARect: TRect; ADir: TTyArrowDirection;
 - `AHeadRatio` / `AShaftRatio` 内部**夹紧到 0.1..0.9**，越界值不会画出超出矩形的顶点。
 - 所有顶点在任意方向、任意（含极端）比例下都保持在 `ARect` 之内。
 
+```pascal
+function TyArrowTrianglePolygon(const ARect: TRect; ADir: TTyArrowDirection;
+  AAngleDeg: Integer): ArrayOfTPointF;
+```
+
+`tasTriangle` 的几何。顶角度数固定了三角形的**底:高 = 2·tan(角/2)**，因此哪条轴会破坏这个比例就把那条轴缩小，再在 `ARect` 里**居中**——与 LCL `CalcTrianglePoints`（`arrow.pp`）同一套拟合。两处刻意的偏离：
+
+- **全程浮点**。LCL 用 `Trunc` 截断成整数，这正是它需要为"角 = 90°"单独打补丁的原因（`arrow.pp` 里那段 `// angle=90: 1pixel shift appears`）；浮点不需要那个特例。
+- **不做 2px 内缩**。LCL 的 `cInnerOffset` / `Dec(FR.Bottom)` 只是为 `TArrow` 的投影阴影腾地方，本控件不画阴影，照抄就是抄一个不存在的需求。
+
+要点：恰好 3 个顶点，同样**从箭尖起**、绕向与 `TyArrowPolygon` 一致（两种字形描边表现相同）；顶点全部落在 `ARect` 内；`AAngleDeg` 在几何层就**夹紧到 20..160**，绕开属性直接调函数也逃不掉。**箭尖落在指向轴的中线上，但未必落在那条边上**——角度比矩形窄时整个三角形居中、短于该边，这是角度拟合的固有结果（LCL 同理）。
+
 ### 绘制流程（`RenderTo`）
 
-`RenderTo(ACanvas, ARect, APPI)` 与库内其它矢量控件一致：创建 `TTyPainter` → `BeginPaint` → 取 `CurrentStyle` → 按（缩放后的）描边宽度内缩一圈（使边框完整落在客户区内）→ 调 `TyArrowPolygon` 得 7 顶点 → 用 `Canvas2D` 的 `beginPath` / `moveTo` / `lineTo` / `closePath` 构建路径 → 先 `fill`（当背景为可见纯色时）再 `stroke`（当边框可见时）→ `EndPaint`。`Paint` 只是 `RenderTo(Canvas, ClientRect, Font.PixelsPerInch)`。
+`RenderTo(ACanvas, ARect, APPI)` 与库内其它矢量控件一致：创建 `TTyPainter` → `BeginPaint` → 取 `CurrentStyle` → 按（缩放后的）描边宽度内缩一圈（使边框完整落在客户区内）→ 按 `Shape` 调 `TyArrowTrianglePolygon`（3 顶点）或 `TyArrowPolygon`（7 顶点）→ 用 `Canvas2D` 的 `beginPath` / `moveTo` / `lineTo` / `closePath` 构建路径 → 先 `fill`（当背景为可见纯色时）再 `stroke`（当边框可见时）→ `EndPaint`。两种字形只在取顶点那一步分叉，其余共用。`Paint` 只是 `RenderTo(Canvas, ClientRect, Font.PixelsPerInch)`。
 
 **颜色（主题令牌驱动，绝不写死）：**
 
@@ -130,13 +149,23 @@ Up.Direction := tadUp;
 Up.HeadRatio := 0.6;    // 更长的箭头
 Up.ShaftRatio := 0.3;   // 更细的箭杆
 Up.StyleOverride := 'background: var(--accent); border-color: var(--accent);';
+
+// LCL TArrow 的三角形字形：一个 45° 的窄尖指示器
+var Tri: TTyArrow;
+Tri := TTyArrow.Create(Self);
+Tri.Parent := Self;
+Tri.SetBounds(160, 20, 40, 40);
+Tri.Shape := tasTriangle;
+Tri.Direction := tadLeft;
+Tri.ArrowPointerAngle := 45;   // 60 = 等边；夹紧到 20..160
 ```
 
 ---
 
 ## 7. 注意事项
 
-- **与 LCL `TArrow` 不可互换：** 同名不同物，而且两个方向的移植都能编译通过、只是看着不对。① **形状**：`TArrow` 画的是三顶点**三角形**，本控件画的是七顶点**块状箭头**（箭杆 + 箭头）；② **默认朝向**：`TArrow.ArrowType` 默认 `atLeft`，本控件默认 `tadRight`——一个没配置过的箭头指的是反方向；③ 属性名是 `Direction`，不是 `ArrowType`。前两条是刻意的（块状箭头才是本库要的观感），记在这里免得留给读者在屏幕上自己发现。
+- **与 LCL `TArrow` 的差异，只剩一条真的。** ① **形状**：`TArrow` 画三顶点**三角形**，本控件默认画七顶点**块状箭头**——但三角形不再够不着，`Shape := tasTriangle` 即可，`ArrowPointerAngle` 连名字带默认值带上下限都与 LCL 一致；② **默认朝向**：`TArrow.ArrowType` 默认 `atLeft`，本控件默认 `tadRight`——一个没配置过的箭头指的是反方向。**这条不改**：翻转默认值会把所有既有窗体上的箭头静默转向，而属性名本来也不叫 `ArrowType`，没人会照名字直接移植；③ 属性名是 `Direction`，不是 `ArrowType`（先发布的名字，改不动了）。
+- **默认字形没有变。** 加三角形是**增量**：`Shape` 默认仍是 `tasBlock`，既有窗体逐像素不变。改默认值才会重画每一个既有箭头，那不是补齐 API，那是回归。
 - **图形控件，非容器：** `TTyArrow` 继承自 `TGraphicControl`，**没有窗口句柄，不能作为父容器**（子控件不能以它为 `Parent`）。
 - **7 顶点纯几何可测：** `TyArrowPolygon` 是纯函数（返回 7 个 `TPointF`），已 headless 单元测试覆盖顶点数、在矩形内、箭尖落在指向边中点、比例夹紧、对称性等（`tests/test.arrow.pas`）。
 - **比例自动夹紧：** `HeadRatio` / `ShaftRatio` 越界（如设 `0` 或 `2.0`）会夹紧到 `0.1..0.9`，不会画出畸形或超框的箭头。

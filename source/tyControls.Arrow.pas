@@ -1,11 +1,16 @@
 unit tyControls.Arrow;
 {$mode objfpc}{$H+}
-{ TTyArrow — a directional block arrow (a themed vector shape).
+{ TTyArrow — a directional arrow (a themed vector shape) in one of two glyphs.
 
-  It draws the classic 7-point block arrow — a rectangular shaft that widens into a
-  triangular head pointing in one of four directions (right / left / up / down). The
-  head length (as a fraction of the total length) and the shaft thickness (as a
-  fraction of the breadth) are adjustable via HeadRatio / ShaftRatio.
+  Shape = tasBlock (the default) draws the classic 7-point block arrow — a rectangular
+  shaft that widens into a triangular head pointing in one of four directions (right /
+  left / up / down). The head length (as a fraction of the total length) and the shaft
+  thickness (as a fraction of the breadth) are adjustable via HeadRatio / ShaftRatio.
+
+  Shape = tasTriangle draws LCL TArrow's glyph instead: a bare 3-point triangle whose
+  apex angle is ArrowPointerAngle degrees, scaled to fit the client rect. That glyph
+  was previously unreachable from this control at any property setting, and nothing
+  else in the library draws a directional triangle.
 
   No new theme token: the control reuses the resolved TyPanel style — the FILL is the
   TyPanel background colour, the BORDER is its border-color at its border-width. An app
@@ -13,38 +18,65 @@ unit tyControls.Arrow;
   (e.g. StyleOverride := 'background: #E11; border-color: #700;'). No colour is ever
   hard-coded in control code.
 
-  The 7 vertices live in the pure, unit-testable free function TyArrowPolygon so the
-  geometry can be asserted headless (vertex count, in-rect containment, the tip landing
-  on the correct edge midpoint, and ratio clamping). RenderTo just fills+strokes it. }
+  The vertices of both glyphs live in pure, unit-testable free functions —
+  TyArrowPolygon (7 points) and TyArrowTrianglePolygon (3 points) — so the geometry can
+  be asserted headless (vertex count, in-rect containment, the tip landing on the
+  correct edge, ratio/angle clamping). RenderTo just fills+strokes whichever it gets. }
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics,
+  Classes, SysUtils, Types, Math, Controls, Graphics,
   BGRABitmap, BGRABitmapTypes, BGRACanvas2D,
   tyControls.Types, tyControls.Painter, tyControls.Base;
 
-type
-  { Which way the arrow points. }
-  { NOT interchangeable with LCL's TArrow, in two ways that no compiler will tell you
-    about, because a form ported either direction compiles and just looks wrong:
+const
+  { Block-arrow proportions. Geometry, not paint: like HeadRatio / ShaftRatio these are
+    unit constants and published properties, NOT theme tokens — a skin recolours an
+    arrow, it does not redesign it. }
+  TyArrowDefHeadRatio  = 0.45;
+  TyArrowDefShaftRatio = 0.5;
+  TyArrowMinRatio      = 0.1;
+  TyArrowMaxRatio      = 0.9;
+  { Triangle apex angle, in degrees. Verbatim from LCL TArrow (arrow.pp): 60 is the
+    equilateral default, 20..160 its cMinAngle/cMaxAngle. }
+  TyArrowDefPointerAngle = 60;
+  TyArrowMinPointerAngle = 20;
+  TyArrowMaxPointerAngle = 160;
 
-      SHAPE.  TArrow draws a three-point TRIANGLE (TTrianglePoints = array[ptA..ptC],
-      arrow.pp). TTyArrow draws a seven-point BLOCK arrow -- a shaft with a head. Same
-      component name, different glyph.
+type
+  { Which way the arrow points.
+
+    ONE divergence from LCL's TArrow survives, and no compiler will tell you about it
+    because a form ported either direction compiles and just looks wrong:
 
       DEFAULT DIRECTION.  TArrow.ArrowType defaults to atLeft (arrow.pp). This defaults
       to tadRight. So an arrow you never configured points the opposite way.
 
-    Both are deliberate -- a block arrow is what this library's look wants -- but they
-    are recorded here rather than left to be discovered on screen. The property is also
-    named Direction, not ArrowType. }
+    It stays. Flipping the default would silently rotate every arrow on every existing
+    form, and the property is not even spelled ArrowType, so nobody ports it by name.
+    Recorded here rather than left to be discovered on screen.
+
+    The other divergence used to be the GLYPH -- see TTyArrowShape, which now reaches
+    TArrow's triangle instead of merely documenting its absence. }
   TTyArrowDirection = (tadRight, tadLeft, tadUp, tadDown);
+
+  { Which glyph the arrow draws.
+
+    tasBlock is the default and stays the default: it is what this library's look wants,
+    and changing it would redraw every arrow on every form already built. tasTriangle is
+    LCL TArrow's glyph (TTrianglePoints = array[ptA..ptC], arrow.pp) -- three points, no
+    shaft, sized by an apex angle -- reachable now for a ported form or a plain pointer. }
+  TTyArrowShape = (tasBlock, tasTriangle);
 
   TTyArrow = class(TTyGraphicControl)
   private
     FDirection: TTyArrowDirection;
+    FShape: TTyArrowShape;
+    FPointerAngle: Integer;
     FHeadRatio: Single;
     FShaftRatio: Single;
     procedure SetDirection(AValue: TTyArrowDirection);
+    procedure SetShape(AValue: TTyArrowShape);
+    procedure SetPointerAngle(AValue: Integer);
     procedure SetHeadRatio(AValue: Single);
     procedure SetShaftRatio(AValue: Single);
   protected
@@ -55,6 +87,15 @@ type
     function GetStyleTypeKey: string; override;
   published
     property Direction: TTyArrowDirection read FDirection write SetDirection default tadRight;
+    { Which of the two glyphs to draw. HeadRatio / ShaftRatio shape the block arrow only;
+      ArrowPointerAngle shapes the triangle only. Each is inert in the other mode. }
+    property Shape: TTyArrowShape read FShape write SetShape default tasBlock;
+    { The triangle's APEX angle in degrees, clamped 20..160 — LCL TArrow's own name,
+      default and limits (arrow.pp: ArrowPointerAngle, cMinAngle, cMaxAngle). Kept
+      spelled exactly as LCL spells it so a ported form's assignment still compiles;
+      Direction is the one name that could not be kept, because it shipped first. }
+    property ArrowPointerAngle: Integer read FPointerAngle write SetPointerAngle
+      default TyArrowDefPointerAngle;
     property HeadRatio: Single read FHeadRatio write SetHeadRatio;
     property ShaftRatio: Single read FShaftRatio write SetShaftRatio;
     property Align;
@@ -76,11 +117,23 @@ type
 function TyArrowPolygon(const ARect: TRect; ADir: TTyArrowDirection;
   AHeadRatio, AShaftRatio: Single): ArrayOfTPointF;
 
-const
-  TyArrowDefHeadRatio  = 0.45;
-  TyArrowDefShaftRatio = 0.5;
-  TyArrowMinRatio      = 0.1;
-  TyArrowMaxRatio      = 0.9;
+{ Pure geometry: the 3 vertices of LCL TArrow's triangle inscribed in ARect, pointing
+  ADir, with an APEX angle of AAngleDeg degrees (clamped 20..160).
+
+  The apex angle fixes the triangle's base:height ratio at 2*tan(angle/2), so the
+  triangle is scaled down on whichever axis would otherwise break that ratio and then
+  CENTRED in ARect — LCL's CalcTrianglePoints (arrow.pp) does the same fit. Two
+  deliberate departures from it: the arithmetic stays in floats (LCL truncates to
+  integers, which is why it needs a special case at exactly 90 degrees), and there is
+  no 2px inner offset (that offset only exists to make room for TArrow's drop shadow,
+  which this control does not draw).
+
+  The result is always exactly 3 TPointF in device px, all inside ARect, wound from the
+  TIP in the same order as TyArrowPolygon's. The tip lies on the pointing axis' centre
+  line but is only ON the pointing edge when the angle happens to fill ARect — an angle
+  narrower than the rect leaves the whole triangle centred and short of that edge. }
+function TyArrowTrianglePolygon(const ARect: TRect; ADir: TTyArrowDirection;
+  AAngleDeg: Integer): ArrayOfTPointF;
 
 implementation
 
@@ -177,10 +230,94 @@ begin
   end;
 end;
 
+function ClampPointerAngle(A: Integer): Integer;
+begin
+  if A < TyArrowMinPointerAngle then Result := TyArrowMinPointerAngle
+  else if A > TyArrowMaxPointerAngle then Result := TyArrowMaxPointerAngle
+  else Result := A;
+end;
+
+function TyArrowTrianglePolygon(const ARect: TRect; ADir: TTyArrowDirection;
+  AAngleDeg: Integer): ArrayOfTPointF;
+var
+  ang: Integer;
+  ratioNeed, ratioThis: Single;
+  w, h, tw, th: Single;
+  midX, midY, L, T, R, B: Single;
+begin
+  Result := nil;
+  SetLength(Result, 3);
+  ang := ClampPointerAngle(AAngleDeg);
+
+  w := ARect.Right - ARect.Left;
+  h := ARect.Bottom - ARect.Top;
+  midX := (ARect.Left + ARect.Right) / 2;
+  midY := (ARect.Top + ARect.Bottom) / 2;
+  if (w <= 0) or (h <= 0) then
+  begin
+    // Degenerate box: collapse to the centre rather than divide by zero. Callers that
+    // paint bail out earlier; this keeps the pure function total.
+    Result[0] := PointF(midX, midY);
+    Result[1] := Result[0];
+    Result[2] := Result[0];
+    Exit;
+  end;
+
+  { base : height for an isosceles triangle of apex angle `ang`. The pointing axis is Y
+    for up/down, so the ratio applies as-is there and INVERTED for left/right. }
+  ratioNeed := 2 * Tan(ang * Pi / 360);
+  if ADir in [tadLeft, tadRight] then ratioNeed := 1 / ratioNeed;
+
+  ratioThis := w / h;
+  tw := w;
+  th := h;
+  if ratioThis >= ratioNeed then
+    tw := h * ratioNeed     // too wide for the angle: shrink across
+  else
+    th := w / ratioNeed;    // too tall for the angle: shrink along
+
+  L := midX - tw / 2;
+  R := L + tw;
+  T := midY - th / 2;
+  B := T + th;
+
+  { Wound from the TIP, then the two base corners in the same rotational order
+    TyArrowPolygon uses (right: upper then lower; left: lower then upper; up: left then
+    right; down: right then left) so both glyphs stroke identically. }
+  case ADir of
+    tadRight:
+      begin
+        Result[0] := PointF(R, midY);
+        Result[1] := PointF(L, T);
+        Result[2] := PointF(L, B);
+      end;
+    tadLeft:
+      begin
+        Result[0] := PointF(L, midY);
+        Result[1] := PointF(R, B);
+        Result[2] := PointF(R, T);
+      end;
+    tadUp:
+      begin
+        Result[0] := PointF(midX, T);
+        Result[1] := PointF(L, B);
+        Result[2] := PointF(R, B);
+      end;
+  else // tadDown
+    begin
+      Result[0] := PointF(midX, B);
+      Result[1] := PointF(R, T);
+      Result[2] := PointF(L, T);
+    end;
+  end;
+end;
+
 constructor TTyArrow.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FDirection := tadRight;
+  FShape := tasBlock;
+  FPointerAngle := TyArrowDefPointerAngle;
   FHeadRatio := TyArrowDefHeadRatio;
   FShaftRatio := TyArrowDefShaftRatio;
   Width := 120;
@@ -199,6 +336,23 @@ procedure TTyArrow.SetDirection(AValue: TTyArrowDirection);
 begin
   if FDirection = AValue then Exit;
   FDirection := AValue;
+  Invalidate;
+end;
+
+procedure TTyArrow.SetShape(AValue: TTyArrowShape);
+begin
+  if FShape = AValue then Exit;
+  FShape := AValue;
+  Invalidate;
+end;
+
+procedure TTyArrow.SetPointerAngle(AValue: Integer);
+begin
+  // Clamp on assignment for the same reason the ratios do: otherwise the property reads
+  // back (and streams to .lfm) an angle the arrow never draws.
+  AValue := ClampPointerAngle(AValue);
+  if FPointerAngle = AValue then Exit;
+  FPointerAngle := AValue;
   Invalidate;
 end;
 
@@ -254,7 +408,10 @@ begin
     if (R.Right - R.Left <= 0) or (R.Bottom - R.Top <= 0) then
       R := Rect(0, 0, w, h);
 
-    pts := TyArrowPolygon(R, FDirection, FHeadRatio, FShaftRatio);
+    if FShape = tasTriangle then
+      pts := TyArrowTrianglePolygon(R, FDirection, FPointerAngle)
+    else
+      pts := TyArrowPolygon(R, FDirection, FHeadRatio, FShaftRatio);
 
     ctx := P.Bitmap.Canvas2D;
     ctx.beginPath;

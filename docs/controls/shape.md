@@ -67,9 +67,24 @@ uses tyControls.Shape;
 
 ---
 
-## 4. 事件
+## 4. 事件与命中测试
 
 TTyShape 暴露 `TTyGraphicControl` 的**基线事件集**(Tier A 鼠标 / 通用事件)。作为纯展示控件,自身不新增任何命令事件。完整清单见 [../events.md](../events.md)。
+
+### 命中测试按**形状**,不按外接矩形
+
+鼠标事件只在**画出来的墨迹**上生效:点圆形四角的空白处,消息会穿透到它背后的控件上。这与 LCL `TShape` 的运行期行为不同——LCL 只在 IDE 设计器里做形状级命中(`CM_MASKHITTEST` 全 Lazarus 只有 `designer/designer.pp:501` 一处发送方),运行期 `TShape` 照样吞掉整个矩形。
+
+| 成员 | 说明 |
+|------|------|
+| `PtInShape(APt: TPoint): Boolean` | `APt` 为**客户区像素**;返回它是否落在形状的填充或描边上。对应 LCL `TShape.PtInShape`,但不做每次调用重绘单色掩码那一套。 |
+| `ShapeGeometry: TTyShapeGeometry` | 下一次绘制将使用的几何(内缩后的外接盒、圆角半径、描边宽度、是否描边、是否退化)。**绘制与命中测试读的是同一条记录**。 |
+| `CM_HITTEST` | 运行期钩子。LCL `TWinControl.ControlAtPos` 用它路由鼠标消息,**非 0 表示命中**;答 0 的控件被跳过,消息落到下层。 |
+| `CM_MASKHITTEST` | 设计期钩子(仅 Lazarus 设计器)。**极性相反:0 才表示"在形状上"**;设计器对 `> 0` 的控件直接跳过。取不到设计器窗体时回落为 0(可选中),与无处理器的 `TControl` 一致。 |
+
+判定是**解析式**的(点在椭圆 / 多边形 / 圆角矩形 / 线段胶囊内),不是渲染掩码:每种 kind 都有闭式解,而绘制路径带抗锯齿——掩码还得挑一个 alpha 阈值。命中范围会按 `描边宽度 / 2` 外扩,因为墨迹本身就比路径宽出半个线宽。
+
+> **`tskLine` 的点击带就是它自己的线宽。** 一条 1px 的对角线,可点区域也只有 1px 宽——这正是"只有看得见的地方才点得到"。要加粗点击带,就加粗主题的 `border-width`,与让它更显眼是同一个旋钮。
 
 ---
 
@@ -128,6 +143,8 @@ Link.Shape := tskLine;
 ## 7. 注意事项
 
 - **纯几何可测:** 顶点型形状(三角形 / 菱形)的顶点由纯函数 `TyShapePolygon(Kind, Rect)` 计算,`tskSquare` / `tskCircle` 的最大居中正方形由 `TyShapeSquareRect(Rect)` 计算;两者均无窗口句柄 / painter 依赖,已 headless 单元测试。矩形 / 圆角矩形 / 椭圆 / 线由 `RenderTo` 直接绘制,对这些 kind `TyShapePolygon` 返回 `[]`。
+- **一份几何,两处使用:** `TyShapeGeometry(Kind, Rect, 描边宽, 圆角半径, 是否有边框)` 是纯函数,返回上表那条记录;`RenderTo` 按它建路径,`TyPointInShape` 按它判命中。**`RenderTo` 自己不再算任何一个数**——两份会分歧的实现,正是控件"在看不见的地方也能点"的由来。守卫测试直接比对渲染出来的墨迹与命中区域(`tests/test.parity.shapearrow.pas`)。
+- **命中测试按像素格中心取点:** `PtInShape(Point(x, y))` 判的是像素**格**的中心 `(x+0.5, y+0.5)`。少了这半格,1px 边框的矩形会丢掉最外一圈像素行 / 列——因为描边是以内缩 `ceil(线宽/2)` 的路径为中心线画的。
 - **Square / Circle 内缩:** 取控件矩形内最大居中正方形,因此在非正方形控件上正方形 / 圆保持不变形。
 - **RoundRect 圆角来自主题:** 圆角半径 = `TyShape` 的 `border-radius`(经 `Scale` 缩放,且不超过较短边的一半);主题半径为 0 时退化为普通矩形。现在这个半径与面板的半径互相独立——改面板圆角不会再连带改圆角矩形节点。
 - **HiDPI:** 线宽与圆角均经 `Painter.Scale` 缩放。
