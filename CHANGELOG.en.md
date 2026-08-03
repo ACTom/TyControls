@@ -324,6 +324,16 @@ error, no log, nothing visible in a screenshot.
   `TTyEdit.Clear`, and the whole `Clear` / `AddItem` / `Count` / `ItemRect` list surface on
   `TTyListBox` and `TTyComboBox`.
 
+- **`TTyShape` claims only the pixels it actually covers.** Circles, ellipses, diamonds and
+  lines used to answer every click inside their **bounding rectangle**, so a control behind
+  a circle could never be reached through the corners. Hit-testing follows the shape now
+  (its border width included), and `PtInShape` is public for hosts that want to ask.
+- **`TTyArrow` gains the triangle arrow** (`Shape := tasTriangle`), with the apex angle on
+  `ArrowPointerAngle` -- LCL's `TArrow` name and its 60° default. This library could only
+  ever draw the block arrow, so the directional triangle a ported form expects was not
+  reachable at all. The block arrow stays the default: changing it would silently rotate
+  every arrow on every existing form.
+
 ### Added -- `OnPaint`
 
 - **Every TTy control has `OnPaint` now.** It fires after the control has finished drawing

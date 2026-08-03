@@ -241,6 +241,14 @@
 - 名称对齐:`TTyCalendar.DateTime`、`TTyMaskEdit.EditMask`、`TTyMemo.Append`、`TTyEdit.Clear`、
   `TTyListBox` 与 `TTyComboBox` 的 `Clear`/`AddItem`/`Count`/`ItemRect` 等一整套列表方法。
 
+- **`TTyShape` 只认它真正盖住的像素了。** 以前圆形/椭圆/菱形/直线都按**整个外框**吃点击,
+  于是圆形四角后面的控件永远点不到。现在按形状本身判定(边框宽度也算在内),
+  另外公开了 `PtInShape` 供宿主自己查。
+- **`TTyArrow` 新增三角形箭头**(`Shape := tasTriangle`),角度由 `ArrowPointerAngle` 控制
+  (与 LCL 的 `TArrow` 同名同默认值 60°)。以前本库只画得出块状箭头,
+  移植过来的窗体想要的那个方向三角形**根本画不出来**。默认仍是块状箭头 ——
+  改默认值会让所有现有窗体上的箭头静默转向。
+
 ### 新增 — `OnPaint`
 
 - **所有 TTy 控件都有 `OnPaint` 了。** 控件画完自己之后触发,交给你的是控件自己的 `Canvas` ——
