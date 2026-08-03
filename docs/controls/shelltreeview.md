@@ -33,12 +33,40 @@ Tree.OnPathChange := @DirChosen;    // 焦点目录变化(对话框据此刷新�
 
 | 成员 | 说明 |
 |---|---|
-| `Directory: string` | 读 = 当前焦点目录(`SelectedPath`);写 = 展开定位并聚焦到该路径(`SelectPath`)。 |
-| `ShowHidden: Boolean` | 是否枚举隐藏目录。默认 `False`。**只置标志**:新值在下次(重)展开时生效;要立即刷新调 `PopulateRoots`。 |
+| `Directory: string` | 读 = 当前焦点目录(`SelectedPath`);写 = 展开定位并聚焦到该路径。**写不到时抛 `ETyShellInvalidPath`**(设计期/流式化时不抛),见下节。 |
+| `ShowHidden: Boolean` | 是否枚举隐藏目录。默认 `False`。**写入即刷新**:立刻按新设置重新枚举已展开的节点(见 `UpdateView`)。 |
 | `OnPathChange` | 焦点目录变化时触发,`SelectedPath` 是新路径。 |
-| `PopulateRoots` | 清空并按 `TyFsRoots` 重铺根节点。 |
+| `PopulateRoots` | 清空并按 `TyFsRoots` 重铺根节点(整棵树重来,焦点也丢)。 |
+| `UpdateView` | 按当前磁盘状态与 `ShowHidden` **重新枚举已展开的节点**,保留展开状态与焦点路径;根节点句柄不变。 |
 | `SelectedPath: string` | 当前焦点目录,无则 `''`。 |
-| `SelectPath(path)` | 从含该路径的根逐级展开、聚焦到目标节点;无根为其前缀或某段不可达时静默返回。 |
+| `SelectPath(path): Boolean` | 从含该路径的根逐级展开、聚焦到目标节点。**返回是否真的落到目标**;失败原因见 `LastPathError`。**不抛异常**。 |
+| `LastPathError: TTyShellPathError` | 上一次路径赋值的结果:`speNone` / `speEmptyPath` / `speNoSuchPath` / `speNoRoot` / `speUnreachable`。 |
+
+## 路径赋值失败是**可观测**的(不再静默)
+
+以前 `SelectPath` 找不到路径就直接返回,`Directory` 还读回**旧**路径 —— 调用方分不清「路径写错了」和
+「路径没错、这棵树就是显示不出来」。现在两条通道各司其职:
+
+| 通道 | 失败时的行为 | 为什么 |
+|---|---|---|
+| `SelectPath(path): Boolean` | 返回 `False`,`LastPathError` 说明原因 | 方法**有返回值**,有返回值就不必用异常;文件对话框解析用户输入的路径是常态,不是异常 |
+| `Directory := path` | 抛 `ETyShellInvalidPath` | 属性写**没有返回通道**,静默 = 不可恢复 |
+
+```pascal
+if not Tree.SelectPath(P) then
+  case Tree.LastPathError of
+    speNoSuchPath:  ShowMessage('目录不存在');
+    speUnreachable: ShowMessage('目录存在,但当前设置下不可见(试试 ShowHidden := True)');
+    speNoRoot:      ShowMessage('该路径不在任何一个已铺的根之下');
+  end;
+```
+
+`speUnreachable` 时焦点**仍然移动** —— 落在能走到的**最深祖先**上,不会把用户丢在原地或空处。
+
+**LCL 对照:** `TCustomShellTreeView` 抛 `EInvalidPath`(`shellctrls.pas:428` 声明;`SetRoot` 在 `:625`、
+`SetPath` 在 `:1549 / :1561 / :1580 / :1604` 抛),并且**设计期不抛**(`:621-624` 注释:「Delphi 会抛,但别把
+IDE 搞崩」)。本控件照抄了这个豁免:`csLoading` / `csDesigning` 下只记 `LastPathError`,不抛 —— 否则 `.lfm`
+里一个过期路径就能让窗体流式化失败。赋 `''` 也不抛:那是「没选」,不是「选失败」。
 
 ## 关键设计
 
@@ -56,8 +84,15 @@ Tree.OnPathChange := @DirChosen;    // 焦点目录变化(对话框据此刷新�
 - **只文件夹,永不文件。** 枚举恒用 `[fotFolders]`(加 `[fotHidden]` 当 `ShowHidden`),从不 `[fotFiles]`。
 - **节点 ↔ 路径。** 节点数据是一个 Integer 索引,指向控件持有的 `FPaths` 路径数组(`NodeDataSize := SizeOf(Integer)`),
   `NodePath(node)` 读回。这是 `TTyTreeView` 数据-按需模式的标准用法。
-- **`ShowHidden` 只置标志、不重建树。** 属性写操作绝不释放消费者(或懒 `SelectPath` 遍历)正持有的节点句柄;
-  且在"唯一可写目录位于隐藏祖先之下"的宿主上,重建会连当前路径一起弄丢。要立即可见刷新,消费者显式调 `PopulateRoots`。
+- **`ShowHidden` 写入即刷新。** 以前是「只置标志」:新值要等到某个节点碰巧被重新展开才生效,看上去就是这个属性
+  坏了。当时的两条顾虑都是真的 —— ①属性写不该释放消费者(或懒 `SelectPath` 遍历)正持有的节点句柄;
+  ②在"当前目录位于隐藏祖先之下"的宿主上,重建会把当前路径弄丢。现在这两条是**被处理掉**而不是被绕开:
+  `UpdateView` 在遍历进行中时**自动推迟**到遍历结束再跑(不会在遍历脚下抽走节点),并且**按路径**恢复焦点 ——
+  目标不可见时退到**能走到的最深祖先**,而不是把焦点丢在已释放的节点上。同一族的 `TTyShellListView.ShowHidden`
+  一直都是写入即重读,树没有理由例外。LCL 也是写入即刷新(`SetObjectTypes` → `UpdateView`,`shellctrls.pas:687`)。
+- **刷新的代价说清楚:`UpdateView` 会重建根节点以下的所有节点。** 这是刷新的定义决定的(子目录集合本来就可能变了),
+  所以它是一个**你主动调用**的方法,不是背地里发生的事;根节点句柄保持不变,折叠中的节点本来就没枚举过、无需刷新。
+  **跨 `UpdateView` / `ShowHidden` 写入持有节点指针 = 悬垂指针**,重新走一次 `SelectPath` 拿新指针。
 - **文件夹/驱动器图标用固定调色板**(内容图标),128px master 降采样。不从主题取色 —— 构造时主题可能还没解析。
 
 ## 消费者

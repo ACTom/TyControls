@@ -20,10 +20,30 @@ type
     RightRule: TRect;     // right rule segment
   end;
 
+const
+  { LeftIndent's "leave it to Alignment" value, and its default.
+
+    LCL's TDividerBevel spells three things with one Integer LeftIndent
+    (dividerbevel.pas:322-333): > 0 = that many pixels in, 0 = hard left,
+    < 0 = centred. It has no way to say "right". Alignment has no way to say
+    "60px in". Neither type contains the other, so TTyDivider carries both —
+    and the tie is broken one way only: a LeftIndent >= 0 is an explicit pixel
+    position and WINS; anything negative means "I am not using this knob, let
+    Alignment place the caption".
+
+    Porting note (the one place the two disagree): TDividerBevel's
+    LeftIndent < 0 means CENTRED, whereas here every negative value means
+    "defer". Write centring as Alignment := taCenter — which is what it says. }
+  TyDividerIndentAuto = -1;
+
 { Pure geometry for a labelled section divider. All inputs/outputs are DEVICE px.
     AClientWidth  — the content-rect width (already inset by padding), device px.
     AClientHeight — the content-rect height, device px (rule is vertically centred).
     ACaptionWidth — measured caption width, device px (0 => no caption).
+    AAlign        — the three-position placement, used only when ALeftIndent < 0.
+    ALeftIndent   — device-px offset of the caption's LEADING edge from the content
+                    rect's left; < 0 (TyDividerIndentAuto) hands placement back to
+                    AAlign. Clamped so the caption never runs past the right edge.
     AGap          — device-px gap between the caption and an adjacent rule segment.
     AMinRule      — minimum device-px length below which a rule segment is dropped
                     (so a caption that fills the width doesn't leave a 1px nub).
@@ -31,13 +51,16 @@ type
   Segments that would be shorter than AMinRule collapse to empty (Right = Left).
   Headless-safe: no control state, no handle — the tests call it directly. }
 function TyDividerLayout(AClientWidth, AClientHeight, ACaptionWidth: Integer;
-  AAlign: TAlignment; AGap, AMinRule, ARuleThick: Integer): TTyDividerLayout;
+  AAlign: TAlignment; ALeftIndent: Integer;
+  AGap, AMinRule, ARuleThick: Integer): TTyDividerLayout;
 
 type
   TTyDivider = class(TTyGraphicControl)
   private
     FAlignment: TAlignment;
+    FLeftIndent: Integer;
     procedure SetAlignment(AValue: TAlignment);
+    procedure SetLeftIndent(AValue: Integer);
     { TTyGraphicControl has no ResolveFontSize helper (that lives on
       TTyCustomControl); mirror TTyLabel and resolve it locally. }
     function ResolveFontSize(const AStyle: TTyStyleSet): Integer;
@@ -62,8 +85,19 @@ type
     { Where the caption sits relative to the rule:
         taLeftJustify  — caption at the left, rule fills the space to its right;
         taRightJustify — mirror (caption at the right, rule to its left);
-        taCenter       — caption centred with a rule segment on each side. }
+        taCenter       — caption centred with a rule segment on each side.
+      Ignored while LeftIndent >= 0. }
     property Alignment: TAlignment read FAlignment write SetAlignment default taLeftJustify;
+    { LOGICAL-pixel offset of the caption's leading edge from the content rect's
+      left, the knob TDividerBevel calls LeftIndent (dividerbevel.pas:80). >= 0
+      overrides Alignment; TyDividerIndentAuto (-1, the default) leaves Alignment
+      in charge — see that constant for the LCL porting note and why the default
+      is "off" rather than LCL's 60 (which would silently re-indent every divider
+      that already exists).
+
+      Logical, not device, px: it is scaled through the painter alongside the gap
+      and rule thickness, so an indent set once looks the same at 96 and 192 dpi. }
+    property LeftIndent: Integer read FLeftIndent write SetLeftIndent default TyDividerIndentAuto;
     property Align;
     property Anchors;
     property StyleClass;
@@ -73,7 +107,8 @@ type
 implementation
 
 function TyDividerLayout(AClientWidth, AClientHeight, ACaptionWidth: Integer;
-  AAlign: TAlignment; AGap, AMinRule, ARuleThick: Integer): TTyDividerLayout;
+  AAlign: TAlignment; ALeftIndent: Integer;
+  AGap, AMinRule, ARuleThick: Integer): TTyDividerLayout;
 var
   ruleTop, ruleBot, capLeft, capRight, lRight, rLeft: Integer;
 begin
@@ -100,6 +135,30 @@ begin
     // No caption: a single full-width rule (returned as RightRule so callers that
     // only look at one segment still see it; LeftRule stays empty).
     Result.RightRule := Rect(0, ruleTop, AClientWidth, ruleBot);
+    Exit;
+  end;
+
+  if ALeftIndent >= 0 then
+  begin
+    // Explicit pixel placement wins over AAlign. Clamp so the caption stays
+    // inside the content rect: an indent past (width - caption) would push the
+    // text off the right edge, and a divider that silently loses its label is
+    // worse than one whose indent quietly stops growing.
+    capLeft := ALeftIndent;
+    if capLeft > AClientWidth - ACaptionWidth then
+      capLeft := AClientWidth - ACaptionWidth;
+    if capLeft < 0 then capLeft := 0;
+    capRight := capLeft + ACaptionWidth;
+    Result.CaptionRect := Rect(capLeft, 0, capRight, AClientHeight);
+    // A rule on each side, each dropped if too short. At ALeftIndent = 0 the
+    // left segment collapses on its own (0 - AGap < AMinRule), which is exactly
+    // taLeftJustify -- the two spellings agree, as they must.
+    lRight := capLeft - AGap;
+    if lRight >= AMinRule then
+      Result.LeftRule := Rect(0, ruleTop, lRight, ruleBot);
+    rLeft := capRight + AGap;
+    if (AClientWidth - rLeft) >= AMinRule then
+      Result.RightRule := Rect(rLeft, ruleTop, AClientWidth, ruleBot);
     Exit;
   end;
 
@@ -142,6 +201,7 @@ constructor TTyDivider.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FAlignment := taLeftJustify;
+  FLeftIndent := TyDividerIndentAuto;
   Width := 150;
   Height := TyDensityHeight(ActiveController, 24);
 end;
@@ -172,13 +232,24 @@ begin
   Invalidate;
 end;
 
+procedure TTyDivider.SetLeftIndent(AValue: Integer);
+begin
+  { Every negative value is the same state ("Alignment decides"), so normalise to
+    the named one -- otherwise -2 and -1 would both work but only one of them
+    would match the published default and get written to the .lfm. }
+  if AValue < 0 then AValue := TyDividerIndentAuto;
+  if FLeftIndent = AValue then Exit;
+  FLeftIndent := AValue;
+  Invalidate;
+end;
+
 procedure TTyDivider.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
   ContentRect: TRect;
   Lay: TTyDividerLayout;
-  fontSize, capW, gap, minRule, ruleThick: Integer;
+  fontSize, capW, gap, minRule, ruleThick, indent: Integer;
   ruleColor: TTyColor;
 
   procedure StrokeSeg(const ASeg: TRect);
@@ -232,9 +303,14 @@ begin
     minRule := P.Scale(4);
     ruleThick := P.Scale(1);
     if ruleThick < 1 then ruleThick := 1;
+    // The sentinel must survive scaling: P.Scale(-1) is not guaranteed to stay
+    // negative, and a rounded-to-0 "auto" would silently become "hard left".
+    if FLeftIndent >= 0 then indent := P.Scale(FLeftIndent)
+    else                     indent := TyDividerIndentAuto;
 
     Lay := TyDividerLayout(ContentRect.Right - ContentRect.Left,
-      ContentRect.Bottom - ContentRect.Top, capW, FAlignment, gap, minRule, ruleThick);
+      ContentRect.Bottom - ContentRect.Top, capW, FAlignment, indent,
+      gap, minRule, ruleThick);
 
     // Offset the layout (content-local) into ContentRect and paint.
     StrokeSeg(Rect(ContentRect.Left + Lay.LeftRule.Left, ContentRect.Top + Lay.LeftRule.Top,

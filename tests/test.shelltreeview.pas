@@ -418,21 +418,31 @@ begin
   AssertTrue('normal subdir a present with ShowHidden on',
     ChildHasBaseName(node, 'a'));
 
-  { --- ShowHidden OFF: re-enumerate the same node's children --- }
+  { --- ShowHidden OFF --- }
+  { This used to be followed by a hand-rolled collapse / SetChildCount(0) /
+    re-stamp nsHasChildren / re-expand dance, because the property write itself
+    did NOTHING and the test had to force the re-enumeration by hand. The write
+    now refreshes (see TTyShellTreeView.UpdateView), so the dance is gone -- and
+    it would be a use-after-free if it stayed: a refresh re-creates every node
+    below the roots, so `node` is dangling the instant this line returns. }
   FTree.ShowHidden := False;
-  { Force a fresh enumeration of THIS node with the new flag. Collapse, drop the
-    cached children, then re-expand. SetChildCount(0) also clears nsHasChildren
-    (a base-tree gotcha the SelectPath template documents), so re-assert it or the
-    re-expand bails before OnExpanding -> PopulateChildren runs. }
-  FTree.Expanded[node] := False;
-  FTree.SetChildCount(node, 0);
-  Include(node^.States, nsHasChildren);
-  FTree.Expanded[node] := True;
 
-  AssertTrue('hidden subdir hsub absent with ShowHidden off',
-    not ChildHasBaseName(node, 'hsub'));
-  AssertTrue('normal subdir a still present with ShowHidden off',
-    ChildHasBaseName(node, 'a'));
+  { Re-walk instead of reusing the pointer. On Windows GetTempDir sits under
+    ...\AppData\..., which is itself hidden, so with the flag off the fixture's
+    own ANCESTOR is filtered out and the walk stops short of it -- the same rule
+    applied one level up, and now a reportable one rather than silence. }
+  if FTree.SelectPath(FRoot) then
+  begin
+    node := FTree.FocusedNode;
+    FTree.Expanded[node] := True;
+    AssertTrue('hidden subdir hsub absent with ShowHidden off',
+      not ChildHasBaseName(node, 'hsub'));
+    AssertTrue('normal subdir a still present with ShowHidden off',
+      ChildHasBaseName(node, 'a'));
+  end
+  else
+    AssertEquals('the fixture is under a hidden ancestor, so it is filtered too',
+      Ord(speUnreachable), Ord(FTree.LastPathError));
 end;
 
 procedure TShellTreeViewTest.TestOnPathChangeFiresOnDirectoryChangeWithNewPath;

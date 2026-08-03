@@ -24,7 +24,8 @@ unit tyControls.ShellTreeView;
 interface
 
 uses
-  Classes, SysUtils, Graphics, Controls, ImgList,
+  Classes, SysUtils, TypInfo, Graphics, Controls, ImgList,
+  LazFileUtils,
   BGRABitmap, BGRABitmapTypes,
   tyControls.TreeView, tyControls.ImageCollection, tyControls.FileSystem;
 
@@ -36,7 +37,39 @@ const
   TyShellTreeFolderGlyph = 0;
   TyShellTreeDriveGlyph  = 1;
 
+  { The ETyShellInvalidPath message. A DEVELOPER diagnostic (you assigned a path
+    this tree cannot show), so it stays English rather than becoming a
+    resourcestring: only tyControls.StrConsts is wired into the runtime's
+    per-unit TranslateUnitResourceStrings call, and the i18n spec already keeps
+    technical errors (the CSS-syntax family) English-only. }
+  TyShellInvalidPathMsg = 'TTyShellTreeView.Directory: cannot select "%s" -- %s';
+
 type
+  { Why a path assignment did not land on its target.
+
+    This exists because the failure used to be UNOBSERVABLE: SelectPath returned
+    nothing and Directory read back the OLD path, so "the path is wrong" and "the
+    path is right and this tree simply has nothing to show" produced byte-identical
+    results. LCL raises a typed EInvalidPath instead (shellctrls.pas:428 declares
+    it; SetRoot:625 and SetPath:1549/1561/1580/1604 raise it) -- catchable, but it
+    carries only a message, so an app that wants to BRANCH on the reason has to
+    parse English. The enum is the branchable half; ETyShellInvalidPath below is
+    the catchable half. }
+  TTyShellPathError = (
+    speNone,          { the target node was reached and focused }
+    speEmptyPath,     { '' or whitespace -- nothing was asked for, nothing happened }
+    speNoSuchPath,    { no such directory on this machine (the typo case) }
+    speNoRoot,        { it exists, but no seeded root is a prefix of it -- e.g.
+                        SelectPath before PopulateRoots, or a drive TyFsRoots
+                        does not enumerate }
+    speUnreachable);  { a root matched but a segment was not enumerable
+                        (permissions, or hidden while ShowHidden is False);
+                        focus was left on the DEEPEST reachable ancestor }
+
+  { Raised by the published Directory setter -- and only by it. A property write
+    has no return channel, so silence there is unrecoverable; SelectPath, which
+    does have one, reports through Boolean + LastPathError and never raises. }
+  ETyShellInvalidPath = class(Exception);
   { ===================================================================
     TTyShellTreeView
     =================================================================== }
@@ -49,6 +82,14 @@ type
     FImages:       TImageList;        { owned; the down-rendered list assigned to Images }
     FSelectedPath: string;           { the focused directory, cached from OnChange }
     FOnPathChange: TNotifyEvent;
+    FLastPathError: TTyShellPathError;
+    { >0 while a tree walk (SelectPath / UpdateView) is holding node pointers.
+      Any refresh requested during that window is queued in FPendingRefresh and
+      applied when the outermost walk unwinds -- refreshing in the middle would
+      free the very nodes the walk is standing on. }
+    FBusy:           Integer;
+    FPendingRefresh: Boolean;
+    FDraining:       Boolean;
 
     { Build the fixed-palette folder + drive glyphs and assign them to Images. }
     procedure BuildGlyphs;
@@ -57,6 +98,10 @@ type
     { Lazy child fill: enumerate NodePath(Node)'s subdirectories (folders only). }
     procedure PopulateChildren(Node: PTyTreeNode);
     procedure SetShowHidden(AValue: Boolean);
+    { The published Directory setter (see ETyShellInvalidPath). }
+    procedure SetDirectory(const AValue: string);
+    { Apply a refresh that was queued while a walk was in progress. }
+    procedure DrainPendingRefresh;
   protected
     { The shell behaviour, as OVERRIDES of the base's virtuals.
 
@@ -82,18 +127,63 @@ type
 
     { Clear the tree and re-seed one node per TyFsRoots place. }
     procedure PopulateRoots;
+    { Re-enumerate the tree against the current filesystem + ShowHidden setting,
+      preserving which nodes are expanded and where the focus sits.
+
+      This is the middle ground between "do nothing" (what ShowHidden used to do)
+      and PopulateRoots (which throws the whole tree away, focus included). Only
+      nodes that were ALREADY expanded are re-read -- a collapsed node was never
+      enumerated, so there is nothing of it to refresh; it will pick up the new
+      setting when it is first expanded, exactly as before. The ROOT nodes keep
+      their handles; every node below them is re-created, which is unavoidable
+      (the point of a refresh is that the child set may have changed) and is why
+      this is a method you call, not something that happens behind your back.
+
+      Focus is restored by PATH, not by pointer, and degrades: if the focused
+      directory is no longer visible (you just turned ShowHidden off while
+      standing under a hidden ancestor) the focus lands on the deepest ancestor
+      that IS still reachable, rather than being stranded on a freed node or lost.
+
+      Called during a walk (from an OnPathChange / OnExpanding handler, say), it
+      queues itself instead and runs when the walk unwinds. LCL's equivalent is
+      TCustomShellTreeView.UpdateView (shellctrls.pas:1250); the name matches
+      TTyShellListView.UpdateView, which already means exactly this. }
+    procedure UpdateView;
     { The focused directory (cached from the last OnChange), or '' when none. }
     function  SelectedPath: string;
     { Reveal APath: expand from the containing root down to the target node and
-      focus it (which caches the path + fires OnPathChange). Silent if no root is
-      a prefix of APath or a segment is unreachable. }
-    procedure SelectPath(const APath: string);
+      focus it (which caches the path + fires OnPathChange).
+
+      Returns True only when the TARGET itself was reached; False otherwise, with
+      LastPathError saying which of the four ways it went wrong. It never raises
+      -- a caller with a return channel does not need an exception, and a file
+      dialog resolving a path the user typed is not an exceptional event. On
+      speUnreachable the focus is still moved, to the deepest reachable ancestor. }
+    function  SelectPath(const APath: string): Boolean;
+    { Why the last SelectPath / Directory write did not reach its target
+      (speNone after a successful one). Read-only: nothing but a path assignment
+      writes it. }
+    property LastPathError: TTyShellPathError read FLastPathError;
   published
     { The selection as a path. Reading returns SelectedPath; writing reveals +
-      focuses it (SelectPath). }
-    property Directory: string read SelectedPath write SelectPath;
-    { Whether hidden directories are enumerated. Flag-only: the new value takes
-      effect on the next (re-)expand; call PopulateRoots for an immediate refresh. }
+      focuses it.
+
+      BREAKING (deliberate): a write that cannot reach its target now raises
+      ETyShellInvalidPath instead of doing nothing. A property write has no
+      return value, so the old no-op left the caller holding a Directory that
+      silently still read back the PREVIOUS path -- indistinguishable from
+      success. Suppressed under csLoading/csDesigning so a stale path in a .lfm
+      cannot break streaming or take the IDE down with it, which is the same
+      carve-out LCL makes (shellctrls.pas:621-624). Assigning '' remains a
+      silent no-op: no path was asked for, so none failed.
+
+      Use SelectPath when you would rather test a Boolean than catch. }
+    property Directory: string read SelectedPath write SetDirectory;
+    { Whether hidden directories are enumerated. Writing it re-enumerates the
+      already-expanded nodes IMMEDIATELY (see UpdateView) -- it used to be
+      flag-only, which meant the setting appeared to do nothing until some node
+      happened to be re-expanded. LCL refreshes on the same kind of write
+      (TCustomShellTreeView.SetObjectTypes -> UpdateView, shellctrls.pas:687). }
     property ShowHidden: Boolean read FShowHidden write SetShowHidden default False;
     { Fires whenever the focused directory changes (SelectedPath is the new path). }
     property OnPathChange: TNotifyEvent read FOnPathChange write FOnPathChange;
@@ -370,7 +460,7 @@ begin
   Result := FSelectedPath;
 end;
 
-procedure TTyShellTreeView.SelectPath(const APath: string);
+function TTyShellTreeView.SelectPath(const APath: string): Boolean;
 
   { True when ABase is ADir itself or a parent directory of it (case-insensitive,
     component-aware so 'C:\Us' is not a prefix of 'C:\Users'). }
@@ -386,47 +476,231 @@ var
   target, cur: string;
   node, child, match: PTyTreeNode;
 begin
+  Result := False;
+  FLastPathError := speEmptyPath;
   target := ExcludeTrailingPathDelimiter(Trim(APath));
   if target = '' then Exit;
 
-  { Find the root node that contains the target. }
-  match := nil;
-  node := GetFirst;
-  while node <> nil do
+  { Separate "there is no such directory" from "there is, but this tree cannot
+    walk to it" BEFORE touching the tree. They need different fixes -- one is a
+    typo, the other is a ShowHidden/permissions problem -- and reporting a single
+    undifferentiated failure for both is barely better than the old silence. }
+  { AppendPathDelim, not the bare target: ExcludeTrailingPathDelimiter turns a
+    Windows drive root 'C:\' into 'C:', which names the process's CURRENT
+    directory on that drive rather than its root, and probing that would reject a
+    perfectly good drive. }
+  if not DirectoryExistsUTF8(AppendPathDelim(target)) then
   begin
-    if IsSelfOrAncestor(ExcludeTrailingPathDelimiter(NodePath(node)), target) then
-    begin
-      match := node;
-      Break;
-    end;
-    node := GetNextSibling(node);
+    FLastPathError := speNoSuchPath;
+    Exit;
   end;
-  if match = nil then Exit;   { no root is a prefix -- silent }
 
-  { Descend segment by segment: expand (lazily populates children) then pick the
-    child that still contains the target. Stop at the target or deepest reachable. }
-  node := match;
-  while not SameFileName(ExcludeTrailingPathDelimiter(NodePath(node)), target) do
-  begin
-    Expanded[node] := True;
+  Inc(FBusy);   { we are about to hold node pointers across expands }
+  try
+    { Find the root node that contains the target. }
     match := nil;
-    child := GetFirstChild(node);
-    while child <> nil do
+    node := GetFirst;
+    while node <> nil do
     begin
-      cur := ExcludeTrailingPathDelimiter(NodePath(child));
-      if IsSelfOrAncestor(cur, target) then
+      if IsSelfOrAncestor(ExcludeTrailingPathDelimiter(NodePath(node)), target) then
       begin
-        match := child;
+        match := node;
         Break;
       end;
-      child := GetNextSibling(child);
+      node := GetNextSibling(node);
     end;
-    if match = nil then Break;   { a segment is missing (permissions / case) }
+    if match = nil then
+    begin
+      FLastPathError := speNoRoot;
+      Exit;
+    end;
+
+    { Descend segment by segment: expand (lazily populates children) then pick the
+      child that still contains the target. Stop at the target or deepest reachable. }
     node := match;
+    while not SameFileName(ExcludeTrailingPathDelimiter(NodePath(node)), target) do
+    begin
+      Expanded[node] := True;
+      match := nil;
+      child := GetFirstChild(node);
+      while child <> nil do
+      begin
+        cur := ExcludeTrailingPathDelimiter(NodePath(child));
+        if IsSelfOrAncestor(cur, target) then
+        begin
+          match := child;
+          Break;
+        end;
+        child := GetNextSibling(child);
+      end;
+      if match = nil then Break;   { a segment is missing (permissions / case) }
+      node := match;
+    end;
+
+    FocusedNode := node;    { fires OnChange -> TreeChange caches path + OnPathChange }
+    ScrollIntoView(node);   { FocusedNode does not scroll on its own }
+
+    { Landing on an ancestor is still a FAILURE to select what was asked for --
+      the focus moved, so the caller is not left nowhere, but Directory would
+      read back something other than what was written. Say so. }
+    if SameFileName(ExcludeTrailingPathDelimiter(NodePath(node)), target) then
+    begin
+      FLastPathError := speNone;
+      Result := True;
+    end
+    else
+      FLastPathError := speUnreachable;
+  finally
+    Dec(FBusy);
+    DrainPendingRefresh;
+  end;
+end;
+
+procedure TTyShellTreeView.UpdateView;
+var
+  keep: array of string;   { paths of the nodes that were expanded, pre-order }
+  focus: string;
+  node: PTyTreeNode;
+
+  { Collect the expanded paths of ANode and its siblings' subtrees. Expansion is
+    remembered as a PATH, not a pointer: every one of those pointers is about to
+    be freed. }
+  procedure Remember(ANode: PTyTreeNode);
+  var
+    n: Integer;
+  begin
+    while ANode <> nil do
+    begin
+      if nsExpanded in ANode^.States then
+      begin
+        n := Length(keep);
+        SetLength(keep, n + 1);
+        keep[n] := ExcludeTrailingPathDelimiter(NodePath(ANode));
+        Remember(GetFirstChild(ANode));
+      end;
+      ANode := GetNextSibling(ANode);
+    end;
   end;
 
-  FocusedNode := node;    { fires OnChange -> TreeChange caches path + OnPathChange }
-  ScrollIntoView(node);   { FocusedNode does not scroll on its own }
+  function WasExpanded(const APath: string): Boolean;
+  var
+    i: Integer;
+  begin
+    for i := 0 to High(keep) do
+      if SameFileName(keep[i], APath) then Exit(True);
+    Result := False;
+  end;
+
+  { Drop a root's cached subtree so the next expand re-reads it from disk. }
+  procedure ResetRoot(ANode: PTyTreeNode);
+  begin
+    if ANode^.ChildCount = 0 then Exit;   { never enumerated -- nothing cached }
+    Expanded[ANode] := False;
+    SetChildCount(ANode, 0);
+    { SetChildCount(_, 0) also clears nsHasChildren, and SetExpanded bails on a
+      node that does not carry it -- so re-stamp the arrow from the same cheap
+      probe DoInitNode uses, or the re-expand below silently does nothing at all
+      and every previously-expanded node comes back collapsed and empty. }
+    if TyFsHasSubdir(NodePath(ANode)) then
+      Include(ANode^.States, nsHasChildren)
+    else
+      Exclude(ANode^.States, nsHasChildren);
+  end;
+
+  { FPaths is append-only, so without this every refresh would leak the whole
+    previous child set into it. The surviving root nodes are the only holders of
+    an index now; re-seed the array from them and re-stamp their node data. }
+  procedure CompactPaths;
+  var
+    kept: array of string;
+    n: Integer;
+    r: PTyTreeNode;
+  begin
+    SetLength(kept, 0);
+    r := GetFirst;
+    while r <> nil do
+    begin
+      n := Length(kept);
+      SetLength(kept, n + 1);
+      kept[n] := NodePath(r);          { read the OLD index before overwriting it }
+      PInteger(GetNodeData(r))^ := n;
+      r := GetNextSibling(r);
+    end;
+    FPaths := kept;
+  end;
+
+  { Re-expand what was expanded. Each expand runs the normal lazy path, so the
+    children come back enumerated with the CURRENT ShowHidden setting. }
+  procedure ReExpand(ANode: PTyTreeNode);
+  begin
+    while ANode <> nil do
+    begin
+      if WasExpanded(ExcludeTrailingPathDelimiter(NodePath(ANode))) then
+      begin
+        Expanded[ANode] := True;
+        ReExpand(GetFirstChild(ANode));
+      end;
+      ANode := GetNextSibling(ANode);
+    end;
+  end;
+
+begin
+  if FBusy > 0 then
+  begin
+    { A walk is holding node pointers. Refreshing now would free them under it. }
+    FPendingRefresh := True;
+    Exit;
+  end;
+
+  Inc(FBusy);
+  try
+    focus := FSelectedPath;
+    SetLength(keep, 0);
+    Remember(GetFirst);
+
+    node := GetFirst;
+    while node <> nil do
+    begin
+      ResetRoot(node);
+      node := GetNextSibling(node);
+    end;
+    CompactPaths;
+
+    ReExpand(GetFirst);
+
+    { Restore the focus by path. DeleteNode already nulled FFocusedNode when it
+      freed the old node, but it does it by assigning the FIELD -- no OnChange,
+      so FSelectedPath still holds the pre-refresh string. }
+    if focus <> '' then
+      SelectPath(focus);
+    if (FocusedNode = nil) and (FSelectedPath <> '') then
+    begin
+      { The old directory is gone from disk entirely. Do not keep reporting it:
+        SelectedPath must never name a directory the tree is not standing on. }
+      FSelectedPath := '';
+      if Assigned(FOnPathChange) then
+        FOnPathChange(Self);
+    end;
+  finally
+    Dec(FBusy);
+    DrainPendingRefresh;
+  end;
+end;
+
+procedure TTyShellTreeView.DrainPendingRefresh;
+begin
+  if (FBusy > 0) or FDraining then Exit;   { an outer walk still owns the tree }
+  if not FPendingRefresh then Exit;
+  FDraining := True;
+  try
+    FPendingRefresh := False;
+    UpdateView;
+  finally
+    { FDraining bounds this to ONE deferred refresh per walk. A handler that
+      re-requests a refresh from inside the refresh it caused would otherwise
+      recurse without end; the re-request stays queued for the next walk. }
+    FDraining := False;
+  end;
 end;
 
 { ---------------------------------------------------------------------------
@@ -437,12 +711,31 @@ procedure TTyShellTreeView.SetShowHidden(AValue: Boolean);
 begin
   if FShowHidden = AValue then Exit;
   FShowHidden := AValue;
-  { Flag-only, deliberately: the new setting takes effect the next time a node is
-    (re-)expanded and PopulateChildren enumerates. We do NOT rebuild the tree here
-    -- a property write must never free node handles a consumer (or a lazy re-walk
-    like SelectPath) is holding, and on a host whose only writable tree sits under
-    a hidden ancestor, a rebuild-on-toggle would also strand the current path.
-    A consumer that wants an immediate visible refresh calls PopulateRoots. }
+  { Refresh NOW. This used to set the flag and stop, on the grounds that a
+    property write must not free node handles a consumer is holding, and that on
+    a host whose current directory sits under a hidden ancestor a rebuild would
+    strand that path. Both hazards are real and both are handled rather than
+    avoided: UpdateView defers itself while a walk is in progress (FBusy), and it
+    restores the focus by path, degrading to the deepest still-reachable ancestor
+    instead of stranding it. What is NOT defensible is the visible result of
+    doing nothing -- the setting appeared broken until some unrelated re-expand
+    happened to apply it, and TTyShellListView.ShowHidden, the sibling control in
+    the same family, has always re-read on the write. }
+  UpdateView;
+end;
+
+procedure TTyShellTreeView.SetDirectory(const AValue: string);
+begin
+  if SelectPath(AValue) then Exit;
+  { '' is not a failed selection, it is an absent one. }
+  if FLastPathError in [speNone, speEmptyPath] then Exit;
+  { Streaming a stale .lfm path, or typing one into the object inspector, must
+    not break form loading or take the IDE down -- the same carve-out LCL makes
+    at shellctrls.pas:621. LastPathError still records what happened, so a
+    designer-time caller is not blind either. }
+  if ([csLoading, csDesigning] * ComponentState) <> [] then Exit;
+  raise ETyShellInvalidPath.CreateFmt(TyShellInvalidPathMsg,
+    [AValue, GetEnumName(TypeInfo(TTyShellPathError), Ord(FLastPathError))]);
 end;
 
 initialization

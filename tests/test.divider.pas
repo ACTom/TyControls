@@ -62,8 +62,9 @@ procedure TTyDividerLayoutTest.TestLeftJustify;
 var
   L: TTyDividerLayout;
 begin
-  // Width 200, caption 40, gap 6, minRule 4, thick 1.
-  L := TyDividerLayout(200, 24, 40, taLeftJustify, 6, 4, 1);
+  // Width 200, caption 40, gap 6, minRule 4, thick 1. TyDividerIndentAuto = the
+  // caption is placed by Alignment, which is what every case below exercises.
+  L := TyDividerLayout(200, 24, 40, taLeftJustify, TyDividerIndentAuto, 6, 4, 1);
   // Caption hugs the left, starting at x=0.
   AssertEquals('caption left = 0', 0, L.CaptionRect.Left);
   AssertEquals('caption right = 40', 40, L.CaptionRect.Right);
@@ -78,7 +79,7 @@ procedure TTyDividerLayoutTest.TestRightJustify;
 var
   L: TTyDividerLayout;
 begin
-  L := TyDividerLayout(200, 24, 40, taRightJustify, 6, 4, 1);
+  L := TyDividerLayout(200, 24, 40, taRightJustify, TyDividerIndentAuto, 6, 4, 1);
   // Caption hugs the right edge.
   AssertEquals('caption right = width', 200, L.CaptionRect.Right);
   AssertEquals('caption left = width - capW', 160, L.CaptionRect.Left);
@@ -92,7 +93,7 @@ procedure TTyDividerLayoutTest.TestCenterHasTwoRules;
 var
   L: TTyDividerLayout;
 begin
-  L := TyDividerLayout(200, 24, 40, taCenter, 6, 4, 1);
+  L := TyDividerLayout(200, 24, 40, taCenter, TyDividerIndentAuto, 6, 4, 1);
   // Caption centred: (200-40)/2 = 80 .. 120.
   AssertEquals('caption centred left', 80, L.CaptionRect.Left);
   AssertEquals('caption centred right', 120, L.CaptionRect.Right);
@@ -110,7 +111,7 @@ var
   L: TTyDividerLayout;
 begin
   // capW = 0 => a single full-width rule; caption empty.
-  L := TyDividerLayout(200, 24, 0, taCenter, 6, 4, 1);
+  L := TyDividerLayout(200, 24, 0, taCenter, TyDividerIndentAuto, 6, 4, 1);
   AssertEquals('no caption (empty rect)', 0, L.CaptionRect.Right - L.CaptionRect.Left);
   AssertEquals('rule spans full width (left 0)', 0, L.RightRule.Left);
   AssertEquals('rule spans full width (right 200)', 200, L.RightRule.Right);
@@ -121,7 +122,7 @@ var
   L: TTyDividerLayout;
 begin
   // Height 24, thick 4 => rule band top = (24-4)/2 = 10, bottom = 14.
-  L := TyDividerLayout(200, 24, 40, taLeftJustify, 6, 4, 4);
+  L := TyDividerLayout(200, 24, 40, taLeftJustify, TyDividerIndentAuto, 6, 4, 4);
   AssertEquals('rule band top centred', 10, L.RightRule.Top);
   AssertEquals('rule band bottom', 14, L.RightRule.Bottom);
 end;
@@ -131,7 +132,7 @@ var
   L: TTyDividerLayout;
 begin
   // Caption 196 of 200 leaves only 4 (< gap+minRule) so the rule collapses.
-  L := TyDividerLayout(200, 24, 196, taLeftJustify, 6, 4, 1);
+  L := TyDividerLayout(200, 24, 196, taLeftJustify, TyDividerIndentAuto, 6, 4, 1);
   AssertEquals('caption fills nearly all width', 196, L.CaptionRect.Right);
   AssertEquals('right rule dropped (too short)', 0, L.RightRule.Right - L.RightRule.Left);
 end;
@@ -141,7 +142,7 @@ var
   L: TTyDividerLayout;
 begin
   // Caption wider than the whole width clamps to the width; no rule fits.
-  L := TyDividerLayout(100, 24, 300, taLeftJustify, 6, 4, 1);
+  L := TyDividerLayout(100, 24, 300, taLeftJustify, TyDividerIndentAuto, 6, 4, 1);
   AssertEquals('caption clamped to width', 100, L.CaptionRect.Right);
   AssertEquals('no rule when caption fills all', 0, L.RightRule.Right - L.RightRule.Left);
 end;
@@ -150,7 +151,7 @@ procedure TTyDividerLayoutTest.TestZeroWidthEmpty;
 var
   L: TTyDividerLayout;
 begin
-  L := TyDividerLayout(0, 24, 40, taCenter, 6, 4, 1);
+  L := TyDividerLayout(0, 24, 40, taCenter, TyDividerIndentAuto, 6, 4, 1);
   AssertEquals('no caption at zero width', 0, L.CaptionRect.Right - L.CaptionRect.Left);
   AssertEquals('no left rule at zero width', 0, L.LeftRule.Right - L.LeftRule.Left);
   AssertEquals('no right rule at zero width', 0, L.RightRule.Right - L.RightRule.Left);
@@ -161,7 +162,7 @@ var
   L: TTyDividerLayout;
 begin
   // The rule must not touch the caption: right-rule left = capRight + gap.
-  L := TyDividerLayout(200, 24, 40, taLeftJustify, 10, 4, 1);
+  L := TyDividerLayout(200, 24, 40, taLeftJustify, TyDividerIndentAuto, 10, 4, 1);
   AssertEquals('gap of 10 between caption(40) and rule', 50, L.RightRule.Left);
 end;
 
