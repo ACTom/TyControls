@@ -5841,11 +5841,17 @@ begin
   G.RowCount := 4;
   c := TTyGridColumn(G.Header.Columns.Items[0]);
   c.EditorKind := gekMask;
-  c.EditMask := '000-0000';
+  { 原来写的是 '000-0000' —— 那是 LCL/Delphi 的掩码码,在 TTyMaskEdit 的语言里
+    一个可编辑槽都没有,整列的掩码编辑器其实是死的,而这条测试照样是绿的。
+    TTyMaskEdit.Mask 现在会直接拒掉这种掩码;这里改成本库的写法。 }
+  c.EditMask := '###-####';
   G.Cells[0, 1] := '021-1234';
 
   AssertTrue('进入掩码编辑', G.BeginEdit(0, 1));
-  AssertEquals('掩码取自列', '000-0000', G.MaskOf);
+  AssertEquals('掩码取自列', '###-####', G.MaskOf);
+  { 掩码是活的:单元格原值合规,原样进编辑器且判定为填满。 }
+  AssertEquals('单元格值经掩码进编辑器', '021-1234', G.MaskEditor.Text);
+  AssertTrue('所有槽已填满', G.MaskEditor.IsComplete);
   G.EndEdit(False);
 end;
 
