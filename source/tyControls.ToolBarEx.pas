@@ -225,8 +225,20 @@ begin
     begin
       if list[i] is TTyButton then
       begin
-        if Flat then TTyButton(list[i]).StyleClass := 'ghost'
-        else TTyButton(list[i]).StyleClass := '';
+        { Only manage a class the bar itself put there -- the same rule TTyToolBar's
+          ApplyToButton follows. Assigning unconditionally (which is what this did) wiped
+          a caller's StyleClass := 'primary' on every relayout, and a relayout runs on any
+          metric change, so the styling vanished at an unpredictable moment. The base was
+          fixed for this and the Ex subclass, which overrides AlignControls and never calls
+          ApplyToButton, kept the old line. }
+        if Flat then
+        begin
+          if TTyButton(list[i]).StyleClass = '' then
+            TTyButton(list[i]).StyleClass := 'ghost';
+        end
+        else
+          if TTyButton(list[i]).StyleClass = 'ghost' then
+            TTyButton(list[i]).StyleClass := '';
       end;
       widths[i] := list[i].Width;
     end;

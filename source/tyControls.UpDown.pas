@@ -126,8 +126,9 @@ begin
   begin
     { Carry the overshoot around, do not discard it. Snapping straight to the opposite
       bound means a step of more than 1 loses whatever was left over: with Min=0, Max=10
-      and Increment=4, stepping up from 9 gave 0 instead of 3, so a wrapping up-down
-      quietly stopped being an adder and became a reset. LCL carries the remainder. }
+      and Increment=4, stepping up from 9 lands on 13, which is 2 past Max -- so the
+      answer is 2, not 0. Snapping returned Min and threw the remainder away, which
+      quietly turned a wrapping up-down from an adder into a reset. LCL carries it. }
     if Result > AMax then
       Result := AMin + ((Result - AMax - 1) mod (AMax - AMin + 1))
     else if Result < AMin then

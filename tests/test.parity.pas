@@ -23,6 +23,7 @@ uses
   tyControls.StrConsts,
   tyControls.PageControl, tyControls.ColorListBox, tyControls.RadioGroup,
   tyControls.ScrollBox, tyControls.ScrollPanel, tyControls.ImageCollection,
+  tyControls.ToolBarEx,
   BGRABitmap, BGRABitmapTypes;
 
 type
@@ -70,6 +71,20 @@ type
     function ProbeHost: TWinControl;
   end;
 
+  { CompareItems is protected -- and it is the ONLY place OnCompare is raised, so it is
+    exactly what has to be driven to prove the slot is reachable. }
+  { AlignControls is protected; TTyToolBarEx overrides it and never calls ApplyToButton,
+    which is exactly how it kept the old unconditional assignment after the base was fixed. }
+  TToolBarExProbe = class(TTyToolBarEx)
+  public
+    procedure ProbeAlign;
+  end;
+
+  TShellListProbe = class(TTyShellListView)
+  public
+    function ProbeCompare(A, B: Integer): Integer;
+  end;
+
   TShellTreeProbe = class(TTyShellTreeView)
   public
     { GetNodeSearchText is protected -- it is the main-column text obtained exactly the
@@ -98,6 +113,8 @@ type
     FGetTextCalls: Integer;
     FColourChanges: Integer;
     procedure CountColourChange(Sender: TObject);
+    procedure CountCompare(Sender: TObject; AIndex1, AIndex2, AColumn: Integer;
+      var ACompare: Integer);
     procedure CountTopClick(Sender: TObject);
     procedure CountGetText(Sender: TTyTreeView; Node: PTyTreeNode; var AText: string);
     procedure CountItemChange(Sender: TObject; AIndex: Integer);
@@ -184,6 +201,8 @@ type
     procedure ScrollPanelAutoPanIsNotCalledAutoScroll;
     procedure ShellFileSizeUnitsAreTranslatable;
     procedure GhostedDrawFadesWithoutRecolouring;
+    procedure ShellListOnCompareIsReachable;
+    procedure ToolBarExAlsoKeepsACallersStyleClass;
   end;
 
 implementation
@@ -231,6 +250,19 @@ end;
 function TScrollBoxProbe.ProbeHost: TWinControl;
 begin
   Result := ContentHost;
+end;
+
+procedure TToolBarExProbe.ProbeAlign;
+var
+  R: TRect;
+begin
+  R := ClientRect;
+  AlignControls(nil, R);
+end;
+
+function TShellListProbe.ProbeCompare(A, B: Integer): Integer;
+begin
+  Result := CompareItems(A, B);
 end;
 
 function TShellTreeProbe.ProbeText(Node: PTyTreeNode): string;
@@ -1320,6 +1352,13 @@ begin
   Inc(FColourChanges);
 end;
 
+procedure TParityTest.CountCompare(Sender: TObject; AIndex1, AIndex2, AColumn: Integer;
+  var ACompare: Integer);
+begin
+  Inc(FItemEvents);
+  ACompare := 0;
+end;
+
 { Snapping straight to the opposite bound discards the overshoot, so a step bigger than 1
   turned a wrapping up-down from an adder into a reset. }
 procedure TParityTest.UpDownWrapCarriesTheOvershoot;
@@ -1565,6 +1604,54 @@ begin
     AssertEquals('', before.blue, after.blue);
   finally
     b.Free;
+  end;
+end;
+
+{ Taking OnCompare back from the shell list's constructor was only half the job: the
+  CompareItems override never called inherited, and that override is the ONLY place the
+  event is raised. So the slot went from "claimed by the library" to "published,
+  assignable, and unreachable" -- the same defect one level down. A documentation sweep
+  found it by reading the code rather than the report that claimed it was fixed. }
+procedure TParityTest.ShellListOnCompareIsReachable;
+var
+  L: TShellListProbe;
+begin
+  L := TShellListProbe.Create(nil);
+  try
+    AssertTrue('the slot is the app''s', L.OnCompare = nil);
+    { Drive CompareItems directly rather than sorting a directory: sorting needs items,
+      and an empty list performs no comparisons at all -- the assertion would then pass by
+      measuring "no handler needed" instead of "handler reached". }
+    FItemEvents := 0;
+    L.ProbeCompare(0, 1);
+    AssertEquals('with no handler the shell ordering runs alone', 0, FItemEvents);
+    L.OnCompare := @CountCompare;
+    L.ProbeCompare(0, 1);
+    AssertTrue('and an assigned handler is actually consulted', FItemEvents > 0);
+  finally
+    L.Free;
+  end;
+end;
+
+{ The base was fixed to manage only a class it put there itself; TTyToolBarEx overrides
+  AlignControls, never calls ApplyToButton, and kept the old unconditional assignment -- so
+  a caller's StyleClass survived on a plain toolbar and was wiped on the Ex one. A fix that
+  lands on a base class and not its override is half a fix. }
+procedure TParityTest.ToolBarExAlsoKeepsACallersStyleClass;
+var
+  T: TToolBarExProbe;
+  B: TTyButton;
+begin
+  T := TToolBarExProbe.Create(nil);
+  try
+    T.SetBounds(0, 0, 400, 30);
+    T.Flat := True;
+    B := TTyButton.Create(T); B.Parent := T;
+    B.StyleClass := 'primary';
+    T.ProbeAlign;
+    AssertEquals('the Ex bar wiped a class it did not put there', 'primary', B.StyleClass);
+  finally
+    T.Free;
   end;
 end;
 

@@ -505,6 +505,12 @@ end;
 { Sort on the RAW values, never the display strings (the whole point of the adapter). }
 function TTyShellListView.CompareItems(AItemA, AItemB: Integer): Integer;
 begin
+  { An application handler wins: it is the caller's ordering, and the whole point of
+    taking the event slot back from the constructor was that the app owns it. Without
+    this the slot was published, assignable, and unreachable -- the exact defect the
+    override was meant to remove, reintroduced one level down. }
+  if Assigned(OnCompare) then
+    Exit(inherited CompareItems(AItemA, AItemB));
   Result := 0;
   ShellCompare(AItemA, AItemB, SortColumn, Result);
   { The base's stable tie-break, which an override replaces and therefore has to redo:
