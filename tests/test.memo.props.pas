@@ -137,36 +137,44 @@ begin
 end;
 
 { TestFlatSelAndCaretPos
-  Multi-line model 'ab' / 'cde' / 'f'. The flat codepoint offset counts the newline
-  between lines as one codepoint, so the flat origin of each line is:
+  Multi-line model 'ab' / 'cde' / 'f'. The flat codepoint offset indexes the string
+  Text returns, so it charges the FULL line separator (NL = UTF8Length(LineEnding),
+  2 on Windows) between lines. The flat origin of each line is:
     line0 'ab'  -> 0
-    line1 'cde' -> 3  (len 2 + 1 newline)
-    line2 'f'   -> 7  (3 + 3 + 1)
-  CaretPos := 5 lands on line1 col2 (offset 3 + 2). A selection anchored at flat 1
-  ('a|b') to caret flat 6 ('cde|') has SelStart=1, SelLength=5, and SelText spans the
-  newline: 'b' + LineEnding + 'cde'. }
+    line1 'cde' -> 2 + NL          (= 4 with CRLF)
+    line2 'f'   -> 2 + NL + 3 + NL (= 9 with CRLF)
+  CaretPos := (2 + NL) + 2 lands on line1 col2. A selection anchored at flat 1
+  ('a|b') to caret flat (2 + NL) + 3 ('cde|') has SelStart=1, SelLength=4+NL, and
+  SelText spans the break: 'b' + LineEnding + 'cde'.
+  Written in terms of NL rather than hard numbers so the expectations hold on LF
+  platforms too. }
 procedure TTyMemoPropsTest.TestFlatSelAndCaretPos;
+var
+  NL, Line1Origin: Integer;
 begin
   SetUpMemo;
   LoadLines(['ab', 'cde', 'f']);
+  NL := UTF8Length(LineEnding);
+  Line1Origin := 2 + NL;
 
   // CaretPos write maps flat offset -> (line,col); read maps back.
-  FMemo.CaretPos := 5;
-  AssertEquals('caret line for flat 5', 1, FMemo.ProbeCaretLine);
-  AssertEquals('caret col for flat 5', 2, FMemo.ProbeCaretCol);
-  AssertEquals('CaretPos reads back flat 5', 5, FMemo.CaretPos);
+  FMemo.CaretPos := Line1Origin + 2;
+  AssertEquals('caret line for line1 col2', 1, FMemo.ProbeCaretLine);
+  AssertEquals('caret col for line1 col2', 2, FMemo.ProbeCaretCol);
+  AssertEquals('CaretPos reads back the same flat offset',
+    Line1Origin + 2, FMemo.CaretPos);
 
-  // SelStart/SelLength write: place a selection from flat 1 to flat 6.
+  // SelStart/SelLength write: place a selection from flat 1 to end-of-line1.
   FMemo.SelStart := 1;
-  FMemo.SelLength := 5;
+  FMemo.SelLength := (Line1Origin + 3) - 1;
   AssertEquals('SelStart reads flat 1', 1, FMemo.SelStart);
-  AssertEquals('SelLength reads 5', 5, FMemo.SelLength);
+  AssertEquals('SelLength reads the span', (Line1Origin + 3) - 1, FMemo.SelLength);
   AssertEquals('SelText spans the newline', 'b' + LineEnding + 'cde', FMemo.SelText);
-  // Caret sits at the far end of the selection (flat 6).
-  AssertEquals('CaretPos at selection end flat 6', 6, FMemo.CaretPos);
+  // Caret sits at the far end of the selection.
+  AssertEquals('CaretPos at selection end', Line1Origin + 3, FMemo.CaretPos);
 
   // SelText write replaces the selection ('b'<LE>'cde') with 'Z' (one OnChange):
-  // deleting flat[1..6] merges line0 head 'a' with line1 tail '' -> 'a', leaving
+  // deleting that span merges line0 head 'a' with line1 tail '' -> 'a', leaving
   // line2 'f' below; inserting 'Z' at the caret yields line0 'aZ', line1 'f'.
   FChangeCount := 0;
   FMemo.SelText := 'Z';

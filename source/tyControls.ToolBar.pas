@@ -4,6 +4,7 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Button,
+  tyControls.GlyphButtons, tyControls.ImageCollection,
   tyControls.Controller;
 type
   TTyToolSeparator = class(TTyCustomControl)
@@ -28,7 +29,12 @@ type
     FWrapable: Boolean;
     FShowCaptions: Boolean;
     FFlat: Boolean;
-    FImages: TImageList;
+    FImages: TTyImageCollection;
+    { The collection this bar last LENT to its tools. A tool still holding it is one we
+      handed it to, so we may re-point or take it back; anything else is the host's own
+      choice and is left alone. Nil'd with FImages in Notification — a freed collection's
+      address can be re-used, and a stale marker would make us adopt a stranger's. }
+    FLentImages: TTyImageCollection;
     FInLayout: Boolean;
     function GetButtonHeight: Integer;
     procedure SetButtonHeight(AValue: Integer);
@@ -36,13 +42,16 @@ type
     procedure SetIndent(AValue: Integer);
     procedure SetWrapable(AValue: Boolean);
     procedure SetShowCaptions(AValue: Boolean);
-    procedure SetImages(AValue: TImageList);
+    procedure SetImages(AValue: TTyImageCollection);
     procedure SetFlat(AValue: Boolean);
     procedure Relayout;
   protected
     { Protected rather than private so a test can drive the one call a relayout makes
       without needing a window handle and a live align pass. }
     procedure ApplyToButton(B: TTyButton);
+    { Push Images + ShowCaptions onto every tool that can draw an icon. Protected for the
+      same reason. }
+    procedure ApplyToolProperties;
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
@@ -50,6 +59,7 @@ type
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   public
     constructor Create(AOwner: TComponent); override;
+    procedure InsertControl(AControl: TControl; Index: Integer); override;
   published
     { Density-aware: unset follows --control-height (classic 24 / modern 38). A host/.lfm value
       pins it (streamed only when explicitly set -- stored FButtonHeightExplicit). }
@@ -57,11 +67,23 @@ type
     property ButtonSpacing: Integer read FButtonSpacing write SetButtonSpacing default 2;
     property Indent: Integer read FIndent write SetIndent default 4;
     property Wrapable: Boolean read FWrapable write SetWrapable default True;
-    { Reserved (not yet wired): in the reuse-TTyButton model each child button owns its own
-      caption + image, so these have no effect today; kept for forward LCL-parity. }
+    { LCL parity: False (the default) makes the tools ICON-ONLY, True draws their captions.
+      It reaches every child that CAN draw an icon (TTyGlyphButtonBase — TTyGlyphButton /
+      TTySpeedButton / TTyGlyphContainerButton) via AdoptShowCaption, which is a no-op on
+      any tool whose ShowCaption the host set itself. A plain TTyButton has no glyph model
+      at all and is untouched, and a glyph tool with no icon keeps its caption rather than
+      painting an empty box — so the False default can never blank an existing toolbar. }
     property ShowCaptions: Boolean read FShowCaptions write SetShowCaptions default False;
     property Flat: Boolean read FFlat write SetFlat default True;
-    property Images: TImageList read FImages write SetImages;
+    { The icon source the tools draw from: a child glyph button that has no Images of its
+      own is LENT this collection, so tools only need an ImageName. A tool carrying its own
+      collection keeps it — the bar re-points or takes back only the reference IT lent.
+
+      A TTyImageCollection, NOT an LCL TImageList: every icon in this library comes from
+      the name-keyed BGRA collection (see tyControls.ImageCollection), so a TImageList here
+      could never reach a tool button no matter what a host assigned — which is exactly why
+      this property used to do nothing. }
+    property Images: TTyImageCollection read FImages write SetImages;
     property Align default alTop;
     property Anchors;
     property StyleClass;
@@ -145,9 +167,22 @@ procedure TTyToolBar.SetButtonHeight(AValue: Integer); begin FButtonHeightExplic
 procedure TTyToolBar.SetButtonSpacing(AValue: Integer); begin if FButtonSpacing = AValue then Exit; FButtonSpacing := AValue; Relayout; end;
 procedure TTyToolBar.SetIndent(AValue: Integer); begin if FIndent = AValue then Exit; FIndent := AValue; Relayout; end;
 procedure TTyToolBar.SetWrapable(AValue: Boolean); begin if FWrapable = AValue then Exit; FWrapable := AValue; Relayout; end;
-procedure TTyToolBar.SetShowCaptions(AValue: Boolean); begin if FShowCaptions = AValue then Exit; FShowCaptions := AValue; Relayout; end;
-procedure TTyToolBar.SetImages(AValue: TImageList); begin FImages := AValue; Relayout; end;
+procedure TTyToolBar.SetShowCaptions(AValue: Boolean); begin if FShowCaptions = AValue then Exit; FShowCaptions := AValue; ApplyToolProperties; Relayout; end;
 procedure TTyToolBar.SetFlat(AValue: Boolean); begin if FFlat = AValue then Exit; FFlat := AValue; Relayout; end;
+
+procedure TTyToolBar.SetImages(AValue: TTyImageCollection);
+begin
+  if FImages = AValue then Exit;
+  // FreeNotification, not just the Notification override: opRemove only reaches us for a
+  // component we asked about. A collection that is not owned by our owner (created with
+  // Owner = nil, or living on another form) would be freed without a word, leaving FImages
+  // AND every reference we lent to the tools dangling.
+  if FImages <> nil then FImages.RemoveFreeNotification(Self);
+  FImages := AValue;
+  if FImages <> nil then FImages.FreeNotification(Self);
+  ApplyToolProperties;
+  Relayout;
+end;
 
 procedure TTyToolBar.ApplyToButton(B: TTyButton);
 begin
@@ -161,7 +196,46 @@ begin
   end
   else
     if B.StyleClass = 'ghost' then B.StyleClass := '';
-  // (Images/ShowCaptions propagation hooks here if/when TTyButton exposes them.)
+  // Images/ShowCaptions are NOT pushed from here: this runs on every relayout (many per
+  // resize), and re-asserting host-visible state that often is what made the StyleClass
+  // handling above a bug in the first place. They are applied by ApplyToolProperties at
+  // the three moments they can actually change -- the two setters and a tool joining.
+end;
+
+procedure TTyToolBar.ApplyToolProperties;
+var
+  i: Integer;
+  G: TTyGlyphButtonBase;
+begin
+  if csDestroying in ComponentState then Exit;
+  for i := 0 to ControlCount - 1 do
+  begin
+    // Only a glyph button has an icon model to point at a collection; a plain TTyButton
+    // (or a separator) has nothing to draw an image with, so the bar leaves it alone.
+    if not (Controls[i] is TTyGlyphButtonBase) then Continue;
+    G := TTyGlyphButtonBase(Controls[i]);
+    // Lend the bar's collection ONLY to a tool that has none, or that still holds the one
+    // we lent last time. A tool with its own collection keeps it: the bar manages the
+    // reference it put there and nothing else.
+    if (G.Images = nil) or (G.Images = FLentImages) then
+      G.Images := FImages;
+    // Container default; a no-op on any tool whose ShowCaption the host wrote itself.
+    G.AdoptShowCaption(FShowCaptions);
+  end;
+  // Remember what a later pass must recognise as "ours to re-point or take back".
+  FLentImages := FImages;
+end;
+
+procedure TTyToolBar.InsertControl(AControl: TControl; Index: Integer);
+begin
+  inherited InsertControl(AControl, Index);
+  // A tool can join the bar long after Images/ShowCaptions were set (code that builds the
+  // bar top-down, an .lfm whose component references are fixed up last, or TTyToolBarEx
+  // handing a button back from its overflow flyout), so the bar's icon source is applied
+  // HERE as well as in the setters. Doing it here rather than in the layout pass also
+  // means TTyToolBarEx — which overrides AlignControls and never calls ApplyToButton —
+  // still hands its tools the bar's icons.
+  ApplyToolProperties;
 end;
 
 procedure TTyToolBar.Relayout;
@@ -233,7 +307,14 @@ end;
 procedure TTyToolBar.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
-  if (Operation = opRemove) and (AComponent = FImages) then FImages := nil;
+  if Operation = opRemove then
+  begin
+    if AComponent = FImages then FImages := nil;
+    // Clear the lent-marker too. It points at the same object; left stale it would be a
+    // dangling address that a freshly allocated collection could land on, and the next
+    // pass would then mistake a tool's OWN collection for one of ours and overwrite it.
+    if AComponent = FLentImages then FLentImages := nil;
+  end;
 end;
 
 procedure TTyToolBar.Paint; begin RenderTo(Canvas, ClientRect, Font.PixelsPerInch); end;

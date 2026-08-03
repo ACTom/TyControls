@@ -85,12 +85,17 @@ type
     FGlyphColor: TTyColor;
     FImages: TTyImageCollection;
     FImageName: string;
+    FShowCaption: Boolean;
+    { True once anything has WRITTEN ShowCaption on this button. AdoptShowCaption
+      (the container default) then leaves it alone forever — see there. }
+    FShowCaptionExplicit: Boolean;
     procedure SetIconFont(AValue: TTyIconFont);
     procedure SetGlyphName(const AValue: string);
     procedure SetGlyphSize(AValue: Integer);
     procedure SetGlyphColor(AValue: TTyColor);
     procedure SetImages(AValue: TTyImageCollection);
     procedure SetImageName(const AValue: string);
+    procedure SetShowCaption(AValue: Boolean);
     { The glyph bitmap to draw at ASizePx in AColor: from Images[ImageName] (tinted to
       AColor) when an image source is set, else from IconFont[GlyphName]. Caller owns it. }
     function ResolveGlyphBitmap(ASizePx: Integer; AColor: TTyColor): TBGRABitmap;
@@ -137,6 +142,13 @@ type
     property GlyphLayout: TTyGlyphLayout read FGlyphLayout write FGlyphLayout;
   public
     constructor Create(AOwner: TComponent); override;
+    { Container DEFAULT for ShowCaption (TTyToolBar.ShowCaptions calls this on every
+      tool it hosts). A no-op once the host has written ShowCaption on this button
+      itself: a container re-applies its defaults whenever a tool joins or the flag
+      changes, so pushing the value unconditionally would silently undo a per-tool
+      choice — exactly the bug ApplyToButton had when it re-wrote every child's
+      StyleClass on every relayout. }
+    procedure AdoptShowCaption(AValue: Boolean);
   published
     { Inherited from TTyButton and still off by default (a designed button keeps the
       width its .lfm gave it). Re-published only to record what it hugs HERE: the glyph
@@ -164,6 +176,21 @@ type
     property Images: TTyImageCollection read FImages write SetImages;
     { The icon name in Images to draw. Empty -> fall back to the IconFont glyph. }
     property ImageName: string read FImageName write SetImageName;
+    { Draw the caption alongside the glyph (True, the default). False makes the button
+      ICON-ONLY: the glyph re-centres in the WHOLE content box and no caption is drawn —
+      what TTyToolBar.ShowCaptions = False asks of its tools.
+
+      A button with no resolvable glyph (no Images/ImageName AND no IconFont/GlyphName)
+      keeps its caption regardless: there is nothing to show in its place, so suppressing
+      it would paint an empty box. That matters because the toolbar's LCL-parity default
+      IS False — without this rule every caption-only tool in every app would go blank.
+      ShowCaption only ever trades a caption for an icon.
+
+      No `default` clause on purpose: `stored` mirrors TTyToolBar.ButtonHeight. An
+      explicit `ShowCaption := True` must survive an .lfm round-trip, and `default True`
+      would suppress writing exactly that case — the button would reload as
+      not-explicit and the container would re-adopt its own value over it. }
+    property ShowCaption: Boolean read FShowCaption write SetShowCaption stored FShowCaptionExplicit;
   end;
 
   { Compact command button: glyph on the LEFT, caption to its right. }
@@ -260,6 +287,19 @@ type
 procedure TyGlyphButtonSplit(const AContentRect: TRect; AGlyphPx, AGapPx: Integer;
   ALayout: TTyGlyphLayout; out AGlyphRect, ACaptionRect: TRect);
 
+{ Pure helper: the glyph rect for an ICON-ONLY button (ShowCaption = False) — an
+  AGlyphPx square centred on BOTH axes in AContentRect, clamped to the box's short side
+  so an oversized glyph can never overhang it.
+
+  Deliberately NOT "TyGlyphButtonSplit with an empty caption rect": the split ANCHORS
+  the glyph (left for glLeft, top for glTop) precisely because a caption follows it.
+  With the caption gone that anchor leaves the icon hugging one edge and dead space
+  where the text used to be, so a row of icon-only tools reads as ragged and misaligned.
+
+  AGlyphPx <= 0 or a degenerate box -> an empty rect at the content origin (never a
+  negative one). Headless-testable, no font, no painter. }
+function TyGlyphButtonIconOnlyRect(const AContentRect: TRect; AGlyphPx: Integer): TRect;
+
 implementation
 
 procedure TyGlyphButtonSplit(const AContentRect: TRect; AGlyphPx, AGapPx: Integer;
@@ -305,6 +345,24 @@ begin
   end;
 end;
 
+function TyGlyphButtonIconOnlyRect(const AContentRect: TRect; AGlyphPx: Integer): TRect;
+var
+  cw, ch, gp, gx, gy: Integer;
+begin
+  cw := AContentRect.Right - AContentRect.Left;
+  ch := AContentRect.Bottom - AContentRect.Top;
+  if (AGlyphPx <= 0) or (cw <= 0) or (ch <= 0) then
+    Exit(Rect(AContentRect.Left, AContentRect.Top, AContentRect.Left, AContentRect.Top));
+  // Clamp to the SHORT side: a square bigger than either dimension would otherwise
+  // start at a negative offset and bleed outside the content box.
+  gp := AGlyphPx;
+  if gp > cw then gp := cw;
+  if gp > ch then gp := ch;
+  gx := AContentRect.Left + (cw - gp) div 2;
+  gy := AContentRect.Top + (ch - gp) div 2;
+  Result := Rect(gx, gy, gx + gp, gy + gp);
+end;
+
 { TTyGlyphButtonBase }
 
 constructor TTyGlyphButtonBase.Create(AOwner: TComponent);
@@ -313,6 +371,10 @@ begin
   FGlyphSize := 0;
   FGlyphColor := TyGlyphButtonColorDefault;
   FGlyphLayout := glLeft;
+  // Standalone default: a glyph button is icon + caption. Only a container (a toolbar)
+  // asks for icon-only, and it does that through AdoptShowCaption.
+  FShowCaption := True;
+  FShowCaptionExplicit := False;
 end;
 
 procedure TTyGlyphButtonBase.SetIconFont(AValue: TTyIconFont);
@@ -361,6 +423,26 @@ procedure TTyGlyphButtonBase.SetImageName(const AValue: string);
 begin
   if FImageName = AValue then Exit;
   FImageName := AValue;
+  Invalidate;
+end;
+
+procedure TTyGlyphButtonBase.SetShowCaption(AValue: Boolean);
+begin
+  // Mark BEFORE the no-change early-exit: writing the same value the container happens
+  // to have pushed is still the host claiming the property, and must pin it. Without
+  // that, `Tool.ShowCaption := False` on a bar whose ShowCaptions is already False
+  // would silently lose the claim the moment the bar was switched back on.
+  FShowCaptionExplicit := True;
+  if FShowCaption = AValue then Exit;
+  FShowCaption := AValue;
+  Invalidate;
+end;
+
+procedure TTyGlyphButtonBase.AdoptShowCaption(AValue: Boolean);
+begin
+  if FShowCaptionExplicit then Exit;   // the host owns it; the container must not fight
+  if FShowCaption = AValue then Exit;
+  FShowCaption := AValue;
   Invalidate;
 end;
 
@@ -535,7 +617,17 @@ begin
   end;
 
   gapPx := APainter.Scale(ActiveController.Metric('--glyph-button-gap', TyGlyphButtonGap));
-  TyGlyphButtonSplit(AContentRect, glyphPx, gapPx, FGlyphLayout, glyphRect, captionRect);
+  if FShowCaption then
+    TyGlyphButtonSplit(AContentRect, glyphPx, gapPx, FGlyphLayout, glyphRect, captionRect)
+  else
+  begin
+    // Icon-only: the glyph owns the whole content box (centred) and there is no caption
+    // rect at all. Only reachable once a glyph HAS resolved — the no-glyph-source and
+    // degenerate-size early-exits above already returned a plain caption button, which
+    // is what keeps ShowCaption from ever painting an empty control.
+    glyphRect := TyGlyphButtonIconOnlyRect(AContentRect, glyphPx);
+    captionRect := Rect(AContentRect.Left, AContentRect.Top, AContentRect.Left, AContentRect.Top);
+  end;
 
   // Glyph color: sentinel -> the theme's TextColor (matches the caption); else override.
   if FGlyphColor = TyGlyphButtonColorDefault then
@@ -561,9 +653,12 @@ begin
     glyph.Free;
   end;
 
-  // Caption in the leftover rect. Skip when there's no caption or no room, so a
-  // pure-icon button doesn't ask the text path to draw into an empty rect.
-  if (Caption <> '') and (captionRect.Right > captionRect.Left)
+  // Caption in the leftover rect. Skip when captions are off, when there's no caption,
+  // or when there's no room — so a pure-icon button never asks the text path to draw
+  // into an empty rect. The explicit FShowCaption test is not redundant with the empty
+  // captionRect above: it states the intent at the point it takes effect, so a later
+  // change to the rect maths cannot resurrect the caption by accident.
+  if FShowCaption and (Caption <> '') and (captionRect.Right > captionRect.Left)
      and (captionRect.Bottom > captionRect.Top) then
     inherited DrawContent(APainter, captionRect, AStyle);
 end;

@@ -182,10 +182,22 @@ type
     procedure SetWantTabs(AValue: Boolean);
     procedure SetWantReturns(AValue: Boolean);
     procedure SetScrollBars(AValue: TScrollStyle);
-    // --- Flat codepoint-offset <-> (line,col) mapping. The flat offset counts one
-    // codepoint for the newline BETWEEN consecutive logical lines, so a document
-    // of N lines has Sum(LineLen)+ (N-1) addressable offsets. Mirrors a native
-    // TMemo's SelStart/SelLength/CaretPos integer addressing. ---
+    // The line separator TStrings.Text actually writes between two lines, and its
+    // codepoint width. Mirrors TStrings.GetTextStr/GetLineBreakCharLBS: an explicitly
+    // assigned Lines.LineBreak wins, otherwise the TextLineBreakStyle glyph (CRLF on
+    // Windows). Every flat offset below is measured in these units, so if this drifts
+    // from what Text emits, SelStart stops indexing Text.
+    function TextLineBreak: string;
+    function LineBreakCodepoints: Integer;
+    // --- Flat codepoint-offset <-> (line,col) mapping. The flat offset counts the
+    // FULL line separator (LineBreakCodepoints, = 2 for CRLF) for the newline BETWEEN
+    // consecutive logical lines, so the offsets index the very string Text returns.
+    // That is the native contract, not a convenience: TCustomEdit.GetSelText IS
+    // UTF8Copy(Text, SelStart + 1, SelLength) (customedit.inc:118-121) and SelectAll
+    // IS SelLength := UTF8Length(Text) (customedit.inc:222-228), while TCustomMemo.Text
+    // IS Lines.Text (custommemo.inc:150-156). Charging one codepoint per newline would
+    // put SelStart one behind Text per preceding line -- silently right on line 0 and
+    // wrong everywhere below it, which is the worst possible failure shape. ---
     function LineColToFlat(ALine, ACol: Integer): Integer;
     procedure FlatToLineCol(AOffset: Integer; out ALine, ACol: Integer);
     // Flat-offset accessors over the (line,col) selection/caret model. The
@@ -485,6 +497,25 @@ type
     procedure Append(const AValue: string);
     { Empty the memo. }
     procedure Clear;
+    // Scroll the TEXT VIEW by a device-pixel delta -- the memo meaning of ScrollBy
+    // (TCustomMemo.ScrollBy -> ScrollBy_WS, custommemo.inc:45-48), NOT the inherited
+    // TWinControl one, which SetBounds()es every child (wincontrol.inc:6255-6268).
+    // Without this override a caller reaching for the documented memo scroll API
+    // would drag this memo's own embedded scrollbars off their docked edges and
+    // leave the text exactly where it was.
+    //
+    // Overriding is safe HERE specifically. TTyScrollBox must not do the same: its
+    // ScrollByDelta calls ScrollBy(-dx,-dy) meaning the TWinControl child-mover, so
+    // an override there would call itself. TTyMemo never calls ScrollBy at all (it
+    // scrolls through SetTopLine / FScrollX), and no LCL code path calls ScrollBy on
+    // a plain TCustomControl -- the only LCL caller is TControlScrollBar
+    // (controlscrollbar.inc:79-81), which exists only on a TScrollingWinControl.
+    //
+    // Sign follows TWinControl: a POSITIVE delta moves the CONTENT down/right, i.e.
+    // reveals earlier rows / earlier columns. Vertical motion is quantised to whole
+    // visual rows (the view's unit), so a sub-row DeltaY is a no-op; callers wanting
+    // row units have TopLine/SetTopLine.
+    procedure ScrollBy(DeltaX, DeltaY: Integer); override;
     // Headless input helpers (mirror TTyEdit.Inject*). InjectChar simulates a
     // printable keypress; InjectKey simulates a VK_* KeyDown.
     procedure InjectChar(const AChar: TUTF8Char);
@@ -511,12 +542,20 @@ type
     property ScrollX: Integer read FScrollX;
     // Flat codepoint-offset selection/caret accessors (runtime; mirror native
     // TCustomMemo's public SelStart/SelLength/SelText/CaretPos integer addressing).
-    // The flat offset counts one codepoint for the newline between consecutive
-    // lines. SelStart = flat(ordered selection start); SelLength = |flat(caret) -
-    // flat(anchor)|; SelText = the selected text (spans newlines as LineEnding);
+    // The offsets index the SAME string Text returns, counting the FULL line
+    // separator between lines (two codepoints for CRLF on Windows), so the native
+    // idiom works verbatim:
+    //   Memo.SelStart := Pos(Needle, Memo.Text) - 1;   Memo.SelLength := Length(Needle);
+    // and SelText always equals UTF8Copy(Text, SelStart + 1, SelLength).
+    // SelStart = flat(ordered selection start); SelLength = |flat(caret) -
+    // flat(anchor)|; SelText = the selected text (line breaks as in Text);
     // CaretPos = flat(caret). Writing SelStart collapses the selection there;
     // writing SelLength extends the caret from SelStart; writing SelText replaces
     // the selection (single OnChange); writing CaretPos places the caret (collapse).
+    // An offset landing inside a CRLF is clamped to the end of the preceding line.
+    // NOTE: SelectAll gives SelLength = UTF8Length(Text) MINUS the trailing break
+    // TStrings.Text appends after the last line -- that trailing break is not a
+    // caret position. (The LCL's own TCustomEdit.SelectAll includes it.)
     property SelStart: Integer read GetSelStart write SetSelStart;
     property SelLength: Integer read GetSelLength write SetSelLength;
     property SelText: string read GetSelText write SetSelText;
@@ -887,35 +926,62 @@ end;
 
 // ---- Flat codepoint-offset <-> (line,col) mapping ----
 
+function TTyMemo.TextLineBreak: string;
+// Reproduce TStrings.GetTextStr's separator choice exactly (it calls the private
+// GetLineBreakCharLBS): an assigned LineBreak overrides, otherwise the style glyph.
+// GetText is FLines.Text, so this IS the separator sitting between two lines in Text.
+begin
+  if FLines.LineBreak <> sLineBreak then
+    Exit(FLines.LineBreak);
+  case FLines.TextLineBreakStyle of
+    tlbsLF: Result := #10;
+    tlbsCR: Result := #13;
+  else
+    Result := #13#10;   // tlbsCRLF
+  end;
+end;
+
+function TTyMemo.LineBreakCodepoints: Integer;
+begin
+  Result := UTF8Length(TextLineBreak);
+  // A zero-width separator would make two adjacent lines share offsets and break
+  // FlatToLineCol's descent; Text always emits at least one char, so floor at 1.
+  if Result < 1 then Result := 1;
+end;
+
 function TTyMemo.LineColToFlat(ALine, ACol: Integer): Integer;
-// Sum of (LineLen + 1 newline) for every line strictly above ALine, plus ACol.
+// Sum of (LineLen + separator width) for every line strictly above ALine, plus ACol.
 // Clamped into the model so out-of-range inputs map to a valid offset.
 var
-  i, MaxLine: Integer;
+  i, MaxLine, NL: Integer;
 begin
   MaxLine := LineCountLogical - 1;
   if ALine < 0 then ALine := 0;
   if ALine > MaxLine then ALine := MaxLine;
   if ACol < 0 then ACol := 0;
   if ACol > LineLen(ALine) then ACol := LineLen(ALine);
+  NL := LineBreakCodepoints;   // hoisted: constant for the whole walk
   Result := 0;
   for i := 0 to ALine - 1 do
-    Inc(Result, LineLen(i) + 1);  // +1 for the newline between lines i and i+1
+    Inc(Result, LineLen(i) + NL);  // + the full separator Text writes after line i
   Inc(Result, ACol);
 end;
 
 procedure TTyMemo.FlatToLineCol(AOffset: Integer; out ALine, ACol: Integer);
-// Walk lines accumulating (LineLen + 1) until AOffset lands within a line's
-// [0..LineLen] span (the trailing slot is the position before that line's
-// newline). Clamps a negative offset to (0,0) and an over-large offset to the
-// end of the last line.
+// Walk lines accumulating (LineLen + separator width) until AOffset lands within a
+// line's [0..LineLen] span (the trailing slot is the position before that line's
+// separator). Clamps a negative offset to (0,0) and an over-large offset to the end
+// of the last line. Offsets landing strictly INSIDE a multi-char separator (the slot
+// between CR and LF) are not caret positions; they bind to the end of the line the
+// separator follows, so no caller can wedge the caret inside a line break.
 var
-  i, MaxLine, Remaining, Span: Integer;
+  i, MaxLine, Remaining, Span, NL: Integer;
 begin
   ALine := 0;
   ACol := 0;
   if AOffset <= 0 then Exit;
   MaxLine := LineCountLogical - 1;
+  NL := LineBreakCodepoints;
   Remaining := AOffset;
   for i := 0 to MaxLine do
   begin
@@ -926,11 +992,11 @@ begin
       ACol := Remaining;
       Exit;
     end;
-    // Consume this line plus its trailing newline and move on.
-    Dec(Remaining, Span + 1);
+    // Consume this line plus its trailing separator and move on.
+    Dec(Remaining, Span + NL);
     if Remaining < 0 then
     begin
-      // AOffset fell on the newline slot itself: bind to end of this line.
+      // AOffset fell on (or inside) the separator: bind to end of this line.
       ALine := i;
       ACol := Span;
       Exit;
@@ -1324,10 +1390,14 @@ end;
 function TTyMemo.GetSelText: string;
 var
   SL, SC, EL, EC, i: Integer;
-  Head, Tail: string;
+  Head, Tail, NL: string;
 begin
   Result := '';
   if not HasSelection then Exit;
+  // Join with the separator Text itself uses (not a bare LineEnding): SelStart /
+  // SelLength are offsets into Text, so SelText must be the slice they name --
+  // UTF8Copy(Text, SelStart + 1, SelLength) -- byte for byte.
+  NL := TextLineBreak;
   GetOrderedSel(SL, SC, EL, EC);
   if SL = EL then
   begin
@@ -1345,15 +1415,15 @@ begin
   for i := SL + 1 to EL - 1 do
   begin
     if i < FLines.Count then
-      Result := Result + LineEnding + FLines[i]
+      Result := Result + NL + FLines[i]
     else
-      Result := Result + LineEnding;
+      Result := Result + NL;
   end;
   if EL < FLines.Count then
     Head := UTF8Copy(FLines[EL], 1, EC)
   else
     Head := '';
-  Result := Result + LineEnding + Head;
+  Result := Result + NL + Head;
 end;
 
 procedure TTyMemo.Append(const AValue: string);
@@ -1917,6 +1987,48 @@ begin
   UpdateScrollBar;
   // A width change alters the horizontal viewport: re-clamp the scroll offset.
   ClampScrollX(Font.PixelsPerInch);
+end;
+
+procedure TTyMemo.ScrollBy(DeltaX, DeltaY: Integer);
+// Text-view scroll (see the declaration for why this must NOT be TWinControl's
+// child-mover, and why overriding is safe on this class but not on TTyScrollBox).
+var
+  PPI, LH, NewX: Integer;
+begin
+  PPI := Font.PixelsPerInch;
+  // Vertical: the view addresses whole visual rows, so convert the pixel delta with
+  // `div` (truncates toward zero) -- a sub-row delta must scroll nothing rather than
+  // jump a whole row. SetTopLine clamps to [0, MaxTopLine] and syncs the bar.
+  if DeltaY <> 0 then
+  begin
+    LH := LineHeight(PPI);
+    if LH < 1 then LH := 1;
+    SetTopLine(FTopRow - (DeltaY div LH));
+  end;
+  // Horizontal: real device px. WordWrap=True never scrolls horizontally (FScrollX is
+  // pinned to 0 there), so leave it alone rather than fight ClampScrollX.
+  if (DeltaX <> 0) and (not FWordWrap) then
+  begin
+    NewX := FScrollX - DeltaX;
+    if NewX < 0 then NewX := 0;
+    if NewX <> FScrollX then
+    begin
+      FScrollX := NewX;
+      ClampScrollX(PPI);   // caps against widest-line width minus the viewport
+      // Move the thumb with the text. Guarded: the bar's OnChange writes straight
+      // back into FScrollX, which would undo the clamp we just applied.
+      if (FHScrollBar <> nil) and FHScrollBar.Visible then
+      begin
+        FSyncingScroll := True;
+        try
+          FHScrollBar.Position := FScrollX;
+        finally
+          FSyncingScroll := False;
+        end;
+      end;
+      Invalidate;
+    end;
+  end;
 end;
 
 procedure TTyMemo.AfterEdit(APPI: Integer);
