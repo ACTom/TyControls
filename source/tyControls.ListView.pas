@@ -161,6 +161,39 @@ type
   TTyListColumnEvent   = procedure(Sender: TObject; AColumn: Integer) of object;
   TTyListItemEvent     = procedure(Sender: TObject; AIndex: Integer) of object;
 
+  { WHAT changed about an item. Mirrors LCL's TItemChange (comctrls.pp:1286) value for
+    value, so a `case AChange of ctText/ctImage/ctState` lifted out of a TListView handler
+    compiles here unedited. Without it OnChange could only say "something moved" and the
+    host had to re-read the whole control to find out what.
+
+    ctImage is declared for that parity but the BUILT-IN data paths never raise it: this
+    control owns no per-item image mutator (an image is whatever the data source answers
+    for GetItemImageIndex). A descendant that does own one raises it through the protected
+    DoChange. LCL is in the same position off Windows, where the native notification it
+    derives ctImage from never arrives. }
+  TTyItemChange = (ctText, ctImage, ctState);
+
+  { Selection notification. LCL: TLVSelectItemEvent (comctrls.pp:1323) = (Sender, Item,
+    Selected); Item is an ITEM index here, as everywhere in this control.
+    ASelected is what makes the event usable: it fires for BOTH directions, so a host can
+    tell "row 3 was chosen" from "row 3 was abandoned". Without it the abandoned row was
+    never reported at all and a host had to diff the selection itself. }
+  TTyListSelectItemEvent = procedure(Sender: TObject; AIndex: Integer;
+                                     ASelected: Boolean) of object;
+
+  { Item-change notification / veto. LCL: TLVChangeEvent / TLVChangingEvent
+    (comctrls.pp:1292 / 1294).
+    AIndex is an ITEM index, or -1 for a bulk change with no single subject (Select All,
+    Clear Selection, a rubber-band sweep, a MultiSelect collapse) — exactly LCL's
+    `iItem < 0 -> Item = nil` in customlistview.inc:337.
+    OnChanging runs BEFORE the change and vetoes it by clearing AAllowChange; the control
+    then leaves the selection untouched and never raises OnChange/OnSelectItem. }
+  TTyListChangeEvent   = procedure(Sender: TObject; AIndex: Integer;
+                                   AChange: TTyItemChange) of object;
+  TTyListChangingEvent = procedure(Sender: TObject; AIndex: Integer;
+                                   AChange: TTyItemChange;
+                                   var AAllowChange: Boolean) of object;
+
   { Grouping events (SP2b). OnGetItemGroup resolves an ITEM index to a GROUP index in
     OwnerData mode (var out-param, LCL convention; leave -1 for the implicit bucket).
     OnGroupCollapsed fires AFTER a header click toggled a group's Collapsed state and
@@ -245,8 +278,9 @@ type
     FOnCompare:       TTyListCompareEvent;
     FOnColumnClick:   TTyListColumnEvent;
     FOnItemActivate:  TTyListItemEvent;
-    FOnSelectItem:    TTyListItemEvent;
-    FOnChange:        TNotifyEvent;
+    FOnSelectItem:    TTyListSelectItemEvent;
+    FOnChange:        TTyListChangeEvent;
+    FOnChanging:      TTyListChangingEvent;
     { checkboxes }
     FCheckboxes:      Boolean;
     FOnItemChecked:   TTyListItemEvent;
@@ -335,8 +369,16 @@ type
     function  IsSelectedItem(AItem: Integer): Boolean; { item index }
     procedure SetSingleSelection(AItem: Integer);      { item index }
     procedure SelectRangeByDisplay(AAnchorItem, ATargetItem: Integer);
-    procedure DoChange;
-    procedure DoSelectItem(AItem: Integer);
+    { The selection DELTA machinery behind OnSelectItem. SnapshotSelection captures the
+      EFFECTIVE selection (single mode: the focused item; multi mode: the set bits) as an
+      ascending list of ITEM indices; FireSelectionDelta re-snapshots and raises
+      DoSelectItem once per item whose state actually flipped — True for gained, False for
+      lost. Comparing snapshots is the only way to report the LOST rows: the mutators
+      overwrite the whole selection (ClearAllBits) and never see the individual bits go out.
+      Both are no-ops when OnSelectItem is unassigned, so a million-row virtual list pays
+      nothing at all unless the host opted in. }
+    function  SnapshotSelection: TTyIntArray;
+    procedure FireSelectionDelta(const ABefore: TTyIntArray);
     function  StatesFor(AItem: Integer): TTyStateSet;  { item index }
 
     { text accessor handed (as a callback) to the pure prefix-match loop. Its AIndex
@@ -436,6 +478,24 @@ type
     procedure CommitEdit(AIndex: Integer; const AText: string); virtual;   { item index }
     { The persistent inline editor, read-only to descendants. }
     property InlineEditor: TTyEdit read FEditor;
+
+    { The item-change seams, mirroring LCL's protected Change / CanChange / DoSelectItem
+      (comctrls.pp:1529-1531, customlistview.inc:193/208/701).
+
+      They are PROTECTED VIRTUAL on purpose. A descendant that needs to react to a change
+      overrides one of these; it must NOT assign OnChange / OnChanging / OnSelectItem on
+      itself, because those slots belong to the APP — a library class that grabs one
+      silently replaces whatever the host assigned, and the host gets no warning at all.
+      TTyFileDialogForm is a host in exactly this sense: it assigns OnSelectItem on its own
+      list, which is legitimate precisely because the control never consumes it.
+
+      DoChange raises OnChange; AIndex is an ITEM index, or -1 for a bulk change with no
+      single subject. CanChange raises OnChanging and returns False when the host vetoed;
+      every selection mutator asks it BEFORE touching a bit. DoSelectItem raises
+      OnSelectItem for one item that gained (ASelected) or lost the selection. }
+    procedure DoChange(AIndex: Integer; AChange: TTyItemChange); virtual;
+    function  CanChange(AIndex: Integer; AChange: TTyItemChange): Boolean; virtual;
+    procedure DoSelectItem(AIndex: Integer; ASelected: Boolean); virtual;
 
     function GetStyleTypeKey: string; override;
     procedure SetController(AValue: TTyStyleController); override;
@@ -539,8 +599,16 @@ type
     property OnCompare:      TTyListCompareEvent  read FOnCompare      write FOnCompare;
     property OnColumnClick:  TTyListColumnEvent   read FOnColumnClick  write FOnColumnClick;
     property OnItemActivate: TTyListItemEvent     read FOnItemActivate write FOnItemActivate;
-    property OnSelectItem:   TTyListItemEvent     read FOnSelectItem   write FOnSelectItem;
-    property OnChange:       TNotifyEvent         read FOnChange       write FOnChange;
+    { Fires once for EVERY row whose selected state flipped — the chosen one with
+      ASelected = True and each abandoned one with False. }
+    property OnSelectItem:   TTyListSelectItemEvent read FOnSelectItem write FOnSelectItem;
+    { What changed and how. AIndex = -1 means a bulk change (Select All / Clear Selection /
+      marquee), matching LCL's nil Item. }
+    property OnChange:       TTyListChangeEvent   read FOnChange       write FOnChange;
+    { Runs before a selection change and can veto it (AAllowChange := False). The rename and
+      checkbox paths keep their own vetoes (OnEditing / OnItemChecked) and are NOT routed
+      through here, so nothing is double-vetoed. }
+    property OnChanging:     TTyListChangingEvent read FOnChanging     write FOnChanging;
     property OnItemChecked:  TTyListItemEvent     read FOnItemChecked  write FOnItemChecked;
     property OnEditing:      TTyListEditingEvent  read FOnEditing      write FOnEditing;
     property OnEdited:       TTyListEditedEvent   read FOnEdited       write FOnEdited;
@@ -1294,7 +1362,12 @@ begin
 end;
 
 procedure TTyListView.SetSingleSelection(AItem: Integer);
+var
+  before: TTyIntArray;
 begin
+  { Ask first: a vetoed change must leave the control exactly as it was. }
+  if not CanChange(AItem, ctState) then Exit;
+  before := SnapshotSelection;
   EnsureSelectedLen;
   ClearAllBits;
   if (AItem >= 0) and FMultiSelect and (AItem < Length(FSelected)) then
@@ -1302,8 +1375,9 @@ begin
   FItemIndex := AItem;
   FAnchor    := AItem;
   Invalidate;
-  DoChange;
-  DoSelectItem(AItem);
+  { LCL order: Change first, then DoSelectItem (customlistview.inc:405-406). }
+  DoChange(AItem, ctState);
+  FireSelectionDelta(before);
 end;
 
 procedure TTyListView.SelectRangeByDisplay(AAnchorItem, ATargetItem: Integer);
@@ -1326,14 +1400,87 @@ begin
   end;
 end;
 
-procedure TTyListView.DoChange;
+procedure TTyListView.DoChange(AIndex: Integer; AChange: TTyItemChange);
 begin
-  if Assigned(FOnChange) then FOnChange(Self);
+  if Assigned(FOnChange) then FOnChange(Self, AIndex, AChange);
 end;
 
-procedure TTyListView.DoSelectItem(AItem: Integer);
+function TTyListView.CanChange(AIndex: Integer; AChange: TTyItemChange): Boolean;
 begin
-  if Assigned(FOnSelectItem) then FOnSelectItem(Self, AItem);
+  { LCL's CanChange (customlistview.inc:208): default True, the host lowers it. Unlike LCL
+    -- where the veto only ever reaches the Win32 widgetset -- this control is its own
+    "widgetset", so the answer is honoured on every platform. }
+  Result := True;
+  if Assigned(FOnChanging) then
+    FOnChanging(Self, AIndex, AChange, Result);
+end;
+
+procedure TTyListView.DoSelectItem(AIndex: Integer; ASelected: Boolean);
+begin
+  if Assigned(FOnSelectItem) then FOnSelectItem(Self, AIndex, ASelected);
+end;
+
+function TTyListView.SnapshotSelection: TTyIntArray;
+var
+  i, n, cnt: Integer;
+begin
+  Result := nil;
+  { Nobody listening -> no scan and no allocation. This is what keeps a virtual list with a
+    million rows from paying for a delta it would only throw away. }
+  if not Assigned(FOnSelectItem) then Exit;
+  cnt := GetItemCount;
+  if FMultiSelect then
+  begin
+    EnsureSelectedLen;
+    SetLength(Result, cnt);
+    n := 0;
+    for i := 0 to cnt - 1 do
+      if (i < Length(FSelected)) and FSelected[i] then
+      begin
+        Result[n] := i;
+        Inc(n);
+      end;
+    SetLength(Result, n);
+  end
+  else if (FItemIndex >= 0) and (FItemIndex < cnt) then
+  begin
+    { Single mode: the selection IS the focused item (see IsSelectedItem); the bit array is
+      not consulted, so reading it here would report a stale multi-mode selection. }
+    SetLength(Result, 1);
+    Result[0] := FItemIndex;
+  end;
+end;
+
+procedure TTyListView.FireSelectionDelta(const ABefore: TTyIntArray);
+var
+  after: TTyIntArray;
+  a, b: Integer;
+begin
+  if not Assigned(FOnSelectItem) then Exit;
+  after := SnapshotSelection;
+  { Both lists are ascending, so one merge walk finds every difference in O(n) and reports
+    the rows in item order. }
+  a := 0;
+  b := 0;
+  while (a < Length(ABefore)) or (b < Length(after)) do
+  begin
+    if (b >= Length(after)) or
+       ((a < Length(ABefore)) and (ABefore[a] < after[b])) then
+    begin
+      DoSelectItem(ABefore[a], False);   { was selected, is not: the abandoned row }
+      Inc(a);
+    end
+    else if (a >= Length(ABefore)) or (after[b] < ABefore[a]) then
+    begin
+      DoSelectItem(after[b], True);      { newly selected }
+      Inc(b);
+    end
+    else
+    begin
+      Inc(a);                            { in both: unchanged, stays silent }
+      Inc(b);
+    end;
+  end;
 end;
 
 function TTyListView.StatesFor(AItem: Integer): TTyStateSet;
@@ -1702,41 +1849,49 @@ procedure TTyListView.SelectAll;
 var
   i: Integer;
   anyChanged: Boolean;
+  before: TTyIntArray;
 begin
   if not FMultiSelect then Exit;
   EnsureSelectedLen;
+  { Decide whether anything WOULD change before asking OnChanging: a Select All over an
+    already-full selection is not a change and must not raise a veto prompt. }
   anyChanged := False;
   for i := 0 to High(FSelected) do
-    if not FSelected[i] then begin FSelected[i] := True; anyChanged := True; end;
-  if anyChanged then
-  begin
-    Invalidate;
-    DoChange;
-  end;
+    if not FSelected[i] then begin anyChanged := True; Break; end;
+  if not anyChanged then Exit;
+  { -1: a bulk change has no single subject (LCL's nil Item). }
+  if not CanChange(-1, ctState) then Exit;
+  before := SnapshotSelection;
+  for i := 0 to High(FSelected) do
+    FSelected[i] := True;
+  Invalidate;
+  DoChange(-1, ctState);
+  FireSelectionDelta(before);
 end;
 
 procedure TTyListView.ClearSelection;
 var
   i: Integer;
   anyChanged: Boolean;
+  before: TTyIntArray;
 begin
-  anyChanged := False;
+  anyChanged := FItemIndex <> -1;
   if FMultiSelect then
   begin
     EnsureSelectedLen;
     for i := 0 to High(FSelected) do
-      if FSelected[i] then begin FSelected[i] := False; anyChanged := True; end;
+      if FSelected[i] then begin anyChanged := True; Break; end;
   end;
-  if FItemIndex <> -1 then
-  begin
-    FItemIndex := -1;
-    anyChanged := True;
-  end;
-  if anyChanged then
-  begin
-    Invalidate;
-    DoChange;
-  end;
+  if not anyChanged then Exit;
+  if not CanChange(-1, ctState) then Exit;
+  before := SnapshotSelection;
+  if FMultiSelect then
+    for i := 0 to High(FSelected) do
+      FSelected[i] := False;
+  FItemIndex := -1;
+  Invalidate;
+  DoChange(-1, ctState);
+  FireSelectionDelta(before);
 end;
 
 function TTyListView.GetNextSelected(var AIndex: Integer): Boolean;
@@ -1781,15 +1936,20 @@ begin
 end;
 
 procedure TTyListView.SetSelected(AIndex: Integer; AValue: Boolean);
+var
+  before: TTyIntArray;
 begin
   if (AIndex < 0) or (AIndex >= GetItemCount) then Exit;
   if FMultiSelect then
   begin
     EnsureSelectedLen;
     if FSelected[AIndex] = AValue then Exit;
+    if not CanChange(AIndex, ctState) then Exit;
+    before := SnapshotSelection;
     FSelected[AIndex] := AValue;
     Invalidate;
-    DoChange;
+    DoChange(AIndex, ctState);
+    FireSelectionDelta(before);
   end
   else if AValue then
     SetSingleSelection(AIndex);
@@ -1821,6 +1981,12 @@ begin
   if GetChecked(AIndex) = AValue then Exit;
   SetItemChecked(AIndex, AValue);   { collection: writes lisChecked; owner-data: no-op }
   if Assigned(FOnItemChecked) then FOnItemChecked(Self, AIndex);   { item index }
+  { A check IS item state, so it is an OnChange(ctState) as well as the dedicated
+    OnItemChecked. Without this an app that listens to OnChange to keep a summary line in
+    sync sees selection moves but never a tick. Deliberately NOT routed through CanChange:
+    the checkbox path has its own gate (a host that wants to refuse a tick simply does not
+    write Checked), and a second veto for the same action is a trap, not a feature. }
+  DoChange(AIndex, ctState);
   Invalidate;
 end;
 
@@ -2127,6 +2293,11 @@ begin
     if (AIndex >= 0) and (AIndex < FItems.Count) then
       FItems[AIndex].Caption := s;
   end;
+  { The one place this control produces a TEXT change, and the reason OnChange carries a
+    reason at all: a host filtering on ctText hears renames without also hearing every
+    selection move. A descendant that overrides CommitEdit WITHOUT calling inherited (the
+    shell view renames on disk instead) owns this notification itself. }
+  DoChange(AIndex, ctText);
   Invalidate;
 end;
 
@@ -2233,9 +2404,16 @@ end;
 procedure TTyListView.SetMultiSelect(AValue: Boolean);
 var
   i: Integer;
+  before: TTyIntArray;
 begin
   if FMultiSelect = AValue then Exit;
   EnsureSelectedLen;
+  { Snapshot under the OLD mode: SnapshotSelection reads the bits in multi mode and the
+    focused item in single mode, so collapsing to single is exactly where the difference
+    (every row but the survivor drops out) has to be captured. No CanChange here — this is
+    a property write, not an item change; a host that wants to refuse it just does not
+    write the property. }
+  before := SnapshotSelection;
 
   if not AValue then
   begin
@@ -2263,7 +2441,8 @@ begin
   if FMultiSelect and (FItemIndex >= 0) and (FItemIndex < Length(FSelected)) then
     FSelected[FItemIndex] := True;
   Invalidate;
-  DoChange;
+  DoChange(-1, ctState);
+  FireSelectionDelta(before);
 end;
 
 procedure TTyListView.SetItems(AValue: TTyListItems);
@@ -2973,30 +3152,40 @@ end;
   --------------------------------------------------------------------------- }
 
 procedure TTyListView.ItemMouseSelect(AItem: Integer; Shift: TShiftState);
+var
+  before: TTyIntArray;
 begin
   EnsureSelectedLen;
   if not FMultiSelect then
   begin
-    SetSingleSelection(AItem);
+    SetSingleSelection(AItem);   { asks CanChange and fires the delta itself }
     Exit;
   end;
   if ssShift in Shift then
   begin
+    if not CanChange(AItem, ctState) then Exit;
+    before := SnapshotSelection;
     SelectRangeByDisplay(FAnchor, AItem);   { anchor stays; range via display order }
     FItemIndex := AItem;
     Invalidate;
-    DoChange;
-    DoSelectItem(AItem);
+    DoChange(AItem, ctState);
+    { The range replaces the previous one wholesale, so the rows that fell out of it are
+      reported as deselected -- which is exactly what a Shift-drag looks like to the user. }
+    FireSelectionDelta(before);
   end
   else if ssCtrl in Shift then
   begin
+    if not CanChange(AItem, ctState) then Exit;
+    before := SnapshotSelection;
     if AItem < Length(FSelected) then
       FSelected[AItem] := not FSelected[AItem];
     FItemIndex := AItem;
     FAnchor := AItem;
     Invalidate;
-    DoChange;
-    DoSelectItem(AItem);
+    DoChange(AItem, ctState);
+    { Ctrl+click on an already-selected row REMOVES it: the delta reports ASelected=False,
+      which the old one-argument event could not express at all. }
+    FireSelectionDelta(before);
   end
   else
     SetSingleSelection(AItem);
@@ -3006,9 +3195,15 @@ procedure TTyListView.ApplyMarquee;
 var
   box, cell: TRect;
   hits: TTyIntArray;
+  before: TTyIntArray;
   m: TTyListMetrics;
   i, it, t, gFirst, gLast, g, iFirst, iLast, k, lastItem: Integer;
 begin
+  { A rubber-band sweep rewrites the whole selection on every mouse move, so it is a bulk
+    change (-1) and the veto has to be honoured per move -- otherwise a host that refused
+    the first move would silently get the rest. }
+  if not CanChange(-1, ctState) then Exit;
+  before := SnapshotSelection;
   box.Left := FMarqueeStart.X; box.Right := FMarqueeCur.X;
   box.Top := FMarqueeStart.Y; box.Bottom := FMarqueeCur.Y;
   if box.Left > box.Right then begin t := box.Left; box.Left := box.Right; box.Right := t; end;
@@ -3046,7 +3241,8 @@ begin
       end;
     if lastItem >= 0 then
       FItemIndex := lastItem;
-    DoChange;
+    DoChange(-1, ctState);
+    FireSelectionDelta(before);
     Exit;
   end;
 
@@ -3061,7 +3257,8 @@ begin
   end;
   if Length(hits) > 0 then
     FItemIndex := DisplayToItem(hits[High(hits)]);
-  DoChange;
+  DoChange(-1, ctState);
+  FireSelectionDelta(before);
 end;
 
 procedure TTyListView.EndInteractions;
@@ -3396,6 +3593,7 @@ var
   cnt, curPos, newPos, newItem: Integer;
   navKey: TTyListNavKey;
   mapped: Boolean;
+  before: TTyIntArray;   { selection snapshot for the OnSelectItem delta }
 begin
   if not Enabled then Exit;
   inherited KeyDown(Key, Shift);
@@ -3437,11 +3635,18 @@ begin
     if FMultiSelect then
     begin
       EnsureSelectedLen;
-      if FItemIndex < Length(FSelected) then
-        FSelected[FItemIndex] := not FSelected[FItemIndex];
-      FAnchor := FItemIndex;
-      Invalidate;
-      DoChange;
+      if CanChange(FItemIndex, ctState) then
+      begin
+        before := SnapshotSelection;
+        if FItemIndex < Length(FSelected) then
+          FSelected[FItemIndex] := not FSelected[FItemIndex];
+        FAnchor := FItemIndex;
+        Invalidate;
+        DoChange(FItemIndex, ctState);
+        FireSelectionDelta(before);
+      end;
+      { Consumed either way: a vetoed Space must not fall through to type-ahead and start
+        searching for a row whose caption begins with a blank. }
       Key := 0;
       Exit;
     end;
@@ -3474,11 +3679,13 @@ begin
 
   if FMultiSelect and (ssShift in Shift) then
   begin
+    if not CanChange(newItem, ctState) then Exit;   { vetoed: focus and view stay put }
+    before := SnapshotSelection;
     SelectRangeByDisplay(FAnchor, newItem);
     FItemIndex := newItem;
     Invalidate;
-    DoChange;
-    DoSelectItem(newItem);
+    DoChange(newItem, ctState);
+    FireSelectionDelta(before);
   end
   else
     SetSingleSelection(newItem);

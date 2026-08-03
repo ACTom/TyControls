@@ -105,7 +105,7 @@ type
     procedure LookInSelectPath(Sender: TObject);
     procedure ListDirectoryChange(Sender: TObject);
     procedure FilterChange(Sender: TObject);
-    procedure ListSelectItem(Sender: TObject; AIndex: Integer);
+    procedure ListSelectItem(Sender: TObject; AIndex: Integer; ASelected: Boolean);
     procedure ListFileActivate(Sender: TObject; AIndex: Integer);
     procedure BtnUpClick(Sender: TObject);
     procedure NewFolderClick(Sender: TObject);
@@ -531,8 +531,13 @@ begin
   FList.Mask := FFilter.Mask;
 end;
 
-procedure TTyFileDialogForm.ListSelectItem(Sender: TObject; AIndex: Integer);
+procedure TTyFileDialogForm.ListSelectItem(Sender: TObject; AIndex: Integer;
+  ASelected: Boolean);
 begin
+  { The event now also reports the row the user just LEFT (ASelected = False). Naming a
+    file the user is no longer on would overwrite the edit with the wrong name -- and in
+    Save mode, with a name they had already typed over. }
+  if not ASelected then Exit;
   { Reflect the focused file's name into the edit (both modes -- Save lets the user
     edit it afterwards). A folder's name is intentionally not forced in. }
   if (FNameEdit <> nil) and (AIndex >= 0) then

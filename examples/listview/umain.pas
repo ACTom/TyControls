@@ -77,12 +77,12 @@ type
     procedure ChkMultiChange(Sender: TObject);
     procedure ChkBoxesChange(Sender: TObject);
     procedure ChkGroupChange(Sender: TObject);
-    procedure LV1SelectItem(Sender: TObject; AIndex: Integer);
-    procedure LV1Change(Sender: TObject);
+    procedure LV1SelectItem(Sender: TObject; AIndex: Integer; ASelected: Boolean);
+    procedure LV1Change(Sender: TObject; AIndex: Integer; AChange: TTyItemChange);
     procedure LV1ColumnClick(Sender: TObject; AColumn: Integer);
     procedure LV1ItemActivate(Sender: TObject; AIndex: Integer);
     procedure LV2GetItemText(Sender: TObject; AIndex, AColumn: Integer; var AText: string);
-    procedure LV2SelectItem(Sender: TObject; AIndex: Integer);
+    procedure LV2SelectItem(Sender: TObject; AIndex: Integer; ASelected: Boolean);
     procedure LV2GetItemState(Sender: TObject; AIndex: Integer;
       var AStates: TTyListItemStates);
     procedure LV2ItemChecked(Sender: TObject; AIndex: Integer);
@@ -607,13 +607,17 @@ begin
   LV1.Sort;
 end;
 
-procedure TMainForm.LV1SelectItem(Sender: TObject; AIndex: Integer);
+procedure TMainForm.LV1SelectItem(Sender: TObject; AIndex: Integer; ASelected: Boolean);
 begin
+  { Fires for the row that gained the selection AND for every row that lost it, so the
+    status line is right after a Ctrl+click removes a row too. }
   UpdateStatus;
 end;
 
-procedure TMainForm.LV1Change(Sender: TObject);
+procedure TMainForm.LV1Change(Sender: TObject; AIndex: Integer; AChange: TTyItemChange);
 begin
+  { AIndex is the item that changed (-1 for a bulk change); AChange says whether it was
+    the text, the image or the state. The status line summarises all three. }
   UpdateStatus;
 end;
 
@@ -691,9 +695,11 @@ begin
   AGroup := VirtualValue(AIndex) div 250000;
 end;
 
-procedure TMainForm.LV2SelectItem(Sender: TObject; AIndex: Integer);
+procedure TMainForm.LV2SelectItem(Sender: TObject; AIndex: Integer; ASelected: Boolean);
 begin
-  if AIndex >= 0 then
+  { Only the row that was CHOSEN names itself here; the abandoned one also arrives, with
+    ASelected = False, and would otherwise overwrite the caption with a stale index. }
+  if ASelected and (AIndex >= 0) then
     LblVirtual.Caption := Format('ItemCount = %d, row objects = 0   ·   focused item index = %d',
       [LV2.ItemCount, AIndex]);
 end;
