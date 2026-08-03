@@ -21,9 +21,9 @@ type
     function MakeWH: TTyValueListEditor;   // Width=100, Height=50
   published
     procedure TestInsertAndRead;
-    procedure TestSetValueFiresEvent;
-    procedure TestSetValueNoEventWhenUnchanged;
-    procedure TestValueOfByName;
+    procedure TestSetValueFromIndexFiresEvent;
+    procedure TestSetValueFromIndexNoEventWhenUnchanged;
+    procedure TestValuesByKey;
     procedure TestValueMayContainAnything;
     procedure TestDeleteRow;
     procedure TestKeyColumnWidthClamp;
@@ -90,21 +90,21 @@ begin
     AssertEquals('two root rows', 2, e.RowCount);
     AssertEquals('two visible rows', 2, e.VisibleRowCount);
     AssertEquals('key 0', 'Width', e.Keys[0]);
-    AssertEquals('value 0', '100', e.Values[0]);
+    AssertEquals('value 0', '100', e.ValueFromIndex[0]);
     AssertEquals('key 1', 'Height', e.Keys[1]);
-    AssertEquals('value 1', '50', e.Values[1]);
+    AssertEquals('value 1', '50', e.ValueFromIndex[1]);
     AssertEquals('not editing', -1, e.EditingRow);
   finally e.Free; end;
 end;
 
-procedure TValueListEditorTest.TestSetValueFiresEvent;
+procedure TValueListEditorTest.TestSetValueFromIndexFiresEvent;
 var e: TTyValueListEditor;
 begin
   e := MakeWH;
   try
     e.OnValueChanged := @OnValChanged;
-    e.Values[0] := '200';
-    AssertEquals('value updated', '200', e.Values[0]);
+    e.ValueFromIndex[0] := '200';
+    AssertEquals('value updated', '200', e.ValueFromIndex[0]);
     AssertEquals('event fired once', 1, FFired);
     AssertTrue('event passed the row', FLastRow = e.Row(0));
     AssertEquals('event row key', 'Width', FLastRow.Key);
@@ -112,26 +112,26 @@ begin
   finally e.Free; end;
 end;
 
-procedure TValueListEditorTest.TestSetValueNoEventWhenUnchanged;
+procedure TValueListEditorTest.TestSetValueFromIndexNoEventWhenUnchanged;
 var e: TTyValueListEditor;
 begin
   e := MakeWH;
   try
     e.OnValueChanged := @OnValChanged;
-    e.Values[0] := '100';   // same -> no change, no event
+    e.ValueFromIndex[0] := '100';   // same -> no change, no event
     AssertEquals('no event', 0, FFired);
   finally e.Free; end;
 end;
 
-procedure TValueListEditorTest.TestValueOfByName;
+procedure TValueListEditorTest.TestValuesByKey;
 var e: TTyValueListEditor;
 begin
   e := MakeWH;
   try
-    AssertEquals('lookup by key', '50', e.ValueOf['Height']);
-    e.ValueOf['Height'] := '75';
-    AssertEquals('write by key', '75', e.Values[1]);
-    AssertEquals('missing key -> empty', '', e.ValueOf['Depth']);
+    AssertEquals('lookup by key', '50', e.Values['Height']);
+    e.Values['Height'] := '75';
+    AssertEquals('write by key', '75', e.ValueFromIndex[1]);
+    AssertEquals('missing key -> empty', '', e.Values['Depth']);
   finally e.Free; end;
 end;
 
@@ -141,8 +141,8 @@ begin
   // Value is a plain field now (no key=value string), so it may contain anything, incl. '='.
   e := MakeWH;
   try
-    e.Values[0] := 'a=b=c';
-    AssertEquals('value with = kept', 'a=b=c', e.Values[0]);
+    e.ValueFromIndex[0] := 'a=b=c';
+    AssertEquals('value with = kept', 'a=b=c', e.ValueFromIndex[0]);
     AssertEquals('key preserved', 'Width', e.Keys[0]);
   finally e.Free; end;
 end;
@@ -189,8 +189,8 @@ begin
   e := MakeWH;
   try
     AssertEquals('negative key', '', e.Keys[-1]);
-    AssertEquals('past-end value', '', e.Values[99]);
-    e.Values[99] := 'x';       // ignored, no crash
+    AssertEquals('past-end value', '', e.ValueFromIndex[99]);
+    e.ValueFromIndex[99] := 'x';   // ignored, no crash
     e.DeleteRow(99);           // ignored, no crash
     AssertTrue('row(99) nil', e.Row(99) = nil);
     AssertEquals('still two rows', 2, e.RowCount);

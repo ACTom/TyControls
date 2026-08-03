@@ -119,10 +119,10 @@ type
     procedure AppendFlat(ARow: TTyValueRow; ALevel: Integer);
     procedure FreeRows;
     function GetKey(AIndex: Integer): string;
-    function GetValue(AIndex: Integer): string;
-    procedure SetValue(AIndex: Integer; const AValue: string);
-    function GetValueOf(const AKey: string): string;
-    procedure SetValueOf(const AKey, AValue: string);
+    function GetValueFromIndex(AIndex: Integer): string;
+    procedure SetValueFromIndex(AIndex: Integer; const AValue: string);
+    function GetValue(const AKey: string): string;
+    procedure SetValue(const AKey, AValue: string);
     procedure SetKeyColumnWidth(AValue: Integer);
     procedure SetImages(const AValue: TTyVirtualImageList);
     procedure CommitEditor(AFlat: Integer; const AText: string);
@@ -199,8 +199,20 @@ type
     // The visible (flat) index being edited, or -1.
     property EditingRow: Integer read FEditFlat;
     property Keys[AIndex: Integer]: string read GetKey;                 // root rows
-    property Values[AIndex: Integer]: string read GetValue write SetValue;
-    property ValueOf[const AKey: string]: string read GetValueOf write SetValueOf;
+    { Values[] is indexed BY KEY, matching TValueListEditor on LCL / Delphi:
+        property Values[const Key: string]: string read GetValue write SetValue;
+      -- C:\lazarus\lcl\valedit.pas:202. It is the class's most-used member, so the identifier
+      has to mean the same thing here as everywhere else. It used to be indexed by ROW NUMBER
+      with the keyed form hidden as ValueOf[], so Values[0] named two different rows on the two
+      libraries and every ported call site had to be rewritten (BREAKING: ValueOf[] is gone --
+      it IS Values[] now, and the old Values[i] is ValueFromIndex[i]).
+
+      The row form is deliberately NOT an overload of the same name: an Integer/string overload
+      pair is exactly how a ported call lands on the wrong member and compiles. The split
+      follows TStrings' own Values[Name] / ValueFromIndex[Index]. }
+    property Values[const AKey: string]: string read GetValue write SetValue;
+    // Root row AIndex's value -- the row-numbered form, pairing with Keys[] above.
+    property ValueFromIndex[AIndex: Integer]: string read GetValueFromIndex write SetValueFromIndex;
     property InlineEditor: TTyValueEdit read FEditor;
   published
     property KeyColumnWidth: Integer read FKeyColumnWidth write SetKeyColumnWidth default 110;
@@ -573,12 +585,14 @@ begin
   if (AIndex >= 0) and (AIndex <= High(FRoot)) then Result := FRoot[AIndex].Key else Result := '';
 end;
 
-function TTyValueListEditor.GetValue(AIndex: Integer): string;
+function TTyValueListEditor.GetValueFromIndex(AIndex: Integer): string;
 begin
   if (AIndex >= 0) and (AIndex <= High(FRoot)) then Result := FRoot[AIndex].Value else Result := '';
 end;
 
-procedure TTyValueListEditor.SetValue(AIndex: Integer; const AValue: string);
+{ The row-numbered setter addresses EXISTING rows only -- out of range is a no-op. It must NOT
+  grow the list the way the keyed setter does, or a stray index would append an empty-keyed row. }
+procedure TTyValueListEditor.SetValueFromIndex(AIndex: Integer; const AValue: string);
 begin
   if (AIndex < 0) or (AIndex > High(FRoot)) then Exit;
   if FRoot[AIndex].Value = AValue then Exit;
@@ -587,19 +601,29 @@ begin
   if Assigned(FOnValueChanged) then FOnValueChanged(Self, FRoot[AIndex]);
 end;
 
-function TTyValueListEditor.GetValueOf(const AKey: string): string;
+{ Key matching FOLDS CASE, as on LCL: TValueListEditor resolves the key through
+  Strings.IndexOfName (valedit.pas:1094), which compares with TStringList.DoCompareText on a
+  list whose CaseSensitive is never set -- i.e. False. Comparing with '=' here would compile and
+  then read '' for a ported Values['height'] whose row is keyed 'Height'. }
+function TTyValueListEditor.GetValue(const AKey: string): string;
 var i: Integer;
 begin
   for i := 0 to High(FRoot) do
-    if FRoot[i].Key = AKey then Exit(FRoot[i].Value);
+    if SameText(FRoot[i].Key, AKey) then Exit(FRoot[i].Value);
   Result := '';
 end;
 
-procedure TTyValueListEditor.SetValueOf(const AKey, AValue: string);
+{ Writing an UNKNOWN key APPENDS that row, as on LCL, where the setter falls through to
+  Strings.Add (valedit.pas:1110-1114) -- ported code populates the editor by assigning to keys
+  that do not exist yet, and dropping those writes would be silent data loss. The append is a
+  row ADD, not a value CHANGE, so it stays silent like AddRow / InsertRow: OnValueChanged
+  reports which EXISTING row changed and has no prior row to name here. }
+procedure TTyValueListEditor.SetValue(const AKey, AValue: string);
 var i: Integer;
 begin
   for i := 0 to High(FRoot) do
-    if FRoot[i].Key = AKey then begin SetValue(i, AValue); Exit; end;
+    if SameText(FRoot[i].Key, AKey) then begin SetValueFromIndex(i, AValue); Exit; end;
+  AddRow(AKey, AValue);   // (key, value) -- see AddRow's declaration, not the other order
 end;
 
 procedure TTyValueListEditor.DeleteRow(AIndex: Integer);
