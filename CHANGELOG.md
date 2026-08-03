@@ -136,6 +136,47 @@
 - **`TTySpinEdit`**:`MinValue = MaxValue` 表示"不限",不再把值钳死在最小值。
 - **`TTyTrackBar.Frequency` 默认改为 1**(刻度开箱即见),`Orientation` 现在会交换宽高。
 - **`TTyHeaderControl.OnSectionResize` 只在松手时触发一次**;拖动过程改由新的 `OnSectionTrack` 报告。
+- **数据网格:六个名字换了含义,升级前逐条对照。**
+  - **`VisibleRowCount` 回到 LCL 的含义 —— 视口能放下几行**。以前它返回的是过滤后的数据行数,
+    移植过来的翻页算式照样编译、算出来的却是另一个数;我们那个含义本来就有
+    `DisplayRowCount` / `FilteredRowCount` 两个名字。
+  - **`ClearRows` / `ClearCols` 现在是删除行列**(LCL 的含义)。以前它们清空一段区域的**内容**,
+    同名反义 —— 清内容改叫 `ClearRowContents` / `ClearColContents`。刻意**不做成参数个数不同的
+    重载**:"删掉所有行"和"清空两行"不能只差一个参数。
+  - **`SaveToStream` / `LoadFromStream` 不再写 CSV**,改为带版本的完整容器(列宽、属性、位置一起存)。
+    以前 CSV 藏在一个默认参数后面,移植代码写一个参数就能编译,存出来的东西悄悄丢列。
+    CSV 请用 `SaveToCSVStream` / `LoadFromCSVStream`(标题行现在可选)。
+  - **`Selection` 可写了** —— 存下来的选区终于能原样还原,不用自己拆成四个坐标重放。
+  - `GridLineStyle` 保留本库含义(枚举类型不同,移植代码一定编译报错,不会静默走错)。
+- **越界赋值现在会抛异常,不再静默。** `TTyCalendar.Date`(超出 `MinDate`/`MaxDate`)、
+  `TTyCheckGroup.Checked[i]`、`TTyRadioGroup.ItemIndex` 三处从前分别是**悄悄钳住**、
+  **读回 False 写了个寂寞**、**悄悄变成 -1**。这些结果都是**看起来合理**的状态,
+  于是索引算错了没人会去查。`.lfm` 流式化豁免(否则属性次序不对会让整个窗体打不开);
+  日历想要"尽量靠近"请改用 `SetDateClamped`。
+- **`TTyMaskEdit.Text := 'hello world'` 现在走掩码**,不再整串塞进 `'###-###'` 里 ——
+  从前 `IsComplete` 会对着那串垃圾说"填完了"。赋值与 Ctrl+V 现在判定一致(截断但不补齐)。
+  另外两种**必然是移植错误**的掩码会直接报错:一个可编辑槽都没有的掩码(`'000-0000'`),
+  以及含 `;` 的 LCL 三段式掩码(会悄悄丢掉后半段)。
+- **`TTyShellTreeView.SelectPath` 改为函数**,写非法 `Directory` 会抛异常。
+  以前非法路径**什么也不做** —— "路径写错了"和"路径没错但里面是空的"看起来一模一样。
+  `SelectPath` 返回 `Boolean` 并附 `LastPathError`(四种可区分的原因),不抛异常;
+  而 `Directory` 是属性写入、没有返回值可用,所以那一头抛。
+- **`TTyTabStrip.TabHeight`**:`0` 保留"不显示标签条"(示例在运行时用它),**自动**改到负数上,
+  与移植过来的 `TabHeight := -1` 一致。顺带修掉:现代密度下 `TabHeight := 28` 会命中"没变化"的
+  提前返回,于是取值缩了、标签条没动。
+- **`TTyHeader.Images` 的类型改为 `TTyVirtualImageList`。** 以前声明成 LCL 的 `TCustomImageList`,
+  而本库的图像集合并非它的后代 —— 也就是说,**能赋进去的列表恰好都是画不出来的**,
+  这个属性从声明上就不可用,网格只好自带第二份列表绕开它。
+- **`TTyHeaderControl` 三个 section 事件的第一个参数由 `TObject` 改为 `TTyHeaderControl`**,
+  `OnSectionTrack` 另多一个 `AState`(按下 / 拖动中 / 松手),于是"这个宽度是拖到一半还是最终值"
+  终于分得清。
+- **`TTySpinEdit.OnChange` 现在每敲一个字符就触发。** 以前只有提交后的值变化才触发,于是
+  做即时校验、点亮"确定"按钮、更新预览的处理器在用户输入过程中**完全听不到动静** ——
+  而半截数字可能根本走不到提交。提交值的变化改由新的 `OnValueChange` 报告(它最后触发,
+  处理器看到的是稳定状态)。新触发点是旧的**超集**,不会有处理器丢事件。
+- **`TTyCheckComboBox.Objects[]` 归应用所有了。** 以前勾选状态就占着这个槽,应用往里放自己的
+  对象,读回来是"已勾选";文档还把这条当规则写着。现在勾选状态与应用数据同住一个对象里
+  (LCL 的做法),排序、删除、清空都不会错位或泄漏。
 
 ### 修复 — 属性面板给了旋钮,控件却不看
 
@@ -184,8 +225,30 @@
 - **`TTyUpDown.Wrap` 现在进位而不是丢弃溢出**(Increment > 1 时不再变成"归零器");
   新增带方向的 `OnArrowClick`。
 - **`TTyShellListView` 大小列的单位可翻译了**(以前写死英文)。
+- **右键菜单的四个属性终于有人读了**:`TrackButton`(以前按住右键拖到菜单项上松手,什么也不会发生)、
+  `GlyphShowMode`(逐项控制图标画不画)、`SubMenuImages`(每级子菜单可以用自己的图标集,
+  以前一律继承上一级)、以及整套 `OwnerDraw` / `OnDrawItem` / `OnMeasureItem` 自绘协议。
+  另外,**禁用菜单项的图标现在画成灰的**。
+- **列头可以带图标了**:`TTyColumn.ImageIndex` 现在真的画出来,标题会给它让位;
+  列头没有自己的图标集时,用控件的 `SmallImages`(这也是 Delphi/LCL 解析列图标的地方)。
+- **文件树的 `ShowHidden` 立刻生效**,不再等到下一次刷新才露面。
+- **`TTyDivider` 新增 `LeftIndent`**(`TDividerBevel` 的属性):按像素指定横线从左边缩进多少。
+  与本库的 `Alignment` 并存,`LeftIndent >= 0` 时它说了算;默认关闭,现有分隔线渲染不变。
+- **`TTyToolBarEx` 不再覆盖子按钮的 `StyleClass`** —— 上一版只修好了基类,`Ex` 子类
+  重写了布局,那一行还留着,于是同样一句 `StyleClass := 'primary'` 在两个几乎一样的工具条上
+  一个保得住、一个每次重排都被抹掉。
+- **`TTyShellListView.OnCompare` 现在真的会被调用**(上一版把事件槽还给了应用,却没人去触发它)。
 - 名称对齐:`TTyCalendar.DateTime`、`TTyMaskEdit.EditMask`、`TTyMemo.Append`、`TTyEdit.Clear`、
   `TTyListBox` 与 `TTyComboBox` 的 `Clear`/`AddItem`/`Count`/`ItemRect` 等一整套列表方法。
+
+### 新增 — `OnPaint`
+
+- **所有 TTy 控件都有 `OnPaint` 了。** 控件画完自己之后触发,交给你的是控件自己的 `Canvas` ——
+  想加一个角标、一层浮层、一个调试框,不必再派生一个类。它**不是**自绘替换:
+  处理器接手时控件已经画好了,你是画在它上面。
+  文档从前把"没有 `OnPaint`"写成一条设计取舍,其实不是:本库每个控件都是先画进 BGRA 图层、
+  再整块合成到画布上,从 `Paint` 里触发的钩子画的东西会被那次合成盖掉 —— 所以钩子挪到了
+  合成完成之后。在带缓存的容器上,浮层也不会被烤进缓存里反复重放。
 
 ### 修复 — 数据网格
 

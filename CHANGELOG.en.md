@@ -177,6 +177,66 @@ below change the behaviour of existing code -- read before upgrading.**
   `Orientation` swaps the axis.
 - **`TTyHeaderControl.OnSectionResize` fires once, on release**; the continuous one is the
   new `OnSectionTrack`.
+- **Data grid: six members whose name now means something else. Read these one by one.**
+  - **`VisibleRowCount` is back to LCL's meaning -- how many rows the viewport holds.**
+    It used to return the filtered row count, so ported paging arithmetic compiled and
+    computed a different number. Our meaning already had two other names,
+    `DisplayRowCount` and `FilteredRowCount`.
+  - **`ClearRows` / `ClearCols` now DELETE rows and columns**, as they do on LCL. They used
+    to blank the CONTENT of a band -- same name, opposite kind. Blanking is now
+    `ClearRowContents` / `ClearColContents`. Deliberately **not** an arity-only overload:
+    "delete every row" and "blank two rows" must not differ by one argument.
+  - **`SaveToStream` / `LoadFromStream` no longer write CSV**; they write a versioned
+    container that keeps column widths, attributes and position. CSV sat behind a default
+    argument, so a one-argument call from ported code compiled and silently produced a
+    format that loses columns. CSV is now `SaveToCSVStream` / `LoadFromCSVStream`, with
+    optional title rows.
+  - **`Selection` is writable** -- restoring a saved rectangle no longer means replaying it
+    as four coordinates.
+  - `GridLineStyle` keeps our meaning: the enum types differ, so every ported use is a
+    compile error rather than a silent misread.
+- **Out-of-range writes raise instead of going quiet.** `TTyCalendar.Date` (outside
+  `MinDate` / `MaxDate`), `TTyCheckGroup.Checked[i]` and `TTyRadioGroup.ItemIndex` used to
+  clamp silently, read back `False` and write nothing, and silently become `-1`
+  respectively. Every one of those outcomes is a **plausible** state, which is precisely
+  why an index bug survives one. `.lfm` streaming is exempt (a property order mismatch
+  would otherwise stop the whole form from opening); the calendar keeps the clamp under
+  the name `SetDateClamped` for callers who want "as close as you can get".
+- **`TTyMaskEdit.Text := 'hello world'` goes through the mask** instead of landing intact
+  in a `'###-###'` field, where `IsComplete` then said that string was complete.
+  An assignment and a Ctrl+V of the same string can no longer disagree (both truncate; the
+  control does not pad). Two mask shapes that can only be porting mistakes are now
+  rejected outright: a non-empty mask with no editable slot at all (`'000-0000'`), and any
+  mask containing `;`, LCL's three-part separator, which would otherwise drop its tail
+  unseen.
+- **`TTyShellTreeView.SelectPath` is a function now**, and writing an invalid `Directory`
+  raises. An invalid path used to do nothing at all -- there was no way to tell "the path
+  is wrong" from "the path is right and empty". `SelectPath` returns `Boolean` plus a
+  `LastPathError` (four distinguishable reasons) and never raises, because resolving a
+  user-typed path is routine; the `Directory` setter raises, because a property write has
+  no return channel.
+- **`TTyTabStrip.TabHeight`**: `0` still means "no tab band" (a shipped capability the
+  examples toggle at runtime) and AUTO moved onto the negatives, matching what a ported
+  `TabHeight := -1` did in Lazarus. Fixed along the way: at modern density
+  `TabHeight := 28` hit a no-change early-out, so the value shrank and the band did not.
+- **`TTyHeader.Images` is retyped to `TTyVirtualImageList`.** It was declared as LCL's
+  `TCustomImageList`, which this library's image collection does not descend from -- so
+  the only lists assignable to it were exactly the ones no painter can draw. The property
+  was unusable by construction, and the grid carried a private second list to work around
+  it.
+- **The three `TTyHeaderControl` section events take `TTyHeaderControl` as their first
+  parameter** instead of `TObject`, and `OnSectionTrack` carries an extra `AState` (grab /
+  move / release) -- so "is this width mid-drag or final?" is finally answerable.
+- **`TTySpinEdit.OnChange` now fires on every keystroke.** It used to fire only when the
+  committed value moved, so a handler doing live validation, enabling an OK button or
+  updating a preview heard **nothing** while the user typed -- and a half-typed number may
+  never commit at all. The committed-value move is the new `OnValueChange`, fired last so
+  the handler sees a settled control. The new firings are a strict superset of the old, so
+  no handler loses an event.
+- **`TTyCheckComboBox.Objects[]` belongs to the application now.** The checked flag used to
+  occupy that slot, so an application object stored there read back as *checked* -- and the
+  docs recorded that as a rule. The check and the application's data now share one object
+  (LCL's arrangement), so sorting, deleting and clearing cannot desync or leak them.
 
 ### Fixed -- knobs the Object Inspector offered and the control ignored
 
@@ -241,9 +301,40 @@ error, no log, nothing visible in a screenshot.
 - **`TTyUpDown.Wrap` carries the overshoot** instead of discarding it (an Increment above 1
   had turned it into a reset); new direction-carrying `OnArrowClick`.
 - **`TTyShellListView`'s Size column units are translatable** (they were hard-coded English).
+- **Four popup-menu properties are finally read**: `TrackButton` (holding the right button,
+  dragging onto an item and releasing used to do nothing), `GlyphShowMode` (per-item control
+  over whether the icon draws), `SubMenuImages` (each submenu level can carry its own icon
+  set; a cascade used to inherit its parent's unconditionally), and the whole `OwnerDraw` /
+  `OnDrawItem` / `OnMeasureItem` protocol. Also: **a disabled row's icon draws greyed**.
+- **Column headers can carry icons**: `TTyColumn.ImageIndex` is drawn now, and the caption
+  steps aside for it. A header with no list of its own resolves against the control's
+  `SmallImages`, which is where Delphi and LCL resolve column icons.
+- **The shell tree's `ShowHidden` takes effect on the write**, instead of waiting for the
+  next refresh to reveal it.
+- **`TTyDivider` gains `LeftIndent`** (`TDividerBevel`'s property): the rule's inset from the
+  left in pixels. It coexists with our `Alignment` and wins when `>= 0`; off by default, so
+  existing dividers render unchanged.
+- **`TTyToolBarEx` no longer overwrites a child button's `StyleClass`** -- the previous round
+  fixed the base class, but the `Ex` subclass overrides layout and kept the old line, so the
+  same `StyleClass := 'primary'` survived on one toolbar and was wiped on every relayout of
+  the other.
+- **`TTyShellListView.OnCompare` actually gets called** (the previous round handed the event
+  slot back to the application but left nothing raising it).
 - Name parity: `TTyCalendar.DateTime`, `TTyMaskEdit.EditMask`, `TTyMemo.Append`,
   `TTyEdit.Clear`, and the whole `Clear` / `AddItem` / `Count` / `ItemRect` list surface on
   `TTyListBox` and `TTyComboBox`.
+
+### Added -- `OnPaint`
+
+- **Every TTy control has `OnPaint` now.** It fires after the control has finished drawing
+  itself and hands you the control's own `Canvas` -- one badge, one overlay, one debug
+  rectangle, without subclassing. It is **not** an owner-draw replacement: the themed
+  control is already on the canvas when the handler runs, and the handler draws over it.
+  The docs used to present the absence as a design position. It was not: every control here
+  builds its frame into a BGRA layer and then composites that layer onto the canvas, so a
+  hook fired from inside `Paint` would have had its output overwritten. The hook sits after
+  the composite instead. On a cached container the overlay is never baked into the cache and
+  replayed frozen.
 
 ### Fixed -- data grid
 
