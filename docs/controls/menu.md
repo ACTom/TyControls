@@ -57,6 +57,19 @@ uses tyControls.Menu;
 > | `PopupPoint` | 每次 `PopUp(X, Y)` 都会写入，因此读到的是本次唤起的位置而不是历史值 |
 > | `Close` / `OnClose` | 弹出体以任何方式消失（选中项、`Esc`、点到外面）都会走到 `TPopupMenu.Close` → `DoClose` → `OnClose`，并清掉全局 `ActivePopupMenu` |
 
+#### 3.2.1 继承自 LCL 且**由主题化渲染器实现**的成员
+
+下面这些成员声明在 `TPopupMenu` / `TMenu` / `TMenuItem` 上，对象查看器一直提供、也一直可以赋值——它们现在由主题化渲染器真正读取并生效（此前是「可设置但被忽略」）。
+
+| 成员 | 声明于 | 默认值 | 主题化渲染器中的语义 |
+|------|--------|--------|----------------------|
+| `TrackButton` | `TPopupMenu` | `tbRightButton` | 弹出后哪个鼠标键可以激活菜单行。`tbRightButton`（默认）= **左右键都能选中**（与 Win32 `TPM_RIGHTBUTTON`、Qt 的 `trackButton` 过滤一致），因此「按住右键 → 拖到某行 → 松开」这一常规右键菜单手势可用；`tbLeftButton` = **仅左键**。 |
+| `OwnerDraw` | `TMenu` | `False` | 自绘开关。为 `True` 时，每一行的**尺寸**来自 `OnMeasureItem`、**像素**来自 `OnDrawItem`（先取该 `TMenuItem` 自己的处理器，没有则回落到所属菜单的处理器——即 `TMenuItem.DoMeasureItem` / `DoDrawItem` 的 LCL 规则）。 |
+| `OnDrawItem` | `TMenu` / `TMenuItem` | `nil` | `procedure(Sender; ACanvas: TCanvas; ARect: TRect; AState: TOwnerDrawState)`。仅在 `OwnerDraw = True` 时触发；触发的行**不再绘制**默认内容（勾选/图标槽、标题、快捷键、子菜单箭头）。 |
+| `OnMeasureItem` | `TMenu` / `TMenuItem` | `nil` | `procedure(Sender; ACanvas: TCanvas; var AWidth, AHeight: Integer)`。仅在 `OwnerDraw = True` 时触发；入参已按主题默认值预填，处理器可只改一个轴。行高、行顶偏移、命中测试与弹出体测量**全部**采用其结果，所以变高行的绘制位置与点击位置一致。 |
+| `GlyphShowMode` | `TMenuItem` | `gsmApplication` | 该项是否参与左侧图标列：`gsmAlways` 始终画、`gsmNever` 从不画、`gsmApplication` 跟随 `Application.ShowMenuGlyphs`、`gsmSystem` 跟随系统主题（`toShowMenuImages`）。设计期一律显示。逐项生效，一项退出不影响同级其他项。 |
+| `SubMenuImages` / `SubMenuImagesWidth` | `TMenuItem` | `nil` / `0` | 子菜单专属图标源。按 LCL 的 `TMenuItem.GetImageList` 规则**逐项**解析：沿父链找**最近**一个设了 `SubMenuImages` 的祖先，都没有才回落到所属菜单的 `Images`。`SubMenuImagesWidth` 是 96-PPI 下的图像宽度（`0` = 用图像列表自身尺寸）。 |
+
 ### 3.3 继承的通用成员
 
 `TTyMenuBar` 继承自 `TTyCustomControl`（`tyControls.Base`）：
@@ -88,6 +101,10 @@ uses tyControls.Menu;
 | `TMenuItem.OnClick` | `TNotifyEvent` | 激活某个叶子菜单项（点击 / Enter / 空格 / 助记符）时，触发**该 `TMenuItem` 自己**的 `OnClick`。菜单栏与右键菜单都通过 `TMenuItem.Click` 分发到此事件。**菜单栏上没有子项的顶层项也算叶子**：点它直接触发它的 `OnClick`（见 §7）。 |
 | `TPopupMenu.OnPopup` | `TNotifyEvent` | 每次 `PopUp(X, Y)` 弹出**之前**触发，且**早于行快照**——所以在这个 handler 里增删菜单项是有效的，这正是"按光标下的东西现拼上下文菜单"的做法。触发后若 `Items.Count = 0` 则什么也不弹（与 LCL 同）。 |
 | `TPopupMenu.OnClose` | `TNotifyEvent` | 弹出体关闭后触发（选中项 / `Esc` / 点到外面都算），同时清掉全局 `ActivePopupMenu`。 |
+| `TMenuItem.OnDrawItem` / `TMenu.OnDrawItem` | `TMenuDrawItemEvent` | 自绘一行的内容；仅当 `OwnerDraw = True` 时触发。见 §3.2.1 与 §7。 |
+| `TMenuItem.OnMeasureItem` / `TMenu.OnMeasureItem` | `TMenuMeasureItemEvent` | 决定一行的宽/高；仅当 `OwnerDraw = True` 时触发。见 §3.2.1。 |
+
+> 上面四个事件对 `TTyMenuBar` 关联的 `TMainMenu` 同样有效：菜单栏下拉与右键菜单用的是同一个渲染器，`TMainMenu.OwnerDraw` 会被转发给下拉。（菜单栏**自身的顶层单元格**不参与自绘，它们不是弹出行。）
 
 > `TTyMenuBar` 作为 `TTyCustomControl` 子类，仍暴露**基线事件集**（Tier A 鼠标 / 通用事件 + Tier B 键盘 / 焦点事件）。但对菜单而言，命令响应应挂在**各 `TMenuItem` 的 `OnClick`** 上，而不是菜单栏本身的 `OnClick`。完整基线清单见 [../events.md](../events.md)。
 
@@ -159,6 +176,10 @@ TyMenuItem:disabled { color: var(--muted); }                          /* 禁用�
 - **子菜单箭头 / 快捷键：** 有子项（`mi.Count > 0`）的行在右槽绘制 `tgArrowRight` 箭头；否则若 `mi.ShortCut <> 0`，在右槽右对齐绘制 `ShortCutToText(mi.ShortCut)`。（`ShortCutToText(0)` 返回 `'Unknown'`，故仅当 `ShortCut <> 0` 才渲染快捷键文本。）
 - **默认项加粗：** `TMenuItem.Default = True` 的行以 `font-weight: 700`（粗体）渲染。
 - **高亮行的 Hint 发布到 `Application.Hint`：** 高亮移到某行时把该 `TMenuItem.Hint` 写进 `Application.Hint`（状态栏 / 长提示面板据此描述光标下的命令）；高亮移开（索引 `-1`）时**清空**——留着一条已经不在指针下的命令的描述，比什么都不显示更糟。
+- **图标列的两个来源与优先级：** 左槽的图标可以来自两处——库自己的 `TTyVirtualImageList`（`TTyImagesMenu.Images`，BGRA 名称键），或按 `GetImageList` 解析出的 **LCL `TCustomImageList`**（`SubMenuImages` 链 → 菜单的 `Images`）。**解析出的 LCL 列表优先**：`SubMenuImages` 是「这一层子菜单就要用这套图标」的明确声明，理应压过菜单级来源；二者在设计器里也不会撞车，因为 `TTyImagesMenu.Images` 遮蔽了 `TMenu.Images`。两条路径都先经 `GlyphShowMode` 门控，`Checked` 的勾选字形仍然优先于图标。
+- **图标尺寸决定槽宽与行高下限：** 主题的 `--menu-check-slot`（18px）与文本行高是**下限**而非上限——LCL 图像列表自带像素尺寸，`SubMenuImagesWidth` 还能要求更大的，所以左槽与行高会被撑到刚好容纳图标（否则 32px 图标会盖住标题、上下被裁）。撑开量来自应用自己的图像列表，不是写死的视觉值。
+- **禁用行的图标变灰：** LCL 图像列表按 `Enabled` 绘制，禁用行传 `False` 得到灰化图标（`TScaledImageListResolution.Draw` 的第 5 参是 `AEnabled` 而**不是** "greyed"，且它还有一个 `TGraphicsDrawEffect` 重载，传反了照样能编译）。
+- **GDI 两趟后置绘制：** LCL 图像列表的图标与 `OnDrawItem` 都是 GDI 绘制，必须在 `TTyPainter.EndPaint` **之后**画到 `ACanvas` 上——在此之前直接画到 `ACanvas` 的内容会被 BGRA 图层的合成覆盖掉。两趟都按各自行矩形裁剪，互不越界。
 - **助记符下划线：** 标题中的 `&` 由 `TyParseMnemonic` 解析（共享设施 `tyControls.Accel`），`&` 从显示文本移除，其后字符在**按住 Alt 时**显示下划线；菜单栏的下划线经 `TyAccelGatePos` 门控（仅 Alt 态显示）。
 - **弹出圆角：** 弹出窗体用与 `TyMenuPopup` 的 `border-radius` 匹配的圆角区域做窗口遮罩（`SetWindowRgn`/`CreateRoundRectRgn`，跨 win32/gtk2/qt）；半径为 0 或非 Windows 时留矩形；Wayland 无法遮罩窗口，改为方角绘制（`ForceSquareSurface`）。
 
@@ -244,6 +265,12 @@ end;
 - **Alt+助记符打开顶层菜单：** `DialogChar` 仅在**恰好按下 Alt**（无 Ctrl/Shift）时匹配顶层项助记符打开其下拉；纯字母键经窗体级 DialogChar 广播不会误开菜单。助记符下划线仅在按住 Alt 时显示。
 - **弹出层键盘导航：** 下拉/子菜单打开后，方向键上下移动高亮（跳过分隔线与禁用项、两端回绕）、`Home`/`End` 跳首末可选项、`Enter`/`Space` 激活、`→` 在子菜单行上展开子菜单（否则在根下拉上切到相邻顶层）、`←` 折叠子菜单回父级（根下拉上则切到上一顶层）、`Esc` 关闭当前层。裸字母/数字键跳转到匹配助记符的行并激活。
 - **子菜单悬停自动展开：** 高亮停在子菜单行上超过 `TyMenuHoverOpenDelay`（350ms）自动展开该子菜单；移到非子菜单行会折叠已展开的同级子菜单。
+- **自绘（`OwnerDraw`）的边界：**
+  - 它是**开关**：`OwnerDraw = False`（默认）时，即使某项挂了 `OnDrawItem` / `OnMeasureItem` 也**不会**触发，行仍按主题绘制。
+  - 触发自绘的行：**先**铺该行的主题背景（含 `:active` 高亮），**再**调处理器，并在 `AState` 中带上 `odBackgroundPainted` 告知这一点——只画文字的处理器因此仍能落在正确的高亮上。其余状态按行如实映射：`odSelected`（当前高亮行）、`odDisabled` + `odGrayed`、`odChecked`、`odDefault`。
+  - **不覆盖 TyControls 专有的「章节标题」行**（`TTyMenuEx` 的 `-Text`）：它在 LCL 里没有对应的项类型，自绘协议管不到它，仍按主题绘制。普通项与分隔线都参与自绘。
+  - 自绘只改**内容**，不改弹出体的背景/边框/圆角——那仍由 `TyMenuView` / `TyMenuPopup` 令牌决定。
+- **`TrackButton` 的含义：** `tbRightButton`（默认）不是「只能右键」，而是「左右键都能选中」，与 Win32 `TPM_RIGHTBUTTON` 一致；左键路径（`TControl.Click`）在两种取值下都可用，`tbLeftButton` 只是把右键关掉。
 - **`TTyPopupMenu` 是真正的 `TPopupMenu`：** 它重写虚方法 `PopUp(X, Y)`（已核实 `menus.pp` 中该方法为 `virtual`），因此赋给任意控件的 `PopupMenu` 属性、走 LCL 的 `DoContextPopup` 右键路径即可弹出主题化菜单，无需额外接线。
 - **主题必须先加载：** 弹出体的背景/边框/圆角/高亮全部来自 `.tycss` 令牌；未加载主题时样式解析没有可用令牌。视觉值一律由主题驱动，代码中不写死颜色。
 - **弹出圆角的平台差异：** 圆角窗口遮罩在 win32/gtk2/qt(X11) 上生效；Wayland 无法遮罩窗口，退化为方角绘制以避免"圆角绘制叠在方角窗口"的边缘瑕疵。

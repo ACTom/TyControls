@@ -2,6 +2,7 @@ unit tyControls.Menu;
 {$mode objfpc}{$H+}
 interface
 uses Classes, SysUtils, Types, Controls, Graphics, Forms, ExtCtrls, LCLType, LCLProc, LCLIntf, LMessages, Menus,
+  ImgList,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.Accel,
   tyControls.QtWS, tyControls.PlatformWS, tyControls.ImageCollection;
 
@@ -42,8 +43,22 @@ type
     ImageIndex: Integer;    // icon-column index into the menu's Images (-1 = none)
     Hint: string;           // published to Application.Hint while the row is highlighted
     AlwaysCheckable: Boolean;  // draw an empty check slot even when unchecked
+    GlyphVisible: Boolean;  // TMenuItem.GlyphShowMode says this row's icon may be drawn
+    { The LCL image list this row resolved to, per TMenuItem.GetImageList: the nearest
+      ancestor's SubMenuImages, else the parent menu's own Images. nil when there is
+      none, in which case the renderer falls back to its TTyVirtualImageList. Width is
+      the list's 96-PPI image width (SubMenuImagesWidth / ImagesWidth; 0 = natural). }
+    LCLImages: TCustomImageList;
+    LCLImagesWidth: Integer;
   end;
   TTyMenuRowArray = array of TTyMenuRow;
+
+{ Whether AItem's icon may be drawn at all, per TMenuItem.GlyphShowMode. This mirrors the
+  private CanShowIcon nested in LCL's TMenuItem.HasIcon; HasIcon ITSELF cannot be used,
+  because it also insists the icon comes from an LCL TCustomImageList and would therefore
+  hide every icon this library draws out of a TTyVirtualImageList. Nothing consulted the
+  mode before, so gsmNever drew the glyph anyway and the property was decoration. }
+function TyMenuGlyphVisible(AItem: TMenuItem): Boolean;
 
 { Flatten a root TMenuItem's visible children into render rows. Caption '-' => separator.
   When AAllowHeaders, a Caption of '-Text' (a dash followed by text) becomes a non-selectable
@@ -77,9 +92,37 @@ type
       row's submenu. FHoverPending is the row armed for opening, or -1 (disarmed). }
     FHoverTimer: TTimer;
     FHoverPending: Integer;
+    FTrackButton: TTrackButton;
+    FOwnerDraw: Boolean;
+    { Row sizes, one per row, valid only for (FMeasuredPPI, FMeasuredVer); FMeasuredPPI = 0
+      means "none". RowTop walks every earlier row, so re-deriving a height per hop would
+      make one paint O(n^2) style resolutions -- and, under OwnerDraw, would ask the app's
+      OnMeasureItem that many times. Both are answered ONCE per row here. Dropped whenever
+      the rows, the OwnerDraw flag or the THEME change (a hot theme reload moves the row
+      height, and a cache that outlived it would paint at the old geometry). }
+    FMeasured: array of TSize;
+    FMeasuredPPI: Integer;
+    FMeasuredVer: Cardinal;
     procedure EnsureHoverTimer;
     procedure HandleHoverTimer(Sender: TObject);
+    procedure SetOwnerDraw(AValue: Boolean);
+    procedure InvalidateMeasure;
+    procedure EnsureMeasured(APPI: Integer);
+    { Device size of the LCL image-list icons these rows resolved to, or (0,0) when no
+      row has one. Drives the left-slot width and the row-height floor: an image list
+      carries its own pixel size and SubMenuImagesWidth can ask for a bigger one. }
+    function LCLIconSize(APPI: Integer): TSize;
+    { The TyMenuItem theme states for row AIndex (disabled wins, then the highlight).
+      Shared by the default row render and the owner-draw branch so both agree. }
+    function RowStateSet(AIndex: Integer): TTyStateSet;
+    { The same row state expressed as LCL's TOwnerDrawState, for OnDrawItem. }
+    function RowOwnerDrawState(AIndex: Integer): TOwnerDrawState;
     function ItemRowHeight(APPI: Integer): Integer;
+    function SeparatorHeight(APPI: Integer): Integer;
+    { Widest DEFAULT item-row content in device px (no popup padding, no banner). Split
+      out of MeasureWidth so the owner-draw measure can seed OnMeasureItem with it
+      without re-entering MeasureWidth. }
+    function ContentWidth(APPI: Integer): Integer;
     { True iff AIndex is an in-range, selectable (non-separator, enabled) item row. }
     function IsSelectable(AIndex: Integer): Boolean;
     { First selectable row whose mnemonic equals AChar (upper-cased), or -1. }
@@ -95,6 +138,14 @@ type
       check/arrow slots + the shortcut text + min gap, themed via TyMenuItem. Pure;
       the popup host sizes to it (clamped to a host minimum). }
     function MeasureWidth(APPI: Integer): Integer;
+    { Height of row AIndex in device px: the separator slot, the item height (floored at
+      the icon height), or whatever OnMeasureItem answered when OwnerDraw is on. Every
+      vertical seam goes through here so a variable-height owner-drawn menu still
+      hit-tests where it paints. }
+    function RowHeight(AIndex, APPI: Integer): Integer;
+    { Device width of the left check/icon slot: the themed --menu-check-slot, widened
+      when a resolved LCL image list draws wider icons than the slot reserves. }
+    function LeftSlotWidth(APPI: Integer): Integer;
     function RowTop(AIndex, APPI: Integer): Integer;
     { Device-y -> row index, or -1 for a separator / out-of-range (not selectable). }
     function RowAtY(AY, APPI: Integer): Integer;
@@ -111,6 +162,7 @@ type
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseLeave; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     { Arm/disarm the lazy hover-open for the current highlight: if it is a submenu row,
@@ -128,6 +180,11 @@ type
     destructor Destroy; override;
     procedure SetRows(const ARows: TTyMenuRowArray);
     procedure Click; override;
+    { Whether AButton activates the row under it while this menu is up. The LEFT button
+      always does (TControl.Click); the RIGHT one only under tbRightButton, which is what
+      TPM_RIGHTBUTTON means on Win32 and what Qt's tbLeftButton filter says in reverse:
+      tbRightButton = both buttons select, tbLeftButton = left only. }
+    function ActivatesOn(AButton: TMouseButton): Boolean;
   public
     { When True, the popup surface is painted with SQUARE corners (frame radius forced to 0). The
       host popup sets this on Wayland, where the window can't be shape-masked, so a square paint
@@ -140,6 +197,12 @@ type
       down the left, with BannerCaption drawn rotated. 0 width = no banner. Set per popup. }
     property BannerCaption: string read FBannerCaption write FBannerCaption;
     property BannerWidth: Integer read FBannerWidth write FBannerWidth;
+    { TPopupMenu.TrackButton, pushed here by the host each popup. }
+    property TrackButton: TTrackButton read FTrackButton write FTrackButton;
+    { TMenu.OwnerDraw, pushed here by the host each popup: each row's size then comes from
+      OnMeasureItem and its pixels from OnDrawItem (the item's own handler, else the
+      parent menu's -- TMenuItem.DoMeasureItem/DoDrawItem own that fallback). }
+    property OwnerDraw: Boolean read FOwnerDraw write SetOwnerDraw;
     { Activation/navigation events consumed by the host popup/bar (Tasks 4/5/7). }
     property OnActivateRow: TTyMenuRowEvent read FOnActivateRow write FOnActivateRow;
     property OnOpenSubmenu: TTyMenuRowEvent read FOnOpenSubmenu write FOnOpenSubmenu;
@@ -181,7 +244,14 @@ type
     FImages: TTyVirtualImageList;   // icon-column source (TTyImagesMenu/TTyMenuEx opt-in)
     FBannerCaption: string;   // decorative left-banner caption (root menu only)
     FBannerWidth: Integer;    // decorative left-banner width (logical px), 0 = none
+    FOwnerDraw: Boolean;      // TMenu.OwnerDraw, forwarded to the view + submenu cascades
+    FTrackButton: TTrackButton;  // TPopupMenu.TrackButton, likewise forwarded
     procedure EnsureForm;
+    { Push the per-popup options the host set onto the live view. Called from EnsureForm
+      AND from Popup: EnsureForm early-exits on every re-open, so a host that changed
+      Images / OwnerDraw / TrackButton between two popups would otherwise keep showing
+      the values the FIRST popup was built with. }
+    procedure ApplyViewOptions;
     procedure HandleActivateRow(Sender: TObject; AIndex: Integer);
     procedure HandleOpenSubmenu(Sender: TObject; AIndex: Integer);
     procedure HandleCloseRequested(Sender: TObject);
@@ -250,6 +320,14 @@ type
     { Decorative left banner on THIS level's view (root only — not propagated to submenus). }
     property BannerCaption: string read FBannerCaption write FBannerCaption;
     property BannerWidth: Integer read FBannerWidth write FBannerWidth;
+    { LCL owner-draw + track-button, forwarded to the view and to every submenu cascade
+      (an owner-drawn menu is owner-drawn all the way down, as it is in the LCL). }
+    property OwnerDraw: Boolean read FOwnerDraw write FOwnerDraw;
+    property TrackButton: TTrackButton read FTrackButton write FTrackButton;
+    { Test seam: this level's live view, building the (hidden) host form on demand. Lets a
+      headless test read what the host actually pushed into the renderer -- the wiring,
+      not merely the property it was written to. }
+    function ViewForTest: TTyMenuView;
     property Root: TMenuItem read FRoot;
     { Left/Right at the bar-root dropdown: ADelta -1/+1. A bare popup has no adjacent
       top to rotate to, so this is meaningful only when a host (TTyMenuBar, Task 5)
@@ -347,6 +425,10 @@ type
     { Which top's dropdown is open, or -1. The observable that says whether OpenTop was
       allowed to proceed -- a disabled top with children must leave this at -1. }
     function OpenIndexForTest: Integer;
+    { Test seam: the dropdown host OpenTop built, or nil when none has been opened yet.
+      Lets a test read what the bar pushed into the shared renderer (e.g. the associated
+      TMainMenu's OwnerDraw) without a real menu grab. }
+    function PopupForTest: TTyMenuPopup;
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
   published
@@ -411,6 +493,9 @@ type
     { Test seam: activate the row at AIndex exactly as choosing it in the themed popup
       would (fires the source item's OnClick). Mirrors TTyMenuPopup.ActivateRowForTest. }
     procedure ActivateRowForTest(AIndex: Integer);
+    { Test seam: the shared themed renderer, built + configured on demand (the same
+      EnsureRenderer a real PopUp runs). Mirrors ActivateRowForTest. }
+    function RendererForTest: TTyMenuPopup;
     function GetVersion: string;
   published
     { Read-only library version (TyVersion); the design-time editor for this property opens
@@ -456,10 +541,74 @@ implementation
 // Rounded popup corners use the CROSS-PLATFORM LCLIntf SetWindowRgn/CreateRoundRectRgn (the
 // win32/gtk2/qt widgetsets all implement them) — no Windows unit needed. (Rect()/Point() call
 // sites remain qualified Types.* — harmless now that the Windows POINT=TPOINT shadow is gone.)
-uses Math, BGRABitmap, BGRABitmapTypes;
+uses Math, Themes, BGRABitmap, BGRABitmapTypes;
+
+type
+  { Reaches TMenuItem's protected InitiateActions / DoDrawItem / DoMeasureItem. Those three
+    are declared protected in another unit, so a same-unit descendant is the way in -- the
+    LCL itself calls them from inside Menus. }
+  TMenuItemAccess = class(TMenuItem);
+
+function TyMenuGlyphVisible(AItem: TMenuItem): Boolean;
+
+  { LCL's own system rule (SystemShowMenuGlyphs in menuitem.inc), which is not exported. }
+  function SystemShowsGlyphs: Boolean;
+  begin
+    Result := ThemeServices.GetOption(toShowMenuImages) = 1;
+  end;
+
+begin
+  Result := False;
+  if AItem = nil then Exit;
+  { At design time every glyph shows regardless of the run-time policy -- an author who
+    cannot see the icons cannot arrange them. LCL makes the same exception. }
+  if csDesigning in AItem.ComponentState then Exit(True);
+  case AItem.GlyphShowMode of
+    gsmNever:  Result := False;
+    gsmAlways: Result := True;
+    gsmSystem: Result := SystemShowsGlyphs;
+  else  // gsmApplication (the TMenuItem default): defer to Application.ShowMenuGlyphs
+    case Application.ShowMenuGlyphs of
+      sbgNever:  Result := False;
+      sbgSystem: Result := SystemShowsGlyphs;
+    else         Result := True;   // sbgAlways
+    end;
+  end;
+end;
+
+{ True when AItem has an owner-draw painter reachable: its own OnDrawItem, else the parent
+  menu's (the fallback TMenuItem.DoDrawItem implements). Asked BEFORE the default row
+  content is skipped -- DoDrawItem only reports "no handler" after the fact, and a row
+  skipped for a handler that never ran would paint as an empty gap. It also keeps us off
+  DoDrawItem's unguarded GetParentMenu deref when an item has no menu at all. }
+function MenuItemHasDrawHandler(AItem: TMenuItem): Boolean;
+var
+  m: TMenu;
+begin
+  Result := False;
+  if AItem = nil then Exit;
+  if Assigned(AItem.OnDrawItem) then Exit(True);
+  m := AItem.GetParentMenu;
+  Result := (m <> nil) and Assigned(m.OnDrawItem);
+end;
+
+{ The OnMeasureItem twin of MenuItemHasDrawHandler, and the same nil-menu guard. }
+function MenuItemHasMeasureHandler(AItem: TMenuItem): Boolean;
+var
+  m: TMenu;
+begin
+  Result := False;
+  if AItem = nil then Exit;
+  if Assigned(AItem.OnMeasureItem) then Exit(True);
+  m := AItem.GetParentMenu;
+  Result := (m <> nil) and Assigned(m.OnMeasureItem);
+end;
 
 function TyBuildMenuRows(ARoot: TMenuItem; AAllowHeaders: Boolean): TTyMenuRowArray;
-var i, n: Integer; mi: TMenuItem;
+var
+  i, n, imgW: Integer;
+  mi: TMenuItem;
+  imgList: TCustomImageList;
 begin
   SetLength(Result, 0);
   if ARoot = nil then Exit;
@@ -503,6 +652,17 @@ begin
         already clicked one. LCL spells this ShowAlwaysCheckable; TMenuItem.AutoCheck is
         the per-item statement of the same thing, so an AutoCheck item reserves its slot. }
       Result[n].AlwaysCheckable := mi.AutoCheck;
+      Result[n].GlyphVisible := TyMenuGlyphVisible(mi);
+      { The icon SOURCE is a per-item question in the LCL, not a per-menu one: GetImageList
+        walks the parent chain for the nearest SubMenuImages and only then falls back to the
+        menu's own Images. Resolving it here is what gives a submenu its own icon set -- the
+        cascade used to inherit the level above unconditionally, so SubMenuImages could not
+        change anything. GetImageList leaves aImagesWidth UNTOUCHED on the nil path (an out
+        parameter of ordinal type is not zeroed), hence the explicit reset. }
+      mi.GetImageList(imgList, imgW);
+      if imgList = nil then imgW := 0;
+      Result[n].LCLImages := imgList;
+      Result[n].LCLImagesWidth := imgW;
     end;
     Inc(n);
   end;
@@ -518,6 +678,8 @@ begin
   SetLength(FRows, 0);
   FHighlight := -1;
   FHoverPending := -1;
+  FTrackButton := tbRightButton;   // the TPopupMenu.TrackButton default
+  InvalidateMeasure;
 end;
 
 destructor TTyMenuView.Destroy;
@@ -588,7 +750,33 @@ procedure TTyMenuView.SetRows(const ARows: TTyMenuRowArray);
 begin
   FRows := Copy(ARows, 0, Length(ARows));
   FHighlight := -1;
+  InvalidateMeasure;
   Invalidate;
+end;
+
+procedure TTyMenuView.SetOwnerDraw(AValue: Boolean);
+begin
+  if FOwnerDraw = AValue then Exit;
+  FOwnerDraw := AValue;
+  InvalidateMeasure;   // row heights are the app's answer now (or ours again)
+  Invalidate;
+end;
+
+procedure TTyMenuView.InvalidateMeasure;
+begin
+  SetLength(FMeasured, 0);
+  FMeasuredPPI := 0;   // no live PPI is 0, so the next EnsureMeasured always recomputes
+  FMeasuredVer := 0;
+end;
+
+function TTyMenuView.ActivatesOn(AButton: TMouseButton): Boolean;
+begin
+  case AButton of
+    mbLeft:  Result := True;   // under either setting; this is TControl.Click's path
+    mbRight: Result := FTrackButton = tbRightButton;
+  else
+    Result := False;
+  end;
 end;
 
 function TTyMenuView.RowCount: Integer;
@@ -602,7 +790,7 @@ end;
 function TTyMenuView.ItemRowHeight(APPI: Integer): Integer;
 var
   S: TTyStyleSet;
-  fontLogical, textPx, padPx: Integer;
+  fontLogical, textPx, padPx, iconH: Integer;
 begin
   S := ActiveController.Model.ResolveStyle('TyMenuItem', '', []);
   fontLogical := S.FontSize;
@@ -612,46 +800,125 @@ begin
   textPx := MulDiv(Round(fontLogical * 96 / 72), APPI, 96);
   padPx := MulDiv(S.Padding.Top, APPI, 96) + MulDiv(S.Padding.Bottom, APPI, 96);
   Result := textPx + padPx;
+  { An LCL image list brings its own pixel size, and SubMenuImagesWidth can ask for a
+    bigger one; a 32px icon in a text-height row would be clipped top and bottom. The
+    themed text+padding height is the FLOOR, not the ceiling -- no visual value is
+    hard-coded here, the extra comes from the app's own image list. }
+  iconH := LCLIconSize(APPI).cy;
+  if iconH > Result then Result := iconH;
   if Result < 1 then Result := 1;
+end;
+
+function TTyMenuView.SeparatorHeight(APPI: Integer): Integer;
+begin
+  Result := MulDiv(ActiveController.Metric('--menu-separator-height', TyMenuSeparatorHeight),
+    APPI, 96);
+end;
+
+function TTyMenuView.LCLIconSize(APPI: Integer): TSize;
+var
+  i: Integer;
+  Res: TScaledImageListResolution;
+begin
+  Result.cx := 0;
+  Result.cy := 0;
+  for i := 0 to High(FRows) do
+    if (FRows[i].Kind = mrkItem) and FRows[i].GlyphVisible and (FRows[i].LCLImages <> nil)
+       and (FRows[i].ImageIndex >= 0) and (FRows[i].ImageIndex < FRows[i].LCLImages.Count) then
+    begin
+      { LCLImagesWidth is the 96-PPI image width the LCL contract asks for; 0 means "the
+        list's own", which GetWidthForPPI already handles. Canvas factor 1: we draw onto
+        the control canvas, not a scaled backing store. }
+      Res := FRows[i].LCLImages.ResolutionForPPI[FRows[i].LCLImagesWidth, APPI, 1];
+      if Res.Width > Result.cx then Result.cx := Res.Width;
+      if Res.Height > Result.cy then Result.cy := Res.Height;
+    end;
+end;
+
+function TTyMenuView.LeftSlotWidth(APPI: Integer): Integer;
+var
+  iconW: Integer;
+begin
+  Result := MulDiv(ActiveController.Metric('--menu-check-slot', TyMenuCheckSlot), APPI, 96);
+  // Same floor rule as ItemRowHeight: a wider icon would otherwise paint over the caption.
+  iconW := LCLIconSize(APPI).cx;
+  if iconW > Result then Result := iconW;
+end;
+
+function TTyMenuView.RowHeight(AIndex, APPI: Integer): Integer;
+begin
+  if (AIndex < 0) or (AIndex > High(FRows)) then Exit(0);
+  EnsureMeasured(APPI);
+  Result := Max(1, FMeasured[AIndex].cy);
+end;
+
+procedure TTyMenuView.EnsureMeasured(APPI: Integer);
+var
+  i, defW, itemH, sepH, w, h: Integer;
+begin
+  if (FMeasuredPPI = APPI) and (FMeasuredVer = ActiveController.Model.ThemeVersion)
+     and (Length(FMeasured) = Length(FRows)) then Exit;
+  SetLength(FMeasured, Length(FRows));
+  // Resolved ONCE, not once per row: both walk the style model.
+  itemH := ItemRowHeight(APPI);
+  sepH := SeparatorHeight(APPI);
+  defW := 0;
+  if FOwnerDraw then defW := ContentWidth(APPI);   // only owner-draw seeds a width
+  for i := 0 to High(FRows) do
+  begin
+    if FRows[i].Kind = mrkSeparator then h := sepH else h := itemH;
+    FMeasured[i].cx := defW;
+    FMeasured[i].cy := h;
+    if not FOwnerDraw then Continue;   // OwnerDraw is the gate on the whole protocol
+    // A section header is a TyControls-only '-Text' row with no LCL counterpart, so the
+    // LCL owner-draw protocol does not speak for it.
+    if FRows[i].Kind = mrkHeader then Continue;
+    if not MenuItemHasMeasureHandler(FRows[i].Item) then Continue;
+    { LCL seeds the handler with the size the menu would have used and lets it adjust
+      either axis (win32wsmenus does exactly this), so a handler that only wants a taller
+      row does not have to re-derive the width. }
+    w := defW;
+    if TMenuItemAccess(FRows[i].Item).DoMeasureItem(Canvas, w, h) then
+    begin
+      if w > 0 then FMeasured[i].cx := w;
+      if h > 0 then FMeasured[i].cy := h;
+    end;
+  end;
+  FMeasuredPPI := APPI;
+  FMeasuredVer := ActiveController.Model.ThemeVersion;
 end;
 
 function TTyMenuView.MeasureHeight(APPI: Integer): Integer;
 var
   S: TTyStyleSet;
-  i, itemH: Integer;
+  i: Integer;
 begin
   // Vertical chrome = the TyMenuView (popup) top+bottom padding.
   S := CurrentStyle;
   Result := MulDiv(S.Padding.Top, APPI, 96) + MulDiv(S.Padding.Bottom, APPI, 96);
-  itemH := ItemRowHeight(APPI);
   for i := 0 to High(FRows) do
-    if FRows[i].Kind = mrkSeparator then
-      Inc(Result, MulDiv(ActiveController.Metric('--menu-separator-height', TyMenuSeparatorHeight), APPI, 96))
-    else
-      Inc(Result, itemH);
+    Inc(Result, RowHeight(i, APPI));
 end;
 
-function TTyMenuView.MeasureWidth(APPI: Integer): Integer;
+function TTyMenuView.ContentWidth(APPI: Integer): Integer;
 var
-  S, RowStyle: TTyStyleSet;
+  RowStyle: TTyStyleSet;
   Bmp: TBGRABitmap;
-  i, effSize, capW, scW, padLR, leftSlot, rightSlot, gap, rowW: Integer;
+  i, effSize, capW, scW, padLR, leftSlot, rightSlot, gap: Integer;
 begin
-  // Vertical chrome (popup) left+right padding bounds every row; each row's content
-  // = check slot + caption + (gap + shortcut) + arrow slot, themed via TyMenuItem.
-  S := CurrentStyle;
-  Result := MulDiv(S.Padding.Left, APPI, 96) + MulDiv(S.Padding.Right, APPI, 96);
+  // Each row's content = check slot + caption + (gap + shortcut) + arrow slot, themed
+  // via TyMenuItem; the widest row wins.
+  Result := 0;
   RowStyle := ActiveController.Model.ResolveStyle('TyMenuItem', '', []);
   effSize := ResolveFontSize(RowStyle);
   padLR := MulDiv(RowStyle.Padding.Left, APPI, 96) + MulDiv(RowStyle.Padding.Right, APPI, 96);
-  leftSlot := MulDiv(ActiveController.Metric('--menu-check-slot', TyMenuCheckSlot), APPI, 96);
+  leftSlot := LeftSlotWidth(APPI);
   rightSlot := MulDiv(ActiveController.Metric('--menu-arrow-slot', TyMenuArrowSlot), APPI, 96);
   gap := MulDiv(ActiveController.Metric('--menu-shortcut-gap', TyMenuShortcutGap), APPI, 96);
 
   Bmp := TBGRABitmap.Create(1, 1);
   try
     TyConfigureTextFont(Bmp, RowStyle.FontName, effSize, RowStyle.FontWeight, APPI);
-    rowW := 0;
     for i := 0 to High(FRows) do
     begin
       if FRows[i].Kind <> mrkItem then Continue;
@@ -659,11 +926,27 @@ begin
       if FRows[i].Display <> '' then capW := Bmp.TextSize(FRows[i].Display).cx;
       scW := 0;
       if FRows[i].ShortcutText <> '' then scW := gap + Bmp.TextSize(FRows[i].ShortcutText).cx;
-      rowW := Max(rowW, padLR + leftSlot + capW + scW + rightSlot);
+      Result := Max(Result, padLR + leftSlot + capW + scW + rightSlot);
     end;
   finally
     Bmp.Free;
   end;
+end;
+
+function TTyMenuView.MeasureWidth(APPI: Integer): Integer;
+var
+  S: TTyStyleSet;
+  i, rowW: Integer;
+begin
+  // Vertical chrome (popup) left+right padding bounds every row.
+  S := CurrentStyle;
+  Result := MulDiv(S.Padding.Left, APPI, 96) + MulDiv(S.Padding.Right, APPI, 96);
+  rowW := ContentWidth(APPI);
+  { OnMeasureItem answers a WIDTH as well as a height, and a row wider than the default
+    would be clipped by the popup if only the height were honoured. }
+  EnsureMeasured(APPI);
+  for i := 0 to High(FMeasured) do
+    rowW := Max(rowW, FMeasured[i].cx);
   Inc(Result, rowW);
   if FBannerWidth > 0 then
     Inc(Result, MulDiv(FBannerWidth, APPI, 96));   // reserve the decorative left banner
@@ -673,32 +956,26 @@ end;
 function TTyMenuView.RowTop(AIndex, APPI: Integer): Integer;
 var
   S: TTyStyleSet;
-  i, itemH: Integer;
+  i: Integer;
 begin
   S := CurrentStyle;
   Result := MulDiv(S.Padding.Top, APPI, 96);
-  itemH := ItemRowHeight(APPI);
   for i := 0 to AIndex - 1 do
   begin
     if (i < 0) or (i > High(FRows)) then Break;
-    if FRows[i].Kind = mrkSeparator then
-      Inc(Result, MulDiv(ActiveController.Metric('--menu-separator-height', TyMenuSeparatorHeight), APPI, 96))
-    else
-      Inc(Result, itemH);
+    Inc(Result, RowHeight(i, APPI));
   end;
 end;
 
 function TTyMenuView.RowAtY(AY, APPI: Integer): Integer;
 var
-  i, rowT, h, itemH, sepH: Integer;
+  i, rowT, h: Integer;
 begin
   Result := -1;
-  itemH := ItemRowHeight(APPI);
-  sepH := MulDiv(ActiveController.Metric('--menu-separator-height', TyMenuSeparatorHeight), APPI, 96);
   for i := 0 to High(FRows) do
   begin
     rowT := RowTop(i, APPI);
-    if FRows[i].Kind = mrkSeparator then h := sepH else h := itemH;
+    h := RowHeight(i, APPI);
     if (AY >= rowT) and (AY < rowT + h) then
     begin
       // Separators and section headers are not selectable.
@@ -812,6 +1089,23 @@ begin
     UpdateHoverOpen;
 end;
 
+procedure TTyMenuView.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  inherited MouseUp(Button, Shift, X, Y);
+  { Rows were only ever activated through TControl.Click, which the LCL raises for the
+    LEFT button alone. So under tbRightButton -- the TPopupMenu default, and what
+    TPM_RIGHTBUTTON means on Win32: BOTH buttons select -- the ordinary "hold the right
+    button down, drag onto a row, let go" gesture did nothing at all, and setting
+    TrackButton to tbLeftButton changed nothing either, because nothing read it.
+    Take the position from the release point: on a press-and-drag the highlight may
+    never have been set by a MouseMove. }
+  if (Button = mbRight) and ActivatesOn(mbRight) then
+  begin
+    SetHighlight(RowAtY(Y, Font.PixelsPerInch));
+    ActivateRow(FHighlight);
+  end;
+end;
+
 procedure TTyMenuView.MouseLeave;
 begin
   inherited MouseLeave;
@@ -873,16 +1167,55 @@ begin
   end;
 end;
 
+function TTyMenuView.RowStateSet(AIndex: Integer): TTyStateSet;
+begin
+  Result := [];
+  if (AIndex < 0) or (AIndex > High(FRows)) or (FRows[AIndex].Kind <> mrkItem) then
+    Include(Result, tysNormal)
+  else if not FRows[AIndex].Enabled then
+    Include(Result, tysDisabled)
+  else if AIndex = FHighlight then
+    Include(Result, tysActive)
+  else
+    Include(Result, tysNormal);
+end;
+
+function TTyMenuView.RowOwnerDrawState(AIndex: Integer): TOwnerDrawState;
+begin
+  { odBackgroundPainted always: the row's themed background goes down before the handler
+    runs, so a handler that only writes text still sits on the right highlight -- and it
+    has to be TOLD, or it will paint one of its own over ours. }
+  Result := [odBackgroundPainted];
+  if (AIndex < 0) or (AIndex > High(FRows)) or (FRows[AIndex].Kind <> mrkItem) then Exit;
+  if not FRows[AIndex].Enabled then
+    Result := Result + [odDisabled, odGrayed]
+  else if AIndex = FHighlight then
+    Include(Result, odSelected);
+  if FRows[AIndex].Checked then Include(Result, odChecked);
+  if FRows[AIndex].DefaultItem then Include(Result, odDefault);
+end;
+
 procedure TTyMenuView.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S, RowStyle, BannerStyle: TTyStyleSet;
   R, RowRect, TextRect: TRect;
-  i, itemH, sepH, padL, padR, leftSlot, rightSlot, capWeight, iconSz, bannerPx: Integer;
+  i, rowT, rowH, padL, padR, leftSlot, rightSlot, capWeight, iconSz, bannerPx: Integer;
   RowStates: TTyStateSet;
   SepFill: TTyFill;
   SepY: Integer;
   icon: TBGRABitmap;
+  ownerDrawOn: Boolean;
+  { Both GDI passes are COLLECTED here and run after P.EndPaint: anything drawn straight
+    to ACanvas during the loop is erased by EndPaint's blit of the BGRA layer (the same
+    trap the tree view's node icons hit). Rects are painter-local, offset by ARect below. }
+  pendingIcon: array of record Res: TScaledImageListResolution; Idx, X, Y: Integer;
+    Enabled: Boolean; Clip: TRect; end;
+  pendingIconCount: Integer;
+  pendingDraw: array of record Item: TMenuItem; R: TRect; St: TOwnerDrawState; end;
+  pendingDrawCount: Integer;
+  k, savedDC: Integer;
+  IconRes: TScaledImageListResolution;
 begin
   P := TTyPainter.Create;
   try
@@ -917,19 +1250,46 @@ begin
       end;
     end;
 
-    itemH := ItemRowHeight(APPI);
-    sepH := MulDiv(ActiveController.Metric('--menu-separator-height', TyMenuSeparatorHeight), APPI, 96);
-    leftSlot := P.Scale(ActiveController.Metric('--menu-check-slot', TyMenuCheckSlot));
+    leftSlot := LeftSlotWidth(APPI);
     rightSlot := P.Scale(ActiveController.Metric('--menu-arrow-slot', TyMenuArrowSlot));
+    ownerDrawOn := FOwnerDraw;
+    SetLength(pendingIcon, 0);
+    pendingIconCount := 0;
+    SetLength(pendingDraw, 0);
+    pendingDrawCount := 0;
 
     for i := 0 to High(FRows) do
     begin
+      rowT := RowTop(i, APPI);
+      rowH := RowHeight(i, APPI);
+      RowRect := Types.Rect(R.Left + bannerPx + P.Scale(S.Padding.Left), rowT,
+        R.Right - P.Scale(S.Padding.Right), rowT + rowH);
+
+      { OwnerDraw: this row's content belongs to the app. The themed row background still
+        goes down (odBackgroundPainted says so), then the handler runs after EndPaint.
+        A SECTION HEADER is skipped: '-Text' is a TyControls-only row kind with no LCL
+        counterpart, so the LCL owner-draw protocol does not speak for it. }
+      if ownerDrawOn and (FRows[i].Kind <> mrkHeader)
+         and MenuItemHasDrawHandler(FRows[i].Item) then
+      begin
+        RowStyle := ActiveController.Model.ResolveStyle('TyMenuItem', '', RowStateSet(i));
+        if tpBackground in RowStyle.Present then
+          P.FillBackground(RowRect, RowStyle.Background, RowStyle.BorderRadius);
+        if pendingDrawCount = Length(pendingDraw) then
+          SetLength(pendingDraw, Length(pendingDraw) + 8);
+        pendingDraw[pendingDrawCount].Item := FRows[i].Item;
+        pendingDraw[pendingDrawCount].R := RowRect;
+        pendingDraw[pendingDrawCount].St := RowOwnerDrawState(i);
+        Inc(pendingDrawCount);
+        Continue;
+      end;
+
       if FRows[i].Kind = mrkSeparator then
       begin
         // A 1px themed line centered in the separator slot, using the TyMenuItem
         // border color (a structural divider color, not a hard-coded value).
         RowStyle := ActiveController.Model.ResolveStyle('TyMenuItem', '', []);
-        SepY := RowTop(i, APPI) + sepH div 2;
+        SepY := rowT + rowH div 2;
         SepFill := Default(TTyFill);
         SepFill.Kind := tfkSolid;
         SepFill.Color := RowStyle.BorderColor;
@@ -942,8 +1302,6 @@ begin
       begin
         // Section header: a non-interactive, muted + bold label (TyMenuItem :disabled color).
         RowStyle := ActiveController.Model.ResolveStyle('TyMenuItem', '', [tysDisabled]);
-        RowRect := Types.Rect(R.Left + bannerPx + P.Scale(S.Padding.Left), RowTop(i, APPI),
-          R.Right - P.Scale(S.Padding.Right), RowTop(i, APPI) + itemH);
         padL := P.Scale(RowStyle.Padding.Left);
         P.DrawText(Types.Rect(RowRect.Left + padL, RowRect.Top, RowRect.Right, RowRect.Bottom),
           FRows[i].Display, RowStyle.FontName, ResolveFontSize(RowStyle),
@@ -952,17 +1310,8 @@ begin
       end;
 
       // Resolve TyMenuItem in the row's interaction state.
-      RowStates := [];
-      if not FRows[i].Enabled then
-        Include(RowStates, tysDisabled)
-      else if i = FHighlight then
-        Include(RowStates, tysActive)
-      else
-        Include(RowStates, tysNormal);
+      RowStates := RowStateSet(i);
       RowStyle := ActiveController.Model.ResolveStyle('TyMenuItem', '', RowStates);
-
-      RowRect := Types.Rect(R.Left + bannerPx + P.Scale(S.Padding.Left), RowTop(i, APPI),
-        R.Right - P.Scale(S.Padding.Right), RowTop(i, APPI) + itemH);
 
       if tpBackground in RowStyle.Present then
         P.FillBackground(RowRect, RowStyle.Background, RowStyle.BorderRadius);
@@ -986,10 +1335,36 @@ begin
           look identical until one of them has already been used. LCL calls the opt-in
           ShowAlwaysCheckable; TMenuItem.AutoCheck is the per-item form of the same thing. }
         P.StrokeBorder(Types.Rect(RowRect.Left + padL + P.Scale(3),
-          RowRect.Top + (itemH - leftSlot) div 2 + P.Scale(3),
+          RowRect.Top + (rowH - leftSlot) div 2 + P.Scale(3),
           RowRect.Left + padL + leftSlot - P.Scale(3),
-          RowRect.Top + (itemH + leftSlot) div 2 - P.Scale(3)), 2, 1, RowStyle.TextColor)
-      else if (FImages <> nil) and (FRows[i].ImageIndex >= 0)
+          RowRect.Top + (rowH + leftSlot) div 2 - P.Scale(3)), 2, 1, RowStyle.TextColor)
+      { GlyphShowMode decides whether this item takes part in the icon column at all.
+        Nothing consulted it before, so gsmNever drew the icon anyway. }
+      else if FRows[i].GlyphVisible and (FRows[i].LCLImages <> nil)
+              and (FRows[i].ImageIndex >= 0)
+              and (FRows[i].ImageIndex < FRows[i].LCLImages.Count) then
+      begin
+        { An LCL image list resolved for THIS row (SubMenuImages walked up the parent
+          chain, else the menu's Images) wins over the library's TTyVirtualImageList: a
+          SubMenuImages is a deliberate per-submenu override, and TTyImagesMenu.Images
+          shadows TMenu.Images so the two cannot collide by accident from the designer.
+          It is a GDI list, so it is collected and drawn after EndPaint. }
+        IconRes := FRows[i].LCLImages.ResolutionForPPI[FRows[i].LCLImagesWidth, APPI, 1];
+        if pendingIconCount = Length(pendingIcon) then
+          SetLength(pendingIcon, Length(pendingIcon) + 8);
+        pendingIcon[pendingIconCount].Res := IconRes;
+        pendingIcon[pendingIconCount].Idx := FRows[i].ImageIndex;
+        pendingIcon[pendingIconCount].X := RowRect.Left + padL + (leftSlot - IconRes.Width) div 2;
+        pendingIcon[pendingIconCount].Y := RowRect.Top + (rowH - IconRes.Height) div 2;
+        { NOTE the parameter. TScaledImageListResolution.Draw's 5th argument is AEnabled,
+          NOT "greyed" -- it also has a TGraphicsDrawEffect overload, so passing the wrong
+          sense here compiles cleanly and draws every icon disabled. A disabled row wants
+          the greyed icon, which is Enabled = False. }
+        pendingIcon[pendingIconCount].Enabled := FRows[i].Enabled;
+        pendingIcon[pendingIconCount].Clip := RowRect;
+        Inc(pendingIconCount);
+      end
+      else if FRows[i].GlyphVisible and (FImages <> nil) and (FRows[i].ImageIndex >= 0)
               and (FRows[i].ImageIndex < FImages.Count) then
       begin
         iconSz := leftSlot - P.Scale(2);
@@ -998,7 +1373,7 @@ begin
         icon := FImages.CachedIndex(FRows[i].ImageIndex, iconSz);
         if icon <> nil then
           P.Bitmap.PutImage(RowRect.Left + padL + (leftSlot - icon.Width) div 2,
-            RowRect.Top + (itemH - icon.Height) div 2, icon, dmDrawWithTransparency);
+            RowRect.Top + (rowH - icon.Height) div 2, icon, dmDrawWithTransparency);
       end;
 
       // Caption: left-aligned after the check slot, ellipsized before the right slot.
@@ -1020,6 +1395,45 @@ begin
     end;
 
     P.EndPaint;
+
+    { --- the two GDI passes, on the COMPOSITED canvas ------------------------
+      Everything above went into the painter's BGRA layer, which EndPaint has just
+      blitted over ACanvas; a GDI draw made before that point is simply erased. Both
+      passes are clipped to their own row so nothing can bleed into a neighbour, and
+      the painter-local rects are offset by ARect into ACanvas device coords. }
+    if pendingIconCount > 0 then
+      for k := 0 to pendingIconCount - 1 do
+      begin
+        savedDC := SaveDC(ACanvas.Handle);
+        try
+          IntersectClipRect(ACanvas.Handle,
+            ARect.Left + pendingIcon[k].Clip.Left,  ARect.Top + pendingIcon[k].Clip.Top,
+            ARect.Left + pendingIcon[k].Clip.Right, ARect.Top + pendingIcon[k].Clip.Bottom);
+          pendingIcon[k].Res.Draw(ACanvas, ARect.Left + pendingIcon[k].X,
+            ARect.Top + pendingIcon[k].Y, pendingIcon[k].Idx, pendingIcon[k].Enabled);
+        finally
+          RestoreDC(ACanvas.Handle, savedDC);
+        end;
+      end;
+
+    if pendingDrawCount > 0 then
+      for k := 0 to pendingDrawCount - 1 do
+      begin
+        savedDC := SaveDC(ACanvas.Handle);
+        try
+          IntersectClipRect(ACanvas.Handle,
+            ARect.Left + pendingDraw[k].R.Left,  ARect.Top + pendingDraw[k].R.Top,
+            ARect.Left + pendingDraw[k].R.Right, ARect.Top + pendingDraw[k].R.Bottom);
+          RowRect := pendingDraw[k].R;
+          Types.OffsetRect(RowRect, ARect.Left, ARect.Top);
+          { TMenuItem.DoDrawItem picks the item's own OnDrawItem, else the parent menu's
+            -- the same fallback the LCL uses. MenuItemHasDrawHandler already proved one
+            of the two exists, so this never returns False and never derefs a nil menu. }
+          TMenuItemAccess(pendingDraw[k].Item).DoDrawItem(ACanvas, RowRect, pendingDraw[k].St);
+        finally
+          RestoreDC(ACanvas.Handle, savedDC);
+        end;
+      end;
   finally
     P.Free;
   end;
@@ -1041,6 +1455,7 @@ begin
   FRoot := nil;
   FController := nil;
   FCloseTick := 0;
+  FTrackButton := tbRightButton;   // the TPopupMenu.TrackButton default
 end;
 
 destructor TTyMenuPopup.Destroy;
@@ -1086,9 +1501,7 @@ begin
   FView := TTyMenuView.Create(FForm);
   FView.Parent := FForm;
   FView.Align := alClient;
-  FView.Images := FImages;   // icon-column source (set before the rows render)
-  FView.BannerCaption := FBannerCaption;   // decorative left banner (this level only)
-  FView.BannerWidth := FBannerWidth;
+  ApplyViewOptions;          // Images / banner / OwnerDraw / TrackButton, before the rows render
   FView.ForceSquareSurface := TyIsWayland;   // Wayland can't shape-mask the window -> square paint
 
   FView.OnActivateRow := @HandleActivateRow;
@@ -1099,6 +1512,23 @@ begin
   FView.OnNavigateLeft := @HandleNavigateLeft;
   if FRoot <> nil then
     FView.SetRows(TyBuildMenuRows(FRoot, FAllowHeaders));
+end;
+
+procedure TTyMenuPopup.ApplyViewOptions;
+begin
+  if FView = nil then Exit;
+  FView.Images := FImages;                 // icon-column source
+  FView.BannerCaption := FBannerCaption;   // decorative left banner (this level only)
+  FView.BannerWidth := FBannerWidth;
+  FView.OwnerDraw := FOwnerDraw;
+  FView.TrackButton := FTrackButton;
+end;
+
+function TTyMenuPopup.ViewForTest: TTyMenuView;
+begin
+  EnsureForm;         // the view is built lazily; a test must see it without a real Popup
+  ApplyViewOptions;   // ...and see it in the state a (re-)Popup would leave it in
+  Result := FView;
 end;
 
 function TTyMenuPopup.ComputeBounds(const AAnchor: TRect;
@@ -1151,6 +1581,8 @@ var
 begin
   EnsureForm;
   FView.Controller := FController;
+  ApplyViewOptions;   // re-assert: EnsureForm early-exits on a re-open, so a host that
+                      // changed any of these between two popups must still be honoured
 
   ParentForm := nil;
   if (Owner <> nil) and (Owner is TControl) then
@@ -1317,6 +1749,12 @@ begin
   FChild.Controller := FController;
   FChild.AllowHeaders := FAllowHeaders;   // submenus honour section headers too
   FChild.Images := FImages;               // ...and the icon column
+  { An owner-drawn menu is owner-drawn all the way down, and the track button applies to
+    the whole cascade -- both are properties of the MENU, not of one level of it.
+    (The per-submenu icon list is NOT propagated like this: TyBuildMenuRows resolves
+    SubMenuImages per item, which is what lets a submenu carry its own icons.) }
+  FChild.OwnerDraw := FOwnerDraw;
+  FChild.TrackButton := FTrackButton;
   // Create the child's form+view and set its root BEFORE any FView access: SetRoot only
   // populates rows when FView already exists (FView is built lazily by EnsureForm), so we
   // build the view first, then root it — guaranteeing FChild.FView exists and is filled.
@@ -1527,6 +1965,11 @@ end;
 function TTyMenuBar.OpenIndexForTest: Integer;
 begin
   Result := FOpenIndex;
+end;
+
+function TTyMenuBar.PopupForTest: TTyMenuPopup;
+begin
+  Result := FPopup;
 end;
 
 function TTyMenuBar.TopRightJustifiedForTest(AIndex: Integer): Boolean;
@@ -1791,6 +2234,10 @@ begin
     FPopup.OnClose := @HandlePopupClosed;
   end;
   FPopup.Controller := ActiveController;
+  { A TMainMenu publishes the same owner-draw protocol as a TPopupMenu, and the dropdown is
+    rendered by the very same view -- without this, OwnerDraw would work in a context menu
+    and silently not in a menu-bar dropdown. }
+  FPopup.OwnerDraw := (FMenu <> nil) and FMenu.OwnerDraw;
   FPopup.SetRoot(mi);
   FOpenIndex := AIndex;
 
@@ -1995,6 +2442,12 @@ begin
     FRenderer := TTyMenuPopup.Create(Self);
   FRenderer.Controller := FController;
   FRenderer.OnClose := @HandleRendererClosed;
+  { The two inherited LCL knobs the themed renderer has to be told about. Both were
+    published (TMenu.OwnerDraw, TPopupMenu.TrackButton), settable in the Object Inspector,
+    and read by nobody -- OwnerDraw + OnDrawItem/OnMeasureItem because the renderer painted
+    every row itself, TrackButton because activation only ever ran through TControl.Click. }
+  FRenderer.OwnerDraw := OwnerDraw;
+  FRenderer.TrackButton := TrackButton;
   ConfigureRenderer(FRenderer);   // subclasses opt into headers/etc. BEFORE the rows are built
   // Root the shared renderer at this popup menu's items (the inherited LCL model).
   FRenderer.SetRoot(Items);
@@ -2032,10 +2485,6 @@ begin
   ARenderer.BannerCaption := FBannerCaption; // + the decorative left banner
   ARenderer.BannerWidth := FBannerWidth;
 end;
-
-type
-  { Reaches TMenuItem.InitiateActions, which is protected. }
-  TMenuItemAccess = class(TMenuItem);
 
 procedure TTyPopupMenu.PopUp(X, Y: Integer);
 var
@@ -2088,6 +2537,12 @@ procedure TTyPopupMenu.ActivateRowForTest(AIndex: Integer);
 begin
   EnsureRenderer;
   FRenderer.ActivateRowForTest(AIndex);
+end;
+
+function TTyPopupMenu.RendererForTest: TTyMenuPopup;
+begin
+  EnsureRenderer;   // same configuration pass a real PopUp runs
+  Result := FRenderer;
 end;
 
 end.
