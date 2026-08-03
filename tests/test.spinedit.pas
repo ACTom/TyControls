@@ -80,7 +80,7 @@ type
     procedure TestMouseDownUpButton;
     procedure TestMouseDownDownButton;
     procedure TestMouseDownTextAreaNoChange;
-    procedure TestOnChangeOnlyOnRealChange;
+    procedure TestValueWriteFiresOnChangeAndSameValueIsSilent;
     procedure TestIncrementUsed;
     procedure TestDisabledKeyIgnored;
     procedure TestDisabledMouseIgnored;
@@ -390,7 +390,11 @@ begin
   AssertEquals('mousedown text area no change', 50, FSpin.Value);
 end;
 
-procedure TTySpinEditControlTest.TestOnChangeOnlyOnRealChange;
+procedure TTySpinEditControlTest.TestValueWriteFiresOnChangeAndSameValueIsSilent;
+{ Renamed from TestOnChangeOnlyOnRealChange: OnChange is now the EDIT's notification (it
+  fires while typing too, see test.parity.spincheck), so "only on a real change" no longer
+  describes it. What still holds -- and is what this pins -- is that a value write that
+  moves nothing rewrites no text and therefore notifies nobody. }
 begin
   FCounter.Count := 0;
   FSpin.Value := 60;
@@ -443,7 +447,9 @@ begin
   FCounter.Count := 0;
   FSpin.MinValue := 60;
   AssertEquals('MinValue raise reclamps Value to 60', 60, FSpin.Value);
-  AssertEquals('reclamp via MinValue fires NO OnChange', 0, FCounter.Count);
+  { Was pinned at 0: the reclamp rewrote the displayed number behind the app's back and
+    said nothing, so a handler validating the field never learned the value had moved. }
+  AssertEquals('reclamp via MinValue is announced like any other value move', 1, FCounter.Count);
 end;
 
 procedure TTySpinEditControlTest.TestIncrementClampMinOne;

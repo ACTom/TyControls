@@ -11,6 +11,7 @@ type
   private
     FMinValue, FMaxValue, FValue, FIncrement: Integer;
     FOnChange: TNotifyEvent;
+    FOnValueChange: TNotifyEvent;
     FReadOnly: Boolean;
     FAlignment: TAlignment;
     FMaxLength: Integer;
@@ -37,6 +38,18 @@ type
     procedure HandleBlink(Sender: TObject);
     procedure ResetCaretBlink;
     procedure DoEnter; override;
+    { OnChange is the EDIT's change notification, as it is on every LCL edit-derived
+      control (TCustomEdit.Change, customedit.inc:622, reached from TextChanged on each
+      keystroke -- and TSpinEdit IS a TCustomEdit). It therefore fires for EVERY buffer
+      mutation: a typed digit, a delete, a spin step, a clamp, a programmatic Value write.
+      Firing it only for a committed value move -- as this control used to -- left live
+      validation and "enable OK while typing" handlers dead for the whole time the user
+      was typing, because a half-typed number may never commit at all. }
+    procedure DoChange; virtual;
+    { OnValueChange is the other half: the committed integer actually moved. Anything that
+      wants "the number is now N" (a preview, a model write-back) hangs here and is not
+      woken by every keystroke. }
+    procedure DoValueChange; virtual;
     // Edit-buffer helpers
     procedure SyncBufferToValue;
     procedure CommitEdit;
@@ -70,7 +83,10 @@ type
     property Alignment: TAlignment read FAlignment write SetAlignment default taLeftJustify;
     // 0 == unlimited; caps the inline edit buffer length in codepoints on insert.
     property MaxLength: Integer read FMaxLength write SetMaxLength default 0;
+    { Text changed (see DoChange): every keystroke, delete, step, clamp and Value write. }
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
+    { The committed Value moved (see DoValueChange). }
+    property OnValueChange: TNotifyEvent read FOnValueChange write FOnValueChange;
     property Align;
     property Anchors;
     property StyleClass;
@@ -182,9 +198,20 @@ begin
   Result := 'TySpinEdit';
 end;
 
+procedure TTySpinEdit.DoChange;
+begin
+  if Assigned(FOnChange) then FOnChange(Self);
+end;
+
+procedure TTySpinEdit.DoValueChange;
+begin
+  if Assigned(FOnValueChange) then FOnValueChange(Self);
+end;
+
 procedure TTySpinEdit.SetValue(const AValue: Integer);
 var
   Clamped: Integer;
+  Moved: Boolean;
 begin
   Clamped := AValue;
   { An empty range (Max <= Min) means "no limit", not "pin everything to Min". With the
@@ -196,12 +223,12 @@ begin
     if Clamped < FMinValue then Clamped := FMinValue;
     if Clamped > FMaxValue then Clamped := FMaxValue;
   end;
-  if FValue <> Clamped then
-  begin
-    FValue := Clamped;
-    if Assigned(FOnChange) then FOnChange(Self);
-  end;
-  SyncBufferToValue;          // always keep buffer in step with Value
+  Moved := FValue <> Clamped;
+  FValue := Clamped;
+  SyncBufferToValue;          // always keep buffer in step with Value; fires OnChange if the text moved
+  { OnValueChange goes last so the handler sees a settled control: new value AND the
+    buffer already rewritten. }
+  if Moved then DoValueChange;
   Invalidate;
 end;
 
@@ -209,18 +236,18 @@ procedure TTySpinEdit.SetMinValue(const AValue: Integer);
 begin
   if FMinValue = AValue then Exit;
   FMinValue := AValue;
-  if FValue < FMinValue then FValue := FMinValue;
-  SyncBufferToValue;
-  Invalidate;
+  { Re-run the current value through the SAME guard the Value setter uses, so a range edit
+    and a value write can never disagree about what an empty range means -- and so the
+    reclamp is announced like any other value move. (LCL: SetMinValue -> UpdateControl ->
+    GetLimitedValue + a widgetset text rewrite, which surfaces as Change.) }
+  SetValue(FValue);
 end;
 
 procedure TTySpinEdit.SetMaxValue(const AValue: Integer);
 begin
   if FMaxValue = AValue then Exit;
   FMaxValue := AValue;
-  if FValue > FMaxValue then FValue := FMaxValue;
-  SyncBufferToValue;
-  Invalidate;
+  SetValue(FValue);           // same re-clamp + notify path as SetMinValue
 end;
 
 procedure TTySpinEdit.SetIncrement(const AValue: Integer);
@@ -260,10 +287,17 @@ begin
 end;
 
 procedure TTySpinEdit.SyncBufferToValue;
+var
+  Old: string;
 begin
+  Old := FEditText;
   FEditText := IntToStr(FValue);
   FCaret := UTF8Length(FEditText);
   ResetCaretBlink;
+  { Rewriting the buffer IS a text change, so it reaches OnChange from here: a step, a
+    clamp, an Esc revert and a commit that reformats '007' into '7' all arrive this way,
+    and only when the text really moved (re-writing the same value stays silent). }
+  if FEditText <> Old then DoChange;
 end;
 
 function TTySpinEdit.AlignOffset(APPI: Integer): Integer;
@@ -319,7 +353,7 @@ var
   v: Integer;
 begin
   v := StrToIntDef(Trim(FEditText), FValue);
-  Value := v;                 // setter clamps to [Min,Max] + fires OnChange if changed
+  Value := v;                 // setter clamps to [Min,Max], rewrites the buffer, and notifies
   SyncBufferToValue;          // resync to the (possibly clamped) value
   Invalidate;
 end;
@@ -343,6 +377,7 @@ begin
   FEditText := Before + C + After;
   Inc(FCaret);
   ResetCaretBlink;
+  DoChange;                   // a typed character is a text change (the path that used to be silent)
 end;
 
 procedure TTySpinEdit.EditBackspace;
@@ -358,6 +393,7 @@ begin
   FEditText := Before + After;
   Dec(FCaret);
   ResetCaretBlink;
+  DoChange;                   // a deleted character is a text change too
 end;
 
 procedure TTySpinEdit.EditDelete;
@@ -372,6 +408,7 @@ begin
   After  := UTF8Copy(FEditText, FCaret + 2, L - FCaret - 1);
   FEditText := Before + After;
   ResetCaretBlink;
+  DoChange;
 end;
 
 procedure TTySpinEdit.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);

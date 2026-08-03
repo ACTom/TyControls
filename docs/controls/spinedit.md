@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-`TTySpinEdit` 是 TyControls 库中的主题化**可内联编辑的整数微调控件**，继承自 `TTyCustomControl`。控件显示一个整数值，右侧有上/下两个小箭头按钮。用户既可以**直接键入数字与前导 `-`**（轻量内联编辑缓冲，无选区/剪贴板），也可以点击箭头按钮、使用上/下方向键、或滚动鼠标滚轮来按 `Increment` 步进改变 `Value`。`Enter` 或失焦时**提交**编辑缓冲（解析 → 夹紧 `[MinValue, MaxValue]` → 写 `Value`）；`Esc` **还原**到当前 `Value`；非法输入（空串或仅 `-`）提交时退回当前 `Value`。值在**区间非空（`MaxValue > MinValue`）时**被夹紧到 `[MinValue, MaxValue]`，`MaxValue <= MinValue` 表示不限制；`Value` 真实变化时触发 `OnChange`。
+`TTySpinEdit` 是 TyControls 库中的主题化**可内联编辑的整数微调控件**，继承自 `TTyCustomControl`。控件显示一个整数值，右侧有上/下两个小箭头按钮。用户既可以**直接键入数字与前导 `-`**（轻量内联编辑缓冲，无选区/剪贴板），也可以点击箭头按钮、使用上/下方向键、或滚动鼠标滚轮来按 `Increment` 步进改变 `Value`。`Enter` 或失焦时**提交**编辑缓冲（解析 → 夹紧 `[MinValue, MaxValue]` → 写 `Value`）；`Esc` **还原**到当前 `Value`；非法输入（空串或仅 `-`）提交时退回当前 `Value`。值在**区间非空（`MaxValue > MinValue`）时**被夹紧到 `[MinValue, MaxValue]`，`MaxValue <= MinValue` 表示不限制。**通知分两个事件**：`OnChange` 是「编辑框文字变了」（每一次按键 / 删除 / 步进 / 夹紧 / 程序赋值都会触发，与 LCL 各编辑类控件一致），`OnValueChange` 是「提交后的整数值真的动了」。
 
 ---
 
@@ -27,14 +27,15 @@ uses tyControls.SpinEdit;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `MinValue` | `Integer` | `0` | 最小值。赋值时若 `Value < MinValue` 则静默夹紧，触发重绘（不触发 `OnChange`）。 |
-| `MaxValue` | `Integer` | `100` | 最大值。赋值时若 `Value > MaxValue` 则静默夹紧，触发重绘（不触发 `OnChange`）。 |
-| `Value` | `Integer` | `0` | 当前值。**仅当 `MaxValue > MinValue`（区间非空）时才夹紧到 `[MinValue, MaxValue]`；`MaxValue <= MinValue` 表示"不限制"，任何值原样写入**（与 LCL `spinedit.inc` 的 `GetLimitedValue` 一致）。若值真正变化则触发 `OnChange` 和重绘。 |
+| `MinValue` | `Integer` | `0` | 最小值。赋值后当前 `Value` 会**走 `Value` setter 同一条夹紧路径**重新过一遍（空区间同样不夹紧）；若因此移动了值，则与其他值变化一样触发 `OnChange` + `OnValueChange`。 |
+| `MaxValue` | `Integer` | `100` | 最大值。同 `MinValue`：重新过一遍 setter，动了就通知。 |
+| `Value` | `Integer` | `0` | 当前值。**仅当 `MaxValue > MinValue`（区间非空）时才夹紧到 `[MinValue, MaxValue]`；`MaxValue <= MinValue` 表示"不限制"，任何值原样写入**（与 LCL `spinedit.inc` 的 `GetLimitedValue` 一致）。值真正变化时触发 `OnValueChange`；显示文字随之改写，因此也触发 `OnChange`。 |
 | `Increment` | `Integer` | `1` | 每步步进量。赋值小于 1 时被强制置为 1。 |
 | `ReadOnly` | `Boolean` | `False` | **（API parity 新增）** 为 `True` 时拦截内联文本编辑**与** ± 步进（箭头按钮 / 方向键 / 滚轮）；程序化 `Value :=` 不受限。 |
 | `Alignment` | `TAlignment` | `taLeftJustify` | **（API parity 新增）** 内联文本的水平对齐（左 / 右 / 居中）；光标随对齐偏移（`AlignOffset`）。 |
 | `MaxLength` | `Integer` | `0`（无限） | **（API parity 新增）** 按码点封顶内联编辑缓冲长度；`0` 表示无限制；插入时检查。 |
-| `OnChange` | `TNotifyEvent` | `nil` | `Value` 真实变化时触发（含箭头按钮、方向键、滚轮、直接赋值）。 |
+| `OnChange` | `TNotifyEvent` | `nil` | **编辑框文字变化时触发**——每按一个数字键、每次退格/删除、箭头按钮 / 方向键 / 滚轮步进、夹紧、`Esc` 还原、程序化 `Value :=` 都算（等价于 LCL `TCustomEdit.Change`）。文字没真的变（同值再写一次）则不触发。 |
+| `OnValueChange` | `TNotifyEvent` | `nil` | **提交后的 `Value` 真的移动时触发**；键入过程中不触发（半截数字还没提交）。给"值现在是 N"这类回调用。 |
 | `TabStop` | `Boolean` | `True` | 是否参与 Tab 键导航（构造时自动置为 `True`）。 |
 | `Align` | `TAlign` | — | 父容器内的停靠方式。 |
 | `Anchors` | `TAnchors` | — | 锚点布局。 |
@@ -65,16 +66,16 @@ function TySpinDownButtonRect(const ALocal: TRect; APPI: Integer): TRect;
 
 | 操作 | 行为 |
 |------|------|
-| 数字键 `0`–`9` | 在光标处插入数字字符，更新内联编辑缓冲，重绘 |
+| 数字键 `0`–`9` | 在光标处插入数字字符，更新内联编辑缓冲，触发 `OnChange`，重绘 |
 | `-` | 仅在光标位于位置 0 且缓冲中尚无 `-` 时插入（允许键入负数），其余位置忽略 |
 | `←` | 光标左移一码点（到达缓冲开头后停止） |
 | `→` | 光标右移一码点（到达缓冲末尾后停止） |
 | `Home` | 光标移到缓冲开头 |
 | `End` | 光标移到缓冲末尾 |
-| `Backspace` | 删除光标前一码点 |
-| `Delete` | 删除光标后一码点 |
-| `Enter` | **提交**：将缓冲解析为整数（`StrToIntDef`，无法解析时退回当前 `Value`）→ 夹紧 `[MinValue, MaxValue]` → 写入 `Value`（若变化则触发 `OnChange`）→ 回填缓冲 |
-| `Esc` | **还原**：丢弃编辑缓冲，重新同步到当前 `Value`（`SyncBufferToValue`），重绘；不触发 `OnChange` |
+| `Backspace` | 删除光标前一码点（真的删掉了才触发 `OnChange`；光标在开头时什么都不做也不通知） |
+| `Delete` | 删除光标后一码点（同上） |
+| `Enter` | **提交**：将缓冲解析为整数（`StrToIntDef`，无法解析时退回当前 `Value`）→ 夹紧 `[MinValue, MaxValue]` → 写入 `Value`（若值移动则触发 `OnValueChange`）→ 回填缓冲（文字变了就触发 `OnChange`） |
+| `Esc` | **还原**：丢弃编辑缓冲，重新同步到当前 `Value`（`SyncBufferToValue`），重绘；`Value` 不动所以不触发 `OnValueChange`，但显示文字被改回去了，触发 `OnChange` |
 | `↑`（Up） | `Value += Increment`（到达 `MaxValue` 后停止），同步回填缓冲，消费按键 |
 | `↓`（Down） | `Value -= Increment`（到达 `MinValue` 后停止），同步回填缓冲，消费按键 |
 | 鼠标左键点击上箭头 | `Value += Increment`，同步回填缓冲 |
@@ -138,9 +139,16 @@ SE.MinValue := 0;
 SE.MaxValue := 100;
 SE.Increment := 5;
 SE.Value := 10;
-SE.OnChange := @OnSpinChange;
+SE.OnChange      := @OnSpinTextChange;    // 每次按键都到（实时校验用）
+SE.OnValueChange := @OnSpinValueChange;   // 只有提交后的值动了才到
 
-procedure TMainForm.OnSpinChange(Sender: TObject);
+procedure TMainForm.OnSpinTextChange(Sender: TObject);
+begin
+  // 用户还在输入：这里适合亮/灭"确定"按钮
+  BtnOK.Enabled := (Sender as TTySpinEdit).Value >= 0;
+end;
+
+procedure TMainForm.OnSpinValueChange(Sender: TObject);
 begin
   with Sender as TTySpinEdit do
     Label1.Caption := Format('当前值：%d', [Value]);
@@ -154,11 +162,12 @@ end;
 ## 8. 注意事项
 
 1. **值夹紧走同一条路径：** 任何修改 `Value` 的路径（属性赋值、按钮、方向键、滚轮、`Enter`/失焦提交）都通过同一 setter。但**空区间（`MaxValue <= MinValue`）表示"无限制"而非"全部钉到最小值"**：早前无条件夹紧，于是 `MinValue := 0` / `MaxValue := 0`——正是"不设限"的写法——把 `Value` 强按成 0，键入什么都进不去。
-2. **OnChange 防重入：** setter 先夹紧值，若夹紧后与原值相同则不调用 `OnChange`，回调中无需过滤重复值。
-3. **Min/Max 修改时 Value 静默校正：** 修改范围后 `Value` 会被自动校正到新区间，但**不**触发 `OnChange`（仅触发 `Invalidate`）。
-4. **Increment 下限为 1：** 给 `Increment` 赋小于 1 的值会被强制置为 1。
-5. **按钮几何固定：** 上/下箭头按钮宽度固定为 18 逻辑像素（DPI 缩放后）、贴齐右缘，各占高度一半，不可通过属性调整。
-6. **内联编辑缓冲轻量：** 编辑缓冲（`FEditText`/`FCaret`）无选区、无剪贴板、无撤销栈；步进操作（方向键/滚轮/按钮）总是立即提交并回填缓冲，不经过缓冲层。
-7. **非法输入安全退回：** 提交时若缓冲为空串或仅含 `-`（`StrToIntDef` 返回当前 `FValue` 作为默认值），则 `Value` 不变、`OnChange` 不触发，缓冲回填为当前 `Value` 的字符串表示。
-8. **光标闪烁：** 聚焦时以约 530 ms 间隔启动；`TTimer` 懒创建，仅在 `HandleAllocated` 后启动，无头测试与设计器中光标静态。
-9. **I-beam 光标（batch⑤+⑥）：** 构造时把 `Cursor` 设为 `crIBeam`，鼠标移到控件上时呈现标准的文本输入「I 形」光标，提示内联数字编辑区可直接键入。
+2. **两个事件各司其职（API parity 修正）：** `OnChange` 是**编辑框**的变化通知——LCL 里 `TSpinEdit` 就是一个 `TCustomEdit`，每次按键都会走 `TCustomEdit.Change`。早前本控件只在"提交后的值变了"时才触发，于是**用户键入期间程序完全听不到**：做实时校验、"输入合法才点亮确定按钮"的回调在整个输入过程中是死的（半截数字可能永远提交不了）。现在 `OnChange` 覆盖所有文字变化，`OnValueChange` 单独承担"值真的动了"。旧的 `OnChange` 触发点是新语义的**子集**，老代码不会漏事件，只会多收到键入期间的通知。
+3. **两者都只在"真的变了"时触发：** 同值再写一次 → 文字没变 → 两个事件都不触发；步进到已经在的边界值同理。
+4. **Min/Max 修改会重新过一遍 `Value` setter：** 改范围后当前值按**同一条**夹紧规则重算（空区间照样不夹紧），若因此移动则照常触发 `OnChange` + `OnValueChange`——早前这里是静默改写显示值的，校验回调根本不知道值动过。
+5. **Increment 下限为 1：** 给 `Increment` 赋小于 1 的值会被强制置为 1。
+6. **按钮几何固定：** 上/下箭头按钮宽度固定为 18 逻辑像素（DPI 缩放后）、贴齐右缘，各占高度一半，不可通过属性调整。
+7. **内联编辑缓冲轻量：** 编辑缓冲（`FEditText`/`FCaret`）无选区、无剪贴板、无撤销栈；步进操作（方向键/滚轮/按钮）总是立即提交并回填缓冲，不经过缓冲层。
+8. **非法输入安全退回：** 提交时若缓冲为空串或仅含 `-`（`StrToIntDef` 返回当前 `FValue` 作为默认值），则 `Value` 不变、`OnValueChange` 不触发；缓冲回填为当前 `Value` 的字符串表示，这一步改写了显示文字，因此触发 `OnChange`。
+9. **光标闪烁：** 聚焦时以约 530 ms 间隔启动；`TTimer` 懒创建，仅在 `HandleAllocated` 后启动，无头测试与设计器中光标静态。
+10. **I-beam 光标（batch⑤+⑥）：** 构造时把 `Cursor` 设为 `crIBeam`，鼠标移到控件上时呈现标准的文本输入「I 形」光标，提示内联数字编辑区可直接键入。

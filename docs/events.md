@@ -87,7 +87,8 @@ TyControls 的全部控件继承自两个基类之一（`tyControls.Base`）：
 | `TTyEdit` | `OnEditingDone` | （Tier B） | 失焦或回车提交时（基线 Tier B） |
 | `TTyMemo` | `OnChange` | `TNotifyEvent` | 文本模型（插入 / 拆分 / 退格 / 删除 / 合并）变化后；纯光标移动不触发 |
 | `TTyMemo` | `OnSelectionChange` | `TNotifyEvent` | 光标位置**或**选区范围变化时（方向键 / 点击 / Shift 选区 / 程序化设置光标）；自带去抖（caret 与 anchor 都未变则不触发） |
-| `TTySpinEdit` | `OnChange` | `TNotifyEvent` | `Value` 变化时 |
+| `TTySpinEdit` | `OnChange` | `TNotifyEvent` | 编辑框**文字**变化时——每次键入 / 删除 / 步进 / 夹紧 / `Value :=`（等价 LCL `TCustomEdit.Change`）；文字没真的变则不触发 |
+| `TTySpinEdit` | `OnValueChange` | `TNotifyEvent` | 提交后的 `Value` 真的移动时；键入过程中**不**触发 |
 | `TTyComboBox` | `OnChange` | `TNotifyEvent` | `ItemIndex` / 文本变化时（含程序化） |
 | `TTyComboBox` | `OnSelect` | `TNotifyEvent` | **用户**驱动的选择（下拉选取 / 键盘导航）后触发；程序化设置 `ItemIndex` **不**触发 |
 | `TTyComboBox` | `OnDropDown` | `TNotifyEvent` | 下拉列表打开时 |
