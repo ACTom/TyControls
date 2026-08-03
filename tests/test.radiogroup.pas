@@ -34,7 +34,7 @@ type
     // ItemIndex round-trip
     procedure TestItemIndexWriteChecksChild;
     procedure TestItemIndexReadReflectsChecked;
-    procedure TestItemIndexOutOfRangeClears;
+    procedure TestItemIndexOutOfRangeRaises;
     procedure TestChildrenAreMutuallyExclusive;
     // rebuild survives selection
     procedure TestRebuildPreservesValidIndex;
@@ -277,14 +277,25 @@ begin
   AssertEquals('reads back index 0', 0, FGrp.ItemIndex);
 end;
 
-procedure TRadioGroupTest.TestItemIndexOutOfRangeClears;
+{ This asserted the clear in its own name -- the sixth test in this pass to pin the
+  defect it was standing next to. Clearing made `ItemIndex := 99` on a two-item group
+  indistinguishable from `ItemIndex := -1`, so an off-by-one read as "the user deselected". }
+procedure TRadioGroupTest.TestItemIndexOutOfRangeRaises;
+var
+  raised: Boolean;
 begin
   FGrp.Items.Add('A');
   FGrp.Items.Add('B');
   FGrp.ItemIndex := 1;
   AssertEquals('set to 1', 1, FGrp.ItemIndex);
-  FGrp.ItemIndex := 99;   // out of range -> clears
-  AssertEquals('out-of-range clears selection', -1, FGrp.ItemIndex);
+  raised := False;
+  try
+    FGrp.ItemIndex := 99;
+  except
+    on E: EListError do raised := True;
+  end;
+  AssertTrue('out-of-range raises', raised);
+  AssertEquals('and the selection survives the refusal', 1, FGrp.ItemIndex);
 end;
 
 procedure TRadioGroupTest.TestChildrenAreMutuallyExclusive;

@@ -203,6 +203,7 @@ type
     procedure GhostedDrawFadesWithoutRecolouring;
     procedure ShellListOnCompareIsReachable;
     procedure ToolBarExAlsoKeepsACallersStyleClass;
+    procedure RadioGroupRejectsAnOutOfRangeIndex;
   end;
 
 implementation
@@ -1652,6 +1653,36 @@ begin
     AssertEquals('the Ex bar wiped a class it did not put there', 'primary', B.StyleClass);
   finally
     T.Free;
+  end;
+end;
+
+{ An out-of-range ItemIndex used to CLEAR the selection, so `RG.ItemIndex := 5` on a
+  three-item group was indistinguishable from `RG.ItemIndex := -1`. An off-by-one in the
+  code computing the index then reads as "the user deselected" -- a plausible state, and
+  therefore one nobody investigates. -1 stays legal because it is the documented "nothing
+  chosen"; streaming stays exempt because a .lfm whose ItemIndex precedes its Items would
+  otherwise abort ReadComponent and take the whole form down. }
+procedure TParityTest.RadioGroupRejectsAnOutOfRangeIndex;
+var
+  G: TTyRadioGroup;
+  raised: Boolean;
+begin
+  G := TTyRadioGroup.Create(nil);
+  try
+    G.Items.Add('a'); G.Items.Add('b');
+    G.ItemIndex := 1;
+    raised := False;
+    try
+      G.ItemIndex := 5;
+    except
+      on E: EListError do raised := True;
+    end;
+    AssertTrue('an out-of-range index raises', raised);
+    AssertEquals('and the selection is untouched by the refusal', 1, G.ItemIndex);
+    G.ItemIndex := -1;
+    AssertEquals('-1 is still the way to say "nothing chosen"', -1, G.ItemIndex);
+  finally
+    G.Free;
   end;
 end;
 

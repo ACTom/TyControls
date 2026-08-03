@@ -323,6 +323,23 @@ procedure TTyRadioGroup.SetItemIndex(AValue: Integer);
 var
   i: Integer;
 begin
+  { -1 is legal and means "nothing chosen"; anything else out of range is a caller bug.
+    It used to silently CLEAR the selection instead -- so `RG.ItemIndex := 5` on a
+    three-item group looked exactly like `RG.ItemIndex := -1`, and an off-by-one in the
+    code that computes the index reads as "the user deselected", which is a plausible
+    state and therefore never investigated. LCL raises here for the same reason
+    (radiogroup.inc:387), and TTyCheckGroup.Checked[] was given the same treatment on this
+    branch; the message shape is deliberately identical so the two read alike in a log.
+    Streaming is exempt: a .lfm whose ItemIndex precedes its Items would otherwise abort
+    ReadComponent and take the whole form down with it. }
+  if (AValue < -1) or (AValue >= FItems.Count) then
+  begin
+    if csLoading in ComponentState then
+      AValue := -1
+    else
+      raise EListError.CreateFmt('%s Index %d out of bounds -1 .. %d',
+        [ClassName, AValue, FItems.Count - 1]);
+  end;
   if GetItemIndex = AValue then Exit;
   { The guard collapses the child-event storm (checking one radio unchecks its siblings,
     each of which fires) into ONE notification -- it is not there to make a programmatic
