@@ -38,6 +38,7 @@ TyControls 的全部控件继承自两个基类之一（`tyControls.Base`）：
 | `OnResize` | 事件 | 尺寸变化 |
 | `OnChangeBounds` | 事件 | 位置或尺寸（BoundsRect）变化 |
 | `OnShowHint` | 事件 | 提示即将显示时；用于按指针所在位置给出不同的 Hint 文本 |
+| `OnPaint` | 事件 | 控件**画完自己之后**触发，拿到的是控件自己的 `Canvas`；用来叠一个角标 / 一层覆盖 / 一个调试矩形，不必再派生子类 |
 | `OnDragOver` | 事件 | 拖动经过本控件（决定是否接受放置） |
 | `OnDragDrop` | 事件 | 在本控件上放下 |
 | `OnStartDrag` | 事件 | 本控件作为拖动源开始拖动 |
@@ -122,7 +123,11 @@ TyControls 的硬性原则是**视觉由主题（.tycss）拥有**：颜色、�
 
 > **别把 `BorderWidth` 当边框宽度。** `TWinControl.BorderWidth` 已在 `TTyCustomControl` 上 published，但它是**布局**属性（子控件区域的内缩量），与画出来的那条边无关；边框的粗细仍然只由主题的 `border-width` 令牌决定，控件不暴露任何覆盖它的原生属性。
 
-此外 **`OnPaint` 未暴露**：绘制完全由控件内部经 Painter + 主题完成，不开放用户自绘钩子（自绘会绕过主题层，破坏跨平台一致性）。
+> **`OnPaint` 不在此列——它是"叠加"而不是"接管"。** 控件的外观仍然只由 Painter + 主题决定；`OnPaint` 在控件**画完并合成到画布之后**才触发，宿主程序只能在成品之上再画东西，改不了主题画出来的那一层。所以它不违反"视觉由主题拥有"：它加的是**应用自己的**标记（角标、选中框、调试矩形），不是控件的皮肤。
+>
+> 为什么钩子不在 `Paint` 里：全库的绘制都是"先画进 BGRA 图层、再由 `TTyPainter.EndPaint` 合成到画布"，**合成会覆盖此前直接画到画布上的一切**。因此钩子挂在 `Paint` 的上一层——图形控件在 `TTyGraphicControl.WndProc`（`LM_PAINT` 之后），窗口化控件在 `TTyCustomControl.PaintWindow`（`inherited` 之后）——这两处是"合成一定已经结束"的**唯一**汇合点，且无需逐控件接线。未挂 handler 时零开销；设计期同 LCL 一样照常触发。
+>
+> 与 `TTyPaintPanel.OnPaintSurface` / `TTyPreviewBox.OnPaintPreview` 的区别：那两个在**合成之前**触发、拿到的是 `TTyPainter`（可以用主题令牌参与控件自己的绘制）；`OnPaint` 在**合成之后**触发、拿到的是 LCL `Canvas`（只能覆盖在上面）。
 
 > 这一原则的完整说明见仓库的「Theme-customizability principle」：凡视觉值必须由主题令牌驱动，永不在控件代码中写死。
 

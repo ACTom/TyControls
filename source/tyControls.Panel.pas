@@ -108,6 +108,10 @@ procedure TTyPanel.Paint;
 var
   w, h: Integer;
 begin
+  { Nothing here fires OnPaint, and nothing here should: the base fires it from PaintWindow,
+    AFTER this method has returned. That is what keeps an application's overlay out of the
+    cache -- baked in, it would be frozen at the frame it was drawn on and then replayed by
+    every child-damage blit. }
   { The designer repaints rarely and streams while it does, so cache only at runtime. }
   if csDesigning in ComponentState then
   begin

@@ -11,7 +11,19 @@ unit tyControls.PaintPanel;
 
   With no handler assigned it is byte-compatible with a plain TTyPanel (it still draws the
   optional Caption). It remains a real LCL container (csAcceptsControls) so child controls
-  may parent onto it. }
+  may parent onto it.
+
+  NOT to be confused with the OnPaint every ty control inherits from tyControls.Base. The
+  two hooks sit on opposite sides of the composite and are not interchangeable:
+    OnPaintSurface  fires INSIDE the pass, before EndPaint, and hands over the TTyPainter --
+                    so the handler draws in theme tokens and its output is composited with
+                    the panel's own. This is the owner-draw seam.
+    OnPaint         fires AFTER the composite has landed, and hands over the LCL Canvas --
+                    so the handler can only draw ON TOP of the finished control. This is the
+                    overlay seam, and it is the only one available on controls that are not
+                    TTyPaintPanel.
+  Drawing to the Canvas from an OnPaintSurface handler is the classic mistake here: EndPaint
+  has not run yet, so the composite overwrites it. }
 interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType,

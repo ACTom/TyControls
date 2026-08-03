@@ -975,21 +975,27 @@ begin
     GetPropInfo(TTyUpDown, 'ChildSizing') = nil);
 end;
 
-{ The counterpart guard, and the more important one. BiDiMode and OnPaint are also
-  TControl members that "work from code", and the same batch nearly republished them.
-  Neither may be published while the paint path ignores it: grep finds ZERO references to
-  BiDiMode/RightToLeft in tyControls.Painter.pas or tyControls.Base.pas, and there is no
-  OnPaint hook anywhere in the paint chain. Publishing either would manufacture exactly
+{ The counterpart guard, and the more important one. BiDiMode is a TControl member that
+  "works from code", and the same batch nearly republished it. It may not be published
+  while the paint path ignores it: grep still finds ZERO references to BiDiMode/RightToLeft
+  in tyControls.Painter.pas or tyControls.Base.pas. Publishing it would manufacture exactly
   the defect this whole pass has been removing -- a property the Object Inspector offers
   and the control silently ignores, which is how TTyColorButton.Caption came to exist.
-  When the paint honours them, delete this test. Until then it is the thing stopping a
-  well-meaning "just republish the rest" commit. }
+  When the paint honours it, delete this test. Until then it is the thing stopping a
+  well-meaning "just republish the rest" commit.
+
+  OnPaint used to be pinned here alongside it, for the same reason and no other. It is
+  published now because the behaviour behind it was built: TTyGraphicControl.WndProc and
+  TTyCustomControl.PaintWindow fire it after the composite has landed on the canvas. The
+  way OUT of this list is to make the property true, not to relax the test -- and the new
+  obligation is guarded in test.parity.onpaint, which asserts the ORDERING in pixels rather
+  than merely that something was called. }
 procedure TParityTest.LyingPropertiesStayUnpublished;
 begin
   AssertTrue('BiDiMode must not be published until the painter honours it',
     GetPropInfo(TTyPanel, 'BiDiMode') = nil);
-  AssertTrue('OnPaint must not be published until the paint chain calls it',
-    GetPropInfo(TTyPanel, 'OnPaint') = nil);
+  AssertTrue('and not on the graphic base either',
+    GetPropInfo(TTyUpDown, 'BiDiMode') = nil);
 end;
 
 { ---------------------------------------------------------------- P0 ------- }

@@ -94,6 +94,10 @@ type
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+    { The post-draw hook's entry point on the GRAPHIC side. See the body: it is here, one
+      level ABOVE Paint, because every control's Paint ends in a composite that would
+      overwrite anything an OnPaint handler drew. }
+    procedure WndProc(var TheMessage: TLMessage); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -165,6 +169,12 @@ type
     property Cursor;
     property ParentShowHint;
     property Action;
+    { Fired AFTER the control has finished drawing itself, with the control's own Canvas --
+      the seam for one badge, one overlay, one debug rectangle, without subclassing. It is
+      NOT an owner-draw replacement: the themed control is already on the canvas when the
+      handler runs, and the handler draws over it. Ordering is the whole property, and it is
+      why the fire site is WMPaint rather than Paint -- see the body. }
+    property OnPaint;
     property StyleClass: string read FStyleClass write SetStyleClass;
     { A9: a per-instance CSS declaration block (e.g. 'border-color: var(--accent);')
       applied on top of the theme for THIS control only. May reference var(--...) tokens,
@@ -222,6 +232,9 @@ type
     procedure DoEnter; override;
     procedure DoExit; override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+    { The post-draw hook's entry point on the WINDOWED side -- TWinControl.PaintHandler's
+      single funnel into Paint. See the body for why it cannot live in Paint itself. }
+    procedure PaintWindow(DC: HDC); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -303,6 +316,12 @@ type
     property Cursor;
     property ParentShowHint;
     property Action;
+    { Fired AFTER the control has finished drawing itself, with the control's own Canvas.
+      Same contract as the graphic base's -- see there. On a CACHED container (TTyPanel and
+      friends) the handler runs after the cache blit, so its output is never baked into the
+      cache: a child's damage still costs a blit, and the overlay is still redrawn on top of
+      it. That is the reason the hook is outside RenderTo and not merely after EndPaint. }
+    property OnPaint;
     { Tier B focusable events (TWinControl-declared; custom control only). }
     property OnKeyDown;
     property OnKeyUp;
@@ -963,6 +982,52 @@ begin
   end;
 end;
 
+procedure TTyGraphicControl.WndProc(var TheMessage: TLMessage);
+var
+  dc: HDC;
+begin
+  { WHY the hook is here and not at the end of Paint.
+
+    Every control in this library paints the same way: build the frame into a BGRA layer,
+    then let TTyPainter.EndPaint composite that layer onto the canvas. EndPaint OVERWRITES
+    the canvas rectangle it owns, so anything drawn to the canvas earlier in the same pass
+    is gone -- the two-pass GDI note in tyControls.Menu and the ghosted-icon work in
+    tyControls.TreeView are both scars from exactly that. A hook fired from inside Paint
+    would therefore be a hook whose output silently disappears, and a property the control
+    offers but ignores is the defect this pass exists to remove.
+
+    Paint itself is not a place a BASE class can wrap: 100+ controls override it, none call
+    inherited, and each one's Paint/RenderTo pair finishes its composite differently (one
+    painter, several painters, or a cached blit). LM_PAINT is the one point upstream of all
+    of them -- whatever shape Paint took, it has returned by the time we get control back,
+    so the composite is finished by construction and there is nothing per-control to wire.
+
+    WHY WndProc and not a WMPaint message handler: TGraphicControl.WMPaint is PRIVATE, so a
+    descendant in another unit cannot call it, and a same-message handler here would REPLACE
+    it -- swallowing the LCL's canvas-handle setup and, worse, whatever the LCL adds to it
+    later. Post-processing after inherited WndProc keeps that layer whole. The LCL clears
+    Canvas.Handle on its way out, so the handle is re-established for the handler and
+    released again -- and none of that runs unless a handler exists. With OnPaint unassigned
+    this override is one integer compare per message. }
+  inherited WndProc(TheMessage);
+  if (TheMessage.Msg <> LM_PAINT) or not Assigned(OnPaint) then Exit;
+  // TLMPaint.DC occupies the WParam slot (both sit directly after Msg/UnusedMsg), which is
+  // also where Perform(LM_PAINT, DC, 0) puts it.
+  dc := HDC(TheMessage.WParam);
+  if dc = 0 then Exit;
+  Canvas.Lock;
+  try
+    Canvas.Handle := dc;
+    try
+      OnPaint(Self);
+    finally
+      Canvas.Handle := 0;
+    end;
+  finally
+    Canvas.Unlock;
+  end;
+end;
+
 { TTyCustomControl }
 
 constructor TTyCustomControl.Create(AOwner: TComponent);
@@ -1278,6 +1343,33 @@ procedure TTyCustomControl.DoExit;
 begin
   inherited DoExit;
   Invalidate;
+end;
+
+procedure TTyCustomControl.PaintWindow(DC: HDC);
+var
+  dcChanged: Boolean;
+begin
+  { The windowed twin of TTyGraphicControl.WMPaint -- the same reasoning, one level higher.
+    TWinControl.PaintHandler reaches a windowed control's own surface through PaintWindow
+    and nowhere else, so this is where Paint has provably returned and every painter in it
+    has composited. Firing from inside Paint would put the handler's ink UNDER the very
+    composite it is meant to sit on; on a cached container it would also be baked into the
+    cache and then repeated, frozen, on every child-damage blit.
+
+    TCustomControl.PaintWindow puts the DC on the canvas for Paint and takes it off again,
+    so the handler needs it back. Mirror the LCL's own condition rather than assuming: it
+    only restores the handle it actually replaced, and a caller that had already parked this
+    DC on the canvas must keep it. Nothing here runs without a handler -- an unassigned
+    OnPaint costs one pointer test per paint and not a single DC call. }
+  inherited PaintWindow(DC);
+  if (DC = 0) or not Assigned(OnPaint) then Exit;
+  dcChanged := (not Canvas.HandleAllocated) or (Canvas.Handle <> DC);
+  if dcChanged then Canvas.Handle := DC;
+  try
+    OnPaint(Self);
+  finally
+    if dcChanged then Canvas.Handle := 0;
+  end;
 end;
 
 end.
