@@ -6,6 +6,14 @@ uses
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller;
 
 type
+  { Raised by Date/DateTime when the assigned day falls outside MinDate..MaxDate.
+    LCL declares the same guard as EInvalidDate (C:/lazarus/lcl/calendar.pp:74,
+    raised from CheckRange :293-304); the alias below lets `except on EInvalidDate`
+    from a ported form compile unchanged. Ty-prefixed as the primary name so the two
+    can coexist in a unit that still uses the LCL Calendar as well. }
+  ETyInvalidDate = class(Exception);
+  EInvalidDate   = ETyInvalidDate;
+
   TTyWeekDay = (wdSunday, wdMonday, wdTuesday, wdWednesday, wdThursday,
                 wdFriday, wdSaturday);
   TTyCalView  = (cvmDays, cvmMonths, cvmYears, cvmDecades);
@@ -66,6 +74,12 @@ type
     FOnAccept: TNotifyEvent;
     FOnViewChange: TNotifyEvent;
     procedure SetDate(AValue: TDateTime);
+    { The only writer of FDate outside the user-gesture path. Takes the date AS GIVEN
+      (no range check, no clamp) and re-anchors the view on it. Split out of SetDate so
+      the three callers that must NOT raise -- streaming, SetDateClamped, and a
+      MinDate/MaxDate move -- can store a value without going back through the guard
+      that would reject the very thing they just computed. }
+    procedure StoreDate(AValue: TDateTime);
     procedure SetMinDate(AValue: TDateTime);
     procedure SetMaxDate(AValue: TDateTime);
     procedure SetFirstDayOfWeek(AValue: TTyWeekDay);
@@ -108,6 +122,13 @@ type
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
   public
     constructor Create(AOwner: TComponent); override;
+    { "Get as close as you can" -- the pre-3.0 behaviour of Date :=, now under a name
+      that says so. Moves the selection to the nearest day inside MinDate..MaxDate and
+      never raises. Use this where an out-of-range value is EXPECTED and harmless (a
+      spin control walking off the end, a value seeded from a wider source); use Date :=
+      where it would be a bug. Having both is the point: the caller states which one it
+      meant, and the reader can see it. }
+    procedure SetDateClamped(AValue: TDateTime);
     { Expose RenderTo publicly for tests and embedding. }
     procedure RenderToPublic(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     { Current drill-down view (transient UI state, not published). }
@@ -122,7 +143,11 @@ type
       `Cal.Date := Now` compiles here and fails there, and `Cal.DateTime` compiles
       there and fails here: the same name means different types on the two controls,
       which is the worst shape a difference can take. DateTime below is the alias that
-      lets code written against either one compile against this. }
+      lets code written against either one compile against this.
+      RANGE: writing a day outside MinDate..MaxDate RAISES ETyInvalidDate. It used to
+      clamp in silence, which meant `Cal.Date := FromTheDatabase` could store a day the
+      caller never chose and nothing anywhere said so. SetDateClamped is the clamping
+      entry point for callers that want it. }
     property Date: TDateTime read FDate write SetDate;
     { LCL's name for the TDateTime accessor. Same storage as Date -- an alias, so a
       form ported from Lazarus needs no edit and neither does one written here. Not
@@ -203,6 +228,17 @@ begin
     Result := AMin;
   if (AMax <> 0) and (DateOf(Result) > DateOf(AMax)) then
     Result := AMax;
+end;
+
+{ How a bound reads inside the ETyInvalidDate message. 0 is this unit's "unbounded"
+  marker everywhere else, and printing it as a date would put "30-12-1899" in front of a
+  developer who never set a MinDate and send them hunting for it. }
+function TyCalendarBoundText(ABound: TDateTime): string;
+begin
+  if ABound = 0 then
+    Result := '(no limit)'
+  else
+    Result := DateToStr(DateOf(ABound));
 end;
 
 { TyDecadeStart }
@@ -303,25 +339,75 @@ begin
   Result := 'TyCalendar';
 end;
 
-procedure TTyCalendar.SetDate(AValue: TDateTime);
+procedure TTyCalendar.StoreDate(AValue: TDateTime);
 var
-  clamped: TDateTime;
+  d: TDateTime;
   dy, dm, dd: Word;
 begin
-  clamped := DateOf(TyCalendarClampDate(AValue, FMinDate, FMaxDate));
-  if DateOf(FDate) = clamped then Exit;
-  FDate := clamped;
+  d := DateOf(AValue);
+  if DateOf(FDate) = d then Exit;
+  FDate := d;
   DecodeDate(FDate, dy, dm, dd);
   FViewYear  := dy;
   FViewMonth := dm;
   Invalidate;
 end;
 
+{ An out-of-range write used to be clamped in SILENCE: the caller read Date back and got
+  a day it never asked for, so nothing distinguished "accepted" from "quietly corrected"
+  -- the whole point of MinDate/MaxDate is to reject, and it was rejecting invisibly.
+  LCL raises instead (CheckRange, C:/lazarus/lcl/calendar.pp:293-304, called from
+  SetDateTime :329-332) and so do we now.
+
+  Two paths deliberately do NOT raise, and both would be bugs if they did:
+
+  * csLoading. A .lfm carrying a date outside its own MinDate/MaxDate must still open
+    the form -- one drifted date is not worth failing an entire window over, and the
+    exception would surface as an unhelpful EReadError far from the cause. The IDE
+    happens to stream Date BEFORE the bounds (declaration order), so the date arrives
+    while the calendar is still unbounded and the bounds re-clamp it afterwards; a
+    hand-edited or reordered .lfm would take the other path, and this clamp is what
+    keeps both of them loading.
+
+  * MinDate/MaxDate moves. Tightening a bound past the standing date is the caller
+    changing the RULES, not passing a bad value, so those setters call StoreDate with an
+    already-clamped date and never re-enter this guard. LCL clamps there too
+    (ApplyLimits, calendar.pp:353-361).
+
+  User gestures are unaffected: SelectDate still refuses an out-of-range cell in silence,
+  which is what a click on a disabled day should do. }
+procedure TTyCalendar.SetDate(AValue: TDateTime);
+begin
+  if csLoading in ComponentState then
+  begin
+    StoreDate(TyCalendarClampDate(AValue, FMinDate, FMaxDate));
+    Exit;
+  end;
+  if not TyCalendarInRange(AValue, FMinDate, FMaxDate) then
+    { Name the offending date AND both bounds, as LCL's rsInvalidDateRangeHint does --
+      "invalid date" alone costs the developer the same round trip the silent clamp did.
+      An unset bound prints as its own "no limit" marker rather than 30-Dec-1899. }
+    raise ETyInvalidDate.CreateFmt('Invalid Date: %s. Must be between %s and %s',
+      [DateToStr(DateOf(AValue)), TyCalendarBoundText(FMinDate),
+       TyCalendarBoundText(FMaxDate)]);
+  StoreDate(AValue);
+end;
+
+procedure TTyCalendar.SetDateClamped(AValue: TDateTime);
+begin
+  StoreDate(TyCalendarClampDate(AValue, FMinDate, FMaxDate));
+end;
+
+{ Moving a bound past the standing date is the caller changing the rules, not passing a
+  bad value, so it CLAMPS -- LCL does the same in ApplyLimits (calendar.pp:353-361).
+  Note the call goes to StoreDate, not SetDate: routing the re-clamp back through the
+  property setter would raise ETyInvalidDate on the very date this line exists to fix,
+  and MinDate/MaxDate would be unusable at run time. }
 procedure TTyCalendar.SetMinDate(AValue: TDateTime);
 begin
   if FMinDate = AValue then Exit;
   FMinDate := AValue;
-  SetDate(FDate);   // re-clamp to new bounds (SetDate clamps + invalidates if date changed)
+  StoreDate(TyCalendarClampDate(FDate, FMinDate, FMaxDate));
   Invalidate;       // always repaint: enabled/disabled cell appearance changed
 end;
 
@@ -329,7 +415,7 @@ procedure TTyCalendar.SetMaxDate(AValue: TDateTime);
 begin
   if FMaxDate = AValue then Exit;
   FMaxDate := AValue;
-  SetDate(FDate);   // re-clamp to new bounds (SetDate clamps + invalidates if date changed)
+  StoreDate(TyCalendarClampDate(FDate, FMinDate, FMaxDate));
   Invalidate;       // always repaint: enabled/disabled cell appearance changed
 end;
 

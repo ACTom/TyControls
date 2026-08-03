@@ -29,7 +29,7 @@ type
     procedure TestChildrenAreNoDesignVisible;
     procedure TestChildCaptionsMatchItems;
     procedure TestCheckedRoundTrip;
-    procedure TestCheckedOutOfRangeSafe;
+    procedure TestCheckedOutOfRangeRaises;
     procedure TestCheckedCount;
     procedure TestToggleFiresOnItemChange;
     procedure TestSetCheckedIsSilent;
@@ -248,21 +248,49 @@ begin
   end;
 end;
 
-procedure TCheckGroupTest.TestCheckedOutOfRangeSafe;
+{ RENAMED from TestCheckedOutOfRangeSafe, which asserted the exact defect: an
+  out-of-range read answering False and an out-of-range write being dropped is not
+  "safe", it is an off-by-one that reads as a legitimately unticked item and a write
+  the user appears to have undone. LCL raises here
+  (include/customcheckgroup.inc:313-338) and so do we now. The full contract --
+  message shape, empty group, half-applied writes -- lives in
+  test.parity.ranges.TCheckGroupRangeTest; this keeps the sibling assertion honest. }
+procedure TCheckGroupTest.TestCheckedOutOfRangeRaises;
 var
   F: TForm;
   G: TTyCheckGroup;
+  belowRaised, aboveRaised, writeRaised: Boolean;
 begin
   F := TForm.CreateNew(nil);
   try
     G := TTyCheckGroup.Create(F);
     G.Parent := F;
     G.Items.Add('only');
-    AssertFalse('read below range -> False', G.Checked[-1]);
-    AssertFalse('read above range -> False', G.Checked[5]);
-    G.Checked[-1] := True;   // must be a no-op, not a crash
-    G.Checked[9] := True;    // must be a no-op, not a crash
-    AssertFalse('the real item stays unchecked', G.Checked[0]);
+    belowRaised := False;
+    try
+      if G.Checked[-1] then ;
+    except
+      on E: EListError do belowRaised := True;
+    end;
+    AssertTrue('read below range raises EListError', belowRaised);
+
+    aboveRaised := False;
+    try
+      if G.Checked[5] then ;
+    except
+      on E: EListError do aboveRaised := True;
+    end;
+    AssertTrue('read above range raises EListError', aboveRaised);
+
+    writeRaised := False;
+    try
+      G.Checked[9] := True;
+    except
+      on E: EListError do writeRaised := True;
+    end;
+    AssertTrue('a write past the end raises rather than vanishing', writeRaised);
+
+    AssertFalse('the real item is untouched by any of it', G.Checked[0]);
   finally
     F.Free;
   end;

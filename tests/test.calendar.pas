@@ -95,7 +95,7 @@ type
     procedure TestArrowRightThenEnterSelectsAndFires;
     procedure TestArrowLeftAcrossMonthBoundary;
     procedure TestOutOfRangeDateNotSelectable;
-    procedure TestMaxDateClampsSelection;
+    procedure TestMaxDateRejectsSelection;
     procedure TestPageDownAdvancesViewMonth;
     procedure TestPageUpRetreatsViewMonth;
     procedure TestHomeSelectsFirstDay;
@@ -567,13 +567,32 @@ begin
   AssertEquals('OnChange NOT fired', 0, FCounter.Count);
 end;
 
-procedure TCalendarControlTest.TestMaxDateClampsSelection;
-{ Setting Date to a value beyond MaxDate should clamp. }
+procedure TCalendarControlTest.TestMaxDateRejectsSelection;
+{ RENAMED from TestMaxDateClampsSelection, which pinned the defect itself: writing a
+  date beyond MaxDate stored a DIFFERENT date and said nothing, so the assertion
+  "clamped to MaxDate" was documenting a value the caller never asked for as if it
+  were the contract. Date := now raises (LCL calendar.pp:293-304); SetDateClamped is
+  the clamping entry point and gets its own line here so both halves stay covered. }
+var
+  raised: Boolean;
 begin
   FCal.MaxDate := EncodeDate(2026, 6, 10);
+  FCal.Date := EncodeDate(2026, 6, 5);
   FCounter.Count := 0;
-  FCal.Date := EncodeDate(2026, 6, 25);
-  AssertEquals('date clamped to MaxDate', DateOf(EncodeDate(2026, 6, 10)), DateOf(FCal.Date));
+
+  raised := False;
+  try
+    FCal.Date := EncodeDate(2026, 6, 25);
+  except
+    on E: ETyInvalidDate do raised := True;
+  end;
+  AssertTrue('a date beyond MaxDate is rejected, not silently coerced', raised);
+  AssertEquals('and the standing date is left alone',
+    DateOf(EncodeDate(2026, 6, 5)), DateOf(FCal.Date));
+
+  FCal.SetDateClamped(EncodeDate(2026, 6, 25));
+  AssertEquals('SetDateClamped still clamps to MaxDate',
+    DateOf(EncodeDate(2026, 6, 10)), DateOf(FCal.Date));
 end;
 
 procedure TCalendarControlTest.TestPageDownAdvancesViewMonth;

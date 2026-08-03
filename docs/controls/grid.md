@@ -169,10 +169,20 @@ end;
   合并块记的是一段**数据行**,只在这段行连续升序显示时成立;排序打散它时它自动失效,排回来又恢复
 - **合并**:`MergeCells(列, 行, 跨列, 跨行)`;基准格跨满整区,被覆盖格无矩形,点区内任意处都归基准格
 - **行列增删**:`InsertRow` / `DeleteRow` / `InsertColumn` / `DeleteColumn`,内容随之整体搬移
+- **清空**:分**结构**与**内容**两类,名字必须分得开 ——
+  `ClearRows` / `ClearCols`(无参,返回是否真清了什么)删掉全部行/列,与 LCL 同义;
+  `ClearRowContents(起, 几行)` / `ClearColContents(起, 几列)` 只把一片格子写空,行列还在
+  (它们从前叫 `ClearRows` / `ClearCols` —— 同名反义)
 - **自动适宽**:`AutoFitColumn(列)` 取表头与**已写入**单元格里最宽的;只量写过的格,百万行空表也不扫全表
 - **查找/替换**:`FindNext` / `ReplaceCells`,按**显示序**从光标之后**环绕**查找;替换跳过只读列
 - **HTML 导出**:`SaveToHTMLText/File`,特殊字符转义,同样走显示序
-- **CSV**:`SaveToCSVText/File`、`LoadFromCSVText/File`。含分隔符/引号/换行的字段自动加引号
+- **CSV**:`SaveToCSVText/File/Stream`、`LoadFromCSVText/File/Stream`。含分隔符/引号/换行的字段自动加引号。
+  表头行**两边都可关**(`AWriteTitles` / `AUseTitles`,默认开)—— 对应 LCL 的
+  `WriteTitles` / `UseTitles`,无表头的分片文件不会再被吃掉第一条记录
+- **全状态流**:`SaveToStream` / `LoadFromStream` 存的是**整张表** —— 结构(行数、
+  列宽/可见性/列序、冻结数)+ 内容(按数据行序,被筛掉的行也在里面)+ 位置
+  (光标、滚动、选区)。**不含**逐格颜色/批注/只读/合并(与 LCL 默认的
+  `SaveOptions` 一致)。喂进来的流认不出格式会**抛异常**而不是回退去当 CSV 读
 - **编辑**:`F2` 或双击进入;`Enter` 提交、`Esc` 丢弃;**光标一动就先自动提交**
 - 光标走出视口时视口自动跟随(最小移动量)
 
@@ -243,6 +253,12 @@ TyGridButton                按钮单元格(:hover / :active)
 - 焦点格与选区区分(`TyGridActiveCell`)
 - 格线 `GridLineStyle`(none / 只横 / 只竖 / 全)+ `GridLineWidth`
   —— 线**不占布局像素**,压在边界上,列宽不因线变粗而挪位
+  —— ⚠ **与 LCL 同名不同义**:LCL 的 `TCustomGrid.GridLineStyle` 是 `TPenStyle`
+  (`psSolid` / `psDash` / `psDot`,即线**怎么画**);这里是线**画哪几轴**。
+  故意保留这处分歧:两边枚举类型不同,移植过来的 `:= psDash` 一律**编译不过**,
+  不会像别的同名冲突那样悄悄跑错;而这个属性已经流进了 .lfm,改名要拿"零安全收益"
+  去换掉所有现存窗体。虚线格线是**功能请求**,不是改名 —— 格线现在是 BGRA 上的
+  `FillRect`,根本没有笔。
 - 表头自绘钩子 `OnGetHeaderStyle`;列头图标走 `TTyGridColumn.ImageIndex` + `Images`
 
 ### 表头
@@ -271,8 +287,9 @@ TyGridButton                按钮单元格(:hover / :active)
 - CSV 往返(引号内的换行不会串数据)
 
 ### 选择
-- `SelectAll` / `SelectRange` / `SelectRows` / `ClearSelection` / `Selection` /
-  `SelectedCellCount` + `OnSelectionChanged`
+- `SelectAll` / `SelectRange` / `SelectRows` / `ClearSelection` /
+  `Selection`(**可读可写**:存下来的矩形直接赋回去即可恢复;全负矩形 = 取消选区,
+  与 LCL 一致)/ `SelectedCellCount` + `OnSelectionChanged`
 - 离散多选(Ctrl+点)、拖选、`SelectionMode`(格 / 行 / 列)
 - 选区聚合 `SelectionSum` / `Avg` / `Min` / `Max`(非数值格跳过)
 - 给整个选区上色:`SetSelectionColor` / `SetSelectionTextColor`(传 0 = 清除,

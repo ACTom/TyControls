@@ -213,8 +213,13 @@ begin
     AssertEquals('0 is honoured, not clamped to 1', 0, Acc.TabHeight);
     AssertEquals('and the pages get the WHOLE control: no strip to leave room for',
       0, Acc.ClientTopInset);
+    { A negative is the AUTO sentinel now (TyTabHeightAuto), not a floor to 0: it hands the
+      band height back to the --control-height token, which is what a ported
+      `TabHeight := -1` did in Lazarus. 0 keeps its own meaning -- no band at all -- because
+      that is a shipped capability here that LCL only reaches via ShowTabs. }
     Acc.TabHeight := -5;
-    AssertEquals('a negative floors at 0 (meaningless, not an error)', 0, Acc.TabHeight);
+    AssertTrue('a negative means auto: the band comes back from the token',
+      Acc.TabHeight > 0);
   finally
     Acc.Free;
   end;

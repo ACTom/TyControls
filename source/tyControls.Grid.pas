@@ -1162,6 +1162,25 @@ type
     { 实际参与显示的行数。过滤后 < RowCount;几何层用的是它,不是 RowCount。 }
     function DisplayRowCount: Integer; virtual;
 
+    { How many rows the VIEWPORT currently holds -- a viewport metric, the same thing
+      LCL's TCustomGrid.VisibleRowCount means (grids.pas:1301, body at 2274). This is
+      the number PageUp/PageDown maths is written against.
+
+      It is NOT "how many rows survived the filter". That is DisplayRowCount (or its
+      alias FilteredRowCount), and it used to be what this name returned on
+      TTyStringGrid -- so paging maths ported from LCL compiled and computed garbage:
+      with 10000 filtered-in rows it paged 10000 rows at a time. Both metrics are
+      Integer, so nothing warned anybody. Hence the split, and hence the guard in
+      test.parity.grid.
+
+      Faithful to LCL down to the off-by-one: LCL answers
+      `VisibleGrid.Bottom - VisibleGrid.Top`, i.e. one LESS than the number of rows
+      touching the viewport, so a page leaves one row of overlap -- that is why the
+      last row of a screen is still the first row of the next one after PageDown. The
+      overlap is dropped when the whole grid fits, exactly as LCL's
+      `if GridHeight<=ClientHeight then inc(Result)` does. }
+    function VisibleRowCount: Integer;
+
     { 单元格所属窗格。**吃的是显示位置 APos,不是数据行** —— 这里的两个判据
       (`< FixedRows` / `>= DisplayRowCount - FixedRowsBottom`)本来就只在显示序里
       成立;从前喂数据行,没排序时两者相等所以看不出来,一排序就把格子判进错的窗格,
@@ -1238,7 +1257,25 @@ type
     { 分组带的高度(逻辑像素)。 }
     property GroupHeaderHeight: Integer read FGroupHeaderHeight
       write SetGroupHeaderHeight default 22;
-    { 格线画哪几轴。 }
+    { 格线画哪几轴。
+
+      **NOT LCL's GridLineStyle.** LCL's TCustomGrid.GridLineStyle (grids.pas:1266) is
+      a TPenStyle -- psSolid / psDash / psDot, i.e. HOW the line is drawn. Ours says
+      WHICH AXES get a line at all. Same name, unrelated meaning, and this one is kept
+      rather than renamed:
+
+        - the enum types are different, so every ported use (`:= psDash`,
+          `= psSolid`) is a COMPILE ERROR. Unlike the other collisions in this unit
+          this one cannot bite silently, so renaming buys no safety;
+        - the property is published and already streamed into .lfm files, so a rename
+          breaks every form that carries it, for that same zero safety;
+        - and taking the name over for a real TPenStyle would mean teaching the
+          painter to rasterise dashes -- grid lines are FillRect calls on a BGRA
+          bitmap (RenderGridLines), there is no pen involved anywhere.
+
+      So it is documented instead, here and in docs/controls/grid.md -- and a guard in
+      test.parity.grid keeps that note from quietly disappearing. Want dashed grid
+      lines? That is a feature request, not a rename. }
     property GridLineStyle: TTyGridLineStyle read FGridLineStyle write SetGridLineStyle
       default glsBoth;
     { 隔行底色(主题键 TyGridCellAlt)。 }
@@ -1625,6 +1662,12 @@ type
     procedure CommitActiveSelection;
     function  ActiveSelectionRect: TRect;   { 显示序空间 }
     procedure SelectionChanged;
+    { Backing pair for the read/write Selection property (declared further down --
+      Object Pascal wants the accessors first). }
+    function  GetSelection: TRect;
+    procedure SetSelection(const AValue: TRect);
+    { 全状态流的内容段(数据行序)。见实现处的说明。 }
+    function  StateContentText: string;
     procedure SetRow(AValue: Integer);
   protected
     function  GetCellText(ACol, ARow: Integer): string; override;
@@ -1901,8 +1944,28 @@ type
       InvalidateAggregates 是整表失效,拿来做这件事太钝。
       ACol < 0 = 整表(等价于 InvalidateAggregates)。 }
     procedure CalcFooter(ACol: Integer);
-    procedure ClearRows(AFrom, ACount: Integer);
-    procedure ClearCols(AFrom, ACount: Integer);
+
+    { --- 清空:内容 vs 结构 ---
+      These two pairs do OPPOSITE KINDS of thing and the naming has to say so.
+
+      ClearRowContents / ClearColContents blank the cell CONTENT over a band; the rows
+      and columns stay. They were called ClearRows / ClearCols, which are LCL's names
+      for the structural DELETE (grids.pas:10285-10316, `function ClearRows: Boolean`).
+      Same name, opposite kind: any host wrapper forwarding ClearRows silently changed
+      meaning, and adding the LCL member as a zero-argument overload would have made
+      "delete every row" and "blank two rows" differ only by argument count. So the band
+      blanking was renamed instead -- ClearRows can no longer be reached by accident. }
+    procedure ClearRowContents(AFrom, ACount: Integer);
+    procedure ClearColContents(AFrom, ACount: Integer);
+
+    { Structural clear, LCL semantics: drop every row / every column and answer whether
+      anything actually changed (False = it was already empty), as LCL does.
+
+      Content goes with the structure. Our cell store is sparse and keyed by (col,row),
+      so leaving the strings behind would resurrect the old contents the moment RowCount
+      grew again -- LCL has no such hazard because its rows OWN their cells. }
+    function  ClearRows: Boolean;
+    function  ClearCols: Boolean;
     { 写过的单元格个数 —— 稀疏性的可观测证据。 }
     function StoredCellCount: Integer;
 
@@ -1938,8 +2001,20 @@ type
     function  NumHiddenRows: Integer;
     procedure UnHideAllRows;
     procedure ClearSelection;
-    { 活动选区(数据行坐标)。离散多选时只代表最后那一块。 }
-    function  Selection: TRect;
+    { 活动选区(数据行坐标)。离散多选时只代表最后那一块。
+
+      READ/WRITE, like LCL's TCustomGrid.Selection (grids.pas:1292). It used to be a
+      read-only `function Selection: TRect`, with SelectRange/SelectRows as the only way
+      in -- so the most ordinary thing a host does with a selection, save it and put it
+      back later, was a rewrite rather than an assignment. Reading is unchanged
+      (`R := Grid.Selection` still compiles), so this only adds the missing half.
+
+      Writing takes DATA-ROW coordinates, symmetric with what reading gives back;
+      out-of-range values are clamped and a reversed rect is normalised, so
+      `Grid.Selection := Grid.Selection` is a no-op. An all-negative rect cancels the
+      selection (LCL's SetSelection -> CancelSelection) -- which matters because that is
+      exactly the shape an empty selection reads back as. }
+    property  Selection: TRect read GetSelection write SetSelection;
     { 选中的单元格总数(0 表示只有光标那一格)。 }
     function SelectedCellCount: Integer;
     { 选区聚合 —— 状态栏那句"已选 12 项,合计 3400"。
@@ -2013,8 +2088,10 @@ type
     procedure DistinctColumnValueCounts(ACol: Integer; AItems: TStrings);
     procedure ColumnValueFilter(ACol: Integer; AOut: TStrings);
     procedure ClearFilters;
-    { 通过过滤的行数(= 当前显示的行数)。 }
-    function  VisibleRowCount: Integer;
+    { There used to be a `VisibleRowCount` here returning DisplayRowCount -- a third
+      spelling of a metric that already had two (DisplayRowCount, FilteredRowCount)
+      while squatting on LCL's name for a viewport metric. It is gone; the name now
+      means what LCL means by it, on TTyCustomGrid. }
 
     { --- 分组 ---
       按某列分组:显示序里插入**合成的分组行**(它不对应任何数据行)。
@@ -2127,10 +2204,16 @@ type
     procedure PasteFromClipboard;
     { CSV。ADelimiter 默认逗号;含分隔符/引号/换行的字段自动加引号。 }
     { CSV 导出。范围参数(T2)缺省 = 全表 —— 加参数不能改变既有调用的行为。
-      越界一律钳到表内。范围走**显示序**,与不带范围时一致。 }
+      越界一律钳到表内。范围走**显示序**,与不带范围时一致。
+
+      AWriteTitles is LCL's WriteTitles (SaveToCSVStream, grids.pas:1815): the column
+      captions were an unconditional line 0 here, so a headerless CSV -- an appendable
+      log, a chunk of a larger file -- simply could not be produced. Defaults to True,
+      which is both the old behaviour and LCL's default. }
     function  SaveToCSVText(ADelimiter: Char = ',';
       AFromRow: Integer = -1; ARowCount: Integer = -1;
-      AFromCol: Integer = -1; AColCount: Integer = -1): string;
+      AFromCol: Integer = -1; AColCount: Integer = -1;
+      AWriteTitles: Boolean = True): string;
     { 导出 HTML 表格(含表头)。与 CSV 一致走显示序:所见即所得。 }
     function  SaveToHTMLText: string;
     procedure SaveToHTMLFile(const AFileName: string);
@@ -2141,18 +2224,58 @@ type
     function  SaveToJSONText: string;
     { CSV 导入。默认是**替换式**(先清空)—— 那是既有行为,不能改。
       AAppend=True 时接在现有数据后面;AMaxRows 限制读多少条(-1 = 不限);
-      AIgnoreRows 跳过表头之后的前几条(说明行)。 }
+      AIgnoreRows 跳过表头之后的前几条(说明行)。
+
+      AUseTitles is LCL's UseTitles (LoadFromCSVStream, grids.pas:1811): line 0 was
+      always eaten as column captions, so a headerless file silently lost its first
+      RECORD. Off, every line is data and the captions are left alone. }
     procedure LoadFromCSVText(const AText: string; ADelimiter: Char = ',';
       AAppend: Boolean = False; AMaxRows: Integer = -1;
-      AIgnoreRows: Integer = 0);
-    procedure SaveToCSVFile(const AFileName: string; ADelimiter: Char = ',');
-    procedure LoadFromCSVFile(const AFileName: string; ADelimiter: Char = ',');
-    { 流式读写(T1)。内部走的就是上面那套 CSV 文本 —— 只多一层流封装,
+      AIgnoreRows: Integer = 0; AUseTitles: Boolean = True);
+    procedure SaveToCSVFile(const AFileName: string; ADelimiter: Char = ',';
+      AWriteTitles: Boolean = True);
+    procedure LoadFromCSVFile(const AFileName: string; ADelimiter: Char = ',';
+      AUseTitles: Boolean = True);
+
+    { CSV 的流式读写。内部走的就是上面那套 CSV 文本 —— 只多一层流封装,
       **刻意不新造第二套序列化**:两套转义规则迟早走样,而含逗号/换行/引号
       的字段正是最容易走样的地方。
-      编码固定 UTF-8 无 BOM,显式声明,别让宿主猜。 }
-    procedure SaveToStream(AStream: TStream; ADelimiter: Char = ',');
-    procedure LoadFromStream(AStream: TStream; ADelimiter: Char = ',');
+      编码固定 UTF-8 无 BOM,显式声明,别让宿主猜。
+
+      These carry LCL's names for exactly this operation (grids.pas:1811/1815). They
+      used to be called SaveToStream / LoadFromStream, which in LCL mean something
+      else entirely -- and because ADelimiter had a DEFAULT, a ported one-argument
+      `Grid.SaveToStream(ms)` compiled and quietly produced bare CSV: no column widths,
+      no visibility, no frozen counts, no cursor, no selection. A signature that
+      accepts a ported call and does something else is worse than one that will not
+      compile, so the CSV pair moved to the name that describes it and SaveToStream /
+      LoadFromStream below became the full-state pair LCL says they are. }
+    procedure SaveToCSVStream(AStream: TStream; ADelimiter: Char = ',';
+      AWriteTitles: Boolean = True);
+    procedure LoadFromCSVStream(AStream: TStream; ADelimiter: Char = ',';
+      AUseTitles: Boolean = True);
+
+    { 全状态流式读写 —— 与 LCL TCustomGrid.SaveToStream / LoadFromStream 同义
+      (grids.pas:1365/1372):存的是**整张表**,而不只是文字。
+
+      Carried: structure (row count, columns with widths / visibility / order, frozen
+      counts), content (every cell), and position (cursor, scroll offset, selection).
+      NOT carried: per-cell colours, comments, read-only flags and merges -- LCL puts
+      those behind soAttributes, which is not in the default SaveOptions either.
+
+      Format is a small versioned text container: a few `key=value` header lines, a
+      line reading `csv`, then the content. LCL uses XMLConfig; the files are not
+      interchangeable across the two libraries in any case, so this reuses the CSV
+      escaper already in the unit rather than growing a second set of quoting rules
+      for the fields (comma / quote / newline) that are hardest to get right.
+
+      A stream that is not in this format RAISES rather than falling back to CSV:
+      guessing would put us straight back to "one call, two formats, no way to know
+      which one you got". An EMPTY stream raises too -- it is not a saved grid, it is
+      a caller who lost one. (LoadFromCSVStream keeps the old "empty stream = empty
+      table" reading, where it is a sensible answer.) }
+    procedure SaveToStream(AStream: TStream);
+    procedure LoadFromStream(AStream: TStream);
 
     { 按某列排序。ACol < 0 表示取消排序、回到原始数据顺序。 }
     procedure SortByColumn(ACol: Integer; ADirection: TTySortDirection);
@@ -4533,6 +4656,26 @@ begin
   Result := FRowCount;
 end;
 
+function TTyCustomGrid.VisibleRowCount: Integer;
+var
+  M: TTyGridMetrics;
+  first, last: Integer;
+begin
+  Result := 0;
+  M := GridMetrics;
+  if not TyGridVisibleRows(M, first, last) then Exit;
+  { `last - first`, not `last - first + 1`: see the declaration -- LCL keeps one row
+    of overlap so a page turn does not skip the seam row. }
+  Result := last - first;
+  { The whole grid on screen means there is nothing to page, so no overlap is kept.
+    HeaderH + content, not FrozenTop + content: FrozenTop already contains the header
+    bands AND the fixed rows, and the fixed rows are part of the content height too --
+    adding both would count them twice and hide the "it fits" case on every grid that
+    has a frozen row. }
+  if TyGridHeaderH(M) + TyGridContentHeight(M) <= M.ClientH then Inc(Result);
+  if Result < 0 then Result := 0;
+end;
+
 procedure TTyCustomGrid.MapToBaseCell(var ACol, ARow: Integer);
 begin
   { 基类没有合并。 }
@@ -6712,7 +6855,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyStringGrid.ClearRows(AFrom, ACount: Integer);
+procedure TTyStringGrid.ClearRowContents(AFrom, ACount: Integer);
 var
   r, c: Integer;
 begin
@@ -6731,7 +6874,7 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.ClearCols(AFrom, ACount: Integer);
+procedure TTyStringGrid.ClearColContents(AFrom, ACount: Integer);
 var
   r, c: Integer;
 begin
@@ -6749,6 +6892,53 @@ begin
   finally
     EndUpdate;
   end;
+end;
+
+function TTyStringGrid.ClearRows: Boolean;
+begin
+  Result := RowCount > 0;
+  if not Result then Exit;          { already empty -- LCL answers False here too }
+  EndEdit(False);                   { an editor open over a row that is about to vanish }
+  BeginUpdate;                      { structure + content = ONE undo record }
+  try
+    ClearCells;                     { see the declaration: sparse storage would resurrect }
+    FixedRows := 0;                 { frozen counts describe rows that no longer exist }
+    FixedRowsBottom := 0;
+    RowCount := 0;
+  finally
+    EndUpdate;
+  end;
+  { The cursor and the selection addressed rows that are gone. Park them at the origin
+    rather than leaving Row pointing past the end -- MoveCursor is not used because it
+    would ask OnSelectCell about a cell that does not exist. }
+  FRow := 0;
+  ClearSelection;
+end;
+
+function TTyStringGrid.ClearCols: Boolean;
+begin
+  Result := Header.Columns.Count > 0;
+  if not Result then Exit;
+  EndEdit(False);
+  BeginUpdate;
+  try
+    ClearCells;
+    { Sort keys and filters name columns by index; with no columns left every one of
+      them dangles, and the display order would be rebuilt against them on the next
+      paint. Drop them with the columns they refer to. }
+    ClearSortColumns;
+    ClearFilters;
+    FixedCols := 0;
+    FixedColsRight := 0;
+    Header.Columns.Clear;
+  finally
+    EndUpdate;
+  end;
+  FCol := 0;
+  ClearSelection;
+  InvalidateColumnCache;
+  UpdateScrollBars;
+  Invalidate;
 end;
 
 procedure TTyStringGrid.ClearCells;
@@ -7615,11 +7805,6 @@ function TTyStringGrid.DisplayRowCount: Integer;
 begin
   EnsureOrder;
   Result := Length(FOrder);
-end;
-
-function TTyStringGrid.VisibleRowCount: Integer;
-begin
-  Result := DisplayRowCount;
 end;
 
 procedure TTyStringGrid.SetColumnFilterEx(ACol: Integer; AOp: TTyGridFilterOp;
@@ -10682,6 +10867,16 @@ end;
 const
   { 版式串的头。版本号独立于控件版本 —— 只有**格式**变了才动它。 }
   TyGridLayoutTag = 'TYGRIDLAYOUT/1';
+  { 全状态流(SaveToStream / LoadFromStream)的头。同一条纪律:版本号跟格式走。
+    读的时候第一行不等于它就直接抛 —— 有头才分得清"这是我们的流"和
+    "这是别人喂来的一段 CSV"。 }
+  TyGridStateTag = 'TYGRIDSTATE/1';
+  { 头部字段与内容之间的分界行。内容段可以含换行(引号内的),所以它只能是
+    "这一行之后全是内容",不能再按行找边界。 }
+  TyGridStateContentMark = 'csv';
+  { 全状态流内容段的分隔符。固定成逗号(不给调用方选):文件是我们自己读回来的,
+    分隔符可配只会多出一个"存的时候用了什么"必须一起存下来的状态。 }
+  TyGridStateDelim = ',';
 
 function TTyStringGrid.SaveLayoutToString: string;
 var
@@ -11429,7 +11624,8 @@ begin
 end;
 
 function TTyStringGrid.SaveToCSVText(ADelimiter: Char;
-  AFromRow, ARowCount, AFromCol, AColCount: Integer): string;
+  AFromRow, ARowCount, AFromCol, AColCount: Integer;
+  AWriteTitles: Boolean): string;
 var
   sb: TStringList;
   pos, cIdx, dataRow, lastPos, lastCol: Integer;
@@ -11449,14 +11645,19 @@ begin
 
   sb := TStringList.Create;
   try
-    { 表头一行(列标题),然后按显示序导出可见行。 }
-    line := '';
-    for cIdx := AFromCol to lastCol do
+    { 表头一行(列标题),然后按显示序导出可见行。
+      AWriteTitles=False 时**整行不写**(而不是写一行空的):headerless CSV 的
+      第 0 行就该是第一条记录,占位空行会在下游变成一条全空的假记录。 }
+    if AWriteTitles then
     begin
-      if cIdx > AFromCol then line := line + ADelimiter;
-      line := line + TyCsvQuote(TTyColumn(Header.Columns.Items[cIdx]).Text, ADelimiter);
+      line := '';
+      for cIdx := AFromCol to lastCol do
+      begin
+        if cIdx > AFromCol then line := line + ADelimiter;
+        line := line + TyCsvQuote(TTyColumn(Header.Columns.Items[cIdx]).Text, ADelimiter);
+      end;
+      sb.Add(line);
     end;
-    sb.Add(line);
 
     for pos := AFromRow to lastPos do
     begin
@@ -11482,10 +11683,10 @@ end;
 
 
 procedure TTyStringGrid.LoadFromCSVText(const AText: string; ADelimiter: Char;
-  AAppend: Boolean; AMaxRows, AIgnoreRows: Integer);
+  AAppend: Boolean; AMaxRows, AIgnoreRows: Integer; AUseTitles: Boolean);
 var
   rows: TTyCsvRows;
-  i, j, dataRow, first, taken, base: Integer;
+  i, j, dataRow, first, titleRows, taken, base: Integer;
 begin
   EndEdit(False);
   { 字符级解析:引号内的换行不断行(见 TyCsvParse 的说明)。 }
@@ -11493,16 +11694,21 @@ begin
   if Length(rows) = 0 then Exit;
 
   { 第一行当表头:按它建列(列数不足就补)。
-    追加模式下不动列标题 —— 追加的是数据,不是重新定义这张表。 }
+    追加模式下不动列标题 —— 追加的是数据,不是重新定义这张表。
+
+    列的**补建**照做,AUseTitles 与否都一样:没有表头行时 rows[0] 是数据,但它
+    有几个字段仍然就是这张表有几列 —— 不补的话第一条记录会被截掉右半边。 }
   while Header.Columns.Count < Length(rows[0]) do
     Header.Columns.Add;
-  if not AAppend then
+  if AUseTitles and (not AAppend) then
     for j := 0 to High(rows[0]) do
       TTyColumn(Header.Columns.Items[j]).Text := rows[0][j];
 
-  { 数据从第 1 行起(第 0 行是表头),再跳过 AIgnoreRows 条说明行。 }
-  first := 1 + AIgnoreRows;
-  if first < 1 then first := 1;
+  { 数据从第 1 行起(第 0 行是表头),再跳过 AIgnoreRows 条说明行。
+    没有表头行时从第 0 行起 —— 不减这一行就会把第一条**记录**当标题吃掉。 }
+  if AUseTitles then titleRows := 1 else titleRows := 0;
+  first := titleRows + AIgnoreRows;
+  if first < titleRows then first := titleRows;
   taken := Length(rows) - first;
   if taken < 0 then taken := 0;
   if (AMaxRows >= 0) and (taken > AMaxRows) then taken := AMaxRows;
@@ -11541,24 +11747,44 @@ begin
   Invalidate;
 end;
 
-procedure TTyStringGrid.SaveToStream(AStream: TStream; ADelimiter: Char);
+{ --- 流封装 ---
+  两条一模一样的 UTF-8 无 BOM 读写,收口在这里,免得四个入口各写一遍。 }
+procedure TyGridWriteUtf8(AStream: TStream; const AText: string);
 var
   txt: UTF8String;
 begin
-  if AStream = nil then Exit;
-  txt := UTF8String(SaveToCSVText(ADelimiter));
+  txt := UTF8String(AText);
   if Length(txt) > 0 then
     AStream.WriteBuffer(txt[1], Length(txt));
 end;
 
-procedure TTyStringGrid.LoadFromStream(AStream: TStream; ADelimiter: Char);
+function TyGridReadUtf8(AStream: TStream): string;
 var
   txt: UTF8String;
   n: Int64;
 begin
-  if AStream = nil then Exit;
   n := AStream.Size - AStream.Position;
-  if n <= 0 then
+  if n <= 0 then Exit('');
+  SetLength(txt, n);
+  AStream.ReadBuffer(txt[1], n);
+  Result := string(txt);
+end;
+
+procedure TTyStringGrid.SaveToCSVStream(AStream: TStream; ADelimiter: Char;
+  AWriteTitles: Boolean);
+begin
+  if AStream = nil then Exit;
+  TyGridWriteUtf8(AStream, SaveToCSVText(ADelimiter, -1, -1, -1, -1, AWriteTitles));
+end;
+
+procedure TTyStringGrid.LoadFromCSVStream(AStream: TStream; ADelimiter: Char;
+  AUseTitles: Boolean);
+var
+  txt: string;
+begin
+  if AStream = nil then Exit;
+  txt := TyGridReadUtf8(AStream);
+  if txt = '' then
   begin
     { 空流 = 空表。别把它当成"什么都不做" —— 那样调用方分不清
       "读了一张空表"和"根本没读"。 }
@@ -11566,32 +11792,184 @@ begin
     RowCount := 0;
     Exit;
   end;
-  SetLength(txt, n);
-  AStream.ReadBuffer(txt[1], n);
-  LoadFromCSVText(string(txt), ADelimiter);
+  { 位置参数一路数到底:LoadFromCSVText(文本, 分隔符, 追加, 上限, 跳过, 用表头)。
+    AUseTitles 是**第六个**参数,别让它落到 AAppend/AMaxRows 上去。 }
+  LoadFromCSVText(txt, ADelimiter, False, -1, 0, AUseTitles);
 end;
 
-procedure TTyStringGrid.SaveToCSVFile(const AFileName: string; ADelimiter: Char);
+{ 全状态流的内容段:按**数据行序**导出,而 CSV 导出走的是显示序。
+
+  这不是风格之争,是正确性:显示序里没有被筛掉的行(存下来就少数据),
+  排过序的表读回来行号还会整体换一位,于是同一份文件里存着的光标、选区、
+  冻结行数会全部指到别的行上去。全状态存的是"这张表",不是"这一屏"。 }
+function TTyStringGrid.StateContentText: string;
+var
+  sb: TStringList;
+  r, c: Integer;
+  line: string;
+begin
+  sb := TStringList.Create;
+  try
+    line := '';
+    for c := 0 to Header.Columns.Count - 1 do
+    begin
+      if c > 0 then line := line + TyGridStateDelim;
+      line := line + TyCsvQuote(TTyColumn(Header.Columns.Items[c]).Text, TyGridStateDelim);
+    end;
+    sb.Add(line);
+
+    for r := 0 to RowCount - 1 do
+    begin
+      line := '';
+      for c := 0 to Header.Columns.Count - 1 do
+      begin
+        if c > 0 then line := line + TyGridStateDelim;
+        line := line + TyCsvQuote(GetCellText(c, r), TyGridStateDelim);
+      end;
+      sb.Add(line);
+    end;
+    Result := sb.Text;
+  finally
+    sb.Free;
+  end;
+end;
+
+procedure TTyStringGrid.SaveToStream(AStream: TStream);
+var
+  sb: TStringList;
+begin
+  if AStream = nil then Exit;
+  sb := TStringList.Create;
+  try
+    sb.Add(TyGridStateTag);
+    sb.Add('layout=' + SaveLayoutToString);
+    sb.Add(Format('rows=%d', [RowCount]));
+    { 位置存的是**锚点 + 光标**,而不是 Selection 给的那个规范化矩形。
+      选区在本控件里就是"锚点到光标"这一对,矩形是它的投影 —— 光标可能落在
+      矩形的任意一角。只存矩形的话读回来光标必定落在右下角,于是
+      「从下往上选」的表 Shift+↑ 会往反方向走。两个坐标存两次,不多。
+      (离散多选的 FSelRects 不存 —— 与逐格颜色同一条理由:见声明处。) }
+    sb.Add(Format('anchor=%d,%d', [FSelAnchorCol, FSelAnchorRow]));
+    sb.Add(Format('cursor=%d,%d', [FCol, FRow]));
+    sb.Add(Format('scroll=%d,%d', [ScrollX, ScrollY]));
+    { 内容**最后**写,而且用一行光杆标记开头:字段里可以合法地含换行
+      (引号内的),所以内容必须是"从这行之后一直到流尾",不能再指望按行切。 }
+    sb.Add(TyGridStateContentMark);
+    TyGridWriteUtf8(AStream, sb.Text + StateContentText);
+  finally
+    sb.Free;
+  end;
+end;
+
+procedure TTyStringGrid.LoadFromStream(AStream: TStream);
+var
+  lines, one: TStringList;
+  i, mark, savedRows, anchorCol, anchorRow, savedCol, savedRow, sx, sy: Integer;
+  layout, content: string;
+
+  function Field(const AName: string): string;
+  var
+    j: Integer;
+  begin
+    Result := '';
+    for j := 1 to mark - 1 do
+      if Copy(lines[j], 1, Length(AName) + 1) = AName + '=' then
+        Exit(Copy(lines[j], Length(AName) + 2, MaxInt));
+  end;
+
+  function IntField(const AName: string; ADefault: Integer): Integer;
+  begin
+    if not TryStrToInt(Trim(Field(AName)), Result) then Result := ADefault;
+  end;
+
+  { `a,b,c,d` 里的第 AIndex 个整数。缺项/坏项一律退回 ADefault。 }
+  function IntAt(const ACsv: string; AIndex, ADefault: Integer): Integer;
+  begin
+    one.DelimitedText := ACsv;
+    if (AIndex < 0) or (AIndex >= one.Count) then Exit(ADefault);
+    if not TryStrToInt(Trim(one[AIndex]), Result) then Result := ADefault;
+  end;
+
+begin
+  if AStream = nil then Exit;
+  lines := TStringList.Create;
+  one := TStringList.Create;
+  try
+    one.Delimiter := ',';
+    one.StrictDelimiter := True;
+    lines.Text := TyGridReadUtf8(AStream);
+
+    { 认不出格式就**抛**,不猜。回退去读 CSV 的话就又回到了
+      "同一个调用两种格式,而且分不出拿到的是哪一种"。
+      喂 CSV 的调用方要的是 LoadFromCSVStream,消息里直接说。 }
+    mark := -1;
+    if (lines.Count > 0) and (lines[0] = TyGridStateTag) then
+      for i := 1 to lines.Count - 1 do
+        if lines[i] = TyGridStateContentMark then
+        begin
+          mark := i;
+          Break;
+        end;
+    if mark < 0 then
+      raise EReadError.Create('TTyStringGrid.LoadFromStream: not a ' + TyGridStateTag
+        + ' stream. Plain CSV goes through LoadFromCSVStream.');
+
+    layout := Field('layout');
+    savedRows := IntField('rows', -1);
+    anchorCol := IntAt(Field('anchor'), 0, 0);
+    anchorRow := IntAt(Field('anchor'), 1, 0);
+    savedCol := IntAt(Field('cursor'), 0, 0);
+    savedRow := IntAt(Field('cursor'), 1, 0);
+    sx := IntAt(Field('scroll'), 0, 0);
+    sy := IntAt(Field('scroll'), 1, 0);
+
+    content := '';
+    for i := mark + 1 to lines.Count - 1 do
+      content := content + lines[i] + LineEnding;
+
+    { 顺序是有讲究的:先读内容(它按标题行把列建出来并填满数据),
+      版式才有列可落 —— LoadLayoutFromString 要求列数完全对得上,
+      先落版式的话它会因为列还没建出来而整串作废。 }
+    LoadFromCSVText(content, TyGridStateDelim, False, -1, 0, True);
+    { 存的行数说了算:全空的尾行在 CSV 里长得跟"没有这一行"一样。 }
+    if (savedRows >= 0) and (savedRows <> RowCount) then RowCount := savedRows;
+    if layout <> '' then LoadLayoutFromString(layout);
+
+    { 锚点与光标一次落位。**用 SelectRange 而不是 MoveCursor**:MoveCursor 会
+      重锚(选区塌成一格)并且顺手 ScrollIntoView —— 把刚要还原的滚动位置冲掉。 }
+    SelectRange(anchorCol, anchorRow, savedCol, savedRow);
+    { 滚动**最后**还原,前面几步都可能动它。 }
+    ScrollX := sx;
+    ScrollY := sy;
+  finally
+    one.Free;
+    lines.Free;
+  end;
+end;
+
+procedure TTyStringGrid.SaveToCSVFile(const AFileName: string; ADelimiter: Char;
+  AWriteTitles: Boolean);
 var
   sl: TStringList;
 begin
   sl := TStringList.Create;
   try
-    sl.Text := SaveToCSVText(ADelimiter);
+    sl.Text := SaveToCSVText(ADelimiter, -1, -1, -1, -1, AWriteTitles);
     sl.SaveToFile(AFileName);
   finally
     sl.Free;
   end;
 end;
 
-procedure TTyStringGrid.LoadFromCSVFile(const AFileName: string; ADelimiter: Char);
+procedure TTyStringGrid.LoadFromCSVFile(const AFileName: string; ADelimiter: Char;
+  AUseTitles: Boolean);
 var
   sl: TStringList;
 begin
   sl := TStringList.Create;
   try
     sl.LoadFromFile(AFileName);
-    LoadFromCSVText(sl.Text, ADelimiter);
+    LoadFromCSVText(sl.Text, ADelimiter, False, -1, 0, AUseTitles);
   finally
     sl.Free;
   end;
@@ -12032,7 +12410,7 @@ begin
   SelectionChanged;
 end;
 
-function TTyStringGrid.Selection: TRect;
+function TTyStringGrid.GetSelection: TRect;
 var
   r: TRect;
 begin
@@ -12042,6 +12420,24 @@ begin
   Result.Right := r.Right;
   Result.Top := DisplayToData(r.Top);
   Result.Bottom := DisplayToData(r.Bottom);
+end;
+
+procedure TTyStringGrid.SetSelection(const AValue: TRect);
+begin
+  { All four negative = cancel, as in LCL (SetSelection -> CancelSelection). This is
+    not a curiosity: an empty grid reads its selection back as (-1,-1,-1,-1), so
+    without this branch `Grid.Selection := Saved` after saving "nothing selected"
+    would clamp to (0,0,0,0) and select the top-left cell instead. }
+  if (AValue.Left < 0) and (AValue.Top < 0)
+     and (AValue.Right < 0) and (AValue.Bottom < 0) then
+  begin
+    ClearSelection;
+    Exit;
+  end;
+  { SelectRange takes (col1, row1, col2, row2) -- NOT a rect -- and does the clamping
+    and the OnSelectionChanged notification. Reading normalises via Min/Max, so a
+    reversed rect written here comes back normalised. }
+  SelectRange(AValue.Left, AValue.Top, AValue.Right, AValue.Bottom);
 end;
 
 { 选区聚合的公共骨架:走一遍选区,把能解析成数值的格喂给累加器。

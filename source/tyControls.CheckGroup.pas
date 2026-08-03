@@ -31,11 +31,20 @@ type
     procedure RebuildCheckBoxes;
     procedure LayoutCheckBoxes;
     procedure ChildChanged(Sender: TObject);   // wired to each child's OnChange
+    { Names the class, the offending index and the largest valid one -- a form with six
+      groups on it needs all three to be actionable. Same shape as LCL's
+      rsIndexOutOfBounds ('%s Index %d out of bounds 0 .. %d',
+      C:/lazarus/lcl/lclstrconsts.pas:268, raised by
+      include/customcheckgroup.inc:173-177). }
+    procedure RaiseIndexOutOfBounds(AIndex: Integer);
   protected
     { The AIndex-th hosted checkbox, or nil when out of range. Protected: the group owns
       its children's lifetime and layout, so handing them out publicly would invite code
       that reparents or frees one. A descendant (and a test probe) legitimately needs to
-      reach the child to simulate what a real click does. }
+      reach the child to simulate what a real click does.
+      Deliberately NOT raising the way Checked[] now does: this is an internal probe with
+      no LCL counterpart, and "is there a child here?" is a question a descendant may
+      legitimately ask about an index it has not validated. nil IS the answer. }
     function CheckBoxAt(AIndex: Integer): TTyCheckBox;
     procedure SetParent(AParent: TWinControl); override;
     procedure Resize; override;
@@ -47,8 +56,13 @@ type
     function Count: Integer;
     { How many items are currently checked. }
     function CheckedCount: Integer;
-    { AIndex-th checkbox's Checked state (indexed property). Out-of-range read ->
-      False; out-of-range write -> ignored. }
+    { AIndex-th checkbox's Checked state (indexed property). An out-of-range index on
+      EITHER side RAISES EListError naming the class, the index and the maximum -- as
+      LCL's TCustomCheckGroup does (include/customcheckgroup.inc:313-338). It used to
+      answer False for a read and drop a write, which is exactly how a populate-order
+      or off-by-one bug hides: an item that does not exist is indistinguishable from
+      one the user simply left unticked, and a lost write looks like the user unticking
+      it again. Note CheckedCount and Count are the safe ways to ask about the range. }
     property Checked[AIndex: Integer]: Boolean read GetChecked write SetChecked;
   published
     property Items: TStrings read FItems write SetItems;
@@ -252,10 +266,19 @@ begin
     end;
 end;
 
+procedure TTyCheckGroup.RaiseIndexOutOfBounds(AIndex: Integer);
+begin
+  raise EListError.CreateFmt('%s Index %d out of bounds 0 .. %d',
+    [ClassName, AIndex, Length(FCheckBoxes) - 1]);
+end;
+
 function TTyCheckGroup.GetChecked(AIndex: Integer): Boolean;
 begin
-  if (AIndex < 0) or (AIndex > High(FCheckBoxes)) or (FCheckBoxes[AIndex] = nil) then
-    Exit(False);
+  if (AIndex < 0) or (AIndex > High(FCheckBoxes)) then
+    RaiseIndexOutOfBounds(AIndex);
+  { A nil slot is not a caller error -- it can only exist mid-rebuild -- so it keeps the
+    old quiet answer rather than blaming the index, which is in range. }
+  if FCheckBoxes[AIndex] = nil then Exit(False);
   Result := FCheckBoxes[AIndex].Checked;
 end;
 
@@ -264,7 +287,9 @@ var
   cb: TTyCheckBox;
   saved: TNotifyEvent;
 begin
-  if (AIndex < 0) or (AIndex > High(FCheckBoxes)) or (FCheckBoxes[AIndex] = nil) then Exit;
+  if (AIndex < 0) or (AIndex > High(FCheckBoxes)) then
+    RaiseIndexOutOfBounds(AIndex);
+  if FCheckBoxes[AIndex] = nil then Exit;   // mid-rebuild slot; see GetChecked
   cb := FCheckBoxes[AIndex];
   { OnItemChange reports what the USER did. Firing it for a programmatic write makes
     the two indistinguishable, so a handler that writes back (the common "uncheck the

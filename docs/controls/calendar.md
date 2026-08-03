@@ -29,10 +29,10 @@ uses tyControls.Calendar;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `Date` | `TDateTime` | 构造时为 `DateOf(Now)`（今天） | 当前选中日期。写入时先按 `[MinDate, MaxDate]` 夹紧并取 `DateOf`（丢弃时间部分）；仅当日期实际变化时更新并 `Invalidate`。**无 `default`，始终写入 DFM/LFM。** |
-| `DateTime` | `TDateTime` | 同 `Date` | **（API parity 新增）** `Date` 的别名——同一个字段、同一个 setter，`stored False` 不重复流式保存（持久化的是 `Date`）。加它是因为**同名不同类型**是最坏的一种差异：LCL 的 `TCustomCalendar.Date` 是 `string`，它的 `TDateTime` 版叫 `DateTime`（`calendar.pp`），于是 `Cal.Date := Now` 在这里能编译、在 Lazarus 编译不过，`Cal.DateTime` 反之。有了这个别名，两边写法都能编过。 |
-| `MinDate` | `TDateTime` | `0`（无下界） | 可选日期下界。`0` 表示不限制。写入后重新夹紧 `Date` 并始终重绘（越界格子的灰显外观会变化）。 |
-| `MaxDate` | `TDateTime` | `0`（无上界） | 可选日期上界。`0` 表示不限制。写入后重新夹紧 `Date` 并始终重绘。 |
+| `Date` | `TDateTime` | 构造时为 `DateOf(Now)`（今天） | 当前选中日期，取 `DateOf`（丢弃时间部分）；仅当日期实际变化时更新并 `Invalidate`。**写入越界值抛 `ETyInvalidDate`**，原日期保持不变（详见第 7 节）。**无 `default`，始终写入 DFM/LFM。** |
+| `DateTime` | `TDateTime` | 同 `Date` | LCL 同名访问器的别名，同一份存储、同一套越界检查。`stored False`（`Date` 才是被序列化的那个）。 |
+| `MinDate` | `TDateTime` | `0`（无下界） | 可选日期下界。`0` 表示不限制。写入后把当前 `Date` **夹紧**到新区间（改的是规则不是值，所以不抛），并始终重绘（越界格子的灰显外观会变化）。 |
+| `MaxDate` | `TDateTime` | `0`（无上界） | 可选日期上界。`0` 表示不限制。写入后同样夹紧当前 `Date` 并重绘。 |
 | `FirstDayOfWeek` | `TTyWeekDay` | `wdSunday` | 每周第一列的星期（`wdSunday`..`wdSaturday`），决定星期名行与网格列的排列顺序。 |
 | `WeekNumbers` | `Boolean` | `False` | 为 `True` 时在网格左侧增加一列 ISO 8601 周数（列宽 24 逻辑像素）。 |
 | `ShowToday` | `Boolean` | `True` | 为 `True` 时给"今天"的格子描一圈高亮环（未被选中时）。 |
@@ -60,6 +60,13 @@ TTyCalendar 继承自 `TTyCustomControl`（`tyControls.Base`）：
 | `ViewMode` | `TTyCalView` | 当前视图层级：`cvmDays` / `cvmMonths` / `cvmYears` / `cvmDecades`。 |
 | `ViewMonth` | `Word` | 当前视图锚定的月份（1–12）。 |
 | `ViewYear` | `Word` | 当前视图锚定的年份。 |
+
+### 公开方法
+
+| 方法 | 说明 |
+|------|------|
+| `SetDateClamped(AValue: TDateTime)` | 把选中日期移到 `[MinDate, MaxDate]` 内**最近**的一天，**永不抛异常**。用在越界值属于预期且无害的场合（spin 走出边界、从更宽的数据源取值）；越界属于 bug 时用 `Date :=`。两者并存是刻意的——由调用方言明自己的意图，读代码的人一眼能看出来。 |
+| `RenderToPublic(...)` | 把控件渲染到任意 `TCanvas`，供测试与嵌入使用。 |
 
 > **状态跟踪：** TTyCalendar **没有** `FHover` / `FPressed` 之类的成员状态字段。格子的 `:selected` / `:disabled` / `:hover` 是在渲染时**逐格计算**并向样式模型查询的（见第 5 节），而非控件级 `CurrentStates` 重写。控件自身的 `CurrentStyle`（主体边框 + 背景）走基类默认的状态机（`:hover`/`:focus`/`:active`/`:disabled`）。
 
@@ -174,7 +181,9 @@ Cal.ReadOnly := True;   // 禁止选择；表头翻页/下钻仍可用
 
 ## 7. 注意事项
 
-- **`Date` 只保留日期部分：** 写入 `Date` 时内部做 `DateOf`（丢弃时间），并按 `[MinDate, MaxDate]` 夹紧。若赋一个越界值，会被夹到最近的边界。
+- **`Date` 只保留日期部分：** 写入 `Date` 时内部做 `DateOf`（丢弃时间）。
+- **`Date` 越界会抛异常（3.0 起的行为变更）：** 写入落在 `[MinDate, MaxDate]` 之外的日期抛 `ETyInvalidDate`，消息里带上越界日期与两侧边界；原日期与视图锚点保持不变。以前是**静默夹紧**——调用方读回 `Date` 拿到的是自己从没赋过的一天，`Cal.Date := 从数据库取的值` 分不清"接受了"和"被悄悄改了"。LCL 同样抛（`EInvalidDate`，`calendar.pp:293-304`），本单元同时提供 `EInvalidDate = ETyInvalidDate` 别名，方便从 Lazarus 移植的 `except on EInvalidDate` 原样编译。**需要旧的夹紧行为就用 `SetDateClamped`。**
+  - 三条路径**不抛**：① 流式加载（`csLoading`）改为夹紧，`.lfm` 里一个漂移的日期不该让整个窗体打不开；② 改 `MinDate`/`MaxDate` 是调用方改规则不是传坏值，按 LCL 的 `ApplyLimits` 夹紧；③ 用户手势（点越界格、方向键走到边界）照旧静默拒绝。
 - **`Date` 无 `default`：** 始终写入 `.lfm`/`.dfm`（与有 `default False/True` 的布尔属性不同）。`MinDate`/`MaxDate` 亦无 `default`，`0` 表示该侧无界。
 - **`DateTime` 只是 `Date` 的别名：** 两者共用同一字段与 setter（同样夹紧 + `DateOf`），不是两份状态；`DateTime` 声明为 `stored False`，`.lfm`/`.dfm` 里只出现 `Date` 一份。注意 LCL 的 `TCustomCalendar.Date` 是 `string` 类型，本控件的 `Date` 是 `TDateTime`——移植时按类型对齐，别按名字对齐。
 - **`OnAccept` vs `OnChange` 的分工：** `OnChange` 只在日期**改变**时发；`OnAccept` 是"确认"手势（回车 / 空格 / 点日期格），**即便日期没变**点击日期格也会触发。做下拉选择器时请用 `OnAccept` 决定何时关闭弹窗，避免方向键导航误关。

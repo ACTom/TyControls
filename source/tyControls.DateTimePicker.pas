@@ -1052,10 +1052,18 @@ begin
 
   EnsurePopup;
 
-  { Seed the calendar from the picker's current state. }
-  FCalendar.Date          := DateOf(FDateTime);
+  { Seed the calendar from the picker's current state -- BOUNDS FIRST.
+
+    The popup calendar is reused across opens, so it still carries the previous open's
+    MinDate/MaxDate. Assigning Date first therefore validated the new date against the
+    OLD range: if the picker's range moved between opens, the date the picker legitimately
+    holds is out of the calendar's stale range. That used to clamp silently and recover by
+    luck -- the popup then showed a date the picker did not hold -- and now that an
+    out-of-range assignment raises, it would abort the dropdown instead. Setting the
+    bounds first means the date is only ever checked against the range it belongs to. }
   FCalendar.MinDate       := FMinDate;
   FCalendar.MaxDate       := FMaxDate;
+  FCalendar.Date          := DateOf(FDateTime);
   FCalendar.FirstDayOfWeek := wdSunday;
   FCalendar.Controller    := ActiveController;
 

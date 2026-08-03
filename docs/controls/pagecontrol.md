@@ -35,7 +35,7 @@
 | `PageCount` | `Integer` | 页数 |
 | `AddPage(caption)` / `AddTab(caption)` | `: TTyTabSheet` | 追加一页（`Owner` = 控件的 Owner，即窗体；`Parent` = 控件），返回该页；首次追加自动选中 |
 | `RemovePage(i)` | 方法 | 移除并释放第 i 页，自动修正活动页 |
-| `TabHeight` | `Integer`（默认 28） | 页签头条带逻辑高度（按 PPI 缩放） |
+| `TabHeight` | `Integer`（不设时跟随主题：经典 28 / 现代 38） | 页签头条带逻辑高度（按 PPI 缩放）。`0` = **完全不要条带**（页面铺满控件，由宿主自己驱动切页）；`TyTabHeightAuto`（-1，含任意负值）= 交回主题的 `--control-height`。详见 §注意事项 |
 | `TabsClosable` | `Boolean`（默认 False） | 页签头是否显示关闭 × |
 | `AnimationsEnabled` | `Boolean`（默认 True） | 切页时活动页签头是否交叉淡入（无窗口句柄时直接定格，保证 headless 测试稳定） |
 | `OnChange` / `OnChanging` / `OnTabClose` / `OnReorder` | 事件 | 切换后 / 切换前可否决 / 点关闭×可否决 / 拖拽重排提交后 |
@@ -80,6 +80,17 @@ PageCtrl.ActivePage := Pg;           // 切到该页
 - **可关闭页签**：`TabsClosable = True` 时每页签头右侧有关闭 ×，点击触发 `OnTabClose`（可否决）。
 - **活动页交叉淡入**：切页时活动页签头背景从非活动样式淡入活动样式（仅页签头颜色淡入，页内容瞬时切换）。
 - **键盘**：`←/→` 上一/下一页，`Home/End` 首/末页，`Ctrl+Tab` / `Ctrl+PageUp/PageDown` 切页。
+- **`TabHeight` 的三种取值（与 LCL 的差异，刻意保留）**：
+  | 取值 | 含义 |
+  |------|------|
+  | 不设 | 跟随主题 `--control-height`：经典 28、现代 38 |
+  | `> 0` | 钉住该逻辑高度，并写入 `.lfm` |
+  | `0` | **完全不要条带**——页面铺满控件，宿主自己驱动切页（侧边栏、分段控制器）。会写入 `.lfm`，重新载入后仍然没有条带 |
+  | `TyTabHeightAuto`（`-1`，任意负值同义） | **交回主题**，回到"不设"状态 |
+
+  LCL 的 `TabHeight` 是 `Smallint`，`<= 0` 一律表示"按字体自动定高"，且只在 `> 0` 时序列化。本库的 `0` 另有其义：LCL 要"不要条带"得写 `ShowTabs := False`，而我们没有那个属性，`0` 就是它——例子 `examples/tabcontrol` 在运行期来回切换的正是这个。所以 `0` 保持原义，LCL 的"自动"落在 `<= 0` 的**负半边**并有了名字 `TyTabHeightAuto`：从 Lazarus 移植过来的 `TabHeight := -1` 行为与在 Lazarus 里一致，不会静默变成"藏掉条带"。**唯一要注意的是显式写字面量 `0` 却指望"自动"的移植代码**——它想要的是 `TyTabHeightAuto`；Lazarus 生成的 `.lfm` 里永远不会带这个坑，因为 LCL 根本不序列化 `0`。
+  - 类型保持 `Integer` 而非 LCL 的 `Smallint`：默认 `{$R-}` 下窄化会让过大的赋值静默回绕，那正是本轮要清理的同一类静默错误。
+  - `stored` 条件是"宿主钉过它"而非 LCL 的 `> 0`：设计期定的 `0` 是一个真实决定，用 `> 0` 会在每次重新载入时把它丢掉，条带又悄悄冒回来。
 
 ## 7. 流式化（.lfm）
 

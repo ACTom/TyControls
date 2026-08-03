@@ -63,7 +63,7 @@ uses tyControls.TabSet;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `TabHeight` | `Integer` | `28` | 页签条高度（逻辑像素）；写入夹紧到 `>= 1`。 |
+| `TabHeight` | `Integer` | 不设时跟随主题（经典 `28` / 现代 `38`） | 页签条高度（逻辑像素）。`0` = 完全不要条带；`TyTabHeightAuto`（`-1`，任意负值同义）= 交回主题。完整取值表与和 LCL 的差异见 [`pagecontrol.md` §6](pagecontrol.md)。 |
 | `TabsClosable` | `Boolean` | `False` | 为 `True` 时每个页签头右侧渲染关闭 × 字形，点击触发 `OnTabClose`。 |
 | `TabStop` | `Boolean` | `True` | 参与键盘 Tab 焦点循环（`Create` 中设 `True`）。 |
 | `Align` | `TAlign` | — | 父容器内的停靠方式。 |
@@ -220,5 +220,5 @@ end;
 - **直接 `Tabs.Delete` 低于选中项的已知失同步：** 通过关闭 × 走 `RemoveTabData` 会正确调整高亮；但**直接**对 `Tabs` 在选中项**之下**做 `Delete`，因裸 `TStringList.OnChange` 不携带索引，高亮会错位一格（源码标注的已知、不常见 desync）。删除位于或高于选中项时只夹紧上界。
 - **重排后选中钉在位置：** `DoReorderTabs` 后 `FTabIndex` 不随被拖动的页签调整——**选中态钉在位置索引上**（与 `TTyPageControl` 一致）。
 - **typeKey 为 `TyTabSet`：** 主题化时写 `TyTabSet` / `TyTab` / `TyTabClose` 选择器。它此前借的 `TyTabControl` 不对应库里任何控件；两个键现在共写一条内建规则，但**要单独调本控件请写 `TyTabSet`**。另注意本控件只吃外框的 `border-color` / `border-width`（见 §5）。
-- **DFM 序列化：** `TabIndex` 声明 `default -1`、`TabHeight` 声明 `default 28`、`TabsClosable` 声明 `default False`，取默认值时不写入 `.lfm`/`.dfm`。
+- **DFM 序列化：** `TabIndex` 声明 `default -1`、`TabsClosable` 声明 `default False`，取默认值时不写入 `.lfm`/`.dfm`。`TabHeight` 走的是 `stored`（宿主钉过才写），所以显式设的 `0`（不要条带）也会被写进去并原样还原。
 - **Alt+助记符：** 页签标题支持 `&` 助记符——`DialogChar` 在 `Enabled` 时扫描标题的加速键并 `SetTabIndex` 切换到匹配页签。

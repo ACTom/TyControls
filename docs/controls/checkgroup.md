@@ -42,7 +42,7 @@ uses tyControls.CheckGroup;
 
 | 成员 | 签名 | 说明 |
 |------|------|------|
-| `Checked[AIndex]` | `property Checked[AIndex: Integer]: Boolean`（**索引属性，可读写**） | 读/写第 `AIndex` 个复选框的勾选状态。**越界读**返回 `False`；**越界写**为安全空操作（不崩溃）。写入期间对应子控件的 `OnChange` 被临时摘掉，因此**不会触发 `OnItemChange`**（见 [§4 事件](#4-事件)）。 |
+| `Checked[AIndex]` | `property Checked[AIndex: Integer]: Boolean`（**索引属性，可读写**） | 读/写第 `AIndex` 个复选框的勾选状态。**越界读写一律抛 `EListError`**，消息形如 `TTyCheckGroup Index 7 out of bounds 0 .. 2`（类名 + 越界下标 + 最大合法下标，与 LCL 同形）。编程写入**不**触发 `OnItemChange`（该事件只报告用户操作）。 |
 | `Count` | `function Count: Integer` | 子复选框数量（`= Items.Count`）。 |
 | `CheckedCount` | `function CheckedCount: Integer` | 当前处于勾选状态的项数。 |
 
@@ -64,7 +64,7 @@ uses tyControls.CheckGroup;
 
 | 事件 | 类型 | 触发时机 |
 |------|------|----------|
-| `OnItemChange` | `TCheckGroupItemEvent = procedure(Sender: TObject; AIndex: Integer) of object` | 某个复选框被**用户**切换（点击、键盘空格）且状态**实际改变**时触发，`AIndex` 为该项索引。设为相同值不触发（子复选框内部有 early-out 守卫）。 |
+| `OnItemChange` | `TCheckGroupItemEvent = procedure(Sender: TObject; AIndex: Integer) of object` | 某个复选框的勾选状态**实际改变**时触发，`AIndex` 为该项索引。只有用户点击 / 键盘空格会触发；通过 `Checked[i] :=` 编程写入**不**触发（否则"取消其它项"这类回写型处理器会自我重入），设为相同值也不触发（子复选框内部有 early-out 守卫）。 |
 
 > **`Checked[i] :=` 不触发：** `OnItemChange` 报告的是"用户做了什么"。程序化赋值也发这个事件的话，两者就无从区分，于是"勾了这个就取消其余"这种最常见的写法会在处理器里递归回自己。写入时代码把子控件的 `OnChange` 临时置 `nil`、赋值、再还原（与 LCL `TCustomCheckGroup` 同样的抑制手法）。
 
@@ -157,7 +157,7 @@ Feats.Items.CommaText := '自动保存,拼写检查,深色模式,行号,自动�
 1. **子复选框独立无互斥：** 与单选组不同，勾选一项不会取消其它项——各项完全独立。若需要互斥，请改用单选组（RadioGroup）。
 2. **`Items` 变化会重建整组子控件：** 增删改任一项都会释放并重建全部子复选框；勾选状态**按索引**保留（仍在范围内的项保持原状态，新增项默认未勾选，被删项状态丢弃）。若需精确的“按内容”迁移，请在赋值前后自行记录/恢复。
 3. **子控件不进设计器：** 内部复选框带 `csNoDesignVisible`，不会作为可选中的子控件出现在 IDE 设计器里。请通过 `Items` 编辑标题，通过 `Checked[]` 读写状态。
-4. **越界访问安全：** `Checked[]` 越界读返回 `False`、越界写为空操作，不崩溃。
+4. **越界访问抛异常（3.0 起的行为变更）：** `Checked[]` 无论读写，下标越界都抛 `EListError` 并写明类名、越界下标与最大合法下标——与 LCL 的 `TCustomCheckGroup` 一致（`include/customcheckgroup.inc:173-177`、`:313-338`）。以前是越界读返回 `False`、越界写静默丢弃，而"不存在的项"和"用户没勾的项"读起来一模一样，填充顺序错了或差一都会被这层静默盖住。用 `Count` / `CheckedCount` 先问范围。
 5. **`Controller` 传播：** 给本控件设 `Controller` 会同步应用到所有内部子复选框，整组主题保持一致。
 6. **复用 `TyGroupBox` 主题：** 外框走 `TyGroupBox` 令牌，子复选框走 `TyCheckBox` 令牌；`.tycss` 中不新增 `TyCheckGroup` 规则。请确保主题为 `TyGroupBox` 声明了 `background`（用于遮盖标题处边框线，见 [TTyGroupBox 注意事项](groupbox.md#7-注意事项)）。
 

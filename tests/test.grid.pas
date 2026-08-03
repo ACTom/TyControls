@@ -289,8 +289,8 @@ type
     procedure TestFilterRowIsABandNotADataRow;
     procedure TestFilterRowFiltersAndClears;
     procedure TestClickingFilterRowOpensAnEditorThatFilters;
-    procedure TestStreamRoundTrip;
-    procedure TestClearRangeIsUndoable;
+    procedure TestCsvStreamRoundTrip;
+    procedure TestClearContentsRangeIsUndoable;
     procedure TestRangeLimitedExport;
     procedure TestAppendingCsvImport;
     procedure TestJsonExport;
@@ -2408,10 +2408,10 @@ begin
   G.Cells[0, 0] := '北京';  G.Cells[0, 1] := '上海';  G.Cells[0, 2] := '北海';
   G.Cells[0, 3] := '广州';  G.Cells[0, 4] := '北川';
 
-  AssertEquals('未过滤时全部可见', 5, G.VisibleRowCount);
+  AssertEquals('未过滤时全部可见', 5, G.DisplayRowCount);
 
   G.SetColumnFilter(0, '北');
-  AssertEquals('只剩 3 行匹配', 3, G.VisibleRowCount);
+  AssertEquals('只剩 3 行匹配', 3, G.DisplayRowCount);
   AssertEquals('显示第 0 位 = 数据行 0', 0, G.DisplayRow(0));
   AssertEquals('显示第 1 位 = 数据行 2', 2, G.DisplayRow(1));
   AssertEquals('显示第 2 位 = 数据行 4', 4, G.DisplayRow(2));
@@ -2422,7 +2422,7 @@ begin
 
   // 大小写不敏感 + 清除过滤。
   G.SetColumnFilter(0, '');
-  AssertEquals('清除后全部回来', 5, G.VisibleRowCount);
+  AssertEquals('清除后全部回来', 5, G.DisplayRowCount);
 end;
 
 { 过滤与排序叠加:先过滤再排序,且 Cells 仍按数据行寻址。 }
@@ -2436,10 +2436,10 @@ begin
   G.Cells[0, 3] := 'd-y';  G.Cells[0, 4] := 'a-x';
 
   G.SetColumnFilter(0, '-x');          // 留下 0,2,4
-  AssertEquals('过滤后 3 行', 3, G.VisibleRowCount);
+  AssertEquals('过滤后 3 行', 3, G.DisplayRowCount);
 
   G.SortByColumn(0, sdAscending);      // a-x(4), b-x(0), c-x(2)
-  AssertEquals('过滤+排序后仍是 3 行', 3, G.VisibleRowCount);
+  AssertEquals('过滤+排序后仍是 3 行', 3, G.DisplayRowCount);
   AssertEquals('首位是 a-x(数据行 4)', 4, G.DisplayRow(0));
   AssertEquals('次位是 b-x(数据行 0)', 0, G.DisplayRow(1));
   AssertEquals('末位是 c-x(数据行 2)', 2, G.DisplayRow(2));
@@ -2763,7 +2763,7 @@ begin
   G.GroupByColumn(0);
   AssertEquals('分成 2 组', 2, G.GroupCount);
   // 5 个数据行 + 2 个分组行 = 7 个显示位置
-  AssertEquals('显示序含分组行', 7, G.VisibleRowCount);
+  AssertEquals('显示序含分组行', 7, G.DisplayRowCount);
 
   AssertTrue('第 0 个显示位置是分组行', G.IsGroupRow(0, gi));
   { 不假设哪组排在前(取决于字符序),按分组值找。 }
@@ -2774,7 +2774,7 @@ begin
       AssertEquals('华北组 2 条', 2, G.GroupInfo(gi).Count);
 
   G.UngroupRows;
-  AssertEquals('取消分组后回到 5 行', 5, G.VisibleRowCount);
+  AssertEquals('取消分组后回到 5 行', 5, G.DisplayRowCount);
   AssertEquals('数据一格没动', '华东', G.Cells[0, 0]);
 end;
 
@@ -2789,16 +2789,16 @@ begin
   G.Cells[0, 0] := 'A'; G.Cells[0, 1] := 'B';
   G.Cells[0, 2] := 'A'; G.Cells[0, 3] := 'B';
   G.GroupByColumn(0);
-  AssertEquals('展开时 4 数据行 + 2 分组行', 6, G.VisibleRowCount);
+  AssertEquals('展开时 4 数据行 + 2 分组行', 6, G.DisplayRowCount);
 
   G.IsGroupRow(0, gi);
   G.ToggleGroup(gi);
-  AssertEquals('折叠一组后少 2 行', 4, G.VisibleRowCount);
+  AssertEquals('折叠一组后少 2 行', 4, G.DisplayRowCount);
   AssertTrue('分组行仍在', G.IsGroupRow(0, gi));
   AssertTrue('该组标记为折叠', G.GroupInfo(gi).Collapsed);
 
   G.ToggleGroup(gi);
-  AssertEquals('展开后恢复', 6, G.VisibleRowCount);
+  AssertEquals('展开后恢复', 6, G.DisplayRowCount);
 end;
 
 { 折叠状态按**分组值**记账,重排后组号变了也不会张冠李戴。 }
@@ -2982,7 +2982,7 @@ begin
     // 只留"甲"之后,候选仍须是 3 个 —— 否则选不回"乙""丙"。
     vals.Clear; vals.Add('甲');
     G.SetColumnValueFilter(0, vals);
-    AssertEquals('过滤生效', 2, G.VisibleRowCount);
+    AssertEquals('过滤生效', 2, G.DisplayRowCount);
 
     vals.Clear;
     G.DistinctColumnValues(0, vals);
@@ -3008,7 +3008,7 @@ begin
   try
     vals.Add('A'); vals.Add('C');
     G.SetColumnValueFilter(0, vals);
-    AssertEquals('只留 A 与 C = 3 行', 3, G.VisibleRowCount);
+    AssertEquals('只留 A 与 C = 3 行', 3, G.DisplayRowCount);
 
     // 回填:已生效的集合能读回来(下拉重开时要靠它回勾)。
     G.ColumnValueFilter(0, back);
@@ -3017,7 +3017,7 @@ begin
     AssertTrue('含 C', back.IndexOf('C') >= 0);
 
     G.SetColumnValueFilter(0, nil);
-    AssertEquals('清除后全部回来', 5, G.VisibleRowCount);
+    AssertEquals('清除后全部回来', 5, G.DisplayRowCount);
   finally
     vals.Free;
     back.Free;
@@ -6910,7 +6910,7 @@ begin
   try
     vals.Add('');                       { 只勾「(空白)」 }
     G.SetColumnValueFilter(0, vals);
-    AssertEquals('只该剩下空白的那几行', 4, G.VisibleRowCount);
+    AssertEquals('只该剩下空白的那几行', 4, G.DisplayRowCount);
 
     { 回读也要还原成"一个空值",而不是空集合。 }
     vals.Clear;
@@ -9653,9 +9653,14 @@ begin
   G.EndEdit(False);
 end;
 
-{ T1:流式读写。内部就是 CSV 那一套,只多一层流封装 ——
-  刻意**不新造第二套序列化**,否则两套的转义规则迟早走样。 }
-procedure TTyStringGridTest.TestStreamRoundTrip;
+{ T1:CSV 的流式读写。内部就是 CSV 那一套,只多一层流封装 ——
+  刻意**不新造第二套序列化**,否则两套的转义规则迟早走样。
+
+  **改过名**:这一对从前叫 SaveToStream / LoadFromStream,而那是 LCL 里"存整张表"
+  的名字,ADelimiter 还带默认值 —— 于是移植来的 `SaveToStream(ms)` 编译得过、
+  悄悄写出的却是光秃秃的 CSV。CSV 现在用 LCL 自己给这件事的名字
+  (SaveToCSVStream / LoadFromCSVStream);全状态那一对见 test.parity.grid。 }
+procedure TTyStringGridTest.TestCsvStreamRoundTrip;
 var
   G, G2: TStrGridAccess;
   ms: TMemoryStream;
@@ -9676,10 +9681,10 @@ begin
   ms := TMemoryStream.Create;
   G2 := MakeStrGrid(FForm, FCtl);
   try
-    G.SaveToStream(ms);
+    G.SaveToCSVStream(ms);
     AssertTrue('写出去了', ms.Size > 0);
     ms.Position := 0;
-    G2.LoadFromStream(ms);
+    G2.LoadFromCSVStream(ms);
 
     AssertEquals('行数一致', 4, G2.RowCount);
     AssertEquals('第一格', 'v0', G2.Cells[0, 0]);
@@ -9697,18 +9702,22 @@ begin
   try
     G2.ClearCells;
     G2.RowCount := 0;
-    G2.SaveToStream(ms);
+    G2.SaveToCSVStream(ms);
     ms.Position := 0;
-    G2.LoadFromStream(ms);
+    G2.LoadFromCSVStream(ms);
     AssertEquals('空表往返之后还是空的', 0, G2.RowCount);
   finally
     ms.Free;
   end;
 end;
 
-{ T5:分区域清空。此前只有无参的 ClearCells(整表)——
-  想清掉几行几列只能自己逐格写空串,而那样撤销是一格一格退的。 }
-procedure TTyStringGridTest.TestClearRangeIsUndoable;
+{ T5:分区域清空**内容**。此前只有无参的 ClearCells(整表)——
+  想清掉几行几列只能自己逐格写空串,而那样撤销是一格一格退的。
+
+  **改过名**:这一对从前叫 ClearRows / ClearCols,而 LCL 用这两个名字**删掉行列**
+  (grids.pas:10285-10316)—— 同名反义,任何转发 ClearRows 的宿主包装都会悄悄换掉
+  语义。结构删除现在才是 ClearRows / ClearCols(无参),见 test.parity.grid。 }
+procedure TTyStringGridTest.TestClearContentsRangeIsUndoable;
 var
   G: TStrGridAccess;
   r, c: Integer;
@@ -9720,7 +9729,7 @@ begin
       G.Cells[c, r] := Format('%d-%d', [c, r]);
   G.ClearUndo;
 
-  G.ClearRows(1, 2);                       { 清掉第 1、2 行 }
+  G.ClearRowContents(1, 2);                { 清掉第 1、2 行的内容 }
   AssertEquals('清掉的行空了', '', G.Cells[0, 1]);
   AssertEquals('同一行的别的列也空了', '', G.Cells[3, 2]);
   AssertEquals('范围外的行没动', '0-0', G.Cells[0, 0]);
@@ -9733,7 +9742,7 @@ begin
 
   { 列方向同理。 }
   G.ClearUndo;
-  G.ClearCols(1, 2);
+  G.ClearColContents(1, 2);
   AssertEquals('清掉的列空了', '', G.Cells[1, 0]);
   AssertEquals('同一列的别的行也空了', '', G.Cells[2, 5]);
   AssertEquals('范围外的列没动', '0-0', G.Cells[0, 0]);
@@ -9743,7 +9752,7 @@ begin
   AssertEquals('列也一次撤销全回来', '1-0', G.Cells[1, 0]);
 
   { 越界要钳到表内,不能崩。 }
-  G.ClearRows(4, 99);
+  G.ClearRowContents(4, 99);
   AssertEquals('越界钳住之后末行确实清了', '', G.Cells[0, 5]);
 end;
 

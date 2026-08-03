@@ -2366,14 +2366,14 @@ var
   sel: TRect;
 begin
   sel := GridIo.Selection;
-  GridIo.ClearRows(sel.Top, sel.Bottom - sel.Top + 1);
+  GridIo.ClearRowContents(sel.Top, sel.Bottom - sel.Top + 1);
   Status(Format('Cleared the content of %d row(s) — the whole batch counts as **one** undo record, one Ctrl+Z brings it back',
     [sel.Bottom - sel.Top + 1]));
 end;
 
 procedure TMainForm.BtnIoClearColsClick(Sender: TObject);
 begin
-  GridIo.ClearCols(GridIo.Col, 1);
+  GridIo.ClearColContents(GridIo.Col, 1);
   Status(Format('Cleared column %d — also a single undo record', [GridIo.Col]));
 end;
 

@@ -6,6 +6,22 @@ uses
   tyControls.Types, tyControls.Controller, tyControls.Painter, tyControls.Base,
   tyControls.Animation, tyControls.Accel;
 
+const
+  { Assign to TabHeight to hand the band's height back to the theme, so it follows
+    --control-height again (28 classic / 38 modern).
+
+    Why a negative and not 0: LCL sizes its band from the font for EVERY value <= 0
+    (C:/lazarus/lcl/include/tabcontrol.inc:404-406, `if NewHeight <= 0 then NewHeight :=
+    GetMinimumTabHeight`), but OUR 0 already means "no band at all" -- a shipped,
+    demoed capability that LCL only reaches through ShowTabs and that we would delete by
+    re-pointing 0 at auto. So 0 keeps the meaning it has and auto takes the other half
+    of LCL's `<= 0`, which makes a ported `TabHeight := -1` land on the SAME behaviour it
+    had in Lazarus instead of silently hiding the band. It also gives the property the
+    reverse gear it lacked: before this, a host that ever pinned a height could not get
+    back to following the theme without hard-coding 28 (and thereby freezing the strip
+    at classic size on a modern-density theme). }
+  TyTabHeightAuto = -1;
+
 type
   TTyTabCloseEvent = procedure(Sender: TObject; AIndex: Integer;
     var AllowClose: Boolean) of object;
@@ -195,8 +211,23 @@ type
   published
     { Header band height in logical px, DPI-scaled at paint time. Left unset it follows
       the theme's --control-height token, so the strip is 28 at classic density and 38 at
-      modern density automatically. Set it explicitly and that value wins and is streamed
-      (stored FTabHeightExplicit); the getter then returns what you set. }
+      modern density automatically. Set it explicitly and that value wins; assign
+      TyTabHeightAuto (or any negative, as LCL does) to hand it back to the theme.
+
+      0 means NO band -- the pages fill the whole control and the host drives paging
+      itself. This is where we differ from LCL, ON PURPOSE: LCL's 0 means "size it from
+      the font", which is what our UNSET state already does, and LCL spells "no band"
+      ShowTabs := False. The only code this catches out is a port that assigns a literal
+      0 expecting auto; TyTabHeightAuto is the value it wants, and a Lazarus .lfm can
+      never carry the trap because LCL streams TabHeight only when > 0.
+
+      Integer, not LCL's Smallint: narrowing would make an over-large assignment wrap
+      silently under the default {$R-}, which is the same class of quiet corruption this
+      property is being cleaned up for. Widening costs nothing.
+
+      `stored FTabHeightExplicit`, not LCL's `TabHeight > 0`: a designed-in 0 is a real
+      decision that must round-trip through the .lfm, and > 0 would drop it on every
+      reload -- the band would silently come back. }
     property TabHeight: Integer read GetTabHeight write SetTabHeight stored FTabHeightExplicit;
     property TabsClosable: Boolean read FTabsClosable write SetTabsClosable default False;
     property OnTabClose: TTyTabCloseEvent read FOnTabClose write FOnTabClose;
@@ -736,15 +767,32 @@ begin
 end;
 
 procedure TTyCustomTabStrip.SetTabHeight(AValue: Integer);
+var
+  OldEffective: Integer;
 begin
-  // 0 is legal and means NO header strip: the pages fill the whole control and the host
-  // drives paging itself (a sider, a segmented control). It used to clamp to 1, which is
-  // not "hidden" — a 1px strip still paints a 1px slice of every tab caption, which reads
-  // as a smear of text above the content.
-  if AValue < 0 then AValue := 0;
-  FTabHeightExplicit := True;   { even if the value equals the fallback, the host meant to pin it }
-  if FTabHeight = AValue then Exit;
-  FTabHeight := AValue;
+  OldEffective := GetTabHeight;
+  if AValue < 0 then
+    // TyTabHeightAuto, and every other negative the way LCL reads them: UN-pin, so the
+    // band goes back to following --control-height. It used to floor at 0 instead, which
+    // silently turned "let the theme size it" into "remove the band" — the two furthest
+    // apart outcomes the property has.
+    FTabHeightExplicit := False
+  else
+  begin
+    // 0 is legal and means NO header strip: the pages fill the whole control and the host
+    // drives paging itself (a sider, a segmented control). It used to clamp to 1, which is
+    // not "hidden" — a 1px strip still paints a 1px slice of every tab caption, which reads
+    // as a smear of text above the content.
+    FTabHeightExplicit := True;   { even if the value equals the fallback, the host meant to pin it }
+    FTabHeight := AValue;
+  end;
+  { Compare the EFFECTIVE height, not the raw field. FTabHeight keeps the classic 28 as a
+    fallback it is not using while unpinned, so on a modern-density theme (band = 38)
+    `TabHeight := 28` hit the old `if FTabHeight = AValue then Exit` and returned before
+    Realign: the getter reported the new 28, the band and the pages stayed at 38, and no
+    repaint was ever asked for. Pinning a value must be judged by what it CHANGES, and
+    what it changes is GetTabHeight. }
+  if GetTabHeight = OldEffective then Exit;
   // The strip's height IS the client rect's top inset (see AdjustClientRect), so the pages
   // must be RE-ALIGNED, not merely repainted: Invalidate alone left every alClient page at
   // its old bounds, covering the new strip (set TabHeight := 30 and no tab was visible).
