@@ -33,11 +33,35 @@ type
   end;
   TTyHeaderSectionArray = array of TTyHeaderSection;
 
-  { Fired when a section body is clicked (not a resize). AIndex is the section. }
-  TTyHeaderSectionEvent = procedure(Sender: TObject; AIndex: Integer) of object;
-  { Fired continuously while a boundary is dragged and once when released.
-    AIndex is the section being resized; AWidth is its new logical width. }
-  TTyHeaderResizeEvent = procedure(Sender: TObject; AIndex, AWidth: Integer) of object;
+  TTyHeaderControl = class;   { forward — the events below name the strip, as LCL's do }
+
+  { Which PHASE of a divider drag an OnSectionTrack call is reporting. Values named for
+    LCL's TSectionTrackState (comctrls.pp:4021) so a `case AState of tsTrackBegin..`
+    lifted out of a THeaderControl handler compiles here unedited. }
+  TTyHeaderTrackState = (tsTrackBegin, tsTrackMove, tsTrackEnd);
+
+  { Fired when a section body is clicked (not a resize). AIndex is the section.
+
+    LCL passes the THeaderSection OBJECT (comctrls.pp:4025). We have no such object --
+    a section is a value record in a plain array -- and the index is what identifies one:
+    every facet the object would expose is one hop away as AHeader.SectionText[AIndex],
+    .SectionWidth[AIndex], .Sort[AIndex], .Sections[AIndex]. The first argument IS typed
+    though: it used to be a bare TObject, so a handler that wanted the strip had to cast
+    the one thing the event was certain about. }
+  TTyHeaderSectionEvent = procedure(AHeader: TTyHeaderControl; AIndex: Integer) of object;
+  { Fired ONCE, when a divider drag is released. AWidth is the settled logical width.
+    LCL: TCustomSectionNotifyEvent (comctrls.pp:4025), whose handler reads Section.Width
+    -- AWidth is that same number, handed over directly. }
+  TTyHeaderResizeEvent = procedure(AHeader: TTyHeaderControl; AIndex, AWidth: Integer) of object;
+  { Fired at EVERY phase of a divider drag. LCL: TCustomSectionTrackEvent
+    (comctrls.pp:4022), which carries the phase for the same reason we now do.
+
+    Without AState this event could report the width stream but not its ENDS, so the one
+    job a continuous event exists for -- start a live preview when the drag opens, tear it
+    down when it closes -- was not expressible: a handler saw a run of identical calls and
+    had to guess which was the first and which the last. }
+  TTyHeaderTrackEvent = procedure(AHeader: TTyHeaderControl; AIndex, AWidth: Integer;
+    AState: TTyHeaderTrackState) of object;
 
   { TTyHeaderControl — a standalone column-header strip.
 
@@ -67,7 +91,7 @@ type
     FResizeStartW: Integer;         // logical width of FResizeIndex at drag start
     FOnSectionClick: TTyHeaderSectionEvent;
     FOnSectionResize: TTyHeaderResizeEvent;
-    FOnSectionTrack: TTyHeaderResizeEvent;
+    FOnSectionTrack: TTyHeaderTrackEvent;
     { A15: the hover handler used to hard-assign crDefault, which silently threw away
       whatever Cursor the caller had set on the strip. Remember it instead. }
     FSavedCursor: TCursor;
@@ -87,6 +111,14 @@ type
     function GetEffectiveSectionWidth(AIndex: Integer): Integer;
   protected
     function GetStyleTypeKey: string; override;   // 'TyHeaderControl' — its own key: a standalone header control is not the tree's header band
+    { The three event seams, as protected virtuals — LCL's SectionClick / SectionResize /
+      SectionTrack (comctrls.pp:4066-4068). Every fire site in this control goes through
+      them, so a descendant can react without stealing the application's event slot (the
+      published property stays the app's) and the phase/width bookkeeping lives in exactly
+      one place per event instead of at each mouse handler. }
+    procedure SectionClick(AIndex: Integer); virtual;
+    procedure SectionResize(AIndex: Integer); virtual;
+    procedure SectionTrack(AIndex: Integer; AState: TTyHeaderTrackState); virtual;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -129,8 +161,11 @@ type
       a grid, save a setting) ran hundreds of times per drag. LCL splits the two the same
       way: OnSectionTrack is the continuous one, OnSectionResize the final one. }
     property OnSectionResize: TTyHeaderResizeEvent read FOnSectionResize write FOnSectionResize;
-    { Fires continuously while a divider is being dragged -- for live preview. }
-    property OnSectionTrack: TTyHeaderResizeEvent read FOnSectionTrack write FOnSectionTrack;
+    { Fires through a whole divider drag -- once at tsTrackBegin when it is grabbed, once
+      per width-changing move at tsTrackMove, once at tsTrackEnd when it is released (just
+      before OnSectionResize). AState is what makes a live preview possible: set it up on
+      Begin, redraw it on Move, tear it down on End. }
+    property OnSectionTrack: TTyHeaderTrackEvent read FOnSectionTrack write FOnSectionTrack;
     // Declared True to match the constructor, so a host's TabStop=False opt-out streams.
     property TabStop default True;
     property Align;
@@ -281,6 +316,32 @@ begin
     header BAND a grid/tree paints inside itself, but that band is not this control (this
     one is never embedded; every user of it drops it on a form). }
   TabStop := True;
+end;
+
+{ ---- event seams ---- }
+
+procedure TTyHeaderControl.SectionClick(AIndex: Integer);
+begin
+  if (AIndex < 0) or (AIndex >= Length(FSections)) then Exit;
+  if Assigned(FOnSectionClick) then FOnSectionClick(Self, AIndex);
+end;
+
+procedure TTyHeaderControl.SectionResize(AIndex: Integer);
+begin
+  if (AIndex < 0) or (AIndex >= Length(FSections)) then Exit;
+  if Assigned(FOnSectionResize) then
+    FOnSectionResize(Self, AIndex, FSections[AIndex].Width);
+end;
+
+procedure TTyHeaderControl.SectionTrack(AIndex: Integer; AState: TTyHeaderTrackState);
+begin
+  if (AIndex < 0) or (AIndex >= Length(FSections)) then Exit;
+  { The width is READ here rather than passed in, exactly as LCL reads Section.FWidth
+    (headercontrol.inc:167): every phase then reports the section's width AT that phase --
+    the width the drag opened at, the live width, the settled width -- and no caller can
+    hand over a number that disagrees with the model. }
+  if Assigned(FOnSectionTrack) then
+    FOnSectionTrack(Self, AIndex, FSections[AIndex].Width, AState);
 end;
 
 function TTyHeaderControl.GetStyleTypeKey: string;
@@ -560,6 +621,11 @@ begin
     FResizeStartX := X;
     FResizeStartW := FSections[edge].Width;
     if HandleAllocated then MouseCapture := True;
+    { Open the drag. LCL does the same on the grab (headercontrol.inc:236), BEFORE any
+      movement, which is what lets a handler stand up a live preview at the width the
+      section actually starts from -- computing that from the first tsTrackMove would
+      already have missed the first frame. }
+    SectionTrack(FResizeIndex, tsTrackBegin);
   end;
 end;
 
@@ -578,7 +644,7 @@ begin
     if FSections[FResizeIndex].Width <> newW then
     begin
       FSections[FResizeIndex].Width := newW;
-      if Assigned(FOnSectionTrack) then FOnSectionTrack(Self, FResizeIndex, newW);
+      SectionTrack(FResizeIndex, tsTrackMove);
       Invalidate;
     end;
     Exit;
@@ -608,10 +674,13 @@ begin
   begin
     FResizing := False;
     if HandleAllocated and (MouseCapture) then MouseCapture := False;
+    { Close the drag, THEN report the settled size -- LCL's order (headercontrol.inc:300-301).
+      It matters: a preview torn down in the tsTrackEnd handler is gone by the time the
+      OnSectionResize handler relayouts, so the relayout never measures a control that is
+      still wearing the preview. }
+    SectionTrack(FResizeIndex, tsTrackEnd);
     // Fire the final resize once on release.
-    if (FResizeIndex >= 0) and (FResizeIndex < Length(FSections))
-       and Assigned(FOnSectionResize) then
-      FOnSectionResize(Self, FResizeIndex, FSections[FResizeIndex].Width);
+    SectionResize(FResizeIndex);
     FResizeIndex := -1;
     inherited MouseUp(Button, Shift, X, Y);
     Exit;
@@ -626,7 +695,7 @@ begin
   if hit >= 0 then
   begin
     ToggleSort(hit);
-    if Assigned(FOnSectionClick) then FOnSectionClick(Self, hit);
+    SectionClick(hit);
   end;
 end;
 

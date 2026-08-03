@@ -393,6 +393,9 @@ type
     procedure MergeSortOrder(ALo, AHi: Integer);
 
     { rendering helpers }
+    { Which list a column header's ImageIndex is resolved against — Header.Images when
+      set, else SmallImages. See the body for why the fallback is the ported behaviour. }
+    function  HeaderImageList: TTyVirtualImageList;
     procedure RenderHeader(P: TTyPainter; const M: TTyListMetrics; const AFrame: TTyStyleSet);
     procedure RenderGridLines(P: TTyPainter; const M: TTyListMetrics; const AFrame: TTyStyleSet);
     procedure RenderMarquee(P: TTyPainter; const AFrame: TTyStyleSet);
@@ -641,6 +644,13 @@ const
     while still fitting a '2026-07-10 08:30' second line; 180 dropped it to two. }
   TyLvTileLabelW  = 150;
   TyLvTextMargin = 4;   { text inset inside a report cell / header cell }
+  { Column-header icon slot, in logical px. Both are theme tokens first
+    ('--listview-header-icon-size' / '--listview-header-icon-gap'); these are only the
+    values a theme that says nothing about them falls back to, and they are deliberately
+    the small-icon edge and the text margin, so wiring a header icon changes nothing
+    about a header that has none. }
+  TyLvHeaderIcon    = TyLvSmallIcon;
+  TyLvHeaderIconGap = TyLvTextMargin;
   { Group-header band height in logical px (DPI-scaled at paint time). There is no theme token
     for a band height, so this is a layout constant like TyLvRowHeight; the band's
     colours/font come from the 'TyListViewGroupHeader' style. }
@@ -2783,16 +2793,33 @@ begin
     RenderFlowCell(P, AIndex, ACell, AStyle);
 end;
 
+function TTyListView.HeaderImageList: TTyVirtualImageList;
+begin
+  { The header's OWN list when it has one, else the control's SmallImages.
+
+    The fallback is not a convenience: Delphi and LCL resolve TListColumn.ImageIndex
+    against the list view's SmallImages -- a TListView has no separate header list at all
+    -- so this is the behaviour ported code expects, and one wired image list is enough
+    for the ordinary case. Header.Images is the OVERRIDE, for a header that wants a set
+    of its own; that is what TCustomHeaderControl.Images (comctrls.pp:4037) is.
+
+    Once Header.Images is set it wins outright, even if it can draw nothing at the
+    requested index -- an override that silently fell back would not be one. }
+  Result := FHeader.Images;
+  if Result = nil then Result := FSmallImages;
+end;
+
 procedure TTyListView.RenderHeader(P: TTyPainter; const M: TTyListMetrics;
   const AFrame: TTyStyleSet);
 var
   hb, hs: TTyStyleSet;
-  posIdx, colLeft, colRight, sortSz: Integer;
+  posIdx, colLeft, colRight, sortSz, textLeft, icoPx, icoGap: Integer;
   col: TTyColumn;
   cellR, tr, sortR: TRect;
   tc: TTyColor;
   useSec: Boolean;
   border: TBGRAPixel;
+  icoList: TTyVirtualImageList;
 begin
   { The REPORT column-header band and its cells. Distinct from the group band's key
     ('TyListViewGroupHeader'): the two used to share one literal, so a skin that wanted a flat
@@ -2809,6 +2836,12 @@ begin
 
   useSec := tpTextColor in hs.Present;
   if useSec then tc := hs.TextColor else tc := AFrame.TextColor;
+
+  { The icon slot. Sized and spaced by theme tokens, not by the caption's margin: a skin
+    that wants 20px header icons must not have to widen every caption inset to get them. }
+  icoList := HeaderImageList;
+  icoPx  := ScaleI(ActiveController.Metric('--listview-header-icon-size', TyLvHeaderIcon));
+  icoGap := ScaleI(ActiveController.Metric('--listview-header-icon-gap', TyLvHeaderIconGap));
 
   for posIdx := 0 to FHeader.Columns.Count - 1 do
   begin
@@ -2830,7 +2863,23 @@ begin
     if (hoShowSortGlyphs in FHeader.Options) and (col.Index = FSortColumn) then
       sortSz := ScaleI(10);
 
-    tr := Rect(cellR.Left + ScaleI(ActiveController.Metric('--listview-text-margin', TyLvTextMargin)), 0,
+    textLeft := cellR.Left + ScaleI(ActiveController.Metric('--listview-text-margin', TyLvTextMargin));
+    { Column icon, left of the caption -- TTyColumn.ImageIndex (tyControls.Columns.pas:95),
+      LCL's THeaderSection.ImageIndex (comctrls.pp:3991). The caption STEPS ASIDE for it:
+      drawing the icon without moving textLeft would just stamp it over the first
+      characters, which reads as a rendering fault rather than as an icon.
+      Drawn through DrawImage -- the same borrowed-from-cache blit every item icon uses.
+      Deliberately NOT TTyVirtualImageList.Draw: its last parameter is AGhosted, while
+      LCL's TCustomImageList.Draw carries Enabled in that slot with the OPPOSITE sense, so
+      a call written from LCL muscle memory compiles clean and inverts the result. }
+    if (icoList <> nil) and (col.ImageIndex >= 0) and (icoPx > 0)
+       and (textLeft + icoPx <= cellR.Right) then
+    begin
+      DrawImage(P, icoList, col.ImageIndex, textLeft,
+        (M.HeaderH - icoPx) div 2, icoPx);
+      Inc(textLeft, icoPx + icoGap);
+    end;
+    tr := Rect(textLeft, 0,
                cellR.Right - ScaleI(ActiveController.Metric('--listview-text-margin', TyLvTextMargin)) - sortSz, M.HeaderH);
     if tr.Left < tr.Right then
     begin

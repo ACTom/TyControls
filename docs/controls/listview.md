@@ -138,7 +138,25 @@ LV.Sort;
 | `RowSelect` | `Boolean` | `True` | 整行高亮,而非仅第 0 列 |
 | `HotTrack` | `Boolean` | `False` | 鼠标悬停高亮 |
 | `LargeImages` | `TTyVirtualImageList` | `nil` | `lvsIcon` / `lvsTile` 用 |
-| `SmallImages` | `TTyVirtualImageList` | `nil` | 其余模式用 |
+| `SmallImages` | `TTyVirtualImageList` | `nil` | 其余模式用；表头列图标在 `Header.Images` 为空时也取它 |
+| `Header.Images` | `TTyVirtualImageList` | `nil` | **列头图标**的图像源，按 `TTyColumn.ImageIndex` 取图；为空时回退到 `SmallImages` |
+
+#### 列头图标
+
+给某一列设 `ImageIndex`(>= 0),该列的表头就会在标题**左边**画出对应图标,标题相应右移让位:
+
+```pascal
+LV.SmallImages := ImgList;                                        // 或 LV.Header.Images := HdrImgList;
+(LV.Header.Columns.Items[0] as TTyColumn).ImageIndex := 0;
+```
+
+图标取自 `Header.Images`;它为 `nil` 时改取 `SmallImages`——Delphi / LCL 的
+`TListColumn.ImageIndex` 本来就是按列表控件的 `SmallImages` 解析的(`TListView` 根本没有
+单独的表头图像列表),所以这个回退就是移植过来的代码所期望的行为;`Header.Images` 是给
+表头想用自己那一套图时的**覆盖**。一旦设了 `Header.Images`,它就说了算,不会再回退。
+
+图标槽宽与图标到标题的间距走主题令牌 `--listview-header-icon-size` /
+`--listview-header-icon-gap`(默认与小图标边长、文字内距一致,所以没有图标的表头分毫未变)。
 
 ### 数据
 

@@ -61,14 +61,25 @@ type
   public
     Count, LastIndex: Integer;
     constructor Create;
-    procedure Handle(Sender: TObject; AIndex: Integer);
+    procedure Handle(AHeader: TTyHeaderControl; AIndex: Integer);
   end;
 
   TResizeProbe = class
   public
     Count, LastIndex, LastWidth: Integer;
     constructor Create;
-    procedure Handle(Sender: TObject; AIndex, AWidth: Integer);
+    procedure Handle(AHeader: TTyHeaderControl; AIndex, AWidth: Integer);
+  end;
+
+  { OnSectionTrack carries the drag PHASE as well; the phase-level guards live in
+    test.parity.header, so this one only needs a handler of the right shape. }
+  TTrackProbe = class
+  public
+    Count, LastIndex, LastWidth: Integer;
+    LastState: TTyHeaderTrackState;
+    constructor Create;
+    procedure Handle(AHeader: TTyHeaderControl; AIndex, AWidth: Integer;
+      AState: TTyHeaderTrackState);
   end;
 
 function THeaderAccess.StyleTypeKey: string;
@@ -107,7 +118,7 @@ begin
   Count := 0; LastIndex := -99;
 end;
 
-procedure TClickProbe.Handle(Sender: TObject; AIndex: Integer);
+procedure TClickProbe.Handle(AHeader: TTyHeaderControl; AIndex: Integer);
 begin
   Inc(Count); LastIndex := AIndex;
 end;
@@ -118,9 +129,21 @@ begin
   Count := 0; LastIndex := -99; LastWidth := -99;
 end;
 
-procedure TResizeProbe.Handle(Sender: TObject; AIndex, AWidth: Integer);
+procedure TResizeProbe.Handle(AHeader: TTyHeaderControl; AIndex, AWidth: Integer);
 begin
   Inc(Count); LastIndex := AIndex; LastWidth := AWidth;
+end;
+
+constructor TTrackProbe.Create;
+begin
+  inherited Create;
+  Count := 0; LastIndex := -99; LastWidth := -99; LastState := tsTrackBegin;
+end;
+
+procedure TTrackProbe.Handle(AHeader: TTyHeaderControl; AIndex, AWidth: Integer;
+  AState: TTyHeaderTrackState);
+begin
+  Inc(Count); LastIndex := AIndex; LastWidth := AWidth; LastState := AState;
 end;
 
 { TTyHeaderControlTest }
@@ -413,7 +436,8 @@ end;
 procedure TTyHeaderControlTest.TestResizeDragChangesWidth;
 var
   Acc: THeaderAccess;
-  Probe, Track: TResizeProbe;
+  Probe: TResizeProbe;
+  Track: TTrackProbe;
 begin
   Acc := THeaderAccess.Create(FForm);
   Acc.Parent := FForm;
@@ -423,7 +447,7 @@ begin
   Acc.AddSection('B', 100);
   Acc.AddSection('C', 100);
   Probe := TResizeProbe.Create;
-  Track := TResizeProbe.Create;
+  Track := TTrackProbe.Create;
   try
     Acc.OnSectionResize := @Probe.Handle;
     Acc.OnSectionTrack := @Track.Handle;
@@ -434,8 +458,11 @@ begin
     // OnSectionTrack is the continuous one. OnSectionResize used to fire here too, so a
     // handler that did anything real -- re-query, relayout a grid, save a setting -- ran
     // once per mouse-move pixel.
-    AssertTrue('track fired during drag', Track.Count >= 1);
+    // Two calls by now: tsTrackBegin on the grab, tsTrackMove on the move. The phase
+    // sequence itself is guarded in test.parity.header.
+    AssertTrue('track fired during drag', Track.Count >= 2);
     AssertEquals('track width is 140', 140, Track.LastWidth);
+    AssertTrue('the last track call is a MOVE', Track.LastState = tsTrackMove);
     AssertEquals('resize did NOT fire during the drag', 0, Probe.Count);
     Acc.PressUp([], 140, 12);
     AssertEquals('width persists after release', 140, Acc.SectionWidth[0]);

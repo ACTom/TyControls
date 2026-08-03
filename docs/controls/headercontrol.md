@@ -40,7 +40,7 @@
 | 操作 | 结果 |
 | --- | --- |
 | 点击某一节的**主体**(非边界) | 循环切换该节排序 none → asc → desc → asc,并触发 `OnSectionClick` |
-| 在**节边界**附近按下并拖动 | 调整该边界左侧那一节的宽度(使用 `MouseCapture`),拖动中持续触发 `OnSectionTrack`,**松开时触发一次** `OnSectionResize` |
+| 在**节边界**附近按下并拖动 | 调整该边界左侧那一节的宽度(使用 `MouseCapture`)。按下发 `OnSectionTrack(tsTrackBegin)`,拖动中每次变宽发 `tsTrackMove`,松手先发 `tsTrackEnd`、再**只发一次** `OnSectionResize` |
 | 鼠标移到边界 | 光标变为水平调整光标(`crHSplit`);移开后**还原为调用方自己设的 `Cursor`**,不再被抹成 `crDefault` |
 
 排序是**单列排序**:某一节开始排序时,会清除其余各节的排序状态。
@@ -75,14 +75,29 @@ property Sort[AIndex: Integer]: TTyHeaderSortDirection;    // 单独读写排序
 ### 事件
 
 ```pascal
-property OnSectionClick: procedure(Sender: TObject; AIndex: Integer) of object;
-property OnSectionTrack:  procedure(Sender: TObject; AIndex, AWidth: Integer) of object;
-property OnSectionResize: procedure(Sender: TObject; AIndex, AWidth: Integer) of object;
+TTyHeaderTrackState = (tsTrackBegin, tsTrackMove, tsTrackEnd);
+
+property OnSectionClick:  procedure(AHeader: TTyHeaderControl; AIndex: Integer) of object;
+property OnSectionResize: procedure(AHeader: TTyHeaderControl; AIndex, AWidth: Integer) of object;
+property OnSectionTrack:  procedure(AHeader: TTyHeaderControl; AIndex, AWidth: Integer;
+                                    AState: TTyHeaderTrackState) of object;
 ```
 
 `OnSectionTrack` 是**拖动过程中**的连续事件(用于实时预览),`OnSectionResize` 在**松开鼠标时只发一次**,
 带最终宽度。以前两者合一,于是一个做实事的处理器(重新查询、重排下方表格、写配置)在一次拖动里
 要跑几百遍。LCL 的 `THeaderControl` 也是这样分的。
+
+`AState` 说明这一次 `OnSectionTrack` 处在拖动的哪个**阶段**:按住分隔线时发一次
+`tsTrackBegin`,之后每次宽度变化发一次 `tsTrackMove`,松手时发一次 `tsTrackEnd`。
+没有它的时候,一串调用彼此长得一模一样,处理器分不出哪一次是第一次、哪一次是最后一次
+——而拖动开始时立起实时预览、拖动结束时撤掉正是连续事件唯一的用途。
+松手时的顺序是 `tsTrackEnd` **先于** `OnSectionResize`(与 LCL 一致):
+在 `tsTrackEnd` 里撤掉的预览,一定在 `OnSectionResize` 重排版面之前就没了。
+
+三个事件的第一个参数都是**这条表头控件本身**(以前是裸 `TObject`)。LCL 在这里传的是
+`THeaderSection` **对象**;我们的节是数组里的值记录,没有这样一个对象,**索引**就是它的身份——
+对象能读到的每一项都在一跳之外:`AHeader.SectionText[AIndex]` / `SectionWidth[AIndex]` /
+`Sort[AIndex]` / `Sections[AIndex]`。
 
 ## 纯几何函数(可脱离窗口直接测试)
 

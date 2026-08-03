@@ -68,7 +68,7 @@ uses tyControls.TreeView, tyControls.Columns;
 | `SortColumn` | `Integer` | `-1` | 当前排序列（`-1` = 未排序）；点击表头自动更新 |
 | `SortDirection` | `TTySortDirection` | `sdAscending` | 当前排序方向 |
 | `AutoSizeIndex` | `Integer` | `-1` | 自动填充剩余宽度的列索引（配合 `hoAutoResize`） |
-| `Images` | `TCustomImageList` | `nil` | 表头图标图像列表 |
+| `Images` | `TTyVirtualImageList` | `nil` | 列头图标的图像源，按 `TTyColumn.ImageIndex` 取图。以前的类型是 LCL 的 `TCustomImageList`——而 `TTyVirtualImageList` 并非它的后代，于是能赋给它的恰恰全是本库画不了的列表，这个属性从类型上就是不可用的。**目前只有 `TTyListView` 的报表表头会读它**；树的表头绘制尚未接上。|
 | `Options` | `TTyHeaderOptions` | `[hoVisible, hoColumnResize, hoShowSortGlyphs, hoHeaderClickAutoSort, hoDrag]` | 表头选项（见下） |
 
 > **⚠️ 关键陷阱：`MainColumn` 必须在列添加之后设置。** `SetMainColumn` 在 `Columns.Count = 0` 时会把任何赋值**夹紧为 `NoColumn`（-1）**。若在添加任何列之前写 `MainColumn := 0`，它会被夹成 -1，导致主列块永远不匹配——展开按钮、节点图标、主列文字**全部消失**，只剩平铺文本格。**正确顺序是先 `Columns.Add`，再设 `MainColumn`。** 作为兜底，控件在**添加第一列**且 `MainColumn` 仍为 `NoColumn` 时会自动把它默认为 `0`（与 VirtualTreeView 一致）；但显式的错误顺序仍应避免。示例（来自 showcase）：

@@ -733,8 +733,10 @@ type
     FLastDownHit: TTyGridHit;
     FShowFooter:       Boolean;
     { 列头图标与 gcdImage 单元格共用的图像源。
-      注意**不用**共享单元里的 TTyHeader.Images —— 那是 LCL 的 TCustomImageList,
-      而我们的 TTyVirtualImageList 并非它的后代;不跟共享单元较劲,网格自带一份。
+      当初自带一份是因为共享单元里的 TTyHeader.Images 声明成了 LCL 的
+      TCustomImageList,而 TTyVirtualImageList 并非它的后代 —— 那个属性根本赋不进去。
+      该属性现已改成 TTyVirtualImageList,那条理由不再成立;网格仍自带一份,是因为
+      这份列表**同时**喂 gcdImage 单元格,不只是列头,两个角色合并要另算一次破坏性变更。
       索引仍走共享的 TTyColumn.ImageIndex。 }
     FImages:           TTyVirtualImageList;
     FFooterHeight:     Integer;

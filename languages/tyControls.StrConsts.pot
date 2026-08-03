@@ -526,6 +526,26 @@ msgstr ""
 msgid "slice() needs 4 values: %s"
 msgstr ""
 
+#: tycontrols.strconsts.rstyfilesizebytes
+msgid "B"
+msgstr ""
+
+#: tycontrols.strconsts.rstyfilesizegb
+msgid "GB"
+msgstr ""
+
+#: tycontrols.strconsts.rstyfilesizekb
+msgid "KB"
+msgstr ""
+
+#: tycontrols.strconsts.rstyfilesizemb
+msgid "MB"
+msgstr ""
+
+#: tycontrols.strconsts.rstyfilesizetb
+msgid "TB"
+msgstr ""
+
 #: tycontrols.strconsts.rstygraphiccontrolonform
 #, object-pascal-format
 msgid ""

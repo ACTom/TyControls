@@ -11,7 +11,7 @@ unit tyControls.Columns;
   thin compatibility shim. }
 interface
 uses
-  Classes, SysUtils, Math, ImgList, Controls;
+  Classes, SysUtils, Math, Controls, tyControls.ImageCollection;
 
 const
   NoColumn = -1;   { sentinel: "no column" / not found }
@@ -177,7 +177,7 @@ type
     FSortColumn:    Integer;
     FSortDirection: TTySortDirection;
     FAutoSizeIndex: Integer;
-    FImages:        TCustomImageList;
+    FImages:        TTyVirtualImageList;
     FOptions:       TTyHeaderOptions;
     FOnChange:      TNotifyEvent;
 
@@ -213,7 +213,17 @@ type
     property SortColumn:    Integer              read FSortColumn    write SetSortColumn    default -1;
     property SortDirection: TTySortDirection     read FSortDirection write SetSortDirection default sdAscending;
     property AutoSizeIndex: Integer              read FAutoSizeIndex write SetAutoSizeIndex default -1;
-    property Images:        TCustomImageList     read FImages        write FImages;
+    { Icon source for the column headers, indexed by TTyColumn.ImageIndex. LCL's
+      equivalent is TCustomHeaderControl.Images (comctrls.pp:4037).
+
+      Typed TTyVirtualImageList, not LCL's TCustomImageList. That is not a preference:
+      TTyVirtualImageList renders on demand instead of holding a fixed-resolution set, so
+      it is NOT a TCustomImageList descendant -- which meant that while this property was
+      typed TCustomImageList, the only lists assignable to it were exactly the ones no
+      TTyPainter can draw. The property was unusable by construction, and every consumer
+      that wanted header icons carried a private second list to work around it
+      (TTyCustomGrid.Images still does, and says so). }
+    property Images:        TTyVirtualImageList  read FImages        write FImages;
     property Options:       TTyHeaderOptions read FOptions       write SetOptions;
   end;
 
