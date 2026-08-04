@@ -2,7 +2,8 @@ unit tyControls.Base;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LMessages, LCLType, BGRABitmap,
+  Classes, SysUtils, Types, Controls, Graphics, LMessages, LCLType,
+  BGRABitmap, BGRABitmapTypes, BGRAGradientScanner,
   tyControls.Types, tyControls.Controller, tyControls.StyleModel,
   tyControls.Css.Values, tyControls.Painter, tyControls.IconFont;
 type
@@ -359,11 +360,26 @@ procedure TySetImeCaretPos(AControl: TWinControl; AClientX, AClientY: Integer);
 function TyResolveFontSize(const AStyle: TTyStyleSet; AParentFont: Boolean;
   AControlFontSize: Integer; AController: TTyStyleController): Integer;
 
-{ Resolve the SOLID background a windowed child should composite onto (it does not
-  inherit its parent's painted bg, so corner-gaps / transparent fills would otherwise
-  show the child's own window colour). Styleable parent -> its themed CurrentStyle;
-  a TTyForm parent -> its themed TyForm bg (via ITyThemedBackground, correct at design
-  time too); otherwise the parent's raw LCL Color. False only when there is no parent.
+{ Resolve the background a windowed child should composite onto (it does not inherit its
+  parent's painted bg, so corner-gaps / transparent fills would otherwise show the child's
+  own window colour), as a FILL and at the child's own position. Styleable parent -> its
+  themed CurrentStyle; a TTyForm parent -> its themed TyForm bg (via ITyThemedBackground,
+  correct at design time too); otherwise the parent's raw LCL Color. False only when there
+  is no parent.
+
+  ARect is in the CHILD's paint space (what TyFillParentBg is handed), and the fill comes
+  back in that same space: hand it straight to APainter.FillBackground(ARect, ...) and the
+  result is the parent's backdrop where the child covers it. That is what a gradient parent
+  needs -- a windowed child gets its own SLICE of the sweep instead of one flat colour, so
+  it stops reading as a rectangular hole punched in the ramp. The returned fill is always
+  OPAQUE (see the alpha notes in the body).
+  Exposed for tests. }
+function TyResolveParentBgFill(AChild: TControl; const ARect: TRect;
+  out AFill: TTyFill): Boolean;
+
+{ The one-colour form of the above, for callers that can only take a TTyColor: an erase
+  brush, an opacity floor, the corner gaps outside a rounded silhouette. Samples the fill
+  at the child's own CENTRE -- see TyFillCentreColor for why that point and no other.
   Exposed for tests. }
 function TyResolveParentBg(AChild: TControl; out AColor: TTyColor): Boolean;
 
@@ -654,63 +670,345 @@ begin
   if FBmp <> nil then Result := FBmp.Canvas else Result := nil;
 end;
 
-function TyResolveParentBg(AChild: TControl; out AColor: TTyColor): Boolean;
+{ The painter's linear-gradient geometry, mirrored. TTyPainter.GradientEndpoints
+  (tyControls.Painter.pas:571) is private, so a child that has to work out WHERE IN its
+  parent's ramp it sits must recompute the same two endpoints; the two are a pair and have
+  to move together.
+
+  The convention they encode is worth spelling out, because the name does not and guessing
+  it costs a whole fixture: the angle is a plain MATH angle in screen space — dx = cos, dy
+  = sin, y growing DOWN — so 0deg runs left->right and 90deg runs top->bottom. 180deg is
+  therefore HORIZONTAL again (right->left), NOT the CSS reading where 180deg means "to
+  bottom". The endpoints are the rect's centre pushed out along that direction by the
+  half-diagonal's projection, so the ramp always spans the rect exactly. }
+procedure TyGradientEndpoints(const ARect: TRect; AAngleDeg: Single; out P1, P2: TPointF);
+var
+  rad, dx, dy, cx, cy, hw, hh, t: Single;
+begin
+  rad := AAngleDeg * Pi / 180;
+  dx := Cos(rad);
+  dy := Sin(rad);
+  cx := (ARect.Left + ARect.Right) / 2;
+  cy := (ARect.Top + ARect.Bottom) / 2;
+  hw := (ARect.Right - ARect.Left) / 2;
+  hh := (ARect.Bottom - ARect.Top) / 2;
+  t := Abs(dx) * hw + Abs(dy) * hh;
+  P1.x := cx - dx * t;
+  P1.y := cy - dy * t;
+  P2.x := cx + dx * t;
+  P2.y := cy + dy * t;
+end;
+
+function TyColorFromBGRA(const APx: TBGRAPixel): TTyColor;
+begin
+  Result := TyRGBA(APx.red, APx.green, APx.blue, APx.alpha);
+end;
+
+{ Build the very scanner TTyPainter.FillBackground would build for AFill over ARect
+  (tyControls.Painter.pas:642-679), so a sample taken from it IS the pixel the parent
+  painted rather than an approximation of it.
+
+  The two colour paths are NOT interchangeable, which is why this mirrors the painter's
+  choice instead of picking one: >2 stops go through a multi-gradient created with gamma
+  correction OFF, while the 2-stop fast path uses the simple scanner whose
+  gammaColorCorrection argument DEFAULTS to ON. Read a black->white ramp with the wrong one
+  and the middle is out by ~60 levels — which is exactly the seam this whole function
+  exists to remove. AOwned is the multi-gradient (nil on the fast path); the scanner does
+  not own it, so the caller frees both. }
+function TyGradientScannerFor(const AFill: TTyFill; const ARect: TRect;
+  out AOwned: TBGRACustomGradient): TBGRAGradientScanner;
+var
+  p1, p2: TPointF;
+  cols: array of TBGRAPixel;
+  poss: array of Single;
+  i: Integer;
+begin
+  AOwned := nil;
+  TyGradientEndpoints(ARect, AFill.GradAngleDeg, p1, p2);
+  if Length(AFill.GradStops) > 2 then
+  begin
+    SetLength(cols, Length(AFill.GradStops));
+    SetLength(poss, Length(AFill.GradStops));
+    for i := 0 to High(AFill.GradStops) do
+    begin
+      cols[i] := TyColorToBGRA(AFill.GradStops[i].Color);
+      poss[i] := AFill.GradStops[i].Pos;
+    end;
+    AOwned := TBGRAMultiGradient.Create(cols, poss, False, False);
+    Result := TBGRAGradientScanner.Create(AOwned, gtLinear, p1, p2);
+  end
+  else
+    Result := TBGRAGradientScanner.Create(TyColorToBGRA(AFill.GradFrom),
+      TyColorToBGRA(AFill.GradTo), gtLinear, p1, p2);
+end;
+
+{ The ONE colour that stands for AFill over ARect: its value at the rect's CENTRE.
+
+  The centre is not an arbitrary pick, it is the minimax point. Every caller reduced to a
+  single colour is one whose error shows up as a SEAM around the control's outline — the
+  window erase brush, the gaps outside a rounded shape, the colour opacity dims toward —
+  and for a ramp the largest distance from the sample to any point of the rect is smallest
+  at the centre: half the sweep instead of all of it. Sampling an edge would put the whole
+  error on the opposite edge, which is the defect this file just removed. }
+function TyFillCentreColor(const AFill: TTyFill; const ARect: TRect): TTyColor;
+var
+  scan: TBGRAGradientScanner;
+  owned: TBGRACustomGradient;
+begin
+  if AFill.Kind <> tfkLinearGradient then Exit(AFill.Color);
+  scan := TyGradientScannerFor(AFill, ARect, owned);
+  try
+    Result := TyColorFromBGRA(scan.ScanAt((ARect.Left + ARect.Right) / 2,
+                                          (ARect.Top + ARect.Bottom) / 2));
+  finally
+    scan.Free;
+    owned.Free;
+  end;
+end;
+
+{ Re-express AFill — a gradient laid out over APR — as the gradient a painter must lay over
+  a rect of ACR's SIZE for the two to be the same ramp where they overlap. This is the fix:
+  the child does not get a representative colour, it gets its own slice of the parent's sweep.
+
+  The reparametrisation is exact, not a fit. The painter's endpoints depend only on a rect's
+  centre and half-extents, so both rects project onto the SAME axis; within one stop segment
+  the colour is an affine function of that projection; and a sub-interval of an affine ramp
+  is an affine ramp. So the endpoint colours are SAMPLED from the parent's own scanner —
+  which settles the gamma question for free, whichever space it interpolates in — and every
+  parent stop falling inside the child's span is carried across at its remapped position.
+
+  The stop COUNT is preserved on purpose either side of the painter's >2 threshold: a parent
+  drawn through the multi-stop path interpolated without gamma correction, and a two-stop
+  child would silently switch to the gamma-corrected fast path and drift off the ramp it is
+  supposed to continue. When no parent stop lands inside the span, a midpoint sampled from
+  the parent keeps the count above two — collinear, so it changes nothing but the path. }
+function TyRebaseGradient(const AFill: TTyFill; const APR, ACR: TRect): TTyFill;
+var
+  p1, p2, q1, q2: TPointF;
+  scan: TBGRAGradientScanner;
+  owned: TBGRACustomGradient;
+  u0, u1, den: Single;
+  i, n: Integer;
+
+  procedure AddStop(AColor: TTyColor; APos: Single);
+  begin
+    SetLength(Result.GradStops, n + 1);
+    Result.GradStops[n].Color := AColor;
+    Result.GradStops[n].Pos := APos;
+    Inc(n);
+  end;
+
+begin
+  Result := AFill;
+  Result.GradStops := nil;   // rebuilt below; never share the parent's array
+  n := 0;
+  TyGradientEndpoints(APR, AFill.GradAngleDeg, p1, p2);
+  TyGradientEndpoints(ACR, AFill.GradAngleDeg, q1, q2);
+  den := Sqr(p2.x - p1.x) + Sqr(p2.y - p1.y);
+  scan := TyGradientScannerFor(AFill, APR, owned);
+  try
+    { A parent with no extent along the axis has no ramp to slice. }
+    if den <= 0 then
+    begin
+      Result.Kind := tfkSolid;
+      Result.Color := TyColorFromBGRA(scan.ScanAt(p1.x, p1.y));
+      Exit;
+    end;
+    { The BGRA linear scanner's parameter is the projection onto P1->P2 normalised by its
+      squared length (TBGRAGradientScanner.ScanAtLinear + InitTransform). }
+    u0 := ((q1.x - p1.x) * (p2.x - p1.x) + (q1.y - p1.y) * (p2.y - p1.y)) / den;
+    u1 := ((q2.x - p1.x) * (p2.x - p1.x) + (q2.y - p1.y) * (p2.y - p1.y)) / den;
+    Result.GradFrom := TyColorFromBGRA(scan.ScanAt(q1.x, q1.y));
+    Result.GradTo := TyColorFromBGRA(scan.ScanAt(q2.x, q2.y));
+    { A child that is a sliver ACROSS the axis (or has no size at all) covers a single
+      point of the ramp: one colour really is the whole truth there. }
+    if u1 - u0 <= 1E-6 then
+    begin
+      Result.Kind := tfkSolid;
+      Result.Color := Result.GradFrom;
+      Exit;
+    end;
+    AddStop(Result.GradFrom, 0);
+    if Length(AFill.GradStops) > 2 then
+    begin
+      for i := 0 to High(AFill.GradStops) do
+        if (AFill.GradStops[i].Pos > u0) and (AFill.GradStops[i].Pos < u1) then
+          AddStop(AFill.GradStops[i].Color, (AFill.GradStops[i].Pos - u0) / (u1 - u0));
+      if n = 1 then
+        AddStop(TyColorFromBGRA(scan.ScanAt((q1.x + q2.x) / 2, (q1.y + q2.y) / 2)), 0.5);
+    end;
+    AddStop(Result.GradTo, 1);
+  finally
+    scan.Free;
+    owned.Free;
+  end;
+end;
+
+{ Alpha-composite ATop over the OPAQUE AUnder. }
+function TyCompositeOver(ATop, AUnder: TTyColor): TTyColor;
+var a: Integer;
+begin
+  a := TyAlphaOf(ATop);
+  if a >= 255 then Exit(ATop);
+  Result := TyRGB(
+    (TyRedOf(ATop)   * a + TyRedOf(AUnder)   * (255 - a)) div 255,
+    (TyGreenOf(ATop) * a + TyGreenOf(AUnder) * (255 - a)) div 255,
+    (TyBlueOf(ATop)  * a + TyBlueOf(AUnder)  * (255 - a)) div 255);
+end;
+
+{ Composite AFill and the opaque AOther against each other, colour by colour: the solid
+  face, both gradient ends and every stop. AFillOnTop says which side AFill is — the TOP
+  layer when it is a partly transparent background being flattened onto a resolved backdrop,
+  the BOTTOM layer when a translucent container is being laid over the backdrop AFill
+  describes. Over a gradient the result is still a gradient: a constant layer over an affine
+  ramp stays affine, so a translucent panel on a gradient form keeps the sweep. }
+procedure TyCompositeFill(var AFill: TTyFill; AOther: TTyColor; AFillOnTop: Boolean);
+
+  function Mix(c: TTyColor): TTyColor;
+  begin
+    if AFillOnTop then Result := TyCompositeOver(c, AOther)
+    else Result := TyCompositeOver(AOther, c);
+  end;
+
+var i: Integer;
+begin
+  if AFill.Kind = tfkLinearGradient then
+  begin
+    AFill.GradFrom := Mix(AFill.GradFrom);
+    AFill.GradTo := Mix(AFill.GradTo);
+    for i := 0 to High(AFill.GradStops) do
+      AFill.GradStops[i].Color := Mix(AFill.GradStops[i].Color);
+  end
+  else
+    AFill.Color := Mix(AFill.Color);
+end;
+
+function TyFillHasAlpha(const AFill: TTyFill): Boolean;
+var i: Integer;
+begin
+  if AFill.Kind <> tfkLinearGradient then
+    Exit(TyAlphaOf(AFill.Color) < 255);
+  Result := (TyAlphaOf(AFill.GradFrom) < 255) or (TyAlphaOf(AFill.GradTo) < 255);
+  for i := 0 to High(AFill.GradStops) do
+    if TyAlphaOf(AFill.GradStops[i].Color) < 255 then Result := True;
+end;
+
+function TyResolveParentBgFill(AChild: TControl; const ARect: TRect;
+  out AFill: TTyFill): Boolean;
 var
   st: TTyStyleSet;
-  r, g, b, a: Byte;
-  back: TTyColor;
+  r, g, b: Byte;
+  back: TTyFill;
+  under: TTyColor;
   tb: ITyThemedBackground;
+  par: TControl;
+  pr, cr: TRect;
+  pw, ph: Integer;
 begin
   Result := False;
+  AFill := Default(TTyFill);
+  AFill.Kind := tfkSolid;
   if (AChild = nil) or (AChild.Parent = nil) then Exit;
-  if AChild.Parent is TTyCustomControl then
+  par := AChild.Parent;
+  { ARect arrives in the CHILD's paint space; everything below reasons in the PARENT's,
+    because that is the space the parent's background was laid out in. A child's Left/Top
+    are already relative to the parent's CLIENT origin, and the client origin is also where
+    the parent starts painting (RenderTo fills Rect(0,0,ClientWidth,ClientHeight)), so the
+    shift between the two spaces is just the child's bounds. Carrying ARect through rather
+    than the child's whole rect is what keeps the SUB-rect callers honest — a group box
+    caption band, a tab strip header — since those ask for a slice of themselves. }
+  cr := Rect(ARect.Left + AChild.Left, ARect.Top + AChild.Top,
+             ARect.Right + AChild.Left, ARect.Bottom + AChild.Top);
+  { Headless, and before a handle exists, ClientWidth is the bounds width; the fallback is
+    for the reverse case of a control asked about before it has been sized at all. }
+  pw := par.ClientWidth;  if pw <= 0 then pw := par.Width;
+  ph := par.ClientHeight; if ph <= 0 then ph := par.Height;
+  pr := Rect(0, 0, pw, ph);
+  if par is TTyCustomControl then
   begin
-    st := TTyCustomControl(AChild.Parent).CurrentStyle;
+    st := TTyCustomControl(par).CurrentStyle;
     { A container with NO background, or a fully TRANSPARENT one (e.g. TyGroupBox
       bg = alpha(#FFFFFF,0)), shows whatever is behind IT — so walk up to the next
       opaque backdrop. Otherwise a child's corner-gap / parent fill would resolve to
       a transparent color and the Win10 DWM glass would show through (an Edit inside
-      a group box had system-colored corners). }
+      a group box had system-colored corners). The rect goes up translated, so the
+      grandparent's own gradient is still sampled where the CHILD sits. }
     if not (tpBackground in st.Present) then
-      Exit(TyResolveParentBg(AChild.Parent, AColor));
+      Exit(TyResolveParentBgFill(par, cr, AFill));
     case st.Background.Kind of
       tfkSolid:
         if TyAlphaOf(st.Background.Color) = 0 then
-          Exit(TyResolveParentBg(AChild.Parent, AColor))
+          Exit(TyResolveParentBgFill(par, cr, AFill))
         else if TyAlphaOf(st.Background.Color) < 255 then
         begin
           { A PARTLY transparent container shows the backdrop through itself, so the opaque
-            colour this function promises is that container COMPOSITED OVER what is behind
+            background this function promises is that container COMPOSITED OVER what is behind
             it. Returning its raw value instead breaks the promise in a way that only shows
             up on a widgetset which never clears a damaged region: the child fills with a
             non-opaque "background", its finished bitmap is therefore non-opaque, and every
             repaint composites onto the previous one instead of replacing it. That is the
             GTK3 smearing on exactly the controls that DO call TyFillParentBg. Throwing the
             alpha away instead would keep it opaque but at the wrong hue. }
-          if not TyResolveParentBg(AChild.Parent, back) then
-            back := TyRGB(255, 255, 255);
-          a := TyAlphaOf(st.Background.Color);
-          AColor := TyRGB(
-            (TyRedOf(st.Background.Color)   * a + TyRedOf(back)   * (255 - a)) div 255,
-            (TyGreenOf(st.Background.Color) * a + TyGreenOf(back) * (255 - a)) div 255,
-            (TyBlueOf(st.Background.Color)  * a + TyBlueOf(back)  * (255 - a)) div 255);
+          if not TyResolveParentBgFill(par, cr, AFill) then
+          begin
+            AFill := Default(TTyFill);
+            AFill.Kind := tfkSolid;
+            AFill.Color := TyRGB(255, 255, 255);
+          end;
+          TyCompositeFill(AFill, st.Background.Color, False);
           Result := True;
         end
         else
-        begin AColor := st.Background.Color;  Result := True; end;
-      tfkLinearGradient: begin AColor := st.Background.GradTo; Result := True; end; // representative
+        begin
+          AFill.Kind := tfkSolid;
+          AFill.Color := st.Background.Color;
+          Result := True;
+        end;
+      tfkLinearGradient:
+        begin
+          AFill := TyRebaseGradient(st.Background, pr, cr);
+          { A gradient may carry alpha stops, and the opaque promise above is the same one
+            here for the same reason. Flatten onto the backdrop behind the parent, sampled
+            where the child sits so a translucent ramp over a ramp still tracks position. }
+          if TyFillHasAlpha(AFill) then
+          begin
+            if TyResolveParentBgFill(par, cr, back) then
+              under := TyFillCentreColor(back, cr)
+            else
+              under := TyRGB(255, 255, 255);
+            TyCompositeFill(AFill, under, True);
+          end;
+          Result := True;
+        end;
     end;
   end
   // A TTyForm parent: use its THEMED TyForm bg (correct at design time too — the LCL
   // Color is only themed by ApplyChromeTheme at runtime). Same value as Color at runtime.
-  else if Supports(AChild.Parent, ITyThemedBackground, tb) and tb.ThemedBgColor(AColor) then
+  else if Supports(par, ITyThemedBackground, tb) and tb.ThemedBgColor(AFill.Color) then
     Result := True
   else
   begin
-    RedGreenBlue(ColorToRGB(AChild.Parent.Color), r, g, b);
-    AColor := TyRGB(r, g, b);
+    RedGreenBlue(ColorToRGB(par.Color), r, g, b);
+    AFill.Color := TyRGB(r, g, b);
     Result := True;
   end;
+end;
+
+function TyResolveParentBg(AChild: TControl; out AColor: TTyColor): Boolean;
+var
+  f: TTyFill;
+  r: TRect;
+  w, h: Integer;
+begin
+  Result := False;
+  if AChild = nil then Exit;
+  { The child's own rect is the space the resolved fill comes back in, so it is also the
+    rect the single colour has to be sampled over. }
+  w := AChild.ClientWidth;  if w <= 0 then w := AChild.Width;
+  h := AChild.ClientHeight; if h <= 0 then h := AChild.Height;
+  r := Rect(0, 0, w, h);
+  Result := TyResolveParentBgFill(AChild, r, f);
+  if Result then AColor := TyFillCentreColor(f, r);
 end;
 
 { True when AControl sits on an image-backed TTyForm (a glass host with a live
@@ -778,13 +1076,11 @@ begin
         Point(off.X + ARect.Left, off.Y + ARect.Top),
         AStyle.Background.GlassTint, TyEffectiveCorners(AStyle));
   end
-  else if TyResolveParentBg(AControl, c) then
-  begin
-    f := Default(TTyFill);
-    f.Kind := tfkSolid;
-    f.Color := c;
+  { Not the single-colour resolver: the fill comes back already re-expressed in THIS rect's
+    space, so a gradient parent hands down the slice of its sweep that ARect covers instead
+    of one representative colour smeared flat across it. }
+  else if TyResolveParentBgFill(AControl, ARect, f) then
     APainter.FillBackground(ARect, f, 0);
-  end;
 end;
 
 procedure TyApplyStyleOpacity(AControl: TControl; APainter: TTyPainter;

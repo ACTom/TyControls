@@ -165,8 +165,19 @@ begin
 end;
 
 procedure TTyNumericEdit.Reformat(AGroup: Boolean);
+var
+  WasModified: Boolean;
 begin
+  { Re-deriving the DISPLAY from the value the field already holds is the control's own
+    bookkeeping, not the program overwriting the user's work — but it goes through the
+    published Text setter, whose contract is to clear Modified. So save and restore the
+    dirty flag around it: otherwise tabbing out of a numeric field silently un-marks the
+    value the user had just finished typing, which is exactly the field an enable-Save
+    reads. TTySpinEdit.CommitEdit does the same around its own reformat, and the two
+    spin-shaped controls have to answer "did the user touch this" the same way. }
+  WasModified := Modified;
   Text := Formatted(GetValue, AGroup);
+  Modified := WasModified;
 end;
 
 procedure TTyNumericEdit.SetDecimals(const AValue: Integer);
@@ -223,7 +234,10 @@ end;
 
 procedure TTyNumericEdit.DoExit;
 begin
-  Text := Formatted(ClampVal(GetValue), True);   // clamp + regroup on blur
+  { GetValue already clamps, so this IS Reformat(True) — routed through it rather than
+    spelled out again so the blur re-display gets the same dirty-flag treatment as every
+    other reformat here, and cannot drift from it later. }
+  Reformat(True);   // clamp + regroup on blur
   inherited DoExit;
 end;
 

@@ -1,15 +1,65 @@
 unit test.numericedit;
 {$mode objfpc}{$H+}
 interface
-uses Classes, SysUtils, fpcunit, testregistry, tyControls.NumericEdit;
+uses Classes, SysUtils, LCLType, fpcunit, testregistry,
+  tyControls.NumericEdit, tyControls.SpinEdit;
 type
+  { DoEnter / DoExit are protected and real focus never happens in a headless run, so the
+    focus-in / blur reformats have to be driven directly. }
+  TNumericFocusProbe = class(TTyNumericEdit)
+  public
+    procedure SimulateEnter;
+    procedure SimulateExit;
+  end;
+
+  { The spin edit's keyboard seams, for the one guard that pins the two SIBLINGS against
+    each other rather than each against itself. }
+  TSpinModifiedProbe = class(TTySpinEdit)
+  public
+    procedure TypeChar(const C: TUTF8Char);
+    procedure DoKey(K: Word);
+  end;
+
   TNumericEditTest = class(TTestCase)
   published
     procedure TestFormat;
     procedure TestParse;
     procedure TestControl;
+    { Modified (LCL TCustomEdit.Modified, stdctrls.pp:867) answers "did the USER touch this",
+      which is what drives enable-Save. The reformats below are the control re-deriving its
+      own display from the value the field already holds -- they must not read as the user
+      undoing the edit they just finished. }
+    procedure TestModifiedSurvivesTheBlurReformat;
+    procedure TestModifiedSurvivesTheFocusInReformat;
+    procedure TestADisplayOnlyPropertyChangeLeavesModifiedAlone;
+    procedure TestModifiedStillClearedByAProgrammaticValueWrite;
+    procedure TestNumericAndSpinAgreeAfterTheirOwnReformat;
   end;
 implementation
+
+procedure TNumericFocusProbe.SimulateEnter;
+begin
+  DoEnter;
+end;
+
+procedure TNumericFocusProbe.SimulateExit;
+begin
+  DoExit;
+end;
+
+procedure TSpinModifiedProbe.TypeChar(const C: TUTF8Char);
+var K: TUTF8Char;
+begin
+  K := C;
+  UTF8KeyPress(K);
+end;
+
+procedure TSpinModifiedProbe.DoKey(K: Word);
+var W: Word;
+begin
+  W := K;
+  KeyDown(W, []);
+end;
 
 procedure TNumericEditTest.TestFormat;
 begin
@@ -48,6 +98,119 @@ begin
     c.Value := 500;
     AssertEquals('clamped to max', 100.0, c.Value, 1e-9);
   finally c.Free; end;
+end;
+
+procedure TNumericEditTest.TestModifiedSurvivesTheBlurReformat;
+{ Tabbing out of a numeric field re-groups the display through the published Text setter,
+  whose contract is to clear Modified. Without a save/restore the user's edit is silently
+  un-marked at the exact moment they finish it -- the field a Save button most needs. }
+var c: TNumericFocusProbe;
+begin
+  c := TNumericFocusProbe.Create(nil);
+  try
+    c.Text := '';                       // programmatic seed: clean slate
+    AssertFalse('a freshly seeded field is clean', c.Modified);
+    c.InjectKey('1'); c.InjectKey('2'); c.InjectKey('3'); c.InjectKey('4');
+    AssertTrue('typing dirties it', c.Modified);
+    c.SimulateExit;                     // blur: clamp + regroup
+    AssertEquals('the blur reformat still runs', '1,234.00', c.Text);
+    AssertTrue('a reformat is the control''s own bookkeeping, not the user undoing the edit',
+      c.Modified);
+  finally c.Free; end;
+end;
+
+procedure TNumericEditTest.TestModifiedSurvivesTheFocusInReformat;
+{ The other half of the same round trip: focus-in strips the grouping so the raw number is
+  easy to edit. Tabbing back into a field must not clean it either. Deliberately does NOT
+  go through the blur first -- otherwise a broken DoExit would fail this guard too and hide
+  which of the two reformats is at fault. }
+var c: TNumericFocusProbe;
+begin
+  c := TNumericFocusProbe.Create(nil);
+  try
+    c.Decimals := 0;
+    c.Value := 1234;                    // programmatic, grouped display
+    AssertEquals('grouped', '1,234', c.Text);
+    AssertFalse('clean after the setup write', c.Modified);
+    c.InjectKey('9');                   // the user appends a digit
+    AssertTrue('typing dirties it', c.Modified);
+    c.SimulateEnter;
+    AssertEquals('the focus-in reformat still runs', '12349', c.Text);
+    AssertTrue('re-entering the field is not the user undoing the edit', c.Modified);
+  finally c.Free; end;
+end;
+
+procedure TNumericEditTest.TestADisplayOnlyPropertyChangeLeavesModifiedAlone;
+{ Decimals / UseThousands / Min / Max all re-derive the display from the SAME value. A host
+  changing how a number is shown has not changed what the user typed -- in EITHER direction:
+  the reformat must not clear a dirty field, and must not invent an edit on a clean one. }
+var c: TTyNumericEdit;
+begin
+  c := TTyNumericEdit.Create(nil);
+  try
+    c.Text := '';
+    c.InjectKey('9');
+    AssertTrue('typing dirties it', c.Modified);
+    c.UseThousands := False;            // display form only -- the value is untouched
+    AssertEquals('reformatted', '9.00', c.Text);
+    AssertTrue('changing only the display format is not an edit', c.Modified);
+  finally c.Free; end;
+
+  c := TTyNumericEdit.Create(nil);
+  try
+    c.Value := 1234.5;                  // programmatic -> clean
+    AssertFalse('clean after a programmatic write', c.Modified);
+    c.UseThousands := False;            // the same reformat, on a clean field
+    AssertEquals('reformatted', '1234.50', c.Text);
+    AssertFalse('a reformat does not invent an edit either', c.Modified);
+  finally c.Free; end;
+end;
+
+procedure TNumericEditTest.TestModifiedStillClearedByAProgrammaticValueWrite;
+{ The other half of the contract, and the half the save/restore must not swallow: writing
+  Value IS the program overwriting the field, so it cleans the flag. }
+var c: TTyNumericEdit;
+begin
+  c := TTyNumericEdit.Create(nil);
+  try
+    c.Text := '5';
+    AssertFalse('a programmatic write is not the user editing', c.Modified);
+    c.InjectKey('7');
+    AssertTrue('typing dirties it', c.Modified);
+    c.Value := 42;
+    AssertEquals('the code''s value won', '42.00', c.Text);
+    AssertFalse('the code wrote it, so the user did not', c.Modified);
+  finally c.Free; end;
+end;
+
+procedure TNumericEditTest.TestNumericAndSpinAgreeAfterTheirOwnReformat;
+{ Two spin-shaped controls in one library must answer "did the user touch this" the same
+  way. Each reformats its own text at the end of an edit -- the numeric edit on blur, the
+  spin edit on commit -- and both of those are bookkeeping, not a programmatic overwrite.
+  This guard fails if EITHER side drifts, which is the point: it has no preferred side. }
+var
+  n: TNumericFocusProbe;
+  s: TSpinModifiedProbe;
+begin
+  n := TNumericFocusProbe.Create(nil);
+  s := TSpinModifiedProbe.Create(nil);
+  try
+    n.Text := '';
+    n.InjectKey('5'); n.InjectKey('9');
+    n.SimulateExit;                     // the numeric edit's own reformat
+
+    s.MinValue := 0; s.MaxValue := 100;
+    s.TypeChar('5'); s.TypeChar('9');
+    s.DoKey(VK_RETURN);                 // the spin edit's own reformat
+
+    AssertEquals('both committed the same number', 59, Round(n.Value));
+    AssertEquals('both committed the same number', 59, s.Value);
+    AssertEquals('the two siblings agree on Modified after their own reformat',
+      s.Modified, n.Modified);
+    AssertTrue('and they agree on TRUE -- the user did type it', n.Modified);
+  finally
+    n.Free; s.Free;
+  end;
 end;
 
 initialization

@@ -26,7 +26,7 @@ uses tyControls.MRUComboBox;
 | 成员 | 说明 |
 |------|------|
 | `MaxItems: Integer` | 记住的最大条目数(默认 10,最小 1)。调小时会立即裁掉尾部多余条目。 |
-| `AddToHistory(const S: string)` | 把 `S`(去首尾空白;空串忽略)插入历史顶部。若已存在(大小写不敏感)则上移而非重复;随后按 `MaxItems` 裁尾,并选中新条目。 |
+| `AddToHistory(const S: string)` | 把 `S`(去首尾空白;空串忽略)插入历史顶部。若已存在(大小写不敏感)则上移而非重复;随后按 `MaxItems` 裁尾,并选中新条目(`ItemIndex := 0`)。这是本控件的固有 API 名;冒泡 / 去重 / 裁尾本身**转调基类的 `AddHistoryItem`**(见 [TTyComboBox](combobox.md)),参数固定为"大小写不敏感、不带对象、上限 = `MaxItems`"。 |
 
 另继承 `TTyComboBox` 的 `Items` / `ItemIndex` / `Text` / `OnChange` / `OnSelect` 等。
 
@@ -62,6 +62,6 @@ MRU.AddToHistory(MRU.Text);
 ## 6. 注意事项
 
 - **可编辑模式:** 控件构造即 `csDropDown`,别再改回 `csDropDownList`(那样就失去了"记住输入值"的意义)。
-- **去重是大小写不敏感的:** `AddToHistory('File')` 与 `AddToHistory('file')` 视为同一条,只保留最新一次的写法冒泡到顶部。
-- **排序无意义且安全:** MRU 顺序是"最近"而非字母序;`AddToHistory` 记录时强制取消排序,故即使误设 `Sorted:=True` 也不会崩溃、也不会把历史重排成字母序。
+- **去重是大小写不敏感的:** `AddToHistory('File')` 与 `AddToHistory('file')` 视为同一条,只保留最新一次的写法冒泡到顶部。折叠规则与基类 `AddHistoryItem(…, ACaseSensitive := False)` 完全一致(**行为变更**:改为转调基类后,非 ASCII 字母如 `'Café'` / `'CAFÉ'` 也会被折叠成一条;此前只折叠 ASCII,会留下两条)。
+- **排序无意义且安全:** MRU 顺序是"最近"而非字母序;`AddToHistory` 记录时强制取消排序**且不再恢复**,故即使误设 `Sorted:=True` 也不会崩溃、也不会把历史重排成字母序。这一点与基类 `AddHistoryItem` 不同——基类临时关掉 `Sorted` 后会恢复,恢复时就重排了(见 [TTyComboBox](combobox.md) 的说明)。
 - **交互是真机验证项:** 纯逻辑(顺序 / 去重冒泡 / 裁尾 / 空串忽略 / 排序不崩溃)已 headless 单测;鼠标挑选(`DoSelect`)与失焦记录(`DoEditorCommit`)的链路需真机验证。

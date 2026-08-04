@@ -2,16 +2,29 @@ unit test.base.drawframe;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Graphics, BGRABitmap, BGRABitmapTypes,
+  Classes, SysUtils, Types, Graphics, Controls, Forms, BGRABitmap, BGRABitmapTypes,
   fpcunit, testregistry,
   tyControls.Types, tyControls.Base, tyControls.Painter,
-  tyControls.Form, tyControls.Button, tyControls.Panel, tyControls.Controller;
+  tyControls.Form, tyControls.Button, tyControls.GlyphButtons, tyControls.Panel,
+  tyControls.Controller;
 type
   TDrawFrameProbe = class(TTyCustomControl)
   protected
     function GetStyleTypeKey: string; override;
   public
     procedure RunDrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);
+  end;
+
+  { RenderTo is protected on both, and these guards need to shoot a parent and a child
+    into separate bitmaps and compare them pixel for pixel. }
+  TGradPanelAccess = class(TTyPanel)
+  public
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+  end;
+
+  TGradChildAccess = class(TTySpeedButton)
+  public
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
   end;
 
   TDrawFrameTest = class(TTestCase)
@@ -24,6 +37,10 @@ type
     procedure TestFocusRingDrawnWhenOutlinePresent;
     procedure TestFormChildResolvesThemedParentBg;
     procedure TestPartlyTransparentParentBgIsCompositedOpaque;
+    procedure TestGradientParentBackdropFollowsChildDownTheAxis;
+    procedure TestGradientParentBackdropFollowsChildAcrossTheAxis;
+    procedure TestGradientParentBackdropCarriesAMultiStopParent;
+    procedure TestGradientParentBgResolvesAtTheChildsCentre;
   end;
 implementation
 
@@ -31,6 +48,12 @@ function TDrawFrameProbe.GetStyleTypeKey: string;
 begin
   Result := 'TyPanel';
 end;
+
+procedure TGradPanelAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin inherited RenderTo(ACanvas, ARect, APPI); end;
+
+procedure TGradChildAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin inherited RenderTo(ACanvas, ARect, APPI); end;
 
 procedure TDrawFrameProbe.RunDrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);
 begin
@@ -429,6 +452,287 @@ begin
   finally
     form.Free;
     TyDefaultController.LoadThemeCss('');   // drop the user layer; back to the base theme
+  end;
+end;
+
+{ ---------------------------------------------------------------------------
+  A windowed child cannot see through to what its parent painted, so it rebuilds the
+  parent's backdrop itself (TyFillParentBg). These three pin that the rebuild follows a
+  GRADIENT parent instead of collapsing it to one representative colour -- which drew a
+  flat rectangular patch, a hole punched in the panel's sweep whose error at the far end
+  was the entire parent spread.
+
+  90deg is the VERTICAL axis for this painter and 0deg the horizontal one: the angle is a
+  plain math angle in screen space, dx = cos / dy = sin (TTyPainter.GradientEndpoints,
+  tyControls.Painter.pas:571). 180deg would therefore be HORIZONTAL, not vertical, and a
+  fixture that assumed the CSS reading would sample a constant and measure nothing.
+  --------------------------------------------------------------------------- }
+
+{ A gradient panel and a transparent windowed child on it, each rendered into its own
+  bitmap so the two can be compared where they overlap. The child's own background is
+  fully transparent and its border zero, so everything in its bitmap IS the reconstruction
+  under test. }
+procedure GradientFixture(const ACss: string; ABX, ABY, ABW, ABH: Integer;
+  out ACtl: TTyStyleController; out AForm: TForm;
+  out APanelShot, AChildShot: TBGRABitmap);
+const
+  cPanelSide = 120;
+var
+  panel: TGradPanelAccess;
+  child: TGradChildAccess;
+  pb, cb: TBitmap;
+begin
+  ACtl := TTyStyleController.Create(nil);
+  ACtl.LoadThemeCss(ACss);
+  AForm := TForm.CreateNew(nil);
+  pb := TBitmap.Create;
+  cb := TBitmap.Create;
+  try
+    panel := TGradPanelAccess.Create(AForm);
+    panel.Parent := AForm;
+    panel.Controller := ACtl;
+    panel.Caption := '';
+    panel.SetBounds(0, 0, cPanelSide, cPanelSide);
+
+    child := TGradChildAccess.Create(panel);
+    child.Parent := panel;
+    child.Controller := ACtl;
+    child.Caption := '';
+    child.SetBounds(ABX, ABY, ABW, ABH);
+
+    pb.PixelFormat := pf32bit;
+    pb.SetSize(cPanelSide, cPanelSide);
+    panel.RenderTo(pb.Canvas, Rect(0, 0, cPanelSide, cPanelSide), 96);
+
+    cb.PixelFormat := pf32bit;
+    cb.SetSize(ABW, ABH);
+    child.RenderTo(cb.Canvas, Rect(0, 0, ABW, ABH), 96);
+
+    APanelShot := TBGRABitmap.Create(pb);
+    AChildShot := TBGRABitmap.Create(cb);
+  finally
+    cb.Free;
+    pb.Free;
+  end;
+end;
+
+function GreenAt(ABmp: TBGRABitmap; AX, AY: Integer): Integer;
+begin
+  Result := ABmp.GetPixel(AX, AY).green;
+end;
+
+procedure TDrawFrameTest.TestGradientParentBackdropFollowsChildDownTheAxis;
+{ THE guard the defect was measured with, tightened in the one way that matters: the child
+  is deliberately OFF-ORIGIN and SHORTER than its parent. A child that covered the panel
+  exactly would still pass with the offset ignored, because its slice would happen to be the
+  whole sweep. This one owns rows 60..99 of a 120px ramp, so only a reconstruction that knows
+  both WHERE the child sits and HOW FAR it runs can match.
+
+  Spread alone is not enough either -- a reversed axis has the same spread -- so both ends
+  are compared against the parent's own pixels by value. }
+var
+  ctl: TTyStyleController;
+  form: TForm;
+  ps, cs: TBGRABitmap;
+  pTop, pBot, cTop, cBot, parentSpread, childSpread: Integer;
+begin
+  GradientFixture(
+    'TyPanel { background: linear-gradient(90deg, #000000, #FFFFFF); border-width: 0px; ' +
+    'padding: 0px; }' +
+    'TySpeedButton { background: rgba(0,0,0,0); border-width: 0px; padding: 0px; }',
+    0, 60, 120, 40, ctl, form, ps, cs);
+  try
+    pTop := GreenAt(ps, 60, 60);
+    pBot := GreenAt(ps, 60, 99);
+    cTop := GreenAt(cs, 60, 0);
+    cBot := GreenAt(cs, 60, 39);
+    parentSpread := Abs(pBot - pTop);
+    childSpread := Abs(cBot - cTop);
+
+    AssertTrue(Format('the parent really varies over the child''s rows (spread=%d)',
+      [parentSpread]), parentSpread > 25);
+    AssertTrue(Format('top edge matches the parent at y=60 (parent=%d child=%d)',
+      [pTop, cTop]), Abs(cTop - pTop) <= 4);
+    AssertTrue(Format('bottom edge matches the parent at y=99 (parent=%d child=%d)',
+      [pBot, cBot]), Abs(cBot - pBot) <= 4);
+    AssertTrue(Format('and it sweeps as far as the parent does (parent=%d child=%d)',
+      [parentSpread, childSpread]), Abs(childSpread - parentSpread) <= 4);
+  finally
+    cs.Free;
+    ps.Free;
+    form.Free;
+    ctl.Free;
+  end;
+end;
+
+procedure TDrawFrameTest.TestGradientParentBackdropFollowsChildAcrossTheAxis;
+{ The same on the OTHER axis, at 0deg. It pins the painter's angle convention from the
+  outside: read as CSS, 0deg would be "to top" and this fixture would be constant across
+  the child, so a reconstruction that guessed the convention cannot pass both this and the
+  90deg guard above. }
+var
+  ctl: TTyStyleController;
+  form: TForm;
+  ps, cs: TBGRABitmap;
+  pLeft, pRight, cLeft, cRight, parentSpread, childSpread: Integer;
+begin
+  GradientFixture(
+    'TyPanel { background: linear-gradient(0deg, #000000, #FFFFFF); border-width: 0px; ' +
+    'padding: 0px; }' +
+    'TySpeedButton { background: rgba(0,0,0,0); border-width: 0px; padding: 0px; }',
+    60, 0, 40, 120, ctl, form, ps, cs);
+  try
+    pLeft := GreenAt(ps, 60, 60);
+    pRight := GreenAt(ps, 99, 60);
+    cLeft := GreenAt(cs, 0, 60);
+    cRight := GreenAt(cs, 39, 60);
+    parentSpread := Abs(pRight - pLeft);
+    childSpread := Abs(cRight - cLeft);
+
+    AssertTrue(Format('0deg really is the horizontal axis (spread=%d)',
+      [parentSpread]), parentSpread > 25);
+    AssertTrue(Format('left edge matches the parent at x=60 (parent=%d child=%d)',
+      [pLeft, cLeft]), Abs(cLeft - pLeft) <= 4);
+    AssertTrue(Format('right edge matches the parent at x=99 (parent=%d child=%d)',
+      [pRight, cRight]), Abs(cRight - pRight) <= 4);
+    AssertTrue(Format('and it sweeps as far as the parent does (parent=%d child=%d)',
+      [parentSpread, childSpread]), Abs(childSpread - parentSpread) <= 4);
+  finally
+    cs.Free;
+    ps.Free;
+    form.Free;
+    ctl.Free;
+  end;
+end;
+
+procedure TDrawFrameTest.TestGradientParentBackdropCarriesAMultiStopParent;
+{ The painter draws >2 stops through a multi-gradient built with gamma correction OFF, and
+  2 stops through a scanner whose gamma correction defaults ON. A reconstruction that
+  reduces a multi-stop parent to two endpoint colours therefore lands on the other curve,
+  and the ends still match while the MIDDLE drifts — a soft bar across the control that a
+  two-point check would never see.
+
+  So the child here deliberately spans the parent's SECOND segment only (rows 60..119 of a
+  ramp whose interior stop sits at row 60): no parent stop falls strictly inside it, which
+  is the case where the count would collapse to two. Row 89, halfway along, is the assertion
+  that matters. }
+var
+  ctl: TTyStyleController;
+  form: TForm;
+  ps, cs: TBGRABitmap;
+  y: Integer;
+begin
+  GradientFixture(
+    'TyPanel { background: linear-gradient(90deg, #000000, #FF0000 50%, #FFFFFF); ' +
+    'border-width: 0px; padding: 0px; }' +
+    'TySpeedButton { background: rgba(0,0,0,0); border-width: 0px; padding: 0px; }',
+    0, 60, 120, 60, ctl, form, ps, cs);
+  try
+    AssertTrue(Format('the middle stop really bends the ramp (y=60 green=%d, y=119 green=%d)',
+      [GreenAt(ps, 60, 60), GreenAt(ps, 60, 119)]),
+      (GreenAt(ps, 60, 60) < 40) and (GreenAt(ps, 60, 119) > 200));
+    for y := 0 to 59 do
+      AssertTrue(Format('row %d matches the parent at y=%d (parent=%d child=%d)',
+        [y, y + 60, GreenAt(ps, 60, y + 60), GreenAt(cs, 60, y)]),
+        Abs(GreenAt(cs, 60, y) - GreenAt(ps, 60, y + 60)) <= 4);
+  finally
+    cs.Free;
+    ps.Free;
+    form.Free;
+    ctl.Free;
+  end;
+end;
+
+procedure TDrawFrameTest.TestGradientParentBgResolvesAtTheChildsCentre;
+{ Callers that can only take ONE colour -- the window erase brush, the corner gaps outside a
+  rounded silhouette, the opacity floor -- still get a single TTyColor. This pins WHICH one:
+  the value at the child's own CENTRE, the minimax point, where the worst distance to any
+  pixel of the control is half the sweep instead of all of it.
+
+  Three identical 20px children at the top, middle and bottom of the same ramp must resolve
+  three DIFFERENT colours -- the old behaviour returned the gradient's last stop for all
+  three, white, at the top of a ramp that is black there. And each must equal the parent's
+  own pixel at that child's CENTRE row, not merely fall somewhere in order: "in order" is
+  also true of an edge sample, and an edge sample is what puts the whole error on the far
+  side of the control. }
+var
+  ctl: TTyStyleController;
+  form: TForm;
+  panel: TGradPanelAccess;
+  pb: TBitmap;
+  ps: TBGRABitmap;
+  top, mid, bot: TTySpeedButton;
+  cTop, cMid, cBot: TTyColor;
+
+  function Kid(AY: Integer): TTySpeedButton;
+  begin
+    Result := TTySpeedButton.Create(panel);
+    Result.Parent := panel;
+    Result.Controller := ctl;
+    Result.SetBounds(0, AY, 120, 20);
+  end;
+
+  { The row the assertion expects is read back from the control, never assumed: a 20px-tall
+    button comes out 24 tall once anything in the process has pumped the LCL's size queue,
+    so a hard-coded centre row silently measures the wrong pixel -- and only in a full run,
+    which is the worst way to find out. The contract is "the centre of whatever this control
+    IS", so the test states it that way. }
+  function CentreRow(AKid: TTySpeedButton): Integer;
+  begin
+    Result := AKid.Top + AKid.ClientHeight div 2;
+  end;
+
+begin
+  ctl := TTyStyleController.Create(nil);
+  ctl.LoadThemeCss(
+    'TyPanel { background: linear-gradient(90deg, #000000, #FFFFFF); border-width: 0px; ' +
+    'padding: 0px; }');
+  form := TForm.CreateNew(nil);
+  pb := TBitmap.Create;
+  ps := nil;
+  try
+    panel := TGradPanelAccess.Create(form);
+    panel.Parent := form;
+    panel.Controller := ctl;
+    panel.Caption := '';
+    panel.SetBounds(0, 0, 120, 120);
+    top := Kid(0);
+    mid := Kid(50);
+    bot := Kid(100);
+
+    pb.PixelFormat := pf32bit;
+    pb.SetSize(120, 120);
+    panel.RenderTo(pb.Canvas, Rect(0, 0, 120, 120), 96);
+    ps := TBGRABitmap.Create(pb);
+
+    cTop := 0; cMid := 0; cBot := 0;
+    AssertTrue('resolved for the top child', TyResolveParentBg(top, cTop));
+    AssertTrue('resolved for the middle child', TyResolveParentBg(mid, cMid));
+    AssertTrue('resolved for the bottom child', TyResolveParentBg(bot, cBot));
+
+    AssertTrue(Format('the top child sits in the DARK end, not the last stop (green=%d)',
+      [TyGreenOf(cTop)]), TyGreenOf(cTop) < 128);
+    AssertTrue(Format('the bottom child sits in the light end (green=%d)',
+      [TyGreenOf(cBot)]), TyGreenOf(cBot) > 200);
+    { The centre, precisely: the parent's own pixel at each child's middle row. The tolerance
+      carries a half-row, since an odd client height puts the sampled centre between two
+      pixel rows -- worth a couple of levels on this ramp, nowhere near the tens of levels
+      an edge sample or a collapsed gradient is out by. }
+    AssertTrue(Format('top child == parent at its centre row %d (parent=%d resolved=%d)',
+      [CentreRow(top), GreenAt(ps, 60, CentreRow(top)), TyGreenOf(cTop)]),
+      Abs(TyGreenOf(cTop) - GreenAt(ps, 60, CentreRow(top))) <= 6);
+    AssertTrue(Format('middle child == parent at its centre row %d (parent=%d resolved=%d)',
+      [CentreRow(mid), GreenAt(ps, 60, CentreRow(mid)), TyGreenOf(cMid)]),
+      Abs(TyGreenOf(cMid) - GreenAt(ps, 60, CentreRow(mid))) <= 6);
+    AssertTrue(Format('bottom child == parent at its centre row %d (parent=%d resolved=%d)',
+      [CentreRow(bot), GreenAt(ps, 60, CentreRow(bot)), TyGreenOf(cBot)]),
+      Abs(TyGreenOf(cBot) - GreenAt(ps, 60, CentreRow(bot))) <= 6);
+    AssertEquals('and every answer is opaque', 255, TyAlphaOf(cMid));
+  finally
+    ps.Free;
+    pb.Free;
+    form.Free;
+    ctl.Free;
   end;
 end;
 

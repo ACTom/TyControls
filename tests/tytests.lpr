@@ -144,6 +144,7 @@ uses
   test.parity.buttons,
   test.parity.listtext,
   test.parity.combo,
+  test.combohint,
   test.card, test.tag, test.badge,
   test.grid.layout, test.grid, test.grid.streaming,
   test.alert, test.notification, test.empty, test.segmented,

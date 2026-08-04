@@ -9,8 +9,9 @@ unit test.parity.buttons;
   DRAWN, the assertion is on pixels; where it changes what is FIRED, on a counter; where it
   changes GEOMETRY, on the pure layout function the paint and the measurement share.
 
-  The one exception is deliberate and labelled: SpeedButtonOnGradientParentIsAFlatPatch
-  MEASURES a known limitation rather than fixing it -- see the comment there. }
+  SpeedButtonOnGradientParentReconstructsTheGradient was the one exception -- it MEASURED a
+  known limitation instead of removing it. The limitation is gone, and the measurement it
+  recorded is now the assertion. }
 interface
 uses
   Classes, SysUtils, Types, TypInfo, Math, fpcunit, testregistry,
@@ -153,7 +154,7 @@ type
     procedure PaintPanelDropsAsASquareSurface;
     { The measurement behind the ancestor recommendation. }
     procedure PaintPanelStillAcceptsChildControls;
-    procedure SpeedButtonOnGradientParentIsAFlatPatch;
+    procedure SpeedButtonOnGradientParentReconstructsTheGradient;
   end;
 
 implementation
@@ -1445,7 +1446,7 @@ begin
   end;
 end;
 
-procedure TContainerParityTest.SpeedButtonOnGradientParentIsAFlatPatch;
+procedure TContainerParityTest.SpeedButtonOnGradientParentReconstructsTheGradient;
 var
   Ctl: TTyStyleController;
   Form: TForm;
@@ -1456,19 +1457,19 @@ var
   pTop, pBottom, bTop, bBottom: TBGRAPixel;
   parentSpread, buttonSpread: Integer;
 begin
-  { A MEASUREMENT, not a fix -- and the one guard in this file that pins a known limitation
-    rather than removing it.
+  { The measurement that drove the fix, kept as the assertion it became.
 
     TTySpeedButton is windowed where LCL's TSpeedButton is a TGraphicControl, so it cannot
     simply let the parent show through: it reconstructs the parent's backdrop itself, via
-    TyFillParentBg. On an IMAGE-backed form that reconstruction is exact (the real photo
-    slice at the control's offset). On a GRADIENT parent it is not: TyResolveParentBg
-    collapses a gradient to a single representative colour, so the button paints a FLAT
-    patch where the parent varies.
+    TyFillParentBg. On an IMAGE-backed form that reconstruction has always been exact (the
+    real photo slice at the control's offset). On a GRADIENT parent it was not --
+    TyResolveParentBg collapsed the whole ramp to one representative colour, so the button
+    painted a FLAT patch where the parent varied, and the error at the far end was the
+    entire parent spread. Recorded here at the time: parent spread > 200 of 255, button
+    spread < 8.
 
-    This measures the size of that error. The parent's gradient spans black to white over
-    its own height; the button's reconstruction spans nothing at all. Numbers, not adjectives:
-    if the reconstruction is ever taught about gradients, this test fails and gets rewritten. }
+    Now the button gets its own SLICE of the parent's sweep, so the two spreads agree.
+    Numbers, not adjectives, in the same units the defect was measured in. }
   { 90deg is the VERTICAL axis for this painter (GradientEndpoints takes dy = sin(angle)),
     so the parent varies down exactly the axis the two sample points walk. }
   Ctl := FlatController(
@@ -1519,10 +1520,13 @@ begin
 
     AssertTrue(Format('the parent really does vary down its height (spread=%d)',
       [parentSpread]), parentSpread > 200);
-    { The recorded limitation: the button's reconstruction is flat. The error at the far end
-      of the button is the whole parent spread. }
-    AssertTrue(Format('the button reconstructs a FLAT backdrop (spread=%d)',
-      [buttonSpread]), buttonSpread < 8);
+    AssertTrue(Format('the button sweeps as far as the parent (parent=%d button=%d)',
+      [parentSpread, buttonSpread]), Abs(buttonSpread - parentSpread) <= 4);
+    { Spread alone would also be satisfied by a REVERSED ramp, so pin both ends by value. }
+    AssertTrue(Format('and starts where the parent starts (parent=%d button=%d)',
+      [pTop.green, bTop.green]), Abs(Integer(bTop.green) - Integer(pTop.green)) <= 4);
+    AssertTrue(Format('and ends where the parent ends (parent=%d button=%d)',
+      [pBottom.green, bBottom.green]), Abs(Integer(bBottom.green) - Integer(pBottom.green)) <= 4);
   finally
     BtnBmp.Free;
     PanelBmp.Free;

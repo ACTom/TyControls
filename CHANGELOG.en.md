@@ -378,6 +378,19 @@ below change the behaviour of existing code -- read before upgrading.**
   control has no native peer for assistive technology to fall back on, so without this the
   whole text family read as unidentified custom controls.
 
+### Fixed -- controls on a gradient container read as a punched hole
+
+When a panel or container's background is a **gradient**, the windowed controls sitting on it
+(speed buttons, check boxes, toggle switches, sliders, the instruments…) rebuild the parent's
+backdrop themselves -- and what they rebuilt was one **flat colour**. The control's rectangle
+therefore read as a patch stamped into the sweep, worst at the far end of it. Each control now
+takes the slice of the gradient that covers **its own position**, so the seam is invisible;
+multi-stop gradients (three or more colour stops) are carried across too.
+
+Where only one colour can be used (the window erase colour, the gaps outside a rounded corner,
+the base a disabled control dims toward) it is now the colour at the control's **centre** --
+previously it was always the gradient's last stop, even for a control sitting on its first.
+
 ### Fixed -- the mask edit's two delete paths bypassed the mask
 
 `InjectBackspace` / `InjectDelete` cut a **raw character** out of the mask edit's display

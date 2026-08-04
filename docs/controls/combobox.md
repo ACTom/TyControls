@@ -114,7 +114,7 @@ procedure AddHistoryItem(const AItem: string; AnObject: TObject;
 
 把 `AItem` 移到第 0 行：已存在则**先删旧位置再插到最前**（不重复），超过 `AMaxHistoryCount` 从**尾部**裁掉（最久未用的先走），`ASetAsText = True` 时顺带写入 `Text`。`ACaseSensitive` 决定"已存在"怎么比。
 
-与 LCL 一样挂在**每个**组合框上，不只是 `TTyMRUComboBox`（后者的 `AddToHistory` 是同一个意思，上限走它自己的 `MaxItems` 属性）。
+与 LCL 一样挂在**每个**组合框上，不只是 `TTyMRUComboBox`——后者的 [`AddToHistory`](mrucombobox.md) 保留自己的名字与已发布面，但促位本身就是转调这里，只是把参数钉死成"大小写不敏感、不带对象、上限 = `MaxItems`"，另外加上它自己的两条约定（去首尾空白 / 忽略空串，以及促位后 `ItemIndex := 0`）。
 
 > **`Sorted = True` 时**：`TStringList` 不允许在排序列表上 `InsertObject`，而 MRU 顺序按定义就不是字母序。实现会临时关掉 `Sorted` 再恢复——不会抛异常，但恢复时会重新排序，所以"促到最前"在视觉上是个空操作。要 MRU 顺序就别开 `Sorted`。
 

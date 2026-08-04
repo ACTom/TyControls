@@ -28,7 +28,10 @@ type
     constructor Create(AOwner: TComponent); override;
     { Insert S at the top of the history (trimmed; empty is ignored). If S already
       exists (case-insensitive) it is moved to the top rather than duplicated. The
-      list is then trimmed to MaxItems and the new entry becomes the selection. }
+      list is then trimmed to MaxItems and the new entry becomes the selection.
+      This control's documented name for the promotion; the promote/dedupe/trim itself
+      is the base's AddHistoryItem, called with MaxItems and the case-insensitive,
+      object-less arguments this narrower contract implies. }
     procedure AddToHistory(const S: string);
   published
     { Maximum number of remembered entries (>= 1). Lowering it trims the tail. }
@@ -58,33 +61,31 @@ end;
 procedure TTyMRUComboBox.AddToHistory(const S: string);
 var
   t: string;
-  existing, i: Integer;
 begin
+  { Trim + ignore-empty is this control's own contract: a stray-whitespace entry is not a
+    history entry. The base's AddHistoryItem has no such guard (nor should it — a plain
+    combo's history is whatever the caller says it is). }
   t := Trim(S);
   if t = '' then Exit;
-  { Find an existing entry case-insensitively so a re-typed value bubbles rather
-    than duplicating with different casing. }
-  existing := -1;
-  for i := 0 to Items.Count - 1 do
-    if SameText(Items[i], t) then
-    begin
-      existing := i;
-      Break;
-    end;
+  { The base drops Sorted for its insert and RESTORES it afterwards, which would
+    re-alphabetise the list it had just promoted into. MRU order is recency by definition
+    (the constructor sets Sorted:=False for the same reason), so drop it here and leave it
+    dropped — that also makes the base's restore a no-op. A designer-set Sorted:=True must
+    neither raise SSortedListError on the promote nor silently turn the history
+    alphabetical. }
+  Items.Sorted := False;
+  { One promote/dedupe/trim, in the base, exactly as every other combo runs it. This
+    method's narrower contract is expressed as ARGUMENTS — always case-insensitive, never
+    an object, capped at MaxItems — instead of as a second implementation that drifts.
+    (BeginUpdate keeps the delete+insert+trim a single Items notification, as before.) }
   Items.BeginUpdate;
   try
-    { MRU order is recency, not alphabetical: Insert(0, …) means "top", which raises
-      SSortedListError on a Sorted list. Force the list unsorted before reordering so a
-      designer-set Sorted:=True can never crash the promote (or silently re-alphabetise). }
-    Items.Sorted := False;
-    if existing >= 0 then
-      Items.Delete(existing);
-    Items.Insert(0, t);
-    while Items.Count > FMaxItems do
-      Items.Delete(Items.Count - 1);
+    AddHistoryItem(t, nil, FMaxItems, False, False);
   finally
     Items.EndUpdate;
   end;
+  { Kept from the hand-rolled version: an MRU box shows its most recent entry, and the
+    base's ASetAsText only writes Text — ItemIndex is what a host reads back. }
   ItemIndex := 0;
 end;
 

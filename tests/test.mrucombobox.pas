@@ -13,6 +13,10 @@ type
     procedure TestLoweringMaxItemsTrims;
     procedure TestMaxItemsClampedToOne;
     procedure TestSortedNeverCrashesKeepsMRUOrder;
+    { AddToHistory predates the base's AddHistoryItem and did the same job by hand. These
+      pin that the two now agree on the shared half, so they cannot drift apart again. }
+    procedure TestAgreesWithTheBaseAddHistoryItem;
+    procedure TestCaseInsensitiveDedupeMatchesTheBaseSwitch;
   end;
 implementation
 
@@ -120,6 +124,58 @@ begin
     AssertEquals('then apple', 'apple', c.Items[1]);
     AssertEquals('then mango', 'mango', c.Items[2]);
   finally c.Free; end;
+end;
+
+procedure TMRUComboBoxTest.TestAgreesWithTheBaseAddHistoryItem;
+var
+  mru: TTyMRUComboBox;
+  base: TTyComboBox;
+  i: Integer;
+const
+  Feed: array[0..4] of string = ('alpha', 'Beta', 'gamma', 'BETA', 'delta');
+begin
+  { The same inputs through both APIs must leave the same list. AddToHistory's narrower
+    contract is expressible as the base's arguments -- always case-insensitive, never an
+    object, capped at MaxItems -- so there is no reason for it to be a second
+    implementation, and two implementations of one behaviour is how they drift apart. }
+  mru  := TTyMRUComboBox.Create(nil);
+  base := TTyComboBox.Create(nil);
+  try
+    mru.MaxItems := 3;
+    for i := Low(Feed) to High(Feed) do
+    begin
+      mru.AddToHistory(Feed[i]);
+      base.AddHistoryItem(Feed[i], nil, 3, False, False);
+    end;
+    AssertEquals('same number of remembered entries', base.Items.Count, mru.Items.Count);
+    for i := 0 to base.Items.Count - 1 do
+      AssertEquals('row ' + IntToStr(i), base.Items[i], mru.Items[i]);
+  finally
+    mru.Free; base.Free;
+  end;
+end;
+
+procedure TMRUComboBoxTest.TestCaseInsensitiveDedupeMatchesTheBaseSwitch;
+var
+  mru: TTyMRUComboBox;
+  base: TTyComboBox;
+begin
+  { AddToHistory has no case switch: it is always the insensitive flavour. Pinned on a
+    NON-ASCII pair because that is where a hand-rolled fold and the base's can disagree --
+    whichever verdict the library gives, both spellings of "did I already remember this"
+    have to give the same one. }
+  mru  := TTyMRUComboBox.Create(nil);
+  base := TTyComboBox.Create(nil);
+  try
+    mru.AddToHistory('Café');
+    mru.AddToHistory('CAFÉ');
+    base.AddHistoryItem('Café', nil, 0, False, False);
+    base.AddHistoryItem('CAFÉ', nil, 0, False, False);
+    AssertEquals('same dedupe verdict as the base', base.Items.Count, mru.Items.Count);
+    AssertEquals('and the same surviving row', base.Items[0], mru.Items[0]);
+  finally
+    mru.Free; base.Free;
+  end;
 end;
 
 initialization
