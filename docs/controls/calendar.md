@@ -33,8 +33,9 @@ uses tyControls.Calendar;
 | `DateTime` | `TDateTime` | 同 `Date` | LCL 同名访问器的别名，同一份存储、同一套越界检查。`stored False`（`Date` 才是被序列化的那个）。 |
 | `MinDate` | `TDateTime` | `0`（无下界） | 可选日期下界。`0` 表示不限制。写入后把当前 `Date` **夹紧**到新区间（改的是规则不是值，所以不抛），并始终重绘（越界格子的灰显外观会变化）。 |
 | `MaxDate` | `TDateTime` | `0`（无上界） | 可选日期上界。`0` 表示不限制。写入后同样夹紧当前 `Date` 并重绘。 |
-| `FirstDayOfWeek` | `TTyWeekDay` | `wdSunday` | 每周第一列的星期（`wdSunday`..`wdSaturday`），决定星期名行与网格列的排列顺序。 |
-| `WeekNumbers` | `Boolean` | `False` | 为 `True` 时在网格左侧增加一列 ISO 8601 周数（列宽 24 逻辑像素）。 |
+| `FirstDayOfWeek` | `TTyWeekDay` | `wdLocaleDefault` | 每周第一列的星期。除 `wdSunday`..`wdSaturday` 外新增 `wdLocaleDefault`（= LCL 的 `dowDefault`）：跟随操作系统区域设置。**3.0 起这是默认值**（原为写死的 `wdSunday`）——见第 7 节的破坏性变更说明。另提供 `dowMonday`..`dowSunday` / `dowDefault` 常量别名，方便从 LCL 移植的代码原样编译。 |
+| `DisplaySettings` | `TTyCalDisplaySettings` | `[dsShowHeadings, dsShowDayNames]` | 控制画哪些"外围装饰"，与 LCL 的 `TDisplaySettings` 同名同成员：`dsShowHeadings`（表头带）、`dsShowDayNames`（星期名行）、`dsNoMonthChange`（点击相邻月格子**不**翻页）、`dsShowWeekNumbers`（周数列）。去掉某个标志时，让出的空间**归日期网格**，不会留空洞。 |
+| `WeekNumbers` | `Boolean` | `False` | `DisplaySettings` 中 `dsShowWeekNumbers` 的布尔视图——**同一份存储**，两者不可能不一致。`stored False`（序列化走 `DisplaySettings`）；旧 `.lfm` 里的 `WeekNumbers = True` 仍能正常加载。 |
 | `ShowToday` | `Boolean` | `True` | 为 `True` 时给"今天"的格子描一圈高亮环（未被选中时）。 |
 | `ReadOnly` | `Boolean` | `False` | 为 `True` 时禁止一切选择：`SelectDate`、日期格点击、键盘导航均被拦截（表头翻页 / 下钻仍可用）。 |
 | `Font` | `TFont` | 系统默认 | 传递 PPI 给渲染器；字体族与大小优先由主题控制。 |
@@ -66,7 +67,16 @@ TTyCalendar 继承自 `TTyCustomControl`（`tyControls.Base`）：
 | 方法 | 说明 |
 |------|------|
 | `SetDateClamped(AValue: TDateTime)` | 把选中日期移到 `[MinDate, MaxDate]` 内**最近**的一天，**永不抛异常**。用在越界值属于预期且无害的场合（spin 走出边界、从更宽的数据源取值）；越界属于 bug 时用 `Date :=`。两者并存是刻意的——由调用方言明自己的意图，读代码的人一眼能看出来。 |
+| `HitTest(APoint: TPoint): TTyCalendarPart` | 判断客户区坐标落在哪个区域：`cpNoWhere` / `cpDate` / `cpWeekNumber` / `cpTitle` / `cpTitleBtn` / `cpTitleMonth` / `cpTitleYear`（与 LCL 的 `TCalendarPart` 成员一一对应）。标题里"月份"与"年份"的分界是**实测**的——标题居中绘制，宽度取决于主题字体与区域月份名，所以不能按字符数猜。 |
+| `GetCalendarView: TTyCalendarView` | 用 LCL 的命名与**页面**粒度报告当前下钻层级：`cvMonth` / `cvYear` / `cvDecade` / `cvCentury`。注意与 `ViewMode` 差一级——LCL 的 `cvMonth`（"一个月的日期网格"）对应我们的 `cvmDays`，**不是** `cvmMonths`。两者并存，读代码时不必猜是哪一种读法。 |
 | `RenderToPublic(...)` | 把控件渲染到任意 `TCanvas`，供测试与嵌入使用。 |
+
+### 单元级辅助
+
+| 名称 | 说明 |
+|------|------|
+| `TyLocaleFirstDayOfWeek: TTyWeekDay` | 启动时从操作系统读一次的"一周从周几开始"（Windows 走 `LOCALE_IFIRSTDAYOFWEEK`；其他平台缺少可靠来源，保持 `wdSunday`，由宿主自行赋值）。是变量而非函数，便于测试固定它。 |
+| `TyResolveFirstDayOfWeek(AValue): TTyWeekDay` | 把 `wdLocaleDefault` 解析成实际星期，其余原样返回。凡是按星期做下标运算的地方都必须先过这个函数——`wdLocaleDefault` 的序号是 7，不是某一列。 |
 
 > **状态跟踪：** TTyCalendar **没有** `FHover` / `FPressed` 之类的成员状态字段。格子的 `:selected` / `:disabled` / `:hover` 是在渲染时**逐格计算**并向样式模型查询的（见第 5 节），而非控件级 `CurrentStates` 重写。控件自身的 `CurrentStyle`（主体边框 + 背景）走基类默认的状态机（`:hover`/`:focus`/`:active`/`:disabled`）。
 
@@ -79,6 +89,11 @@ TTyCalendar 继承自 `TTyCustomControl`（`tyControls.Base`）：
 | `OnChange` | `TNotifyEvent` | 选中日期**实际改变**时触发——键盘方向 / 翻月导航（`SelectDate`）以及日期格点击改变了日期时。设为同一日期不触发。 |
 | `OnAccept` | `TNotifyEvent` | 用户**确认**当前日期时：按 `Enter` / `Space`，或**点击一个日期格**。即使日期未变，日期格点击也会触发（用户确认了该日期）。宿主弹窗应监听此事件来提交 + 关闭，而**不是** `OnChange`，这样下拉内的方向键导航不会误关弹窗。 |
 | `OnViewChange` | `TNotifyEvent` | `ViewMode` 改变（下钻 / 上钻）时触发。 |
+| `OnYearChanged` | `TNotifyEvent` | 选中日期的**年**分量改变时触发；表头翻页跨年时也触发。 |
+| `OnMonthChanged` | `TNotifyEvent` | 选中日期的**月**分量改变时触发；**表头箭头翻页**时也触发——"翻到某月就去加载该月日程"的常规接线用的就是它（此前翻页不触发任何事件）。 |
+| `OnDayChanged` | `TNotifyEvent` | 选中日期的**日**分量改变时触发。 |
+
+> 选择变化的触发**顺序**与 LCL 一致（`calendar.pp` 的 `LMChanged`）：`OnYearChanged` → `OnMonthChanged` → `OnDayChanged` → `OnChange`。顺序是有承载的：先在 `OnMonthChanged` 里重载数据、再在 `OnChange` 里读 `Date` 的处理链依赖它。**代码写入** `Date` / `DateTime` 不触发上述任何事件（它不是一次选择动作）。
 
 > 除上表外，TTyCalendar 还暴露**基线事件集**（Tier A 鼠标 / 通用事件 + Tier B 键盘 / 焦点事件，因其为可聚焦的 `TTyCustomControl`）。完整清单见 [../events.md](../events.md)。
 
@@ -120,7 +135,7 @@ TyCalendarCell:disabled { color: var(--muted); }
 
 ### 渲染 / 布局细节
 
-- 布局按当前尺寸 + PPI 自适应：表头带高 28 逻辑像素、星期名行高 20、周数列宽 24（`WeekNumbers=True` 时），其余按 7 列 × 6 行均分。下钻视图（月 / 年 / 十年）使用 4×3 网格，表头带高同样 28。
+- 布局按当前尺寸 + PPI 自适应：表头带高 28 逻辑像素（`dsShowHeadings` 去掉则为 0）、星期名行高 20（`dsShowDayNames` 去掉则为 0）、周数列宽 24（`dsShowWeekNumbers` 时），其余按 7 列 × 6 行均分——**被去掉的带高会让给日期网格**。下钻视图（月 / 年 / 十年）使用 4×3 网格，表头带高同样 28。注意：表头是进入下钻视图的唯一入口，去掉 `dsShowHeadings` 就得到一块纯日期网格。
 - 表头为 `[←] [标题] [→]`：左右箭头用主体 `TextColor` 绘制的字形（`tgArrowLeft`/`tgArrowRight`），标题居中。
 - 相邻月 / 越界格子若主题未显式给 `color`，则回退为**主体文本色的低透明度版本**（alpha≈100）做灰显。
 - 今日环颜色复用 `TyCalendarCell:selected` 的 `background`（即 `var(--accent)`），线宽为缩放后的 1px 发丝线。
@@ -189,7 +204,9 @@ Cal.ReadOnly := True;   // 禁止选择；表头翻页/下钻仍可用
 - **`OnAccept` vs `OnChange` 的分工：** `OnChange` 只在日期**改变**时发；`OnAccept` 是"确认"手势（回车 / 空格 / 点日期格），**即便日期没变**点击日期格也会触发。做下拉选择器时请用 `OnAccept` 决定何时关闭弹窗，避免方向键导航误关。
 - **`ReadOnly` 只锁选择：** `ReadOnly=True` 拦截 `SelectDate`、日期格点击与键盘选择，但表头的 ←/→ 翻月、标题下钻 / 上钻仍然工作（只浏览不选择）。
 - **下钻状态是瞬态的：** `ViewMode` / `ViewMonth` / `ViewYear` 为只读运行时状态，不 published、不序列化；每次运行从 `Date` 派生初值（`FViewMode := cvmDays`）。
-- **点击语义：** Days 视图点标题 → 下钻到 Months；点日期格 → 选中该日（`OnChange` + `OnAccept`）。Months/Years/Decades 视图点标题 → 再上一层，点格子 → 选定并下钻一层。相邻月 / 越界格子点击被忽略。
+- **点击语义：** Days 视图点标题 → 下钻到 Months；点日期格 → 选中该日（`OnChange` + `OnAccept`）。Months/Years/Decades 视图点标题 → 再上一层，点格子 → 选定并下钻一层。越界（`MinDate`/`MaxDate` 之外）格子点击被忽略。
+- **点相邻月的灰格会翻页（3.0 起的行为变更）：** 以前这一击被直接丢掉——灰格是死的，也没有任何提示。现在默认**选中那一天并把视图翻到它所属的月**，与 LCL 的默认一致（`dsNoMonthChange` 不在 `DefaultDisplaySettings` 里）。**要恢复旧行为，把 `dsNoMonthChange` 放进 `DisplaySettings`。**
+- **`FirstDayOfWeek` 默认改为跟随系统（3.0 起的行为变更）：** 原来写死 `wdSunday`，于是周一开头的区域（欧洲 / 亚洲大部分）开箱即得一个美式周布局，而且**没有**任何取值能表达"跟随系统"——只能硬写 `wdMonday`，应用换语言后又错了。现在默认 `wdLocaleDefault`。**依赖原来周日开头的窗体请显式写 `FirstDayOfWeek := wdSunday`。**（几何相关的测试同理：断言里的列坐标必须自己钉住 `wdSunday`，否则那是在测开发机的控制面板。）
 - **键盘导航：** 方向键移动一天 / 一周（越界自动夹紧），`PageUp`/`PageDown` 换上 / 下月（保留日、月末夹紧），`Home`/`End` 跳到当月首 / 末个可选日，`Enter`/`Space` 触发 `OnAccept`。这些键在 Days 视图 + 非 `ReadOnly` 时生效。
 - **主体无成员状态字段：** 与 CheckBox 等不同，本控件不缓存 `FHover`/`FPressed`；格子的 `:selected`/`:disabled`/`:hover` 由渲染时逐格向 `ActiveController.Model.ResolveStyle` 查询决定。
 - **视觉由主题令牌驱动：** 颜色 / 字体 / 圆角一律来自 `.tycss` 令牌（`--accent`、`--muted`、`--surface-hover` 等），不在控件代码写死；可通过 `StyleClass` 或覆盖上述子部件 typeKey 规则定制外观。

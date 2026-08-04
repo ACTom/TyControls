@@ -4,6 +4,7 @@ program tytests;
 
 uses
   Interfaces, consoletestrunner, tyControls.Painter, tyControls.Controller,
+  tyControls.Calendar,
   test.Types, test.Css.Tokens, test.Css.Lexer, test.Css.Parser,
   test.Css.Values, test.StyleModel, test.accent, test.gradient, test.bevelborder, test.nineslice, test.metric, test.glyph, test.skins, test.fontcascade, test.darktext, test.painter, test.controller,
   test.controller.hotreload, test.base,
@@ -132,11 +133,18 @@ uses
   test.starshape,
   test.arrow,
   test.parity.shapearrow,
+  test.parity.starshape,
+  test.parity.image,
+  test.parity.shell,
+  test.parity.numeric,
+  test.parity.treeview,
+  test.parity.grid.members,
   test.card, test.tag, test.badge,
   test.grid.layout, test.grid, test.grid.streaming,
   test.alert, test.notification, test.empty, test.segmented,
   test.pagination, test.steps, test.breadcrumb, test.transfer,
-  test.treeselect, test.cascader, test.popover;
+  test.treeselect, test.cascader, test.popover,
+  test.parity.datetime;
 
 type
   TTyTestRunner = class(TTestRunner)
@@ -154,6 +162,14 @@ begin
   // Screen.SystemFont is real here -- without this gate it would leak in.)
   TyAutoSystemFontFallback := False;
   TyFallbackFontName := '';
+  // Same reason, second source of machine-dependence: TTyCalendar.FirstDayOfWeek
+  // defaults to wdLocaleDefault, which tyControls.Calendar resolves from the OS at
+  // unit start. Every calendar geometry assertion would otherwise be measuring the
+  // developer's Control Panel -- a Monday-first machine shifts the whole day grid by
+  // one column. Pin it here so a new calendar test cannot inherit the machine's
+  // answer by omission; the one test that is ABOUT locale resolution overrides this
+  // variable itself and restores it.
+  TyLocaleFirstDayOfWeek := wdSunday;
   Application := TTyTestRunner.Create(nil);
   Application.Initialize;
   Application.Title := 'TyControls Test Runner';

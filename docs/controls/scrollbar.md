@@ -26,7 +26,8 @@
 | `Min` | `Integer` | `0` | 最小位置值。赋值时若 `Position < Min` 则自动夹紧 `Position := Min`。 |
 | `Max` | `Integer` | `100` | 最大位置值。赋值时若 `Position > Max` 则自动夹紧 `Position := Max`。 |
 | `Position` | `Integer` | `0` | 当前位置，范围 `[Min, Max]`。赋值时自动夹紧；仅在值真正变化时触发 `OnChange`。 |
-| `PageSize` | `Integer` | `10` | 页面大小（可见内容大小），决定 thumb 在轨道中的比例长度。不可为负（负值被夹为 0）。同时也是点击轨道空白处和 `PageUp`/`PageDown` 的步进量。 |
+| `PageSize` | `Integer` | `10` | 页面大小（可见内容大小），决定 thumb 在轨道中的比例长度。不可为负（负值被夹为 0）。**当 `LargeChange = 0`（默认）时它也是**点击轨道空白处和 `PageUp`/`PageDown` 的步进量。 |
+| `LargeChange` | `Integer` | `0` | **（API parity 新增）** 翻页步进量：点轨道、`PageUp`/`PageDown`、`scPageUp`/`scPageDown`。早前 `PageSize` 身兼两职，于是**滑块比例与翻页步长无法分开选**：把 `PageSize` 调小去瘦滑块，翻页也跟着变成一行。LCL 里两者分开（`stdctrls.pp:106`；`PageSize` 只喂 `ScrollInfo.nPage`，`LargeChange` 只驱动翻页）。**默认值有意与 LCL 不同**：LCL 是 `1`，而本库的列表框 / 网格 / 备忘录 / 树 / 滚动容器全都内嵌这个滑块并把 `PageSize` 设为视口大小，跟随 LCL 会让每一次点轨道只走 1 个单位。`0` = “按 `PageSize` 翻页”，即这个属性存在之前的行为。 |
 | `SmallChange` | `Integer` | `1` | 单步步进量：点击端部箭头按钮、按方向键各步进 ±`SmallChange`。最小为 1（赋值 <1 被夹为 1）。 |
 | `AnimationsEnabled` | `Boolean` | `True` | **（API parity 新增 published）** 控制程序化 Position 变化（键盘 / 滚轮 / 轨道点击）时 thumb 的缓动动画（约 120 ms，EaseOutCubic）；实时拖拽与无头环境瞬时跟随。 |
 | `OnChange` | `TNotifyEvent` | `nil` | Position 真实变化时触发（包括 `DragThumbTo` 引起的变化）。 |
@@ -313,3 +314,13 @@ end;
 5. **TabStop：** ScrollBar 控件 `TabStop` 不在 `published` 列表中，默认继承 `TCustomControl` 的默认值（`False`），通常不参与焦点循环。
 6. **水平时默认尺寸不自动翻转：** `Kind` 改变后，控件的宽/高不会自动对调，需手动交换 `Width` 和 `Height`。
 7. **滑块过渡动画（batch⑤+⑥）：** `AnimationsEnabled` 默认 `True`，程序化 `Position` 变化（键盘/滚轮/翻页/箭头）时滑块缓动到新位置（约 120ms），**拖动则始终瞬时跟手**；headless / 设计器下瞬间吸附。`TTyListBox` / `TTyMemo` 的**内嵌滚动条按设计置为静态**（`AnimationsEnabled := False`）。详见上文「状态过渡动画」。
+
+## 附：API parity 备注（本轮）
+
+### `Kind` 默认值与 LCL 不同，有意保留
+
+本库：`sbVertical`；LCL `TCustomScrollBar`：`sbHorizontal`（`stdctrls.pp:105`）。**不跟随**，理由与 `TTyTrackBar.Max` 一样：这只是一个默认值，不改变语义，而 published 默认值一改，**所有现有的竖向 `.lfm`（因为等于默认而没存盘）会静默变成横向**；本控件的构造函数默认尺寸（宽 = `--scrollbar-size`、高 = 160）也是竖向的。从 Lazarus 移植时请显式写 `Kind`。
+
+### 不做：`BidiMode` / `ParentBidiMode`
+
+RTL 镜像（`stdctrls.pp:124`/`:137`，机制是 `FRTLFactor`）仍然缺失：它不是一个属性，而是要贯穿 `TyScrollThumbRect` / 拖拽数学 / 翻页方向 / 箭头字形的一整套坐标系反转，且应当与全库的 RTL 方案一起做。

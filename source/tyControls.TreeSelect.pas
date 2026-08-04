@@ -486,7 +486,7 @@ begin
     Exit;
   end;
   FTree.FocusedNode := FSelectedNode;      // focusing selects, in single-select mode
-  FTree.Selected[FSelectedNode] := True;   // idempotent: covers focus ALREADY being there,
+  FTree.NodeSelected[FSelectedNode] := True;   // idempotent: covers focus ALREADY being there,
                                            // where the setter above short-circuits
   FTree.ScrollIntoView(FSelectedNode);
 end;

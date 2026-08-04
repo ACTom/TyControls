@@ -34,7 +34,7 @@ uses tyControls.TreeView, tyControls.Columns;
 | `DefaultNodeHeight` | `Integer` | `18` | 未启用变高时每行的逻辑像素高度 |
 | `RootNodeCount` | `Cardinal` | `0` | 根级（顶层）节点数量。写入即创建这么多未初始化的根节点骨架 |
 | `Indent` | `Integer` | `16` | 每一层的缩进逻辑像素 |
-| `Images` | `TImageList` | `nil` | 主列节点图标的图像列表，配合 `OnGetImageIndex` 使用 |
+| `Images` | `TCustomImageList` | `nil` | 主列节点图标的图像列表，配合 `OnGetImageIndex` 使用。类型是 `TCustomImageList`（对齐 LCL），任何派生自它的列表都能赋值 |
 | `EmptyListMessage` | `string` | `''` | 树为空时在内容区居中显示的提示文字 |
 | `ShowButtons` | `Boolean` | `True` | 是否绘制展开 / 折叠按钮（±方块） |
 | `ShowTreeLines` | `Boolean` | `True` | 是否绘制连接父子节点的树状连线 |
@@ -42,7 +42,24 @@ uses tyControls.TreeView, tyControls.Columns;
 | `ToggleOnDblClick` | `Boolean` | `True` | 双击一行是否展开 / 折叠该节点 |
 | `HotTrack` | `Boolean` | `False` | 是否高亮鼠标悬停行（`:hover` 状态） |
 | `SearchTimeout` | `Integer` | `1000` | 键入查找（type-to-find）缓冲区空闲多少毫秒后自动重置 |
+| `ScrollBars` | `TScrollStyle` | `ssBoth` | 允许出现哪些方向的滚动条。`ssNone` = 视口固定（嵌在外层滚动容器里时用）；被禁掉的那一轴偏移会归零 |
+| `AutoExpand` | `Boolean` | `False` | 焦点移入的节点自动展开、移出的自动折叠（新焦点在旧节点子树内时不折叠） |
+| `RightClickSelect` | `Boolean` | `True` | 右键按下是否把焦点移到点中的节点。**默认与 LCL 不同**：LCL 默认 `False`，本控件一直是"右键跟随"，故保留 `True`；要 LCL 行为设 `False` |
+| `HideSelection` | `Boolean` | `True` | 控件失去焦点时是否隐藏选中高亮（并排两棵树不会都显示强高亮）。隐藏＝该行按普通行的主题样式绘制，不在控件里凭空造颜色 |
+| `ShowSeparators` | `Boolean` | `False` | 是否在每个顶层行下画一条分隔线（颜色取控件边框色 token，与树状连线同源） |
 | `TabStop` | `Boolean` | `True` | 是否参与键盘 Tab 焦点循环 |
+
+#### LCL 名字的等价成员（public，不 published）
+
+这些成员只是把已有状态换成 LCL 的拼法暴露出来，**不额外流式保存**（避免 `.lfm` 里同一个开关出现两份互相打架的值）：
+
+| 成员 | 等价于 | 说明 |
+|------|--------|------|
+| `RowSelect` | `toFullRowSelect in Options` | 整行选中 |
+| `MultiSelect` | `toMultiSelect in Options` | 多选 |
+| `ShowLines` | `ShowTreeLines` | 树状连线 |
+| `ReadOnly` | `not (toEditable in Options)` | **默认 `True`**（本控件就地编辑是 opt-in）；`ReadOnly := False` 等于 `Options + [toEditable]` |
+| `DefaultItemHeight` | `DefaultNodeHeight` | 同一个读写器，未显式设定时同样跟随 `--item-height` 密度令牌 |
 
 #### `Options` 集合（`TTyTreeOption`）
 
@@ -107,6 +124,9 @@ uses tyControls.TreeView, tyControls.Columns;
 | `ImageIndex` | `Integer` | `-1` | 表头图标索引 |
 | `Options` | `TTyColumnOptions` | `[coVisible, coResizable, coAllowClick, coDraggable]` | 列级选项（`coVisible` / `coResizable` / `coAllowClick` / `coDraggable` / `coAutoSpring`） |
 | `Tag` | `NativeInt` | `0` | 用户自定义标记 |
+| `Visible` | `Boolean` | `True` | 列可见性。**存储仍是 `Options` 里的 `coVisible`**,这是它的一个视图(对标 LCL `TGridColumn.Visible`);`stored False`,由 `Options` 负责流式化 |
+| `MinSize` / `MaxSize` | `Integer` | 同 `MinWidth` / `MaxWidth` | LCL 对宽度上下限的叫法,别名。注意默认值与 LCL 不同:LCL 的 `DEFMINSIZE`/`DEFMAXSIZE` 都是 0(无界),这里是 10 / 10000 —— 要无界请显式写 0 |
+| `SizePriority` | `Integer` | `1` | 分配多余宽度时这一列的权重(见 `TTyCustomGrid.AutoFillColumns`)。0 = 永不自动调宽。对标 LCL `TGridColumn.SizePriority` |
 
 ### 继承的通用成员
 
@@ -157,6 +177,7 @@ uses tyControls.TreeView, tyControls.Columns;
 
 | 事件 | 类型 | 触发时机 |
 |------|------|----------|
+| `OnChanging` | `TTyTreeChangingEvent` | 选择 / 焦点移动**之前**；`var Allowed := False` 可否决——焦点和选中都不动。一次手势只问一次（`FocusedNode := X` 内部会转调 `SetSelected`，不会重复发问），对"同一个节点再设一次"这种空操作不发问 |
 | `OnChange` | `TTyTreeNodeEvent` | 单选选择集实际变化时（`SetSelected` / `ClearSelection`） |
 | `OnFocusChanged` | `TTyTreeNodeEvent` | 焦点节点变化时 |
 | `OnSelectionChanged` | `TNotifyEvent` | **多选**集合每次手势变化后触发一次（`toMultiSelect`） |
@@ -176,7 +197,7 @@ uses tyControls.TreeView, tyControls.Columns;
 |------|------|----------|
 | `OnGetText` | `TTyTreeGetTextEvent` | 取节点文本（简单签名 `var Text`；单列 / 主列常用） |
 | `OnGetTextWithType` | `TTyTreeGetTextWithTypeEvent` | 取单元格文本（完整签名，带 `Column` + `TextType: ttNormal/ttStatic`；多列用） |
-| `OnGetImageIndex` | `TTyTreeGetImageIndexEvent` | 取节点图标索引（带 `Kind` + `Column` + `var Ghosted`）。`Ghosted := True` **会被采纳**：该行图标按"不可用"绘制（走 `TImageList.Draw` 的禁用灰化）。以前这个标志被收下就丢掉，于是应用唯一能表达"这一项不可用"的开关在任何地方都没有效果 |
+| `OnGetImageIndex` | `TTyTreeGetImageIndexEvent` | 取节点图标索引（带 `Kind` + `Column` + `var Ghosted`）。`Ghosted := True` **会被采纳**：该行图标按"不可用"绘制（走 `TCustomImageList.Draw` 的禁用灰化）。以前这个标志被收下就丢掉；后来只在**多列**分支接上，0 列（默认形态）仍然丢——现在两条分支都接上了。`Kind` 现在会被真的问到三次：`ikNormal` 每行都问，`ikSelected` 只对选中行问（**以当前 `ikNormal` 结果为初值**，handler 不管它就保持原图标，老代码渲染不变），`ikOverlay` 初值 `-1`、答了就叠画在普通图标之上。`ikState` 仍未实现（需要第二个图像列表和自己的槽位，见"注意事项"） |
 | `OnPaintText` | `TTyTreePaintTextEvent` | 文本绘制后的钩子 |
 | `OnMeasureItem` | `TTyTreeMeasureItemEvent` | 从 `InitNode` 触发（仅 `toVariableNodeHeight`），app 通过 `var ANodeHeight` 返回逐行高度（逻辑像素） |
 | `OnDrawNode` | `TTyTreeDrawNodeEvent` | 逐单元格**完全自绘**（仅 `toOwnerDraw`）；在 BGRA 合成后、裁剪到单元格设备矩形时触发，跳过默认单元格内容 |
@@ -199,12 +220,13 @@ uses tyControls.TreeView, tyControls.Columns;
 | `OnEditing` | `TTyTreeEditingEvent` | 编辑器打开**之前**；`var Allowed`（默认 `True`）设 `False` 否决该单元格编辑 |
 | `OnNewText` | `TTyTreeNewTextEvent` | 提交时**仅在文本实际改变**才触发；app 把 `NewText` 写入自己的节点数据块 |
 | `OnEditCancelled` | `TTyTreeColumnNodeEvent` | Esc / 程序化 `CancelEdit` 时 |
+| `OnEditingEnd` | `TTyTreeEditingEndEvent` | 编辑会话结束时**必定触发一次**，提交 `Cancel = False`，取消 `Cancel = True`。`OnNewText` 只在文本变了才发，所以它不能当"编辑器关了"的信号用 |
 
 ### 节点拖放
 
 | 事件 | 类型 | 触发时机 |
 |------|------|----------|
-| `OnDragOver` | `TTyTreeDragOverEvent` | 拖拽过程中的逐目标 / 逐模式否决；`Allowed` 入参为 `CanMoveNode(...)` 结果，handler **只能进一步收紧**（对无效移动设 `Allowed := True` 仍被 `MoveNode` 的硬闸拦下） |
+| `OnNodeDragOver` | `TTyTreeDragOverEvent` | 拖拽过程中的逐目标 / 逐模式否决；`Allowed` 入参为 `CanMoveNode(...)` 结果，handler **只能进一步收紧**（对无效移动设 `Allowed := True` 仍被 `MoveNode` 的硬闸拦下）。**此前叫 `OnDragOver`**，那个名字已还给 LCL 的拖放钩子 |
 | `OnNodeMoved` | `TTyTreeNodeEvent` | 一次成功放下后（`Node.Parent` 已是新父节点） |
 
 > 除上表外，`TTyTreeView` 还暴露**基线事件集**（Tier A 鼠标 / 通用 + Tier B 键盘 / 焦点事件，因其为可聚焦的 `TTyCustomControl`）。完整清单见 [../events.md](../events.md)。内部内嵌的两个滚动条（`VScroll` / `HScroll`）是私有子部件，不暴露其事件。
@@ -374,18 +396,60 @@ Tree.OnNodeMoved := @OnMoved;
 
 ---
 
-## 7. 注意事项
+## 7. 与 LCL `TTreeView` 对齐（含 3 个不兼容改名）
+
+### 三个撞名成员：名字还给 LCL，我们的含义换了名字
+
+| 现在 | 以前 | 为什么必须改 |
+|------|------|--------------|
+| `GetNodeAt(X, Y: Integer): PTyTreeNode` | —— | LCL 的 `GetNodeAt` 就是"客户区某点上的节点"（`comctrls.pp:3716`） |
+| `GetNodeAtOffset(Y; out ANodeTop)` | `GetNodeAt(Y; out ANodeTop)` | **同名、同参数个数、两个参数都是 `Integer`**，所以移植过来的 `Tree.GetNodeAt(X, Y)` 会**编译通过**：把调用方的 X 当成滚动空间的 Y 用，再把调用方的 Y 变量用 out 参数覆写掉，返回错误的节点且没有任何警告。改名当天本仓库自己的 12 条断言立刻变红，就是这条路径 |
+| `NodeSelected[Node]: Boolean` | `Selected[Node]: Boolean` | `Selected` 在 LCL 是**当前节点**（`comctrls.pp:3778`）。`if Tree.Selected <> nil` / `Tree.Selected := N` 这两句最常写的代码在带下标的布尔属性上根本编不过 |
+| `OnNodeDragOver` | `OnDragOver` | `OnDragOver` 是 `TControl` 的 LCL 拖放钩子，基类本来就 published。树把这个名字占成了内部节点拖放的否决事件，于是**整个库里只有这一个控件不能当 LCL 拖放目标**——往上挂一个正常的 `TDragOverEvent` 是类型错误 |
+
+迁移只有三条替换：`GetNodeAt(y, top)` → `GetNodeAtOffset(y, top)`；`Selected[n]` → `NodeSelected[n]`；`OnDragOver := @H` → `OnNodeDragOver := @H`。
+
+### 新增的 LCL 成员
+
+| 成员 | 说明 |
+|------|------|
+| `Selected: PTyTreeNode` | 当前节点。读：焦点节点（选中时），否则第一个选中节点，都没有则 `nil`。写：独占选中并把焦点移过去；写 `nil` 等于 `ClearSelection` |
+| `SelectionCount` / `Selections[i]` | 多选的随机访问，让 `for i := 0 to SelectionCount-1 do Use(Selections[i])` 直接可用。**类型是 `Integer` 不是 LCL 的 `Cardinal`**——空选择时 `Cardinal(0) - 1` 会绕成 40 亿。`Selections[i]` 每次都是 O(n) 线性走，热循环仍请用 `GetFirstSelected` / `GetNextSelected` |
+| `GetLastSelected` | 屏幕序里最后一个选中节点 |
+| `NodeVisible[Node]: Boolean` | 隐藏单个节点及其子树而不删除它——过滤要的就是这个形状。引擎一直支持不可见节点（各处遍历都看 `nsVisible`），只是开关没暴露，于是过滤只能删了再加。隐藏会把该节点的子树高度从祖先链上扣掉（`ContentHeight` / 滚动条 / 位置缓存同步），并且**不会**把光标或选中留在一个不绘制的行上。**故意不叫 `Visible`**：LCL 把它挂在 `TTreeNode`（一个类）上，我们的节点是记录，只能挂到控件上——而控件上的 `Visible` 已经是"这个控件显不显示"，同名带下标属性会把 `TControl.Visible` 遮掉，`Tree.Visible := False` 直接编不过。命名与 `NodeSelected` 一致 |
+| `HasChildren[Node]: Boolean` | 可反复设置的"有没有子节点"。以前只能从 `OnInitNode` 的 `ivsHasChildren` 回答一次，`ivsReInit` 又没有公开触发点，所以一个"后来才变成非空"的目录永远长不出展开箭头。写 `False` 会先折叠，避免留下一堆没法收起来的行 |
+| `ScrolledTop` / `ScrolledLeft` | 可读**可写**的滚动位置（LCL 的符号约定：已滚走的像素数，即 `-OffsetY` / `-OffsetX`）。刷新前后保存 / 恢复滚动位置靠它 |
+| `TopItem` / `BottomItem` | 视口顶 / 底的节点；`TopItem := N` 把 N 滚到顶部 |
+| `DisplayRect(Node, TextOnly, out R)` | 行矩形 / 仅标题矩形（设备像素，`ContentRect` 坐标系） |
+| `DisplayTextLeft(Node, out L)` | 标题起始 X——把浮层锚到**文字**而不是整格时要的那个值 |
+| `DisplayExpandSignRect(Node, out R)` | 展开箭头的方框；没有箭头的节点返回 `False` |
+| `GetNodeWithExpandSignAt(X, Y)` | 只在展开箭头上才回答的命中测试 |
+| `GetHitTestInfoAt(X, Y): THitTests` | LCL 的**集合**型命中结果（`comctrls.pp:41`），能同时表达 `htOnItem` + `htOnLabel`；我们自己的 `GetNodeAtPoint` 返回的是单值枚举，表达不了这种组合 |
+| `AlphaSort(Node = nil)` | 按节点主列文本排序，**不需要任何 compare handler**。`Sort` / `SortTree` 都走 `DoCompare` → `OnCompareNodes`，没挂 handler 时返回 0，也就是说"按字母排序"这个最常见的需求以前是个静默的空操作 |
+| `CustomSort(SortProc, Node = nil)` | 用一个**普通函数**（非方法指针）排序；结束后归还 app 原来的 `OnCompareNodes` |
+
+### 已知仍未对齐
+
+- `Items` / `TTreeNodes` / `Node.Text` 那套**可流式化的节点对象模型**没有，也不打算有：本控件是虚拟树，节点是定长记录 + 用户数据块，文本由 `OnGetText` 现算。设计期的"TreeView Items Editor"与 `.lfm` 里的节点树因此都不存在。
+- `ikState` / `StateImages`：需要第二个图像列表**和它自己的行内槽位**（会牵动命中测试、标题矩形、编辑器定位三处几何），本轮没做。`ikNormal` / `ikSelected` / `ikOverlay` 已可用。
+- `ToolTips`：没有"标题被裁剪时自动弹出完整文本"的逐项提示，只有继承自 `TControl` 的整控件 `Hint`。
+- `SortType`（插入时自动保持有序）、`Cut` / `DropTarget` 逐节点显示态、逐节点 `Enabled` / `DisabledFontColor`、`OnCustomDraw*` 整行/整控件分阶段绘制、`InsertMark*` 外部拖放插入标记——均未实现。
+- `TreeLineColor` / `TreeLinePenStyle` / `ExpandSignColor|Size|Width` / `SeparatorColor` 这类**逐控件颜色与线型旋钮**按本库硬规则不做：视觉值一律走主题 token。树状连线与分隔线取控件边框色 token，展开箭头取行文字色 token 并支持 `--glyph-chevron-down` / `--glyph-chevron-right` 覆盖。
+
+---
+
+## 8. 注意事项
 
 - **`MainColumn` 必须在列添加之后设置**（本文档最重要的陷阱）：`Columns.Count = 0` 时 `SetMainColumn` 把值夹紧为 `NoColumn(-1)`，主列块永不匹配 → 展开按钮 / 图标 / 主列文字全部消失。控件仅在**添加第一列时**自动把 `NoColumn` 兜底为 `0`；显式错误顺序仍会出问题。删除列时控件会自动跟随重编号修正 `MainColumn`。
 - **虚拟 = 数据在你手里，不在树里**：树本身不存文本 / 图标 / 子节点。文本经 `OnGetText` / `OnGetTextWithType` 现算；子节点数经 `OnInitChildren` 现算。持久数据放进节点数据块（`NodeDataSize` + `GetNodeData`），**不要**用 `Node^.Index` 作为持久 key——排序会重新戳 `Index`，稳定 key 必须存在数据块里。
 - **三阶段懒惰初始化**：① `RootNodeCount :=` 创建根节点骨架（未初始化）；② 首次需要一个节点时 `InitNode` 触发 `OnInitNode`，app 声明 `ivsHasChildren` / `ivsExpanded` / `ivsSelected`；③ 展开一个声明了有子节点的节点时 `InitChildren` 触发 `OnInitChildren` 物化子节点。恒定内存直到用户实际展开。
 - **变高节点**：`toVariableNodeHeight` + `OnMeasureItem` 才生效；测量在 `InitNode` 末尾进行一次。未启用时每行都用 `DefaultNodeHeight`。
-- **`OnDragOver` 只能收紧不能放宽**：`CanMoveNode` 是硬闸（非空、模式非 `dmNone`、目标不在源子树内、非空操作等），对无效移动即便 handler 设 `Allowed := True` 也会被 `MoveNode` 拦下。
+- **`OnNodeDragOver` 只能收紧不能放宽**：`CanMoveNode` 是硬闸（非空、模式非 `dmNone`、目标不在源子树内、非空操作等），对无效移动即便 handler 设 `Allowed := True` 也会被 `MoveNode` 拦下。
 - **`OnAfterCellPaint` 与 `OnDrawNode` 的裁剪时机**：二者都在 BGRA 图层合成到画布**之后**触发（跨平台后处理路径）。因此没有「在默认文本下方绘制背景」的 `OnBeforeCellPaint`——那需要不同的绘制路径，目前未实现。
 - **`toCheckSupport` 是复选框总开关**：未加入 `Options` 时，即使给节点设了 `CheckType`，`ToggleCheck` 也直接返回、不绘制复选槽。三态自动传播还额外需要 `toAutoTristateTracking`。
 - **单选 vs 多选事件**：单选走 `OnChange`（`FSelectedNode` 变化）；多选走 `OnSelectionChanged`（每次手势后一次）。二者是不同的通道。
 - **`Enabled = False` 不响应输入**：与全库一致，禁用时不触发点击 / 键盘 / 滚轮驱动的事件。
 - **你设的 `Cursor` 不会被吞掉**：拖放反馈（`crDrag` / `crNoDrop`）与列分隔线提示（`crHSplit`）都只是**临时借用** `Cursor`，手势结束后还原成你原本设的那个。以前是硬还原成 `crDefault`——给树设了 `crHandPoint`，只要在分隔线上划过一次就永久没了。
 - **五个事件同时是子类的重写点**：`OnGetText` / `OnInitNode` / `OnExpanding` / `OnGetImageIndex` / `OnChange` 各有一个 protected 虚方法（`DoGetText` / `DoInitNode` / `DoExpanding` / `DoGetImageIndex` / `DoTreeChange`），默认实现就是"发这个事件"。像 [`TTyShellTreeView`](shelltreeview.md) 这样自带行为的子类**重写虚方法**而不是抢占事件槽，因此应用照常可以挂这些事件，不会把子类的行为顶掉（重写里调 `inherited` 即可两者兼得）。
-- **DFM / LFM 序列化**：声明了 `default` 的属性（`Options=[]`、`NodeDataSize=-1`、`DefaultNodeHeight=18`、`RootNodeCount=0`、`Indent=16`、`ShowButtons/ShowTreeLines/ShowRoot/ToggleOnDblClick=True`、`HotTrack=False`、`SearchTimeout=1000`、`TabStop=True`）等于默认值时不写入文件。`Header` / `Columns` 作为子对象随控件流式保存（列类已在单元 `initialization` 中 `RegisterClass`）。
+- **DFM / LFM 序列化**：声明了 `default` 的属性（`Options=[]`、`NodeDataSize=-1`、`DefaultNodeHeight=18`、`RootNodeCount=0`、`Indent=16`、`ShowButtons/ShowTreeLines/ShowRoot/ToggleOnDblClick=True`、`HotTrack=False`、`SearchTimeout=1000`、`ScrollBars=ssBoth`、`AutoExpand=False`、`RightClickSelect=True`、`HideSelection=True`、`ShowSeparators=False`、`TabStop=True`）等于默认值时不写入文件。`Header` / `Columns` 作为子对象随控件流式保存（列类已在单元 `initialization` 中 `RegisterClass`）。
 - **内嵌滚动条是私有的**：`VScroll` / `HScroll` 只读可访问（供测试 / 布局），不暴露 `OnScroll`，且不做缓动动画。应监听宿主树自身的事件。

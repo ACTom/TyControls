@@ -24,10 +24,10 @@ unit tyControls.ShellListView;
 interface
 
 uses
-  Classes, SysUtils, Graphics, LazFileUtils,
+  Classes, SysUtils, Math, Graphics, LazFileUtils, FileUtil,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Columns, tyControls.ImageCollection, tyControls.FileSystem,
-  tyControls.ListView, tyControls.StrConsts;
+  tyControls.ListView, tyControls.TreeView, tyControls.StrConsts;
 
 const
   { The default filter: every file (directories are always shown regardless). }
@@ -35,12 +35,37 @@ const
   { FoldersFirst's published default -- a compile-time constant so the `default`
     directive is visible where the property is declared (FPC gotcha). }
   TyShellFoldersFirst = True;
+  { AutoSizeColumns' default. True, matching LCL (shellctrls.pas:296). }
+  TyShellAutoSizeColumns = True;
+  { UseBuiltInIcons' default. True, matching LCL (shellctrls.pas:302). }
+  TyShellUseBuiltInIcons = True;
 
 type
   { The kind buckets a file/folder is classified into. The ordinal doubles as the
     glyph index in the built-in image list AND as the canonical group order, so the
     two must stay in lockstep with the Names list built in BuildGlyphs. }
   TTyShellKind = (skFolder, skText, skImage, skSheet, skExecutable, skFile);
+
+  { The seam a shell TREE exposes to its companion list.
+
+    Declared here rather than in tyControls.ShellTreeView purely so the two
+    controls can point at each other: Pascal has no mutual interface-section uses,
+    and LCL sidesteps the problem by putting both classes in one unit with forward
+    declarations. tyControls.ShellTreeView already uses THIS unit (its
+    ShellListView property needs the concrete type), so the seam has to travel in
+    this direction. TTyShellTreeView is its only descendant; nothing else should
+    ever derive from it, and it is never registered on the palette.
+
+    The methods are protected: TTyShellListView is declared in the same unit and
+    can therefore reach them, while application code cannot mistake them for the
+    tree's public API (Directory / SelectPath / UpdateView are that). }
+  TTyShellTreeLink = class(TTyTreeView)
+  protected
+    { Move the tree's selection to APath. Must not push back to the list. }
+    procedure ShellLinkSelect(const APath: string); virtual; abstract;
+    { Re-read the tree, or just the AStartDir subtree. }
+    procedure ShellLinkUpdate(const AStartDir: string); virtual; abstract;
+  end;
 
   { ===================================================================
     TTyShellListView
@@ -50,10 +75,14 @@ type
     FDirectory:    string;
     FEntries:      TTyFsEntryArray;      { the ONLY backing store; item index == subscript }
     FMask:         string;               { current file filter, default '*' }
+    FMaskCase:     TTyMaskCaseSensitivity;
     FObjectTypes:  TTyFsObjectTypes;     { default [fotFolders, fotFiles] }
     FFoldersFirst: Boolean;              { default True }
     FShowHidden:   Boolean;              { mirror of the fotHidden bit in FObjectTypes }
     FGroupByKind:  Boolean;
+    FAutoSizeCols: Boolean;
+    FColWeights:   array of Integer;     { the authored proportions AutoSizeColumns scales }
+    FUseBuiltIn:   Boolean;
     FIcons:        TTyImageCollection;   { owned; the kind-glyph masters (freed in destructor) }
     FImages:       TTyVirtualImageList;  { owned; exposes FIcons as Small/LargeImages }
     FGroupTypes:   TStringList;   { distinct TypeName -> group index (= list position). Grouping
@@ -62,21 +91,50 @@ type
                                     Type column shows as different, are different groups too. }
     FOnFileActivate: TTyListItemEvent;
     FOnDirectoryChange: TNotifyEvent;
+    FOnAddItem: TTyFsAddItemEvent;
+    FShellTreeView: TTyShellTreeLink;
+    { >0 while this control is pushing a change INTO its companion tree. The tree
+      pushes back on selection, so without it the pair would recurse forever --
+      LCL guards the same cascade with FLockUpdate (shellctrls.pas:2003-2011). }
+    FLinkLock: Integer;
 
     procedure BuildColumns;
     procedure BuildGlyphs;
     { The one real directory read: fills FEntries then ItemsChanged. Self-guards the
       streaming / designer states so it never touches disk mid-stream or in the IDE. }
     procedure ReloadEntries;
+    { Drop the entries OnAddItem vetoed. A separate pass rather than a callback threaded
+      through TyFsReadDirectory: the model unit stays a pure enumerator, and the veto sees
+      the fully decoded entry (IsDir / IsHidden / TypeName) instead of a raw TSearchRec. }
+    procedure ApplyAddItemVeto;
     procedure RebuildKindGroups;
+    { Snapshot / re-apply the selection BY PATH across a re-read (see UpdateView). }
+    function  SnapshotSelectedPaths(out AFocused: string): TStringList;
+    procedure RestoreSelectedPaths(APaths: TStringList; const AFocused: string);
+    procedure CaptureColumnWeights;
+    procedure ApplyAutoSizeColumns;
     procedure ShellCompare(AIndex1, AIndex2, AColumn: Integer;
       var ACompare: Integer);
     procedure ShellActivate(AIndex: Integer);
     procedure SetMask(const AValue: string);
+    procedure SetMaskCaseSensitivity(AValue: TTyMaskCaseSensitivity);
+    procedure SetObjectTypes(AValue: TTyFsObjectTypes);
     procedure SetShowHidden(AValue: Boolean);
     procedure SetFoldersFirst(AValue: Boolean);
     procedure SetGroupByKind(AValue: Boolean);
+    procedure SetAutoSizeColumns(AValue: Boolean);
+    procedure SetUseBuiltInIcons(AValue: Boolean);
+    procedure SetShellTreeView(AValue: TTyShellTreeLink);
+    { Push the current directory into the linked tree, guarded against the
+      push-back it will provoke. }
+    procedure PushToTree;
   protected
+    procedure Resize; override;
+    { Nils a link whose partner is being freed -- otherwise the next navigation
+      walks a dead pointer. }
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+    { True while a partner control is driving this one, so a push must not bounce. }
+    function  ShellLinkBusy: Boolean;
     { The shell's ordering and activation, as overrides of the base virtuals. }
     function  CompareItems(AItemA, AItemB: Integer): Integer; override;
     procedure DoItemActivate(AIndex: Integer); override;
@@ -95,14 +153,22 @@ type
 
     { Read APath from disk into FEntries and refresh (re-sorts under AutoSort). }
     procedure LoadDirectory(const APath: string);
-    { Re-read the current directory from disk.
+    { Re-read the current directory from disk, KEEPING the selection on the same files.
 
       BREAKING: this used to be called Refresh, with `reintroduce` hiding TControl.Refresh.
       Refresh means "repaint now" (Invalidate + Update) on every other control in the LCL
       and in this library, so a shell list was the one control where a routine repaint call
       hit the filesystem -- and a caller who wanted a repaint had no way to ask for one.
       UpdateView is LCL's own name for the re-enumerate, and Refresh now means what it
-      means everywhere else. }
+      means everywhere else.
+
+      The selection is re-applied BY PATH. It used to survive as a row INDEX, because
+      ItemsChanged only resizes the selection array, so a file created or deleted above the
+      selected row silently moved the highlight onto a different file -- the dialog then
+      returned a name the user never picked. LCL restores by caption (shellctrls.pas:1996-
+      1999); by path is the same idea and also correct when a rename is what changed. A
+      selected file that is GONE simply loses its selection rather than sliding onto a
+      survivor. }
     procedure UpdateView;
     { The focused entry's FullPath, or '' when nothing is focused. }
     function  SelectedFile: string;
@@ -110,13 +176,55 @@ type
     function  FileAt(AIndex: Integer): string;
     { The raw backing array, read-only -- a dialog reads the selected set from it. }
     property  Entries: TTyFsEntryArray read FEntries;
+    { LCL's name for the listed directory (shellctrls.pas:300), same storage as
+      Directory. PUBLIC and not published on purpose: two published names over one
+      field would put the same path in every .lfm twice and give the Object
+      Inspector two rows that overwrite each other. This exists so ported code that
+      says `List.Root := Dir` compiles and means what it says. }
+    property Root: string read FDirectory write LoadDirectory;
   published
     { Setting Directory reads that path from disk (LoadDirectory). }
     property Directory: string read FDirectory write LoadDirectory;
     { The file filter (';'-separated masks). Changing it re-reads. }
     property Mask: string read FMask write SetMask;
+    { How Mask is matched.
+
+      DELIBERATE DEVIATION: LCL defaults to mcsPlatformDefault (shellctrls.pas:298),
+      which is case-SENSITIVE on Linux. This library has always matched
+      case-insensitively everywhere -- the file-dialog convention, and documented as
+      such in tyControls.FileSystem -- so adopting LCL's default would silently
+      re-filter every existing Unix host. The default stays mcsCaseInsensitive; what
+      was missing, and is now here, is the ability to ASK for either of the others. }
+    property MaskCaseSensitivity: TTyMaskCaseSensitivity
+      read FMaskCase write SetMaskCaseSensitivity default mcsCaseInsensitive;
+    { Which kinds of entry are listed. Changing it re-reads.
+
+      DELIBERATE DEVIATION: LCL defaults to [otNonFolders] -- a files-only pane
+      (shellctrls.pas:299). Ours has always shown both, and a file list that
+      suddenly lost its folders would break every existing host, so the default
+      stays [fotFolders, fotFiles]. This used to be a private field fixed in the
+      constructor, so a files-only or folders-only pane was unconfigurable.
+      fotHidden and ShowHidden are two views of one bit and stay in step. }
+    property ObjectTypes: TTyFsObjectTypes read FObjectTypes write SetObjectTypes
+      default [fotFolders, fotFiles];
     { Whether hidden entries are enumerated (toggles the fotHidden bit + re-reads). }
     property ShowHidden: Boolean read FShowHidden write SetShowHidden default False;
+    { Redistribute the column widths across the client width on every resize.
+
+      Widths are scaled from the proportions the columns were AUTHORED with (the
+      constructor's 220/90/120/140, or whatever a designer left behind when the
+      switch was turned on), so this fills the pane without inventing a layout of
+      its own. Off leaves every width exactly as set. LCL: shellctrls.pas:296 +
+      AdjustColWidths (1913-1945). }
+    property AutoSizeColumns: Boolean read FAutoSizeCols write SetAutoSizeColumns
+      default TyShellAutoSizeColumns;
+    { Whether the control's own kind glyphs are used. Off detaches the built-in
+      image lists and stops claiming an image index, which is how a compact
+      text-only pane is asked for (LCL: shellctrls.pas:302). An app that assigns
+      its own SmallImages/LargeImages keeps them either way -- turning this back on
+      only re-attaches the built-in list. }
+    property UseBuiltInIcons: Boolean read FUseBuiltIn write SetUseBuiltInIcons
+      default TyShellUseBuiltInIcons;
     { Whether folders sort ahead of files in BOTH directions. }
     property FoldersFirst: Boolean read FFoldersFirst write SetFoldersFirst default TyShellFoldersFirst;
     { Partition the view into one collapsible band per kind present. Off by default. }
@@ -126,6 +234,22 @@ type
     { Fires after LoadDirectory (re)loads a directory -- the seam a host uses to keep a
       path box / companion tree in sync when the list navigates into a folder itself. }
     property OnDirectoryChange: TNotifyEvent read FOnDirectoryChange write FOnDirectoryChange;
+    { Per-entry veto, raised once for every entry the enumeration produced: set
+      ACanAdd False to drop it. The only filters before this were Mask (files, by
+      name), ShowHidden and ObjectTypes, so filtering by size, date, attribute or an
+      app blocklist had no seam at all -- Entries is read-only and is the sole
+      backing store. LCL: shellctrls.pas:303. }
+    property OnAddItem: TTyFsAddItemEvent read FOnAddItem write FOnAddItem;
+    { A companion shell tree, assignable in the Object Inspector: diving into a
+      folder here moves the tree to it. Without it the pair could not be connected
+      in the designer at all and the app had to hand-write the OnDirectoryChange
+      glue. LCL: shellctrls.pas:301, cascaded from UpdateView (2003-2011).
+
+      The declared type is the abstract seam, not TTyShellTreeView, because the two
+      units cannot both name each other's class -- see TTyShellTreeLink. The Object
+      Inspector still offers every shell tree on the form, since that is the only
+      concrete descendant. }
+    property ShellTreeView: TTyShellTreeLink read FShellTreeView write SetShellTreeView;
   end;
 
 { bytes -> '512 B' / '1.2 KB' / '3.4 MB' / ... . Pure and exported: the unit words come
@@ -221,16 +345,20 @@ begin
   inherited Create(AOwner);
 
   FMask         := TyShellAllFilesMask;
+  FMaskCase     := mcsCaseInsensitive;
   FShowHidden   := False;
   FObjectTypes  := [fotFolders, fotFiles];
   FFoldersFirst := TyShellFoldersFirst;
   FGroupByKind  := False;
+  FAutoSizeCols := TyShellAutoSizeColumns;
+  FUseBuiltIn   := TyShellUseBuiltInIcons;
   SetLength(FEntries, 0);
   FGroupTypes := TStringList.Create;
 
   OwnerData := True;
 
   BuildColumns;
+  CaptureColumnWeights;
   Header.Options := [hoVisible, hoColumnResize, hoShowSortGlyphs, hoHeaderClickAutoSort];
 
   { Sorting and activation are OVERRIDES now (CompareItems / DoItemActivate), not handlers
@@ -402,12 +530,83 @@ begin
     one real read) or in the IDE designer. At runtime neither flag is set, so a code
     LoadDirectory / property write reads immediately. }
   if ComponentState * [csLoading, csDesigning] <> [] then Exit;
-  FEntries := TyFsReadDirectory(FDirectory, FMask, FObjectTypes);
+  FEntries := TyFsReadDirectory(FDirectory, FMask, FObjectTypes,
+                                TyFsMaskCaseSensitive(FMaskCase));
+  ApplyAddItemVeto;
   { Grouped view: the set of present kinds may have changed, so rebuild the group
     collection + kind->group map BEFORE ItemsChanged rebuilds the (grouped) order. }
   if FGroupByKind then
     RebuildKindGroups;
   ItemsChanged;   { inherited: resizes order/rank/selection, re-sorts under AutoSort }
+end;
+
+procedure TTyShellListView.ApplyAddItemVeto;
+var
+  i, n: Integer;
+  keep: TTyFsEntryArray;
+  can: Boolean;
+begin
+  if not Assigned(FOnAddItem) then Exit;   { the common case pays nothing }
+  SetLength(keep, Length(FEntries));
+  n := 0;
+  for i := 0 to High(FEntries) do
+  begin
+    can := True;
+    FOnAddItem(Self, FDirectory, FEntries[i], can);
+    if can then
+    begin
+      keep[n] := FEntries[i];
+      Inc(n);
+    end;
+  end;
+  SetLength(keep, n);
+  FEntries := keep;
+end;
+
+{ The selected FILES, captured before a re-read frees the array they indexed.
+  Returns a caller-owned list of FullPaths (sorted, so the restore is a binary
+  search rather than a scan per row) and, separately, the focused one -- focus and
+  selection are different things and both have to come back. }
+function TTyShellListView.SnapshotSelectedPaths(out AFocused: string): TStringList;
+var
+  i: Integer;
+begin
+  AFocused := SelectedFile;
+  Result := TStringList.Create;
+  Result.Sorted := True;
+  Result.Duplicates := dupIgnore;
+  { CompareFilenames is the OS case rule; a sorted TStringList compares with its own,
+    so keep it case-insensitive on the hosts where filenames are. }
+  Result.CaseSensitive := FilenamesCaseSensitive;
+  for i := 0 to High(FEntries) do
+    if Selected[i] then
+      Result.Add(FEntries[i].FullPath);
+end;
+
+procedure TTyShellListView.RestoreSelectedPaths(APaths: TStringList;
+  const AFocused: string);
+var
+  i, focusRow: Integer;
+begin
+  focusRow := -1;
+  if AFocused <> '' then
+    for i := 0 to High(FEntries) do
+      if SameFileName(FEntries[i].FullPath, AFocused) then
+      begin
+        focusRow := i;
+        Break;
+      end;
+
+  ClearSelection;
+  { FOCUS FIRST, THEN THE BITS. SetItemIndex re-establishes a SINGLE selection, so
+    writing it after the bits collapses a restored multi-selection back to one row --
+    which is exactly what this method exists to prevent.
+    -1 when the focused file is gone: that is the answer, not a fallback. Leaving the
+    focus where it was would report a file the user never picked. }
+  ItemIndex := focusRow;
+  for i := 0 to High(FEntries) do
+    if APaths.IndexOf(FEntries[i].FullPath) >= 0 then
+      Selected[i] := True;
 end;
 
 procedure TTyShellListView.LoadDirectory(const APath: string);
@@ -421,15 +620,61 @@ begin
   ClearSelection;
   ItemIndex := -1;
   { One sync point for consumers: fires whether the load came from a property write,
-    a tree-driven LoadDirectory, or the user diving into a folder (HandleItemActivate).
+    a tree-driven LoadDirectory, or the user diving into a folder (ShellActivate).
     A file dialog keeps its path box / tree in step from here. }
   if Assigned(FOnDirectoryChange) then
     FOnDirectoryChange(Self);
+  { ...and the designer-wired companion tree, which needs no glue at all. }
+  PushToTree;
+end;
+
+procedure TTyShellListView.PushToTree;
+begin
+  if (FShellTreeView = nil) or (FLinkLock > 0) then Exit;
+  if FDirectory = '' then Exit;
+  if ComponentState * [csLoading, csDesigning] <> [] then Exit;
+  Inc(FLinkLock);
+  try
+    FShellTreeView.ShellLinkSelect(FDirectory);
+  finally
+    Dec(FLinkLock);
+  end;
+end;
+
+function TTyShellListView.ShellLinkBusy: Boolean;
+begin
+  Result := FLinkLock > 0;
+end;
+
+procedure TTyShellListView.SetShellTreeView(AValue: TTyShellTreeLink);
+begin
+  if FShellTreeView = AValue then Exit;
+  FShellTreeView := AValue;
+  { So Notification fires even when the partner has a different owner. }
+  if AValue <> nil then
+    AValue.FreeNotification(Self);
+end;
+
+procedure TTyShellListView.Notification(AComponent: TComponent;
+  Operation: TOperation);
+begin
+  inherited Notification(AComponent, Operation);
+  if (Operation = opRemove) and (AComponent = FShellTreeView) then
+    FShellTreeView := nil;
 end;
 
 procedure TTyShellListView.UpdateView;
+var
+  paths: TStringList;
+  focusPath: string;   { not `focused`: TWinControl.Focused is already that name }
 begin
-  ReloadEntries;
+  paths := SnapshotSelectedPaths(focusPath);
+  try
+    ReloadEntries;
+    RestoreSelectedPaths(paths, focusPath);
+  finally
+    paths.Free;
+  end;
 end;
 
 { ---------------------------------------------------------------------------
@@ -460,6 +705,10 @@ function TTyShellListView.GetItemImageIndex(AIndex, AColumn: Integer): Integer;
 begin
   { The kind glyph lives in the main column only; other columns carry no icon. }
   if AColumn > 0 then Exit(-1);
+  { With the built-in icons off, claim no index at all. Detaching the image lists
+    alone would not be enough: the row still reserves the glyph slot for whatever
+    list is attached, so a text-only pane has to stop asking as well. }
+  if not FUseBuiltIn then Exit(-1);
   if (AIndex < 0) or (AIndex > High(FEntries)) then Exit(-1);
   Result := Ord(TyShellKindOf(FEntries[AIndex]));
 end;
@@ -495,7 +744,12 @@ begin
   if (Pos('/', AText) > 0) or (Pos('\', AText) > 0) then Exit;
   newPath := AppendPathDelim(FDirectory) + AText;
   if RenameFileUTF8(FEntries[AIndex].FullPath, newPath) then
-    Refresh;   { re-read; the row may move under the active sort }
+    { UpdateView, not Refresh. This said Refresh, and when Refresh stopped being the
+      re-read and went back to meaning "repaint" it silently became one: the file was
+      renamed on disk and the row kept showing the old name until something else
+      happened to re-enumerate. The rename test could not see it -- it called the
+      re-read itself. }
+    UpdateView;   { re-read; the row may move under the active sort }
 end;
 
 { ---------------------------------------------------------------------------
@@ -634,6 +888,27 @@ begin
   ReloadEntries;
 end;
 
+procedure TTyShellListView.SetMaskCaseSensitivity(AValue: TTyMaskCaseSensitivity);
+begin
+  if FMaskCase = AValue then Exit;
+  FMaskCase := AValue;
+  { Two settings can mean the same thing on this host (mcsPlatformDefault is
+    mcsCaseInsensitive on Windows), so re-read unconditionally rather than trying
+    to be clever about when the effective rule actually changed. }
+  ReloadEntries;
+end;
+
+procedure TTyShellListView.SetObjectTypes(AValue: TTyFsObjectTypes);
+begin
+  if FObjectTypes = AValue then Exit;
+  FObjectTypes := AValue;
+  { ShowHidden is a VIEW of the fotHidden bit, not a second copy of it: writing the
+    set has to move it too, or the two properties disagree about the same state and
+    a 'Show hidden' checkbox bound to ShowHidden reads back a lie. }
+  FShowHidden := fotHidden in FObjectTypes;
+  ReloadEntries;
+end;
+
 procedure TTyShellListView.SetShowHidden(AValue: Boolean);
 begin
   if FShowHidden = AValue then Exit;
@@ -643,6 +918,88 @@ begin
   else
     Exclude(FObjectTypes, fotHidden);
   ReloadEntries;
+end;
+
+procedure TTyShellListView.SetAutoSizeColumns(AValue: Boolean);
+begin
+  if FAutoSizeCols = AValue then Exit;
+  FAutoSizeCols := AValue;
+  if AValue then
+  begin
+    { Adopt whatever proportions the columns carry RIGHT NOW as the ones to scale --
+      a designer's widths, or a user's drag. Turning the switch on must not silently
+      restore the constructor's ratios. }
+    CaptureColumnWeights;
+    ApplyAutoSizeColumns;
+  end;
+end;
+
+procedure TTyShellListView.SetUseBuiltInIcons(AValue: Boolean);
+begin
+  if FUseBuiltIn = AValue then Exit;
+  FUseBuiltIn := AValue;
+  if AValue then
+  begin
+    SmallImages := FImages;
+    LargeImages := FImages;
+  end
+  else
+  begin
+    { Detach rather than free: the switch is a toggle, and FImages/FIcons stay owned
+      by this control either way (the destructor frees them). }
+    SmallImages := nil;
+    LargeImages := nil;
+  end;
+  Invalidate;
+end;
+
+{ ---------------------------------------------------------------------------
+  Column auto-size
+  --------------------------------------------------------------------------- }
+
+procedure TTyShellListView.CaptureColumnWeights;
+var
+  i: Integer;
+begin
+  SetLength(FColWeights, Header.Columns.Count);
+  for i := 0 to Header.Columns.Count - 1 do
+    FColWeights[i] := Max(1, TTyColumn(Header.Columns.Items[i]).Width);
+end;
+
+procedure TTyShellListView.ApplyAutoSizeColumns;
+var
+  i, n, sum, avail, used, w: Integer;
+begin
+  if not FAutoSizeCols then Exit;
+  n := Header.Columns.Count;
+  if (n = 0) or (n <> Length(FColWeights)) then Exit;
+  avail := ClientWidth;
+  if avail <= 0 then Exit;      { not laid out yet -- the next Resize will do it }
+
+  sum := 0;
+  for i := 0 to n - 1 do
+    Inc(sum, FColWeights[i]);
+  if sum <= 0 then Exit;
+
+  used := 0;
+  for i := 0 to n - 2 do
+  begin
+    w := (avail * FColWeights[i]) div sum;
+    TTyColumn(Header.Columns.Items[i]).Width := w;
+    { Read the width BACK: TTyColumn.SetWidth clamps to [MinWidth, MaxWidth], so the
+      remainder has to be computed from what the column actually took, not from what
+      it was offered. }
+    Inc(used, TTyColumn(Header.Columns.Items[i]).Width);
+  end;
+  { The last column absorbs the division remainder, so the row always ends exactly at
+    the client edge instead of one or two pixels short. }
+  TTyColumn(Header.Columns.Items[n - 1]).Width := avail - used;
+end;
+
+procedure TTyShellListView.Resize;
+begin
+  inherited Resize;
+  ApplyAutoSizeColumns;
 end;
 
 procedure TTyShellListView.SetFoldersFirst(AValue: Boolean);

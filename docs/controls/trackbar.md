@@ -33,6 +33,9 @@ uses tyControls.TrackBar;
 | `Position` | `Integer` | `0` | 当前值，范围 `[Min, Max]`，赋值时自动夹紧；若值真正变化则触发 `OnChange` 和重绘。 |
 | `Orientation` | `TTyTrackOrientation` | `toHorizontal` | 滑块方向：`toHorizontal`（水平，默认；左=Min、右=Max）/ `toVertical`（垂直）。**垂直约定：顶部为 `Max`，值向上增大**（即向上拖动/方向键增大 `Position`）。赋值时若当前宽高与新方向不符会**自动对调宽高**（与 LCL 一致），随后重绘；流式载入期间（`csLoading`）不动，`.lfm` 里写死的尺寸优先。 |
 | `Frequency` | `Integer` | `1` | 刻度线（tick marks）间隔，单位为值（value-units）。默认 `1` = 每个值单位一条刻度（与原生 `TTrackBar` 一致，开箱即可见刻度）；`0` = **不绘制刻度**。负值被夹为 0。 |
+| `Reversed` | `Boolean` | `False` | **（API parity 新增）** 在**不改方向**的前提下翻转值轴：水平条从左到右递**减**，或垂直条把 `Min` 放到顶部。早前方向是写死在 `Orientation` 上的（垂直=反向、水平=正向），四种配置里有两种根本取不到。**垂直轴上与 LCL 有意不同**，见第 8 节第 12 条。 |
+| `TickMarks` | `TTyTrackTickMark` | `ttmBottomRight` | **（API parity 新增）** 刻度画在轨道哪一侧：`ttmBottomRight`（水平在下 / 垂直在右，默认）/ `ttmTopLeft` / `ttmBoth`。与 LCL `TTickMark` 同义同默认（`comctrls.pp:2795`）。 |
+| `TickStyle` | `TTyTrackTickStyle` | `ttsAuto` | **（API parity 新增）** 刻度怎么生成：`ttsAuto`（每 `Frequency` 个值单位一条，默认）/ `ttsNone`（不画）/ `ttsManual`（**只**画 `SetTick` 手工放的那几条）。与 LCL `TTickStyle` 同义同默认（`comctrls.pp:2796`）。`Frequency = 0` 仍然能关掉自动刻度，旧写法不变。 |
 | `LineSize` | `Integer` | `1` | 方向键单步步进量（每次 ±`LineSize`）。最小为 1（赋值 <1 被夹为 1）。 |
 | `PageSize` | `Integer` | `10` | `PageUp`/`PageDown` 翻页步进量（每次 ±`PageSize`）。最小为 1（赋值 <1 被夹为 1）。 |
 | `ShowValue` | `Boolean` | `False` | 在滑轨旁显示当前值（横向在右、纵向在下），字体与颜色取轨道样式 `TyTrackBar` 的 `color`。默认关——打开会占掉一条空间，滑轨相应变短（几何与命中都跟着变）。 |
@@ -207,5 +210,9 @@ end;
 4. **Min/Max 修改时 Position 静默校正：** 修改范围后 `Position` 会被自动校正，但不触发 `OnChange`（仅触发 `Invalidate`）。
 5. **滑块沿主轴厚度固定：** 滑块沿主轴的厚度固定为 12 逻辑像素（DPI 缩放后），不可通过属性调整；横向尺寸跟随控件另一边（水平=控件高、垂直=控件宽）。如需更宽的滑块，需继承并重写渲染逻辑。
 6. **垂直方向约定：** `Orientation = toVertical` 时，**顶部为 `Max`、底部为 `Min`，值向上增大**——向上拖动、`↑`、`PageUp` 都增大 `Position`。切换 `Orientation` 时控件的宽/高会**自动对调**（仅当当前尺寸与新方向不符时）：以前不换，于是一个 200×30 的横条切成垂直后仍是 200 宽 30 高、里面画着一条竖轨道，每个调用方都得自己再改一次尺寸。流式载入期间不动，`.lfm` 里的显式尺寸优先。
-7. **刻度由 Frequency 驱动：** 默认 `Frequency = 1`（每个值单位一条刻度，与原生 `TTrackBar` 一致）；置 `0` 才不绘制刻度。颜色取自主题 `TyTrackBar` 的 `color`。以前默认是 `0`，于是拖一个滑块到窗体上看到的是一条光秃秃的轨道，刻度看起来像没实现，而不像被关掉了。
-8. **滑块过渡动画（batch⑤+⑥）：** `AnimationsEnabled` 默认 `True`，程序化 `Position` 变化（方向键/翻页/Home/End/赋值）时滑块缓动到新位置（约 120ms），**拖动 / 点击定位则始终瞬时跟手**；headless / 设计器下瞬间吸附。详见上文「状态过渡动画」。
+7. **刻度由 TickStyle + Frequency + TickMarks 共同决定（API parity 新增）：** `TickStyle` 选**哪些值**有刻度（自动 / 不画 / 只画手工放的），`TickMarks` 选**画在哪一侧**。`ttsManual` 配合 `SetTick` 才能表达不等距刻度（gamma 曲线、一组档位）；`ClearTicks` 清空，`TickCount` 读数量。超出 `[Min,Max]` 的手工刻度不会被接受，也不会在范围改变后被夹到端头凭空造出一条刻度。
+8. **刷一遍默认值差异（有意保留）：** `Max` 默认 `100`（LCL 是 `10`）、`PageSize` 默认 `10`（LCL 是 `2`）。两者**不跟随 LCL**：这两个只是量级默认值，不改变任何语义；而 published 默认值一旦改动，**所有现有 `.lfm`（恰恰因为值等于默认而没有存盘）会静默改变含义** —— 正是这条指控本身担心的那种失败，只不过受害者变成了本库的使用者。从 Lazarus 批量移植时请显式写清楚这两个属性。
+9. **刻度由 Frequency 驱动：** 默认 `Frequency = 1`（每个值单位一条刻度，与原生 `TTrackBar` 一致）；置 `0` 才不绘制刻度。颜色取自主题 `TyTrackBar` 的 `color`。以前默认是 `0`，于是拖一个滑块到窗体上看到的是一条光秃秃的轨道，刻度看起来像没实现，而不像被关掉了。
+10. **滑块过渡动画（batch⑤+⑥）：** `AnimationsEnabled` 默认 `True`，程序化 `Position` 变化（方向键/翻页/Home/End/赋值）时滑块缓动到新位置（约 120ms），**拖动 / 点击定位则始终瞬时跟手**；headless / 设计器下瞬间吸附。详见上文「状态过渡动画」。
+11. **`AutoSize` 现在有东西可问（API parity 新增）：** 控件实现了 `CalculatePreferredSize`，**只答跨轴**（水平条答高度、垂直条答宽度，主轴返回 `0` = 该轴无意见）——与 LCL `ShouldAutoAdjust` 的切分一致（`include/trackbar.inc:95-107`）。轨道多长是窗体作者的事，多厚是主题的事：换一个刻度更长、内距更厚或读数字体更大的皮肤时，写死 `Height = 24` 的滑块会把刻度或读数裁掉。（`ShowValue` 的文字高度在绘制时量得并缓存，因此开了读数的控件在**第二次**布局时才稳定，与 `MainLen` 早就带着的首帧局限一样。）
+12. **`Reversed` 在垂直轴上与 LCL 不同（有意，有迁移路径）：** 本控件**未翻转**的垂直方向是顶部 = `Max`（音量推块），因为只有这样“向上 = 变大”对键盘、滚轮和拖动才同时成立（见第 6 条）；LCL/Win32 未翻转的垂直条是顶部 = `Min`。所以：**水平条与 LCL 完全一致**，垂直条正好相反。迁移：从 Lazarus 移植时，垂直条上的 `Reversed` 去掉，水平条上的原样保留。若改成跟随 LCL，现有每一个垂直 `TTyTrackBar` 都会静默倒过来，而且 `↑` 会变成向下拖滑块。

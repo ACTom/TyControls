@@ -131,6 +131,19 @@
   `OnClick` 现在在打开取色对话框**之前**触发,处理器因此能看到改动前的值。
 - **`TTyImage.Proportional` 不再放大图片。** 以前 16×16 图标放进 200×200 会被吹大;现在只缩不放,
   要放大请同时开 `Stretch`(与 LCL 一致)。
+- **`TTyImage.Center` 与 `Transparent` 的默认值改为 `False`(与 `TImage` 一致)。**
+  这两个属性用的是 LCL 的**名字**,默认值却一直是相反的。LCL 不把等于默认值的属性写进 `.lfm`,
+  所以一份从 `TImage` 转过来的窗体里**根本没有 `Center=` 这一行** —— 落到旧版控件上,
+  每一张未拉伸的图都会悄悄跑到控件正中,而 `.lfm` 里没有任何东西能解释它。
+  **迁移**:原先依赖默认值的窗体显式写上 `Center = True` / `Transparent = True`。
+- **`TTyVirtualImageList.Draw` 与 `TTyGlyphImageList.Draw` 改用 LCL 的参数顺序。**
+  以前是 `Draw(画布, 序号, X, Y, 尺寸)` —— 顶着 LCL 的**方法名**却把序号和坐标**对调**。
+  所有参数都是 `Integer`,于是把 `Images.Draw(C, X, Y, Idx)` 移植过来最自然的改法就是补上尺寸,
+  写成 `Draw(C, X, Y, Idx, 16)`:**编译通过**,然后把第 X 号图画到了 `(Y, Idx)`。
+  现在 `Draw` 就是 LCL 那个签名(末位是 **`AEnabled`**,不是 `Ghosted` —— 两者互为反义
+  且都是 `Boolean`,写反了照样编译,结果是每个图标都画成禁用态)。带尺寸的那版改名
+  **`DrawIndex`**,四个 `Integer` 的 `Draw` 已不存在,所以旧调用点会**编译失败**而不是悄悄对调。
+  **迁移**:`Draw(C, i, x, y, sz)` → `DrawIndex(C, i, x, y, sz)`。
 - **`TTySplitter` 新增 `AutoSnap`(默认开)**:拖过 `MinSize` 即收起面板。以前 `MinSize` 是一道
   拖不过去的地板,等于没有任何手势能关掉一个面板。
 - **`TTySpinEdit`**:`MinValue = MaxValue` 表示"不限",不再把值钳死在最小值。
@@ -177,6 +190,60 @@
 - **`TTyCheckComboBox.Objects[]` 归应用所有了。** 以前勾选状态就占着这个槽,应用往里放自己的
   对象,读回来是"已勾选";文档还把这条当规则写着。现在勾选状态与应用数据同住一个对象里
   (LCL 的做法),排序、删除、清空都不会错位或泄漏。
+- **`TTyDateTimePicker.DateTime` 的代码写入不再触发 `OnChange`。** 以前无条件触发,于是
+  "把一条记录读进窗体"这行普通代码会回调应用自己的处理器 —— 没人碰过的窗体亮起脏标记,
+  回写模型的处理器还会自激循环,而且**没有开关可以关掉**。现在 `OnChange` 只代表用户改的;
+  需要旧行为把 `dtpoDoChangeOnSetDateTime` 放进新的 `Options`(这也是 LCL 的做法与默认值)。
+- **`TTyCalendar.FirstDayOfWeek` 默认改为跟随系统。** 以前写死周日开头,于是周一开头的区域
+  (欧洲、亚洲大部分)开箱即得一个美式周布局,而且**没有任何取值能表达"跟随系统"** ——
+  只能硬写 `wdMonday`,应用换语言后又错了。依赖周日开头的窗体请显式写 `FirstDayOfWeek := wdSunday`。
+- **点日历里相邻月的灰格,现在会选中它并翻到那个月。** 以前这一击被直接丢掉:灰格是死的,
+  也没有任何提示。这是 LCL 的默认行为;要恢复旧的拒绝,把 `dsNoMonthChange` 放进新的
+  `DisplaySettings`。
+- **`Esc` 现在撤销整次编辑,而不只是丢掉半截数字。** 用方向键把月份调过头的用户按下 `Esc`、
+  以为取消了,改动却留着 —— 这是所有人都会做的手势里最不该失灵的一个。控件在获得焦点时
+  记下当时的值,`Esc` 恢复它。
+- **`TTyDateTimePicker` 里键入的两位年份会展开。** 在 `yyyy` 格式里敲 `26` 再离开,以前存下的是
+  公元 26 年 —— 一个看不见的错误数据。现在按新的 `CenturyFrom`(默认 1941)展开成 2026。
+  三位 / 四位输入不动。同理,12 小时格式里键入的小时留在当前半天(下午 3 点敲 `04` 得 16:00,
+  以前得 4:00,显示还写着 "04 PM")。
+- **格式串不再被悄悄改写。** 以前控件把单字母字段翻倍(`'d/m/yyyy'` → `'dd/mm/yyyy'`),
+  于是显式写的格式看起来像被忽略了;而且这条改写对月份名本来就不成立,`'dd mmmm yyyy'` 里
+  点年份会选中月份。现在按写的那样渲染,新的 `LeadingZeros := False` 给出 `9/7/2026` 这种紧凑样式。
+- **`Space` 切换复选框现在会触发 `OnChecked`。** 以前只有鼠标点复选框那条路径通知,键盘改了
+  状态却不告诉任何人。通知点移进了属性 setter,所以鼠标、`Space`、自动勾选、程序化赋值
+  走的都是同一条路(LCL 也是这样)。
+- **`TTySpinEdit.MaxValue` 默认从 100 改为 0(= 不限)。** 这是 LCL 的默认值,而"上限恰好 100"
+  是个**会毁数据的**默认:往一个没配过范围的控件里输入 5000,提交时被静默钳成 100,
+  没有任何提示。示例里的每个 spin edit 都显式写了范围,所以显示不受影响;
+  你自己的窗体若依赖那个隐含的 100,请显式写出来。
+- **`TTyUpDown.OnArrowClick` 改到值变完之后触发。** 以前它先触发,于是处理器里读 `Position`
+  读到的是**自己这次点击之前**的值 —— 每一个"点了上箭头就去同步别处"的处理器都慢一拍。
+- **`TTyShellTreeView` 的目录展开默认改为每次重新读盘**(LCL 的 `ecmRefreshedExpanding`)。
+  以前一个目录在控件生命周期里只枚举一次,所以**之后新建的文件永远不出现**。
+  要旧行为把 `ExpandCollapseMode` 设成 `ecmKeepChildren`。
+- **`TTyShellListView.UpdateView` 按路径而不是按行号恢复选中。** 以前钉的是行**下标**,
+  于是在选中项上方新建一个文件,高亮就跑到了另一个文件上 —— 文件对话框会返回一个
+  用户根本没点过的名字。
+- **`TTyImage.Center` / `Transparent` 默认由 `True` 改为 `False`(与 LCL 一致)。**
+  从 `TImage` 转过来的 `.lfm` 里没有 `Center=` 这一行,于是每一张不拉伸的图都被悄悄居中了。
+  需要居中请显式写 `Center = True`。
+- **树控件三个成员把名字还给了 LCL 的含义,升级前逐条替换。**
+  - **`GetNodeAt`**。以前是 `GetNodeAt(Y; out ANodeTop)` —— 与 LCL 的
+    `GetNodeAt(X, Y)` **同名、同参数个数、都是 Integer**,于是移植过来的调用**直接绑上了它**:
+    把调用方的 X 当成滚动偏移读、返回错误的节点、还顺手改写了调用方的 Y。
+    这不是假想:改完名,本库自己的测试**一次构建红了 12 条断言**。
+    现在 `GetNodeAt(X, Y)` 是 LCL 的含义,我们原来那个叫 `GetNodeAtOffset`。
+  - **`Selected`**。以前是按下标的 Boolean;LCL 的是**当前节点**,所以
+    `if Tree.Selected <> nil` 根本编译不过。现在 `Selected` 是节点,按下标的那个叫 `NodeSelected[]`。
+  - **`OnDragOver`**。以前被树内节点拖动的否决事件占着,而它压在基类本来就提供的
+    LCL 拖放钩子上 —— 于是树是唯一一个**不能当 LCL 放置目标**的 TTy 控件。
+    树内那个改叫 `OnNodeDragOver`;`OnDragOver`/`OnDragDrop`/`OnStartDrag`/`OnEndDrag`/
+    `DragMode`/`DragCursor` 回来了。
+- **`TTyVirtualImageList.Draw` / `TTyGlyphImageList.Draw` 改用 LCL 的参数顺序**
+  `(Canvas, X, Y, Index, Enabled)` —— 注意最后一个是 **Enabled**,不是 Ghosted,含义相反。
+  带尺寸的那个形式改叫 `DrawIndex`。**刻意不保留 4 个 Integer 参数的重载**:
+  让旧调用点编译失败,好过让它编译通过而把坐标和下标对调。
 
 ### 修复 — 属性面板给了旋钮,控件却不看
 
@@ -238,16 +305,62 @@
   重写了布局,那一行还留着,于是同样一句 `StyleClass := 'primary'` 在两个几乎一样的工具条上
   一个保得住、一个每次重排都被抹掉。
 - **`TTyShellListView.OnCompare` 现在真的会被调用**(上一版把事件槽还给了应用,却没人去触发它)。
+- **文件重命名(F2)之后列表会重新读盘。** 上一版把 `Refresh` 改名成 `UpdateView` 之后,
+  提交编辑那一句 `Refresh` **静默落到了 `TControl.Refresh` 上** —— 磁盘上改了,行里还是旧名字。
+- **滑块的刻度终于画出来了**:`TickMarks`(上/下、左/右、两侧)、`TickStyle`
+  (无 / 自动 / 手动)、`SetTick`/`ClearTicks`/`TickCount`,以及 `Reversed`(反向刻度)。
+- **进度条**:`Step`/`StepIt`/`StepBy` 步进、`BarShowText` 在条上显示百分比
+  (模板可配,`BarTextFormat`)、`Orientation` 支持四个方向(含从右往左、从上往下)。
+- **`TTyScrollBar.LargeChange` 现在有人读了** —— 以前点滚动槽永远翻一整页,
+  宿主设的翻页量到不了任何地方。
+- **微调框补齐了一批编辑期成员**:`Text`(读到的是**还没提交的**输入缓冲)、`CaretPos`、
+  `Modified`(程序赋值会清零 —— 它回答的是"用户动过没有")、`EditorEnabled`
+  (锁住键入但保留箭头)、`ValueEmpty`(空白态)、`TextHint`,以及可覆写的
+  `GetLimitedValue`/`ValueToStr`/`StrToValue`。
+- **`TTyUpDown` 新增 `OnChanging` / `OnChangingEx`**:可以否决一次步进,
+  `OnChangingEx` 还能看到**将要变成的值和方向**。另有 `MinRepeatInterval`(长按重复的下限)。
+- **文件树补齐**:`Root`(把树限定在一个目录下)、`ObjectTypes`、`Path`、`FileSortType`
+  与 `OnSortCompare`(自定义排序)、`OnAddItem`(逐项否决)、`UseBuiltinIcons`;
+  文件列表同上,外加 `AutoSizeColumns`、`MaskCaseSensitivity`。
+  树 / 列表 / 过滤下拉之间可以互相关联(`Tree.ShellListView`、`List.ShellTreeView`、
+  `Combo.ShellListView`),点一边另一边跟着走。
 - 名称对齐:`TTyCalendar.DateTime`、`TTyMaskEdit.EditMask`、`TTyMemo.Append`、`TTyEdit.Clear`、
   `TTyListBox` 与 `TTyComboBox` 的 `Clear`/`AddItem`/`Count`/`ItemRect` 等一整套列表方法。
 
 - **`TTyShape` 只认它真正盖住的像素了。** 以前圆形/椭圆/菱形/直线都按**整个外框**吃点击,
   于是圆形四角后面的控件永远点不到。现在按形状本身判定(边框宽度也算在内),
   另外公开了 `PtInShape` 供宿主自己查。
+- **`TTyStarShape` 同上,而星形是这件事最严重的地方。** 五个尖角之间有五道很深的凹口,
+  外框里一大片是**根本没画过的画布** —— 以前控件对这些位置一律回答"是我的",
+  于是**任何压在星角背后的控件都点不到**。现在按形状判定,并公开 `PtInShape` / `StarGeometry`。
 - **`TTyArrow` 新增三角形箭头**(`Shape := tasTriangle`),角度由 `ArrowPointerAngle` 控制
   (与 LCL 的 `TArrow` 同名同默认值 60°)。以前本库只画得出块状箭头,
   移植过来的窗体想要的那个方向三角形**根本画不出来**。默认仍是块状箭头 ——
   改默认值会让所有现有窗体上的箭头静默转向。
+
+### 新增 — 形状与图像控件补齐
+
+- **`TTyShape` 补齐 LCL 的 15 种形状,并多了一个逃生口。** 新增圆角正方形、正菱形、
+  左 / 右 / 下三角形(流程方向标、播放 / 后退图标)、朝上与朝下的五角星 ——
+  这些以前**任何属性组合都画不出来**,`.lfm` 里带这些值的窗体直接打不开。
+  另加 `tskPolygon` + **`OnShapePoints`**:顶点由应用给,于是六边形、标注框、V 形箭头
+  这些枚举没覆盖的形状**在设计期就能用**,不必再派生一个 `TTyGraphicControl`。
+  新枚举值一律**追加在末尾**,现有窗体的形状不会变。
+- **`TTyShape` / `TTyStarShape` 新增 `OnShapeClick`** —— 点在墨迹上才触发。
+- **`TTyStarShape` 新增 `PointDown`**,尖角朝下(LCL 的 `stStarDown`)。以前控件没有任何
+  旋转手段,这个形状画不出来。
+- **`TTyImage` 可以直接用共享图标集了**(`Images` / `ImageIndex` / `ImageWidth`)。
+  以前一张窗体上的主题图标只能把位图复制进控件自己的 `Picture`,于是"图标集改一处、
+  处处生效"和集合已经做好的按 DPI 出图全都用不上。
+- **`TTyImage` 新增 `StretchInEnabled` / `StretchOutEnabled`** —— 分别管缩小与放大。
+  "大图缩小、小图绝不放大"这条 LCL 的经典配方以前**无法表达**(关掉 `Stretch`/`Proportional`
+  是两个方向一起关)。
+- **`TTyImage` 新增 `KeepOriginXWhenClipped` / `KeepOriginYWhenClipped`**:居中时若图比控件大,
+  把该轴钉在原点而不是两边对称裁掉 —— 地图、截图、扫描件的左上角终于能看见。
+- **`TTyImage` 新增 `AntialiasingMode`**:`amOn` 要求插值平滑(以前**无法要求**),
+  `amOff` 要求硬边,`amDontCare`(默认)行为不变。
+- **`TTyImage` 新增 `OnPictureChanged` 与 `HasGraphic`**:换图时刷新尺寸标签 / 置脏标志 /
+  重建缩略图,不必再轮询;判断"有没有东西可画"也不用自己去 `Picture.Graphic` 上做 nil 判断。
 
 ### 新增 — `OnPaint`
 

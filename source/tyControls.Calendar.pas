@@ -2,7 +2,11 @@ unit tyControls.Calendar;
 {$mode objfpc}{$H+}
 interface
 uses
+  { Windows comes FIRST on purpose: it declares RECT as a type, which shadows the
+    Rect(l,t,r,b) constructor this unit uses everywhere if it is listed later. }
+  {$IFDEF WINDOWS}Windows,{$ENDIF}
   Classes, SysUtils, Types, DateUtils, Controls, Graphics, LCLType,
+  BGRABitmap,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller;
 
 type
@@ -14,11 +18,78 @@ type
   ETyInvalidDate = class(Exception);
   EInvalidDate   = ETyInvalidDate;
 
+  { wdLocaleDefault is LCL's dowDefault (C:/lazarus/lcl/calendar.pp:71): "start the week
+    where the OS says this locale starts it". It is APPENDED, not inserted, so every
+    existing ordinal and every .lfm that names a weekday keeps its meaning. Resolve it
+    with TyResolveFirstDayOfWeek before doing arithmetic on the ordinal -- 7 is not a
+    weekday and `Ord(x) mod 7` would silently answer Sunday. }
   TTyWeekDay = (wdSunday, wdMonday, wdTuesday, wdWednesday, wdThursday,
-                wdFriday, wdSaturday);
+                wdFriday, wdSaturday, wdLocaleDefault);
   TTyCalView  = (cvmDays, cvmMonths, cvmYears, cvmDecades);
   TTyDateGrid = array[0..41] of TDateTime;   // 6 rows x 7 cols
 
+  { Which pieces of calendar chrome are drawn. LCL spells this TDisplaySetting with the
+    same four member names (C:/lazarus/lcl/calendar.pp:37-46), so a ported .lfm line
+    `DisplaySettings = [dsShowHeadings, dsShowDayNames]` streams in unchanged.
+    Ty-prefixed as the primary type name so a unit that also uses the LCL Calendar can
+    name both; the unprefixed aliases below are what ported code says. }
+  TTyCalDisplaySetting = (
+    dsShowHeadings,      // the [<] Month YYYY [>] band
+    dsShowDayNames,      // the Su/Mo/Tu... row
+    dsNoMonthChange,     // clicking a spill-over day does NOT page to its month
+    dsShowWeekNumbers);  // the ISO week column
+  TTyCalDisplaySettings = set of TTyCalDisplaySetting;
+  TDisplaySetting  = TTyCalDisplaySetting;
+  TDisplaySettings = TTyCalDisplaySettings;
+
+  { Which region of the calendar a point falls in. LCL's TCalendarPart
+    (C:/lazarus/lcl/calendar.pp:49-57), member for member. }
+  TTyCalendarPart = (
+    cpNoWhere,      // outside everything interesting
+    cpDate,         // a grid cell (a day, or a month/year/decade in a drill-down view)
+    cpWeekNumber,   // the ISO week-number column
+    cpTitle,        // the title band, but not on the text or a button
+    cpTitleBtn,     // one of the two navigation arrows
+    cpTitleMonth,   // the month name inside the title
+    cpTitleYear);   // the year inside the title
+  TCalendarPart = TTyCalendarPart;
+
+  { The drill-down level, named the way LCL names it: after the PAGE the grid shows,
+    not after the cell. LCL's TCalendarView (C:/lazarus/lcl/calendar.pp:62-67).
+    Note the off-by-one-level trap this exists to remove: LCL's cvMonth ("a grid of the
+    days in one month") is our cvmDays, NOT our cvmMonths. }
+  TTyCalendarView = (cvMonth, cvYear, cvDecade, cvCentury);
+  TCalendarView   = TTyCalendarView;
+
+const
+  { LCL's DefaultDisplaySettings (C:/lazarus/lcl/calendar.pp:46) verbatim. }
+  TyDefaultDisplaySettings = [dsShowHeadings, dsShowDayNames];
+  DefaultDisplaySettings   = TyDefaultDisplaySettings;
+
+  { LCL's TCalDayOfWeek member names, so `Cal.FirstDayOfWeek := dowMonday` from a ported
+    unit compiles here. They are our own enum's members under LCL's spelling -- not a
+    second type -- so there is nothing to keep in sync. }
+  dowMonday    = wdMonday;
+  dowTuesday   = wdTuesday;
+  dowWednesday = wdWednesday;
+  dowThursday  = wdThursday;
+  dowFriday    = wdFriday;
+  dowSaturday  = wdSaturday;
+  dowSunday    = wdSunday;
+  dowDefault   = wdLocaleDefault;
+
+var
+  { The weekday the OS says a week starts on, read once at unit start. A variable and
+    not a function so a test can pin it (the answer differs per machine, and a grid
+    geometry assertion that moves with the developer's Control Panel is worthless). }
+  TyLocaleFirstDayOfWeek: TTyWeekDay = wdSunday;
+
+{ Resolves wdLocaleDefault to the OS's answer; every other value passes through.
+  Everything that indexes by weekday must go through this -- wdLocaleDefault has
+  ordinal 7 and is not a column. }
+function TyResolveFirstDayOfWeek(AValue: TTyWeekDay): TTyWeekDay;
+
+type
   { Array of 7 day-of-week indices (0=Sunday .. 6=Saturday) in display order
     starting at AFirst. }
   TTyWeekdayOrderArray = array[0..6] of Integer;
@@ -64,7 +135,7 @@ type
     FMinDate: TDateTime;
     FMaxDate: TDateTime;
     FFirstDayOfWeek: TTyWeekDay;
-    FWeekNumbers: Boolean;
+    FDisplaySettings: TTyCalDisplaySettings;
     FShowToday: Boolean;
     FReadOnly: Boolean;
     FViewYear: Word;
@@ -73,6 +144,9 @@ type
     FOnChange: TNotifyEvent;
     FOnAccept: TNotifyEvent;
     FOnViewChange: TNotifyEvent;
+    FOnDayChanged: TNotifyEvent;
+    FOnMonthChanged: TNotifyEvent;
+    FOnYearChanged: TNotifyEvent;
     procedure SetDate(AValue: TDateTime);
     { The only writer of FDate outside the user-gesture path. Takes the date AS GIVEN
       (no range check, no clamp) and re-anchors the view on it. Split out of SetDate so
@@ -83,12 +157,16 @@ type
     procedure SetMinDate(AValue: TDateTime);
     procedure SetMaxDate(AValue: TDateTime);
     procedure SetFirstDayOfWeek(AValue: TTyWeekDay);
+    function  GetWeekNumbers: Boolean;
     procedure SetWeekNumbers(AValue: Boolean);
+    procedure SetDisplaySettings(AValue: TTyCalDisplaySettings);
     procedure SetShowToday(AValue: Boolean);
     procedure SetReadOnly(AValue: Boolean);
-    { Moves the view to a different month, clamping to valid year/month range. }
+    { Moves the view to a different month, clamping to valid year/month range.
+      Fires OnMonthChanged / OnYearChanged for whichever component moved. }
     procedure SetViewMonth(AYear: Integer; AMonth: Integer);
-    { Selects a cell date (used by keyboard), fires OnChange if changed. }
+    { Selects a cell date (used by keyboard AND the mouse), fires the per-component
+      events then OnChange, in LCL's order (calendar.pp LMChanged :443-453). }
     procedure SelectDate(ANewDate: TDateTime);
     { Changes ViewMode and fires OnViewChange. }
     procedure ChangeViewMode(ANewMode: TTyCalView);
@@ -129,6 +207,15 @@ type
       where it would be a bug. Having both is the point: the caller states which one it
       meant, and the reader can see it. }
     procedure SetDateClamped(AValue: TDateTime);
+    { Which region of the calendar APoint (client coords) falls in. The private layout
+      maths is the only thing that can answer this, so without a public entry point a
+      host wanting a per-region context menu or tooltip had to guess. LCL's
+      TCustomCalendar.HitTest (C:/lazarus/lcl/calendar.pp:121, :219-225). }
+    function HitTest(APoint: TPoint): TTyCalendarPart;
+    { The drill-down level under LCL's name and PAGE-granularity spelling
+      (C:/lazarus/lcl/calendar.pp:122). ViewMode is the same state named after the
+      cell; both exist so neither reading is a guess. }
+    function GetCalendarView: TTyCalendarView;
     { Expose RenderTo publicly for tests and embedding. }
     procedure RenderToPublic(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     { Current drill-down view (transient UI state, not published). }
@@ -156,11 +243,32 @@ type
     property DateTime: TDateTime read FDate write SetDate stored False;
     property MinDate: TDateTime read FMinDate write SetMinDate;
     property MaxDate: TDateTime read FMaxDate write SetMaxDate;
-    property FirstDayOfWeek: TTyWeekDay read FFirstDayOfWeek write SetFirstDayOfWeek default wdSunday;
-    property WeekNumbers: Boolean read FWeekNumbers write SetWeekNumbers default False;
+    { DEFAULT CHANGED in 3.0: was wdSunday, is now "ask the OS". A Monday-first locale
+      -- most of Europe and Asia -- used to get a US week layout out of the box and had
+      no value to set that meant "follow the system", only a hardcoded wdMonday that
+      then stayed wrong if the app was relocalised. LCL has had dowDefault as its
+      default all along (calendar.pp:127). Pin wdSunday explicitly if you relied on it. }
+    property FirstDayOfWeek: TTyWeekDay read FFirstDayOfWeek write SetFirstDayOfWeek default wdLocaleDefault;
+    { The whole chrome switch, LCL-shaped (calendar.pp:125-126). }
+    property DisplaySettings: TTyCalDisplaySettings read FDisplaySettings
+      write SetDisplaySettings default [dsShowHeadings, dsShowDayNames];
+    { The week-number column under its old Boolean name. It is now a view onto
+      DisplaySettings' dsShowWeekNumbers rather than a second copy of the same fact --
+      one storage, so the two can never disagree. Not streamed (DisplaySettings is the
+      persisted form); an .lfm that still carries `WeekNumbers = True` loads unchanged. }
+    property WeekNumbers: Boolean read GetWeekNumbers write SetWeekNumbers stored False;
     property ShowToday: Boolean read FShowToday write SetShowToday default True;
     property ReadOnly: Boolean read FReadOnly write SetReadOnly default False;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
+    { The three per-component events LCL fires alongside OnChange (calendar.pp:131-133,
+      fired from LMChanged :443-453). OnChange alone cannot answer "did the DAY move?"
+      because we never passed the previous value, so every handler that cared had to
+      keep its own shadow copy. Selection changes fire year, then month, then day, then
+      OnChange -- LCL's order. Paging the header arrows fires the month/year pair too:
+      that is the "load this month's appointments" hook, and it used to fire nothing. }
+    property OnDayChanged: TNotifyEvent read FOnDayChanged write FOnDayChanged;
+    property OnMonthChanged: TNotifyEvent read FOnMonthChanged write FOnMonthChanged;
+    property OnYearChanged: TNotifyEvent read FOnYearChanged write FOnYearChanged;
     { Fires when the user definitively accepts the current date (Enter/Space key
       or a day-cell mouse click). A hosting popup should close on this event, not
       on OnChange, so arrow-navigation inside the dropdown does not close it. }
@@ -177,14 +285,29 @@ type
 
 implementation
 
+{ TyResolveFirstDayOfWeek }
+
+function TyResolveFirstDayOfWeek(AValue: TTyWeekDay): TTyWeekDay;
+begin
+  if AValue = wdLocaleDefault then
+    Result := TyLocaleFirstDayOfWeek
+  else
+    Result := AValue;
+end;
+
 { TyWeekdayOrder }
 
 function TyWeekdayOrder(AFirst: TTyWeekDay): TTyWeekdayOrderArray;
 var
   i: Integer;
+  First: TTyWeekDay;
 begin
+  { Resolve here as well as at the call sites: this is a public helper, and a caller
+    that passes wdLocaleDefault straight through would otherwise get Sunday's column
+    order from Ord(7) mod 7 with nothing to say it had been ignored. }
+  First := TyResolveFirstDayOfWeek(AFirst);
   for i := 0 to 6 do
-    Result[i] := (Ord(AFirst) + i) mod 7;
+    Result[i] := (Ord(First) + i) mod 7;
 end;
 
 { TyCalendarMonthGrid }
@@ -198,6 +321,7 @@ var
   StartDate: TDateTime;
   i: Integer;
 begin
+  AFirst := TyResolveFirstDayOfWeek(AFirst);
   FirstOfMonth := EncodeDate(AYear, AMonth, 1);
   // DayOfWeek: 1=Sun..7=Sat  ->  0=Sun..6=Sat
   DowFirst := DayOfWeek(FirstOfMonth) - 1;
@@ -312,8 +436,8 @@ begin
   FDate         := DateOf(Now);
   FMinDate      := 0;
   FMaxDate      := 0;
-  FFirstDayOfWeek := wdSunday;
-  FWeekNumbers  := False;
+  FFirstDayOfWeek := wdLocaleDefault;
+  FDisplaySettings := TyDefaultDisplaySettings;
   FShowToday    := True;
   FReadOnly     := False;
   FViewMode     := cvmDays;
@@ -426,10 +550,23 @@ begin
   Invalidate;
 end;
 
+function TTyCalendar.GetWeekNumbers: Boolean;
+begin
+  Result := dsShowWeekNumbers in FDisplaySettings;
+end;
+
 procedure TTyCalendar.SetWeekNumbers(AValue: Boolean);
 begin
-  if FWeekNumbers = AValue then Exit;
-  FWeekNumbers := AValue;
+  if AValue then
+    DisplaySettings := FDisplaySettings + [dsShowWeekNumbers]
+  else
+    DisplaySettings := FDisplaySettings - [dsShowWeekNumbers];
+end;
+
+procedure TTyCalendar.SetDisplaySettings(AValue: TTyCalDisplaySettings);
+begin
+  if FDisplaySettings = AValue then Exit;
+  FDisplaySettings := AValue;
   Invalidate;
 end;
 
@@ -447,21 +584,32 @@ begin
   Invalidate;
 end;
 
+{ Paging the view is the "the user is now looking at a different month" signal, and it
+  used to raise nothing at all -- the header arrows only clamped and repainted, so the
+  common "fetch this month's appointments" wiring had no hook. LCL fires the same pair
+  from its LMMonthChanged/LMYearChanged handlers (calendar.pp:458-478). }
 procedure TTyCalendar.SetViewMonth(AYear: Integer; AMonth: Integer);
+var
+  oldY, oldM: Word;
 begin
   while AMonth < 1  do begin Dec(AYear); Inc(AMonth, 12); end;
   while AMonth > 12 do begin Inc(AYear); Dec(AMonth, 12); end;
   if AYear < 1    then AYear := 1;
   if AYear > 9999 then AYear := 9999;
+  oldY := FViewYear;
+  oldM := FViewMonth;
   FViewYear  := AYear;
   FViewMonth := AMonth;
   Invalidate;
+  if (Word(AYear) <> oldY) and Assigned(FOnYearChanged) then FOnYearChanged(Self);
+  if (Word(AMonth) <> oldM) and Assigned(FOnMonthChanged) then FOnMonthChanged(Self);
 end;
 
 procedure TTyCalendar.SelectDate(ANewDate: TDateTime);
 var
   d: TDateTime;
   dy, dm, dd: Word;
+  oy, om, od: Word;
   oldDate: TDateTime;
 begin
   if FReadOnly then Exit;
@@ -469,11 +617,18 @@ begin
   if not TyCalendarInRange(d, FMinDate, FMaxDate) then Exit;
   oldDate := DateOf(FDate);
   if oldDate = d then Exit;
+  DecodeDate(oldDate, oy, om, od);
   FDate := d;
   DecodeDate(FDate, dy, dm, dd);
   FViewYear  := dy;
   FViewMonth := dm;
   Invalidate;
+  { LCL's order, from LMChanged (calendar.pp:443-453): year, month, day, then OnChange.
+    A handler chain that reloads on OnMonthChanged and then reads Date in OnChange
+    depends on it, so it is not an arbitrary sequence. }
+  if (oy <> dy) and Assigned(FOnYearChanged)  then FOnYearChanged(Self);
+  if (om <> dm) and Assigned(FOnMonthChanged) then FOnMonthChanged(Self);
+  if (od <> dd) and Assigned(FOnDayChanged)   then FOnDayChanged(Self);
   if Assigned(FOnChange) then FOnChange(Self);
 end;
 
@@ -492,8 +647,12 @@ var
 begin
   W := ARect.Right  - ARect.Left;
   H := ARect.Bottom - ARect.Top;
-  { Header band follows --control-height under modern density; classic keeps 28 verbatim. }
-  HeaderH := MulDiv(TyDensityHeight(ActiveController, 28), APPI, 96);
+  { Header band follows --control-height under modern density; classic keeps 28 verbatim.
+    dsShowHeadings out of DisplaySettings zeroes it, and the grid takes the space back. }
+  if dsShowHeadings in FDisplaySettings then
+    HeaderH := MulDiv(TyDensityHeight(ActiveController, 28), APPI, 96)
+  else
+    HeaderH := 0;
   ColW    := (W) div 4;
   if ColW < 1 then ColW := 1;
   RowH    := (H - HeaderH) div 3;
@@ -525,8 +684,13 @@ begin
   ArrowRightRect := Rect(W - ArrowW, 0, W, HeaderH);
   TitleRect      := Rect(ArrowW, 0, W - ArrowW, HeaderH);
 
-  P.DrawGlyph(ArrowLeftRect,  tgArrowLeft,  S.TextColor, 1);
-  P.DrawGlyph(ArrowRightRect, tgArrowRight, S.TextColor, 1);
+  { HeaderH is 0 when dsShowHeadings is out; nothing may be drawn into the collapsed
+    band, and a 0x0 glyph rect is not something the painter should be asked to scale. }
+  if HeaderH > 0 then
+  begin
+    P.DrawGlyph(ArrowLeftRect,  tgArrowLeft,  S.TextColor, 1);
+    P.DrawGlyph(ArrowRightRect, tgArrowRight, S.TextColor, 1);
+  end;
 
   TitleText := IntToStr(FViewYear);
   CellStyle := ActiveController.Model.ResolveStyle('TyCalendarTitle', '', [tysNormal]);
@@ -600,8 +764,13 @@ begin
   ArrowRightRect := Rect(W - ArrowW, 0, W, HeaderH);
   TitleRect      := Rect(ArrowW, 0, W - ArrowW, HeaderH);
 
-  P.DrawGlyph(ArrowLeftRect,  tgArrowLeft,  S.TextColor, 1);
-  P.DrawGlyph(ArrowRightRect, tgArrowRight, S.TextColor, 1);
+  { HeaderH is 0 when dsShowHeadings is out; nothing may be drawn into the collapsed
+    band, and a 0x0 glyph rect is not something the painter should be asked to scale. }
+  if HeaderH > 0 then
+  begin
+    P.DrawGlyph(ArrowLeftRect,  tgArrowLeft,  S.TextColor, 1);
+    P.DrawGlyph(ArrowRightRect, tgArrowRight, S.TextColor, 1);
+  end;
 
   TitleText := IntToStr(DS) + '–' + IntToStr(DS + 9);
   CellStyle := ActiveController.Model.ResolveStyle('TyCalendarTitle', '', [tysNormal]);
@@ -687,8 +856,13 @@ begin
   ArrowRightRect := Rect(W - ArrowW, 0, W, HeaderH);
   TitleRect      := Rect(ArrowW, 0, W - ArrowW, HeaderH);
 
-  P.DrawGlyph(ArrowLeftRect,  tgArrowLeft,  S.TextColor, 1);
-  P.DrawGlyph(ArrowRightRect, tgArrowRight, S.TextColor, 1);
+  { HeaderH is 0 when dsShowHeadings is out; nothing may be drawn into the collapsed
+    band, and a 0x0 glyph rect is not something the painter should be asked to scale. }
+  if HeaderH > 0 then
+  begin
+    P.DrawGlyph(ArrowLeftRect,  tgArrowLeft,  S.TextColor, 1);
+    P.DrawGlyph(ArrowRightRect, tgArrowRight, S.TextColor, 1);
+  end;
 
   TitleText := IntToStr(CentStart) + '–' + IntToStr(CentStart + 99);
   CellStyle := ActiveController.Model.ResolveStyle('TyCalendarTitle', '', [tysNormal]);
@@ -751,13 +925,21 @@ begin
   H := ARect.Bottom - ARect.Top;
   { Density-aware bands: header ~ --control-height, weekday-names row ~ --item-height.
     Classic returns the original constants verbatim (byte-identical); only modern density
-    reads the roomier tokens. WkNumW stays a fixed classic width (no density token). }
-  HeaderH  := MulDiv(TyDensityHeight(ActiveController, 28), APPI, 96);
-  if ActiveController.Density = tdModern then
+    reads the roomier tokens. WkNumW stays a fixed classic width (no density token).
+    Each band collapses to 0 when its DisplaySettings flag is out, and the day rows
+    divide up whatever is left -- suppressing chrome must GIVE the space to the grid,
+    not leave a hole where the band was. }
+  if dsShowHeadings in FDisplaySettings then
+    HeaderH := MulDiv(TyDensityHeight(ActiveController, 28), APPI, 96)
+  else
+    HeaderH := 0;
+  if not (dsShowDayNames in FDisplaySettings) then
+    WeekdayH := 0
+  else if ActiveController.Density = tdModern then
     WeekdayH := MulDiv(TyDensityMetric(ActiveController, 20, '--item-height'), APPI, 96)
   else
     WeekdayH := MulDiv(20, APPI, 96);
-  if FWeekNumbers then
+  if dsShowWeekNumbers in FDisplaySettings then
     WkNumW := MulDiv(24, APPI, 96)
   else
     WkNumW := 0;
@@ -831,26 +1013,29 @@ begin
 
     CalcLayout(ARect, APPI, HeaderH, WeekdayH, WkNumW, ColW, RowH, GridRect);
 
-    // Header band: [←] [Month YYYY] [→]
-    ArrowW         := HeaderH;
-    ArrowLeftRect  := Rect(0, 0, ArrowW, HeaderH);
-    ArrowRightRect := Rect(W - ArrowW, 0, W, HeaderH);
-    TitleRect      := Rect(ArrowW, 0, W - ArrowW, HeaderH);
+    // Header band: [←] [Month YYYY] [→]   (suppressed by dsShowHeadings)
+    if HeaderH > 0 then
+    begin
+      ArrowW         := HeaderH;
+      ArrowLeftRect  := Rect(0, 0, ArrowW, HeaderH);
+      ArrowRightRect := Rect(W - ArrowW, 0, W, HeaderH);
+      TitleRect      := Rect(ArrowW, 0, W - ArrowW, HeaderH);
 
-    P.DrawGlyph(ArrowLeftRect,  tgArrowLeft,  S.TextColor, 1);
-    P.DrawGlyph(ArrowRightRect, tgArrowRight, S.TextColor, 1);
+      P.DrawGlyph(ArrowLeftRect,  tgArrowLeft,  S.TextColor, 1);
+      P.DrawGlyph(ArrowRightRect, tgArrowRight, S.TextColor, 1);
 
-    // Title text
-    TitleText := FormatDateTime('mmmm yyyy', EncodeDate(FViewYear, FViewMonth, 1));
-    CellStyle := ActiveController.Model.ResolveStyle('TyCalendarTitle', '', [tysNormal]);
-    if not (tpTextColor in CellStyle.Present) then
-      CellStyle.TextColor := S.TextColor;
-    if CellStyle.FontSize <= 0 then
-      CellStyle.FontSize := FontSz;
-    P.DrawText(TitleRect, TitleText, CellStyle.FontName, ResolveFontSize(CellStyle),
-      FontWt, CellStyle.TextColor, taCenter, tlCenter, False);
+      // Title text
+      TitleText := FormatDateTime('mmmm yyyy', EncodeDate(FViewYear, FViewMonth, 1));
+      CellStyle := ActiveController.Model.ResolveStyle('TyCalendarTitle', '', [tysNormal]);
+      if not (tpTextColor in CellStyle.Present) then
+        CellStyle.TextColor := S.TextColor;
+      if CellStyle.FontSize <= 0 then
+        CellStyle.FontSize := FontSz;
+      P.DrawText(TitleRect, TitleText, CellStyle.FontName, ResolveFontSize(CellStyle),
+        FontWt, CellStyle.TextColor, taCenter, tlCenter, False);
+    end;
 
-    // Weekday name row
+    // Weekday name row   (suppressed by dsShowDayNames)
     WeekOrderArr := TyWeekdayOrder(FFirstDayOfWeek);
     CellStyle := ActiveController.Model.ResolveStyle('TyCalendarWeekday', '', [tysNormal]);
     if not (tpTextColor in CellStyle.Present) then
@@ -858,25 +1043,28 @@ begin
     if CellStyle.FontSize <= 0 then
       CellStyle.FontSize := FontSz;
 
-    // Week number header label (blank area above week-number column)
-    if FWeekNumbers then
+    if WeekdayH > 0 then
     begin
-      WkNumRect := Rect(0, HeaderH, WkNumW, HeaderH + WeekdayH);
-      P.DrawText(WkNumRect, '#', CellStyle.FontName, ResolveFontSize(CellStyle),
-        FontWt, CellStyle.TextColor, taCenter, tlCenter, False);
-    end;
+      // Week number header label (blank area above week-number column)
+      if WkNumW > 0 then
+      begin
+        WkNumRect := Rect(0, HeaderH, WkNumW, HeaderH + WeekdayH);
+        P.DrawText(WkNumRect, '#', CellStyle.FontName, ResolveFontSize(CellStyle),
+          FontWt, CellStyle.TextColor, taCenter, tlCenter, False);
+      end;
 
-    for col := 0 to 6 do
-    begin
-      // ShortDayNames: 1=Sunday .. 7=Saturday in FPC/Delphi DefaultFormatSettings
-      DayName  := DefaultFormatSettings.ShortDayNames[WeekOrderArr[col] + 1];
-      CellRect := Rect(
-        GridRect.Left + col * ColW,
-        HeaderH,
-        GridRect.Left + (col + 1) * ColW,
-        HeaderH + WeekdayH);
-      P.DrawText(CellRect, DayName, CellStyle.FontName, ResolveFontSize(CellStyle),
-        FontWt, CellStyle.TextColor, taCenter, tlCenter, False);
+      for col := 0 to 6 do
+      begin
+        // ShortDayNames: 1=Sunday .. 7=Saturday in FPC/Delphi DefaultFormatSettings
+        DayName  := DefaultFormatSettings.ShortDayNames[WeekOrderArr[col] + 1];
+        CellRect := Rect(
+          GridRect.Left + col * ColW,
+          HeaderH,
+          GridRect.Left + (col + 1) * ColW,
+          HeaderH + WeekdayH);
+        P.DrawText(CellRect, DayName, CellStyle.FontName, ResolveFontSize(CellStyle),
+          FontWt, CellStyle.TextColor, taCenter, tlCenter, False);
+      end;
     end;
 
     // Day grid (6 rows x 7 cols)
@@ -947,7 +1135,7 @@ begin
         FontWt, CellStyle.TextColor, taCenter, tlCenter, False);
 
       // Week number (leftmost column only)
-      if FWeekNumbers and (col = 0) then
+      if (WkNumW > 0) and (col = 0) then
       begin
         wkNum := TyISOWeekNumber(CellDate);
         WkNumRect := Rect(
@@ -981,6 +1169,104 @@ begin
   RenderTo(ACanvas, ARect, APPI);
 end;
 
+function TTyCalendar.GetCalendarView: TTyCalendarView;
+begin
+  { Deliberately a straight positional map and not a cast: the two enums count the same
+    four levels but name them one level apart (LCL's cvMonth = "a grid of days in one
+    month" = our cvmDays), and a cast would silently answer one level out. }
+  case FViewMode of
+    cvmDays:    Result := cvMonth;
+    cvmMonths:  Result := cvYear;
+    cvmYears:   Result := cvDecade;
+    cvmDecades: Result := cvCentury;
+  else
+    Result := cvMonth;
+  end;
+end;
+
+function TTyCalendar.HitTest(APoint: TPoint): TTyCalendarPart;
+{ The header split is measured, not guessed: the title is drawn centred, so the month
+  name's pixel span depends on the resolved font and on the locale's month names, and
+  the only honest way to say "you clicked the year" is to measure the same string the
+  renderer draws. }
+var
+  HeaderH, WeekdayH, WkNumW, ColW, RowH, ArrowW, W, PPI: Integer;
+  GridRect, GridRect4: TRect;
+  HdrH4, ColW4, RowH4: Integer;
+  S: TTyStyleSet;
+  TitleStyle: TTyStyleSet;
+  TitleText, MonthPart: string;
+  SpacePos, FullW, MonthW, TitleLeft, TitleW: Integer;
+  Bmp: TBGRABitmap;
+begin
+  Result := cpNoWhere;
+  W   := ClientWidth;
+  PPI := Font.PixelsPerInch;
+
+  if FViewMode <> cvmDays then
+  begin
+    CalcLayout4x3(ClientRect, PPI, HdrH4, ColW4, RowH4, GridRect4);
+    if (HdrH4 > 0) and (APoint.Y >= 0) and (APoint.Y < HdrH4) then
+    begin
+      if (APoint.X < HdrH4) or (APoint.X >= W - HdrH4) then
+        Result := cpTitleBtn
+      else
+        Result := cpTitle;
+      Exit;
+    end;
+    if TyCalendarHitCell(GridRect4, 4, 3, APoint.X, APoint.Y) >= 0 then
+      Result := cpDate;
+    Exit;
+  end;
+
+  CalcLayout(ClientRect, PPI, HeaderH, WeekdayH, WkNumW, ColW, RowH, GridRect);
+  ArrowW := HeaderH;
+
+  if (HeaderH > 0) and (APoint.Y >= 0) and (APoint.Y < HeaderH) then
+  begin
+    if (APoint.X < ArrowW) or (APoint.X >= W - ArrowW) then
+      Exit(cpTitleBtn);
+    TitleText  := FormatDateTime('mmmm yyyy', EncodeDate(FViewYear, FViewMonth, 1));
+    S          := CurrentStyle;
+    TitleStyle := ActiveController.Model.ResolveStyle('TyCalendarTitle', '', [tysNormal]);
+    if TitleStyle.FontSize <= 0 then TitleStyle.FontSize := ResolveFontSize(S);
+    SpacePos := Pos(' ', TitleText);
+    Result   := cpTitle;
+    if SpacePos > 0 then
+    begin
+      MonthPart := Copy(TitleText, 1, SpacePos - 1);
+      Bmp := TBGRABitmap.Create(1, 1);
+      try
+        TyConfigureTextFont(Bmp, TitleStyle.FontName, ResolveFontSize(TitleStyle),
+          S.FontWeight, PPI);
+        FullW  := Bmp.TextSize(TitleText).cx;
+        MonthW := Bmp.TextSize(MonthPart).cx;
+      finally
+        Bmp.Free;
+      end;
+      TitleW    := W - 2 * ArrowW;
+      TitleLeft := ArrowW + (TitleW - FullW) div 2;    // taCenter, as RenderTo draws it
+      if (APoint.X >= TitleLeft) and (APoint.X < TitleLeft + FullW) then
+      begin
+        if APoint.X < TitleLeft + MonthW then
+          Result := cpTitleMonth
+        else
+          Result := cpTitleYear;
+      end;
+    end;
+    Exit;
+  end;
+
+  { The week-number column runs beside the day rows only -- the strip beside the
+    weekday-name row is the '#' caption, which is chrome, not a week number. }
+  if (WkNumW > 0) and (APoint.X >= 0) and (APoint.X < WkNumW) and
+     (APoint.Y >= GridRect.Top) and (APoint.Y < GridRect.Bottom) then
+    Exit(cpWeekNumber);
+
+  if TyCalendarHitCell(GridRect, 7, 6, APoint.X, APoint.Y) >= 0 then
+    Result := cpDate;
+end;
+
 procedure TTyCalendar.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   HeaderH, WeekdayH, WkNumW, ColW, RowH: Integer;
@@ -990,8 +1276,6 @@ var
   Grid: TTyDateGrid;
   CellDate: TDateTime;
   CellY, CellM, dummy: Word;
-  oldDate, newDate: TDateTime;
-  dy, dm, dd: Word;
   // drill-down
   HdrH4, ColW4, RowH4: Integer;
   GridRect4: TRect;
@@ -1008,39 +1292,39 @@ begin
     CalcLayout4x3(ClientRect, Font.PixelsPerInch, HdrH4, ColW4, RowH4, GridRect4);
     ArrowW := HdrH4;
 
-    // Left arrow
-    if (X >= 0) and (X < ArrowW) and (Y >= 0) and (Y < HdrH4) then
+    { The whole band is gone when dsShowHeadings is out; skip its three hit-tests
+      rather than let them match at y=0 against a zero-height rect. }
+    if HdrH4 > 0 then
     begin
-      case FViewMode of
-        cvmMonths:  FViewYear := FViewYear - 1;          // ∓1 year
-        cvmYears:   FViewYear := FViewYear - 10;         // ∓10 years (decade)
-        cvmDecades: FViewYear := FViewYear - 100;        // ∓100 years (century)
+      // Left arrow.  Routed through SetViewMonth (not a raw FViewYear write) so the
+      // year move announces itself through OnYearChanged like every other one does.
+      if (X >= 0) and (X < ArrowW) and (Y >= 0) and (Y < HdrH4) then
+      begin
+        case FViewMode of
+          cvmMonths:  SetViewMonth(FViewYear - 1,   FViewMonth);   // ∓1 year
+          cvmYears:   SetViewMonth(FViewYear - 10,  FViewMonth);   // ∓10 years (decade)
+          cvmDecades: SetViewMonth(FViewYear - 100, FViewMonth);   // ∓100 years (century)
+        end;
+        Exit;
       end;
-      if FViewYear < 1    then FViewYear := 1;
-      if FViewYear > 9999 then FViewYear := 9999;
-      Invalidate;
-      Exit;
-    end;
 
-    // Right arrow
-    if (X >= W - ArrowW) and (X < W) and (Y >= 0) and (Y < HdrH4) then
-    begin
-      case FViewMode of
-        cvmMonths:  FViewYear := FViewYear + 1;
-        cvmYears:   FViewYear := FViewYear + 10;
-        cvmDecades: FViewYear := FViewYear + 100;
+      // Right arrow
+      if (X >= W - ArrowW) and (X < W) and (Y >= 0) and (Y < HdrH4) then
+      begin
+        case FViewMode of
+          cvmMonths:  SetViewMonth(FViewYear + 1,   FViewMonth);
+          cvmYears:   SetViewMonth(FViewYear + 10,  FViewMonth);
+          cvmDecades: SetViewMonth(FViewYear + 100, FViewMonth);
+        end;
+        Exit;
       end;
-      if FViewYear < 1    then FViewYear := 1;
-      if FViewYear > 9999 then FViewYear := 9999;
-      Invalidate;
-      Exit;
-    end;
 
-    // Title click: zoom out another level
-    if (X >= ArrowW) and (X < W - ArrowW) and (Y >= 0) and (Y < HdrH4) then
-    begin
-      ChangeViewMode(TyCalendarZoomOut(FViewMode));
-      Exit;
+      // Title click: zoom out another level
+      if (X >= ArrowW) and (X < W - ArrowW) and (Y >= 0) and (Y < HdrH4) then
+      begin
+        ChangeViewMode(TyCalendarZoomOut(FViewMode));
+        Exit;
+      end;
     end;
 
     // Grid cell click: pick and zoom in
@@ -1048,12 +1332,14 @@ begin
     if cellIdx < 0 then Exit;
 
     case FViewMode of
+      { All three go through SetViewMonth rather than writing FViewYear/FViewMonth by
+        hand: drilling in IS a view move, and a host listening for "which month are we
+        looking at now" must not have to special-case the way the user got there. }
       cvmMonths:
         begin
           // Pick the month; zoom to Days of that month
           cellMonth  := cellIdx + 1;   // 1..12
-          FViewMonth := Word(cellMonth);
-          // FViewYear already set (the displayed year)
+          SetViewMonth(FViewYear, cellMonth);
           ChangeViewMode(TyCalendarZoomIn(FViewMode));
         end;
       cvmYears:
@@ -1061,7 +1347,7 @@ begin
           // Pick the year (spill layout: cell 0 = DS-1)
           DS       := TyDecadeStart(FViewYear);
           cellYear := DS - 1 + cellIdx;
-          FViewYear := cellYear;
+          SetViewMonth(cellYear, FViewMonth);
           ChangeViewMode(TyCalendarZoomIn(FViewMode));
         end;
       cvmDecades:
@@ -1069,7 +1355,7 @@ begin
           // Pick a decade (spill layout: cell 0 = CentStart-10)
           CentStart   := (Integer(FViewYear) div 100) * 100;
           cellDecade  := CentStart - 10 + cellIdx * 10;
-          FViewYear   := cellDecade;   // navigate to that decade's start year
+          SetViewMonth(cellDecade, FViewMonth);   // that decade's start year
           ChangeViewMode(TyCalendarZoomIn(FViewMode));
         end;
     end;
@@ -1082,25 +1368,28 @@ begin
     HeaderH, WeekdayH, WkNumW, ColW, RowH, GridRect);
   ArrowW := HeaderH;
 
-  // Title click in Days view: zoom out to Months
-  if (X >= ArrowW) and (X < W - ArrowW) and (Y >= 0) and (Y < HeaderH) then
+  if HeaderH > 0 then
   begin
-    ChangeViewMode(TyCalendarZoomOut(FViewMode));
-    Exit;
-  end;
+    // Title click in Days view: zoom out to Months
+    if (X >= ArrowW) and (X < W - ArrowW) and (Y >= 0) and (Y < HeaderH) then
+    begin
+      ChangeViewMode(TyCalendarZoomOut(FViewMode));
+      Exit;
+    end;
 
-  // Left arrow (prev month)
-  if (X >= 0) and (X < ArrowW) and (Y >= 0) and (Y < HeaderH) then
-  begin
-    SetViewMonth(FViewYear, Integer(FViewMonth) - 1);
-    Exit;
-  end;
+    // Left arrow (prev month)
+    if (X >= 0) and (X < ArrowW) and (Y >= 0) and (Y < HeaderH) then
+    begin
+      SetViewMonth(FViewYear, Integer(FViewMonth) - 1);
+      Exit;
+    end;
 
-  // Right arrow (next month)
-  if (X >= W - ArrowW) and (X < W) and (Y >= 0) and (Y < HeaderH) then
-  begin
-    SetViewMonth(FViewYear, Integer(FViewMonth) + 1);
-    Exit;
+    // Right arrow (next month)
+    if (X >= W - ArrowW) and (X < W) and (Y >= 0) and (Y < HeaderH) then
+    begin
+      SetViewMonth(FViewYear, Integer(FViewMonth) + 1);
+      Exit;
+    end;
   end;
 
   // Grid cell
@@ -1111,23 +1400,21 @@ begin
   CellDate := Grid[cellIdx];
   DecodeDate(CellDate, CellY, CellM, dummy);
 
-  // Only accept current-view-month cells that are in range
-  if (CellM <> FViewMonth) or (CellY <> FViewYear) then Exit;
+  { A spill-over day (a greyed cell from the previous/next month) used to be dropped
+    on the floor: the click did nothing and nothing said why. LCL pages to that day's
+    month instead, and only refuses when dsNoMonthChange is IN DisplaySettings -- which
+    it is not by default (calendar.pp:46). So the default here now matches: the click
+    selects the day and SelectDate re-anchors the view onto its month.
+    BEHAVIOUR CHANGE: pass dsNoMonthChange to get the old refusal back. }
+  if ((CellM <> FViewMonth) or (CellY <> FViewYear)) and
+     (dsNoMonthChange in FDisplaySettings) then Exit;
   if not TyCalendarInRange(CellDate, FMinDate, FMaxDate) then Exit;
   if FReadOnly then Exit;
 
-  newDate := DateOf(CellDate);
-  oldDate := DateOf(FDate);
-
-  if newDate <> oldDate then
-  begin
-    FDate := newDate;
-    DecodeDate(FDate, dy, dm, dd);
-    FViewYear  := dy;
-    FViewMonth := dm;
-    Invalidate;
-    if Assigned(FOnChange) then FOnChange(Self);
-  end;
+  { SelectDate is the single writer: it re-anchors the view, fires the per-component
+    events and OnChange, and no-ops when the date did not move. Duplicating that here
+    is what let the mouse path drift away from the keyboard path in the first place. }
+  SelectDate(DateOf(CellDate));
 
   // A day-cell click is a definitive-select gesture: always fire OnAccept
   // (even when the date didn't change, the user confirmed this date).
@@ -1263,5 +1550,31 @@ begin
 
   end;
 end;
+
+{ Reads the OS's "first day of week" once, at unit start, into TyLocaleFirstDayOfWeek.
+  Win32 API and not a widgetset call, so the gate is WINDOWS, not LCLWin32. Elsewhere
+  the seeded wdSunday stands: the RTL exposes no first-day-of-week and inventing one
+  from the language would be a guess, so a host on those platforms sets the variable. }
+procedure TyInitLocaleFirstDayOfWeek;
+{$IFDEF WINDOWS}
+var
+  Buf: array[0..7] of WideChar;
+  v: Integer;
+{$ENDIF}
+begin
+{$IFDEF WINDOWS}
+  { LOCALE_IFIRSTDAYOFWEEK is 0 = Monday .. 6 = Sunday -- a different origin from
+    TTyWeekDay's 0 = Sunday, hence the rotation rather than a straight cast. }
+  if GetLocaleInfoW(LOCALE_USER_DEFAULT, LOCALE_IFIRSTDAYOFWEEK, @Buf[0], Length(Buf)) > 0 then
+  begin
+    v := StrToIntDef(string(WideString(PWideChar(@Buf[0]))), -1);
+    if (v >= 0) and (v <= 6) then
+      TyLocaleFirstDayOfWeek := TTyWeekDay((v + 1) mod 7);
+  end;
+{$ENDIF}
+end;
+
+initialization
+  TyInitLocaleFirstDayOfWeek;
 
 end.

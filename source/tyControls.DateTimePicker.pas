@@ -74,10 +74,63 @@ uses
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.Animation,
   tyControls.Popup, tyControls.Calendar;
 
+const
+  { LCL's sentinels for "as far as this control will go" (datetimepicker.pas:63, :77).
+    LCL seeds MinDate/MaxDate to these so its picker is ALWAYS bounded; ours keeps 0 =
+    unbounded (changing that would flip the meaning of every `if MinDate <> 0` in the
+    wild), but the two values are now reachable by name, and an UNBOUNDED field is
+    still held inside them so a user cannot type a year the calendar cannot draw.
+    TheSmallestDate is 1 Oct 1752: LCL's own comment says widgetset calendars
+    misrender anything earlier, and a date entered here can end up in one of those. }
+  TyTheSmallestDate = TDateTime(-53780.0);   // 1 Oct 1752
+  TyTheBiggestDate  = TDateTime(2958465.0);  // 31 Dec 9999
+  TheSmallestDate   = TyTheSmallestDate;
+  TheBiggestDate    = TyTheBiggestDate;
+
+  { LCL's TTimeFormat members (datetimepicker.pas:105-107) as the patterns they mean,
+    so `DTP.TimeFormat := tf24` from a ported unit compiles and does the right thing.
+    Ours is a FormatDateTime pattern rather than an enum -- the picker is format-string
+    driven end to end -- so these are the two patterns that enum selects, not a second
+    type. Anything else is still just a pattern. }
+  tf12 = 'hh:nn:ss AM/PM';
+  tf24 = 'hh:nn:ss';
+
+  { The pivot LCL defaults CenturyFrom to (datetimepicker.pas:4079). }
+  TyDefaultCenturyFrom = 1941;
+
 type
   TTyDateTimeKind = (dtkDate, dtkTime);
 
-  TTySegKind = (skNone, skDay, skMonth, skYear, skHour, skMinute, skSecond, skAMPM);
+  { skMilliSec closes the one field a format string could DISPLAY but nothing could
+    select, type or step: EncodeDateTime preserves the millisecond component, so a
+    value seeded from Now carried a sub-second nobody could see or clear. }
+  TTySegKind = (skNone, skDay, skMonth, skYear, skHour, skMinute, skSecond, skAMPM,
+                skMilliSec);
+
+  { LCL's TDateTimePickerOption (datetimepicker.pas:131-146) minus dtpoFlatButton,
+    which selects between a raised and a flat drop-down button -- a purely visual axis
+    that belongs in the theme here, and which our chevron already draws flat. Adding it
+    as a published flag nothing reads is exactly the defect this pass exists to remove. }
+  TTyDateTimePickerOption = (
+    dtpoDoChangeOnSetDateTime,  // fire OnChange on a programmatic DateTime write too
+    dtpoEnabledIfUnchecked,     // keep the field editable while the checkbox is clear
+    dtpoAutoCheck,              // set Checked when the value is changed
+    dtpoResetSelection);        // focus-in always lands on the first field
+  TTyDateTimePickerOptions = set of TTyDateTimePickerOption;
+  TDateTimePickerOption  = TTyDateTimePickerOption;
+  TDateTimePickerOptions = TTyDateTimePickerOptions;
+
+  { Which affordance sits at the right-hand edge. LCL's TDTDateMode
+    (datetimepicker.pas:125) member for member.
+      dmComboBox  the default, and the only value that keeps Kind in charge: a date
+                  field drops a calendar, a time field spins.
+      dmUpDown    spin buttons, whatever the Kind -- a date field that steps without
+                  ever opening a popup.
+      dmNone      no button, and no button COLUMN either: the text gets the width back.
+                  This is the one a grid cell or a compact toolbar wants; before, the
+                  space was reserved whether or not anything could use it. }
+  TTyDTDateMode = (dmComboBox, dmUpDown, dmNone);
+  TDTDateMode   = TTyDTDateMode;
 
   { Describes one editable segment inside a formatted date/time string.
     StartCh and LenCh are 0-based character indices into the EFFECTIVE FORMAT
@@ -152,6 +205,36 @@ function TyDateTimeActiveSegAt(const ASegs: TTySegmentArray;
   every offset the walk visits is a character boundary — is testable without a mouse. }
 function TyDateTimeNextCharOffset(const AText: string; AOffset: Integer): Integer;
 
+{ Renders AValue with AFormat AND reports where each field landed in the RESULT --
+  ASpans[i].StartCh/LenCh are byte offsets into the returned string, matched one for
+  one with TyDateTimeSegments(AFormat).
+
+  This exists because the old model inferred rendered offsets from the FORMAT string:
+  TyEffectiveFormat doubled every single specifier so that "the 4th format character"
+  and "the 4th rendered character" were the same place. That invariant bought the
+  segment highlight and the click hit-test their arithmetic, and it cost two things.
+  It made LeadingZeros=False unreachable by construction -- an author's 'd/m/yyyy' was
+  silently rewritten to 'dd/mm/yyyy', a format string that appeared to be ignored. And
+  it was already false for month NAMES: 'mmmm' is 4 format characters and 'September'
+  is 9 rendered ones, so every field after the month sat at the wrong pixel and a click
+  on the year selected the month. Measuring the render instead of indexing the format
+  removes both at once.
+
+  ALeadingZeros=False drops the padding zero from day, month and hour -- the three
+  fields LCL's LeadingZeros governs (datetimepicker.pas:2795-2836). Minute, second and
+  millisecond stay padded there and here: '9:5' is not a time. }
+function TyRenderDateTime(AValue: TDateTime; const AFormat: string;
+  const AFmt: TFormatSettings; ALeadingZeros: Boolean;
+  out ASpans: TTySegmentArray): string;
+
+{ Expands a year the user typed with fewer than three digits, against the pivot
+  ACenturyFrom: at or above the pivot's last two digits it belongs to the pivot's
+  century, below it to the next one. LCL does the same against CenturyFrom
+  (datetimepicker.pas:1690-1697, default 1941). Longer input is already explicit and
+  passes through untouched. }
+function TyExpandShortYear(ATyped: Integer; ADigits: Integer;
+  ACenturyFrom: Word): Integer;
+
 { TTyDateTimePicker — field render + segment editing (Task C2).
   Dropdown/time-spin/ShowCheckBox behavior is wired in Task C3. }
 type
@@ -170,9 +253,17 @@ type
     FOnChecked:   TNotifyEvent;
     FShowCheckBox: Boolean;
     FChecked:      Boolean;
+    FAlignment:    TAlignment;
+    FLeadingZeros: Boolean;
+    FCenturyFrom:  Word;
+    FOptions:      TTyDateTimePickerOptions;
+    FDateMode:     TTyDTDateMode;
+    { The value as of the last focus-in (or the last programmatic write). Escape
+      restores it -- see KeyDown. LCL calls this FConfirmedDateTime. }
+    FConfirmedDateTime: TDateTime;
 
     { Segment editing state }
-    FSegments:    TTySegmentArray;  // computed from effective format
+    FSegments:    TTySegmentArray;  // field kinds + their spans in the FORMAT string
     FActiveSeg:   Integer;          // index into FSegments; -1 = none
     FDigitBuffer: string;           // accumulated digit chars for current seg
                                     // (not yet written to FDateTime)
@@ -190,9 +281,18 @@ type
     function  EffectiveFormat: string;
     procedure RebuildSegments;
     function  FormattedText: string;
-    { Return the text to render for the active segment: uses FDigitBuffer content
-      when a buffer is active, otherwise the value from FDateTime. }
-    function  ActiveSegDisplayText: string;
+    { The string the control actually draws, plus where each field landed IN IT.
+      Both come out of one call because they must agree: the highlight rect, the click
+      hit-test and the digit buffer all index the same string, and the previous code
+      derived their offsets from a different one (the format). ASpans is indexed like
+      FSegments. }
+    procedure BuildDisplay(out AText: string; out ASpans: TTySegmentArray);
+    { Digits a field accepts -- what the buffer pads itself to while typing. }
+    function  SegmentDigitWidth(const ASeg: TTySegment): Integer;
+    { Left edge of the rendered text inside ATextR, honouring Alignment. The highlight
+      and the hit-test both need it; drawing gets it from P.DrawText's own alignment. }
+    function  TextOriginX(const ATextR: TRect; const AText, AFontName: string;
+                AFontSizePx, AFontWeight, APPI: Integer): Integer;
     { Pixel x of the start of character ACharIdx in the rendered text,
       relative to the text-content rect's left edge. }
     function  MeasureCharX(const AText, AFontName: string;
@@ -216,6 +316,19 @@ type
     { Returns True when the field is inert: ShowCheckBox=True AND Checked=False.
       All editing and dropdown must be blocked when this is True. }
     function  HourOf(AValue: TDateTime): Integer;
+    { True when the active format carries an am/pm token, i.e. the hour field is
+      showing 1..12 rather than 0..23. }
+    function  TwelveHourFormat: Boolean;
+    { True when the right-hand button opens the calendar (as opposed to spinning, or
+      not being there at all). Kind alone used to decide this. }
+    function  HasDropDownButton: Boolean;
+    function  HasSpinButtons: Boolean;
+    { Reserved width of the button column, 0 under dmNone. Two entry points because
+      the paint path scales through the painter (which carries the theme's own factor)
+      and the mouse path only has the control's PPI; they must not drift, so both read
+      the same token and the same dmNone rule. }
+    function  ButtonColumnWidth(P: TTyPainter): Integer;
+    function  ButtonWidthDev: Integer;
     function  IsInert: Boolean;
     { Resolve the checkbox box rect within ATextR (left of text content) @APPI. }
     function  CheckBoxRect(const ATextR: TRect; APPI: Integer): TRect;
@@ -253,6 +366,12 @@ type
     procedure SetReadOnly(AValue: Boolean);
     procedure SetShowCheckBox(AValue: Boolean);
     procedure SetChecked(AValue: Boolean);
+    procedure SetAlignment(AValue: TAlignment);
+    procedure SetLeadingZeros(AValue: Boolean);
+    procedure SetCenturyFrom(AValue: Word);
+    procedure SetDateMode(AValue: TTyDTDateMode);
+    { Re-measure + relayout after anything that changes the rendered content. }
+    procedure ContentChanged;
     function  GetDroppedDown: Boolean;
     procedure SetDroppedDown(AValue: Boolean);
 
@@ -263,6 +382,12 @@ type
     procedure EnsurePopup;
 
     function  GetStyleTypeKey: string; override;
+    { What the field needs to show its own content without clipping: padding, the
+      checkbox if there is one, the widest text this format can produce, and the button
+      column. Measured, not assumed -- a roomier skin changes every one of those, and a
+      fixed 130px meant the text clipped instead of the control growing. }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure DoEnter; override;
@@ -280,6 +405,13 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor  Destroy; override;
+
+    { Take the current value as the one Escape reverts to. LCL calls this
+      ConfirmChanges (datetimepicker.pas:1979-1983); it happens on focus-in and on a
+      programmatic write, so "undo" means "undo what the USER did since then". }
+    procedure ConfirmChanges;
+    { Restore the confirmed value (LCL's UndoChanges, :1985-1997). }
+    procedure UndoChanges;
 
     property Date:        TDateTime read GetDate    write SetDate;
     property Time:        TDateTime read GetTime    write SetTime;
@@ -303,10 +435,42 @@ type
     property ShowCheckBox: Boolean         read FShowCheckBox write SetShowCheckBox default False;
     property Checked:      Boolean         read FChecked     write SetChecked     default True;
     property DroppedDown:  Boolean         read GetDroppedDown write SetDroppedDown;
+    { Horizontal placement of the whole date/time string inside the field. A date column
+      next to numeric ones is conventionally right-aligned and there was no way to say
+      so; LCL has had Alignment since forever (datetimepicker.pas:455). The segment
+      highlight and the click hit-test move with it -- an alignment that the mouse does
+      not follow is worse than none. }
+    property Alignment:    TAlignment      read FAlignment   write SetAlignment   default taLeftJustify;
+    { False drops the padding zero from day, month and hour: 9/7/2026, not 09/07/2026.
+      Until now the padding was structural -- the format was rewritten to force it --
+      so an explicit 'd/m/yyyy' came out as 'dd/mm/yyyy' and looked ignored. }
+    property LeadingZeros: Boolean         read FLeadingZeros write SetLeadingZeros default True;
+    { The pivot a SHORT typed year expands against: 26 becomes 2026, 40 becomes 2040,
+      and with the default 1941 anything below 41 rolls into the next century. It is
+      read by the expansion in FinalizeBuffer -- it is the knob on a behaviour, not a
+      value stored for its own sake. }
+    property CenturyFrom:  Word            read FCenturyFrom write SetCenturyFrom default TyDefaultCenturyFrom;
+    { LCL's Options set (datetimepicker.pas:456), default [] as there. The one that
+      changes existing behaviour is dtpoDoChangeOnSetDateTime -- see SetDateTime. }
+    property Options:      TTyDateTimePickerOptions read FOptions write FOptions default [];
+    { Which right-hand affordance the field carries, and whether it reserves a column
+      at all. Was hardwired to Kind, so a date field could only drop a calendar and the
+      button column was spent whether or not anything used it. }
+    property DateMode:     TTyDTDateMode   read FDateMode    write SetDateMode    default dmComboBox;
+    { Off by default, unlike LCL's picker (datetimepicker.pas:394 publishes it True):
+      turning it on for everyone would resize every field on every existing form. On,
+      the control measures its own text, checkbox and button and grows to fit -- which
+      is what a skin with a larger font or fatter padding needs, and what the fixed
+      130px width could not do. }
+    property AutoSize;
     property OnChange:     TNotifyEvent    read FOnChange    write FOnChange;
     property OnDropDown:   TNotifyEvent    read FOnDropDown  write FOnDropDown;
     property OnCloseUp:    TNotifyEvent    read FOnCloseUp   write FOnCloseUp;
     property OnChecked:    TNotifyEvent    read FOnChecked   write FOnChecked;
+    { LCL's name for the same event (datetimepicker.pas:415-416). One storage, two
+      names, so a ported form's `OnCheckBoxChange = Handler` streams instead of leaving
+      the handler silently orphaned. OnChecked stays the persisted one. }
+    property OnCheckBoxChange: TNotifyEvent read FOnChecked  write FOnChecked stored False;
     property Align;
     property Anchors;
     property Font;
@@ -494,7 +658,7 @@ begin
     end;
 
     { ── recognised single-letter field tokens ── }
-    if Ch in ['y', 'm', 'd', 'h', 'n', 's'] then
+    if Ch in ['y', 'm', 'd', 'h', 'n', 's', 'z'] then
     begin
       { Consume the run }
       RunStart := i;
@@ -513,6 +677,7 @@ begin
         'h': Kind := skHour;
         'n': Kind := skMinute;
         's': Kind := skSecond;
+        'z': Kind := skMilliSec;
         'm':
           begin
             { m-after-h rule: if the most-recently-emitted field was skHour,
@@ -557,6 +722,7 @@ begin
     skHour:   begin AMin := 0;  AMax := 23;   Result := True; end;
     skMinute: begin AMin := 0;  AMax := 59;   Result := True; end;
     skSecond: begin AMin := 0;  AMax := 59;   Result := True; end;
+    skMilliSec: begin AMin := 0; AMax := 999; Result := True; end;
     skAMPM:   begin AMin := 0;  AMax := 1;    Result := True; end;
   else
     Result := False;
@@ -590,6 +756,7 @@ begin
     skHour:   Field := H;
     skMinute: Field := Min;
     skSecond: Field := S;
+    skMilliSec: Field := MS;
     skAMPM:   Field := H div 12;   // 0 = AM, 1 = PM
   else
     begin
@@ -629,6 +796,7 @@ begin
     skHour:  H   := Word(Field);
     skMinute: Min := Word(Field);
     skSecond: S   := Word(Field);
+    skMilliSec: MS := Word(Field);
     skAMPM:
       begin
         { Toggle AM/PM by adding or subtracting 12 hours; keep within 0..23 }
@@ -678,6 +846,164 @@ begin
   if Result > Length(AText) then Result := Length(AText);
 end;
 
+{ ── TyRenderDateTime ─────────────────────────────────────────────────────── }
+
+{ Zero-pads S on the left to AWidth. }
+function TyPadLeft(const S: string; AWidth: Integer): string;
+begin
+  Result := S;
+  while Length(Result) < AWidth do Result := '0' + Result;
+end;
+
+{ The rendered text of ONE field. ARawToken is the field's own slice of the format
+  string -- needed for the meridiem, whose CASE follows the way the author wrote it
+  ('AM/PM' vs 'am/pm'), exactly as FormatDateTime does it. }
+function TySegmentDisplay(const ASeg: TTySegment; const ARawToken: string;
+  Y, M, D, H, Mi, S, MS: Word; const AFmt: TFormatSettings;
+  ALeadingZeros, ATwelveHour: Boolean): string;
+var
+  hh, dow: Integer;
+begin
+  case ASeg.Kind of
+    skYear:
+      case ASeg.LenCh of
+        1, 2: Result := TyPadLeft(IntToStr(Y mod 100), 2);
+        3:    Result := TyPadLeft(IntToStr(Y), 3);
+      else
+        Result := TyPadLeft(IntToStr(Y), 4);
+      end;
+    skMonth:
+      if ASeg.LenCh >= 4 then
+        Result := AFmt.LongMonthNames[M]
+      else if ASeg.LenCh = 3 then
+        Result := AFmt.ShortMonthNames[M]
+      else if ALeadingZeros then
+        Result := TyPadLeft(IntToStr(M), 2)
+      else
+        Result := IntToStr(M);
+    skDay:
+      if ASeg.LenCh >= 3 then
+      begin
+        { 'ddd'/'dddd' are weekday NAMES in FormatDateTime, not the day number. }
+        dow := DayOfWeek(EncodeDate(Y, M, D));
+        if ASeg.LenCh >= 4 then
+          Result := AFmt.LongDayNames[dow]
+        else
+          Result := AFmt.ShortDayNames[dow];
+      end
+      else if ALeadingZeros then
+        Result := TyPadLeft(IntToStr(D), 2)
+      else
+        Result := IntToStr(D);
+    skHour:
+      begin
+        hh := H;
+        if ATwelveHour then
+        begin
+          hh := H mod 12;
+          if hh = 0 then hh := 12;
+        end;
+        if ALeadingZeros then
+          Result := TyPadLeft(IntToStr(hh), 2)
+        else
+          Result := IntToStr(hh);
+      end;
+    skMinute:   Result := TyPadLeft(IntToStr(Mi), 2);
+    skSecond:   Result := TyPadLeft(IntToStr(S),  2);
+    skMilliSec: Result := TyPadLeft(IntToStr(MS), 3);
+    skAMPM:
+      begin
+        if ASeg.LenCh = 3 then          { 'a/p' }
+          if H < 12 then Result := 'A' else Result := 'P'
+        else                            { 'am/pm' }
+          if H < 12 then Result := 'AM' else Result := 'PM';
+        if ARawToken = LowerCase(ARawToken) then
+          Result := LowerCase(Result);
+      end;
+  else
+    Result := '';
+  end;
+end;
+
+function TyRenderDateTime(AValue: TDateTime; const AFormat: string;
+  const AFmt: TFormatSettings; ALeadingZeros: Boolean;
+  out ASpans: TTySegmentArray): string;
+var
+  Segs: TTySegmentArray;
+  i, si, N: Integer;
+  Y, M, D, H, Mi, S, MS: Word;
+  Twelve: Boolean;
+  Ch: Char;
+  T: string;
+begin
+  { Reuse the scanner rather than re-deriving the field list: it already carries the
+    m-after-h rule, and two independent readings of the same format is how the format
+    offsets and the rendered offsets drifted apart in the first place. }
+  Segs := TyDateTimeSegments(AFormat);
+  SetLength(ASpans, Length(Segs));
+  DecodeDateTime(AValue, Y, M, D, H, Mi, S, MS);
+  Twelve := False;
+  for i := 0 to High(Segs) do
+    if Segs[i].Kind = skAMPM then Twelve := True;
+
+  Result := '';
+  N := Length(AFormat);
+  i  := 1;      // 1-based into AFormat
+  si := 0;      // next segment to emit
+  while i <= N do
+  begin
+    if (si <= High(Segs)) and (Segs[si].StartCh = i - 1) then
+    begin
+      T := TySegmentDisplay(Segs[si], Copy(AFormat, i, Segs[si].LenCh),
+             Y, M, D, H, Mi, S, MS, AFmt, ALeadingZeros, Twelve);
+      ASpans[si].Kind    := Segs[si].Kind;
+      ASpans[si].StartCh := Length(Result);
+      ASpans[si].LenCh   := Length(T);
+      Result := Result + T;
+      Inc(i, Segs[si].LenCh);
+      Inc(si);
+      Continue;
+    end;
+
+    Ch := AFormat[i];
+    { Quoted literal: FormatDateTime emits the contents without the quotes. }
+    if (Ch = '''') or (Ch = '"') then
+    begin
+      Inc(i);
+      while (i <= N) and (AFormat[i] <> Ch) do
+      begin
+        Result := Result + AFormat[i];
+        Inc(i);
+      end;
+      if i <= N then Inc(i);
+      Continue;
+    end;
+    { '/' and ':' are placeholders for the locale's separators in FormatDateTime, not
+      literals; a German build must still get 30.07.2026 out of 'dd/mm/yyyy'. }
+    if Ch = '/' then
+      Result := Result + AFmt.DateSeparator
+    else if Ch = ':' then
+      Result := Result + AFmt.TimeSeparator
+    else
+      Result := Result + Ch;
+    Inc(i);
+  end;
+end;
+
+{ ── TyExpandShortYear ────────────────────────────────────────────────────── }
+
+function TyExpandShortYear(ATyped: Integer; ADigits: Integer;
+  ACenturyFrom: Word): Integer;
+begin
+  Result := ATyped;
+  if ADigits > 2 then Exit;        // three or four digits is already an explicit year
+  if ATyped < 0 then Exit;
+  if ATyped >= (ACenturyFrom mod 100) then
+    Result := ATyped + 100 * (ACenturyFrom div 100)
+  else
+    Result := ATyped + 100 * (ACenturyFrom div 100 + 1);
+end;
+
 { ── Button geometry helpers ──────────────────────────────────────────────── }
 
 function TyDateTimeButtonRect(const ALocal: TRect; APPI: Integer; ABtnWDev: Integer = 0): TRect;
@@ -725,6 +1051,12 @@ begin
   FReadOnly      := False;
   FShowCheckBox  := False;
   FChecked       := True;
+  FAlignment     := taLeftJustify;
+  FLeadingZeros  := True;
+  FCenturyFrom   := TyDefaultCenturyFrom;
+  FOptions       := [];
+  FDateMode      := dmComboBox;
+  FConfirmedDateTime := FDateTime;
   FActiveSeg     := 0;
   FDigitBuffer   := '';
   FPopup         := nil;
@@ -784,9 +1116,11 @@ end;
 
 procedure TTyDateTimePicker.RebuildSegments;
 begin
-  { Scan the EFFECTIVE (normalized) format so segment positions match the
-    rendered text positions. }
-  FSegments := TyDateTimeSegments(EffectiveFormat);
+  { Scan the AUTHOR'S format, not the doubled one. The doubling existed only to make
+    format offsets equal rendered offsets; BuildDisplay now reports the rendered
+    offsets directly, so the format can stay exactly as it was written -- which is what
+    lets LeadingZeros=False and month names work at all. }
+  FSegments := TyDateTimeSegments(ActiveFormat);
   if FActiveSeg > High(FSegments) then
     FActiveSeg := 0;
   if Length(FSegments) = 0 then
@@ -795,45 +1129,75 @@ begin
 end;
 
 function TTyDateTimePicker.FormattedText: string;
+var
+  Spans: TTySegmentArray;
 begin
-  { Render using the EFFECTIVE format (fixed-width fields). }
-  Result := TyFormatDateTime(FDateTime, EffectiveFormat, DefaultFormatSettings);
+  Result := TyRenderDateTime(FDateTime, ActiveFormat, DefaultFormatSettings,
+              FLeadingZeros, Spans);
 end;
 
-function TTyDateTimePicker.ActiveSegDisplayText: string;
-{ Return the per-segment display text, substituting the buffer content for the
-  active segment when a digit buffer is active (buffer-display model). }
-var
-  Full: string;
-  Seg:  TTySegment;
-  BufVal, RMin, RMax: Integer;
-  SegText: string;
+function TTyDateTimePicker.SegmentDigitWidth(const ASeg: TTySegment): Integer;
 begin
-  Full := FormattedText;
-  if (FDigitBuffer = '') or (FActiveSeg < 0) or (FActiveSeg > High(FSegments)) then
-  begin
-    Result := Full;
-    Exit;
+  case ASeg.Kind of
+    skYear:     if ASeg.LenCh >= 3 then Result := 4 else Result := 2;
+    skMilliSec: Result := 3;
+  else
+    Result := 2;
   end;
-  Seg := FSegments[FActiveSeg];
-  if not TySegmentRange(Seg, RMin, RMax) then
-  begin
-    Result := Full;
-    Exit;
-  end;
-  { Build the segment display string from the buffer:
-    zero-pad on the left to match the segment width. }
-  BufVal  := StrToIntDef(FDigitBuffer, 0);
-  SegText := IntToStr(BufVal);
-  while Length(SegText) < Seg.LenCh do
-    SegText := '0' + SegText;
-  { Splice into the full formatted string }
-  Result := Copy(Full, 1, Seg.StartCh) +
-            SegText +
-            Copy(Full, Seg.StartCh + Seg.LenCh + 1, MaxInt);
+end;
+
+procedure TTyDateTimePicker.BuildDisplay(out AText: string;
+  out ASpans: TTySegmentArray);
+var
+  BufText: string;
+  i, Delta: Integer;
+begin
+  AText := TyRenderDateTime(FDateTime, ActiveFormat, DefaultFormatSettings,
+             FLeadingZeros, ASpans);
+  if (FDigitBuffer = '') or (FActiveSeg < 0) or (FActiveSeg > High(ASpans)) then Exit;
+
+  { Show exactly what was typed, so there is no premature-clamp flicker; pad it to the
+    field's digit width only when the field is padded anyway, otherwise a '1' typed
+    into a LeadingZeros=False day would jump to '01' and back. }
+  BufText := FDigitBuffer;
+  if FLeadingZeros then
+    BufText := TyPadLeft(BufText, SegmentDigitWidth(FSegments[FActiveSeg]));
+
+  Delta := Length(BufText) - ASpans[FActiveSeg].LenCh;
+  AText := Copy(AText, 1, ASpans[FActiveSeg].StartCh) + BufText +
+           Copy(AText, ASpans[FActiveSeg].StartCh + ASpans[FActiveSeg].LenCh + 1, MaxInt);
+  ASpans[FActiveSeg].LenCh := Length(BufText);
+  { Everything after the spliced field moved; leaving the spans stale is how the
+    highlight and the mouse would disagree with the text mid-typing. }
+  for i := FActiveSeg + 1 to High(ASpans) do
+    Inc(ASpans[i].StartCh, Delta);
 end;
 
 { ── Pixel measurement helper ─────────────────────────────────────────────── }
+
+function TTyDateTimePicker.TextOriginX(const ATextR: TRect;
+  const AText, AFontName: string;
+  AFontSizePx, AFontWeight, APPI: Integer): Integer;
+var
+  Bmp: TBGRABitmap;
+  TextW: Integer;
+begin
+  Result := ATextR.Left;
+  if FAlignment = taLeftJustify then Exit;
+  if AText = '' then Exit;
+  Bmp := TBGRABitmap.Create(1, 1);
+  try
+    TyConfigureTextFont(Bmp, AFontName, AFontSizePx, AFontWeight, APPI);
+    TextW := Bmp.TextSize(AText).cx;
+  finally
+    Bmp.Free;
+  end;
+  if FAlignment = taRightJustify then
+    Result := ATextR.Right - TextW
+  else
+    Result := ATextR.Left + (ATextR.Right - ATextR.Left - TextW) div 2;
+  if Result < ATextR.Left then Result := ATextR.Left;
+end;
 
 function TTyDateTimePicker.MeasureCharX(const AText, AFontName: string;
   ACharIdx, AFontSizePx, AFontWeight, APPI: Integer): Integer;
@@ -881,10 +1245,7 @@ begin
   NewVal := StrToIntDef(NewBuf, -1);
   if NewVal < 0 then Exit;  // non-digit sneaked in
 
-  if Seg.Kind = skYear then
-    MaxDigits := 4
-  else
-    MaxDigits := 2;
+  MaxDigits := SegmentDigitWidth(Seg);
 
   FDigitBuffer := NewBuf;  // store buffer (no FDateTime write yet)
 
@@ -920,6 +1281,11 @@ begin
   end;
 
   NewVal := StrToIntDef(FDigitBuffer, RMin);
+  { A year typed with one or two digits is shorthand, not the year AD 26. Without this
+    the digits went in verbatim and DoExit committed them, so typing 26 and tabbing away
+    silently stored 0026 -- wrong DATA, with nothing on screen saying so. }
+  if Seg.Kind = skYear then
+    NewVal := TyExpandShortYear(NewVal, Length(FDigitBuffer), FCenturyFrom);
   if NewVal < RMin then NewVal := RMin;
   if NewVal > RMax then NewVal := RMax;
 
@@ -928,9 +1294,29 @@ begin
     skYear:   Y  := Word(NewVal);
     skMonth:  M  := Word(NewVal);
     skDay:    D  := Word(NewVal);
-    skHour:   H  := Word(NewVal);
+    skHour:
+      { In a 12-hour format the field SHOWS 1..12, so the digits the user typed are a
+        12-hour reading and must be put back through the meridiem they are looking at.
+        Storing them raw meant typing 3 at 15:00 silently produced 03:00 -- the display
+        still read "03 PM" until the next repaint, and the value was twelve hours out.
+        LCL maps it the same way (datetimepicker.pas:1708-1724). }
+      if TwelveHourFormat then
+      begin
+        if H < 12 then
+        begin
+          if NewVal = 12 then H := 0 else H := Word(NewVal);
+        end
+        else
+        begin
+          if NewVal = 12 then H := 12 else H := Word(NewVal + 12);
+        end;
+        if H > 23 then H := 23;
+      end
+      else
+        H := Word(NewVal);
     skMinute: Mi := Word(NewVal);
     skSecond: S  := Word(NewVal);
+    skMilliSec: MS := Word(NewVal);
   else
     FDigitBuffer := '';
     Exit;
@@ -962,9 +1348,21 @@ begin
   Clamped := FDateTime;
   if (FMinDate <> 0) and (Clamped < FMinDate) then Clamped := FMinDate;
   if (FMaxDate <> 0) and (Clamped > FMaxDate) then Clamped := FMaxDate;
+  { A 4-digit year field let a user type 0001 or 9999 into an UNBOUNDED picker, and
+    dates before Oct 1752 are what LCL refuses outright because widgetset calendars
+    misdraw them -- a value entered here can be handed to one of those. So the absolute
+    limits apply whether or not MinDate/MaxDate were set. }
+  if Clamped < TyTheSmallestDate then Clamped := TyTheSmallestDate;
+  if Clamped > TyTheBiggestDate  then Clamped := TyTheBiggestDate;
   FDateTime := Clamped;
-  if (FDateTime <> AOldVal) and Assigned(FOnChange) then
-    FOnChange(Self);
+  if FDateTime <> AOldVal then
+  begin
+    { dtpoAutoCheck: an edit implies the value is wanted, so the box follows it
+      (LCL datetimepicker.pas:4007). }
+    if (dtpoAutoCheck in FOptions) and FShowCheckBox and not FChecked then
+      Checked := True;
+    if Assigned(FOnChange) then FOnChange(Self);
+  end;
   Invalidate;
 end;
 
@@ -996,9 +1394,50 @@ begin
   Result := h;
 end;
 
+function TTyDateTimePicker.TwelveHourFormat: Boolean;
+var
+  i: Integer;
+begin
+  Result := False;
+  for i := 0 to High(FSegments) do
+    if FSegments[i].Kind = skAMPM then Exit(True);
+end;
+
+function TTyDateTimePicker.HasDropDownButton: Boolean;
+begin
+  Result := (FDateMode = dmComboBox) and (FKind = dtkDate);
+end;
+
+function TTyDateTimePicker.HasSpinButtons: Boolean;
+begin
+  Result := (FDateMode = dmUpDown) or
+            ((FDateMode = dmComboBox) and (FKind = dtkTime));
+end;
+
+function TTyDateTimePicker.ButtonColumnWidth(P: TTyPainter): Integer;
+begin
+  if FDateMode = dmNone then
+    Result := 0
+  else
+    Result := P.Scale(ActiveController.Metric('--field-button-width', TyFieldButtonWidth));
+end;
+
+function TTyDateTimePicker.ButtonWidthDev: Integer;
+begin
+  if FDateMode = dmNone then
+    Result := 0
+  else
+    Result := MulDiv(ActiveController.Metric('--field-button-width', TyFieldButtonWidth),
+                Font.PixelsPerInch, 96);
+end;
+
 function TTyDateTimePicker.IsInert: Boolean;
 begin
-  Result := FShowCheckBox and not FChecked;
+  { dtpoEnabledIfUnchecked keeps the field editable while the box is clear -- LCL's
+    flag of the same name (datetimepicker.pas:1024). Without it an unchecked picker
+    refuses every gesture, which is the right default but not the only useful one. }
+  Result := FShowCheckBox and not FChecked and
+            not (dtpoEnabledIfUnchecked in FOptions);
 end;
 
 function TTyDateTimePicker.CheckBoxRect(const ATextR: TRect; APPI: Integer): TRect;
@@ -1042,7 +1481,8 @@ var
   Radius: Integer;
 begin
   if IsInert then Exit;
-  if FKind <> dtkDate then Exit;
+  { DateMode, not Kind, decides whether there is a calendar to drop. }
+  if not HasDropDownButton then Exit;
   if (FPopup <> nil) and FPopup.IsOpen then Exit;
 
   { Guard the click-while-open reopen race: the popup deactivates (fires
@@ -1064,7 +1504,11 @@ begin
   FCalendar.MinDate       := FMinDate;
   FCalendar.MaxDate       := FMaxDate;
   FCalendar.Date          := DateOf(FDateTime);
-  FCalendar.FirstDayOfWeek := wdSunday;
+  { Was pinned to wdSunday, which quietly overrode the calendar's own locale default --
+    so on a Monday-first machine the dropdown disagreed with a standalone calendar on
+    the same form. Let the calendar decide; a host that wants a fixed column order sets
+    it on the calendar it can reach through the Calendar property. }
+  FCalendar.FirstDayOfWeek := wdLocaleDefault;
   FCalendar.Controller    := ActiveController;
 
   { Match the popup corner radius to the calendar's resolved border-radius. }
@@ -1138,11 +1582,18 @@ procedure TTyDateTimePicker.CalendarAccepted(Sender: TObject);
   Uses CloseDropDown so both the real-window path (fires PopupClosed→OnCloseUp)
   and the headless test path (CloseDropDown's else-branch fires OnCloseUp) work. }
 var
-  NewDate: TDateTime;
+  NewDate, OldVal: TDateTime;
 begin
   if FCalendar = nil then Exit;
   NewDate := DateOf(FCalendar.Date) + Frac(FDateTime);
+  OldVal  := FDateTime;
   SetDateTime(NewDate);
+  { Picking a day in the dropdown is a USER edit, so it must notify even though it goes
+    through the (now silent) programmatic setter. Without this line the one gesture the
+    dropdown exists for became the one gesture that told nobody. }
+  if (FDateTime <> OldVal) and not (dtpoDoChangeOnSetDateTime in FOptions)
+     and Assigned(FOnChange) then
+    FOnChange(Self);
   { Close after committing — CloseDropDown handles both the real-window path
     (FPopup.Close → PopupClosed → FOnCloseUp) and the headless path
     (directly fires FOnCloseUp). }
@@ -1154,6 +1605,13 @@ end;
 procedure TTyDateTimePicker.DoEnter;
 begin
   inherited DoEnter;
+  { Snapshot on the way in: this is the value Escape restores, so it has to be taken
+    before the user can touch anything. }
+  ConfirmChanges;
+  { dtpoResetSelection: always land on the first field rather than wherever the last
+    visit left the caret (LCL datetimepicker.pas:2852). }
+  if (dtpoResetSelection in FOptions) and (Length(FSegments) > 0) then
+    FActiveSeg := 0;
   Invalidate;
 end;
 
@@ -1184,8 +1642,9 @@ var
   { Selection highlight }
   SelStyle:  TTyStyleSet;
   SelFill:   TTyFill;
-  SegX1, SegX2: Integer;
+  SegX1, SegX2, OriginX: Integer;
   SegRect:   TRect;
+  Spans:     TTySegmentArray;
   { Button area }
   UpR, DnR:  TRect;
 begin
@@ -1196,7 +1655,7 @@ begin
     S := CurrentStyle;
     DrawFrame(P, R, S);
 
-    BtnW  := P.Scale(ActiveController.Metric('--field-button-width', TyFieldButtonWidth));
+    BtnW  := ButtonColumnWidth(P);
     EffSize := ResolveFontSize(S);
 
     { Base text content rect: left padding to right minus button column }
@@ -1235,28 +1694,28 @@ begin
     end;
 
     { Use buffer-display text: shows digit buffer content for active segment
-      while the user is mid-entry, so no premature-clamp flicker. }
-    Txt := ActiveSegDisplayText;
+      while the user is mid-entry, so no premature-clamp flicker.  Spans come out of
+      the same call so the highlight below cannot index a different string. }
+    BuildDisplay(Txt, Spans);
+    OriginX := TextOriginX(TextR, Txt, S.FontName, EffSize, S.FontWeight, APPI);
 
     { 1. Active-segment highlight (drawn BEFORE text so glyphs appear on top)
          Only when focused AND field is not inert. }
     if Focused and not IsInert and
-       (FActiveSeg >= 0) and (FActiveSeg <= High(FSegments)) then
+       (FActiveSeg >= 0) and (FActiveSeg <= High(Spans)) then
     begin
       SelStyle := ActiveController.Model.ResolveStyle('TyTextSelection', '', []);
       SelFill  := Default(TTyFill);
       SelFill.Kind  := tfkSolid;
       SelFill.Color := SelStyle.Background.Color;
 
-      { Measure pixel x of segment start/end in the displayed text.
-        Because we use the effective (normalized) format, every field is
-        fixed-width: format character positions == rendered text positions,
-        so StartCh/LenCh index directly into the rendered string. }
-      SegX1 := TextR.Left + MeasureCharX(Txt, S.FontName,
-                  FSegments[FActiveSeg].StartCh,
+      { Spans are offsets into Txt itself -- measured, not inferred from the format --
+        so a month NAME or an unpadded day no longer drags the highlight off the field. }
+      SegX1 := OriginX + MeasureCharX(Txt, S.FontName,
+                  Spans[FActiveSeg].StartCh,
                   EffSize, S.FontWeight, APPI);
-      SegX2 := TextR.Left + MeasureCharX(Txt, S.FontName,
-                  FSegments[FActiveSeg].StartCh + FSegments[FActiveSeg].LenCh,
+      SegX2 := OriginX + MeasureCharX(Txt, S.FontName,
+                  Spans[FActiveSeg].StartCh + Spans[FActiveSeg].LenCh,
                   EffSize, S.FontWeight, APPI);
       if SegX2 <= SegX1 then SegX2 := SegX1 + P.Scale(8);  // degenerate guard
       SegRect := Rect(SegX1, TextR.Top, SegX2, TextR.Bottom);
@@ -1265,20 +1724,21 @@ begin
 
     { 2. Draw the formatted text }
     P.DrawText(TextR, Txt, S.FontName, EffSize, S.FontWeight,
-      TextColor, taLeftJustify, tlCenter, False);
+      TextColor, FAlignment, tlCenter, False);
 
-    { 3. Right-side button area }
-    BtnR := TyDateTimeButtonRect(R, APPI, BtnW);
-    if FKind = dtkDate then
+    { 3. Right-side button area — absent entirely under dmNone }
+    if BtnW > 0 then
     begin
-      P.DrawGlyph(BtnR, tgChevronDown, S.TextColor, 2);
-    end
-    else
-    begin
-      UpR := TyDateTimeUpButtonRect(R, APPI, BtnW);
-      DnR := TyDateTimeDownButtonRect(R, APPI, BtnW);
-      P.DrawGlyph(UpR,  tgArrowUp,   S.TextColor, 2);
-      P.DrawGlyph(DnR,  tgArrowDown, S.TextColor, 2);
+      BtnR := TyDateTimeButtonRect(R, APPI, BtnW);
+      if HasDropDownButton then
+        P.DrawGlyph(BtnR, tgChevronDown, S.TextColor, 2)
+      else if HasSpinButtons then
+      begin
+        UpR := TyDateTimeUpButtonRect(R, APPI, BtnW);
+        DnR := TyDateTimeDownButtonRect(R, APPI, BtnW);
+        P.DrawGlyph(UpR,  tgArrowUp,   S.TextColor, 2);
+        P.DrawGlyph(DnR,  tgArrowDown, S.TextColor, 2);
+      end;
     end;
 
     P.EndPaint;
@@ -1292,6 +1752,50 @@ begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
+procedure TTyDateTimePicker.CalculatePreferredSize(
+  var PreferredWidth, PreferredHeight: Integer; WithThemeSpace: Boolean);
+var
+  S: TTyStyleSet;
+  Bmp: TBGRABitmap;
+  EffSize, PPI, TextW, TextH: Integer;
+  Txt: string;
+  Spans: TTySegmentArray;
+  Widest: TDateTime;
+begin
+  inherited CalculatePreferredSize(PreferredWidth, PreferredHeight, WithThemeSpace);
+  S       := CurrentStyle;
+  EffSize := ResolveFontSize(S);
+  PPI     := Font.PixelsPerInch;
+
+  { Measure a value whose fields are as wide as this format can render, not the value
+    that happens to be showing: a field sized to "1 May" clips the day it is switched
+    to September, and LeadingZeros=False makes that a routine occurrence. 30 September
+    is the widest month name in most locales and gives two-digit day/hour/minute. }
+  Widest := EncodeDateTime(2026, 9, 30, 22, 58, 58, 888);
+  Txt := TyRenderDateTime(Widest, ActiveFormat, DefaultFormatSettings,
+           FLeadingZeros, Spans);
+  Bmp := TBGRABitmap.Create(1, 1);
+  try
+    TyConfigureTextFont(Bmp, S.FontName, EffSize, S.FontWeight, PPI);
+    TextW := Bmp.TextSize(Txt).cx;
+    TextH := Bmp.TextSize(Txt).cy;
+  finally
+    Bmp.Free;
+  end;
+
+  PreferredWidth := MulDiv(S.Padding.Left + S.Padding.Right, PPI, 96)
+                  + TextW + ButtonWidthDev;
+  if FShowCheckBox then
+    Inc(PreferredWidth, MulDiv(TyCheckBoxBox + TyCheckBoxGap, PPI, 96));
+  { One character of slack: TextSize rounds down on some backends and a date that just
+    fits is a date that clips on the next repaint. }
+  Inc(PreferredWidth, MulDiv(EffSize, PPI, 96) div 2 + 2);
+
+  PreferredHeight := MulDiv(S.Padding.Top + S.Padding.Bottom, PPI, 96) + TextH;
+  if PreferredHeight < TyDensityHeight(ActiveController, 24) then
+    PreferredHeight := TyDensityHeight(ActiveController, 24);
+end;
+
 { ── Keyboard ─────────────────────────────────────────────────────────────── }
 
 procedure TTyDateTimePicker.KeyDown(var Key: Word; Shift: TShiftState);
@@ -1300,24 +1804,26 @@ begin
   if not Enabled then Exit;
   inherited KeyDown(Key, Shift);
 
-  { Escape: close dropdown if open, otherwise clear digit buffer }
+  { Escape: close the dropdown if it is open, otherwise revert the whole edit.
+    It used to drop only the half-typed digits, so a month the user had spun with the
+    arrow keys survived the Escape -- the one gesture everybody uses to mean "forget
+    it" quietly did almost nothing. LCL restores its focus-in snapshot here
+    (datetimepicker.pas:3725-3730 -> UndoChanges). ReadOnly has nothing to revert. }
   if Key = VK_ESCAPE then
   begin
     if (FPopup <> nil) and FPopup.IsOpen then
-    begin
-      CloseDropDown;
-      Key := 0;
-    end
+      CloseDropDown
+    else if not FReadOnly then
+      UndoChanges
     else
-    begin
       FDigitBuffer := '';
-      Invalidate; Key := 0;
-    end;
+    Invalidate;
+    Key := 0;
     Exit;
   end;
 
-  { Alt+Down or F4: toggle dropdown for dtkDate }
-  if FKind = dtkDate then
+  { Alt+Down or F4: toggle the dropdown, when there is one to toggle }
+  if HasDropDownButton then
   begin
     if ((Key = VK_DOWN) and (ssAlt in Shift)) or (Key = VK_F4) then
     begin
@@ -1501,6 +2007,8 @@ var
   PaddingL: Integer;
   CbBoxR:   TRect;
   TextR:    TRect;
+  TextRect: TRect;
+  Spans:    TTySegmentArray;
 begin
   if not Enabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
@@ -1516,7 +2024,7 @@ begin
       TextR := Rect(
         PaddingL,
         MulDiv(S.Padding.Top, Font.PixelsPerInch, 96),
-        ClientRect.Right - MulDiv(ActiveController.Metric('--field-button-width', TyFieldButtonWidth), Font.PixelsPerInch, 96),
+        ClientRect.Right - ButtonWidthDev,
         ClientRect.Bottom - MulDiv(S.Padding.Bottom, Font.PixelsPerInch, 96));
       CbBoxR := CheckBoxRect(TextR, Font.PixelsPerInch);
       { Expand hit area slightly (easy to miss tiny box) }
@@ -1524,10 +2032,8 @@ begin
                      CbBoxR.Right + 2, CbBoxR.Bottom + 2);
       if PtInRect(CbBoxR, Point(X, Y)) then
       begin
-        { Toggle Checked }
-        FChecked := not FChecked;
-        Invalidate;
-        if Assigned(FOnChecked) then FOnChecked(Self);
+        { Through the property, so the notification happens in one place. }
+        Checked := not FChecked;
         try
           if CanFocus then SetFocus;
         except
@@ -1537,22 +2043,21 @@ begin
     end;
 
     { ── Button area click ───────────────────────────────────────────────── }
-    if PtInRect(TyDateTimeButtonRect(ClientRect, Font.PixelsPerInch,
-         MulDiv(ActiveController.Metric('--field-button-width', TyFieldButtonWidth),
-           Font.PixelsPerInch, 96)), Point(X, Y)) then
+    if (ButtonWidthDev > 0) and
+       PtInRect(TyDateTimeButtonRect(ClientRect, Font.PixelsPerInch,
+         ButtonWidthDev), Point(X, Y)) then
     begin
-      if FKind = dtkDate then
+      if HasDropDownButton then
       begin
         { Chevron pressed → remember it; the actual open happens in Click (so the
           mouse-up that follows MouseDown can't immediately deactivate-close the popup). }
         if not IsInert then
           FMouseDownOnButton := True;
       end
-      else if (FKind = dtkTime) and not FReadOnly and not IsInert then
+      else if HasSpinButtons and not FReadOnly and not IsInert then
       begin
         if PtInRect(TyDateTimeUpButtonRect(ClientRect, Font.PixelsPerInch,
-             MulDiv(ActiveController.Metric('--field-button-width', TyFieldButtonWidth),
-               Font.PixelsPerInch, 96)), Point(X, Y)) then
+             ButtonWidthDev), Point(X, Y)) then
           StepActiveSeg(+1)
         else
           StepActiveSeg(-1);
@@ -1567,8 +2072,16 @@ begin
       { If ShowCheckBox, add the checkbox+gap to the text left offset }
       if FShowCheckBox then
         Inc(TextLeft, MulDiv(TyCheckBoxBox + TyCheckBoxGap, Font.PixelsPerInch, 96));
-      Txt      := FormattedText;
+      { The same string and the same spans the renderer used -- resolving a click
+        against offsets derived from the FORMAT is what put the caret on the month when
+        the user clicked the year in 'dd mmmm yyyy'. }
+      BuildDisplay(Txt, Spans);
       TxtLen   := Length(Txt);
+      { Alignment moves the whole string; the hit-test has to move with it. }
+      TextRect := Rect(TextLeft, 0,
+        ClientRect.Right - ButtonWidthDev, ClientRect.Bottom);
+      TextLeft := TextOriginX(TextRect, Txt, S.FontName, EffSize, S.FontWeight,
+        Font.PixelsPerInch);
 
       { Convert click X to a character offset by finding the character
         whose right edge passes the click coordinate. The step is a whole CHARACTER
@@ -1589,7 +2102,7 @@ begin
               Break;
             CharIdx := NextIdx;
           end;
-          HitSeg := TyDateTimeActiveSegAt(FSegments, CharIdx);
+          HitSeg := TyDateTimeActiveSegAt(Spans, CharIdx);
           if HitSeg >= 0 then
           begin
             FActiveSeg   := HitSeg;
@@ -1611,22 +2124,67 @@ end;
 
 { ── Property setters ─────────────────────────────────────────────────────── }
 
+{ Everything that changes what the field RENDERS also changes what it needs to be wide
+  enough for, so each of these re-measures. Leaving that out is how AutoSize ends up
+  "implemented" but never actually growing: the first measurement would stand forever. }
+procedure TTyDateTimePicker.ContentChanged;
+begin
+  InvalidatePreferredSize;
+  AdjustSize;
+  Invalidate;
+end;
+
 procedure TTyDateTimePicker.SetKind(AValue: TTyDateTimeKind);
 begin
   if FKind = AValue then Exit;
   FKind := AValue;
   RebuildSegments;
-  Invalidate;
+  ContentChanged;
 end;
 
+{ BEHAVIOUR CHANGE: a programmatic write is SILENT unless dtpoDoChangeOnSetDateTime is
+  in Options -- LCL's rule (UpdateDate(dtpoDoChangeOnSetDateTime in FOptions),
+  datetimepicker.pas:1210, and cDefOptions = []).
+
+  It used to fire unconditionally, so the ordinary "load this record into the form"
+  line re-entered the application's own OnChange handler: the dirty flag came up on a
+  form nobody had touched, and a handler that wrote back to the model looped. There was
+  no flag to turn it off. If your handler genuinely wants to run on code writes, put
+  dtpoDoChangeOnSetDateTime in Options; if it wants to run on user edits only -- which
+  is what OnChange means everywhere else -- you now get that for free. }
 procedure TTyDateTimePicker.SetDateTime(AValue: TDateTime);
 begin
   if (FMinDate <> 0) and (AValue < FMinDate) then AValue := FMinDate;
   if (FMaxDate <> 0) and (AValue > FMaxDate) then AValue := FMaxDate;
+  if AValue < TyTheSmallestDate then AValue := TyTheSmallestDate;
+  if AValue > TyTheBiggestDate  then AValue := TyTheBiggestDate;
   if FDateTime = AValue then Exit;
   FDateTime := AValue;
   FDigitBuffer := '';
-  if Assigned(FOnChange) then FOnChange(Self);
+  { The value the host just supplied is the new baseline: Escape must undo what the
+    USER did afterwards, not throw away the record that was just loaded. }
+  FConfirmedDateTime := FDateTime;
+  if (dtpoDoChangeOnSetDateTime in FOptions) and Assigned(FOnChange) then
+    FOnChange(Self);
+  Invalidate;
+end;
+
+procedure TTyDateTimePicker.ConfirmChanges;
+begin
+  FConfirmedDateTime := FDateTime;
+end;
+
+procedure TTyDateTimePicker.UndoChanges;
+begin
+  FDigitBuffer := '';
+  if FDateTime <> FConfirmedDateTime then
+  begin
+    FDateTime := FConfirmedDateTime;
+    { A revert IS a change from the handler's point of view -- the value it was last
+      told about is no longer the value -- so OnChange fires as for any other user
+      gesture. }
+    if Assigned(FOnChange) then FOnChange(Self);
+  end;
   Invalidate;
 end;
 
@@ -1657,7 +2215,7 @@ begin
   if FDateFormat = AValue then Exit;
   FDateFormat := AValue;
   if FKind = dtkDate then RebuildSegments;
-  Invalidate;
+  ContentChanged;
 end;
 
 procedure TTyDateTimePicker.SetTimeFormat(const AValue: string);
@@ -1665,7 +2223,7 @@ begin
   if FTimeFormat = AValue then Exit;
   FTimeFormat := AValue;
   if FKind = dtkTime then RebuildSegments;
-  Invalidate;
+  ContentChanged;
 end;
 
 procedure TTyDateTimePicker.SetMinDate(AValue: TDateTime);
@@ -1695,14 +2253,55 @@ procedure TTyDateTimePicker.SetShowCheckBox(AValue: Boolean);
 begin
   if FShowCheckBox = AValue then Exit;
   FShowCheckBox := AValue;
-  Invalidate;
+  ContentChanged;
 end;
 
+{ The event lives HERE, not at the mouse hit-test, so every route that flips the box
+  announces it. Space used to toggle Checked without notifying anyone -- the keyboard
+  path had been given the state change and not the event. LCL fires CheckBoxChange from
+  its own setter too (datetimepicker.pas:1011-1020), deliberately unlike OnChange:
+  a checkbox has no "user vs code" distinction worth drawing. }
 procedure TTyDateTimePicker.SetChecked(AValue: Boolean);
 begin
   if FChecked = AValue then Exit;
   FChecked := AValue;
   Invalidate;
+  if Assigned(FOnChecked) then FOnChecked(Self);
+end;
+
+procedure TTyDateTimePicker.SetAlignment(AValue: TAlignment);
+begin
+  if FAlignment = AValue then Exit;
+  FAlignment := AValue;
+  Invalidate;
+end;
+
+procedure TTyDateTimePicker.SetLeadingZeros(AValue: Boolean);
+begin
+  if FLeadingZeros = AValue then Exit;
+  FLeadingZeros := AValue;
+  { Only the RENDERING changes -- the field list comes from the author's format and is
+    unaffected -- but the buffer's padding does, so drop it rather than redraw it at
+    the other width mid-entry. }
+  FDigitBuffer := '';
+  ContentChanged;
+end;
+
+procedure TTyDateTimePicker.SetCenturyFrom(AValue: Word);
+begin
+  if FCenturyFrom = AValue then Exit;
+  FCenturyFrom := AValue;
+end;
+
+procedure TTyDateTimePicker.SetDateMode(AValue: TTyDTDateMode);
+begin
+  if FDateMode = AValue then Exit;
+  { Close first: switching away from dmComboBox with the calendar down would leave a
+    popup on screen belonging to a control that no longer has a way to close it. }
+  if (FDateMode = dmComboBox) and DroppedDown then CloseDropDown;
+  FDateMode := AValue;
+  { The button column's width changed, so the text rect did too. }
+  ContentChanged;
 end;
 
 function TTyDateTimePicker.GetDroppedDown: Boolean;

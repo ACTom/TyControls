@@ -28,10 +28,13 @@ uses tyControls.SpinEdit;
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `MinValue` | `Integer` | `0` | 最小值。赋值后当前 `Value` 会**走 `Value` setter 同一条夹紧路径**重新过一遍（空区间同样不夹紧）；若因此移动了值，则与其他值变化一样触发 `OnChange` + `OnValueChange`。 |
-| `MaxValue` | `Integer` | `100` | 最大值。同 `MinValue`：重新过一遍 setter，动了就通知。 |
+| `MaxValue` | `Integer` | `0` | 最大值。同 `MinValue`：重新过一遍 setter，动了就通知。**默认 `0`（= `MinValue`）即"不限制"**，与 LCL `spin.pp` 的 `DefMaxValue = 0` 一致——刚拖到窗体上的微调框接受任意整数。**破坏性变更**：早前默认 `100`，于是一个未配置的控件会把用户键入的 250 悄悄改成 100，没有任何提示。 |
 | `Value` | `Integer` | `0` | 当前值。**仅当 `MaxValue > MinValue`（区间非空）时才夹紧到 `[MinValue, MaxValue]`；`MaxValue <= MinValue` 表示"不限制"，任何值原样写入**（与 LCL `spinedit.inc` 的 `GetLimitedValue` 一致）。值真正变化时触发 `OnValueChange`；显示文字随之改写，因此也触发 `OnChange`。 |
 | `Increment` | `Integer` | `1` | 每步步进量。赋值小于 1 时被强制置为 1。 |
 | `ReadOnly` | `Boolean` | `False` | **（API parity 新增）** 为 `True` 时拦截内联文本编辑**与** ± 步进（箭头按钮 / 方向键 / 滚轮）；程序化 `Value :=` 不受限。 |
+| `EditorEnabled` | `Boolean` | `True` | **（API parity 新增）** 为 `False` 时**只锁键盘**：不能键入 / 退格 / 删除，但箭头按钮、方向键、滚轮照常步进——即"只能用箭头选，不许手打"，把值限制在合法刻度（5 的倍数、偶数……）上的标准做法。与 `ReadOnly` 正交（LCL `spin.pp:79`）：`ReadOnly` 锁死整个值，这个只锁输入。 |
+| `ValueEmpty` | `Boolean` | `False` | **（API parity 新增）** 让字段显示**空白**而不是数字——"尚未填写 / 多选混合"这种 `0` 无法诚实表达的状态（LCL `spin.pp:84`）。与 LCL 一样是**程序设置、真实输入清除**的状态：键入数字、删除字符或写入 `Value` 都会让它回到 `False`。 |
+| `TextHint` | `TCaption` | `''` | **（API parity 新增）** 字段为空时用 `TyTextHint` 的弱化墨色绘制的占位文字（LCL `stdctrls.pp:879`），与兄弟控件 `TTyEdit` 同一个 token、同一条绘制规则。 |
 | `Alignment` | `TAlignment` | `taLeftJustify` | **（API parity 新增）** 内联文本的水平对齐（左 / 右 / 居中）；光标随对齐偏移（`AlignOffset`）。 |
 | `MaxLength` | `Integer` | `0`（无限） | **（API parity 新增）** 按码点封顶内联编辑缓冲长度；`0` 表示无限制；插入时检查。 |
 | `OnChange` | `TNotifyEvent` | `nil` | **编辑框文字变化时触发**——每按一个数字键、每次退格/删除、箭头按钮 / 方向键 / 滚轮步进、夹紧、`Esc` 还原、程序化 `Value :=` 都算（等价于 LCL `TCustomEdit.Change`）。文字没真的变（同值再写一次）则不触发。 |
@@ -43,9 +46,24 @@ uses tyControls.SpinEdit;
 | `Controller` | `TTyStyleController` | `nil`（全局默认） | 关联的样式控制器。 |
 | `OnClick` | `TNotifyEvent` | `nil` | 鼠标点击时触发。 |
 
+### public 成员（不进 .lfm，代码可用）
+
+| 成员 | 类型 / 签名 | 说明 |
+|------|------|------|
+| `Text` | `TCaption` | **（API parity 新增）** 编辑框里**尚未提交**的原始文字，等价于 LCL `TCustomEdit.Text`（`stdctrls.pp:878`）。读：拿到用户正在键入的字符串；写：能解析成整数就写进 `Value`（照常夹紧 + 通知），解析不了就**原样保留**，于是可以把字段预置成非规范字符串（与 LCL `RealSetText` 一致）。`Caption` 同源。 |
+| `CaretPos` | `Integer` | **（API parity 新增）** 光标位置（**码点下标**），赋值自动夹紧到 `0..长度`。宿主接管字段时可以据此把光标放到该放的地方。**与 LCL 的 `TPoint` 类型不同**——单行数字框没有第二个轴；这条差异是编译期报错的响亮失败，不是静默的错答案。与兄弟控件 `TTyEdit.CaretPos` 一致。 |
+| `Modified` | `Boolean` | **（API parity 新增）** 脏标记：**用户**改过（键入 / 删除 / 箭头按钮 / 方向键 / 滚轮）为 `True`；**程序**写 `Value` 或 `Text` 后回到 `False`；`Enter` / 失焦提交**保留**它（提交是用户在收尾，不是代码在覆盖）。宿主可据此驱动"启用保存"/"关闭前提示"。LCL 同样区分（`include/spinedit.inc:38-42, 163-165`）。 |
+| `GetLimitedValue` | `function(const AValue: Integer): Integer; virtual` | **（API parity 新增）** 夹紧规则。 |
+| `ValueToStr` | `function(const AValue: Integer): string; virtual` | **（API parity 新增）** 值 → 显示文字。 |
+| `StrToValue` | `function(const S: string): Integer; virtual` | **（API parity 新增）** 显示文字 → 值。 |
+
+上面三个 `virtual` 就是 LCL `spin.pp:74-76` 的那三个缝：控件内**每一次**夹紧、格式化、解析都走它们，所以派生类可以改成十六进制、带单位后缀（`12 px`）、千分位或"吸附到某个倍数"，而不必重写整个控件。
+
 ### 继承的通用成员
 
 TTySpinEdit 继承自 `TTyCustomControl`（`tyControls.Base`）的通用状态机制。**基线事件集**（Tier A + Tier B，含 `OnEditingDone`）全部暴露——见 [../events.md](../events.md)。
+
+`AutoSize`（基类已 published）现在**有东西可问**了：控件实现了 `CalculatePreferredSize`，按主题字号 + padding + 边框算出**高度**（宽度返回 `0` = 该轴无意见，由窗体作者决定）。换一个字号更大或内距更厚的皮肤时，`AutoSize := True` 的微调框会长高而不是把数字裁掉。
 
 ---
 
@@ -170,4 +188,7 @@ end;
 7. **内联编辑缓冲轻量：** 编辑缓冲（`FEditText`/`FCaret`）无选区、无剪贴板、无撤销栈；步进操作（方向键/滚轮/按钮）总是立即提交并回填缓冲，不经过缓冲层。
 8. **非法输入安全退回：** 提交时若缓冲为空串或仅含 `-`（`StrToIntDef` 返回当前 `FValue` 作为默认值），则 `Value` 不变、`OnValueChange` 不触发；缓冲回填为当前 `Value` 的字符串表示，这一步改写了显示文字，因此触发 `OnChange`。
 9. **光标闪烁：** 聚焦时以约 530 ms 间隔启动；`TTimer` 懒创建，仅在 `HandleAllocated` 后启动，无头测试与设计器中光标静态。
-10. **I-beam 光标（batch⑤+⑥）：** 构造时把 `Cursor` 设为 `crIBeam`，鼠标移到控件上时呈现标准的文本输入「I 形」光标，提示内联数字编辑区可直接键入。
+10. **`ReadOnly` 与 `EditorEnabled` 是两把不同的锁（API parity 新增）：** `ReadOnly := True` 锁死整个值——键入不行、箭头 / 方向键 / 滚轮也不动（这**就是** LCL 的语义：Win32 部件在 `win32wsspin.pp:274` 的 `UDN_DELTAPOS` 分支里明确 `if not SpinEdit.ReadOnly`）。`EditorEnabled := False` 只锁键盘，箭头照常工作。早前只有前者，于是"只许用箭头选、不许手打"的微调框做不出来——把它设成 `ReadOnly` 会让控件彻底变成死的。
+11. **空白状态与占位文字（API parity 新增）：** `ValueEmpty := True` 让字段真的空着（`0` 是一个合法值，拿它冒充"没填"是在说谎）；配合 `TextHint` 就能显示"请选择年份"这类提示。真实输入会清掉空白状态，这与 LCL 一致（`include/spinedit.inc:76`）——它是程序设置的状态，不是键入能产生的状态。
+12. **`OnChange` 是状态问题，`Modified` 是意图问题：** `OnChange` 回答"字段现在是什么"，所以程序赋值也触发（每一次变化都是事实）；`Modified` 回答"用户碰过没有"，所以程序赋值把它清成 `False`（把代码写的值算成用户输入就是在撒谎）。
+13. **I-beam 光标（batch⑤+⑥）：** 构造时把 `Cursor` 设为 `crIBeam`，鼠标移到控件上时呈现标准的文本输入「I 形」光标，提示内联数字编辑区可直接键入。

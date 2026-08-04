@@ -18,6 +18,26 @@ type
     -- with no diagnostic, because both sides are legal. Renaming the inherited one
     is not on the table, so the direction-carrying event gets its own name. }
   TTyUpDownClickEvent = procedure(Sender: TObject; AButton: TTyUpDownButton) of object;
+  { Which way a pending step is heading. LCL calls these updNone/updUp/updDown
+    (TUpDownDirection, comctrls.pp:1913). }
+  TTyUpDownDirection = (uddNone, uddUp, uddDown);
+  { Veto hooks, consulted BEFORE a user-driven step commits. Setting AAllowChange
+    to False refuses the step: the position does not move, OnChange does not fire
+    and neither does OnArrowClick.
+
+    Both are INTENT questions -- "may the user do this?" -- so they are asked only
+    on the paths the user drives (a click on a half, and each auto-repeat tick
+    while a half is held). A programmatic `Position := N` is not a proposal to be
+    refused, it is an instruction, so it never consults them. LCL draws the line in
+    the same place: CanChange is reached from Click (customupdown.inc:369) and not
+    from SetPosition. }
+  TTyUpDownChangingEvent = procedure(Sender: TObject; var AAllowChange: Boolean) of object;
+  { The richer form: the same veto, plus the value the step WOULD land on and the
+    direction it is heading, so a handler can allow one target and refuse another.
+    LCL: TUDChangingEventEx, comctrls.pp:1917. Both fire, in this order, over the
+    one shared AAllowChange -- either can refuse. }
+  TTyUpDownChangingEventEx = procedure(Sender: TObject; var AAllowChange: Boolean;
+    ANewValue: Integer; ADirection: TTyUpDownDirection) of object;
 
 { Device rect of the up (increment) or down (decrement) half within [0,0,AW,AH].
   Vertical: up = top, down = bottom. Horizontal: up = right, down = left. }
@@ -40,6 +60,9 @@ type
     FWrap: Boolean;
     FOnChange: TNotifyEvent;
     FOnArrowClick: TTyUpDownClickEvent;
+    FOnChanging: TTyUpDownChangingEvent;
+    FOnChangingEx: TTyUpDownChangingEventEx;
+    FMinRepeatInterval: Byte;    // floor on the hold-to-repeat interval, in ms
     FHot, FHeldDir: Integer;     // -1 down, +1 up, 0 none
     FRepeatTimer: TTimer;        // lazy auto-repeat while a half is held
     FRepeatFast: Boolean;        // False = still in the initial delay, True = fast phase
@@ -49,6 +72,7 @@ type
     procedure SetIncrement(const AValue: Integer);
     procedure SetOrientation(const AValue: TTyUpDownOrientation);
     procedure SetWrap(const AValue: Boolean);
+    procedure SetMinRepeatInterval(const AValue: Byte);
     function IsVertical: Boolean;
     procedure Step(ADir: Integer);
     procedure EnsureRepeatTimer;
@@ -56,6 +80,10 @@ type
     procedure StopRepeat;
     procedure SetHot(AValue: Integer);
   protected
+    { Asks both veto hooks over one shared answer, exactly as LCL's CanChange does
+      (customupdown.inc:332-341). Virtual so a descendant can add its own rule
+      without shadowing the user's handlers. }
+    function CanChange(ANewValue: Integer; ADirection: TTyUpDownDirection): Boolean; virtual;
     function GetStyleTypeKey: string; override;   // 'TyButton'
     procedure Paint; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -72,12 +100,29 @@ type
     property Increment: Integer read FIncrement write SetIncrement default 1;
     property Orientation: TTyUpDownOrientation read FOrientation write SetOrientation default udoVertical;
     property Wrap: Boolean read FWrap write SetWrap default False;
+    { Floor on the hold-to-repeat interval in milliseconds, i.e. the fastest the value
+      moves while a half is held down. Clamped up to 25 like LCL's setter
+      (customupdown.inc:666-670); LCL's default is 100 and so is ours. LCL ramps its
+      interval down to this floor in 25ms steps from 300 (customupdown.inc:244-248);
+      we keep the two-phase initial-delay-then-repeat model and use this as the repeat
+      interval, so the property means the same thing: how fast a held button goes. }
+    property MinRepeatInterval: Byte read FMinRepeatInterval write SetMinRepeatInterval default 100;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
     { Fires per STEP -- including each auto-repeat tick while a half is held, which is
       what LCL's TUpDown.OnClick does too -- and says which arrow caused it. Unlike
       OnChange it fires even when the value did not move (already at Min or Max), so
-      "the user pressed down but nothing happened" is observable. }
+      "the user pressed down but nothing happened" is observable.
+
+      Fired AFTER the position has moved, so a handler reading Position sees the value
+      the press produced. It used to fire first, which meant every such handler read
+      the value from BEFORE its own event -- a silent off-by-one-step that only shows
+      up as stale data in whatever the handler drives. LCL's order is the same:
+      Position := ... then OnClick (customupdown.inc:371-374). }
     property OnArrowClick: TTyUpDownClickEvent read FOnArrowClick write FOnArrowClick;
+    { Refuse a user-driven step; see TTyUpDownChangingEvent. }
+    property OnChanging: TTyUpDownChangingEvent read FOnChanging write FOnChanging;
+    { Refuse a user-driven step, knowing where it would land; see TTyUpDownChangingEventEx. }
+    property OnChangingEx: TTyUpDownChangingEventEx read FOnChangingEx write FOnChangingEx;
     property Align;
     property Anchors;
     property StyleClass;
@@ -87,8 +132,8 @@ type
 implementation
 
 const
-  cRepeatDelayMs = 400;   // initial hold before auto-repeat starts
-  cRepeatFastMs  = 60;    // repeat interval once going
+  cRepeatDelayMs = 400;   // initial hold before auto-repeat starts (the repeat
+                          // interval that follows is MinRepeatInterval)
 
 function TyUpDownButtonRect(AUp: Boolean; AW, AH: Integer; AVertical: Boolean): TRect;
 begin
@@ -152,6 +197,7 @@ begin
   FIncrement := 1;
   FOrientation := udoVertical;
   FWrap := False;
+  FMinRepeatInterval := 100;   // LCL's default (customupdown.inc:226)
   FHot := 0;
   FHeldDir := 0;
   Width := TyDensityMetric(ActiveController, 20, '--icon-size');  // button-column width follows the icon-slot density token
@@ -177,21 +223,39 @@ begin
   Result := FOrientation = udoVertical;
 end;
 
-procedure TTyUpDown.Step(ADir: Integer);
-var v: Integer;
+function TTyUpDown.CanChange(ANewValue: Integer; ADirection: TTyUpDownDirection): Boolean;
 begin
-  { Announce the press before the early-out below: a press that changes nothing (already
-    pinned at Min or Max) is still a press, and a caller driving another control from
-    this one needs to see it. }
+  Result := True;
+  if Assigned(FOnChanging) then FOnChanging(Self, Result);
+  if Assigned(FOnChangingEx) then FOnChangingEx(Self, Result, ANewValue, ADirection);
+end;
+
+procedure TTyUpDown.Step(ADir: Integer);
+var
+  v: Integer;
+  dir: TTyUpDownDirection;
+begin
+  v := TyUpDownClamp(FPosition + ADir * FIncrement, FMin, FMax, FWrap);
+  if ADir > 0 then dir := uddUp else dir := uddDown;
+  { Ask before moving, and ask even when the step would land where we already are --
+    LCL consults CanChange on every click regardless (customupdown.inc:369), so a
+    handler that refuses on a condition rather than on the value stays in charge. A
+    refused step is not a press that happened: nothing moves and nothing is announced. }
+  if not CanChange(v, dir) then Exit;
+  if v <> FPosition then
+  begin
+    FPosition := v;
+    Invalidate;
+    if Assigned(FOnChange) then FOnChange(Self);
+  end;
+  { Then the press itself. A press that changes nothing (already pinned at Min or Max)
+    is still a press, and a caller driving another control from this one needs to see
+    it -- but it is announced with Position already settled, so the handler reads the
+    value the press produced rather than the one before it. }
   if Assigned(FOnArrowClick) then
   begin
     if ADir > 0 then FOnArrowClick(Self, udbNext) else FOnArrowClick(Self, udbPrev);
   end;
-  v := TyUpDownClamp(FPosition + ADir * FIncrement, FMin, FMax, FWrap);
-  if v = FPosition then Exit;
-  FPosition := v;
-  Invalidate;
-  if Assigned(FOnChange) then FOnChange(Self);
 end;
 
 procedure TTyUpDown.SetMin(const AValue: Integer);
@@ -239,6 +303,18 @@ begin
   FWrap := AValue;
 end;
 
+procedure TTyUpDown.SetMinRepeatInterval(const AValue: Byte);
+begin
+  if FMinRepeatInterval = AValue then Exit;
+  FMinRepeatInterval := AValue;
+  // Same floor LCL applies (customupdown.inc:669): below ~25ms the repeat outruns
+  // the message loop and the control becomes impossible to stop on a value.
+  if FMinRepeatInterval < 25 then FMinRepeatInterval := 25;
+  // A live hold picks the new speed up on its next tick.
+  if (FRepeatTimer <> nil) and FRepeatFast then
+    FRepeatTimer.Interval := FMinRepeatInterval;
+end;
+
 procedure TTyUpDown.SetHot(AValue: Integer);
 begin
   if FHot = AValue then Exit;
@@ -262,7 +338,7 @@ begin
   if not FRepeatFast then
   begin
     FRepeatFast := True;
-    FRepeatTimer.Interval := cRepeatFastMs;
+    FRepeatTimer.Interval := FMinRepeatInterval;
   end;
   Step(FHeldDir);
 end;

@@ -39,6 +39,7 @@ uses tyControls.StarShape;
 |------|------|--------|------|
 | `Points` | `Integer` | `5` | 星形外角数;setter 夹紧到 `>= 3`(低于 3 视为三角星)。 |
 | `InnerRatio` | `Single` | `0.42` | 内半径占外半径的比例;setter 夹紧到 `0.05 .. 0.95`。 |
+| `PointDown` | `Boolean` | `False` | 把整个顶点环转半步,顶点 0 改指正下方(6 点方向)。对应 LCL 的 `stStarDown`——本控件从前**没有任何旋转手段**,这个形状在任何属性组合下都画不出来。 |
 
 ### 继承的通用成员
 
@@ -51,9 +52,26 @@ uses tyControls.StarShape;
 
 ---
 
-## 4. 事件
+## 4. 事件与命中测试
 
-TTyStarShape 暴露 `TTyGraphicControl` 的**基线事件集**(Tier A 鼠标 / 通用事件)。作为纯装饰控件,自身不新增任何命令事件。完整清单见 [../events.md](../events.md)。
+TTyStarShape 暴露 `TTyGraphicControl` 的**基线事件集**(Tier A 鼠标 / 通用事件),外加一个自有事件。完整清单见 [../events.md](../events.md)。
+
+| 事件 | 类型 | 触发时机 |
+|------|------|----------|
+| `OnShapeClick` | `TNotifyEvent` | 点击**落在星形墨迹上**时(而非只落在外接矩形内)。对应 `TShape.OnShapeClick`——本库用这个独立控件顶替 `Shape = stStar`,事件名也一并对齐。 |
+
+### 命中测试按**形状**,不按外接矩形
+
+星形是这件事最极端的例子:五个尖角之间是五道很深的凹口,加上四个空角,外接矩形里有一大片**根本没画过的画布**。从前控件对这些位置一律回答"是我的",于是**任何压在星角背后的控件都点不到**。
+
+| 成员 | 说明 |
+|------|------|
+| `PtInShape(APt: TPoint): Boolean` | `APt` 为**客户区像素**(判的是像素格中心 `(x+0.5, y+0.5)`);返回它是否落在星形的填充或描边上。 |
+| `StarGeometry: TTyStarGeometry` | 下一次绘制将使用的几何(内缩后的外接盒、夹紧后的 `Points` / `InnerRatio`、`PointDown`、描边宽度、是否描边、是否退化)。**绘制与命中测试读的是同一条记录**——`RenderTo` 自己不再算任何一个数。 |
+| `CM_HITTEST` | 运行期钩子,**非 0 表示命中**;答 0 的控件被跳过,消息落到下层。 |
+| `CM_MASKHITTEST` | 设计期钩子(仅 Lazarus 设计器)。**极性相反:0 才表示"在形状上"**。取不到设计器窗体时回落为 0(可选中)。 |
+
+判定是**解析式**的(交叉数法判点在凹多边形内,再按 `描边宽度 / 2` 外扩出描边带),不是渲染掩码。守卫测试直接比对渲染出来的墨迹与命中区域(`tests/test.parity.starshape.pas`),这是唯一能抓住"绘制路径又自己推了一遍几何"的检查。
 
 ---
 
@@ -105,7 +123,8 @@ Burst.StyleOverride := 'background: #E11; border-color: #700;';
 
 ## 7. 注意事项
 
-- **顶点朝上:** 第一个外顶点(索引 0)恒指向正上方(12 点方向),外顶点在偶数索引、内顶点在奇数索引。
+- **顶点朝上:** 第一个外顶点(索引 0)默认指向正上方(12 点方向),`PointDown = True` 时改指正下方;外顶点在偶数索引、内顶点在奇数索引。
+- **顶点环只有一份实现:** 环本身是 `tyControls.Shape` 的 `TyStarRingPolygon`,`TTyShape` 的 `tskStar` / `tskStarDown` 与本控件都调它;`TyStarPolygon` 只是套了本控件 `Points` / `InnerRatio` 夹紧规则的薄封装。两份顶点表就是两处会分歧的几何。
 - **外半径取短边:** 非正方形控件中外半径 = `min(宽,高)/2 - 边距`,星形不会溢出较长边。
 - **无自身矩形填充:** 只填充 / 描边星形本身,矩形其余区域保持透明——叠在其他背景之上不会遮挡。
 - **纯几何可测:** `TyStarPolygon` 是纯函数(输入 `TRect` + 参数,返回顶点数组),已 headless 单元测试(顶点数 = `2*max(3,Points)`、内外半径交替、全部落在 `ARect` 内、`Points<3` 与 `InnerRatio` 越界均夹紧、左右对称)。

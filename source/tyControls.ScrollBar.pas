@@ -11,7 +11,7 @@ type
   private
     FKind: TTyScrollBarKind;
     FMin, FMax, FPosition, FPageSize: Integer;
-    FSmallChange: Integer;
+    FSmallChange, FLargeChange: Integer;
     FOnChange: TNotifyEvent;
     FOnScroll: TScrollEvent;
     FDragGrabOffset: Integer;
@@ -34,6 +34,9 @@ type
     procedure SetPosition(const AValue: Integer);
     procedure SetPageSize(const AValue: Integer);
     procedure SetSmallChange(const AValue: Integer);
+    procedure SetLargeChange(const AValue: Integer);
+    { How far one page action moves: LargeChange when set, PageSize otherwise. }
+    function EffectiveLargeChange: Integer;
     procedure EnsureTimer;
     procedure HandleTimer(Sender: TObject);
   protected
@@ -91,8 +94,21 @@ type
     property Min: Integer read FMin write SetMin default 0;
     property Max: Integer read FMax write SetMax default 100;
     property Position: Integer read FPosition write SetPosition default 0;
+    { PageSize sizes the THUMB (thumb : track = PageSize : (Max-Min)+PageSize). It also
+      used to be the only page STEP, so a proportional thumb and a page jump could not
+      be chosen independently: shrinking the thumb shrank the page click with it. LCL
+      keeps the two apart -- PageSize feeds ScrollInfo.nPage (include/scrollbar.inc:55)
+      while LargeChange drives scPageUp/scPageDown (:195,199). }
     property PageSize: Integer read FPageSize write SetPageSize default 10;
     property SmallChange: Integer read FSmallChange write SetSmallChange default 1;
+    { The page step: a track click, PgUp/PgDn, scPageUp/scPageDown. LCL: stdctrls.pp:106.
+
+      DIFFERENT DEFAULT, deliberately. LCL's is 1, which would make a track click on
+      every bar in this library -- the list box, the grid, the memo, the tree, the
+      scroll box all embed one -- crawl by a single unit instead of a screenful. 0 here
+      means "page by PageSize", i.e. exactly what this bar did before the property
+      existed, so nothing that ships today changes; set it to page by something else. }
+    property LargeChange: Integer read FLargeChange write SetLargeChange default 0;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
     property OnScroll: TScrollEvent read FOnScroll write FOnScroll;
     { A standalone bar is a keyboard control (arrows / PgUp / PgDn / Home / End in
@@ -196,6 +212,7 @@ begin
   FPosition := 0;
   FPageSize := 10;
   FSmallChange := 1;
+  FLargeChange := 0;           // 0 == page by PageSize (see the property comment)
   FAnimEnabled := True;
   // Thumb-glide animator: 0..1 traversal in ~120ms, decelerating. Start settled
   // at the rest endpoint so DisplayPos == FPosition before any change.
@@ -431,6 +448,22 @@ begin
     FSmallChange := 1
   else
     FSmallChange := AValue;
+end;
+
+procedure TTyScrollBar.SetLargeChange(const AValue: Integer);
+begin
+  // Negative is meaningless (a page action would scroll backwards); 0 is the "follow
+  // PageSize" sentinel, so it is the floor rather than 1.
+  if AValue < 0 then
+    FLargeChange := 0
+  else
+    FLargeChange := AValue;
+end;
+
+function TTyScrollBar.EffectiveLargeChange: Integer;
+begin
+  if FLargeChange > 0 then Result := FLargeChange else Result := FPageSize;
+  if Result < 1 then Result := 1;   // a page action that moves nothing is a dead control
 end;
 
 procedure TTyScrollBar.DoScroll(ACode: TScrollCode; var APos: Integer);
@@ -682,13 +715,13 @@ begin
     begin
       // click on the track: page one PageSize toward the click
       if (FKind = sbVertical) and (Y < ThumbR.Top) then
-        ScrollTo(scPageUp, Position - FPageSize)
+        ScrollTo(scPageUp, Position - EffectiveLargeChange)
       else if (FKind = sbVertical) and (Y >= ThumbR.Bottom) then
-        ScrollTo(scPageDown, Position + FPageSize)
+        ScrollTo(scPageDown, Position + EffectiveLargeChange)
       else if (FKind = sbHorizontal) and (X < ThumbR.Left) then
-        ScrollTo(scPageUp, Position - FPageSize)
+        ScrollTo(scPageUp, Position - EffectiveLargeChange)
       else if (FKind = sbHorizontal) and (X >= ThumbR.Right) then
-        ScrollTo(scPageDown, Position + FPageSize);
+        ScrollTo(scPageDown, Position + EffectiveLargeChange);
     end;
     try
       if CanFocus then SetFocus;
@@ -743,8 +776,8 @@ begin
   end
   else
     case Key of
-      VK_PRIOR: begin ScrollTo(scPageUp, Position - FPageSize); Key := 0; end;
-      VK_NEXT:  begin ScrollTo(scPageDown, Position + FPageSize); Key := 0; end;
+      VK_PRIOR: begin ScrollTo(scPageUp, Position - EffectiveLargeChange); Key := 0; end;
+      VK_NEXT:  begin ScrollTo(scPageDown, Position + EffectiveLargeChange); Key := 0; end;
       VK_HOME:  begin ScrollTo(scTop, FMin); Key := 0; end;
       VK_END:   begin ScrollTo(scBottom, FMax); Key := 0; end;
     end;

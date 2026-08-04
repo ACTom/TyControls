@@ -38,6 +38,9 @@ uses tyControls.UpDown;
 | `Wrap` | `Boolean` | `False` | 越界时是否回绕到另一端(而非停在边界)。**回绕会带着溢出量继续走,不丢弃**:`Min=0` / `Max=10` / `Increment=4` 时从 9 往上一步得 **2**(9→10→0→1→2),而不是直接跳到 `Min`。早前是直接贴到对端,于是步长大于 1 的回绕微调器悄悄从"加法器"变成了"复位钮"。 |
 | `OnChange` | `TNotifyEvent` | — | `Position` 变化时触发。 |
 | `OnArrowClick` | `TTyUpDownClickEvent` | — | **(API parity 新增)** 每一"步"触发一次,并告诉你按的是哪半边:`procedure(Sender: TObject; AButton: TTyUpDownButton) of object`,`AButton` 取 `udbPrev`(下 / 减)或 `udbNext`(上 / 加)。 |
+| `MinRepeatInterval` | `Byte` | `100` | **(API parity 新增)** 按住不放时连发的间隔下限(毫秒),小于 25 会被抬到 25——与 LCL 的 setter 同一个下限(`customupdown.inc:666-670`),默认值也一致。早前连发速度是写死的常量(60ms),`0..10000` 这种范围快得没法停在想要的值上,无障碍设置想调慢也无从调起。 |
+| `OnChanging` | `TTyUpDownChangingEvent` | — | **(API parity 新增)** 否决钩子:`procedure(Sender: TObject; var AAllowChange: Boolean) of object`。在步进**提交之前**询问;把 `AAllowChange` 置 `False` 就拒绝这一步——值不动,`OnChange` 不发,`OnArrowClick` 也不发。早前只能在 `OnChange` 里把值写回去,而那会重入 setter 再发一次 `OnChange`。 |
+| `OnChangingEx` | `TTyUpDownChangingEventEx` | — | **(API parity 新增)** 同一个否决,但多告诉你**这一步会落到哪个值**与方向:`procedure(Sender: TObject; var AAllowChange: Boolean; ANewValue: Integer; ADirection: TTyUpDownDirection) of object`。两个钩子依次共用同一个 `AAllowChange`,任一个都能拒绝(LCL `CanChange`,`customupdown.inc:332-341`)。 |
 
 继承:`Align` / `Anchors` / `StyleClass` / `Controller`。
 
@@ -49,6 +52,7 @@ uses tyControls.UpDown;
 |------|------|
 | `OnChange` | `Position` 改变(点击 / 连发 / 代码设值)后触发。 |
 | `OnArrowClick` | **每一步**触发一次(含按住时的每一次连发 tick,与 LCL `TUpDown.OnClick` 一致),并带上方向 `udbPrev` / `udbNext`。与 `OnChange` 不同,**值没动也照发**(已经顶到 `Min` 或 `Max` 时),所以"用户按了但没反应"是可观测的;反过来,代码直接写 `Position` 没有"按下"可言,不触发它。 |
+| — | **触发顺序(API parity 修正)**:`OnChanging` / `OnChangingEx` → （获准后）`Position` 移动 → `OnChange` → `OnArrowClick`。`OnArrowClick` 现在在值**落定之后**发,所以处理函数里读 `Position` 拿到的是这一按产生的值。早前它先发,于是每一个这样的处理函数读到的都是**自己这次事件之前**的值——错一步,而且只会表现为下游控件的数据迟一拍。LCL 的顺序相同(`customupdown.inc:371-374`)。 |
 
 > **为什么另起一个名字,而不是用 `OnClick`:** TTyUpDown 从基类继承来的 `OnClick` 是普通的
 > `TNotifyEvent`,而 LCL 的 `TUpDown` 把**同一个名字**给了 `(Sender; Button: TUDBtnType)` 事件。

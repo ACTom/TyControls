@@ -584,7 +584,7 @@ begin
     AssertNull('a programmatic pick does not touch the tree', TS.Tree.FocusedNode);
     TS.SyncTree;
     AssertSame('opening focuses the pick', n1, TS.Tree.FocusedNode);
-    AssertTrue('and highlights it', TS.Tree.Selected[n1]);
+    AssertTrue('and highlights it', TS.Tree.NodeSelected[n1]);
   finally
     TS.Free;
   end;
@@ -602,7 +602,7 @@ begin
     TS.SyncTree;
     TS.ClearSelection;
     TS.SyncTree;
-    AssertFalse('the old row is no longer highlighted', TS.Tree.Selected[n1]);
+    AssertFalse('the old row is no longer highlighted', TS.Tree.NodeSelected[n1]);
     AssertEquals('nothing is selected in the tree', 0, TS.Tree.SelectedCount);
   finally
     TS.Free;

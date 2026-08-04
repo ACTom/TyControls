@@ -870,7 +870,7 @@ begin
     v.Collection := c;
     v.Names.Add('one');
     target.SetSize(32, 32);
-    v.Draw(target.Canvas, 0, 4, 4, 16);   // must not raise
+    v.DrawIndex(target.Canvas, 0, 4, 4, 16);   // must not raise
     AssertTrue('drew', True);
   finally
     target.Free;
@@ -889,8 +889,8 @@ begin
   target := TBitmap.Create;
   try
     target.SetSize(32, 32);
-    v.Draw(target.Canvas, 99, 0, 0, 16);   // bad index, no collection -> safe no-op blit
-    v.Draw(nil, 0, 0, 0, 16);              // nil canvas -> safe
+    v.DrawIndex(target.Canvas, 99, 0, 0, 16);   // bad index, no collection -> safe no-op
+    v.DrawIndex(nil, 0, 0, 0, 16);              // nil canvas -> safe
     AssertTrue('safe', True);
   finally
     target.Free;

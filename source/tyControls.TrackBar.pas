@@ -6,11 +6,24 @@ uses
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.Animation;
 type
   TTyTrackOrientation = (toHorizontal, toVertical);
+  { Which side of the groove the ticks sit on. LCL: TTickMark = (tmBottomRight,
+    tmTopLeft, tmBoth), comctrls.pp:2729. Own identifiers so a unit that uses both
+    ComCtrls and this one has no ambiguity. }
+  TTyTrackTickMark = (ttmBottomRight, ttmTopLeft, ttmBoth);
+  { How the ticks are generated. LCL: TTickStyle = (tsNone, tsAuto, tsManual),
+    comctrls.pp:2730. ttsAuto = one every Frequency units; ttsManual = only the values
+    handed to SetTick, which is how an irregular scale (a gamma curve, a set of stops)
+    is expressed. }
+  TTyTrackTickStyle = (ttsNone, ttsAuto, ttsManual);
 
   TTyTrackBar = class(TTyCustomControl)
   private
     FMin, FMax, FPosition: Integer;
     FOrientation: TTyTrackOrientation;
+    FReversed: Boolean;
+    FTickMarks: TTyTrackTickMark;
+    FTickStyle: TTyTrackTickStyle;
+    FManualTicks: array of Integer;   // ttsManual: the hand-placed tick values
     FFrequency: Integer;
     FLineSize, FPageSize: Integer;
     FOnChange: TNotifyEvent;
@@ -20,6 +33,9 @@ type
       要量文字才知道,而量文字需要一个 painter —— 所以在 RenderTo 里算好缓存下来,
       几何与命中都读这个缓存值。首帧之前它是 0(还没画过的控件也拖不动)。 }
     FValueAreaPx: Integer;
+    { 读数文字自身的高度(跨轴方向要让出多少),同样量于绘制、缓存于此:
+      AutoSize 的跨轴预期尺寸要用它,而量文字必须有 painter。 }
+    FValueTextPx: Integer;
 
     FAnimEnabled: Boolean;
     FPosAnim: TTyAnimator;      // 0..1 traversal driving FAnimFrom -> FAnimTo
@@ -29,6 +45,9 @@ type
     procedure SetMax(const AValue: Integer);
     procedure SetPosition(const AValue: Integer);
     procedure SetOrientation(const AValue: TTyTrackOrientation);
+    procedure SetReversed(const AValue: Boolean);
+    procedure SetTickMarks(const AValue: TTyTrackTickMark);
+    procedure SetTickStyle(const AValue: TTyTrackTickStyle);
     procedure SetFrequency(const AValue: Integer);
     procedure SetLineSize(const AValue: Integer);
     procedure SetPageSize(const AValue: Integer);
@@ -62,11 +81,28 @@ type
     // state. Runtime always routes through SetPosition (which snaps headless);
     // this is the test seam so the animation is reachable without a window.
     procedure SetPositionAnimating(AValue: Integer);
+    { AutoSize is republished on the base class already; without this it had nothing to
+      ask. CROSS AXIS ONLY, the same split LCL makes in ShouldAutoAdjust
+      (include/trackbar.inc:95-107): the length of the track is the form author's call,
+      the thickness is what the theme's thumb, ticks and readout actually need. }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     function ThumbRect: TRect;
     procedure DragTo(APos: Integer);
+    { Place a tick by hand. Only drawn while TickStyle = ttsManual, which is what makes
+      an irregular scale expressible at all; LCL's TCustomTrackBar.SetTick
+      (comctrls.pp:2778) is the same call, forwarded to the widget's tick list. Values
+      outside Min..Max and duplicates are ignored. }
+    procedure SetTick(AValue: Integer);
+    { Drop every hand-placed tick. LCL has no counterpart -- its ticks live in the
+      widget and are cleared by recreating it -- but a tick list you can only add to is
+      a leak in a control that lives as long as the form. }
+    procedure ClearTicks;
+    { How many hand-placed ticks are set (chiefly so the list is observable). }
+    function TickCount: Integer;
     // On by default. When enabled and the control has a window handle, a
     // PROGRAMMATIC Position change (keyboard/wheel) eases the painted thumb to
     // the new value; with no handle (every render test) or while dragging it
@@ -77,6 +113,27 @@ type
     property Max: Integer read FMax write SetMax default 100;
     property Position: Integer read FPosition write SetPosition default 0;
     property Orientation: TTyTrackOrientation read FOrientation write SetOrientation default toHorizontal;
+    { Flip the value axis WITHOUT changing the orientation: a horizontal bar that counts
+      down left-to-right, or a vertical bar with Min at the top. It used to be hard-wired
+      to the orientation (vertical inverted, horizontal not) with no opt-out, so two of
+      the four configurations were unreachable. LCL: comctrls.pp:2789.
+
+      DIFFERS FROM LCL ON THE VERTICAL AXIS, deliberately: this bar's un-reversed
+      vertical direction is Max at the top (a volume slider), because that is what makes
+      "up increases" true for the keyboard, the wheel and the drag alike -- see KeyDown.
+      LCL/Win32's un-reversed vertical is Min at the top, so a ported form that sets
+      Reversed on a VERTICAL bar draws the other way round here. Migration: drop
+      Reversed on ported vertical bars, set it on ported horizontal ones unchanged. }
+    property Reversed: Boolean read FReversed write SetReversed default False;
+    { Which side of the groove the ticks are drawn on. LCL: comctrls.pp:2795, same
+      default. Ticks used to be nailed to one side (below when horizontal, right when
+      vertical), so a slider needing them above its groove could not have them. }
+    property TickMarks: TTyTrackTickMark read FTickMarks write SetTickMarks default ttmBottomRight;
+    { How the ticks are chosen: ttsAuto (every Frequency units, the default and the old
+      behaviour), ttsNone, or ttsManual -- only the values passed to SetTick. LCL:
+      comctrls.pp:2796, same default. Frequency = 0 still suppresses the automatic
+      ticks, so nothing that relied on that sentinel changes. }
+    property TickStyle: TTyTrackTickStyle read FTickStyle write SetTickStyle default ttsAuto;
     { One tick per value-unit, matching LCL's TTrackBar (comctrls.pp: default 1). It
       was 0 here, and 0 means "no ticks" -- so a track bar dropped on a form showed a
       bare groove and the tick marks looked unimplemented rather than switched off. }
@@ -134,6 +191,9 @@ begin
   FMax := 100;
   FPosition := 0;
   FOrientation := toHorizontal;
+  FReversed := False;
+  FTickMarks := ttmBottomRight;   // LCL's default (comctrls.pp:2795)
+  FTickStyle := ttsAuto;          // LCL's default (comctrls.pp:2796)
   FFrequency := 1;
   FLineSize := 1;
   FPageSize := 10;
@@ -196,7 +256,91 @@ end;
 
 function TTyTrackBar.Inverted: Boolean;
 begin
-  Result := (FOrientation = toVertical);
+  { The axis' natural direction (horizontal = Min left, vertical = Max top), flipped by
+    Reversed. Every geometry call -- thumb offset, drag, ticks -- reads this one
+    function, so there is exactly one place that decides which way the values run. }
+  Result := (FOrientation = toVertical) xor FReversed;
+end;
+
+procedure TTyTrackBar.SetReversed(const AValue: Boolean);
+begin
+  if FReversed = AValue then Exit;
+  FReversed := AValue;
+  Invalidate;
+end;
+
+procedure TTyTrackBar.SetTickMarks(const AValue: TTyTrackTickMark);
+begin
+  if FTickMarks = AValue then Exit;
+  FTickMarks := AValue;
+  Invalidate;
+end;
+
+procedure TTyTrackBar.SetTickStyle(const AValue: TTyTrackTickStyle);
+begin
+  if FTickStyle = AValue then Exit;
+  FTickStyle := AValue;
+  Invalidate;
+end;
+
+procedure TTyTrackBar.SetTick(AValue: Integer);
+var
+  i: Integer;
+begin
+  if (AValue < FMin) or (AValue > FMax) then Exit;
+  for i := 0 to High(FManualTicks) do
+    if FManualTicks[i] = AValue then Exit;    // a tick placed twice is still one tick
+  SetLength(FManualTicks, Length(FManualTicks) + 1);
+  FManualTicks[High(FManualTicks)] := AValue;
+  if FTickStyle = ttsManual then Invalidate;
+end;
+
+procedure TTyTrackBar.ClearTicks;
+begin
+  if Length(FManualTicks) = 0 then Exit;
+  SetLength(FManualTicks, 0);
+  if FTickStyle = ttsManual then Invalidate;
+end;
+
+function TTyTrackBar.TickCount: Integer;
+begin
+  Result := Length(FManualTicks);
+end;
+
+procedure TTyTrackBar.CalculatePreferredSize(var PreferredWidth,
+  PreferredHeight: Integer; WithThemeSpace: Boolean);
+var
+  S: TTyStyleSet;
+  ppi, thumbW, tickLen, cross: Integer;
+begin
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  S := CurrentStyle;
+  thumbW := ThumbWAtPPI(ppi);
+  { The thumb spans the whole cross axis, so it sets the floor; the ticks are drawn
+    against the far edge (4 device-independent px, the constant RenderTo scales) and
+    would otherwise be painted straight over the thumb. }
+  tickLen := MulDiv(4, ppi, 96);
+  cross := thumbW + tickLen;
+  { A readout needs its own room on top. Its height is measured at paint time and cached
+    (FValueTextPx) for the same reason FValueAreaPx is: measuring text needs a painter.
+    Before the first paint it is 0, so an AutoSize'd bar settles on its second layout --
+    the same first-frame caveat MainLen already carries. }
+  if FShowValue and (FValueTextPx > 0) then Inc(cross, FValueTextPx);
+  Inc(cross, MulDiv(S.Padding.Top + S.Padding.Bottom, ppi, 96));
+  if cross < 1 then cross := 1;
+  { CROSS AXIS ONLY: 0 means "no preference" to LCL, so the track keeps whatever length
+    the form gave it and only the thickness follows the theme. }
+  if FOrientation = toVertical then
+  begin
+    PreferredWidth := cross;
+    PreferredHeight := 0;
+  end
+  else
+  begin
+    PreferredWidth := 0;
+    PreferredHeight := cross;
+  end;
 end;
 
 procedure TTyTrackBar.EnsureTimer;
@@ -500,8 +644,34 @@ var
   ThumbStates: TTyStateSet;
   TW, MLen, Off: Integer;
   TickFill: TTyFill;
-  TickLen, TickW, V, TickOff, C: Integer;
+  TickLen, TickW, V, TickOff, Idx: Integer;
   vs, vw: TSize;
+
+  { One tick at cross-axis-independent offset AC along the track, on whichever side(s)
+    TickMarks names. Nested so the two generators (auto/manual) cannot drift apart on
+    where a tick is drawn -- which is exactly how the side got hard-coded before. }
+  procedure DrawTickAt(AC: Integer);
+  begin
+    if FOrientation = toVertical then
+    begin
+      if FTickMarks in [ttmBottomRight, ttmBoth] then
+        P.FillBackground(Rect(R.Right - TickLen, R.Top + AC,
+          R.Right, R.Top + AC + TickW), TickFill, 0);
+      if FTickMarks in [ttmTopLeft, ttmBoth] then
+        P.FillBackground(Rect(R.Left, R.Top + AC,
+          R.Left + TickLen, R.Top + AC + TickW), TickFill, 0);
+    end
+    else
+    begin
+      if FTickMarks in [ttmBottomRight, ttmBoth] then
+        P.FillBackground(Rect(R.Left + AC, R.Bottom - TickLen,
+          R.Left + AC + TickW, R.Bottom), TickFill, 0);
+      if FTickMarks in [ttmTopLeft, ttmBoth] then
+        P.FillBackground(Rect(R.Left + AC, R.Top,
+          R.Left + AC + TickW, R.Top + TickLen), TickFill, 0);
+    end;
+  end;
+
 begin
   P := TTyPainter.Create;
   try
@@ -522,13 +692,17 @@ begin
       vs := P.MeasureText(IntToStr(FMin), S.FontName, ResolveFontSize(S), S.FontWeight);
       vw := P.MeasureText(IntToStr(FMax), S.FontName, ResolveFontSize(S), S.FontWeight);
       if vs.cx > vw.cx then vw := vs;
+      FValueTextPx := vw.cy;    // cached for CalculatePreferredSize
       if FOrientation = toVertical then
         FValueAreaPx := vw.cy + MulDiv(4, APPI, 96)
       else
         FValueAreaPx := vw.cx + MulDiv(8, APPI, 96);
     end
     else
+    begin
       FValueAreaPx := 0;
+      FValueTextPx := 0;
+    end;
 
     if FOrientation = toVertical then
       MLen := (R.Bottom - R.Top) - FValueAreaPx
@@ -558,9 +732,10 @@ begin
     if (tpBackground in ThumbS.Present) then
       P.FillBackground(ThumbR, ThumbS.Background, ThumbS.BorderRadius);
 
-    // Tick marks: one every FFrequency value-units, lined up with where the
-    // thumb centre would sit at value v. Theme-driven color (S.TextColor).
-    if (FFrequency > 0) and (FMax > FMin) then
+    { Tick marks. Which VALUES get one is TickStyle's call (auto = every Frequency
+      units, manual = only the hand-placed ones); which SIDE they are drawn on is
+      TickMarks'. Theme-driven colour (S.TextColor) either way. }
+    if (FTickStyle <> ttsNone) and (FMax > FMin) then
     begin
       TickLen := P.Scale(4);
       TickW := P.Scale(1);
@@ -568,18 +743,27 @@ begin
       TickFill := Default(TTyFill);
       TickFill.Kind := tfkSolid;
       TickFill.Color := S.TextColor;
-      V := FMin;
-      while V <= FMax do
+
+      if FTickStyle = ttsManual then
       begin
-        TickOff := TyTrackThumbOffset(MLen, TW, FMin, FMax, V, Inverted);
-        C := TickOff + TW div 2;
-        if FOrientation = toVertical then
-          P.FillBackground(Rect(R.Right - TickLen, R.Top + C,
-            R.Right, R.Top + C + TickW), TickFill, 0)
-        else
-          P.FillBackground(Rect(R.Left + C, R.Bottom - TickLen,
-            R.Left + C + TickW, R.Bottom), TickFill, 0);
-        Inc(V, FFrequency);
+        for Idx := 0 to High(FManualTicks) do
+        begin
+          { A tick the range has since moved past is not drawn -- TyTrackThumbOffset
+            clamps, which would otherwise pile it onto an end and invent a mark. }
+          if (FManualTicks[Idx] < FMin) or (FManualTicks[Idx] > FMax) then Continue;
+          TickOff := TyTrackThumbOffset(MLen, TW, FMin, FMax, FManualTicks[Idx], Inverted);
+          DrawTickAt(TickOff + TW div 2);
+        end;
+      end
+      else if FFrequency > 0 then
+      begin
+        V := FMin;
+        while V <= FMax do
+        begin
+          TickOff := TyTrackThumbOffset(MLen, TW, FMin, FMax, V, Inverted);
+          DrawTickAt(TickOff + TW div 2);
+          Inc(V, FFrequency);
+        end;
       end;
     end;
 

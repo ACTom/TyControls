@@ -170,6 +170,22 @@ below change the behaviour of existing code -- read before upgrading.**
   `OnClick` now runs BEFORE the picker opens so a handler sees the pre-dialog value.
 - **`TTyImage.Proportional` no longer enlarges.** A 16x16 icon on a 200x200 image used to
   be blown up; Proportional alone shrinks only, and enlargement is opt-in via `Stretch`.
+- **`TTyImage.Center` and `Transparent` now default to `False`, as on `TImage`.** They
+  carried LCL's NAME with the opposite default. LCL does not write a property equal to its
+  default into the `.lfm`, so a form converted from `TImage` has **no `Center=` line at
+  all** -- and on the old control every unstretched picture silently moved to the middle,
+  with nothing in the form file to explain it. **Migration:** forms that relied on the old
+  defaults should now say `Center = True` / `Transparent = True` explicitly.
+- **`TTyVirtualImageList.Draw` and `TTyGlyphImageList.Draw` take LCL's argument order.**
+  They used to be `Draw(ACanvas, AIndex, AX, AY, ASizePx)` -- LCL's method NAME with the
+  index and the coordinates TRANSPOSED. Every argument is an Integer, so the natural port
+  of `Images.Draw(C, X, Y, Idx)` was to append the size and get `Draw(C, X, Y, Idx, 16)`,
+  which **compiled** and drew image number X at (Y, Idx). `Draw` is now LCL's signature
+  (the trailing flag is **`AEnabled`**, not `Ghosted` -- negations of one another and both
+  Boolean, so the wrong polarity compiles and draws every icon disabled). The
+  size-carrying form is **`DrawIndex`**; the 4-Integer `Draw` no longer exists, so an old
+  call site fails to COMPILE rather than transposing in silence.
+  **Migration:** `Draw(C, i, x, y, sz)` -> `DrawIndex(C, i, x, y, sz)`.
 - **`TTySplitter` gains `AutoSnap` (default on)**: dragging past `MinSize` closes the pane.
   MinSize used to be a floor no drag could get under, so no gesture closed a pane at all.
 - **`TTySpinEdit`**: `MinValue = MaxValue` means "unbounded" and no longer pins every value.
@@ -237,6 +253,73 @@ below change the behaviour of existing code -- read before upgrading.**
   occupy that slot, so an application object stored there read back as *checked* -- and the
   docs recorded that as a rule. The check and the application's data now share one object
   (LCL's arrangement), so sorting, deleting and clearing cannot desync or leak them.
+- **A code write to `TTyDateTimePicker.DateTime` no longer fires `OnChange`.** It used to fire
+  unconditionally, so the ordinary "load this record into the form" line re-entered the
+  application's own handler: the dirty flag came up on a form nobody had touched, a handler
+  that wrote back to the model looped, and **there was no flag to turn it off**. `OnChange`
+  now means the user changed it; put `dtpoDoChangeOnSetDateTime` in the new `Options` for the
+  old behaviour (that is LCL's arrangement and default too).
+- **`TTyCalendar.FirstDayOfWeek` now follows the OS by default.** It was hardcoded to Sunday,
+  so every Monday-first locale -- most of Europe and Asia -- shipped with a US week layout,
+  and **no value expressed "follow the system"**: you hardcoded `wdMonday` and it went wrong
+  again the moment the app was relocalised. Pin `FirstDayOfWeek := wdSunday` if you relied on it.
+- **Clicking a greyed spill-over day now selects it and pages to its month.** The click used
+  to be dropped on the floor -- the grey day was dead and nothing said why. This is LCL's
+  default; put `dsNoMonthChange` in the new `DisplaySettings` to get the refusal back.
+- **`Esc` now reverts the whole edit, not just the half-typed digits.** A user who spun the
+  month with the arrow keys and pressed `Esc` kept the changed month believing they had
+  cancelled -- of all the gestures everyone makes, that is the worst one to have not work.
+  The control snapshots its value on focus-in and `Esc` restores it.
+- **A two-digit year typed into `TTyDateTimePicker` is expanded.** Typing `26` into a `yyyy`
+  format and tabbing away used to store the year 0026 -- wrong data, with nothing on screen
+  saying so. It now expands against the new `CenturyFrom` (default 1941). Three and four digit
+  input is left alone. Likewise, an hour typed into a 12-hour format stays in the meridiem you
+  are looking at (typing `04` at 3 PM gives 16:00; it used to give 4:00 with the field still
+  reading "04 PM").
+- **Format strings are no longer silently rewritten.** The control used to double every single
+  field specifier (`'d/m/yyyy'` became `'dd/mm/yyyy'`), so an explicit format looked ignored --
+  and that rewrite was never true for month names, so in `'dd mmmm yyyy'` a click on the year
+  selected the month. It now renders what you wrote, and the new `LeadingZeros := False` gives
+  the compact `9/7/2026` look.
+- **`Space` toggling the checkbox now fires `OnChecked`.** Only the mouse path notified, so the
+  keyboard changed the state and told nobody. The notification moved into the property setter,
+  so mouse, `Space`, auto-check and a code write all travel the same path (as in LCL).
+- **`TTySpinEdit.MaxValue` now defaults to 0 (unbounded), not 100.** That is LCL's default, and
+  "the ceiling happens to be 100" is a **data-destroying** one: typing 5000 into a control
+  whose range was never configured was silently clamped to 100 on commit, with no diagnostic.
+  Every spin edit in the examples sets its range explicitly, so nothing shipped changes; if
+  your own form relied on the implicit 100, say it out loud.
+- **`TTyUpDown.OnArrowClick` fires after the value settles.** It used to fire first, so a
+  handler reading `Position` read the value from **before its own click** -- every "the up
+  arrow was pressed, go update something" handler was one step behind.
+- **`TTyShellTreeView` re-reads a directory each time it expands** (LCL's
+  `ecmRefreshedExpanding`). A directory used to be enumerated exactly once per control
+  lifetime, so **anything created afterwards never appeared**. For the old behaviour set
+  `ExpandCollapseMode := ecmKeepChildren`.
+- **`TTyShellListView.UpdateView` restores the selection by path, not by row.** It used to pin
+  the row *index*, so creating a file above the selected one moved the highlight onto a
+  different file -- and a file dialog then returned a name the user never picked.
+- **`TTyImage.Center` / `Transparent` now default to `False`,** as in LCL. A `.lfm` converted
+  from `TImage` carries no `Center=` line, so every unstretched picture was silently
+  re-centred. Say `Center = True` explicitly if you want it.
+- **Three tree members give LCL's names back their LCL meanings.** Three substitutions.
+  - **`GetNodeAt`.** Ours was `GetNodeAt(Y; out ANodeTop)` -- LCL's is `GetNodeAt(X, Y)`.
+    **Same name, same arity, both Integer**, so a ported call *bound to ours*: it read the
+    caller's X as a scroll offset, returned the wrong node, and clobbered the caller's Y
+    through the out parameter. Not theoretical -- renaming it turned **12 assertions in our
+    own suite red in one build**. `GetNodeAt(X, Y)` is now LCL's; ours is `GetNodeAtOffset`.
+  - **`Selected`.** Ours was an indexed Boolean; LCL's is *the current node*, so
+    `if Tree.Selected <> nil` could not compile. `Selected` is now the node; the indexed
+    form is `NodeSelected[]`.
+  - **`OnDragOver`.** Ours was the intra-tree node-drag veto, published over the LCL drag
+    hook the base class already offers -- so the tree was the one TTy control that could not
+    be an LCL drop target. The intra-tree one is `OnNodeDragOver`; `OnDragOver`,
+    `OnDragDrop`, `OnStartDrag`, `OnEndDrag`, `DragMode` and `DragCursor` are back.
+- **`TTyVirtualImageList.Draw` / `TTyGlyphImageList.Draw` take LCL's argument order**
+  `(Canvas, X, Y, Index, Enabled)` -- note the last one is **Enabled**, not Ghosted, which is
+  its opposite. The size-carrying form is `DrawIndex`. There is deliberately **no** 4-Integer
+  overload: old call sites should fail to compile rather than compile with the coordinates
+  and the index transposed.
 
 ### Fixed -- knobs the Object Inspector offered and the control ignored
 
@@ -320,6 +403,28 @@ error, no log, nothing visible in a screenshot.
   the other.
 - **`TTyShellListView.OnCompare` actually gets called** (the previous round handed the event
   slot back to the application but left nothing raising it).
+- **Renaming a file with F2 re-reads the directory again.** When `Refresh` was renamed to
+  `UpdateView` last round, the commit-edit path's `Refresh` call **silently rebound to
+  `TControl.Refresh`** -- the file changed on disk and the row kept the old name.
+- **The track bar draws its ticks**: `TickMarks` (top/left, bottom/right, both), `TickStyle`
+  (none / auto / manual), `SetTick` / `ClearTicks` / `TickCount`, and `Reversed`.
+- **Progress bar**: `Step` / `StepIt` / `StepBy`, `BarShowText` to print the percentage on the
+  bar (template-configurable via `BarTextFormat`), and `Orientation` in all four directions
+  including right-to-left and top-down.
+- **`TTyScrollBar.LargeChange` is finally read** -- clicking the trough always paged by a full
+  page, so a host-configured page step reached nothing.
+- **The spin edit gained the editing-time surface it was missing**: `Text` (which reads the
+  **uncommitted** input buffer), `CaretPos`, `Modified` (cleared by a code write -- it answers
+  "did the user touch this?"), `EditorEnabled` (locks typing but keeps the arrows),
+  `ValueEmpty`, `TextHint`, and overridable `GetLimitedValue` / `ValueToStr` / `StrToValue`.
+- **`TTyUpDown` gained `OnChanging` / `OnChangingEx`**, which can veto a step --
+  `OnChangingEx` also sees the proposed value and the direction. Plus `MinRepeatInterval`
+  for the auto-repeat floor.
+- **Shell tree**: `Root` (scope the tree to one directory), `ObjectTypes`, `Path`,
+  `FileSortType` with `OnSortCompare`, `OnAddItem` (veto per entry), `UseBuiltinIcons`; the
+  list view likewise, plus `AutoSizeColumns` and `MaskCaseSensitivity`. Tree, list and filter
+  combo can be linked to each other (`Tree.ShellListView`, `List.ShellTreeView`,
+  `Combo.ShellListView`) so navigating one drives the others.
 - Name parity: `TTyCalendar.DateTime`, `TTyMaskEdit.EditMask`, `TTyMemo.Append`,
   `TTyEdit.Clear`, and the whole `Clear` / `AddItem` / `Count` / `ItemRect` list surface on
   `TTyListBox` and `TTyComboBox`.
@@ -328,11 +433,47 @@ error, no log, nothing visible in a screenshot.
   lines used to answer every click inside their **bounding rectangle**, so a control behind
   a circle could never be reached through the corners. Hit-testing follows the shape now
   (its border width included), and `PtInShape` is public for hosts that want to ask.
+- **`TTyStarShape` likewise -- and a star is the worst case of it.** Five points leave five
+  deep concave notches, so a great deal of the bounding rectangle is canvas the control
+  never draws on; it used to answer "mine" at all of it, and **no control behind a star's
+  points could be clicked**. Hit-testing follows the shape now, with `PtInShape` and
+  `StarGeometry` public.
 - **`TTyArrow` gains the triangle arrow** (`Shape := tasTriangle`), with the apex angle on
   `ArrowPointerAngle` -- LCL's `TArrow` name and its 60° default. This library could only
   ever draw the block arrow, so the directional triangle a ported form expects was not
   reachable at all. The block arrow stays the default: changing it would silently rotate
   every arrow on every existing form.
+
+### Added -- shape and image controls brought up to parity
+
+- **`TTyShape` gains the rest of LCL's fifteen kinds, plus an escape hatch.** New: the
+  rounded square, the squared diamond, the left / right / down triangles (flow-direction
+  markers, play/back glyphs), and the star point-up and point-down -- none of which were
+  reachable at **any** property setting, and a `.lfm` carrying one of those values simply
+  failed to load. Plus `tskPolygon` + **`OnShapePoints`**: the app supplies the vertices,
+  so hexagons, callouts and chevrons are reachable **from the designer** instead of needing
+  a hand-written `TTyGraphicControl` descendant. The new enum values are APPENDED, so no
+  existing form changes shape.
+- **`TTyShape` / `TTyStarShape` gain `OnShapeClick`** -- fires only for a click on the ink.
+- **`TTyStarShape` gains `PointDown`** (LCL's `stStarDown`). The control had no rotation of
+  any kind, so that star could not be drawn.
+- **`TTyImage` can draw from a shared icon set** (`Images` / `ImageIndex` / `ImageWidth`).
+  A themed icon on a form previously had to be duplicated into the control's own `Picture`,
+  losing both the one-place-to-change icon set and the per-DPI rendering the collection
+  already does.
+- **`TTyImage` gains `StretchInEnabled` / `StretchOutEnabled`** -- the shrink and the
+  enlarge gates, independently. The standard LCL recipe "shrink big photos, never enlarge
+  small ones" was previously unexpressible: turning Stretch/Proportional off disables both
+  directions at once.
+- **`TTyImage` gains `KeepOriginXWhenClipped` / `KeepOriginYWhenClipped`**: when a centred
+  picture is bigger than the control, pin that axis at the origin instead of cropping
+  symmetrically -- the top-left of a map, screenshot or scan is finally visible.
+- **`TTyImage` gains `AntialiasingMode`**: `amOn` requires a smoothed scale (which nothing
+  could ask for before), `amOff` requires hard edges, `amDontCare` (the default) is
+  unchanged.
+- **`TTyImage` gains `OnPictureChanged` and `HasGraphic`**: react to a new image (dimension
+  label, dirty flag, thumbnail) without polling, and ask "is there anything to draw" without
+  reaching into `Picture.Graphic` to null/Empty-check it by hand.
 
 ### Added -- `OnPaint`
 

@@ -57,8 +57,11 @@ begin
   try
     AssertFalse('Stretch default False', I.Stretch);
     AssertFalse('Proportional default False', I.Proportional);
-    AssertTrue('Center default True', I.Center);
-    AssertTrue('Transparent default True', I.Transparent);
+    // Both of these were True and are now False: they carry LCL's NAME, so they have to
+    // carry LCL's default too or a .lfm converted from TImage silently re-lays-out.
+    // See test.parity.image.pas TTyImageDefaultsTest for the whole argument.
+    AssertFalse('Center default False, as on TImage', I.Center);
+    AssertFalse('Transparent default False, as on TImage', I.Transparent);
     AssertTrue('Picture is created (non-nil)', I.Picture <> nil);
   finally
     I.Free;
@@ -242,6 +245,9 @@ begin
     Src.Canvas.FillRect(0, 0, 40, 40);
     G.Picture.Assign(Src);
     G.Center := True;   // native size, centered in the 120x120 client
+    // Explicit now that Transparent defaults to False: this test reads the backdrop
+    // through the control, so the panel surface must not be painted over it.
+    G.Transparent := True;
 
     Dst.PixelFormat := pf32bit;
     Dst.SetSize(120, 120);
@@ -256,7 +262,7 @@ begin
       AssertTrue('centre pixel carries the image (red-dominant)',
         (px.red > 150) and (px.green < 100) and (px.blue < 100));
       // A far corner is outside the image -> the white backdrop shows through
-      // (Transparent default: no panel fill painted).
+      // (Transparent=True: no panel fill painted).
       px := Reread.GetPixel(4, 4);
       AssertTrue('corner shows the transparent backdrop (white)',
         (px.red > 200) and (px.green > 200) and (px.blue > 200));

@@ -3,6 +3,11 @@ unit tyControls.TreeView;
 interface
 uses
   Classes, SysUtils, Types, Math, Controls, Graphics, LCLType, LCLIntf, LazUTF8, ImgList,
+  { StdCtrls: TScrollStyle, so ScrollBars means the same thing here as on TTyMemo and
+    on LCL's own TCustomTreeView. ComCtrls: THitTests/THitTest — GetHitTestInfoAt has
+    to return LCL's OWN set type or ported `htOnButton in Tree.GetHitTestInfoAt(X,Y)`
+    still will not compile, which is the whole point of having the method. }
+  StdCtrls, ComCtrls,
   BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.ScrollBar,
   tyControls.Columns, tyControls.Edit;
@@ -101,14 +106,34 @@ type
     Column: Integer) of object;
 
   { ③f F2: intra-tree drag events.
-    OnDragOver — per-target/-mode veto fired while dragging. Allowed enters as
+    OnNodeDragOver — per-target/-mode veto fired while dragging. Allowed enters as
                  CanMoveNode(Src, Target, Mode); the handler may only FURTHER
                  restrict (setting Allowed:=True on an invalid move is still
                  blocked by MoveNode's own guard — CanMoveNode is the hard gate).
     OnNodeMoved reuses TTyTreeNodeEvent (Sender; Node) — fired after a successful
-                drop (Node.Parent is the new parent; Index re-stamped). }
+                drop (Node.Parent is the new parent; Index re-stamped).
+
+    BREAKING (parity): this event used to be published as `OnDragOver`, which is the
+    name TControl already uses for the LCL drag-and-drop hook that the base class
+    publishes (tyControls.Base.pas:299). One control shadowing that name with an
+    unrelated signature meant the tree was the ONE TTy control that could not be
+    wired as an LCL drop target — assigning a TDragOverEvent there was a type error.
+    Migration: rename the handler assignment to OnNodeDragOver; `OnDragOver` is back
+    to being LCL's. }
   TTyTreeDragOverEvent = procedure(Sender: TTyTreeView; Src, Target: PTyTreeNode;
     Mode: TTyTreeDropMode; var Allowed: Boolean) of object;
+
+  { LCL parity: one end-of-edit notification, fired exactly once per editing session
+    whether the edit committed or was abandoned (comctrls.pp:2935 TTVEditingEndEvent).
+    OnNewText/OnEditCancelled remain the two half-events; "the editor closed, re-enable
+    my buttons" is this one. }
+  TTyTreeEditingEndEvent = procedure(Sender: TTyTreeView; Node: PTyTreeNode;
+    Column: Integer; Cancel: Boolean) of object;
+
+  { LCL parity: the plain-function compare CustomSort takes (comctrls.pp:2965
+    TTreeNodeCompare). A function, not a method pointer — that is the whole point of
+    the LCL member: a one-off sort order should not need an object to hang on. }
+  TTyTreeNodeCompare = function(Node1, Node2: PTyTreeNode): Integer;
 
   { C3: text type (mirrors VTV's TVSTTextType) }
   TTyVSTTextType = (ttNormal, ttStatic);
@@ -264,6 +289,16 @@ type
     FOnEditing:            TTyTreeEditingEvent;
     FOnNewText:            TTyTreeNewTextEvent;
     FOnEditCancelled:      TTyTreeColumnNodeEvent;
+    FOnEditingEnd:         TTyTreeEditingEndEvent;
+    { LCL parity: the vetoable half of the selection change (comctrls.pp:3669). Every
+      other selection notification we had -- OnChange, OnFocusChanged,
+      OnSelectionChanged -- fires after the move, so "you have unsaved edits, stay on
+      this node" was not expressible even though the veto shape already existed here
+      for expand/collapse and check. }
+    FOnChanging:           TTyTreeChangingEvent;
+    { SetFocusedNode asks OnChanging, then delegates to SetSelected, which would ask
+      again for the same gesture. One question per gesture. }
+    FSuppressChanging:     Boolean;
     { ③f F2: intra-tree node-drag state machine (gated by toNodeDrag). The drag
       lives entirely on the control (no node-record growth). FDragNode is the
       pressed node (ARMED on MouseDown over a label/image); FDragActive flips True
@@ -286,13 +321,35 @@ type
     FOnNodeMoved:          TTyTreeNodeEvent;
     { C1: layout / display properties }
     FIndent:            Integer;
-    FImages:            TImageList;
+    { LCL takes any TCustomImageList here (comctrls.pp:3768). Ours took the narrower
+      TImageList, so a TCustomImageList-typed reference -- TLCLGlyphs, or any custom
+      descendant that is not a TImageList -- would not assign. }
+    FImages:            TCustomImageList;
     FEmptyListMessage:  string;
     FShowButtons:       Boolean;
     FShowTreeLines:     Boolean;
     FShowRoot:          Boolean;
     FToggleOnDblClick:  Boolean;
     FHotTrack:          Boolean;
+    { LCL parity block — every one of these exists on TCustomTreeView.
+      FScrollBars      comctrls.pp:3777, default ssBoth. Ours always created both bars
+                       and decided visibility purely from content extent, so ssNone
+                       (a tree inside an outer scroller) was unreachable.
+      FAutoExpand      comctrls.pp:3654, default False.
+      FRightClickSelect
+                       comctrls.pp:3695. NOTE the default: LCL ships False, ours has
+                       always moved focus on right-down (see MouseDown) and shipping
+                       controls depend on it, so ours defaults True. Set it False for
+                       LCL's behaviour.
+      FHideSelection   comctrls.pp:3656, default True — dim the selection when the
+                       control does not have focus, so two adjacent trees do not both
+                       look active.
+      FShowSeparators  comctrls.pp:3703, default False — a rule under each top-level row. }
+    FScrollBars:        TScrollStyle;
+    FAutoExpand:        Boolean;
+    FRightClickSelect:  Boolean;
+    FHideSelection:     Boolean;
+    FShowSeparators:    Boolean;
     { C2: embedded scrollbars + offsets }
     FVScroll:   TTyScrollBar;   // vertical; created in constructor (never nil after Create)
     FHScroll:   TTyScrollBar;   // horizontal; created in constructor (never nil after Create)
@@ -320,6 +377,7 @@ type
     FSorting:          Boolean;   // reentrancy guard: SortTree -> HeaderChanged -> SortTree
     FSortedColumn:     Integer;   // last key SortTree ran with — so a width/reorder
     FSortedDirection:  TTySortDirection;  //   change (same key) does NOT re-sort the tree
+    FCustomSortProc:   TTyTreeNodeCompare;   { live only for the duration of CustomSort }
     { B1: tree option flags }
     FOptions:          TTyTreeOptions;
     procedure OverrideCursor(AOn: Boolean; AWith: TCursor);
@@ -352,12 +410,52 @@ type
     procedure HeaderChanged(Sender: TObject);
     procedure SetHeader(AValue: TTyHeader);
     procedure SetIndent(AValue: Integer);
-    procedure SetImages(AValue: TImageList);
+    procedure SetImages(AValue: TCustomImageList);
     procedure SetShowButtons(AValue: Boolean);
     procedure SetShowTreeLines(AValue: Boolean);
     procedure SetShowRoot(AValue: Boolean);
     procedure SetToggleOnDblClick(AValue: Boolean);
     procedure SetHotTrack(AValue: Boolean);
+    { LCL parity accessors }
+    procedure SetScrollBars(AValue: TScrollStyle);
+    procedure SetHideSelection(AValue: Boolean);
+    procedure SetShowSeparators(AValue: Boolean);
+    { LCL names for four switches that only existed as Options set members / under a
+      different spelling. Read/write pass-throughs, no second copy of the state. }
+    function  GetRowSelect: Boolean;
+    procedure SetRowSelect(AValue: Boolean);
+    function  GetMultiSelect: Boolean;
+    procedure SetMultiSelect(AValue: Boolean);
+    function  GetShowLines: Boolean;
+    procedure SetShowLines(AValue: Boolean);
+    function  GetReadOnly: Boolean;
+    procedure SetReadOnly(AValue: Boolean);
+    { LCL parity: Selected as THE current node (comctrls.pp:3778). }
+    function  GetSelection: PTyTreeNode;
+    procedure SetSelection(AValue: PTyTreeNode);
+    function  GetSelections(AIndex: Integer): PTyTreeNode;
+    { per-node Visible / HasChildren }
+    function  GetNodeVisible(Node: PTyTreeNode): Boolean;
+    procedure SetNodeVisible(Node: PTyTreeNode; AValue: Boolean);
+    function  GetHasChildren(Node: PTyTreeNode): Boolean;
+    procedure SetHasChildren(Node: PTyTreeNode; AValue: Boolean);
+    { writable scroll position }
+    function  GetTopItem: PTyTreeNode;
+    procedure SetTopItem(AValue: PTyTreeNode);
+    function  GetBottomItem: PTyTreeNode;
+    function  GetScrolledTop: Integer;
+    procedure SetScrolledTop(AValue: Integer);
+    function  GetScrolledLeft: Integer;
+    procedure SetScrolledLeft(AValue: Integer);
+    { Visible[] bookkeeping: like AdjustTotalHeight but it does NOT touch Node's own
+      TotalHeight — hiding a node must not destroy the subtree total we need to add
+      back when it is shown again. }
+    procedure AdjustAncestorsHeight(Node: PTyTreeNode; Delta: Integer);
+    { AlphaSort's / CustomSort's stand-in compare handlers (see AlphaSort). }
+    procedure AlphaCompare(Sender: TTyTreeView; Node1, Node2: PTyTreeNode;
+      Column: Integer; var CompareResult: Integer);
+    procedure CustomSortCompare(Sender: TTyTreeView; Node1, Node2: PTyTreeNode;
+      Column: Integer; var CompareResult: Integer);
     { C1: selection internals }
     procedure ClearSelectedNode;
     { FIX 3: recursive full-tree clear of nsSelected (walks collapsed subtrees) }
@@ -432,6 +530,11 @@ type
     procedure DoGetImageIndex(Node: PTyTreeNode; AKind: TTyVTImageKind; AColumn: Integer;
       var AGhosted: Boolean; var AIndex: Integer); virtual;
     procedure DoTreeChange(Node: PTyTreeNode); virtual;
+    { LCL parity: the veto gate in front of every selection/focus move (LCL's
+      CanChange, include/treeview.inc). Returns False when a handler cleared Allowed. }
+    function  DoChanging(Node: PTyTreeNode): Boolean; virtual;
+    { AutoExpand's open-the-new / close-the-old pair; no-op when AutoExpand is off. }
+    procedure ApplyAutoExpand(APrev, ANew: PTyTreeNode);
     { A node's MAIN-column text, resolved exactly the way the caption is. Protected rather
       than private: "what does this node display" is a question a descendant legitimately
       asks (and the one a test asks to prove the caption path still reaches the app's
@@ -518,8 +621,20 @@ type
     function GetFirstVisibleNoInit: PTyTreeNode;
     function GetNextVisibleNoInit(Node: PTyTreeNode): PTyTreeNode;
     function GetPreviousVisibleNoInit(Node: PTyTreeNode): PTyTreeNode;
-    { B2/B3 scroll engine }
-    function  GetNodeAt(Y: Integer; out ANodeTop: Integer): PTyTreeNode;
+    { B2/B3 scroll engine.
+      BREAKING (parity): this used to be called GetNodeAt. LCL's GetNodeAt is
+      `GetNodeAt(X, Y: Integer): TTreeNode` (comctrls.pp:3716) — same name, same
+      arity, both parameters Integer — so ported `n := Tree.GetNodeAt(X, Y)` BOUND to
+      ours, read the caller's X as a scroll-space Y, returned the wrong node, and
+      overwrote the caller's Y through the out parameter. Nothing warned. The LCL name
+      now has the LCL meaning (below) and this one, which takes a scroll-space offset
+      and answers with the row's absolute top, says so.
+      Migration: GetNodeAt(y, top) -> GetNodeAtOffset(y, top). }
+    function  GetNodeAtOffset(Y: Integer; out ANodeTop: Integer): PTyTreeNode;
+    { LCL parity: the node under a CLIENT point, nil when the point is not on a node
+      (comctrls.pp:3716). Thin wrapper over GetNodeAtPoint, which also reports which
+      part of the row was hit. }
+    function  GetNodeAt(X, Y: Integer): PTyTreeNode;
     { B1 helpers — used by tests + scroll engine }
     function  SumVisibleHeights: Integer;
     { A2: check-propagation pure helpers }
@@ -533,14 +648,54 @@ type
     procedure SelectAll;
     function  GetFirstSelected: PTyTreeNode;
     function  GetNextSelected(Node: PTyTreeNode): PTyTreeNode;
+    { LCL parity: the last selected node in screen order (comctrls.pp:3737
+      GetLastMultiSelected). A linear walk, like GetFirstSelected. }
+    function  GetLastSelected: PTyTreeNode;
+    { LCL parity: random access to the multi-selection, so the standard loop
+        for i := 0 to Tree.SelectionCount - 1 do Use(Tree.Selections[i]);
+      works without rewriting it as a pointer walk (comctrls.pp:3780/:3783).
+      SelectionCount is Integer, not LCL's Cardinal, deliberately: with Cardinal that
+      loop's `- 1` underflows to 4 billion on an empty selection.
+      Selections[] is O(n) per call — for a hot loop over a large selection prefer
+      GetFirstSelected/GetNextSelected. }
+    property SelectionCount: Integer read SelectedCount;
+    property Selections[AIndex: Integer]: PTyTreeNode read GetSelections;
     { C1: selection + focus }
     procedure ClearSelection;
     procedure FullExpand(Node: PTyTreeNode = nil);
     procedure FullCollapse(Node: PTyTreeNode = nil);
     procedure ScrollIntoView(Node: PTyTreeNode);
     property Expanded[Node: PTyTreeNode]: Boolean read GetExpanded write SetExpanded;
-    property Selected[Node: PTyTreeNode]: Boolean read GetSelected write SetSelected;
+    { BREAKING (parity): this indexed Boolean used to be called Selected, which is the
+      name LCL gives to THE current node (`property Selected: TTreeNode`,
+      comctrls.pp:3778). `if Tree.Selected <> nil then ... ` and `Tree.Selected := N`
+      — the two most-typed lines in TreeView code — could not compile against an
+      indexed Boolean, and the error ("property requires an index") points nowhere
+      near the real difference. The LCL name now carries the LCL meaning (below).
+      Migration: Selected[N] -> NodeSelected[N]. }
+    property NodeSelected[Node: PTyTreeNode]: Boolean read GetSelected write SetSelected;
+    { LCL parity: the current node. Reading returns the focused node when it is
+      selected (LCL's Selected is nil when nothing is selected); writing selects that
+      node exclusively and moves focus to it, and nil clears the selection. }
+    property Selected: PTyTreeNode read GetSelection write SetSelection;
     property FocusedNode: PTyTreeNode read GetFocusedNode write SetFocusedNode;
+    { LCL parity: hide a single node and its subtree without deleting it — the shape
+      a filter needs (comctrls.pp:3179). The walkers already honoured nsVisible; only
+      the switch was missing, so filtering meant delete-and-re-add.
+      NOT called Visible, deliberately. LCL puts it on TTreeNode, a class; our nodes
+      are records, so it has to live on the control — where `Visible` already means
+      "is this CONTROL on screen". An indexed property of that name would hide
+      TControl.Visible and make `Tree.Visible := False` a compile error, which is the
+      exact species of collision this pass exists to remove. Same NodeXxx convention
+      as NodeSelected. }
+    property NodeVisible[Node: PTyTreeNode]: Boolean read GetNodeVisible write SetNodeVisible;
+    { LCL parity: re-askable "does this node have children" (comctrls.pp's
+      OnHasChildren / NodeHasChildren). Ours was answered once, from OnInitNode's
+      ivsHasChildren, and there was no public way to ask again — a directory that
+      became non-empty could never grow an expander. Writing True marks the node
+      expandable (children materialise lazily through OnInitChildren); writing False
+      collapses it and drops the expander. }
+    property HasChildren[Node: PTyTreeNode]: Boolean read GetHasChildren write SetHasChildren;
     { B1: raw per-node check accessors (no propagation — that is Phase C) }
     property CheckType[Node: PTyTreeNode]: TTyCheckType   read GetCheckType  write SetCheckType;
     property CheckState[Node: PTyTreeNode]: TTyCheckState  read GetCheckState write SetCheckState;
@@ -554,6 +709,15 @@ type
     property OffsetY: Integer read FOffsetY;
     property OffsetX: Integer read FOffsetX;
     property RangeX: Integer read FRangeX;
+    { LCL parity: the scroll position, readable AND writable (comctrls.pp:3698-3699,
+      :3787, :3759). Ours exposed OffsetX/OffsetY read-only, so save/restore across a
+      refresh had to go through the scrollbar objects. ScrolledTop/ScrolledLeft are
+      LCL's sign convention — positive pixels scrolled away — i.e. -OffsetY/-OffsetX.
+      TopItem := N scrolls N to the top of the viewport. }
+    property ScrolledTop:  Integer read GetScrolledTop  write SetScrolledTop;
+    property ScrolledLeft: Integer read GetScrolledLeft write SetScrolledLeft;
+    property TopItem:      PTyTreeNode read GetTopItem write SetTopItem;
+    property BottomItem:   PTyTreeNode read GetBottomItem;
     { C2: read-only access to the embedded scrollbars (for tests + C3 paint). }
     property VScroll: TTyScrollBar read FVScroll;
     property HScroll: TTyScrollBar read FHScroll;
@@ -571,6 +735,20 @@ type
       node state (never calls InitNode). RenderTo derives its per-cell rect from
       the same shared helper so paint and GetCellRect cannot drift. }
     function GetCellRect(Node: PTyTreeNode; Column: Integer; out ACellRect: TRect): Boolean;
+    { LCL parity: per-node geometry (comctrls.pp:3096-3102). GetCellRect answers the
+      whole CELL; these answer the parts a custom overlay actually anchors to.
+        DisplayRect(Node, TextOnly)  — the row rect, or just the caption's rect.
+        DisplayTextLeft(Node)        — device X where the caption starts.
+        DisplayExpandSignRect(Node)  — the expander's square (empty when it has none).
+      All device px in ContentRect space, like GetCellRect, and all return False /
+      an empty rect for a node that is not currently on screen — the same restriction
+      GetCellRect has, since the geometry is derived from the paint walk. }
+    function DisplayRect(Node: PTyTreeNode; TextOnly: Boolean; out ARect: TRect): Boolean;
+    function DisplayTextLeft(Node: PTyTreeNode; out ALeft: Integer): Boolean;
+    function DisplayExpandSignRect(Node: PTyTreeNode; out ARect: TRect): Boolean;
+    { LCL parity: the node whose EXPANDER is under (X, Y), nil otherwise
+      (comctrls.pp:3717 GetNodeWithExpandSignAt). }
+    function GetNodeWithExpandSignAt(X, Y: Integer): PTyTreeNode;
     { C3: paint }
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     { B3: read-only; how many nodes were visited in the last GetNodeAt walk (for perf tests) }
@@ -581,12 +759,27 @@ type
     function GetNodeAtPoint(X, Y: Integer; out APart: TTyTreeHitPart; out AColumn: Integer): PTyTreeNode; overload;
     { D1: header hit-test — True when (X,Y) is in the header band }
     function GetHeaderHitAt(X, Y: Integer; out APart: TTyTreeHitPart; out AColumn: Integer): Boolean;
+    { LCL parity: the standard hit-test SET (comctrls.pp:3715, type at :41-43). Our own
+      GetNodeAtPoint answers a single-valued enum, so "on the item AND on its label"
+      could not be expressed and ported `if htOnButton in Tree.GetHitTestInfoAt(X,Y)`
+      did not compile. Returns LCL's THitTests so it does. }
+    function GetHitTestInfoAt(X, Y: Integer): THitTests;
     { E1: compare helper wrapping OnCompareNodes — returns 0 when unassigned }
     function DoCompare(Node1, Node2: PTyTreeNode; Column: Integer): Integer;
     { E1: sort the direct children of Node (one level only) }
     procedure Sort(Node: PTyTreeNode; Column: Integer; ADirection: TTySortDirection; DoInit: Boolean);
     { E2: recursive sort of the whole tree (initialized+expanded levels only) }
     procedure SortTree(Column: Integer; ADirection: TTySortDirection);
+    { LCL parity: sort by the node's own text, with no compare handler at all
+      (comctrls.pp:3709). Sort/SortTree route through DoCompare -> OnCompareNodes,
+      which returns 0 when the handler is unassigned — so "sort this tree
+      alphabetically", the single most common ask, was a silent no-op. AlphaSort
+      compares the MAIN-column text the painter shows (GetNodeSearchText), case-
+      insensitively, and needs no handler. Node = nil sorts the whole tree. }
+    function AlphaSort(Node: PTyTreeNode = nil): Boolean;
+    { LCL parity: sort with a plain FUNCTION rather than a method-pointer event
+      (comctrls.pp:3712/:2965). OnCompareNodes is restored afterwards. }
+    function CustomSort(SortProc: TTyTreeNodeCompare; Node: PTyTreeNode = nil): Boolean;
     { ③e E1: inline-edit public API (mirrors VirtualTreeView). E1 ships stubs;
       E2 fills the lifecycle. EditNode returns False when editing is not allowed
       (not toEditable, OnEditing veto, nil node, or the cell has no visible rect);
@@ -607,6 +800,21 @@ type
     property IsDraggingNode: Boolean         read FDragActive;
     property DropTargetNode: PTyTreeNode     read FDropTarget;
     property DropMode:       TTyTreeDropMode read FDropMode;
+    { LCL names for four switches that were only reachable as Options set members or
+      under a different spelling (comctrls.pp:3697/:3662/:3701/:3694). Public rather
+      than published on purpose: Options and ShowTreeLines already stream, and a
+      second storable copy of the same bit would let a .lfm contradict itself.
+      NOTE ReadOnly's default. LCL's is False (editing on out of the box); ours is
+      True, because editing here is opt-in through toEditable and every shipped tree
+      relies on that. ReadOnly := False is exactly Options + [toEditable]. }
+    property RowSelect:   Boolean read GetRowSelect   write SetRowSelect;
+    property MultiSelect: Boolean read GetMultiSelect write SetMultiSelect;
+    property ShowLines:   Boolean read GetShowLines   write SetShowLines;
+    property ReadOnly:    Boolean read GetReadOnly    write SetReadOnly;
+    { LCL parity: DefaultItemHeight is LCL's name for what we call DefaultNodeHeight
+      (comctrls.pp:3761). Same storage, same stored-sentinel behaviour — public, not
+      published, so only one of the two names streams. }
+    property DefaultItemHeight: Integer read GetDefaultNodeHeight write SetDefaultNodeHeight;
   published
     { B1: option flags set (default [] = ③a/③b behaviour) }
     property Options: TTyTreeOptions read FOptions write SetOptions default [];
@@ -621,13 +829,20 @@ type
     property RootNodeCount: Cardinal read GetRootNodeCount write SetRootNodeCount default 0;
     { C1: display properties }
     property Indent: Integer read FIndent write SetIndent default 16;
-    property Images: TImageList read FImages write SetImages;
+    property Images: TCustomImageList read FImages write SetImages;
     property EmptyListMessage: string read FEmptyListMessage write FEmptyListMessage;
     property ShowButtons: Boolean read FShowButtons write SetShowButtons default True;
     property ShowTreeLines: Boolean read FShowTreeLines write SetShowTreeLines default True;
     property ShowRoot: Boolean read FShowRoot write SetShowRoot default True;
     property ToggleOnDblClick: Boolean read FToggleOnDblClick write SetToggleOnDblClick default True;
     property HotTrack: Boolean read FHotTrack write SetHotTrack default False;
+    { LCL parity switches — see the field declarations for the LCL line numbers and for
+      why RightClickSelect defaults True here where LCL defaults False. }
+    property ScrollBars: TScrollStyle read FScrollBars write SetScrollBars default ssBoth;
+    property AutoExpand: Boolean read FAutoExpand write FAutoExpand default False;
+    property RightClickSelect: Boolean read FRightClickSelect write FRightClickSelect default True;
+    property HideSelection: Boolean read FHideSelection write SetHideSelection default True;
+    property ShowSeparators: Boolean read FShowSeparators write SetShowSeparators default False;
     { ③d C1: ms of keyboard idle before the incremental-search buffer auto-resets
       (next printable char starts a fresh search). Default 1000. }
     property SearchTimeout: Integer read FSearchTimeout write FSearchTimeout default 1000;
@@ -647,6 +862,9 @@ type
     property OnCollapsing:    TTyTreeChangingEvent     read FOnCollapsing    write FOnCollapsing;
     property OnCollapsed:     TTyTreeNodeEvent         read FOnCollapsed     write FOnCollapsed;
     property OnChange:        TTyTreeNodeEvent         read FOnChange        write FOnChange;
+    { LCL parity: fires BEFORE the selection moves; clear Allowed to keep the user
+      where they are (comctrls.pp:3669). }
+    property OnChanging:      TTyTreeChangingEvent     read FOnChanging      write FOnChanging;
     property OnFocusChanged:  TTyTreeNodeEvent         read FOnFocusChanged  write FOnFocusChanged;
     { C1: check events }
     property OnChecking: TTyTreeCheckingEvent          read FOnChecking      write FOnChecking;
@@ -679,9 +897,22 @@ type
     property OnEditing:       TTyTreeEditingEvent    read FOnEditing       write FOnEditing;
     property OnNewText:       TTyTreeNewTextEvent    read FOnNewText       write FOnNewText;
     property OnEditCancelled: TTyTreeColumnNodeEvent read FOnEditCancelled write FOnEditCancelled;
-    { ③f F2: intra-tree node-drag events }
-    property OnDragOver:      TTyTreeDragOverEvent   read FOnDragOver      write FOnDragOver;
+    { LCL parity: one event for "the editor closed", commit or cancel }
+    property OnEditingEnd:    TTyTreeEditingEndEvent read FOnEditingEnd    write FOnEditingEnd;
+    { ③f F2: intra-tree node-drag events. OnNodeDragOver was called OnDragOver until
+      it was moved off the name TControl already owns — see TTyTreeDragOverEvent. }
+    property OnNodeDragOver:  TTyTreeDragOverEvent   read FOnDragOver      write FOnDragOver;
     property OnNodeMoved:     TTyTreeNodeEvent       read FOnNodeMoved     write FOnNodeMoved;
+    { The LCL drag-and-drop surface the base class publishes. Re-listed here only so
+      the tree's own published block shows it is back — TTyTreeDragOverEvent used to
+      shadow OnDragOver, which made this the one TTy control that could not be an LCL
+      drop target. }
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property DragMode;
+    property DragCursor;
   end;
 
 implementation
@@ -731,6 +962,10 @@ begin
     // Selecting a node: changed if the node is not already the selected one.
     didChange := (FSelectedNode <> Node);
     if not didChange then Exit;   // same node, same state — fire nothing
+    { LCL parity: the veto runs BEFORE anything moves (comctrls.pp:3669 / CanChange).
+      Placed after the no-op early-out so a handler is not asked about a change that
+      is not happening. }
+    if not DoChanging(Node) then Exit;
     ClearSelectedNode;             // deselects previous (adjusts FSelectionCount)
     Include(Node^.States, nsSelected);
     FSelectedNode := Node;
@@ -1001,26 +1236,43 @@ var
   prevFocus: PTyTreeNode;
 begin
   if AValue = FFocusedNode then Exit;
+  { LCL parity: OnChanging vetoes the whole move — focus does NOT budge either, or
+    the caret and the selection would end up on different rows. }
+  if not DoChanging(AValue) then Exit;
   prevFocus   := FFocusedNode;
   FFocusedNode := AValue;
   // Focusing selects in single-select mode.
   if AValue <> nil then
-    SetSelected(AValue, True);
+  begin
+    { one OnChanging per gesture: the question was already asked above }
+    FSuppressChanging := True;
+    try
+      SetSelected(AValue, True);
+    finally
+      FSuppressChanging := False;
+    end;
+  end;
   if Assigned(FOnFocusChanged) then
     FOnFocusChanged(Self, AValue);
+  { AutoExpand runs after the notification, so a handler reading Expanded[] sees the
+    state the user is about to see. }
+  ApplyAutoExpand(prevFocus, AValue);
   Invalidate;
-  { suppress unused-variable warning }
-  if prevFocus = nil then ;
 end;
 
 { MoveFocusOnly — move keyboard focus without touching the selection set.
   Used by the multi-select mouse/keyboard paths to position the caret
   independently of selection. }
 procedure TTyTreeView.MoveFocusOnly(AValue: PTyTreeNode);
+var
+  prevFocus: PTyTreeNode;
 begin
   if AValue = FFocusedNode then Exit;
+  if not DoChanging(AValue) then Exit;
+  prevFocus    := FFocusedNode;
   FFocusedNode := AValue;
   if Assigned(FOnFocusChanged) then FOnFocusChanged(Self, AValue);
+  ApplyAutoExpand(prevFocus, AValue);
   Invalidate;
 end;
 
@@ -1247,7 +1499,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyTreeView.SetImages(AValue: TImageList);
+procedure TTyTreeView.SetImages(AValue: TCustomImageList);
 begin
   if FImages = AValue then Exit;
   FImages := AValue;
@@ -1626,6 +1878,23 @@ begin
     viewW := ClientWidth - SBThick;
   end;
 
+  { LCL parity: ScrollBars gates which axes may have a bar at all (comctrls.pp:3777).
+    Applied AFTER the content-extent decision so the "does it fit" maths above is
+    untouched -- this only removes a bar the property forbids, and the width/height
+    it was going to steal is given back so the content uses the full viewport.
+    ssAuto* behave like their plain counterparts here: our bars are already auto
+    (they appear only when the content overflows), so ssAutoBoth == ssBoth. }
+  if not (FScrollBars in [ssVertical, ssBoth, ssAutoVertical, ssAutoBoth]) then
+  begin
+    if wantVScroll then viewW := viewW + SBThick;
+    wantVScroll := False;
+  end;
+  if not (FScrollBars in [ssHorizontal, ssBoth, ssAutoHorizontal, ssAutoBoth]) then
+  begin
+    if wantHScroll then viewH := viewH + MulDiv(SBThick, 96, PPI);
+    wantHScroll := False;
+  end;
+
   { ── Vertical bar ────────────────────────────────────────────────────────── }
   if wantVScroll then
   begin
@@ -1877,6 +2146,13 @@ begin
   FDragStartPos     := Point(0, 0);
   FDropTarget       := nil;
   FDropMode         := dmNone;
+  { LCL parity defaults. ssBoth / False / True / False match LCL; RightClickSelect
+    is True because that is what this control has always done on right-down. }
+  FScrollBars       := ssBoth;
+  FAutoExpand       := False;
+  FRightClickSelect := True;
+  FHideSelection    := True;
+  FShowSeparators   := False;
   { TabStop=False on both: a standalone TTyScrollBar is focusable (it owns arrow/page keys),
     but a bar embedded in the tree must not be — dragging it would take focus off the tree,
     which would then lose its focus ring and its keyboard navigation mid-scroll. }
@@ -2987,7 +3263,7 @@ end;
 
   FLastGetNodeAtVisits counts how many node-iterations the walk makes;
   it is exposed read-only for the performance-invariant test (TTreePerfTest). }
-function TTyTreeView.GetNodeAt(Y: Integer; out ANodeTop: Integer): PTyTreeNode;
+function TTyTreeView.GetNodeAtOffset(Y: Integer; out ANodeTop: Integer): PTyTreeNode;
 var
   node, climb: PTyTreeNode;
   runTop, h:   Integer;
@@ -3182,7 +3458,7 @@ begin
   { Seed the row-top walk the SAME way RenderTo does. }
   firstNodeY := -FOffsetY;
   if firstNodeY < 0 then firstNodeY := 0;
-  seed := GetNodeAt(firstNodeY, firstTop);
+  seed := GetNodeAtOffset(firstNodeY, firstTop);
   if seed = nil then Exit;   // empty / fully scrolled past
   rowTop := CR.Top - MulDiv(firstNodeY - firstTop, PPI, 96);
 
@@ -3262,6 +3538,7 @@ var
   txt: string;
   ghosted: Boolean;
   imgIdx: Integer;
+  selIdx, ovlIdx: Integer;      { ikSelected / ikOverlay answers for the current row }
   captionX: Integer;
   rangeXNew: Integer;
   inset, insetLogical: Integer;
@@ -3578,7 +3855,7 @@ begin
     { ── First on-screen node ─────────────────────────────────────────────── }
     firstNodeY := -FOffsetY;
     if firstNodeY < 0 then firstNodeY := 0;
-    node := GetNodeAt(firstNodeY, firstTop);
+    node := GetNodeAtOffset(firstNodeY, firstTop);
     if node = nil then
     begin
       { Empty tree (or fully scrolled past): draw the empty-list message in the
@@ -3614,8 +3891,13 @@ begin
       rowRect := Rect(CR.Left, rowTop, CR.Right, rowTop + rowH);
 
       { ── Row background ─────────────────────────────────────────────────── }
+      { LCL parity (comctrls.pp:3656): with HideSelection the highlight is not drawn
+        while the control is unfocused, so two side-by-side trees do not both look
+        active. It HIDES rather than dims — the row resolves as an ordinary row, so
+        no colour is invented in control code; whatever the skin says a plain
+        TyTreeNode looks like is what an inactive selection looks like. }
       nodeStates := [];
-      if nsSelected in node^.States then
+      if (nsSelected in node^.States) and (Focused or not FHideSelection) then
         nodeStates := [tysSelected]
       else if FHotTrack and (node = FHotNode) then
         nodeStates := [tysHover];
@@ -3627,6 +3909,14 @@ begin
         bgRect := rowRect;
         P.FillBackground(bgRect, NodeStyle.Background, 0);
       end;
+
+      { LCL parity (comctrls.pp:3703): a rule under each TOP-LEVEL row. The colour is
+        the resolved control border token — the same one the tree-lines use — so a
+        skin recolours both together and nothing is hardcoded here. }
+      if FShowSeparators and (GetNodeLevel(node) = 0) then
+        P.Bitmap.DrawLine(rowRect.Left, rowRect.Bottom - 1,
+                          rowRect.Right, rowRect.Bottom - 1,
+                          TyColorToBGRA(S.BorderColor), False);
 
       { ── X accumulation: level → indent ─────────────────────────────────── }
       level    := GetNodeLevel(node);
@@ -3739,10 +4029,14 @@ begin
               );
               if btnRect.Right  <= btnRect.Left  then btnRect.Right  := btnRect.Left  + 4;
               if btnRect.Bottom <= btnRect.Top   then btnRect.Bottom := btnRect.Top   + 4;
+              { The expander goes through TyDrawGlyph, not TTyPainter.DrawGlyph directly,
+                so a theme that overrides --glyph-chevron-down / --glyph-chevron-right
+                reaches the tree too. Calling the painter straight bypassed an override
+                this library already supports everywhere else. }
               if nsExpanded in node^.States then
-                P.DrawGlyph(btnRect, tgChevronDown, NodeStyle.TextColor, P.Scale(1), 2)
+                TyDrawGlyph(P, ActiveController, btnRect, tgChevronDown, NodeStyle.TextColor, P.Scale(1), 2)
               else
-                P.DrawGlyph(btnRect, tgChevronRight, NodeStyle.TextColor, P.Scale(1), 2);
+                TyDrawGlyph(P, ActiveController, btnRect, tgChevronRight, NodeStyle.TextColor, P.Scale(1), 2);
             end;
 
             { Image (main column only) }
@@ -3838,6 +4132,16 @@ begin
               imgIdx  := -1;
               ghosted := False;
               DoGetImageIndex(node, ikNormal, colIdx, ghosted, imgIdx);
+              { ikSelected / ikOverlay — see ResolveNodeImages' comment in the
+                0-column branch; the two paths must ask the same questions. }
+              if nsSelected in node^.States then
+              begin
+                selIdx := imgIdx;
+                DoGetImageIndex(node, ikSelected, colIdx, ghosted, selIdx);
+                if selIdx >= 0 then imgIdx := selIdx;
+              end;
+              ovlIdx := -1;
+              DoGetImageIndex(node, ikOverlay, colIdx, ghosted, ovlIdx);
               { ③d D1: when this cell is owner-drawn the app owns the image too —
                 do NOT collect it into pendingIcons (slot still reserved so the
                 row width / chrome layout is unchanged). }
@@ -3851,6 +4155,14 @@ begin
                 pendingIcons[pendingCount].Idx := imgIdx;
                 pendingIcons[pendingCount].Ghost := ghosted;
                 Inc(pendingCount);
+                if (ovlIdx >= 0) and (ovlIdx < FImages.Count) then
+                begin
+                  if pendingCount = Length(pendingIcons) then
+                    SetLength(pendingIcons, pendingCount + 32);
+                  pendingIcons[pendingCount] := pendingIcons[pendingCount - 1];
+                  pendingIcons[pendingCount].Idx := ovlIdx;
+                  Inc(pendingCount);
+                end;
               end;
               Inc(captionX, imgSlotW);
             end;
@@ -3992,10 +4304,14 @@ begin
           );
           if btnRect.Right  <= btnRect.Left  then btnRect.Right  := btnRect.Left  + 4;
           if btnRect.Bottom <= btnRect.Top   then btnRect.Bottom := btnRect.Top   + 4;
+          { The expander goes through TyDrawGlyph, not TTyPainter.DrawGlyph directly, so
+            a theme that overrides --glyph-chevron-down / --glyph-chevron-right reaches
+            the tree too. Calling the painter straight bypassed an override this library
+            already supports everywhere else. }
           if nsExpanded in node^.States then
-            P.DrawGlyph(btnRect, tgChevronDown, NodeStyle.TextColor, P.Scale(1), 2)
+            TyDrawGlyph(P, ActiveController, btnRect, tgChevronDown, NodeStyle.TextColor, P.Scale(1), 2)
           else
-            P.DrawGlyph(btnRect, tgChevronRight, NodeStyle.TextColor, P.Scale(1), 2);
+            TyDrawGlyph(P, ActiveController, btnRect, tgChevronRight, NodeStyle.TextColor, P.Scale(1), 2);
         end;
 
         { ── B2: Checkbox slot (after expand button, before image) ──────── }
@@ -4092,6 +4408,24 @@ begin
           imgIdx  := -1;
           ghosted := False;
           DoGetImageIndex(node, ikNormal, -1, ghosted, imgIdx);
+          { TTyVTImageKind advertises four kinds and only ikNormal was ever asked for,
+            so a folder tree could not show an open-folder icon on the selected row and
+            an overlay badge was unreachable.
+            ikSelected: asked only for a selected row, SEEDED with the normal index —
+            a handler that ignores the kind leaves it alone, so a tree written before
+            this change renders identically.
+            ikOverlay: seeded -1 and drawn on top of the normal icon at the same
+            position when the handler answers, which is what a badge is.
+            ikState still has no answer here: it needs a SECOND image list
+            (LCL's StateImages) and its own slot in the row layout. }
+          if nsSelected in node^.States then
+          begin
+            selIdx := imgIdx;
+            DoGetImageIndex(node, ikSelected, -1, ghosted, selIdx);
+            if selIdx >= 0 then imgIdx := selIdx;
+          end;
+          ovlIdx := -1;
+          DoGetImageIndex(node, ikOverlay, -1, ghosted, ovlIdx);
           { ③d D1: owner-drawn cell owns its image — do not collect it. }
           if (not ownerDrawCell) and (imgIdx >= 0) and (imgIdx < FImages.Count) then
           begin
@@ -4101,7 +4435,19 @@ begin
             pendingIcons[pendingCount].X   := ARect.Left + captionX;
             pendingIcons[pendingCount].Y   := ARect.Top  + rowTop + (rowH - FImages.Height) div 2;
             pendingIcons[pendingCount].Idx := imgIdx;
+            { The Ghost carry landed on the multi-column branch only, so in the DEFAULT
+              0-column tree `var Ghosted := True` still reached nothing. Same fix, this
+              side of the branch. }
+            pendingIcons[pendingCount].Ghost := ghosted;
             Inc(pendingCount);
+            if (ovlIdx >= 0) and (ovlIdx < FImages.Count) then
+            begin
+              if pendingCount = Length(pendingIcons) then
+                SetLength(pendingIcons, pendingCount + 32);
+              pendingIcons[pendingCount] := pendingIcons[pendingCount - 1];
+              pendingIcons[pendingCount].Idx := ovlIdx;
+              Inc(pendingCount);
+            end;
           end;
           Inc(captionX, imgSlotW);
         end;
@@ -4247,7 +4593,7 @@ begin
           ARect.Left + CR.Left,  ARect.Top + CR.Top,
           ARect.Left + CR.Right, ARect.Top + CR.Bottom);
         for iIcon := 0 to pendingCount - 1 do
-          { NOTE the fifth argument. FImages here is LCL's TImageList, whose Draw is
+          { NOTE the fifth argument. FImages here is LCL's TCustomImageList, whose Draw is
             Draw(Canvas, X, Y, Index, Enabled) -- Enabled, not Ghosted, and it happens to
             accept a Boolean in that position either way, so passing the flag straight
             through compiled cleanly and drew EVERY icon disabled. Ghosted is the negation
@@ -4338,7 +4684,7 @@ begin
 
   if absY < 0 then Exit;
 
-  node := GetNodeAt(absY, nodeTop);
+  node := GetNodeAtOffset(absY, nodeTop);
   if node = nil then Exit;
 
   { Make sure the node is initialised so nsHasChildren is reliable }
@@ -4661,11 +5007,15 @@ begin
   end
   else if Button = mbRight then
   begin
-    { Right-click: always move focus to the clicked node (mirrors VTV right-down
-      behaviour).  Doing this unconditionally avoids a desync where FocusedNode
-      and the visually-highlighted row differ when the node was programmatically
-      selected without focus, and keeps keyboard nav anchored to the right row. }
-    if node <> nil then
+    { Right-click: move focus to the clicked node (mirrors VTV right-down behaviour),
+      which avoids a desync where FocusedNode and the visually-highlighted row differ
+      when the node was programmatically selected without focus, and keeps keyboard
+      nav anchored to the right row.
+      LCL parity: this used to be unconditional; it is now RightClickSelect
+      (comctrls.pp:3695), so a context menu that must act on the EXISTING selection
+      can turn it off. Ours defaults True — the shipped behaviour — where LCL
+      defaults False. }
+    if FRightClickSelect and (node <> nil) then
       FocusedNode := node;
   end;
 
@@ -5866,16 +6216,26 @@ begin
 end;
 
 { Commit the active edit: fire OnNewText iff the text changed, then tear down.
-  FEndingEdit guards re-entry (a focus-loss commit can fire mid-teardown). }
+  FEndingEdit guards re-entry (a focus-loss commit can fire mid-teardown).
+  OnEditingEnd(Cancel=False) fires last, ALWAYS — OnNewText is conditional on the
+  text having changed, so it is not a usable "the editor closed" signal. }
 procedure TTyTreeView.EndEditNode;
+var
+  endNode: PTyTreeNode;
+  endCol:  Integer;
 begin
   if FEndingEdit then Exit;
   if not FEditing then Exit;
   FEndingEdit := True;
   try
+    endNode := FEditNode;
+    endCol  := FEditColumn;
     if (FEditor.Text <> FEditOriginalText) and Assigned(FOnNewText) then
       FOnNewText(Self, FEditNode, FEditColumn, FEditor.Text);
     FinishEdit;
+    { after FinishEdit: the edit state is already torn down, so a handler that
+      re-opens an editor from here is not fighting a half-live one. }
+    if Assigned(FOnEditingEnd) then FOnEditingEnd(Self, endNode, endCol, False);
   finally
     FEndingEdit := False;
   end;
@@ -5883,17 +6243,539 @@ end;
 
 { Discard the active edit: fire OnEditCancelled, then tear down (no commit). }
 procedure TTyTreeView.CancelEdit;
+var
+  endNode: PTyTreeNode;
+  endCol:  Integer;
 begin
   if FEndingEdit then Exit;
   if not FEditing then Exit;
   FEndingEdit := True;
   try
+    endNode := FEditNode;
+    endCol  := FEditColumn;
     if Assigned(FOnEditCancelled) then
       FOnEditCancelled(Self, FEditNode, FEditColumn);
     FinishEdit;
+    if Assigned(FOnEditingEnd) then FOnEditingEnd(Self, endNode, endCol, True);
   finally
     FEndingEdit := False;
   end;
+end;
+
+{ ══ LCL parity surface ═══════════════════════════════════════════════════════
+  Everything below exists because the audit of our published members against
+  C:/lazarus/lcl/comctrls.pp found it missing, differently named, or -- the bad
+  case -- present under LCL's name with a different meaning. Each block cites the
+  LCL declaration it mirrors. }
+
+{ ── the LCL-shaped GetNodeAt ─────────────────────────────────────────────── }
+
+function TTyTreeView.GetNodeAt(X, Y: Integer): PTyTreeNode;
+var
+  part: TTyTreeHitPart;
+begin
+  Result := GetNodeAtPoint(X, Y, part);
+  { LCL answers nil for a point that is not on a node at all. GetNodeAtPoint
+    already returns nil there, but it also reports hpHeaderSection/hpHeaderDivider
+    with a nil node for the header band -- keep nil. }
+end;
+
+{ ── Selected: the current node (comctrls.pp:3778) ────────────────────────── }
+
+function TTyTreeView.GetSelection: PTyTreeNode;
+begin
+  { LCL's Selected is nil when nothing is selected. FFocusedNode survives a
+    ClearSelection (the caret stays where it was), so answer it only while it is
+    actually selected; otherwise fall back to the first selected node, which is
+    what a multi-select tree means by "the current one" after a range gesture. }
+  Result := FFocusedNode;
+  if (Result <> nil) and (nsSelected in Result^.States) then Exit;
+  Result := GetFirstSelected;
+end;
+
+procedure TTyTreeView.SetSelection(AValue: PTyTreeNode);
+begin
+  if AValue = nil then
+  begin
+    ClearSelection;
+    Exit;
+  end;
+  if AValue = FRoot then Exit;
+  { Exclusive select + focus, which is what `Tree.Selected := N` means in LCL even
+    with MultiSelect on. ClearSelection first so a multi-selection collapses to one. }
+  if SelectedCount > 1 then ClearSelection;
+  FocusedNode := AValue;
+  if not (nsSelected in AValue^.States) then SetSelected(AValue, True);
+end;
+
+function TTyTreeView.GetSelections(AIndex: Integer): PTyTreeNode;
+var
+  n: PTyTreeNode;
+  i: Integer;
+begin
+  Result := nil;
+  if AIndex < 0 then Exit;
+  i := 0;
+  n := GetFirstSelected;
+  while n <> nil do
+  begin
+    if i = AIndex then Exit(n);
+    Inc(i);
+    n := GetNextSelected(n);
+  end;
+end;
+
+function TTyTreeView.GetLastSelected: PTyTreeNode;
+var
+  n: PTyTreeNode;
+begin
+  Result := nil;
+  n := GetFirstSelected;
+  while n <> nil do
+  begin
+    Result := n;
+    n := GetNextSelected(n);
+  end;
+end;
+
+{ ── the four switches under LCL's names (comctrls.pp:3697/:3662/:3701/:3694) ─ }
+
+function TTyTreeView.GetRowSelect: Boolean;
+begin
+  Result := toFullRowSelect in FOptions;
+end;
+
+procedure TTyTreeView.SetRowSelect(AValue: Boolean);
+begin
+  if AValue then Options := FOptions + [toFullRowSelect]
+  else           Options := FOptions - [toFullRowSelect];
+end;
+
+function TTyTreeView.GetMultiSelect: Boolean;
+begin
+  Result := toMultiSelect in FOptions;
+end;
+
+procedure TTyTreeView.SetMultiSelect(AValue: Boolean);
+begin
+  if AValue then Options := FOptions + [toMultiSelect]
+  else           Options := FOptions - [toMultiSelect];
+end;
+
+function TTyTreeView.GetShowLines: Boolean;
+begin
+  Result := FShowTreeLines;
+end;
+
+procedure TTyTreeView.SetShowLines(AValue: Boolean);
+begin
+  SetShowTreeLines(AValue);
+end;
+
+function TTyTreeView.GetReadOnly: Boolean;
+begin
+  Result := not (toEditable in FOptions);
+end;
+
+procedure TTyTreeView.SetReadOnly(AValue: Boolean);
+begin
+  if AValue then Options := FOptions - [toEditable]
+  else           Options := FOptions + [toEditable];
+end;
+
+{ ── ScrollBars (comctrls.pp:3777) ────────────────────────────────────────── }
+
+procedure TTyTreeView.SetScrollBars(AValue: TScrollStyle);
+begin
+  if FScrollBars = AValue then Exit;
+  FScrollBars := AValue;
+  { A bar that is no longer permitted must give its offset back, or the content
+    stays scrolled with nothing left to scroll it. UpdateScrollBars zeroes the
+    offset of any bar it hides. }
+  UpdateScrollBars;
+  Invalidate;
+end;
+
+procedure TTyTreeView.SetHideSelection(AValue: Boolean);
+begin
+  if FHideSelection = AValue then Exit;
+  FHideSelection := AValue;
+  Invalidate;
+end;
+
+procedure TTyTreeView.SetShowSeparators(AValue: Boolean);
+begin
+  if FShowSeparators = AValue then Exit;
+  FShowSeparators := AValue;
+  Invalidate;
+end;
+
+{ ── per-node Visible (comctrls.pp:3179) ──────────────────────────────────── }
+
+{ Like AdjustTotalHeight but starting at Node's PARENT, so Node's own TotalHeight
+  is left intact. Hiding a node must not destroy the subtree total we add back
+  when it is shown again. }
+procedure TTyTreeView.AdjustAncestorsHeight(Node: PTyTreeNode; Delta: Integer);
+var
+  run, up: PTyTreeNode;
+begin
+  if (Node = nil) or (Delta = 0) then Exit;
+  run := Node;
+  while True do
+  begin
+    up := run^.Parent;
+    if (up = nil) or (up = PTyTreeNode(Self)) then Break;
+    if not (nsExpanded in up^.States) then Break;
+    Inc(up^.TotalHeight, Delta);
+    run := up;
+  end;
+end;
+
+function TTyTreeView.GetNodeVisible(Node: PTyTreeNode): Boolean;
+begin
+  Result := (Node <> nil) and (nsVisible in Node^.States);
+end;
+
+procedure TTyTreeView.SetNodeVisible(Node: PTyTreeNode; AValue: Boolean);
+var
+  contrib: Integer;
+begin
+  if (Node = nil) or (Node = FRoot) then Exit;
+  if AValue = (nsVisible in Node^.States) then Exit;
+
+  { The node's screen contribution is its whole subtree total (NodeHeight when
+    collapsed or childless). Take it off / put it back on the ancestor chain so
+    ContentHeight, the scrollbars and the position cache all stay honest --
+    RootNode^.TotalHeight - RootNode^.NodeHeight must equal the sum of NodeHeight
+    over the nodes that actually paint. }
+  contrib := Integer(Node^.TotalHeight);
+  if AValue then
+  begin
+    Include(Node^.States, nsVisible);
+    AdjustAncestorsHeight(Node, contrib);
+  end
+  else
+  begin
+    Exclude(Node^.States, nsVisible);
+    AdjustAncestorsHeight(Node, -contrib);
+    { A hidden node must not keep the caret or the selection: both would point at
+      a row nothing draws, and keyboard nav would walk off it into nowhere. }
+    if FFocusedNode = Node then FFocusedNode := nil;
+    if nsSelected in Node^.States then InternalSetSelected(Node, False);
+  end;
+  InvalidateTreeLayout;
+end;
+
+{ ── per-node HasChildren, re-askable (comctrls.pp:3688 OnHasChildren) ────── }
+
+function TTyTreeView.GetHasChildren(Node: PTyTreeNode): Boolean;
+begin
+  Result := (Node <> nil) and (nsHasChildren in Node^.States);
+end;
+
+procedure TTyTreeView.SetHasChildren(Node: PTyTreeNode; AValue: Boolean);
+begin
+  if (Node = nil) or (Node = FRoot) then Exit;
+  if AValue = (nsHasChildren in Node^.States) then Exit;
+  if AValue then
+    Include(Node^.States, nsHasChildren)
+  else
+  begin
+    { Dropping the flag on an expanded node would leave its children on screen with
+      no way to collapse them -- the expander is gone. Collapse first. }
+    if nsExpanded in Node^.States then SetExpanded(Node, False);
+    Exclude(Node^.States, nsHasChildren);
+  end;
+  InvalidateTreeLayout;
+end;
+
+{ ── writable scroll position (comctrls.pp:3698-3699/:3759/:3787) ─────────── }
+
+function TTyTreeView.GetScrolledTop: Integer;
+begin
+  Result := -FOffsetY;    { LCL counts pixels scrolled AWAY; FOffsetY is <= 0 }
+end;
+
+procedure TTyTreeView.SetScrolledTop(AValue: Integer);
+var
+  viewH, minOff: Integer;
+begin
+  if AValue < 0 then AValue := 0;
+  FOffsetY := -AValue;
+  { Same clamp ScrollIntoView applies, so a restore of a stale value cannot park
+    the viewport past the end of the content. }
+  viewH  := MulDiv(ClientHeight, 96, Font.PixelsPerInch);
+  minOff := viewH - FRangeY;
+  if minOff > 0 then minOff := 0;
+  if FOffsetY < minOff then FOffsetY := minOff;
+  if FOffsetY > 0 then FOffsetY := 0;
+  UpdateScrollBars;
+  Invalidate;
+  RepositionEditor;
+end;
+
+function TTyTreeView.GetScrolledLeft: Integer;
+begin
+  Result := -FOffsetX;
+end;
+
+procedure TTyTreeView.SetScrolledLeft(AValue: Integer);
+begin
+  if AValue < 0 then AValue := 0;
+  FOffsetX := -AValue;
+  if FOffsetX > 0 then FOffsetX := 0;
+  UpdateScrollBars;   { clamps against FRangeX and the viewport width }
+  Invalidate;
+  RepositionEditor;
+end;
+
+function TTyTreeView.GetTopItem: PTyTreeNode;
+var
+  nodeTop: Integer;
+begin
+  Result := GetNodeAtOffset(-FOffsetY, nodeTop);
+end;
+
+procedure TTyTreeView.SetTopItem(AValue: PTyTreeNode);
+var
+  n: PTyTreeNode;
+  accTop: Integer;
+begin
+  if (AValue = nil) or (AValue = FRoot) then Exit;
+  if not (nsVisible in AValue^.States) then Exit;
+  accTop := 0;
+  n := GetFirstVisibleNoInit;
+  while n <> nil do
+  begin
+    if n = AValue then
+    begin
+      ScrolledTop := accTop;
+      Exit;
+    end;
+    Inc(accTop, n^.NodeHeight);
+    n := GetNextVisibleNoInit(n);
+  end;
+  { not reachable in the current visible order (collapsed ancestor) -- no scroll }
+end;
+
+function TTyTreeView.GetBottomItem: PTyTreeNode;
+var
+  viewH, y, nodeTop: Integer;
+  n: PTyTreeNode;
+begin
+  viewH := MulDiv(ClientHeight, 96, Font.PixelsPerInch);
+  y := -FOffsetY + viewH - 1;
+  if y < 0 then y := 0;
+  Result := GetNodeAtOffset(y, nodeTop);
+  if Result <> nil then Exit;
+  { The viewport ends past the content (short tree / scrolled to the end), so the
+    last node in visible order IS the bottom one. }
+  n := GetFirstVisibleNoInit;
+  while n <> nil do
+  begin
+    Result := n;
+    n := GetNextVisibleNoInit(n);
+  end;
+end;
+
+{ ── per-node geometry (comctrls.pp:3096-3102) ────────────────────────────── }
+
+function TTyTreeView.DisplayRect(Node: PTyTreeNode; TextOnly: Boolean;
+  out ARect: TRect): Boolean;
+var
+  cell: TRect;
+  col: Integer;
+begin
+  ARect  := Rect(0, 0, 0, 0);
+  Result := False;
+  if Node = nil then Exit;
+  col := NoColumn;
+  if (FHeader <> nil) and (FHeader.Columns.Count > 0) then col := FHeader.MainColumn;
+  if not GetCellRect(Node, col, cell) then Exit;
+  if TextOnly then
+    ARect := CellTextRect(Node, col, cell)
+  else
+    { the whole ROW, not just the main cell -- LCL's DisplayRect(False) spans the
+      control width }
+    ARect := Rect(ContentRect.Left, cell.Top, ContentRect.Right, cell.Bottom);
+  Result := True;
+end;
+
+function TTyTreeView.DisplayTextLeft(Node: PTyTreeNode; out ALeft: Integer): Boolean;
+var
+  r: TRect;
+begin
+  ALeft  := 0;
+  Result := DisplayRect(Node, True, r);
+  if Result then ALeft := r.Left;
+end;
+
+function TTyTreeView.DisplayExpandSignRect(Node: PTyTreeNode; out ARect: TRect): Boolean;
+var
+  cell: TRect;
+  col, level, indentPx, btnSlotW, gSz, slotBaseX, rowH, PPI: Integer;
+begin
+  ARect  := Rect(0, 0, 0, 0);
+  Result := False;
+  if Node = nil then Exit;
+  if not (FShowButtons and (nsHasChildren in Node^.States)) then Exit;
+  col := NoColumn;
+  if (FHeader <> nil) and (FHeader.Columns.Count > 0) then col := FHeader.MainColumn;
+  if not GetCellRect(Node, col, cell) then Exit;
+
+  { Reproduce RenderTo's expander geometry exactly (the btnRect block): one
+    Indent-wide slot immediately before indentPx, a centred square of side
+    min(slot, rowH). }
+  PPI       := Font.PixelsPerInch;
+  rowH      := cell.Bottom - cell.Top;
+  level     := GetNodeLevel(Node);
+  indentPx  := MulDiv((level + Ord(FShowRoot)) * FIndent, PPI, 96);
+  btnSlotW  := MulDiv(FIndent, PPI, 96);
+  gSz       := btnSlotW;
+  if rowH < gSz then gSz := rowH;
+  slotBaseX := cell.Left + indentPx - btnSlotW + (btnSlotW - gSz) div 2;
+  ARect := Rect(slotBaseX, cell.Top + (rowH - gSz) div 2,
+                slotBaseX + gSz, cell.Top + (rowH - gSz) div 2 + gSz);
+  Result := True;
+end;
+
+function TTyTreeView.GetNodeWithExpandSignAt(X, Y: Integer): PTyTreeNode;
+var
+  part: TTyTreeHitPart;
+  n: PTyTreeNode;
+begin
+  Result := nil;
+  n := GetNodeAtPoint(X, Y, part);
+  if (n <> nil) and (part = hpButton) then Result := n;
+end;
+
+{ ── GetHitTestInfoAt (comctrls.pp:3715, THitTest at :41) ─────────────────── }
+
+function TTyTreeView.GetHitTestInfoAt(X, Y: Integer): THitTests;
+var
+  part: TTyTreeHitPart;
+  n: PTyTreeNode;
+  r: TRect;
+begin
+  Result := [];
+  n := GetNodeAtPoint(X, Y, part);
+  if n = nil then
+  begin
+    { LCL distinguishes "above every row" / "below every row" / neither. }
+    r := ContentRect;
+    if Y < r.Top then Include(Result, htAbove)
+    else if Y >= r.Bottom then Include(Result, htBelow)
+    else if X < r.Left then Include(Result, htToLeft)
+    else if X >= r.Right then Include(Result, htToRight)
+    else Include(Result, htNowhere);
+    Exit;
+  end;
+
+  { On a node: htOnItem is LCL's "the point is on this item's row" and coexists
+    with the more specific part -- which is exactly the expressiveness the
+    single-valued TTyTreeHitPart cannot reach. }
+  Include(Result, htOnItem);
+  case part of
+    hpButton:   Include(Result, htOnButton);
+    hpImage:    Include(Result, htOnIcon);
+    hpLabel:    Include(Result, htOnLabel);
+    hpIndent:   Include(Result, htOnIndent);
+    hpCheckBox: Include(Result, htOnStateIcon);
+  else
+    ;
+  end;
+  { Right of the caption but still in the row: LCL reports htOnItem + htOnRight. }
+  if (part = hpLabel) and DisplayRect(n, True, r) and (X >= r.Right) then
+    Include(Result, htOnRight);
+end;
+
+{ ── AlphaSort (comctrls.pp:3709) ─────────────────────────────────────────── }
+
+function TTyTreeView.AlphaSort(Node: PTyTreeNode): Boolean;
+var
+  saved: TTyTreeCompareEvent;
+begin
+  { Borrow the existing sort engine, temporarily standing in for the app's compare
+    handler. Restoring it in a finally keeps AlphaSort from being a way to lose a
+    handler the app installed. }
+  saved := FOnCompareNodes;
+  FOnCompareNodes := @AlphaCompare;
+  try
+    if Node = nil then
+      SortTree(NoColumn, sdAscending)
+    else
+      Sort(Node, NoColumn, sdAscending, False);
+  finally
+    FOnCompareNodes := saved;
+  end;
+  Result := True;
+end;
+
+function TTyTreeView.CustomSort(SortProc: TTyTreeNodeCompare; Node: PTyTreeNode): Boolean;
+var
+  saved: TTyTreeCompareEvent;
+begin
+  Result := False;
+  if SortProc = nil then Exit;
+  FCustomSortProc := SortProc;
+  saved := FOnCompareNodes;
+  FOnCompareNodes := @CustomSortCompare;
+  try
+    if Node = nil then
+      SortTree(NoColumn, sdAscending)
+    else
+      Sort(Node, NoColumn, sdAscending, False);
+  finally
+    FOnCompareNodes := saved;
+    FCustomSortProc := nil;
+  end;
+  Result := True;
+end;
+
+procedure TTyTreeView.CustomSortCompare(Sender: TTyTreeView; Node1, Node2: PTyTreeNode;
+  Column: Integer; var CompareResult: Integer);
+begin
+  if Assigned(FCustomSortProc) then
+    CompareResult := FCustomSortProc(Node1, Node2)
+  else
+    CompareResult := 0;
+end;
+
+procedure TTyTreeView.AlphaCompare(Sender: TTyTreeView; Node1, Node2: PTyTreeNode;
+  Column: Integer; var CompareResult: Integer);
+begin
+  { The MAIN-column text the painter shows -- the same path OnGetText feeds, so
+    what the user reads is what gets sorted. UTF8CompareText is case-insensitive
+    and UTF-8 aware; CompareText would mis-order anything non-ASCII. }
+  CompareResult := UTF8CompareText(GetNodeSearchText(Node1), GetNodeSearchText(Node2));
+end;
+
+{ ── OnChanging: the veto in front of a selection move (comctrls.pp:3669) ─── }
+
+function TTyTreeView.DoChanging(Node: PTyTreeNode): Boolean;
+var
+  allowed: Boolean;
+begin
+  Result := True;
+  if FSuppressChanging then Exit;          { already asked, this same gesture }
+  if not Assigned(FOnChanging) then Exit;
+  allowed := True;
+  FOnChanging(Self, Node, allowed);
+  Result := allowed;
+end;
+
+{ AutoExpand (comctrls.pp:3654): the node that gains focus opens, the one that
+  loses it closes. The previous node is left alone when the new focus is inside
+  its subtree -- otherwise walking INTO a folder would immediately shut it. }
+procedure TTyTreeView.ApplyAutoExpand(APrev, ANew: PTyTreeNode);
+begin
+  if not FAutoExpand then Exit;
+  if (APrev <> nil) and (APrev <> ANew) and (nsExpanded in APrev^.States) and
+     not IsDescendant(ANew, APrev) then
+    SetExpanded(APrev, False);
+  if (ANew <> nil) and (nsHasChildren in ANew^.States) and
+     not (nsExpanded in ANew^.States) then
+    SetExpanded(ANew, True);
 end;
 
 initialization

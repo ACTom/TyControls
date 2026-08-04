@@ -467,7 +467,7 @@ begin
     selection-change paths so the test does not depend on which of the two the
     implementation routes OnPathChange through. }
   FTree.FocusedNode := child;
-  FTree.Selected[child] := True;
+  FTree.NodeSelected[child] := True;
 
   AssertTrue('OnPathChange fired on the directory change', FPathChangeCount > 0);
   AssertTrue('SelectedPath is the new (child) path',

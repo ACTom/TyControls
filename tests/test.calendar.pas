@@ -500,6 +500,11 @@ begin
   FCal.Parent := FForm;
   FCal.SetBounds(0, 0, 240, 220);
   FCal.Font.PixelsPerInch := 96;
+  { Every cell coordinate below is worked out for a Sunday-first grid (the comments say
+    so). FirstDayOfWeek now defaults to wdLocaleDefault -- the OS's answer -- so a
+    Monday-first machine shifts the whole grid one column and these become geometry
+    tests of the developer's Control Panel. Pin what they always meant. }
+  FCal.FirstDayOfWeek := wdSunday;
   FCal.OnChange := @FCounter.Handle;
   FCal.OnAccept := @FAccept.Handle;
   FCal.Date := EncodeDate(2026, 6, 15);
@@ -819,6 +824,9 @@ begin
     Cal.Controller := Ctl;
     Cal.SetBounds(0, 0, BMP_W, BMP_H);
     Cal.Font.PixelsPerInch := APPI;
+    { SEL_L..SEL_R below are the column June 15 occupies in a SUNDAY-first grid.
+      FirstDayOfWeek now defaults to the OS's answer, so pin what this scan means. }
+    Cal.FirstDayOfWeek := wdSunday;
     Cal.Date := EncodeDate(2026, 6, 15);
 
     Bmp.PixelFormat := pf32bit;

@@ -59,6 +59,7 @@ type
     FText:             TCaption;
     FImageIndex:       Integer;
     FOptions:          TTyColumnOptions;
+    FSizePriority:     Integer;
     FTag:              NativeInt;
     { internal: absolute left edge set by UpdatePositions }
     FLeft:             Integer;
@@ -70,6 +71,8 @@ type
     procedure SetMaxWidth(AValue: Integer);
     procedure SetPosition(AValue: Cardinal);
     procedure SetOptions(AValue: TTyColumnOptions);
+    function  GetVisible: Boolean;
+    procedure SetVisible(AValue: Boolean);
     procedure SetAlignment(AValue: TAlignment);
     procedure SetCaptionAlignment(AValue: TAlignment);
     procedure SetText(const AValue: TCaption);
@@ -95,6 +98,39 @@ type
     property ImageIndex:       Integer              read FImageIndex       write SetImageIndex       default -1;
     property Options:          TTyColumnOptions read FOptions          write SetOptions;
     property Tag:              NativeInt            read FTag              write FTag                default 0;
+    { Per-column visibility as its own boolean, the way LCL publishes it
+      (TGridColumn.Visible, grids.pas:626). The STORAGE is still the coVisible element
+      of Options -- this is a view onto it, not a second flag, so the two can never
+      disagree. `stored False` for that reason: Options already streams the truth, and
+      writing both into a .lfm would let a later Options= line silently undo an earlier
+      Visible= line (the same reason GridLines is a stored-False alias of GridLineStyle
+      over in the grid).
+
+      Worth having anyway: `Columns[i].Visible := False` is what every ported line says,
+      and in the collection editor a checkbox is findable where a set element is not. }
+    property Visible:          Boolean              read GetVisible        write SetVisible          stored False default True;
+    { LCL's names for the width bounds (TGridColumn.MinSize / MaxSize, grids.pas:618-619).
+      Aliases of MinWidth / MaxWidth, which stay the storage and the streamed pair.
+
+      NOTE A DEFAULT DIFFERENCE, deliberately kept: LCL's DEFMINSIZE = DEFMAXSIZE = 0,
+      both meaning "unbounded", while ours are 10 and 10000. A ported column that never
+      mentioned MinSize/MaxSize therefore gains a 10..10000 clamp here. Adopting 0/0
+      would remove the floor that keeps a dragged column from collapsing to nothing, so
+      the bounds stay; assign 0 explicitly to get LCL's unbounded behaviour. }
+    property MinSize:          Integer              read FMinWidth         write SetMinWidth         stored False;
+    property MaxSize:          Integer              read FMaxWidth         write SetMaxWidth         stored False;
+    { Weight this column pulls when the owner distributes spare width
+      (TTyCustomGrid.AutoFillColumns). LCL's TGridColumn.SizePriority
+      (grids.pas:622, DEFSIZEPRIORITY = 1 at :80), same meaning and same default:
+
+        0  -- never auto-sized; the column keeps whatever width it has.
+        1  -- the default; an equal share with every other participant.
+        n  -- pulls n times as hard, so 'give the description column most of the
+              slack' is one number rather than an event handler.
+
+      Nothing reads this while AutoFillColumns is off, so it costs a grid that does
+      not use it exactly nothing. }
+    property SizePriority:     Integer              read FSizePriority     write FSizePriority       default 1;
   end;
 
   { ===================================================================
@@ -114,6 +150,8 @@ type
 
     procedure RebuildPositionMap;
     procedure DoChange;
+    function  GetColumn(AIndex: Integer): TTyColumn;
+    procedure SetColumn(AIndex: Integer; AValue: TTyColumn);
   protected
     procedure Notify(Item: TCollectionItem; Action: TCollectionNotification); override;
     function  GetOwner: TPersistent; override;
@@ -126,8 +164,28 @@ type
     constructor Create(AOwnerHeader: TTyHeader;
       AItemClass: TCollectionItemClass); overload;
 
+    { Typed collection surface, matching TGridColumns (grids.pas:661 `function Add:
+      TGridColumn`, :670 `property Items[Index]: TGridColumn ... default`).
+
+      Until these existed the collection was plain TCollection, so `Items[i]` came back
+      as TCollectionItem and `Columns[3].Width := 40` -- the default-array form every
+      line of ported column code uses -- did not compile at all. Even our OWN code paid
+      the tax: `TTyColumn(FHeader.Columns.Items[i])` appears dozens of times in the grid.
+
+      The item class is still whatever the owner asked for (see the three-argument
+      Create), so a grid's Items[] really holds TTyGridColumn; TTyColumn is the widest
+      type every consumer shares, and a further cast still narrows it. }
+    function  Add: TTyColumn;
+    property  Items[AIndex: Integer]: TTyColumn read GetColumn write SetColumn; default;
     { Look up the column at visual position APos (0-based). }
     function  ColumnByPosition(APos: Integer): TTyColumn;
+    { Find a column by its caption; nil when no column carries it. LCL's
+      TGridColumns.ColumnByTitle (grids.pas:663) -- our caption field is named Text
+      rather than Title, hence the parameter name, but the lookup is the same one.
+      Case-insensitive: a caption is display text, and a report generator matching
+      column names should not care that a designer typed 'Total' where the spec said
+      'TOTAL'. First match wins when captions repeat. }
+    function  ColumnByTitle(const ATitle: string): TTyColumn;
 
     { Recompute FLeft for every visible column (left-to-right, position order). }
     procedure UpdatePositions;
@@ -159,6 +217,25 @@ type
       proportionally (integral bonus-pixel remainder so widths stay whole
       and the sum of deltas is exact). }
     procedure DistributeSpring(ADeltaWidth: Integer);
+
+    { Set ABSOLUTE widths so every visible column together fills AClientWidth, sharing
+      the spare space by SizePriority. This is what LCL's AutoFillColumns does
+      (grids.pas:1224 + CalcAutoSizeColumn at :987), and it is the multi-column
+      counterpart of ApplyAutoSize, which can only fatten ONE designated column.
+
+      Rules, in the order they matter:
+        - SizePriority = 0 columns keep their current width and come out of the budget
+          first: "never auto-size me" has to hold even when that leaves the others
+          nothing;
+        - the rest share the remaining budget in proportion to SizePriority, each
+          clamped to its own [MinWidth, MaxWidth];
+        - a column that hits a clamp retires and its leftover is redistributed over the
+          ones still free, repeatedly. Without that pass a single narrow-MaxWidth column
+          silently swallows slack it cannot use and the row comes up short;
+        - integral throughout, and the last free column absorbs the rounding remainder
+          so the sum is EXACT -- one pixel of gap at the right edge is precisely what a
+          user notices about a "fill the width" feature. }
+    procedure DistributeFill(AClientWidth: Integer);
 
     { Notify hook wired by the header in Phase B. }
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
@@ -257,6 +334,7 @@ begin
   FCaptionAlignment := taLeftJustify;
   FImageIndex       := -1;
   FOptions          := [coVisible, coResizable, coAllowClick, coDraggable];
+  FSizePriority     := 1;      { DEFSIZEPRIORITY, as in LCL (grids.pas:80) }
   FLeft             := 0;
   FTag              := 0;
   { Re-notify with the correct defaults now set. }
@@ -282,6 +360,7 @@ begin
     FText             := Src.FText;
     FImageIndex       := Src.FImageIndex;
     FOptions          := Src.FOptions;
+    FSizePriority     := Src.FSizePriority;
     FTag              := Src.FTag;
     { FLeft and FPosition are computed — not copied; let the owning
       collection recompute them via UpdatePositions after assignment. }
@@ -359,6 +438,23 @@ begin
     GetOwnerColumns.UpdatePositions;
     GetOwnerColumns.DoChange;
   end;
+end;
+
+function TTyColumn.GetVisible: Boolean;
+begin
+  Result := coVisible in FOptions;
+end;
+
+procedure TTyColumn.SetVisible(AValue: Boolean);
+var
+  o: TTyColumnOptions;
+begin
+  { Routed through SetOptions, not straight at FOptions: hiding a column has to re-run
+    UpdatePositions and notify the header, and that bookkeeping lives there. Writing the
+    flag directly is exactly how a "hidden column still takes up width" bug gets made. }
+  o := FOptions;
+  if AValue then Include(o, coVisible) else Exclude(o, coVisible);
+  SetOptions(o);
 end;
 
 procedure TTyColumn.SetAlignment(AValue: TAlignment);
@@ -524,12 +620,36 @@ begin
   end;
 end;
 
+function TTyColumns.GetColumn(AIndex: Integer): TTyColumn;
+begin
+  Result := TTyColumn(inherited Items[AIndex]);
+end;
+
+procedure TTyColumns.SetColumn(AIndex: Integer; AValue: TTyColumn);
+begin
+  inherited Items[AIndex] := AValue;
+end;
+
+function TTyColumns.Add: TTyColumn;
+begin
+  Result := TTyColumn(inherited Add);
+end;
+
+function TTyColumns.ColumnByTitle(const ATitle: string): TTyColumn;
+var
+  i: Integer;
+begin
+  for i := 0 to Count - 1 do
+    if SameText(Items[i].Text, ATitle) then Exit(Items[i]);
+  Result := nil;
+end;
+
 function TTyColumns.ColumnByPosition(APos: Integer): TTyColumn;
 begin
   if (APos < 0) or (APos >= Length(FPositionToIndex)) then
     Result := nil
   else
-    Result := Items[FPositionToIndex[APos]] as TTyColumn;
+    Result := Items[FPositionToIndex[APos]];
 end;
 
 procedure TTyColumns.UpdatePositions;
@@ -764,6 +884,91 @@ begin
     col.FWidth := Max(col.FMinWidth, Min(col.FMaxWidth, col.FWidth + share));
   end;
 
+  UpdatePositions;
+  DoChange;
+end;
+
+procedure TTyColumns.DistributeFill(AClientWidth: Integer);
+var
+  free_: array of Integer;      { collection indices still free to move }
+  freeCount, weightTotal, budget, i, colIndex, w, given, lastFree: Integer;
+  col: TTyColumn;
+  clamped, anyChanged: Boolean;
+begin
+  if Count = 0 then Exit;
+  if AClientWidth < 0 then AClientWidth := 0;
+
+  { Budget = client width minus every visible column that does NOT participate. }
+  budget := AClientWidth;
+  SetLength(free_, Count);
+  freeCount := 0;
+  weightTotal := 0;
+  for i := 0 to Count - 1 do
+  begin
+    col := Items[i];
+    if not (coVisible in col.FOptions) then Continue;
+    if col.FSizePriority <= 0 then
+    begin
+      Dec(budget, col.FWidth);
+      Continue;
+    end;
+    free_[freeCount] := i;
+    Inc(freeCount, 1);
+    Inc(weightTotal, col.FSizePriority);
+  end;
+  SetLength(free_, freeCount);
+  if (freeCount = 0) or (weightTotal <= 0) then Exit;
+  if budget < 0 then budget := 0;
+  anyChanged := False;
+
+  { Clamp pass: hand out proportional shares, retire whatever hit a bound, repeat.
+    Terminates because every round either retires a column or finds nothing to retire. }
+  repeat
+    clamped := False;
+    for i := 0 to freeCount - 1 do
+    begin
+      col := Items[free_[i]];
+      w := (budget * col.FSizePriority) div weightTotal;
+      if w < col.FMinWidth then w := col.FMinWidth
+      else if w > col.FMaxWidth then w := col.FMaxWidth
+      else Continue;                          { still free }
+      { Retire it at its clamped width and take it out of the budget. }
+      if col.FWidth <> w then anyChanged := True;
+      col.FWidth := w;
+      Dec(budget, w);
+      Dec(weightTotal, col.FSizePriority);
+      free_[i] := free_[freeCount - 1];
+      Dec(freeCount);
+      clamped := True;
+      Break;                                  { indices shifted; restart the sweep }
+    end;
+  until (not clamped) or (freeCount = 0) or (weightTotal <= 0);
+
+  if budget < 0 then budget := 0;
+
+  { Unclamped remainder: proportional shares, and the LAST one takes what is left so the
+    widths sum to the budget exactly rather than one pixel short. }
+  given := 0;
+  lastFree := freeCount - 1;
+  for i := 0 to freeCount - 1 do
+  begin
+    colIndex := free_[i];
+    col := Items[colIndex];
+    if i = lastFree then w := budget - given
+    else w := (budget * col.FSizePriority) div weightTotal;
+    if w < col.FMinWidth then w := col.FMinWidth;
+    if w > col.FMaxWidth then w := col.FMaxWidth;
+    if col.FWidth <> w then anyChanged := True;
+    col.FWidth := w;
+    Inc(given, w);
+  end;
+
+  { Notify ONLY when a width actually moved. This is not an optimisation: the owner's
+    OnChange runs UpdateScrollBars, which is where this method is called from, so an
+    unconditional DoChange recurses until the stack gives out (it did -- a segfault,
+    not a hang, and with no output at all). Converging on "nothing left to change" is
+    what breaks the loop, exactly as ApplyAutoSize's `if autoCol.FWidth <> needed` does. }
+  if not anyChanged then Exit;
   UpdatePositions;
   DoChange;
 end;

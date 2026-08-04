@@ -172,8 +172,10 @@ begin
     bmp.SetSize(48, 48);
     L.Glyphs.Text := 'save';
     // No IconFont, and also a bad index — neither may raise.
-    L.Draw(bmp.Canvas, 0, 4, 4, 16, $FF000000);
-    L.Draw(bmp.Canvas, 99, 4, 4, 16, $FF000000);
+    // (DrawIndex is what the size/colour-carrying form is called now; Draw carries
+    // LCL's own (x, y, index) order.)
+    L.DrawIndex(bmp.Canvas, 0, 4, 4, 16, $FF000000);
+    L.DrawIndex(bmp.Canvas, 99, 4, 4, 16, $FF000000);
     AssertTrue('survived', True);
   finally
     bmp.Free;

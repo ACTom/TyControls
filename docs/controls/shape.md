@@ -53,6 +53,18 @@ uses tyControls.Shape;
 | `tskTriangle` | 等腰三角形(顶点在上中,底边为矩形下两角)。 |
 | `tskDiamond` | 菱形(四个顶点在矩形四边中点)。 |
 | `tskLine` | 左上 → 右下的对角线,仅用边框色描边(无填充)。 |
+| `tskRoundSquare` | 圆角**正方形**:先锁到最大居中正方形,再按主题 `border-radius` 倒角。 |
+| `tskSquaredDiamond` | 锁到最大居中正方形的菱形(正菱形)。 |
+| `tskTriangleLeft` | 顶点在**左**边中点、底边贴右边的三角形。 |
+| `tskTriangleRight` | 顶点在**右**边中点、底边贴左边的三角形。 |
+| `tskTriangleDown` | 顶点在**下**中、底边贴上边的三角形。 |
+| `tskStar` | 五角星,尖角朝上(内外半径比 = LCL 的 `57/150`)。 |
+| `tskStarDown` | 五角星,尖角朝下。 |
+| `tskPolygon` | 顶点由 **`OnShapePoints`** 提供的任意多边形——枚举没覆盖的形状(六边形、标注框、V 形箭头)全靠它,而且设计期就能用。没有处理器时运行期什么都不画,设计期描一圈灰色轮廓。 |
+
+> **枚举顺序**:新增的八项一律**追加在末尾**,不是插在相近的旧项旁边。`.lfm` 存的是标识符,
+> 但设计器、存成整数的属性、以及任何拿 `Ord()` 的代码都不是——把 `tskTriangleLeft`
+> 插到 `tskTriangle` 后面会悄悄改掉每一份既有窗体。所以阅读顺序是历史顺序,不是分类顺序。
 
 ### 继承的通用成员
 
@@ -69,7 +81,32 @@ uses tyControls.Shape;
 
 ## 4. 事件与命中测试
 
-TTyShape 暴露 `TTyGraphicControl` 的**基线事件集**(Tier A 鼠标 / 通用事件)。作为纯展示控件,自身不新增任何命令事件。完整清单见 [../events.md](../events.md)。
+TTyShape 暴露 `TTyGraphicControl` 的**基线事件集**(Tier A 鼠标 / 通用事件),外加两个自有事件。完整清单见 [../events.md](../events.md)。
+
+| 事件 | 类型 | 触发时机 |
+|------|------|----------|
+| `OnShapeClick` | `TNotifyEvent` | 点击**落在墨迹上**时(而非只落在外接矩形内)。对应 LCL `TShape.OnShapeClick`。**注意**:本控件的 `CM_HITTEST` 本来就是形状级的,所以这里 `OnClick` 同样不会在墨迹之外触发;`OnShapeClick` 的价值在于**移植**(从 `TShape` 转过来的窗体保住处理器)与**表意**(代码写明它依赖的是墨迹,不依赖上面那条实现细节)。 |
+| `OnShapePoints` | `TTyShapePointsEvent` | `Shape = tskPolygon` 时,向应用**索取顶点**。签名与 LCL 的 `TShapePointsEvent` 逐参数一致(`var Points: TPointArray; var Winding: Boolean`),从 `TShape` 移过来的处理器可原样编译。`Winding = True` 为非零环绕规则,`False` 为奇偶规则——自相交轮廓中间那块是实心还是镂空,由它决定,**填充与命中测试都遵守同一条规则**。 |
+
+```pascal
+// 一个六边形节点:枚举里没有,也不必再写一个 TTyGraphicControl 后代
+procedure TForm1.HexPoints(Sender: TObject; var Points: TPointArray;
+  var Winding: Boolean);
+var
+  i: Integer;
+  cx, cy, r: Double;
+  G: TTyShapeGeometry;
+begin
+  G := TTyShape(Sender).ShapeGeometry;      // 用绘制时那份几何,别自己再推一遍
+  cx := (G.Bounds.Left + G.Bounds.Right) / 2;
+  cy := (G.Bounds.Top + G.Bounds.Bottom) / 2;
+  r  := (G.Bounds.Right - G.Bounds.Left) / 2;
+  SetLength(Points, 6);
+  for i := 0 to 5 do
+    Points[i] := Point(Round(cx + r * Cos(i * Pi / 3)),
+                       Round(cy + r * Sin(i * Pi / 3)));
+end;
+```
 
 ### 命中测试按**形状**,不按外接矩形
 
@@ -78,7 +115,7 @@ TTyShape 暴露 `TTyGraphicControl` 的**基线事件集**(Tier A 鼠标 / 通�
 | 成员 | 说明 |
 |------|------|
 | `PtInShape(APt: TPoint): Boolean` | `APt` 为**客户区像素**;返回它是否落在形状的填充或描边上。对应 LCL `TShape.PtInShape`,但不做每次调用重绘单色掩码那一套。 |
-| `ShapeGeometry: TTyShapeGeometry` | 下一次绘制将使用的几何(内缩后的外接盒、圆角半径、描边宽度、是否描边、是否退化)。**绘制与命中测试读的是同一条记录**。 |
+| `ShapeGeometry: TTyShapeGeometry` | 下一次绘制将使用的几何(内缩后的外接盒、圆角半径、描边宽度、是否描边、是否退化;`tskPolygon` 还带上应用交回的顶点与环绕规则)。**绘制与命中测试读的是同一条记录**。注意 `tskPolygon` 下每次调用都会**再问一次** `OnShapePoints`——处理器应当是纯函数。 |
 | `CM_HITTEST` | 运行期钩子。LCL `TWinControl.ControlAtPos` 用它路由鼠标消息,**非 0 表示命中**;答 0 的控件被跳过,消息落到下层。 |
 | `CM_MASKHITTEST` | 设计期钩子(仅 Lazarus 设计器)。**极性相反:0 才表示"在形状上"**;设计器对 `> 0` 的控件直接跳过。取不到设计器窗体时回落为 0(可选中),与无处理器的 `TControl` 一致。 |
 

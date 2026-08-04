@@ -116,6 +116,11 @@ type
   { 选择粒度。gsmCell = 单元格矩形选区(默认);gsmRow = 整行;gsmColumn = 整列。 }
   TTyGridSelectionMode = (gsmCell, gsmRow, gsmColumn);
 
+  { 选区能不能有**好几块**。对标 LCL 的 TRangeSelectMode(grids.pas:150)。
+    与 TTyGridSelectionMode 正交:那个说的是"一块选区的粒度是格/行/列",
+    这个说的是"能不能同时有好几块"。 }
+  TTyGridRangeSelectMode = (rsmSingle, rsmMulti);
+
   { 列聚合方式(汇总带用)。一律只统计**通过过滤的行** —— 筛完总计要跟着变。 }
   TTyGridAggregate = (gagNone, gagSum, gagAvg, gagMin, gagMax, gagCount);
 
@@ -242,9 +247,15 @@ type
     FUseEditorKind: Boolean;
     FCellDisplay: TTyGridCellDisplay;
     FUseCellDisplay: Boolean;
+    FColor:      TTyColor;
+    FLayout:     TTextLayout;
+    FValueChecked:   string;
+    FValueUnchecked: string;
     procedure SetPickList(AValue: TStrings);
     procedure SetEditorKind(AValue: TTyGridEditorKind);
     procedure SetCellDisplay(AValue: TTyGridCellDisplay);
+    procedure SetColor(AValue: TTyColor);
+    procedure SetLayout(AValue: TTextLayout);
   public
     constructor Create(ACollection: TCollection); override;
     destructor Destroy; override;
@@ -289,6 +300,38 @@ type
     { 汇总带上这一列显示什么统计。 }
     property Aggregate: TTyGridAggregate read FAggregate write FAggregate
       default gagNone;
+    { 整列的单元格底色。TyColorNone(0,默认)= 不指定,走主题。
+      对标 LCL TGridColumn.Color (grids.pas:613)。
+
+      为什么这不违反"视觉值必须走主题令牌":令牌管的是**控件自己**画成什么样,
+      而这是宿主给自己的数据上色 —— 与 CellColors[c,r] / SetRowColor 完全同一类,
+      那两个早就在了。缺的只是"整列"这一档,而它偏偏是唯一能在设计器里设的一档
+      (从前只能写 OnGetCellStyle 事件代码)。
+
+      优先级夹在斑马纹与逐格色之间:主题 → 斑马纹 → **列色** → 行色/格色 → 宿主钩子。
+      越靠后越具体。列色不算 HasExplicitBackground —— 它是一整列的背景基调,
+      不该像用户手工标黄的那一格那样去压住焦点格底色。 }
+    property Color: TTyColor read FColor write SetColor default 0;
+    { 整列的**垂直**对齐(Alignment 管水平)。对标 LCL TGridColumn.Layout
+      (grids.pas:617)。从前 VAlign 在 CellAppearance 里写死 tlCenter,
+      要改只能接 OnGetCellStyle —— 而 WordWrap 的长文本列想顶端对齐是常事。 }
+    property Layout: TTextLayout read FLayout write SetLayout default tlCenter;
+    { 这一列的勾选框在数据里写成什么。对标 LCL TGridColumn.ValueChecked /
+      ValueUnchecked (grids.pas:627-630)。
+
+      两个都留空(默认)时行为与从前**逐字节相同**:读认 1/true/yes/y 加一个全局的
+      TyGridCheckedWord,写 '1' / ''。
+
+      非空时这一列改说宿主的话。修的是写那一侧:ToggleCellChecked 从前不管这一列
+      装的是 'Y'/'N' 还是 'true'/'false',一律写 '1' —— 也就是说用户点一下勾选框,
+      宿主的数据词汇就被换掉了,而 OnCellEdited 的 ANewText 是 const,连改回来的
+      口子都没有。读那一侧是**叠加**:先按本列词汇认,认不出再走内建宽松词表,
+      所以已经能读对的表不会因为设了这一对而读错。
+
+      三态的灰显仍写 '2':LCL 的这一对本来就只有两个词,给灰显再加第三个属性
+      是本库自己的三态功能的事,不是这条对标的事。 }
+    property ValueChecked: string read FValueChecked write FValueChecked;
+    property ValueUnchecked: string read FValueUnchecked write FValueUnchecked;
   end;
 
   { 一格显示成什么。放在这里(而不是 TTyStringGrid 那段)是因为基类要用它
@@ -672,6 +715,10 @@ type
       从前永远不会触发,就是因为没人记这个。 }
     FHoverCol:         Integer;
     FHoverRow:         Integer;
+    { 鼠标底下的**列头段**(-1 = 不在任何列头上)。与 FHoverCol 分开记:
+      那个只在正文格上有值,而列头带上根本不是格 —— 合成一个的话,
+      鼠标移到列头会把正文里的 hover 一起点亮。 }
+    FHoverHeaderCol:   Integer;
     { 逐格样式解析的记忆化。**这是 A2 渲染管线逐格化能不掉速的全部原因**:
       按状态组合缓存,绝大多数格状态相同(空集)于是整帧只解析一次;
       只有 hover/选中/被钩子改过的那几格才多解析几次。 }
@@ -784,6 +831,35 @@ type
     FVScroll:          TTyScrollBar;
     FHScroll:          TTyScrollBar;
     FSyncingScroll:    Boolean;      { 防止程序改 Position 反弹回来 }
+    FAutoFillColumns:  Boolean;
+    FDefaultColWidth:  Integer;
+    FDefaultColWidthExplicit: Boolean;  { True once a host/.lfm pins it; False = follow --column-width }
+    FOnTopLeftChanged: TNotifyEvent;
+    { 上一次通知过的左上角(列下标 / 显示行位置)。OnTopLeftChanged 按**格**而不是
+      按像素触发,所以必须记住上一次是哪一格 —— 我们的滚动是平滑的像素滚动,
+      滚三个像素并不换行,那种时候 LCL 里根本不会有事件。 }
+    FLastLeftCol:      Integer;
+    FLastTopRow:       Integer;
+    function  GetColWidths(ACol: Integer): Integer;
+    procedure SetColWidths(ACol, AValue: Integer);
+    function  GetDefaultColWidth: Integer;
+    procedure SetDefaultColWidth(AValue: Integer);
+    function  GetLeftCol: Integer;
+    procedure SetLeftCol(AValue: Integer);
+    function  GetTopRow: Integer;
+    procedure SetTopRow(AValue: Integer);
+    function  GetScrollBars: TScrollStyle;
+    procedure SetScrollBars(AValue: TScrollStyle);
+    procedure SetAutoFillColumns(AValue: Boolean);
+    { GridWidth/GridHeight 的取值器。**必须**是这里的私有方法而不是直接
+      `read ContentWidthPx` —— 那两个虚方法声明在下面的 protected 段里,
+      属性子句在解析时还看不见它们(FPC 报 "Unknown class field or method")。 }
+    function  GetGridWidth: Integer;
+    function  GetGridHeight: Integer;
+    { 左上角换格了就通知宿主。每一条改变滚动量的路径都要经过它 ——
+      少接一条就是"用滚轮滚不发、拖滑块才发"这种最难查的半吊子事件。 }
+    procedure NotifyTopLeftChanged;
+    procedure SetOnTopLeftChanged(AValue: TNotifyEvent);
     procedure SetHeaderWordWrap(AValue: Boolean);
     procedure SetHeaderAutoHeight(AValue: Boolean);
     procedure SetShowFocusCell(AValue: Boolean);
@@ -949,6 +1025,41 @@ type
     { 显式行高。设为 <= 0 表示"清掉,回到回调/默认值"。
       **public**:宿主按行设高度是正常用法(示例里"恢复行高"就靠它)。 }
     property RowHeights[ARow: Integer]: Integer read GetRowHeights write SetRowHeights;
+    { 列宽,逻辑像素 —— RowHeights 的**列轴对偶**,对标 LCL 的 ColWidths[aCol]
+      (grids.pas:1236,与 RowHeights[aRow] 并排声明)。
+
+      从前只有行那一半:改一列的宽度得写
+      `TTyColumn(Grid.Header.Columns.Items[i]).Width := 40`,而同一段代码里改行高
+      只要 `Grid.RowHeights[r] := 20`。ColumnWidthPx 不算数 —— 它只读、吃的是
+      设备像素,而且在 protected 段里,宿主够不着。
+
+      写入走的钳制与拖动改宽**完全一样**:先网格级的 MinColWidth/MaxColWidth,
+      再列自己的 MinWidth/MaxWidth(在 TTyColumn.SetWidth 里)。两条路一致,
+      不会出现"手拖到 60 是下限、代码写 10 却进去了"。列下标越界不抛异常,
+      读回 0、写则忽略(与本单元其余钳制同一条纪律)。 }
+    property ColWidths[ACol: Integer]: Integer read GetColWidths write SetColWidths;
+    { 视口里现在装得下几列 —— VisibleRowCount 的列轴对偶(LCL grids.pas:1300)。
+      按**看得见的像素**算:横向滚到一半的那一列也算在内,与行那边一致。
+      冻结列恒可见,一律计入。 }
+    function VisibleColCount: Integer;
+    { 全部列 / 全部行加起来有多大(设备像素,与 ClientWidth/ClientHeight 同一坐标空间)。
+      对标 LCL 的 GridWidth / GridHeight(grids.pas:1264/:1268)。
+
+      内部一直叫 ContentWidthPx / ContentHeightPx,但那两个在 protected 段里 ——
+      宿主想问"内容溢出了没有""把面板收到刚好包住表格"只能自己把列宽再加一遍,
+      而那份加法要处理隐藏列和行头槽,正是最容易加错的地方。 }
+    property GridWidth: Integer read GetGridWidth;
+    property GridHeight: Integer read GetGridHeight;
+    { 视口左上角那一格。LeftCol 是**列下标**,TopRow 是**显示位置**(不是数据行:
+      排序筛选之后"屏幕最上面那一行"本来就是显示序里的概念,而滚动条也按显示序走)。
+      对标 LCL grids.pas:1278/:1297。
+
+      读:第一个不在左冻结带里、且有像素落在正文区的列 / 行。
+      写:滚到让那一格贴着正文区左上角;越界钳制,不改光标、不改选区
+      —— "把视野挪过去但别动光标"正是它相对 ScrollIntoView 的价值。
+      固定列/固定行钉在冻结带里,永远不是滚动窗口的一部分,写进去等于写第一个可滚的。 }
+    property LeftCol: Integer read GetLeftCol write SetLeftCol;
+    property TopRow: Integer read GetTopRow write SetTopRow;
   protected
     { 按内容自适应列宽。基类没有数据、什么都不做;TTyStringGrid 改写。 }
     procedure AutoFitColumnWidth(ACol: Integer); virtual;
@@ -1050,6 +1161,17 @@ type
     { 列头上筛选按钮的槽(命中与绘制共用)。 }
     function HeaderFilterRect(ACol, AHeaderH: Integer): TRect;
 
+    { 列头图标从哪份图像列表取。Header.Images 有货就用它,否则用网格自己的 Images。
+
+      从前列头图标只认 FImages,而 TTyHeader.Images 是**published** 的 ——
+      设计器里给它赋一份列表,什么都不会发生,也没有任何提示。那不是"没实现",
+      是一个骗人的属性。回落到 Images 是因为 gcdImage 单元格与列头共用一份列表
+      是这里的常态(声明处有说明),一份接好就够用;Header.Images 是**覆盖**,
+      与 TTyListView.HeaderImageList 同一套规则。
+
+      一旦设了 Header.Images 就它说了算,哪怕那个下标它画不出来 ——
+      会静默回落的覆盖不叫覆盖。 }
+    function HeaderImageList: TTyVirtualImageList; virtual;
     { 列头里每一列的分段:底色、标题文字、排序字形。 }
     procedure RenderHeaderSections(P: TTyPainter; const M: TTyGridMetrics;
       AHeaderH: Integer); virtual;
@@ -1122,11 +1244,6 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
 
-    { 滚动条三态,横纵各一。gsbNever 只是不显示 —— 键盘/滚轮照样能滚到底。 }
-    property VertScrollBarMode: TTyGridScrollBarMode
-      read FVertScrollBarMode write SetVertScrollBarMode default gsbAuto;
-    property HorzScrollBarMode: TTyGridScrollBarMode
-      read FHorzScrollBarMode write SetHorzScrollBarMode default gsbAuto;
     { 整表背景图。控件**不持有**这张位图的所有权 —— 宿主给什么用什么,
       宿主负责释放(与 Images 同一约定,免得两边都以为对方会 Free)。 }
     property BackgroundBitmap: TBGRABitmap
@@ -1141,14 +1258,6 @@ type
     { 列头带高度按最高的那个标题自适应(Header.Height 当作下限)。 }
     property HeaderAutoHeight: Boolean
       read FHeaderAutoHeight write SetHeaderAutoHeight default False;
-    { 焦点格要不要画外框。gsmRow 模式下整行都是选中底色,不画外框就
-      看不出光标在哪一格 —— 所以默认开着。 }
-    property ShowFocusCell: Boolean
-      read FShowFocusCell write SetShowFocusCell default True;
-    { 控件失去焦点时选区要不要变淡。 }
-    property HideSelectionWhenInactive: Boolean
-      read FHideSelectionWhenInactive write SetHideSelectionWhenInactive
-      default False;
     property VScrollBar: TTyScrollBar read FVScroll;
     property HScrollBar: TTyScrollBar read FHScroll;
 
@@ -1231,6 +1340,68 @@ type
     { Left unset it follows the theme's --row-height (22 classic / 32 modern); set it and that
       value wins and is streamed (a dense report grid can still pin its own). See TTyListView. }
     property DefaultRowHeight: Integer read GetDefaultRowHeight write SetDefaultRowHeight stored FDefaultRowHeightExplicit;
+    { 新建列的宽度 —— DefaultRowHeight 的列轴对偶,对标 LCL 的 DefaultColWidth
+      (grids.pas:1237)。InsertColumn / InsertCols 建出来的列按它起宽。
+
+      与 DefaultRowHeight 同一套规则:没被显式写过时跟着主题的 `--column-width`
+      走(密度轴因此也能管列宽),写过之后那个值说了算并被写进 .lfm。
+      主题没定义这个变量就是 100 —— 与从前 TTyColumn.Width 的 `default 100` 一致,
+      所以什么都不设时行为逐字节不变。
+
+      **不追溯改已有列**:LCL 的 SetDefColWidth 会把所有没被显式设过宽的列一起改,
+      而我们的列没有"这一列的宽度是不是显式设过"这一位可查 —— 追溯就得靠猜,
+      猜错的代价是用户调好的列宽被抹掉。要统一改宽请遍历 ColWidths[]。 }
+    property DefaultColWidth: Integer read GetDefaultColWidth write SetDefaultColWidth
+      stored FDefaultColWidthExplicit;
+    { 让**每一列**分掉多余的宽度,按各自的 TTyColumn.SizePriority 加权。
+      对标 LCL 的 AutoFillColumns(grids.pas:1224,默认 False)。
+
+      与 hoAutoResize / Header.AutoSizeIndex 的区别:那一对只让**指定的一列**
+      吸收剩余宽度,别的列纹丝不动。真要"表格随窗口一起变宽、各列按比例跟着变",
+      从前只能宿主自己在 OnResize 里遍历改列宽 —— 而多列分配的算法
+      (TTyColumns.DistributeSpring)其实早就在库里,只是**零调用点**,
+      从来没有任何控件够得着它。
+
+      两个开关都开时 AutoFillColumns 先跑、AutoSizeIndex 后跑,后者压前者
+      —— "整体铺满,再让某一列吃掉最后的零头"是能讲通的组合,反过来不是。 }
+    property AutoFillColumns: Boolean read FAutoFillColumns write SetAutoFillColumns
+      default False;
+    { 滚动条三态,横纵各一。gsbNever 只是不显示 —— 键盘/滚轮照样能滚到底。
+      **published** 而不是 public:从前它们在 public 段里,于是设计器上根本
+      看不到这两个属性 —— 一个只用设计器的用户压根没法关掉网格的滚动条。 }
+    property VertScrollBarMode: TTyGridScrollBarMode
+      read FVertScrollBarMode write SetVertScrollBarMode default gsbAuto;
+    property HorzScrollBarMode: TTyGridScrollBarMode
+      read FHorzScrollBarMode write SetHorzScrollBarMode default gsbAuto;
+    { LCL 用一个 TScrollStyle 表达上面那两个(grids.pas:1293,默认 ssAutoBoth)。
+      同名同类型地补上,于是 `ScrollBars := ssNone` 与 .lfm 里的 ScrollBars=ssNone
+      都能用。存储仍是上面那一对,所以 `stored False` —— 两处都写进 .lfm 的话,
+      后读到的那一行会静默推翻先读到的(与 GridLines/GridLineStyle 同一条纪律)。
+
+      映射:ssNone=两条都 Never;ssHorizontal/ssVertical=那一条 Always、另一条 Never;
+      ssBoth=两条 Always;ssAuto* 同理但用 Auto。读回时找不到对应组合
+      (比如横 Auto 纵 Always)就答最接近的 ssAutoBoth —— 这是 LCL 表达不了的状态,
+      而我们的两个属性才是真相。 }
+    property ScrollBars: TScrollStyle read GetScrollBars write SetScrollBars
+      stored False default ssAutoBoth;
+    { 焦点格要不要画外框。gsmRow 模式下整行都是选中底色,不画外框就
+      看不出光标在哪一格 —— 所以默认开着。
+      **published**:从前在 public 段,设计器里看不见。 }
+    property ShowFocusCell: Boolean
+      read FShowFocusCell write SetShowFocusCell default True;
+    { LCL 管这件事叫 FocusRectVisible(grids.pas:1261,同样 default true)。
+      别名,存储是 ShowFocusCell。 }
+    property FocusRectVisible: Boolean
+      read FShowFocusCell write SetShowFocusCell stored False default True;
+    { 控件失去焦点时选区要不要变淡。**published**:同上。 }
+    property HideSelectionWhenInactive: Boolean
+      read FHideSelectionWhenInactive write SetHideSelectionWhenInactive
+      default False;
+    { LCL 管这件事叫 FadeUnfocusedSelection(grids.pas:1290,同样 default false)。
+      别名,存储是 HideSelectionWhenInactive。 }
+    property FadeUnfocusedSelection: Boolean
+      read FHideSelectionWhenInactive write SetHideSelectionWhenInactive
+      stored False default False;
     { 冻结在左侧、不随横向滚动的列数。 }
     property FixedCols: Integer read FFixedCols write SetFixedCols default 0;
     { 冻结在顶部、不随纵向滚动的数据行数(列头带另计)。 }
@@ -1338,6 +1509,16 @@ type
       read FOnGetCellWordWrap write FOnGetCellWordWrap;
     property OnHeaderClick: TTyGridHeaderMouseEvent read FOnHeaderClick write FOnHeaderClick;
     property OnHeaderRightClick: TTyGridHeaderMouseEvent read FOnHeaderRightClick write FOnHeaderRightClick;
+    { 视口的左上角换格了。对标 LCL 的 OnTopLeftChanged(grids.pas:1315)。
+
+      在此之前网格**没有任何**滚动通知:唯一沾边的 OnScrollHint 只是在拖纵向滑块
+      时问宿主要一句提示文字,滚轮、键盘、ScrollIntoView 一概不发。于是"两个表格
+      同步滚动""按可视窗口去后台取数""退出时记住滚到哪儿"都只能轮询。
+
+      按**格**触发,不按像素:我们是平滑的像素滚动,滚三个像素并不换行,而 LCL 按
+      整格滚动所以每次滚动必然换格 —— 照名字办事,LeftCol/TopRow 真的变了才发。 }
+    property OnTopLeftChanged: TNotifyEvent
+      read FOnTopLeftChanged write SetOnTopLeftChanged;
     { 底部汇总带。内容由派生类给(TTyStringGrid 按列聚合)。 }
     property ShowFooter: Boolean read FShowFooter write SetShowFooter default False;
     property FooterHeight: Integer read FFooterHeight write SetFooterHeight default 24;
@@ -1572,7 +1753,12 @@ type
       用显示序而不是数据行:Ctrl+点出来的"这几行"在用户眼里就是屏幕上那几条,
       排序之后跟着屏幕走才符合直觉。 }
     FSelRects: array of TRect;
+    FRangeSelectMode: TTyGridRangeSelectMode;
     FOnSelectionChanged: TNotifyEvent;
+    { 有没有被编辑过(自建表/装载以来)。见 Modified 属性的说明。 }
+    FModified: Boolean;
+    { 排序指示器被 HideSortArrow 熄掉了。排序键**没有**被清 —— 见 HideSortArrow。 }
+    FSortArrowHidden: Boolean;
     FSortCol: Integer;
     { 完整的排序键序列;FSortCol/FSortDir 是它的第 0 项(保留成兼容视图)。 }
     FSortKeys: TTyGridSortKeys;
@@ -1664,6 +1850,13 @@ type
     procedure CommitActiveSelection;
     function  ActiveSelectionRect: TRect;   { 显示序空间 }
     procedure SelectionChanged;
+    function  GetSelectedRange(AIndex: Integer): TRect;
+    function  GetSelectedRangeCount: Integer;
+    function  GetEditorMode: Boolean;
+    procedure SetEditorMode(AValue: Boolean);
+    function  GetSelectedColumn: TTyGridColumn;
+    function  GetModified: Boolean;
+    procedure SetModified(AValue: Boolean);
     { Backing pair for the read/write Selection property (declared further down --
       Object Pascal wants the accessors first). }
     function  GetSelection: TRect;
@@ -1920,6 +2113,10 @@ type
       全绿而宿主一行都调不到。TestNewApiIsReachableByHost 用裸
       TTyStringGrid 变量守着这条。 }
     function  CellChecked(ACol, ARow: Integer): Boolean;
+    { 这一列的勾选词汇(见 TTyGridColumn.ValueChecked)。列没设时两个都是空串。
+      **public** 是因为宿主接了 OnGetCellText 的虚拟表也要按同一套词汇写回去 ——
+      让它去猜控件此刻用的是哪两个词,就是下一次数据被换掉的写法。 }
+    procedure CheckWordsOf(ACol: Integer; out AChecked, AUnchecked: string);
     { 三态读值(T11)。语义**复用 TTyCheckBox** 的 TCheckBoxState,
       不在网格里另定义一套。 }
     function  CellCheckState(ACol, ARow: Integer): TCheckBoxState;
@@ -1968,6 +2165,13 @@ type
       grew again -- LCL has no such hazard because its rows OWN their cells. }
     function  ClearRows: Boolean;
     function  ClearCols: Boolean;
+    { 整表清空:行、列、内容一起没。LCL grids.pas:1342,body at :10302 = ClearRows +
+      ClearCols,这里逐字照做。
+
+      别与 ClearCells 混:那个只清内容、行列结构原封不动。把 LCL 的 Clear 映射到
+      ClearCells 是最自然的误译,而它会把列留在原地 —— 于是"清空后重新装载"的表
+      每装载一次就多一批旧列。 }
+    procedure Clear;
     { 写过的单元格个数 —— 稀疏性的可观测证据。 }
     function StoredCellCount: Integer;
 
@@ -2003,6 +2207,10 @@ type
     function  NumHiddenRows: Integer;
     procedure UnHideAllRows;
     procedure ClearSelection;
+    { LCL 拼的是复数(grids.pas:1343 `procedure ClearSelections`)。同义,
+      单数那个是本库的原名并保留 —— 一个字母的差别不值得让老代码全改一遍,
+      但也不值得让移植过来的代码编不过。 }
+    procedure ClearSelections;
     { 活动选区(数据行坐标)。离散多选时只代表最后那一块。
 
       READ/WRITE, like LCL's TCustomGrid.Selection (grids.pas:1292). It used to be a
@@ -2017,6 +2225,20 @@ type
       selection (LCL's SetSelection -> CancelSelection) -- which matters because that is
       exactly the shape an empty selection reads back as. }
     property  Selection: TRect read GetSelection write SetSelection;
+    { --- 离散多选的枚举 ---
+      对标 LCL 的 SelectedRange[] / SelectedRangeCount / HasMultiSelection
+      (grids.pas:1377/:1378/:1356)。
+
+      Ctrl+点可以选出好几块,这一直是成立的 —— 但对外唯一的读口子是 Selection,
+      而它只给**最后**那一块。于是宿主遍历"选区"时,前面几块被静默丢掉:
+      用户明明选了三片、复制出来只有一片,而控件不觉得有什么不对。
+
+      索引 0 恒为**活动**矩形(锚点<->光标的那一块),之后才是已固化的那些,
+      顺序与用户 Ctrl+点的先后一致。坐标与 Selection 一样是**数据行**。
+      Count 至少为 1:网格总有一个当前格,"一块都没有"不是它的状态。 }
+    property  SelectedRange[AIndex: Integer]: TRect read GetSelectedRange;
+    property  SelectedRangeCount: Integer read GetSelectedRangeCount;
+    function  HasMultiSelection: Boolean;
     { 选中的单元格总数(0 表示只有光标那一格)。 }
     function SelectedCellCount: Integer;
     { 选区聚合 —— 状态栏那句"已选 12 项,合计 3400"。
@@ -2211,11 +2433,18 @@ type
       AWriteTitles is LCL's WriteTitles (SaveToCSVStream, grids.pas:1815): the column
       captions were an unconditional line 0 here, so a headerless CSV -- an appendable
       log, a chunk of a larger file -- simply could not be produced. Defaults to True,
+      which is both the old behaviour and LCL's default.
+
+      AVisibleColumnsOnly is LCL's VisibleColumnsOnly (SaveToCSVStream, grids.pas:1815):
+      the exporter walked every column index in range with no coVisible test, so a grid
+      whose user hid two columns still dumped their contents -- a surprise at best and,
+      for a column hidden BECAUSE it holds something private, a leak. Defaults to False,
       which is both the old behaviour and LCL's default. }
     function  SaveToCSVText(ADelimiter: Char = ',';
       AFromRow: Integer = -1; ARowCount: Integer = -1;
       AFromCol: Integer = -1; AColCount: Integer = -1;
-      AWriteTitles: Boolean = True): string;
+      AWriteTitles: Boolean = True;
+      AVisibleColumnsOnly: Boolean = False): string;
     { 导出 HTML 表格(含表头)。与 CSV 一致走显示序:所见即所得。 }
     function  SaveToHTMLText: string;
     procedure SaveToHTMLFile(const AFileName: string);
@@ -2230,14 +2459,20 @@ type
 
       AUseTitles is LCL's UseTitles (LoadFromCSVStream, grids.pas:1811): line 0 was
       always eaten as column captions, so a headerless file silently lost its first
-      RECORD. Off, every line is data and the captions are left alone. }
+      RECORD. Off, every line is data and the captions are left alone.
+
+      ASkipEmptyLines is LCL's SkipEmptyLines (LoadFromCSVStream, grids.pas:1811):
+      blank separator lines used to import as phantom empty ROWS. Defaults to False
+      rather than LCL's True -- keeping every line is what this method has always done,
+      and a blank line is a legitimate record in some tables. }
     procedure LoadFromCSVText(const AText: string; ADelimiter: Char = ',';
       AAppend: Boolean = False; AMaxRows: Integer = -1;
-      AIgnoreRows: Integer = 0; AUseTitles: Boolean = True);
+      AIgnoreRows: Integer = 0; AUseTitles: Boolean = True;
+      ASkipEmptyLines: Boolean = False);
     procedure SaveToCSVFile(const AFileName: string; ADelimiter: Char = ',';
-      AWriteTitles: Boolean = True);
+      AWriteTitles: Boolean = True; AVisibleColumnsOnly: Boolean = False);
     procedure LoadFromCSVFile(const AFileName: string; ADelimiter: Char = ',';
-      AUseTitles: Boolean = True);
+      AUseTitles: Boolean = True; ASkipEmptyLines: Boolean = False);
 
     { CSV 的流式读写。内部走的就是上面那套 CSV 文本 —— 只多一层流封装,
       **刻意不新造第二套序列化**:两套转义规则迟早走样,而含逗号/换行/引号
@@ -2253,9 +2488,9 @@ type
       compile, so the CSV pair moved to the name that describes it and SaveToStream /
       LoadFromStream below became the full-state pair LCL says they are. }
     procedure SaveToCSVStream(AStream: TStream; ADelimiter: Char = ',';
-      AWriteTitles: Boolean = True);
+      AWriteTitles: Boolean = True; AVisibleColumnsOnly: Boolean = False);
     procedure LoadFromCSVStream(AStream: TStream; ADelimiter: Char = ',';
-      AUseTitles: Boolean = True);
+      AUseTitles: Boolean = True; ASkipEmptyLines: Boolean = False);
 
     { 全状态流式读写 —— 与 LCL TCustomGrid.SaveToStream / LoadFromStream 同义
       (grids.pas:1365/1372):存的是**整张表**,而不只是文字。
@@ -2278,6 +2513,12 @@ type
       table" reading, where it is a sensible answer.) }
     procedure SaveToStream(AStream: TStream);
     procedure LoadFromStream(AStream: TStream);
+    { 同一份东西写进/读出一个文件。对标 LCL 的 SaveToFile / LoadFromFile
+      (grids.pas:1371/:1364,同样是 SaveToStream/LoadFromStream 的薄封装)。
+      参数带 const —— LCL 那边是传值的 `FileName: string`,而按值传字符串在这里
+      没有任何理由。格式与 SaveToStream 完全相同,不是 XMLConfig(见上)。 }
+    procedure SaveToFile(const AFileName: string);
+    procedure LoadFromFile(const AFileName: string);
 
     { 按某列排序。ACol < 0 表示取消排序、回到原始数据顺序。 }
     procedure SortByColumn(ACol: Integer; ADirection: TTySortDirection);
@@ -2305,9 +2546,42 @@ type
     property SortDirection: TTySortDirection read FSortDir;
 
     property Editing: Boolean read FEditing;
+    { **内建文本编辑器**这一个具体控件。注意它与 LCL 的 Editor 同名而窄得多:
+      LCL 的 TCustomGrid.Editor (grids.pas:1243) 是可读可写的 TWinControl,指的是
+      "此刻在用的编辑器";这个恒指那一个 TTyEdit,哪怕当前编辑的是下拉列表格。
+      要"此刻在用的那一个"请用 InplaceEditor / EditorControl。 }
     property Editor: TTyEdit read FEditor;
+    { 此刻真正在用的编辑器,没在编辑时 nil —— LCL 的 InplaceEditor
+      (grids.pas:1276)就是这个意思,只读。
+      与 EditorControl 同一个答案,类型是 TWinControl 而非 TControl:LCL 那边的
+      类型是 TWinControl,而编辑器一定是窗口化控件,收窄不会丢东西。 }
+    function  InplaceEditor: TWinControl;
+    { 开/关编辑器的**一个布尔**,对标 LCL 的 EditorMode(grids.pas:1245)。
+      读 = Editing;写 True = BeginEdit,写 False = EndEdit(True)(提交)。
+      工具栏按钮 / Action 要绑的正是这么一个可写属性 —— 从前只有一读一双方法。 }
+    property  EditorMode: Boolean read GetEditorMode write SetEditorMode;
+    { 光标所在那一列的列对象(没有列时 nil)。LCL grids.pas:1291。
+      从前得写 TTyGridColumn(Grid.Header.Columns.Items[Grid.Col]),而干这件事的
+      现成助手 GridColumn 在 protected 段里,宿主够不着。 }
+    property  SelectedColumn: TTyGridColumn read GetSelectedColumn;
     property PickEditor: TTyComboBox read FPickEditor;
     property Cells[ACol, ARow: Integer]: string read GetCells write SetCells;
+    { 自建表 / 上一次装载或清零以来,有没有格子被改过。对标 LCL 的
+      TCustomStringGrid.Modified(grids.pas:1797,在 TStringGrid 上 published)。
+
+      收口在 SetCells 与结构性增删行,所以粘贴、填充柄、撤销/重做、勾选框、CSV
+      装载——凡是改数据的路径——都算数,宿主不必逐个功能去接事件记账。
+      **不是** CanUndo:撤销栈会被 ClearUndo 清、UndoLimit=0 时压根不记,而且撤到
+      底也不代表"回到存盘时的样子"。宿主存过盘之后自己写 False 复位。
+      LoadFromStream / LoadFromCSVText 装载完置 False:刚读进来的表不叫"改过"。 }
+    property  Modified: Boolean read GetModified write SetModified;
+    { 只熄掉表头的排序指示器,**一行都不重排**。LCL grids.pas:1357(body 3359:
+      `FSortColumn := -1; InvalidateGrid`)。
+
+      服务端排序的表要的正是这个:顺序由服务器定,控件只管画不画那个三角。
+      ClearSortColumns 与 SortByColumn(-1) 都会把显示序退回原始数据顺序,
+      所以都不能拿来做这件事。下一次真的排序时指示器自己回来。 }
+    procedure HideSortArrow;
   published
     { 当前单元格。 }
     property Col: Integer read FCol write SetCol default 0;
@@ -2320,6 +2594,14 @@ type
     property GroupRowFormat: string read FGroupRowFormat write FGroupRowFormat;
     property SelectionMode: TTyGridSelectionMode
       read FSelectionMode write SetSelectionMode default gsmCell;
+    { 能不能 Ctrl+点选出好几块。对标 LCL 的 RangeSelectMode(grids.pas:1282)。
+
+      **默认与 LCL 不同**,而且是有意的:LCL 默认 rsmSingle,本库一直无条件支持
+      离散多选,把默认改成 rsmSingle 会从每一个既有窗体上悄悄拿掉一个功能。
+      所以默认 rsmMulti(= 从前的行为),要单块的表显式设 rsmSingle。
+      rsmSingle 下 Ctrl+点只是把选区挪过去,不再叠加。 }
+    property RangeSelectMode: TTyGridRangeSelectMode
+      read FRangeSelectMode write FRangeSelectMode default rsmMulti;
     property OnSelectionChanged: TNotifyEvent
       read FOnSelectionChanged write FOnSelectionChanged;
     property DefaultEditorKind: TTyGridEditorKind
@@ -2798,6 +3080,7 @@ begin
   FSortKind := gskAuto;
   FMinValue := 0;
   FMaxValue := 100;
+  FLayout := tlCenter;      { 与从前写死在 CellAppearance 里的那个值一致 }
   FPickList := TStringList.Create;
 end;
 
@@ -2825,11 +3108,32 @@ begin
   FUseCellDisplay := True;    { 见 SetEditorKind:写过就算设过 }
 end;
 
+procedure TTyGridColumn.SetColor(AValue: TTyColor);
+begin
+  if FColor = AValue then Exit;
+  FColor := AValue;
+  { 列色改了整列都要重画。TTyColumn 的 NotifyOwner 是 private,走 Changed(False)
+    —— TCollectionItem 的标准通知,最终落到 TTyColumns.Notify 再到 header 的
+    OnChange,与改列宽走的是同一条链。 }
+  Changed(False);
+end;
+
+procedure TTyGridColumn.SetLayout(AValue: TTextLayout);
+begin
+  if FLayout = AValue then Exit;
+  FLayout := AValue;
+  Changed(False);
+end;
+
 procedure TTyGridColumn.Assign(ASource: TPersistent);
 begin
   inherited Assign(ASource);
   if ASource is TTyGridColumn then
   begin
+    FColor := TTyGridColumn(ASource).Color;
+    FLayout := TTyGridColumn(ASource).Layout;
+    FValueChecked := TTyGridColumn(ASource).ValueChecked;
+    FValueUnchecked := TTyGridColumn(ASource).ValueUnchecked;
     FEditorKind := TTyGridColumn(ASource).EditorKind;
     FUseEditorKind := TTyGridColumn(ASource).UseEditorKind;
     FReadOnly := TTyGridColumn(ASource).ReadOnly;
@@ -3009,6 +3313,10 @@ begin
   FRowCount := 0;
   FDefaultRowHeight := 22;              { fallback; unused while FDefaultRowHeightExplicit=False }
   FDefaultRowHeightExplicit := False;   { follow --row-height (density-aware) until set }
+  FDefaultColWidth := 100;              { same shape on the column axis; see GetDefaultColWidth }
+  FDefaultColWidthExplicit := False;
+  FLastLeftCol := -1;                   { -1 = 还没通知过任何位置 }
+  FLastTopRow := -1;
   FFixedCols := 0;
   FFixedRows := 0;
   FFixedRowsBottom := 0;
@@ -3023,6 +3331,7 @@ begin
   FGridLineWidth := 1;
   FHoverCol := -1;
   FHoverRow := -1;
+  FHoverHeaderCol := -1;
   FPressedBtnCol := -1;
   FPressedBtnRow := -1;
   FResizeRow := -1;
@@ -3148,6 +3457,64 @@ begin
   FDefaultRowHeightExplicit := True;   { the host meant to pin it, even at the fallback value }
   if FDefaultRowHeight = AValue then Exit;
   FDefaultRowHeight := AValue;
+  UpdateScrollBars;
+  Invalidate;
+end;
+
+function TTyCustomGrid.GetGridWidth: Integer;
+begin
+  Result := ContentWidthPx;
+end;
+
+function TTyCustomGrid.GetGridHeight: Integer;
+begin
+  Result := ContentHeightPx;
+end;
+
+procedure TTyCustomGrid.SetAutoFillColumns(AValue: Boolean);
+begin
+  if FAutoFillColumns = AValue then Exit;
+  FAutoFillColumns := AValue;
+  { 立刻铺一次 —— 不然打开这个开关之后要等到下一次 Resize 才看得出效果,
+    在设计器里就表现为"勾了没反应"。 }
+  UpdateScrollBars;
+  Invalidate;
+end;
+
+function TTyCustomGrid.GetDefaultColWidth: Integer;
+begin
+  { 与 GetDefaultRowHeight 一模一样的形状:没被钉住就跟着主题走。
+    主题里没有 --column-width 时答 100 —— 正是 TTyColumn.Width 的 default。 }
+  if FDefaultColWidthExplicit then
+    Result := FDefaultColWidth
+  else
+    Result := ActiveController.Metric('--column-width', 100);
+end;
+
+procedure TTyCustomGrid.SetDefaultColWidth(AValue: Integer);
+begin
+  if AValue < 1 then AValue := 1;
+  FDefaultColWidthExplicit := True;   { 写过就算钉住,哪怕写的正好是回落值 }
+  if FDefaultColWidth = AValue then Exit;
+  FDefaultColWidth := AValue;
+end;
+
+function TTyCustomGrid.GetColWidths(ACol: Integer): Integer;
+begin
+  if (ACol < 0) or (ACol >= FHeader.Columns.Count) then Exit(0);
+  Result := FHeader.Columns.Items[ACol].Width;
+end;
+
+procedure TTyCustomGrid.SetColWidths(ACol, AValue: Integer);
+begin
+  if (ACol < 0) or (ACol >= FHeader.Columns.Count) then Exit;
+  { 网格级的上下限先钳 —— 与拖动改宽那条路(MouseMove 的 FResizeCol 分支)用的是
+    同两行,列自己的 MinWidth/MaxWidth 随后在 TTyColumn.SetWidth 里再钳一次。
+    两条路必须同规则,否则"手拖到 60 是下限、代码写 10 却进去了"。 }
+  if (FMinColWidth > 0) and (AValue < FMinColWidth) then AValue := FMinColWidth;
+  if (FMaxColWidth > 0) and (AValue > FMaxColWidth) then AValue := FMaxColWidth;
+  if FHeader.Columns.Items[ACol].Width = AValue then Exit;
+  FHeader.Columns.Items[ACol].Width := AValue;
   UpdateScrollBars;
   Invalidate;
 end;
@@ -3312,8 +3679,12 @@ end;
 procedure TTyCustomGrid.HScrollChange(Sender: TObject);
 begin
   if FSyncingScroll then Exit;
-  FScrollX := FHScroll.Position;
-  Invalidate;
+  { 走收口点 SetScrollX,不再直接写 FScrollX —— 直接写会绕过钳制,也绕过
+    OnTopLeftChanged,于是"用滚轮滚会发事件、拖横向滑块不发"。纵向那一侧的
+    同一个 bug 在 SetScrollY 的注释里记着。
+    回弹不用担心:SetScrollX -> SyncScrollBars 期间 FSyncingScroll 为真,
+    再进到这里第一行就退出去了。 }
+  ScrollX := FHScroll.Position;
 end;
 
 procedure TTyCustomGrid.Resize;
@@ -3434,9 +3805,22 @@ begin
   needV := False;
   needH := False;
 
-  { 自动列宽:让 AutoSizeIndex 那一列吸收剩余宽度。此前 ApplyAutoSize **零调用**
-    —— hoAutoResize / AutoSizeIndex 已 published 却完全不生效。
-    放在两趟收敛**之前**:列宽变了会影响横向内容量,进而影响横条是否出现。 }
+  { 自动列宽。两条都放在两趟收敛**之前**:列宽变了会影响横向内容量,
+    进而影响横条是否出现。
+
+    先整体铺满(AutoFillColumns),再让 AutoSizeIndex 那一列吃掉零头 ——
+    见 AutoFillColumns 的声明处。ApplyAutoSize 此前是**零调用**,
+    DistributeFill 那条更是连入口都没有。
+
+    喂给 DistributeFill 的是**列可用的**宽度,即视口宽减去行头槽 ——
+    ContentWidthPx 正是 `行头槽 + 各可见列宽之和`,两边必须按同一个式子算,
+    否则铺完仍差一条槽那么宽。冻结列也是列,一起参与。
+    用 ViewportW 而不是 ClientWidth:纵向滚动条占掉的那一条不能算进去,
+    否则最后一列会钻到它底下。不会来回震荡 —— 纵条出不出现取决于内容
+    **高度**,与列宽无关。 }
+  if FAutoFillColumns and not FSyncingScroll then
+    FHeader.Columns.DistributeFill(UnscaleI(ViewportW)
+      - IfThen(FShowIndicator, FIndicatorWidth, 0));
   if (hoAutoResize in FHeader.Options) and (FHeader.AutoSizeIndex >= 0)
      and not FSyncingScroll then
     FHeader.Columns.ApplyAutoSize(UnscaleI(ClientWidth - FrozenWidthPx),
@@ -3718,7 +4102,7 @@ end;
 procedure TTyCustomGrid.UpdateHoverCell(X, Y: Integer);
 var
   hit: TTyGridHit;
-  c, r: Integer;
+  c, r, hc: Integer;
 begin
   hit := CellAt(X, Y);
   if hit.Part = ghpCell then
@@ -3731,19 +4115,25 @@ begin
     c := -1;
     r := -1;
   end;
-  if (c = FHoverCol) and (r = FHoverRow) then Exit;   { 同一格:不重绘 }
+  { 列头段的 hover 与格的 hover 一起在这里算 —— 两处各算一遍迟早对不上,
+    而它们本来就是同一次命中判定的两个答案。 }
+  if hit.Part = ghpHeader then hc := hit.Col else hc := -1;
+  if (c = FHoverCol) and (r = FHoverRow) and (hc = FHoverHeaderCol) then
+    Exit;   { 同一格:不重绘 }
   FHoverCol := c;
   FHoverRow := r;
+  FHoverHeaderCol := hc;
   Invalidate;
 end;
 
 procedure TTyCustomGrid.CMMouseLeave(var Msg: TLMessage);
 begin
   inherited;
-  if (FHoverCol >= 0) or (FHoverRow >= 0) then
+  if (FHoverCol >= 0) or (FHoverRow >= 0) or (FHoverHeaderCol >= 0) then
   begin
     FHoverCol := -1;
     FHoverRow := -1;
+    FHoverHeaderCol := -1;    { 漏了这一句,鼠标离开控件时列头会一直亮着 }
     Invalidate;
   end;
 end;
@@ -4386,8 +4776,11 @@ begin
   Result.HAlign := taLeftJustify;
   if (ACol >= 0) and (ACol < FHeader.Columns.Count) then
   begin
-    col := TTyColumn(FHeader.Columns.Items[ACol]);
+    col := FHeader.Columns.Items[ACol];
     Result.HAlign := col.Alignment;
+    { 垂直对齐同样跟着列走(TTyGridColumn.Layout);别的控件共用的 TTyColumn
+      没有这个成员,所以要判类型 —— 不是网格的列就仍是 tlCenter。 }
+    if col is TTyGridColumn then Result.VAlign := TTyGridColumn(col).Layout;
   end;
 
   { 斑马纹按**显示行号**取奇偶。用自己的 typeKey 而不是 `TyGridCell:alternate`:
@@ -4405,8 +4798,24 @@ begin
     if tpTextColor in altS.Present then Result.TextColor := altS.TextColor;
   end;
 
+  { 整列底色(TTyGridColumn.Color)。排在斑马纹**之后** —— 列色是宿主对这一列
+    数据的判断("只读列灰底"),比装饰性的隔行条纹具体;排在逐格/行色**之前** ——
+    那两个更具体。刻意不置 HasExplicitBackground:那面旗子的意思是"用户手工标了
+    这一格",焦点格底色因此避让;整列的基调不该让焦点框在这一列上消失。 }
+  if (ACol >= 0) and (ACol < FHeader.Columns.Count) then
+  begin
+    col := FHeader.Columns.Items[ACol];
+    if (col is TTyGridColumn) and (TTyGridColumn(col).Color <> 0) then
+    begin
+      Result.HasBackground := True;
+      Result.Background := Default(TTyFill);
+      Result.Background.Kind := tfkSolid;
+      Result.Background.Color := TTyGridColumn(col).Color;
+    end;
+  end;
+
   { 逐格**持久**外观(Colors[c,r] / TextColors[c,r] / RowColor[r] 落在属性存储里)。
-    优先级:主题 → 斑马纹 → 行色 → 逐格色 → 宿主钩子。
+    优先级:主题 → 斑马纹 → 列色 → 行色 → 逐格色 → 宿主钩子。
     越靠后越具体,所以越晚覆盖。 }
   attr := FAttrs2Find(ACol, ARow);
   if attr <> nil then
@@ -4493,6 +4902,7 @@ begin
   FScrollX := AValue;
   SyncScrollBars;
   Invalidate;
+  NotifyTopLeftChanged;
 end;
 
 { **所有纵向滚动的唯一入口** —— 滚动条、滚轮、键盘导航、EnsureVisible 都落到这里。
@@ -4514,6 +4924,7 @@ begin
     累加而不是赋值 —— 一帧里可能滚不止一次。 }
   Inc(FSurfacePendingDy, dy);
   inherited Invalidate;
+  NotifyTopLeftChanged;
 end;
 
 procedure TTyCustomGrid.InvalidateColumnCache;
@@ -4676,6 +5087,183 @@ begin
     has a frozen row. }
   if TyGridHeaderH(M) + TyGridContentHeight(M) <= M.ClientH then Inc(Result);
   if Result < 0 then Result := 0;
+end;
+
+function TTyCustomGrid.GetLeftCol: Integer;
+var
+  i, frozen: Integer;
+begin
+  { 第一个"有像素落在正文区里"的可滚动列。倒序扫不行 —— 要的是最左那个,
+    而 ColumnAtX(FrozenWidthPx) 也不行:冻结带右缘那一点归属谁,取决于
+    ColumnAtX 里"被冻结带盖住的正文列跳过"那条规则,答出来会是冻结列本身。 }
+  frozen := FrozenWidthPx;
+  for i := FFixedCols to FHeader.Columns.Count - 1 do
+  begin
+    if not (coVisible in FHeader.Columns.Items[i].Options) then Continue;
+    if ColumnLeftPx(i) + ColumnWidthPx(i) > frozen then Exit(i);
+  end;
+  { 一列都没有(或全滚过去了):答第一个可滚列,别答 -1 —— 这是个"视口在哪"的
+    坐标,不是命中判定,给个界外值只会让宿主拿去当下标。 }
+  Result := NextVisibleCol(FFixedCols, 1);
+end;
+
+procedure TTyCustomGrid.SetLeftCol(AValue: Integer);
+begin
+  if AValue < FFixedCols then AValue := FFixedCols;
+  if AValue > FHeader.Columns.Count - 1 then AValue := FHeader.Columns.Count - 1;
+  if AValue < 0 then Exit;
+  if not FColCacheValid then BuildColumnCache;
+  if AValue >= Length(FColBasePx) then Exit;
+  { FColBasePx 是**未减滚动量**的左缘;让它正好落在冻结带右缘,
+    那一列就贴着正文区左边了。SetScrollX 负责钳到 [0, MaxScrollX]。 }
+  SetScrollX(FColBasePx[AValue] - FrozenWidthPx);
+end;
+
+function TTyCustomGrid.GetTopRow: Integer;
+var
+  M: TTyGridMetrics;
+  first, last: Integer;
+begin
+  M := GridMetrics;
+  if TyGridVisibleRows(M, first, last) then Exit(first);
+  { 滚动窗口是空的(整表都在冻结带里、或者没有行):第一个可滚的显示位置。 }
+  Result := FFixedRows;
+  if Result > DisplayRowCount - 1 then Result := DisplayRowCount - 1;
+  if Result < 0 then Result := 0;
+end;
+
+procedure TTyCustomGrid.SetTopRow(AValue: Integer);
+var
+  M: TTyGridMetrics;
+  fixedTop, fixedH, rowTop, dummy: Integer;
+begin
+  if AValue < FFixedRows then AValue := FFixedRows;
+  if AValue > DisplayRowCount - 1 then AValue := DisplayRowCount - 1;
+  if AValue < 0 then Exit;
+
+  M := GridMetrics;
+  { 目标行在**内容坐标**里的顶边,减掉固定行占掉的那一段 —— 那一段不参与滚动,
+    ScrollY=0 时正文区显示的就是第 FixedRows 行,不是第 0 行。
+    (局部变量不叫 top:TControl 已经有 Top 属性,同名会被判重。) }
+  TyGridRowExtent(AValue, M, rowTop, dummy);
+  fixedTop := 0;
+  if FFixedRows > 0 then TyGridRowExtent(FFixedRows, M, fixedTop, fixedH);
+  SetScrollY(rowTop - fixedTop);
+end;
+
+function TTyCustomGrid.VisibleColCount: Integer;
+var
+  i, frozen, right: Integer;
+  l, w: Integer;
+begin
+  { 与 VisibleRowCount 同一条口径:有像素落在视口里就算看得见(半列也算)。
+    冻结列恒可见,所以从 0 数起而不是从 FixedCols。 }
+  Result := 0;
+  frozen := FrozenWidthPx;
+  right := ViewportW;
+  for i := 0 to FHeader.Columns.Count - 1 do
+  begin
+    if not (coVisible in FHeader.Columns.Items[i].Options) then Continue;
+    l := ColumnLeftPx(i);
+    w := ColumnWidthPx(i);
+    if w <= 0 then Continue;
+    if i >= FFixedCols then
+    begin
+      { 滚到冻结带底下的那一段看不见 —— 整列都在下面就不算。 }
+      if l + w <= frozen then Continue;
+    end;
+    if l >= right then Continue;
+    Inc(Result);
+  end;
+end;
+
+function TTyCustomGrid.GetScrollBars: TScrollStyle;
+begin
+  { 两个三态属性有九种组合,TScrollStyle 只表达得了其中六种。表达不了的组合
+    答 ssAutoBoth(它的默认值)—— 别拿一个错的具体值糊弄宿主。 }
+  if (FVertScrollBarMode = gsbNever) and (FHorzScrollBarMode = gsbNever) then
+    Exit(ssNone);
+  if FHorzScrollBarMode = gsbNever then
+  begin
+    if FVertScrollBarMode = gsbAlways then Exit(ssVertical);
+    Exit(ssAutoVertical);
+  end;
+  if FVertScrollBarMode = gsbNever then
+  begin
+    if FHorzScrollBarMode = gsbAlways then Exit(ssHorizontal);
+    Exit(ssAutoHorizontal);
+  end;
+  if (FVertScrollBarMode = gsbAlways) and (FHorzScrollBarMode = gsbAlways) then
+    Exit(ssBoth);
+  Result := ssAutoBoth;
+end;
+
+procedure TTyCustomGrid.SetScrollBars(AValue: TScrollStyle);
+begin
+  case AValue of
+    ssNone:
+      begin
+        SetVertScrollBarMode(gsbNever);
+        SetHorzScrollBarMode(gsbNever);
+      end;
+    ssHorizontal:
+      begin
+        SetVertScrollBarMode(gsbNever);
+        SetHorzScrollBarMode(gsbAlways);
+      end;
+    ssVertical:
+      begin
+        SetVertScrollBarMode(gsbAlways);
+        SetHorzScrollBarMode(gsbNever);
+      end;
+    ssBoth:
+      begin
+        SetVertScrollBarMode(gsbAlways);
+        SetHorzScrollBarMode(gsbAlways);
+      end;
+    ssAutoHorizontal:
+      begin
+        SetVertScrollBarMode(gsbNever);
+        SetHorzScrollBarMode(gsbAuto);
+      end;
+    ssAutoVertical:
+      begin
+        SetVertScrollBarMode(gsbAuto);
+        SetHorzScrollBarMode(gsbNever);
+      end;
+    else   { ssAutoBoth }
+      begin
+        SetVertScrollBarMode(gsbAuto);
+        SetHorzScrollBarMode(gsbAuto);
+      end;
+  end;
+end;
+
+procedure TTyCustomGrid.SetOnTopLeftChanged(AValue: TNotifyEvent);
+begin
+  FOnTopLeftChanged := AValue;
+  { 挂上钩子时把"上一次的左上角"播种成**现在**的位置。不播的话缓存还停在 -1
+    (构造时的哨兵,因为没挂钩子时 NotifyTopLeftChanged 一步都不走),于是挂完
+    之后的第一次滚动必然与 -1 不等 —— 哪怕那次滚动根本没换行,事件照发。 }
+  if Assigned(AValue) then
+  begin
+    FLastLeftCol := GetLeftCol;
+    FLastTopRow := GetTopRow;
+  end;
+end;
+
+procedure TTyCustomGrid.NotifyTopLeftChanged;
+var
+  l, t: Integer;
+begin
+  { 没接钩子就一步也别走 —— GetTopRow 要算一次 GridMetrics,而这里是滚动路径。 }
+  if not Assigned(FOnTopLeftChanged) then Exit;
+  l := GetLeftCol;
+  t := GetTopRow;
+  if (l = FLastLeftCol) and (t = FLastTopRow) then Exit;
+  FLastLeftCol := l;
+  FLastTopRow := t;
+  FOnTopLeftChanged(Self);
 end;
 
 procedure TTyCustomGrid.MapToBaseCell(var ACol, ARow: Integer);
@@ -5150,6 +5738,12 @@ begin
   Result := Rect(cx - ScaleI(7), cy - ScaleI(7), cx + ScaleI(7), cy + ScaleI(7));
 end;
 
+function TTyCustomGrid.HeaderImageList: TTyVirtualImageList;
+begin
+  Result := FHeader.Images;
+  if Result = nil then Result := FImages;
+end;
+
 procedure TTyCustomGrid.RenderHeaderSections(P: TTyPainter; const M: TTyGridMetrics;
   AHeaderH: Integer);
 var
@@ -5161,7 +5755,9 @@ var
   hdrFontSize, hdrFontWeight: Integer;
   col: TTyColumn;
   bmp: TBGRABitmap;
-  secS, hdrS, actHdrS: TTyStyleSet;
+  imgList: TTyVirtualImageList;
+  secS, hdrS, actHdrS, hotS: TTyStyleSet;
+  hotTrack: Boolean;
   ink: TTyColor;
   r, textR: TRect;
   line: TBGRAPixel;
@@ -5179,12 +5775,26 @@ begin
   if tpTextColor in actHdrS.Present then accentInk := actHdrS.TextColor
   else accentInk := ink;
 
+  { 鼠标底下那一段要不要点亮 —— hoHotTrack。这个标志一直是 published 的
+    (TTyHeader.Options),而网格从来没读过它:用户在对象查看器里勾上它,
+    列头一点反应都没有,于是整条列头看起来根本不像能点。
+    (TTyTreeView 早就认这个标志了,网格一直漏着。)
+
+    悬停样式**在循环外解析一次**:每段各解析一遍会把逐格样式那套记忆化带来的
+    好处在列头上全赔掉。没在 hot-track 或者鼠标不在列头上时一次都不解析。 }
+  hotTrack := (hoHotTrack in FHeader.Options) and (FHoverHeaderCol >= 0);
+  if hotTrack then
+    hotS := ActiveController.Model.ResolveStyle('TyGridHeaderSection',
+      StyleClass, [tysHover]);
+
+  imgList := HeaderImageList;
+
   { 列头带**在分组带之下**。没有分组时 bandTop = 0,与从前逐像素一致。 }
   bandTop := GroupBandHeightPx;
 
   for i := 0 to FHeader.Columns.Count - 1 do
   begin
-    col := TTyColumn(FHeader.Columns.Items[i]);
+    col := FHeader.Columns.Items[i];
     if not (coVisible in col.Options) then Continue;
     l := ColumnLeftPx(i);
     w := ColumnWidthPx(i);
@@ -5204,6 +5814,18 @@ begin
     hdrBg := secS.Background;
     hdrHasBg := tpBackground in secS.Present;
     hdrInk := ink;
+    { 鼠标底下那一段用 :hover 的那份。主题没给 hover 背景就退回普通那份 ——
+      与本单元其余"皮肤没写就优雅退化"的地方同一条规矩。宿主钩子在后面,
+      仍然压得过它。 }
+    if hotTrack and (i = FHoverHeaderCol) then
+    begin
+      if (tpBackground in hotS.Present) and (hotS.Background.Kind <> tfkNone) then
+      begin
+        hdrBg := hotS.Background;
+        hdrHasBg := True;
+      end;
+      if tpTextColor in hotS.Present then hdrInk := hotS.TextColor;
+    end;
     hdrFontName := hdrS.FontName;
     hdrFontSize := ResolveFontSize(hdrS);
     hdrFontWeight := hdrS.FontWeight;
@@ -5228,13 +5850,13 @@ begin
       (当初那条测试只数"表头带里有没有红像素",图标画在字**上面**照样满足 ——
       测试对"压字"是瞎的。现在改成同时看标题墨的左右两端。) }
     imgIdx := col.ImageIndex;
-    if (FImages <> nil) and (imgIdx >= 0) then
+    if (imgList <> nil) and (imgIdx >= 0) then
     begin
       imgSz := ScaleI(16);
       if imgSz > AHeaderH - ScaleI(4) then imgSz := AHeaderH - ScaleI(4);
       if imgSz > 0 then
       begin
-        bmp := FImages.CachedIndex(imgIdx, imgSz);
+        bmp := imgList.CachedIndex(imgIdx, imgSz);
         if bmp <> nil then
         begin
           P.Bitmap.PutImage(r.Left + ScaleI(4), bandTop + (AHeaderH - imgSz) div 2, bmp,
@@ -6064,6 +6686,10 @@ begin
   FSelAnchorCol := 0;
   FSelAnchorRow := 0;
   FSelectionMode := gsmCell;
+  { 默认 rsmMulti = 从前的行为(离散多选一直无条件开着)。见属性声明处
+    为什么这里刻意不跟 LCL 的 rsmSingle 默认值。 }
+  FRangeSelectMode := rsmMulti;
+  FModified := False;
   FHintCol := -1;
   FHintRow := -1;
   FSortCol := -1;
@@ -6836,6 +7462,10 @@ var
   e: TTyGridUndoEntry;
 begin
   k := CellKey(ACol, ARow);
+  { 脏标记挂在这个收口点上 —— 编辑提交、粘贴、填充柄、勾选框、撤销/重做、
+    行列增删搬格子,统统经过这里(与撤销的记录点是同一处口子)。
+    只在值**真的**变了时置位:重复写同一个值不算改过。 }
+  if GetCells(ACol, ARow) <> AValue then FModified := True;
   if not FUndoBusy then
   begin
     e.Kind := gukCell;
@@ -6941,6 +7571,19 @@ begin
   InvalidateColumnCache;
   UpdateScrollBars;
   Invalidate;
+end;
+
+procedure TTyStringGrid.Clear;
+begin
+  { LCL 的 body(grids.pas:10302)就是这两句。包一层 BeginUpdate,于是整表清空
+    算**一条**撤销记录而不是两条 —— 与本单元其余批量操作同一条纪律。 }
+  BeginUpdate;
+  try
+    ClearRows;
+    ClearCols;
+  finally
+    EndUpdate;
+  end;
 end;
 
 procedure TTyStringGrid.ClearCells;
@@ -8918,12 +9561,34 @@ end;
 
 { ---- 勾选框单元格 --------------------------------------------------------- }
 
+{ 这一列的勾选词汇。列没设(或根本不是网格自己的列类)时两个都回空串,
+  于是所有调用点自动退回内建的那套 —— 判空一次,别在四处各判一次。 }
+procedure TTyStringGrid.CheckWordsOf(ACol: Integer;
+  out AChecked, AUnchecked: string);
+var
+  gc: TTyGridColumn;
+begin
+  AChecked := '';
+  AUnchecked := '';
+  { 局部变量刻意不叫 col —— TTyStringGrid 发布了 Col 属性,同名局部会遮蔽它。 }
+  gc := GridColumn(ACol);
+  if gc = nil then Exit;
+  AChecked := gc.ValueChecked;
+  AUnchecked := gc.ValueUnchecked;
+end;
+
 function TTyStringGrid.CellChecked(ACol, ARow: Integer): Boolean;
 var
-  v: string;
+  v, wc, wu: string;
 begin
-  { 宽松识别:从 CSV/外部系统进来的真值写法五花八门,读的时候都认。 }
   v := LowerCase(Trim(GetCellText(ACol, ARow)));
+  { 本列自己的词汇先说话 —— 'Y'/'N' 那种表里 'n' 落不进内建词表算是碰巧对了,
+    而 ValueChecked='N' 这种(合法但少见的)配置只有问过列才答得对。 }
+  CheckWordsOf(ACol, wc, wu);
+  if (wc <> '') and (v = LowerCase(Trim(wc))) then Exit(True);
+  if (wu <> '') and (v = LowerCase(Trim(wu))) then Exit(False);
+
+  { 宽松识别:从 CSV/外部系统进来的真值写法五花八门,读的时候都认。 }
   Result := (v = '1') or (v = 'true') or (v = 'yes') or (v = 'y');
   { 再认一个本地化的真值写法(中文表里常见 '是')—— 空的本地化词不参与判定。 }
   if (not Result) and (TyGridCheckedWord <> '') then
@@ -8932,11 +9597,16 @@ end;
 
 function TTyStringGrid.CellCheckState(ACol, ARow: Integer): TCheckBoxState;
 var
-  v: string;
+  v, wc, wu: string;
 begin
   { 读值宽松(与 CellChecked 同一条纪律:进来的写法五花八门,都认)。
     灰显认 '2' / 'grayed' / 'null' —— 三态最常见的三种外部表示。 }
   v := LowerCase(Trim(GetCellText(ACol, ARow)));
+  { 本列词汇里的那两个词优先于灰显词表:一列真值写成 '2' 的表(评分/等级导出来的
+    很常见)如果先撞上灰显判定,就永远读不出"勾上"。 }
+  CheckWordsOf(ACol, wc, wu);
+  if (wc <> '') and (v = LowerCase(Trim(wc))) then Exit(cbChecked);
+  if (wu <> '') and (v = LowerCase(Trim(wu))) then Exit(cbUnchecked);
   if (v = '2') or (v = 'grayed') or (v = 'null') then Exit(cbGrayed);
   if CellChecked(ACol, ARow) then Exit(cbChecked);
   Result := cbUnchecked;
@@ -8945,7 +9615,7 @@ end;
 procedure TTyStringGrid.ToggleCellChecked(ACol, ARow: Integer);
 var
   accept: Boolean;
-  oldTxt, newTxt: string;
+  oldTxt, newTxt, wordC, wordU: string;
 begin
   if FReadOnly then Exit;
 
@@ -8955,26 +9625,34 @@ begin
   if not accept then Exit;
 
   oldTxt := GetCellText(ACol, ARow);
-  { 写回统一成 '1'/'2'/'' —— 读的时候宽松,写的时候收敛。
+  { 写回收敛成本列的词汇;列没定义就还是从前那套 '1'/'2'/''。
+    从前这里**无条件**写 '1'/'',于是一张 'Y'/'N' 的表被点一下就多出个 '1' ——
+    宿主的数据词汇被控件换掉了,而 OnCellEdited 的 ANewText 是 const,拦不住也改不回。
     循环顺序**照抄 TTyCheckBox.Click**(空→勾→灰→空),不另定义一套:
     同一个视觉部件在两处走不同的顺序是最容易被当成 bug 的那种不一致。 }
+  CheckWordsOf(ACol, wordC, wordU);
+  if wordC = '' then wordC := '1';
   if FAllowGrayed then
     case CellCheckState(ACol, ARow) of
-      cbUnchecked: newTxt := '1';
+      cbUnchecked: newTxt := wordC;
+      { 灰显没有列词汇可用(LCL 那一对本来就只有两个词),仍写 '2'。 }
       cbChecked:   newTxt := '2';
-      else         newTxt := '';
+      else         newTxt := wordU;
     end
   else
-    if CellChecked(ACol, ARow) then newTxt := '' else newTxt := '1';
+    if CellChecked(ACol, ARow) then newTxt := wordU else newTxt := wordC;
   accept := True;
   if Assigned(FOnCellEdited) then
     FOnCellEdited(Self, ACol, ARow, oldTxt, newTxt, accept);
   if accept then
   begin
     Cells[ACol, ARow] := newTxt;
-    { 切换成功了才通知 —— 让宿主不用自己再判一次有没有真的变。 }
+    { 切换成功了才通知 —— 让宿主不用自己再判一次有没有真的变。
+      判据是"不等于**未勾的那个词**",不是"不等于空串":列词汇里未勾写成 'N' 时
+      空串判法会把 'N' 当成勾上了。词汇没设时 wordU 就是 '',与从前一模一样
+      (灰显的 '2' 仍报 True)。 }
     if Assigned(FOnCheckBoxChange) then
-      FOnCheckBoxChange(Self, ACol, ARow, newTxt <> '');
+      FOnCheckBoxChange(Self, ACol, ARow, newTxt <> wordU);
   end;
 end;
 
@@ -9262,6 +9940,10 @@ var
   i: Integer;
 begin
   Result := 0;
+  { HideSortArrow 熄的是**整个指示器**,不只是那个三角:多列排序时列头上还有
+    "1/2/3" 的顺位徽标,只清 Header.SortColumn 的话三角没了、徽标还在,
+    看起来像画坏了。 }
+  if FSortArrowHidden then Exit;
   for i := 0 to High(FSortKeys) do
     if FSortKeys[i].Col = ACol then Exit(i + 1);   { 1-based:徽标上显示的就是它 }
 end;
@@ -10098,7 +10780,11 @@ begin
   if (ACol < 0) or (ACol > Header.Columns.Count) then Exit;
   EndEdit(True);
   ShiftCells(ACol, 1, False);
-  c := Header.Columns.Add as TTyColumn;
+  c := Header.Columns.Add;
+  { 新列按 DefaultColWidth 起宽(LCL 的 DefaultColWidth 就管这件事)。
+    TTyColumn.Create 里那个 100 仍在,但那是"没人管的时候的宽度";
+    网格有意见时该由网格说了算,否则这个属性只在设计器里好看。 }
+  c.Width := GetDefaultColWidth;
   c.Index := ACol;
   { **在格子搬移之后**记 —— 撤销是倒序应用的,这一条要最先跑
     (先把列去掉,后面的 gukCell 条目才有正确的落点)。 }
@@ -10684,6 +11370,10 @@ procedure TTyStringGrid.RecordRowCountUndo(AOldCount: Integer);
 var
   e: TTyGridUndoEntry;
 begin
+  { 行数变了也算"改过"。SetCells 那个收口点接不到这一条:往空表里插一行
+    一个格子都没搬,可表确实不一样了。撤销/重做也走这里,与 SetCells 同样对待
+    (Ctrl+Z 之后仍算改过 —— 它未必回到了存盘时的样子)。 }
+  FModified := True;
   if FUndoBusy then Exit;
   e.Kind := gukRowCount;
   e.Col := -1;
@@ -11627,11 +12317,20 @@ end;
 
 function TTyStringGrid.SaveToCSVText(ADelimiter: Char;
   AFromRow, ARowCount, AFromCol, AColCount: Integer;
-  AWriteTitles: Boolean): string;
+  AWriteTitles, AVisibleColumnsOnly: Boolean): string;
 var
   sb: TStringList;
   pos, cIdx, dataRow, lastPos, lastCol: Integer;
   line: string;
+  firstCol: Boolean;
+
+  { 这一列要不要导。AVisibleColumnsOnly 关着时一律导(既有行为)。 }
+  function Wanted(AIdx: Integer): Boolean;
+  begin
+    Result := (not AVisibleColumnsOnly)
+              or (coVisible in Header.Columns.Items[AIdx].Options);
+  end;
+
 begin
   { 范围钳制。-1 = 全表 —— 缺省调用与从前逐字节一致。 }
   if AFromCol < 0 then AFromCol := 0;
@@ -11653,10 +12352,13 @@ begin
     if AWriteTitles then
     begin
       line := '';
+      firstCol := True;
       for cIdx := AFromCol to lastCol do
       begin
-        if cIdx > AFromCol then line := line + ADelimiter;
-        line := line + TyCsvQuote(TTyColumn(Header.Columns.Items[cIdx]).Text, ADelimiter);
+        if not Wanted(cIdx) then Continue;
+        if not firstCol then line := line + ADelimiter;
+        firstCol := False;
+        line := line + TyCsvQuote(Header.Columns.Items[cIdx].Text, ADelimiter);
       end;
       sb.Add(line);
     end;
@@ -11668,9 +12370,15 @@ begin
         一条全空的记录(`,,,`),导回来或用 Excel 打开就是凭空多出的空行。 }
       if dataRow < 0 then Continue;
       line := '';
+      firstCol := True;
       for cIdx := AFromCol to lastCol do
       begin
-        if cIdx > AFromCol then line := line + ADelimiter;
+        if not Wanted(cIdx) then Continue;
+        { 分隔符跟着"写过第一列没有"走,而不是跟着 cIdx = AFromCol 走 ——
+          跳过隐藏列之后,那个判据会在第一个导出的列前面多写一个分隔符,
+          于是整行右移一格、与表头对不上。 }
+        if not firstCol then line := line + ADelimiter;
+        firstCol := False;
         line := line + TyCsvQuote(GetCellText(cIdx, dataRow), ADelimiter);
       end;
       sb.Add(line);
@@ -11685,14 +12393,45 @@ end;
 
 
 procedure TTyStringGrid.LoadFromCSVText(const AText: string; ADelimiter: Char;
-  AAppend: Boolean; AMaxRows, AIgnoreRows: Integer; AUseTitles: Boolean);
+  AAppend: Boolean; AMaxRows, AIgnoreRows: Integer; AUseTitles: Boolean;
+  ASkipEmptyLines: Boolean);
 var
   rows: TTyCsvRows;
-  i, j, dataRow, first, titleRows, taken, base: Integer;
+  i, j, dataRow, first, titleRows, taken, base, keep: Integer;
+
+  { 这一条是不是"空行":没有字段,或者所有字段都是空串。
+    `a,,b` 不是空行 —— 那是三个字段,中间那个恰好为空。 }
+  function RowIsBlank(const ARow: TStringArray): Boolean;
+  var
+    k: Integer;
+  begin
+    for k := 0 to High(ARow) do
+      if ARow[k] <> '' then Exit(False);
+    Result := True;
+  end;
+
 begin
   EndEdit(False);
   { 字符级解析:引号内的换行不断行(见 TyCsvParse 的说明)。 }
   rows := TyCsvParse(AText, ADelimiter);
+
+  { 空行剔除**在数到表头/AIgnoreRows 之前**做,否则"跳过前 2 条说明行"会把
+    分隔用的空行数进去,而用户数的是看得见的那几条。
+    对标 LCL LoadFromCSVStream 的 SkipEmptyLines(grids.pas:1811,默认 True)——
+    这里默认 False,因为无条件保留空行是本库既有的行为,而空行在某些表里
+    (定长块之间的分隔)是有意义的记录。 }
+  if ASkipEmptyLines then
+  begin
+    keep := 0;
+    for i := 0 to High(rows) do
+      if not RowIsBlank(rows[i]) then
+      begin
+        rows[keep] := rows[i];
+        Inc(keep);
+      end;
+    SetLength(rows, keep);
+  end;
+
   if Length(rows) = 0 then Exit;
 
   { 第一行当表头:按它建列(列数不足就补)。
@@ -11744,6 +12483,10 @@ begin
     EndUpdate;
   end;
 
+  { 刚装载进来的表不算"改过"。装载途中每写一格都会把 FModified 置位,
+    所以复位必须在最后 —— 与 LCL 在 LoadContent 末尾清 FModified 同一处。 }
+  FModified := False;
+
   InvalidateOrder;
   UpdateScrollBars;
   Invalidate;
@@ -11773,14 +12516,15 @@ begin
 end;
 
 procedure TTyStringGrid.SaveToCSVStream(AStream: TStream; ADelimiter: Char;
-  AWriteTitles: Boolean);
+  AWriteTitles, AVisibleColumnsOnly: Boolean);
 begin
   if AStream = nil then Exit;
-  TyGridWriteUtf8(AStream, SaveToCSVText(ADelimiter, -1, -1, -1, -1, AWriteTitles));
+  TyGridWriteUtf8(AStream, SaveToCSVText(ADelimiter, -1, -1, -1, -1,
+    AWriteTitles, AVisibleColumnsOnly));
 end;
 
 procedure TTyStringGrid.LoadFromCSVStream(AStream: TStream; ADelimiter: Char;
-  AUseTitles: Boolean);
+  AUseTitles, ASkipEmptyLines: Boolean);
 var
   txt: string;
 begin
@@ -11796,7 +12540,7 @@ begin
   end;
   { 位置参数一路数到底:LoadFromCSVText(文本, 分隔符, 追加, 上限, 跳过, 用表头)。
     AUseTitles 是**第六个**参数,别让它落到 AAppend/AMaxRows 上去。 }
-  LoadFromCSVText(txt, ADelimiter, False, -1, 0, AUseTitles);
+  LoadFromCSVText(txt, ADelimiter, False, -1, 0, AUseTitles, ASkipEmptyLines);
 end;
 
 { 全状态流的内容段:按**数据行序**导出,而 CSV 导出走的是显示序。
@@ -11943,6 +12687,8 @@ begin
     { 滚动**最后**还原,前面几步都可能动它。 }
     ScrollX := sx;
     ScrollY := sy;
+    { 刚读进来的表不算改过 —— 见 Modified 与 LoadFromCSVText 里的同一句。 }
+    FModified := False;
   finally
     one.Free;
     lines.Free;
@@ -11950,13 +12696,14 @@ begin
 end;
 
 procedure TTyStringGrid.SaveToCSVFile(const AFileName: string; ADelimiter: Char;
-  AWriteTitles: Boolean);
+  AWriteTitles, AVisibleColumnsOnly: Boolean);
 var
   sl: TStringList;
 begin
   sl := TStringList.Create;
   try
-    sl.Text := SaveToCSVText(ADelimiter, -1, -1, -1, -1, AWriteTitles);
+    sl.Text := SaveToCSVText(ADelimiter, -1, -1, -1, -1,
+      AWriteTitles, AVisibleColumnsOnly);
     sl.SaveToFile(AFileName);
   finally
     sl.Free;
@@ -11964,16 +12711,40 @@ begin
 end;
 
 procedure TTyStringGrid.LoadFromCSVFile(const AFileName: string; ADelimiter: Char;
-  AUseTitles: Boolean);
+  AUseTitles, ASkipEmptyLines: Boolean);
 var
   sl: TStringList;
 begin
   sl := TStringList.Create;
   try
     sl.LoadFromFile(AFileName);
-    LoadFromCSVText(sl.Text, ADelimiter, False, -1, 0, AUseTitles);
+    LoadFromCSVText(sl.Text, ADelimiter, False, -1, 0, AUseTitles, ASkipEmptyLines);
   finally
     sl.Free;
+  end;
+end;
+
+procedure TTyStringGrid.SaveToFile(const AFileName: string);
+var
+  fs: TFileStream;
+begin
+  fs := TFileStream.Create(AFileName, fmCreate);
+  try
+    SaveToStream(fs);
+  finally
+    fs.Free;
+  end;
+end;
+
+procedure TTyStringGrid.LoadFromFile(const AFileName: string);
+var
+  fs: TFileStream;
+begin
+  fs := TFileStream.Create(AFileName, fmOpenRead or fmShareDenyWrite);
+  try
+    LoadFromStream(fs);
+  finally
+    fs.Free;
   end;
 end;
 
@@ -12110,6 +12881,9 @@ begin
     Exit;
   end;
 
+  { 真的排一次序,指示器就该回来 —— HideSortArrow 说的是"这一次别画",
+    不是"从此不画"(LCL 里 Sort 重新写 FSortColumn,效果一样)。 }
+  FSortArrowHidden := False;
   { 单列排序 = 把键序列重置成只有这一条。想追加次级列请用 AddSortColumn。 }
   SetLength(FSortKeys, 1);
   FSortKeys[0].Col := ACol;
@@ -12180,12 +12954,22 @@ var
   i, n: Integer;
 begin
   if (ACol < 0) or (ACol >= Header.Columns.Count) then Exit;
+  FSortArrowHidden := False;   { 见 SortByColumn }
   for i := 0 to High(FSortKeys) do
     if FSortKeys[i].Col = ACol then
     begin
       { 已经是排序键了 —— 再点一次就翻方向,而不是加一条重复的键。 }
       FSortKeys[i].Dir := ADirection;
-      if i = 0 then begin FSortCol := ACol; FSortDir := ADirection; end;
+      if i = 0 then
+      begin
+        FSortCol := ACol;
+        FSortDir := ADirection;
+        { 表头也要同步。从前这一支没写,于是翻方向时小三角的朝向不跟着变
+          (三角画的是 Header.SortDirection);HideSortArrow 之后再走到这一支
+          还会让三角回不来。 }
+        Header.SortColumn := ACol;
+        Header.SortDirection := ADirection;
+      end;
       InvalidateOrder;
       UpdateScrollBars;
       Invalidate;
@@ -12211,10 +12995,59 @@ procedure TTyStringGrid.ClearSortColumns;
 begin
   SetLength(FSortKeys, 0);
   FSortCol := -1;
+  FSortArrowHidden := False;   { 没有排序键了,"熄掉指示器"这个状态也就无从谈起 }
   Header.SortColumn := NoColumn;
   InvalidateOrder;
   UpdateScrollBars;
   Invalidate;
+end;
+
+procedure TTyStringGrid.HideSortArrow;
+begin
+  { 排序键**刻意不动**:显示序是由它们算出来的,清掉就等于把行顺序也退回去了,
+    而这个方法的全部意义正是"顺序留着、只是别画那个三角"。
+    (LCL 的排序是物理的,顺序留在数据里,所以它只需要清 FSortColumn。) }
+  FSortArrowHidden := True;
+  Header.SortColumn := NoColumn;
+  Invalidate;
+end;
+
+function TTyStringGrid.GetModified: Boolean;
+begin
+  Result := FModified;
+end;
+
+procedure TTyStringGrid.SetModified(AValue: Boolean);
+begin
+  FModified := AValue;
+end;
+
+function TTyStringGrid.InplaceEditor: TWinControl;
+var
+  c: TControl;
+begin
+  { 与 EditorControl 同一个答案,只是收窄成 TWinControl(LCL 那边的类型)。
+    两处不许各算一遍 —— 那正是"两个属性对不上"的做法。 }
+  Result := nil;
+  c := EditorControl;
+  if c is TWinControl then Result := TWinControl(c);
+end;
+
+function TTyStringGrid.GetEditorMode: Boolean;
+begin
+  Result := FEditing;
+end;
+
+procedure TTyStringGrid.SetEditorMode(AValue: Boolean);
+begin
+  if AValue = FEditing then Exit;
+  if AValue then BeginEdit
+  else EndEdit(True);      { LCL 的 EditorMode := False 是提交,不是丢弃 }
+end;
+
+function TTyStringGrid.GetSelectedColumn: TTyGridColumn;
+begin
+  Result := GridColumn(FCol);
 end;
 
 function TTyStringGrid.SortColumnCount: Integer;
@@ -12327,6 +13160,9 @@ procedure TTyStringGrid.CommitActiveSelection;
 var
   n: Integer;
 begin
+  { rsmSingle = 只许有一块:固化就是这个功能的入口,在这里挡住比在 MouseDown 里
+    判要牢靠 —— 键盘上将来若也有 Ctrl+空格,不必再挡一次。 }
+  if FRangeSelectMode = rsmSingle then Exit;
   n := Length(FSelRects);
   SetLength(FSelRects, n + 1);
   FSelRects[n] := ActiveSelectionRect;
@@ -12410,6 +13246,38 @@ begin
   { 选区收缩成光标所在的那一格 —— 网格总有一个当前格,"什么都没选"不是它的状态。 }
   AnchorSelection;
   SelectionChanged;
+end;
+
+procedure TTyStringGrid.ClearSelections;
+begin
+  ClearSelection;
+end;
+
+function TTyStringGrid.GetSelectedRangeCount: Integer;
+begin
+  { 活动矩形恒算一块 —— 见属性声明处。 }
+  Result := Length(FSelRects) + 1;
+end;
+
+function TTyStringGrid.GetSelectedRange(AIndex: Integer): TRect;
+var
+  r: TRect;
+begin
+  Result := Rect(-1, -1, -1, -1);
+  if (AIndex < 0) or (AIndex >= GetSelectedRangeCount) then Exit;
+  if AIndex = 0 then r := ActiveSelectionRect
+  else r := FSelRects[AIndex - 1];
+  { 内部按显示序存,对外一律数据行 —— 与 GetSelection 同一条纪律,
+    否则宿主拿到的 Top/Bottom 没法直接索引 Cells。 }
+  Result.Left := r.Left;
+  Result.Right := r.Right;
+  Result.Top := DisplayToData(r.Top);
+  Result.Bottom := DisplayToData(r.Bottom);
+end;
+
+function TTyStringGrid.HasMultiSelection: Boolean;
+begin
+  Result := Length(FSelRects) > 0;
 end;
 
 function TTyStringGrid.GetSelection: TRect;

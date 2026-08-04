@@ -79,7 +79,7 @@ type
     FForm: TForm;
     FTree: TTyTreeView;
     FN0, FN1, FN2: PTyTreeNode;   // three top-level nodes (rows 0,1,2)
-    { OnDragOver bookkeeping }
+    { OnNodeDragOver bookkeeping }
     FDragOverFired:   Integer;
     FDragOverAllow:   Boolean;    // what the handler forces Allowed to
     FDragOverVeto:    Boolean;    // when True the handler sets Allowed := False
@@ -732,19 +732,19 @@ begin
     Ord(TDragTreeAccess(FTree).DropModeFromYPub(nil, 33)));
 end;
 
-{ ---- OnDragOver veto → no move ---- }
+{ ---- OnNodeDragOver veto → no move ---- }
 
 procedure TTreeDragF2Test.TestDragOverVetoPerformsNoMove;
 begin
   FTree.Options    := [toNodeDrag];
-  FTree.OnDragOver := @OnDragOver;
+  FTree.OnNodeDragOver := @OnDragOver;
   FDragOverVeto    := True;        // handler forces Allowed := False
   Layout;
   { press n2's label, drag onto n0 (dmOn), release. The veto must block the move. }
   TDragTreeAccess(FTree).MouseDownPub(mbLeft, [], LabelX, RowMidY(2));   // n2
   TDragTreeAccess(FTree).MouseMovePub([ssLeft], LabelX + 6, RowMidY(2)); // start
   TDragTreeAccess(FTree).MouseMovePub([ssLeft], LabelX, RowMidY(0));     // over n0
-  AssertTrue('OnDragOver fired during the drag', FDragOverFired > 0);
+  AssertTrue('OnNodeDragOver fired during the drag', FDragOverFired > 0);
   AssertEquals('veto collapses the drop mode to dmNone', Ord(dmNone), Ord(FTree.DropMode));
   TDragTreeAccess(FTree).MouseUpPub(mbLeft, [], LabelX, RowMidY(0));
   { n2 must be untouched: still a top-level leaf, n0 still has just its 1 child. }
@@ -759,7 +759,7 @@ end;
 procedure TTreeDragF2Test.TestValidDropMovesAndFiresOnce;
 begin
   FTree.Options     := [toNodeDrag];
-  FTree.OnDragOver  := @OnDragOver;
+  FTree.OnNodeDragOver := @OnDragOver;
   FTree.OnNodeMoved := @OnNodeMoved;
   Layout;
   AssertEquals('precondition: 3 top-level nodes', 3, Integer(FTree.RootNode^.ChildCount));

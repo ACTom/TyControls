@@ -123,7 +123,7 @@ type
     procedure TestUpOnMonthStepsItRollsNoCarry;
     procedure TestRightLeftMoveActiveSeg;
     procedure TestCommitClampsToMaxDate;
-    procedure TestOnChangeFiredOnlyOnRealChange;
+    procedure TestProgrammaticWriteFiresOnChangeOnlyWithTheOption;
     procedure TestHomeGoesToFirstSeg;
     procedure TestEndGoesToLastSeg;
 
@@ -787,16 +787,26 @@ begin
   AssertEquals('day clamped to 31', 31, Integer(D));
 end;
 
-procedure TDateTimePickerControlTest.TestOnChangeFiredOnlyOnRealChange;
+{ RENAMED from TestOnChangeFiredOnlyOnRealChange, which asserted that a PROGRAMMATIC
+  DateTime write fires OnChange -- the behaviour this pass removed. It was green for
+  years and it was pinning the defect: `DTP.DateTime := Rec.Due` re-entered the
+  application's own handler. OnChange now means "the user changed it" unless
+  dtpoDoChangeOnSetDateTime says otherwise, so the test asserts both halves. }
+procedure TDateTimePickerControlTest.TestProgrammaticWriteFiresOnChangeOnlyWithTheOption;
 begin
   FPicker.DateTime := EncodeDate(2026, 6, 15);
   FCounter.Count := 0;
-  { Same value again → no OnChange }
+  { Default Options: a code write is silent, whether or not the value moved. }
   FPicker.DateTime := EncodeDate(2026, 6, 15);
   AssertEquals('same value: no OnChange', 0, FCounter.Count);
-  { Different value → OnChange }
   FPicker.DateTime := EncodeDate(2026, 6, 16);
-  AssertEquals('different value: OnChange once', 1, FCounter.Count);
+  AssertEquals('different value, no option: still no OnChange', 0, FCounter.Count);
+  { Opt in and the old behaviour is back -- still only on a real change. }
+  FPicker.Options := [dtpoDoChangeOnSetDateTime];
+  FPicker.DateTime := EncodeDate(2026, 6, 16);
+  AssertEquals('same value with the option: no OnChange', 0, FCounter.Count);
+  FPicker.DateTime := EncodeDate(2026, 6, 17);
+  AssertEquals('different value with the option: OnChange once', 1, FCounter.Count);
 end;
 
 procedure TDateTimePickerControlTest.TestHomeGoesToFirstSeg;
@@ -1199,9 +1209,11 @@ end;
 
 procedure TTyDateTimePickerProbeC3.SimToggleCheckBox;
 begin
-  { Simulate a checkbox toggle: flip Checked and fire OnChecked. }
+  { Simulate a checkbox toggle. The probe used to fire OnChecked itself, because the
+    setter did not -- only the mouse hit-test did, which is why the Space key changed
+    the state and told nobody. SetChecked now notifies (LCL does the same from its own
+    setter, datetimepicker.pas:1011-1020), so firing it here as well would double. }
   Checked := not Checked;
-  if Assigned(OnChecked) then OnChecked(Self);
 end;
 
 { ── TDateTimePickerC3Test ────────────────────────────────────────────────── }

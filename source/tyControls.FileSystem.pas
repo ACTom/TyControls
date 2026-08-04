@@ -54,6 +54,32 @@ type
   { Which raw field a comparison/sort keys on. }
   TTyFsSortKey = (fskName, fskSize, fskType, fskModified);
 
+  { Whether a file MASK matches case-sensitively.
+
+    mcsPlatformDefault follows the filesystem's own rule (FileUtil's compile-time
+    FilenamesCaseSensitive: False on Windows/macOS, True on Linux); the other two
+    say so outright regardless of host. Mirrors LCL's TMaskCaseSensitivity
+    (C:/lazarus/lcl/shellctrls.pas:46) name for name, so ported code reads the
+    same -- but see TTyShellListView.MaskCaseSensitivity for why our DEFAULT
+    differs from LCL's. }
+  TTyMaskCaseSensitivity = (mcsPlatformDefault, mcsCaseInsensitive, mcsCaseSensitive);
+
+  { How a directory's entries are ordered before they reach a view.
+    LCL's TFileSortType (shellctrls.pas:44), value for value. fstCustom defers to
+    the consumer's own comparator. }
+  TTyFsFileSortType = (fstNone, fstAlphabet, fstFoldersFirst, fstCustom);
+
+  { Per-entry veto raised while a view populates itself: set ACanAdd False to drop
+    this one entry. LCL's TAddItemEvent (shellctrls.pas:77-78) hands back a raw
+    TSearchRec; ours hands the already-decoded TTyFsEntry, which carries every
+    field TSearchRec does plus IsDir/IsHidden/TypeName. }
+  TTyFsAddItemEvent = procedure(Sender: TObject; const ABasePath: string;
+    const AEntry: TTyFsEntry; var ACanAdd: Boolean) of object;
+
+  { A consumer's own ordering over two raw entries (LCL's TFileItemCompareEvent,
+    shellctrls.pas:73). Negative / zero / positive, as any comparator. }
+  TTyFsCompareEvent = function(const A, B: TTyFsEntry): Integer of object;
+
   { A navigable "place": a Windows drive, the Unix root, the user home, a
     mounted volume, or a curated place. }
   TTyFsRootKind = (rkDrive, rkRoot, rkHome, rkVolume, rkPlace);
@@ -74,10 +100,21 @@ type
   directories are always shown. Name/FullPath/Size/Modified/Attr/TypeName are
   filled from the search record; TypeName via TyFsTypeName.
 
+  ACaseSens selects how AMask is matched. It defaults to False -- this library's
+  file-dialog convention, and the behaviour every existing caller already had, so
+  adding the parameter changed nothing for them. A caller that wants the host
+  filesystem's own rule passes TyFsMaskCaseSensitive(mcsPlatformDefault).
+
   Portable primitive: FindFirstUTF8 (FindCloseUTF8 always runs in try/finally).
   A non-existent or unreadable directory never raises -- it returns an empty
   array (sentinel: Length(Result)=0). }
-function TyFsReadDirectory(const ADir, AMask: string; AOptions: TTyFsObjectTypes): TTyFsEntryArray;
+function TyFsReadDirectory(const ADir, AMask: string; AOptions: TTyFsObjectTypes;
+  ACaseSens: Boolean = False): TTyFsEntryArray;
+
+{ Resolve a TTyMaskCaseSensitivity to the Boolean TyFsMatchesFilter takes.
+  mcsPlatformDefault reads FileUtil's compile-time FilenamesCaseSensitive, so the
+  answer is the host filesystem's own rule and needs no IFDEF at the call site. }
+function TyFsMaskCaseSensitive(AValue: TTyMaskCaseSensitivity): Boolean;
 
 { True when AName matches APatterns (a ';'-separated pattern list).
 
@@ -115,6 +152,21 @@ function TyFsCompareEntries(const A, B: TTyFsEntry; AKey: TTyFsSortKey;
   untouched. }
 procedure TyFsSortEntries(var AEntries: TTyFsEntryArray; AKey: TTyFsSortKey;
   AAscending, AFoldersFirst: Boolean);
+
+{ The same in-place STABLE sort, ordered by a caller's own comparator instead of a
+  key/direction/folders-first triple. A sibling rather than a wrapper because the
+  two take genuinely different orderings: TyFsCompareEntries needs three arguments
+  that no method-pointer signature carries. A nil comparator, or a length < 2
+  array, leaves AEntries untouched. }
+procedure TyFsSortEntriesBy(var AEntries: TTyFsEntryArray; ACompare: TTyFsCompareEvent);
+
+{ True when APath holds at least one entry the AOptions set would keep -- the
+  generalisation of TyFsHasSubdir to a tree that also shows files. Stops at the
+  FIRST survivor, so it stays the cheap has-children probe a lazy tree stamps its
+  expand arrow from, and it honours fotHidden (TyFsHasSubdir does not, which is why
+  a folder holding only a hidden subdirectory used to show an arrow that expanded
+  to nothing). A non-existent / unreadable directory returns False, never raises. }
+function TyFsHasEntry(const APath: string; AOptions: TTyFsObjectTypes): Boolean;
 
 { The portable list of navigable "places", always with at least one element.
 
@@ -206,7 +258,20 @@ begin
   Result := MatchesWindowsMaskList(AName, pat, ';', ACaseSens);
 end;
 
-function TyFsReadDirectory(const ADir, AMask: string; AOptions: TTyFsObjectTypes): TTyFsEntryArray;
+function TyFsMaskCaseSensitive(AValue: TTyMaskCaseSensitivity): Boolean;
+begin
+  case AValue of
+    mcsCaseSensitive:   Result := True;
+    mcsCaseInsensitive: Result := False;
+  else
+    { FilenamesCaseSensitive is a compile-time const in FileUtil, so this is the
+      unit's second platform branch -- but a constant one, not an IFDEF. }
+    Result := FilenamesCaseSensitive;
+  end;
+end;
+
+function TyFsReadDirectory(const ADir, AMask: string; AOptions: TTyFsObjectTypes;
+  ACaseSens: Boolean = False): TTyFsEntryArray;
 var
   sr: TSearchRec;
   base: string;
@@ -234,9 +299,11 @@ begin
           Continue;
         if (not isDir) and not (fotFiles in AOptions) then
           Continue;
-        { AMask applies to FILES only; directories are always shown. Matching is
-          case-insensitive (the file-dialog convention on every platform). }
-        if (not isDir) and not TyFsMatchesFilter(sr.Name, AMask, False) then
+        { AMask applies to FILES only; directories are always shown. The case rule
+          is the caller's (default False = the file-dialog convention); it used to
+          be a hard-coded False, so an app that needed exact-case matching had no
+          way to ask for it. }
+        if (not isDir) and not TyFsMatchesFilter(sr.Name, AMask, ACaseSens) then
           Continue;
 
         e.Name     := sr.Name;
@@ -408,6 +475,75 @@ begin
   end;
 end;
 
+procedure TyFsSortEntriesBy(var AEntries: TTyFsEntryArray; ACompare: TTyFsCompareEvent);
+var
+  tmp: TTyFsEntryArray;
+  n, width, i, lo, mid, hi: Integer;
+
+  { Stable merge of [lo,mid) and [mid,hi) into tmp, then back into AEntries. }
+  procedure MergeRun(ALo, AMid, AHi: Integer);
+  var
+    a, b, k: Integer;
+  begin
+    a := ALo;
+    b := AMid;
+    k := ALo;
+    while (a < AMid) and (b < AHi) do
+    begin
+      { take the left run on a tie (<= 0) to stay stable }
+      if ACompare(AEntries[a], AEntries[b]) <= 0 then
+      begin
+        tmp[k] := AEntries[a];
+        Inc(a);
+      end
+      else
+      begin
+        tmp[k] := AEntries[b];
+        Inc(b);
+      end;
+      Inc(k);
+    end;
+    while a < AMid do
+    begin
+      tmp[k] := AEntries[a];
+      Inc(a);
+      Inc(k);
+    end;
+    while b < AHi do
+    begin
+      tmp[k] := AEntries[b];
+      Inc(b);
+      Inc(k);
+    end;
+    for k := ALo to AHi - 1 do
+      AEntries[k] := tmp[k];
+  end;
+
+begin
+  if not Assigned(ACompare) then
+    Exit;
+  n := Length(AEntries);
+  if n < 2 then
+    Exit;
+  SetLength(tmp, n);
+  width := 1;
+  while width < n do
+  begin
+    i := 0;
+    while i < n do
+    begin
+      lo := i;
+      mid := i + width;
+      if mid > n then mid := n;
+      hi := i + 2 * width;
+      if hi > n then hi := n;
+      MergeRun(lo, mid, hi);
+      Inc(i, 2 * width);
+    end;
+    width := width * 2;
+  end;
+end;
+
 function TyFsRoots: TTyFsRootArray;
 {$IFDEF MSWINDOWS}
 var
@@ -513,6 +649,41 @@ begin
           Result := True;
           Break;
         end;
+      until FindNextUTF8(sr) <> 0;
+    finally
+      FindCloseUTF8(sr);
+    end;
+end;
+
+function TyFsHasEntry(const APath: string; AOptions: TTyFsObjectTypes): Boolean;
+var
+  sr: TSearchRec;
+  base: string;
+  isDir, isHidden: Boolean;
+begin
+  Result := False;
+  if AOptions * [fotFolders, fotFiles] = [] then
+    Exit;                             { nothing would be kept -- do not touch disk }
+  base := AppendPathDelim(APath);
+  { faAnyFile then filter, same shape as TyFsReadDirectory, but breaking at the
+    first survivor: this runs once per node during lazy init and must stay cheap. }
+  if FindFirstUTF8(base + '*', faAnyFile, sr) = 0 then
+    try
+      repeat
+        if (sr.Name = '.') or (sr.Name = '..') then
+          Continue;
+        isDir := (sr.Attr and faDirectory) <> 0;
+        {$push}{$warn symbol_platform off}
+        isHidden := (sr.Attr and faHidden) <> 0;
+        {$pop}
+        if isHidden and not (fotHidden in AOptions) then
+          Continue;
+        if isDir and not (fotFolders in AOptions) then
+          Continue;
+        if (not isDir) and not (fotFiles in AOptions) then
+          Continue;
+        Result := True;
+        Break;
       until FindNextUTF8(sr) <> 0;
     finally
       FindCloseUTF8(sr);

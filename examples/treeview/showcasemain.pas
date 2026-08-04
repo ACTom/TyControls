@@ -1165,10 +1165,10 @@ begin
   DragTree.NodeDataSize := SizeOf(TDragRec);
   DragTree.OnGetText   := @DragGetText;
   DragTree.OnNodeMoved := @DragNodeMoved;
-  { OnDragOver vets every hover position, so a drop can be refused before it happens;
+  { OnNodeDragOver vets every hover position, so a drop can be refused before it happens;
     OnFreeNode fires for every node the control releases, however it dies (Delete,
     Clear, or the form going away). }
-  DragTree.OnDragOver  := @DragDragOver;
+  DragTree.OnNodeDragOver := @DragDragOver;
   DragTree.OnFreeNode  := @DragFreeNode;
 
   BuildDragNodes;
@@ -1217,7 +1217,7 @@ end;
 
 { Announce a completed move in the status bar (the stable label travels with the
   node, so we just re-read its caption). }
-{ OnDragOver runs for every hover position, so the tree can refuse a drop before it
+{ OnNodeDragOver runs for every hover position, so the tree can refuse a drop before it
   happens rather than undoing it afterwards. dmOn means "make it a CHILD of the
   target", which only makes sense for a branch -- so it is refused on a leaf, while
   dmAbove / dmBelow (pure reordering) always pass. }
@@ -1227,7 +1227,7 @@ begin
   if (Mode = dmOn) and (Target <> nil) and (Sender.GetNodeLevel(Target) > 0) then
   begin
     Allowed := False;
-    SetStatus('OnDragOver: refused - a leaf cannot take children (drop ABOVE or BELOW instead)');
+    SetStatus('OnNodeDragOver: refused - a leaf cannot take children (drop ABOVE or BELOW instead)');
   end;
 end;
 

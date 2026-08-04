@@ -40,8 +40,8 @@ msgid "Center = False"
 msgstr "居中 Center = False"
 
 #: tmainform.lbltrans.caption
-msgid "Transparent: left True (default, no surface) · right False"
-msgstr "Transparent:左 True(默认,无表面) · 右 False"
+msgid "Transparent: left True (no surface) · right False (default)"
+msgstr "Transparent:左 True(无表面) · 右 False(默认)"
 
 #: tmainform.lblauto.caption
 msgid "AutoSize: the box shrinks to the 120x80 picture"

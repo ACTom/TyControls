@@ -33,6 +33,9 @@ uses tyControls.ProgressBar;
 | `Min` | `Integer` | `0` | 进度最小值。赋值时若 `Position < Min` 则自动夹紧 `Position := Min`，然后触发重绘。 |
 | `Max` | `Integer` | `100` | 进度最大值。赋值时若 `Position > Max` 则自动夹紧 `Position := Max`，然后触发重绘。 |
 | `Position` | `Integer` | `0` | 当前进度值，范围 `[Min, Max]`。赋值时自动夹紧；若夹紧后值未变化则不触发重绘。 |
+| `Step` | `Integer` | `10` | **（API parity 新增）** `StepIt` 一次前进多少（LCL `comctrls.pp:1853`，同默认）。不夹负值：倒数的进度条是合法用法。 |
+| `BarShowText` | `Boolean` | `False` | **（API parity 新增）** 在条内画出进度文字（那个“47%”）。早前只能另外放一个标签自己同步，尽管同库的 `TTyGauge` / `TTyCircularProgress` / `TTyTrackBar` 早就会画自己的值。LCL：`comctrls.pp:1855`。 |
+| `BarTextFormat` | `string` | `'%p%%'` | **（API parity 新增）** 读数模板：`%v` = `Position`、`%l` = `Min`、`%u` = `Max`、`%p` = 百分比、`%%` = 一个百分号。LCL 把 `'%v from [%l-%u] (=%p%%)'` 写死在 gtk 接口里（`include/progressbar.inc:48`）且不可改；这里默认就是人们真正想要的百分比，并且可改。 |
 | `AnimationsEnabled` | `Boolean` | `True` | **（API parity 新增 published）** 控制 Position 变化时填充段的缓动动画（约 120 ms，EaseOutCubic）；关闭或无头环境瞬时跳变。 |
 | `OnChange` | `TNotifyEvent` | `nil` | **（API parity 新增）** `Position` / `Min` / `Max` 实际变化后触发；同值赋值不触发。 |
 | `Align` | `TAlign` | — | 父容器内的停靠方式。 |
@@ -195,3 +198,39 @@ end;
 4. **退化情形：** 当 `Max <= Min` 时，`TyProgressFillRect` 返回宽度为 0 的矩形，即进度条始终显示空。
 5. **填充段圆角：** `TyProgressFill` 的 `border-radius` 只影响填充块本身的圆角，不受 `TyProgressBar` 的圆角约束；若两者不一致，填充块可能超出轨道圆角范围，需在主题中手动对齐。**部分填充**时只圆起始(左)两角、保留前缘(右)直角（见上文“部分填充只圆起始角”）；**满填充**时四角都圆。
 6. **填充过渡动画（batch⑤+⑥）：** `AnimationsEnabled` 默认 `True`，有窗口句柄时改变 `Position` 会让填充缓动到新比例（约 120ms，`teEaseOutCubic`）；headless / 设计器下瞬间吸附到终态，逐像素测试不受影响。详见上文「状态过渡动画」。
+
+## 附：API parity 补齐（本轮）
+
+### 四个填充方向
+
+`TTyProgressOrientation` 现在有 LCL `TProgressBarOrientation`（`comctrls.pp:1801`）的全部四个值：
+
+| 值 | 填充方向 | 圆角侧 |
+|------|----------|--------|
+| `tpoHorizontal`（默认） | 左 → 右 | 左侧两角 |
+| `tpoVertical` | 下 → 上 | 底部两角 |
+| `tpoRightToLeft` | 右 → 左 | 右侧两角 |
+| `tpoTopDown` | 上 → 下 | 顶部两角 |
+
+后两个早前根本取不到，于是 RTL 版面的进度条与“排空/倒计时”表计都画不出来。枚举标识符与 LCL 不同（`tpo*` vs `pb*`），这是全库的命名约定；它是编译期报错的响亮失败，不是静默的错答案。
+
+### StepIt / StepBy
+
+```pascal
+procedure StepIt;                  // Position += Step（夹紧到 [Min,Max]）
+procedure StepBy(ADelta: Integer); // Position += ADelta（同样夹紧）
+function  BarText: string;         // 已填好的读数文字
+```
+
+`for i := 1 to n do begin Work; Bar.StepIt; end` 这个惯用循环早前没有对应物。两者都走 `Position` setter，所以夹紧、重绘、缓动与 `OnChange` 与直接赋值完全一致——LCL 的 `StepIt` 绕过了自己的 setter（`progressbar.inc:237`），代价是它不发通知。
+
+`BarText` 是 public 的，宿主可以把同一串字放到状态栏里，不必重新推导一遍。
+
+### 读数的墨色从哪里来
+
+没有任何颜色写在控件里：主题给 `TyProgressBar` 声明了 `color` 就用它，没声明就回退到每个主题都定义的弱化墨色 `TyTextHint`。（目前随库发布的主题都没有给 `TyProgressBar` 写 `color`，而未声明的 `TextColor` 会解析成 `$00000000`——alpha 0——正是 `TTyTrackBar.ShowValue` 曾经“留了位置却什么也没画”的原因。）想自定义，在 `.tycss` 里给 `TyProgressBar` 写 `color` 即可。
+
+### 不做：`Style = pbstMarquee` 与 `Smooth`
+
+- **`Style`（确定/不确定）** 在本库是另一个控件：`TTyActivityBar`（它的头注释就写着“`TTyProgressBar` 的不确定兄弟”）。本轮**未**把它并回来，所以 `ProgressBar1.Style := pbstMarquee` 仍然无法工作，且一个控件不能在运行时两种模式互切（“先不知道总大小、后来知道了”的下载正需要这个）。
+- **`Smooth`（连续/分段填充）** 不作为属性提供：LCL 那边它只是转给原生部件的一个请求（Win32 的 `PBS_SMOOTH`），在没有该能力的 widgetset 上什么也不做；对一个自绘控件而言“连续还是分段”是材质决定，属于皮肤引擎，不应该是控件上的一个布尔。

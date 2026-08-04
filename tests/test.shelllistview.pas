@@ -90,8 +90,10 @@ type
     { Repeated GetItemCount calls return the same value (no disk re-read per call). }
     procedure TestGetItemCountStableAcrossCalls;
     { Mutating the filesystem WITHOUT LoadDirectory does not change GetItemCount;
-      only an explicit Refresh picks the new file up. }
-    procedure TestGetItemCountIgnoresDiskUntilRefresh;
+      only an explicit UpdateView picks the new file up. (Renamed from
+      ...IgnoresDiskUntilRefresh: Refresh is TControl's repaint again, and a name
+      that still said Refresh would assert a contract this control dropped.) }
+    procedure TestGetItemCountIgnoresDiskUntilUpdateView;
 
     { ----- THE SORT TRAP (highest value) ----- }
     { A ~9 KB and a ~10 KB file: their DISPLAY sizes sort lexically opposite to
@@ -105,8 +107,10 @@ type
     procedure TestFoldersBeforeFilesDescending;
 
     { ----- CommitEdit renames the real file ----- }
-    { CommitEdit renames on disk (old gone, new present) and, after Refresh, the
-      entry carries the new Name. }
+    { CommitEdit renames on disk (old gone, new present) and the entry carries the
+      new Name. (That CommitEdit re-reads BY ITSELF is guarded separately, in
+      test.parity.shell: this one calls UpdateView explicitly, so it cannot see a
+      missing re-read -- and for a while there was one.) }
     procedure TestCommitEditRenamesOnDisk;
     { An empty new name leaves the file unchanged. }
     procedure TestCommitEditEmptyNameLeavesFileUnchanged;
@@ -381,7 +385,7 @@ begin
   AssertEquals('repeated GetItemCount is stable', c1, c2);
 end;
 
-procedure TShellListViewTest.TestGetItemCountIgnoresDiskUntilRefresh;
+procedure TShellListViewTest.TestGetItemCountIgnoresDiskUntilUpdateView;
 var
   before, afterWrite, afterRefresh: Integer;
 begin
@@ -397,7 +401,7 @@ begin
 
   FLV.UpdateView;
   afterRefresh := FLV.XGetItemCount;
-  AssertEquals('Refresh picks up the new file', before + 1, afterRefresh);
+  AssertEquals('UpdateView picks up the new file', before + 1, afterRefresh);
 end;
 
 { ===========================================================================
@@ -514,8 +518,8 @@ begin
   AssertTrue('new name present on disk',    FileExistsUTF8(newPath));
 
   FLV.UpdateView;
-  AssertTrue('after Refresh the new name is an entry',  HasItemNamed('renamed.zzz'));
-  AssertTrue('after Refresh the old name is gone',  not HasItemNamed('a.txt'));
+  AssertTrue('after UpdateView the new name is an entry',  HasItemNamed('renamed.zzz'));
+  AssertTrue('after UpdateView the old name is gone',  not HasItemNamed('a.txt'));
 end;
 
 procedure TShellListViewTest.TestCommitEditEmptyNameLeavesFileUnchanged;

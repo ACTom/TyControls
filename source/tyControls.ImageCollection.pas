@@ -196,16 +196,33 @@ type
       allocation-free path for paint code; use RenderIndex when you need to own or
       mutate the bitmap. ASizePx <= 0 is clamped to a 1px square. }
     function CachedIndex(AIndex, ASizePx: Integer): TBGRABitmap;
-    { Render item AIndex and paint it onto ACanvas at (AX, AY). Guards every edge
-      case (nil canvas/Collection, bad index, ASizePx <= 0) so it never raises.
+    { Paint item AIndex onto ACanvas at (AX, AY) at the list's DefaultSize.
 
-      AGhosted draws the icon DIMMED -- the cut / unavailable / disabled look. It exists
-      because callers already had the information and nowhere to put it: TTyTreeView's
-      OnGetImageIndex hands the app a `var Ghosted: Boolean`, collected it, and dropped it,
-      so the one thing that flag says had no effect anywhere. Alpha only: the icon keeps
-      its colours and loses its presence, which is what "unavailable" should look like --
-      recolouring would say "different", not "faded". }
-    procedure Draw(ACanvas: TCanvas; AIndex, AX, AY, ASizePx: Integer;
+      DELIBERATELY LCL's signature, argument for argument (imglist.pp:356
+      `Draw(ACanvas: TCanvas; AX, AY, AIndex: Integer; AEnabled: Boolean = True)`).
+      This method used to be Draw(ACanvas, AIndex, AX, AY, ASizePx) -- LCL's NAME with
+      the index and the coordinates TRANSPOSED and a size appended. Every argument is an
+      Integer, so the natural port of `Images.Draw(C, X, Y, Idx)` was to add the size and
+      get `Draw(C, X, Y, Idx, 16)`, which compiled and drew image number X at (Y, Idx).
+      The size-carrying form still exists as DrawIndex; the 4-Integer shape no longer
+      does, so the old call site fails to COMPILE rather than transposing in silence.
+
+      AEnabled=False draws the icon DIMMED -- the cut / unavailable / disabled look.
+      NOTE that it is ENABLED, not Ghosted: the two are negations of one another and
+      both are Booleans, so the wrong polarity compiles cleanly and draws every icon
+      disabled. That bug has already shipped once in this library. Alpha only: the icon
+      keeps its colours and loses its presence, which is what "unavailable" should look
+      like -- recolouring would say "different", not "faded".
+
+      Guards every edge case (nil canvas/Collection, bad index) so it never raises. }
+    procedure Draw(ACanvas: TCanvas; AX, AY, AIndex: Integer;
+      AEnabled: Boolean = True);
+    { The size-carrying form: (AIndex, AX, AY, ASizePx), as Draw used to be. Renamed so
+      that the two orders cannot be confused -- paint code in this library needs an
+      explicit pixel size (it scales with DPI and with the row height), and LCL's Draw
+      has nowhere to put one. AGhosted is the NEGATION of Draw's AEnabled, kept in that
+      polarity because that is what the callers upstream of it carry. }
+    procedure DrawIndex(ACanvas: TCanvas; AIndex, AX, AY, ASizePx: Integer;
       AGhosted: Boolean = False);
   published
     { The raster image source. Setting it registers a FreeNotification so the
@@ -637,7 +654,15 @@ begin
   Result := FCollection.GetCachedBitmap(nm, ASizePx);
 end;
 
-procedure TTyVirtualImageList.Draw(ACanvas: TCanvas; AIndex, AX, AY, ASizePx: Integer;
+procedure TTyVirtualImageList.Draw(ACanvas: TCanvas; AX, AY, AIndex: Integer;
+  AEnabled: Boolean);
+begin
+  // The one place the two polarities meet. Named here rather than at each call site so
+  // there is exactly one `not` to get wrong, and it is under a test.
+  DrawIndex(ACanvas, AIndex, AX, AY, FDefaultSize, not AEnabled);
+end;
+
+procedure TTyVirtualImageList.DrawIndex(ACanvas: TCanvas; AIndex, AX, AY, ASizePx: Integer;
   AGhosted: Boolean);
 var
   bmp, dim: TBGRABitmap;

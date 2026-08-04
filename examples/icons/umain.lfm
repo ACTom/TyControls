@@ -85,6 +85,7 @@ object MainForm: TMainForm
       Height = 100
       Top = 74
       Width = 120
+      Center = True
       Transparent = False
     end
     object Cap4: TTyLabel
@@ -107,7 +108,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 186
       Width = 290
-      Caption = 'Transparent: left True (default, no surface) · right False'
+      Caption = 'Transparent: left True (no surface) · right False (default)'
     end
     object Img4: TTyImage
       Left = 16
@@ -115,6 +116,7 @@ object MainForm: TMainForm
       Top = 208
       Width = 120
       Proportional = True
+      Transparent = True
     end
     object Img7: TTyImage
       Left = 152

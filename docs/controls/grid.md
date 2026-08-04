@@ -58,6 +58,20 @@ end;
 | `OnGetRowHeight` | 逐行行高。**接了它才启用可变行高**;不接则全表等高,几何层走整除快路径(百万行时省下一个百万项的前缀和数组) |
 | `SortKind` | `gskText` 还是 `gskNumber`。数值列用文本排会得到 `'10' < '9'` |
 | `DefaultEditorKind` | 默认编辑器种类,见下表 |
+| `DefaultColWidth` | 新建列的宽度(`InsertColumn` / `InsertCols` 用它起宽)。不设时跟着主题的 `--column-width` 走,与 `DefaultRowHeight` 同一套规则。**不追溯改已有列** |
+| `ColWidths[列]` | 列宽(逻辑像素),`RowHeights[行]` 的列轴对偶。写入的钳制与拖动改宽完全一样 |
+| `GridWidth` / `GridHeight` | 全部列 / 全部行加起来有多大(设备像素)。用来判断内容有没有溢出,或者把面板收到刚好包住表格 |
+| `LeftCol` / `TopRow` | 视口左上角那一格(列下标 / **显示位置**)。可读可写;写它只挪视野,**不动光标**——这正是它相对 `ScrollIntoView` 的价值 |
+| `VisibleColCount` | 视口里现在装得下几列,`VisibleRowCount` 的列轴对偶 |
+| `AutoFillColumns` | 让**每一列**分掉多余的宽度,按各自的 `SizePriority` 加权。与 `hoAutoResize` + `AutoSizeIndex` 的区别:那一对只让**指定的一列**吸收剩余宽度 |
+| `ScrollBars` | `ssNone` / `ssHorizontal` / `ssVertical` / `ssBoth` / `ssAuto*`。存储仍是 `VertScrollBarMode` / `HorzScrollBarMode` 那一对(现已 published),这个是 LCL 同名同类型的视图 |
+| `ShowFocusCell` / `FocusRectVisible` | 焦点格要不要画外框(同一个存储,后者是 LCL 的名字)。**现已 published** |
+| `HideSelectionWhenInactive` / `FadeUnfocusedSelection` | 失去焦点时选区变淡(同上)。**现已 published** |
+| `Modified` | 自建表 / 上次装载以来有没有被改过。收口在 `Cells[]` 与结构性增删行,所以粘贴、填充柄、撤销、勾选框、CSV 装载都算数。存过盘之后宿主自己写 `False` 复位 |
+| `EditorMode` | 开/关编辑器的**一个布尔**(读 = `Editing`;写 `False` 是**提交**,不是丢弃)。工具栏按钮要绑的就是它 |
+| `InplaceEditor` | 此刻真正在用的编辑器(没在编辑时 nil)。注意 `Editor` 恒指内建的那个 `TTyEdit`,哪怕当前编辑的是下拉列表格 |
+| `SelectedColumn` | 光标所在那一列的列对象 |
+| `RangeSelectMode` | `rsmMulti`(默认,= 从前的行为)/ `rsmSingle`。**默认与 LCL 不同**是有意的:本库一直无条件支持离散多选,改默认会从每个既有窗体上悄悄拿掉一个功能 |
 
 ### 编辑器种类
 
@@ -259,12 +273,17 @@ TyGridButton                按钮单元格(:hover / :active)
   不会像别的同名冲突那样悄悄跑错;而这个属性已经流进了 .lfm,改名要拿"零安全收益"
   去换掉所有现存窗体。虚线格线是**功能请求**,不是改名 —— 格线现在是 BGRA 上的
   `FillRect`,根本没有笔。
-- 表头自绘钩子 `OnGetHeaderStyle`;列头图标走 `TTyGridColumn.ImageIndex` + `Images`
+- 表头自绘钩子 `OnGetHeaderStyle`;列头图标走 `TTyGridColumn.ImageIndex` + `Images`,
+  `Header.Images` 有货时**它优先**(覆盖关系,与 `TTyListView` 同一套规则)
+- 逐列的外观:`TTyGridColumn.Color`(整列底色)、`Layout`(整列**垂直**对齐;
+  `Alignment` 管水平)。这两个都能在设计器里设 —— 从前只能写 `OnGetCellStyle` 事件代码
 
 ### 表头
 - 分组表头 `HeaderGroups`(横跨若干相邻列的上层标题)+ `GroupHeaderHeight`
 - 排序/筛选按钮**只在叶子级** —— 点分组标题不会把下面某一列排序掉
 - 拖列宽 / 拖动重排 / 双击分隔线自适应列宽
+- `hoHotTrack` 会让鼠标底下那一段列头点亮(主题键 `TyGridHeaderSection:hover`)。
+  这个标志一直是 published 的,而网格从前**根本没读过它**
 - 正在过滤的列漏斗**点亮**;多列排序时表头显示顺位徽标
 
 ### 数据与交互
@@ -284,13 +303,30 @@ TyGridButton                按钮单元格(:hover / :active)
   `MoveRow` / `SwapRows` / `MoveColumn`
 - 剪贴板:复制 / 剪切 / **智能粘贴**(按剪贴板块大小自动扩行扩列),
   事件族 `OnClipboardCopy/Paste` / `OnBeforePasteCell` / `OnAfterPasteCell`
-- CSV 往返(引号内的换行不会串数据)
+- CSV 往返(引号内的换行不会串数据)。可选项对标 LCL:
+  `AWriteTitles` / `AUseTitles`(表头行可有可无)、
+  `AVisibleColumnsOnly`(**跳过隐藏列** —— 用户藏起来的列不该被导出去)、
+  `ASkipEmptyLines`(空行不再变成幻影空行)。后两个默认关,保持既有行为
+- 整表持久化:`SaveToStream` / `LoadFromStream` 与 `SaveToFile` / `LoadFromFile`
+  存的是**整张表**(结构 + 内容 + 光标/选区/滚动位置);只要 CSV 请用
+  `SaveToCSVStream` / `LoadFromCSVStream`
+- `Clear` = 行、列、内容一起没(LCL 语义)。只清内容请用 `ClearCells`;
+  只清一段用 `ClearRowContents` / `ClearColContents`
+- `HideSortArrow` 只熄掉表头的排序指示器,**一行都不重排** ——
+  接服务端排序时用它;`ClearSortColumns` 与 `SortByColumn(-1)` 会把顺序退回去
+- 逐列勾选词汇 `TTyGridColumn.ValueChecked` / `ValueUnchecked`:
+  一张 `'Y'`/`'N'` 的表被点一下勾选框,从前会被写进一个 `'1'` ——
+  宿主的数据词汇被控件换掉了。两个都留空时行为与从前逐字节相同
 
 ### 选择
 - `SelectAll` / `SelectRange` / `SelectRows` / `ClearSelection` /
   `Selection`(**可读可写**:存下来的矩形直接赋回去即可恢复;全负矩形 = 取消选区,
   与 LCL 一致)/ `SelectedCellCount` + `OnSelectionChanged`
 - 离散多选(Ctrl+点)、拖选、`SelectionMode`(格 / 行 / 列)
+- 离散多选**能枚举**了:`SelectedRangeCount` / `SelectedRange[i]` / `HasMultiSelection`
+  (索引 0 恒为活动矩形)。从前对外只有 `Selection`,而它只给最后那一块 ——
+  宿主遍历"选区"会静默丢掉前面几片
+- `ClearSelections` 是 `ClearSelection` 的 LCL 拼法(复数),同义
 - 选区聚合 `SelectionSum` / `Avg` / `Min` / `Max`(非数值格跳过)
 - 给整个选区上色:`SetSelectionColor` / `SetSelectionTextColor`(传 0 = 清除,
   返回改了几格)。**别自己写循环** —— 遍历选区要走显示序、跳过分组行、按数据行
@@ -338,6 +374,11 @@ TyGridButton                按钮单元格(:hover / :active)
   (从前只有 `gekColor` 编辑器、没有显示侧,那一列看起来就是一串没格式化的脏数据)
 - 换行 `WordWrap` + `OnGetCellWordWrap`;行高三件套(可写 `RowHeights[]`、
   拖行分隔线、`AutoFitRow` / `AutoFitRows`)+ 全局上下限
+
+### 视口
+- `OnTopLeftChanged` —— 视口左上角换格时触发。在此之前网格**没有任何**滚动通知,
+  两个表格同步滚动 / 按可视窗口取数 / 记住滚到哪儿都只能轮询
+- 按**格**触发而不按像素:我们是平滑的像素滚动,滚三个像素并不换行
 
 ### 事件
 单元格级鼠标(`OnClickCell` / `OnDblClickCell` / `OnRightClickCell` / `OnCanClickCell`)、

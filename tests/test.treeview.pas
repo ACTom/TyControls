@@ -183,7 +183,7 @@ type
   { ③d B1: variable per-node row height (toVariableNodeHeight + OnMeasureItem +
     NodeHeight[]). A flat 12-child tree whose OnMeasureItem returns
     18 + 6*(Index mod 3) → heights cycle 18/24/30. Verifies the ③a height
-    invariant holds with variable heights, GetNodeAt lands on the right node,
+    invariant holds with variable heights, GetNodeAtOffset lands on the right node,
     NodeHeight[] override bumps TotalHeight by the delta, default-off == ③c, and
     the invariant survives HiDPI (logical units). }
   TTreeB1VariableHeightTest = class(TTestCase)
@@ -206,8 +206,8 @@ type
     procedure TestTotalHeightSumsVariableHeights;
     { SumVisibleHeights (the ③a invariant helper) agrees with RootNode.TotalHeight }
     procedure TestInvariantHelperAgrees;
-    { GetNodeAt(y) lands on the correct node across the varied heights }
-    procedure TestGetNodeAtAcrossVariedHeights;
+    { GetNodeAtOffset(y) lands on the correct node across the varied heights }
+    procedure TestGetNodeAtOffsetAcrossVariedHeights;
     { NodeHeight[node] := 40 bumps TotalHeight by (40 - oldHeight); reads back 40 }
     procedure TestSetNodeHeightUpdatesTotal;
     { default off (no toVariableNodeHeight) → every node = DefaultNodeHeight (== ③c) }
@@ -1796,10 +1796,10 @@ begin
   end;
 end;
 
-{ ── B2 ── GetNodeAt(Y) cross-check vs linear walk ────────────────────────── }
+{ ── B2 ── GetNodeAtOffset(Y) cross-check vs linear walk ────────────────────────── }
 
 type
-  TTreeGetNodeAtTest = class(TTestCase)
+  TTreeGetNodeAtOffsetTest = class(TTestCase)
   private
     { Multi-level test tree layout (all nodes have DefaultNodeHeight=18):
         Root (hidden)
@@ -1829,23 +1829,23 @@ type
     function  LinearGetNodeAt(T: TTyTreeView; Y: Integer; out ANodeTop: Integer): PTyTreeNode;
   published
     { Exact-node tests: known (node, top) pairs. }
-    procedure TestGetNodeAtKnownNodes;
-    { Boundary: GetNodeAt(top + NodeHeight - 1) still returns the same node;
-                GetNodeAt(top + NodeHeight)     returns the NEXT visible node. }
-    procedure TestGetNodeAtBoundaries;
+    procedure TestGetNodeAtOffsetKnownNodes;
+    { Boundary: GetNodeAtOffset(top + NodeHeight - 1) still returns the same node;
+                GetNodeAtOffset(top + NodeHeight)     returns the NEXT visible node. }
+    procedure TestGetNodeAtOffsetBoundaries;
     { Cross-check against linear walk for EVERY Y from 0 to (visibleHeight + margin). }
-    procedure TestGetNodeAtCrossCheckVsLinearWalk;
+    procedure TestGetNodeAtOffsetCrossCheckVsLinearWalk;
     { Edge cases: Y<0 and Y past end return nil. }
-    procedure TestGetNodeAtNegativeAndPastEnd;
+    procedure TestGetNodeAtOffsetNegativeAndPastEnd;
     { Collapsed subtree is correctly skipped. }
-    procedure TestGetNodeAtSkipsCollapsedSubtree;
-    { Empty tree: GetNodeAt(0) returns nil. }
-    procedure TestGetNodeAtEmptyTree;
+    procedure TestGetNodeAtOffsetSkipsCollapsedSubtree;
+    { Empty tree: GetNodeAtOffset(0) returns nil. }
+    procedure TestGetNodeAtOffsetEmptyTree;
   end;
 
-{ ── TTreeGetNodeAtTest helpers ────────────────────────────────────────────── }
+{ ── TTreeGetNodeAtOffsetTest helpers ────────────────────────────────────────────── }
 
-function TTreeGetNodeAtTest.BuildTree: TTyTreeView;
+function TTreeGetNodeAtOffsetTest.BuildTree: TTyTreeView;
 var
   t: TTyTreeView;
 begin
@@ -1900,7 +1900,7 @@ begin
   Result := t;
 end;
 
-function TTreeGetNodeAtTest.LinearGetNodeAt(T: TTyTreeView; Y: Integer;
+function TTreeGetNodeAtOffsetTest.LinearGetNodeAt(T: TTyTreeView; Y: Integer;
   out ANodeTop: Integer): PTyTreeNode;
 { Walk all screen-order visible nodes, accumulating NodeHeight, and return
   the one whose [accTop, accTop+NodeHeight) contains Y. }
@@ -1928,9 +1928,9 @@ begin
   { Y is past the end — return nil }
 end;
 
-{ ── TTreeGetNodeAtTest published tests ───────────────────────────────────── }
+{ ── TTreeGetNodeAtOffsetTest published tests ───────────────────────────────────── }
 
-procedure TTreeGetNodeAtTest.TestGetNodeAtKnownNodes;
+procedure TTreeGetNodeAtOffsetTest.TestGetNodeAtOffsetKnownNodes;
 { Verify exact (node, top) pairs for the constructed tree.
   Tree layout (NodeHeight = 18 each):
     A0       top=0
@@ -1952,47 +1952,47 @@ var
 begin
   t := BuildTree;
   try
-    node := t.GetNodeAt(0, nodeTop);
+    node := t.GetNodeAtOffset(0, nodeTop);
     AssertEquals('A0 top=0: nodeTop', 0, nodeTop);
     AssertEquals('A0 top=0: node', PtrUInt(FA0), PtrUInt(node));
 
-    node := t.GetNodeAt(18, nodeTop);
+    node := t.GetNodeAtOffset(18, nodeTop);
     AssertEquals('A0C0 top=18: nodeTop', 18, nodeTop);
     AssertEquals('A0C0 top=18: node', PtrUInt(FA0C0), PtrUInt(node));
 
-    node := t.GetNodeAt(36, nodeTop);
+    node := t.GetNodeAtOffset(36, nodeTop);
     AssertEquals('A0C1 top=36: nodeTop', 36, nodeTop);
     AssertEquals('A0C1 top=36: node', PtrUInt(FA0C1), PtrUInt(node));
 
-    node := t.GetNodeAt(54, nodeTop);
+    node := t.GetNodeAtOffset(54, nodeTop);
     AssertEquals('A0C1G0 top=54: nodeTop', 54, nodeTop);
     AssertEquals('A0C1G0 top=54: node', PtrUInt(FA0C1G0), PtrUInt(node));
 
-    node := t.GetNodeAt(72, nodeTop);
+    node := t.GetNodeAtOffset(72, nodeTop);
     AssertEquals('A0C1G1 top=72: nodeTop', 72, nodeTop);
     AssertEquals('A0C1G1 top=72: node', PtrUInt(FA0C1G1), PtrUInt(node));
 
-    node := t.GetNodeAt(90, nodeTop);
+    node := t.GetNodeAtOffset(90, nodeTop);
     AssertEquals('A0C2 top=90: nodeTop', 90, nodeTop);
     AssertEquals('A0C2 top=90: node', PtrUInt(FA0C2), PtrUInt(node));
 
-    node := t.GetNodeAt(108, nodeTop);
+    node := t.GetNodeAtOffset(108, nodeTop);
     AssertEquals('A1 top=108: nodeTop', 108, nodeTop);
     AssertEquals('A1 top=108: node', PtrUInt(FA1), PtrUInt(node));
 
-    node := t.GetNodeAt(126, nodeTop);
+    node := t.GetNodeAtOffset(126, nodeTop);
     AssertEquals('A2 top=126: nodeTop', 126, nodeTop);
     AssertEquals('A2 top=126: node', PtrUInt(FA2), PtrUInt(node));
 
-    node := t.GetNodeAt(144, nodeTop);
+    node := t.GetNodeAtOffset(144, nodeTop);
     AssertEquals('A2C0 top=144: nodeTop', 144, nodeTop);
     AssertEquals('A2C0 top=144: node', PtrUInt(FA2C0), PtrUInt(node));
 
-    node := t.GetNodeAt(162, nodeTop);
+    node := t.GetNodeAtOffset(162, nodeTop);
     AssertEquals('A2C1 top=162: nodeTop', 162, nodeTop);
     AssertEquals('A2C1 top=162: node', PtrUInt(FA2C1), PtrUInt(node));
 
-    node := t.GetNodeAt(180, nodeTop);
+    node := t.GetNodeAtOffset(180, nodeTop);
     AssertEquals('A3 top=180: nodeTop', 180, nodeTop);
     AssertEquals('A3 top=180: node', PtrUInt(FA3), PtrUInt(node));
   finally
@@ -2000,10 +2000,10 @@ begin
   end;
 end;
 
-procedure TTreeGetNodeAtTest.TestGetNodeAtBoundaries;
-{ GetNodeAt(top)                returns node with ANodeTop=top
-  GetNodeAt(top + NodeHeight-1) returns the same node
-  GetNodeAt(top + NodeHeight)   returns the NEXT visible node }
+procedure TTreeGetNodeAtOffsetTest.TestGetNodeAtOffsetBoundaries;
+{ GetNodeAtOffset(top)                returns node with ANodeTop=top
+  GetNodeAtOffset(top + NodeHeight-1) returns the same node
+  GetNodeAtOffset(top + NodeHeight)   returns the NEXT visible node }
 var
   t: TTyTreeView;
   node: PTyTreeNode;
@@ -2012,34 +2012,34 @@ begin
   t := BuildTree;
   try
     { A0C1 is at top=36, NodeHeight=18 → spans [36, 54) }
-    node := t.GetNodeAt(36, nodeTop);
-    AssertEquals('A0C1: GetNodeAt(36) nodeTop', 36, nodeTop);
-    AssertEquals('A0C1: GetNodeAt(36) node', PtrUInt(FA0C1), PtrUInt(node));
+    node := t.GetNodeAtOffset(36, nodeTop);
+    AssertEquals('A0C1: GetNodeAtOffset(36) nodeTop', 36, nodeTop);
+    AssertEquals('A0C1: GetNodeAtOffset(36) node', PtrUInt(FA0C1), PtrUInt(node));
 
-    node := t.GetNodeAt(53, nodeTop);  { 36 + 18 - 1 }
-    AssertEquals('A0C1: GetNodeAt(53) nodeTop', 36, nodeTop);
-    AssertEquals('A0C1: GetNodeAt(53) node', PtrUInt(FA0C1), PtrUInt(node));
+    node := t.GetNodeAtOffset(53, nodeTop);  { 36 + 18 - 1 }
+    AssertEquals('A0C1: GetNodeAtOffset(53) nodeTop', 36, nodeTop);
+    AssertEquals('A0C1: GetNodeAtOffset(53) node', PtrUInt(FA0C1), PtrUInt(node));
 
-    node := t.GetNodeAt(54, nodeTop);  { 36 + 18 = next node top }
-    AssertEquals('A0C1G0: GetNodeAt(54) nodeTop', 54, nodeTop);
-    AssertEquals('A0C1G0: GetNodeAt(54) node', PtrUInt(FA0C1G0), PtrUInt(node));
+    node := t.GetNodeAtOffset(54, nodeTop);  { 36 + 18 = next node top }
+    AssertEquals('A0C1G0: GetNodeAtOffset(54) nodeTop', 54, nodeTop);
+    AssertEquals('A0C1G0: GetNodeAtOffset(54) node', PtrUInt(FA0C1G0), PtrUInt(node));
 
     { A1 is at top=108 (collapsed), spans [108, 126); next visible is A2 at 126 }
-    node := t.GetNodeAt(125, nodeTop);
-    AssertEquals('A1: GetNodeAt(125) nodeTop', 108, nodeTop);
-    AssertEquals('A1: GetNodeAt(125) node', PtrUInt(FA1), PtrUInt(node));
+    node := t.GetNodeAtOffset(125, nodeTop);
+    AssertEquals('A1: GetNodeAtOffset(125) nodeTop', 108, nodeTop);
+    AssertEquals('A1: GetNodeAtOffset(125) node', PtrUInt(FA1), PtrUInt(node));
 
-    node := t.GetNodeAt(126, nodeTop);
-    AssertEquals('A2: GetNodeAt(126) nodeTop', 126, nodeTop);
-    AssertEquals('A2: GetNodeAt(126) node', PtrUInt(FA2), PtrUInt(node));
+    node := t.GetNodeAtOffset(126, nodeTop);
+    AssertEquals('A2: GetNodeAtOffset(126) nodeTop', 126, nodeTop);
+    AssertEquals('A2: GetNodeAtOffset(126) node', PtrUInt(FA2), PtrUInt(node));
   finally
     t.Free;
   end;
 end;
 
-procedure TTreeGetNodeAtTest.TestGetNodeAtCrossCheckVsLinearWalk;
+procedure TTreeGetNodeAtOffsetTest.TestGetNodeAtOffsetCrossCheckVsLinearWalk;
 { THE KEY TEST: for every Y from 0 to (visibleHeight + 18 margin), assert that
-  GetNodeAt(Y) returns exactly the same (node, nodeTop) as a linear walk. }
+  GetNodeAtOffset(Y) returns exactly the same (node, nodeTop) as a linear walk. }
 var
   t: TTyTreeView;
   y, fastTop, linearTop: Integer;
@@ -2054,14 +2054,14 @@ begin
 
     for y := 0 to visH + 18 do
     begin
-      fastNode   := t.GetNodeAt(y, fastTop);
+      fastNode   := t.GetNodeAtOffset(y, fastTop);
       linearNode := LinearGetNodeAt(t, y, linearTop);
 
       if fastNode <> linearNode then
-        Fail(Format('Y=%d: GetNodeAt returns $%x but linear walk returns $%x',
+        Fail(Format('Y=%d: GetNodeAtOffset returns $%x but linear walk returns $%x',
                     [y, PtrUInt(fastNode), PtrUInt(linearNode)]));
       if fastTop <> linearTop then
-        Fail(Format('Y=%d: GetNodeAt nodeTop=%d but linear walk nodeTop=%d',
+        Fail(Format('Y=%d: GetNodeAtOffset nodeTop=%d but linear walk nodeTop=%d',
                     [y, fastTop, linearTop]));
     end;
   finally
@@ -2069,7 +2069,7 @@ begin
   end;
 end;
 
-procedure TTreeGetNodeAtTest.TestGetNodeAtNegativeAndPastEnd;
+procedure TTreeGetNodeAtOffsetTest.TestGetNodeAtOffsetNegativeAndPastEnd;
 var
   t: TTyTreeView;
   node: PTyTreeNode;
@@ -2077,17 +2077,17 @@ var
 begin
   t := BuildTree;
   try
-    node := t.GetNodeAt(-1, nodeTop);
-    AssertNull('GetNodeAt(-1) = nil', node);
+    node := t.GetNodeAtOffset(-1, nodeTop);
+    AssertNull('GetNodeAtOffset(-1) = nil', node);
 
-    node := t.GetNodeAt(100000, nodeTop);
-    AssertNull('GetNodeAt(hugeY) = nil', node);
+    node := t.GetNodeAtOffset(100000, nodeTop);
+    AssertNull('GetNodeAtOffset(hugeY) = nil', node);
   finally
     t.Free;
   end;
 end;
 
-procedure TTreeGetNodeAtTest.TestGetNodeAtSkipsCollapsedSubtree;
+procedure TTreeGetNodeAtOffsetTest.TestGetNodeAtOffsetSkipsCollapsedSubtree;
 { A Y just past A1 (collapsed at top=108) must land on A2 (top=126), NOT on one
   of A1's hidden children. }
 var
@@ -2098,7 +2098,7 @@ begin
   t := BuildTree;
   try
     { A1 spans [108, 126); Y=126 is A2, not A1's hidden child }
-    node := t.GetNodeAt(126, nodeTop);
+    node := t.GetNodeAtOffset(126, nodeTop);
     AssertEquals('Y=126 lands on A2, not a hidden child of A1',
                  PtrUInt(FA2), PtrUInt(node));
     AssertEquals('A2 nodeTop=126', 126, nodeTop);
@@ -2110,7 +2110,7 @@ begin
   end;
 end;
 
-procedure TTreeGetNodeAtTest.TestGetNodeAtEmptyTree;
+procedure TTreeGetNodeAtOffsetTest.TestGetNodeAtOffsetEmptyTree;
 var
   t: TTyTreeView;
   node: PTyTreeNode;
@@ -2118,8 +2118,8 @@ var
 begin
   t := TTyTreeView.Create(nil);
   try
-    node := t.GetNodeAt(0, nodeTop);
-    AssertNull('empty tree: GetNodeAt(0) = nil', node);
+    node := t.GetNodeAtOffset(0, nodeTop);
+    AssertNull('empty tree: GetNodeAtOffset(0) = nil', node);
   finally
     t.Free;
   end;
@@ -2130,10 +2130,10 @@ end;
 type
   TTreePerfTest = class(TTestCase)
   private
-    { Linear-walk helper (reused from TTreeGetNodeAtTest). }
+    { Linear-walk helper (reused from TTreeGetNodeAtOffsetTest). }
     function LinearGetNodeAt(T: TTyTreeView; Y: Integer; out ANodeTop: Integer): PTyTreeNode;
   published
-    { PERFORMANCE INVARIANT: a flat 200k-node tree, GetNodeAt near the END of the
+    { PERFORMANCE INVARIANT: a flat 200k-node tree, GetNodeAtOffset near the END of the
       list must visit ≤ TREE_CACHE_STEP + small constant nodes, NOT ~200k.
       This proves the binary-search cache bounds the per-call scan.
 
@@ -2142,20 +2142,20 @@ type
       Each node: NodeHeight=18, nsVisible set, not expandable → total visible height = 200k×18.
 
       We query a Y near the END (node 199_000's top = 199_000 × 18 = 3_582_000 px).
-      Without the cache, GetNodeAt would scan ~199_000 nodes linearly.
+      Without the cache, GetNodeAtOffset would scan ~199_000 nodes linearly.
       With TREE_CACHE_STEP=2000, it starts from mark floor(199_000/2000)=99 and
       then scans at most 2000 nodes → visits ≤ 2000+small.
 
       Building 200k nodes takes ~100ms headlessly; well within test budget. }
     procedure TestFlatTree200kCacheBoundsVisits;
 
-    { CORRECTNESS SPOT-CHECK: a few GetNodeAt queries on the 200k tree must return
+    { CORRECTNESS SPOT-CHECK: a few GetNodeAtOffset queries on the 200k tree must return
       the correct node (verified against a short local linear walk — we do NOT
       linearly scan 200k for every query). }
     procedure TestFlatTree200kCorrectness;
 
     { INVALIDATION: after Clear, the cache is dirty; after re-adding nodes,
-      ValidateCache rebuilds and GetNodeAt still works correctly. }
+      ValidateCache rebuilds and GetNodeAtOffset still works correctly. }
     procedure TestCacheInvalidatesOnClear;
   end;
 
@@ -2207,7 +2207,7 @@ begin
     { Y for node at QUERY_INDEX (0-based): QUERY_INDEX × DefaultNodeHeight }
     queryY := QUERY_INDEX * t.DefaultNodeHeight;
 
-    node   := t.GetNodeAt(queryY, nodeTop);
+    node   := t.GetNodeAtOffset(queryY, nodeTop);
     visits := t.LastGetNodeAtVisits;
 
     AssertTrue('node found (not nil)', node <> nil);
@@ -2229,7 +2229,7 @@ begin
 end;
 
 procedure TTreePerfTest.TestFlatTree200kCorrectness;
-{ Spot-check: a few GetNodeAt queries at known Y values return the right node
+{ Spot-check: a few GetNodeAtOffset queries at known Y values return the right node
   (confirmed by cross-checking against a short local linear walk).
   We test a node near the START, MIDDLE, and END of the 200k list. }
 const
@@ -2242,9 +2242,9 @@ var
   procedure Check(idx: Integer; const tag: string);
   begin
     queryY     := idx * t.DefaultNodeHeight;
-    fastNode   := t.GetNodeAt(queryY, fastTop);
+    fastNode   := t.GetNodeAtOffset(queryY, fastTop);
     linearNode := LinearGetNodeAt(t, queryY, linearTop);
-    AssertTrue(tag + ': GetNodeAt non-nil', fastNode <> nil);
+    AssertTrue(tag + ': GetNodeAtOffset non-nil', fastNode <> nil);
     if fastNode <> linearNode then
       Fail(Format('%s: node mismatch at idx=%d Y=%d', [tag, idx, queryY]));
     if fastTop <> linearTop then
@@ -2270,8 +2270,8 @@ end;
 
 procedure TTreePerfTest.TestCacheInvalidatesOnClear;
 { After structural changes (Clear + re-add), FCacheValid must be False,
-  so ValidateCache rebuilds on the next GetNodeAt.
-  We verify GetNodeAt still returns correct results after rebuild. }
+  so ValidateCache rebuilds on the next GetNodeAtOffset.
+  We verify GetNodeAtOffset still returns correct results after rebuild. }
 const
   NODE_COUNT = 5000;
 var
@@ -2285,7 +2285,7 @@ begin
     t.RootNodeCount := NODE_COUNT;
 
     { First query — builds cache }
-    node := t.GetNodeAt(0, nodeTop);
+    node := t.GetNodeAtOffset(0, nodeTop);
     AssertTrue('first query: node found', node <> nil);
 
     { Clear invalidates the cache; RangeY = ContentHeight = TotalHeight - NodeHeight.
@@ -2294,12 +2294,12 @@ begin
     AssertEquals('after Clear: RangeY = ContentHeight (= 0 when tree empty)',
                  Integer(t.RootNode^.TotalHeight) - Integer(t.RootNode^.NodeHeight),
                  t.RangeY);
-    node := t.GetNodeAt(0, nodeTop);
-    AssertNull('after Clear: GetNodeAt(0) = nil (empty)', node);
+    node := t.GetNodeAtOffset(0, nodeTop);
+    AssertNull('after Clear: GetNodeAtOffset(0) = nil (empty)', node);
 
     { Add nodes back → cache rebuilds }
     t.RootNodeCount := NODE_COUNT;
-    node := t.GetNodeAt((NODE_COUNT - 1) * t.DefaultNodeHeight, nodeTop);
+    node := t.GetNodeAtOffset((NODE_COUNT - 1) * t.DefaultNodeHeight, nodeTop);
     AssertTrue('after re-add: last node found', node <> nil);
     AssertEquals('after re-add: nodeTop correct',
                  (NODE_COUNT - 1) * t.DefaultNodeHeight, nodeTop);
@@ -2404,7 +2404,7 @@ begin
     t.OnChange   := @OnChange;
     t.RootNodeCount := 3;
     n := t.RootNode^.FirstChild;
-    t.Selected[n] := True;
+    t.NodeSelected[n] := True;
     AssertTrue ('nsSelected set on node', nsSelected in n^.States);
     AssertEquals('OnChange fired once', 1, FOnChangeCount);
     AssertEquals('OnChange passed correct node', PtrUInt(n), PtrUInt(FOnChangeLastNode));
@@ -2424,9 +2424,9 @@ begin
     t.OnChange   := @OnChange;
     t.RootNodeCount := 3;
     n := t.RootNode^.FirstChild;
-    t.Selected[n] := True;   // first selection
+    t.NodeSelected[n] := True;   // first selection
     FOnChangeCount := 0;     // reset
-    t.Selected[n] := True;   // re-select same node → should fire nothing
+    t.NodeSelected[n] := True;   // re-select same node → should fire nothing
     AssertEquals('no OnChange on re-select of same node', 0, FOnChangeCount);
     AssertTrue ('nsSelected still set', nsSelected in n^.States);
   finally
@@ -2446,11 +2446,11 @@ begin
     t.RootNodeCount := 3;
     n1 := t.RootNode^.FirstChild;
     n2 := n1^.NextSibling;
-    t.Selected[n1] := True;
+    t.NodeSelected[n1] := True;
     AssertTrue ('n1 selected', nsSelected in n1^.States);
     FOnChangeCount := 0;
     // Selecting n2 must clear n1 (single-select) and fire OnChange once.
-    t.Selected[n2] := True;
+    t.NodeSelected[n2] := True;
     AssertFalse('n1 deselected after selecting n2', nsSelected in n1^.States);
     AssertTrue ('n2 now selected', nsSelected in n2^.States);
     AssertEquals('OnChange fired exactly once for the transition', 1, FOnChangeCount);
@@ -2495,7 +2495,7 @@ begin
     t.OnChange   := @OnChange;
     t.RootNodeCount := 3;
     n := t.RootNode^.FirstChild;
-    t.Selected[n] := True;
+    t.NodeSelected[n] := True;
     FOnChangeCount := 0;
     t.ClearSelection;
     AssertFalse('nsSelected cleared', nsSelected in n^.States);
@@ -3071,8 +3071,13 @@ var
 begin
   Tree := BuildPaintTree(Ctl, F, @OnGetText, @OnInitNode, @OnInitChildren);
   try
+    { HideSelection defaults True (LCL's default, comctrls.pp:3656) and a headless
+      control is never Focused, so the highlight would correctly be suppressed here.
+      This test is about the ACTIVE selection fill; the inactive behaviour has its own
+      guards in test.parity.treeview.pas. }
+    Tree.HideSelection := False;
     { Select node 0 }
-    Tree.Selected[Tree.RootNode^.FirstChild] := True;
+    Tree.NodeSelected[Tree.RootNode^.FirstChild] := True;
 
     Bgra := RenderTreeToBitmap(Tree, Bmp);
     try
@@ -3674,7 +3679,7 @@ end;
   Right-click must unconditionally move FocusedNode to the clicked node,
   even when the node is already selected.  This prevents a desync where
   FocusedNode and the visually-highlighted row differ after a programmatic
-  Selected[] assignment without focus.
+  NodeSelected[] assignment without focus.
 
   Setup: select n2 programmatically (no focus change), then right-click n2.
   Expected: FocusedNode = n2 after right-click.
@@ -3689,7 +3694,7 @@ begin
   t := BuildHitTestTree(n0, n0c0, n1, n2);
   try
     // Programmatically select n2 without moving focus
-    t.Selected[n2] := True;
+    t.NodeSelected[n2] := True;
     AssertTrue('n2 is selected', nsSelected in n2^.States);
     AssertTrue('FocusedNode is NOT n2 yet (selection only)', t.FocusedNode <> n2);
 
@@ -3832,8 +3837,8 @@ procedure TTreeHiDPITest.TestHitTestMatchesPaintAt144DPI;
   Its visual centre is device Y = 75.  GetNodeAtPoint must return the 3rd root
   child (the node RenderTo paints at that device Y).
 
-  Pre-fix:  absY = (75 - 0) + 0 = 75 → GetNodeAt returns node[3] (wrong).
-  Post-fix: absY = MulDiv(75, 96, 144) + 0 = 50 → GetNodeAt returns node[2] (correct). }
+  Pre-fix:  absY = (75 - 0) + 0 = 75 → GetNodeAtOffset returns node[3] (wrong).
+  Post-fix: absY = MulDiv(75, 96, 144) + 0 = 50 → GetNodeAtOffset returns node[2] (correct). }
 var
   Ctl: TTyStyleController;
   F: TForm;
@@ -4298,8 +4303,12 @@ var
 begin
   Tree := BuildColumnTree(Ctl, F);
   try
+    { See TestSelectedRowHasAccentBlue: HideSelection defaults True and a headless
+      control is never Focused, so the ACTIVE fill this test is about has to opt out
+      of the inactive-selection rule. }
+    Tree.HideSelection := False;
     { Select the root node (row 0) }
-    Tree.Selected[Tree.RootNode^.FirstChild] := True;
+    Tree.NodeSelected[Tree.RootNode^.FirstChild] := True;
 
     Bgra := RenderColumnTree(Tree, Bmp);
     try
@@ -5511,7 +5520,7 @@ type
     procedure TestE2_ExpandedChildLevelSorted;
     procedure TestE2_CollapsedBranchNotSorted;
     procedure TestE2_HeightInvariantAfterSortTree;
-    procedure TestE2_GetNodeAtConsistentAfterSort;
+    procedure TestE2_GetNodeAtOffsetConsistentAfterSort;
   end;
 
 procedure TTreeE2SortTreeTest.OnCompare(Sender: TTyTreeView;
@@ -5668,8 +5677,8 @@ begin
   end;
 end;
 
-procedure TTreeE2SortTreeTest.TestE2_GetNodeAtConsistentAfterSort;
-{ After SortTree, GetNodeAt(y) must return the same node as a manual visible-walk. }
+procedure TTreeE2SortTreeTest.TestE2_GetNodeAtOffsetConsistentAfterSort;
+{ After SortTree, GetNodeAtOffset(y) must return the same node as a manual visible-walk. }
 var
   t: TTyTreeView;
   A, B, C: PTyTreeNode;
@@ -5690,7 +5699,7 @@ begin
     for i := 0 to 2 do
     begin
       sampleY       := yList[i];
-      nodeFromCache := t.GetNodeAt(sampleY, nodeTop);
+      nodeFromCache := t.GetNodeAtOffset(sampleY, nodeTop);
       { Manual visible-order walk to find who owns sampleY }
       accTop        := 0;
       nodeFromWalk  := nil;
@@ -5705,7 +5714,7 @@ begin
         Inc(accTop, walk^.NodeHeight);
         walk := t.GetNextVisibleNoInit(walk);
       end;
-      AssertTrue('E2 GetNodeAt['+IntToStr(sampleY)+'] matches walk',
+      AssertTrue('E2 GetNodeAtOffset['+IntToStr(sampleY)+'] matches walk',
         nodeFromCache = nodeFromWalk);
     end;
   finally
@@ -6955,7 +6964,7 @@ begin
     AssertTrue('C1 mouse: FocusedNode unchanged (still nil)',
       t.FocusedNode = nil);
     AssertFalse('C1 mouse: node not selected',
-      t.Selected[n0]);
+      t.NodeSelected[n0]);
   finally F.Free; Ctl.Free; end;
 end;
 
@@ -7002,7 +7011,7 @@ begin
     t.Options := [];   { toCheckSupport off }
     t.MouseDown(mbLeft, [], 20, 10);
     AssertTrue('C1 click-no-check: node is focused/selected',
-      t.Selected[n0]);
+      t.NodeSelected[n0]);
   finally F.Free; Ctl.Free; end;
 end;
 
@@ -7792,7 +7801,7 @@ begin
   t := TTyTreeView.Create(nil);
   try
     n := t.AddChild(nil);
-    t.Selected[n] := True;
+    t.NodeSelected[n] := True;
     AssertEquals('count=1 before delete', 1, t.SelectedCount);
     t.DeleteNode(n);
     AssertEquals('FIX1: count=0 after delete', 0, t.SelectedCount);
@@ -8917,7 +8926,7 @@ begin
   end;
 end;
 
-procedure TTreeB1VariableHeightTest.TestGetNodeAtAcrossVariedHeights;
+procedure TTreeB1VariableHeightTest.TestGetNodeAtOffsetAcrossVariedHeights;
 var
   Ctl: TTyStyleController; F: TForm; t: TTyTreeView;
   node: PTyTreeNode;
@@ -8928,27 +8937,27 @@ begin
     ForceMeasureAll(t);
 
     { Walk the expected boundaries: child i occupies [accTop, accTop+ExpectedH(i)).
-      GetNodeAt at the top pixel and the last pixel of each band must land on
+      GetNodeAtOffset at the top pixel and the last pixel of each band must land on
       child i with ANodeTop = accTop. }
     accTop := 0;
     for i := 0 to 11 do
     begin
-      node := t.GetNodeAt(accTop, top);
-      AssertTrue('GetNodeAt(top of band ' + IntToStr(i) + ') non-nil', node <> nil);
-      AssertEquals('GetNodeAt(top) → child ' + IntToStr(i) + ' (by Index)',
+      node := t.GetNodeAtOffset(accTop, top);
+      AssertTrue('GetNodeAtOffset(top of band ' + IntToStr(i) + ') non-nil', node <> nil);
+      AssertEquals('GetNodeAtOffset(top) → child ' + IntToStr(i) + ' (by Index)',
         i, Integer(node^.Index));
-      AssertEquals('GetNodeAt(top) ANodeTop = band top', accTop, top);
+      AssertEquals('GetNodeAtOffset(top) ANodeTop = band top', accTop, top);
 
-      node := t.GetNodeAt(accTop + ExpectedH(i) - 1, top);
-      AssertEquals('GetNodeAt(bottom-1 of band ' + IntToStr(i) + ') → same child',
+      node := t.GetNodeAtOffset(accTop + ExpectedH(i) - 1, top);
+      AssertEquals('GetNodeAtOffset(bottom-1 of band ' + IntToStr(i) + ') → same child',
         i, Integer(node^.Index));
 
       Inc(accTop, ExpectedH(i));
     end;
 
     { One pixel past the last band → nil (past end). accTop now = 288. }
-    node := t.GetNodeAt(accTop, top);
-    AssertTrue('GetNodeAt past last band → nil', node = nil);
+    node := t.GetNodeAtOffset(accTop, top);
+    AssertTrue('GetNodeAtOffset past last band → nil', node = nil);
   finally
     F.Free; Ctl.Free;
   end;
@@ -9481,7 +9490,7 @@ initialization
   RegisterTest(TTreeDeleteTest);
   RegisterTest(TTreeLazyTest);
   RegisterTest(TTreeHeightInvariantTest);
-  RegisterTest(TTreeGetNodeAtTest);
+  RegisterTest(TTreeGetNodeAtOffsetTest);
   RegisterTest(TTreePerfTest);
   RegisterTest(TTreeC1Test);
   RegisterTest(TTreeC2Test);

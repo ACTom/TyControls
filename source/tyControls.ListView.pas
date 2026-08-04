@@ -2869,9 +2869,12 @@ begin
       drawing the icon without moving textLeft would just stamp it over the first
       characters, which reads as a rendering fault rather than as an icon.
       Drawn through DrawImage -- the same borrowed-from-cache blit every item icon uses.
-      Deliberately NOT TTyVirtualImageList.Draw: its last parameter is AGhosted, while
-      LCL's TCustomImageList.Draw carries Enabled in that slot with the OPPOSITE sense, so
-      a call written from LCL muscle memory compiles clean and inverts the result. }
+      Deliberately NOT TTyVirtualImageList.Draw: this path needs an explicit pixel SIZE,
+      which Draw does not take (DrawIndex is the size-carrying form), and DrawImage is the
+      allocation-free cache blit already on the hot path. Historical note, since the scar
+      is still worth carrying: Draw's flag used to be AGhosted while LCL's carries Enabled
+      in the same slot with the OPPOSITE sense, so a call written from LCL muscle memory
+      compiled clean and inverted the result. Draw now matches LCL's order and polarity. }
     if (icoList <> nil) and (col.ImageIndex >= 0) and (icoPx > 0)
        and (textLeft + icoPx <= cellR.Right) then
     begin

@@ -19,7 +19,10 @@ interface
 
 uses
   Classes, SysUtils, Graphics, BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Component, tyControls.IconFont;
+  tyControls.Types, tyControls.Component, tyControls.IconFont,
+  { for TyFadeBitmapAlpha / TyGhostedAlpha -- the library has ONE "unavailable" look
+    and both image lists must reach for the same one. }
+  tyControls.ImageCollection;
 
 type
   TTyGlyphImageList = class(TTyComponent)
@@ -47,9 +50,22 @@ type
       empty transparent bitmap of the requested size when IconFont is unset, AIndex
       is out of range, or ASizePx <= 0 (clamped to a 1px square). }
     function RenderIndex(AIndex: Integer; ASizePx: Integer; AColor: TTyColor): TBGRABitmap;
-    { Render item AIndex and paint it onto ACanvas at (AX, AY). Guards every edge
-      case (nil canvas/IconFont, bad index, ASizePx <= 0) so it never raises. }
-    procedure Draw(ACanvas: TCanvas; AIndex, AX, AY, ASizePx: Integer; AColor: TTyColor);
+    { Paint item AIndex onto ACanvas at (AX, AY) at DefaultSize in DefaultColor.
+
+      DELIBERATELY LCL's signature (imglist.pp:356), for the same reason as
+      TTyVirtualImageList.Draw: this method used to carry LCL's NAME with the index and
+      the coordinates transposed, so a ported `Images.Draw(C, X, Y, Idx)` compiled into
+      the wrong icon in the wrong place. The size/colour-carrying form is DrawIndex.
+
+      AEnabled=False draws the glyph dimmed -- Enabled, not Ghosted; the two are
+      negations and both are Booleans. Guards every edge case (nil canvas/IconFont, bad
+      index) so it never raises. }
+    procedure Draw(ACanvas: TCanvas; AX, AY, AIndex: Integer;
+      AEnabled: Boolean = True);
+    { The size- and colour-carrying form: (AIndex, AX, AY, ASizePx, AColor), as Draw
+      used to be. Renamed so the two argument orders cannot be confused. }
+    procedure DrawIndex(ACanvas: TCanvas; AIndex, AX, AY, ASizePx: Integer;
+      AColor: TTyColor);
   published
     { The glyph source. Setting it registers a FreeNotification so the reference is
       nil'd automatically if the font component is freed first. }
@@ -133,7 +149,24 @@ begin
     Result := FIconFont.RenderGlyph(gname, ASizePx, AColor);
 end;
 
-procedure TTyGlyphImageList.Draw(ACanvas: TCanvas; AIndex, AX, AY, ASizePx: Integer;
+procedure TTyGlyphImageList.Draw(ACanvas: TCanvas; AX, AY, AIndex: Integer;
+  AEnabled: Boolean);
+var
+  bmp: TBGRABitmap;
+begin
+  if ACanvas = nil then Exit;
+  bmp := RenderIndex(AIndex, FDefaultSize, FDefaultColor);
+  try
+    // Alpha only: a disabled glyph keeps its colour and loses its presence. Nothing is
+    // shared here (RenderIndex hands back an owned bitmap), so this fades in place.
+    if not AEnabled then TyFadeBitmapAlpha(bmp, TyGhostedAlpha);
+    bmp.Draw(ACanvas, AX, AY, False);
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TTyGlyphImageList.DrawIndex(ACanvas: TCanvas; AIndex, AX, AY, ASizePx: Integer;
   AColor: TTyColor);
 var
   bmp: TBGRABitmap;

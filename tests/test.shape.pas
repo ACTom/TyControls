@@ -15,7 +15,7 @@ type
     // ---- TyShapePolygon: vertex count per kind ----
     procedure TestTriangleHasThreePoints;
     procedure TestDiamondHasFourPoints;
-    procedure TestNonPolygonKindsAreEmpty;
+    procedure TestOnlyVertexKindsReturnAPolygon;
     // ---- TyShapePolygon: triangle geometry ----
     procedure TestTriangleApexTopCentre;
     procedure TestTriangleBaseCorners;
@@ -62,19 +62,30 @@ begin
   AssertEquals('diamond has exactly 4 vertices', 4, Length(poly));
 end;
 
-procedure TTyShapeGeomTest.TestNonPolygonKindsAreEmpty;
+procedure TTyShapeGeomTest.TestOnlyVertexKindsReturnAPolygon;
 var
   k: TTyShapeKind;
   poly: array of TPointF;
 begin
-  // Every kind EXCEPT triangle/diamond is drawn directly -> empty polygon.
+  { Renamed from TestNonPolygonKindsAreEmpty, which hard-coded [tskTriangle, tskDiamond]
+    as "the polygon kinds" -- true when there were eight kinds, and quietly wrong the
+    moment the triangles, the squared diamond and the stars arrived. The membership now
+    has ONE name, TyShapeVertexKinds, that the painter and the hit test also read, and
+    this walks the whole enum against it in BOTH directions: a kind wrongly left out of
+    the set draws and hit-tests as a rectangle, and one wrongly put in gets no path at
+    all -- so asserting only one direction would miss half of it. }
   for k := Low(TTyShapeKind) to High(TTyShapeKind) do
-    if not (k in [tskTriangle, tskDiamond]) then
-    begin
-      poly := TyShapePolygon(k, Rect(0, 0, 100, 60));
-      AssertEquals('non-polygon kind ' + IntToStr(Ord(k)) + ' returns []',
+  begin
+    poly := TyShapePolygon(k, Rect(0, 0, 100, 60));
+    if k in TyShapeVertexKinds then
+      AssertTrue('vertex kind ' + IntToStr(Ord(k)) + ' returns a closed ring',
+        Length(poly) >= 3)
+    else
+      // tskPolygon included: its vertices come from the app through OnShapePoints,
+      // never from this pure function.
+      AssertEquals('non-vertex kind ' + IntToStr(Ord(k)) + ' returns []',
         0, Length(poly));
-    end;
+  end;
 end;
 
 { ---- triangle geometry ---- }
