@@ -1009,12 +1009,22 @@ end;
 
 { The counterpart guard, and the more important one. BiDiMode is a TControl member that
   "works from code", and the same batch nearly republished it. It may not be published
-  while the paint path ignores it: grep still finds ZERO references to BiDiMode/RightToLeft
-  in tyControls.Painter.pas or tyControls.Base.pas. Publishing it would manufacture exactly
-  the defect this whole pass has been removing -- a property the Object Inspector offers
-  and the control silently ignores, which is how TTyColorButton.Caption came to exist.
-  When the paint honours it, delete this test. Until then it is the thing stopping a
-  well-meaning "just republish the rest" commit.
+  while the paint path ignores it, and the paint path still does.
+
+  What HAS changed: the painter now handles bidirectional TEXT. TTyPainter.DrawText routes
+  any caption carrying Hebrew/Arabic/Syriac through BGRA's TBidiTextLayout, so the words come
+  out in the order a native reader expects instead of with the paragraph's halves swapped.
+  That is one half of what BiDiMode promises. The other half -- MIRRORING, i.e. the check box
+  indicator moving to the right of its caption, the scroll bar to the left edge, grid columns
+  and tree expanders reversing -- is not built. tyControls.Painter.pas mentions BiDiMode in
+  exactly one place, a comment saying it deliberately does not read it, and
+  tyControls.Base.pas still has zero references.
+
+  So publishing it would still manufacture the defect this whole pass has been removing -- a
+  property the Object Inspector offers and the control half-ignores, which is how
+  TTyColorButton.Caption came to exist. Delete this test when the MIRRORING lands, not when
+  the text does. Until then it is the thing stopping a well-meaning "just republish the rest"
+  commit.
 
   OnPaint used to be pinned here alongside it, for the same reason and no other. It is
   published now because the behaviour behind it was built: TTyGraphicControl.WndProc and

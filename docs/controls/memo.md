@@ -227,7 +227,13 @@ end;
 
 > **API parity 第三轮已交付：** `Alignment`、`CharCase`、`Modified`、多播 `AddHandlerOnChange` /
 > `RemoveHandlerOnChange`，以及公开的 `CaretLine` / `CaretCol` / `SetCaret`（见 §3）。
-> `BidiMode` 仍然**不在范围内**：LCL 的 RTL 是 widgetset 在原生 EDIT 句柄上实现的，自绘控件没有可继承的东西。
+> `BidiMode` 仍然**不 published**，但理由已经变了。旧文写的是「LCL 的 RTL 是 widgetset 在原生 EDIT
+> 句柄上实现的，自绘控件没有可继承的东西」——绘制这一半现在有了：`TTyPainter.DrawText` 会把含右到左
+> 文字的字符串走 Unicode 双向算法排版（UAX #9），阿拉伯语/希伯来语的**词序与字形连写都是对的**。
+> 没有的是**镜像**：指示器、滚动条、列的左右不翻转。所以 `BidiMode` 依然是一个「界面上给了、控件只兑现一半」
+> 的属性，仍然不 published。
+> **⚠ 而且本控件的光标与点击定位仍是逻辑序的**——双向文本在这里**画对了、选不对**（点字形可能把光标放到别处）。
+> 详见 [KNOWN_GAPS.md](../KNOWN_GAPS.md#bidirectional-right-to-left-text)。
 > **无障碍：** 构造时声明 `AccessibleRole := larTextEditorMultiline`（`TTyEdit` 是 `larTextEditorSingleline`）。
 
 

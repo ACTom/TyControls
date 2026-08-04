@@ -141,3 +141,4 @@ Lbl.Caption := Format('已处理 %d 条记录', [RecordCount]);
 - **`Layout` 默认值与 LCL 不同：** 这里是 `tlCenter`，`TCustomLabel` 是 `tlTop`（`stdctrls.pp:1599`）。刻意保留：本库的默认值已经写进每一份 `.lfm`（省略即 `tlCenter`），改默认会让所有既有的非 AutoSize 标签整体上移。从 LCL 移植窗体时，非 AutoSize 的标签请显式写上 `Layout = tlTop`。
 - **无障碍：** 构造时声明 `AccessibleRole := larLabel`。自绘控件没有可供辅助技术回退的原生对等物，不声明的话读屏软件只会读到一个身份不明的自定义控件。
 - **单元名陷阱：** 单元名是 `tyControls.TyLabel`（含 `Ty` 前缀），与其他控件单元（如 `tyControls.Button`）的命名规律不同，容易拼错。
+- **双向文本（阿拉伯语 / 希伯来语）：词序对，但布局不镜像。** 标题里只要含右到左文字，`TTyPainter.DrawText` 就会走 Unicode 双向算法排版，词序与阿拉伯字母连写形都是对的（这条路径只在检测到右到左码点时才走，拉丁与中日韩文本逐像素不变）。但 `Alignment` 完全按调用方写的执行——右到左标题设成 `taLeftJustify` 就靠左，不会因为是 RTL 段落而自动靠右。整体镜像属于另一件事，未实现，见 [KNOWN_GAPS.md](../KNOWN_GAPS.md#bidirectional-right-to-left-text)。

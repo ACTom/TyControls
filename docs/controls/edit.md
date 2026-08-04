@@ -335,3 +335,5 @@ end;
 - **`ClearSelection` 会删字（API parity 破坏性变更）：** 它现在删除选区文本（LCL / Delphi 语义）；只想去掉高亮而保留文本请改用新增的 `CollapseSelection`。
 - **`Enter` 提交字段：** 无修饰键的回车调用 `EditingDone`（触发 `OnEditingDone`），但**不消费按键**，窗体的默认按钮仍能收到；`Enabled = False` 时同其他按键一样不生效。
 - **I-beam 光标（batch⑤+⑥）：** 构造时把 `Cursor` 设为 `crIBeam`，鼠标移到文本区域时呈现标准的文本输入「I 形」光标，与原生单行编辑框观感一致。
+- **⚠ 双向文本（阿拉伯语 / 希伯来语）：画对了，选不对。** `TTyPainter.DrawText` 现在会把含右到左文字的字符串走 Unicode 双向算法排版，所以框里**显示**的词序是对的。但本控件的光标与点击定位仍然是**逻辑序**的：`MeasureCodepointWidths`（`tyControls.Edit.pas:948`）按字符串顺序累加码点宽度，`CaretPixelXAt` / `CaretIndexAtX` 都建立在这个前缀和上。对双向文本这个模型根本不成立——混排串里两个逻辑相邻的码点，光标可能落在屏幕上两个不同的位置。后果是：**点某个字形可能把光标放到别处**，方向键会在不同书写方向的段落之间跳，拖选高亮出来的范围也未必对应指针下的字形。
+  绘制层需要的接缝已经有了、也有测试（`TTyPainter.TextCaretX` / `TTyPainter.TextCharIndexAtX`，从排好版的字形反查位置与索引），但**目前没有任何控件调用它们**。接线是另一件事。详见 [KNOWN_GAPS.md](../KNOWN_GAPS.md#bidirectional-right-to-left-text)。

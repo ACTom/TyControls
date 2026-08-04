@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, SysUtils, Types, Math, Graphics, LCLType, LazUTF8, BGRABitmap, BGRABitmapTypes,
-  BGRAGradientScanner, BGRACanvas2D,
+  BGRAGradientScanner, BGRACanvas2D, BGRATextBidi,
   FPReadJPEG, FPReadPNG, FPReadBMP,  // register FPImage readers so url() jpg/png/bmp load
   tyControls.Types;
 
@@ -44,6 +44,37 @@ type
     procedure DrawTextLine(const ARect: TRect; const AText, AFontName: string;
       AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment;
       AVAlign: TTextLayout; AEllipsis: Boolean; AMnemonicPos: Integer; ASmallCrisp: Boolean);
+    { ONE line of text that carries right-to-left script, laid out through BGRA's
+      TBidiTextLayout instead of through a single TextRect.
+
+      WHY a second path rather than a flag on the first: a bare TextRect is always laid out
+      with an IMPLICIT LEFT-TO-RIGHT paragraph base. Inside that call the widgetset's own
+      engine does reorder the runs and shape the Arabic -- that part was never broken -- but
+      it never asks whose paragraph this is. So "<arabic phrase> Acme" came out with the two
+      halves swapped: the Arabic on the left, where a native reader expects the Latin tail.
+      TBidiTextLayout resolves the base direction from the first strong character (fbmAuto),
+      splits the line into same-level parts and places them itself, which also stops the
+      answer depending on which widgetset is underneath.
+
+      The font must already be configured on FBmp: the layout borrows FBmp.FontRenderer.
+
+      LIMIT worth knowing: this is called once per LINE, so a caption that has already been
+      wrapped (TyWrapTextCJK, which breaks on spaces and on CJK codepoints and therefore
+      wraps Arabic correctly) resolves its base direction PER LINE. UAX #9 says a wrapped
+      line should inherit the PARAGRAPH's base direction, so a wrapped right-to-left
+      paragraph whose second line happens to begin with a Latin word gets a left-to-right
+      base for that line alone. Fixing it means carrying the paragraph's direction down from
+      the wrapper, which is a change to every wrapping caller, not to this function.
+
+      AMnemonicPos is a 1-based BYTE offset into AText, 0 for none. }
+    procedure DrawTextLineBidi(const ARect: TRect; const AText: string; AColor: TTyColor;
+      AHAlign: TAlignment; AVAlign: TTextLayout; AMnemonicPos: Integer);
+    { Build ONE line's bidi layout, already anchored in ARect by AHAlign/AVAlign. Shared by
+      the drawing path and the caret queries, so a caret can never disagree with the glyph it
+      is pointing at. The font must already be configured on FBmp. Caller frees; nil when
+      there is nothing to lay out. }
+    function BuildLineLayout(const ARect: TRect; const AText: string;
+      AHAlign: TAlignment; AVAlign: TTextLayout): TBidiTextLayout;
     { The device-px height of one line box: the theme's --line-height (passed in as logical
       px by the caller, who owns the controller) when set, else the font's own line box.
       Assumes the font is already configured on FBmp. }
@@ -107,6 +138,33 @@ type
       AMnemonicPos is honoured on that single-line fall-through only: the index counts into
       the whole caption, and mapping it onto a line is the caller's knowledge, not ours. }
     procedure DrawText(const ARect: TRect; const AText, AFontName: string; AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout; AEllipsis: Boolean; AMnemonicPos: Integer = 0; ASmallCrisp: Boolean = False; AMultiLine: Boolean = False; ALineHeightLogical: Integer = 0);
+    { --- Where a character IS, once bidirectional reordering has moved it ---------------
+
+      These two answer, for the SAME rectangle and font DrawText would use, the two questions
+      a text-editing control has to answer: "where do I put the caret for codepoint N" and
+      "which codepoint did the user click on". They are exposed because the answer stops
+      being derivable from a prefix sum the moment the text is bidirectional: TTyEdit builds
+      cumulative codepoint widths in STRING order (MeasureCodepointWidths), which is exactly
+      right for Latin and CJK and simply untrue for Arabic or Hebrew, where the caret between
+      two logically adjacent codepoints can be at two different places on screen.
+
+      NOTHING IN THIS LIBRARY CALLS THEM YET. TTyEdit still walks its own prefix sum, so an
+      Arabic string in an edit now DRAWS correctly and still SELECTS in logical order --
+      caret and click-to-position land on the wrong glyph. Wiring the edits up is a separate
+      job; this is the seam it needs, put here rather than in a control so that the caret and
+      the glyphs are computed by one piece of code.
+
+      Cost: each call builds and lays out a TBidiTextLayout, so they are per-click / per-key
+      operations, not per-frame ones. Ask TyTextHasRTL first and keep the cheap prefix sum
+      when it says no.
+
+      ACharIndex is a 0-based CODEPOINT index (not a byte offset), 0..codepoint count. }
+    function TextCaretX(const ARect: TRect; const AText, AFontName: string;
+      AFontSizeLogical, AWeight: Integer; AHAlign: TAlignment; ACharIndex: Integer): Integer;
+    { The 0-based codepoint index a click at device-x AX selects. Rounds to the nearer
+      character boundary, which is what a text cursor does. }
+    function TextCharIndexAtX(const ARect: TRect; const AText, AFontName: string;
+      AFontSizeLogical, AWeight: Integer; AHAlign: TAlignment; AX: Integer): Integer;
     procedure DrawGlyph(const ARect: TRect; AGlyph: TTyGlyphKind; AColor: TTyColor; AThicknessLogical: Integer; APadLogical: Integer = 4);
     { A FIXED-SIZE dropdown chevron (a shallow wide "v"), centered in AZoneRect and NOT
       stretched to the zone height — so a tall combo/button keeps a small clean chevron
@@ -196,6 +254,32 @@ function TyEllipsisPrefix(const AText: string; ACharCount: Integer): string;
   "pill" radius (e.g. border-radius:100 on a short progress track) renders as a rounded pill
   instead of overshooting the corner arcs into a pointed lens. Exposed for tests. }
 function TyClampRadiusPx(ARadiusPx, AWidthPx, AHeightPx: Integer): Integer;
+{ True when AText contains at least one codepoint from a right-to-left script -- Hebrew,
+  Arabic, Syriac, Thaana, N'Ko, Samaritan, Mandaic, Adlam and the Arabic presentation forms
+  -- or an explicit right-to-left mark / embedding / override.
+
+  THIS IS THE FAST-PATH GATE, and it is the reason bidirectional support costs the common
+  case nothing. Every one of the 146 DrawText call sites in this library passes through it,
+  and all but a vanishing few pass Latin or CJK; those must keep taking the single-TextRect
+  path they have always taken, because building a TBidiTextLayout per caption per frame is
+  the same shape of mistake that once cost TTyMemo half a second per keystroke.
+
+  So the scan is arranged to be cheap in exactly the cases that are common: an ASCII byte is
+  one compare, and a non-ASCII lead byte outside the handful that can possibly BEGIN a
+  right-to-left codepoint is one set test -- CJK ($E4..$E9) and Cyrillic/Greek ($D0..$D5)
+  never get decoded at all.
+
+  Measured on Windows, 2e6 calls each: 24-32 ns for a 14-byte Latin caption, 24 ns for a
+  15-byte Chinese one, 227 ns for a 108-byte sentence. The draw it guards, on the same
+  machine and in the same run, costs 1.5 ms for a small 11 px label and 11 ms for a 24 px
+  one -- so the gate is four to five orders of magnitude below the thing it is protecting,
+  and a caption that does NOT need BiDi pays only that. A caption that DOES pays about
+  2.1 ms more for the layout (roughly four bare text measurements), once per draw.
+
+  Conservative by design: it answers True for the unassigned holes inside those blocks too.
+  A false positive costs one correct-but-slower layout; a false negative would draw the text
+  backwards, so test.bidi pins the scan against BGRA's own GetUnicodeBidiClass tables. }
+function TyTextHasRTL(const AText: string): Boolean;
 
 var
   // Concrete font used when a style/theme provides no font-family.
@@ -221,6 +305,63 @@ begin
     Result := TyFallbackFontName
   else
     Result := AName;
+end;
+
+function TyTextHasRTL(const AText: string): Boolean;
+const
+  { The only UTF-8 LEAD bytes that can begin a right-to-left codepoint:
+      $D6..$DF  ->  U+0580..U+07FF   Hebrew, Arabic, Syriac, Thaana, N'Ko
+      $E0       ->  U+0800..U+0FFF   Samaritan, Mandaic, Arabic Extended-A/B
+      $E2       ->  U+2000..U+2FFF   the RLM / RLE / RLO / RLI / FSI direction controls
+      $EF       ->  U+F000..U+FFFF   Hebrew + Arabic presentation forms
+      $F0       ->  U+10000..U+3FFFF Cypriot..Kharoshthi, Adlam, Arabic Mathematical
+    Everything else -- and that is all of CJK, Cyrillic, Greek, Latin Extended -- is
+    rejected on the lead byte alone, without decoding the codepoint. }
+  RTL_LEADS = [$D6..$DF, $E0, $E2, $EF, $F0];
+var
+  i, n, len: Integer;
+  b: Byte;
+  u: LongWord;
+begin
+  n := Length(AText);
+  i := 1;
+  while i <= n do
+  begin
+    b := Byte(AText[i]);
+    if b < $80 then                       // ASCII: the common case, one compare
+    begin
+      Inc(i);
+      Continue;
+    end;
+    if (b and $E0) = $C0 then len := 2
+    else if (b and $F0) = $E0 then len := 3
+    else if (b and $F8) = $F0 then len := 4
+    else begin Inc(i); Continue; end;     // stray continuation byte -- step, never spin
+    if i + len - 1 > n then Break;        // truncated tail: nothing decodable left
+    if not (b in RTL_LEADS) then
+    begin
+      Inc(i, len);
+      Continue;
+    end;
+    case len of
+      2: u := ((b and $1F) shl 6) or (Byte(AText[i + 1]) and $3F);
+      3: u := ((b and $0F) shl 12) or ((Byte(AText[i + 1]) and $3F) shl 6)
+              or (Byte(AText[i + 2]) and $3F);
+    else
+      u := ((b and $07) shl 18) or ((Byte(AText[i + 1]) and $3F) shl 12)
+           or ((Byte(AText[i + 2]) and $3F) shl 6) or (Byte(AText[i + 3]) and $3F);
+    end;
+    if ((u >= $0590) and (u <= $08FF)) or            // Hebrew .. Arabic Extended-A
+       (u = $200F) or (u = $202B) or (u = $202E) or  // RLM, RLE, RLO
+       (u = $2067) or (u = $2068) or                 // RLI, FSI
+       ((u >= $FB1D) and (u <= $FDFF)) or            // Hebrew + Arabic presentation forms A
+       ((u >= $FE70) and (u <= $FEFF)) or            // Arabic presentation forms B
+       ((u >= $10800) and (u <= $10FFF)) or          // Cypriot .. Manichaean .. Hanifi
+       ((u >= $1E800) and (u <= $1EFFF)) then        // Mende, Adlam, Arabic Mathematical
+      Exit(True);
+    Inc(i, len);
+  end;
+  Result := False;
 end;
 
 { Wraps ONE authored line (no CR/LF inside). ABase is ALines.Count at entry, so the
@@ -565,6 +706,13 @@ begin
   if FBmp = nil then Exit;
   // Same font configuration as DrawText, so measured size matches drawn glyphs.
   TyConfigureTextFont(FBmp, AFontName, AFontSizeLogical, AWeight, FPPI);
+  { Deliberately NOT routed through the bidi layout, unlike the drawing side. Reordering a
+    line does not change how wide it is, and the widgetset's own measurement already accounts
+    for Arabic shaping (a joined BEH+TEH measures 31 px against 46 for the two isolated
+    forms) -- so the answer is already right, and building a TBidiTextLayout for each of the
+    36 MeasureText call sites would buy nothing but cost. The one visible consequence: for a
+    MIXED line the layout's own UsedWidth can exceed this by a pixel or two, because it sums
+    per-run widths that were each rounded. The draw clips, so the effect is bounded there. }
   Result := FBmp.TextSize(AText);
 end;
 
@@ -1004,9 +1152,14 @@ var
   sz, full: TSize;
   px: TBGRAPixel;
   beforeW, charW, ux, uy, uth: Integer;
+  rtl: Boolean;
 begin
   if FBmp = nil then
     Exit;
+  { Asked ONCE, of the caption rather than of the ellipsised prefix: this is the question
+    "is this a bidirectional caption at all", and a truncation that happens to drop the last
+    Arabic word does not turn it into a Latin one. Everything below reads the answer. }
+  rtl := TyTextHasRTL(AText);
   {$IF defined(LINUX) or defined(DARWIN)}
   // On Linux/macOS, BGRABitmap's LCL renderer drops fqFineAntialiasing to single-pass
   // fqSystem for text taller than ~13px (bgratext.pas SYSTEM_RENDERER_IS_FINE), so small
@@ -1014,7 +1167,10 @@ begin
   // callers that ask for crisp small text (the button badge) we supersample ourselves. Skips
   // the ellipsis/mnemonic features (the badge uses neither); only compiled where it's needed,
   // so Windows/headless keep the exact original path (and the pixel goldens stay byte-identical).
-  if ASmallCrisp and not AEllipsis and (AMnemonicPos = 0) then
+  // Right-to-left text is skipped too: the supersampler is a bare TextRect at 3x, so it
+  // carries the same implicit left-to-right paragraph base the ordinary path had. Legible
+  // beats crisp, and the only caller (the button badge) draws digits.
+  if ASmallCrisp and not AEllipsis and (AMnemonicPos = 0) and not rtl then
   begin
     DrawTextSupersampled(ARect, AText, AFontName, AFontSizeLogical, AWeight, AColor, AHAlign, AVAlign);
     Exit;
@@ -1040,6 +1196,16 @@ begin
     end;
     if s <> AText then
       s := s + '...';
+  end;
+  if rtl then
+  begin
+    { The mnemonic is dropped for an ellipsised caption here for the same reason the legacy
+      path drops it below: the underline would land on a '.' or on a glyph that moved. }
+    if s = AText then
+      DrawTextLineBidi(ARect, s, AColor, AHAlign, AVAlign, AMnemonicPos)
+    else
+      DrawTextLineBidi(ARect, s, AColor, AHAlign, AVAlign, 0);
+    Exit;
   end;
   style := Default(TTextStyle);
   style.Alignment := AHAlign;
@@ -1072,6 +1238,171 @@ begin
     if uth < 1 then uth := 1;
     Dec(uy, uth);
     FBmp.FillRect(ux, uy, ux + charW, uy + uth, px, dmDrawWithTransparency);
+  end;
+end;
+
+function TTyPainter.BuildLineLayout(const ARect: TRect; const AText: string;
+  AHAlign: TAlignment; AVAlign: TTextLayout): TBidiTextLayout;
+var
+  x, y, w, h: Integer;
+begin
+  Result := nil;
+  if (FBmp = nil) or (AText = '') then Exit;
+  { fbmAuto = resolve the paragraph direction from the first strong character, which is what
+    "the user typed an Arabic sentence" means. The alternative -- asking the control for a
+    BiDiMode -- is deliberately NOT taken: no control publishes one, because publishing a
+    property the paint path only half-honours is the defect this codebase keeps removing. }
+  Result := TBidiTextLayout.Create(FBmp.FontRenderer, AText);
+  { AvailableWidth is deliberately LEFT UNSET (BGRA reads that as "infinite"), for two
+    reasons that happen to be the same reason. It stops the layout from word-wrapping -- this
+    is the SINGLE-line path, and the callers that wrap have already wrapped, CJK-aware, in
+    TyWrapTextCJK. And it makes the layout's own box exactly as wide as the text, so its
+    ParagraphAlignment has nothing left to do and cannot quietly right-align a right-to-left
+    paragraph on us. That matters: right-aligning it would be the MIRRORING half of the job
+    -- indicator side, scrollbar side, column order -- and that half is not built, so the
+    caller's AHAlign stays the only thing that decides where the block sits. Anchor it here,
+    exactly as the legacy path anchors a TextRect.
+    If a caller ever needs AvailableWidth, it must pin ParagraphAlignment to btaLeftJustify
+    at the same time, or that decision changes underneath every control at once. }
+  w := Ceil(Result.UsedWidth);
+  h := Ceil(Result.TotalTextHeight);
+  case AHAlign of
+    taCenter:       x := ARect.Left + ((ARect.Right - ARect.Left) - w) div 2;
+    taRightJustify: x := ARect.Right - w;
+  else
+    x := ARect.Left;
+  end;
+  case AVAlign of
+    tlCenter: y := ARect.Top + ((ARect.Bottom - ARect.Top) - h) div 2;
+    tlBottom: y := ARect.Bottom - h;
+  else
+    y := ARect.Top;
+  end;
+  Result.TopLeft := PointF(x, y);
+end;
+
+{ The visual x-span of ONE codepoint of a laid-out line.
+
+  GetCaret alone cannot answer this. Where a left-to-right run meets a right-to-left one,
+  a single character index has TWO screen positions, and BGRA resolves the ambiguity towards
+  the run that ENDS at that index. So asking it for both edges of the character just AFTER a
+  boundary returns the same x twice and the span comes out empty -- which is exactly how the
+  mnemonic underline first went missing. Locate the part the codepoint lives in and take
+  that part's own end carets when the index sits on its edge. }
+function BidiCharSpan(ALayout: TBidiTextLayout; ACharIndex: Integer;
+  out AX1, AX2, ABottom: Single): Boolean;
+
+  function EdgeX(APart, AIndex: Integer): Single;
+  begin
+    if AIndex <= ALayout.PartStartIndex[APart] then
+      Result := ALayout.PartStartCaret[APart].Top.x
+    else if AIndex >= ALayout.PartEndIndex[APart] then
+      Result := ALayout.PartEndCaret[APart].Top.x
+    else
+      Result := ALayout.GetCaret(AIndex).Top.x;   // strictly inside a part: unambiguous
+  end;
+
+var
+  i: Integer;
+  t: Single;
+begin
+  Result := False;
+  AX1 := 0; AX2 := 0; ABottom := 0;
+  for i := 0 to ALayout.PartCount - 1 do
+    if (ACharIndex >= ALayout.PartStartIndex[i]) and (ACharIndex < ALayout.PartEndIndex[i]) then
+    begin
+      AX1 := EdgeX(i, ACharIndex);
+      AX2 := EdgeX(i, ACharIndex + 1);
+      { A caret inside a right-to-left run advances LEFTWARDS, so the second edge is the
+        smaller x. Take the span, not the signed difference. }
+      if AX2 < AX1 then begin t := AX1; AX1 := AX2; AX2 := t; end;
+      ABottom := ALayout.PartRectF[i].Bottom;
+      Exit(True);
+    end;
+end;
+
+procedure TTyPainter.DrawTextLineBidi(const ARect: TRect; const AText: string;
+  AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout; AMnemonicPos: Integer);
+var
+  lay: TBidiTextLayout;
+  ux, uy, uth, uw, cp: Integer;
+  oldClip: TRect;
+  px: TBGRAPixel;
+  x1, x2, bottom: Single;
+begin
+  lay := BuildLineLayout(ARect, AText, AHAlign, AVAlign);
+  if lay = nil then Exit;
+  try
+    px := TyColorToBGRA(AColor);
+    { TextRect clipped for us (style.Clipping); the layout does not, so a caption wider than
+      its box would paint over the control next to it. }
+    oldClip := FBmp.ClipRect;
+    FBmp.ClipRect := TRect.Intersect(oldClip, ARect);
+    try
+      lay.DrawText(FBmp, px);
+      { Mnemonic underline. The legacy arithmetic -- measure the bytes BEFORE the mnemonic,
+        add that to the block's left edge -- assumes the glyphs come out in the order the
+        bytes went in, which is precisely what stops being true here: in "<arabic> &Save"
+        the S displays at the far LEFT and the old sum put its underline a whole word to the
+        right. Ask the layout where that character actually landed instead. }
+      if (AMnemonicPos >= 1) and (AMnemonicPos <= Length(AText)) then
+      begin
+        cp := UTF8Length(Copy(AText, 1, AMnemonicPos - 1));   // bytes before -> chars before
+        if BidiCharSpan(lay, cp, x1, x2, bottom) then
+        begin
+          ux := Round(x1);
+          uw := Round(x2 - x1);
+          uth := Scale(1);
+          if uth < 1 then uth := 1;
+          uy := Round(bottom) - uth;
+          if uw > 0 then
+            FBmp.FillRect(ux, uy, ux + uw, uy + uth, px, dmDrawWithTransparency);
+        end;
+      end;
+    finally
+      FBmp.ClipRect := oldClip;
+    end;
+  finally
+    lay.Free;
+  end;
+end;
+
+function TTyPainter.TextCaretX(const ARect: TRect; const AText, AFontName: string;
+  AFontSizeLogical, AWeight: Integer; AHAlign: TAlignment; ACharIndex: Integer): Integer;
+var
+  lay: TBidiTextLayout;
+begin
+  Result := ARect.Left;
+  if FBmp = nil then Exit;
+  TyConfigureTextFont(FBmp, AFontName, AFontSizeLogical, AWeight, FPPI);
+  lay := BuildLineLayout(ARect, AText, AHAlign, tlTop);
+  if lay = nil then Exit;
+  try
+    if ACharIndex < 0 then ACharIndex := 0;
+    if ACharIndex > lay.CharCount then ACharIndex := lay.CharCount;
+    Result := Round(lay.GetCaret(ACharIndex).Top.x);
+  finally
+    lay.Free;
+  end;
+end;
+
+function TTyPainter.TextCharIndexAtX(const ARect: TRect; const AText, AFontName: string;
+  AFontSizeLogical, AWeight: Integer; AHAlign: TAlignment; AX: Integer): Integer;
+var
+  lay: TBidiTextLayout;
+begin
+  Result := 0;
+  if FBmp = nil then Exit;
+  TyConfigureTextFont(FBmp, AFontName, AFontSizeLogical, AWeight, FPPI);
+  lay := BuildLineLayout(ARect, AText, AHAlign, tlTop);
+  if lay = nil then Exit;
+  try
+    { Probed at the vertical middle of the line the layout actually produced, not of ARect:
+      a one-line layout anchored at the top of a tall box would otherwise be probed below
+      its own glyphs. }
+    Result := lay.GetCharIndexAt(PointF(AX, lay.TopLeft.y + lay.TotalTextHeight / 2));
+  finally
+    lay.Free;
   end;
 end;
 
