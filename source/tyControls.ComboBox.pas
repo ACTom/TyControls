@@ -7,6 +7,9 @@ uses
   tyControls.ListBox, tyControls.Popup, tyControls.Edit;
 function TyComboTypeAheadMatch(AItems: TStrings; AStart: Integer; const APrefix: string): Integer;
 function TyFilterItemsByPrefix(AItems: TStrings; const APrefix: string): TStringList;
+{ Position of AText in AItems, or -1. The case-sensitivity switch is AddHistoryItem's
+  (LCL passes it per call), so it lives with the list search rather than in the caller. }
+function TyComboIndexOfText(AItems: TStrings; const AText: string; ACaseSensitive: Boolean): Integer;
 
 type
   { csDropDownList = read-only (pick from list only). csDropDown = editable field
@@ -22,6 +25,15 @@ type
     FSorted: Boolean;
     FMaxLength: Integer;
     FCharCase: TEditCharCase;
+    { 0 = follow the popup list's own (themed, density-aware) row height; > 0 pins it.
+      Kept as a combo-level value so the height is known BEFORE the popup list exists
+      and so a .lfm can stream it. }
+    FItemHeight: Integer;
+    { 0 = the dropdown is exactly as wide as the closed field; > 0 is a MINIMUM width in
+      logical px, which is how LCL spells "let the list be wider than the field". }
+    FItemWidth: Integer;
+    FTextHint: TCaption;
+    FReadOnly: Boolean;
     { Editable-mode (csDropDown) state }
     FStyle: TTyComboBoxStyle;
     FEditor: TTyEdit;             // embedded edit field; owned by Self, parented to Self
@@ -32,6 +44,7 @@ type
     FOnSelect: TNotifyEvent;
     FOnDropDown: TNotifyEvent;
     FOnCloseUp: TNotifyEvent;
+    FOnGetItems: TNotifyEvent;
     { Dropdown popup state }
     FPopup: TTyDropdownPopup; // lazy; created on first DropDown; freed in Destroy
     FPopupList: TTyListBox;   // owned by Self; parented into FPopup.Form via SetContent
@@ -45,6 +58,20 @@ type
     procedure SetSorted(const AValue: Boolean);
     procedure SetMaxLength(const AValue: Integer);
     procedure SetCharCase(const AValue: TEditCharCase);
+    procedure SetItemHeight(const AValue: Integer);
+    procedure SetItemWidth(const AValue: Integer);
+    procedure SetTextHint(const AValue: TCaption);
+    procedure SetReadOnly(const AValue: Boolean);
+    function  GetDroppedDown: Boolean;
+    procedure SetDroppedDown(const AValue: Boolean);
+    { The edit portion's selection API. All four route to the embedded TTyEdit and are
+      quiet no-ops in csDropDownList, where there is no editable run to select. }
+    function  GetSelStart: Integer;
+    procedure SetSelStart(const AValue: Integer);
+    function  GetSelLength: Integer;
+    procedure SetSelLength(const AValue: Integer);
+    function  GetSelText: string;
+    procedure SetSelText(const AValue: string);
     { Set the embedded editor's text under the FSyncingText guard (exception-safe),
       so a programmatic write never re-triggers the autocomplete filter. }
     procedure SetEditorText(const S: string);
@@ -80,11 +107,20 @@ type
       Mirrored from FPopup.CloseUpTick (via PopupClosed) so test subclasses can
       still manipulate it (e.g. AgeCloseUpTick) without accessing FPopup directly. }
     FCloseUpTick: QWord;
+    { False = do not write Items into the .lfm (see ItemsStored). A subclass whose OWN
+      published member is the row set (TTyComboBoxEx's ItemsEx) clears this: writing both
+      would put two sources of truth for one list into the same file, and the reader
+      applies them in declaration order — ancestor first — so the rows would be built
+      twice. READING an Items block is unaffected, so older .lfm files still load. }
+    FItemsStreamed: Boolean;
     procedure SetController(AValue: TTyStyleController); override;
     { Headless-testable popup-height calculation: DropDownCount governs how many
       rows are visible before the dropdown scrolls. Separated from DropDown so it
       can be exercised without building a real win32 popup form. }
     function ComputePopupHeight(APPI: Integer): Integer;
+    { The dropdown's width: the field, widened to ItemWidth when that is larger. Same
+      separation as ComputePopupHeight — one formula, exercised headless. }
+    function ComputePopupWidth(APPI: Integer): Integer;
     procedure DoSelect; virtual;
     { Fires when the editable (csDropDown) field loses focus with committed text.
       Default no-op; TTyMRUComboBox overrides it to remember the typed value. }
@@ -95,10 +131,19 @@ type
     procedure DoPopupPick(AIndex: Integer); virtual;
     procedure DoDropDown; virtual;
     procedure DoCloseUp; virtual;
+    { Items was mutated (add / insert / delete / clear / assign / a sorted reorder). Fires
+      BEFORE the selection is re-pinned, so a subclass keeping a side model per row
+      (TTyComboBoxEx's ItemsEx) can reconcile it while the list is still the truth. }
+    procedure DoItemsChanged; virtual;
+    function ItemsStored: Boolean;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     // Field content paint (default: the selected item's text). A subclass draws a
     // swatch / glyph + text; ATextRect is the field's text zone (left of the chevron).
     procedure PaintFieldContent(P: TTyPainter; const ATextRect: TRect; const AStyle: TTyStyleSet); virtual;
+    { Paints TextHint into the field when there is nothing else to show. Separate so a
+      subclass that REPLACES PaintFieldContent (image rows, a checked-items summary) can
+      still opt its own empty state into the placeholder instead of losing it. }
+    procedure PaintTextHint(P: TTyPainter; const ATextRect: TRect; const AStyle: TTyStyleSet);
     // Factory for the drop-down list (default: a plain TTyListBox). A subclass returns a
     // custom TTyListBox (e.g. one whose PaintItemContent draws colour swatches).
     function CreatePopupList: TTyListBox; virtual;
@@ -118,10 +163,27 @@ type
     function EditorVisibleForTest: Boolean;
     { Test seam: the embedded editor's MaxLength (-1 when the editor is absent). }
     function EditorMaxLengthForTest: Integer;
+    { Test seams: what actually reached the embedded editor. A forwarding property that
+      stores but never forwards is the failure mode these pin. }
+    function EditorTextHintForTest: string;
+    function EditorReadOnlyForTest: Boolean;
+    { Test seams for the two popup-geometry formulas (the protected ones are where the
+      sizing lives; these let a headless test pin the arithmetic, not just the setter). }
+    function ComputePopupHeightForTest(APPI: Integer): Integer;
+    function ComputePopupWidthForTest(APPI: Integer): Integer;
     procedure SelectItem(AIndex: Integer); virtual;
-    function DroppedDown: Boolean;
     procedure DropDown; virtual;
     procedure CloseUp;
+    { Highlight the whole edit run (csDropDown only). LCL's combo has this so a field can
+      be pre-selected on focus-in. }
+    procedure SelectAll;
+    { MRU promotion, on EVERY combo the way LCL has it: move AItem to row 0, drop its old
+      position, trim the tail past AMaxHistoryCount, optionally make it the field text.
+      TTyMRUComboBox's AddToHistory is the same idea with the cap as a property. }
+    procedure AddHistoryItem(const AItem: string; AMaxHistoryCount: Integer;
+      ASetAsText, ACaseSensitive: Boolean); overload;
+    procedure AddHistoryItem(const AItem: string; AnObject: TObject;
+      AMaxHistoryCount: Integer; ASetAsText, ACaseSensitive: Boolean); overload;
     { Expose popup list for headless tests and internal use }
     function PopupList: TTyListBox;
     { The three control-level list methods LCL's combo has. Clear empties Items AND blanks
@@ -129,10 +191,23 @@ type
       the list, which is the bug you get from calling Items.Clear by hand. }
     procedure Clear;
     procedure ClearSelection;
-    procedure AddItem(const AItem: string; AnObject: TObject);
+    { virtual + overload so a subclass can both REDIRECT this (TTyComboBoxEx routes the
+      object into its per-row entry instead of the raw Objects[] slot, which it owns) and
+      ADD an image/state-carrying form beside it without hiding this one. }
+    procedure AddItem(const AItem: string; AnObject: TObject); virtual; overload;
     function Count: Integer;
+    { Read/WRITE, as on LCL's combo: assigning True opens the list, False closes it. It
+      was a bare function here, so `Combo.DroppedDown := True` — the idiom for opening a
+      combo from a button or a shortcut — did not compile. Public, not published: the
+      open/closed state is runtime, never something a .lfm should carry. }
+    property DroppedDown: Boolean read GetDroppedDown write SetDroppedDown;
+    { The edit portion's selection (UTF-8 positions), forwarded to the embedded editor.
+      Zeros in csDropDownList, where nothing is editable. }
+    property SelStart: Integer read GetSelStart write SetSelStart;
+    property SelLength: Integer read GetSelLength write SetSelLength;
+    property SelText: string read GetSelText write SetSelText;
   published
-    property Items: TStringList read FItems write SetItems;
+    property Items: TStringList read FItems write SetItems stored ItemsStored;
     property ItemIndex: Integer read FItemIndex write SetItemIndex;
     property Text: TCaption read FText write SetText;
     { Max number of rows visible in the dropdown before it scrolls (LCL default 8). }
@@ -146,12 +221,31 @@ type
       inert — published for native-API parity and streaming round-trip. }
     property MaxLength: Integer read FMaxLength write SetMaxLength default 0;
     property CharCase: TEditCharCase read FCharCase write SetCharCase default ecNormal;
-    { csDropDownList (default) = read-only; csDropDown = editable + prefix autocomplete. }
+    { csDropDownList (default) = read-only; csDropDown = editable + prefix autocomplete.
+      NOTE the default is the OPPOSITE of LCL's csDropDown, and deliberately so: every
+      .lfm in this repo and in users' projects omits Style and expects a pick-only combo.
+      See docs/controls/combobox.md for the five LCL Style values we do not have. }
     property Style: TTyComboBoxStyle read FStyle write SetStyle default csDropDownList;
+    { Pixel height of one dropdown row. 0 (default) = follow the theme's --item-height,
+      so a density change still moves the rows; a positive value pins them. }
+    property ItemHeight: Integer read FItemHeight write SetItemHeight default 0;
+    { MINIMUM dropdown width in logical px. 0 (default) = exactly the field width. Lets a
+      list of long paths open wider than the closed combo. }
+    property ItemWidth: Integer read FItemWidth write SetItemWidth default 0;
+    { Placeholder shown while the field is empty. Forwarded to the embedded editor in
+      csDropDown; painted by the field itself in csDropDownList, which has no editor. }
+    property TextHint: TCaption read FTextHint write SetTextHint;
+    { Rejects typing in the edit portion while the dropdown still works. Inert in
+      csDropDownList, which has no editable text at all. }
+    property ReadOnly: Boolean read FReadOnly write SetReadOnly default False;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
     property OnSelect: TNotifyEvent read FOnSelect write FOnSelect;
     property OnDropDown: TNotifyEvent read FOnDropDown write FOnDropDown;
     property OnCloseUp: TNotifyEvent read FOnCloseUp write FOnCloseUp;
+    { Fires as the list is about to be shown, so the application can fill Items
+      just-in-time. It runs BEFORE DropDown's empty-list guard — that ordering is the
+      whole point, since a lazy combo starts empty and would otherwise never open. }
+    property OnGetItems: TNotifyEvent read FOnGetItems write FOnGetItems;
     property TabStop default True;
     property Align;
     property Anchors;
@@ -190,6 +284,17 @@ begin
       // per-item data (e.g. TTyComboBoxEx image indices) survives the prefix filter
 end;
 
+function TyComboIndexOfText(AItems: TStrings; const AText: string; ACaseSensitive: Boolean): Integer;
+var i: Integer;
+begin
+  Result := -1;
+  if AItems = nil then Exit;
+  for i := 0 to AItems.Count - 1 do
+    if (ACaseSensitive and (AItems[i] = AText))
+    or ((not ACaseSensitive) and (AnsiCompareText(AItems[i], AText) = 0)) then
+      Exit(i);
+end;
+
 constructor TTyComboBox.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
@@ -201,6 +306,11 @@ begin
   FSorted := False;
   FMaxLength := 0;
   FCharCase := ecNormal;
+  FItemHeight := 0;   // follow the theme until a host pins it
+  FItemWidth  := 0;   // dropdown exactly as wide as the field
+  FTextHint   := '';
+  FReadOnly   := False;
+  FItemsStreamed := True;   // the plain combo's Items IS the persisted row set
   FPopup     := nil;
   FPopupList := nil;
   TabStop := True;
@@ -385,6 +495,150 @@ begin
     Result := -1;
 end;
 
+function TTyComboBox.EditorTextHintForTest: string;
+begin
+  if FEditor <> nil then Result := FEditor.TextHint else Result := '';
+end;
+
+function TTyComboBox.EditorReadOnlyForTest: Boolean;
+begin
+  Result := (FEditor <> nil) and FEditor.ReadOnly;
+end;
+
+function TTyComboBox.ComputePopupHeightForTest(APPI: Integer): Integer;
+begin
+  Result := ComputePopupHeight(APPI);
+end;
+
+function TTyComboBox.ComputePopupWidthForTest(APPI: Integer): Integer;
+begin
+  Result := ComputePopupWidth(APPI);
+end;
+
+procedure TTyComboBox.SetItemHeight(const AValue: Integer);
+begin
+  if FItemHeight = AValue then Exit;
+  if AValue < 0 then FItemHeight := 0 else FItemHeight := AValue;
+  { Push it into an already-built popup list. Only when pinned: 0 must leave whatever the
+    list chose for itself, which is how TTyAdvancedComboBox keeps its 40px rich rows. }
+  if (FPopupList <> nil) and (FItemHeight > 0) then
+    FPopupList.ItemHeight := FItemHeight;
+  Invalidate;
+end;
+
+procedure TTyComboBox.SetItemWidth(const AValue: Integer);
+begin
+  if FItemWidth = AValue then Exit;
+  if AValue < 0 then FItemWidth := 0 else FItemWidth := AValue;
+  { No live resize of an open popup: the next DropDown picks the new width up, same rule
+    DropDownCount already follows. }
+end;
+
+procedure TTyComboBox.SetTextHint(const AValue: TCaption);
+begin
+  if FTextHint = AValue then Exit;
+  FTextHint := AValue;
+  { csDropDown borrows TTyEdit's hint painting; csDropDownList has no editor, so the
+    field paints it in PaintFieldContent. Forward unconditionally so a hint set before
+    the style switch is already in place afterwards (mirrors MaxLength/CharCase). }
+  if FEditor <> nil then
+    FEditor.TextHint := AValue;
+  Invalidate;
+end;
+
+procedure TTyComboBox.SetReadOnly(const AValue: Boolean);
+begin
+  if FReadOnly = AValue then Exit;
+  FReadOnly := AValue;
+  if FEditor <> nil then
+    FEditor.ReadOnly := AValue;
+end;
+
+function TTyComboBox.GetDroppedDown: Boolean;
+begin
+  Result := (FPopup <> nil) and FPopup.IsOpen;
+end;
+
+procedure TTyComboBox.SetDroppedDown(const AValue: Boolean);
+begin
+  { Routed through the virtual DropDown / CloseUp so a subclass's override still runs
+    (TTyCheckComboBox pushes its check states in DropDown, for one). }
+  if AValue then
+    DropDown
+  else
+    CloseUp;
+end;
+
+function TTyComboBox.GetSelStart: Integer;
+begin
+  if FEditor <> nil then Result := FEditor.SelStart else Result := 0;
+end;
+
+procedure TTyComboBox.SetSelStart(const AValue: Integer);
+begin
+  if FEditor <> nil then FEditor.SelStart := AValue;
+end;
+
+function TTyComboBox.GetSelLength: Integer;
+begin
+  if FEditor <> nil then Result := FEditor.SelLength else Result := 0;
+end;
+
+procedure TTyComboBox.SetSelLength(const AValue: Integer);
+begin
+  if FEditor <> nil then FEditor.SelLength := AValue;
+end;
+
+function TTyComboBox.GetSelText: string;
+begin
+  if FEditor <> nil then Result := FEditor.SelText else Result := '';
+end;
+
+procedure TTyComboBox.SetSelText(const AValue: string);
+begin
+  { No resync afterwards on purpose: TTyEdit.SetSelText fires its OnChange once for the
+    whole replace, and our EditorChange handler is what pulls the new text back into
+    FText. Re-reading here as well would be code no test can distinguish. }
+  if FEditor <> nil then FEditor.SelText := AValue;
+end;
+
+procedure TTyComboBox.SelectAll;
+begin
+  if FEditor <> nil then FEditor.SelectAll;
+end;
+
+procedure TTyComboBox.AddHistoryItem(const AItem: string; AMaxHistoryCount: Integer;
+  ASetAsText, ACaseSensitive: Boolean);
+begin
+  AddHistoryItem(AItem, nil, AMaxHistoryCount, ASetAsText, ACaseSensitive);
+end;
+
+procedure TTyComboBox.AddHistoryItem(const AItem: string; AnObject: TObject;
+  AMaxHistoryCount: Integer; ASetAsText, ACaseSensitive: Boolean);
+var
+  Existing: Integer;
+  WasSorted: Boolean;
+begin
+  { Sorted forbids InsertObject on a TStringList ("Operation not allowed on sorted
+    list"), and an MRU order is by definition not alphabetical — so drop Sorted for the
+    duration and restore it, which re-sorts and makes the promotion a no-op visually.
+    Better than raising in the caller's face on a combo that merely had Sorted set. }
+  WasSorted := FItems.Sorted;
+  if WasSorted then FItems.Sorted := False;
+  try
+    Existing := TyComboIndexOfText(FItems, AItem, ACaseSensitive);
+    if Existing >= 0 then FItems.Delete(Existing);   // promote, never duplicate
+    FItems.InsertObject(0, AItem, AnObject);
+    { Trim from the BOTTOM: the least recently used entries are the ones that go. }
+    if AMaxHistoryCount > 0 then
+      while FItems.Count > AMaxHistoryCount do
+        FItems.Delete(FItems.Count - 1);
+  finally
+    if WasSorted then FItems.Sorted := True;
+  end;
+  if ASetAsText then Text := AItem;
+end;
+
 procedure TTyComboBox.SetEditorText(const S: string);
 begin
   if FEditor = nil then Exit;
@@ -537,8 +791,21 @@ begin
   end;
 end;
 
+procedure TTyComboBox.DoItemsChanged;
+begin
+  // default: no-op (see TTyComboBoxEx)
+end;
+
+function TTyComboBox.ItemsStored: Boolean;
+begin
+  Result := FItemsStreamed;
+end;
+
 procedure TTyComboBox.ItemsChanged(Sender: TObject);
 begin
+  { Subclass side models reconcile first — they may change what Items holds in Objects[],
+    and ResyncIndexFromText below must see the settled list. }
+  DoItemsChanged;
   { When items are added/removed (including a sorted insert that shifts indices),
     keep FItemIndex pinned to the selected item's text. }
   ResyncIndexFromText;
@@ -553,12 +820,30 @@ begin
     e.g. TTyAdvancedComboBox uses 40); fall back to the TTyListBox default (24) before the
     popup list exists (headless calc). Visible rows = min(Items.Count, DropDownCount), each
     scaled to the given PPI, + the 2px popup frame chrome. Single source of the sizing
-    formula — DropDown calls this so the live popup and the headless calc stay in sync. }
+    formula — DropDown calls this so the live popup and the headless calc stay in sync.
+    An explicit ItemHeight wins over both, and is readable before the popup exists. }
   RowH := 24;
-  if FPopupList <> nil then RowH := FPopupList.ItemHeight;
+  if FItemHeight > 0 then
+    RowH := FItemHeight
+  else if FPopupList <> nil then
+    RowH := FPopupList.ItemHeight;
   ScaledIH := MulDiv(RowH, APPI, 96);
   VisibleRows := Min(FItems.Count, FDropDownCount);
   Result := VisibleRows * ScaledIH + 2;
+end;
+
+function TTyComboBox.ComputePopupWidth(APPI: Integer): Integer;
+var Scaled: Integer;
+begin
+  { The field width is the floor — a dropdown narrower than the combo it hangs off looks
+    broken — and ItemWidth raises it, which is exactly LCL's "minimum pixels allocated to
+    the items in the dropdown list" (customcombobox.inc AdjustDropDown). }
+  Result := Width;
+  if FItemWidth > 0 then
+  begin
+    Scaled := MulDiv(FItemWidth, APPI, 96);
+    if Scaled > Result then Result := Scaled;
+  end;
 end;
 
 function TTyComboBox.ButtonWidthLogical: Integer;
@@ -589,11 +874,6 @@ begin
     FOnChange(Self);
 end;
 
-function TTyComboBox.DroppedDown: Boolean;
-begin
-  Result := (FPopup <> nil) and FPopup.IsOpen;
-end;
-
 { Lazily create the popup helper and the list box (both live for the combo's
   lifetime — the helper reuses its form across multiple show/hide cycles). }
 procedure TTyComboBox.EnsurePopup;
@@ -605,6 +885,10 @@ begin
 
   FPopupList := CreatePopupList;  // owned by the combo (virtual: a subclass may return a custom list)
   FPopupList.ForceSquareSurface := TyIsWayland;
+  { A pinned ItemHeight overrides whatever the list (or a subclass's factory) chose;
+    0 leaves that choice alone so themed / rich-row lists keep working. }
+  if FItemHeight > 0 then
+    FPopupList.ItemHeight := FItemHeight;
   FPopupList.OnChange := @PopupListChange;
 
   { Wire the list into the helper's form (alClient; SetContent is one-shot). }
@@ -621,6 +905,11 @@ var
   PopupH: Integer;
   S: TTyStyleSet;
 begin
+  { Lazy population, and it MUST come before the empty-list guard below: a lazy combo
+    starts with no rows, so a hook fired after the guard could never fill anything and
+    the user's first click would do nothing at all. This is the hole OnDropDown cannot
+    plug — that one only fires once the popup has already been shown. }
+  if Assigned(FOnGetItems) then FOnGetItems(Self);
   if FItems.Count = 0 then Exit;
   EnsurePopup;
   { Chevron/list-mode drop activates normally (auto-closes on deactivate). Only the
@@ -647,7 +936,7 @@ begin
   { Size: height = min(DropDownCount, Items.Count) rows (+ frame chrome). }
   PopupH := ComputePopupHeight(Font.PixelsPerInch);
 
-  FPopup.Popup(Self, Width, PopupH);
+  FPopup.Popup(Self, ComputePopupWidth(Font.PixelsPerInch), PopupH);
   DoDropDown;   // popup actually opened
 end;
 
@@ -655,7 +944,7 @@ end;
   subset (FVisibleItems) instead of the full list. Mirrors DropDown otherwise. }
 procedure TTyComboBox.DropDownFiltered;
 var
-  PopupH, ScaledIH, VisibleRows: Integer;
+  PopupH, PopupW, ScaledIH, VisibleRows: Integer;
   S: TTyStyleSet;
 begin
   if FVisibleItems.Count = 0 then Exit;
@@ -678,12 +967,15 @@ begin
 
   { Height off the FILTERED count (mirrors ComputePopupHeight's formula but on
     FVisibleItems, which is what is actually shown). }
-  if FPopupList <> nil then                            // honour a subclass's taller rows
+  if FItemHeight > 0 then                              // an explicit ItemHeight wins
+    ScaledIH := MulDiv(FItemHeight, Font.PixelsPerInch, 96)
+  else if FPopupList <> nil then                       // honour a subclass's taller rows
     ScaledIH := MulDiv(FPopupList.ItemHeight, Font.PixelsPerInch, 96)
   else
     ScaledIH := MulDiv(24, Font.PixelsPerInch, 96);
   VisibleRows := Min(FVisibleItems.Count, FDropDownCount);
   PopupH      := VisibleRows * ScaledIH + 2;
+  PopupW      := ComputePopupWidth(Font.PixelsPerInch);
 
   { First open: show the popup, then immediately return focus to the editor. LCL
     focuses the popup's list on Show (which WS_EX_NOACTIVATE alone does not stop),
@@ -693,12 +985,12 @@ begin
     On later keystrokes the popup is already open — resize it IN PLACE (no Show, no
     focus churn / no per-keystroke flicker). }
   if FPopup.IsOpen then
-    FPopup.Resize(Width, PopupH)
+    FPopup.Resize(PopupW, PopupH)
   else
   begin
     FShowingPopup := True;
     try
-      FPopup.Popup(Self, Width, PopupH);
+      FPopup.Popup(Self, PopupW, PopupH);
       if FEditor.HandleAllocated and FEditor.CanFocus then FEditor.SetFocus;
     finally
       FShowingPopup := False;
@@ -902,7 +1194,21 @@ begin
   // Default: the selected item's text (unchanged from the old inline draw).
   if FText <> '' then
     P.DrawText(ATextRect, FText, AStyle.FontName, ResolveFontSize(AStyle), AStyle.FontWeight,
-      AStyle.TextColor, taLeftJustify, tlCenter, True);
+      AStyle.TextColor, taLeftJustify, tlCenter, True)
+  else
+    PaintTextHint(P, ATextRect, AStyle);
+end;
+
+procedure TTyComboBox.PaintTextHint(P: TTyPainter; const ATextRect: TRect; const AStyle: TTyStyleSet);
+var HintColor: TTyColor;
+begin
+  { Only the pick-only field paints its own hint: in csDropDown the embedded TTyEdit
+    covers this zone and draws the same hint itself, so drawing here too would double it.
+    The dim ink is the shared 'TyTextHint' token TTyEdit resolves — no hardcoded grey. }
+  if (FTextHint = '') or (FStyle <> csDropDownList) then Exit;
+  HintColor := ActiveController.Model.ResolveStyle('TyTextHint', '', []).TextColor;
+  P.DrawText(ATextRect, FTextHint, AStyle.FontName, ResolveFontSize(AStyle),
+    AStyle.FontWeight, HintColor, taLeftJustify, tlCenter, True);
 end;
 
 function TTyComboBox.CreatePopupList: TTyListBox;

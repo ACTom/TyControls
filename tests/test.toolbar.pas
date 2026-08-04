@@ -48,8 +48,10 @@ end;
 procedure TToolBarGeomTest.TestLayoutSingleRow;
 var r: TTyRectArray; rows: Integer;
 begin
-  // two 40x20 items, indent 4, spacing 2, buttonHeight 24, bar 200 wide
-  r := TyToolbarLayout([Size(40,20), Size(40,20)], 200, 4, 2, 24, True, rows);
+  // two 40x20 items, indent 4, top pad 4, spacing 2, buttonHeight 24, bar 200 wide.
+  // Indent (horizontal) and the top pad are separate arguments now -- they used to be one,
+  // which is why an indented bar was also a padded, taller one.
+  r := TyToolbarLayout([Size(40,20), Size(40,20)], 200, 4, 4, 2, 24, True, rows);
   AssertEquals('rows', 1, rows);
   AssertEquals('i0.left', 4, r[0].Left);     AssertEquals('i0.right', 44, r[0].Right);
   AssertEquals('i1.left', 46, r[1].Left);    AssertEquals('i1.right', 86, r[1].Right);
@@ -59,10 +61,10 @@ procedure TToolBarGeomTest.TestLayoutWraps;
 var r: TTyRectArray; rows: Integer;
 begin
   // bar only 90 wide -> third item wraps to row 2
-  r := TyToolbarLayout([Size(40,20), Size(40,20), Size(40,20)], 90, 4, 2, 24, True, rows);
+  r := TyToolbarLayout([Size(40,20), Size(40,20), Size(40,20)], 90, 4, 4, 2, 24, True, rows);
   AssertEquals('rows', 2, rows);
   AssertEquals('i2 wrapped to indent', 4, r[2].Left);
-  AssertEquals('i2.Top = indent + buttonHeight + spacing', 30, r[2].Top);
+  AssertEquals('i2.Top = TOP PAD + buttonHeight + spacing', 30, r[2].Top);
 end;
 
 { TToolBarControlTest }

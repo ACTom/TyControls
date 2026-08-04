@@ -2,7 +2,8 @@ unit test.checkgroup;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Forms, Controls, fpcunit, testregistry,
+  Classes, SysUtils, Types, Forms, Controls, ExtCtrls, LCLType,
+  fpcunit, testregistry,
   tyControls.Types, tyControls.Controller, tyControls.Base,
   tyControls.CheckBox, tyControls.CheckGroup;
 type
@@ -43,7 +44,8 @@ type
   TCheckGroupLayoutTest = class(TTestCase)
   published
     procedure TestSingleColumnStacksRows;
-    procedure TestTwoColumnsSplitWidthAndFillFirstColumn;
+    procedure TestTwoColumnsSplitWidthAndFillFirstRow;
+    procedure TestColumnMajorFillIsOptIn;
     procedure TestLastColumnAbsorbsWidthRemainder;
     procedure TestOutOfRangeYieldsEmpty;
     procedure TestMoreColumnsThanItemsClamped;
@@ -472,23 +474,45 @@ begin
   AssertEquals('row height honored', 20, r0.Bottom - r0.Top);
 end;
 
-procedure TCheckGroupLayoutTest.TestTwoColumnsSplitWidthAndFillFirstColumn;
+{ RENAMED. This used to be TestTwoColumnsSplitWidthAndFillFirstColumn -- its name asserted
+  that the grid fills column 0 top-down first, which is what made a multi-column group
+  disagree, silently, with the same .lfm loaded in Lazarus. The default is now LCL's
+  clHorizontalThenVertical; the old order is still reachable, see the next test. }
+procedure TCheckGroupLayoutTest.TestTwoColumnsSplitWidthAndFillFirstRow;
 var r0, r1, r2, r3: TRect;
 begin
   // 4 items, 2 columns, width 200 -> two 100px columns, 2 rows each.
-  // Fill column 0 first (indices 0,1), then column 1 (indices 2,3).
+  // Fill row 0 first (indices 0,1), then row 1 (indices 2,3).
   r0 := TyCheckGroupCellRect(Rect(0, 0, 200, 400), 4, 2, 0, 20);
   r1 := TyCheckGroupCellRect(Rect(0, 0, 200, 400), 4, 2, 1, 20);
   r2 := TyCheckGroupCellRect(Rect(0, 0, 200, 400), 4, 2, 2, 20);
   r3 := TyCheckGroupCellRect(Rect(0, 0, 200, 400), 4, 2, 3, 20);
 
   AssertEquals('item 0 in left column', 0, r0.Left);
-  AssertEquals('item 1 in left column', 0, r1.Left);
+  AssertEquals('item 1 in right column (fills first row left-to-right)', 100, r1.Left);
   AssertEquals('item 0 top row', 0, r0.Top);
-  AssertEquals('item 1 second row (fills first column top-down)', 20, r1.Top);
+  AssertEquals('item 1 also top row', 0, r1.Top);
 
-  AssertEquals('item 2 in right column', 100, r2.Left);
+  AssertEquals('item 2 in left column', 0, r2.Left);
   AssertEquals('item 3 in right column', 100, r3.Left);
+  AssertEquals('item 2 second row', 20, r2.Top);
+  AssertEquals('item 3 second row', 20, r3.Top);
+end;
+
+{ The opt-out: the pre-3.0 order, now something a form asks for rather than something it
+  gets without being told. }
+procedure TCheckGroupLayoutTest.TestColumnMajorFillIsOptIn;
+var r0, r1, r2, r3: TRect;
+begin
+  r0 := TyCheckGroupCellRect(Rect(0, 0, 200, 400), 4, 2, 0, 20, clVerticalThenHorizontal);
+  r1 := TyCheckGroupCellRect(Rect(0, 0, 200, 400), 4, 2, 1, 20, clVerticalThenHorizontal);
+  r2 := TyCheckGroupCellRect(Rect(0, 0, 200, 400), 4, 2, 2, 20, clVerticalThenHorizontal);
+  r3 := TyCheckGroupCellRect(Rect(0, 0, 200, 400), 4, 2, 3, 20, clVerticalThenHorizontal);
+
+  AssertEquals('item 0 in left column', 0, r0.Left);
+  AssertEquals('item 1 in left column', 0, r1.Left);
+  AssertEquals('item 1 second row (fills first column top-down)', 20, r1.Top);
+  AssertEquals('item 2 in right column', 100, r2.Left);
   AssertEquals('item 2 top row', 0, r2.Top);
   AssertEquals('item 3 second row', 20, r3.Top);
 end;
@@ -497,8 +521,9 @@ procedure TCheckGroupLayoutTest.TestLastColumnAbsorbsWidthRemainder;
 var r0, r1: TRect;
 begin
   // width 201, 2 columns: colW = 100; last column runs to 201.
+  // Row-major: the right column is index 1.
   r0 := TyCheckGroupCellRect(Rect(0, 0, 201, 400), 4, 2, 0, 20);   // left col
-  r1 := TyCheckGroupCellRect(Rect(0, 0, 201, 400), 4, 2, 2, 20);   // right col (index 2)
+  r1 := TyCheckGroupCellRect(Rect(0, 0, 201, 400), 4, 2, 1, 20);   // right col
   AssertEquals('left column right edge = colW', 100, r0.Right);
   AssertEquals('right column extends to full width (absorbs remainder)', 201, r1.Right);
 end;

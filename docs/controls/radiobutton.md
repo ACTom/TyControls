@@ -30,6 +30,7 @@ uses tyControls.CheckBox;   // TTyRadioButton 与 TTyCheckBox 共用此单元
 | `Checked` | `Boolean` | `False` | 单选按钮当前选中状态；设为 `True` 时自动取消同一父容器下**相同 `GroupIndex`** 的其他 `TTyRadioButton` 的选中状态（已定义 `default False`） |
 | `GroupIndex` | `Integer` | `0` | 分组索引。同一 `Parent` 内，只有 `GroupIndex` 相同的 `TTyRadioButton` 之间互斥。不同 `GroupIndex` 的单选按钮彼此独立，从而允许同一父容器内并存多个互斥组，无需为每组使用独立容器。 |
 | `Caption` | `string` | `''` | 单选按钮右侧显示的文字标签 |
+| `Alignment` | `TLeftRight` | `taRightJustify` | **（API parity 新增）** 圆点在标题的哪一侧，与 [`TTyCheckBox.Alignment`](checkbox.md) 同名同型同默认值（LCL 在 `TRadioButton` 上转发的就是同一个 `TCustomCheckBox.Alignment`）：`taRightJustify`（默认）= 圆点在左、标题在右；`taLeftJustify` = 圆点挪到**右边**，标题靠着它右对齐。类型 `TLeftRight` 是 `TAlignment` 的子界（只有 `taLeftJustify` / `taRightJustify`），来自 FPC 的 `classesh.inc`。两种摆法宽度完全一样，尺寸不受影响。 |
 | `Enabled` | `Boolean` | `True` | 为 `False` 时触发 `:disabled`，控件不响应交互 |
 | `Font` | `TFont` | 系统默认 | 传递 PPI 给渲染器；字体族与大小优先由主题控制 |
 | `Align` | `TAlign` | `alNone` | 父容器内的停靠方式 |

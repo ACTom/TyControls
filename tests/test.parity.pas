@@ -157,6 +157,7 @@ type
     procedure CalendarAcceptsTheLclPropertyName;
     { A8 }
     procedure MaskEditAcceptsTheLclPropertyName;
+    procedure TextControlsAnnounceTheirAccessibleRole;
     { A1 }
     procedure ColorButtonPaintsItsCaption;
     procedure ColorButtonCaptionOutranksTheHex;
@@ -665,7 +666,10 @@ begin
   try
     M.Mask := '###-###';
     M.ProbePaste('hello world');
-    AssertEquals('nothing the mask rejects may land', '', M.Text);
+    { The skeleton, not '': the field shows its shape when it holds nothing (SpaceChar).
+      MaskedValue is the VALUE, and that is what must still be empty. }
+    AssertEquals('nothing the mask rejects may land', '', M.MaskedValue);
+    AssertEquals('and the box shows the empty skeleton', '___-___', M.Text);
     AssertFalse('and it is certainly not complete', M.IsComplete);
   finally
     M.Free;
@@ -720,6 +724,34 @@ begin
     AssertEquals('EditMask is an alias on the same field', '###', M.Mask);
   finally
     M.Free;
+  end;
+end;
+
+{ LCL's TCustomEdit.Create says `AccessibleRole := larTextEditorSingleline` in one line
+  (include/customedit.inc:87, under an '// Accessibility' comment). Nothing in this library
+  assigned a role anywhere, so every self-drawn control kept TControl's larUnknown -- and a
+  self-drawn control has NO native peer for assistive technology to fall back on, which makes
+  the whole text-input family opaque to a screen reader rather than merely unlabelled. }
+procedure TParityTest.TextControlsAnnounceTheirAccessibleRole;
+var
+  E: TTyEdit;
+  M: TTyMemo;
+  K: TTyMaskEdit;
+begin
+  E := TTyEdit.Create(nil);
+  M := TTyMemo.Create(nil);
+  K := TTyMaskEdit.Create(nil);
+  try
+    AssertEquals('an edit is a single-line text editor',
+      Ord(larTextEditorSingleline), Ord(E.AccessibleRole));
+    AssertEquals('a memo is the multi-line one',
+      Ord(larTextEditorMultiline), Ord(M.AccessibleRole));
+    AssertEquals('and a mask edit inherits the edit''s',
+      Ord(larTextEditorSingleline), Ord(K.AccessibleRole));
+  finally
+    K.Free;
+    M.Free;
+    E.Free;
   end;
 end;
 

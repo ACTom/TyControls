@@ -87,8 +87,14 @@ end;
 constructor TTyPaintPanel.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
-  // Inherit TTyPanel's container behaviour (csAcceptsControls) + default size; an owner-draw
-  // surface is still a real container, so leave that intact.
+  // Inherit TTyPanel's container behaviour (csAcceptsControls); an owner-draw surface is
+  // still a real container, so leave that intact.
+  { But NOT its shape. TTyPanel is a caption strip and lands 185x41; a drawing surface has no
+    intrinsic aspect, so it arrives as a letterbox in which anything drawn is clipped and the
+    first thing a user must do is resize it. Square, and the same 105x105 TPaintBox picks for
+    the same reason (include/paintbox.inc:50-54). }
+  Width := 105;
+  Height := 105;
 end;
 
 procedure TTyPaintPanel.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);

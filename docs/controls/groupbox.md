@@ -32,6 +32,8 @@ uses tyControls.GroupBox;
 |------|------|--------|------|
 | `Caption` | `string` | `''` | 分组框顶部嵌入边框线的标题文字。写入时触发重绘。若为空字符串，则不绘制标题文字和背景遮盖带。 |
 | `Alignment` | `TAlignment` | `taLeftJustify` | 标题文字在顶部边框带内的水平对齐方式：`taLeftJustify`（左对齐，默认）/ `taCenter`（居中）/ `taRightJustify`（右对齐）。背景遮盖带与文字按同一对齐方式定位，使断口始终对准标题文字。赋值时触发 `Invalidate`。 |
+| `ClientWidth` | `Integer` | — | **（API parity 新增，转发 `TControl` 的）** 设定 / 流式化**框内**可用空间的宽度。分组框的客户区与外框差着标题带加主题内边距，所以"我要框里这么大地方"本来就是最自然的说法；以前设计器里说不出来，移植过来的 `.lfm` 里这一行会被丢掉。对应 LCL 的 `TGroupBox`（`stdctrls.pp:193-194`）。 |
+| `ClientHeight` | `Integer` | — | **（API parity 新增，转发 `TControl` 的）** 同上，框内可用空间的高度。 |
 | `Align` | `TAlign` | — | 父容器内的停靠方式。 |
 | `Anchors` | `TAnchors` | — | 锚点布局。 |
 | `StyleClass` | `string` | `''` | CSS 变体类名。 |
@@ -160,4 +162,5 @@ R4.Caption := '蓝色';
 2. **客户区自动下移 16 逻辑像素：** `AdjustClientRect` 已重写，子控件的 `Top = 0` 位置实际显示在标题栏下方。无需手动为子控件添加顶部偏移。
 3. **边框从标题中线开始：** 边框矩形的顶边位于 `CapH div 2`（约 8 逻辑像素处），而非控件顶边，以便标题文字的中心线与边框线对齐。
 4. **RadioButton 分组由 Parent 决定：** `TTyRadioButton.UncheckSiblings` 只遍历同一 `Parent` 下的兄弟控件。将两组单选按钮分别放在两个 `TTyGroupBox` 内即可实现独立互斥，无需额外的 GroupName 属性。
-5. **标题文字宽度用 Canvas 精确测量：** 渲染器使用临时 `TBitmap.Canvas` 测量文字宽度（正确处理 CJK 等可变宽字体），而非简单估算。
+5. **`AutoSize` 一直是 published 的：** 它由 `TTyCustomControl`（`tyControls.Base.pas`）发布，本库每个控件都有。曾有审计说"ty 分组框没法裹住内容因为 `AutoSize` 没发布"，那是事实错误：`TWinControl` 本来就会按子控件算容器的 preferred size，`AdjustClientRect` 也早就留出了标题带与内边距，整条路径一直是通的。这里记一笔，免得有人再"修"一次。
+6. **标题文字宽度用 Canvas 精确测量：** 渲染器使用临时 `TBitmap.Canvas` 测量文字宽度（正确处理 CJK 等可变宽字体），而非简单估算。

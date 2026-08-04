@@ -35,14 +35,18 @@ uses tyControls.CheckGroup;
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `Items` | `TStrings` | `[]`（空列表） | 各复选项的标题列表。内部由 `TStringList` 支撑（以获得 `OnChange`），声明类型为 `TStrings`。写入时调用 `Assign` 复制内容；列表变化（增删改）自动**重建全部子复选框**、重新布局并重绘。标题支持 `&` 助记符显示（下划线）。 |
-| `Columns` | `Integer` | `1` | 子复选框排布的列数。各列等分客户区宽度，**最后一列吸收宽度余数**；每列自上而下填满后再填下一列（column-major）。写入 `< 1` 的值会被夹紧为 `1`。声明 `default 1`。 |
+| `Columns` | `Integer` | `1` | 子复选框排布的列数。各列等分客户区宽度，**最后一列吸收宽度余数**。填充**顺序**由 `ColumnLayout` 决定。写入 `< 1` 的值会被夹紧为 `1`。声明 `default 1`。 |
+| `ColumnLayout` | `TColumnLayout`（`ExtCtrls`） | `clHorizontalThenVertical` | 网格的**填充顺序**。`clHorizontalThenVertical`（默认，也是 LCL 的默认）先横着填满第 0 行再填第 1 行，6 项 2 列读作 `1 2 / 3 4 / 5 6`；`clVerticalThenHorizontal` 先竖着填满第 0 列，读作 `1 4 / 2 5 / 3 6`。见 [§7 注意事项](#7-注意事项) 的破坏性变更说明。 |
 | `OnItemChange` | `TCheckGroupItemEvent` | `nil` | 某个复选框被切换时触发，携带该项索引。见 [§4 事件](#4-事件)。 |
+| `OnItemClick` | `TCheckGroupClicked` | `nil` | **与 `OnItemChange` 同一个通知**，用的是 LCL 的名字（`extctrls.pp:907`，`TCheckGroup` 在 `:955` 转发）。两个都会触发，`OnItemChange` 在前。各有独立字段，因此各按自己的名字流式化；移植过来的处理器不必改名，已有的也不必动。`TCheckGroupClicked` 是 `TCheckGroupItemEvent` 的类型别名（参数表本来就一致），所以移植的处理器**声明**也能原样编译。 |
 
 ### 自有 public 成员
 
 | 成员 | 签名 | 说明 |
 |------|------|------|
 | `Checked[AIndex]` | `property Checked[AIndex: Integer]: Boolean`（**索引属性，可读写**） | 读/写第 `AIndex` 个复选框的勾选状态。**越界读写一律抛 `EListError`**，消息形如 `TTyCheckGroup Index 7 out of bounds 0 .. 2`（类名 + 越界下标 + 最大合法下标，与 LCL 同形）。编程写入**不**触发 `OnItemChange`（该事件只报告用户操作）。 |
+| `Buttons[AIndex]` | `property Buttons[AIndex: Integer]: TTyCheckBox`（**索引属性，只读**） | 交出第 `AIndex` 个**托管复选框本身**，用来触及本控件没有再暴露的逐项属性——单项的 `Hint`、`PopupMenu`、`Font`、`Enabled`，或额外挂一个事件。越界抛 `EListError`，与 `Checked[]` 同形。对应 LCL `TCustomCheckGroup.Buttons[]`（`extctrls.pp:901`，public；`include/customcheckgroup.inc:321-326` 同样越界抛异常）。**分组仍然拥有子控件的生命周期与布局**：不要通过这个句柄给它换父容器或释放它。 |
+| `CheckEnabled[AIndex]` | `property CheckEnabled[AIndex: Integer]: Boolean`（**索引属性，可读写**） | 单独禁用/启用某一项，其余保持可用——就是"这个选项你当前的版本没有"那种置灰。越界读写都抛 `EListError`。对应 LCL（`extctrls.pp:904`、`include/customcheckgroup.inc:288-301`）。**能扛过 `Items` 编辑**：重建时按**标题**（而不是槽位下标）恢复，和 `Checked[]` 用的是同一条身份规则——否则这就是个"demo 里能用、app 里活不过下一次列表改动"的旋钮。 |
 | `Count` | `function Count: Integer` | 子复选框数量（`= Items.Count`）。 |
 | `CheckedCount` | `function CheckedCount: Integer` | 当前处于勾选状态的项数。 |
 
@@ -70,17 +74,19 @@ uses tyControls.CheckGroup;
 
 > **重建期不误触发：** `Items` 变化引发重建时，代码在恢复各项勾选状态**之后**才挂接子控件的 `OnChange`，因此“重建恢复状态”这一步同样**不会**误触发 `OnItemChange`。
 
-> 除 `OnItemChange` 外，`TTyCheckGroup` 还暴露继承自 `TTyCustomControl` 的**基线事件集**（Tier A 鼠标 / 通用事件 + Tier B 键盘 / 焦点事件）。完整清单见 [../events.md](../events.md)。
+> 除 `OnItemChange` / `OnItemClick` 外，`TTyCheckGroup` 还暴露继承自 `TTyCustomControl` 的**基线事件集**（Tier A 鼠标 / 通用事件 + Tier B 键盘 / 焦点事件）。完整清单见 [../events.md](../events.md)。
+
+> **键盘事件现在真的会触发（3.0 起）：** 分组框自己**永不持有焦点**——它整个表面都被子控件铺满——所以它继承来的 `OnKeyDown` / `OnKeyUp` / `OnKeyPress` / `OnUTF8KeyPress` 以前是可以赋值却永远不响的死钩子。现在每个子复选框的四个键盘事件都转接回分组框（LCL 走的是同一条路：`include/customcheckgroup.inc:238-241`、处理器 `:147-171`），焦点在任意一项上时敲的键都会到达分组框的处理器。`Key` 全程是 `var`，因此处理器吞掉一个键就真的吞掉了。
 
 ---
 
 ## 5. 布局与渲染
 
-### 列网格布局（column-major）
+### 列网格布局
 
 - 子复选框在**分组框客户区**内排列——`TTyGroupBox.AdjustClientRect` 已把客户区顶边下移到标题带之下，因此子复选框不会遮盖标题。
 - `Columns` 列**等分客户区宽度**，最后一列吸收整数除法余数（无缝拼贴）。
-- 每列**自上而下**填满后再填下一列（先纵后横）。项数不能整除列数时，靠前的列多一行。
+- 填充**顺序**由 `ColumnLayout` 决定：默认 `clHorizontalThenVertical` 先横着填满一行再换行；`clVerticalThenHorizontal` 先竖着填满一列再换列。两种顺序的行数都是 `ceil(项数 / 列数)`——它们是同一张网格的两种走法，不是两张网格。
 - 每个复选框行高固定为 24 逻辑像素（按 `Font.PixelsPerInch` 缩放），复选框本体 22 高。
 - 布局在 `Items` 变化、`Columns` 变化、控件 `Resize` 与 `SetParent` 时自动重算。
 
@@ -98,14 +104,19 @@ uses tyControls.CheckGroup;
 
 | 函数 | 签名 | 说明 |
 |------|------|------|
-| `TyCheckGroupCellRect` | `function TyCheckGroupCellRect(const AClientRect: TRect; ACount, AColumns, AIndex, ARowH: Integer): TRect` | 第 `AIndex` 项在客户区 `AClientRect` 内的设备像素单元矩形，共 `ACount` 项、`AColumns` 列、行高 `ARowH`。列等分宽度（末列吸收余数），列内自上而下（column-major）。`AIndex` 越界、`ACount <= 0`、`AColumns <= 0` 或 `ARowH <= 0` 返回空矩形。 |
+| `TyCheckGroupCellRect` | `function TyCheckGroupCellRect(const AClientRect: TRect; ACount, AColumns, AIndex, ARowH: Integer; ALayout: TColumnLayout = clHorizontalThenVertical): TRect` | 第 `AIndex` 项在客户区 `AClientRect` 内的设备像素单元矩形，共 `ACount` 项、`AColumns` 列、行高 `ARowH`，按 `ALayout` 指定的顺序填充。列等分宽度（末列吸收余数）。`AIndex` 越界、`ACount <= 0`、`AColumns <= 0` 或 `ARowH <= 0` 返回空矩形。 |
 
 ```pascal
-// 200px 宽、4 项、2 列、行高 20：两列各 100px、各 2 行，先填左列。
-TyCheckGroupCellRect(Rect(0,0,200,400), 4, 2, 0, 20);  // -> (0,0,100,20)     左列第 1 行
-TyCheckGroupCellRect(Rect(0,0,200,400), 4, 2, 1, 20);  // -> (0,20,100,40)    左列第 2 行
-TyCheckGroupCellRect(Rect(0,0,200,400), 4, 2, 2, 20);  // -> (100,0,200,20)   右列第 1 行
-TyCheckGroupCellRect(Rect(0,0,201,400), 4, 2, 2, 20).Right;  // -> 201（末列吸收余数）
+// 200px 宽、4 项、2 列、行高 20：两列各 100px、各 2 行。
+// 默认（行优先）：先填满第 0 行 —— 0 1 / 2 3
+TyCheckGroupCellRect(Rect(0,0,200,400), 4, 2, 0, 20);  // -> (0,0,100,20)     第 1 行左
+TyCheckGroupCellRect(Rect(0,0,200,400), 4, 2, 1, 20);  // -> (100,0,200,20)   第 1 行右
+TyCheckGroupCellRect(Rect(0,0,200,400), 4, 2, 2, 20);  // -> (0,20,100,40)    第 2 行左
+TyCheckGroupCellRect(Rect(0,0,201,400), 4, 2, 1, 20).Right;  // -> 201（末列吸收余数）
+
+// 列优先（旧行为，现在要显式要求）：先填满第 0 列 —— 0 2 / 1 3
+TyCheckGroupCellRect(Rect(0,0,200,400), 4, 2, 1, 20, clVerticalThenHorizontal);
+  // -> (0,20,100,40)  左列第 2 行
 ```
 
 ---
@@ -156,10 +167,12 @@ Feats.Items.CommaText := '自动保存,拼写检查,深色模式,行号,自动�
 
 1. **子复选框独立无互斥：** 与单选组不同，勾选一项不会取消其它项——各项完全独立。若需要互斥，请改用单选组（RadioGroup）。
 2. **`Items` 变化会重建整组子控件：** 增删改任一项都会释放并重建全部子复选框；勾选状态**按索引**保留（仍在范围内的项保持原状态，新增项默认未勾选，被删项状态丢弃）。若需精确的“按内容”迁移，请在赋值前后自行记录/恢复。
-3. **子控件不进设计器：** 内部复选框带 `csNoDesignVisible`，不会作为可选中的子控件出现在 IDE 设计器里。请通过 `Items` 编辑标题，通过 `Checked[]` 读写状态。
-4. **越界访问抛异常（3.0 起的行为变更）：** `Checked[]` 无论读写，下标越界都抛 `EListError` 并写明类名、越界下标与最大合法下标——与 LCL 的 `TCustomCheckGroup` 一致（`include/customcheckgroup.inc:173-177`、`:313-338`）。以前是越界读返回 `False`、越界写静默丢弃，而"不存在的项"和"用户没勾的项"读起来一模一样，填充顺序错了或差一都会被这层静默盖住。用 `Count` / `CheckedCount` 先问范围。
-5. **`Controller` 传播：** 给本控件设 `Controller` 会同步应用到所有内部子复选框，整组主题保持一致。
-6. **复用 `TyGroupBox` 主题：** 外框走 `TyGroupBox` 令牌，子复选框走 `TyCheckBox` 令牌；`.tycss` 中不新增 `TyCheckGroup` 规则。请确保主题为 `TyGroupBox` 声明了 `background`（用于遮盖标题处边框线，见 [TTyGroupBox 注意事项](groupbox.md#7-注意事项)）。
+3. **子控件不进设计器：** 内部复选框带 `csNoDesignVisible`，不会作为可选中的子控件出现在 IDE 设计器里。请通过 `Items` 编辑标题，通过 `Checked[]` 读写状态；要触及单项的其它属性（`Hint` / `PopupMenu` / `Enabled` / `Font`），用 `Buttons[i]`。
+4. **网格填充顺序改了（3.0 起的破坏性变更）：** 本控件原先**硬编码列优先**（先竖着填满第 0 列），且没有任何开关。LCL 的 `TCustomCheckGroup` 默认是行优先（`ColumnLayout = clHorizontalThenVertical`，`extctrls.pp:906`），于是同一份 .lfm 在 Lazarus 里和在这里排出来的**选项顺序不一样**——6 项 2 列，那边读作 `1 2 / 3 4 / 5 6`，这边读作 `1 4 / 2 5 / 3 6`，而且既不报错也没有别的迹象。现在默认与 LCL 一致，旧顺序仍可通过 `ColumnLayout := clVerticalThenHorizontal` 取回。**迁移**：单列分组（也就是默认的 `Columns = 1`）完全不受影响；只有多列分组需要看一眼，想保持原样就加这一行。
+5. **越界访问抛异常（3.0 起的行为变更）：** `Checked[]`、`Buttons[]`、`CheckEnabled[]` 无论读写，下标越界都抛 `EListError` 并写明类名、越界下标与最大合法下标——与 LCL 的 `TCustomCheckGroup` 一致（`include/customcheckgroup.inc:173-177`、`:313-338`）。以前是越界读返回 `False`、越界写静默丢弃，而"不存在的项"和"用户没勾的项"读起来一模一样，填充顺序错了或差一都会被这层静默盖住。用 `Count` / `CheckedCount` 先问范围。
+6. **`CheckEnabled[]` 按标题存活：** 逐项禁用的状态在 `Items` 重建时**按标题**恢复，与 `Checked[]` 同一条身份规则；否则改一次列表就会把置灰全部丢掉。
+7. **`Controller` 传播：** 给本控件设 `Controller` 会同步应用到所有内部子复选框，整组主题保持一致。
+8. **复用 `TyGroupBox` 主题：** 外框走 `TyGroupBox` 令牌，子复选框走 `TyCheckBox` 令牌；`.tycss` 中不新增 `TyCheckGroup` 规则。请确保主题为 `TyGroupBox` 声明了 `background`（用于遮盖标题处边框线，见 [TTyGroupBox 注意事项](groupbox.md#7-注意事项)）。
 
 ---
 

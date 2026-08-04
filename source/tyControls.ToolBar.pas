@@ -46,6 +46,12 @@ type
     procedure SetFlat(AValue: Boolean);
     procedure Relayout;
   protected
+    { The vertical breathing room above the first row and below the last, in logical px.
+      Theme-driven (--toolbar-pad-y) rather than a published property: it is chrome, and
+      the fallback is 4 — byte-for-byte the value Indent used to supply here, so no
+      existing bar changes height. Protected because TTyToolBarEx lays its own row out and
+      must use the SAME pad, or the two bars would sit their tools at different heights. }
+    function ContentPadY: Integer;
     { Protected rather than private so a test can drive the one call a relayout makes
       without needing a window handle and a live align pass. }
     procedure ApplyToButton(B: TTyButton);
@@ -65,6 +71,19 @@ type
       pins it (streamed only when explicitly set -- stored FButtonHeightExplicit). }
     property ButtonHeight: Integer read GetButtonHeight write SetButtonHeight stored FButtonHeightExplicit;
     property ButtonSpacing: Integer read FButtonSpacing write SetButtonSpacing default 2;
+    { Blank space at the LEADING edge of the bar, before the first tool — and nothing else.
+      LCL's TToolBar.Indent (comctrls.pp:2398) means exactly that, and ours used to mean
+      two more things besides: it was also the TOP pad every row started at, and the bar's
+      auto-grown height was `Indent*2 + rows`. So `Indent := 24` — a perfectly ordinary LCL
+      value, used to clear a logo or a leading label — silently made the bar 48 px taller
+      and pushed its tools down 24 px, which is not what any LCL form that set it asked for.
+      The vertical breathing room is now its own value (ContentPadY, theme token
+      --toolbar-pad-y, default 4 = the old Indent default), so the two knobs move apart.
+
+      Still differs from LCL in one respect: LCL's default is 1, ours is 4. That one is left
+      alone on purpose — a `default` directive is what decides how every existing .lfm that
+      OMITTED the value is read, so changing it would re-indent every toolbar already out
+      there. A ported form that relied on LCL's 1 should set Indent := 1 explicitly. }
     property Indent: Integer read FIndent write SetIndent default 4;
     property Wrapable: Boolean read FWrapable write SetWrapable default True;
     { LCL parity: False (the default) makes the tools ICON-ONLY, True draws their captions.
@@ -90,17 +109,20 @@ type
     property Controller;
   end;
 
-function TyToolbarLayout(const AItemSizes: array of TSize; ABarWidth, AIndent, ASpacing, AButtonHeight: Integer; AWrapable: Boolean; out ARows: Integer): TTyRectArray;
+{ AIndent is the LEADING (horizontal) gap before the first tool on every row; ATopPad is the
+  vertical gap above the first row. They used to be one number, so a bar could not be indented
+  without also being padded — see TTyToolBar.Indent. }
+function TyToolbarLayout(const AItemSizes: array of TSize; ABarWidth, AIndent, ATopPad, ASpacing, AButtonHeight: Integer; AWrapable: Boolean; out ARows: Integer): TTyRectArray;
 
 implementation
 
-function TyToolbarLayout(const AItemSizes: array of TSize; ABarWidth, AIndent, ASpacing, AButtonHeight: Integer; AWrapable: Boolean; out ARows: Integer): TTyRectArray;
+function TyToolbarLayout(const AItemSizes: array of TSize; ABarWidth, AIndent, ATopPad, ASpacing, AButtonHeight: Integer; AWrapable: Boolean; out ARows: Integer): TTyRectArray;
 var
   i, x, y: Integer;
 begin
   SetLength(Result, Length(AItemSizes));
   ARows := 1;
-  x := AIndent; y := AIndent;
+  x := AIndent; y := ATopPad;
   for i := 0 to High(AItemSizes) do
   begin
     if AWrapable and (i > 0) and (x + AItemSizes[i].cx > ABarWidth - AIndent) then
@@ -155,6 +177,12 @@ begin
 end;
 
 function TTyToolBar.GetStyleTypeKey: string; begin Result := 'TyToolBar'; end;
+
+function TTyToolBar.ContentPadY: Integer;
+begin
+  Result := ActiveController.Metric('--toolbar-pad-y', 4);
+  if Result < 0 then Result := 0;
+end;
 
 function TTyToolBar.GetButtonHeight: Integer;
 begin
@@ -253,7 +281,7 @@ var
   rects: TTyRectArray;
   ctl: TControl;
   list: array of TControl;
-  newH, bh: Integer;
+  newH, bh, padY: Integer;
 begin
   // re-entrancy guard: Height assignment at the end triggers another AlignControls call
   if FInLayout then Exit;
@@ -281,7 +309,8 @@ begin
     bh := GetButtonHeight;
     for i := 0 to n - 1 do
       if list[i].Constraints.MinHeight > bh then bh := list[i].Constraints.MinHeight;
-    rects := TyToolbarLayout(sizes, ClientWidth, FIndent, FButtonSpacing, bh, FWrapable, rows);
+    padY := ContentPadY;
+    rects := TyToolbarLayout(sizes, ClientWidth, FIndent, padY, FButtonSpacing, bh, FWrapable, rows);
     for i := 0 to n - 1 do
     begin
       { Centre each child in the row. A child SHORTER than the row (a separator, a combo that
@@ -295,7 +324,9 @@ begin
     // grow the bar to fit the rows when alTop/alBottom
     if (Align in [alTop, alBottom]) and (rows > 0) then
     begin
-      newH := FIndent*2 + rows*bh + (rows-1)*FButtonSpacing;
+      // The VERTICAL pad closes the bar, top and bottom -- Indent is horizontal and has no
+      // business in a height (a bar indented 24px to clear a logo was 48px taller for it).
+      newH := padY*2 + rows*bh + (rows-1)*FButtonSpacing;
       if Height <> newH then
         Height := newH;
     end;

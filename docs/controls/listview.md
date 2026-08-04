@@ -133,6 +133,9 @@ LV.Sort;
 | `ViewStyle` | `TTyListViewStyle` | `lvsReport` | `lvsIcon` / `lvsSmallIcon` / `lvsList` / `lvsReport` / `lvsTile`,运行时可切 |
 | `RowHeight` | `Integer` | `22` | 报表模式行高(逻辑像素,自动按 DPI 缩放) |
 | `Header` | `TTyHeader` | — | 列模型子对象,`Header.Columns` 是列集合 |
+| `Columns` | `TTyColumns` | — | **public(不 published)**,就是 `Header.Columns` 那个对象。`LV.Columns[0].Width := 120` 是所有移植过来的列代码的写法(LCL `comctrls.pp:1582`),以前必须多绕一层 `Header`。不 published 是故意的:`Header` 已经在流式化这个集合,再开一条 published 路径会把它写进 .lfm 两次 |
+| `Column[AIndex]` | `TTyColumn` | — | **public**,第 i 列;越界返回 `nil`(不抛异常,与本控件其它 index-first 接口一致) |
+| `ColumnCount` | `Integer` | — | **public**,列数(LCL `comctrls.pp:1665`) |
 | `ShowColumnHeaders` | `Boolean` | `True` | 报表模式是否画表头带 |
 | `GridLines` | `Boolean` | `False` | 报表模式行/列网格线 |
 | `RowSelect` | `Boolean` | `True` | 整行高亮,而非仅第 0 列 |
@@ -194,6 +197,20 @@ LV.SmallImages := ImgList;                                        // 或 LV.Head
 | `OnItemChecked` | 勾选变化,收 item index |
 | `OnEditing(Sender; AIndex; var AAllow)` | `AAllow := False` 否决改名 |
 | `OnEdited(Sender; AIndex; var AText)` | 提交前触发;可改写 `AText`;**置 `''` 视为放弃**(用户自己清空也一样) |
+
+### 结构通知(内置集合模式)
+
+| 事件 | 说明 |
+|---|---|
+| `OnInsert(Sender; AIndex)` | 一行**刚刚**加入内置集合之后触发(LCL `comctrls.pp:1613`) |
+| `OnDeletion(Sender; AIndex)` | 一行**即将**离开内置集合之前触发(LCL `comctrls.pp:1610`)。`Items.Clear` 和控件析构时**逐行**触发 |
+
+> **`OnDeletion` 是 `Data` 里那个「归你所有」的对象唯一的释放时机**——它触发时行还在、索引还有效、`Items[AIndex].Data` 还读得到。
+> 在此之前 `TTyListItems` 是个 `TCollection`,`Notify` 是 protected 且已被控件自己消费掉,应用除了派生集合类之外**没有任何**钩子,于是每一个这样的载荷都漏掉了。
+>
+> 控件析构时也会逐行触发,所以析构顺序已相应调整:**先放 `Items`(通知期间控件仍然完整,处理器可以回调),再放 `Header`**。
+>
+> `OwnerData` 模式下两者都不触发:那里没有集合生命周期可报告,存储本来就是应用自己的。
 
 > **勾选态和选中态一样,按 item index 存,跨排序稳定。**
 >

@@ -172,7 +172,7 @@ TyMenuItem:disabled { color: var(--muted); }                          /* 禁用�
 - **布局度量常量**（逻辑像素，96-PPI 基线，各调用点用 `TTyPainter.Scale` / `MulDiv` 缩放到设备 PPI）：`TyMenuSeparatorHeight = 7`（分隔线槽高）、`TyMenuArrowSlot = 16`（右侧子菜单 ▸ 箭头预留宽）、`TyMenuCheckSlot = 18`（左侧勾选/单选字形预留宽）、`TyMenuShortcutGap = 24`（标题与右对齐快捷键文本间最小间距）、`TyMenuHoverOpenDelay = 350`（子菜单悬停自动展开的毫秒延迟）。这些是**尺寸/间距令牌，不是颜色**——颜色一律来自 `.tycss`。
 - **分隔线：** `TMenuItem.Caption = '-'`（`IsLine`）渲染为一条居中于分隔槽的 1px 主题线，颜色取 `TyMenuItem` 的 `border-color`。
 - **勾选/单选字形：** `TMenuItem.Checked` 为 `True` 时在左槽绘制字形——`RadioItem` 为 `True` 用圆点（`tgRadioDot`），否则用勾号（`tgCheck`），颜色跟随行的 `TextColor`。
-- **可切换项的空勾选框：** `TMenuItem.AutoCheck = True` 但当前 `Checked = False` 的行，在左槽画一个**空方框**（`StrokeBorder`），让用户在点之前就看出这是个开关——否则"视图 &gt; 工具栏"和"文件 &gt; 打开"长得一模一样，非要点过一次才知道。LCL 里对应的是 `ShowAlwaysCheckable`，`AutoCheck` 是它的逐项版本。空框只在没有勾选字形时画，且**优先于图标列**（`ImageIndex`）。
+- **可切换项的空勾选框：** `TMenuItem.ShowAlwaysCheckable = True` **或** `AutoCheck = True`、而当前 `Checked = False` 的行，在左槽画一个**空方框**（`StrokeBorder`），让用户在点之前就看出这是个开关——否则"视图 &gt; 工具栏"和"文件 &gt; 打开"长得一模一样，非要点过一次才知道。两个标志都读，因为 LCL 自己两个都读（`TMenuItem.IsCheckItem` = `Checked or RadioItem or AutoCheck or ShowAlwaysCheckable`，`menuitem.inc:1247`）。`ShowAlwaysCheckable` 是**显式**的那一个——"这是个开关，把框画出来"——而它恰恰是此前被忽略的：属性已 published、对象查看器里就有，绘制却只看 `AutoCheck`（那个还会让菜单项点一下自己就切换，很多程序并不想要），于是设了专为此事而生的那个属性反而什么都不画。空框只在没有勾选字形时画，且**优先于图标列**（`ImageIndex`）。
 - **子菜单箭头 / 快捷键：** 有子项（`mi.Count > 0`）的行在右槽绘制 `tgArrowRight` 箭头；否则若 `mi.ShortCut <> 0`，在右槽右对齐绘制 `ShortCutToText(mi.ShortCut)`。（`ShortCutToText(0)` 返回 `'Unknown'`，故仅当 `ShortCut <> 0` 才渲染快捷键文本。）
 - **默认项加粗：** `TMenuItem.Default = True` 的行以 `font-weight: 700`（粗体）渲染。
 - **高亮行的 Hint 发布到 `Application.Hint`：** 高亮移到某行时把该 `TMenuItem.Hint` 写进 `Application.Hint`（状态栏 / 长提示面板据此描述光标下的命令）；高亮移开（索引 `-1`）时**清空**——留着一条已经不在指针下的命令的描述，比什么都不显示更糟。
@@ -253,7 +253,7 @@ end;
 
 ## 7. 注意事项
 
-- **数据模型是标准 LCL：** 菜单结构完全用原生 `TMainMenu` / `TPopupMenu` + `TMenuItem` 描述——`Caption`、`Enabled`、`Checked`、`RadioItem`、`AutoCheck`、`ShortCut`、`Default`、`Hint`、`RightJustify`、`Visible`、子项（`Add`）都是标准 LCL 语义，且都**真的被读**。TyControls 只接管**外观**（重绘），不改数据模型。
+- **数据模型是标准 LCL：** 菜单结构完全用原生 `TMainMenu` / `TPopupMenu` + `TMenuItem` 描述——`Caption`、`Enabled`、`Checked`、`RadioItem`、`AutoCheck`、`ShortCut`、`Default`、`Hint`、`RightJustify`、`ShowAlwaysCheckable`、`Visible`、子项（`Add`）都是标准 LCL 语义，且都**真的被读**。TyControls 只接管**外观**（重绘），不改数据模型。
 - **命令挂在 `TMenuItem.OnClick`：** 激活叶子项会调用 `TMenuItem.Click` 触发**该项自己**的 `OnClick`；不要指望菜单栏/弹出菜单类上有汇总的选择事件（它们没有）。
 - **禁用的顶层项打不开：** `Enabled = False` 的顶层项，点击、悬停切换、Alt+助记符三条路都打不开它的下拉（三者都汇到同一个 `OpenTop`，所以判定就写在那里）；它同时按 `:disabled` 绘制，用户看得出来点不动。
 - **没有子项的顶层项是一个命令按钮：** 与原生菜单栏一致，点一个没有子项的顶层项直接触发它的 `OnClick`（先收起已打开的下拉）。这就是"帮助"这类单条命令能直接摆在菜单栏上的做法。

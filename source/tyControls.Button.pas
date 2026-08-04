@@ -22,11 +22,15 @@ type
     FCancel: Boolean;
     FModalResult: TModalResult;
     FDown: Boolean;
+    FAlignment: TAlignment;
+    FShowAccelChar: Boolean;
     FShowBadge: Boolean;
     FRefitting: Boolean;   // guards the AutoSize re-fit in Invalidate against re-entry
     FBadgeValue: Integer;
     FBadgePosition: TTyBadgePosition;
     FOnBadgeDisplay: TTyBadgeDisplayEvent;
+    procedure SetAlignment(AValue: TAlignment);
+    procedure SetShowAccelChar(AValue: Boolean);
     procedure SetShowBadge(AValue: Boolean);
     procedure SetBadgeValue(AValue: Integer);
     procedure SetBadgePosition(AValue: TTyBadgePosition);
@@ -70,6 +74,11 @@ type
       WithThemeSpace: Boolean); override;
     { The caption's drawn size in DEVICE px at APPI, mnemonic markers removed. }
     procedure MeasureCaption(APPI: Integer; out AWidth, AHeight: Integer);
+    { The string this button actually DRAWS, and the 1-based index of its mnemonic (0 = none).
+      The single place ShowAccelChar is honoured, so measuring and painting can never
+      disagree about whether an '&' is a marker or a character. Descendants that draw a
+      caption of their own (the colour button) route through here too. }
+    procedure ResolveCaptionText(out AText: string; out AMnemonicPos: Integer);
     { The ink this control stacks INSIDE the padded content box, in device px at APPI — the
       vertical half of the floor, the half CalculatePreferredSize deliberately refuses to
       answer (it reports 0 on that axis so nothing negotiates a height with its parent).
@@ -158,6 +167,20 @@ type
     // in OnClick (no built-in GroupIndex this round).
     property Down: Boolean read FDown write SetDown default False;
     property ModalResult: TModalResult read FModalResult write FModalResult default mrNone;
+    { Horizontal placement of the caption inside the button. taCenter (the default) is the
+      push-button look; taLeftJustify is what a vertical navigation rail or a ribbon's file
+      menu needs, where icon and label must line up down the left edge. LCL's self-drawn
+      button spells it the same way (TCustomSpeedButton.Alignment, buttons.pp:414, also
+      default taCenter).
+      A glyph button applies this to the caption in the rect LEFT OVER beside the glyph, so
+      the glyph stays anchored and only the text moves. }
+    property Alignment: TAlignment read FAlignment write SetAlignment default taCenter;
+    { On by default: '&' in the caption marks the next character as the Alt accelerator and
+      is not drawn. Turn it OFF for a caption that legitimately contains an ampersand --
+      'AT&T', 'Save & Close', or any string coming from data -- which otherwise silently
+      loses the character AND acquires a stray accelerator. The button then also stops
+      answering Alt+letter, because it no longer has one. LCL: buttons.pp:431. }
+    property ShowAccelChar: Boolean read FShowAccelChar write SetShowAccelChar default True;
     // Badge: numeric only, >99 shows '99+'. ShowBadge is the master switch; by default
     // it shows even for 0, and OnBadgeDisplay may rewrite the text or set AVisible:=False
     // to hide it. Styled via the TyBadge typeKey theme.
@@ -194,6 +217,8 @@ begin
   // cycle turns it back off explicitly (TTySpeedButton; TTyTransfer's rail buttons).
   TabStop := True;
   FAnimationsEnabled := True;
+  FAlignment := taCenter;
+  FShowAccelChar := True;
   FBadgePosition := bpBottomRight;
   // Hover bg-fade animator: rest at 0 (normal), ~120ms full traversal,
   // decelerating. Mirrors the ToggleSwitch knob-slide timing.
@@ -214,9 +239,42 @@ begin
   inherited Destroy;
 end;
 
+procedure TTyButton.SetAlignment(AValue: TAlignment);
+begin
+  if FAlignment = AValue then Exit;
+  FAlignment := AValue;
+  Invalidate;
+end;
+
+procedure TTyButton.SetShowAccelChar(AValue: Boolean);
+begin
+  if FShowAccelChar = AValue then Exit;
+  FShowAccelChar := AValue;
+  { The displayed string just changed length ('Save & Close' is two characters wider than
+    'Save  Close'), so an AutoSize button has to re-fit and the size floor has to move.
+    Invalidate already does both (see there). }
+  Invalidate;
+end;
+
+procedure TTyButton.ResolveCaptionText(out AText: string; out AMnemonicPos: Integer);
+begin
+  if FShowAccelChar then
+    TyParseMnemonic(Caption, AText, AMnemonicPos)
+  else
+  begin
+    // Literal: every character is drawn, including '&', and there is no mnemonic to
+    // underline. 0 is TyParseMnemonic's own "no mnemonic" value, so DrawText's gate is fed
+    // the same sentinel it would get from a caption that simply had no '&'.
+    AText := Caption;
+    AMnemonicPos := 0;
+  end;
+end;
+
 function TTyButton.DialogChar(var Message: TLMKey): Boolean;
 begin
-  if Enabled and TyIsAccelKey(Message, Caption) then
+  { No mnemonic parsing means no mnemonic: a button showing 'AT&T' literally must not also
+    answer Alt+T, or the escape hatch would only fix half the bug. }
+  if Enabled and FShowAccelChar and TyIsAccelKey(Message, Caption) then
   begin
     Click;
     Exit(True);
@@ -652,8 +710,9 @@ var
   mp: Integer;
 begin
   S := CurrentStyle;
-  // The '&' markers are not drawn, so they must not be measured either.
-  TyParseMnemonic(Caption, disp, mp);
+  // Measure the string DrawContent will draw: with ShowAccelChar on the '&' markers are
+  // not drawn and must not be measured, with it off they are both.
+  ResolveCaptionText(disp, mp);
   { Measure the BLOCK, not one line: a caption may carry authored breaks
     (Caption := '你好' + #13#10 + '世界'), and DrawContent now renders them, so the size floor
     has to cover every line or the second one is what gets clipped. TyMeasureTextBlock is the
@@ -694,11 +753,11 @@ var
   disp: string;
   mp: Integer;
 begin
-  TyParseMnemonic(Caption, disp, mp);
+  ResolveCaptionText(disp, mp);
   { AMultiLine: an authored break in the caption really renders. Costs nothing when there is
     none -- the painter early-outs to the identical single-line path, mnemonic and all. }
   APainter.DrawText(AContentRect, disp, AStyle.FontName, ResolveFontSize(AStyle),
-    AStyle.FontWeight, AStyle.TextColor, taCenter, tlCenter, True, TyAccelGatePos(mp),
+    AStyle.FontWeight, AStyle.TextColor, FAlignment, tlCenter, True, TyAccelGatePos(mp),
     False, True, TyLineHeight(ActiveController));
 end;
 

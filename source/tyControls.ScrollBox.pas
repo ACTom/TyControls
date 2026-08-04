@@ -137,12 +137,41 @@ type
 
       Both already existed and were protected, so the one thing a caller most wants from a
       scrolling container -- "show me a bit further down" -- was reachable only by writing
-      the scrollbar's Position and hoping. Note the names: TWinControl.ScrollBy MOVES CHILD
-      CONTROLS and this class calls it internally to do exactly that, so overriding it to
-      mean "scroll the view" would have it call itself. ScrollByDelta is the view operation;
-      ScrollBy keeps TWinControl's meaning. }
+      the scrollbar's Position and hoping. }
     procedure ScrollByDelta(ADx, ADy: Integer);
     procedure ScrollTo(AX, AY: Integer);
+    { ScrollBy, with the meaning it has on every OTHER scrolling container.
+
+      This is a name that already existed and already compiled, and that is the whole
+      problem: on a TScrollBox, ScrollBy is the documented "scroll the view" call, because
+      TScrollingWinControl OVERRIDES TWinControl's child-mover with a real view scroll
+      (C:/lazarus/lcl/include/scrollingwincontrol.inc:276-279). Ours did not override it, so
+      a ported `Box.ScrollBy(0, -50)` reached TWinControl's version
+      (include/wincontrol.inc:6255-6268) and re-bounded EVERY child -- including the two
+      scrollbars, which walked off their docked edges -- while FScrollX/FScrollY, documented
+      at the top of this unit as the single source of truth, stayed where they were. The
+      next UpdateScrollRange then measured the moved children as a SMALLER content extent
+      (MeasureAndDock adds the offset back in), so the range and the thumb were both wrong
+      and the following drag made the content jump. Same name, same arity, same parameter
+      types, different meaning, no compile error.
+
+      Sign convention is LCL's: the arguments are how far the CONTENT moves, so a negative
+      DeltaY pushes the content up, i.e. scrolls DOWN -- hence the negation into the offset.
+      The child-moving original is still what does the work; it is reached as `inherited`
+      from ScrollContentTo, which is the only caller that wants it. }
+    procedure ScrollBy(DeltaX, DeltaY: Integer); override;
+    { Scroll the minimum amount that brings AControl fully into the viewport.
+
+      Nothing here could do this, and a host could not hand-roll it either while the only
+      mutator was protected. It is what makes keyboard navigation follow the content: tab to
+      a child below the fold and it is still off screen otherwise. Clamped like LCL's
+      (include/scrollingwincontrol.inc:281-312): a child TALLER than the viewport aligns its
+      top edge rather than chasing its bottom one off the other end. }
+    procedure ScrollInView(AControl: TControl);
+    { LCL's name for UpdateScrollRange (forms.pp:202, TScrollingWinControl.UpdateScrollbars).
+      Same job, and it stays a one-line forward rather than a rename so the existing name --
+      which every call site and doc page in this repo uses -- keeps working. }
+    procedure UpdateScrollbars;
     { The logical content extent (bounding box of the non-scrollbar children), valid
       after UpdateScrollRange. Exposed for tests. }
     property ContentWidth: Integer read FContentW;
@@ -150,6 +179,13 @@ type
     property ScrollX: Integer read FScrollX;
     property ScrollY: Integer read FScrollY;
   published
+    { Republished as TScrollBox does (forms.pp:257). It is declared in TControl's PROTECTED
+      "optional properties" block (controls.pp:1580), so unlike most of the events this
+      library republishes it was unreachable from CODE too, not merely absent from the
+      Object Inspector -- the static Constraints values were the only size limits a host
+      could express, and a limit that depends on the form ("never wider than half of it")
+      had no expression at all. }
+    property OnConstrainedResize;
     property Align;
     property Anchors;
     property StyleClass;
@@ -307,6 +343,47 @@ begin
     FHScrollBar.ControlStyle := FHScrollBar.ControlStyle + [csNoDesignVisible];
     FHScrollBar.Visible := False;
   end;
+end;
+
+{ See the declaration for why this override exists at all. }
+procedure TTyScrollBox.ScrollBy(DeltaX, DeltaY: Integer);
+begin
+  ScrollByDelta(-DeltaX, -DeltaY);
+end;
+
+procedure TTyScrollBox.UpdateScrollbars;
+begin
+  UpdateScrollRange;
+end;
+
+procedure TTyScrollBox.ScrollInView(AControl: TControl);
+var
+  R: TRect;
+  P: TPoint;
+  viewW, viewH, dx, dy: Integer;
+begin
+  if (AControl = nil) or (AControl.Parent = nil) then Exit;
+  if not ContentHost.IsParentOf(AControl) then Exit;
+  UpdateScrollRange;
+  { The child's rect in the CONTENT HOST's coordinates -- the same space the offset is
+    expressed in, so a plain delta is all that is needed. }
+  P := AControl.ClientToParent(Point(0, 0), ContentHost);
+  R := Rect(P.x, P.y, P.x + AControl.Width, P.y + AControl.Height);
+
+  viewW := ClientWidth;
+  viewH := ClientHeight;
+  dx := 0;
+  dy := 0;
+  { Past the far edge: pull it back by the overshoot. Before the near edge: push by the
+    shortfall. The near-edge test runs SECOND so an oversized child ends up top/left-aligned
+    rather than chasing its far edge out of view -- LCL resolves the same conflict the same
+    way. }
+  if R.Right > viewW then dx := R.Right - viewW;
+  if R.Left - dx < 0 then dx := R.Left;
+  if R.Bottom > viewH then dy := R.Bottom - viewH;
+  if R.Top - dy < 0 then dy := R.Top;
+  if (dx <> 0) or (dy <> 0) then
+    ScrollByDelta(dx, dy);
 end;
 
 procedure TTyScrollBox.ScrollTo(AX, AY: Integer);
@@ -514,10 +591,12 @@ begin
   // unconditionally latches it — a column of alTop rows would keep the full box width, sit
   // under the vertical bar forever, and never fall back to the viewport. (LCL's own
   // TScrollingWinControl.GetLogicalClientRect guards on ScrollBar.Visible for the same reason.)
-  { Grow by the content PLUS the frame AdjustClientRect is about to take back off both edges,
+  { Grow by the content PLUS everything AdjustClientRect is about to take back off both edges,
     so what the children actually get laid out in is exactly the content. Growing to the bare
-    content would leave them a frame short of it and clip the last row by a border width. }
-  bw := 2 * FrameInset;
+    content would leave them a frame short of it and clip the last row by a border width.
+    BorderWidth is in that sum because TTyPanel.AdjustClientRect now honours it -- leave it
+    out and an 8px gutter would cost the last row 16px instead of moving it. }
+  bw := 2 * (FrameInset + BorderWidth);
   if (FHScrollBar <> nil) and FHScrollBar.Visible and (FContentW > viewW) then
     Result.Right := Result.Left + FContentW + bw;
   if (FVScrollBar <> nil) and FVScrollBar.Visible and (FContentH > viewH) then
@@ -616,7 +695,9 @@ begin
     if FContent <> nil then
       FContent.ScrollBy(-dx, -dy)
     else
-      ScrollBy(-dx, -dy);
+      { INHERITED: the child-mover, not our own view-scroll override -- which would call
+        straight back into here. }
+      inherited ScrollBy(-dx, -dy);
   finally
     FInScrollBy := False;
   end;

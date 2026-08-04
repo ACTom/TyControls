@@ -5,20 +5,39 @@ uses
   Classes, SysUtils, Controls, LCLType, LazUTF8,
   tyControls.Edit;
 
+const
+  { The placeholder LCL and Delphi both default to (maskedit.pp DefaultBlank). }
+  TyMaskDefaultBlank = '_';
+
 { Mask slot codes: '#' = digit (0-9), 'L' = letter (A-Za-z), 'C' = any non-space;
   every other char is a fixed LITERAL, auto-inserted between slots. }
 function TyMaskSlotAccepts(ASlot, ACh: Char): Boolean;
 { Lay the significant chars of ARaw into AMask, inserting literals between them.
-  Deferred: a literal is only emitted once the slot AFTER it is filled, so a partial
-  string never shows a dangling trailing separator ("12" not "12/"). }
-function TyMaskApply(const AMask, ARaw: string): string;
+
+  ABlank = #0 keeps the original SHORT form: emission stops at the end of the input and a
+  pending trailing literal is dropped, so "12" on '##/##' stays "12".
+
+  ABlank <> #0 emits the SKELETON instead: the whole mask, every literal in place, and ABlank
+  in every slot the input did not reach -- '__/__/____' empty, '12/__/____' half-typed. That
+  is the shape a masked field exists to show, and the short form could not express it: an
+  empty date field rendered as nothing at all, so the user was looking at a blank box with no
+  clue what it wanted or how much of it. }
+function TyMaskApply(const AMask, ARaw: string; ABlank: Char = #0): string;
 { Recover the significant (non-literal) chars from AText for AMask (round-trips
-  TyMaskApply for conforming input). }
-function TyMaskExtract(const AMask, AText: string): string;
+  TyMaskApply for conforming input). A slot holding ABlank ENDS the recovery: entry is
+  append-only, so the first blank is the end of the input and everything past it is
+  placeholder, not content. }
+function TyMaskExtract(const AMask, AText: string; ABlank: Char = #0): string;
 { Mask char of the (AFilledCount+1)-th editable slot, or #0 when all slots are filled. }
 function TyMaskNextSlot(const AMask: string; AFilledCount: Integer): Char;
-{ True when every editable slot in AMask is filled by AText. }
-function TyMaskIsComplete(const AMask, AText: string): Boolean;
+{ Index (1-based, into the string TyMaskApply produces) of the slot that AFilledCount filled
+  characters leave next in line, or Length(AMask)+1 when they fill the mask. The caret belongs
+  THERE and not at the end of the display string: with a skeleton in the box those two stopped
+  being the same place, and a caret parked after '__/____' points at nothing the next keystroke
+  will touch. }
+function TyMaskCaretSlot(const AMask: string; AFilledCount: Integer): Integer;
+{ True when every editable slot in AMask is filled by AText (ABlank never counts as filled). }
+function TyMaskIsComplete(const AMask, AText: string; ABlank: Char = #0): Boolean;
 { '' when AMask is usable, otherwise the reason it is not -- see TTyMaskEdit.Mask for what
   this control's mask language is and, more to the point, what it is NOT. Setting Mask
   raises ETyMaskError with this text; call it first to check a mask without raising. }
@@ -37,12 +56,34 @@ type
   TTyMaskEdit = class(TTyEdit)
   private
     FMask: string;
+    FSpaceChar: Char;
+    { Text as it stood when this focus visit began, and the "already reported" latch. Both are
+      LCL's (maskedit.pp FTextOnEnter / FValidationFailed): the on-exit check must only fire
+      when the USER changed something during the visit, and must never raise a second time
+      while the first exception is still unwound. }
+    FTextOnEnter: string;
+    FValidationFailed: Boolean;
     procedure SetMask(const AValue: string);
+    procedure SetSpaceChar(const AValue: Char);
     procedure ApplyRaw(const ARaw: string);
     procedure SetMaskedText(const AValue: TCaption);
+    { The significant characters currently held, blanks excluded. }
+    function RawText: string;
   protected
     procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    procedure DoEnter; override;
+    { The validation MOMENT LCL has and this control did not (maskedit.pp:2094-2112). Without
+      it a half-typed '12/__/____' left the control in silence and reached business code
+      unless every caller remembered to poll IsComplete at every exit point -- and one that
+      forgets is exactly the bug a mask edit exists to prevent.
+
+      LCL's own three guards, all load-bearing: `inherited DoExit` runs FIRST so an OnExit
+      handler can fix the value before anything is raised; nothing is checked unless the user
+      actually CHANGED the text during this visit (tabbing through an untouched field is not
+      an error); and FValidationFailed stops a second raise while the first is still unwound,
+      which would abort the application rather than report anything. }
+    procedure DoExit; override;
     { The seam TTyEdit provides for exactly this, and the one path this control never
       took. Typing was masked because UTF8KeyPress is overridden; PASTE is not typing --
       it funnels through InjectStringAt -> FilterInsert, which was inherited unchanged.
@@ -52,8 +93,22 @@ type
       messages (LM_PASTE/LM_CUT/LM_CLEAR) for the same reason. }
     function FilterInsert(const AText: string): string; override;
   public
+    constructor Create(AOwner: TComponent); override;
     // True when every slot of the mask is filled (e.g. gate an OK button).
+    { The two erase entry points that do NOT go through KeyDown, so overriding KeyDown alone
+      left them cutting raw characters out of the display -- literals and placeholders with
+      them. Both mean what Backspace and Delete mean here: drop the last significant char. }
+    procedure InjectBackspace; override;
+    procedure InjectDelete; override;
     function IsComplete: Boolean;
+    { The significant characters, with literals and placeholders stripped -- the VALUE behind
+      the display. `M.Text` is what the user sees ('12/__/____'); this is what it means ('12'). }
+    function MaskedValue: string;
+    { Raise ETyMaskError when a mask is in force and its slots are not all filled. Public and
+      virtual, as LCL's is (maskedit.pp:315): call it from an OK button to refuse a half-typed
+      value, or override it to report differently. A no-op when Mask is '' -- an unmasked edit
+      has nothing to validate against. }
+    procedure ValidateEdit; virtual;
   published
     { THE MASK LANGUAGE, and its boundary.
 
@@ -82,6 +137,24 @@ type
       for the same reason -- and unlike ';' it announces itself, since as a literal it is
       drawn: '!##' displays as "!12". }
     property Mask: string read FMask write SetMask;
+    { The placeholder drawn in every slot the user has not reached yet -- LCL's SpaceChar
+      (maskedit.pp:305, published :364), default '_' on both.
+
+      This is the point of a mask edit and it was missing entirely: the display was built only
+      as far as the last character typed, so an EMPTY date field rendered as an empty box and a
+      half-typed one showed "12". Nothing on screen said the field wanted eight digits, where
+      the separators would fall, or how much was left -- the user was asked to guess the shape
+      of a form field from a blank rectangle. It now reads "__/__/____", then "12/__/____".
+
+      #0 turns the skeleton off and restores that older, shorter display, in which Text holds
+      only what has been typed. Two consequences worth knowing before choosing:
+        * Text is the DISPLAY string, so with a skeleton in force an untouched field reads
+          '__/__/____' rather than ''. MaskedValue is the value ('' there); IsComplete and
+          TyMaskExtract both already ignore placeholders.
+        * TextHint only shows for an empty Text, so a skeleton supersedes it. That is the
+          intent -- a skeleton says more than a hint and does not vanish at the first
+          keystroke -- but a control relying on TextHint wants SpaceChar := #0. }
+    property SpaceChar: Char read FSpaceChar write SetSpaceChar default TyMaskDefaultBlank;
     { LCL and Delphi both call this property EditMask (maskedit.pp), so code ported
       from either fails to compile on the name alone -- before anyone gets as far as
       noticing that the mask LANGUAGE is different too (see Mask above). This is an alias
@@ -126,7 +199,7 @@ begin
   end;
 end;
 
-function TyMaskApply(const AMask, ARaw: string): string;
+function TyMaskApply(const AMask, ARaw: string; ABlank: Char = #0): string;
 var
   i, ri: Integer;
   m: Char;
@@ -140,7 +213,13 @@ begin
     m := AMask[i];
     if m in ['#', 'L', 'C'] then
     begin
-      if ri > Length(ARaw) then Break;   // out of input: drop any pending trailing literal
+      if ri > Length(ARaw) then
+      begin
+        if ABlank = #0 then Break;   // short form: drop any pending trailing literal
+        Result := Result + pending + ABlank;   // skeleton: the slot still shows
+        pending := '';
+        Continue;
+      end;
       Result := Result + pending + ARaw[ri];
       pending := '';
       Inc(ri);
@@ -148,9 +227,27 @@ begin
     else
       pending := pending + m;             // literal: hold until the next slot is filled
   end;
+  { Skeleton only: a mask may end in literals with no slot after them ('##-' or '(###)').
+    The short form deliberately drops those; the skeleton is the whole mask, so they belong. }
+  if (ABlank <> #0) and (pending <> '') then
+    Result := Result + pending;
 end;
 
-function TyMaskExtract(const AMask, AText: string): string;
+function TyMaskCaretSlot(const AMask: string; AFilledCount: Integer): Integer;
+var
+  i, cnt: Integer;
+begin
+  cnt := 0;
+  for i := 1 to Length(AMask) do
+    if AMask[i] in ['#', 'L', 'C'] then
+    begin
+      if cnt = AFilledCount then Exit(i - 1);   // caret sits BEFORE that slot
+      Inc(cnt);
+    end;
+  Result := Length(AMask);   // every slot filled: caret at the end of the display
+end;
+
+function TyMaskExtract(const AMask, AText: string; ABlank: Char = #0): string;
 var
   i, ti: Integer;
   m: Char;
@@ -163,6 +260,9 @@ begin
     m := AMask[i];
     if m in ['#', 'L', 'C'] then
     begin
+      { A blank is the end of the input, not a character of it. Without this the skeleton
+        would read back as content and IsComplete would call an untouched field full. }
+      if (ABlank <> #0) and (AText[ti] = ABlank) then Break;
       Result := Result + AText[ti];
       Inc(ti);
     end
@@ -186,13 +286,13 @@ begin
   Result := #0;
 end;
 
-function TyMaskIsComplete(const AMask, AText: string): Boolean;
+function TyMaskIsComplete(const AMask, AText: string; ABlank: Char = #0): Boolean;
 var i, slots: Integer;
 begin
   slots := 0;
   for i := 1 to Length(AMask) do
     if AMask[i] in ['#', 'L', 'C'] then Inc(slots);
-  Result := (slots > 0) and (Length(TyMaskExtract(AMask, AText)) >= slots);
+  Result := (slots > 0) and (Length(TyMaskExtract(AMask, AText, ABlank)) >= slots);
 end;
 
 function TyMaskRejectReason(const AMask: string): string;
@@ -217,7 +317,7 @@ end;
 
 { The characters of AInput this mask will take, in order, when appended after the ARaw
   already laid down. Shared by paste and by `Text :=` so the two cannot disagree. }
-function MaskAcceptedFrom(const AMask, ARaw, AInput: string): string;
+function MaskAcceptedFrom(const AMask, ARaw, AInput: string; ABlank: Char): string;
 var
   i: Integer;
   slot: Char;
@@ -225,6 +325,10 @@ begin
   Result := '';
   for i := 1 to Length(AInput) do
   begin
+    { The blank character is never CONTENT, whatever the slot would say about it -- 'C' takes
+      any non-space, so without this line assigning a skeleton back into a 'C' mask would lay
+      its own placeholders in as data. }
+    if (ABlank <> #0) and (AInput[i] = ABlank) then Continue;
     slot := TyMaskNextSlot(AMask, Length(ARaw) + Length(Result));
     if slot = #0 then Break;                  // every slot filled: ignore the rest
     if TyMaskSlotAccepts(slot, AInput[i]) then Result := Result + AInput[i];
@@ -238,19 +342,32 @@ end;
   Not the same question as TyMaskExtract, which copies whatever sits at a slot POSITION
   without asking whether it belongs there -- that is why IsComplete used to answer True
   for '###-###' holding 'abc-def'. }
-function MaskConformingRaw(const AMask, AText: string; out ARaw: string): Boolean;
+function MaskConformingRaw(const AMask, AText: string; ABlank: Char;
+  out ARaw: string): Boolean;
 var
   i, ti: Integer;
   m: Char;
+  sawBlank: Boolean;
 begin
   ARaw := '';
   ti := 1;
+  sawBlank := False;
   for i := 1 to Length(AMask) do
   begin
     if ti > Length(AText) then Break;
     m := AMask[i];
     if m in ['#', 'L', 'C'] then
     begin
+      if (ABlank <> #0) and (AText[ti] = ABlank) then
+      begin
+        { From the first blank on, every remaining slot must also be blank -- entry is
+          append-only, so a filled slot after an empty one is not a shape this control can
+          produce and must be re-derived rather than trusted. }
+        sawBlank := True;
+        Inc(ti);
+        Continue;
+      end;
+      if sawBlank then Exit(False);
       if not TyMaskSlotAccepts(m, AText[ti]) then Exit(False);
       ARaw := ARaw + AText[ti];
       Inc(ti);
@@ -262,10 +379,34 @@ begin
   end;
   { Nothing left over, and no dangling trailing literal ('12/' on '##/##' extracts to
     '12', which re-applies to '12' -- so '12/' is NOT conforming and gets normalised). }
-  Result := (ti > Length(AText)) and (TyMaskApply(AMask, ARaw) = AText);
+  Result := (ti > Length(AText)) and (TyMaskApply(AMask, ARaw, ABlank) = AText);
 end;
 
 { TTyMaskEdit }
+
+constructor TTyMaskEdit.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  FSpaceChar := TyMaskDefaultBlank;
+  FValidationFailed := False;
+  FTextOnEnter := '';
+end;
+
+function TTyMaskEdit.RawText: string;
+begin
+  Result := TyMaskExtract(FMask, Text, FSpaceChar);
+end;
+
+procedure TTyMaskEdit.SetSpaceChar(const AValue: Char);
+var
+  raw: string;
+begin
+  if FSpaceChar = AValue then Exit;
+  raw := RawText;             // read the value under the OLD placeholder
+  FSpaceChar := AValue;
+  if FMask <> '' then
+    ApplyRaw(raw);            // and re-render it under the new one
+end;
 
 procedure TTyMaskEdit.SetMask(const AValue: string);
 var
@@ -287,10 +428,18 @@ end;
 
 procedure TTyMaskEdit.ApplyRaw(const ARaw: string);
 begin
-  { Straight to the base setter on purpose: ARaw is already the accepted significant
-    chars, so SetMaskedText would only re-derive the same string on every keystroke. }
-  inherited Text := TyMaskApply(FMask, ARaw);
-  CaretPos := UTF8Length(Text);   // append-only: caret always at the end
+  { Straight to the base writer on purpose: ARaw is already the accepted significant
+    chars, so SetMaskedText would only re-derive the same string on every keystroke.
+    AByCode=False because this IS the keystroke path -- this control rebuilds its whole
+    display string per accepted character, and the programmatic route would clear
+    Modified on every one of them. }
+  SetTextInternal(TyMaskApply(FMask, ARaw, FSpaceChar), False);
+  { Entry is still append-only, but "the end of the display" stopped meaning "where the next
+    character goes" the moment a skeleton filled the box: after '12' on '##/##/####' the
+    display runs to '____' and the caret belongs on the third slot, not past the eighth.
+    TyMaskCaretSlot answers that; with no skeleton it lands past the last typed character and
+    SetCaretPos clamps it to the end, which is what this line used to say outright. }
+  CaretPos := TyMaskCaretSlot(FMask, Length(ARaw));
 end;
 
 procedure TTyMaskEdit.SetMaskedText(const AValue: TCaption);
@@ -306,9 +455,13 @@ begin
     sibling edit) is kept verbatim. Re-filtering it is NOT a no-op: 'C' accepts any
     non-space char, so on mask 'C-C' the filter eats the mask's own '-' as CONTENT and
     turns 'a-b' into 'a--'. Without this branch `Ed.Text := Ed.Text` corrupts itself. }
-  if not MaskConformingRaw(FMask, AValue, raw) then
-    raw := MaskAcceptedFrom(FMask, '', AValue);
-  inherited Text := TyMaskApply(FMask, raw);
+  if not MaskConformingRaw(FMask, AValue, FSpaceChar, raw) then
+    raw := MaskAcceptedFrom(FMask, '', AValue, FSpaceChar);
+  inherited Text := TyMaskApply(FMask, raw, FSpaceChar);
+  { The base setter parks the caret at the end of the string it was handed, which with a
+    skeleton in the box is the end of the PLACEHOLDERS -- an empty date field opened with the
+    caret sitting after '____'. It belongs on the first slot still waiting for input. }
+  CaretPos := TyMaskCaretSlot(FMask, Length(raw));
 end;
 
 procedure TTyMaskEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
@@ -324,7 +477,7 @@ begin
   if Length(UTF8Key) = 1 then
   begin
     c := UTF8Key[1];
-    raw := TyMaskExtract(FMask, Text);
+    raw := RawText;
     slot := TyMaskNextSlot(FMask, Length(raw));
     if (slot <> #0) and TyMaskSlotAccepts(slot, c) then
       ApplyRaw(raw + c);
@@ -341,7 +494,7 @@ begin
       caret -- including a mask LITERAL, leaving Text no longer conforming to the mask
       the control claims to enforce. This model has no mid-text hole, so both keys mean
       the same thing: drop the last significant char. }
-    raw := TyMaskExtract(FMask, Text);
+    raw := RawText;
     if raw <> '' then Delete(raw, Length(raw), 1);
     ApplyRaw(raw);
     Key := 0;
@@ -361,17 +514,80 @@ begin
     assignment cannot drift apart). Literals in the pasted text are dropped rather than
     matched -- TyMaskApply re-inserts them itself, so pasting "2026-07-30" into
     '####-##-##' lands the digits and rebuilds the dashes. }
-  raw := TyMaskExtract(FMask, Text);
-  keep := MaskAcceptedFrom(FMask, raw, AText);
+  raw := RawText;
+  keep := MaskAcceptedFrom(FMask, raw, AText, FSpaceChar);
   if keep <> '' then ApplyRaw(raw + keep);
   { ApplyRaw has already rewritten Text through the mask, so there is nothing left for
     the base insert to do -- '' is InjectStringAt's documented "insert nothing". }
   Result := '';
 end;
 
+procedure TTyMaskEdit.InjectBackspace;
+var raw: string;
+begin
+  if FMask = '' then
+  begin
+    inherited InjectBackspace;   // no mask -> plain edit, unchanged
+    Exit;
+  end;
+  if ReadOnly then Exit;
+  raw := RawText;
+  if raw = '' then Exit;
+  Delete(raw, Length(raw), 1);
+  ApplyRaw(raw);
+end;
+
+procedure TTyMaskEdit.InjectDelete;
+begin
+  { This model has no mid-text hole, so Delete means what Backspace means -- the same call
+    KeyDown makes for both keys. }
+  if FMask = '' then
+    inherited InjectDelete
+  else
+    InjectBackspace;
+end;
+
 function TTyMaskEdit.IsComplete: Boolean;
 begin
-  Result := TyMaskIsComplete(FMask, Text);
+  Result := TyMaskIsComplete(FMask, Text, FSpaceChar);
+end;
+
+function TTyMaskEdit.MaskedValue: string;
+begin
+  Result := RawText;
+end;
+
+procedure TTyMaskEdit.ValidateEdit;
+begin
+  if FMask = '' then Exit;          // nothing to validate against
+  if IsComplete then Exit;
+  raise ETyMaskError.CreateFmt('TTyMaskEdit: "%s" does not fill the mask "%s".',
+    [Text, FMask]);
+end;
+
+procedure TTyMaskEdit.DoEnter;
+begin
+  inherited DoEnter;
+  FTextOnEnter := Text;             // the baseline the exit check compares against
+  FValidationFailed := False;
+end;
+
+procedure TTyMaskEdit.DoExit;
+begin
+  { OnExit gets its chance FIRST, exactly as in LCL -- a handler that completes or clears the
+    value must be able to do so before anything is raised. }
+  inherited DoExit;
+  if (FMask = '') or FValidationFailed then Exit;
+  if FTextOnEnter = Text then Exit; // untouched: tabbing through is not an error
+  try
+    ValidateEdit;
+  except
+    { Latch BEFORE re-raising: the exception travels out through the focus change, and a
+      second one raised while this is still unwound aborts the application instead of
+      reporting anything. Cleared on the next DoEnter. }
+    FValidationFailed := True;
+    raise;
+  end;
 end;
 
 end.

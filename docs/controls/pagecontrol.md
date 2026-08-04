@@ -34,7 +34,10 @@
 | `Pages[i]` | `TTyTabSheet`（public, 只读 indexed） | 第 i 页；越界返回 `nil` |
 | `PageCount` | `Integer` | 页数 |
 | `AddPage(caption)` / `AddTab(caption)` | `: TTyTabSheet` | 追加一页（`Owner` = 控件的 Owner，即窗体；`Parent` = 控件），返回该页；首次追加自动选中 |
+| `AddTabSheet` | `: TTyTabSheet` | LCL 的写法与签名（`TPageControl.AddTabSheet`）：不带 caption 参数，返回新页。这是现有 Delphi / Lazarus 代码里建页最常见的一种写法，也是本类此前唯一不认的一种。caption 留空而不是自动生成 `TabSheet1`——LCL 也留空，凭空造一个标签只会变成宿主还得注意去清掉的文字 |
 | `RemovePage(i)` | 方法 | 移除并释放第 i 页，自动修正活动页 |
+| `MovePage(from, to)` | 方法 | 把某页（连同它的页签）从一个位置挪到另一个位置。重排原语一直存在，但只是个由页签拖拽驱动的 **protected** 钩子，应用代码根本无从排序页面。两端都会裁剪，越界或原地不动直接忽略。`TTyTabSheet.PageIndex` 的公开入口 |
+| `IndexOfPageAt(X, Y)` / `IndexOfPageAt(P)` | `: Integer` | 某点落在哪一**页**上，无则 -1。与 `IndexOfTabAt` 问的是不同的问题：那个问页签头，这个问页面体，所以落在页签条上不算页命中，反之亦然。只有活动页有像素，因此最多只有一个索引会应答 |
 | `TabHeight` | `Integer`（不设时跟随主题：经典 28 / 现代 38） | 页签头条带逻辑高度（按 PPI 缩放）。`0` = **完全不要条带**（页面铺满控件，由宿主自己驱动切页）；`TyTabHeightAuto`（-1，含任意负值）= 交回主题的 `--control-height`。详见 §注意事项 |
 | `TabsClosable` | `Boolean`（默认 False） | 页签头是否显示关闭 × |
 | `AnimationsEnabled` | `Boolean`（默认 True） | 切页时活动页签头是否交叉淡入（无窗口句柄时直接定格，保证 headless 测试稳定） |
@@ -47,7 +50,13 @@
 | 成员 | 说明 |
 |---|---|
 | `Caption`（published） | 该页的**标签文字**；改动时通知宿主重排标签头（经重写 `TextChanged`）；**不**画在页面体上。**它就是 `TControl.Caption`**：`Caption` 与 `Text` 是同一个字符串，早先的 `FCaption` 影子字段已去掉 |
+| `PageIndex`（published, `stored False`） | 该页在宿主里的位置，**可写**：赋值即**移动**该页（连同页签）。此前排序只能靠用户拖页签——重排原语是 protected 且没有任何入口——所以"最近使用顺序""按文档名排序"这类由数据决定的顺序，从代码里完全表达不出来。`stored False`（与 `TTabSheet` 一致）：顺序已经由页流式化的先后承载，再存一份就是同一个事实有两个真相来源 |
+| `PageControl`（public, 读/写） | 该页所属的宿主，**读/写**——赋值即把页搬到另一个宿主，与 `TTabSheet.PageControl` 一致。此前只能读 `Parent` 再硬转型，那对任何 parent 都编译得过、只在运行期才炸。类型是 `TTyCustomTabStrip` 而非 `TTyPageControl`，这一点由单元依赖图决定：`tyControls.PageControl` 的 **interface** 需要 `TTyTabSheet`（页数组、`AddPage` 的返回类型），所以具体宿主类型无法出现在本单元的 interface 里，否则 interface 段循环引用。标签条基类是编译期能表达"这是个标签宿主"的最近类型；页级成员仍需转型 |
+| `OnShow` / `OnHide`（published） | 本页成为 / 不再是活动页时触发。此前逐页的进入/离开逻辑（延迟加载内容、离开时校验）只能集中到宿主的 `OnChange` 里再按索引 if/case 分发，页无法拥有自己的行为；移植过来的 `OnShow`/`OnHide` 处理器也无处可挂。名字、签名与触发时机都与 `TCustomPage` 一致（经 `CM_VISIBLECHANGED`） |
+| `Left` / `Top` / `Width` / `Height` / `TabOrder` / `Visible` | 六个都重声明为 `stored False`（与 `TCustomPage` 一致）。它们统统归宿主管：构造时强制 `Align := alClient` 与 `Visible := False`，宿主每次切页都会重写 `Visible`。序列化的话，每一页都会往 `.lfm` 里写一个 `Visible = False` 和一组载入时会被对齐引擎覆盖掉的 bounds——纯噪声，每次进设计器都让 diff 再翻腾一遍，而且那个被持久化的 `Visible = False` 要靠 `Loaded` 跑起来才被撤销，而不是压根就没写过。**只影响写入**；已经带着这些值的旧 `.lfm` 照常读取 |
 | `ControlStyle` | 构造时加 `csAcceptsControls, csDesignFixedBounds, csNoDesignVisible, csNoFocus`；`Align = alClient` |
+
+> **换宿主时的注销（一个真实缺陷的修复）**：离开一个宿主与加入一个宿主同样是页列表事件，而此前只接了加入那一半——注销挂在 `Notification(opRemove)` 上，那是页被**释放**时触发的，不是被重新 parent 时。于是把一页搬到第二个宿主，会让它同时被两个宿主计数、画页签、并从 `Pages[]` 里发出来：旧宿主还在为一个已经不在它里面的控件画标签页。现在 `TTyTabSheet.SetParent` 两半都做（拆除过程中跳过——`Notification` 已经覆盖释放路径）。
 
 ## 4. 设计器里使用
 
@@ -76,7 +85,18 @@ PageCtrl.ActivePage := Pg;           // 切到该页
 ## 6. 标签头能力（继承自 TTyCustomTabStrip）
 
 - **横向滚动**：标签头溢出时显示左右箭头；`ScrollTabIntoView`/`SetHeaderScroll`/`TyMaxHeaderScroll` 等几何 API（设备像素）供测试与自定义命中。
-- **拖拽重排**：按住页签头拖动可重排页顺序，提交后触发 `OnReorder(从, 到)`。
+- **拖拽重排**：按住页签头拖动可重排页顺序，提交后触发 `OnReorder(从, 到)`。选中项钉在**位置**上而不是跟着被拖的那一页走；此前只有页签头遵守这条规则，`Visible` 属于页对象、数组重排后没有任何东西重新赋值它，于是把一页拖过选中页会让"高亮的页签"和"显示的页面"对不上，直到下一次点击才恢复。现在 `DoReorderTabs` 末尾重新应用 `ShowOnlyPage`。
+
+### 带 LCL 名字的几何 / 命中 / 滚动成员
+
+这三个（加上 `TTyPageControl.IndexOfPageAt`）用的是 LCL 的名字，因此必须承担 LCL 的**语义**——引擎里本来就各有一个近似的孪生成员，而三处的孪生成员回答的都是**另一个问题**，那正是移植过来的调用点绑错成员、拿到一个貌似合理的错误答案而非编译错误的方式。
+
+| 成员 | 语义，以及它不是哪个孪生成员 |
+|---|---|
+| `TabRect(i)` | 页签头**绘制时**的矩形——已应用滚动偏移与左侧内缩。`TyTabHeaderRect` 是**未偏移**的内容空间矩形：标签条放得下时两者相同，放不下时正好差一个滚动偏移——而那恰恰是调用方要把菜单/浮层放到某个页签上时需要区分的时刻 |
+| `DisplayRect` | 页面**体**在控件内占的矩形（控件局部设备像素，标签条以下）。此前这个内缩只存在于 `AdjustClientRect` 内部，没有任何对外访问点 |
+| `IndexOfTabAt(X, Y)` / `IndexOfTabAt(P)` | 某点下是哪个页签，无则 **-1**。`TyDropIndexAt` 不是它、也不能拿来当它用：那是拖拽重排的落点解析器，按偏移后的中点找**最近的槽位**并裁剪进 `[0, Count-1]`，因此**永远说不出"这里没有页签"**——问它"右键点在最后一个页签之后的空白条带上是哪个"，它会回答最后一个页签。基于它做右键菜单或逐页签 tooltip，菜单就会开在用户根本没瞄准的页签上。本方法命中的是真实的偏移后页签矩形，要求点落在条带内，其余一律返回 -1（含两个溢出箭头——它们不是页签） |
+| `ScrollTabs(Delta)` | 按 **Delta 个页签**滚动标签条——LCL 的单位（`comctrls.pp:711/862`），不是我们的。`SetHeaderScroll` 收的是**设备像素**，所以把移植来的 `ScrollTabs(2)` 机械改名过去会滚动两个像素，看上去像什么都没发生。实现落在页签边界上而不是按平均页签宽度换算，因为各页签的标题宽度通常差别很大 |
 - **可关闭页签**：`TabsClosable = True` 时每页签头右侧有关闭 ×，点击触发 `OnTabClose`（可否决）。
 - **活动页交叉淡入**：切页时活动页签头背景从非活动样式淡入活动样式（仅页签头颜色淡入，页内容瞬时切换）。
 - **键盘**：`←/→` 上一/下一页，`Home/End` 首/末页，`Ctrl+Tab` / `Ctrl+PageUp/PageDown` 切页。

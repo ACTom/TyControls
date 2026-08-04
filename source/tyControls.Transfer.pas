@@ -621,11 +621,11 @@ begin
     FLeftList := NewPane;
     FRightList := NewPane;
     // Chain, do not steal — see the FLeftInnerChange declaration.
-    FLeftInnerChange := FLeftList.Items.OnChange;
-    FLeftList.Items.OnChange := @LeftItemsChanged;
+    FLeftInnerChange := FLeftList.ItemsList.OnChange;
+    FLeftList.ItemsList.OnChange := @LeftItemsChanged;
     FLeftList.OnChange := @PaneSelectionChanged;
-    FRightInnerChange := FRightList.Items.OnChange;
-    FRightList.Items.OnChange := @RightItemsChanged;
+    FRightInnerChange := FRightList.ItemsList.OnChange;
+    FRightList.ItemsList.OnChange := @RightItemsChanged;
     FRightList.OnChange := @PaneSelectionChanged;
 
     for m := Low(TTyTransferMove) to High(TTyTransferMove) do
@@ -661,12 +661,12 @@ begin
   // listbox's own bookkeeping exactly as it is when nobody chained onto it.
   if FLeftList <> nil then
   begin
-    FLeftList.Items.OnChange := FLeftInnerChange;
+    FLeftList.ItemsList.OnChange := FLeftInnerChange;
     FLeftList.OnChange := nil;
   end;
   if FRightList <> nil then
   begin
-    FRightList.Items.OnChange := FRightInnerChange;
+    FRightList.ItemsList.OnChange := FRightInnerChange;
     FRightList.OnChange := nil;
   end;
   inherited Destroy;

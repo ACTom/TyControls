@@ -119,6 +119,11 @@ type
     procedure AppendFlat(ARow: TTyValueRow; ALevel: Integer);
     procedure FreeRows;
     function GetKey(AIndex: Integer): string;
+    function GetRowCount: Integer;
+    procedure SetRowCount(AValue: Integer);
+    { Root-row index of the row the user currently has selected, or -1. Selection is a FLAT
+      index, so this walks up to the owning root row. }
+    function CurrentRootIndex: Integer;
     function GetValueFromIndex(AIndex: Integer): string;
     procedure SetValueFromIndex(AIndex: Integer; const AValue: string);
     function GetValue(const AKey: string): string;
@@ -172,11 +177,21 @@ type
     destructor Destroy; override;
     // Append a root row and return it (nest via its AddChild, set EditorKind / style, etc.).
     function AddRow(const AKey, AValue: string): TTyValueRow;
-    // Simple form: append a plain text root row (kept for the previous API).
-    procedure InsertRow(const AKey, AValue: string);
+    { LCL's signature (valedit.pas:188 `function InsertRow(const KeyName, Value: string;
+      Append: Boolean): Integer`), and its return value: the index of the row that was made.
+      This used to be a two-argument PROCEDURE that always appended, so a ported call failed
+      to compile on the arity and there was no insert-at-a-position on the class at all --
+      AddRow appends, DeleteRow removes, and building a list in a chosen order meant
+      rebuilding it wholesale.
+
+      AAppend=False inserts BEFORE the currently selected root row, which is what LCL's
+      not-Append means (it inserts at the grid's current Row). It defaults to True so the
+      calls already written keep working unchanged. }
+    function InsertRow(const AKey, AValue: string; AAppend: Boolean = True): Integer;
+    { Insert a root row at a chosen index and return it -- the general form InsertRow's
+      Boolean is a two-case shorthand for. An index past the end appends. }
+    function InsertRowAt(AIndex: Integer; const AKey, AValue: string): TTyValueRow;
     procedure Clear;
-    // Number of ROOT rows.
-    function RowCount: Integer;
     // Root row AIndex (nil out of range).
     function Row(AIndex: Integer): TTyValueRow;
     // Remove root row AIndex (frees it + its children; cancels any edit).
@@ -194,10 +209,40 @@ type
     // Set a row's value programmatically (by identity): fires OnValueChanged and propagates to
     // composite ancestors (a Font/Style parent's value re-summarises from its children).
     procedure SetRowValue(ARow: TTyValueRow; const AText: string);
-    // Number of VISIBLE (expanded) rows — root rows plus expanded descendants.
+    { Number of rows that CURRENTLY HAVE A DISPLAY POSITION — root rows plus the descendants
+      of expanded ones. A DATA metric: collapsing a node lowers it, resizing the control never
+      does. This used to be called VisibleRowCount, which is a different measurement one class
+      over -- see there. DisplayRowCount is the name TTyCustomGrid already uses for exactly
+      this idea, so the two read alike in a log. }
+    function DisplayRowCount: Integer;
+    { How many rows the VIEWPORT currently holds -- a viewport metric, the same thing LCL's
+      TCustomGrid.VisibleRowCount means (grids.pas:1301, body at 2274), which TValueListEditor
+      inherits through TCustomStringGrid -> TCustomDrawGrid (republished public, grids.pas:1538)
+      because over there this class IS a grid.
+
+      It is NOT "how many rows are expanded". That is DisplayRowCount, and it used to be what
+      this name returned here -- so paging maths ported from Lazarus compiled and computed
+      garbage: with 500 expanded rows it paged 500 rows at a time. Both are Integer and both
+      are public, so nothing warned anybody. This is the same collision fixed on TTyCustomGrid
+      in 03c29b3; it did not land here because ours is a TTyListBox, not a grid.
+
+      Faithful to LCL down to the off-by-one: LCL answers `VisibleGrid.Bottom - VisibleGrid.Top`,
+      one LESS than the number of rows touching the viewport, so a page turn leaves one row of
+      overlap. The overlap is dropped when the whole list fits, exactly as LCL's
+      `if GridHeight <= ClientHeight then inc(Result)` does. }
     function VisibleRowCount: Integer;
     // The visible (flat) index being edited, or -1.
     property EditingRow: Integer read FEditFlat;
+    { Number of ROOT rows -- read/write, as LCL declares it (valedit.pas:237, a property, not
+      a function, so it can be read through RTTI or a binding layer and `VLE.RowCount := 0` is
+      the one-line way to empty the list). Writing grows the list with blank rows or trims it
+      from the end.
+
+      Two deliberate differences from LCL, both consequences of not being a grid: it counts
+      DATA rows only (LCL's includes the fixed title row, so the same list reports one more
+      over there), and it is public rather than published -- a live row count in a .lfm would
+      make the designer manufacture blank rows on every load. }
+    property RowCount: Integer read GetRowCount write SetRowCount;
     property Keys[AIndex: Integer]: string read GetKey;                 // root rows
     { Values[] is indexed BY KEY, matching TValueListEditor on LCL / Delphi:
         property Values[const Key: string]: string read GetValue write SetValue;
@@ -548,9 +593,49 @@ begin
   RebuildFlat;
 end;
 
-procedure TTyValueListEditor.InsertRow(const AKey, AValue: string);
+function TTyValueListEditor.InsertRowAt(AIndex: Integer;
+  const AKey, AValue: string): TTyValueRow;
+var
+  i: Integer;
 begin
-  AddRow(AKey, AValue);
+  if AIndex < 0 then AIndex := 0;
+  if AIndex > Length(FRoot) then AIndex := Length(FRoot);
+  Result := TTyValueRow.Create;
+  Result.Key := AKey;
+  Result.Value := AValue;
+  SetLength(FRoot, Length(FRoot) + 1);
+  for i := High(FRoot) downto AIndex + 1 do FRoot[i] := FRoot[i - 1];
+  FRoot[AIndex] := Result;
+  RebuildFlat;
+end;
+
+function TTyValueListEditor.CurrentRootIndex: Integer;
+var
+  r: TTyValueRow;
+  i: Integer;
+begin
+  Result := -1;
+  if (ItemIndex < 0) or (ItemIndex > High(FFlatRow)) then Exit;
+  r := FFlatRow[ItemIndex];
+  while (r <> nil) and (r.Parent <> nil) do r := r.Parent;
+  for i := 0 to High(FRoot) do
+    if FRoot[i] = r then Exit(i);
+end;
+
+function TTyValueListEditor.InsertRow(const AKey, AValue: string;
+  AAppend: Boolean = True): Integer;
+var
+  at: Integer;
+begin
+  if AAppend then
+  begin
+    AddRow(AKey, AValue);
+    Exit(High(FRoot));
+  end;
+  at := CurrentRootIndex;
+  if at < 0 then at := 0;    // nothing selected: LCL's current row on a fresh grid is the top
+  InsertRowAt(at, AKey, AValue);
+  Result := at;
 end;
 
 procedure TTyValueListEditor.Clear;
@@ -560,14 +645,57 @@ begin
   RebuildFlat;
 end;
 
-function TTyValueListEditor.RowCount: Integer;
+function TTyValueListEditor.GetRowCount: Integer;
 begin
   Result := Length(FRoot);
 end;
 
-function TTyValueListEditor.VisibleRowCount: Integer;
+procedure TTyValueListEditor.SetRowCount(AValue: Integer);
+var
+  i: Integer;
+begin
+  if AValue < 0 then AValue := 0;
+  if AValue = Length(FRoot) then Exit;
+  if FEditFlat >= 0 then EndEdit(False);
+  { Trim from the END, so shrinking keeps the rows the caller built first. Each dropped row
+    owns its children, so it has to be freed, not just unlinked. }
+  for i := AValue to High(FRoot) do FRoot[i].Free;
+  i := Length(FRoot);
+  SetLength(FRoot, AValue);
+  while i < AValue do
+  begin
+    FRoot[i] := TTyValueRow.Create;   // grown rows are blank; the caller names them
+    Inc(i);
+  end;
+  RebuildFlat;
+end;
+
+function TTyValueListEditor.DisplayRowCount: Integer;
 begin
   Result := Length(FFlatRow);
+end;
+
+function TTyValueListEditor.VisibleRowCount: Integer;
+var
+  sh, avail, touching, rest: Integer;
+begin
+  Result := 0;
+  sh := Dp(ItemHeight);
+  if sh < 1 then Exit;
+  { Height, not ClientHeight -- the same headless note TTyListBox.VisibleRows carries: without
+    a native handle ClientHeight lags SetBounds, and this control is borderless so at run time
+    the two agree. The first row starts below the style's top padding, so that is not viewport. }
+  avail := Height - ContentTopDp;
+  if avail <= 0 then Exit;
+  touching := (avail + sh - 1) div sh;      // a partially visible last row still touches
+  rest := Length(FFlatRow) - TopIndex;      // rows left below the scroll position
+  if rest < 0 then rest := 0;
+  if touching > rest then touching := rest;
+  { One LESS than the rows on screen (see the declaration): the overlap row that makes PageDown
+    leave the seam row visible. Dropped when the whole list fits, mirroring LCL. }
+  Result := touching - 1;
+  if ContentTopDp + Length(FFlatRow) * sh <= Height then Inc(Result);
+  if Result < 0 then Result := 0;
 end;
 
 procedure TTyValueListEditor.UpdateRows;

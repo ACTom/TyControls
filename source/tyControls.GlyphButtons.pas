@@ -71,8 +71,14 @@ const
   TyGlyphButtonGap = 6;
 
 type
-  { Glyph placement relative to the caption. }
-  TTyGlyphLayout = (glLeft, glTop);
+  { Glyph placement relative to the caption — LCL's TButtonLayout, four ways
+    (buttons.pp:42-48: blGlyphLeft, blGlyphRight, blGlyphTop, blGlyphBottom).
+
+    glLeft and glTop shipped first, so they keep their ordinals and glRight/glBottom are
+    appended: an .lfm that already carries a GlyphLayout value still reads back the same
+    member. The trailing-icon look ('more ▾', a disclosure chevron) and the caption-over-icon
+    tile were simply unreachable before — TyGlyphButtonSplit had no branch for either. }
+  TTyGlyphLayout = (glLeft, glTop, glRight, glBottom);
 
   { Shared base: TTyButton + an icon-font glyph placed per GlyphLayout. Usable on
     its own (it defaults to glyph-left) but primarily the parent of the three
@@ -85,10 +91,12 @@ type
     FGlyphColor: TTyColor;
     FImages: TTyImageCollection;
     FImageName: string;
+    FSpacing: Integer;
     FShowCaption: Boolean;
     { True once anything has WRITTEN ShowCaption on this button. AdoptShowCaption
       (the container default) then leaves it alone forever — see there. }
     FShowCaptionExplicit: Boolean;
+    procedure SetSpacing(AValue: Integer);
     procedure SetIconFont(AValue: TTyIconFont);
     procedure SetGlyphName(const AValue: string);
     procedure SetGlyphSize(AValue: Integer);
@@ -107,12 +115,12 @@ type
     { Draw the glyph (if any) then the inherited caption in the leftover rect. }
     procedure DrawContent(APainter: TTyPainter; const AContentRect: TRect;
       const AStyle: TTyStyleSet); override;
-    { True exactly when DrawContent will really paint a glyph: an image icon
-      (Images + ImageName, which wins) or a font glyph (IconFont + GlyphName).
-      The preferred width may only reserve a slot the paint actually uses —
-      otherwise an AutoSize button with a GlyphName but no font would sit on a
-      pocket of empty space its plain-caption paint never fills. }
-    function HasGlyphSource: Boolean;
+    { The gap between glyph and caption in DEVICE px at APPI: an explicit Spacing (scaled)
+      when set, otherwise the theme's '--glyph-button-gap'. The ONE place that decision is
+      made, because DrawContent draws with it while CalculatePreferredSize and
+      MeasureContentHeight reserve for it — a preferred size that disagrees with the paint
+      is worse than none at all. }
+    function EffectiveGapPx(APPI: Integer): Integer;
     { The glyph square's edge in DEVICE px at APPI under AStyle, mirroring the choice
       DrawContent makes: an explicit GlyphSize (scaled) wins, otherwise auto-fit. }
     function MeasureGlyphSlot(APPI: Integer; const AStyle: TTyStyleSet): Integer;
@@ -139,9 +147,22 @@ type
     procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
       WithThemeSpace: Boolean); override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
-    property GlyphLayout: TTyGlyphLayout read FGlyphLayout write FGlyphLayout;
+    procedure SetGlyphLayout(AValue: TTyGlyphLayout); virtual;
   public
     constructor Create(AOwner: TComponent); override;
+    { True exactly when DrawContent will really paint a glyph: an image icon
+      (Images + ImageName, which wins) or a font glyph (IconFont + GlyphName).
+      The preferred width may only reserve a slot the paint actually uses —
+      otherwise an AutoSize button with a GlyphName but no font would sit on a
+      pocket of empty space its plain-caption paint never fills.
+
+      PUBLIC, and under LCL's name (TCustomBitBtn.CanShowGlyph, buttons.pp:214): layout code
+      outside the class legitimately asks a button whether it is showing an icon — to pick a
+      tool bar's row height, or to align a column of captions — and had to subclass to find
+      out. LCL's takes an AWithShowMode flag for its Application.ShowButtonGlyphs mechanism;
+      that mechanism does not exist here, so the parameter is OMITTED rather than accepted
+      and ignored, which would be the same lie in a smaller box. }
+    function CanShowGlyph: Boolean;
     { Container DEFAULT for ShowCaption (TTyToolBar.ShowCaptions calls this on every
       tool it hosts). A no-op once the host has written ShowCaption on this button
       itself: a container re-applies its defaults whenever a tool joins or the flag
@@ -176,6 +197,25 @@ type
     property Images: TTyImageCollection read FImages write SetImages;
     { The icon name in Images to draw. Empty -> fall back to the IconFont glyph. }
     property ImageName: string read FImageName write SetImageName;
+    { Where the glyph sits relative to the caption. Published so the choice can be made in
+      the designer and streamed — it used to be protected, which meant an app that wanted a
+      trailing icon had to SUBCLASS to reach a property that already existed.
+      Each concrete button still seeds its own (glLeft for the compact command button and the
+      speed button, glTop for the ribbon tile), so nothing changes unless it is set. }
+    property GlyphLayout: TTyGlyphLayout read FGlyphLayout write SetGlyphLayout default glLeft;
+    { Per-instance gap between glyph and caption, in LOGICAL px.
+
+      -1 (the default) = let the THEME decide: the gap is '--glyph-button-gap', so a skin
+      retunes every glyph button at once and no pixel value is hard-coded in control code.
+      0 or more = that many logical px on THIS button, so one tight icon+label button can sit
+      next to an airy one without inventing a StyleClass and shipping .tycss with the app.
+
+      DIVERGENCE, recorded rather than left to be discovered: LCL spells -1 "centre the
+      glyph+caption block" (TCustomSpeedButton.Spacing, buttons.pp:433, default 4). Here -1
+      means "the theme owns it", because in this library a resting visual value belongs to a
+      token. A ported button that left Spacing at LCL's default of 4 therefore gets a
+      literal 4px gap — the value it asked for — and only the sentinel differs. }
+    property Spacing: Integer read FSpacing write SetSpacing default -1;
     { Draw the caption alongside the glyph (True, the default). False makes the button
       ICON-ONLY: the glyph re-centres in the WHOLE content box and no caption is drawn —
       what TTyToolBar.ShowCaptions = False asks of its tools.
@@ -213,6 +253,11 @@ type
     function GetStyleTypeKey: string; override;
   public
     constructor Create(AOwner: TComponent); override;
+  published
+    { The tile IS the glyph-over-caption layout, so its declared default has to say so —
+      otherwise the streamer writes GlyphLayout into every ribbon .lfm just to restate what
+      the constructor already did. }
+    property GlyphLayout default glTop;
   end;
 
   { Flat/toolbar toggle button (glyph-left). Groupable like a classic
@@ -252,6 +297,21 @@ type
       release same-group siblings; AllowAllUp additionally lets a click on the
       down button toggle it back up. }
     procedure Click; override;
+    { Which button of THIS button's group is currently pressed, or nil when they are all up.
+      Reading back the selected tool is the single most common question asked of a speed-button
+      group, and the only way to ask it used to be a hand-rolled typed scan over Parent.Controls
+      in every app -- the grouping code only ever walked the siblings to RELEASE them.
+
+      SCOPE, stated because it is a real divergence: this searches the immediate PARENT, the
+      same set UnpressSiblings releases and the same set LCL's UpdateExclusive broadcasts to
+      (include/speedbutton.inc:479-491). LCL's own FindDownButton instead scans the whole FORM
+      (include/speedbutton.inc:81-111), so it can return a button that its own grouping never
+      manages. Matching our grouping is the more useful answer: everything this returns is
+      something Down/Click actually keeps in step.
+
+      Self counts -- a group of one still has a pressed member. GroupIndex = 0 means "not
+      grouped", so it answers nil rather than pretending every ungrouped button is a group. }
+    function FindDownButton: TTySpeedButton;
   protected
     { Grouping belongs HERE and not only in Click: `Btn.Down := True` from code is a
       perfectly ordinary way to preselect a radio (restoring a saved toolbar mode, say),
@@ -275,10 +335,12 @@ type
 { Pure helper: split a content rect (device px) into a glyph rect + a caption rect
   for the given layout and glyph pixel size, separated by AGapPx.
 
-  glLeft: the glyph is an AGlyphPx-wide, AGlyphPx-tall square anchored at the LEFT
-  and vertically centered; the caption takes the rest to its right, past the gap.
-  glTop:  the glyph is an AGlyphPx square anchored at the TOP and horizontally
-  centered; the caption takes the rest below, past the gap.
+  glLeft:   the glyph is an AGlyphPx square anchored at the LEFT and vertically centered;
+            the caption takes the rest to its right, past the gap.
+  glRight:  the mirror image — glyph anchored at the RIGHT, caption to its left.
+  glTop:    the glyph is an AGlyphPx square anchored at the TOP and horizontally
+            centered; the caption takes the rest below, past the gap.
+  glBottom: the mirror image — glyph anchored at the BOTTOM, caption above it.
 
   AGlyphPx <= 0 (no glyph) -> the glyph rect is empty and the caption keeps the
   whole content rect. The glyph rect is clamped to the content box so an oversized
@@ -331,6 +393,27 @@ begin
         if ACaptionRect.Top > ACaptionRect.Bottom then
           ACaptionRect.Top := ACaptionRect.Bottom;
       end;
+    glBottom:
+      begin
+        if gp > ch then gp := ch;
+        gx := AContentRect.Left + (cw - gp) div 2;    // horizontally centered
+        AGlyphRect := Rect(gx, AContentRect.Bottom - gp, gx + gp, AContentRect.Bottom);
+        ACaptionRect := Rect(AContentRect.Left, AContentRect.Top,
+          AContentRect.Right, AGlyphRect.Top - AGapPx);
+        // Collapse (never invert) when glyph + gap overran the box.
+        if ACaptionRect.Bottom < ACaptionRect.Top then
+          ACaptionRect.Bottom := ACaptionRect.Top;
+      end;
+    glRight:
+      begin
+        if gp > cw then gp := cw;
+        gy := AContentRect.Top + (ch - gp) div 2;     // vertically centered
+        AGlyphRect := Rect(AContentRect.Right - gp, gy, AContentRect.Right, gy + gp);
+        ACaptionRect := Rect(AContentRect.Left, AContentRect.Top,
+          AGlyphRect.Left - AGapPx, AContentRect.Bottom);
+        if ACaptionRect.Right < ACaptionRect.Left then
+          ACaptionRect.Right := ACaptionRect.Left;
+      end;
   else
     // glLeft
     begin
@@ -371,6 +454,7 @@ begin
   FGlyphSize := 0;
   FGlyphColor := TyGlyphButtonColorDefault;
   FGlyphLayout := glLeft;
+  FSpacing := -1;   // sentinel: the theme's --glyph-button-gap owns the gap
   // Standalone default: a glyph button is icon + caption. Only a container (a toolbar)
   // asks for icon-only, and it does that through AdoptShowCaption.
   FShowCaption := True;
@@ -426,6 +510,33 @@ begin
   Invalidate;
 end;
 
+procedure TTyGlyphButtonBase.SetGlyphLayout(AValue: TTyGlyphLayout);
+begin
+  if FGlyphLayout = AValue then Exit;
+  FGlyphLayout := AValue;
+  { Invalidate, not just a repaint: moving the glyph from beside the caption to above it
+    changes which axis the slot is spent on, so both the preferred WIDTH and the height
+    floor move with it — and TTyButton.Invalidate is where an auto-sized button re-fits. }
+  Invalidate;
+end;
+
+procedure TTyGlyphButtonBase.SetSpacing(AValue: Integer);
+begin
+  if AValue < -1 then AValue := -1;   // one sentinel only; -2 is not a second kind of auto
+  if FSpacing = AValue then Exit;
+  FSpacing := AValue;
+  Invalidate;   // the gap is part of the measured width (see EffectiveGapPx)
+end;
+
+function TTyGlyphButtonBase.EffectiveGapPx(APPI: Integer): Integer;
+begin
+  if FSpacing >= 0 then
+    Result := MulDiv(FSpacing, APPI, 96)
+  else
+    Result := MulDiv(ActiveController.Metric('--glyph-button-gap', TyGlyphButtonGap), APPI, 96);
+  if Result < 0 then Result := 0;
+end;
+
 procedure TTyGlyphButtonBase.SetShowCaption(AValue: Boolean);
 begin
   // Mark BEFORE the no-change early-exit: writing the same value the container happens
@@ -460,7 +571,7 @@ begin
     Result := TBGRABitmap.Create(ASizePx, ASizePx);   // empty (guarded by DrawContent)
 end;
 
-function TTyGlyphButtonBase.HasGlyphSource: Boolean;
+function TTyGlyphButtonBase.CanShowGlyph: Boolean;
 begin
   // The exact negation of the condition DrawContent falls through to the plain
   // caption on — the two must never disagree about whether a glyph exists.
@@ -491,7 +602,7 @@ function TTyGlyphButtonBase.FixedGlyphPx(APPI: Integer): Integer;
 begin
   Result := 0;
   // No source -> DrawContent paints a plain caption; nothing to reserve for.
-  if not HasGlyphSource then Exit;
+  if not CanShowGlyph then Exit;
   // Auto (GlyphSize = 0): computed FROM the box, so it can never be a demand ON the box.
   if FGlyphSize <= 0 then Exit;
   Result := MulDiv(FGlyphSize, APPI, 96);
@@ -504,21 +615,23 @@ var
 begin
   lineH := inherited MeasureContentHeight(APPI);   // the caption's own line
   gpx := FixedGlyphPx(APPI);
-  if (gpx < 1) or (FGlyphLayout <> glTop) then
+  { glTop and glBottom are the two layouts that stack the glyph on the CAPTION's axis, so
+    both owe the same height. glLeft/glRight displace the caption sideways and that cost
+    already lives in the preferred WIDTH; counting it as height too would quietly grow every
+    tool-bar row that carries an icon. }
+  if (gpx < 1) or not (FGlyphLayout in [glTop, glBottom]) then
   begin
-    // Glyph beside the caption, or no fixed glyph at all: the caption's line still decides.
     Result := lineH;
     Exit;
   end;
   Result := gpx;
-  { The gap — and the caption's line under it — are only paid for when a caption is really
+  { The gap — and the caption's line beside it — are only paid for when a caption is really
     drawn: DrawContent skips the caption rect entirely when Caption is empty, exactly as the
-    preferred WIDTH refuses to pay a glyph-left gap to nothing. The metric is the same
-    '--glyph-button-gap' DrawContent scales, so a skin retuning it moves both together. }
+    preferred WIDTH refuses to pay a gap to nothing. Same EffectiveGapPx the paint uses, so
+    a per-instance Spacing or a skin retuning the metric moves both together. }
   if Caption <> '' then
   begin
-    gapPx := MulDiv(ActiveController.Metric('--glyph-button-gap', TyGlyphButtonGap), APPI, 96);
-    if gapPx < 0 then gapPx := 0;
+    gapPx := EffectiveGapPx(APPI);
     Inc(Result, gapPx + lineH);
   end;
 end;
@@ -535,32 +648,32 @@ begin
   // No glyph source: DrawContent paints a plain centered caption over the whole content
   // rect, so the inherited width already IS the truth. Same for a slot that scales away
   // to nothing — DrawContent takes the plain path there too (glyphPx < 1).
-  if not HasGlyphSource then Exit;
+  if not CanShowGlyph then Exit;
   ppi := Font.PixelsPerInch;
   if ppi <= 0 then ppi := 96;
   S := CurrentStyle;
   glyphPx := MeasureGlyphSlot(ppi, S);
   if glyphPx < 1 then Exit;
   padX := MulDiv(S.Padding.Left + S.Padding.Right, ppi, 96);
-  if FGlyphLayout = glTop then
+  if FGlyphLayout in [glTop, glBottom] then
   begin
-    // Ribbon tile: the glyph sits ABOVE the caption, so the two SHARE the width instead
-    // of adding up, and the gap between them is vertical — it costs nothing sideways.
-    // The tile still may not be narrower than its own icon plus the padding.
+    // Stacked (ribbon tile, or caption-over-icon): the glyph sits ABOVE or BELOW the
+    // caption, so the two SHARE the width instead of adding up, and the gap between them is
+    // vertical — it costs nothing sideways. The tile still may not be narrower than its own
+    // icon plus the padding.
     if glyphPx + padX > PreferredWidth then
       PreferredWidth := glyphPx + padX;
   end
   else
   begin
-    // glyph-left: glyph, gap and caption stand side by side exactly as TyGlyphButtonSplit
-    // lays them out, so all three plus the padding is what the button needs.
+    // glyph-left / glyph-right: glyph, gap and caption stand side by side exactly as
+    // TyGlyphButtonSplit lays them out, so all three plus the padding is what it needs.
     Inc(PreferredWidth, glyphPx);
     // The gap is only paid for when a caption is actually drawn: DrawContent skips the
     // caption rect entirely when Caption is empty, and a pure-icon toolbar button must
     // not carry a gap to nothing (that would be a visibly off-centre glyph).
     if Caption <> '' then
-      Inc(PreferredWidth,
-        MulDiv(ActiveController.Metric('--glyph-button-gap', TyGlyphButtonGap), ppi, 96));
+      Inc(PreferredWidth, EffectiveGapPx(ppi));
   end;
   if PreferredWidth < 1 then PreferredWidth := 1;
 end;
@@ -594,14 +707,15 @@ begin
   end;
 
   // Device-px glyph size: explicit GlyphSize (scaled) wins; else auto-fit from the
-  // content box — the short side for glyph-top (big square icon), the box height
-  // for glyph-left (a caption-height icon beside the text).
+  // content box — the short side for the STACKED layouts (a big square icon over or under
+  // the caption), the box height for the SIDE-BY-SIDE ones (a caption-height icon beside
+  // the text). MeasureGlyphSlot mirrors this choice; the two must not drift.
   scaledSize := APainter.Scale(FGlyphSize);
   if scaledSize > 0 then
     glyphPx := scaledSize
   else
   begin
-    if FGlyphLayout = glTop then
+    if FGlyphLayout in [glTop, glBottom] then
     begin
       autoPx := cw;
       if ch < autoPx then autoPx := ch;
@@ -616,7 +730,8 @@ begin
     Exit;
   end;
 
-  gapPx := APainter.Scale(ActiveController.Metric('--glyph-button-gap', TyGlyphButtonGap));
+  // Painter PPI, so a per-instance Spacing scales exactly as the theme metric did.
+  gapPx := EffectiveGapPx(APainter.PPI);
   if FShowCaption then
     TyGlyphButtonSplit(AContentRect, glyphPx, gapPx, FGlyphLayout, glyphRect, captionRect)
   else
@@ -743,6 +858,23 @@ begin
           sib.FInGroupUpdate := False;
         end;
       end;
+    end;
+end;
+
+function TTySpeedButton.FindDownButton: TTySpeedButton;
+var
+  i: Integer;
+  sib: TTySpeedButton;
+begin
+  Result := nil;
+  if FGroupIndex <= 0 then Exit;
+  if Down then Exit(Self);
+  if Parent = nil then Exit;
+  for i := 0 to Parent.ControlCount - 1 do
+    if Parent.Controls[i] is TTySpeedButton then
+    begin
+      sib := TTySpeedButton(Parent.Controls[i]);
+      if (sib.FGroupIndex = FGroupIndex) and sib.Down then Exit(sib);
     end;
 end;
 

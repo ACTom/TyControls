@@ -24,6 +24,7 @@ interface
 uses
   Classes, SysUtils, Types, Graphics, Controls, StdCtrls, LCLType, LazUTF8,
   fpcunit, testregistry,
+  BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.Base,
   tyControls.Memo;
 type
@@ -39,6 +40,36 @@ type
     procedure ProbeSetAnchor(ALine, ACol: Integer);
     procedure ProbeUpdateScrollBar;
     procedure ProbeSetWordWrap(AValue: Boolean);
+    procedure SimulateClick(X, Y: Integer);
+    procedure ProbeRenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+  end;
+
+  { Round-3 parity: four members TMemo publishes and this one did not, plus the two 2-D caret
+    readers that existed but were unreachable.
+
+      Alignment  stdctrls.pp:1023 (TCustomEdit :857)  -- a genuine capability gap: nothing in
+                 the renderer moved a row off the left content edge, so a centred multi-line
+                 block could not be produced by any route, theme included.
+      CharCase   stdctrls.pp:1028 (TCustomEdit :862)  -- one method away from the sibling Edit.
+      Modified   stdctrls.pp:867                       -- the user-vs-code distinction OnChange
+                 cannot express, since OnChange fires for both.
+      Add/RemoveHandlerOnChange stdctrls.pp:853-855    -- so an observer need not seize the
+                 application's one OnChange slot.
+      CaretLine / CaretCol                             -- LCL answers these from CaretPos on a
+                 memo; ours were PROTECTED, so a status bar had to subclass the control. }
+  TTyMemoRound3Test = class(TTestCase)
+  private
+    FA, FB, FOwn: Integer;
+    procedure CountA(Sender: TObject);
+    procedure CountB(Sender: TObject);
+    procedure CountOwn(Sender: TObject);
+  published
+    procedure TestAlignmentIsPublishedAndCentresTheRow;
+    procedure TestAlignmentHitTestFollowsTheShiftedRow;
+    procedure TestCharCaseFoldsTypedAndAssignedText;
+    procedure TestModifiedTellsUserEditsFromProgrammaticOnes;
+    procedure TestCaretLineAndColAreReachable;
+    procedure TestMulticastOnChange;
   end;
 
   TTyMemoParityTest = class(TTestCase)
@@ -100,6 +131,18 @@ end;
 procedure TTyMemoParityProbe.ProbeUpdateScrollBar;
 begin
   UpdateScrollBar;
+end;
+
+procedure TTyMemoParityProbe.SimulateClick(X, Y: Integer);
+begin
+  MouseDown(mbLeft, [], X, Y);
+  MouseUp(mbLeft, [], X, Y);
+end;
+
+procedure TTyMemoParityProbe.ProbeRenderTo(ACanvas: TCanvas; const ARect: TRect;
+  APPI: Integer);
+begin
+  RenderTo(ACanvas, ARect, APPI);
 end;
 
 procedure TTyMemoParityProbe.ProbeSetWordWrap(AValue: Boolean);
@@ -377,6 +420,210 @@ begin
   AssertEquals('scrolling past the left edge clamps at 0', 0, FMemo.ScrollX);
 end;
 
+{ ------------------------------------------------------------- Round-3 members ---- }
+
+procedure TTyMemoRound3Test.CountA(Sender: TObject);
+begin Inc(FA); end;
+
+procedure TTyMemoRound3Test.CountB(Sender: TObject);
+begin Inc(FB); end;
+
+procedure TTyMemoRound3Test.CountOwn(Sender: TObject);
+begin Inc(FOwn); end;
+
+procedure TTyMemoRound3Test.TestAlignmentIsPublishedAndCentresTheRow;
+{ Rendered, not merely declared: a published property the paint path ignores is the exact
+  defect this pass exists to remove. The proof is where the ink lands -- with the row centred
+  the left edge of the content area must be BLANK, and it must not be under taLeftJustify. }
+var
+  Ctl: TTyStyleController;
+  M: TTyMemoParityProbe;
+  Bmp: TBitmap;
+
+  function InkNearLeftEdge: Boolean;
+  var Reread: TBGRABitmap; Px: TBGRAPixel; X, Y: Integer;
+  begin
+    Result := False;
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(0, 0, 240, 60);
+    M.ProbeRenderTo(Bmp.Canvas, Rect(0, 0, 240, 60), 96);
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      for X := 4 to 50 do
+        for Y := 2 to 26 do
+        begin
+          Px := Reread.GetPixel(X, Y);
+          if (Px.red < 128) and (Px.green < 128) and (Px.blue < 128) then Exit(True);
+        end;
+    finally
+      Reread.Free;
+    end;
+  end;
+
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  M := TTyMemoParityProbe.Create(nil);
+  try
+    Ctl.LoadThemeCss('TyMemo { background: #FFFFFF; color: #000000; padding: 4px; }');
+    M.Controller := Ctl;
+    M.ScrollBars := ssNone;
+    M.SetBounds(0, 0, 240, 60);
+    M.Lines.Text := 'Hi';
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(240, 60);
+
+    AssertEquals('default is left, as on TCustomEdit', Ord(taLeftJustify), Ord(M.Alignment));
+    AssertTrue('left-justified: the text starts at the left edge', InkNearLeftEdge);
+
+    M.Alignment := taCenter;
+    AssertFalse('centred: the left edge is empty now', InkNearLeftEdge);
+    M.Alignment := taRightJustify;
+    AssertFalse('right-justified: still empty', InkNearLeftEdge);
+    M.Alignment := taLeftJustify;
+    AssertTrue('and back', InkNearLeftEdge);
+  finally
+    M.Free;
+    Bmp.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TTyMemoRound3Test.TestAlignmentHitTestFollowsTheShiftedRow;
+{ Moving only the DRAW origin is the half-fix: a click would then land on the character that
+  would have been there had the row NOT moved.
+
+  The discriminating click is the middle of the box, and the assertion is deliberately
+  metric-free -- it does not depend on how wide 'Hi' renders, only on the one fact that a
+  two-character string in a 240px box is narrower than half of it. That makes the midpoint
+  PAST the end of a left-aligned row (so the caret goes to the last column) and BEFORE the
+  start of a right-aligned one (so it goes to column 0). A hit-test that ignores the shift
+  answers the left-aligned way in both cases.
+
+  (The first draft of this test clicked at x=4 and x=238 instead. Both of those resolve
+  outside the row under EITHER alignment, so it passed with the correction removed -- it was
+  pinning nothing. Found by the mutant, which is the only reason it is written this way.) }
+var
+  M: TTyMemoParityProbe;
+begin
+  M := TTyMemoParityProbe.Create(nil);
+  try
+    M.ScrollBars := ssNone;
+    M.SetBounds(0, 0, 240, 60);
+    M.Lines.Text := 'Hi';
+
+    M.Alignment := taLeftJustify;
+    M.SimulateClick(120, 2);
+    AssertEquals('left-aligned: the midpoint is past the row, so the caret lands after it',
+      2, M.CaretCol);
+
+    M.Alignment := taRightJustify;
+    M.SimulateClick(120, 2);
+    AssertEquals('right-aligned: the SAME click is now before the row, so it lands at 0',
+      0, M.CaretCol);
+
+    { And the ends still behave: a click past the right edge of a right-aligned row lands
+      after its last character. }
+    M.SimulateClick(238, 2);
+    AssertEquals('past the right end of a right-aligned row', 2, M.CaretCol);
+  finally
+    M.Free;
+  end;
+end;
+
+procedure TTyMemoRound3Test.TestCharCaseFoldsTypedAndAssignedText;
+var M: TTyMemo;
+begin
+  M := TTyMemo.Create(nil);
+  try
+    AssertEquals('default is ecNormal', Ord(ecNormal), Ord(M.CharCase));
+    M.Text := 'mixed Case';
+    M.CharCase := ecUpperCase;
+    AssertEquals('setting it re-folds what is already held, as LCL does',
+      'MIXED CASE', Trim(M.Text));
+    M.Text := 'assigned later';
+    AssertEquals('and an assignment folds too', 'ASSIGNED LATER', Trim(M.Text));
+    M.SetCaret(0, 14);
+    M.InjectChar('q');
+    AssertEquals('so does a keystroke', 'ASSIGNED LATERQ', Trim(M.Text));
+    M.CharCase := ecLowerCase;
+    AssertEquals('the other direction works too', 'assigned laterq', Trim(M.Text));
+  finally
+    M.Free;
+  end;
+end;
+
+procedure TTyMemoRound3Test.TestModifiedTellsUserEditsFromProgrammaticOnes;
+var
+  M: TTyMemo;
+  L: TStringList;
+begin
+  M := TTyMemo.Create(nil);
+  L := TStringList.Create;
+  try
+    AssertFalse('a fresh memo is clean', M.Modified);
+    M.Text := 'loaded from a file';
+    AssertFalse('loading content is not the user editing', M.Modified);
+    M.InjectChar('x');
+    AssertTrue('a keystroke dirties it', M.Modified);
+    M.Text := 'reloaded';
+    AssertFalse('and reloading cleans it again', M.Modified);
+    M.InjectChar('y');
+    AssertTrue('dirty again', M.Modified);
+    L.Add('from a list');
+    M.Lines := L;
+    AssertFalse('a Lines assignment is programmatic too', M.Modified);
+    M.InjectBackspace;
+    AssertTrue('and a deletion dirties it', M.Modified);
+  finally
+    L.Free;
+    M.Free;
+  end;
+end;
+
+procedure TTyMemoRound3Test.TestCaretLineAndColAreReachable;
+{ Reachable from OUTSIDE the class: this test holds a plain TTyMemo, not a probe subclass.
+  That is the whole point -- these were protected, so 'Ln 12, Col 4' meant subclassing. }
+var M: TTyMemo;
+begin
+  M := TTyMemo.Create(nil);
+  try
+    M.Lines.Text := 'alpha' + LineEnding + 'beta' + LineEnding + 'gamma';
+    M.SetCaret(2, 3);
+    AssertEquals('line', 2, M.CaretLine);
+    AssertEquals('column', 3, M.CaretCol);
+    { And they agree with the flat form, which is the other half of the addressing. }
+    M.CaretPos := 0;
+    AssertEquals('a flat write moves the 2-D caret', 0, M.CaretLine);
+    AssertEquals('to column 0', 0, M.CaretCol);
+  finally
+    M.Free;
+  end;
+end;
+
+procedure TTyMemoRound3Test.TestMulticastOnChange;
+var M: TTyMemo;
+begin
+  M := TTyMemo.Create(nil);
+  try
+    FA := 0; FB := 0; FOwn := 0;
+    M.OnChange := @CountOwn;
+    M.AddHandlerOnChange(@CountA);
+    M.AddHandlerOnChange(@CountB);
+    M.InjectChar('x');
+    AssertEquals('the application slot still fires', 1, FOwn);
+    AssertEquals('and the first observer', 1, FA);
+    AssertEquals('and the second alongside it', 1, FB);
+    M.RemoveHandlerOnChange(@CountA);
+    M.InjectChar('y');
+    AssertEquals('removed observers stop', 1, FA);
+    AssertEquals('the other carries on', 2, FB);
+  finally
+    M.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTyMemoParityTest);
+  RegisterTest(TTyMemoRound3Test);
 end.

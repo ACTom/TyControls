@@ -28,6 +28,8 @@ uses tyControls.Button;
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `Caption` | `string` | `''` | 按钮显示文字，居中绘制 |
+| `Alignment` | `TAlignment` | `taCenter` | **（API parity 新增）** 标题在按钮内的水平对齐，以前硬编码为 `taCenter`。`taLeftJustify` 用于纵向导航栏 / ribbon 文件菜单那种图标与文字沿左缘对齐的排布。对应 LCL 的 `TCustomSpeedButton.Alignment`（`buttons.pp:414`，同名同型同默认值）。带图标的按钮把它应用在**图标之外剩下的那块**标题矩形上，所以图标不动、只有文字移动。 |
+| `ShowAccelChar` | `Boolean` | `True` | **（API parity 新增）** 是否把标题里的 `&` 当作 Alt 助记符标记（标记本身不画，下一个字符加下划线）。关掉之后 `&` 作为**普通字符**原样画出，并且该按钮不再响应 Alt+字母——为的是 `AT&T`、`Save & Close` 或任何来自数据的标题，以前它们会静默丢掉那个字符并平白多出一个助记符。对应 LCL 的 `TCustomSpeedButton.ShowAccelChar`（`buttons.pp:431`）。宽度测量跟着这个开关走，因此 `AutoSize` 不会为一个没画出来的字符留位置。 |
 | `Default` | `Boolean` | `False` | **（API parity 新增）** 为 `True` 时在宿主窗体上按 Enter 触发本按钮的 `Click`（注册到窗体 `DefaultControl`）；流式载入后在 `Loaded` 中重新注册（设置时 Parent 尚未就绪的情形）。 |
 | `Cancel` | `Boolean` | `False` | **（API parity 新增）** 为 `True` 时在宿主窗体上按 Esc 触发本按钮的 `Click`（注册到窗体 `CancelControl`）；同样在 `Loaded` 中重新注册。 |
 | `ModalResult` | `TModalResult` | `mrNone` | **（API parity 新增）** 非 `mrNone` 时，`Click` 在调用 `inherited Click`（即触发 `OnClick`）**之前**先把宿主窗体的 `ModalResult` 设为本值——遵循原生 `TButton` 语义，使 `OnClick` 处理器可通过 `Form.ModalResult := mrNone` 否决关闭。 |
@@ -201,7 +203,7 @@ Btn.Caption := '悬停我';
 
 ## 8. 注意事项
 
-- `Caption` 文字在渲染时水平和垂直均居中；标题里手写的换行（`#13#10`）会真的换行绘制。
+- `Caption` 文字在渲染时垂直居中，水平方向按 `Alignment`（默认 `taCenter`，即照旧居中）；标题里手写的换行（`#13#10`）会真的换行绘制。
 - **尺寸下限由标题决定**：控件把 `Constraints.MinWidth` / `MinHeight` 钉在"标题 + 主题内边距"上，因此把按钮设得比它要画的内容还小是做不到的——主题的 `--control-height` 和你手设的 `Height` 都只是**请求**，字体与内边距才决定实际可能的最小值。用 `Constraints` 而不是 preferred size，是因为提出高度就得跟父容器协商，而 `TTyToolBar` 会把每个子控件压到自己的 `ButtonHeight`，两边来回顶到 LCL 报 `ChangeBounds loop detected`。下限对派生按钮（图标按钮的图标槽、拆分按钮的箭头区、色块按钮的色块）自动成立：它们各自的测量本来就在同一处。
 - `StyleClass` 区分大小写，须与 `.tycss` 文件中的类名完全一致（如 `'primary'`、`'danger'`）。
 - `Font` 属性中的 `PixelsPerInch` 用于 HiDPI 缩放；字体族（`FontName`）和大小（`FontSize`）优先从主题读取，`Font.Name`、`Font.Size` 作为备用。

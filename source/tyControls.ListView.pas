@@ -91,10 +91,19 @@ type
   { ===================================================================
     TTyListItems — the built-in item collection
     =================================================================== }
+  { WHICH item the collection is telling us about, and what happened to it. Used only to
+    reach the control (which republishes it as OnInsert / OnDeletion); the app never sees
+    this type. FPC fires cnAdded AFTER the item joins the list and cnExtracting BEFORE it
+    leaves (collect.inc:200-226), so AItem.Index is valid in both directions -- which is
+    what makes an index-carrying notification possible at all. }
+  TTyListItemsNotifyEvent = procedure(Sender: TObject; AItem: TCollectionItem;
+    AAction: TCollectionNotification) of object;
+
   TTyListItems = class(TCollection)
   private
     FOwner:    TPersistent;
     FOnChange: TNotifyEvent;
+    FOnItemNotify: TTyListItemsNotifyEvent;
     function GetItem(AIndex: Integer): TTyListItem;
     procedure SetItem(AIndex: Integer; AValue: TTyListItem);
   protected
@@ -106,6 +115,7 @@ type
     function Add: TTyListItem;
     property Items[AIndex: Integer]: TTyListItem read GetItem write SetItem; default;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
+    property OnItemNotify: TTyListItemsNotifyEvent read FOnItemNotify write FOnItemNotify;
   end;
 
   { ===================================================================
@@ -188,6 +198,16 @@ type
     `iItem < 0 -> Item = nil` in customlistview.inc:337.
     OnChanging runs BEFORE the change and vetoes it by clearing AAllowChange; the control
     then leaves the selection untouched and never raises OnChange/OnSelectItem. }
+  { An item was inserted, or is ABOUT to be deleted. LCL: TLVDeletedEvent /
+    TLVInsertEvent (comctrls.pp:1313/1320), published as OnDeletion / OnInsert.
+    AIndex is an ITEM index, valid for the duration of the call.
+
+    OnDeletion is the only moment at which an item's Data payload is still reachable and
+    the row is still there. Without it a collection holding owned objects in Data leaked
+    every one of them: TTyListItems is a TCollection whose Notify is protected and already
+    consumed internally, so short of subclassing the collection there was no hook at all. }
+  TTyListItemNotifyEvent = procedure(Sender: TObject; AIndex: Integer) of object;
+
   TTyListChangeEvent   = procedure(Sender: TObject; AIndex: Integer;
                                    AChange: TTyItemChange) of object;
   TTyListChangingEvent = procedure(Sender: TObject; AIndex: Integer;
@@ -281,6 +301,8 @@ type
     FOnSelectItem:    TTyListSelectItemEvent;
     FOnChange:        TTyListChangeEvent;
     FOnChanging:      TTyListChangingEvent;
+    FOnInsert:        TTyListItemNotifyEvent;
+    FOnDeletion:      TTyListItemNotifyEvent;
     { checkboxes }
     FCheckboxes:      Boolean;
     FOnItemChecked:   TTyListItemEvent;
@@ -307,6 +329,11 @@ type
     FOnGroupCollapsed: TTyListGroupEvent;
 
     procedure ItemsCollectionChanged(Sender: TObject);
+    procedure ItemsCollectionNotify(Sender: TObject; AItem: TCollectionItem;
+      AAction: TCollectionNotification);
+    function  GetColumns: TTyColumns;
+    function  GetColumn(AIndex: Integer): TTyColumn;
+    function  GetColumnCount: Integer;
     procedure HeaderChanged(Sender: TObject);
     procedure GroupsChanged(Sender: TObject);
     procedure VScrollChange(Sender: TObject);
@@ -499,6 +526,13 @@ type
     procedure DoChange(AIndex: Integer; AChange: TTyItemChange); virtual;
     function  CanChange(AIndex: Integer; AChange: TTyItemChange): Boolean; virtual;
     procedure DoSelectItem(AIndex: Integer; ASelected: Boolean); virtual;
+    { Structural seams, same discipline: DoInsert raises OnInsert just after an item joined
+      the built-in collection, DoDeletion raises OnDeletion just before one leaves it (and
+      per item when the collection is cleared or the control is destroyed), so the row's
+      Data payload is still reachable. Neither fires in OwnerData mode: there is no
+      collection there and the app already owns the lifetime. LCL: comctrls.pp:1610/1613. }
+    procedure DoInsert(AIndex: Integer); virtual;
+    procedure DoDeletion(AIndex: Integer); virtual;
 
     function GetStyleTypeKey: string; override;
     procedure SetController(AValue: TTyStyleController); override;
@@ -541,6 +575,15 @@ type
     { Iterate selected ITEM indices; pass -1 to get the first. }
     function  GetNextSelected(var AIndex: Integer): Boolean;
     property  Selected[AIndex: Integer]: Boolean read GetSelected write SetSelected;
+
+    { The report columns, reachable WITHOUT the Header hop. `LV.Columns[0].Width := 120`
+      and `LV.ColumnCount` are how every line of ported TListView column code is written
+      (comctrls.pp:1582/:1664/:1665), and Header.Columns was the only spelling here.
+      PUBLIC, not published, deliberately: Header already streams the collection, and a
+      second published path to the same objects would write them into the .lfm twice. }
+    property Columns: TTyColumns read GetColumns;
+    property Column[AIndex: Integer]: TTyColumn read GetColumn;
+    property ColumnCount: Integer read GetColumnCount;
 
     { Hit-testing / scrolling — ITEM indices in, ITEM indices out. }
     function  GetItemAt(X, Y: Integer): Integer;
@@ -613,6 +656,11 @@ type
       through here, so nothing is double-vetoed. }
     property OnChanging:     TTyListChangingEvent read FOnChanging     write FOnChanging;
     property OnItemChecked:  TTyListItemEvent     read FOnItemChecked  write FOnItemChecked;
+    { Fires just after a row joined the built-in collection. }
+    property OnInsert:       TTyListItemNotifyEvent read FOnInsert   write FOnInsert;
+    { Fires just BEFORE a row leaves it -- the only moment its Data payload is still
+      reachable. An item collection holding owned objects had no hook to free them. }
+    property OnDeletion:     TTyListItemNotifyEvent read FOnDeletion write FOnDeletion;
     property OnEditing:      TTyListEditingEvent  read FOnEditing      write FOnEditing;
     property OnEdited:       TTyListEditedEvent   read FOnEdited       write FOnEdited;
     property OnGetItemGroup:   TTyListGetGroupEvent read FOnGetItemGroup   write FOnGetItemGroup;
@@ -779,6 +827,9 @@ end;
 procedure TTyListItems.Notify(Item: TCollectionItem; Action: TCollectionNotification);
 begin
   inherited Notify(Item, Action);
+  // Per-item first: the control turns it into OnDeletion while the row (and its Data)
+  // still exists. FOnChange resizes the control's arrays and would invalidate the index.
+  if Assigned(FOnItemNotify) then FOnItemNotify(Self, Item, Action);
   if Assigned(FOnChange) then FOnChange(Self);
 end;
 
@@ -880,6 +931,7 @@ begin
   inherited Create(AOwner);
   FItems := TTyListItems.Create(Self);
   FItems.OnChange := @ItemsCollectionChanged;
+  FItems.OnItemNotify := @ItemsCollectionNotify;
 
   FGroups := TTyListGroups.Create(Self);
   FGroups.OnChange := @GroupsChanged;
@@ -959,10 +1011,15 @@ end;
 
 destructor TTyListView.Destroy;
 begin
-  FHeader.OnChange := nil;
-  FHeader.Free;
+  { Items go FIRST, and with OnItemNotify still armed: OnDeletion fires per row as the
+    collection empties, and a control going away is exactly when a host holding owned
+    objects in Data must free them. That means the handler can still call back into the
+    control, so everything it might read -- the header above all -- has to outlive it. }
   FItems.OnChange := nil;
   FItems.Free;
+  FItems := nil;
+  FHeader.OnChange := nil;
+  FHeader.Free;
   FGroups.OnChange := nil;
   FGroups.Free;
   { FVScroll / FHScroll owned by Self, freed by TComponent. }
@@ -1826,6 +1883,53 @@ procedure TTyListView.ItemsCollectionChanged(Sender: TObject);
 begin
   if FOwnerData then Exit;     { the collection is dormant in virtual mode }
   ItemsChanged;
+end;
+
+procedure TTyListView.ItemsCollectionNotify(Sender: TObject; AItem: TCollectionItem;
+  AAction: TCollectionNotification);
+begin
+  if FOwnerData then Exit;     { no collection lifetime to report in virtual mode }
+  if AItem = nil then Exit;
+  case AAction of
+    cnAdded:      DoInsert(AItem.Index);
+    { cnExtracting ONLY. Delete(i) fires cnDeleting and then, through the item's destructor,
+      cnExtracting (collect.inc:391-398); Clear and the destructor go straight to the item's
+      Free and fire cnExtracting alone (:362-365). Reacting to both would report every
+      Delete twice and every Clear once -- an inconsistency the host cannot compensate for.
+      cnExtracting is the one path every removal takes, and it still runs BEFORE the item
+      leaves the list, which is what keeps the index and the Data payload valid. }
+    cnExtracting: DoDeletion(AItem.Index);
+  end;
+end;
+
+procedure TTyListView.DoInsert(AIndex: Integer);
+begin
+  if Assigned(FOnInsert) then FOnInsert(Self, AIndex);
+end;
+
+procedure TTyListView.DoDeletion(AIndex: Integer);
+begin
+  if Assigned(FOnDeletion) then FOnDeletion(Self, AIndex);
+end;
+
+function TTyListView.GetColumns: TTyColumns;
+begin
+  Result := FHeader.Columns;
+end;
+
+function TTyListView.GetColumn(AIndex: Integer): TTyColumn;
+begin
+  // Out of range is nil rather than an exception: `if LV.Column[i] <> nil` is how the
+  // rest of this control's index-first surface is written.
+  if (AIndex >= 0) and (AIndex < FHeader.Columns.Count) then
+    Result := FHeader.Columns[AIndex]
+  else
+    Result := nil;
+end;
+
+function TTyListView.GetColumnCount: Integer;
+begin
+  Result := FHeader.Columns.Count;
 end;
 
 procedure TTyListView.HeaderChanged(Sender: TObject);

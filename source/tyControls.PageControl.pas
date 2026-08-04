@@ -28,14 +28,36 @@ type
     procedure SetController(AValue: TTyStyleController); override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure Loaded; override;
-    procedure UnregisterPage(APage: TTyTabSheet; AFree: Boolean);
   public
     destructor Destroy; override;
     { Public so TTyTabSheet.SetParent (a different unit) can self-register. Idempotent. }
     procedure RegisterPage(APage: TTyTabSheet);
+    { The other half of RegisterPage, and public for the same reason: SetParent lives in
+      tyControls.TabSheet and protected does not reach across units. It used to be reachable
+      only from Notification (opRemove) and the close path, i.e. only when a page was being
+      FREED -- so a page that merely MOVED to another pager registered with the new one and
+      stayed registered with the old one too. The old pager went on counting it, drawing its
+      tab and handing it out from Pages[], while the control itself lived somewhere else.
+      AFree=False leaves the page alone; True frees it (the close-button path). }
+    procedure UnregisterPage(APage: TTyTabSheet; AFree: Boolean);
     function AddPage(const ACaption: string): TTyTabSheet;
     function AddTab(const ACaption: string): TTyTabSheet;   // API-parity alias
+    { LCL's spelling (comctrls.pp:606) and LCL's signature: no caption argument, returns the
+      page. It is the single most common way pages get created in existing Delphi/Lazarus
+      code, and it is the one spelling this class did not answer to. }
+    function AddTabSheet: TTyTabSheet;
+    { Which PAGE is under a point, or -1 for none. LCL's IndexOfPageAt (comctrls.pp:452,
+      overridden on TPageControl :604) asks about the page BODY, where IndexOfTabAt asks
+      about the header -- so a point on the tab band is not a page hit, and vice versa.
+      Only the active page occupies the body, so at most one index can ever answer. }
+    function IndexOfPageAt(X, Y: Integer): Integer; overload;
+    function IndexOfPageAt(P: TPoint): Integer; overload;
     procedure RemovePage(AIndex: Integer);
+    { Move a page (and its tab) from one position to another. The reorder primitive existed
+      but only as a PROTECTED hook driven by the header drag, so application code had no way
+      to order pages at all. Public entry point for TTyTabSheet.PageIndex; both ends are
+      clamped and out-of-range or no-op moves are ignored. }
+    procedure MovePage(AFromIndex, AToIndex: Integer);
     function PageCount: Integer;
     property Pages[AIndex: Integer]: TTyTabSheet read GetPage;
   published
@@ -136,6 +158,25 @@ begin
   else
     for I := AFromIndex downto AToIndex + 1 do FPages[I] := FPages[I - 1];
   FPages[AToIndex] := Moved;
+  { Re-show whatever page NOW sits at the selected index.
+
+    The selection is pinned to the POSITION, not to the moved tab (the same rule
+    TTyTabSet.DoReorderTabs documents) -- but only the header was following that rule.
+    Visible is a property of the page OBJECT, and nothing re-assigned it after the array was
+    permuted, so dragging a tab past the selected one left the highlighted tab and the shown
+    page disagreeing: the header said "B" and the body still showed A, until the next tab
+    click resynced them. }
+  ShowOnlyPage(FTabIndex);
+end;
+
+procedure TTyPageControl.MovePage(AFromIndex, AToIndex: Integer);
+begin
+  if (AFromIndex < 0) or (AFromIndex > High(FPages)) then Exit;
+  if AToIndex < 0 then AToIndex := 0;
+  if AToIndex > High(FPages) then AToIndex := High(FPages);
+  if AFromIndex = AToIndex then Exit;
+  DoReorderTabs(AFromIndex, AToIndex);
+  TabsChanged;
 end;
 
 procedure TTyPageControl.RegisterPage(APage: TTyTabSheet);
@@ -207,6 +248,31 @@ end;
 function TTyPageControl.AddTab(const ACaption: string): TTyTabSheet;
 begin
   Result := AddPage(ACaption);
+end;
+
+function TTyPageControl.AddTabSheet: TTyTabSheet;
+begin
+  { '' and not a generated name: LCL's AddTabSheet leaves the caption empty too, and a
+    made-up 'TabSheet1' would then be a label the host has to notice and clear. }
+  Result := AddPage('');
+end;
+
+function TTyPageControl.IndexOfPageAt(X, Y: Integer): Integer;
+var
+  Body: TRect;
+begin
+  Result := -1;
+  Body := DisplayRect;
+  if (X < Body.Left) or (X >= Body.Right) then Exit;
+  if (Y < Body.Top) or (Y >= Body.Bottom) then Exit;
+  { The shown page is the only one with any pixels; every other page is Visible := False. }
+  if (FTabIndex >= 0) and (FTabIndex <= High(FPages)) then
+    Result := FTabIndex;
+end;
+
+function TTyPageControl.IndexOfPageAt(P: TPoint): Integer;
+begin
+  Result := IndexOfPageAt(P.x, P.y);
 end;
 
 procedure TTyPageControl.SetController(AValue: TTyStyleController);

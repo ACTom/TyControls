@@ -59,8 +59,11 @@ uses tyControls.MaskEdit;
 |------|------|--------|------|
 | `Mask` | `string` | `''` | 掩码模板;运行期改变会清空当前内容。**流式保存的是这个名字。** 非法掩码抛 `ETyMaskError`(见 3.1)。 |
 | `EditMask` | `string` | `''` | `Mask` 的别名(LCL / Delphi 用的名字),**同一个字段**,不参与流式化。名字一样不等于语言一样:`'!90:00;1;_'` 在 LCL 是一个合法的时间掩码,在这里一个槽位码都没有 —— 详见 3.1。 |
-| `Text` | `TCaption` | `''` | 掩码后的显示串。**赋值会过掩码**,见 5.1。 |
-| `IsComplete` | `function: Boolean` | — | 所有槽是否填满(可用于校验 / 门控 OK 按钮)。 |
+| `Text` | `TCaption` | 空骨架 | 掩码后的显示串,**含占位骨架**(见 4.1)。**赋值会过掩码**,见 5.1。 |
+| `SpaceChar` | `Char` | `'_'` | **(API parity 新增)** 未录入槽位上画的**占位符**,同 LCL 的 `SpaceChar`(`maskedit.pp:305`,published 于 `:364`),默认值两边都是 `'_'`。见 4.1。 |
+| `IsComplete` | `function: Boolean` | — | 所有槽是否填满(可用于校验 / 门控 OK 按钮);占位符**不算填过**。 |
+| `MaskedValue` | `function: string` | — | **(API parity 新增)** 去掉字面量与占位符后的**有效字符**,即显示串背后的"值"。`M.Text` 是 `'12/__/____'`,`M.MaskedValue` 是 `'12'`。 |
+| `ValidateEdit` | `procedure; virtual` | — | **(API parity 新增)** 掩码在用而槽位没填满时抛 `ETyMaskError`;`Mask = ''` 时什么也不做。见 5.2。 |
 | `ETyMaskError` | `class(Exception)` | — | 掩码不被接受时抛出。 |
 | `TyMaskRejectReason` | `function(const AMask: string): string` | — | `''` = 可用;否则是拒绝原因。 |
 
@@ -74,6 +77,20 @@ uses tyControls.MaskEdit;
 - **`KeyDown` 退格 / Delete**:两个键同义(本模型没有"中间的洞"),删最后一个有效字符后重算 —— Delete 不会删掉掩码字面量。
 - **粘贴(`FilterInsert`)**:与打字同一套判定,见 5.1。
 - 纯函数 `TyMaskApply` / `TyMaskExtract` / `TyMaskNextSlot` / `TyMaskSlotAccepts` / `TyMaskIsComplete` / `TyMaskRejectReason` 承载全部逻辑,已单元测试。
+
+### 4.1 占位骨架(`SpaceChar`)
+
+**空的掩码框现在显示 `__/__/____`,打了两位显示 `12/__/____`。** 这是掩码框存在的理由,而从前**根本画不出来**:`TyMaskApply` 只铺到最后一个已填槽为止,并丢掉悬空的尾随字面量,于是空日期框渲染成**一个什么都没有的空盒子**,打了一半是 `12` —— 屏幕上没有任何东西告诉用户这个字段要八位数字、分隔符落在哪、还差多少。
+
+- 占位符由 `SpaceChar` 决定,默认 `'_'`(与 LCL / Delphi 同)。
+- **光标落在下一个待填槽上**,不是显示串的末尾。骨架进场之后这两个位置不再是同一处:`'12/__/____'` 的光标该在下标 3(分隔符之后),  停在下标 10 就是指着一个敲不进任何东西的地方。录入仍然是追加式的,光标纯粹是视觉反馈,所以这个改动只会更对。
+- `SpaceChar := #0` **关掉骨架**,退回从前那种短显示串。两个后果值得先知道:
+  - `Text` 是**显示串**,所以骨架在时,没动过的字段读出来是 `'__/__/____'` 而不是 `''`。值请读 `MaskedValue`(那里是 `''`);    `IsComplete` 与 `TyMaskExtract` 本来就会跳过占位符。
+  - `TextHint` 只在 `Text` 为空时画,所以骨架把它顶掉了。这是有意的 —— 骨架说得比提示多,而且不会在第一个键落下时消失 ——     但依赖 `TextHint` 的控件要写 `SpaceChar := #0`。
+
+> 纯函数侧对应的是可选参数:`TyMaskApply(AMask, ARaw, ABlank)`、`TyMaskExtract(AMask, AText, ABlank)`、> `TyMaskIsComplete(AMask, AText, ABlank)`,`ABlank = #0`(默认)就是原来的短形式;另有 `TyMaskCaretSlot(AMask, AFilledCount)` 回答光标该落在哪。
+
+---
 
 ### 5.1 `Text :=` / 粘贴:一套规则,只截断不补白
 
@@ -91,6 +108,18 @@ D.Text := '123456789';    // 超出槽数的部分丢掉
 已经合规的串(本控件自己的显示串、`.lfm` 里的值、从另一个掩码框复制过来的值)**原样保留**,`Ed.Text := Ed.Text` 是恒等。
 
 > **注意(静态绑定):** `Text` 是属性覆盖,只拦通过 `TTyMaskEdit`(或其子类)类型引用的赋值。强转到基类 —— `TTyEdit(M).Text := X` —— 仍然会绕过掩码。别这么写。
+
+### 5.2 校验时机:`ValidateEdit` 与失焦自动校验
+
+**(API parity 新增,破坏性)** 从前这个控件**没有校验时机**:半截的 `'12/__/____'` 悄无声息地离开控件、进到业务代码,除非每个调用点都记得在每个出口轮询 `IsComplete` —— 而忘掉一次,正是掩码框本该防住的那个 bug。
+
+- `ValidateEdit`(public virtual):掩码在用且槽位没填满就抛 `ETyMaskError`。可以在 OK 按钮里主动调,也可以重写它换一种报法。
+- **失焦时自动调一次**,照抄 LCL 的三道闸(`maskedit.pp:2094-2112`),每一道都有用:
+  1. **先**跑 `inherited DoExit`,让 `OnExit` 处理器有机会先把值补齐或清掉;
+  2. 本次焦点访问内**用户没改过**就不查(Tab 划过一个没碰过的字段不是错误);
+  3. 一个失败只报一次 —— 前一个异常还没退栈时再抛一个会**中止整个程序**,而不是报告任何东西。
+
+> **迁移:** 若你的表单本来就允许半截值离开掩码框,把该字段的 `Mask` 设为 `''`(普通编辑),或重写 `ValidateEdit` 改成不抛。
 
 ---
 

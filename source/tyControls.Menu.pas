@@ -649,9 +649,17 @@ begin
       Result[n].Hint := mi.Hint;
       { A menu item that can be toggled should LOOK toggleable before it is toggled --
         otherwise "View > Toolbar" and "File > Open" are indistinguishable until you have
-        already clicked one. LCL spells this ShowAlwaysCheckable; TMenuItem.AutoCheck is
-        the per-item statement of the same thing, so an AutoCheck item reserves its slot. }
-      Result[n].AlwaysCheckable := mi.AutoCheck;
+        already clicked one.
+
+        BOTH of the LCL flags that say so are read, because LCL reads both:
+        TMenuItem.IsCheckItem is `Checked or RadioItem or AutoCheck or ShowAlwaysCheckable`
+        (menuitem.inc:1247-1250). ShowAlwaysCheckable (menus.pp:345) is the EXPLICIT
+        opt-in -- "this is a toggle, show the box" -- and it was the one still being
+        ignored: it is published, the Object Inspector offers it, and only AutoCheck (the
+        flag that also makes the item toggle ITSELF on click, which many apps deliberately
+        do not want) reached the paint. Setting the property meant for exactly this job
+        drew nothing. }
+      Result[n].AlwaysCheckable := mi.AutoCheck or mi.ShowAlwaysCheckable;
       Result[n].GlyphVisible := TyMenuGlyphVisible(mi);
       { The icon SOURCE is a per-item question in the LCL, not a per-menu one: GetImageList
         walks the parent chain for the nearest SubMenuImages and only then falls back to the
@@ -1332,8 +1340,8 @@ begin
       else if FRows[i].AlwaysCheckable then
         { An UNCHECKED but checkable item draws an empty box, so the user can see that this
           command toggles BEFORE clicking it -- otherwise "View > Toolbar" and "File > Open"
-          look identical until one of them has already been used. LCL calls the opt-in
-          ShowAlwaysCheckable; TMenuItem.AutoCheck is the per-item form of the same thing. }
+          look identical until one of them has already been used. Set by either LCL flag
+          that declares the item checkable: ShowAlwaysCheckable or AutoCheck. }
         P.StrokeBorder(Types.Rect(RowRect.Left + padL + P.Scale(3),
           RowRect.Top + (rowH - leftSlot) div 2 + P.Scale(3),
           RowRect.Left + padL + leftSlot - P.Scale(3),

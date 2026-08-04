@@ -137,5 +137,7 @@ Lbl.Caption := Format('已处理 %d 条记录', [RecordCount]);
 - **无边框、纯文本：** 默认背景完全透明（`alpha(#FFFFFF, 0)`），不绘制边框，视觉上等同于原生 `TLabel`，但外观完全由 `.tycss` 主题驱动。
 - **不可聚焦：** 基类是 `TGraphicControl`，没有 HWND，无法接收键盘焦点，`:focus` 伪类永远不会生效。如果需要可聚焦的文字控件，应换用其他控件类型。
 - **Opacity：** `:disabled` 状态下 `opacity: 0.5` 会使文字和背景一起半透明。若主题未设置 `opacity`，渲染时默认 `Opacity = 1.0`（见 `EmptyStyleSet`）。
-- **文字对齐：** 渲染时固定为左对齐（`taLeftJustify`）、垂直居中（`tlCenter`），不可通过属性修改；如需其他对齐方式，需自行继承并重写 `RenderTo`。
+- **文字对齐：** 由 published 的 `Alignment`（水平）与 `Layout`（垂直）控制，两者都是真的走绘制路径的。（这一行从前写着"固定为左对齐、垂直居中,不可通过属性修改"——属性落地之后没有人回来改文档。记在这里，好让下一位读者知道旧文是错的，而不是在描述另一个版本。）
+- **`Layout` 默认值与 LCL 不同：** 这里是 `tlCenter`，`TCustomLabel` 是 `tlTop`（`stdctrls.pp:1599`）。刻意保留：本库的默认值已经写进每一份 `.lfm`（省略即 `tlCenter`），改默认会让所有既有的非 AutoSize 标签整体上移。从 LCL 移植窗体时，非 AutoSize 的标签请显式写上 `Layout = tlTop`。
+- **无障碍：** 构造时声明 `AccessibleRole := larLabel`。自绘控件没有可供辅助技术回退的原生对等物，不声明的话读屏软件只会读到一个身份不明的自定义控件。
 - **单元名陷阱：** 单元名是 `tyControls.TyLabel`（含 `Ty` 前缀），与其他控件单元（如 `tyControls.Button`）的命名规律不同，容易拼错。

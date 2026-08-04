@@ -11,7 +11,7 @@ type
     procedure TestSelected;
     procedure TestAddAndClear;
     procedure TestSortedKeepsColors;
-    procedure TestStyleLocked;
+    procedure TestComboModeStaysLocked;
   end;
 implementation
 
@@ -84,14 +84,19 @@ begin
   finally c.Free; end;
 end;
 
-procedure TColorBoxTest.TestStyleLocked;
+{ Was TestStyleLocked, and its name asserted what Style MEANT on this class: the combo's
+  dropdown mode, which the control silently discarded on every write. Style now composes the
+  palette (as it does on LCL's TColorBox), so the combo mode is reached through the ancestor
+  -- and is still locked, for the same reason as before: a filtered editable popup would map
+  row indices to the wrong swatches. }
+procedure TColorBoxTest.TestComboModeStaysLocked;
 var c: TTyColorBox;
 begin
   c := TTyColorBox.Create(nil);
   try
-    AssertTrue('starts list-only', c.Style = csDropDownList);
-    c.Style := csDropDown;   // must be ignored (filtered popup would desync swatches)
-    AssertTrue('stays list-only', c.Style = csDropDownList);
+    AssertTrue('starts list-only', TTyComboBox(c).Style = csDropDownList);
+    TTyComboBox(c).Style := csDropDown;   // must still be ignored
+    AssertTrue('stays list-only', TTyComboBox(c).Style = csDropDownList);
   finally c.Free; end;
 end;
 

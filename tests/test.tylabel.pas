@@ -39,6 +39,7 @@ type
     procedure TestTransparentDefault;
     procedure TestAuthoredBreakRendersASecondLine;
     procedure TestLineHeightTokenSizesTheCaptionBlock;
+    procedure TestAccessibleRoleIsAnnounced;
   end;
 
   { A hand-set Height is a REQUEST; what is possible is decided by the font and the padding,
@@ -728,6 +729,20 @@ begin
   finally
     F.Free;
   end;
+end;
+
+{ A screen reader has no native peer to fall back on for a self-drawn control, so without an
+  explicit role a caption reads as an unidentified custom control -- and a label, whose whole
+  job is to name the control beside it, is the worst one to lose. LCL assigns the role in the
+  same one line in TCustomEdit.Create (include/customedit.inc:87). }
+procedure TLabelTest.TestAccessibleRoleIsAnnounced;
+var L: TTyLabel;
+begin
+  L := TTyLabel.Create(nil);
+  try
+    AssertEquals('a label announces itself as one',
+      Ord(larLabel), Ord(L.AccessibleRole));
+  finally L.Free; end;
 end;
 
 initialization

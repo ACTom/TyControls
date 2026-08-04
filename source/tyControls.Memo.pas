@@ -2,7 +2,7 @@ unit tyControls.Memo;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType, LazUTF8, Clipbrd,
+  Classes, SysUtils, Types, Controls, Graphics, LCLType, LazUTF8, LazMethodList, Clipbrd,
   Generics.Collections, ExtCtrls, StdCtrls,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base,
@@ -129,6 +129,21 @@ type
     // Fired after any mutation of the text model (insert/split/delete/merge).
     // Pure caret moves do NOT fire it.
     FOnChange: TNotifyEvent;
+    { Multicast OnChange (LCL stdctrls.pp:853-855, inherited by TCustomMemo). Lazy: a memo
+      nobody observes must not pay for a TMethodList. }
+    FOnChangeHandlers: TMethodList;
+    { Dirty flag + the by-code guard, verbatim in spirit from TTyEdit -- see there. Every
+      completed mutation passes DoChange, and only a programmatic Text/Lines assignment sets
+      the guard, so typing dirties the memo and `Memo.Lines := ...` cleans it. }
+    FModified: Boolean;
+    FTextChangeByCode: Boolean;
+    { Horizontal alignment of every painted row (TMemo republishes TCustomEdit's Alignment at
+      stdctrls.pp:1023). A centred multi-line block could not be produced by any other route
+      here: the row renderer always started at the left content edge. }
+    FAlignment: TAlignment;
+    { Case folding applied to typed AND assigned text (stdctrls.pp:1028; LCL folds in
+      include/customedit.inc). Reuses TTyEdit's rule so the two controls fold identically. }
+    FCharCase: TEditCharCase;
     // Fired whenever the caret position OR the selection range changes (arrow/click/
     // shift-select, programmatic SetCaret, and after edits that move the caret). The
     // funnel DoSelectionChange snapshots the last-reported (caret,anchor) and only
@@ -182,6 +197,19 @@ type
     procedure SetWantTabs(AValue: Boolean);
     procedure SetWantReturns(AValue: Boolean);
     procedure SetScrollBars(AValue: TScrollStyle);
+    procedure SetAlignment(AValue: TAlignment);
+    procedure SetCharCase(AValue: TEditCharCase);
+    { Fold AStr per CharCase (identical rule to TTyEdit.ApplyCharCase). '' passes through. }
+    function ApplyCharCase(const AStr: string): string;
+    { Re-fold every line after CharCase changes to something other than ecNormal -- LCL folds
+      the EXISTING text on the setter too, so a field switched to ecUpperCase does not keep
+      showing the lower-case value it already held. }
+    procedure RefoldAllLines;
+    { Device-px x offset added to a visual row's draw/caret/band origin under
+      taCenter / taRightJustify. Zero when left-aligned, and zero whenever the row is wider
+      than the viewport (scroll governs then; alignment of an overflowing row is moot -- the
+      same rule TTyEdit.AlignOffset follows). }
+    function RowAlignOffset(AVisualRow, AContentWidth, APPI: Integer): Integer;
     // The line separator TStrings.Text actually writes between two lines, and its
     // codepoint width. Mirrors TStrings.GetTextStr/GetLineBreakCharLBS: an explicitly
     // assigned Lines.LineBreak wins, otherwise the TextLineBreakStyle glyph (CRLF on
@@ -379,10 +407,6 @@ type
     // segment so a click never escapes the row it landed on.
     procedure VisualToCaret(AVisualRow, AX, AContentWidth, APPI: Integer;
       out ALine, ACol: Integer);
-    // Caret read/write for tests and later tasks.
-    function CaretLine: Integer;
-    function CaretCol: Integer;
-    procedure SetCaret(ALine, ACol: Integer);
     // Direct write of the selection anchor (tests / later tasks). Does NOT move
     // the caret, so it can establish a non-empty selection.
     procedure SetSelAnchor(ALine, ACol: Integer);
@@ -559,7 +583,31 @@ type
     property SelStart: Integer read GetSelStart write SetSelStart;
     property SelLength: Integer read GetSelLength write SetSelLength;
     property SelText: string read GetSelText write SetSelText;
+    { A FLAT codepoint offset, not LCL's TPoint. LCL's TCustomMemo overrides GetCaretPos to
+      return line/column (stdctrls.pp:919, custommemo.inc:176-179), and the two types share no
+      assignment, so a ported `P := Memo.CaretPos` fails to COMPILE rather than misbehaving --
+      the loud failure. What was genuinely unreachable was the information itself: the 2-D
+      accessors were protected, so every "Ln 12, Col 4" indicator had to subclass the memo.
+      They are public now (CaretLine / CaretCol / SetCaret, just below), which is the part
+      that was missing; the flat form keeps its name because SelStart/SelLength/SelText are
+      flat too and the four have to address the same string. }
     property CaretPos: Integer read GetCaretPos write SetCaretPos;
+    { The caret's LINE and COLUMN (0-based codepoints) -- what LCL answers from CaretPos on a
+      memo, and the pair a status bar, a go-to-line command or an error highlighter needs.
+      These were PROTECTED, so the one piece of information a multi-line caret carries and a
+      flat offset does not was reachable only by subclassing. SetCaret places both. }
+    function CaretLine: Integer;
+    function CaretCol: Integer;
+    procedure SetCaret(ALine, ACol: Integer);
+    { Dirty flag, LCL's TCustomEdit.Modified inherited by TCustomMemo (stdctrls.pp:867): True
+      once the USER has changed the text, False again after a programmatic Text/Lines write.
+      See TTyEdit.Modified -- the distinction is the point, and OnChange cannot supply it. }
+    property Modified: Boolean read FModified write FModified;
+    { Multicast OnChange (stdctrls.pp:853-855). Same reason as on TTyEdit: the single OnChange
+      slot belongs to the application, and an observer must not have to take it. }
+    procedure AddHandlerOnChange(const AnOnChangeEvent: TNotifyEvent; AsFirst: Boolean = False);
+    procedure RemoveHandlerOnChange(const AnOnChangeEvent: TNotifyEvent);
+    procedure RemoveAllHandlersOfObject(AnObject: TObject); override;
   published
     property Lines: TStrings read GetLines write SetLines;
     // Whole-document text as one string with platform line breaks (TStrings.Text
@@ -587,6 +635,17 @@ type
     // acts as Copy. Default False.
     property ReadOnly: Boolean read FReadOnly write SetReadOnly default False;
     property HideSelection: Boolean read FHideSelection write SetHideSelection default True;
+    { Horizontal placement of EVERY painted row (TMemo republishes it at stdctrls.pp:1023).
+      A centred title block or a right-aligned numeric column could not be produced by any
+      route here before: the renderer always started each row at the left content edge, and
+      no theme token moves text. Alignment is ignored for a row that is WIDER than the
+      viewport -- there is nothing to centre, and horizontal scroll owns the origin then
+      (TTyEdit.AlignOffset takes the same position). }
+    property Alignment: TAlignment read FAlignment write SetAlignment default taLeftJustify;
+    { Force typed AND assigned text to one case (stdctrls.pp:1028). Reuses TTyEdit's fold, so
+      an upper-case-only note field behaves the same in both controls; setting it re-folds the
+      text already held, as LCL does. }
+    property CharCase: TEditCharCase read FCharCase write SetCharCase default ecNormal;
     // Caps total content codepoints (typing blocked at the cap; paste truncated
     // to the remaining room). 0 = unlimited. Default 0.
     property MaxLength: Integer read FMaxLength write SetMaxLength default 0;
@@ -604,7 +663,10 @@ type
     property OnSelectionChange: TNotifyEvent read FOnSelectionChange write FOnSelectionChange;
     // Standard control properties/events re-published to match TMemo (all inherited; the key/mouse
     // overrides call inherited so the events fire). Color/BorderStyle are intentionally NOT published:
-    // this control is theme-/self-drawn. Alignment/CharCase/BidiMode are out of scope.
+    // this control is theme-/self-drawn. BidiMode stays out of scope -- RTL is realized by the
+    // widgetset on a native EDIT handle, so there is nothing for a self-drawn control to inherit.
+    // (Alignment and CharCase used to be listed here as out of scope too. Alignment was a real
+    // capability gap and CharCase was one method away from the sibling Edit; both are above now.)
     property TabStop default True;
     property TabOrder;
     property Visible;
@@ -689,6 +751,13 @@ begin
   FCaretVisible := True;       // solid caret until a real timer toggles it
   FBlinkTimer := nil;          // lazy: created only when HandleAllocated
   FBlinkElapsedMs := 0;
+  FAlignment := taLeftJustify;
+  FCharCase := ecNormal;
+  FModified := False;
+  { A screen reader has no native peer to fall back on for a self-drawn control, so without
+    this the memo reads as an unidentified custom control. LCL's TCustomEdit.Create says
+    larTextEditorSingleline (include/customedit.inc:87); a memo is the multi-line one. }
+  AccessibleRole := larTextEditorMultiline;
   Width := 200;
   Height := 120;
 end;
@@ -703,7 +772,30 @@ begin
   FLineWidthCache.Free;
   FLineTotalWidthCache.Free;
   FLines.Free;
+  FreeAndNil(FOnChangeHandlers);
   inherited Destroy;
+end;
+
+// ---- Multicast OnChange (LCL customedit.inc:91-97) ----
+
+procedure TTyMemo.AddHandlerOnChange(const AnOnChangeEvent: TNotifyEvent;
+  AsFirst: Boolean = False);
+begin
+  if FOnChangeHandlers = nil then FOnChangeHandlers := TMethodList.Create;
+  FOnChangeHandlers.Add(TMethod(AnOnChangeEvent), not AsFirst);
+end;
+
+procedure TTyMemo.RemoveHandlerOnChange(const AnOnChangeEvent: TNotifyEvent);
+begin
+  if FOnChangeHandlers <> nil then
+    FOnChangeHandlers.Remove(TMethod(AnOnChangeEvent));
+end;
+
+procedure TTyMemo.RemoveAllHandlersOfObject(AnObject: TObject);
+begin
+  inherited RemoveAllHandlersOfObject(AnObject);
+  if FOnChangeHandlers <> nil then
+    FOnChangeHandlers.RemoveAllMethodsOfObject(AnObject);
 end;
 
 // ---- Blinking caret (Task 10) ----
@@ -1112,13 +1204,21 @@ begin
   // Replace all lines from the string (split on line breaks by TStrings.Text),
   // collapse the caret/selection to the origin, refresh layout + fire OnChange.
   BeginUndoStep(uskNone);
-  FLines.Text := AValue;
+  FLines.Text := ApplyCharCase(AValue);
   FCaretLine := 0;
   FCaretCol := 0;
   FSelAnchorLine := 0;
   FSelAnchorCol := 0;
   FDesiredCol := 0;
-  AfterEdit(Font.PixelsPerInch);
+  { A programmatic write: OnChange still fires (LCL's does too), but it must not dirty the
+    field -- that difference is the whole content of Modified. }
+  FTextChangeByCode := True;
+  try
+    AfterEdit(Font.PixelsPerInch);
+  finally
+    FTextChangeByCode := False;
+  end;
+  FModified := False;
 end;
 
 function TTyMemo.ContentCodepointCount: Integer;
@@ -1175,6 +1275,7 @@ begin
   if FTopRow > MaxTopLine then FTopRow := MaxTopLine;
   if FTopRow < 0 then FTopRow := 0;
   UpdateScrollBar;
+  FModified := False;   // loading content into the control is not the user editing it
   Invalidate;
 end;
 
@@ -1283,6 +1384,93 @@ begin
     Result := FVisualRows[VRow].EndCol
   else
     Result := LineLen(FCaretLine);
+end;
+
+procedure TTyMemo.SetAlignment(AValue: TAlignment);
+begin
+  if FAlignment = AValue then Exit;
+  FAlignment := AValue;
+  { Only the draw ORIGIN moves. Wrapping, measurement and the (line,col) model are all
+    alignment-free, so the visual-row cache stays valid -- rebuilding it here would re-measure
+    every line for a repaint that needs none. }
+  Invalidate;
+end;
+
+function TTyMemo.ApplyCharCase(const AStr: string): string;
+begin
+  case FCharCase of
+    ecUppercase: Result := UTF8UpperCase(AStr);
+    ecLowerCase: Result := UTF8LowerCase(AStr);
+  else
+    Result := AStr;
+  end;
+end;
+
+procedure TTyMemo.RefoldAllLines;
+var
+  i: Integer;
+  folded: string;
+  didFold: Boolean;
+begin
+  if FCharCase = ecNormal then Exit;
+  didFold := False;
+  FInLinesChange := True;   // one invalidation at the end, not one per line
+  try
+    for i := 0 to FLines.Count - 1 do
+    begin
+      folded := ApplyCharCase(FLines[i]);
+      if folded <> FLines[i] then
+      begin
+        FLines[i] := folded;
+        didFold := True;
+      end;
+    end;
+  finally
+    FInLinesChange := False;
+  end;
+  if didFold then
+  begin
+    InvalidateVisualRows;
+    Invalidate;
+  end;
+end;
+
+procedure TTyMemo.SetCharCase(AValue: TEditCharCase);
+begin
+  if FCharCase = AValue then Exit;
+  FCharCase := AValue;
+  { Re-case what is already held, as LCL and TTyEdit.SetCharCase both do: a field switched to
+    ecUpperCase that goes on showing its lower-case value is the surprising half. Not an undo
+    step and not a Modified change -- it is a normalisation the program asked for, not an edit
+    the user made. }
+  RefoldAllLines;
+end;
+
+function TTyMemo.RowAlignOffset(AVisualRow, AContentWidth, APPI: Integer): Integer;
+var
+  RL, RS, RE, w: Integer;
+  Line: string;
+  Widths: TTyIntArray;
+begin
+  Result := 0;
+  { Left-justified is the default and the hot path: exit before measuring anything, so an
+    unaligned memo pays nothing and renders byte-identically to before. }
+  if FAlignment = taLeftJustify then Exit;
+  if (AContentWidth <= 0) or (AVisualRow < 0) or (AVisualRow > High(FVisualRows)) then Exit;
+  RL := FVisualRows[AVisualRow].Line;
+  RS := FVisualRows[AVisualRow].StartCol;
+  RE := FVisualRows[AVisualRow].EndCol;
+  if RL < FLines.Count then Line := FLines[RL] else Line := '';
+  { The per-line width cache is what makes this affordable per paint: the measure is keyed by
+    line CONTENT, so after the first pass every visible row is a dictionary hit. (The selection
+    band on the same row already measures the same line the same way.) }
+  Widths := MeasureLineWidths(Line, APPI);
+  w := Widths[RE] - Widths[RS];
+  if w >= AContentWidth then Exit;   // overflowing row: scroll owns the origin
+  if FAlignment = taCenter then
+    Result := (AContentWidth - w) div 2
+  else
+    Result := AContentWidth - w;
 end;
 
 function TTyMemo.CaretLine: Integer;
@@ -1494,8 +1682,14 @@ end;
 
 procedure TTyMemo.DoChange;
 begin
+  { Dirty-flag bookkeeping at the one point every completed mutation passes, reading the
+    by-code guard exactly as LCL's Change does (include/customedit.inc:613-616). }
+  if not FTextChangeByCode then
+    FModified := True;
   if Assigned(FOnChange) then
     FOnChange(Self);
+  if FOnChangeHandlers <> nil then
+    FOnChangeHandlers.CallNotifyEvents(Self);
 end;
 
 procedure TTyMemo.DoSelectionChange;
@@ -1896,7 +2090,10 @@ begin
   // so this reduces to the legacy logical-line hit-test exactly. VisualToCaret
   // resolves the (line,col) under X clamped to the row's segment.
   Row := FTopRow + (Y div LH);
-  VisualToCaret(Row, X, CW, APPI, NewLine, NewCol);
+  { Undo the row's alignment shift before resolving the column, or a click on a centred row
+    lands on the character that WOULD be there if the row were left-justified. Zero under the
+    default alignment, so the plain hit-test is unchanged. }
+  VisualToCaret(Row, X - RowAlignOffset(Row, CW, APPI), CW, APPI, NewLine, NewCol);
   FCaretLine := NewLine;
   FCaretCol := NewCol;
   FDesiredCol := FCaretCol;
@@ -1936,7 +2133,7 @@ begin
   CW := ContentWidthFor(APPI);
   EnsureVisualRows(APPI);
   Row := FTopRow + (Y div LH);
-  VisualToCaret(Row, X, CW, APPI, NewLine, NewCol);
+  VisualToCaret(Row, X - RowAlignOffset(Row, CW, APPI), CW, APPI, NewLine, NewCol);
   FCaretLine := NewLine;
   FCaretCol := NewCol;
   FDesiredCol := FCaretCol;
@@ -2082,10 +2279,14 @@ procedure TTyMemo.DoInsertText(const AStr: string);
 // Splice AStr into the current line at FCaretCol (codepoint index); advance the
 // caret past the inserted text. Mirrors TTyEdit.InjectStringAt per-line.
 var
-  Cur, Before, After: string;
+  Cur, Before, After, Ins: string;
   L: Integer;
 begin
   if AStr = '' then Exit;
+  { CharCase folds at the single splice point, so typing, IME commits and paste all land
+    already-cased and nothing can enter the model in the wrong case. Identity under the
+    default ecNormal. }
+  Ins := ApplyCharCase(AStr);
   // Ensure the model has a backing line for the caret.
   if FLines.Count = 0 then
     FLines.Add('');
@@ -2094,8 +2295,8 @@ begin
   if FCaretCol > L then FCaretCol := L;
   Before := UTF8Copy(Cur, 1, FCaretCol);
   After  := UTF8Copy(Cur, FCaretCol + 1, L - FCaretCol);
-  FLines[FCaretLine] := Before + AStr + After;
-  FCaretCol := FCaretCol + UTF8Length(AStr);
+  FLines[FCaretLine] := Before + Ins + After;
+  FCaretCol := FCaretCol + UTF8Length(Ins);
 end;
 
 procedure TTyMemo.DoSplitLine;
@@ -2553,7 +2754,9 @@ var
   i, InsertAt: Integer;
 begin
   // Normalise CR/LF: CRLF -> LF, lone CR -> LF, so each remaining LF is one break.
-  Norm := StringReplace(AStr, #13#10, #10, [rfReplaceAll]);
+  // (CharCase first: the multi-line path builds its lines itself rather than going through
+  //  DoInsertText, so a pasted block has to be folded here too. Identity under ecNormal.)
+  Norm := StringReplace(ApplyCharCase(AStr), #13#10, #10, [rfReplaceAll]);
   Norm := StringReplace(Norm, #13, #10, [rfReplaceAll]);
   // Split into segments on LF. A single segment (no break) is a plain insert.
   // Build the segment list manually (rather than via TStringList.Text) so a
@@ -2879,6 +3082,7 @@ var
   EffSize, CaretX, CaretVRow: Integer;
   Line, Seg: string;
   RL, RS, RE, RowBaseW, bandStartCol, bandEndCol: Integer;
+  AOff, AlignW: Integer;   // Alignment: per-row draw-origin shift, and the width it fits into
   // Selection-band state (resolved once before the visible-row loop).
   SL, SC, EL, EC, X1, X2: Integer;
   Widths: TTyIntArray;
@@ -2950,12 +3154,17 @@ begin
       // (RS=0, RE=LineLen) this is the whole line (identity with the old render).
       Seg := UTF8Copy(Line, RS + 1, RE - RS);
       y := ContentTop + (vr - FTopRow) * LH;
+      { Alignment shifts this row's ORIGIN -- text, band and caret all take the same AOff, so
+        the three can never drift apart. Zero under the default taLeftJustify (RowAlignOffset
+        exits before measuring), which keeps the unaligned render byte-identical. }
+      AlignW := (ContentRect.Right - SBWidth) - ContentRect.Left;
+      AOff := RowAlignOffset(vr, AlignW, APPI);
       // Horizontal scroll: shift the row's left edge left by FScrollX so a long
       // line follows the caret; the Right edge stays clipped at the content
       // right (DrawText clips to LineRect), so glyphs never spill past it. With
       // FScrollX = 0 (fitting text or WordWrap=True) LineRect.Left is unchanged,
       // so the no-wrap render is byte-identical to today.
-      LineRect := Rect(ContentRect.Left - FScrollX, y,
+      LineRect := Rect(ContentRect.Left - FScrollX + AOff, y,
         ContentRect.Right - SBWidth, y + LH);
 
       // Selection band for this row, drawn BENEATH the text (band first so the
@@ -3000,11 +3209,11 @@ begin
           // so it is NOT shifted. Clamp both edges into the content rect so the
           // band never paints over the padding/scrollbar when scrolled. FScrollX=0
           // leaves the band geometry byte-identical to today.
-          X1 := ContentRect.Left + (Widths[bandStartCol] - RowBaseW) - FScrollX;
+          X1 := ContentRect.Left + (Widths[bandStartCol] - RowBaseW) - FScrollX + AOff;
           if bandEndCol < 0 then
             X2 := ContentRect.Right - SBWidth
           else
-            X2 := ContentRect.Left + (Widths[bandEndCol] - RowBaseW) - FScrollX;
+            X2 := ContentRect.Left + (Widths[bandEndCol] - RowBaseW) - FScrollX + AOff;
           if X1 < ContentRect.Left then X1 := ContentRect.Left;
           if X2 > ContentRect.Right - SBWidth then X2 := ContentRect.Right - SBWidth;
           if X1 < X2 then
@@ -3048,7 +3257,8 @@ begin
         // then shifted left by FScrollX so the caret tracks the scrolled text.
         // FScrollX = 0 (fitting text / WordWrap=True) leaves this byte-identical.
         CaretX := R.Left + ColPixelXAt(Line, FCaretCol, APPI)
-          - (ColPixelXAt(Line, RS, APPI) - TextStartX(APPI)) - FScrollX;
+          - (ColPixelXAt(Line, RS, APPI) - TextStartX(APPI)) - FScrollX
+          + RowAlignOffset(CaretVRow, (ContentRect.Right - SBWidth) - ContentRect.Left, APPI);
         y := ContentTop + (CaretVRow - FTopRow) * LH;
         CaretRect := Rect(CaretX, y + P.Scale(2),
           CaretX + P.Scale(1), y + LH - P.Scale(2));

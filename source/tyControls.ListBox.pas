@@ -6,6 +6,16 @@ uses
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller,
   tyControls.ScrollBar;
 type
+  { Selection-changed notification carrying LCL's User flag: True when the change came from
+    the USER (a click, a key), False when code moved the selection. LCL:
+    TSelectionChangeEvent, stdctrls.pp:529.
+
+    Why the flag matters: a handler that writes back into the model, and a model that
+    writes back into ItemIndex, is the standard two-way binding. Without a way to tell its
+    own writes from the user's, such a handler either loops or has to carry a private
+    "I am updating" boolean at every call site. }
+  TTySelectionChangeEvent = procedure(Sender: TObject; AUser: Boolean) of object;
+
   TTyListBox = class(TTyCustomControl)
   private
     FItems: TStringList;
@@ -22,7 +32,16 @@ type
     FSelAnchor: Integer;
     FSorted: Boolean;
     FSuppressItemsChanged: Boolean;  // guard while we drive a reorder ourselves
-    procedure SetItems(const AValue: TStringList);
+    FExtendedSelect: Boolean;
+    FOnSelectionChange: TTySelectionChangeEvent;
+    FLockSelectionChange: Integer;   // >0 = report every change as programmatic
+    { Nesting depth of a MOUSE/KEY handler. DoSelectionChange derives LCL's User flag from
+      it, rather than threading a second argument through SelectItem / SetSelected /
+      SelectAll -- SelectItem is public AND virtual, so widening it would break every
+      descendant that overrides it (TTyValueListEditor does). }
+    FUserAction: Integer;
+    function GetItems: TStrings;
+    procedure SetItems(const AValue: TStrings);
     procedure SetSorted(const AValue: Boolean);
     { Snapshot the currently-selected strings (single OR multi mode). }
     function SnapshotSelectedTexts: TStringList;
@@ -45,6 +64,9 @@ type
     procedure SetSelected(AIndex: Integer; AValue: Boolean);
     procedure SetMultiSelect(AValue: Boolean);
     procedure DoChangeSel;
+    { The one place a selection change is announced. Every mutator calls it; it decides the
+      User flag from FUserAction and the lock. }
+    procedure FireSelectionChanged;
     procedure ClearAllBits;
     function FSelAnchorOr(ADefault: Integer): Integer;
     procedure ApplyRangeSelection(ALo, AHi: Integer);
@@ -63,6 +85,12 @@ type
       two-column property inspector) uses it; every subclass that really does draw one line of
       text per row keeps the shared key, which is why they can all be restyled at once. }
     function GetItemStyleTypeKey: string; virtual;
+    { The state set ONE ROW resolves, after the base has decided active/hover/normal. The
+      row loop lives in RenderTo, so this is the only seam through which a descendant can
+      say something about an individual row's condition -- TTyCheckListBox adds tysDisabled
+      for a row its ItemEnabled[] turns off, which is what makes such a row look disabled
+      instead of merely refusing to toggle. Default: unchanged. }
+    function ItemStatesFor(AIndex: Integer; ABaseStates: TTyStateSet): TTyStateSet; virtual;
     // Row index at client device Y (or -1 if outside any item). For subclasses that
     // hit-test rows, e.g. TTyCheckListBox's checkbox column.
     function RowAtY(AY: Integer): Integer;
@@ -78,6 +106,10 @@ type
       (TTyValueListEditor) can commit/close it before the list scrolls (all scroll paths —
       wheel, scrollbar, keyboard auto-scroll — funnel through here). }
     procedure SetTopIndex(const AValue: Integer); virtual;
+    { Raise OnChange and OnSelectionChange. AUser is LCL's flag (stdctrls.pp:608
+      DoSelectionChange). Virtual so a descendant can observe every selection change
+      without claiming the app's event slot. }
+    procedure DoSelectionChange(AUser: Boolean); virtual;
     procedure Paint; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -120,6 +152,18 @@ type
     procedure SelectRange(ALow, AHigh: Integer; ASelected: Boolean);
     { The selected rows' text, newline-joined -- what a "copy the selection" command wants. }
     function GetSelectedText: string;
+    { Bracket a bulk programmatic update so every OnSelectionChange inside it reports
+      AUser = False, however the change was produced. LCL: stdctrls.pp:625/:631, bodies at
+      customlistbox.inc:708-716 -- note the lock DEMOTES the flag, it does not suppress the
+      event, so a handler that only cares about user edits stays correct while one that
+      mirrors the selection still sees every move. Reference-counted; pair them. }
+    procedure LockSelectionChange;
+    procedure UnlockSelectionChange;
+    { The backing store behind Items. Items is typed TStrings, as LCL types it, which is
+      what lets `LB.Items := AnyTStrings` compile -- but it also hides the TStringList
+      members, and one of them is load-bearing for anyone who wants to be told when the
+      list itself mutates: OnChange. Same object as Items; never free it, never swap it. }
+    property ItemsList: TStringList read FItems;
     property Selected[AIndex: Integer]: Boolean read GetSelected write SetSelected;
   public
     { When True, the box surface is painted with SQUARE corners (frame radius forced to 0). The
@@ -127,9 +171,20 @@ type
       square paint matches the square window. Default False — embedded listboxes keep their radius. }
     ForceSquareSurface: Boolean;
   published
-    property Items: TStringList read FItems write SetItems;
+    { Typed TStrings, as LCL types it (stdctrls.pp:435/:647). It was TStringList, which made
+      `LB.Items := Memo.Lines` -- the everyday population idiom -- a compile error, because
+      the ABSTRACT base is what every other TStrings source is. The backing store is still a
+      TStringList (Sorted rides on it); assigning any TStrings copies into it. }
+    property Items: TStrings read GetItems write SetItems;
     property ItemIndex: Integer read FItemIndex write SetItemIndex default -1;
     property MultiSelect: Boolean read FMultiSelect write SetMultiSelect default False;
+    { With MultiSelect on, WHICH multi-select discipline the mouse follows. True (LCL's
+      default, stdctrls.pp:642) is the extended one: a plain click replaces the selection,
+      Ctrl toggles one row, Shift takes a range. False is simple multi-select -- every plain
+      click toggles that row and nothing else, no modifier needed, which is the only usable
+      discipline on a touch screen or a kiosk. It governs the MOUSE; arrow-key navigation is
+      the same in both, as it is on the platforms LCL wraps. }
+    property ExtendedSelect: Boolean read FExtendedSelect write FExtendedSelect default True;
     { When True, Items are kept in ascending (case-insensitive) order. The
       previously-selected item(s) stay selected, tracked by their text and
       re-pinned to their new indices after each reorder. }
@@ -138,6 +193,10 @@ type
     property ItemHeight: Integer read GetItemHeight write SetItemHeight stored FItemHeightExplicit;
     property TopIndex: Integer read FTopIndex write SetTopIndex default 0;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
+    { LCL's name and shape for the same notification (stdctrls.pp:668). Fires alongside
+      OnChange, never instead of it, so nothing that already listens has to move. }
+    property OnSelectionChange: TTySelectionChangeEvent
+      read FOnSelectionChange write FOnSelectionChange;
     property TabStop default True;
     property Align;
     property Anchors;
@@ -167,6 +226,9 @@ begin
   FScrollBar := nil;
   FSyncingScroll := False;
   FSelAnchor := -1;
+  FExtendedSelect := True;        { LCL's default discipline }
+  FLockSelectionChange := 0;
+  FUserAction := 0;
   TabStop := True;
   Width := 160;
   Height := 120;
@@ -189,7 +251,17 @@ begin
   Result := 'TyListItem';
 end;
 
-procedure TTyListBox.SetItems(const AValue: TStringList);
+function TTyListBox.ItemStatesFor(AIndex: Integer; ABaseStates: TTyStateSet): TTyStateSet;
+begin
+  Result := ABaseStates;
+end;
+
+function TTyListBox.GetItems: TStrings;
+begin
+  Result := FItems;
+end;
+
+procedure TTyListBox.SetItems(const AValue: TStrings);
 begin
   // Drive the assignment ourselves; suppress the per-mutation ItemsChanged hook
   // so we do the clamping/selection bookkeeping exactly once below.
@@ -209,8 +281,7 @@ begin
   if (FItemIndex >= 0) and (FItemIndex >= FItems.Count) then
   begin
     FItemIndex := -1;
-    if Assigned(FOnChange) then
-      FOnChange(Self);
+    FireSelectionChanged;
   end;
   SetLength(FSelected, FItems.Count);
   UpdateScrollBar;
@@ -416,8 +487,7 @@ begin
   EnsureSelectionVisible;
   UpdateScrollBar;
   Invalidate;
-  if Assigned(FOnChange) then
-    FOnChange(Self);
+  FireSelectionChanged;
 end;
 
 procedure TTyListBox.ScrollBarChange(Sender: TObject);
@@ -458,7 +528,7 @@ begin
     if FSelected[AIndex] = AValue then Exit;
     FSelected[AIndex] := AValue;
     Invalidate;
-    if Assigned(FOnChange) then FOnChange(Self);
+    FireSelectionChanged;
   end
   else if AValue then
     SelectItem(AIndex)    // single mode: setting True selects it
@@ -511,7 +581,7 @@ begin
   if AnyChanged then
   begin
     Invalidate;
-    if Assigned(FOnChange) then FOnChange(Self);
+    FireSelectionChanged;
   end;
 end;
 
@@ -526,13 +596,37 @@ begin
   if AnyChanged then
   begin
     Invalidate;
-    if Assigned(FOnChange) then FOnChange(Self);
+    FireSelectionChanged;
   end;
 end;
 
 procedure TTyListBox.DoChangeSel;
 begin
+  FireSelectionChanged;
+end;
+
+{ The User flag LCL carries is derived here, once, rather than plumbed through every
+  mutator: FUserAction is non-zero only inside MouseDown/KeyDown, and a held lock demotes
+  the flag exactly as customlistbox.inc:360 does. }
+procedure TTyListBox.FireSelectionChanged;
+begin
+  DoSelectionChange((FUserAction > 0) and (FLockSelectionChange = 0));
+end;
+
+procedure TTyListBox.DoSelectionChange(AUser: Boolean);
+begin
   if Assigned(FOnChange) then FOnChange(Self);
+  if Assigned(FOnSelectionChange) then FOnSelectionChange(Self, AUser);
+end;
+
+procedure TTyListBox.LockSelectionChange;
+begin
+  Inc(FLockSelectionChange);
+end;
+
+procedure TTyListBox.UnlockSelectionChange;
+begin
+  if FLockSelectionChange > 0 then Dec(FLockSelectionChange);
 end;
 
 procedure TTyListBox.ClearAllBits;
@@ -624,6 +718,10 @@ begin
   inherited KeyDown(Key, Shift);
   RowTotal := FItems.Count;
   if RowTotal = 0 then Exit;
+  { Every selection change from here down is the USER's; the counter is what lets
+    OnSelectionChange report it as such without a second parameter on SelectItem. }
+  Inc(FUserAction);
+  try
   VR := VisibleRows;
   Extend := (ssShift in Shift) and FMultiSelect;
   NewFocus := FItemIndex;
@@ -672,6 +770,9 @@ begin
   end;
   EnsureSelectionVisible;
   UpdateScrollBar;
+  finally
+    Dec(FUserAction);   { every Exit above passes through here }
+  end;
 end;
 
 procedure TTyListBox.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
@@ -687,29 +788,43 @@ begin
     Row := FTopIndex + ((Y - ContentTopOffset) div SH);
     if (Row >= 0) and (Row < FItems.Count) then
     begin
-      if not FMultiSelect then
-        SelectItem(Row)
-      else
-      begin
-        EnsureSelectedLen;
-        if ssShift in Shift then
-        begin
-          ApplyRangeSelection(FSelAnchorOr(Row), Row);
-          FItemIndex := Row;
-        end
-        else if ssCtrl in Shift then
-        begin
-          FSelected[Row] := not FSelected[Row];
-          FItemIndex := Row; FSelAnchor := Row;
-          Invalidate; DoChangeSel;
-        end
+      Inc(FUserAction);   { everything below is the USER moving the selection }
+      try
+        if not FMultiSelect then
+          SelectItem(Row)
         else
         begin
-          ClearAllBits;
-          FSelected[Row] := True;
-          FItemIndex := Row; FSelAnchor := Row;
-          Invalidate; DoChangeSel;
+          EnsureSelectedLen;
+          if ssShift in Shift then
+          begin
+            ApplyRangeSelection(FSelAnchorOr(Row), Row);
+            FItemIndex := Row;
+          end
+          else if ssCtrl in Shift then
+          begin
+            FSelected[Row] := not FSelected[Row];
+            FItemIndex := Row; FSelAnchor := Row;
+            Invalidate; DoChangeSel;
+          end
+          else if not FExtendedSelect then
+          begin
+            { Simple multi-select: a plain click toggles THAT row and touches nothing else.
+              No modifier is reachable on a touch screen, which is the whole reason LCL
+              carries the switch (LBS_MULTIPLESEL vs LBS_EXTENDEDSEL). }
+            FSelected[Row] := not FSelected[Row];
+            FItemIndex := Row; FSelAnchor := Row;
+            Invalidate; DoChangeSel;
+          end
+          else
+          begin
+            ClearAllBits;
+            FSelected[Row] := True;
+            FItemIndex := Row; FSelAnchor := Row;
+            Invalidate; DoChangeSel;
+          end;
         end;
+      finally
+        Dec(FUserAction);
       end;
     end;
     try
@@ -852,6 +967,7 @@ begin
         Include(ItemStates, tysHover)
       else
         Include(ItemStates, tysNormal);
+      ItemStates := ItemStatesFor(i, ItemStates);
 
       // Resolve the row style for this row ('TyListItem', or the descendant's own key)
       RowStyle := ActiveController.Model.ResolveStyle(GetItemStyleTypeKey, '', ItemStates);
@@ -998,7 +1114,7 @@ begin
     if FTopIndex > FItems.Count - 1 then FTopIndex := 0;
     UpdateScrollBar;
     Invalidate;
-    if Assigned(FOnChange) then FOnChange(Self);
+    FireSelectionChanged;
   end;
 end;
 
@@ -1023,7 +1139,7 @@ begin
   if moved then
   begin
     Invalidate;
-    if Assigned(FOnChange) then FOnChange(Self);
+    FireSelectionChanged;
   end;
 end;
 

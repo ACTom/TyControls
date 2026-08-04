@@ -25,12 +25,43 @@ uses tyControls.ColorBox;
 
 | 成员 | 类型 | 说明 |
 |------|------|------|
-| `Selected` | `TColor` | **published**(对齐 `TColorBox`,可在对象查看器里设、可流式保存)。当前选中色;读=当前项的色(无则 `clNone`),写=选中板里的匹配项,**板里没有则 `ItemIndex := -1`,不再往列表里追加行**。 |
+| `Selected` | `TColor` | **published**(对齐 `TColorBox`,可在对象查看器里设、可流式保存)。当前选中色;读=当前项的色(无则 `clNone`),写=选中板里的匹配项,**板里没有则 `ItemIndex := -1`,不再往列表里追加行**(除非 `Style` 里有 `cbCustomColor`,见下)。 |
+| `Style` | `TTyColorBoxStyle` | **published**,默认 `TyDefaultColorBoxStyle`。**色板由哪些颜色组成**——见下表。写它会重建 `Items`。 |
+| `ColorRectWidth` / `ColorRectOffset` | `Integer` | **published**,逻辑 px,默认 0 = 跟随主题(`--color-swatch-width` / `--color-swatch-offset`;主题不说话时就是历来的「按行高取正方形」+ 4px 内缩)。宽度设成正数即得**色条**而非方块。 |
+| `DefaultColorColor` / `NoneColorColor` | `TColor` | **published**,默认 `clBlack`。`clDefault` / `clNone` 这两行**实际画出来的**颜色——它们本身是哨兵值,不是颜色。 |
+| `OnGetColors` | `TTyGetColorsEvent` | **published**。`Style` 含 `cbCustomColors` 时,每次重建色板的最后一步触发,处理器往传入的 `AItems` 里追加自己的颜色(用 `TyAddColorItem`)。 |
+| `Colors[AIndex]` | `TColor` | **读 / 写**第 i 项的色(对齐 `TColorListBox.Colors`;越界写忽略)。 |
+| `ColorNames[AIndex]` | `string` | 第 i 项的显示名(越界返回 `''`)。 |
 | `AddColor(AName, AColor)` | — | 追加一个(名, 色)项。 |
 | `ClearColors` | — | 清空所有项与颜色。 |
 | `ColorAt(AIndex)` | `TColor` | 第 i 项的色(越界 `clNone`)。 |
 
-内置 16 色经典 VGA 调色板(Black…White);另继承 `TTyComboBox` 的 `ItemIndex` / `OnChange` / `OnSelect` 等。
+另继承 `TTyComboBox` 的 `ItemIndex` / `OnChange` / `OnSelect` 等。
+
+### 3.1 Style —— 色板由什么组成
+
+对齐 LCL `TColorBox.Style`(`colorbox.pas:35-43`),成员一一对应:
+
+| 成员 | 作用 |
+|------|------|
+| `cbStandardColors` | 16 个标准 VGA 色(clBlack…clWhite) |
+| `cbExtendedColors` | 4 个扩展色(clMoneyGreen / clSkyBlue / clCream / clMedGray) |
+| `cbSystemColors` | 系统色(clBtnFace / clWindow / clHighlight…) |
+| `cbIncludeNone` | 加一行 `clNone` |
+| `cbIncludeDefault` | 加一行 `clDefault` |
+| `cbCustomColor` | 第 0 行是**可写槽位**:`Selected := 板外的颜色` 会落进这一行,而不是清空选择 |
+| `cbPrettyNames` | 显示 `Button Face` 而不是 `clBtnFace`(用的是 LCL 自己的资源串,所以自带各语言翻译) |
+| `cbCustomColors` | 重建的最后一步触发 `OnGetColors` |
+
+> **默认值刻意与 LCL 不同。** LCL 的默认是 `[cbStandardColors, cbExtendedColors, cbSystemColors]`;
+> 本库的 `TyDefaultColorBoxStyle = [cbStandardColors, cbPrettyNames]`,**正好重建出本控件历来内置的
+> 那 16 个漂亮名字的 VGA 色**——数量、顺序、名字都不变。published 属性的 `default` 决定了「.lfm 里没写这一行」
+> 该怎么解释,改它等于悄悄重排每一个已经在用的颜色框。要 LCL 的组合,写一句 `Style := [...]` 即可。
+
+> **这个名字以前是别的意思。** `Style` 原本是从 `TTyComboBox` 继承来的下拉模式,而 `TTyColorBox.SetStyle`
+> 会把写进来的值**原样丢掉**(强制 `csDropDownList`)——对象查看器给你这个属性、控件不理它。
+> 现在它是色板组合;下拉模式仍然锁死,仍可经 `TTyComboBox(Box).Style` 读到。
+> **BREAKING**:`ColorBox1.Style := csDropDown` 不再编译(它本来也没有任何效果)。
 
 ---
 

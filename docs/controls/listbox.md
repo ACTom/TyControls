@@ -28,13 +28,15 @@ uses tyControls.ListBox;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `Items` | `TStringList` | `''`（空列表） | 条目集合。通过赋值触发整体替换（`Assign`），同时校正 `TopIndex` 与 `ItemIndex`，自动更新滚动条并重绘。直接调用 `Items.Add` / `Items.Clear` 等方法也有效，但不触发自动夹取——`TopIndex` 会在下次重绘（`Paint` → `UpdateScrollBar`）时自动收敛到合法范围。 |
+| `Items` | `TStrings` | `''`（空列表） | 条目集合。**类型是抽象的 `TStrings`（对齐 LCL `stdctrls.pp:435`）**，所以 `LB.Items := Memo.Lines` / `:= 任意 TStrings` 这种日常写法能直接编译；以前声明成具体的 `TStringList`，这一句是硬编译错误。底层仍是 `TStringList`（`Sorted` 就骑在它上面），需要 `TStringList` 独有成员（尤其是挂 `OnChange` 钩子）时用只读的 `ItemsList` 拿到同一个对象。通过赋值触发整体替换（`Assign`），同时校正 `TopIndex` 与 `ItemIndex`，自动更新滚动条并重绘。直接调用 `Items.Add` / `Items.Clear` 等方法也有效，但不触发自动夹取——`TopIndex` 会在下次重绘（`Paint` → `UpdateScrollBar`）时自动收敛到合法范围。 |
 | `ItemIndex` | `Integer` | `-1` | 当前焦点行（光标行）的从 0 起始的索引；`-1` 表示无焦点。写入等价于调用 `SelectItem`：范围外的值被夹为 `-1`，并触发 `EnsureSelectionVisible`、滚动条更新及 `OnChange`。 |
 | `MultiSelect` | `Boolean` | `False` | 是否允许多选。`False` 时为单选模式，行为与旧版相同；`True` 时启用多选，`Selected[]`、`SelCount`、`ClearSelection`、`SelectAll` 等多选方法生效。切换此属性会清空所有选择位。 |
 | `ItemHeight` | `Integer` | `24` | 每行条目的逻辑像素高度（最小为 1）；写入时触发滚动条更新和重绘。实际像素高度在绘制时按 PPI 缩放。 |
 | `TopIndex` | `Integer` | `0` | 当前最顶部可见行的索引，范围 `[0, MaxTopIndex]`，写入时自动夹紧。直接改 `Items` 后 `TopIndex` 会在下次更新时自动收敛。 |
 | `Sorted` | `Boolean` | `False` | **（API parity 新增）** 为 `True` 时 `Items` 保持升序（不区分大小写）。切换时按**文本**快照当前选择（单选 / 多选均支持），重排后再依文本重新定位选中项——保持同一逻辑选择且**不**触发 `OnChange`。 |
 | `OnChange` | `TNotifyEvent` | `nil` | 选中行变化时触发（`SelectItem` 中，仅当 `ItemIndex` 真正变化时触发）。 |
+| `OnSelectionChange` | `TTySelectionChangeEvent` | `nil` | **（LCL 同名同形,`stdctrls.pp:668`）** `(Sender; AUser: Boolean)`。与 `OnChange` **并行**触发（不是取代它，已有的监听者不必迁移），多带一个 `AUser`：鼠标 / 键盘引起的为 True，代码写 `ItemIndex` / `Selected[]` 等引起的为 False。双向绑定的处理器靠它区分「用户改的」和「我自己刚写进去的」，不必再在每个调用点挂私有的 updating 布尔。 |
+| `ExtendedSelect` | `Boolean` | `True` | **（LCL `stdctrls.pp:642` 同名同默认）** 多选时鼠标遵循哪一套规矩。True = 扩展多选：普通点击**替换**选择，Ctrl 切换单行，Shift 选区间。False = 简单多选：**每次普通点击就切换那一行**，不需要任何修饰键——触摸屏 / kiosk 上唯一能用的一套。只管鼠标；方向键导航两种模式一样。 |
 | `TabStop` | `Boolean` | `True` | 是否参与 Tab 键导航（构造时自动置为 `True`）。 |
 | `Align` | `TAlign` | — | 父容器内的停靠方式。 |
 | `Anchors` | `TAnchors` | — | 锚点布局。 |
@@ -102,6 +104,8 @@ TTyListBox 继承自 `TTyCustomControl`（`tyControls.Base`）的通用状态机
 | `function ItemRect(AIndex: Integer): TRect` | 第 `AIndex` 行**实际绘制**所在的设备像素矩形（相对客户区，含滚动偏移）。索引越界返回空矩形 `(0,0,0,0)`；**滚出视野的行返回的是客户区之外的坐标（可能为负），不是空矩形**——要判断是否可见请自行与 `ClientRect` 相交。与绘制共用同一套 `ScaledItemHeight` / `ContentTopOffset`，因此在行上叠编辑器或弹层不会与实际行错位。 |
 | `function GetIndexAtY(AY: Integer): Integer` | `ItemRect` 的逆运算：设备 y 坐标 → 行索引（转发命中测试用的同一个 `RowAtY`）；落到任何行之外返回 `-1`。 |
 | `function DeleteSelected: Integer` | 删除所有选中行并返回删除条数。多选模式下**从后往前**删（否则删掉第一行后后面的索引全部错位）；单选模式下删当前 `ItemIndex` 行。删过就把 `ItemIndex` 置 `-1`、更新滚动条并触发 `OnChange`。 |
+| `procedure LockSelectionChange` / `UnlockSelectionChange` | **（LCL `stdctrls.pp:625/631`)** 把一段批量的程序化改动括起来，其中每一次 `OnSelectionChange` 都报 `AUser = False`，不论改动实际由什么产生。注意它**降级标志、不吞事件**（LCL `customlistbox.inc:360` 就是这么做的）：只关心用户编辑的处理器因此保持正确，而镜像整个选择的处理器仍能看到每一次变化。引用计数，成对使用。 |
+| `property ItemsList: TStringList` | `Items` 背后的那个 `TStringList` 本体（同一个对象，别 Free、别换掉）。`Items` 为对齐 LCL 声明成 `TStrings`，而 `TStringList` 有一个成员是别人真正需要的：`OnChange`——想知道「列表本身变了」只能从这里挂。 |
 | `procedure SelectRange(ALow, AHigh: Integer; ASelected: Boolean)` | 把闭区间 `[ALow..AHigh]` 整体设为选中 / 未选中（顺序颠倒会自动交换，端点自动夹紧）。**非多选模式下为空操作**——单选框装不下一个区间，而"悄悄只选一端"比什么都不做更糟。有位变化才触发 `Invalidate` 和 `OnChange`。 |
 | `function GetSelectedText: string` | 选中行的文本，按行序以换行连接（单选模式返回当前行文本，无选中则空串）——"复制选区"这类命令要的就是它。 |
 

@@ -2,7 +2,7 @@ unit tyControls.RadioGroup;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls,
+  Classes, SysUtils, Types, Controls, LCLType, ExtCtrls,
   tyControls.Base, tyControls.Controller, tyControls.GroupBox, tyControls.CheckBox;
 type
   { TTyRadioGroup — a titled frame (subclass of TTyGroupBox, so it inherits the themed
@@ -16,30 +16,51 @@ type
     Items changes. ItemIndex reads the checked child's index and writes by checking that
     child; OnSelectionChanged fires when the selection changes via a click.
 
-    Layout is COLUMN-MAJOR (fill down column 0, then column 1, …) across Columns columns,
-    matching the classic VCL TRadioGroup. NOTE: LCL's own TRadioGroup defaults the other way --
-    ColumnLayout = clHorizontalThenVertical (extctrls.pp) -- so a form ported from Lazarus will
-    see its items in a different order here. The geometry is a pure unit-level function
+    Layout fills across Columns columns in the order ColumnLayout names -- across each row
+    first by default, which is what LCL's TRadioGroup does (ColumnLayout
+    = clHorizontalThenVertical, extctrls.pp:777). The geometry is a pure unit-level function
     (TyRadioGroupCellRect) so it is headless-testable in isolation. }
   TTyRadioGroup = class(TTyGroupBox)
   private
     FItems: TStrings;
     FColumns: Integer;
+    FColumnLayout: TColumnLayout;
     FButtons: array of TTyRadioButton;
     FOnSelectionChanged: TNotifyEvent;
+    FOnItemEnter: TNotifyEvent;
+    FOnItemExit: TNotifyEvent;
     FRebuilding: Boolean;      // re-entrancy guard for RebuildButtons
     FUpdatingIndex: Boolean;   // re-entrancy guard for the child OnChange router
     procedure SetItems(AValue: TStrings);
     procedure ItemsChanged(Sender: TObject);
     procedure SetColumns(AValue: Integer);
+    procedure SetColumnLayout(AValue: TColumnLayout);
     function GetItemIndex: Integer;
     procedure SetItemIndex(AValue: Integer);
+    function GetButton(AIndex: Integer): TTyRadioButton;
+    procedure RaiseIndexOutOfBounds(AIndex: Integer);
     procedure ClearButtons;
     procedure RebuildButtons;
     procedure LayoutButtons;
     procedure ChildChanged(Sender: TObject);
     procedure NotifySelection;
     procedure UpdateTabStops;
+    { Move the selection one cell in the direction (AHorzDiff, AVertDiff), honouring
+      ColumnLayout, skipping items that cannot take it, and focusing the one it lands on.
+      See ItemKeyDown for why this is the group's job and not the radio's. }
+    procedure MoveSelection(AHorzDiff, AVertDiff: Integer);
+    { The four child-key relays. The group never holds focus -- its whole surface is covered
+      by its children -- so without these its OnKeyDown/OnKeyUp/OnKeyPress/OnUTF8KeyPress
+      could be assigned and could never fire. LCL wires the identical four
+      (include/radiogroup.inc:186-191). ItemKeyDown additionally implements arrow
+      navigation, the half of the radio-group keyboard contract a single radio cannot
+      provide: only the GROUP knows the grid, so only the group can find the neighbour. }
+    procedure ItemKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+    procedure ItemKeyUp(Sender: TObject; var Key: Word; Shift: TShiftState);
+    procedure ItemKeyPress(Sender: TObject; var Key: char);
+    procedure ItemUTF8KeyPress(Sender: TObject; var UTF8Key: TUTF8Char);
+    procedure ItemEnter(Sender: TObject);
+    procedure ItemExit(Sender: TObject);
   protected
     procedure SetParent(AParent: TWinControl); override;
     procedure DoOnResize; override;
@@ -51,9 +72,25 @@ type
     destructor Destroy; override;
     { Number of item rows == number of radio children. }
     function Count: Integer;
+    { The hosted radio itself -- the way to reach one option's Hint, Font, PopupMenu or
+      Enabled. LCL publishes the same accessor under the same name (extctrls.pp:773) and
+      raises out of range (include/radiogroup.inc:534-540), so this does too. The group
+      still owns the child's lifetime and bounds: do not reparent or free one. }
+    property Buttons[AIndex: Integer]: TTyRadioButton read GetButton;
   published
     property Items: TStrings read FItems write SetItems;
     property Columns: Integer read FColumns write SetColumns default 1;
+    { Which way the item grid FILLS -- see TTyCheckGroup.ColumnLayout, which is the same
+      property with the same default. clHorizontalThenVertical (the default, and LCL's)
+      reads 6 items in 2 columns as 1 2 / 3 4 / 5 6.
+      BREAKING: this control used to be hard-wired column-major (1 4 / 2 5 / 3 6) with no
+      way to say otherwise, and the unit header used to record that divergence instead of
+      fixing it. Single-column groups -- the default -- are unaffected; a multi-column group
+      that wants the old order says ColumnLayout := clVerticalThenHorizontal.
+      Arrow-key navigation reads this too, so the keys always move to the neighbour the
+      user can SEE. }
+    property ColumnLayout: TColumnLayout read FColumnLayout write SetColumnLayout
+      default clHorizontalThenVertical;
     { -1 = nothing selected. Read = the checked child's index; write = check that child
       (out-of-range clears the selection). Setting it programmatically does NOT fire
       OnSelectionChanged (that is reserved for user clicks); the property setter's own
@@ -61,6 +98,12 @@ type
     property ItemIndex: Integer read GetItemIndex write SetItemIndex default -1;
     { Fires when ItemIndex changes because the user clicked a radio child. }
     property OnSelectionChanged: TNotifyEvent read FOnSelectionChanged write FOnSelectionChanged;
+    { Focus entered / left ONE option, with Sender = that TTyRadioButton -- the hook for
+      per-option help text, a status-bar hint, or a preview that follows the keyboard.
+      LCL: extctrls.pp:779-780, wired at include/radiogroup.inc:186-187 with the same
+      Sender convention (the button, not the group). }
+    property OnItemEnter: TNotifyEvent read FOnItemEnter write FOnItemEnter;
+    property OnItemExit: TNotifyEvent read FOnItemExit write FOnItemExit;
     property Caption;
     property Alignment;
   end;
@@ -70,21 +113,26 @@ type
   Given AClient (the ALREADY-INSET client rect, i.e. below the caption band), ACount total
   cells, AColumns columns, and a 0-based AIndex, return that cell's rect.
 
-  Tiling is COLUMN-MAJOR: rows = ceil(ACount / AColumns); cells fill down column 0 first
-  (indices 0..rows-1), then column 1, etc. Column widths split AClient evenly (the last
-  column absorbs the horizontal rounding remainder); each cell is a fixed row height with
-  the whole grid vertically centered in AClient so short lists do not hug the top edge.
+  rows = ceil(ACount / AColumns) either way; ALayout picks the FILL ORDER:
+    clHorizontalThenVertical (the default, and LCL's) — across each row first, so 4 items in
+                                                        2 columns sit 0 1 / 2 3.
+    clVerticalThenHorizontal                          — down each column first: 0 2 / 1 3.
+  Column widths split AClient evenly (the last column absorbs the horizontal rounding
+  remainder); each cell is a fixed row height with the whole grid vertically centered in
+  AClient so short lists do not hug the top edge.
 
   Returns an empty rect for a degenerate request (ACount <= 0, AColumns <= 0, AIndex out of
   range, or a zero-area client). }
-function TyRadioGroupCellRect(const AClient: TRect; ACount, AColumns, AIndex: Integer; ARowH: Integer = 0): TRect;
+function TyRadioGroupCellRect(const AClient: TRect; ACount, AColumns, AIndex: Integer;
+  ARowH: Integer = 0; ALayout: TColumnLayout = clHorizontalThenVertical): TRect;
 
 implementation
 
 const
   TyRadioRowH = 22;   // logical row height per radio child (matches the radio default)
 
-function TyRadioGroupCellRect(const AClient: TRect; ACount, AColumns, AIndex: Integer; ARowH: Integer = 0): TRect;
+function TyRadioGroupCellRect(const AClient: TRect; ACount, AColumns, AIndex: Integer;
+  ARowH: Integer = 0; ALayout: TColumnLayout = clHorizontalThenVertical): TRect;
 var
   rows, col, row, cw, l, r, gridH, top, cy: Integer;
   clientW, clientH, rowH: Integer;
@@ -100,9 +148,16 @@ begin
   rows := (ACount + AColumns - 1) div AColumns;   // ceil
   if rows <= 0 then Exit;
 
-  // Column-major placement: column first, row within column.
-  col := AIndex div rows;
-  row := AIndex mod rows;
+  if ALayout = clVerticalThenHorizontal then
+  begin
+    col := AIndex div rows;   // column-major: fill down column 0 first
+    row := AIndex mod rows;
+  end
+  else
+  begin
+    col := AIndex mod AColumns;   // row-major: fill across row 0 first
+    row := AIndex div AColumns;
+  end;
 
   // Even column split; the last column extends to the client right edge so the tiling
   // covers [Left, Right) with no gap/overlap (integer-division remainder absorbed).
@@ -135,6 +190,7 @@ begin
   FItems := TStringList.Create;
   TStringList(FItems).OnChange := @ItemsChanged;
   FColumns := 1;
+  FColumnLayout := clHorizontalThenVertical;   // LCL's default fill order
   Width := 185;
   Height := 130;
 end;
@@ -170,6 +226,30 @@ begin
   FColumns := AValue;
   LayoutButtons;
   Invalidate;
+end;
+
+procedure TTyRadioGroup.SetColumnLayout(AValue: TColumnLayout);
+begin
+  if FColumnLayout = AValue then Exit;
+  FColumnLayout := AValue;
+  LayoutButtons;   // the fill order IS the layout; re-place, do not just repaint
+  Invalidate;
+end;
+
+procedure TTyRadioGroup.RaiseIndexOutOfBounds(AIndex: Integer);
+begin
+  { Same message shape as TTyCheckGroup's and as LCL's rsIndexOutOfBounds, so the two read
+    alike in a log. Note the range is 0..n-1 here -- unlike ItemIndex, where -1 is a legal
+    "nothing chosen" and the message says so. }
+  raise EListError.CreateFmt('%s Index %d out of bounds 0 .. %d',
+    [ClassName, AIndex, Length(FButtons) - 1]);
+end;
+
+function TTyRadioGroup.GetButton(AIndex: Integer): TTyRadioButton;
+begin
+  if (AIndex < 0) or (AIndex > High(FButtons)) then
+    RaiseIndexOutOfBounds(AIndex);
+  Result := FButtons[AIndex];
 end;
 
 procedure TTyRadioGroup.ClearButtons;
@@ -216,6 +296,15 @@ begin
       rb.GroupIndex := 0;                   // same parent + group => auto-exclusive
       rb.Caption := FItems[i];
       rb.OnChange := @ChildChanged;         // routes selection back to us
+      { Focus lives on the child, never on the group, so the group's own key and focus
+        events can only ever fire through these relays. ItemKeyDown is also where arrow
+        navigation lives -- see there. }
+      rb.OnKeyDown := @ItemKeyDown;
+      rb.OnKeyUp := @ItemKeyUp;
+      rb.OnKeyPress := @ItemKeyPress;
+      rb.OnUTF8KeyPress := @ItemUTF8KeyPress;
+      rb.OnEnter := @ItemEnter;
+      rb.OnExit := @ItemExit;
       // Inherit the group's controller so the radios theme with the same style set.
       rb.Controller := Controller;
       FButtons[i] := rb;
@@ -260,7 +349,7 @@ begin
   begin
     if FButtons[i] = nil then Continue;
     cell := TyRadioGroupCellRect(client, n, FColumns, i,
-      ActiveController.Metric('--row-height', TyRadioRowH));
+      ActiveController.Metric('--row-height', TyRadioRowH), FColumnLayout);
     FButtons[i].SetBounds(cell.Left, cell.Top, cell.Right - cell.Left, cell.Bottom - cell.Top);
   end;
 end;
@@ -363,6 +452,96 @@ begin
   UpdateTabStops;
   Invalidate;
   NotifySelection;
+end;
+
+{ Arrow navigation. Only the GROUP can do this: moving "one to the right" means knowing the
+  column count and the fill order, and a lone TTyRadioButton knows neither -- which is why
+  arrows did nothing at all before, leaving Tab-to-each-item-plus-Space as the only keyboard
+  route, and that route CHANGES THE SELECTION on the way past every option it touches.
+
+  The step is the same arithmetic LCL uses (include/radiogroup.inc:260-297): one cell
+  horizontally is +1 in row-major order and +Rows in column-major, and one cell vertically is
+  the other way round. Items that cannot take the selection are stepped OVER rather than
+  stopped on, so a disabled option does not become a wall. }
+procedure TTyRadioGroup.MoveSelection(AHorzDiff, AVertDiff: Integer);
+var
+  rows, step, i, n: Integer;
+begin
+  n := Length(FButtons);
+  if n = 0 then Exit;
+  rows := (n + FColumns - 1) div FColumns;   // ceil, matching TyRadioGroupCellRect
+  if rows < 1 then rows := 1;
+  if FColumnLayout = clVerticalThenHorizontal then
+    step := AHorzDiff * rows + AVertDiff
+  else
+    step := AHorzDiff + AVertDiff * FColumns;
+  if step = 0 then Exit;
+  i := GetItemIndex;
+  if i < 0 then
+    // Nothing chosen yet: the first arrow selects the first usable option rather than
+    // walking off the end from a phantom -1.
+    i := 0
+  else
+    Inc(i, step);
+  while (i >= 0) and (i < n) do
+  begin
+    if (FButtons[i] <> nil) and FButtons[i].Enabled and FButtons[i].Visible then
+    begin
+      { Through the property, not the field: a keyboard move IS a selection change, so it
+        must notify exactly as a click does and must re-hand the single tab stop. }
+      ItemIndex := i;
+      { Follow the selection with the caret, but only when there is really a focus to move.
+        CanFocus alone is not enough: it answers from Visible/Enabled up the parent chain and
+        says True for a control on a form that was never shown, so SetFocus then raises
+        "TForm Can not focus" -- and it would raise in an app too, for a group on a hidden or
+        inactive form. A realised handle is the honest test that a caret exists at all. }
+      if FButtons[i].HandleAllocated and FButtons[i].CanFocus then
+        FButtons[i].SetFocus;
+      Exit;
+    end;
+    Inc(i, step);
+  end;
+end;
+
+{ Re-raise on the GROUP first, so a group-level handler can swallow a key before the
+  navigation sees it; then, if the key survived, move the selection. }
+procedure TTyRadioGroup.ItemKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+begin
+  KeyDown(Key, Shift);
+  if Shift * [ssShift, ssAlt, ssCtrl] <> [] then Exit;   // modified arrows are not ours
+  case Key of
+    VK_LEFT:  begin MoveSelection(-1,  0); Key := 0; end;
+    VK_RIGHT: begin MoveSelection( 1,  0); Key := 0; end;
+    VK_UP:    begin MoveSelection( 0, -1); Key := 0; end;
+    VK_DOWN:  begin MoveSelection( 0,  1); Key := 0; end;
+  end;
+end;
+
+procedure TTyRadioGroup.ItemKeyUp(Sender: TObject; var Key: Word; Shift: TShiftState);
+begin
+  KeyUp(Key, Shift);
+end;
+
+procedure TTyRadioGroup.ItemKeyPress(Sender: TObject; var Key: char);
+begin
+  KeyPress(Key);
+end;
+
+procedure TTyRadioGroup.ItemUTF8KeyPress(Sender: TObject; var UTF8Key: TUTF8Char);
+begin
+  UTF8KeyPress(UTF8Key);
+end;
+
+{ Sender stays the BUTTON, as LCL's does -- the whole point is to know WHICH option the
+  keyboard is on, which a Sender of Self would not tell anyone. }
+procedure TTyRadioGroup.ItemEnter(Sender: TObject);
+begin
+  if Assigned(FOnItemEnter) then FOnItemEnter(Sender);
+end;
+
+procedure TTyRadioGroup.ItemExit(Sender: TObject);
+begin
+  if Assigned(FOnItemExit) then FOnItemExit(Sender);
 end;
 
 procedure TTyRadioGroup.SetParent(AParent: TWinControl);

@@ -31,6 +31,7 @@ uses tyControls.CheckBox;
 |------|------|--------|------|
 | `Checked` | `Boolean` | `False` | 复选框当前勾选状态；赋值会触发重绘（已定义 `default False`，可参与 DFM 差量存储） |
 | `Caption` | `string` | `''` | 复选框右侧显示的文字标签 |
+| `Alignment` | `TLeftRight` | `taRightJustify` | **（API parity 新增）** 指示框在标题的哪一侧。**这个名字在 LCL 里说的不是标题对齐**：`taRightJustify`（默认）= 指示框在左、标题在右（一直以来的样子）；`taLeftJustify` = 指示框挪到**右边**，标题靠着它右对齐。类型 `TLeftRight` 是 `TAlignment` 的子界（只有 `taLeftJustify` / `taRightJustify`），来自 FPC 的 `classesh.inc`。对应 LCL 的 `TCustomCheckBox.Alignment`（`stdctrls.pp:1358`，LCL 靠 `BS_RIGHTBUTTON` 实现，见 `include/customcheckbox.inc:269-274`）。两种摆法宽度完全一样，所以 `AutoSize` / 尺寸下限不受影响。用途：右侧选项列表，以及 RTL 语言的常规顺序。 |
 | `Enabled` | `Boolean` | `True` | 为 `False` 时触发 `:disabled`，控件不响应交互 |
 | `Font` | `TFont` | 系统默认 | 传递 PPI 给渲染器；字体族与大小优先由主题控制 |
 | `Align` | `TAlign` | `alNone` | 父容器内的停靠方式 |

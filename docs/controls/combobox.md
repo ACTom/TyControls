@@ -27,6 +27,11 @@
 | `Sorted` | `Boolean` | `False` | **（API parity 新增）** 为 `True` 时 `Items` 保持升序（不区分大小写）；切换时按**文本**重新定位先前选中项，保持同一逻辑选中。 |
 | `MaxLength` | `Integer` | `0` | 转发给内嵌编辑器。`Style = csDropDown`（可编辑）时生效，限制可输入的字符数；`csDropDownList`（只读下拉）下无可编辑文本，自然无影响。 |
 | `CharCase` | `TEditCharCase` | `ecNormal` | 转发给内嵌编辑器。`Style = csDropDown` 时对输入文本做大小写变换，并同步回 `Text`。 |
+| `ItemHeight` | `Integer` | `0` | **（API parity 新增）** 下拉行高（逻辑像素）。`0` = 跟随主题的 `--item-height`（密度切换仍生效）；正值钉死行高，并同时决定弹层高度（见 `ComputePopupHeight`）。子类自定义的高行（如 `TTyAdvancedComboBox` 的 40）在 `0` 时不受影响。 |
+| `ItemWidth` | `Integer` | `0` | **（API parity 新增）** 下拉列表的**最小**宽度（逻辑像素）。`0` = 与字段同宽；正值让列表比字段更宽（长路径列表）。永远不会窄于字段。 |
+| `TextHint` | `TCaption` | `''` | **（API parity 新增）** 字段为空时显示的灰色占位文字。`csDropDown` 下转发给内嵌 `TTyEdit`；`csDropDownList` 下由字段自己绘制（用 `TyTextHint` 主题令牌取色，不硬编码）。 |
+| `ReadOnly` | `Boolean` | `False` | **（API parity 新增）** 转发给内嵌编辑器：可编辑外观但拒绝键入，下拉照常工作。`csDropDownList` 下本就无可编辑文本，无影响。 |
+| `OnGetItems` | `TNotifyEvent` | `nil` | **（API parity 新增）** 见下方事件表。 |
 | `OnChange` | `TNotifyEvent` | `nil` | 选中项变化时触发（仅当 `ItemIndex` 或 `Text` 实际改变时）。 |
 | `OnSelect` | `TNotifyEvent` | `nil` | **（API parity 新增）** 仅 **用户驱动** 的选择（下拉选取 / 键盘导航）后触发；程序化设置 `ItemIndex` **不**触发。 |
 | `OnDropDown` | `TNotifyEvent` | `nil` | **（API parity 新增）** 下拉列表打开时触发。 |
@@ -56,9 +61,11 @@
 - 若新索引与新文本均与当前值相同，**不触发任何操作**（防止重复刷新）。
 - 有效变化时：触发 `Invalidate`；若 `OnChange` 已赋值则调用之。
 
-#### `function DroppedDown: Boolean`
+#### `property DroppedDown: Boolean`（读 / 写）
 
-只读属性函数。当弹出窗口已创建且可见时返回 `True`，否则返回 `False`。
+读：弹出窗口已创建且可见时为 `True`。写：`True` 调用 `DropDown`（虚方法，子类覆写照常生效），`False` 调用 `CloseUp`。
+
+> **（API parity 修正）** 这里从前是 `function DroppedDown: Boolean`，于是 `Combo.DroppedDown := True`——"用按钮 / 快捷键打开下拉"的标准写法——**编译不过**。现在与 LCL 和本库的 `TTyDateTimePicker` 一致。属性是 **public 不是 published**：开合是运行期状态，不该进 `.lfm`。
 
 #### `procedure DropDown`
 
@@ -82,8 +89,34 @@ LCL 的组合框在**控件本身**上提供的一组列表方法，本控件从
 |------|------|
 | `procedure Clear` | 清空 `Items`，**并且**把 `ItemIndex` 置 `-1`、`Text` 置 `''`（含内嵌编辑器）。手工调 `Items.Clear` 不等价：`ItemsChanged` → `ResyncIndexFromText` 只在 `csDropDownList` 下清空显示，`csDropDown` 下会**故意**保留字段里的自由文本，于是字段还显示着一个已经不在列表里的项。 |
 | `procedure ClearSelection` | 只丢选择、不动列表，等价于 `SelectItem(-1)`（LCL 的叫法；`ItemIndex := -1` 同义，但前提是你已经知道 `-1` 是哨兵值）。 |
-| `procedure AddItem(const AItem: string; AnObject: TObject)` | 追加一项及其关联对象，转发 `Items.AddObject`。 |
+| `procedure AddItem(const AItem: string; AnObject: TObject)` | 追加一项及其关联对象，转发 `Items.AddObject`。**virtual + overload**：子类可以改道（`TTyComboBoxEx` 把对象放进它自己的行条目的 `Data`，因为那里的 `Objects[]` 归控件所有），也可以在旁边再加一个带图片 / 状态的重载而不遮蔽本方法。 |
 | `function Count: Integer` | 项数，转发 `Items.Count`。 |
+
+#### 编辑区选择 API（API parity 新增）
+
+`Style = csDropDown` 时字段是一个内嵌 `TTyEdit`；以下四个成员全部转发给它，`csDropDownList` 下是安静的空操作（读 `0` / `''`，写被忽略），**不抛异常**——通用代码（例如一个格式工具条）会在不知道模式的情况下碰它们。
+
+| 成员 | 说明 |
+|------|------|
+| `SelStart: Integer`（读/写） | 选区起点（UTF-8 位置）。 |
+| `SelLength: Integer`（读/写） | 选区长度（UTF-8 长度）。 |
+| `SelText: string`（读/写） | 选中的文本；写入等价于"替换选区"。 |
+| `procedure SelectAll` | 全选字段文本。 |
+
+#### 历史项（MRU）促位（API parity 新增）
+
+```pascal
+procedure AddHistoryItem(const AItem: string; AMaxHistoryCount: Integer;
+  ASetAsText, ACaseSensitive: Boolean);
+procedure AddHistoryItem(const AItem: string; AnObject: TObject;
+  AMaxHistoryCount: Integer; ASetAsText, ACaseSensitive: Boolean);
+```
+
+把 `AItem` 移到第 0 行：已存在则**先删旧位置再插到最前**（不重复），超过 `AMaxHistoryCount` 从**尾部**裁掉（最久未用的先走），`ASetAsText = True` 时顺带写入 `Text`。`ACaseSensitive` 决定"已存在"怎么比。
+
+与 LCL 一样挂在**每个**组合框上，不只是 `TTyMRUComboBox`（后者的 `AddToHistory` 是同一个意思，上限走它自己的 `MaxItems` 属性）。
+
+> **`Sorted = True` 时**：`TStringList` 不允许在排序列表上 `InsertObject`，而 MRU 顺序按定义就不是字母序。实现会临时关掉 `Sorted` 再恢复——不会抛异常，但恢复时会重新排序，所以"促到最前"在视觉上是个空操作。要 MRU 顺序就别开 `Sorted`。
 
 #### `procedure Click`（override，protected）
 
@@ -141,6 +174,7 @@ DroppedDown = False → DropDown
 | `OnSelect` | `TNotifyEvent` | **（API parity 新增）** 仅用户驱动的选择（下拉选取 / 关闭态键盘导航）实际改变选项后触发；程序化 `ItemIndex :=` 不触发。在 `OnChange` 之后发出。 |
 | `OnDropDown` | `TNotifyEvent` | **（API parity 新增）** `DropDown` 实际打开弹出列表时触发。 |
 | `OnCloseUp` | `TNotifyEvent` | **（API parity 新增）** `CloseUp` 关闭弹出列表时触发。 |
+| `OnGetItems` | `TNotifyEvent` | **（API parity 新增）** 列表**即将展开**时触发，用于按需填充 `Items`（懒加载：文件、数据库查询）。**在 `DropDown` 的"空列表就退出"守卫之前触发**——这正是关键：懒加载的组合框一开始是空的，守卫之后再触发就永远填不上，用户第一次点击什么也不会发生。`OnDropDown` 顶替不了它（那个在弹层已经显示之后才发）。 |
 
 > 除上表外，TTyComboBox 还暴露**基线事件集**（Tier A + Tier B，因其为可聚焦的 `TTyCustomControl`）。完整清单见 [../events.md](../events.md)。
 >
@@ -249,3 +283,26 @@ Combo.StyleClass := 'compact';
 6. **TabStop 默认 True：** 控件默认可获得键盘焦点，会渲染 `:focus` 状态样式。
 7. **弹出窗口生命周期：** `FPopup` 在首次 `DropDown` 时懒创建，在控件 `Destroy` 时释放。`FPopupList` 由 `FPopup` 拥有，随之释放。
 8. **类型超前在下拉打开时不生效：** `UTF8KeyPress` 中无 `DroppedDown` 检查，但下拉打开时焦点转移至弹出窗口，实际键盘事件不会路由到组合框，因此 type-ahead 仅在关闭态有效。
+
+## 8. 与 LCL `TComboBox` 已知的差异（未做）
+
+移植 LCL 代码前请先看这里——下面这些**故意**没有对齐，写了会编译不过或行为不同。
+
+### 8.1 `Style`：只有 2 个值，且默认相反
+
+LCL 的 `TComboBoxStyle` 有 7 个值（`stdctrls.pp:262`），默认 `csDropDown`（可编辑）；本控件的 `TTyComboBoxStyle` 只有 `csDropDownList` / `csDropDown` 两个，默认 `csDropDownList`（只读）。
+
+- **默认相反是有意保留的。** 库里和用户工程里的 `.lfm` 普遍不写 `Style`，改默认会把**每一个**已有组合框翻成可编辑的——`default` 指令一改，所有省略该属性的 `.lfm` 都被重新解释。
+- **缺的 5 个值**：`csSimple`（列表常驻在字段下方，不是弹层）、`csOwnerDrawFixed` / `csOwnerDrawVariable` / `csOwnerDrawEditableFixed` / `csOwnerDrawEditableVariable`（自绘行）。`Style := csSimple` 或任一 `csOwnerDraw*` **编译不过**。
+- 注意两边的标识符**同名**：`Style := csDropDownList` 在两边都能编译且含义相同，所以只有那 5 个值会报错，默认值的差异是**静默**的。
+- 自绘行在本库有另一条路：覆写 `PaintFieldContent`（字段）/ `CreatePopupList` + `TTyListBox.PaintItemContent`（下拉行）。代价是要写一个子类，不能像 LCL 那样在窗体里挂一个 `OnDrawItem` 事件处理器。
+
+### 8.2 其余未做项
+
+| LCL 成员 | 现状 |
+|----------|------|
+| `Items: TStrings` | 本控件是 `TStringList`。`Combo.Items := Screen.Fonts`（`TStrings`）编译不过，要写 `Items.Assign(...)`。 |
+| `AutoComplete` / `AutoCompleteText` / `AutoDropDown` / `AutoSelect` | 全无。本控件 `csDropDown` 下**恒定**在每次按键时过滤并弹出建议列表（`AutoDropDown` 相当于永远开着且无法关闭），也没有"把匹配的剩余部分补进字段"的就地补全，没有获得焦点自动全选。 |
+| `AutoSize`（LCL 默认 `True`） | 未 published。高度在构造函数里定死（`TyDensityHeight(..., 26)`）。 |
+| `OnDrawItem` / `OnMeasureItem` | 无（见 8.1，走子类覆写）。行高统一，没有变高行。 |
+| `ArrowKeysTraverseList` / `Canvas` / `EmulatedTextHintStatus` / `MatchListItem` | 无。 |

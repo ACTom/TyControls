@@ -88,7 +88,7 @@ begin
   e := MakeWH;
   try
     AssertEquals('two root rows', 2, e.RowCount);
-    AssertEquals('two visible rows', 2, e.VisibleRowCount);
+    AssertEquals('two displayed rows', 2, e.DisplayRowCount);
     AssertEquals('key 0', 'Width', e.Keys[0]);
     AssertEquals('value 0', '100', e.ValueFromIndex[0]);
     AssertEquals('key 1', 'Height', e.Keys[1]);
@@ -155,7 +155,7 @@ begin
     e.DeleteRow(0);
     AssertEquals('one row left', 1, e.RowCount);
     AssertEquals('remaining key', 'Height', e.Keys[0]);
-    AssertEquals('visible follows', 1, e.VisibleRowCount);
+    AssertEquals('display count follows', 1, e.DisplayRowCount);
   finally e.Free; end;
 end;
 
@@ -224,11 +224,11 @@ begin
     AssertEquals('one root row', 1, e.RowCount);
     AssertTrue('has children', font.HasChildren);
     AssertEquals('child count', 2, font.ChildCount);
-    AssertEquals('expanded -> 3 visible', 3, e.VisibleRowCount);
+    AssertEquals('expanded -> 3 displayed', 3, e.DisplayRowCount);
     e.SetExpanded(font, False);
-    AssertEquals('collapsed -> 1 visible', 1, e.VisibleRowCount);
+    AssertEquals('collapsed -> 1 displayed', 1, e.DisplayRowCount);
     e.SetExpanded(font, True);
-    AssertEquals('re-expanded -> 3 visible', 3, e.VisibleRowCount);
+    AssertEquals('re-expanded -> 3 displayed', 3, e.DisplayRowCount);
   finally e.Free; end;
 end;
 
@@ -334,11 +334,11 @@ begin
     b.AddChild('b1', 'x'); b.AddChild('b2', 'y');
     e.AddRow('C', '3');
     e.SetExpanded(b, False);              // flat: [A, B, C]
-    AssertEquals('3 visible collapsed', 3, e.VisibleRowCount);
+    AssertEquals('3 displayed while collapsed', 3, e.DisplayRowCount);
     e.ItemIndex := 2;                     // select C
     AssertEquals('C selected', 2, e.ItemIndex);
     e.SetExpanded(b, True);               // flat: [A, B, b1, b2, C] -> C now at 4
-    AssertEquals('5 visible expanded', 5, e.VisibleRowCount);
+    AssertEquals('5 displayed while expanded', 5, e.DisplayRowCount);
     AssertEquals('C re-pinned by identity', 4, e.ItemIndex);
   finally e.Free; end;
 end;

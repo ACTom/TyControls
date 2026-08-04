@@ -320,6 +320,70 @@ below change the behaviour of existing code -- read before upgrading.**
   its opposite. The size-carrying form is `DrawIndex`. There is deliberately **no** 4-Integer
   overload: old call sites should fail to compile rather than compile with the coordinates
   and the index transposed.
+- **`TTyScrollBox.ScrollBy` scrolls the view now.** `TScrollingWinControl` **overrides** it to
+  do that; we did not -- so a ported `Box.ScrollBy(0,-50)` reached `TWinControl`'s
+  child-mover. Same name, same arity, same parameter types, no compile error. It re-bounded
+  every child **including both scrollbars** while the scroll offset stayed at 0, and the next
+  range update then measured the moved children as a *smaller* extent, corrupting the range
+  and the thumb. The child-moving meaning survives as `inherited ScrollBy`.
+- **`TTyToolBar.Indent` is horizontal only; vertical padding is the new `ContentPadY`.** LCL's
+  `Indent` is the gap before the first tool. Ours was **also** the top pad, and the bar's
+  height was `Indent*2 + rows` -- so `Indent := 24`, an ordinary LCL value used to clear a
+  logo, made the bar **48 px taller** and pushed every tool down 24 px. `ContentPadY` defaults
+  to 4, the old default, so **a bar that never set `Indent` does not move a pixel**; one that
+  did gets its vertical padding back at 4.
+- **`TTyCheckGroup` / `TTyRadioGroup` lay multi-column items out row-major now** (new
+  `ColumnLayout`, defaulting to LCL's `clHorizontalThenVertical`). Ours was hard-wired
+  column-major, so a 6-item, 2-column group that reads `1 2 / 3 4 / 5 6` in Lazarus read
+  **`1 4 / 2 5 / 3 6`** here -- the user's option list silently reordered. For the old order:
+  `ColumnLayout := clVerticalThenHorizontal`. **Single-column groups (the `Columns = 1`
+  default) are unaffected.**
+- **`TTyListBox.Items` is retyped `TStringList` -> `TStrings`**, so `LB.Items := Memo.Lines`
+  compiles.
+- **`TTyColorBox.Style` composes the palette now.** The Object Inspector offered it, the `.lfm`
+  streamed it, and the setter **threw every value away**. All eight set members do something
+  real (standard / extended / system colours, the custom slot, none, default, pretty names,
+  including `clNone`); the names come from LCL's own resourcestrings, so they arrive
+  translated. The default deliberately **does not copy LCL's** -- it reproduces the existing
+  curated 16 byte for byte, because a published `default` is how every `.lfm` that omits the
+  line is read. The combo shape stays locked; reach it as `TTyComboBox(Box).Style`.
+- **`TTyCheckComboItemState.Checked` becomes `State: TCheckBoxState`** (plus a new `Enabled`),
+  matching LCL's `TCheckComboItemState`. Code reaching into the state object must change;
+  anything going through the `Checked[]` property is unaffected.
+- **`TTyPaintPanel`'s design-time drop size is 105×105, not 185×41.** A drawing surface arrived
+  as a letterbox strip in which anything drawn was clipped. Existing `.lfm` files carry
+  explicit bounds and are unaffected.
+- **`TTyColorButton.Caption` parses `&` mnemonics** like every other button on the same form
+  (it used to draw the ampersand literally).
+- **`TTyGlyphLayout` gained `glRight` / `glBottom`** (appended, existing ordinals unchanged);
+  `HasGlyphSource` (protected) is now `CanShowGlyph` (public).
+
+### Added -- the LCL members the text controls were missing
+
+- **`TTyMemo.Alignment`** -- horizontal alignment per visible row. A centred multi-line block
+  **could not be produced by any route**, the theme included. Painting and **click
+  hit-testing** share one offset, so you cannot click in one place and land in another.
+- **`TTyMemo.CharCase`** -- forces case on typing and on assignment, reusing the edit's folding.
+- **`Modified` (`TTyEdit` / `TTyMemo`)** -- True when the user edited, back to False after a
+  programmatic write. An application **cannot rebuild that distinction** from `OnChange`, which
+  fires for both. It is what drives "enable Save" and "prompt before closing".
+- **`TTyEdit.EchoMode`** -- `emNormal` / `emPassword` / `emNone` (shows nothing), coupled to
+  `PasswordChar` in both directions. `emNone` had no equivalent at any spelling.
+- **Multicast `OnChange`** (`AddHandlerOnChange` / `RemoveHandlerOnChange`, both controls) --
+  a library or framework observer no longer has to seize the application's single `OnChange`
+  slot, and two observers can coexist.
+- **`TTyMemo.CaretLine` / `CaretCol` / `SetCaret` are public** -- the "Ln 12, Col 4" status
+  line, go-to-line and error highlighting all needed a subclass to reach them before.
+- **Accessible roles** on `TTyEdit` / `TTyMaskEdit` / `TTyMemo` / `TTyLabel`. A self-drawn
+  control has no native peer for assistive technology to fall back on, so without this the
+  whole text family read as unidentified custom controls.
+
+### Fixed -- the mask edit's two delete paths bypassed the mask
+
+`InjectBackspace` / `InjectDelete` cut a **raw character** out of the mask edit's display
+string, mask literals included -- leaving content that no longer matches the mask the control
+claims to enforce. Backspace and Delete from the keyboard were always correct; these two
+methods were not. (Same shape as the `Ctrl+V` hole that was closed earlier in this pass.)
 
 ### Fixed -- knobs the Object Inspector offered and the control ignored
 
@@ -443,6 +507,79 @@ error, no log, nothing visible in a screenshot.
   ever draw the block arrow, so the directional triangle a ported form expects was not
   reachable at all. The block arrow stays the default: changing it would silently rotate
   every arrow on every existing form.
+- **`TTyPanel.BorderWidth` actually insets now.** The base republished it, but `TWinControl`
+  **never reads** the value -- in LCL that gutter is done solely by `TCustomPanel`. So the
+  Object Inspector offered an 8px border the container treated as air.
+- **A panel can be a dock site**: `DockSite`, `UseDockManager` and the whole `OnDockDrop` /
+  `OnDockOver` / `OnStartDock` / `OnEndDock` / `OnUnDock` / `OnGetSiteInfo` /
+  `OnGetDockCaption` family. The last four are protected upstream and **had no route at all**.
+- **Drag-reordering tabs no longer desyncs the header from the body** (selection is pinned to
+  the position, and only the header obeyed), and **moving a page to another `TTyPageControl`
+  no longer leaves it counted by the old one** (un-registration hung off "was freed", not
+  "was re-parented").
+- **The status bar can show hints**: `AutoHint` routes `Application.Hint` into `SimpleText` or
+  panel 0, and `OnHint` takes the whole job over. This is what finally makes the **menu item
+  `Hint`** landed earlier in this pass visible -- the menu was publishing all along and
+  nothing in the library was listening. Also `GetPanelIndexAt`, and `Style := psOwnerDraw`
+  with `OnDrawPanel` (a status cell could only ever be plain text).
+- **Header sections gained constraints and hiding**: `MinWidth`, `MaxWidth`, `Visible`,
+  `InsertSection`. All four width paths -- the setter, a whole-record write, insertion and the
+  **live drag** -- go through one clamp; a limit the setter honours and the drag ignores is
+  not a limit.
+- **`TMenuItem.ShowAlwaysCheckable` is read now** -- the row model only looked at `AutoCheck`,
+  the flag that **also** makes the item toggle itself on click, which many applications do not
+  want.
+- **Buttons gained `Alignment` (caption) and `ShowAccelChar`.** `'AT&T'` used to render as
+  `'ATT'` **and** acquire a stray Alt+T accelerator, escapable only by doubling the ampersand
+  at every assignment site. Also `GlyphLayout` gained right and bottom (the trailing-icon
+  `more ▾` look was unreachable at any setting), a per-button `Spacing`, a public
+  `CanShowGlyph`, and `TTySpeedButton.FindDownButton` -- the grouping code only ever walked
+  siblings to *release* them, so reading back which one is down needed a hand-rolled typed
+  scan.
+- **`Alignment` on the check box and radio button** -- note this is LCL's meaning: **which
+  side the indicator sits on**, not caption alignment (that is `TTyGroupBox.Alignment`). One
+  word, two subjects.
+- **The group controls gained per-item reach**: `Buttons[]` (per-item `Hint`, `PopupMenu`,
+  `Font`, `Enabled` were unreachable), `CheckEnabled[]` (one greyed row -- "this option isn't
+  in your edition"), `OnItemClick`, `OnItemEnter` / `OnItemExit`. **Arrow keys move the
+  selection in a radio group now** -- they used to do **nothing**, leaving Tab as the only
+  keyboard route, and Tab plus Space **changes the selection on the way past every option**.
+  Arrows step over disabled items and stop at the ends. The group's own `OnKeyDown` /
+  `OnKeyUp` / `OnKeyPress` also fire at last (the group never holds focus, so those slots
+  could be assigned and never run).
+- **`TTyColorButton.ButtonColor`** -- LCL's name *and* type. Assigning a `TColor` to
+  `SelectedColor` was read as ARGB and came out a different colour, silently. Plus
+  `OnColorChanged`, one letter from ours and therefore reading as "the event is missing".
+- **`TTyGroupBox.ClientWidth` / `ClientHeight`** -- a ported `.lfm` that pinned a *client* size
+  simply lost those lines.
+- **List box**: `OnSelectionChange(Sender; User)` distinguishes a user click from a code write
+  (with `Lock` / `Unlock`), and `ExtendedSelect` -- the only multi-select discipline usable on
+  a touch screen.
+- **Check list box**: tri-state `State[]` with `AllowGrayed`, `ItemEnabled[]` (a disabled row
+  now also *looks* disabled), `Toggle`, `CheckAll`. Found on the way: a foreign object in
+  `Objects[]` read as *checked*, because it was non-zero.
+- **Colour box / colour list box**: `Colors[]` readable **and writable**, `ColorNames[]`,
+  `OnGetColors`, `DefaultColorColor` / `NoneColorColor` (`clNone` / `clDefault` were painted
+  as their raw sentinel values). The swatch size moved off a hardcoded 4px onto
+  `--color-swatch-width` / `--color-swatch-offset`.
+- **`TTyListView.Columns` / `Column[]` / `ColumnCount`** without the `Header` hop, plus
+  `OnInsert` / `OnDeletion` -- the latter is the only moment a per-item `Data` payload is
+  still reachable, and it fires per row on clear and on destroy.
+- **Combo box**: `ItemHeight` / `ItemWidth`, `TextHint` (painted in both shapes), `ReadOnly`, a
+  **writable** `DroppedDown`, `SelStart` / `SelLength` / `SelText` / `SelectAll`,
+  `AddHistoryItem`, and `OnGetItems` -- a lazily-filled combo's **first click did nothing**,
+  because the empty-list early-out ran before any hook could fill it.
+- **`TTyComboBoxEx.ItemsEx`**: a published collection, **editable in the designer and streamed
+  to `.lfm`** -- the reason that control exists. It is the single source of truth; `Items` is
+  its projection.
+- **Check combo box**: tri-state, `ItemEnabled[]`, `OnItemChange`, `CheckAll` / `Toggle` /
+  `AddItem` / `AssignItems` / `DeleteItem`.
+- **Tabs and scrolling containers**: `TabRect`, `DisplayRect`, `IndexOfTabAt`, `AddTabSheet`,
+  `ScrollTabs`, `PageIndex`, `PageControl`, `OnShow` / `OnHide`, `ScrollInView`,
+  `UpdateScrollbars`, and `WordWrap` / `VerticalAlignment` / `ShowAccelChar` on tab text.
+- **Accessibility**: the text controls, panels and splitters declare an `AccessibleRole`. A
+  self-drawn control has no native peer for assistive technology to fall back on, so until now
+  the whole text family read as unidentified custom controls.
 
 ### Added -- shape and image controls brought up to parity
 

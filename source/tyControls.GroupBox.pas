@@ -25,7 +25,24 @@ type
     destructor Destroy; override;
   published
     property Caption: TCaption read FCaption write SetCaption;
+    { NOTE: this is the CAPTION's alignment in the band, and it has no LCL counterpart --
+      TGroupBox/TRadioGroup/TCheckGroup publish no Alignment at all. It is emphatically NOT
+      TCustomCheckBox.Alignment, which is a TLeftRight naming the side the INDICATOR sits on
+      (see TTyCheckBox.Alignment). Same word, two subjects; recorded so nobody unifies them. }
     property Alignment: TAlignment read FAlignment write SetAlignment default taLeftJustify;
+    { AutoSize is NOT republished here, and that is not an oversight: TTyCustomControl
+      already publishes it (tyControls.Base.pas), so it has always been in the Object
+      Inspector for this control and every other one. The audit claim that a ty group box
+      "cannot be made to hug its contents" was wrong on the facts -- TWinControl computes a
+      container's preferred size from its children, and AdjustClientRect above already
+      reserves the caption band plus the themed padding, so the whole path was live.
+      Restating the publication would have looked like a fix and changed nothing. }
+    { The size of the space INSIDE the frame. On a group box the client and the outer bounds
+      differ by the caption band and the themed padding, which is exactly what makes "I need
+      this much room inside" the natural thing to say -- and it was unsayable in the designer
+      and dropped from any ported .lfm that pinned it (LCL: stdctrls.pp:193-194). }
+    property ClientWidth;
+    property ClientHeight;
     property Align;
     property Anchors;
     property StyleClass;

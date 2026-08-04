@@ -56,6 +56,7 @@ uses tyControls.ScrollBox;
 | `Anchors` | `TAnchors` | `[akLeft, akTop]` | 锚点布局。 |
 | `StyleClass` | `string` | `''` | CSS 类名，对应 `.tycss` 中 `TyScrollBox.classname` 选择器。 |
 | `Controller` | `TTyStyleController` | `nil`（全局 `TyDefaultController`） | 指定样式控制器；该值会自动传播给两个内嵌滚动条。 |
+| `OnConstrainedResize` | `TConstrainedResizeEvent` | `nil` | 尺寸协商钩子，照 `TScrollBox` republish。它在 `TControl` 上是 **protected**，所以此前不只是对象检视器里没有——**代码里也够不着**，能表达的尺寸限制只有静态的 `Constraints` 值；"这一栏永远不超过窗体的一半"这类依赖运行期数值的限制无从表达。 |
 
 > `Caption` / `Alignment` 从 `TTyPanel` 继承而来，滚动框场景一般不使用（若设置了 `Caption`，它会被子控件覆盖）。
 
@@ -68,8 +69,13 @@ uses tyControls.ScrollBox;
 | `procedure UpdateScrollRange` | 重新测量子控件包围盒，据此显示 / 隐藏 / 定位两个滚动条，并把滚动偏移夹取到合法范围。**通常不需要你调用**：控件在 `Resize`、`.lfm` 流式化结束（`Loaded`）、以及**每一轮子控件布局之后**（`ControlsAligned`，涵盖增删子控件、改子控件位置 / 大小）都会自动重算。留作 public 是给"绕过 LCL 布局直接改了子控件几何"这类特殊场景兜底。 |
 | `procedure ScrollByDelta(ADx, ADy)` | 把**视图**按 `(ADx, ADy)` 挪一段，夹取到当前滚动范围（该轴没有滚动条时为 0），并同步两个缩略块。 |
 | `procedure ScrollTo(AX, AY)` | 把**视图**滚到绝对偏移 `(AX, AY)`；内部走 `ScrollByDelta`，因此与增量路径共用同一套重新测量与夹取规则。 |
+| `procedure ScrollBy(DeltaX, DeltaY); override` | **滚动视图**——与其他所有滚动容器上的语义一致。参数按 LCL 的约定是**内容**移动了多远，所以 `DeltaY` 为负 = 内容上移 = 向下滚。 |
+| `procedure ScrollInView(AControl)` | 把 `AControl` 完整带进视口所需的**最小**滚动量。比视口还大的子控件按顶/左边缘对齐（追它的下边缘会把上边缘顶出另一头），与 LCL 的取舍一致。 |
+| `procedure UpdateScrollbars` | `UpdateScrollRange` 的 LCL 名字（`TScrollingWinControl.UpdateScrollbars`），同一件事。保留为一行转发而非改名，因为仓库内所有调用点与文档用的都是原名。 |
 
-> **`ScrollByDelta` 不是 `ScrollBy`。** 二者原先都是 protected，于是"再往下看一点"这个滚动容器最常见的诉求，只能靠去写内嵌滚动条的 `Position` 来碰运气；现在两个方法都是 public。注意别把它们混起来：`TWinControl.ScrollBy` 的语义是**平移子控件**，本类内部正是用它来干这件事，所以重写 `ScrollBy` 让它表示"滚动视图"会变成自我递归。`ScrollByDelta` / `ScrollTo` 才是视图操作，`ScrollBy` 保持 `TWinControl` 的原意。
+> **`ScrollBy` 曾经是个"同名不同义"的陷阱。** 本类原先**没有**重写它，于是移植过来的 `Box.ScrollBy(0, -50)` 落到 `TWinControl.ScrollBy`（平移子控件）而不是 `TScrollingWinControl.ScrollBy`（滚动视图）——同名、同参数个数、同参数类型、无编译错误、结果是错的：它把**每一个**子控件都重新定位，包括那两条滚动条（它们被带离了吸附的边缘），而本单元开头声明为"唯一真相来源"的 `FScrollX/FScrollY` 纹丝不动。紧接着的一次 `UpdateScrollRange` 会把被挪走的子控件量成**更小**的内容范围（测量时会把偏移加回去），于是范围和缩略块双双失真，下一次拖动缩略块内容就跳一下。现在它按 LCL 的语义滚动视图；平移子控件的那个原版仍在，由 `ScrollContentTo` 以 `inherited ScrollBy` 取用——那是唯一需要它的调用点。
+>
+> `ScrollByDelta` / `ScrollTo` 是同一件事的另一种签名（参数直接是偏移增量，符号与 `ScrollBy` 相反），两者原先都是 protected，于是"再往下看一点"这个滚动容器最常见的诉求，只能靠去写内嵌滚动条的 `Position` 来碰运气。
 
 ---
 
@@ -77,7 +83,7 @@ uses tyControls.ScrollBox;
 
 1. **滚动范围** = 全部非滚动条子控件在**逻辑（未滚动）坐标**下的包围盒。每个子控件的逻辑坐标 = 其当前 `Left/Top`（已被滚动平移过）+ 当前偏移 `FScrollX/FScrollY`。范围从视口原点 `(0,0)` 量到内容最远的右 / 下边界。
 2. **滚动条可见性**：某一轴的 `内容尺寸 > 视口尺寸` 时才显示该轴滚动条。两条滚动条互相影响——显示垂直条会占掉水平方向的可用宽度，可能进而需要水平条（反之亦然），`UpdateScrollRange` 内部对这种相互依赖做了二次判定。
-3. **拖动滚动条**：在滚动条 `OnChange` 中，计算新目标偏移与当前偏移的差值 `dx/dy`，调用 `inherited ScrollBy(-dx, -dy)` 平移**所有**子控件；由于 `ScrollBy` 也会移动那两个内嵌滚动条，随后把它们重新吸附回右 / 下边缘，并提交新的偏移值。
+3. **拖动滚动条**：在滚动条 `OnChange` 中，计算新目标偏移与当前偏移的差值 `dx/dy`，调用 `inherited ScrollBy(-dx, -dy)`（`inherited` = `TWinControl` 那个平移子控件的原版，不是本类"滚动视图"的重写）平移**所有**子控件；由于它也会移动那两个内嵌滚动条，随后把它们重新吸附回右 / 下边缘。**偏移先提交、再平移**：`ScrollBy` 末尾的 `EnableAutoSizing` 可能就地重排子控件，那次重排读的是 `AdjustClientRect`，偏移若还是旧值，就会把每个对齐子控件放回原处、把这次滚动悄悄吃掉。
 4. **鼠标滚轮**：优先滚动溢出的垂直轴（无垂直溢出时滚动水平轴），每格约一个滚动条厚度的内容距离。
 
 ### 容器契约（子控件可用区域）

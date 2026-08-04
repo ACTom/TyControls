@@ -182,6 +182,41 @@ type
     procedure SetHeaderScroll(AValue: Integer);
     procedure ScrollTabIntoView(AIndex: Integer);
 
+    { --- LCL-named geometry / hit-test / scroll -------------------------------------
+
+      Three members that carry LCL's names, and therefore have to carry LCL's MEANINGS.
+      The engine already had a near-twin of each under a Ty- name, and in all three cases
+      the twin answers a DIFFERENT question -- which is exactly how a ported call site
+      binds to the wrong member and gets a plausible wrong answer instead of a compile
+      error. Each is spelled out below against the twin it is not. }
+
+    { The tab header's rect AS DRAWN -- scroll offset and left inset applied. That is what
+      TCustomTabControl.TabRect returns (comctrls.pp:476) and what any caller positioning a
+      tooltip, a menu or an overlay over a tab needs. TyTabHeaderRect is the UNSHIFTED
+      content-space rect: identical while the strip fits, and off by the scroll offset the
+      moment it does not. Empty rect for an out-of-range index. }
+    function TabRect(AIndex: Integer): TRect;
+    { The rectangle the PAGE BODY occupies inside the control -- the area below the header
+      band, in control-local device px. LCL's TCustomTabControl.DisplayRect (comctrls.pp:469).
+      Nothing exposed this before: the inset existed only inside AdjustClientRect. }
+    function DisplayRect: TRect;
+    { Which tab is under a point, or -1 for NONE.
+
+      TyDropIndexAt is not this and must not be mistaken for it: it is the drag-reorder
+      target resolver, it answers with the nearest slot by shifted midpoints, it clamps into
+      [0, Count-1], and so it can NEVER say "no tab here" -- ask it where a right-click
+      landed on the empty strip past the last tab and it names the last tab. A context menu
+      or a per-tab tooltip built on that opens on the wrong tab. This one hit-tests the real
+      shifted header rects, requires the point to be inside the band, and returns -1
+      everywhere else (including over the two overflow arrows, which are not tabs). }
+    function IndexOfTabAt(X, Y: Integer): Integer; overload;
+    function IndexOfTabAt(P: TPoint): Integer; overload;
+    { Scroll the header band by Delta TABS -- LCL's unit (comctrls.pp:711/862), not ours.
+      SetHeaderScroll takes DEVICE PIXELS, so a mechanical rename of a ported ScrollTabs(2)
+      would scroll two pixels and look like nothing happened. Positive Delta moves the band
+      toward later tabs. Clamped by SetHeaderScroll. }
+    procedure ScrollTabs(Delta: Integer);
+
     { Drag-reorder helpers (pure, no mutation; device px).
       TyDragThresholdPx: how far (in device px at APPI) a press must move before
         a drag counts as a reorder rather than a click. Small + PPI-scaled.
@@ -646,6 +681,76 @@ begin
     Want := L - VisLeft;
 
   SetHeaderScroll(Want);
+end;
+
+{ --- LCL-named geometry / hit-test / scroll. See the declarations. --------------- }
+
+function TTyCustomTabStrip.TabRect(AIndex: Integer): TRect;
+begin
+  { HeaderRectShifted, not FHeaderRects[]: the SHIFTED rect is the one on screen, and on
+    screen is what LCL's TabRect means. }
+  Result := HeaderRectShifted(AIndex);
+end;
+
+function TTyCustomTabStrip.DisplayRect: TRect;
+var
+  TabH: Integer;
+begin
+  Result := Rect(0, 0, Width, Height);
+  TabH := TabHPx(Font.PixelsPerInch);
+  Inc(Result.Top, TabH);          // the same inset AdjustClientRect applies
+  if Result.Top > Result.Bottom then Result.Top := Result.Bottom;
+end;
+
+function TTyCustomTabStrip.IndexOfTabAt(X, Y: Integer): Integer;
+var
+  PPI, TabH, I: Integer;
+  HR: TRect;
+begin
+  Result := -1;
+  PPI  := Font.PixelsPerInch;
+  TabH := TabHPx(PPI);
+  if TabH <= 0 then Exit;         // no band: nothing to hit
+  if (Y < 0) or (Y >= TabH) then Exit;
+  RebuildLayout(PPI);
+  { The overflow arrows sit ON the band but are not tabs; a click there scrolls, so a
+    hit-test that named a tab would put a context menu on a tab the user never aimed at. }
+  if FShowScrollAffordance then
+  begin
+    if (X >= FScrollLeftRect.Left) and (X < FScrollLeftRect.Right) then Exit;
+    if (X >= FScrollRightRect.Left) and (X < FScrollRightRect.Right) then Exit;
+  end;
+  for I := 0 to GetTabCount - 1 do
+  begin
+    HR := FHeaderRects[I];
+    OffsetRect(HR, HeaderShiftPx, 0);
+    if (X >= HR.Left) and (X < HR.Right) then Exit(I);
+  end;
+end;
+
+function TTyCustomTabStrip.IndexOfTabAt(P: TPoint): Integer;
+begin
+  Result := IndexOfTabAt(P.x, P.y);
+end;
+
+procedure TTyCustomTabStrip.ScrollTabs(Delta: Integer);
+var
+  Target, Cnt: Integer;
+begin
+  Cnt := GetTabCount;
+  if (Cnt = 0) or (Delta = 0) then Exit;
+  RebuildLayout(Font.PixelsPerInch);
+  { "By N tabs" is expressed as: find the tab whose left edge the band currently starts at,
+    step N along the collection, and scroll to THAT tab's left edge. Doing it in tab space
+    rather than by an averaged pixel width keeps the band aligned to a tab boundary even
+    when the tabs have wildly different caption widths -- which they normally do. }
+  Target := 0;
+  while (Target < Cnt - 1) and (FHeaderRects[Target].Right <= FHeaderScroll) do
+    Inc(Target);
+  Inc(Target, Delta);
+  if Target < 0 then Target := 0;
+  if Target > Cnt - 1 then Target := Cnt - 1;
+  SetHeaderScroll(FHeaderRects[Target].Left);
 end;
 
 { Device-px drag threshold at APPI: 6 logical px scaled. At 96 PPI this is 6. }

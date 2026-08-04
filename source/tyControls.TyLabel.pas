@@ -107,6 +107,11 @@ begin
   FLayout := tlCenter;
   FWordWrap := False;
   FTransparent := True;
+  { Assistive technology has no native peer to fall back on for a self-drawn control, so
+    without this a caption reads as an unidentified custom control -- and a label whose whole
+    job is to name the control beside it is the worst one to lose. LCL assigns the role in the
+    same one line in TCustomEdit.Create (include/customedit.inc:87). }
+  AccessibleRole := larLabel;
 end;
 
 destructor TTyLabel.Destroy;

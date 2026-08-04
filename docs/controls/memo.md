@@ -36,6 +36,9 @@ uses tyControls.Memo;
 | `ScrollBars` | `TScrollStyle` | `ssAutoVertical` | 滚动条策略，与 `TMemo` 同义：`ssNone` 两条都不要；`ssVertical` / `ssBoth` 强制显示竖条，`ssAutoVertical` / `ssAutoBoth` 溢出才出现；`ssHorizontal` / `ssBoth` 强制显示横条，`ssAutoHorizontal` / `ssAutoBoth` 溢出才出现。横条只在 `WordWrap = False` 时有意义（回绕模式不会横向滚动）。 |
 | `WordWrap` | `Boolean` | `False` | 软回绕开关。`True` 时长逻辑行按词边界折成多条可见行；`False`（默认）时长行改为横向滚动。 |
 | `HideSelection` | `Boolean` | `True` | 失去焦点时是否隐藏选区高亮。 |
+| `Alignment` | `TAlignment` | `taLeftJustify` | **（API parity 新增）** **每一条可见行**的水平对齐（`TMemo` 在 `stdctrls.pp:1023` 转发同名属性）。这是一个真正缺失的**能力**：从前渲染器永远从内容区左缘起画，居中的多行文字块**用任何办法都做不出来**，主题也不行。比视口**更宽**的行不参与对齐——没有可居中的余量，此时横向滚动拥有原点（与 `TTyEdit.AlignOffset` 同一条口径）。绘制、选区带、光标和**点击命中**共用同一个偏移量，不会彼此错位。 |
+| `CharCase` | `TEditCharCase` | `ecNormal` | **（API parity 新增）** 打字与赋值都强制大小写（`stdctrls.pp:1028`），复用 `TTyEdit` 的折叠规则，两个控件表现一致；设置它会像 LCL 一样**重折已有文本**（否则切到 `ecUpperCase` 的字段还在显示原来的小写值）。 |
+| `Modified` | `Boolean`（读写，非 published） | **（API parity 新增）** 脏标记，同 `TTyEdit.Modified`：用户改过为 `True`，程序化 `Text :=` / `Lines :=` 之后回到 `False`。 |
 | `OnChange` | `TNotifyEvent` | `nil` | 文本模型变化（插入/拆分/退格/删除/合并）后触发；纯光标移动不触发。 |
 | `OnSelectionChange` | `TNotifyEvent` | `nil` | **（API parity 新增）** 光标位置**或**选区范围变化时触发（方向键 / 点击 / Shift 选区 / 程序化设置光标 / 编辑导致光标移动）；自带去抖——caret 与 anchor 都未变则不触发。 |
 | `Enabled` | `Boolean` | `True` | 为 `False` 时键盘与滚轮输入一律被忽略（v1.5 策略：禁用时不消费按键、`DoMouseWheel` 返回 `False`）。 |
@@ -67,7 +70,10 @@ uses tyControls.Memo;
 | `SelStart` | `Integer`（读写） | 选区起始的扁平码点偏移；写入时收起选区到该处。 |
 | `SelLength` | `Integer`（读写） | 选区长度（扁平码点数）；写入时从 `SelStart` 起扩展光标。 |
 | `SelText` | `string`（读写） | 选区内容；恒等于 `UTF8Copy(Text, SelStart + 1, SelLength)`。写入时以新文本替换选区，仅触发一次 `OnChange`。 |
-| `CaretPos` | `Integer`（读写） | 光标的扁平码点偏移。 |
+| `CaretPos` | `Integer`（读写） | 光标的扁平码点偏移。**刻意不是 LCL 的 `TPoint`**：两个类型之间不存在赋值，移植代码是编译不过（响的失败），而且 `SelStart`/`SelLength`/`SelText` 都是扁平的，四者必须指向同一个字符串。真正缺的是**信息本身**，见下面两行。 |
+| `CaretLine` / `CaretCol` | `Integer`（只读函数） | **（API parity 新增可达性）** 光标的**行**与**列**（0 起，按码点）——即 LCL 在 memo 上让 `CaretPos` 回答的东西。它们从前是 **protected**，于是每个“Ln 12, Col 4”指示器、跳转到行、错误高亮都得先派生一个子类。现在是 public。 |
+| `SetCaret(ALine, ACol)` | — | **（API parity 新增可达性）** 同上，按行/列设置光标。 |
+| `AddHandlerOnChange` / `RemoveHandlerOnChange` | — | **（API parity 新增）** 多播 `OnChange`，与 `TTyEdit` 同义。 |
 
 > `SelectAll` 之后 `SelLength` 是 `UTF8Length(Text)` **减去** `TStrings.Text` 在最后一行之后补的那个
 > 尾随换行符——那个位置不是一个光标能落脚的地方（LCL 自己的 `TCustomEdit.SelectAll` 把它算进去了）。
@@ -218,6 +224,12 @@ end;
 ---
 
 ## 10. v1 限制 / 缺口（Gaps）
+
+> **API parity 第三轮已交付：** `Alignment`、`CharCase`、`Modified`、多播 `AddHandlerOnChange` /
+> `RemoveHandlerOnChange`，以及公开的 `CaretLine` / `CaretCol` / `SetCaret`（见 §3）。
+> `BidiMode` 仍然**不在范围内**：LCL 的 RTL 是 widgetset 在原生 EDIT 句柄上实现的，自绘控件没有可继承的东西。
+> **无障碍：** 构造时声明 `AccessibleRole := larTextEditorMultiline`（`TTyEdit` 是 `larTextEditorSingleline`）。
+
 
 `TTyMemo` 在可靠的多行编辑核心（逐码点编辑、跨行合并、二维导航、垂直滚动）之上，于 **v1.11** 补齐了对标 `TTyEdit` 的**二维文本选区**层：选区锚点（`Shift`+方向键/Home/End 扩展、鼠标拖拽高亮、逐行选区带、`SelText`/`SelectAll`/`CollapseSelection`）、**区间剪贴板**（`Ctrl/Cmd+A/C/X/V`，粘贴按 CR/LF 拆分为多行，复制/剪切经与 `TTyEdit` 同源的虚方法 `ReadClipboardText`/`WriteClipboardText`）、以及**按词导航**（`Ctrl/Alt+←/→` 跨行按词移动，`Ctrl/Alt+Backspace/Delete` 按词删除并在行边界退化为跨行合并）。本节曾登记的缺口现已全部补齐：
 

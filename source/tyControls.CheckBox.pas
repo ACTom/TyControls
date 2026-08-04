@@ -9,11 +9,13 @@ type
   private
     FState: TCheckBoxState;
     FAllowGrayed: Boolean;
+    FAlignment: TLeftRight;
     FRefitting: Boolean;   // guards the AutoSize re-fit in Invalidate against re-entry
     FOnChange: TNotifyEvent;
     function GetChecked: Boolean;
     procedure SetState(const AValue: TCheckBoxState);
     procedure SetChecked(const AValue: Boolean);
+    procedure SetAlignment(const AValue: TLeftRight);
   protected
     function GetStyleTypeKey: string; override;
     function CurrentStates: TTyStateSet; override;
@@ -59,6 +61,18 @@ type
     property State: TCheckBoxState read FState write SetState default cbUnchecked;
     property AllowGrayed: Boolean read FAllowGrayed write FAllowGrayed default False;
     property Checked: Boolean read GetChecked write SetChecked default False;
+    { 指示框在标题的哪一侧。名字、类型和默认值都照 LCL 抄
+      (TCustomCheckBox.Alignment: TLeftRight default taRightJustify,stdctrls.pp:1358)。
+
+      注意这个名字在 LCL 里说的**不是**标题的对齐方式:taRightJustify(默认)= 指示框在
+      左、标题在右,也就是一直以来的样子;taLeftJustify = 指示框挪到**右边**,标题靠着它
+      右对齐(LCL 靠 BS_RIGHTBUTTON 实现,include/customcheckbox.inc:269-274)。
+      同名不同义正是这一轮在清的那类坑,所以这里既没有借用 TTyGroupBox.Alignment 的
+      TAlignment(那个是标题对齐,另一件事),也没有自己发明一套语义。
+
+      宽度两种摆法完全一样(padding + 指示框 + gap + 标题),所以 CalculatePreferredSize
+      不用分支。 }
+    property Alignment: TLeftRight read FAlignment write SetAlignment default taRightJustify;
     property Caption;
     property Enabled;
     property Font;
@@ -78,9 +92,11 @@ type
   private
     FChecked: Boolean;
     FGroupIndex: Integer;
+    FAlignment: TLeftRight;
     FRefitting: Boolean;   // guards the AutoSize re-fit in Invalidate against re-entry
     FOnChange: TNotifyEvent;
     procedure SetChecked(const AValue: Boolean);
+    procedure SetAlignment(const AValue: TLeftRight);
     procedure UncheckSiblings;
   protected
     function GetStyleTypeKey: string; override;
@@ -112,6 +128,9 @@ type
     property AutoSize;
     property Checked: Boolean read FChecked write SetChecked default False;
     property GroupIndex: Integer read FGroupIndex write FGroupIndex default 0;
+    { 圆点在标题的哪一侧 —— 见 TTyCheckBox.Alignment,同名同型同默认值
+      (LCL 在 TRadioButton 上转发的是同一个 TCustomCheckBox.Alignment)。 }
+    property Alignment: TLeftRight read FAlignment write SetAlignment default taRightJustify;
     property Caption;
     property Enabled;
     property Font;
@@ -133,8 +152,16 @@ begin
   inherited Create(AOwner);
   TyAccelRegister(Self);
   TabStop := True;
+  FAlignment := taRightJustify;   // indicator left, caption right — LCL's default
   Width := 130;
   Height := TyDensityHeight(ActiveController, 22);
+end;
+
+procedure TTyCheckBox.SetAlignment(const AValue: TLeftRight);
+begin
+  if FAlignment = AValue then Exit;
+  FAlignment := AValue;
+  Invalidate;
 end;
 
 destructor TTyCheckBox.Destroy;
@@ -218,7 +245,8 @@ var
   P: TTyPainter;
   S, FrameS, CaptionS: TTyStyleSet;
   ContentRect, BoxRect, TextRect, FullRect: TRect;
-  BoxSize, Gap: Integer;
+  BoxSize, Gap, BoxTop: Integer;
+  TextAlign: TAlignment;
   disp: string;
   mp: Integer;
 begin
@@ -253,10 +281,13 @@ begin
     // v3/C: box size + caption gap are skin-tunable metrics (default = the built-in constants).
     BoxSize := P.Scale(ActiveController.Metric('--checkbox-size', TyCheckBoxBox));
     Gap := P.Scale(ActiveController.Metric('--checkbox-gap', TyCheckBoxGap));
-    BoxRect := Rect(ContentRect.Left,
-      ContentRect.Top + ((ContentRect.Bottom - ContentRect.Top - BoxSize) div 2),
-      ContentRect.Left + BoxSize,
-      ContentRect.Top + ((ContentRect.Bottom - ContentRect.Top - BoxSize) div 2) + BoxSize);
+    BoxTop := ContentRect.Top + ((ContentRect.Bottom - ContentRect.Top - BoxSize) div 2);
+    // Alignment picks the SIDE the indicator sits on; see the property. Vertical centring
+    // and every size are identical either way, so only the two X coordinates branch.
+    if FAlignment = taLeftJustify then
+      BoxRect := Rect(ContentRect.Right - BoxSize, BoxTop, ContentRect.Right, BoxTop + BoxSize)
+    else
+      BoxRect := Rect(ContentRect.Left, BoxTop, ContentRect.Left + BoxSize, BoxTop + BoxSize);
     P.FillBackground(BoxRect, S.Background, S.BorderRadius);
     P.StrokeBorder(BoxRect, S.BorderRadius, S.BorderWidth, S.BorderColor);
     // v3/C5: the check/indeterminate glyph is theme-overridable with an icon-font codepoint.
@@ -264,11 +295,22 @@ begin
       cbChecked: TyDrawGlyph(P, ActiveController, BoxRect, '--glyph-check', tgCheck, S.TextColor, 2);
       cbGrayed:  TyDrawGlyph(P, ActiveController, BoxRect, '--glyph-check-indeterminate', tgCheckIndeterminate, S.TextColor, 2);
     end;
-    TextRect := Rect(BoxRect.Right + Gap, ContentRect.Top,
-      ContentRect.Right, ContentRect.Bottom);
+    // The caption takes the strip left over, hugging the indicator from whichever side it
+    // is on — so the pair reads as one unit at either alignment instead of drifting apart.
+    if FAlignment = taLeftJustify then
+    begin
+      TextRect := Rect(ContentRect.Left, ContentRect.Top, BoxRect.Left - Gap, ContentRect.Bottom);
+      if TextRect.Right < TextRect.Left then TextRect.Right := TextRect.Left;
+      TextAlign := taRightJustify;
+    end
+    else
+    begin
+      TextRect := Rect(BoxRect.Right + Gap, ContentRect.Top, ContentRect.Right, ContentRect.Bottom);
+      TextAlign := taLeftJustify;
+    end;
     TyParseMnemonic(Caption, disp, mp);
     P.DrawText(TextRect, disp, S.FontName, ResolveFontSize(S), S.FontWeight,
-      CaptionS.TextColor, taLeftJustify, tlCenter, True, TyAccelGatePos(mp));
+      CaptionS.TextColor, TextAlign, tlCenter, True, TyAccelGatePos(mp));
     P.EndPaint;
   finally
     P.Free;
@@ -413,8 +455,16 @@ begin
   inherited Create(AOwner);
   TyAccelRegister(Self);
   TabStop := True;
+  FAlignment := taRightJustify;   // dot left, caption right — LCL's default
   Width := 130;
   Height := TyDensityHeight(ActiveController, 22);
+end;
+
+procedure TTyRadioButton.SetAlignment(const AValue: TLeftRight);
+begin
+  if FAlignment = AValue then Exit;
+  FAlignment := AValue;
+  Invalidate;
 end;
 
 destructor TTyRadioButton.Destroy;
@@ -498,7 +548,8 @@ var
   P: TTyPainter;
   S, FrameS, CaptionS: TTyStyleSet;
   ContentRect, DotRect, TextRect, FullRect: TRect;
-  BoxSize, Gap, DotRadiusLogical: Integer;
+  BoxSize, Gap, DotRadiusLogical, DotTop: Integer;
+  TextAlign: TAlignment;
   disp: string;
   mp: Integer;
 begin
@@ -531,10 +582,12 @@ begin
     // v3/C: radio indicator size + caption gap are skin-tunable (default = the built-in constants).
     BoxSize := P.Scale(ActiveController.Metric('--radio-size', TyCheckBoxBox));
     Gap := P.Scale(ActiveController.Metric('--radio-gap', TyCheckBoxGap));
-    DotRect := Rect(ContentRect.Left,
-      ContentRect.Top + ((ContentRect.Bottom - ContentRect.Top - BoxSize) div 2),
-      ContentRect.Left + BoxSize,
-      ContentRect.Top + ((ContentRect.Bottom - ContentRect.Top - BoxSize) div 2) + BoxSize);
+    DotTop := ContentRect.Top + ((ContentRect.Bottom - ContentRect.Top - BoxSize) div 2);
+    // See TTyCheckBox.RenderTo: Alignment picks the SIDE, nothing else changes.
+    if FAlignment = taLeftJustify then
+      DotRect := Rect(ContentRect.Right - BoxSize, DotTop, ContentRect.Right, DotTop + BoxSize)
+    else
+      DotRect := Rect(ContentRect.Left, DotTop, ContentRect.Left + BoxSize, DotTop + BoxSize);
     // FillBackground/StrokeBorder take a LOGICAL radius (they Scale() internally),
     // so cap the token (S.BorderRadius, logical) against the dot's LOGICAL half-side.
     // The dot box is P.Scale(TyCheckBoxBox) device wide → logical half = MulDiv(BoxSize,96,APPI) div 2,
@@ -545,11 +598,20 @@ begin
     P.StrokeBorder(DotRect, DotRadiusLogical, S.BorderWidth, S.BorderColor);
     if FChecked then
       TyDrawGlyph(P, ActiveController, DotRect, '--glyph-radio', tgRadioDot, S.TextColor, 2);
-    TextRect := Rect(DotRect.Right + Gap, ContentRect.Top,
-      ContentRect.Right, ContentRect.Bottom);
+    if FAlignment = taLeftJustify then
+    begin
+      TextRect := Rect(ContentRect.Left, ContentRect.Top, DotRect.Left - Gap, ContentRect.Bottom);
+      if TextRect.Right < TextRect.Left then TextRect.Right := TextRect.Left;
+      TextAlign := taRightJustify;
+    end
+    else
+    begin
+      TextRect := Rect(DotRect.Right + Gap, ContentRect.Top, ContentRect.Right, ContentRect.Bottom);
+      TextAlign := taLeftJustify;
+    end;
     TyParseMnemonic(Caption, disp, mp);
     P.DrawText(TextRect, disp, S.FontName, ResolveFontSize(S), S.FontWeight,
-      CaptionS.TextColor, taLeftJustify, tlCenter, True, TyAccelGatePos(mp));
+      CaptionS.TextColor, TextAlign, tlCenter, True, TyAccelGatePos(mp));
     P.EndPaint;
   finally
     P.Free;

@@ -35,6 +35,8 @@ uses tyControls.Splitter;
 | `Anchors` | `TAnchors` | `[akLeft, akTop]` | 随父控件调整大小时的锚点 |
 
 > 构造函数中默认设置 `Align := alLeft`、`Width := 5`、`Height := 100`，并调用 `UpdateCursor` 初始化光标。
+>
+> 构造时还会设 `AccessibleRole := larResizeGrip`（与 `TCustomSplitter.Create` 一致）。此前屏幕阅读器把分隔条念成"未知控件"，键盘 + 阅读器用户唯一能据以判断"这个东西是用来改变两栏大小的"的结构线索是缺的。
 
 ### 继承的通用成员
 

@@ -2,7 +2,7 @@ unit tyControls.Edit;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType, LazUTF8, Clipbrd,
+  Classes, SysUtils, Types, Controls, Graphics, LCLType, LazUTF8, LazMethodList, Clipbrd,
   ExtCtrls, StdCtrls,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.UndoStack,
@@ -32,11 +32,25 @@ type
     FReadOnly: Boolean;
     FMaxLength: Integer;
     FPasswordChar: string;
+    FEchoMode: TEchoMode;
     FTextHint: TCaption;
     FAlignment: TAlignment;
     FCharCase: TEditCharCase;
     FNumbersOnly: Boolean;
+    FHideSelection: Boolean;
+    FModified: Boolean;
+    { True only for the duration of a PROGRAMMATIC text write (the published Text setter).
+      LCL calls its copy FTextChangedByRealSetText and reads it in exactly one place --
+      Change -- to keep `Edit.Text := S` from dirtying the field while typing does
+      (include/customedit.inc:615-616). Without the flag the two are indistinguishable,
+      which is why a hand-rolled OnChange dirty-tracker can never reproduce Modified. }
+    FTextChangeByCode: Boolean;
+    FAutoSelect: Boolean;
+    FAutoSelected: Boolean;
     FOnChange: TNotifyEvent;
+    { Multicast OnChange (LCL stdctrls.pp:853-855 / customedit.inc:91-97). Created lazily:
+      an edit that nobody observes must not pay for a TMethodList. }
+    FOnChangeHandlers: TMethodList;
     FImeHook: TObject;    // Qt-only IME commit interceptor (nil off Qt); see tyControls.QtWS
     FImeCaretRect: TRect; // caret rect (client device px) cached each paint; fed to the Qt IME query
     // Insert a full IME commit string (Qt: the un-truncated QInputMethodEvent.commitString).
@@ -49,6 +63,8 @@ type
     procedure SetReadOnly(const AValue: Boolean);
     procedure SetMaxLength(const AValue: Integer);
     procedure SetPasswordChar(const AValue: string);
+    procedure SetEchoMode(const AValue: TEchoMode);
+    procedure SetHideSelection(const AValue: Boolean);
     procedure SetAlignment(const AValue: TAlignment);
     procedure SetCharCase(const AValue: TEditCharCase);
     // Selection accessors (read = derived from FSelAnchor/FCaret; write = move selection)
@@ -91,6 +107,12 @@ type
     procedure DoExit; override;
     function GetStyleTypeKey: string; override;
     procedure DoChange;
+    { The one text writer. AByCode=True is a PROGRAMMATIC assignment (the published Text
+      setter): the caret parks at the end and Modified comes back False. AByCode=False is a
+      write that stands in for a keystroke, which only TTyMaskEdit needs -- it rebuilds the
+      whole display string on every accepted character, and routing that through the
+      programmatic path would clear the dirty flag on every keypress. }
+    procedure SetTextInternal(const AValue: TCaption; AByCode: Boolean);
     // Text measurement helper (protected so headless access subclasses can call it)
     function TextStartX(APPI: Integer): Integer;
     // Trailing-widget hook: a subclass reserves RightReserve device-px at the RIGHT of the
@@ -142,8 +164,13 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     procedure InjectKey(const AChar: TUTF8Char);
-    procedure InjectBackspace;
-    procedure InjectDelete;
+    { VIRTUAL, and it matters: these are the erase counterparts of InjectKey, and unlike it
+      they splice FText directly instead of passing through FilterInsert -- so a descendant
+      that rewrites the whole string (TTyMaskEdit) had no seam here and these two removed a
+      raw character from its display, mask literals and placeholders included. Same hole the
+      paste path had before FilterInsert existed; found by a guard, not by a user. }
+    procedure InjectBackspace; virtual;
+    procedure InjectDelete; virtual;
     // Selection API
     function HasSelection: Boolean;
     procedure SelectAll;
@@ -176,6 +203,18 @@ type
     procedure Redo;
     function CanUndo: Boolean;
     function CanRedo: Boolean;
+    { Multicast OnChange, LCL's stdctrls.pp:853-855. The single OnChange property belongs to
+      the application; a validator, a dirty-tracker or a live preview living inside the
+      library (or a framework layer above it) has to be able to observe the same edit without
+      taking that slot away, and two such observers have to be able to coexist. }
+    procedure AddHandlerOnChange(const AnOnChangeEvent: TNotifyEvent; AsFirst: Boolean = False);
+    procedure RemoveHandlerOnChange(const AnOnChangeEvent: TNotifyEvent);
+    procedure RemoveAllHandlersOfObject(AnObject: TObject); override;
+    { Caret index in CODEPOINTS. LCL's TCustomEdit.CaretPos is a TPoint because the same
+      class also backs a memo; a single-line edit has no second axis, so this deliberately
+      differs -- and differs LOUDLY, since Integer and TPoint share no assignment. (The same
+      call was made on the sibling TTySpinEdit; the two now read alike.) The line/column form
+      that a multi-line control really needs lives on TTyMemo as CaretLine / CaretCol. }
     property CaretPos: Integer read FCaret write SetCaretPos;
     // Scroll offset (device px, >= 0) — read-only for tests
     property ScrollX: Integer read FScrollX;
@@ -187,11 +226,43 @@ type
     property SelStart: Integer read GetSelStart write SetSelStart;
     property SelLength: Integer read GetSelLength write SetSelLength;
     property SelText: string read GetSelText write SetSelText;
+    { Dirty flag, LCL's TCustomEdit.Modified (stdctrls.pp:867). True once the USER has changed
+      the text -- typed, deleted, pasted, cut, undone; False again after a programmatic
+      `Text := ...`. That split is the whole point and is the one thing an application cannot
+      rebuild from OnChange, because OnChange fires for both. Host code drives enable-Save and
+      prompt-on-close off it. Not published: it is run-time state, not a design value. }
+    property Modified: Boolean read FModified write FModified;
+    { LCL's latch (stdctrls.pp:839): set once AutoSelect has fired for this focus visit so the
+      first click inside an already-focused edit does not re-select. Cleared on focus loss. }
+    property AutoSelected: Boolean read FAutoSelected write FAutoSelected;
   published
     property Text: TCaption read FText write SetText;
     property ReadOnly: Boolean read FReadOnly write SetReadOnly default False;
     property MaxLength: Integer read FMaxLength write SetMaxLength default 0;
+    { The masking character, as a UTF-8 STRING rather than LCL's Char (stdctrls.pp:870) --
+      deliberately wider, because the character people actually want is '●' (U+25CF), which
+      does not fit in a Char. '' turns masking off.
+
+      #0 is accepted and means '' , because LCL's "off" value IS #0 and `Ed.PasswordChar := #0`
+      compiles here (Char converts to string). It used to build a one-character string holding
+      NUL, so the field went on masking -- with a glyph nobody can see -- exactly when the
+      ported code was asking for plain text. Same for ' ' , which is LCL's emNone. }
     property PasswordChar: string read FPasswordChar write SetPasswordChar;
+    { How the text is echoed, LCL's TCustomEdit.EchoMode (stdctrls.pp:863). emNormal shows the
+      text, emPassword masks it, emNone shows NOTHING at all -- and emNone had no equivalent
+      here at any spelling. Coupled to PasswordChar in both directions exactly as LCL couples
+      them (include/customedit.inc:374-387 and 408-424), so setting either keeps the other
+      truthful and a form can be written against whichever one it already uses. }
+    property EchoMode: TEchoMode read FEchoMode write SetEchoMode default emNormal;
+    { When True (the default, as on TEdit -- stdctrls.pp:865) the selection band is not painted
+      while the control is unfocused; the selection itself survives. Without it a form with
+      three edits paints three "active-looking" selections at once. TTyMemo has had this since
+      it shipped; only the Edit was missing it. }
+    property HideSelection: Boolean read FHideSelection write SetHideSelection default True;
+    { Select the whole text when the control gains focus from the KEYBOARD (Tab/Enter), and on
+      the first left click of that focus visit -- LCL's TEdit default (stdctrls.pp:838), and
+      what makes "tab in, type the new value" work without an OnEnter handler on every edit. }
+    property AutoSelect: Boolean read FAutoSelect write FAutoSelect default True;
     property TextHint: TCaption read FTextHint write SetTextHint;
     property Alignment: TAlignment read FAlignment write SetAlignment default taLeftJustify;
     property CharCase: TEditCharCase read FCharCase write SetCharCase default ecNormal;
@@ -230,6 +301,16 @@ begin
   FCaretVisible := True;       // solid caret until a real timer toggles it
   FBlinkTimer := nil;          // lazy: created only when HandleAllocated
   FBlinkElapsedMs := 0;
+  FEchoMode := emNormal;
+  FHideSelection := True;      // TEdit default: no selection band while unfocused
+  FAutoSelect := True;         // TEdit default: tab in and the value is selected
+  FAutoSelected := False;
+  FModified := False;
+  { Announce what this is to assistive technology. A self-drawn control has NO native peer for
+    a screen reader to fall back on, so without this the whole text-input family reads as an
+    unidentified custom control. LCL does the same one line in TCustomEdit.Create
+    (include/customedit.inc:87). }
+  AccessibleRole := larTextEditorSingleline;
 end;
 
 destructor TTyEdit.Destroy;
@@ -240,7 +321,32 @@ begin
   TyQtUninstallIme(FImeHook);   // in case DestroyWnd never ran (Qt-only; no-op elsewhere)
   FUndoStack.Free;
   FMeasureBmp.Free;
+  FreeAndNil(FOnChangeHandlers);
   inherited Destroy;
+end;
+
+// ---- Multicast OnChange (LCL customedit.inc:91-97) ----
+
+procedure TTyEdit.AddHandlerOnChange(const AnOnChangeEvent: TNotifyEvent;
+  AsFirst: Boolean = False);
+begin
+  if FOnChangeHandlers = nil then FOnChangeHandlers := TMethodList.Create;
+  FOnChangeHandlers.Add(TMethod(AnOnChangeEvent), not AsFirst);
+end;
+
+procedure TTyEdit.RemoveHandlerOnChange(const AnOnChangeEvent: TNotifyEvent);
+begin
+  if FOnChangeHandlers <> nil then
+    FOnChangeHandlers.Remove(TMethod(AnOnChangeEvent));
+end;
+
+procedure TTyEdit.RemoveAllHandlersOfObject(AnObject: TObject);
+begin
+  inherited RemoveAllHandlersOfObject(AnObject);
+  { An observer that is being freed must not stay in the list -- otherwise the next edit
+    calls a method on a dead object. LCL overrides this for the same reason. }
+  if FOnChangeHandlers <> nil then
+    FOnChangeHandlers.RemoveAllMethodsOfObject(AnObject);
 end;
 
 // ---- Blinking caret (Task 10) ----
@@ -272,6 +378,14 @@ end;
 procedure TTyEdit.DoEnter;
 begin
   inherited DoEnter;
+  { AutoSelect on KEYBOARD focus only -- csLButtonDown is LCL's own test for "this focus came
+    from a click" (include/customedit.inc:634), and a click has to be allowed to place the
+    caret where it landed. The click case is handled once, in MouseUp. }
+  if FAutoSelect and not (csLButtonDown in ControlState) then
+  begin
+    SelectAll;
+    if SelText = FText then FAutoSelected := True;
+  end;
   ResetCaretBlink;
   if HandleAllocated then
   begin
@@ -285,6 +399,7 @@ end;
 procedure TTyEdit.DoExit;
 begin
   inherited DoExit;
+  FAutoSelected := False;   // the next focus visit gets its own auto-select (LCL does this too)
   TyGtkImeSetFocus(FImeHook, False);   // GTK2: stop our IM context composing (no-op elsewhere)
   if FBlinkTimer <> nil then FBlinkTimer.Enabled := False;
   FCaretVisible := True;
@@ -306,8 +421,15 @@ begin
   // end. (FSuspendUndo gates undo-pushes for the same composite ops; OnChange
   // reuses the same "inside a composite" signal so it fires exactly once.)
   if FSuspendUndo then Exit;
+  { Dirty-flag bookkeeping sits HERE, at the one point every completed edit passes through, and
+    reads the by-code flag exactly as LCL's Change does (include/customedit.inc:613-616). Inside
+    a composite op the inner mutators exit above, so a paste-over-selection dirties once. }
+  if not FTextChangeByCode then
+    FModified := True;
   if Assigned(FOnChange) then
     FOnChange(Self);
+  if FOnChangeHandlers <> nil then
+    FOnChangeHandlers.CallNotifyEvents(Self);
 end;
 
 // ---- Undo/redo machinery ----
@@ -587,6 +709,11 @@ begin
 end;
 
 procedure TTyEdit.SetText(const AValue: TCaption);
+begin
+  SetTextInternal(AValue, True);   // the published writer is by definition programmatic
+end;
+
+procedure TTyEdit.SetTextInternal(const AValue: TCaption; AByCode: Boolean);
 var
   APPI: Integer;
 begin
@@ -601,7 +728,13 @@ begin
   ClampScrollX(APPI);
   EnsureCaretVisible(APPI);
   Invalidate;
-  DoChange;
+  FTextChangeByCode := AByCode;
+  try
+    DoChange;
+  finally
+    FTextChangeByCode := False;
+  end;
+  if AByCode then FModified := False;
 end;
 
 procedure TTyEdit.SetCaretPos(AValue: Integer);
@@ -634,12 +767,52 @@ begin
 end;
 
 procedure TTyEdit.SetPasswordChar(const AValue: string);
+var
+  V: string;
 begin
   if UTF8Length(AValue) > 1 then
-    FPasswordChar := UTF8Copy(AValue, 1, 1)
+    V := UTF8Copy(AValue, 1, 1)
   else
-    FPasswordChar := AValue;
+    V := AValue;
+  { LCL's off-switch is #0, and `PasswordChar := #0` reaches this setter as a one-character
+    string holding NUL. Treating it as a mask glyph is how a ported "stop masking" turned into
+    "mask with an invisible character" -- text on screen, none of it readable, nothing raised. }
+  if V = #0 then V := '';
+  if FPasswordChar = V then Exit;
+  FPasswordChar := V;
+  { The pair is kept in sync in both directions, as LCL does (customedit.inc:374-387): '' is
+    emNormal, ' ' is emNone (show nothing), anything else is emPassword. Assigning FEchoMode
+    directly rather than through the property so the two setters cannot recurse. }
+  if FPasswordChar = '' then
+    FEchoMode := emNormal
+  else if FPasswordChar = ' ' then
+    FEchoMode := emNone
+  else
+    FEchoMode := emPassword;
   InvalidateWidthCache;
+  Invalidate;
+end;
+
+procedure TTyEdit.SetEchoMode(const AValue: TEchoMode);
+begin
+  if FEchoMode = AValue then Exit;
+  FEchoMode := AValue;
+  { The other direction of the same coupling (customedit.inc:408-424). emPassword keeps an
+    already-chosen glyph and only supplies '*' when there is none. }
+  case FEchoMode of
+    emNormal: FPasswordChar := '';
+    emNone:   FPasswordChar := ' ';
+    emPassword:
+      if (FPasswordChar = '') or (FPasswordChar = ' ') then FPasswordChar := '*';
+  end;
+  InvalidateWidthCache;
+  Invalidate;
+end;
+
+procedure TTyEdit.SetHideSelection(const AValue: Boolean);
+begin
+  if FHideSelection = AValue then Exit;
+  FHideSelection := AValue;
   Invalidate;
 end;
 
@@ -1195,7 +1368,17 @@ procedure TTyEdit.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Intege
 begin
   inherited MouseUp(Button, Shift, X, Y);
   if Button = mbLeft then
+  begin
     FMouseSelecting := False;
+    { First left click of this focus visit selects everything (LCL customedit.inc:520-531).
+      On MouseUp, not MouseDown, so a click-and-DRAG keeps the range the user swept out --
+      selecting all on the press would throw that away before the drag even starts. }
+    if FAutoSelect and not FAutoSelected and not HasSelection then
+    begin
+      SelectAll;
+      if SelText = FText then FAutoSelected := True;
+    end;
+  end;
 end;
 
 procedure TTyEdit.InjectKey(const AChar: TUTF8Char);
@@ -1686,7 +1869,10 @@ begin
     AOff := AlignOffset(APPI);
 
     // 1. Selection band (drawn before text so glyphs appear on top)
-    if HasSelection then
+    { HideSelection (TEdit's default True): no band while unfocused -- the selection itself is
+      untouched, only its paint. Gated on the same Focused the caret below uses, so the two can
+      never disagree about which edit on the form is the live one. }
+    if HasSelection and (Focused or not FHideSelection) then
     begin
       // Band color comes from the TyTextSelection typeKey (accent-tinted via
       // --selection = alpha(accent,0.30)), keeping it theme-overridable and

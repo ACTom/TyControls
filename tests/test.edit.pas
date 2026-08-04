@@ -28,6 +28,10 @@ type
     // Task 10: blinking-caret field access (pure reset logic; no real timer)
     function CaretVisibleForTest: Boolean;
     procedure SetCaretVisibleForTest(b: Boolean);
+    { AutoSelect fires from DoEnter/DoExit, which real focus drives and headless tests have
+      none of -- so the probe calls them directly. }
+    procedure SimulateEnterForTest;
+    procedure SimulateExitForTest;
   end;
 
   // Subclass with in-memory clipboard for headless testing
@@ -47,6 +51,11 @@ type
   end;
 
   TEditTest = class(TTestCase)
+  private
+    FMultiA, FMultiB, FMultiOwn: Integer;
+    procedure CountA(Sender: TObject);
+    procedure CountB(Sender: TObject);
+    procedure CountOwn(Sender: TObject);
   published
     procedure TestTypeKey;
     procedure TestDefaultSize;
@@ -129,6 +138,12 @@ type
     procedure TestTextHintHiddenWhenNonEmpty;
     // Batch4 Task4: selection band + hint via TyTextSelection/TyTextHint tokens
     procedure TestSelectionBandUsesTextSelectionToken;
+    // Parity round 3: HideSelection / Modified / EchoMode / AutoSelect / multicast OnChange
+    procedure TestHideSelectionGatesTheBandOnFocus;
+    procedure TestModifiedTellsUserEditsFromProgrammaticOnes;
+    procedure TestEchoModeAndPasswordCharStayInSync;
+    procedure TestAutoSelectOnKeyboardFocus;
+    procedure TestMulticastOnChange;
     procedure TestTextHintUsesMutedToken;
     // Task 10: blinking caret reset-on-activity
     procedure TestEditActivityResetsCaretVisible;
@@ -213,6 +228,16 @@ begin
   Result := FCaretVisible;
 end;
 
+procedure TTyEditAccess.SimulateEnterForTest;
+begin
+  DoEnter;
+end;
+
+procedure TTyEditAccess.SimulateExitForTest;
+begin
+  DoExit;
+end;
+
 procedure TTyEditAccess.SetCaretVisibleForTest(b: Boolean);
 begin
   FCaretVisible := b;
@@ -229,6 +254,15 @@ procedure TTyEditClipboardAccess.WriteClipboardText(const S: string);
 begin
   FClipText := S;
 end;
+
+procedure TEditTest.CountA(Sender: TObject);
+begin Inc(FMultiA); end;
+
+procedure TEditTest.CountB(Sender: TObject);
+begin Inc(FMultiB); end;
+
+procedure TEditTest.CountOwn(Sender: TObject);
+begin Inc(FMultiOwn); end;
 
 procedure TEditTest.TestTypeKey;
 var
@@ -982,6 +1016,10 @@ begin
     E.Controller := Ctl;
     E.Text := 'aaaa';
     E.SelectAll;  // has selection
+    { HideSelection defaults True (as on TEdit) and a headlessly-rendered control is never
+      Focused, so the band would be correctly suppressed. This test is about the band's
+      GEOMETRY, not about focus -- TestHideSelectionGatesTheBandOnFocus covers that. }
+    E.HideSelection := False;
 
     Bmp.PixelFormat := pf32bit;
     Bmp.SetSize(200, 28);
@@ -1951,6 +1989,176 @@ end;
 
 // ---- Batch4 Task4: selection band + hint resolve theme tokens ----
 
+procedure TEditTest.TestHideSelectionGatesTheBandOnFocus;
+{ HideSelection is TCustomEdit's (stdctrls.pp:865, default True) and TTyMemo has honoured it
+  since it shipped; the Edit painted its band on `if HasSelection` alone, with no focus test.
+  A form with three edits therefore showed three "active-looking" selections at once. The
+  selection itself is untouched -- only its paint. }
+var
+  Ctl: TTyStyleController;
+  E: TTyEditAccess;
+  Form: TForm;
+  Bmp: TBitmap;
+
+  function BandPainted: Boolean;
+  var Reread: TBGRABitmap; Px: TBGRAPixel; X: Integer;
+  begin
+    Result := False;
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(0, 0, 200, 28);
+    E.RenderTo(Bmp.Canvas, Rect(0, 0, 200, 28), 96);
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      for X := 5 to 195 do
+      begin
+        Px := Reread.GetPixel(X, 14);
+        if Px.blue > Px.red then Exit(True);
+      end;
+    finally
+      Reread.Free;
+    end;
+  end;
+
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Form := TForm.CreateNew(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss('TyEdit { background: #FFFFFF; color: #000000; padding: 4px; }');
+    E := TTyEditAccess.Create(Form);
+    E.Parent := Form;
+    E.Controller := Ctl;
+    E.Text := 'aaaa';
+    E.SelectAll;
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(200, 28);
+
+    AssertTrue('HideSelection is on by default, like TEdit''s', E.HideSelection);
+    AssertFalse('an unfocused edit paints no selection band', BandPainted);
+    AssertEquals('but the selection itself is untouched', 4, E.SelLength);
+
+    E.HideSelection := False;
+    AssertTrue('opting out paints it again', BandPainted);
+  finally
+    Bmp.Free;
+    Form.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TEditTest.TestModifiedTellsUserEditsFromProgrammaticOnes;
+{ The whole content of LCL's Modified (stdctrls.pp:867) is this distinction, and it is the one
+  thing a hand-rolled OnChange dirty-tracker cannot rebuild -- OnChange fires for both. }
+var E: TTyEditAccess;
+begin
+  E := TTyEditAccess.Create(nil);
+  try
+    AssertFalse('a fresh edit is clean', E.Modified);
+    E.Text := 'loaded from the record';
+    AssertFalse('a programmatic write is not the user editing', E.Modified);
+    E.InjectKey('x');
+    AssertTrue('a keystroke dirties it', E.Modified);
+    E.Text := 'reloaded';
+    AssertFalse('and another programmatic write cleans it again', E.Modified);
+    E.InjectBackspace;
+    AssertTrue('so does a deletion', E.Modified);
+    E.Modified := False;
+    E.SelectAll;
+    E.InjectKey('q');
+    AssertTrue('typing over a selection is one dirtying edit', E.Modified);
+  finally E.Free; end;
+end;
+
+procedure TEditTest.TestEchoModeAndPasswordCharStayInSync;
+{ Two halves. LCL keeps EchoMode and PasswordChar coupled in both directions
+  (customedit.inc:374-387 / 408-424) -- and `PasswordChar := #0`, which is how ported code
+  turns masking OFF, used to build a one-character string holding NUL here, so the field went
+  on masking with a glyph nobody can see. }
+var E: TTyEditAccess;
+begin
+  E := TTyEditAccess.Create(nil);
+  try
+    E.Text := 'secret';
+    AssertEquals('default is plain echo', Ord(emNormal), Ord(E.EchoMode));
+    AssertEquals('and no mask char', '', E.PasswordChar);
+
+    E.PasswordChar := '*';
+    AssertEquals('setting the char selects the mode', Ord(emPassword), Ord(E.EchoMode));
+    AssertEquals('and the display is masked', '******', E.DisplayTextForTest);
+
+    E.PasswordChar := #0;
+    { Asserted by LENGTH, not by comparing the strings: when this guard fails the offending
+      value IS a NUL, and fpcunit puts the actual value into the XML report -- a raw #0 there
+      makes the writer raise EConvertError and take the whole run down with it, so the one
+      failure would hide every suite after it. }
+    AssertEquals('#0 is LCL''s off switch, not a masking glyph', 0, Length(E.PasswordChar));
+    AssertEquals('so the mode goes back to normal', Ord(emNormal), Ord(E.EchoMode));
+    AssertEquals('and the text is readable again', 'secret', E.DisplayTextForTest);
+
+    E.EchoMode := emPassword;
+    AssertEquals('emPassword supplies a glyph when there is none', '*', E.PasswordChar);
+    E.EchoMode := emNone;
+    AssertEquals('emNone shows nothing at all', '      ', E.DisplayTextForTest);
+    E.EchoMode := emNormal;
+    AssertEquals('and back', 'secret', E.DisplayTextForTest);
+    AssertEquals('the char follows the mode too', '', E.PasswordChar);
+  finally E.Free; end;
+end;
+
+procedure TEditTest.TestAutoSelectOnKeyboardFocus;
+{ TEdit's AutoSelect default is True (stdctrls.pp:838): tab into a field and the value is
+  selected, so typing replaces it. Without it every edit on every ported form needed an
+  OnEnter handler calling SelectAll. DoEnter is the keyboard path; a CLICK must not select,
+  or click-to-place-the-caret stops working -- LCL tells them apart with csLButtonDown. }
+var E: TTyEditAccess;
+begin
+  E := TTyEditAccess.Create(nil);
+  try
+    E.Text := '1280';
+    AssertTrue('on by default', E.AutoSelect);
+    AssertEquals('nothing selected yet', 0, E.SelLength);
+
+    E.SimulateEnterForTest;
+    AssertEquals('keyboard focus selects the whole value', 4, E.SelLength);
+    AssertTrue('and latches so a click inside does not re-select', E.AutoSelected);
+
+    E.SimulateExitForTest;
+    AssertFalse('the latch is per focus visit', E.AutoSelected);
+
+    E.AutoSelect := False;
+    E.CollapseSelection;
+    E.SimulateEnterForTest;
+    AssertEquals('opting out leaves the caret alone', 0, E.SelLength);
+  finally E.Free; end;
+end;
+
+procedure TEditTest.TestMulticastOnChange;
+{ The single OnChange belongs to the application. An observer inside the library -- a
+  validator, a dirty tracker, a live preview -- must be able to watch the same edit without
+  taking it, and two of them must be able to coexist (stdctrls.pp:853-855). }
+var E: TTyEditAccess;
+begin
+  E := TTyEditAccess.Create(nil);
+  try
+    FMultiA := 0;
+    FMultiB := 0;
+    FMultiOwn := 0;
+    E.OnChange := @CountOwn;
+    E.AddHandlerOnChange(@CountA);
+    E.AddHandlerOnChange(@CountB);
+    E.InjectKey('x');
+    AssertEquals('the application''s own slot still fires', 1, FMultiOwn);
+    AssertEquals('and so does the first observer', 1, FMultiA);
+    AssertEquals('and the second, alongside it', 1, FMultiB);
+
+    E.RemoveHandlerOnChange(@CountA);
+    E.InjectKey('y');
+    AssertEquals('removed observers stop', 1, FMultiA);
+    AssertEquals('the other one carries on', 2, FMultiB);
+    AssertEquals('and so does OnChange', 2, FMultiOwn);
+  finally E.Free; end;
+end;
+
 procedure TEditTest.TestSelectionBandUsesTextSelectionToken;
 { The selection band must derive its color from the TyTextSelection typeKey
   (background: alpha(accent,0.30)) instead of the old $59-over-focus-border
@@ -1987,6 +2195,7 @@ begin
     E.Controller := Ctl;
     E.Text := 'aaaa';
     E.SelectAll;
+    E.HideSelection := False;   // see TestSelectionBandRendered: this test is about COLOUR
 
     // Expected band color from the SAME model, composited over white.
     SelStyle := Ctl.Model.ResolveStyle('TyTextSelection', '', []);

@@ -30,7 +30,7 @@ type
   published
     procedure TextAssignmentGoesThroughTheMask;
     procedure TextAssignmentRebuildsTheLiterals;
-    procedure TextAssignmentTruncatesTheOverflow;
+    procedure TextAssignmentTruncatesTheOverflowAndPadsTheShortfall;
     procedure TextAssignmentIsIdempotent;
     procedure IsCompleteAnswersAboutAStringTheMaskApproved;
     procedure StreamedTextSurvivesAndConforms;
@@ -95,7 +95,8 @@ begin
   try
     M.Mask := '###-###';
     M.Text := 'hello world';
-    AssertEquals('nothing the mask rejects may land', '', M.Text);
+    AssertEquals('nothing the mask rejects may land', '', M.MaskedValue);
+    AssertEquals('and the box shows the empty skeleton', '___-___', M.Text);
     AssertFalse('and it is certainly not complete', M.IsComplete);
 
     { Same rule as paste: keep what fits, drop the rest, in order. }
@@ -119,17 +120,18 @@ begin
     M.Text := '2026/07/30';               { slashes where the mask wants dashes }
     AssertEquals('rebuilt with the mask''s own literals', '2026-07-30', M.Text);
     AssertEquals('and it reads back', '20260730',
-      TyMaskExtract('####-##-##', M.Text));
+      TyMaskExtract('####-##-##', M.Text, M.SpaceChar));
     AssertTrue('complete', M.IsComplete);
   finally
     M.Free;
   end;
 end;
 
-{ LCL truncates an over-long value (maskedit.pp ApplyMaskToText); so do we. What we do
-  NOT do is LCL's other half, padding a short value out with blank chars -- this control
-  has no blank char, and IsComplete is defined by how many slots are filled. }
-procedure TMaskParityTest.TextAssignmentTruncatesTheOverflow;
+{ LCL truncates an over-long value (maskedit.pp ApplyMaskToText) and pads a short one out
+  with blank chars; we now do both. (This test used to be named ...TruncatesTheOverflow and
+  asserted that a short value 'stays short -- no blank padding', which was the missing
+  skeleton written down as if it were a decision.) }
+procedure TMaskParityTest.TextAssignmentTruncatesTheOverflowAndPadsTheShortfall;
 var
   M: TTyMaskEdit;
 begin
@@ -140,8 +142,14 @@ begin
     AssertEquals('everything past the last slot is dropped', '123', M.Text);
 
     M.Text := '7';
-    AssertEquals('a short value stays short -- no blank padding', '7', M.Text);
+    AssertEquals('a short value is padded out to the mask', '7__', M.Text);
+    AssertEquals('and the value behind it is just what was set', '7', M.MaskedValue);
     AssertFalse('and says so', M.IsComplete);
+
+    { SpaceChar := #0 is the documented way back to the short form. }
+    M.SpaceChar := #0;
+    AssertEquals('no placeholder, no padding', '7', M.Text);
+    AssertFalse('still incomplete either way', M.IsComplete);
   finally
     M.Free;
   end;
@@ -182,7 +190,8 @@ begin
     M.Text := 'abc-def';
     AssertFalse('six letters are not a filled digit mask', M.IsComplete);
     AssertEquals('and there is nothing to read back', '',
-      TyMaskExtract('###-###', M.Text));
+      TyMaskExtract('###-###', M.Text, M.SpaceChar));
+    AssertEquals('nor through the control', '', M.MaskedValue);
   finally
     M.Free;
   end;
@@ -284,7 +293,7 @@ begin
     M.Text := 'ab123';
     AssertEquals('letters then digits, separator rebuilt', 'ab-123', M.Text);
     AssertTrue('complete', M.IsComplete);
-    AssertEquals('reads back', 'ab123', TyMaskExtract('LL-###', M.Text));
+    AssertEquals('reads back', 'ab123', TyMaskExtract('LL-###', M.Text, M.SpaceChar));
   finally
     M.Free;
   end;

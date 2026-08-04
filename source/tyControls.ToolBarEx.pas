@@ -173,7 +173,7 @@ end;
 
 procedure TTyToolBarEx.AlignControls(AControl: TControl; var ARect: TRect);
 var
-  i, n, visCount, x, chevW: Integer;
+  i, n, visCount, x, chevW, padY: Integer;
   list: array of TControl;
   widths: array of Integer;
   ctl: TControl;
@@ -249,13 +249,17 @@ begin
 
     // Place the lead (fitting) buttons; hide + record the overflow set.
     ClearOverflow;
+    { Indent is the LEADING gap, ContentPadY the vertical one -- the base stopped conflating
+      the two and this override has to stop too, or a bar with a non-default Indent would sit
+      its tools at one height here and another there. }
+    padY := ContentPadY;
     x := Indent;
     for i := 0 to n - 1 do
     begin
       list[i].Align := alNone;
       if i < visCount then
       begin
-        list[i].SetBounds(x, Indent, list[i].Width, ButtonHeight);
+        list[i].SetBounds(x, padY, list[i].Width, ButtonHeight);
         list[i].Visible := True;
         Inc(x, list[i].Width + ButtonSpacing);
       end
@@ -270,7 +274,7 @@ begin
     if visCount < n then
     begin
       EnsureMoreButton;
-      FMoreBtn.SetBounds(ClientWidth - chevW - Indent, Indent, chevW, ButtonHeight);
+      FMoreBtn.SetBounds(ClientWidth - chevW - Indent, padY, chevW, ButtonHeight);
       FMoreBtn.Visible := True;
       FMoreBtn.BringToFront;
     end

@@ -2,7 +2,8 @@ unit test.radiogroup;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Graphics, Forms, Controls, fpcunit, testregistry,
+  Classes, SysUtils, Types, Graphics, Forms, Controls, ExtCtrls, LCLType,
+  fpcunit, testregistry,
   tyControls.Base, tyControls.Controller, tyControls.CheckBox, tyControls.RadioGroup;
 type
   TRadioGroupTest = class(TTestCase)
@@ -22,7 +23,8 @@ type
     procedure TestDefaultColumns;
     // pure layout math
     procedure TestCellRectSingleColumnStacks;
-    procedure TestCellRectColumnMajorOrder;
+    procedure TestCellRectRowMajorIsTheDefaultOrder;
+    procedure TestCellRectColumnMajorIsOptIn;
     procedure TestCellRectTwoColumnsSplitWidth;
     procedure TestCellRectLastColumnAbsorbsRemainder;
     procedure TestCellRectDegenerate;
@@ -147,40 +149,62 @@ begin
   AssertEquals('row height = 22', 22, c0.Bottom - c0.Top);
 end;
 
-procedure TRadioGroupTest.TestCellRectColumnMajorOrder;
+{ RENAMED. This used to be TestCellRectColumnMajorOrder and it asserted, by name, the very
+  thing that was wrong: the grid filled DOWN column 0 first while the same .lfm loaded in
+  Lazarus filled ACROSS row 0 first, so a ported multi-column group silently reordered the
+  user's options and nothing anywhere said so. The default is now LCL's. }
+procedure TRadioGroupTest.TestCellRectRowMajorIsTheDefaultOrder;
 var
   client: TRect;
   c0, c1, c2, c3: TRect;
 begin
-  // 4 items, 2 columns => rows = 2. Column-major: index 0,1 in col0 (rows 0,1),
-  // index 2,3 in col1 (rows 0,1).
+  // 4 items, 2 columns => 2 rows. Row-major: index 0,1 across row 0; index 2,3 across row 1.
   client := Rect(0, 0, 200, 120);
   c0 := TyRadioGroupCellRect(client, 4, 2, 0);
   c1 := TyRadioGroupCellRect(client, 4, 2, 1);
   c2 := TyRadioGroupCellRect(client, 4, 2, 2);
   c3 := TyRadioGroupCellRect(client, 4, 2, 3);
-  // 0 and 1 share the left column (same Left), 2 and 3 the right column.
+  // 0 and 1 share the TOP row; 2 and 3 the second one.
+  AssertEquals('idx0 and idx1 on the same row', c0.Top, c1.Top);
+  AssertEquals('idx2 and idx3 on the same row', c2.Top, c3.Top);
+  AssertTrue('the second row is lower', c2.Top > c0.Top);
+  // 1 is to the RIGHT of 0 (row-major fills across first)
+  AssertTrue('idx1 right of idx0 on the same row', c1.Left > c0.Left);
+  // 0 and 2 head their rows -> same Left
+  AssertEquals('idx0 and idx2 start the same column', c0.Left, c2.Left);
+end;
+
+{ The opt-out. Column-major is still reachable, it is simply no longer the silent default. }
+procedure TRadioGroupTest.TestCellRectColumnMajorIsOptIn;
+var
+  client: TRect;
+  c0, c1, c2, c3: TRect;
+begin
+  client := Rect(0, 0, 200, 120);
+  c0 := TyRadioGroupCellRect(client, 4, 2, 0, 0, clVerticalThenHorizontal);
+  c1 := TyRadioGroupCellRect(client, 4, 2, 1, 0, clVerticalThenHorizontal);
+  c2 := TyRadioGroupCellRect(client, 4, 2, 2, 0, clVerticalThenHorizontal);
+  c3 := TyRadioGroupCellRect(client, 4, 2, 3, 0, clVerticalThenHorizontal);
   AssertEquals('idx0 left col', c0.Left, c1.Left);
   AssertEquals('idx2 right col', c2.Left, c3.Left);
   AssertTrue('right column is further right', c2.Left > c0.Left);
-  // 0 above 1 (column-major fills down first)
   AssertTrue('idx1 below idx0 in same column', c1.Top > c0.Top);
-  // 0 and 2 are the top row of their columns -> same Top
   AssertEquals('idx0 and idx2 same row', c0.Top, c2.Top);
 end;
 
 procedure TRadioGroupTest.TestCellRectTwoColumnsSplitWidth;
 var
   client: TRect;
-  c0, c2: TRect;
+  c0, c1: TRect;
 begin
   client := Rect(0, 0, 200, 120);
+  // Row-major: the SECOND column is index 1, not index 2.
   c0 := TyRadioGroupCellRect(client, 4, 2, 0);   // col 0
-  c2 := TyRadioGroupCellRect(client, 4, 2, 2);   // col 1
+  c1 := TyRadioGroupCellRect(client, 4, 2, 1);   // col 1
   AssertEquals('col0 left', 0, c0.Left);
   AssertEquals('col0 right = half', 100, c0.Right);
-  AssertEquals('col1 left = half', 100, c2.Left);
-  AssertEquals('col1 right = full', 200, c2.Right);
+  AssertEquals('col1 left = half', 100, c1.Left);
+  AssertEquals('col1 right = full', 200, c1.Right);
 end;
 
 procedure TRadioGroupTest.TestCellRectLastColumnAbsorbsRemainder;
@@ -210,18 +234,21 @@ begin
   AssertTrue('zero-area client -> empty', IsRectEmpty(TyRadioGroupCellRect(Rect(0,0,0,0), 3, 1, 0)));
 end;
 
+{ Row count is ceil(Count/Columns) in BOTH fill orders — that is what makes the two orders a
+  permutation of the same grid rather than two different grids. Asserted on the column-major
+  order, where the row count is what decides when a column wraps. }
 procedure TRadioGroupTest.TestCellRectRowsCeil;
 var
   client: TRect;
   c0, c1, c2, c3, c4: TRect;
 begin
-  // 5 items, 2 columns => rows = ceil(5/2) = 3. col0: 0,1,2 ; col1: 3,4.
+  // 5 items, 2 columns => rows = ceil(5/2) = 3. Column-major: col0 gets 0,1,2 ; col1 gets 3,4.
   client := Rect(0, 0, 200, 200);
-  c0 := TyRadioGroupCellRect(client, 5, 2, 0);
-  c1 := TyRadioGroupCellRect(client, 5, 2, 1);
-  c2 := TyRadioGroupCellRect(client, 5, 2, 2);
-  c3 := TyRadioGroupCellRect(client, 5, 2, 3);
-  c4 := TyRadioGroupCellRect(client, 5, 2, 4);
+  c0 := TyRadioGroupCellRect(client, 5, 2, 0, 0, clVerticalThenHorizontal);
+  c1 := TyRadioGroupCellRect(client, 5, 2, 1, 0, clVerticalThenHorizontal);
+  c2 := TyRadioGroupCellRect(client, 5, 2, 2, 0, clVerticalThenHorizontal);
+  c3 := TyRadioGroupCellRect(client, 5, 2, 3, 0, clVerticalThenHorizontal);
+  c4 := TyRadioGroupCellRect(client, 5, 2, 4, 0, clVerticalThenHorizontal);
   // col0 holds 3 rows
   AssertEquals('c0,c1 same col', c0.Left, c1.Left);
   AssertEquals('c1,c2 same col', c1.Left, c2.Left);
@@ -230,6 +257,13 @@ begin
   // c3 aligns to the top row of col1 (same Top as c0)
   AssertEquals('c3 top-row aligns with c0', c0.Top, c3.Top);
   AssertTrue('c4 below c3', c4.Top > c3.Top);
+  { The row-major default lays the SAME 5 items on the same 3 rows, just walked the other
+    way: 0 1 / 2 3 / 4. Asserting the row count from both sides is what stops a future edit
+    from "fixing" one order into a different grid shape. }
+  AssertEquals('row-major puts idx2 on row 1',
+    TyRadioGroupCellRect(client, 5, 2, 2).Top, c1.Top);
+  AssertEquals('row-major puts idx4 on row 2',
+    TyRadioGroupCellRect(client, 5, 2, 4).Top, c2.Top);
 end;
 
 { ---- Items -> child count ------------------------------------------------ }

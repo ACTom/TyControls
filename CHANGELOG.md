@@ -107,6 +107,29 @@
   以前它们只是收起选区、保留文字,而 LCL 和 Delphi 的同名方法一直是删除。同一个名字两个相反
   语义,而且**静默的那个方向更危险**:从 Lazarus 移植来的代码调它删除用户选中的内容,文字留着,
   什么提示都没有。旧行为保留为 **`CollapseSelection`**。
+- **`TTyValueListEditor.VisibleRowCount` 改成"视口里装得下几行"。** 从前它答的是"展开着几行",
+  那个含义现在叫 **`DisplayRowCount`**。两者都是 `Integer`、都是 public,所以从 Lazarus 移植来的
+  翻页算式编译得过、算出来的却是垃圾:500 行展开着就一次翻 500 行。这与数据网格上那个同名撞车
+  是同一处伤,当时没落到这个类上,因为这个控件是列表框不是网格。
+- **掩码框空着的时候现在显示 `__/__/____`。** 从前空的掩码框就是一个**什么都没有的空盒子**,
+  打了一半显示 `12` —— 屏幕上没有任何东西告诉用户这个字段要八位数字、分隔符在哪、还差多少。
+  占位符由新的 `SpaceChar` 决定(默认 `'_'`,与 Delphi/Lazarus 相同),光标落在下一个待填槽上。
+  **注意 `Text` 是显示串**,所以没动过的字段读出来是 `'__/__/____'` 而不是 `''` —— 要值请读新的
+  `MaskedValue`。写 `SpaceChar := #0` 可退回旧显示。
+- **掩码框离开焦点时会检查有没有填完。** 半截的 `'12/__/____'` 从前**悄无声息地**进到业务代码,
+  除非每个调用点都记得轮询 `IsComplete`。现在失焦时自动校验一次,没填满抛 `ETyMaskError`;
+  也可以在 OK 按钮里主动调新增的 `ValidateEdit`。只在**用户本次真的改过**这个字段时才查,
+  且 `OnExit` 先跑 —— 让处理器有机会先补齐。允许半截值的表单请把该字段的 `Mask` 设为 `''`,
+  或重写 `ValidateEdit`。
+- **`TTyValueListEditor.InsertRow` 换成 LCL 的签名**,返回新行下标、带 `Append` 参数
+  (默认 `True`,已有的两参数写法照旧可用)。同时补上"插到某个位置"——这个类从前**根本没有**,
+  想按顺序建表只能整体重建。`RowCount` 也从只读函数变成可读写属性,`RowCount := 0` 能编译了。
+- **失焦的 `TTyEdit` 不再画选区高亮**(`HideSelection`,默认 `True`,与 `TEdit` 一致)。
+  从前一张窗体上三个输入框会同时显示三段"像是活动的"选区。选区本身保留,只是不画。
+- **Tab 进 `TTyEdit` 会全选内容了**(`AutoSelect`,默认 `True`,与 `TEdit` 一致),于是"Tab 进去
+  直接打新值"这套录入流程不用再在每个输入框的 `OnEnter` 里手写 `SelectAll`。鼠标点击定位光标不受影响。
+- **`TTyEdit.PasswordChar := #0` 现在是"关掉掩码"。** 从前它得到一个装着 NUL 的字符串 ——
+  于是该显示明文的时候仍在打码,打的还是一个谁也看不见的字形。
 - **`TTyShellListView.Refresh` 改名为 `UpdateView`。** `Refresh` 在整个 LCL 和本库都是"立刻重画",
   这里却被改成了重新读盘 —— 于是它是唯一一个"顺手重画一下"会打到文件系统的控件,而真想重画的人
   没有办法要。
@@ -244,6 +267,56 @@
   `(Canvas, X, Y, Index, Enabled)` —— 注意最后一个是 **Enabled**,不是 Ghosted,含义相反。
   带尺寸的那个形式改叫 `DrawIndex`。**刻意不保留 4 个 Integer 参数的重载**:
   让旧调用点编译失败,好过让它编译通过而把坐标和下标对调。
+- **`TTyScrollBox.ScrollBy` 现在滚动的是视图。** `TScrollingWinControl` **重写**了它做这件事,
+  我们没有 —— 于是移植过来的 `Box.ScrollBy(0,-50)` 落到了 `TWinControl` 的**搬子控件**版本上:
+  同名、同参数个数、同类型,零编译错误。它把所有子控件(**连两个滚动条一起**)整体位移,
+  而滚动偏移字段纹丝不动;下一次量程刷新把移位后的子控件量成更小的范围,滚动条和滑块一起坏掉。
+  搬子控件那个语义仍在,走 `inherited ScrollBy`。
+- **`TTyToolBar.Indent` 只管横向了,纵向内距是新的 `ContentPadY`。** LCL 的 `Indent` 是第一个
+  工具前面的横向间隙;我们的**同时**是顶部内距,而且工具条高度算成 `Indent*2 + 行高`。
+  于是 `Indent := 24` —— 一个再普通不过的 LCL 值,用来让开一个 logo —— 会让工具条**凭空高 48px**、
+  所有工具往下挪 24px。`ContentPadY` 默认 4(= 原来的默认值),所以**没设过 `Indent` 的工具条
+  一个像素都不变**;设过的会拿回 4px 的纵向内距。
+- **`TTyCheckGroup` / `TTyRadioGroup` 的多列排布默认改为行优先**(新属性 `ColumnLayout`,
+  默认 `clHorizontalThenVertical` = LCL 的默认)。以前硬写成列优先,于是一个 6 项 2 列的分组
+  在 Lazarus 里读作 `1 2 / 3 4 / 5 6`,在这里读作 **`1 4 / 2 5 / 3 6`** —— 用户的选项列表被静默重排。
+  要旧排布写 `ColumnLayout := clVerticalThenHorizontal`。**单列分组(默认 `Columns = 1`)不受影响。**
+- **`TTyListBox.Items` 的类型由 `TStringList` 改为 `TStrings`**,于是 `LB.Items := Memo.Lines` 编译得过。
+- **`TTyColorBox.Style` 现在真的组合调色板了。** 属性面板给了它、`.lfm` 存了它,而 setter
+  **把每一个取值都扔掉**。八个集合成员现在全部生效(标准色/扩展色/系统色/自定义槽/无色/默认色/
+  精选名字/包含 `clNone`);颜色名读 LCL 自己的资源串,所以是**翻译过的**。
+  默认值刻意**不照抄 LCL** —— 它逐字节复现现有那 16 个精选颜色,否则每一份省略该行的 `.lfm`
+  都会被重新组合成另一套调色板。下拉形态仍锁定,要改走 `TTyComboBox(Box).Style`。
+- **`TTyCheckComboItemState.Checked` 改为 `State: TCheckBoxState`**(并新增 `Enabled`),
+  与 LCL 的 `TCheckComboItemState` 一致。直接操作状态对象的代码要改;走 `Checked[]` 属性的不受影响。
+- **`TTyPaintPanel` 的设计期落点尺寸由 185×41 改为 105×105。** 一个绘图面以信箱条的形状落下来,
+  画什么都被裁掉。已有 `.lfm` 带着显式尺寸,不受影响。
+- **`TTyColorButton.Caption` 现在解析 `&` 助记符**,和同一张窗体上其它按钮一致(以前它把 `&` 原样画出)。
+- **`TTyGlyphLayout` 新增 `glRight` / `glBottom`**(追加在末尾,已有序号不变);
+  `HasGlyphSource`(protected)改名为 `CanShowGlyph`(public)。
+
+### 新增 — 文本输入控件补上 LCL 的成员
+
+- **`TTyMemo.Alignment`**:每一条可见行的水平对齐。居中的多行文字块从前**用任何办法都做不出来**,
+  主题也不行。绘制与**点击命中**共用同一个偏移,不会点在一处、落在另一处。
+- **`TTyMemo.CharCase`**:打字与赋值都强制大小写,复用输入框那套折叠规则。
+- **`Modified`(`TTyEdit` / `TTyMemo`)**:用户改过为 `True`,程序化赋值之后回到 `False` ——
+  这个区分是应用层用 `OnChange` **搭不出来**的(两种情况它都触发)。用来驱动"保存"是否可用、
+  关闭前要不要提示。
+- **`TTyEdit.EchoMode`**:`emNormal` / `emPassword` / `emNone`(什么都不显示),与 `PasswordChar`
+  双向联动。`emNone` 从前没有任何等价写法。
+- **多播 `OnChange`**(`AddHandlerOnChange` / `RemoveHandlerOnChange`,两个控件都有):库内或框架层
+  想观察一个输入框,不必再把应用唯一的那个 `OnChange` 抢走,两个观察者也能共存。
+- **`TTyMemo.CaretLine` / `CaretCol` / `SetCaret` 变成公开的**:光标在第几行第几列 ——
+  状态栏那句"Ln 12, Col 4"、跳转到行、错误高亮,从前都得先派生一个子类才够得着。
+- **无障碍角色**:`TTyEdit` / `TTyMaskEdit` / `TTyMemo` / `TTyLabel` 构造时声明自己是什么。
+  自绘控件没有可供读屏软件回退的原生对等物,不声明的话整个文本输入族对辅助技术都是不透明的。
+
+### 修复 — 掩码框的两个删除入口绕过掩码
+
+`InjectBackspace` / `InjectDelete` 会从掩码框的显示串里挖掉一个**原始字符**,掩码字面量一并挖走 ——
+于是内容不再符合它自称在强制的掩码。键盘上的退格/删除一直是对的,这两个方法不是。
+(与 `Ctrl+V` 从前那个洞同一个形状。)
 
 ### 修复 — 属性面板给了旋钮,控件却不看
 
@@ -337,6 +410,64 @@
   (与 LCL 的 `TArrow` 同名同默认值 60°)。以前本库只画得出块状箭头,
   移植过来的窗体想要的那个方向三角形**根本画不出来**。默认仍是块状箭头 ——
   改默认值会让所有现有窗体上的箭头静默转向。
+- **`TTyPanel.BorderWidth` 现在真的留出内距了。** 基类 republish 了它,但 `TWinControl`
+  **根本不读**这个值 —— LCL 里那圈内缩全靠 `TCustomPanel` 自己做。于是属性面板给了你
+  一个 8px 的内边距,容器把它当空气。
+- **面板可以当停靠站点了**:`DockSite`、`UseDockManager` 与整套 `OnDockDrop`/`OnDockOver`/
+  `OnStartDock`/`OnEndDock`/`OnUnDock`/`OnGetSiteInfo`/`OnGetDockCaption`。
+  后四个在上游是 protected,**以前根本没有任何途径能用到**。
+- **拖动重排标签页不再让页头和页体错位**(选中钉在位置上,而只有页头听话);
+  **把一页移到另一个 `TTyPageControl`,旧的那个不再继续把它算在自己名下**
+  (反注册挂在"被释放"上,而不是"换了父控件")。
+- **状态栏能自动显示提示了**:`AutoHint` 把 `Application.Hint` 写进 `SimpleText` 或第 0 格,
+  `OnHint` 可整段接管。这也让**上一版做的菜单项 `Hint`** 终于看得见 —— 菜单一直在发布,
+  只是库里没人接。另有 `GetPanelIndexAt`、以及 `Style := psOwnerDraw` + `OnDrawPanel`
+  (状态格从前只能是纯文字)。
+- **列头段落有了约束与隐藏**:`MinWidth`/`MaxWidth`/`Visible`/`InsertSection`。
+  四条改宽路径(setter、整条写入、插入、**实时拖动**)走同一个钳制 ——
+  setter 认、拖动不认的限制不叫限制。
+- **菜单项的 `ShowAlwaysCheckable` 有人读了** —— 以前只看 `AutoCheck`,而那个标志**同时**
+  让菜单项自己翻转,很多应用并不想要。
+- **按钮补上 `Alignment`(标题对齐)与 `ShowAccelChar`。** `'AT&T'` 从前会画成 `'ATT'`
+  **并且**莫名其妙多出一个 Alt+T 快捷键,唯一的躲法是在每个赋值点把 `&` 写两遍。
+  另有 `GlyphLayout` 新增右侧/下方(`more ▾` 那种尾随图标从前任何设置都做不出来)、
+  逐按钮的 `Spacing`、public 的 `CanShowGlyph`、以及 `TTySpeedButton.FindDownButton`
+  (分组代码一直只会遍历兄弟去**弹起**它们,想读回哪个被按下得自己写一遍类型扫描)。
+- **勾选框/单选钮的 `Alignment`** —— 注意这是 LCL 的含义:**指示器在哪一侧**,不是标题对齐
+  (`TTyGroupBox.Alignment` 才是标题对齐)。同一个词两个主语。
+- **分组控件补上逐项控制**:`Buttons[]`(逐项的 `Hint`/`PopupMenu`/`Font`/`Enabled` 从前够不着)、
+  `CheckEnabled[]`(灰掉某一行 —— "这个选项你的版本没有")、`OnItemClick`、`OnItemEnter`/`OnItemExit`。
+  **方向键现在能在单选组里移动了** —— 以前箭头**什么也不做**,键盘用户只能一路 Tab,
+  而 Tab 配空格会**沿途改掉每一个经过的选项**。方向键跳过禁用项、到头停住。
+  分组自己的 `OnKeyDown`/`OnKeyUp`/`OnKeyPress` 也终于会触发(分组从不持有焦点,
+  这几个槽以前装了也白装)。
+- **`TTyColorButton.ButtonColor`**(LCL 的名字**和类型**)—— 从前把一个 `TColor` 赋给
+  `SelectedColor` 会被当成 ARGB 读,颜色静默变成另一个;另有 `OnColorChanged`(与我们的
+  `OnColorChange` 只差一个字母,读起来像"这个事件不存在")。
+- **`TTyGroupBox` 的 `ClientWidth`/`ClientHeight`** —— 移植过来的 `.lfm` 里钉客户区尺寸的那两行
+  以前直接丢失。
+- **列表框**:`OnSelectionChange(Sender; User)` 能区分用户点选与代码赋值(配 `Lock`/`Unlock`)、
+  `ExtendedSelect`(触屏上唯一可用的多选方式)。
+- **勾选列表框**:三态 `State[]` + `AllowGrayed`、`ItemEnabled[]`(禁用行**看上去也是禁用的**)、
+  `Toggle`、`CheckAll`。顺带修掉:`Objects[]` 里放了别的对象会被读成"已勾选"(非零即真)。
+- **取色框 / 取色列表**:`Colors[]` 可读**可写**、`ColorNames[]`、`OnGetColors`、
+  `DefaultColorColor`/`NoneColorColor`(`clNone`/`clDefault` 从前按哨兵值原样画出来)。
+  色块尺寸也从写死的 4px 改走 `--color-swatch-width` / `--color-swatch-offset`。
+- **`TTyListView` 的 `Columns` / `Column[]` / `ColumnCount`** 不必再绕 `Header` 拿;
+  另有 `OnInsert` / `OnDeletion`(后者是逐项 `Data` 唯一还够得着的时刻,清空和销毁时逐行触发)。
+- **下拉框**:`ItemHeight`/`ItemWidth`、`TextHint`(占位提示,两种形态都画)、`ReadOnly`、
+  **可写的 `DroppedDown`**、`SelStart`/`SelLength`/`SelText`/`SelectAll`、`AddHistoryItem`、
+  以及 `OnGetItems` —— 懒加载下拉的**第一次点击从前什么也不会发生**,因为空列表的早退发生在
+  任何钩子之前。
+- **`TTyComboBoxEx.ItemsEx`**:published 的集合,**设计器可编辑、进 `.lfm`** ——
+  这个控件存在的理由本身。它是唯一真相来源,`Items` 是它的投影。
+- **勾选下拉框**:三态、`ItemEnabled[]`、`OnItemChange`、`CheckAll`/`Toggle`/`AddItem`/
+  `AssignItems`/`DeleteItem`。
+- **标签页与滚动容器补齐**:`TabRect`/`DisplayRect`/`IndexOfTabAt`/`AddTabSheet`/`ScrollTabs`/
+  `PageIndex`/`PageControl`/`OnShow`/`OnHide`、`ScrollInView`/`UpdateScrollbars`、
+  以及标签文字的 `WordWrap`/`VerticalAlignment`/`ShowAccelChar`。
+- **无障碍**:文本控件、面板、分隔条现在会声明 `AccessibleRole` —— 自绘控件没有原生对等物
+  可供辅助技术回落,在此之前整个文本族对读屏软件都是"未识别的自定义控件"。
 
 ### 新增 — 形状与图像控件补齐
 

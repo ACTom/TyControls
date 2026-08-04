@@ -5,20 +5,33 @@ uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller;
 type
+  { How a panel's content is produced. psText (the default) draws the panel's own Text with
+    the resolved theme style; psOwnerDraw hands the cell to the bar's OnDrawPanel and draws
+    nothing itself. Named for LCL's TStatusPanelStyle (comctrls.pp:45) so a `Style :=
+    psOwnerDraw` lifted out of a TStatusBar form compiles here unedited. }
+  TTyStatusPanelStyle = (psText, psOwnerDraw);
+
   TTyStatusPanel = class(TCollectionItem)
   private
     FText: TCaption;
     FWidth: Integer;
     FAlignment: TAlignment;
+    FStyle: TTyStatusPanelStyle;
     procedure SetText(const AValue: TCaption);
     procedure SetWidth(AValue: Integer);
     procedure SetAlignment(AValue: TAlignment);
+    procedure SetStyle(AValue: TTyStatusPanelStyle);
   public
     constructor Create(ACollection: TCollection); override;
   published
     property Text: TCaption read FText write SetText;
     property Width: Integer read FWidth write SetWidth default 50;
     property Alignment: TAlignment read FAlignment write SetAlignment default taLeftJustify;
+    { psOwnerDraw makes this cell the application's: the bar paints the panel background and
+      separators as usual, then fires OnDrawPanel for the cell rect and draws no text of its
+      own. That is the only way to put a progress bar, a lock icon or a coloured state dot in
+      a status cell -- before this, a panel could be plain text and nothing else. }
+    property Style: TTyStatusPanelStyle read FStyle write SetStyle default psText;
   end;
 
   TTyStatusBar = class;
@@ -33,12 +46,26 @@ type
     property Items[AIndex: Integer]: TTyStatusPanel read GetItem; default;
   end;
 
+  { Fired for a psOwnerDraw panel. APainter is the bar's LIVE painter, mid-pass -- draw
+    through it, not through the bar's Canvas: a TTyPainter builds into a BGRA layer that
+    EndPaint composites, so anything a handler put on the Canvas first would be overwritten.
+    This is the same contract as TTyPaintPanel.OnPaintSurface, and the reason the signature
+    carries a painter where LCL's TDrawPanelEvent (comctrls.pp:115) carries only a rect and
+    expects the handler to reach for StatusBar.Canvas.
+
+    ARect is the panel's cell in the bar's device-px, paint-local coordinates. }
+  TTyDrawPanelEvent = procedure(AStatusBar: TTyStatusBar; APanel: TTyStatusPanel;
+    APainter: TTyPainter; const ARect: TRect) of object;
+
   TTyStatusBar = class(TTyCustomControl)
   private
     FPanels: TTyStatusPanels;
     FSimplePanel: Boolean;
     FSimpleText: string;
     FSizeGrip: Boolean;
+    FAutoHint: Boolean;
+    FOnHint: TNotifyEvent;
+    FOnDrawPanel: TTyDrawPanelEvent;
     FSavedCursor: TCursor;
     FShowResizeCur: Boolean;
     procedure SetPanels(AValue: TTyStatusPanels);
@@ -50,6 +77,14 @@ type
     function ResizeHitAt(X, Y: Integer): Integer;
   protected
     function GetStyleTypeKey: string; override;
+    { The two hint seams, as protected virtuals -- LCL's DoHint / DoSetApplicationHint
+      (comctrls.pp:157-158). DoHint returns True when the application took the hint over
+      via OnHint, in which case the bar writes nothing itself. }
+    function DoHint: Boolean; virtual;
+    function DoSetApplicationHint(const AHintStr: string): Boolean; virtual;
+    { Fires OnDrawPanel for one psOwnerDraw cell. Protected virtual so a descendant can
+      paint a cell without stealing the application's event slot. }
+    procedure DrawPanel(APanel: TTyStatusPanel; APainter: TTyPainter; const ARect: TRect); virtual;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -59,11 +94,34 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     function PanelAtPos(X, Y: Integer): Integer;   // -1 outside any panel / SimplePanel mode
+    { LCL's name for PanelAtPos (comctrls.pp:171) -- same signature, same client-space
+      coordinates, same -1 sentinel. It is an alias and not a rename because PanelAtPos
+      is this library's own published surface and forms already call it; without the LCL
+      spelling, `if StatusBar1.GetPanelIndexAt(X, Y) = 2 then` -- an idiom straight out of
+      any ported OnMouseDown handler -- simply failed to compile. }
+    function GetPanelIndexAt(X, Y: Integer): Integer;
+    { The application-hint sink, LCL's contract exactly (statusbar.inc:268-269): the LCL
+      dispatches a TCustomHintAction whenever Application.Hint changes, and a status bar
+      with AutoHint on answers it by putting the text in SimpleText / panel 0.
+
+      Which is what makes the hint of a highlighted MENU ITEM visible: the themed menu
+      publishes it to Application.Hint, and until now nothing in this library listened. }
+    function ExecuteAction(ExeAction: TBasicAction): Boolean; override;
   published
     property Panels: TTyStatusPanels read FPanels write SetPanels;
     property SimplePanel: Boolean read FSimplePanel write SetSimplePanel default False;
     property SimpleText: string read FSimpleText write SetSimpleText;
     property SizeGrip: Boolean read FSizeGrip write SetSizeGrip default True;
+    { Show the application's current hint here as the pointer moves over hinted controls
+      and highlighted menu items -- the classic status line. Off by default, as in LCL
+      (comctrls.pp:179), because turning it on takes over SimpleText / panel 0. }
+    property AutoHint: Boolean read FAutoHint write FAutoHint default False;
+    { Assign this to format the hint yourself: it fires INSTEAD of the bar's own write, so
+      a handler that wants "Ready — <hint>" in panel 2 has somewhere to put it. Reads
+      Application.Hint for the text, as LCL's does. }
+    property OnHint: TNotifyEvent read FOnHint write FOnHint;
+    { Paints a psOwnerDraw panel. See TTyDrawPanelEvent for the painter contract. }
+    property OnDrawPanel: TTyDrawPanelEvent read FOnDrawPanel write FOnDrawPanel;
     property Align default alBottom;
     property Anchors;
     property StyleClass;
@@ -75,6 +133,7 @@ function TyStatusPanelRects(const AWidths: array of Integer; ATotalWidth, APaddi
 implementation
 
 uses
+  Forms,                      // Application.Hint + TCustomHintAction (the hint-action sink)
   tyControls.WindowEffects;   // TyStartNativeResize / TyWindowResizable (Windows-gated inside)
 
 const
@@ -125,6 +184,8 @@ procedure TTyStatusPanel.SetWidth(AValue: Integer);
 begin if FWidth = AValue then Exit; FWidth := AValue; Changed(False); end;
 procedure TTyStatusPanel.SetAlignment(AValue: TAlignment);
 begin if FAlignment = AValue then Exit; FAlignment := AValue; Changed(False); end;
+procedure TTyStatusPanel.SetStyle(AValue: TTyStatusPanelStyle);
+begin if FStyle = AValue then Exit; FStyle := AValue; Changed(False); end;
 
 { TTyStatusPanels }
 function TTyStatusPanels.GetItem(AIndex: Integer): TTyStatusPanel;
@@ -160,6 +221,48 @@ procedure TTyStatusBar.SetSizeGrip(AValue: Boolean); begin if FSizeGrip = AValue
 
 function TTyStatusBar.GetStyleTypeKey: string;
 begin Result := 'TyStatusBar'; end;
+
+function TTyStatusBar.DoHint: Boolean;
+begin
+  { LCL's rule (statusbar.inc:83-88): a handler is a TAKEOVER, not a notification -- when one
+    is assigned the bar writes nothing of its own, because the handler's whole purpose is to
+    decide where the text goes. }
+  Result := Assigned(FOnHint);
+  if Result then FOnHint(Self);
+end;
+
+function TTyStatusBar.DoSetApplicationHint(const AHintStr: string): Boolean;
+begin
+  Result := DoHint;
+  if Result then Exit;
+  if FSimplePanel then
+    SimpleText := AHintStr
+  else if FPanels.Count > 0 then
+    FPanels[0].Text := AHintStr;
+  Result := True;
+end;
+
+function TTyStatusBar.ExecuteAction(ExeAction: TBasicAction): Boolean;
+begin
+  { The LCL turns every Application.Hint change into a TCustomHintAction and executes it
+    against the focused control's chain (application.inc:1544-1556); a status bar is where
+    that action is meant to land. Without AutoHint the action falls through to the normal
+    action handling, so an ordinary TAction assigned to the bar still works. }
+  if FAutoHint and (ExeAction is TCustomHintAction) then
+    Result := DoSetApplicationHint(TCustomHintAction(ExeAction).Hint)
+  else
+    Result := inherited ExecuteAction(ExeAction);
+end;
+
+procedure TTyStatusBar.DrawPanel(APanel: TTyStatusPanel; APainter: TTyPainter; const ARect: TRect);
+begin
+  if Assigned(FOnDrawPanel) then FOnDrawPanel(Self, APanel, APainter, ARect);
+end;
+
+function TTyStatusBar.GetPanelIndexAt(X, Y: Integer): Integer;
+begin
+  Result := PanelAtPos(X, Y);
+end;
 
 function TTyStatusBar.PanelAtPos(X, Y: Integer): Integer;
 var
@@ -224,6 +327,16 @@ begin
         begin
           bg.Color := S.BorderColor;
           P.FillBackground(Rect(rects[i].Left, P.Scale(3), rects[i].Left + sepW, H - P.Scale(3)), bg, 0);
+        end;
+        { An owner-drawn cell belongs to the application: the bar keeps painting the chrome
+          around it (background, the separator rules, the size grip) and hands over the cell
+          itself instead of drawing text into it. Fired HERE, inside the pass and through the
+          painter, so what the handler draws is composited with everything else -- drawing to
+          the Canvas from a handler would be wiped by EndPaint (see TTyDrawPanelEvent). }
+        if FPanels[i].Style = psOwnerDraw then
+        begin
+          DrawPanel(FPanels[i], P, Rect(rects[i].Left, 0, rects[i].Right, H));
+          Continue;
         end;
         P.DrawText(Rect(rects[i].Left + P.Scale(2), 0, rects[i].Right - P.Scale(2), H),
           FPanels[i].Text, S.FontName, fs, S.FontWeight, S.TextColor, FPanels[i].Alignment, tlCenter, True);

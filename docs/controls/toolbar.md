@@ -42,7 +42,7 @@ uses tyControls.ToolBar, tyControls.Button;
 |------|------|--------|------|
 | `ButtonHeight` | `Integer` | 跟随密度轴 | 所有子按钮的统一逻辑高度；排布时每个子控件的高度被强制设为此值（`AlignControls` 中 `SetBounds(..., bh)`）。**未显式赋值时跟随主题的 `--control-height`**（经典 24 / 现代 38），一经写入即固定并写进 `.lfm`。改值触发 `Relayout`。 |
 | `ButtonSpacing` | `Integer` | `2` | 相邻工具项之间的水平间距（换行时也用作行间距）。改值触发 `Relayout`。 |
-| `Indent` | `Integer` | `4` | 首项 / 顶边留白（左、上内缩）。改值触发 `Relayout`。 |
+| `Indent` | `Integer` | `4` | 工具条**前缘**（每行第一项之前）的留白，仅此而已。改值触发 `Relayout`。**曾经它还兼任上下内边距**，工具条自动增高时算的是 `Indent*2 + rows`，于是 `Indent := 24`（在 LCL 里是再普通不过的取值，用来给一个 logo 或前置标签让位）会静悄悄地把工具条撑高 48px、把所有工具往下推 24px——那不是任何 LCL 窗体设这个值时想要的。纵向留白现在是它自己的值（主题令牌 `--toolbar-pad-y`，缺省 4 = 原来 `Indent` 的缺省），两个旋钮各走各的。与 LCL 仍有一处不同：`TToolBar.Indent` 的缺省是 1，这里是 4。这一点是**有意保留**的——`default` 指令决定的是所有省略了该值的既有 `.lfm` 怎么被读回，改掉它等于给现存的每一条工具条重新缩进。从 LCL 移植、依赖缺省 1 的窗体请显式写 `Indent := 1`。 |
 | `Wrapable` | `Boolean` | `True` | 为 `True` 时，一行放不下的工具项自动折到下一行；`Align in [alTop, alBottom]` 时工具条随行数自动增高。改值触发 `Relayout`。 |
 | `ShowCaptions` | `Boolean` | `False` | 与 LCL 一致：`False`（默认）让工具项**只显示图标**，`True` 才画标题。它下发到每个**能画图标**的子控件（`TTyGlyphButtonBase` 一族：`TTyGlyphButton` / `TTySpeedButton` / `TTyGlyphContainerButton`），走 `AdoptShowCaption`——对已被宿主自己写过 `ShowCaption` 的工具项是空操作。普通 `TTyButton` 没有图标模型，不受影响；**解析不出图标的工具项保留标题**（否则画出来是个空盒子），所以 `False` 这个默认值不会把现有的纯文字工具条抹白。改值触发 `Relayout`。 |
 | `Flat` | `Boolean` | `True` | 为 `True` 时，工具条把子 `TTyButton` 的 `StyleClass` 设为 `'ghost'`（平面外观）——但**只在它还是空串时**；为 `False` 时只把 `'ghost'` 改回 `''`。宿主自己写的 `StyleClass := 'primary'` 会保留下来。改值触发 `Relayout`。 |
@@ -167,7 +167,7 @@ end;
 - **子控件即工具项：** 把 `TTyButton`（及 `TTyToolSeparator`）的 `Parent` 设为工具条即完成停靠；工具条是 `csAcceptsControls` 容器，在 `AlignControls` 里按子控件顺序（仅可见者）逐个排布。子按钮**只需设 `Width`**，高度被 `ButtonHeight` 统一覆盖。
 - **Flat 只动它自己设过的 StyleClass：** `Flat=True` 把**空** `StyleClass` 设为 `'ghost'`，`Flat=False` 把 `'ghost'` 改回 `''`；子按钮上宿主写的其它变体（`'primary'`、`'danger'`…）**会保留**。
 - **命令响应走子按钮：** 工具条自身无 `OnClick` 语义的专有事件；请挂接各子按钮的 `OnClick`（Tier A 基线事件）。
-- **Wrapable 自动增高：** 当 `Align in [alTop, alBottom]` 且 `Wrapable=True` 时，一行放不下的工具项换行，工具条高度按 `Indent*2 + rows*ButtonHeight + (rows-1)*ButtonSpacing` 自动调整——不要在代码里硬设一个与之冲突的 `Height`。
+- **Wrapable 自动增高：** 当 `Align in [alTop, alBottom]` 且 `Wrapable=True` 时，一行放不下的工具项换行，工具条高度按 `padY*2 + rows*ButtonHeight + (rows-1)*ButtonSpacing` 自动调整（`padY` = 主题令牌 `--toolbar-pad-y`，缺省 4；**不再是 `Indent`**，横向留白不该参与高度）——不要在代码里硬设一个与之冲突的 `Height`。
 - **重入守卫：** `AlignControls` 末尾对 `Height` 的赋值会再次触发 `AlignControls`，`FInLayout` 守卫防止无限递归。
 - **ShowCaptions 的默认值是 `False`（与 LCL 一致）：** 它只对**能画图标**的工具项（`TTyGlyphButtonBase` 一族）生效，且只把标题换成图标——**解析不出图标的工具项照旧显示标题**，所以给一条纯文字工具条打开这个默认值不会把它抹白。工具项上一旦有人写过 `ShowCaption`，工具条就不再管它。
 - **Images 借给工具项：** 工具条把自己的 `TTyImageCollection` 借给**没有 `Images` 的**子图标按钮，于是工具项只需设 `ImageName`；自带集合的工具项不受影响。工具项**加入工具条之后**才设 `Images` 也有效（`InsertControl` 里也会下发一次）。

@@ -49,6 +49,8 @@
 
 ```pascal
 function AddSection(const AText: string; AWidth: Integer = 100): Integer;  // 追加一节,返回索引
+function InsertSection(AIndex: Integer; const AText: string;
+  AWidth: Integer = 100): Integer;               // 在 AIndex 前插入,其余右移;越界即追加
 procedure DeleteSection(AIndex: Integer);
 procedure ClearSections;
 procedure ToggleSort(AIndex: Integer);           // 循环该节排序(并清除其它节)
@@ -58,6 +60,9 @@ property Sections[AIndex: Integer]: TTyHeaderSection;        // 整条记录读�
 property SectionText[AIndex: Integer]: string;              // 单独读写标题
 property SectionWidth[AIndex: Integer]: Integer;           // 你**设**的宽度(逻辑像素),可读写
 property EffectiveSectionWidth[AIndex: Integer]: Integer;  // 实际**画**出来的宽度(逻辑像素),只读
+property SectionVisible[AIndex: Integer]: Boolean;         // 隐藏/显示某节(不删除)
+property SectionMinWidth[AIndex: Integer]: Integer;        // 该节自己的宽度下限(0=用全条下限)
+property SectionMaxWidth[AIndex: Integer]: Integer;        // 该节自己的宽度上限(0=不限)
 property Sort[AIndex: Integer]: TTyHeaderSortDirection;    // 单独读写排序状态
 ```
 
@@ -67,10 +72,25 @@ property Sort[AIndex: Integer]: TTyHeaderSortDirection;    // 单独读写排序
 需要"画出来的那个数"时读 `EffectiveSectionWidth` —— 它走的是绘制用的同一个纯几何函数,
 两者不可能对不上。它是布局的**结果**而非输入,因此只读。
 
-节记录 `TTyHeaderSection` 含 `Text` / `Width`(逻辑像素) / `Alignment` / `SortDirection`。
+节记录 `TTyHeaderSection` 含 `Text` / `Width`(逻辑像素) / `Alignment` / `SortDirection` /
+`MinWidth` / `MaxWidth` / `Visible`。
 排序方向枚举 `TTyHeaderSortDirection = (hsdNone, hsdAscending, hsdDescending)`。
 
-宽度有下限 `TyHeaderMinSectionWidth`(16 逻辑像素),低于它会被夹紧。
+宽度有下限 `TyHeaderMinSectionWidth`(16 逻辑像素),低于它会被夹紧 —— 但**只在该节没有自己的
+`MinWidth` 时**。`MinWidth > 0` 就是这一节自己的下限,**高于或低于 16 都算数**:一个 12px 的
+复选框列是真实存在的列,把它抬回 16 等于让它无法表达。`MaxWidth = 0` 表示不限(LCL 写作 10000,
+零是记录天生就有的值,含义一样)。两个限制在**属性写入、整条记录写入、追加 / 插入、以及分隔线
+实时拖动**四条路径上是同一个函数,不会互相矛盾 —— 一个"设得住、拖不住"的限制等于没有限制。
+
+`SectionVisible[i] := False` 隐藏一节而**不删除**它:宽度与排序状态原样保留,以便"选择要显示的列"
+菜单把它原样放回。隐藏节仍占着自己的索引位、按零宽度平铺,因此不被命中测试、不被绘制、
+它的边界也抓不住;末节被隐藏时,剩余宽度改由**最后一个仍可见**的节吸收(否则刚被隐藏的那一节
+会以整条剩余宽度重新出现)。
+
+> 注意记录里 `Visible` 是**属性**而非字段,内部按"隐藏"取反存储。值记录出生即全零 ——
+> `SetLength`、`Default(TTyHeaderSection)`、宿主自己拼一条记录交给 `Sections[i] :=` 都是 ——
+> 若直接写成 `Visible: Boolean` 字段,这些节将全部生而不可见,与 `THeaderSection.Visible`
+> 的 `default true`(`comctrls.pp:3996`)正好相反。
 
 ### 事件
 

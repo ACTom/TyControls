@@ -30,7 +30,10 @@ uses tyControls.Edit;
 | `Text` | `string` | `''` | 输入框当前内容；赋值会触发重绘，**并触发** `OnChange`（`SetText` 末尾调用 `DoChange`，与 LCL `TCustomEdit` 一致）。赋值时光标移动到文本末尾，选区收起。 |
 | `ReadOnly` | `Boolean` | `False` | 为 `True` 时拦截用户编辑（打字/退格/删除/词级删除/粘贴），保留光标移动、选区、复制、全选；程序化 `Text :=` 仍可写；`CutToClipboard` 退化为 `CopyToClipboard`。 |
 | `MaxLength` | `Integer` | `0`（无限） | 按**码点**封顶；`0` 表示无限制；满则不再插入；粘贴时截断到余量。 |
-| `PasswordChar` | `string` | `''`（关闭） | 单个 UTF-8 码点（如 `'●'`）；渲染与宽度测量都用掩码字符替代实际内容；掩码激活时**禁用复制/剪切**（防明文外泄）。 |
+| `PasswordChar` | `string` | `''`（关闭） | 单个 UTF-8 码点（如 `'●'`）；渲染与宽度测量都用掩码字符替代实际内容；掩码激活时**禁用复制/剪切**（防明文外泄）。LCL 那边是 `Char`，这里刻意放宽成字符串——大家真正想用的 `'●'`（U+25CF）塞不进一个 `Char`。**`#0` 现在等同于 `''`（关闭掩码）**：LCL 的“关掉”就是写 `#0`，而 `Ed.PasswordChar := #0` 在这里能编译（`Char` 转 `string`），从前会得到一个装着 NUL 的单字符串——于是该显示明文的时候仍在打码，且打的是一个谁也看不见的字形。 |
+| `EchoMode` | `TEchoMode` | `emNormal` | **（API parity 新增）** 回显方式：`emNormal` 显示文本 / `emPassword` 打码 / `emNone` **什么都不显示**。与 `PasswordChar` **双向联动**，规则照抄 LCL（`include/customedit.inc:374-387`、`408-424`）：`''`↔`emNormal`、`' '`↔`emNone`、其余↔`emPassword`。`emNone` 从前在这里没有任何等价写法。 |
+| `HideSelection` | `Boolean` | `True` | **（API parity 新增）** 与 `TEdit` 同默认：控件**失焦时不画选区高亮**（选区本身保留，只是不画）。从前只按 `HasSelection` 画，于是一张窗体上三个输入框会同时显示三段“像是活动的”选区。 |
+| `AutoSelect` | `Boolean` | `True` | **（API parity 新增）** 与 `TEdit` 同默认：**键盘**获得焦点（Tab/Enter）时全选内容，本次焦点访问内的**第一次左键单击**也全选（`AutoSelected` 是那个闩）。鼠标点击定位光标不受影响——LCL 用 `csLButtonDown` 区分两者，这里照做。没有它，“Tab 进去直接打新值”这套录入流程要在每个输入框的 `OnEnter` 里手写 `SelectAll`。 |
 | `TextHint` | `string` | `''` | 占位符文本；仅在 `Text` 为空时绘制，颜色取子部件 typeKey `TyTextHint` 的 `color`（默认 `var(--muted)`，弱化前景）。 |
 | `Alignment` | `TAlignment` | `taLeftJustify` | **（API parity 新增）** 文本水平对齐（左 / 右 / 居中）；影响文本绘制起点，光标定位随对齐偏移。 |
 | `CharCase` | `TEditCharCase` | `ecNormal` | **（API parity 新增）** 输入字符大小写转换：`ecNormal`（原样） / `ecUpperCase`（转大写） / `ecLowerCase`（转小写）。 |
@@ -44,7 +47,10 @@ uses tyControls.Edit;
 
 | 属性 | 类型 | 说明 |
 |------|------|------|
-| `CaretPos` | `Integer`（读写） | 光标的码点索引，范围 `[0, UTF8Length(Text)]`。写入时收起选区（`FSelAnchor := FCaretPos`）并重绘。 |
+| `CaretPos` | `Integer`（读写） | 光标的码点索引，范围 `[0, UTF8Length(Text)]`。写入时收起选区（`FSelAnchor := FCaretPos`）并重绘。**刻意与 LCL 的 `TPoint` 不同**：`TCustomEdit` 那边之所以是点，是因为同一个类还要撑起 memo；单行输入框没有第二根轴。两个类型之间不存在赋值，所以移植代码是**编译不过**（响的那种失败），不是悄悄跑歪。兄弟控件 `TTySpinEdit` 早先也是这么定的，两处口径一致。多行控件真正需要的行/列形式在 `TTyMemo.CaretLine` / `CaretCol`。 |
+| `Modified` | `Boolean`（读写） | **（API parity 新增）** 脏标记，同 LCL `TCustomEdit.Modified`：**用户**改过（打字/删除/粘贴/剪切/撤销）为 `True`，程序化 `Text :=` 之后回到 `False`。这个区分正是它的全部内容，也是应用层用 `OnChange` **搭不出来**的东西——`OnChange` 两种情况都触发。用于驱动“保存”按钮可用性、关闭前提示等。 |
+| `AutoSelected` | `Boolean`（读写） | **（API parity 新增）** `AutoSelect` 的闩：本次焦点访问已经自动全选过了，于是已聚焦状态下再点一次不会重新全选；失焦时清除。 |
+| `procedure AddHandlerOnChange(AEvent; AsFirst = False)` / `RemoveHandlerOnChange(AEvent)` | **（API parity 新增）** 多播 `OnChange`（LCL `stdctrls.pp:853-855`）。唯一的那个 `OnChange` 属性是**应用**的；库内或框架层的观察者（校验器、脏标记跟踪、实时预览）不该为了看一眼输入而把它抢走，两个观察者也得能共存。`RemoveAllHandlersOfObject` 已重写，被释放的观察者会自动摘除。 |
 
 ### public 选区 API（读写属性 + 只读方法）
 
@@ -307,6 +313,9 @@ end;
 ---
 
 ## 7. 注意事项
+
+- **无障碍：** 构造时声明 `AccessibleRole := larTextEditorSingleline`，与 LCL `TCustomEdit.Create`（`include/customedit.inc:87`）同一行。自绘控件没有可供辅助技术回退的原生对等物，不声明的话整个文本输入族对读屏软件都是不透明的。`TTyMaskEdit` 继承同一角色，`TTyMemo` 用 `larTextEditorMultiline`。
+- **`InjectBackspace` / `InjectDelete` 现在是 `virtual` 的。** 它们是 `InjectKey` 的删除对偶，但与 `InjectKey` 不同——不经过 `FilterInsert`，而是直接改 `FText`，于是重写整串显示的子类（`TTyMaskEdit`）在这里**没有接缝**，这两个方法会从它的显示串里挖掉一个原始字符，掩码字面量和占位符一并挖走。这和 `FilterInsert` 出现之前粘贴路径上的洞是同一个形状。
 
 - **UTF-8 安全操作：** 退格、删除、光标移动、选区均按 UTF-8 码点（字符）操作，不会截断多字节序列。内部使用 `LazUTF8` 函数库。
 - **ReadOnly：** `ReadOnly = True` 时拦截打字/退格/删除/词级删除/粘贴；导航、选区、复制、全选、撤销/重做快捷键仍可用（但撤销/重做历史在只读模式下不会产生新步）；`CutToClipboard` 退化为 `CopyToClipboard`；`Text :=` 程序化赋值不受限制。

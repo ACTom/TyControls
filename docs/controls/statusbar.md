@@ -35,6 +35,7 @@ uses tyControls.StatusBar;
 | `SimplePanel` | `Boolean` | `False` | 为 `True` 时切换到单一整条文本模式：忽略 `Panels`，改为绘制 `SimpleText`（左对齐、垂直居中）。 |
 | `SimpleText` | `string` | `''` | `SimplePanel = True` 时显示的整条文本。写入时仅当当前处于 `SimplePanel` 模式才触发重绘。 |
 | `SizeGrip` | `Boolean` | `True` | 为 `True` 时在控件右下角绘制 3 个对角小点组成的尺寸手柄（`default True`）。 |
+| `AutoHint` | `Boolean` | `False` | 为 `True` 时把应用程序当前提示（`Application.Hint`）显示到状态栏：`SimplePanel` 模式写入 `SimpleText`，否则写入 `Panels[0].Text`。这正是"鼠标划过工具按钮 / 高亮菜单项，下面这条读出说明"的经典状态行；主题化菜单已经会把菜单项 `Hint` 发布到 `Application.Hint`，此前库内没有任何控件接收它。与 LCL `TStatusBar.AutoHint` 同名同义，默认同为 `False`（打开会接管 `SimpleText` / 0 号面板）。 |
 | `Align` | `TAlign` | `alBottom` | 停靠方式，**默认已重声明为 `alBottom`**（`property Align default alBottom;`），构造函数也显式设为 `alBottom`。 |
 | `Anchors` | `TAnchors` | `[akLeft, akTop]` | 随父控件调整大小时的锚点。 |
 
@@ -45,6 +46,7 @@ uses tyControls.StatusBar;
 | `Text` | `string` | `''` | 该面板显示的文本。 |
 | `Width` | `Integer` | `50` | 面板逻辑宽度（`default 50`）。**`Width <= 0` 的面板为"填充面板"**：占据其余固定宽度面板之外的全部剩余空间；若有多个 `<= 0` 面板，只有**第一个**吃掉剩余空间，其后的 `<= 0` 面板宽度为 0。**最后一个面板的 `Width` 只是下限**：它总是延伸到右侧内边距处（见 §7）。 |
 | `Alignment` | `TAlignment` | `taLeftJustify` | 面板内文本的水平对齐（`taLeftJustify` / `taCenter` / `taRightJustify`，`default taLeftJustify`）。垂直方向固定居中。 |
+| `Style` | `TTyStatusPanelStyle` | `psText` | `psText` 按主题样式绘制本面板的 `Text`；`psOwnerDraw` 把这一格交给应用：状态栏照常绘制背景与分隔线，但**不画任何文本**，改为触发 `OnDrawPanel`。这是在状态格里放进度条 / 锁图标 / 彩色状态点的唯一途径——此前面板只能是纯文本。枚举名取自 LCL `TStatusPanelStyle`（`comctrls.pp:45`），从 `TStatusBar` 窗体里搬过来的 `Style := psOwnerDraw` 可原样编译。 |
 
 > `TTyStatusPanels` 额外提供 `function Add: TTyStatusPanel;` 与默认索引器 `Items[AIndex]: TTyStatusPanel`（即 `Panels[i]`）以便按类型访问面板项。
 
@@ -63,9 +65,12 @@ TTyStatusBar 继承自 `TTyCustomControl`（`tyControls.Base`）：
 
 ## 4. 事件
 
-`TTyStatusBar` **未声明任何自有专有事件**（无 `OnChange` / `OnPanelClick` 等）。
+| 事件 | 签名 | 说明 |
+|------|------|------|
+| `OnHint` | `TNotifyEvent` | `AutoHint = True` 时，状态栏收到应用提示后**先**触发本事件。它是**接管**而非通知：一旦赋值，状态栏自己就不再写 `SimpleText` / `Panels[0]`，由处理器决定提示放到哪、怎么排版（例如"就绪 — <hint>"放进 2 号面板）。文本从 `Application.Hint` 读。语义与 LCL `TStatusBar.OnHint`（`statusbar.inc:70-88`）一致。 |
+| `OnDrawPanel` | `TTyDrawPanelEvent = procedure(AStatusBar: TTyStatusBar; APanel: TTyStatusPanel; APainter: TTyPainter; const ARect: TRect) of object` | 为每个 `Style = psOwnerDraw` 的面板触发一次，`ARect` 是该格在状态栏绘制坐标系里的设备像素矩形。**必须通过 `APainter` 绘制，不要用状态栏的 `Canvas`**：`TTyPainter` 画进 BGRA 图层，`EndPaint` 才合成到画布上，先画到 `Canvas` 的内容会被整个覆盖。这与 `TTyPaintPanel.OnPaintSurface` 是同一套约定；LCL 的 `TDrawPanelEvent` 只给矩形、要求处理器自己去取 `StatusBar.Canvas`，在自绘管线下不成立。 |
 
-> `TTyStatusBar` 暴露**基线事件集**（Tier A 鼠标 / 通用事件 + Tier B 键盘 / 焦点事件，因其为可聚焦的 `TTyCustomControl`）。若要响应面板点击，可挂接基线 `OnMouseDown` / `OnClick`，并用公开方法 `PanelAtPos(X, Y): Integer` 把坐标映射到面板索引（`SimplePanel` 模式或点击空白处返回 `-1`）。完整基线清单见 [../events.md](../events.md)。
+> 除以上两个自有事件外，`TTyStatusBar` 暴露**基线事件集**（Tier A 鼠标 / 通用事件 + Tier B 键盘 / 焦点事件，因其为可聚焦的 `TTyCustomControl`）。若要响应面板点击，可挂接基线 `OnMouseDown` / `OnClick`，并用公开方法 `PanelAtPos(X, Y): Integer`（LCL 同名别名 `GetPanelIndexAt(X, Y)`）把坐标映射到面板索引（`SimplePanel` 模式或点击空白处返回 `-1`）。完整基线清单见 [../events.md](../events.md)。
 
 ---
 

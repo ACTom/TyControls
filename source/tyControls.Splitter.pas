@@ -208,6 +208,11 @@ begin
   FMinSize := 30;
   FAutoSnap := True;
   FResizeStyle := rsUpdate;
+  { A screen reader announced this as an unidentified control, so the one structural cue a
+    keyboard-and-reader user has for "this is the thing that resizes the panes" was missing.
+    TCustomSplitter sets the same role in its constructor
+    (C:/lazarus/lcl/include/customsplitter.inc:951). }
+  AccessibleRole := larResizeGrip;
   Align := alLeft;
   Width := 5;
   Height := 100;

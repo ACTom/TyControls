@@ -3,7 +3,8 @@ unit tyControls.ColorButton;
 interface
 uses
   Classes, SysUtils, Types, Graphics, LCLType,
-  tyControls.Types, tyControls.Painter, tyControls.Button, tyControls.Dialogs.Color;
+  tyControls.Types, tyControls.Painter, tyControls.Button, tyControls.ColorMath,
+  tyControls.Accel, tyControls.Dialogs.Color;
 
 const
   { Logical px (96-PPI baseline), scaled at every call site.
@@ -28,8 +29,11 @@ type
     FShowText: Boolean;
     FDialogCaption: string;
     FOnColorChange: TNotifyEvent;
+    FOnColorChanged: TNotifyEvent;
     procedure SetSelectedColor(AValue: TTyColor);
     procedure SetShowText(AValue: Boolean);
+    function GetButtonColor: TColor;
+    procedure SetButtonColor(AValue: TColor);
   protected
     // Draw the swatch (rounded, filled with SelectedColor, subtle border) inset on
     // the left of AContentRect; when ShowText, draw the '#RRGGBB' hex to its right.
@@ -74,13 +78,33 @@ type
     // The current swatch colour. Setting it programmatically repaints but does NOT
     // fire OnColorChange (that event is reserved for dialog-driven changes).
     property SelectedColor: TTyColor read FSelectedColor write SetSelectedColor default $FF3B82F6;
+    { LCL's name and LCL's TYPE for the same swatch (dialogs.pp:370). Both halves matter:
+      `Btn.ButtonColor := clRed` is the one line every TColorButton user writes, and a raw
+      TColor assigned to SelectedColor would be read as ARGB and come out the wrong colour
+      with no error -- so the conversion has to live behind the LCL-spelled name, not in the
+      porter's head.
+      `stored False` on purpose: this is a second view of FSelectedColor, not a second
+      value. A published property is READ from an .lfm whether or not it is stored, so a
+      ported `ButtonColor = clRed` line loads; not storing it keeps our own .lfm from
+      carrying the same colour twice under two names. }
+    property ButtonColor: TColor read GetButtonColor write SetButtonColor stored False;
+    { The caption sits in the strip LEFT OVER beside the swatch, so it starts at that
+      strip's left edge rather than floating in the middle of it -- hence the default the
+      base does not have. Still fully settable: taCenter or taRightJustify move the text
+      within the strip, and the swatch never moves. }
+    property Alignment default taLeftJustify;
     // When True, the '#RRGGBB' hex is drawn as the caption to the right of the swatch;
     // when False the swatch fills most of the content area.
     property ShowText: Boolean read FShowText write SetShowText default False;
     // Title bar text of the colour dialog opened on click.
     property DialogCaption: string read FDialogCaption write FDialogCaption;
-    // Fired only when the dialog is accepted AND the colour actually changed.
+    // Fired whenever the colour actually changes, however it changed (see SetSelectedColor).
     property OnColorChange: TNotifyEvent read FOnColorChange write FOnColorChange;
+    { LCL's name for the very same notification (dialogs.pp:387-388) -- one letter apart,
+      which is exactly the kind of difference that reads as "the event is missing". Both
+      fire, OnColorChange first. Two fields rather than one aliased field, so each streams
+      under its own name and a save never silently renames the host's handler. }
+    property OnColorChanged: TNotifyEvent read FOnColorChanged write FOnColorChanged;
   end;
 
 implementation
@@ -107,6 +131,22 @@ begin
   FSelectedColor := TyRGB(59, 130, 246);   // $FF3B82F6 — the library accent blue
   FShowText := False;
   FDialogCaption := 'Select Color';
+  // Matches the redeclared `Alignment default taLeftJustify`; the two must agree or the
+  // streamer writes the property into every .lfm that holds one of these.
+  Alignment := taLeftJustify;
+end;
+
+function TTyColorButton.GetButtonColor: TColor;
+begin
+  Result := TyColorToLCL(FSelectedColor);
+end;
+
+procedure TTyColorButton.SetButtonColor(AValue: TColor);
+begin
+  // Keep the current alpha: SelectedColor is ARGB and a TColor carries none, so reading
+  // ButtonColor and writing it straight back must not quietly make an opaque swatch
+  // transparent (or the reverse).
+  SelectedColor := TyColorFromLCL(AValue, TyAlphaOf(FSelectedColor));
 end;
 
 procedure TTyColorButton.SetSelectedColor(AValue: TTyColor);
@@ -120,7 +160,12 @@ begin
     restored a saved value, which is exactly the case nobody tests. Suppressed while
     streaming, or every .lfm load would fire it before the form exists. }
   if not (csLoading in ComponentState) then
+  begin
+    // Two names, one notification (see OnColorChanged). Ours first, so the ordering is
+    // stated rather than left to field-declaration order.
     if Assigned(FOnColorChange) then FOnColorChange(Self);
+    if Assigned(FOnColorChanged) then FOnColorChanged(Self);
+  end;
 end;
 
 procedure TTyColorButton.SetShowText(AValue: Boolean);
@@ -135,9 +180,10 @@ procedure TTyColorButton.DrawContent(APainter: TTyPainter; const AContentRect: T
 var
   swatch, capRect: TRect;
   fill: TTyFill;
-  cw, gap, radius: Integer;
+  cw, gap, radius, mp: Integer;
   borderCol: TTyColor;
   hasText: Boolean;
+  disp: string;
 begin
   // Degenerate rect (headless zero-size render) — nothing to draw, stay crash-safe.
   if (AContentRect.Right <= AContentRect.Left) or (AContentRect.Bottom <= AContentRect.Top) then
@@ -172,8 +218,18 @@ begin
   begin
     capRect := Rect(swatch.Right + gap, AContentRect.Top, AContentRect.Right, AContentRect.Bottom);
     if capRect.Right > capRect.Left then
-      APainter.DrawText(capRect, ContentText, AStyle.FontName,
-        ResolveFontSize(AStyle), AStyle.FontWeight, AStyle.TextColor, taLeftJustify, tlCenter, True);
+    begin
+      { Through the base's resolver, not raw ContentText: this button's Caption is an
+        ordinary button caption, so '&Save' must underline the S here exactly as it does on
+        every other button -- and ShowAccelChar must be able to turn that off here too, or
+        it would be a published property one descendant quietly ignores. The '#RRGGBB'
+        fallback has no '&' and passes through untouched. }
+      ResolveCaptionText(disp, mp);
+      if Caption = '' then disp := ContentText;   // the hex fallback; no mnemonic in it
+      APainter.DrawText(capRect, disp, AStyle.FontName,
+        ResolveFontSize(AStyle), AStyle.FontWeight, AStyle.TextColor, Alignment, tlCenter,
+        True, TyAccelGatePos(mp));
+    end;
   end;
 end;
 
@@ -188,9 +244,13 @@ function TTyColorButton.MeasureHexText(APPI: Integer; const AStyle: TTyStyleSet)
 var
   Meas: TBitmap;
   txt: string;
+  mp: Integer;
 begin
   txt := ContentText;
   if txt = '' then Exit(0);
+  // Measure what is DRAWN, not what is stored: with ShowAccelChar on, '&Save' paints as
+  // 'Save', and reserving the ampersand's width would leave a gap AutoSize never fills.
+  if Caption <> '' then ResolveCaptionText(txt, mp);
   // 与 TTyButton.MeasureCaption 同一套量法(同样的字体名回落、同样的 MulDiv 字号缩放、
   // 同样的粗体阈值),只是量的字符串换成了真正会被画出来的十六进制色值。
   Meas := TBitmap.Create;

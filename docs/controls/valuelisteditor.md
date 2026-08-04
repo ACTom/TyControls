@@ -67,9 +67,12 @@ uses tyControls.ValueListEditor;
 | 成员 | 说明 |
 |------|------|
 | `AddRow(AKey, AValue): TTyValueRow` | 追加一根行,返回它(可继续 `AddChild` 嵌套 / 设 `EditorKind` / 样式)。 |
-| `InsertRow(AKey, AValue)` | 简单形式,追加纯文本根行。 |
-| `Row(AIndex): TTyValueRow` / `RowCount` | 第 i 根行 / 根行数。 |
-| `VisibleRowCount` | 可见(展开后)行数。 |
+| `InsertRow(AKey, AValue, AAppend = True): Integer` | **(API parity 变更,破坏性)** 改成 LCL 的签名(`valedit.pas:188`):**返回新行的下标**,`AAppend = False` 时插到**当前选中根行之前**(LCL 的 not-Append 就是插在 grid 的当前行)。从前是只会追加的两参数 **procedure**,移植调用连参数个数都对不上;`AAppend` 有默认值,已有的两参数写法照旧可用。 |
+| `InsertRowAt(AIndex, AKey, AValue): TTyValueRow` | **(API parity 新增)** 插到指定下标并返回该行 —— `InsertRow` 那个布尔量只是它的两种特例。从前这个类上**根本没有"插到某个位置"**:`AddRow` 追加、`DeleteRow` 删除,想按某个顺序建表只能整体重建。下标超出末尾即追加。 |
+| `Row(AIndex): TTyValueRow` | 第 i 根行。 |
+| `RowCount` | **(API parity 变更)根行数,现在是可读写的属性**(LCL `valedit.pas:237` 也是属性),所以能被 RTTI / 绑定层读到,`VLE.RowCount := 0` 这条"一行清空"的写法也能编译。写入时**从末尾**增删(增出来的是空行)。两处与 LCL 有意不同:只数**数据行**(LCL 的还含固定标题行,同一份列表在那边多 1),且是 public 而非 published —— 把活的行数写进 `.lfm` 会让设计器每次加载都凭空造出空行。 |
+| `DisplayRowCount` | **(API parity 重命名,破坏性)** 当前**有显示位置**的行数 = 根行 + 已展开节点的后代。折叠会让它变小,改控件大小不会。**这个含义从前叫 `VisibleRowCount`。** |
+| `VisibleRowCount` | **(API parity 变更,破坏性)视口**里现在装得下几行 —— 即 LCL `TCustomGrid.VisibleRowCount` 的含义(`grids.pas:1301`,实现 `:2274`),`TValueListEditor` 经 `TCustomStringGrid` → `TCustomDrawGrid`(`:1538` public 转发)继承而来,因为在那边这个类**就是**一个 grid。**它不是"有几行展开着"** —— 那是 `DisplayRowCount`。两者都是 `Integer`、都是 public,所以移植来的翻页算式编译得过、算出垃圾:500 行展开着就一次翻 500 行。与 LCL 一致到那个差一:答的是 `VisibleGrid.Bottom - VisibleGrid.Top`,比"碰到视口的行数"少一行(翻页留一行重叠);整份列表都装得下时不留重叠。这与 `TTyCustomGrid` 在 03c29b3 修的是同一个撞名,当时没落到这个类上,因为我们这个是 `TTyListBox` 不是 grid。 |
 | `Keys[i]` | 第 i 根行的键(只读)。 |
 | `Values[key]` | **按键**读写根行的值(与 LCL / Delphi 的 `TValueListEditor.Values[const Key: string]` 同义)。查找**不分大小写**;写一个**不存在的键会追加一行**——移植过来的代码正是这样填这个控件的。 |
 | `ValueFromIndex[i]` | **按行号**读写根行的值,与 `Keys[i]` 配对(名字取自 RTL 自己的 `TStrings.Values[Name]` / `ValueFromIndex[Index]` 一对)。 |

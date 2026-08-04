@@ -24,12 +24,39 @@ type
   { A list of section rectangles, returned by the pure tiling function. }
   TTyHeaderRectArray = array of TRect;
 
-  { One header section's model. Alignment is the caption alignment inside the cell. }
+  { One header section's model. Alignment is the caption alignment inside the cell.
+
+    Visible is stored INVERTED (FHidden) on purpose. This is a value record, so a section
+    springs into existence zero-filled -- by SetLength, by Default(), by a host building one
+    to hand to Sections[i] := -- and a plain `Visible: Boolean` field would make every one of
+    those born HIDDEN, which is the opposite of THeaderSection.Visible's `default true`
+    (comctrls.pp:3996). Inverting the storage makes the zero value mean visible; the property
+    is the only thing anyone reads or writes, and it carries the LCL name. }
   TTyHeaderSection = record
+  private
+    FHidden: Boolean;
+    function GetVisible: Boolean;
+    procedure SetVisible(AValue: Boolean);
+  public
     Text: string;
     Width: Integer;                 // logical px
     Alignment: TAlignment;
     SortDirection: TTyHeaderSortDirection;
+    { Per-section resize constraints, logical px, both zero-means-unset so a zero-filled
+      record keeps today's behaviour:
+        MinWidth = 0  -> the strip-wide floor TyHeaderMinSectionWidth (16) applies;
+        MinWidth > 0  -> that value IS the floor, ABOVE OR BELOW 16. Which is the point:
+                         a 12px checkbox column is a real column and the shared 16px floor
+                         made it inexpressible.
+        MaxWidth = 0  -> unbounded (LCL spells this 10000; zero is the value a record
+                         gets for free, and "no cap" is what the number means either way). }
+    MinWidth: Integer;
+    MaxWidth: Integer;
+    { Hide a section without deleting it, so a "choose columns" menu can put it back with
+      its width and sort state intact. A hidden section keeps its place in the index order
+      and tiles zero-wide; it is never hit-tested, never painted, and its boundary cannot
+      be grabbed. }
+    property Visible: Boolean read GetVisible write SetVisible;
   end;
   TTyHeaderSectionArray = array of TTyHeaderSection;
 
@@ -106,6 +133,16 @@ type
     procedure SetSectionWidth(AIndex: Integer; AValue: Integer);
     function GetSortDirection(AIndex: Integer): TTyHeaderSortDirection;
     procedure SetSortDirection(AIndex: Integer; AValue: TTyHeaderSortDirection);
+    function GetSectionVisible(AIndex: Integer): Boolean;
+    procedure SetSectionVisible(AIndex: Integer; AValue: Boolean);
+    function GetSectionMinWidth(AIndex: Integer): Integer;
+    procedure SetSectionMinWidth(AIndex: Integer; AValue: Integer);
+    function GetSectionMaxWidth(AIndex: Integer): Integer;
+    procedure SetSectionMaxWidth(AIndex: Integer; AValue: Integer);
+    { AWidth clamped by section AIndex's own MinWidth/MaxWidth (the strip-wide floor when
+      it has no MinWidth of its own). One place, so the setter, the record write, the
+      append and the live drag can never disagree about a section's limits. }
+    function ClampSectionWidth(AIndex, AWidth: Integer): Integer;
     { Device-px widths (scaled) — what the pure geometry actually tiles. }
     function DeviceWidths: TIntegerDynArray;
     function GetEffectiveSectionWidth(AIndex: Integer): Integer;
@@ -129,6 +166,13 @@ type
     constructor Create(AOwner: TComponent); override;
     { Append a section; returns its index. }
     function AddSection(const AText: string; AWidth: Integer = TyHeaderDefaultSectionWidth): Integer;
+    { Insert a section BEFORE AIndex, shifting the rest right; returns the index it landed
+      at. AIndex past the end appends (so InsertSection(SectionCount, ...) == AddSection).
+      LCL's THeaderSections has Insert (comctrls.pp:4016) and we had only append, so adding
+      a column anywhere but the end meant appending it and then shuffling every caption,
+      width and sort state down by hand. }
+    function InsertSection(AIndex: Integer; const AText: string;
+      AWidth: Integer = TyHeaderDefaultSectionWidth): Integer;
     procedure DeleteSection(AIndex: Integer);
     procedure ClearSections;
     { Cycle a section's sort: none -> asc -> desc -> asc. Clears every OTHER
@@ -153,6 +197,11 @@ type
       section except the last, which may be wider. Read-only: it is a consequence of
       the layout, not an input to it. }
     property EffectiveSectionWidth[AIndex: Integer]: Integer read GetEffectiveSectionWidth;
+    { Per-facet accessors for the three record fields a "choose columns" / pinned-column UI
+      actually drives, so the read-modify-write-the-whole-record dance is not the only way. }
+    property SectionVisible[AIndex: Integer]: Boolean read GetSectionVisible write SetSectionVisible;
+    property SectionMinWidth[AIndex: Integer]: Integer read GetSectionMinWidth write SetSectionMinWidth;
+    property SectionMaxWidth[AIndex: Integer]: Integer read GetSectionMaxWidth write SetSectionMaxWidth;
     property Sort[AIndex: Integer]: TTyHeaderSortDirection read GetSortDirection write SetSortDirection;
   published
     property OnSectionClick: TTyHeaderSectionEvent read FOnSectionClick write FOnSectionClick;
@@ -169,6 +218,12 @@ type
     // Declared True to match the constructor, so a host's TabStop=False opt-out streams.
     property TabStop default True;
     property Align;
+    { Every sibling in this family publishes Anchors (TTyTreeView, TTyListView) and the strip
+      did not, so the one layout a header strip most obviously wants -- pinned left+right+top
+      at a fixed height, over a list that is NOT align-docked -- could be written in code and
+      not in the designer, and never streamed to the .lfm. THeaderControl publishes it
+      (comctrls.pp:4122). }
+    property Anchors;
   end;
 
 { ── PURE, headless-tested geometry (all in DEVICE pixels) ──────────────────── }
@@ -201,27 +256,33 @@ implementation
 
 function TyHeaderSectionRects(const AWidths: array of Integer; const AClient: TRect): TTyHeaderRectArray;
 var
-  i, n, x, w, sum, clientW: Integer;
+  i, n, x, w, sum, clientW, absorber: Integer;
 begin
   n := Length(AWidths);
   SetLength(Result, n);
   if n = 0 then Exit;
   clientW := AClient.Right - AClient.Left;
   sum := 0;
+  absorber := -1;
   for i := 0 to n - 1 do
   begin
     w := AWidths[i];
     if w < 0 then w := 0;
     Inc(sum, w);
+    { The remainder goes to the last section that HAS a width. A zero-width entry is how a
+      hidden section is spelled (see TTyHeaderSection.Visible), and handing the leftover to
+      one would have made it the widest thing on the strip -- a section the user just hid,
+      reappearing as the full remaining width. }
+    if w > 0 then absorber := i;
   end;
   x := AClient.Left;
   for i := 0 to n - 1 do
   begin
     w := AWidths[i];
     if w < 0 then w := 0;
-    // The last section absorbs any remainder so the strip always fills the client,
+    // The absorbing section takes any remainder so the strip always fills the client,
     // but never SHRINKS below its own width (a wider-than-client set just overruns).
-    if (i = n - 1) and (sum < clientW) then
+    if (i = absorber) and (sum < clientW) then
       w := clientW - (x - AClient.Left);
     Result[i] := Rect(x, AClient.Top, x + w, AClient.Bottom);
     Inc(x, w);
@@ -248,17 +309,25 @@ end;
 function TyHeaderResizeEdgeAtX(const AWidths: array of Integer; const AClient: TRect; X, AGrip: Integer): Integer;
 var
   rects: TTyHeaderRectArray;
-  i, edge, dist, best, bestDist: Integer;
+  i, edge, dist, best, bestDist, lastVisible: Integer;
 begin
   Result := -1;
   if AGrip < 0 then AGrip := 0;
   rects := TyHeaderSectionRects(AWidths, AClient);
   best := -1;
   bestDist := MaxInt;
+  { The last section with a width. Everything past it is hidden, so ITS right edge is the
+    control edge -- the boundary that is not a boundary. }
+  lastVisible := -1;
+  for i := 0 to High(AWidths) do
+    if AWidths[i] > 0 then lastVisible := i;
   // Interior boundaries only: the right edge of sections 0..n-2. The final section's
   // right edge is the control edge and is not a resizable boundary.
   for i := 0 to High(rects) - 1 do
   begin
+    { A zero-width (hidden) section has no grabbable edge of its own -- its "boundary" sits
+      exactly on its neighbour's, and dragging it would resize something invisible. }
+    if (AWidths[i] <= 0) or (i >= lastVisible) then Continue;
     edge := rects[i].Right;
     dist := Abs(X - edge);
     if (dist <= AGrip) and (dist < bestDist) then
@@ -297,6 +366,18 @@ begin
     Result[1] := Point(cx + half, cy + half div 2 + half);
     Result[2] := Point(cx,        cy - half div 2);
   end;
+end;
+
+{ ---- TTyHeaderSection ---- }
+
+function TTyHeaderSection.GetVisible: Boolean;
+begin
+  Result := not FHidden;
+end;
+
+procedure TTyHeaderSection.SetVisible(AValue: Boolean);
+begin
+  FHidden := not AValue;
 end;
 
 { ---- TTyHeaderControl ---- }
@@ -369,8 +450,74 @@ procedure TTyHeaderControl.SetSection(AIndex: Integer; const AValue: TTyHeaderSe
 begin
   if (AIndex < 0) or (AIndex >= Length(FSections)) then Exit;
   FSections[AIndex] := AValue;
-  if FSections[AIndex].Width < TyHeaderMinSectionWidth then
-    FSections[AIndex].Width := TyHeaderMinSectionWidth;
+  FSections[AIndex].Width := ClampSectionWidth(AIndex, FSections[AIndex].Width);
+  Invalidate;
+end;
+
+function TTyHeaderControl.ClampSectionWidth(AIndex, AWidth: Integer): Integer;
+var
+  lo, hi: Integer;
+begin
+  Result := AWidth;
+  if (AIndex < 0) or (AIndex >= Length(FSections)) then Exit;
+  lo := FSections[AIndex].MinWidth;
+  { No MinWidth of its own -> the strip-wide floor. An explicit MinWidth replaces that floor
+    outright rather than being raised to meet it: a 12px checkbox column is the whole reason
+    the property exists, and clamping it back up to 16 would make it inexpressible again. }
+  if lo <= 0 then lo := TyHeaderMinSectionWidth;
+  if lo < 1 then lo := 1;
+  hi := FSections[AIndex].MaxWidth;      // 0 = unbounded
+  if (hi > 0) and (Result > hi) then Result := hi;
+  // Floor last, so a MinWidth above MaxWidth resolves to MinWidth (LCL's CheckConstraints
+  // order too) rather than silently pinning the section at a width it declared too small.
+  if Result < lo then Result := lo;
+end;
+
+function TTyHeaderControl.GetSectionVisible(AIndex: Integer): Boolean;
+begin
+  Result := GetSection(AIndex).Visible;
+end;
+
+procedure TTyHeaderControl.SetSectionVisible(AIndex: Integer; AValue: Boolean);
+begin
+  if (AIndex < 0) or (AIndex >= Length(FSections)) then Exit;
+  if FSections[AIndex].Visible = AValue then Exit;
+  FSections[AIndex].Visible := AValue;
+  { A hidden section can no longer be the hot one -- otherwise the highlight would sit on a
+    cell that is not there, and MouseLeave is the only thing that would ever clear it. }
+  if (not AValue) and (FHotIndex = AIndex) then FHotIndex := -1;
+  Invalidate;
+end;
+
+function TTyHeaderControl.GetSectionMinWidth(AIndex: Integer): Integer;
+begin
+  Result := GetSection(AIndex).MinWidth;
+end;
+
+procedure TTyHeaderControl.SetSectionMinWidth(AIndex: Integer; AValue: Integer);
+begin
+  if (AIndex < 0) or (AIndex >= Length(FSections)) then Exit;
+  if AValue < 0 then AValue := 0;
+  if FSections[AIndex].MinWidth = AValue then Exit;
+  FSections[AIndex].MinWidth := AValue;
+  // Re-apply to the current width: a floor raised past it must take effect now, not at the
+  // next drag -- otherwise the section sits below its own declared minimum.
+  FSections[AIndex].Width := ClampSectionWidth(AIndex, FSections[AIndex].Width);
+  Invalidate;
+end;
+
+function TTyHeaderControl.GetSectionMaxWidth(AIndex: Integer): Integer;
+begin
+  Result := GetSection(AIndex).MaxWidth;
+end;
+
+procedure TTyHeaderControl.SetSectionMaxWidth(AIndex: Integer; AValue: Integer);
+begin
+  if (AIndex < 0) or (AIndex >= Length(FSections)) then Exit;
+  if AValue < 0 then AValue := 0;
+  if FSections[AIndex].MaxWidth = AValue then Exit;
+  FSections[AIndex].MaxWidth := AValue;
+  FSections[AIndex].Width := ClampSectionWidth(AIndex, FSections[AIndex].Width);
   Invalidate;
 end;
 
@@ -411,7 +558,7 @@ end;
 procedure TTyHeaderControl.SetSectionWidth(AIndex: Integer; AValue: Integer);
 begin
   if (AIndex < 0) or (AIndex >= Length(FSections)) then Exit;
-  if AValue < TyHeaderMinSectionWidth then AValue := TyHeaderMinSectionWidth;
+  AValue := ClampSectionWidth(AIndex, AValue);
   if FSections[AIndex].Width = AValue then Exit;
   FSections[AIndex].Width := AValue;
   Invalidate;
@@ -436,7 +583,14 @@ var
 begin
   SetLength(Result, Length(FSections));
   for i := 0 to High(FSections) do
-    Result[i] := MulDiv(FSections[i].Width, Font.PixelsPerInch, 96);
+    { A hidden section tiles at ZERO width rather than being dropped from the array. Dropping
+      it would make the rect index stop matching the section index, and every caller here --
+      paint, hit-test, resize-edge, EffectiveSectionWidth -- indexes one by the other. Zero
+      keeps the two in step and is already the "nothing to draw / nothing to hit" case. }
+    if FSections[i].Visible then
+      Result[i] := MulDiv(FSections[i].Width, Font.PixelsPerInch, 96)
+    else
+      Result[i] := 0;
 end;
 
 function TTyHeaderControl.ScaledGrip: Integer;
@@ -447,13 +601,28 @@ end;
 
 function TTyHeaderControl.AddSection(const AText: string; AWidth: Integer): Integer;
 begin
-  if AWidth < TyHeaderMinSectionWidth then AWidth := TyHeaderMinSectionWidth;
-  Result := Length(FSections);
-  SetLength(FSections, Result + 1);
-  FSections[Result].Text := AText;
-  FSections[Result].Width := AWidth;
-  FSections[Result].Alignment := taLeftJustify;
-  FSections[Result].SortDirection := hsdNone;
+  Result := InsertSection(Length(FSections), AText, AWidth);
+end;
+
+function TTyHeaderControl.InsertSection(AIndex: Integer; const AText: string;
+  AWidth: Integer): Integer;
+var
+  i: Integer;
+begin
+  if AIndex < 0 then AIndex := 0;
+  if AIndex > Length(FSections) then AIndex := Length(FSections);
+  Result := AIndex;
+  SetLength(FSections, Length(FSections) + 1);
+
+  for i := High(FSections) downto AIndex + 1 do
+    FSections[i] := FSections[i - 1];
+  FSections[AIndex] := Default(TTyHeaderSection);   // Visible (FHidden=False), no constraints
+  FSections[AIndex].Text := AText;
+  FSections[AIndex].Alignment := taLeftJustify;
+  FSections[AIndex].SortDirection := hsdNone;
+  FSections[AIndex].Width := ClampSectionWidth(AIndex, AWidth);
+  { Whatever the pointer was over, it is over a different section now. }
+  if FHotIndex >= AIndex then FHotIndex := -1;
   Invalidate;
 end;
 
@@ -501,7 +670,7 @@ var
   R, cellRect, textRect, clipR: TRect;
   rects: TTyHeaderRectArray;
   widths: TIntegerDynArray;
-  i, padL, padR, sortSize, gutter: Integer;
+  i, padL, padR, sortSize, gutter, lastVisible: Integer;
   tri: TTyHeaderTriangle;
   ctx: TBGRACanvas2D;
   txtColor, dividerColor: TTyColor;
@@ -525,6 +694,11 @@ begin
     // Device-px widths -> tiled rects. Pure math == hit-test geometry.
     widths := DeviceWidths;
     rects := TyHeaderSectionRects(widths, R);
+    { Which section is the RIGHTMOST one still on screen -- not necessarily the last index,
+      once a trailing section can be hidden. Only it is allowed to skip its divider. }
+    lastVisible := -1;
+    for i := 0 to High(widths) do
+      if widths[i] > 0 then lastVisible := i;
 
     padL := P.Scale(6);
     padR := P.Scale(6);
@@ -587,8 +761,8 @@ begin
         ctx.fill;
       end;
 
-      // Right divider (not after the last section).
-      if i < High(rects) then
+      // Right divider (not after the last VISIBLE section -- that edge is the control's).
+      if i < lastVisible then
         P.Bitmap.DrawLine(cellRect.Right - 1, cellRect.Top,
           cellRect.Right - 1, cellRect.Bottom, TyColorToBGRA(dividerColor), False);
     end;
@@ -640,7 +814,10 @@ begin
     // Convert the device-px drag delta to logical px and apply to the start width.
     deltaLogical := MulDiv(X - FResizeStartX, 96, Font.PixelsPerInch);
     newW := FResizeStartW + deltaLogical;
-    if newW < TyHeaderMinSectionWidth then newW := TyHeaderMinSectionWidth;
+    { The drag is clamped by the SECTION's own constraints, not by the strip-wide floor
+      alone. A MinWidth/MaxWidth that the setter honours and the drag ignores would be no
+      constraint at all -- the user drags straight through it. }
+    newW := ClampSectionWidth(FResizeIndex, newW);
     if FSections[FResizeIndex].Width <> newW then
     begin
       FSections[FResizeIndex].Width := newW;
