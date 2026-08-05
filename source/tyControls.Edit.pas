@@ -4,16 +4,44 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType, LazUTF8, LazMethodList, Clipbrd,
   ExtCtrls, StdCtrls,
-  BGRABitmap, BGRABitmapTypes,
+  BGRABitmap, BGRABitmapTypes, BGRATextBidi,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.UndoStack,
   tyControls.Animation, tyControls.QtWS, tyControls.GtkWS;
 type
   TTyIntArray = array of Integer;
 
+  { One same-direction stretch of a laid-out line: a contiguous half-open range of LOGICAL
+    codepoints [First, Last) that the bidirectional algorithm placed at [Left, Right) on
+    screen. A line with no right-to-left script in it is one run and this whole apparatus
+    stays asleep; "ab<two hebrew letters>cd" is three, the middle one drawn right-to-left.
+
+    The runs are in LOGICAL order (they partition 0..codepoint count) while Left/Right are
+    VISUAL, so run[1].Left < run[0].Left is perfectly normal and is exactly the case the
+    prefix sum could not express. }
+  TTyBidiRun = record
+    First, Last: Integer;
+    RTL: Boolean;
+    Left, Right: Integer;   // device px, relative to the text origin (as MeasureCodepointWidths is)
+  end;
+  TTyBidiRunArray = array of TTyBidiRun;
+
   TTyEdit = class(TTyCustomControl)
   private
     FText: TCaption;
     FCaret: Integer;      // codepoint index 0..UTF8Length(FText)
+    { Which of the two glyphs beside FCaret the caret is standing against.
+
+      A codepoint index stops having ONE screen position the moment the text is
+      bidirectional: in "ab<alef><bet>cd" the boundary at index 2 is both "after the b" and
+      "before the alef", and those are the two OPPOSITE ends of the Hebrew run. True means
+      the caret is drawn against the character BEFORE it (where typing and a rightward walk
+      leave it), False against the character AFTER it. Both are legitimate answers and the
+      Unicode algorithm does not choose; the operation that last moved the caret does, so
+      that is what this remembers.
+
+      True is the default and the value every path that does not care leaves behind, because
+      it is what an insertion point means: "the text I just wrote ends here". }
+    FCaretAfterPrev: Boolean;
     FSelAnchor: Integer;  // codepoint index; no selection <=> FSelAnchor = FCaret
     FMouseSelecting: Boolean;  // true while left button held for drag-select
     FScrollX: Integer;    // horizontal scroll offset in device px (>= 0)
@@ -24,6 +52,26 @@ type
     FWidthCacheFontSize: Integer;   // effective pt (after EffectiveFontSize)
     FWidthCachePPI: Integer;
     FWidthCachePassword: string;    // password char active when cache was built
+    { --- Bidirectional layout cache; see EnsureBidiLayout for the whole argument ---
+      FBidiHasRTL is THE GATE's answer, kept rather than recomputed: whether the text needs
+      reordering depends on the text alone, so a font or PPI change cannot flip it and a
+      left-to-right field pays one Boolean test per caret query rather than a scan. }
+    FBidiGateValid: Boolean;
+    FBidiHasRTL: Boolean;
+    FBidiValid: Boolean;            // the arrays below match the key fields below
+    FBidiActive: Boolean;           // ...and there is something in them worth using
+    FBidiRuns: TTyBidiRunArray;     // logical order
+    FBidiOrder: TTyIntArray;        // run indices, LEFT-to-RIGHT on screen
+    { The x of caret boundary i measured inside the run that owns the character AFTER it
+      (Lead) and inside the run that owns the character BEFORE it (Trail). They differ only
+      at a direction boundary -- which is the entire point, since that is where one index
+      has two positions and BGRA's own GetCaret hands back only the second. }
+    FBidiLead: TTyIntArray;
+    FBidiTrail: TTyIntArray;
+    FBidiKeyFont: string;
+    FBidiKeySize: Integer;
+    FBidiKeyPPI: Integer;
+    FBidiKeyPassword: string;
     // Lazy measuring bitmap (freed in Destroy)
     FMeasureBmp: TBGRABitmap;
     // Undo/redo infrastructure
@@ -81,10 +129,27 @@ type
     // Word-wise deletion (splice modelled on DeleteSelection)
     procedure DeleteWordBackward;
     procedure DeleteWordForward;
-    // Text measurement helper (moved to protected so subclasses can expose it)
-    procedure InvalidateWidthCache;
-    function EffectiveFontSize(const S: TTyStyleSet): Integer;
-    function MeasureCodepointWidths(APPI: Integer): TTyIntArray;
+    { Build (or reuse) the bidirectional run table and the two caret-x arrays for the
+      CURRENT display text, font and PPI. Cheap no-op -- one Boolean test -- when the text
+      carries no right-to-left script, which is the overwhelmingly common case and the one
+      whose cost may not change. }
+    procedure EnsureBidiLayout(APPI: Integer);
+    { The x of caret boundary AIndex measured INSIDE run ARun. Only meaningful for
+      ARun.First <= AIndex <= ARun.Last. }
+    function BidiRunEdgeX(ARun, AIndex: Integer): Integer;
+    // The run the live caret currently binds to (see FCaretAfterPrev). -1 when there is none.
+    function BidiCaretRun: Integer;
+    // The run immediately to the left (ADir<0) or right (ADir>0) of ARun on screen; -1 at the end.
+    function BidiNeighbourRun(ARun, ADir: Integer): Integer;
+    { Move the caret ONE GLYPH in the direction pressed (ADir: -1 left, +1 right) and set
+      the affinity the move implies. False when there is nowhere further to go. }
+    function MoveCaretVisual(ADir, APPI: Integer): Boolean;
+    { Park FCaretAfterPrev at its default -- the caret stands against the character BEFORE
+      it. Called by the navigations that move the caret without choosing a glyph for it to
+      stand against: a programmatic SelStart or CaretPos, a word jump, End, collapsing a
+      selection onto one of its edges. The mouse and the arrow keys DO choose, and set it
+      themselves. (Text mutations go through InvalidateWidthCache, which does this too.) }
+    procedure DefaultCaretAffinity;
     // Scroll helpers
     procedure EnsureCaretVisible(APPI: Integer);
     procedure ClampScrollX(APPI: Integer);
@@ -113,8 +178,20 @@ type
       whole display string on every accepted character, and routing that through the
       programmatic path would clear the dirty flag on every keypress. }
     procedure SetTextInternal(const AValue: TCaption; AByCode: Boolean);
-    // Text measurement helper (protected so headless access subclasses can call it)
+    // Text measurement helpers (protected so headless access subclasses can call them --
+    // the comment that claimed so had been sitting over a PRIVATE block).
     function TextStartX(APPI: Integer): Integer;
+    procedure InvalidateWidthCache;
+    function EffectiveFontSize(const S: TTyStyleSet): Integer;
+    function MeasureCodepointWidths(APPI: Integer): TTyIntArray;
+    { WHICH PATH the caret is currently coming from: the bidirectional run table, or the
+      prefix sum. A diagnostic, and it has to exist, because pixels cannot answer it -- for
+      text with a single run the two paths produce the SAME numbers, so a gate wedged
+      permanently open is invisible in the output and shows up only in the cost (a
+      TBidiTextLayout per text change, measured at ~3.3 ms against a ~23 us caret query).
+      A mutation that forced the gate on passed every geometry guard in the suite until this
+      existed. }
+    function UsesBidiCaret(APPI: Integer): Boolean;
     // Trailing-widget hook: a subclass reserves RightReserve device-px at the RIGHT of the
     // text area (default 0 => plain edit, byte-identical) and paints its widget there via
     // PaintTrailing; TrailingZone returns the same rect (client px) for hit-testing.
@@ -191,13 +268,34 @@ type
       ported code writes, and `Text := ''` is what it had to be rewritten to. }
     procedure Clear;
     // Mouse hit test
-    function CaretIndexAtX(AX: Integer): Integer;
+    function CaretIndexAtX(AX: Integer): Integer; overload;
+    { The same, also reporting which side of the boundary the click landed on -- which run
+      the user aimed at. Only the pair says where the caret goes: at a direction boundary
+      the index alone is two different places on screen. }
+    function CaretIndexAtX(AX: Integer; out AAfterPrev: Boolean): Integer; overload;
     // Clipboard API
     procedure CopyToClipboard;
     procedure CutToClipboard;
     procedure PasteFromClipboard;
     // Rendering helpers (public for headless tests)
     function CaretPixelXAt(ACaretIndex, APPI: Integer): Integer;
+    { Where the caret for ACaretIndex is DRAWN, device px in control coordinates before
+      the horizontal scroll and the alignment offset are applied -- the same origin
+      CaretPixelXAt has always used.
+
+      AAfterPrev is the caret's AFFINITY, and it exists because a codepoint index does not
+      have one screen position once the text is bidirectional. In "ab<2 hebrew letters>cd"
+      the boundary at index 2 is both "after the b" and "before the first Hebrew letter",
+      and those are the two opposite ends of the Hebrew run. True picks the side of the
+      character BEFORE the caret (where typing left it), False the side of the character
+      AFTER it. For text with no right-to-left run in it the two answers are identical and
+      this is exactly CaretPixelXAt. }
+    function CaretDrawXAt(ACaretIndex, APPI: Integer; AAfterPrev: Boolean): Integer;
+    { Where the LIVE caret is drawn: CaretDrawXAt for CaretPos, resolved with the affinity
+      the last caret movement left behind. This -- not CaretPixelXAt -- is what the
+      renderer, the scroller and the IME follow, because they follow the caret the user
+      can see. }
+    function CaretDrawX(APPI: Integer): Integer;
     // Undo/redo API
     procedure Undo;
     procedure Redo;
@@ -292,9 +390,11 @@ begin
   Height := TyDensityHeight(ActiveController, 28);
   FText := '';
   FCaret := 0;
+  FCaretAfterPrev := True;     // an insertion point stands after what was written
   FSelAnchor := 0;
   FScrollX := 0;
   FWidthCacheValid := False;
+  FBidiGateValid := False;
   FMeasureBmp := nil;
   FUndoStack := TTyUndoStack.Create;
   FSuspendUndo := False;
@@ -486,6 +586,11 @@ end;
 
 procedure TTyEdit.BreakCoalescing;
 begin
+  { Undo bookkeeping ONLY. It is tempting to default the caret's affinity here too -- every
+    caret navigation passes through it -- but the visual arrow walk needs to read the
+    affinity it is about to replace, and this runs before it. The default lives in
+    InvalidateWidthCache (every text mutation) and at the handful of navigations that move
+    the caret without deciding which glyph it stands against. }
   FUndoStack.BreakCoalescing;
 end;
 
@@ -551,6 +656,7 @@ begin
   BreakCoalescing;
   FCaret := V;
   FSelAnchor := V;
+  DefaultCaretAffinity;
   EnsureCaretVisible(Font.PixelsPerInch);
   ResetCaretBlink;
   Invalidate;
@@ -570,6 +676,7 @@ begin
   BreakCoalescing;
   FSelAnchor := SS;
   FCaret := SS + V;
+  DefaultCaretAffinity;
   EnsureCaretVisible(Font.PixelsPerInch);
   ResetCaretBlink;
   Invalidate;
@@ -603,6 +710,7 @@ begin
   BreakCoalescing;
   FSelAnchor := 0;
   FCaret := UTF8Length(FText);
+  DefaultCaretAffinity;
   EnsureCaretVisible(Font.PixelsPerInch);
   ResetCaretBlink;
   Invalidate;
@@ -748,6 +856,7 @@ begin
   BreakCoalescing;
   FCaret := AValue;
   FSelAnchor := AValue;  // direct CaretPos write collapses selection
+  DefaultCaretAffinity;
   EnsureCaretVisible(Font.PixelsPerInch);
   ResetCaretBlink;
   Invalidate;
@@ -861,6 +970,17 @@ end;
 procedure TTyEdit.InvalidateWidthCache;
 begin
   FWidthCacheValid := False;
+  { The gate's answer and the run table both hang off the TEXT, and this is the one call
+    every text mutation already makes -- so it is where they are dropped too, rather than in
+    fourteen places that would eventually stop agreeing. }
+  FBidiGateValid := False;
+  FBidiValid := False;
+  FBidiActive := False;
+  { And the caret's affinity with it, for the same reason and by the same argument: after a
+    text mutation the caret is an insertion point, which by definition stands after what was
+    just written. Only the mouse and the arrow keys ever leave it otherwise, and both of
+    those set it themselves. }
+  FCaretAfterPrev := True;
 end;
 
 function TTyEdit.EffectiveFontSize(const S: TTyStyleSet): Integer;
@@ -1004,6 +1124,267 @@ begin
   Result := FWidthCache;
 end;
 
+// ---- Bidirectional layout ----------------------------------------------------------
+//
+// WHY THIS EXISTS. MeasureCodepointWidths answers "where is codepoint N" with a cumulative
+// sum taken in STRING order. That is exactly right for Latin and CJK and simply untrue once
+// the glyphs have been reordered: c2cfafc taught TTyPainter to draw a mixed Arabic/Latin
+// line in visual order, and until this the edit still walked its prefix sum -- so an Arabic
+// field DREW right and SELECTED wrong. Clicking a glyph put the caret on a different one,
+// arrow keys jumped across runs, and a drag-selection highlighted glyphs the user had not
+// dragged over.
+//
+// WHY NOT TTyPainter.TextCaretX / TextCharIndexAtX, which exist for exactly this. Two
+// reasons, both structural:
+//
+//   * they lay out on the painter's FBmp, which only exists between BeginPaint and EndPaint.
+//     A caret is asked for from mouse handlers, key handlers, the scroller and the blink
+//     timer, and none of those are painting. Standing a whole painter up per query would be
+//     a TBidiTextLayout per keystroke -- the shape of the bug that once cost TTyMemo half a
+//     second of latency per key.
+//   * TextCaretX answers with TBidiTextLayout.GetCaret, which resolves a direction boundary
+//     towards the run that ENDS there and discards the other position. In "ab<alef><bet>cd"
+//     that makes codepoints 2 and 4 the same pixel with no way to tell them apart, and the
+//     far end of the embedded run unreachable by any index at all.
+//
+// So the line is laid out here instead, ONCE per text/font/PPI change, and every query is an
+// array lookup afterwards. The duplication is deliberate and pinned:
+// test.edit.bidi.EditCaretAgreesWithThePainterForUnambiguousIndices renders the same string
+// through TTyPainter.TextCaretX and requires the same pixel for every index the painter can
+// express, so the two cannot drift apart in silence.
+
+procedure TTyEdit.EnsureBidiLayout(APPI: Integer);
+var
+  S: TTyStyleSet;
+  EffSize, i, r, n, a, b, x: Integer;
+  Disp: string;
+  lay: TBidiTextLayout;
+begin
+  { THE GATE. Whether a line needs reordering depends on the TEXT and nothing else, so the
+    answer outlives a font or PPI change and is kept rather than rescanned. TyTextHasRTL
+    rejects ASCII in one compare and CJK, Cyrillic and Greek on the lead byte without
+    decoding, and it runs once per text change -- so a left-to-right field's per-query cost
+    is the Boolean test below and nothing more.
+
+    It is asked about the DISPLAY text, not about FText: a password field draws a column of
+    identical ASCII mask characters, and laying THOSE out bidirectionally would walk the
+    caret backwards through a mask that has no direction. }
+  if not FBidiGateValid then
+  begin
+    FBidiGateValid := True;
+    FBidiHasRTL := TyTextHasRTL(DisplayText);
+    if not FBidiHasRTL then
+    begin
+      FBidiValid := False;
+      FBidiActive := False;
+    end;
+  end;
+  if not FBidiHasRTL then Exit;
+
+  S := CurrentStyle;
+  EffSize := EffectiveFontSize(S);
+  n := UTF8Length(FText);
+  if FBidiValid
+    and (FBidiKeyFont = S.FontName)
+    and (FBidiKeySize = EffSize)
+    and (FBidiKeyPPI = APPI)
+    and (FBidiKeyPassword = FPasswordChar)
+    and (Length(FBidiLead) = n + 1)
+  then
+    Exit;
+
+  FBidiValid := True;
+  FBidiActive := False;
+  FBidiKeyFont := S.FontName;
+  FBidiKeySize := EffSize;
+  FBidiKeyPPI := APPI;
+  FBidiKeyPassword := FPasswordChar;
+  SetLength(FBidiRuns, 0);
+  SetLength(FBidiOrder, 0);
+  SetLength(FBidiLead, 0);
+  SetLength(FBidiTrail, 0);
+  if n = 0 then Exit;
+
+  Disp := DisplayText;
+  if FMeasureBmp = nil then
+    FMeasureBmp := TBGRABitmap.Create(1, 1);
+  // The same four lines MeasureCodepointWidths runs, and for the same reason: the layout
+  // borrows this bitmap's FontRenderer, so its metrics are the ones DrawText will use.
+  TyConfigureTextFont(FMeasureBmp, S.FontName, EffSize, S.FontWeight, APPI);
+
+  lay := TBidiTextLayout.Create(FMeasureBmp.FontRenderer, Disp);
+  try
+    { TopLeft at the origin makes every x below relative to the TEXT START -- the same
+      origin FWidthCache uses -- so the callers' existing "content left + align offset +
+      width - scroll" arithmetic is untouched. AvailableWidth is left unset for the same
+      reason TTyPainter.BuildLineLayout leaves it unset: this is a single-line control, and
+      an unset width also stops the layout right-aligning a right-to-left paragraph on its
+      own, which would be the MIRRORING half of the job and that half is not built. }
+    lay.TopLeft := PointF(0, 0);
+    SetLength(FBidiLead, n + 1);
+    SetLength(FBidiTrail, n + 1);
+    { Seed both arrays from the plain caret query so that an index no run claims (BGRA owes
+      us a partition of 0..n, but a zero here would be a caret at the left margin rather
+      than a visible wrong answer) still gets a defensible number. The run walk below then
+      overwrites every index it owns. }
+    for i := 0 to n do
+    begin
+      x := Round(lay.GetCaret(i).Top.x);
+      FBidiLead[i] := x;
+      FBidiTrail[i] := x;
+    end;
+    SetLength(FBidiRuns, lay.PartCount);
+    for r := 0 to lay.PartCount - 1 do
+    begin
+      a := lay.PartStartIndex[r];
+      b := lay.PartEndIndex[r];
+      FBidiRuns[r].First := a;
+      FBidiRuns[r].Last := b;
+      FBidiRuns[r].RTL := lay.PartRightToLeft[r];
+      FBidiRuns[r].Left := Round(lay.PartRectF[r].Left);
+      FBidiRuns[r].Right := Round(lay.PartRectF[r].Right);
+      for i := a to b do
+      begin
+        { The run's OWN end carets at its edges. Asking GetCaret there is what collapses the
+          two sides of a boundary onto one; asking the run resolves it, because a run has
+          exactly one start and one end and they are never the same point. Strictly inside
+          a run there is no ambiguity and GetCaret is exact. }
+        if i = a then x := Round(lay.PartStartCaret[r].Top.x)
+        else if i = b then x := Round(lay.PartEndCaret[r].Top.x)
+        else x := Round(lay.GetCaret(i).Top.x);
+        if i < b then FBidiLead[i] := x;    // boundary i faces the character i, which is in this run
+        if i > a then FBidiTrail[i] := x;   // ...and character i-1, likewise
+      end;
+    end;
+  finally
+    lay.Free;
+  end;
+
+  { Run indices in left-to-right SCREEN order, for the arrow keys: "the next glyph to the
+    right" is in the next run along, which is not the next run in logical order. Insertion
+    sort because a line has a handful of runs, not thousands. }
+  SetLength(FBidiOrder, Length(FBidiRuns));
+  for r := 0 to High(FBidiRuns) do
+  begin
+    i := r;
+    while (i > 0) and (FBidiRuns[FBidiOrder[i - 1]].Left > FBidiRuns[r].Left) do
+    begin
+      FBidiOrder[i] := FBidiOrder[i - 1];
+      Dec(i);
+    end;
+    FBidiOrder[i] := r;
+  end;
+  FBidiActive := Length(FBidiRuns) > 0;
+end;
+
+function TTyEdit.BidiRunEdgeX(ARun, AIndex: Integer): Integer;
+begin
+  { At the run's logical END only Trail was written from this run; everywhere else Lead was.
+    (Both arrays hold the same number except at a direction boundary.) }
+  if AIndex >= FBidiRuns[ARun].Last then
+    Result := FBidiTrail[FBidiRuns[ARun].Last]
+  else
+    Result := FBidiLead[AIndex];
+end;
+
+function TTyEdit.BidiCaretRun: Integer;
+var
+  r: Integer;
+begin
+  { The affinity names which neighbouring character the caret is standing against, and that
+    character's run is the one it belongs to. At the two ends of the line only one of the
+    two rules can be satisfied, so the other is the fallback. }
+  for r := 0 to High(FBidiRuns) do
+    if FCaretAfterPrev then
+    begin
+      if (FCaret > FBidiRuns[r].First) and (FCaret <= FBidiRuns[r].Last) then Exit(r);
+    end
+    else
+      if (FCaret >= FBidiRuns[r].First) and (FCaret < FBidiRuns[r].Last) then Exit(r);
+  for r := 0 to High(FBidiRuns) do
+    if (FCaret >= FBidiRuns[r].First) and (FCaret <= FBidiRuns[r].Last) then Exit(r);
+  Result := -1;
+end;
+
+function TTyEdit.BidiNeighbourRun(ARun, ADir: Integer): Integer;
+var
+  i: Integer;
+begin
+  Result := -1;
+  for i := 0 to High(FBidiOrder) do
+    if FBidiOrder[i] = ARun then
+    begin
+      if ADir > 0 then
+      begin
+        if i < High(FBidiOrder) then Result := FBidiOrder[i + 1];
+      end
+      else
+        if i > 0 then Result := FBidiOrder[i - 1];
+      Exit;
+    end;
+end;
+
+function TTyEdit.UsesBidiCaret(APPI: Integer): Boolean;
+begin
+  EnsureBidiLayout(APPI);
+  Result := FBidiActive;
+end;
+
+procedure TTyEdit.DefaultCaretAffinity;
+begin
+  FCaretAfterPrev := True;
+end;
+
+function TTyEdit.MoveCaretVisual(ADir, APPI: Integer): Boolean;
+var
+  Len, r, q, j: Integer;
+begin
+  Len := UTF8Length(FText);
+  EnsureBidiLayout(APPI);
+  if not FBidiActive then
+  begin
+    // No reordering: one glyph right IS one codepoint forward. Byte-identical to the
+    // Inc/Dec this replaced.
+    j := FCaret + ADir;
+    Result := (j >= 0) and (j <= Len);
+    if Result then
+    begin
+      FCaret := j;
+      FCaretAfterPrev := True;
+    end;
+    Exit;
+  end;
+
+  r := BidiCaretRun;
+  if r < 0 then Exit(False);
+  { Inside a right-to-left run the screen and the string run opposite ways, so a rightward
+    keypress is a BACKWARD step through the codepoints. This one line is the whole of
+    "Left and Right are visual movement in text". }
+  if FBidiRuns[r].RTL then j := FCaret - ADir else j := FCaret + ADir;
+  if (j >= FBidiRuns[r].First) and (j <= FBidiRuns[r].Last) then
+  begin
+    FCaret := j;
+    FCaretAfterPrev := j > FBidiRuns[r].First;
+    Exit(True);
+  end;
+
+  { The step left the run: cross to the one that sits next to it ON SCREEN and land one
+    glyph inside it, measured from the edge we arrived at. Landing ON that edge instead
+    would be a keypress that did not move the caret, because a run's near edge is the same
+    point as its neighbour's far edge. }
+  q := BidiNeighbourRun(r, ADir);
+  if q < 0 then Exit(False);
+  if ADir > 0 then
+  begin
+    if FBidiRuns[q].RTL then j := FBidiRuns[q].Last - 1 else j := FBidiRuns[q].First + 1;
+  end
+  else
+    if FBidiRuns[q].RTL then j := FBidiRuns[q].First + 1 else j := FBidiRuns[q].Last - 1;
+  FCaret := j;
+  FCaretAfterPrev := j > FBidiRuns[q].First;
+  Result := True;
+end;
+
 // ---- Scroll helpers ----
 
 procedure TTyEdit.ClampScrollX(APPI: Integer);
@@ -1053,8 +1434,11 @@ begin
   MaxScroll := TotalTextWidth - ViewWidth;
   if MaxScroll < 0 then MaxScroll := 0;
 
-  // Caret position in control coordinates (before scroll adjustment)
-  CaretPx := StartX + Widths[FCaret];
+  { Caret position in control coordinates (before scroll adjustment). Asked of the DRAWN
+    caret rather than of the prefix sum: those are the same number for left-to-right text
+    and only the drawn one is right for the rest -- and scrolling to where the caret is not
+    would leave the user typing off-screen. }
+  CaretPx := CaretDrawX(APPI);
 
   // Scroll right if caret beyond right edge
   if CaretPx - FScrollX > ViewRight - Margin then
@@ -1082,7 +1466,7 @@ begin
   ppi := Font.PixelsPerInch;
   S := CurrentStyle;
   TySetImeCaretPos(Self,
-    CaretPixelXAt(FCaret, ppi) + AlignOffset(ppi) - FScrollX,
+    CaretDrawX(ppi) + AlignOffset(ppi) - FScrollX,
     MulDiv(S.Padding.Top, ppi, 96));
 end;
 
@@ -1147,11 +1531,18 @@ end;
 
 function TTyEdit.CaretIndexAtX(AX: Integer): Integer;
 var
+  Ignored: Boolean;
+begin
+  Result := CaretIndexAtX(AX, Ignored);
+end;
+
+function TTyEdit.CaretIndexAtX(AX: Integer; out AAfterPrev: Boolean): Integer;
+var
   APPI: Integer;
   Widths: TTyIntArray;
   StartX: Integer;
   RelX: Integer;
-  Len, i: Integer;
+  Len, i, r, best, bestErr, err, ex: Integer;
   MidPoint: Integer;
 begin
   APPI := Font.PixelsPerInch;
@@ -1160,6 +1551,41 @@ begin
   // AlignOffset) so clicks map to the right codepoint under center/right align.
   RelX := AX - StartX - AlignOffset(APPI) + FScrollX;
   Len := UTF8Length(FText);
+  AAfterPrev := True;
+
+  EnsureBidiLayout(APPI);
+  if FBidiActive then
+  begin
+    { Which RUN the click landed in decides half the answer: at a direction boundary the
+      codepoint index alone is two different places on screen, so a hit test that returned
+      only the index would leave the caret to guess -- and a click on the far side of an
+      embedded run would draw the caret on the near side. }
+    r := FBidiOrder[0];
+    for i := 0 to High(FBidiOrder) do
+    begin
+      r := FBidiOrder[i];
+      if RelX < FBidiRuns[r].Right then Break;
+    end;
+    { Nearest boundary WITHIN that run. Scanned rather than bisected: a run's boundaries
+      descend for right-to-left text, and a handful of comparisons is nothing next to the
+      layout this is reading. }
+    best := FBidiRuns[r].First;
+    bestErr := MaxInt;
+    for i := FBidiRuns[r].First to FBidiRuns[r].Last do
+    begin
+      ex := BidiRunEdgeX(r, i);
+      err := Abs(ex - RelX);
+      if err < bestErr then
+      begin
+        bestErr := err;
+        best := i;
+      end;
+    end;
+    { The caret belongs to the run the user aimed at: against the character after it at the
+      run's logical start, against the one before it everywhere else. }
+    AAfterPrev := best > FBidiRuns[r].First;
+    Exit(best);
+  end;
 
   if RelX <= 0 then
   begin
@@ -1206,6 +1632,31 @@ begin
     Exit;
   Widths := MeasureCodepointWidths(APPI);
   Result := Result + Widths[ACaretIndex];
+end;
+
+function TTyEdit.CaretDrawXAt(ACaretIndex, APPI: Integer; AAfterPrev: Boolean): Integer;
+var
+  Len: Integer;
+begin
+  { The gate first and the clamp afterwards, deliberately: CaretPixelXAt clamps for itself,
+    so a left-to-right field must not pay a second UTF8Length walk of its own text on the
+    way past. Measured: with the clamp in front, this cost ~380ns more per query than the
+    call it delegates to; behind it, the difference is the Boolean test below. }
+  EnsureBidiLayout(APPI);
+  if not FBidiActive then
+    Exit(CaretPixelXAt(ACaretIndex, APPI));   // the prefix sum, untouched
+  Len := UTF8Length(FText);
+  if ACaretIndex < 0 then ACaretIndex := 0;
+  if ACaretIndex > Len then ACaretIndex := Len;
+  if AAfterPrev then
+    Result := TextStartX(APPI) + FBidiTrail[ACaretIndex]
+  else
+    Result := TextStartX(APPI) + FBidiLead[ACaretIndex];
+end;
+
+function TTyEdit.CaretDrawX(APPI: Integer): Integer;
+begin
+  Result := CaretDrawXAt(FCaret, APPI, FCaretAfterPrev);
 end;
 
 // ---- Clipboard implementation ----
@@ -1335,7 +1786,10 @@ begin
     begin
       // Single click: position caret, collapse selection
       BreakCoalescing;
-      FCaret := CaretIndexAtX(X);
+      // The hit test reports which RUN was aimed at, and at a direction boundary that is
+      // the difference between the caret appearing under the pointer and appearing at the
+      // far end of an embedded run.
+      FCaret := CaretIndexAtX(X, FCaretAfterPrev);
       FSelAnchor := FCaret;
       FMouseSelecting := True;
       EnsureCaretVisible(Font.PixelsPerInch);
@@ -1358,7 +1812,7 @@ begin
   begin
     // Drag-select: move caret, keep anchor fixed
     BreakCoalescing;
-    FCaret := CaretIndexAtX(X);
+    FCaret := CaretIndexAtX(X, FCaretAfterPrev);
     EnsureCaretVisible(Font.PixelsPerInch);
     Invalidate;
   end;
@@ -1679,6 +2133,9 @@ begin
         // Word-wise left: Alt+Left (macOS Option) or Ctrl+Left (Win/Linux).
         // Extending keeps the anchor and moves only the caret to the previous
         // word boundary; otherwise collapse selection. (Cmd/ssMeta falls through.)
+        { Word-wise movement stays LOGICAL: a word is a run of codepoints, not a run of
+          glyphs, and there is no visual definition of "the previous word" that survives an
+          embedded run. Only the affinity is parked. }
         if Extending then
           FCaret := PrevWordBoundary(FCaret)
         else
@@ -1686,6 +2143,7 @@ begin
           FCaret := PrevWordBoundary(FCaret);
           FSelAnchor := FCaret;
         end;
+        DefaultCaretAffinity;
         EnsureCaretVisible(Font.PixelsPerInch);
         Invalidate;
         Key := 0;
@@ -1694,29 +2152,35 @@ begin
         // remaining modifier+arrow (e.g. Cmd/Meta): do NOT consume; fall through
       else
       begin
+        { In TEXT, Left and Right are VISUAL movement -- one glyph in the direction pressed,
+          whatever that does to the codepoint index underneath. (In lists, grids, tabs and
+          menus the same two keys are LAYOUT direction and belong to the mirroring layer,
+          which is not built: plans/2026-08-04-rtl-mirroring-scope.md 6.3 item 4.)
+          For text with no right-to-left run in it MoveCaretVisual is Dec(FCaret) and the
+          bounds test that used to guard it, unchanged. }
         if Extending then
         begin
           // Shift held: move caret left (anchor stays)
-          if FCaret > 0 then
+          if MoveCaretVisual(-1, Font.PixelsPerInch) then
           begin
-            Dec(FCaret);
             EnsureCaretVisible(Font.PixelsPerInch);
             Invalidate;
           end;
         end
         else
         begin
-          // No shift: if selection exists collapse to left edge, else move
+          { No shift: if selection exists collapse to its LOGICAL start -- a selection is a
+            logical range and collapsing it is not a movement through glyphs -- else move. }
           if HasSelection then
           begin
             FCaret := SelStart;
             FSelAnchor := FCaret;
+            DefaultCaretAffinity;
             EnsureCaretVisible(Font.PixelsPerInch);
             Invalidate;
           end
-          else if FCaret > 0 then
+          else if MoveCaretVisual(-1, Font.PixelsPerInch) then
           begin
-            Dec(FCaret);
             FSelAnchor := FCaret;
             EnsureCaretVisible(Font.PixelsPerInch);
             Invalidate;
@@ -1733,6 +2197,7 @@ begin
         // Word-wise right: Alt+Right (macOS Option) or Ctrl+Right (Win/Linux).
         // Extending keeps the anchor and moves only the caret to the next word
         // boundary; otherwise collapse selection. (Cmd/ssMeta falls through.)
+        // Logical, like its mirror in the VK_LEFT branch above.
         if Extending then
           FCaret := NextWordBoundary(FCaret)
         else
@@ -1740,6 +2205,7 @@ begin
           FCaret := NextWordBoundary(FCaret);
           FSelAnchor := FCaret;
         end;
+        DefaultCaretAffinity;
         EnsureCaretVisible(Font.PixelsPerInch);
         Invalidate;
         Key := 0;
@@ -1748,29 +2214,29 @@ begin
         // remaining modifier+arrow (e.g. Cmd/Meta): do NOT consume; fall through
       else
       begin
+        // Visual movement; see the VK_LEFT branch for the whole argument.
         if Extending then
         begin
           // Shift held: move caret right (anchor stays)
-          if FCaret < Len then
+          if MoveCaretVisual(1, Font.PixelsPerInch) then
           begin
-            Inc(FCaret);
             EnsureCaretVisible(Font.PixelsPerInch);
             Invalidate;
           end;
         end
         else
         begin
-          // No shift: if selection exists collapse to right edge, else move
+          // No shift: if selection exists collapse to its LOGICAL end, else move
           if HasSelection then
           begin
             FCaret := SelStart + SelLength;
             FSelAnchor := FCaret;
+            DefaultCaretAffinity;
             EnsureCaretVisible(Font.PixelsPerInch);
             Invalidate;
           end
-          else if FCaret < Len then
+          else if MoveCaretVisual(1, Font.PixelsPerInch) then
           begin
-            Inc(FCaret);
             FSelAnchor := FCaret;
             EnsureCaretVisible(Font.PixelsPerInch);
             Invalidate;
@@ -1786,6 +2252,12 @@ begin
         // modifier+home: fall through
       else
       begin
+        { Home and End stay LOGICAL -- codepoint 0 and the last codepoint, wherever the
+          bidirectional algorithm happened to draw them (6.3 item 3 of the mirroring scope
+          note). Only the affinity is visual: the caret at the start of the text stands
+          against the character AFTER it, which is what makes it land on that glyph's
+          leading edge rather than on the far end of whatever run reaches index 0. }
+        FCaretAfterPrev := False;
         if Extending then
         begin
           FCaret := 0;
@@ -1809,6 +2281,8 @@ begin
         // modifier+end: fall through
       else
       begin
+        // Logical, like Home; the caret at the end of the text stands after the last one.
+        DefaultCaretAffinity;
         if Extending then
         begin
           FCaret := Len;
@@ -1835,6 +2309,7 @@ var
   ContentRect, BandRect, CaretRect: TRect;
   Widths: TTyIntArray;
   X1, X2, CaretX, AOff: Integer;
+  RunIdx, SelA, SelB, Swap: Integer;
   CaretH, CaretMidY: Integer;
   BandFill: TTyFill;
   BandColor: TTyColor;
@@ -1878,22 +2353,53 @@ begin
       // --selection = alpha(accent,0.30)), keeping it theme-overridable and
       // matching selected list rows.
       SelStyle := ActiveController.Model.ResolveStyle('TyTextSelection', '', []);
+      BandColor := SelStyle.Background.Color;
+      BandFill := Default(TTyFill);
+      BandFill.Kind := tfkSolid;
+      BandFill.Color := BandColor;
 
-      Widths := MeasureCodepointWidths(APPI);
-      // Apply scroll + alignment offset: shift band left by FScrollX, right by AOff
-      X1 := ContentRect.Left + AOff + Widths[SelStart] - FScrollX;
-      X2 := ContentRect.Left + AOff + Widths[SelStart + SelLength] - FScrollX;
-      // Clamp to content rect
-      if X1 < ContentRect.Left then X1 := ContentRect.Left;
-      if X2 > ContentRect.Right then X2 := ContentRect.Right;
-      if X1 < X2 then
+      EnsureBidiLayout(APPI);
+      if FBidiActive then
       begin
-        BandRect := Rect(X1, ContentRect.Top, X2, ContentRect.Bottom);
-        BandColor := SelStyle.Background.Color;
-        BandFill := Default(TTyFill);
-        BandFill.Kind := tfkSolid;
-        BandFill.Color := BandColor;
-        P.FillBackground(BandRect, BandFill, 0);
+        { A selection is a LOGICAL range, and a logical range that crosses a direction
+          boundary is not one rectangle on screen. Selecting "ab" plus the first letter of
+          an embedded Hebrew word highlights the "ab" and that letter -- with the SECOND
+          Hebrew letter, which is not selected, drawn in the gap between them. One band
+          spanning the lot would be telling the user they had selected it.
+          So: one band per run, over the part of the run the selection actually covers. }
+        for RunIdx := 0 to High(FBidiRuns) do
+        begin
+          SelA := SelStart;
+          if SelA < FBidiRuns[RunIdx].First then SelA := FBidiRuns[RunIdx].First;
+          SelB := SelStart + SelLength;
+          if SelB > FBidiRuns[RunIdx].Last then SelB := FBidiRuns[RunIdx].Last;
+          if SelA >= SelB then Continue;
+          X1 := BidiRunEdgeX(RunIdx, SelA);
+          X2 := BidiRunEdgeX(RunIdx, SelB);
+          // Inside a right-to-left run the later codepoint is the SMALLER x.
+          if X2 < X1 then begin Swap := X1; X1 := X2; X2 := Swap; end;
+          X1 := ContentRect.Left + AOff + X1 - FScrollX;
+          X2 := ContentRect.Left + AOff + X2 - FScrollX;
+          if X1 < ContentRect.Left then X1 := ContentRect.Left;
+          if X2 > ContentRect.Right then X2 := ContentRect.Right;
+          if X1 < X2 then
+            P.FillBackground(Rect(X1, ContentRect.Top, X2, ContentRect.Bottom), BandFill, 0);
+        end;
+      end
+      else
+      begin
+        Widths := MeasureCodepointWidths(APPI);
+        // Apply scroll + alignment offset: shift band left by FScrollX, right by AOff
+        X1 := ContentRect.Left + AOff + Widths[SelStart] - FScrollX;
+        X2 := ContentRect.Left + AOff + Widths[SelStart + SelLength] - FScrollX;
+        // Clamp to content rect
+        if X1 < ContentRect.Left then X1 := ContentRect.Left;
+        if X2 > ContentRect.Right then X2 := ContentRect.Right;
+        if X1 < X2 then
+        begin
+          BandRect := Rect(X1, ContentRect.Top, X2, ContentRect.Bottom);
+          P.FillBackground(BandRect, BandFill, 0);
+        end;
       end;
     end;
 
@@ -1935,10 +2441,9 @@ begin
     // 3. Caret (only when focused, no selection, and blink-visible)
     if Focused and not HasSelection and FCaretVisible then
     begin
-      if Length(Widths) = 0 then
-        Widths := MeasureCodepointWidths(APPI);
-      // Apply scroll + alignment offset to caret position
-      CaretX := ContentRect.Left + AOff + Widths[FCaret] - FScrollX;
+      // Apply scroll + alignment offset to caret position. CaretDrawX is the prefix sum for
+      // left-to-right text and the reordered position otherwise, so this one line is both.
+      CaretX := CaretDrawX(APPI) + AOff - FScrollX;
       // Caret height tracks the TEXT (font line height), vertically centered on the content
       // rect — NOT the box height. The text is drawn tlCenter in ContentRect, so its centre is
       // ContentRect's centre; sizing the caret to the measured line height keeps it the same

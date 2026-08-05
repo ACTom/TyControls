@@ -177,3 +177,4 @@ Feats.Items.CommaText := '自动保存,拼写检查,深色模式,行号,自动�
 ---
 
 参见 [[TTyGroupBox]] —— 提供带标题的外框与客户区内缩；[[TTyCheckBox]] —— 每个组内项的子控件类型。
+- **右到左镜像：** `BiDiMode := bdRightToLeft` 时列序反转（第 0 项落在最右列，往左排），每个内部复选框的指示框各自翻到右侧（靠 LCL 的 `ParentBiDiMode` 父子传播，不需要本控件伸手）。行序不动。

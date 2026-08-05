@@ -508,8 +508,14 @@ begin
 end;
 
 { AHAlign is the CALLER's instruction about where the text block sits in its rectangle, and
-  BiDi does not get to overrule it -- mirroring a control's geometry is a separate job that
-  has not been done. A right-to-left caption asked to sit on the left sits on the left. }
+  the SCRIPT does not get to overrule it. A right-to-left caption asked to sit on the left
+  sits on the left.
+
+  This got MORE load-bearing once mirroring landed, not less. Mirroring does overrule AHAlign
+  -- but it is armed by the control's BiDiMode at BeginPaint (test.rtl.pas), and the painter
+  here is unarmed. The two questions are "which way does this SENTENCE read" and "which way
+  does this FORM read", and conflating them would drag every Arabic label in an otherwise
+  English UI over to the right edge. This test is the wall between them. }
 procedure TBidiTextTest.RTLTextHonoursHorizontalAlignment;
 var
   left, centre, right: TBGRABitmap;

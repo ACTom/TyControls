@@ -173,7 +173,13 @@ var
 begin
   P := TTyPainter.Create;
   try
-    P.BeginPaint(ACanvas, ARect, APPI);
+    { MIRRORING: the Caption, and nothing else -- deliberately. The panel's own CHILDREN are
+      not mirrored, because LCL's align engine does not mirror either (the only BiDi branch
+      in wincontrol.inc is the ChildSizing TABLE path, :1551, which TTyPanel republishes and
+      therefore gets for free). Mirroring alLeft here would make a ty panel lay out
+      differently from every native container next to it and misplace any ported .lfm.
+      See plans/2026-08-04-rtl-mirroring-scope.md §6.3. No internal hit test. }
+    P.BeginPaint(ACanvas, ARect, APPI, IsRightToLeft);
     S := CurrentStyle;
     ContentRect := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
     DrawFrame(P, ContentRect, S);

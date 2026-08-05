@@ -5,7 +5,7 @@ unit tyControls.Painter;
 interface
 
 uses
-  Classes, SysUtils, Types, Math, Graphics, LCLType, LazUTF8, BGRABitmap, BGRABitmapTypes,
+  Classes, SysUtils, Types, Math, Controls, Graphics, LCLType, LazUTF8, BGRABitmap, BGRABitmapTypes,
   BGRAGradientScanner, BGRACanvas2D, BGRATextBidi,
   FPReadJPEG, FPReadPNG, FPReadBMP,  // register FPImage readers so url() jpg/png/bmp load
   tyControls.Types;
@@ -31,6 +31,7 @@ type
     FRect: TRect;
     FPPI: Integer;
     FOwnsBmp: Boolean;
+    FRightToLeft: Boolean;
     procedure GradientEndpoints(const ARect: TRect; AAngleDeg: Single; out P1, P2: TPointF);
     procedure BlitRegion(ASrc: TBGRABitmap; const ASrcR, ADstR: TRect; ATile: Boolean = False);
     {$IF defined(LINUX) or defined(DARWIN)}
@@ -82,11 +83,34 @@ type
   public
     Opacity: Single;
     OpacityBase: TTyColor;   // when Opacity<1, dim TOWARD this opaque colour (0 = old alpha-reduce)
-    procedure BeginPaint(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    { ARightToLeft arms this frame's MIRRORING. It says one thing only: the alignments the
+      caller is about to pass are LOGICAL -- taLeftJustify means "the reading start", not
+      "the left edge" -- so the painter resolves each of them to a physical side through
+      LCL's BidiFlipAlignment. The control gets it from TControl.IsRightToLeft
+      (controls.pp:1833, = BiDiMode <> bdLeftToRight), which is public and works from code
+      even though nothing publishes BiDiMode yet.
+
+      Deliberately a PARAMETER with a False default rather than something read off the
+      control, and that is the whole safety property of this batch. Flipping every caller at
+      once was the tempting design (plans/2026-08-04-rtl-mirroring-scope.md §2.1 counted 146
+      DrawText sites behind this one function), but it is wrong for any caller that has
+      already sliced its content rect into a SLOT and pre-positioned the text inside it:
+      TTyEdit hands DrawText a taLeftJustify over Rect(ContentRect.Left + AlignOffset, ...)
+      (tyControls.Edit.pas:1928) and keeps its caret and selection band on that same offset.
+      Flip that alignment without moving the slot and the glyphs jump to the far edge while
+      the caret stays put -- paint and hit test disagreeing, which is the exact defect this
+      codebase keeps digging out. So a control opts in only once its GEOMETRY mirrors too,
+      and `grep -n "BeginPaint(.*IsRightToLeft"` is the honest list of which ones do. }
+    procedure BeginPaint(ACanvas: TCanvas; const ARect: TRect; APPI: Integer;
+      ARightToLeft: Boolean = False);
     { 画到**调用方提供**的位图上,EndPaint 只 blit 不释放,也不预先清空。
       给需要跨帧复用表面的调用方用(网格的滚动脏区重绘)。 }
     procedure BeginPaintOn(ACanvas: TCanvas; const ARect: TRect; APPI: Integer;
-      ABmp: TBGRABitmap);
+      ABmp: TBGRABitmap; ARightToLeft: Boolean = False);
+    { Which way this frame reads. Exposed because a DrawContent override receives the
+      painter but not the control (TTyGlyphButtonBase.DrawContent), and asking the painter
+      guarantees the slot it lays out agrees with the direction the text was armed with. }
+    property RightToLeft: Boolean read FRightToLeft;
     procedure EndPaint;
     function Scale(ALogical: Integer): Integer;
     function Unscale(ADevice: Integer): Integer;
@@ -621,10 +645,12 @@ begin
   Result := BGRA(TyRedOf(c), TyGreenOf(c), TyBlueOf(c), TyAlphaOf(c));
 end;
 
-procedure TTyPainter.BeginPaint(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyPainter.BeginPaint(ACanvas: TCanvas; const ARect: TRect; APPI: Integer;
+  ARightToLeft: Boolean = False);
 begin
   FCanvas := ACanvas;
   FRect := ARect;
+  FRightToLeft := ARightToLeft;
   if APPI <= 0 then
     FPPI := 96
   else
@@ -637,10 +663,11 @@ begin
 end;
 
 procedure TTyPainter.BeginPaintOn(ACanvas: TCanvas; const ARect: TRect;
-  APPI: Integer; ABmp: TBGRABitmap);
+  APPI: Integer; ABmp: TBGRABitmap; ARightToLeft: Boolean = False);
 begin
   FCanvas := ACanvas;
   FRect := ARect;
+  FRightToLeft := ARightToLeft;
   if APPI <= 0 then FPPI := 96 else FPPI := APPI;
   Opacity := 1.0;
   OpacityBase := 0;
@@ -1156,6 +1183,19 @@ var
 begin
   if FBmp = nil then
     Exit;
+  { MIRRORING, resolved once for all four ways out of this function: the supersampled
+    twin below, style.Alignment, the mnemonic-underline case, and the bidi path's
+    BuildLineLayout. AHAlign arrives LOGICAL (see BeginPaint) and leaves physical, so
+    everything downstream of here reads a side, never a direction, and the three
+    placements cannot drift apart. BidiFlipAlignment (controls.pp:2922) is a two-row
+    lookup: left<->right, taCenter fixed. FRightToLeft = False is the identity row, which
+    is why every existing caller stays byte-identical.
+
+    Note this is layout direction, NOT script direction -- `rtl` just below is a different
+    question (does the STRING carry right-to-left codepoints), answered per caption. An
+    Arabic label on a left-to-right form still reorders its words; a Latin label on a
+    right-to-left form still moves to the right edge. }
+  AHAlign := BidiFlipAlignment(AHAlign, FRightToLeft);
   { Asked ONCE, of the caption rather than of the ellipsised prefix: this is the question
     "is this a bidirectional caption at all", and a truncation that happens to drop the last
     Arabic word does not turn it into a Latin one. Everything below reads the answer. }
@@ -1249,19 +1289,24 @@ begin
   Result := nil;
   if (FBmp = nil) or (AText = '') then Exit;
   { fbmAuto = resolve the paragraph direction from the first strong character, which is what
-    "the user typed an Arabic sentence" means. The alternative -- asking the control for a
-    BiDiMode -- is deliberately NOT taken: no control publishes one, because publishing a
-    property the paint path only half-honours is the defect this codebase keeps removing. }
+    "the user typed an Arabic sentence" means. Still deliberately NOT the control's BiDiMode:
+    that one answers "which way does this FORM read", which is the question BeginPaint's
+    ARightToLeft carries and AHAlign already encodes -- a different question from "which way
+    does this SENTENCE read", and conflating them would swap the halves of a Latin caption on
+    a right-to-left form. }
   Result := TBidiTextLayout.Create(FBmp.FontRenderer, AText);
   { AvailableWidth is deliberately LEFT UNSET (BGRA reads that as "infinite"), for two
     reasons that happen to be the same reason. It stops the layout from word-wrapping -- this
     is the SINGLE-line path, and the callers that wrap have already wrapped, CJK-aware, in
     TyWrapTextCJK. And it makes the layout's own box exactly as wide as the text, so its
     ParagraphAlignment has nothing left to do and cannot quietly right-align a right-to-left
-    paragraph on us. That matters: right-aligning it would be the MIRRORING half of the job
-    -- indicator side, scrollbar side, column order -- and that half is not built, so the
-    caller's AHAlign stays the only thing that decides where the block sits. Anchor it here,
-    exactly as the legacy path anchors a TextRect.
+    paragraph on us. That matters: right-aligning it would be the MIRRORING half of the job,
+    and mirroring is now a decision the CONTROL makes and passes down (BeginPaint's
+    ARightToLeft, already applied to AHAlign by the time it gets here) -- not something the
+    text layout is allowed to infer from the script it happens to be holding. Those two
+    answers differ for every Arabic caption on a left-to-right form. So the caller's AHAlign
+    stays the only thing that decides where the block sits. Anchor it here, exactly as the
+    legacy path anchors a TextRect.
     If a caller ever needs AvailableWidth, it must pin ParagraphAlignment to btaLeftJustify
     at the same time, or that decision changes underneath every control at once. }
   w := Ceil(Result.UsedWidth);
@@ -1375,7 +1420,9 @@ begin
   Result := ARect.Left;
   if FBmp = nil then Exit;
   TyConfigureTextFont(FBmp, AFontName, AFontSizeLogical, AWeight, FPPI);
-  lay := BuildLineLayout(ARect, AText, AHAlign, tlTop);
+  { The SAME flip DrawTextLine applies, for the reason this pair exists at all: a caret that
+    answered from an unmirrored block would point at a glyph that is no longer there. }
+  lay := BuildLineLayout(ARect, AText, BidiFlipAlignment(AHAlign, FRightToLeft), tlTop);
   if lay = nil then Exit;
   try
     if ACharIndex < 0 then ACharIndex := 0;
@@ -1394,7 +1441,8 @@ begin
   Result := 0;
   if FBmp = nil then Exit;
   TyConfigureTextFont(FBmp, AFontName, AFontSizeLogical, AWeight, FPPI);
-  lay := BuildLineLayout(ARect, AText, AHAlign, tlTop);
+  { See TextCaretX: the inverse query must be built on the block the DRAW produced. }
+  lay := BuildLineLayout(ARect, AText, BidiFlipAlignment(AHAlign, FRightToLeft), tlTop);
   if lay = nil then Exit;
   try
     { Probed at the vertical middle of the line the layout actually produced, not of ARect:

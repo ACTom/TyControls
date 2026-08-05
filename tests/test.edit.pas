@@ -23,6 +23,15 @@ type
     function DisplayTextForTest: string;
     function CaretPixelX2(AIdx: Integer): Integer;
     function TextStartXForTest: Integer;
+    { The font the control actually configures for measurement and drawing. Exposed so a
+      test can build the SAME layout the control builds (test.edit.bidi pins the two
+      against each other). }
+    function StyleFontNameForTest: string;
+    function StyleFontSizeForTest: Integer;
+    function StyleFontWeightForTest: Integer;
+    { Which caret path is live. See TTyEdit.UsesBidiCaret: pixels cannot tell, so this is
+      the only way to guard the gate. }
+    function UsesBidiCaretForTest(APPI: Integer): Boolean;
     // EDIT.17: TextHint helper
     function HintVisibleForTest: Boolean;
     // Task 10: blinking-caret field access (pure reset logic; no real timer)
@@ -84,7 +93,7 @@ type
     procedure TestMetaASelectsAll;
     // EDIT.3: mouse caret + clipboard
     procedure TestCaretIndexAtXBounds;
-    procedure TestCaretIndexAtXMonotonic;
+    procedure TestCaretIndexAtXMonotonicForLeftToRightText;
     procedure TestMouseDownPositionsCaret;
     procedure TestMouseDragSelects;
     procedure TestDoubleClickSelectsAll;
@@ -200,7 +209,30 @@ end;
 
 function TTyEditAccess.CaretPixelX(APPI: Integer): Integer;
 begin
-  Result := CaretPixelXAt(CaretPos, APPI);
+  { The DRAWN caret, not the prefix-sum one: every caller of this helper compares it with
+    rendered pixels, and once the text can be bidirectional those two are the same number
+    only if this asks the same question the renderer does. }
+  Result := CaretDrawX(APPI);
+end;
+
+function TTyEditAccess.StyleFontNameForTest: string;
+begin
+  Result := CurrentStyle.FontName;
+end;
+
+function TTyEditAccess.StyleFontSizeForTest: Integer;
+begin
+  Result := EffectiveFontSize(CurrentStyle);
+end;
+
+function TTyEditAccess.StyleFontWeightForTest: Integer;
+begin
+  Result := CurrentStyle.FontWeight;
+end;
+
+function TTyEditAccess.UsesBidiCaretForTest(APPI: Integer): Boolean;
+begin
+  Result := UsesBidiCaret(APPI);
 end;
 
 function TTyEditAccess.DisplayTextForTest: string;
@@ -741,7 +773,12 @@ begin
   end;
 end;
 
-procedure TEditTest.TestCaretIndexAtXMonotonic;
+{ Renamed: the old name, TestCaretIndexAtXMonotonic, read as a claim about the hit test and
+  it is not one. Sweeping left to right returns non-decreasing caret indices only while the
+  glyphs are in string order -- which is what 'abcde' is and what a bidirectional string is
+  not. In "ab<two hebrew letters>cd" the sweep returns 0,1,2,4,3,2,4,5,6: the embedded run
+  is walked backwards, on purpose, and test.edit.bidi pins that. }
+procedure TEditTest.TestCaretIndexAtXMonotonicForLeftToRightText;
 var
   F: TCustomForm;
   E: TTyEditAccess;

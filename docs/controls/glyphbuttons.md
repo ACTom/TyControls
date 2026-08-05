@@ -254,3 +254,4 @@ end;
 - [[TTyButton]] —— 基类，提供框架、状态、悬停渐变、角标、Default/Cancel/ModalResult。
 - [[TTyIconFont]] —— 图标字体源，`RenderGlyph` 光栅化字形。
 - [[TTyCharImage]] —— 只显示单个字形的叶子图形控件（同样的字形合成机制）。
+- **右到左镜像：** `GlyphLayout` 的左右一对会翻转（`glLeft` ↔ `glRight`），上下一对不动（`glTop`/`glBottom` 没有阅读方向）。这与 LCL 给 `TBitBtn` 备的 `BidiAdjustButtonLayout`（`buttons.pp:700`）是同一张表，所以 ty 图标按钮和 `TBitBtn` 在同一个右到左窗体上会把图标放在同一侧。尺寸不变，只是三段的顺序变了。

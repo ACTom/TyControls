@@ -186,3 +186,4 @@ end;
 8. **网格填充顺序改了（3.0 起的破坏性变更）：** 本控件原先**硬编码列优先**（先竖着填满第 0 列），且没有任何开关；单元头部注释当年记下了这条分歧，却没有修它。LCL 的 `TCustomRadioGroup` 默认是行优先（`ColumnLayout = clHorizontalThenVertical`，`extctrls.pp:777`），于是同一份 .lfm 在 Lazarus 里和在这里排出来的**选项顺序不一样**——6 项 2 列，那边读作 `1 2 / 3 4 / 5 6`，这边读作 `1 4 / 2 5 / 3 6`，既不报错也没有别的迹象。现在默认与 LCL 一致，旧顺序仍可通过 `ColumnLayout := clVerticalThenHorizontal` 取回。**迁移**：单列分组（也就是默认的 `Columns = 1`）完全不受影响；只有多列分组需要看一眼。
 9. **复用 `TyGroupBox` 主题：** 本控件不引入任何新 typeKey 或新 .tycss 规则；框体走 `TyGroupBox`，子控件走 `TyRadioButton`。
 ```
+- **右到左镜像：** `BiDiMode := bdRightToLeft` 时列序反转（第 0 项落在最右列），每个圆钮各自翻转指示器，**方向键跟着列走**——镜像后按 ← 是走向下一项，因为下一项在视觉上就在左边。上下方向键不变（纵向没有阅读方向）。

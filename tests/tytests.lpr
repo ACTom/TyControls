@@ -146,6 +146,8 @@ uses
   test.parity.combo,
   test.combohint,
   test.bidi,
+  test.rtl,
+  test.edit.bidi,
   test.card, test.tag, test.badge,
   test.grid.layout, test.grid, test.grid.streaming,
   test.alert, test.notification, test.empty, test.segmented,

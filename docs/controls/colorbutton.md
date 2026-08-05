@@ -105,3 +105,4 @@ function TyColorHex(AColor: TTyColor): string;   // 返回 '#RRGGBB'（大写，
 
 - [[TTyButton]] — 父类，提供全部按钮能力。
 - [对话框子系统](dialogs.md) — `TySelectColor` 取色对话框（§9.1）。
+- **右到左镜像：** `BiDiMode := bdRightToLeft` 时色块移到右侧、标题移到它左边。宽度计算不变（`CalculatePreferredSize` 无需分支），只是同样的三段换了顺序。

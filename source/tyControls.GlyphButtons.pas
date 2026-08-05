@@ -362,7 +362,26 @@ procedure TyGlyphButtonSplit(const AContentRect: TRect; AGlyphPx, AGapPx: Intege
   negative one). Headless-testable, no font, no painter. }
 function TyGlyphButtonIconOnlyRect(const AContentRect: TRect; AGlyphPx: Integer): TRect;
 
+{ The glyph layout mirrored for a right-to-left button: glLeft <-> glRight, the stacked
+  pair untouched (up/down is not a reading direction). This is LCL's BidiAdjustButtonLayout
+  (buttons.pp:700) over our four-member enum — the same table, applied to the same problem,
+  so a ty glyph button and a TBitBtn put their icon on the same side of the same caption.
+  AFlip = False is the identity row. }
+function TyBidiFlipGlyphLayout(ALayout: TTyGlyphLayout; AFlip: Boolean): TTyGlyphLayout;
+
 implementation
+
+const
+  BidiGlyphLayout: array[Boolean, TTyGlyphLayout] of TTyGlyphLayout =
+  (
+    ( glLeft,  glTop, glRight, glBottom ),
+    ( glRight, glTop, glLeft,  glBottom )
+  );
+
+function TyBidiFlipGlyphLayout(ALayout: TTyGlyphLayout; AFlip: Boolean): TTyGlyphLayout;
+begin
+  Result := BidiGlyphLayout[AFlip, ALayout];
+end;
 
 procedure TyGlyphButtonSplit(const AContentRect: TRect; AGlyphPx, AGapPx: Integer;
   ALayout: TTyGlyphLayout; out AGlyphRect, ACaptionRect: TRect);
@@ -732,8 +751,16 @@ begin
 
   // Painter PPI, so a per-instance Spacing scales exactly as the theme metric did.
   gapPx := EffectiveGapPx(APainter.PPI);
+  { MIRRORING: glyph-left becomes glyph-right, so the icon stays on the side the caption
+    STARTS at. Only the split needs it — the size decision above reads glTop/glBottom, which
+    the flip never produces from a side layout and never turns into one, so MeasureGlyphSlot
+    and the icon-only path stay identical and AutoSize cannot drift from what is drawn.
+    Asked of the PAINTER rather than of Self: DrawContent is handed a painter that was armed
+    once in RenderTo, and taking the direction from the same place the text did is what stops
+    a slot and its caption from disagreeing about which way this frame reads. }
   if FShowCaption then
-    TyGlyphButtonSplit(AContentRect, glyphPx, gapPx, FGlyphLayout, glyphRect, captionRect)
+    TyGlyphButtonSplit(AContentRect, glyphPx, gapPx,
+      TyBidiFlipGlyphLayout(FGlyphLayout, APainter.RightToLeft), glyphRect, captionRect)
   else
   begin
     // Icon-only: the glyph owns the whole content box (centred) and there is no caption

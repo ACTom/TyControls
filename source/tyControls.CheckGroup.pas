@@ -2,7 +2,7 @@ unit tyControls.CheckGroup;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, LCLType, ExtCtrls,
+  Classes, SysUtils, Types, Controls, LCLType, LMessages, ExtCtrls,
   tyControls.Controller, tyControls.GroupBox, tyControls.CheckBox;
 type
   { Fired when a hosted checkbox toggles; AIndex is that item's index. }
@@ -69,6 +69,10 @@ type
     procedure SetParent(AParent: TWinControl); override;
     procedure Resize; override;
     procedure SetController(AValue: TTyStyleController); override;
+    { See TTyRadioGroup.CMBiDiModeChanged: LCL's own handling invalidates and calls
+      AdjustSize, neither of which re-runs a layout this control did with SetBounds -- so
+      without this the indicators would flip and the columns would not. }
+    procedure CMBiDiModeChanged(var Message: TLMessage); message CM_BIDIMODECHANGED;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -133,16 +137,24 @@ type
   Columns divide the client width evenly; the last column absorbs the width remainder so
   cells tile flush. Rows stack from the top; a partially-filled last row/column simply has
   fewer cells. An out-of-range AIndex, ACount <= 0, AColumns <= 0 or ARowH <= 0 yields an
-  empty rect. PURE — no control state; unit-tested directly. }
+  empty rect. PURE — no control state; unit-tested directly.
+
+  ARightToLeft reverses the COLUMN order: item 0 starts in the rightmost column and the
+  fill order runs leftwards. Rows are untouched (top-to-bottom is not a reading direction
+  this library mirrors). Implemented as a reflection of the finished cell about AClientRect
+  rather than as `col := cols - 1 - col`, so the flush tiling — which the remainder-absorbing
+  last column exists to guarantee — is preserved by construction instead of by argument. }
 function TyCheckGroupCellRect(const AClientRect: TRect;
   ACount, AColumns, AIndex, ARowH: Integer;
-  ALayout: TColumnLayout = clHorizontalThenVertical): TRect;
+  ALayout: TColumnLayout = clHorizontalThenVertical;
+  ARightToLeft: Boolean = False): TRect;
 
 implementation
 
 function TyCheckGroupCellRect(const AClientRect: TRect;
   ACount, AColumns, AIndex, ARowH: Integer;
-  ALayout: TColumnLayout = clHorizontalThenVertical): TRect;
+  ALayout: TColumnLayout = clHorizontalThenVertical;
+  ARightToLeft: Boolean = False): TRect;
 var
   cols, rowsPerCol, col, row, colW, l, r, cw: Integer;
 begin
@@ -180,6 +192,11 @@ begin
                  AClientRect.Top + row * ARowH,
                  r,
                  AClientRect.Top + row * ARowH + ARowH);
+  { Reflect the finished cell about AClientRect's vertical centre — LCL's own five-liner
+    (controls.pp:2966), because a reflection of a gapless tiling is gapless and a
+    hand-written index flip is where the seam would come from. }
+  if ARightToLeft then
+    Result := BidiFlipRect(Result, AClientRect, True);
 end;
 
 { TTyCheckGroup }
@@ -342,7 +359,12 @@ begin
   for i := 0 to n - 1 do
   begin
     if FCheckBoxes[i] = nil then Continue;
-    cell := TyCheckGroupCellRect(cr, n, FColumns, i, rowH, FColumnLayout);
+    { MIRRORING: the columns reverse here; each hosted TTyCheckBox flips its OWN indicator,
+      because BiDiMode propagates parent-to-child through LCL (CMParentBiDiModeChanged,
+      include/control.inc:5993) and every child has ParentBiDiMode on by default. Nothing to
+      keep a hit test in step with: the children are real controls that answer their own
+      clicks, so there is no index-to-position arithmetic on the input side at all. }
+    cell := TyCheckGroupCellRect(cr, n, FColumns, i, rowH, FColumnLayout, IsRightToLeft);
     FCheckBoxes[i].SetBounds(cell.Left, cell.Top,
       cell.Right - cell.Left, cell.Bottom - cell.Top);
   end;
@@ -468,6 +490,12 @@ procedure TTyCheckGroup.Resize;
 begin
   inherited Resize;
   LayoutCheckBoxes;                 // reflow on resize (columns share the new width)
+end;
+
+procedure TTyCheckGroup.CMBiDiModeChanged(var Message: TLMessage);
+begin
+  inherited;
+  LayoutCheckBoxes;                 // the columns have to actually change sides
 end;
 
 procedure TTyCheckGroup.SetController(AValue: TTyStyleController);

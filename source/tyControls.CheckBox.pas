@@ -246,13 +246,20 @@ var
   S, FrameS, CaptionS: TTyStyleSet;
   ContentRect, BoxRect, TextRect, FullRect: TRect;
   BoxSize, Gap, BoxTop: Integer;
-  TextAlign: TAlignment;
+  TextAlign, SideAlign: TAlignment;
   disp: string;
   mp: Integer;
 begin
   P := TTyPainter.Create;
   try
-    P.BeginPaint(ACanvas, ARect, APPI);
+    P.BeginPaint(ACanvas, ARect, APPI, IsRightToLeft);
+    { MIRRORING. The switch was already here -- Alignment has moved the indicator to the
+      other side and re-hugged the caption since that property landed -- so all right-to-left
+      does is decide which way the switch points. SideAlign is the PHYSICAL side; FAlignment
+      is untouched, because RTL overrides the effective side for one frame and never rewrites
+      what the author wrote (LCL does the same: grids.pas:4006 flips a column's own alignment
+      at paint time, checklst.pas:199 flips the check side unconditionally). }
+    SideAlign := BidiFlipAlignment(FAlignment, IsRightToLeft);
     // S drives the BOX (and its glyph): when checked it carries tysActive so the
     // :active accent fill + white glyph resolve. CaptionS is resolved WITHOUT the
     // checked-derived tysActive so the :active 'color:#FFFFFF' never whitens the
@@ -284,7 +291,7 @@ begin
     BoxTop := ContentRect.Top + ((ContentRect.Bottom - ContentRect.Top - BoxSize) div 2);
     // Alignment picks the SIDE the indicator sits on; see the property. Vertical centring
     // and every size are identical either way, so only the two X coordinates branch.
-    if FAlignment = taLeftJustify then
+    if SideAlign = taLeftJustify then
       BoxRect := Rect(ContentRect.Right - BoxSize, BoxTop, ContentRect.Right, BoxTop + BoxSize)
     else
       BoxRect := Rect(ContentRect.Left, BoxTop, ContentRect.Left + BoxSize, BoxTop + BoxSize);
@@ -297,17 +304,21 @@ begin
     end;
     // The caption takes the strip left over, hugging the indicator from whichever side it
     // is on — so the pair reads as one unit at either alignment instead of drifting apart.
-    if FAlignment = taLeftJustify then
+    // The strip is a PHYSICAL rect, so it follows SideAlign; TextAlign is a LOGICAL one the
+    // painter resolves (it was armed with the same flag), so it follows FAlignment and is
+    // exactly the line it always was. Both readings agree because "hug the indicator" is
+    // direction-free: the caption sits on the indicator's inner side either way round.
+    if SideAlign = taLeftJustify then
     begin
       TextRect := Rect(ContentRect.Left, ContentRect.Top, BoxRect.Left - Gap, ContentRect.Bottom);
       if TextRect.Right < TextRect.Left then TextRect.Right := TextRect.Left;
-      TextAlign := taRightJustify;
     end
     else
-    begin
       TextRect := Rect(BoxRect.Right + Gap, ContentRect.Top, ContentRect.Right, ContentRect.Bottom);
+    if FAlignment = taLeftJustify then
+      TextAlign := taRightJustify
+    else
       TextAlign := taLeftJustify;
-    end;
     TyParseMnemonic(Caption, disp, mp);
     P.DrawText(TextRect, disp, S.FontName, ResolveFontSize(S), S.FontWeight,
       CaptionS.TextColor, TextAlign, tlCenter, True, TyAccelGatePos(mp));
@@ -549,13 +560,15 @@ var
   S, FrameS, CaptionS: TTyStyleSet;
   ContentRect, DotRect, TextRect, FullRect: TRect;
   BoxSize, Gap, DotRadiusLogical, DotTop: Integer;
-  TextAlign: TAlignment;
+  TextAlign, SideAlign: TAlignment;
   disp: string;
   mp: Integer;
 begin
   P := TTyPainter.Create;
   try
-    P.BeginPaint(ACanvas, ARect, APPI);
+    P.BeginPaint(ACanvas, ARect, APPI, IsRightToLeft);
+    // MIRRORING: see TTyCheckBox.RenderTo -- same switch, same two readings of Alignment.
+    SideAlign := BidiFlipAlignment(FAlignment, IsRightToLeft);
     // S drives the dot box (+ its glyph): checked -> tysActive -> :active accent
     // fill + white dot. CaptionS is resolved WITHOUT the checked-derived tysActive
     // so the caption text colour stays normal (box-only). See TTyCheckBox.RenderTo.
@@ -584,7 +597,7 @@ begin
     Gap := P.Scale(ActiveController.Metric('--radio-gap', TyCheckBoxGap));
     DotTop := ContentRect.Top + ((ContentRect.Bottom - ContentRect.Top - BoxSize) div 2);
     // See TTyCheckBox.RenderTo: Alignment picks the SIDE, nothing else changes.
-    if FAlignment = taLeftJustify then
+    if SideAlign = taLeftJustify then
       DotRect := Rect(ContentRect.Right - BoxSize, DotTop, ContentRect.Right, DotTop + BoxSize)
     else
       DotRect := Rect(ContentRect.Left, DotTop, ContentRect.Left + BoxSize, DotTop + BoxSize);
@@ -598,17 +611,19 @@ begin
     P.StrokeBorder(DotRect, DotRadiusLogical, S.BorderWidth, S.BorderColor);
     if FChecked then
       TyDrawGlyph(P, ActiveController, DotRect, '--glyph-radio', tgRadioDot, S.TextColor, 2);
-    if FAlignment = taLeftJustify then
+    // Physical strip from SideAlign, logical text alignment from FAlignment -- see
+    // TTyCheckBox.RenderTo for why the two branch conditions differ on purpose.
+    if SideAlign = taLeftJustify then
     begin
       TextRect := Rect(ContentRect.Left, ContentRect.Top, DotRect.Left - Gap, ContentRect.Bottom);
       if TextRect.Right < TextRect.Left then TextRect.Right := TextRect.Left;
-      TextAlign := taRightJustify;
     end
     else
-    begin
       TextRect := Rect(DotRect.Right + Gap, ContentRect.Top, ContentRect.Right, ContentRect.Bottom);
+    if FAlignment = taLeftJustify then
+      TextAlign := taRightJustify
+    else
       TextAlign := taLeftJustify;
-    end;
     TyParseMnemonic(Caption, disp, mp);
     P.DrawText(TextRect, disp, S.FontName, ResolveFontSize(S), S.FontWeight,
       CaptionS.TextColor, TextAlign, tlCenter, True, TyAccelGatePos(mp));

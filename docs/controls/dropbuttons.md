@@ -165,3 +165,4 @@ SortBtn.DropDownMenu := Menu;
 
 - [[TTyButton]] —— 基类，提供框架、状态、悬停渐变、角标、Default/Cancel/ModalResult。
 - [[菜单|menu]] —— `TTyPopupMenu` 主题化弹出菜单（`PopUp(X, Y)` 渲染菜单树）。
+- **右到左镜像：暂不支持，且是刻意的。** `TTyDropDownButton` 把按钮面切成「标题区 + 箭头区」，并且**要把点击的 x 读回来**判断按的是哪一半（`TyDropArrowHit`，`tyControls.DropButtons.pas:170`）。只镜像绘制而不镜像命中，就会得到「画在左边、点在右边」——本库已经在 `TTyShape`、`TTyTreeView.GetNodeAt`、日期选择器上栽过三次的那个 bug。所以箭头区暂时留在右侧；`tests/test.rtl.pas` 的 `TRtlExclusionTest` 把绘制与命中钉在一起，将来谁要镜像它，必须在同一次提交里把两边一起改，否则测试变红。（`TTyMenuButton` 没有内部命中，整块就是下拉，不受影响。）

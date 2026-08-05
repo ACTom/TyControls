@@ -223,3 +223,4 @@ end;
 ---
 
 参见 [[TTyButton]] —— 视觉原型相同，但两者是各自独立的 typeKey（`TyButton` / `TyButtonGroup`），主题里要分别定义。语义更接近的近亲是分段控件 `TySegmented` / `TySegmentedItem`。
+- **右到左镜像：暂不支持，且是刻意的。** `TySegmentAt` 直接把点击的原始 x 映射成分段下标（`MouseDown` / `MouseMove` 都走它）。只反转绘制的话，点击会选中鼠标位置镜像点上的那一段——在一个专门用来"选"的控件上尤其难发现。理由与 [dropbuttons.md](dropbuttons.md) 相同，同样由 `tests/test.rtl.pas` 的 `TRtlExclusionTest` 钉住。

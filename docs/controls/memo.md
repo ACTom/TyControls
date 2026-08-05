@@ -232,8 +232,19 @@ end;
 > 文字的字符串走 Unicode 双向算法排版（UAX #9），阿拉伯语/希伯来语的**词序与字形连写都是对的**。
 > 没有的是**镜像**：指示器、滚动条、列的左右不翻转。所以 `BidiMode` 依然是一个「界面上给了、控件只兑现一半」
 > 的属性，仍然不 published。
-> **⚠ 而且本控件的光标与点击定位仍是逻辑序的**——双向文本在这里**画对了、选不对**（点字形可能把光标放到别处）。
-> 详见 [KNOWN_GAPS.md](../KNOWN_GAPS.md#bidirectional-right-to-left-text)。
+> **⚠ 而且本控件的光标与点击定位仍是逻辑序的**——双向文本在这里**画对了、选不对**：`CaretToVisual` /
+> `VisualToCaret`（`tyControls.Memo.pas:403` / `:408`）建立在按字符串顺序累加的逐行码点宽度缓存上，
+> 而混排串里两个逻辑相邻的码点可能落在屏幕上两个不同的位置。后果是点某个字形可能把光标放到别处、
+> 方向键在书写方向不同的段落间跳、拖选高亮的范围未必对应指针下的字形。
+>
+> **`TTyEdit` 已经修好了，本控件没有，这是有意划的范围，不是遗漏。** 单行控件只有一条基线，
+> 建一份同向段（run）表就够了；本控件的光标是**二维**的 `(line, col)`，而且开启 `WordWrap` 后
+> 一条逻辑行会切成若干**视觉行**——采用同一套段表意味着**每个视觉行各建一份**，并把它接进：
+> 视觉行解析（`CaretToVisual` / `VisualToCaret`）、逐行选区带（跨方向时同一行要画多条）、
+> 上下方向键记住的「目标列」（视觉列与逻辑列在混排行里不是一回事）、以及关掉自动换行时的横向滚动。
+> 这比单行那次实质上大一圈，而且半接线的结果比原样不动更糟。
+> 参照实现与守卫在 `tests/test.edit.bidi.pas`，详见
+> [KNOWN_GAPS.md](../KNOWN_GAPS.md#bidirectional-right-to-left-text)。
 > **无障碍：** 构造时声明 `AccessibleRole := larTextEditorMultiline`（`TTyEdit` 是 `larTextEditorSingleline`）。
 
 

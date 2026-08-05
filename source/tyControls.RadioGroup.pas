@@ -2,7 +2,7 @@ unit tyControls.RadioGroup;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, LCLType, ExtCtrls,
+  Classes, SysUtils, Types, Controls, LCLType, LMessages, ExtCtrls,
   tyControls.Base, tyControls.Controller, tyControls.GroupBox, tyControls.CheckBox;
 type
   { TTyRadioGroup — a titled frame (subclass of TTyGroupBox, so it inherits the themed
@@ -67,6 +67,12 @@ type
     // Keep the internal radio children on the group's controller so a controller assigned
     // AFTER population still themes them (mirrors TTyCheckGroup.SetController).
     procedure SetController(AValue: TTyStyleController); override;
+    { Reading direction changed, so the COLUMNS changed sides -- and the children sit where
+      SetBounds last put them, which LCL's own handling never revisits (it invalidates and
+      calls AdjustSize; neither re-runs a layout done by hand). Without this the columns keep
+      their old order and only each indicator flips, which looks like the mirroring half
+      worked and the other half silently did not. }
+    procedure CMBiDiModeChanged(var Message: TLMessage); message CM_BIDIMODECHANGED;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -122,9 +128,14 @@ type
   AClient so short lists do not hug the top edge.
 
   Returns an empty rect for a degenerate request (ACount <= 0, AColumns <= 0, AIndex out of
-  range, or a zero-area client). }
+  range, or a zero-area client).
+
+  ARightToLeft reverses the COLUMN order (item 0 in the rightmost column), by reflecting the
+  finished cell about AClient — see TyCheckGroupCellRect for why it is a reflection and not
+  an index flip. Rows and the vertical centring are unaffected. }
 function TyRadioGroupCellRect(const AClient: TRect; ACount, AColumns, AIndex: Integer;
-  ARowH: Integer = 0; ALayout: TColumnLayout = clHorizontalThenVertical): TRect;
+  ARowH: Integer = 0; ALayout: TColumnLayout = clHorizontalThenVertical;
+  ARightToLeft: Boolean = False): TRect;
 
 implementation
 
@@ -132,7 +143,8 @@ const
   TyRadioRowH = 22;   // logical row height per radio child (matches the radio default)
 
 function TyRadioGroupCellRect(const AClient: TRect; ACount, AColumns, AIndex: Integer;
-  ARowH: Integer = 0; ALayout: TColumnLayout = clHorizontalThenVertical): TRect;
+  ARowH: Integer = 0; ALayout: TColumnLayout = clHorizontalThenVertical;
+  ARightToLeft: Boolean = False): TRect;
 var
   rows, col, row, cw, l, r, gridH, top, cy: Integer;
   clientW, clientH, rowH: Integer;
@@ -180,6 +192,9 @@ begin
   cy := AClient.Top + top + row * rowH;
 
   Result := Rect(l, cy, r, cy + rowH);
+  // Reflect the finished cell — see TyCheckGroupCellRect, same reason, same one line.
+  if ARightToLeft then
+    Result := BidiFlipRect(Result, AClient, True);
 end;
 
 { TTyRadioGroup }
@@ -348,8 +363,10 @@ begin
   for i := 0 to n - 1 do
   begin
     if FButtons[i] = nil then Continue;
+    // MIRRORING: columns reverse; each hosted radio flips its own dot via ParentBiDiMode.
+    // See TTyCheckGroup.LayoutCheckBoxes -- there is no hit test on this side either.
     cell := TyRadioGroupCellRect(client, n, FColumns, i,
-      ActiveController.Metric('--row-height', TyRadioRowH), FColumnLayout);
+      ActiveController.Metric('--row-height', TyRadioRowH), FColumnLayout, IsRightToLeft);
     FButtons[i].SetBounds(cell.Left, cell.Top, cell.Right - cell.Left, cell.Bottom - cell.Top);
   end;
 end;
@@ -469,6 +486,13 @@ var
 begin
   n := Length(FButtons);
   if n = 0 then Exit;
+  { MIRRORING, the keyboard half. The columns reversed, so a horizontal step must reverse
+    with them or Left walks the selection BACKWARDS relative to what the user sees -- the
+    single most reviewer-invisible way a mirrored control goes wrong, since every instance
+    of it is just a missing minus sign (plans/2026-08-04-rtl-mirroring-scope.md §5.3).
+    This is LAYOUT direction, not text direction: an arrow key inside an edit stays the
+    bidi layer's business and is deliberately not touched (§6.3 item 4). }
+  if IsRightToLeft then AHorzDiff := -AHorzDiff;
   rows := (n + FColumns - 1) div FColumns;   // ceil, matching TyRadioGroupCellRect
   if rows < 1 then rows := 1;
   if FColumnLayout = clVerticalThenHorizontal then
@@ -555,6 +579,12 @@ procedure TTyRadioGroup.DoOnResize;
 begin
   inherited DoOnResize;
   LayoutButtons;   // reflow the grid when the box is resized
+end;
+
+procedure TTyRadioGroup.CMBiDiModeChanged(var Message: TLMessage);
+begin
+  inherited;       // LCL invalidates, tells the children, and calls AdjustSize
+  LayoutButtons;   // and then the columns have to actually change sides
 end;
 
 end.

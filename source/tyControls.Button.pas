@@ -205,7 +205,27 @@ type
     property Controller;
     property OnClick;
   end;
+
+{ The badge corner mirrored for a right-to-left button: left <-> right, top/bottom fixed.
+  A two-row lookup rather than an if-chain, and public rather than local, for the reason
+  LCL's BidiAdjustButtonLayout (buttons.pp:700) is both -- one table is checkable at a
+  glance and testable without a painter, where four scattered comparisons are neither.
+  AFlip = False is the identity row. }
+function TyBidiFlipBadgePosition(APos: TTyBadgePosition; AFlip: Boolean): TTyBadgePosition;
+
 implementation
+
+const
+  BidiBadgePos: array[Boolean, TTyBadgePosition] of TTyBadgePosition =
+  (
+    ( bpTopLeft,  bpTopRight, bpBottomLeft,  bpBottomRight ),
+    ( bpTopRight, bpTopLeft,  bpBottomRight, bpBottomLeft  )
+  );
+
+function TyBidiFlipBadgePosition(APos: TTyBadgePosition; AFlip: Boolean): TTyBadgePosition;
+begin
+  Result := BidiBadgePos[AFlip, APos];
+end;
 
 constructor TTyButton.Create(AOwner: TComponent);
 begin
@@ -434,7 +454,11 @@ begin
   inset := ActiveController.Metric(TyBadgeInsetVar, TyBadgeInset);
   if inset < 0 then inset := 0;
   inset := P.Scale(inset);
-  case FBadgePosition of
+  { MIRRORING: the badge names a corner, and a corner has a reading-order meaning -- the
+    default bpBottomRight is "the trailing corner", which is bottom-LEFT on a right-to-left
+    form. Flipped here rather than stored flipped, exactly as Alignment is. The vertical
+    half never moves; only the horizontal half has a reading direction. }
+  case TyBidiFlipBadgePosition(FBadgePosition, P.RightToLeft) of
     bpTopLeft:     begin x := AFullRect.Left  + inset;       y := AFullRect.Top    + inset;       end;
     bpTopRight:    begin x := AFullRect.Right - inset - bw;  y := AFullRect.Top    + inset;       end;
     bpBottomLeft:  begin x := AFullRect.Left  + inset;       y := AFullRect.Bottom - inset - bh;  end;
@@ -587,7 +611,18 @@ var
 begin
   P := TTyPainter.Create;
   try
-    P.BeginPaint(ACanvas, ARect, APPI);
+    { MIRRORING for the whole button family, armed once here because every descendant paints
+      through this RenderTo and overrides only DrawContent. For a plain button it costs
+      nothing visible: Alignment defaults to taCenter and BidiFlipAlignment leaves taCenter
+      alone, so the overwhelming majority of buttons render byte-identically either way --
+      only one that was explicitly left- or right-aligned moves. The descendants that DO
+      have sides (glyph slot, colour swatch) read APainter.RightToLeft in their DrawContent.
+      The button has no internal hit test: the whole face is one click target.
+      EXCEPTION, deliberate: TTyDropDownButton splits that face into caption + arrow zone and
+      hit-tests the split (TyDropArrowHit, tyControls.DropButtons.pas:170). Its arrow stays
+      on the right for now -- mirroring the paint without the hit test is the "drawn right,
+      answers left" bug this library has already been bitten by three times. }
+    P.BeginPaint(ACanvas, ARect, APPI, IsRightToLeft);
     S := CurrentStyle;
     Eased := FBgAnim.Eased;
     // When mid-fade, blend the normal-state and hover-state background colours.

@@ -199,7 +199,15 @@ begin
   if cw < APainter.Scale(TyColorButtonMinSwatch) then cw := APainter.Scale(TyColorButtonMinSwatch);
   if cw > (AContentRect.Right - AContentRect.Left) then
     cw := AContentRect.Right - AContentRect.Left;
-  swatch := Rect(AContentRect.Left, AContentRect.Top, AContentRect.Left + cw, AContentRect.Bottom);
+  { MIRRORING: the swatch leads, so it moves to the right on a right-to-left button and the
+    caption follows on its left. Widths are untouched, which is why CalculatePreferredSize
+    needs no branch — the same three pieces, in the other order. Direction comes from the
+    painter, the same place the caption's alignment came from. No hit test: a colour button
+    is one click target that opens the dialog. }
+  if APainter.RightToLeft then
+    swatch := Rect(AContentRect.Right - cw, AContentRect.Top, AContentRect.Right, AContentRect.Bottom)
+  else
+    swatch := Rect(AContentRect.Left, AContentRect.Top, AContentRect.Left + cw, AContentRect.Bottom);
 
   // Subtle border: prefer the resolved style's border colour; else a fixed low-contrast grey.
   if tpBorderColor in AStyle.Present then
@@ -213,10 +221,13 @@ begin
   APainter.FillBackground(swatch, fill, TyUniformCorners(radius));
   APainter.StrokeBorder(swatch, TyUniformCorners(radius), 1, borderCol);
 
-  // Caption (or, with none, the optional hex) to the right of the swatch.
+  // Caption (or, with none, the optional hex) on the far side of the swatch.
   if hasText then
   begin
-    capRect := Rect(swatch.Right + gap, AContentRect.Top, AContentRect.Right, AContentRect.Bottom);
+    if APainter.RightToLeft then
+      capRect := Rect(AContentRect.Left, AContentRect.Top, swatch.Left - gap, AContentRect.Bottom)
+    else
+      capRect := Rect(swatch.Right + gap, AContentRect.Top, AContentRect.Right, AContentRect.Bottom);
     if capRect.Right > capRect.Left then
     begin
       { Through the base's resolver, not raw ContentText: this button's Caption is an

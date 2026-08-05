@@ -356,7 +356,13 @@ var
 begin
   P := TTyPainter.Create;
   try
-    P.BeginPaint(ACanvas, ARect, APPI);
+    { MIRRORING: the whole of it, for this control. Both DrawText calls below hand the
+      painter the FULL content rect (or a full-width line box out of the wrap loop), so
+      there is no slot to move -- flipping the alignment IS flipping the layout. The label
+      has no internal hit test either (Click is the whole box), so paint and hit cannot
+      diverge. Alignment is not rewritten: RTL overrides the EFFECTIVE side each frame and
+      the stored property keeps saying what the author wrote. }
+    P.BeginPaint(ACanvas, ARect, APPI, IsRightToLeft);
     S := CurrentStyle;
     fontSize := ResolveFontSize(S);
     TyParseMnemonic(Caption, dispCap, mp);

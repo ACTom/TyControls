@@ -141,10 +141,18 @@ var
   MeasBmp: TBitmap;
   disp: string;
   mp: Integer;
+  BandAlign: TAlignment;
 begin
   P := TTyPainter.Create;
   try
-    P.BeginPaint(ACanvas, ARect, APPI);
+    P.BeginPaint(ACanvas, ARect, APPI, IsRightToLeft);
+    { MIRRORING: the caption band moves to the other end of the top border. That is the
+      whole visible change -- the frame is symmetric and AdjustClientRect insets left and
+      right by their own themed paddings, so a mirrored group box only differs there if a
+      skin gave it asymmetric padding, and swapping those would put our containers out of
+      step with LCL's for no visible gain. Children are laid out by the align engine, which
+      does not mirror (see TTyPanel.RenderTo). No internal hit test. }
+    BandAlign := BidiFlipAlignment(FAlignment, IsRightToLeft);
     S := CurrentStyle;
 
     W := ARect.Right - ARect.Left;
@@ -186,7 +194,8 @@ begin
 
       // Position the erase band AND the text from the SAME BandLeft per
       // Alignment, so the erased gap stays centered on the caption ink.
-      case FAlignment of
+      // BandAlign, not FAlignment: this is a physical x, and the two differ under mirroring.
+      case BandAlign of
         taCenter:      BandLeft := (W - (TextW + P.Scale(16))) div 2;
         taRightJustify:BandLeft := W - (TextW + P.Scale(16)) - P.Scale(4);
       else             BandLeft := P.Scale(4);   // taLeftJustify (current look: band starts ~Scale(8))

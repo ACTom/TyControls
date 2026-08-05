@@ -13,7 +13,12 @@ type
       RightRule — likewise
     Both segments share the same vertical band (RuleY, 1 logical-px thick — the
     caller strokes it). taLeftJustify uses RightRule only; taRightJustify uses
-    LeftRule only; taCenter uses both (rule on each side of the caption). }
+    LeftRule only; taCenter uses both (rule on each side of the caption).
+
+    The two names stay PHYSICALLY true under mirroring: TyDividerLayout's
+    ARightToLeft reflects the rects and swaps the pair, so LeftRule is the segment
+    nearer x=0 whichever way the divider reads. (Which one is "the" segment does
+    change: a mirrored taLeftJustify uses LeftRule.) }
   TTyDividerLayout = record
     CaptionRect: TRect;   // where the caption text is drawn (empty => no caption)
     LeftRule: TRect;      // left rule segment (Left..Right span; Top..Bottom band)
@@ -48,11 +53,19 @@ const
     AMinRule      — minimum device-px length below which a rule segment is dropped
                     (so a caption that fills the width doesn't leave a 1px nub).
     ARuleThick    — rule thickness, device px (the returned bands are this tall).
+    ARightToLeft  — MIRROR the finished layout about the content rect's vertical centre
+                    line. AAlign and ALeftIndent are then read as READING-ORDER
+                    quantities: taLeftJustify puts the caption at the right edge and
+                    ALeftIndent counts leftwards from it. Done as one reflection of the
+                    finished rects rather than three mirrored branches, so a divider can
+                    never come out with a gap or an overlap the left-to-right one did not
+                    have — the property that is easy to break with a hand-written -1.
   Segments that would be shorter than AMinRule collapse to empty (Right = Left).
   Headless-safe: no control state, no handle — the tests call it directly. }
 function TyDividerLayout(AClientWidth, AClientHeight, ACaptionWidth: Integer;
   AAlign: TAlignment; ALeftIndent: Integer;
-  AGap, AMinRule, ARuleThick: Integer): TTyDividerLayout;
+  AGap, AMinRule, ARuleThick: Integer;
+  ARightToLeft: Boolean = False): TTyDividerLayout;
 
 type
   TTyDivider = class(TTyGraphicControl)
@@ -108,14 +121,29 @@ implementation
 
 function TyDividerLayout(AClientWidth, AClientHeight, ACaptionWidth: Integer;
   AAlign: TAlignment; ALeftIndent: Integer;
-  AGap, AMinRule, ARuleThick: Integer): TTyDividerLayout;
+  AGap, AMinRule, ARuleThick: Integer;
+  ARightToLeft: Boolean = False): TTyDividerLayout;
 var
   ruleTop, ruleBot, capLeft, capRight, lRight, rLeft: Integer;
+  span, swap: TRect;
+
+  { Reflect one rect about the content rect's vertical centre. LCL's own five-liner
+    (controls.pp:2966) rather than a hand-written formula, because reflecting a gapless
+    tiling is exactly where an off-by-one shows up as a hairline seam and nowhere else. }
+  function Mirror(const R: TRect): TRect;
+  begin
+    { An empty segment must stay empty, not become a zero-width band parked at the far
+      edge, or "is there a rule here" stops being answerable by Right > Left. }
+    if R.Right <= R.Left then Exit(R);
+    Result := BidiFlipRect(R, span, True);
+  end;
+
 begin
   Result.CaptionRect := Rect(0, 0, 0, 0);
   Result.LeftRule := Rect(0, 0, 0, 0);
   Result.RightRule := Rect(0, 0, 0, 0);
   if AClientWidth <= 0 then Exit;
+  span := Rect(0, 0, AClientWidth, AClientHeight);
   if AGap < 0 then AGap := 0;
   if AMinRule < 0 then AMinRule := 0;
   if ARuleThick < 1 then ARuleThick := 1;
@@ -134,6 +162,9 @@ begin
   begin
     // No caption: a single full-width rule (returned as RightRule so callers that
     // only look at one segment still see it; LeftRule stays empty).
+    // Exits BEFORE the mirroring below, and must: a full-width band is its own
+    // reflection, and swapping it into LeftRule would break that convention for
+    // right-to-left dividers alone, for no visible gain.
     Result.RightRule := Rect(0, ruleTop, AClientWidth, ruleBot);
     Exit;
   end;
@@ -159,9 +190,8 @@ begin
     rLeft := capRight + AGap;
     if (AClientWidth - rLeft) >= AMinRule then
       Result.RightRule := Rect(rLeft, ruleTop, AClientWidth, ruleBot);
-    Exit;
-  end;
-
+  end
+  else
   case AAlign of
     taRightJustify:
       begin
@@ -192,6 +222,19 @@ begin
     rLeft := ACaptionWidth + AGap;
     if (AClientWidth - rLeft) >= AMinRule then
       Result.RightRule := Rect(rLeft, ruleTop, AClientWidth, ruleBot);
+  end;
+
+  { MIRROR, once, at the end -- so both placement rules above (explicit indent AND the
+    three-way Alignment) get it from the same three lines, and neither can be the branch
+    somebody forgot. Everything up to here is the left-to-right layout verbatim, which is
+    also why ARightToLeft = False costs exactly nothing. The swap keeps the field names
+    physically honest (see TTyDividerLayout). }
+  if ARightToLeft then
+  begin
+    Result.CaptionRect := Mirror(Result.CaptionRect);
+    swap := Mirror(Result.LeftRule);
+    Result.LeftRule := Mirror(Result.RightRule);
+    Result.RightRule := swap;
   end;
 end;
 
@@ -267,7 +310,10 @@ var
 begin
   P := TTyPainter.Create;
   try
-    P.BeginPaint(ACanvas, ARect, APPI);
+    { MIRRORING: the rule/caption split comes from the pure function (mirrored below), the
+      caption's own alignment inside its rect from the painter. Not interactive at all, so
+      there is nothing to keep the hit test in step with. }
+    P.BeginPaint(ACanvas, ARect, APPI, IsRightToLeft);
     S := CurrentStyle;
     fontSize := ResolveFontSize(S);
     // The divider is a transparent overlay (like a default TTyLabel): honor opacity
@@ -308,9 +354,13 @@ begin
     if FLeftIndent >= 0 then indent := P.Scale(FLeftIndent)
     else                     indent := TyDividerIndentAuto;
 
+    { LeftIndent keeps its NAME under mirroring and changes its meaning to "indent from the
+      reading start", i.e. from the right edge. Renaming it would be a breaking change for
+      every .lfm that carries one, and the property is documented rather than renamed --
+      plans/2026-08-04-rtl-mirroring-scope.md §6.3 item 6. }
     Lay := TyDividerLayout(ContentRect.Right - ContentRect.Left,
       ContentRect.Bottom - ContentRect.Top, capW, FAlignment, indent,
-      gap, minRule, ruleThick);
+      gap, minRule, ruleThick, IsRightToLeft);
 
     // Offset the layout (content-local) into ContentRect and paint.
     StrokeSeg(Rect(ContentRect.Left + Lay.LeftRule.Left, ContentRect.Top + Lay.LeftRule.Top,

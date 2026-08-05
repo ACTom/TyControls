@@ -1008,23 +1008,37 @@ begin
 end;
 
 { The counterpart guard, and the more important one. BiDiMode is a TControl member that
-  "works from code", and the same batch nearly republished it. It may not be published
-  while the paint path ignores it, and the paint path still does.
+  "works from code", and the same batch nearly republished it. It may not be published while
+  most of the library ignores it, and most of the library still does.
 
-  What HAS changed: the painter now handles bidirectional TEXT. TTyPainter.DrawText routes
-  any caption carrying Hebrew/Arabic/Syriac through BGRA's TBidiTextLayout, so the words come
-  out in the order a native reader expects instead of with the paragraph's halves swapped.
-  That is one half of what BiDiMode promises. The other half -- MIRRORING, i.e. the check box
-  indicator moving to the right of its caption, the scroll bar to the left edge, grid columns
-  and tree expanders reversing -- is not built. tyControls.Painter.pas mentions BiDiMode in
-  exactly one place, a comment saying it deliberately does not read it, and
-  tyControls.Base.pas still has zero references.
+  What HAS changed, in three steps:
 
-  So publishing it would still manufacture the defect this whole pass has been removing -- a
-  property the Object Inspector offers and the control half-ignores, which is how
-  TTyColorButton.Caption came to exist. Delete this test when the MIRRORING lands, not when
-  the text does. Until then it is the thing stopping a well-meaning "just republish the rest"
-  commit.
+  (1) The painter handles bidirectional TEXT. TTyPainter.DrawText routes any caption carrying
+      Hebrew/Arabic/Syriac through BGRA's TBidiTextLayout, so the words come out in the order
+      a native reader expects instead of with the paragraph's halves swapped. That half never
+      consulted BiDiMode and still does not -- it is a question about the STRING.
+
+  (2) TTyEdit -- and with it the whole single-line text-entry family that descends from it --
+      puts its caret, its click target, its selection bands and its Left/Right arrow keys on
+      the GLYPHS rather than on the string order (test.edit.bidi). TTyMemo does NOT: its caret
+      is a two-dimensional (line, column) model over wrapped visual rows, and adopting the run
+      table means doing it per row. docs/KNOWN_GAPS.md carries that scope.
+
+  (3) MIRRORING now exists, for a form's worth of controls: label, panel, divider, check box,
+      radio button, group box, check group, radio group, and the button family including the
+      glyph slot, the colour swatch and the badge corner. Those DO read BiDiMode, through
+      TTyPainter.BeginPaint's ARightToLeft; tests/test.rtl.pas guards them.
+
+  So this is no longer "the paint path ignores it" -- it is "the paint path honours it in the
+  minority of controls". Everything with a scroll bar, a column or a tab strip is still
+  left-to-right, as is TTyMemo's caret, and publishing now would put a property in the Object
+  Inspector that does nothing on a grid, a tree, a list or a memo. That is the same defect
+  this pass has been removing -- a property offered and half-ignored, which is how
+  TTyColorButton.Caption came to exist.
+
+  The way OUT is unchanged and is NOT to relax this assertion: mirror the remaining families
+  (plans/2026-08-04-rtl-mirroring-scope.md phases 2 onwards), then delete this test. Until
+  then it is the thing stopping a well-meaning "just republish the rest" commit.
 
   OnPaint used to be pinned here alongside it, for the same reason and no other. It is
   published now because the behaviour behind it was built: TTyGraphicControl.WndProc and
@@ -1034,7 +1048,7 @@ end;
   than merely that something was called. }
 procedure TParityTest.LyingPropertiesStayUnpublished;
 begin
-  AssertTrue('BiDiMode must not be published until the painter honours it',
+  AssertTrue('BiDiMode must not be published until the whole library honours it',
     GetPropInfo(TTyPanel, 'BiDiMode') = nil);
   AssertTrue('and not on the graphic base either',
     GetPropInfo(TTyUpDown, 'BiDiMode') = nil);

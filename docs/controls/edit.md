@@ -335,5 +335,14 @@ end;
 - **`ClearSelection` 会删字（API parity 破坏性变更）：** 它现在删除选区文本（LCL / Delphi 语义）；只想去掉高亮而保留文本请改用新增的 `CollapseSelection`。
 - **`Enter` 提交字段：** 无修饰键的回车调用 `EditingDone`（触发 `OnEditingDone`），但**不消费按键**，窗体的默认按钮仍能收到；`Enabled = False` 时同其他按键一样不生效。
 - **I-beam 光标（batch⑤+⑥）：** 构造时把 `Cursor` 设为 `crIBeam`，鼠标移到文本区域时呈现标准的文本输入「I 形」光标，与原生单行编辑框观感一致。
-- **⚠ 双向文本（阿拉伯语 / 希伯来语）：画对了，选不对。** `TTyPainter.DrawText` 现在会把含右到左文字的字符串走 Unicode 双向算法排版，所以框里**显示**的词序是对的。但本控件的光标与点击定位仍然是**逻辑序**的：`MeasureCodepointWidths`（`tyControls.Edit.pas:948`）按字符串顺序累加码点宽度，`CaretPixelXAt` / `CaretIndexAtX` 都建立在这个前缀和上。对双向文本这个模型根本不成立——混排串里两个逻辑相邻的码点，光标可能落在屏幕上两个不同的位置。后果是：**点某个字形可能把光标放到别处**，方向键会在不同书写方向的段落之间跳，拖选高亮出来的范围也未必对应指针下的字形。
-  绘制层需要的接缝已经有了、也有测试（`TTyPainter.TextCaretX` / `TTyPainter.TextCharIndexAtX`，从排好版的字形反查位置与索引），但**目前没有任何控件调用它们**。接线是另一件事。详见 [KNOWN_GAPS.md](../KNOWN_GAPS.md#bidirectional-right-to-left-text)。
+- **双向文本（阿拉伯语 / 希伯来语）：光标、点击、选区、方向键都按字形走。** `TTyPainter.DrawText` 把含右到左文字的字符串按 Unicode 双向算法排版，本控件的光标模型也跟上了：显示文本里出现右到左字符时，控件为该行建一份**同向段（run）表**——每段是一段连续的逻辑码点加上它在屏幕上的左右边界——此后的每次查询都只是查表。
+  - **点击**落在哪个字形上，光标就贴在那个字形边上，内嵌段的两端都点得到。
+  - **选区**是逻辑区间，跨书写方向时会**按段各画一条**高亮带，所以高亮盖住的正是这段区间点名的那些字形，中间没被选中的字形不会被顺带涂上。
+  - **左右方向键是视觉移动**：按哪边光标就往哪边走一个字形，跨段时按**屏幕顺序**跨（右到左段内部则是逻辑序往回走）。这是 `plans/2026-08-04-rtl-mirroring-scope.md` §6.3 第 4 条划的线——**文本**里的左右键归双向层，列表 / 表格 / 页签 / 菜单里的左右键是布局方向，归尚未开工的镜像层。
+  - **`Home` / `End` 仍是逻辑的**（首 / 末码点，不管它画在哪儿），`Ctrl`+左右的词级跳转同理——词是码点的连续段，不是字形的。
+
+  **一个索引两个位置**：内嵌段与两侧文本的交界处，同一个码点索引对应屏幕上**两个**点（该段的两端），Unicode 算法本身不替你选。控件记住最后一次光标移动隐含的是哪一侧（输入与向右走 = 贴前一个字符，点击 = 贴用户瞄准的那一段），所以两个位置都到得了。BGRA 的 `TBidiTextLayout.GetCaret` 只会给出「在此处结束的那一段」的那一个，另一个直接丢掉——本控件因此自己排版并缓存，而不是调用 `TTyPainter.TextCaretX`（它还要求 painter 正处在 `BeginPaint`/`EndPaint` 之间，而光标是鼠标、按键和闪烁定时器问出来的）。两者的答案由 `tests/test.edit.bidi.pas` 对齐。
+
+  **对左到右文本零代价**：判定走 `TyTextHasRTL` 字节扫描，且**每次文本变化只问一次**，之后每次光标查询只多一个布尔判断（实测 ≤ 0.2 µs，对比光标查询本身约 23 µs，落在噪声里）；它挡住的那份排版建一次约 3.3 ms。掩码（`PasswordChar`）字段按**显示串**判定，所以密码框永远走不到双向路径。
+
+  由本控件派生的 `TTyNumericEdit` / `TTyCurrencyEdit` / `TTyCalcEdit` / `TTyTrackEdit` / `TTyMaskEdit` / `TTyURLEdit` / `TTyComboEdit` / `TTyValueEdit` 都不覆写光标与绘制路径，因此一并生效。`TTyMemo` 尚未跟进，仍是逻辑序前缀和。详见 [KNOWN_GAPS.md](../KNOWN_GAPS.md#bidirectional-right-to-left-text)。

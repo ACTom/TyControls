@@ -193,3 +193,4 @@ G2B.Caption := '蓝色';
 - **控件整体无背景：** 主题中的 `background` 和 `border` 只作用于圆圈本身，控件整体保持透明。
 - **同单元注意：** `TTyCheckBox` 和 `TTyRadioButton` 定义在同一单元 `tyControls.CheckBox` 中，`uses` 一次即可同时使用两者。
 - **DFM 序列化：** `Checked` 声明了 `default False`，值为 `False` 时不写入 `.lfm`/`.dfm`；值为 `True` 时写入。
+- **右到左镜像：** 与 `TTyCheckBox` 完全同构——`BiDiMode := bdRightToLeft` 时圆点移到标题右侧，`Alignment` 被覆盖而非忽略。见 [checkbox.md](checkbox.md) 的同名条目与 [KNOWN_GAPS.md](../KNOWN_GAPS.md#bidirectional-right-to-left-text)。

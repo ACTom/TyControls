@@ -105,8 +105,23 @@ still marked as gaps belong to a future Tier-2 native enhancement layer.
 ## Bidirectional (right-to-left) text
 
 Arabic, Hebrew, Persian, Urdu and the other right-to-left scripts are supported
-**at the text layer only**. Read the two lists below before shipping a UI in one
-of those languages: what works is real, and what does not is not cosmetic.
+**at the text layer, and at the layout layer for form controls only**. Read the
+two lists below before shipping a UI in one of those languages: what works is
+real, and what does not is not cosmetic.
+
+Two independent questions live in this section, and keeping them apart is what
+makes the rest of it readable:
+
+- **"Which way does this *sentence* read?"** — answered from the string, by
+  scanning it for right-to-left codepoints. Governs word order and letter
+  shaping. Always on, for every control, no configuration.
+- **"Which way does this *form* read?"** — answered from the control's
+  `BiDiMode`. Governs which side boxes sit on. Off by default, and implemented
+  for the controls listed below and no others.
+
+An Arabic caption on a left-to-right form gets its words in the right order and
+does **not** move to the right edge. That is correct, and it is asserted by
+`tests/test.bidi.pas`.
 
 ### What works
 
@@ -141,51 +156,143 @@ of those languages: what works is real, and what does not is not cosmetic.
 - **Mnemonic underlines** (`Alt` access keys) land under the character they
   belong to, not at the byte offset's distance from the left edge.
 
+- **Editing a single-line field.** `TTyEdit` — and with it every control that
+  descends from it, none of which overrides the caret or the paint path:
+  `TTyNumericEdit`, `TTyCurrencyEdit`, `TTyCalcEdit`, `TTyTrackEdit`,
+  `TTyMaskEdit`, `TTyURLEdit`, `TTyComboEdit` and `TTyValueEdit` — puts its
+  caret, its click target, its selection highlight and its `Left`/`Right` arrow
+  keys on the **glyphs**, not on the string order:
+
+  - clicking a glyph puts the caret against that glyph, including on the far
+    side of an embedded run;
+  - a selection that crosses a direction boundary paints **one band per run**,
+    so the highlight covers the glyphs the range names and nothing between them;
+  - `Left` and `Right` move the caret one glyph **in the direction pressed**,
+    crossing between runs in screen order — which for a right-to-left run means
+    stepping backwards through the codepoints;
+  - `Home` and `End` stay **logical** (first and last codepoint, wherever those
+    are drawn), as do `Ctrl`+arrow word jumps, because a word is a run of
+    codepoints and not of glyphs.
+
+  Where an embedded run meets the text around it, one codepoint index has **two**
+  screen positions — the two ends of that run — and the Unicode algorithm does
+  not choose between them. `TTyEdit` remembers which one the last caret movement
+  implied, so both are reachable: typing and a rightward walk leave the caret
+  against the character before it, a click leaves it against the run the user
+  aimed at. `tests/test.edit.bidi.pas` guards all of it.
+
 - **Cost to everyone else: none measurable.** Latin and CJK text never reaches
   the bidirectional layout. A byte scan (`TyTextHasRTL`, 24–32 ns for a typical
   caption against a 1.5–11 ms draw) decides, and the legacy path it protects
   produces byte-identical output to before — asserted in pixels, not assumed.
+  On the *caret* path the same scan runs once per text change rather than per
+  query, so a left-to-right field pays one Boolean test: measured at ≤ 0.2 µs
+  against a ~23 µs caret query, i.e. inside the run-to-run noise. The layout it
+  guards costs ~3.3 ms to build.
+
+- **Layout mirroring, for a form's worth of controls.** Set
+  `BiDiMode := bdRightToLeft` from code (see the caveat below about it not being
+  *published*) and the following now lay themselves out right-to-left. This is
+  phases 0 and 1 of `plans/2026-08-04-rtl-mirroring-scope.md`; the rest of that
+  document is not built.
+
+  | Control | What moves |
+  |---|---|
+  | `TTyLabel` | the caption: `taLeftJustify` resolves to the right edge |
+  | `TTyPanel` | the caption (its *children* are not mirrored — see below) |
+  | `TTyDivider` | the caption and the rule swap ends; `LeftIndent` counts from the right |
+  | `TTyCheckBox`, `TTyRadioButton` | the indicator moves to the right, the caption re-hugs it |
+  | `TTyGroupBox` | the caption band moves to the other end of the top border |
+  | `TTyCheckGroup`, `TTyRadioGroup` | the columns fill from the right; each hosted box flips its own indicator; the ←/→ keys follow the columns |
+  | `TTyButton` and descendants | the caption (a `taCenter` caption — the default — does not move) |
+  | `TTyGlyphButton`, `TTySpeedButton`, `TTyGlyphContainerButton` | the icon slot swaps sides (`glLeft` ↔ `glRight`; `glTop`/`glBottom` unaffected) |
+  | `TTyColorButton` | the colour swatch moves to the right, the caption to its left |
+  | the numeric badge on any button | `BadgePosition` flips horizontally: `bpBottomRight` (the default) becomes bottom-**left** |
+
+  The mechanism is one flag on `TTyPainter`, set at `BeginPaint`, that resolves
+  every alignment the caller passes from a *reading-order* one to a physical one
+  through LCL's `BidiFlipAlignment`. A control opts in by passing
+  `IsRightToLeft`; everything that has not opted in is bit-for-bit unchanged.
+  `grep -n "BeginPaint(.*IsRightToLeft" source/` is the authoritative list.
+
+  **`Alignment` is overridden, not defaulted.** A caption the author explicitly
+  set to `taLeftJustify` sits on the **right** in a right-to-left form, and a
+  check box whose `Alignment` was set to put the indicator on the right gets it on
+  the **left**. This matches LCL (`grids.pas:4006` flips a column's own alignment
+  at paint time; `checklst.pas:199` flips the check side unconditionally), and the
+  alternative — "flip only the default the author did not write" — is not
+  expressible: `TAlignment` has no *unset* member. The stored property is never
+  rewritten; only the value used for one frame is.
 
 ### What does NOT work
 
-- **Layout is not mirrored.** This is the big one. Only the *text* flips; the
-  *geometry* of every control stays left-to-right:
+- **Most controls are still laid out left-to-right.** Everything not in the table
+  above ignores `BiDiMode` entirely — it does not half-mirror, it does not move at
+  all:
 
-  - a check box or radio button keeps its indicator on the **left** of its
-    caption;
   - a scroll bar stays on the **right** edge of its container;
   - grid and list-view **columns** keep their left-to-right order, and so do
     tab headers, toolbar buttons, breadcrumb segments and pagination items;
   - a tree view's expander stays on the **left**, and indentation still grows
     rightwards;
-  - `Alignment`/`AHAlign` is honoured exactly as the caller wrote it, so a
-    right-to-left caption asked for `taLeftJustify` sits on the **left** of its
-    box rather than the right.
+  - an edit or memo keeps its text, caret and selection anchored to the left;
+  - a `TTyDropDownButton` keeps its arrow zone on the **right**, and a
+    `TTyButtonGroup` keeps its segments in left-to-right order — deliberately,
+    because both read a click's x back through a hit test, and mirroring the paint
+    without the hit test is the "drawn on the right, answers on the left" defect
+    this library has already shipped three times. Pinned by
+    `tests/test.rtl.pas` (`TRtlExclusionTest`), which asserts paint and hit test
+    still agree, so mirroring either one alone turns red.
 
-  A right-to-left UI built on this release reads correctly word by word and is
-  laid out the wrong way round. That is a deliberate, shippable intermediate
-  state, not an oversight — but it is not "RTL support" in the sense a user of
-  an Arabic desktop would mean it.
+  A right-to-left UI built on this release gets its forms — labels, check boxes,
+  radio groups, buttons, panels — the right way round, and its data views the
+  wrong way round.
 
-- **`BiDiMode` is not published** on any control, and must not be, precisely
-  because half of what it promises is missing. Setting it from code does nothing.
+- **Containers do not mirror their children's `Align`/`Anchors` layout**, and this
+  is not a gap to be closed. LCL's own align engine has no BiDi branch outside the
+  `ChildSizing` *table* path (`wincontrol.inc:1551`, which `TTyPanel` republishes
+  and therefore gets for free), so mirroring ours would make a ty container behave
+  differently from every native container beside it and misplace any ported
+  `.lfm`. `Home`/`End`/`PageUp`/`PageDown` are likewise never flipped: they are
+  logical ends, not visual ones.
+
+- **`BiDiMode` is not published** on any control, and must not be yet, because the
+  controls above are the minority — the Object Inspector would be offering a
+  property most of the library ignores. Setting it from code works.
   `tests/test.parity.pas` (`LyingPropertiesStayUnpublished`) pins this.
 
-- **Text editing walks the string in logical order.** `TTyEdit` and `TTyMemo`
-  now *draw* right-to-left text correctly, but their caret and their
-  click-to-position still use a cumulative sum of codepoint widths taken in
-  string order (`MeasureCodepointWidths`). That model is simply untrue for
-  bidirectional text — in a mixed string the caret between two logically adjacent
-  codepoints can be at two different places on screen. **So an Arabic string in
-  an edit draws right and selects wrong**: clicking a glyph can put the caret
-  somewhere else, arrow keys jump across the run, and a drag-selection can
-  highlight a range that does not correspond to the glyphs under the pointer. A
-  control that draws right and selects wrong is in some ways worse than one that
-  draws wrong, because the drawing is what a reviewer checks.
+- **`TTyMemo` still walks the string in logical order.** The multi-line editor
+  *draws* right-to-left text correctly, but its caret and its click-to-position
+  use a cumulative sum of codepoint widths taken in string order
+  (`CaretToVisual` / `VisualToCaret`, built on the same per-line width cache).
+  That model is simply untrue for bidirectional text — in a mixed string the
+  caret between two logically adjacent codepoints can be at two different places
+  on screen. **So an Arabic paragraph in a memo draws right and selects wrong**:
+  clicking a glyph can put the caret somewhere else, arrow keys jump across the
+  run, and a drag-selection can highlight a range that does not correspond to the
+  glyphs under the pointer. A control that draws right and selects wrong is in
+  some ways worse than one that draws wrong, because the drawing is what a
+  reviewer checks.
 
-  The seam this needs already exists and is tested — `TTyPainter.TextCaretX` and
-  `TTyPainter.TextCharIndexAtX` answer the same two questions from the laid-out
-  glyphs — but **no control calls them yet**.
+  `TTyEdit` was fixed and `TTyMemo` was not, deliberately rather than for lack of
+  time: the memo's caret is a two-dimensional `(line, column)` model over *visual
+  rows*, which under word wrap are segments of a logical line. Adopting the run
+  table means building one per visual row and threading it through row
+  resolution, per-row selection bands, the up/down arrows' remembered column, and
+  the horizontal scroll — a materially larger job than the single-line case, and
+  one where a half-wired result would be worse than an untouched one. What it
+  needs is in `docs/controls/memo.md`.
+
+  Neither control calls `TTyPainter.TextCaretX` / `TextCharIndexAtX`, and the
+  reason is worth recording: those lay out on the painter's `FBmp`, which exists
+  only between `BeginPaint` and `EndPaint`, while a caret is queried from mouse
+  handlers, key handlers and the blink timer; and `TextCaretX` answers with
+  `TBidiTextLayout.GetCaret`, which resolves a direction boundary towards the run
+  that *ends* there and discards the other position — so the far end of an
+  embedded run is unreachable through it. `TTyEdit` therefore lays the line out
+  itself and caches the result, and
+  `test.edit.bidi.EditCaretAgreesWithThePainterForUnambiguousIndices` pins its
+  answer against the painter's for every index the painter can express.
 
 - **A wrapped paragraph resolves its direction per line, not per paragraph.**
   Word wrap (`TyWrapTextCJK`) breaks on spaces and on CJK codepoints, so Arabic
