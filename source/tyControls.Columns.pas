@@ -11,12 +11,20 @@ unit tyControls.Columns;
   thin compatibility shim. }
 interface
 uses
-  Classes, SysUtils, Math, Controls, tyControls.ImageCollection;
+  Classes, SysUtils, Math, Controls, LCLType, tyControls.ImageCollection;
 
 const
   NoColumn = -1;   { sentinel: "no column" / not found }
 
 type
+  { The horizontal extent of ONE column, in whatever coordinate space the caller's
+    origin and PPI put it: device px for a paint, logical px for a hit test.
+    Left/Right only -- the vertical extent is the caller's band (a row, the header
+    strip, the whole viewport) and never belongs to the column model. }
+  TTyColumnSpan = record
+    Left, Right: Integer;
+  end;
+
   { Column-level option flags (mirrors VTV's TVTColumnOption subset) }
   TTyColumnOption = (
     coVisible,       { column is shown in the header and body }
@@ -84,8 +92,15 @@ type
   public
     constructor Create(ACollection: TCollection); override;
     procedure Assign(ASource: TPersistent); override;
+    { This column's horizontal span, scaled and placed by the caller's origin/PPI.
+      A thin accessor over the unit-level TyColumnSpan (which see) -- it exists only
+      so a call site reads `col.Span(cellOrigin, PPI)` rather than restating which
+      two fields feed the formula. }
+    function Span(AOriginX, APPI: Integer): TTyColumnSpan;
     { Read-only public: current absolute left edge (set by UpdatePositions).
-      Note: this is NOT scroll-adjusted — paint code subtracts FOffsetX itself. }
+      Note: this is NOT scroll-adjusted — paint code subtracts FOffsetX itself.
+      PUBLIC and read by hosts, so its meaning is fixed: LOGICAL px, un-scrolled,
+      un-scaled. Span() is the supported way to turn it into an x. }
     property Left: Integer read FLeft;
   published
     property Width:            Integer              read FWidth            write SetWidth            default 100;
@@ -314,11 +329,52 @@ type
   TTyTreeHeaderOptions = TTyHeaderOptions deprecated 'use TTyHeaderOptions';
   TTyTreeHeader        = TTyHeader        deprecated 'use TTyHeader';
 
+{ ---------------------------------------------------------------------------
+  The ONE place a column's Left/Width becomes an x.
+  --------------------------------------------------------------------------- }
+
+{ Turn a column's LOGICAL left/width into a span, given the x that logical 0 sits at
+  (AOriginX) and the pixel density to scale by (APPI; 96 = no scaling).
+
+  This exists because the same three-term formula
+      left := origin + Scale(col.Left);  right := left + Scale(col.Width)
+  used to be written out at NINE call sites -- the two hit tests below plus seven
+  paints across ListView and TreeView -- each combining ScaleI/MulDiv/P.Scale, a
+  scroll offset and a cell origin in its own way. Nine copies of one formula is nine
+  chances to get eight of them right, and this control family has already shipped the
+  failure that produces: a column that paints in one place and answers clicks in
+  another. Passing the origin in (rather than a scroll offset) is deliberate -- it is
+  what lets ONE function serve callers whose FOffsetX has opposite signs; see the
+  comment on ColumnFromPosition.
+
+  Callers supply the origin already in their own space:
+    * TTyTreeView paint   -> ContentRect.Left + FOffsetX   (FOffsetX <= 0), APPI = paint PPI
+    * TTyListView paint   -> -FOffsetX                     (FOffsetX >= 0), APPI = control Dpi
+    * both hit tests      -> -AScrollOffset (logical),      APPI = 96
+  Nothing else may compute a column x. }
+function TyColumnSpan(ALogicalLeft, ALogicalWidth, AOriginX, APPI: Integer): TTyColumnSpan;
+
 implementation
+
+function TyColumnSpan(ALogicalLeft, ALogicalWidth, AOriginX, APPI: Integer): TTyColumnSpan;
+begin
+  { MulDiv, not a hand-rolled (a*p) div 96: it is what every existing call site used
+    (ScaleI, TTyPainter.Scale and the inline MulDivs are all MulDiv(n, PPI, 96)), and
+    its round-half-away-from-zero differs from div's truncation on exactly the odd
+    half-pixels where a column edge is most likely to land. APPI = 96 is the identity,
+    which is how the logical-space hit tests get today's arithmetic unchanged. }
+  Result.Left  := AOriginX + MulDiv(ALogicalLeft, APPI, 96);
+  Result.Right := Result.Left + MulDiv(ALogicalWidth, APPI, 96);
+end;
 
 { ---------------------------------------------------------------------------
   TTyColumn
   --------------------------------------------------------------------------- }
+
+function TTyColumn.Span(AOriginX, APPI: Integer): TTyColumnSpan;
+begin
+  Result := TyColumnSpan(FLeft, FWidth, AOriginX, APPI);
+end;
 
 constructor TTyColumn.Create(ACollection: TCollection);
 begin
@@ -740,11 +796,26 @@ end;
 
 function TTyColumns.ColumnFromPosition(AX, AScrollOffset: Integer): Integer;
 { Left-to-right scan; return the collection Index whose on-screen span
-  contains AX.  AScrollOffset > 0 means scrolled right. }
+  contains AX.  AScrollOffset > 0 means scrolled right.
+
+  BOTH ARGUMENTS ARE LOGICAL PX, which is why the span is asked for at APPI = 96:
+  callers convert their device X and their device FOffsetX down to logical first
+  (MulDiv(.., 96, PPI)) and pass the result here. That normalisation is also where
+  the two controls' opposite FOffsetX signs are reconciled -- TTyTreeView stores it
+  <= 0 and negates, TTyListView stores it >= 0 and does not -- so by the time a
+  scroll offset reaches this function it always means "how far right we are
+  scrolled", positive. Neither sign was wrong; they were two spellings of one idea,
+  and the origin form of TyColumnSpan is what lets both reach one formula.
+
+  KNOWN SKEW, deliberately preserved by this refactor rather than silently fixed:
+  working in logical px makes this coarser than the device-px paint, so at PPI <> 96
+  a column can claim one device pixel that the paint gives to its left neighbour.
+  Measured at ppi 120/144/168 for widths 103/106/109. Fixing it means moving the hit
+  tests into device space, which is a behaviour change and needs its own guard. }
 var
   i, colIndex: Integer;
   col: TTyColumn;
-  cellLeft, cellRight: Integer;
+  span: TTyColumnSpan;
 begin
   Result := NoColumn;
   if Length(FPositionToIndex) <> Count then
@@ -757,10 +828,9 @@ begin
     col := Items[colIndex] as TTyColumn;
     if not (coVisible in col.FOptions) then Continue;
 
-    cellLeft  := col.FLeft - AScrollOffset;
-    cellRight := cellLeft + col.FWidth;
+    span := col.Span(-AScrollOffset, 96);
 
-    if (AX >= cellLeft) and (AX < cellRight) then
+    if (AX >= span.Left) and (AX < span.Right) then
       Exit(colIndex);
   end;
 end;
@@ -772,7 +842,7 @@ function TTyColumns.DetermineSplitterIndex(AX, AScrollOffset: Integer;
 var
   i, colIndex: Integer;
   col: TTyColumn;
-  edge: Integer;
+  span: TTyColumnSpan;
 begin
   Result := NoColumn;
   if Length(FPositionToIndex) <> Count then
@@ -786,10 +856,12 @@ begin
     if not (coVisible in col.FOptions) then Continue;
     if not (coResizable in col.FOptions) then Continue;
 
-    { right screen-edge = absolute right − scroll }
-    edge := col.FLeft + col.FWidth - AScrollOffset;
+    { The grip is the span's RIGHT edge -- read off the same span the body hit test
+      and the paints use, never recomputed, so the divider can never end up beside
+      the border it is supposed to be on. Logical px; see ColumnFromPosition. }
+    span := col.Span(-AScrollOffset, 96);
 
-    if (AX >= edge - ATolLeft) and (AX <= edge + ATolRight) then
+    if (AX >= span.Right - ATolLeft) and (AX <= span.Right + ATolRight) then
       Exit(colIndex);
   end;
 end;

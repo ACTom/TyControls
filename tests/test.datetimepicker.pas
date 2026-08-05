@@ -102,6 +102,42 @@ type
     function  ActiveSegForTest: Integer;
     function  DateTimeForTest: TDateTime;
     function  DigitBufferForTest: string;
+    { The click the user would make, and — from the SAME layout call the paint uses —
+      where field AIndex is actually painted. A test that asks the first and checks it
+      against the second is the only thing that can catch the paint and the hit test
+      drifting apart, which is what shipped the month-name bug. }
+    procedure SimMouseDown(X, Y: Integer);
+    function  PaintedSegSpan(AIndex: Integer; out AX1, AX2: Integer): Boolean;
+    function  RectsForTest: TTyDateTimeRects;
+  end;
+
+  { The field's horizontal layout — the one source (TyDateTimeRects) and the join it
+    exists to hold: the paint and the click hit-test reading their x out of it.
+    Declared after the probe because it drives one. }
+  TDateTimeLayoutTest = class(TTestCase)
+  private
+    { Click AX and require field AIndex to come back. Parks the active field elsewhere
+      first: a click that resolves to NO field leaves the active one untouched, so
+      without the parking a miss would read as a hit whenever the field happened to be
+      selected already. Probes the span's INNER EDGES, not just its middle -- a
+      middle-only assertion survives any drift narrower than half a field, which is
+      every drift that has actually happened here. }
+    procedure AssertClickSelects(P: TTyDateTimePickerProbe; AIndex, AX: Integer;
+      const AWhere: string);
+    procedure AssertPaintedFieldsAnswerTheirOwnClicks(P: TTyDateTimePickerProbe;
+      const AContext: string);
+  published
+    { The pure tiling, no fonts involved. }
+    procedure TestTextBoxClearsPaddingAndButton;
+    procedure TestNoButtonLeavesTheRectsEmpty;
+    procedure TestCheckBoxShiftsTextByItsOwnColumn;
+    procedure TestCheckBoxColumnScalesItsTwoTermsSeparately;
+    procedure TestSpinHalvesTileTheButtonColumn;
+    { Paint and hit-test must agree — the assertion the two sites cannot both pass
+      while they disagree. }
+    procedure TestClickInThePaintedFieldSelectsThatField;
+    procedure TestClickInThePaintedFieldSelectsThatFieldRightAligned;
+    procedure TestCheckBoxColumnMovesThePaintedFieldsAndTheClicks;
   end;
 
   TChangeCounter = class
@@ -673,6 +709,37 @@ end;
 function TTyDateTimePickerProbe.DigitBufferForTest: string;
 begin
   Result := DigitBuffer;
+end;
+
+procedure TTyDateTimePickerProbe.SimMouseDown(X, Y: Integer);
+begin
+  MouseDown(mbLeft, [], X, Y);
+end;
+
+function TTyDateTimePickerProbe.PaintedSegSpan(AIndex: Integer;
+  out AX1, AX2: Integer): Boolean;
+var
+  L:       TTyDateTimeRects;
+  S:       TTyStyleSet;
+  EffSize: Integer;
+  Txt:     string;
+  Spans:   TTySegmentArray;
+  OriginX: Integer;
+begin
+  FieldLayout(ClientRect, Font.PixelsPerInch, L, S, EffSize, Txt, Spans, OriginX);
+  Result := SegmentSpanX(Txt, Spans, OriginX, AIndex, S.FontName, EffSize,
+              S.FontWeight, Font.PixelsPerInch, AX1, AX2);
+end;
+
+function TTyDateTimePickerProbe.RectsForTest: TTyDateTimeRects;
+var
+  S:       TTyStyleSet;
+  EffSize: Integer;
+  Txt:     string;
+  Spans:   TTySegmentArray;
+  OriginX: Integer;
+begin
+  FieldLayout(ClientRect, Font.PixelsPerInch, Result, S, EffSize, Txt, Spans, OriginX);
 end;
 
 { ── TChangeCounter ───────────────────────────────────────────────────────── }
@@ -1422,8 +1489,161 @@ begin
     FPicker.Calendar.Controller.Model);
 end;
 
+{ ── TDateTimeLayoutTest ──────────────────────────────────────────────────── }
+
+procedure TDateTimeLayoutTest.AssertClickSelects(P: TTyDateTimePickerProbe;
+  AIndex, AX: Integer; const AWhere: string);
+var
+  K: Word;
+begin
+  if AIndex = 0 then K := VK_END else K := VK_HOME;
+  P.SimKeyDown(K);
+  AssertTrue('parked away from field ' + IntToStr(AIndex),
+    P.ActiveSegForTest <> AIndex);
+  P.SimMouseDown(AX, 12);
+  AssertEquals(AWhere + ' of painted field ' + IntToStr(AIndex) + ' selects it',
+    AIndex, P.ActiveSegForTest);
+end;
+
+procedure TDateTimeLayoutTest.AssertPaintedFieldsAnswerTheirOwnClicks(
+  P: TTyDateTimePickerProbe; const AContext: string);
+var
+  i, X1, X2: Integer;
+begin
+  for i := 0 to High(P.Segments) do
+  begin
+    AssertTrue(AContext + ': field ' + IntToStr(i) + ' has a painted span',
+      P.PaintedSegSpan(i, X1, X2));
+    AssertClickSelects(P, i, X1 + 1,        AContext + ': the left edge');
+    AssertClickSelects(P, i, (X1 + X2) div 2, AContext + ': the middle');
+    AssertClickSelects(P, i, X2 - 1,        AContext + ': the right edge');
+  end;
+end;
+
+procedure TDateTimeLayoutTest.TestTextBoxClearsPaddingAndButton;
+var L: TTyDateTimeRects;
+begin
+  L := TyDateTimeRects(Rect(0, 0, 200, 24), 96, Rect(6, 3, 6, 3), 18, False);
+  AssertEquals('text starts after the left padding', 6, L.Text.Left);
+  AssertEquals('text stops before the button column', 200 - 18, L.Text.Right);
+  AssertEquals('text clears the top padding', 3, L.Text.Top);
+  AssertEquals('text clears the bottom padding', 24 - 3, L.Text.Bottom);
+end;
+
+procedure TDateTimeLayoutTest.TestNoButtonLeavesTheRectsEmpty;
+var L: TTyDateTimeRects;
+begin
+  { dmNone hands the column width down as 0. }
+  L := TyDateTimeRects(Rect(0, 0, 200, 24), 96, Rect(6, 3, 6, 3), 0, False);
+  AssertTrue('no button rect',      IsRectEmpty(L.Button));
+  AssertTrue('no up-half rect',     IsRectEmpty(L.ButtonUp));
+  AssertTrue('no down-half rect',   IsRectEmpty(L.ButtonDown));
+  AssertEquals('text runs to the frame', 200, L.Text.Right);
+end;
+
+procedure TDateTimeLayoutTest.TestCheckBoxShiftsTextByItsOwnColumn;
+var L: TTyDateTimeRects;
+begin
+  L := TyDateTimeRects(Rect(0, 0, 200, 24), 96, Rect(6, 3, 6, 3), 18, True);
+  AssertEquals('the indicator sits at the text box start', 6, L.CheckBox.Left);
+  AssertEquals('the indicator is the token box wide',
+    MulDiv(TyCheckBoxBox, 96, 96), L.CheckBox.Right - L.CheckBox.Left);
+  AssertEquals('the string begins past the indicator AND its gap',
+    6 + TyDateTimeCheckBoxColumn(96), L.Text.Left);
+end;
+
+procedure TDateTimeLayoutTest.TestCheckBoxColumnScalesItsTwoTermsSeparately;
+{ At 111 PPI the indicator scales to 19 and the gap to 7, but their SUM scales to 25.
+  The hit-test used to reserve the sum and the paint the two terms, so the string the
+  user clicked began a pixel to the right of the one the control drew. Pinning the
+  two-term form here is what stops that being re-introduced as a "simplification". }
+begin
+  AssertEquals('the column is the two terms scaled separately',
+    MulDiv(TyCheckBoxBox, 111, 96) + MulDiv(TyCheckBoxGap, 111, 96),
+    TyDateTimeCheckBoxColumn(111));
+  AssertTrue('premise: scaling the SUM would give a different answer at this PPI',
+    MulDiv(TyCheckBoxBox + TyCheckBoxGap, 111, 96) <> TyDateTimeCheckBoxColumn(111));
+end;
+
+procedure TDateTimeLayoutTest.TestSpinHalvesTileTheButtonColumn;
+var L: TTyDateTimeRects;
+begin
+  L := TyDateTimeRects(Rect(0, 0, 200, 24), 96, Rect(6, 3, 6, 3), 18, False);
+  AssertEquals('up half starts at the column',   L.Button.Left,  L.ButtonUp.Left);
+  AssertEquals('down half ends at the column',   L.Button.Right, L.ButtonDown.Right);
+  AssertEquals('the halves meet with no gap',    L.ButtonUp.Bottom, L.ButtonDown.Top);
+  AssertEquals('together they span the column',
+    L.Button.Bottom - L.Button.Top,
+    (L.ButtonUp.Bottom - L.ButtonUp.Top) + (L.ButtonDown.Bottom - L.ButtonDown.Top));
+end;
+
+procedure TDateTimeLayoutTest.TestClickInThePaintedFieldSelectsThatField;
+{ THE join. For every field, ask where the highlight is PAINTED and click its middle;
+  the field that comes back must be the one that was painted there. The paint and the
+  hit-test can only both satisfy this while they agree about the field's x, so any
+  second tiling of the width shows up here as a red test rather than as a user clicking
+  the year and landing on the month. A month NAME is used deliberately: it is the case
+  where format offsets and rendered offsets differ, so the assertion has teeth. }
+var
+  P: TTyDateTimePickerProbe;
+begin
+  P := TTyDateTimePickerProbe.Create(nil);
+  try
+    P.SetBounds(0, 0, 300, 24);
+    P.Kind       := dtkDate;
+    P.DateFormat := 'dd mmmm yyyy';
+    P.DateTime   := EncodeDate(2026, 9, 15);
+    AssertPaintedFieldsAnswerTheirOwnClicks(P, 'left-aligned');
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TDateTimeLayoutTest.TestClickInThePaintedFieldSelectsThatFieldRightAligned;
+{ Alignment moves the whole string, so it moves both the highlight and the hit test --
+  or it moves one of them, which is the bug this pins. }
+var
+  P: TTyDateTimePickerProbe;
+begin
+  P := TTyDateTimePickerProbe.Create(nil);
+  try
+    P.SetBounds(0, 0, 300, 24);
+    P.Kind       := dtkDate;
+    P.DateFormat := 'dd mmmm yyyy';
+    P.DateTime   := EncodeDate(2026, 9, 15);
+    P.Alignment  := taRightJustify;
+    AssertPaintedFieldsAnswerTheirOwnClicks(P, 'right-aligned');
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TDateTimeLayoutTest.TestCheckBoxColumnMovesThePaintedFieldsAndTheClicks;
+{ The checkbox is the column the two sites composed differently. With one showing, the
+  painted fields and the clicks must still meet. }
+var
+  P: TTyDateTimePickerProbe;
+begin
+  P := TTyDateTimePickerProbe.Create(nil);
+  try
+    P.SetBounds(0, 0, 300, 24);
+    P.Kind         := dtkDate;
+    P.DateFormat   := 'dd mmmm yyyy';
+    P.DateTime     := EncodeDate(2026, 9, 15);
+    P.ShowCheckBox := True;
+    P.Checked      := True;
+    AssertEquals('the text box has moved right by the checkbox column',
+      P.RectsForTest.CheckBox.Left + TyDateTimeCheckBoxColumn(P.Font.PixelsPerInch),
+      P.RectsForTest.Text.Left);
+    AssertPaintedFieldsAnswerTheirOwnClicks(P, 'with a checkbox');
+  finally
+    P.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TDateTimePickerPureTest);
+  RegisterTest(TDateTimeLayoutTest);
   RegisterTest(TDateTimeActiveSegAtTest);
   RegisterTest(TDateTimePickerControlTest);
   RegisterTest(TDateTimePickerPixelTest);

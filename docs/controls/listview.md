@@ -303,6 +303,11 @@ protected
 
 - **单元格尺寸恒定。** 这是 O(1) 闭式虚拟化窗口(`TyListVisibleRange` 不遍历任何项)的前提。因此**不支持可变行高与单元格自动换行** —— 需要那些就得引入 TreeView 那套位置缓存。
 - **几何全在纯函数里。** 布局、命中、网格导航、框选、首字母定位、排序比较器都在 `tyControls.ListView.Layout`,无窗口、无 painter、可无头单元测试。`TyListItemRect` 是绘制与命中**唯一**的几何来源,`TyListItemAt` 内部回调它做 `PtInRect` 校验 —— 两者不可能漂移。
+- **列的横轴同理。** report 模式下列的屏幕跨度只出自 `TyColumnSpan`(`tyControls.Columns.pas`):
+  报表行、表头格、网格竖线三处绘制,以及 `ColumnFromPosition` / `DetermineSplitterIndex`
+  两个命中函数,都从它取 `Left`/`Right`,自己不算坐标。它取的是**原点**而不是滚动量 ——
+  正因如此,本控件的 `FOffsetX >= 0`(传 `-FOffsetX`)与 `TTyTreeView` 的 `FOffsetX <= 0`
+  (传 `+FOffsetX`)才能共用同一个公式,而不必各写一遍符号。
 - **富缩略图网格不属于这里。** 图标/平铺只做定尺流式格。
 
 ---

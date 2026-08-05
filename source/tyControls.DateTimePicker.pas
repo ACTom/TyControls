@@ -235,6 +235,31 @@ function TyRenderDateTime(AValue: TDateTime; const AFormat: string;
 function TyExpandShortYear(ATyped: Integer; ADigits: Integer;
   ACenturyFrom: Word): Integer;
 
+{ Every horizontal landmark the field has, in DEVICE pixels relative to its client
+  rect's origin -- what TyDateTimeRects (below the class) answers.
+
+  The paint and the click hit-test used to tile the field's width SEPARATELY, each
+  deriving the padding inset, the checkbox column and the button column from the same
+  tokens by its own arithmetic, with a comment in the hit-test asking whoever edited one
+  to remember the other. That is the shape the month-name bug came out of: two
+  computations that agreed right up until they didn't, and a note where an invariant
+  should have been. RenderTo, MouseDown and the preferred-width query now read their x
+  out of THIS and nothing re-derives one; the model is TyHeaderSectionRects
+  (HeaderControl.pas), for exactly the same reason.
+
+  Text is the box the string is drawn in AND hit-tested against, already clear of the
+  padding, the checkbox and the button column. CheckBox, Button, ButtonUp and ButtonDown
+  come back EMPTY when the field has no such part, so a caller that forgets to ask
+  whether the part exists still cannot hit one that was never drawn. }
+type
+  TTyDateTimeRects = record
+    Text:       TRect;
+    CheckBox:   TRect;
+    Button:     TRect;
+    ButtonUp:   TRect;
+    ButtonDown: TRect;
+  end;
+
 { TTyDateTimePicker — field render + segment editing (Task C2).
   Dropdown/time-spin/ShowCheckBox behavior is wired in Task C3. }
 type
@@ -323,15 +348,22 @@ type
       not being there at all). Kind alone used to decide this. }
     function  HasDropDownButton: Boolean;
     function  HasSpinButtons: Boolean;
-    { Reserved width of the button column, 0 under dmNone. Two entry points because
-      the paint path scales through the painter (which carries the theme's own factor)
-      and the mouse path only has the control's PPI; they must not drift, so both read
-      the same token and the same dmNone rule. }
-    function  ButtonColumnWidth(P: TTyPainter): Integer;
+    { The button column's token width in LOGICAL px, 0 under dmNone. There were two of
+      these, one scaling through the painter and one through the control's PPI, on the
+      stated grounds that the painter carried the theme's own factor -- it does not
+      (TTyPainter.Scale is MulDiv by PPI and nothing else), so the second answer was never
+      a different answer, only a second place to change. }
+    function  ButtonColumnLogical: Integer;
+    { The same column in DEVICE px, for the callers that need a width rather than a rect. }
     function  ButtonWidthDev: Integer;
     function  IsInert: Boolean;
-    { Resolve the checkbox box rect within ATextR (left of text content) @APPI. }
-    function  CheckBoxRect(const ATextR: TRect; APPI: Integer): TRect;
+    { Which field the click at device AX lands in, or -1. The walk steps a whole CHARACTER
+      at a time and stops at the first one whose right edge reaches AX; it lives here so
+      that the paint's highlight and this share not just the string and its spans but the
+      x the string starts at. }
+    function  SegmentAtX(const AText: string; const ASpans: TTySegmentArray;
+                AOriginX, AX: Integer; const AFontName: string;
+                AFontSizePx, AFontWeight, APPI: Integer): Integer;
 
     { Dropdown helpers (dtkDate) }
     { Ensure FPopup + FCalendar are created (lazy init).
@@ -376,6 +408,25 @@ type
     procedure SetDroppedDown(AValue: Boolean);
 
   protected
+    { Everything the paint and the click both need, out of ONE call: the field's rects,
+      the resolved style and font size behind them, the string the control is showing,
+      that string's field spans, and the x the string actually starts at. Any x the
+      control needs comes from here -- see TyDateTimeRects for what re-deriving one cost
+      last time. Protected so a probe can ask where a field is PAINTED and then click it,
+      which is the only way a test can catch the two drifting apart again. }
+    procedure FieldLayout(const ALocal: TRect; APPI: Integer;
+      out ARects: TTyDateTimeRects; out AStyle: TTyStyleSet;
+      out AFontSizePx: Integer; out AText: string;
+      out ASpans: TTySegmentArray; out AOriginX: Integer);
+    { The device-x span field AIndex OCCUPIES -- what the highlight fills. False when
+      AIndex names no field. The paint fills exactly this and the hit-test resolves
+      clicks inside it, so a click on the middle of a highlighted field must select that
+      field: that is the one assertion the two sites cannot both satisfy while disagreeing,
+      which is why it is reachable from a probe. }
+    function  SegmentSpanX(const AText: string; const ASpans: TTySegmentArray;
+                AOriginX, AIndex: Integer; const AFontName: string;
+                AFontSizePx, AFontWeight, APPI: Integer;
+                out AX1, AX2: Integer): Boolean;
     { Step the active segment by ADelta and commit (protected for test probes). }
     procedure StepActiveSeg(ADelta: Integer);
     { Ensure FPopup + FCalendar are created (lazy init; protected for probes). }
@@ -486,6 +537,22 @@ function TyDateTimeButtonRect(const ALocal: TRect; APPI: Integer; ABtnWDev: Inte
 function TyDateTimeUpButtonRect(const ALocal: TRect; APPI: Integer; ABtnWDev: Integer = 0): TRect;
 { For dtkTime: bottom half = down arrow }
 function TyDateTimeDownButtonRect(const ALocal: TRect; APPI: Integer; ABtnWDev: Integer = 0): TRect;
+
+{ ── PURE, headless-tested field geometry (all in DEVICE pixels) ───────────── }
+
+{ APaddingLogical is the resolved style's padding and AButtonWLogical the button
+  column's token width, both in LOGICAL px; AButtonWLogical is 0 when the field has no
+  button at all (dmNone), which is what empties the three button rects. }
+function TyDateTimeRects(const ALocal: TRect; APPI: Integer;
+  const APaddingLogical: TRect; AButtonWLogical: Integer;
+  AShowCheckBox: Boolean): TTyDateTimeRects;
+
+{ What the checkbox reserves at the reading start of the text box: the indicator plus its
+  gap. Scaled as TWO terms because the indicator is DRAWN MulDiv(TyCheckBoxBox) wide and
+  the gap sits beside it -- scaling their sum instead lands a pixel out at any PPI that is
+  not a whole multiple of 96, and that one pixel is precisely where the paint and the hit
+  test used to part company. }
+function TyDateTimeCheckBoxColumn(APPI: Integer): Integer;
 
 implementation
 
@@ -1035,6 +1102,56 @@ begin
   Result := Rect(X0, HalfY, ALocal.Right, ALocal.Bottom);
 end;
 
+{ ── TyDateTimeCheckBoxColumn / TyDateTimeRects — the one source ──────────── }
+
+function TyDateTimeCheckBoxColumn(APPI: Integer): Integer;
+begin
+  Result := MulDiv(TyCheckBoxBox, APPI, 96) + MulDiv(TyCheckBoxGap, APPI, 96);
+end;
+
+function TyDateTimeRects(const ALocal: TRect; APPI: Integer;
+  const APaddingLogical: TRect; AButtonWLogical: Integer;
+  AShowCheckBox: Boolean): TTyDateTimeRects;
+var
+  BtnW, BoxSize, MidY: Integer;
+begin
+  Result := Default(TTyDateTimeRects);
+  if AButtonWLogical > 0 then
+    BtnW := MulDiv(AButtonWLogical, APPI, 96)
+  else
+    BtnW := 0;
+
+  { The text box is the client less the padding and less the button column. Padding.Right
+    is deliberately NOT subtracted: the button column already holds that edge, and when
+    there is no button the field has always run its text to the frame. }
+  Result.Text := Rect(
+    ALocal.Left   + MulDiv(APaddingLogical.Left,   APPI, 96),
+    ALocal.Top    + MulDiv(APaddingLogical.Top,    APPI, 96),
+    ALocal.Right  - BtnW,
+    ALocal.Bottom - MulDiv(APaddingLogical.Bottom, APPI, 96));
+
+  { The indicator is centred in the text box's height and sits at its reading start; the
+    string then begins past the indicator AND its gap. }
+  if AShowCheckBox then
+  begin
+    BoxSize := MulDiv(TyCheckBoxBox, APPI, 96);
+    MidY    := Result.Text.Top +
+               (Result.Text.Bottom - Result.Text.Top - BoxSize) div 2;
+    Result.CheckBox  := Rect(Result.Text.Left, MidY,
+                             Result.Text.Left + BoxSize, MidY + BoxSize);
+    Result.Text.Left := Result.Text.Left + TyDateTimeCheckBoxColumn(APPI);
+  end;
+
+  { A column too narrow to scale to a single pixel is no column: leaving the rects empty
+    is what keeps a click off a button the paint never drew. }
+  if BtnW > 0 then
+  begin
+    Result.Button     := TyDateTimeButtonRect(ALocal, APPI, BtnW);
+    Result.ButtonUp   := TyDateTimeUpButtonRect(ALocal, APPI, BtnW);
+    Result.ButtonDown := TyDateTimeDownButtonRect(ALocal, APPI, BtnW);
+  end;
+end;
+
 { ── TTyDateTimePicker ────────────────────────────────────────────────────── }
 
 constructor TTyDateTimePicker.Create(AOwner: TComponent);
@@ -1414,21 +1531,17 @@ begin
             ((FDateMode = dmComboBox) and (FKind = dtkTime));
 end;
 
-function TTyDateTimePicker.ButtonColumnWidth(P: TTyPainter): Integer;
+function TTyDateTimePicker.ButtonColumnLogical: Integer;
 begin
   if FDateMode = dmNone then
     Result := 0
   else
-    Result := P.Scale(ActiveController.Metric('--field-button-width', TyFieldButtonWidth));
+    Result := ActiveController.Metric('--field-button-width', TyFieldButtonWidth);
 end;
 
 function TTyDateTimePicker.ButtonWidthDev: Integer;
 begin
-  if FDateMode = dmNone then
-    Result := 0
-  else
-    Result := MulDiv(ActiveController.Metric('--field-button-width', TyFieldButtonWidth),
-                Font.PixelsPerInch, 96);
+  Result := MulDiv(ButtonColumnLogical, Font.PixelsPerInch, 96);
 end;
 
 function TTyDateTimePicker.IsInert: Boolean;
@@ -1440,14 +1553,74 @@ begin
             not (dtpoEnabledIfUnchecked in FOptions);
 end;
 
-function TTyDateTimePicker.CheckBoxRect(const ATextR: TRect; APPI: Integer): TRect;
-{ Returns the small checkbox box rect aligned vertically within ATextR. }
-var
-  BoxSize, MidY: Integer;
+procedure TTyDateTimePicker.FieldLayout(const ALocal: TRect; APPI: Integer;
+  out ARects: TTyDateTimeRects; out AStyle: TTyStyleSet;
+  out AFontSizePx: Integer; out AText: string;
+  out ASpans: TTySegmentArray; out AOriginX: Integer);
 begin
-  BoxSize := MulDiv(TyCheckBoxBox, APPI, 96);
-  MidY    := ATextR.Top + (ATextR.Bottom - ATextR.Top - BoxSize) div 2;
-  Result  := Rect(ATextR.Left, MidY, ATextR.Left + BoxSize, MidY + BoxSize);
+  AStyle      := CurrentStyle;
+  AFontSizePx := ResolveFontSize(AStyle);
+  ARects      := TyDateTimeRects(ALocal, APPI, AStyle.Padding,
+                   ButtonColumnLogical, FShowCheckBox);
+  { The string and its spans come out of one call because they must agree; the origin
+    then comes out of the SAME text box the string will be drawn in, which is the join
+    the hit-test used to make for itself against a rect it built separately. }
+  BuildDisplay(AText, ASpans);
+  AOriginX    := TextOriginX(ARects.Text, AText, AStyle.FontName, AFontSizePx,
+                   AStyle.FontWeight, APPI);
+end;
+
+function TTyDateTimePicker.SegmentSpanX(const AText: string;
+  const ASpans: TTySegmentArray; AOriginX, AIndex: Integer;
+  const AFontName: string; AFontSizePx, AFontWeight, APPI: Integer;
+  out AX1, AX2: Integer): Boolean;
+begin
+  AX1    := 0;
+  AX2    := 0;
+  Result := (AIndex >= 0) and (AIndex <= High(ASpans));
+  if not Result then Exit;
+  { Spans are offsets into AText itself -- measured, not inferred from the format -- so a
+    month NAME or an unpadded day no longer drags the highlight off the field. }
+  AX1 := AOriginX + MeasureCharX(AText, AFontName, ASpans[AIndex].StartCh,
+           AFontSizePx, AFontWeight, APPI);
+  AX2 := AOriginX + MeasureCharX(AText, AFontName,
+           ASpans[AIndex].StartCh + ASpans[AIndex].LenCh,
+           AFontSizePx, AFontWeight, APPI);
+  if AX2 <= AX1 then AX2 := AX1 + MulDiv(8, APPI, 96);  // degenerate guard
+end;
+
+function TTyDateTimePicker.SegmentAtX(const AText: string;
+  const ASpans: TTySegmentArray; AOriginX, AX: Integer;
+  const AFontName: string; AFontSizePx, AFontWeight, APPI: Integer): Integer;
+var
+  Bmp:     TBGRABitmap;
+  TextX:   Integer;
+  CharIdx: Integer;
+  NextIdx: Integer;
+  TxtLen:  Integer;
+begin
+  Result := -1;
+  TxtLen := Length(AText);
+  if TxtLen = 0 then Exit;
+  Bmp := TBGRABitmap.Create(1, 1);
+  try
+    TyConfigureTextFont(Bmp, AFontName, AFontSizePx, AFontWeight, APPI);
+    { The step is a whole CHARACTER (TyDateTimeNextCharOffset), so the measured prefix is
+      never a Chinese separator cut down the middle -- see that function for why the
+      offset stays in bytes. }
+    TextX   := AX - AOriginX;
+    CharIdx := 0;
+    while CharIdx < TxtLen do
+    begin
+      NextIdx := TyDateTimeNextCharOffset(AText, CharIdx);
+      if Bmp.TextSize(Copy(AText, 1, NextIdx)).cx >= TextX then
+        Break;
+      CharIdx := NextIdx;
+    end;
+    Result := TyDateTimeActiveSegAt(ASpans, CharIdx);
+  finally
+    Bmp.Free;
+  end;
 end;
 
 { ── Dropdown helpers (dtkDate) ───────────────────────────────────────────── }
@@ -1635,8 +1808,9 @@ var
   P:         TTyPainter;
   S:         TTyStyleSet;
   CbS:       TTyStyleSet;
-  R, TextR, BtnR, CbR: TRect;
-  BtnW, CbW, EffSize: Integer;
+  L:         TTyDateTimeRects;
+  R, TextR:  TRect;
+  EffSize:   Integer;
   Txt:       string;
   TextColor: TTyColor;
   { Selection highlight }
@@ -1645,43 +1819,29 @@ var
   SegX1, SegX2, OriginX: Integer;
   SegRect:   TRect;
   Spans:     TTySegmentArray;
-  { Button area }
-  UpR, DnR:  TRect;
 begin
   P := TTyPainter.Create;
   try
     R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
     P.BeginPaint(ACanvas, ARect, APPI);
-    S := CurrentStyle;
+    { Every x below -- the text box, the checkbox, the button column and the origin the
+      string starts at -- comes out of this one call, and so does the hit-test's. }
+    FieldLayout(R, APPI, L, S, EffSize, Txt, Spans, OriginX);
     DrawFrame(P, R, S);
+    TextR := L.Text;
 
-    BtnW  := ButtonColumnWidth(P);
-    EffSize := ResolveFontSize(S);
-
-    { Base text content rect: left padding to right minus button column }
-    TextR := Rect(
-      R.Left  + P.Scale(S.Padding.Left),
-      R.Top   + P.Scale(S.Padding.Top),
-      R.Right - BtnW,
-      R.Bottom - P.Scale(S.Padding.Bottom));
-
-    { ShowCheckBox: reserve space at the left and draw the checkbox glyph }
-    CbW := 0;
+    { ShowCheckBox: the column is already reserved in TextR; draw the glyph in it }
     if FShowCheckBox then
     begin
-      CbW := P.Scale(TyCheckBoxBox) + P.Scale(TyCheckBoxGap);
-      CbR := CheckBoxRect(TextR, APPI);
       { Resolve checkbox style from TyCheckBox typeKey }
       if FChecked then
         CbS := ActiveController.Model.ResolveStyle('TyCheckBox', '', [tysActive])
       else
         CbS := ActiveController.Model.ResolveStyle('TyCheckBox', '', []);
-      P.FillBackground(CbR, CbS.Background, CbS.BorderRadius);
-      P.StrokeBorder(CbR, CbS.BorderRadius, CbS.BorderWidth, CbS.BorderColor);
+      P.FillBackground(L.CheckBox, CbS.Background, CbS.BorderRadius);
+      P.StrokeBorder(L.CheckBox, CbS.BorderRadius, CbS.BorderWidth, CbS.BorderColor);
       if FChecked then
-        P.DrawGlyph(CbR, tgCheck, CbS.TextColor, 2);
-      { Shift text rect right past the checkbox }
-      TextR.Left := TextR.Left + CbW;
+        P.DrawGlyph(L.CheckBox, tgCheck, CbS.TextColor, 2);
     end;
 
     { Determine text color: muted when inert (ShowCheckBox + not Checked) }
@@ -1693,12 +1853,6 @@ begin
       TextColor := CbS.TextColor;
     end;
 
-    { Use buffer-display text: shows digit buffer content for active segment
-      while the user is mid-entry, so no premature-clamp flicker.  Spans come out of
-      the same call so the highlight below cannot index a different string. }
-    BuildDisplay(Txt, Spans);
-    OriginX := TextOriginX(TextR, Txt, S.FontName, EffSize, S.FontWeight, APPI);
-
     { 1. Active-segment highlight (drawn BEFORE text so glyphs appear on top)
          Only when focused AND field is not inert. }
     if Focused and not IsInert and
@@ -1709,35 +1863,27 @@ begin
       SelFill.Kind  := tfkSolid;
       SelFill.Color := SelStyle.Background.Color;
 
-      { Spans are offsets into Txt itself -- measured, not inferred from the format --
-        so a month NAME or an unpadded day no longer drags the highlight off the field. }
-      SegX1 := OriginX + MeasureCharX(Txt, S.FontName,
-                  Spans[FActiveSeg].StartCh,
-                  EffSize, S.FontWeight, APPI);
-      SegX2 := OriginX + MeasureCharX(Txt, S.FontName,
-                  Spans[FActiveSeg].StartCh + Spans[FActiveSeg].LenCh,
-                  EffSize, S.FontWeight, APPI);
-      if SegX2 <= SegX1 then SegX2 := SegX1 + P.Scale(8);  // degenerate guard
-      SegRect := Rect(SegX1, TextR.Top, SegX2, TextR.Bottom);
-      P.FillBackground(SegRect, SelFill, 0);
+      if SegmentSpanX(Txt, Spans, OriginX, FActiveSeg, S.FontName, EffSize,
+           S.FontWeight, APPI, SegX1, SegX2) then
+      begin
+        SegRect := Rect(SegX1, TextR.Top, SegX2, TextR.Bottom);
+        P.FillBackground(SegRect, SelFill, 0);
+      end;
     end;
 
     { 2. Draw the formatted text }
     P.DrawText(TextR, Txt, S.FontName, EffSize, S.FontWeight,
       TextColor, FAlignment, tlCenter, False);
 
-    { 3. Right-side button area — absent entirely under dmNone }
-    if BtnW > 0 then
+    { 3. Right-side button area — the rects come back empty under dmNone }
+    if not IsRectEmpty(L.Button) then
     begin
-      BtnR := TyDateTimeButtonRect(R, APPI, BtnW);
       if HasDropDownButton then
-        P.DrawGlyph(BtnR, tgChevronDown, S.TextColor, 2)
+        P.DrawGlyph(L.Button, tgChevronDown, S.TextColor, 2)
       else if HasSpinButtons then
       begin
-        UpR := TyDateTimeUpButtonRect(R, APPI, BtnW);
-        DnR := TyDateTimeDownButtonRect(R, APPI, BtnW);
-        P.DrawGlyph(UpR,  tgArrowUp,   S.TextColor, 2);
-        P.DrawGlyph(DnR,  tgArrowDown, S.TextColor, 2);
+        P.DrawGlyph(L.ButtonUp,   tgArrowUp,   S.TextColor, 2);
+        P.DrawGlyph(L.ButtonDown, tgArrowDown, S.TextColor, 2);
       end;
     end;
 
@@ -1785,8 +1931,11 @@ begin
 
   PreferredWidth := MulDiv(S.Padding.Left + S.Padding.Right, PPI, 96)
                   + TextW + ButtonWidthDev;
+  { The same column the text box reserves, from the same function that reserves it -- a
+    width query that budgets for a different checkbox than the paint draws is how a field
+    ends up one pixel short of the text it just asked to fit. }
   if FShowCheckBox then
-    Inc(PreferredWidth, MulDiv(TyCheckBoxBox + TyCheckBoxGap, PPI, 96));
+    Inc(PreferredWidth, TyDateTimeCheckBoxColumn(PPI));
   { One character of slack: TextSize rounds down on some backends and a date that just
     fits is a date that clips on the next repaint. }
   Inc(PreferredWidth, MulDiv(EffSize, PPI, 96) div 2 + 2);
@@ -1995,19 +2144,12 @@ procedure TTyDateTimePicker.MouseDown(Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
 var
   S:        TTyStyleSet;
+  L:        TTyDateTimeRects;
   EffSize:  Integer;
-  TextLeft: Integer;
   Txt:      string;
-  Bmp:      TBGRABitmap;
-  TextX:    Integer;
-  CharIdx:  Integer;
-  NextIdx:  Integer;
   HitSeg:   Integer;
-  TxtLen:   Integer;
-  PaddingL: Integer;
+  OriginX:  Integer;
   CbBoxR:   TRect;
-  TextR:    TRect;
-  TextRect: TRect;
   Spans:    TTySegmentArray;
 begin
   if not Enabled then Exit;
@@ -2015,21 +2157,16 @@ begin
   FMouseDownOnButton := False;
   if Button = mbLeft then
   begin
+    { The same rects the paint used, from the same call the paint uses -- there is no
+      second tiling of the field's width to keep in step any more. }
+    FieldLayout(ClientRect, Font.PixelsPerInch, L, S, EffSize, Txt, Spans, OriginX);
+
     { ── Checkbox area click ─────────────────────────────────────────────── }
     if FShowCheckBox then
     begin
-      S        := CurrentStyle;
-      PaddingL := MulDiv(S.Padding.Left, Font.PixelsPerInch, 96);
-      { Recompute text rect exactly as in RenderTo (without scale rounding diff) }
-      TextR := Rect(
-        PaddingL,
-        MulDiv(S.Padding.Top, Font.PixelsPerInch, 96),
-        ClientRect.Right - ButtonWidthDev,
-        ClientRect.Bottom - MulDiv(S.Padding.Bottom, Font.PixelsPerInch, 96));
-      CbBoxR := CheckBoxRect(TextR, Font.PixelsPerInch);
       { Expand hit area slightly (easy to miss tiny box) }
-      CbBoxR := Rect(CbBoxR.Left - 2, CbBoxR.Top - 2,
-                     CbBoxR.Right + 2, CbBoxR.Bottom + 2);
+      CbBoxR := Rect(L.CheckBox.Left - 2, L.CheckBox.Top - 2,
+                     L.CheckBox.Right + 2, L.CheckBox.Bottom + 2);
       if PtInRect(CbBoxR, Point(X, Y)) then
       begin
         { Through the property, so the notification happens in one place. }
@@ -2043,9 +2180,7 @@ begin
     end;
 
     { ── Button area click ───────────────────────────────────────────────── }
-    if (ButtonWidthDev > 0) and
-       PtInRect(TyDateTimeButtonRect(ClientRect, Font.PixelsPerInch,
-         ButtonWidthDev), Point(X, Y)) then
+    if not IsRectEmpty(L.Button) and PtInRect(L.Button, Point(X, Y)) then
     begin
       if HasDropDownButton then
       begin
@@ -2056,8 +2191,7 @@ begin
       end
       else if HasSpinButtons and not FReadOnly and not IsInert then
       begin
-        if PtInRect(TyDateTimeUpButtonRect(ClientRect, Font.PixelsPerInch,
-             ButtonWidthDev), Point(X, Y)) then
+        if PtInRect(L.ButtonUp, Point(X, Y)) then
           StepActiveSeg(+1)
         else
           StepActiveSeg(-1);
@@ -2066,52 +2200,16 @@ begin
     else if not IsInert then
     begin
       { ── Segment hit-test ─────────────────────────────────────────────── }
-      S        := CurrentStyle;
-      EffSize  := ResolveFontSize(S);
-      TextLeft := MulDiv(S.Padding.Left, Font.PixelsPerInch, 96);
-      { If ShowCheckBox, add the checkbox+gap to the text left offset }
-      if FShowCheckBox then
-        Inc(TextLeft, MulDiv(TyCheckBoxBox + TyCheckBoxGap, Font.PixelsPerInch, 96));
-      { The same string and the same spans the renderer used -- resolving a click
+      { The string, the spans and the origin are the paint's own -- resolving a click
         against offsets derived from the FORMAT is what put the caret on the month when
         the user clicked the year in 'dd mmmm yyyy'. }
-      BuildDisplay(Txt, Spans);
-      TxtLen   := Length(Txt);
-      { Alignment moves the whole string; the hit-test has to move with it. }
-      TextRect := Rect(TextLeft, 0,
-        ClientRect.Right - ButtonWidthDev, ClientRect.Bottom);
-      TextLeft := TextOriginX(TextRect, Txt, S.FontName, EffSize, S.FontWeight,
-        Font.PixelsPerInch);
-
-      { Convert click X to a character offset by finding the character
-        whose right edge passes the click coordinate. The step is a whole CHARACTER
-        (TyDateTimeNextCharOffset), so the measured prefix is never a Chinese separator
-        cut down the middle — see that function for why the offset stays in bytes. }
-      if (Txt <> '') and (TxtLen > 0) then
+      HitSeg := SegmentAtX(Txt, Spans, OriginX, X, S.FontName, EffSize,
+                  S.FontWeight, Font.PixelsPerInch);
+      if HitSeg >= 0 then
       begin
-        Bmp := TBGRABitmap.Create(1, 1);
-        try
-          TyConfigureTextFont(Bmp, S.FontName, EffSize, S.FontWeight,
-            Font.PixelsPerInch);
-          TextX   := X - TextLeft;
-          CharIdx := 0;
-          while CharIdx < TxtLen do
-          begin
-            NextIdx := TyDateTimeNextCharOffset(Txt, CharIdx);
-            if Bmp.TextSize(Copy(Txt, 1, NextIdx)).cx >= TextX then
-              Break;
-            CharIdx := NextIdx;
-          end;
-          HitSeg := TyDateTimeActiveSegAt(Spans, CharIdx);
-          if HitSeg >= 0 then
-          begin
-            FActiveSeg   := HitSeg;
-            FDigitBuffer := '';
-            Invalidate;
-          end;
-        finally
-          Bmp.Free;
-        end;
+        FActiveSeg   := HitSeg;
+        FDigitBuffer := '';
+        Invalidate;
       end;
     end;
 

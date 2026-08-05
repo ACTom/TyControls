@@ -288,6 +288,18 @@ TyTreeCheckBox:disabled { color: var(--muted); }
 - 排序三角字形仅在 `hoShowSortGlyphs` 且该列为 `SortColumn` 时绘制。
 - 内嵌滚动条使用各自的 `TyScrollBar` 主题，且 thumb 不做缓动动画（内嵌滚动直接跟随）。
 
+> **横轴只有两处算 x。** 列的屏幕跨度出自 `TyColumnSpan`(`tyControls.Columns.pas`)——
+> 绘制、表头、拖列浮标、`GetCellRect` 与两个命中函数都从它取 `Left`/`Right`;
+> 节点内部的缩进 / 展开槽 / 复选槽 / 图标槽 / 标题起点出自 `NodeCaptionSlots`
+> (它包装纯函数 `TyTreeCaptionSlots`)——两处绘制、命中判定、`CellTextRect`
+> 和 `DisplayExpandSignRect` 都读它。这两条是有意维持的:
+> "画在这边、点在那边"这类 bug 只能从第二份算式里长出来。
+> 改这个文件时请保持它 —— 任何在这两个函数之外新算出来的 x,都是一条会走散的第二路径。
+>
+> 已知偏差(**尚未修复**,见 `GetNodeAtPoint` 的注释):命中判定给 `NodeCaptionSlots`
+> 传的锚点是 `0`,即假设主列从内容区左缘开始。`Header.MainColumn` 不是最左可见列时该假设
+> 不成立,展开箭头会画在 `Scale(MainColumn.Left)` 之外、却在原处接收点击 —— 点箭头不展开。
+
 ---
 
 ## 6. 代码示例

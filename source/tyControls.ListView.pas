@@ -2758,6 +2758,7 @@ procedure TTyListView.RenderReportRow(P: TTyPainter; AIndex: Integer; const ACel
 var
   posIdx, colIdx, colLeft, colRight, textLeft, mainCol, imgPx, ii, cbShift: Integer;
   col: TTyColumn;
+  span: TTyColumnSpan;
   txt: string;
   tc: TTyColor;
   tr, chk: TRect;
@@ -2772,9 +2773,11 @@ begin
     if col = nil then Continue;
     if not (coVisible in col.Options) then Continue;
     colIdx := col.Index;
-    { report cell rect Left = -FOffsetX; column x = that + Scale(col.Left) }
-    colLeft  := ACell.Left + ScaleI(col.Left);
-    colRight := colLeft + ScaleI(col.Width);
+    { The report row's cell rect already starts at -FOffsetX, so it IS this column
+      family's content origin -- pass it straight to the one span source. }
+    span     := col.Span(ACell.Left, Dpi);
+    colLeft  := span.Left;
+    colRight := span.Right;
     textLeft := colLeft + ScaleI(ActiveController.Metric('--listview-text-margin', TyLvTextMargin));
     if colIdx = mainCol then
     begin
@@ -2919,6 +2922,7 @@ var
   hb, hs: TTyStyleSet;
   posIdx, colLeft, colRight, sortSz, textLeft, icoPx, icoGap: Integer;
   col: TTyColumn;
+  span: TTyColumnSpan;
   cellR, tr, sortR: TRect;
   tc: TTyColor;
   useSec: Boolean;
@@ -2952,8 +2956,11 @@ begin
     col := FHeader.Columns.ColumnByPosition(posIdx);
     if col = nil then Continue;
     if not (coVisible in col.Options) then Continue;
-    colLeft  := ScaleI(col.Left) - FOffsetX;
-    colRight := colLeft + ScaleI(col.Width);
+    { -FOffsetX is this control's content origin (FOffsetX >= 0 here, unlike the
+      tree's <= 0); the span source takes the origin so the sign lives in one place. }
+    span     := col.Span(-FOffsetX, Dpi);
+    colLeft  := span.Left;
+    colRight := span.Right;
     if colRight <= 0 then Continue;
     if colLeft >= M.ViewportW then Continue;
     cellR := Rect(colLeft, 0, colRight, M.HeaderH);
@@ -3050,7 +3057,9 @@ begin
     col := FHeader.Columns.ColumnByPosition(posIdx);
     if col = nil then Continue;
     if not (coVisible in col.Options) then Continue;
-    x := ScaleI(col.Left) + ScaleI(col.Width) - FOffsetX;
+    { The grid line sits on the column's right edge -- the same span edge the header
+      cell and the report row are drawn from, so the rule cannot drift off the cell. }
+    x := col.Span(-FOffsetX, Dpi).Right;
     if (x > 0) and (x < M.ViewportW) then
       P.Bitmap.DrawLine(x - 1, M.HeaderH, x - 1, M.ViewportH, border, False);
   end;

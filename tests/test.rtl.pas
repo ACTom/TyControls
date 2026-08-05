@@ -54,6 +54,7 @@ uses
   tyControls.ListBox, tyControls.CheckListBox, tyControls.ColorListBox,
   tyControls.ValueListEditor,
   tyControls.HeaderControl,
+  tyControls.Columns, tyControls.Grid, tyControls.Grid.Layout,
   tyControls.TabStrip, tyControls.TabSheet, tyControls.PageControl, tyControls.TabSet,
   tyControls.Ribbon,
   { The strip harness -- caption model plus the protected mouse/key seams -- already exists;
@@ -134,6 +135,62 @@ type
   end;
 
   TValueListAccess = class(TTyValueListEditor)
+  public
+    function Mirrors: Boolean;
+  end;
+
+  { Phase 5: the grid (§3.8). It has more x-axis consumers than anything else in the library,
+    so its shim is correspondingly wide -- every one of the questions below is a question the
+    grid answers out of the SAME function it paints with, and the shim exists to let a test
+    ask both halves. }
+  TRtlGridAccess = class(TTyStringGrid)
+  public
+    procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    function  ColLeft(ACol: Integer): Integer;
+    function  ColWidth(ACol: Integer): Integer;
+    function  ColAt(AX: Integer): Integer;
+    function  Hit(AX, AY: Integer): TTyGridHit;
+    function  Cell(ACol, ARow: Integer): TRect;
+    { The CLIPPED rect. The unclipped one cannot see a band/pane swap that only half
+      happened -- the cell is still placed correctly and only vanishes once it is
+      intersected with the pane it claims to belong to. }
+    function  CellVis(ACol, ARow: Integer): TRect;
+    { The single source the three chrome renderers (header sections, group subtotals, footer)
+      use to cut a scrolled body column back to the band it may paint in. Reached directly
+      because it IS the shared function -- asserting its output is asserting all three. }
+    function  ClipCol(ACol: Integer; var ALeft, AWidth: Integer): Boolean;
+    function  Divider(AX: Integer): Integer;
+    function  Metrics: TTyGridMetrics;
+    function  ViewW: Integer;
+    function  FrozenW: Integer;
+    { The embedded bar is a PRIVATE field, so it is found the way a user would find it --
+      among the children. That also makes the assertion stronger: it pins the bar the grid
+      actually shows, not a field a refactor could leave behind. }
+    function  HBar: TTyScrollBar;
+    function  SelBounds: TRect;
+    function  FunnelRect(ACol: Integer): TRect;
+    function  TreeToggle(ARow: Integer): TRect;
+    function  BoxRect(ACol, ARow: Integer): TRect;
+    function  BtnRect(ACol, ARow: Integer): TRect;
+    function  StarRect(ACol, ARow, AStar: Integer): TRect;
+    function  DotsRect(ACol, ARow: Integer): TRect;
+    function  HandleRect: TRect;
+    function  GroupToggle(APos: Integer): TRect;
+    function  Sc(AValue: Integer): Integer;
+    procedure PressDown(X, Y: Integer);
+    procedure PressMove(X, Y: Integer);
+    procedure PressUp(X, Y: Integer);
+    procedure ClickAt(X, Y: Integer);
+    procedure Key(AKey: Word);
+    procedure Remeasure;
+    procedure ScrollTo(AX: Integer);
+    procedure SetLevel(Sender: TObject; ARow: Integer; var ALevel: Integer);
+    procedure SetHasKids(Sender: TObject; ARow: Integer; var AHas: Boolean);
+  end;
+
+  { The filter drop-down's row layout is a DECLINE (see TRtlExclusionTest); this reaches the
+    predicate that records it. }
+  TRtlFilterListAccess = class(TTyGridFilterList)
   public
     function Mirrors: Boolean;
   end;
@@ -293,6 +350,83 @@ type
     procedure TabSetInheritsTheMirroredStrip;
   end;
 
+  { Phase 5: TTyCustomGrid / TTyStringGrid (§3.8).
+
+    The scoping document buckets this control as a rewrite of the column axis. That is wrong,
+    and the reason matters for how these tests are shaped: the column axis was ALREADY
+    collapsed. ColumnLeftPx is the one source and ColumnAtX is written as its inverse through
+    that same function -- so the tests that sweep every pixel below are guarding a property
+    the control already had, not one this commit invented. What this commit had to build was
+    the other four single sources: the row-header gutter (four independent `x < IndicatorWidth`
+    expressions), the frozen band boundary (four independent `FrozenWidthPx` thresholds), the
+    header funnel (paint and hit each computed their own centre), and the resize edge (the
+    divider's x and the drag's delta were unrelated expressions that happened to agree).
+
+    So the assertions come in three shapes, and each catches a different half-mirror:
+      * INVERSE sweeps -- every device x across the viewport, hit test versus the reflected
+        LTR answer. These catch a paint that mirrored while its hit test did not.
+      * PAINT-then-HIT -- render, find the ink, ask the hit test to name what is under it.
+        These catch two functions that both mirrored but disagree by a slot.
+      * WIDTH and INDEX invariants -- what a reflection must NOT change. These catch the
+        mirror that also reversed something logical, e.g. a selection anchor. }
+  TRtlGridTest = class(TTestCase)
+  private
+    FForm: TForm;
+    FCtl:  TTyStyleController;
+    FG:    TRtlGridAccess;
+    procedure Build(ARtl: Boolean; const AWidths: array of Integer;
+      ARows: Integer = 6; AWidth: Integer = 400);
+    function  Shot(AWidth: Integer = 400; AHeight: Integer = 240): TBGRABitmap;
+  protected
+    procedure TearDown; override;
+  published
+    { --- the column axis --- }
+    procedure ColumnZeroSitsAgainstTheRightEdgeAndTheRestPackLeftwards;
+    procedure MirroredColumnsTileWithNoSeamAndKeepEveryWidth;
+    procedure ColumnAtXIsTheExactPixelInverseOfTheMirroredTiling;
+    procedure TheHitTestNamesTheColumnThePaintFilled;
+    procedure ColumnOrderIsMirroredNotReversed;
+    { --- the row-header gutter: four consumers, one source --- }
+    procedure TheRowHeaderGutterMovesToTheRightEdge;
+    procedure AllFourGutterConsumersMovedTogether;
+    procedure RowNumberInkLandsInsideTheMirroredGutter;
+    { --- the frozen bands --- }
+    procedure FrozenColumnsPinToTheRightEdgeAndDoNotScroll;
+    procedure TheBodyBandStartsWhereTheFrozenBandEnds;
+    procedure ARightFrozenColumnMovesToTheLeftEdge;
+    { --- the scroll origin --- }
+    procedure ScrollXZeroShowsTheReadingStartWhicheverWayItReads;
+    procedure ScrollingForwardSlidesTheBodyTowardTheRight;
+    procedure LeftColNamesTheFirstColumnInsideTheBodyBandEitherWay;
+    procedure TheHorizontalBarIsToldToMirrorAndTheVerticalOneIsNot;
+    procedure ScrollIntoViewChasesTheCellOutTheCorrectEnd;
+    { --- resize and drag --- }
+    procedure ResizeGripGrabsTheMirroredColumnEdgeNotTheLtrOne;
+    procedure DraggingAwayFromTheReadingStartWidensTheColumn;
+    { --- header chrome --- }
+    procedure AHeaderClickSortsTheColumnUnderThePointerNotItsLtrTwin;
+    procedure TheFilterFunnelIsHitWhereItIsPainted;
+    procedure AHeaderGroupSpansItsColumnsInsteadOfInverting;
+    { --- cell chrome, all of it derived from one cell rect --- }
+    procedure CheckBoxAndButtonCellsAnswerInsideTheMirroredCell;
+    procedure TheEllipsisButtonMovesToTheCellsLeadingSideAndItsHitFollows;
+    procedure RatingStarsCountFromTheRightAndTheClickAgrees;
+    procedure TheTreeChevronMovesToTheCellsRightGutterAndItsHitFollows;
+    procedure TheFilterRowNamesTheColumnUnderThePointer;
+    procedure CellTextHugsTheCellsReadingStart;
+    procedure HeaderCaptionsHugTheirSectionsReadingStart;
+    procedure TheFixedColumnStripIsPaintedBesideTheMirroredGutter;
+    procedure AScrolledBodyColumnIsClippedAtTheFrozenBandsEdge;
+    procedure TheFillHandleHangsOffTheSelectionsTrailingCornerAndDragsFromThere;
+    procedure TheGroupRowToggleMovesToTheRightAndStillCollapsesItsGroup;
+    { --- keyboard and selection --- }
+    procedure ArrowKeysFollowTheEyeAndHomeEndStayLogical;
+    procedure ARectangularSelectionStillDescribesTheSameCells;
+    { --- what a reflection must not change --- }
+    procedure EveryColumnWidthAndTheContentWidthSurviveMirroring;
+    procedure MergedCellsSpanForwardInsteadOfCollapsing;
+  end;
+
   { The two controls in these same source files that are deliberately NOT mirrored, because
     they read x back out of a click. Pinned so that mirroring them later is a decision
     somebody makes on purpose, with the hit test in the same commit. }
@@ -302,6 +436,8 @@ type
     procedure ButtonGroupSegmentsAreNotMirroredWhileSegmentAtReadsRawX;
     procedure ValueListEditorIsNotMirroredWhileItsSplitterIsHitTestedTwice;
     procedure RibbonDeclinesToMirrorTheHeaderBandItInherits;
+    procedure TheGridsVerticalBarStaysOnTheRightAndItsViewportOriginStaysAtZero;
+    procedure TheGridsFilterDropDownDeclinesToMirrorItsRows;
   end;
 
   { --------------------------------------------------------------- PHASE 3 -- }
@@ -2803,6 +2939,1112 @@ begin
   end;
 end;
 
+{ --------------------------------------------------------------- TRtlGridTest }
+
+procedure TRtlGridAccess.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin RenderTo(ACanvas, ARect, APPI); end;
+function TRtlGridAccess.ColLeft(ACol: Integer): Integer;
+begin Result := ColumnLeftPx(ACol); end;
+function TRtlGridAccess.ColWidth(ACol: Integer): Integer;
+begin Result := ColumnWidthPx(ACol); end;
+function TRtlGridAccess.ColAt(AX: Integer): Integer;
+begin Result := ColumnAtX(AX); end;
+function TRtlGridAccess.Hit(AX, AY: Integer): TTyGridHit;
+begin Result := CellAt(AX, AY); end;
+function TRtlGridAccess.Cell(ACol, ARow: Integer): TRect;
+begin Result := CellRect(ACol, ARow); end;
+function TRtlGridAccess.CellVis(ACol, ARow: Integer): TRect;
+begin Result := CellVisibleRect(ACol, ARow); end;
+function TRtlGridAccess.ClipCol(ACol: Integer; var ALeft, AWidth: Integer): Boolean;
+begin Result := ClipColToBody(GridMetrics, ACol, ALeft, AWidth); end;
+function TRtlGridAccess.Divider(AX: Integer): Integer;
+begin Result := DividerAtX(AX); end;
+function TRtlGridAccess.Metrics: TTyGridMetrics;
+begin Result := GridMetrics; end;
+function TRtlGridAccess.ViewW: Integer;
+begin Result := ViewportW; end;
+function TRtlGridAccess.FrozenW: Integer;
+begin Result := FrozenWidthPx; end;
+function TRtlGridAccess.HBar: TTyScrollBar;
+var i: Integer;
+begin
+  Result := nil;
+  for i := 0 to ControlCount - 1 do
+    if (Controls[i] is TTyScrollBar)
+       and (TTyScrollBar(Controls[i]).Kind = sbHorizontal) then
+      Exit(TTyScrollBar(Controls[i]));
+end;
+function TRtlGridAccess.SelBounds: TRect;
+begin Result := SelectionBoundsRect; end;
+procedure TRtlGridAccess.SetLevel(Sender: TObject; ARow: Integer; var ALevel: Integer);
+begin if ARow > 0 then ALevel := 1 else ALevel := 0; end;
+procedure TRtlGridAccess.SetHasKids(Sender: TObject; ARow: Integer; var AHas: Boolean);
+begin AHas := True; end;
+function TRtlFilterListAccess.Mirrors: Boolean;
+begin Result := RtlRowLayout; end;
+function TRtlGridAccess.FunnelRect(ACol: Integer): TRect;
+begin Result := HeaderFilterRect(ACol, ScaleI(Header.Height)); end;
+function TRtlGridAccess.TreeToggle(ARow: Integer): TRect;
+begin Result := TreeToggleRect(ARow); end;
+function TRtlGridAccess.BoxRect(ACol, ARow: Integer): TRect;
+begin Result := CheckBoxRect(ACol, ARow); end;
+function TRtlGridAccess.BtnRect(ACol, ARow: Integer): TRect;
+begin Result := CellButtonRect(ACol, ARow); end;
+function TRtlGridAccess.StarRect(ACol, ARow, AStar: Integer): TRect;
+begin Result := RatingStarRect(ACol, ARow, AStar); end;
+function TRtlGridAccess.DotsRect(ACol, ARow: Integer): TRect;
+begin Result := EllipsisRect(ACol, ARow); end;
+function TRtlGridAccess.HandleRect: TRect;
+begin Result := FillHandleRect; end;
+function TRtlGridAccess.GroupToggle(APos: Integer): TRect;
+begin Result := GroupToggleRect(APos); end;
+function TRtlGridAccess.Sc(AValue: Integer): Integer;
+begin Result := ScaleI(AValue); end;
+procedure TRtlGridAccess.PressDown(X, Y: Integer);
+begin MouseDown(mbLeft, [], X, Y); end;
+procedure TRtlGridAccess.PressMove(X, Y: Integer);
+begin MouseMove([ssLeft], X, Y); end;
+procedure TRtlGridAccess.PressUp(X, Y: Integer);
+begin MouseUp(mbLeft, [], X, Y); end;
+procedure TRtlGridAccess.ClickAt(X, Y: Integer);
+begin MouseDown(mbLeft, [], X, Y); MouseUp(mbLeft, [], X, Y); end;
+procedure TRtlGridAccess.Key(AKey: Word);
+var k: Word;
+begin k := AKey; KeyDown(k, []); end;
+procedure TRtlGridAccess.Remeasure;
+begin UpdateScrollBars; end;
+procedure TRtlGridAccess.ScrollTo(AX: Integer);
+begin ScrollX := AX; end;
+
+procedure TRtlGridTest.Build(ARtl: Boolean; const AWidths: array of Integer;
+  ARows: Integer; AWidth: Integer);
+var
+  i, r, c: Integer;
+  col: TTyColumn;
+begin
+  FForm := TForm.CreateNew(nil);
+  FForm.SetBounds(0, 0, 640, 480);
+  FCtl := TTyStyleController.Create(nil);
+  { No sheet is loaded over the stock theme anywhere in this class. The one test that reads
+    pixels out of a chrome band measures the band's WIDTH instead of giving it a loud colour,
+    which keeps it honest about what a user sees and avoids this repo's recorded trap: a sheet
+    naming a couple of keys and nothing else drops every token the rest of the control needs. }
+  FG := TRtlGridAccess.Create(FForm);
+  FG.Parent := FForm;
+  FG.Controller := FCtl;
+  FG.Font.PixelsPerInch := 96;
+  { The bar must never appear on its own in these fixtures: a vertical bar narrows the
+    viewport, and the viewport width is the mirror's axis of reflection. Left to "auto" a
+    fixture that grows a row would silently reflect about a different number than its LTR
+    twin, and every coordinate assertion below would be off by the bar's width for a reason
+    that has nothing to do with mirroring. }
+  FG.VertScrollBarMode := gsbNever;
+  FG.SetBounds(0, 0, AWidth, 240);
+  for i := 0 to High(AWidths) do
+  begin
+    col := FG.Header.Columns.Add as TTyColumn;
+    col.Width := AWidths[i];
+    col.Text := Chr(Ord('A') + i);
+  end;
+  FG.RowCount := ARows;
+  for r := 0 to ARows - 1 do
+    for c := 0 to High(AWidths) do
+      FG.Cells[c, r] := Chr(Ord('a') + c) + IntToStr(r);
+  if ARtl then FG.BiDiMode := bdRightToLeft;
+  FG.Remeasure;
+end;
+
+function TRtlGridTest.Shot(AWidth, AHeight: Integer): TBGRABitmap;
+var
+  Bmp: TBitmap;
+begin
+  Bmp := TBitmap.Create;
+  try
+    Bmp.SetSize(AWidth, AHeight);
+    FG.Render(Bmp.Canvas, Rect(0, 0, AWidth, AHeight), 96);
+    Result := TBGRABitmap.Create(Bmp);
+  finally
+    Bmp.Free;
+  end;
+end;
+
+procedure TRtlGridTest.TearDown;
+begin
+  FreeAndNil(FForm);
+  FreeAndNil(FCtl);
+  inherited TearDown;
+end;
+
+{ --- the column axis ------------------------------------------------------- }
+
+{ The headline claim, and the cheapest thing to get wrong in a way that looks right: it is
+  not enough that the columns are in some mirrored order, the FIRST one has to be flush
+  against the reading start. Widths are deliberately unequal so a fixture that is accidentally
+  symmetric cannot pass. }
+procedure TRtlGridTest.ColumnZeroSitsAgainstTheRightEdgeAndTheRestPackLeftwards;
+begin
+  Build(True, [60, 90, 50]);
+  AssertEquals('column 0 ends flush against the viewport''s right edge',
+    FG.ViewW, FG.ColLeft(0) + FG.ColWidth(0));
+  AssertEquals('column 1 ends where column 0 begins',
+    FG.ColLeft(0), FG.ColLeft(1) + FG.ColWidth(1));
+  AssertEquals('column 2 ends where column 1 begins',
+    FG.ColLeft(1), FG.ColLeft(2) + FG.ColWidth(2));
+  AssertTrue('and the columns run right to left, not left to right',
+    (FG.ColLeft(0) > FG.ColLeft(1)) and (FG.ColLeft(1) > FG.ColLeft(2)));
+end;
+
+{ A reflection of a gapless tiling is gapless -- that is the whole argument for reflecting
+  the finished layout instead of accumulating backwards, so it needs an assertion rather than
+  a comment. A backwards accumulation that rounds anywhere grows a 1px seam here. }
+procedure TRtlGridTest.MirroredColumnsTileWithNoSeamAndKeepEveryWidth;
+var
+  i: Integer;
+  Ltr: array[0..2] of Integer;
+begin
+  Build(False, [60, 90, 50]);
+  for i := 0 to 2 do Ltr[i] := FG.ColWidth(i);
+  TearDown;
+  Build(True, [60, 90, 50]);
+  for i := 0 to 2 do
+    AssertEquals(Format('column %d keeps its width', [i]), Ltr[i], FG.ColWidth(i));
+  for i := 0 to 1 do
+    AssertEquals(Format('no seam between columns %d and %d', [i, i + 1]),
+      FG.ColLeft(i), FG.ColLeft(i + 1) + FG.ColWidth(i + 1));
+end;
+
+{ THE inverse sweep. ColumnAtX is written as ColumnLeftPx's inverse THROUGH that same
+  function, so this ought to be free -- and that is exactly why it is worth pinning: the day
+  someone "optimises" ColumnAtX into its own accumulation loop, this is the test that turns
+  red instead of the users. Every device x, both directions, compared against the reflection
+  of the unmirrored grid's answer. }
+procedure TRtlGridTest.ColumnAtXIsTheExactPixelInverseOfTheMirroredTiling;
+var
+  x, vw: Integer;
+  Ltr: array of Integer;
+begin
+  Build(False, [60, 90, 50]);
+  vw := FG.ViewW;
+  SetLength(Ltr, vw);
+  for x := 0 to vw - 1 do Ltr[x] := FG.ColAt(x);
+  TearDown;
+  Build(True, [60, 90, 50]);
+  AssertEquals('same viewport, so the reflection axis is the same', vw, FG.ViewW);
+  for x := 0 to vw - 1 do
+    AssertEquals(Format('x=%d answers the mirror of the unmirrored grid''s answer', [x]),
+      Ltr[vw - 1 - x], FG.ColAt(x));
+end;
+
+{ Paint-then-hit. The sweep above proves the hit test mirrors; this proves it mirrors the
+  same way the INK did. The two can disagree -- that is the failure this whole programme
+  exists around -- so the probe reads a pixel the header actually filled and asks the hit
+  test to name it. }
+procedure TRtlGridTest.TheHitTestNamesTheColumnThePaintFilled;
+var
+  Bmp: TBGRABitmap;
+  hdrY, i, mid: Integer;
+  h: TTyGridHit;
+begin
+  Build(True, [60, 90, 50]);
+  FG.Header.Options := FG.Header.Options + [hoVisible];
+  Bmp := Shot;
+  try
+    hdrY := FG.Metrics.FrozenTop div 2;
+    if hdrY < 2 then hdrY := 2;
+    for i := 0 to 2 do
+    begin
+      mid := FG.ColLeft(i) + FG.ColWidth(i) div 2;
+      AssertTrue(Format('column %d was painted somewhere on screen', [i]),
+        (mid >= 0) and (mid < Bmp.Width));
+      h := FG.Hit(mid, hdrY);
+      AssertEquals(Format('the header hit at the middle of the painted column %d names it',
+        [i]), i, h.Col);
+    end;
+    { And the cell band, which goes through a different branch of CellAt. }
+    for i := 0 to 2 do
+    begin
+      mid := FG.ColLeft(i) + FG.ColWidth(i) div 2;
+      h := FG.Hit(mid, FG.Metrics.FrozenTop + 4);
+      AssertEquals(Format('and so does the cell hit for column %d', [i]), i, h.Col);
+    end;
+  finally
+    Bmp.Free;
+  end;
+end;
+
+{ A reflection is not a reversal. Reversing the ORDER would put column 2 where column 0's
+  mirror image is only when every width is equal -- which is why the widths here are not.
+  This separates "mirrored" from "I reversed the index and called it mirroring". }
+procedure TRtlGridTest.ColumnOrderIsMirroredNotReversed;
+begin
+  Build(True, [60, 90, 50]);
+  { Reversal would give column 0 the width-50 slot at the right; reflection gives it its own
+    60px, and the left edge lands 60 short of the viewport, not 50. }
+  AssertEquals('column 0 occupies its own width against the right edge',
+    FG.ViewW - 60, FG.ColLeft(0));
+  AssertEquals('and column 2 is the one flush with the left edge',
+    FG.ViewW - 60 - 90 - 50, FG.ColLeft(2));
+end;
+
+{ --- the row-header gutter ------------------------------------------------- }
+
+procedure TRtlGridTest.TheRowHeaderGutterMovesToTheRightEdge;
+var
+  h: TTyGridHit;
+  bodyY: Integer;
+begin
+  Build(True, [60, 90, 50]);
+  FG.ShowIndicator := True;
+  FG.IndicatorWidth := 30;
+  bodyY := FG.Metrics.FrozenTop + 4;
+  h := FG.Hit(FG.ViewW - 4, bodyY);
+  AssertTrue('a click at the right edge lands in the row-header gutter',
+    h.Part = ghpIndicator);
+  h := FG.Hit(4, bodyY);
+  AssertTrue('and one at the left edge does not', h.Part <> ghpIndicator);
+end;
+
+{ FOUR expressions used to say `x < ScaleI(FIndicatorWidth)`, in four functions, and they
+  agreed because they were all measured from x=0. Mirrored they must all move together, and
+  a test that only exercised one of them would pass with three of the four still on the old
+  side. This drives every one: the hit test, the row-height divider, the drag-row gesture,
+  and (in the sibling test below) the paint. }
+procedure TRtlGridTest.AllFourGutterConsumersMovedTogether;
+var
+  M: TTyGridMetrics;
+  rowBottom, gx, lx, before: Integer;
+begin
+  Build(True, [60, 90, 50]);
+  FG.ShowIndicator := True;
+  FG.IndicatorWidth := 30;
+  FG.ShowRowNumbers := True;
+  M := FG.Metrics;
+  gx := FG.ViewW - 4;      { inside the mirrored gutter }
+  lx := 4;                 { where the gutter used to be }
+
+  { 1. the hit test }
+  AssertTrue('CellAt answers the gutter on the right',
+    FG.Hit(gx, M.FrozenTop + 4).Part = ghpIndicator);
+
+  { 2. the row-height grip, which is only offered inside the gutter. Driven through the
+       MOUSE rather than through RowDividerAtY, because that function is private -- and
+       because the height actually changing is the honest evidence. }
+  rowBottom := TyGridRowRect(FG.FixedRows, M).Bottom;
+  FG.PressDown(gx, rowBottom);
+  FG.PressMove(gx, rowBottom + 12);
+  FG.PressUp(gx, rowBottom + 12);
+  AssertTrue('a drag inside the mirrored gutter resizes the row',
+    FG.RowHeights[FG.FixedRows] > 0);
+  AssertTrue('and it actually grew', FG.RowHeights[FG.FixedRows] > 12);
+
+  { 3. the same drag where the gutter USED to be must do nothing at all. }
+  before := FG.RowHeights[FG.FixedRows];
+  FG.PressDown(lx, rowBottom);
+  FG.PressMove(lx, rowBottom + 24);
+  FG.PressUp(lx, rowBottom + 24);
+  AssertEquals('and the same drag on the left edge changes nothing',
+    before, FG.RowHeights[FG.FixedRows]);
+end;
+
+{ The paint half of the same four. Ink, not arithmetic: a gutter whose numbers still render
+  on the left is exactly the "painted one side, answers the other" defect, and no geometry
+  assertion above would notice. }
+procedure TRtlGridTest.RowNumberInkLandsInsideTheMirroredGutter;
+var
+  Bmp, Bare: TBGRABitmap;
+  M: TTyGridMetrics;
+
+  { Pixels that DIFFER between two shots of the same grid, one with row numbers and one
+    without -- i.e. the numbers themselves. Comparing the two shots rather than counting
+    "non-background" pixels is what makes this probe honest: the strip where the gutter used
+    to be is full of cell text either way, so an absolute ink count there is large no matter
+    which side the numbers went to, and a mirror that moved nothing would still pass. }
+  function Delta(AL, AR, ATop, ABot: Integer): Integer;
+  var x, y: Integer;
+  begin
+    Result := 0;
+    for y := ATop to ABot - 1 do
+      for x := AL to AR - 1 do
+        if Bmp.GetPixel(x, y) <> Bare.GetPixel(x, y) then Inc(Result);
+  end;
+
+var
+  leftInk, rightInk, x, y, firstX, inner: Integer;
+begin
+  Build(True, [60, 90, 50]);
+  FG.ShowIndicator := True;
+  FG.IndicatorWidth := 30;
+  M := FG.Metrics;
+  Bare := Shot;
+  try
+    FG.ShowRowNumbers := True;
+    Bmp := Shot;
+    try
+      rightInk := Delta(FG.ViewW - 30, FG.ViewW, M.FrozenTop + 1, M.FrozenTop + 18);
+      leftInk  := Delta(0, 30, M.FrozenTop + 1, M.FrozenTop + 18);
+      AssertTrue('turning row numbers on puts ink in the gutter on the right',
+        rightInk > 0);
+      AssertEquals('and puts none in the strip where the gutter used to be',
+        0, leftInk);
+
+      { WHICH SIDE OF THE GUTTER, not merely which gutter. The number hugs the edge that
+        faces the DATA, with the slot's 4px breathing gap between the two -- mirrored, that
+        is the gutter's left edge. A slot that was moved to the correct band but inset on the
+        wrong end still paints inside the gutter and still satisfies both counts above; it
+        differs by four pixels, which is exactly the size of miss this repo has let through
+        before. }
+      inner := FG.ViewW - 30;
+      firstX := -1;
+      for x := inner to FG.ViewW - 1 do
+      begin
+        for y := M.FrozenTop + 1 to M.FrozenTop + 17 do
+          if Bmp.GetPixel(x, y) <> Bare.GetPixel(x, y) then
+          begin
+            firstX := x;
+            Break;
+          end;
+        if firstX >= 0 then Break;
+      end;
+      AssertTrue('the number was found', firstX >= 0);
+      AssertTrue('and the breathing gap is between it and the data, not at the window edge',
+        firstX - inner >= 3);
+    finally
+      Bmp.Free;
+    end;
+  finally
+    Bare.Free;
+  end;
+end;
+
+{ --- the frozen bands ------------------------------------------------------ }
+
+procedure TRtlGridTest.FrozenColumnsPinToTheRightEdgeAndDoNotScroll;
+var
+  before: Integer;
+begin
+  Build(True, [60, 90, 50, 80, 70], 6, 200);
+  FG.FixedCols := 1;
+  FG.Remeasure;
+  before := FG.ColLeft(0);
+  AssertEquals('the frozen column is flush with the reading start',
+    FG.ViewW, before + FG.ColWidth(0));
+  FG.ScrollTo(40);
+  AssertEquals('and scrolling does not move it', before, FG.ColLeft(0));
+  AssertTrue('while a body column does move', FG.ColLeft(2) <> 0);
+  { The other half of the band swap, from the LEFT-frozen side: CellPane has to name the
+    band GridMetrics made thick, or the frozen column is intersected with an empty pane and
+    disappears while ColLeft above still reads perfectly. }
+  AssertFalse('and the frozen column still has visible pixels',
+    IsRectEmpty(FG.CellVis(0, 0)));
+  AssertEquals('all of them', FG.ColWidth(0),
+    FG.CellVis(0, 0).Right - FG.CellVis(0, 0).Left);
+end;
+
+{ The boundary between the two bands -- decision (2). Mirrored, the frozen strip is against
+  the right edge and the scrolling band is what is left, so gpBody's RIGHT edge is the seam.
+  Four expressions used to read FrozenWidthPx as a left-hand threshold; if any one of them
+  stayed, a body column scrolled under the frozen strip is either hit-testable through it or
+  clipped away on the wrong side. }
+procedure TRtlGridTest.TheBodyBandStartsWhereTheFrozenBandEnds;
+var
+  M: TTyGridMetrics;
+  body: TRect;
+  h: TTyGridHit;
+begin
+  Build(True, [60, 90, 50, 80, 70], 6, 200);
+  FG.FixedCols := 1;
+  FG.Remeasure;
+  FG.ScrollTo(60);
+  M := FG.Metrics;
+  body := TyGridPaneRect(M, gpBody);
+  AssertEquals('the body band ends where the frozen strip begins',
+    FG.ViewW - FG.FrozenW, body.Right);
+  AssertEquals('and it starts at the viewport''s left edge', 0, body.Left);
+  { A pixel just inside the frozen strip must answer the frozen column, never the body
+    column scrolled underneath it. }
+  h := FG.Hit(body.Right + 2, M.FrozenTop + 4);
+  AssertEquals('a pixel inside the frozen strip answers the frozen column', 0, h.Col);
+end;
+
+{ TTyCustomGrid has a right-frozen band too (FixedColsRight), which the scoping document
+  never mentions. Mirrored it swaps sides with the left one -- and the two halves of that
+  swap live in different functions (GridMetrics' band thicknesses and CellPane's pane
+  names). Change one and the cell is clipped against the opposite band, producing an empty
+  rect and a column that silently vanishes. }
+procedure TRtlGridTest.ARightFrozenColumnMovesToTheLeftEdge;
+var
+  last: Integer;
+begin
+  Build(True, [60, 90, 50, 80, 70], 6, 200);
+  FG.FixedColsRight := 1;
+  FG.Remeasure;
+  last := FG.Header.Columns.Count - 1;
+  AssertEquals('the right-frozen column is flush with the viewport''s LEFT edge',
+    0, FG.ColLeft(last));
+  { The swap has TWO halves in two different functions -- GridMetrics decides how THICK each
+    band is, CellPane decides which band a column belongs to -- and the unclipped rect above
+    sees neither. Only the CLIPPED rect does: get one half without the other and the cell is
+    intersected with the band on the opposite side, which is empty, and the column silently
+    disappears while every coordinate still reads correctly. }
+  AssertFalse('its VISIBLE rect is not empty -- both halves of the band swap happened',
+    IsRectEmpty(FG.CellVis(last, 0)));
+  AssertEquals('and nothing of it was clipped away', FG.ColWidth(last),
+    FG.CellVis(last, 0).Right - FG.CellVis(last, 0).Left);
+  FG.ScrollTo(30);
+  AssertEquals('scrolling leaves it there', 0, FG.ColLeft(last));
+end;
+
+{ A body column scrolled under the frozen strip must be cut back to the band it is allowed
+  to paint in -- and mirrored, the side it overflows is the RIGHT one. The unmirrored rule
+  clips only the left, which leaves the header section, the group subtotal and the footer
+  cell of a scrolled column painting straight over the frozen column pinned beside them:
+  two numbers on top of each other, and nothing in the geometry that looks wrong.
+
+  Asserted on ClipColToBody itself because that IS the shared source the three renderers
+  call; a pixel probe would test one of the three and let the other two rot. }
+procedure TRtlGridTest.AScrolledBodyColumnIsClippedAtTheFrozenBandsEdge;
+var
+  l, w, seam: Integer;
+begin
+  Build(True, [60, 90, 50, 80, 70], 6, 200);
+  FG.FixedCols := 1;
+  FG.Remeasure;
+  FG.ScrollTo(30);
+  seam := FG.ViewW - FG.FrozenW;
+
+  l := FG.ColLeft(1);
+  w := FG.ColWidth(1);
+  AssertTrue('precondition: column 1 really does run under the frozen strip',
+    l + w > seam);
+  AssertTrue('and it survives the clip', FG.ClipCol(1, l, w));
+  AssertEquals('clipped exactly at the frozen band''s edge', seam, l + w);
+  AssertTrue('and nothing was taken off its other end', l = FG.ColLeft(1));
+
+  { The frozen column itself is never clipped -- it IS the band. }
+  l := FG.ColLeft(0);
+  w := FG.ColWidth(0);
+  AssertTrue('the frozen column survives', FG.ClipCol(0, l, w));
+  AssertEquals('untouched', FG.ColWidth(0), w);
+end;
+
+{ --- the scroll origin ----------------------------------------------------- }
+
+{ DECISION (1), pinned. FScrollX keeps its meaning: it is how far the body has scrolled AWAY
+  from the reading start, so ScrollX = 0 shows column 0 -- which mirrored is at the RIGHT.
+  That is Windows' own answer for a mirrored horizontal bar (Position = Min shows the reading
+  start), and it is the only choice under which the same number means the same thing in both
+  directions, so a form that saves and restores ScrollX survives a BiDiMode change. }
+procedure TRtlGridTest.ScrollXZeroShowsTheReadingStartWhicheverWayItReads;
+var
+  ltrLeft: Integer;
+begin
+  Build(False, [60, 90, 50, 80, 70], 6, 200);
+  AssertEquals('unmirrored, ScrollX=0 puts column 0 at the left edge', 0, FG.ColLeft(0));
+  ltrLeft := FG.ColLeft(0);
+  TearDown;
+  Build(True, [60, 90, 50, 80, 70], 6, 200);
+  AssertEquals('mirrored, ScrollX=0 puts column 0 flush with the RIGHT edge',
+    FG.ViewW, FG.ColLeft(0) + FG.ColWidth(0));
+  AssertTrue('which is not where it was', FG.ColLeft(0) <> ltrLeft);
+end;
+
+procedure TRtlGridTest.ScrollingForwardSlidesTheBodyTowardTheRight;
+var
+  before: Integer;
+begin
+  Build(True, [60, 90, 50, 80, 70], 6, 200);
+  before := FG.ColLeft(3);
+  FG.ScrollTo(40);
+  AssertEquals('increasing ScrollX slides the body toward the right by that much',
+    before + 40, FG.ColLeft(3));
+end;
+
+{ LeftCol is the grid''s public answer to "where is the viewport", and hosts persist it
+  alongside ScrollX. It is a LOGICAL answer -- the first scrollable column with pixels in the
+  body band -- so mirroring must not change it for a given scroll offset, and the numbers
+  below are asserted against the unmirrored grid to say exactly that.
+
+  It is also the one x-axis consumer whose comparison operator carries the direction: written
+  against screen coordinates it answers the column at the far END of the strip, because in a
+  mirrored tiling every column''s screen right edge is large. That answer is not obviously
+  wrong -- it is a valid column index -- which is why this needs a guard rather than a look. }
+procedure TRtlGridTest.LeftColNamesTheFirstColumnInsideTheBodyBandEitherWay;
+var
+  ltrUnscrolled, ltrScrolled: Integer;
+begin
+  Build(False, [60, 90, 50, 80, 70], 6, 200);
+  FG.FixedCols := 1;
+  FG.Remeasure;
+  ltrUnscrolled := FG.LeftCol;
+  FG.ScrollTo(95);
+  ltrScrolled := FG.LeftCol;
+  AssertEquals('precondition: scrolling past column 1 moves LeftCol on',
+    ltrUnscrolled + 1, ltrScrolled);
+  TearDown;
+
+  Build(True, [60, 90, 50, 80, 70], 6, 200);
+  FG.FixedCols := 1;
+  FG.Remeasure;
+  AssertEquals('mirrored, an unscrolled grid names the same first body column',
+    ltrUnscrolled, FG.LeftCol);
+  FG.ScrollTo(95);
+  AssertEquals('and the same one after the same scroll', ltrScrolled, FG.LeftCol);
+end;
+
+{ TTyScrollBar deliberately does not read BiDiMode -- it mirrors only when a host sets
+  MirrorHorizontal, precisely so the grid can make this call for itself. The vertical bar is
+  a different matter and is pinned NOT to move; see TRtlExclusionTest. }
+procedure TRtlGridTest.TheHorizontalBarIsToldToMirrorAndTheVerticalOneIsNot;
+begin
+  Build(True, [60, 90, 50, 80, 70], 6, 200);
+  FG.HorzScrollBarMode := gsbAlways;
+  FG.Remeasure;
+  AssertNotNull('the grid has an embedded horizontal bar', FG.HBar);
+  AssertTrue('the grid turns its horizontal bar''s mirroring on',
+    FG.HBar.MirrorHorizontal);
+  TearDown;
+  Build(False, [60, 90, 50, 80, 70], 6, 200);
+  FG.HorzScrollBarMode := gsbAlways;
+  FG.Remeasure;
+  AssertFalse('and leaves it off when the grid reads left to right',
+    FG.HBar.MirrorHorizontal);
+end;
+
+{ ScrollIntoView compares a cell rect against the body band. Mirrored, "past the end" is the
+  LEFT edge, and the branch that adds to ScrollX is the one testing the other side. Written
+  as a reflection rather than a second pair of branches, so this test is really asking
+  whether the reflection was applied to BOTH rects. }
+procedure TRtlGridTest.ScrollIntoViewChasesTheCellOutTheCorrectEnd;
+var
+  after: Integer;
+begin
+  Build(True, [60, 90, 50, 80, 70], 6, 200);
+  AssertEquals('starts unscrolled', 0, FG.ScrollX);
+  FG.ScrollIntoView(4, 0);
+  after := FG.ScrollX;
+  AssertTrue('bringing the last column into view scrolls forward', after > 0);
+  AssertTrue('and it is now inside the viewport',
+    (FG.ColLeft(4) >= 0) and (FG.ColLeft(4) + FG.ColWidth(4) <= FG.ViewW));
+  FG.ScrollIntoView(0, 0);
+  AssertEquals('and coming back to column 0 returns to the reading start', 0, FG.ScrollX);
+end;
+
+{ --- resize and drag ------------------------------------------------------- }
+
+{ The resize grip is a column's TRAILING edge -- right in LTR, LEFT once mirrored. Getting
+  this wrong is not subtle in behaviour but is invisible in a screenshot: the grip is offered
+  on the boundary between the same two columns either way, and the only symptom is that the
+  drag widens the neighbour. }
+procedure TRtlGridTest.ResizeGripGrabsTheMirroredColumnEdgeNotTheLtrOne;
+begin
+  Build(True, [60, 90, 50]);
+  FG.Header.Options := FG.Header.Options + [hoColumnResize];
+  AssertEquals('the grip for column 0 is on its left edge once mirrored',
+    0, FG.Divider(FG.ColLeft(0)));
+  AssertEquals('and its right edge -- the viewport edge -- is not a grip at all',
+    -1, FG.Divider(FG.ColLeft(0) + FG.ColWidth(0)));
+  AssertEquals('column 1''s grip is likewise on its left edge',
+    1, FG.Divider(FG.ColLeft(1)));
+end;
+
+procedure TRtlGridTest.DraggingAwayFromTheReadingStartWidensTheColumn;
+var
+  edge: Integer;
+begin
+  Build(True, [60, 90, 50]);
+  FG.Header.Options := FG.Header.Options + [hoColumnResize];
+  edge := FG.ColLeft(0);
+  FG.PressDown(edge, 4);
+  FG.PressMove(edge - 20, 4);
+  AssertEquals('dragging the grip away from the right edge widens column 0',
+    80, FG.Header.Columns.Items[0].Width);
+  FG.PressMove(edge + 10, 4);
+  AssertEquals('and dragging it back toward that edge narrows it',
+    50, FG.Header.Columns.Items[0].Width);
+  FG.PressUp(edge + 10, 4);
+end;
+
+{ --- header chrome --------------------------------------------------------- }
+
+procedure TRtlGridTest.AHeaderClickSortsTheColumnUnderThePointerNotItsLtrTwin;
+var
+  hdrY: Integer;
+begin
+  { Width 200 = exactly the three columns, so the strip is full and the two probe x's below
+    are real screen coordinates rather than coordinates derived from the very function under
+    test. A wider fixture leaves blank space, and mirrored that blank space is on the LEFT --
+    x=4 would then be nowhere at all and the test would fail for the wrong reason. }
+  Build(True, [60, 90, 50], 6, 200);
+  FG.Header.Options := FG.Header.Options + [hoVisible, hoHeaderClickAutoSort];
+  hdrY := 4;
+  { x deep inside the LEFTMOST painted header cell, which mirrored is column 2. Unmirrored
+    the same x is column 0 -- so this single assertion separates "mirrored" from "mirrored
+    in the paint only". }
+  FG.ClickAt(4, hdrY);
+  AssertEquals('the click sorted the column painted under it',
+    2, FG.Header.SortColumn);
+  FG.ClickAt(FG.ViewW - 4, hdrY);
+  AssertEquals('and a click at the right edge sorts column 0',
+    0, FG.Header.SortColumn);
+end;
+
+{ The funnel had TWO independent expressions for its centre: RenderHeaderSections computed
+  `r.Right - 10 - gs` and HeaderFilterRect computed `l + w - 10 - gs`. They agreed because
+  r.Right happened to equal l + w -- an agreement by coincidence, the same shape as
+  TTyCheckListBox's toggle in phase 3. Unified into HeaderFunnelCenterX before mirroring;
+  this pins that the hit rect really is centred on the painted glyph. }
+procedure TRtlGridTest.TheFilterFunnelIsHitWhereItIsPainted;
+var
+  fr: TRect;
+  h: TTyGridHit;
+begin
+  Build(True, [60, 90, 50]);
+  FG.Header.Options := FG.Header.Options + [hoVisible];
+  FG.ShowFilterButtons := True;
+  fr := FG.FunnelRect(1);
+  AssertFalse('column 1 has a funnel', IsRectEmpty(fr));
+  { The funnel sits at the section's TRAILING edge, which mirrored is its left. }
+  AssertTrue('the funnel is in the left half of the mirrored section',
+    (fr.Left + fr.Right) div 2 < FG.ColLeft(1) + FG.ColWidth(1) div 2);
+  AssertTrue('and inside that section, not the next one along',
+    ((fr.Left + fr.Right) div 2 >= FG.ColLeft(1))
+    and ((fr.Left + fr.Right) div 2 < FG.ColLeft(1) + FG.ColWidth(1)));
+  h := FG.Hit((fr.Left + fr.Right) div 2, 4);
+  AssertEquals('and the header hit under the funnel names the same column', 1, h.Col);
+end;
+
+{ A header group spans first..last column. Mirrored, first is on the RIGHT, so the naive
+  `Rect(Left(first), .., Left(last)+Width(last), ..)` is an INVERTED rect and the whole group
+  band paints nothing. ColumnSpanX takes the union instead; this is the guard on that. }
+procedure TRtlGridTest.AHeaderGroupSpansItsColumnsInsteadOfInverting;
+var
+  Bmp: TBGRABitmap;
+  g: TTyGridHeaderGroup;
+  ink, x: Integer;
+  bg, px: TBGRAPixel;
+begin
+  Build(True, [60, 90, 50]);
+  FG.Header.Options := FG.Header.Options + [hoVisible];
+  g := FG.HeaderGroups.Add as TTyGridHeaderGroup;
+  g.FirstCol := 0;
+  g.LastCol := 1;
+  g.Text := 'G';
+  FG.GroupHeaderHeight := 18;
+  Bmp := Shot;
+  try
+    { Ink anywhere along the band the group is supposed to cover. An inverted rect draws
+      nothing at all, which is the failure this catches. }
+    ink := 0;
+    bg := Bmp.GetPixel(2, 9);
+    for x := FG.ColLeft(1) to FG.ColLeft(0) + FG.ColWidth(0) - 1 do
+    begin
+      px := Bmp.GetPixel(x, 9);
+      if (px.red <> bg.red) or (px.green <> bg.green) or (px.blue <> bg.blue) then Inc(ink);
+    end;
+    AssertTrue('the group band paints across the columns it spans', ink > 0);
+  finally
+    Bmp.Free;
+  end;
+end;
+
+{ --- cell chrome ----------------------------------------------------------- }
+
+{ Every one of these slots derives from CellRect, so mirroring the column axis moves them as
+  a block. That is the property being pinned -- not that somebody remembered each of them,
+  but that none of them needed remembering. }
+procedure TRtlGridTest.CheckBoxAndButtonCellsAnswerInsideTheMirroredCell;
+var
+  box, cell: TRect;
+begin
+  Build(True, [60, 90, 50]);
+  { A check cell is an EDITOR kind, not a display kind -- CheckBoxRect answers only where
+    EditorKindFor says gekCheckBox. }
+  FG.DefaultEditorKind := gekCheckBox;
+  cell := FG.Cell(1, 1);
+  box := FG.BoxRect(1, 1);
+  AssertFalse('the check box has a rect', IsRectEmpty(box));
+  AssertTrue('and it is inside the mirrored cell, not its unmirrored twin',
+    (box.Left >= cell.Left) and (box.Right <= cell.Right));
+  AssertEquals('a click in the middle of the box names that cell''s column',
+    1, FG.Hit((box.Left + box.Right) div 2, (box.Top + box.Bottom) div 2).Col);
+end;
+
+{ The ellipsis button is pinned to the cell's TRAILING edge, which mirrored is its left.
+  Paint and hit both read EllipsisRect, so the assertion that matters is where that one rect
+  moved to -- and that a click there still reaches the right cell. }
+procedure TRtlGridTest.TheEllipsisButtonMovesToTheCellsLeadingSideAndItsHitFollows;
+var
+  cell, dots: TRect;
+begin
+  Build(True, [60, 90, 50]);
+  (FG.Header.Columns.Items[1] as TTyGridColumn).EditorKind := gekEllipsis;
+  cell := FG.Cell(1, 1);
+  dots := FG.DotsRect(1, 1);
+  AssertFalse('the ellipsis button has a rect', IsRectEmpty(dots));
+  AssertTrue('and it sits in the left half of the mirrored cell',
+    (dots.Left + dots.Right) div 2 < (cell.Left + cell.Right) div 2);
+  AssertEquals('a click on it lands in the cell it belongs to',
+    1, FG.Hit((dots.Left + dots.Right) div 2, (dots.Top + dots.Bottom) div 2).Col);
+end;
+
+{ Rating stars are the one cell slot with an ORDER inside the cell, so they catch a mirror
+  that moved the block but left the sequence running the old way. Star 1 must be nearest the
+  reading start, and SetRatingByPoint must agree -- it hit-tests through RatingStarRect, the
+  same function the paint uses. }
+procedure TRtlGridTest.RatingStarsCountFromTheRightAndTheClickAgrees;
+var
+  s1, s3, cell: TRect;
+begin
+  Build(True, [60, 90, 50]);
+  FG.DefaultCellDisplay := gcdRating;
+  FG.DefaultEditorKind := gekRating;
+  cell := FG.Cell(1, 1);
+  s1 := FG.StarRect(1, 1, 1);
+  s3 := FG.StarRect(1, 1, 3);
+  AssertFalse('star 1 has a rect', IsRectEmpty(s1));
+  AssertFalse('star 3 has a rect', IsRectEmpty(s3));
+  AssertTrue('star 1 is nearer the reading start than star 3', s1.Left > s3.Left);
+  AssertTrue('and both are inside the mirrored cell',
+    (s3.Left >= cell.Left) and (s1.Right <= cell.Right));
+  FG.ClickAt((s3.Left + s3.Right) div 2, (s3.Top + s3.Bottom) div 2);
+  AssertEquals('clicking the third star from the reading start sets 3',
+    '3', FG.Cells[1, 1]);
+end;
+
+{ The tree chevron is the only cell slot whose position depends on a LEVEL, i.e. on an
+  accumulation. Mirrored, the indent grows leftwards from the cell's right edge, and the text
+  has to yield the same side -- that is one computation (TreeContentLeft feeding a rect that
+  is reflected once), which is why the chevron and the caption cannot end up on opposite
+  sides. Paint and hit both read TreeToggleRect. }
+procedure TRtlGridTest.TheTreeChevronMovesToTheCellsRightGutterAndItsHitFollows;
+var
+  cell, tg: TRect;
+begin
+  Build(True, [120, 90, 50]);
+  FG.TreeColumn := 0;
+  FG.TreeIndent := 16;
+  FG.OnGetNodeLevel := @FG.SetLevel;
+  FG.OnGetHasChildren := @FG.SetHasKids;
+  FG.Remeasure;
+  cell := FG.Cell(0, 0);
+  tg := FG.TreeToggle(0);
+  AssertFalse('the root node has a chevron', IsRectEmpty(tg));
+  AssertTrue('and it sits in the RIGHT gutter of the mirrored cell',
+    tg.Left > (cell.Left + cell.Right) div 2);
+  AssertTrue('inside the cell', (tg.Left >= cell.Left) and (tg.Right <= cell.Right));
+  { A child's chevron indents AWAY from the reading start, i.e. leftwards. }
+  AssertTrue('a deeper node indents leftwards, not rightwards',
+    FG.TreeToggle(1).Left < tg.Left);
+end;
+
+{ The inline filter row is its own band and is hit-tested before the cell branch. Its column
+  comes from ColumnAtX like everything else, so this is really asking whether the band
+  survived the mirror at all. }
+procedure TRtlGridTest.TheFilterRowNamesTheColumnUnderThePointer;
+var
+  h: TTyGridHit;
+  fy: Integer;
+begin
+  Build(True, [60, 90, 50]);
+  FG.Header.Options := FG.Header.Options + [hoVisible];
+  FG.ShowFilterRow := True;
+  fy := FG.Metrics.FrozenTop - 4;
+  h := FG.Hit(FG.ColLeft(1) + 4, fy);
+  AssertTrue('the filter row is hit-testable', h.Part = ghpFilterRow);
+  AssertEquals('and names the column painted under the pointer', 1, h.Col);
+  h := FG.Hit(FG.ColLeft(0) + 4, fy);
+  AssertEquals('a pointer near the right edge is column 0', 0, h.Col);
+end;
+
+{ The painter's alignment flag, seen from inside a mirrored grid. The cell RECT alone puts
+  the text in the right cell -- what puts it against the right EDGE of that cell is the flag
+  BeginPaintOn carries, and a grid that forgot it looks very nearly correct: every column is
+  where it should be and only the words sit against the far side of their own cell. Probed by
+  differencing two shots, so what is measured is the glyphs and nothing else. }
+procedure TRtlGridTest.CellTextHugsTheCellsReadingStart;
+var
+  Bmp, Bare: TBGRABitmap;
+  cell: TRect;
+  x, y, firstX, lastX: Integer;
+  differs: Boolean;
+begin
+  Build(True, [60, 90, 50]);
+  cell := FG.Cell(1, 1);
+  FG.Cells[1, 1] := '';
+  Bare := Shot;
+  try
+    FG.Cells[1, 1] := 'W';
+    Bmp := Shot;
+    try
+      firstX := -1;
+      lastX := -1;
+      for x := cell.Left to cell.Right - 1 do
+      begin
+        differs := False;
+        for y := cell.Top to cell.Bottom - 1 do
+          if Bmp.GetPixel(x, y) <> Bare.GetPixel(x, y) then
+          begin
+            differs := True;
+            Break;
+          end;
+        if differs then
+        begin
+          if firstX < 0 then firstX := x;
+          lastX := x;
+        end;
+      end;
+      AssertTrue('the cell text was drawn at all', firstX >= 0);
+      AssertTrue('and it hugs the cell''s RIGHT edge -- its reading start',
+        (cell.Right - lastX) < (firstX - cell.Left));
+    finally
+      Bmp.Free;
+    end;
+  finally
+    Bare.Free;
+  end;
+end;
+
+{ THE SECOND ALIGNMENT PATH, and the reason the one above is not enough. Cell text goes
+  through TTyCustomGrid.DrawCellText, which renders into its own cached bitmap and therefore
+  never touches TTyPainter.DrawText -- it has to flip its own alignment. Header captions,
+  header-group captions, group-row keys and footer totals go the OTHER way, through
+  P.DrawText, and are flipped by the flag BeginPaintOn carries. Two mechanisms, two mutants;
+  a test that probed only one of them would let the other ship. }
+procedure TRtlGridTest.HeaderCaptionsHugTheirSectionsReadingStart;
+var
+  Bmp, Bare: TBGRABitmap;
+  sec: TRect;
+  x, y, firstX, lastX: Integer;
+  differs: Boolean;
+begin
+  Build(True, [60, 90, 50]);
+  FG.Header.Options := FG.Header.Options + [hoVisible];
+  sec := Rect(FG.ColLeft(1), 0, FG.ColLeft(1) + FG.ColWidth(1), 0);
+  FG.Header.Columns.Items[1].Text := '';
+  Bare := Shot;
+  try
+    FG.Header.Columns.Items[1].Text := 'W';
+    Bmp := Shot;
+    try
+      firstX := -1;
+      lastX := -1;
+      for x := sec.Left to sec.Right - 1 do
+      begin
+        differs := False;
+        for y := 1 to FG.Metrics.FrozenTop - 2 do
+          if Bmp.GetPixel(x, y) <> Bare.GetPixel(x, y) then
+          begin
+            differs := True;
+            Break;
+          end;
+        if differs then
+        begin
+          if firstX < 0 then firstX := x;
+          lastX := x;
+        end;
+      end;
+      AssertTrue('the header caption was drawn at all', firstX >= 0);
+      AssertTrue('and it hugs its section''s RIGHT edge -- the reading start',
+        (sec.Right - lastX) < (firstX - sec.Left));
+    finally
+      Bmp.Free;
+    end;
+  finally
+    Bare.Free;
+  end;
+end;
+
+{ The fixed-column strip is the one chrome band whose two edges come from DIFFERENT places:
+  the gutter''s inner edge and the frozen band''s outer one. Written in screen coordinates it
+  reads `Rect(indW, .., M.FrozenLeft, ..)` -- and mirrored, M.FrozenLeft holds the RIGHT
+  frozen band, so that rect is inverted and the strip vanishes entirely. Written in reading
+  space and reflected once, it cannot.
+
+  Measured as the WIDTH of the unbroken chrome run at the reading edge rather than by giving
+  the two bands loud colours of their own: the stock theme paints the gutter and the strip in
+  one colour, which is what turns this into a single number -- 80px of chrome (a 20px gutter
+  plus a 60px frozen column) against 20px if the strip went missing. Nothing is loaded over
+  the theme, so the measurement is of what a user actually sees.
+
+  RowCount is 0 and the grid lines are off so that nothing paints INTO the band and breaks the
+  run: cell text and a column's own divider would each cross it. }
+procedure TRtlGridTest.TheFixedColumnStripIsPaintedBesideTheMirroredGutter;
+var
+  Bmp: TBGRABitmap;
+  M: TTyGridMetrics;
+  x, y, band: Integer;   { 'run' is a TTestCase method -- do not shadow it }
+  chrome: TBGRAPixel;
+begin
+  Build(True, [60, 90, 50], 0, 200);
+  FG.ShowIndicator := True;
+  FG.IndicatorWidth := 20;
+  FG.FixedCols := 1;
+  FG.GridLineStyle := glsNone;
+  FG.Remeasure;
+  M := FG.Metrics;
+  AssertEquals('precondition: gutter + one frozen column', 80, FG.FrozenW);
+  Bmp := Shot(200, 240);
+  try
+    y := M.FrozenTop + 4;
+    chrome := Bmp.GetPixel(FG.ViewW - 4, y);
+    AssertTrue('precondition: the chrome band is not the cell background',
+      chrome <> Bmp.GetPixel(4, y));
+    band := 0;
+    x := FG.ViewW - 1;
+    while (x >= 0) and (Bmp.GetPixel(x, y) = chrome) do
+    begin
+      Inc(band);
+      Dec(x);
+    end;
+    AssertEquals('the chrome at the reading edge is the gutter AND the fixed strip',
+      FG.FrozenW, band);
+  finally
+    Bmp.Free;
+  end;
+end;
+
+{ --- keyboard and selection ------------------------------------------------ }
+
+{ Left and right are LAYOUT direction here, not text direction, so they flip -- \xa76.3 item 4
+  draws exactly that line. Home and End are LOGICAL ends and do not: End goes to the last
+  column whichever side of the screen that column is on. }
+procedure TRtlGridTest.ArrowKeysFollowTheEyeAndHomeEndStayLogical;
+begin
+  Build(True, [60, 90, 50]);
+  FG.Col := 1;
+  FG.Row := 1;
+  FG.Key(VK_LEFT);
+  AssertEquals('mirrored, the left arrow moves FORWARD through the columns', 2, FG.Col);
+  FG.Key(VK_RIGHT);
+  AssertEquals('and the right arrow moves back', 1, FG.Col);
+  FG.Key(VK_HOME);
+  AssertEquals('Home is logical: the first column, wherever it is drawn', 0, FG.Col);
+  FG.Key(VK_END);
+  AssertEquals('End is logical too', 2, FG.Col);
+end;
+
+{ A rectangular selection is stored as column INDICES. Mirroring must not touch them: the
+  anchor and the opposite corner have to describe the same cells, or every host reading
+  Selection gets a different answer on a mirrored form. }
+procedure TRtlGridTest.ARectangularSelectionStillDescribesTheSameCells;
+var
+  sel, bounds: TRect;
+begin
+  Build(True, [60, 90, 50]);
+  FG.SelectRange(0, 1, 2, 3);
+  sel := FG.Selection;
+  AssertEquals('the anchor column is unchanged by mirroring', 0, sel.Left);
+  AssertEquals('and so is the opposite corner', 2, sel.Right);
+  AssertEquals('rows likewise', 1, sel.Top);
+  AssertEquals('rows likewise', 3, sel.Bottom);
+  { The PIXEL bounds, on the other hand, must not be an inverted rect -- index 0 is on the
+    right now, so naively pairing tl.Left with br.Right gives Left > Right and the selection
+    frame plus its fill handle disappear. }
+  bounds := FG.SelBounds;
+  AssertTrue('and its pixel bounds are a real rect, not an inverted one',
+    bounds.Right > bounds.Left);
+end;
+
+{ The fill handle is the one affordance that is deliberately drawn HALF OUTSIDE the thing it
+  belongs to, so "is it inside the selection" cannot be the assertion -- the assertion is
+  which corner it hangs off. Paint and hit both read FillHandleRect, so the second half of
+  this test (a drag that actually fills) is what proves the click target moved with the ink
+  rather than merely that a rect moved. }
+procedure TRtlGridTest.TheFillHandleHangsOffTheSelectionsTrailingCornerAndDragsFromThere;
+var
+  b, h, target: TRect;
+begin
+  Build(True, [60, 90, 50]);
+  FG.Cells[0, 0] := 'X';
+  FG.SelectRange(0, 0, 0, 0);
+  b := FG.SelBounds;
+  h := FG.HandleRect;
+  AssertFalse('the selection has a fill handle', IsRectEmpty(h));
+  AssertTrue('which hangs off its LEFT corner once mirrored -- the trailing one',
+    h.Left < b.Left);
+  AssertTrue('and not off the right one', h.Right < b.Right);
+
+  { And a drag started on it really fills. If the handle had stayed on the selection''s right
+    the press below would land on a plain cell, reset the selection and fill nothing -- which
+    is the whole failure mode, and it leaves no mark on any static geometry. }
+  target := FG.Cell(0, 2);
+  FG.PressDown((h.Left + h.Right) div 2, (h.Top + h.Bottom) div 2);
+  FG.PressMove((target.Left + target.Right) div 2, (target.Top + target.Bottom) div 2);
+  FG.PressUp((target.Left + target.Right) div 2, (target.Top + target.Bottom) div 2);
+  AssertEquals('dragging the handle down filled the rows below', 'X', FG.Cells[0, 2]);
+end;
+
+{ A group row''s triangle is measured from the client edge and indented per level, so it is
+  the one piece of chrome in the grid that is NOT derived from a column rect -- which is
+  exactly why it can be left behind. Paint and hit both read GroupToggleRect; the click at
+  the end is what says so. }
+procedure TRtlGridTest.TheGroupRowToggleMovesToTheRightAndStillCollapsesItsGroup;
+var
+  tg: TRect;
+  gi: Integer;
+begin
+  Build(True, [60, 90, 50], 4);
+  FG.Cells[0, 0] := 'A';
+  FG.Cells[0, 1] := 'B';
+  FG.Cells[0, 2] := 'A';
+  FG.Cells[0, 3] := 'B';
+  FG.GroupByColumn(0);
+  AssertTrue('precondition: display position 0 is a group row', FG.IsGroupRow(0, gi));
+
+  tg := FG.GroupToggle(0);
+  AssertFalse('the group row has a toggle', IsRectEmpty(tg));
+  AssertTrue('which sits in the RIGHT half of the row once mirrored',
+    tg.Left > FG.ViewW div 2);
+  AssertEquals('flush against the reading start, less its indent',
+    FG.ViewW, tg.Right + FG.Sc(4));
+
+  AssertFalse('precondition: the group starts expanded', FG.GroupInfo(gi).Collapsed);
+  FG.ClickAt((tg.Left + tg.Right) div 2, (tg.Top + tg.Bottom) div 2);
+  AssertTrue('clicking the mirrored toggle collapses its group',
+    FG.GroupInfo(gi).Collapsed);
+end;
+
+{ --- invariants ------------------------------------------------------------ }
+
+{ A reflection preserves widths exactly. This is the consumer whose breakage would be
+  silent -- nothing on screen looks wrong when a column is one pixel narrower than it says
+  it is, and the auto-fit and fill-distribute paths both read these numbers. }
+procedure TRtlGridTest.EveryColumnWidthAndTheContentWidthSurviveMirroring;
+var
+  i: Integer;
+  wLtr: array[0..2] of Integer;
+  cwLtr: Integer;
+begin
+  Build(False, [60, 90, 50]);
+  for i := 0 to 2 do wLtr[i] := FG.ColWidth(i);
+  cwLtr := FG.GridWidth;
+  TearDown;
+  Build(True, [60, 90, 50]);
+  for i := 0 to 2 do
+    AssertEquals(Format('column %d width', [i]), wLtr[i], FG.ColWidth(i));
+  AssertEquals('and the total content width', cwLtr, FG.GridWidth);
+end;
+
+{ A merged cell spans forward from its base. Mirrored, "forward" is leftwards, so the base
+  cell's rect has to grow on its LEFT -- assigning to Result.Right the way the unmirrored
+  code did produces Right < Left and the merged block renders as nothing. }
+procedure TRtlGridTest.MergedCellsSpanForwardInsteadOfCollapsing;
+var
+  base, one: TRect;
+begin
+  Build(True, [60, 90, 50]);
+  FG.MergeCells(0, 0, 2, 1);
+  base := FG.Cell(0, 0);
+  one := FG.Cell(1, 1);
+  AssertTrue('the merged rect is not inverted', base.Right > base.Left);
+  AssertEquals('it still ends flush against the reading start',
+    FG.ViewW, base.Right);
+  AssertTrue('and it reaches back over the column it swallowed',
+    base.Left <= one.Left);
+  AssertEquals('covering exactly two columns'' worth',
+    FG.ColWidth(0) + FG.ColWidth(1), base.Right - base.Left);
+end;
+
 { ---------------------------------------------------------- TRtlExclusionTest }
 
 { TTyDropDownButton splits its face into a caption zone and an arrow zone, and decides which
@@ -2938,6 +4180,81 @@ begin
     AssertEquals('and it still starts at the reading-left of the band',
       0, Rib.IndexOfTabAt((after.Left + after.Right) div 2,
                           (after.Top + after.Bottom) div 2));
+  finally
+    Form.Free;
+  end;
+end;
+
+{ THE GRID'S VERTICAL SCROLL BAR DOES NOT MOVE, and this is a decision rather than an
+  omission -- pinned here so the next person makes it again on purpose.
+
+  Everything the grid paints lives in a viewport whose width is ViewportW and whose ORIGIN
+  is x=0; the mirror is a reflection of [0, ViewportW) onto itself, which is why LTR output
+  came out byte-identical. Docking the vertical bar on the left would move that origin to
+  the bar's width, and roughly fifteen full-width band expressions currently read
+  `Rect(0, .., M.ClientW, ..)` -- row bands, the header fill, the filter row, grid lines, the
+  footer, the fast-scroll blit. Each would need the same constant added, which is fifteen more
+  chances to mirror fourteen. The scoping document ranks a bar left on the wrong side as the
+  MOST visible and therefore the SAFEST omission (\xa75 item 7), and that is the trade taken.
+
+  Two assertions, because either alone would let the other half drift: the origin is still
+  zero, and the bar is still on the right. Move one without the other and this turns red. }
+procedure TRtlExclusionTest.TheGridsVerticalBarStaysOnTheRightAndItsViewportOriginStaysAtZero;
+var
+  Form: TForm;
+  Ctl: TTyStyleController;
+  G: TRtlGridAccess;
+  i: Integer;
+  bar: TTyScrollBar;
+begin
+  Form := TForm.CreateNew(nil);
+  Ctl := TTyStyleController.Create(nil);
+  try
+    G := TRtlGridAccess.Create(Form);
+    G.Parent := Form;
+    G.Controller := Ctl;
+    G.Font.PixelsPerInch := 96;
+    G.SetBounds(0, 0, 300, 120);
+    G.Header.Columns.Add;
+    G.RowCount := 200;                 { forces the vertical bar }
+    G.VertScrollBarMode := gsbAlways;
+    G.BiDiMode := bdRightToLeft;
+    G.Remeasure;
+
+    AssertEquals('the paint origin is still the viewport''s left edge',
+      0, TyGridPaneRect(G.Metrics, gpTopLeft).Left);
+    AssertTrue('and the viewport is narrower than the control by the bar''s width',
+      G.ViewW < G.ClientWidth);
+
+    bar := nil;
+    for i := 0 to G.ControlCount - 1 do
+      if (G.Controls[i] is TTyScrollBar)
+         and (TTyScrollBar(G.Controls[i]).Kind = sbVertical) then
+        bar := TTyScrollBar(G.Controls[i]);
+    AssertNotNull('the grid shows a vertical bar', bar);
+    AssertEquals('which is still docked against the right edge',
+      G.ClientWidth, bar.Left + bar.Width);
+  finally
+    Form.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ The filter drop-down is a TTyCheckListBox whose PaintItemContent pins a count column to
+  ARowRect.Right, while the base class puts its toggle at the row's READING start. Mirrored,
+  those two land on the same side and the count sits on top of the check box. One rect
+  function short of being mirrorable, exactly like TTyValueListEditor in phase 3. }
+procedure TRtlExclusionTest.TheGridsFilterDropDownDeclinesToMirrorItsRows;
+var
+  Form: TForm;
+  L: TRtlFilterListAccess;
+begin
+  Form := TForm.CreateNew(nil);
+  try
+    L := TRtlFilterListAccess.Create(Form);
+    L.Parent := Form;
+    L.BiDiMode := bdRightToLeft;
+    AssertFalse('the filter list declines to mirror its rows', L.Mirrors);
   finally
     Form.Free;
   end;
@@ -3698,6 +5015,7 @@ initialization
   RegisterTest(TRtlButtonSlotTest);
   RegisterTest(TRtlHeaderTest);
   RegisterTest(TRtlTabStripTest);
+  RegisterTest(TRtlGridTest);
   RegisterTest(TRtlExclusionTest);
   RegisterTest(TRtlScrollBarGeometryTest);
   RegisterTest(TRtlScrollBarControlTest);

@@ -45,6 +45,11 @@ type
   protected
     procedure PaintItemContent(P: TTyPainter; const ARowRect: TRect; AIndex: Integer;
       const AStyle: TTyStyleSet); override;
+    { **这个下拉不镜像。** 它下面那行 PaintItemContent 把计数列钉在 ARowRect.Right,
+      而基类的勾选框槽是 TyCheckBoxSlotRect 从行的**起点**那一侧算的 —— 镜像之后
+      两者会挤到同一边:计数压在勾选框上。收口成一个来源之前不该动它,
+      而这一句就是那个决定(与 TTyValueListEditor 同样的围栏,见 5c2ceca)。 }
+    function RtlRowLayout: Boolean; override;
   public
     procedure SetCounts(const ACounts: array of Integer);
   end;
@@ -915,8 +920,10 @@ type
       **新增一张按列记账的旁挂表时,这里和 ShiftCells 的列分支都要加。** }
     procedure ShiftColKeyedTable(AList: TStringList; AFromIndex, ADelta: Integer);
     { 把行号画进行头槽。ShowRowNumbers 关着时整段跳过。 }
+    { 行号画在**调用方给的那条屏幕槽**里(ASlotLeft..ASlotRight),不自己再算一遍 ——
+      那条槽与铺底色用的是同一个 IndicatorBandX。 }
     procedure RenderRowNumbers(P: TTyPainter; const M: TTyGridMetrics;
-      AHeaderH, AIndicatorW: Integer); virtual;
+      AHeaderH, ASlotLeft, ASlotRight: Integer); virtual;
     procedure SetWordWrap(AValue: Boolean);
     function  GetRowHeights(ARow: Integer): Integer;
     procedure SetRowHeights(ARow, AValue: Integer); virtual;
@@ -1089,6 +1096,11 @@ type
     procedure Invalidate; override;
     procedure DblClick; override;
     procedure CMMouseLeave(var Msg: TLMessage); message CM_MOUSELEAVE;
+    { 阅读方向变了,整幅几何都换了边 —— 列缓存按**逻辑**像素存(那一份不变),
+      但横向滚动条的镜像开关、以及所有画出来的东西都得重来一遍。
+      LCL 自己只 Invalidate + AdjustSize,不会回头重跑我们手写的滚动条装配;
+      与 TTyListBox.CMBiDiModeChanged 同一个缺口、同一个补法。 }
+    procedure CMBiDiModeChanged(var Msg: TLMessage); message CM_BIDIMODECHANGED;
     function FrozenWidthPx: Integer; virtual;
     { 冻结带高度(设备像素)= 列头带 + 固定行 * 行高。 }
     function FrozenHeightPx: Integer; virtual;
@@ -1123,9 +1135,86 @@ type
     procedure DrawInPane(P: TTyPainter; APane: TTyGridPane;
       const M: TTyGridMetrics; ADraw: TTyGridBandDraw);
 
+    { --- 横轴镜像(RTL)-------------------------------------------------------
+
+      本控件这一帧的横轴要不要镜像。**按类回答,不按实例**:默认跟着窗体的阅读方向
+      (TControl.IsRightToLeft),后代在自己的 x 命中还没和绘制收口成一个来源之前
+      覆写成 False。与 TTyListBox.RtlRowLayout 同一条约定,
+      `grep -n "RtlLayout"` 就是"谁镜像了"的诚实清单。
+
+      **BiDiMode 不 published** —— 见 tests/test.parity.pas 的
+      LyingPropertiesStayUnpublished。阅读方向从窗体继承,不在网格上单独摆一个开关。 }
+    function RtlLayout: Boolean; virtual;
+
+    { 逻辑 x(恒从左往右累加)→ **屏幕 x** 的唯一变换,以及它的精确逆。
+
+      做的是"把已经排好的一份平铺整体反射一次",而不是"倒着再累加一遍":
+      反射一份无缝平铺仍然无缝,两列之间不可能长出一道 1px 的缝;凡是由列矩形
+      派生出来的东西(单元格、格线、表头段、筛选位)自动落在对的地方,不必各写
+      第二个公式。反射用 LCL 的 BidiFlipRect(controls.pp:2966)—— 那五行算术
+      别人已经写对了,重抄一遍只是多一个可能写错的减号。
+
+      逆走 1px 宽矩形的同一个 BidiFlipRect,不是手写 `VW-1-X`:
+      "X 落在 ToScreenRect(R) 里"与"ToReadingX(X) 落在 R 里"必须是**同一个谓词**,
+      手写的那一版差半格就是"画在右边、点在左边"。
+
+      LTR 下两者都是恒等 —— 所以 LTR 的每一个像素与本次改动之前逐字节相同。 }
+    function ToScreenRect(const ARect: TRect): TRect;
+    function ToReadingX(AX: Integer): Integer;
+    { 屏幕矩形 → 阅读空间。反射是**对合**(反射两次回到原处),所以它的实现就是
+      ToScreenRect —— 单独起个名字是为了让调用点读得出方向,免得下一个人以为
+      那里少了一个逆函数。凡是判据里带方向性比较符(`>` / `<`)的地方都先经过它,
+      比较符本身就一个字都不用改。 }
+    function ToReadingRect(const ARect: TRect): TRect;
+
+    { 行头/行号槽在**屏幕**上的 x 区间(半开)。返回 False = 不显示。
+
+      从前这条边界在四处各写一遍 `x < ScaleI(FIndicatorWidth)`:绘制底色
+      (RenderChrome)、行号槽(RenderRowNumbers)、命中(CellAt)、行高拖拽
+      (RowDividerAtY)、拖行手势(MouseDown)。LTR 下四份都从 x=0 起算,
+      写几遍都一样;RTL 下这条槽整条换到右边,**漏掉任何一份就是一处画在一边、
+      答在另一边**。收口在这里之后,换边只写一次。 }
+    function IndicatorBandX(out ALeft, ARight: Integer): Boolean;
+
+    { **前导**冻结带(行头槽 + 左固定列)在屏幕上的 x 区间。LTR 下 = [0, FrozenWidthPx),
+      RTL 下整条钉在视口右沿。返回 False = 没有冻结带。
+      它与 IndicatorBandX 是同一条带的两截,反射的是同一次。 }
+    function LeadFrozenBandX(out ALeft, ARight: Integer): Boolean;
+
+    { 正文(可滚动列)那条横带的 x 区间。等价于 gpBody 窗格的横向范围。
+      冻结带盖住滚过来的正文列这条规则原先在四处各写一遍
+      (ColumnAtX 的守卫、GetLeftCol、列头段裁剪、页脚/分组小计裁剪),
+      RTL 下"被盖住的是哪一侧"跟着换边 —— 同样只该写一次。 }
+    procedure BodyBandX(const M: TTyGridMetrics; out ALeft, ARight: Integer);
+    { 把第 ACol 列(可滚动列)的可见段裁进正文带。返回 False = 整列都被冻结带盖住。
+      ALeft/AWidth 传入的是完整列矩形,传出的是裁过的那一段。 }
+    function ClipColToBody(const M: TTyGridMetrics; ACol: Integer;
+      var ALeft, AWidth: Integer): Boolean;
+
+    { 从第 AFirst 列到第 ALast 列(含)的横向跨度,屏幕像素。
+      RTL 下首列在右、末列在左,直接 `Left(first) .. Left(last)+Width(last)`
+      会写出一个**反向矩形**(分组表头整条消失、跨列合并格画成空)。
+      两个调用方(表头分组带、跨列合并)都走这里,方向无关。 }
+    function ColumnSpanX(AFirst, ALast: Integer; out ALeft, ARight: Integer): Boolean;
+
+    { 第 ACol 列的**尾缘** —— 拖它改的就是这一列的宽度。
+      LTR 下是右缘,RTL 下是左缘。DividerAtX 与拖动位移都走它,
+      于是"看得见的那条分隔线"和"拖起来变宽的那一列"不可能是两列。 }
+    function ColumnResizeEdgeX(ACol: Integer): Integer;
+
+    { 方向键在列上走一步的**下标增量**。ADelta 是"往屏幕右边走 +1 / 左边走 -1",
+      返回的是列下标该加多少 —— RTL 下取反。抽成一个函数而不是在 KeyDown 里
+      写两个 `if RtlLayout`:方向键漏翻是本程序记在案的第三号静默故障,
+      而每一处都只是一个减号,review 时几乎看不出来。 }
+    function ArrowColStep(ADelta: Integer): Integer;
+
     { 第 ACol 列左边界的客户区横坐标(设备像素)——**列轴几何的唯一出处**。
       固定列钉在冻结带里不随横向滚动;正文列随 ScrollX 平移。
-      CellRect 与 ColumnAtX 都必须走它,否则绘制与命中会分叉。 }
+      CellRect 与 ColumnAtX 都必须走它,否则绘制与命中会分叉。
+      RTL 下它在出口反射一次,于是十六个消费者一起换边。 }
+    { ColumnLeftPx 的出口反射。抽出来只为一件事:两条 return 路径
+      (右冻结列 / 其余列)必须反射同一次 —— 只反射一条就是右冻结带留在原地。 }
+    function MirrorColX(ALogicalLeft, ACol: Integer): Integer;
     function ColumnLeftPx(ACol: Integer): Integer; virtual;
     function ColumnWidthPx(ACol: Integer): Integer;
     { 横坐标落在哪一列 —— ColumnLeftPx 的逆;不在任何列上时答 -1。 }
@@ -1159,6 +1248,11 @@ type
     function SortRankOf(ACol: Integer): Integer; virtual;
     function SortColumnCountOf: Integer; virtual;
     { 列头上筛选按钮的槽(命中与绘制共用)。 }
+    { 排序三角在这一段里占掉的宽度(没有排序时为 0)。绘制端与漏斗定位端
+      从前各算一遍 —— 同一个式子的两份拷贝。 }
+    function HeaderSortGlyphW(ACol: Integer): Integer;
+    { 表头漏斗(筛选按钮)的圆心横坐标,屏幕像素。**绘制与命中的唯一出处**。 }
+    function HeaderFunnelCenterX(ACol: Integer): Integer;
     function HeaderFilterRect(ACol, AHeaderH: Integer): TRect;
 
     { 列头图标从哪份图像列表取。Header.Images 有货就用它,否则用网格自己的 Images。
@@ -1296,8 +1390,12 @@ type
       (`< FixedRows` / `>= DisplayRowCount - FixedRowsBottom`)本来就只在显示序里
       成立;从前喂数据行,没排序时两者相等所以看不出来,一排序就把格子判进错的窗格,
       求交后成空矩形、行静默变空白。空间写进签名,别再靠约定。
-      被筛掉的行(APos < 0)没有显示位置,只按列分窗格。 }
+      被筛掉的行(APos < 0)没有显示位置,只按列分窗格。
+      RTL 下答案在出口整体换边 —— 见 CellPaneLtr。 }
     function CellPane(ACol, APos: Integer): TTyGridPane;
+    { 上面那一个按**列的角色**(左固定 / 右固定 / 正文)选带的那一半,
+      不带镜像。拆开是为了让"换边"只有一处。 }
+    function CellPaneLtr(ACol, APos: Integer): TTyGridPane;
 
     { 单元格的几何矩形,客户区坐标 —— **未裁剪**。派生类可覆写(合并区)。绘制时要先裁到所属窗格;
       正文列横向滚到冻结带底下的那一段就在这里被裁掉。 }
@@ -3885,6 +3983,15 @@ begin
       FVScroll.PageSize := bodyH;
     end;
 
+    { **横向条的原点跟着阅读方向走。** FScrollX 的语义一个字没变 ——
+      它恒是"正文列离开阅读起点多远",FScrollX = 0 就是"第 0 列贴着冻结带"。
+      变的只是这个位置画在条的哪一头:Position = Min 必须落在阅读起点,
+      RTL 下那是条的右端。TTyScrollBar 刻意**不读** BiDiMode(见 5c2ceca),
+      正是把这个判断留给宿主 —— 网格在这里替它做,一处。
+      每次装配都设,不是只在创建时设:BiDiMode 运行时可写,
+      CMBiDiModeChanged 直接回到这里。 }
+    FHScroll.MirrorHorizontal := RtlLayout;
+
     if needH then
     begin
       FHScroll.Controller := Self.Controller;
@@ -3976,10 +4083,14 @@ begin
   else if r.Bottom > body.Bottom then
     SetScrollY(FScrollY + (r.Bottom - body.Bottom));
 
-  { 横向:固定列本来就在冻结带里,不需要也不能滚。 }
+  { 横向:固定列本来就在冻结带里,不需要也不能滚。
+    两个矩形一起反射回阅读空间再比 —— 判据与滚动量的符号一个字没改,
+    LTR 逐字节等价;RTL 下"探出去的是哪一头"自动跟着换,
+    不必写第二组 `if rtl then` 分支(那正是滚动原点最常漏的地方)。 }
   if ACol >= FFixedCols then
   begin
-    cell := CellRect(ACol, ARow);
+    cell := ToReadingRect(CellRect(ACol, ARow));
+    body := ToReadingRect(body);
     if cell.Left < body.Left then
       SetScrollX(FScrollX - (body.Left - cell.Left))
     else if cell.Right > body.Right then
@@ -4138,6 +4249,16 @@ begin
   end;
 end;
 
+procedure TTyCustomGrid.CMBiDiModeChanged(var Msg: TLMessage);
+begin
+  inherited;
+  { 列缓存存的是**逻辑**像素(BuildColumnCache 按索引累加),换向不影响它 ——
+    反射发生在 ColumnLeftPx 的出口。要重来的是横向条的镜像开关(它由
+    UpdateScrollBars 装配,LCL 换向时不会回头重跑)和整幅像素。 }
+  UpdateScrollBars;
+  Invalidate;
+end;
+
 procedure TTyCustomGrid.ClearTextCache;
 begin
   if FTextCache <> nil then FTextCache.Clear;
@@ -4260,6 +4381,14 @@ begin
   w := ARect.Right - ARect.Left;
   h := ARect.Bottom - ARect.Top;
   if (w <= 0) or (h <= 0) or (AText = '') then Exit;
+
+  { **本函数不走 TTyPainter.DrawText**,所以画笔那一层的 RTL 对齐翻转够不着它 ——
+    文字是画进自己的缓存位图、用 bmp.TextRect 排的(见下面)。于是这一句必须在这里
+    自己翻一次,否则网格里几乎所有文字(单元格、行号、页脚、筛选位、换行表头)
+    都会贴在镜像后单元格的**错误**一侧:列的位置全对,只有字靠错了边。
+    翻在 key 之前:缓存键含 Ord(AHAlign),翻过再算键,运行时换向自然不会命中旧条目。
+    LTR 下 BidiFlipAlignment 是恒等,像素逐一不变。 }
+  AHAlign := BidiFlipAlignment(AHAlign, RtlLayout);
 
   fname := AFontName;
   sz := AFontSize;
@@ -4522,12 +4651,13 @@ var
   M: TTyGridMetrics;
   first, last, pos: Integer;
   r: TRect;
-  tol: Integer;
+  tol, ib0, ib1: Integer;
 begin
   Result := -1;
-  { 只在行头槽里认分隔线 —— 在单元格上认的话会和框选拖拽抢手势。 }
-  if not FShowIndicator then Exit;
-  if (AX < 0) or (AX >= ScaleI(FIndicatorWidth)) then Exit;
+  { 只在行头槽里认分隔线 —— 在单元格上认的话会和框选拖拽抢手势。
+    槽的位置走 IndicatorBandX(唯一出处),不再自己写一遍 `AX < IndicatorWidth`。 }
+  if not IndicatorBandX(ib0, ib1) then Exit;
+  if (AX < ib0) or (AX >= ib1) then Exit;
 
   M := GridMetrics;
   { 走绘制槽位:顶部固定行 + 正文窗口(固定行不在正文窗口里)。 }
@@ -4691,7 +4821,7 @@ begin
 end;
 
 procedure TTyCustomGrid.RenderRowNumbers(P: TTyPainter; const M: TTyGridMetrics;
-  AHeaderH, AIndicatorW: Integer);
+  AHeaderH, ASlotLeft, ASlotRight: Integer);
 var
   slot: Integer;   { 绘制槽位 }
   first, last, pos: Integer;
@@ -4703,15 +4833,25 @@ var
 
   { 交给 DrawInRowBand 执行 —— 裁剪由它负责,这里只管画。 }
   procedure DrawOneNumber;
+  var
+    slot: TRect;
   begin
-    DrawCellText(P, Rect(0, r.Top, AIndicatorW - ScaleI(4), r.Bottom),
+    { 槽是**调用方给的那一条**(RenderChrome 用同一条铺底色),这里只在它的
+      尾缘让出 4px 气口 —— 回到阅读空间做那一次内缩,再送回屏幕。
+      写成第二份 `Rect(0, .., IndicatorWidth - 4, ..)` 就又是两个表达式了,
+      而这条槽的位置正是本次改动收口掉的那四份之一。
+      taRightJustify 由画笔那一层(BeginPaintOn 收到的 RTL 标志)翻成
+      taLeftJustify —— 槽换了边而对齐没换,号码会贴到槽外那一侧去。 }
+    slot := ToReadingRect(Rect(ASlotLeft, r.Top, ASlotRight, r.Bottom));
+    Dec(slot.Right, ScaleI(4));
+    DrawCellText(P, ToScreenRect(slot),
       IntToStr(pos + 1), indS.FontName, ResolveFontSize(indS), indS.FontWeight,
       ink, taRightJustify, tlCenter);
   end;
 
 begin
   if not FShowRowNumbers then Exit;
-  if AIndicatorW <= 0 then Exit;
+  if ASlotRight <= ASlotLeft then Exit;
   { 走绘制槽位:顶部固定行 + 正文窗口(固定行不在正文窗口里)。 }
   if not TyGridDrawSlots(M, first, last) then Exit;
 
@@ -4966,6 +5106,127 @@ begin
   FColCacheValid := True;
 end;
 
+function TTyCustomGrid.RtlLayout: Boolean;
+begin
+  Result := IsRightToLeft;
+end;
+
+function TTyCustomGrid.ToScreenRect(const ARect: TRect): TRect;
+begin
+  Result := ARect;
+  if RtlLayout then
+    Result := BidiFlipRect(Result, Rect(0, 0, ViewportW, 0), True);
+end;
+
+function TTyCustomGrid.ToReadingX(AX: Integer): Integer;
+begin
+  Result := AX;
+  if RtlLayout then
+    Result := BidiFlipRect(Rect(AX, 0, AX + 1, 0), Rect(0, 0, ViewportW, 0), True).Left;
+end;
+
+function TTyCustomGrid.ToReadingRect(const ARect: TRect): TRect;
+begin
+  Result := ToScreenRect(ARect);   { 反射自逆 —— 见声明处 }
+end;
+
+function TTyCustomGrid.IndicatorBandX(out ALeft, ARight: Integer): Boolean;
+var
+  r: TRect;
+begin
+  ALeft := 0;
+  ARight := 0;
+  Result := False;
+  if not FShowIndicator then Exit;
+  if FIndicatorWidth <= 0 then Exit;
+  { 逻辑上恒是"最前面那条槽" —— 从阅读起点起算。反射交给唯一那个变换。 }
+  r := ToScreenRect(Rect(0, 0, ScaleI(FIndicatorWidth), 0));
+  ALeft := r.Left;
+  ARight := r.Right;
+  Result := ARight > ALeft;
+end;
+
+function TTyCustomGrid.LeadFrozenBandX(out ALeft, ARight: Integer): Boolean;
+var
+  r: TRect;
+begin
+  r := ToScreenRect(Rect(0, 0, FrozenWidthPx, 0));
+  ALeft := r.Left;
+  ARight := r.Right;
+  Result := ARight > ALeft;
+end;
+
+procedure TTyCustomGrid.BodyBandX(const M: TTyGridMetrics;
+  out ALeft, ARight: Integer);
+var
+  r: TRect;
+begin
+  { 直接问窗格函数。它已经把两条冻结带钳到视口内、且保证九格无缝铺满 ——
+    在这里另写一遍 `FrozenLeft .. ClientW - FrozenRight` 就是第二份钳制规则。 }
+  r := TyGridPaneRect(M, gpBody);
+  ALeft := r.Left;
+  ARight := r.Right;
+end;
+
+function TTyCustomGrid.ClipColToBody(const M: TTyGridMetrics; ACol: Integer;
+  var ALeft, AWidth: Integer): Boolean;
+var
+  bl, br, right: Integer;
+begin
+  Result := AWidth > 0;
+  if not Result then Exit;
+  right := ALeft + AWidth;
+  { 固定列本来就画在冻结带里,不裁。 }
+  if (ACol < FFixedCols)
+     or (ACol >= FHeader.Columns.Count - EffectiveFixedColsRight) then Exit;
+  BodyBandX(M, bl, br);
+  if ALeft < bl then ALeft := bl;
+  if right > br then right := br;
+  AWidth := right - ALeft;
+  Result := AWidth > 0;
+end;
+
+function TTyCustomGrid.ColumnSpanX(AFirst, ALast: Integer;
+  out ALeft, ARight: Integer): Boolean;
+var
+  a0, a1, b0, b1: Integer;
+begin
+  ALeft := 0;
+  ARight := 0;
+  Result := False;
+  if (AFirst < 0) or (AFirst >= FHeader.Columns.Count) then Exit;
+  if ALast < AFirst then ALast := AFirst;
+  if ALast >= FHeader.Columns.Count then ALast := FHeader.Columns.Count - 1;
+  a0 := ColumnLeftPx(AFirst);  a1 := a0 + ColumnWidthPx(AFirst);
+  b0 := ColumnLeftPx(ALast);   b1 := b0 + ColumnWidthPx(ALast);
+  { 取两端的并集而不是 `a0 .. b1` —— 后者在 RTL 下是反向矩形。 }
+  ALeft  := a0; if b0 < ALeft  then ALeft  := b0;
+  ARight := a1; if b1 > ARight then ARight := b1;
+  Result := ARight > ALeft;
+end;
+
+function TTyCustomGrid.ColumnResizeEdgeX(ACol: Integer): Integer;
+begin
+  if RtlLayout then Result := ColumnLeftPx(ACol)
+  else Result := ColumnLeftPx(ACol) + ColumnWidthPx(ACol);
+end;
+
+function TTyCustomGrid.MirrorColX(ALogicalLeft, ACol: Integer): Integer;
+var
+  w: Integer;
+begin
+  Result := ALogicalLeft;
+  if not RtlLayout then Exit;      { LTR:恒等,一个像素都不动 }
+  w := 0;
+  if (ACol >= 0) and (ACol < Length(FColWidthPx)) then w := FColWidthPx[ACol];
+  Result := ToScreenRect(Rect(ALogicalLeft, 0, ALogicalLeft + w, 0)).Left;
+end;
+
+function TTyCustomGrid.ArrowColStep(ADelta: Integer): Integer;
+begin
+  if RtlLayout then Result := -ADelta else Result := ADelta;
+end;
+
 function TTyCustomGrid.ColumnLeftPx(ACol: Integer): Integer;
 var
   i, n: Integer;
@@ -4985,6 +5246,7 @@ begin
     Result := ViewportW;
     for i := FHeader.Columns.Count - 1 downto ACol do
       if i < Length(FColWidthPx) then Dec(Result, FColWidthPx[i]);
+    Result := MirrorColX(Result, ACol);
     Exit;
   end;
 
@@ -4993,6 +5255,7 @@ begin
     滚动量在**读取时**才减,所以横向滚动不必让缓存失效。 }
   if ACol >= FFixedCols then
     Dec(Result, FScrollX);
+  Result := MirrorColX(Result, ACol);
 end;
 
 function TTyCustomGrid.ColumnWidthPx(ACol: Integer): Integer;
@@ -5006,7 +5269,7 @@ end;
 
 function TTyCustomGrid.ColumnAtX(AX: Integer): Integer;
 var
-  i, l, w: Integer;
+  i, l, w, lb0, lb1: Integer;
 begin
   Result := -1;
   { 取逆:逐列用 ColumnLeftPx/ColumnWidthPx 判定,而不是另写一套累加。
@@ -5021,7 +5284,12 @@ begin
     w := ColumnWidthPx(i);
     if (w > 0) and (AX >= l) and (AX < l + w) then
     begin
-      if (i >= FFixedCols) and (AX < FrozenWidthPx) then Continue;  { 被左冻结带盖住 }
+      { 被**前导**冻结带(行头槽 + 左固定列)盖住。RTL 下这条带整条挪到视口右沿,
+        于是判据不能再写成 `AX < FrozenWidthPx`;走 LeadFrozenBandX 之后
+        LTR 下它逐字节还原成那一句,RTL 下自动变成"落在右沿那条带里"。
+        右冻结带仍然**不需要**对称的守卫 —— 见下方说明,那条规则也镜像了。 }
+      if (i >= FFixedCols) and LeadFrozenBandX(lb0, lb1)
+         and (AX >= lb0) and (AX < lb1) then Continue;
       { 右冻结带**不需要**对称的守卫:这里是倒序扫,而右冻结列就是最后那几列,
         落在右带里的点必然先命中它们。加过一条,变异测试证明它无法被区分
         (删掉没有任何测试变红)—— 够不着的代码不留。 }
@@ -5091,16 +5359,24 @@ end;
 
 function TTyCustomGrid.GetLeftCol: Integer;
 var
-  i, frozen: Integer;
+  i, l, w, frozen: Integer;
 begin
-  { 第一个"有像素落在正文区里"的可滚动列。倒序扫不行 —— 要的是最左那个,
-    而 ColumnAtX(FrozenWidthPx) 也不行:冻结带右缘那一点归属谁,取决于
-    ColumnAtX 里"被冻结带盖住的正文列跳过"那条规则,答出来会是冻结列本身。 }
+  { 第一个"有像素落在正文区里"的可滚动列。倒序扫不行 —— 要的是最靠阅读起点的那个,
+    而 ColumnAtX(冻结带边缘) 也不行:那一点归属谁,取决于 ColumnAtX 里
+    "被冻结带盖住的正文列跳过"那条规则,答出来会是冻结列本身。
+
+    判据本身一个字没改(`列的尾缘 > 正文带的首缘`),改的只是**先把列反射回
+    阅读空间再比** —— 比较符号里写死一个方向,是 RTL 下最难看出来的一类错。
+    在阅读空间里,正文带的首缘恒是 FrozenWidthPx(两个方向同一个数),
+    所以这一句在 LTR 下逐字节等价于从前的 `右缘 > FrozenWidthPx`。
+    (不走 GridMetrics:本函数在每次滚动时都被调,而那个记录要装配行高前缀和。) }
   frozen := FrozenWidthPx;
   for i := FFixedCols to FHeader.Columns.Count - 1 do
   begin
     if not (coVisible in FHeader.Columns.Items[i].Options) then Continue;
-    if ColumnLeftPx(i) + ColumnWidthPx(i) > frozen then Exit(i);
+    l := ColumnLeftPx(i);
+    w := ColumnWidthPx(i);
+    if ToReadingRect(Rect(l, 0, l + w, 0)).Right > frozen then Exit(i);
   end;
   { 一列都没有(或全滚过去了):答第一个可滚列,别答 -1 —— 这是个"视口在哪"的
     坐标,不是命中判定,给个界外值只会让宿主拿去当下标。 }
@@ -5155,9 +5431,13 @@ function TTyCustomGrid.VisibleColCount: Integer;
 var
   i, frozen, right: Integer;
   l, w: Integer;
+  colR: TRect;
 begin
   { 与 VisibleRowCount 同一条口径:有像素落在视口里就算看得见(半列也算)。
-    冻结列恒可见,所以从 0 数起而不是从 FixedCols。 }
+    冻结列恒可见,所以从 0 数起而不是从 FixedCols。
+
+    两条判据都带方向性比较符,所以列与视口一起反射回阅读空间再比 ——
+    式子一个字不改,LTR 逐字节等价。 }
   Result := 0;
   frozen := FrozenWidthPx;
   right := ViewportW;
@@ -5167,12 +5447,13 @@ begin
     l := ColumnLeftPx(i);
     w := ColumnWidthPx(i);
     if w <= 0 then Continue;
+    colR := ToReadingRect(Rect(l, 0, l + w, 0));
     if i >= FFixedCols then
     begin
       { 滚到冻结带底下的那一段看不见 —— 整列都在下面就不算。 }
-      if l + w <= frozen then Continue;
+      if colR.Right <= frozen then Continue;
     end;
-    if l >= right then Continue;
+    if colR.Left >= right then Continue;
     Inc(Result);
   end;
 end;
@@ -5271,7 +5552,30 @@ begin
   { 基类没有合并。 }
 end;
 
+{ 屏幕左带 <-> 屏幕右带。CellPane 按**列的角色**(左固定 / 右固定)选带,
+  而带的名字说的是屏幕位置 —— RTL 下两者对不上,在出口换一次。
+  与 GridMetrics 里换 FrozenLeft/FrozenRight 是同一次换边的两半:
+  只换一半,格子就会被裁到对面那条带上,结果是一个空矩形(整列消失)。 }
+function TyMirrorPane(APane: TTyGridPane): TTyGridPane;
+begin
+  case APane of
+    gpTopLeft:     Result := gpTopRight;
+    gpTopRight:    Result := gpTopLeft;
+    gpLeft:        Result := gpRight;
+    gpRight:       Result := gpLeft;
+    gpBottomLeft:  Result := gpBottomRight;
+    gpBottomRight: Result := gpBottomLeft;
+  else             Result := APane;    { 中间那一列(gpTop/gpBody/gpBottom)自镜像 }
+  end;
+end;
+
 function TTyCustomGrid.CellPane(ACol, APos: Integer): TTyGridPane;
+begin
+  Result := CellPaneLtr(ACol, APos);
+  if RtlLayout then Result := TyMirrorPane(Result);
+end;
+
+function TTyCustomGrid.CellPaneLtr(ACol, APos: Integer): TTyGridPane;
 begin
   { 行也要分窗格,不只是列。固定行的矩形钉在上冻结带里,而正文窗格从冻结带
     **之下**才开始 —— 把它们一律算作正文窗格的话,可见矩形恒为空,
@@ -5326,6 +5630,7 @@ end;
 function TTyCustomGrid.CellAt(AX, AY: Integer): TTyGridHit;
 var
   M: TTyGridMetrics;
+  ib0, ib1: Integer;
 begin
   Result.Part := ghpNowhere;
   Result.Col := -1;
@@ -5357,8 +5662,9 @@ begin
     Exit;
   end;
 
-  { 行头槽:列头之下、冻结带最左那条。 }
-  if FShowIndicator and (AX < ScaleI(FIndicatorWidth)) then
+  { 行头槽:列头之下、冻结带最前那条(RTL 下在右)。走 IndicatorBandX ——
+    这一条判断从前在四处各写一遍。 }
+  if IndicatorBandX(ib0, ib1) and (AX >= ib0) and (AX < ib1) then
   begin
     Result.Part := ghpIndicator;
     Result.Row := TyGridRowAt(AY, M);
@@ -5499,7 +5805,10 @@ begin
   for i := 0 to FHeader.Columns.Count - 1 do
   begin
     if not (coVisible in TTyColumn(FHeader.Columns.Items[i]).Options) then Continue;
-    edge := ColumnLeftPx(i) + ColumnWidthPx(i);
+    { 抓的是这一列的**尾缘** —— LTR 右缘、RTL 左缘。走 ColumnResizeEdgeX,
+      拖动的位移(MouseMove)读的也是同一个定义,所以"抓住的线"与
+      "变宽的列"不可能是两列。 }
+    edge := ColumnResizeEdgeX(i);
     if Abs(AX - edge) <= tol then
     begin
       Result := i;
@@ -5511,7 +5820,7 @@ end;
 procedure TTyCustomGrid.MouseDown(Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
 var
-  hdrH, d: Integer;
+  hdrH, d, ib0, ib1: Integer;
   col: TTyColumn;
 begin
   inherited MouseDown(Button, Shift, X, Y);
@@ -5541,8 +5850,10 @@ begin
     end;
 
     { 行头槽里按下(且不在分隔线上)= 准备拖行。
-      分隔线优先:边缘那几像素上用户的意图是改行高,不是搬行。 }
-    if (Button = mbLeft) and FShowIndicator and (X < ScaleI(FIndicatorWidth))
+      分隔线优先:边缘那几像素上用户的意图是改行高,不是搬行。
+      槽位走 IndicatorBandX —— 第四处、也是最后一处 `X < IndicatorWidth`。 }
+    if (Button = mbLeft) and IndicatorBandX(ib0, ib1)
+       and (X >= ib0) and (X < ib1)
        and DisplayOrderIsDataOrder then
     begin
       d := TyGridRowAt(Y, GridMetrics);
@@ -5614,7 +5925,11 @@ begin
 
   if FResizeCol >= 0 then
   begin
-    delta := UnscaleI(X - FResizeStartX);
+    { **位移也要反射**。RTL 下往左拖是变宽,而这里从前是一个裸减号 ——
+      静态截图完全正确、一拖列宽就朝反方向变,任何绘制测试都红不了。
+      两端各过一次 ToReadingX(而不是加一个 `if rtl then -delta`):
+      它与 ColumnResizeEdgeX 用的是同一个反射,不可能差半格。 }
+    delta := UnscaleI(ToReadingX(X) - ToReadingX(FResizeStartX));
     newSize := FResizeStartW + delta;
     { 上下限 + 宿主否决,都在**赋值之前** —— 赋完再回退会闪一下。 }
     if (FMinColWidth > 0) and (newSize < FMinColWidth) then newSize := FMinColWidth;
@@ -5721,19 +6036,42 @@ begin
   Result := 0;
 end;
 
+function TTyCustomGrid.HeaderSortGlyphW(ACol: Integer): Integer;
+begin
+  Result := 0;
+  if (hoShowSortGlyphs in FHeader.Options) and (ACol = FHeader.SortColumn) then
+    Result := ScaleI(12);
+end;
+
+function TTyCustomGrid.HeaderFunnelCenterX(ACol: Integer): Integer;
+var
+  l, w: Integer;
+  sec: TRect;
+begin
+  l := ColumnLeftPx(ACol);
+  w := ColumnWidthPx(ACol);
+  { 漏斗贴在这一段的**尾缘**,排序三角占掉的那一格之前。写在段自己的
+    阅读空间里再反射回来 —— 于是"尾缘在哪一边"只回答一次。 }
+  sec := ToReadingRect(Rect(l, 0, l + w, 0));
+  { ToReadingX 在这里当"阅读 -> 屏幕"用:反射是对合,两个方向是同一个函数。
+    绘制盒(±5x±4)与命中盒(±7)围绕的是**同一个** cx,所以无论反射差不差
+    半个像素,两者恒同心 —— 这正是把它收口成一个函数要保证的东西。 }
+  Result := ToReadingX(sec.Right - ScaleI(10) - HeaderSortGlyphW(ACol));
+end;
+
 function TTyCustomGrid.HeaderFilterRect(ACol, AHeaderH: Integer): TRect;
 var
-  l, w, cx, cy, gs: Integer;
+  w, cx, cy: Integer;
 begin
   Result := Rect(0, 0, 0, 0);
   if not ShowsFilterButton(ACol) then Exit;
-  l := ColumnLeftPx(ACol);
   w := ColumnWidthPx(ACol);
   if w <= 0 then Exit;
-  gs := 0;
-  if (hoShowSortGlyphs in FHeader.Options) and (ACol = FHeader.SortColumn) then
-    gs := ScaleI(12);
-  cx := l + w - ScaleI(10) - gs;
+  { 圆心走 HeaderFunnelCenterX —— **绘制端读的是同一个函数**。
+    从前这里写 `l + w - 10 - gs`,而 RenderHeaderSections 写 `r.Right - 10 - gs`:
+    两条独立的表达式,靠 `r.Right = l + w` 恰好相等。LTR 下永远看不出来,
+    换边时只要有一处漏改就是"漏斗画在一头、点在另一头"。 }
+  cx := HeaderFunnelCenterX(ACol);
   cy := AHeaderH div 2;
   Result := Rect(cx - ScaleI(7), cy - ScaleI(7), cx + ScaleI(7), cy + ScaleI(7));
 end;
@@ -5748,6 +6086,7 @@ procedure TTyCustomGrid.RenderHeaderSections(P: TTyPainter; const M: TTyGridMetr
   AHeaderH: Integer);
 var
   i, l, w, cx, cy, gs, imgIdx, imgSz, imgPad, bandTop: Integer;
+  rr, imgR: TRect;   { rr = 本段在阅读空间里的矩形;见循环体开头 }
   hdrBg: TTyFill;
   hdrHasBg: Boolean;
   hdrInk, accentInk, funnelInk: TTyColor;
@@ -5799,13 +6138,10 @@ begin
     l := ColumnLeftPx(i);
     w := ColumnWidthPx(i);
     if (w <= 0) or (l >= M.ClientW) or (l + w <= 0) then Continue;
-    { 正文列滚到冻结带底下的那一截不该露出来 —— 与单元格同一条裁剪规则。 }
-    if (i >= FFixedCols) and (l < M.FrozenLeft) then
-    begin
-      if l + w <= M.FrozenLeft then Continue;
-      l := M.FrozenLeft;
-      w := ColumnLeftPx(i) + ColumnWidthPx(i) - l;
-    end;
+    { 正文列滚到冻结带底下的那一截不该露出来 —— 与单元格同一条裁剪规则。
+      三个渲染器(这里、分组小计、页脚)从前各写一遍;RTL 下"被盖住的是哪一侧"
+      跟着换边,三份里漏一份就是一条画反的裁剪。收口在 ClipColToBody。 }
+    if not ClipColToBody(M, i, l, w) then Continue;
 
     r := Rect(l, bandTop, l + w, bandTop + AHeaderH);
 
@@ -5838,10 +6174,13 @@ begin
     if hdrHasBg then
       P.FillBackground(r, hdrBg, 0);
 
-    { 排序列留出字形的位置,标题文字缩进一点。 }
-    gs := 0;
-    if (hoShowSortGlyphs in FHeader.Options) and (i = FHeader.SortColumn) then
-      gs := ScaleI(12);
+    { 这一段自己的**阅读空间**矩形。图标 / 标题 / 漏斗 / 排序徽标 / 排序三角
+      五个槽位全部在它里面算,最后各自反射回屏幕 —— 一处定方向,五个槽一起换边。 }
+    rr := ToReadingRect(r);
+
+    { 排序列留出字形的位置,标题文字缩进一点。走 HeaderSortGlyphW ——
+      HeaderFunnelCenterX 读的是同一个函数,不再各算一遍。 }
+    gs := HeaderSortGlyphW(i);
     imgPad := 0;
 
     { 列头图标必须**先画、先累加 imgPad**,下面算 textR 时标题才让得出位。
@@ -5859,14 +6198,18 @@ begin
         bmp := imgList.CachedIndex(imgIdx, imgSz);
         if bmp <> nil then
         begin
-          P.Bitmap.PutImage(r.Left + ScaleI(4), bandTop + (AHeaderH - imgSz) div 2, bmp,
+          { 图标贴在段的**起点**那一侧,与标题同侧。 }
+          imgR := ToScreenRect(Rect(rr.Left + ScaleI(4), 0,
+            rr.Left + ScaleI(4) + imgSz, 0));
+          P.Bitmap.PutImage(imgR.Left, bandTop + (AHeaderH - imgSz) div 2, bmp,
             dmDrawWithTransparency);
           Inc(imgPad, imgSz + ScaleI(4));
         end;
       end;
     end;
 
-    textR := Rect(r.Left + ScaleI(6) + imgPad, r.Top, r.Right - ScaleI(4) - gs, r.Bottom);
+    textR := ToScreenRect(Rect(rr.Left + ScaleI(6) + imgPad, r.Top,
+      rr.Right - ScaleI(4) - gs, r.Bottom));
     if (col.Text <> '') and (textR.Right > textR.Left) then
       { 换行时不省略号截断 —— 两者一起开的话第二行永远画不出来。
         (B6 勾了"换行绘制(表头格同享)",但表头走的 P.DrawText
@@ -5885,7 +6228,9 @@ begin
       否则"为什么少了几行"会变成一次排查。 }
     if ShowsFilterButton(i) then
     begin
-      cx := r.Right - ScaleI(10) - gs;
+      { **命中读的是同一个 HeaderFunnelCenterX**(HeaderFilterRect)。
+        从前这里和那里各写一个式子,靠 `r.Right = l + w` 恰好相等。 }
+      cx := HeaderFunnelCenterX(i);
       cy := bandTop + AHeaderH div 2;
       if ColumnFilterActive(i) then funnelInk := accentInk else funnelInk := ink;
       TyDrawGlyph(P, ActiveController,
@@ -5898,7 +6243,8 @@ begin
     if (hoShowSortGlyphs in FHeader.Options) and (SortColumnCountOf > 1)
        and (SortRankOf(i) > 0) then
     begin
-      textR := Rect(r.Right - ScaleI(24), r.Top, r.Right - ScaleI(14), r.Bottom);
+      textR := ToScreenRect(Rect(rr.Right - ScaleI(24), r.Top,
+        rr.Right - ScaleI(14), r.Bottom));
       if textR.Right > textR.Left then
         P.DrawText(textR, IntToStr(SortRankOf(i)), hdrFontName,
           hdrFontSize - 2, hdrFontWeight, hdrInk, taCenter, tlCenter, False);
@@ -5907,7 +6253,7 @@ begin
     { 排序方向的小三角。 }
     if gs > 0 then
     begin
-      cx := r.Right - ScaleI(10);
+      cx := ToReadingX(rr.Right - ScaleI(10));   { 反射自逆,见 HeaderFunnelCenterX }
       cy := bandTop + AHeaderH div 2;
       { 槽位式调用传 pad=1:DrawGlyph 默认每边内缩 4 逻辑像素,小槽里会只剩个糊点。 }
       if FHeader.SortDirection = sdAscending then
@@ -5988,7 +6334,8 @@ end;
 
 procedure TTyCustomGrid.RenderChrome(P: TTyPainter; const M: TTyGridMetrics);
 var
-  headerH, indW, bandH: Integer;
+  headerH, indW, bandH, ind0, ind1: Integer;
+  fixR: TRect;
 begin
   headerH := 0;
   if hoVisible in FHeader.Options then
@@ -5996,22 +6343,26 @@ begin
   { 行头槽与固定列区要从**整条表头区之下**开始 —— 筛选行也在表头这一侧,
     不减掉它的话行头槽会从筛选行底下钻上来。 }
   bandH := headerH + FilterRowHeightPx;
-  indW := 0;
-  if FShowIndicator then indW := ScaleI(FIndicatorWidth);
 
   { 次序 = 遮挡次序,且必须与 CellAt 的判定次序一致,否则"看到的"和"点到的"会错位。
     先画下层的行头槽与固定列,最后让列头带横跨整幅盖上去(含左上角)。 }
 
-  { 行头槽:列头之下、最左那条。 }
-  if indW > 0 then
+  { 行头槽:列头之下、阅读起点那一条(RTL 下在右)。位置走 IndicatorBandX ——
+    与 CellAt / RowDividerAtY / MouseDown 的拖行手势读的是同一个来源。 }
+  indW := 0;
+  if FShowIndicator then indW := ScaleI(FIndicatorWidth);
+  if IndicatorBandX(ind0, ind1) then
   begin
-    FillRegion(P, Rect(0, bandH, indW, M.ClientH), 'TyGridIndicator');
-    RenderRowNumbers(P, M, bandH, indW);
+    FillRegion(P, Rect(ind0, bandH, ind1, M.ClientH), 'TyGridIndicator');
+    RenderRowNumbers(P, M, bandH, ind0, ind1);
   end;
 
-  { 固定列区:行头槽右侧到冻结带右缘。 }
-  if M.FrozenLeft > indW then
-    FillRegion(P, Rect(indW, bandH, M.FrozenLeft, M.ClientH), 'TyGridFixed');
+  { 固定列区:行头槽之后到冻结带尾缘。这一句写在**阅读空间**里
+    (`[行头槽宽, 冻结带宽)` 与方向无关)再整条反射 —— 于是它必定与行头槽同侧,
+    不会一块在左一块在右。写成 `Rect(indW, .., M.FrozenLeft, ..)` 就做不到:
+    M.FrozenLeft 在 RTL 下装的是**右**冻结列。 }
+  fixR := ToScreenRect(Rect(indW, bandH, FrozenWidthPx, M.ClientH));
+  if fixR.Right > fixR.Left then FillRegion(P, fixR, 'TyGridFixed');
 
   { 列头带:横跨整幅宽度,盖住左上角 —— 与 CellAt 里"列头优先"一致。 }
   if headerH > 0 then
@@ -6069,7 +6420,7 @@ end;
 
 function TTyCustomGrid.TreeToggleRect(ARow: Integer): TRect;
 var
-  cell: TRect;
+  cell, cellR: TRect;
   ind, sz, cx, cy: Integer;
 begin
   Result := Rect(0, 0, 0, 0);
@@ -6082,12 +6433,18 @@ begin
   ind := ScaleI(FTreeIndent);
   sz := ind;
   if sz > cell.Bottom - cell.Top then sz := cell.Bottom - cell.Top;
-  { 三角落在**它这一级的缩进槽**里 —— 也就是内容左边界往左那一格。 }
-  cx := cell.Left + NodeLevelOf(ARow) * ind;
+  { 三角落在**它这一级的缩进槽**里 —— 也就是内容起点往回那一格。
+    格子内部先在**格子自己的阅读空间**里算(cellR),最后整块反射回屏幕:
+    缩进方向、三角、以及 RenderCells 里 `Inc(textR.Left, TreeContentLeft)`
+    那一步于是同时换向,不会出现"缩进往右、三角在左"。
+    绘制与命中读的都是这一个矩形,所以换边时点击面一定跟着。 }
+  cellR := ToReadingRect(cell);
+  cx := cellR.Left + NodeLevelOf(ARow) * ind;
   cy := cell.Top + ((cell.Bottom - cell.Top) - sz) div 2;
   Result := Rect(cx, cy, cx + sz, cy + sz);
-  if Result.Right > cell.Right then Result.Right := cell.Right;
-  if Result.Right <= Result.Left then Result := Rect(0, 0, 0, 0);
+  if Result.Right > cellR.Right then Result.Right := cellR.Right;
+  if Result.Right <= Result.Left then Exit(Rect(0, 0, 0, 0));
+  Result := ToScreenRect(Result);
 end;
 
 procedure TTyCustomGrid.SetTreeColumn(AValue: Integer);
@@ -6156,7 +6513,7 @@ end;
 
 procedure TTyCustomGrid.RenderHeaderGroups(P: TTyPainter; const M: TTyGridMetrics);
 var
-  i, l, r0, h, lvlH: Integer;
+  i, l, r0, h, lvlH, lastCol: Integer;
   g: TTyGridHeaderGroup;
   secS, hdrS: TTyStyleSet;
   ink: TTyColor;
@@ -6182,15 +6539,15 @@ begin
     if (g.Level < 0) or (g.Level >= GroupLevelCount) then Continue;
     if (g.FirstCol < 0) or (g.FirstCol >= FHeader.Columns.Count) then Continue;
 
-    { 跨列 = 从首列左缘到末列右缘。列宽/拖动重排都自动跟着走,
-      因为两端都取自 ColumnLeftPx —— 列轴的唯一出处。 }
-    l := ColumnLeftPx(g.FirstCol);
+    { 跨列 = 首列与末列的并集。列宽/拖动重排都自动跟着走,
+      因为两端都取自 ColumnLeftPx —— 列轴的唯一出处。
+      走 ColumnSpanX 而不是 `首列左缘 .. 末列右缘`:RTL 下首列在右,
+      后者是一个反向矩形,整条分组带一个像素都画不出来。 }
     if g.LastCol < FHeader.Columns.Count then
-      r0 := ColumnLeftPx(g.LastCol) + ColumnWidthPx(g.LastCol)
+      lastCol := g.LastCol
     else
-      r0 := ColumnLeftPx(FHeader.Columns.Count - 1)
-            + ColumnWidthPx(FHeader.Columns.Count - 1);
-    if r0 <= l then Continue;
+      lastCol := FHeader.Columns.Count - 1;
+    if not ColumnSpanX(g.FirstCol, lastCol, l, r0) then Continue;
 
     rc := Rect(l, g.Level * lvlH, r0, (g.Level + 1) * lvlH);
     if tpBackground in secS.Present then
@@ -6335,7 +6692,12 @@ begin
 
   P := TTyPainter.Create;
   try
-    P.BeginPaintOn(ACanvas, ARect, APPI, FSurface);
+    { 最后一个参数是这一帧的镜像开关(phase 0 的约定)。它只做一件事:
+      把每一次 DrawText 的水平对齐过一遍 BidiFlipAlignment。
+      网格的每一个文字矩形都是由已经镜像过的列/单元格矩形派生出来的,
+      所以在这里翻对齐是对的 —— 反过来,凡是自己切好槽位又不镜像槽位的调用方
+      都不能这么翻(那正是 phase 0 否掉"无条件翻"的理由)。 }
+    P.BeginPaintOn(ACanvas, ARect, APPI, FSurface, RtlLayout);
 
     S := CurrentStyle;
     { 主题没给 TyGrid 定义背景 → 一个像素都不画。降级成空白区域,
@@ -6504,11 +6866,23 @@ begin
   Result := Default(TTyGridMetrics);
   Result.ClientW := ViewportW;
   Result.ClientH := ViewportH;
-  Result.FrozenLeft := FrozenWidthPx;
   Result.FrozenTop  := FrozenHeightPx;
-  { 右/下冻结带的模型层还没建(B2 只先把几何契约拓宽),这里恒 0。 }
   Result.FrozenBottom := FrozenBottomPx;
-  Result.FrozenRight := FrozenRightPx;
+  { **两条竖冻结带在 RTL 下换边。** 几何层的字段名说的是"屏幕的左/右",而
+    FrozenWidthPx 说的是"阅读起点那一侧"(行头槽 + 左固定列)—— 镜像之后
+    那一侧是屏幕的右。在这里换一次,九宫格、窗格裁剪、正文带边界全部跟着走;
+    唯一还要一起换的是 CellPane 答的窗格名(gpLeft <-> gpRight),
+    只换一处就会出现"格子画在右带、裁剪按左带"的空矩形。 }
+  if RtlLayout then
+  begin
+    Result.FrozenLeft  := FrozenRightPx;
+    Result.FrozenRight := FrozenWidthPx;
+  end
+  else
+  begin
+    Result.FrozenLeft  := FrozenWidthPx;
+    Result.FrozenRight := FrozenRightPx;
+  end;
   Result.GridLineWidth := GridLineWidthPx;
   Result.RowH := ScaleI(GetDefaultRowHeight);
   Result.RowCount := DisplayRowCount;
@@ -6616,17 +6990,28 @@ begin
         线宽 <= 1 时 TyGridCellContentRect 是恒等的,与从前逐像素一致。 }
       ap := CellAppearance(colIdx, dataRow, row, AFrame);
       cell := TyGridCellContentRect(CellRect(colIdx, dataRow), M);
-      textR := Rect(cell.Left + padL, cell.Top, cell.Right - padR, cell.Bottom);
-      { 树形列:文字为缩进和三角让位。缩进只推左边界,不改右边界 ——
+      { 内边距与缩进都在**格子的阅读空间**里加,最后整块反射回屏幕。
+        padL/padR 是主题给的左右内边距,RTL 下"起点那一侧"是右 ——
+        直接写 `cell.Left + padL` 会让非对称内边距翻个个儿。 }
+      textR := ToReadingRect(cell);
+      textR := Rect(textR.Left + padL, cell.Top, textR.Right - padR, cell.Bottom);
+      { 树形列:文字为缩进和三角让位。缩进只推**起点**边界,不改另一端 ——
         深层节点的文字该被截断就截断,不该反过来把列撑宽。 }
       if (FTreeColumn >= 0) and (colIdx = FTreeColumn) then
-      begin
         Inc(textR.Left, TreeContentLeft(colIdx, dataRow));
+      textR := ToScreenRect(textR);
+      if (FTreeColumn >= 0) and (colIdx = FTreeColumn) then
+      begin
         treeTg := TreeToggleRect(dataRow);
         if not IsRectEmpty(treeTg) then
         begin
           { 展开时朝下、折叠时朝右 —— 与分组行的三角同一个约定。
             pad=1:小槽里 DrawGlyph 默认每边内缩 4 逻辑像素会只剩个糊点。 }
+          { 折叠三角在 RTL 下**仍然朝右**,这是一处已知缺口而不是疏忽:
+            TTyGlyphKind 里没有 tgChevronLeft(tyControls.Painter.pas:15),
+            而画笔单元不在本次改动的范围里。三角的**位置**已经换边了,
+            点击面也跟着换了(两者读同一个 TreeToggleRect)—— 差的只是那一笔的朝向。
+            记在 docs/KNOWN_GAPS.md。 }
           if NodeCollapsedOf(dataRow) then
             TyDrawGlyph(P, ActiveController, treeTg, tgChevronRight,
               ap.TextColor, 1, 1)
@@ -8059,8 +8444,14 @@ begin
   try
 
   case Key of
-    VK_LEFT:  begin MoveCursor(FCol - 1, FRow); Key := 0; end;
-    VK_RIGHT: begin MoveCursor(FCol + 1, FRow); Key := 0; end;
+    { 左/右在这里是**布局方向**,不是文字方向 —— 网格里方向键跟着眼睛走,
+      所以 RTL 下它们对调(镜像范围文档 §6.3 第 4 条画的正是这条线:
+      文本编辑里的左右归 BiDi 层管,列表/网格/标签页/菜单里的归镜像层管)。
+      Home/End 不翻:它们是**逻辑**首尾,答的恒是第一/最后一列
+      (RTL 下第一列在屏幕右边,Home 仍然去那里)。
+      选区锚点与角落也不翻:它们存的是列**下标**,和像素无关。 }
+    VK_LEFT:  begin MoveCursor(FCol + ArrowColStep(-1), FRow); Key := 0; end;
+    VK_RIGHT: begin MoveCursor(FCol + ArrowColStep(1), FRow); Key := 0; end;
     VK_UP:    begin MoveCursor(FCol, FRow - 1); Key := 0; end;
     VK_DOWN:  begin MoveCursor(FCol, FRow + 1); Key := 0; end;
     VK_HOME:  begin MoveCursor(FirstVisibleCol, FRow); Key := 0; end;
@@ -9009,7 +9400,7 @@ end;
 procedure TTyStringGrid.RenderHyperlinkCell(P: TTyPainter; ACol, ARow: Integer;
   const AFrame: TTyStyleSet);
 var
-  r, line: TRect;
+  r, rr, line: TRect;
   ap: TTyGridCellAppearance;
   txt: string;
   tw: TSize;
@@ -9028,8 +9419,10 @@ begin
 
   { 下划线画在文字底下一点点,宽度按**量出来的文字宽**,不是整个格宽 ——
     整格宽的下划线看起来像一条分隔线,不像链接。 }
-  line := Rect(r.Left + ScaleI(4), 0, r.Left + ScaleI(4) + tw.cx, 0);
-  if line.Right > r.Right then line.Right := r.Right;
+  rr := ToReadingRect(r);
+  line := Rect(rr.Left + ScaleI(4), 0, rr.Left + ScaleI(4) + tw.cx, 0);
+  if line.Right > rr.Right then line.Right := rr.Right;
+  line := ToScreenRect(line);
   line.Top := (r.Top + r.Bottom) div 2 + tw.cy div 2;
   line.Bottom := line.Top + ScaleI(1);
   if (line.Right <= line.Left) or (line.Bottom > r.Bottom) then Exit;
@@ -9068,7 +9461,7 @@ end;
 procedure TTyStringGrid.RenderPickListArrow(P: TTyPainter; ACol, ARow: Integer;
   const AFrame: TTyStyleSet);
 var
-  r, tg: TRect;
+  r, rr, tg: TRect;
   sz: Integer;
 begin
   { 正在编辑这一格时不画 —— 编辑器自己带箭头,两个叠着难看。 }
@@ -9079,8 +9472,11 @@ begin
   sz := ScaleI(8);
   if sz > (r.Bottom - r.Top) then sz := r.Bottom - r.Top;
   if (sz <= 0) or (r.Right - r.Left < sz + ScaleI(4)) then Exit;
-  tg := Rect(r.Right - sz - ScaleI(3), (r.Top + r.Bottom - sz) div 2,
-             r.Right - ScaleI(3), (r.Top + r.Bottom + sz) div 2);
+  { 箭头贴在格子的**尾缘**。格内槽位一律"在格子的阅读空间里算好再整块反射",
+    这一条在本单元里出现十来次,写法相同才不会漏掉其中一处。 }
+  rr := ToReadingRect(r);
+  tg := ToScreenRect(Rect(rr.Right - sz - ScaleI(3), (r.Top + r.Bottom - sz) div 2,
+             rr.Right - ScaleI(3), (r.Top + r.Bottom + sz) div 2));
   { pad=1:小槽里 DrawGlyph 默认每边内缩 4 逻辑像素会只剩个糊点。 }
   TyDrawGlyph(P, ActiveController, tg, tgChevronDown, AFrame.TextColor, 1, 1);
 end;
@@ -9446,8 +9842,11 @@ begin
   if tpBackground in trackS.Present then
     P.FillBackground(bar, trackS.Background, TyEffectiveCorners(trackS));
 
-  fill := bar;
-  fill.Right := bar.Left + Round((bar.Right - bar.Left) * pct / 100);
+  { 填充从**阅读起点**长出去,不是从左边长。在阅读空间里算完再反射回来 ——
+    RTL 下 30% 的进度条应当是右边那 30% 被填满。 }
+  fill := ToReadingRect(bar);
+  fill.Right := fill.Left + Round((bar.Right - bar.Left) * pct / 100);
+  fill := ToScreenRect(fill);
   if fill.Right > fill.Left then
   begin
     { 填充色取 TyProgressBarFill;主题没定义就不画填充(优雅退化,不自己发明颜色)。 }
@@ -9507,7 +9906,7 @@ end;
 
 function TTyStringGrid.RatingStarRect(ACol, ARow, AStar: Integer): TRect;
 var
-  r: TRect;
+  r, rr: TRect;
   box, cy, x0, i: Integer;
 begin
   Result := Rect(0, 0, 0, 0);
@@ -9517,11 +9916,15 @@ begin
 
   box := ScaleI(12);
   cy := (r.Top + r.Bottom) div 2;
-  x0 := r.Left + ScaleI(4);
+  { 星星从阅读起点排起。RenderRatingCell 画的就是本函数的返回值,
+    SetRatingByPoint 命中的也是它 —— 一个来源,三个消费者。 }
+  rr := ToReadingRect(r);
+  x0 := rr.Left + ScaleI(4);
   i := AStar - 1;
   Result := Rect(x0 + i * (box + ScaleI(2)), cy - box div 2,
                  x0 + i * (box + ScaleI(2)) + box, cy - box div 2 + box);
-  if Result.Right > r.Right then Result := Rect(0, 0, 0, 0);
+  if Result.Right > rr.Right then Exit(Rect(0, 0, 0, 0));
+  Result := ToScreenRect(Result);
 end;
 
 procedure TTyStringGrid.RenderRatingCell(P: TTyPainter; ACol, ARow: Integer;
@@ -9676,7 +10079,7 @@ end;
 { 省略号按钮:贴在格的右缘,方形。与绘制同源 —— 画在哪就点在哪。 }
 function TTyStringGrid.EllipsisRect(ACol, ARow: Integer): TRect;
 var
-  r: TRect;
+  r, rr: TRect;
   box: Integer;
 begin
   Result := Rect(0, 0, 0, 0);
@@ -9687,8 +10090,9 @@ begin
   if box > ScaleI(18) then box := ScaleI(18);
   if box <= 0 then Exit;
   if box > (r.Right - r.Left) - ScaleI(2) then Exit;
-  Result := Rect(r.Right - box - ScaleI(2), (r.Top + r.Bottom - box) div 2,
-                 r.Right - ScaleI(2), (r.Top + r.Bottom - box) div 2 + box);
+  rr := ToReadingRect(r);
+  Result := ToScreenRect(Rect(rr.Right - box - ScaleI(2), (r.Top + r.Bottom - box) div 2,
+                 rr.Right - ScaleI(2), (r.Top + r.Bottom - box) div 2 + box));
 end;
 
 { 画省略号按钮。样式走 TyGridButton(与按钮单元格同一个键 —— 它们在视觉上
@@ -9815,7 +10219,7 @@ end;
   没有批注就返回空矩形 —— 调用方靠"空不空"判断要不要画。 }
 function TTyStringGrid.CommentMarkRect(ACol, ARow: Integer): TRect;
 var
-  r: TRect;
+  r, rr: TRect;
   sz: Integer;
 begin
   Result := Rect(0, 0, 0, 0);
@@ -9827,7 +10231,10 @@ begin
   if sz > (r.Bottom - r.Top) then sz := r.Bottom - r.Top;
   if sz > (r.Right - r.Left) then sz := r.Right - r.Left;
   if sz <= 0 then Exit;
-  Result := Rect(r.Right - sz, r.Top, r.Right, r.Top + sz);
+  { 批注角标钉在格子的**尾上角**。绘制(RenderCommentMark)与提示命中读的
+    都是这一个矩形,所以换边时两者一起换。 }
+  rr := ToReadingRect(r);
+  Result := ToScreenRect(Rect(rr.Right - sz, r.Top, rr.Right, r.Top + sz));
 end;
 
 function TTyStringGrid.CheckBoxRect(ACol, ARow: Integer): TRect;
@@ -10240,6 +10647,11 @@ var i: Integer;
 begin
   SetLength(FCounts, Length(ACounts));
   for i := 0 to High(ACounts) do FCounts[i] := ACounts[i];
+end;
+
+function TTyGridFilterList.RtlRowLayout: Boolean;
+begin
+  Result := False;      { 见声明处 —— 这是一处刻意的不镜像,不是漏掉的 }
 end;
 
 procedure TTyGridFilterList.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
@@ -11027,7 +11439,9 @@ begin
   ind := ScaleI(4);
   if IsGroupRow(APos, gi) and (gi >= 0) and (gi <= High(FGroups)) then
     Inc(ind, FGroups[gi].Level * ScaleI(14));
-  Result := Rect(ind, cy - box div 2, ind + box, cy - box div 2 + box);
+  { 缩进从**阅读起点**起算,反射一次落到屏幕上。绘制与命中读的都是这一个矩形,
+    所以三角换边时点击面一起换 —— 它们本来就不可能是两处。 }
+  Result := ToScreenRect(Rect(ind, cy - box div 2, ind + box, cy - box div 2 + box));
 end;
 
 procedure TTyStringGrid.RenderGroupRow(P: TTyPainter; APos, AGroupIndex: Integer;
@@ -11040,7 +11454,7 @@ var
   i, l, w, keyRight: Integer;
   cRef: TTyColumn;
   txt: string;
-  sub: TRect;
+  sub, colR: TRect;
 begin
   r := TyGridRowRect(APos, M);
   if (r.Bottom <= M.FrozenTop) or (r.Top >= M.ClientH) then Exit;
@@ -11064,7 +11478,11 @@ begin
   { 分组小计:哪些列配了汇总方式,就在分组行的那几列上画出本组的小计。
     复用页脚那套列定位与冻结带裁剪 —— 同一个数在两处该长得一样、也该
     对齐在同一列下面。 }
-  keyRight := M.ClientW - ScaleI(4);
+  { keyRight 与后面那条标题矩形整段都写在**阅读空间**里 —— 它是一条
+    "标题从三角之后一直铺到第一个小计之前"的规则,与方向无关;
+    最后整条反射一次落到屏幕上。分开在两个空间里写就会出现
+    "三角在右、标题往左量、小计在左"这种各说各话。 }
+  keyRight := ToReadingRect(Rect(0, 0, M.ClientW, 0)).Right - ScaleI(4);
   if FShowGroupSubtotals then
     for i := 0 to Header.Columns.Count - 1 do
     begin
@@ -11074,22 +11492,18 @@ begin
       if txt = '' then Continue;
       l := ColumnLeftPx(i);
       w := ColumnWidthPx(i);
-      if (i >= FixedCols) and (l < M.FrozenLeft) then
-      begin
-        if l + w <= M.FrozenLeft then Continue;
-        w := l + w - M.FrozenLeft;
-        l := M.FrozenLeft;
-      end;
+      if not ClipColToBody(M, i, l, w) then Continue;
       if (l >= M.ClientW) or (l + w <= 0) then Continue;
-      { 组标题不能压到小计上 —— 让它在最左边那个小计列之前收住。 }
-      if l - ScaleI(6) < keyRight then keyRight := l - ScaleI(6);
+      { 组标题不能压到小计上 —— 让它在**阅读序上最靠前**的那个小计列之前收住。 }
+      colR := ToReadingRect(Rect(l, 0, l + w, 0));
+      if colR.Left - ScaleI(6) < keyRight then keyRight := colR.Left - ScaleI(6);
       sub := Rect(l + ScaleI(4), r.Top, l + w - ScaleI(4), r.Bottom);
       if sub.Right > sub.Left then
         P.DrawText(sub, txt, gS.FontName, ResolveFontSize(gS), gS.FontWeight,
           ink, taRightJustify, tlCenter, True);
     end;
 
-  tr := Rect(tg.Right + ScaleI(6), r.Top, keyRight, r.Bottom);
+  tr := ToScreenRect(Rect(ToReadingRect(tg).Right + ScaleI(6), r.Top, keyRight, r.Bottom));
   if tr.Right > tr.Left then
     P.DrawText(tr, GroupRowText(info.Key, info.Count),
       gS.FontName, ResolveFontSize(gS), gS.FontWeight, ink, taLeftJustify, tlCenter, True);
@@ -11310,13 +11724,8 @@ begin
     if txt = '' then Continue;
     l := ColumnLeftPx(i);
     w := ColumnWidthPx(i);
-    { 与单元格同一条裁剪规则:滚到冻结带底下的部分不露出来。 }
-    if (i >= FixedCols) and (l < M.FrozenLeft) then
-    begin
-      if l + w <= M.FrozenLeft then Continue;
-      w := l + w - M.FrozenLeft;
-      l := M.FrozenLeft;
-    end;
+    { 与单元格同一条裁剪规则:滚到冻结带底下的部分不露出来。收口在 ClipColToBody。 }
+    if not ClipColToBody(M, i, l, w) then Continue;
     if (l >= M.ClientW) or (l + w <= 0) then Continue;
     r := Rect(l + ScaleI(4), AFooterRect.Top, l + w - ScaleI(4), AFooterRect.Bottom);
     if r.Right > r.Left then
@@ -11327,7 +11736,7 @@ end;
 
 function TTyStringGrid.CellRect(ACol, ARow: Integer): TRect;
 var
-  cs, rs, bc, br, lastPos: Integer;
+  cs, rs, bc, br, lastPos, sl, sr: Integer;
   r2: TRect;
 begin
   Result := inherited CellRect(ACol, ARow);
@@ -11335,10 +11744,15 @@ begin
 
   if CellSpan(ACol, ARow, cs, rs) then
   begin
-    { 基准格:向右吃 cs 列、向下吃 rs 行(按显示序)。 }
+    { 基准格:向**阅读方向**吃 cs 列、向下吃 rs 行(按显示序)。
+      走 ColumnSpanX:RTL 下末列在左,写 `Result.Right := 末列右缘`
+      会得到一个反向矩形 —— 合并格于是整块消失。 }
     if cs > 1 then
-      Result.Right := ColumnLeftPx(Min(ACol + cs, Header.Columns.Count) - 1)
-                      + ColumnWidthPx(Min(ACol + cs, Header.Columns.Count) - 1);
+      if ColumnSpanX(ACol, Min(ACol + cs, Header.Columns.Count) - 1, sl, sr) then
+      begin
+        Result.Left := sl;
+        Result.Right := sr;
+      end;
     if rs > 1 then
     begin
       lastPos := DataToDisplay(ARow) + rs - 1;
@@ -11447,12 +11861,17 @@ begin
   tl := CellRect(r.Left, DisplayToData(r.Top));
   br := CellRect(r.Right, DisplayToData(r.Bottom));
   if IsRectEmpty(tl) or IsRectEmpty(br) then Exit;
+  { 横轴取两端的并集,不是 `tl.Left .. br.Right`:r.Left / r.Right 是**列下标**
+    (锚点与角落,与像素无关,所以它们不镜像),而 RTL 下下标小的那一列在屏幕右边
+    —— 直接拼两端会得到一个反向矩形,选区外框与填充柄一起消失。 }
   Result := Rect(tl.Left, tl.Top, br.Right, br.Bottom);
+  if br.Left < Result.Left then Result.Left := br.Left;
+  if tl.Right > Result.Right then Result.Right := tl.Right;
 end;
 
 function TTyStringGrid.FillHandleRect: TRect;
 var
-  b: TRect;
+  b, bb: TRect;
   sz: Integer;
 begin
   Result := Rect(0, 0, 0, 0);
@@ -11461,8 +11880,10 @@ begin
   b := SelectionBoundsRect;
   if IsRectEmpty(b) then Exit;
   sz := ScaleI(6);
-  { 贴在选区右下角、略微外探一点 —— 与 Excel 的手感一致,也更好点中。 }
-  Result := Rect(b.Right - sz, b.Bottom - sz, b.Right + 1, b.Bottom + 1);
+  { 贴在选区的**尾下角**、略微外探一点 —— 与 Excel 的手感一致,也更好点中。
+    绘制(RenderSelectionFrame)与命中(MouseDown)读的都是这一个矩形。 }
+  bb := ToReadingRect(b);
+  Result := ToScreenRect(Rect(bb.Right - sz, b.Bottom - sz, bb.Right + 1, b.Bottom + 1));
 end;
 
 { 源区里某一列是不是等差数列;是则给出首项与公差。
@@ -13501,6 +13922,7 @@ function TTyStringGrid.WidenEditorRect(ACol, ARow: Integer;
   const ARect: TRect): TRect;
 var
   want, limit: Integer;
+  rd: TRect;
   gcol: TTyGridColumn;   { 别叫 col —— 与网格的 Col 属性撞名 }
 begin
   Result := ARect;
@@ -13518,9 +13940,13 @@ begin
   want := ScaleI(want);
   if Result.Right - Result.Left >= want then Exit;   { 本来就够宽 }
 
-  limit := ViewportW;
-  Result.Right := Result.Left + want;
-  if Result.Right > limit then Result.Right := limit;
+  { 往**阅读方向**长,不是往右长:反射进阅读空间加宽、钳到视口尾缘、再反射回来。
+    RTL 下这一句原样保留就会让编辑器往右长,从格子的起点跑出去。 }
+  rd := ToReadingRect(Result);
+  limit := ToReadingRect(Rect(0, 0, ViewportW, 0)).Right;
+  rd.Right := rd.Left + want;
+  if rd.Right > limit then rd.Right := limit;
+  Result := ToScreenRect(rd);
 end;
 
 { 当前正在用的编辑器控件。宿主给的 EditLink 优先,其次看内建那几个谁在显示。

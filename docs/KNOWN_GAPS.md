@@ -193,8 +193,8 @@ does **not** move to the right edge. That is correct, and it is asserted by
 - **Layout mirroring, for a form's worth of controls, its menus and its bars.** Set
   `BiDiMode := bdRightToLeft` from code (see the caveat below about it not being
   *published*) and the following now lay themselves out right-to-left. This is
-  phases 0, 1, 2 and 3 of `plans/2026-08-04-rtl-mirroring-scope.md`, plus §3.12 and
-  §3.14; the rest of that document is not built.
+  phases 0, 1, 2, 3 and 4 of `plans/2026-08-04-rtl-mirroring-scope.md`, plus §3.8,
+  §3.12 and §3.14; the rest of that document is not built.
 
   | Control | What moves |
   |---|---|
@@ -220,6 +220,7 @@ does **not** move to the right edge. That is correct, and it is asserted by
   | `TTyPopupMenu` (and `TTyImagesMenu` / `TTyMenuEx`) | the check/icon slot moves right, the shortcut and submenu arrow move left, the arrow turns round, the banner strip changes ends, dropdowns hang from the anchor's right, submenus cascade left, and **←/→ swap** (← opens a submenu, → returns to the parent) |
   | `TTyHeaderControl` | the whole strip: section 0 sits against the right edge, captions align right, the sort triangle and the divider move to each cell's other side, and the **hit test and the resize drag follow** — a click on the leftmost cell sorts the *last* section, and a divider is widened by dragging it left |
   | `TTyCustomTabStrip` and everything on it — `TTyPageControl`, `TTyTabSet` | the whole tab band: tab 0 is the **rightmost** and the strip packs leftwards; the close × moves to each header's left edge; the two overflow arrows swap ends and turn round; scrolling forward slides the band **right**; `←`/`→` follow the eye. The page **body** does not move (there are no left/right-edge tabs to mirror), and a page's own children are not mirrored |
+  | `TTyCustomGrid`, `TTyDrawGrid`, `TTyStringGrid` | the whole column axis: column 0 sits against the **right** edge and the columns pack leftwards; the row-header gutter and its row numbers move to the right; frozen columns pin to the right and a `FixedColsRight` band moves to the left; the horizontal bar's `Position = Min` is the right end; a resize grip is a column's **left** edge and dragging it left widens the column; header captions, cell text, the sort triangle, the filter funnel, the tree chevron and its indent, rating stars, the ellipsis button, the comment mark, the pick-list arrow, the progress fill and the fill handle all change ends; `←`/`→` follow the eye while `Home`/`End` stay logical. **Every hit test follows the paint out of the same function**, so a click lands in the cell that was drawn under it. See `docs/controls/grid.md` for what does *not* move |
 
   **The vertical scroll bar moving to the left edge is the loudest signal a
   window gives that it reads right-to-left**, which is why the scrolling
@@ -276,8 +277,8 @@ does **not** move to the right edge. That is correct, and it is asserted by
   all:
 
   - a scroll bar stays on the **right** edge of its container;
-  - grid and list-view **columns** keep their left-to-right order, and so do
-    toolbar buttons, breadcrumb segments and pagination items;
+  - list-view **columns** keep their left-to-right order, and so do toolbar
+    buttons, breadcrumb segments and pagination items;
   - a tree view's expander stays on the **left**, and indentation still grows
     rightwards;
   - an edit or memo keeps its text, caret and selection anchored to the left;
@@ -294,9 +295,26 @@ does **not** move to the right edge. That is correct, and it is asserted by
     (`TRtlExclusionTest`), which asserts paint and hit test still agree, so
     mirroring either one alone turns red.
 
+  Two things inside a mirrored grid also decline, for the same reason and pinned
+  the same way. Its **vertical scroll bar stays on the right edge**: the grid
+  paints into a viewport whose origin is x=0 and mirrors by reflecting that band
+  onto itself, and docking the bar on the left would move the origin, putting the
+  same added constant in front of about fifteen full-width band expressions —
+  fifteen more chances to mirror fourteen. The scoping document ranks a bar on the
+  wrong side as the most visible and therefore the safest omission (§5 item 7).
+  Its **column-filter drop-down** does not mirror its rows either: that list pins
+  a per-value count column to the row's right while the check box it inherits sits
+  at the row's reading start, so mirroring would stack the two on the same side.
+
+  A mirrored grid's collapsed **tree chevron still points right**. The glyph set
+  has no `tgChevronLeft` (`tyControls.Painter.pas:15`) and the painter was out of
+  scope for that commit; the chevron's *position* and its click target did both
+  move, so nothing is drawn on one side and answered on the other — only the
+  stroke faces the wrong way.
+
   A right-to-left UI built on this release gets its forms — labels, check boxes,
-  radio groups, buttons, panels — and its tabbed containers the right way round,
-  and its data views the wrong way round.
+  radio groups, buttons, panels — its tabbed containers **and its grids** the right
+  way round, and its trees, list views, edits and date pickers the wrong way round.
 
 - **Containers do not mirror their children's `Align`/`Anchors` layout**, and this
   is not a gap to be closed. LCL's own align engine has no BiDi branch outside the

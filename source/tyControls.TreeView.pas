@@ -18,6 +18,33 @@ type
                     hpHeaderSection, hpHeaderDivider,
                     hpCheckBox);   { B3: the checkbox slot in the main column }
 
+  { Where one node's chrome slots and caption sit INSIDE one cell. Device px,
+    all absolute (already offset by the cell left the caller passed in).
+
+    A main-column cell lays out strictly left to right:
+        [ ...indent... ][ button ][ checkbox? ][ image? ][ caption ]
+                        ^ButtonSlotX          ^ImageX    ^CaptionX
+                                  ^CheckX
+    where the button slot is the Indent-wide strip ENDING at IndentPx (it sits
+    inside the indent, not after it), and the optional slots are present only when
+    CheckW / ImageW are non-zero. A non-main cell has no chrome: CaptionX is the
+    cell left and TextPad is the only inset.
+
+    The caption's x used to be re-accumulated by four separate `Inc(captionX, ..)`
+    runs -- two paints, the hit test and CellTextRect -- under a comment asking a
+    human to keep them in step. This record is what they now all read. }
+  TTyTreeCaptionSlots = record
+    IndentPx:    Integer;   { Scale((level + Ord(ShowRoot)) * Indent) }
+    ButtonSlotX: Integer;   { left of the expander slot }
+    ButtonSlotW: Integer;   { Scale(Indent) }
+    CheckX:      Integer;   { left of the checkbox slot; valid iff CheckW > 0 }
+    CheckW:      Integer;   { Scale(16), or 0 when this node shows no checkbox }
+    ImageX:      Integer;   { left of the image slot; valid iff ImageW > 0 }
+    ImageW:      Integer;   { Scale(Indent), or 0 when no image list is assigned }
+    CaptionX:    Integer;   { where the caption starts, BEFORE TextPad }
+    TextPad:     Integer;   { Scale(2) in the main column, Scale(4) elsewhere }
+  end;
+
   { B1: per-tree option flags (VTV-style set; default [] = ③a/③b behaviour) }
   { ③d B1: toVariableNodeHeight opts a tree into per-node row heights via
     OnMeasureItem (default off ⇒ every node uses DefaultNodeHeight, == ③c).
@@ -491,6 +518,22 @@ type
       out of range / not visible. }
     function  InternalCellRect(const CR: TRect; ARowTop, ARowH, AColumn, APPI: Integer;
                 out ACellRect: TRect): Boolean;
+    { Where Node's chrome slots and caption sit inside a cell whose left edge is
+      ACellLeft. The thin accessor over TyTreeCaptionSlots: it supplies Indent,
+      ShowRoot and the two per-node answers (does this node show a checkbox / does
+      this tree have icons) so no caller has to restate them.
+
+      ACellLeft IS THE ANCHOR AND IT IS THE CALLER'S ANSWER, deliberately. The two
+      paints pass the main column's cell left; CellTextRect passes the cell rect it
+      was given; GetNodeAtPoint passes 0, because it works in content space where
+      the main column is ASSUMED to start. That assumption is false whenever
+      Header.MainColumn is not the leftmost visible column -- the chrome is then
+      painted Scale(MainColumn.Left) px right of where the hit test looks for it,
+      and the expander stops responding to clicks. Preserved here rather than fixed
+      silently: this refactor is behaviour-preserving, and the bug now shows up as
+      one argument differing between call sites instead of as four hidden walks. }
+    function  NodeCaptionSlots(Node: PTyTreeNode; ACellLeft, APPI: Integer;
+                AIsMainColumn: Boolean): TTyTreeCaptionSlots;
     { A5 helpers }
     function  ComputeExpandedSubtreeHeight(Node: PTyTreeNode): Integer;
     function  GetExpanded(Node: PTyTreeNode): Boolean;
@@ -915,9 +958,66 @@ type
     property DragCursor;
   end;
 
+{ ---------------------------------------------------------------------------
+  The ONE place a node's caption x is worked out.
+  --------------------------------------------------------------------------- }
+
+{ Lay out one cell's chrome slots, left to right, from ACellLeft.
+
+  Pure on purpose: it takes the four control settings it needs (Indent, ShowRoot)
+  and the two per-node answers (has a checkbox / has an image) as plain arguments,
+  so it can be reasoned about and tested without a tree, and so that every caller
+  is forced to state WHICH cell it is laying out. That last part matters: the
+  callers do not currently agree on the answer -- see NodeCaptionSlots.
+
+  APPI scales; 96 is the identity. AIsMainColumn = False short-circuits to a bare
+  text pad, which is what a non-main cell has always drawn. }
+function TyTreeCaptionSlots(ACellLeft, APPI, AIndent, ALevel: Integer;
+  AShowRoot, AHasCheckBox, AHasImage, AIsMainColumn: Boolean): TTyTreeCaptionSlots;
+
 implementation
 
 { TTyTreeView }
+
+function TyTreeCaptionSlots(ACellLeft, APPI, AIndent, ALevel: Integer;
+  AShowRoot, AHasCheckBox, AHasImage, AIsMainColumn: Boolean): TTyTreeCaptionSlots;
+begin
+  FillChar(Result, SizeOf(Result), 0);
+  if not AIsMainColumn then
+  begin
+    { A non-main cell carries no indent, no expander, no checkbox and no icon --
+      only the flat margin the painter has always used (colMargin = Scale(4)). }
+    Result.CaptionX := ACellLeft;
+    Result.TextPad  := MulDiv(4, APPI, 96);
+    Exit;
+  end;
+
+  Result.IndentPx    := MulDiv((ALevel + Ord(AShowRoot)) * AIndent, APPI, 96);
+  { The expander occupies the Indent-wide slot that ENDS at IndentPx, so it is
+    drawn inside the indent the node has already earned rather than pushing the
+    caption further right at every level. }
+  Result.ButtonSlotW := MulDiv(AIndent, APPI, 96);
+  Result.ButtonSlotX := ACellLeft + Result.IndentPx - Result.ButtonSlotW;
+
+  { CaptionX walks right past each slot that is actually present. This walk is the
+    thing that used to be copied out four times; a slot's width is 0 exactly when
+    it is absent, which is also how a consumer tells whether CheckX/ImageX mean
+    anything. }
+  Result.CaptionX := ACellLeft + Result.IndentPx;
+  if AHasCheckBox then
+  begin
+    Result.CheckW := MulDiv(16, APPI, 96);
+    Result.CheckX := Result.CaptionX;
+    Inc(Result.CaptionX, Result.CheckW);
+  end;
+  if AHasImage then
+  begin
+    Result.ImageW := MulDiv(AIndent, APPI, 96);
+    Result.ImageX := Result.CaptionX;
+    Inc(Result.CaptionX, Result.ImageW);
+  end;
+  Result.TextPad := MulDiv(2, APPI, 96);
+end;
 
 function TTyTreeView.GetStyleTypeKey: string;
 begin
@@ -3380,20 +3480,39 @@ end;
 
   Output ACellRect spans the full device column cell:
     • 0-column mode → CR.Left .. CR.Right (AColumn ignored).
-    • multi-column  → CR.Left + Scale(col.Left) + FOffsetX
-                      .. + Scale(col.Width)
-      (verbatim the colCellLeft/colCellRight formula RenderTo paints with).
+    • multi-column  → TyColumnSpan(col, CR.Left + FOffsetX, APPI)
+      -- the shared column-x source, which RenderTo's paint loop, the header strip
+      and the drag overlay all call too, so there is nothing left to keep in step.
   The vertical extent is always [ARowTop .. ARowTop + ARowH].
 
   Returns False only when a REAL column index does not resolve to a visible
   column (out of range / coVisible off); the main/0-column cases always succeed. }
+function TTyTreeView.NodeCaptionSlots(Node: PTyTreeNode; ACellLeft, APPI: Integer;
+  AIsMainColumn: Boolean): TTyTreeCaptionSlots;
+var
+  level: Integer;
+begin
+  if Node <> nil then level := GetNodeLevel(Node) else level := 0;
+  Result := TyTreeCaptionSlots(ACellLeft, APPI, FIndent, level,
+    FShowRoot,
+    { A checkbox slot is reserved only when the tree supports check marks AND this
+      node actually asked for one -- the paint, the hit test and the editor all
+      have to ask that same pair of questions or the caption shifts by Scale(16). }
+    (toCheckSupport in FOptions) and (Node <> nil) and (Node^.CheckType <> ctNone),
+    { The image slot is reserved whenever a list is assigned, even if THIS node
+      resolves no icon: a row whose caption slid left when its icon was missing
+      would read as a layout fault, so the slot is held open. }
+    (FImages <> nil) and (FImages.Count > 0),
+    AIsMainColumn);
+end;
+
 function TTyTreeView.InternalCellRect(const CR: TRect;
   ARowTop, ARowH, AColumn, APPI: Integer; out ACellRect: TRect): Boolean;
 var
   col: TTyColumn;
   colObj: TObject;
   effCol: Integer;
-  cLeft, cRight: Integer;
+  span: TTyColumnSpan;
 begin
   Result   := False;
   ACellRect := Rect(0, 0, 0, 0);
@@ -3417,10 +3536,12 @@ begin
   col := TTyColumn(colObj);
   if not (coVisible in col.Options) then Exit;
 
-  { Verbatim the RenderTo cell-left/right math (device px, scroll-adjusted). }
-  cLeft  := CR.Left + MulDiv(col.Left,  APPI, 96) + FOffsetX;
-  cRight := cLeft   + MulDiv(col.Width, APPI, 96);
-  ACellRect := Rect(cLeft, ARowTop, cRight, ARowTop + ARowH);
+  { The ONE column-x source (tyControls.Columns.TyColumnSpan). CR.Left + FOffsetX is
+    this control's content origin -- FOffsetX is <= 0 here, so it is ADDED; the
+    list view stores the same quantity >= 0 and subtracts. Both mean "where logical
+    x 0 currently sits", which is exactly what the span source takes. }
+  span := col.Span(CR.Left + FOffsetX, APPI);
+  ACellRect := Rect(span.Left, ARowTop, span.Right, ARowTop + ARowH);
   Result := True;
 end;
 
@@ -3533,13 +3654,16 @@ var
   rowTop, firstTop, firstNodeY: Integer;
   rowH: Integer;
   rowRect, bgRect, textRect, btnRect: TRect;
-  level, indentPx, btnSlotW, imgSlotW: Integer;
+  level: Integer;
+  { Per-row chrome geometry, from the ONE shared walk (NodeCaptionSlots). The
+    indent/button/checkbox/image widths that used to be four separate locals
+    accumulated by hand now all live here. }
+  slots: TTyTreeCaptionSlots;
   nodeStates: TTyStateSet;
   txt: string;
   ghosted: Boolean;
   imgIdx: Integer;
   selIdx, ovlIdx: Integer;      { ikSelected / ikOverlay answers for the current row }
-  captionX: Integer;
   rangeXNew: Integer;
   inset, insetLogical: Integer;
   savedClip: TRect;
@@ -3548,8 +3672,8 @@ var
   measW: Integer;
   contentLeft: Integer;
   gSz, slotBaseX: Integer;
-  usedImgSlotW: Integer;
   { ── C (columns) variables ───────────────────────────────────────────────── }
+  colSpan: TTyColumnSpan;       // shared column-x source result (see TyColumnSpan)
   useColumns: Boolean;          // True when Columns.Count > 0
   hasHeader: Boolean;           // True when hoVisible and useColumns
   headerH: Integer;             // device-px header band height
@@ -3567,12 +3691,10 @@ var
   sortBandR: TRect;
   accentPx: TBGRAPixel;         // theme accent for the drag ghost/drop-mark
   mainColBase: Integer;
-  { B2: checkbox slot variables }
-  cbSlotW: Integer;            // device-px width of the checkbox slot (P.Scale(16))
+  { B2: checkbox APPEARANCE only -- the slot's x and width come from `slots`. }
   cbStyle: TTyStyleSet;        // resolved TyTreeCheckBox style
   cbBoxRect: TRect;            // device rect of the box/circle within the slot
   cbBoxSize: Integer;          // device-px side of the drawn box/circle
-  usedCbSlotW: Integer;        // 0 when checkbox off/ctNone; cbSlotW otherwise
   { Node images are drawn via GDI onto ACanvas AFTER EndPaint (see below), so
     collect their device-coord positions during the row loop instead of drawing
     them into the BGRA layer. Drawing an ImageList into TTyPainter.Bitmap.Canvas
@@ -3701,10 +3823,11 @@ begin
 
         colIdx := col.Index;
 
-        { Column cell x range (scroll-adjusted, device pixels).
-          col.Left is the absolute left in logical px; scale to device. }
-        cellLeft  := CR.Left + P.Scale(col.Left) + FOffsetX;
-        cellRight := cellLeft + P.Scale(col.Width);
+        { Column cell x range (scroll-adjusted, device pixels) -- from the shared
+          span source, so the header cell sits exactly over the body cell below it. }
+        colSpan   := col.Span(CR.Left + FOffsetX, APPI);
+        cellLeft  := colSpan.Left;
+        cellRight := colSpan.Right;
 
         { Skip cells entirely off-screen }
         if cellRight <= CR.Left then Continue;
@@ -3816,8 +3939,9 @@ begin
         { Ghost: draw a semi-transparent filled rect over the dragged column's
           header cell at its current position (not yet moved) }
         col := FHeader.Columns.Items[FDragColumn] as TTyColumn;
-        cellLeft  := CR.Left + P.Scale(col.Left) + FOffsetX;
-        cellRight := cellLeft + P.Scale(col.Width);
+        colSpan   := col.Span(CR.Left + FOffsetX, APPI);
+        cellLeft  := colSpan.Left;
+        cellRight := colSpan.Right;
         { Clamp to visible area }
         if cellLeft  < CR.Left  then cellLeft  := CR.Left;
         if cellRight > CR.Right then cellRight := CR.Right;
@@ -3836,8 +3960,10 @@ begin
           col := FHeader.Columns.ColumnByPosition(FDragTargetPos);
           if col <> nil then
           begin
-            { Insert caret at the LEFT edge of the target column's position }
-            cellLeft := CR.Left + P.Scale(col.Left) + FOffsetX;
+            { Insert caret at the LEFT edge of the target column's position -- the
+              same span edge the ghost above and the cells below are drawn from, so
+              the drop mark always lands on a real column boundary. }
+            cellLeft := col.Span(CR.Left + FOffsetX, APPI).Left;
             if cellLeft < CR.Left  then cellLeft := CR.Left;
             if cellLeft > CR.Right then cellLeft := CR.Right;
             { Draw a 2px wide vertical accent bar }
@@ -3879,9 +4005,6 @@ begin
 
     rangeXNew := FRangeX;
 
-    btnSlotW := P.Scale(FIndent);   // one Indent-wide slot for the expand button
-    imgSlotW := P.Scale(FIndent);   // one Indent-wide slot for the image
-
     { ── Per-row paint loop ───────────────────────────────────────────────── }
     while (node <> nil) and (rowTop < CR.Bottom) do
     begin
@@ -3918,9 +4041,10 @@ begin
                           rowRect.Right, rowRect.Bottom - 1,
                           TyColorToBGRA(S.BorderColor), False);
 
-      { ── X accumulation: level → indent ─────────────────────────────────── }
-      level    := GetNodeLevel(node);
-      indentPx := P.Scale((level + Ord(FShowRoot)) * FIndent);
+      { Only the node's LEVEL is needed out here (it gates the tree-line block and
+        feeds the ancestor guides); every x derived from it comes from the shared
+        walk inside each branch, where the cell anchor is known. }
+      level := GetNodeLevel(node);
 
       if useColumns then
       begin
@@ -3986,6 +4110,11 @@ begin
             { ── Main column: draw ③a chrome (tree-lines + button + image) ── }
             { mainColBase is the left of the main column cell (like contentLeft in ③a) }
             mainColBase := colCellLeft;
+            { Every chrome x below is READ from this one walk. The anchor is the
+              main column's own cell left, so the indent/expander/checkbox/icon
+              land in the column being painted -- which is exactly the argument
+              GetNodeAtPoint gets wrong (it passes 0); see NodeCaptionSlots. }
+            slots := NodeCaptionSlots(node, mainColBase, APPI, True);
 
             { Tree lines (anchored at mainColBase) }
             if FShowTreeLines and (level > 0) then
@@ -3996,7 +4125,7 @@ begin
                 ancLevel := GetNodeLevel(anc);
                 ancSlotX := mainColBase
                             + P.Scale((ancLevel + Ord(FShowRoot)) * FIndent)
-                            - (btnSlotW shr 1);
+                            - (slots.ButtonSlotW shr 1);
                 if anc^.NextSibling <> nil then
                   P.Bitmap.DrawLine(ancSlotX, rowTop, ancSlotX, rowTop + rowH,
                     TyColorToBGRA(S.BorderColor), False);
@@ -4004,11 +4133,11 @@ begin
               end;
               ancMidX := mainColBase
                          + P.Scale((level - 1 + Ord(FShowRoot)) * FIndent + FIndent)
-                         - (btnSlotW shr 1);
+                         - (slots.ButtonSlotW shr 1);
               ancMidY := rowTop + rowH div 2;
               P.Bitmap.DrawLine(ancMidX, rowTop,    ancMidX, ancMidY,
                 TyColorToBGRA(S.BorderColor), False);
-              P.Bitmap.DrawLine(ancMidX, ancMidY,   mainColBase + indentPx, ancMidY,
+              P.Bitmap.DrawLine(ancMidX, ancMidY,   mainColBase + slots.IndentPx, ancMidY,
                 TyColorToBGRA(S.BorderColor), False);
               if node^.NextSibling <> nil then
                 P.Bitmap.DrawLine(ancMidX, ancMidY, ancMidX, rowTop + rowH,
@@ -4018,9 +4147,9 @@ begin
             { Expand button (anchored at mainColBase) }
             if FShowButtons and (nsHasChildren in node^.States) then
             begin
-              gSz := btnSlotW;
+              gSz := slots.ButtonSlotW;
               if rowH < gSz then gSz := rowH;
-              slotBaseX := mainColBase + indentPx - btnSlotW + (btnSlotW - gSz) div 2;
+              slotBaseX := slots.ButtonSlotX + (slots.ButtonSlotW - gSz) div 2;
               btnRect := Rect(
                 slotBaseX,
                 rowTop + (rowH - gSz) div 2,
@@ -4039,14 +4168,9 @@ begin
                 TyDrawGlyph(P, ActiveController, btnRect, tgChevronRight, NodeStyle.TextColor, P.Scale(1), 2);
             end;
 
-            { Image (main column only) }
             { B2: Checkbox slot (main column, after expand button, before image) }
-            captionX := mainColBase + indentPx;
-            usedCbSlotW := 0;
             if (toCheckSupport in FOptions) and (node^.CheckType <> ctNone) then
             begin
-              cbSlotW     := P.Scale(16);
-              usedCbSlotW := cbSlotW;
               { Resolve checkbox style — fall back gracefully if typeKey absent }
               if node^.CheckState = csChecked then
                 cbStyle := ActiveController.Model.ResolveStyle('TyTreeCheckBox', '', [tysActive])
@@ -4058,9 +4182,9 @@ begin
               if cbBoxSize > rowH - P.Scale(2) then cbBoxSize := rowH - P.Scale(2);
               if cbBoxSize < 4 then cbBoxSize := 4;
               cbBoxRect := Rect(
-                captionX + (cbSlotW - cbBoxSize) div 2,
+                slots.CheckX + (slots.CheckW - cbBoxSize) div 2,
                 rowTop + (rowH - cbBoxSize) div 2,
-                captionX + (cbSlotW - cbBoxSize) div 2 + cbBoxSize,
+                slots.CheckX + (slots.CheckW - cbBoxSize) div 2 + cbBoxSize,
                 rowTop + (rowH - cbBoxSize) div 2 + cbBoxSize);
               { FIX 4: draw rectangular box background + border ONLY for checkbox
                 types; ctRadioButton draws its own circle below (no square corners). }
@@ -4121,14 +4245,11 @@ begin
                   end;
                 end;
               end; { case }
-              Inc(captionX, cbSlotW);
             end;
 
             { Image (main column only) }
-            usedImgSlotW := 0;
             if (FImages <> nil) and (FImages.Count > 0) then
             begin
-              usedImgSlotW := imgSlotW;
               imgIdx  := -1;
               ghosted := False;
               DoGetImageIndex(node, ikNormal, colIdx, ghosted, imgIdx);
@@ -4150,7 +4271,7 @@ begin
                 { Collect; drawn via GDI onto ACanvas after EndPaint (see below). }
                 if pendingCount = Length(pendingIcons) then
                   SetLength(pendingIcons, pendingCount + 32);
-                pendingIcons[pendingCount].X   := ARect.Left + captionX;
+                pendingIcons[pendingCount].X   := ARect.Left + slots.ImageX;
                 pendingIcons[pendingCount].Y   := ARect.Top  + rowTop + (rowH - FImages.Height) div 2;
                 pendingIcons[pendingCount].Idx := imgIdx;
                 pendingIcons[pendingCount].Ghost := ghosted;
@@ -4164,7 +4285,6 @@ begin
                   Inc(pendingCount);
                 end;
               end;
-              Inc(captionX, imgSlotW);
             end;
 
             { Caption in main column — skipped for an owner-drawn cell (the app
@@ -4177,8 +4297,8 @@ begin
               else
                 DoGetText(node, colTxt);
 
-              textRect := Rect(captionX + P.Scale(2), rowTop,
-                               colCellRight - P.Scale(2), rowTop + rowH);
+              textRect := Rect(slots.CaptionX + slots.TextPad, rowTop,
+                               colCellRight - slots.TextPad, rowTop + rowH);
               if (textRect.Left < textRect.Right) and (colTxt <> '') then
                 P.DrawText(textRect, colTxt,
                   NodeStyle.FontName, ResolveFontSize(NodeStyle), NodeStyle.FontWeight,
@@ -4194,8 +4314,12 @@ begin
             { ③d D1: skipped for an owner-drawn cell (app fully replaces it). }
             if not ownerDrawCell then
             begin
-              colMargin := P.Scale(4);
-              colCaptionX := colCellLeft + colMargin;
+              { The non-main branch of the SAME walk: no chrome, just the flat pad.
+                Sourced here too so CellTextRect (which the inline editor sits on)
+                and this paint cannot disagree about what that pad is. }
+              slots := NodeCaptionSlots(node, colCellLeft, APPI, False);
+              colMargin := slots.TextPad;
+              colCaptionX := slots.CaptionX + slots.TextPad;
 
               colTxt := '';
               if Assigned(FOnGetTextWithType) then
@@ -4232,6 +4356,11 @@ begin
           rowTop+rowH). }
         InternalCellRect(CR, rowTop, rowH, -1, APPI, cellRect);
 
+        { The 0-column tree's single cell IS the main column, so the same walk runs
+          with the content origin as its anchor. This is the one branch where the
+          hit test's assumption (main column starts at content x 0) is true. }
+        slots := NodeCaptionSlots(node, contentLeft, APPI, True);
+
         { ③d D1: 0-column owner-draw — Column = -1 (the whole row cell). Same
           collection as the multi-column paths; default caption/image skipped
           for the owner-drawn cell, row bg + chrome still paint underneath. }
@@ -4266,7 +4395,7 @@ begin
             ancLevel := GetNodeLevel(anc);
             ancSlotX := contentLeft
                         + P.Scale((ancLevel + Ord(FShowRoot)) * FIndent)
-                        - (btnSlotW shr 1);
+                        - (slots.ButtonSlotW shr 1);
             if anc^.NextSibling <> nil then
               P.Bitmap.DrawLine(ancSlotX, rowTop, ancSlotX, rowTop + rowH,
                 TyColorToBGRA(S.BorderColor), False);
@@ -4276,11 +4405,11 @@ begin
           { Elbow at this node's level: vertical half + horizontal stub. }
           ancMidX := contentLeft
                      + P.Scale((level - 1 + Ord(FShowRoot)) * FIndent + FIndent)
-                     - (btnSlotW shr 1);
+                     - (slots.ButtonSlotW shr 1);
           ancMidY := rowTop + rowH div 2;
           P.Bitmap.DrawLine(ancMidX, rowTop,    ancMidX, ancMidY,
             TyColorToBGRA(S.BorderColor), False);
-          P.Bitmap.DrawLine(ancMidX, ancMidY,   contentLeft + indentPx, ancMidY,
+          P.Bitmap.DrawLine(ancMidX, ancMidY,   contentLeft + slots.IndentPx, ancMidY,
             TyColorToBGRA(S.BorderColor), False);
           if node^.NextSibling <> nil then
             P.Bitmap.DrawLine(ancMidX, ancMidY, ancMidX, rowTop + rowH,
@@ -4293,9 +4422,9 @@ begin
           { The button occupies the slot just before indentPx. Use a CENTRED
             SQUARE filling the slot (side = min(slot, rowH)) so the chevron is
             large and crisp; DrawGlyph's pad is reduced to 2. }
-          gSz := btnSlotW;
+          gSz := slots.ButtonSlotW;
           if rowH < gSz then gSz := rowH;
-          slotBaseX := contentLeft + indentPx - btnSlotW + (btnSlotW - gSz) div 2;
+          slotBaseX := slots.ButtonSlotX + (slots.ButtonSlotW - gSz) div 2;
           btnRect := Rect(
             slotBaseX,
             rowTop + (rowH - gSz) div 2,
@@ -4315,12 +4444,8 @@ begin
         end;
 
         { ── B2: Checkbox slot (after expand button, before image) ──────── }
-        captionX := contentLeft + indentPx;
-        usedCbSlotW := 0;
         if (toCheckSupport in FOptions) and (node^.CheckType <> ctNone) then
         begin
-          cbSlotW     := P.Scale(16);
-          usedCbSlotW := cbSlotW;
           { Resolve checkbox style }
           if node^.CheckState = csChecked then
             cbStyle := ActiveController.Model.ResolveStyle('TyTreeCheckBox', '', [tysActive])
@@ -4332,9 +4457,9 @@ begin
           if cbBoxSize > rowH - P.Scale(2) then cbBoxSize := rowH - P.Scale(2);
           if cbBoxSize < 4 then cbBoxSize := 4;
           cbBoxRect := Rect(
-            captionX + (cbSlotW - cbBoxSize) div 2,
+            slots.CheckX + (slots.CheckW - cbBoxSize) div 2,
             rowTop + (rowH - cbBoxSize) div 2,
-            captionX + (cbSlotW - cbBoxSize) div 2 + cbBoxSize,
+            slots.CheckX + (slots.CheckW - cbBoxSize) div 2 + cbBoxSize,
             rowTop + (rowH - cbBoxSize) div 2 + cbBoxSize);
           { FIX 4: draw rectangular box background + border ONLY for checkbox
             types; ctRadioButton draws its own circle below (no square corners). }
@@ -4394,17 +4519,14 @@ begin
               end;
             end;
           end; { case }
-          Inc(captionX, cbSlotW);
         end;
 
         { ── Image ────────────────────────────────────────────────────────── }
         { The image slot is RESERVED whenever an image list is assigned (matching
-          GetNodeAtPoint's hpImage zone), so usedImgSlotW mirrors that reservation
-          for the FRangeX width below. }
-        usedImgSlotW := 0;
+          GetNodeAtPoint's hpImage zone); slots.ImageW carries that reservation,
+          including into the FRangeX width below. }
         if (FImages <> nil) and (FImages.Count > 0) then
         begin
-          usedImgSlotW := imgSlotW;
           imgIdx  := -1;
           ghosted := False;
           DoGetImageIndex(node, ikNormal, -1, ghosted, imgIdx);
@@ -4432,7 +4554,7 @@ begin
             { Collect; drawn via GDI onto ACanvas after EndPaint (see below). }
             if pendingCount = Length(pendingIcons) then
               SetLength(pendingIcons, pendingCount + 32);
-            pendingIcons[pendingCount].X   := ARect.Left + captionX;
+            pendingIcons[pendingCount].X   := ARect.Left + slots.ImageX;
             pendingIcons[pendingCount].Y   := ARect.Top  + rowTop + (rowH - FImages.Height) div 2;
             pendingIcons[pendingCount].Idx := imgIdx;
             { The Ghost carry landed on the multi-column branch only, so in the DEFAULT
@@ -4449,7 +4571,6 @@ begin
               Inc(pendingCount);
             end;
           end;
-          Inc(captionX, imgSlotW);
         end;
 
         { ── Caption ─────────────────────────────────────────────────────── }
@@ -4460,7 +4581,7 @@ begin
 
         if not ownerDrawCell then
         begin
-          textRect := Rect(captionX + P.Scale(2), rowTop, CR.Right, rowTop + rowH);
+          textRect := Rect(slots.CaptionX + slots.TextPad, rowTop, CR.Right, rowTop + rowH);
           if (textRect.Left < textRect.Right) and (txt <> '') then
             P.DrawText(textRect, txt,
               NodeStyle.FontName, ResolveFontSize(NodeStyle), NodeStyle.FontWeight,
@@ -4472,11 +4593,13 @@ begin
 
         { ── FRangeX accumulation ─────────────────────────────────────────── }
         { Pure content WIDTH for this row — independent of CR.Left and FOffsetX so
-          the H-scroll range never drifts with the scroll position.  Equals the
-          rendered layout: indent + cbSlot + (image slot if used) + gap + text + tail. }
+          the H-scroll range never drifts with the scroll position. Taken as the
+          DISTANCE the shared walk travelled (CaptionX - the anchor it started at),
+          which is by construction indent + cbSlot + image slot; restating that sum
+          here is what used to let the scroll range disagree with the paint. }
         if txt <> '' then
         begin
-          measW := indentPx + usedCbSlotW + usedImgSlotW + P.Scale(2) +
+          measW := (slots.CaptionX - contentLeft) + slots.TextPad +
             P.MeasureText(txt, NodeStyle.FontName, ResolveFontSize(NodeStyle),
                           NodeStyle.FontWeight).cx + P.Scale(4);
           if measW > rangeXNew then
@@ -4648,11 +4771,9 @@ end;
   node under the cursor via GetNodeAt, then classify which column slot was hit.
   AColumn returns the collection Index of the column under X (-1 = NoColumn).
 
-  X-accumulation mirrors RenderTo EXACTLY (same scale, same formula):
-    CR      = ContentRect (padding-inset + scrollbar-shrunk, header inset already applied)
-    indentPx = Scale((level + Ord(FShowRoot)) * FIndent)
-    btnSlotW = Scale(FIndent)   — one Indent-wide slot before indentPx
-    imgSlotW = Scale(FIndent)   — one Indent-wide slot after indentPx
+  The x-zones come from NodeCaptionSlots — the same walk RenderTo paints with — so
+  the slot WIDTHS and CONDITIONS cannot drift from the chrome on screen. What can
+  still differ is the ANCHOR: this function passes 0 (see the call below).
 
   The absolute content X/Y:
     absY = (Y - CR.Top) + (-FOffsetY)
@@ -4664,8 +4785,7 @@ var
   absY, absX: Integer;
   nodeTop: Integer;
   node: PTyTreeNode;
-  level, indentPx, btnSlotW, imgSlotW: Integer;
-  captionX: Integer;
+  slots: TTyTreeCaptionSlots;
   logX, logScroll: Integer;
 begin
   Result   := nil;
@@ -4690,33 +4810,30 @@ begin
   { Make sure the node is initialised so nsHasChildren is reliable }
   InitNode(node);
 
-  { Compute the same x-zone layout as RenderTo }
-  level    := GetNodeLevel(node);
+  { The same slot walk RenderTo paints with — read, not re-derived.
 
-  { Use a simple 1:1 scale helper: Scale(n) = MulDiv(n, PPI, 96) }
-  indentPx := MulDiv((level + Ord(FShowRoot)) * FIndent, PPI, 96);
-  btnSlotW := MulDiv(FIndent, PPI, 96);
-  imgSlotW := MulDiv(FIndent, PPI, 96);
-
-  { Zones (all in content-space X, i.e. relative to CR.Left after FOffsetX):
-      [0 .. indentPx - btnSlotW)        = hpIndent (the left-padding area)
-      [indentPx - btnSlotW .. indentPx) = hpButton slot (only when nsHasChildren)
-      [indentPx .. indentPx + cbSlotW)  = hpCheckBox (B3: only when toCheckSupport + CheckType<>ctNone)
-      [captionX .. captionX+imgSlotW)   = hpImage (only when FImages assigned)
-      [captionX or beyond)              = hpLabel
-    cbSlotW = MulDiv(16, PPI, 96) — identical to B2 paint formula.              }
+    THE ANCHOR IS 0, and that is this function's long-standing bug, kept as-is by
+    the refactor that exposed it. absX is content space (relative to CR.Left, past
+    the scroll), so 0 means "the main column starts at the left edge of the
+    content". True in the 0-column tree and whenever MainColumn is the leftmost
+    visible column; false otherwise, and then every zone below sits
+    Scale(MainColumn.Left) px left of the chrome actually on screen — the expander
+    a user clicks answers hpLabel and the node will not expand. Passing the main
+    column's cell left here is the fix; it is a behaviour change and wants its own
+    guard, so it is not made in this pass. }
+  slots := NodeCaptionSlots(node, 0, PPI, True);
 
   if absX < 0 then
   begin
     APart := hpIndent;
     Result := node;
   end
-  else if absX < indentPx - btnSlotW then
+  else if absX < slots.ButtonSlotX then
   begin
     APart  := hpIndent;
     Result := node;
   end
-  else if (absX < indentPx) then
+  else if absX < slots.ButtonSlotX + slots.ButtonSlotW then
   begin
     { In the button slot — classify as hpButton only if the node has children
       AND buttons are shown.  Otherwise treat as hpIndent. }
@@ -4726,68 +4843,24 @@ begin
       APart := hpIndent;
     Result := node;
   end
+  { Past the indent zone. A slot with zero width is one this node does not have,
+    so these two tests fall through exactly when the painter drew nothing. }
+  else if (slots.CheckW > 0) and (absX < slots.CheckX + slots.CheckW) then
+  begin
+    APart  := hpCheckBox;
+    Result := node;
+    { Column detection happens below — don't Exit here }
+  end
+  else if (slots.ImageW > 0) and (absX < slots.ImageX + slots.ImageW) then
+  begin
+    APart  := hpImage;
+    Result := node;
+  end
   else
   begin
-    { Past the indent zone }
-    captionX := indentPx;
-
-    { B3: Checkbox slot — same width as B2 paint: MulDiv(16, PPI, 96) }
-    if (toCheckSupport in FOptions) and (node^.CheckType <> ctNone) then
-    begin
-      if absX < captionX + MulDiv(16, PPI, 96) then
-      begin
-        APart  := hpCheckBox;
-        Result := node;
-        { Column detection happens below — don't Exit here }
-      end
-      else
-      begin
-        Inc(captionX, MulDiv(16, PPI, 96));
-        if (FImages <> nil) and (FImages.Count > 0) then
-        begin
-          if absX < captionX + imgSlotW then
-          begin
-            APart  := hpImage;
-            Result := node;
-          end
-          else
-          begin
-            Inc(captionX, imgSlotW);
-            APart  := hpLabel;
-            Result := node;
-          end;
-        end
-        else
-        begin
-          APart  := hpLabel;
-          Result := node;
-        end;
-      end;
-    end
-    else
-    begin
-      { No checkbox slot }
-      if (FImages <> nil) and (FImages.Count > 0) then
-      begin
-        if absX < captionX + imgSlotW then
-        begin
-          APart  := hpImage;
-          Result := node;
-        end
-        else
-        begin
-          Inc(captionX, imgSlotW);
-          APart  := hpLabel;
-          Result := node;
-        end;
-      end
-      else
-      begin
-        { Everything to the right of the indent zone is the label area }
-        APart  := hpLabel;
-        Result := node;
-      end;
-    end;
+    { Everything from CaptionX rightward is the label area }
+    APart  := hpLabel;
+    Result := node;
   end;
 
   { D1: determine which column the X coordinate lands in (when columns exist) }
@@ -5995,20 +6068,17 @@ end;
   indent + (optional) checkbox slot + (optional) image slot, then draws text at
   captionX + Scale(2); a non-main column just pads the text in by Scale(4).
 
-  KEEP IN SYNC WITH RenderTo's main-column caption layout (lines ~3286–3411 and
-  the 0-column twin ~3540–3660) and GetNodeAtPoint's x-zones (~3824–3895): the
-  slot conditions + widths below are byte-identical to those paths —
-    indentPx     = Scale((level + Ord(FShowRoot)) * FIndent)
-    checkbox slot= Scale(16),  reserved iff toCheckSupport + node CheckType<>ctNone
-    image slot   = Scale(FIndent), reserved iff FImages assigned + non-empty
-    text pad     = Scale(2) (main column) / Scale(4) (other columns)
-  Scale(n) here = MulDiv(n, Font.PixelsPerInch, 96), identical to the painter's
-  P.Scale and GetNodeAtPoint, so the glue holds at any DPI. }
+  Those slot widths and conditions are NOT restated here — they come from
+  NodeCaptionSlots, the same call RenderTo's two caption paints make. There used to
+  be a note here asking whoever edited this to keep it in step with three other
+  places by hand; the walk is shared now, so the note would be false. The only
+  arithmetic left below is the right-hand pad, which is this function's alone. }
 function TTyTreeView.CellTextRect(Node: PTyTreeNode; Column: Integer;
   const ACellRect: TRect): TRect;
 var
-  PPI, effCol, level, indentPx, slots: Integer;
+  PPI, effCol: Integer;
   isMain: Boolean;
+  slots: TTyTreeCaptionSlots;
 begin
   Result := ACellRect;
   PPI := Font.PixelsPerInch;
@@ -6025,26 +6095,12 @@ begin
     isMain := (effCol = FHeader.MainColumn);
   end;
 
-  if isMain then
-  begin
-    if Node <> nil then
-      level := GetNodeLevel(Node)
-    else
-      level := 0;
-    indentPx := MulDiv((level + Ord(FShowRoot)) * FIndent, PPI, 96);
-    slots := indentPx;
-    if (toCheckSupport in FOptions) and (Node <> nil) and (Node^.CheckType <> ctNone) then
-      Inc(slots, MulDiv(16, PPI, 96));
-    if (FImages <> nil) and (FImages.Count > 0) then
-      Inc(slots, MulDiv(FIndent, PPI, 96));
-    Inc(Result.Left, slots + MulDiv(2, PPI, 96));   { captionX + Scale(2) }
-    Dec(Result.Right, MulDiv(2, PPI, 96));           { painter's right pad }
-  end
-  else
-  begin
-    Inc(Result.Left, MulDiv(4, PPI, 96));            { colMargin = Scale(4) }
-    Dec(Result.Right, MulDiv(4, PPI, 96));
-  end;
+  { The cell band's own left IS the anchor here — this is the one consumer that is
+    handed the cell rect directly, so it can never be looking at a different cell
+    from the one it was asked about. }
+  slots := NodeCaptionSlots(Node, ACellRect.Left, PPI, isMain);
+  Result.Left := slots.CaptionX + slots.TextPad;
+  Dec(Result.Right, slots.TextPad);   { the painter's matching right pad }
 
   if Result.Right < Result.Left then Result.Right := Result.Left;   // never inverted
 end;
@@ -6613,7 +6669,8 @@ end;
 function TTyTreeView.DisplayExpandSignRect(Node: PTyTreeNode; out ARect: TRect): Boolean;
 var
   cell: TRect;
-  col, level, indentPx, btnSlotW, gSz, slotBaseX, rowH, PPI: Integer;
+  col, gSz, slotBaseX, rowH, PPI: Integer;
+  slots: TTyTreeCaptionSlots;
 begin
   ARect  := Rect(0, 0, 0, 0);
   Result := False;
@@ -6623,17 +6680,15 @@ begin
   if (FHeader <> nil) and (FHeader.Columns.Count > 0) then col := FHeader.MainColumn;
   if not GetCellRect(Node, col, cell) then Exit;
 
-  { Reproduce RenderTo's expander geometry exactly (the btnRect block): one
-    Indent-wide slot immediately before indentPx, a centred square of side
-    min(slot, rowH). }
+  { The expander slot comes from the shared walk (the same one RenderTo's btnRect
+    block reads), anchored on the cell this node's main column actually occupies;
+    only the centred-square sizing is this function's own. }
   PPI       := Font.PixelsPerInch;
   rowH      := cell.Bottom - cell.Top;
-  level     := GetNodeLevel(Node);
-  indentPx  := MulDiv((level + Ord(FShowRoot)) * FIndent, PPI, 96);
-  btnSlotW  := MulDiv(FIndent, PPI, 96);
-  gSz       := btnSlotW;
+  slots     := NodeCaptionSlots(Node, cell.Left, PPI, True);
+  gSz       := slots.ButtonSlotW;
   if rowH < gSz then gSz := rowH;
-  slotBaseX := cell.Left + indentPx - btnSlotW + (btnSlotW - gSz) div 2;
+  slotBaseX := slots.ButtonSlotX + (slots.ButtonSlotW - gSz) div 2;
   ARect := Rect(slotBaseX, cell.Top + (rowH - gSz) div 2,
                 slotBaseX + gSz, cell.Top + (rowH - gSz) div 2 + gSz);
   Result := True;

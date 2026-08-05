@@ -1048,11 +1048,11 @@ end;
       was raised on, since a TPopupMenu has no BiDiMode of its own.
 
   So this is no longer "the paint path ignores it" -- it is "the paint path honours it in the
-  minority of controls". Grid and list-view COLUMNS, tab strips, tree indentation, the bars
-  inside those four controls and TTyMemo's caret are all still left-to-right, and publishing
-  now would put a property in the Object Inspector that does nothing on a grid, a tree or a
-  memo. That is the same defect this pass has been removing -- a property offered and
-  half-ignored, which is how TTyColorButton.Caption came to exist.
+  minority of controls". LIST-VIEW columns, tree indentation, the date picker's fields and
+  TTyMemo's caret are all still left-to-right, and publishing now would put a property in the
+  Object Inspector that does nothing on a tree or a memo. That is the same defect this pass has
+  been removing -- a property offered and half-ignored, which is how TTyColorButton.Caption
+  came to exist.
 
   (6) ...and for TTyHeaderControl, the first control whose GEOMETRY and both HIT TESTS come
       out of one pure function -- TyHeaderSectionRects -- so the strip, the section a click
@@ -1066,9 +1066,7 @@ end;
   field into a screen x independently (Columns.pas:760/790, ListView.pas:2776/2955/3053,
   TreeView.pas:3421/3706/3819/3840). The strip has no such expression anywhere -- its consumers
   receive finished rects -- which is exactly why it was safe to mirror and they are not.
-  TTyCustomGrid is the exception: its column axis IS collapsed already (ColumnLeftPx,
-  Grid.pas:4969, with ColumnAtX:5007 written as its inverse), so what blocks it is the scroll
-  origin and the frozen bands, not a duplicated tiling.
+  TTyCustomGrid was the exception, and it has since been mirrored -- see (8).
 
   (7) ...and for the TAB family: TTyCustomTabStrip and everything built on its header engine
       (TTyPageControl, TTyTabSet). Its four x-axis consumers -- the paint, three separate
@@ -1077,6 +1075,18 @@ end;
       cannot drop a tab in a slot the paint disagrees with. TTyRibbon shares that engine and
       declines to mirror, because its File tab, collapse chevron and KeyTip chips would not
       have followed.
+
+  (8) ...and for TTyCustomGrid / TTyStringGrid, whose column axis was already collapsed --
+      ColumnLeftPx is one source and ColumnAtX is written as its inverse THROUGH that same
+      function, which is why the scoping document's "rewrite the column axis" was wrong. What
+      the grid actually lacked was four OTHER single sources, each of which was created before
+      anything moved: the row-header gutter (four independent `x < IndicatorWidth` tests), the
+      frozen-band boundary (four independent FrozenWidthPx thresholds), the header funnel
+      (paint and hit each computed their own centre and agreed by coincidence) and the column
+      resize edge (the divider's x and the drag's delta were unrelated expressions). Its
+      vertical scroll bar deliberately stays on the right, and its filter drop-down declines to
+      mirror its rows; both declines are pinned by TRtlExclusionTest rather than left to
+      chance.
 
   The way OUT is unchanged and is NOT to relax this assertion: mirror the remaining families
   (plans/2026-08-04-rtl-mirroring-scope.md phases 3 onwards), then delete this test. Until
