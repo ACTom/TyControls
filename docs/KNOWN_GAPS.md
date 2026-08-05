@@ -219,6 +219,7 @@ does **not** move to the right edge. That is correct, and it is asserted by
   | `TTyMenuBar` | top cells pack from the right; `RightJustify` groups pack against the left |
   | `TTyPopupMenu` (and `TTyImagesMenu` / `TTyMenuEx`) | the check/icon slot moves right, the shortcut and submenu arrow move left, the arrow turns round, the banner strip changes ends, dropdowns hang from the anchor's right, submenus cascade left, and **←/→ swap** (← opens a submenu, → returns to the parent) |
   | `TTyHeaderControl` | the whole strip: section 0 sits against the right edge, captions align right, the sort triangle and the divider move to each cell's other side, and the **hit test and the resize drag follow** — a click on the leftmost cell sorts the *last* section, and a divider is widened by dragging it left |
+  | `TTyCustomTabStrip` and everything on it — `TTyPageControl`, `TTyTabSet` | the whole tab band: tab 0 is the **rightmost** and the strip packs leftwards; the close × moves to each header's left edge; the two overflow arrows swap ends and turn round; scrolling forward slides the band **right**; `←`/`→` follow the eye. The page **body** does not move (there are no left/right-edge tabs to mirror), and a page's own children are not mirrored |
 
   **The vertical scroll bar moving to the left edge is the loudest signal a
   window gives that it reads right-to-left**, which is why the scrolling
@@ -274,58 +275,28 @@ does **not** move to the right edge. That is correct, and it is asserted by
   above ignores `BiDiMode` entirely — it does not half-mirror, it does not move at
   all:
 
-  - the scroll bar inside a **grid, list view, tree view or memo** stays on the
-    **right** edge (only the scroll box, the scroll panel and the list-box family
-    move theirs);
-  - grid, list-view and tree-view **columns** keep their left-to-right order, and
-    so do tab headers, toolbar buttons, breadcrumb segments and pagination items.
-    The standalone `TTyHeaderControl` *does* mirror and those column headers do
-    **not**, which is worth stating precisely because they look like the same
-    control. They do not share its geometry. `TTyColumns.UpdatePositions`
-    (`tyControls.Columns.pas:655`) writes a per-column `FLeft` field instead of
-    returning rects, and nine separate expressions turn that field into a screen x
-    on their own — `Columns.pas:760` and `:790` for the two hit tests,
-    `ListView.pas:2776`/`:2955`/`:3053` and `TreeView.pas:3421`/`:3706`/`:3819`/`:3840`
-    for the paints. Nine sites is nine chances to mirror eight of them.
-    `TTyCustomGrid` is the exception and is much closer to ready: its column axis
-    is already collapsed to one source (`ColumnLeftPx`, `tyControls.Grid.pas:4969`)
-    with `ColumnAtX` (`:5007`) written as that function's inverse rather than as a
-    second accumulation. What blocks the grid is not a duplicated tiling but the
-    scroll origin (`:4995`) and the two frozen bands, which the header strip — it
-    does not scroll at all — could not validate the approach against;
+  - a scroll bar stays on the **right** edge of its container;
+  - grid and list-view **columns** keep their left-to-right order, and so do
+    toolbar buttons, breadcrumb segments and pagination items;
   - a tree view's expander stays on the **left**, and indentation still grows
     rightwards;
   - an edit or memo keeps its text, caret and selection anchored to the left;
-  - a `TTyCoolBar` band's own **caption** (`ShowText`) is drawn into an empty rect
-    whichever way the bar reads — the strip `TyCoolBarPack` reserves for it is not
-    the strip `BandRectFor` derives, and has never been. Mirroring reproduced that
-    faithfully rather than fixing it; a band caption is invisible either way;
   - a `TTyDropDownButton` keeps its arrow zone on the **right**, a
-    `TTyButtonGroup` keeps its segments in left-to-right order, and
-    `TTyValueListEditor` keeps its whole two-column layout — deliberately, because
-    each of the three reads a click's x back through a hit test that is computed a
-    *second* time from something other than the rect it paints into
-    (`ValueListEditor.pas:536`/`:576`/`:1542` against `:1426`), and mirroring the
-    paint without the hit test is the "drawn on the right, answers on the left"
-    defect this library has already shipped three times. Pinned by
-    `tests/test.rtl.pas` (`TRtlExclusionTest`), which asserts paint and hit test
-    still agree, so mirroring either one alone turns red. The way out for the
-    value-list editor is to make `CellRect` the single source both halves read,
-    then mirror that.
-  - the **popup lists** inside the combo-box family (`TTyColorBox`,
-    `TTyColorComboBox`, `TTyComboBoxEx`, `TTyFontComboBox`, `TTyOfficeListBox`,
-    `TTyAdvancedListBox`, `TTyShellComboBox`, and the grid's filter list) inherit
-    the mirrored row and the left-hand scroll bar from `TTyListBox`, but their own
-    per-row slots — the swatch, the icon, the header band, the count column — are
-    still drawn from the row's left edge. That is cosmetic only: none of them
-    hit-tests x, so nothing answers a click on the wrong side. `TyDrawColorRow`
-    already takes an `ARightToLeft` argument, defaulted off; passing it is the
-    remaining work.
+    `TTyButtonGroup` keeps its segments in left-to-right order, and `TTyRibbon`
+    keeps its whole tab band left-to-right even though it *is* a
+    `TTyCustomTabStrip` — all three deliberately, because each reads a click's x
+    back through a hit test its paint would have moved away from, and that is the
+    "drawn on the right, answers on the left" defect this library has already
+    shipped three times. The ribbon declines in one line
+    (`TTyRibbon.HeaderRightToLeft`); its File tab, collapse chevron, KeyTip chips
+    and two `X >= HeaderLeftInset` gestures all have to move in the same commit
+    that deletes it. All three are pinned by `tests/test.rtl.pas`
+    (`TRtlExclusionTest`), which asserts paint and hit test still agree, so
+    mirroring either one alone turns red.
 
   A right-to-left UI built on this release gets its forms — labels, check boxes,
-  radio groups, buttons, panels — its scrolling containers and list boxes, its
-  menus and its window chrome bars the right way round, and its data views —
-  grids, trees, tabs — and its multi-line text editor the wrong way round.
+  radio groups, buttons, panels — and its tabbed containers the right way round,
+  and its data views the wrong way round.
 
 - **Containers do not mirror their children's `Align`/`Anchors` layout**, and this
   is not a gap to be closed. LCL's own align engine has no BiDi branch outside the

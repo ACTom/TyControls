@@ -19,6 +19,14 @@ Batch-C 的按钮家族([TTyGlyphButton](glyphbuttons.md)/[TTyGlyphContainerButt
 | `AddPage(caption): TTyRibbonPage` | 新增一页。 |
 | `RemovePage(index)` / `PageCount` / `Pages[i]` | 页管理。 |
 
+> **右到左镜像:刻意不做。** 基类 `TTyCustomTabStrip` 的标签带已经支持 `BiDiMode := bdRightToLeft`
+> (`TTyPageControl` / `TTyTabSet` 都会镜像),但 Ribbon 自己的装饰件还没有:File 标签绘制并命中在
+> `x ∈ [0, FileTabWidthPx)`,折叠箭头在 `CollapseRectPx`,Alt KeyTip 徽标居中在标签矩形上,
+> `MouseDown` 里还有两处 `X >= HeaderLeftInset` 的手势判定。让底下的标签带单独翻过去,正是本库反复
+> 栽过的"画在一边、点在另一边"。所以 Ribbon 用一行 `HeaderRightToLeft := False` 明确弃权;真要做
+> 右到左 Ribbon,得在删掉这一行的**同一次提交**里把上面那些装饰件与命中一起挪。
+> `tests/test.rtl.pas` 的 `TRtlExclusionTest` 钉着这条弃权。
+
 ## TTyRibbonPage
 
 一个标签页,托管 `TTyRibbonGroup`(分组通过 `Align=alLeft` 自左向右排布)。`Caption` 是**标签文字**

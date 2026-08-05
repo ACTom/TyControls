@@ -99,7 +99,10 @@ PageCtrl.ActivePage := Pg;           // 切到该页
 | `ScrollTabs(Delta)` | 按 **Delta 个页签**滚动标签条——LCL 的单位（`comctrls.pp:711/862`），不是我们的。`SetHeaderScroll` 收的是**设备像素**，所以把移植来的 `ScrollTabs(2)` 机械改名过去会滚动两个像素，看上去像什么都没发生。实现落在页签边界上而不是按平均页签宽度换算，因为各页签的标题宽度通常差别很大 |
 - **可关闭页签**：`TabsClosable = True` 时每页签头右侧有关闭 ×，点击触发 `OnTabClose`（可否决）。
 - **活动页交叉淡入**：切页时活动页签头背景从非活动样式淡入活动样式（仅页签头颜色淡入，页内容瞬时切换）。
-- **键盘**：`←/→` 上一/下一页，`Home/End` 首/末页，`Ctrl+Tab` / `Ctrl+PageUp/PageDown` 切页。
+- **键盘**：`←/→` 上一/下一页（右到左镜像时两键对调，见下），`Home/End` 首/末页，`Ctrl+Tab` / `Ctrl+PageUp/PageDown` 切页。
+- **右到左镜像**：`BiDiMode := bdRightToLeft` 时整条标签带镜像——第 0 页的页签在**最右**，往左排；关闭 × 挪到每个页签头的**左**边；两个溢出箭头对调两端并且各自转向（"上一批"那个永远在阅读起点，也就是镜像时的右端）；向后滚动时标签带往**右**滑；`←/→` 跟着眼睛走（左键=下一页）。`Home/End` 与 `Ctrl+Tab` 是**逻辑**首尾/循环，不翻。
+  **页面体不镜像**：`TabPosition` 目前没有左/右边标签这一形态，所以页面体的左右边界没有可镜像的东西，`AdjustClientRect` 照旧只扣顶部条带。**页内子控件也不镜像**（`Align`/`Anchors` 排布跟随 LCL，见 [panel.md](panel.md)）；但 `BiDiMode` 会按 LCL 的 `ParentBiDiMode` 传播给页里的控件，所以页上的复选框、标签等各自会翻自己的指示器与文字。
+  一个**名字会骗人的成员**：`TyTabScrollLeftRect` 是"上一批"箭头，镜像时它在**右**端；`TyTabScrollRightRect` 在左端。改名是破坏性变更，收益不抵成本，所以名字保留、在这里写清楚。取指针坐标请用 `TabRect(i)`（绘制时的矩形），不要用 `TyTabHeaderRect(i)`——后者是**阅读序内容空间**的矩形，镜像时它不是屏幕坐标。
 - **`TabHeight` 的三种取值（与 LCL 的差异，刻意保留）**：
   | 取值 | 含义 |
   |------|------|

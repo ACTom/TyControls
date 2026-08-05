@@ -94,6 +94,16 @@ type
     procedure DoReorderTabs(AFromIndex, AToIndex: Integer); override;
     procedure RemoveTabData(AIndex: Integer); override;
     function  HeaderLeftInset: Integer; override;
+    { The ribbon does NOT mirror, and declines here rather than half-mirroring. The base's
+      header band is ready to (see TTyCustomTabStrip.HeaderRightToLeft), but the ribbon's own
+      chrome is not: the File tab is painted and hit-tested at x in [0, FileTabWidthPx), the
+      collapse chevron sits at CollapseRectPx, the Alt KeyTip chips are centred on the tab
+      rects, and MouseDown gates two gestures on `X >= HeaderLeftInset`. Mirroring the strip
+      underneath all of that is exactly the "drawn on one side, answers on the other" defect
+      the mirroring programme exists to avoid, so whoever wants a right-to-left ribbon has to
+      move that chrome and those hit tests in the same commit as deleting this override.
+      tests/test.rtl.pas TRtlExclusionTest pins it. }
+    function  HeaderRightToLeft: Boolean; override;
     procedure AdjustClientRect(var ARect: TRect); override;
     procedure Paint; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -592,6 +602,11 @@ end;
 function TTyRibbon.HeaderLeftInset: Integer;
 begin
   if FShowFileTab then Result := FileTabWidthPx else Result := 0;
+end;
+
+function TTyRibbon.HeaderRightToLeft: Boolean;
+begin
+  Result := False;   // see the declaration: the ribbon's own chrome is not mirrored yet
 end;
 
 procedure TTyRibbon.AdjustClientRect(var ARect: TRect);

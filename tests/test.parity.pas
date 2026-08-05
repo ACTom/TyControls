@@ -1070,6 +1070,14 @@ end;
   Grid.pas:4969, with ColumnAtX:5007 written as its inverse), so what blocks it is the scroll
   origin and the frozen bands, not a duplicated tiling.
 
+  (7) ...and for the TAB family: TTyCustomTabStrip and everything built on its header engine
+      (TTyPageControl, TTyTabSet). Its four x-axis consumers -- the paint, three separate
+      click scans, the drag-reorder midpoint and the overflow scroll offset -- were unified
+      into one screen transform and its exact inverse before anything was mirrored, so a drag
+      cannot drop a tab in a slot the paint disagrees with. TTyRibbon shares that engine and
+      declines to mirror, because its File tab, collapse chevron and KeyTip chips would not
+      have followed.
+
   The way OUT is unchanged and is NOT to relax this assertion: mirror the remaining families
   (plans/2026-08-04-rtl-mirroring-scope.md phases 3 onwards), then delete this test. Until
   then it is the thing stopping a well-meaning "just republish the rest" commit.

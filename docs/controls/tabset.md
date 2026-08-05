@@ -222,3 +222,4 @@ end;
 - **typeKey 为 `TyTabSet`：** 主题化时写 `TyTabSet` / `TyTab` / `TyTabClose` 选择器。它此前借的 `TyTabControl` 不对应库里任何控件；两个键现在共写一条内建规则，但**要单独调本控件请写 `TyTabSet`**。另注意本控件只吃外框的 `border-color` / `border-width`（见 §5）。
 - **DFM 序列化：** `TabIndex` 声明 `default -1`、`TabsClosable` 声明 `default False`，取默认值时不写入 `.lfm`/`.dfm`。`TabHeight` 走的是 `stored`（宿主钉过才写），所以显式设的 `0`（不要条带）也会被写进去并原样还原。
 - **Alt+助记符：** 页签标题支持 `&` 助记符——`DialogChar` 在 `Enabled` 时扫描标题的加速键并 `SetTabIndex` 切换到匹配页签。
+- **右到左镜像：** `BiDiMode := bdRightToLeft` 时整条标签带镜像，行为与 `TTyPageControl` 完全一致（同一个 `TTyCustomTabStrip` 引擎）：第 0 个页签在**最右**、往左排，关闭 × 在每个页签头的**左**边，两个溢出箭头对调两端并各自转向，向后滚动时标签带往**右**滑，`←/→` 跟着眼睛走而 `Home/End`、`Ctrl+Tab` 不翻。取指针坐标用 `TabRect(i)`；`TyTabHeaderRect(i)` 是阅读序的内容空间矩形，镜像时不是屏幕坐标。细节与那个"名字会骗人"的 `TyTabScrollLeftRect` 见 [pagecontrol.md](pagecontrol.md) §6。

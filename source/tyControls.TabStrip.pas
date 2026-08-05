@@ -2,7 +2,7 @@ unit tyControls.TabStrip;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType, LMessages, ExtCtrls,
+  Classes, SysUtils, Types, Math, Controls, Graphics, LCLType, LMessages, ExtCtrls,
   tyControls.Types, tyControls.Controller, tyControls.Painter, tyControls.Base,
   tyControls.Animation, tyControls.Accel;
 
@@ -104,6 +104,15 @@ type
     FShowScrollAffordance: Boolean;
     FScrollLeftRect:  TRect;
     FScrollRightRect: TRect;
+    { Device-px width of ONE overflow arrow band, 0 while the strip fits. Recomputed by
+      RebuildLayout alongside the two arrow rects.
+
+      HeaderShiftPx used to read this quantity off FScrollLeftRect.Right, which is only the
+      same number while the back arrow is the one on the left. It is a CONTENT-SPACE
+      reservation -- "how much of the band is not available to tab headers at each end" --
+      and reading it off a rect whose side is a rendering decision is how the scroll origin
+      and the arrow positions come apart. }
+    FArrowBandPx: Integer;
     { Tab data is supplied by the subclass: GetTabCount/GetTabCaption are the
       only window the header engine has onto the tab model. The virtual hooks
       below let the subclass react to header gestures (select/reorder/close) and
@@ -123,6 +132,16 @@ type
       right by this much so a subclass can draw its own leftmost element there (e.g. a
       ribbon "File" tab). Default 0. }
     function HeaderLeftInset: Integer; virtual;
+    { Which way this header band READS -- the ONE answer every x-axis consumer in this unit
+      takes. RebuildLayout's arrow ends, ToScreenRect/ToReadingX, the RenderTo clip and
+      caption slot, and the Left/Right arrow keys all call this and nothing else, so a
+      subclass whose OWN chrome is still left-to-right can decline in one place instead of
+      shipping a strip that is mirrored in three of its four consumers. TTyRibbon does
+      exactly that, and tests/test.rtl.pas pins the decline.
+
+      Default: TControl.IsRightToLeft (controls.pp:1833, = BiDiMode <> bdLeftToRight), which
+      is public and works from code even though nothing publishes BiDiMode yet. }
+    function HeaderRightToLeft: Boolean; virtual;
     { Does anything live BELOW the header band? A pager (TTyPageControl) hosts its
       pages there, so the area is framed as the page container. A caption-only strip
       (TTyTabSet) hosts nothing: framing it would draw an empty box under the tabs.
@@ -179,6 +198,28 @@ type
     function TyTabScrollRightRect: TRect;
     function HeaderRectShifted(AIndex: Integer): TRect;
     function HeaderShiftPx: Integer;
+
+    { --- The ONE content-space <-> screen transform, and its exact inverse ------------
+
+      A tab strip has FOUR consumers of the same x axis -- the paint, the click hit test,
+      the drag-reorder midpoint rule and the overflow scroll offset -- and every one of them
+      used to apply `OffsetRect(R, HeaderShiftPx, 0)` for itself, six copies of the same
+      line. That was survivable while the transform was a translation, because a translation
+      written six times is still the same translation. It stops being survivable the moment
+      the transform acquires a direction: a drag whose midpoint rule did not follow the paint
+      drops tabs on the wrong side of their neighbour, and no static render test can see it.
+
+      So both directions are named here and nothing in this unit converts by hand.
+
+      ToScreenRect: CONTENT space (what RebuildLayout builds -- reading order, tab 0 first,
+        origin at the strip's start) -> control-local device px as drawn.
+      ToReadingX:   the same reflection applied to a single x, i.e. ToScreenRect run
+        backwards. A reflection is its own inverse, so `X in ToScreenRect(R)` and
+        `ToReadingX(X) in shifted R` are the SAME predicate -- which is what lets the drag
+        resolver keep one left-to-right comparison instead of growing a mirrored copy of it
+        one character away from the original. }
+    function ToScreenRect(const AContentRect: TRect): TRect;
+    function ToReadingX(AX: Integer): Integer;
     procedure SetHeaderScroll(AValue: Integer);
     procedure ScrollTabIntoView(AIndex: Integer);
 
@@ -360,6 +401,11 @@ begin
   Result := 0;
 end;
 
+function TTyCustomTabStrip.HeaderRightToLeft: Boolean;
+begin
+  Result := IsRightToLeft;
+end;
+
 function TTyCustomTabStrip.HasPageBody: Boolean;
 begin
   Result := True;
@@ -524,11 +570,32 @@ begin
   if FShowScrollAffordance then
   begin
     ArrowW := MulDiv(ActiveController.Metric('--tab-arrow-band', TyTabArrowBand), APPI, 96);
-    FScrollLeftRect  := Rect(0, 0, ArrowW, TabH);
-    FScrollRightRect := Rect(VisibleWidth - ArrowW, 0, VisibleWidth, TabH);
+    FArrowBandPx     := ArrowW;
+    { The two arrows change ENDS when the strip reads right-to-left, and their names do not:
+      FScrollLeftRect is the BACK arrow (a click on it decreases the scroll) and belongs at
+      the reading START, which is the right edge here. Renaming the fields would be a
+      breaking change for no behavioural gain, so the plan rules it out (§6.3.6) and the
+      documentation carries the warning instead -- which is also why every test for this
+      asserts the SCROLL DIRECTION a click produces and not the field name.
+
+      Written as two explicit branches rather than a BidiFlipRect over the pair, because
+      these two rects are the only geometry in the unit that is NOT in content space: they
+      are already physical, so putting them through the content transform would mirror them
+      twice. }
+    if HeaderRightToLeft then
+    begin
+      FScrollLeftRect  := Rect(VisibleWidth - ArrowW, 0, VisibleWidth, TabH);
+      FScrollRightRect := Rect(0, 0, ArrowW, TabH);
+    end
+    else
+    begin
+      FScrollLeftRect  := Rect(0, 0, ArrowW, TabH);
+      FScrollRightRect := Rect(VisibleWidth - ArrowW, 0, VisibleWidth, TabH);
+    end;
   end
   else
   begin
+    FArrowBandPx     := 0;
     FScrollLeftRect  := Rect(0, 0, 0, 0);
     FScrollRightRect := Rect(0, 0, 0, 0);
     AffordanceW := 0; // no band reserved when content fits
@@ -606,27 +673,58 @@ begin
   Result := FScrollRightRect;
 end;
 
-{ Header rect translated left by the current scroll offset. }
+{ Header rect as drawn: the cached content rect put through the one transform. }
 function TTyCustomTabStrip.HeaderRectShifted(AIndex: Integer): TRect;
 begin
   RebuildLayout(Font.PixelsPerInch);
   if (AIndex < 0) or (AIndex >= Length(FHeaderRects)) then
     Exit(Rect(0, 0, 0, 0));
-  Result := FHeaderRects[AIndex];
-  OffsetRect(Result, HeaderShiftPx, 0);
+  Result := ToScreenRect(FHeaderRects[AIndex]);
 end;
 
-{ Content-space → screen translation. FScrollLeftRect.Right is the left-arrow
-  width when the overflow arrows show (0 otherwise, so this is a no-op when the
-  strip fits). Insetting by it keeps tab headers inside the [leftArrow, rightArrow]
-  band the RenderTo clip reserves, so the first/last tab is never drawn under an
-  arrow. Callers must have run RebuildLayout so FScrollLeftRect/FHeaderScroll are
-  current. }
+{ Content-space → screen TRANSLATION (the transform's first half; ToScreenRect adds the
+  second). FArrowBandPx is one arrow's width when the overflow arrows show, 0 otherwise, so
+  this is a plain scroll offset when the strip fits. Insetting by it keeps tab headers inside
+  the band between the two arrows that the RenderTo clip reserves, so the first/last tab is
+  never drawn under an arrow. Callers must have run RebuildLayout so FArrowBandPx and
+  FHeaderScroll are current. }
 function TTyCustomTabStrip.HeaderShiftPx: Integer;
 begin
-  // Reserve the subclass's left inset (e.g. a ribbon File tab) plus the overflow
-  // left-arrow width, minus the current scroll offset.
-  Result := FScrollLeftRect.Right - FHeaderScroll + HeaderLeftInset;
+  // Reserve the subclass's leading inset (e.g. a ribbon File tab) plus the overflow
+  // arrow band, minus the current scroll offset.
+  Result := FArrowBandPx - FHeaderScroll + HeaderLeftInset;
+end;
+
+{ Shift, then -- when the strip reads right-to-left -- reflect about the control's width.
+
+  A REFLECTION of the finished layout, not a reversed accumulation loop: a reflection of a
+  gapless tiling is gapless by construction, so the mirrored strip cannot grow a 1px seam of
+  page body between two headers, and every derived rect (the close slot, which lives INSIDE
+  a header) lands in the right place without a second formula. LCL's BidiFlipRect
+  (controls.pp:2966) is that five-line arithmetic, used here rather than rewritten so nobody
+  has to check a `-1` twice.
+
+  The reflection uses the control's own Width -- the same quantity RebuildLayout measures the
+  overflow against and pins the arrow ends to -- so the band between the two arrows maps onto
+  itself and the scroll arithmetic, which is all in content space, needs no mirror of its own. }
+function TTyCustomTabStrip.ToScreenRect(const AContentRect: TRect): TRect;
+begin
+  Result := AContentRect;
+  OffsetRect(Result, HeaderShiftPx, 0);
+  if HeaderRightToLeft then
+    Result := BidiFlipRect(Result, Rect(0, 0, Width, 0), True);
+end;
+
+{ The same reflection on a 1px-wide rect, which is what makes this the EXACT inverse of
+  ToScreenRect rather than a hand-written `Width - 1 - X` that could drift from it by one
+  pixel. `X in ToScreenRect(R)` and `ToReadingX(X) in shifted R` are then the same predicate
+  for every integer X, which is the property TyDropIndexAt relies on to keep a single
+  left-to-right comparison. }
+function TTyCustomTabStrip.ToReadingX(AX: Integer): Integer;
+begin
+  Result := AX;
+  if HeaderRightToLeft then
+    Result := BidiFlipRect(Rect(AX, 0, AX + 1, 0), Rect(0, 0, Width, 0), True).Left;
 end;
 
 { Clamp the requested scroll into [0, TyMaxHeaderScroll] and repaint. }
@@ -722,8 +820,7 @@ begin
   end;
   for I := 0 to GetTabCount - 1 do
   begin
-    HR := FHeaderRects[I];
-    OffsetRect(HR, HeaderShiftPx, 0);
+    HR := ToScreenRect(FHeaderRects[I]);
     if (X >= HR.Left) and (X < HR.Right) then Exit(I);
   end;
 end;
@@ -761,24 +858,32 @@ begin
 end;
 
 { Resolve which collection index a drag at device-X should drop into, scanning
-  the shifted header midpoints left-to-right. Returns the first index whose
-  shifted midpoint lies strictly to the right of X; if X is past every midpoint
-  it defaults to the last index. Result is clamped to [0, Count-1]. Pure: it
-  rebuilds the (cached) layout for measurement but mutates no selection state. }
+  the shifted header midpoints in READING order. Returns the first index whose
+  shifted midpoint lies strictly past X; if X is past every midpoint it defaults
+  to the last index. Result is clamped to [0, Count-1]. Pure: it rebuilds the
+  (cached) layout for measurement but mutates no selection state.
+
+  The pointer is reflected ONCE, at the door, and the scan below is then the plain
+  left-to-right one. The alternative -- keeping X physical and writing a second,
+  mirrored `X > Mid` branch beside the first -- puts the direction rule in two places one
+  character apart, which is the shape §5 of the mirroring plan lists as the hardest kind
+  of half-mirroring to spot. ToReadingX is exactly ToScreenRect run backwards, so the slot
+  a drag drops into is by construction the slot the paint drew and the hit test names. }
 function TTyCustomTabStrip.TyDropIndexAt(X, APPI: Integer): Integer;
 var
-  I, Mid: Integer;
+  I, Mid, RX: Integer;
   HR: TRect;
 begin
   if GetTabCount = 0 then Exit(0);
   RebuildLayout(APPI);
+  RX := ToReadingX(X);
   Result := GetTabCount - 1; // default: past every midpoint -> last
   for I := 0 to GetTabCount - 1 do
   begin
     HR := FHeaderRects[I];
-    OffsetRect(HR, HeaderShiftPx, 0); // shifted midpoint (incl. left-arrow inset)
+    OffsetRect(HR, HeaderShiftPx, 0); // shifted midpoint (incl. arrow-band inset)
     Mid := (HR.Left + HR.Right) div 2;
-    if X < Mid then
+    if RX < Mid then
     begin
       Result := I;
       Break;
@@ -918,13 +1023,20 @@ var
   FadeEased: Single;
   disp: string;
   mp: Integer;
+  Rtl: Boolean;
 begin
   P := TTyPainter.Create;
   try
     R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
     W := R.Right;
     H := R.Bottom;
-    P.BeginPaint(ACanvas, ARect, APPI);
+    Rtl := HeaderRightToLeft;
+    { Armed because this control's GEOMETRY mirrors -- that is the rule BeginPaint's comment
+      lays down for opting in. Every string this frame draws is taCenter, which
+      BidiFlipAlignment leaves alone, so arming changes no pixel today; it is here so that a
+      caption alignment which ever stops being centred cannot end up hugging the wrong side
+      of a header that already moved. }
+    P.BeginPaint(ACanvas, ARect, APPI, Rtl);
 
     BoxStyle := CurrentStyle;
     TabH := TabHPx(APPI);
@@ -983,7 +1095,13 @@ begin
       control. When it fits, clip to the full header band (offset is 0 anyway). }
     SavedClip := P.Bitmap.ClipRect;
     if FShowScrollAffordance then
-      BandRect := Rect(FScrollLeftRect.Right, 0, FScrollRightRect.Left, TabH)
+      { The band BETWEEN the arrows, whichever end each of them is on. The old expression
+        named FScrollLeftRect.Right and FScrollRightRect.Left directly, which is the same
+        band only while the back arrow is the left one -- mirrored, it names an INVERTED
+        (empty) clip and every header disappears. Min/Max is the same two numbers in
+        left-to-right, so this is byte-identical there. }
+      BandRect := Rect(Min(FScrollLeftRect.Right, FScrollRightRect.Right), 0,
+                       Max(FScrollLeftRect.Left,  FScrollRightRect.Left),  TabH)
     else
       BandRect := Rect(0, 0, W, TabH);
     P.Bitmap.ClipRect := BandRect;
@@ -993,7 +1111,7 @@ begin
       HdrRect   := HeaderRectShifted(I);
       CloseRect := FCloseRects[I];
       if GetTabClosableAt(I) then
-        OffsetRect(CloseRect, HeaderShiftPx, 0);
+        CloseRect := ToScreenRect(CloseRect);
 
       { Determine state }
       TabStates := [];
@@ -1030,10 +1148,18 @@ begin
       if tpBackground in TabStyle.Present then
         P.FillBackground(HdrRect, TabStyle.Background, TyEffectiveCorners(TabStyle));
 
-      { Draw caption centered in header (clipped to left of close glyph) }
+      { Draw caption centered in header, clipped off the close glyph. The close slot is at
+        the header's TRAILING edge -- the right one normally, the left one when the strip
+        reads right-to-left (the reflection put it there) -- so it is the opposite edge of
+        the caption box that has to give way. }
       TextRect := HdrRect;
       if GetTabClosableAt(I) then
-        TextRect.Right := CloseRect.Left;
+      begin
+        if Rtl then
+          TextRect.Left := CloseRect.Right
+        else
+          TextRect.Right := CloseRect.Left;
+      end;
       TyParseMnemonic(GetTabCaption(I), disp, mp);
       P.DrawText(TextRect,
         disp,
@@ -1071,8 +1197,20 @@ begin
         P.FillBackground(FScrollLeftRect,  ArrowStyle.Background, 0);
         P.FillBackground(FScrollRightRect, ArrowStyle.Background, 0);
       end;
-      P.DrawGlyph(FScrollLeftRect,  tgArrowLeft,  ArrowStyle.TextColor, 2);
-      P.DrawGlyph(FScrollRightRect, tgArrowRight, ArrowStyle.TextColor, 2);
+      { The chevrons point the way the strip MOVES, so they turn round with the ends: on a
+        mirrored strip the back arrow is at the right and points right. Two arrows both
+        pointing the old way over swapped rects would be the "size grip drawn on one side,
+        grabbed on the other" defect (§5.5) in miniature. }
+      if Rtl then
+      begin
+        P.DrawGlyph(FScrollLeftRect,  tgArrowRight, ArrowStyle.TextColor, 2);
+        P.DrawGlyph(FScrollRightRect, tgArrowLeft,  ArrowStyle.TextColor, 2);
+      end
+      else
+      begin
+        P.DrawGlyph(FScrollLeftRect,  tgArrowLeft,  ArrowStyle.TextColor, 2);
+        P.DrawGlyph(FScrollRightRect, tgArrowRight, ArrowStyle.TextColor, 2);
+      end;
     end;
 
     P.EndPaint;
@@ -1127,8 +1265,7 @@ begin
         HdrRect := HeaderRectShifted(I);
         if (X >= HdrRect.Left) and (X < HdrRect.Right) then
         begin
-          CloseRect := FCloseRects[I];
-          OffsetRect(CloseRect, HeaderShiftPx, 0);
+          CloseRect := ToScreenRect(FCloseRects[I]);
           if GetTabClosableAt(I) and
              (X >= CloseRect.Left) and (X < CloseRect.Right) and
              (Y >= CloseRect.Top) and (Y < CloseRect.Bottom) then
@@ -1215,8 +1352,7 @@ begin
             so the highlight and the actual close target stay in lockstep. }
           if GetTabClosableAt(I) then
           begin
-            CloseRect := FCloseRects[I];
-            OffsetRect(CloseRect, HeaderShiftPx, 0);
+            CloseRect := ToScreenRect(FCloseRects[I]);
             if (X >= CloseRect.Left) and (X < CloseRect.Right) and
                (Y >= CloseRect.Top)  and (Y < CloseRect.Bottom) then
               NewHoverClose := I;
@@ -1311,11 +1447,12 @@ end;
 { Keyboard: standard tab navigation.
   Ctrl+Tab / Ctrl+Shift+Tab cycle the selection WITH wrap; Ctrl+PageDown /
   Ctrl+PageUp step next/prev clamped at the ends; Home/End jump to first/last;
-  VK_LEFT/VK_RIGHT step prev/next clamped (legacy). Every handled key is
+  the arrow key pointing at the next tab steps next, the other steps prev, both
+  clamped (which arrow is which follows HeaderRightToLeft). Every handled key is
   consumed (Key := 0). TabIndex := routes through SetTabIndex, which clamps,
   shows the page, scrolls it into view, and fires OnChange. }
 procedure TTyCustomTabStrip.KeyDown(var Key: Word; Shift: TShiftState);
-var NewIndex, Cnt: Integer;
+var NewIndex, Cnt, Step: Integer;
 begin
   if not Enabled then Exit;
   inherited KeyDown(Key, Shift);
@@ -1338,18 +1475,30 @@ begin
   begin
     if FTabIndex > 0 then TabIndex := FTabIndex - 1; Key := 0; Exit;
   end;
+  { Step := +1 for the key that points at the NEXT tab. On a mirrored strip the next tab is
+    the one to the LEFT, so the two arrows trade jobs -- this is LAYOUT direction, which the
+    plan separates from text direction precisely here (§6.3.4): a text caret's Left/Right
+    belong to the bidi layer and must not be flipped, a tab strip's follow the eye. Home/End
+    are logical ends and Ctrl+Tab a logical cycle, so neither turns (§6.3.3); they are handled
+    above and below this and deliberately not touched.
+
+    One `Step` rather than two mirrored branches: the branches differ only by a sign, which
+    §5.3 lists as the flip reviewers cannot see. }
+  if HeaderRightToLeft then Step := -1 else Step := 1;
   case Key of
     VK_HOME:  begin TabIndex := 0; Key := 0; end;
     VK_END:   begin TabIndex := Cnt - 1; Key := 0; end;
     VK_RIGHT:
       begin
-        NewIndex := FTabIndex + 1;
+        NewIndex := FTabIndex + Step;
         if NewIndex > Cnt - 1 then NewIndex := Cnt - 1;
+        if NewIndex < 0 then NewIndex := 0;
         TabIndex := NewIndex; Key := 0;
       end;
     VK_LEFT:
       begin
-        NewIndex := FTabIndex - 1;
+        NewIndex := FTabIndex - Step;
+        if NewIndex > Cnt - 1 then NewIndex := Cnt - 1;
         if NewIndex < 0 then NewIndex := 0;
         TabIndex := NewIndex; Key := 0;
       end;

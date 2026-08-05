@@ -81,7 +81,7 @@ type
   protected
     procedure TearDown; override;
   published
-    procedure TestHeaderRectsOrderedLeftToRight;
+    procedure TestHeaderRectsOrderedInReadingOrder;
     procedure TestClickSelectsTab;
     procedure TestScrollOverflowAndIntoView;
     procedure TestDropIndexAtMidpoints;
@@ -290,7 +290,12 @@ begin
   FForm := nil;
 end;
 
-procedure TTabStripTest.TestHeaderRectsOrderedLeftToRight;
+{ TyTabHeaderRect answers in CONTENT space, which is the reading-order accumulation: tab 0
+  first, whichever way the strip reads. The old name said "left to right", which is only the
+  same statement on an unmirrored strip -- and this fixture is one, so the assertions below
+  are unchanged. Mirroring lives in the content -> screen transform; TabRect is the rect as
+  drawn, and tests/test.rtl.pas covers that side. }
+procedure TTabStripTest.TestHeaderRectsOrderedInReadingOrder;
 var R0, R1, R2: TRect;
 begin
   Build3;

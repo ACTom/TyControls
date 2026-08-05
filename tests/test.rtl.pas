@@ -25,6 +25,19 @@ unit test.rtl;
   paint into are excluded instead, and TRtlExclusionTest pins all three so a later mirroring
   commit has to face the hit test rather than walk past it.
 
+  Phase 2 is TTyHeaderControl and phase 4 the tab family; both are here too. From phase 2
+  onwards every control mirrors its HIT TEST as well as its paint, which is why each of them
+  answers out of the same function that places the thing -- and why these tests assert both
+  halves rather than pixels alone.
+
+  Phase 4 adds the TAB family (§3.11), and it is the first batch here that does NOT have that
+  safety property: a tab strip has four consumers of one x axis -- the paint, the click hit
+  test, the drag-reorder midpoint rule, and the overflow scroll offset. TRtlTabStripTest is
+  therefore built mostly out of INVERSE and SYMMETRY assertions rather than "is it on the
+  right", because only those catch a strip that mirrored three of the four. Two of them sweep
+  every device x across the band and compare against the unmirrored strip's answer at the
+  reflected x; one renders and asks the hit test to name the tab the paint just filled.
+
   Everything is headless: pure geometry functions where there are any, and RenderTo into an
   off-screen bitmap where there are not. }
 {$mode objfpc}{$H+}
@@ -40,7 +53,13 @@ uses
   tyControls.ScrollBar, tyControls.ScrollBox, tyControls.ScrollPanel, tyControls.ScrollContent,
   tyControls.ListBox, tyControls.CheckListBox, tyControls.ColorListBox,
   tyControls.ValueListEditor,
-  tyControls.HeaderControl;
+  tyControls.HeaderControl,
+  tyControls.TabStrip, tyControls.TabSheet, tyControls.PageControl, tyControls.TabSet,
+  tyControls.Ribbon,
+  { The strip harness -- caption model plus the protected mouse/key seams -- already exists;
+    building a second one here would let the two drift. Same precedent as test.edit.bidi
+    reaching into test.edit. }
+  test.tabstrip;
 
 type
   { RenderTo is protected on every one of these; the tests must call it directly, because
@@ -118,6 +137,13 @@ type
   public
     function Mirrors: Boolean;
   end;
+
+  { TStripAccess (test.tabstrip) supplies the caption model and the protected mouse/key
+    seams. Only the paint seam is missing, and this batch needs it: "which header did the
+    ink land in" is the only question that can catch a hit test agreeing with itself and
+    with nothing else. }
+  TRtlStripAccess    = class(TStripAccess) public procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer); end;
+  TRtlSheetAccess    = class(TTyTabSheet)  public procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer); end;
 
   { The painter lever itself: phase 0. One flag, set at BeginPaint, resolving every
     alignment the caller passes from a reading-order one to a physical one. }
@@ -225,6 +251,48 @@ type
     procedure MirroredDividerIsDrawnOnTheEdgeTheResizeGripGrabs;
   end;
 
+  { Phase 4: the tab family (§3.11). TTyPageControl, TTyTabSet and the test strip all share
+    TTyCustomTabStrip's header engine, which is where every one of these assertions lands. }
+  TRtlTabStripTest = class(TTestCase)
+  private
+    FForm:  TForm;
+    FCtl:   TTyStyleController;
+    FStrip: TRtlStripAccess;
+    procedure Build(ARtl: Boolean; ACount: Integer = 3; AWidth: Integer = 300;
+      AClosable: Boolean = False; const ACss: string = '');
+    function  Shot: TBGRABitmap;
+    function  ScreenMid(AIndex: Integer): Integer;
+  protected
+    procedure TearDown; override;
+  published
+    { layout }
+    procedure TabsFillFromTheRightEdgeWhenMirrored;
+    procedure MirroredTabsTileWithNoSeamAndKeepTheirWidths;
+    procedure ContentSpaceStaysInReadingOrderWhenMirrored;
+    { paint <-> hit test }
+    procedure TheHitTestNamesTheTabThePaintFilled;
+    procedure AnOverflowingMirroredStripStillPaintsInsideTheArrowBand;
+    procedure HitTestIsTheExactPixelMirrorOfTheUnmirroredStrip;
+    { drag-reorder midpoint }
+    procedure DropIndexIsTheExactPixelMirrorOfTheUnmirroredStrip;
+    procedure DraggingTowardTheReadingStartMovesTheTabEarlier;
+    { close slot }
+    procedure CloseSlotSitsOnTheTrailingSideAndItsHitTestFollows;
+    procedure TheCaptionYieldsTheEdgeTheCloseSlotActuallyTook;
+    { overflow scroll }
+    procedure OverflowArrowsSwapEndsAndKeepTheirScrollDirections;
+    procedure OverflowChevronsKeepPointingOffTheEndTheySitOn;
+    procedure ScrollingForwardSlidesTheMirroredStripTowardTheRight;
+    { keyboard }
+    procedure ArrowKeysFollowTheEyeAndNotTheXAxis;
+    procedure HomeEndAndCtrlTabStayLogicalUnderMirroring;
+    { what does NOT move }
+    procedure ThePageBodyHasNoHorizontalEdgeToMirror;
+    procedure MirroredPageControlMovesItsTabsAndNotItsPages;
+    procedure TabSheetIsPixelIdenticalWhicheverWayItReads;
+    procedure TabSetInheritsTheMirroredStrip;
+  end;
+
   { The two controls in these same source files that are deliberately NOT mirrored, because
     they read x back out of a click. Pinned so that mirroring them later is a decision
     somebody makes on purpose, with the hit test in the same commit. }
@@ -233,6 +301,7 @@ type
     procedure DropDownArrowStaysWhereItsHitTestSaysItIs;
     procedure ButtonGroupSegmentsAreNotMirroredWhileSegmentAtReadsRawX;
     procedure ValueListEditorIsNotMirroredWhileItsSplitterIsHitTestedTwice;
+    procedure RibbonDeclinesToMirrorTheHeaderBandItInherits;
   end;
 
   { --------------------------------------------------------------- PHASE 3 -- }
@@ -451,6 +520,8 @@ function TValueListAccess.Mirrors: Boolean;
 begin
   Result := RtlRowLayout;
 end;
+procedure TRtlStripAccess.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);     begin RenderTo(ACanvas, ARect, APPI); end;
+procedure TRtlSheetAccess.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);     begin RenderTo(ACanvas, ARect, APPI); end;
 
 { Press an arrow key the way a user does: on the FOCUSED CHILD. The group's navigation lives
   behind the OnKeyDown it wires onto every hosted radio (tyControls.RadioGroup.pas:311), so
@@ -545,6 +616,32 @@ begin
     end;
     if (mine > 150) and (o1 < 110) and (o2 < 110) then Exit(True);
   end;
+end;
+
+{ How many channel-dominant pixels fall in the half-open x range [AX0, AX1). The same
+  dominance rule as ChannelSpanX, counted rather than bounded, because "is any of this
+  control's ink in THIS slot" is a different question from "how far does its ink reach" --
+  and a composite whose pieces share a colour (a tab caption and its close glyph both paint
+  in TyTab's colour) can only be taken apart by slot. }
+function ChannelInkCount(A: TBGRABitmap; ACh: TChannel; AX0, AX1: Integer): Integer;
+var
+  x, y, mine, o1, o2: Integer;
+  p: TBGRAPixel;
+begin
+  Result := 0;
+  if AX0 < 0 then AX0 := 0;
+  if AX1 > A.Width then AX1 := A.Width;
+  for y := 0 to A.Height - 1 do
+    for x := AX0 to AX1 - 1 do
+    begin
+      p := A.GetPixel(x, y);
+      case ACh of
+        chRed:   begin mine := p.red;   o1 := p.green; o2 := p.blue;  end;
+        chGreen: begin mine := p.green; o1 := p.red;   o2 := p.blue;  end;
+      else       begin mine := p.blue;  o1 := p.red;   o2 := p.green; end;
+      end;
+      if (mine > 150) and (o1 < 110) and (o2 < 110) then Inc(Result);
+    end;
 end;
 
 { An AW x AH host bitmap for RenderTo. Its colour is not asserted on anywhere (see
@@ -2103,6 +2200,609 @@ begin
   end;
 end;
 
+{ ----------------------------------------------------------- TRtlTabStripTest }
+
+const
+  { One loud colour, on the ACTIVE header only, so a render probe can answer "which tab did
+    the paint fill" as a colour search rather than a diff. Everything else in frame is white
+    (the box and the inactive headers), near-black (the captions) or the LCL form colour the
+    strip lays down first -- none of which is red-dominant, which is what ChannelSpanX tests. }
+  cTabCss =
+    'TyTabControl { background: #FFFFFF; border-width: 0px; border-radius: 0px; }' +
+    'TyPageControl { background: #FFFFFF; border-width: 0px; border-radius: 0px; }' +
+    'TyTabSet     { background: #FFFFFF; border-width: 0px; border-radius: 0px; }' +
+    'TyTab        { background: #FFFFFF; color: #101010; font-size: 12px; }' +
+    'TyTab:active { background: #FF0000; color: #101010; }';
+
+  { The same strip with the CAPTION as the loud colour instead of the active background, for
+    the one test that asks where the text landed rather than which header was filled. }
+  cTabInkCss =
+    'TyTabControl { background: #FFFFFF; border-width: 0px; border-radius: 0px; }' +
+    'TyTab        { background: #FFFFFF; color: #0000FF; font-size: 12px; }' +
+    'TyTab:active { background: #FFFFFF; color: #0000FF; }';
+
+procedure TRtlTabStripTest.Build(ARtl: Boolean; ACount: Integer; AWidth: Integer;
+  AClosable: Boolean; const ACss: string);
+var
+  i: Integer;
+begin
+  FForm := TForm.CreateNew(nil);
+  FForm.SetBounds(0, 0, 640, 400);
+  FCtl := TTyStyleController.Create(FForm);
+  if ACss <> '' then FCtl.LoadThemeCss(ACss) else FCtl.LoadThemeCss(cTabCss);
+  FStrip := TRtlStripAccess.Create(FForm);
+  FStrip.Parent := FForm;
+  FStrip.Controller := FCtl;
+  FStrip.Font.PixelsPerInch := 96;
+  FStrip.SetBounds(0, 0, AWidth, 120);
+  FStrip.TabsClosable := AClosable;
+  for i := 1 to ACount do FStrip.AddCap('Tab ' + IntToStr(i));
+  { Last, so the strip is fully populated when the direction changes -- the same order a
+    host uses, and the order that would expose a layout cached before the flip. }
+  if ARtl then FStrip.BiDiMode := bdRightToLeft;
+end;
+
+function TRtlTabStripTest.Shot: TBGRABitmap;
+var
+  host: TBitmap;
+begin
+  host := NewHost(FStrip.Width, FStrip.Height);
+  try
+    FStrip.Render(host.Canvas, Rect(0, 0, FStrip.Width, FStrip.Height), 96);
+    Result := TBGRABitmap.Create(host);
+  finally
+    host.Free;
+  end;
+end;
+
+{ TabRect, not TyTabHeaderRect: the former is the rect AS DRAWN and therefore the one a
+  pointer coordinate lives in; the latter is content space, which on a mirrored strip is a
+  reading-order coordinate and not a screen one. Every gesture below goes through this. }
+function TRtlTabStripTest.ScreenMid(AIndex: Integer): Integer;
+var
+  r: TRect;
+begin
+  r := FStrip.TabRect(AIndex);
+  Result := (r.Left + r.Right) div 2;
+end;
+
+procedure TRtlTabStripTest.TearDown;
+begin
+  if FForm <> nil then FForm.Free;
+  FForm := nil;
+end;
+
+{ The headline: the first tab is the RIGHTMOST one and the strip packs leftwards. Stated
+  against the control's own right edge rather than against the other tabs, so a mutant that
+  merely reverses the collection order (tab 2 first, still starting at x=0) does not pass. }
+procedure TRtlTabStripTest.TabsFillFromTheRightEdgeWhenMirrored;
+var
+  r0, r1, r2: TRect;
+begin
+  Build(True, 3, 300);
+  r0 := FStrip.TabRect(0);
+  r1 := FStrip.TabRect(1);
+  r2 := FStrip.TabRect(2);
+  AssertEquals('tab 0 ends at the control''s right edge', FStrip.Width, r0.Right);
+  AssertTrue('tab 1 sits to the LEFT of tab 0', r1.Right = r0.Left);
+  AssertTrue('tab 2 sits to the LEFT of tab 1', r2.Right = r1.Left);
+  AssertTrue('and the strip has not run off the left edge', r2.Left > 0);
+end;
+
+{ A reflection of a gapless tiling is gapless, which is the whole reason the mirroring is
+  expressed as BidiFlipRect over the finished layout instead of a reversed accumulation loop
+  -- an index-flipped loop has to re-derive every width and is where an off-by-one seam (a
+  1px stripe of page body showing between two headers) would come from. }
+procedure TRtlTabStripTest.MirroredTabsTileWithNoSeamAndKeepTheirWidths;
+var
+  i: Integer;
+  content, screen: TRect;
+begin
+  Build(True, 5, 400);
+  for i := 0 to 4 do
+  begin
+    content := FStrip.TyTabHeaderRect(i);
+    screen  := FStrip.TabRect(i);
+    AssertEquals('tab ' + IntToStr(i) + ' keeps its width under mirroring',
+      content.Right - content.Left, screen.Right - screen.Left);
+    if i > 0 then
+      AssertEquals('no seam between tab ' + IntToStr(i - 1) + ' and tab ' + IntToStr(i),
+        FStrip.TabRect(i - 1).Left, screen.Right);
+  end;
+end;
+
+{ CONTENT space is the reading-order accumulation and stays that way: tab 0 first, and
+  TyHeaderStripWidth still the last rect's right edge. Pinned because the mirroring
+  deliberately lives in the content -> screen transform rather than in RebuildLayout, and a
+  later hand that "fixes" RebuildLayout to lay out backwards would silently break
+  TyHeaderStripWidth, TyMaxHeaderScroll and ScrollTabs, which all read content space. }
+procedure TRtlTabStripTest.ContentSpaceStaysInReadingOrderWhenMirrored;
+begin
+  Build(True, 3, 300);
+  AssertEquals('content space starts at 0', 0, FStrip.TyTabHeaderRect(0).Left);
+  AssertTrue('tab 0 still precedes tab 1 in content space',
+    FStrip.TyTabHeaderRect(0).Left < FStrip.TyTabHeaderRect(1).Left);
+  AssertEquals('and the strip width is still the last content rect''s right edge',
+    FStrip.TyTabHeaderRect(2).Right, FStrip.TyHeaderStripWidth);
+end;
+
+{ "Drawn on the right, answers on the left" is the defect this whole programme exists around,
+  and this is the test that would see it: render, find the pixels the ACTIVE header style
+  filled, and ask the hit test which tab owns that spot. Run for all three tabs because the
+  middle one of a three-tab strip is near its own mirror image and would pass by accident. }
+procedure TRtlTabStripTest.TheHitTestNamesTheTabThePaintFilled;
+var
+  i, l, r: Integer;
+  bmp: TBGRABitmap;
+begin
+  Build(True, 3, 300);
+  for i := 0 to 2 do
+  begin
+    FStrip.TabIndex := i;
+    bmp := Shot;
+    try
+      ChannelSpanX(bmp, chRed, l, r);
+      AssertTrue('the active header was filled for tab ' + IntToStr(i), l >= 0);
+      AssertEquals('the hit test names the tab the paint filled, tab ' + IntToStr(i),
+        i, FStrip.IndexOfTabAt((l + r) div 2, FStrip.HeaderMidY));
+      { And the fill is where the geometry says, not merely self-consistent. }
+      AssertTrue('the fill lies inside that tab''s drawn rect, tab ' + IntToStr(i),
+        (l >= FStrip.TabRect(i).Left) and (r < FStrip.TabRect(i).Right));
+    finally
+      bmp.Free;
+    end;
+  end;
+end;
+
+{ The overflowing case has its own paint step -- the headers are clipped to the band BETWEEN
+  the two arrows so a scrolled header cannot paint over them -- and that clip is derived from
+  the two arrow rects, which just changed ends. Derived the old way it names an INVERTED
+  rectangle and every header disappears: a catastrophic, obvious-in-person bug that no
+  geometry assertion sees, because the geometry is still perfectly right. So this one renders
+  and looks for ink, and checks it landed between the arrows rather than under them. }
+procedure TRtlTabStripTest.AnOverflowingMirroredStripStillPaintsInsideTheArrowBand;
+var
+  bmp: TBGRABitmap;
+  l, r, arrowW: Integer;
+begin
+  Build(True, 12, 160);
+  AssertTrue('precondition: the strip overflows', FStrip.TyMaxHeaderScroll > 0);
+  FStrip.TabIndex := 0;
+  arrowW := FStrip.TyTabScrollLeftRect.Right - FStrip.TyTabScrollLeftRect.Left;
+  AssertTrue('precondition: an arrow band is reserved', arrowW > 0);
+  bmp := Shot;
+  try
+    ChannelSpanX(bmp, chRed, l, r);
+    AssertTrue('the active header is still painted when the strip overflows', l >= 0);
+    AssertTrue('and it stays inside the band between the two arrows',
+      (l >= arrowW) and (r < FStrip.Width - arrowW));
+    AssertEquals('and the hit test still names the tab the paint filled',
+      0, FStrip.IndexOfTabAt((l + r) div 2, FStrip.HeaderMidY));
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ The strongest guard in the batch, and the only shape that catches a strip which mirrored
+  three of its four x consumers: sweep EVERY device x across the band and require the
+  mirrored strip's answer at x to equal the unmirrored strip's answer at the reflected x.
+  Deliberately run on an OVERFLOWING strip with a non-zero scroll, so the arrow bands (which
+  are not tabs and must answer -1 on both sides) and the scroll origin are in the sweep too. }
+procedure TRtlTabStripTest.HitTestIsTheExactPixelMirrorOfTheUnmirroredStrip;
+var
+  ltr: array of Integer;
+  x, w, midY: Integer;
+begin
+  Build(False, 12, 160);
+  AssertTrue('precondition: the strip overflows', FStrip.TyMaxHeaderScroll > 0);
+  FStrip.SetHeaderScroll(37);
+  AssertTrue('precondition: and is scrolled', FStrip.HeaderScroll > 0);
+  w := FStrip.Width;
+  midY := FStrip.HeaderMidY;
+  SetLength(ltr, w);
+  for x := 0 to w - 1 do ltr[x] := FStrip.IndexOfTabAt(x, midY);
+  FForm.Free; FForm := nil;
+
+  Build(True, 12, 160);
+  FStrip.SetHeaderScroll(37);
+  AssertEquals('precondition: the same scroll offset on both', 37, FStrip.HeaderScroll);
+  for x := 0 to w - 1 do
+    AssertEquals('hit test at x=' + IntToStr(x) + ' must mirror x=' + IntToStr(w - 1 - x),
+      ltr[w - 1 - x], FStrip.IndexOfTabAt(x, midY));
+end;
+
+{ The same sweep for the DRAG-REORDER resolver, which is the consumer §3.11 names and the one
+  a render test cannot see: TyDropIndexAt answers by MIDPOINT, so it never returns "no tab"
+  and a wrong answer looks exactly like a right one until a tab lands in the wrong slot. }
+procedure TRtlTabStripTest.DropIndexIsTheExactPixelMirrorOfTheUnmirroredStrip;
+var
+  ltr: array of Integer;
+  x, w: Integer;
+begin
+  Build(False, 4, 260);
+  w := FStrip.Width;
+  SetLength(ltr, w);
+  for x := 0 to w - 1 do ltr[x] := FStrip.TyDropIndexAt(x, 96);
+  FForm.Free; FForm := nil;
+
+  Build(True, 4, 260);
+  for x := 0 to w - 1 do
+    AssertEquals('drop index at x=' + IntToStr(x) + ' must mirror x=' + IntToStr(w - 1 - x),
+      ltr[w - 1 - x], FStrip.TyDropIndexAt(x, 96));
+end;
+
+{ The behavioural half, chosen to be a coordinate at which every wrong version of the
+  midpoint rule gives a DIFFERENT answer: dragging the last tab toward the reading start (in
+  a mirrored strip, rightwards) past its neighbour's drawn midpoint must move it one slot
+  EARLIER. Leaving the rule unflipped answers "no move"; flipping the rects but not the rule
+  answers index 0. Both turn this red. }
+procedure TRtlTabStripTest.DraggingTowardTheReadingStartMovesTheTabEarlier;
+var
+  cap0, cap1, cap2: string;
+  y: Integer;
+begin
+  Build(True, 3, 300);
+  cap0 := FStrip.TabCaption(0);
+  cap1 := FStrip.TabCaption(1);
+  cap2 := FStrip.TabCaption(2);
+  y := FStrip.HeaderMidY;
+
+  FStrip.CallMouseDown(mbLeft, ScreenMid(2), y, [ssLeft]);
+  FStrip.CallMouseMove(ScreenMid(1) + 1, y, [ssLeft]);
+  FStrip.CallMouseUp(mbLeft, ScreenMid(1) + 1, y, [ssLeft]);
+
+  AssertEquals('caption[0] unchanged', cap0, FStrip.TabCaption(0));
+  AssertEquals('the dragged tab is now at index 1', cap2, FStrip.TabCaption(1));
+  AssertEquals('and its old neighbour moved up', cap1, FStrip.TabCaption(2));
+end;
+
+{ The close (x) sits at the header's TRAILING edge, which is the left one when the strip
+  reads right-to-left -- and, more to the point, the click that closes a tab has to land
+  where the glyph was drawn. Both halves are asserted together because a close slot painted
+  on one side and hit-tested on the other is the same class of bug as the arrow zone
+  TRtlExclusionTest is guarding. }
+procedure TRtlTabStripTest.CloseSlotSitsOnTheTrailingSideAndItsHitTestFollows;
+var
+  hdr, cls: TRect;
+  probe: TStripCloseProbe;
+begin
+  Build(True, 3, 300, True);
+  hdr := FStrip.TabRect(1);
+  cls := FStrip.ToScreenRect(FStrip.TyTabCloseRect(1));
+  AssertTrue('the close slot is non-empty', cls.Right > cls.Left);
+  AssertTrue('it is inside its own header',
+    (cls.Left >= hdr.Left) and (cls.Right <= hdr.Right));
+  AssertTrue('and on the header''s left half, its trailing side when mirrored',
+    cls.Right <= (hdr.Left + hdr.Right) div 2);
+
+  probe := TStripCloseProbe.Create;
+  try
+    FStrip.OnTabClose := @probe.Handle;
+    probe.Veto := True;             // keep the tab so the assertion is about the hit, not the removal
+    FStrip.CallMouseDown(mbLeft, (cls.Left + cls.Right) div 2,
+      (cls.Top + cls.Bottom) div 2);
+    AssertEquals('a click on the drawn close slot fires OnTabClose once', 1, probe.Count);
+    AssertEquals('for the tab it was drawn on', 1, probe.LastIndex);
+  finally
+    FStrip.OnTabClose := nil;
+    probe.Free;
+  end;
+end;
+
+{ The caption box is clipped off the close glyph, and the edge it gives up is the edge the
+  close slot is ON -- which the reflection moved. Clipping the same edge as before leaves the
+  caption squeezed into the few pixels of margin OUTSIDE the close slot and the rest of the
+  header empty; the tab still looks plausible in a thumbnail, which is why this needs a probe
+  and not an eyeball. One tab, so the caption ink in a given x range can only be this tab's,
+  and the close glyph is excluded by scanning strictly outside the close slot. }
+procedure TRtlTabStripTest.TheCaptionYieldsTheEdgeTheCloseSlotActuallyTook;
+var
+  bmp: TBGRABitmap;
+  hdr, cls: TRect;
+  beyond, before: Integer;
+begin
+  { A blue caption on a white header: TyTab's colour paints both the caption and the close
+    glyph, so the two are told apart by WHERE they are, not by what colour they are. }
+  Build(True, 1, 300, True, cTabInkCss);
+  hdr := FStrip.TabRect(0);
+  cls := FStrip.ToScreenRect(FStrip.TyTabCloseRect(0));
+  AssertTrue('precondition: a close slot exists inside the header',
+    (cls.Right > cls.Left) and (cls.Left >= hdr.Left) and (cls.Right <= hdr.Right));
+
+  bmp := Shot;
+  try
+    beyond := ChannelInkCount(bmp, chBlue, cls.Right, hdr.Right);
+    before := ChannelInkCount(bmp, chBlue, hdr.Left, cls.Left);
+    AssertTrue('the caption occupies the header BEYOND the close slot', beyond > 0);
+    AssertEquals('and nothing is drawn in the sliver on the far side of it', 0, before);
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ The two overflow arrows change ENDS, and each keeps the direction it scrolls. The back
+  arrow leads the strip, so it belongs at the reading start -- the right edge here. Its field
+  is still called FScrollLeftRect (renaming a published-adjacent member is a breaking change
+  the plan rules out in §6.3.6), which is exactly why the direction is asserted by BEHAVIOUR
+  and not by the name. }
+procedure TRtlTabStripTest.OverflowArrowsSwapEndsAndKeepTheirScrollDirections;
+var
+  back, fwd: TRect;
+  after: Integer;
+begin
+  Build(True, 12, 160);
+  AssertTrue('precondition: the strip overflows', FStrip.TyMaxHeaderScroll > 0);
+  back := FStrip.TyTabScrollLeftRect;
+  fwd  := FStrip.TyTabScrollRightRect;
+  AssertTrue('both arrows are drawn', (back.Right > back.Left) and (fwd.Right > fwd.Left));
+  AssertEquals('the back arrow ends at the right edge', FStrip.Width, back.Right);
+  AssertEquals('the forward arrow starts at the left edge', 0, fwd.Left);
+
+  FStrip.CallMouseDown(mbLeft, (fwd.Left + fwd.Right) div 2, (fwd.Top + fwd.Bottom) div 2);
+  after := FStrip.HeaderScroll;
+  AssertTrue('clicking the forward arrow scrolls forward', after > 0);
+  FStrip.CallMouseDown(mbLeft, (back.Left + back.Right) div 2, (back.Top + back.Bottom) div 2);
+  AssertTrue('and clicking the back arrow scrolls back', FStrip.HeaderScroll < after);
+end;
+
+{ The chevrons turn round WITH the ends, and the net effect of doing both is that the arrow
+  at each physical end is drawn identically whichever way the strip reads: the left end always
+  shows the left-pointing one. Swapping the ends and not the glyphs leaves both chevrons
+  pointing inward -- the "grip drawn on one side, grabbed on the other" defect of §5.5 -- and
+  it is invisible to every geometry assertion, because the geometry is right.
+
+  Asserted as an exact pixel comparison of the two arrow bands between an unmirrored and a
+  mirrored render, which needs no assumption about how a chevron is shaped. The ink check
+  stops an all-white comparison from passing the test vacuously. }
+procedure TRtlTabStripTest.OverflowChevronsKeepPointingOffTheEndTheySitOn;
+var
+  ltr, rtl: TBGRABitmap;
+  arrowW, w, bandH, x, y, diff: Integer;
+
+  function Band(A: TBGRABitmap; AX0, AX1: Integer): Integer;
+  begin
+    Result := ChannelInkCount(A, chBlue, AX0, AX1);
+  end;
+
+begin
+  Build(False, 12, 160, False, cTabInkCss);
+  arrowW := FStrip.TyTabScrollLeftRect.Right;
+  w      := FStrip.Width;
+  bandH  := FStrip.TabHeight;
+  AssertTrue('precondition: an arrow band is reserved', arrowW > 0);
+  ltr := Shot;
+  try
+    FForm.Free; FForm := nil;
+    Build(True, 12, 160, False, cTabInkCss);
+    rtl := Shot;
+    try
+      AssertTrue('precondition: the left arrow actually drew a chevron',
+        Band(ltr, 0, arrowW) > 0);
+      diff := 0;
+      for y := 0 to bandH - 1 do
+        for x := 0 to w - 1 do
+          if (x < arrowW) or (x >= w - arrowW) then
+            if ltr.GetPixel(x, y) <> rtl.GetPixel(x, y) then Inc(diff);
+      AssertEquals('both arrow bands are drawn identically whichever way the strip reads',
+        0, diff);
+    finally
+      rtl.Free;
+    end;
+  finally
+    ltr.Free;
+  end;
+end;
+
+{ Scroll origin, the fourth consumer. The offset stays a reading-order quantity -- 0 is
+  "showing the first tab" whichever way the strip reads -- so increasing it must slide the
+  band toward the RIGHT here, the opposite of the unmirrored strip. Getting this wrong is
+  §5.4 of the plan: the first frame looks right and it only goes wrong once you scroll. }
+procedure TRtlTabStripTest.ScrollingForwardSlidesTheMirroredStripTowardTheRight;
+var
+  before: Integer;
+  last: TRect;
+begin
+  Build(True, 12, 160);
+  AssertTrue('precondition: the strip overflows', FStrip.TyMaxHeaderScroll > 0);
+  AssertEquals('precondition: scroll starts at 0', 0, FStrip.HeaderScroll);
+  before := FStrip.TabRect(0).Left;
+  FStrip.SetHeaderScroll(40);
+  AssertTrue('scrolling forward pushes tab 0 off the right side',
+    FStrip.TabRect(0).Left > before);
+
+  FStrip.ScrollTabIntoView(11);
+  last := FStrip.TabRect(11);
+  AssertTrue('and scrolling the last tab into view lands it inside the control',
+    (last.Left >= 0) and (last.Right <= FStrip.Width));
+
+  { ScrollTabs counts in TABS and works entirely in content space, so it needs no mirror of
+    its own -- pinned here rather than assumed, because "positive Delta moves toward later
+    tabs" is a sentence somebody could later decide means "moves right". }
+  FStrip.ScrollTabs(-11);
+  AssertEquals('stepping back 11 tabs returns to the start of the strip',
+    0, FStrip.HeaderScroll);
+end;
+
+{ §6.3.1: a page is an ordinary container and its children are not mirrored -- and the page
+  SURFACE itself has no left/right feature to mirror either, so TTyTabSheet was deliberately
+  left untouched by this batch. Pinned as an exact pixel comparison, which is the only form
+  of "we changed nothing here" that stays true when somebody edits the page's RenderTo. }
+procedure TRtlTabStripTest.TabSheetIsPixelIdenticalWhicheverWayItReads;
+var
+  Form: TForm;
+  Ctl: TTyStyleController;
+  Sheet: TRtlSheetAccess;
+  host: TBitmap;
+  a, b: TBGRABitmap;
+  x, y, diff: Integer;
+begin
+  Form := TForm.CreateNew(nil);
+  try
+    Ctl := TTyStyleController.Create(Form);
+    Ctl.LoadThemeCss('TyTabSheet { background: #FF0000; border: 2px solid #0000FF; }');
+    Sheet := TRtlSheetAccess.Create(Form);
+    Sheet.Parent := Form;
+    Sheet.Controller := Ctl;
+    Sheet.Font.PixelsPerInch := 96;
+    Sheet.SetBounds(0, 0, 120, 60);
+
+    host := NewHost(120, 60);
+    try
+      Sheet.Render(host.Canvas, Rect(0, 0, 120, 60), 96);
+      a := TBGRABitmap.Create(host);
+    finally
+      host.Free;
+    end;
+    try
+      Sheet.BiDiMode := bdRightToLeft;
+      host := NewHost(120, 60);
+      try
+        Sheet.Render(host.Canvas, Rect(0, 0, 120, 60), 96);
+        b := TBGRABitmap.Create(host);
+      finally
+        host.Free;
+      end;
+      try
+        diff := 0;
+        for y := 0 to 59 do
+          for x := 0 to 119 do
+            if a.GetPixel(x, y) <> b.GetPixel(x, y) then Inc(diff);
+        AssertEquals('the page surface is byte-identical in both directions', 0, diff);
+      finally
+        b.Free;
+      end;
+    finally
+      a.Free;
+    end;
+  finally
+    Form.Free;
+  end;
+end;
+
+{ Arrow keys in a tab strip are LAYOUT direction, not text direction (§6.3.4 draws that
+  line): the user presses the key that points at the tab they can see. So Left advances on a
+  mirrored strip. Clamping at the ends is asserted too, because "swap the two branches" and
+  "swap the two branches and lose a clamp" are one keystroke apart. }
+procedure TRtlTabStripTest.ArrowKeysFollowTheEyeAndNotTheXAxis;
+var
+  k: Word;
+begin
+  Build(True, 3, 300);
+  FStrip.TabIndex := 0;
+  k := VK_LEFT;  FStrip.CallKeyDown(k);
+  AssertEquals('Left moves to the next tab, which is the one to its left', 1, FStrip.TabIndex);
+  AssertEquals('and the key is consumed', 0, k);
+  k := VK_RIGHT; FStrip.CallKeyDown(k);
+  AssertEquals('Right moves back', 0, FStrip.TabIndex);
+  k := VK_RIGHT; FStrip.CallKeyDown(k);
+  AssertEquals('and clamps at the first tab', 0, FStrip.TabIndex);
+  FStrip.TabIndex := 2;
+  k := VK_LEFT;  FStrip.CallKeyDown(k);
+  AssertEquals('Left clamps at the last tab', 2, FStrip.TabIndex);
+end;
+
+{ Home / End / Ctrl+Tab are LOGICAL ends and a logical cycle, not visual ones, so mirroring
+  must leave all three alone (§6.3.3). Asserted because the flip lives in the same case
+  statement and is one label away from catching them. }
+procedure TRtlTabStripTest.HomeEndAndCtrlTabStayLogicalUnderMirroring;
+var
+  k: Word;
+begin
+  Build(True, 3, 300);
+  FStrip.TabIndex := 1;
+  k := VK_END;  FStrip.CallKeyDown(k);
+  AssertEquals('End goes to the LAST tab', 2, FStrip.TabIndex);
+  k := VK_HOME; FStrip.CallKeyDown(k);
+  AssertEquals('Home goes to the FIRST tab', 0, FStrip.TabIndex);
+end;
+
+{ TabPosition has no left-edge or right-edge tabs -- the band is always the top one
+  (docs/KNOWN_GAPS.md records the gap) -- so the page body's horizontal edges have nothing
+  to mirror, and AdjustClientRect keeps insetting only the top. Pinned so that nobody builds
+  a mirroring branch for a feature that does not exist (§6.3.7), and so that the day left/
+  right tabs DO arrive, this test is the thing that has to be rewritten on purpose. }
+procedure TRtlTabStripTest.ThePageBodyHasNoHorizontalEdgeToMirror;
+var
+  ltrBody, rtlBody: TRect;
+begin
+  Build(False, 3, 300);
+  ltrBody := FStrip.DisplayRect;
+  FForm.Free; FForm := nil;
+
+  Build(True, 3, 300);
+  rtlBody := FStrip.DisplayRect;
+  AssertEquals('body left edge unmoved',   ltrBody.Left,   rtlBody.Left);
+  AssertEquals('body right edge unmoved',  ltrBody.Right,  rtlBody.Right);
+  AssertEquals('body top edge unmoved',    ltrBody.Top,    rtlBody.Top);
+  AssertEquals('body bottom edge unmoved', ltrBody.Bottom, rtlBody.Bottom);
+end;
+
+{ TTyPageControl contributes no geometry of its own -- it forwards to the strip engine -- so
+  the pager mirrors its HEADER and nothing else. Its pages are ordinary containers whose own
+  children are not mirrored (§6.3.1); asserted through IndexOfPageAt, which answers over the
+  whole body width and must keep doing so from both sides. }
+procedure TRtlTabStripTest.MirroredPageControlMovesItsTabsAndNotItsPages;
+var
+  Form: TForm;
+  PC: TTyPageControl;
+  bodyBefore, bodyAfter: TRect;
+begin
+  Form := TForm.CreateNew(nil);
+  try
+    PC := TTyPageControl.Create(Form);
+    PC.Parent := Form;
+    PC.Font.PixelsPerInch := 96;
+    PC.SetBounds(0, 0, 300, 200);
+    PC.AddPage('One');
+    PC.AddPage('Two');
+    bodyBefore := PC.DisplayRect;
+    PC.BiDiMode := bdRightToLeft;
+    bodyAfter := PC.DisplayRect;
+
+    AssertEquals('the pager''s first tab moved to the right edge',
+      PC.Width, PC.TabRect(0).Right);
+    AssertTrue('and its second tab is to the left of it',
+      PC.TabRect(1).Right = PC.TabRect(0).Left);
+    AssertEquals('the page body is unchanged (left)',  bodyBefore.Left,  bodyAfter.Left);
+    AssertEquals('the page body is unchanged (right)', bodyBefore.Right, bodyAfter.Right);
+    AssertEquals('a point near the body''s left edge still names the active page',
+      0, PC.IndexOfPageAt(4, bodyAfter.Top + 4));
+    AssertEquals('and so does one near its right edge',
+      0, PC.IndexOfPageAt(PC.Width - 4, bodyAfter.Top + 4));
+  finally
+    Form.Free;
+  end;
+end;
+
+{ TTyTabSet adds a caption list and nothing geometric, so it inherits the mirrored strip
+  whole. Asserted rather than assumed: it is the one member of the family with no page body,
+  and the baseline rail it draws instead of a frame is laid out from the same band. }
+procedure TRtlTabStripTest.TabSetInheritsTheMirroredStrip;
+var
+  Form: TForm;
+  TS: TTyTabSet;
+  r0: TRect;
+begin
+  Form := TForm.CreateNew(nil);
+  try
+    TS := TTyTabSet.Create(Form);
+    TS.Parent := Form;
+    TS.Font.PixelsPerInch := 96;
+    TS.SetBounds(0, 0, 300, 32);
+    TS.Tabs.Add('A');
+    TS.Tabs.Add('B');
+    TS.Tabs.Add('C');
+    TS.BiDiMode := bdRightToLeft;
+    r0 := TS.TabRect(0);
+    AssertEquals('tab 0 ends at the right edge', TS.Width, r0.Right);
+    AssertTrue('tab 2 is further left than tab 0', TS.TabRect(2).Left < r0.Left);
+    AssertEquals('and a click in tab 0 as drawn selects tab 0',
+      0, TS.IndexOfTabAt((r0.Left + r0.Right) div 2, (r0.Top + r0.Bottom) div 2));
+  finally
+    Form.Free;
+  end;
+end;
+
 { ---------------------------------------------------------- TRtlExclusionTest }
 
 { TTyDropDownButton splits its face into a caption zone and an arrow zone, and decides which
@@ -2203,6 +2903,41 @@ begin
     AssertTrue('the form really is mirrored', V.IsRightToLeft);
     AssertFalse('but the property inspector opts out until its two x computations are one',
       V.Mirrors);
+  finally
+    Form.Free;
+  end;
+end;
+
+{ TTyRibbon is the third subclass of the tab-strip engine, and mirroring the engine put it in
+  the same position TTyDropDownButton is in above: the base's headers would move while the
+  ribbon's OWN chrome -- the File tab it paints at x=0, the collapse chevron, the Alt KeyTip
+  chips, and the two `X >= HeaderLeftInset` tests in its MouseDown -- would not. So the
+  ribbon declines, in one place (HeaderRightToLeft), and this pins the decline: whoever
+  mirrors the ribbon has to move that chrome and those hit tests in the same commit, because
+  deleting the override alone turns this red. }
+procedure TRtlExclusionTest.RibbonDeclinesToMirrorTheHeaderBandItInherits;
+var
+  Form: TForm;
+  Rib: TTyRibbon;
+  before, after: TRect;
+begin
+  Form := TForm.CreateNew(nil);
+  try
+    Rib := TTyRibbon.Create(Form);
+    Rib.Parent := Form;
+    Rib.Font.PixelsPerInch := 96;
+    Rib.SetBounds(0, 0, 400, 120);
+    Rib.AddPage('Home');
+    Rib.AddPage('Insert');
+    before := Rib.TabRect(0);
+    Rib.BiDiMode := bdRightToLeft;
+    after := Rib.TabRect(0);
+    AssertTrue('precondition: the ribbon draws a first tab', before.Right > before.Left);
+    AssertEquals('the ribbon''s first tab does not move (left)',  before.Left,  after.Left);
+    AssertEquals('the ribbon''s first tab does not move (right)', before.Right, after.Right);
+    AssertEquals('and it still starts at the reading-left of the band',
+      0, Rib.IndexOfTabAt((after.Left + after.Right) div 2,
+                          (after.Top + after.Bottom) div 2));
   finally
     Form.Free;
   end;
@@ -2954,7 +3689,6 @@ begin
     host.Free;
   end;
 end;
-
 initialization
   RegisterTest(TRtlPainterTest);
   RegisterTest(TRtlCaptionTest);
@@ -2963,6 +3697,7 @@ initialization
   RegisterTest(TRtlGroupTest);
   RegisterTest(TRtlButtonSlotTest);
   RegisterTest(TRtlHeaderTest);
+  RegisterTest(TRtlTabStripTest);
   RegisterTest(TRtlExclusionTest);
   RegisterTest(TRtlScrollBarGeometryTest);
   RegisterTest(TRtlScrollBarControlTest);
