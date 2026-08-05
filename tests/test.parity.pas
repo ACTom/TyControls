@@ -1020,9 +1020,12 @@ end;
 
   (2) TTyEdit -- and with it the whole single-line text-entry family that descends from it --
       puts its caret, its click target, its selection bands and its Left/Right arrow keys on
-      the GLYPHS rather than on the string order (test.edit.bidi). TTyMemo does NOT: its caret
-      is a two-dimensional (line, column) model over wrapped visual rows, and adopting the run
-      table means doing it per row. docs/KNOWN_GAPS.md carries that scope.
+      the GLYPHS rather than on the string order (test.edit.bidi). TTyMemo now does too
+      (test.memo.bidi): its caret is a two-dimensional (line, column) model over wrapped
+      visual rows, so the run table is built PER VISUAL ROW -- a row is what RenderTo draws
+      as one string, and so is what the reordering a caret must agree with belongs to. This
+      entry used to record the memo as the exception; it is not one any more. Neither
+      control MIRRORS, which is the separate question item (3) is about.
 
   (3) MIRRORING now exists, for a form's worth of controls: label, panel, divider, check box,
       radio button, group box, check group, radio group, and the button family including the
@@ -1048,11 +1051,13 @@ end;
       was raised on, since a TPopupMenu has no BiDiMode of its own.
 
   So this is no longer "the paint path ignores it" -- it is "the paint path honours it in the
-  minority of controls". LIST-VIEW columns, tree indentation, the date picker's fields and
-  TTyMemo's caret are all still left-to-right, and publishing now would put a property in the
-  Object Inspector that does nothing on a tree or a memo. That is the same defect this pass has
-  been removing -- a property offered and half-ignored, which is how TTyColorButton.Caption
-  came to exist.
+  minority of controls". LIST-VIEW columns, tree indentation and the date picker's fields are
+  all still left-to-right, and so is the LAYOUT of an edit or a memo -- their text block stays
+  against the left edge and their scroll bars do not change sides, even though the reordering
+  INSIDE a line is now right in both. Publishing BiDiMode now would still put a property in the
+  Object Inspector that does nothing on a tree, and only half of what it says on a memo. That
+  is the same defect this pass has been removing -- a property offered and half-ignored, which
+  is how TTyColorButton.Caption came to exist.
 
   (6) ...and for TTyHeaderControl, the first control whose GEOMETRY and both HIT TESTS come
       out of one pure function -- TyHeaderSectionRects -- so the strip, the section a click

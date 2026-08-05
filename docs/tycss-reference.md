@@ -1267,6 +1267,9 @@ TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth
     - `--glyph-radio` — 单选钮圆点;
     - `--glyph-close` / `--glyph-minimize` / `--glyph-maximize` / `--glyph-restore` — 标题栏按钮图标;
     - `--glyph-arrow-up` / `--glyph-arrow-down` / `--glyph-arrow-left` / `--glyph-arrow-right` — SpinEdit / 滚动条箭头;
+    - `--glyph-chevron-down` / `--glyph-chevron-right` / `--glyph-chevron-left` — 展开/折叠三角。
+      `-left` 是 `-right` 的**镜像伙伴**:RTL 网格里折叠三角朝阅读前进的方向,
+      走的就是这个槽(见 `docs/controls/grid.md`);
     - `--glyph-dropdown` — ComboBox 下拉指示箭头。
 
     令牌名遵循 `--glyph-<kind>` 约定,内部字形绘制统一走一个可覆盖入口,所以其余字形槽(菜单/

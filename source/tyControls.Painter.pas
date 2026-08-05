@@ -12,7 +12,15 @@ uses
 
 type
   TTyGlyphKind = (tgClose, tgMinimize, tgMaximize, tgRestore, tgCheck, tgCheckIndeterminate,
-    tgRadioDot, tgChevronDown, tgChevronRight, tgArrowUp, tgArrowDown, tgArrowLeft, tgArrowRight,
+    tgRadioDot, tgChevronDown, tgChevronRight,
+    // tgChevronLeft is tgChevronRight's MIRROR PARTNER and exists for one reason: a
+    // right-to-left control that has already moved its collapsed-node chevron to the other
+    // end still has to turn the STROKE round, and a direction the glyph set cannot name is a
+    // direction no caller can ask for. Not every directional glyph needs a partner -- an
+    // arrow at each end of a scroll-bar track reflects onto itself, which is why
+    // TTyScrollBar deliberately keeps its pair (tyControls.ScrollBar.pas:617).
+    tgChevronLeft,
+    tgArrowUp, tgArrowDown, tgArrowLeft, tgArrowRight,
     tgDialogLauncher,
     // Semantic status marks (TTyAlert / TTyNotification). Drawn in ONE ink like every glyph
     // here, so they are outlines (ring + mark), not AntD's filled discs — a filled disc needs
@@ -1555,6 +1563,13 @@ begin
         down-left from the vertical centre. Mirrors tgChevronDown rotated 90°. }
       FBmp.DrawPolyLineAntialias([PointF(l + w * 0.3, t),
         PointF(r - w * 0.2, cy), PointF(l + w * 0.3, b)], px, th);
+    tgChevronLeft:
+      { The exact reflection of tgChevronRight about the glyph box's vertical centre line
+        (x -> l + r - x), written out rather than derived so the two stay one shape: a
+        mirrored control must draw the SAME chevron its unmirrored twin draws, and a second
+        set of hand-picked coefficients is a second thing to drift. }
+      FBmp.DrawPolyLineAntialias([PointF(r - w * 0.3, t),
+        PointF(l + w * 0.2, cy), PointF(r - w * 0.3, b)], px, th);
     tgArrowUp:
       begin
         FBmp.DrawLineAntialias(cx, b, cx, t, px, th, True);

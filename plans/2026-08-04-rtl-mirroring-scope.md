@@ -340,6 +340,14 @@ report 模式的列 x 走共享列模型 `TTyColumns`(见 §3.8)。
   **这是最容易漏的一处**,因为它不在任何 `*Rect` 函数里。
 - **框选**(`TyListMarqueeHits:750`)自动跟着 `TyListItemRect` 走,无需额外改。
 
+> **2026-08-06 更新:report 模式的列轴现在是白送的。**
+> 本控件的三个列命中调用(`ListView.pas:2158` 与 `:3469` 的 `DetermineSplitterIndex`、
+> `:3488` 的 `ColumnFromPosition`)已改成收**设备像素 + 绘制端原点 + PPI**,
+> 与 `RenderHeader`(`:2962`)、报表行(`:2779`)、网格竖线(`:3063`)传给 `Span()` 的
+> 是同一组参数。所以 §3.9 说的那个 `TyColumnSpan.ARightToLeft` 一改,
+> 本控件的列轴、拖宽命中、表头点击**一起跟上,不需要在本单元里加任何东西**。
+> 桶仍是 (b),但 (b) 的内容只剩上面那三个 `TyList*` 函数与下面两条"还牵动"。
+
 ---
 
 ### 3.8 `TTyCustomGrid` / `TTyStringGrid` —— **(c) 重写(列轴)**
@@ -384,41 +392,56 @@ report 模式的列 x 走共享列模型 `TTyColumns`(见 §3.8)。
 
 ---
 
-### 3.9 `TTyTreeView` —— **(c) 重写**
+### 3.9 `TTyTreeView` —— **(b) 有边界**(2026-08-06 由 (c) 降级)
 
-**这是最贵的一个,而且理由不是"树难",是"这里有三份手抄的 x 累加"。**
+> **本节已重写。** 原判 **(c)** 的唯一理由是"四到五份手抄的 x 累加链",
+> 并建议"先合并成一个纯函数 `TyTreeSlotLayout`,做完之后 RTL 就是 (a)"。
+> **那次重构做完了**:`bee3308` 把五份累加收成 `TyTreeCaptionSlots`;
+> 随后一轮(本节的来源)又把命中端的**锚点**和**坐标空间**与绘制端对齐 ——
+> 那两处不一致各自是一个真 bug(主列不在最左时点箭头不展开;PPI≠96 时列边界差一格),
+> 都已修复并有守卫。**债已还清,所以桶变了。**
 
-**几何**:`RenderTo` 的逐行循环里,
-`indentPx := P.Scale((level + Ord(FShowRoot)) * FIndent)`(`TreeView.pas:3923`),
-`btnSlotW`/`imgSlotW` 各一个 Indent 宽(`:3882-3883`),
-之后靠 `Inc(captionX, ...)` 逐槽往右推。
+**几何**:两个纯函数,都是 §3.10 夸的那个形状。
+- `TyColumnSpan(ALogicalLeft, ALogicalWidth, AOriginX, APPI)`(`Columns.pas:364`)——
+  列的横向跨度,从**原点**向右平铺;`TTyColumn.Span`(`:379`)是薄壳。
+- `TyTreeCaptionSlots(ACellLeft, APPI, AIndent, ALevel, ...)`(`TreeView.pas:989`)——
+  单元格内 缩进→展开→复选→图标→标题 逐槽向右走,一次算完填进记录;
+  `NodeCaptionSlots`(`:3497`)是薄壳,负责补上两个 per-node 答案。
 
-**命中**:`GetNodeAtPoint`(`:4660`)—— **把同一串累加又写了一遍**
-(`:4697-4699` 复制了三个 slot 宽,`:4702-4707` 的注释画出 x 分区表,
-`:4732` 起用 `captionX := indentPx` + `Inc(captionX, ...)` 重走一遍)。
-函数头的注释自己写着 "X-accumulation mirrors RenderTo EXACTLY"(`:4651`)。
-`GetNodeAt`(`:6273`)只是它的转发壳。
+**命中**:`GetNodeAtPoint`(`:4809`)、`GetHeaderHitAt`(`:4923`)、
+拖列的 `MouseMove`(`:5331`)**全部调用**上面两个 ——
+而且现在传的是与绘制端**逐字相同**的参数:同一个原点、同一个 PPI、同一个锚点
+(`MainCellAnchor:3516`,它自己取自绘制端的 `InternalCellRect:3537`)。
+**三个消费者、一个来源,机械上不可能分叉** —— §3.10 的判据,树现在也满足。
 
-**而且不止三份。** `Inc(captionX, imgSlotW)` 这一句在文件里出现**四次**:
-`:4167`(多列绘制分支)、`:4452`(单列绘制分支 —— 注释里说的 "the 0-column twin")、
-`:4755` 与 `:4779`(命中的两条分支)。
-第五份是 `CellTextRect`(`:6007`),内联编辑器的定位,文件注释写着
-**"KEEP IN SYNC WITH RenderTo's main-column caption layout ...
-and GetNodeAtPoint's x-zones"**(`:5998-6000`),并逐条列出四个槽宽。
+**桶理由**:分成两条轴看。
+- **列轴 = (a) 几行**:给 `TyColumnSpan` 加一个 `ARightToLeft`,
+  把"从 `AOriginX` 向右平铺"改成绕客户区宽度反射。**一个纯函数、一个参数**;
+  `ColumnFromPosition`(`Columns.pas:802`)、`DetermineSplitterIndex`(`:844`)、
+  表头、拖列浮标、`GetCellRect` 自动跟上,因为它们收的就是同一组 `(origin, PPI)`。
+  **且这一条与 §3.8 / §3.10 同源,一次改三处。**
+  > **先决已经完成**:反射要算 `clientWidth - x`。命中在逻辑像素、绘制在设备像素时,
+  > 这个 `clientWidth` 两边不是同一个量,反射没有唯一含义 —— 那时那一格舍入偏差
+  > 在镜像后会放大成"整列错位"。现在两边同空间,`ARightToLeft` 才是可写的。
+- **槽位轴 = (b) 有边界**:`TyTreeCaptionSlots` 要能从单元格**右**缘向左平铺
+  (缩进往左长,展开→复选→图标→标题依次左移)。改动集中在一个纯函数里,
+  但记录的 `ButtonSlotX` / `CheckX` / `ImageX` / `CaptionX` 现在语义是"左边",
+  五个消费者都按左边读;**要么记录加方向位,要么这四个字段改成"前缘"** —— 这就是那条边界。
+  `MainCellAnchor` 与 `absX < mainX → hpLabel` 的分区规则(`:4857`)同向翻转:
+  RTL 下非主列正文在主列**右**边。
 
-**桶理由**:一个方向标志要在**四五份手抄的累加链**里各插一遍,
-而"缩进往左长"意味着累加要从 `CR.Right` 开始递减 —— 每条链的每一步都要重写。
-**任何漏掉一条分支的补丁都会让树画在右边、答在左边。**
-
-**唯一负责任的做法**:先把三份合并成一个纯函数
-(`TyTreeSlotLayout(level, flags, ...) : record Indent, Button, Check, Image, Text: TRect end`),
-让三个调用方都吃它 —— **这次重构本身就值得做,与 RTL 无关**;
-做完之后 RTL 是 (a)。**建议把这一条从 RTL 程序里拆出去,单独立项。**
-
-**还牵动**:`VK_RIGHT` 展开 / `VK_LEFT` 收起(`:5505`、`:5526`)—— 这两个在 RTL 下必须对调,
-而且它是**语义**而非视觉的对调,漏了会让 RTL 用户的方向键完全反过来;
-多列模式的列 x 走 `TTyColumns.ColumnFromPosition`(`:4801`、`:4861`、`:5226`),
-和 §3.8/§3.10 同源,一起改;拖放插入点、树线(`:3998-4006`、`:4268-4278`)也是同一串累加。
+**还牵动**(都不在任何 `*Rect` 函数里 —— 按经验这才是会漏的部分):
+1. **树线是本族最后一份手写 x 累加**:`ancSlotX` / `ancMidX`(`:4154`、`:4162`,
+   以及 0 列孪生分支 `:4424`、`:4434`)按**祖先**层级重算缩进,
+   而槽位记录只覆盖本节点这一层。要么手工镜像,要么先并进记录。
+2. **`VK_RIGHT` 展开 / `VK_LEFT` 收起**(`:5610`、`:5631`):
+   按 §6.3 第 4 条的判据 —— 这一下按键移动的是**节点**(槽位之间)而不是光标(字符之间),
+   属于**布局方向,要翻**。
+3. **拖宽符号**:`newWidth := FResizeStartWidth + MulDiv(X - FResizeStartX, 96, PPI)`(`:5292`),
+   与 §3.7 的 `ListView.pas:3682` 同类 —— RTL 下向左拖是变宽。
+4. **`TTyColumn.Left` 不能动**(`Columns.pas:104`,public,宿主在读):
+   镜像必须做进 `TyColumnSpan`,不能做进 `UpdatePositions`。
+5. `FRangeX` / `FOffsetX` 的横向滚动原点移到右缘。
 
 ---
 
@@ -585,7 +608,7 @@ RenderTo (without scale rounding diff)"(`:1352`)**,然后在 `:1354-1358` 手抄
 | 6 | ListBox | **b** | 三处 x 常量 + 滚动条 `alRight` + 行矩形定义 |
 | 7 | ListView | **b** | 纯几何单元里三个函数 + 拖宽符号 + 方向键 |
 | 8 | CustomGrid / StringGrid | **c** | 视口原点钉在 x=0;行头槽有四处独立判断 |
-| 9 | TreeView | **c** | 四到五份手抄的 x 累加链,源码自己写着 KEEP IN SYNC |
+| 9 | TreeView | ~~c~~ → **b** | 五份累加已收成一个纯函数(`bee3308`),锚点与坐标空间也已对齐;列轴变 (a),只剩槽位记录的"左边→前缘"和树线那一份手写累加 |
 | 10 | HeaderControl | **a** | 一个纯函数,三个消费者全部取逆于它 |
 | 11 | PageControl / TabSheet / TabStrip | **b** | 一份缓存布局 + 箭头/关闭槽换边 + 中点规则 |
 | 12 | PopupMenu / MenuBar | **b**(Bar 是 **a**) | Bar 已有反向分支;Popup 行内 x 无命中,只需换边 + 弹出方向 |
@@ -593,7 +616,7 @@ RenderTo (without scale rounding diff)"(`:1352`)**,然后在 `:1354-1358` 手抄
 | 14 | StatusBar / CoolBar / ControlBar | **b** | 纯打包函数 + 抓手边;size grip 绘制与命中分写两处 |
 | 15 | DateTimePicker | **c** | 命中面把绘制的矩形手抄了一遍(既有 bug 的机制) |
 
-**合计:(a) 5 · (b) 7 · (c) 3。**
+**原合计:(a) 5 · (b) 7 · (c) 3。2026-08-06 起:(a) 5 · (b) 8 · (c) 2。**
 
 **改变决策形状的一点**:三个 (c) 里,**没有一个是因为"RTL 难"**。
 它们贵是因为各自欠一次"绘制/命中收口"的重构 ——
@@ -602,6 +625,12 @@ RenderTo (without scale rounding diff)"(`:1352`)**,然后在 `:1354-1358` 手抄
 如果把它们记在各自的账上,**RTL 程序本身就变成 5 个 (a) + 7 个 (b) + 3 个 (b)** ——
 量级完全不同。这一条应该直接影响"做不做"的判断。
 
+> **这个预测已经兑现了一次(2026-08-06)。** TreeView 的那次收口(`bee3308`)
+> 独立于 RTL 做掉了,顺带**露出**了两个真 bug —— 主列不在最左时点箭头不展开、
+> PPI≠96 时列边界差一格 —— 修完之后 TreeView 直接从 (c) 落到 (b)(§3.9)。
+> 也就是说:**这三笔重构的收益是先于 RTL 兑现的**,
+> 而"是否要做 RTL"的答案不必等它们做完才给。
+
 ---
 
 ## 5. 半做会静默坏掉什么(按"多难发现"排,最难在前)
@@ -609,8 +638,17 @@ RenderTo (without scale rounding diff)"(`:1352`)**,然后在 `:1354-1358` 手抄
 1. **命中偏移了半个槽,但没偏出格。**
    最难发现。用户点"月",选中了"月",但点在月和日的交界像素上选错。
    headless 测不出(要逐像素反查),真机上也只是"偶尔手滑"。
-   高危点:`TTyDateTimePicker.MouseDown:1352`、`TTyTreeView.GetNodeAtPoint:4660`。
+   高危点:`TTyDateTimePicker.MouseDown:1352`、`TTyTreeView.GetNodeAtPoint`(现 `:4809`)。
    **防线**:逐像素反查测试(纯几何单元已经有这种测试,`Grid.Layout.pas:163-169` 写了这条不变量)。
+
+   > **这一条已经应验过一次,而且正是"没偏出格"的那个形状(2026-08-06)。**
+   > `GetNodeAtPoint` 曾把列命中折算到逻辑像素再比,PPI≠96 时一列的最后一个设备像素
+   > 会答成下一列;主列不在最左时展开箭头整整偏一列(那个偏出格了,所以点不动)。
+   > 两者都是**先写守卫、看它红、再修**发现的。
+   > 守卫在 `tests/test.treeview.columns.pas` 的 `TColumnX1Test` / `TColumnX2Test`
+   > 与 `tests/test.listview.pas` 的 `TListViewHeaderDpiTest`,
+   > 全部**断言在边界像素上,不在槽位中点** —— 中点断言对本条完全免疫,
+   > 变异测试里"锚点 +1 像素"这个突变体只被边界断言杀掉。做镜像时照抄这个形状。
 
 2. **只翻了绘制,没翻拖动的位移符号。**
    静态截图完全正确,一拖列宽就朝反方向变。
@@ -647,11 +685,16 @@ RenderTo (without scale rounding diff)"(`:1352`)**,然后在 `:1354-1358` 手抄
 
 ### 6.1 先决:与 BiDi 线碰一次头
 
-**必须先定的一件事**:`TTyEdit.MeasureCodepointWidths`(`Edit.pas:948`)
-返回逻辑序前缀和,`CaretPixelXAt`(`:1196`)与 `CaretIndexAtX`(`:1148`)全部建在其上。
-BiDi 落地后视觉序 ≠ 逻辑序,**这个模型失效,与镜像无关**。
-两条线要就"光标 x ↔ 字符下标由谁负责"达成一致,否则会出现混排文本里点击落错词。
-`TTyMemo` 的 `CaretToVisual`/`VisualToCaret`(`Memo.pas:403`/`:408`)同理。
+**~~必须先定的一件事~~ —— 2026-08-06 已做完,此条留作记录。**
+`TTyEdit.MeasureCodepointWidths` 返回逻辑序前缀和,`CaretPixelXAt` 与 `CaretIndexAtX`
+全部建在其上;BiDi 落地后视觉序 ≠ 逻辑序,**这个模型失效,与镜像无关**。
+`TTyMemo` 的 `CaretToVisual`/`VisualToCaret` 同理(原文的 `Memo.pas:403`/`:408` 行号已过期)。
+
+**结论**:光标 x ↔ 字符下标**由控件自己负责**,不走 painter。
+`TTyPainter.TextCaretX`/`TextCharIndexAtX` 从控件里用不了 —— 它们在 `FBmp` 上排版,
+而那个只在 `BeginPaint`/`EndPaint` 之间存在,光标却是从鼠标/按键/闪烁定时器里查的。
+两个控件各自建 run 表并缓存,再用守卫钉住"答案必须与 painter 一致"(对 painter 能表达的下标)。
+`TTyEdit` 在 `7fd44ec`、`TTyMemo` 在这一轮完成 —— memo 是**按视觉行**建表,不是按逻辑行。
 
 ### 6.2 顺序(最便宜且最显眼在前)
 

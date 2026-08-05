@@ -281,7 +281,10 @@ does **not** move to the right edge. That is correct, and it is asserted by
     buttons, breadcrumb segments and pagination items;
   - a tree view's expander stays on the **left**, and indentation still grows
     rightwards;
-  - an edit or memo keeps its text, caret and selection anchored to the left;
+  - an edit or memo keeps its text block, caret and selection anchored to the
+    **left** — the *reordering* inside a line is right (see the entry on
+    bidirectional carets below), but the block itself does not move to the right
+    edge and the scroll bar does not change sides;
   - a `TTyDropDownButton` keeps its arrow zone on the **right**, a
     `TTyButtonGroup` keeps its segments in left-to-right order, and `TTyRibbon`
     keeps its whole tab band left-to-right even though it *is* a
@@ -306,11 +309,29 @@ does **not** move to the right edge. That is correct, and it is asserted by
   a per-value count column to the row's right while the check box it inherits sits
   at the row's reading start, so mirroring would stack the two on the same side.
 
-  A mirrored grid's collapsed **tree chevron still points right**. The glyph set
-  has no `tgChevronLeft` (`tyControls.Painter.pas:15`) and the painter was out of
-  scope for that commit; the chevron's *position* and its click target did both
-  move, so nothing is drawn on one side and answered on the other — only the
-  stroke faces the wrong way.
+  The collapsed **tree and group chevrons do turn round** — that used to be listed
+  here as the one glyph whose stroke stayed put while its box changed ends, and it
+  no longer is. `tgChevronLeft` now exists beside `tgChevronRight`
+  (`tyControls.Painter.pas`), and both of the grid's collapsed chevrons ask for it
+  through one `TTyCustomGrid.DrawToggleGlyph`, so they cannot diverge again. What
+  remains is smaller and worth naming: the kind→token map behind the *derived*
+  `TyDrawGlyph` overload (`TyGlyphKindToken`, `tyControls.Base.pas:1140`) has no
+  `--glyph-chevron-left` row, so the grid passes that token explicitly — the same
+  thing `TTyCheckBox` and `TTyCheckComboBox` already do for `--glyph-check`. A
+  theme can replace the mirrored chevron today (`tests/test.rtl.pas`,
+  `TheMirroredCollapsedChevronIsThemeReplaceableLikeEveryOtherGlyph`); a *future*
+  caller that reaches for the short overload would silently get no override until
+  that one row is added.
+
+  Two directional glyphs still have no mirror partner, deliberately.
+  **`tgDialogLauncher`** points into the bottom-right corner and would want a
+  bottom-left twin, but its only caller is `TTyRibbon`, which declines to mirror
+  at all (above) — a partner with no caller is a shape nobody has ever looked at.
+  **Scroll-bar and spin arrows are not partnered because they do not need to be**:
+  an arrow at each end of a track reflects onto itself, so a mirrored bar is the
+  same picture (`tyControls.ScrollBar.pas:617`), and up/down is an axis the reading
+  direction does not touch. The same goes for the sort indicator and every
+  expander's down-chevron.
 
   A right-to-left UI built on this release gets its forms — labels, check boxes,
   radio groups, buttons, panels — its tabbed containers **and its grids** the right
@@ -329,27 +350,32 @@ does **not** move to the right edge. That is correct, and it is asserted by
   property most of the library ignores. Setting it from code works.
   `tests/test.parity.pas` (`LyingPropertiesStayUnpublished`) pins this.
 
-- **`TTyMemo` still walks the string in logical order.** The multi-line editor
-  *draws* right-to-left text correctly, but its caret and its click-to-position
-  use a cumulative sum of codepoint widths taken in string order
-  (`CaretToVisual` / `VisualToCaret`, built on the same per-line width cache).
-  That model is simply untrue for bidirectional text — in a mixed string the
-  caret between two logically adjacent codepoints can be at two different places
-  on screen. **So an Arabic paragraph in a memo draws right and selects wrong**:
-  clicking a glyph can put the caret somewhere else, arrow keys jump across the
-  run, and a drag-selection can highlight a range that does not correspond to the
-  glyphs under the pointer. A control that draws right and selects wrong is in
-  some ways worse than one that draws wrong, because the drawing is what a
-  reviewer checks.
+- **`TTyMemo`'s caret is now visual too, so the "draws right, selects wrong" gap
+  is closed.** This entry used to say the multi-line editor drew right-to-left
+  text correctly but answered every caret question from a cumulative sum of
+  codepoint widths taken in string order. It no longer does. `TTyMemo` builds a
+  bidirectional run table **per visual row** — a row, not a line, because
+  `RenderTo` draws each row as its own string and the reordering a caret must
+  agree with is the row's — and answers from it: the drawn caret, the click and
+  drag hit test, the `Left`/`Right` arrows, the up/down arrows' remembered
+  position, and the horizontal scroll. Clicking a glyph puts the caret on that
+  glyph, the arrows move one glyph the way the key points, and a drag reports the
+  range between the two positions it actually touched.
 
-  `TTyEdit` was fixed and `TTyMemo` was not, deliberately rather than for lack of
-  time: the memo's caret is a two-dimensional `(line, column)` model over *visual
-  rows*, which under word wrap are segments of a logical line. Adopting the run
-  table means building one per visual row and threading it through row
-  resolution, per-row selection bands, the up/down arrows' remembered column, and
-  the horizontal scroll — a materially larger job than the single-line case, and
-  one where a half-wired result would be worse than an untouched one. What it
-  needs is in `docs/controls/memo.md`.
+  Two consequences worth knowing rather than discovering:
+
+  - a selection that crosses a direction boundary is painted as **more than one
+    band**, because a contiguous *logical* range is not a contiguous *visual* one.
+    Sweeping the pointer across mixed text can therefore highlight glyphs it did
+    not pass over and skip glyphs it did — that is the range between the two
+    endpoints, and it is what every other editor does;
+  - `Home` and `End` remain **logical** ends, so on a right-to-left line `Home`
+    puts the caret at the right of the ink. Only `Left`/`Right` are visual.
+
+  What is still **not** done is the mirroring half, exactly as for `TTyEdit`: the
+  memo's own scroll bar, margins and alignment do not flip, and the trailing
+  strip that marks a selected line break is drawn at the row's right edge in
+  either direction. Guards live in `tests/test.memo.bidi.pas`.
 
   Neither control calls `TTyPainter.TextCaretX` / `TextCharIndexAtX`, and the
   reason is worth recording: those lay out on the painter's `FBmp`, which exists
@@ -357,10 +383,12 @@ does **not** move to the right edge. That is correct, and it is asserted by
   handlers, key handlers and the blink timer; and `TextCaretX` answers with
   `TBidiTextLayout.GetCaret`, which resolves a direction boundary towards the run
   that *ends* there and discards the other position — so the far end of an
-  embedded run is unreachable through it. `TTyEdit` therefore lays the line out
-  itself and caches the result, and
-  `test.edit.bidi.EditCaretAgreesWithThePainterForUnambiguousIndices` pins its
-  answer against the painter's for every index the painter can express.
+  embedded run is unreachable through it. Each control therefore lays its own
+  line (or row) out and caches the result, and both duplications are pinned:
+  `test.edit.bidi.EditCaretAgreesWithThePainterForUnambiguousIndices` and
+  `test.memo.bidi.MemoCaretAgreesWithThePainterForUnambiguousIndices` require the
+  control's answer to equal the painter's for every index the painter can
+  express, so the two cannot drift apart in silence.
 
 - **A wrapped paragraph resolves its direction per line, not per paragraph.**
   Word wrap (`TyWrapTextCJK`) breaks on spaces and on CJK codepoints, so Arabic

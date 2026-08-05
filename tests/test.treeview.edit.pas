@@ -171,6 +171,47 @@ type
     procedure TestEditorBoundsNonMainColumnPad;
   end;
 
+  { -----------------------------------------------------------------------
+    The CHECK BOX's share of the caption x.
+
+    The main-column caption walks indent -> check box -> image -> text, and the
+    check slot is the one term nothing pinned: check-box trees are exercised and
+    the hpCheckBox hit zone is asserted, but no test read the caption's (or the
+    editor's) x for a node that HAS a check box, so dropping the slot from the
+    walk moved every such caption 16 px left without turning anything red.
+
+    The fixture makes all four terms DIFFERENT numbers -- Indent 24 (=> 48 px of
+    indent at level 1), a 16 px check slot, a 24 px image slot and a 2 px text
+    pad -- so no pair can be swapped, dropped or double-counted and still add up.
+    ----------------------------------------------------------------------- }
+  TTreeCheckCaptionXTest = class(TTestCase)
+  private
+    FCtl:    TTyStyleController;
+    FForm:   TForm;
+    FTree:   TTyTreeView;
+    FImages: TImageList;
+    FChecked, FPlain: PTyTreeNode;   { two level-1 siblings; only FChecked has a box }
+    procedure OnGetText(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
+    procedure OnGetImageIndex(Sender: TTyTreeView; Node: PTyTreeNode;
+      Kind: TTyVTImageKind; Column: Integer; var Ghosted: Boolean;
+      var ImageIndex: Integer);
+    procedure Build(APPI: Integer);
+    procedure Layout(APPI: Integer);
+  protected
+    procedure TearDown; override;
+  published
+    { the caption of a checked node sits exactly one check slot right of a plain one }
+    procedure TestCheckBoxPushesTheCaptionByExactlyOneSlot;
+    { and the absolute x is indent + check + image + pad, each term spelled out }
+    procedure TestCheckedCaptionLeftIsTheFullSlotWalk;
+    { the inline editor lands on that same caption x }
+    procedure TestEditorSitsOnTheCheckedNodesCaption;
+    { the slot ORDER is check-then-image, not image-then-check }
+    procedure TestCheckSlotComesBeforeTheImageSlot;
+    { every term scales with the density, the check slot included }
+    procedure TestCheckedCaptionLeftAt144DPI;
+  end;
+
 implementation
 
 const
@@ -1212,6 +1253,205 @@ begin
     cell.Left + 4, edR.Left);   { PPI=96 → Scale(4)=4 }
 end;
 
+{ ============================================================================
+  The check box's share of the caption x
+  ============================================================================ }
+
+procedure TTreeCheckCaptionXTest.OnGetText(Sender: TTyTreeView;
+  Node: PTyTreeNode; var Text: string);
+begin
+  Text := 'n' + IntToStr(Node^.Index);
+end;
+
+procedure TTreeCheckCaptionXTest.OnGetImageIndex(Sender: TTyTreeView;
+  Node: PTyTreeNode; Kind: TTyVTImageKind; Column: Integer;
+  var Ghosted: Boolean; var ImageIndex: Integer);
+begin
+  ImageIndex := 0;
+end;
+
+procedure TTreeCheckCaptionXTest.Build(APPI: Integer);
+var
+  redBmp: TBitmap;
+  col0, col1: TTyColumn;
+  root: PTyTreeNode;
+begin
+  FCtl := TTyStyleController.Create(nil);
+  FCtl.LoadThemeCss(EDIT_THEME_CSS);
+
+  FForm := TForm.CreateNew(nil);
+  FTree := TTyTreeView.Create(FForm);
+  FTree.Parent     := FForm;
+  FTree.Controller := FCtl;
+  FTree.Font.PixelsPerInch := APPI;
+  FTree.DefaultNodeHeight  := 22;
+  { 24, not the default 16: the indent step, the image slot (= Indent) and the
+    16 px check slot then have three different values. }
+  FTree.Indent             := 24;
+  FTree.ShowButtons        := True;
+  FTree.ShowTreeLines      := False;
+  FTree.ShowRoot           := True;
+  FTree.SetBounds(0, 0, 400, 200);
+  FTree.OnGetText          := @OnGetText;
+  FTree.OnGetImageIndex    := @OnGetImageIndex;
+  FTree.Options            := [toEditable, toCheckSupport];
+
+  redBmp := TBitmap.Create;
+  try
+    redBmp.SetSize(16, 16);
+    redBmp.Canvas.Brush.Color := clRed;
+    redBmp.Canvas.FillRect(0, 0, 16, 16);
+    FImages := TImageList.Create(FForm);
+    FImages.Width  := 16;
+    FImages.Height := 16;
+    FImages.Add(redBmp, nil);
+  finally
+    redBmp.Free;
+  end;
+  FTree.Images := FImages;
+
+  col0 := FTree.Header.Columns.Add as TTyColumn;
+  col0.Width := 220; col0.Text := 'Name';
+  col1 := FTree.Header.Columns.Add as TTyColumn;
+  col1.Width := 90;  col1.Text := 'Info';
+  FTree.Header.MainColumn := 0;
+  FTree.Header.Options    := [hoVisible];
+
+  { One root, two level-1 children. Same level, same column, same everything --
+    the ONLY difference is the check box, so the delta between their caption x
+    is the slot and nothing else. }
+  FTree.RootNodeCount := 1;
+  root := FTree.RootNode^.FirstChild;
+  FTree.InitNode(root);
+  FChecked := FTree.AddChild(root);
+  FPlain   := FTree.AddChild(root);
+  FTree.Expanded[root] := True;
+  FTree.CheckType[FChecked] := ctCheckBox;
+  FTree.CheckType[FPlain]   := ctNone;
+end;
+
+procedure TTreeCheckCaptionXTest.Layout(APPI: Integer);
+var
+  Bmp: TBitmap;
+begin
+  Bmp := TBitmap.Create;
+  try
+    Bmp.SetSize(400, 200);
+    TEditTreeAccess(FTree).RenderTo(Bmp.Canvas, Rect(0, 0, 400, 200), APPI);
+  finally
+    Bmp.Free;
+  end;
+end;
+
+procedure TTreeCheckCaptionXTest.TearDown;
+begin
+  FreeAndNil(FForm);
+  FreeAndNil(FCtl);
+  FTree := nil;
+end;
+
+procedure TTreeCheckCaptionXTest.TestCheckBoxPushesTheCaptionByExactlyOneSlot;
+var
+  withBox, without: Integer;
+begin
+  Build(96);
+  Layout(96);
+  AssertTrue('checked caption left', FTree.DisplayTextLeft(FChecked, withBox));
+  AssertTrue('plain caption left',   FTree.DisplayTextLeft(FPlain,  without));
+  AssertEquals('the check box moves the caption right by exactly its 16px slot',
+    16, withBox - without);
+end;
+
+procedure TTreeCheckCaptionXTest.TestCheckedCaptionLeftIsTheFullSlotWalk;
+var
+  cell: TRect;
+  left: Integer;
+begin
+  Build(96);
+  Layout(96);
+  AssertTrue('main cell resolves', FTree.GetCellRect(FChecked, 0, cell));
+  AssertTrue('checked caption left', FTree.DisplayTextLeft(FChecked, left));
+  { indent (level 1 + ShowRoot = 2 steps of 24) + check 16 + image 24 + pad 2 }
+  AssertEquals('checked caption = cell + indent48 + check16 + image24 + pad2',
+    cell.Left + 48 + 16 + 24 + 2, left);
+
+  AssertTrue('plain caption left', FTree.DisplayTextLeft(FPlain, left));
+  AssertEquals('plain caption = cell + indent48 + image24 + pad2 (no check slot)',
+    cell.Left + 48 + 24 + 2, left);
+end;
+
+procedure TTreeCheckCaptionXTest.TestEditorSitsOnTheCheckedNodesCaption;
+var
+  cell, edR: TRect;
+  left: Integer;
+begin
+  Build(96);
+  Layout(96);
+  AssertTrue('open edit on the checked node', FTree.EditNode(FChecked, 0));
+  edR := TEditTreeAccess(FTree).Editor.BoundsRect;
+
+  AssertTrue('main cell resolves', FTree.GetCellRect(FChecked, 0, cell));
+  AssertTrue('checked caption left', FTree.DisplayTextLeft(FChecked, left));
+  AssertEquals('the editor opens on the caption, not one check slot left of it',
+    left, edR.Left);
+  AssertEquals('which is the full slot walk', cell.Left + 48 + 16 + 24 + 2, edR.Left);
+end;
+
+procedure TTreeCheckCaptionXTest.TestCheckSlotComesBeforeTheImageSlot;
+var
+  cell: TRect;
+  midY: Integer;
+  part: TTyTreeHitPart;
+begin
+  { The two slots are 16 and 24 px wide, so swapping them leaves the caption x
+    unchanged and only this test would notice. }
+  Build(96);
+  Layout(96);
+  AssertTrue('main cell resolves', FTree.GetCellRect(FChecked, 0, cell));
+  midY := (cell.Top + cell.Bottom) div 2;
+
+  { Slot EDGES, not slot centres: a 16 and a 24 px slot both contain their own
+    midpoint under most of the ways the walk could be wrong. }
+  FTree.GetNodeAtPoint(cell.Left + 48, midY, part);
+  AssertEquals('the first pixel past the indent is the check box',
+    Ord(hpCheckBox), Ord(part));
+  FTree.GetNodeAtPoint(cell.Left + 63, midY, part);
+  AssertEquals('the check slot is 16 px wide', Ord(hpCheckBox), Ord(part));
+  FTree.GetNodeAtPoint(cell.Left + 64, midY, part);
+  AssertEquals('the image slot starts one check slot in', Ord(hpImage), Ord(part));
+  FTree.GetNodeAtPoint(cell.Left + 87, midY, part);
+  AssertEquals('and is 24 px wide', Ord(hpImage), Ord(part));
+  FTree.GetNodeAtPoint(cell.Left + 88, midY, part);
+  AssertEquals('after which the caption begins', Ord(hpLabel), Ord(part));
+
+  { The sibling without a box: its image slot starts where the checked node's BOX
+    starts, so the two nodes' zones differ by exactly the missing slot. }
+  AssertTrue('plain main cell resolves', FTree.GetCellRect(FPlain, 0, cell));
+  midY := (cell.Top + cell.Bottom) div 2;
+  FTree.GetNodeAtPoint(cell.Left + 48, midY, part);
+  AssertEquals('a node with no box starts its image slot at the indent',
+    Ord(hpImage), Ord(part));
+  FTree.GetNodeAtPoint(cell.Left + 71, midY, part);
+  AssertEquals('24 px of it', Ord(hpImage), Ord(part));
+  FTree.GetNodeAtPoint(cell.Left + 72, midY, part);
+  AssertEquals('and its caption begins one check slot earlier',
+    Ord(hpLabel), Ord(part));
+end;
+
+procedure TTreeCheckCaptionXTest.TestCheckedCaptionLeftAt144DPI;
+var
+  cell: TRect;
+  left: Integer;
+begin
+  Build(144);
+  Layout(144);
+  AssertTrue('main cell resolves @144', FTree.GetCellRect(FChecked, 0, cell));
+  AssertTrue('checked caption left @144', FTree.DisplayTextLeft(FChecked, left));
+  AssertEquals('every slot scales, the check box included',
+    cell.Left + MulDiv(48, 144, 96) + MulDiv(16, 144, 96)
+             + MulDiv(24, 144, 96) + MulDiv(2, 144, 96), left);
+end;
+
 initialization
   RegisterTest(TTreeEditE1Test);
   RegisterTest(TTreeEditE2Test);
@@ -1219,4 +1459,5 @@ initialization
   RegisterTest(TTreeEditE4Test);
   RegisterTest(TTreeEditE5ThemeTest);
   RegisterTest(TTreeEditFix1Test);
+  RegisterTest(TTreeCheckCaptionXTest);
 end.

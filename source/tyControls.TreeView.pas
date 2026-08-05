@@ -525,15 +525,22 @@ type
 
       ACellLeft IS THE ANCHOR AND IT IS THE CALLER'S ANSWER, deliberately. The two
       paints pass the main column's cell left; CellTextRect passes the cell rect it
-      was given; GetNodeAtPoint passes 0, because it works in content space where
-      the main column is ASSUMED to start. That assumption is false whenever
-      Header.MainColumn is not the leftmost visible column -- the chrome is then
-      painted Scale(MainColumn.Left) px right of where the hit test looks for it,
-      and the expander stops responding to clicks. Preserved here rather than fixed
-      silently: this refactor is behaviour-preserving, and the bug now shows up as
-      one argument differing between call sites instead of as four hidden walks. }
+      was given; GetNodeAtPoint passes the main column's cell left translated into
+      its own content space (MainCellAnchor, which see) -- it used to pass a bare 0,
+      assuming the main column starts at content x 0. That assumption is false
+      whenever Header.MainColumn is not the leftmost visible column: the chrome then
+      painted Scale(MainColumn.Left) px right of where the hit test looked for it,
+      so the expander a user clicked answered hpLabel and the node never expanded.
+      Every caller now names the same cell. }
     function  NodeCaptionSlots(Node: PTyTreeNode; ACellLeft, APPI: Integer;
                 AIsMainColumn: Boolean): TTyTreeCaptionSlots;
+    { The main column's cell left, expressed in GetNodeAtPoint's CONTENT space
+      (x 0 = logical x 0, i.e. CR.Left + FOffsetX). That is Scale(MainColumn.Left)
+      in multi-column mode and 0 in the 0-column tree, whose single cell is anchored
+      at contentLeft by the paint. Derived from InternalCellRect -- the cell rect the
+      PAINT fills -- so neither the geometry nor the "which column is the main one"
+      policy (range check, coVisible, NoColumn -> MainColumn) exists twice. }
+    function  MainCellAnchor(const CR: TRect; APPI: Integer): Integer;
     { A5 helpers }
     function  ComputeExpandedSubtreeHeight(Node: PTyTreeNode): Integer;
     function  GetExpanded(Node: PTyTreeNode): Boolean;
@@ -3506,6 +3513,27 @@ begin
     AIsMainColumn);
 end;
 
+function TTyTreeView.MainCellAnchor(const CR: TRect; APPI: Integer): Integer;
+{ 主列单元格的左边,换算到 GetNodeAtPoint 的内容坐标系(x=0 即 contentLeft)。
+  绘制侧的单元格来自 InternalCellRect,其 Left = (CR.Left + FOffsetX) + Scale(col.Left);
+  这里减掉同一个 contentLeft,得到的就是 Scale(col.Left) —— 同一个 MulDiv、同一个整数,
+  不会有第二次取整。走 InternalCellRect 而不是自己取列,是为了不让"哪一列是主列"
+  (越界判断、coVisible、NoColumn→MainColumn)这套策略出现第二份。 }
+var
+  cell: TRect;
+begin
+  Result := 0;
+  { 0-column tree: the single cell IS the main column and the paint anchors it at
+    contentLeft, which is content x 0. Guarded here rather than left to
+    InternalCellRect, whose 0-column branch answers CR.Left (not contentLeft) —
+    the two differ by FOffsetX once such a tree scrolls horizontally. }
+  if (FHeader = nil) or (FHeader.Columns.Count = 0) then Exit;
+  { False when MainColumn is out of range or hidden — exactly the case in which the
+    paint's `colIdx = MainColumn` branch never fires and no chrome is drawn at all. }
+  if not InternalCellRect(CR, 0, 0, NoColumn, APPI, cell) then Exit;
+  Result := cell.Left - (CR.Left + FOffsetX);
+end;
+
 function TTyTreeView.InternalCellRect(const CR: TRect;
   ARowTop, ARowH, AColumn, APPI: Integer; out ACellRect: TRect): Boolean;
 var
@@ -4772,8 +4800,8 @@ end;
   AColumn returns the collection Index of the column under X (-1 = NoColumn).
 
   The x-zones come from NodeCaptionSlots — the same walk RenderTo paints with — so
-  the slot WIDTHS and CONDITIONS cannot drift from the chrome on screen. What can
-  still differ is the ANCHOR: this function passes 0 (see the call below).
+  the slot WIDTHS and CONDITIONS cannot drift from the chrome on screen, and the
+  ANCHOR is now MainCellAnchor, so neither can the cell they sit in.
 
   The absolute content X/Y:
     absY = (Y - CR.Top) + (-FOffsetY)
@@ -4786,7 +4814,7 @@ var
   nodeTop: Integer;
   node: PTyTreeNode;
   slots: TTyTreeCaptionSlots;
-  logX, logScroll: Integer;
+  mainX: Integer;
 begin
   Result   := nil;
   APart    := hpNowhere;
@@ -4810,22 +4838,29 @@ begin
   { Make sure the node is initialised so nsHasChildren is reliable }
   InitNode(node);
 
-  { The same slot walk RenderTo paints with — read, not re-derived.
-
-    THE ANCHOR IS 0, and that is this function's long-standing bug, kept as-is by
-    the refactor that exposed it. absX is content space (relative to CR.Left, past
-    the scroll), so 0 means "the main column starts at the left edge of the
-    content". True in the 0-column tree and whenever MainColumn is the leftmost
-    visible column; false otherwise, and then every zone below sits
-    Scale(MainColumn.Left) px left of the chrome actually on screen — the expander
-    a user clicks answers hpLabel and the node will not expand. Passing the main
-    column's cell left here is the fix; it is a behaviour change and wants its own
-    guard, so it is not made in this pass. }
-  slots := NodeCaptionSlots(node, 0, PPI, True);
+  { The same slot walk RenderTo paints with — read, not re-derived — anchored on the
+    cell the main column actually occupies. The anchor used to be a bare 0, i.e.
+    "the main column starts at the left edge of the content": true in the 0-column
+    tree and whenever MainColumn is the leftmost visible column, false otherwise,
+    and then every zone below sat Scale(MainColumn.Left) px left of the chrome on
+    screen — the expander a user clicked answered hpLabel and the node would not
+    expand. MainCellAnchor is 0 in exactly the cases where the old constant was right. }
+  mainX := MainCellAnchor(CR, PPI);
+  slots := NodeCaptionSlots(node, mainX, PPI, True);
 
   if absX < 0 then
   begin
+    { Off the content's left edge entirely (scrolled past x 0). }
     APart := hpIndent;
+    Result := node;
+  end
+  else if absX < mainX then
+  begin
+    { Left of the main column's cell: a NON-main cell's body, which carries no
+      chrome — the paint draws none there. Same answer a non-main cell to the RIGHT
+      of the main column has always given; only the left side is new, because before
+      the anchor moved there was never anything to the left of it. }
+    APart  := hpLabel;
     Result := node;
   end
   else if absX < slots.ButtonSlotX then
@@ -4863,16 +4898,14 @@ begin
     Result := node;
   end;
 
-  { D1: determine which column the X coordinate lands in (when columns exist) }
+  { D1: determine which column the X coordinate lands in (when columns exist).
+    Device X against the device origin the paint uses (CR.Left + FOffsetX) — the
+    identical pair InternalCellRect hands to Span, so the column boundary this
+    reports is the boundary that was drawn. It used to convert both down to logical
+    px first, which rounded the same edge twice and could hand the last device pixel
+    of a column to its right-hand neighbour. }
   if (Result <> nil) and (FHeader <> nil) and (FHeader.Columns.Count > 0) then
-  begin
-    { Convert device X offset from CR.Left into logical px (matches paint formula).
-      ColumnFromPosition(logX, logScroll) checks col.FLeft-logScroll <= logX < col.FLeft-logScroll+col.Width
-      which matches CR.Left + Scale(col.Left) + FOffsetX <= X < ... }
-    logX      := MulDiv(X - CR.Left, 96, PPI);
-    logScroll := MulDiv(-FOffsetX, 96, PPI);
-    AColumn := FHeader.Columns.ColumnFromPosition(logX, logScroll);
-  end;
+    AColumn := FHeader.Columns.ColumnFromPosition(X, CR.Left + FOffsetX, PPI);
 end;
 
 { GetNodeAtPoint (2-out overload — backward-compatible delegator) }
@@ -4889,7 +4922,7 @@ end;
   CR = ContentRect (which already has headerH added to its Top). }
 function TTyTreeView.GetHeaderHitAt(X, Y: Integer; out APart: TTyTreeHitPart; out AColumn: Integer): Boolean;
 var
-  PPI, logX, logScroll, colIdx: Integer;
+  PPI, originX, colIdx: Integer;
   CR: TRect;
 begin
   Result  := False;
@@ -4911,17 +4944,16 @@ begin
   { We're in the header band }
   PPI := Font.PixelsPerInch;
 
-  { Compute logical X relative to CR.Left (shared horizontal geometry with cells).
-    ColumnFromPosition and DetermineSplitterIndex both use the same paint formula. }
-  logX      := MulDiv(X - CR.Left, 96, PPI);
-  logScroll := MulDiv(-FOffsetX, 96, PPI);
+  { The header strip shares the body's horizontal geometry, so it shares its origin:
+    device X against CR.Left + FOffsetX, exactly what the cells are painted from. }
+  originX := CR.Left + FOffsetX;
 
   { Check for divider (resizable column right-edge within tolerance) — only when
     column resize is enabled; otherwise the divider zone belongs to the clickable
     (sortable) header section so a click near a border still sorts. }
   colIdx := NoColumn;
   if hoColumnResize in FHeader.Options then
-    colIdx := FHeader.Columns.DetermineSplitterIndex(logX, logScroll);
+    colIdx := FHeader.Columns.DetermineSplitterIndex(X, originX, PPI);
   if colIdx <> NoColumn then
   begin
     APart   := hpHeaderDivider;
@@ -4931,7 +4963,7 @@ begin
   else
   begin
     { Plain header section hit }
-    AColumn := FHeader.Columns.ColumnFromPosition(logX, logScroll);
+    AColumn := FHeader.Columns.ColumnFromPosition(X, originX, PPI);
     APart   := hpHeaderSection;
     Result  := True;
   end;
@@ -5199,7 +5231,7 @@ var
   hPart: TTyTreeHitPart;
   hCol, PPI, newWidth: Integer;
   col: TTyColumn;
-  threshold, logX, logScroll, hitColIdx, targetPos: Integer;
+  threshold, hitColIdx, targetPos: Integer;
   allowed: Boolean;   { ③f F2: per-move CanMoveNode + OnDragOver verdict }
 begin
   hitColIdx := NoColumn;
@@ -5292,11 +5324,11 @@ begin
 
     if FDragging then
     begin
-      { Compute the target visual position from the current X }
+      { Compute the target visual position from the current X — same device origin
+        the header strip is painted from, so the column the pointer is over is the
+        column under the pointer. }
       PPI       := Font.PixelsPerInch;
-      logX      := MulDiv(X - ContentRect.Left, 96, PPI);
-      logScroll := MulDiv(-FOffsetX, 96, PPI);
-      hitColIdx := FHeader.Columns.ColumnFromPosition(logX, logScroll);
+      hitColIdx := FHeader.Columns.ColumnFromPosition(X, ContentRect.Left + FOffsetX, PPI);
 
       if hitColIdx <> NoColumn then
       begin

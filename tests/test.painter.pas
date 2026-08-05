@@ -35,6 +35,7 @@ type
     procedure TestDropShadowAlpha;
     procedure TestDrawTextRastersPixels;
     procedure TestDrawGlyphAllKinds;
+    procedure TestChevronLeftIsTheApexMirrorOfChevronRight;
     procedure TestNineSliceCenterRegion;
     procedure TestEraseRectMakesTransparent;
     procedure TestPerCornerTopRoundBottomSquare;
@@ -248,6 +249,48 @@ begin
     AssertTrue('glyph ' + IntToStr(Ord(g)) + ' painted', hits > 0);
     FreePainter;
   end;
+end;
+
+{ The mirror partner, asked where the two shapes actually differ.
+
+  A '<' and a '>' fill the same box with the same amount of ink and their arms are each
+  other's reflection, so total ink, bounding box and centre of mass are all identical for the
+  two -- a probe aimed anywhere near the middle of the glyph cannot tell them apart, and
+  would go on passing if tgChevronLeft were a copy of tgChevronRight. Only the APEX moves, so
+  only the apex is asserted: the vertical centre band, which each chevron touches with
+  nothing but its point, must be empty on the side the point came from.
+
+  Pad 1 rather than the default 4, because that is what every slot-sized caller passes and
+  what the arithmetic below assumes about where the glyph box sits inside the rect. }
+procedure TPainterTest.TestChevronLeftIsTheApexMirrorOfChevronRight;
+const
+  BOX = 24;
+var
+  inkLeft, inkRight: Integer;
+
+  { Ink in the glyph's vertical centre band, split at the box's own centre line. }
+  procedure BandInk(AGlyph: TTyGlyphKind; out ALeft, ARight: Integer);
+  var
+    x, y: Integer;
+  begin
+    ALeft := 0;
+    ARight := 0;
+    MakePainter(BOX, BOX, 96);
+    FPainter.DrawGlyph(Rect(0, 0, BOX, BOX), AGlyph, TyRGBA(0, 0, 0, 255), 1, 1);
+    for y := BOX div 2 - 1 to BOX div 2 + 1 do
+      for x := 0 to BOX - 1 do
+        if PixelAt(x, y).alpha > 100 then
+          if x < BOX div 2 then Inc(ALeft) else Inc(ARight);
+    FreePainter;
+  end;
+
+begin
+  BandInk(tgChevronRight, inkLeft, inkRight);
+  AssertTrue('a right chevron puts its point in the right half', inkRight > 0);
+  AssertEquals('and nothing of it reaches the half its arms open towards', 0, inkLeft);
+  BandInk(tgChevronLeft, inkLeft, inkRight);
+  AssertTrue('a left chevron puts its point in the left half', inkLeft > 0);
+  AssertEquals('and nothing of it reaches the half its arms open towards', 0, inkRight);
 end;
 
 function TPainterTest.WriteTempNineSlice: string;

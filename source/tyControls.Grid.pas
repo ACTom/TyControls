@@ -1416,6 +1416,13 @@ type
     { 展开/折叠三角的矩形。**命中与绘制共用它** —— 分成两份迟早对不上
       (本库在填充柄、分组三角上都是这么守的)。没孩子时返回空矩形。 }
     function  TreeToggleRect(ARow: Integer): TRect;
+    { 展开/折叠三角**那一笔**。树形列与分组行各画一次,所以方向判断只写在这里 ——
+      两处各写一遍,正是分组行的三角上次被漏掉的原因。
+
+      折叠态朝**阅读前进的方向**(LTR 朝右、RTL 朝左),展开态一律朝下:向下是
+      "已经展开在下面"这条竖轴上的事实,与从哪一头读无关。 }
+    procedure DrawToggleGlyph(P: TTyPainter; const ARect: TRect; ACollapsed: Boolean;
+      AColor: TTyColor);
     { 落在合并区内的坐标归到基准格。基类无合并,原样返回。 }
     procedure MapToBaseCell(var ACol, ARow: Integer); virtual;
 
@@ -6447,6 +6454,21 @@ begin
   Result := ToScreenRect(Result);
 end;
 
+procedure TTyCustomGrid.DrawToggleGlyph(P: TTyPainter; const ARect: TRect;
+  ACollapsed: Boolean; AColor: TTyColor);
+begin
+  { pad=1:小槽里 DrawGlyph 默认每边内缩 4 逻辑像素会只剩个糊点。 }
+  if not ACollapsed then
+    TyDrawGlyph(P, ActiveController, ARect, tgChevronDown, AColor, 1, 1)
+  else if RtlLayout then
+    { 令牌显式写出 —— 与 CheckBox/CheckComboBox 的勾选框同一种写法。皮肤要能替换
+      这一向,和它能替换其余每一个 glyph 一样;而 tyControls.Base 里那张
+      kind→token 派生表还没有收录它,这里就不去赌它收录了没有。 }
+    TyDrawGlyph(P, ActiveController, ARect, '--glyph-chevron-left', tgChevronLeft, AColor, 1, 1)
+  else
+    TyDrawGlyph(P, ActiveController, ARect, tgChevronRight, AColor, 1, 1);
+end;
+
 procedure TTyCustomGrid.SetTreeColumn(AValue: Integer);
 begin
   if AValue < -1 then AValue := -1;
@@ -7005,19 +7027,9 @@ begin
         treeTg := TreeToggleRect(dataRow);
         if not IsRectEmpty(treeTg) then
         begin
-          { 展开时朝下、折叠时朝右 —— 与分组行的三角同一个约定。
-            pad=1:小槽里 DrawGlyph 默认每边内缩 4 逻辑像素会只剩个糊点。 }
-          { 折叠三角在 RTL 下**仍然朝右**,这是一处已知缺口而不是疏忽:
-            TTyGlyphKind 里没有 tgChevronLeft(tyControls.Painter.pas:15),
-            而画笔单元不在本次改动的范围里。三角的**位置**已经换边了,
-            点击面也跟着换了(两者读同一个 TreeToggleRect)—— 差的只是那一笔的朝向。
-            记在 docs/KNOWN_GAPS.md。 }
-          if NodeCollapsedOf(dataRow) then
-            TyDrawGlyph(P, ActiveController, treeTg, tgChevronRight,
-              ap.TextColor, 1, 1)
-          else
-            TyDrawGlyph(P, ActiveController, treeTg, tgChevronDown,
-              ap.TextColor, 1, 1);
+          { 展开时朝下、折叠时朝阅读前进的方向 —— 与分组行的三角同一个约定,
+            也确实是同一个函数(见 DrawToggleGlyph)。 }
+          DrawToggleGlyph(P, treeTg, NodeCollapsedOf(dataRow), ap.TextColor);
         end;
       end;
       if textR.Right <= textR.Left then Continue;
@@ -11465,15 +11477,10 @@ begin
     P.FillBackground(r, gS.Background, 0);
   if tpTextColor in gS.Present then ink := gS.TextColor else ink := AFrame.TextColor;
 
-  { 折叠三角:展开时朝下,折叠时朝右 —— 与树的约定一致。 }
+  { 折叠三角:展开时朝下,折叠时朝阅读前进的方向 —— 与树的约定一致,同一个函数。 }
   tg := GroupToggleRect(APos);
   if not IsRectEmpty(tg) then
-  begin
-    if info.Collapsed then
-      TyDrawGlyph(P, ActiveController, tg, tgChevronRight, ink, 1, 1)
-    else
-      TyDrawGlyph(P, ActiveController, tg, tgChevronDown, ink, 1, 1);
-  end;
+    DrawToggleGlyph(P, tg, info.Collapsed, ink);
 
   { 分组小计:哪些列配了汇总方式,就在分组行的那几列上画出本组的小计。
     复用页脚那套列定位与冻结带裁剪 —— 同一个数在两处该长得一样、也该

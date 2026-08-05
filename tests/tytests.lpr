@@ -35,6 +35,7 @@ uses
   test.memo.hscroll,
   test.memo.wrap,
   test.memo.wrap.nav,
+  test.memo.bidi,
   test.animation,
   test.animation.toggle,
   test.animation.button,

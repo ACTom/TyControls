@@ -412,6 +412,8 @@ type
     procedure TheEllipsisButtonMovesToTheCellsLeadingSideAndItsHitFollows;
     procedure RatingStarsCountFromTheRightAndTheClickAgrees;
     procedure TheTreeChevronMovesToTheCellsRightGutterAndItsHitFollows;
+    procedure ACollapsedTreeChevronTurnsRoundAndDoesNotOnlyChangeEnds;
+    procedure TheMirroredCollapsedChevronIsThemeReplaceableLikeEveryOtherGlyph;
     procedure TheFilterRowNamesTheColumnUnderThePointer;
     procedure CellTextHugsTheCellsReadingStart;
     procedure HeaderCaptionsHugTheirSectionsReadingStart;
@@ -419,6 +421,7 @@ type
     procedure AScrolledBodyColumnIsClippedAtTheFrozenBandsEdge;
     procedure TheFillHandleHangsOffTheSelectionsTrailingCornerAndDragsFromThere;
     procedure TheGroupRowToggleMovesToTheRightAndStillCollapsesItsGroup;
+    procedure ACollapsedGroupToggleTurnsRoundWithTheRowItSitsOn;
     { --- keyboard and selection --- }
     procedure ArrowKeysFollowTheEyeAndHomeEndStayLogical;
     procedure ARectangularSelectionStillDescribesTheSameCells;
@@ -778,6 +781,44 @@ begin
       end;
       if (mine > 150) and (o1 < 110) and (o2 < 110) then Inc(Result);
     end;
+end;
+
+{ Which half of a toggle box a collapsed chevron's TIP falls in: -1 = the left half,
+  +1 = the right half, 0 = no chevron was drawn at all.
+
+  Only the box's vertical CENTRE band is scanned, and that is the whole point of the probe.
+  A '<' and a '>' fill the same box with the same ink, and their arms are each other's
+  reflection about the horizontal mid-line, so anything that takes in the whole shape reads
+  the SAME answer for both -- widening this band to the full box was tried as a mutant and
+  reported 'left' for both chevrons, which let a mirrored box with an unturned stroke through
+  unnoticed. The two versions differ only at the apex, so the apex is what gets asked.
+
+  The apex is taken as the darkest pixel in that band rather than by comparing against an
+  assumed background: the stock theme is what these fixtures render on, and nothing else is
+  ever drawn inside a toggle box. 'Darkest minus lightest' doubles as the ink precondition --
+  a box with no glyph in it is flat, and returns 0 instead of pointing at a random pixel. }
+function ChevronTipHalf(A: TBGRABitmap; const ABox: TRect): Integer;
+var
+  x, y, y0, y1, lum, dark, light, tipX: Integer;
+  p: TBGRAPixel;
+begin
+  Result := 0;
+  y0 := (ABox.Top + ABox.Bottom) div 2 - 1;
+  y1 := y0 + 2;
+  dark := MaxInt;
+  light := -1;
+  tipX := -1;
+  for y := y0 to y1 do
+    for x := ABox.Left + 1 to ABox.Right - 2 do
+    begin
+      if (x < 0) or (x >= A.Width) or (y < 0) or (y >= A.Height) then Continue;
+      p := A.GetPixel(x, y);
+      lum := (p.red * 299 + p.green * 587 + p.blue * 114) div 1000;
+      if lum < dark then begin dark := lum; tipX := x; end;
+      if lum > light then light := lum;
+    end;
+  if (tipX < 0) or (light - dark < 40) then Exit;
+  if tipX < (ABox.Left + ABox.Right) div 2 then Result := -1 else Result := 1;
 end;
 
 { An AW x AH host bitmap for RenderTo. Its colour is not asserted on anywhere (see
@@ -3737,6 +3778,93 @@ begin
     FG.TreeToggle(1).Left < tg.Left);
 end;
 
+{ The stroke, which is a separate question from the box the test above pins. A chevron says
+  "there is more this way", so in a mirrored grid it has to point back towards the reading
+  start -- left -- exactly as the indent it stands in now grows leftwards. Moving the box and
+  leaving the glyph alone passes every geometry assertion in this class and still ships an
+  arrow aimed at the cell it just came out of.
+
+  Both directions are asserted in one test on purpose: a fix applied one branch too high
+  would turn the unmirrored chevron round too, and that would be a far worse regression than
+  the defect. }
+procedure TRtlGridTest.ACollapsedTreeChevronTurnsRoundAndDoesNotOnlyChangeEnds;
+var
+  ltr, rtl: Integer;
+
+  function TipHalf(ARtl: Boolean): Integer;
+  var
+    bmp: TBGRABitmap;
+    tog: TRect;
+  begin
+    Build(ARtl, [120, 90, 50]);
+    FG.TreeColumn := 0;
+    FG.TreeIndent := 16;
+    FG.OnGetNodeLevel := @FG.SetLevel;
+    FG.OnGetHasChildren := @FG.SetHasKids;
+    { Row 1 is a level-1 node among level-1 siblings, so collapsing it hides nothing and the
+      two shots differ in the stroke and nothing else. }
+    FG.ToggleNode(1);
+    AssertTrue('precondition: the node is collapsed', FG.NodeCollapsed(1));
+    FG.Remeasure;
+    tog := FG.TreeToggle(1);
+    AssertFalse('precondition: the collapsed node has a chevron box', IsRectEmpty(tog));
+    bmp := Shot;
+    try
+      Result := ChevronTipHalf(bmp, tog);
+    finally
+      bmp.Free;
+    end;
+    FreeAndNil(FForm);
+    FreeAndNil(FCtl);
+  end;
+
+begin
+  ltr := TipHalf(False);
+  AssertTrue('precondition: the unmirrored chevron drew a stroke at all', ltr <> 0);
+  AssertEquals('unmirrored, the collapsed chevron points right', 1, ltr);
+  rtl := TipHalf(True);
+  AssertTrue('precondition: the mirrored chevron drew a stroke at all', rtl <> 0);
+  AssertEquals('mirrored, it points back towards the reading start', -1, rtl);
+end;
+
+{ v3/C5 says every glyph in this library is replaceable by a theme, and a direction that
+  only exists as a hard-coded vector is a direction a skin cannot follow -- it would keep
+  drawing the library's chevron next to the skin's own everywhere else. Overriding the token
+  to a SPACE codepoint is this repo's font-independent proof that the override path is what
+  ran: the box goes blank, which no vector fallback can do. }
+procedure TRtlGridTest.TheMirroredCollapsedChevronIsThemeReplaceableLikeEveryOtherGlyph;
+var
+  bmp: TBGRABitmap;
+  tog: TRect;
+begin
+  Build(True, [120, 90, 50]);
+  FG.TreeColumn := 0;
+  FG.TreeIndent := 16;
+  FG.OnGetNodeLevel := @FG.SetLevel;
+  FG.OnGetHasChildren := @FG.SetHasKids;
+  FG.ToggleNode(1);
+  FG.Remeasure;
+  tog := FG.TreeToggle(1);
+  AssertFalse('precondition: the collapsed node has a chevron box', IsRectEmpty(tog));
+  bmp := Shot;
+  try
+    AssertTrue('precondition: without the override a stroke is drawn',
+      ChevronTipHalf(bmp, tog) <> 0);
+  finally
+    bmp.Free;
+  end;
+  { Composed onto the stock theme, not instead of it -- a sheet that names one key and
+    nothing else drops every token the rest of the grid needs. }
+  FCtl.LoadThemeCss(':root { --glyph-chevron-left: "Arial" "\20"; }');
+  bmp := Shot;
+  try
+    AssertEquals('the theme''s (blank) glyph replaced the vector one',
+      0, ChevronTipHalf(bmp, tog));
+  finally
+    bmp.Free;
+  end;
+end;
+
 { The inline filter row is its own band and is hit-tested before the cell branch. Its column
   comes from ColumnAtX like everything else, so this is really asking whether the band
   survived the mirror at all. }
@@ -4002,6 +4130,47 @@ begin
   FG.ClickAt((tg.Left + tg.Right) div 2, (tg.Top + tg.Bottom) div 2);
   AssertTrue('clicking the mirrored toggle collapses its group',
     FG.GroupInfo(gi).Collapsed);
+end;
+
+{ The group row's toggle is the SECOND collapsed chevron in this unit, drawn from its own
+  render pass, and the gap report only ever named the tree one. Left out of the fix it would
+  be the classic half-mirrored control: two triangles on the same screen, both moved to the
+  right, one of them still aimed at where it used to be. }
+procedure TRtlGridTest.ACollapsedGroupToggleTurnsRoundWithTheRowItSitsOn;
+var
+  ltr, rtl: Integer;
+
+  function TipHalf(ARtl: Boolean): Integer;
+  var
+    bmp: TBGRABitmap;
+    tog: TRect;
+    gi: Integer;
+  begin
+    Build(ARtl, [60, 90, 50], 4);
+    FG.Cells[0, 0] := 'A';
+    FG.Cells[0, 1] := 'B';
+    FG.Cells[0, 2] := 'A';
+    FG.Cells[0, 3] := 'B';
+    FG.GroupByColumn(0);
+    AssertTrue('precondition: display position 0 is a group row', FG.IsGroupRow(0, gi));
+    tog := FG.GroupToggle(0);
+    FG.ClickAt((tog.Left + tog.Right) div 2, (tog.Top + tog.Bottom) div 2);
+    AssertTrue('precondition: the group is collapsed', FG.GroupInfo(gi).Collapsed);
+    bmp := Shot;
+    try
+      Result := ChevronTipHalf(bmp, tog);
+    finally
+      bmp.Free;
+    end;
+    FreeAndNil(FForm);
+    FreeAndNil(FCtl);
+  end;
+
+begin
+  ltr := TipHalf(False);
+  AssertEquals('unmirrored, the collapsed group toggle points right', 1, ltr);
+  rtl := TipHalf(True);
+  AssertEquals('mirrored, it points back towards the reading start', -1, rtl);
 end;
 
 { --- invariants ------------------------------------------------------------ }

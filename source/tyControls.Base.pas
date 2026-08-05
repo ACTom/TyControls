@@ -1150,6 +1150,7 @@ begin
     tgRadioDot:           Result := '--glyph-radio';
     tgChevronDown:        Result := '--glyph-chevron-down';
     tgChevronRight:       Result := '--glyph-chevron-right';
+    tgChevronLeft:        Result := '--glyph-chevron-left';
     tgArrowUp:            Result := '--glyph-arrow-up';
     tgArrowDown:          Result := '--glyph-arrow-down';
     tgArrowLeft:          Result := '--glyph-arrow-left';

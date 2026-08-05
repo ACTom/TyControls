@@ -296,9 +296,17 @@ TyTreeCheckBox:disabled { color: var(--muted); }
 > "画在这边、点在那边"这类 bug 只能从第二份算式里长出来。
 > 改这个文件时请保持它 —— 任何在这两个函数之外新算出来的 x,都是一条会走散的第二路径。
 >
-> 已知偏差(**尚未修复**,见 `GetNodeAtPoint` 的注释):命中判定给 `NodeCaptionSlots`
-> 传的锚点是 `0`,即假设主列从内容区左缘开始。`Header.MainColumn` 不是最左可见列时该假设
-> 不成立,展开箭头会画在 `Scale(MainColumn.Left)` 之外、却在原处接收点击 —— 点箭头不展开。
+> **锚点也统一了。** 命中判定曾经给 `NodeCaptionSlots` 传锚点 `0`,即假设主列从内容区
+> 左缘开始;`Header.MainColumn` 不是最左可见列时该假设不成立,展开箭头画在
+> `Scale(MainColumn.Left)` 处、却在原处接收点击 —— 点箭头不展开。现在它传
+> `MainCellAnchor`,与绘制端取自同一个 `Span()`。随之确定了一条分区规则:
+> **主列单元格左边的那一段属于别的列的正文,回答 `hpLabel`,不带任何 chrome** ——
+> 和主列右边的非主列单元格一直以来的答案一致。
+>
+> **坐标空间也只剩一个:设备像素。** `ColumnFromPosition` / `DetermineSplitterIndex`
+> 收的 `(AX, AOriginX, APPI)` 就是绘制端交给 `Span()` 的同一组参数。它们曾经先折算成
+> 逻辑像素再比较,同一条边界被取整两次,PPI ≠ 96 时某一列的最后一个设备像素会命中成
+> 下一列。分隔条的 ±3/5 容差仍是**逻辑**量(描述手感),在函数内部按 APPI 放大。
 
 ---
 

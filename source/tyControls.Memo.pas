@@ -4,7 +4,7 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType, LazUTF8, LazMethodList, Clipbrd,
   Generics.Collections, ExtCtrls, StdCtrls,
-  BGRABitmap, BGRABitmapTypes,
+  BGRABitmap, BGRABitmapTypes, BGRATextBidi,
   tyControls.Types, tyControls.Painter, tyControls.Base,
   tyControls.ScrollBar, tyControls.UndoStack, tyControls.Animation,
   tyControls.QtWS, tyControls.GtkWS;
@@ -25,6 +25,49 @@ type
   end;
   TTyVisualRowArray = array of TTyVisualRow;
 
+  { One same-direction stretch of a laid-out VISUAL ROW: a contiguous half-open range of
+    codepoints [First, Last) -- counted from the ROW's first codepoint, not the logical
+    line's -- that the bidirectional algorithm placed at [Left, Right) px from the row's
+    left edge. A row with no right-to-left script in it never gets a table at all and this
+    whole apparatus stays asleep; a row reading "ab<two hebrew letters>cd" is three runs,
+    the middle one drawn right-to-left.
+
+    The runs are in LOGICAL order (they partition 0..the row's codepoint count) while
+    Left/Right are VISUAL, so run[1].Left < run[0].Left is perfectly normal and is exactly
+    the case the prefix sum could not express.
+
+    WHY A ROW AND NOT A LINE. RenderTo draws each visual row as its OWN string (the segment
+    substring, at the content left edge), so TTyPainter runs the bidirectional algorithm per
+    row and the reordering a caret has to agree with is the row's, not the line's. Under
+    WordWrap=False a row IS the whole line and the distinction costs nothing.
+
+    This is TTyEdit.TTyBidiRun's record with row-relative indices. It is duplicated rather
+    than shared because the shared home for it would be tyControls.Painter or .Base, and
+    pulling the whole of tyControls.Edit into the memo's dependency graph to borrow a
+    five-field record would be the worse trade. }
+  TTyMemoBidiRun = record
+    First, Last: Integer;
+    RTL: Boolean;
+    Left, Right: Integer;   // device px, relative to the ROW's text origin
+  end;
+  TTyMemoBidiRunArray = array of TTyMemoBidiRun;
+
+  { The whole bidirectional answer for ONE visual row's segment, cached by segment content.
+
+    Lead[i] / Trail[i] are the x of caret boundary i measured inside the run that owns the
+    character AFTER it and the run that owns the character BEFORE it. They differ only at a
+    direction boundary -- which is the entire point, since that is where one column has two
+    screen positions and BGRA's own GetCaret hands back only the second.
+
+    Active = False records "this segment needs no reordering", which is an answer worth
+    caching too: it is what keeps a mixed document from re-asking the gate per paint. }
+  TTyMemoRowBidi = record
+    Active: Boolean;
+    Runs: TTyMemoBidiRunArray;   // logical order
+    Order: TTyIntArray;          // run indices, LEFT-to-RIGHT on screen
+    Lead, Trail: TTyIntArray;    // length = row codepoints + 1
+  end;
+
   TTyMemo = class(TTyCustomControl)
   protected
     // Pixel x where text begins (left padding scaled). Promoted from private so
@@ -39,6 +82,19 @@ type
     // vertical motion across short lines (used by later tasks).
     FCaretLine: Integer;
     FCaretCol: Integer;
+    { Which of the two glyphs beside the caret it is standing against.
+
+      A (line, column) stops having ONE screen position the moment the row is
+      bidirectional: in "ab<alef><bet>cd" the boundary at column 2 is both "after the b" and
+      "before the alef", and those are the two OPPOSITE ends of the Hebrew run. True means
+      the caret is drawn against the character BEFORE it (where typing and a rightward walk
+      leave it), False against the character AFTER it. Both are legitimate answers and the
+      Unicode algorithm does not choose; the operation that last moved the caret does, so
+      that is what this remembers. Verbatim in spirit from TTyEdit.FCaretAfterPrev.
+
+      True is the default and the value every path that does not care leaves behind, because
+      it is what an insertion point means: "the text I just wrote ends here". }
+    FCaretAfterPrev: Boolean;
     FDesiredCol: Integer;
     // Desired device-x for VERTICAL caret motion under WordWrap=True. Mirrors
     // FDesiredCol but in pixels: visual-row Up/Down preserve the on-screen x and
@@ -122,6 +178,22 @@ type
     FWidestWidth: Integer;
     FWidestWidthValid: Boolean;
     FWidestWidthSig: string;
+    { --- Bidirectional row layout; see EnsureRowBidi for the whole argument ---
+      THE GATE, memoised on the ONE line it was last asked about. TTyEdit keeps a
+      document-wide flag because its document IS one line; a memo's is unbounded, and
+      rescanning it per text change would put an O(document) cost on the keystroke path --
+      the exact shape of the bug that once cost this control half a second per key. So the
+      question asked here is "does THIS line need reordering", and the answer is kept for
+      the line the caret is sitting on, which is the line every blink, every keystroke and
+      every mouse move of a drag re-asks about. }
+    FBidiGateLine: string;
+    FBidiGateAnswer: Boolean;
+    FBidiGateSeeded: Boolean;
+    { Run tables per ROW SEGMENT, keyed by content -- the same discipline (and the same
+      reason) as FLineWidthCache: a repaint of a bidirectional document must not rebuild a
+      TBidiTextLayout per visible row per frame. Only ever reached once the gate has fired. }
+    FRowBidiCache: specialize TDictionary<string, TTyMemoRowBidi>;
+    FRowBidiSig: string;      // font signature the row tables were built for
     // Headless-only override of the LCL focused state. Real focus is unavailable
     // when rendering offscreen, so tests can force the caret to draw. Production
     // paint uses (Focused or FForceFocused) so this is a no-op unless set.
@@ -245,7 +317,6 @@ type
     function ContentCodepointCount: Integer;
     function GetLines: TStrings;
     procedure SetLines(AValue: TStrings);
-    function EffectiveFontSize(const S: TTyStyleSet): Integer;
     // WordWrap published setter (no-op if unchanged; repaints when toggled).
     procedure SetWordWrap(AValue: Boolean);
     // Fire OnChange (after a model mutation).
@@ -291,6 +362,27 @@ type
     // function entry, incl. cache hits). The perf-regression test asserts a bulk load + widest-width
     // scroll-range scan does NOT enter it once per line (WidestLineWidth uses the cheap total path).
     FMeasureLineWidthsCalls: Integer;
+    // Diagnostic: how many times the RTL gate actually SCANNED a line (memo misses only).
+    // The perf guard asserts a thousand left-to-right lines cost the caret no more scans
+    // than one line does -- i.e. that the gate is per line, not per document.
+    FBidiGateCalls: Integer;
+    { Diagnostic: how many times the ROW-LAYOUT machinery was entered (EnsureRowBidi), which
+      is the work the line gate exists to avoid. It has to be counted separately from
+      FBidiGateCalls and from UsesBidiCaret, because neither can see the difference:
+      EnsureRowBidi has a second gate of its own (TyTextHasRTL of the segment, which is the
+      question the PAINTER asks), so wedging the line gate open still produces the right
+      ANSWER for left-to-right text -- it just pays a segment substring, a dictionary hash
+      and a second scan per query to get there. Two mutants that forced the line gate open
+      survived the whole suite until this counter existed. }
+    FBidiRowLookups: Integer;
+    { Diagnostic: how many TBidiTextLayout objects were actually CONSTRUCTED. Separate from
+      FBidiRowLookups for the same reason that one is separate from FBidiGateCalls -- the
+      output cannot tell the difference. BGRA's layout reproduces the cumulative-prefix
+      caret positions EXACTLY for a string with no right-to-left codepoint in it, so
+      removing the second gate (TyTextHasRTL of the segment, which is the question the
+      PAINTER asks) changes not one pixel; it just lays every row out twice. A mutant that
+      did exactly that survived two rounds of guards until this counter existed. }
+    FBidiLayoutBuilds: Integer;
     // Blinking caret (Task 10). FCaretVisible defaults True; the timer is created
     // lazily and started ONLY when HandleAllocated, so headless tests never blink
     // and the static-caret pixel tests stay deterministic.
@@ -321,6 +413,10 @@ type
     // so headless probe subclasses can exercise it directly (like HasSelection).
     procedure DeleteSelection;
     // --- Pure per-line geometry helpers (headless-testable; no paint state) ---
+    // Effective point size for a resolved style (routes through the shared resolver so a
+    // skin that suppresses font-size gets the theme's --font-size-base). Protected so the
+    // headless probes can configure a measuring bitmap exactly as the control does.
+    function EffectiveFontSize(const S: TTyStyleSet): Integer;
     // Codepoint length of a logical line index (0 for the synthetic empty line).
     function LineLen(ALineIndex: Integer): Integer;
     // Floored at 1 so vertical layout never divides by zero.
@@ -360,6 +456,71 @@ type
     function MeasureLineTotalWidth(const ALine: string; APPI: Integer): Integer;
     // Pixel x of the caret boundary before codepoint ACol on ALine.
     function ColPixelXAt(const ALine: string; ACol, APPI: Integer): Integer;
+    { Where the caret for (ALine, ACol) is DRAWN, in control device px, BEFORE the
+      horizontal scroll and the row's alignment offset are applied -- the same frame
+      TTyEdit.CaretDrawXAt answers in. AAfterPrev is the caret's AFFINITY (see
+      FCaretAfterPrev): which of the two glyphs beside the column it stands against. For a
+      row with no right-to-left script in it the two answers are identical. }
+    { Which visual row owns caret (ALine, ACol), with the soft-wrap tie-break. Reads the
+      row cache directly, so callers must have ensured it. }
+    function CaretOwningRow(ALine, ACol: Integer): Integer;
+    function CaretDrawXAt(ALine, ACol: Integer; AAfterPrev: Boolean; APPI: Integer): Integer;
+    // Where the LIVE caret is drawn: CaretDrawXAt for (FCaretLine, FCaretCol) resolved
+    // with the affinity the last movement left behind.
+    function CaretDrawX(APPI: Integer): Integer;
+    { WHICH PATH the caret is currently coming from: the per-row bidirectional run table, or
+      the prefix sum. A diagnostic, and it has to exist, because pixels cannot answer it --
+      for a row with a single run the two paths produce the SAME numbers, so a gate wedged
+      permanently open is invisible in the output and shows up only in the cost. }
+    function UsesBidiCaret(APPI: Integer): Boolean;
+    // --- Bidirectional row layout (all no-ops on a left-to-right document) ---
+    { THE GATE. Does ALine carry any right-to-left script? Memoised on the last line asked
+      about, so a run of caret queries on an unchanged line costs one string compare and a
+      thousand left-to-right lines cost exactly what one line costs. }
+    function LineHasRTL(const ALine: string): Boolean;
+    // The substring RenderTo actually draws for visual row AVisualRow.
+    function RowSegmentOf(AVisualRow: Integer): string;
+    { Build (or fetch) the run table for a row SEGMENT. False when the segment needs no
+      reordering -- which is also what the painter decides, by asking TyTextHasRTL of the
+      very string it is about to draw. }
+    function EnsureRowBidi(const ASeg: string; APPI: Integer;
+      out ARB: TTyMemoRowBidi): Boolean;
+    // Gate then table, for a visual row. False => this row is answered by the prefix sum.
+    function RowBidi(AVisualRow, APPI: Integer; out ARB: TTyMemoRowBidi): Boolean;
+    { The x of caret boundary AIndex measured INSIDE run ARun. Only meaningful for
+      ARun.First <= AIndex <= ARun.Last. }
+    function RowBidiEdgeX(const ARB: TTyMemoRowBidi; ARun, AIndex: Integer): Integer;
+    // The run a caret at row-relative AIndex with affinity AAfterPrev binds to; -1 if none.
+    function RowBidiCaretRun(const ARB: TTyMemoRowBidi; AIndex: Integer;
+      AAfterPrev: Boolean): Integer;
+    // The run immediately left (ADir<0) or right (ADir>0) of ARun on screen; -1 at the end.
+    function RowBidiNeighbourRun(const ARB: TTyMemoRowBidi; ARun, ADir: Integer): Integer;
+    { Device x of a caret within visual row AVisualRow, measured from the row's own left
+      text edge, for the row-relative column ARowCol. The prefix sum when the row needs no
+      reordering, the run table's answer when it does. }
+    function RowCaretRelX(AVisualRow, ARowCol: Integer; AAfterPrev: Boolean;
+      APPI: Integer): Integer;
+    { The visually leftmost (ASide<0) or rightmost (ASide>0) caret column of a visual row,
+      as a LOGICAL column, plus the affinity that puts the caret on that side. For a row
+      with no reordering these are simply StartCol and EndCol. }
+    procedure RowVisualEdge(AVisualRow, ASide, APPI: Integer;
+      out ACol: Integer; out AAfterPrev: Boolean);
+    { Park FCaretAfterPrev at its default -- the caret stands against the character BEFORE
+      it. Called by the navigations that move the caret without choosing a glyph for it to
+      stand against: a programmatic caret/selection write, a word jump, Home, End, a
+      completed edit. The mouse and the Left/Right arrows DO choose, and set it themselves. }
+    procedure DefaultCaretAffinity;
+    { Move the caret ONE GLYPH in the direction pressed (ADir: -1 left, +1 right), crossing
+      into the neighbouring visual row at the row's VISUAL edge. Returns True when this
+      row's caret is governed by a run table -- whether or not the caret actually moved --
+      so the caller knows to skip the logical walk. False means "no reordering here, walk
+      the string exactly as before". }
+    function MoveCaretVisualH(ADir, APPI: Integer): Boolean;
+    { True when a vertical move must be resolved by SCREEN X rather than by the remembered
+      logical column: a remembered column only names the same place on both lines when both
+      read the same way. Consulted only on the no-wrap path -- the wrap path is already an
+      x-preserving move. }
+    function VerticalMoveNeedsX(ATargetLine: Integer): Boolean;
     // Nearest codepoint boundary to device-x AX on ALine (midpoint rule).
     function ColIndexAtX(const ALine: string; AX, APPI: Integer): Integer;
     // --- Per-line word-boundary helpers (pure codepoint logic; no paint state).
@@ -402,11 +563,33 @@ type
     // horizontal origin (horizontal scroll is applied later by the renderer).
     procedure CaretToVisual(ALine, ACol, AContentWidth, APPI: Integer;
       out AVisualRow, AX: Integer);
+    { The same, told which side of a direction boundary the caret is standing on. The
+      two-argument form above delegates here with the DEFAULT affinity, so a caller that
+      does not know about glyphs (and the headless row tests, which do not) is unchanged.
+
+      Note the two questions the memo has to answer at once and must not confuse: the WRAP
+      tie-break decides which ROW owns a column sitting on a soft-wrap boundary (the earlier
+      row wins, unchanged), and the DIRECTION affinity decides which of two x positions that
+      column has inside that row. }
+    procedure CaretToVisualEx(ALine, ACol: Integer; AAfterPrev: Boolean;
+      AContentWidth, APPI: Integer; out AVisualRow, AX: Integer);
+    { The visual row list for AContentWidth: the CACHE when it matches, a fresh build when
+      the caller asked about a different width (the headless row tests do). This is on the
+      caret path -- every keystroke, every mouse move of a drag, every blink -- and
+      rebuilding the whole document's row list per query is the shape of the bug that once
+      cost this control half a second per key. }
+    function RowsFor(AContentWidth, APPI: Integer): TTyVisualRowArray;
     // Inverse of CaretToVisual: given a visual row index and a device-x, return
     // the logical (line,col) under that x, clamped to the row's [StartCol,EndCol]
     // segment so a click never escapes the row it landed on.
     procedure VisualToCaret(AVisualRow, AX, AContentWidth, APPI: Integer;
       out ALine, ACol: Integer);
+    { The same, also reporting which side of a direction boundary the x landed on. That half
+      of the answer cannot be dropped: at a boundary the column alone is two different places
+      on screen, so a hit test that returned only the column would leave the caret to guess,
+      and a click on the far side of an embedded run would draw the caret on the near side. }
+    procedure VisualToCaretEx(AVisualRow, AX, AContentWidth, APPI: Integer;
+      out ALine, ACol: Integer; out AAfterPrev: Boolean);
     // Direct write of the selection anchor (tests / later tasks). Does NOT move
     // the caret, so it can establish a non-empty selection.
     procedure SetSelAnchor(ALine, ACol: Integer);
@@ -710,6 +893,7 @@ begin
   TStringList(FLines).OnChange := @LinesChanged;
   FCaretLine := 0;
   FCaretCol := 0;
+  FCaretAfterPrev := True;
   FDesiredCol := 0;
   FDesiredX := 0;
   FInVerticalMove := False;
@@ -739,6 +923,18 @@ begin
   FWidestWidthValid := False;
   FWidestWidthSig := '';
   FMeasureLineWidthsCalls := 0;
+  FBidiGateCalls := 0;
+  FBidiRowLookups := 0;
+  FBidiLayoutBuilds := 0;
+  { Both bidirectional caches are keyed by CONTENT -- the gate by the line string, the run
+    tables by the row's segment string -- so neither needs an invalidation seam: a text
+    change simply misses. That is the same argument FLineWidthCache is built on, and it is
+    what keeps a keystroke from having to drop anything. }
+  FBidiGateLine := '';
+  FBidiGateAnswer := False;
+  FBidiGateSeeded := False;
+  FRowBidiCache := specialize TDictionary<string, TTyMemoRowBidi>.Create;
+  FRowBidiSig := '';
   FForceFocused := False;
   FUndoStack := TTyUndoStack.Create;
   FSuspendUndo := False;
@@ -771,6 +967,7 @@ begin
   FMeasureBmp.Free;
   FLineWidthCache.Free;
   FLineTotalWidthCache.Free;
+  FRowBidiCache.Free;
   FLines.Free;
   FreeAndNil(FOnChangeHandlers);
   inherited Destroy;
@@ -1127,6 +1324,7 @@ begin
   FCaretLine := L;
   FCaretCol := C;
   ClampCaret;
+  DefaultCaretAffinity;   // a flat offset names a codepoint, not a glyph; see SetCaret
   FSelAnchorLine := FCaretLine;
   FSelAnchorCol := FCaretCol;
   FDesiredCol := FCaretCol;
@@ -1153,6 +1351,7 @@ begin
   FCaretLine := L;
   FCaretCol := C;
   ClampCaret;
+  DefaultCaretAffinity;   // likewise
   FDesiredCol := FCaretCol;
   BreakCoalescing;
   UpdateDesiredX(Font.PixelsPerInch);
@@ -1329,7 +1528,9 @@ begin
   // form is stable across rows (the quantity a user perceives as "the column"),
   // so a wrap Up/Down can re-project it onto a different row's coordinate frame.
   CW := ContentWidthFor(APPI);
-  CaretToVisual(FCaretLine, FCaretCol, CW, APPI, VRow, CaretAbsX);
+  { The LIVE affinity, not the default: the desired x has to be where the caret is actually
+    DRAWN, or a following Up/Down would re-project a position the user never saw. }
+  CaretToVisualEx(FCaretLine, FCaretCol, FCaretAfterPrev, CW, APPI, VRow, CaretAbsX);
   FDesiredX := CaretAbsX - RowBaseAbsX(VRow, APPI);
   if FDesiredX < 0 then FDesiredX := 0;
 end;
@@ -1343,7 +1544,7 @@ begin
   MaxRow := High(FVisualRows);
   if MaxRow < 0 then Exit;   // no rows (defensive)
   // Current owning visual row.
-  CaretToVisual(FCaretLine, FCaretCol, CW, APPI, CurRow, CaretAbsX);
+  CaretToVisualEx(FCaretLine, FCaretCol, FCaretAfterPrev, CW, APPI, CurRow, CaretAbsX);
   TargetRow := CurRow + ADelta;
   // Guards mirror the no-wrap FCaretLine>0 / <MaxLine: clamp into [0, MaxRow] so a
   // top-row Up or bottom-row Down is a no-op (the caret stays put).
@@ -1354,10 +1555,98 @@ begin
   // resolves the column in its (absolute-x) contract and clamps into the segment,
   // so the caret lands at the same on-screen column on the target row.
   TargetAbsX := FDesiredX + RowBaseAbsX(TargetRow, APPI);
-  VisualToCaret(TargetRow, TargetAbsX, CW, APPI, NewLine, NewCol);
+  { The affinity comes from the hit test too. A vertical move lands the caret ON a glyph
+    boundary of the target row, and on a reordered row that boundary has two sides -- the
+    one the x fell on is the one the user is looking at. }
+  VisualToCaretEx(TargetRow, TargetAbsX, CW, APPI, NewLine, NewCol, FCaretAfterPrev);
   FCaretLine := NewLine;
   FCaretCol := NewCol;
   // FDesiredX intentionally NOT refreshed: a run of Up/Down tracks the original x.
+end;
+
+function TTyMemo.MoveCaretVisualH(ADir, APPI: Integer): Boolean;
+var
+  CW, VRow, X, RS, RowCol, r, q, j, TargetRow, EdgeCol: Integer;
+  RB: TTyMemoRowBidi;
+  EdgeAfterPrev: Boolean;
+begin
+  CW := ContentWidthFor(APPI);
+  EnsureVisualRows(APPI);
+  CaretToVisualEx(FCaretLine, FCaretCol, FCaretAfterPrev, CW, APPI, VRow, X);
+  if not RowBidi(VRow, APPI, RB) then
+    Exit(False);   // nothing reordered here: the caller walks the string exactly as before
+
+  { From here on the answer is OURS whatever happens, including "the caret did not move".
+    Falling through to the logical walk at a reordered row's edge would step the caret in the
+    OPPOSITE direction from the key pressed: at the visual LEFT end of a right-to-left run
+    the caret sits on the run's LAST column, and Dec would walk it back to the right. }
+  Result := True;
+  RS := FVisualRows[VRow].StartCol;
+  RowCol := FCaretCol - RS;
+  r := RowBidiCaretRun(RB, RowCol, FCaretAfterPrev);
+  if r < 0 then Exit;
+
+  { Inside a right-to-left run the screen and the string run opposite ways, so a rightward
+    keypress is a BACKWARD step through the codepoints. This one line is the whole of "Left
+    and Right are visual movement in text". }
+  if RB.Runs[r].RTL then j := RowCol - ADir else j := RowCol + ADir;
+  if (j >= RB.Runs[r].First) and (j <= RB.Runs[r].Last) then
+  begin
+    FCaretCol := RS + j;
+    FCaretAfterPrev := j > RB.Runs[r].First;
+    Exit;
+  end;
+
+  { The step left the run: cross to the one that sits next to it ON SCREEN and land one
+    glyph inside it, measured from the edge we arrived at. Landing ON that edge instead
+    would be a keypress that did not move the caret, because a run's near edge is the same
+    point as its neighbour's far edge. }
+  q := RowBidiNeighbourRun(RB, r, ADir);
+  if q >= 0 then
+  begin
+    if ADir > 0 then
+    begin
+      if RB.Runs[q].RTL then j := RB.Runs[q].Last - 1 else j := RB.Runs[q].First + 1;
+    end
+    else
+      if RB.Runs[q].RTL then j := RB.Runs[q].First + 1 else j := RB.Runs[q].Last - 1;
+    FCaretCol := RS + j;
+    FCaretAfterPrev := j > RB.Runs[q].First;
+    Exit;
+  end;
+
+  { The step left the ROW as well: cross into the neighbouring VISUAL row and land on ITS
+    far visual edge -- the right edge going left, the left edge going right. This is the
+    generalisation of the plain "previous line's end / next line's start", and on a
+    left-to-right neighbour it produces exactly those two columns. }
+  TargetRow := VRow + ADir;
+  if (TargetRow < 0) or (TargetRow > High(FVisualRows)) then Exit;
+  if ADir > 0 then
+    RowVisualEdge(TargetRow, -1, APPI, EdgeCol, EdgeAfterPrev)
+  else
+    RowVisualEdge(TargetRow, +1, APPI, EdgeCol, EdgeAfterPrev);
+  FCaretLine := FVisualRows[TargetRow].Line;
+  FCaretCol := EdgeCol;
+  FCaretAfterPrev := EdgeAfterPrev;
+end;
+
+function TTyMemo.VerticalMoveNeedsX(ATargetLine: Integer): Boolean;
+var
+  Cur, Tgt: string;
+begin
+  { A remembered COLUMN names the same place on both lines only when both read the same way.
+    Asked of BOTH lines because either one being reordered breaks the correspondence: moving
+    off a Hebrew line onto a Latin one is as wrong as the other way round.
+
+    Two gate calls rather than one, and deliberately so -- the memo is one slot deep, so this
+    costs two scans per Up/Down keypress on a left-to-right document. That is per KEYPRESS,
+    not per query, and it is two scans of a LINE, never of the document. }
+  if FCaretLine < FLines.Count then Cur := FLines[FCaretLine] else Cur := '';
+  if (ATargetLine >= 0) and (ATargetLine < FLines.Count) then
+    Tgt := FLines[ATargetLine]
+  else
+    Tgt := '';
+  Result := LineHasRTL(Cur) or LineHasRTL(Tgt);
 end;
 
 function TTyMemo.CaretRowStartCol(APPI: Integer): Integer;
@@ -1488,6 +1777,11 @@ begin
   FCaretLine := ALine;
   FCaretCol := ACol;
   ClampCaret;
+  { A code-facing caret write names a (line, column) and says nothing about glyphs, so the
+    caret it places has no run to stand against and must fall back to the default. Without
+    this the same assignment would land in two different places depending on which side of a
+    direction boundary the user last clicked. }
+  DefaultCaretAffinity;
   // A direct caret write collapses any selection (mirrors TTyEdit.SetCaretPos).
   FSelAnchorLine := FCaretLine;
   FSelAnchorCol := FCaretCol;
@@ -1635,6 +1929,7 @@ begin
   LastLine := LineCountLogical - 1;
   FCaretLine := LastLine;
   FCaretCol := LineLen(LastLine);
+  DefaultCaretAffinity;   // the document end is a logical end; see SetCaret
   FDesiredCol := FCaretCol;
   EnsureCaretLineVisible(Font.PixelsPerInch);
   Invalidate;
@@ -1815,12 +2110,22 @@ begin
   ViewRight := StartX + ViewWidth;
   // 2 scaled device px margin (mirrors TTyEdit.EnsureCaretVisible).
   Margin := MulDiv(2, APPI, 96);
-  // Caret x on its OWN line (absolute, before the scroll shift).
+  { Caret x on its OWN line (absolute, before the scroll shift). Asked of the DRAWN caret
+    rather than of the prefix sum: those are the same number for a line with no right-to-left
+    script in it and only the drawn one is right for the rest -- and scrolling to where the
+    caret is NOT would leave the user typing off-screen.
+
+    This branch only runs with WordWrap off, where a visual row IS a logical line and starts
+    at column 0, so the row's own frame and the line's are the same and CaretDrawXAt's answer
+    is directly comparable with ViewRight. }
   if FCaretLine < FLines.Count then
     CaretLineStr := FLines[FCaretLine]
   else
     CaretLineStr := '';
-  CaretPx := ColPixelXAt(CaretLineStr, FCaretCol, APPI);
+  if LineHasRTL(CaretLineStr) then
+    CaretPx := CaretDrawXAt(FCaretLine, FCaretCol, FCaretAfterPrev, APPI)
+  else
+    CaretPx := ColPixelXAt(CaretLineStr, FCaretCol, APPI);
   // Scroll right when the caret is past the right edge.
   if CaretPx - FScrollX > ViewRight - Margin then
     FScrollX := CaretPx - (ViewRight - Margin);
@@ -2092,8 +2397,17 @@ begin
   Row := FTopRow + (Y div LH);
   { Undo the row's alignment shift before resolving the column, or a click on a centred row
     lands on the character that WOULD be there if the row were left-justified. Zero under the
-    default alignment, so the plain hit-test is unchanged. }
-  VisualToCaret(Row, X - RowAlignOffset(Row, CW, APPI), CW, APPI, NewLine, NewCol);
+    default alignment, so the plain hit-test is unchanged.
+
+    Then lift the click into the ABSOLUTE (full logical line) frame VisualToCaret answers in,
+    by adding back the row's base. RowBaseAbsX is TextStartX for any row that starts at
+    column 0 -- which is EVERY row when WordWrap is off -- so this term is zero for the
+    unwrapped hit test and leaves it byte-identical. It is not zero for a wrapped
+    CONTINUATION row, where a client x was being compared against whole-line prefix widths
+    and then clamped: that resolved most of the row to its StartCol. }
+  VisualToCaretEx(Row, X - RowAlignOffset(Row, CW, APPI)
+      + (RowBaseAbsX(Row, APPI) - TextStartX(APPI)),
+    CW, APPI, NewLine, NewCol, FCaretAfterPrev);
   FCaretLine := NewLine;
   FCaretCol := NewCol;
   FDesiredCol := FCaretCol;
@@ -2133,7 +2447,11 @@ begin
   CW := ContentWidthFor(APPI);
   EnsureVisualRows(APPI);
   Row := FTopRow + (Y div LH);
-  VisualToCaret(Row, X - RowAlignOffset(Row, CW, APPI), CW, APPI, NewLine, NewCol);
+  // Same frame lift as MouseDown -- a drag has to hit-test identically to the press that
+  // began it, or the selection would not follow the pointer on a wrapped or reordered row.
+  VisualToCaretEx(Row, X - RowAlignOffset(Row, CW, APPI)
+      + (RowBaseAbsX(Row, APPI) - TextStartX(APPI)),
+    CW, APPI, NewLine, NewCol, FCaretAfterPrev);
   FCaretLine := NewLine;
   FCaretCol := NewCol;
   FDesiredCol := FCaretCol;
@@ -2231,6 +2549,13 @@ end;
 procedure TTyMemo.AfterEdit(APPI: Integer);
 begin
   ClampCaret;
+  { A completed edit parks the affinity, because that is what an insertion point means:
+    "the text I just wrote ends here". Placed HERE rather than in InvalidateVisualRows --
+    which is the seam every text mutation passes -- because that one is also reached from a
+    resize, from a scrollbar appearing and from the WordWrap setter, none of which are the
+    user typing; and because the Left/Right arrows must be able to READ the affinity they
+    are about to replace, and they do not come through here. }
+  DefaultCaretAffinity;
   // NOTE: AfterEdit is anchor-NEUTRAL on purpose. RestoreState (undo/redo) restores a selection and
   // then calls AfterEdit, so collapsing the anchor here would defeat undo re-selection. Edit paths
   // that should drop the selection collapse the anchor themselves before calling AfterEdit (typing,
@@ -2557,16 +2882,34 @@ begin
   FWidestWidthValid := False;
 end;
 
+function TTyMemo.RowsFor(AContentWidth, APPI: Integer): TTyVisualRowArray;
+begin
+  if FVisualRowsValid and (FVisualRowsWidth = AContentWidth) then
+    Exit(FVisualRows);
+  Result := BuildVisualRows(AContentWidth, APPI);
+end;
+
 procedure TTyMemo.CaretToVisual(ALine, ACol, AContentWidth, APPI: Integer;
   out AVisualRow, AX: Integer);
+begin
+  { The DEFAULT affinity, which is what a caller that does not know about glyphs means: the
+    caret stands against the character before it. For a row with no right-to-left script in
+    it the two answers are identical, so every existing caller is unchanged. }
+  CaretToVisualEx(ALine, ACol, True, AContentWidth, APPI, AVisualRow, AX);
+end;
+
+procedure TTyMemo.CaretToVisualEx(ALine, ACol: Integer; AAfterPrev: Boolean;
+  AContentWidth, APPI: Integer; out AVisualRow, AX: Integer);
 var
   Rows: TTyVisualRowArray;
   i: Integer;
   Line: string;
+  Cached: Boolean;
 begin
   AVisualRow := 0;
   AX := TextStartX(APPI);
-  Rows := BuildVisualRows(AContentWidth, APPI);
+  Cached := FVisualRowsValid and (FVisualRowsWidth = AContentWidth);
+  Rows := RowsFor(AContentWidth, APPI);
   if Length(Rows) = 0 then Exit;
   // Find the owning row. Tie-break: a caret at a soft-wrap boundary column binds
   // to the EARLIER row (the one whose EndCol == ACol) rather than the next row
@@ -2574,32 +2917,62 @@ begin
   // because we scan in order and accept the FIRST such row, the earlier row wins
   // the tie at a shared boundary column.
   AVisualRow := High(Rows);   // default: last row (handles col == final EndCol)
-  for i := 0 to High(Rows) do
-    if (Rows[i].Line = ALine) and (ACol >= Rows[i].StartCol)
-       and (ACol <= Rows[i].EndCol) then
-    begin
-      AVisualRow := i;
-      Break;
-    end;
-  // Device-x is identical to the plain per-line caret x (visual rows do not move
-  // the horizontal origin; horizontal scroll is applied later by the renderer).
-  if ALine < FLines.Count then
-    Line := FLines[ALine]
+  if Cached then
+    AVisualRow := CaretOwningRow(ALine, ACol)
   else
-    Line := '';
-  AX := ColPixelXAt(Line, ACol, APPI);
+    for i := 0 to High(Rows) do
+      if (Rows[i].Line = ALine) and (ACol >= Rows[i].StartCol)
+         and (ACol <= Rows[i].EndCol) then
+      begin
+        AVisualRow := i;
+        Break;
+      end;
+  { The ABSOLUTE (full logical line) frame both halves of this pair work in: the row's own
+    base plus the caret's x WITHIN the row. For a row that needs no reordering that sum is
+    Widths[StartCol] + (Widths[ACol] - Widths[StartCol]) = the plain per-line caret x, so the
+    left-to-right answer is exactly the ColPixelXAt this used to return. For a reordered row
+    the base is still the prefix sum -- it is only ever subtracted off again by the caller --
+    while the part INSIDE the row comes from the run table, which is the half that has to
+    match what was drawn.
+
+    The run tables hang off the CACHED row list, so a caller asking about some other content
+    width (the headless row tests ask about narrow widths to force a wrap) gets the prefix
+    sum rather than an answer read out of a row list that is not the one in the cache. }
+  if Cached then
+    AX := RowBaseAbsX(AVisualRow, APPI)
+      + RowCaretRelX(AVisualRow, ACol - Rows[AVisualRow].StartCol, AAfterPrev, APPI)
+  else
+  begin
+    if ALine < FLines.Count then
+      Line := FLines[ALine]
+    else
+      Line := '';
+    AX := ColPixelXAt(Line, ACol, APPI);
+  end;
 end;
 
 procedure TTyMemo.VisualToCaret(AVisualRow, AX, AContentWidth, APPI: Integer;
   out ALine, ACol: Integer);
 var
+  Ignored: Boolean;
+begin
+  VisualToCaretEx(AVisualRow, AX, AContentWidth, APPI, ALine, ACol, Ignored);
+end;
+
+procedure TTyMemo.VisualToCaretEx(AVisualRow, AX, AContentWidth, APPI: Integer;
+  out ALine, ACol: Integer; out AAfterPrev: Boolean);
+var
   Rows: TTyVisualRowArray;
+  RB: TTyMemoRowBidi;
   Line: string;
-  Col: Integer;
+  Col, RelX, i, r, best, bestErr, err, ex: Integer;
+  Cached: Boolean;
 begin
   ALine := 0;
   ACol := 0;
-  Rows := BuildVisualRows(AContentWidth, APPI);
+  AAfterPrev := True;
+  Cached := FVisualRowsValid and (FVisualRowsWidth = AContentWidth);
+  Rows := RowsFor(AContentWidth, APPI);
   if Length(Rows) = 0 then Exit;
   if AVisualRow < 0 then AVisualRow := 0;
   if AVisualRow > High(Rows) then AVisualRow := High(Rows);
@@ -2608,6 +2981,44 @@ begin
     Line := FLines[ALine]
   else
     Line := '';
+
+  if Cached and RowBidi(AVisualRow, APPI, RB) then
+  begin
+    { Row-relative x, in the same frame RowCaretRelX answers in. AX arrives ABSOLUTE (see
+      CaretToVisualEx), and ColIndexAtX's own frame adds FScrollX, so both terms are here. }
+    RelX := AX + FScrollX - RowBaseAbsX(AVisualRow, APPI);
+    { Which RUN the x landed in decides half the answer: at a direction boundary the column
+      alone is two different places on screen, so a hit test that returned only the column
+      would leave the caret to guess -- and a click on the far side of an embedded run would
+      draw the caret on the near side. }
+    r := RB.Order[0];
+    for i := 0 to High(RB.Order) do
+    begin
+      r := RB.Order[i];
+      if RelX < RB.Runs[r].Right then Break;
+    end;
+    { Nearest boundary WITHIN that run. Scanned rather than bisected: a run's boundaries
+      DESCEND in x for right-to-left text, and a handful of comparisons is nothing next to
+      the layout this is reading. }
+    best := RB.Runs[r].First;
+    bestErr := MaxInt;
+    for i := RB.Runs[r].First to RB.Runs[r].Last do
+    begin
+      ex := RowBidiEdgeX(RB, r, i);
+      err := Abs(ex - RelX);
+      if err < bestErr then
+      begin
+        bestErr := err;
+        best := i;
+      end;
+    end;
+    { The caret belongs to the run the user aimed at: against the character after it at the
+      run's logical start, against the one before it everywhere else. }
+    AAfterPrev := best > RB.Runs[r].First;
+    ACol := Rows[AVisualRow].StartCol + best;
+    Exit;
+  end;
+
   // Resolve x to a codepoint on the logical line, then clamp into the row's
   // [StartCol,EndCol] segment so the result never escapes the clicked row.
   Col := ColIndexAtX(Line, AX, APPI);
@@ -3035,6 +3446,400 @@ begin
   Result := Result + Widths[ACol];
 end;
 
+// ---- Bidirectional row layout -------------------------------------------------------
+//
+// WHY THIS EXISTS. MeasureLineWidths answers "where is column N" with a cumulative sum
+// taken in STRING order. That is exactly right for Latin and CJK and simply untrue once the
+// glyphs have been reordered: c2cfafc taught TTyPainter to draw a mixed Arabic/Latin line in
+// visual order and 7fd44ec fixed TTyEdit, but this control was still walking its prefix sum
+// -- so an Arabic paragraph in a memo DREW right and SELECTED wrong. Clicking a glyph put
+// the caret on a different one, arrow keys jumped across runs, and a drag highlighted glyphs
+// the user had not dragged over.
+//
+// WHY PER ROW rather than per line, which is the whole of what made this harder than the
+// single-line case: RenderTo draws each visual row as its OWN string, at the content left
+// edge, so the bidirectional algorithm runs once per row inside TTyPainter and a caret has
+// to agree with THAT reordering. A table built for the logical line would put a wrapped
+// continuation row's caret at the line's coordinates -- somewhere off to the right of the
+// viewport. Under WordWrap=False a row is the whole line and the distinction costs nothing.
+//
+// WHY NOT TTyPainter.TextCaretX / TextCharIndexAtX, which exist for exactly this. The same
+// two structural reasons TTyEdit records, and they apply here with more force:
+//
+//   * they lay out on the painter's FBmp, which only exists between BeginPaint and EndPaint.
+//     A caret is asked for from mouse handlers, key handlers, the scroller and the blink
+//     timer, and none of those are painting. Standing a whole painter up per query would be
+//     a TBidiTextLayout per keystroke -- the shape of the bug that once cost TTyMemo half a
+//     second of latency per key.
+//   * TextCaretX answers with TBidiTextLayout.GetCaret, which resolves a direction boundary
+//     towards the run that ENDS there and discards the other position. In "ab<alef><bet>cd"
+//     that makes columns 2 and 4 the same pixel with no way to tell them apart, and the far
+//     end of the embedded run unreachable by any column at all.
+//
+// So the row is laid out here instead, once per (segment, font, PPI), and every query is an
+// array lookup afterwards. The duplication is deliberate and pinned:
+// test.memo.bidi.MemoCaretAgreesWithThePainterForUnambiguousIndices renders the same string
+// through TTyPainter.TextCaretX and requires the same pixel for every column the painter can
+// express, so the two cannot drift apart in silence.
+
+function TTyMemo.LineHasRTL(const ALine: string): Boolean;
+begin
+  { The memo is one slot deep on purpose. The caret asks about the SAME line on every blink,
+    every keystroke and every mouse move of a drag-select, so one slot catches nearly all of
+    it; and a miss costs a scan of ONE LINE, never of the document, which is the property
+    that makes a thousand left-to-right lines cost what one line costs
+    (test.memo.bidi.AThousandLeftToRightLinesCostTheSameGateAsOne pins it as a COUNT, since
+    a wall clock could not tell the two apart reliably enough to fail).
+
+    TyTextHasRTL rejects ASCII in one compare and CJK, Cyrillic and Greek on the lead byte
+    without decoding, so the miss is cheap too. }
+  if FBidiGateSeeded and (ALine = FBidiGateLine) then
+    Exit(FBidiGateAnswer);
+  Inc(FBidiGateCalls);
+  FBidiGateLine := ALine;
+  FBidiGateAnswer := TyTextHasRTL(ALine);
+  FBidiGateSeeded := True;
+  Result := FBidiGateAnswer;
+end;
+
+function TTyMemo.RowSegmentOf(AVisualRow: Integer): string;
+var
+  Line: string;
+begin
+  Result := '';
+  if (AVisualRow < 0) or (AVisualRow > High(FVisualRows)) then Exit;
+  if FVisualRows[AVisualRow].Line < FLines.Count then
+    Line := FLines[FVisualRows[AVisualRow].Line]
+  else
+    Line := '';
+  Result := UTF8Copy(Line, FVisualRows[AVisualRow].StartCol + 1,
+    FVisualRows[AVisualRow].EndCol - FVisualRows[AVisualRow].StartCol);
+end;
+
+function TTyMemo.EnsureRowBidi(const ASeg: string; APPI: Integer;
+  out ARB: TTyMemoRowBidi): Boolean;
+var
+  S: TTyStyleSet;
+  EffSize, i, r, n, a, b, x: Integer;
+  sig: string;
+  lay: TBidiTextLayout;
+begin
+  Inc(FBidiRowLookups);   // diagnostic: the work the LINE gate exists to avoid (perf guard)
+  ARB := Default(TTyMemoRowBidi);
+  if ASeg = '' then Exit(False);
+
+  S := CurrentStyle;
+  EffSize := EffectiveFontSize(S);
+  sig := S.FontName + '|' + IntToStr(EffSize) + '|' + IntToStr(S.FontWeight) + '|'
+    + IntToStr(APPI);
+  if sig <> FRowBidiSig then
+  begin
+    // Font changed: every x in every table is stale. Same drop discipline as the width caches.
+    FRowBidiCache.Clear;
+    FRowBidiSig := sig;
+  end;
+  if FRowBidiCache.TryGetValue(ASeg, ARB) then
+    Exit(ARB.Active);
+
+  { THE SECOND GATE, and the one that has to agree with the PAINT. TTyPainter.DrawText asks
+    TyTextHasRTL of the very string it is about to draw and takes the bidirectional path only
+    when it says yes; a row whose segment carries no right-to-left codepoint is drawn by the
+    plain TextRect path. Reading such a row's caret out of a TBidiTextLayout instead would be
+    a SECOND rasterisation of the same row, and the two can round differently -- so the
+    control's gate has to be the painter's gate, asked of the same string. }
+  if TyTextHasRTL(ASeg) then
+  begin
+    n := UTF8Length(ASeg);
+    if FMeasureBmp = nil then
+      FMeasureBmp := TBGRABitmap.Create(1, 1);
+    // The layout borrows this bitmap's FontRenderer, so its metrics are the ones DrawText
+    // will use -- the same four lines, and the same reason, as MeasureLineWidths.
+    TyConfigureTextFont(FMeasureBmp, S.FontName, EffSize, S.FontWeight, APPI);
+    Inc(FBidiLayoutBuilds);   // diagnostic: the work the SEGMENT gate exists to avoid
+    lay := TBidiTextLayout.Create(FMeasureBmp.FontRenderer, ASeg);
+    try
+      { TopLeft at the origin makes every x below relative to the ROW's text start, which is
+        the frame the renderer draws the row in. AvailableWidth is left unset for the same
+        reason TTyPainter.BuildLineLayout leaves it unset: the wrap has already happened,
+        CJK-aware, in BuildVisualRows, and an unset width also stops the layout right-
+        aligning a right-to-left paragraph on its own -- which would be the MIRRORING half of
+        the job, and that half is not built. }
+      lay.TopLeft := PointF(0, 0);
+      SetLength(ARB.Lead, n + 1);
+      SetLength(ARB.Trail, n + 1);
+      { Seed both arrays from the plain caret query so that an index no run claims (BGRA owes
+        us a partition of 0..n, but a zero here would be a caret at the row's left edge
+        rather than a visible wrong answer) still gets a defensible number. The run walk
+        below then overwrites every index it owns. }
+      for i := 0 to n do
+      begin
+        x := Round(lay.GetCaret(i).Top.x);
+        ARB.Lead[i] := x;
+        ARB.Trail[i] := x;
+      end;
+      SetLength(ARB.Runs, lay.PartCount);
+      for r := 0 to lay.PartCount - 1 do
+      begin
+        a := lay.PartStartIndex[r];
+        b := lay.PartEndIndex[r];
+        ARB.Runs[r].First := a;
+        ARB.Runs[r].Last := b;
+        ARB.Runs[r].RTL := lay.PartRightToLeft[r];
+        ARB.Runs[r].Left := Round(lay.PartRectF[r].Left);
+        ARB.Runs[r].Right := Round(lay.PartRectF[r].Right);
+        for i := a to b do
+        begin
+          { The run's OWN end carets at its edges. Asking GetCaret there is what collapses
+            the two sides of a boundary onto one; asking the run resolves it, because a run
+            has exactly one start and one end and they are never the same point. Strictly
+            inside a run there is no ambiguity and GetCaret is exact. }
+          if i = a then x := Round(lay.PartStartCaret[r].Top.x)
+          else if i = b then x := Round(lay.PartEndCaret[r].Top.x)
+          else x := Round(lay.GetCaret(i).Top.x);
+          if i < b then ARB.Lead[i] := x;    // boundary i faces character i, which is in this run
+          if i > a then ARB.Trail[i] := x;   // ...and character i-1, likewise
+        end;
+      end;
+    finally
+      lay.Free;
+    end;
+
+    { Run indices in left-to-right SCREEN order, for the arrow keys: "the next glyph to the
+      right" is in the next run along, which is not the next run in logical order. Insertion
+      sort because a row has a handful of runs, not thousands. }
+    SetLength(ARB.Order, Length(ARB.Runs));
+    for r := 0 to High(ARB.Runs) do
+    begin
+      i := r;
+      while (i > 0) and (ARB.Runs[ARB.Order[i - 1]].Left > ARB.Runs[r].Left) do
+      begin
+        ARB.Order[i] := ARB.Order[i - 1];
+        Dec(i);
+      end;
+      ARB.Order[i] := r;
+    end;
+    ARB.Active := Length(ARB.Runs) > 0;
+  end;
+
+  // Cached either way: "this segment needs no reordering" is the answer a repaint of a
+  // mixed document asks for most often. Capped like the width caches to bound growth.
+  if FRowBidiCache.Count > 512 then
+    FRowBidiCache.Clear;
+  FRowBidiCache.AddOrSetValue(ASeg, ARB);
+  Result := ARB.Active;
+end;
+
+function TTyMemo.RowBidi(AVisualRow, APPI: Integer; out ARB: TTyMemoRowBidi): Boolean;
+var
+  Line: string;
+begin
+  ARB := Default(TTyMemoRowBidi);
+  Result := False;
+  if (AVisualRow < 0) or (AVisualRow > High(FVisualRows)) then Exit;
+  if FVisualRows[AVisualRow].Line < FLines.Count then
+    Line := FLines[FVisualRows[AVisualRow].Line]
+  else
+    Line := '';
+  { Gate on the LINE before touching the row: a left-to-right document pays one memoised
+    string compare here and never builds a segment substring or hashes a dictionary key. }
+  if not LineHasRTL(Line) then Exit;
+  Result := EnsureRowBidi(RowSegmentOf(AVisualRow), APPI, ARB);
+end;
+
+function TTyMemo.RowBidiEdgeX(const ARB: TTyMemoRowBidi; ARun, AIndex: Integer): Integer;
+begin
+  { At the run's logical END only Trail was written from this run; everywhere else Lead was.
+    (Both arrays hold the same number except at a direction boundary.) }
+  if AIndex >= ARB.Runs[ARun].Last then
+    Result := ARB.Trail[ARB.Runs[ARun].Last]
+  else
+    Result := ARB.Lead[AIndex];
+end;
+
+function TTyMemo.RowBidiCaretRun(const ARB: TTyMemoRowBidi; AIndex: Integer;
+  AAfterPrev: Boolean): Integer;
+var
+  r: Integer;
+begin
+  { The affinity names which neighbouring character the caret is standing against, and that
+    character's run is the one it belongs to. At the two ends of the row only one of the two
+    rules can be satisfied, so the other is the fallback. }
+  for r := 0 to High(ARB.Runs) do
+    if AAfterPrev then
+    begin
+      if (AIndex > ARB.Runs[r].First) and (AIndex <= ARB.Runs[r].Last) then Exit(r);
+    end
+    else
+      if (AIndex >= ARB.Runs[r].First) and (AIndex < ARB.Runs[r].Last) then Exit(r);
+  for r := 0 to High(ARB.Runs) do
+    if (AIndex >= ARB.Runs[r].First) and (AIndex <= ARB.Runs[r].Last) then Exit(r);
+  Result := -1;
+end;
+
+function TTyMemo.RowBidiNeighbourRun(const ARB: TTyMemoRowBidi;
+  ARun, ADir: Integer): Integer;
+var
+  i: Integer;
+begin
+  Result := -1;
+  for i := 0 to High(ARB.Order) do
+    if ARB.Order[i] = ARun then
+    begin
+      if ADir > 0 then
+      begin
+        if i < High(ARB.Order) then Result := ARB.Order[i + 1];
+      end
+      else
+        if i > 0 then Result := ARB.Order[i - 1];
+      Exit;
+    end;
+end;
+
+function TTyMemo.RowCaretRelX(AVisualRow, ARowCol: Integer; AAfterPrev: Boolean;
+  APPI: Integer): Integer;
+var
+  RB: TTyMemoRowBidi;
+  Line: string;
+  RS, n: Integer;
+  Widths: TTyIntArray;
+begin
+  Result := 0;
+  if (AVisualRow < 0) or (AVisualRow > High(FVisualRows)) then Exit;
+  RS := FVisualRows[AVisualRow].StartCol;
+  if RowBidi(AVisualRow, APPI, RB) then
+  begin
+    n := Length(RB.Lead) - 1;
+    if ARowCol < 0 then ARowCol := 0;
+    if ARowCol > n then ARowCol := n;
+    if AAfterPrev then
+      Result := RB.Trail[ARowCol]
+    else
+      Result := RB.Lead[ARowCol];
+    Exit;
+  end;
+  { The prefix sum, untouched: the row's own columns measured from its first codepoint. For
+    a full-width row (StartCol = 0) Widths[RS] is 0 and this is the per-line caret x this
+    control has always produced. }
+  if FVisualRows[AVisualRow].Line < FLines.Count then
+    Line := FLines[FVisualRows[AVisualRow].Line]
+  else
+    Line := '';
+  if Line = '' then Exit;
+  Widths := MeasureLineWidths(Line, APPI);
+  if RS + ARowCol < 0 then ARowCol := -RS;
+  if RS + ARowCol > High(Widths) then ARowCol := High(Widths) - RS;
+  Result := Widths[RS + ARowCol] - Widths[RS];
+end;
+
+procedure TTyMemo.RowVisualEdge(AVisualRow, ASide, APPI: Integer;
+  out ACol: Integer; out AAfterPrev: Boolean);
+var
+  RB: TTyMemoRowBidi;
+  RS, r, j: Integer;
+begin
+  ACol := 0;
+  AAfterPrev := True;
+  if (AVisualRow < 0) or (AVisualRow > High(FVisualRows)) then Exit;
+  RS := FVisualRows[AVisualRow].StartCol;
+  if not RowBidi(AVisualRow, APPI, RB) then
+  begin
+    // No reordering: the leftmost caret is the row's first column, the rightmost its last.
+    if ASide < 0 then
+    begin
+      ACol := RS;
+      AAfterPrev := False;
+    end
+    else
+    begin
+      ACol := FVisualRows[AVisualRow].EndCol;
+      AAfterPrev := True;
+    end;
+    Exit;
+  end;
+  if Length(RB.Order) = 0 then Exit;
+  if ASide < 0 then r := RB.Order[0] else r := RB.Order[High(RB.Order)];
+  { Inside a right-to-left run the run's LAST codepoint boundary is its LEFT edge, so which
+    end of the run is "the outer one" depends on the run's direction, not on the side. }
+  if ASide < 0 then
+  begin
+    if RB.Runs[r].RTL then j := RB.Runs[r].Last else j := RB.Runs[r].First;
+  end
+  else
+    if RB.Runs[r].RTL then j := RB.Runs[r].First else j := RB.Runs[r].Last;
+  ACol := RS + j;
+  AAfterPrev := j > RB.Runs[r].First;
+end;
+
+procedure TTyMemo.DefaultCaretAffinity;
+begin
+  FCaretAfterPrev := True;
+end;
+
+function TTyMemo.CaretOwningRow(ALine, ACol: Integer): Integer;
+var
+  i: Integer;
+begin
+  { Tie-break: a caret at a soft-wrap boundary column binds to the EARLIER row (the one
+    whose EndCol == ACol) rather than the next row whose StartCol == ACol. We accept a row
+    when ACol is within [StartCol, EndCol]; because we scan in order and accept the FIRST
+    such row, the earlier row wins the tie at a shared boundary column.
+    Requires FVisualRows to be current -- every caller ensures it first. }
+  Result := High(FVisualRows);   // default: last row (handles col == final EndCol)
+  for i := 0 to High(FVisualRows) do
+    if (FVisualRows[i].Line = ALine) and (ACol >= FVisualRows[i].StartCol)
+       and (ACol <= FVisualRows[i].EndCol) then
+      Exit(i);
+end;
+
+function TTyMemo.CaretDrawXAt(ALine, ACol: Integer; AAfterPrev: Boolean;
+  APPI: Integer): Integer;
+var
+  VRow: Integer;
+begin
+  { Deliberately NOT routed through CaretToVisualEx, and this is a measured decision rather
+    than a stylistic one -- do not "simplify" it back.
+
+    CaretToVisualEx answers in the ABSOLUTE (full logical line) frame: the row's base PLUS
+    the caret's x within the row. This function then subtracts the base straight back off.
+    Computing both and cancelling them meant four ContentWidthFor calls per caret query
+    instead of one, and ContentWidthFor is not cheap -- it resolves a style and asks the
+    controller for --scrollbar-size, measured at ~115us against a ~25us width lookup. The
+    first cut of this function did exactly that and cost 546us per query on a thousand-line
+    memo; finding the row once and taking the row-relative x directly brought it to 139us,
+    with no change to a single pixel. On a control whose caret is queried on every keystroke,
+    every mouse move of a drag-select and every blink -- and which once had half a second of
+    latency per key from uncached measurement -- that is not an acceptable way to arrive at a
+    number the arithmetic throws away.
+
+    (The cost is flat in document size either way: 139.3 / 138.9 / 140.7 us at lines 0, 500
+    and 999 of a thousand. What was wrong was the constant, not the complexity.)
+
+    For a full-width row (StartCol = 0) RowCaretRelX is Widths[ACol], so this is the
+    per-line caret x this control has always drawn. }
+  EnsureVisualRows(APPI);
+  if Length(FVisualRows) = 0 then
+    Exit(TextStartX(APPI));
+  VRow := CaretOwningRow(ALine, ACol);
+  Result := TextStartX(APPI)
+    + RowCaretRelX(VRow, ACol - FVisualRows[VRow].StartCol, AAfterPrev, APPI);
+end;
+
+function TTyMemo.CaretDrawX(APPI: Integer): Integer;
+begin
+  Result := CaretDrawXAt(FCaretLine, FCaretCol, FCaretAfterPrev, APPI);
+end;
+
+function TTyMemo.UsesBidiCaret(APPI: Integer): Boolean;
+var
+  CW, VRow, X: Integer;
+  RB: TTyMemoRowBidi;
+begin
+  CW := ContentWidthFor(APPI);
+  EnsureVisualRows(APPI);
+  CaretToVisualEx(FCaretLine, FCaretCol, FCaretAfterPrev, CW, APPI, VRow, X);
+  Result := RowBidi(VRow, APPI, RB);
+end;
+
 function TTyMemo.ColIndexAtX(const ALine: string; AX, APPI: Integer): Integer;
 // Midpoint-nearest codepoint boundary (lifted from TTyEdit.CaretIndexAtX). AX is a
 // device x in control coordinates; add FScrollX so a click while horizontally
@@ -3085,6 +3890,9 @@ var
   AOff, AlignW: Integer;   // Alignment: per-row draw-origin shift, and the width it fits into
   // Selection-band state (resolved once before the visible-row loop).
   SL, SC, EL, EC, X1, X2: Integer;
+  // Per-run band state for a reordered row (one band per run; see the band block).
+  RowRB: TTyMemoRowBidi;
+  RunIdx, SelA, SelB, BandSwap, bandEffEnd: Integer;
   Widths: TTyIntArray;
   BandFill: TTyFill;
   BandColor: TTyColor;
@@ -3204,28 +4012,75 @@ begin
           bandEndCol := -1;           // sentinel: extend to the content right edge
         if DrawBand then
         begin
-          // Shift the band left by FScrollX (same as the text). The right-edge
-          // sentinel (bandEndCol < 0) already means "extend to the viewport right"
-          // so it is NOT shifted. Clamp both edges into the content rect so the
-          // band never paints over the padding/scrollbar when scrolled. FScrollX=0
-          // leaves the band geometry byte-identical to today.
-          X1 := ContentRect.Left + (Widths[bandStartCol] - RowBaseW) - FScrollX + AOff;
-          if bandEndCol < 0 then
-            X2 := ContentRect.Right - SBWidth
-          else
-            X2 := ContentRect.Left + (Widths[bandEndCol] - RowBaseW) - FScrollX + AOff;
-          if X1 < ContentRect.Left then X1 := ContentRect.Left;
-          if X2 > ContentRect.Right - SBWidth then X2 := ContentRect.Right - SBWidth;
-          if X1 < X2 then
+          // Band color from the TyTextSelection typeKey (accent-tinted; mirrors
+          // TTyEdit). Theme-overridable, matching selected list rows.
+          BandColor := SelStyle.Background.Color;
+          BandFill := Default(TTyFill);
+          BandFill.Kind := tfkSolid;
+          BandFill.Color := BandColor;
+          if RowBidi(vr, APPI, RowRB) then
           begin
-            BandRect := Rect(X1, y, X2, y + LH);
-            // Band color from the TyTextSelection typeKey (accent-tinted; mirrors
-            // TTyEdit). Theme-overridable, matching selected list rows.
-            BandColor := SelStyle.Background.Color;
-            BandFill := Default(TTyFill);
-            BandFill.Kind := tfkSolid;
-            BandFill.Color := BandColor;
-            P.FillBackground(BandRect, BandFill, 0);
+            { A selection is a LOGICAL range, and a logical range that crosses a direction
+              boundary is not one rectangle on screen. Selecting "ab" plus the FIRST letter
+              of an embedded Hebrew word highlights the "ab" and that letter -- with the
+              SECOND Hebrew letter, which is NOT selected, drawn in the gap between them.
+              One band spanning the lot would be telling the user they had selected it.
+              So: one band per run, over the part of the run the selection actually covers.
+              Columns go row-relative here, which is the frame the run table is in. }
+            if bandEndCol < 0 then bandEffEnd := RE else bandEffEnd := bandEndCol;
+            for RunIdx := 0 to High(RowRB.Runs) do
+            begin
+              SelA := bandStartCol - RS;
+              if SelA < RowRB.Runs[RunIdx].First then SelA := RowRB.Runs[RunIdx].First;
+              SelB := bandEffEnd - RS;
+              if SelB > RowRB.Runs[RunIdx].Last then SelB := RowRB.Runs[RunIdx].Last;
+              if SelA >= SelB then Continue;
+              X1 := RowBidiEdgeX(RowRB, RunIdx, SelA);
+              X2 := RowBidiEdgeX(RowRB, RunIdx, SelB);
+              // Inside a right-to-left run the later codepoint is the SMALLER x.
+              if X2 < X1 then begin BandSwap := X1; X1 := X2; X2 := BandSwap; end;
+              X1 := ContentRect.Left + X1 - FScrollX + AOff;
+              X2 := ContentRect.Left + X2 - FScrollX + AOff;
+              if X1 < ContentRect.Left then X1 := ContentRect.Left;
+              if X2 > ContentRect.Right - SBWidth then X2 := ContentRect.Right - SBWidth;
+              if X1 < X2 then
+                P.FillBackground(Rect(X1, y, X2, y + LH), BandFill, 0);
+            end;
+            { The trailing-line-break strip. When the selection continues onto a later line
+              the plain path fills to the viewport right to show the break is included; that
+              indicator is about the ROW, not about any run, so it is drawn from the row's
+              rightmost ink rather than folded into one of the run bands. }
+            if bandEndCol < 0 then
+            begin
+              X1 := 0;
+              for RunIdx := 0 to High(RowRB.Runs) do
+                if RowRB.Runs[RunIdx].Right > X1 then X1 := RowRB.Runs[RunIdx].Right;
+              X1 := ContentRect.Left + X1 - FScrollX + AOff;
+              X2 := ContentRect.Right - SBWidth;
+              if X1 < ContentRect.Left then X1 := ContentRect.Left;
+              if X1 < X2 then
+                P.FillBackground(Rect(X1, y, X2, y + LH), BandFill, 0);
+            end;
+          end
+          else
+          begin
+            // Shift the band left by FScrollX (same as the text). The right-edge
+            // sentinel (bandEndCol < 0) already means "extend to the viewport right"
+            // so it is NOT shifted. Clamp both edges into the content rect so the
+            // band never paints over the padding/scrollbar when scrolled. FScrollX=0
+            // leaves the band geometry byte-identical to today.
+            X1 := ContentRect.Left + (Widths[bandStartCol] - RowBaseW) - FScrollX + AOff;
+            if bandEndCol < 0 then
+              X2 := ContentRect.Right - SBWidth
+            else
+              X2 := ContentRect.Left + (Widths[bandEndCol] - RowBaseW) - FScrollX + AOff;
+            if X1 < ContentRect.Left then X1 := ContentRect.Left;
+            if X2 > ContentRect.Right - SBWidth then X2 := ContentRect.Right - SBWidth;
+            if X1 < X2 then
+            begin
+              BandRect := Rect(X1, y, X2, y + LH);
+              P.FillBackground(BandRect, BandFill, 0);
+            end;
           end;
         end;
       end;
@@ -3242,22 +4097,24 @@ begin
     // a full-width row (RS=0) reproduces today's caret X exactly.
     if (Focused or FForceFocused) and not HasSelection and FCaretVisible then
     begin
-      CaretToVisual(FCaretLine, FCaretCol, FVisualRowsWidth, APPI, CaretVRow, CaretX);
+      { The row directly, not through CaretToVisual: the rows are already ensured above and
+        the x is taken from the row's own frame just below, so resolving an absolute x here
+        only to discard it would pay for a second ContentWidthFor mid-paint. }
+      if Length(FVisualRows) = 0 then
+        CaretVRow := -1
+      else
+        CaretVRow := CaretOwningRow(FCaretLine, FCaretCol);
       if (CaretVRow >= FTopRow) and (CaretVRow <= LastVisible)
         and (CaretVRow >= 0) and (CaretVRow <= High(FVisualRows)) then
       begin
-        RL := FVisualRows[CaretVRow].Line;
-        RS := FVisualRows[CaretVRow].StartCol;
-        if RL < FLines.Count then
-          Line := FLines[RL]
-        else
-          Line := '';
-        // Segment-relative caret X: full-line ColPixelXAt minus the row's base
-        // offset (= 0 when RS=0, so identical to the old caret X for no-wrap),
-        // then shifted left by FScrollX so the caret tracks the scrolled text.
-        // FScrollX = 0 (fitting text / WordWrap=True) leaves this byte-identical.
-        CaretX := R.Left + ColPixelXAt(Line, FCaretCol, APPI)
-          - (ColPixelXAt(Line, RS, APPI) - TextStartX(APPI)) - FScrollX
+        // Row-relative caret X in the same frame the row's text is drawn in, then shifted
+        // left by FScrollX so the caret tracks the scrolled text and right by the row's
+        // alignment offset. RowCaretRelX is the prefix sum for a row with no right-to-left
+        // script in it and the reordered position otherwise, so this one line is both.
+        CaretX := R.Left + TextStartX(APPI)
+          + RowCaretRelX(CaretVRow, FCaretCol - FVisualRows[CaretVRow].StartCol,
+              FCaretAfterPrev, APPI)
+          - FScrollX
           + RowAlignOffset(CaretVRow, (ContentRect.Right - SBWidth) - ContentRect.Left, APPI);
         y := ContentTop + (CaretVRow - FTopRow) * LH;
         CaretRect := Rect(CaretX, y + P.Scale(2),
@@ -3604,13 +4461,22 @@ begin
           Dec(FCaretLine);
           FCaretCol := LineLen(FCaretLine);
         end;
+        // A word jump names a codepoint, not a glyph: it has no side to stand on.
+        DefaultCaretAffinity;
       end
-      else if FCaretCol > 0 then
-        Dec(FCaretCol)
-      else if FCaretLine > 0 then
+      { Left is VISUAL movement in text. MoveCaretVisualH answers False -- having changed
+        nothing -- for any row that is not reordered, and the logical walk below is then
+        byte-identical to what it always was. }
+      else if not MoveCaretVisualH(-1, APPI) then
       begin
-        Dec(FCaretLine);
-        FCaretCol := LineLen(FCaretLine);
+        if FCaretCol > 0 then
+          Dec(FCaretCol)
+        else if FCaretLine > 0 then
+        begin
+          Dec(FCaretLine);
+          FCaretCol := LineLen(FCaretLine);
+        end;
+        DefaultCaretAffinity;
       end;
       FDesiredCol := FCaretCol;
       if not Extending then
@@ -3638,13 +4504,20 @@ begin
           Inc(FCaretLine);
           FCaretCol := 0;
         end;
+        // A word jump names a codepoint, not a glyph: it has no side to stand on.
+        DefaultCaretAffinity;
       end
-      else if FCaretCol < L then
-        Inc(FCaretCol)
-      else if FCaretLine < MaxLine then
+      // Right is VISUAL movement in text; see the note on VK_LEFT.
+      else if not MoveCaretVisualH(+1, APPI) then
       begin
-        Inc(FCaretLine);
-        FCaretCol := 0;
+        if FCaretCol < L then
+          Inc(FCaretCol)
+        else if FCaretLine < MaxLine then
+        begin
+          Inc(FCaretLine);
+          FCaretCol := 0;
+        end;
+        DefaultCaretAffinity;
       end;
       FDesiredCol := FCaretCol;
       if not Extending then
@@ -3662,7 +4535,13 @@ begin
       // FDesiredCol column-restore idiom and is byte-identical to today.
       FInVerticalMove := True;
       try
-        if FWordWrap then
+        { The wrap path is already an x-preserving move; the no-wrap path restores a
+          remembered COLUMN, which only names the same screen place when both lines read the
+          same way. When either does not, route the no-wrap move through the same
+          x-preserving code -- with WordWrap off a visual row IS a logical line, so
+          MoveCaretByVisualRow's row arithmetic reduces to the line arithmetic below it,
+          clamp and no-op guard included. }
+        if FWordWrap or VerticalMoveNeedsX(FCaretLine - 1) then
           MoveCaretByVisualRow(-1, APPI)
         else if FCaretLine > 0 then
         begin
@@ -3671,6 +4550,7 @@ begin
           FCaretCol := FDesiredCol;
           if FCaretCol > LineLen(FCaretLine) then
             FCaretCol := LineLen(FCaretLine);
+          DefaultCaretAffinity;
         end;
         // FDesiredCol / FDesiredX preserved across vertical motion.
         if not Extending then
@@ -3688,7 +4568,8 @@ begin
     begin
       FInVerticalMove := True;
       try
-        if FWordWrap then
+        // See the note on VK_UP for why a reordered line takes the x-preserving path.
+        if FWordWrap or VerticalMoveNeedsX(FCaretLine + 1) then
           MoveCaretByVisualRow(+1, APPI)
         else if FCaretLine < MaxLine then
         begin
@@ -3696,6 +4577,7 @@ begin
           FCaretCol := FDesiredCol;
           if FCaretCol > LineLen(FCaretLine) then
             FCaretCol := LineLen(FCaretLine);
+          DefaultCaretAffinity;
         end;
         // FDesiredCol / FDesiredX preserved across vertical motion.
         if not Extending then
@@ -3722,6 +4604,8 @@ begin
         FCaretCol := CaretRowStartCol(APPI)
       else
         FCaretCol := 0;          // line-local (no-wrap; unchanged)
+      // Home names a logical end, not a glyph: it has no side to stand on.
+      DefaultCaretAffinity;
       FDesiredCol := FCaretCol;
       // FDesiredX is refreshed in AfterCaretMove (horizontal move).
       if not Extending then
@@ -3747,6 +4631,8 @@ begin
         FCaretCol := CaretRowEndCol(APPI)
       else
         FCaretCol := LineLen(FCaretLine);  // line-local (no-wrap; unchanged)
+      // End likewise: a logical end, not a glyph.
+      DefaultCaretAffinity;
       FDesiredCol := FCaretCol;
       // FDesiredX is refreshed in AfterCaretMove (horizontal move).
       if not Extending then

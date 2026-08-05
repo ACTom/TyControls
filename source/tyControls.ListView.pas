@@ -2144,17 +2144,18 @@ end;
 function TTyListView.GetHitPart(X, Y: Integer): TTyListHitPart;
 var
   m: TTyListMetrics;
-  logX, logScroll, pos, g, idx: Integer;
+  pos, g, idx: Integer;
   cell, chk: TRect;
 begin
   SyncArrays;
   m := CurrentMetrics;
   if (FViewStyle = lvsReport) and (m.HeaderH > 0) and (Y < m.HeaderH) then
   begin
-    logX      := UnscaleI(X);          { device -> logical (column model is logical) }
-    logScroll := UnscaleI(FOffsetX);
+    { Device X against -FOffsetX, the SAME origin RenderHeader paints the cells
+      from. Converting down to logical first rounded the edge twice and could put
+      the grip one device pixel off the border it belongs to. }
     if (hoColumnResize in FHeader.Options) and
-       (FHeader.Columns.DetermineSplitterIndex(logX, logScroll) <> NoColumn) then
+       (FHeader.Columns.DetermineSplitterIndex(X, -FOffsetX, Dpi) <> NoColumn) then
       Result := lhpDivider
     else
       Result := lhpHeader;
@@ -3441,7 +3442,7 @@ end;
 procedure TTyListView.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   m: TTyListMetrics;
-  cnt, pos, item, logX, logScroll, dividerCol, clickCol, g, idx: Integer;
+  cnt, pos, item, dividerCol, clickCol, g, idx: Integer;
   col: TTyColumn;
 begin
   if not Enabled then Exit;
@@ -3461,11 +3462,11 @@ begin
   { Header band (report mode). }
   if (FViewStyle = lvsReport) and (m.HeaderH > 0) and (Y < m.HeaderH) then
   begin
-    logX      := UnscaleI(X);          { device -> logical (column model is logical) }
-    logScroll := UnscaleI(FOffsetX);
+    { Device X against -FOffsetX — the origin the header cells are painted from
+      (see GetHitPart). }
     dividerCol := NoColumn;
     if hoColumnResize in FHeader.Options then
-      dividerCol := FHeader.Columns.DetermineSplitterIndex(logX, logScroll);
+      dividerCol := FHeader.Columns.DetermineSplitterIndex(X, -FOffsetX, Dpi);
     if dividerCol <> NoColumn then
     begin
       { Double-click on a divider fits the column to its content, as in Explorer. }
@@ -3484,7 +3485,7 @@ begin
       MouseCapture := True;
       Exit;
     end;
-    clickCol := FHeader.Columns.ColumnFromPosition(logX, logScroll);
+    clickCol := FHeader.Columns.ColumnFromPosition(X, -FOffsetX, Dpi);
     if clickCol <> NoColumn then
     begin
       if Assigned(FOnColumnClick) then FOnColumnClick(Self, clickCol);

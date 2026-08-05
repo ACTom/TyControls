@@ -1028,9 +1028,11 @@ begin
       case lst[i].Kind of
         pikPrev, pikNext:
           begin
-            // tgArrowLeft/tgArrowRight rather than a chevron pair: the painter has
-            // tgChevronRight but no tgChevronLeft, and half a chevron pair would read as two
-            // different marks. Both are theme-overridable with an icon-font codepoint
+            // tgArrowLeft/tgArrowRight rather than a chevron pair. The original reason was
+            // that the painter had tgChevronRight and no left twin; that is no longer true
+            // (the twin landed with the grid's mirrored tree toggle), so this is now a plain
+            // style choice and can be revisited. Both are theme-overridable with an
+            // icon-font codepoint
             // (--glyph-arrow-left / --glyph-arrow-right), which is where a skin that wants
             // chevrons puts them (v3/C5).
             glyphR := TyPaginationGlyphRect(cellR, glyphSz);

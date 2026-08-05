@@ -226,6 +226,37 @@ type
   end;
 
   { -----------------------------------------------------------------------
+    HEADER X AXIS AT HiDPI — the click→column map must land on the pixel the
+    header was PAINTED at.
+
+    The header cells are painted from col.Span(-FOffsetX, Dpi), i.e. device px.
+    The click used to be converted DOWN to logical px first and matched against
+    the logical span, so at PPI <> 96 the same edge could be rounded twice and
+    the last device pixel of a column answered as the next one. Widths 101/102
+    at PPI 144 put both interior edges on a half pixel.
+    ----------------------------------------------------------------------- }
+  TListViewHeaderDpiTest = class(TTestCase)
+  private
+    FLV: TTyListViewAccess;
+    FClicked: Integer;    { the column the control reported, -2 = none }
+    procedure HColumnClick(Sender: TObject; AColumn: Integer);
+    { device x of a column's painted left edge — the span source the paint uses }
+    function  PaintLeft(AIndex: Integer): Integer;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    { the first painted pixel of column 1 clicks column 1 }
+    procedure TestClickOnAColumnsFirstPaintedPixelSelectsThatColumn;
+    { and the pixel before it still clicks column 0 }
+    procedure TestClickJustLeftOfTheEdgeStaysOnThePreviousColumn;
+    { the same boundary, one column further right }
+    procedure TestTheSecondInteriorBoundaryAgrees;
+    { the divider grip keeps its physical width at 192 PPI }
+    procedure TestDividerGripKeepsItsPhysicalWidthAtHiDpi;
+  end;
+
+  { -----------------------------------------------------------------------
     TYPE-AHEAD — a fresh key cycles, a refining key may stay put
     ----------------------------------------------------------------------- }
   TListViewTypeAheadTest = class(TTestCase)
@@ -2437,6 +2468,82 @@ begin
     AssertEquals(Format('lvsList identity unchanged at display %d', [k]), k, FLV.OrderAt(k));
 end;
 
+{ ===========================================================================
+  HEADER X AXIS AT HiDPI
+  =========================================================================== }
+
+procedure TListViewHeaderDpiTest.SetUp;
+var
+  c: TTyColumn;
+begin
+  FLV := TTyListViewAccess.Create(nil);
+  FLV.Font.PixelsPerInch := 144;
+  FLV.SetBounds(0, 0, 900, 200);
+  FLV.ViewStyle := lvsReport;
+  c := FLV.Header.Columns.Add as TTyColumn; c.Text := 'a'; c.Width := 101;
+  c := FLV.Header.Columns.Add as TTyColumn; c.Text := 'b'; c.Width := 102;
+  c := FLV.Header.Columns.Add as TTyColumn; c.Text := 'c'; c.Width := 107;
+  { hoColumnResize OFF for the section tests: the grip would otherwise claim the
+    very edge these measure. The grip has its own test below, which turns it on. }
+  FLV.Header.Options := FLV.Header.Options + [hoVisible] - [hoColumnResize];
+  FLV.Items.Add.Caption := 'row';
+  FLV.ItemsChanged;
+  FClicked := -2;
+  FLV.OnColumnClick := @HColumnClick;
+end;
+
+procedure TListViewHeaderDpiTest.TearDown;
+begin
+  FreeAndNil(FLV);
+end;
+
+procedure TListViewHeaderDpiTest.HColumnClick(Sender: TObject; AColumn: Integer);
+begin
+  FClicked := AColumn;
+end;
+
+function TListViewHeaderDpiTest.PaintLeft(AIndex: Integer): Integer;
+begin
+  { The paint's own source (TTyColumn.Span at the control's Dpi -- which is
+    Font.PixelsPerInch, pinned by SetUp), not a restatement of the formula:
+    FOffsetX is 0 here, so the origin is 0. }
+  Result := (FLV.Header.Columns.Items[AIndex] as TTyColumn)
+              .Span(0, FLV.Font.PixelsPerInch).Left;
+end;
+
+procedure TListViewHeaderDpiTest.TestClickOnAColumnsFirstPaintedPixelSelectsThatColumn;
+begin
+  FLV.XMouseDown(PaintLeft(1), 5);
+  AssertEquals('the first painted pixel of column 1 is column 1', 1, FClicked);
+end;
+
+procedure TListViewHeaderDpiTest.TestClickJustLeftOfTheEdgeStaysOnThePreviousColumn;
+begin
+  FLV.XMouseDown(PaintLeft(1) - 1, 5);
+  AssertEquals('the pixel before it is still column 0', 0, FClicked);
+end;
+
+procedure TListViewHeaderDpiTest.TestTheSecondInteriorBoundaryAgrees;
+begin
+  FLV.XMouseDown(PaintLeft(2), 5);
+  AssertEquals('the first painted pixel of column 2 is column 2', 2, FClicked);
+  FClicked := -2;
+  FLV.XMouseDown(PaintLeft(2) - 1, 5);
+  AssertEquals('the pixel before it is still column 1', 1, FClicked);
+end;
+
+procedure TListViewHeaderDpiTest.TestDividerGripKeepsItsPhysicalWidthAtHiDpi;
+begin
+  { The ±3/5 px grip is a PHYSICAL grab zone. At 192 PPI that is ±6/10 device px;
+    left in device px it would halve and this point would miss. }
+  FLV.Font.PixelsPerInch := 192;
+  FLV.Header.Options := FLV.Header.Options + [hoColumnResize];
+  AssertEquals('Scale(5) px right of the painted edge is still the grip',
+    Ord(lhpDivider), Ord(FLV.GetHitPart(PaintLeft(1) + 10, 5)));
+  AssertEquals('two px past the grip is a plain header cell again',
+    Ord(lhpHeader), Ord(FLV.GetHitPart(PaintLeft(1) + 12, 5)));
+end;
+
 initialization
   RegisterTest(TListViewDataTest);
   RegisterTest(TListViewSortTest);
@@ -2444,6 +2551,7 @@ initialization
   RegisterTest(TListViewVirtualTest);
   RegisterTest(TListViewScrollTest);
   RegisterTest(TListViewHeaderTest);
+  RegisterTest(TListViewHeaderDpiTest);
   RegisterTest(TListViewTypeAheadTest);
   RegisterTest(TListViewCheckboxTest);
   RegisterTest(TListViewRenameTest);

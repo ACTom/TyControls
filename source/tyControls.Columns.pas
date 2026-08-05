@@ -213,14 +213,18 @@ type
     procedure AdjustPosition(ACol: TTyColumn; ANewPos: Integer);
 
     { Return the collection Index of the column whose on-screen span contains AX.
-      AScrollOffset is the current FOffsetX (positive = scrolled right).
-      Returns NoColumn when AX is beyond all visible columns. }
-    function  ColumnFromPosition(AX, AScrollOffset: Integer): Integer;
+      AX / AOriginX / APPI are the SAME three the paints hand to Span() -- device
+      px and the paint PPI -- so a hit test is literally the paint's own span
+      arithmetic re-run, not a second derivation of it. Returns NoColumn when AX
+      is beyond all visible columns. }
+    function  ColumnFromPosition(AX, AOriginX, APPI: Integer): Integer;
 
     { Return the collection Index of a resizable column whose right screen-edge
       is within [right-ATolLeft, right+ATolRight] of AX, or NoColumn.
-      Reverse-iterates so rightmost edge wins at overlapping boundaries. }
-    function  DetermineSplitterIndex(AX, AScrollOffset: Integer;
+      Reverse-iterates so rightmost edge wins at overlapping boundaries.
+      AX/AOriginX/APPI as in ColumnFromPosition; the two tolerances are LOGICAL
+      px and are scaled by APPI here (see the body). }
+    function  DetermineSplitterIndex(AX, AOriginX, APPI: Integer;
                                      ATolLeft: Integer = 3;
                                      ATolRight: Integer = 5): Integer;
 
@@ -347,10 +351,11 @@ type
   what lets ONE function serve callers whose FOffsetX has opposite signs; see the
   comment on ColumnFromPosition.
 
-  Callers supply the origin already in their own space:
-    * TTyTreeView paint   -> ContentRect.Left + FOffsetX   (FOffsetX <= 0), APPI = paint PPI
-    * TTyListView paint   -> -FOffsetX                     (FOffsetX >= 0), APPI = control Dpi
-    * both hit tests      -> -AScrollOffset (logical),      APPI = 96
+  Callers supply the origin already in their own space -- and since the hit tests
+  moved into device px there is only ONE space left, so a hit test and the paint it
+  answers for pass an IDENTICAL pair:
+    * TTyTreeView paint + hit tests -> ContentRect.Left + FOffsetX (FOffsetX <= 0), APPI = PPI
+    * TTyListView paint + hit tests -> -FOffsetX                   (FOffsetX >= 0), APPI = Dpi
   Nothing else may compute a column x. }
 function TyColumnSpan(ALogicalLeft, ALogicalWidth, AOriginX, APPI: Integer): TTyColumnSpan;
 
@@ -794,24 +799,25 @@ begin
   DoChange;
 end;
 
-function TTyColumns.ColumnFromPosition(AX, AScrollOffset: Integer): Integer;
+function TTyColumns.ColumnFromPosition(AX, AOriginX, APPI: Integer): Integer;
 { Left-to-right scan; return the collection Index whose on-screen span
-  contains AX.  AScrollOffset > 0 means scrolled right.
+  contains AX.
 
-  BOTH ARGUMENTS ARE LOGICAL PX, which is why the span is asked for at APPI = 96:
-  callers convert their device X and their device FOffsetX down to logical first
-  (MulDiv(.., 96, PPI)) and pass the result here. That normalisation is also where
-  the two controls' opposite FOffsetX signs are reconciled -- TTyTreeView stores it
-  <= 0 and negates, TTyListView stores it >= 0 and does not -- so by the time a
-  scroll offset reaches this function it always means "how far right we are
-  scrolled", positive. Neither sign was wrong; they were two spellings of one idea,
-  and the origin form of TyColumnSpan is what lets both reach one formula.
+  ONE SPACE, DEVICE PX. AX, AOriginX and APPI are exactly what the caller's PAINT
+  passes to Span() -- the same origin, the same PPI -- so the boundary this answers
+  IS the boundary that was drawn, by construction rather than by agreement.
 
-  KNOWN SKEW, deliberately preserved by this refactor rather than silently fixed:
-  working in logical px makes this coarser than the device-px paint, so at PPI <> 96
-  a column can claim one device pixel that the paint gives to its left neighbour.
-  Measured at ppi 120/144/168 for widths 103/106/109. Fixing it means moving the hit
-  tests into device space, which is a behaviour change and needs its own guard. }
+  这三个参数取代了旧的 (AX, AScrollOffset) 逻辑像素对。旧签名在 96 DPI 之外会把同一
+  条列边界舍入两次:命中侧 MulDiv(device, 96, PPI) 向下折算,绘制侧 MulDiv(left, PPI, 96)
+  向上折算,两次半像素取整不必然落回同一格。实测 PPI 120/144/168/192 × 宽度 100..109,
+  50 组里有 22 组的首个可命中像素比首个绘制像素靠左一格 —— 也就是某一列的最后一个像素
+  会回答成下一列。改成"只在一个空间里比较、只在边界处换算"后,差值恒为 0。
+
+  The origin form is also what lets the two controls share this: TTyTreeView stores
+  FOffsetX <= 0 and passes CR.Left + FOffsetX, TTyListView stores it >= 0 and passes
+  -FOffsetX. Both mean "where logical x 0 currently sits", which is what an origin is
+  -- and it is the quantity a right-to-left reflection has to mirror, so the axis is
+  now expressed in the one form mirroring can consume. }
 var
   i, colIndex: Integer;
   col: TTyColumn;
@@ -828,25 +834,35 @@ begin
     col := Items[colIndex] as TTyColumn;
     if not (coVisible in col.FOptions) then Continue;
 
-    span := col.Span(-AScrollOffset, 96);
+    span := col.Span(AOriginX, APPI);
 
     if (AX >= span.Left) and (AX < span.Right) then
       Exit(colIndex);
   end;
 end;
 
-function TTyColumns.DetermineSplitterIndex(AX, AScrollOffset: Integer;
+function TTyColumns.DetermineSplitterIndex(AX, AOriginX, APPI: Integer;
   ATolLeft: Integer; ATolRight: Integer): Integer;
 { Reverse-iterate visible+resizable columns; return the Index of the one
-  whose right screen-edge is within [edge-ATolLeft, edge+ATolRight] of AX. }
+  whose right screen-edge is within [edge-ATolLeft, edge+ATolRight] of AX.
+
+  AX/AOriginX/APPI are device px (see ColumnFromPosition). THE TOLERANCES ARE NOT:
+  ±3/5 describes how big the grab zone should FEEL, so it is a logical measurement
+  and is scaled here. Leaving it in device px would silently halve the physical grip
+  at 192 PPI -- the same class of regression as any other unscaled constant, and the
+  reason the tolerance did not simply follow AX into device space when the rest did.
+  At APPI = 96 the scaling is the identity, so nothing moves at the default density. }
 var
-  i, colIndex: Integer;
+  i, colIndex, tolL, tolR: Integer;
   col: TTyColumn;
   span: TTyColumnSpan;
 begin
   Result := NoColumn;
   if Length(FPositionToIndex) <> Count then
     RebuildPositionMap;
+
+  tolL := MulDiv(ATolLeft,  APPI, 96);
+  tolR := MulDiv(ATolRight, APPI, 96);
 
   for i := Count - 1 downto 0 do
   begin
@@ -858,10 +874,10 @@ begin
 
     { The grip is the span's RIGHT edge -- read off the same span the body hit test
       and the paints use, never recomputed, so the divider can never end up beside
-      the border it is supposed to be on. Logical px; see ColumnFromPosition. }
-    span := col.Span(-AScrollOffset, 96);
+      the border it is supposed to be on. }
+    span := col.Span(AOriginX, APPI);
 
-    if (AX >= span.Right - ATolLeft) and (AX <= span.Right + ATolRight) then
+    if (AX >= span.Right - tolL) and (AX <= span.Right + tolR) then
       Exit(colIndex);
   end;
 end;

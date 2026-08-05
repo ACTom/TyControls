@@ -254,7 +254,7 @@ TyPaginationItem:disabled { color: var(--muted); border-color: var(--border); }
 
 **带子自身的内缩不在其列**：那就是 `TyPagination` 样式**普通的 CSS `padding`**，而格子的水平内缩是 `TyPaginationItem` 的——两者**本来就是主题化属性**，再为它们发明令牌等于把同一件事说两遍。
 
-**两个箭头字形还支持图标字体覆盖**（v3/C5）：`--glyph-arrow-left` / `--glyph-arrow-right`。用的是 `tgArrowLeft` / `tgArrowRight` **而不是**一对 V 形箭头：painter 有 `tgChevronRight` 但**没有** `tgChevronLeft`，半对 V 形会读成两个不同的记号。想要 V 形的皮肤就把它们塞进上面这两个令牌里。
+**两个箭头字形还支持图标字体覆盖**（v3/C5）：`--glyph-arrow-left` / `--glyph-arrow-right`。用的是 `tgArrowLeft` / `tgArrowRight` **而不是**一对 V 形箭头。当初的理由是 painter 只有 `tgChevronRight`、没有左向的那一半；随着网格的镜像树形折叠符落地，`tgChevronLeft` 已经补上，所以这现在只是一个样式选择，可以再议。想要 V 形的皮肤就把它们塞进上面这两个令牌里。
 
 ---
 

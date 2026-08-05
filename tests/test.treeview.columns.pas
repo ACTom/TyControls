@@ -1,8 +1,9 @@
 unit test.treeview.columns;
 { Phase A — pure column model tests (A1–A4).
   Phase B — TTyHeader + Header/Columns wired into TTyTreeView.
+  X  — the shared column x axis: paint and hit test must answer the same pixel.
   A-tests: headless, no TTyTreeView.
-  B-tests: use TTyTreeView headlessly (Create(nil), no windowing). }
+  B/X-tests: use TTyTreeView headlessly (Create(nil), no windowing). }
 {$mode objfpc}{$H+}
 interface
 uses
@@ -221,6 +222,74 @@ type
     procedure TestExplicitNonZeroMainColumnRespectedOnLaterAdd;
     { #4 Opt-out respected: 3 columns (auto->0), set :=NoColumn -> stays -1 }
     procedure TestMainColumnOptOutToNoColumnRespected;
+  end;
+
+  { -----------------------------------------------------------------------
+    X1: the chrome follows the MAIN COLUMN'S CELL, not content x 0.
+
+    The paints anchor the caption-slot walk at the main column's cell left;
+    GetNodeAtPoint used to anchor it at 0, so with a MainColumn that is not the
+    leftmost visible column the two disagreed by exactly Scale(MainColumn.Left):
+    the expander painted inside the main column while the hit test looked for it
+    Scale(MainColumn.Left) px further left. Clicking the painted chevron answered
+    hpLabel, GetNodeWithExpandSignAt returned nil and the node did not expand.
+
+    Deliberately asymmetric: three DIFFERENT widths and a MainColumn that is
+    neither the first nor (in X1b) the last, so no coincidence of equal widths
+    can make a wrong anchor look right.
+    ----------------------------------------------------------------------- }
+  TColumnX1Test = class(TTestCase)
+  private
+    FTree: TTyTreeView;
+    FRoot: PTyTreeNode;
+    { 3 columns 90/130/110 (lefts 0/90/220), one expandable root, MainColumn = AMain }
+    procedure Build(AMain: Integer);
+    { device Y at the vertical centre of the root node's row }
+    function  RowMidY: Integer;
+  protected
+    procedure TearDown; override;
+  published
+    { MainColumn=1: the painted expander answers hpButton and expands the node }
+    procedure TestExpanderIsClickableWhenMainColumnIsNotLeftmost;
+    { MainColumn=2: same, one column further right (not just "the middle one") }
+    procedure TestExpanderIsClickableWhenMainColumnIsLast;
+    { MainColumn=1: a click in column 0 is a plain cell body, NOT the expander }
+    procedure TestColumnLeftOfTheMainOneCarriesNoChrome;
+    { MainColumn=1: the caption starts inside the main column's own cell }
+    procedure TestCaptionStartsInsideTheMainColumnCell;
+    { MainColumn=0 (the leftmost) is unchanged — the anchor is still the cell left }
+    procedure TestLeftmostMainColumnStillWorks;
+  end;
+
+  { -----------------------------------------------------------------------
+    X2: one coordinate space. The seven paints work in DEVICE px; the two hit
+    tests used to work in LOGICAL px, round-tripped through MulDiv, so at
+    PPI <> 96 a column edge could be rounded twice and land one device pixel
+    apart. Measured before the fix at PPI 120/144/168/192 for widths 100..109:
+    22 of 50 combinations put the first hit-testable pixel one px LEFT of the
+    first painted pixel, i.e. the last pixel of a column answered as the next.
+
+    Widths 101/102/107 at PPI 144 are chosen so BOTH interior boundaries land on
+    a half pixel (lefts 101 and 203, x1.5) — two independent failures, not one.
+    ----------------------------------------------------------------------- }
+  TColumnX2Test = class(TTestCase)
+  private
+    FTree: TTyTreeView;
+    FRoot: PTyTreeNode;
+    procedure Build(APPI: Integer; AResize: Boolean);
+    function  RowMidY: Integer;
+  protected
+    procedure TearDown; override;
+  published
+    { the node-area hit test: cell.Left hits column c, cell.Left-1 hits c-1 }
+    procedure TestColumnBoundaryHitMatchesPaintAtHiDpi;
+    { the header-band hit test: same boundary, same answer }
+    procedure TestHeaderSectionBoundaryMatchesPaintAtHiDpi;
+    { the divider grip keeps its PHYSICAL width: +Scale(5) px past the painted
+      edge is still the grip at 192 PPI (a device-px tolerance would halve it) }
+    procedure TestSplitterGripKeepsItsPhysicalWidthAtHiDpi;
+    { and it is centred on the painted edge, not one px off it }
+    procedure TestSplitterGripSitsOnThePaintedEdge;
   end;
 
   { -----------------------------------------------------------------------
@@ -452,71 +521,72 @@ procedure TColumnA3Test.TestColumnFromPositionInB;
 { X=120, scroll=0: B spans [100,150) -> B's index }
 begin
   AssertEquals('X=120 -> B index', FB.Index,
-    FCols.ColumnFromPosition(120, 0));
+    FCols.ColumnFromPosition(120, 0, 96));
 end;
 
 procedure TColumnA3Test.TestColumnFromPositionInA;
 { X=0, scroll=0: A spans [0,100) }
 begin
   AssertEquals('X=0 -> A index', FA.Index,
-    FCols.ColumnFromPosition(0, 0));
+    FCols.ColumnFromPosition(0, 0, 96));
 end;
 
 procedure TColumnA3Test.TestColumnFromPositionLastPixelC;
 { X=229, scroll=0: C spans [150,230) -> C's index }
 begin
   AssertEquals('X=229 -> C index', FC.Index,
-    FCols.ColumnFromPosition(229, 0));
+    FCols.ColumnFromPosition(229, 0, 96));
 end;
 
 procedure TColumnA3Test.TestColumnFromPositionPastEnd;
 { X=230, scroll=0: no column }
 begin
   AssertEquals('X=230 -> NoColumn', NoColumn,
-    FCols.ColumnFromPosition(230, 0));
+    FCols.ColumnFromPosition(230, 0, 96));
 end;
 
 procedure TColumnA3Test.TestColumnFromPositionWithScroll;
-{ scroll=40: columns shift left by 40
+{ origin=-40 (i.e. scrolled right by 40): columns shift left by 40
   A spans [-40, 60), B spans [60,110), C spans [110,190)
-  X=70 -> B }
+  X=70 -> B. The second argument is the ORIGIN -- where logical x 0 sits -- so a
+  scroll of +40 reaches this function as -40; the third is the PPI (96 = 1:1). }
 begin
   AssertEquals('X=70 scroll=40 -> B index', FB.Index,
-    FCols.ColumnFromPosition(70, 40));
+    FCols.ColumnFromPosition(70, -40, 96));
 end;
 
 procedure TColumnA3Test.TestColumnFromPositionFarRight;
 begin
   AssertEquals('X=300 -> NoColumn', NoColumn,
-    FCols.ColumnFromPosition(300, 0));
+    FCols.ColumnFromPosition(300, 0, 96));
 end;
 
 procedure TColumnA3Test.TestDetermineSplitterIndexA;
 { A.right=100; zone=[97,105]; X=101 -> A }
 begin
   AssertEquals('X=101 -> A splitter', FA.Index,
-    FCols.DetermineSplitterIndex(101, 0));
+    FCols.DetermineSplitterIndex(101, 0, 96));
 end;
 
 procedure TColumnA3Test.TestDetermineSplitterIndexNoHit;
 { X=125 not near any edge (A.right=100, B.right=150, C.right=230) }
 begin
   AssertEquals('X=125 -> NoColumn', NoColumn,
-    FCols.DetermineSplitterIndex(125, 0));
+    FCols.DetermineSplitterIndex(125, 0, 96));
 end;
 
 procedure TColumnA3Test.TestDetermineSplitterIndexB;
 { B.right=150; zone=[147,155]; X=150 -> B }
 begin
   AssertEquals('X=150 -> B splitter', FB.Index,
-    FCols.DetermineSplitterIndex(150, 0));
+    FCols.DetermineSplitterIndex(150, 0, 96));
 end;
 
 procedure TColumnA3Test.TestDetermineSplitterIndexRightEdgeA;
 { X=100 is the exact right edge of A; A.zone=[97,105]; returns A (not B) }
 begin
   AssertEquals('X=100 -> A splitter (not B)', FA.Index,
-    FCols.DetermineSplitterIndex(100, 0));
+    FCols.DetermineSplitterIndex(100, 0, 96));
 end;
 
 procedure TColumnA3Test.TestDetermineSplitterIndexNonResizable;
@@ -525,14 +595,15 @@ begin
   FA.Options := FA.Options - [coResizable];
   { B.right=150 zone [147,155], C.right=230 zone [227,235].  X=100 -> NoColumn }
   AssertEquals('X=100 non-resizable A -> NoColumn', NoColumn,
-    FCols.DetermineSplitterIndex(100, 0));
+    FCols.DetermineSplitterIndex(100, 0, 96));
 end;
 
 procedure TColumnA3Test.TestDetermineSplitterIndexWithScroll;
-{ scroll=10: A.right = 100-10=90; zone=[87,95]; X=90 -> A }
+{ origin=-10 (scrolled right by 10): A.right = 100-10=90; zone=[87,95]; X=90 -> A.
+  Second argument is the ORIGIN, third is the PPI — see TestColumnFromPositionWithScroll. }
 begin
   AssertEquals('X=90 scroll=10 -> A splitter', FA.Index,
-    FCols.DetermineSplitterIndex(90, 10));
+    FCols.DetermineSplitterIndex(90, -10, 96));
 end;
 
 { ===========================================================================
@@ -990,6 +1061,302 @@ begin
   end;
 end;
 
+{ ===========================================================================
+  X1 — the chrome follows the main column's cell
+  =========================================================================== }
+
+procedure TColumnX1Test.Build(AMain: Integer);
+var
+  c: TTyColumn;
+  kid: PTyTreeNode;
+begin
+  FTree := TTyTreeView.Create(nil);
+  FTree.Font.PixelsPerInch := 96;   { device = logical, so the numbers below mean what they say }
+  FTree.DefaultNodeHeight  := 20;
+  FTree.Indent             := 16;
+  FTree.ShowRoot           := True;
+  FTree.ShowButtons        := True;
+  FTree.ShowTreeLines      := False;
+  FTree.SetBounds(0, 0, 420, 200);
+
+  { Three DIFFERENT widths: an anchor that is wrong by a whole column cannot
+    coincide with the right answer. }
+  c := FTree.Header.Columns.Add; c.Width := 90;  c.Text := 'A';
+  c := FTree.Header.Columns.Add; c.Width := 130; c.Text := 'B';
+  c := FTree.Header.Columns.Add; c.Width := 110; c.Text := 'C';
+  { MainColumn AFTER the columns exist — setting it first clamps it to NoColumn
+    (see TColumnB3Test); this fixture must not depend on that ordering either way. }
+  FTree.Header.MainColumn := AMain;
+  FTree.Header.Height     := 22;
+  FTree.Header.Options    := [hoVisible];
+
+  FRoot := FTree.AddChild(nil);
+  Include(FRoot^.States, nsInitialized);
+  kid := FTree.AddChild(FRoot);
+  Include(kid^.States, nsInitialized);
+  FTree.Expanded[FRoot] := True;
+end;
+
+function TColumnX1Test.RowMidY: Integer;
+var
+  cell: TRect;
+begin
+  if not FTree.GetCellRect(FRoot, FTree.Header.MainColumn, cell) then
+    Fail('fixture: the root node has no visible cell');
+  Result := (cell.Top + cell.Bottom) div 2;
+end;
+
+procedure TColumnX1Test.TearDown;
+begin
+  FreeAndNil(FTree);
+end;
+
+{ The one assertion this whole class exists for: the pixel the paint puts the
+  chevron on is the pixel the hit test calls the chevron. Both are public API
+  (DisplayExpandSignRect / GetNodeAtPoint), so a host reading one and clicking
+  the other has to get the same answer. }
+procedure TColumnX1Test.TestExpanderIsClickableWhenMainColumnIsNotLeftmost;
+var
+  cell, exp: TRect;
+  midX, midY: Integer;
+  part: TTyTreeHitPart;
+begin
+  Build(1);
+  AssertTrue('fixture: main cell resolves', FTree.GetCellRect(FRoot, 1, cell));
+  AssertTrue('fixture: the node has an expander', FTree.DisplayExpandSignRect(FRoot, exp));
+  AssertEquals('the expander is painted at the main column cell left',
+    cell.Left, exp.Left);
+
+  midX := (exp.Left + exp.Right) div 2;
+  midY := RowMidY;
+  AssertTrue('the node under the painted chevron is the root',
+    FTree.GetNodeAtPoint(midX, midY, part) = FRoot);
+  AssertEquals('and the part under it is the button, not the label',
+    Ord(hpButton), Ord(part));
+  AssertTrue('GetNodeWithExpandSignAt agrees',
+    FTree.GetNodeWithExpandSignAt(midX, midY) = FRoot);
+
+  { BOTH EDGES, not just the centre. A slot is 16 px wide, so an anchor that is
+    off by one or two px still contains its own midpoint — clicking the middle of
+    a cell is exactly how a guard ends up immune to the drift it was written for.
+    These four pixels pin the zone to the painted rect. }
+  FTree.GetNodeAtPoint(exp.Left, midY, part);
+  AssertEquals('the chevron''s FIRST painted pixel is the button',
+    Ord(hpButton), Ord(part));
+  FTree.GetNodeAtPoint(exp.Left - 1, midY, part);
+  AssertEquals('the pixel before it is the previous column''s body',
+    Ord(hpLabel), Ord(part));
+  FTree.GetNodeAtPoint(exp.Right - 1, midY, part);
+  AssertEquals('the chevron''s LAST painted pixel is still the button',
+    Ord(hpButton), Ord(part));
+  FTree.GetNodeAtPoint(exp.Right, midY, part);
+  AssertEquals('and the pixel after it is the caption area',
+    Ord(hpLabel), Ord(part));
+end;
+
+procedure TColumnX1Test.TestExpanderIsClickableWhenMainColumnIsLast;
+var
+  cell, exp: TRect;
+  midX, midY: Integer;
+  part: TTyTreeHitPart;
+begin
+  Build(2);
+  AssertTrue('fixture: main cell resolves', FTree.GetCellRect(FRoot, 2, cell));
+  AssertTrue('fixture: the node has an expander', FTree.DisplayExpandSignRect(FRoot, exp));
+  AssertEquals('the expander is painted at the main column cell left',
+    cell.Left, exp.Left);
+
+  midX := (exp.Left + exp.Right) div 2;
+  midY := RowMidY;
+  AssertTrue('the node under the painted chevron is the root',
+    FTree.GetNodeAtPoint(midX, midY, part) = FRoot);
+  AssertEquals('the chevron of the LAST column answers hpButton too',
+    Ord(hpButton), Ord(part));
+  AssertTrue('GetNodeWithExpandSignAt agrees',
+    FTree.GetNodeWithExpandSignAt(midX, midY) = FRoot);
+end;
+
+{ The other half of the same claim: the chrome must not ALSO answer where it is
+  not painted. Before the fix a click at column 0's left edge -- 90 px away from
+  the painted chevron -- toggled the node. }
+procedure TColumnX1Test.TestColumnLeftOfTheMainOneCarriesNoChrome;
+var
+  cell0: TRect;
+  x, midY: Integer;
+  part: TTyTreeHitPart;
+begin
+  Build(1);
+  AssertTrue('fixture: column 0 resolves', FTree.GetCellRect(FRoot, 0, cell0));
+  midY := RowMidY;
+  x    := cell0.Left + 8;   { inside column 0, where the old anchor put the button slot }
+
+  AssertTrue('the row is still hit', FTree.GetNodeAtPoint(x, midY, part) = FRoot);
+  AssertEquals('a non-main cell body is a label, not chrome',
+    Ord(hpLabel), Ord(part));
+  AssertTrue('and there is no expander there',
+    FTree.GetNodeWithExpandSignAt(x, midY) = nil);
+end;
+
+procedure TColumnX1Test.TestCaptionStartsInsideTheMainColumnCell;
+var
+  cell: TRect;
+  left: Integer;
+begin
+  Build(1);
+  AssertTrue('fixture: main cell resolves', FTree.GetCellRect(FRoot, 1, cell));
+  AssertTrue('caption left available', FTree.DisplayTextLeft(FRoot, left));
+  { indent 16 (level 0 + ShowRoot) + the main column's 2px text pad. Spelled out
+    rather than compared to a sibling: a shifted anchor moves both. }
+  AssertEquals('the caption starts one indent + one text pad into the MAIN cell',
+    cell.Left + 16 + 2, left);
+  AssertTrue('which is inside that cell', (left >= cell.Left) and (left < cell.Right));
+end;
+
+procedure TColumnX1Test.TestLeftmostMainColumnStillWorks;
+var
+  cell, exp: TRect;
+  midY: Integer;
+  part: TTyTreeHitPart;
+begin
+  Build(0);
+  AssertTrue('fixture: main cell resolves', FTree.GetCellRect(FRoot, 0, cell));
+  AssertTrue('fixture: the node has an expander', FTree.DisplayExpandSignRect(FRoot, exp));
+  AssertEquals('unchanged: the leftmost main column anchors at its own cell left',
+    cell.Left, exp.Left);
+  midY := RowMidY;
+  FTree.GetNodeAtPoint((exp.Left + exp.Right) div 2, midY, part);
+  AssertEquals('and still answers hpButton', Ord(hpButton), Ord(part));
+end;
+
+{ ===========================================================================
+  X2 — one coordinate space
+  =========================================================================== }
+
+procedure TColumnX2Test.Build(APPI: Integer; AResize: Boolean);
+var
+  c: TTyColumn;
+  opts: TTyHeaderOptions;
+begin
+  FTree := TTyTreeView.Create(nil);
+  FTree.Font.PixelsPerInch := APPI;
+  FTree.DefaultNodeHeight  := 20;
+  FTree.Indent             := 16;
+  FTree.ShowRoot           := True;
+  FTree.ShowButtons        := False;
+  FTree.ShowTreeLines      := False;
+  { wide enough that the columns fit at 2x and no horizontal scroll offset creeps in }
+  FTree.SetBounds(0, 0, 900, 200);
+
+  { Lefts 0 / 101 / 203 — both interior edges are odd, so x1.5 (PPI 144) puts
+    both on a half pixel, which is exactly where rounding twice differs from
+    rounding once. }
+  c := FTree.Header.Columns.Add; c.Width := 101; c.Text := 'A';
+  c := FTree.Header.Columns.Add; c.Width := 102; c.Text := 'B';
+  c := FTree.Header.Columns.Add; c.Width := 107; c.Text := 'C';
+  FTree.Header.MainColumn := 0;
+  FTree.Header.Height     := 22;
+  opts := [hoVisible];
+  if AResize then Include(opts, hoColumnResize);
+  FTree.Header.Options := opts;
+
+  FRoot := FTree.AddChild(nil);
+  Include(FRoot^.States, nsInitialized);
+end;
+
+function TColumnX2Test.RowMidY: Integer;
+var
+  cell: TRect;
+begin
+  if not FTree.GetCellRect(FRoot, 0, cell) then
+    Fail('fixture: the root node has no visible cell');
+  Result := (cell.Top + cell.Bottom) div 2;
+end;
+
+procedure TColumnX2Test.TearDown;
+begin
+  FreeAndNil(FTree);
+end;
+
+procedure TColumnX2Test.TestColumnBoundaryHitMatchesPaintAtHiDpi;
+var
+  cell: TRect;
+  i, midY, col: Integer;
+  part: TTyTreeHitPart;
+begin
+  Build(144, False);
+  midY := RowMidY;
+  for i := 1 to 2 do
+  begin
+    AssertTrue(Format('fixture: column %d resolves', [i]),
+      FTree.GetCellRect(FRoot, i, cell));
+    FTree.GetNodeAtPoint(cell.Left, midY, part, col);
+    AssertEquals(Format('the FIRST painted pixel of column %d hits column %d', [i, i]),
+      i, col);
+    FTree.GetNodeAtPoint(cell.Left - 1, midY, part, col);
+    AssertEquals(Format('and the pixel before it still belongs to column %d', [i - 1]),
+      i - 1, col);
+  end;
+end;
+
+procedure TColumnX2Test.TestHeaderSectionBoundaryMatchesPaintAtHiDpi;
+var
+  cell: TRect;
+  i, hdrY, col: Integer;
+  part: TTyTreeHitPart;
+begin
+  { hoColumnResize off: the divider zone would otherwise swallow the very edge we
+    are measuring, and it is the SECTION boundary this test is about. }
+  Build(144, False);
+  hdrY := FTree.ContentRect.Top - 2;   { inside the header band }
+  for i := 1 to 2 do
+  begin
+    AssertTrue(Format('fixture: column %d resolves', [i]),
+      FTree.GetCellRect(FRoot, i, cell));
+    AssertTrue('header hit', FTree.GetHeaderHitAt(cell.Left, hdrY, part, col));
+    AssertEquals(Format('header: the first painted pixel of column %d is column %d', [i, i]),
+      i, col);
+    AssertTrue('header hit', FTree.GetHeaderHitAt(cell.Left - 1, hdrY, part, col));
+    AssertEquals(Format('header: the pixel before it is still column %d', [i - 1]),
+      i - 1, col);
+  end;
+end;
+
+procedure TColumnX2Test.TestSplitterGripKeepsItsPhysicalWidthAtHiDpi;
+var
+  cell: TRect;
+  hdrY, col: Integer;
+  part: TTyTreeHitPart;
+begin
+  { The grip's ±3/5 px are a PHYSICAL grab zone, so they scale with the density.
+    At 192 PPI that is ±6/10 device px; a tolerance left in device px would halve
+    the grab zone and this point would fall outside it. }
+  Build(192, True);
+  AssertTrue('fixture: column 1 resolves', FTree.GetCellRect(FRoot, 1, cell));
+  hdrY := FTree.ContentRect.Top - 2;
+  AssertTrue('header hit', FTree.GetHeaderHitAt(cell.Left + 10, hdrY, part, col));
+  AssertEquals('Scale(5) px right of the painted edge is still the divider',
+    Ord(hpHeaderDivider), Ord(part));
+  AssertEquals('and it resizes the column to its LEFT', 0, col);
+
+  AssertTrue('header hit', FTree.GetHeaderHitAt(cell.Left + 12, hdrY, part, col));
+  AssertEquals('two px past the grip is a plain section again',
+    Ord(hpHeaderSection), Ord(part));
+end;
+
+procedure TColumnX2Test.TestSplitterGripSitsOnThePaintedEdge;
+var
+  cell: TRect;
+  hdrY, col: Integer;
+  part: TTyTreeHitPart;
+begin
+  Build(144, True);
+  hdrY := FTree.ContentRect.Top - 2;
+  AssertTrue('fixture: column 2 resolves', FTree.GetCellRect(FRoot, 2, cell));
+  AssertTrue('header hit', FTree.GetHeaderHitAt(cell.Left, hdrY, part, col));
+  AssertEquals('the painted edge of column 2 IS a divider', Ord(hpHeaderDivider), Ord(part));
+  AssertEquals('and it drags column 1', 1, col);
+end;
+
 procedure TColumnF3Test.TestRegisterClassForStreaming;
 begin
   { RegisterClass was called in initialization of tyControls.Columns.
@@ -1008,5 +1375,7 @@ initialization
   RegisterTest(TColumnB1Test);
   RegisterTest(TColumnB2Test);
   RegisterTest(TColumnB3Test);
+  RegisterTest(TColumnX1Test);
+  RegisterTest(TColumnX2Test);
   RegisterTest(TColumnF3Test);
 end.
