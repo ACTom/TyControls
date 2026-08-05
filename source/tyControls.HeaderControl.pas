@@ -93,27 +93,33 @@ type
   { TTyHeaderControl — a standalone column-header strip.
 
     An ordered list of SECTIONS, each with a caption, a logical width, a caption
-    alignment and a sort state. The strip draws each section (caption + a right
-    divider + a sort-indicator triangle when sorted) and hover-highlights the
-    section under the mouse.
+    alignment and a sort state. The strip draws each section (caption + the divider it
+    shares with the next section + a sort-indicator triangle when sorted) and
+    hover-highlights the section under the mouse.
 
     Interaction:
       * click a section body  -> toggles its sort (none->asc->desc->asc...) and
         fires OnSectionClick;
-      * drag a section BOUNDARY (within the resize grip) -> resizes the section to
-        its left, using MouseCapture; fires OnSectionResize live and SectionResized
-        emits it once on release.
+      * drag a section BOUNDARY (within the resize grip) -> resizes the section that
+        boundary belongs to, using MouseCapture; OnSectionTrack reports every phase of
+        the drag and OnSectionResize fires once, on release.
 
-    Reuses the 'TyTreeHeader' typeKey for the strip background/border (inherited
-    GetStyleTypeKey); each section is drawn with the 'TyTreeHeaderSection' resolved
-    style (+ :hover / :selected states) — NO new .tycss. All colours are theme-driven. }
+    MIRRORING: BiDiMode = bdRightToLeft lays the whole strip out right-to-left -- section 0
+    against the right edge, captions aligned right, divider and sort triangle on each cell's
+    other side, and the drag delta inverted. The HIT TEST mirrors with it, because paint and
+    both hit tests read their rects out of the one pure function TyHeaderSectionRects; see
+    its comment for why nothing here may compute an x of its own.
+
+    Uses its own 'TyHeaderControl' typeKey for the strip background/border (GetStyleTypeKey
+    overrides it); each section is drawn with the 'TyTreeHeaderSection' resolved style
+    (+ :hover / :selected states) — NO new .tycss. All colours are theme-driven. }
 
   TTyHeaderControl = class(TTyCustomControl)
   private
     FSections: TTyHeaderSectionArray;
     FHotIndex: Integer;             // section under the mouse (-1 none)
     FResizing: Boolean;
-    FResizeIndex: Integer;          // section whose right edge is being dragged
+    FResizeIndex: Integer;          // section whose shared edge is being dragged (its right, or its left when mirrored)
     FResizeStartX: Integer;         // device X where the drag began
     FResizeStartW: Integer;         // logical width of FResizeIndex at drag start
     FOnSectionClick: TTyHeaderSectionEvent;
@@ -228,33 +234,51 @@ type
 
 { ── PURE, headless-tested geometry (all in DEVICE pixels) ──────────────────── }
 
+{ ARightToLeft mirrors the section ORDER: index 0 sits against AClient's right edge and the
+  strip runs leftward. It is threaded through the two hit-test functions below rather than
+  applied by their callers, and that is the whole design: paint, section-at-x, resize-edge-at-x
+  and EffectiveSectionWidth all get their x out of THIS function, so a mirrored strip cannot
+  answer a click on the side it no longer paints. Anything that computed an x of its own would
+  be a second tiling, and a second tiling is the defect (plans/2026-08-04-rtl-mirroring-scope.md
+  §5). The flag defaults to False so every existing caller keeps today's geometry exactly. }
+
 { Tile AWidths left-to-right across AClient, each section AWidths[i] wide. The LAST
   section absorbs the remainder when the widths under-fill AClient (so the strip
   always spans the full client), but keeps its OWN width when the widths already
-  meet or overrun it. Every returned rect has the client's top/bottom. }
-function TyHeaderSectionRects(const AWidths: array of Integer; const AClient: TRect): TTyHeaderRectArray;
+  meet or overrun it. Every returned rect has the client's top/bottom.
+  ARightToLeft reflects the finished tiling about AClient's vertical centre. }
+function TyHeaderSectionRects(const AWidths: array of Integer; const AClient: TRect;
+  ARightToLeft: Boolean = False): TTyHeaderRectArray;
 
-{ Index of the section whose horizontal span contains device X (client-relative), or
-  -1 when X is left of the first / right of the last section. Boundaries belong to the
-  section on their LEFT (so x == a section's right edge is still that section). }
-function TyHeaderSectionAtX(const AWidths: array of Integer; const AClient: TRect; X: Integer): Integer;
+{ Index of the section whose horizontal span contains device X (client-relative), or -1
+  when X falls outside every section. Spans are half-open [Left, Right), so an INTERIOR
+  boundary belongs to the section it is the LEFT edge of -- physically the one to its right,
+  in either direction (which is the later section reading rightward and the earlier one when
+  mirrored). Only the strip's own OUTER edge is special-cased, to the section against it. }
+function TyHeaderSectionAtX(const AWidths: array of Integer; const AClient: TRect; X: Integer;
+  ARightToLeft: Boolean = False): Integer;
 
-{ Index of the section boundary being grabbed when the mouse is within AGrip device
-  px of an INTERIOR boundary (the right edge of sections 0..n-2 — the final right edge
-  is the control edge, not resizable). Returns the LEFT section's index, or -1 when no
-  boundary is within the grip. The nearest boundary wins on overlap. }
-function TyHeaderResizeEdgeAtX(const AWidths: array of Integer; const AClient: TRect; X, AGrip: Integer): Integer;
+{ Index of the section boundary being grabbed when the mouse is within AGrip device px of an
+  INTERIOR boundary — the edge each section shares with its successor, which is its right in
+  a left-to-right strip and its left in a mirrored one. The strip's outer edge is the control
+  edge and is never a boundary. Returns the resized section's index, or -1 when no boundary is
+  within the grip. The nearest boundary wins on overlap. }
+function TyHeaderResizeEdgeAtX(const AWidths: array of Integer; const AClient: TRect; X, AGrip: Integer;
+  ARightToLeft: Boolean = False): Integer;
 
-{ The three points of the sort-indicator triangle, centered in a small square zone at
-  the RIGHT of ACellRect ( before the divider). Up for ascending, down for descending.
+{ The three points of the sort-indicator triangle, centered in a small square zone at the
+  reading END of ACellRect (before the divider) — the right in a left-to-right strip, the
+  left when ARightToLeft. Up for ascending, down for descending.
   ASizeDev is the triangle's width in device px. Device pixels. }
-function TyHeaderSortTriangle(const ACellRect: TRect; ADir: TTyHeaderSortDirection; ASizeDev: Integer): TTyHeaderTriangle;
+function TyHeaderSortTriangle(const ACellRect: TRect; ADir: TTyHeaderSortDirection; ASizeDev: Integer;
+  ARightToLeft: Boolean = False): TTyHeaderTriangle;
 
 implementation
 
 { ---- pure geometry ---- }
 
-function TyHeaderSectionRects(const AWidths: array of Integer; const AClient: TRect): TTyHeaderRectArray;
+function TyHeaderSectionRects(const AWidths: array of Integer; const AClient: TRect;
+  ARightToLeft: Boolean = False): TTyHeaderRectArray;
 var
   i, n, x, w, sum, clientW, absorber: Integer;
 begin
@@ -287,33 +311,55 @@ begin
     Result[i] := Rect(x, AClient.Top, x + w, AClient.Bottom);
     Inc(x, w);
   end;
+  { Mirroring is a REFLECTION of the finished tiling, not a second tiling run backwards from
+    AClient.Right. That is deliberate and it is what makes the rest of this unit safe: the
+    absorber, the zero-width hidden sections and the overrun case are all decided once, above,
+    and reflecting cannot round any of them differently. A reverse accumulation would be a
+    second copy of those three rules, and the first time one of them changed only one copy
+    would be edited. LCL's own five-liner does the arithmetic (controls.pp:2966) so nobody
+    here writes the off-by-one that shows up as a hairline seam and nowhere else. }
+  if ARightToLeft then
+    for i := 0 to n - 1 do
+      Result[i] := BidiFlipRect(Result[i], AClient, True);
 end;
 
-function TyHeaderSectionAtX(const AWidths: array of Integer; const AClient: TRect; X: Integer): Integer;
+function TyHeaderSectionAtX(const AWidths: array of Integer; const AClient: TRect; X: Integer;
+  ARightToLeft: Boolean = False): Integer;
 var
   rects: TTyHeaderRectArray;
-  i: Integer;
+  i, outer: Integer;
 begin
   Result := -1;
-  rects := TyHeaderSectionRects(AWidths, AClient);
+  { The SAME tiling the paint uses, mirrored the same way. Nothing below computes an x --
+    it only reads the rects back -- which is why a mirrored strip cannot answer a click on
+    the side it stopped painting. }
+  rects := TyHeaderSectionRects(AWidths, AClient, ARightToLeft);
   for i := 0 to High(rects) do
-    // Half-open [Left, Right) so a boundary belongs to the section on its left ONLY
-    // at its own right edge via the <= on the final section handled below.
+    // Half-open [Left, Right): every interior boundary is claimed by exactly one section,
+    // in either direction. The one x this leaves unclaimed is the strip's outer edge, below.
     if (X >= rects[i].Left) and (X < rects[i].Right) then
       Exit(i);
-  // Exact right edge of the last section still counts as that section.
-  if (Length(rects) > 0) and (X = rects[High(rects)].Right) then
-    Result := High(rects);
+  { The strip's own outer edge still counts as the section against it, so the rightmost
+    column is not one pixel short of its border. WHICH index that is follows the tiling
+    direction -- the last when sections run rightward, the first when they run leftward --
+    and it is chosen here rather than searched for, because with a hidden trailing section
+    two rects can share the same edge and "search" would have to break the tie. }
+  if Length(rects) > 0 then
+  begin
+    if ARightToLeft then outer := 0 else outer := High(rects);
+    if X = rects[outer].Right then Result := outer;
+  end;
 end;
 
-function TyHeaderResizeEdgeAtX(const AWidths: array of Integer; const AClient: TRect; X, AGrip: Integer): Integer;
+function TyHeaderResizeEdgeAtX(const AWidths: array of Integer; const AClient: TRect; X, AGrip: Integer;
+  ARightToLeft: Boolean = False): Integer;
 var
   rects: TTyHeaderRectArray;
   i, edge, dist, best, bestDist, lastVisible: Integer;
 begin
   Result := -1;
   if AGrip < 0 then AGrip := 0;
-  rects := TyHeaderSectionRects(AWidths, AClient);
+  rects := TyHeaderSectionRects(AWidths, AClient, ARightToLeft);
   best := -1;
   bestDist := MaxInt;
   { The last section with a width. Everything past it is hidden, so ITS right edge is the
@@ -321,14 +367,19 @@ begin
   lastVisible := -1;
   for i := 0 to High(AWidths) do
     if AWidths[i] > 0 then lastVisible := i;
-  // Interior boundaries only: the right edge of sections 0..n-2. The final section's
-  // right edge is the control edge and is not a resizable boundary.
+  // Interior boundaries only: the edge each of sections 0..n-2 shares with its SUCCESSOR.
+  // The last one's outer edge is the control edge and is not a resizable boundary.
   for i := 0 to High(rects) - 1 do
   begin
     { A zero-width (hidden) section has no grabbable edge of its own -- its "boundary" sits
       exactly on its neighbour's, and dragging it would resize something invisible. }
     if (AWidths[i] <= 0) or (i >= lastVisible) then Continue;
-    edge := rects[i].Right;
+    { Which SIDE of the rect that shared edge is on is the whole of the mirroring here: the
+      successor sits to the right in a left-to-right strip and to the left in a mirrored one.
+      Read off the rect the tiling produced, never recomputed -- so the grip is always on the
+      divider the user can see, rather than on a boundary the paint stopped drawing. }
+    if ARightToLeft then edge := rects[i].Left
+    else edge := rects[i].Right;
     dist := Abs(X - edge);
     if (dist <= AGrip) and (dist < bestDist) then
     begin
@@ -339,7 +390,8 @@ begin
   Result := best;
 end;
 
-function TyHeaderSortTriangle(const ACellRect: TRect; ADir: TTyHeaderSortDirection; ASizeDev: Integer): TTyHeaderTriangle;
+function TyHeaderSortTriangle(const ACellRect: TRect; ADir: TTyHeaderSortDirection; ASizeDev: Integer;
+  ARightToLeft: Boolean = False): TTyHeaderTriangle;
 var
   zone, half, cx, cy, margin: Integer;
 begin
@@ -347,10 +399,14 @@ begin
   if zone < 4 then zone := 4;
   if Odd(zone) then Dec(zone);       // even -> the apex lands on a pixel
   half := zone div 2;
-  // Centre the glyph in a right-hand gutter, one glyph-width in from the right edge,
-  // vertically centred in the cell.
+  { Centre the glyph in a gutter at the cell's reading END, one glyph-width in from that
+    edge, vertically centred. Mirroring reflects the CENTRE and nothing else: the three
+    points are symmetric about cx, so a reflected triangle is the same triangle at a
+    reflected centre -- same width, same apex parity, and the up/down sense of the sort
+    left alone, which is a direction of ORDER and not of reading. }
   margin := zone;
-  cx := ACellRect.Right - margin;
+  if ARightToLeft then cx := ACellRect.Left + margin
+  else cx := ACellRect.Right - margin;
   cy := (ACellRect.Top + ACellRect.Bottom) div 2;
   if ADir = hsdDescending then
   begin
@@ -529,8 +585,12 @@ begin
   Result := 0;
   if (AIndex < 0) or (AIndex >= Length(FSections)) then Exit;
   { Go through the SAME pure function the paint goes through, so the two can never
-    drift: anything else here would be a second implementation of the tiling. }
-  rects := TyHeaderSectionRects(DeviceWidths, ClientRect);
+    drift: anything else here would be a second implementation of the tiling.
+    The direction is passed even though a reflection preserves every width and this
+    result could not change: the moment one consumer is allowed to call the tiling with
+    different arguments from the others, "they cannot diverge" stops being true by
+    construction and becomes something a reader has to re-derive. }
+  rects := TyHeaderSectionRects(DeviceWidths, ClientRect, IsRightToLeft);
   if AIndex >= Length(rects) then Exit;
   ppi := Font.PixelsPerInch;
   if ppi <= 0 then ppi := 96;
@@ -670,7 +730,7 @@ var
   R, cellRect, textRect, clipR: TRect;
   rects: TTyHeaderRectArray;
   widths: TIntegerDynArray;
-  i, padL, padR, sortSize, gutter, lastVisible: Integer;
+  i, padL, padR, sortSize, gutter, lastVisible, dividerX: Integer;
   tri: TTyHeaderTriangle;
   ctx: TBGRACanvas2D;
   txtColor, dividerColor: TTyColor;
@@ -681,9 +741,14 @@ begin
   P := TTyPainter.Create;
   try
     R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
-    P.BeginPaint(ACanvas, ARect, APPI);
+    { Arming the painter is safe here only because the GEOMETRY below mirrors too: each
+      caption is drawn into a slot this method has already reflected, so the alignment the
+      painter resolves and the slot it resolves it in agree. A strip that armed the painter
+      without mirroring its tiling would push captions to the far side of cells that had not
+      moved (tyControls.Painter.pas, BeginPaint's ARightToLeft). }
+    P.BeginPaint(ACanvas, ARect, APPI, IsRightToLeft);
     S := CurrentStyle;
-    // Strip background + border from 'TyTreeHeader'.
+    // Strip background + border from 'TyHeaderControl' (GetStyleTypeKey).
     DrawFrame(P, R, S);
 
     // Section styles (base + hover). :selected is available too but the strip uses
@@ -693,9 +758,12 @@ begin
 
     // Device-px widths -> tiled rects. Pure math == hit-test geometry.
     widths := DeviceWidths;
-    rects := TyHeaderSectionRects(widths, R);
-    { Which section is the RIGHTMOST one still on screen -- not necessarily the last index,
-      once a trailing section can be hidden. Only it is allowed to skip its divider. }
+    rects := TyHeaderSectionRects(widths, R, IsRightToLeft);
+    { The LAST section still on screen -- not necessarily the last index, once a trailing
+      section can be hidden. Only it is allowed to skip its divider, because the edge it
+      would draw on is the control's own. Deliberately an index in SECTION order, not a
+      physical side: mirroring moves that section from the right end of the strip to the
+      left, and it is still the one whose shared edge does not exist. }
     lastVisible := -1;
     for i := 0 to High(widths) do
       if widths[i] > 0 then lastVisible := i;
@@ -733,16 +801,26 @@ begin
         fontWeight := S.FontWeight;
       end;
 
-      // A sorted section reserves a right gutter for the triangle.
+      // A sorted section reserves a gutter for the triangle at its reading END; the flip
+      // below puts the gutter and the glyph on the same side without computing either twice.
       gutter := 0;
       if FSections[i].SortDirection <> hsdNone then
         gutter := sortSize * 2;
 
       textRect := Rect(cellRect.Left + padL, cellRect.Top,
         cellRect.Right - padR - gutter, cellRect.Bottom);
-      // Clip the caption so it never bleeds past the strip's right edge.
+      { Reflect the finished slot inside its own cell rather than rebuilding it from the
+        other edge: the sort gutter then lands on the same side as the triangle by
+        construction, because both are the reflection of the same pair. }
+      if IsRightToLeft then
+        textRect := BidiFlipRect(textRect, cellRect, True);
+      { Clip the caption so it never bleeds past the strip. BOTH edges are clamped because
+        which one an overfull strip overruns follows the direction -- the last section runs
+        off the right when reading rightward and off the left when mirrored. The clamp that
+        cannot fire is a no-op, not a behaviour change. }
       clipR := textRect;
       if clipR.Right > R.Right then clipR.Right := R.Right;
+      if clipR.Left < R.Left then clipR.Left := R.Left;
       if (FSections[i].Text <> '') and (clipR.Left < clipR.Right) then
         P.DrawText(clipR, FSections[i].Text, fontName, fontSize, fontWeight,
           txtColor, FSections[i].Alignment, tlCenter, True);
@@ -750,7 +828,7 @@ begin
       // Sort-indicator triangle.
       if FSections[i].SortDirection <> hsdNone then
       begin
-        tri := TyHeaderSortTriangle(cellRect, FSections[i].SortDirection, sortSize);
+        tri := TyHeaderSortTriangle(cellRect, FSections[i].SortDirection, sortSize, IsRightToLeft);
         ctx := P.Bitmap.Canvas2D;
         ctx.beginPath;
         ctx.moveTo(tri[0].X + 0.5, tri[0].Y + 0.5);
@@ -761,10 +839,19 @@ begin
         ctx.fill;
       end;
 
-      // Right divider (not after the last VISIBLE section -- that edge is the control's).
+      { The divider on the side this section shares with its successor -- its right when
+        reading rightward, its left when mirrored. `i < lastVisible` needs no mirroring of
+        its own: the section that skips its divider is still the LAST visible one, whose
+        shared edge is the control's own edge in either direction.
+        The mirrored column is Left, not Left - 1: reflecting the innermost pixel column of
+        a cell (Right - 1) lands on Left, so the rule stays "the last pixel inside me". }
       if i < lastVisible then
-        P.Bitmap.DrawLine(cellRect.Right - 1, cellRect.Top,
-          cellRect.Right - 1, cellRect.Bottom, TyColorToBGRA(dividerColor), False);
+      begin
+        if IsRightToLeft then dividerX := cellRect.Left
+        else dividerX := cellRect.Right - 1;
+        P.Bitmap.DrawLine(dividerX, cellRect.Top,
+          dividerX, cellRect.Bottom, TyColorToBGRA(dividerColor), False);
+      end;
     end;
 
     P.EndPaint;
@@ -787,7 +874,7 @@ begin
   if (Button <> mbLeft) or not Enabled then Exit;
   widths := DeviceWidths;
   // A boundary within the grip starts a resize; otherwise a plain section press.
-  edge := TyHeaderResizeEdgeAtX(widths, ClientRect, X, ScaledGrip);
+  edge := TyHeaderResizeEdgeAtX(widths, ClientRect, X, ScaledGrip, IsRightToLeft);
   if edge >= 0 then
   begin
     FResizing := True;
@@ -811,8 +898,15 @@ begin
   inherited MouseMove(Shift, X, Y);
   if FResizing and (FResizeIndex >= 0) and (FResizeIndex < Length(FSections)) then
   begin
-    // Convert the device-px drag delta to logical px and apply to the start width.
-    deltaLogical := MulDiv(X - FResizeStartX, 96, Font.PixelsPerInch);
+    { Convert the device-px drag delta to logical px and apply to the start width. The sign
+      follows the tiling: a mirrored section is pinned to the strip's right edge and grows
+      LEFTWARD, so the pointer moving toward smaller x is the one that widens it. Without the
+      inversion the divider runs away from the pointer at twice the speed -- the strip still
+      resizes, so nothing crashes and nothing looks wrong in a screenshot. }
+    if IsRightToLeft then
+      deltaLogical := MulDiv(FResizeStartX - X, 96, Font.PixelsPerInch)
+    else
+      deltaLogical := MulDiv(X - FResizeStartX, 96, Font.PixelsPerInch);
     newW := FResizeStartW + deltaLogical;
     { The drag is clamped by the SECTION's own constraints, not by the strip-wide floor
       alone. A MinWidth/MaxWidth that the setter honours and the drag ignores would be no
@@ -829,9 +923,9 @@ begin
   // Not resizing: hover-track. A boundary within the grip switches the cursor to a
   // horizontal resize; otherwise track the hot section for the highlight.
   widths := DeviceWidths;
-  edge := TyHeaderResizeEdgeAtX(widths, ClientRect, X, ScaledGrip);
+  edge := TyHeaderResizeEdgeAtX(widths, ClientRect, X, ScaledGrip, IsRightToLeft);
   SetResizeCursor(edge >= 0);
-  hit := TyHeaderSectionAtX(widths, ClientRect, X);
+  hit := TyHeaderSectionAtX(widths, ClientRect, X, IsRightToLeft);
   if hit <> FHotIndex then
   begin
     FHotIndex := hit;
@@ -866,9 +960,9 @@ begin
   if (Button <> mbLeft) or not Enabled then Exit;
   // A plain click (no drag) on a section body toggles its sort and fires the event.
   widths := DeviceWidths;
-  movedX := TyHeaderResizeEdgeAtX(widths, ClientRect, X, ScaledGrip);
+  movedX := TyHeaderResizeEdgeAtX(widths, ClientRect, X, ScaledGrip, IsRightToLeft);
   if movedX >= 0 then Exit;   // released on a boundary, not a body click
-  hit := TyHeaderSectionAtX(widths, ClientRect, X);
+  hit := TyHeaderSectionAtX(widths, ClientRect, X, IsRightToLeft);
   if hit >= 0 then
   begin
     ToggleSort(hit);

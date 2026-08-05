@@ -174,3 +174,25 @@ end;
 - **`Controller` 自动传播：** 给滚动框设置 `Controller` 后，两个内嵌滚动条会在下次 `UpdateScrollRange` 时继承同一控制器，保证主题一致。
 - **偏移永远非负：** `ScrollX/ScrollY` 始终 `≥ 0`，且被夹取在 `[0, 内容-视口]`；当宿主放大到内容可完整容纳时，偏移自动归零、滚动条自动隐藏。
 - **有自己的主题键：** 滚动框走 `TyScrollBox`，与 `TyPanel` 互不影响。要让滚动井下沉（例如更深的底色、无圆角、内描边），直接写 `TyScrollBox { … }`——**不要**改 `TyPanel`，那会重涂全应用的面板。旧文档建议的 `StyleClass` 变通（`TyPanel.scroll`）已经过时，只在需要同一控件的多种变体时才用得上。
+
+---
+
+## 9. RTL 镜像（`BiDiMode = bdRightToLeft`）
+
+**竖向滚动条搬到左边缘**——这是一个窗口宣告自己从右往左读时，最响的一个信号。跟着一起动的有四处，它们必须同时动：
+
+| 动的 | 怎么动 |
+|---|---|
+| 竖条 | 停靠到**左**边缘（框内，让开边框）；滚动一次之后重新贴边也贴同一侧 |
+| 横条 | 起点让开竖条的槽，仍然在竖条那个角之前收住——角换了一端而已 |
+| 视口（`TTyScrollContent`） | 左端让开竖条 |
+| 子控件布局原点（`AdjustClientRect`） | 整体右移一个条宽 |
+| `TTyScrollPanel` 的自动平移边带 | 跟着视口走 |
+
+### 不动的两处，都是有意的
+
+**`GetClientRect` 让出的仍然是右边。** 这一处最容易改错：`TControl.GetClientWidth` 就是 `ClientRect.Right`（`lcl/include/control.inc:1910`），所以把 `Dec(Result.Right, …)` 改成 `Inc(Result.Left, …)` 会让镜像后的框把**整个宽度**报成客户宽度，而布局矩形却窄一个滚动条——LCL 从前者记锚点基线、按后者布局，每次 `ScrollBy` 都把这个差额再记一遍，结果就是本仓库记录过的"`akRight` 子控件每滚一次少 12px 直到消失"。所以：**尺寸由 `GetClientRect` / `GetLogicalClientRect` 负责，与左右无关；镜像只搬原点，在 `AdjustClientRect` 里。**三个钩子的分工没变，只是第三个多了一个固定位移。
+
+**横向滚动条自己不镜像**（`MirrorHorizontal` 保持 `False`）。盒子里的子控件按 `Align` / `Anchors` 布局，而这一层**不镜像**（LCL 的对齐引擎除 `ChildSizing` 表格路径外没有 BiDi 分支，我们跟着翻会和所有原生容器分叉、把移植过来的 `.lfm` 全摆错）。子控件既然仍是从左往右排的，内容的原点就真的是左边缘；此时把横条的 `Min` 放到右边，滑块指的就是文档的另一头。**条什么时候镜像，取决于它滚的东西什么时候镜像。**
+
+守卫在 `tests/test.rtl.pas` 的 `TRtlScrollBoxTest`，其中 `MirroringChangesTheSideOfTheGuttersAndNotTheirCost` 专钉上面那个 12px 陷阱。

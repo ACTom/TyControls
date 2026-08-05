@@ -146,3 +146,13 @@ end;
 - **定时器安全：** `FPanTimer` 由 `Self` 拥有但析构里先 `FreeAndNil`，避免拆卸期 `OnTimer` 触发（沿用 `TTyScrollBar` 的定时器拆卸约定）。
 - **滚动落地接缝：** 每帧增量经受保护的 `ApplyAutoPanDelta` 落到基类偏移——它调 `TTyScrollBox.ScrollByDelta`（夹取到滚动范围 + 同步缩略块），并返回偏移是否**真的动了**，好让已经滚到头的空转帧停下来。此钩子被刻意隔离在一处，测试用访问子类覆写它即可在无实时偏移的情况下观察请求的增量。
 </content>
+
+---
+
+## RTL 镜像（`BiDiMode = bdRightToLeft`）
+
+本控件继承 `TTyScrollBox` 的全部镜像：竖条到左边缘、视口与子控件布局原点让开它。此外它自己有一处：**边缘自动平移的感应带跟着视口走**。
+
+`ClientRect` 让出的是滚动条的**宽度**，但它的左端永远是 0（这是 LCL 的硬约束，见 `docs/controls/scrollbox.md`），所以镜像后真正的视口是那个矩形整体右移一个条宽。不跟着移的话，左边那条感应带会压在滚动条上，而右边那条用户真正够得到的边带落在矩形之外——按 `TyEdgeAutoPan` 的语义那等于**一直在满速平移**。
+
+守卫：`tests/test.rtl.pas` 的 `TRtlScrollBoxTest.AutoPanBandsMoveWithTheMirroredViewport`。

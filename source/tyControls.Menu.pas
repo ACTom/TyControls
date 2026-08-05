@@ -60,6 +60,19 @@ type
   mode before, so gsmNever drew the glyph anyway and the property was decoration. }
 function TyMenuGlyphVisible(AItem: TMenuItem): Boolean;
 
+{ How far a context menu's anchor moves for a given TPopupMenu.Alignment and a measured popup
+  width. The renderer hangs the popup from the anchor's LEADING edge, so alignment is expressed
+  by moving that edge; AAlignment is read as a READING-ORDER quantity (paLeft = "aligned to the
+  reading start"), the same rule TAlignment follows through BidiFlipAlignment, so mirroring
+  turns each shift round.
+
+  Pure, and separate from PopUp, because PopUp needs a live window and this is a SIGN in a
+  one-line offset -- precisely the kind of thing plans/2026-08-04-rtl-mirroring-scope.md §5
+  item 2 warns has no static symptom: every screenshot is right and the menu opens on the
+  wrong side of the cursor. }
+function TyPopupAnchorShift(AAlignment: TPopupAlignment; AWidth: Integer;
+  ARightToLeft: Boolean): Integer;
+
 { Flatten a root TMenuItem's visible children into render rows. Caption '-' => separator.
   When AAllowHeaders, a Caption of '-Text' (a dash followed by text) becomes a non-selectable
   SECTION HEADER captioned 'Text' (a bare '-' stays a plain separator) — the TTyMenuEx opt-in.
@@ -246,6 +259,7 @@ type
     FBannerWidth: Integer;    // decorative left-banner width (logical px), 0 = none
     FOwnerDraw: Boolean;      // TMenu.OwnerDraw, forwarded to the view + submenu cascades
     FTrackButton: TTrackButton;  // TPopupMenu.TrackButton, likewise forwarded
+    FRightToLeft: Boolean;    // mirrored layout, forwarded to the view + submenu cascades
     procedure EnsureForm;
     { Push the per-popup options the host set onto the live view. Called from EnsureForm
       AND from Popup: EnsureForm early-exits on every re-open, so a host that changed
@@ -277,7 +291,7 @@ type
       submenu, AToRight=True) LEFT of the anchor when there is no room to the right.
       Headless-testable; the live Popup calls it so on-screen sizing cannot drift. }
     function ComputeBounds(const AAnchor: TRect; AWidth, AHeight, APPI: Integer;
-      AToRight: Boolean): TRect;
+      AToRight: Boolean; ARightToLeft: Boolean = False): TRect;
     { Shape the borderless popup window with a rounded region matching the popup's
       own themed BorderRadius (TyMenuPopup), scaled to device PPI, so the opaque
       rectangular corners outside the rounded fill are clipped away. Guarded on
@@ -324,6 +338,12 @@ type
       (an owner-drawn menu is owner-drawn all the way down, as it is in the LCL). }
     property OwnerDraw: Boolean read FOwnerDraw write FOwnerDraw;
     property TrackButton: TTrackButton read FTrackButton write FTrackButton;
+    { MIRRORED layout, pushed down to the view (which has no other way to learn it: the popup
+      form is a bare TForm.CreateNew of ours, so it inherits no BiDiMode from the application
+      window) and inherited by every submenu cascade -- a menu reads one way all the way down.
+      Set by the host: TTyMenuBar from its own IsRightToLeft, TTyPopupMenu from the control
+      the context menu was raised on. }
+    property RightToLeft: Boolean read FRightToLeft write FRightToLeft;
     { Test seam: this level's live view, building the (hidden) host form on demand. Lets a
       headless test read what the host actually pushed into the renderer -- the wiring,
       not merely the property it was written to. }
@@ -398,12 +418,17 @@ type
     { Resolve the width of the AIndex-th top cell in device px (caption + the
       TyMenuItem left/right padding), theme-driven. }
     function TopCellWidth(AIndex, APPI: Integer): Integer;
+    { The cell's physical left edge. MIRRORED when the bar reads right-to-left, and the ONLY
+      place that mirroring happens: paint, hit test and dropdown anchor all read this. }
     function TopLeft(AIndex, APPI: Integer): Integer;
+    { The same in reading order, before mirroring — for measuring an extent, not placing a
+      cell. See the implementation for why FitWidth may not use the mirrored one. }
+    function TopLeftUnmirrored(AIndex, APPI: Integer): Integer;
     { Device-x -> top cell index, or -1 when X is past the last cell. }
     function TopAtX(AX, APPI: Integer): Integer;
     { Pure content-fit width (device px): the sum of the top-cell widths plus the bar's
-      own left+right padding — i.e. TopLeft(last) + TopCellWidth(last) + right padding.
-      The width an AutoSizeWidth bar shrinks to; headless-testable like TopLeft/TopAtX. }
+      own left+right padding — i.e. TopLeftUnmirrored(last) + TopCellWidth(last) + right
+      padding. The width an AutoSizeWidth bar shrinks to; headless-testable like TopLeft/TopAtX. }
     function FitWidth(APPI: Integer): Integer;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
@@ -467,6 +492,11 @@ type
   private
     FRenderer: TTyMenuPopup;     // lazy themed popup host; created on first PopUp
     FController: TTyStyleController;
+    { Which way this menu reads. A TPopupMenu is a component, not a control, so it has no
+      BiDiMode of its own; a context menu belongs to whatever it was raised over, which LCL
+      records in PopupComponent (include/control.inc:2496) before popping. Falls back to the
+      owner, which is what a menu invoked from code (PopUp called directly) has. }
+    function ResolveRightToLeft: Boolean;
     procedure EnsureRenderer;
     { Wired to the renderer's OnClose so the LCL side of the protocol -- OnClose,
       and clearing the global ActivePopupMenu -- runs when the themed popup goes
@@ -548,6 +578,18 @@ type
     are declared protected in another unit, so a same-unit descendant is the way in -- the
     LCL itself calls them from inside Menus. }
   TMenuItemAccess = class(TMenuItem);
+
+function TyPopupAnchorShift(AAlignment: TPopupAlignment; AWidth: Integer;
+  ARightToLeft: Boolean): Integer;
+begin
+  { paLeft is the reading start and the renderer already hangs the popup from there, whichever
+    end that is -- so it never shifts. paCenter is half of paRight's shift, and mirroring
+    negates both: one sign, one place, all three cases. }
+  if AAlignment = paLeft then Exit(0);
+  Result := AWidth;
+  if AAlignment <> paRight then Result := Result div 2;   // paCenter
+  if not ARightToLeft then Result := -Result;
+end;
 
 function TyMenuGlyphVisible(AItem: TMenuItem): Boolean;
 
@@ -1141,22 +1183,27 @@ begin
     VK_END:   begin SetHighlight(LastSelectable);  Key := 0; end;
     VK_RETURN, VK_SPACE:
       begin ActivateRow(FHighlight); Key := 0; end;
-    VK_RIGHT:
+    VK_RIGHT, VK_LEFT:
       begin
-        // On a submenu row, open it; otherwise this is a bar-level "next top".
-        if IsSelectable(FHighlight) and FRows[FHighlight].HasSubmenu then
+        { MIRRORING: these are LAYOUT arrows, not text arrows (plans/2026-08-04-rtl-mirroring
+          -scope.md §6.3 item 4) -- a cascade opens toward the READING end, so on a mirrored
+          menu the key that goes deeper is LEFT and the key that returns to the parent is
+          RIGHT. Left unswapped, a right-to-left user has no keyboard route into a submenu at
+          all: the failure is total, not cosmetic, and invisible in any screenshot. }
+        if (Key = VK_RIGHT) <> IsRightToLeft then
         begin
-          if Assigned(FOnOpenSubmenu) then FOnOpenSubmenu(Self, FHighlight);
+          // Deeper: on a submenu row, open it; otherwise this is a bar-level "next top".
+          if IsSelectable(FHighlight) and FRows[FHighlight].HasSubmenu then
+          begin
+            if Assigned(FOnOpenSubmenu) then FOnOpenSubmenu(Self, FHighlight);
+          end
+          else if Assigned(FOnNavigateAdjacentBar) then
+            FOnNavigateAdjacentBar(Self, +1);
         end
-        else if Assigned(FOnNavigateAdjacentBar) then
-          FOnNavigateAdjacentBar(Self, +1);
-        Key := 0;
-      end;
-    VK_LEFT:
-      begin
-        // Left: a submenu collapses back to its parent; the ROOT dropdown rotates to the
-        // PREVIOUS top. The host popup decides by level (it knows if it is a child cascade).
-        if Assigned(FOnNavigateLeft) then FOnNavigateLeft(Self);
+        else
+          // Back: a submenu collapses to its parent; the ROOT dropdown rotates to the
+          // PREVIOUS top. The host popup decides by level (it knows if it is a child cascade).
+          if Assigned(FOnNavigateLeft) then FOnNavigateLeft(Self);
         Key := 0;
       end;
     VK_ESCAPE:
@@ -1224,11 +1271,31 @@ var
   pendingDrawCount: Integer;
   k, savedDC: Integer;
   IconRes: TScaledImageListResolution;
+  rtl: Boolean;
+  Slot, Banner: TRect;
+
+  { Reflect one rect inside ABox when this frame is mirrored — LCL's BidiFlipRect
+    (controls.pp:2966). Applied to EVERY x a row lays out rather than to a chosen few, so a
+    slot cannot be the one somebody forgot, and applied to the finished left-to-right rect so
+    the row's own paddings and gaps come out as their own mirror image. The identity when the
+    menu reads left-to-right, which is why an unmirrored popup renders exactly as before. }
+  function Mir(const R, ABox: TRect): TRect;
+  begin
+    if rtl then Result := BidiFlipRect(R, ABox, True) else Result := R;
+  end;
+
 begin
   P := TTyPainter.Create;
   try
     R := Types.Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
-    P.BeginPaint(ACanvas, ARect, APPI);
+    { MIRRORING: the check/icon slot moves to the right, the shortcut text and the submenu
+      arrow to the left, and the arrow turns round. There is no row-internal HIT TEST to keep
+      in step — RowAtY answers from y alone and MouseUp uses only y — which is what makes
+      moving these slots a safe change rather than the paint half of a split. Direction comes
+      from this view's own BiDiMode, which the host popup pushes down (ApplyViewOptions);
+      the popup form is created by us, so nothing else would ever set it. }
+    rtl := IsRightToLeft;
+    P.BeginPaint(ACanvas, ARect, APPI, rtl);
     // Surface: the TyMenuView (popup) background/border/radius from its own tokens.
     S := CurrentStyle;
     // Wayland: the window can't be shape-masked, so paint the surface SQUARE to match it (no edge).
@@ -1248,12 +1315,16 @@ begin
     if bannerPx > 0 then
     begin
       BannerStyle := ActiveController.Model.ResolveStyle('TyMenuItem', '', [tysActive]);
-      P.FillBackground(Types.Rect(R.Left, R.Top, R.Left + bannerPx, R.Bottom), BannerStyle.Background, 0);
+      // The strip is on the READING-start side, so it swaps ends with the rows it indents.
+      Banner := Mir(Types.Rect(R.Left, R.Top, R.Left + bannerPx, R.Bottom), R);
+      P.FillBackground(Banner, BannerStyle.Background, 0);
       if FBannerCaption <> '' then
       begin
         TyConfigureTextFont(P.Bitmap, BannerStyle.FontName, ResolveFontSize(BannerStyle) + 1, 600, APPI);
         // 90° CCW: reads bottom-to-top up the strip, anchored near the bottom, centered across it.
-        P.Bitmap.TextOutAngle(R.Left + bannerPx div 2, R.Bottom - P.Scale(8), 900,
+        // The ROTATION is not mirrored -- a vertical banner reads bottom-to-top in either
+        // direction; only which end of the popup it decorates changes.
+        P.Bitmap.TextOutAngle(Banner.Left + bannerPx div 2, R.Bottom - P.Scale(8), 900,
           FBannerCaption, TyColorToBGRA(BannerStyle.TextColor), taLeftJustify);
       end;
     end;
@@ -1270,8 +1341,8 @@ begin
     begin
       rowT := RowTop(i, APPI);
       rowH := RowHeight(i, APPI);
-      RowRect := Types.Rect(R.Left + bannerPx + P.Scale(S.Padding.Left), rowT,
-        R.Right - P.Scale(S.Padding.Right), rowT + rowH);
+      RowRect := Mir(Types.Rect(R.Left + bannerPx + P.Scale(S.Padding.Left), rowT,
+        R.Right - P.Scale(S.Padding.Right), rowT + rowH), R);
 
       { OwnerDraw: this row's content belongs to the app. The themed row background still
         goes down (odBackgroundPainted says so), then the handler runs after EndPaint.
@@ -1301,8 +1372,9 @@ begin
         SepFill := Default(TTyFill);
         SepFill.Kind := tfkSolid;
         SepFill.Color := RowStyle.BorderColor;
-        P.FillBackground(Types.Rect(R.Left + bannerPx + P.Scale(S.Padding.Left), SepY,
-          R.Right - P.Scale(S.Padding.Right), SepY + Max(1, P.Scale(1))), SepFill, 0);
+        // Same horizontal span as the row (already mirrored), so the two cannot disagree.
+        P.FillBackground(Types.Rect(RowRect.Left, SepY,
+          RowRect.Right, SepY + Max(1, P.Scale(1))), SepFill, 0);
         Continue;
       end;
 
@@ -1311,7 +1383,7 @@ begin
         // Section header: a non-interactive, muted + bold label (TyMenuItem :disabled color).
         RowStyle := ActiveController.Model.ResolveStyle('TyMenuItem', '', [tysDisabled]);
         padL := P.Scale(RowStyle.Padding.Left);
-        P.DrawText(Types.Rect(RowRect.Left + padL, RowRect.Top, RowRect.Right, RowRect.Bottom),
+        P.DrawText(Mir(Types.Rect(RowRect.Left + padL, RowRect.Top, RowRect.Right, RowRect.Bottom), RowRect),
           FRows[i].Display, RowStyle.FontName, ResolveFontSize(RowStyle),
           700, RowStyle.TextColor, taLeftJustify, tlCenter, True);
         Continue;
@@ -1327,24 +1399,24 @@ begin
       padL := P.Scale(RowStyle.Padding.Left);
       padR := P.Scale(RowStyle.Padding.Right);
 
-      // Check / radio glyph OR the item's icon in the left slot (a check wins when both apply).
+      // Check / radio glyph OR the item's icon in the LEADING slot (a check wins when both apply).
+      Slot := Mir(Types.Rect(RowRect.Left + padL, RowRect.Top,
+        RowRect.Left + padL + leftSlot, RowRect.Bottom), RowRect);
       if FRows[i].Checked then
       begin
         if FRows[i].RadioItem then
-          P.DrawGlyph(Types.Rect(RowRect.Left + padL, RowRect.Top, RowRect.Left + padL + leftSlot,
-            RowRect.Bottom), tgRadioDot, RowStyle.TextColor, 2)
+          P.DrawGlyph(Slot, tgRadioDot, RowStyle.TextColor, 2)
         else
-          P.DrawGlyph(Types.Rect(RowRect.Left + padL, RowRect.Top, RowRect.Left + padL + leftSlot,
-            RowRect.Bottom), tgCheck, RowStyle.TextColor, 2);
+          P.DrawGlyph(Slot, tgCheck, RowStyle.TextColor, 2);
       end
       else if FRows[i].AlwaysCheckable then
         { An UNCHECKED but checkable item draws an empty box, so the user can see that this
           command toggles BEFORE clicking it -- otherwise "View > Toolbar" and "File > Open"
           look identical until one of them has already been used. Set by either LCL flag
           that declares the item checkable: ShowAlwaysCheckable or AutoCheck. }
-        P.StrokeBorder(Types.Rect(RowRect.Left + padL + P.Scale(3),
+        P.StrokeBorder(Types.Rect(Slot.Left + P.Scale(3),
           RowRect.Top + (rowH - leftSlot) div 2 + P.Scale(3),
-          RowRect.Left + padL + leftSlot - P.Scale(3),
+          Slot.Right - P.Scale(3),
           RowRect.Top + (rowH + leftSlot) div 2 - P.Scale(3)), 2, 1, RowStyle.TextColor)
       { GlyphShowMode decides whether this item takes part in the icon column at all.
         Nothing consulted it before, so gsmNever drew the icon anyway. }
@@ -1362,7 +1434,12 @@ begin
           SetLength(pendingIcon, Length(pendingIcon) + 8);
         pendingIcon[pendingIconCount].Res := IconRes;
         pendingIcon[pendingIconCount].Idx := FRows[i].ImageIndex;
-        pendingIcon[pendingIconCount].X := RowRect.Left + padL + (leftSlot - IconRes.Width) div 2;
+        { The GDI pass runs after EndPaint, on the composited canvas, and it has to be
+          mirrored HERE with everything else: it is the only piece of a row whose position is
+          carried out of the loop as a bare point rather than a rect. Centred in the slot the
+          check glyph would have used, so an icon row and a checked row line up either way. }
+        pendingIcon[pendingIconCount].X :=
+          Slot.Left + ((Slot.Right - Slot.Left) - IconRes.Width) div 2;
         pendingIcon[pendingIconCount].Y := RowRect.Top + (rowH - IconRes.Height) div 2;
         { NOTE the parameter. TScaledImageListResolution.Draw's 5th argument is AEnabled,
           NOT "greyed" -- it also has a TGraphicsDrawEffect overload, so passing the wrong
@@ -1380,24 +1457,33 @@ begin
         // BGRA, cross-platform; borrowed from the collection's render cache (do NOT free).
         icon := FImages.CachedIndex(FRows[i].ImageIndex, iconSz);
         if icon <> nil then
-          P.Bitmap.PutImage(RowRect.Left + padL + (leftSlot - icon.Width) div 2,
+          P.Bitmap.PutImage(Slot.Left + ((Slot.Right - Slot.Left) - icon.Width) div 2,
             RowRect.Top + (rowH - icon.Height) div 2, icon, dmDrawWithTransparency);
       end;
 
       // Caption: left-aligned after the check slot, ellipsized before the right slot.
       // A DefaultItem renders bold; otherwise honour the theme's font-weight.
       if FRows[i].DefaultItem then capWeight := 700 else capWeight := RowStyle.FontWeight;
-      TextRect := Types.Rect(RowRect.Left + padL + leftSlot, RowRect.Top,
-        RowRect.Right - padR - rightSlot, RowRect.Bottom);
+      TextRect := Mir(Types.Rect(RowRect.Left + padL + leftSlot, RowRect.Top,
+        RowRect.Right - padR - rightSlot, RowRect.Bottom), RowRect);
       P.DrawText(TextRect, FRows[i].Display, RowStyle.FontName, ResolveFontSize(RowStyle),
         capWeight, RowStyle.TextColor, taLeftJustify, tlCenter, True, FRows[i].MnemonicPos);
 
-      // Submenu arrow OR the right-aligned shortcut text in the right slot.
+      // Submenu arrow OR the trailing-aligned shortcut text in the trailing slot.
       if FRows[i].HasSubmenu then
-        P.DrawGlyph(Types.Rect(RowRect.Right - rightSlot, RowRect.Top, RowRect.Right, RowRect.Bottom),
-          tgArrowRight, RowStyle.TextColor, 2)
+      begin
+        { The arrow POINTS the way the cascade opens, so mirroring has to turn the glyph
+          round as well as move it -- a left-hand slot with a right-pointing chevron in it is
+          the classic half-mirrored menu, and it points away from where the submenu appears. }
+        if rtl then
+          P.DrawGlyph(Mir(Types.Rect(RowRect.Right - rightSlot, RowRect.Top, RowRect.Right, RowRect.Bottom), RowRect),
+            tgArrowLeft, RowStyle.TextColor, 2)
+        else
+          P.DrawGlyph(Types.Rect(RowRect.Right - rightSlot, RowRect.Top, RowRect.Right, RowRect.Bottom),
+            tgArrowRight, RowStyle.TextColor, 2);
+      end
       else if FRows[i].ShortcutText <> '' then
-        P.DrawText(Types.Rect(RowRect.Left, RowRect.Top, RowRect.Right - padR, RowRect.Bottom),
+        P.DrawText(Mir(Types.Rect(RowRect.Left, RowRect.Top, RowRect.Right - padR, RowRect.Bottom), RowRect),
           FRows[i].ShortcutText, RowStyle.FontName, ResolveFontSize(RowStyle),
           RowStyle.FontWeight, RowStyle.TextColor, taRightJustify, tlCenter, False);
     end;
@@ -1530,6 +1616,11 @@ begin
   FView.BannerWidth := FBannerWidth;
   FView.OwnerDraw := FOwnerDraw;
   FView.TrackButton := FTrackButton;
+  { The view reads its own IsRightToLeft (BiDiMode is public on TControl even though nothing
+    publishes it), so this one assignment arms its painter, moves its slots and swaps the
+    meaning of its Left/Right keys together. Written every time, not once at build: a host
+    that changed direction between two popups must be honoured, exactly like OwnerDraw. }
+  if FRightToLeft then FView.BiDiMode := bdRightToLeft else FView.BiDiMode := bdLeftToRight;
 end;
 
 function TTyMenuPopup.ViewForTest: TTyMenuView;
@@ -1540,7 +1631,7 @@ begin
 end;
 
 function TTyMenuPopup.ComputeBounds(const AAnchor: TRect;
-  AWidth, AHeight, APPI: Integer; AToRight: Boolean): TRect;
+  AWidth, AHeight, APPI: Integer; AToRight: Boolean; ARightToLeft: Boolean = False): TRect;
 var
   L, T: Integer;
   wa: TRect;
@@ -1554,12 +1645,33 @@ begin
   mon := Screen.MonitorFromPoint(Types.Point((AAnchor.Left + AAnchor.Right) div 2, AAnchor.Top));
   if mon <> nil then wa := mon.WorkareaRect;
 
+  { MIRRORING: a cascade grows toward the reading end, so a mirrored submenu opens to the
+    LEFT of its parent row and flips right only when it would run off the screen -- the same
+    rule, read the other way. Note AToRight keeps its name: it means "this is a SUBMENU"
+    (the caller says AToRight=True for a cascade and False for a dropdown), and renaming it
+    would touch every call site to express the same two cases. }
   if AToRight then
   begin
-    // A submenu sits to the RIGHT of its parent row; flip LEFT if it would overflow.
-    L := AAnchor.Right;
-    if L + AWidth > wa.Right then
+    if ARightToLeft then
+    begin
+      // A mirrored submenu sits to the LEFT of its parent row; flip RIGHT if it would run off.
       L := AAnchor.Left - AWidth;
+      if L < wa.Left then
+        L := AAnchor.Right;
+    end
+    else
+    begin
+      // A submenu sits to the RIGHT of its parent row; flip LEFT if it would overflow.
+      L := AAnchor.Right;
+      if L + AWidth > wa.Right then
+        L := AAnchor.Left - AWidth;
+    end;
+  end
+  else if ARightToLeft then
+  begin
+    // A mirrored dropdown hangs its RIGHT edge under the anchor's right; the shared clamp
+    // below nudges it right when it would run off the left of the work area.
+    L := AAnchor.Right - AWidth;
   end
   else
   begin
@@ -1604,7 +1716,7 @@ begin
   // Content-driven width, but never narrower than the anchor (e.g. a bar cell), so
   // a top dropdown is at least as wide as its trigger.
   w := Max(FView.MeasureWidth(ppi), AAnchor.Right - AAnchor.Left);
-  R := ComputeBounds(AAnchor, w, h, ppi, AToRight);
+  R := ComputeBounds(AAnchor, w, h, ppi, AToRight, FRightToLeft);
   FPopupRect := R;
   TyQtMakePopup(FForm);   // Qt: re-type as Qt::Popup BEFORE Show so it maps app-positioned (no top-left flash)
   FForm.SetBounds(R.Left, R.Top, R.Right - R.Left, R.Bottom - R.Top);
@@ -1763,6 +1875,7 @@ begin
     SubMenuImages per item, which is what lets a submenu carry its own icons.) }
   FChild.OwnerDraw := FOwnerDraw;
   FChild.TrackButton := FTrackButton;
+  FChild.RightToLeft := FRightToLeft;     // a menu reads one way all the way down the cascade
   // Create the child's form+view and set its root BEFORE any FView access: SetRoot only
   // populates rows when FView already exists (FView is built lazily by EnsureForm), so we
   // build the view first, then root it — guaranteeing FChild.FView exists and is filled.
@@ -1776,10 +1889,14 @@ begin
   // exactly what the previous FView nil-deref crashed on when FForm/FView weren't live.
   if (FForm <> nil) and FForm.HandleAllocated and (FView <> nil) then
   begin
-    // A zero-width anchor at the parent's right edge: the child opens flush to the
-    // right of the parent column (ComputeBounds uses AAnchor.Right for AToRight),
-    // and its own width is carried by Popup via the form width below.
-    anchor.Left := FForm.Left + FForm.Width;
+    // A zero-width anchor at the parent's TRAILING edge: the child opens flush to the far
+    // side of the parent column (ComputeBounds reads AAnchor.Right for AToRight, or
+    // AAnchor.Left when mirrored), and its own width is carried by Popup via the form width
+    // below. Mirrored, the parent's trailing edge is its LEFT one.
+    if FRightToLeft then
+      anchor.Left := FForm.Left
+    else
+      anchor.Left := FForm.Left + FForm.Width;
     anchor.Right := anchor.Left;
     anchor.Top := FForm.Top + FView.RowTop(AIndex, FView.Font.PixelsPerInch);
     anchor.Bottom := anchor.Top;
@@ -2078,7 +2195,12 @@ begin
   Result := (mi <> nil) and mi.RightJustify;
 end;
 
-function TTyMenuBar.TopLeft(AIndex, APPI: Integer): Integer;
+{ Where the cell would sit on a left-to-right bar: the packing rules themselves, with no
+  mirroring applied. Split out of TopLeft because FitWidth measures the bar's CONTENT EXTENT
+  and must not read a mirrored x -- a reflection is taken about Width, and Width is the very
+  thing FitWidth is computing, so mirroring there would be circular. Nothing else uses it:
+  every consumer that means a position on screen goes through TopLeft. }
+function TTyMenuBar.TopLeftUnmirrored(AIndex, APPI: Integer): Integer;
 var
   S: TTyStyleSet;
   i: Integer;
@@ -2086,9 +2208,9 @@ begin
   S := CurrentStyle;
   if TopRightJustified(AIndex) then
   begin
-    { A right-justified top and everything after it pack against the RIGHT edge, in order.
-      Measuring from the right rather than the left is the whole point: the group has to
-      stay glued to the edge as the bar resizes, which a left-packed offset cannot do. }
+    { A right-justified top and everything after it pack against the TRAILING edge, in order.
+      Measuring from the far end rather than the near one is the whole point: the group has to
+      stay glued to the edge as the bar resizes, which a near-packed offset cannot do. }
     Result := Width - MulDiv(S.Padding.Right, APPI, 96);
     for i := AIndex to TopCount - 1 do
       Dec(Result, TopCellWidth(i, APPI));
@@ -2098,6 +2220,18 @@ begin
   Result := MulDiv(S.Padding.Left, APPI, 96);
   for i := 0 to AIndex - 1 do
     Inc(Result, TopCellWidth(i, APPI));
+end;
+
+function TTyMenuBar.TopLeft(AIndex, APPI: Integer): Integer;
+begin
+  Result := TopLeftUnmirrored(AIndex, APPI);
+  { MIRROR once, here, so BOTH packing rules above get it and neither can be the branch
+    somebody forgot -- and, more to the point, so the paint (RenderTo), the hit test (TopAtX)
+    and the dropdown anchor (OpenTop) go on taking their x from ONE expression. All three
+    call this; a mirrored bar that answered clicks on the old side would need somebody to
+    add a second copy first. }
+  if IsRightToLeft then
+    Result := Width - Result - TopCellWidth(AIndex, APPI);
 end;
 
 function TTyMenuBar.TopAtX(AX, APPI: Integer): Integer;
@@ -2128,7 +2262,10 @@ begin
   if n <= 0 then
     Result := MulDiv(S.Padding.Left, APPI, 96) + MulDiv(S.Padding.Right, APPI, 96)
   else
-    Result := TopLeft(n - 1, APPI) + TopCellWidth(n - 1, APPI)
+    { The UNMIRRORED x on purpose: this is an extent, not a position, and a reflection is
+      taken about Width -- which is what this function exists to produce. A mirrored bar
+      fits into exactly the same width, because a reflection preserves extent. }
+    Result := TopLeftUnmirrored(n - 1, APPI) + TopCellWidth(n - 1, APPI)
       + MulDiv(S.Padding.Right, APPI, 96);
   if Result < 1 then Result := 1;
 end;
@@ -2246,6 +2383,10 @@ begin
     rendered by the very same view -- without this, OwnerDraw would work in a context menu
     and silently not in a menu-bar dropdown. }
   FPopup.OwnerDraw := (FMenu <> nil) and FMenu.OwnerDraw;
+  { The dropdown reads the way the bar does -- rows, slots, cascade direction and the
+    Left/Right keys all follow from this one assignment. Re-asserted on every open, like
+    OwnerDraw, so a bar whose direction changed between two opens is honoured. }
+  FPopup.RightToLeft := IsRightToLeft;
   FPopup.SetRoot(mi);
   FOpenIndex := AIndex;
 
@@ -2361,14 +2502,19 @@ procedure TTyMenuBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Intege
 var
   P: TTyPainter;
   S, CellStyle: TTyStyleSet;
-  R, CellRect: TRect;
+  R, CellRect, CapRect: TRect;
   i, cellL, cellW, padL: Integer;
   CellStates: TTyStateSet;
+  rtl: Boolean;
 begin
   P := TTyPainter.Create;
   try
     R := Types.Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
-    P.BeginPaint(ACanvas, ARect, APPI);
+    { MIRRORING: the cells pack from the right. Their x comes from TopLeft, which is also
+      what TopAtX inverts and what OpenTop anchors the dropdown to, so this loop cannot end
+      up painting cells the hit test does not agree with. }
+    rtl := IsRightToLeft;
+    P.BeginPaint(ACanvas, ARect, APPI, rtl);
     // Surface: the TyMenuBar background/border from its own tokens.
     S := CurrentStyle;
     DrawFrame(P, R, S);
@@ -2398,8 +2544,13 @@ begin
       if tpBackground in CellStyle.Present then
         P.FillBackground(CellRect, CellStyle.Background, CellStyle.BorderRadius);
 
+      { The caption's own slot is inset from the cell's LEADING edge, so under mirroring it is
+        inset from the right -- and the painter turns the taLeftJustify into that side. Both
+        halves, or the text hugs a padding that is no longer where the text is. }
       padL := P.Scale(CellStyle.Padding.Left);
-      P.DrawText(Types.Rect(CellRect.Left + padL, CellRect.Top, CellRect.Right, CellRect.Bottom),
+      CapRect := Types.Rect(CellRect.Left + padL, CellRect.Top, CellRect.Right, CellRect.Bottom);
+      if rtl then CapRect := BidiFlipRect(CapRect, CellRect, True);
+      P.DrawText(CapRect,
         TopCaption(i), CellStyle.FontName, ResolveFontSize(CellStyle),
         CellStyle.FontWeight, CellStyle.TextColor, taLeftJustify, tlCenter, True, AccelPos(i));
     end;
@@ -2444,6 +2595,15 @@ begin
   inherited Destroy;
 end;
 
+function TTyPopupMenu.ResolveRightToLeft: Boolean;
+var
+  c: TComponent;
+begin
+  c := PopupComponent;
+  if not (c is TControl) then c := Owner;
+  Result := (c is TControl) and TControl(c).IsRightToLeft;
+end;
+
 procedure TTyPopupMenu.EnsureRenderer;
 begin
   if FRenderer = nil then
@@ -2456,6 +2616,9 @@ begin
     every row itself, TrackButton because activation only ever ran through TControl.Click. }
   FRenderer.OwnerDraw := OwnerDraw;
   FRenderer.TrackButton := TrackButton;
+  { Resolved here, with the other per-popup knobs, so it is in place before the view is built
+    and before MeasuredWidth is asked -- the alignment shift below depends on that width. }
+  FRenderer.RightToLeft := ResolveRightToLeft;
   ConfigureRenderer(FRenderer);   // subclasses opt into headers/etc. BEFORE the rows are built
   // Root the shared renderer at this popup menu's items (the inherited LCL model).
   FRenderer.SetRoot(Items);
@@ -2518,20 +2681,17 @@ begin
     offered paLeft/paRight/paCenter -- and nothing read it, which made a right-aligned
     context menu (the normal choice for a menu opened from a right-hand toolbar, where a
     left-aligned one runs off the edge) silently identical to a left-aligned one.
-    The renderer hangs its dropdown from the anchor's LEFT edge, so alignment is expressed
+    The renderer hangs its dropdown from the anchor's LEADING edge, so alignment is expressed
     by moving that edge: the popup's own width is not known until it measures itself, so
-    paRight/paCenter shift the anchor by the width the renderer reports. }
+    paRight/paCenter shift the anchor by the width the renderer reports. The shift itself is
+    TyPopupAnchorShift -- a pure function, because it carries a SIGN that mirroring turns
+    round and nothing about a live popup can be tested. }
   anchor := Types.Rect(X, Y, X, Y);
   if Alignment <> paLeft then
   begin
     w := FRenderer.MeasuredWidth;
     if w > 0 then
-    begin
-      if Alignment = paRight then
-        OffsetRect(anchor, -w, 0)
-      else
-        OffsetRect(anchor, -(w div 2), 0);
-    end;
+      OffsetRect(anchor, TyPopupAnchorShift(Alignment, w, FRenderer.RightToLeft), 0);
   end;
   FRenderer.Popup(anchor, False);
 end;

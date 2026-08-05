@@ -48,6 +48,20 @@ type
     function ScrollbarThick: Integer;
     function MeasureAndDock: Boolean;
   protected
+    { HOW FAR THE CONTENT AREA IS PUSHED OFF THE LEFT EDGE, and the single number the whole
+      mirror consists of.
+
+      Zero left-to-right. Right-to-left it is the vertical bar's width, because the bar moves
+      to the LEFT edge -- which is the loudest thing a mirrored window does, and the reason
+      this control is in phase 3 at all. Every place that has to know (the layout origin in
+      AdjustClientRect, the viewport's bounds, the horizontal bar's left end, both re-docks,
+      ScrollInView's viewport test) adds exactly this, so there is one definition of "which
+      side the gutter is on" rather than six agreeing copies.
+
+      What it deliberately does NOT change is the SIZE anything gives up -- see GetClientRect.
+      Protected rather than private because TTyScrollPanel's auto-pan viewport needs the same
+      number: a pan band placed on the unmirrored side pans toward the scrollbar. }
+    function LeadingInset: Integer;
     procedure Resize; override;
     procedure Loaded; override;
     procedure InsertControl(AControl: TControl; Index: Integer); override;
@@ -278,6 +292,14 @@ begin
   if FContent <> nil then Result := FContent else Result := Self;
 end;
 
+function TTyScrollBox.LeadingInset: Integer;
+begin
+  if IsRightToLeft and (FVScrollBar <> nil) and FVScrollBar.Visible then
+    Result := FVScrollBar.Width
+  else
+    Result := 0;
+end;
+
 procedure TTyScrollBox.InsertControl(AControl: TControl; Index: Integer);
 begin
   inherited InsertControl(AControl, Index);
@@ -369,6 +391,13 @@ begin
     expressed in, so a plain delta is all that is needed. }
   P := AControl.ClientToParent(Point(0, 0), ContentHost);
   R := Rect(P.x, P.y, P.x + AControl.Width, P.y + AControl.Height);
+  { The tests below are against the VIEWPORT, whose origin is 0 only when the content host is
+    the viewport control (it carries the leading gutter in its own bounds). Without one, the
+    children sit directly in the box and a mirrored box has pushed them past the bar, so take
+    that back off first -- otherwise "is this child off the right edge" is asked a scrollbar's
+    width too late and the last column never quite scrolls into view. }
+  if FContent = nil then
+    Types.OffsetRect(R, -LeadingInset, 0);
 
   viewW := ClientWidth;
   viewH := ClientHeight;
@@ -434,6 +463,7 @@ var
   vMax, hMax: Integer;
   oldW, oldH: Integer;
   oldV, oldH2: Boolean;
+  lead: Integer;
 begin
   thick := ScrollbarThick;
   oldW := FContentW;
@@ -477,6 +507,9 @@ begin
   viewH := Height - 2 * bw - Ord(wantH) * thick;
   if viewW < 0 then viewW := 0;
   if viewH < 0 then viewH := 0;
+  { LeadingInset cannot be used yet -- it reads FVScrollBar.Visible, and this pass is what
+    DECIDES that. Same number, from the decision instead of from the outcome. }
+  if IsRightToLeft and wantV then lead := thick else lead := 0;
 
   // 3) Clamp the offset to the (possibly reduced) viewport, moving content if needed.
   ScrollContentTo(TyClampScroll(FScrollX, FContentW, viewW),
@@ -492,7 +525,13 @@ begin
       gaps between rows. Raising them here rather than at construction is deliberate: children
       stream in and get added after the fact, and this runs whenever the content changes. }
     FVScrollBar.BringToFront;
-    FVScrollBar.SetBounds(Width - thick - bw, bw, thick, viewH);
+    { THE SIGNAL. A vertical bar on the left edge is what makes a window read as right-to-left
+      before a single word is legible, which is why this one placement is the phase's headline
+      even though the arithmetic around it is larger than phase 2's. }
+    if lead > 0 then
+      FVScrollBar.SetBounds(bw, bw, thick, viewH)
+    else
+      FVScrollBar.SetBounds(Width - thick - bw, bw, thick, viewH);
     vMax := TyScrollMax(FContentH, viewH);
     FSyncing := True;
     try
@@ -513,7 +552,12 @@ begin
   begin
     FHScrollBar.Controller := Self.Controller;
     FHScrollBar.BringToFront;
-    FHScrollBar.SetBounds(bw, Height - thick - bw, viewW, thick);
+    { Starts where the content starts, so it still stops short of the vertical bar's corner --
+      the corner has simply changed ends. Its own MirrorHorizontal stays OFF: the children it
+      scrolls are laid out left-to-right (see AdjustClientRect), so the content's origin IS
+      the left edge, and a bar that put Position=Min on the right would point at the wrong end
+      of its own document. The bar mirrors when the thing it scrolls does. }
+    FHScrollBar.SetBounds(bw + lead, Height - thick - bw, viewW, thick);
     hMax := TyScrollMax(FContentW, viewW);
     FSyncing := True;
     try
@@ -533,7 +577,7 @@ begin
     Sizing it here rather than by Align keeps it in step with the very numbers the scroll range
     was computed from. }
   if FContent <> nil then
-    FContent.SetBounds(bw, bw, viewW, viewH);
+    FContent.SetBounds(bw + lead, bw, viewW, viewH);
 
   Result := (FContentW <> oldW) or (FContentH <> oldH)
          or (FVScrollBar.Visible <> oldV) or (FHScrollBar.Visible <> oldH2);
@@ -564,6 +608,21 @@ end;
 
 function TTyScrollBox.GetClientRect: TRect;
 begin
+  { THIS DOES NOT MIRROR, and it is the one hook of the three that must not.
+
+    The scoping document reads `Dec(Result.Right, ...)` as "vertical bar on the right,
+    hard-coded" and asks for it to become `Inc(Result.Left, ...)` when mirrored. Doing that
+    breaks the control outright: TControl.GetClientWidth is literally `ClientRect.Right`
+    (lcl/include/control.inc:1910) -- a client rect that starts at Left=12 reports its width
+    as the FULL width, so the anchor baseline LCL banks from ClientWidth (the thing the
+    declaration comment above warns about) would exceed the layout rect by a scrollbar, and
+    every ScrollBy would re-bank the difference. That is the recorded "each scroll costs an
+    akRight child 12 px until it vanishes" failure, reintroduced by the change meant to
+    mirror the box.
+
+    So the split is: this hook and GetLogicalClientRect own the SIZE the gutters cost, which
+    is side-independent, and AdjustClientRect owns WHERE the remaining area starts, which is
+    the only thing mirroring actually moves. LeadingInset is that move. }
   Result := inherited GetClientRect;
   if (FVScrollBar <> nil) and FVScrollBar.Visible then
     Dec(Result.Right, FVScrollBar.Width);
@@ -619,7 +678,22 @@ begin
     if ARect.Right < ARect.Left then ARect.Right := ARect.Left;
     if ARect.Bottom < ARect.Top then ARect.Bottom := ARect.Top;
   end;
-  // Size is GetLogicalClientRect's job; this only moves the origin to the scrolled origin.
+  { Size is GetLogicalClientRect's job; this only moves the ORIGIN -- twice, for two unrelated
+    reasons that both land here.
+
+    LeadingInset is the mirror: right-to-left the vertical bar sits on the LEFT, so the first
+    column of content starts a bar-width in. It is added to both edges (a slide, not a
+    stretch) precisely because the size was already settled by the other two hooks; adding it
+    to Left alone would shrink the layout area a second time and hand every child a viewport
+    a scrollbar too narrow.
+
+    The scroll offset is the other, and it does NOT change sign when mirrored: the children
+    inside the box are still laid out left-to-right (§6.3 item 1 -- LCL's align engine has no
+    BiDi outside the ChildSizing table path, and diverging from it would misplace every
+    ported .lfm), so the content still begins at the layout origin and still runs rightwards.
+    Flipping the sign here would scroll away from the content on the first drag. }
+  Inc(ARect.Left,  LeadingInset);
+  Inc(ARect.Right, LeadingInset);
   Types.OffsetRect(ARect, -FScrollX, -FScrollY);
 end;
 
@@ -701,13 +775,21 @@ begin
   finally
     FInScrollBy := False;
   end;
-  // Re-dock the bars to the edges (ScrollBy shifted them off): vbar on the right,
-  // hbar on the bottom. Bounds/PageSize/Max stay as UpdateScrollRange set them.
+  { Re-dock the bars to the edges (ScrollBy shifted them off): vbar on the LEADING side, hbar
+    on the bottom starting after it. Bounds/PageSize/Max stay as UpdateScrollRange set them.
+
+    This is MeasureAndDock's placement written a second time, and it already disagreed with it
+    by the frame width before any of this (there: bw and Width-thick-bw; here: 0 and
+    Width-Width_of_bar). That predates the mirror and is left alone -- what the mirror must not
+    do is disagree about the SIDE as well, so both docks take it from the same LeadingInset. }
   if (FVScrollBar <> nil) and FVScrollBar.Visible then
-    FVScrollBar.SetBounds(Width - FVScrollBar.Width, 0,
-      FVScrollBar.Width, FVScrollBar.Height);
+    if LeadingInset > 0 then
+      FVScrollBar.SetBounds(0, 0, FVScrollBar.Width, FVScrollBar.Height)
+    else
+      FVScrollBar.SetBounds(Width - FVScrollBar.Width, 0,
+        FVScrollBar.Width, FVScrollBar.Height);
   if (FHScrollBar <> nil) and FHScrollBar.Visible then
-    FHScrollBar.SetBounds(0, Height - FHScrollBar.Height,
+    FHScrollBar.SetBounds(LeadingInset, Height - FHScrollBar.Height,
       FHScrollBar.Width, FHScrollBar.Height);
   Invalidate;
 end;

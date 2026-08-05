@@ -82,3 +82,13 @@ CL.Checked[0] := True;
 
 - **Objects 被占用:** 勾选状态存在 `Items.Objects[i]`——所以**别再用 `Objects` 存自己的数据**(这是刻意的:并行数组会在排序时错位,见 [colorbox.md](colorbox.md) 的同一教训)。
 - **交互是真机验证项:** 纯状态逻辑(`Checked` / `CheckedCount` / 排序不错位)已 headless 单测;鼠标 / 空格切换需真机验证。
+
+---
+
+## RTL 镜像（`BiDiMode = bdRightToLeft`）
+
+勾选框搬到行的**尾端**（镜像时是右边），文字排在它左侧并贴右读。
+
+关键不在于框搬了，而在于**框和"点哪儿会切换"是同一份算术**：`TyCheckBoxSlotRect(ARowRect, APad, ARightToLeft)` 是本控件里唯一一处决定方块在哪的代码，`PaintItemContent` 拿它画、`CheckZoneRect` 拿它算命中列。在这之前那是两份：绘制用 `ARowRect.Left + pad + sz`，命中用 `Padding.Left + pad + sz + pad` 这个从 x=0 起算的**宽度**——两者相等纯粹因为都从 0 起算。镜像一来，行的前导边缘要动两次（滚动条换边、勾选列跟着换），"都从 0 起算"就不再成立了。
+
+守卫：`tests/test.rtl.pas` 里三条，分别钉几何（框与列一起动、并且**松开**了旧那一列）、像素（画出来的方块落在会切换的那一列里）、行为（点画出来的地方会切、点它原来的地方不会）。少翻任何一半都会红。

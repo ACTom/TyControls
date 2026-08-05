@@ -1011,7 +1011,7 @@ end;
   "works from code", and the same batch nearly republished it. It may not be published while
   most of the library ignores it, and most of the library still does.
 
-  What HAS changed, in three steps:
+  What HAS changed, in four steps:
 
   (1) The painter handles bidirectional TEXT. TTyPainter.DrawText routes any caption carrying
       Hebrew/Arabic/Syriac through BGRA's TBidiTextLayout, so the words come out in the order
@@ -1029,15 +1029,49 @@ end;
       glyph slot, the colour swatch and the badge corner. Those DO read BiDiMode, through
       TTyPainter.BeginPaint's ARightToLeft; tests/test.rtl.pas guards them.
 
+  (4) THE SCROLLING CONTAINERS AND THE LIST BOXES mirror too, which is a different KIND of
+      change from (3) -- it moves boxes rather than resolving an alignment. TTyScrollBox and
+      TTyScrollPanel dock the vertical bar on the LEFT and start the viewport, the horizontal
+      bar and the child layout origin after it; TTyListBox docks its bar on the left, insets
+      the rows on that side and reads its text to the right edge; TTyCheckListBox moves its
+      toggle column AND the zone that answers a click on it, from one shared rect;
+      TTyColorListBox moves its swatch. A horizontal TTyScrollBar can put its origin at the
+      right end, but only when a host asks via MirrorHorizontal -- deliberately NOT from
+      BiDiMode, because the four controls that embed one have not mirrored their content.
+
+  (5) ...and for the MENUS and the window-chrome BARS: TTyMenuBar, TTyPopupMenu (with the
+      whole submenu cascade), TTyStatusBar, TTyControlBar and TTyCoolBar. Those are the first
+      mirrored controls that hit-test INTERNALLY -- which top cell, which status panel,
+      whether this is the size grip, whether this is a band's gripper -- so each of them
+      answers out of the same function that places the thing, and tests/test.rtl.bars.pas
+      pins paint and hit test together. TTyPopupMenu takes its direction from the control it
+      was raised on, since a TPopupMenu has no BiDiMode of its own.
+
   So this is no longer "the paint path ignores it" -- it is "the paint path honours it in the
-  minority of controls". Everything with a scroll bar, a column or a tab strip is still
-  left-to-right, as is TTyMemo's caret, and publishing now would put a property in the Object
-  Inspector that does nothing on a grid, a tree, a list or a memo. That is the same defect
-  this pass has been removing -- a property offered and half-ignored, which is how
-  TTyColorButton.Caption came to exist.
+  minority of controls". Grid and list-view COLUMNS, tab strips, tree indentation, the bars
+  inside those four controls and TTyMemo's caret are all still left-to-right, and publishing
+  now would put a property in the Object Inspector that does nothing on a grid, a tree or a
+  memo. That is the same defect this pass has been removing -- a property offered and
+  half-ignored, which is how TTyColorButton.Caption came to exist.
+
+  (6) ...and for TTyHeaderControl, the first control whose GEOMETRY and both HIT TESTS come
+      out of one pure function -- TyHeaderSectionRects -- so the strip, the section a click
+      lands in and the boundary a resize drag grabs cannot disagree by construction. That
+      shape is the target the column model has to reach before a grid or a list view can
+      mirror; see docs/KNOWN_GAPS.md for why TTyColumns is not there yet.
+
+  Note that (4) does NOT carry to the list-view and tree-view column headers even though they
+  are the same SHAPE. They run on tyControls.Columns.pas, whose UpdatePositions writes a
+  per-column FLeft field rather than returning rects, and nine separate expressions turn that
+  field into a screen x independently (Columns.pas:760/790, ListView.pas:2776/2955/3053,
+  TreeView.pas:3421/3706/3819/3840). The strip has no such expression anywhere -- its consumers
+  receive finished rects -- which is exactly why it was safe to mirror and they are not.
+  TTyCustomGrid is the exception: its column axis IS collapsed already (ColumnLeftPx,
+  Grid.pas:4969, with ColumnAtX:5007 written as its inverse), so what blocks it is the scroll
+  origin and the frozen bands, not a duplicated tiling.
 
   The way OUT is unchanged and is NOT to relax this assertion: mirror the remaining families
-  (plans/2026-08-04-rtl-mirroring-scope.md phases 2 onwards), then delete this test. Until
+  (plans/2026-08-04-rtl-mirroring-scope.md phases 3 onwards), then delete this test. Until
   then it is the thing stopping a well-meaning "just republish the rest" commit.
 
   OnPaint used to be pinned here alongside it, for the same reason and no other. It is

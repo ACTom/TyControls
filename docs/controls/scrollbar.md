@@ -321,6 +321,22 @@ end;
 
 本库：`sbVertical`；LCL `TCustomScrollBar`：`sbHorizontal`（`stdctrls.pp:105`）。**不跟随**，理由与 `TTyTrackBar.Max` 一样：这只是一个默认值，不改变语义，而 published 默认值一改，**所有现有的竖向 `.lfm`（因为等于默认而没存盘）会静默变成横向**；本控件的构造函数默认尺寸（宽 = `--scrollbar-size`、高 = 160）也是竖向的。从 Lazarus 移植时请显式写 `Kind`。
 
-### 不做：`BidiMode` / `ParentBidiMode`
+### RTL 镜像：`MirrorHorizontal`，**不**跟 `BiDiMode`
 
-RTL 镜像（`stdctrls.pp:124`/`:137`，机制是 `FRTLFactor`）仍然缺失：它不是一个属性，而是要贯穿 `TyScrollThumbRect` / 拖拽数学 / 翻页方向 / 箭头字形的一整套坐标系反转，且应当与全库的 RTL 方案一起做。
+横向滚动条在 RTL 下**原点在右端**：`Min` 在右，`Position` 变大滑块往**左**走。这是 Windows 对镜像窗口的既定行为，不是本库的选择。打开的方式是 `MirrorHorizontal := True`（默认 `False`）：
+
+| 跟着翻的 | 不翻的 |
+|---|---|
+| 滑块位置（`TyScrollThumbRect` 的 `ARightToLeft` 参数） | 两端按钮的**字形**——左端仍是左箭头 |
+| 拖拽的反算（放下的位置读回 `Position`） | 轨道矩形与按钮尺寸（本来就左右对称，翻了等于没翻） |
+| 命中：点滑块=抓住，点轨道=往点击方向翻页 | `Home` / `End`（逻辑首尾，不是视觉首尾） |
+| 左端按钮变成"加"，右端变成"减" | 滚轮（不是空间方向） |
+| ← / → 跟着滑块走：← 让 `Position` 变大 | 竖向滚动条：**完全不受影响** |
+
+字形不翻不是漏做：把"左端左箭头、右端右箭头"这一对镜像一次，得到的还是它自己——所以 Windows 的镜像横条看上去和普通横条一模一样，变的是滑块在哪、哪个按钮往哪走。
+
+**为什么是 opt-in、不读 `BiDiMode`。** 本库里内嵌横向滚动条的有 `TTyGrid`、`TTyListView`、`TTyMemo`、`TTyTreeView`、`TTyScrollBox` 五个，它们的**内容**都还没镜像。滚动条自己读 `BiDiMode` 的话，就会出现"`Position=Min` 的滑块停在右边，而它驱动的文档还是从左边开始"——这正是这一轮一直在清的"画在一侧、点在另一侧"，只是上移了一层。宿主在**镜像自己内容的那次提交里**顺手打开它。`TTyScrollBox` 明确不打开，理由见 `docs/controls/scrollbox.md`。
+
+绘制与命中共用 `TyScrollThumbRect` 同一次调用，翻转本身只有 `TyScrollMirrorOffset` 一处，绘制与拖拽反算都经过它——所以"只翻了一半"在结构上不可能。守卫在 `tests/test.rtl.pas`（`TRtlScrollBarGeometryTest` / `TRtlScrollBarControlTest`）。
+
+`BidiMode` / `ParentBidiMode` 本身仍然不 published（全库一致，见 `docs/KNOWN_GAPS.md`）。

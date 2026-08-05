@@ -61,3 +61,13 @@ CL.Selected := clNavy;
 
 - **组合 vs 列表:** 收起式选色用 [TTyColorBox](colorbox.md);要常驻列表用本控件。
 - **颜色随名同步:** 颜色在 `Items.Objects[i]`,`Sorted` / `Delete` 不会错位(见 [colorbox.md](colorbox.md) 的同一机制)。
+
+---
+
+## RTL 镜像（`BiDiMode = bdRightToLeft`）
+
+色块搬到行的**右端**，颜色名排在它左侧并贴右读——`TyDrawColorRow` 的 `ARightToLeft` 参数负责，本控件把 `RtlRowLayout` 传进去。槽位和对齐必须一起翻：只翻对齐的话名字会脱开色块、贴到另一头去。
+
+可以安全镜像，是因为本控件**只按 Y 命中**（`TTyListBox.RowAtY`），没有任何读 x 的点击目标会被落在旧位置上。
+
+同一个 `TyDrawColorRow` 也被 `TTyColorBox` 的弹出列表和 `TTyColorComboBox` 用着，它们**还没有**传这个参数（参数默认 `False`，所以它们一个像素都没变）。见 `docs/KNOWN_GAPS.md`。

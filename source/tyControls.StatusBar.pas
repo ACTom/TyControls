@@ -72,11 +72,15 @@ type
     procedure SetSimplePanel(AValue: Boolean);
     procedure SetSimpleText(const AValue: string);
     procedure SetSizeGrip(AValue: Boolean);
-    { Which window-resize edge (0 = none) the point sits on, so the status bar -- which covers the
-      form's bottom edge + the size-grip corner -- can hand the drag to the OS window resize. }
-    function ResizeHitAt(X, Y: Integer): Integer;
   protected
     function GetStyleTypeKey: string; override;
+    { Which window-resize edge (0 = none) the point sits on, so the status bar -- which covers the
+      form's bottom edge + the size-grip corner -- can hand the drag to the OS window resize.
+      PROTECTED rather than private because it is the size grip's HIT TEST, and a hit test that
+      no test can call is a hit test nobody checks against the paint: the live route to it
+      (MouseMove's resize cursor) is gated on TyWindowResizable, i.e. on Windows and a real
+      resizable handle, which a headless run never has. }
+    function ResizeHitAt(X, Y: Integer): Integer;
     { The two hint seams, as protected virtuals -- LCL's DoHint / DoSetApplicationHint
       (comctrls.pp:157-158). DoHint returns True when the application took the hint over
       via OnHint, in which case the bar writes nothing itself. }
@@ -128,7 +132,30 @@ type
     property Controller;
   end;
 
-function TyStatusPanelRects(const AWidths: array of Integer; ATotalWidth, APadding: Integer): TTyRectArray;
+{ ARightToLeft MIRRORS the finished tiling about the bar's vertical centre: panel 0 sits at
+  the RIGHT edge and later panels follow leftwards, the fill panel absorbing the slack in the
+  same place it did. Done as a reflection of the left-to-right result rather than as a
+  reverse tiling loop, because the flush-to-both-edges property (the "last panel runs to the
+  edge" rule below exists precisely to guarantee it) is preserved by a reflection for free
+  and is exactly what a hand-written reverse loop loses to an off-by-one. }
+function TyStatusPanelRects(const AWidths: array of Integer; ATotalWidth, APadding: Integer;
+  ARightToLeft: Boolean = False): TTyRectArray;
+
+{ The size grip's corner box in device px: an ASizePx square in the bar's TRAILING bottom
+  corner — bottom-right on a left-to-right bar, bottom-LEFT on a mirrored one.
+
+  ONE function because there used to be two. RenderTo laid its three dots out from
+  `W - Scale(3) - k*Scale(4)` and ResizeHitAt tested `X >= W - grip`, in different functions,
+  each an independent claim about which corner the grip is in — the shape that ships a
+  handle drawn in one corner and grabbed in another. Both now take the corner from here and
+  differ only in the SIZE they ask for: the hit zone is deliberately more generous than the
+  ink, so the grip is grabbable a few px before the pointer is on a dot. }
+function TyStatusGripRect(AWidth, AHeight, ASizePx: Integer;
+  ARightToLeft: Boolean = False): TRect;
+
+{ Device-px side of that corner at APPI — asked by the paint and by the hit test, so the box
+  they share is the same box and not merely the same shape. }
+function TyStatusGripZonePx(APPI: Integer): Integer;
 
 implementation
 
@@ -138,12 +165,18 @@ uses
 
 const
   CStatusBarPadX = 6;   // logical-px horizontal padding (panels + simple text)
+  { Logical-px side of the size-grip corner, and its device-px floor. The GRAB zone, which is
+    deliberately larger than the three dots drawn inside it. }
+  CStatusGripZone = 18;
+  CStatusGripZoneMin = 14;
   { Win32 WM_NCHITTEST edge codes (== winuser.h), used to hand a bottom/corner drag to the OS. }
   cHTBOTTOM = 15; cHTBOTTOMLEFT = 16; cHTBOTTOMRIGHT = 17;
 
-function TyStatusPanelRects(const AWidths: array of Integer; ATotalWidth, APadding: Integer): TTyRectArray;
+function TyStatusPanelRects(const AWidths: array of Integer; ATotalWidth, APadding: Integer;
+  ARightToLeft: Boolean = False): TTyRectArray;
 var
   i, x, fixed, fillIdx, fillW: Integer;
+  span: TRect;
 begin
   SetLength(Result, Length(AWidths));
   // total fixed width + locate the first fill (<=0) panel
@@ -169,6 +202,30 @@ begin
     Result[i].Right := x;
     Result[i].Bottom := 0;   // caller sets vertical extent
   end;
+  { MIRROR once, at the end, through LCL's own five-liner (controls.pp:2966) — so the two
+    call sites that consume these rects (the hint hit test and the paint) get it from the
+    same place and cannot be mirrored one without the other. }
+  if ARightToLeft then
+  begin
+    span := Rect(0, 0, ATotalWidth, 0);
+    for i := 0 to High(Result) do
+      Result[i] := BidiFlipRect(Result[i], span, True);
+  end;
+end;
+
+function TyStatusGripRect(AWidth, AHeight, ASizePx: Integer;
+  ARightToLeft: Boolean = False): TRect;
+begin
+  if ASizePx < 0 then ASizePx := 0;
+  Result := Rect(AWidth - ASizePx, AHeight - ASizePx, AWidth, AHeight);
+  if ARightToLeft then
+    Result := BidiFlipRect(Result, Rect(0, 0, AWidth, 0), True);
+end;
+
+function TyStatusGripZonePx(APPI: Integer): Integer;
+begin
+  Result := (CStatusGripZone * APPI) div 96;
+  if Result < CStatusGripZoneMin then Result := CStatusGripZoneMin;
 end;
 
 { TTyStatusPanel }
@@ -275,7 +332,8 @@ begin
   if (Y < 0) or (Y >= ClientHeight) then Exit;
   SetLength(ws, FPanels.Count);
   for i := 0 to FPanels.Count - 1 do ws[i] := FPanels[i].Width;
-  rects := TyStatusPanelRects(ws, ClientWidth, MulDiv(CStatusBarPadX, Font.PixelsPerInch, 96));
+  rects := TyStatusPanelRects(ws, ClientWidth, MulDiv(CStatusBarPadX, Font.PixelsPerInch, 96),
+    IsRightToLeft);
   for i := 0 to High(rects) do
     if (X >= rects[i].Left) and (X < rects[i].Right) then Exit(i);
 end;
@@ -291,10 +349,18 @@ var
   bg, grip: TTyFill;
   rects: TTyRectArray;
   ws: array of Integer;
+  rtl: Boolean;
+  sep, gripBox: TRect;
 begin
   P := TTyPainter.Create;
   try
-    P.BeginPaint(ACanvas, ARect, APPI);
+    { MIRRORING: the panels tile from the right and the size grip moves to the bottom-LEFT.
+      Both come from the same pure functions the hit tests use (TyStatusPanelRects,
+      TyStatusGripRect), so there is no second copy of the geometry to forget. The panel
+      texts' own Alignment is resolved by the painter, which is why arming it is the whole
+      of that half. }
+    rtl := IsRightToLeft;
+    P.BeginPaint(ACanvas, ARect, APPI, rtl);
     S := CurrentStyle;
     W := ARect.Right - ARect.Left; H := ARect.Bottom - ARect.Top;
     padX := P.Scale(CStatusBarPadX);
@@ -319,14 +385,18 @@ begin
     begin
       SetLength(ws, FPanels.Count);
       for i := 0 to FPanels.Count - 1 do ws[i] := FPanels[i].Width;
-      rects := TyStatusPanelRects(ws, W, padX);
+      rects := TyStatusPanelRects(ws, W, padX, rtl);
       sepW := P.Scale(1); if sepW < 1 then sepW := 1;
       for i := 0 to High(rects) do
       begin
         if (i > 0) and (tpBorderColor in S.Present) then   // separator before each panel after the first (only when border color is present)
         begin
           bg.Color := S.BorderColor;
-          P.FillBackground(Rect(rects[i].Left, P.Scale(3), rects[i].Left + sepW, H - P.Scale(3)), bg, 0);
+          { The rule sits on the panel's LEADING edge — reflected inside the cell rather than
+            restated for the mirrored case, so it can never end up drawn over the neighbour. }
+          sep := Rect(rects[i].Left, P.Scale(3), rects[i].Left + sepW, H - P.Scale(3));
+          if rtl then sep := BidiFlipRect(sep, rects[i], True);
+          P.FillBackground(sep, bg, 0);
         end;
         { An owner-drawn cell belongs to the application: the bar keeps painting the chrome
           around it (background, the separator rules, the size grip) and hands over the cell
@@ -342,14 +412,21 @@ begin
           FPanels[i].Text, S.FontName, fs, S.FontWeight, S.TextColor, FPanels[i].Alignment, tlCenter, True);
       end;
     end;
-    if FSizeGrip then    // 3 diagonal dots, bottom-right, in muted text color
+    if FSizeGrip then    // 3 diagonal dots in the trailing bottom corner, in muted text color
     begin
       grip := Default(TTyFill); grip.Kind := tfkSolid; grip.Color := S.TextColor;
+      { The corner comes from the SAME function ResizeHitAt asks — it used to be restated
+        here as a bare `W - ...`, which is how a grip gets drawn in one corner and grabbed
+        in the other. The dots are laid out against the box's own far corner and reflected
+        INSIDE it, so they stay in the zone the hit test answers for whichever way it reads. }
+      gripBox := TyStatusGripRect(W, H, TyStatusGripZonePx(APPI), rtl);
       for k := 0 to 2 do
       begin
-        gx := W - P.Scale(3) - k*P.Scale(4);
-        gy := H - P.Scale(3) - k*P.Scale(4);
-        P.FillBackground(Rect(gx, gy, gx + P.Scale(2), gy + P.Scale(2)), grip, P.Scale(1));
+        gx := gripBox.Right - P.Scale(3) - k*P.Scale(4);
+        gy := gripBox.Bottom - P.Scale(3) - k*P.Scale(4);
+        sep := Rect(gx, gy, gx + P.Scale(2), gy + P.Scale(2));
+        if rtl then sep := BidiFlipRect(sep, gripBox, True);
+        P.FillBackground(sep, grip, P.Scale(1));
       end;
     end;
     P.EndPaint;
@@ -360,14 +437,28 @@ end;
 
 function TTyStatusBar.ResizeHitAt(X, Y: Integer): Integer;
 var
-  zone, grip, W, H: Integer;
+  zone, W, H: Integer;
+  gripBox: TRect;
+  rtl: Boolean;
 begin
   Result := 0;
   W := Width; H := Height;
+  rtl := IsRightToLeft;
   zone := (5 * Font.PixelsPerInch) div 96;   if zone < 4 then zone := 4;   // bottom-edge strip
-  grip := (18 * Font.PixelsPerInch) div 96;  if grip < 14 then grip := 14; // size-grip corner
-  if FSizeGrip and (X >= W - grip) and (Y >= H - grip) then
-    Result := cHTBOTTOMRIGHT
+  { The grip corner, from the one function RenderTo draws it in. Mirrored, the grip is in the
+    bottom-LEFT corner and the drag it hands the OS is that corner's edge code — the bare
+    cHTBOTTOMRIGHT here was the second half of the two-copies problem. Bounded on the INNER
+    edges only, exactly as the old `X >= W - grip` was: a pointer that has run past the bar's
+    own edge during a drag is still on the grip.
+    The plain bottom-edge strip below is NOT mirrored: its two branches name real WINDOW
+    corners, and the bottom-left corner of a window resizes bottom-left whichever way the
+    bar inside it happens to read. }
+  gripBox := TyStatusGripRect(W, H, TyStatusGripZonePx(Font.PixelsPerInch), rtl);
+  if FSizeGrip and (Y >= gripBox.Top)
+     and (((not rtl) and (X >= gripBox.Left)) or (rtl and (X < gripBox.Right))) then
+  begin
+    if rtl then Result := cHTBOTTOMLEFT else Result := cHTBOTTOMRIGHT;
+  end
   else if Y >= H - zone then
   begin
     if X <= zone then Result := cHTBOTTOMLEFT

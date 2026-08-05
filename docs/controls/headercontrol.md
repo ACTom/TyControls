@@ -19,8 +19,9 @@
 | `TyHeaderControl` | 整条:背景、边框描边、圆角、阴影(`DrawFrame`),以及分隔线取的 `border-color` |
 | `TyTreeHeaderSection` | 每一节的标题文字色与字体;`:hover` 的背景用于鼠标所在那一节 |
 
-- 排序时在该节右侧画一个排序指示三角:升序朝上、降序朝下,**填充色取该节的文字色**。
-- 节与节之间画一条分隔线,颜色取整条样式的 `border-color`。
+- 排序时在该节的**阅读末端**画一个排序指示三角:升序朝上、降序朝下,**填充色取该节的文字色**。
+  从左到右时在右侧,`BiDiMode` 为右到左时在左侧(见"右到左镜像")。
+- 节与节之间画一条分隔线,颜色取整条样式的 `border-color`;它画在每节与**后一节相邻**的那一边。
 
 > **节的 typeKey 仍与树共享,这是"尚未拆分",不是"设计如此"。** `TyTreeHeaderSection` 目前同时被
 > 树的列头和本控件使用,改它会同时改到树。本轮只拆了**盒子键**;`TyHeaderControlSection` /
@@ -40,7 +41,7 @@
 | 操作 | 结果 |
 | --- | --- |
 | 点击某一节的**主体**(非边界) | 循环切换该节排序 none → asc → desc → asc,并触发 `OnSectionClick` |
-| 在**节边界**附近按下并拖动 | 调整该边界左侧那一节的宽度(使用 `MouseCapture`)。按下发 `OnSectionTrack(tsTrackBegin)`,拖动中每次变宽发 `tsTrackMove`,松手先发 `tsTrackEnd`、再**只发一次** `OnSectionResize` |
+| 在**节边界**附近按下并拖动 | 调整该边界所属那一节的宽度(正序是边界左侧那一节;镜像后是右侧那一节。使用 `MouseCapture`)。按下发 `OnSectionTrack(tsTrackBegin)`,拖动中每次变宽发 `tsTrackMove`,松手先发 `tsTrackEnd`、再**只发一次** `OnSectionResize` |
 | 鼠标移到边界 | 光标变为水平调整光标(`crHSplit`);移开后**还原为调用方自己设的 `Cursor`**,不再被抹成 `crDefault` |
 
 排序是**单列排序**:某一节开始排序时,会清除其余各节的排序状态。
@@ -127,23 +128,52 @@ property OnSectionTrack:  procedure(AHeader: TTyHeaderControl; AIndex, AWidth: I
 ```pascal
 // 把各节宽度从左到右平铺到 AClient;最后一节吸收剩余宽度(当各节宽度之和
 // 不足以填满 AClient 时),否则保持自身宽度(允许溢出,不收缩)。
+// ARightToLeft=True 时把铺好的结果整体沿 AClient 的垂直中线**反射**:
+// 第 0 节贴右边缘,整条向左延伸。
 function TyHeaderSectionRects(const AWidths: array of Integer;
-  const AClient: TRect): TTyHeaderRectArray;
+  const AClient: TRect; ARightToLeft: Boolean = False): TTyHeaderRectArray;
 
-// 返回设备 X 落在哪一节(-1 表示越界)。边界归属其左侧那一节。
+// 返回设备 X 落在哪一节(-1 表示越界)。各节区间是半开的 [Left, Right),
+// 因此每个内部边界恰好归属一节;唯一特殊处理的是整条自己的外边缘,
+// 它归属贴着它的那一节(正序是最后一节,镜像后是第 0 节)。
 function TyHeaderSectionAtX(const AWidths: array of Integer;
-  const AClient: TRect; X: Integer): Integer;
+  const AClient: TRect; X: Integer; ARightToLeft: Boolean = False): Integer;
 
-// 当鼠标落在某个内部边界(第 0..n-2 节的右边)AGrip 设备像素范围内时,
-// 返回该边界左侧节的索引(即被调宽的那一节);否则 -1。最后一节的右边
-// 是控件边缘,不可调宽。重叠时取最近的边界。
+// 当鼠标落在某个内部边界 AGrip 设备像素范围内时,返回被调宽的那一节的索引;
+// 否则 -1。所谓内部边界是第 0..n-2 节与**后一节相邻**的那条边 —— 正序是它的
+// 右边,镜像后是它的左边。整条的外边缘是控件边缘,不可调宽。重叠时取最近的。
 function TyHeaderResizeEdgeAtX(const AWidths: array of Integer;
-  const AClient: TRect; X, AGrip: Integer): Integer;
+  const AClient: TRect; X, AGrip: Integer; ARightToLeft: Boolean = False): Integer;
 
-// 排序三角形的三个顶点(位于单元格右侧的小方形区域内),升序朝上、降序朝下。
+// 排序三角形的三个顶点(位于单元格**阅读末端**的小方形区域内),升序朝上、
+// 降序朝下。ARightToLeft 只反射三角形的中心 x,上下朝向不变 ——
+// 排序方向是次序的方向,不是阅读的方向。
 function TyHeaderSortTriangle(const ACellRect: TRect;
-  ADir: TTyHeaderSortDirection; ASizeDev: Integer): TTyHeaderTriangle;
+  ADir: TTyHeaderSortDirection; ASizeDev: Integer;
+  ARightToLeft: Boolean = False): TTyHeaderTriangle;
 ```
+
+## 右到左镜像(RTL)
+
+把控件(或它的父窗体)的 `BiDiMode` 设为 `bdRightToLeft`,整条列头就镜像:
+第 0 节贴右边缘、整条向左延伸,标题文字靠右,排序三角与分隔线换到每节的另一侧,
+拖分隔线时**向左**拖是变宽。命中判定跟着一起动 —— 点在最左边的格子上,排序的是
+**最后**一节,而不是第 0 节。
+
+`BiDiMode` 目前**没有 published**(不在对象查看器里),要用请在代码里赋值;
+原因见 `docs/KNOWN_GAPS.md`:整库尚未全部镜像,提前 published 会给出一个在网格、
+树、列表上无效的属性。
+
+> **实现上只有一处算 x。** `TyHeaderSectionRects` 是唯一的平铺来源,绘制(`RenderTo`)、
+> 两个命中函数、以及 `EffectiveSectionWidth` 全都从它取矩形,自己不算坐标;镜像也只是把
+> 铺好的结果**反射**一次(走 LCL 的 `BidiFlipRect`),不是倒着再铺一遍。
+> 这条性质是有意维持的:它让"画在这边、点在那边"这类 bug 在结构上不可能发生。
+> 改这个文件时请保持它 —— 任何在 `TyHeaderSectionRects` 之外新算出来的 x,
+> 都是一条会和另一条走散的第二路径。
+
+不镜像的东西:节的**索引次序**不变(第 0 节仍是第 0 节,只是画在右边);
+`SectionWidth` / `EffectiveSectionWidth` 的数值不变(反射不改变宽度);
+排序三角的上下朝向不变。
 
 ## 用法示例
 

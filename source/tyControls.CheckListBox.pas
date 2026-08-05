@@ -30,11 +30,17 @@ type
     procedure SetState(AIndex: Integer; AValue: TCheckBoxState);
     function GetItemEnabled(AIndex: Integer): Boolean;
     procedure SetItemEnabled(AIndex: Integer; AValue: Boolean);
-    function CheckZoneWidth: Integer;   // device px of the left checkbox column
     { The packed word for AIndex, and the write-back. Out of range reads 0. }
     function ItemFlags(AIndex: Integer): PtrInt;
     procedure SetItemFlags(AIndex: Integer; AFlags: PtrInt);
   protected
+    { The toggle column, in device px, client coordinates -- everything from the row's leading
+      edge to just past the box. It used to be a WIDTH measured from x=0, which was only ever
+      right because the column started at x=0; the leading edge moves twice now (a mirrored
+      box docks its scrollbar on the left, and the column with it), so the zone is a rect.
+      Protected so a guard can assert it against the box PaintItemContent actually drew --
+      the two agreeing is the whole point of TyCheckBoxSlotRect. }
+    function CheckZoneRect: TRect;
     procedure PaintItemContent(P: TTyPainter; const ARowRect: TRect; AIndex: Integer;
       const AStyle: TTyStyleSet); override;
     function ItemStatesFor(AIndex: Integer; ABaseStates: TTyStateSet): TTyStateSet; override;
@@ -70,7 +76,39 @@ type
     property OnClickCheck: TNotifyEvent read FOnClickCheck write FOnClickCheck;
   end;
 
+{ THE CHECK BOX INSIDE ONE ROW -- the only arithmetic in this control that says where the
+  square is, and therefore the only one that can be wrong.
+
+  PaintItemContent draws it here and MouseDown toggles when the click lands in the column
+  around it; both go through this function with the same ARightToLeft, so there is no
+  arrangement in which a mirrored box is drawn on one side and answers clicks on the other.
+  That split -- painted right, clicked left -- is the exact defect this pass has been closing
+  across the library, and it was live here in the shape of two independent formulas: a
+  Left+pad+size rect in the painter and a Padding.Left+pad+size+pad WIDTH in the hit test,
+  agreeing only because both happened to start from zero.
+
+  APad is the scaled gap between the row edge and the box, and between the box and the text.
+  The square is the row height less a pad top and bottom, floored so a very short row still
+  gets something clickable. }
+function TyCheckBoxSlotRect(const ARowRect: TRect; APad: Integer;
+  ARightToLeft: Boolean): TRect;
+
 implementation
+
+function TyCheckBoxSlotRect(const ARowRect: TRect; APad: Integer;
+  ARightToLeft: Boolean): TRect;
+var
+  sz, rowH, boxTop: Integer;
+begin
+  rowH := ARowRect.Bottom - ARowRect.Top;
+  sz := rowH - 2 * APad;
+  if sz < 6 then sz := 6;
+  boxTop := ARowRect.Top + (rowH - sz) div 2;
+  if ARightToLeft then
+    Result := Rect(ARowRect.Right - APad - sz, boxTop, ARowRect.Right - APad, boxTop + sz)
+  else
+    Result := Rect(ARowRect.Left + APad, boxTop, ARowRect.Left + APad + sz, boxTop + sz);
+end;
 
 const
   { Bit layout of the packed per-row word in Items.Objects[i]. See the class comment for
@@ -194,20 +232,26 @@ begin
   end;
 end;
 
-function TTyCheckListBox.CheckZoneWidth: Integer;
+function TTyCheckListBox.CheckZoneRect: TRect;
 var
-  s: TTyStyleSet;
-  sh, pad, sz: Integer;
+  ppi, pad, sh, l, r: Integer;
+  slot: TRect;
 begin
-  // Everything left of the item TEXT is the toggle column: the row's left padding + the
-  // checkbox square (row-height minus insets) + a gap. Tracks the actual box geometry
-  // (same as PaintItemContent) rather than assuming a fixed width.
-  s := CurrentStyle;
-  sh := MulDiv(ItemHeight, Font.PixelsPerInch, 96);
-  pad := MulDiv(4, Font.PixelsPerInch, 96);
-  sz := sh - 2 * pad;
-  if sz < 6 then sz := 6;
-  Result := MulDiv(s.Padding.Left, Font.PixelsPerInch, 96) + pad + sz + pad;
+  { Everything BEFORE the item text is the toggle column: the row's leading padding + the
+    checkbox square + the gap after it. Built from the same row bounds RenderTo paints between
+    and the same slot function PaintItemContent draws into, so the column cannot drift from
+    the square inside it -- which is what the old width-from-zero did the moment either edge
+    moved. The far end runs to the row's own edge so the leading padding stays clickable, the
+    way it always was. }
+  ppi := Font.PixelsPerInch;
+  pad := MulDiv(4, ppi, 96);
+  sh  := MulDiv(ItemHeight, ppi, 96);
+  RowContentBounds(ClientWidth, ppi, l, r);
+  slot := TyCheckBoxSlotRect(Rect(l, 0, r, sh), pad, RtlRowLayout);
+  if RtlRowLayout then
+    Result := Rect(slot.Left - pad, 0, ClientWidth, ClientHeight)
+  else
+    Result := Rect(0, 0, slot.Right + pad, ClientHeight);
 end;
 
 procedure TTyCheckListBox.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
@@ -215,16 +259,13 @@ procedure TTyCheckListBox.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
 var
   cs: TTyStyleSet;
   st: TCheckBoxState;
-  pad, sz, boxTop: Integer;
+  pad: Integer;
   boxR, textR: TRect;
   states: TTyStateSet;
 begin
   st := GetState(AIndex);
   pad := P.Scale(4);
-  sz := (ARowRect.Bottom - ARowRect.Top) - 2 * pad;
-  if sz < 6 then sz := 6;
-  boxTop := ARowRect.Top + ((ARowRect.Bottom - ARowRect.Top) - sz) div 2;
-  boxR := Rect(ARowRect.Left + pad, boxTop, ARowRect.Left + pad + sz, boxTop + sz);
+  boxR := TyCheckBoxSlotRect(ARowRect, pad, RtlRowLayout);
   // Checkbox chrome from the 'TyCheckBox' token. Both non-empty states resolve :active, so
   // a grayed box carries the same accent chrome as a checked one and differs by its glyph
   // -- which is how TTyCheckBox itself renders indeterminate.
@@ -246,11 +287,16 @@ begin
     cbGrayed:  TyDrawGlyph(P, ActiveController, boxR, '--glyph-check-indeterminate',
                            tgCheckIndeterminate, cs.TextColor, 2);
   end;
-  // Item text, to the right of the checkbox.
-  textR := Rect(boxR.Right + pad, ARowRect.Top,
-    ARowRect.Right - P.Scale(AStyle.Padding.Right), ARowRect.Bottom);
+  // Item text, on the far side of the checkbox from the row's leading edge.
+  if RtlRowLayout then
+    textR := Rect(ARowRect.Left + P.Scale(AStyle.Padding.Right), ARowRect.Top,
+      boxR.Left - pad, ARowRect.Bottom)
+  else
+    textR := Rect(boxR.Right + pad, ARowRect.Top,
+      ARowRect.Right - P.Scale(AStyle.Padding.Right), ARowRect.Bottom);
   P.DrawText(textR, Items[AIndex], AStyle.FontName, ResolveFontSize(AStyle),
-    AStyle.FontWeight, AStyle.TextColor, taLeftJustify, tlCenter, True);
+    AStyle.FontWeight, AStyle.TextColor,
+    BidiFlipAlignment(taLeftJustify, RtlRowLayout), tlCenter, True);
 end;
 
 procedure TTyCheckListBox.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
@@ -261,7 +307,7 @@ begin
   inherited MouseDown(Button, Shift, X, Y);
   // NOTE: in LCL, MouseDown's Shift set INCLUDES the pressed button (ssLeft), so do NOT
   // gate on `Shift = []` — that is never true during a left click.
-  if (Button = mbLeft) and (X < CheckZoneWidth) then
+  if (Button = mbLeft) and PtInRect(CheckZoneRect, Point(X, Y)) then
   begin
     row := RowAtY(Y);
     // Toggle already refuses a disabled row; the guard here is only so a click on one

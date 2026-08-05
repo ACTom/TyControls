@@ -2,7 +2,7 @@ unit tyControls.ListBox;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType,
+  Classes, SysUtils, Types, Controls, Graphics, LCLType, LMessages,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller,
   tyControls.ScrollBar;
 type
@@ -91,6 +91,34 @@ type
       for a row its ItemEnabled[] turns off, which is what makes such a row look disabled
       instead of merely refusing to toggle. Default: unchanged. }
     function ItemStatesFor(AIndex: Integer; ABaseStates: TTyStateSet): TTyStateSet; virtual;
+    { DOES THIS CLASS'S ROW LAYOUT MIRROR? Answered per CLASS, not per instance, and the
+      default answer is "whatever the form says" -- IsRightToLeft.
+
+      A descendant OVERRIDES THIS TO FALSE when its own PaintItemContent computes an x
+      coordinate that something else recomputes independently. This box has fifteen
+      descendants; each slices ARowRect into its own slots, and mirroring the row underneath
+      one whose hit test was written against the unmirrored row is precisely the failure this
+      pass has spent itself removing (a shape claiming its whole bounding box, a tree reading
+      x as a scroll offset, a picker selecting the month you did not click). TTyValueListEditor
+      is the one that does: its splitter and expander triangles are hit-tested from
+      ContentLeftDp/SplitXDp, a SECOND computation of the geometry PaintItemContent derives
+      from ARowRect, and the two cannot both follow this flag until they are one computation.
+
+      Everything else in the family is safe because it has no x-axis hit test at all -- which
+      is a property worth re-checking, not assuming, before adding a descendant that does. }
+    function RtlRowLayout: Boolean; virtual;
+    { THE LEFT AND RIGHT EDGE OF A PAINTED ROW, in device px, client coordinates.
+
+      One definition, because two things need it and they must not disagree: RenderTo draws
+      every row between these, and TTyCheckListBox hit-tests its toggle column against them.
+      What makes it load-bearing is the scrollbar gutter -- right-to-left it moves to the LEFT
+      edge, so the row's LEADING edge is the one that gets inset, and a check box painted from
+      one edge while the click was measured from the other lands a full bar's width out.
+      ContentTopOffset is this function's y-axis sibling and exists for the same reason.
+
+      AWidth is the width being painted into (RenderTo is handed a rect; the hit tests use
+      ClientWidth), APPI the same scale RenderTo's painter uses. }
+    procedure RowContentBounds(AWidth, APPI: Integer; out ALeft, ARight: Integer);
     // Row index at client device Y (or -1 if outside any item). For subclasses that
     // hit-test rows, e.g. TTyCheckListBox's checkbox column.
     function RowAtY(AY: Integer): Integer;
@@ -111,6 +139,13 @@ type
       without claiming the app's event slot. }
     procedure DoSelectionChange(AUser: Boolean); virtual;
     procedure Paint; override;
+    { The reading direction changed, so the scrollbar changed SIDES -- and the bar's Align is
+      written by UpdateScrollBar, which LCL's own handling never re-runs (it invalidates,
+      notifies the children and calls AdjustSize; none of those revisits an Align this control
+      set by hand). Without this the bar keeps its old edge while the rows re-inset for the
+      new one, i.e. a gutter on one side and a bar on the other. Same defect and same fix as
+      TTyRadioGroup.CMBiDiModeChanged. }
+    procedure CMBiDiModeChanged(var Message: TLMessage); message CM_BIDIMODECHANGED;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
@@ -671,7 +706,6 @@ begin
       FScrollBar := TTyScrollBar.Create(Self);
       FScrollBar.Parent := Self;
       FScrollBar.Kind := sbVertical;
-      FScrollBar.Align := alRight;
       // A standalone TTyScrollBar is focusable (it has its own arrow/page keys), but an
       // EMBEDDED one must not be: dragging the bar would pull focus off the list box, which
       // would then lose its focus ring and its arrow-key navigation mid-scroll.
@@ -682,6 +716,15 @@ begin
       FScrollBar.AnimationsEnabled := False;
       FScrollBar.ControlStyle := FScrollBar.ControlStyle + [csNoDesignVisible];   // internal: never a designable child
     end;
+    { WHICH EDGE THE BAR DOCKS TO -- set on EVERY call, not once at creation, because it can
+      change after the bar exists (BiDiMode is writable at runtime; CMBiDiModeChanged comes
+      straight back here). LCL's alignment engine has no BiDi of its own, so alRight stays
+      the right-hand edge on a mirrored form and the side has to be chosen explicitly; this
+      is the one place that chooses it, and RowContentBounds insets the rows to match. }
+    if RtlRowLayout then
+      FScrollBar.Align := alLeft
+    else
+      FScrollBar.Align := alRight;
     // Update DPI-dependent width and controller every call so DPI changes take effect
     FScrollBar.Width := MulDiv(ActiveController.Metric('--scrollbar-size', TyScrollbarSize), Font.PixelsPerInch, 96);
     FScrollBar.Controller := Self.Controller;
@@ -896,6 +939,7 @@ var
   BoxStyle, RowStyle: TTyStyleSet;
   R, ContentRect, RowRect: TRect;
   SBWidth, SH, i, LastRow: Integer;
+  cLeft, cRight, leadSB, trailSB: Integer;
   ItemStates: TTyStateSet;
   capR, fillTop, fillBottom, inset, insetLogical: Integer;
   contentFills: Boolean;
@@ -919,18 +963,25 @@ begin
     end;
     DrawFrame(P, R, BoxStyle);
 
-    // Content area = full rect inset by the LISTBOX style's Padding
+    { Content area = full rect inset by the LISTBOX style's Padding, with the x edges coming
+      from RowContentBounds -- which also takes the visible bar's gutter off the side the bar
+      is docked to. The hit tests read the same function, so "where a row starts" has one
+      definition rather than a painted one and a clicked one. }
+    RowContentBounds(R.Right - R.Left, APPI, cLeft, cRight);
     ContentRect := Rect(
-      R.Left   + P.Scale(BoxStyle.Padding.Left),
+      cLeft,
       R.Top    + P.Scale(BoxStyle.Padding.Top),
-      R.Right  - P.Scale(BoxStyle.Padding.Right),
+      cRight,
       R.Bottom - P.Scale(BoxStyle.Padding.Bottom)
     );
 
-    // Subtract scrollbar width when visible
+    // The bar's gutter, and which side of the row FILL it comes off (the fills are measured
+    // from the frame, not from the padding, so they need the number separately).
     SBWidth := 0;
     if (FScrollBar <> nil) and FScrollBar.Visible then
       SBWidth := MulDiv(ActiveController.Metric('--scrollbar-size', TyScrollbarSize), APPI, 96);
+    if RtlRowLayout then begin leadSB := SBWidth; trailSB := 0; end
+    else                 begin leadSB := 0;       trailSB := SBWidth; end;
 
     SH := MulDiv(GetItemHeight, APPI, 96);
     if SH < 1 then SH := 1;
@@ -972,11 +1023,12 @@ begin
       // Resolve the row style for this row ('TyListItem', or the descendant's own key)
       RowStyle := ActiveController.Model.ResolveStyle(GetItemStyleTypeKey, '', ItemStates);
 
-      // Row rect: full content width minus scrollbar, height = scaledItemHeight
+      // Row rect: the content width (RowContentBounds already gave up the bar's gutter on
+      // whichever side the bar is on), height = scaledItemHeight
       RowRect := Rect(
         ContentRect.Left,
         ContentRect.Top + (i - FTopIndex) * SH,
-        ContentRect.Right - SBWidth,
+        ContentRect.Right,
         ContentRect.Top + (i - FTopIndex + 1) * SH
       );
 
@@ -1010,7 +1062,7 @@ begin
           fillBottom := R.Bottom - inset;
           rowCorners.BR := capR; rowCorners.BL := capR;
         end;
-        P.FillBackground(Rect(R.Left + inset, fillTop, R.Right - inset - SBWidth, fillBottom),
+        P.FillBackground(Rect(R.Left + inset + leadSB, fillTop, R.Right - inset - trailSB, fillBottom),
           RowStyle.Background, rowCorners);
       end;
 
@@ -1028,17 +1080,28 @@ end;
 
 procedure TTyListBox.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
   AIndex: Integer; const AStyle: TTyStyleSet);
+var
+  textR: TRect;
 begin
-  // Default: the item text, inset by the item padding (unchanged from the old inline draw).
+  { Default: the item text, inset by the item padding. BOTH halves have to mirror together --
+    the slot AND the alignment inside it. The painter's own flag is not enough here for the
+    reason phase 0 recorded: this caller pre-slices its rect, so flipping only the alignment
+    would push the text to the far edge of a slot that is still cut for the other direction.
+    Padding.Left is the LEADING inset in either mode, so it changes physical sides with the
+    text -- a theme that gives a row an asymmetric indent keeps that indent next to the text's
+    start, which is what an author writing `padding-left` for a list means. }
+  if RtlRowLayout then
+    textR := Rect(ARowRect.Left  + P.Scale(AStyle.Padding.Right), ARowRect.Top,
+                  ARowRect.Right - P.Scale(AStyle.Padding.Left),  ARowRect.Bottom)
+  else
+    textR := Rect(ARowRect.Left  + P.Scale(AStyle.Padding.Left),  ARowRect.Top,
+                  ARowRect.Right - P.Scale(AStyle.Padding.Right), ARowRect.Bottom);
   P.DrawText(
-    Rect(ARowRect.Left + P.Scale(AStyle.Padding.Left),
-         ARowRect.Top,
-         ARowRect.Right - P.Scale(AStyle.Padding.Right),
-         ARowRect.Bottom),
+    textR,
     FItems[AIndex],
     AStyle.FontName, ResolveFontSize(AStyle), AStyle.FontWeight,
     AStyle.TextColor,
-    taLeftJustify, tlCenter, True
+    BidiFlipAlignment(taLeftJustify, RtlRowLayout), tlCenter, True
   );
 end;
 
@@ -1175,6 +1238,39 @@ function TTyListBox.ContentTopOffset: Integer;
 begin
   { Same scale RenderTo uses (P.Scale = MulDiv(x, APPI, 96)); Font.PixelsPerInch tracks APPI. }
   Result := MulDiv(CurrentStyle.Padding.Top, Font.PixelsPerInch, 96);
+end;
+
+function TTyListBox.RtlRowLayout: Boolean;
+begin
+  Result := IsRightToLeft;
+end;
+
+procedure TTyListBox.RowContentBounds(AWidth, APPI: Integer; out ALeft, ARight: Integer);
+var
+  S: TTyStyleSet;
+  sb: Integer;
+begin
+  S := CurrentStyle;
+  ALeft  := MulDiv(S.Padding.Left,  APPI, 96);
+  ARight := AWidth - MulDiv(S.Padding.Right, APPI, 96);
+  { The gutter a VISIBLE bar owns, taken off the side the bar is actually docked to (see
+    UpdateScrollBar, which docks it). Take it off the wrong side and the rows run underneath
+    the bar while a strip of empty box sits opposite. }
+  sb := 0;
+  if (FScrollBar <> nil) and FScrollBar.Visible then
+    sb := MulDiv(ActiveController.Metric('--scrollbar-size', TyScrollbarSize), APPI, 96);
+  if RtlRowLayout then
+    Inc(ALeft, sb)
+  else
+    Dec(ARight, sb);
+  if ARight < ALeft then ARight := ALeft;
+end;
+
+procedure TTyListBox.CMBiDiModeChanged(var Message: TLMessage);
+begin
+  inherited;          // LCL invalidates, tells the children and calls AdjustSize
+  UpdateScrollBar;    // and then the bar has to actually change edges
+  Invalidate;
 end;
 
 procedure TTyListBox.SetItemIndexSilent(const AIndex: Integer);

@@ -10,6 +10,7 @@ type
   TTyScrollBar = class(TTyCustomControl)
   private
     FKind: TTyScrollBarKind;
+    FMirrorH: Boolean;
     FMin, FMax, FPosition, FPageSize: Integer;
     FSmallChange, FLargeChange: Integer;
     FOnChange: TNotifyEvent;
@@ -27,6 +28,11 @@ type
     function TrackRect: TRect;
     function TrackLength: Integer;
     function PosAlong(X, Y: Integer): Integer;
+    { True when THIS bar's track runs right-to-left, i.e. MirrorHorizontal is on AND the
+      bar is horizontal. Every mirrored site asks this one question, so a vertical bar can
+      never accidentally pick up the flag. }
+    function Mirrored: Boolean;
+    procedure SetMirrorHorizontal(const AValue: Boolean);
     procedure ButtonRects(const AClient: TRect; out ALo, AHi: TRect);
     procedure SetKind(const AValue: TTyScrollBarKind);
     procedure SetMin(const AValue: Integer);
@@ -90,6 +96,22 @@ type
     // thumb to the new value; with no handle (every render test) or while
     // dragging it snaps, preserving exact-pixel tests and live mouse tracking.
     property AnimationsEnabled: Boolean read FAnimEnabled write FAnimEnabled default True;
+    { RIGHT-TO-LEFT HORIZONTAL BAR: Min sits at the RIGHT end of the track and a rising
+      Position walks the thumb LEFTWARDS. That is Windows' behaviour for a mirrored window,
+      not a preference — a horizontal bar under WS_EX_LAYOUTRTL comes out reflected. The
+      painted bar looks IDENTICAL either way (reflecting a left arrow at one end and a right
+      arrow at the other is its own mirror image); what changes is where the thumb is for a
+      given Position, which end button decrements, and which way the arrow keys step.
+      Vertical bars ignore it entirely.
+
+      OPT-IN, and default False on purpose — it is NOT wired to BiDiMode. Five controls in
+      this library embed a horizontal bar (Grid, ListView, Memo, TreeView, ScrollBox) and
+      none of them mirrors its CONTENT yet. A bar that put Position=Min on the right while
+      the content it drives still began on the left would be a thumb pointing at the wrong
+      half of the document — the paint/hit-test split this whole pass exists to remove, just
+      moved up one level. A host turns this on in the same commit that mirrors its content.
+      TTyScrollBox deliberately leaves it off: see the note on its horizontal bar. }
+    property MirrorHorizontal: Boolean read FMirrorH write SetMirrorHorizontal default False;
     property Kind: TTyScrollBarKind read FKind write SetKind default sbVertical;
     property Min: Integer read FMin write SetMin default 0;
     property Max: Integer read FMax write SetMax default 100;
@@ -123,16 +145,45 @@ type
   end;
 
 function TyScrollThumbRect(const ATrack: TRect; AKind: TTyScrollBarKind;
-  AMin, AMax, APosition, APageSize: Integer): TRect;
+  AMin, AMax, APosition, APageSize: Integer; ARightToLeft: Boolean = False): TRect;
+
+{ THE ONLY PLACE THE HORIZONTAL AXIS IS EVER FLIPPED.
+
+  AOffset is how far the thumb's near edge sits from the track's near edge; AFreeSpace is
+  how far it can travel (track length minus thumb length). Mirroring a scroll bar is exactly
+  "measure that offset from the other end", so it is one subtraction — and putting it in a
+  function rather than inline is the whole point: TyScrollThumbRect (which PAINTS the thumb)
+  and TTyScrollBar.DragThumbTo (which reads a dragged thumb back OUT into a Position) are
+  inverse computations written in two different places, and this is the single line they
+  share. Flip it here and both flip; there is no arrangement in which the thumb is drawn
+  mirrored and the drag/click math is not.
+
+  Vertical bars and left-to-right bars return AOffset untouched, which is why every existing
+  caller is bit-for-bit unchanged. }
+function TyScrollMirrorOffset(AOffset, AFreeSpace: Integer; AKind: TTyScrollBarKind;
+  ARightToLeft: Boolean): Integer;
 
 function TyScrollButtonSize(const AClient: TRect; AKind: TTyScrollBarKind): Integer;
+{ NOT mirrored, and deliberately: the track is inset by one button-size at EACH end, so the
+  rect is symmetric about the client centre and reflecting it is the identity. (The scoping
+  document expected the two end buttons to swap here; the end buttons are not here — they are
+  TTyScrollBar.ButtonRects — and they do not swap either. See RenderTo.) }
 function TyScrollTrackRect(const AClient: TRect; AKind: TTyScrollBarKind;
   AButtonSize: Integer): TRect;
 
 implementation
 
+function TyScrollMirrorOffset(AOffset, AFreeSpace: Integer; AKind: TTyScrollBarKind;
+  ARightToLeft: Boolean): Integer;
+begin
+  if ARightToLeft and (AKind = sbHorizontal) then
+    Result := AFreeSpace - AOffset
+  else
+    Result := AOffset;
+end;
+
 function TyScrollThumbRect(const ATrack: TRect; AKind: TTyScrollBarKind;
-  AMin, AMax, APosition, APageSize: Integer): TRect;
+  AMin, AMax, APosition, APageSize: Integer; ARightToLeft: Boolean): TRect;
 var
   TrackLen, Span, ThumbLen, FreeSpace, Travel, Pos0, Offset: Integer;
   Cross, MinThumb: Integer;
@@ -162,6 +213,7 @@ begin
     Offset := 0
   else
     Offset := Integer((Int64(Pos0) * FreeSpace) div Travel);
+  Offset := TyScrollMirrorOffset(Offset, FreeSpace, AKind, ARightToLeft);
   if AKind = sbVertical then
     Result := Rect(ATrack.Left, ATrack.Top + Offset,
       ATrack.Right, ATrack.Top + Offset + ThumbLen)
@@ -213,6 +265,7 @@ begin
   FPageSize := 10;
   FSmallChange := 1;
   FLargeChange := 0;           // 0 == page by PageSize (see the property comment)
+  FMirrorH := False;           // opt-in; see the MirrorHorizontal property comment
   FAnimEnabled := True;
   // Thumb-glide animator: 0..1 traversal in ~120ms, decelerating. Start settled
   // at the rest endpoint so DisplayPos == FPosition before any change.
@@ -241,6 +294,20 @@ end;
 function TTyScrollBar.GetStyleTypeKey: string;
 begin
   Result := 'TyScrollBar';
+end;
+
+function TTyScrollBar.Mirrored: Boolean;
+begin
+  Result := FMirrorH and (FKind = sbHorizontal);
+end;
+
+procedure TTyScrollBar.SetMirrorHorizontal(const AValue: Boolean);
+begin
+  if FMirrorH = AValue then Exit;
+  FMirrorH := AValue;
+  { Only the thumb's x moves; the frame, the track and both end buttons are already
+    symmetric, so a repaint is the whole update. }
+  Invalidate;
 end;
 
 procedure TTyScrollBar.EnsureTimer;
@@ -518,7 +585,7 @@ begin
     // The PAINTED thumb uses the displayed (possibly mid-animation) position; at
     // rest DisplayPos == FPosition so headless renders are pixel-identical. The
     // track-paging hit math, drag math and BeginThumbDrag keep using FPosition.
-    ThumbR := TyScrollThumbRect(Track, FKind, FMin, FMax, Round(DisplayPos), FPageSize);
+    ThumbR := TyScrollThumbRect(Track, FKind, FMin, FMax, Round(DisplayPos), FPageSize, Mirrored);
     // Thumb fill is its own sub-element typeKey (TyScrollThumb). Feed the control's
     // hover/press state so TyScrollThumb:hover/:active render (matches the pre-typeKey
     // behavior where the thumb borrowed the parent's state-resolved TextColor).
@@ -542,6 +609,13 @@ begin
       end
       else
       begin
+        { The GLYPHS do not swap under MirrorHorizontal, and that is not an omission.
+          Reflecting a pair "left arrow at the left end, right arrow at the right end" gives
+          back the same picture, which is why Windows' mirrored horizontal bar is visually
+          indistinguishable from its unmirrored one. What the mirror moves is the MEANING:
+          the left-end button now steps Position UP (see MouseDown), because that is the
+          direction the thumb travels when it goes left. Drawing tgArrowRight on the left
+          would make the button point away from where it sends the thumb. }
         TyDrawGlyph(P, ActiveController, LoR, tgArrowLeft, S.TextColor, 2);
         TyDrawGlyph(P, ActiveController, HiR, tgArrowRight, S.TextColor, 2);
       end;
@@ -609,7 +683,7 @@ var
   ThumbR: TRect;
   ThumbStart: Integer;
 begin
-  ThumbR := TyScrollThumbRect(TrackRect, FKind, FMin, FMax, FPosition, FPageSize);
+  ThumbR := TyScrollThumbRect(TrackRect, FKind, FMin, FMax, FPosition, FPageSize, Mirrored);
   if FKind = sbVertical then
     ThumbStart := ThumbR.Top
   else
@@ -627,11 +701,11 @@ end;
 procedure TTyScrollBar.DragThumbTo(APosAlongTrack: Integer);
 var
   Track, ThumbR: TRect;
-  ThumbLen, FreeSpace, NewTop, Travel, NewPos, TrackStart: Integer;
+  ThumbLen, FreeSpace, NewTop, Travel, NewPos, TrackStart, Off: Integer;
 begin
   if not FDragging then Exit;
   Track := TrackRect;
-  ThumbR := TyScrollThumbRect(Track, FKind, FMin, FMax, FPosition, FPageSize);
+  ThumbR := TyScrollThumbRect(Track, FKind, FMin, FMax, FPosition, FPageSize, Mirrored);
   if FKind = sbVertical then
     ThumbLen := ThumbR.Bottom - ThumbR.Top
   else
@@ -648,7 +722,12 @@ begin
   if NewTop < TrackStart then NewTop := TrackStart;
   if NewTop > TrackStart + FreeSpace then NewTop := TrackStart + FreeSpace;
   Travel := FMax - FMin;
-  NewPos := FMin + Integer((Int64(NewTop - TrackStart) * Travel) div FreeSpace);
+  { The inverse of TyScrollThumbRect, through the same one-line mirror it uses. NewTop is a
+    real CLIENT coordinate either way (the thumb follows the cursor whichever end the origin
+    is at); what the mirror decides is only how that distance-from-the-left is read back as a
+    distance-from-the-ORIGIN. }
+  Off := TyScrollMirrorOffset(NewTop - TrackStart, FreeSpace, FKind, Mirrored);
+  NewPos := FMin + Integer((Int64(Off) * Travel) div FreeSpace);
   // Live drag tracking fires scTrack with the proposed value (handler may
   // adjust it); commit through the Position setter (clamps + OnChange).
   if NewPos < FMin then NewPos := FMin;
@@ -678,6 +757,12 @@ end;
 
 function TTyScrollBar.PosAlong(X, Y: Integer): Integer;
 begin
+  { Stays a raw CLIENT coordinate under mirroring. The scoping document proposed turning this
+    into TrackRect.Right - X, "one line"; it is the wrong line. Everything downstream of this
+    -- BeginThumbDrag's ThumbR.Left, DragThumbTo's clamp against Track.Left, the thumb rect
+    the click is tested against -- is in client coordinates, so flipping here would leave the
+    grab offset measured from one end and the thumb from the other. The flip belongs where
+    the offset becomes a POSITION, which is TyScrollMirrorOffset, and it is applied there. }
   if FKind = sbVertical then
     Result := Y
   else
@@ -687,29 +772,55 @@ end;
 procedure TTyScrollBar.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   ThumbR, LoR, HiR: TRect;
+  Back, Fwd: TScrollCode;
+  BackSign: Integer;
 begin
   if not Enabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
   if Button = mbLeft then
   begin
+    { WHICH WAY THE LOW END OF THE BAR STEPS. On a mirrored horizontal bar the origin is the
+      right end, so the LEFT-hand button and the track left of the thumb are the direction
+      Position INCREASES -- the same swap the thumb's own arithmetic makes. Resolving it once
+      into a pair of (code, step) values keeps the six call sites below from each having to
+      remember it. BackSign is the sign the LEFT/TOP side moves Position in; the right/bottom
+      side is its negation. }
+    if Mirrored then
+    begin
+      Back := scLineDown;  Fwd := scLineUp;    BackSign := +1;
+    end
+    else
+    begin
+      Back := scLineUp;    Fwd := scLineDown;  BackSign := -1;
+    end;
     ButtonRects(ClientRect, LoR, HiR);
     if PtInRect(LoR, Point(X, Y)) then
     begin
-      ScrollTo(scLineUp, Position - FSmallChange);
+      ScrollTo(Back, Position + BackSign * FSmallChange);
       try if CanFocus then SetFocus; except end;
       Exit;
     end;
     if PtInRect(HiR, Point(X, Y)) then
     begin
-      ScrollTo(scLineDown, Position + FSmallChange);
+      ScrollTo(Fwd, Position - BackSign * FSmallChange);
       try if CanFocus then SetFocus; except end;
       Exit;
     end;
-    ThumbR := TyScrollThumbRect(TrackRect, FKind, FMin, FMax, FPosition, FPageSize);
+    { THE HIT TEST AND THE PAINT ARE THE SAME CALL. RenderTo builds its thumb from
+      TyScrollThumbRect and so does this, with the same Mirrored argument -- there is no
+      second copy of the geometry that could be mirrored on one side only. (The painted rect
+      uses DisplayPos so the thumb can glide; at rest, and always while dragging, that equals
+      FPosition.) }
+    ThumbR := TyScrollThumbRect(TrackRect, FKind, FMin, FMax, FPosition, FPageSize, Mirrored);
     if PtInRect(ThumbR, Point(X, Y)) then
     begin
       BeginThumbDrag(PosAlong(X, Y));
-      MouseCapture := True;
+      { A control with no window cannot hold a capture, and LCL does not say so gently:
+        SetCaptureControl forces the handle into existence and the widgetset RAISES when the
+        window class is not registered -- which in a headless runner is any process that has
+        not already built a form. The drag itself is pure arithmetic and works without one,
+        so the only thing that raise ever did was put the hit test out of reach of a guard. }
+      if HandleAllocated then MouseCapture := True;
     end
     else
     begin
@@ -719,9 +830,9 @@ begin
       else if (FKind = sbVertical) and (Y >= ThumbR.Bottom) then
         ScrollTo(scPageDown, Position + EffectiveLargeChange)
       else if (FKind = sbHorizontal) and (X < ThumbR.Left) then
-        ScrollTo(scPageUp, Position - EffectiveLargeChange)
+        ScrollTo(Back, Position + BackSign * EffectiveLargeChange)
       else if (FKind = sbHorizontal) and (X >= ThumbR.Right) then
-        ScrollTo(scPageDown, Position + EffectiveLargeChange);
+        ScrollTo(Fwd, Position - BackSign * EffectiveLargeChange);
     end;
     try
       if CanFocus then SetFocus;
@@ -758,6 +869,16 @@ begin
   begin
     Dec1 := VK_UP;
     Inc1 := VK_DOWN;
+  end
+  else if Mirrored then
+  begin
+    { The arrow keys on a scroll bar are a LAYOUT direction, not a text direction, so they
+      follow the mirror (plans/2026-08-04-rtl-mirroring-scope.md §6.3 item 4 draws exactly
+      this line: keys that move through a laid-out thing flip, keys that move through a
+      STRING do not). Left steps the thumb left, which on a mirrored bar is up-Position.
+      Home/End below stay logical -- they mean first/last, not leftmost/rightmost. }
+    Dec1 := VK_RIGHT;
+    Inc1 := VK_LEFT;
   end
   else
   begin

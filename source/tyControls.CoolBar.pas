@@ -217,10 +217,16 @@ type
   parallel and is the width reserved between a band's gripper and its child -- the band's own
   caption when ShowText is on; a missing entry reads as 0. Returns the CHILD rects
   (the band minus its gripper), so the gripper for band i is the AGripperW-wide strip immediately
-  left of Result[i]. Pure: no control, no canvas, no PPI -- device px in, device px out. }
+  left of Result[i]. Pure: no control, no canvas, no PPI -- device px in, device px out.
+
+  ARightToLeft MIRRORS the finished row about AAvail: bands fill from the RIGHT and each
+  gripper is the strip immediately RIGHT of its child. The row-overflow rule inverts with it
+  for free -- a reflection of "ran off the right end" is "ran off the left end" -- which is
+  why this is one reflection at the end rather than a second, decrementing packing loop. }
 function TyCoolBarPack(const AChildSizes: array of TSize; const ABreaks: array of Boolean;
   const ALeadExtra: array of Integer;
-  AAvail, ABandHeight, AGripperW, ASpacing: Integer): TTyRectArray;
+  AAvail, ABandHeight, AGripperW, ASpacing: Integer;
+  ARightToLeft: Boolean = False): TTyRectArray;
 
 { What a gripper drag MEANS, from the travel so far. A CoolBar grip does two jobs and the
   pointer's direction picks between them -- the same disambiguation Delphi's and Lazarus's
@@ -231,17 +237,30 @@ function TyCoolDragMode(ADx, ADy, AThreshold: Integer): TTyCoolDrag;
 { The same packing turned on its side: bands run DOWN a column, a column is ABandThick wide,
   and each band's gripper is the AGripperW-tall strip immediately ABOVE it. Break starts a new
   column. A vertical rebar is not a special case of the horizontal one -- every axis swaps --
-  so it is its own function rather than a flag threaded through the other. }
+  so it is its own function rather than a flag threaded through the other.
+
+  ARightToLeft mirrors the COLUMN ORDER: the first column sits at the right edge and later
+  columns march leftwards. The grippers do NOT move -- they are above their bands on either
+  reading, because up is not a reading direction. It needs ACrossExtent, the bar's WIDTH,
+  precisely because this function's AAvail is the OTHER axis (the column run, i.e. the
+  height): there is nothing in its own parameters that says how wide the bar is. Left at 0 no
+  mirroring is possible and none is done. }
 function TyCoolBarPackVertical(const AChildSizes: array of TSize; const ABreaks: array of Boolean;
   const ALeadExtra: array of Integer;
-  AAvail, ABandThick, AGripperW, ASpacing: Integer): TTyRectArray;
+  AAvail, ABandThick, AGripperW, ASpacing: Integer;
+  ARightToLeft: Boolean = False; ACrossExtent: Integer = 0): TTyRectArray;
 
 function TyCoolBandResize(AStartW, ADx, AMinW, AMaxW: Integer): Integer;
 
 { True when APt lies on the gripper strip of ABandRect: the leftmost AGripperW px
   column of the band (device px). AGripperW <= 0 -> no gripper -> always False. The
   test is half-open on the right edge (Left .. Left+AGripperW), inclusive on top,
-  exclusive on bottom — matching LCL hit-testing. }
+  exclusive on bottom — matching LCL hit-testing.
+
+  Describes the HORIZONTAL, LEFT-TO-RIGHT case only, and deliberately keeps doing so: the
+  control's own hit test does not go through it (BandAtPoint tests plain containment of the
+  strip BandRectFor returns, which is already on the correct side and axis), so giving this
+  one a direction flag would add a second, unused statement of where the gripper is. }
 function TyCoolGripperHit(const ABandRect: TRect; AGripperW: Integer; const APt: TPoint): Boolean;
 
 implementation
@@ -251,10 +270,12 @@ implementation
 // -----------------------------------------------------------------------------
 function TyCoolBarPack(const AChildSizes: array of TSize; const ABreaks: array of Boolean;
   const ALeadExtra: array of Integer;
-  AAvail, ABandHeight, AGripperW, ASpacing: Integer): TTyRectArray;
+  AAvail, ABandHeight, AGripperW, ASpacing: Integer;
+  ARightToLeft: Boolean = False): TTyRectArray;
 var
   n, i, x, y, w, rowStart, lead: Integer;
   brk, firstOnRow: Boolean;
+  span: TRect;
 begin
   Result := nil;
   n := Length(AChildSizes);
@@ -294,6 +315,14 @@ begin
     x := rowStart + w + ASpacing;
     firstOnRow := False;
   end;
+  { MIRROR once, at the end, through LCL's BidiFlipRect (controls.pp:2966). Rows are
+    untouched: top-to-bottom is not a reading direction. }
+  if ARightToLeft then
+  begin
+    span := Rect(0, 0, AAvail, 0);
+    for i := 0 to n - 1 do
+      Result[i] := BidiFlipRect(Result[i], span, True);
+  end;
 end;
 
 function TyCoolDragMode(ADx, ADy, AThreshold: Integer): TTyCoolDrag;
@@ -311,10 +340,12 @@ end;
 
 function TyCoolBarPackVertical(const AChildSizes: array of TSize; const ABreaks: array of Boolean;
   const ALeadExtra: array of Integer;
-  AAvail, ABandThick, AGripperW, ASpacing: Integer): TTyRectArray;
+  AAvail, ABandThick, AGripperW, ASpacing: Integer;
+  ARightToLeft: Boolean = False; ACrossExtent: Integer = 0): TTyRectArray;
 var
   n, i, x, y, h, colStart, lead: Integer;
   brk, firstInCol: Boolean;
+  span: TRect;
 begin
   Result := nil;
   n := Length(AChildSizes);
@@ -350,6 +381,14 @@ begin
     Result[i].Bottom := colStart + h;
     y := colStart + h + ASpacing;
     firstInCol := False;
+  end;
+  { MIRROR the column order about the bar's width. The y axis -- where the bands and their
+    grippers sit -- is untouched, which is the whole difference from the horizontal case. }
+  if ARightToLeft and (ACrossExtent > 0) then
+  begin
+    span := Rect(0, 0, ACrossExtent, 0);
+    for i := 0 to n - 1 do
+      Result[i] := BidiFlipRect(Result[i], span, True);
   end;
 end;
 
@@ -601,9 +640,22 @@ begin
   Result := ACtl.BoundsRect;
   if FVertical then
   begin
+    { Above the band on either reading -- up is not a reading direction, so a mirrored
+      vertical rebar reverses which COLUMN a band is in and nothing about its gripper. }
     Result.Bottom := Result.Top;
     Dec(Result.Top, gw);
     if Result.Top < 0 then Result.Top := 0;
+  end
+  else if IsRightToLeft then
+  begin
+    { The packer put the gripper on the band's LEADING edge, which mirrored is its right.
+      Derived here rather than reflected about the bar, because the child this is derived
+      FROM has already moved: reflecting a rect built off a mirrored child would mirror it
+      twice. This function stays the single source -- PaintGrippers draws what it returns and
+      BandAtPoint hit-tests what it returns -- so paint and hit cannot take different sides. }
+    Result.Left := Result.Right;
+    Inc(Result.Right, gw);
+    if Result.Right > ClientWidth then Result.Right := ClientWidth;
   end
   else
   begin
@@ -748,10 +800,14 @@ begin
   end;
   if FVertical then
     { AAvail is the run the bands travel along, so vertically it is the bar's HEIGHT, and the
-      band's fixed extent is its width. The caller measures the horizontal case, so swap here. }
-    Result := TyCoolBarPackVertical(ASizes, brks, leads, Height, ABandHeight, AGripperW, ASpacing)
+      band's fixed extent is its width. The caller measures the horizontal case, so swap here
+      -- and hand the width on separately, because mirroring a vertical rebar reverses the
+      COLUMN order, which is the axis AAvail is no longer describing. }
+    Result := TyCoolBarPackVertical(ASizes, brks, leads, Height, ABandHeight, AGripperW, ASpacing,
+      IsRightToLeft, AAvail)
   else
-    Result := TyCoolBarPack(ASizes, brks, leads, AAvail, ABandHeight, AGripperW, ASpacing);
+    Result := TyCoolBarPack(ASizes, brks, leads, AAvail, ABandHeight, AGripperW, ASpacing,
+      IsRightToLeft);
 end;
 
 procedure TTyCoolBar.PaintGrippers(APainter: TTyPainter; const AStyle: TTyStyleSet;
@@ -760,7 +816,7 @@ var
   i: Integer;
   bnd: TTyCoolBand;
   ctl: TControl;
-  r: TRect;
+  r, cap: TRect;
 begin
   { One gripper per BAND, drawn immediately left of the child it belongs to -- not one per row.
     Band 2 having no handle at all was this loop inherited unchanged from the base. }
@@ -774,10 +830,18 @@ begin
     begin
       bnd := FBandList.FindBand(ctl);
       if (bnd <> nil) and (bnd.Text <> '') then
-        { Between the gripper and the child -- the strip PackBands reserved for exactly this. }
-        APainter.DrawText(Rect(r.Right, r.Top, ctl.Left, r.Bottom), bnd.Text,
+      begin
+        { Between the gripper and the child -- the strip PackBands reserved for exactly this.
+          Mirrored, the gripper is on the child's right, so the span runs the other way; the
+          painter (armed in TTyControlBar.Paint) turns the taLeftJustify into the right side. }
+        if IsRightToLeft then
+          cap := Rect(ctl.Left + ctl.Width, r.Top, r.Left, r.Bottom)
+        else
+          cap := Rect(r.Right, r.Top, ctl.Left, r.Bottom);
+        APainter.DrawText(cap, bnd.Text,
           AStyle.FontName, ResolveFontSize(AStyle), AStyle.FontWeight, AStyle.TextColor,
           taLeftJustify, tlCenter, True);
+      end;
     end;
   end;
 end;
@@ -855,7 +919,14 @@ begin
         if FVertical then
           dxLogical := MulDiv(Y - FDragStartY, 96, ppi)
         else
+        begin
           dxLogical := MulDiv(X - FDragStartX, 96, ppi);
+          { MIRRORING: the band grows AWAY from its gripper, and mirrored the gripper is on
+            its right -- so dragging LEFT is what widens it. A sign nobody looks at in review
+            and no static render can catch: the screenshot is right and the drag runs
+            backwards (plans/2026-08-04-rtl-mirroring-scope.md §5 item 2). }
+          if IsRightToLeft then dxLogical := -dxLogical;
+        end;
         minW := BandMinWidth(FDragCtl);
         maxW := BandMaxWidth(FDragCtl);
         newW := TyCoolBandResize(FDragStartW, dxLogical, minW, maxW);
@@ -875,8 +946,19 @@ begin
         if step <= 0 then Exit;
         if FVertical then
         begin
-          curRow := FDragCtl.Left div step;
-          wantRow := X div step;
+          { Columns, not rows -- and mirrored they are counted from the right edge, matching
+            the order TyCoolBarPackVertical laid them out in. Measured from the band's far
+            side (Left + Width) so the two counts agree on which column a band occupies. }
+          if IsRightToLeft then
+          begin
+            curRow := (ClientWidth - FDragCtl.Left - FDragCtl.Width) div step;
+            wantRow := (ClientWidth - X) div step;
+          end
+          else
+          begin
+            curRow := FDragCtl.Left div step;
+            wantRow := X div step;
+          end;
         end
         else
         begin

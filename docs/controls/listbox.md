@@ -247,3 +247,22 @@ end;
 6. **SelectAll / SelectRange 仅在多选模式有效：** 单选模式下这两个方法直接返回不做任何操作。`ClearSelection` **两种模式都有效**（单选模式下等价于 `ItemIndex := -1`）。
 7. **Selected[] 非 published：** `Selected` 属性数组为 `public`，不可在 `.lfm` 中序列化；需在运行时代码中访问。
 8. **OnChange 在多选操作时亦触发：** 鼠标 Ctrl/Shift 点击、键盘 Shift 扩展选区、Space 切换、`ClearSelection`、`SelectAll`、`SelectRange`、`DeleteSelected` 均在选择实际变化时触发 `OnChange`。控件级的 `Clear` 是例外——它不报告选择变化。
+
+---
+
+## RTL 镜像（`BiDiMode = bdRightToLeft`）
+
+| 动的 | 怎么动 |
+|---|---|
+| 滚动条 | `Align` 改为 `alLeft`，停靠到**左**边缘 |
+| 行矩形 | 让出的槽从右端换到左端（`RowContentBounds`），行宽不变 |
+| 行文字 | 贴右端；`padding-left` 作为**前导**内距，物理上换到右边 |
+| 内嵌行内容（勾选框、色块） | 见 `checklistbox.md` / `colorlistbox.md` |
+
+滚动条的 `Align` 在**每次** `UpdateScrollBar` 都重写一遍，而不是创建时写一次：`BiDiMode` 运行时可改，而 LCL 的 `CMBiDiModeChanged` 只是重绘、通知子控件、`AdjustSize`，没有一样会重跑一个手写的 `Align`。控件因此覆写了 `CMBiDiModeChanged` 回到 `UpdateScrollBar`——不然就是"行换了边、条没换"。
+
+**LCL 的对齐引擎不认 BiDi**，`alRight` 在镜像窗体上仍然是右边缘，所以哪一边是显式选的，`RowContentBounds` 按同一个选择内缩行矩形。绘制与命中读的是同一个函数，这是勾选列能安全镜像的前提。
+
+### 后代的边界
+
+`RtlRowLayout` 是**按类**回答的（`protected virtual`，默认 `IsRightToLeft`）：本控件有十五个后代，各自在 `PaintItemContent` 里切自己的槽位。凡是自己**再算一遍 x**（而不是从传进来的行矩形里切）的后代，必须覆写它返回 `False`，否则基类翻了行、它的命中没翻。`TTyValueListEditor` 就是这样一个，已经覆写；组合框家族的弹出列表没有 x 命中，只是内部槽位还没镜像——那是外观问题，不会点错。详见 `docs/KNOWN_GAPS.md`。

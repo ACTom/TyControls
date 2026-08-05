@@ -159,6 +159,21 @@ type
     procedure EndEdit(ACommit: Boolean; ARestoreFocus: Boolean = False);
     procedure RepositionEditor;
   protected
+    { NOT MIRRORED, and this is the whole reason TTyListBox asks per class.
+
+      Every other member of the list-box family hit-tests rows on Y alone, so mirroring the
+      row can move the paint without stranding a click. This one reads X three times -- the
+      splitter drag (OverSplit), which column a click opens an editor in, and the expander
+      triangle -- and it reads it from ContentLeftDp / SplitXDp / ContentRightDp, a SECOND
+      computation of the geometry PaintItemContent derives from ARowRect. ContentRightDp even
+      subtracts the scroll bar from the right on its own. Let the base mirror the row while
+      those stay put and the splitter is grabbed a scrollbar's width from where it is drawn:
+      the "painted here, answers there" bug this pass exists to remove.
+
+      Removing this override means first collapsing those two computations into one -- the
+      cell rects and the hit tests both coming from CellRect -- and mirroring THAT. Until
+      then a mirrored form gets a left-to-right property inspector, which is honest. }
+    function RtlRowLayout: Boolean; override;
     function GetStyleTypeKey: string; override;
     function GetItemStyleTypeKey: string; override;
     procedure PaintItemContent(P: TTyPainter; const ARowRect: TRect; AIndex: Integer;
@@ -1371,6 +1386,13 @@ begin
 end;
 
 { ---- painting ---- }
+
+function TTyValueListEditor.RtlRowLayout: Boolean;
+begin
+  { See the declaration: the x-axis hit tests here are computed a second time and would not
+    follow. }
+  Result := False;
+end;
 
 function TTyValueListEditor.GetStyleTypeKey: string;
 begin

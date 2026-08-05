@@ -2,7 +2,7 @@ unit tyControls.ColorBox;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Graphics, LCLType, LCLStrConsts,
+  Classes, SysUtils, Types, Graphics, Controls, LCLType, LCLStrConsts,
   tyControls.Types, tyControls.Painter, tyControls.StyleModel, tyControls.Base,
   tyControls.ListBox, tyControls.ComboBox;
 
@@ -89,10 +89,15 @@ procedure TyBuildColorPalette(AItems: TStrings; APaletteStyle: TTyColorBoxStyle)
   AColorRectWidth / AColorRectOffset are LOGICAL px and both mean "decide for me" at 0:
   a 0 width keeps the height-derived square this has always drawn (so the swatch tracks
   row height / density), a 0 offset keeps the 4px inset. LCL's counterparts are
-  ColorRectWidth / ColorRectOffset (colorbox.pas:82-83). }
+  ColorRectWidth / ColorRectOffset (colorbox.pas:82-83).
+
+  ARightToLeft mirrors the row: the swatch takes the RIGHT end and the name reads toward it.
+  Defaulted False so every caller that has not been through the RTL audit keeps the exact
+  pixels it had -- only TTyColorListBox passes it today (see the note there). }
 procedure TyDrawColorRow(P: TTyPainter; const ARect: TRect; AColor: TColor;
   const AName: string; const AStyle: TTyStyleSet; AFontSize: Integer;
-  AColorRectWidth: Integer = 0; AColorRectOffset: Integer = 0);
+  AColorRectWidth: Integer = 0; AColorRectOffset: Integer = 0;
+  ARightToLeft: Boolean = False);
 
 type
   { Drop-down list for TTyColorBox: draws a colour swatch + name per row via the
@@ -395,7 +400,7 @@ end;
   AFontSize is the caller's resolved size (list rows differ from the field). }
 procedure TyDrawColorRow(P: TTyPainter; const ARect: TRect; AColor: TColor;
   const AName: string; const AStyle: TTyStyleSet; AFontSize: Integer;
-  AColorRectWidth: Integer; AColorRectOffset: Integer);
+  AColorRectWidth: Integer; AColorRectOffset: Integer; ARightToLeft: Boolean);
 var
   pad, sw, sh, maxSw, top: Integer;
   swR, txR: TRect;
@@ -421,15 +426,24 @@ begin
   else
     sh := sw;   // auto: the square this has always drawn, clamps included
   top := ARect.Top + ((ARect.Bottom - ARect.Top) - sh) div 2;
-  swR := Rect(ARect.Left + pad, top, ARect.Left + pad + sw, top + sh);
+  { The swatch sits at the LEADING edge and the name fills what is left, whichever way the
+    row reads. Both the slot and the alignment have to move together: leave the alignment
+    behind and the name detaches from its swatch and hugs the far edge instead. }
+  if ARightToLeft then
+    swR := Rect(ARect.Right - pad - sw, top, ARect.Right - pad, top + sh)
+  else
+    swR := Rect(ARect.Left + pad, top, ARect.Left + pad + sw, top + sh);
   f := Default(TTyFill);
   f.Kind := tfkSolid;
   f.Color := TyTColorToTy(AColor);
   P.FillBackground(swR, f, 2);
   P.StrokeBorder(swR, 2, 1, AStyle.TextColor);   // theme-driven outline so light swatches show
-  txR := Rect(swR.Right + pad, ARect.Top, ARect.Right - pad, ARect.Bottom);
+  if ARightToLeft then
+    txR := Rect(ARect.Left + pad, ARect.Top, swR.Left - pad, ARect.Bottom)
+  else
+    txR := Rect(swR.Right + pad, ARect.Top, ARect.Right - pad, ARect.Bottom);
   P.DrawText(txR, AName, AStyle.FontName, AFontSize, AStyle.FontWeight,
-    AStyle.TextColor, taLeftJustify, tlCenter, True);
+    AStyle.TextColor, BidiFlipAlignment(taLeftJustify, ARightToLeft), tlCenter, True);
 end;
 
 { TTyColorPopupList }

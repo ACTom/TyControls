@@ -95,8 +95,13 @@ end;
 procedure TTyColorListBox.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
   AIndex: Integer; const AStyle: TTyStyleSet);
 begin
+  { The swatch changes ends with the row, through the shared draw's own flag rather than a
+    copy of its geometry here. Safe to mirror because this control hit-tests rows on Y only
+    (TTyListBox.RowAtY) -- there is no x-axis click target that could be left behind on the
+    old side, and a swatch is not one. Its sibling TTyColorBox's popup list draws through the
+    same function and does NOT pass the flag yet; see docs/KNOWN_GAPS.md. }
   TyDrawColorRow(P, ARowRect, SwatchColorFor(TyColorOfItem(Items, AIndex)), Items[AIndex],
-    AStyle, ResolveFontSize(AStyle), EffectiveRectWidth, EffectiveRectOffset);
+    AStyle, ResolveFontSize(AStyle), EffectiveRectWidth, EffectiveRectOffset, RtlRowLayout);
 end;
 
 procedure TTyColorListBox.SetPaletteStyle(const AValue: TTyColorBoxStyle);

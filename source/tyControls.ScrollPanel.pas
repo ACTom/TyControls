@@ -237,6 +237,12 @@ begin
   // AutoPanTo is fed). ClientRect is the natural viewport; a subclass narrows it
   // if the ScrollBox reserves a scrollbar gutter that should not arm the pan.
   Result := ClientRect;
+  { ClientRect gives up the bar's WIDTH but always starts at 0 (it has to -- see
+    TTyScrollBox.GetClientRect). Right-to-left the bar it gave that width up for is on the
+    LEFT, so the viewport is that rect slid across. Without the slide the left edge band would
+    arm the pan over the scrollbar, and the band the user can actually reach at the right edge
+    would be a bar's width outside the rect -- i.e. permanently at full speed. }
+  Types.OffsetRect(Result, LeadingInset, 0);
 end;
 
 function TTyScrollPanel.ApplyAutoPanDelta(ADx, ADy: Integer): Boolean;

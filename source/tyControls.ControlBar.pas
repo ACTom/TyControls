@@ -26,7 +26,7 @@ unit tyControls.ControlBar;
 interface
 
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType,
+  Classes, SysUtils, Types, Controls, Graphics, LCLType, LMessages,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller,
   tyControls.Panel;
 
@@ -67,6 +67,11 @@ type
       ABandCount, ABandHeight, AGripperW, ASpacing: Integer); virtual;
     procedure Paint; override;
     procedure AlignControls(AControl: TControl; var ARect: TRect); override;
+    { The bands are placed with SetBounds, and LCL's own CM_BIDIMODECHANGED handling only
+      invalidates and calls AdjustSize -- neither of which re-runs a SetBounds layout. Without
+      this, switching direction would move the gripper column and leave every child where it
+      was. (Same hole TTyCheckGroup/TTyRadioGroup had to plug.) }
+    procedure CMBiDiModeChanged(var Message: TLMessage); message CM_BIDIMODECHANGED;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   public
     constructor Create(AOwner: TComponent); override;
@@ -98,9 +103,18 @@ type
 
   - avail <= gripperW  -> degenerate: children pinned at the gripper edge, zero usable width.
   - zero children      -> empty result.
-  Headless-testable; the control just feeds it the child list and applies the rects. }
+  Headless-testable; the control just feeds it the child list and applies the rects.
+
+  ARightToLeft MIRRORS the finished packing about the bar's vertical centre: the gripper
+  column moves to the RIGHT edge, children fill leftwards from it, and a row that overflows
+  still wraps to the next band. The wrap RULE inverts with it -- "would run off the left end"
+  -- and it does so for free, because reflecting the whole result is the same layout read
+  the other way. Written that way rather than as a second, decrementing loop for the reason
+  every mirrored geometry in this library is: a reflection of a gapless row is gapless, and
+  a hand-written `contentRight - x - w` is where the one-pixel seam comes from. }
 function TyControlBarPack(const AChildSizes: array of TSize;
-  AAvail, ABandHeight, AGripperW, ASpacing: Integer): TTyRectArray;
+  AAvail, ABandHeight, AGripperW, ASpacing: Integer;
+  ARightToLeft: Boolean = False): TTyRectArray;
 
 implementation
 
@@ -108,10 +122,12 @@ implementation
 // Pure packing
 // ---------------------------------------------------------------------------
 function TyControlBarPack(const AChildSizes: array of TSize;
-  AAvail, ABandHeight, AGripperW, ASpacing: Integer): TTyRectArray;
+  AAvail, ABandHeight, AGripperW, ASpacing: Integer;
+  ARightToLeft: Boolean = False): TTyRectArray;
 var
   N, I, contentLeft, x, y, w, usable: Integer;
   firstOnBand: Boolean;
+  span: TRect;
 begin
   Result := nil;
   N := Length(AChildSizes);
@@ -147,6 +163,14 @@ begin
     Result[I].Bottom := y + ABandHeight;
     Inc(x, w + ASpacing);
     firstOnBand := False;
+  end;
+  { MIRROR once, at the end, through LCL's BidiFlipRect (controls.pp:2966). Bands (the y
+    axis) are untouched: top-to-bottom is not a reading direction this library mirrors. }
+  if ARightToLeft then
+  begin
+    span := Rect(0, 0, AAvail, 0);
+    for I := 0 to N - 1 do
+      Result[I] := BidiFlipRect(Result[I], span, True);
   end;
 end;
 
@@ -213,20 +237,27 @@ end;
 function TTyControlBar.PackBands(const ABands: array of TControl; const ASizes: array of TSize;
   AAvail, ABandHeight, AGripperW, ASpacing: Integer): TTyRectArray;
 begin
-  { A ControlBar reserves ONE gripper per row, at the row's left edge. ABands is unused here
-    and passed only so a subclass keying on per-band state can reach it. }
-  Result := TyControlBarPack(ASizes, AAvail, ABandHeight, AGripperW, ASpacing);
+  { A ControlBar reserves ONE gripper per row, at the row's LEADING edge -- its left, or its
+    right when the bar reads right-to-left. ABands is unused here and passed only so a
+    subclass keying on per-band state can reach it. }
+  Result := TyControlBarPack(ASizes, AAvail, ABandHeight, AGripperW, ASpacing, IsRightToLeft);
 end;
 
 procedure TTyControlBar.PaintGrippers(APainter: TTyPainter; const AStyle: TTyStyleSet;
   ABandCount, ABandHeight, AGripperW, ASpacing: Integer);
 var
   i, bandTop: Integer;
+  strip: TRect;
 begin
   for i := 0 to ABandCount - 1 do
   begin
     bandTop := i * (ABandHeight + ASpacing);
-    DrawGripper(APainter, Rect(0, bandTop, AGripperW, bandTop + ABandHeight), AStyle);
+    strip := Rect(0, bandTop, AGripperW, bandTop + ABandHeight);
+    { MIRRORING: the gripper column is the strip TyControlBarPack indented the children past,
+      so it moves with them. Reflected about the same ClientWidth the packer was handed --
+      restating it as `ClientWidth - AGripperW` would be a second copy of the same fact. }
+    if IsRightToLeft then strip := BidiFlipRect(strip, Rect(0, 0, ClientWidth, 0), True);
+    DrawGripper(APainter, strip, AStyle);
   end;
 end;
 
@@ -325,6 +356,22 @@ begin
   end;
 end;
 
+procedure TTyControlBar.CMBiDiModeChanged(var Message: TLMessage);
+var
+  r: TRect;
+begin
+  inherited;
+  { The bands have to actually change sides, not merely repaint. Relayout would be the
+    idiomatic call and is what every other setter here uses -- but it routes through
+    Realign -> AdjustSize, which the LCL DELAYS for a control whose form is not showing, so a
+    bar mirrored before it is shown would keep its old child positions until something else
+    happened to lay it out. Run the packing directly instead: it is idempotent, FInLayout
+    guards the re-entry, and it is the only form of this that is observable at all. }
+  r := Rect(0, 0, Width, Height);
+  AlignControls(nil, r);
+  Invalidate;
+end;
+
 procedure TTyControlBar.Notification(AComponent: TComponent; Operation: TOperation);
 var
   I, J: Integer;
@@ -350,8 +397,10 @@ begin
   end;
 end;
 
-{ Draw a band gripper: a couple of vertical dotted rails in the reserved gripper column at
-  the left of ABandRect, in the theme's border colour (falls back to text colour). }
+{ Draw a band gripper: a couple of vertical dotted rails centred in ABandRect -- the reserved
+  gripper column, which the caller has already placed on the band's leading edge (its left, or
+  its right on a mirrored bar) -- in the theme's border colour (falls back to text colour).
+  Symmetric within the column, so this function has nothing of its own to mirror. }
 procedure TTyControlBar.DrawGripper(P: TTyPainter; const ABandRect: TRect;
   const AStyle: TTyStyleSet);
 var
@@ -398,7 +447,10 @@ begin
   if bands <= 0 then Exit;
   P := TTyPainter.Create;
   try
-    P.BeginPaint(Canvas, ClientRect, ppi);
+    { Armed for the same reason TTyPanel's pass is: a CoolBar band caption goes out through
+      this painter (TTyCoolBar.PaintGrippers), and its taLeftJustify has to mean "the reading
+      start". The grippers themselves are marks, not text, and are placed by geometry. }
+    P.BeginPaint(Canvas, ClientRect, ppi, IsRightToLeft);
     S := CurrentStyle;
     PaintGrippers(P, S, bands, bandH, gripW, spacing);
     P.EndPaint;
