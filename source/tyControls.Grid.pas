@@ -126,6 +126,91 @@ type
     这个说的是"能不能同时有好几块"。 }
   TTyGridRangeSelectMode = (rsmSingle, rsmMulti);
 
+  { 行为开关的集合,对标 LCL 的 TGridOption(grids.pas:86)。
+
+    **只收我们真的照办的标志。** LCL 有 32 个;这里 21 个。少掉的 11 个不是
+    漏了 —— 是"发布了却不照办"这一类缺陷的唯一防法:一个存在于类型里、
+    IDE 里勾得动、控件却当没看见的标志,比根本没有它更坏,因为用户会
+    以为自己已经关掉了某个行为。逐条的去留理由与 seam 在
+    docs/controls/grid.md 的对照表里。
+
+    **一半的标志在别处已经有名字了。** goColSizing 就是
+    `Header.Options` 里的 hoColumnResize,goEditing 就是 `ReadOnly` 取反,
+    goRowSelect 就是 `SelectionMode = gsmRow`。这些位在这里**不另存一份** ——
+    Options 读它们、写它们,但真相始终只有一处(见 TyGridDerivedOptions
+    与 GetOptions/SetOptions)。两处存储一个行为,结果必然是设计器说一套、
+    控件做另一套。
+
+    **只增不改序。** 集合成员在 .lfm 里是按**名字**写的(TWriter.WriteSet 走
+    GetEnumName),所以插一个成员不会让老窗体读错;但**改名或删名**会让老
+    窗体在加载时抛 "Invalid property value",而序号仍然被编译期的 default
+    子句和一切 Integer() 强转吃进去。所以:只在末尾追加,不改名、不删除。
+    test.grid.options 里的 OptionOrdinalsAreAppendOnly 钉着这条。 }
+  TTyGridOption = (
+    goVertLine,            { 纵向格线 —— GridLineStyle 的视图 }
+    goHorzLine,            { 横向格线 —— GridLineStyle 的视图 }
+    goRangeSelect,         { 鼠标/Shift 能拉出一块矩形选区;关掉只剩当前格 }
+    goDrawFocusSelected,   { 焦点格在选区里也照画 —— ShowFocusCell 的视图 }
+    goRowSizing,           { 在行头槽里拖分隔线改行高(仍需 ShowIndicator) }
+    goColSizing,           { 在列头里拖分隔线改列宽 —— hoColumnResize 的视图 }
+    goRowMoving,           { 在行头槽里拖动整行重排(仍需 ShowIndicator) }
+    goColMoving,           { 拖动列头重排列 —— hoDrag 的视图 }
+    goEditing,             { 能开出**编辑器** —— ReadOnly 的**反**视图。
+                             注意它挡不住 Ctrl+V/Ctrl+X/填充柄,见 ReadOnly 声明处 }
+    goTabs,                { Tab 在格之间走;关掉则 Tab 把焦点交给下一个控件 }
+    goRowSelect,           { 整行选择 —— SelectionMode = gsmRow 的视图 }
+    goDblClickAutoSize,    { 双击列分隔线按内容适宽 }
+    goFixedRowNumbering,   { 行头槽里画行号 —— ShowRowNumbers 的视图 }
+    goScrollKeepVisible,   { 滚动时把光标格拖进新视口 }
+    goHeaderHotTracking,   { 鼠标下的列头段点亮 —— hoHotTrack 的视图 }
+    goFixedColSizing,      { 冻结列也能改宽 }
+    goDontScrollPartCell,  { 点一个半露的格时**不**把它滚进来 }
+    goCellHints,           { 逐格提示(批注 + OnGetCellHint) }
+    goTruncCellHints,      { 文字放不下时用完整文本当提示 }
+    goCellEllipsis,        { 放不下的单行文字末尾加"…";关掉则硬裁 }
+    goRowHighlight         { 高亮光标所在的整行 }
+  );
+  TTyGridOptions = set of TTyGridOption;
+
+const
+  { **别处已经有名字**的那些位。Options 对它们只是一个视图:
+    读的时候现算,写的时候推回它们真正的属性去,`FOptions` 里**从不**留副本。
+
+    这条边界是整个设计的支点。留副本的话,`GridLineStyle := glsNone` 之后
+    `Options` 里还挂着 goVertLine,设计器于是显示"纵线开着"而屏幕上一根没有
+    —— 一个行为两处存储,永远会走岔。
+
+    **无类型常量**(不是 `: TTyGridOptions = ...`):published 属性的 default
+    子句只吃编译期常量,加了类型标注在 FPC 里就成了**变量**,那一行编译不过
+    ("The default value of a property must be constant")。LCL 的
+    DefaultGridOptions(grids.pas:189)是同一个写法。
+    也因此这两个常量必须声明在 TTyCustomGrid **之前** —— Pascal 先声明后使用。 }
+  TyGridDerivedOptions =
+    [goVertLine, goHorzLine, goDrawFocusSelected, goColSizing, goColMoving,
+     goEditing, goRowSelect, goFixedRowNumbering, goHeaderHotTracking];
+
+  { 出厂值。**逐位复刻加这个属性之前的行为** —— 不是复刻 LCL 的
+    DefaultGridOptions(grids.pas:189)。三处刻意与 LCL 不同,原因写在
+    docs/controls/grid.md 的对照表里:
+
+      goDblClickAutoSize —— LCL 默认关,我们从来就是开的;
+      goFixedColSizing   —— LCL 默认关,我们从来没挡过冻结列改宽;
+      goCellEllipsis     —— LCL 默认关(硬裁),我们从来就加"…"。
+
+    把这三位改成 LCL 的默认值等于给每一张现有窗体换行为,而这个属性
+    本来是要**描述**现状的,不是要偷偷改现状。
+
+    goVertLine/goHorzLine 跟着 GridLineStyle 的 glsBoth 走;
+    goColSizing/goColMoving 跟着 TTyHeader 出厂的 [hoColumnResize, hoDrag] 走;
+    goHeaderHotTracking 不在里面,因为 hoHotTrack 也不在列头的出厂集合里。
+    这几位是**算出来的**,写在这里只是为了让 default 子句与新控件的实际读数
+    一致 —— 不一致的话 TWriter 会漏写或多写。DefaultsMatchAFreshGrid 钉着它。 }
+  TyDefaultGridOptions =
+    [goVertLine, goHorzLine, goRangeSelect, goDrawFocusSelected, goRowSizing,
+     goColSizing, goRowMoving, goColMoving, goEditing, goTabs,
+     goDblClickAutoSize, goFixedColSizing, goCellHints, goCellEllipsis];
+
+type
   { 列聚合方式(汇总带用)。一律只统计**通过过滤的行** —— 筛完总计要跟着变。 }
   TTyGridAggregate = (gagNone, gagSum, gagAvg, gagMin, gagMax, gagCount);
 
@@ -859,6 +944,10 @@ type
     FHeaderWordWrap:   Boolean;
     FHeaderAutoHeight: Boolean;
     FShowFocusCell:    Boolean;
+    { goDontScrollPartCell:MouseDown 期间把 MoveCursor 尾巴上那次
+      ScrollIntoView 摁住。做成一个瞬时闸而不是在 MoveCursor 里读标志,
+      是因为 LCL 的这个标志只管**点击**,键盘导航照样要把光标滚进视口。 }
+    FSuppressScrollIntoView: Boolean;
     FHideSelectionWhenInactive: Boolean;
     FVScroll:          TTyScrollBar;
     FHScroll:          TTyScrollBar;
@@ -895,6 +984,8 @@ type
     procedure SetHeaderWordWrap(AValue: Boolean);
     procedure SetHeaderAutoHeight(AValue: Boolean);
     procedure SetShowFocusCell(AValue: Boolean);
+    function  GetOptions: TTyGridOptions;
+    procedure SetOptions(AValue: TTyGridOptions);
     procedure SetHideSelectionWhenInactive(AValue: Boolean);
     procedure SetVertScrollBarMode(AValue: TTyGridScrollBarMode);
     procedure SetHorzScrollBarMode(AValue: TTyGridScrollBarMode);
@@ -954,11 +1045,18 @@ type
     procedure SetWordWrap(AValue: Boolean);
     function  GetRowHeights(ARow: Integer): Integer;
     procedure SetRowHeights(ARow, AValue: Integer); virtual;
-    { Y 落在哪一行的下边界附近(行头槽内才算)。不在分隔线上返回 -1。 }
-    function  RowDividerAtY(AX, AY: Integer): Integer;
     function  GetGridLines: Boolean;
     procedure SetFooterHeight(AValue: Integer);
   protected
+    { Options 里没有别处安身的那几位。**protected 而不是 private**:
+      派生类与测试都要能看见"自有存储里究竟躺着什么" —— 那条
+      "派生位一份副本都不许留" 的不变量,从外面只看 Options 是验不出来的
+      (读数是现算的,副本躺在里面也照样对)。 }
+    FOptions: TTyGridOptions;
+    { Y 落在哪一行的下边界附近(行头槽内才算)。不在分隔线上返回 -1。
+      与列那边的 DividerAtX 对称,所以可见性也跟它一样是 protected ——
+      行高拖拽的闸(goRowSizing)收口在这里,派生类要能问、测试要能钉。 }
+    function  RowDividerAtY(AX, AY: Integer): Integer;
     function GetStyleTypeKey: string; override;
     { 行数变了 → 行序间接层失效。基类无序可失效,派生类改写。 }
     procedure InvalidateGridOrder; virtual;
@@ -1054,7 +1152,27 @@ type
     function  CanClickCell(ACol, ARow: Integer): Boolean;
     { 这一格是不是"焦点格"(光标所在)。基类没有光标概念,恒 False。 }
     function  IsActiveCell(ACol, ARow: Integer): Boolean; virtual;
+    { 这一**行**是不是光标所在的行(goRowHighlight 用)。基类恒 False。
+      与 IsActiveCell 分开而不是拿 `IsActiveCell(FCol, ARow)` 凑:基类根本没有
+      FCol 这个东西,凑出来的写法在 TTyDrawGrid 上会答错。 }
+    function  IsActiveRow(ARow: Integer): Boolean; virtual;
     function  SelectionIsActive: Boolean; virtual;
+
+    { ---- Options 里落在派生类属性上的那几位 ----
+
+      goEditing 的真身是 TTyStringGrid.ReadOnly,goRowSelect 的真身是
+      TTyStringGrid.SelectionMode —— 两个都不在基类上。Options 却必须发布在
+      TTyCustomGrid 上(TTyDrawGrid 也要有),所以中间隔一对可改写的钩子。
+
+      基类的实现描述**基类的事实**:没有 ReadOnly 概念 = 永远"可编辑"、
+      永远按格选。这不是占位,是真话 —— 所以基类上这两位读出来是常量,
+      写进去是空操作,而不是假装存下来了。 }
+    function  GetOptEditing: Boolean; virtual;
+    procedure SetOptEditing(AValue: Boolean); virtual;
+    function  GetOptRowSelect: Boolean; virtual;
+    procedure SetOptRowSelect(AValue: Boolean); virtual;
+    { goScrollKeepVisible:滚动落定之后把光标拖进新视口。基类没有光标,空实现。 }
+    procedure KeepCursorVisible; virtual;
     { 逐格属性查询。基类没有属性存储,恒 nil;TTyStringGrid 改写。 }
     function  FAttrs2Find(ACol, ARow: Integer): TTyGridCellAttr; virtual;
     { 网格自己的列类;列还没建时返回 nil。 }
@@ -1533,6 +1651,30 @@ type
       而我们的两个属性才是真相。 }
     property ScrollBars: TScrollStyle read GetScrollBars write SetScrollBars
       stored False default ssAutoBoth;
+    { 行为开关的总入口,对标 LCL 的 TCustomGrid.Options(grids.pas:1280)。
+
+      **这是设计器里唯一一处能把网格的交互行为一次看全的地方。** 在此之前
+      这些开关散在四个不同的对象上:格线在 GridLineStyle,改列宽/拖列/列头
+      点亮在 `Header.Options` 里(要展开子对象才看得到),只读在 ReadOnly,
+      整行选择在 SelectionMode,行号在 ShowRowNumbers —— 而改行高、拖行、
+      双击适宽、"…"截断这几条**根本没有开关**,想关掉只能改库。
+
+      **它不是第二份存储。** 一半的位没有别的家,存在 FOptions 里;另一半
+      (TyGridDerivedOptions)现读现算、写回原主。所以
+      `GridLineStyle := glsNone` 之后 `goVertLine in Options` 立刻是 False,
+      `Options := Options - [goColSizing]` 之后 `Header.Options` 里的
+      hoColumnResize 立刻没了 —— 两个方向都真的通,各有一条测试钉着。
+
+      **.lfm 会同时写 Options 和那几个具名属性**,这是有意的,不是遗漏:
+      两边都由 TWriter 从**同一份状态**算出来,不可能互相矛盾,谁后读到都
+      收敛到同一个值(SetOptions 只在某一位**真的翻了**时才写回原主,所以
+      重复赋值是幂等的)。手改 .lfm 把两边写拧了才会有歧义,那时后读到的赢。
+
+      与 GridLines/ScrollBars 那几个**别名**不同:那些是同一个概念的另一个
+      名字,所以 `stored False`;Options 里有一半是它自己的存储,`stored False`
+      会让 goRangeSelect 之类整个流不出去。 }
+    property Options: TTyGridOptions read GetOptions write SetOptions
+      default TyDefaultGridOptions;
     { 焦点格要不要画外框。gsmRow 模式下整行都是选中底色,不画外框就
       看不出光标在哪一格 —— 所以默认开着。
       **published**:从前在 public 段,设计器里看不见。 }
@@ -2089,12 +2231,25 @@ type
     { 基类的问法(按钮矩形/命中要用),转给上面这个。 }
     function  CellDisplayOf(ACol, ARow: Integer): TTyGridCellDisplay; override;
     function  IsActiveCell(ACol, ARow: Integer): Boolean; override;
+    function  IsActiveRow(ARow: Integer): Boolean; override;
+    { Options 的 goEditing / goRowSelect 两位在这里才有真身。
+      goEditing 是 ReadOnly 的**反**面 —— 名字反过来是 LCL 的选择,不是我们的,
+      同名同义比"我们觉得哪个更顺"重要。 }
+    function  GetOptEditing: Boolean; override;
+    procedure SetOptEditing(AValue: Boolean); override;
+    function  GetOptRowSelect: Boolean; override;
+    procedure SetOptRowSelect(AValue: Boolean); override;
+    procedure KeepCursorVisible; override;
     function  FAttrs2Find(ACol, ARow: Integer): TTyGridCellAttr; override;
     function  ShouldDrawCellText(ACol, ARow: Integer): Boolean; override;
     { **画出来的**那串文字。与 GetCellText(原始值)分开:
       格式化只作用于显示,编辑器/导出/排序一律走原始值。
       绘制路径**只能**走这个,否则"哪些地方算显示"会散成一堆判断。 }
     function  DisplayCellText(ACol, ARow: Integer): string; override;
+    { goTruncCellHints 用:这一格的文字放不下就答全文,放得下答空串。
+      protected 而不是 private —— 派生类改写了 DisplayCellText / 列宽的话
+      也该能改写"什么算放不下"。 }
+    function  TruncatedCellHint(ACol, ARow: Integer): string; virtual;
     function  CellAppearance(ACol, ARow, ADisplayPos: Integer;
       const AFrame: TTyStyleSet): TTyGridCellAppearance; override;
     function  HoverIsHyperlink(X, Y: Integer): Boolean; override;
@@ -2789,7 +2944,12 @@ type
     property Col: Integer read FCol write SetCol default 0;
     property Row: Integer read FRow write SetRow default 0;
     property OnSelectCell: TTyGridSelectCellEvent read FOnSelectCell write FOnSelectCell;
-    { 整表只读:任何编辑都开不起来。 }
+    { 整表只读:任何**编辑器**都开不起来(双击 / F2 / 直接打字 / 勾选框 /
+      评分 / 颜色 / "…" 七条路都问它)。`Options` 里的 goEditing 是它的反视图。
+
+      **它今天挡不住 Ctrl+V、Ctrl+X 和填充柄拖拽** —— 那三条路径不看 FReadOnly,
+      所以一张"只读"的表仍然能被粘贴改掉。这是这个属性自带的缺口,
+      补法(三行)与不顺手补的理由都写在 docs/controls/grid.md 的《已知缺口》里。 }
     property ReadOnly: Boolean read FReadOnly write FReadOnly default False;
     { 选择粒度:单元格矩形 / 整行 / 整列。 }
     { 分组行的格式串:%s = 分组值,%d = 组内行数。 }
@@ -3597,6 +3757,19 @@ begin
   FIndicatorWidth := 30;
   FShowIndicator := False;
   FGridLineStyle := glsBoth;
+  { **构造函数从来没设过它**,而 ShowFocusCell 与它的 LCL 别名 FocusRectVisible
+    都写着 `default True`。于是出厂的网格里焦点格底色是熄的 —— 属性文档说
+    "默认开着"、LCL 的 FocusRectVisible 也确实默认 true,只有代码不是。
+
+    两个后果:一是 gsmRow 下看不出光标停在哪一格(那正是这块底色存在的理由);
+    二是每一张窗体都会被 TWriter 多写一行 `ShowFocusCell = False` ——
+    实际值与 default 子句不符时它必写。
+    是 Options 那条 default 断言把它照出来的:goDrawFocusSelected 是它的视图。 }
+  FShowFocusCell := True;
+  { 只留自己那一半 —— 派生位由 GridLineStyle / Header.Options / ReadOnly /
+    SelectionMode / ShowRowNumbers 各自的出厂值现算出来。
+    这里若把整个 TyDefaultGridOptions 存进去,FOptions 就多了一份会发霉的副本。 }
+  FOptions := TyDefaultGridOptions - TyGridDerivedOptions;
   FHeaderGroups := TTyGridHeaderGroups.Create;
   FHeaderGroups.OnChange := @HeaderGroupsChanged;
   FGroupHeaderHeight := 22;
@@ -4014,6 +4187,118 @@ begin
   ResetCellStyleCache;      { 外观缓存里有焦点格那一格 }
   InvalidateSurface;
   Invalidate;
+end;
+
+{ ---- Options:一半是存储,一半是别处状态的视图 ---- }
+
+{ 派生位现读现算,**永远不从 FOptions 取** —— 那是这个属性不会说谎的全部原因。 }
+function TTyCustomGrid.GetOptions: TTyGridOptions;
+begin
+  Result := FOptions - TyGridDerivedOptions;   { 防御:存储侧不该沾派生位 }
+  if FGridLineStyle in [glsVertical, glsBoth]   then Include(Result, goVertLine);
+  if FGridLineStyle in [glsHorizontal, glsBoth] then Include(Result, goHorzLine);
+  if FShowFocusCell                             then Include(Result, goDrawFocusSelected);
+  if FShowRowNumbers                            then Include(Result, goFixedRowNumbering);
+  if hoColumnResize in FHeader.Options          then Include(Result, goColSizing);
+  if hoDrag         in FHeader.Options          then Include(Result, goColMoving);
+  if hoHotTrack     in FHeader.Options          then Include(Result, goHeaderHotTracking);
+  if GetOptEditing                              then Include(Result, goEditing);
+  if GetOptRowSelect                            then Include(Result, goRowSelect);
+end;
+
+procedure TTyCustomGrid.SetOptions(AValue: TTyGridOptions);
+var
+  cur: TTyGridOptions;
+  ls: TTyGridLineStyle;
+  ho: TTyHeaderOptions;
+begin
+  cur := GetOptions;
+  if cur = AValue then Exit;
+
+  { 自己那一半直接换。 }
+  FOptions := AValue - TyGridDerivedOptions;
+
+  { 派生那一半:**只在这一位真的翻了的时候才写回去**。
+
+    这个 `if` 不是省一次赋值那么简单,它是三态属性的救命绳:
+    SelectionMode 有 gsmCell/gsmRow/gsmColumn 三态,而 goRowSelect 只有两态。
+    无条件写回的话,一次 `Options := Options`(设计器每次流式化都会做的事)
+    就会把 gsmColumn 压成 gsmCell —— 用户设的"按列选"莫名其妙变回按格选。
+    改成"翻位才写"之后,goRowSelect 那一位在 gsmColumn 下读出来是 False、
+    写进去也是 False,没翻,于是 gsmColumn 原封不动。 }
+  if ((goVertLine in cur) <> (goVertLine in AValue))
+     or ((goHorzLine in cur) <> (goHorzLine in AValue)) then
+  begin
+    { 两位 → 四态,双射,不丢信息。 }
+    if (goVertLine in AValue) and (goHorzLine in AValue) then ls := glsBoth
+    else if goVertLine in AValue then ls := glsVertical
+    else if goHorzLine in AValue then ls := glsHorizontal
+    else ls := glsNone;
+    SetGridLineStyle(ls);
+  end;
+
+  if (goDrawFocusSelected in cur) <> (goDrawFocusSelected in AValue) then
+    SetShowFocusCell(goDrawFocusSelected in AValue);
+
+  if (goFixedRowNumbering in cur) <> (goFixedRowNumbering in AValue) then
+    SetShowRowNumbers(goFixedRowNumbering in AValue);
+
+  ho := FHeader.Options;
+  if (goColSizing in cur) <> (goColSizing in AValue) then
+    if goColSizing in AValue then Include(ho, hoColumnResize)
+    else Exclude(ho, hoColumnResize);
+  if (goColMoving in cur) <> (goColMoving in AValue) then
+    if goColMoving in AValue then Include(ho, hoDrag) else Exclude(ho, hoDrag);
+  if (goHeaderHotTracking in cur) <> (goHeaderHotTracking in AValue) then
+    if goHeaderHotTracking in AValue then Include(ho, hoHotTrack)
+    else Exclude(ho, hoHotTrack);
+  { 一次写回去,不是三次 —— TTyHeader.SetOptions 每次都会重排/重画。 }
+  if ho <> FHeader.Options then FHeader.Options := ho;
+
+  if (goEditing in cur) <> (goEditing in AValue) then
+    SetOptEditing(goEditing in AValue);
+  if (goRowSelect in cur) <> (goRowSelect in AValue) then
+    SetOptRowSelect(goRowSelect in AValue);
+
+  { 自己存的那一半里有影响外观的(goCellEllipsis / goRowHighlight),
+    而上面那些具名 setter 只在自己翻位时才重画 —— 所以这里补一次。
+
+    **两级缓存都要掀,少掀一级就是一个只在换肤时才现形的 bug**:
+    整行高亮进的是外观缓存(ResetCellStyleCache),而省略号进的是**文字位图**
+    缓存 —— 那个缓存的键里只有文字、宽高、颜色,没有"当时截没截断"。
+    只掀外观缓存的话,关掉 goCellEllipsis 之后每一格还是从缓存里取出那张
+    带"…"的旧位图,属性看着生效了、屏幕上一个字没变。 }
+  ResetCellStyleCache;
+  ClearTextCache;
+  InvalidateSurface;
+  Invalidate;
+end;
+
+{ 基类没有 ReadOnly / SelectionMode 这两个概念,答的是**基类的事实**:
+  永远可编辑、永远按格选。写进去是空操作 —— 假装存下来才是说谎。 }
+function TTyCustomGrid.GetOptEditing: Boolean;
+begin
+  Result := True;
+end;
+
+procedure TTyCustomGrid.SetOptEditing(AValue: Boolean);
+begin
+  { 基类无处安放。 }
+end;
+
+function TTyCustomGrid.GetOptRowSelect: Boolean;
+begin
+  Result := False;
+end;
+
+procedure TTyCustomGrid.SetOptRowSelect(AValue: Boolean);
+begin
+  { 基类无处安放。 }
+end;
+
+procedure TTyCustomGrid.KeepCursorVisible;
+begin
+  { 基类没有光标。 }
 end;
 
 procedure TTyCustomGrid.SetHideSelectionWhenInactive(AValue: Boolean);
@@ -4637,11 +4922,20 @@ begin
   weight := AFontWeight;
 
   { 键 = 这块文字的**全部外观输入**。任何一项变了都是新条目,
-    所以换主题/改列宽/切深色都不需要显式失效 —— 旧条目自然不再被命中。 }
+    所以换主题/改列宽/切深色都不需要显式失效 —— 旧条目自然不再被命中。
+
+    goCellEllipsis 也是一项外观输入 —— 同一串文字"加省略号"和"硬裁"画出来
+    是两张不同的位图 —— 所以也进键。
+
+    今天 SetOptions 里那句 ClearTextCache 已经够用了,这一项是**把失效变成
+    结构性的**:不进键的话,正确性就挂在"每一条会改这个标志的路径都记得清缓存"
+    上,而那是一条随时会被下一个人漏掉的口头约定。代价是每次缓存未命中多拼
+    一个字符。 }
   key := AText + #1 + fname + #1 + IntToStr(sz) + #1 + IntToStr(weight) + #1 +
          IntToStr(AColor) + #1 + IntToStr(w) + 'x' + IntToStr(h) + #1 +
          IntToStr(Ord(AHAlign)) + #1 + IntToStr(Ord(AVAlign)) + #1 +
-         IntToStr(Ord(AWordWrap)) + #1 + IntToStr(P.PPI);
+         IntToStr(Ord(AWordWrap)) + #1 + IntToStr(P.PPI) + #1 +
+         IntToStr(Ord(goCellEllipsis in Options));
 
   idx := FTextCache.IndexOf(key);
   if idx >= 0 then
@@ -4656,11 +4950,13 @@ begin
     TyConfigureTextFont(bmp, fname, sz, weight, P.PPI);
 
     txt := AText;
-    if not AWordWrap then
+    if (not AWordWrap) and (goCellEllipsis in Options) then
     begin
       { 省略号截断走 TyGridEllipsisFit —— 那里连"砍到几个字"都用 TTyPainter 的
         TyEllipsisPrefix,两条路径排出来的字因此一模一样,而且砍的是字不是字节。
-        换行时**不截断** —— 放不下就往下一行走,这正是换行的意义。 }
+        换行时**不截断** —— 放不下就往下一行走,这正是换行的意义。
+        goCellEllipsis 关掉时不截断,靠下面 st.Clipping 硬裁 —— 于是最后一个字
+        会被切成半个,这正是 LCL 关掉 goCellEllipsis 时的样子。 }
       txt := TyGridEllipsisFit(bmp, txt, w);
     end;
 
@@ -4717,6 +5013,11 @@ begin
 end;
 
 function TTyCustomGrid.IsActiveCell(ACol, ARow: Integer): Boolean;
+begin
+  Result := False;
+end;
+
+function TTyCustomGrid.IsActiveRow(ARow: Integer): Boolean;
 begin
   Result := False;
 end;
@@ -4919,6 +5220,11 @@ var
   tol, ib0, ib1: Integer;
 begin
   Result := -1;
+  { goRowSizing。收口在这里而不是在 MouseDown 里,是因为**光标形状**
+    (UpdateHoverCursor)问的也是这个函数 —— 分两处写的话会出现
+    "指针变成了上下箭头,按下去却不动"的那种最招人烦的假动作。
+    列那边(DividerAtX)的 hoColumnResize 也是同一个位置、同一条理由。 }
+  if not (goRowSizing in Options) then Exit;
   { 只在行头槽里认分隔线 —— 在单元格上认的话会和框选拖拽抢手势。
     槽的位置走 IndicatorBandX(唯一出处),不再自己写一遍 `AX < IndicatorWidth`。 }
   if not IndicatorBandX(ib0, ib1) then Exit;
@@ -5243,8 +5549,15 @@ begin
   end;
 
   { **焦点格**要和选区区分开:gsmRow 模式下整行都是选中底色,不区分的话
-    根本看不出光标在哪一格。用自己的 typeKey,主题没定义就什么都不做。 }
-  if FShowFocusCell and IsActiveCell(ACol, ARow) then
+    根本看不出光标在哪一格。用自己的 typeKey,主题没定义就什么都不做。
+
+    goRowHighlight 把这块底色从"光标那一格"摊到"光标那一行"。共用
+    TyGridActiveCell 这个键是有意的:它已经是**本控件自己的**键(不是借来的),
+    语义也正是"光标落点的底色"。代价是主题分不开"焦点格"和"高亮行"两档 ——
+    真要分开得加一个 TyGridRowHighlight 键,那要动 themes/,记在 grid.md 里。 }
+  if FShowFocusCell
+     and (IsActiveCell(ACol, ARow)
+          or ((goRowHighlight in Options) and IsActiveRow(ARow))) then
   begin
     actS := ActiveController.Model.ResolveStyle('TyGridActiveCell', StyleClass, []);
     { 用户给这格指定了底色时**不铺焦点底色** —— 否则光标停在哪一格,
@@ -5306,6 +5619,9 @@ begin
   if FScrollX = AValue then Exit;
   FScrollX := AValue;
   SyncScrollBars;
+  { goScrollKeepVisible:视口已经落定(FScrollX 先赋值)才去拖光标 ——
+    反过来的话 KeepCursorVisible 算的是**旧**视口,永远拖不对。 }
+  if goScrollKeepVisible in Options then KeepCursorVisible;
   Invalidate;
   NotifyTopLeftChanged;
 end;
@@ -5329,6 +5645,13 @@ begin
     累加而不是赋值 —— 一帧里可能滚不止一次。 }
   Inc(FSurfacePendingDy, dy);
   inherited Invalidate;
+  { 同 SetScrollX:FScrollY 先落定再问"光标该去哪",否则算的是旧视口。
+
+    光标真的动了的时候,KeepCursorVisible 里的 SelectionChanged 会走一次
+    **普通** Invalidate,于是上面那份平移复用的许可被熄掉、这一帧整幅重画。
+    那是对的:换了当前格,焦点底色和选区都变了,平移旧像素本来就不成立。
+    没开这个标志时一行都不多跑。 }
+  if goScrollKeepVisible in Options then KeepCursorVisible;
   NotifyTopLeftChanged;
 end;
 
@@ -6070,6 +6393,12 @@ begin
   for i := 0 to FHeader.Columns.Count - 1 do
   begin
     if not (coVisible in TTyColumn(FHeader.Columns.Items[i]).Options) then Continue;
+    { goFixedColSizing:关掉时冻结列的分隔线不认。判据与 ClipColToBody
+      用的是同一对(前导 FixedCols + 尾部 FixedColsRight),两边不同步的话
+      会出现"能拖的列"和"画在冻结带里的列"对不上。 }
+    if not (goFixedColSizing in Options) then
+      if (i < FFixedCols)
+         or (i >= FHeader.Columns.Count - EffectiveFixedColsRight) then Continue;
     { 抓的是这一列的**尾缘** —— LTR 右缘、RTL 左缘。走 ColumnResizeEdgeX,
       拖动的位移(MouseMove)读的也是同一个定义,所以"抓住的线"与
       "变宽的列"不可能是两列。 }
@@ -6117,7 +6446,8 @@ begin
     { 行头槽里按下(且不在分隔线上)= 准备拖行。
       分隔线优先:边缘那几像素上用户的意图是改行高,不是搬行。
       槽位走 IndicatorBandX —— 第四处、也是最后一处 `X < IndicatorWidth`。 }
-    if (Button = mbLeft) and IndicatorBandX(ib0, ib1)
+    if (Button = mbLeft) and (goRowMoving in Options)
+       and IndicatorBandX(ib0, ib1)
        and (X >= ib0) and (X < ib1)
        and DisplayOrderIsDataOrder then
     begin
@@ -6138,8 +6468,11 @@ begin
   if d >= 0 then
   begin
     { 双击分隔线 = 按内容自适应列宽,是表格的通用手势。
-      LCL 在第二次按下时把 ssDouble 塞进 Shift。 }
-    if ssDouble in Shift then
+      LCL 在第二次按下时把 ssDouble 塞进 Shift。
+      goDblClickAutoSize 关掉时**不是什么都不做**,而是落到下面那条普通的
+      拖拽改宽上去 —— 双击的第二下本来就是一次按下,吞掉它会让用户觉得
+      "双击之后列头就卡住了"。 }
+    if (ssDouble in Shift) and (goDblClickAutoSize in Options) then
     begin
       AutoFitColumnWidth(d);
       Exit;
@@ -8420,7 +8753,8 @@ begin
     收口在这里之后,漏掉是不可能的:要拉长必须显式声明在扩选。 }
   if not FExtendingSelection then AnchorSelection;
 
-  ScrollIntoView(FCol, FRow);   { 光标走到哪,视口跟到哪 }
+  { 光标走到哪,视口跟到哪 —— 除非这一次是被 goDontScrollPartCell 摁住的点击。 }
+  if not FSuppressScrollIntoView then ScrollIntoView(FCol, FRow);
   Invalidate;
 end;
 
@@ -8546,11 +8880,16 @@ begin
     else if not (ssShift in Shift) then
       SetLength(FSelRects, 0);
 
-    FExtendingSelection := ssShift in Shift;
+    FExtendingSelection := (ssShift in Shift) and (goRangeSelect in Options);
+    { goDontScrollPartCell:半露的格被点中时不把它滚进来。
+      闸只罩住**这一次** MoveCursor —— 键盘导航仍然要滚,LCL 的这个标志
+      管的也只是点击。 }
+    FSuppressScrollIntoView := goDontScrollPartCell in Options;
     try
       MoveCursor(hit.Col, hit.Row);
     finally
       FExtendingSelection := False;
+      FSuppressScrollIntoView := False;
     end;
     SelectionChanged;
     { 勾选框:点在方块上就切换。命中用的是绘制同一个槽,所以点哪切哪。 }
@@ -8728,7 +9067,8 @@ begin
   { 只有**导航键 + Shift** 才算扩选。Ctrl+A / Ctrl+C / Ctrl+V 都不该动锚点
     (Ctrl+A 尤其:从前末尾那句无差别的 AnchorSelection 会把刚拉满的选区
      立刻收回成一格,全选看上去完全没反应)。 }
-  FExtendingSelection := (ssShift in Shift) and (navKey in [VK_LEFT, VK_RIGHT,
+  FExtendingSelection := (ssShift in Shift) and (goRangeSelect in Options)
+    and (navKey in [VK_LEFT, VK_RIGHT,
     VK_UP, VK_DOWN, VK_HOME, VK_END, VK_PRIOR, VK_NEXT]);
   try
 
@@ -8775,6 +9115,10 @@ begin
     { Tab = 按**格**推进,到行尾折到下一行行首。
       不拦的话 Tab 会把焦点整个弹出网格 —— 表格里这是最让人措手不及的一下。 }
     VK_TAB:   begin
+                { goTabs 关掉 = 把 Tab 还给对话框。**不置 Key := 0** 才是关键:
+                  LCL 靠 Key 还在不在来决定要不要换焦点,吞掉它就等于
+                  "关了也还是不放行"。外面是 try..finally,直接 Exit 安全。 }
+                if not (goTabs in Options) then Exit;
                 if FEditing then EndEdit(True);
                 { 折行时也要落在**可见**列上,别折到一个隐藏列里去。 }
                 if ssShift in Shift then
@@ -9837,6 +10181,86 @@ begin
   Result := (ACol = FCol) and (ARow = FRow);
 end;
 
+function TTyStringGrid.IsActiveRow(ARow: Integer): Boolean;
+begin
+  Result := ARow = FRow;
+end;
+
+{ goEditing = not ReadOnly。**直接读写 FReadOnly** 而不是走属性:
+  ReadOnly 的 setter 就是字段(声明处 `write FReadOnly`),绕一圈没有区别,
+  而写成 `ReadOnly := ...` 会让人以为那边还有别的动作。 }
+function TTyStringGrid.GetOptEditing: Boolean;
+begin
+  Result := not FReadOnly;
+end;
+
+procedure TTyStringGrid.SetOptEditing(AValue: Boolean);
+begin
+  FReadOnly := not AValue;
+end;
+
+function TTyStringGrid.GetOptRowSelect: Boolean;
+begin
+  Result := FSelectionMode = gsmRow;
+end;
+
+{ 三态压两态的那一半。**只在 SetOptions 判定"这一位真的翻了"之后才会被调到** ——
+  所以 gsmColumn 走不到这里,不会被压成 gsmCell。要是哪天有人直接调这个方法,
+  行为仍然是明确的:开 = gsmRow,关 = gsmCell。 }
+procedure TTyStringGrid.SetOptRowSelect(AValue: Boolean);
+begin
+  if AValue then SetSelectionMode(gsmRow) else SetSelectionMode(gsmCell);
+end;
+
+{ goScrollKeepVisible:视口刚挪完,把光标拖回可见范围里。
+
+  **不能走 MoveCursor** —— 它尾巴上那句 ScrollIntoView 会立刻把视口拽回光标
+  原来的位置,于是滚动条一放手画面就弹回去,看起来像滚不动。所以这里直接
+  改 FCol/FRow 再重锚,跳过滚动那一步。 }
+procedure TTyStringGrid.KeepCursorVisible;
+var
+  M: TTyGridMetrics;
+  firstRow, lastRow, pos, d, lc, vc, newCol, newRow: Integer;
+begin
+  if (Header.Columns.Count = 0) or (RowCount = 0) then Exit;
+  newCol := FCol;
+  newRow := FRow;
+
+  M := GridMetrics;
+  { 纵向:可见的**显示位置**区间。用显示序而不是数据行 —— 排序/过滤之后
+    数据行号与屏幕位置根本不是一回事。 }
+  if TyGridVisibleRows(M, firstRow, lastRow) then
+  begin
+    pos := DataToDisplay(FRow);
+    { pos < 0 = 光标那一行被筛掉了。这时候没有"把它拉进视口"这回事,别动。 }
+    if pos >= 0 then
+    begin
+      if pos < firstRow then pos := firstRow
+      else if pos > lastRow then pos := lastRow;
+      d := DisplayToData(pos);
+      if d >= 0 then newRow := d;    { 组标题行的 DisplayToData 是负的,跳过 }
+    end;
+  end;
+
+  { 横向:冻结列永远可见,所以只在光标落在可滚动区时才管。 }
+  if FCol >= FFixedCols then
+  begin
+    lc := GetLeftCol;
+    vc := VisibleColCount;
+    if vc < 1 then vc := 1;
+    if FCol < lc then newCol := lc
+    else if FCol > lc + vc - 1 then newCol := lc + vc - 1;
+    if newCol > Header.Columns.Count - 1 then newCol := Header.Columns.Count - 1;
+    if newCol < FFixedCols then newCol := FFixedCols;
+  end;
+
+  if (newCol = FCol) and (newRow = FRow) then Exit;
+  FCol := newCol;
+  FRow := newRow;
+  if not FExtendingSelection then AnchorSelection;
+  SelectionChanged;
+end;
+
 function TTyStringGrid.FAttrs2Find(ACol, ARow: Integer): TTyGridCellAttr;
 begin
   { 同上:逐格属性是稀疏的例外,常态不该为它建字符串。 }
@@ -9997,7 +10421,7 @@ end;
 procedure TTyStringGrid.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   hit: TTyGridHit;
-  txt: string;
+  txt, cmt: string;
 begin
   inherited MouseMove(Shift, X, Y);
   if not Enabled then Exit;
@@ -10025,7 +10449,9 @@ begin
     hit := CellAt(X, Y);
     if (hit.Part = ghpCell) and ((hit.Col <> FCol) or (hit.Row <> FRow)) then
     begin
-      FExtendingSelection := True;
+      { goRangeSelect 关掉时拖动仍然移动光标(那是"点着走"的手感,
+        LCL 也如此),只是不再把选区拉长 —— 选区始终收在当前格。 }
+      FExtendingSelection := goRangeSelect in Options;
       try
         MoveCursor(hit.Col, hit.Row);
       finally
@@ -10036,9 +10462,26 @@ begin
     Exit;
   end;
 
+  { goCellHints 是总闸。关掉时还要把**已经挂上**的那条提示摘掉,
+    否则鼠标停在某格上时关掉开关,那条提示会一直悬在那儿。 }
+  if not (goCellHints in Options) then
+  begin
+    if (FHintCol <> -1) or (FHintRow <> -1) then
+    begin
+      FHintCol := -1;
+      FHintRow := -1;
+      Hint := '';
+      ShowHint := False;
+    end;
+    Exit;
+  end;
+
   { 批注也要出提示,所以**不能**因为没挂 OnGetCellHint 就走人 ——
-    那样批注在没挂钩子的表上永远显示不出来(存了却看不见 = 等于没存)。 }
-  if (not Assigned(FOnGetCellHint)) and (not FHasComments) then Exit;
+    那样批注在没挂钩子的表上永远显示不出来(存了却看不见 = 等于没存)。
+    goTruncCellHints 是第三个来源(放不下的文字用全文当提示),
+    所以它也算"有理由继续往下走"。 }
+  if (not Assigned(FOnGetCellHint)) and (not FHasComments)
+     and not (goTruncCellHints in Options) then Exit;
 
   hit := CellAt(X, Y);
   if hit.Part <> ghpCell then
@@ -10057,11 +10500,73 @@ begin
   if (hit.Col = FHintCol) and (hit.Row = FHintRow) then Exit;
   FHintCol := hit.Col;
   FHintRow := hit.Row;
-  { 批注先给,宿主钩子后压 —— 宿主是更具体的那一层(与别处的优先级同向)。 }
-  txt := GetCellComment(hit.Col, hit.Row);
+  { 三层,由弱到强:截断全文 → 批注 → 宿主钩子。宿主永远是最具体的那一层
+    (与别处的优先级同向),截断全文最弱 —— 它只是"没有别的可说时"的兜底。 }
+  txt := '';
+  if goTruncCellHints in Options then txt := TruncatedCellHint(hit.Col, hit.Row);
+  cmt := GetCellComment(hit.Col, hit.Row);
+  if cmt <> '' then txt := cmt;
   if Assigned(FOnGetCellHint) then FOnGetCellHint(Self, hit.Col, hit.Row, txt);
   Hint := txt;
   ShowHint := txt <> '';
+end;
+
+{ goTruncCellHints:这一格的文字放得下就答空串,放不下就答**全文**。
+
+  **现量,不在绘制时记账。** 绘制那条路一帧要走几百格,给每格记一位
+  "截没截断"要么多一张随时可能与实际不同步的表,要么把这一位塞进文字位图
+  缓存的键里(那会让缓存命中率掉一半)。而这里一次只问一格、只在**换格**时问
+  (上面那道 FHintCol/FHintRow 闸),量一次的代价可以忽略。
+
+  量的口径与绘制**同一个函数**(TyGridEllipsisFit),所以"提示说放不下"
+  与"屏幕上真的加了…"不可能对不上 —— 这正是自己另写一遍宽度比较会踩的坑。 }
+function TTyStringGrid.TruncatedCellHint(ACol, ARow: Integer): string;
+var
+  bmp: TBGRABitmap;
+  { 不叫 cellS —— Pascal 不分大小写,那个名字与 TTyStringGrid.Cells 属性同名,
+    编译器直接报 "Duplicate identifier Cells"。 }
+  cellSty: TTyStyleSet;
+  ap: TTyGridCellAppearance;
+  M: TTyGridMetrics;
+  cell, textR: TRect;
+  w, pos: Integer;
+  full: string;
+begin
+  Result := '';
+  full := DisplayCellText(ACol, ARow);
+  if full = '' then Exit;
+
+  { WordWrap 逐格可被 OnGetCellWordWrap 改写,所以必须问 CellAppearance,
+    不能只看网格的 FWordWrap。换行的格放不下就往下一行走,没有"截断"这回事。 }
+  pos := DataToDisplay(ARow);
+  if pos < 0 then Exit;                     { 被筛掉的行不在屏幕上 }
+  { 传 CurrentStyle 而不是自己现解析一次 'TyGrid' —— 绘制那条路
+    (RenderTo:`AFrame := CurrentStyle`)喂给 CellAppearance 的就是它。
+    换一个来源就等于换一套字体,量出来的宽度会与屏幕上的不是一回事。 }
+  ap := CellAppearance(ACol, ARow, pos, CurrentStyle);
+  if ap.WordWrap then Exit;
+
+  { **宽度预算与 RenderCells 逐字算同一份**:让开格线 → 减主题左右内边距 →
+    树形列再减缩进。少减一项就会出现"提示说放得下、屏幕上却带着…"。 }
+  M := GridMetrics;
+  cell := TyGridCellContentRect(CellRect(ACol, ARow), M);
+  cellSty := ActiveController.Model.ResolveStyle('TyGridCell', StyleClass, []);
+  textR := ToReadingRect(cell);
+  textR := Rect(textR.Left + ScaleI(cellSty.Padding.Left), cell.Top,
+                textR.Right - ScaleI(cellSty.Padding.Right), cell.Bottom);
+  if (FTreeColumn >= 0) and (ACol = FTreeColumn) then
+    Inc(textR.Left, TreeContentLeft(ACol, ARow));
+  w := textR.Right - textR.Left;
+  if w <= 0 then Exit;
+
+  { 1x1 的临时位图只用来量文字 —— 与 AutoFitColumn 同一个手法。 }
+  bmp := TBGRABitmap.Create(1, 1);
+  try
+    TyConfigureTextFont(bmp, ap.FontName, ap.FontSize, ap.FontWeight, Dpi);
+    if TyGridEllipsisFit(bmp, full, w) <> full then Result := full;
+  finally
+    bmp.Free;
+  end;
 end;
 
 { 链接格的文字色从 TyGridHyperlink 取 —— 不硬编码蓝色。
@@ -13952,8 +14457,12 @@ var
   n: Integer;
 begin
   { rsmSingle = 只许有一块:固化就是这个功能的入口,在这里挡住比在 MouseDown 里
-    判要牢靠 —— 键盘上将来若也有 Ctrl+空格,不必再挡一次。 }
+    判要牢靠 —— 键盘上将来若也有 Ctrl+空格,不必再挡一次。
+
+    goRangeSelect 关掉时更彻底:一块都不许多出来。只挡拖选而放过 Ctrl+点 的话,
+    "选区永远只有当前格"这句话就不成立了 —— 用户仍能攒出一把离散的单格。 }
   if FRangeSelectMode = rsmSingle then Exit;
+  if not (goRangeSelect in Options) then Exit;
   n := Length(FSelRects);
   SetLength(FSelRects, n + 1);
   FSelRects[n] := ActiveSelectionRect;

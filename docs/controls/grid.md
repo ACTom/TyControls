@@ -46,7 +46,8 @@ end;
 | `Objects[列, 行]` | 挂在这一格上的任意对象("这一行是哪条记录")。网格**不拥有**它:不释放、不复制、不流式化;设 `nil` 即取下。排序 / 插删行 / 换行 / 拖行都带着它走。**不进撤销栈** —— 见下面《对象槽与撤销》 |
 | `Cols[列]` / `Rows[行]` | 整列 / 整行的 `TStrings` **活视图**(可读可写、可赋值)。`Memo.Lines := Grid.Cols[2]`、`Grid.Rows[3] := MyList`、`Rows[r].CommaText` 都能用。赋值**不改网格结构**,见下面《整行整列赋值》 |
 | `Col` / `Row` | 当前单元格(二维光标) |
-| `ReadOnly` | 整表只读,任何编辑都开不起来 |
+| `Options` | 行为开关的集合(`TTyGridOptions`),对标 LCL 的 `TCustomGrid.Options`。设计器里一次看全所有交互开关 —— 见下面《`Options` 与 LCL 标志对照》 |
+| `ReadOnly` | 整表只读:任何**编辑器**都开不起来(等价于 `Options` 里去掉 `goEditing`)。⚠ 今天**不挡** Ctrl+V / Ctrl+X / 填充柄 —— 见《已知缺口》 |
 | `SortColumn` / `SortDirection` | 当前排序列与方向(只读;用 `SortByColumn` / `ToggleSortColumn` 改) |
 | `ShowFooter` / `FooterHeight` | 底部汇总带 |
 | `FixedRowsBottom` | 冻结在**底部**的显示行数(与 `FixedRows` 对称)。常见用途是把合计行钉在视口下沿 |
@@ -67,7 +68,7 @@ end;
 | `VisibleColCount` | 视口里现在装得下几列,`VisibleRowCount` 的列轴对偶 |
 | `AutoFillColumns` | 让**每一列**分掉多余的宽度,按各自的 `SizePriority` 加权。与 `hoAutoResize` + `AutoSizeIndex` 的区别:那一对只让**指定的一列**吸收剩余宽度 |
 | `ScrollBars` | `ssNone` / `ssHorizontal` / `ssVertical` / `ssBoth` / `ssAuto*`。存储仍是 `VertScrollBarMode` / `HorzScrollBarMode` 那一对(现已 published),这个是 LCL 同名同类型的视图 |
-| `ShowFocusCell` / `FocusRectVisible` | 焦点格要不要画外框(同一个存储,后者是 LCL 的名字)。**现已 published** |
+| `ShowFocusCell` / `FocusRectVisible` | 焦点格要不要铺一层区分底色(`TyGridActiveCell`;同一个存储,后者是 LCL 的名字)。**默认 True** —— 两个属性一直都写着 `default True`,但构造函数从来没设过它,所以在此之前出厂的网格里这层底色是熄的;`Options` 的出厂值断言把它照了出来。`Options` 里的对应位是 `goDrawFocusSelected` |
 | `HideSelectionWhenInactive` / `FadeUnfocusedSelection` | 失去焦点时选区变淡(同上)。**现已 published** |
 | `Modified` | 自建表 / 上次装载以来有没有被改过。收口在 `Cells[]` 与结构性增删行,所以粘贴、填充柄、撤销、勾选框、CSV 装载都算数。存过盘之后宿主自己写 `False` 复位 |
 | `EditorMode` | 开/关编辑器的**一个布尔**(读 = `Editing`;写 `False` 是**提交**,不是丢弃)。工具栏按钮要绑的就是它 |
@@ -289,6 +290,12 @@ TyGridButton                按钮单元格(:hover / :active)
 - 正在过滤的列漏斗**点亮**;多列排序时表头显示顺位徽标
 
 ### 数据与交互
+- **行为开关总入口** `Options`(`TTyGridOptions`,对标 LCL `TCustomGrid.Options`):
+  改行高 / 拖行 / 拖选 / Tab 走格 / 双击适宽 / 冻结列改宽 / 逐格提示 /
+  截断提示 / 省略号 / 整行高亮 / 滚动带光标 / 点半露格不滚,一处全在。
+  其中一半的位是 `GridLineStyle`、`Header.Options`、`ReadOnly`、`SelectionMode`、
+  `ShowRowNumbers` 的**视图**(两边同步,不是第二份存储)——
+  见下面《`Options` 与 LCL 标志对照》
 - 多列排序:`SortByColumn` 单列、`AddSortColumn` 追加次级列(Shift+点列头)
 - 排序方式**跟着列走**(`TTyGridColumn.SortKind`:文本 / 数值 / 日期)
 - 排序细则:`BlanksPosition`(空值排前/后,**翻方向时位置不变**)、
@@ -559,6 +566,107 @@ LTR 因此逐字节不变。**不要在控件里写第二组 `if RtlLayout then 
 - **批量写数据一定要用 `BeginUpdate` / `EndUpdate`**(可嵌套)。
   `Cells[c,r] := ...` 每写一格就往 LCL 送一次失效;灌 10 万行 x 9 列 = 90 万次,界面看起来就是死的。
   加锁后整批只重画一次。这是本控件**最容易踩、也最容易漏掉**的性能点
+
+## `Options` 与 LCL 标志对照
+
+`Options: TTyGridOptions` 是从 LCL `TCustomGrid.Options`(`grids.pas:86`)移过来的
+行为开关集合。在它之前,这些开关散在四个不同的对象上 —— 格线在 `GridLineStyle`,
+改列宽/拖列/列头点亮埋在 `Header.Options` 里(设计器要展开子对象才看得到),
+只读在 `ReadOnly`,整行选择在 `SelectionMode`,行号在 `ShowRowNumbers` ——
+而**改行高、拖行、双击适宽、"…" 截断这几条根本没有开关**。
+
+### 三条纪律
+
+1. **只收我们真的照办的标志。** LCL 有 32 个,这里 21 个。少掉的 11 个不是漏了:
+   一个勾得动却没人理的开关比根本没有它更坏,因为用户会以为自己已经关掉了
+   某个行为。`test.grid.options` 里的 `NoInertOptionMembers` 逐个成员去源码里
+   找强制点,找不到就红。
+2. **一半的位是视图,不是第二份存储。** `goColSizing` 就是
+   `Header.Options` 里的 `hoColumnResize`,`goEditing` 就是 `ReadOnly` 取反。
+   这些位**不另存一份**:`Options` 读它们时现算,写它们时推回原主。所以
+   `GridLineStyle := glsNone` 之后 `goVertLine in Options` 立刻是 `False`,
+   反之亦然。
+3. **只增不改序。** 集合成员在 `.lfm` 里按**名字**写(`Options = [goVertLine, …]`),
+   所以插入成员不会让老窗体读错;但**改名或删名**会让老窗体加载时抛
+   `Invalid property value`。新成员一律追加在末尾。
+
+### 出厂值
+
+```pascal
+TyDefaultGridOptions =
+  [goVertLine, goHorzLine, goRangeSelect, goDrawFocusSelected, goRowSizing,
+   goColSizing, goRowMoving, goColMoving, goEditing, goTabs,
+   goDblClickAutoSize, goFixedColSizing, goCellHints, goCellEllipsis];
+```
+
+出厂值**逐位复刻加这个属性之前的行为**,不是复刻 LCL 的 `DefaultGridOptions`。
+三处刻意与 LCL 不同(见下表 ⚠ 标记):`goDblClickAutoSize`、`goFixedColSizing`、
+`goCellEllipsis` 在 LCL 里默认关,而我们一直是开的。改成 LCL 的默认值等于
+给每一张现有窗体换行为 —— 这个属性是来**描述**现状的,不是来偷偷改现状的。
+
+### 对照表
+
+`归属` 一列的含义:
+
+- **视图** —— 这一位在别处已经有名字了,`Options` 只是它的另一个入口,两边同步;
+- **自有** —— `Options` 是这个行为唯一的开关,以前没有;
+- **不收** —— 不在 `TTyGridOption` 里,理由在备注。
+
+| LCL 标志 | 归属 | 我们的 | 出厂 | 备注 |
+|---|---|---|---|---|
+| `goVertLine` | 视图 | `GridLineStyle` 含 `glsVertical` | 开 | 两位 ↔ 四态,双射不丢信息 |
+| `goHorzLine` | 视图 | `GridLineStyle` 含 `glsHorizontal` | 开 | 同上 |
+| `goFixedVertLine` | 不收 | — | — | 我们的列头/冻结带是**主题绘制的 chrome**,分隔线取自 `TyGridHeaderSection` 的 `border-color`,不是"固定单元格的格线"。真要拆开:`RenderGridLines` 的纵向循环已经以 `M.FrozenTop` 为界,那就是现成的 seam;列头带那一段还要在 `RenderHeaderSections` 再开一处 |
+| `goFixedHorzLine` | 不收 | — | — | 同上。今天顶部固定行走正文那条横线路径,而列头带的横线是无条件画的 |
+| `goRangeSelect` | 自有 | `goRangeSelect` | 开 | 关掉后拖动/Shift 仍移动光标,但选区收在当前格。只管**手势**,`SelectRange` 等 API 不受影响 |
+| `goDrawFocusSelected` | 视图 | `ShowFocusCell` / `FocusRectVisible` | 开 | 我们的选区**恒含光标格**(`ClearSelection` 收缩到光标),所以"焦点格总是画在选中格上",这个映射是精确的而非近似 |
+| `goRowSizing` | 自有 | `goRowSizing` | 开 | 仍需 `ShowIndicator` —— 行分隔线只在行头槽里认(放在单元格上会和框选抢手势) |
+| `goColSizing` | 视图 | `Header.Options` 含 `hoColumnResize` | 开 | |
+| `goRowMoving` | 自有 | `goRowMoving` | 开 | 仍需 `ShowIndicator`,且排序/过滤生效时不可拖(显示序 ≠ 数据序) |
+| `goColMoving` | 视图 | `Header.Options` 含 `hoDrag` | 开 | 单列还要 `coDraggable` |
+| `goEditing` | 视图 | `ReadOnly` 取反 | 开 | ⚠ **范围比名字窄**:它挡的是**编辑器**(双击 / F2 / 直接打字 / 勾选框 / 评分 / 颜色 / "…"),不挡 Ctrl+V、Ctrl+X 和填充柄拖拽 —— 那三条路径今天不看 `ReadOnly`。这是 `ReadOnly` 自带的遗留缺口,不是 `Options` 引入的;补法见下 |
+| `goAutoAddRows` | 不收 | — | — | **可以做,但语义要先定。** 我们有排序/过滤/分组的显示序,在最后一行编辑完自动追加的那一行该出现在**显示序**的哪儿并不显然;而且要不要进撤销栈也得定。seam 在 `TTyStringGrid.EndEdit` |
+| `goAutoAddRowsSkipContentCheck` | 不收 | — | — | 上一条的修饰位,一起等 |
+| `goTabs` | 自有 | `goTabs` | 开 | 关掉后 Tab 交给对话框换焦点(不置 `Key := 0`) |
+| `goRowSelect` | 视图 | `SelectionMode = gsmRow` | 关 | 三态压两态:`Options` 只在这一位**真的翻了**时才写回,所以 `gsmColumn` 不会被一次无变化的写压成 `gsmCell` |
+| `goAlwaysShowEditor` | 不收 | — | — | 我们的编辑器是一个**共享的隐藏子控件**,`MoveCursor` 每次都无条件 `EndEdit`。常驻编辑器要么每格一个实例,要么重做光标移动那条路 —— 是一个独立的改动 |
+| `goThumbTracking` | 不收 | — | — | 我们的 `TTyScrollBar` **恒为实时拖动**(`DragThumbTo` 每步 `DoScroll(scTrack)`)。要做成可关,seam 在 `source/tyControls.ScrollBar.pas` 的 `DragThumbTo` / `EndThumbDrag`,不在本控件 |
+| `goColSpanning` | 不收 | — | — | 合并格是**按需自动**的:`HasMergedCells` 看 `FMergeCount > 0`,没有合并就不走那条路径。一个开关只能用来"禁用用户显式请求的合并",没有意义 |
+| `goRelaxedRowSelect` | 不收 | — | — | 我们**恒为 relaxed**:`FCol` 始终被跟踪,`SelectionMode` 的 setter 不动光标,`gsmRow` 下焦点格照样有自己的底色 |
+| `goDblClickAutoSize` | 自有 | `goDblClickAutoSize` | ⚠ 开 | LCL 默认关。关掉后双击**落到普通拖拽改宽**上,不是被吞掉 |
+| `goSmoothScroll` | 不收 | — | — | 我们**恒为像素级平滑滚动**(`ScrollX`/`ScrollY` 是设备像素,不按格吸附)。逐格滚动是功能倒退,不提供 |
+| `goFixedRowNumbering` | 视图 | `ShowRowNumbers` | 关 | 还需 `ShowIndicator` 才有槽可画;行号按**显示序**、1 起 |
+| `goScrollKeepVisible` | 自有 | `goScrollKeepVisible` | 关 | 默认视口与光标解耦(滚走了光标留在原地)。打开后滚动落定时把光标拖进新视口,横纵都管 |
+| `goHeaderHotTracking` | 视图 | `Header.Options` 含 `hoHotTrack` | 关 | |
+| `goHeaderPushedLook` | 不收 | — | — | **缺主题 token。** 列头段只定义了 `TyGridHeaderSection:hover` 和 `:selected`,没有 `:active`;按下态解析出来会退回 base,看起来毫无变化 —— 那正是"发布了却不照办"。seam:在 `themes/light.tycss` 加 `TyGridHeaderSection:active`,重跑 `gen-defaulttheme.ps1` / `gen-builtinthemes.ps1`,再在 `RenderHeaderSections` 里解析 `[tysActive]` |
+| `goSelectionActive` | 不收 | — | — | 我们**恒为 active**:`SetSelection` → `SelectRange` 直接写 `FCol`/`FRow` |
+| `goFixedColSizing` | 自有 | `goFixedColSizing` | ⚠ 开 | LCL 默认关。关掉后冻结列(前 `FixedCols` + 后 `FixedColsRight`)的分隔线不再命中,可滚动列不受影响 |
+| `goDontScrollPartCell` | 自有 | `goDontScrollPartCell` | 关 | 只管**点击**;键盘导航仍然把光标滚进视口 |
+| `goCellHints` | 自有 | `goCellHints` | 开 | 总闸。关掉时连**已经挂上**的提示也摘掉 |
+| `goTruncCellHints` | 自有 | `goTruncCellHints` | 关 | 放不下的文字用全文当提示。**现量不记账**:量的口径与绘制是同一个函数(`TyGridEllipsisFit`),所以"提示说放不下"与"屏幕上真加了…"不可能对不上。优先级:截断全文 < 批注 < `OnGetCellHint` |
+| `goCellEllipsis` | 自有 | `goCellEllipsis` | ⚠ 开 | LCL 默认关。关掉后单行文字硬裁(末字被切一半) |
+| `goRowHighlight` | 自有 | `goRowHighlight` | 关 | 高亮光标所在**整行**。底色复用 `TyGridActiveCell`(本控件自己的键)—— 代价是主题分不开"焦点格"与"高亮行",要分开得加一个 `TyGridRowHighlight` 键 |
+
+### 已知缺口:`ReadOnly` / `goEditing` 管不到剪贴板与填充柄
+
+`FReadOnly` 今天只在五处被读到 —— `DoBeginEdit`、`ToggleCellChecked`、
+`SetRatingByPoint`、`ToggleCellColor`、`InvokeEllipsis`。也就是说
+`ReadOnly := True`(等价于 `Options - [goEditing]`)之后,用户仍可以用
+**Ctrl+V 粘贴、Ctrl+X 剪切、拖填充柄**改掉数据。
+
+这不是 `Options` 带来的,`ReadOnly` 一直如此;但既然 `goEditing` 是它的视图,
+这里必须写明,免得两个名字一起说同一句不成立的话。
+
+补法(三行,方向已经确定):在 `TTyStringGrid.PasteFromClipboard`、
+`CutToClipboard`、`FillFromSelectionTo` 的开头各加一句 `if FReadOnly then Exit;`。
+**没有顺手改**是因为它改的是数据写入语义,不属于本次"给行为开关做一个入口"
+的范围;要改就该配一组自己的测试(含"宿主主动调 `PasteFromClipboard` 时
+要不要也挡"这个决定 —— 挡用户手势是显然的,挡宿主 API 则未必)。
+
+`TGridOptions2`(`goScrollToLastCol` / `goScrollToLastRow` / `goEditorParentColor` /
+`goEditorParentFont` / `goCopyWithoutTrailingLinebreak`)整套不收:前两个是 LCL 逐格
+滚动模型下的边界修补,后三个是它那套编辑器父属性继承的产物 —— 我们的编辑器走
+主题,没有 `ParentColor` 这一层。
 
 ## 明确不做
 
