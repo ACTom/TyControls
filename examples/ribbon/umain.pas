@@ -189,6 +189,85 @@ implementation
 
 {$R *.lfm}
 
+{ Every user-visible string this unit builds in CODE. The ribbon's groups, backstage,
+  Quick-Access ScreenTips, app menu and status bar are all assembled here rather than in
+  umain.lfm, so the .lfm translator never sees them -- which is why this example used to
+  stay two-thirds English under a Chinese locale. resourcestrings ARE translated by
+  SetDefaultLang, so moving the literals here is the whole fix. }
+resourcestring
+  rsCmdFind           = 'Find';
+  rsCmdReplace        = 'Replace';
+  rsCmdSelectAll      = 'Select all';
+  rsAlignLeft         = 'Left';
+  rsAlignCenter       = 'Medium';
+  rsAlignRight        = 'Right';
+  rsAlignJustify      = 'both ends';
+  rsCmdBullets        = 'Bullet list';
+  rsCmdNumbers        = 'No.';
+  rsCmdPaste          = 'Paste';
+  rsCmdCut            = 'Cut';
+  rsCmdCopy           = 'Copy';
+  rsCmdPainter        = 'Format painter';
+  rsCmdSymbol         = 'Symbol';
+  rsCmdDateTime       = 'Date-time';
+  rsCmdGrid           = 'Grid';
+  rsCmdPicture        = 'Picture';
+  rsCmdNewWindow      = 'New window';
+  rsCmdArrange        = 'Side by side';
+  rsCmdZoomIn         = 'Zoom in';
+  rsCmdZoomOut        = 'Zoom out';
+  rsChkWordWrap       = 'Word wrap';
+  rsChkStatusBar      = 'Status bar';
+  rsChkContext        = 'Picture tools (contextual)';
+  rsCmdClip           = 'Clip';
+  rsBsInformation     = 'Information';
+  rsBsNew             = 'New';
+  rsBsOpen            = 'Open';
+  rsBsSave            = 'Save';
+  rsBsSaveAs          = 'Save as';
+  rsBsClose           = 'Close';
+  rsBsAbout           = 'About';
+  rsBsOption          = 'Option';
+  rsBsSignOut         = 'Sign out';
+  rsBsBlankDoc        = 'Blank document';
+  rsBsBrowse          = 'Browse…';
+  rsMenuOpenDots      = 'Open...';
+  rsMenuExit          = 'Exit';
+  rsStatNotSaved      = 'Not saved';
+  rsStatReady         = 'Ready';
+  rsStatZoom          = 'Zoom 100%';
+  rsStatKeyTips       = 'Press Alt for KeyTips';
+  rsStatStyleN        = 'Style %d';
+  rsStatStyle1        = 'Style 1';
+  rsStatCharN         = 'Char %d';
+  rsStatFileTab       = 'File tab clicked - backstage opening';
+  rsInfoNoDoc         = '(no open document)';
+  rsInfoNotSavedYet   = '(not saved yet)';
+  rsInfoPath          = 'Path:';
+  rsInfoCharCount     = 'Char count: %d';
+  rsInfoRowCount      = 'Row count: %d';
+  rsNewDocN           = 'New document %d';
+  rsPickAccent        = 'Choose accent colour';
+  rsTxtFilter         = 'Text file (*.txt)|*.txt|All files (*.*)|*.*';
+  rsAccentFollow      = 'Follow theme';
+  { The File tab is set here, not in umain.lfm, because TTyRibbon.FileTabCaption is declared
+    `string` rather than TTranslateString -- LCL's LFM translator only rewrites properties of
+    that exact type, so an .lfm-authored FileTabCaption is unreachable and stayed English
+    while every tab beside it translated. See the report: the property's declared type is a
+    library-side gap, and this line is the example's own way around it. }
+  rsFileTab           = 'File';
+  rsTipPictureGroup   = 'This group has ShowCaption = False'#10 +
+                        'No caption band, no dialog launcher - the content fills the whole group height.';
+  rsQatNew            = 'New'#10'Create a new blank document';
+  rsQatOpen           = 'Open'#10'Open an existing text file';
+  rsQatSave           = 'Save'#10'Write the current document to disk';
+  rsQatUndo           = 'Undo'#10'Undo the last action';
+  rsQatRedo           = 'Redo'#10'Redo the undone action';
+  rsAboutText         = 'TyControls text editor'#10 +
+                        'Ribbon overview example'#10#10 +
+                        'Built on ty-controls (BGRABitmap + .tycss themes)'#10 +
+                        'Cross-platform vector icons · themed ScreenTips · built-in theme switching';
+
 { Locate the repo themes/ folder by walking up from the exe until themes/auto.tycss is found,
   so the ribbon skin switcher lists the structural skins (office, xp, win11, …) — not just the
   two compiled-in themes. Empty if not found (e.g. a stand-alone deployed exe). }
@@ -332,19 +411,23 @@ var
   i: Integer;
 begin
   // Editing
-  Small(GrpEdit, 'Find', 'find', 6, 4, 88, @DoFind);
-  Small(GrpEdit, 'Replace', 'replace', 6, 30, 88, @DoReplace);
-  Small(GrpEdit, 'Select all', 'selectall', 6, 56, 88, @DoSelectAll);
+  Small(GrpEdit, rsCmdFind, 'find', 6, 4, 88, @DoFind);
+  Small(GrpEdit, rsCmdReplace, 'replace', 6, 30, 88, @DoReplace);
+  Small(GrpEdit, rsCmdSelectAll, 'selectall', 6, 56, 88, @DoSelectAll);
 
   // Paragraph
   alignGrp := TTyButtonGroup.Create(Self);
   alignGrp.Parent := GrpParagraph;
   alignGrp.StyleClass := 'ghost';
-  alignGrp.SetBounds(6, 6, 138, 26);
-  alignGrp.Items.Add('Left'); alignGrp.Items.Add('Medium'); alignGrp.Items.Add('Right'); alignGrp.Items.Add('both ends');
+  { 264, not 138: a TTyButtonGroup splits its width EVENLY, so the strip has to be four times
+    the widest label plus its padding -- 'both ends' / 两端对齐. At 138 the last two labels
+    were ellipsised away in both languages. GrpParagraph was widened to match (umain.lfm). }
+  alignGrp.SetBounds(6, 6, 300, 26);
+  alignGrp.Items.Add(rsAlignLeft); alignGrp.Items.Add(rsAlignCenter);
+  alignGrp.Items.Add(rsAlignRight); alignGrp.Items.Add(rsAlignJustify);
   alignGrp.ItemIndex := 0;
-  Small(GrpParagraph, 'Bullet list', 'bullets', 6, 40, 66, @DoNoop);
-  Small(GrpParagraph, 'No.', 'number', 76, 40, 66, @DoNoop);
+  Small(GrpParagraph, rsCmdBullets, 'bullets', 6, 40, 66, @DoNoop);
+  Small(GrpParagraph, rsCmdNumbers, 'number', 76, 40, 66, @DoNoop);
 
   // Font
   fontc := TTyComboBox.Create(Self);
@@ -372,10 +455,12 @@ begin
   col.OnColorChange := @DoFontColor;
 
   // Clipboard (with a dialog launcher, like Word)
-  Big(GrpClipboard, 'Paste', 'paste', 6, 56, @DoPaste);
-  Small(GrpClipboard, 'Cut', 'cut', 66, 4, 78, @DoCut);
-  Small(GrpClipboard, 'Copy', 'copy', 66, 30, 78, @DoCopy);
-  Small(GrpClipboard, 'Format painter', 'painter', 66, 56, 78, @DoNoop);
+  Big(GrpClipboard, rsCmdPaste, 'paste', 6, 56, @DoPaste);
+  { 110, not 78: 'Format painter' rendered as "Format p" at 78 -- one column, one width, so
+    the widest label in it is what sets it. GrpClipboard was widened to match (umain.lfm). }
+  Small(GrpClipboard, rsCmdCut, 'cut', 66, 4, 110, @DoCut);
+  Small(GrpClipboard, rsCmdCopy, 'copy', 66, 30, 110, @DoCopy);
+  Small(GrpClipboard, rsCmdPainter, 'painter', 66, 56, 110, @DoNoop);
 end;
 
 procedure TMainForm.BuildInsertTab;
@@ -384,8 +469,8 @@ var
   pic: TTyGlyphContainerButton;
 begin
   // Symbol
-  Small(GrpSymbol, 'Symbol', 'symbol', 6, 4, 116, @DoNoop);
-  Small(GrpSymbol, 'Date-time', 'datetime', 6, 30, 116, @DoInsertDate);
+  Small(GrpSymbol, rsCmdSymbol, 'symbol', 6, 4, 116, @DoNoop);
+  Small(GrpSymbol, rsCmdDateTime, 'datetime', 6, 30, 116, @DoInsertDate);
 
   // Style library: the gallery itself (12 items, their glyph names, the icon font, the
   // 4-column dropped grid and OnSelect) is entirely authored in umain.lfm.
@@ -394,14 +479,13 @@ begin
   dd := TTyDropDownButton.Create(Self);
   dd.Parent := GrpTable;
   dd.SetBounds(6, 6, 78, 60);
-  dd.Caption := 'Grid';
+  dd.Caption := rsCmdGrid;
 
   // The caption-LESS group (GrpPicture has ShowCaption=False in the .lfm): no bottom caption
   // band and no dialog launcher, so its content owns the group's full height. Compare its
   // bottom edge with the captioned groups beside it.
-  pic := Big(GrpPicture, 'Picture', 'crop', 6, 58, @DoNoop);
-  pic.Hint := 'This group has ShowCaption = False'#10 +
-    'No caption band, no dialog launcher - the content fills the whole group height.';
+  pic := Big(GrpPicture, rsCmdPicture, 'crop', 6, 58, @DoNoop);
+  pic.Hint := rsTipPictureGroup;
 end;
 
 procedure TMainForm.BuildViewTab;
@@ -409,24 +493,24 @@ var
   wrap, statusbar, ctx: TTyCheckBox;
 begin
   // Window
-  Small(GrpWindow, 'New window', 'newwindow', 6, 4, 98, @DoNoop);
-  Small(GrpWindow, 'Side by side', 'arrange', 6, 30, 98, @DoNoop);
+  Small(GrpWindow, rsCmdNewWindow, 'newwindow', 6, 4, 98, @DoNoop);
+  Small(GrpWindow, rsCmdArrange, 'arrange', 6, 30, 98, @DoNoop);
 
   // Zoom
-  Small(GrpZoom, 'Zoom in', 'zoomin', 6, 4, 60, @DoNoop);
-  Small(GrpZoom, 'Zoom out', 'zoomout', 68, 4, 60, @DoNoop);
+  Small(GrpZoom, rsCmdZoomIn, 'zoomin', 6, 4, 60, @DoNoop);
+  Small(GrpZoom, rsCmdZoomOut, 'zoomout', 68, 4, 60, @DoNoop);
   Small(GrpZoom, '100%', 'zoom100', 6, 30, 122, @DoNoop);
 
   // View options
   wrap := TTyCheckBox.Create(Self);
   wrap.Parent := GrpShow; wrap.SetBounds(6, 6, 128, 22);
-  wrap.Caption := 'Word wrap'; wrap.OnClick := @DoWordWrap;
+  wrap.Caption := rsChkWordWrap; wrap.OnClick := @DoWordWrap;
   statusbar := TTyCheckBox.Create(Self);
   statusbar.Parent := GrpShow; statusbar.SetBounds(6, 30, 128, 22);
-  statusbar.Caption := 'Status bar'; statusbar.Checked := True;
+  statusbar.Caption := rsChkStatusBar; statusbar.Checked := True;
   ctx := TTyCheckBox.Create(Self);
   ctx.Parent := GrpShow; ctx.SetBounds(6, 54, 128, 22);
-  ctx.Caption := 'Picture tools (contextual)'; ctx.OnClick := @DoToggleContext;
+  ctx.Caption := rsChkContext; ctx.OnClick := @DoToggleContext;
 
   // 'Ribbon itself' (ChkKeyTips / ChkCollapse) and 'App menu' (AppMenu) are .lfm objects;
   // the app menu's command list is filled in BuildEditor, next to the recent-files list.
@@ -477,7 +561,7 @@ begin
   begin
     dlg := TTyColorDialog.Create(nil);
     try
-      dlg.Caption := 'Choose accent colour';
+      dlg.Caption := rsPickAccent;
       if dlg.Execute then
         TyDefaultController.SetAccent('#' + IntToHex(TyRedOf(dlg.Color), 2)
           + IntToHex(TyGreenOf(dlg.Color), 2) + IntToHex(TyBlueOf(dlg.Color), 2));
@@ -553,21 +637,21 @@ begin
   // Top block (Office File menu) — some show a content page, some act immediately.
   FBackstage.Commands.Clear;
   FBackstage.CommandGlyphs.Clear;
-  FBackstage.Commands.Add('Information');   FBackstage.CommandGlyphs.Add('info');   // 0 -> content page
-  FBackstage.Commands.Add('New');   FBackstage.CommandGlyphs.Add('new');    // 1 -> content page
-  FBackstage.Commands.Add('Open');   FBackstage.CommandGlyphs.Add('open');   // 2 -> content page
-  FBackstage.Commands.Add('Save');   FBackstage.CommandGlyphs.Add('save');   // 3 -> act
-  FBackstage.Commands.Add('Save as'); FBackstage.CommandGlyphs.Add('saveas'); // 4 -> act
-  FBackstage.Commands.Add('Close');   FBackstage.CommandGlyphs.Add('close');  // 5 -> act
+  FBackstage.Commands.Add(rsBsInformation);   FBackstage.CommandGlyphs.Add('info');   // 0 -> content page
+  FBackstage.Commands.Add(rsBsNew);   FBackstage.CommandGlyphs.Add('new');    // 1 -> content page
+  FBackstage.Commands.Add(rsBsOpen);   FBackstage.CommandGlyphs.Add('open');   // 2 -> content page
+  FBackstage.Commands.Add(rsBsSave);   FBackstage.CommandGlyphs.Add('save');   // 3 -> act
+  FBackstage.Commands.Add(rsBsSaveAs); FBackstage.CommandGlyphs.Add('saveas'); // 4 -> act
+  FBackstage.Commands.Add(rsBsClose);   FBackstage.CommandGlyphs.Add('close');  // 5 -> act
   // Bottom-pinned block (with a separator above it) — caller-defined, not hardcoded.
   FBackstage.BottomCommands.Clear;
   FBackstage.BottomCommandGlyphs.Clear;
-  FBackstage.BottomCommands.Add('About'); FBackstage.BottomCommandGlyphs.Add('info');     // 6
-  FBackstage.BottomCommands.Add('Option'); FBackstage.BottomCommandGlyphs.Add('settings'); // 7
+  FBackstage.BottomCommands.Add(rsBsAbout); FBackstage.BottomCommandGlyphs.Add('info');     // 6
+  FBackstage.BottomCommands.Add(rsBsOption); FBackstage.BottomCommandGlyphs.Add('settings'); // 7
   // A row whose text is a lone '-' draws as a NON-SELECTABLE divider line. It still takes a
   // unified index, so everything below it shifts by one (Sign out is 9, not 8).
   FBackstage.BottomCommands.Add('-'); FBackstage.BottomCommandGlyphs.Add('');              // 8 = divider
-  FBackstage.BottomCommands.Add('Sign out'); FBackstage.BottomCommandGlyphs.Add('exit');     // 9
+  FBackstage.BottomCommands.Add(rsBsSignOut); FBackstage.BottomCommandGlyphs.Add('exit');     // 9
   FBackstage.ItemIndex := -1;
 end;
 
@@ -590,27 +674,27 @@ procedure TMainForm.BuildBackstageContent;
 var i: Integer;
 begin
   // Info
-  FPgInfo := NewPage('Information');
+  FPgInfo := NewPage(rsBsInformation);
   FBsInfoLbl := TTyLabel.Create(Self);
   FBsInfoLbl.Parent := FPgInfo;
   FBsInfoLbl.SetBounds(28, 68, 520, 140);
 
   // New -- a "blank document" template button (placeholder for a template gallery)
-  FPgNew := NewPage('New');
+  FPgNew := NewPage(rsBsNew);
   FBsNewBlank := TTyGlyphButton.Create(Self);
   FBsNewBlank.Parent := FPgNew;
   FBsNewBlank.SetBounds(28, 68, 160, 40);
-  FBsNewBlank.Caption := 'Blank document';
+  FBsNewBlank.Caption := rsBsBlankDoc;
   FBsNewBlank.Images := FImgColl;
   FBsNewBlank.ImageName := 'new';
   FBsNewBlank.OnClick := @DoNew;
 
   // Open -- Browse + recent-file rows
-  FPgOpen := NewPage('Open');
+  FPgOpen := NewPage(rsBsOpen);
   FBsBrowse := TTyGlyphButton.Create(Self);
   FBsBrowse.Parent := FPgOpen;
   FBsBrowse.SetBounds(28, 68, 200, 34);
-  FBsBrowse.Caption := 'Browse…';
+  FBsBrowse.Caption := rsBsBrowse;
   FBsBrowse.Images := FImgColl;
   FBsBrowse.ImageName := 'folder';
   FBsBrowse.OnClick := @DoOpen;
@@ -628,18 +712,14 @@ begin
   end;
 
   // About
-  FPgAbout := NewPage('About');
+  FPgAbout := NewPage(rsBsAbout);
   FBsAboutLbl := TTyLabel.Create(Self);
   FBsAboutLbl.Parent := FPgAbout;
   FBsAboutLbl.SetBounds(28, 68, 520, 180);
-  FBsAboutLbl.Caption :=
-    'TyControls text editor'#10 +
-    'Ribbon overview example'#10#10 +
-    'Built on ty-controls (BGRABitmap + .tycss themes)'#10 +
-    'Cross-platform vector icons · themed ScreenTips · built-in theme switching';
+  FBsAboutLbl.Caption := rsAboutText;
 
   // Options (placeholder)
-  FPgOptions := NewPage('Option');
+  FPgOptions := NewPage(rsBsOption);
 end;
 
 procedure TMainForm.ShowBsPage(APage: TTyPanel);
@@ -683,12 +763,12 @@ var d: TEditorDoc; s: string;
 begin
   d := ActiveDoc;
   if d = nil then
-    s := '(no open document)'
+    s := rsInfoNoDoc
   else
   begin
-    if d.FilePath <> '' then s := 'Path:' + d.FilePath else s := '(not saved yet)';
-    s := s + #10 + Format('Char count: %d', [Length(d.Memo.Lines.Text)]);
-    s := s + #10 + Format('Row count: %d', [d.Memo.Lines.Count]);
+    if d.FilePath <> '' then s := rsInfoPath + d.FilePath else s := rsInfoNotSavedYet;
+    s := s + #10 + Format(rsInfoCharCount, [Length(d.Memo.Lines.Text)]);
+    s := s + #10 + Format(rsInfoRowCount, [d.Memo.Lines.Count]);
   end;
   if FBsInfoLbl <> nil then FBsInfoLbl.Caption := s;
 end;
@@ -719,14 +799,14 @@ begin
   m := ActiveMemo;
   if d <> nil then
     if d.FilePath <> '' then FStatus.Panels[0].Text := d.FilePath
-    else FStatus.Panels[0].Text := 'Not saved'
+    else FStatus.Panels[0].Text := rsStatNotSaved
   else
-    FStatus.Panels[0].Text := 'Ready';
+    FStatus.Panels[0].Text := rsStatReady;
   if m <> nil then
-    FStatus.Panels[1].Text := Format('Char %d', [Length(m.Lines.Text)])
+    FStatus.Panels[1].Text := Format(rsStatCharN, [Length(m.Lines.Text)])
   else
     FStatus.Panels[1].Text := '';
-  FStatus.Panels[2].Text := 'Zoom 100%';
+  FStatus.Panels[2].Text := rsStatZoom;
 end;
 
 // ===========================================================================
@@ -735,7 +815,7 @@ end;
 procedure TMainForm.DoNew(Sender: TObject);
 begin
   Inc(FNewCount);
-  NewDoc(Format('New document %d', [FNewCount]));
+  NewDoc(Format(rsNewDocN, [FNewCount]));
 end;
 
 procedure TMainForm.DoOpen(Sender: TObject);
@@ -743,7 +823,7 @@ var dlg: TOpenDialog;
 begin
   dlg := TOpenDialog.Create(Self);
   try
-    dlg.Filter := 'Text file (*.txt)|*.txt|All files (*.*)|*.*';
+    dlg.Filter := rsTxtFilter;
     if dlg.Execute then OpenFile(dlg.FileName);
   finally
     dlg.Free;
@@ -771,7 +851,7 @@ begin
   if d = nil then Exit;
   dlg := TSaveDialog.Create(Self);
   try
-    dlg.Filter := 'Text file (*.txt)|*.txt|All files (*.*)|*.*';
+    dlg.Filter := rsTxtFilter;
     dlg.DefaultExt := 'txt';
     if dlg.Execute then
     begin
@@ -904,14 +984,14 @@ end;
 procedure TMainForm.RibbonFileTab(Sender: TObject);
 begin
   if FStatus <> nil then
-    FStatus.Panels[0].Text := 'File tab clicked - backstage opening';
+    FStatus.Panels[0].Text := rsStatFileTab;
 end;
 
 { Picking a gallery thumbnail — inline or from the dropped 4-column grid — lands here. }
 procedure TMainForm.GalleryStyleSelect(Sender: TObject);
 begin
   if FStatus <> nil then
-    FStatus.Panels[3].Text := Format('Style %d', [Gallery.ItemIndex + 1]);
+    FStatus.Panels[3].Text := Format(rsStatStyleN, [Gallery.ItemIndex + 1]);
 end;
 
 { A recent-files row of the app menu's dropdown: AIndex indexes RecentItems, not the menu. }
@@ -954,6 +1034,7 @@ begin
   // built-in pack ('default'+'system' + every structural skin), so this ribbon example needs no
   // themes/ folder. It DEFAULTS to Office; the combo lists the whole pack, plus any extra theme
   // FILE dropped in themes/ during development (e.g. the green image demo).
+  Ribbon.FileTabCaption := rsFileTab;           // see rsFileTab: not reachable from the .lfm
   TyRegisterBuiltinThemes;
   names := TyBuiltinThemeNames;                 // default, system, office, xp, win11, … (compiled in)
   for i := 0 to High(names) do
@@ -972,7 +1053,7 @@ begin
   TyDefaultController.ThemeName := 'office';   // default to Office
 
   // Office-app accent presets (item order MUST match ACCENT_HEX in AccentComboChange).
-  AccentCombo.Items.Add('Follow theme');
+  AccentCombo.Items.Add(rsAccentFollow);
   AccentCombo.Items.Add('Word Blue');
   AccentCombo.Items.Add('Excel Green');
   AccentCombo.Items.Add('PowerPoint Orange');
@@ -1029,8 +1110,8 @@ begin
   FStatus.Panels.Add.Width := 100;
   FStatus.Panels.Add.Width := 140;   // 3 = the gallery's last pick (GalleryStyleSelect)
   FStatus.Panels.Add.Width := 180;   // 4 = a standing reminder that KeyTips are on
-  FStatus.Panels[3].Text := 'Style 1';
-  FStatus.Panels[4].Text := 'Press Alt for KeyTips';
+  FStatus.Panels[3].Text := rsStatStyle1;
+  FStatus.Panels[4].Text := rsStatKeyTips;
 
   // The ribbon, its four pages and their groups all stream from umain.lfm — including the
   // contextual "Picture tools" page (Context='pic', hidden until DoToggleContext shows it).
@@ -1046,18 +1127,18 @@ begin
   BuildHomeTab;
   BuildInsertTab;
   BuildViewTab;
-  Big(GrpAdjust, 'Clip', 'crop', 6, 56, @DoNoop);   // the contextual page's only group
+  Big(GrpAdjust, rsCmdClip, 'crop', 6, 56, @DoNoop);   // the contextual page's only group
 
   // TTyRibbonAppMenu (View tab) composes its OWN dropdown out of two sources it never
   // mutates: the top-level items of Commands, then a separator, then one row per
   // RecentItems entry. That is the alternative to the FileTab+Backstage route above —
   // the same app, one big File view vs one small File menu.
   FFileMenu := TTyPopupMenu.Create(Self);
-  AddCommand(FFileMenu, 'New', @DoNew);
-  AddCommand(FFileMenu, 'Open...', @DoOpen);
-  AddCommand(FFileMenu, 'Save', @DoSave);
+  AddCommand(FFileMenu, rsBsNew, @DoNew);
+  AddCommand(FFileMenu, rsMenuOpenDots, @DoOpen);
+  AddCommand(FFileMenu, rsBsSave, @DoSave);
   AddCommand(FFileMenu, '-', nil);          // a separator row inside the commands block
-  AddCommand(FFileMenu, 'Exit', @DoQuit);
+  AddCommand(FFileMenu, rsMenuExit, @DoQuit);
   AppMenu.Commands := FFileMenu;
   AppMenu.RecentItems := FRecent;           // re-assigned by AddRecent (RecentItems copies)
 
@@ -1068,11 +1149,11 @@ begin
   FQat.Parent := Bar;
   FQat.SetBounds(Bar.ClientWidth, 3, 5 * 28 + 8, 28);   // 5 flush buttons + tiny slack; Left set by LayoutQat
   // Two-line hints (title + description) render as Office-style ScreenTips.
-  AddQat(FQat, 'New'#10'Create a new blank document', 'new',  @DoNew);
-  AddQat(FQat, 'Open'#10'Open an existing text file', 'open', @DoOpen);
-  AddQat(FQat, 'Save'#10'Write the current document to disk', 'save', @DoSave);
-  AddQat(FQat, 'Undo'#10'Undo the last action', 'undo', @DoUndo);
-  AddQat(FQat, 'Redo'#10'Redo the undone action', 'redo', @DoRedo);
+  AddQat(FQat, rsQatNew, 'new',  @DoNew);
+  AddQat(FQat, rsQatOpen, 'open', @DoOpen);
+  AddQat(FQat, rsQatSave, 'save', @DoSave);
+  AddQat(FQat, rsQatUndo, 'undo', @DoUndo);
+  AddQat(FQat, rsQatRedo, 'redo', @DoRedo);
 
   // The document tab area fills the middle (alClient).
   FDocPages := TTyPageControl.Create(Self);

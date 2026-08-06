@@ -1,10 +1,10 @@
 object MainForm: TMainForm
   Left = 0
-  Height = 320
+  Height = 340
   Top = 0
   Width = 520
   Caption = 'TTyComboBox example'
-  ClientHeight = 320
+  ClientHeight = 340
   ClientWidth = 520
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
@@ -12,7 +12,7 @@ object MainForm: TMainForm
   TitleBar = Bar
   object Surface: TTyFormSurface
     Left = 0
-    Height = 320
+    Height = 340
     Top = 0
     Width = 520
     Align = alClient
@@ -44,15 +44,16 @@ object MainForm: TMainForm
     end
     object LblList: TTyLabel
       Left = 24
-      Height = 20
+      Height = 40
       Top = 52
       Width = 224
+      WordWrap = True
       Caption = 'Read-only dropdown (Sorted, keyboard type-ahead):'
     end
     object ListCombo: TTyComboBox
       Left = 24
       Height = 26
-      Top = 76
+      Top = 96
       Width = 224
       Style = csDropDownList
       Sorted = True
@@ -64,15 +65,16 @@ object MainForm: TMainForm
     end
     object LblEdit: TTyLabel
       Left = 272
-      Height = 20
+      Height = 40
       Top = 52
       Width = 224
+      WordWrap = True
       Caption = 'Editable (Text preset, prefix autocomplete / uppercase / max length 10):'
     end
     object EditCombo: TTyComboBox
       Left = 272
       Height = 26
-      Top = 76
+      Top = 96
       Width = 224
       Style = csDropDown
       DropDownCount = 6
@@ -97,21 +99,21 @@ object MainForm: TMainForm
     object LblStatus: TTyLabel
       Left = 24
       Height = 22
-      Top = 140
+      Top = 160
       Width = 472
       Caption = 'Event state: (awaiting action, try expanding or typing a prefix)'
     end
     object LblApi: TTyLabel
       Left = 24
       Height = 20
-      Top = 180
+      Top = 200
       Width = 472
       Caption = 'Programmatic DropDown / CloseUp — watch the same events fire:'
     end
     object BtnToggleList: TTyButton
       Left = 24
       Height = 28
-      Top = 206
+      Top = 226
       Width = 160
       Caption = 'Open / close the list'
       OnClick = BtnToggleListClick

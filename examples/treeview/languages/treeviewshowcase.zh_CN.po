@@ -1,0 +1,116 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols-treeviewshowcase 2.99\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+# --- .lfm captions/text/hints (auto-generated, msgid=English source) ---
+
+#: tshowcaseform.caption
+msgid "TTyTreeView Feature Showcase"
+msgstr "TTyTreeView 功能展示"
+
+#: tshowcaseform.chromebar.caption
+msgid "TTyTreeView Feature Showcase"
+msgstr "TTyTreeView 功能展示"
+
+#: tshowcaseform.btnlight.caption
+msgid "Light"
+msgstr "浅色"
+
+#: tshowcaseform.btndark.caption
+msgid "Dark"
+msgstr "暗色"
+
+#: tshowcaseform.pgvirtual.caption
+msgid "Virtual (1M nodes)"
+msgstr "虚拟（100 万节点）"
+
+#: tshowcaseform.lblvirtual.caption
+msgid "Virtual engine: 1 000 000 root nodes; up to level 4 each has 10 children. All nodes initialised lazily (OnInitNode / OnInitChildren).  OnExpanding VETOES every level-3 expansion - try opening one; OnExpanded / OnCollapsed / OnNodeClick / OnNodeDblClick report below."
+msgstr "虚拟引擎：100 万个根节点；第 4 层以内每个节点各有 10 个子节点。所有节点都按需初始化（OnInitNode / OnInitChildren）。OnExpanding 会否决第 3 层的每一次展开 —— 试着打开一个看看；OnExpanded / OnCollapsed / OnNodeClick / OnNodeDblClick 的结果显示在下方。"
+
+#: tshowcaseform.btngotonode.caption
+msgid "Go to node 1000"
+msgstr "跳到第 1000 个节点"
+
+#: tshowcaseform.pgcol.caption
+msgid "Columns + Sort"
+msgstr "列与排序"
+
+#: tshowcaseform.lblcol.caption
+msgid "Data lives in the node (NodeDataSize = SizeOf(TRowRec)). Sort reads PRowRec(GetNodeData(Node)) — never Node^.Index — so column sorts are always stable.  Click a column header to sort.  Each Name shows an Explorer-style icon (folder / file / image / archive) via Images + OnGetImageIndex.  Double-click / F2 a Name to edit it (OnNewText writes the text into the node blob, so it survives re-sorts).  HotTrack lights the hovered row, hoHotTrack the hovered header section.  Modified fills the leftover width (hoAutoResize + AutoSizeIndex).  Name is pinned - no coDraggable, so it cannot be dragged out of first place - and Size is clamped to 60..140 px (MinWidth / MaxWidth) and right-aligns its caption.  Header clicks, resizes, reorders and Esc-cancelled renames all report below."
+msgstr "数据存在节点里（NodeDataSize = SizeOf(TRowRec)）。排序读的是 PRowRec(GetNodeData(Node))，绝不用 Node^.Index，所以按列排序始终稳定。点列头即可排序。每个“名称”通过 Images + OnGetImageIndex 显示资源管理器风格的图标（文件夹 / 文件 / 图片 / 压缩包）。双击或按 F2 可编辑名称（OnNewText 把文本写回节点数据，所以重新排序后依然保留）。HotTrack 高亮鼠标所在行，hoHotTrack 高亮鼠标所在列头。“修改时间”列填满剩余宽度（hoAutoResize + AutoSizeIndex）。“名称”列被钉住 —— 没有 coDraggable，拖不走第一列 —— “大小”列宽度被限制在 60..140 px（MinWidth / MaxWidth）并且标题右对齐。列头的点击、调宽、重排，以及被 Esc 取消的重命名，都会显示在下方。"
+
+#: tshowcaseform.btnexpandall.caption
+msgid "Expand all"
+msgstr "全部展开"
+
+#: tshowcaseform.btncollapseall.caption
+msgid "Collapse all"
+msgstr "全部折叠"
+
+#: tshowcaseform.pgcheck.caption
+msgid "Checkboxes"
+msgstr "复选框"
+
+#: tshowcaseform.lblcheck.caption
+msgid "Folders: tri-state checkboxes (auto-propagate). Music/Videos files: plain checkboxes. Games entries: radio buttons (one active at a time).  One row is locked: OnChecking refuses to let Music / cover.jpg toggle at all."
+msgstr "文件夹用三态复选框（自动向上下传递）。Music/Videos 里的文件用普通复选框。Games 里的条目用单选钮（同时只有一个选中）。有一行是锁住的：OnChecking 根本不让 Music / cover.jpg 切换。"
+
+#: tshowcaseform.pgmulti.caption
+msgid "Multi-Select"
+msgstr "多选"
+
+#: tshowcaseform.lblmulti.caption
+msgid "Multi-select + full-row highlight. Ctrl+click / Shift+click / Ctrl+A. OnSelectionChanged shows live count in the status bar.  Ctrl+Space toggles the focused row in or out of the selection; OnFocusChanged names it on the right.  Type a few characters to jump to a row (toIncrementalSearch) - OnIncrementalSearch turns the built-in prefix test into a substring match, and 1.5 s of idle clears the buffer (SearchTimeout).  The strip below drives ShowButtons / ShowTreeLines / ShowRoot / Indent live; DefaultNodeHeight is left unset, so rows follow the theme item-height token."
+msgstr "多选加整行高亮。Ctrl+点击 / Shift+点击 / Ctrl+A。OnSelectionChanged 在状态栏实时显示选中数量。Ctrl+空格把当前焦点行加入或移出选区；OnFocusChanged 在右边报出它的名字。敲几个字符可以跳到某一行（toIncrementalSearch）—— OnIncrementalSearch 把内置的前缀匹配换成了子串匹配，停手 1.5 秒后缓冲区清空（SearchTimeout）。下面这一条控件实时驱动 ShowButtons / ShowTreeLines / ShowRoot / Indent；DefaultNodeHeight 没有设置，所以行高跟随主题的 item-height 令牌。"
+
+#: tshowcaseform.chkbuttons.caption
+msgid "Expand buttons"
+msgstr "展开按钮"
+
+#: tshowcaseform.chklines.caption
+msgid "Tree lines"
+msgstr "树形连线"
+
+#: tshowcaseform.chkroot.caption
+msgid "Show root"
+msgstr "显示根节点"
+
+#: tshowcaseform.lblindent.caption
+msgid "Indent"
+msgstr "缩进"
+
+#: tshowcaseform.pgdrag.caption
+msgid "Drag to Move"
+msgstr "拖动移动"
+
+#: tshowcaseform.lbldrag.caption
+msgid "Drag to move: drag a node ABOVE / ONTO / BELOW another to reorder or reparent it (toNodeDrag). Each node keeps its name when moved.  Reordering is free, but OnDragOver refuses dropping ONTO a leaf.  Double-click no longer expands here (ToggleOnDblClick = False).  Delete or Clear rows and OnFreeNode counts what it releases; empty the tree and the control paints its own centred EmptyListMessage."
+msgstr "拖动移动：把一个节点拖到另一个节点的上方 / 上面 / 下方，就能重排或换父节点（toNodeDrag）。节点移动后名字不变。重排是自由的，但 OnDragOver 拒绝把节点丢到叶子节点“上面”。这里双击不再展开（ToggleOnDblClick = False）。删除或清空行时，OnFreeNode 会统计它释放了多少；把树清空，控件会自己画出居中的 EmptyListMessage。"
+
+#: tshowcaseform.btndragdelete.caption
+msgid "Delete selected"
+msgstr "删除选中"
+
+#: tshowcaseform.btndragclear.caption
+msgid "Clear"
+msgstr "清空"
+
+#: tshowcaseform.btndragrebuild.caption
+msgid "Rebuild"
+msgstr "重建"
+
+#: tshowcaseform.pgownerdraw.caption
+msgid "Owner-draw"
+msgstr "自绘"
+
+#: tshowcaseform.lbldraw.caption
+msgid "toOwnerDraw + OnDrawNode replaces the cell content: every caption and progress pill here is drawn by the example, over the theme row background, expand button and tree lines.  OnAfterCellPaint runs for EVERY cell (with or without the option) and stamps the NEW badge on each fifth build.  Row heights come from OnMeasureItem (toVariableNodeHeight) - 40 px builds, 22 px stages.  Click a row and OnChange reports it below."
+msgstr "toOwnerDraw + OnDrawNode 接管单元格内容：这里的每一段文字和每一个进度条都是示例自己画的，画在主题提供的行背景、展开按钮和树形连线之上。OnAfterCellPaint 对每一个单元格都会执行（不管有没有开这个选项），并给每第 5 次构建盖上 NEW 徽标。行高来自 OnMeasureItem（toVariableNodeHeight）—— 构建行 40 px，阶段行 22 px。点一行，OnChange 会在下方报出来。"

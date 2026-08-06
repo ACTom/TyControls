@@ -883,7 +883,7 @@ object MainForm: TMainForm
             Left = 1034
             Height = 22
             Top = 8
-            Width = 140
+            Width = 130
             Caption = 'Fill: weekdays'
             OnChange = ChkDataChange
           end
@@ -1037,7 +1037,7 @@ object MainForm: TMainForm
             OnClick = BtnEvImportCsvClick
           end
           object ChkEvRowMove: TTyCheckBox
-            Left = 946
+            Left = 938
             Height = 22
             Top = 8
             Width = 118
@@ -1045,7 +1045,7 @@ object MainForm: TMainForm
             OnChange = ChkEvChange
           end
           object ChkEvEditorProp: TTyCheckBox
-            Left = 1070
+            Left = 1060
             Height = 22
             Top = 8
             Width = 108
@@ -1764,7 +1764,7 @@ object MainForm: TMainForm
             Left = 282
             Height = 20
             Top = 10
-            Width = 892
+            Width = 886
             Caption = 'TTyDrawGrid stores nothing at all: every cell comes from OnGetCellText, so a million rows cost no memory'
           end
         end

@@ -122,3 +122,258 @@ msgstr "图片工具"
 #: tmainform.grpadjust.caption
 msgid "Adjust"
 msgstr "调整"
+
+# --- resourcestrings (umain.pas): the ribbon's groups, backstage, ScreenTips, app menu
+#     and status bar are built in code, out of the .lfm translator's reach ---
+
+#: umain.rscmdfind
+msgid "Find"
+msgstr "查找"
+
+#: umain.rscmdreplace
+msgid "Replace"
+msgstr "替换"
+
+#: umain.rscmdselectall
+msgid "Select all"
+msgstr "全选"
+
+#: umain.rsalignleft
+msgid "Left"
+msgstr "左对齐"
+
+#: umain.rsaligncenter
+msgid "Medium"
+msgstr "居中"
+
+#: umain.rsalignright
+msgid "Right"
+msgstr "右对齐"
+
+#: umain.rsalignjustify
+msgid "both ends"
+msgstr "两端对齐"
+
+#: umain.rscmdbullets
+msgid "Bullet list"
+msgstr "项目符号"
+
+#: umain.rscmdnumbers
+msgid "No."
+msgstr "编号"
+
+#: umain.rscmdpaste
+msgid "Paste"
+msgstr "粘贴"
+
+#: umain.rscmdcut
+msgid "Cut"
+msgstr "剪切"
+
+#: umain.rscmdcopy
+msgid "Copy"
+msgstr "复制"
+
+#: umain.rscmdpainter
+msgid "Format painter"
+msgstr "格式刷"
+
+#: umain.rscmdsymbol
+msgid "Symbol"
+msgstr "符号"
+
+#: umain.rscmddatetime
+msgid "Date-time"
+msgstr "日期时间"
+
+#: umain.rscmdgrid
+msgid "Grid"
+msgstr "表格"
+
+#: umain.rscmdpicture
+msgid "Picture"
+msgstr "图片"
+
+#: umain.rscmdnewwindow
+msgid "New window"
+msgstr "新建窗口"
+
+#: umain.rscmdarrange
+msgid "Side by side"
+msgstr "并排查看"
+
+#: umain.rscmdzoomin
+msgid "Zoom in"
+msgstr "放大"
+
+#: umain.rscmdzoomout
+msgid "Zoom out"
+msgstr "缩小"
+
+#: umain.rschkwordwrap
+msgid "Word wrap"
+msgstr "自动换行"
+
+#: umain.rschkstatusbar
+msgid "Status bar"
+msgstr "状态栏"
+
+#: umain.rschkcontext
+msgid "Picture tools (contextual)"
+msgstr "图片工具（上下文选项卡）"
+
+#: umain.rscmdclip
+msgid "Clip"
+msgstr "裁剪"
+
+#: umain.rsbsinformation
+msgid "Information"
+msgstr "信息"
+
+#: umain.rsbsnew
+msgid "New"
+msgstr "新建"
+
+#: umain.rsbsopen
+msgid "Open"
+msgstr "打开"
+
+#: umain.rsbssave
+msgid "Save"
+msgstr "保存"
+
+#: umain.rsbssaveas
+msgid "Save as"
+msgstr "另存为"
+
+#: umain.rsbsclose
+msgid "Close"
+msgstr "关闭"
+
+#: umain.rsbsabout
+msgid "About"
+msgstr "关于"
+
+#: umain.rsbsoption
+msgid "Option"
+msgstr "选项"
+
+#: umain.rsbssignout
+msgid "Sign out"
+msgstr "注销"
+
+#: umain.rsbsblankdoc
+msgid "Blank document"
+msgstr "空白文档"
+
+#: umain.rsbsbrowse
+msgid "Browse…"
+msgstr "浏览…"
+
+#: umain.rsmenuopendots
+msgid "Open..."
+msgstr "打开..."
+
+#: umain.rsmenuexit
+msgid "Exit"
+msgstr "退出"
+
+#: umain.rsstatnotsaved
+msgid "Not saved"
+msgstr "未保存"
+
+#: umain.rsstatready
+msgid "Ready"
+msgstr "就绪"
+
+#: umain.rsstatzoom
+msgid "Zoom 100%"
+msgstr "缩放 100%"
+
+#: umain.rsstatkeytips
+msgid "Press Alt for KeyTips"
+msgstr "按 Alt 显示 KeyTips"
+
+#: umain.rsstatstylen
+msgid "Style %d"
+msgstr "样式 %d"
+
+#: umain.rsstatstyle1
+msgid "Style 1"
+msgstr "样式 1"
+
+#: umain.rsstatcharn
+msgid "Char %d"
+msgstr "字符 %d"
+
+#: umain.rsstatfiletab
+msgid "File tab clicked - backstage opening"
+msgstr "File 标签被点击 —— 正在打开后台视图"
+
+#: umain.rsinfonodoc
+msgid "(no open document)"
+msgstr "（没有打开的文档）"
+
+#: umain.rsinfonotsavedyet
+msgid "(not saved yet)"
+msgstr "（尚未保存）"
+
+#: umain.rsinfopath
+msgid "Path:"
+msgstr "路径："
+
+#: umain.rsinfocharcount
+msgid "Char count: %d"
+msgstr "字符数：%d"
+
+#: umain.rsinforowcount
+msgid "Row count: %d"
+msgstr "行数：%d"
+
+#: umain.rsnewdocn
+msgid "New document %d"
+msgstr "新建文档 %d"
+
+#: umain.rspickaccent
+msgid "Choose accent colour"
+msgstr "选择强调色"
+
+#: umain.rstxtfilter
+msgid "Text file (*.txt)|*.txt|All files (*.*)|*.*"
+msgstr "文本文件 (*.txt)|*.txt|所有文件 (*.*)|*.*"
+
+#: umain.rsaccentfollow
+msgid "Follow theme"
+msgstr "跟随主题"
+
+#: umain.rsfiletab
+msgid "File"
+msgstr "文件"
+
+#: umain.rstippicturegroup
+msgid "This group has ShowCaption = False\nNo caption band, no dialog launcher - the content fills the whole group height."
+msgstr "这个组的 ShowCaption = False\n没有标题带、没有对话框启动器 —— 内容占满整个组的高度。"
+
+#: umain.rsqatnew
+msgid "New\nCreate a new blank document"
+msgstr "新建\n新建一个空白文档"
+
+#: umain.rsqatopen
+msgid "Open\nOpen an existing text file"
+msgstr "打开\n打开一个已有的文本文件"
+
+#: umain.rsqatsave
+msgid "Save\nWrite the current document to disk"
+msgstr "保存\n把当前文档写入磁盘"
+
+#: umain.rsqatundo
+msgid "Undo\nUndo the last action"
+msgstr "撤销\n撤销上一步操作"
+
+#: umain.rsqatredo
+msgid "Redo\nRedo the undone action"
+msgstr "重做\n重做被撤销的操作"
+
+#: umain.rsabouttext
+msgid "TyControls text editor\nRibbon overview example\n\nBuilt on ty-controls (BGRABitmap + .tycss themes)\nCross-platform vector icons · themed ScreenTips · built-in theme switching"
+msgstr "TyControls 文本编辑器\nRibbon 总览示例\n\n基于 ty-controls 构建（BGRABitmap + .tycss 主题）\n跨平台矢量图标 · 主题化 ScreenTip · 内置换肤"

@@ -276,6 +276,21 @@ function TyNaturalLineHeight(ACanvas: TCanvas): Integer;
 procedure TyMeasureTextBlock(const AText, AFontName: string;
   AFontSizeLogical, AWeight, APPI, AWrapWidthPx, ALineHeightLogical: Integer;
   out AWidthPx, AHeightPx: Integer);
+{ The width the RENDERER reports for one line of text -- the exact number DrawTextLine's
+  ellipsis test compares the content box against.
+
+  WHY THIS IS NOT TyMeasureTextBlock. That one measures on an LCL TBitmap.Canvas; the text
+  is DRAWN on a TBGRABitmap. They are two rasterisers and they round differently: measured
+  on this machine at the demo's own font, "Open" comes out 32 on both, but "New" is 26 by
+  the canvas and 27 by the renderer. One pixel is enough. A control that builds its size
+  floor from the canvas measurement alone sizes its content box to exactly the canvas
+  width, the renderer then finds itself one pixel over, and the caption the button JUST
+  SIZED ITSELF FOR is ellipsised -- the demo tool bar's AutoSize '&New' rendered "Ne...".
+  Which captions get hit is pure luck, which is why it looked like a translation bug.
+
+  So: any control whose size floor feeds a clip must take the LARGER of the two. }
+function TyMeasureRenderedTextWidth(const AText, AFontName: string;
+  AFontSizeLogical, AWeight, APPI: Integer): Integer;
 { The prefix the ellipsis fitter uses when it has narrowed the text to ACharCount CHARACTERS.
   A named function purely so the invariant is testable: the version this replaced shortened by
   one BYTE, which cuts a three-byte CJK character in half. The headless BGRA path silently
@@ -646,6 +661,42 @@ begin
   ABmp.FontQuality := fqFineAntialiasing;
   {$ENDIF}
   if AWeight >= 600 then ABmp.FontStyle := [fsBold] else ABmp.FontStyle := [];
+end;
+
+function TyMeasureRenderedTextWidth(const AText, AFontName: string;
+  AFontSizeLogical, AWeight, APPI: Integer): Integer;
+var
+  Meas: TBGRABitmap;
+  Lines: TStringList;
+  i, w: Integer;
+begin
+  Result := 0;
+  if AText = '' then Exit;
+  { A 1x1 surface: TextSize asks the font, never the pixels, so the bitmap never has to be
+    big enough to hold the string. Allocated per call for the same reason TyMeasureTextBlock
+    allocates its TBitmap per call -- a cached one would carry the last caller's font across
+    a theme switch, and this is a size-FLOOR path, not a per-frame paint path. }
+  Meas := TBGRABitmap.Create(1, 1);
+  Lines := TStringList.Create;
+  try
+    TyConfigureTextFont(Meas, AFontName, AFontSizeLogical, AWeight, APPI);
+    { PER LINE, then the widest -- exactly as TyMeasureTextBlock does it, and for the same
+      reason: DrawText renders an authored break as two lines, so the block is as wide as its
+      widest line, not as wide as the two of them laid end to end. Measuring the raw string
+      here reported '你好'+LineEnding+'你好' as 48 where one '你好' is 24, which is the width
+      of a button that draws two 24px lines. }
+    TySplitTextLines(AText, Lines);
+    for i := 0 to Lines.Count - 1 do
+    begin
+      if Lines[i] = '' then Continue;
+      w := Meas.TextSize(Lines[i]).cx;
+      if w > Result then Result := w;
+    end;
+  finally
+    Lines.Free;
+    Meas.Free;
+  end;
+  if Result < 0 then Result := 0;
 end;
 
 function TyColorToBGRA(c: TTyColor): TBGRAPixel;

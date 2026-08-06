@@ -742,7 +742,7 @@ var
   S: TTyStyleSet;
   Meas: TBitmap;
   disp: string;
-  mp: Integer;
+  mp, rw: Integer;
 begin
   S := CurrentStyle;
   // Measure the string DrawContent will draw: with ShowAccelChar on the '&' markers are
@@ -755,6 +755,16 @@ begin
     no break it returns exactly the single line this used to compute by hand. }
   TyMeasureTextBlock(disp, S.FontName, ResolveFontSize(S), S.FontWeight, APPI,
     0, TyLineHeight(ActiveController), AWidth, AHeight);
+  { ...and then ask the RENDERER, because the renderer is the one that decides whether the
+    caption fits. TyMeasureTextBlock measures on an LCL canvas; DrawTextLine ellipsises
+    against TBGRABitmap.TextSize, and the two round differently -- one pixel was enough to
+    make an AutoSize '&New' render "Ne..." while '&Open' beside it, where the two agreed
+    exactly, was fine. Taking the larger closes the gap in the only direction that matters:
+    a button is never sized smaller than the text it is about to draw. It cannot shrink any
+    existing button (Max never lowers AWidth) and it costs one font-metrics call on a size
+    floor, not on a paint. }
+  rw := TyMeasureRenderedTextWidth(disp, S.FontName, ResolveFontSize(S), S.FontWeight, APPI);
+  if rw > AWidth then AWidth := rw;
   if AWidth < 0 then AWidth := 0;
   if AHeight < 1 then AHeight := 1;
 end;

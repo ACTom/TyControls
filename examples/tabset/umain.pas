@@ -60,6 +60,39 @@ implementation
 
 {$R *.lfm}
 
+{ Everything the LFM translator cannot reach.
+
+  Tabs is a TStrings, not a TCaption property, so SetDefaultLang walks straight past it --
+  LCL's LFM translator only rewrites TTranslateString-typed properties, and a TStrings
+  collection is neither. The same goes for every status line built here with Format(). Both
+  come from resourcestrings instead, which SetDefaultLang DOES translate, and FormCreate
+  pushes the tab lists back into the two strips once. (antdesign_pro does the same thing for
+  its code-built Sider and breadcrumb.) }
+resourcestring
+  rsTabOverview   = '&Overview';
+  rsTabDetail     = '&Detail';
+  rsTabNotice     = '&Notice (locked)';
+  rsTabSettings   = '&Settings';
+  rsTabAbout      = '&About';
+  rsNTabOverview  = 'Overview';
+  rsNTabDetail    = 'Detail';
+  rsNTabNotice    = 'Notice';
+  rsNTabSettings  = 'Settings';
+  rsNTabAbout     = 'About';
+  rsNTabHistory   = 'History';
+  rsNTabExport    = 'Export';
+  rsNTabAdvanced  = 'Advanced';
+
+  rsCurrentTab    = 'Current tab: %s (TabIndex=%d)';
+  rsVetoedSelect  = 'The "Notice (locked)" tab was vetoed by OnChanging and cannot be selected.';
+  rsVetoedClose   = 'The "Overview" tab was vetoed by OnTabClose and will not close.';
+  rsClosingTab    = 'Closing tab: %s';
+  rsReordered     = 'Tabs reordered: %d → %d (current: %s)';
+  rsNewTabName    = 'Tab %d';
+  rsAddedTab      = 'Added a tab through Tabs.Add — Tabs.Count is now %d. '
+                  + 'Keep going and the top strip overflows too.';
+  rsOverflowStrip = 'Overflow strip: %s (TabIndex=%d) — selecting a tab scrolls it into view.';
+
 { Tab captions carry '&' mnemonics, which the strip strips before drawing. Do the same before
   quoting one back in a message, so the status line reads "Overview", not "&Overview". }
 function PlainCaption(const ACaption: string): string;
@@ -85,6 +118,15 @@ begin
   ThemeCombo.ItemIndex := ThemeCombo.Items.IndexOf('default');
   TyDefaultController.ThemeName := 'default';
   ApplyChromeTheme(TyDefaultController);   // theme the window chrome + background
+
+  { Refill both strips from the resourcestrings above: the .lfm's Tabs.Strings is what the
+    designer shows, but it arrives untranslated because it is a TStrings. Assigning the whole
+    list at once keeps TabIndex handling in one place -- the re-selection just below. }
+  TabStrip.Tabs.Text := rsTabOverview + LineEnding + rsTabDetail + LineEnding +
+    rsTabNotice + LineEnding + rsTabSettings + LineEnding + rsTabAbout;
+  NarrowStrip.Tabs.Text := rsNTabOverview + LineEnding + rsNTabDetail + LineEnding +
+    rsNTabNotice + LineEnding + rsNTabSettings + LineEnding + rsNTabAbout + LineEnding +
+    rsNTabHistory + LineEnding + rsNTabExport + LineEnding + rsNTabAdvanced;
 
   { A TabIndex set in the .lfm is parked while the form streams, so re-apply the designed
     selection now that loading is done -- otherwise both strips open with nothing active.
@@ -115,7 +157,7 @@ end;
 { Tab-switch callback: update the status label to show the current tab caption }
 procedure TMainForm.TabChanged(Sender: TObject);
 begin
-  LblStatus.Caption := Format('Current tab: %s (TabIndex=%d)',
+  LblStatus.Caption := Format(rsCurrentTab,
     [PlainCaption(TabStrip.TabCaption(TabStrip.TabIndex)), TabStrip.TabIndex]);
 end;
 
@@ -127,7 +169,7 @@ begin
   if ANewIndex = 2 then
   begin
     AllowChange := False;
-    LblStatus.Caption := 'The "Notice (locked)" tab was vetoed by OnChanging and cannot be selected.';
+    LblStatus.Caption := rsVetoedSelect;
   end;
 end;
 
@@ -140,16 +182,16 @@ begin
   if AIndex = 0 then
   begin
     AllowClose := False;
-    LblStatus.Caption := 'The "Overview" tab was vetoed by OnTabClose and will not close.';
+    LblStatus.Caption := rsVetoedClose;
   end
   else
-    LblStatus.Caption := Format('Closing tab: %s', [PlainCaption(TabStrip.TabCaption(AIndex))]);
+    LblStatus.Caption := Format(rsClosingTab, [PlainCaption(TabStrip.TabCaption(AIndex))]);
 end;
 
 { Drag-reorder commit callback: fires once after a clean drag gesture completes }
 procedure TMainForm.TabReordered(Sender: TObject; AFromIndex, AToIndex: Integer);
 begin
-  LblStatus.Caption := Format('Tabs reordered: %d → %d (current: %s)',
+  LblStatus.Caption := Format(rsReordered,
     [AFromIndex, AToIndex, PlainCaption(TabStrip.TabCaption(TabStrip.TabIndex))]);
 end;
 
@@ -158,9 +200,8 @@ end;
   back once TabsClosable has let the user close tabs away. }
 procedure TMainForm.BtnAddClick(Sender: TObject);
 begin
-  TabStrip.Tabs.Add(Format('Tab %d', [TabStrip.Tabs.Count + 1]));
-  LblStatus.Caption := Format('Added a tab through Tabs.Add — Tabs.Count is now %d. '
-    + 'Keep going and the top strip overflows too.', [TabStrip.Tabs.Count]);
+  TabStrip.Tabs.Add(Format(rsNewTabName, [TabStrip.Tabs.Count + 1]));
+  LblStatus.Caption := Format(rsAddedTab, [TabStrip.Tabs.Count]);
 end;
 
 { The narrow strip: eight tabs in 200px, so the header overflows and the prev/next arrows and
@@ -168,7 +209,7 @@ end;
   with Ctrl+Tab / End while it is off-screen scrolls itself back into the visible band. }
 procedure TMainForm.NarrowTabChanged(Sender: TObject);
 begin
-  LblStatus.Caption := Format('Overflow strip: %s (TabIndex=%d) — selecting a tab scrolls it into view.',
+  LblStatus.Caption := Format(rsOverflowStrip,
     [NarrowStrip.TabCaption(NarrowStrip.TabIndex), NarrowStrip.TabIndex]);
 end;
 

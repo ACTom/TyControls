@@ -46,7 +46,7 @@ object MainForm: TMainForm
       Left = 16
       Height = 190
       Top = 50
-      Width = 340
+      Width = 276
       Caption = 'User info (Caption left-aligned)'
       Alignment = taLeftJustify
       object NameLabel: TTyLabel
@@ -60,7 +60,7 @@ object MainForm: TMainForm
         Left = 80
         Height = 26
         Top = 40
-        Width = 240
+        Width = 180
       end
       object GreetBtn: TTyButton
         Left = 80
@@ -75,22 +75,24 @@ object MainForm: TMainForm
         Left = 12
         Height = 52
         Top = 124
-        Width = 316
+        Width = 252
         Caption = 'Nested sub-panel (centered)'
         Alignment = taCenter
       end
     end
     object RightPanel: TTyPanel
-      Left = 372
+      Left = 308
       Height = 190
       Top = 50
-      Width = 172
+      Width = 220
       Caption = 'Description'
       object DescLabel: TTyLabel
         Left = 12
-        Height = 140
-        Top = 40
-        Width = 148
+        Height = 76
+        Top = 104
+        Width = 196
+        Layout = tlTop
+        WordWrap = True
         Caption = 'The panel''s background, border and corners all come from the theme''s TyPanel rule, no hand-written colours.'
       end
     end
@@ -98,36 +100,36 @@ object MainForm: TMainForm
       Left = 16
       Height = 24
       Top = 252
-      Width = 528
+      Width = 512
       Caption = 'Click the "Say hello" button…'
     end
     object AlignHeader: TTyLabel
       Left = 16
       Height = 24
       Top = 288
-      Width = 528
+      Width = 512
       Caption = 'Alignment — watch the caption slide from edge to edge across these three'
     end
     object AlignLeftPanel: TTyPanel
       Left = 16
       Height = 40
       Top = 316
-      Width = 168
+      Width = 160
       Caption = 'taLeftJustify'
       Alignment = taLeftJustify
     end
     object AlignCenterPanel: TTyPanel
-      Left = 196
+      Left = 192
       Height = 40
       Top = 316
-      Width = 168
+      Width = 160
       Caption = 'taCenter (default)'
     end
     object AlignRightPanel: TTyPanel
-      Left = 376
+      Left = 368
       Height = 40
       Top = 316
-      Width = 168
+      Width = 160
       Caption = 'taRightJustify'
       Alignment = taRightJustify
     end
@@ -135,36 +137,36 @@ object MainForm: TMainForm
       Left = 16
       Height = 24
       Top = 368
-      Width = 528
+      Width = 512
       Caption = 'StyleOverride — only the left panel is restyled; switch skins, both still follow'
     end
     object AccentPanel: TTyPanel
       Left = 16
       Height = 52
       Top = 396
-      Width = 260
+      Width = 252
       Caption = 'Accent tint, thicker edge, 12px corners'
       StyleOverride = 'background: alpha(var(--accent), 0.14); border-color: var(--accent); border-width: 2px; border-radius: 12px;'
     end
     object PlainPanel: TTyPanel
-      Left = 284
+      Left = 276
       Height = 52
       Top = 396
-      Width = 260
+      Width = 252
       Caption = 'No override — plain theme values'
     end
     object InteractHeader: TTyLabel
       Left = 16
       Height = 24
       Top = 460
-      Width = 528
+      Width = 512
       Caption = 'A panel is a real control — hover it for a Hint, click it, or switch it off'
     end
     object HotPanel: TTyPanel
       Left = 16
       Height = 52
       Top = 488
-      Width = 340
+      Width = 276
       Cursor = crHandPoint
       Caption = 'Hover and click me'
       Hint = 'ShowHint = True: panels carry hints like any other control'
@@ -174,10 +176,10 @@ object MainForm: TMainForm
       OnMouseLeave = HotPanelMouseLeave
     end
     object DisabledPanel: TTyPanel
-      Left = 372
+      Left = 308
       Height = 52
       Top = 488
-      Width = 172
+      Width = 220
       Caption = 'Enabled = False'
       Enabled = False
     end
@@ -185,7 +187,7 @@ object MainForm: TMainForm
       Left = 16
       Height = 24
       Top = 552
-      Width = 528
+      Width = 512
       Caption = 'Panel mouse events show up here…'
     end
     object BottomPanel: TTyPanel

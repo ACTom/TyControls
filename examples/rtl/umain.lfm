@@ -54,7 +54,7 @@ object MainForm: TMainForm
     end
     object HeadPanel: TTyPanel
       Left = 0
-      Height = 92
+      Height = 106
       Top = 64
       Width = 1200
       Align = alTop

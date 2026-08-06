@@ -65,12 +65,12 @@ object MainForm: TMainForm
           Left = 0
           Height = 104
           Top = 0
-          Width = 150
+          Width = 186
           Caption = 'Clipboard'
           ShowDialogLauncher = True
         end
         object GrpFont: TTyRibbonGroup
-          Left = 150
+          Left = 186
           Height = 104
           Top = 0
           Width = 240
@@ -78,15 +78,15 @@ object MainForm: TMainForm
           ShowDialogLauncher = True
         end
         object GrpParagraph: TTyRibbonGroup
-          Left = 390
+          Left = 426
           Height = 104
           Top = 0
-          Width = 150
+          Width = 312
           Caption = 'Paragraph'
           ShowDialogLauncher = True
         end
         object GrpEdit: TTyRibbonGroup
-          Left = 540
+          Left = 738
           Height = 104
           Top = 0
           Width = 96

@@ -32,8 +32,8 @@ msgid "Tabs is a live TStrings: closed tabs come back."
 msgstr "Tabs 是实时 TStrings：关掉的标签能加回来。"
 
 #: tmainform.lblstatus.caption
-msgid "Current tab: Overview'#13#10'Tip: click to switch · drag to reorder · click × to close · the \"Notice (locked)\" tab cannot be selected"
-msgstr "当前标签：Overview'#13#10'提示：点击切换 · 拖动重排 · 点 × 关闭 · \"Notice (locked)\" 标签不可选中"
+msgid "Current tab: Overview\nTip: click to switch · drag to reorder · click × to close · the \"Notice (locked)\" tab cannot be selected"
+msgstr "当前标签：总览\n提示：点击切换 · 拖动重排 · 点 × 关闭 · “通知（锁定）”标签不可选中"
 
 #: tmainform.lblnarrow.caption
 msgid "Eight tabs in 200 px: click the arrows at each end, or roll the wheel over the strip."
@@ -50,3 +50,90 @@ msgstr "TTyTabSet  · TyControls"
 #: tmainform.div1.caption
 msgid "Header overflow · TabHeight unset"
 msgstr "标签头溢出 · TabHeight 未设"
+
+# --- resourcestrings (umain.pas): the tab captions live in a TStrings and every status line
+#     is built with Format(), so neither is reachable by the .lfm translator ---
+
+#: umain.rstaboverview
+msgid "&Overview"
+msgstr "总览(&O)"
+
+#: umain.rstabdetail
+msgid "&Detail"
+msgstr "明细(&D)"
+
+#: umain.rstabnotice
+msgid "&Notice (locked)"
+msgstr "通知（锁定）(&N)"
+
+#: umain.rstabsettings
+msgid "&Settings"
+msgstr "设置(&S)"
+
+#: umain.rstababout
+msgid "&About"
+msgstr "关于(&A)"
+
+#: umain.rsntaboverview
+msgid "Overview"
+msgstr "总览"
+
+#: umain.rsntabdetail
+msgid "Detail"
+msgstr "明细"
+
+#: umain.rsntabnotice
+msgid "Notice"
+msgstr "通知"
+
+#: umain.rsntabsettings
+msgid "Settings"
+msgstr "设置"
+
+#: umain.rsntababout
+msgid "About"
+msgstr "关于"
+
+#: umain.rsntabhistory
+msgid "History"
+msgstr "历史"
+
+#: umain.rsntabexport
+msgid "Export"
+msgstr "导出"
+
+#: umain.rsntabadvanced
+msgid "Advanced"
+msgstr "高级"
+
+#: umain.rscurrenttab
+msgid "Current tab: %s (TabIndex=%d)"
+msgstr "当前标签：%s（TabIndex=%d）"
+
+#: umain.rsvetoedselect
+msgid "The \"Notice (locked)\" tab was vetoed by OnChanging and cannot be selected."
+msgstr "“通知（锁定）”标签被 OnChanging 否决，无法选中。"
+
+#: umain.rsvetoedclose
+msgid "The \"Overview\" tab was vetoed by OnTabClose and will not close."
+msgstr "“总览”标签被 OnTabClose 否决，不会关闭。"
+
+#: umain.rsclosingtab
+msgid "Closing tab: %s"
+msgstr "正在关闭标签：%s"
+
+#: umain.rsreordered
+msgid "Tabs reordered: %d → %d (current: %s)"
+msgstr "标签已重排：%d → %d（当前：%s）"
+
+#: umain.rsnewtabname
+msgid "Tab %d"
+msgstr "标签 %d"
+
+#: umain.rsaddedtab
+msgid "Added a tab through Tabs.Add — Tabs.Count is now %d. Keep going and the top strip overflows too."
+msgstr "通过 Tabs.Add 添加了一个标签 —— Tabs.Count 现在是 %d。继续加下去，上面那条标签栏也会溢出。"
+
+#: umain.rsoverflowstrip
+msgid "Overflow strip: %s (TabIndex=%d) — selecting a tab scrolls it into view."
+msgstr "溢出标签栏：%s（TabIndex=%d）—— 选中某个标签会把它滚动到可见范围内。"

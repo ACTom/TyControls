@@ -522,10 +522,10 @@ object DemoMainForm: TDemoMainForm
         Style = csDropDown
       end
       object TabSet1: TTyTabSet
-        Left = 464
+        Left = 460
         Height = 28
         Top = 320
-        Width = 156
+        Width = 144
         TabOrder = 16
         Controller = TyController
         Tabs.Strings = (
@@ -543,10 +543,10 @@ object DemoMainForm: TDemoMainForm
         Controller = TyController
       end
       object GroupBox1: TTyGroupBox
-        Left = 460
+        Left = 452
         Height = 110
         Top = 207
-        Width = 160
+        Width = 152
         TabOrder = 8
         OnClick = GroupBox1Click
         Controller = TyController

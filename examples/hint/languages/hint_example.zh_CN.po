@@ -44,8 +44,8 @@ msgid "Saved"
 msgstr "已保存"
 
 #: tmainform.btndel.hint
-msgid "Delete selected items'#13#10'This action cannot be undone"
-msgstr "删除选中的项目'#13#10'此操作无法撤销"
+msgid "Delete selected items\nThis action cannot be undone"
+msgstr "删除选中的项目\n此操作无法撤销"
 
 #: tmainform.lblhintnote.caption
 msgid "Switch \"Themed hints\" off and hover Save: the OS tooltip returns."

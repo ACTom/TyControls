@@ -21,7 +21,7 @@ msgstr "暗色"
 
 #: tmainform.lbldark.caption
 msgid "Dark mode"
-msgstr "深色模式："
+msgstr "暗色模式"
 
 #: tmainform.lblnotify.caption
 msgid "Receive notifications:"

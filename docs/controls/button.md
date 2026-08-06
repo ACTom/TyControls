@@ -38,7 +38,7 @@ uses tyControls.Button;
 | `ShowBadge` | `Boolean` | `False` | **（v1.11 新增）** 角标总开关。详见第 9 节。 |
 | `BadgeValue` | `Integer` | `0` | **（v1.11 新增）** 角标数值；仅数字，`>99` 显示 `99+`。 |
 | `BadgePosition` | `TTyBadgePosition` | `bpBottomRight` | **（v1.11 新增）** 角标所在角：`bpTopLeft / bpTopRight / bpBottomLeft / bpBottomRight`。窗口控件不能越界,角标内嵌于按钮内并稍作内缩。 |
-| `AutoSize` | `Boolean` | `False` | 打开后按钮**横向**加宽到刚好容下 `Caption` + 主题内边距，于是标题变长（换了更长的译文、更大的密度、更粗的字体）时按钮跟着变长，而不是把文字省略掉。**只管宽度不管高度**——高度属于排布这一行的那一方，这正是它放进 [`TTyToolBar`](toolbar.md) 也安全的原因。`Caption` 改变、主题切换时都会重新测量。 |
+| `AutoSize` | `Boolean` | `False` | 打开后按钮**横向**加宽到刚好容下 `Caption` + 主题内边距，于是标题变长（换了更长的译文、更大的密度、更粗的字体）时按钮跟着变长，而不是把文字省略掉。**只管宽度不管高度**——高度属于排布这一行的那一方，这正是它放进 [`TTyToolBar`](toolbar.md) 也安全的原因。`Caption` 改变、主题切换时都会重新测量。测量取 LCL 画布与 BGRA 渲染器两者的**较大值**：两个光栅器的舍入能差 1px，只按前者定宽会让按钮把自己刚量好的标题省略掉（`&New` 曾被画成 `Ne…`，旁边的 `&Open` 因为两者恰好相等而幸免）。 |
 | `Enabled` | `Boolean` | `True` | 为 `False` 时触发 `:disabled` 主题状态，控件不响应交互 |
 | `Font` | `TFont` | 系统默认 | 传递 PPI 给渲染器；字体族与大小优先由主题控制 |
 | `Align` | `TAlign` | `alNone` | 父容器内的停靠方式 |

@@ -2,10 +2,10 @@ object MainForm: TMainForm
   Left = 0
   Height = 750
   Top = 0
-  Width = 480
+  Width = 560
   Caption = 'TTyLabel example'
   ClientHeight = 750
-  ClientWidth = 480
+  ClientWidth = 560
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
@@ -14,18 +14,18 @@ object MainForm: TMainForm
     Left = 0
     Height = 750
     Top = 0
-    Width = 480
+    Width = 560
     Align = alClient
     object Bar: TTyTitleBar
       Left = 0
       Height = 34
       Top = 0
-      Width = 480
+      Width = 560
       Align = alTop
       Caption = 'TTyLabel  ·  TyControls'
       TitleAlignment = taLeftJustify
       object DarkSwitch: TTyToggleSwitch
-        Left = 132
+        Left = 212
         Height = 24
         Top = 5
         Width = 74
@@ -34,7 +34,7 @@ object MainForm: TMainForm
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
-        Left = 214
+        Left = 294
         Height = 26
         Top = 4
         Width = 120
@@ -46,7 +46,7 @@ object MainForm: TMainForm
       Left = 20
       Height = 26
       Top = 46
-      Width = 440
+      Width = 504
       Caption = 'Heading via StyleOverride (font-size 13px, weight 600)'
       StyleOverride = 'font-size: 13px; font-weight: 600;'
     end
@@ -54,7 +54,7 @@ object MainForm: TMainForm
       Left = 20
       Height = 22
       Top = 82
-      Width = 440
+      Width = 504
       AutoSize = False
       Alignment = taLeftJustify
       Caption = 'Left align (taLeftJustify)'
@@ -63,7 +63,7 @@ object MainForm: TMainForm
       Left = 20
       Height = 22
       Top = 108
-      Width = 440
+      Width = 504
       AutoSize = False
       Alignment = taCenter
       Caption = 'Center align (taCenter)'
@@ -72,7 +72,7 @@ object MainForm: TMainForm
       Left = 20
       Height = 22
       Top = 134
-      Width = 440
+      Width = 504
       AutoSize = False
       Alignment = taRightJustify
       Caption = 'Right align (taRightJustify)'
@@ -81,7 +81,7 @@ object MainForm: TMainForm
       Left = 20
       Height = 22
       Top = 166
-      Width = 440
+      Width = 504
       AutoSize = False
       Alignment = taCenter
       Transparent = False
@@ -99,7 +99,7 @@ object MainForm: TMainForm
       Left = 20
       Height = 60
       Top = 224
-      Width = 440
+      Width = 504
       AutoSize = False
       WordWrap = True
       Alignment = taLeftJustify
@@ -123,14 +123,14 @@ object MainForm: TMainForm
       Left = 20
       Height = 22
       Top = 344
-      Width = 440
+      Width = 504
       Caption = 'Layout: three 56px boxes, three vertical placements'
     end
     object LblLayoutTop: TTyLabel
       Left = 20
       Height = 56
       Top = 372
-      Width = 440
+      Width = 504
       AutoSize = False
       Transparent = False
       Layout = tlTop
@@ -141,7 +141,7 @@ object MainForm: TMainForm
       Left = 20
       Height = 56
       Top = 434
-      Width = 440
+      Width = 504
       AutoSize = False
       Transparent = False
       Layout = tlCenter
@@ -152,7 +152,7 @@ object MainForm: TMainForm
       Left = 20
       Height = 56
       Top = 496
-      Width = 440
+      Width = 504
       AutoSize = False
       Transparent = False
       Layout = tlBottom
@@ -163,14 +163,14 @@ object MainForm: TMainForm
       Left = 20
       Height = 22
       Top = 564
-      Width = 440
+      Width = 504
       Caption = 'AutoSize + WordWrap: the box keeps its width and grows its height'
     end
     object LblWrapAuto: TTyLabel
       Left = 20
       Height = 56
       Top = 592
-      Width = 440
+      Width = 504
       Anchors = [akTop, akLeft, akRight]
       AutoSize = True
       WordWrap = True
@@ -182,7 +182,7 @@ object MainForm: TMainForm
       Left = 20
       Height = 24
       Top = 668
-      Width = 440
+      Width = 504
       Cursor = crHandPoint
       Caption = 'Click me: TTyLabel fires OnClick like any other control'
       OnClick = LblClickClick
@@ -191,7 +191,7 @@ object MainForm: TMainForm
       Left = 20
       Height = 22
       Top = 704
-      Width = 440
+      Width = 504
       StyleOverride = 'color: var(--accent);'
       Caption = 'StyleOverride = color: var(--accent) - still theme-aware'
     end

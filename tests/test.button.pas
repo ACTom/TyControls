@@ -4,7 +4,8 @@ interface
 uses
   Classes, SysUtils, TypInfo, fpcunit, testregistry, Forms, Controls, Graphics, LCLType,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Base, tyControls.Button, tyControls.Types, tyControls.Controller, tyControls.ToolBar;
+  tyControls.Base, tyControls.Button, tyControls.Types, tyControls.Controller, tyControls.ToolBar,
+  tyControls.Painter, tyControls.Accel;
 type
   // Expose protected RenderTo for testing
   TTyButtonAccess = class(TTyButton)
@@ -29,6 +30,8 @@ type
     procedure CallPreferred(out AW, AH: Integer);
     // Expose the protected caption measurement the size floor is derived from.
     procedure CallMeasure(APPI: Integer; out AW, AH: Integer);
+    // Expose the resolved style + font size the SAME way DrawContent hands them to the painter.
+    procedure CallDrawFont(out AName: string; out ASize, AWeight: Integer);
   end;
 
   TButtonTest = class(TTestCase)
@@ -66,12 +69,23 @@ type
     procedure TestMinimumSurvivesAHeightPinningParent;
     procedure TestSmallerFontLowersTheMinimum;
     procedure TestAuthoredBreakMakesTwoLinesAndRaisesTheFloor;
+    procedure TestAutoSizedButtonNeverEllipsisesItsOwnCaption;
   end;
 implementation
 
 procedure TTyButtonAccess.CallMeasure(APPI: Integer; out AW, AH: Integer);
 begin
   MeasureCaption(APPI, AW, AH);
+end;
+
+procedure TTyButtonAccess.CallDrawFont(out AName: string; out ASize, AWeight: Integer);
+var
+  S: TTyStyleSet;
+begin
+  S := CurrentStyle;
+  AName := S.FontName;
+  ASize := ResolveFontSize(S);
+  AWeight := S.FontWeight;
 end;
 
 procedure TTyButtonAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -777,6 +791,56 @@ begin
     AssertEquals('two identical lines are no wider', w1, w2);
     AssertEquals('and exactly twice as tall', h1 * 2, h2);
     AssertTrue('the floor grew with them', B.Constraints.MinHeight >= h2);
+  finally
+    F.Free;
+  end;
+end;
+
+{ A button that sized itself must be able to DRAW what it sized itself for.
+
+  It could not, and the bug was invisible until you read one caption in one language. The size
+  floor came from TyMeasureTextBlock, which measures on an LCL TBitmap.Canvas; the ellipsis
+  fitter in TTyPainter.DrawTextLine compares against TBGRABitmap.TextSize. Two rasterisers,
+  two roundings. Where they agreed the caption drew fine; where the renderer came out one
+  pixel wider, an AutoSize button ellipsised the caption it had JUST measured -- the demo
+  tool bar's '&New' rendered "Ne...", while '&Open' right beside it was untouched because for
+  that string the two happened to agree exactly. Which captions get hit is luck.
+
+  So the invariant is not "New is 39 px wide". It is: whatever MeasureCaption answers is at
+  least what the renderer will ask for. AMnemonic captions are in the list on purpose -- the
+  '&' is stripped before both measurements, so the two must still agree afterwards.
+
+  PROBE AT THE EDGE, not the middle: these are short Latin words, the case where the two
+  measurements land within a pixel or two of each other. A long caption has slack and would
+  pass with the bug in place. }
+procedure TButtonTest.TestAutoSizedButtonNeverEllipsisesItsOwnCaption;
+const
+  CAPTIONS: array[0..7] of string =
+    ('&New', '&Open', 'New', 'Open', 'Reset', 'Accent', 'Density', 'Light');
+var
+  F: TForm;
+  B: TTyButtonAccess;
+  i, mw, mh, rendered: Integer;
+  fname, disp: string;
+  fsize, fweight, mp: Integer;
+begin
+  F := TForm.CreateNew(nil);
+  try
+    B := TTyButtonAccess.Create(F);
+    B.Parent := F;
+    B.Font.PixelsPerInch := 96;
+    for i := Low(CAPTIONS) to High(CAPTIONS) do
+    begin
+      B.Caption := CAPTIONS[i];
+      B.CallMeasure(96, mw, mh);
+      B.CallDrawFont(fname, fsize, fweight);
+      { The '&' never reaches either measurement -- ResolveCaptionText strips it before
+        MeasureCaption measures and before DrawContent draws. Strip it here the same way. }
+      TyParseMnemonic(CAPTIONS[i], disp, mp);
+      rendered := TyMeasureRenderedTextWidth(disp, fname, fsize, fweight, 96);
+      AssertTrue(Format('"%s": the size floor (%d) must cover what the renderer draws (%d)',
+        [CAPTIONS[i], mw, rendered]), mw >= rendered);
+    end;
   finally
     F.Free;
   end;

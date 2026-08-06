@@ -165,4 +165,4 @@ msgstr "例如在 .tycss 里:  TyStarShape { background: #E8C547; border-color: 
 
 #: tmainform.darkswitch.caption
 msgid "Dark"
-msgstr "深色"
+msgstr "暗色"

@@ -25,7 +25,7 @@ object MainForm: TMainForm
       Caption = 'Labels  · TyControls'
       TitleAlignment = taLeftJustify
       object DarkSwitch: TTyToggleSwitch
-        Left = 72
+        Left = 172
         Height = 24
         Top = 5
         Width = 74
@@ -34,7 +34,7 @@ object MainForm: TMainForm
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
-        Left = 154
+        Left = 254
         Height = 26
         Top = 4
         Width = 120
