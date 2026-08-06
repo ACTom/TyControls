@@ -36,8 +36,8 @@ msgid "Currency (TTyCurrencyEdit, ¥):"
 msgstr "货币(TTyCurrencyEdit,¥):"
 
 #: tmainform.l5.caption
-msgid "Date mask (##/##/####):"
-msgstr "日期掩码(##/##/####):"
+msgid "Date mask (00/00/0000):"
+msgstr "日期掩码(00/00/0000):"
 
 #: tmainform.l6.caption
 msgid "URL (TTyURLEdit, click →):"

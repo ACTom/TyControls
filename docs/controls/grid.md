@@ -88,7 +88,7 @@ end;
 | `gekSlider` | 滑动条,范围同上。编辑时自带数值读数,拖到哪儿一眼看得见 |
 | `gekRating` | **不弹编辑器** —— 点第几颗星就是几分(与勾选框同一种手感) |
 | `gekMemo` | 多行文本,编辑器向下撑开 |
-| `gekMask` | 掩码输入,掩码取列的 `EditMask`(交给 `TTyMaskEdit` 解释) |
+| `gekMask` | 掩码输入,掩码取列的 `EditMask` —— 交给 [`TTyMaskEdit`](maskedit.md) 解释,**写法就是 LCL / Delphi 的掩码语言**(`0` 必填数字、`9` 可选数字、`L` 字母……);`#` 会被拒,详见 [maskedit.md 3.3](maskedit.md#33-与-lcl-的两处故意不同) |
 | `gekTime` | 只选时间 |
 | `gekPassword` | 输入时打点 |
 | `gekCalculator` | 带计算器的数值输入 |

@@ -104,14 +104,14 @@ object MainForm: TMainForm
       Height = 20
       Top = 232
       Width = 200
-      Caption = 'Date mask (##/##/####):'
+      Caption = 'Date mask (00/00/0000):'
     end
     object FDate: TTyMaskEdit
       Left = 240
       Height = 28
       Top = 228
       Width = 180
-      Mask = '##/##/####'
+      Mask = '00/00/0000'
     end
     object L6: TTyLabel
       Left = 24

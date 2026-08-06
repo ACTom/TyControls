@@ -664,7 +664,7 @@ var
 begin
   M := TMaskProbe.Create(nil);
   try
-    M.Mask := '###-###';
+    M.Mask := '000-000';
     M.ProbePaste('hello world');
     { The skeleton, not '': the field shows its shape when it holds nothing (SpaceChar).
       MaskedValue is the VALUE, and that is what must still be empty. }
@@ -684,7 +684,7 @@ var
 begin
   M := TMaskProbe.Create(nil);
   try
-    M.Mask := '###-###';
+    M.Mask := '000-000';
     M.ProbePaste('12a3-45x6789');
     AssertEquals('digits laid into slots, literals rebuilt', '123-456', M.Text);
     AssertTrue('all slots filled', M.IsComplete);
@@ -720,8 +720,8 @@ var
 begin
   M := TTyMaskEdit.Create(nil);
   try
-    M.EditMask := '###';          { LCL and Delphi both call it this }
-    AssertEquals('EditMask is an alias on the same field', '###', M.Mask);
+    M.EditMask := '000';          { LCL and Delphi both call it this }
+    AssertEquals('EditMask is an alias on the same field', '000', M.Mask);
   finally
     M.Free;
   end;
