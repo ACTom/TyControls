@@ -377,7 +377,7 @@ Lazarus 里打开 `tycontrols_dt.lpk`(设计期包)→ **Use → Install**,IDE �
 | [listview](examples/listview/) | `TTyListView`:五视图 / 分组折叠 / 10 万行虚拟 |
 | [inputs](examples/inputs/) | 富输入:数值 / 货币 / 掩码 / URL / 滑块 / 计算器编辑 |
 | [shapes](examples/shapes/) | `TTyShape` / `TTyStarShape` / `TTyArrow` + `StyleOverride` |
-| [rtl](examples/rtl/) | 从右往左镜像 + 双向文本:一个开关翻整窗,逐区标注**什么镜像、什么还不镜像** |
+| [rtl](examples/rtl/) | 从右往左镜像 + 双向文本:**方向**与**语言(英语/阿拉伯语)两个独立开关**,可分别查看"只镜像""只换字""真正的阿拉伯语界面"三种状态;逐区标注**什么镜像、什么还不镜像**,并单列一页给**故意不镜像**的三个控件与"真实程序里怎么开"的做法 |
 | [icons](examples/icons/) | `TTyIconFont` 图标字体 |
 | [transitions](examples/transitions/) | 滑入 / 淡入过渡 |
 

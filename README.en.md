@@ -422,7 +422,7 @@ Each example is a standalone buildable project: `lazbuild examples/<name>/<proje
 | [listview](examples/listview/) | `TTyListView`: five views / grouped collapse / 100k virtual |
 | [inputs](examples/inputs/) | rich input: numeric / currency / mask / URL / slider / calculator edits |
 | [shapes](examples/shapes/) | `TTyShape` / `TTyStarShape` / `TTyArrow` + `StyleOverride` |
-| [rtl](examples/rtl/) | right-to-left mirroring + bidirectional text: one switch turns the whole window round, each area labelled with **what mirrors and what does not yet** |
+| [rtl](examples/rtl/) | right-to-left mirroring + bidirectional text: **two independent switches, direction and language (English / Arabic)**, so mirrored-English, unmirrored-Arabic and a genuine Arabic interface can each be inspected on their own; each area labelled with **what mirrors and what does not yet**, plus a page for the three controls that **deliberately** do not and for how a real application turns any of it on |
 | [icons](examples/icons/) | `TTyIconFont` icon font |
 | [transitions](examples/transitions/) | slide / fade transitions |
 

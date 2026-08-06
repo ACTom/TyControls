@@ -27,6 +27,14 @@ msgstr "暗色"
 msgid "Right-to-left (BiDiMode)"
 msgstr "从右往左 (BiDiMode)"
 
+#: tmainform.langswitch.caption
+msgid "Arabic interface"
+msgstr "阿拉伯语界面"
+
+#: tmainform.lbllangstate.caption
+msgid "Language: English"
+msgstr "语言:英语"
+
 #: tmainform.lbldirstate.caption
 msgid "Direction: left-to-right (bdLeftToRight)"
 msgstr "方向:从左往右 (bdLeftToRight)"
@@ -330,6 +338,78 @@ msgstr "从左往右(&L)"
 #: tmainform.mnudirrtl.caption
 msgid "&Right to left"
 msgstr "从右往左(&R)"
+
+#: tmainform.pgfenced.caption
+msgid "4  Fenced"
+msgstr "4  不镜像"
+
+#: tmainform.divfenced.caption
+msgid "These three deliberately DO NOT mirror - press them and satisfy yourself"
+msgstr "这三个是**故意**不镜像的 —— 按一按,自己确认"
+
+#: tmainform.lblfencedintro.caption
+msgid "All three share ONE reason: the click position is computed a SECOND time, separately from the paint."
+msgstr "三个的原因是同一个:点击位置是**另算**一遍的,与绘制分开。只镜像绘制就会“画对了、答错了”。"
+
+#: tmainform.divdrop.caption
+msgid "TTyDropDownButton - a split face"
+msgstr "TTyDropDownButton —— 分区按钮"
+
+#: tmainform.lbldropnote.caption
+msgid "The arrow zone stays on the RIGHT."
+msgstr "箭头区留在**右边**:命中判定按同一条 x 轴回读。"
+
+#: tmainform.divgroup.caption
+msgid "TTyButtonGroup - segments"
+msgstr "TTyButtonGroup —— 分段"
+
+#: tmainform.lblgroupnote.caption
+msgid "The segments keep their order."
+msgstr "分段保持原顺序:TySegmentAt 直接拿原始 x 映射下标。"
+
+#: tmainform.divvlist.caption
+msgid "TTyValueListEditor - two columns"
+msgstr "TTyValueListEditor —— 两列"
+
+#: tmainform.lblvlistnote.caption
+msgid "The key and value columns keep their sides."
+msgstr "键列与值列不换边:分隔条由 SplitXDp 另算一遍。"
+
+#: tmainform.divhow.caption
+msgid "How you switch a real application over"
+msgstr "真实程序里怎么切换"
+
+#: tmainform.lblhow1.caption
+msgid "1. BiDiMode is NOT published."
+msgstr "1. BiDiMode **未** published,只能从代码设置:"
+
+#: tmainform.lblhow2.caption
+msgid "2. Children inherit it through ParentBiDiMode."
+msgstr "2. 子控件经 ParentBiDiMode 继承。"
+
+#: tmainform.lblhow3.caption
+msgid "3. A horizontal TTyScrollBar does NOT read BiDiMode."
+msgstr "3. 横向 TTyScrollBar **不**读 BiDiMode,由宿主自己开:"
+
+#: tmainform.lblhow4.caption
+msgid "4. TTyStringGrid already does that for its own bar."
+msgstr "4. TTyStringGrid 已替自己的滚动条做了,宿主不用管。"
+
+#: tmainform.lblhow5.caption
+msgid "5. Arabic literals in Pascal need the codepage directive."
+msgstr "5. Pascal 里的阿拉伯字面量需要 {$codepage UTF8},否则每个字母都会变成问号。"
+
+#: tmainform.mnulanguage.caption
+msgid "&Language"
+msgstr "语言(&L)"
+
+#: tmainform.mnulangen.caption
+msgid "&English"
+msgstr "英语(&E)"
+
+#: tmainform.mnulangar.caption
+msgid "&Arabic"
+msgstr "阿拉伯语(&A)"
 
 #: tmainform.mnuhelpright.caption
 msgid "&Help"

@@ -125,14 +125,30 @@ does **not** move to the right edge. That is correct, and it is asserted by
 
 ### What works
 
-- **Word order.** `TTyPainter.DrawText` — the single chokepoint every caption,
-  label, button, list row, tab header, menu item, grid cell and status panel in
-  this library draws through — routes any string containing a right-to-left
-  codepoint through BGRABitmap's `TBidiTextLayout`, which implements the Unicode
-  bidirectional algorithm (UAX #9). The paragraph's base direction is resolved
-  from its **first strong character**, so a caption that begins in Arabic and
-  ends in Latin (`"<arabic phrase> Acme"`) now puts the two halves the way a
-  native reader expects them.
+- **Word order.** `TTyPainter.DrawText` — the chokepoint every caption, label,
+  button, list row, tab header, menu item and status panel in this library draws
+  through — routes any string containing a right-to-left codepoint through
+  BGRABitmap's `TBidiTextLayout`, which implements the Unicode bidirectional
+  algorithm (UAX #9). The paragraph's base direction is resolved from its
+  **first strong character**, so a caption that begins in Arabic and ends in
+  Latin (`"<arabic phrase> Acme"`) now puts the two halves the way a native
+  reader expects them.
+
+  **Grid cells are the one exception, and they are a second implementation.**
+  `TTyCustomGrid.DrawCellText` does not call the painter at all — it lays text
+  into its own cached bitmap, which is what lets a very large table scroll. This
+  list used to name grid cells as going through `DrawText`; that was simply
+  wrong, and being wrong is why the grid kept the original defect for a release
+  after the painter was fixed. Cell text, the row-number gutter, footer totals,
+  filter text, wrapped header captions and button-cell captions all go through
+  that one function, and every one of them showed `"<arabic phrase> Acme 3.0"`
+  with its halves swapped while the label beside the grid showed it correctly.
+  It now applies the same gate (`TyTextHasRTL`) and the same `TBidiTextLayout`,
+  inside the cache-miss branch so a repeated string is laid out once rather than
+  once per frame. `tests/test.grid.bidi.pas` pins both the ordering and that
+  Latin and CJK never reach the layout at all — the latter has to be **counted**,
+  because a bidi layout reproduces a plain text call pixel-for-pixel on
+  single-run text and so pixels alone cannot see the difference.
 
   Before this change the painter handed the whole caption to one text call, which
   is always laid out with an implicit **left-to-right** paragraph base — so that

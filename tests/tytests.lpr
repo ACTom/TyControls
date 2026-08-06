@@ -151,7 +151,7 @@ uses
   test.edit.bidi,
   test.rtl.bars,
   test.card, test.tag, test.badge,
-  test.grid.layout, test.grid, test.grid.streaming,
+  test.grid.layout, test.grid, test.grid.streaming, test.grid.bidi,
   test.alert, test.notification, test.empty, test.segmented,
   test.pagination, test.steps, test.breadcrumb, test.transfer,
   test.treeselect, test.cascader, test.popover,

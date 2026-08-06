@@ -24,7 +24,7 @@ interface
 uses
   Classes, SysUtils, Types, Math, contnrs, Clipbrd, Controls, Graphics, LCLType, LMessages, StdCtrls,
   ExtCtrls, LazUTF8,
-  BGRABitmap, BGRABitmapTypes,
+  BGRABitmap, BGRABitmapTypes, BGRATextBidi,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Columns,
   tyControls.ScrollBar, tyControls.Edit, tyControls.ComboBox, tyControls.DateTimePicker, tyControls.Popover, tyControls.CheckListBox, tyControls.ColorMath,
   tyControls.SpinEdit, tyControls.TrackBar, tyControls.Memo, tyControls.MaskEdit,
@@ -743,6 +743,7 @@ type
       键含文字/字体/字号/字重/颜色/尺寸/对齐 —— 任何一项变了都是新条目,
       因此换主题、改列宽、切深色都不需要显式失效。 }
     FTextCache:        TStringList;   { Sorted;Objects 存 TBGRABitmap,自己拥有 }
+    FBidiLayouts:      Integer;       { 建过几次 TBidiTextLayout —— 只给测试,见 BidiLayoutCount }
     { 一次绘制期间的 GridMetrics 记忆化。CellRect/CellVisibleRect/CellPane 都要它,
       于是每格要重算三四次;而每次都得遍历列求冻结带宽、还要为 HeaderBands 分配数组。
       一帧内网格状态不可能变,所以整帧只算一次 —— 实测这是文字之外最大的一块开销。 }
@@ -963,6 +964,10 @@ type
     procedure DrawCellText(P: TTyPainter; const ARect: TRect; const AText: string;
       const AFontName: string; AFontSize, AFontWeight: Integer; AColor: TTyColor;
       AHAlign: TAlignment; AVAlign: TTextLayout; AWordWrap: Boolean = False);
+    { 含右到左码点的那一份格子文本,走 BGRA 的双向布局排。 }
+    procedure DrawCellTextBidi(ABmp: TBGRABitmap; AW, AH: Integer;
+      const AText: string; AColor: TTyColor; AHAlign: TAlignment;
+      AVAlign: TTextLayout; AWordWrap: Boolean);
     procedure ClearTextCache;
     { 作废持久表面(下一帧整幅重画)。 }
     procedure InvalidateSurface;
@@ -978,6 +983,19 @@ type
       放 protected —— 测试经访问子类够得着,而它们不该成为对外支持的 API。 }
     property RealInvalidateCount: Integer read FRealInvalidates;
     property SurfaceFresh: Boolean read FSurfaceFresh;
+    { 第三个探针,同样只给测试用:文字缓存里有几条。
+      双向文字要建 TBidiTextLayout,那是**每串一次**还是**每帧每格一次**,
+      画面上看不出任何差别(缓存的位图和刚排好的位图一模一样),
+      只表现为变慢 —— TTyMemo 那次每键半秒就是这个形状。
+      所以"排版发生在缓存未命中的分支里"这条契约,只能在这里断言。 }
+    function TextCacheCount: Integer;
+    { 第四个探针,同样只给测试用:一共建过几次 TBidiTextLayout。
+      **像素证明不了这件事**。双向布局对只有一个 run 的文字(纯拉丁、纯 CJK、
+      纯阿拉伯)排出来的结果与裸 TextRect 逐像素相同 —— 把闸门改成恒真,
+      "拉丁输出没变"那条断言依旧全绿(实测如此,与 test.bidi.pas 记的
+      是同一个陷阱)。所以"拉丁文根本走不到这条路"只能数出来,不能看出来。 }
+    property BidiLayoutCount: Integer read FBidiLayouts;
+    procedure ResetBidiLayoutCount;
     { 把数据行 AFrom 移到 ATo。基类不持有单元格,什么都不做;
       TTyStringGrid 覆盖成真正的 MoveRow(它会把底色/行高/合并跨度一起搬)。 }
     { 撤销事务的开合。批量更新与撤销事务是**同一对边界** ——
@@ -4375,6 +4393,74 @@ begin
   ScrollY := FScrollY + ADy;
 end;
 
+{ 一行(或一块换行)**含右到左文字**的格子文本,走 BGRA 的 TBidiTextLayout 排,
+  而不是一次 TextRect。
+
+  为什么必须另开一条路:裸 TextRect 永远按**隐含的左到右段落基准**排版。调用里
+  widgetset 的引擎确实会重排 run、也会把阿拉伯字母连写(这半边从来没坏过),
+  但它**不问这一段到底是谁的段落**。于是 "<阿拉伯短语> Acme 3.0" —— 一个本地化
+  报表里再普通不过的单元格 —— 两半被调了个个儿:阿拉伯文跑到左边,拉丁文尾巴
+  跑到右边,正好是母语读者预期的反面。而**同一个字符串**放在旁边的标签里却是对的,
+  因为 TTyPainter.DrawText 早就这么修过了(见 tyControls.Painter.pas 的
+  DrawTextLineBidi,以及 tests/test.bidi.pas)。网格是唯一漏网的那条路径,
+  因为 DrawCellText 为了那份文字缓存(十万行能滚起来全靠它)自己排字。
+
+  TBidiTextLayout 用 fbmAuto:段落方向取自**第一个强方向字符**,也就是"用户写的是
+  一句阿拉伯话"的意思。注意这**不是**控件的 BiDiMode —— 那个问的是"这个窗体朝哪边读",
+  已由 RtlLayout 经 BidiFlipAlignment 折进 AHAlign 了,是另一个问题;
+  把两者混为一谈会把右到左窗体上一个拉丁标题的两半也调过来。
+
+  换行时才设 AvailableWidth:设了它布局自己就会按段落对齐,所以必须同时把
+  ParagraphAlignment 钉死成调用方的 AHAlign,否则"块往哪边靠"这个决定会从
+  控件手里偷偷跑到布局引擎手里(painter 那边留了同样的告诫)。
+  不换行时**故意不设**,BGRA 读作"无限宽",块宽正好等于文字宽,由下面自己摆位 ——
+  与 TTyPainter.BuildLineLayout 逐字同构。
+
+  裁剪不用管:ABmp 就是这一格的大小,画出界的部分自然被位图边界切掉。 }
+procedure TTyCustomGrid.DrawCellTextBidi(ABmp: TBGRABitmap; AW, AH: Integer;
+  const AText: string; AColor: TTyColor; AHAlign: TAlignment;
+  AVAlign: TTextLayout; AWordWrap: Boolean);
+var
+  lay: TBidiTextLayout;
+  x, y, i: Integer;
+  bta: TBidiTextAlignment;
+begin
+  Inc(FBidiLayouts);      { 只给测试的计数器,见 BidiLayoutCount }
+  lay := TBidiTextLayout.Create(ABmp.FontRenderer, AText);
+  try
+    if AWordWrap then
+    begin
+      lay.AvailableWidth := AW;
+      case AHAlign of
+        taCenter:       bta := btaCenter;
+        taRightJustify: bta := btaRightJustify;
+      else
+        bta := btaLeftJustify;
+      end;
+      for i := 0 to lay.ParagraphCount - 1 do
+        lay.ParagraphAlignment[i] := bta;
+      x := 0;
+    end
+    else
+      case AHAlign of
+        taCenter:       x := (AW - Ceil(lay.UsedWidth)) div 2;
+        taRightJustify: x := AW - Ceil(lay.UsedWidth);
+      else
+        x := 0;
+      end;
+    case AVAlign of
+      tlCenter: y := (AH - Ceil(lay.TotalTextHeight)) div 2;
+      tlBottom: y := AH - Ceil(lay.TotalTextHeight);
+    else
+      y := 0;
+    end;
+    lay.TopLeft := PointF(x, y);
+    lay.DrawText(ABmp, TyColorToBGRA(AColor));
+  finally
+    lay.Free;
+  end;
+end;
+
 procedure TTyCustomGrid.DrawCellText(P: TTyPainter; const ARect: TRect;
   const AText: string; const AFontName: string; AFontSize, AFontWeight: Integer;
   AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout;
@@ -4429,13 +4515,26 @@ begin
       txt := TyGridEllipsisFit(bmp, txt, w);
     end;
 
-    st := Default(TTextStyle);
-    st.Alignment := AHAlign;
-    st.Layout := AVAlign;
-    st.SingleLine := not AWordWrap;
-    st.Wordbreak := AWordWrap;
-    st.Clipping := True;
-    bmp.TextRect(Rect(0, 0, w, h), 0, 0, txt, st, TyColorToBGRA(AColor));
+    { 双向文字的闸门,和 TTyPainter.DrawTextLine 用的是同一个:一次字节扫描,
+      ASCII 一比就否,CJK / 西里尔 / 希腊看首字节就否。问的是"这串**文字本身**
+      有没有右到左的码点",与上面那次 BidiFlipAlignment(问的是"这个**窗体**朝哪边读")
+      是两个独立的问题 —— 右到左窗体上的拉丁文照样不重排,左到右窗体上的阿拉伯文
+      照样重排。
+      排版发生在**缓存未命中的分支里**,这是有意的:TBidiTextLayout 建一次约 3.3ms,
+      每帧每格建一次正是当年 TTyMemo 每键半秒的那个形状,而网格一帧要画几百格。
+      键里含 AText,所以同一串文字全程只排一次。 }
+    if TyTextHasRTL(txt) then
+      DrawCellTextBidi(bmp, w, h, txt, AColor, AHAlign, AVAlign, AWordWrap)
+    else
+    begin
+      st := Default(TTextStyle);
+      st.Alignment := AHAlign;
+      st.Layout := AVAlign;
+      st.SingleLine := not AWordWrap;
+      st.Wordbreak := AWordWrap;
+      st.Clipping := True;
+      bmp.TextRect(Rect(0, 0, w, h), 0, 0, txt, st, TyColorToBGRA(AColor));
+    end;
 
     { 排序表 + dupIgnore:键重复时 AddObject **不会收下这个对象**,
       直接走人就把位图漏了(上面刚 IndexOf 过,理论上碰不到;但漏内存的代价
@@ -4456,6 +4555,16 @@ end;
 function TTyGridEditLink.HandleKey(var AKey: Word; AShift: TShiftState): Boolean;
 begin
   Result := False;      { 默认什么都不吃,网格照常处理导航键 }
+end;
+
+function TTyCustomGrid.TextCacheCount: Integer;
+begin
+  if FTextCache = nil then Result := 0 else Result := FTextCache.Count;
+end;
+
+procedure TTyCustomGrid.ResetBidiLayoutCount;
+begin
+  FBidiLayouts := 0;
 end;
 
 function TTyCustomGrid.IsActiveCell(ACol, ARow: Integer): Boolean;

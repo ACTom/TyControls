@@ -77,6 +77,23 @@ object MainForm: TMainForm
         Alignment = taLeftJustify
         Caption = 'Direction: left-to-right (bdLeftToRight)'
       end
+      object LangSwitch: TTyToggleSwitch
+        Left = 600
+        Height = 26
+        Top = 10
+        Width = 250
+        Caption = 'Arabic interface'
+        OnChange = LangSwitchChange
+      end
+      object LblLangState: TTyLabel
+        Left = 866
+        Height = 22
+        Top = 12
+        Width = 318
+        AutoSize = False
+        Alignment = taLeftJustify
+        Caption = 'Language: English'
+      end
       object LblLegend: TTyLabel
         Left = 16
         Height = 20
@@ -817,6 +834,181 @@ object MainForm: TMainForm
           Caption = 'The outer pager at the top of this window mirrors too - watch tab 1 jump to the right.'
         end
       end
+      object PgFenced: TTyTabSheet
+        Caption = '4  Fenced'
+        object DivFenced: TTyDivider
+          Left = 16
+          Height = 22
+          Top = 6
+          Width = 584
+          Caption = 'These three deliberately DO NOT mirror - press them and satisfy yourself'
+          Alignment = taLeftJustify
+        end
+        object LblFencedIntro: TTyLabel
+          Left = 16
+          Height = 76
+          Top = 32
+          Width = 584
+          AutoSize = False
+          WordWrap = True
+          Alignment = taLeftJustify
+          Caption = 'All three share ONE reason: the click position is computed a SECOND time, separately from the paint.'
+        end
+        object DivDrop: TTyDivider
+          Left = 16
+          Height = 22
+          Top = 114
+          Width = 584
+          Caption = 'TTyDropDownButton - a split face'
+          Alignment = taLeftJustify
+        end
+        object DropBtn: TTyDropDownButton
+          Left = 16
+          Height = 34
+          Top = 140
+          Width = 180
+          Caption = 'Save'
+          DropDownMenu = Popup1
+        end
+        object LblDropNote: TTyLabel
+          Left = 210
+          Height = 44
+          Top = 140
+          Width = 390
+          AutoSize = False
+          WordWrap = True
+          Alignment = taLeftJustify
+          Caption = 'The arrow zone stays on the RIGHT.'
+        end
+        object DivGroup: TTyDivider
+          Left = 16
+          Height = 22
+          Top = 192
+          Width = 584
+          Caption = 'TTyButtonGroup - segments'
+          Alignment = taLeftJustify
+        end
+        object BtnGroup: TTyButtonGroup
+          Left = 16
+          Height = 30
+          Top = 218
+          Width = 180
+          ItemIndex = 0
+          Items.Strings = (
+            'One'
+            'Two'
+            'Three'
+          )
+        end
+        object LblGroupNote: TTyLabel
+          Left = 210
+          Height = 44
+          Top = 218
+          Width = 390
+          AutoSize = False
+          WordWrap = True
+          Alignment = taLeftJustify
+          Caption = 'The segments keep their order.'
+        end
+        object DivVList: TTyDivider
+          Left = 16
+          Height = 22
+          Top = 268
+          Width = 584
+          Caption = 'TTyValueListEditor - two columns'
+          Alignment = taLeftJustify
+        end
+        object VList: TTyValueListEditor
+          Left = 16
+          Height = 120
+          Top = 294
+          Width = 300
+        end
+        object LblVListNote: TTyLabel
+          Left = 330
+          Height = 120
+          Top = 294
+          Width = 270
+          AutoSize = False
+          WordWrap = True
+          Alignment = taLeftJustify
+          Caption = 'The key and value columns keep their sides.'
+        end
+        object DivHow: TTyDivider
+          Left = 616
+          Height = 22
+          Top = 6
+          Width = 568
+          Caption = 'How you switch a real application over'
+          Alignment = taLeftJustify
+        end
+        object LblHow1: TTyLabel
+          Left = 616
+          Height = 54
+          Top = 32
+          Width = 568
+          AutoSize = False
+          WordWrap = True
+          Alignment = taLeftJustify
+          Caption = '1. BiDiMode is NOT published.'
+        end
+        object EdHow1: TTyEdit
+          Left = 616
+          Height = 28
+          Top = 88
+          Width = 568
+          ReadOnly = True
+          Text = 'Form.BiDiMode := bdRightToLeft;'
+        end
+        object LblHow2: TTyLabel
+          Left = 616
+          Height = 54
+          Top = 122
+          Width = 568
+          AutoSize = False
+          WordWrap = True
+          Alignment = taLeftJustify
+          Caption = '2. Children inherit it through ParentBiDiMode.'
+        end
+        object LblHow3: TTyLabel
+          Left = 616
+          Height = 54
+          Top = 180
+          Width = 568
+          AutoSize = False
+          WordWrap = True
+          Alignment = taLeftJustify
+          Caption = '3. A horizontal TTyScrollBar does NOT read BiDiMode.'
+        end
+        object EdHow3: TTyEdit
+          Left = 616
+          Height = 28
+          Top = 236
+          Width = 568
+          ReadOnly = True
+          Text = 'ScrollBar.MirrorHorizontal := True;'
+        end
+        object LblHow4: TTyLabel
+          Left = 616
+          Height = 40
+          Top = 270
+          Width = 568
+          AutoSize = False
+          WordWrap = True
+          Alignment = taLeftJustify
+          Caption = '4. TTyStringGrid already does that for its own bar.'
+        end
+        object LblHow5: TTyLabel
+          Left = 616
+          Height = 76
+          Top = 314
+          Width = 568
+          AutoSize = False
+          WordWrap = True
+          Alignment = taLeftJustify
+          Caption = '5. Arabic literals in Pascal need the codepage directive.'
+        end
+      end
     end
     object StatusBar1: TTyStatusBar
       Left = 0
@@ -924,6 +1116,24 @@ object MainForm: TMainForm
         GroupIndex = 1
         RadioItem = True
         OnClick = MenuDirectionClick
+      end
+    end
+    object MnuLanguage: TMenuItem
+      Caption = '&Language'
+      object MnuLangEn: TMenuItem
+        AutoCheck = True
+        Caption = '&English'
+        Checked = True
+        GroupIndex = 2
+        RadioItem = True
+        OnClick = MenuLanguageClick
+      end
+      object MnuLangAr: TMenuItem
+        AutoCheck = True
+        Caption = '&Arabic'
+        GroupIndex = 2
+        RadioItem = True
+        OnClick = MenuLanguageClick
       end
     end
     object MnuHelpRight: TMenuItem
