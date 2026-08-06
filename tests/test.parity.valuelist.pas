@@ -1,9 +1,18 @@
 unit test.parity.valuelist;
 {$mode objfpc}{$H+}
 interface
-uses Classes, SysUtils, fpcunit, testregistry,
+uses Classes, SysUtils, TypInfo, LCLType, Controls, Forms, fpcunit, testregistry,
   tyControls.ValueListEditor;
 type
+  { Drives the protected key handler and the protected editor-close, so the guards below exercise
+    the SAME paths a user's keystroke does rather than calling the data API underneath them. }
+  TValueListKeyDriver = class(TTyValueListEditor)
+  public
+    procedure Press(AKey: Word; AShift: TShiftState);
+    procedure Commit;    // Enter / focus-out: apply the editor's text
+    procedure Cancel;    // Escape: throw it away
+  end;
+
   { LCL / Delphi API-parity guards for TTyValueListEditor's two value indexers.
 
     C:\lazarus\lcl\valedit.pas:201-202 declares
@@ -75,6 +84,67 @@ type
     procedure TestInsertRowReturnsTheIndexAndCanInsertNotAppend;
     procedure TestInsertRowAtPlacesTheRowExactly;
     procedure TestRowCountIsReadWrite;
+  end;
+
+  { KeyOptions -- what the USER may do to the row set at run time.
+
+    C:\lazarus\lcl\valedit.pas:310 declares
+      property KeyOptions: TKeyOptions read FKeyOptions write SetKeyOptions default [];
+    over the set TKeyOption = (keyEdit, keyAdd, keyDelete, keyUnique) at :109.
+
+    Ours had no equivalent at all: rows could only be added (AddRow / InsertRow) or removed
+    (DeleteRow) from CODE, the key column was not editable by any gesture, and nothing anywhere
+    checked for duplicate keys. So the one thing this control is named for -- a user-editable
+    name/value list, the ini or environment-variable editor -- could not be built: the user
+    could change values and nothing else.
+
+    Each guard below sits on a decision where a plausible implementation compiles and behaves
+    differently, so none is implied by the declaration:
+      - the ordinals, because a set property streams as BIT POSITIONS and reordering the enum
+        silently renames every flag in every .lfm already saved;
+      - keyAdd pulling keyEdit in with it, which is a SETTER that rewrites its argument;
+      - the key editor writing Key and not Value, the one-character routing mistake that would
+        have made the rename corrupt the row it was opened on;
+      - Ctrl+Delete rather than bare Delete;
+      - and keyUnique's collision rule, which is the only flag with a REFUSAL behind it. }
+  TValueListKeyOptionsTest = class(TTestCase)
+  private
+    FRenames, FRejects: Integer;
+    FLastRejectKey: string;
+    FLastRenamed: TTyValueRow;
+    procedure OnKeyRenamed(Sender: TObject; ARow: TTyValueRow);
+    procedure OnKeyRefused(Sender: TObject; ARow: TTyValueRow; const AKey: string);
+    { Three root rows A/B/C (values 1/2/3), KeyOptions as given, selection on row ASel. }
+    function Make(AOpts: TTyKeyOptions; ASel: Integer = -1): TValueListKeyDriver;
+  published
+    { the shape }
+    procedure TestKeyOptionOrdinalsAreFrozen;
+    procedure TestKeyOptionsIsPublishedAndDefaultsToEmpty;
+    procedure TestKeyOptionsRoundTripsThroughTheStream;
+    procedure TestKeyAddSilentlyImpliesKeyEdit;
+    { keyEdit }
+    procedure TestKeyEditOffMeansNoKeyEditorAtAll;
+    procedure TestKeyEditOpensTheEditorOverTheKeyColumn;
+    procedure TestKeyEditRenamesTheRowAndFiresOnKeyChanged;
+    procedure TestKeyEditCommitsToTheKeyNotTheValue;
+    procedure TestKeyEditCancelKeepsTheOldName;
+    procedure TestClearingKeyEditClosesAnOpenRename;
+    { keyAdd }
+    procedure TestKeyAddInsertsABlankRowAtTheCurrentPosition;
+    procedure TestKeyAddOffLeavesInsertAlone;
+    { keyDelete }
+    procedure TestKeyDeleteRemovesTheCurrentRowOnCtrlDelete;
+    procedure TestKeyDeleteIgnoresBareDelete;
+    procedure TestKeyDeleteOffLeavesCtrlDeleteAlone;
+    { keyUnique }
+    procedure TestKeyUniqueRefusesADuplicateRename;
+    procedure TestKeyUniqueFoldsCase;
+    procedure TestWithoutKeyUniqueTheDuplicateIsAccepted;
+    procedure TestKeyUniqueScopesToSiblingsNotTheWholeTree;
+    procedure TestKeyUniqueLetsBlankKeysCoexist;
+    procedure TestKeyUniqueDoesNotRefuseARowItsOwnName;
+    { ReadOnly outranks all four }
+    procedure TestReadOnlyOutranksEveryKeyOption;
   end;
 
 implementation
@@ -365,8 +435,435 @@ begin
   finally e.Free; end;
 end;
 
+{ ------------------------------------------------------------------ KeyOptions ------- }
+
+procedure TValueListKeyDriver.Press(AKey: Word; AShift: TShiftState);
+var k: Word;
+begin
+  k := AKey;
+  KeyDown(k, AShift);
+end;
+
+procedure TValueListKeyDriver.Commit;
+begin
+  EndEdit(True);
+end;
+
+procedure TValueListKeyDriver.Cancel;
+begin
+  EndEdit(False);
+end;
+
+procedure TValueListKeyOptionsTest.OnKeyRenamed(Sender: TObject; ARow: TTyValueRow);
+begin
+  Inc(FRenames);
+  FLastRenamed := ARow;
+end;
+
+procedure TValueListKeyOptionsTest.OnKeyRefused(Sender: TObject; ARow: TTyValueRow;
+  const AKey: string);
+begin
+  Inc(FRejects);
+  FLastRejectKey := AKey;
+end;
+
+function TValueListKeyOptionsTest.Make(AOpts: TTyKeyOptions; ASel: Integer): TValueListKeyDriver;
+begin
+  FRenames := 0; FRejects := 0; FLastRejectKey := ''; FLastRenamed := nil;
+  Result := TValueListKeyDriver.Create(nil);
+  Result.InsertRow('A', '1');
+  Result.InsertRow('B', '2');
+  Result.InsertRow('C', '3');
+  Result.KeyOptions := AOpts;
+  Result.OnKeyChanged := @OnKeyRenamed;
+  Result.OnKeyRejected := @OnKeyRefused;
+  Result.ItemIndex := ASel;
+end;
+
+{ A set property streams as a BYTE OF BIT POSITIONS, not as names -- so inserting a flag anywhere
+  but the end shifts every ordinal above it and every .lfm already written silently means
+  something else (an old `KeyOptions=[keyAdd]` would load as keyDelete). Pinning the four numbers
+  is the only thing that makes "append only" enforceable rather than a comment nobody reads. }
+procedure TValueListKeyOptionsTest.TestKeyOptionOrdinalsAreFrozen;
+begin
+  AssertEquals('keyEdit is bit 0',   0, Ord(keyEdit));
+  AssertEquals('keyAdd is bit 1',    1, Ord(keyAdd));
+  AssertEquals('keyDelete is bit 2', 2, Ord(keyDelete));
+  AssertEquals('keyUnique is bit 3', 3, Ord(keyUnique));
+  AssertEquals('and there is no fifth flag hiding above them', 3, Ord(High(TTyKeyOption)));
+  AssertEquals('...nor below', 0, Ord(Low(TTyKeyOption)));
+end;
+
+procedure TValueListKeyOptionsTest.TestKeyOptionsIsPublishedAndDefaultsToEmpty;
+var e: TTyValueListEditor;
+begin
+  e := TTyValueListEditor.Create(nil);
+  try
+    AssertTrue('KeyOptions must reach the Object Inspector and the streamer',
+      IsPublishedProp(e, 'KeyOptions'));
+    AssertTrue('and it must be READABLE, or the IDE reports "Cannot read property"',
+      GetPropInfo(e, 'KeyOptions')^.GetProc <> nil);
+    AssertTrue('and have a real setter, or TWriter.WriteProperty skips it entirely',
+      GetPropInfo(e, 'KeyOptions')^.SetProc <> nil);
+    AssertTrue('default is [] -- the behaviour that shipped before this existed',
+      e.KeyOptions = []);
+  finally e.Free; end;
+end;
+
+type
+  THostFormVLE = class(TForm)
+  published
+    VLE: TTyValueListEditor;
+  end;
+
+{ The ordinals only matter because the set really does travel through the streamer as bits; this
+  proves the whole path rather than the enum alone. }
+procedure TValueListKeyOptionsTest.TestKeyOptionsRoundTripsThroughTheStream;
+const
+  Want: TTyKeyOptions = [keyEdit, keyDelete, keyUnique];   // deliberately NOT contiguous
+var
+  Src, Dst: THostFormVLE;
+  MS: TMemoryStream;
+  D: TTyValueListEditor;
+begin
+  Src := THostFormVLE.CreateNew(nil);
+  Dst := THostFormVLE.CreateNew(nil);
+  MS := TMemoryStream.Create;
+  try
+    Src.Name := 'HostFormVLE1';
+    Src.VLE := TTyValueListEditor.Create(Src);
+    Src.VLE.Name := 'VLE';
+    Src.VLE.Parent := Src;
+    Src.VLE.KeyOptions := Want;
+    MS.WriteComponent(Src);
+    MS.Position := 0;
+    MS.ReadComponent(Dst);
+
+    D := Dst.FindComponent('VLE') as TTyValueListEditor;
+    AssertNotNull('the editor survived the round trip', D);
+    AssertTrue('and its KeyOptions came back bit-for-bit', D.KeyOptions = Want);
+  finally
+    MS.Free; Dst.Free; Src.Free;
+  end;
+end;
+
+{ LCL's setter rewrites its own argument (valedit.pas:1037-1038) -- a row the user can create but
+  cannot name is not worth creating. So this reads back MORE than was written, which is exactly
+  the kind of asymmetry a later "simplification" removes. }
+procedure TValueListKeyOptionsTest.TestKeyAddSilentlyImpliesKeyEdit;
+var e: TTyValueListEditor;
+begin
+  e := TTyValueListEditor.Create(nil);
+  try
+    e.KeyOptions := [keyAdd];
+    AssertTrue('keyAdd survived', keyAdd in e.KeyOptions);
+    AssertTrue('and dragged keyEdit in with it', keyEdit in e.KeyOptions);
+    e.KeyOptions := [keyDelete];
+    AssertFalse('but keyDelete implies nothing', keyEdit in e.KeyOptions);
+  finally e.Free; end;
+end;
+
+procedure TValueListKeyOptionsTest.TestKeyEditOffMeansNoKeyEditorAtAll;
+var e: TValueListKeyDriver;
+begin
+  e := Make([], 0);
+  try
+    e.BeginKeyEdit(0);
+    AssertEquals('no rename opens without keyEdit', -1, e.EditingRow);
+    AssertFalse('and nothing is sitting over the key column', e.IsEditingKey);
+    e.Press(VK_F2, [ssShift]);
+    AssertEquals('Shift+F2 is inert too', -1, e.EditingRow);
+  finally e.Free; end;
+end;
+
+procedure TValueListKeyOptionsTest.TestKeyEditOpensTheEditorOverTheKeyColumn;
+var e: TValueListKeyDriver;
+begin
+  e := Make([keyEdit], 1);
+  try
+    e.BeginKeyEdit(1);
+    AssertEquals('the rename opened on row 1', 1, e.EditingRow);
+    AssertTrue('over the KEY column, not the value', e.IsEditingKey);
+    AssertEquals('seeded with the row''s real key', 'B', e.InlineEditor.Text);
+
+    { The value editor is a different cell on the same row: opening it must hand over, not be
+      swallowed by a "same row, already editing" early exit. }
+    e.BeginEdit(1);
+    AssertEquals('still on row 1', 1, e.EditingRow);
+    AssertFalse('but now over the VALUE column', e.IsEditingKey);
+    AssertEquals('seeded with the row''s value', '2', e.InlineEditor.Text);
+  finally e.Free; end;
+end;
+
+procedure TValueListKeyOptionsTest.TestKeyEditRenamesTheRowAndFiresOnKeyChanged;
+var e: TValueListKeyDriver;
+begin
+  e := Make([keyEdit], 1);
+  try
+    e.Press(VK_F2, [ssShift]);        // the keyboard route, not the data API
+    AssertTrue('Shift+F2 opened the rename', e.IsEditingKey);
+    e.InlineEditor.Text := 'Beta';
+    e.Commit;
+    AssertEquals('the key changed', 'Beta', e.Keys[1]);
+    AssertEquals('OnKeyChanged fired once', 1, FRenames);
+    AssertSame('naming the row that was renamed', e.Row(1), FLastRenamed);
+    AssertEquals('the editor closed', -1, e.EditingRow);
+  finally e.Free; end;
+end;
+
+{ The routing mistake this exists to catch: the key cell's editor committing through the VALUE
+  path, so a rename overwrites the row's data with the row's name. One `col = 0` test apart. }
+procedure TValueListKeyOptionsTest.TestKeyEditCommitsToTheKeyNotTheValue;
+var e: TValueListKeyDriver;
+begin
+  e := Make([keyEdit], 0);
+  try
+    e.BeginKeyEdit(0);
+    e.InlineEditor.Text := 'Renamed';
+    e.Commit;
+    AssertEquals('key took the text', 'Renamed', e.Keys[0]);
+    AssertEquals('and the VALUE was not touched', '1', e.ValueFromIndex[0]);
+    AssertEquals('so no value-change event fired either', 0, FRejects);
+  finally e.Free; end;
+end;
+
+procedure TValueListKeyOptionsTest.TestKeyEditCancelKeepsTheOldName;
+var e: TValueListKeyDriver;
+begin
+  e := Make([keyEdit], 0);
+  try
+    e.BeginKeyEdit(0);
+    e.InlineEditor.Text := 'Discarded';
+    e.Cancel;
+    AssertEquals('Escape throws the rename away', 'A', e.Keys[0]);
+    AssertEquals('and fires nothing', 0, FRenames);
+  finally e.Free; end;
+end;
+
+{ Turning keyEdit off while a rename is open must not leave a live editor that will still commit
+  through a switch the app has just closed. }
+procedure TValueListKeyOptionsTest.TestClearingKeyEditClosesAnOpenRename;
+var e: TValueListKeyDriver;
+begin
+  e := Make([keyEdit], 0);
+  try
+    e.BeginKeyEdit(0);
+    e.InlineEditor.Text := 'Sneak';
+    e.KeyOptions := [];
+    AssertEquals('the open rename was closed', -1, e.EditingRow);
+    AssertEquals('and discarded, not applied', 'A', e.Keys[0]);
+  finally e.Free; end;
+end;
+
+{ LCL inserts AT the current row (InsertRow('','',False), valedit.pas:1301) rather than appending,
+  so the blank row lands where the user is looking. }
+procedure TValueListKeyOptionsTest.TestKeyAddInsertsABlankRowAtTheCurrentPosition;
+var e: TValueListKeyDriver;
+begin
+  e := Make([keyAdd], 1);
+  try
+    e.Press(VK_INSERT, []);
+    AssertEquals('a row appeared', 4, e.RowCount);
+    AssertEquals('at the selected position, not the end', '', e.Keys[1]);
+    AssertEquals('pushing the old row down', 'B', e.Keys[2]);
+    AssertEquals('and the last row is still the last row', 'C', e.Keys[3]);
+  finally e.Free; end;
+end;
+
+procedure TValueListKeyOptionsTest.TestKeyAddOffLeavesInsertAlone;
+var e: TValueListKeyDriver;
+begin
+  e := Make([keyEdit, keyDelete, keyUnique], 1);   // every flag EXCEPT keyAdd
+  try
+    e.Press(VK_INSERT, []);
+    AssertEquals('Insert adds nothing without keyAdd', 3, e.RowCount);
+  finally e.Free; end;
+end;
+
+procedure TValueListKeyOptionsTest.TestKeyDeleteRemovesTheCurrentRowOnCtrlDelete;
+var e: TValueListKeyDriver;
+begin
+  e := Make([keyDelete], 1);
+  try
+    e.Press(VK_DELETE, [ssModifier]);
+    AssertEquals('one row went', 2, e.RowCount);
+    AssertEquals('the SELECTED one', 'A', e.Keys[0]);
+    AssertEquals('and the rest closed up', 'C', e.Keys[1]);
+  finally e.Free; end;
+end;
+
+{ Delphi's help says plain Delete; LCL's own comment (valedit.pas:1308-1309) records that testers
+  only ever saw Ctrl+Delete, and bare Delete has to stay with the text being typed. }
+procedure TValueListKeyOptionsTest.TestKeyDeleteIgnoresBareDelete;
+var e: TValueListKeyDriver;
+begin
+  e := Make([keyDelete], 1);
+  try
+    e.Press(VK_DELETE, []);
+    AssertEquals('bare Delete removes nothing', 3, e.RowCount);
+    AssertEquals('and the row is untouched', 'B', e.Keys[1]);
+  finally e.Free; end;
+end;
+
+procedure TValueListKeyOptionsTest.TestKeyDeleteOffLeavesCtrlDeleteAlone;
+var e: TValueListKeyDriver;
+begin
+  e := Make([keyEdit, keyAdd, keyUnique], 1);   // every flag EXCEPT keyDelete
+  try
+    e.Press(VK_DELETE, [ssModifier]);
+    AssertEquals('Ctrl+Delete removes nothing without keyDelete', 3, e.RowCount);
+  finally e.Free; end;
+end;
+
+{ The whole obligation behind the flag: the rename must NOT take effect. Shipping keyUnique
+  without this would be worse than not shipping it -- the switch would claim a guarantee the
+  data does not have. }
+procedure TValueListKeyOptionsTest.TestKeyUniqueRefusesADuplicateRename;
+var e: TValueListKeyDriver;
+begin
+  e := Make([keyEdit, keyUnique], 0);
+  try
+    e.BeginKeyEdit(0);
+    e.InlineEditor.Text := 'C';        // already the name of root row 2
+    e.Commit;
+    AssertEquals('the row KEPT its old key', 'A', e.Keys[0]);
+    AssertEquals('the other row is untouched too', 'C', e.Keys[2]);
+    AssertEquals('OnKeyRejected fired', 1, FRejects);
+    AssertEquals('carrying the name that was refused', 'C', FLastRejectKey);
+    AssertEquals('and OnKeyChanged did NOT', 0, FRenames);
+  finally e.Free; end;
+end;
+
+{ LCL compares with AnsiCompareText (valedit.pas:1610) -- case-insensitive, because a list whose
+  keys differ only in case is duplicate for every purpose an ini file has. }
+procedure TValueListKeyOptionsTest.TestKeyUniqueFoldsCase;
+var e: TValueListKeyDriver;
+begin
+  e := Make([keyEdit, keyUnique], 0);
+  try
+    e.BeginKeyEdit(0);
+    e.InlineEditor.Text := 'c';
+    e.Commit;
+    AssertEquals('a case-only difference is still a duplicate', 'A', e.Keys[0]);
+    AssertEquals('and was reported as one', 1, FRejects);
+  finally e.Free; end;
+end;
+
+procedure TValueListKeyOptionsTest.TestWithoutKeyUniqueTheDuplicateIsAccepted;
+var e: TValueListKeyDriver;
+begin
+  e := Make([keyEdit], 0);              // keyEdit WITHOUT keyUnique
+  try
+    e.BeginKeyEdit(0);
+    e.InlineEditor.Text := 'C';
+    e.Commit;
+    AssertEquals('no uniqueness asked for, none enforced', 'C', e.Keys[0]);
+    AssertEquals('nothing was refused', 0, FRejects);
+    AssertEquals('and the rename was reported', 1, FRenames);
+  finally e.Free; end;
+end;
+
+{ SIBLINGS, not the whole tree -- and this is a real divergence from LCL, whose list is flat so
+  the two are the same set over there. Ours nests, and the nesting MANUFACTURES duplicates: every
+  vekFont row grows children called 'name', 'size', 'bold'. A flat-global rule would make the
+  second font row's 'size' un-renameable and declare the control's own tree invalid. }
+procedure TValueListKeyOptionsTest.TestKeyUniqueScopesToSiblingsNotTheWholeTree;
+var
+  e: TValueListKeyDriver;
+  parent: TTyValueRow;
+begin
+  e := Make([keyEdit, keyUnique], -1);
+  try
+    parent := e.AddRow('font', '');
+    parent.AddChild('size', '9');
+    parent.AddChild('weight', '400');
+    { Rows start Expanded, so SetExpanded(True) would be a no-op here and would NOT rebuild.
+      Direct child mutation is invisible until UpdateRows, exactly as the class documents. }
+    e.UpdateRows;                       // flat list: 0..2 = A/B/C, 3 = font, 4/5 = its children
+    AssertEquals('the tree flattened as expected', 6, e.DisplayRowCount);
+
+    { A child may take a name a ROOT row already has -- different parents, no collision. }
+    e.BeginKeyEdit(5);                  // the 'weight' child
+    AssertTrue('the child rename opened', e.IsEditingKey);
+    e.InlineEditor.Text := 'A';         // 'A' is a ROOT row
+    e.Commit;
+    AssertEquals('a different branch is not a collision', 'A', parent.Child[1].Key);
+    AssertEquals('so nothing was refused', 0, FRejects);
+
+    { Its own sibling, however, is. }
+    e.BeginKeyEdit(5);
+    e.InlineEditor.Text := 'size';      // its sibling's name
+    e.Commit;
+    AssertEquals('a SIBLING collision is refused', 'A', parent.Child[1].Key);
+    AssertEquals('and reported', 1, FRejects);
+  finally e.Free; end;
+end;
+
+{ keyAdd inserts BLANK rows, and two of them is the normal state of a list being filled in, so an
+  empty key must collide with nothing. LCL skips empty Names[] for the same reason. }
+procedure TValueListKeyOptionsTest.TestKeyUniqueLetsBlankKeysCoexist;
+var e: TValueListKeyDriver;
+begin
+  e := Make([keyEdit, keyAdd, keyUnique], 0);
+  try
+    e.Press(VK_INSERT, []);
+    e.Press(VK_INSERT, []);
+    AssertEquals('two blank rows were inserted', 5, e.RowCount);
+    AssertEquals('the first is blank', '', e.Keys[0]);
+    AssertEquals('and so is the second', '', e.Keys[1]);
+
+    e.BeginKeyEdit(0);
+    e.InlineEditor.Text := '';          // blanking a name is not a duplicate either
+    e.Commit;
+    AssertEquals('blanking a key is never refused', 0, FRejects);
+  finally e.Free; end;
+end;
+
+{ Committing a row's OWN name unchanged must not trip the check against itself -- the loop has to
+  skip the row being renamed, and "compare against every row" is the obvious wrong version. }
+procedure TValueListKeyOptionsTest.TestKeyUniqueDoesNotRefuseARowItsOwnName;
+var e: TValueListKeyDriver;
+begin
+  e := Make([keyEdit, keyUnique], 0);
+  try
+    e.BeginKeyEdit(1);
+    e.InlineEditor.Text := 'B';         // exactly what it is already called
+    e.Commit;
+    AssertEquals('the row keeps its name', 'B', e.Keys[1]);
+    AssertEquals('and it was not treated as a clash with itself', 0, FRejects);
+
+    { Same again, differing only in case -- still the same row, still not a clash. }
+    e.BeginKeyEdit(1);
+    e.InlineEditor.Text := 'b';
+    e.Commit;
+    AssertEquals('a case-only self-rename goes through', 'b', e.Keys[1]);
+    AssertEquals('without a refusal', 0, FRejects);
+  finally e.Free; end;
+end;
+
+{ ReadOnly means the whole sheet is read-only. KeyOptions describes what is PERMITTED when
+  editing is possible at all; it must not become a back door around it. }
+procedure TValueListKeyOptionsTest.TestReadOnlyOutranksEveryKeyOption;
+var e: TValueListKeyDriver;
+begin
+  e := Make([keyEdit, keyAdd, keyDelete, keyUnique], 1);
+  try
+    e.ReadOnly := True;
+    e.Press(VK_INSERT, []);
+    AssertEquals('no row added', 3, e.RowCount);
+    e.Press(VK_DELETE, [ssModifier]);
+    AssertEquals('no row deleted', 3, e.RowCount);
+    e.BeginKeyEdit(1);
+    AssertEquals('no rename opened', -1, e.EditingRow);
+    e.Press(VK_F2, [ssShift]);
+    AssertEquals('not by keyboard either', -1, e.EditingRow);
+    AssertEquals('and the list is exactly as it was', 'B', e.Keys[1]);
+  finally e.Free; end;
+end;
+
 initialization
   RegisterTest(TValueListParityTest);
   RegisterTest(TValueListViewportMetricTest);
   RegisterTest(TValueListRowApiTest);
+  RegisterTest(TValueListKeyOptionsTest);
 end.

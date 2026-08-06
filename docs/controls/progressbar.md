@@ -234,3 +234,20 @@ function  BarText: string;         // 已填好的读数文字
 
 - **`Style`（确定/不确定）** 在本库是另一个控件：`TTyActivityBar`（它的头注释就写着“`TTyProgressBar` 的不确定兄弟”）。本轮**未**把它并回来，所以 `ProgressBar1.Style := pbstMarquee` 仍然无法工作，且一个控件不能在运行时两种模式互切（“先不知道总大小、后来知道了”的下载正需要这个）。
 - **`Smooth`（连续/分段填充）** 不作为属性提供：LCL 那边它只是转给原生部件的一个请求（Win32 的 `PBS_SMOOTH`），在没有该能力的 widgetset 上什么也不做；对一个自绘控件而言“连续还是分段”是材质决定，属于皮肤引擎，不应该是控件上的一个布尔。
+
+### 不做：`TabStop` / `TabOrder` / `OnEnter` / `OnExit`
+
+这四个成员 LCL 的 `TProgressBar` 有，我们**没有，而且刻意不补**。
+
+原因是**类型层级**，不是遗漏：
+
+| | 基类 | 有窗口句柄吗 |
+|---|---|---|
+| LCL | `TCustomProgressBar = class(TWinControl)`（`comctrls.pp:1814`） | 有 |
+| 本库 | `TTyProgressBar = class(TTyGraphicControl)`，而 `TTyGraphicControl = class(TGraphicControl, ITyStyleable)`（`tyControls.Base.pas:69`），`TGraphicControl = class(TControl)`（`controls.pp:2446`） | **没有** |
+
+`TabStop`、`TabOrder`、`OnEnter`、`OnExit` 四个全都声明在 `TWinControl` 上（`controls.pp:2341-2348`）。**没有句柄的控件收不到 `WM_SETFOCUS`，永远不会产生 `CM_ENTER`/`CM_EXIT`，也根本不在 Tab 链里。** 这四个成员在我们的类上**不以任何形式存在**。
+
+所以“把它们 published 出来”实际上是**新声明四个同名成员**:一个没人读的 Boolean、一个没人用的次序值、两个永远不会被触发的事件槽。这正是 `tests/test.parity.pas` 里 `LyingPropertiesStayUnpublished` 要挡住的那类缺陷——对象查看器里多出一个控件根本不理会的开关。何况被拒绝的这点能力本身价值极低:进度条是**读数**,没有可输入的东西,LCL 自己在它上面的 `TabStop` 默认也是 `False`——忠实实现的结果是一个默认关着的 Tab 停靠点。
+
+**真要这个能力,正确做法不是 published 这四个**,而是把 `TTyProgressBar` 改基到 `TTyCustomControl`(真正的窗口化控件)去继承它们。那会改变它的每一个像素——图形控件是画进父控件 DC 的——并且会带进本库已经记录在案的"窗口化控件圆角/擦除底色"那一串问题。这是一个需要专门决策的改动,所以 `tests/test.progressbar.pas` 的 `TTyProgressBarFocusParityTest` 把**基类本身**也钉住了:哪天有人真去改基类,那条断言会立刻变红,逼着回来重看这一节,而不是让这段说明悄悄过期。

@@ -48,12 +48,43 @@ type
   { Fired after a value cell commits with a changed value. }
   TTyValueEditEvent = procedure(Sender: TObject; ARow: TTyValueRow) of object;
 
+  { A keyUnique collision: ARow kept its old key, AKey is the name the user tried to give it.
+    LCL raises a ShowMessage from inside the control (valedit.pas:1614); a control library
+    must not, so the refusal is reported here and the app decides whether to say anything. }
+  TTyKeyRejectedEvent = procedure(Sender: TObject; ARow: TTyValueRow; const AKey: string) of object;
+
   { Input restriction for the inline editor: vnmInteger allows only digits + a leading '-';
     vnmFloat additionally allows a single '.'. }
   TTyValueNumericMode = (vnmNone, vnmInteger, vnmFloat);
 
   { Which kind of pick list is currently dropped. }
   TTyValueDropKind = (dkNone, dkEnum, dkColor);
+
+  { What the USER may do to the ROW SET at run time -- the switch that turns a read-only
+    property sheet into an editable name/value list (the classic ini / environment-variable
+    editor). Without it the user could change VALUES but never add, remove or rename an
+    entry: rows could only be built from code.
+
+    Identifiers are LCL's verbatim (C:\lazarus\lcl\valedit.pas:109) so
+    `VLE.KeyOptions := [keyEdit, keyAdd]` ports across unchanged; the TYPE names carry the
+    library's TTy prefix like every other option set here.
+
+      keyEdit    the KEY cell is editable -- click it (or Shift+F2 on the selected row; plain
+                 F2 already opens the VALUE) and the same inline editor opens over column 0,
+                 committing to Row.Key.
+      keyAdd     Insert (no modifiers) inserts a blank row AT the current position.
+                 IMPLIES keyEdit, exactly as LCL's SetKeyOptions does (valedit.pas:1037-1038):
+                 a row you can add but not name is not worth adding.
+      keyDelete  Ctrl+Delete removes the current ROOT row.
+      keyUnique  a rename that collides with a SIBLING's key is refused -- see
+                 OnKeyRejected for the collision rule and how it differs from LCL's.
+
+    Default [] -- every flag off, which is the behaviour this control already had.
+
+    ORDINALS ARE API. A set property streams as a byte of bit positions, so reordering
+    these renames every flag in every .lfm already written. Append only. }
+  TTyKeyOption = (keyEdit, keyAdd, keyDelete, keyUnique);
+  TTyKeyOptions = set of TTyKeyOption;
 
   { The inline VALUE editor: a TTyEdit that can (a) restrict typing to a number and (b) show a
     trailing "…" button. The text stays freely clickable / selectable / copyable — only the "…"
@@ -89,6 +120,7 @@ type
     FFlatLevel: array of Integer;     // indent level per flat row
     FEditor: TTyValueEdit;
     FEditFlat: Integer;               // flat index being edited, or -1
+    FEditCol: Integer;                // which COLUMN that editor sits over: 0 = key, 1 = value
     FEndingEdit: Boolean;
     FRebuilding: Boolean;
     FDropMode: Boolean;               // a boolean/enum/colour dropdown is open (suppresses OnExit commit)
@@ -102,9 +134,12 @@ type
     FKeyColumnWidth: Integer;         // logical px
     FIndent: Integer;                 // logical px per nesting level
     FReadOnly: Boolean;
+    FKeyOptions: TTyKeyOptions;
     FDraggingSplit: Boolean;
     FImages: TTyVirtualImageList;
     FOnValueChanged: TTyValueEditEvent;
+    FOnKeyChanged: TTyValueEditEvent;      // a keyEdit rename committed
+    FOnKeyRejected: TTyKeyRejectedEvent;   // a keyUnique collision refused a rename
     FOnEditRow: TTyValueEditEvent;    // vekDialog: the app shows a dialog + sets ARow.Value
     function Dp(ALogical: Integer): Integer;
     function ContentLeftDp: Integer;
@@ -129,8 +164,22 @@ type
     function GetValue(const AKey: string): string;
     procedure SetValue(const AKey, AValue: string);
     procedure SetKeyColumnWidth(AValue: Integer);
+    procedure SetKeyOptions(AValue: TTyKeyOptions);
     procedure SetImages(const AValue: TTyVirtualImageList);
+    { keyUnique's collision rule: does AKey already name one of ARow's SIBLINGS? Case-insensitive
+      (LCL uses AnsiCompareText, valedit.pas:1610) and blind to empty keys, like LCL's.
+
+      SIBLINGS, not the whole list, and that is a deliberate divergence: LCL's list is flat, so
+      "sibling" and "every row" are the same set over there. Ours nests, and the nesting produces
+      legitimate duplicates by design -- every vekFont row grows children called 'name', 'size',
+      'bold' (SeedFontFromRow), so two font rows in one sheet already hold two 'size' keys. A
+      flat-global rule would declare that pre-existing tree invalid and make nested rows
+      un-renameable the moment keyUnique went on. }
+    function KeyCollides(ARow: TTyValueRow; const AKey: string): Boolean;
     procedure CommitEditor(AFlat: Integer; const AText: string);
+    { Commit a keyEdit rename. False = keyUnique refused it (OnKeyRejected has fired and the row
+      still holds its old key); the caller must not treat the edit as applied. }
+    function CommitKeyEdit(ARow: TTyValueRow; const AText: string): Boolean;
     procedure CommitEditorRow(ARow: TTyValueRow; const AText: string);
     function RowExists(ARow: TTyValueRow): Boolean;
     function ChildByKey(ARow: TTyValueRow; const AKey: string): TTyValueRow;
@@ -156,9 +205,14 @@ type
     procedure SyncFontChildren(ARow: TTyValueRow; AFont: TFont);
     procedure EditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure EditorExit(Sender: TObject);
-    procedure EndEdit(ACommit: Boolean; ARestoreFocus: Boolean = False);
     procedure RepositionEditor;
   protected
+    { Close whatever cell editor is open: ACommit applies the typed text (to the row's VALUE, or
+      to its KEY when the key column is the one being edited), otherwise it is discarded.
+      Protected rather than private because it is the other half of BeginEdit / BeginKeyEdit --
+      a descendant that opens an editor has to be able to close one, and the guards drive the
+      commit through here rather than by simulating a click somewhere else on the control. }
+    procedure EndEdit(ACommit: Boolean; ARestoreFocus: Boolean = False);
     { NOT MIRRORED, and this is the whole reason TTyListBox asks per class.
 
       Every other member of the list-box family hit-tests rows on Y alone, so mirroring the
@@ -219,6 +273,10 @@ type
     procedure SetExpanded(ARow: TTyValueRow; AExpanded: Boolean);
     // Start editing the VISIBLE row at flat index AFlat (no-op when ReadOnly / read-only row).
     procedure BeginEdit(AFlat: Integer);
+    { Start editing that row's KEY -- the rename gesture keyEdit turns on, and a no-op without it
+      (or while ReadOnly). Public alongside BeginEdit so a host can offer "rename" from its own
+      menu instead of only through the click / Shift+F2 the control handles itself. }
+    procedure BeginKeyEdit(AFlat: Integer);
     // Run the dialog editor for a vekFont / vekDialog row (what the inline "…" button triggers).
     procedure InvokeRowDialog(AFlat: Integer);
     // Set a row's value programmatically (by identity): fires OnValueChanged and propagates to
@@ -248,6 +306,10 @@ type
     function VisibleRowCount: Integer;
     // The visible (flat) index being edited, or -1.
     property EditingRow: Integer read FEditFlat;
+    { True while the open editor sits over the KEY column (a keyEdit rename) rather than the value.
+      A pure query -- EditingRow alone cannot tell the two apart, and "which cell is open" decides
+      where the commit lands. }
+    function IsEditingKey: Boolean;
     { Number of ROOT rows -- read/write, as LCL declares it (valedit.pas:237, a property, not
       a function, so it can be read through RTTI or a binding layer and `VLE.RowCount := 0` is
       the one-line way to empty the list). Writing grows the list with blank rows or trims it
@@ -277,8 +339,22 @@ type
   published
     property KeyColumnWidth: Integer read FKeyColumnWidth write SetKeyColumnWidth default 110;
     property ReadOnly: Boolean read FReadOnly write FReadOnly default False;
+    { What the user may do to the row set: rename a key, add a row, delete a row, and whether a
+      rename must stay unique. See TTyKeyOption. Default [], which is the behaviour that shipped
+      before this existed -- values editable, the row SET fixed.
+
+      ReadOnly still wins over all four: it turns the whole control read-only, so a ReadOnly
+      sheet with KeyOptions set neither renames nor adds nor deletes. }
+    property KeyOptions: TTyKeyOptions read FKeyOptions write SetKeyOptions default [];
     property Images: TTyVirtualImageList read FImages write SetImages;
     property OnValueChanged: TTyValueEditEvent read FOnValueChanged write FOnValueChanged;
+    { A keyEdit rename COMMITTED (ARow.Key already holds the new name). Distinct from
+      OnValueChanged on purpose -- that one is documented as naming the row whose VALUE moved,
+      and firing it for a rename would make it lie. }
+    property OnKeyChanged: TTyValueEditEvent read FOnKeyChanged write FOnKeyChanged;
+    { A keyUnique rename REFUSED. The row kept its old key; the app decides whether to tell the
+      user (LCL pops its own ShowMessage from inside the control; we do not). }
+    property OnKeyRejected: TTyKeyRejectedEvent read FOnKeyRejected write FOnKeyRejected;
     // Fires for a vekDialog row (click its value / '…'): show a custom dialog and set ARow.Value.
     property OnEditRow: TTyValueEditEvent read FOnEditRow write FOnEditRow;
   end;
@@ -442,6 +518,7 @@ constructor TTyValueListEditor.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FEditFlat := -1;
+  FEditCol := 1;      // the value column: what an edit meant before the key became editable
   FColorDlgRow := nil;
   FKeyColumnWidth := 110;
   FIndent := 14;
@@ -793,8 +870,22 @@ begin
   if AValue < 16 then AValue := 16;
   if FKeyColumnWidth = AValue then Exit;
   FKeyColumnWidth := AValue;
-  if FEditFlat >= 0 then FEditor.BoundsRect := CellRect(FEditFlat, 1);
+  if FEditFlat >= 0 then FEditor.BoundsRect := CellRect(FEditFlat, FEditCol);
   Invalidate;
+end;
+
+{ LCL normalises the same way (valedit.pas:1035-1039): keyAdd pulls keyEdit in with it, because a
+  blank row you cannot name is not a row anybody wanted. So `KeyOptions := [keyAdd]` READS BACK as
+  [keyEdit, keyAdd] -- deliberate, and pinned by a test, since a setter that silently rewrites its
+  argument is exactly the kind of thing a later refactor "tidies away". }
+procedure TTyValueListEditor.SetKeyOptions(AValue: TTyKeyOptions);
+begin
+  if keyAdd in AValue then Include(AValue, keyEdit);
+  if FKeyOptions = AValue then Exit;
+  FKeyOptions := AValue;
+  { A key edit already open stops being legal the moment keyEdit goes away -- committing it
+    afterwards would apply a rename through a switch the app has just turned off. }
+  if (FEditFlat >= 0) and (FEditCol = 0) and not (keyEdit in FKeyOptions) then EndEdit(False);
 end;
 
 procedure TTyValueListEditor.SetImages(const AValue: TTyVirtualImageList);
@@ -818,6 +909,47 @@ procedure TTyValueListEditor.CommitEditor(AFlat: Integer; const AText: string);
 begin
   if (AFlat < 0) or (AFlat > High(FFlatRow)) then Exit;
   CommitEditorRow(FFlatRow[AFlat], AText);
+end;
+
+function TTyValueListEditor.KeyCollides(ARow: TTyValueRow; const AKey: string): Boolean;
+var
+  i: Integer;
+  p, sib: TTyValueRow;
+begin
+  Result := False;
+  { An empty name collides with nothing -- LCL skips empty Names[] the same way. Otherwise the
+    blank rows keyAdd inserts would refuse to coexist, and two of them is the normal state of a
+    list somebody is filling in. }
+  if (ARow = nil) or (AKey = '') then Exit;
+  p := ARow.Parent;
+  if p = nil then
+  begin
+    for i := 0 to High(FRoot) do
+      if (FRoot[i] <> ARow) and (FRoot[i].Key <> '') and SameText(FRoot[i].Key, AKey) then Exit(True);
+  end
+  else
+    for i := 0 to p.ChildCount - 1 do
+    begin
+      sib := p.Child[i];
+      if (sib <> ARow) and (sib.Key <> '') and SameText(sib.Key, AKey) then Exit(True);
+    end;
+end;
+
+function TTyValueListEditor.CommitKeyEdit(ARow: TTyValueRow; const AText: string): Boolean;
+begin
+  Result := True;
+  if ARow = nil then Exit;
+  if ARow.Key = AText then Exit;                 // unchanged: not a rename, and never a collision
+  if (keyUnique in FKeyOptions) and KeyCollides(ARow, AText) then
+  begin
+    Result := False;
+    if Assigned(FOnKeyRejected) then FOnKeyRejected(Self, ARow, AText);
+    Invalidate;                                  // repaint the key cell the editor was covering
+    Exit;
+  end;
+  ARow.Key := AText;
+  if Assigned(FOnKeyChanged) then FOnKeyChanged(Self, ARow);
+  Invalidate;
 end;
 
 { Commit by row IDENTITY (not flat index) — used by the deferred colour dialog, which must survive
@@ -963,8 +1095,14 @@ begin
   if (AFlat < 0) or (AFlat > High(FFlatRow)) then Exit;
   r := FFlatRow[AFlat];
   if r.ReadOnly or (r.EditorKind = vekReadOnly) then Exit;
-  if FEditFlat = AFlat then Exit;
+  { Same row AND same column: already editing this cell. A KEY edit on this row is a DIFFERENT
+    cell, so clicking the value must still hand over -- without the column test the key editor
+    stayed open and the click on the value did nothing. }
+  if (FEditFlat = AFlat) and (FEditCol = 1) then Exit;
   if FEditFlat >= 0 then EndEdit(True);
+  { EndEdit may have rebuilt or shortened the flat list (a commit handler can edit the tree). }
+  if (AFlat < 0) or (AFlat > High(FFlatRow)) then Exit;
+  r := FFlatRow[AFlat];
   { A Font/Style COMPOSITE row's value is DERIVED from its children (see ComposeValue), so it must
     NOT be freely typed — the typed text would be overwritten by the next child edit, or left as a
     stray value if the font dialog is cancelled. A Style composite has no dialog of its own, so
@@ -996,12 +1134,45 @@ procedure TTyValueListEditor.BeginInlineEdit(AFlat: Integer; ANumeric: TTyValueN
   AEllipsis: Boolean);
 begin
   FEditFlat := AFlat;
+  FEditCol := 1;
   FEditor.NumericMode := ANumeric;
   FEditor.ShowEllipsis := AEllipsis;
   FEditor.ReadOnly := False;
   FEditor.Controller := Controller;
   FEditor.Text := FFlatRow[AFlat].Value;
   FEditor.BoundsRect := CellRect(AFlat, 1);
+  FEditor.Visible := True;
+  if CanFocus and FEditor.CanFocus then FEditor.SetFocus;
+  Invalidate;
+end;
+
+{ keyEdit: the SAME inline editor, over column 0, holding the row's Key. Plain text always -- the
+  per-row EditorKind (numeric / dropdown / dialog) describes how the VALUE is edited and has
+  nothing to say about the name, so a vekColor row's key is still typed, not picked. A read-only
+  ROW is read-only in its value only: renaming the entry is a row-set operation, which is what
+  KeyOptions governs. }
+function TTyValueListEditor.IsEditingKey: Boolean;
+begin
+  Result := (FEditFlat >= 0) and (FEditCol = 0);
+end;
+
+procedure TTyValueListEditor.BeginKeyEdit(AFlat: Integer);
+begin
+  if FReadOnly or not (keyEdit in FKeyOptions) then Exit;
+  if (AFlat < 0) or (AFlat > High(FFlatRow)) then Exit;
+  if (FEditFlat = AFlat) and (FEditCol = 0) then Exit;
+  if FEditFlat >= 0 then EndEdit(True);
+  { EndEdit can drop rows out from under us (a rejected commit repaints, a handler may edit the
+    tree), so re-check before indexing. }
+  if (AFlat < 0) or (AFlat > High(FFlatRow)) then Exit;
+  FEditFlat := AFlat;
+  FEditCol := 0;
+  FEditor.NumericMode := vnmNone;
+  FEditor.ShowEllipsis := False;
+  FEditor.ReadOnly := False;
+  FEditor.Controller := Controller;
+  FEditor.Text := FFlatRow[AFlat].Key;    // the REAL key, not EffectiveKey: DisplayKey is a label
+  FEditor.BoundsRect := CellRect(AFlat, 0);
   FEditor.Visible := True;
   if CanFocus and FEditor.CanFocus then FEditor.SetFocus;
   Invalidate;
@@ -1308,7 +1479,7 @@ begin
 end;
 
 procedure TTyValueListEditor.EndEdit(ACommit: Boolean; ARestoreFocus: Boolean);
-var flat: Integer;
+var flat, col: Integer;
 begin
   if FEditor = nil then Exit;
   if FDropMode then
@@ -1327,9 +1498,25 @@ begin
   FEndingEdit := True;
   try
     flat := FEditFlat;
+    col := FEditCol;
     FEditFlat := -1;
+    FEditCol := 1;
     FEditor.Visible := False;
-    if ACommit then CommitEditor(flat, FEditor.Text) else Invalidate;
+    if ACommit then
+    begin
+      { Column 0 is a RENAME, not a value change: it writes Row.Key, fires OnKeyChanged, and can
+        be refused outright by keyUnique. Routing it through CommitEditor would have written the
+        typed text into the row's VALUE -- the key cell's editor silently corrupting the row it
+        was opened on. }
+      if col = 0 then
+      begin
+        if (flat >= 0) and (flat <= High(FFlatRow)) then CommitKeyEdit(FFlatRow[flat], FEditor.Text);
+      end
+      else
+        CommitEditor(flat, FEditor.Text);
+    end
+    else
+      Invalidate;
     if ARestoreFocus and CanFocus then SetFocus;
   finally
     FEndingEdit := False;
@@ -1343,7 +1530,7 @@ begin
   if FEditFlat > High(FFlatRow) then
     EndEdit(False)
   else
-    FEditor.BoundsRect := CellRect(FEditFlat, 1);
+    FEditor.BoundsRect := CellRect(FEditFlat, FEditCol);
 end;
 
 procedure TTyValueListEditor.EditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
@@ -1482,10 +1669,14 @@ begin
     ctx.fill;
   end;
 
-  // Key label (after the triangle + indent).
-  keyR := Rect(indentX + P.Scale(indent), ARowRect.Top, splitX - P.Scale(4), ARowRect.Bottom);
-  P.DrawText(keyR, r.EffectiveKey, AStyle.FontName, ResolveFontSize(AStyle), AStyle.FontWeight,
-    keyCol, taLeftJustify, tlCenter, True);
+  // Key label (after the triangle + indent), skipped while ITS inline editor is open -- else the
+  // old name shows through beside the text being typed, exactly as the value cell would.
+  if not ((AIndex = FEditFlat) and (FEditCol = 0)) then
+  begin
+    keyR := Rect(indentX + P.Scale(indent), ARowRect.Top, splitX - P.Scale(4), ARowRect.Bottom);
+    P.DrawText(keyR, r.EffectiveKey, AStyle.FontName, ResolveFontSize(AStyle), AStyle.FontWeight,
+      keyCol, taLeftJustify, tlCenter, True);
+  end;
 
   // Column divider. Its own key ('TyValueListEditorDivider') -- taking the colour from a
   // background, like every other rule/line key in the library ('TyGridLine'). Silent theme =>
@@ -1496,8 +1687,9 @@ begin
   P.Bitmap.Canvas2D.fillRect(splitX, ARowRect.Top + P.Scale(2), 1,
     (ARowRect.Bottom - ARowRect.Top) - P.Scale(4));
 
-  // Value cell (skipped while its inline editor is open).
-  if AIndex <> FEditFlat then
+  // Value cell (skipped while ITS inline editor is open -- a KEY edit on this row leaves the
+  // value cell alone, so the row still reads as the thing being renamed).
+  if (AIndex <> FEditFlat) or (FEditCol <> 1) then
   begin
     valR := Rect(splitX + pad, ARowRect.Top, ARowRect.Right - P.Scale(4), ARowRect.Bottom);
     // '…' affordance for the ellipsis-dialog editors (font / custom), at the right edge. (vekColor
@@ -1562,6 +1754,9 @@ begin
   if (Button = mbLeft) and not FReadOnly and (flat >= 0) then
   begin
     if X >= SplitXDp then BeginEdit(flat)
+    { keyEdit turns the key cell into the second editable column. Off, a click left of the
+      divider keeps doing what it always did: commit whatever was open and select the row. }
+    else if keyEdit in FKeyOptions then BeginKeyEdit(flat)
     else if FEditFlat >= 0 then EndEdit(True);
   end;
 end;
@@ -1584,11 +1779,50 @@ begin
 end;
 
 procedure TTyValueListEditor.KeyDown(var Key: Word; Shift: TShiftState);
+var at: Integer;
 begin
+  { keyAdd / keyDelete are ROW-SET gestures, so they run before the edit keys and regardless of
+    whether an editor is open -- but never while the control is ReadOnly, which outranks all of
+    KeyOptions. LCL: valedit.pas:1296-1312. }
+  if not FReadOnly then
+  begin
+    { Insert with NO modifiers. LCL inserts AT the current row rather than appending
+      (InsertRow('','',False), valedit.pas:1301), so the new row lands where the user is looking. }
+    if (keyAdd in FKeyOptions) and (Key = VK_INSERT) and (Shift = []) then
+    begin
+      if FEditFlat >= 0 then EndEdit(True);
+      InsertRow('', '', False);
+      Key := 0;
+      Exit;
+    end;
+    { Ctrl+Delete, not bare Delete: bare Delete belongs to the text being typed, and LCL carries
+      the same note (valedit.pas:1308-1309) after testers reported Delphi's documented plain
+      Delete never actually fires. }
+    if (keyDelete in FKeyOptions) and (Key = VK_DELETE) and (Shift = [ssModifier]) then
+    begin
+      at := CurrentRootIndex;      // DeleteRow is indexed by ROOT row; selection is a flat index
+      if at >= 0 then
+      begin
+        if FEditFlat >= 0 then EndEdit(False);   // the row is going away: do not commit into it
+        DeleteRow(at);
+      end;
+      Key := 0;
+      Exit;
+    end;
+  end;
   if ((Key = VK_F2) or (Key = VK_RETURN)) and (Shift = []) and (ItemIndex >= 0)
     and not FReadOnly and (FEditFlat < 0) then
   begin
     BeginEdit(ItemIndex);
+    Key := 0;
+    Exit;
+  end;
+  { Shift+F2 opens the KEY cell -- F2 is already taken by the value editor, and keyEdit must be
+    reachable without a mouse or the flag is only half there. }
+  if (Key = VK_F2) and (Shift = [ssShift]) and (ItemIndex >= 0)
+    and not FReadOnly and (keyEdit in FKeyOptions) then
+  begin
+    BeginKeyEdit(ItemIndex);
     Key := 0;
     Exit;
   end;

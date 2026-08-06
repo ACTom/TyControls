@@ -495,9 +495,67 @@ begin
   end;
 end;
 
+{ ------------------------------------------------------- focus parity: a REFUSAL ------- }
+
+{ TabStop / TabOrder / OnEnter / OnExit -- the four members LCL's TProgressBar has and ours does
+  not, and deliberately will not.
+
+  LCL: TCustomProgressBar = class(TWinControl) (comctrls.pp:1814), so TProgressBar republishes
+  TabOrder / TabStop / OnEnter / OnExit -- all four declared on TWinControl itself
+  (controls.pp:2341-2348).
+
+  Ours: TTyProgressBar = class(TTyGraphicControl), and
+        TTyGraphicControl = class(TGraphicControl, ITyStyleable)   (tyControls.Base.pas:69),
+  with TGraphicControl = class(TControl) (controls.pp:2446). A TControl has NO WINDOW HANDLE, so
+  it never receives WM_SETFOCUS, never gets a CM_ENTER / CM_EXIT, and is not in the tab chain at
+  all. The four members do not exist on the class in any form.
+
+  Publishing them would therefore mean DECLARING FOUR NEW ONES -- a Boolean field, an ordering
+  field, and two event slots that nothing on earth would ever fire. That is precisely the defect
+  class LyingPropertiesStayUnpublished exists to stop: a switch in the Object Inspector that the
+  control does nothing about. And the capability being refused is worth almost nothing to begin
+  with -- a progress bar is a read-out, nothing to type into, and LCL itself defaults TabStop to
+  False on it, so honouring the request faithfully would produce a tab stop that is off.
+
+  The remedy, if this is ever genuinely wanted, is not to publish the four: it is to rebase
+  TTyProgressBar on TTyCustomControl (a real windowed control) and inherit them, which changes
+  how every pixel of it is painted -- graphic controls draw into the parent's DC -- and drags in
+  the windowed-control corner and erase-colour problems the library already documents. That is a
+  deliberate decision, so the second assertion here fails the moment somebody makes it, forcing
+  this comment to be revisited rather than quietly outlived. }
+type
+  TTyProgressBarFocusParityTest = class(TTestCase)
+  published
+    procedure TestFocusMembersStayUnpublished;
+    procedure TestTheReasonIsTheBaseClassNotAnOversight;
+  end;
+
+procedure TTyProgressBarFocusParityTest.TestFocusMembersStayUnpublished;
+begin
+  AssertTrue('TabStop must not be published: a handle-less control cannot be tabbed to',
+    GetPropInfo(TTyProgressBar, 'TabStop') = nil);
+  AssertTrue('nor TabOrder: there is no tab chain position to hold',
+    GetPropInfo(TTyProgressBar, 'TabOrder') = nil);
+  AssertTrue('nor OnEnter: no CM_ENTER can ever arrive',
+    GetPropInfo(TTyProgressBar, 'OnEnter') = nil);
+  AssertTrue('nor OnExit: no CM_EXIT can ever arrive',
+    GetPropInfo(TTyProgressBar, 'OnExit') = nil);
+end;
+
+procedure TTyProgressBarFocusParityTest.TestTheReasonIsTheBaseClassNotAnOversight;
+begin
+  AssertTrue('TTyProgressBar is a graphic control',
+    TTyProgressBar.InheritsFrom(TGraphicControl));
+  { The load-bearing one. Rebase the class on a windowed control and this goes red, which is the
+    signal to revisit the refusal above rather than to delete this test. }
+  AssertFalse('and NOT a windowed one -- which is the whole reason the four above cannot exist',
+    TTyProgressBar.InheritsFrom(TWinControl));
+end;
+
 initialization
   RegisterTest(TTyProgressBarGeometryTest);
   RegisterTest(TTyProgressBarControlTest);
   RegisterTest(TTyProgressBarPixelTest);
   RegisterTest(TTyProgressBarAnimationTest);
+  RegisterTest(TTyProgressBarFocusParityTest);
 end.

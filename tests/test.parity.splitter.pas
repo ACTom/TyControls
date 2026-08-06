@@ -9,7 +9,7 @@ unit test.parity.splitter;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, Forms, ExtCtrls, LCLType,
+  Classes, SysUtils, Types, TypInfo, Controls, Graphics, Forms, ExtCtrls, LCLType,
   fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller,
@@ -515,10 +515,60 @@ begin
   AssertTrue('rsPattern is dashed, not solid — it must leave gaps', blue < rows);
 end;
 
+{ ------------------------------------------------ ResizeAnchor: a REFUSAL, pinned ------- }
+
+{ LCL's TCustomSplitter.ResizeAnchor (extctrls.pp:430) reads like a small property that says
+  which neighbour a drag resizes. It is not. It is the SWITCH BETWEEN THE CLASS'S TWO MODES,
+  and we only implement one of them.
+
+  The class comment spells the two out (extctrls.pp:361-369):
+    1. Align mode   -- Align := alLeft/alRight/alTop/alBottom; the adjacent sibling is resized.
+                       This is everything TTySplitter does.
+    2. Anchored     -- Align := alNone + AnchorSides + ResizeAnchor.
+
+  The two setters clamp each other, so at rest the pair CANNOT disagree:
+    SetAlign        (customsplitter.inc:770-775) derives FResizeAnchor from Align;
+    SetResizeAnchor (:515-525) sets it and then, outside csLoading, forces Align := alNone.
+  In other words "assigning ResizeAnchor" MEANS "leave Align mode". That is the whole property,
+  and it is why the target lookup forks (GetResizeControl, :127-133): FindAlignControl in Align
+  mode, AnchorSide[ResizeAnchor].Control in anchored mode -- and we have no anchored mode at all
+  (FindResizeTarget requires Align in [alLeft..alBottom] by construction).
+
+  So publishing a ResizeAnchor that merely picks a neighbour INSIDE Align mode would ship a
+  public member whose NAME is LCL's and whose MEANING is not -- the exact defect this parity
+  pass exists to remove, and one this codebase has already been bitten by twice on one class
+  (Values[] by row vs by key, VisibleRowCount data vs viewport; see test.parity.valuelist.pas).
+  Ported code would compile and quietly do something else.
+
+  Hence: either anchored mode gets built, or the NAME does not ship. This guard pins the second
+  choice, so a later half-version has to come through here and read the reasoning first.
+  docs/controls/splitter.md §8 carries the full specification, including why the blocker is
+  VERIFICATION rather than code volume: anchored resizing is produced entirely by LCL's
+  align/anchor engine, which AutoSizeDelayed suppresses while the parent form has no handle,
+  so every headless guard over it would be fake-green. }
+type
+  TSplitterResizeAnchorRefusalTest = class(TTestCase)
+  published
+    procedure TestResizeAnchorStaysUnpublishedUntilAnchoredModeExists;
+  end;
+
+procedure TSplitterResizeAnchorRefusalTest.TestResizeAnchorStaysUnpublishedUntilAnchoredModeExists;
+begin
+  AssertTrue('ResizeAnchor must not ship while anchored mode does not exist -- see the note above',
+    GetPropInfo(TTySplitter, 'ResizeAnchor') = nil);
+  { The other half of the same refusal: these three are LCL's anchored-mode API, and one of them
+    appearing alone would mean the mode had been half-built. }
+  AssertTrue('nor ResizeControl, which is anchored mode''s target accessor',
+    GetPropInfo(TTySplitter, 'ResizeControl') = nil);
+  AssertTrue('nor OnCanOffset -- anchored mode negotiates an OFFSET, not a size',
+    GetPropInfo(TTySplitter, 'OnCanOffset') = nil);
+end;
+
 initialization
   RegisterTest(TSplitterDeferredTest);
   RegisterTest(TSplitterBandTest);
   RegisterTest(TSplitterBandPixelTest);
+  RegisterTest(TSplitterResizeAnchorRefusalTest);
 end.
 </content>
 </invoke>

@@ -82,7 +82,12 @@ uses tyControls.ValueListEditor;
 | `SetRowValue(ARow, AText)` | 按行对象改值(触发 `OnValueChanged`,并**向上更新复合父行**——见 §6)。 |
 | `InvokeRowDialog(flat)` | 编程触发 `vekFont`/`vekDialog` 行的对话框(等同点"…")。 |
 | `KeyColumnWidth` | 键列宽 / 分隔线位置(逻辑 px,默认 110,可拖)。 |
+| `KeyOptions: TTyKeyOptions` | **(API parity 新增)运行时用户能对"行集合"做什么**:`keyEdit` 改键名、`keyAdd` 插行、`keyDelete` 删行、`keyUnique` 键名查重。默认 `[]`(= 从前的行为:值能改,行集合是死的)。详见 §7。 |
+| `BeginKeyEdit(flat)` | **(新增)** 编程打开某行的**键**编辑器(等同点键列 / Shift+F2);没开 `keyEdit` 或 `ReadOnly` 时是空操作。与 `BeginEdit`(值列)配对。 |
+| `IsEditingKey: Boolean` | **(新增)** 当前打开的编辑器是否盖在**键**列上。`EditingRow` 只说是哪一行,说不出是哪一列,而"哪个单元格开着"决定提交写到哪儿。 |
 | `ReadOnly` / `Images` / `OnValueChanged(Sender, ARow)` | 全局只读 / 值单元图像源 / 值提交事件。 |
+| `OnKeyChanged(Sender, ARow)` | **(新增)** 一次 `keyEdit` 改名**已提交**(`ARow.Key` 已是新名)。**刻意不复用 `OnValueChanged`**——那个事件的约定是"哪一行的**值**变了",拿它报改名会让它说谎。 |
+| `OnKeyRejected(Sender, ARow, AKey)` | **(新增)** 一次改名被 `keyUnique` **拒绝**(该行仍是旧名),`AKey` 是用户想取的名字。LCL 在控件内部直接弹 `ShowMessage`(`valedit.pas:1614`);控件库不该这么干,所以只把拒绝报出来,要不要提示由应用决定。 |
 
 **`TTyValueRow`**:`Key`、`DisplayKey`、`Value`、`DisplayValue`、`EditorKind`、`EnumValues`、`ReadOnly`、`Bold`、`TextColor`、`ImageIndex`、`Expanded`;`AddChild(k,v)` / `ChildCount` / `Child[i]` / `Parent` / `HasChildren` / `EffectiveKey` / `EffectiveValue`。
 
@@ -90,7 +95,8 @@ uses tyControls.ValueListEditor;
 
 ## 4. 交互
 
-- **点值列** → 按该行 `EditorKind` 编辑:文本(可选中/复制,数字类型限数字)/ 布尔·枚举·颜色下拉 / 字体·自定义先进入可编辑文本、**点尾部"…"** 才弹对话框;**点键列** → 选中该行。选中行按 **F2 / Enter** 也进入编辑。
+- **点值列** → 按该行 `EditorKind` 编辑:文本(可选中/复制,数字类型限数字)/ 布尔·枚举·颜色下拉 / 字体·自定义先进入可编辑文本、**点尾部"…"** 才弹对话框;**点键列** → 选中该行(开了 `keyEdit` 则**同时进入改名**)。选中行按 **F2 / Enter** 也进入编辑。
+- **`KeyOptions` 开出来的手势**(默认全关,见 §7):**点键列 / Shift+F2** 改键名(`keyEdit`)、**Insert** 在当前位置插空行(`keyAdd`)、**Ctrl+Delete** 删当前根行(`keyDelete`)。
 - **点键列前的三角** → 展开/收起子行。**层级无上限**(如 `Font → Style → Bold`)。
 - **拖分隔条**(光标变 ↔)→ 调整键/值列宽。
 - 编辑中:**Enter** / 点别处 / 失焦 → 提交;**Esc** → 取消。`ReadOnly` 行 / 全局 `ReadOnly` 不可编辑。
@@ -137,6 +143,36 @@ VLE.OnValueChanged := @HandleChange;   // (Sender; ARow: TTyValueRow)
 - **复合父行双向联动(Font / Style):** 改子行(如 `Bold`)会**向上**重算 `Style` 与 `Font` 的显示值(`Style`→`Regular`/`Bold, Italic`;`Font`→`Name, Size` + 尾随样式词);点 `Font` 的"…"选字体则**向下**回写全部子行并重算 `Style`/`Font`。编程改值用 `SetRowValue`(会触发同样的向上联动),别直接写 `ARow.Value`。仅 `style` 键名 + `Bold`/`Italic` 子行、及 `vekFont` 行被识别为复合;其它复合语义自理。
 - **颜色"更多…"对话框是延迟弹的:** 走 `Application.QueueAsyncCall`,让弹出列表的鼠标事件先退栈(析构里 `RemoveAsyncCalls` 取消未决调用)。
 - **交互是真机验证项:** 数据 / 嵌套 / 展开 / 显示覆盖 / 只读 / 列宽钳制 / 数字过滤已 headless 单测;分隔拖动、三角点击、下拉圆角、"…"按钮、颜色/字体对话框、字体子行回写需真机验证。
+
+---
+
+## 7. `KeyOptions` —— 让用户能改"行集合"
+
+对标 LCL `TValueListEditor.KeyOptions`(`valedit.pas:310`,集合 `TKeyOption` 在 `:109`)。**从前这个控件完全没有对应物**:行只能从**代码**里加(`AddRow`/`InsertRow`)和删(`DeleteRow`),键列没有任何手势能改,也没有任何地方查过重复键。于是这个控件最该干的那件事——**用户可编辑的名/值列表**(ini 编辑器、环境变量编辑器)——根本做不出来:用户只能改值,别的什么都不能做。
+
+```pascal
+VLE.KeyOptions := [keyEdit, keyAdd, keyDelete, keyUnique];
+```
+
+| 标志 | 手势 | 效果 |
+|------|------|------|
+| `keyEdit` | 点键列 / **Shift+F2** | 键单元变成可编辑,用**同一个**内联编辑器盖在第 0 列上,提交写 `Row.Key`,触发 `OnKeyChanged`。 |
+| `keyAdd` | **Insert**(不带修饰键) | 在**当前行位置**插一根空行(不是追加——LCL 也是 `InsertRow('','',False)`,让新行出现在用户正看着的地方)。 |
+| `keyDelete` | **Ctrl+Delete** | 删掉当前**根**行。 |
+| `keyUnique` | (改名提交时) | 与**同级兄弟**重名的改名**被拒**:该行保留旧名,`OnKeyRejected` 带着被拒的名字触发。 |
+
+**默认 `[]`**,即从前的行为。`ReadOnly` **压过全部四个**——整张表只读时,既不能改名、也不能加删。
+
+### 几个不是自明的点
+
+- **`keyAdd` 会把 `keyEdit` 一起打开。** `KeyOptions := [keyAdd]` **读回来是 `[keyEdit, keyAdd]`**。LCL 的 setter 同样改写自己的入参(`valedit.pas:1037-1038`):一根加得出来却取不了名的空行没有意义。
+- **`keyUnique` 只在"同级兄弟"里查重,不是全表。这是与 LCL 有意的分歧。** LCL 的列表是**平的**,所以在那边"兄弟"和"所有行"是同一批。我们这个是**树**,而这棵树**天生就会产生重名**:每根 `vekFont` 行都会长出叫 `Name`/`Size`/`Color` 的子行,一张表里放两个字体行就已经有两个 `Size` 了。若照搬全表规则,`keyUnique` 一打开就等于宣布控件自己的树非法,嵌套行从此改不了名。
+- **空键不与任何东西冲突。** `keyAdd` 插进来的就是空行,而"正在填的表里有两根空行"是常态。LCL 跳过空 `Names[]` 也是同一个理由。
+- **查重不分大小写**(LCL 用 `AnsiCompareText`,`valedit.pas:1610`),但**行不与自己冲突**——把 `Bold` 改成 `bold` 是允许的。
+- **被拒时控件不弹窗。** LCL 在控件内部直接 `ShowMessage`;这里改成触发 `OnKeyRejected`,要不要提示、用哪个对话框由应用定(库自带 `TyMessageDlg`)。**没有处理器时改名就是静静地不生效**——这是刻意的,"改名不落地"才是 `keyUnique` 的义务,提示只是附带。
+- **枚举的序号是 API。** 集合属性是按**位序**流式化的,所以 `TTyKeyOption` **只能往后追加**;插在中间会让所有已存的 `.lfm` 悄悄换意思(旧的 `[keyAdd]` 会读成 `keyDelete`)。守卫在 `tests/test.parity.valuelist.pas` 的 `TestKeyOptionOrdinalsAreFrozen`,外加一条真实的流式化往返 `TestKeyOptionsRoundTripsThroughTheStream`。
+- **没有对应 LCL 的 `goAutoAddRows` 联动。** LCL 的 setter 会顺手开关 grid 的 `goAutoAddRows`(`valedit.pas:1040-1043`),因为它**是**一个 grid;我们这个是 `TTyListBox`,没有那套 `Options`,所以这条不存在。
+- **`Keys[]` 仍是只读的。** 用户改名走 `keyEdit`,代码改名写 `Row(i).Key`。LCL 的 `Keys[]` 可写但**不查重**(查重只在编辑器路径上),所以补一个可写 `Keys[]` 是另一件事,不在这条里。
 
 ---
 

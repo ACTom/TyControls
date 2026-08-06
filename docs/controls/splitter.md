@@ -176,3 +176,50 @@ end;
 - **控件默认透明：** 内置主题 `background: none`，分隔条本身不绘制背景框，只在中央画三点握把；如需可见分隔背景，可在主题中为 `TySplitter` 设置 `background`（`DrawFrame` 路径会应用它）。
 - **DFM 序列化：** `MinSize`（`default 30`）、`AutoSnap`（`default True`）、`ResizeStyle`（`default rsUpdate`）、`Align`（`default alLeft`）均声明了默认值，等于默认值时不写入 `.lfm`/`.dfm`。
 - **预览带需真机验证：** 带子压在指针底下、依赖分隔条持有鼠标捕获，无头测试跑不到这条路——发版前每种 `ResizeStyle` 至少手拖一次。
+
+---
+
+## 8. 不做（暂缓）：`ResizeAnchor` 与"锚定式分隔"
+
+LCL 的 `TCustomSplitter.ResizeAnchor: TAnchorKind`（`extctrls.pp:430`）看着像"显式指定改哪一边"的一个小属性。**它不是。** 读完实现就会发现，它是 `TCustomSplitter` **两种工作模式之间的开关**，而我们只实现了其中一种。
+
+### 它在 LCL 里到底是什么
+
+`extctrls.pp:361-369` 的类注释把两种模式写得很清楚：
+
+1. **Align 模式**——`Align := alLeft`（或 `alRight`/`alTop`/`alBottom`），相邻的同级控件被改尺寸。**这就是 `TTySplitter` 现在做的全部。**
+2. **锚定模式**——`Align := alNone` + `AnchorSides` + `ResizeAnchor`。
+
+`ResizeAnchor` 就是这两种模式的开关本身，两个 setter 互相钳死，**正常情况下它和 `Align` 不可能不一致**：
+
+- `SetAlign`（`customsplitter.inc:770-775`）从 `Align` **反推** `FResizeAnchor`：`alLeft→akLeft`、`alTop→akTop`、`alRight→akRight`、`alBottom→akBottom`。
+- `SetResizeAnchor`（`:515-525`）设完之后，**只要不在 `csLoading` 里，就把 `Align` 强行置成 `alNone`**——也就是说，"改 `ResizeAnchor`"这个动作的含义是**离开 Align 模式、进入锚定模式**。
+
+于是目标控件的取法也跟着分岔（`GetResizeControl`，`:127-133`）：
+
+```pascal
+if Align in [alLeft,alRight,alTop,alBottom] then
+  Result := FindAlignControl              // 几何查找相邻兄弟 —— 我们有对应物
+else
+  Result := AnchorSide[ResizeAnchor].Control;   // 锚定模式 —— 我们完全没有
+```
+
+**"两者不一致"这件事本身就是这个属性的全部意义**：不一致 = 你要的是另一种模式。唯一的例外是 `csLoading` —— 那个分支存在，只是为了让一份 `.lfm` 能把两个值一起流进来而不在半路把 `Align` 抹掉。
+
+### 为什么不能"只发一个属性"
+
+最省事的做法——published 一个 `ResizeAnchor`，让它在 Align 模式内部挑"改左边还是右边邻居"——**恰恰是本轮在清的那类缺陷**：一个**名字是 LCL 的、含义不是 LCL 的**公共成员。这个类上已经有两次同样的教训（`Values[]` 按行号 vs 按键、`VisibleRowCount` 数据量 vs 视口量，见 `tests/test.parity.valuelist.pas` 的注释），移植代码照写照编译、行为静静地不同。`ResizeAnchor := akRight` 在 LCL 上意味着"`Align` 变成 `alNone`，改用锚定"，在我们这儿若变成"还是 Align 模式，只是换个邻居"，那是同名异义，比不提供更糟。
+
+**所以要么把锚定模式一起做出来，要么这个名字不发。** 本轮选后者。
+
+### 真要做，工作量在哪儿
+
+不是一个属性，是 `TCustomSplitter` 的另一半：
+
+- `MoveSplitter` 的锚定分支（`customsplitter.inc:403-460+`）：遍历 `AnchoredControls[]`，找出把本分隔条当作 `AnchorSide[ResizeAnchor]` 或其对侧的控件，按各自的 `Constraints` min/max 算出偏移上下界，钳制后**移动分隔条自己的 `Left`/`Top`**，剩下的交给 LCL 的锚定引擎去重新布局邻居。
+- 随之而来的一串成员：`ResizeControl` / `GetOtherResizeControl` / `AnchorSplitter` / `GetSplitterPosition` / `SetSplitterPosition`，以及 `OnCanOffset`——锚定模式协商的是**偏移**，不是尺寸，我们现有的 `OnCanResize` 接不上。
+- `SetAlign` / `SetResizeAnchor` / `SetAnchors` / `AdaptAnchors` 那一套模式互斥的不变式。
+
+**真正卡住的是验证，不是代码量。** 锚定模式的全部效果都由 LCL 的对齐/锚定引擎产生，而这套引擎在**没有窗体句柄时根本不跑**——`AutoSizeDelayed` 会把它整个吞掉（本仓库已被这一点咬过很多次，`tests/` 下几十处注释都记着这件事，例如 `test.button.pas:548`、`test.buttongroup.pas:41`）。当前 Align 模式之所以测得出来，是因为它直接 `FTarget.Width := n`，绕开了引擎。换成锚定模式，任何无头守卫都会是**假绿**。
+
+**先决条件**：一条能真正建句柄、跑得动对齐引擎的测试路径（或明确接受这块只做真机验收）。在那之前，`TTySplitter` 就是一个 Align 式分隔条，并且文档如实这么写——`FindResizeTarget` 要求 `Align in [alLeft..alBottom]`，这不是限制的漏写，是设计。
