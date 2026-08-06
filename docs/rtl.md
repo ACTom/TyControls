@@ -116,8 +116,13 @@ does **not** move to the right edge. That is correct, and it is asserted by
 - **Layout mirroring, for a form's worth of controls, its menus and its bars.** Set
   `BiDiMode := bdRightToLeft` from code (see the caveat below about it not being
   *published*) and the following now lay themselves out right-to-left. This is
-  phases 0, 1, 2, 3 and 4 of `plans/2026-08-04-rtl-mirroring-scope.md`, plus §3.8,
-  §3.12 and §3.14; the rest of that document is not built.
+  phases 0, 1, 2, 3 and 4 of `plans/2026-08-04-rtl-mirroring-scope.md`, plus §3.7,
+  §3.8, §3.9, §3.12 and §3.14; the rest of that document is not built.
+
+  **`TTyTitleBar` is in the table but not in that document**, which never mentions
+  the window chrome — as a phase, as a cost, or as an exclusion. It was simply not in
+  the surveyed set, which is how an application ended up mirroring everything inside
+  its window and nothing around it.
 
   | Control | What moves |
   |---|---|
@@ -136,6 +141,7 @@ does **not** move to the right edge. That is correct, and it is asserted by
   | `TTyCheckListBox` | the toggle column moves with the row: the check box is drawn at the trailing end and the zone that toggles it moves with it |
   | `TTyColorListBox` | the colour swatch moves to the right end of the row, the name to its left |
   | `TTyScrollBar` (horizontal) | **opt-in via `MirrorHorizontal`, not `BiDiMode`** — see below |
+  | `TTyTitleBar` (and the `TTyForm` chrome around it) | the whole window frame: the caption moves to the **right**, the caption-button cluster to the **left**, and the cluster **reverses** — Close takes the window corner, then Maximize, then Minimize, so the sequence still reads minimize / maximize / close in the direction the window reads. The strip the buttons reserve and the content zone a host's own children get change ends with them. See below for the two things that deliberately do not move |
   | `TTyStatusBar` | panels tile from the right, separators sit on each panel's leading edge, and the **size grip moves to the bottom-left** — including the `HTBOTTOMLEFT` edge code it hands the OS |
   | `TTyControlBar` | the gripper column moves to each band's right; children fill leftwards and wrap on the same overflow |
   | `TTyCoolBar` | every band's own gripper moves to its right; a resize drag grows the band **leftwards**; a vertical rebar reverses its column order (its grippers stay above their bands) |
@@ -144,6 +150,8 @@ does **not** move to the right edge. That is correct, and it is asserted by
   | `TTyHeaderControl` | the whole strip: section 0 sits against the right edge, captions align right, the sort triangle and the divider move to each cell's other side, and the **hit test and the resize drag follow** — a click on the leftmost cell sorts the *last* section, and a divider is widened by dragging it left |
   | `TTyCustomTabStrip` and everything on it — `TTyPageControl`, `TTyTabSet` | the whole tab band: tab 0 is the **rightmost** and the strip packs leftwards; the close × moves to each header's left edge; the two overflow arrows swap ends and turn round; scrolling forward slides the band **right**; `←`/`→` follow the eye. The page **body** does not move (there are no left/right-edge tabs to mirror), and a page's own children are not mirrored |
   | `TTyCustomGrid`, `TTyDrawGrid`, `TTyStringGrid` | the whole column axis: column 0 sits against the **right** edge and the columns pack leftwards; the row-header gutter and its row numbers move to the right; frozen columns pin to the right and a `FixedColsRight` band moves to the left; the horizontal bar's `Position = Min` is the right end; a resize grip is a column's **left** edge and dragging it left widens the column; header captions, cell text, the sort triangle, the filter funnel, the tree chevron and its indent, rating stars, the ellipsis button, the comment mark, the pick-list arrow, the progress fill and the fill handle all change ends; `←`/`→` follow the eye while `Home`/`End` stay logical. **Every hit test follows the paint out of the same function**, so a click lands in the cell that was drawn under it. See `docs/controls/grid.md` for what does *not* move |
+  | `TTyListView` and `TTyShellListView` | in report mode the whole column axis: column 0 sits against the **right** edge, the header cells and the grid rules follow it, a resize grip is a column's **left** edge and dragging it left widens the column, the sort triangle and any column icon move to each cell's reading start, and the row's check box and icon move with them while the caption steps aside. In the four flow styles (icon, small icon, tile, list) the cells tile from the **right**, and a `lvsList` column packs its first track against the right edge; grouped layouts reflect with them. Marquee selection follows the cells. `←`/`→` follow the eye — `→` steps to the item drawn to its right, i.e. the *earlier* one — while `Home`/`End`/`PageUp`/`PageDown` stay logical |
+  | `TTyTreeView` and `TTyShellTreeView` | the column axis exactly as the list view's, plus the chrome inside the main cell: the indent grows **leftwards** from the cell's right edge, and the expander, check box, icon and caption follow it in that order. The **connecting tree lines move with the indent** — ancestor guides, the elbow and its stub all come out of one function, because a tree whose nodes mirror and whose lines do not is worse than one that does neither. The inline editor lands on the caption rather than across the chrome. `←`/`→` **swap**: `←` expands a node and `→` collapses it, because the children are drawn towards the left |
 
   **The vertical scroll bar moving to the left edge is the loudest signal a
   window gives that it reads right-to-left**, which is why the scrolling
@@ -156,11 +164,12 @@ does **not** move to the right edge. That is correct, and it is asserted by
   logical). The painted bar is unchanged — reflecting a left arrow at one end and
   a right arrow at the other gives back the same picture, which is why a mirrored
   Windows scroll bar looks identical. It is deliberately **not** wired to
-  `BiDiMode`: `TTyGrid`, `TTyListView`, `TTyMemo` and `TTyTreeView` each embed one
-  and none of them mirrors its *content* yet, so a bar that read `BiDiMode` would
-  put the thumb at the wrong end of the document it scrolls. `TTyScrollBox` leaves
-  it off for the same reason — the children inside a box are still laid out
-  left-to-right (see below), so the content's origin really is the left edge.
+  `BiDiMode`: a bar must never mirror ahead of the content it scrolls, so each host
+  sets it *for* its own bar once that content mirrors. `TTyGrid`, `TTyListView` and
+  `TTyTreeView` now do; `TTyMemo` does not, because its text block still does not
+  move. `TTyScrollBox` leaves it off for the same reason — the children inside a box
+  are still laid out left-to-right (see below), so the content's origin really is the
+  left edge.
 
   The mechanism is one flag on `TTyPainter`, set at `BeginPaint`, that resolves
   every alignment the caller passes from a *reading-order* one to a physical one
@@ -176,6 +185,33 @@ does **not** move to the right edge. That is correct, and it is asserted by
   `TyStatusGripRect`, `TTyMenuBar.TopLeft`, `TTyCoolBar.BandRectFor`), so mirroring
   the paint without the hit test would take a deliberate second copy first.
   `tests/test.rtl.bars.pas` asserts both halves of each.
+
+  **The window chrome is the same shape again, and it is the first thing a viewer
+  sees.** A right-to-left application used to get its whole client area mirrored and
+  its frame left alone. `TTyTitleBar` now follows, through `TyCaptionLayoutFor` — one
+  pure function returning the three button boxes, the strip they reserve and the
+  content zone in one record, mirrored by a single reflection over all of them
+  (`BidiFlipRect`, the same lever `TyStatusPanelRects` uses). It had to be one
+  function because the bar held **two** independent claims about which side the
+  buttons are on: `LayoutButtons` packed them from `ClientWidth` leftwards, while
+  `RightInset` restated the same cluster as a width that `AdjustClientRect` and
+  `CaptionSpan` subtracted from the right. The buttons themselves need no separate
+  hit test — they are windowed children, so LCL routes every click, hover and press
+  by the very bounds `LayoutButtons` writes. `tests/test.rtl.chrome.pas` sweeps every
+  device x across the bar and requires the routing to name the button the layout drew
+  there, in both directions.
+
+  **Why the cluster reverses rather than sliding across as a block.** Windows mirrors
+  the entire non-client area of a right-to-left window (`WS_EX_LAYOUTRTL`), which puts
+  Close in the window corner, then Maximize, then Minimize. Read in the direction the
+  window reads, that is still minimize → maximize → close: the same sequence, read the
+  other way. A block move without the reversal would put *Minimize* in the corner and
+  Close in the middle, an order no platform has.
+
+  `RightInset` keeps its name although it now measures a strip at the **left** edge of
+  a mirrored bar. Renaming a public member is a breaking change for a gain the
+  documentation can give instead — the same call §6.3 of the scoping document makes
+  for `Divider.LeftIndent` and `Columns[].Left`.
 
   A **menu takes its direction from its host**, not from itself: a `TPopupMenu` is
   a component with no `BiDiMode`, and the popup window is a `TForm.CreateNew` of
@@ -200,10 +236,8 @@ does **not** move to the right edge. That is correct, and it is asserted by
   all:
 
   - a scroll bar stays on the **right** edge of its container;
-  - list-view **columns** keep their left-to-right order, and so do toolbar
-    buttons, breadcrumb segments and pagination items;
-  - a tree view's expander stays on the **left**, and indentation still grows
-    rightwards;
+  - toolbar buttons, breadcrumb segments and pagination items keep their
+    left-to-right order;
   - an edit or memo keeps its text block, caret and selection anchored to the
     **left** — the *reordering* inside a line is right (see the entry on
     bidirectional carets below), but the block itself does not move to the right
@@ -232,6 +266,19 @@ does **not** move to the right edge. That is correct, and it is asserted by
   a per-value count column to the row's right while the check box it inherits sits
   at the row's reading start, so mirroring would stack the two on the same side.
 
+  **`TTyListView` and `TTyTreeView` keep their vertical bars on the right for
+  exactly the grid's reason**, and are pinned the same way: each reflects about the
+  band it paints into (the list view's viewport, the tree's content rect), and that
+  band already stops short of the bar's gutter. Moving the bar means moving the axis,
+  so `TRtlExclusionTest` asserts the bar's edge and the axis together — whoever moves
+  one has to move the other in the same commit. Both controls' **descendants**,
+  `TTyShellListView` and `TTyShellTreeView`, mirror with their bases rather than
+  opting out, because neither derives an x of its own: they replace data accessors
+  (`GetItemCount`/`GetItemText`/… and `DoGetText`/`DoInitNode`/…) and, on the shell
+  list, a column-*width* distribution, which is direction-free. That is the question
+  to ask of any new descendant, and `BothShellDescendantsMirrorBecauseNeitherDerivesAnXOfItsOwn`
+  is where the answer is recorded.
+
   The collapsed **tree and group chevrons do turn round** — that used to be listed
   here as the one glyph whose stroke stayed put while its box changed ends, and it
   no longer is. `tgChevronLeft` now exists beside `tgChevronRight`
@@ -246,6 +293,31 @@ does **not** move to the right edge. That is correct, and it is asserted by
   caller that reaches for the short overload would silently get no override until
   that one row is added.
 
+  **The native window edge codes do not mirror, and that is not an omission.**
+  `HTBOTTOMLEFT` and `HTBOTTOMRIGHT` name real window corners: a window's bottom-left
+  corner is its bottom-left corner in either reading direction, and a right-to-left
+  window that resized from the mirror image of the corner the pointer grabbed would be
+  unusable. `TyNcHitTest` / `TyResolveNcHit` therefore take no direction argument at
+  all, exactly as `TTyStatusBar.ResizeHitAt` already decided for the plain bottom-edge
+  strip beside its size grip. Pinned by `tests/test.rtl.chrome.pas`
+  (`NativeWindowEdgeCodesAreNotMirrored`).
+
+  The caption band those functions hand the OS is likewise **x-independent** — a
+  height, not a set of button boxes; the whole top strip answers `HTCAPTION`. The
+  caption buttons are windowed children the OS routes to by their own HWNDs, so a
+  caption button's x has never been reported to the OS and mirroring the cluster needs
+  no second copy of its geometry kept in step. `TheCaptionBandHandedToTheOsIsXIndependent`
+  pins that, so a later commit tempted to teach the mapper about the buttons has to
+  face the decision rather than walk past it.
+
+  **The restore glyph does not turn round.** `cbkRestore` draws two overlapping
+  rectangles with the back one to the top-**right** (`tyControls.Painter.pas`,
+  `tgRestore`), and a mirrored window on Windows would put it top-left. There is no
+  `tgRestoreLeft` to ask for. This is a glyph, not a geometry: the paint and the hit
+  test cannot come apart over it, because the glyph is centred in a box whose position
+  both halves take from `TyCaptionLayoutFor`. Closing it means adding one glyph kind
+  beside `tgChevronLeft`, in the same shape that one was added.
+
   Two directional glyphs still have no mirror partner, deliberately.
   **`tgDialogLauncher`** points into the bottom-right corner and would want a
   bottom-left twin, but its only caller is `TTyRibbon`, which declines to mirror
@@ -257,8 +329,10 @@ does **not** move to the right edge. That is correct, and it is asserted by
   expander's down-chevron.
 
   A right-to-left UI built on this release gets its forms — labels, check boxes,
-  radio groups, buttons, panels — its tabbed containers **and its grids** the right
-  way round, and its trees, list views, edits and date pickers the wrong way round.
+  radio groups, buttons, panels — its tabbed containers, its grids, its list views,
+  its trees **and its window frame** the right way round. Its text editors read and
+  select correctly but do not mirror their own layout (the scroll bar stays on the
+  right), and its date picker does neither.
 
 - **Containers do not mirror their children's `Align`/`Anchors` layout**, and this
   is not a gap to be closed. LCL's own align engine has no BiDi branch outside the
@@ -267,6 +341,15 @@ does **not** move to the right edge. That is correct, and it is asserted by
   differently from every native container beside it and misplace any ported
   `.lfm`. `Home`/`End`/`PageUp`/`PageDown` are likewise never flipped: they are
   logical ends, not visual ones.
+
+  **A title bar is a container too**, and this is where a viewer meets the rule
+  first: a theme picker or menu bar a host has anchored into the bar keeps the side
+  it was anchored to. What the bar *does* do is keep the caption clear of it — the
+  caption takes the widest contiguous gap those children leave inside the mirrored
+  content zone, so it is never drawn underneath them and never underneath the
+  caption buttons. `examples/rtl` shows exactly this: flip the direction and the
+  window's buttons change corner while the two controls in its title bar stay
+  anchored where the `.lfm` put them.
 
 - **`BiDiMode` is not published** on any control, and must not be yet, because the
   controls above are the minority — the Object Inspector would be offering a

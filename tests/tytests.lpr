@@ -150,6 +150,7 @@ uses
   test.rtl,
   test.edit.bidi,
   test.rtl.bars,
+  test.rtl.chrome,
   test.card, test.tag, test.badge,
   test.grid.layout, test.grid, test.grid.streaming, test.grid.bidi,
   test.alert, test.notification, test.empty, test.segmented,

@@ -30,6 +30,25 @@ type
   TTyCaptionButtonFlag  = (cbfMinimize, cbfMaximize, cbfClose);
   TTyCaptionButtonFlags = set of TTyCaptionButtonFlag;
 
+  { Where the caption cluster sits inside a title bar, in the bar's own client px, and what is
+    left over for everything else.
+
+    ONE record because the bar used to hold TWO independent claims about which side the buttons
+    are on: LayoutButtons packed them from `ClientWidth - margin` leftwards, while RightInset
+    restated the same cluster as a width that AdjustClientRect and CaptionSpan then subtracted
+    from the RIGHT. Mirroring either claim alone lays the caption and every host child straight
+    over the buttons at one end and leaves a hole at the other -- the "drawn on the right,
+    answers on the left" shape this library has shipped repeatedly. Both now come out of
+    TyCaptionLayoutFor, so mirroring is one reflection applied to all of them at once.
+
+    The buttons need no separate hit test: they are windowed children, so LCL routes a press,
+    a hover and a pressed state by the very bounds LayoutButtons wrote from Min/Max/CloseBtn. }
+  TTyCaptionLayout = record
+    MinBtn, MaxBtn, CloseBtn: TRect;   // per-button box; empty (zero width) when that one is hidden
+    Band: TRect;                       // the whole strip the cluster reserves, both margins included
+    Content: TRect;                    // what is left for the caption and the host's own children
+  end;
+
   TTyChromeEngine = class;
 
   TTyCaptionButton = class(TTyCustomControl)
@@ -73,7 +92,6 @@ type
     procedure SetCaption(const AValue: TCaption);
     procedure SetButtonWidth(AValue: Integer);
     procedure SetTitleAlignment(AValue: TAlignment);
-    function VisibleButtonCount: Integer;
     { Device-px caption-button width: an explicit ButtonWidth wins; otherwise the theme's
       --caption-button-width metric (logical, DPI-scaled); otherwise TyTitleButtonWidth. }
     function EffectiveButtonWidthPx: Integer;
@@ -85,6 +103,12 @@ type
     function CapMarginYPx: Integer;
     function CapGapPx: Integer;
     function LeftInsetPx: Integer;
+    { The layout for a bar of AWidth x AHeight -- the seam every consumer of a caption button's
+      x goes through. Separate from the public no-argument CaptionLayout because RenderTo and
+      AdjustClientRect are handed a rect that need not be the live ClientRect (tests render into
+      an off-screen one), and a second copy of the metric gathering is exactly what this
+      function exists to prevent. }
+    function CaptionLayoutAt(AWidth, AHeight: Integer): TTyCaptionLayout;
     function GetShowMinimize: Boolean;
     function GetShowMaximize: Boolean;
     function GetShowClose: Boolean;
@@ -105,12 +129,25 @@ type
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure DblClick; override;
+    { See TTyRadioGroup.CMBiDiModeChanged: LCL's own handling invalidates and calls AdjustSize,
+      but the caption buttons are placed by SetBounds rather than redrawn from a paint, so
+      without this the cluster stays on the old side until something happens to repaint the bar. }
+    procedure CMBiDiModeChanged(var Message: TLMessage); message CM_BIDIMODECHANGED;
   public
     constructor Create(AOwner: TComponent); override;
     function GetStyleTypeKey: string; override;
     property MinButton: TTyCaptionButton read FMinButton;
     property MaxButton: TTyCaptionButton read FMaxButton;
     property CloseButton: TTyCaptionButton read FCloseButton;
+    { Where the caption cluster and the content zone are right now, for the bar's live client
+      size. Public because a host that wants to place something in the bar has to be able to ask
+      ONE authority which side the buttons are on -- and because that is the only way a test can
+      check the paint and the routing against the same answer. }
+    function CaptionLayout: TTyCaptionLayout;
+    { The total width the caption buttons reserve. A WIDTH, so it does not change with the
+      reading direction -- but on a mirrored bar the strip it measures is at the LEFT edge, so
+      the name lies. Kept anyway: renaming a public member is a breaking change for a gain the
+      documentation can give instead (see docs/controls/titlebar.md). }
     function RightInset: Integer;
     { The horizontal span the caption may use: the bar minus the caption-button inset, minus
       whatever the host's own child controls occupy. }
@@ -402,6 +439,24 @@ function TyResizeGutterRect(const AClient: TRect; AZone: Integer; AResizable, AM
   unit-tested directly. }
 function TyResolveCaptionButtons(ABorderIcons: TBorderIcons; AResizable: Boolean): TTyCaptionButtonFlags;
 
+{ The whole horizontal layout of a title bar, in one pure function -- see TTyCaptionLayout for
+  why it is one. Widths are device px; ALeadPadPx is the caption's pad at the reading start.
+
+  ARightToLeft MIRRORS the finished layout about the bar's vertical centre, so the cluster moves
+  to the leading edge AND reverses: Close takes the window corner, then Maximize, then Minimize.
+  Read in the direction the window reads, the sequence is still minimize / maximize / close --
+  unchanged. That is what Windows does for a right-to-left window (it mirrors the entire
+  non-client area via WS_EX_LAYOUTRTL), and a cluster that slid across as a block without
+  reversing would put Minimize in the corner and Close in the middle, an order no platform has.
+
+  Done as a REFLECTION of the left-to-right result rather than as a reverse packing loop, for
+  the reason TyStatusPanelRects records: a reflection preserves the margins, the gaps and the
+  flush-to-the-edge property for free, and those are exactly what a hand-written reverse loop
+  loses to an off-by-one. }
+function TyCaptionLayoutFor(AShowMin, AShowMax, AShowClose: Boolean;
+  ABarWidth, ABarHeight, AButtonWidthPx, AMarginXPx, AMarginYPx, AGapPx,
+  ALeadPadPx: Integer; ARightToLeft: Boolean = False): TTyCaptionLayout;
+
 const
   { Win32 WM_NCHITTEST result codes, declared platform-neutrally so TyNcHitTest (a pure
     function compiled on EVERY widgetset for headless testing) needn't pull in the Windows
@@ -559,6 +614,60 @@ begin
   if biSystemMenu in ABorderIcons then Include(Result, cbfClose);
   if biMinimize in ABorderIcons then Include(Result, cbfMinimize);
   if (biMaximize in ABorderIcons) and AResizable then Include(Result, cbfMaximize);
+end;
+
+function TyCaptionLayoutFor(AShowMin, AShowMax, AShowClose: Boolean;
+  ABarWidth, ABarHeight, AButtonWidthPx, AMarginXPx, AMarginYPx, AGapPx,
+  ALeadPadPx: Integer; ARightToLeft: Boolean): TTyCaptionLayout;
+var
+  n, h, y, x, span: Integer;
+  bar: TRect;
+
+  { One slot, taken off the running x. The cluster PACKS: a hidden button consumes neither a
+    slot nor a gap, so hiding the middle one slides the outer two together. }
+  function TakeSlot(var AX: Integer): TRect;
+  begin
+    Dec(AX, AButtonWidthPx);
+    Result := Rect(AX, y, AX + AButtonWidthPx, y + h);
+    Dec(AX, AGapPx);
+  end;
+
+begin
+  Result := Default(TTyCaptionLayout);
+  h := ABarHeight - 2 * AMarginYPx;   // inset top+bottom by the vertical margin (0 = full height)
+  if h < 1 then h := ABarHeight;
+  y := AMarginYPx;
+  { Always packed left-to-right first, close outermost; the mirror at the bottom turns that into
+    the right-to-left picture in one step. }
+  x := ABarWidth - AMarginXPx;
+  if AShowClose then Result.CloseBtn := TakeSlot(x);
+  if AShowMax   then Result.MaxBtn   := TakeSlot(x);
+  if AShowMin   then Result.MinBtn   := TakeSlot(x);
+
+  n := Ord(AShowMin) + Ord(AShowMax) + Ord(AShowClose);
+  if n = 0 then
+    span := 0                          // no buttons -> no reserved strip at all
+  else
+    // both margins + N buttons + (N-1) gaps: the left margin is the caption's gap before the group
+    span := 2 * AMarginXPx + n * AButtonWidthPx + (n - 1) * AGapPx;
+  Result.Band := Rect(ABarWidth - span, 0, ABarWidth, ABarHeight);
+  Result.Content := Rect(ALeadPadPx, 0, ABarWidth - span, ABarHeight);
+  if Result.Content.Right < Result.Content.Left then
+    Result.Content.Right := Result.Content.Left;
+
+  { MIRROR once, at the end, through LCL's own five-liner (controls.pp:2966) -- and over EVERY
+    rect in the record, so the cluster, the strip it reserves and the zone left for the caption
+    cannot end up on different sides of the bar. This one statement is the whole mirror: the
+    side, the internal order, the margins and the gaps all follow from it. }
+  if ARightToLeft then
+  begin
+    bar := Rect(0, 0, ABarWidth, 0);
+    Result.MinBtn   := BidiFlipRect(Result.MinBtn, bar, True);
+    Result.MaxBtn   := BidiFlipRect(Result.MaxBtn, bar, True);
+    Result.CloseBtn := BidiFlipRect(Result.CloseBtn, bar, True);
+    Result.Band     := BidiFlipRect(Result.Band, bar, True);
+    Result.Content  := BidiFlipRect(Result.Content, bar, True);
+  end;
 end;
 
 function TyResizeGutterRect(const AClient: TRect; AZone: Integer;
@@ -896,13 +1005,6 @@ begin
   LayoutButtons;
 end;
 
-function TTyTitleBar.VisibleButtonCount: Integer;
-begin
-  if (FCloseButton = nil) or (FMaxButton = nil) or (FMinButton = nil) then
-    Exit(0);
-  Result := Ord(FMinButton.Visible) + Ord(FMaxButton.Visible) + Ord(FCloseButton.Visible);
-end;
-
 function TTyTitleBar.CapMarginPx: Integer;
 begin
   Result := MulDiv(ActiveController.Metric('--caption-button-margin', 0), Font.PixelsPerInch, 96);
@@ -923,12 +1025,11 @@ begin
 end;
 
 function TTyTitleBar.RightInset: Integer;
-var n: Integer;
 begin
-  n := VisibleButtonCount;
-  if n = 0 then Exit(0);
-  // right margin + N buttons + (N-1) gaps + a left margin (title text gap before the group)
-  Result := 2 * CapMarginPx + n * EffectiveButtonWidthPx + (n - 1) * CapGapPx;
+  { The cluster's width, taken from the band the layout reserved -- not restated here. That
+    restatement was the second, independent claim about the caption buttons' x, and it is what
+    made a mirror a two-place change. }
+  with CaptionLayout.Band do Result := Right - Left;
 end;
 
 function TTyTitleBar.LeftInsetPx: Integer;
@@ -936,23 +1037,51 @@ begin
   Result := MulDiv(ActiveController.Metric('--titlebar-padding', TyTitleBarPad), Font.PixelsPerInch, 96);
 end;
 
+function TTyTitleBar.CaptionLayoutAt(AWidth, AHeight: Integer): TTyCaptionLayout;
+var
+  sMin, sMax, sClose: Boolean;
+begin
+  { The ctor sets the bar's bounds BEFORE it builds the three buttons, so this can be reached
+    with all of them still nil -- reserve nothing then, exactly as the VisibleButtonCount rule
+    this replaced did. (GetShowMinimize & co. answer True for a nil button, which is right for
+    the published property and wrong here.) }
+  sMin := False; sMax := False; sClose := False;
+  if (FMinButton <> nil) and (FMaxButton <> nil) and (FCloseButton <> nil) then
+  begin
+    sMin := FMinButton.Visible;
+    sMax := FMaxButton.Visible;
+    sClose := FCloseButton.Visible;
+  end;
+  Result := TyCaptionLayoutFor(sMin, sMax, sClose,
+    AWidth, AHeight, EffectiveButtonWidthPx,
+    CapMarginPx, CapMarginYPx, CapGapPx, LeftInsetPx, IsRightToLeft);
+end;
+
+function TTyTitleBar.CaptionLayout: TTyCaptionLayout;
+begin
+  Result := CaptionLayoutAt(ClientWidth, ClientHeight);
+end;
+
 procedure TTyTitleBar.LayoutButtons;
 var
-  W, H, X, Y, m, my, g: Integer;
+  lay: TTyCaptionLayout;
+
+  procedure Place(ABtn: TTyCaptionButton; const R: TRect);
+  begin
+    if ABtn.Visible then
+      ABtn.SetBounds(R.Left, R.Top, R.Right - R.Left, R.Bottom - R.Top);
+  end;
+
 begin
   if (FCloseButton = nil) or (FMaxButton = nil) or (FMinButton = nil) then
     Exit;
-  m := CapMarginPx;
-  my := CapMarginYPx;
-  g := CapGapPx;
-  W := EffectiveButtonWidthPx;
-  H := ClientHeight - 2 * my;              // inset top+bottom by the vertical margin (0 = full height)
-  if H < 1 then H := ClientHeight;
-  Y := my;
-  X := ClientWidth - m;                    // start inset from the right edge (horizontal margin)
-  if FCloseButton.Visible then begin Dec(X, W); FCloseButton.SetBounds(X, Y, W, H); Dec(X, g); end;
-  if FMaxButton.Visible  then begin Dec(X, W); FMaxButton.SetBounds(X, Y, W, H); Dec(X, g); end;
-  if FMinButton.Visible  then begin Dec(X, W); FMinButton.SetBounds(X, Y, W, H); end;
+  { These three SetBounds are also the buttons' hit test, their hover zone and their pressed
+    zone: they are windowed children, so LCL routes every one of those by the bounds written
+    here. That is why the cluster's geometry only ever needs to be right in ONE place. }
+  lay := CaptionLayout;
+  Place(FCloseButton, lay.CloseBtn);
+  Place(FMaxButton, lay.MaxBtn);
+  Place(FMinButton, lay.MinBtn);
 end;
 
 procedure TTyTitleBar.Resize;
@@ -962,10 +1091,18 @@ begin
 end;
 
 procedure TTyTitleBar.AdjustClientRect(var ARect: TRect);
+var
+  w: Integer;
+  lay: TTyCaptionLayout;
 begin
   inherited AdjustClientRect(ARect);
-  Inc(ARect.Left, LeftInsetPx);
-  Dec(ARect.Right, RightInset);
+  { Applied as INSETS rather than as absolute edges, so an ancestor that had already narrowed
+    ARect keeps its narrowing. The content zone comes from the same layout that places the
+    buttons, so the side this gives up can never be the side they are not on. }
+  w := ARect.Right - ARect.Left;
+  lay := CaptionLayoutAt(w, ARect.Bottom - ARect.Top);
+  Dec(ARect.Right, w - lay.Content.Right);
+  Inc(ARect.Left, lay.Content.Left);
   if ARect.Right < ARect.Left then ARect.Right := ARect.Left;
 end;
 
@@ -985,9 +1122,14 @@ var
   c: TControl;
   edges: array of Integer;
   n, j, tmp: Integer;
+  lay: TTyCaptionLayout;
 begin
-  ALeft := LeftInsetPx;
-  ARight := AWidth - RightInset;
+  { The zone comes from the layout that places the buttons -- so on a mirrored bar the scan
+    below starts AFTER the cluster instead of ending before it, and the gap-scanning logic
+    itself needs no direction of its own: it takes the widest gap in whatever band it is given. }
+  lay := CaptionLayoutAt(AWidth, ClientHeight);
+  ALeft := lay.Content.Left;
+  ARight := lay.Content.Right;
   if ARight < ALeft then ARight := ALeft;
 
   { Collect the children's spans, clipped to the caption band. }
@@ -1050,7 +1192,11 @@ begin
   P := TTyPainter.Create;
   try
     R := Rect(0, 0, W, H);
-    P.BeginPaint(ACanvas, ARect, APPI);
+    { Opt into the painter's alignment lever: TitleAlignment is a READING-ORDER alignment, so on
+      a mirrored bar taLeftJustify has to resolve to the right-hand edge of the span. The span
+      itself has already changed ends (CaptionSpan reads the mirrored layout), so both halves --
+      which side the text box is on, and which side the text hugs inside it -- move together. }
+    P.BeginPaint(ACanvas, ARect, APPI, IsRightToLeft);
     S := CurrentStyle;
     DrawFrame(P, R, S);
     CaptionSpan(W, tl, tr);
@@ -1117,6 +1263,12 @@ begin
   inherited DblClick;
   if (FEngine <> nil) and not (csDesigning in ComponentState) then
     FEngine.TitleBarDblClick;
+end;
+
+procedure TTyTitleBar.CMBiDiModeChanged(var Message: TLMessage);
+begin
+  inherited;         // LCL invalidates, tells the children, and calls AdjustSize
+  LayoutButtons;     // and then the caption buttons have to actually change sides
 end;
 
 { TTyChromeEngine }

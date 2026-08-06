@@ -112,13 +112,23 @@ end;
 
 ### 标题栏系统按钮的行为接线
 
-标题栏右侧三个系统按钮的 `OnClick` 由框架接线，行为如下：
+标题栏上三个系统按钮的 `OnClick` 由框架接线（按 identity 接，不按位置），行为如下：
 
 | 按钮 | 行为 |
 |------|------|
 | 最小化（Min） | `WindowState := wsMinimized` |
 | 最大化/还原（Max） | 引擎 `ToggleMaximize`（自绘无边框最大化/还原，避让任务栏工作区） |
 | 关闭（Close） | `Close`（走标准 `OnCloseQuery` → `OnClose` 流程） |
+
+### 右到左（`BiDiMode = bdRightToLeft`）
+
+把窗体的 `BiDiMode` 设成 `bdRightToLeft`（它会经 `ParentBiDiMode` 传播到标题栏），**窗框跟着一起镜像**：标题文本移到右边，系统按钮簇移到左边并翻转内部顺序（关闭占窗口角）。细节与理由见 [titlebar.md](titlebar.md) §5「右到左」。
+
+窗框里**不跟着翻**的部分，都是有意的：
+
+- **原生窗口边角码。** `TyNcHitTest` / `TyResolveNcHit` 交给 OS 的 `HTBOTTOMLEFT` / `HTLEFT` 等命名的是**真实窗口边角**，与阅读方向无关，因此这两个纯函数根本没有方向参数。镜像窗口若从被抓那一角的镜像位置缩放，窗口会没法用。
+- **交给 OS 的标题拖拽带。** 它只是一个**高度**（`ACaptionHeight`），对 x 全程不敏感——整条顶栏一律回答 `HTCAPTION`。系统按钮是窗口化子控件，OS 按它们各自的 HWND 路由，所以按钮的 x **从来没有**报给过 OS，镜像按钮簇不需要同步任何第二份几何。
+- **`Surface` 里子控件的 `Align` / `Anchors` 布局。** LCL 自己的对齐引擎不认 BiDi（见 [../rtl.md](../rtl.md)）。
 
 ## 6. 设计期行为（重要）
 
@@ -204,7 +214,8 @@ TyForm {
 
 ## 11. 相关文档
 
-- [titlebar.md](titlebar.md) —— `TTyTitleBar` 标题栏子组件（可定制内容区、`AdjustClientRect`、`ButtonWidth`）。
+- [titlebar.md](titlebar.md) —— `TTyTitleBar` 标题栏子组件（可定制内容区、`AdjustClientRect`、`ButtonWidth`、右到左镜像）。
+- [../rtl.md](../rtl.md) —— 全库双向文本与右到左布局的真实状态。
 - [captionbutton.md](captionbutton.md) —— `TTyCaptionButton` 标题栏系统按钮。
 - [formchrome.md](formchrome.md) —— 旧 `TTyFormChrome` → `TTyForm` 迁移说明。
 - [../events.md](../events.md) —— 全库事件契约；`TTyForm` 使用标准 `TForm` 生命周期事件。
