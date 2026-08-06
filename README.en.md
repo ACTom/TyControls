@@ -53,7 +53,7 @@ shows how far a theme can go — translucent controls floating over a photo back
   **orthogonal** to colour, switched by one `Controller.Density` property.
 - **Follows the OS** — light/dark mode and accent colour can track the operating system; a
   single-file `@mode` carries both sets of values.
-- **160 droppable controls** across 16 component-palette pages — see the [control list](#control-list).
+- **161 droppable controls** across 16 component-palette pages — see the [control list](#control-list).
 - **Designer-first** — `TTyPageControl`'s pages and `TTyGridPanel`'s cells are **real designer
   containers**: drop controls straight in, see the finished look in the designer, and it persists
   to the `.lfm` with no layout code. Theme changes show up in the designer too.
@@ -128,7 +128,7 @@ Select `Surface` in the designer; its `Purpose` property says the same thing.
 
 ## Control list
 
-160 controls you can drop from the component palette, across 16 pages. Per-control
+161 controls you can drop from the component palette, across 16 pages. Per-control
 properties / events / states / theme keys are in **[docs/controls/](docs/controls/)**.
 
 ### Core · `TyControls` (2)
@@ -163,13 +163,14 @@ properties / events / states / theme keys are in **[docs/controls/](docs/control
 | `TTyTag` | Closable tag pill, for filters and status marks |
 | `TTyBadge` | Numeric / dot badge that can anchor to any control's corner |
 
-### Text & numeric input · `TyControls Edits` (13)
+### Text & numeric input · `TyControls Edits` (14)
 
 | Control | What it is for |
 |---|---|
 | `TTyEdit` | Single-line edit: selection, clipboard, word navigation, horizontal scroll |
 | `TTyMemo` | Multi-line edit: 2D navigation, cross-line editing, vertical scroll |
 | `TTySpinEdit` | Numeric field with up/down arrows |
+| `TTyFloatSpinEdit` | Decimal spinner: `Value` is a `Double`, and so is the step |
 | `TTyNumericEdit` | Digits-only field, group-formatted on blur |
 | `TTyCurrencyEdit` | Currency field that adds the symbol |
 | `TTyMaskEdit` | Input constrained by a mask (phone, ID, date) |

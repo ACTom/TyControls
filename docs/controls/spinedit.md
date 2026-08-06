@@ -193,4 +193,4 @@ end;
 12. **`OnChange` 是状态问题，`Modified` 是意图问题：** `OnChange` 回答"字段现在是什么"，所以程序赋值也触发（每一次变化都是事实）；`Modified` 回答"用户碰过没有"，所以程序赋值把它清成 `False`（把代码写的值算成用户输入就是在撒谎）。
 13. **I-beam 光标（batch⑤+⑥）：** 构造时把 `Cursor` 设为 `crIBeam`，鼠标移到控件上时呈现标准的文本输入「I 形」光标，提示内联数字编辑区可直接键入。
 14. **和 `TTyUpDown` + `TTyEdit` 的分工：** [`TTyUpDown.Associate`](updown.md#31-绑定伴随字段associate) 现在可以把一对上下按钮绑到任意编辑框上，双向同步。两条路的区别只有一个，但它很关键：绑定方案里的输入框是一个**完整的 `TTyEdit`**（选区、剪贴板、撤销、IME 全都在），而 `TTySpinEdit` 自带的是轻量行缓冲（见第 8 条）。需要在数字字段里选择 / 粘贴 / 撤销，就用绑定方案；要一个开箱即用、能 Tab 进去的一体控件，用 `TTySpinEdit`。
-15. **小数版本(`TFloatSpinEdit` 对标)尚未提供。** 需要带步进按钮的小数字段，眼下用 [`TTyNumericEdit`](numericedit.md)（有 `Value: Double` 与 `Decimals`，但没有按钮），或给它绑一个 `TTyUpDown`（按钮会步进整数）。
+15. **小数版本是一个单独的控件：[`TTyFloatSpinEdit`](floatspinedit.md)。** 它**不是** `TTySpinEdit` 的后代——LCL 把家族反着建（整数版继承小数版，`spin.pp:146`），而本控件那三个 `Integer` 的 `public virtual` 缝（`GetLimitedValue` / `ValueToStr` / `StrToValue`）已经有外部覆写者，改不成 `Double`。小数版改为继承 [`TTyNumericEdit`](numericedit.md)，因此顺带拥有 `TTyEdit` 的完整文本引擎（选区 / 剪贴板 / 撤销 / IME），而本控件只有轻量行缓冲（见第 7 条）。两者的其他差别：`Increment` 那边是 `Double` 且**不**钳到 ≥ 1；按钮不贴右缘而是落在 `TTyEdit` 被内距内缩过的尾部区里（刻意，与 `TTyComboEdit` / `TTyURLEdit` 的尾部按钮对齐）。

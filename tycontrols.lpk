@@ -381,6 +381,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.SpinEdit"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.FloatSpinEdit.pas"/>
+        <UnitName Value="tyControls.FloatSpinEdit"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.Memo.pas"/>
         <UnitName Value="tyControls.Memo"/>
       </Item>

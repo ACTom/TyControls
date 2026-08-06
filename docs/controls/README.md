@@ -72,6 +72,7 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyFontSizeComboBox](fontsizecombobox.md) | 可编辑字号组合框（预设 6…72，也可手输） |
 | [TTyMemo](memo.md) | 多行编辑器：2D 导航、内嵌滚动条 |
 | [TTySpinEdit](spinedit.md) | 数值微调框（箭头 / 方向键 / 滚轮，Min/Max/Increment） |
+| [TTyFloatSpinEdit](floatspinedit.md) | 小数微调框（`Value: Double` + `Double` 步长，NumericEdit 派生，带完整文本引擎） |
 | [TTyUpDown](updown.md) | 独立上/下微调按钮对（按住连发，绑定到任意控件） |
 | [TTyComboBox](combobox.md) | 下拉框：只读选择 + 可编辑 `csDropDown` + 前缀自动补全 |
 | [TTyMRUComboBox](mrucombobox.md) | 最近使用（MRU）组合框（提交值去重置顶、`MaxItems` 裁尾） |

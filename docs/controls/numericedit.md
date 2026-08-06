@@ -76,3 +76,4 @@ Price.Value := 1234.5;
 - **粘贴:** 粘贴的非数字文本不走输入过滤,但会在失焦解析时被清理 / 归零。
 - **`Modified` 用于"启用保存":** Tab 离开一个刚填好的数值框**不会**把它重新标成"未改动";要重置脏标记请显式写 `Modified := False`(保存成功之后)。
 - **货币 / 掩码:** 需要货币符号用后续 `TTyCurrencyEdit`;需要输入掩码(日期 / 电话)用 `TTyMaskEdit`。
+- **要步进按钮:** 用派生的 [`TTyFloatSpinEdit`](floatspinedit.md)(LCL `TFloatSpinEdit` 对标)。它只加一对上下按钮和一个 `Double` 的 `Increment`,其余全部继承本控件——**但把 `UseThousands` 的默认值翻成 `False`**,因为 LCL 的小数微调框不做千分位分组。

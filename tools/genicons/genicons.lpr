@@ -227,6 +227,9 @@ procedure GGroupBox(b: TBGRABitmap); begin RRect(b,4,7,20,20,2,Ink); Line(b,6.5,
 procedure GPanel(b: TBGRABitmap); begin RRect(b,3,5,21,19,2,Ink); end;
 procedure GScrollBar(b: TBGRABitmap); begin RRect(b,9,3,15,21,3,Ink); PolyL(b,[PointF(10.5,7),PointF(12,5.5),PointF(13.5,7)],Ink); PolyL(b,[PointF(10.5,17),PointF(12,18.5),PointF(13.5,17)],Ink); FillRRect(b,9.5,10,14.5,15,1.5,Acc); end;
 procedure GSpinEdit(b: TBGRABitmap); begin RRect(b,3,7,15,17,2,Ink); Line(b,6,9.5,6,14.5,Acc,2); Line(b,15,7,15,17,Ink); PolyL(b,[PointF(16.5,11),PointF(18,9.5),PointF(19.5,11)],Ink); PolyL(b,[PointF(16.5,13),PointF(18,14.5),PointF(19.5,13)],Ink); end;
+{ TTyFloatSpinEdit: the spin box again, but the field holds "digit . digit" instead of a bare
+  caret — that decimal point is the whole difference between it and TTySpinEdit. }
+procedure GFloatSpinEdit(b: TBGRABitmap); begin RRect(b,3,7,15,17,2,Ink); Line(b,6,10,6,14,Acc,1.6); FillCirc(b,8.4,13.6,0.95,Acc); Line(b,11,10,11,14,Acc,1.6); Line(b,15,7,15,17,Ink); PolyL(b,[PointF(16.5,11),PointF(18,9.5),PointF(19.5,11)],Ink); PolyL(b,[PointF(16.5,13),PointF(18,14.5),PointF(19.5,13)],Ink); end;
 procedure GMemo(b: TBGRABitmap); begin RRect(b,3,3,21,21,2,Ink); Line(b,6,8,17,8,Ink); Line(b,6,12,17,12,Ink); Line(b,6,16,13,16,Ink); end;
 procedure GTitleBar(b: TBGRABitmap); begin RRect(b,3,4,21,20,2,Ink); Line(b,3,9,21,9,Ink); FillCirc(b,15,6.5,0.9,Ink); FillCirc(b,17,6.5,0.9,Ink); FillCirc(b,19,6.5,0.9,Acc); end;
 procedure GMenuBar(b: TBGRABitmap); begin RRect(b,3,6,21,12,2,Ink); Line(b,6,9,8,9,Acc); Line(b,10,9,12,9,Ink); Line(b,14,9,16,9,Ink); end;
@@ -862,7 +865,7 @@ procedure GCascader(b: TBGRABitmap); begin RRect(b,3,3,21,10,2,Ink); PolyL(b,[Po
 procedure GPopover(b: TBGRABitmap); begin RRect(b,2,4,22,17,2,Ink); PolyL(b,[PointF(9,17),PointF(11.5,20.5),PointF(14,17)],Ink); FillRRect(b,5,7.5,10.5,13.5,1,Acc); Line(b,12.5,9,19,9,Ink,1.3); Line(b,12.5,12,17.5,12,Ink,1.3); end;
 
 const
-  Glyphs: array[0..159] of TGlyph = (
+  Glyphs: array[0..160] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -944,6 +947,7 @@ const
     (Name:'TTyPanel';           Draw:@GPanel),
     (Name:'TTyScrollBar';       Draw:@GScrollBar),
     (Name:'TTySpinEdit';        Draw:@GSpinEdit),
+    (Name:'TTyFloatSpinEdit';   Draw:@GFloatSpinEdit),
     (Name:'TTyMemo';            Draw:@GMemo),
     (Name:'TTyTitleBar';        Draw:@GTitleBar),
     (Name:'TTyMenuBar';         Draw:@GMenuBar),

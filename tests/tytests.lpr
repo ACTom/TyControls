@@ -30,6 +30,7 @@ uses
   test.groupbox,
   test.tabstrip, test.tabstrip.axis,
   test.defaulttheme, test.spinedit, test.memo, test.memo.selection, test.memo.undo,
+  test.floatspinedit,
   test.memo.props,
   test.memo.visualrows,
   test.memo.hscroll,

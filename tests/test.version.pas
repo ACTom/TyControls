@@ -19,7 +19,8 @@ uses
   tyControls.Dialogs.Color, tyControls.Dialogs.FileDialog, tyControls.Dialogs.Find,
   tyControls.Dialogs.Font, tyControls.Dialogs.Progress, tyControls.Dialogs.SelectPath,
   tyControls.Divider, tyControls.DropButtons, tyControls.Edit, tyControls.Empty,
-  tyControls.ExPanel, tyControls.FilterComboBox, tyControls.FontComboBox,
+  tyControls.ExPanel, tyControls.FilterComboBox, tyControls.FloatSpinEdit,
+  tyControls.FontComboBox,
   tyControls.FontListBox, tyControls.FontSizeComboBox, tyControls.Form, tyControls.FormSurface,
   tyControls.Gauge, tyControls.GearActivityIndicator, tyControls.GearDial,
   tyControls.GlowLabel, tyControls.GlyphButtons, tyControls.GlyphImageList, tyControls.Grid,
@@ -417,7 +418,8 @@ initialization
     TTySpeedButton, TTyDropDownButton, TTyMenuButton, TTyColorButton, TTyButtonGroup, TTyLabel,
     TTyHtmlLabel, TTyLinkLabel, TTyShadowLabel, TTyGlowLabel, TTyTag, TTyBadge, TTyEdit,
     TTyNumericEdit, TTyCurrencyEdit, TTyMaskEdit, TTyURLEdit, TTyComboEdit, TTyTrackEdit,
-    TTyCalcEdit, TTyCalcCurrencyEdit, TTyCalculator, TTyMemo, TTySpinEdit, TTyUpDown,
+    TTyCalcEdit, TTyCalcCurrencyEdit, TTyCalculator, TTyMemo, TTySpinEdit, TTyFloatSpinEdit,
+    TTyUpDown,
     TTyCheckBox, TTyRadioButton, TTyToggleSwitch, TTyRadioGroup, TTyCheckGroup, TTySegmented,
     TTyComboBox, TTyMRUComboBox, TTyComboBoxEx, TTyOfficeComboBox]);
   Reg([
