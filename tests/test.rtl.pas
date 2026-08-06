@@ -59,10 +59,15 @@ uses
   tyControls.TreeView, tyControls.ShellTreeView,
   tyControls.TabStrip, tyControls.TabSheet, tyControls.PageControl, tyControls.TabSet,
   tyControls.Ribbon,
+  tyControls.DateTimePicker, tyControls.Popup,
   { The strip harness -- caption model plus the protected mouse/key seams -- already exists;
     building a second one here would let the two drift. Same precedent as test.edit.bidi
     reaching into test.edit. }
-  test.tabstrip;
+  test.tabstrip,
+  { And the picker's probe, for the same reason: test.datetimepicker already exposes
+    FieldLayout's answer and the click seam, and the ONE thing these tests exist to check
+    is that those two agree -- so they have to be the same two. }
+  test.datetimepicker;
 
 type
   { RenderTo is protected on every one of these; the tests must call it directly, because
@@ -612,6 +617,62 @@ type
     procedure TheListViewsVerticalBarStaysOnTheRightAndSoDoesItsMirrorAxis;
     procedure TheTreeViewsVerticalBarStaysOnTheRightAndSoDoesItsMirrorAxis;
     procedure BothShellDescendantsMirrorBecauseNeitherDerivesAnXOfItsOwn;
+  end;
+
+  { --------------------------------------------------------- §3.15 PICKER -- }
+
+  { TTyDateTimePicker. The scoping document filed this one as a REWRITE, on the
+    grounds that four groups of slot -- text, indicator, button, spin halves -- each
+    had an independent x expression in the paint AND another in the hit test, so a
+    direction flag would have had to be threaded through eight places with nothing
+    able to prove the eight agreed. They did not agree even before anyone mentioned
+    mirroring: that disagreement is what put the caret on the month when the user
+    clicked the year.
+
+    That collapse has since happened on its own account. TyDateTimeRects is one pure
+    function returning all four groups, FieldLayout joins it to the string and the
+    origin, and RenderTo / MouseDown / CalculatePreferredSize all read out of it. So
+    mirroring is now ONE reflection applied to the finished record, and the tests that
+    matter are the ones that would still catch a second tiling if anybody re-introduced
+    one: every assertion below that names a click asks the PAINT where the thing is
+    first, and clicks THAT -- never a coordinate the test computed for itself.
+
+    The arrow keys move a FIELD, not a caret (§6.3 item 4), so they mirror. Home and
+    End name logical ends, so they do not. }
+  TRtlDateTimePickerTest = class(TTestCase)
+  private
+    function  MakePicker(ARtl: Boolean): TTyDateTimePickerProbe;
+    { Ask the paint where field AIndex landed, then click its two INNER EDGES and its
+      middle and require that field back. Edges, because every drift this control has
+      actually shipped was narrower than half a field and a centre probe is immune to
+      all of them. }
+    procedure AssertPaintedFieldsAnswerTheirOwnClicks(P: TTyDateTimePickerProbe;
+      const AContext: string);
+  published
+    { the pure tiling }
+    procedure TheDefaultDirectionArgumentLeavesTheTilingExactlyAsItWas;
+    procedure MirroredButtonColumnTakesTheOppositeEdge;
+    procedure MirroredIndicatorSitsAtTheTextBoxesReadingStart;
+    procedure TheSpinHalvesReflectOntoThemselves;
+    procedure EveryPartIsTheReflectionOfItsLeftToRightTwin;
+    procedure APartThatWasNeverDrawnIsStillEmptyAfterMirroring;
+    { the join: paint and hit test }
+    procedure MirroredFieldsAnswerTheirOwnClicks;
+    procedure MirroredFieldsAnswerTheirOwnClicksWithAnIndicatorInTheWay;
+    procedure TheIndicatorsHitZoneTravelsWithTheIndicator;
+    procedure TheButtonsHitZoneTravelsWithTheButton;
+    { the text origin }
+    procedure TheGlyphsLandWhereTheOriginSaysTheyWill;
+    procedure TheStringStartsAtTheReadingEdgeWhenMirrored;
+    procedure AnAuthorsExplicitAlignmentIsOverriddenNotDefaulted;
+    procedure AStringTooWideToFitKeepsItsReadingStartInside;
+    { keys }
+    procedure TheFieldArrowsStepTheWayTheEyeReads;
+    procedure HomeAndEndStayLogicalInBothDirections;
+    { the popup }
+    procedure TheDropdownLinesUpWithTheReadingEdge;
+    { the honest boundary }
+    procedure BidiTextDoesNotSplitThePaintFromTheHitTest;
   end;
 
   { --------------------------------------------------------------- PHASE 3 -- }
@@ -6887,6 +6948,499 @@ begin
     host.Free;
   end;
 end;
+{ ----------------------------------------------------- TRtlDateTimePickerTest -- }
+
+function TRtlDateTimePickerTest.MakePicker(ARtl: Boolean): TTyDateTimePickerProbe;
+begin
+  Result := TTyDateTimePickerProbe.Create(nil);
+  Result.SetBounds(0, 0, 300, 24);
+  Result.Kind       := dtkDate;
+  { A month NAME on purpose: it is the case where the format's character offsets and the
+    rendered string's differ, so an assertion built on it has teeth that 'yyyy-mm-dd'
+    does not. }
+  Result.DateFormat := 'dd mmmm yyyy';
+  Result.DateTime   := EncodeDate(2026, 9, 15);
+  if ARtl then Result.BiDiMode := bdRightToLeft;
+end;
+
+procedure TRtlDateTimePickerTest.AssertPaintedFieldsAnswerTheirOwnClicks(
+  P: TTyDateTimePickerProbe; const AContext: string);
+
+  procedure ClickAndExpect(AIndex, AX: Integer; const AWhere: string);
+  var K: Word;
+  begin
+    { Park elsewhere first: a click that resolves to NO field leaves the active one
+      alone, so without the parking a total miss reads as a hit whenever the field
+      happened to be selected already. }
+    if AIndex = 0 then K := VK_END else K := VK_HOME;
+    P.SimKeyDown(K);
+    AssertTrue(AContext + ': parked away from field ' + IntToStr(AIndex),
+      P.ActiveSegForTest <> AIndex);
+    P.SimMouseDown(AX, 12);
+    AssertEquals(AContext + ': ' + AWhere + ' of painted field ' + IntToStr(AIndex),
+      AIndex, P.ActiveSegForTest);
+  end;
+
+var
+  i, X1, X2: Integer;
+begin
+  for i := 0 to High(P.Segments) do
+  begin
+    AssertTrue(AContext + ': field ' + IntToStr(i) + ' has a painted span',
+      P.PaintedSegSpan(i, X1, X2));
+    ClickAndExpect(i, X1 + 1,          'the left edge');
+    ClickAndExpect(i, (X1 + X2) div 2, 'the middle');
+    ClickAndExpect(i, X2 - 1,          'the right edge');
+  end;
+end;
+
+procedure TRtlDateTimePickerTest.TheDefaultDirectionArgumentLeavesTheTilingExactlyAsItWas;
+{ Every existing caller passes five arguments. If the sixth defaulted the other way --
+  or if the reflection ran unconditionally -- the whole left-to-right suite would move
+  by the button column, so this is the guard that says the default is the identity. }
+var A, B: TTyDateTimeRects;
+begin
+  A := TyDateTimeRects(Rect(0, 0, 200, 24), 96, Rect(6, 3, 6, 3), 18, True);
+  B := TyDateTimeRects(Rect(0, 0, 200, 24), 96, Rect(6, 3, 6, 3), 18, True, False);
+  AssertTrue('text',       CompareMem(@A.Text,       @B.Text,       SizeOf(TRect)));
+  AssertTrue('checkbox',   CompareMem(@A.CheckBox,   @B.CheckBox,   SizeOf(TRect)));
+  AssertTrue('button',     CompareMem(@A.Button,     @B.Button,     SizeOf(TRect)));
+  AssertTrue('up half',    CompareMem(@A.ButtonUp,   @B.ButtonUp,   SizeOf(TRect)));
+  AssertTrue('down half',  CompareMem(@A.ButtonDown, @B.ButtonDown, SizeOf(TRect)));
+  AssertEquals('and it is still the left-to-right tiling: indicator at the left padding',
+    6, A.CheckBox.Left);
+  AssertEquals('string past the indicator and its gap',
+    6 + TyDateTimeCheckBoxColumn(96), A.Text.Left);
+  AssertEquals('button still at the right edge', 200, A.Button.Right);
+end;
+
+procedure TRtlDateTimePickerTest.MirroredButtonColumnTakesTheOppositeEdge;
+var L: TTyDateTimeRects;
+begin
+  L := TyDateTimeRects(Rect(0, 0, 200, 24), 96, Rect(6, 3, 6, 3), 18, False, True);
+  AssertEquals('the button column starts at the frame', 0, L.Button.Left);
+  AssertEquals('and is the column wide',               18, L.Button.Right);
+  AssertEquals('the text box begins where the button ends', 18, L.Text.Left);
+  AssertEquals('and runs to the padding at the other end', 200 - 6, L.Text.Right);
+  AssertEquals('the vertical inset is untouched by a horizontal reflection',
+    3, L.Text.Top);
+  AssertEquals('at both ends', 24 - 3, L.Text.Bottom);
+end;
+
+procedure TRtlDateTimePickerTest.MirroredIndicatorSitsAtTheTextBoxesReadingStart;
+{ In a mirrored field the eye starts at the right, so that is where the indicator goes
+  and the string begins to its LEFT -- past the box and past the same gap. }
+var L: TTyDateTimeRects;
+begin
+  L := TyDateTimeRects(Rect(0, 0, 200, 24), 96, Rect(6, 3, 6, 3), 18, True, True);
+  AssertEquals('the indicator ends at the padding on the reading side',
+    200 - 6, L.CheckBox.Right);
+  AssertEquals('and is the token box wide',
+    MulDiv(TyCheckBoxBox, 96, 96), L.CheckBox.Right - L.CheckBox.Left);
+  AssertEquals('the string stops one gap short of the indicator',
+    200 - 6 - TyDateTimeCheckBoxColumn(96), L.Text.Right);
+  AssertTrue('and the string is on the indicator''s left, not under it',
+    L.Text.Right <= L.CheckBox.Left);
+end;
+
+procedure TRtlDateTimePickerTest.TheSpinHalvesReflectOntoThemselves;
+{ Up/down is an axis the reading direction does not reach. A reflection that touched it
+  would put the up arrow at the bottom, which no platform does and no user expects. }
+var L: TTyDateTimeRects;
+begin
+  L := TyDateTimeRects(Rect(0, 0, 200, 24), 96, Rect(6, 3, 6, 3), 18, False, True);
+  AssertEquals('up is still the TOP half',    L.Button.Top,    L.ButtonUp.Top);
+  AssertEquals('down is still the BOTTOM half', L.Button.Bottom, L.ButtonDown.Bottom);
+  AssertEquals('the halves meet with no gap', L.ButtonUp.Bottom, L.ButtonDown.Top);
+  AssertEquals('and both sit in the mirrored column', L.Button.Left, L.ButtonUp.Left);
+  AssertEquals('at its far edge too', L.Button.Right, L.ButtonDown.Right);
+end;
+
+procedure TRtlDateTimePickerTest.EveryPartIsTheReflectionOfItsLeftToRightTwin;
+{ The strongest form of the claim, and the one that catches "mirrored four of the five".
+  Each mirrored rect must equal LCL's own reflection of the unmirrored one about the same
+  band -- so no part can be left behind and none can be moved by a different amount. }
+const
+  Local: TRect = (Left: 0; Top: 0; Right: 200; Bottom: 24);
+
+  procedure Same(const AName: string; const ALtr, ARtl: TRect);
+  var want: TRect;
+  begin
+    want := BidiFlipRect(ALtr, Local, True);
+    AssertEquals(AName + ': left',  want.Left,  ARtl.Left);
+    AssertEquals(AName + ': right', want.Right, ARtl.Right);
+    AssertEquals(AName + ': top',    want.Top,    ARtl.Top);
+    AssertEquals(AName + ': bottom', want.Bottom, ARtl.Bottom);
+  end;
+
+var A, B: TTyDateTimeRects;
+begin
+  A := TyDateTimeRects(Local, 96, Rect(6, 3, 6, 3), 18, True, False);
+  B := TyDateTimeRects(Local, 96, Rect(6, 3, 6, 3), 18, True, True);
+  Same('text',      A.Text,       B.Text);
+  Same('checkbox',  A.CheckBox,   B.CheckBox);
+  Same('button',    A.Button,     B.Button);
+  Same('up half',   A.ButtonUp,   B.ButtonUp);
+  Same('down half', A.ButtonDown, B.ButtonDown);
+end;
+
+procedure TRtlDateTimePickerTest.APartThatWasNeverDrawnIsStillEmptyAfterMirroring;
+{ dmNone hands the column down as 0, which is what leaves the three button rects empty
+  and keeps a click off a button the paint never drew. Reflecting an empty rect about a
+  band is exactly the operation that can hand back a NON-empty one. }
+var L: TTyDateTimeRects;
+begin
+  L := TyDateTimeRects(Rect(0, 0, 200, 24), 96, Rect(6, 3, 6, 3), 0, False, True);
+  AssertTrue('no button rect',    IsRectEmpty(L.Button));
+  AssertTrue('no up-half rect',   IsRectEmpty(L.ButtonUp));
+  AssertTrue('no down-half rect', IsRectEmpty(L.ButtonDown));
+  { IsRectEmpty alone is too weak to pin this: reflecting Rect(0,0,0,0) about the client
+    gives Rect(200,0,200,0), which is STILL empty -- so a version that flipped the
+    absent parts anyway would pass the three lines above while leaving three degenerate
+    rects sitting on the field's edge, one arithmetic slip from becoming a button a
+    click can find where the paint drew nothing. Pin them at the origin. }
+  AssertEquals('an absent button was not moved onto an edge', 0, L.Button.Left);
+  AssertEquals('nor its right', 0, L.Button.Right);
+  AssertEquals('nor the up half',   0, L.ButtonUp.Right);
+  AssertEquals('nor the down half', 0, L.ButtonDown.Right);
+  AssertEquals('and the text runs all the way to the frame it gained', 0, L.Text.Left);
+  L := TyDateTimeRects(Rect(0, 0, 200, 24), 96, Rect(6, 3, 6, 3), 18, False, True);
+  AssertTrue('with no checkbox, that rect stays empty too',
+    IsRectEmpty(L.CheckBox));
+  AssertEquals('and it was not moved onto an edge either', 0, L.CheckBox.Right);
+end;
+
+procedure TRtlDateTimePickerTest.MirroredFieldsAnswerTheirOwnClicks;
+{ THE join, in the mirrored direction. Every x below comes from the PAINT; the click is
+  then aimed at it. Mirror the paint and leave the hit test reading the unmirrored
+  origin and every one of these lands in the wrong field -- which is the failure this
+  control has already shipped once, in the other direction. }
+var P: TTyDateTimePickerProbe;
+begin
+  P := MakePicker(True);
+  try
+    AssertPaintedFieldsAnswerTheirOwnClicks(P, 'mirrored');
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TRtlDateTimePickerTest.MirroredFieldsAnswerTheirOwnClicksWithAnIndicatorInTheWay;
+{ The indicator is the column the two sites used to compose differently, and mirroring
+  moves it across the whole field. }
+var P: TTyDateTimePickerProbe;
+begin
+  P := MakePicker(True);
+  try
+    P.ShowCheckBox := True;
+    P.Checked      := True;
+    AssertPaintedFieldsAnswerTheirOwnClicks(P, 'mirrored, with an indicator');
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TRtlDateTimePickerTest.TheIndicatorsHitZoneTravelsWithTheIndicator;
+{ Not "is there a hit zone on the right" -- that would pass on a control that grew a
+  second zone and kept the first. The old position must go DEAD. }
+var
+  P: TTyDateTimePickerProbe;
+  Old, New_: TRect;
+begin
+  P := MakePicker(False);
+  try
+    P.ShowCheckBox := True;
+    P.Checked      := True;
+    Old := P.RectsForTest.CheckBox;
+    P.BiDiMode := bdRightToLeft;
+    New_ := P.RectsForTest.CheckBox;
+    AssertTrue('premise: the indicator actually moved', New_.Left > Old.Left);
+
+    P.SimMouseDown((New_.Left + New_.Right) div 2, (New_.Top + New_.Bottom) div 2);
+    AssertFalse('a click where the indicator now IS toggles it', P.Checked);
+
+    P.Checked := True;
+    P.SimMouseDown((Old.Left + Old.Right) div 2, (Old.Top + Old.Bottom) div 2);
+    AssertTrue('and a click where it USED to be does not', P.Checked);
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TRtlDateTimePickerTest.TheButtonsHitZoneTravelsWithTheButton;
+{ The chevron opens the calendar. Mirror the glyph and leave the zone and the user is
+  clicking a picture; leave the glyph and mirror the zone and they are clicking blank
+  field. Both halves come out of the same record, so this asserts the record moved. }
+var
+  P: TTyDateTimePickerProbe;
+  Old, New_: TRect;
+  K: Word;
+begin
+  P := MakePicker(False);
+  try
+    Old := P.RectsForTest.Button;
+    P.BiDiMode := bdRightToLeft;
+    New_ := P.RectsForTest.Button;
+    AssertEquals('the button now starts at the frame', 0, New_.Left);
+    AssertTrue('premise: it used to be at the other end', Old.Left > 0);
+    { A click in the mirrored button must NOT be read as a click in a text field -- the
+      text box no longer covers that x at all. Parked on the LAST field on purpose: park
+      on field 0 and a hit test still reading the UNMIRRORED tiling (where this x is
+      inside the text box, and resolves to field 0) would answer 0 and the assertion
+      would pass for the wrong reason. }
+    K := VK_END; P.SimKeyDown(K);
+    P.SimMouseDown((New_.Left + New_.Right) div 2, 12);
+    AssertEquals('a click on the mirrored button selects no field',
+      High(P.Segments), P.ActiveSegForTest);
+    AssertTrue('and the text box has given that band up',
+      P.RectsForTest.Text.Left >= New_.Right);
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TRtlDateTimePickerTest.TheGlyphsLandWhereTheOriginSaysTheyWill;
+{ The one assertion that reaches the GLYPHS. Everything else in this class compares two
+  numbers the control computed; this compares a number the control computed against
+  where the ink actually landed.
+
+  It exists because there are two independent flips on the text path and only one of
+  them is visible to the other tests. TextOriginX resolves Alignment for the HIGHLIGHT
+  and the HIT TEST; TTyPainter.DrawText resolves the same property again, from the flag
+  BeginPaint was armed with, for the GLYPHS. Arm one and not the other and every
+  geometry assertion in this file still passes while the string is drawn at one end of
+  the box and selected at the other -- the exact "drawn on the right, answers on the
+  left" defect, in its purest form. So: render, find the ink, and require it to begin
+  where the origin said.
+
+  dmNone on purpose -- the chevron is drawn in the same TextColor and its ink would
+  otherwise be counted as part of the string. }
+var
+  Ctl:  TTyStyleController;
+  P:    TTyDateTimePickerProbe;
+  host: TBitmap;
+  shot: TBGRABitmap;
+  l, r, origin: Integer;
+
+  procedure ShootAndCompare(const AWhere: string);
+  begin
+    host := NewHost(200, 26);
+    try
+      P.RenderToForTest(host.Canvas, Rect(0, 0, 200, 26), 96);
+      shot := TBGRABitmap.Create(host);
+      try
+        ChannelSpanX(shot, chGreen, l, r);
+        origin := P.OriginXForTest;
+        AssertTrue(AWhere + ': the field drew its string', l >= 0);
+        AssertTrue(AWhere + ': the ink begins where the origin says (origin ' +
+          IntToStr(origin) + ', ink ' + IntToStr(l) + ')', Abs(l - origin) <= 3);
+      finally
+        shot.Free;
+      end;
+    finally
+      host.Free;
+    end;
+  end;
+
+begin
+  Ctl := TTyStyleController.Create(nil);
+  P   := TTyDateTimePickerProbe.Create(nil);
+  try
+    Ctl.LoadThemeCss('TyDateTimePicker { background: #FFFFFF; color: #00FF00; ' +
+      'border-width: 0px; padding: 0px 6px; }');
+    P.Controller := Ctl;
+    P.Font.PixelsPerInch := 96;
+    P.SetBounds(0, 0, 200, 26);
+    P.Kind       := dtkDate;
+    P.DateMode   := dmNone;
+    P.DateFormat := 'yyyy-mm-dd';
+    P.DateTime   := EncodeDate(2026, 9, 15);
+
+    ShootAndCompare('left to right');
+    AssertTrue('premise: unmirrored, the string is at the LEFT end', l < 60);
+
+    P.BiDiMode := bdRightToLeft;
+    ShootAndCompare('mirrored');
+    AssertTrue('mirrored, the string has moved to the RIGHT end (ink at ' +
+      IntToStr(l) + '..' + IntToStr(r) + ')', l > 100);
+    AssertTrue('and it reaches that end', r > 200 - 12);
+  finally
+    P.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TRtlDateTimePickerTest.TheStringStartsAtTheReadingEdgeWhenMirrored;
+{ Alignment is resolved from READING order, so the default taLeftJustify puts the string
+  against the box's right edge in a mirrored field. The origin is what the highlight and
+  the hit test both measure from, so getting it wrong moves all three together -- which
+  is why this asserts the origin rather than looking at pixels. }
+var
+  P: TTyDateTimePickerProbe;
+  LtrOrigin, RtlOrigin: Integer;
+begin
+  P := MakePicker(False);
+  try
+    LtrOrigin := P.OriginXForTest;
+    AssertEquals('left to right, the string starts at the box''s left edge',
+      P.RectsForTest.Text.Left, LtrOrigin);
+    P.BiDiMode := bdRightToLeft;
+    RtlOrigin := P.OriginXForTest;
+    AssertTrue('mirrored, it has moved right', RtlOrigin > LtrOrigin);
+    AssertTrue('and it ENDS at the box''s right edge rather than starting at its left',
+      RtlOrigin > P.RectsForTest.Text.Left);
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TRtlDateTimePickerTest.AnAuthorsExplicitAlignmentIsOverriddenNotDefaulted;
+{ docs/rtl.md: Alignment is OVERRIDDEN, not defaulted -- TAlignment has no "unset"
+  member, so "flip only what the author did not write" is not expressible. A field the
+  author pinned to taRightJustify therefore hugs the LEFT edge in a mirrored form, and
+  the stored property is never rewritten. }
+var P: TTyDateTimePickerProbe;
+begin
+  P := MakePicker(True);
+  try
+    P.Alignment := taRightJustify;
+    AssertEquals('an explicit right-justify resolves to the physical LEFT edge',
+      P.RectsForTest.Text.Left, P.OriginXForTest);
+    AssertTrue('and the stored property was not rewritten',
+      P.Alignment = taRightJustify);
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TRtlDateTimePickerTest.AStringTooWideToFitKeepsItsReadingStartInside;
+{ When the string does not fit, one end has to spill. It must be the end the reader
+  finishes at, never the end they start from -- a field whose first character is off the
+  edge is a field with nothing legible in it. Left to right that means clamping the
+  origin to the left edge; mirrored it means clamping the END to the right edge. }
+var
+  P: TTyDateTimePickerProbe;
+  R: TRect;
+begin
+  P := MakePicker(False);
+  try
+    { A box far too narrow for 'dd mmmm yyyy'. }
+    P.SetBounds(0, 0, 60, 24);
+    P.Alignment := taRightJustify;
+    R := P.RectsForTest.Text;
+    AssertEquals('left to right, the string''s START stays inside',
+      R.Left, P.OriginXForTest);
+    P.BiDiMode  := bdRightToLeft;
+    P.Alignment := taLeftJustify;   { -> reading start, i.e. the right edge }
+    R := P.RectsForTest.Text;
+    AssertTrue('mirrored, the string''s START (its right end) stays inside: ' +
+      IntToStr(P.OriginXForTest) + ' vs box right ' + IntToStr(R.Right),
+      P.OriginXForTest < R.Right);
+    AssertTrue('and it spills off the OTHER end', P.OriginXForTest < R.Left);
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TRtlDateTimePickerTest.TheFieldArrowsStepTheWayTheEyeReads;
+{ §6.3 item 4: the criterion is not "can this control be typed into" but "what does this
+  keystroke move". These arrows move the CURRENT FIELD between slots, not a caret between
+  characters, so they are layout direction and they mirror. Left unswapped, a mirrored
+  user pressing the key that points at the next field walks away from it. }
+var
+  P: TTyDateTimePickerProbe;
+  K: Word;
+begin
+  P := MakePicker(True);
+  try
+    K := VK_HOME; P.SimKeyDown(K);
+    AssertEquals('parked on field 0', 0, P.ActiveSegForTest);
+    K := VK_LEFT; P.SimKeyDown(K);
+    AssertEquals('mirrored, LEFT walks towards the next field', 1, P.ActiveSegForTest);
+    K := VK_RIGHT; P.SimKeyDown(K);
+    AssertEquals('and RIGHT walks back', 0, P.ActiveSegForTest);
+    { The unmirrored control must be untouched. }
+    P.BiDiMode := bdLeftToRight;
+    K := VK_HOME;  P.SimKeyDown(K);
+    K := VK_LEFT;  P.SimKeyDown(K);
+    AssertEquals('left to right, LEFT at field 0 stays put', 0, P.ActiveSegForTest);
+    K := VK_RIGHT; P.SimKeyDown(K);
+    AssertEquals('and RIGHT advances', 1, P.ActiveSegForTest);
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TRtlDateTimePickerTest.HomeAndEndStayLogicalInBothDirections;
+{ §6.3 item 3. Home and End name the FIRST and LAST field -- the day and the year in
+  'dd mmmm yyyy' -- not the leftmost and rightmost boxes. Flipping them would make the
+  keys mean something no other control in the library means. }
+var
+  P: TTyDateTimePickerProbe;
+  K: Word;
+begin
+  P := MakePicker(True);
+  try
+    K := VK_END;  P.SimKeyDown(K);
+    AssertEquals('End is still the LAST field', High(P.Segments), P.ActiveSegForTest);
+    K := VK_HOME; P.SimKeyDown(K);
+    AssertEquals('Home is still the FIRST', 0, P.ActiveSegForTest);
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TRtlDateTimePickerTest.TheDropdownLinesUpWithTheReadingEdge;
+{ Pure: the popup rect. A mirrored field's calendar hangs from the edge the reader's eye
+  starts at. The vertical flip is a separate axis and must survive untouched. }
+var Ltr, Rtl: TRect;
+begin
+  Ltr := TyPopupRect(Rect(50, 100, 250, 120), 240, 200, 1000, False);
+  Rtl := TyPopupRect(Rect(50, 100, 250, 120), 240, 200, 1000, True);
+  AssertEquals('left to right, the popup''s LEFT edge meets the anchor''s',
+    50, Ltr.Left);
+  AssertEquals('mirrored, its RIGHT edge meets the anchor''s', 250, Rtl.Right);
+  AssertEquals('and it is still the width asked for',
+    240, Rtl.Right - Rtl.Left);
+  AssertEquals('the drop is unchanged', Ltr.Top, Rtl.Top);
+  AssertEquals('including its height',  Ltr.Bottom - Ltr.Top, Rtl.Bottom - Rtl.Top);
+  { And the flip-above branch still flips, mirrored. }
+  Rtl := TyPopupRect(Rect(50, 900, 250, 920), 240, 200, 1000, True);
+  AssertEquals('no room below, so it still flips ABOVE', 700, Rtl.Top);
+  AssertEquals('and still hangs from the reading edge', 250, Rtl.Right);
+end;
+
+procedure TRtlDateTimePickerTest.BidiTextDoesNotSplitThePaintFromTheHitTest;
+{ The honest boundary, stated as a guard rather than left in a comment.
+
+  A date is digits and separators, which are left-to-right runs in any paragraph, so a
+  mirrored picker draws '15 September 2026' in that order and only the BOX moves. Put a
+  right-to-left literal in the format and the painter routes the string through the
+  bidirectional layout, which reorders the runs -- while this control measures field
+  positions by PREFIX WIDTH, which does not.
+
+  What this test claims is the part that is true and load-bearing: the highlight and the
+  hit test come out of the same origin and the same measurement, so they agree with EACH
+  OTHER in either direction. What it deliberately does not claim is that either agrees
+  with the reordered glyphs; that is the segment-order-under-bidi item, it is unchanged
+  by mirroring, and it is recorded in docs/rtl.md rather than pretended away here. }
+var P: TTyDateTimePickerProbe;
+begin
+  P := TTyDateTimePickerProbe.Create(nil);
+  try
+    P.SetBounds(0, 0, 320, 24);
+    P.Kind := dtkDate;
+    { An Arabic literal beside the numeric fields: the string now carries strong
+      right-to-left codepoints, so the paint takes the bidirectional path. }
+    P.DateFormat := '"'#$D9#$8A#$D9#$88#$D9#$85'" dd/mm/yyyy';
+    P.DateTime   := EncodeDate(2026, 9, 15);
+    P.BiDiMode   := bdRightToLeft;
+    AssertPaintedFieldsAnswerTheirOwnClicks(P, 'mirrored, bidi literal');
+  finally
+    P.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TRtlPainterTest);
   RegisterTest(TRtlCaptionTest);
@@ -6900,6 +7454,7 @@ initialization
   RegisterTest(TRtlTreeViewTest);
   RegisterTest(TRtlListViewTest);
   RegisterTest(TRtlExclusionTest);
+  RegisterTest(TRtlDateTimePickerTest);
   RegisterTest(TRtlScrollBarGeometryTest);
   RegisterTest(TRtlScrollBarControlTest);
   RegisterTest(TRtlScrollBoxTest);

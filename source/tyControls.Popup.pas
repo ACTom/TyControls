@@ -24,9 +24,16 @@ uses
 // anchored to AAnchorScreen (screen coordinates).
 // Drops below the anchor; flips above when there isn't AContentH room below
 // within AScreenH.
+//
+// ARightToLeft moves the ALIGNMENT EDGE, not the drop direction: a mirrored
+// dropdown lines its RIGHT edge up with the anchor's right edge, because that is
+// the edge a right-to-left reader's eye starts from and the edge the host's own
+// button now sits at the far side of. The vertical flip is untouched -- up/down
+// is an axis the reading direction does not reach.
 // ---------------------------------------------------------------------------
 function TyPopupRect(const AAnchorScreen: TRect;
-  AContentW, AContentH, AScreenH: Integer): TRect;
+  AContentW, AContentH, AScreenH: Integer;
+  ARightToLeft: Boolean = False): TRect;
 
 // ---------------------------------------------------------------------------
 // TTyDropdownPopup — borderless popup-window host.
@@ -44,6 +51,7 @@ type
     FClosing     : Boolean;         // guard: prevents re-entrant deactivate→close→deactivate loops
     FCloseUpTick : QWord;           // tick when popup last closed (deactivate-reopen-race guard)
     FNoActivate  : Boolean;         // show without stealing activation (autocomplete popups)
+    FRightToLeft : Boolean;         // alignment edge of the last Popup (Resize re-uses it)
 
     procedure FormDeactivate(Sender: TObject);
     procedure FormResize(Sender: TObject);
@@ -62,8 +70,11 @@ type
 
     { Compute the screen rect via TyPopupRect, size/show the form non-activating,
       apply the rounded region.  AAnchor is the control the popup drops from
-      (its ClientToScreen(Rect(0,0,Width,Height)) is used as the anchor rect). }
-    procedure Popup(AAnchor: TControl; AContentWidth, AContentHeight: Integer);
+      (its ClientToScreen(Rect(0,0,Width,Height)) is used as the anchor rect).
+      ARightToLeft aligns the popup's RIGHT edge to the anchor's right edge; it is
+      remembered so a later Resize re-anchors to the same edge. }
+    procedure Popup(AAnchor: TControl; AContentWidth, AContentHeight: Integer;
+      ARightToLeft: Boolean = False);
 
     { Re-anchor + resize an ALREADY-open popup in place — recomputes the drop rect
       from the last anchor and re-applies the region, but does NOT re-Show and does
@@ -116,7 +127,8 @@ implementation
 // TyPopupRect
 // ---------------------------------------------------------------------------
 function TyPopupRect(const AAnchorScreen: TRect;
-  AContentW, AContentH, AScreenH: Integer): TRect;
+  AContentW, AContentH, AScreenH: Integer;
+  ARightToLeft: Boolean): TRect;
 var
   belowTop: Integer;
 begin
@@ -134,8 +146,16 @@ begin
     Result.Top    := belowTop;
     Result.Bottom := belowTop + AContentH;
   end;
-  Result.Left  := AAnchorScreen.Left;
-  Result.Right := AAnchorScreen.Left + AContentW;
+  if ARightToLeft then
+  begin
+    Result.Right := AAnchorScreen.Right;
+    Result.Left  := AAnchorScreen.Right - AContentW;
+  end
+  else
+  begin
+    Result.Left  := AAnchorScreen.Left;
+    Result.Right := AAnchorScreen.Left + AContentW;
+  end;
 end;
 
 // ---------------------------------------------------------------------------
@@ -151,6 +171,7 @@ begin
   FController := nil;
   FNoActivate := False;
   FAnchor := nil;
+  FRightToLeft := False;
 
   FForm := TForm.CreateNew(nil);
   FForm.BorderStyle  := bsNone;
@@ -194,7 +215,7 @@ begin
 end;
 
 procedure TTyDropdownPopup.Popup(AAnchor: TControl;
-  AContentWidth, AContentHeight: Integer);
+  AContentWidth, AContentHeight: Integer; ARightToLeft: Boolean);
 var
   AnchorTL: TPoint;
   AnchorScreen: TRect;
@@ -203,13 +224,15 @@ var
   {$IFDEF LCLWin32}exStyle: PtrInt;{$ENDIF}
 begin
   FAnchor := AAnchor;   // remembered so Resize can re-anchor an already-open popup
+  FRightToLeft := ARightToLeft;   // and to the same EDGE
   // Resolve the anchor control's screen rectangle.
   AnchorTL := AAnchor.ClientToScreen(Types.Point(0, 0));
   AnchorScreen := Types.Rect(AnchorTL.X, AnchorTL.Y,
     AnchorTL.X + AAnchor.Width, AnchorTL.Y + AAnchor.Height);
 
   // Compute drop/flip rect.
-  FRect := TyPopupRect(AnchorScreen, AContentWidth, AContentHeight, Screen.Height);
+  FRect := TyPopupRect(AnchorScreen, AContentWidth, AContentHeight, Screen.Height,
+             FRightToLeft);
   PopupW := FRect.Right - FRect.Left;
   PopupH := FRect.Bottom - FRect.Top;
 
@@ -263,7 +286,8 @@ begin
   AnchorTL := FAnchor.ClientToScreen(Types.Point(0, 0));
   AnchorScreen := Types.Rect(AnchorTL.X, AnchorTL.Y,
     AnchorTL.X + FAnchor.Width, AnchorTL.Y + FAnchor.Height);
-  FRect := TyPopupRect(AnchorScreen, AContentWidth, AContentHeight, Screen.Height);
+  FRect := TyPopupRect(AnchorScreen, AContentWidth, AContentHeight, Screen.Height,
+             FRightToLeft);
   W := FRect.Right - FRect.Left;
   H := FRect.Bottom - FRect.Top;
   FForm.SetBounds(FRect.Left, FRect.Top, W, H);

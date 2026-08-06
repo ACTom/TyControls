@@ -117,7 +117,7 @@ does **not** move to the right edge. That is correct, and it is asserted by
   `BiDiMode := bdRightToLeft` from code (see the caveat below about it not being
   *published*) and the following now lay themselves out right-to-left. This is
   phases 0, 1, 2, 3 and 4 of `plans/2026-08-04-rtl-mirroring-scope.md`, plus §3.7,
-  §3.8, §3.9, §3.12 and §3.14; the rest of that document is not built.
+  §3.8, §3.9, §3.12, §3.14 and §3.15; the rest of that document is not built.
 
   **`TTyTitleBar` is in the table but not in that document**, which never mentions
   the window chrome — as a phase, as a cost, or as an exclusion. It was simply not in
@@ -148,10 +148,11 @@ does **not** move to the right edge. That is correct, and it is asserted by
   | `TTyMenuBar` | top cells pack from the right; `RightJustify` groups pack against the left |
   | `TTyPopupMenu` (and `TTyImagesMenu` / `TTyMenuEx`) | the check/icon slot moves right, the shortcut and submenu arrow move left, the arrow turns round, the banner strip changes ends, dropdowns hang from the anchor's right, submenus cascade left, and **←/→ swap** (← opens a submenu, → returns to the parent) |
   | `TTyHeaderControl` | the whole strip: section 0 sits against the right edge, captions align right, the sort triangle and the divider move to each cell's other side, and the **hit test and the resize drag follow** — a click on the leftmost cell sorts the *last* section, and a divider is widened by dragging it left |
-  | `TTyCustomTabStrip` and everything on it — `TTyPageControl`, `TTyTabSet` | the whole tab band: tab 0 is the **rightmost** and the strip packs leftwards; the close × moves to each header's left edge; the two overflow arrows swap ends and turn round; scrolling forward slides the band **right**; `←`/`→` follow the eye. The page **body** does not move (there are no left/right-edge tabs to mirror), and a page's own children are not mirrored |
+  | `TTyCustomTabStrip` and everything on it — `TTyPageControl`, `TTyTabSet` | the whole tab band: tab 0 is the **rightmost** and the strip packs leftwards; the close × and the tab icon move to each header's other edge; the two overflow arrows swap ends and turn round; scrolling forward slides the band **right**; `←`/`→` follow the eye. With `TabPosition = tpLeft`/`tpRight` the mirror is a **change of edge, not of order**: the reflection is applied to the screen's x axis, which for a side band is the band's *minor* axis — so a `tpLeft` band moves bodily to the **right** edge (and the page body's inset moves with it), the close × and icon swap ends within each row, but the rows keep their top-to-bottom order and `↑`/`↓` keep their meaning. Reflecting x cannot reorder a run that goes down the page — the same rule that keeps `Home`/`End` logical. A page's own children are not mirrored |
   | `TTyCustomGrid`, `TTyDrawGrid`, `TTyStringGrid` | the whole column axis: column 0 sits against the **right** edge and the columns pack leftwards; the row-header gutter and its row numbers move to the right; frozen columns pin to the right and a `FixedColsRight` band moves to the left; the horizontal bar's `Position = Min` is the right end; a resize grip is a column's **left** edge and dragging it left widens the column; header captions, cell text, the sort triangle, the filter funnel, the tree chevron and its indent, rating stars, the ellipsis button, the comment mark, the pick-list arrow, the progress fill and the fill handle all change ends; `←`/`→` follow the eye while `Home`/`End` stay logical. **Every hit test follows the paint out of the same function**, so a click lands in the cell that was drawn under it. See `docs/controls/grid.md` for what does *not* move |
   | `TTyListView` and `TTyShellListView` | in report mode the whole column axis: column 0 sits against the **right** edge, the header cells and the grid rules follow it, a resize grip is a column's **left** edge and dragging it left widens the column, the sort triangle and any column icon move to each cell's reading start, and the row's check box and icon move with them while the caption steps aside. In the four flow styles (icon, small icon, tile, list) the cells tile from the **right**, and a `lvsList` column packs its first track against the right edge; grouped layouts reflect with them. Marquee selection follows the cells. `←`/`→` follow the eye — `→` steps to the item drawn to its right, i.e. the *earlier* one — while `Home`/`End`/`PageUp`/`PageDown` stay logical |
   | `TTyTreeView` and `TTyShellTreeView` | the column axis exactly as the list view's, plus the chrome inside the main cell: the indent grows **leftwards** from the cell's right edge, and the expander, check box, icon and caption follow it in that order. The **connecting tree lines move with the indent** — ancestor guides, the elbow and its stub all come out of one function, because a tree whose nodes mirror and whose lines do not is worse than one that does neither. The inline editor lands on the caption rather than across the chrome. `←`/`→` **swap**: `←` expands a node and `→` collapses it, because the children are drawn towards the left |
+  | `TTyDateTimePicker` | the whole field: the button column (chevron or spin arrows) takes the **left** edge, the text box takes what is left, the check box moves to the text box's reading start at its **right**, and the drop-down calendar hangs from the anchor's right. The spin halves do **not** turn over — up/down is an axis the reading direction does not reach. `←`/`→` **swap**, because they step between *fields* (year → month → day) and not between characters; `Home`/`End` stay logical. All four slot groups and both hit tests come out of one `TyDateTimeRects` record, reflected once at the end, so the paint and the click cannot take different sides. The digits themselves are not reordered — see below |
 
   **The vertical scroll bar moving to the left edge is the loudest signal a
   window gives that it reads right-to-left**, which is why the scrolling
@@ -219,6 +220,14 @@ does **not** move to the right edge. That is correct, and it is asserted by
   `TTyPopupMenu` reads the control the menu was raised on (LCL records it in
   `PopupComponent`), falling back to `Owner`. The direction then propagates the
   whole way down a submenu cascade.
+
+  **A shared drop-down takes its alignment edge from its host.** `TyPopupRect` grew an
+  `ARightToLeft` argument that moves which edge of the popup meets the anchor — right
+  to right instead of left to left — and `TTyDropdownPopup.Popup` passes it through and
+  remembers it, so a later in-place `Resize` re-anchors to the same edge. It defaults to
+  the unmirrored edge, so every other caller (the combo boxes, the autocomplete lists)
+  is byte-identical; `TTyDateTimePicker` is the first host that asks for it. The
+  vertical flip-above branch is untouched, because up/down is a different axis.
 
   **`Alignment` is overridden, not defaulted.** A caption the author explicitly
   set to `taLeftJustify` sits on the **right** in a right-to-left form, and a
@@ -330,9 +339,24 @@ does **not** move to the right edge. That is correct, and it is asserted by
 
   A right-to-left UI built on this release gets its forms — labels, check boxes,
   radio groups, buttons, panels — its tabbed containers, its grids, its list views,
-  its trees **and its window frame** the right way round. Its text editors read and
-  select correctly but do not mirror their own layout (the scroll bar stays on the
-  right), and its date picker does neither.
+  its trees, **its date pickers and its window frame** the right way round. Its text
+  editors read and select correctly but do not mirror their own layout (the scroll
+  bar stays on the right).
+
+  **The date picker's own string is not reordered, and that is the boundary rather
+  than an omission.** A date is digits and separators, which are left-to-right runs
+  in any paragraph, so a mirrored picker draws `15 September 2026` in that order and
+  only the *boxes* move — which is what a native mirrored picker does too. Put a
+  right-to-left literal or month name in the format and the painter routes the string
+  through `TBidiTextLayout`, which reorders the runs, while the picker measures field
+  positions by **prefix width**, which does not. The consequence is worth stating
+  precisely: the highlight and the hit test still agree with **each other** in either
+  direction — they read one origin and one measurement, and
+  `tests/test.rtl.pas` (`BidiTextDoesNotSplitThePaintFromTheHitTest`) requires it —
+  but neither follows the reordered glyphs. That is the segment-order-under-bidi
+  item; it is unchanged by mirroring, it was equally true left-to-right before, and
+  closing it means giving the picker a run table per field the way `TTyEdit` and
+  `TTyMemo` have one per line and per visual row.
 
 - **Containers do not mirror their children's `Align`/`Anchors` layout**, and this
   is not a gap to be closed. LCL's own align engine has no BiDi branch outside the

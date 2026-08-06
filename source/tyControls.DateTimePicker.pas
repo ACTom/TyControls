@@ -68,7 +68,7 @@ unit tyControls.DateTimePicker;
 interface
 
 uses
-  Classes, SysUtils, Types, DateUtils, LazUTF8,
+  Classes, SysUtils, Types, DateUtils, Math, LazUTF8,
   Controls, Graphics, LCLType, LCLIntf,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.Animation,
@@ -97,6 +97,31 @@ const
 
   { The pivot LCL defaults CenturyFrom to (datetimepicker.pas:4079). }
   TyDefaultCenturyFrom = 1941;
+
+  { ── The empty value ──────────────────────────────────────────────────────
+
+    "No date chosen" needs a representation, and TDateTime has no spare member --
+    every bit pattern in range is a real instant, and 0 is 30 Dec 1899, a date a
+    form can legitimately hold. So the empty state is a value FAR OUTSIDE the
+    range, exactly as LCL does it (datetimepicker.pas:60), and to the same number
+    so a value handed over from an LCL picker or read out of the same database
+    column arrives here still empty.
+
+    TyDateIsNull is deliberately a RANGE test, not `= TyNullDate`: a value that
+    round-tripped through a .lfm, a float cast or a NaN from a database driver
+    need not come back bit-identical, and "slightly different infinity" must not
+    read as "5 June 4000-something". Every WRITE normalises to TyNullDate, so the
+    stored value is always exactly this one and plain comparisons downstream stay
+    honest; every READ tests the range. }
+  TyNullDate = TDateTime(1.7e+308);
+  NullDate   = TyNullDate;          // LCL's spelling
+
+  { What an empty field shows. LCL's own default (datetimepicker.pas:4077), and
+    deliberately a LITERAL rather than a resourcestring: it is a property default,
+    so translating it would make the .lfm a form writes depend on the locale it was
+    saved under. An application that wants "(none)" -- in any language -- sets
+    TextForNullDate itself, and that string is the app's to translate. }
+  TyDefaultTextForNullDate = 'NULL';
 
 type
   TTyDateTimeKind = (dtkDate, dtkTime);
@@ -151,6 +176,18 @@ type
   and segment scanning (TyDateTimeSegments), ensuring that format character
   positions equal rendered-text positions (every field is leading-zero padded). }
 function TyEffectiveFormat(const AFormat: string): string;
+
+{ True when ADateTime carries no date at all -- see TyNullDate for why this is a
+  range test and not an equality one. LCL spells it IsNullDate
+  (datetimepicker.pas:600) and computes the same predicate. }
+function TyDateIsNull(const ADateTime: TDateTime): Boolean;
+
+{ Equality that treats two empty values as equal. Ordinary `=` would answer False
+  for two nulls that came from different round trips, which is how "the value did
+  not change" turns into a spurious OnChange -- and, worse, how an Escape that
+  should restore an empty field restores a date instead.
+  LCL: EqualDateTime, datetimepicker.pas:594. }
+function TyEqualDateTime(const A, B: TDateTime): Boolean;
 
 { Thin deterministic wrapper around the RTL FormatDateTime.
   Always uses AFmt so locale never leaks. }
@@ -283,6 +320,8 @@ type
     FCenturyFrom:  Word;
     FOptions:      TTyDateTimePickerOptions;
     FDateMode:     TTyDTDateMode;
+    FNullInputAllowed: Boolean;
+    FTextForNullDate:  TCaption;
     { The value as of the last focus-in (or the last programmatic write). Escape
       restores it -- see KeyDown. LCL calls this FConfirmedDateTime. }
     FConfirmedDateTime: TDateTime;
@@ -301,6 +340,21 @@ type
                                     // into the popup form — ownership stays with Self.
     FCloseUpTick: QWord;            // tick at last CloseUp for the reopen-race guard
     FMouseDownOnButton: Boolean;    // chevron pressed in MouseDown -> open the dropdown in Click
+
+    { What the LAST PAINT actually used. Recorded, not re-derived.
+
+      The invariant this control exists to hold is "a click lands in the field that was
+      drawn under it", and the way it holds it is that RenderTo and MouseDown read one
+      FieldLayout call. But a TEST that checks the invariant by calling FieldLayout
+      itself is asking the hit test where the paint went -- it proves the two callers of
+      one function agree, which they do by construction, and it stays green through a
+      change that mirrors the paint and leaves the hit test behind. That is exactly the
+      defect this control has already shipped once.
+      So the paint writes down what it used, and the guards read THAT. }
+    FPaintedRects:   TTyDateTimeRects;
+    FPaintedOriginX: Integer;
+    FPaintedText:    string;
+    FPaintedSpans:   TTySegmentArray;
 
     function  ActiveFormat: string;
     function  EffectiveFormat: string;
@@ -402,6 +456,15 @@ type
     procedure SetLeadingZeros(AValue: Boolean);
     procedure SetCenturyFrom(AValue: Word);
     procedure SetDateMode(AValue: TTyDTDateMode);
+    procedure SetNullInputAllowed(AValue: Boolean);
+    procedure SetTextForNullDate(const AValue: TCaption);
+    { The date an EMPTY field starts editing from. Today, pulled inside every bound
+      that applies. Typing a digit or pressing an arrow on an empty field has to
+      produce a valid date to modify, and picking one at random -- 30 Dec 1899, say,
+      which is what the raw zero is -- makes the first keystroke jump the user to a
+      century they did not ask for. LCL composes against the same expression
+      (datetimepicker.pas:1306). }
+    function  NullSeedDate: TDateTime;
     { Re-measure + relayout after anything that changes the rendered content. }
     procedure ContentChanged;
     function  GetDroppedDown: Boolean;
@@ -431,6 +494,11 @@ type
     procedure StepActiveSeg(ADelta: Integer);
     { Ensure FPopup + FCalendar are created (lazy init; protected for probes). }
     procedure EnsurePopup;
+    { Copy the picker's bounds and value into the reused popup calendar. Split out of
+      OpenDropDown so it can be exercised without a real window: everything here can
+      RAISE (the calendar rejects an out-of-range date), while the rest of OpenDropDown
+      needs a screen. }
+    procedure SeedPopupCalendar;
 
     function  GetStyleTypeKey: string; override;
     { What the field needs to show its own content without clipping: padding, the
@@ -460,6 +528,11 @@ type
     { Take the current value as the one Escape reverts to. LCL calls this
       ConfirmChanges (datetimepicker.pas:1979-1983); it happens on focus-in and on a
       programmatic write, so "undo" means "undo what the USER did since then". }
+    { True when the field holds no date. The question a host asks before writing the
+      value into an optional column, and the one this control could not answer at all
+      before: an "optional deadline" had nowhere to put "none". LCL: same name,
+      datetimepicker.pas:4194. }
+    function DateIsNull: Boolean;
     procedure ConfirmChanges;
     { Restore the confirmed value (LCL's UndoChanges, :1985-1997). }
     procedure UndoChanges;
@@ -470,6 +543,12 @@ type
     property ActiveSeg:   Integer   read FActiveSeg;
     property Segments:    TTySegmentArray read FSegments;
     property DigitBuffer: string    read FDigitBuffer;
+    { The layout the last RenderTo drew with -- see the fields for why a guard has to
+      read this rather than call FieldLayout again. Empty until the first paint. }
+    property PaintedRects:   TTyDateTimeRects read FPaintedRects;
+    property PaintedOriginX: Integer          read FPaintedOriginX;
+    property PaintedText:    string           read FPaintedText;
+    property PaintedSpans:   TTySegmentArray  read FPaintedSpans;
     { Expose popup and calendar for test probes }
     property Popup:       TTyDropdownPopup read FPopup;
     property Calendar:    TTyCalendar      read FCalendar;
@@ -514,6 +593,18 @@ type
       is what a skin with a larger font or fatter padding needs, and what the fixed
       130px width could not do. }
     property AutoSize;
+    { Whether the USER may empty the field (N or Delete). Code can always write
+      DateTime := TyNullDate -- LCL draws the line in the same place
+      (datetimepicker.pas:3731 checks it, SetDateTime :1202 does not), and it is the
+      right place: a form that means "required" wants the keyboard route closed, not
+      its own load-this-record line refused. }
+    property NullInputAllowed: Boolean read FNullInputAllowed
+             write SetNullInputAllowed default True;
+    { What the field shows while empty. No `default` on purpose (LCL says nodefault
+      for the same reason): the initial value is a non-empty string, so a form that
+      legitimately wants an empty one has to be able to stream it. }
+    property TextForNullDate: TCaption read FTextForNullDate
+             write SetTextForNullDate;
     property OnChange:     TNotifyEvent    read FOnChange    write FOnChange;
     property OnDropDown:   TNotifyEvent    read FOnDropDown  write FOnDropDown;
     property OnCloseUp:    TNotifyEvent    read FOnCloseUp   write FOnCloseUp;
@@ -542,10 +633,21 @@ function TyDateTimeDownButtonRect(const ALocal: TRect; APPI: Integer; ABtnWDev: 
 
 { APaddingLogical is the resolved style's padding and AButtonWLogical the button
   column's token width, both in LOGICAL px; AButtonWLogical is 0 when the field has no
-  button at all (dmNone), which is what empties the three button rects. }
+  button at all (dmNone), which is what empties the three button rects.
+
+  ARightToLeft MIRRORS the finished tiling about ALocal's vertical centre -- one
+  reflection over all five rects at the very end, not a direction branch per part.
+  That is the shape TyCaptionLayoutFor and TyStatusPanelRects already use, and the
+  reason to insist on it here is this control's history: five parts, each with its
+  own x expression, is five chances to mirror four. Reflecting the finished record
+  cannot mirror four. The button column lands at the physical LEFT (the trailing
+  edge in either direction, which is also where Windows puts it under
+  WS_EX_LAYOUTRTL), the text box takes what is left, and the indicator comes to rest
+  at the text box's reading start -- its right edge. Up/down is untouched: the spin
+  halves reflect onto themselves. }
 function TyDateTimeRects(const ALocal: TRect; APPI: Integer;
   const APaddingLogical: TRect; AButtonWLogical: Integer;
-  AShowCheckBox: Boolean): TTyDateTimeRects;
+  AShowCheckBox: Boolean; ARightToLeft: Boolean = False): TTyDateTimeRects;
 
 { What the checkbox reserves at the reading start of the text box: the indicator plus its
   gap. Scaled as TWO terms because the indicator is DRAWN MulDiv(TyCheckBoxBox) wide and
@@ -555,6 +657,26 @@ function TyDateTimeRects(const ALocal: TRect; APPI: Integer;
 function TyDateTimeCheckBoxColumn(APPI: Integer): Integer;
 
 implementation
+
+{ ── The empty value ──────────────────────────────────────────────────────── }
+
+function TyDateIsNull(const ADateTime: TDateTime): Boolean;
+begin
+  { NaN first: every comparison against a NaN is False, so the range tests below
+    would let one through as a perfectly ordinary date. A database driver handing
+    back a NaN for a NULL column is exactly the case this order exists for. }
+  Result := IsNan(Double(ADateTime)) or IsInfinite(Double(ADateTime)) or
+            (ADateTime > SysUtils.MaxDateTime) or
+            (ADateTime < SysUtils.MinDateTime);
+end;
+
+function TyEqualDateTime(const A, B: TDateTime): Boolean;
+begin
+  if TyDateIsNull(A) then
+    Result := TyDateIsNull(B)
+  else
+    Result := (not TyDateIsNull(B)) and (A = B);
+end;
 
 { ── TyEffectiveFormat ────────────────────────────────────────────────────── }
 
@@ -1111,7 +1233,7 @@ end;
 
 function TyDateTimeRects(const ALocal: TRect; APPI: Integer;
   const APaddingLogical: TRect; AButtonWLogical: Integer;
-  AShowCheckBox: Boolean): TTyDateTimeRects;
+  AShowCheckBox: Boolean; ARightToLeft: Boolean): TTyDateTimeRects;
 var
   BtnW, BoxSize, MidY: Integer;
 begin
@@ -1150,6 +1272,29 @@ begin
     Result.ButtonUp   := TyDateTimeUpButtonRect(ALocal, APPI, BtnW);
     Result.ButtonDown := TyDateTimeDownButtonRect(ALocal, APPI, BtnW);
   end;
+
+  { MIRROR once, at the very end, over the FINISHED record. Every part above was tiled
+    left-to-right and none of them knows about direction; reflecting them together is
+    what makes "the paint mirrored but the hit test did not" unrepresentable rather than
+    merely untested -- both sides read this record. LCL's BidiFlipRect (controls.pp:2966)
+    does the arithmetic, the same lever TyCaptionLayoutFor and TyStatusPanelRects pull.
+
+    An EMPTY part is left exactly as it is. Reflecting Rect(0,0,0,0) about the client
+    would hand back Rect(W,0,W,0) -- still empty by IsRectEmpty, but a rect sitting on a
+    real edge, one arithmetic slip away from becoming a button a click could find where
+    the paint drew nothing. }
+  if ARightToLeft then
+  begin
+    Result.Text := BidiFlipRect(Result.Text, ALocal, True);
+    if not IsRectEmpty(Result.CheckBox) then
+      Result.CheckBox := BidiFlipRect(Result.CheckBox, ALocal, True);
+    if not IsRectEmpty(Result.Button) then
+    begin
+      Result.Button     := BidiFlipRect(Result.Button,     ALocal, True);
+      Result.ButtonUp   := BidiFlipRect(Result.ButtonUp,   ALocal, True);
+      Result.ButtonDown := BidiFlipRect(Result.ButtonDown, ALocal, True);
+    end;
+  end;
 end;
 
 { ── TTyDateTimePicker ────────────────────────────────────────────────────── }
@@ -1173,6 +1318,8 @@ begin
   FCenturyFrom   := TyDefaultCenturyFrom;
   FOptions       := [];
   FDateMode      := dmComboBox;
+  FNullInputAllowed := True;
+  FTextForNullDate  := TyDefaultTextForNullDate;
   FConfirmedDateTime := FDateTime;
   FActiveSeg     := 0;
   FDigitBuffer   := '';
@@ -1249,8 +1396,7 @@ function TTyDateTimePicker.FormattedText: string;
 var
   Spans: TTySegmentArray;
 begin
-  Result := TyRenderDateTime(FDateTime, ActiveFormat, DefaultFormatSettings,
-              FLeadingZeros, Spans);
+  BuildDisplay(Result, Spans);
 end;
 
 function TTyDateTimePicker.SegmentDigitWidth(const ASeg: TTySegment): Integer;
@@ -1268,8 +1414,36 @@ procedure TTyDateTimePicker.BuildDisplay(out AText: string;
 var
   BufText: string;
   i, Delta: Integer;
+  Base: TDateTime;
 begin
-  AText := TyRenderDateTime(FDateTime, ActiveFormat, DefaultFormatSettings,
+  { An EMPTY field has no date to format, and TyRenderDateTime on the sentinel would
+    decode an out-of-range value. Two cases, and the second is the one that is easy to
+    miss:
+
+    * nothing typed yet -> show TextForNullDate and report NO spans. Zero spans is what
+      suppresses the highlight and what makes a click resolve to no field: the string on
+      screen is 'NULL', which has no year in it, and a span measured against the date's
+      offsets would put a highlight over characters that are not there.
+
+    * digits being typed -> the value is STILL empty (the buffer does not commit until
+      the field fills), so a naive null branch here would keep saying 'NULL' while the
+      user typed into it and the keystrokes would vanish into a field that never
+      acknowledged them. Render the SEED instead, and splice the buffer into it as
+      usual, so what is on screen is the date being built. }
+  if TyDateIsNull(FDateTime) then
+  begin
+    if (FDigitBuffer = '') or (FActiveSeg < 0) then
+    begin
+      AText  := FTextForNullDate;
+      ASpans := nil;
+      Exit;
+    end;
+    Base := NullSeedDate;
+  end
+  else
+    Base := FDateTime;
+
+  AText := TyRenderDateTime(Base, ActiveFormat, DefaultFormatSettings,
              FLeadingZeros, ASpans);
   if (FDigitBuffer = '') or (FActiveSeg < 0) or (FActiveSeg > High(ASpans)) then Exit;
 
@@ -1298,9 +1472,23 @@ function TTyDateTimePicker.TextOriginX(const ATextR: TRect;
 var
   Bmp: TBGRABitmap;
   TextW: Integer;
+  Rtl: Boolean;
+  Eff: TAlignment;
 begin
+  Rtl := IsRightToLeft;
+  { Alignment is a READING-order value here, resolved to a physical one exactly as
+    TTyPainter.DrawText will resolve the same property a few lines later -- one lookup,
+    two callers, so the origin the highlight and the hit test measure from cannot end up
+    on the other side of the box from the glyphs. It OVERRIDES rather than defaults: a
+    caption the author pinned to taLeftJustify sits on the right in a mirrored field,
+    because TAlignment has no "unset" member to distinguish the two (docs/rtl.md, and
+    LCL does the same at grids.pas:4006). The stored property is never rewritten. }
+  Eff    := BidiFlipAlignment(FAlignment, Rtl);
   Result := ATextR.Left;
-  if FAlignment = taLeftJustify then Exit;
+  { The unmirrored fast path, byte for byte as it was: a left-justified string starts at
+    the box's left edge and no measurement is needed. Mirrored, the clamp below can bite
+    even here, so the measurement has to happen. }
+  if (Eff = taLeftJustify) and not Rtl then Exit;
   if AText = '' then Exit;
   Bmp := TBGRABitmap.Create(1, 1);
   try
@@ -1309,11 +1497,20 @@ begin
   finally
     Bmp.Free;
   end;
-  if FAlignment = taRightJustify then
+  if Eff = taRightJustify then
     Result := ATextR.Right - TextW
-  else
+  else if Eff = taCenter then
     Result := ATextR.Left + (ATextR.Right - ATextR.Left - TextW) div 2;
-  if Result < ATextR.Left then Result := ATextR.Left;
+  { A string wider than its box has to spill off ONE end, and it must be the end the
+    reader finishes at -- a field whose first character is off the edge has nothing
+    legible in it. So the clamp pins the READING START inside: the left edge normally,
+    the right edge when the field is mirrored. }
+  if Rtl then
+  begin
+    if Result + TextW > ATextR.Right then Result := ATextR.Right - TextW;
+  end
+  else
+    if Result < ATextR.Left then Result := ATextR.Left;
 end;
 
 function TTyDateTimePicker.MeasureCharX(const AText, AFontName: string;
@@ -1406,7 +1603,16 @@ begin
   if NewVal < RMin then NewVal := RMin;
   if NewVal > RMax then NewVal := RMax;
 
-  DecodeDateTime(FDateTime, Y, M, D, H, Mi, S, MS);
+  { The fields this keystroke is NOT changing come from the standing value, and an EMPTY
+    field has none to decode -- DecodeDateTime on the sentinel would raise. Start from
+    the seed instead, which is the same date BuildDisplay has been showing the user
+    while they typed, so the month and day that end up stored are the ones that were on
+    screen. Note FDateTime itself is still empty at this point: the materialisation
+    happens below, in one place, when the new value is written. }
+  if TyDateIsNull(FDateTime) then
+    DecodeDateTime(NullSeedDate, Y, M, D, H, Mi, S, MS)
+  else
+    DecodeDateTime(FDateTime, Y, M, D, H, Mi, S, MS);
   case Seg.Kind of
     skYear:   Y  := Word(NewVal);
     skMonth:  M  := Word(NewVal);
@@ -1462,6 +1668,24 @@ procedure TTyDateTimePicker.CommitAndFire(AOldVal: TDateTime);
 var
   Clamped: TDateTime;
 begin
+  { An EMPTY value is outside every bound BY CONSTRUCTION, so the clamps below would read
+    it as a date that overshot and "correct" it to 31 Dec 9999. That is the single
+    failure that would make this feature worse than not having it: the field the user
+    just cleared reads back as a real date, and nothing tells the caller which happened.
+    So an empty value skips the clamping entirely and only the notification runs. }
+  if TyDateIsNull(FDateTime) then
+  begin
+    FDateTime := TyNullDate;   { normalise, so later plain comparisons stay honest }
+    if not TyEqualDateTime(FDateTime, AOldVal) then
+    begin
+      { dtpoAutoCheck deliberately does NOT fire here. It exists so that editing a value
+        implies the value is wanted; clearing it means the opposite, and ticking the
+        "I have a date" box at the moment the date goes away is the wrong way round. }
+      if Assigned(FOnChange) then FOnChange(Self);
+    end;
+    Invalidate;
+    Exit;
+  end;
   Clamped := FDateTime;
   if (FMinDate <> 0) and (Clamped < FMinDate) then Clamped := FMinDate;
   if (FMaxDate <> 0) and (Clamped > FMaxDate) then Clamped := FMaxDate;
@@ -1495,7 +1719,14 @@ begin
   if FDigitBuffer <> '' then
     FinalizeBuffer(OldVal, False);
   OldVal    := FDateTime;
-  FDateTime := TySegmentStep(FDateTime, FSegments[FActiveSeg], ADelta);
+  { Same reason as FinalizeBuffer: TySegmentStep decodes the value it is stepping, and
+    an empty field has none. An arrow on an empty field therefore fills it -- from the
+    seed, stepped once -- which is the behaviour that makes an emptied field reachable
+    again without the mouse. }
+  if TyDateIsNull(FDateTime) then
+    FDateTime := TySegmentStep(NullSeedDate, FSegments[FActiveSeg], ADelta)
+  else
+    FDateTime := TySegmentStep(FDateTime, FSegments[FActiveSeg], ADelta);
   CommitAndFire(OldVal);
 end;
 
@@ -1507,6 +1738,10 @@ function TTyDateTimePicker.HourOf(AValue: TDateTime): Integer;
 var
   h, m, sec, ms: Word;
 begin
+  { DecodeTime on the empty sentinel would raise, and this runs off an A/P keystroke --
+    the seed carries no time, so an empty field reads as midnight and 'P' steps it into
+    the afternoon, which is the same thing that would happen on a freshly seeded one. }
+  if TyDateIsNull(AValue) then AValue := NullSeedDate;
   DecodeTime(AValue, h, m, sec, ms);
   Result := h;
 end;
@@ -1560,8 +1795,10 @@ procedure TTyDateTimePicker.FieldLayout(const ALocal: TRect; APPI: Integer;
 begin
   AStyle      := CurrentStyle;
   AFontSizePx := ResolveFontSize(AStyle);
+  { The direction is asked ONCE, here, and every x downstream is whatever this call
+    produced -- the paint's, the hit test's and the preferred width's alike. }
   ARects      := TyDateTimeRects(ALocal, APPI, AStyle.Padding,
-                   ButtonColumnLogical, FShowCheckBox);
+                   ButtonColumnLogical, FShowCheckBox, IsRightToLeft);
   { The string and its spans come out of one call because they must agree; the origin
     then comes out of the SAME text box the string will be drawn in, which is the join
     the hit-test used to make for itself against a rect it built separately. }
@@ -1664,6 +1901,25 @@ begin
   if GetTickCount64 - FCloseUpTick <= 200 then Exit;
 
   EnsurePopup;
+  SeedPopupCalendar;
+
+  CalStyle := ActiveController.Model.ResolveStyle('TyCalendar', '', []);
+  Radius   := CalStyle.BorderRadius;
+  FPopup.CornerRadiusLogical := Radius;
+  FPopup.Controller := ActiveController;
+
+  if Assigned(FOnDropDown) then FOnDropDown(Self);
+
+  { Show the popup below (or above) the picker control -- hanging from the edge the
+    field reads FROM, so a mirrored picker drops its calendar under its own reading
+    start rather than trailing off the far side of the control. }
+  FPopup.Popup(Self, 240, 220, IsRightToLeft);
+  Invalidate;
+end;
+
+procedure TTyDateTimePicker.SeedPopupCalendar;
+begin
+  if FCalendar = nil then Exit;
 
   { Seed the calendar from the picker's current state -- BOUNDS FIRST.
 
@@ -1676,28 +1932,25 @@ begin
     bounds first means the date is only ever checked against the range it belongs to. }
   FCalendar.MinDate       := FMinDate;
   FCalendar.MaxDate       := FMaxDate;
-  FCalendar.Date          := DateOf(FDateTime);
+  { An EMPTY field has no date to show the calendar, and DateOf on the sentinel does not
+    produce one -- it produces a value the calendar's own setter RAISES on
+    (tyControls.Calendar.pas:510-516), so an unguarded seed does not merely open on the
+    wrong month, it throws out of the click that opened the popup. Show the seed instead:
+    today, pulled inside the same bounds. Note this does NOT fill the picker -- the field
+    stays empty until the user actually picks a day. }
+  if DateIsNull then
+    FCalendar.Date := NullSeedDate
+  else
+    FCalendar.Date := DateOf(FDateTime);
   { Was pinned to wdSunday, which quietly overrode the calendar's own locale default --
     so on a Monday-first machine the dropdown disagreed with a standalone calendar on
     the same form. Let the calendar decide; a host that wants a fixed column order sets
     it on the calendar it can reach through the Calendar property. }
   FCalendar.FirstDayOfWeek := wdLocaleDefault;
-  FCalendar.Controller    := ActiveController;
-
-  { Match the popup corner radius to the calendar's resolved border-radius. }
   { Use ActiveController (falls back to the global default when Controller is nil) —
     a picker themed via the global TyDefaultController has Controller=nil, and the
     old FCalendar.Controller.Model deref here crashed the dropdown with an AV. }
-  CalStyle := ActiveController.Model.ResolveStyle('TyCalendar', '', []);
-  Radius   := CalStyle.BorderRadius;
-  FPopup.CornerRadiusLogical := Radius;
-  FPopup.Controller := ActiveController;
-
-  if Assigned(FOnDropDown) then FOnDropDown(Self);
-
-  { Show the popup below (or above) the picker control. }
-  FPopup.Popup(Self, 240, 220);
-  Invalidate;
+  FCalendar.Controller    := ActiveController;
 end;
 
 procedure TTyDateTimePicker.CloseDropDown;
@@ -1739,13 +1992,18 @@ var
 begin
   if FCalendar = nil then Exit;
   OldVal    := FDateTime;
-  { Keep the time part; replace only the date part. }
-  FDateTime := DateOf(FCalendar.Date) + Frac(FDateTime);
+  { Keep the time part; replace only the date part -- except that an EMPTY field has no
+    time part, and Frac of the sentinel is not one. Navigating the calendar over an empty
+    field FILLS it, which is what the user asked for by moving the selection. }
+  if TyDateIsNull(FDateTime) then
+    FDateTime := DateOf(FCalendar.Date)
+  else
+    FDateTime := DateOf(FCalendar.Date) + Frac(FDateTime);
   { Clamp to [MinDate, MaxDate] }
   if (FMinDate <> 0) and (FDateTime < FMinDate) then FDateTime := FMinDate;
   if (FMaxDate <> 0) and (FDateTime > FMaxDate) then FDateTime := FMaxDate;
-  if (FDateTime <> OldVal) and Assigned(FOnChange) then
-    FOnChange(Self);
+  if not TyEqualDateTime(FDateTime, OldVal) then
+    if Assigned(FOnChange) then FOnChange(Self);
   Invalidate;
 end;
 
@@ -1758,13 +2016,19 @@ var
   NewDate, OldVal: TDateTime;
 begin
   if FCalendar = nil then Exit;
-  NewDate := DateOf(FCalendar.Date) + Frac(FDateTime);
+  { Same as CalendarChange: no time part to keep when the field is empty. Picking a day
+    is the gesture that fills an empty field. }
+  if TyDateIsNull(FDateTime) then
+    NewDate := DateOf(FCalendar.Date)
+  else
+    NewDate := DateOf(FCalendar.Date) + Frac(FDateTime);
   OldVal  := FDateTime;
   SetDateTime(NewDate);
   { Picking a day in the dropdown is a USER edit, so it must notify even though it goes
     through the (now silent) programmatic setter. Without this line the one gesture the
     dropdown exists for became the one gesture that told nobody. }
-  if (FDateTime <> OldVal) and not (dtpoDoChangeOnSetDateTime in FOptions)
+  if (not TyEqualDateTime(FDateTime, OldVal))
+     and not (dtpoDoChangeOnSetDateTime in FOptions)
      and Assigned(FOnChange) then
     FOnChange(Self);
   { Close after committing — CloseDropDown handles both the real-window path
@@ -1823,10 +2087,22 @@ begin
   P := TTyPainter.Create;
   try
     R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
-    P.BeginPaint(ACanvas, ARect, APPI);
+    { Armed with the direction, so the Alignment handed to DrawText below is resolved by
+      the painter's own BidiFlipAlignment -- the same two-row lookup TextOriginX used to
+      place the highlight. Opting in is only safe because the GEOMETRY mirrors too: a
+      painter that flips the text while the rects stay put is precisely the "drawn on the
+      right, answers on the left" defect this library has shipped three times. }
+    P.BeginPaint(ACanvas, ARect, APPI, IsRightToLeft);
     { Every x below -- the text box, the checkbox, the button column and the origin the
       string starts at -- comes out of this one call, and so does the hit-test's. }
     FieldLayout(R, APPI, L, S, EffSize, Txt, Spans, OriginX);
+    { Write down what this frame is about to draw with, before anything is drawn with it.
+      Every x below comes from these four, so a guard that reads them is reading the
+      paint's own answer rather than re-asking the function the hit test asks. }
+    FPaintedRects   := L;
+    FPaintedOriginX := OriginX;
+    FPaintedText    := Txt;
+    FPaintedSpans   := Copy(Spans, 0, Length(Spans));
     DrawFrame(P, R, S);
     TextR := L.Text;
 
@@ -1903,7 +2179,7 @@ procedure TTyDateTimePicker.CalculatePreferredSize(
 var
   S: TTyStyleSet;
   Bmp: TBGRABitmap;
-  EffSize, PPI, TextW, TextH: Integer;
+  EffSize, PPI, TextW, TextH, NullW: Integer;
   Txt: string;
   Spans: TTySegmentArray;
   Widest: TDateTime;
@@ -1925,6 +2201,14 @@ begin
     TyConfigureTextFont(Bmp, S.FontName, EffSize, S.FontWeight, PPI);
     TextW := Bmp.TextSize(Txt).cx;
     TextH := Bmp.TextSize(Txt).cy;
+    { The field can show EITHER string, so it has to be wide enough for both. Measuring
+      only the date is how a picker whose TextForNullDate reads "no deadline set" clips
+      the words the moment it is emptied -- and an AutoSize field would have shrunk to
+      the date's width and stayed there. Measured unconditionally rather than only when
+      the field happens to be empty, because the width must not change under the user
+      when the value does. }
+    NullW := Bmp.TextSize(FTextForNullDate).cx;
+    if NullW > TextW then TextW := NullW;
   finally
     Bmp.Free;
   end;
@@ -1999,20 +2283,44 @@ begin
   end;
   if IsInert then Exit;
 
+  { N (LCL's key, datetimepicker.pas:3731) and Delete empty the field. Delete is ours:
+    LCL binds only the letter, which nobody guesses, while Delete is what a user reaches
+    for to clear a field and costs one label here. Both are USER gestures, so unlike the
+    programmatic setter they announce themselves -- CommitAndFire does that, and it also
+    means pressing the key twice is silent the second time. }
+  if ((Key = VK_N) or (Key = VK_DELETE)) and (Shift = []) then
+  begin
+    if FNullInputAllowed and not FReadOnly then
+    begin
+      OldVal       := FDateTime;
+      FDateTime    := TyNullDate;
+      FDigitBuffer := '';
+      CommitAndFire(OldVal);
+    end;
+    Key := 0;
+    Exit;
+  end;
+
   case Key of
-    VK_LEFT:
+    VK_LEFT, VK_RIGHT:
       begin
-        { Finalize any pending buffer before moving the cursor }
+        { MIRRORING: these arrows step between FIELDS -- year to month to day -- not
+          between characters, so by the criterion in §6.3 item 4 of
+          plans/2026-08-04-rtl-mirroring-scope.md they are LAYOUT direction and they
+          swap. This control is the one case that criterion was written to settle: it
+          can be typed into, which makes it look like the text-editing exclusion, but
+          nothing here moves a caret. Left unswapped, a right-to-left user pressing the
+          key that points at the next field walks away from it.
+
+          Finalize any pending buffer first, whichever way we are about to move. }
         OldVal := FDateTime;
         if FDigitBuffer <> '' then FinalizeBuffer(OldVal, False);
-        if FActiveSeg > 0 then Dec(FActiveSeg);
-        Invalidate; Key := 0;
-      end;
-    VK_RIGHT:
-      begin
-        OldVal := FDateTime;
-        if FDigitBuffer <> '' then FinalizeBuffer(OldVal, False);
-        if FActiveSeg < High(FSegments) then Inc(FActiveSeg);
+        if (Key = VK_RIGHT) <> IsRightToLeft then
+        begin
+          if FActiveSeg < High(FSegments) then Inc(FActiveSeg);
+        end
+        else
+          if FActiveSeg > 0 then Dec(FActiveSeg);
         Invalidate; Key := 0;
       end;
     VK_HOME:
@@ -2252,11 +2560,26 @@ end;
   is what OnChange means everywhere else -- you now get that for free. }
 procedure TTyDateTimePicker.SetDateTime(AValue: TDateTime);
 begin
-  if (FMinDate <> 0) and (AValue < FMinDate) then AValue := FMinDate;
-  if (FMaxDate <> 0) and (AValue > FMaxDate) then AValue := FMaxDate;
-  if AValue < TyTheSmallestDate then AValue := TyTheSmallestDate;
-  if AValue > TyTheBiggestDate  then AValue := TyTheBiggestDate;
-  if FDateTime = AValue then Exit;
+  { The empty value is checked BEFORE any clamp, and normalised to exactly TyNullDate.
+    Order is the whole of it: the sentinel is above the ceiling by construction, so a
+    clamp reached first turns "no date" into 31 Dec 9999 and the field reads back as a
+    date the caller never wrote. Normalising means the stored value is always this one,
+    so `FDateTime <> AOldVal` downstream keeps working on plain floats.
+
+    NullInputAllowed is deliberately NOT consulted here. It governs the USER's keyboard
+    route, not the host's own writes -- a form that loads a record whose column is NULL
+    is passing its data, not typing, and LCL draws the line in the same place
+    (datetimepicker.pas:1202 does not check it; :3731 does). }
+  if TyDateIsNull(AValue) then
+    AValue := TyNullDate
+  else
+  begin
+    if (FMinDate <> 0) and (AValue < FMinDate) then AValue := FMinDate;
+    if (FMaxDate <> 0) and (AValue > FMaxDate) then AValue := FMaxDate;
+    if AValue < TyTheSmallestDate then AValue := TyTheSmallestDate;
+    if AValue > TyTheBiggestDate  then AValue := TyTheBiggestDate;
+  end;
+  if TyEqualDateTime(FDateTime, AValue) then Exit;
   FDateTime := AValue;
   FDigitBuffer := '';
   { The value the host just supplied is the new baseline: Escape must undo what the
@@ -2275,7 +2598,16 @@ end;
 procedure TTyDateTimePicker.UndoChanges;
 begin
   FDigitBuffer := '';
-  if FDateTime <> FConfirmedDateTime then
+  { TyEqualDateTime, not `<>`: restoring an EMPTY snapshot over a date has to count as a
+    change, and restoring one empty value over another must not.
+
+    The second half is currently unreachable and the reason is worth recording rather
+    than rediscovering: both values here came through SetDateTime or CommitAndFire, which
+    normalise every empty write to exactly TyNullDate, so two empty values are always
+    bit-identical and plain `<>` gives the same answer (verified by mutation -- swapping
+    it back survives). This spelling stays because it does not depend on that invariant
+    holding somewhere else. }
+  if not TyEqualDateTime(FDateTime, FConfirmedDateTime) then
   begin
     FDateTime := FConfirmedDateTime;
     { A revert IS a change from the handler's point of view -- the value it was last
@@ -2286,26 +2618,44 @@ begin
   Invalidate;
 end;
 
+{ Date and Time each keep the HALF of the standing value they are not writing -- and an
+  empty value has no halves. Trunc and Frac of the sentinel are meaningless at best, and
+  the number they produce would go straight into the host's record. Each of these three
+  cases exists in LCL for the same reason (SetDate, datetimepicker.pas:1194-1200). }
 procedure TTyDateTimePicker.SetDate(AValue: TDateTime);
 begin
-  { Keep the time part, replace only the date part }
-  SetDateTime(Trunc(AValue) + Frac(FDateTime));
+  if TyDateIsNull(AValue) then
+    SetDateTime(TyNullDate)
+  else if DateIsNull then
+    { Nothing to keep: the new date starts at midnight rather than picking up a
+      fraction of infinity. }
+    SetDateTime(Trunc(AValue))
+  else
+    SetDateTime(Trunc(AValue) + Frac(FDateTime));
 end;
 
 function TTyDateTimePicker.GetDate: TDateTime;
 begin
-  Result := Trunc(FDateTime);
+  if DateIsNull then Result := TyNullDate
+  else Result := Trunc(FDateTime);
 end;
 
 procedure TTyDateTimePicker.SetTime(AValue: TDateTime);
 begin
-  { Keep the date part, replace only the time part }
-  SetDateTime(Trunc(FDateTime) + Frac(AValue));
+  if TyDateIsNull(AValue) then
+    SetDateTime(TyNullDate)
+  else if DateIsNull then
+    { A time needs a day to sit on. The seed is today pulled inside the bounds, not the
+      raw zero -- writing a time into an empty field must not silently date it 1899. }
+    SetDateTime(NullSeedDate + Frac(AValue))
+  else
+    SetDateTime(Trunc(FDateTime) + Frac(AValue));
 end;
 
 function TTyDateTimePicker.GetTime: TDateTime;
 begin
-  Result := Frac(FDateTime);
+  if DateIsNull then Result := TyNullDate
+  else Result := Frac(FDateTime);
 end;
 
 procedure TTyDateTimePicker.SetDateFormat(const AValue: string);
@@ -2324,11 +2674,27 @@ begin
   ContentChanged;
 end;
 
+{ Moving a bound re-clamps a standing value that now sits outside it. An EMPTY value sits
+  outside EVERY bound by construction, so `FDateTime > FMaxDate` is true of it -- and
+  without the guard the ceiling's setter reads the emptiness as a date that overshot and
+  fills the field in, from a line that never mentions the value at all. LCL guards both
+  the same way (`if not DateIsNull then`, datetimepicker.pas:1232, :1251).
+
+  Only the CEILING can actually trip today, and it is worth writing down which one is
+  load-bearing: the sentinel sits at the top of the range, so `FDateTime < FMinDate` is
+  False of it and removing the floor's guard changes no observable behaviour (verified by
+  mutation -- that mutant survives). It stays because it is the same guard, and because
+  it is only unreachable while SetDateTime normalises every empty write to the POSITIVE
+  sentinel; TyDateIsNull also accepts values below the floor, and a negative one stored
+  raw would go straight through here. The normalisation is what makes it unreachable and
+  the normalisation is pinned (test.datetimepicker,
+  TheProgrammaticSetterKeepsTheValueEmpty). }
 procedure TTyDateTimePicker.SetMinDate(AValue: TDateTime);
 begin
   if FMinDate = AValue then Exit;
   FMinDate := AValue;
-  if (FMinDate <> 0) and (FDateTime < FMinDate) then SetDateTime(FMinDate);
+  if not DateIsNull then
+    if (FMinDate <> 0) and (FDateTime < FMinDate) then SetDateTime(FMinDate);
   Invalidate;
 end;
 
@@ -2336,7 +2702,8 @@ procedure TTyDateTimePicker.SetMaxDate(AValue: TDateTime);
 begin
   if FMaxDate = AValue then Exit;
   FMaxDate := AValue;
-  if (FMaxDate <> 0) and (FDateTime > FMaxDate) then SetDateTime(FMaxDate);
+  if not DateIsNull then
+    if (FMaxDate <> 0) and (FDateTime > FMaxDate) then SetDateTime(FMaxDate);
   Invalidate;
 end;
 
@@ -2400,6 +2767,39 @@ begin
   FDateMode := AValue;
   { The button column's width changed, so the text rect did too. }
   ContentChanged;
+end;
+
+procedure TTyDateTimePicker.SetNullInputAllowed(AValue: Boolean);
+begin
+  { Storage only, exactly as LCL (datetimepicker.pas:1171): turning the permission off
+    does not retroactively fill in a field that is already empty -- the host would have
+    no idea what date to put there, and quietly inventing one is how a "required" flag
+    ends up writing today's date into every blank row. }
+  FNullInputAllowed := AValue;
+end;
+
+procedure TTyDateTimePicker.SetTextForNullDate(const AValue: TCaption);
+begin
+  if FTextForNullDate = AValue then Exit;
+  FTextForNullDate := AValue;
+  { ContentChanged, not just Invalidate: this string is one of the two the preferred
+    width is the maximum of, so an AutoSize field that switches to "Not scheduled"
+    has to re-measure or it clips the text it was just told to show. }
+  ContentChanged;
+end;
+
+function TTyDateTimePicker.NullSeedDate: TDateTime;
+begin
+  Result := Trunc(SysUtils.Date);
+  if (FMinDate <> 0) and (Result < FMinDate) then Result := FMinDate;
+  if (FMaxDate <> 0) and (Result > FMaxDate) then Result := FMaxDate;
+  if Result < TyTheSmallestDate then Result := TyTheSmallestDate;
+  if Result > TyTheBiggestDate  then Result := TyTheBiggestDate;
+end;
+
+function TTyDateTimePicker.DateIsNull: Boolean;
+begin
+  Result := TyDateIsNull(FDateTime);
 end;
 
 function TTyDateTimePicker.GetDroppedDown: Boolean;

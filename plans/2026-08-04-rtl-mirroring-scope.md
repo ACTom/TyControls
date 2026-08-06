@@ -484,8 +484,11 @@ report 模式的列 x 走共享列模型 `TTyColumns`(见 §3.8)。
 - **拖拽重排的中点规则**:`TyDropIndexAt`(`:768`)"从左往右扫,返回第一个中点在 X 右侧的下标"
   (`:775` 的默认值 + `:781` 的 `Mid` + `:782` 的 `if X < Mid`)—— RTL 下扫描方向和比较符号都要翻。**brief 点名的中点规则就是这里。**
 - `VK_LEFT`/`VK_RIGHT` 切页(`:1344`、`:1350`)取反。
-- `AdjustClientRect`(`:803`)只扣顶部标签带,**与镜像无关** —— `TabPosition` 目前只有顶边
-  (审计已记为缺口),所以没有"标签在左/右边"的分支要一起翻。这一点省了不少事。
+- ~~`AdjustClientRect`(`:803`)只扣顶部标签带,**与镜像无关** —— `TabPosition` 目前只有顶边
+  (审计已记为缺口),所以没有"标签在左/右边"的分支要一起翻。这一点省了不少事。~~
+  **(2026-08-06 作废:`TabPosition` 已落地。)** 现在扣的是**镜像之后**那条边:
+  `tpLeft` 在右到左下扣的是右边。规则收在一个 `InsetForBand` 里,`AdjustClientRect` 与
+  `DisplayRect` 共用,两者不可能各说各话。理由见 §6.3 第 7 条。
 - `TTyPageControl`(`PageControl.pas`)本身不含几何,全部转发给基类;
   `TTyTabSheet` 是普通容器,子控件布局不镜像(§1.2)。**这两个零成本。**
 
@@ -570,29 +573,44 @@ RTL 下横向偏移方向相反。
 
 ---
 
-### 3.15 `TTyDateTimePicker` —— **(c) 重写(命中面)**
+### 3.15 `TTyDateTimePicker` —— ~~(c) 重写(命中面)~~ → **(b) 有边界** → **已做(2026-08-06)**
 
-**几何**:`RenderTo`(`DateTimePicker.pas:1633`)算文本矩形 → `TextOriginX`(`:1178`)
+> **本节的行号在写下时就已经过期一轮,现在整节都是历史了。** 下面第一段保留原始诊断
+> (行号按当时的文件,与今天差 ~500 行,`CheckBoxRect` 这个函数已经不存在),
+> 因为它记录的是**为什么**这一条曾经贵;之后是收口与镜像的结果。
+
+**当初的诊断**:`RenderTo`(`DateTimePicker.pas:1633`)算文本矩形 → `TextOriginX`(`:1178`)
 按 `FAlignment` 定起点 → 逐段用 `MeasureCharX`(`:1202`)量到第 n 个字符的宽度。
 按钮列 `TyDateTimeButtonRect`(`:1009`)钉死 `X0 := ALocal.Right - BtnW`(`:1014`);
-勾选框 `CheckBoxRect`(`:1443`)在文本矩形左侧。
+勾选框 `CheckBoxRect`(`:1443`)在文本矩形左侧。命中面 `MouseDown`(`:1322`)的注释直接写着
+"Recompute text rect exactly as in RenderTo (without scale rounding diff)",然后手抄了
+一遍文本矩形、又手抄了一遍文字左偏移。**这就是"点年份选到月份"那个 bug 的机制:
+同一个矩形算了两遍,一遍带舍入差、一遍不带。** 四组槽位、绘制与命中各一份表达式,
+加方向标志等于在八处各插一遍,而且没有任何测试能保证八处一致 —— 它们本来就不一致。
 
-**命中**:`MouseDown`(`:1322`)—— **注释直接写着 "Recompute text rect exactly as in
-RenderTo (without scale rounding diff)"(`:1352`)**,然后在 `:1354-1358` 手抄了一遍
-文本矩形,`:1414-1416` 又手抄了一遍文字左偏移。
-**这就是 brief 里"点年份选到月份"那个 bug 的机制:同一个矩形算了两遍,
-一遍带舍入差、一遍不带。**
+**收口已经发生了**,而且和本文的预测一样,是独立于 RTL 做掉的:
+`TyDateTimeRects` 现在是**一个纯函数**,一次返回文本框、勾选框、按钮与上下半区;
+`FieldLayout` 把它和显示串、文本原点接在一起;`RenderTo` / `MouseDown` /
+`CalculatePreferredSize` 全部只读它。`FieldLayout` / `SegmentSpanX` / `SegmentAtX`
+是三个接缝。**桶因此从 (c) 落到 (b)** —— 与 §3.9 的 TreeView 完全同型。
 
-**桶理由**:段分割 + 文本原点 + 三种按钮(下拉/上下)+ 勾选框,四组槽位,
-每组在**绘制与命中两侧各有一份独立表达式**。加方向标志等于在八处各插一遍,
-且没有任何测试能保证八处一致 —— 因为它们本来就不一致。
+**镜像本身(2026-08-06 完成)**:成品记录在 `TyDateTimeRects` 末尾**做一次
+`BidiFlipRect`**,不是每组槽位各加一个方向分支 —— 与 `TyCaptionLayoutFor`、
+`TyStatusPanelRects` 同一个杠杆。绘制与命中读同一条记录,所以"镜像了绘制、
+没镜像命中"在结构上不可表达。没画出来的部件(`dmNone` 的按钮、没开的勾选框)不参与反射。
+`TextOriginX` 走 `BidiFlipAlignment`,溢出钳位也跟着换边(把**阅读起点**留在框内);
+`RenderTo` 给 `BeginPaint` 上方向标志;弹出日历经 `TyPopupRect` 新增的
+`ARightToLeft` 贴锚点右缘。段间 `VK_LEFT`/`VK_RIGHT` 按 §6.3 第 4 条取反,
+`Home`/`End` 不动。
 
-**唯一负责任的做法**:和 TreeView 一样,**先把 `RenderTo` 与 `MouseDown` 的 x 分区
-抽成一个纯函数,让两边都吃它**;做完之后 RTL 是 (b)。
-**这次抽取本身会顺手修掉一个既有 bug** —— 值得单独立项,而不是记在 RTL 账上。
+**留下的边界**:段位置是按**前缀宽度**量的,量不出 painter 的双向重排。
+所以格式串里出现右到左字面量/月份名时,高亮与命中**彼此一致**(同源)但都不跟随重排后的
+字形。这与镜像无关、镜像前后一样,记在 `docs/rtl.md`。
 
-**还牵动**:段间 `VK_LEFT`/`VK_RIGHT` 移动(在 `KeyDown:1801` 里)要取反;
-弹出日历的对齐边。
+**守卫**:`tests/test.rtl.pas` 的 `TRtlDateTimePickerTest`。其中
+`TheGlyphsLandWhereTheOriginSaysTheyWill` 是唯一够到**字形**的一条 ——
+文本路径上有两个独立的翻转(`TextOriginX` 管高亮与命中,`TTyPainter.DrawText` 管字形),
+只翻一个的话本文件其余断言全绿而字串画在框的一端、选在另一端。
 
 ---
 
@@ -614,9 +632,11 @@ RenderTo (without scale rounding diff)"(`:1352`)**,然后在 `:1354-1358` 手抄
 | 12 | PopupMenu / MenuBar | **b**(Bar 是 **a**) | Bar 已有反向分支;Popup 行内 x 无命中,只需换边 + 弹出方向 |
 | 13 | ScrollBar / ScrollBox | **b** | 三个纯函数的横向分支 + 四处 dock 坐标 + 原点符号 |
 | 14 | StatusBar / CoolBar / ControlBar | **b** | 纯打包函数 + 抓手边;size grip 绘制与命中分写两处 |
-| 15 | DateTimePicker | **c** | 命中面把绘制的矩形手抄了一遍(既有 bug 的机制) |
+| 15 | DateTimePicker | ~~c~~ → **b** | 四组槽位已收成一个纯函数(`TyDateTimeRects`),绘制/命中/宽度查询全读它;镜像是成品上的一次反射 |
 
-**原合计:(a) 5 · (b) 7 · (c) 3。2026-08-06 起:(a) 5 · (b) 8 · (c) 2。**
+**原合计:(a) 5 · (b) 7 · (c) 3。2026-08-06 起:(a) 5 · (b) 9 · (c) 1** ——
+TreeView(§3.9)与 DateTimePicker(§3.15)都因为各自的收口从 (c) 落到了 (b),
+只剩 CustomGrid/StringGrid 一个 (c)。
 
 **改变决策形状的一点**:三个 (c) 里,**没有一个是因为"RTL 难"**。
 它们贵是因为各自欠一次"绘制/命中收口"的重构 ——
@@ -625,11 +645,13 @@ RenderTo (without scale rounding diff)"(`:1352`)**,然后在 `:1354-1358` 手抄
 如果把它们记在各自的账上,**RTL 程序本身就变成 5 个 (a) + 7 个 (b) + 3 个 (b)** ——
 量级完全不同。这一条应该直接影响"做不做"的判断。
 
-> **这个预测已经兑现了一次(2026-08-06)。** TreeView 的那次收口(`bee3308`)
+> **这个预测已经兑现了两次(都在 2026-08-06)。** TreeView 的那次收口(`bee3308`)
 > 独立于 RTL 做掉了,顺带**露出**了两个真 bug —— 主列不在最左时点箭头不展开、
 > PPI≠96 时列边界差一格 —— 修完之后 TreeView 直接从 (c) 落到 (b)(§3.9)。
+> DateTimePicker 走了完全一样的路:`TyDateTimeRects` 那次收口修掉的正是本文点名的
+> "点年份选到月份",做完之后它也落到 (b),镜像本身随后只是成品上的一次反射(§3.15)。
 > 也就是说:**这三笔重构的收益是先于 RTL 兑现的**,
-> 而"是否要做 RTL"的答案不必等它们做完才给。
+> 而"是否要做 RTL"的答案不必等它们做完才给。三个 (c) 现在只剩一个。
 
 ---
 
@@ -736,8 +758,18 @@ RenderTo (without scale rounding diff)"(`:1352`)**,然后在 `:1354-1358` 手抄
 5. **不在 `EndPaint` 里翻位图**(§2.4)。
 6. **不改属性名**(`Divider.LeftIndent`、`Columns[].Left`、`FScrollLeftRect`)。
    语义在 RTL 下会骗人,但改名是破坏性变更,收益不抵成本 —— 在 `docs/` 里写清楚即可。
-7. **`TabPosition` 的左/右边标签不做。** 它目前根本不存在(审计已记为缺口),
-   现在为一个还没有的功能预留镜像分支是浪费。
+7. ~~**`TabPosition` 的左/右边标签不做。** 它目前根本不存在(审计已记为缺口),
+   现在为一个还没有的功能预留镜像分支是浪费。~~
+   **(2026-08-06 作废:`TabPosition` 已经做了。)** 当时的判断("功能不存在,不预留分支")
+   是对的 —— 而它现在存在了,所以这一条的结论要换,判据不用换。
+   实际落地时**一个镜像分支都没有加**:反射从"作用在内容矩形上、嵌入之前"挪到了
+   "作用在屏幕矩形上、嵌入之后"。这一挪在 `tpTop` 下逐字节不变(嵌入是恒等映射),
+   而对左/右条带自动变成"**换边**"——反射的是条带的**次轴**,于是 `tpLeft` 整条搬到右边、
+   行内的关闭 ×/图标各自换端,而**上下顺序不动**、`↑/↓` 不对调。
+   这正是本节第 3 条("`Home`/`End` 是逻辑首尾")的同一条判据:
+   **横向反射不可能给一条竖着走的行程重新排序**。
+   `AdjustClientRect` 因此也有了要翻的东西(页面体扣的是镜像**之后**那条边),
+   §3.11 里"`AdjustClientRect` 与镜像无关、这一点省了不少事"随之作废。
 
 ### 6.4 如果决定**不做**
 

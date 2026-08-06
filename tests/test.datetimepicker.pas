@@ -11,7 +11,7 @@ unit test.datetimepicker;
 interface
 
 uses
-  Classes, SysUtils, Types, DateUtils, Graphics, Forms, Controls, LCLType,
+  Classes, SysUtils, Types, DateUtils, Math, Graphics, Forms, Controls, LCLType,
   fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.Base,
@@ -107,8 +107,16 @@ type
       against the second is the only thing that can catch the paint and the hit test
       drifting apart, which is what shipped the month-name bug. }
     procedure SimMouseDown(X, Y: Integer);
+    { Draw one frame into a throwaway bitmap so the Painted* record is current. }
+    procedure RenderOffscreen;
     function  PaintedSegSpan(AIndex: Integer; out AX1, AX2: Integer): Boolean;
     function  RectsForTest: TTyDateTimeRects;
+    { The string the field would DRAW, out of the same call the paint uses -- so a test
+      that asserts what an empty field shows is reading the paint's own answer and not a
+      second formatter written for the test. }
+    function  DisplayTextForTest: string;
+    function  OriginXForTest: Integer;
+    procedure SimKeyDownWith(var Key: Word; Shift: TShiftState);
   end;
 
   { The field's horizontal layout — the one source (TyDateTimeRects) and the join it
@@ -144,6 +152,56 @@ type
   public
     Count: Integer;
     procedure Handle(Sender: TObject);
+  end;
+
+  { The empty value. Two classes of assertion live here and they fail differently:
+    the PURE ones pin what "null" means, and the CONTROL ones pin that every write
+    path agrees about it. The second set is the whole cost of this feature -- a
+    control that accepts null through one door and quietly hands back a real date
+    through another is worse than one that cannot express null at all, because the
+    caller has no way to know which door it just used. }
+  TDateTimeNullTest = class(TTestCase)
+  private
+    FPicker: TTyDateTimePickerProbe;
+    FChanges: Integer;
+    procedure CountChange(Sender: TObject);
+    { Press AKey and report nothing -- the shift-less path every guard below uses. }
+    procedure Press(AKey: Word);
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    { ── what null IS ── }
+    procedure NullIsARangeNotABitPattern;
+    procedure EqualDateTimeTreatsTwoUnequalNullsAsEqual;
+    { ── every write path ── }
+    procedure TheProgrammaticSetterKeepsTheValueEmpty;
+    procedure TighteningMaxDateDoesNotFillAnEmptyField;
+    procedure TighteningMinDateDoesNotFillAnEmptyField;
+    procedure LosingFocusDoesNotFillAnEmptyField;
+    procedure AnUndoRestoresEmptinessRatherThanADate;
+    procedure DateAndTimeReadBackEmptyRatherThanGarbage;
+    procedure WritingTheDatePartOfAnEmptyFieldDoesNotComposeAgainstGarbage;
+    procedure WritingTheTimePartOfAnEmptyFieldLandsOnARealDay;
+    { ── what the user sees and can do ── }
+    procedure AnEmptyFieldShowsTextForNullDate;
+    procedure AnEmptyFieldHasNoSegmentToHighlight;
+    procedure AnEmptyFieldStillMovesBetweenItsFields;
+    procedure TypingIntoAnEmptyFieldMaterialisesADate;
+    procedure SteppingAnEmptyFieldMaterialisesADate;
+    procedure TheTypedDigitsShowWhileTheFieldIsStillEmpty;
+    { ── the keys that reach it ── }
+    procedure TheNullKeyEmptiesTheFieldAndAnnouncesIt;
+    procedure DeleteEmptiesTheFieldToo;
+    procedure NullInputAllowedFalseClosesTheKeyNotTheProperty;
+    procedure ReadOnlyRefusesTheNullKey;
+    procedure AnInertFieldRefusesTheNullKey;
+    { ── the parts that measure and seed ── }
+    procedure PreferredWidthBudgetsForTheLongerOfTheTwoStrings;
+    procedure TheDropdownSeedsFromASeedDateWhenTheFieldIsEmpty;
+    { ── streaming ── }
+    procedure AnEmptyValueSurvivesAnLfmRoundTrip;
+    procedure ADateStreamedBeforeItsBoundsStillLoads;
   end;
 
   { Control behavior tests (no real window needed) }
@@ -190,6 +248,10 @@ type
   public
     { Ensure the lazy popup+calendar are created (calls protected EnsurePopup). }
     procedure EnsurePopupForTest;
+    { Everything OpenDropDown does to the calendar BEFORE it needs a screen -- which is
+      the half that can raise. Showing the popup itself needs a real window and is out of
+      reach headlessly, so the seeding lives in its own method for this to call. }
+    procedure SeedPopupCalendarForTest;
     { Simulate a CalendarAccepted call for headless testing.
       Seeds the internal FCalendar with ADate then calls the accept handler. }
     procedure SimCalendarAccept(ADate: TDateTime);
@@ -716,30 +778,64 @@ begin
   MouseDown(mbLeft, [], X, Y);
 end;
 
+{ Every "where is it painted" query below RENDERS FIRST and then reads what the render
+  wrote down (TTyDateTimePicker.Painted*). Calling FieldLayout here instead would be
+  asking the HIT TEST's own source where the paint went -- a tautology that stays green
+  through the one change these tests exist to catch, a paint that mirrors while the hit
+  test does not. Verified by mutation: that change leaves this file green when the probe
+  re-derives, and turns it red when the probe reads the render. }
+procedure TTyDateTimePickerProbe.RenderOffscreen;
+var
+  Host: TBitmap;
+  R: TRect;
+begin
+  R := ClientRect;
+  if R.Right <= R.Left then R.Right := R.Left + 1;
+  if R.Bottom <= R.Top then R.Bottom := R.Top + 1;
+  Host := TBitmap.Create;
+  try
+    Host.PixelFormat := pf32bit;
+    Host.SetSize(R.Right - R.Left, R.Bottom - R.Top);
+    RenderTo(Host.Canvas, R, Font.PixelsPerInch);
+  finally
+    Host.Free;
+  end;
+end;
+
 function TTyDateTimePickerProbe.PaintedSegSpan(AIndex: Integer;
   out AX1, AX2: Integer): Boolean;
 var
-  L:       TTyDateTimeRects;
   S:       TTyStyleSet;
   EffSize: Integer;
-  Txt:     string;
-  Spans:   TTySegmentArray;
-  OriginX: Integer;
 begin
-  FieldLayout(ClientRect, Font.PixelsPerInch, L, S, EffSize, Txt, Spans, OriginX);
-  Result := SegmentSpanX(Txt, Spans, OriginX, AIndex, S.FontName, EffSize,
-              S.FontWeight, Font.PixelsPerInch, AX1, AX2);
+  RenderOffscreen;
+  S       := CurrentStyle;
+  EffSize := ResolveFontSize(S);
+  Result  := SegmentSpanX(PaintedText, PaintedSpans, PaintedOriginX, AIndex,
+               S.FontName, EffSize, S.FontWeight, Font.PixelsPerInch, AX1, AX2);
 end;
 
 function TTyDateTimePickerProbe.RectsForTest: TTyDateTimeRects;
-var
-  S:       TTyStyleSet;
-  EffSize: Integer;
-  Txt:     string;
-  Spans:   TTySegmentArray;
-  OriginX: Integer;
 begin
-  FieldLayout(ClientRect, Font.PixelsPerInch, Result, S, EffSize, Txt, Spans, OriginX);
+  RenderOffscreen;
+  Result := PaintedRects;
+end;
+
+function TTyDateTimePickerProbe.DisplayTextForTest: string;
+begin
+  RenderOffscreen;
+  Result := PaintedText;
+end;
+
+function TTyDateTimePickerProbe.OriginXForTest: Integer;
+begin
+  RenderOffscreen;
+  Result := PaintedOriginX;
+end;
+
+procedure TTyDateTimePickerProbe.SimKeyDownWith(var Key: Word; Shift: TShiftState);
+begin
+  KeyDown(Key, Shift);
 end;
 
 { ── TChangeCounter ───────────────────────────────────────────────────────── }
@@ -1251,6 +1347,11 @@ begin
   EnsurePopup;
 end;
 
+procedure TTyDateTimePickerProbeC3.SeedPopupCalendarForTest;
+begin
+  SeedPopupCalendar;
+end;
+
 procedure TTyDateTimePickerProbeC3.SimCalendarAccept(ADate: TDateTime);
 begin
   { Force-create the popup+calendar if not yet done (lazy init). }
@@ -1641,8 +1742,462 @@ begin
   end;
 end;
 
+{ ── TDateTimeNullTest ───────────────────────────────────────────────────── }
+
+type
+  { A host for the streaming guards. Declared here rather than reused from another
+    unit so the .lfm this test writes is this test's own. }
+  TNullHostForm = class(TForm)
+  published
+    DTP: TTyDateTimePicker;
+  end;
+
+procedure TDateTimeNullTest.CountChange(Sender: TObject);
+begin
+  Inc(FChanges);
+end;
+
+procedure TDateTimeNullTest.Press(AKey: Word);
+var K: Word;
+begin
+  K := AKey;
+  FPicker.SimKeyDown(K);
+end;
+
+procedure TDateTimeNullTest.SetUp;
+begin
+  FPicker := TTyDateTimePickerProbe.Create(nil);
+  FPicker.SetBounds(0, 0, 300, 24);
+  FPicker.Kind       := dtkDate;
+  FPicker.DateFormat := 'yyyy-mm-dd';
+  FPicker.DateTime   := EncodeDate(2026, 9, 15);
+  FChanges := 0;
+end;
+
+procedure TDateTimeNullTest.TearDown;
+begin
+  FreeAndNil(FPicker);
+end;
+
+procedure TDateTimeNullTest.NullIsARangeNotABitPattern;
+{ The predicate has to answer for values that never came from TyNullDate: a NaN out
+  of a database driver, an infinity out of a bad cast, a float that lost its last
+  digits round-tripping through text. Pinning it as `= TyNullDate` would pass every
+  test written with TyNullDate and fail every one of those. }
+begin
+  AssertTrue('the sentinel itself',            TyDateIsNull(TyNullDate));
+  AssertTrue('LCL spelling is the same value', TyDateIsNull(NullDate));
+  AssertTrue('a DIFFERENT out-of-range value is null too',
+    TyDateIsNull(TDateTime(1.9e+308)));
+  AssertTrue('an infinity is null',  TyDateIsNull(TDateTime(Math.Infinity)));
+  AssertTrue('a NaN is null',        TyDateIsNull(TDateTime(Math.NaN)));
+  AssertTrue('below the floor is null too',
+    TyDateIsNull(TDateTime(-1.9e+308)));
+  AssertFalse('a real date is not null',  TyDateIsNull(EncodeDate(2026, 9, 15)));
+  AssertFalse('zero is a DATE (30 Dec 1899), not an absence',
+    TyDateIsNull(TDateTime(0)));
+  AssertFalse('the last representable instant is still a date',
+    TyDateIsNull(SysUtils.MaxDateTime));
+  AssertFalse('and so is the first', TyDateIsNull(SysUtils.MinDateTime));
+end;
+
+procedure TDateTimeNullTest.EqualDateTimeTreatsTwoUnequalNullsAsEqual;
+begin
+  AssertTrue('two nulls that are not bit-equal still mean the same thing',
+    TyEqualDateTime(TyNullDate, TDateTime(1.9e+308)));
+  AssertFalse('null is not a date', TyEqualDateTime(TyNullDate, EncodeDate(2026, 1, 1)));
+  AssertFalse('a date is not null', TyEqualDateTime(EncodeDate(2026, 1, 1), TyNullDate));
+  AssertTrue('and dates still compare as dates',
+    TyEqualDateTime(EncodeDate(2026, 1, 1), EncodeDate(2026, 1, 1)));
+  AssertFalse('two different dates do not',
+    TyEqualDateTime(EncodeDate(2026, 1, 1), EncodeDate(2026, 1, 2)));
+end;
+
+procedure TDateTimeNullTest.TheProgrammaticSetterKeepsTheValueEmpty;
+{ THE assertion. SetDateTime pulls every write inside the absolute limits, and
+  TyNullDate is above the ceiling BY CONSTRUCTION -- so the clamp that exists to stop
+  a user typing year 0001 is also the clamp that turns "no date" into 31 Dec 9999.
+  A field that reads back a real date after being emptied is the failure mode this
+  whole feature is judged on. }
+begin
+  FPicker.DateTime := TyNullDate;
+  AssertTrue('the field is empty', FPicker.DateIsNull);
+  AssertTrue('and it did not become the biggest date the clamp allows',
+    FPicker.DateTime > SysUtils.MaxDateTime);
+  { NORMALISATION, and it carries more weight than it looks like it does. Every write
+    lands on exactly TyNullDate, whatever out-of-range value came in -- which is what
+    lets the plain `<>` comparisons inside the control stay correct without each of them
+    reaching for TyEqualDateTime. Break this and those comparisons start answering
+    "changed" for two values that are both empty. }
+  FPicker.DateTime := EncodeDate(2026, 1, 1);
+  FPicker.DateTime := TDateTime(1.9e+308);
+  AssertTrue('a DIFFERENT empty value normalises to the one sentinel',
+    FPicker.DateTime = TyNullDate);
+  FPicker.DateTime := EncodeDate(2026, 1, 1);
+  FPicker.DateTime := TDateTime(Math.NaN);
+  AssertTrue('and so does a NaN', FPicker.DateTime = TyNullDate);
+end;
+
+procedure TDateTimeNullTest.TighteningMaxDateDoesNotFillAnEmptyField;
+{ MaxDate's setter re-clamps a standing value that is now out of range. An empty value
+  is out of range by construction, so the ordinary `if FDateTime > FMaxDate` sees it as
+  a date that overshot and "corrects" it -- silently filling the field the user just
+  cleared, from a line that never mentions the value at all. }
+begin
+  FPicker.DateTime := TyNullDate;
+  FPicker.MaxDate  := EncodeDate(2030, 1, 1);
+  AssertTrue('still empty after the ceiling moved', FPicker.DateIsNull);
+end;
+
+procedure TDateTimeNullTest.TighteningMinDateDoesNotFillAnEmptyField;
+begin
+  FPicker.DateTime := TyNullDate;
+  FPicker.MinDate  := EncodeDate(2020, 1, 1);
+  AssertTrue('still empty after the floor moved', FPicker.DateIsNull);
+end;
+
+procedure TDateTimeNullTest.LosingFocusDoesNotFillAnEmptyField;
+{ DoExit commits, and the commit clamps. Same trap as MaxDate, reached by tabbing away. }
+begin
+  FPicker.DateTime := TyNullDate;
+  FPicker.SimDoExit;
+  AssertTrue('still empty after focus-out', FPicker.DateIsNull);
+end;
+
+procedure TDateTimeNullTest.AnUndoRestoresEmptinessRatherThanADate;
+{ Escape restores the focus-in snapshot. The edit has to be a USER one: a programmatic
+  DateTime write is documented to become the new baseline (SetDateTime re-confirms), so
+  reverting one would be throwing away the record the host just loaded.
+
+  The trap is the comparison. `FDateTime <> FConfirmedDateTime` on two empty values is
+  arithmetic on out-of-range floats, and the restore either fires a spurious OnChange or
+  -- the direction that actually loses data -- decides nothing changed and leaves the
+  date sitting in a field the user meant to clear. }
+begin
+  FPicker.DateTime := TyNullDate;
+  FPicker.ConfirmChanges;
+  Press(VK_HOME);
+  Press(VK_UP);                       { a user gesture: the arrow fills the field }
+  AssertFalse('premise: it holds a date now', FPicker.DateIsNull);
+  FPicker.UndoChanges;
+  AssertTrue('Escape put the emptiness back', FPicker.DateIsNull);
+  { And the other direction: undoing to a DATE from an empty edit must still restore. }
+  FPicker.DateTime := EncodeDate(2026, 5, 5);
+  FPicker.ConfirmChanges;
+  Press(VK_N);
+  AssertTrue('premise: the user cleared it', FPicker.DateIsNull);
+  FPicker.UndoChanges;
+  AssertFalse('Escape put the date back', FPicker.DateIsNull);
+  AssertEquals('the very date that was there', 2026, YearOf(FPicker.DateTime));
+end;
+
+procedure TDateTimeNullTest.DateAndTimeReadBackEmptyRatherThanGarbage;
+{ Date is Trunc(FDateTime) and Time is Frac(FDateTime). Both of those on 1.7e308 are
+  meaningless at best and a range error at worst, and the value they produce would be
+  written straight into the host's record. }
+begin
+  FPicker.DateTime := TyNullDate;
+  AssertTrue('Date reports empty', TyDateIsNull(FPicker.Date));
+  AssertTrue('Time reports empty', TyDateIsNull(FPicker.Time));
+end;
+
+procedure TDateTimeNullTest.WritingTheDatePartOfAnEmptyFieldDoesNotComposeAgainstGarbage;
+{ SetDate keeps the TIME part of the standing value. There is no time part in an empty
+  value, so the composition has to notice rather than add a fraction of infinity. }
+begin
+  FPicker.DateTime := TyNullDate;
+  FPicker.Date     := EncodeDate(2026, 3, 4);
+  AssertFalse('the field now holds a date', FPicker.DateIsNull);
+  AssertEquals('the year written', 2026, YearOf(FPicker.DateTime));
+  AssertEquals('the month written',   3, MonthOf(FPicker.DateTime));
+  AssertEquals('the day written',     4, DayOf(FPicker.DateTime));
+  AssertEquals('with no time smuggled in from the empty value', 0.0,
+    Double(Frac(FPicker.DateTime)), 1e-9);
+end;
+
+procedure TDateTimeNullTest.WritingTheTimePartOfAnEmptyFieldLandsOnARealDay;
+{ The mirror image: SetTime keeps the DATE part, and an empty value has none. }
+begin
+  FPicker.DateTime := TyNullDate;
+  FPicker.Time     := 0.5;   { 12:00 }
+  AssertFalse('the field now holds a value', FPicker.DateIsNull);
+  AssertEquals('the time is the one written', 0.5,
+    Double(Frac(FPicker.DateTime)), 1e-6);
+  AssertEquals('and the day it landed on is today, not 30 Dec 1899',
+    Int64(Trunc(SysUtils.Date)), Int64(Trunc(FPicker.DateTime)));
+end;
+
+procedure TDateTimeNullTest.AnEmptyFieldShowsTextForNullDate;
+begin
+  FPicker.DateTime := TyNullDate;
+  AssertEquals('the default is LCL''s', TyDefaultTextForNullDate,
+    FPicker.TextForNullDate);
+  AssertEquals('and it is what the field draws', TyDefaultTextForNullDate,
+    FPicker.DisplayTextForTest);
+  FPicker.TextForNullDate := '(no deadline)';
+  AssertEquals('a host''s own wording reaches the paint', '(no deadline)',
+    FPicker.DisplayTextForTest);
+end;
+
+procedure TDateTimeNullTest.AnEmptyFieldHasNoSegmentToHighlight;
+{ 'NULL' has no year in it. A highlight measured against the date's spans would land
+  on characters that are not there -- which on a short string means a band drawn past
+  the text, and on the hit-test side a click resolving to a field the paint never drew. }
+var X1, X2: Integer;
+begin
+  FPicker.DateTime := TyNullDate;
+  AssertFalse('no painted span for field 0', FPicker.PaintedSegSpan(0, X1, X2));
+  AssertFalse('nor for the last one',
+    FPicker.PaintedSegSpan(High(FPicker.Segments), X1, X2));
+  { And the click that would have landed in a field resolves to nothing rather than
+    to whichever field the DATE's spans would have put there. }
+  Press(VK_END);
+  FPicker.SimMouseDown(FPicker.RectsForTest.Text.Left + 2, 12);
+  AssertEquals('a click on an empty field does not move the selection',
+    High(FPicker.Segments), FPicker.ActiveSegForTest);
+  AssertTrue('and it certainly does not invent a date', FPicker.DateIsNull);
+end;
+
+procedure TDateTimeNullTest.AnEmptyFieldStillMovesBetweenItsFields;
+{ The FIELD LIST comes from the format, not from the value, so it exists whether or not
+  a date does. Losing it would mean an empty field could be tabbed into and then had no
+  reachable place to start typing. }
+begin
+  FPicker.DateTime := TyNullDate;
+  Press(VK_HOME);
+  AssertEquals('parked on the first field', 0, FPicker.ActiveSegForTest);
+  Press(VK_RIGHT);
+  AssertEquals('and the arrow still moves', 1, FPicker.ActiveSegForTest);
+end;
+
+procedure TDateTimeNullTest.TypingIntoAnEmptyFieldMaterialisesADate;
+{ FinalizeBuffer decodes the STANDING value to get the fields it is not changing.
+  Decoding an empty one raises, so the field has to start from a seed. }
+begin
+  FPicker.DateTime := TyNullDate;
+  FPicker.OnChange := @CountChange;
+  Press(VK_HOME);                     { the year field of 'yyyy-mm-dd' }
+  FPicker.SimKeyPress('2');
+  FPicker.SimKeyPress('0');
+  FPicker.SimKeyPress('3');
+  FPicker.SimKeyPress('1');
+  AssertFalse('typing a year filled the field', FPicker.DateIsNull);
+  AssertEquals('with the year that was typed', 2031, YearOf(FPicker.DateTime));
+  AssertEquals('and the month/day came from today, not from year zero',
+    MonthOf(SysUtils.Date), MonthOf(FPicker.DateTime));
+  AssertEquals('exactly one change was announced', 1, FChanges);
+end;
+
+procedure TDateTimeNullTest.SteppingAnEmptyFieldMaterialisesADate;
+{ TySegmentStep decodes the standing value too. }
+begin
+  FPicker.DateTime := TyNullDate;
+  Press(VK_HOME);
+  Press(VK_UP);
+  AssertFalse('the arrow filled the field', FPicker.DateIsNull);
+  AssertEquals('one year on from the seed', YearOf(SysUtils.Date) + 1,
+    YearOf(FPicker.DateTime));
+end;
+
+procedure TDateTimeNullTest.TheTypedDigitsShowWhileTheFieldIsStillEmpty;
+{ The digit buffer is a "commit on leave" model: the value stays as it was until the
+  field fills. On an empty field that means the value is STILL EMPTY while the user is
+  typing -- so the display has to show the partly-typed date rather than go on saying
+  NULL, or the keystrokes vanish into a field that never acknowledges them. }
+begin
+  FPicker.DateTime := TyNullDate;
+  Press(VK_HOME);
+  FPicker.SimKeyPress('2');
+  AssertTrue('premise: one digit has not committed anything yet', FPicker.DateIsNull);
+  AssertTrue('and the field is no longer showing the null text',
+    FPicker.DisplayTextForTest <> TyDefaultTextForNullDate);
+  AssertTrue('it is showing what was typed',
+    Pos('2', FPicker.DisplayTextForTest) > 0);
+end;
+
+procedure TDateTimeNullTest.TheNullKeyEmptiesTheFieldAndAnnouncesIt;
+{ N is LCL's key for this (datetimepicker.pas:3731). Emptying the field from the
+  keyboard is a USER edit, so it announces itself -- unlike the programmatic setter,
+  which is deliberately silent. }
+begin
+  FPicker.OnChange := @CountChange;
+  Press(VK_N);
+  AssertTrue('N emptied the field', FPicker.DateIsNull);
+  AssertEquals('and said so once', 1, FChanges);
+  Press(VK_N);
+  AssertEquals('pressing it again changes nothing and announces nothing',
+    1, FChanges);
+end;
+
+procedure TDateTimeNullTest.DeleteEmptiesTheFieldToo;
+{ Ours, not LCL's -- LCL binds only N, which is a letter nobody guesses. Delete is
+  what a user reaches for to clear a field, and binding it costs one case label. }
+begin
+  Press(VK_DELETE);
+  AssertTrue('Delete empties the field', FPicker.DateIsNull);
+end;
+
+procedure TDateTimeNullTest.NullInputAllowedFalseClosesTheKeyNotTheProperty;
+{ The flag governs the USER, not the host. A form that means "required" wants the
+  keyboard route shut; refusing its own `DTP.DateTime := Rec.Due` -- which may be null
+  because the column is -- would be refusing the caller's data. }
+begin
+  AssertTrue('on by default, as LCL', FPicker.NullInputAllowed);
+  FPicker.NullInputAllowed := False;
+  Press(VK_N);
+  AssertFalse('the key is refused', FPicker.DateIsNull);
+  Press(VK_DELETE);
+  AssertFalse('and so is Delete', FPicker.DateIsNull);
+  FPicker.DateTime := TyNullDate;
+  AssertTrue('but the property still writes through', FPicker.DateIsNull);
+end;
+
+procedure TDateTimeNullTest.ReadOnlyRefusesTheNullKey;
+begin
+  FPicker.ReadOnly := True;
+  Press(VK_N);
+  AssertFalse('a read-only field cannot be emptied from the keyboard',
+    FPicker.DateIsNull);
+end;
+
+procedure TDateTimeNullTest.AnInertFieldRefusesTheNullKey;
+{ IsInert blocks every edit, and clearing the value is an edit. The ordering matters:
+  the Space branch deliberately sits ABOVE the inert gate (it is the only way back),
+  and N must not be tempted up there with it. }
+begin
+  FPicker.ShowCheckBox := True;
+  FPicker.Checked      := False;
+  Press(VK_N);
+  AssertFalse('an unchecked field is not editable, including to empty',
+    FPicker.DateIsNull);
+end;
+
+procedure TDateTimeNullTest.PreferredWidthBudgetsForTheLongerOfTheTwoStrings;
+{ The field can show either string, so it has to be wide enough for both. Measuring
+  only the date is how an AutoSize field set to "Not scheduled" clips the words it was
+  just told to display. }
+var
+  WithShort, WithLong: Integer;
+  H: Integer;
+begin
+  FPicker.AutoSize := False;
+  FPicker.TextForNullDate := 'X';
+  WithShort := 0; H := 0;
+  FPicker.GetPreferredSize(WithShort, H);
+  FPicker.TextForNullDate :=
+    'no deadline has been set for this item at all';
+  WithLong := 0; H := 0;
+  FPicker.GetPreferredSize(WithLong, H);
+  AssertTrue('the longer null text asks for more width (' +
+    IntToStr(WithShort) + ' -> ' + IntToStr(WithLong) + ')', WithLong > WithShort);
+end;
+
+procedure TDateTimeNullTest.TheDropdownSeedsFromASeedDateWhenTheFieldIsEmpty;
+{ OpenDropDown assigns the picker's date into the calendar, and the calendar's setter
+  RAISES on anything outside its range (tyControls.Calendar.pas:510-516). An empty
+  value is outside every range, so an unguarded seed does not merely show the wrong
+  month -- it throws out of the click that opened the popup. }
+var
+  P: TTyDateTimePickerProbeC3;
+begin
+  P := TTyDateTimePickerProbeC3.Create(nil);
+  try
+    P.SetBounds(0, 0, 300, 24);
+    P.Kind     := dtkDate;
+    P.DateTime := TyNullDate;
+    { The seeding, not the showing: the raise would come from here, and showing a real
+      popup window is out of reach without a screen. }
+    P.EnsurePopupForTest;
+    P.SeedPopupCalendarForTest;
+    AssertNotNull('the seeding returned rather than throwing', P.Calendar);
+    AssertEquals('the calendar starts on the seed day',
+      Int64(Trunc(SysUtils.Date)), Int64(Trunc(P.Calendar.Date)));
+    AssertTrue('and opening it did not fill the picker', P.DateIsNull);
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TDateTimeNullTest.AnEmptyValueSurvivesAnLfmRoundTrip;
+{ The sentinel is written and read as an ordinary float. It need not come back
+  bit-identical for the field to still read as empty -- that is exactly why the
+  predicate is a range test -- but it does have to come back OUT OF RANGE. }
+var
+  Src, Dst: TNullHostForm;
+  MS: TMemoryStream;
+  D: TTyDateTimePicker;
+begin
+  Src := TNullHostForm.CreateNew(nil);
+  Dst := TNullHostForm.CreateNew(nil);
+  MS  := TMemoryStream.Create;
+  try
+    Src.Name       := 'NullHost1';
+    Src.DTP        := TTyDateTimePicker.Create(Src);
+    Src.DTP.Name   := 'DTP';
+    Src.DTP.Parent := Src;
+    Src.DTP.DateTime := TyNullDate;
+    Src.DTP.TextForNullDate := '(none)';
+    AssertTrue('premise: the source is empty', Src.DTP.DateIsNull);
+    MS.WriteComponent(Src);
+
+    MS.Position := 0;
+    MS.ReadComponent(Dst);
+    D := Dst.FindComponent('DTP') as TTyDateTimePicker;
+    AssertNotNull('the picker survived', D);
+    AssertTrue('and it is still empty', D.DateIsNull);
+    AssertEquals('the null wording streamed too', '(none)', D.TextForNullDate);
+  finally
+    MS.Free;
+    Dst.Free;
+    Src.Free;
+  end;
+end;
+
+procedure TDateTimeNullTest.ADateStreamedBeforeItsBoundsStillLoads;
+{ A .lfm lists properties in declaration order, so DateTime arrives BEFORE MinDate and
+  MaxDate -- i.e. while the field is still unbounded, holding a value its own bounds
+  will later reject. Turning that into an exception aborts ReadComponent and the whole
+  window refuses to open, which is what tyControls.Calendar.pas:505-509 carves an
+  explicit csLoading branch out to avoid. This control clamps instead of raising, and
+  this guard is what stops a later "validate the value" edit changing that quietly. }
+var
+  Host: TNullHostForm;
+  MS: TStringStream;
+  BinStream: TMemoryStream;
+  D: TTyDateTimePicker;
+  Lfm: string;
+begin
+  { A hand-written .lfm with the value BEFORE the bounds and OUTSIDE them. }
+  Lfm :=
+    'object NullHost2: TNullHostForm'#13#10 +
+    '  object DTP: TTyDateTimePicker'#13#10 +
+    '    DateTime = 44000'#13#10 +          { 2020-06-19 }
+    '    MinDate = 45000'#13#10 +           { 2023-03-15 -- above the value }
+    '    MaxDate = 46000'#13#10 +
+    '  end'#13#10 +
+    'end'#13#10;
+  Host      := TNullHostForm.CreateNew(nil);
+  MS        := TStringStream.Create(Lfm);
+  BinStream := TMemoryStream.Create;
+  try
+    ObjectTextToBinary(MS, BinStream);
+    BinStream.Position := 0;
+    { The assertion IS that this returns. }
+    BinStream.ReadComponent(Host);
+    D := Host.FindComponent('DTP') as TTyDateTimePicker;
+    AssertNotNull('the form opened and the picker is on it', D);
+    AssertEquals('and the out-of-range value was clamped, not rejected',
+      Int64(45000), Int64(Trunc(D.DateTime)));
+  finally
+    BinStream.Free;
+    MS.Free;
+    Host.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TDateTimePickerPureTest);
+  RegisterTest(TDateTimeNullTest);
   RegisterTest(TDateTimeLayoutTest);
   RegisterTest(TDateTimeActiveSegAtTest);
   RegisterTest(TDateTimePickerControlTest);

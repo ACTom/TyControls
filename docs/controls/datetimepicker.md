@@ -37,7 +37,9 @@ uses tyControls.DateTimePicker;
 | `TimeFormat` | `string` | `''` | `dtkTime` 模式的格式串；为空时用 `DefaultFormatSettings.ShortTimeFormat`。含 `am/pm`（或 `a/p`）时小时按 12 小时制显示与录入。`z`/`zzz` 是**毫秒**字段，可选中、可键入、可步进。常量 `tf12` / `tf24` 是 LCL 同名枚举成员所选的那两种模式对应的格式串，可直接赋值。 |
 | `MinDate` | `TDateTime` | `0` | 允许的下界；`0` 表示不限制。设置后若当前值越界会立即夹紧。 |
 | `MaxDate` | `TDateTime` | `0` | 允许的上界；`0` 表示不限制。设置后若当前值越界会立即夹紧。 |
-| `Alignment` | `TAlignment` | `taLeftJustify` | 整串日期 / 时间文字在字段内的水平对齐。分段高亮与点击命中一起移动。 |
+| `Alignment` | `TAlignment` | `taLeftJustify` | 整串日期 / 时间文字在字段内的水平对齐。分段高亮与点击命中一起移动。这是**阅读序**的值：镜像布局下 `taLeftJustify` 解析到右边缘（见第 8 节）。 |
+| `NullInputAllowed` | `Boolean` | `True` | 用户能否用键盘把字段清空（`N` / `Delete`）。**只管用户**，不管代码：`DTP.DateTime := TyNullDate` 任何时候都写得进去——宿主把一条 NULL 列读进窗体是在传数据，不是在打字。LCL 同样只在按键分支里查它。 |
+| `TextForNullDate` | `TCaption` | `'NULL'` | 空态字段显示的文字。**无 `default`**（与 LCL 一致）：初值非空，所以想要"空字符串"的窗体必须能把它流出来。默认值是**字面量而非 resourcestring**——它是属性默认值，翻译了会让窗体存出的 `.lfm` 随保存时的语言变。要本地化的措辞由应用自己赋值、自己翻译。 |
 | `LeadingZeros` | `Boolean` | `True` | `False` 时**日 / 月 / 时**不补前导零（`9/7/2026` 而非 `09/07/2026`）。分 / 秒 / 毫秒始终补零（`9:5` 不是时间）——与 LCL 的取舍一致。 |
 | `CenturyFrom` | `Word` | `1941` | 键入**少于三位**的年份时的展开枢轴：不小于枢轴后两位的归枢轴所在世纪，小于的归下一个世纪。三位 / 四位输入视为明确年份，原样保留。 |
 | `Options` | `TTyDateTimePickerOptions` | `[]` | LCL 同名集合：`dtpoDoChangeOnSetDateTime`（代码写入也触发 `OnChange`）、`dtpoEnabledIfUnchecked`（复选框未勾选时仍可编辑）、`dtpoAutoCheck`（值被改动时自动勾上复选框）、`dtpoResetSelection`（每次获得焦点都回到第一个字段）。 |
@@ -52,7 +54,9 @@ uses tyControls.DateTimePicker;
 | `Font` | `TFont` | 系统默认 | 传递 PPI 给渲染器；字体族与大小优先由主题控制。 |
 | `TabStop` | `Boolean` | `True` | 是否参与键盘 Tab 焦点循环。 |
 
-> **`Date` / `Time` 为 public（非 published）便捷属性：** `Date` 只读写日期部分（保留时间），`Time` 只读写时间部分（保留日期），二者内部都转发到 `SetDateTime`，因此同样会夹紧并触发 `OnChange`。它们不出现在对象查看器中。
+> **`Date` / `Time` 为 public（非 published）便捷属性：** `Date` 只读写日期部分（保留时间），`Time` 只读写时间部分（保留日期），二者内部都转发到 `SetDateTime`，因此同样会夹紧并触发 `OnChange`。它们不出现在对象查看器中。**字段为空时二者读回 `TyNullDate`**（而不是 `Trunc` / `Frac` 一个越界浮点数得到的垃圾），写入时也各自知道"没有另一半可保留"——见第 8 节。
+
+> **`DateIsNull: Boolean`（public 方法）** 回答"这个字段有没有日期"。宿主把值写进可空列之前问的就是它。LCL 同名（`datetimepicker.pas:4194`）。
 
 ### 继承的通用成员
 
@@ -207,9 +211,76 @@ if DatePicker.DroppedDown then
 - **ShowCheckBox 空态（inert）：** `ShowCheckBox=True` 且 `Checked=False` 时控件进入 inert——所有编辑、步进、滚轮、下拉一律屏蔽，文字置灰。点击复选框区域切换 `Checked` 并触发 `OnChecked`（程序化 `Checked :=` 不触发）。**`Space` 键同样切换 `Checked`**：这个分支**排在 inert 拦截之前**，否则未勾选的控件会拒掉所有按键——连唯一能把它打开的那一个也拒掉，而复选框只有约 12px 的鼠标靶面，键盘用户 Tab 过来就再没有办法让它可编辑。`Space` 走的是 `Checked` 属性 setter，而通知点就在 setter 里，因此**同样触发** `OnChecked`（3.0 起；此前只有鼠标那条路径通知）。`ReadOnly=True` 时 `Space` 不生效。`ShowCheckBox=False` 时 `Checked` 无意义、控件永不 inert。加了 `dtpoEnabledIfUnchecked` 则未勾选时也可编辑。
 - **下拉由 `DateMode` 决定，不再只看 `Kind`：** 只有 `DateMode = dmComboBox` 且 `Kind = dtkDate` 才有下拉日历（`OpenDropDown`、`Alt+↓`、`F4` 在其余组合下直接返回）。`dmUpDown` 一律给上下箭头；`dmNone` 既不画按钮也不预留按钮列。下拉的开合在 `Click` 而非 `MouseDown` 中完成（配合 200 ms 重开守卫），以避免 mouse-up 立即失活关闭刚弹出的日历。
 - **绝对边界：** 即使 `MinDate`/`MaxDate` 都是 `0`（不限制），值也会被夹在 `TyTheSmallestDate`（1752-10-01）与 `TyTheBiggestDate`（9999-12-31）之间——四位年份字段本来可以键入 0001，而早于 1752 的日期各 widgetset 的原生日历都画不对，而这里录入的值是会被交给它们的。两个常量另有 `TheSmallestDate` / `TheBiggestDate` 的 LCL 拼写别名。注意与 LCL 的差别：LCL 把 `MinDate`/`MaxDate` **初始化**成这两个哨兵，本控件保留 `0 = 不限制`（改掉会翻转所有 `if MinDate <> 0` 的含义）。
-- **键盘：** ←/→ 切换字段，Home/End 跳到首/末段，↑/↓ 步进当前段，Enter 提交缓冲，Esc 关闭下拉或撤销整次编辑，`Alt+↓` / `F4` 开合下拉（需 `DateMode=dmComboBox` 且 `Kind=dtkDate`），`Space` 切换 `Checked`（仅 `ShowCheckBox=True`，见上一条）。
+- **键盘：** ←/→ 切换字段，Home/End 跳到首/末段，↑/↓ 步进当前段，Enter 提交缓冲，Esc 关闭下拉或撤销整次编辑，`Alt+↓` / `F4` 开合下拉（需 `DateMode=dmComboBox` 且 `Kind=dtkDate`），`Space` 切换 `Checked`（仅 `ShowCheckBox=True`，见上一条），`N` / `Delete` 清空字段（见下）。**镜像布局下 ←/→ 对调，Home/End 不变**——见第 8 节。
 - **`A` / `P` 直接设 AM / PM：** 激活段是 AM/PM 段时，`A` 设为上午、`P` 设为下午——是**设定**不是切换，连按两次 `A` 仍是 AM。从前该段只能靠 ↑/↓ 或滚轮改，从左往右打字的用户填到最后一段会撞上死路，而 `A`/`P` 是各原生选择器都接受的键。
 - **分隔符键提交当前段并前移：** `/` `-` `.` `,` `:` 与空格会提交正在录入的段并跳到下一段，于是可以一路打 `1/2/2026`。从前只有在某段"填满"时才自动前移，单个数字的月份会把光标卡在原地。（`ShowCheckBox=True` 时空格已被上面的 `Checked` 切换消费，不再作分隔符用。）
 - **格式串按写的那样渲染，分段位置按渲染出来的结果算：** 以前控件会把单字母字段翻倍（`d`→`dd`）以保证"格式串第 N 个字符 == 渲染文本第 N 个字符"，分段高亮与点击命中就靠这条等式。代价有两个：`LeadingZeros=False` 在结构上不可能实现；而且这条等式对**月份名**本来就是假的（`mmmm` 是 4 个格式字符，`September` 是 9 个渲染字符），于是月份之后的每个字段都偏了，点年份会选中月份。现在渲染时直接记录每段落在结果串里的字节区间（`TyRenderDateTime`），两者都随之解决。`TyEffectiveFormat` 作为公开辅助函数保留，但控件不再依赖它。
-- **DFM 序列化：** `Kind`（`default dtkDate`）、`ReadOnly`、`ShowCheckBox`、`Checked`、`TabStop`、`Alignment`（`taLeftJustify`）、`LeadingZeros`（`True`）、`CenturyFrom`（`1941`）、`Options`（`[]`）、`DateMode`（`dmComboBox`）声明了默认值，等于默认值时不写入 `.lfm`/`.dfm`。`DateTime` / `MinDate` / `MaxDate` / `DateFormat` / `TimeFormat` 无 `default`，始终按当前值流式保存。`OnCheckBoxChange` 为 `stored False`（与 `OnChecked` 同一存储）。
+- **DFM 序列化：** `Kind`（`default dtkDate`）、`ReadOnly`、`ShowCheckBox`、`Checked`、`TabStop`、`Alignment`（`taLeftJustify`）、`LeadingZeros`（`True`）、`CenturyFrom`（`1941`）、`Options`（`[]`）、`DateMode`（`dmComboBox`）、`NullInputAllowed`（`True`）声明了默认值，等于默认值时不写入 `.lfm`/`.dfm`。`DateTime` / `MinDate` / `MaxDate` / `DateFormat` / `TimeFormat` / `TextForNullDate` 无 `default`，始终按当前值流式保存。`OnCheckBoxChange` 为 `stored False`（与 `OnChecked` 同一存储）。
+- **流式加载不会因越界日期而失败：** `.lfm` 按声明顺序写属性，于是 `DateTime` 先于 `MinDate`/`MaxDate` 到达——值到的时候字段还没有界。本控件的 setter **夹紧而不抛异常**，所以哪怕手写的 `.lfm` 把顺序调了、值也确实在自己的界外，`ReadComponent` 照样返回、窗体照样打开。（`TTyCalendar` 的 `Date` setter 会抛，因此它另外挖了一个 `csLoading` 分支；这里不需要，但这条行为由测试钉着，免得日后一次"加个校验"把它悄悄改掉。）
 - **主题一致性：** 弹出日历对应 `TyCalendar` 选择器，复选框复用 `TyCheckBox` 令牌——自定义主题时应一并覆盖，才能保持整体外观一致。右侧按钮区**没有**自己的键（`TyDateTimeButton` 是死键，见上），它跟随字段的 `color`。
+
+---
+
+## 8. 空值（"没选日期"）
+
+`TDateTime` 没有多余的成员可以当"空"：范围内每一个位型都是一个真实时刻，`0` 是 1899-12-30——一个窗体完全可能合法持有的日期。所以空态是一个**远在范围之外**的值，取的就是 LCL 的那一个（`datetimepicker.pas:60`），数值也一样，于是从 LCL picker 交过来、或从同一个数据库列读出来的空值，到这里仍然是空的。
+
+```pascal
+const TyNullDate = TDateTime(1.7e+308);   // 别名 NullDate（LCL 拼写）
+
+function TyDateIsNull(const ADateTime: TDateTime): Boolean;
+function TyEqualDateTime(const A, B: TDateTime): Boolean;
+```
+
+- `TyDateIsNull` 是**范围判定**，不是等值判定：经过 `.lfm` 往返、浮点转换、或数据库驱动给回一个 NaN 的值未必位位相同，而"稍微不一样的无穷大"绝不能被读成"公元四千年的某一天"。NaN 排在最前面判——对 NaN 的任何比较都是 False，先做范围比较会把它当成一个再普通不过的日期放过去。
+- `TyEqualDateTime` 把两个空值视为相等。普通的 `=` 会对它们答 False，于是"值没变"变成一次莫须有的 `OnChange`；更糟的方向是 `Esc` 判定"没变化"，把用户想清掉的日期留在字段里。
+- **每一次写入都归一到恰好 `TyNullDate`**，所以控件内部存的空值永远是同一个，下游的普通浮点比较依旧成立。
+
+### 每条写入路径都同意这件事
+
+半吊子的空值支持比没有更糟：调用方从一扇门写进空值、从另一扇门读回一个真实日期，而它无从知道自己刚才走的是哪扇。所以下面每一条都单独处理了空态，每一条也都有守卫钉着：
+
+| 路径 | 空态下的行为 |
+|---|---|
+| `DateTime :=` | 先判空、**再**夹紧。反过来的话，那个防止用户键入公元 0001 年的夹紧会把"没有日期"变成 9999-12-31。 |
+| `MinDate :=` / `MaxDate :=` | 移动边界会重夹越界的现值，而空值天生越界——不加守卫，一行根本没提到值的代码就会把用户刚清空的字段填回去。 |
+| `Date :=` / `Time :=` | 各自保留自己不写的那一半，而空值没有半边可留：`Date` 写进去从零点起算，`Time` 写进去落在**种子日**（见下）而不是 1899。 |
+| `Date` / `Time` 读取 | 返回 `TyNullDate`，不是 `Trunc` / `Frac` 一个越界浮点得到的数——那个数会被直接写进宿主的记录。 |
+| 失焦 / `Enter` 提交 | 提交路径整体跳过夹紧，只跑通知。 |
+| `Esc`（`UndoChanges`） | 快照比较走 `TyEqualDateTime`。 |
+| 键入数字 / ↑↓ / 滚轮 | 从**种子日**起算（见下）。空字段可以直接开始打字。 |
+| 下拉日历 | 种子日做初始月份。日历的 `Date` setter 对越界值**会抛异常**，所以这里不加守卫不是"月份不对"，是从那一次点击里抛出去。打开下拉本身**不会**填上字段。 |
+| `CalculatePreferredSize` | 取"该格式可能渲染出的最宽文字"与 `TextForNullDate` 的**较大者**。只量日期的话，一个 `TextForNullDate` 设成"未设定截止日"的 `AutoSize` 字段一被清空就会截字。 |
+
+**种子日** = 今天，夹进 `[MinDate, MaxDate]` 与绝对边界。空字段被键入或步进时需要一个合法日期去修改，而随手挑一个（比如裸的 `0` = 1899-12-30）会让用户的第一次按键把自己甩到另一个世纪。
+
+### 键盘与显示
+
+- **`N`** 清空字段——LCL 的键（`datetimepicker.pas:3731`）。**`Delete`** 也清空，这一个是本库加的：LCL 只绑了那个没人猜得到的字母，而 `Delete` 才是用户清字段时会去按的键。
+- 两者都是**用户手势**，所以会触发 `OnChange`（与默认静默的程序化写入相反）；连按两次第二次不再通知。`ReadOnly`、inert 空态（`ShowCheckBox` 未勾选）、以及 `NullInputAllowed = False` 都会拒掉它们。
+- `ShowCheckBox` 的 inert 空态与本节的空值是**两件独立的事**：前者是"这个字段现在不可用"，后者是"这个字段没有值"。取消勾选不会把值清空，清空也不会去动勾选框（`dtpoAutoCheck` 在清空时刻意不触发——值消失的那一刻去勾上"我有日期"是反的）。
+- 空字段仍然可以用 ←/→ 在字段间移动：**字段列表来自格式串，不来自值**，所以它在有没有日期时都存在——否则 Tab 进一个空字段就再没有可以落脚开始打字的地方。
+- 空字段**不画分段高亮**，点击也不会选中任何字段：屏幕上是 `NULL`，里面根本没有"年"，按日期的偏移量量出来的高亮会盖在不存在的字符上。
+- **正在键入时显示的是正在成形的日期，不是 `NULL`。** 数字缓冲是"离开时提交"模型，所以第一个数字下去时值**仍然是空的**；这时若还固执地显示 `NULL`，用户的按键就消失在一个从不回应的字段里。
+
+---
+
+## 9. 右到左镜像
+
+`BiDiMode := bdRightToLeft` 时整个字段镜像。跨控件的部分见 [`../rtl.md`](../rtl.md)。
+
+| 部件 | 镜像后 |
+|---|---|
+| 按钮列（下拉 V 形 / 上下箭头） | 移到**物理左**边缘——两个方向下都是尾缘，也是 Windows 在 `WS_EX_LAYOUTRTL` 下放它的位置 |
+| 文本框 | 拿走剩下的宽度 |
+| 复选框 | 移到文本框的**阅读起点**，即右端；字串从它左侧一个间隙外开始 |
+| 上下微调半区 | **不动**——上下是阅读方向够不着的轴，它们各自反射到自己身上 |
+| 文字 | `Alignment` 按阅读序解析：默认的 `taLeftJustify` 贴右边缘 |
+| 下拉日历 | 右边缘对齐锚点右边缘（`TyPopupRect` 的 `ARightToLeft`） |
+| ←/→ | **对调**：← 走向下一个字段 |
+| Home / End | **不变**：仍是首 / 末字段 |
+
+- **一次反射，作用在成品上。** 四组槽位不是各自加一个方向分支，而是 `TyDateTimeRects` 在最后对整条记录做一次 `BidiFlipRect`。绘制与命中读的是**同一条记录**，所以"镜像了绘制、没镜像命中"在结构上不可表达——那正是这个控件已经出过一次的 bug（点年份选中月份）。**没有画出来的部件（`dmNone` 的按钮列、没开的复选框）不参与反射**，留在原点。
+- **`Alignment` 是被覆盖，不是只改默认值。** 作者显式写死的 `taLeftJustify` 在镜像窗体里也坐在右边；`TAlignment` 没有"未设定"成员，"只翻作者没写的那个"表达不出来。存储的属性从不被改写，只有当帧用到的值变。
+- **←/→ 属于布局方向。** 判据（`plans/2026-08-04-rtl-mirroring-scope.md` §6.3 第 4 条）不是"这个控件能不能打字"，而是"这一下按键移动的是什么"：这里移动的是**字段**（年→月→日），不是字符间的光标。本控件就是那条判据专门为之写下的唯一案例。
+- **文字本身的顺序不随镜像改变，这是刻意的边界。** 日期是数字与分隔符，在任何段落方向下都是从左到右的 run，所以镜像的 picker 画出的仍是 `15 September 2026`，只有**盒子**换了边。若格式串里放了右到左脚本的字面量或月份名，painter 会走双向布局把 run 重排，而本控件按**前缀宽度**量字段位置，量不出重排——**高亮与命中依旧彼此一致**（两者同源），但都不跟随重排后的字形。这一项与镜像无关、镜像前后一样，`docs/rtl.md` 里也记着。
