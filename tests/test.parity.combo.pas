@@ -6,7 +6,9 @@ unit test.parity.combo;
   not in a user's ported form. }
 interface
 uses
-  Classes, SysUtils, Types, Graphics, Controls, Forms, StdCtrls, fpcunit, testregistry,
+  Classes, SysUtils, Types, Math, Graphics, Controls, Forms, StdCtrls,
+  LCLType, LCLIntf, fpcunit, testregistry,
+  BGRABitmap, BGRABitmapTypes,
   tyControls.ComboBox, tyControls.ComboBoxEx, tyControls.CheckComboBox,
   tyControls.ListBox, tyControls.CheckListBox;
 
@@ -72,6 +74,64 @@ type
     procedure TestOnItemChangeCarriesTheIndex;          // comboex.pas:329
     procedure TestCheckAddItemAssignItemsDeleteItem;    // comboex.pas:317-320
     procedure TestObjectsSlotSurvivesChecking;          // comboex.pas:327 (already shipped)
+  end;
+
+const
+  { One popup-list geometry for every row test: three 24px rows and room to spare, so a
+    scrolled-out row never quietly reduces the number of callbacks under test. }
+  ListW = 140;
+  ListH = 100;
+
+type
+  { Counts repaints, so "the setter invalidates" is a measured claim rather than a reading
+    of the source. TControl.Invalidate is virtual, which is what makes this possible. }
+  TComboInvalidateProbe = class(TTyComboBox)
+  public
+    Invalidations: Integer;
+    procedure Invalidate; override;
+  end;
+
+  { Owner-draw: the Style values, OnDrawItem, and the two things that can only be seen in
+    the pixels -- that the host's pass runs on the COMPOSITED canvas, and that every one of
+    its calls inks with its own state rather than the previous call's. }
+  TComboOwnerDrawTest = class(TTestCase)
+  private
+    FForm: TForm;
+    FCalls: Integer;
+    FSeen: Integer;
+    FIndexSeen: array of Integer;
+    FStateSeen: array of TOwnerDrawState;
+    FRectSeen: array of TRect;
+    FStaleInkRows: Integer;    // calls whose DC ink was NOT the one the handler asked for
+    procedure RecordCall(AIndex: Integer; const ARect: TRect; AState: TOwnerDrawState);
+    procedure HandleDrawSilent(Sender: TObject; ACanvas: TCanvas; Index: Integer;
+      ARect: TRect; AState: TOwnerDrawState);
+    procedure HandleDrawSameStateEveryCall(Sender: TObject; ACanvas: TCanvas;
+      Index: Integer; ARect: TRect; AState: TOwnerDrawState);
+    procedure HandleDrawOverflowing(Sender: TObject; ACanvas: TCanvas; Index: Integer;
+      ARect: TRect; AState: TOwnerDrawState);
+    function MakeCombo(AStyle: TTyComboBoxStyle; AHandler: TTyDrawItemEvent): TTyComboBox;
+    function MakeList(ACombo: TTyComboBox): TTyComboPopupList;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestStyleValuesAppendedAndDefaultOrdinalHeld;   // stdctrls.pp:262
+    procedure TestEditableOwnerDrawStyleShowsTheEditor;       // stdctrls.pp:268
+    procedure TestOwnerDrawFieldSuppressesTheDefaultContent;  // stdctrls.pp:399
+    procedure TestOwnerDrawStyleWithoutAHandlerKeepsTheThemedField;
+    procedure TestHandlerIsInertAtTheDefaultStyle;
+    procedure TestOwnerDrawFieldSurvivesTheComposite;
+    procedure TestOwnerDrawFieldClipsToTheTextZone;
+    procedure TestOwnerDrawRowsSuppressTheDefaultRowContent;
+    procedure TestOwnerDrawRowIndexIsAnItemsIndex;
+    procedure TestOwnerDrawRowsClipToTheirOwnRow;
+    procedure TestOwnerDrawRowStateSurvivesEveryRow;
+    procedure TestRowCollectionDoesNotAccumulateAcrossPaints;
+    procedure TestAssigningTheHandlerRepaints;
+    procedure TestOwnerDrawReachesComboBoxEx;
+    procedure TestOwnerDrawReachesCheckComboBox;
+    procedure TestPickOnlyLockDropsTheEditBoxNotTheOwnerDraw;
   end;
 
 implementation
@@ -820,6 +880,698 @@ begin
   finally c.Free; payload.Free; end;
 end;
 
+{ ===================== owner-draw ===================================================== }
+
+function IsGreenInk(const P: TBGRAPixel): Boolean;
+begin
+  Result := (P.green > 150) and (P.green > P.red + 40) and (P.green > P.blue + 40);
+end;
+
+{ The two popup-list families do not share an ancestor (the check combo's descends from
+  TTyCheckListBox), so the render seam is reached by class, exactly as the protocol is. }
+procedure RenderAnyPopupList(AList: TTyListBox; ACanvas: TCanvas; const ARect: TRect;
+  APPI: Integer);
+begin
+  if AList is TTyCheckComboPopupList then
+    TTyCheckComboPopupList(AList).RenderWithOwnerDraw(ACanvas, ARect, APPI)
+  else
+    TTyComboPopupList(AList).RenderWithOwnerDraw(ACanvas, ARect, APPI);
+end;
+
+{ Renders two popup lists and reports whether ANY pixel differs. }
+function ListRenderDiffers(A, B: TTyListBox; AW, AH: Integer): Boolean;
+var
+  BmpA, BmpB: TBitmap;
+  x, y: Integer;
+begin
+  Result := False;
+  BmpA := TBitmap.Create;
+  BmpB := TBitmap.Create;
+  try
+    BmpA.PixelFormat := pf32bit; BmpA.SetSize(AW, AH);
+    BmpB.PixelFormat := pf32bit; BmpB.SetSize(AW, AH);
+    RenderAnyPopupList(A, BmpA.Canvas, Rect(0, 0, AW, AH), 96);
+    RenderAnyPopupList(B, BmpB.Canvas, Rect(0, 0, AW, AH), 96);
+    for y := 0 to AH - 1 do
+      for x := 0 to AW - 1 do
+        if ColorToRGB(BmpA.Canvas.Pixels[x, y]) <> ColorToRGB(BmpB.Canvas.Pixels[x, y]) then
+          Exit(True);
+  finally
+    BmpA.Free; BmpB.Free;
+  end;
+end;
+
+procedure TComboInvalidateProbe.Invalidate;
+begin
+  Inc(Invalidations);
+  inherited Invalidate;
+end;
+
+procedure TComboOwnerDrawTest.SetUp;
+begin
+  FCalls := 0;
+  FSeen := 0;
+  FStaleInkRows := 0;
+  SetLength(FIndexSeen, 0);
+  SetLength(FStateSeen, 0);
+  SetLength(FRectSeen, 0);
+  FForm := TForm.CreateNew(nil);
+end;
+
+procedure TComboOwnerDrawTest.TearDown;
+begin
+  FreeAndNil(FForm);
+end;
+
+procedure TComboOwnerDrawTest.RecordCall(AIndex: Integer; const ARect: TRect;
+  AState: TOwnerDrawState);
+begin
+  Inc(FCalls);
+  if FSeen = Length(FIndexSeen) then
+  begin
+    SetLength(FIndexSeen, FSeen + 8);
+    SetLength(FStateSeen, FSeen + 8);
+    SetLength(FRectSeen,  FSeen + 8);
+  end;
+  FIndexSeen[FSeen] := AIndex;
+  FStateSeen[FSeen] := AState;
+  FRectSeen[FSeen]  := ARect;
+  Inc(FSeen);
+end;
+
+procedure TComboOwnerDrawTest.HandleDrawSilent(Sender: TObject; ACanvas: TCanvas;
+  Index: Integer; ARect: TRect; AState: TOwnerDrawState);
+begin
+  { Records and paints NOTHING. What it proves is the suppression half: with this handler
+    assigned, an owner-draw style must render exactly as an empty control does. }
+  RecordCall(Index, ARect, AState);
+end;
+
+{ The shape that catches a canvas whose cached state no longer describes its DC: the SAME
+  pen colour and the SAME ink on EVERY call. An LCL TCanvas re-selects one of its objects
+  only when a property actually CHANGES, so from the second row on nothing is re-selected
+  and the stroke lands with whatever object the DC is holding.
+
+  Brush + FillRect is deliberately NOT used: LCL hands FillRect the brush handle explicitly,
+  so it is the one primitive this defect cannot bite, and a guard written around it passes
+  against the broken code -- that exact guard was fake-green for two months in TTyTreeView.
+  The strokes run ALONG the row's top and bottom edges, never across it, so what gets probed
+  is the four corner pixels; a probe in the middle of a row survives any drift that leaves
+  SOME of the row green. }
+procedure TComboOwnerDrawTest.HandleDrawSameStateEveryCall(Sender: TObject;
+  ACanvas: TCanvas; Index: Integer; ARect: TRect; AState: TOwnerDrawState);
+const
+  Probe = TColor($00C800);   // GREEN, identical on every call
+begin
+  RecordCall(Index, ARect, AState);
+  ACanvas.Pen.Color   := Probe;
+  ACanvas.Brush.Style := bsClear;
+  ACanvas.Font.Color  := Probe;
+  { LineTo stops one short of its end point, so these two strokes cover exactly the four
+    corners: (Left,Top), (Right-1,Top), (Left,Bottom-1) and (Right-1,Bottom-1). }
+  ACanvas.MoveTo(ARect.Left, ARect.Top);
+  ACanvas.LineTo(ARect.Right, ARect.Top);
+  ACanvas.MoveTo(ARect.Left, ARect.Bottom - 1);
+  ACanvas.LineTo(ARect.Right, ARect.Bottom - 1);
+  { The same question asked of the TEXT path, which is what an owner-drawn caption rides on.
+    LCL sets the DC's text colour inside the FONT selection, so a font the canvas still
+    believes is selected means SetTextColor is never reached and the ink is whatever the
+    restore put back. }
+  ACanvas.TextOut(ARect.Left + 2, ARect.Top + 2, 'x');
+  if LCLIntf.GetTextColor(ACanvas.Handle) <> Probe then Inc(FStaleInkRows);
+end;
+
+{ Strokes WELL OUTSIDE its own rect. Everything it draws beyond ARect must be clipped away. }
+procedure TComboOwnerDrawTest.HandleDrawOverflowing(Sender: TObject; ACanvas: TCanvas;
+  Index: Integer; ARect: TRect; AState: TOwnerDrawState);
+const
+  Probe = TColor($00C800);
+begin
+  RecordCall(Index, ARect, AState);
+  ACanvas.Pen.Color := Probe;
+  ACanvas.Brush.Color := Probe;
+  ACanvas.Brush.Style := bsSolid;
+  ACanvas.FillRect(ARect.Left, ARect.Top - 40, ARect.Right, ARect.Bottom + 40);
+end;
+
+{ ---- the closed field ------------------------------------------------------------- }
+
+procedure TComboOwnerDrawTest.TestStyleValuesAppendedAndDefaultOrdinalHeld;
+var c: TTyComboBox;
+begin
+  { csDropDownList MUST stay ordinal 0. A .lfm stores Style by identifier, but the published
+    property's `default csDropDownList` is stored as an ORDINAL, and every .lfm in this repo
+    and in users' projects omits Style and is read against it. Appending values is safe;
+    inserting one silently re-reads every existing form. }
+  AssertEquals('csDropDownList is still ordinal 0', 0, Ord(csDropDownList));
+  AssertEquals('csDropDown is still ordinal 1', 1, Ord(csDropDown));
+  AssertEquals('the owner-draw values were APPENDED, not inserted', 2, Ord(csOwnerDrawFixed));
+  AssertEquals('...both of them', 3, Ord(csOwnerDrawEditableFixed));
+  c := TTyComboBox.Create(nil);
+  try
+    AssertTrue('a fresh combo is STILL pick-only -- the inverted default is deliberate',
+      c.Style = csDropDownList);
+  finally c.Free; end;
+  { The two predicates LCL spells as TComboBoxStyleHelper (stdctrls.pp:271-278). }
+  AssertFalse('csDropDownList has no edit box', TyComboStyleHasEditBox(csDropDownList));
+  AssertTrue ('csDropDown has one',             TyComboStyleHasEditBox(csDropDown));
+  AssertFalse('csOwnerDrawFixed is pick-only',  TyComboStyleHasEditBox(csOwnerDrawFixed));
+  AssertTrue ('csOwnerDrawEditableFixed is not',TyComboStyleHasEditBox(csOwnerDrawEditableFixed));
+  AssertFalse('csDropDown is not owner-drawn',  TyComboStyleIsOwnerDrawn(csDropDown));
+  AssertTrue ('csOwnerDrawFixed is',            TyComboStyleIsOwnerDrawn(csOwnerDrawFixed));
+  AssertTrue ('csOwnerDrawEditableFixed is',    TyComboStyleIsOwnerDrawn(csOwnerDrawEditableFixed));
+end;
+
+procedure TComboOwnerDrawTest.TestEditableOwnerDrawStyleShowsTheEditor;
+var c: TTyComboBox;
+begin
+  { The editable/pick-only split is orthogonal to owner-draw, and every place that asked
+    `Style = csDropDown` had to become the predicate or the new editable style would come up
+    with no edit field at all. }
+  c := TTyComboBox.Create(nil);
+  try
+    c.Style := csOwnerDrawEditableFixed;
+    AssertTrue('csOwnerDrawEditableFixed shows the embedded editor', c.EditorVisibleForTest);
+    c.Style := csOwnerDrawFixed;
+    AssertFalse('csOwnerDrawFixed does not', c.EditorVisibleForTest);
+  finally c.Free; end;
+end;
+
+procedure TComboOwnerDrawTest.TestOwnerDrawFieldSuppressesTheDefaultContent;
+var owned, blank: TComboRender;
+begin
+  { A silent handler paints nothing, so an owner-drawn field must come out EXACTLY as an
+    empty one: proof the default content is gone rather than merely covered. }
+  owned := TComboRender.Create(nil);
+  blank := TComboRender.Create(nil);
+  try
+    owned.Items.Add('Belgium'); owned.ItemIndex := 0;
+    owned.OnDrawItem := @HandleDrawSilent;
+    owned.Style := csOwnerDrawFixed;
+    AssertFalse('an owner-drawn field shows none of the default text',
+      ComboRenderDiffers(owned, blank, 140, 26));
+    AssertEquals('and the handler was asked exactly once, for the field', 1, FCalls);
+    AssertTrue('with odComboBoxEdit, which is how a shared handler knows it is the field',
+      odComboBoxEdit in FStateSeen[0]);
+    AssertTrue('and odBackgroundPainted, because DrawFrame already ran',
+      odBackgroundPainted in FStateSeen[0]);
+    AssertEquals('Index is the selected row', 0, FIndexSeen[0]);
+  finally
+    owned.Free; blank.Free;
+  end;
+end;
+
+procedure TComboOwnerDrawTest.TestOwnerDrawStyleWithoutAHandlerKeepsTheThemedField;
+var owned, plain: TComboRender;
+begin
+  { Setting Style alone must never blank a control. LCL/Win32 paints nothing in that case;
+    keeping the themed default is the strictly better rule and this is what pins it. }
+  owned := TComboRender.Create(nil);
+  plain := TComboRender.Create(nil);
+  try
+    owned.Items.Add('Belgium'); owned.ItemIndex := 0;
+    plain.Items.Add('Belgium'); plain.ItemIndex := 0;
+    owned.Style := csOwnerDrawFixed;         // no OnDrawItem
+    AssertFalse('an owner-draw style with no handler renders the themed default',
+      ComboRenderDiffers(owned, plain, 140, 26));
+  finally
+    owned.Free; plain.Free;
+  end;
+end;
+
+procedure TComboOwnerDrawTest.TestHandlerIsInertAtTheDefaultStyle;
+var
+  owned, plain: TComboRender;
+  cOwned, cPlain: TTyComboBox;
+begin
+  { The other half of the same gate, and the one that protects every existing form: a combo
+    left at csDropDownList must be byte-identical whether or not an OnDrawItem is hanging
+    off it. BOTH surfaces have to say so -- the field and the drop-down rows read the gate
+    through different predicates, and a version that checked only Assigned(OnDrawItem) for
+    the rows passed a field-only version of this test. }
+  owned := TComboRender.Create(nil);
+  plain := TComboRender.Create(nil);
+  try
+    owned.Items.Add('Belgium'); owned.ItemIndex := 0;
+    plain.Items.Add('Belgium'); plain.ItemIndex := 0;
+    owned.OnDrawItem := @HandleDrawSameStateEveryCall;
+    AssertFalse('a handler on a csDropDownList combo changes the field not at all',
+      ComboRenderDiffers(owned, plain, 140, 26));
+    AssertEquals('and is never called for it', 0, FCalls);
+  finally
+    owned.Free; plain.Free;
+  end;
+  cOwned := MakeCombo(csDropDownList, @HandleDrawSameStateEveryCall);
+  cPlain := MakeCombo(csDropDownList, nil);
+  AssertFalse('...nor the drop-down rows',
+    ListRenderDiffers(MakeList(cOwned), MakeList(cPlain), ListW, ListH));
+  AssertEquals('and is never called for those either', 0, FCalls);
+  AssertFalse('OwnerDrawsRows answers on the STYLE, not merely on the handler',
+    cOwned.OwnerDrawsRows);
+end;
+
+procedure TComboOwnerDrawTest.TestOwnerDrawFieldSurvivesTheComposite;
+const
+  W = 140; H = 26;
+var
+  c: TComboRender;
+  Bmp: TBitmap;
+  Img: TBGRABitmap;
+  R: TRect;
+  P: TBGRAPixel;
+begin
+  { THE TRAP. The painter builds into a BGRA layer and EndPaint blits it over the canvas, so
+    a handler dispatched before that line has its pixels ERASED and the control renders as
+    if no handler existed. Nothing but the pixels can tell the two apart -- the call count is
+    the same either way. }
+  c := TComboRender.Create(nil);
+  Bmp := TBitmap.Create;
+  try
+    c.Items.Add('Belgium'); c.ItemIndex := 0;
+    c.OnDrawItem := @HandleDrawSameStateEveryCall;
+    c.Style := csOwnerDrawFixed;
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(W, H);
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.Brush.Style := bsSolid;
+    Bmp.Canvas.FillRect(0, 0, W, H);
+    c.Render(Bmp.Canvas, Rect(0, 0, W, H), 96);
+    AssertEquals('the field handler ran', 1, FCalls);
+    R := FRectSeen[0];
+    Img := TBGRABitmap.Create(Bmp);
+    try
+      P := Img.GetPixel(R.Left, R.Top);
+      AssertTrue(Format('the field handler''s ink survived EndPaint at (%d,%d) ' +
+        '(got R%d G%d B%d)', [R.Left, R.Top, P.red, P.green, P.blue]), IsGreenInk(P));
+    finally Img.Free; end;
+  finally
+    c.Free; Bmp.Free;
+  end;
+end;
+
+procedure TComboOwnerDrawTest.TestOwnerDrawFieldClipsToTheTextZone;
+const
+  W = 140; H = 26;
+var
+  c: TComboRender;
+  Bmp: TBitmap;
+  Img: TBGRABitmap;
+  R: TRect;
+  y: Integer;
+  P: TBGRAPixel;
+begin
+  { The field handler is given the text zone -- the same rect PaintFieldContent would have
+    had, inset by the theme's padding and stopping short of the chevron. It must not be able
+    to paint over the frame or the drop arrow, so the clip is set to that rect inside the
+    same bracket as the call. This handler deliberately paints 40px past both ends. }
+  c := TComboRender.Create(nil);
+  Bmp := TBitmap.Create;
+  try
+    c.Items.Add('Belgium'); c.ItemIndex := 0;
+    c.OnDrawItem := @HandleDrawOverflowing;
+    c.Style := csOwnerDrawFixed;
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(W, H);
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.Brush.Style := bsSolid;
+    Bmp.Canvas.FillRect(0, 0, W, H);
+    c.Render(Bmp.Canvas, Rect(0, 0, W, H), 96);
+    AssertEquals('the field handler ran', 1, FCalls);
+    R := FRectSeen[0];
+    AssertTrue('the field rect leaves a band above and below to probe',
+      (R.Top >= 2) and (R.Bottom <= H - 2));
+    Img := TBGRABitmap.Create(Bmp);
+    try
+      for y := 1 to 2 do
+      begin
+        P := Img.GetPixel(R.Left + 2, R.Top - y);
+        AssertFalse(Format('the field handler bled %d px above its rect (R%d G%d B%d)',
+          [y, P.red, P.green, P.blue]), IsGreenInk(P));
+        P := Img.GetPixel(R.Left + 2, R.Bottom - 1 + y);
+        AssertFalse(Format('the field handler bled %d px below its rect (R%d G%d B%d)',
+          [y, P.red, P.green, P.blue]), IsGreenInk(P));
+      end;
+    finally Img.Free; end;
+  finally
+    c.Free; Bmp.Free;
+  end;
+end;
+
+{ ---- the drop-down rows ------------------------------------------------------------ }
+
+function TComboOwnerDrawTest.MakeCombo(AStyle: TTyComboBoxStyle;
+  AHandler: TTyDrawItemEvent): TTyComboBox;
+begin
+  Result := TTyComboBox.Create(FForm);
+  Result.Items.Add('Alpha');
+  Result.Items.Add('Beta');
+  Result.Items.Add('Gamma');
+  Result.OnDrawItem := AHandler;
+  Result.Style := AStyle;
+end;
+
+function TComboOwnerDrawTest.MakeList(ACombo: TTyComboBox): TTyComboPopupList;
+begin
+  { Owner is the COMBO and Parent is the form -- the real arrangement (CreatePopupList does
+    Create(Self), then the popup helper parents the list into its own window), and the one
+    the protocol reads: it finds the combo through Owner. }
+  Result := TTyComboPopupList.Create(ACombo);
+  Result.Parent := FForm;
+  Result.Font.PixelsPerInch := 96;
+  Result.ItemHeight := 24;
+  Result.SetBounds(0, 0, ListW, ListH);
+  Result.Items.Assign(ACombo.Items);
+  Result.SelectItem(1);
+  Result.TopIndex := 0;
+end;
+
+procedure TComboOwnerDrawTest.TestOwnerDrawRowsSuppressTheDefaultRowContent;
+var
+  cOwn, cPlain, cEmpty: TTyComboBox;
+  lOwn, lPlain, lEmpty: TTyComboPopupList;
+begin
+  { Three renders. Owner-drawn-with-a-silent-handler must DIFFER from the themed default
+    (the captions really did go) and must be IDENTICAL to the same list holding empty
+    strings (nothing but the captions went -- the row backgrounds and the selection
+    highlight are still down, which is what odBackgroundPainted promises the handler). }
+  cOwn   := MakeCombo(csOwnerDrawFixed, @HandleDrawSilent);
+  cPlain := MakeCombo(csDropDownList, nil);
+  cEmpty := MakeCombo(csDropDownList, nil);
+  cEmpty.Items.Clear;
+  cEmpty.Items.Add(''); cEmpty.Items.Add(''); cEmpty.Items.Add('');
+  lOwn   := MakeList(cOwn);
+  lPlain := MakeList(cPlain);
+  lEmpty := MakeList(cEmpty);
+  AssertTrue('owner-drawn rows do not show the default captions',
+    ListRenderDiffers(lOwn, lPlain, ListW, ListH));
+  AssertEquals('every visible row was offered to the handler', 3, FCalls);
+  AssertTrue('the selected row is reported as odSelected', odSelected in FStateSeen[1]);
+  AssertFalse('an unselected row is not', odSelected in FStateSeen[0]);
+  AssertTrue('and every row carries odBackgroundPainted',
+    odBackgroundPainted in FStateSeen[0]);
+  AssertFalse('a row is NOT told odComboBoxEdit -- that is the field''s marker',
+    odComboBoxEdit in FStateSeen[0]);
+  AssertFalse('and nothing but the captions went: backgrounds and highlight remain',
+    ListRenderDiffers(lOwn, lEmpty, ListW, ListH));
+end;
+
+procedure TComboOwnerDrawTest.TestOwnerDrawRowIndexIsAnItemsIndex;
+var
+  c: TTyComboBox;
+  l: TTyComboPopupList;
+  Bmp: TBitmap;
+begin
+  { The popup does not always hold Items: typing in an editable combo fills it with the
+    prefix-FILTERED subset. OnDrawItem's Index is documented as an index into Items, so a
+    handler doing the obvious Items[Index] must not read the wrong row. }
+  c := MakeCombo(csOwnerDrawEditableFixed, @HandleDrawSilent);
+  l := TTyComboPopupList.Create(c);
+  Bmp := TBitmap.Create;
+  try
+    l.Parent := FForm;
+    l.Font.PixelsPerInch := 96;
+    l.ItemHeight := 24;
+    l.SetBounds(0, 0, ListW, ListH);
+    l.Items.Add('Gamma');          // the filtered subset: one row, Items' LAST one
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(ListW, ListH);
+    l.RenderWithOwnerDraw(Bmp.Canvas, Rect(0, 0, ListW, ListH), 96);
+    AssertEquals('one filtered row was drawn', 1, FCalls);
+    AssertEquals('Index is the row''s position in ITEMS, not in the filtered list',
+      2, FIndexSeen[0]);
+  finally
+    Bmp.Free;
+  end;
+end;
+
+procedure TComboOwnerDrawTest.TestOwnerDrawRowsClipToTheirOwnRow;
+const
+  Overhang = 6;
+var
+  c: TTyComboBox;
+  l: TTyComboPopupList;
+  Bmp: TBitmap;
+  Img: TBGRABitmap;
+  y: Integer;
+  P: TBGRAPixel;
+begin
+  { A handler that draws outside its rect must not reach its neighbour -- or the popup's own
+    frame. The clip is per row and set inside the same bracket as the callback. }
+  c := MakeCombo(csOwnerDrawFixed, @HandleDrawOverflowing);
+  l := MakeList(c);
+  Bmp := TBitmap.Create;
+  try
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(ListW, ListH);
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.Brush.Style := bsSolid;
+    Bmp.Canvas.FillRect(0, 0, ListW, ListH);
+    l.RenderWithOwnerDraw(Bmp.Canvas, Rect(0, 0, ListW, ListH), 96);
+    AssertEquals('three rows drew', 3, FCalls);
+    Img := TBGRABitmap.Create(Bmp);
+    try
+      { Above the FIRST row: the list's own padding / border band. The handler filled 40px
+        past its top edge, so without the clip this is green. }
+      for y := 1 to Overhang do
+        if FRectSeen[0].Top - y >= 0 then
+        begin
+          P := Img.GetPixel(FRectSeen[0].Left + 2, FRectSeen[0].Top - y);
+          AssertFalse(Format('row 0 bled %d px above its rect (R%d G%d B%d)',
+            [y, P.red, P.green, P.blue]), IsGreenInk(P));
+        end;
+      { Below the LAST row, same reasoning at the other end. }
+      for y := 1 to Overhang do
+        if FRectSeen[2].Bottom - 1 + y < ListH then
+        begin
+          P := Img.GetPixel(FRectSeen[2].Left + 2, FRectSeen[2].Bottom - 1 + y);
+          AssertFalse(Format('row 2 bled %d px below its rect (R%d G%d B%d)',
+            [y, P.red, P.green, P.blue]), IsGreenInk(P));
+        end;
+    finally Img.Free; end;
+  finally
+    Bmp.Free;
+  end;
+end;
+
+procedure TComboOwnerDrawTest.TestOwnerDrawRowStateSurvivesEveryRow;
+const
+  SeedRed = TColor($0000DC);   // BGR literal: pure red
+var
+  c: TTyComboBox;
+  l: TTyComboPopupList;
+  Bmp: TBitmap;
+  Img: TBGRABitmap;
+  k, xr: Integer;
+  R: TRect;
+
+  procedure AssertGreenAt(const AWhere: string; x, y: Integer);
+  var P: TBGRAPixel;
+  begin
+    P := Img.GetPixel(x, y);
+    AssertTrue(Format('%s at (%d,%d) drew with the DC''s pen, not the handler''s ' +
+      '(got R%d G%d B%d, seeded red)', [AWhere, x, y, P.red, P.green, P.blue]),
+      (P.green > 160) and (P.red < 96) and (P.blue < 96));
+  end;
+
+begin
+  { EVERY owner-drawn row must ink with what ITS handler asked for, not with what the row
+    before it left in the DC. The dispatch brackets each callback in a DC save/restore; the
+    restore has to be one the LCL canvas knows about (SaveHandleState/RestoreHandleState), or
+    the canvas goes on believing its Pen/Font are still selected while the restore has swapped
+    them out -- and from the SECOND row onwards the handler's assignments become silent
+    no-ops. This exact defect shipped twice this week: 2477173 (tree), 7629c14 (menu).
+
+    Non-vacuous by construction: the canvas's pen and ink are seeded RED and driven into the
+    DC first, so a row that skips the re-select strokes red, not green. }
+  c := MakeCombo(csOwnerDrawFixed, @HandleDrawSameStateEveryCall);
+  l := MakeList(c);
+  Bmp := TBitmap.Create;
+  try
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(ListW, ListH);
+    Bmp.Canvas.Brush.Style := bsSolid;
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(0, 0, ListW, ListH);
+    { Seed the canvas's PEN and INK red and drive BOTH into the DC, so "whatever the DC is
+      currently holding" is a colour the handler never asks for. Off-surface, so the seed
+      strokes cannot be mistaken for a probe. }
+    Bmp.Canvas.Pen.Color  := SeedRed;
+    Bmp.Canvas.Font.Color := SeedRed;
+    Bmp.Canvas.MoveTo(-8, -8);
+    Bmp.Canvas.LineTo(-4, -8);
+    Bmp.Canvas.TextOut(-40, -40, 'x');
+
+    l.RenderWithOwnerDraw(Bmp.Canvas, Rect(0, 0, ListW, ListH), 96);
+    AssertEquals('three rows were owner-drawn -- the defect starts at the SECOND call',
+      3, FCalls);
+    Img := TBGRABitmap.Create(Bmp);
+    try
+      for k := 0 to FCalls - 1 do
+      begin
+        R := FRectSeen[k];
+        xr := Min(R.Right - 1, ListW - 1);
+        AssertTrue('the probed row has room to stroke',
+          (R.Left < xr) and (R.Bottom - R.Top >= 4));
+        AssertGreenAt(Format('row %d: top-left', [k]),     R.Left, R.Top);
+        AssertGreenAt(Format('row %d: top-right', [k]),    xr,     R.Top);
+        AssertGreenAt(Format('row %d: bottom-left', [k]),  R.Left, R.Bottom - 1);
+        AssertGreenAt(Format('row %d: bottom-right', [k]), xr,     R.Bottom - 1);
+      end;
+      AssertEquals('every row inked with the colour its handler set', 0, FStaleInkRows);
+    finally Img.Free; end;
+  finally
+    Bmp.Free;
+  end;
+end;
+
+procedure TComboOwnerDrawTest.TestRowCollectionDoesNotAccumulateAcrossPaints;
+const
+  Rows = 3;
+var
+  c: TTyComboBox;
+  l: TTyComboPopupList;
+  Bmp: TBitmap;
+begin
+  { A live drop-down repaints on every hover and every scroll. The pending row list is
+    rebuilt from scratch each time, so it has to be CLEARED first -- leave that out and the
+    dispatch grows by one screenful per paint, replaying stale rects for ever. }
+  c := MakeCombo(csOwnerDrawFixed, @HandleDrawSilent);
+  l := MakeList(c);
+  Bmp := TBitmap.Create;
+  try
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(ListW, ListH);
+    l.RenderWithOwnerDraw(Bmp.Canvas, Rect(0, 0, ListW, ListH), 96);
+    AssertEquals('three rows on the first paint', Rows, FCalls);
+    l.RenderWithOwnerDraw(Bmp.Canvas, Rect(0, 0, ListW, ListH), 96);
+    AssertEquals('three MORE on the second -- not the first paint''s rows again as well',
+      Rows * 2, FCalls);
+    AssertEquals('the pending list holds one screenful, not two',
+      Rows, c.RowOwnerDrawCountForTest);
+  finally
+    Bmp.Free;
+  end;
+end;
+
+procedure TComboOwnerDrawTest.TestAssigningTheHandlerRepaints;
+var p: TComboInvalidateProbe;
+begin
+  { Style first and the handler second is the ordinary order, and it is the SECOND write
+    that switches an owner-draw combo from the themed default to the host's paint. Without a
+    repaint there the control keeps the render it had before the handler existed. }
+  p := TComboInvalidateProbe.Create(nil);
+  try
+    p.Style := csOwnerDrawFixed;
+    p.Invalidations := 0;
+    p.OnDrawItem := @HandleDrawSilent;
+    AssertTrue('assigning OnDrawItem repaints', p.Invalidations > 0);
+    p.Invalidations := 0;
+    p.OnDrawItem := nil;
+    AssertTrue('and so does clearing it', p.Invalidations > 0);
+  finally p.Free; end;
+end;
+
+{ ---- the two siblings --------------------------------------------------------------- }
+
+procedure TComboOwnerDrawTest.TestOwnerDrawReachesComboBoxEx;
+var
+  c: TTyComboBoxEx;
+  lOwn, lPlain: TTyComboBoxExPopupList;
+
+  function BuildEx(AStyle: TTyComboBoxStyle; AHandler: TTyDrawItemEvent): TTyComboBoxEx;
+  begin
+    Result := TTyComboBoxEx.Create(FForm);
+    Result.Items.Add('Alpha'); Result.Items.Add('Beta'); Result.Items.Add('Gamma');
+    Result.OnDrawItem := AHandler;
+    Result.Style := AStyle;
+  end;
+
+  function BuildList(ACombo: TTyComboBoxEx): TTyComboBoxExPopupList;
+  begin
+    Result := TTyComboBoxExPopupList.Create(ACombo);
+    Result.Parent := FForm;
+    Result.Font.PixelsPerInch := 96;
+    Result.ItemHeight := 24;
+    Result.SetBounds(0, 0, ListW, ListH);
+    Result.Items.Assign(ACombo.Items);
+    Result.TopIndex := 0;
+  end;
+
+begin
+  { A fix that lands on a base and not its override is half a fix. TTyComboBoxEx replaces
+    the row painter outright (image + name), so the skip has to be spelled out in ITS
+    PaintItemContent -- an inherited call would already be too late. }
+  c := BuildEx(csOwnerDrawFixed, @HandleDrawSilent);
+  lOwn := BuildList(c);
+  lPlain := BuildList(BuildEx(csDropDownList, nil));
+  AssertTrue('TTyComboBoxEx rows reach the host handler',
+    ListRenderDiffers(lOwn, lPlain, ListW, ListH));
+  AssertEquals('once per visible row', 3, FCalls);
+end;
+
+procedure TComboOwnerDrawTest.TestOwnerDrawReachesCheckComboBox;
+var
+  c: TTyCheckComboBox;
+  lOwn, lPlain: TTyCheckComboPopupList;
+
+  function BuildCheck(AStyle: TTyComboBoxStyle; AHandler: TTyDrawItemEvent): TTyCheckComboBox;
+  begin
+    Result := TTyCheckComboBox.Create(FForm);
+    Result.Items.Add('Alpha'); Result.Items.Add('Beta'); Result.Items.Add('Gamma');
+    Result.OnDrawItem := AHandler;
+    Result.Style := AStyle;
+  end;
+
+  function BuildList(ACombo: TTyCheckComboBox): TTyCheckComboPopupList;
+  begin
+    Result := TTyCheckComboPopupList.Create(ACombo);
+    Result.Parent := FForm;
+    Result.Font.PixelsPerInch := 96;
+    Result.ItemHeight := 24;
+    Result.SetBounds(0, 0, ListW, ListH);
+    Result.Items.Assign(ACombo.Items);
+    Result.TopIndex := 0;
+  end;
+
+begin
+  { The other override, and the one whose popup list descends from TTyCheckListBox instead
+    of TTyListBox -- no shared shim class can reach it, which is why the protocol is three
+    calls it copies rather than an ancestor it inherits. }
+  c := BuildCheck(csOwnerDrawFixed, @HandleDrawSilent);
+  AssertTrue('the pick-only lock lets an owner-draw style THROUGH',
+    c.Style = csOwnerDrawFixed);
+  lOwn := BuildList(c);
+  lPlain := BuildList(BuildCheck(csDropDownList, nil));
+  AssertTrue('TTyCheckComboBox rows reach the host handler',
+    ListRenderDiffers(lOwn, lPlain, ListW, ListH));
+  AssertEquals('once per visible row', 3, FCalls);
+end;
+
+procedure TComboOwnerDrawTest.TestPickOnlyLockDropsTheEditBoxNotTheOwnerDraw;
+var c: TTyCheckComboBox;
+begin
+  { The lock used to replace the whole style with csDropDownList. Owner-draw is orthogonal
+    to editability, so it now takes only the EDIT BOX off -- LCL's SetEditBox(False). }
+  c := TTyCheckComboBox.Create(nil);
+  try
+    c.Style := csDropDown;
+    AssertTrue('an editable style is still refused', c.Style = csDropDownList);
+    c.Style := csOwnerDrawEditableFixed;
+    AssertTrue('the EDITABLE owner-draw style lands as its pick-only twin',
+      c.Style = csOwnerDrawFixed);
+    c.Style := csDropDownList;
+    c.Style := csOwnerDrawFixed;
+    AssertTrue('and the pick-only one passes through untouched',
+      c.Style = csOwnerDrawFixed);
+  finally c.Free; end;
+  { The two style-mapping cases stated once, on the function itself. }
+  AssertTrue(TyComboStylePickOnly(csDropDown) = csDropDownList);
+  AssertTrue(TyComboStylePickOnly(csOwnerDrawEditableFixed) = csOwnerDrawFixed);
+  AssertTrue(TyComboStylePickOnly(csOwnerDrawFixed) = csOwnerDrawFixed);
+  AssertTrue(TyComboStylePickOnly(csDropDownList) = csDropDownList);
+end;
+
 initialization
   RegisterTest(TComboBoxParityTest);
+  RegisterTest(TComboOwnerDrawTest);
 end.

@@ -13,8 +13,63 @@ function TyComboIndexOfText(AItems: TStrings; const AText: string; ACaseSensitiv
 
 type
   { csDropDownList = read-only (pick from list only). csDropDown = editable field
-    with prefix autocomplete (an embedded TTyEdit overlays the text zone). }
-  TTyComboBoxStyle = (csDropDownList, csDropDown);
+    with prefix autocomplete (an embedded TTyEdit overlays the text zone).
+    csOwnerDrawFixed / csOwnerDrawEditableFixed are those same two shapes with the ROWS
+    (and, for the pick-only one, the closed field) handed to the application's OnDrawItem
+    instead of painted from the theme -- LCL's stdctrls.pp:266/:268 spelling and meaning.
+
+    THE NEW VALUES ARE APPENDED, NOT INSERTED. A .lfm stores the identifier, so order does
+    not matter there -- but `default csDropDownList` on the published property stores the
+    ORDINAL, and every .lfm that omits Style is read against it. csDropDownList has to stay
+    at 0 or every existing form silently changes mode.
+
+    Still absent, and deliberately so (docs/controls/combobox.md §8.1): csSimple, and the
+    two Variable owner-draw styles. Naming them here without honouring them would turn a
+    compile error into a silent wrong render, which is the worse of the two. }
+  TTyComboBoxStyle = (csDropDownList, csDropDown, csOwnerDrawFixed, csOwnerDrawEditableFixed);
+
+  { The three questions LCL asks of a combo style through TComboBoxStyleHelper
+    (stdctrls.pp:271-278). Plain functions rather than a type helper because a helper on an
+    enum is reachable only where the helper's unit is in scope AND nothing else has a helper
+    for the same type -- one helper per type wins, silently. }
+  { Does an embedded TTyEdit cover the text zone? }
+  function TyComboStyleHasEditBox(AStyle: TTyComboBoxStyle): Boolean;
+  { Do the drop-down rows belong to OnDrawItem? }
+  function TyComboStyleIsOwnerDrawn(AStyle: TTyComboBoxStyle): Boolean;
+  { The same style with the edit box taken off -- LCL's SetEditBox(False). What a combo that
+    is pick-only BY CONSTRUCTION (the check combo, the colour box) should apply instead of
+    swallowing the value whole, so an orthogonal choice like owner-draw still gets through. }
+  function TyComboStylePickOnly(AStyle: TTyComboBoxStyle): TTyComboBoxStyle;
+
+type
+  { The application paints one row -- or the closed field. LCL's own TDrawItemEvent
+    (stdctrls.pp:282) is `(Control: TWinControl; Index: Integer; ARect: TRect;
+    State: TOwnerDrawState)` with NO canvas, because there the host reaches it through
+    Control.Canvas: LCL's TCustomComboBox descends from TWinControl and hand-makes a
+    TControlCanvas (customcombobox.inc:891) which it re-points at whichever DC is being
+    drawn -- the edit area on one call, the list on the next.
+
+    THAT IS NOT AVAILABLE HERE and the difference is structural, not a preference. This
+    combo descends from TCustomControl, which already owns a Canvas bound to the combo's own
+    window; the drop-down rows are painted by a SEPARATE control in a SEPARATE window, so
+    Control.Canvas could never be their surface. Reproducing LCL's route would mean shadowing
+    an inherited property with a different object -- a handler drawing on the wrong window
+    whenever anything reached the ancestor's Canvas instead.
+
+    So the canvas is a parameter, which is what the two owner-draw controls already in this
+    library do (TTyTreeView.OnDrawNode, and LCL's OWN menu owner-draw, TMenuDrawItemEvent).
+    Sender is the combo either way, so Items[Index] reads the same as it would in LCL. }
+  TTyDrawItemEvent = procedure(Sender: TObject; ACanvas: TCanvas; Index: Integer;
+    ARect: TRect; AState: TOwnerDrawState) of object;
+
+  { One collected owner-draw row: the rect the list actually painted it in, the index into
+    the COMBO's Items (not the popup list's -- they differ under the autocomplete filter),
+    and the state the handler is told about. }
+  TTyComboRowDraw = record
+    R: TRect;
+    SrcIndex: Integer;
+    St: TOwnerDrawState;
+  end;
 
   TTyComboBox = class(TTyCustomControl)
   private
@@ -51,6 +106,15 @@ type
     { Type-ahead state }
     FTypeAhead: string;
     FTypeAheadTick: QWord;
+    { Owner-draw state. FRowDraw is filled while the popup list paints and drained
+      immediately after it composites — see DispatchRowOwnerDraw. }
+    FOnDrawItem: TTyDrawItemEvent;
+    FRowDraw: array of TTyComboRowDraw;
+    FRowDrawCount: Integer;
+    procedure SetOnDrawItem(const AValue: TTyDrawItemEvent);
+    { OnDrawItem's Index is an index into ITEMS. The popup may be holding the
+      prefix-filtered subset instead, so map it back. }
+    function RowSourceIndex(AList: TTyListBox; ARow: Integer): Integer;
     procedure SetItems(const AValue: TStringList);
     procedure SetItemIndex(const AValue: Integer);
     procedure SetText(const AValue: TCaption);
@@ -150,6 +214,12 @@ type
     // Style setter is virtual so a subclass can lock the mode (e.g. TTyColorBox forces
     // csDropDownList — a filtered editable popup would desync its per-item swatches).
     procedure SetStyle(AValue: TTyComboBoxStyle); virtual;
+    { The state the CLOSED FIELD's OnDrawItem call carries. odComboBoxEdit is how a shared
+      handler tells "this is the field" from "this is a row" (LCLType:1163; Windows'
+      ODS_COMBOBOXEDIT). odBackgroundPainted is always in it: DrawFrame has already laid the
+      themed surface down, so a handler that only writes text sits on the right background
+      instead of painting one of its own over ours -- and it has to be TOLD, or it will. }
+    function FieldOwnerDrawState: TOwnerDrawState;
     procedure Paint; override;
     procedure Resize; override;
     procedure Click; override;
@@ -186,6 +256,34 @@ type
       AMaxHistoryCount: Integer; ASetAsText, ACaseSensitive: Boolean); overload;
     { Expose popup list for headless tests and internal use }
     function PopupList: TTyListBox;
+    { --- the drop-down row owner-draw protocol --------------------------------------
+      True when the application has actually taken the rows over: an owner-draw Style AND a
+      handler. Without the handler the themed default stays, so assigning Style alone can
+      never blank a control -- which is the failure mode of "owner-draw means paint
+      nothing" and it is not worth reproducing.
+
+      The three calls below are what a drop-down list makes to join in. They are METHODS on
+      the combo (with free-function wrappers underneath) rather than an ancestor class,
+      because the popup lists in this family do not share one: TTyCheckComboBox's descends
+      from TTyCheckListBox, everyone else's from TTyListBox, and single inheritance means no
+      shim class can reach both.
+
+        Begin  -- before the list paints; drops anything a previous paint left behind.
+        Collect -- from PaintItemContent, per row. True = the host owns this row, so the
+                  default CONTENT is skipped; the themed row background stays (RenderTo has
+                  already drawn it, and odBackgroundPainted says so).
+        Dispatch -- after the list's paint has composited. THIS IS THE ONLY PLACE THE HOST
+                  CALLBACK MAY RUN: the painter builds into a BGRA layer that EndPaint
+                  blits over the canvas, so anything a handler drew before that point is
+                  simply erased (commit d427095, and the two owner-draw controls that
+                  already dispatch this way). }
+    function OwnerDrawsRows: Boolean;
+    procedure BeginRowOwnerDraw;
+    function CollectRowOwnerDraw(AList: TTyListBox; const ARowRect: TRect;
+      AIndex: Integer): Boolean;
+    procedure DispatchRowOwnerDraw(ACanvas: TCanvas; const ARect: TRect);
+    { Test seam: how many rows the last list paint handed to the host. }
+    function RowOwnerDrawCountForTest: Integer;
     { The three control-level list methods LCL's combo has. Clear empties Items AND blanks
       Text -- doing only the first leaves the field displaying an item that is no longer in
       the list, which is the bug you get from calling Items.Clear by hand. }
@@ -221,10 +319,12 @@ type
       inert — published for native-API parity and streaming round-trip. }
     property MaxLength: Integer read FMaxLength write SetMaxLength default 0;
     property CharCase: TEditCharCase read FCharCase write SetCharCase default ecNormal;
-    { csDropDownList (default) = read-only; csDropDown = editable + prefix autocomplete.
+    { csDropDownList (default) = read-only; csDropDown = editable + prefix autocomplete;
+      csOwnerDrawFixed / csOwnerDrawEditableFixed = the same two with the rows drawn by
+      OnDrawItem.
       NOTE the default is the OPPOSITE of LCL's csDropDown, and deliberately so: every
       .lfm in this repo and in users' projects omits Style and expects a pick-only combo.
-      See docs/controls/combobox.md for the five LCL Style values we do not have. }
+      See docs/controls/combobox.md for the three LCL Style values we do not have. }
     property Style: TTyComboBoxStyle read FStyle write SetStyle default csDropDownList;
     { Pixel height of one dropdown row. 0 (default) = follow the theme's --item-height,
       so a density change still moves the rows; a positive value pins them. }
@@ -238,6 +338,16 @@ type
     { Rejects typing in the edit portion while the dropdown still works. Inert in
       csDropDownList, which has no editable text at all. }
     property ReadOnly: Boolean read FReadOnly write SetReadOnly default False;
+    { The application paints a drop-down row -- and, in csOwnerDrawFixed, the closed field.
+      LCL's OnDrawItem (stdctrls.pp:399) plus the canvas its signature leaves implicit; see
+      TTyDrawItemEvent for why that one parameter had to be added. Runs only when Style is
+      one of the owner-draw values; the handler is called AFTER the themed background is down
+      (odBackgroundPainted) and after the painter has composited, on the real canvas.
+
+      ARect is the row's own painted rect and the clip is set to it, so a handler cannot
+      bleed into its neighbour. Index is an index into Items -- mapped back for you when the
+      popup is showing the autocomplete's filtered subset. }
+    property OnDrawItem: TTyDrawItemEvent read FOnDrawItem write SetOnDrawItem;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
     property OnSelect: TNotifyEvent read FOnSelect write FOnSelect;
     property OnDropDown: TNotifyEvent read FOnDropDown write FOnDropDown;
@@ -252,9 +362,111 @@ type
     property StyleClass;
     property Controller;
   end;
+
+  { The plain combo's drop-down list, and the reference implementation of the row
+    owner-draw protocol: three calls, nothing else. A popup list that already descends from
+    TTyListBox should descend from THIS instead and add one line to its PaintItemContent
+    (the Collect-and-skip); one that descends from somewhere else (TTyCheckComboPopupList,
+    off TTyCheckListBox) copies the Paint body below verbatim. }
+  TTyComboPopupList = class(TTyListBox)
+  protected
+    procedure PaintItemContent(P: TTyPainter; const ARowRect: TRect; AIndex: Integer;
+      const AStyle: TTyStyleSet); override;
+    procedure Paint; override;
+  public
+    { Paint the rows AND run the owning combo's post-composite owner-draw pass. Public and
+      canvas-taking so a headless test can drive the whole dispatch into a bitmap -- Paint
+      needs a window handle, and the defect this pass exists to avoid is only visible in
+      the pixels. }
+    procedure RenderWithOwnerDraw(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+  end;
+
+{ The protocol as free functions, for a popup list whose ancestor is fixed elsewhere. Each
+  finds the combo through the list's Owner -- CreatePopupList does Create(Self) throughout
+  this family, which is the same route every one of these lists already takes to reach its
+  combo from PaintItemContent. A list with no combo owner is left alone. }
+procedure TyComboBeginRowOwnerDraw(AList: TTyListBox);
+function  TyComboCollectRowOwnerDraw(AList: TTyListBox; const ARowRect: TRect;
+  AIndex: Integer): Boolean;
+procedure TyComboDispatchRowOwnerDraw(AList: TTyListBox; ACanvas: TCanvas; const ARect: TRect);
+
 implementation
 uses
   Math, tyControls.QtWS, tyControls.PlatformWS;
+
+function TyComboStyleHasEditBox(AStyle: TTyComboBoxStyle): Boolean;
+begin
+  Result := AStyle in [csDropDown, csOwnerDrawEditableFixed];
+end;
+
+function TyComboStyleIsOwnerDrawn(AStyle: TTyComboBoxStyle): Boolean;
+begin
+  Result := AStyle in [csOwnerDrawFixed, csOwnerDrawEditableFixed];
+end;
+
+function TyComboStylePickOnly(AStyle: TTyComboBoxStyle): TTyComboBoxStyle;
+begin
+  case AStyle of
+    csDropDown:               Result := csDropDownList;
+    csOwnerDrawEditableFixed: Result := csOwnerDrawFixed;
+  else
+    Result := AStyle;
+  end;
+end;
+
+function TyComboOwnerOf(AList: TTyListBox): TTyComboBox;
+begin
+  Result := nil;
+  if (AList <> nil) and (AList.Owner is TTyComboBox) then
+    Result := TTyComboBox(AList.Owner);
+end;
+
+procedure TyComboBeginRowOwnerDraw(AList: TTyListBox);
+var C: TTyComboBox;
+begin
+  C := TyComboOwnerOf(AList);
+  if C <> nil then C.BeginRowOwnerDraw;
+end;
+
+function TyComboCollectRowOwnerDraw(AList: TTyListBox; const ARowRect: TRect;
+  AIndex: Integer): Boolean;
+var C: TTyComboBox;
+begin
+  C := TyComboOwnerOf(AList);
+  Result := (C <> nil) and C.CollectRowOwnerDraw(AList, ARowRect, AIndex);
+end;
+
+procedure TyComboDispatchRowOwnerDraw(AList: TTyListBox; ACanvas: TCanvas; const ARect: TRect);
+var C: TTyComboBox;
+begin
+  C := TyComboOwnerOf(AList);
+  if C <> nil then C.DispatchRowOwnerDraw(ACanvas, ARect);
+end;
+
+{ TTyComboPopupList }
+
+procedure TTyComboPopupList.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
+  AIndex: Integer; const AStyle: TTyStyleSet);
+begin
+  { Collect-and-skip. The row BACKGROUND is already down (RenderTo fills it before calling
+    here), so an owner-drawn row still gets its hover / selection highlight and the handler
+    is told so via odBackgroundPainted -- the same division TTyMenuView draws. }
+  if TyComboCollectRowOwnerDraw(Self, ARowRect, AIndex) then Exit;
+  inherited PaintItemContent(P, ARowRect, AIndex, AStyle);
+end;
+
+procedure TTyComboPopupList.RenderWithOwnerDraw(ACanvas: TCanvas; const ARect: TRect;
+  APPI: Integer);
+begin
+  TyComboBeginRowOwnerDraw(Self);
+  RenderTo(ACanvas, ARect, APPI);   // collects during the row loop; ends with EndPaint
+  TyComboDispatchRowOwnerDraw(Self, ACanvas, ARect);
+end;
+
+procedure TTyComboPopupList.Paint;
+begin
+  RenderWithOwnerDraw(Canvas, ClientRect, Font.PixelsPerInch);
+end;
 
 function TyComboTypeAheadMatch(AItems: TStrings; AStart: Integer; const APrefix: string): Integer;
 var n, i, idx: Integer; pfx: string;
@@ -422,7 +634,7 @@ begin
   FText := AValue;
   { In editable mode keep the visible field in sync with a programmatic Text set,
     but under the guard so it does not re-trigger the autocomplete filter/popup. }
-  if (FEditor <> nil) and (FStyle = csDropDown) and (FEditor.Text <> AValue) then
+  if (FEditor <> nil) and TyComboStyleHasEditBox(FStyle) and (FEditor.Text <> AValue) then
     SetEditorText(AValue);
   Invalidate;
 end;
@@ -477,7 +689,7 @@ begin
     FEditor.CharCase := AValue;
     { TTyEdit re-cases its buffer in place without firing OnChange; keep our Text
       in sync so the getter matches what the field now displays. }
-    if FStyle = csDropDown then
+    if TyComboStyleHasEditBox(FStyle) then
       FText := FEditor.Text;
   end;
 end;
@@ -686,8 +898,8 @@ begin
   FStyle := AValue;
   if FEditor <> nil then
   begin
-    FEditor.Visible := (FStyle = csDropDown);
-    if FStyle = csDropDown then
+    FEditor.Visible := TyComboStyleHasEditBox(FStyle);
+    if TyComboStyleHasEditBox(FStyle) then
     begin
       SetEditorText(FText);   // seed from current text without re-triggering filter
       LayoutEditor;
@@ -696,12 +908,132 @@ begin
   Invalidate;
 end;
 
+procedure TTyComboBox.SetOnDrawItem(const AValue: TTyDrawItemEvent);
+begin
+  { Assigning (or clearing) the handler is what switches an owner-draw Style between the
+    host's rows and the themed default, so it has to repaint -- setting Style first and the
+    handler second is the ordinary order, and without this the field would keep the render
+    it had before the handler existed. }
+  FOnDrawItem := AValue;
+  Invalidate;
+end;
+
+function TTyComboBox.OwnerDrawsRows: Boolean;
+begin
+  Result := TyComboStyleIsOwnerDrawn(FStyle) and Assigned(FOnDrawItem);
+end;
+
+function TTyComboBox.RowOwnerDrawCountForTest: Integer;
+begin
+  Result := FRowDrawCount;
+end;
+
+function TTyComboBox.RowSourceIndex(AList: TTyListBox; ARow: Integer): Integer;
+begin
+  { OnDrawItem's Index indexes ITEMS, as LCL documents it -- but the popup may be holding
+    the prefix-filtered subset (the editable styles' autocomplete) rather than Items, and a
+    handler doing the obvious Items[Index] would then read the wrong row or run off the end.
+    TyFilterItemsByPrefix keeps order and drops nothing when the prefix is empty, so an
+    equal count IS the full list; anything shorter is mapped back by text -- the same
+    mapping PopupListChange makes when it commits a picked row, and with the same limit
+    (duplicate texts map to the first). }
+  Result := ARow;
+  if (AList = nil) or (ARow < 0) or (ARow >= AList.Items.Count) then Exit;
+  if AList.Items.Count = FItems.Count then Exit;
+  Result := FItems.IndexOf(AList.Items[ARow]);
+end;
+
+function TTyComboBox.FieldOwnerDrawState: TOwnerDrawState;
+begin
+  Result := [odComboBoxEdit, odBackgroundPainted];
+  if not Enabled then Result := Result + [odDisabled, odGrayed];
+  if Focused then Include(Result, odFocused);
+end;
+
+procedure TTyComboBox.BeginRowOwnerDraw;
+begin
+  { Drop anything a previous paint left: a RenderTo that collects and never dispatches
+    (a golden-image test drawing the list straight to a bitmap) would otherwise leak its
+    rows into the next real paint. }
+  FRowDrawCount := 0;
+end;
+
+function TTyComboBox.CollectRowOwnerDraw(AList: TTyListBox; const ARowRect: TRect;
+  AIndex: Integer): Boolean;
+var
+  St: TOwnerDrawState;
+begin
+  Result := OwnerDrawsRows;
+  if not Result then Exit;
+  { odBackgroundPainted always: RenderTo filled this row before calling PaintItemContent,
+    so the handler must be told not to paint one of its own over the highlight. }
+  St := [odBackgroundPainted];
+  if not Enabled then St := St + [odDisabled, odGrayed];
+  if AList <> nil then
+  begin
+    if AList.MultiSelect then
+    begin
+      if AList.Selected[AIndex] then Include(St, odSelected);
+    end
+    else if AIndex = AList.ItemIndex then
+      Include(St, odSelected);
+  end;
+  if FRowDrawCount = Length(FRowDraw) then
+    SetLength(FRowDraw, Length(FRowDraw) + 8);
+  FRowDraw[FRowDrawCount].R := ARowRect;
+  FRowDraw[FRowDrawCount].SrcIndex := RowSourceIndex(AList, AIndex);
+  FRowDraw[FRowDrawCount].St := St;
+  Inc(FRowDrawCount);
+end;
+
+procedure TTyComboBox.DispatchRowOwnerDraw(ACanvas: TCanvas; const ARect: TRect);
+var
+  k: Integer;
+  R: TRect;
+begin
+  if (ACanvas = nil) or (FRowDrawCount = 0) or not Assigned(FOnDrawItem) then Exit;
+  { --- the host pass, on the COMPOSITED canvas ---------------------------------------
+    Everything the list drew went into the painter's BGRA layer, which EndPaint has just
+    blitted over ACanvas; a GDI draw made before that point is erased, which is the whole
+    reason this loop is here and not inside the row loop.
+
+    The per-row bracket is Canvas.SaveHandleState / RestoreHandleState and NOT raw
+    SaveDC/RestoreDC. RestoreDC swaps the DC's selected pen/font/brush back, but an LCL
+    TCanvas caches which of ITS objects it believes are selected and only re-selects one
+    when a property actually CHANGES -- so from the second callback on that cache is a lie,
+    and a handler assigning the SAME Font.Color (or Pen.Color) it assigned last row gets a
+    silent no-op and inks with whatever the restore put back. A host cannot defend against
+    that: an OnDrawItem doing the ordinary thing -- one ink on every row -- would paint row
+    one correctly and every row after it in a foreign colour. The canvas-aware pair calls
+    DeselectHandles on both sides, so the cache never outlives the DC state it describes.
+    It is the bracket LCL's own per-cell owner-draw hook uses (TCustomGrid.DoDrawCell around
+    OnDrawCell) and the one LCLIntf's header points at. Both sibling instances of this
+    defect shipped and were fixed: commits 2477173 (tree) and 7629c14 (menu). FillRect is
+    immune (LCL hands it the brush handle explicitly), which is why a guard written around
+    Brush + FillRect cannot see any of this.
+
+    The rects are painter-local (0-based inside ARect); offset into canvas device coords and
+    clip each row to its own, so no handler can bleed into its neighbour. }
+  for k := 0 to FRowDrawCount - 1 do
+  begin
+    R := FRowDraw[k].R;
+    Types.OffsetRect(R, ARect.Left, ARect.Top);
+    ACanvas.SaveHandleState;
+    try
+      IntersectClipRect(ACanvas.Handle, R.Left, R.Top, R.Right, R.Bottom);
+      FOnDrawItem(Self, ACanvas, FRowDraw[k].SrcIndex, R, FRowDraw[k].St);
+    finally
+      ACanvas.RestoreHandleState;
+    end;
+  end;
+end;
+
 procedure TTyComboBox.LayoutEditor;
 var
   BtnW, PPI, PadL, PadT, PadR, PadB: Integer;
   S: TTyStyleSet;
 begin
-  if (FEditor = nil) or (FStyle <> csDropDown) then Exit;
+  if (FEditor = nil) or not TyComboStyleHasEditBox(FStyle) then Exit;
   PPI  := Font.PixelsPerInch;
   BtnW := MulDiv(ButtonWidthLogical, PPI, 96);
   { Inset the editor to the same field rectangle RenderTo paints the text into:
@@ -787,7 +1119,7 @@ begin
       field keeps its free text (it may just not be a list member); only the
       read-only list-mode blanks the display. }
     FItemIndex := -1;
-    if FStyle = csDropDownList then FText := '';
+    if not TyComboStyleHasEditBox(FStyle) then FText := '';
   end;
 end;
 
@@ -1027,7 +1359,7 @@ begin
   inherited Click;
   { In editable mode a click on the text zone belongs to the embedded editor
     (caret placement / focus); only a click on the chevron toggles the dropdown. }
-  if (FStyle = csDropDown) and not PointInChevron(ScreenToClient(Mouse.CursorPos)) then Exit;
+  if TyComboStyleHasEditBox(FStyle) and not PointInChevron(ScreenToClient(Mouse.CursorPos)) then Exit;
   { If dropped down, close. Otherwise open — but guard the reopen race:
     clicking the combo while it is open fires FormDeactivate→FPopup.Close→
     PopupClosed BEFORE this Click handler runs, so DroppedDown is already False
@@ -1101,7 +1433,7 @@ begin
     now-hidden popup form, raising EInvalidOperation
     '[TCustomForm.SetFocus] ... Can not focus'. Closing on the next message cycle
     lets the click finish first. }
-  if FStyle = csDropDown then
+  if TyComboStyleHasEditBox(FStyle) then
   begin
     { Commit by the row's text read from the list ACTUALLY shown — the popup may
       hold the filtered subset (autocomplete typing → DropDownFiltered) OR the full
@@ -1164,9 +1496,16 @@ procedure TTyComboBox.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integ
 var
   P: TTyPainter;
   S: TTyStyleSet;
-  R, TextR, BtnR: TRect;
+  R, TextR, BtnR, FieldR: TRect;
   BtnW: Integer;
+  FieldOwnerDraw: Boolean;
 begin
+  { The CLOSED FIELD belongs to the host in the pick-only owner-draw style only. The
+    editable one puts a real TTyEdit over the text zone, so there would be nothing left for
+    a handler to show -- the same split Windows makes, where an owner-draw combo gets a
+    WM_DRAWITEM for its edit area only when it is CBS_DROPDOWNLIST. And no handler means the
+    themed default: assigning Style must never be able to blank a control on its own. }
+  FieldOwnerDraw := (FStyle = csOwnerDrawFixed) and Assigned(FOnDrawItem);
   P := TTyPainter.Create;
   try
     R := Types.Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
@@ -1179,11 +1518,32 @@ begin
     // the right edge stops at the chevron button zone.
     TextR := Types.Rect(R.Left + P.Scale(S.Padding.Left), R.Top + P.Scale(S.Padding.Top),
       R.Right - BtnW, R.Bottom - P.Scale(S.Padding.Bottom));
-    PaintFieldContent(P, TextR, S);
+    if not FieldOwnerDraw then
+      PaintFieldContent(P, TextR, S);
     // v3/C5: the dropdown indicator is theme-overridable (--glyph-dropdown); else the built-in chevron.
     if not TyTryDrawGlyphOverride(P, ActiveController, BtnR, '--glyph-dropdown', S.TextColor) then
       P.DrawDropChevron(BtnR, S.TextColor);   // fixed small chevron (not stretched to height)
     P.EndPaint;
+
+    { The host's field pass, on the COMPOSITED canvas. It cannot run above: the painter
+      builds into a BGRA layer and EndPaint blits that over ACanvas, so a GDI draw made
+      before this line is erased. Clipped to the same text zone PaintFieldContent would have
+      been given, so a handler cannot paint over the frame or the chevron. Only ONE callback
+      here, so the stale-DC defect the row loop guards against cannot arise -- the bracket is
+      the canvas-aware pair anyway, because the next thing anyone adds beside it makes it
+      two. }
+    if FieldOwnerDraw then
+    begin
+      FieldR := TextR;
+      Types.OffsetRect(FieldR, ARect.Left, ARect.Top);
+      ACanvas.SaveHandleState;
+      try
+        IntersectClipRect(ACanvas.Handle, FieldR.Left, FieldR.Top, FieldR.Right, FieldR.Bottom);
+        FOnDrawItem(Self, ACanvas, FItemIndex, FieldR, FieldOwnerDrawState);
+      finally
+        ACanvas.RestoreHandleState;
+      end;
+    end;
   finally
     P.Free;
   end;
@@ -1205,7 +1565,7 @@ begin
   { Only the pick-only field paints its own hint: in csDropDown the embedded TTyEdit
     covers this zone and draws the same hint itself, so drawing here too would double it.
     The dim ink is the shared 'TyTextHint' token TTyEdit resolves — no hardcoded grey. }
-  if (FTextHint = '') or (FStyle <> csDropDownList) then Exit;
+  if (FTextHint = '') or TyComboStyleHasEditBox(FStyle) then Exit;
   HintColor := ActiveController.Model.ResolveStyle('TyTextHint', '', []).TextColor;
   P.DrawText(ATextRect, FTextHint, AStyle.FontName, ResolveFontSize(AStyle),
     AStyle.FontWeight, HintColor, taLeftJustify, tlCenter, True);
@@ -1213,7 +1573,10 @@ end;
 
 function TTyComboBox.CreatePopupList: TTyListBox;
 begin
-  Result := TTyListBox.Create(Self);
+  { TTyComboPopupList, not a bare TTyListBox: the only difference is the three owner-draw
+    calls, every one of which is inert while OwnerDrawsRows is False, so the default combo
+    renders exactly as before. }
+  Result := TTyComboPopupList.Create(Self);
 end;
 
 procedure TTyComboBox.Paint;

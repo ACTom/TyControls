@@ -33,6 +33,15 @@ type
   protected
     procedure PaintItemContent(P: TTyPainter; const ARowRect: TRect; AIndex: Integer;
       const AStyle: TTyStyleSet); override;
+    { The owner-draw dispatch TTyComboPopupList carries for every OTHER list in this family.
+      Copied rather than inherited because this one descends from TTyCheckListBox, and a
+      class cannot have two ancestors -- the reason the protocol is three free functions
+      instead of a shim class. }
+    procedure Paint; override;
+  public
+    { The twin of TTyComboPopupList.RenderWithOwnerDraw: canvas-taking, so a headless test
+      can drive the whole post-composite dispatch into a bitmap. Paint needs a window. }
+    procedure RenderWithOwnerDraw(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
   end;
 
   { A combo box whose drop-down is a CHECK list: the user ticks any number of items and the
@@ -170,6 +179,13 @@ var
   states: TTyStateSet;
   ink: TTyColor;
 begin
+  { Owner-draw first: this override replaces the whole row, so leaving it to an inherited
+    call would be too late. True only when the combo has an owner-draw Style AND a handler;
+    the themed row background is already down and the handler runs after EndPaint, from the
+    Paint override below. Note what this costs the caller: the CHECK BOX goes with the rest
+    of the default content, because the host asked to paint the row. Toggling still works --
+    the hit test is not part of the paint. }
+  if TyComboCollectRowOwnerDraw(Self, ARowRect, AIndex) then Exit;
   { The Owner is the combo (Create(Self) in CreatePopupList); it holds the only tri-state
     truth. Without an owner we are a plain two-state checklist -- fall back rather than
     guess. }
@@ -216,6 +232,19 @@ begin
     ARowRect.Right - P.Scale(AStyle.Padding.Right), ARowRect.Bottom);
   P.DrawText(textR, Items[AIndex], AStyle.FontName, ResolveFontSize(AStyle),
     AStyle.FontWeight, ink, taLeftJustify, tlCenter, True);
+end;
+
+procedure TTyCheckComboPopupList.RenderWithOwnerDraw(ACanvas: TCanvas; const ARect: TRect;
+  APPI: Integer);
+begin
+  TyComboBeginRowOwnerDraw(Self);
+  RenderTo(ACanvas, ARect, APPI);   // collects during the row loop; ends with EndPaint
+  TyComboDispatchRowOwnerDraw(Self, ACanvas, ARect);
+end;
+
+procedure TTyCheckComboPopupList.Paint;
+begin
+  RenderWithOwnerDraw(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
 { TTyCheckComboBox }
@@ -561,7 +590,12 @@ end;
 
 procedure TTyCheckComboBox.SetStyle(AValue: TTyComboBoxStyle);
 begin
-  inherited SetStyle(csDropDownList);   // multi-check is pick-only; ignore editable mode
+  { Multi-check is pick-only: an editable, prefix-FILTERED field cannot express a set of
+    ticks. Take the EDIT BOX off the requested style rather than replacing the style whole
+    -- LCL spells that TComboBoxStyleHelper.SetEditBox(False). The distinction is the whole
+    point now that owner-draw exists: it is orthogonal to editability, so csOwnerDrawFixed
+    must reach the base intact instead of being flattened to csDropDownList along with it. }
+  inherited SetStyle(TyComboStylePickOnly(AValue));
 end;
 
 end.

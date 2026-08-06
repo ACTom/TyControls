@@ -134,5 +134,6 @@ end;
 - **`Sorted = True` 时集合顺序与显示顺序不同:** `Sorted` 排的是投影(显示),`ItemsEx` 保持插入顺序;配对靠 `Objects[]`,不会错。要**集合**也有序就用 `ItemsEx.SortType`。
 - **`ItemIndex` 的流式化顺序:** `ItemIndex` 声明在祖先类,会**先于** `ItemsEx` 写进 `.lfm`,加载时列表还是空的、索引会被钳成 `-1`。控件在 `SelectItem` 里记住流式化期间的索引,并在 `Loaded` 里重新应用——所以设计期设的选中项能活下来。
 - **`Images` 是 `TTyVirtualImageList`(按索引)**,不是 `TTyImageCollection`(按名字);图片索引对应 `Images.Names` 的行号。
+- **自绘行支持:** `Style := csOwnerDrawFixed` / `csOwnerDrawEditableFixed` + `OnDrawItem` 时,图文行绘制整个让位给应用的 handler(字段同理)。协议与限制见 [combobox.md §8.2](combobox.md#82-自绘csownerdrawfixed--csownerdraweditablefixed--ondrawitem)。
 - **未做(与 LCL `TComboBoxEx` 的差异):** `Images` 类型不是 `TCustomImageList`(现成的 `TImageList` **不能**直接赋值,`ComboEx.Images := ImageList1` 编译不过);没有 `ImagesWidth`;没有 `AutoCompleteOptions` 和 `StyleEx`(所以没法说"关闭字段里的图标" `csExNoEditImage`);`SortType` 少一个 `stCustom` 值(用 `CustomSort` 方法代替)。
 - **纯状态逻辑已 headless 单测**(集合↔列表双向同步 / 各扩展字段 / 增删插 / 批量装载 / 排序不错位 / 对象重载不进图片槽);图文绘制、下拉交互需真机验证。

@@ -87,7 +87,8 @@ CC.OnItemChange := @StyleItemChanged;       // 告诉你是哪一行变了
 
 - **应用数据用 `Objects[i]`,不是 `Items.Objects[i]`(API parity 修正):** `Items.Objects[i]` 是控件的槽位(放状态对象)。早前那里直接存的是 `0`/`1` 勾选标志,于是**应用往里存任何东西都会把勾选状态冲掉,反过来勾一下也会把应用的数据冲掉**——`Items.AddObject(s, Data)` 挂的对象甚至会被读成"已勾选"。现在改用 `CC.Objects[i] := Data` / `Data := CC.Objects[i]`(和 LCL 一样),两者各有各的字段。仍然**不要**在已经勾选过的行上直接写 `Items.Objects[i] := X`:那会把状态对象整个替换掉(不会崩、也不会泄漏,但那一行的勾选状态就没了)——这条限制 LCL 也有,而且 LCL 是直接抛异常。
 - **状态对象由控件持有:** 它们挂在 `Items.Objects[]` 上但由控件自己的池负责释放;`Items.Delete` / `Items.Clear` / 重新填表都不会泄漏(池会在长大到一定程度时清扫掉够不着的状态)。
-- **只读多选:** 控件锁定 `csDropDownList`,忽略改成 `csDropDown` 的尝试(多选没有单一"选中项",可编辑字段无意义)。
+- **只读多选:** 控件锁定为**不可编辑**(多选没有单一"选中项",可编辑字段无意义):写进来的 `Style` 只被摘掉编辑框那一位——`csDropDown` → `csDropDownList`,`csOwnerDrawEditableFixed` → `csOwnerDrawFixed`——而不是整个换成 `csDropDownList`。这正是 LCL 的 `TComboBoxStyleHelper.SetEditBox(False)`,也是自绘能设进来的原因:自绘与可编辑是两件正交的事。
+- **自绘行支持:** `Style := csOwnerDrawFixed` + `OnDrawItem` 时下拉行整行交给应用画——**包括那一行的勾选框**,因为你要的就是整行自己画。点击切换不受影响(命中测试不在绘制路径上)。协议与限制见 [combobox.md §8.2](combobox.md#82-自绘csownerdrawfixed--csownerdraweditablefixed--ondrawitem)。
 - **弹层常开靠基类钩子:** 基类把弹层点选行为抽成了 `DoPopupPick`,本控件覆写为空以"切换而不关闭";其余组合框仍是"选中即关闭"。
 - **`TTyCheckComboItemState.Checked` 改名为 `State`(BREAKING):** 状态对象的字段从 `Checked: Boolean` 变成 `State: TCheckBoxState`(并新增 `Enabled: Boolean`),与 LCL 同名同型。直接摸这个对象的代码要改;走 `Checked[]` 属性的代码**不受影响**。
 - **切换顺序与 `TTyCheckBox` 不同:** 这里是 LCL `TCustomCheckCombo` 的顺序(未勾 → **半选** → 勾上),`TTyCheckBox` 是(未勾 → 勾上 → 半选)。两边各自对齐各自的 LCL 对应物。

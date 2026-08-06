@@ -114,8 +114,9 @@ type
     TTyListBox.PaintItemContent hook. Its Owner is the combo (CreatePopupList does
     Create(Self)), which supplies the shared draw method and the row entries — the combo
     copies its Items (Objects[] included) into this list, so there is no side array that
-    could desync from the names. }
-  TTyComboBoxExPopupList = class(TTyListBox)
+    could desync from the names. Descends from TTyComboPopupList rather than TTyListBox for
+    one reason: to inherit the owner-draw Paint dispatch. Nothing else about it changes. }
+  TTyComboBoxExPopupList = class(TTyComboPopupList)
   protected
     procedure PaintItemContent(P: TTyPainter; const ARowRect: TRect; AIndex: Integer;
       const AStyle: TTyStyleSet); override;
@@ -406,6 +407,12 @@ end;
 procedure TTyComboBoxExPopupList.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
   AIndex: Integer; const AStyle: TTyStyleSet);
 begin
+  { Owner-draw first, and it has to be spelled out here rather than left to the ancestor:
+    this override replaces the whole row, so an inherited call would already be too late.
+    The Collect returns True only when the combo really has both an owner-draw Style and a
+    handler; the row background is already down and the handler runs after EndPaint (the
+    Paint override that dispatches it is inherited from TTyComboPopupList). }
+  if TyComboCollectRowOwnerDraw(Self, ARowRect, AIndex) then Exit;
   { The Owner is the combo (Create(Self) in CreatePopupList); it owns the shared draw
     method and the Images reference. The row entry rides in Objects[] (copied from the
     combo via Items.Assign), so field and popup read the same object. }
