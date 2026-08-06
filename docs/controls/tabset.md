@@ -50,13 +50,18 @@ uses tyControls.TabSet;
 
 ### 自有 published 属性
 
-`TTyTabSet` 在**本类**上仅新增两个 published 属性：
+`TTyTabSet` 在**本类**上新增 `Tabs` / `TabIndex` 两个 published 属性，并把引擎里 `public` 的 `TabPosition` / `MultiLine` / `RaggedRight` 在这里 published（它们不在基类 published，是为了不让 `TTyRibbon` 的对象检查器出现一堆它的 chrome 跟不上的开关）。`RowCount` 是只读的，只能 public，列在这里方便对照：
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `Tabs` | `TStrings` | `[]`（空列表） | 页签标题列表。内部由 `TStringList` 支撑（以获得其 `OnChange`），但声明类型为 `TStrings`。写入时调用 `Assign` 复制内容；列表变化（增删改）触发重绘并把 `TabIndex` 上界夹紧到 `Count-1`。 |
 | `TabIndex` | `Integer` | `-1` | 当前选中页签索引；`-1` 表示无选中。写入等价于调用 `SetTabIndex`（夹紧、触发 `OnChanging` 否决钩子、`DoSelectTab`、`OnChange`）。声明了 `default -1`。 |
 | `TabPosition` | `TTabPosition` | `tpTop` | 标签条贴哪条边。在标签头引擎上是 `public`，在 `TTyTabSet` 与 `TTyPageControl` 上才 published（`TTyRibbon` 是同一引擎的第三个子类，它的 File 页签与 KeyTip 角标钉死在顶边）。`tpLeft` 的纯页签条正是"侧边栏"那个形态，也是本属性在这个控件上最主要的用途。**侧边标签不旋转文字**，条带宽度取最宽的标题——完整规则与和 LCL 的分歧见 [`pagecontrol.md` §6](pagecontrol.md)。 |
+| `MultiLine` | `Boolean` | `False` | 页签放不下时**折行**填满整条带，而不是留溢出箭头横向滚动。打开后**溢出箭头一定消失**、滚动偏移归零——两者互斥。条带厚度变成 `RowCount ×` 一行。纯页签条是最适合折行的形态：它没有页面体来跟它抢空间，多出来的行只花掉控件自己的高度。published 的位置与 `TabPosition` 同理。完整规则见 [`pagecontrol.md` §6](pagecontrol.md)。 |
+| `RaggedRight` | `Boolean` | `False` | `MultiLine` 打开时，每行是否保持自然宽度、行尾留白。**默认 `False` = 拉伸铺满整行**（LCL 的极性：`TCS_RAGGEDRIGHT` 是属性为 `True` 时才设的样式位）。余数逐像素发到行内各页签上，所以行尾正好落在条带边缘。 |
+| `RowCount` | `Integer` | — | **只读**（public，不 published）。折出来的行数：无页签 0，`MultiLine` 关着恒 1。行数是布局的结果不是输入。 |
+
+> **不提供 `ScrollOpposite`**，而且是刻意的：它只在"选中的那一行会被重排到贴着页面体"这个 comctl32 行为存在时才有意义，而本库不做那个重排——它会把选中从渲染状态变成布局输入，并在拖拽重排的过程中把页签从指针底下挪走。理由与代价见 [`pagecontrol.md` §6](pagecontrol.md)。
 
 ### 继承自 `TTyCustomTabStrip` 的 published 成员
 

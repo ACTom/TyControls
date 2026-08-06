@@ -38,6 +38,12 @@ type
       it is published on the concrete strips and not on the shared base. A caption-only
       strip on the left edge is the "sider" shape, which is the main reason to want it. }
     property TabPosition;
+    { Promoted for the reason TabPosition is -- see TTyPageControl.MultiLine. A caption-only
+      strip is the shape most likely to want folding: it has no page body competing for the
+      space, so extra rows cost only the strip's own height. RowCount stays public (read-only,
+      so it cannot be published). }
+    property MultiLine;
+    property RaggedRight;
   end;
 implementation
 

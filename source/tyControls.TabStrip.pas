@@ -79,9 +79,18 @@ type
       control's box. }
     FTabPosition: TTabPosition;
     { Device-px thickness of the band across its minor axis, recomputed by RebuildLayout.
-      Equal to TabHPx on a horizontal band; on a vertical one it is the widest caption box,
-      because the captions are NOT rotated (see RebuildLayout). }
+      ONE ROW is TabHPx on a horizontal band and the widest caption box on a vertical one
+      (the captions are NOT rotated -- see RebuildLayout); the band is FRowCount of those. }
     FBandThickness: Integer;
+
+    { Wrapping. FMultiLine lets the run FOLD instead of overflowing: it fills the band's main
+      extent, then starts another row. FRaggedRight = False (LCL's default, and LCL's polarity
+      -- the STYLE bit is set when the property is True) stretches each row's tabs to fill it.
+      FRowCount is the RESULT of that fold and is therefore read-only, exactly as LCL has it:
+      a setter would create "I asked for 3 rows and only 2 fit", a state with no answer. }
+    FMultiLine: Boolean;
+    FRaggedRight: Boolean;
+    FRowCount: Integer;
 
     { Tab icons: one list on the control, an index per tab, an event with the last word. }
     FImages: TTyVirtualImageList;
@@ -118,6 +127,9 @@ type
     procedure SetTabHeight(AValue: Integer);
     procedure SetTabsClosable(AValue: Boolean);
     procedure SetTabPosition(AValue: TTabPosition);
+    procedure SetMultiLine(AValue: Boolean);
+    procedure SetRaggedRight(AValue: Boolean);
+    function  GetRowCount: Integer;
     procedure SetImages(AValue: TTyVirtualImageList);
     procedure SetImagesWidth(AValue: Integer);
     procedure RebuildLayout(APPI: Integer);
@@ -130,11 +142,10 @@ type
       [Left,Right) x [Top,Bottom) convention every hit test in this unit already uses is
       visible at the one place it is now shared from. }
     function  HitRect(const R: TRect; AX, AY: Integer): Boolean;
-    { The screen coordinate along the band's MAIN axis, and the same test restricted to
-      that axis. Every scan in this unit used to hard-code X for both; a left/right band
-      turns the main axis vertical and these two are the only places that has to know. }
+    { The screen coordinate along the band's MAIN axis. Every scan in this unit used to
+      hard-code X for it; a left/right band turns the main axis vertical and this is the
+      only place that has to know. }
     function  MainOf(AX, AY: Integer): Integer;
-    function  HitMainSpan(const R: TRect; AX, AY: Integer): Boolean;
     function  HitBandMinor(AX, AY: Integer): Boolean;
     { The band's physical rect BEFORE the mirror, and the control's extent along the
       band's main axis. See the implementations. }
@@ -188,6 +199,15 @@ type
       of which assume a top band) declines here in one place instead of shipping a strip
       whose band moved and whose chrome did not. }
     function HeaderTabPosition: TTabPosition; virtual;
+    { Does the run FOLD, as the LAYOUT sees it -- the same shape as HeaderTabPosition and for
+      the same reason. A subclass whose own chrome is sized to ONE row declines here, in one
+      place, instead of growing a band its chrome does not follow. TTyRibbon is that subclass:
+      its File tab, its collapse chevron, its KeyTip chips and two of its MouseDown gates are
+      all computed as `MulDiv(TabHeight, PPI, 96)` -- one row -- so a two-row ribbon band would
+      be drawn two rows tall and answer clicks over one. It needs
+        function TTyRibbon.HeaderMultiLine: Boolean; begin Result := False; end;
+      which is outside this change's edit scope and is reported rather than made. }
+    function HeaderMultiLine: Boolean; virtual;
     { Protected so a subclass can publish the selection under its own name
       (TTyPageControl: ActivePageIndex). Clamps against GetTabCount, fires
       OnChanging/OnChange, calls DoSelectTab. }
@@ -311,6 +331,17 @@ type
         of growing a mirrored copy of it one character away from the original. }
     function ToScreenRect(const AContentRect: TRect): TRect;
     function ToReadingMain(const APt: TPoint): Integer;
+    { The CROSS-axis half of the same inverse, and written here rather than anywhere else so
+      the two cannot drift: they undo the same two steps of ToScreenRect in the same order,
+      and each reads off the axis the other does not.
+
+      They differ in exactly one argument, and it is load-bearing. ToReadingMain may pass a
+      thickness of 0 to BandBoxPx because it reads the MAJOR axis, which the thickness does
+      not place. This reads the MINOR axis, which is the only thing the thickness DOES place
+      (`tpBottom` puts the band at `AH - AThickness`, `tpRight` at `AW - AThickness`), so it
+      has to pay for the real one. Passing 0 here would answer as if every band were at the
+      top-left, which is right at tpTop and off by the control's whole extent elsewhere. }
+    function ToReadingCross(const APt: TPoint): Integer;
     { The horizontal-band form of ToReadingMain, kept because it is public API and because
       a top/bottom band is the only shape whose main axis is x. On a LEFT/RIGHT band the
       main axis is y and an x alone cannot answer: ask ToReadingMain. }
@@ -419,6 +450,43 @@ type
       one, which is what every modern themed tab rail does and what this painter can draw
       crisply at any DPI. docs/controls/pagecontrol.md records the divergence. }
     property TabPosition: TTabPosition read FTabPosition write SetTabPosition default tpTop;
+
+    { Let the run FOLD rather than overflow. LCL's name, LCL's default, and LCL's mutual
+      exclusion with the scroll affordance: with MultiLine on there is nothing off-screen to
+      scroll to, so the two arrow bands are dropped and the offset is pinned at 0. Half of
+      this feature would be worse than none -- a strip that both wrapped AND kept the arrows
+      would eat 16px at each end of every row to reach content that is already visible.
+
+      It generalises to the side bands with no code of its own, because the layout is 1-D:
+      a tpLeft band that folds grows a second COLUMN, which is the same statement about the
+      cross axis that a second row is on a top band. comctl32's TCS_MULTILINE + TCS_VERTICAL
+      does the same, so this is one of the places we and LCL agree.
+
+      What it does NOT do, deliberately, is move the rows about when the selection changes.
+      Delphi/comctl32 re-seat the selected row next to the page body (and TCS_SCROLLOPPOSITE
+      picks which way the others go). We do not, and therefore do not offer ScrollOpposite
+      either: that rearrangement is what turns selection from a RENDER state into a LAYOUT
+      input, and this control has a drag-reorder gesture comctl32 has never had -- during a
+      drag the selection is pinned to the POSITION, so a reorder across a row boundary would
+      re-fold the band underneath the pointer mid-gesture. docs/controls/pagecontrol.md
+      records the divergence.
+
+      PUBLIC here and PUBLISHED on TTyPageControl / TTyTabSet, for the reason TabPosition is:
+      TTyRibbon's chrome is one row tall. See HeaderMultiLine. }
+    property MultiLine: Boolean read FMultiLine write SetMultiLine default False;
+    { With MultiLine on, should a row keep its tabs' natural extents and leave the tail of the
+      row empty? LCL's polarity, which reads backwards until you look at the style bit:
+      TCS_RAGGEDRIGHT is set when the property is TRUE, and WITHOUT it comctl32 stretches each
+      row to fill the band. So False -- the default -- is the JUSTIFIED one. Inert while
+      MultiLine is off, where there is only ever one row and nothing to justify against. }
+    property RaggedRight: Boolean read FRaggedRight write SetRaggedRight default False;
+    { How many rows the run folded into: 0 with no tabs, 1 whenever MultiLine is off.
+
+      READ-ONLY, as LCL has it, and public rather than published for the same reason it is
+      read-only: it is the RESULT of the fold, so it has no setter, and a published property
+      without a setter is one TWriter.WriteProperty skips and the Object Inspector reports as
+      unreadable. }
+    property RowCount: Integer read GetRowCount;
   published
     { The icon source for the tab headers, indexed by the per-tab image index.
 
@@ -490,6 +558,9 @@ begin
   FTabsClosable := False;
   FTabPosition := tpTop;
   FBandThickness := 0;
+  FMultiLine := False;
+  FRaggedRight := False;
+  FRowCount := 0;
   FImagesWidth := 0;
   FAnimationsEnabled := True;
   { Active-tab header cross-fade: rests at 1 (settled = active style), ~120ms full
@@ -564,6 +635,11 @@ end;
 function TTyCustomTabStrip.HeaderTabPosition: TTabPosition;
 begin
   Result := FTabPosition;
+end;
+
+function TTyCustomTabStrip.HeaderMultiLine: Boolean;
+begin
+  Result := FMultiLine;
 end;
 
 function TTyCustomTabStrip.GetTabImageIndex(AIndex: Integer): Integer;
@@ -688,6 +764,41 @@ begin
   Invalidate;
 end;
 
+{ Folding changes the band's THICKNESS (one row becomes RowCount rows), which is the client
+  rect's inset -- so this is the same Realign-not-just-Invalidate rule SetTabHeight and
+  SetTabPosition already carry, and for the same reason: Invalidate alone would leave every
+  alClient page at its old bounds, covering the rows that just appeared.
+
+  The scroll offset is dropped rather than clamped. Turning MultiLine ON removes overflow
+  entirely, so any surviving offset would be a shift with nothing left to shift towards;
+  turning it OFF re-measures the run from scratch and RebuildLayout re-clamps anyway. }
+procedure TTyCustomTabStrip.SetMultiLine(AValue: Boolean);
+begin
+  if FMultiLine = AValue then Exit;
+  FMultiLine := AValue;
+  FHeaderScroll := 0;
+  Realign;
+  Invalidate;
+end;
+
+{ Justification only moves tabs ALONG their row, so unlike MultiLine this cannot change the
+  band's thickness and an Invalidate would do. Realign anyway: it is one layout pass, and the
+  alternative is a pair of near-identical setters where one re-lays and the other does not,
+  which is the kind of difference that survives a review and then has to be found. }
+procedure TTyCustomTabStrip.SetRaggedRight(AValue: Boolean);
+begin
+  if FRaggedRight = AValue then Exit;
+  FRaggedRight := AValue;
+  Realign;
+  Invalidate;
+end;
+
+function TTyCustomTabStrip.GetRowCount: Integer;
+begin
+  RebuildLayout(Font.PixelsPerInch);
+  Result := FRowCount;
+end;
+
 procedure TTyCustomTabStrip.SetImages(AValue: TTyVirtualImageList);
 begin
   if FImages = AValue then Exit;
@@ -743,14 +854,6 @@ begin
   if BandIsVertical then Result := AY else Result := AX;
 end;
 
-function TTyCustomTabStrip.HitMainSpan(const R: TRect; AX, AY: Integer): Boolean;
-begin
-  if BandIsVertical then
-    Result := (AY >= R.Top) and (AY < R.Bottom)
-  else
-    Result := (AX >= R.Left) and (AX < R.Right);
-end;
-
 { Is the point on the band, measured across the band's MINOR axis ONLY?
 
   Only the minor one, and that is not laziness: an overflowing run reaches PAST the control
@@ -777,14 +880,20 @@ begin
   Result := HeaderTabPosition in [tpLeft, tpRight];
 end;
 
-{ Thickness across the band's MINOR axis. A top/bottom band is one tab-height thick and
-  costs nothing to answer. A left/right band is as thick as its widest caption box, which
-  only RebuildLayout knows -- so the measuring pass runs only for the shapes that need it,
-  and a default strip pays exactly what it paid before. }
+{ Thickness across the band's MINOR axis. A single-row top/bottom band is one tab-height
+  thick and costs nothing to answer. Everything else -- a left/right band, whose thickness is
+  its widest caption box, and ANY folded band, whose thickness is RowCount rows -- is a
+  number only RebuildLayout knows, so the measuring pass runs for exactly the shapes that
+  need it and a default strip pays what it always paid.
+
+  MultiLine had to join BandIsVertical in that test. It is the one line of the band-geometry
+  chain that folding does change: InsetForBand, BandBoxPx and BandRect all already speak in
+  terms of this answer, which is the whole reason the row count is folded into the THICKNESS
+  and not carried separately. }
 function TTyCustomTabStrip.BandThicknessPx: Integer;
 begin
-  if not BandIsVertical then Exit(TabHPx(Font.PixelsPerInch));
   if TabHPx(Font.PixelsPerInch) <= 0 then Exit(0);   // TabHeight = 0 still means NO band
+  if not (BandIsVertical or HeaderMultiLine) then Exit(TabHPx(Font.PixelsPerInch));
   RebuildLayout(Font.PixelsPerInch);
   Result := FBandThickness;
 end;
@@ -845,10 +954,13 @@ var
   TabH, Pad, MinW, CloseSize, Gap, CloseSlot, Margin: Integer;
   IconSize, IconGap, IconSlot: Integer;
   TabStyle: TTyStyleSet;
-  I, X, TW, MainExt, Cross, Cy, Lead: Integer;
-  MainVisible, AffordanceW, ArrowW, MaxScroll: Integer;
-  Vert: Boolean;
-  Boxes: array of Integer;
+  I, J, K, X, TW, MainExt, RowThick, Cy, Lead: Integer;
+  Row, CrossLo, CrossHi, RowLen, Extra, Share, Rem, N: Integer;
+  MainVisible, WrapLimit, StripLen, AffordanceW, ArrowW, MaxScroll: Integer;
+  Vert, Multi: Boolean;
+  Boxes: array of Integer;   // pass 1: each tab's measured caption box
+  Mains: array of Integer;   // pass 2: each tab's FINAL main-axis extent (post-justification)
+  Rows:  array of Integer;   // pass 2: which row each tab folded into
   Band: TRect;
   dispCap: string;
   mpm: Integer;
@@ -858,6 +970,7 @@ begin
   SetLength(FIconRects, GetTabCount);
 
   Vert      := BandIsVertical;
+  Multi     := HeaderMultiLine;
   TabH      := TabHPx(APPI);
   Pad       := MulDiv(ActiveController.Metric('--tab-padding', TyTabPad), APPI, 96);
   MinW      := MulDiv(ActiveController.Metric('--tab-min-width', TyTabMinWidth), APPI, 96);
@@ -878,7 +991,7 @@ begin
     builder called TW and used directly as the header width; it still is, and on a
     top/bottom band nothing below changes it. }
   SetLength(Boxes, GetTabCount);
-  Cross := TabH;
+  RowThick := TabH;
   for I := 0 to GetTabCount - 1 do
   begin
     TyParseMnemonic(GetTabCaption(I), dispCap, mpm);
@@ -893,31 +1006,127 @@ begin
       if TW < MinW then TW := MinW;
     Boxes[I] := TW;
     { A side band is only as wide as it has to be, and never narrower than one row. }
-    if Vert and (TW > Cross) then Cross := TW;
+    if Vert and (TW > RowThick) then RowThick := TW;
   end;
-  FBandThickness := Cross;
 
-  { Pass 2 -- lay the run out. The close slot sits at the trailing edge of the caption
-    box and the icon at its leading edge; the caption box runs along the MAIN axis on a
-    top/bottom band and along the CROSS axis on a left/right one, because the text itself
-    is upright in all four. }
-  X := 0;
+  { Pass 2a -- FOLD. RowThick is ONE row's extent across the cross axis, and it comes from
+    the same two places it always did (TabHPx off --control-height on a top/bottom band, the
+    widest measured caption box on a side one); nothing here introduces a metric of its own.
+
+    The wrap limit is the main extent MINUS the subclass's leading inset, because the run is
+    drawn shifted by that inset (HeaderShiftPx) and a row measured against the full extent
+    would fold one tab too late and hang it off the end.
+
+    `(X > 0)` is not optional, and not for the reason it looks like. This is a FOR loop over
+    a fixed tab count, so omitting it cannot spin -- what it does is fold a tab that is wider
+    than the whole band at the START of its row, pushing it onto the next one and leaving the
+    row it came from EMPTY. An over-wide tab has to be allowed to overhang a row of its own;
+    there is nowhere narrower to put it. }
+  MainVisible := MainVisiblePx;
+  WrapLimit   := MainVisible - HeaderLeftInset;
+  if WrapLimit < 1 then WrapLimit := 1;
+
+  SetLength(Rows,  GetTabCount);
+  SetLength(Mains, GetTabCount);
+  Row := 0;
+  X   := 0;
   for I := 0 to GetTabCount - 1 do
   begin
     if Vert then MainExt := TabH else MainExt := Boxes[I];
-    FHeaderRects[I] := Rect(X, 0, X + MainExt, Cross);
+    if Multi and (X > 0) and (X + MainExt > WrapLimit) then
+    begin
+      Inc(Row);
+      X := 0;
+    end;
+    Rows[I]  := Row;
+    Mains[I] := MainExt;
+    Inc(X, MainExt);
+  end;
+
+  if GetTabCount = 0 then
+  begin
+    { No tabs folded into no rows -- but the BAND is still there, exactly as it was before
+      folding existed (an empty strip has always shown one row of backdrop). Deriving the
+      thickness from FRowCount here would delete it. }
+    FRowCount      := 0;
+    FBandThickness := RowThick;
+  end
+  else
+  begin
+    FRowCount      := Row + 1;
+    FBandThickness := FRowCount * RowThick;
+  end;
+
+  { Pass 2b -- JUSTIFY. Not folded into 2a: how many tabs share a row is only known once the
+    fold is finished, so the stretch has to be a separate sweep over completed rows. It
+    re-measures nothing; it only widens numbers pass 1 already produced.
+
+    The remainder is handed out one pixel at a time rather than dropped. `Extra div N` alone
+    leaves the row up to N-1 px short of the band edge, which on a skin with a visible tab
+    border is a ragged notch at the end of every row -- the exact thing RaggedRight = False
+    exists to remove. }
+  if Multi and (not FRaggedRight) then
+  begin
+    I := 0;
+    while I < GetTabCount do
+    begin
+      J      := I;
+      RowLen := 0;
+      while (J < GetTabCount) and (Rows[J] = Rows[I]) do
+      begin
+        Inc(RowLen, Mains[J]);
+        Inc(J);
+      end;
+      N     := J - I;
+      Extra := WrapLimit - RowLen;
+      if Extra > 0 then            // an over-wide lone tab OVERHANGS; it is never shrunk
+      begin
+        Share := Extra div N;
+        Rem   := Extra mod N;
+        for K := I to J - 1 do
+        begin
+          Inc(Mains[K], Share);
+          if (K - I) < Rem then Inc(Mains[K]);
+        end;
+      end;
+      I := J;
+    end;
+  end;
+
+  { Pass 2c -- PLACE. The close slot sits at the trailing edge of the caption box and the
+    icon at its leading edge; the caption box runs along the MAIN axis on a top/bottom band
+    and along the CROSS axis on a left/right one, because the text itself is upright in all
+    four. Every cross coordinate is measured from CrossLo -- the row's own leading edge --
+    rather than from the band's, which is what carries the close glyph and the icon down onto
+    row 1 with their tab instead of stranding them all on row 0. At RowCount = 1 CrossLo is 0
+    and CrossHi is the band thickness, so this is byte-identical to the unfolded arithmetic. }
+  X   := 0;
+  Row := -1;
+  for I := 0 to GetTabCount - 1 do
+  begin
+    if Rows[I] <> Row then
+    begin
+      Row := Rows[I];
+      X   := 0;
+    end;
+    MainExt := Mains[I];
+    CrossLo := Row * RowThick;
+    CrossHi := CrossLo + RowThick;
+    FHeaderRects[I] := Rect(X, CrossLo, X + MainExt, CrossHi);
 
     if GetTabClosableAt(I) then
     begin
       if Vert then
       begin
-        Cy := X + (TabH - CloseSize) div 2;      // centred down the row
-        FCloseRects[I] := Rect(Cy, Cross - Margin - CloseSize,
-                               Cy + CloseSize, Cross - Margin);
+        { Centred down the row, measured against the tab's OWN extent so a justified row
+          (whose rows are taller than TabH) keeps the glyph in the middle of its tab. }
+        Cy := X + (MainExt - CloseSize) div 2;
+        FCloseRects[I] := Rect(Cy, CrossHi - Margin - CloseSize,
+                               Cy + CloseSize, CrossHi - Margin);
       end
       else
       begin
-        Cy := (TabH - CloseSize) div 2;
+        Cy := CrossLo + (RowThick - CloseSize) div 2;
         FCloseRects[I] := Rect(X + MainExt - Margin - CloseSize, Cy,
                                X + MainExt - Margin, Cy + CloseSize);
       end;
@@ -929,12 +1138,12 @@ begin
     begin
       if Vert then
       begin
-        Lead := X + (TabH - IconSize) div 2;     // centred down the row
-        FIconRects[I] := Rect(Lead, Pad, Lead + IconSize, Pad + IconSize);
+        Lead := X + (MainExt - IconSize) div 2;     // centred down the row
+        FIconRects[I] := Rect(Lead, CrossLo + Pad, Lead + IconSize, CrossLo + Pad + IconSize);
       end
       else
       begin
-        Cy := (TabH - IconSize) div 2;
+        Cy := CrossLo + (RowThick - IconSize) div 2;
         FIconRects[I] := Rect(X + Pad, Cy, X + Pad + IconSize, Cy + IconSize);
       end;
     end
@@ -944,12 +1153,23 @@ begin
     Inc(X, MainExt);
   end;
 
-  { X is now the total (unshifted) length of the run. Decide whether it overflows the
-    control along the MAIN axis and, if so, reserve an arrow affordance band (two
-    Scale(16) arrows) at the run's two ends. }
-  MainVisible  := MainVisiblePx;
+  { The run's main extent is the LONGEST row -- which is the last header's Right while there
+    is only one row, and is not once there are several (X now holds the last row's length,
+    which on a folded strip is usually the shortest). Decide whether that overflows the
+    control along the MAIN axis and, if so, reserve an arrow affordance band (two Scale(16)
+    arrows) at the run's two ends.
+
+    MULTILINE FORCES THE AFFORDANCE OFF, and that is the feature's one hard interlock rather
+    than a tidy-up: folding exists precisely so that nothing is off-screen, so arrows would
+    reserve 16px at each end of every row to reach content already in view -- and the first
+    tab of every row would be drawn under one of them. FHeaderScroll follows automatically:
+    with no affordance MaxScroll is 0 and the clamp at the bottom of this function pins it. }
+  StripLen := 0;
+  for I := 0 to GetTabCount - 1 do
+    if FHeaderRects[I].Right > StripLen then StripLen := FHeaderRects[I].Right;
+
   AffordanceW  := MulDiv(ActiveController.Metric('--tab-arrow-band', TyTabArrowBand), APPI, 96) * 2;
-  FShowScrollAffordance := X > MainVisible;
+  FShowScrollAffordance := (not Multi) and (StripLen > MainVisible);
   if FShowScrollAffordance then
   begin
     ArrowW := MulDiv(ActiveController.Metric('--tab-arrow-band', TyTabArrowBand), APPI, 96);
@@ -971,10 +1191,11 @@ begin
       x axis cannot reorder a run that goes down the page (the plan's logical-vs-visual
       rule, §6.3.3), so only the horizontal case has ends to trade.
 
-      Built from the LOCAL Cross rather than from BandRect, which is the same rect: BandRect
-      asks BandThicknessPx, and on a vertical band BandThicknessPx asks RebuildLayout --
-      i.e. this function. Cross is that answer, already computed above. }
-    Band := BandBoxPx(Width, Height, Cross);
+      Built from the LOCAL FBandThickness rather than from BandRect, which is the same rect:
+      BandRect asks BandThicknessPx, and on a vertical (or folded) band BandThicknessPx asks
+      RebuildLayout -- i.e. this function. FBandThickness is that answer, set just above.
+      Only reached with Multi = False, so the band is one row here either way. }
+    Band := BandBoxPx(Width, Height, FBandThickness);
     if HeaderRightToLeft then
       Band := BidiFlipRect(Band, Rect(0, 0, Width, 0), True);
     if Vert then
@@ -1001,10 +1222,12 @@ begin
     AffordanceW := 0; // no band reserved when content fits
   end;
 
-  { Clamp the current scroll to the new maximum. Max scroll is the overshoot of
-    the run past the visible extent minus the affordance band. }
+  { Clamp the current scroll to the new maximum. Max scroll is the overshoot of the run past
+    the visible extent minus the affordance band. Measured off StripLen and not off X: X now
+    holds the LAST ROW's length, which is the same number only while there is one row -- and
+    a folded strip never gets here anyway, because folding cleared the affordance above. }
   if FShowScrollAffordance then
-    MaxScroll := X - (MainVisible - AffordanceW)
+    MaxScroll := StripLen - (MainVisible - AffordanceW)
   else
     MaxScroll := 0;
   if MaxScroll < 0 then MaxScroll := 0;
@@ -1032,29 +1255,34 @@ begin
     Result := FCloseRects[AIndex];
 end;
 
-{ Total unshifted width of the header strip = right edge of the last header
-  (rebuilt at the control's current PPI). }
+{ Unshifted main extent of the header strip: the LONGEST row (rebuilt at the control's
+  current PPI). While the run is one row that is the last header's right edge, which is what
+  this used to read directly; once the run folds, the last header is at the end of the last
+  row -- normally the SHORTEST one -- and reading it would report a strip narrower than the
+  one on screen. }
 function TTyCustomTabStrip.TyHeaderStripWidth: Integer;
+var
+  I: Integer;
 begin
   RebuildLayout(Font.PixelsPerInch);
-  if Length(FHeaderRects) = 0 then
-    Result := 0
-  else
-    Result := FHeaderRects[High(FHeaderRects)].Right;
+  Result := 0;
+  for I := 0 to High(FHeaderRects) do
+    if FHeaderRects[I].Right > Result then Result := FHeaderRects[I].Right;
 end;
 
 { Largest valid scroll: the overshoot of the run past the visible MAIN extent minus
   the reserved arrow band. 0 when the strip fits. Mirrors RebuildLayout's clamp. }
 function TTyCustomTabStrip.TyMaxHeaderScroll: Integer;
 var
-  StripW, MainVisible, AffordanceW: Integer;
+  I, StripW, MainVisible, AffordanceW: Integer;
 begin
   RebuildLayout(Font.PixelsPerInch);
+  { A folded strip has no affordance (RebuildLayout clears it), so this is the ONE place
+    MultiLine's "no scrolling" promise is observable from outside, and it answers 0. }
   if not FShowScrollAffordance then Exit(0);
-  if Length(FHeaderRects) = 0 then
-    StripW := 0
-  else
-    StripW := FHeaderRects[High(FHeaderRects)].Right;
+  StripW := 0;
+  for I := 0 to High(FHeaderRects) do
+    if FHeaderRects[I].Right > StripW then StripW := FHeaderRects[I].Right;
   MainVisible  := MainVisiblePx;
   AffordanceW  := MulDiv(ActiveController.Metric('--tab-arrow-band', TyTabArrowBand), Font.PixelsPerInch, 96) * 2;
   Result := StripW - (MainVisible - AffordanceW);
@@ -1154,6 +1382,31 @@ begin
     Result := APt.Y - Band.Top     // main runs down the side; x carried the cross axis
   else
     Result := MX - Band.Left;      // at tpTop Band.Left is 0, so this is the un-reflected x
+end;
+
+{ The same inverse read off the OTHER axis, deliberately written next to ToReadingMain and
+  built out of the same two undone steps in the same order, so that a change to one is in the
+  reviewer's eye when the other is edited. Two inverses of one transform that live apart is
+  how a fold ends up drawn on row 1 and answered on row 0.
+
+  The one asymmetry is the thickness handed to BandBoxPx, and it is not an oversight in
+  either direction. ToReadingMain reads the axis the band RUNS along, which BandBoxPx places
+  at 0 for every thickness, so it passes 0 and skips measuring the strip. This reads the axis
+  the band is THICK along, which is the only thing that argument moves, so it has to pay for
+  the real number -- and on a folded or vertical band paying for it means a layout pass. }
+function TTyCustomTabStrip.ToReadingCross(const APt: TPoint): Integer;
+var
+  CX: Integer;
+  Band: TRect;
+begin
+  CX := APt.X;
+  if HeaderRightToLeft then
+    CX := BidiFlipRect(Rect(CX, 0, CX + 1, 0), Rect(0, 0, Width, 0), True).Left;
+  Band := BandBoxPx(Width, Height, BandThicknessPx);
+  if BandIsVertical then
+    Result := CX - Band.Left     // cross runs across the side band; x carried it
+  else
+    Result := APt.Y - Band.Top;  // at tpTop Band.Top is 0, so this is the plain y
 end;
 
 function TTyCustomTabStrip.ToReadingX(AX: Integer): Integer;
@@ -1310,10 +1563,19 @@ begin
     if HitRect(FScrollLeftRect, X, Y) then Exit;
     if HitRect(FScrollRightRect, X, Y) then Exit;
   end;
+  { BOTH axes, on every band and whether it folded or not.
+
+    It used to be the MAIN axis alone, because a single-row tab spans the whole band across
+    the cross axis and the HitBandMinor gate above had already tested that -- the two are the
+    same predicate there, which is why nothing below changes for an unfolded strip. They stop
+    being the same the moment the run folds: two tabs one above the other cover the same main
+    span, a main-only scan finds the row-0 one first, and every tab on row 1 becomes
+    unclickable while still being drawn. Written as the unconditional two-axis test rather
+    than as `if MultiLine then` so there is one rule to check against the paint, not two. }
   for I := 0 to GetTabCount - 1 do
   begin
     HR := ToScreenRect(FHeaderRects[I]);
-    if HitMainSpan(HR, X, Y) then Exit(I);
+    if HitRect(HR, X, Y) then Exit(I);
   end;
 end;
 
@@ -1368,22 +1630,59 @@ end;
 
 function TTyCustomTabStrip.TyDropIndexAtPoint(const APt: TPoint; APPI: Integer): Integer;
 var
-  I, Mid, RM: Integer;
+  I, Mid, RM, RC: Integer;
   HR: TRect;
+  Folded, Past: Boolean;
 begin
   if GetTabCount = 0 then Exit(0);
   RebuildLayout(APPI);
   RM := ToReadingMain(APt);
-  Result := GetTabCount - 1; // default: past every midpoint -> last
+
+  { Is there any row STRUCTURE to compare? Asked of the finished layout (FRowCount) and not
+    of the MultiLine property, because that is the condition the comparison below actually
+    needs -- MultiLine with everything on one row has no rows to tell apart either.
+
+    The one-row branch is SPELLED OUT rather than derived. The tempting version is to let the
+    folded comparison degenerate, and it does not: TabHeight = 0 is a shipped capability (no
+    band at all), it makes RowThick and therefore every row's cross extent ZERO, and a
+    half-open `RC < HR.Bottom` can never be satisfied against a zero-height row -- the scan
+    would fall through every tab and answer with its default for every point on the strip.
+    That is a live regression in TyDropIndexAt, which is pure public API and does not go
+    through the HitBandMinor gate that hides the rest of a zero-height band. }
+  Folded := FRowCount > 1;
+
+  { The pointer's row, CLAMPED into the band. A drag leaves the band constantly, and
+    unclamped the comparison would answer with the row above the first or below the last --
+    different SLOTS, not nearby ones. Only meaningful while folded, and only computed then:
+    a zero-thickness band has no range to clamp into. }
+  RC := ToReadingCross(APt);
+  if Folded then
+  begin
+    if RC < 0 then RC := 0;
+    if RC > FBandThickness - 1 then RC := FBandThickness - 1;
+  end;
+
+  Result := GetTabCount - 1; // default: past every midpoint on the last row -> last
   for I := 0 to GetTabCount - 1 do
   begin
     HR := FHeaderRects[I];
     OffsetRect(HR, HeaderShiftPx, 0); // shifted midpoint (incl. arrow-band inset)
-    { Content space always carries MAIN in x, whichever edge the band ended up on -- so
-      this stays the one forward comparison, and it is the paint's own midpoint because
-      ToReadingMain is exactly the transform that placed the paint run backwards. }
+    { Content space always carries MAIN in x and CROSS in y, whichever edge the band ended up
+      on -- so this stays the one forward comparison, and it is the paint's own midpoint
+      because ToReadingMain/ToReadingCross are exactly the transform that placed the paint,
+      run backwards.
+
+      LEXICOGRAPHIC (row, main): tab I is past the pointer if its row is past the pointer's,
+      or they share a row and its midpoint is. A main-only rule answers "the nearest midpoint
+      anywhere", so dragging up from row 1 into row 0 would drop at whichever row-1 tab
+      happened to have a midpoint past the pointer -- a whole slot wrong, silently, and only
+      in the gesture nobody re-tests. }
     Mid := (HR.Left + HR.Right) div 2;
-    if RM < Mid then
+    if Folded then
+      Past := (RC < HR.Top) or ((RC < HR.Bottom) and (RM < Mid))
+    else
+      Past := RM < Mid;          // byte-for-byte the rule this shipped with
+    if Past then
     begin
       Result := I;
       Break;
@@ -1826,7 +2125,7 @@ begin
       for I := 0 to GetTabCount - 1 do
       begin
         HdrRect := HeaderRectShifted(I);
-        if HitMainSpan(HdrRect, X, Y) then
+        if HitRect(HdrRect, X, Y) then     // both axes -- see IndexOfTabAt
         begin
           CloseRect := ToScreenRect(FCloseRects[I]);
           if GetTabClosableAt(I) and HitRect(CloseRect, X, Y) then
@@ -1912,7 +2211,7 @@ begin
       for I := 0 to GetTabCount - 1 do
       begin
         HdrRect := HeaderRectShifted(I);
-        if HitMainSpan(HdrRect, X, Y) then
+        if HitRect(HdrRect, X, Y) then     // both axes -- see IndexOfTabAt
         begin
           NewHover := I;
           { Independent close (x) hover: only when closable and the pointer is
