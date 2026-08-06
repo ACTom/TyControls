@@ -43,6 +43,30 @@ type
       and dropped from any ported .lfm that pinned it (LCL: stdctrls.pp:193-194). }
     property ClientWidth;
     property ClientHeight;
+    { Docking, republished exactly as TGroupBox does and for the same reason TTyPanel does
+      it (tyControls.Panel.pas): every member here is TWinControl's or TControl's own, and
+      the dock manager that drives them is LCL code we do not touch.
+
+      It really is republish and not re-implementation, and that is measured rather than
+      assumed -- a real drag (mouse_event into the system input queue, hit-tested by
+      Windows, dispatched through LCL's DragManager) docks a control into a ty group box
+      with no source change at all, and the same probe with DockSite:=False refuses it.
+      The findings are in plans/2026-08-04-parity-remaining-programs.md. TTyFormSurface
+      does not get in the dock manager's way either; the site's Parent was the surface.
+
+      DockSite/UseDockManager/OnDockDrop/OnDockOver/OnUnDock are public on TWinControl;
+      OnGetSiteInfo/OnGetDockCaption and OnStartDock/OnEndDock are PROTECTED, so before
+      this no route reached those four -- not the designer, and not hand-written code
+      either. }
+    property DockSite;
+    property UseDockManager;
+    property OnDockDrop;
+    property OnDockOver;
+    property OnUnDock;
+    property OnGetSiteInfo;
+    property OnGetDockCaption;
+    property OnStartDock;
+    property OnEndDock;
     property Align;
     property Anchors;
     property StyleClass;

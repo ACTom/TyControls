@@ -169,7 +169,7 @@ LCL 的 `TSpeedButton` 和 `TPaintBox` 都是 `TGraphicControl` —— **没有�
 | ~~`TTyComboBoxEx`~~ | ~~`ItemsEx` 集合(`TComboExItem`)~~ | **审计写错了 —— 这个早就有**:`TTyComboExItem` 的 `Caption`/`ImageIndex`/`Indent`/`OverlayImageIndex`/`SelectedImageIndex`/`Data` 与 LCL 的 `TComboExItem` 逐项对得上,`ItemsEx` 是 published 的集合、设计期可编辑。核过 `source/tyControls.ComboBoxEx.pas` |
 | `TTyMaskEdit` | LCL 掩码语言(~20 个 token)、槽内定位编辑 | 掩码语言是我们自己的三码;光标不能落进任意槽 |
 | `TTyDateTimePicker` | 整个 null/空日期模型(`NullInputAllowed`/`NullDate`) | 字段清不空,"未填写"表达不了 |
-| `TTySpinEdit` | `TFloatSpinEdit`(`Value: Double`、`DecimalPlaces`) | 小数版本整个没有 |
+| ~~`TTySpinEdit`~~ | ~~`TFloatSpinEdit`(`Value: Double`、`DecimalPlaces`)~~ | **已做**:新控件 `TTyFloatSpinEdit = class(TTyNumericEdit)`(自己的单元 `tyControls.FloatSpinEdit`),不是 `TTySpinEdit` 的后代——LCL 把家族反着建(`spin.pp:146`),且本控件三个 `Integer` 的 public virtual 缝已有外部覆写者。按钮走 `TTyEdit` 的 `RightReserve`/`PaintTrailing`/`TrailingZone`。`DecimalPlaces` 沿用本库既有拼法 `Decimals`(继承自 `TTyNumericEdit`)。见 `docs/controls/floatspinedit.md` |
 | `TTyUpDown` | `Associate`、`ArrowKeys` | 上下按钮绑不到伴随编辑框 |
 | `TTyImageCollection` | 设计期像素流式化、多分辨率母版 | 图标进不了 `.lfm`;HiDPI 只能缩放不能换母版 |
 | `TTyValueListEditor` | `KeyOptions` | 运行时能不能改键/加行/删行,没有开关 |

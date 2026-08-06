@@ -5,7 +5,8 @@ uses
   Classes, SysUtils, Types, TypInfo, Controls, Forms, Graphics, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Base, tyControls.Panel, tyControls.ScrollBox, tyControls.TabStrip,
-  tyControls.TabSheet, tyControls.PageControl, tyControls.Splitter;
+  tyControls.TabSheet, tyControls.PageControl, tyControls.Splitter,
+  tyControls.ControlBar, tyControls.GroupBox;
 
 type
   { The dock probe. The audit claimed TTyPanel could not be a dock site "at all"; the
@@ -313,8 +314,19 @@ var
   I: Integer;
 begin
   for I := Low(Names) to High(Names) do
+  begin
     AssertTrue('TTyPanel must publish ' + Names[I],
       GetPropInfo(TTyPanel, Names[I]) <> nil);
+    { TTyControlBar = class(TTyPanel), so it inherits the whole surface for free. Asserted
+      rather than assumed: an intervening class that stopped descending from TTyPanel would
+      take nine designer properties away with it and nothing else would notice. }
+    AssertTrue('TTyControlBar must publish ' + Names[I],
+      GetPropInfo(TTyControlBar, Names[I]) <> nil);
+    { A group box is a dock site in LCL and answers a real drag here -- the empirical run
+      is written up in plans/2026-08-04-parity-remaining-programs.md. }
+    AssertTrue('TTyGroupBox must publish ' + Names[I],
+      GetPropInfo(TTyGroupBox, Names[I]) <> nil);
+  end;
 end;
 
 { --- TTyPanel ------------------------------------------------------------------- }
