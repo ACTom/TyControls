@@ -529,6 +529,10 @@ msgstr "最小 "
 msgid "Max "
 msgstr "最大 "
 
+#: tycontrols.strconsts.rsgridcheckedword
+msgid "yes"
+msgstr "是"
+
 #: tycontrols.strconsts.rsgridcountprefix
 msgid "Count "
 msgstr "计数 "
@@ -558,10 +562,6 @@ msgstr "搜索"
 #: tycontrols.strconsts.rsgridfilterselectall
 msgid "(Select all)"
 msgstr "(全选)"
-
-#: tycontrols.strconsts.rsgridcheckedword
-msgid ""
-msgstr "是"
 
 #: tycontrols.strconsts.rstyupdownalreadyassociated
 #, object-pascal-format

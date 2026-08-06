@@ -52,6 +52,50 @@ headless 测不出来 —— 停靠走的是真实鼠标与窗口消息。
 **优先级判断**:受众小(这是框架管道,不是用户天天看见的东西),但**如果验证下来真是几行**,
 那它的性价比在整个剩余清单里排第一。
 
+### 实证结果(2026-08-06,真机)——**结论:就是几行,4 条可以全收**
+
+探针:`.lfm` 建的 `TTyForm`(带真 `TTyTitleBar`),四个停靠站放在 `TTyFormSurface` 里,
+拖的是**真鼠标输入**(`mouse_event` 注入系统输入队列,由 Windows 命中测试、走真实消息泵和
+LCL `DragManager`),**不是 `ManualDock`**。
+
+**先说一件必须先查的事:`TTyPanel` 这 9 个成员早在 `4e3376a` 就已经 republish 了。**
+提要里"先在 `TTyPanel` 上 republish"这一步不用做——它已经在。
+(又一次 `capability-built-but-not-wired`:说"缺 X"之前先查 X 在不在。)
+
+真机拖放,四个站**全部接受停靠,且一行源码都没改**(`DockSite` 在 `TWinControl` 上是
+public,所以能从代码里打开来测):
+
+| 站 | 真拖放 | `DockClientCount` | RTTI 已 published |
+|---|---|---|---|
+| `TTyPanel` | DOCKED | 0→1 | **9/9**(`4e3376a`) |
+| `TTyGroupBox` | DOCKED | 0→1 | **0/9** |
+| `TTyPageControl` | DOCKED | 0→1 | **0/9** |
+| `TTyControlBar` | DOCKED | 0→1 | **9/9**(继承自 `TTyPanel`,白捡) |
+
+`TTyPanel` 上把九个事件全接上跑一遍,真拖放依次触发:
+`OnStartDock 1 / OnGetSiteInfo 25 / OnDockOver 17 / OnDockDrop 1 / OnEndDock 1(Target=Site)`,
+结束后 `DockClient.Parent=Site`、`HostDockSite=Site`、`DockClientCount=1`。
+
+**关键结构问题的答案:`TTyFormSurface` 不挡。** 站的 `Parent` 就是 `Surface`,
+`AdjustClientRect` 也没有妨碍 `FindDragTarget` 找到它。
+
+**探针自身做过变异测试**(否则"4/4 全 DOCKED"可能只是个永远打印 DOCKED 的假绿):
+同一段代码、同一次拖放,只把 `DockSite` 置 `False` →
+`REFUSED,DockClientCount 0->0,DockDrop=0,HostDockSite=nil`。探针分得出来。
+
+**所以剩下的工作量 = 给 `TTyGroupBox` 和 `TTyPageControl` 各补 9 行 `property`,没有实现。**
+(这两个文件本轮有别的 agent 在改,故未动手。)
+
+顺带证实了 `tyControls.Panel.pas` 注释里的说法:`OnGetSiteInfo` / `OnGetDockCaption` /
+`OnStartDock` / `OnEndDock` 在 `TWinControl` 上是 **protected**——拿一个 `TWinControl`
+引用去赋值会直接编译不过(`identifier idents no member "OnGetSiteInfo"`)。
+也就是说这四个**连代码都够不着**,republish 不只是"给设计器看",是唯一的通路。
+
+**headless 那份测试是真绿但覆盖不到这里**:`tests/test.parity.container.pas` 全程只调
+`ManualDock`,那是编程接口,直接 reparent,根本不经过 `DragManager`,也就不会碰
+`OnStartDock`/`OnGetSiteInfo`/`OnDockOver`/`OnEndDock` 这四个。该文件 303-307 行的注释
+自己也承认了这一点。所以它不算假绿,只是**测的是另一件事**。
+
 ---
 
 ## 程序 C —— 图形控件 vs 窗口化控件的祖先(2 条)
@@ -71,6 +115,44 @@ LCL 的 `TSpeedButton` 和 `TPaintBox` 都是 `TGraphicControl` —— **没有�
 
 **判据**:先量清楚**现在到底难看到什么程度**(在带图片主题的窗体上放一个 SpeedButton,
 截图),再决定值不值得为它付一次破坏性变更。**不要先改再看。**
+
+### 实证结果(2026-08-06,真机)——**结论:不值得,建议关掉这一条**
+
+**一、`TTyPaintPanel` 现在就能放子控件,所以它不可能变成图形控件。**
+不是推理,是真放了一个:`TTyPaintPanel = class(TTyPanel)`,`csAcceptsControls = True`,
+把一个 `TTyButton` 认到它里面 → `Parent=TTyPaintPanel`、`ControlCount=1`、
+`HandleAllocated=True`,且 `GetParent(子.Handle) = 面板.Handle`(真的 Win32 父子窗口)。
+`TGraphicControl` 没句柄,认不了任何东西。**这一条到此为止。**
+
+**二、上面那个"渐变/图片被自己的擦除截断"的前提,已经不成立了。**
+`a1c31d1`(本轮已并入)修的就是这件事,提交信息末尾写得很明白:
+"这是对那个促使有人提议把 `TTySpeedButton` 挪到 `TGraphicControl` 的缺陷的**相称修法**。
+一个函数,所有渐变父控件上的窗口化控件一次修好。"
+真机复核(`themes/green.tycss`,真图片背景):6px 外的背景与控件角像素只差 1~3 个色阶
+(那是照片本身的噪点),4 倍放大截图里 SpeedButton 的圆角外照片是**连续的**,
+`TTyPaintPanel` 更是整块透明——只看得见它的子按钮。**没有可见的擦除矩形。**
+
+**三、但量出来一个真的、可见的残留缺陷,而且它不支持改基类。**
+17 个内置主题各起一个独立进程、置前、6 秒后从屏幕 DC 读回控件左上角像素:
+
+> **只有 `aero` 一个主题**,窗口化控件四角出现纯 `#000000` 的硬角块(1/17)。
+> 同一窗体里的图形控件 `TTyLabel` 角像素干净。6 倍放大截图里,两个 SpeedButton、
+> `TTyPaintPanel`、连它里面的子按钮,四角全是黑的。
+
+这就是记忆里的 `windowed-control-shadow-corners`(角隙填充)。`aero` 的特殊之处不是"有阴影"
+——`showcase`/`office`/`fluent` 也定义了 `shadow:`,且都不黑——而是**只有它同时是
+`TyForm { background: linear-gradient(...) }` 的渐变底 + 控件带阴影**。
+所以怀疑是角隙填充在"渐变父背景 + 带 alpha 的阴影色"这一组合下丢了 alpha,把
+`#00000014` 当成 `#000000` 写了进去。
+
+**这不构成改基类的理由**:它是 1/17 的主题级缺陷,已经有 `FillCornerGaps` 这条便宜的修法,
+而 `TTyPaintPanel` 无论如何都改不动(见第一条)。**建议:把程序 C 关掉,
+另开一张小票修 `aero` 的角隙填充。**
+
+**没能定死的一点(别当结论用)**:黑角是"仅首帧"还是"一直在",没验成——
+强制重绘那次窗口被最小化/还原挪了位,前后截图不是同一块区域,不可比。
+另外探针内部那版"切主题连续采样"的扫描**不可信**(它给 `aero` 读到 `#FAFAFA`,
+那正好是上一个主题 `adwaita` 的背景色,典型的采到上一帧);**上表用的是每主题独立进程那一版。**
 
 ---
 
@@ -102,8 +184,13 @@ LCL 的 `TSpeedButton` 和 `TPaintBox` 都是 `TGraphicControl` —— **没有�
 
 ## 建议的下一步顺序
 
-1. **程序 B 的实证**(半天):republish 一组 dock 成员 + 一个真机停靠探针。
-   结论要么"几行搞定,收 4 条",要么"结构挡着,单独排期"。
+1. ~~**程序 B 的实证**~~ **已做完(2026-08-06)。结论是"几行搞定"。**
+   剩余动作只有一个:给 `TTyGroupBox` 和 `TTyPageControl` 各补 9 行 `property`
+   (照抄 `tyControls.Panel.pas:76-84`),外加两条 RTTI 守卫。
+   `TTyPanel`(`4e3376a`)和 `TTyControlBar`(继承)这两条**已经可以直接勾掉**。
 2. **RTL 定性**(一句话决定):做,还是在文档里写明不支持。**现在这种既不做也不说的状态最差。**
 3. **26 条单控件特性**按上表受众排,继续按控件分区并行推进。
-4. **程序 C 先量后改**,不要先改。
+4. ~~**程序 C 先量后改**~~ **已量完(2026-08-06)。结论是不改,建议关掉这一条**
+   ——`TTyPaintPanel` 是能放子控件的真容器,变不了图形控件;而原本的视觉理由已被
+   `a1c31d1` 用一个函数修掉了。**替代动作**:开一张小票修 `aero` 主题下窗口化控件的黑角
+   (1/17 主题,`FillCornerGaps` 在"渐变底 + 带 alpha 阴影"下疑似丢 alpha)。

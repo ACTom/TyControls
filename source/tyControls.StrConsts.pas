@@ -195,9 +195,17 @@ resourcestring
   rsGridMaxPrefix   = 'Max ';
   rsGridCountPrefix = 'Count ';
   rsGridPickColor   = 'Select colour';
-  { 勾选框判真时额外认这个词(英文基线为空 = 只认 1/true/yes/y;
-    中文 .po 里译成 '是')。 }
-  rsGridCheckedWord = '';
+  { 勾选框判真时额外认的**本地化**词(中文 .po 里是 '是')。内建的 1/true/yes/y
+    永远认,不受它影响。
+
+    英文基线**必须非空**,尽管在英文下它是多余的(yes 本来就在内建表里)。
+    从前它是 `''`,理由写着"英文不需要额外的词" —— 运行期这条路其实是通的
+    (LazUtils 按标识符查条目,不按 msgid,空 msgid 也找得到),
+    **但 Lazarus 的提取器会跳过值为空的字符串**:这一条从来没进过
+    languages/tyControls.StrConsts.pot,于是任何译者都看不见它,中文那句 '是'
+    压根没地方写。空基线在这里不是"省一个词",是"这个功能翻译不了"。
+    由 test.i18n 的 TestEveryStrConstsResourcestringIsInThePot 钉住。 }
+  rsGridCheckedWord = 'yes';
 
   { --- TTyUpDown -------------------------------------------------------------
     Raised when a second up-down is pointed at a control another one already drives.

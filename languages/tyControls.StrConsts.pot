@@ -301,6 +301,10 @@ msgstr ""
 msgid "Avg "
 msgstr ""
 
+#: tycontrols.strconsts.rsgridcheckedword
+msgid "yes"
+msgstr ""
+
 #: tycontrols.strconsts.rsgridcountprefix
 msgid "Count "
 msgstr ""

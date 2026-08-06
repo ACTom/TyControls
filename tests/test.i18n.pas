@@ -10,6 +10,8 @@ type
   published
     procedure TestZhCNTranslatesAndRestores;
     procedure TestNoCatalogueEntryIsWhollyEmpty;
+    procedure TestEveryStrConstsResourcestringIsInThePot;
+    procedure TestTheShippedChineseCatalogueReallyGivesTheGridItsTruthyWord;
   end;
 
 implementation
@@ -72,9 +74,13 @@ end;
   catalogue entries for captions whose value is the empty string) left the groupbox,
   radiobutton and toggleswitch examples unable to start at all.
 
-  An empty msgid with a REAL msgstr is fine and deliberate -- tyControls.StrConsts'
-  rsGridCheckedWord ships empty in English precisely so a catalogue can give the Grid an
-  extra truthy word ('是'). Only the both-sides-empty shape is forbidden. }
+  An empty msgid with a REAL msgstr does not raise, and this guard deliberately allows it.
+  It is not, however, a shape anything in this repo can USE: rsGridCheckedWord shipped
+  empty in English on exactly that theory, and the runtime half worked -- LazUtils keys
+  entries by identifier, so a hand-written entry with an empty msgid is found -- but
+  Lazarus's extractor skips empty strings, so the entry never reached the .pot and no
+  translator ever saw it. See TestEveryStrConstsResourcestringIsInThePot below. Only the
+  both-sides-empty shape is forbidden here. }
 procedure TI18NTest.TestNoCatalogueEntryIsWhollyEmpty;
 var
   files: TStringList;
@@ -118,6 +124,124 @@ begin
   finally
     files.Free;
   end;
+end;
+
+{ A resourcestring that never reaches the .pot cannot be translated by anyone, however
+  carefully its comment describes the translation.
+
+  Lazarus's extractor writes the .pot from the compiler's .rsj, and it SKIPS a string whose
+  value is empty -- so exactly the strings that were designed to be filled in by a catalogue
+  are the ones that silently never get an entry. Comparing the declarations against the
+  catalogue is the only way to see it; the code compiles, the .po loads, and the feature
+  just is not there.
+
+  Failing entries are reported by name so the fix is either "add it to the .pot" or "give it
+  a non-empty English baseline", decided per string. }
+procedure TI18NTest.TestEveryStrConstsResourcestringIsInThePot;
+var
+  src, pot: TStringList;
+  i, k, eq, depth: Integer;
+  root, line, id, missing: string;
+  inBlock: Boolean;
+  potText: string;
+
+  { A valid Pascal identifier and nothing else -- the guard that keeps prose out. }
+  function IsIdent(const S: string): Boolean;
+  var
+    j: Integer;
+  begin
+    Result := (S <> '') and (S[1] in ['A'..'Z', 'a'..'z', '_']);
+    if not Result then Exit;
+    for j := 2 to Length(S) do
+      if not (S[j] in ['A'..'Z', 'a'..'z', '0'..'9', '_']) then Exit(False);
+  end;
+
+begin
+  root := ExtractFilePath(ParamStr(0)) + '..' + PathDelim;
+  AssertTrue('found the .pot', FileExists(root + 'languages' + PathDelim + 'tyControls.StrConsts.pot'));
+
+  pot := TStringList.Create;
+  src := TStringList.Create;
+  try
+    pot.LoadFromFile(root + 'languages' + PathDelim + 'tyControls.StrConsts.pot');
+    potText := LowerCase(pot.Text);
+    src.LoadFromFile(root + 'source' + PathDelim + 'tyControls.StrConsts.pas');
+
+    inBlock := False;
+    depth   := 0;
+    missing := '';
+    for i := 0 to src.Count - 1 do
+    begin
+      line := src[i];
+      (* Brace depth FIRST, and it is what makes this readable at all: this unit documents
+         nearly every string in a multi-line brace comment, and a comment's CONTINUATION
+         lines do not start with an opening brace. Skipping only lines that BEGIN with one
+         let the tail of a comment through as if it were code -- the first run of this test
+         reported "LCL refuses it (customupdown.inc:380-389). %s" as an untranslated
+         resourcestring. *)
+      if depth > 0 then
+      begin
+        for k := 1 to Length(line) do
+          if line[k] = '}' then Dec(depth) else if line[k] = '{' then Inc(depth);
+        Continue;
+      end;
+      for k := 1 to Length(line) do
+        if line[k] = '{' then Inc(depth) else if line[k] = '}' then Dec(depth);
+      if depth > 0 then Continue;      { a comment opened on this line and did not close }
+
+      line := Trim(line);
+      if LowerCase(line) = 'resourcestring' then begin inBlock := True; Continue; end;
+      if not inBlock then Continue;
+      if (LowerCase(line) = 'implementation') or (LowerCase(line) = 'type')
+         or (LowerCase(line) = 'var') or (LowerCase(line) = 'const') then
+      begin
+        inBlock := False;
+        Continue;
+      end;
+      if (line = '') or (Copy(line, 1, 2) = '//') then Continue;
+      eq := Pos('=', line);
+      if eq < 2 then Continue;
+      id := Trim(Copy(line, 1, eq - 1));
+      if not IsIdent(id) then Continue;
+      if Pos('#: tycontrols.strconsts.' + LowerCase(id) + LineEnding, potText) = 0 then
+        missing := missing + LineEnding + '  ' + id;
+    end;
+
+    AssertEquals('resourcestrings declared in StrConsts.pas with no .pot entry -- nobody '
+      + 'can translate these:' + missing, '', missing);
+  finally
+    src.Free;
+    pot.Free;
+  end;
+end;
+
+{ End to end, against the catalogue that actually ships.
+
+  The test above proves the identifier reaches the .pot. This proves the rest of the chain:
+  that the Chinese catalogue carries a translation for it, and that LazUtils hands that
+  translation back when asked with the shipped English value. Both halves have been wrong
+  here before -- the entry existed in the .po for a long while with an EMPTY msgid, which
+  the runtime tolerated and every piece of .po tooling would have discarded on the next
+  merge with the .pot, silently taking the feature with it.
+
+  Read through TPOFile rather than TranslateUnitResourceStrings so the process-wide
+  resourcestring is left alone; a translated one stays translated for every test that runs
+  after it. }
+procedure TI18NTest.TestTheShippedChineseCatalogueReallyGivesTheGridItsTruthyWord;
+var
+  po: TPOFile;
+  root: string;
+begin
+  root := ExtractFilePath(ParamStr(0)) + '..' + PathDelim;
+  po := TPOFile.Create(root + 'languages' + PathDelim + 'tycontrols.strconsts.zh_CN.po');
+  try
+    AssertEquals('the shipped zh_CN catalogue gives the grid its localised truthy word',
+      '是', po.Translate('tycontrols.strconsts.rsgridcheckedword', rsGridCheckedWord));
+  finally
+    po.Free;
+  end;
+  AssertEquals('and reading the catalogue did not translate the running process',
+    'yes', rsGridCheckedWord);
 end;
 
 initialization
