@@ -473,3 +473,46 @@ Tree.OnNodeMoved := @OnMoved;
 - **五个事件同时是子类的重写点**：`OnGetText` / `OnInitNode` / `OnExpanding` / `OnGetImageIndex` / `OnChange` 各有一个 protected 虚方法（`DoGetText` / `DoInitNode` / `DoExpanding` / `DoGetImageIndex` / `DoTreeChange`），默认实现就是"发这个事件"。像 [`TTyShellTreeView`](shelltreeview.md) 这样自带行为的子类**重写虚方法**而不是抢占事件槽，因此应用照常可以挂这些事件，不会把子类的行为顶掉（重写里调 `inherited` 即可两者兼得）。
 - **DFM / LFM 序列化**：声明了 `default` 的属性（`Options=[]`、`NodeDataSize=-1`、`DefaultNodeHeight=18`、`RootNodeCount=0`、`Indent=16`、`ShowButtons/ShowTreeLines/ShowRoot/ToggleOnDblClick=True`、`HotTrack=False`、`SearchTimeout=1000`、`ScrollBars=ssBoth`、`AutoExpand=False`、`RightClickSelect=True`、`HideSelection=True`、`ShowSeparators=False`、`TabStop=True`）等于默认值时不写入文件。`Header` / `Columns` 作为子对象随控件流式保存（列类已在单元 `initialization` 中 `RegisterClass`）。
 - **内嵌滚动条是私有的**：`VScroll` / `HScroll` 只读可访问（供测试 / 布局），不暴露 `OnScroll`，且不做缓动动画。应监听宿主树自身的事件。
+
+---
+
+## 9. 右到左布局（RTL）
+
+`BiDiMode := bdRightToLeft` 时本控件整体镜像。`BiDiMode` **不 published**（全库统一，见
+[`docs/rtl.md`](../rtl.md)），从代码或从窗体继承设置。
+
+**会动的：**
+
+| 部位 | 镜像后 |
+|---|---|
+| 列轴 | 第 0 列贴内容区**右**缘，其余向左排；表头、单元格、`GetCellRect`、拖列浮标同源 |
+| 列分隔线 / 拖宽抓手 | 是一列的**左**缘；向左拖是**变宽** |
+| 表头 | 标题靠右，排序三角换到单元格的阅读起点（右侧） |
+| 主列槽位 | 从单元格**右**缘向内：缩进 → 展开箭头 → 复选框 → 图标 → 标题。整段是把左到右那一份**整体反射**一次，不是倒着重排一遍 |
+| 树状连线 | 跟着缩进走 —— 祖先竖线、肘部竖线、肘部横段三处都过同一个 `TreeLineX` |
+| 内联编辑器 | 落在标题上，不跨到 chrome 上（`CellTextRect` 取的是槽位记录自己的两条边） |
+| `←`/`→` | 跟着眼睛：`←` **展开**、`→` **收起**（子节点画在左边）。按 `plans/2026-08-04-rtl-mirroring-scope.md` §6.3 第 4 条的判据，这一下按键移动的是**节点**而不是光标，属布局方向。`Home`/`End`/`↑`/`↓` 不翻 |
+
+**不动的，而且是有意的：**
+
+- **竖滚动条仍在右缘。** 反射轴是内容矩形 `ContentRect`（padding 内缩、扣掉滚动条之后
+  那一条），滚动条槽在它之外。与 `TTyCustomGrid` / `TTyListView` 同一条取舍，理由与守卫
+  见 [`docs/rtl.md`](../rtl.md)；`tests/test.rtl.pas` 的 `TRtlExclusionTest` 把
+  "条的边"与"反射轴"钉在一起，只改一处会红。
+- 容器不镜像子控件的 `Align`/`Anchors` 布局（全库规则）。
+
+**槽位记录的字段语义**（改这块前必读）：`TTyTreeCaptionSlots` 的
+`ButtonSlotX` / `CheckX` / `ImageX` / `CaptionX` 在**两个方向下都是物理左缘**，不是"前缘"。
+六个消费者里有五个是拿 `[X, X+W)` 拼矩形的，这个写法只有在 X 是物理左缘时才两个方向都对；
+改成"前缘"会让那五处在镜像下全部反过来，各自要再算一次 `X - W` —— 又是五份新的 x 计算。
+真正读**顺序**（而不是矩形）的只有 `GetNodeAtPoint` 那道阶梯，记录里的
+`RightToLeft` 位就是给它一个用的。标题是**余量**不是定宽槽，所以额外给了
+`CaptionRight`：左到右时它就是单元格右缘，镜像后它是图标槽的起点。
+
+**后代**：`TTyShellTreeView` 不覆写 `RtlLayout` —— 它只重写了 `DoGetText` / `DoInitNode` /
+`DoGetImageIndex` / `DoExpanding` / `DoTreeChange`，一个 x 也没有自己算。加后代时先问：
+**它自己算 x 吗？** 算，就覆写成 `False`。
+
+守卫在 `tests/test.rtl.pas` 的 `TRtlTreeViewTest`。槽位探针一律打在**边界像素**上，
+不打槽位中点 —— 本控件真正出过的两个故障（锚点差一整列、PPI≠96 时边界差一像素）
+对中点探针完全免疫。

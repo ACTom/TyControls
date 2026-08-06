@@ -55,6 +55,8 @@ uses
   tyControls.ValueListEditor,
   tyControls.HeaderControl,
   tyControls.Columns, tyControls.Grid, tyControls.Grid.Layout,
+  tyControls.ListView, tyControls.ListView.Layout, tyControls.ShellListView,
+  tyControls.TreeView, tyControls.ShellTreeView,
   tyControls.TabStrip, tyControls.TabSheet, tyControls.PageControl, tyControls.TabSet,
   tyControls.Ribbon,
   { The strip harness -- caption model plus the protected mouse/key seams -- already exists;
@@ -191,6 +193,52 @@ type
   { The filter drop-down's row layout is a DECLINE (see TRtlExclusionTest); this reaches the
     predicate that records it. }
   TRtlFilterListAccess = class(TTyGridFilterList)
+  public
+    function Mirrors: Boolean;
+  end;
+
+  { Phase 6: the two controls that share the column model (§3.7, §3.9). Both hit-test
+    INTERNALLY on the x axis -- a tree answers "expander or caption", a list "which column,
+    and is this the check box" -- so every probe below asks the paint and the hit test the
+    same question, and asks it at a slot EDGE. A probe at a slot's centre is immune to every
+    drift this library has actually shipped. }
+  TRtlTreeAccess = class(TTyTreeView)
+  public
+    procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    procedure PressDown(X, Y: Integer);
+    procedure PressMove(X, Y: Integer);
+    procedure PressUp(X, Y: Integer);
+    procedure Key(AKey: Word);
+    function  Mirrors: Boolean;
+    function  Axis: TTyColumnAxis;
+    { The caption box the inline editor sits over -- the one consumer of the slot walk that
+      needs BOTH of the caption region's edges, which is what makes it the probe that can see
+      a caption mirrored at only one end. }
+    function  TextRect(Node: PTyTreeNode; ACol: Integer; const ACell: TRect): TRect;
+  end;
+
+  TRtlShellTreeAccess = class(TTyShellTreeView)
+  public
+    function Mirrors: Boolean;
+  end;
+
+  TRtlListAccess = class(TTyListView)
+  public
+    procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    procedure PressDown(X, Y: Integer);
+    procedure PressMove(X, Y: Integer);
+    procedure PressUp(X, Y: Integer);
+    procedure Key(AKey: Word);
+    function  Mirrors: Boolean;
+    function  Metrics: TTyListMetrics;
+    function  Axis: TTyColumnAxis;
+    function  CheckBox(const ACell: TRect): TRect;
+    function  Cell(APos: Integer): TRect;
+    function  VBar: TTyScrollBar;
+    procedure Remeasure;
+  end;
+
+  TRtlShellListAccess = class(TTyShellListView)
   public
     function Mirrors: Boolean;
   end;
@@ -430,6 +478,126 @@ type
     procedure MergedCellsSpanForwardInsteadOfCollapsing;
   end;
 
+  { ---------------------------------------------------------------- PHASE 6 -- }
+
+  { §3.9, TTyTreeView. Two axes, and they are deliberately probed apart:
+
+      * the COLUMN axis, which is the shared TyColumnSpan and therefore the same
+        arithmetic the list view and the header strip get -- pinned by the sweeps, which
+        compare a hit answer against the cell rect the paint filled at every device x;
+      * the SLOT axis inside the main cell (indent / expander / check / icon / caption),
+        which is TyTreeCaptionSlots and is this control's alone.
+
+    Slot probes press EDGES, never centres. The two failures this control has actually
+    shipped -- an anchor a whole column out, and a boundary one device pixel out at
+    PPI <> 96 -- are both invisible to a click in the middle of a slot. }
+  TRtlTreeViewTest = class(TTestCase)
+  private
+    FForm: TForm;
+    FCtl:  TTyStyleController;
+    FT:    TRtlTreeAccess;
+    FBoxed, FPlain, FRoot: PTyTreeNode;
+    procedure Build(ARtl: Boolean; ACols: Integer = 3; AWidth: Integer = 400;
+      APPI: Integer = 96);
+    function  Shot(AWidth: Integer = 400; AHeight: Integer = 200): TBGRABitmap;
+    procedure OnText(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
+    procedure OnImage(Sender: TTyTreeView; Node: PTyTreeNode; Kind: TTyVTImageKind;
+      Column: Integer; var Ghosted: Boolean; var ImageIndex: Integer);
+    { Column index whose PAINTED cell contains device x, or NoColumn. Derived from
+      GetCellRect, i.e. from the paint, never from the hit test being checked. }
+    function  PaintedColumnAt(AX: Integer): Integer;
+    function  MainCell: TRect;
+    function  RowMidY(Node: PTyTreeNode): Integer;
+  protected
+    procedure TearDown; override;
+  published
+    { --- the column axis (shared with the list view and the header strip) --- }
+    procedure ColumnZeroSitsAgainstTheContentsRightEdgeAndTheRestPackLeftwards;
+    procedure MirroredColumnsTileWithNoSeamAndKeepEveryWidth;
+    procedure TheColumnHitTestNamesTheColumnThePaintFilledAtEveryPixel;
+    procedure AHeaderSectionClickSortsTheColumnUnderThePointer;
+    procedure TheResizeGripGrabsTheMirroredColumnEdgeNotTheLtrOne;
+    procedure DraggingAwayFromTheReadingStartWidensTheColumn;
+    procedure ColumnBoundariesStayExactAtANonDefaultDensity;
+    { --- the slot axis inside the main cell --- }
+    procedure TheChromeSlotsRunFromTheCellsRightEdgeInwards;
+    procedure EverySlotBoundaryIsAnsweredOnTheExactPixelItIsPaintedAt;
+    procedure TheCheckSlotStillMovesTheCaptionByExactlyItsOwnWidth;
+    procedure TheExpanderIsPaintedWhereTheHitTestOpensIt;
+    procedure ClickingWhereTheLtrExpanderUsedToBeDoesNotExpand;
+    procedure TheCaptionOccupiesTheCellsReadingEndAtBothOfItsEdges;
+    procedure ANonMainCellsTextStillHugsItsOwnReadingStart;
+    procedure TheChromeStaysInsideTheMainCellWhenItIsNotTheFirstColumn;
+    { --- the tree lines, the last hand-written x in the file --- }
+    procedure TreeLinesFollowTheMirroredIndentInsteadOfStayingLeft;
+    procedure TreeLinesInAZeroColumnTreeMirrorTogetherWithItsChrome;
+    { --- keyboard --- }
+    procedure LeftExpandsAndRightCollapsesWhenTheTreeReadsRightToLeft;
+    procedure UpAndDownAndHomeAndEndAreUntouchedByTheMirror;
+    { --- what a reflection must not change --- }
+    procedure MirroringChangesNoWidthAndNoNodeOrder;
+    procedure TheHorizontalBarIsToldToMirrorAndTheVerticalOneIsNot;
+  end;
+
+  { §3.7, TTyListView. Five view styles, and the mirror has to reach all of them: report
+    is the column model again, the other four are the index<->position arithmetic in
+    tyControls.ListView.Layout.pas. The inverse sweeps are the load-bearing probes -- that
+    unit's own contract is that TyListItemAt is TyListItemRect's exact inverse, and a
+    mirror that reaches one of them and not the other breaks precisely that. }
+  TRtlListViewTest = class(TTestCase)
+  private
+    FForm: TForm;
+    FCtl:  TTyStyleController;
+    FL:    TRtlListAccess;
+    FClickCol: Integer;
+    procedure Build(ARtl: Boolean; AStyle: TTyListViewStyle; AItems: Integer = 8;
+      AWidth: Integer = 400; APPI: Integer = 96);
+    function  Shot(AWidth: Integer = 400; AHeight: Integer = 200): TBGRABitmap;
+    function  PaintedColumnAt(AX: Integer): Integer;
+    function  RowMidY(APos: Integer): Integer;
+    { The RENDERED column boundaries: the x of every vertical rule the report actually
+      paints. RenderGridLines puts one on the edge each column shares with its successor,
+      so reading them back out of the bitmap is a PAINT-side answer that owes nothing to
+      the column model the hit test also consults. Every column guard below starts by
+      requiring these to coincide with the model's spans -- without that link a sweep
+      comparing the hit test against the model would only prove the model agrees with
+      itself, which is true whether or not the paint ever moved. }
+    procedure AssertPaintedRulesMatchTheModel;
+    procedure ColumnClicked(Sender: TObject; AColumn: Integer);
+    { Which column the CONTROL says a header click at AX lands on, via its own MouseDown
+      and the OnColumnClick it fires. -1 when it names none. }
+    function  ClickedColumnAt(AX: Integer): Integer;
+  protected
+    procedure TearDown; override;
+  published
+    { --- report mode: the column axis --- }
+    procedure ReportColumnZeroSitsAgainstTheRightEdge;
+    procedure TheHeaderHitTestNamesTheColumnThePaintFilledAtEveryPixel;
+    procedure TheResizeGripGrabsTheMirroredColumnEdge;
+    procedure DraggingAwayFromTheReadingStartWidensTheColumn;
+    procedure GridLinesSitOnTheEdgeTheColumnsActuallyShare;
+    procedure ReportRowTextHugsItsCellsReadingStart;
+    { --- report mode: the check box, which is painted AND clicked --- }
+    procedure TheReportCheckBoxMovesToTheMainColumnsReadingStart;
+    procedure AClickWhereTheLtrCheckBoxWasDoesNotToggleAnything;
+    procedure TheCheckBoxIsPaintedInsideTheZoneThatTogglesIt;
+    procedure ReportRowTextStepsAsideForTheMirroredCheckBox;
+    { --- the four flow styles --- }
+    procedure IconCellsFillFromTheRightEdgeOfTheViewport;
+    procedure TheItemHitTestIsTheExactInverseOfTheMirroredCells;
+    procedure AColumnMajorListFillsItsFirstTrackAgainstTheRightEdge;
+    procedure TheFlowCheckBoxMovesToTheCellsReadingStartAndTheLabelStepsAside;
+    procedure AMarqueeSelectsTheCellsItActuallyCovers;
+    procedure GroupedCellsMirrorTogetherWithTheFlatOnes;
+    procedure ASelectedCellIsFilledWhereTheHitTestSaysItIs;
+    procedure TheHorizontalBarIsToldToMirrorAndTheVerticalOneIsNot;
+    { --- keyboard --- }
+    procedure ArrowKeysFollowTheEyeAndHomeEndStayLogical;
+    procedure ReportModeLeftAndRightStillDoNotMoveTheSelection;
+    { --- what a reflection must not change --- }
+    procedure MirroringChangesNoCellSizeAndNoItemOrder;
+  end;
+
   { The two controls in these same source files that are deliberately NOT mirrored, because
     they read x back out of a click. Pinned so that mirroring them later is a decision
     somebody makes on purpose, with the hit test in the same commit. }
@@ -441,6 +609,9 @@ type
     procedure RibbonDeclinesToMirrorTheHeaderBandItInherits;
     procedure TheGridsVerticalBarStaysOnTheRightAndItsViewportOriginStaysAtZero;
     procedure TheGridsFilterDropDownDeclinesToMirrorItsRows;
+    procedure TheListViewsVerticalBarStaysOnTheRightAndSoDoesItsMirrorAxis;
+    procedure TheTreeViewsVerticalBarStaysOnTheRightAndSoDoesItsMirrorAxis;
+    procedure BothShellDescendantsMirrorBecauseNeitherDerivesAnXOfItsOwn;
   end;
 
   { --------------------------------------------------------------- PHASE 3 -- }
@@ -659,6 +830,60 @@ function TValueListAccess.Mirrors: Boolean;
 begin
   Result := RtlRowLayout;
 end;
+
+procedure TRtlTreeAccess.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin
+  RenderTo(ACanvas, ARect, APPI);
+end;
+procedure TRtlTreeAccess.PressDown(X, Y: Integer); begin MouseDown(mbLeft, [ssLeft], X, Y); end;
+procedure TRtlTreeAccess.PressMove(X, Y: Integer); begin MouseMove([ssLeft], X, Y); end;
+procedure TRtlTreeAccess.PressUp(X, Y: Integer);   begin MouseUp(mbLeft, [ssLeft], X, Y); end;
+procedure TRtlTreeAccess.Key(AKey: Word);
+var k: Word;
+begin
+  k := AKey;
+  KeyDown(k, []);
+end;
+function TRtlTreeAccess.Mirrors: Boolean; begin Result := RtlLayout; end;
+function TRtlTreeAccess.Axis: TTyColumnAxis;
+begin
+  Result := ColumnAxis(ContentRect, Font.PixelsPerInch);
+end;
+function TRtlTreeAccess.TextRect(Node: PTyTreeNode; ACol: Integer; const ACell: TRect): TRect;
+begin
+  Result := CellTextRect(Node, ACol, ACell);
+end;
+
+function TRtlShellTreeAccess.Mirrors: Boolean; begin Result := RtlLayout; end;
+function TRtlShellListAccess.Mirrors: Boolean; begin Result := RtlLayout; end;
+
+procedure TRtlListAccess.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin
+  RenderTo(ACanvas, ARect, APPI);
+end;
+procedure TRtlListAccess.PressDown(X, Y: Integer); begin MouseDown(mbLeft, [ssLeft], X, Y); end;
+procedure TRtlListAccess.PressMove(X, Y: Integer); begin MouseMove([ssLeft], X, Y); end;
+procedure TRtlListAccess.PressUp(X, Y: Integer);   begin MouseUp(mbLeft, [ssLeft], X, Y); end;
+procedure TRtlListAccess.Key(AKey: Word);
+var k: Word;
+begin
+  k := AKey;
+  KeyDown(k, []);
+end;
+function TRtlListAccess.Mirrors: Boolean;      begin Result := RtlLayout; end;
+function TRtlListAccess.Metrics: TTyListMetrics; begin Result := CurrentMetrics; end;
+function TRtlListAccess.Axis: TTyColumnAxis;   begin Result := ColumnAxis; end;
+function TRtlListAccess.CheckBox(const ACell: TRect): TRect;
+begin
+  Result := CheckRectForCell(ACell);
+end;
+function TRtlListAccess.Cell(APos: Integer): TRect;
+begin
+  { The paint's own call, offsets included -- see ScrollOffsetX's comment. }
+  Result := TyListItemRect(APos, Items.Count, CurrentMetrics, ScrollOffsetX, ScrollOffsetY);
+end;
+function TRtlListAccess.VBar: TTyScrollBar; begin Result := VScrollBar; end;
+procedure TRtlListAccess.Remeasure;         begin UpdateScrollBars; end;
 procedure TRtlStripAccess.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);     begin RenderTo(ACanvas, ARect, APPI); end;
 procedure TRtlSheetAccess.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);     begin RenderTo(ACanvas, ARect, APPI); end;
 
@@ -771,6 +996,34 @@ begin
   if AX0 < 0 then AX0 := 0;
   if AX1 > A.Width then AX1 := A.Width;
   for y := 0 to A.Height - 1 do
+    for x := AX0 to AX1 - 1 do
+    begin
+      p := A.GetPixel(x, y);
+      case ACh of
+        chRed:   begin mine := p.red;   o1 := p.green; o2 := p.blue;  end;
+        chGreen: begin mine := p.green; o1 := p.red;   o2 := p.blue;  end;
+      else       begin mine := p.blue;  o1 := p.red;   o2 := p.green; end;
+      end;
+      if (mine > 150) and (o1 < 110) and (o2 < 110) then Inc(Result);
+    end;
+end;
+
+{ The same count restricted to a Y band as well. The tree draws its connecting lines and
+  its header dividers in ONE colour (both come from the frame's resolved border token, and
+  that is deliberate -- a skin recolours them together), so the only way to ask about the
+  lines alone is to ask below the header band. }
+function ChannelInkCountRows(A: TBGRABitmap; ACh: TChannel;
+  AX0, AX1, AY0, AY1: Integer): Integer;
+var
+  x, y, mine, o1, o2: Integer;
+  p: TBGRAPixel;
+begin
+  Result := 0;
+  if AX0 < 0 then AX0 := 0;
+  if AY0 < 0 then AY0 := 0;
+  if AX1 > A.Width  then AX1 := A.Width;
+  if AY1 > A.Height then AY1 := A.Height;
+  for y := AY0 to AY1 - 1 do
     for x := AX0 to AX1 - 1 do
     begin
       p := A.GetPixel(x, y);
@@ -4214,6 +4467,1355 @@ begin
     FG.ColWidth(0) + FG.ColWidth(1), base.Right - base.Left);
 end;
 
+{ ----------------------------------------------------------- TRtlTreeViewTest }
+
+const
+  { A grouped list pushes its first body row down by one group-header band. The band's
+    height is a theme metric the test does not restate; this is the offset from the top of
+    the item region to somewhere safely inside the first row of the first group, found by
+    the same constant the control uses for its header height default. }
+  GroupProbeOffset = 28;
+
+  { Loud, saturated, mutually exclusive channels so a composite can be taken apart by
+    ChannelSpanX / ChannelInColumn: captions blue, tree lines and dividers green, node
+    icons red. Padding and border are zeroed so ContentRect is the whole client and the
+    reflection band is a number the test can restate. }
+  cTreeCss =
+    'TyTreeView { background: #FFFFFF; color: #0000FF; border-width: 0px; ' +
+    'border-color: #00FF00; padding: 0px; }' +
+    'TyTreeNode { color: #0000FF; }' +
+    'TyTreeHeader { background: #FFFFFF; }' +
+    'TyTreeHeaderSection { color: #0000FF; }';
+  cListCss =
+    'TyListView { background: #FFFFFF; color: #0000FF; border-width: 0px; ' +
+    'border-color: #00FF00; padding: 0px; }' +
+    'TyListViewItem { color: #0000FF; }' +
+    { A loud selection fill, so "which cell did the paint put here" can be answered from
+      the bitmap rather than from the geometry function the hit test also reads. }
+    'TyListViewItem:selected { background: #FF0000; }' +
+    'TyListViewHeader { background: #FFFFFF; }' +
+    'TyListViewHeaderSection { color: #0000FF; }' +
+    'TyListViewLine { background: #00FF00; }';
+
+procedure TRtlTreeViewTest.OnText(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
+begin
+  Text := 'n' + IntToStr(Node^.Index);
+end;
+
+procedure TRtlTreeViewTest.OnImage(Sender: TTyTreeView; Node: PTyTreeNode;
+  Kind: TTyVTImageKind; Column: Integer; var Ghosted: Boolean; var ImageIndex: Integer);
+begin
+  if Kind = ikNormal then ImageIndex := 0;
+end;
+
+procedure TRtlTreeViewTest.Build(ARtl: Boolean; ACols, AWidth, APPI: Integer);
+var
+  i: Integer;
+  col: TTyColumn;
+  bmp: TBitmap;
+  lst: TImageList;
+begin
+  FForm := TForm.CreateNew(nil);
+  FForm.SetBounds(0, 0, 640, 480);
+  FCtl := TTyStyleController.Create(nil);
+  FCtl.LoadThemeCss(cTreeCss);
+
+  FT := TRtlTreeAccess.Create(FForm);
+  FT.Parent     := FForm;
+  FT.Controller := FCtl;
+  FT.Font.PixelsPerInch := APPI;
+  FT.DefaultNodeHeight  := 24;
+  { 24, not the default 16, so the indent step, the 16 px check slot and the image slot
+    (= Indent) are three different numbers and a walk that confuses two of them shows. }
+  FT.Indent        := 24;
+  FT.ShowButtons   := True;
+  FT.ShowRoot      := True;
+  FT.ShowTreeLines := False;    { on only in the two tree-line guards }
+  FT.Options       := [toCheckSupport];
+  FT.SetBounds(0, 0, AWidth, 200);
+  FT.OnGetText       := @OnText;
+  FT.OnGetImageIndex := @OnImage;
+
+  bmp := TBitmap.Create;
+  try
+    bmp.SetSize(16, 16);
+    bmp.Canvas.Brush.Color := clRed;
+    bmp.Canvas.FillRect(0, 0, 16, 16);
+    lst := TImageList.Create(FForm);
+    lst.Width := 16; lst.Height := 16;
+    lst.Add(bmp, nil);
+  finally
+    bmp.Free;
+  end;
+  FT.Images := lst;
+
+  for i := 0 to ACols - 1 do
+  begin
+    col := FT.Header.Columns.Add as TTyColumn;
+    col.Width := 120 - 20 * i;      { 120 / 100 / 80 -- three distinct widths }
+    col.Text  := Chr(Ord('A') + i);
+  end;
+  if ACols > 0 then
+  begin
+    { MainColumn LAST, after the columns exist: setting it first clamps it to -1 and the
+      main column then paints no chrome at all (see the MainColumn-before-columns note in
+      the treeview docs). }
+    FT.Header.MainColumn := 0;
+    FT.Header.Options    := [hoVisible, hoColumnResize, hoShowSortGlyphs,
+                             hoHeaderClickAutoSort];
+  end;
+
+  { One root with two children: same level, same column, same everything except that one
+    of them carries a check box -- so the delta between their captions is the slot alone. }
+  FT.RootNodeCount := 1;
+  FRoot := FT.RootNode^.FirstChild;
+  FT.InitNode(FRoot);
+  FBoxed := FT.AddChild(FRoot);
+  FPlain := FT.AddChild(FRoot);
+  FT.Expanded[FRoot]   := True;
+  FT.CheckType[FBoxed] := ctCheckBox;
+  FT.CheckType[FPlain] := ctNone;
+
+  if ARtl then FT.BiDiMode := bdRightToLeft;
+end;
+
+function TRtlTreeViewTest.Shot(AWidth, AHeight: Integer): TBGRABitmap;
+var
+  Bmp: TBitmap;
+begin
+  Bmp := TBitmap.Create;
+  try
+    Bmp.SetSize(AWidth, AHeight);
+    FT.Render(Bmp.Canvas, Rect(0, 0, AWidth, AHeight), FT.Font.PixelsPerInch);
+    Result := TBGRABitmap.Create(Bmp);
+  finally
+    Bmp.Free;
+  end;
+end;
+
+procedure TRtlTreeViewTest.TearDown;
+begin
+  FreeAndNil(FForm);
+  FreeAndNil(FCtl);
+  FT := nil;
+  inherited TearDown;
+end;
+
+function TRtlTreeViewTest.PaintedColumnAt(AX: Integer): Integer;
+var
+  i: Integer;
+  cell: TRect;
+begin
+  Result := NoColumn;
+  for i := 0 to FT.Header.Columns.Count - 1 do
+    if FT.GetCellRect(FBoxed, i, cell) and (AX >= cell.Left) and (AX < cell.Right) then
+      Exit(i);
+end;
+
+function TRtlTreeViewTest.MainCell: TRect;
+begin
+  if not FT.GetCellRect(FBoxed, FT.Header.MainColumn, Result) then
+    Result := Rect(0, 0, 0, 0);
+end;
+
+function TRtlTreeViewTest.RowMidY(Node: PTyTreeNode): Integer;
+var
+  r: TRect;
+begin
+  Result := 0;
+  if FT.DisplayRect(Node, False, r) then Result := (r.Top + r.Bottom) div 2;
+end;
+
+{ --- the column axis ------------------------------------------------------- }
+
+procedure TRtlTreeViewTest.ColumnZeroSitsAgainstTheContentsRightEdgeAndTheRestPackLeftwards;
+var
+  c0, c1, c2, cr: TRect;
+begin
+  Build(True);
+  cr := FT.ContentRect;
+  AssertTrue('cells resolve', FT.GetCellRect(FBoxed, 0, c0) and
+    FT.GetCellRect(FBoxed, 1, c1) and FT.GetCellRect(FBoxed, 2, c2));
+  AssertEquals('column 0 ends flush against the content''s right edge', cr.Right, c0.Right);
+  AssertEquals('column 1 ends where column 0 begins', c0.Left, c1.Right);
+  AssertEquals('column 2 ends where column 1 begins', c1.Left, c2.Right);
+end;
+
+procedure TRtlTreeViewTest.MirroredColumnsTileWithNoSeamAndKeepEveryWidth;
+var
+  i: Integer;
+  ltr, rtl: array[0..2] of TRect;
+begin
+  Build(False);
+  for i := 0 to 2 do FT.GetCellRect(FBoxed, i, ltr[i]);
+  FreeAndNil(FForm); FreeAndNil(FCtl);
+  Build(True);
+  for i := 0 to 2 do FT.GetCellRect(FBoxed, i, rtl[i]);
+  for i := 0 to 2 do
+    AssertEquals('column ' + IntToStr(i) + ' keeps its width',
+      ltr[i].Right - ltr[i].Left, rtl[i].Right - rtl[i].Left);
+end;
+
+{ The load-bearing probe of the column half. Every device x in the content strip is asked
+  of the HIT TEST and of the PAINT, and the two must name the same column -- which catches
+  a mirror that reached one and not the other at the ONE pixel where they disagree, not
+  merely at the pixels in the middle of a cell where every wrong version still agrees. }
+procedure TRtlTreeViewTest.TheColumnHitTestNamesTheColumnThePaintFilledAtEveryPixel;
+var
+  x, y, cnt: Integer;
+  part: TTyTreeHitPart;
+  col: Integer;
+begin
+  Build(True);
+  y := RowMidY(FBoxed);
+  cnt := 0;
+  for x := FT.ContentRect.Left to FT.ContentRect.Right - 1 do
+  begin
+    FT.GetNodeAtPoint(x, y, part, col);
+    AssertEquals('hit test and paint disagree at x=' + IntToStr(x),
+      PaintedColumnAt(x), col);
+    if col <> NoColumn then Inc(cnt);
+  end;
+  AssertTrue('the sweep actually covered painted columns', cnt > 100);
+end;
+
+procedure TRtlTreeViewTest.AHeaderSectionClickSortsTheColumnUnderThePointer;
+var
+  cell: TRect;
+  hdrY: Integer;
+begin
+  Build(True);
+  AssertTrue('column 2''s cell resolves', FT.GetCellRect(FBoxed, 2, cell));
+  hdrY := FT.ContentRect.Top - 2;   { inside the header band, just above the node area }
+  { The LEFTMOST cell in a mirrored strip is the LAST column, and clicking it must sort
+    that one. Just clear of the resize grip -- the divider zone reaches 5 px inside the
+    edge and a press inside it starts a drag instead of a click, which is a different
+    (and separately guarded) behaviour, not a mirroring failure. Still nowhere near the
+    cell's centre: unmirrored, this x belongs to column 0. }
+  FT.PressDown(cell.Left + 10, hdrY);
+  FT.PressUp(cell.Left + 10, hdrY);
+  AssertEquals('the leftmost header cell sorts the LAST column', 2, FT.Header.SortColumn);
+end;
+
+{ The grip is a column's TRAILING edge, which mirroring moves from its right to its left.
+
+  Anchored to RENDERED INK first and to the hit test second, deliberately: asking the hit
+  test to agree with GetCellRect alone would only prove the two halves of the same span
+  source agree with each other. The divider a user grabs is the one they can SEE, so the
+  probe starts from the pixels the painter actually put down and requires the grip to be
+  on that column of pixels -- and requires the unmirrored position to have gone dead, or
+  a hit test answering on both sides would satisfy the positive half by itself. }
+procedure TRtlTreeViewTest.TheResizeGripGrabsTheMirroredColumnEdgeNotTheLtrOne;
+var
+  cell: TRect;
+  hdrY, bandTop: Integer;
+  part: TTyTreeHitPart;
+  col: Integer;
+  bmp: TBGRABitmap;
+begin
+  Build(True);
+  AssertTrue('column 0''s cell resolves', FT.GetCellRect(FBoxed, 0, cell));
+  hdrY    := FT.ContentRect.Top - 2;
+  bandTop := FT.ContentRect.Top - MulDiv(FT.Header.Height, 96, 96);
+
+  bmp := Shot;
+  try
+    AssertTrue('a divider is PAINTED on the edge column 0 shares with column 1',
+      ChannelInkCountRows(bmp, chGreen, cell.Left, cell.Left + 1, bandTop, FT.ContentRect.Top) > 0);
+    AssertEquals('and none on the edge it used to share there',
+      0, ChannelInkCountRows(bmp, chGreen, cell.Right - 2, cell.Right - 1,
+                             bandTop, FT.ContentRect.Top));
+  finally
+    bmp.Free;
+  end;
+
+  AssertTrue('the painted edge is a divider',
+    FT.GetHeaderHitAt(cell.Left, hdrY, part, col));
+  AssertEquals('and it is column 0''s', Ord(hpHeaderDivider), Ord(part));
+  AssertEquals('named as column 0', 0, col);
+  { Column 0's right edge is now the content edge, which is nobody's divider. }
+  FT.GetHeaderHitAt(cell.Right - 1, hdrY, part, col);
+  AssertEquals('the old right-hand grip is no longer a divider',
+    Ord(hpHeaderSection), Ord(part));
+end;
+
+procedure TRtlTreeViewTest.DraggingAwayFromTheReadingStartWidensTheColumn;
+var
+  cell: TRect;
+  hdrY, w0: Integer;
+begin
+  Build(True);
+  AssertTrue('column 0''s cell resolves', FT.GetCellRect(FBoxed, 0, cell));
+  hdrY := FT.ContentRect.Top - 2;
+  w0 := (FT.Header.Columns.Items[0] as TTyColumn).Width;
+  FT.PressDown(cell.Left, hdrY);
+  FT.PressMove(cell.Left - 20, hdrY);   { leftwards = away from the reading start }
+  FT.PressUp(cell.Left - 20, hdrY);
+  AssertEquals('dragging the grip leftwards widens the column by the drag',
+    w0 + 20, (FT.Header.Columns.Items[0] as TTyColumn).Width);
+end;
+
+{ The reflection is `bandRight - x`, and a boundary that rounds differently on the two
+  sides of it only shows away from 96 PPI -- which is exactly the skew this control had
+  before the hit tests moved into device px. 144 PPI with widths that do not divide by
+  two evenly is where that reappears if anyone re-derives instead of reflecting. }
+procedure TRtlTreeViewTest.ColumnBoundariesStayExactAtANonDefaultDensity;
+var
+  x, y: Integer;
+  part: TTyTreeHitPart;
+  col: Integer;
+begin
+  Build(True, 3, 400, 144);
+  y := RowMidY(FBoxed);
+  for x := FT.ContentRect.Left to FT.ContentRect.Right - 1 do
+  begin
+    FT.GetNodeAtPoint(x, y, part, col);
+    AssertEquals('@144 PPI hit and paint disagree at x=' + IntToStr(x),
+      PaintedColumnAt(x), col);
+  end;
+end;
+
+{ --- the slot axis inside the main cell ------------------------------------ }
+
+{ The mirrored order, stated as the four boundaries rather than as four containments:
+  cell.Right inwards it is indent (with the expander at its inner end), then the check
+  slot, then the icon slot, then the caption. Every number here is an EDGE. }
+procedure TRtlTreeViewTest.TheChromeSlotsRunFromTheCellsRightEdgeInwards;
+var
+  cell: TRect;
+  y: Integer;
+  part: TTyTreeHitPart;
+begin
+  Build(True);
+  cell := MainCell;
+  y := RowMidY(FBoxed);
+  { level 1 + ShowRoot = 2 indent steps of 24 = 48; check 16; image 24.
+    FBoxed is a LEAF, so its expander slot classifies as indent -- which is the existing
+    rule (hpButton needs ShowButtons AND children) and is asserted on a node that has
+    children by TheExpanderIsPaintedWhereTheHitTestOpensIt. }
+  FT.GetNodeAtPoint(cell.Right - 1, y, part);
+  AssertEquals('the cell''s last pixel is indent', Ord(hpIndent), Ord(part));
+  FT.GetNodeAtPoint(cell.Right - 48, y, part);
+  AssertEquals('and so is the last pixel of the indent, 48 in', Ord(hpIndent), Ord(part));
+  FT.GetNodeAtPoint(cell.Right - 48 - 1, y, part);
+  AssertEquals('and the check slot begins immediately past the indent',
+    Ord(hpCheckBox), Ord(part));
+  FT.GetNodeAtPoint(cell.Right - 48 - 16, y, part);
+  AssertEquals('the check slot is 16 px wide', Ord(hpCheckBox), Ord(part));
+  FT.GetNodeAtPoint(cell.Right - 48 - 16 - 1, y, part);
+  AssertEquals('after which the icon slot starts', Ord(hpImage), Ord(part));
+  FT.GetNodeAtPoint(cell.Right - 48 - 16 - 24, y, part);
+  AssertEquals('and is 24 px wide', Ord(hpImage), Ord(part));
+  FT.GetNodeAtPoint(cell.Right - 48 - 16 - 24 - 1, y, part);
+  AssertEquals('everything further in is the caption', Ord(hpLabel), Ord(part));
+end;
+
+{ The same statement made structurally: sweep the whole main cell and require the hit
+  test's answer at x to equal the unmirrored tree's answer at the reflected x. This is
+  the probe that catches a slot walk that mirrored three of its four slots. }
+procedure TRtlTreeViewTest.EverySlotBoundaryIsAnsweredOnTheExactPixelItIsPaintedAt;
+var
+  cell: TRect;
+  ltr: array of Integer;
+  i, y, w: Integer;
+  part: TTyTreeHitPart;
+begin
+  Build(False);
+  cell := MainCell;
+  y := RowMidY(FBoxed);
+  w := cell.Right - cell.Left;
+  SetLength(ltr, w);
+  for i := 0 to w - 1 do
+  begin
+    FT.GetNodeAtPoint(cell.Left + i, y, part);
+    ltr[i] := Ord(part);
+  end;
+  FreeAndNil(FForm); FreeAndNil(FCtl);
+
+  Build(True);
+  cell := MainCell;
+  y := RowMidY(FBoxed);
+  AssertEquals('the mirrored main cell is the same width', w, cell.Right - cell.Left);
+  for i := 0 to w - 1 do
+  begin
+    FT.GetNodeAtPoint(cell.Left + i, y, part);
+    AssertEquals('slot at cell offset ' + IntToStr(i) + ' must mirror offset ' +
+      IntToStr(w - 1 - i), ltr[w - 1 - i], Ord(part));
+  end;
+end;
+
+{ The check box's share of the caption x, asserted at BOTH ends and in BOTH directions.
+  It is here because it is the one contribution to this walk that a whole test suite can
+  miss: the box is optional, so a node without one is not evidence about a node with one,
+  and the two slots on either side of it (24 px indent step, 24 px icon) are wide enough
+  that a caption which lost 16 px still lands inside plausible-looking chrome. }
+procedure TRtlTreeViewTest.TheCheckSlotStillMovesTheCaptionByExactlyItsOwnWidth;
+var
+  cellB, cellP, tB, tP: TRect;
+begin
+  Build(False);
+  AssertTrue('cells resolve', FT.GetCellRect(FBoxed, 0, cellB) and
+    FT.GetCellRect(FPlain, 0, cellP));
+  tB := FT.TextRect(FBoxed, 0, cellB);
+  tP := FT.TextRect(FPlain, 0, cellP);
+  AssertEquals('reading left-to-right the box pushes the caption right by its 16 px slot',
+    16, tB.Left - tP.Left);
+  FreeAndNil(FForm); FreeAndNil(FCtl);
+
+  Build(True);
+  AssertTrue('mirrored cells resolve', FT.GetCellRect(FBoxed, 0, cellB) and
+    FT.GetCellRect(FPlain, 0, cellP));
+  tB := FT.TextRect(FBoxed, 0, cellB);
+  tP := FT.TextRect(FPlain, 0, cellP);
+  AssertEquals('mirrored, the caption still starts at the cell''s reading end',
+    tP.Left, tB.Left);
+  AssertEquals('and the box takes its 16 px off the caption''s other edge',
+    -16, tB.Right - tP.Right);
+end;
+
+procedure TRtlTreeViewTest.TheExpanderIsPaintedWhereTheHitTestOpensIt;
+var
+  btn, cell: TRect;
+  y: Integer;
+begin
+  Build(True);
+  AssertTrue('the root has an expander', FT.DisplayExpandSignRect(FRoot, btn));
+  cell := MainCell;
+  AssertTrue('it is inside the main cell', (btn.Left >= cell.Left) and (btn.Right <= cell.Right));
+  AssertTrue('and on the cell''s right half, its reading start when mirrored',
+    btn.Left >= (cell.Left + cell.Right) div 2);
+  y := RowMidY(FRoot);
+  AssertTrue('the root starts expanded', FT.Expanded[FRoot]);
+  { The expander's LEADING pixel, not its centre. }
+  FT.PressDown(btn.Right - 1, y);
+  FT.PressUp(btn.Right - 1, y);
+  AssertFalse('a click on the painted expander collapses the node', FT.Expanded[FRoot]);
+end;
+
+procedure TRtlTreeViewTest.ClickingWhereTheLtrExpanderUsedToBeDoesNotExpand;
+var
+  cell: TRect;
+  y: Integer;
+begin
+  Build(True);
+  cell := MainCell;
+  y := RowMidY(FRoot);
+  AssertTrue('the root starts expanded', FT.Expanded[FRoot]);
+  { Level 0 + ShowRoot = one indent step: unmirrored, the root's expander sat in
+    [cell.Left, cell.Left + 24). Nothing may respond there now. }
+  FT.PressDown(cell.Left + 4, y);
+  FT.PressUp(cell.Left + 4, y);
+  AssertTrue('the node the user did not click stays expanded', FT.Expanded[FRoot]);
+end;
+
+{ The caption is the one slot that is a REMAINDER rather than a fixed width, so it is the
+  one a half-done mirror leaves inverted or empty. Both edges are asserted, and then the
+  ink is required to actually be inside them. }
+procedure TRtlTreeViewTest.TheCaptionOccupiesTheCellsReadingEndAtBothOfItsEdges;
+var
+  cell, tr: TRect;
+  bmp: TBGRABitmap;
+  l, r: Integer;
+begin
+  Build(True);
+  l := 0; r := 0;
+  cell := MainCell;
+  tr := FT.TextRect(FBoxed, 0, cell);
+  AssertEquals('the caption box starts at the cell''s far end plus its pad',
+    cell.Left + 2, tr.Left);
+  AssertEquals('and ends where the icon slot begins, less the same pad',
+    cell.Right - 48 - 16 - 24 - 2, tr.Right);
+  bmp := Shot;
+  try
+    { The ROW band only: the header captions resolve the same colour, and scanning the
+      whole bitmap would find them sitting happily inside the chrome x range. }
+    AssertTrue('some caption ink was drawn in the row',
+      ChannelInkCountRows(bmp, chBlue, cell.Left, cell.Right, cell.Top, cell.Bottom) > 0);
+    AssertEquals('and none of it strays into the chrome slots',
+      0, ChannelInkCountRows(bmp, chBlue, cell.Right - 48 - 16 - 24, cell.Right,
+                             cell.Top, cell.Bottom));
+    AssertTrue('precondition: the ink probe is looking at a real row',
+      (l <= 0) or (r >= 0));
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ A chrome-less cell's text BOX is symmetric, so the box alone says nothing about
+  direction -- which is why the ink is asserted too: the caption inside it has to hug the
+  cell's reading start, and that comes from the painter's alignment lever, not from the
+  slot walk. Without the ink half this guard would pass in either direction. }
+procedure TRtlTreeViewTest.ANonMainCellsTextStillHugsItsOwnReadingStart;
+var
+  cell, tr: TRect;
+  bmp: TBGRABitmap;
+  mid: Integer;
+begin
+  Build(True);
+  AssertTrue('column 1''s cell resolves', FT.GetCellRect(FBoxed, 1, cell));
+  tr := FT.TextRect(FBoxed, 1, cell);
+  AssertEquals('a chrome-less cell pads both ends by 4', cell.Left + 4, tr.Left);
+  AssertEquals('and nothing else', cell.Right - 4, tr.Right);
+  mid := (cell.Left + cell.Right) div 2;
+  bmp := Shot;
+  try
+    AssertTrue('its caption is drawn against the cell''s reading start',
+      ChannelInkCount(bmp, chBlue, mid, cell.Right) > 0);
+    AssertEquals('and not against the far end',
+      0, ChannelInkCount(bmp, chBlue, cell.Left, mid));
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ The anchor bug this control shipped, in its mirrored form: with MainColumn = 1 the
+  chrome belongs in the MIDDLE cell, and a walk anchored on the content edge instead of
+  the cell puts it a whole column away. }
+procedure TRtlTreeViewTest.TheChromeStaysInsideTheMainCellWhenItIsNotTheFirstColumn;
+var
+  cell, btn: TRect;
+  y: Integer;
+  part: TTyTreeHitPart;
+begin
+  Build(True);
+  FT.Header.MainColumn := 1;
+  AssertTrue('the main cell resolves', FT.GetCellRect(FRoot, 1, cell));
+  AssertTrue('the expander resolves', FT.DisplayExpandSignRect(FRoot, btn));
+  AssertTrue('and it is inside the middle cell, not the right-hand one',
+    (btn.Left >= cell.Left) and (btn.Right <= cell.Right));
+  y := RowMidY(FRoot);
+  { The root is one indent step deep and HAS children, so that single step is entirely
+    its expander slot -- the middle cell's last pixel is the button, not bare indent. }
+  FT.GetNodeAtPoint(cell.Right - 1, y, part);
+  AssertEquals('the middle cell''s last pixel is the root''s expander',
+    Ord(hpButton), Ord(part));
+  FT.GetNodeAtPoint(cell.Left + 1, y, part);
+  AssertEquals('and its far end is the caption', Ord(hpLabel), Ord(part));
+  { The pixels on either SIDE of the main cell belong to chrome-less cells and must answer
+    hpLabel -- both sides, because the mirrored ladder has to bound its indent zone at the
+    cell edge or the indent swallows the whole neighbouring column. The right-hand probe
+    is the one that only exists once the tree is mirrored. }
+  FT.GetNodeAtPoint(cell.Right, y, part);
+  AssertEquals('the first pixel past the main cell is a plain cell body',
+    Ord(hpLabel), Ord(part));
+  FT.GetNodeAtPoint(cell.Left - 1, y, part);
+  AssertEquals('and so is the last pixel before it', Ord(hpLabel), Ord(part));
+end;
+
+{ --- the tree lines -------------------------------------------------------- }
+
+{ The connecting lines walk ANCESTOR levels, which the slot record does not describe, so
+  they are the one hand-written x accumulation left in the file. A tree whose nodes mirror
+  and whose lines do not is worse than one that does neither -- the lines then run through
+  the captions. Asserted as an exact reflection of the unmirrored render, which needs no
+  assumption about what an elbow looks like. }
+procedure TRtlTreeViewTest.TreeLinesInAZeroColumnTreeMirrorTogetherWithItsChrome;
+var
+  bmp: TBGRABitmap;
+  ltr: array of Boolean;
+  x, w, ink: Integer;
+  r: TRect;
+begin
+  { A 0-column tree has no header band, so the frame's border token can only be reaching
+    the bitmap through the connecting lines -- which is what lets this scan the whole
+    height and still be about the lines alone. }
+  Build(False, 0);
+  FT.ShowTreeLines := True;
+  r := FT.ContentRect;
+  w := FT.Width;
+  SetLength(ltr, w);
+  bmp := Shot;
+  try
+    ink := 0;
+    for x := 0 to w - 1 do
+    begin
+      ltr[x] := ChannelInkCount(bmp, chGreen, x, x + 1) > 0;
+      if ltr[x] then Inc(ink);
+    end;
+    AssertTrue('the unmirrored tree drew some lines', ink > 0);
+  finally
+    bmp.Free;
+  end;
+  FreeAndNil(FForm); FreeAndNil(FCtl);
+
+  Build(True, 0);
+  FT.ShowTreeLines := True;
+  r := FT.ContentRect;
+  bmp := Shot;
+  try
+    for x := r.Left to r.Right - 1 do
+      AssertEquals('tree-line ink at x=' + IntToStr(x) + ' must mirror x=' +
+        IntToStr(r.Left + r.Right - 1 - x),
+        Ord(ltr[r.Left + r.Right - 1 - x]),
+        Ord(ChannelInkCount(bmp, chGreen, x, x + 1) > 0));
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TRtlTreeViewTest.TreeLinesFollowTheMirroredIndentInsteadOfStayingLeft;
+var
+  bmp: TBGRABitmap;
+  cell: TRect;
+  x, first, y0, y1: Integer;
+begin
+  Build(True);
+  FT.ShowTreeLines := True;
+  cell := MainCell;
+  y0 := FT.ContentRect.Top + 25;    { inside the child rows, clear of the header band }
+  y1 := y0 + 40;
+  bmp := Shot;
+  try
+    first := -1;
+    for x := cell.Left to cell.Right - 1 do
+      if ChannelInkCount(bmp, chGreen, x, x + 1) > 0 then
+      begin
+        { only count ink inside the row band, not the header's dividers }
+        if ChannelInkCountRows(bmp, chGreen, x, x + 1, y0, y1) > 0 then
+        begin
+          first := x;
+          Break;
+        end;
+      end;
+    AssertTrue('some tree line was drawn inside the main cell', first >= 0);
+    AssertTrue('and the leftmost of them is past the cell''s middle, i.e. in the indent',
+      first > (cell.Left + cell.Right) div 2);
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ --- keyboard -------------------------------------------------------------- }
+
+{ §6.3 item 4: this key moves a NODE between slots, not a caret between characters, so it
+  is layout direction and it flips. Both halves are asserted, because flipping only one
+  leaves a tree that can be collapsed but never reopened. }
+procedure TRtlTreeViewTest.LeftExpandsAndRightCollapsesWhenTheTreeReadsRightToLeft;
+begin
+  Build(True);
+  FT.FocusedNode := FRoot;
+  AssertTrue('the root starts expanded', FT.Expanded[FRoot]);
+  FT.Key(VK_RIGHT);
+  AssertFalse('right collapses, because the children are drawn to the LEFT',
+    FT.Expanded[FRoot]);
+  FT.Key(VK_LEFT);
+  AssertTrue('and left opens it again', FT.Expanded[FRoot]);
+end;
+
+procedure TRtlTreeViewTest.UpAndDownAndHomeAndEndAreUntouchedByTheMirror;
+begin
+  Build(True);
+  FT.FocusedNode := FRoot;
+  FT.Key(VK_DOWN);
+  AssertTrue('down still moves to the next visible node', FT.FocusedNode = FBoxed);
+  FT.Key(VK_UP);
+  AssertTrue('and up back again', FT.FocusedNode = FRoot);
+  FT.Key(VK_END);
+  AssertTrue('End is a logical end, not a visual one', FT.FocusedNode = FPlain);
+  FT.Key(VK_HOME);
+  AssertTrue('and so is Home', FT.FocusedNode = FRoot);
+end;
+
+procedure TRtlTreeViewTest.MirroringChangesNoWidthAndNoNodeOrder;
+var
+  i, wLtr, wRtl: Integer;
+  c: TRect;
+begin
+  Build(False);
+  wLtr := 0;
+  for i := 0 to 2 do
+    if FT.GetCellRect(FBoxed, i, c) then Inc(wLtr, c.Right - c.Left);
+  FreeAndNil(FForm); FreeAndNil(FCtl);
+  Build(True);
+  wRtl := 0;
+  for i := 0 to 2 do
+    if FT.GetCellRect(FBoxed, i, c) then Inc(wRtl, c.Right - c.Left);
+  AssertEquals('the total painted width is unchanged', wLtr, wRtl);
+  AssertTrue('and the node order is unchanged', FT.GetNext(FRoot) = FBoxed);
+  AssertTrue('all the way down', FT.GetNext(FBoxed) = FPlain);
+end;
+
+{ Same statement as the list view's, and here for the same reason: the tree's content now
+  mirrors, so the bar it embeds has to be told, and the vertical one must be left alone. }
+procedure TRtlTreeViewTest.TheHorizontalBarIsToldToMirrorAndTheVerticalOneIsNot;
+var
+  i: Integer;
+  b: TTyScrollBar;
+  sawH, sawV: Boolean;
+  bmp: TBitmap;
+begin
+  { Columns wider than the control, and enough nodes to need a vertical bar too. The tree
+    only learns its content width during a paint (FRangeX is accumulated there), so the
+    bars are not settled until one has run. }
+  Build(True, 3, 180);
+  FT.RootNodeCount := 40;
+  bmp := TBitmap.Create;
+  try
+    bmp.SetSize(180, 200);
+    FT.Render(bmp.Canvas, Rect(0, 0, 180, 200), 96);
+  finally
+    bmp.Free;
+  end;
+  sawH := False; sawV := False;
+  for i := 0 to FT.ControlCount - 1 do
+    if FT.Controls[i] is TTyScrollBar then
+    begin
+      b := TTyScrollBar(FT.Controls[i]);
+      if not b.Visible then Continue;
+      if b.Kind = sbHorizontal then
+      begin
+        sawH := True;
+        AssertTrue('the horizontal bar is told to mirror', b.MirrorHorizontal);
+      end
+      else
+      begin
+        sawV := True;
+        AssertFalse('the vertical bar is not', b.MirrorHorizontal);
+      end;
+    end;
+  AssertTrue('precondition: a horizontal bar is showing', sawH);
+  AssertTrue('precondition: a vertical bar is showing', sawV);
+end;
+
+{ ----------------------------------------------------------- TRtlListViewTest }
+
+procedure TRtlListViewTest.Build(ARtl: Boolean; AStyle: TTyListViewStyle;
+  AItems, AWidth, APPI: Integer);
+var
+  i: Integer;
+  col: TTyColumn;
+  it: TTyListItem;
+begin
+  FForm := TForm.CreateNew(nil);
+  FForm.SetBounds(0, 0, 640, 480);
+  FCtl := TTyStyleController.Create(nil);
+  FCtl.LoadThemeCss(cListCss);
+
+  FL := TRtlListAccess.Create(FForm);
+  FL.Parent     := FForm;
+  FL.Controller := FCtl;
+  FL.Font.PixelsPerInch := APPI;
+  FL.ViewStyle  := AStyle;
+  FL.RowHeight  := 24;
+  FL.SetBounds(0, 0, AWidth, 200);
+  for i := 0 to 2 do
+  begin
+    col := FL.Header.Columns.Add as TTyColumn;
+    col.Width := 120 - 20 * i;
+    col.Text  := Chr(Ord('A') + i);
+  end;
+  FL.Header.MainColumn := 0;
+  FL.Header.Options    := [hoVisible, hoColumnResize, hoShowSortGlyphs];
+  for i := 0 to AItems - 1 do
+  begin
+    it := FL.Items.Add;
+    it.Caption := 'i' + IntToStr(i);
+    it.SubItems.Add('s' + IntToStr(i));
+    it.SubItems.Add('t' + IntToStr(i));
+  end;
+  if ARtl then FL.BiDiMode := bdRightToLeft;
+  FL.Remeasure;
+end;
+
+function TRtlListViewTest.Shot(AWidth, AHeight: Integer): TBGRABitmap;
+var
+  Bmp: TBitmap;
+begin
+  Bmp := TBitmap.Create;
+  try
+    Bmp.SetSize(AWidth, AHeight);
+    FL.Render(Bmp.Canvas, Rect(0, 0, AWidth, AHeight), FL.Font.PixelsPerInch);
+    Result := TBGRABitmap.Create(Bmp);
+  finally
+    Bmp.Free;
+  end;
+end;
+
+procedure TRtlListViewTest.TearDown;
+begin
+  FreeAndNil(FForm);
+  FreeAndNil(FCtl);
+  FL := nil;
+  inherited TearDown;
+end;
+
+function TRtlListViewTest.PaintedColumnAt(AX: Integer): Integer;
+var
+  i: Integer;
+  sp: TTyColumnSpan;
+begin
+  Result := NoColumn;
+  for i := 0 to FL.Header.Columns.Count - 1 do
+  begin
+    sp := (FL.Header.Columns.Items[i] as TTyColumn).Span(FL.Axis);
+    if (AX >= sp.Left) and (AX < sp.Right) then Exit(i);
+  end;
+end;
+
+function TRtlListViewTest.RowMidY(APos: Integer): Integer;
+var
+  r: TRect;
+begin
+  r := FL.Cell(APos);
+  Result := (r.Top + r.Bottom) div 2;
+end;
+
+procedure TRtlListViewTest.AssertPaintedRulesMatchTheModel;
+var
+  bmp: TBGRABitmap;
+  i, edge, inward, y0, y1: Integer;
+  sp: TTyColumnSpan;
+  rtl: Boolean;
+begin
+  FL.GridLines := True;
+  rtl := FL.Mirrors;
+  { INSIDE the first row, clear of the horizontal rule the same renderer draws on that
+    row's bottom edge in the same colour. Scanning the whole row height would count that
+    rule in every column and make the probe answer "ink everywhere". }
+  y0 := FL.Metrics.HeaderH + 4;
+  y1 := y0 + 14;
+  bmp := Shot;
+  try
+    for i := 0 to FL.Header.Columns.Count - 1 do
+    begin
+      sp := (FL.Header.Columns.Items[i] as TTyColumn).Span(FL.Axis);
+      { The rule sits on the column's LAST pixel on the side it shares with its successor:
+        Right-1 reading rightward, Left when mirrored -- which is that same pixel reflected. }
+      if rtl then
+      begin
+        edge := sp.Left;
+        inward := edge + 3;      { three pixels INTO the column, whichever side that is }
+      end
+      else
+      begin
+        edge := sp.Right - 1;
+        inward := edge - 3;
+      end;
+      AssertTrue('column ' + IntToStr(i) + ': a rule is painted on its trailing edge (x=' +
+        IntToStr(edge) + ')',
+        ChannelInkCountRows(bmp, chGreen, edge, edge + 1, y0, y1) > 0);
+      AssertEquals('column ' + IntToStr(i) + ': and nothing three pixels inside it',
+        0, ChannelInkCountRows(bmp, chGreen, inward, inward + 1, y0, y1));
+    end;
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TRtlListViewTest.ColumnClicked(Sender: TObject; AColumn: Integer);
+begin
+  FClickCol := AColumn;
+end;
+
+function TRtlListViewTest.ClickedColumnAt(AX: Integer): Integer;
+var
+  hdrY: Integer;
+begin
+  FClickCol := -1;
+  FL.OnColumnClick := @ColumnClicked;
+  hdrY := FL.Metrics.HeaderH div 2;
+  FL.PressDown(AX, hdrY);
+  FL.PressUp(AX, hdrY);
+  Result := FClickCol;
+end;
+
+{ --- report mode: the column axis ------------------------------------------ }
+
+procedure TRtlListViewTest.ReportColumnZeroSitsAgainstTheRightEdge;
+var
+  s0, s1, s2: TTyColumnSpan;
+begin
+  Build(True, lvsReport);
+  { The link to the pixels: without this the three span assertions below would only be
+    about the column model, which mirrors on its own whether or not the control asks it to. }
+  AssertPaintedRulesMatchTheModel;
+  s0 := (FL.Header.Columns.Items[0] as TTyColumn).Span(FL.Axis);
+  s1 := (FL.Header.Columns.Items[1] as TTyColumn).Span(FL.Axis);
+  s2 := (FL.Header.Columns.Items[2] as TTyColumn).Span(FL.Axis);
+  AssertEquals('column 0 ends flush against the viewport''s right edge',
+    FL.Metrics.ViewportW, s0.Right);
+  AssertEquals('column 1 ends where column 0 begins', s0.Left, s1.Right);
+  AssertEquals('column 2 ends where column 1 begins', s1.Left, s2.Right);
+  AssertEquals('and every width survives', 120, s0.Right - s0.Left);
+  AssertEquals('every width survives', 100, s1.Right - s1.Left);
+  AssertEquals('every width survives', 80, s2.Right - s2.Left);
+end;
+
+{ The sweep, driven through the CONTROL: every device x across the header is clicked and
+  the column the control names is compared with the column the paint filled. The paint's
+  answer is chained to the bitmap by AssertPaintedRulesMatchTheModel first, so this cannot
+  degenerate into the model agreeing with itself. }
+procedure TRtlListViewTest.TheHeaderHitTestNamesTheColumnThePaintFilledAtEveryPixel;
+var
+  x, named, hdrY, grips, clicks: Integer;
+begin
+  Build(True, lvsReport);
+  AssertPaintedRulesMatchTheModel;
+  hdrY := FL.Metrics.HeaderH div 2;
+  grips := 0;
+  clicks := 0;
+  for x := 0 to FL.Metrics.ViewportW - 1 do
+  begin
+    { A pixel inside a divider's grab zone starts a RESIZE, not a section click, in either
+      direction -- so it is counted rather than asserted about here (which edge it grabs
+      is TheResizeGripGrabsTheMirroredColumnEdge's subject). Every other pixel must name
+      the column the paint filled. }
+    if FL.GetHitPart(x, hdrY) = lhpDivider then
+    begin
+      Inc(grips);
+      Continue;
+    end;
+    named := ClickedColumnAt(x);
+    AssertEquals('header click and paint disagree at x=' + IntToStr(x),
+      PaintedColumnAt(x), named);
+    Inc(clicks);
+  end;
+  AssertTrue('the sweep really did click most of the strip', clicks > 300);
+  AssertTrue('and the grab zones it skipped are a small minority', grips < 40);
+end;
+
+procedure TRtlListViewTest.TheResizeGripGrabsTheMirroredColumnEdge;
+var
+  sp: TTyColumnSpan;
+  hdrY: Integer;
+begin
+  Build(True, lvsReport);
+  AssertPaintedRulesMatchTheModel;
+  sp := (FL.Header.Columns.Items[0] as TTyColumn).Span(FL.Axis);
+  hdrY := FL.Metrics.HeaderH div 2;
+  { Through the control's own hit classification, not the column model's -- GetHitPart is
+    what MouseDown consults to decide whether a press starts a resize. }
+  AssertEquals('the painted trailing edge is a divider',
+    Ord(lhpDivider), Ord(FL.GetHitPart(sp.Left, hdrY)));
+  AssertEquals('and the old right-hand edge is plain header now',
+    Ord(lhpHeader), Ord(FL.GetHitPart(sp.Right - 1, hdrY)));
+end;
+
+procedure TRtlListViewTest.DraggingAwayFromTheReadingStartWidensTheColumn;
+var
+  sp: TTyColumnSpan;
+  hdrY, w0: Integer;
+begin
+  Build(True, lvsReport);
+  AssertPaintedRulesMatchTheModel;
+  sp := (FL.Header.Columns.Items[0] as TTyColumn).Span(FL.Axis);
+  hdrY := FL.Metrics.HeaderH div 2;
+  w0 := (FL.Header.Columns.Items[0] as TTyColumn).Width;
+  FL.PressDown(sp.Left, hdrY);
+  FL.PressMove(sp.Left - 20, hdrY);
+  FL.PressUp(sp.Left - 20, hdrY);
+  AssertEquals('dragging the grip leftwards widens the column by the drag',
+    w0 + 20, (FL.Header.Columns.Items[0] as TTyColumn).Width);
+end;
+
+{ The rules themselves, stated as the exact reflection of the unmirrored render. This is
+  the probe that owes nothing at all to the column model: it compares one bitmap against
+  another. }
+procedure TRtlListViewTest.GridLinesSitOnTheEdgeTheColumnsActuallyShare;
+var
+  bmp: TBGRABitmap;
+  ltr: array of Boolean;
+  x, vw, y0, y1, n: Integer;
+begin
+  Build(False, lvsReport);
+  FL.GridLines := True;
+  vw := FL.Metrics.ViewportW;
+  y0 := FL.Metrics.HeaderH + 4;
+  y1 := y0 + 14;      { inside row 0, clear of its own horizontal rule -- see above }
+  SetLength(ltr, vw);
+  n := 0;
+  bmp := Shot;
+  try
+    for x := 0 to vw - 1 do
+    begin
+      ltr[x] := ChannelInkCountRows(bmp, chGreen, x, x + 1, y0, y1) > 0;
+      if ltr[x] then Inc(n);
+    end;
+    AssertEquals('the unmirrored report rules its three column edges', 3, n);
+  finally
+    bmp.Free;
+  end;
+  FreeAndNil(FForm); FreeAndNil(FCtl);
+
+  Build(True, lvsReport);
+  FL.GridLines := True;
+  bmp := Shot;
+  try
+    for x := 0 to vw - 1 do
+      AssertEquals('rule ink at x=' + IntToStr(x) + ' must mirror x=' +
+        IntToStr(vw - 1 - x), Ord(ltr[vw - 1 - x]),
+        Ord(ChannelInkCountRows(bmp, chGreen, x, x + 1, y0, y1) > 0));
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TRtlListViewTest.ReportRowTextHugsItsCellsReadingStart;
+var
+  bmp: TBGRABitmap;
+  sp: TTyColumnSpan;
+  n: Integer;
+begin
+  Build(True, lvsReport);
+  sp := (FL.Header.Columns.Items[2] as TTyColumn).Span(FL.Axis);
+  bmp := Shot;
+  try
+    n := ChannelInkCount(bmp, chBlue, sp.Left, (sp.Left + sp.Right) div 2);
+    AssertEquals('the last column''s text does not sit on its left half', 0, n);
+    AssertTrue('it sits on the right half, its reading start',
+      ChannelInkCount(bmp, chBlue, (sp.Left + sp.Right) div 2, sp.Right) > 0);
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ --- report mode: the check box -------------------------------------------- }
+
+procedure TRtlListViewTest.TheReportCheckBoxMovesToTheMainColumnsReadingStart;
+var
+  cell, chk: TRect;
+  sp: TTyColumnSpan;
+begin
+  Build(True, lvsReport);
+  FL.Checkboxes := True;
+  cell := FL.Cell(0);
+  chk  := FL.CheckBox(cell);
+  sp   := (FL.Header.Columns.Items[0] as TTyColumn).Span(FL.Axis);
+  AssertTrue('a box was placed', chk.Right > chk.Left);
+  AssertTrue('inside the main column''s cell', (chk.Left >= sp.Left) and (chk.Right <= sp.Right));
+  AssertTrue('against its reading start, i.e. the right end',
+    chk.Left > (sp.Left + sp.Right) div 2);
+end;
+
+procedure TRtlListViewTest.AClickWhereTheLtrCheckBoxWasDoesNotToggleAnything;
+var
+  cell: TRect;
+  sp: TTyColumnSpan;
+  y: Integer;
+begin
+  Build(True, lvsReport);
+  FL.Checkboxes := True;
+  cell := FL.Cell(0);
+  sp   := (FL.Header.Columns.Items[0] as TTyColumn).Span(FL.Axis);
+  y := (cell.Top + cell.Bottom) div 2;
+  AssertFalse('item 0 starts unchecked', FL.Checked[0]);
+  FL.PressDown(sp.Left + 4, y);          { where the unmirrored box used to be }
+  FL.PressUp(sp.Left + 4, y);
+  AssertFalse('a click on the far side of the cell must not toggle', FL.Checked[0]);
+end;
+
+procedure TRtlListViewTest.TheCheckBoxIsPaintedInsideTheZoneThatTogglesIt;
+var
+  cell, chk: TRect;
+  y: Integer;
+begin
+  Build(True, lvsReport);
+  FL.Checkboxes := True;
+  cell := FL.Cell(0);
+  chk  := FL.CheckBox(cell);
+  y := (chk.Top + chk.Bottom) div 2;
+  AssertEquals('the hit test calls the painted box a check',
+    Ord(lhpCheck), Ord(FL.GetHitPart(chk.Left, y)));
+  AssertEquals('right up to its last pixel',
+    Ord(lhpCheck), Ord(FL.GetHitPart(chk.Right - 1, y)));
+  FL.PressDown(chk.Left, y);
+  FL.PressUp(chk.Left, y);
+  AssertTrue('and pressing it toggles the item', FL.Checked[0]);
+end;
+
+{ The box moves to the main column's reading start, and the CAPTION BOX has to give up
+  that end with it. Mirroring the box alone leaves the text rect spanning the whole cell,
+  and the painter's right-alignment then stamps the caption straight over the check mark.
+  Nothing about the ink's SIDE can see that -- the caption is against the reading start
+  either way -- which is why this asks whether the box's own x range is clear. }
+procedure TRtlListViewTest.ReportRowTextStepsAsideForTheMirroredCheckBox;
+var
+  cell, chk: TRect;
+  bmp: TBGRABitmap;
+begin
+  Build(True, lvsReport);
+  FL.Checkboxes := True;
+  cell := FL.Cell(0);
+  chk  := FL.CheckBox(cell);
+  AssertTrue('a box was placed', chk.Right > chk.Left);
+  bmp := Shot;
+  try
+    AssertEquals('no caption ink inside the check box''s own column of pixels',
+      0, ChannelInkCountRows(bmp, chBlue, chk.Left, chk.Right, cell.Top, cell.Bottom));
+    AssertTrue('and the caption really was drawn somewhere in that row',
+      ChannelInkCountRows(bmp, chBlue, 0, FL.Metrics.ViewportW,
+                          cell.Top, cell.Bottom) > 0);
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ --- the four flow styles -------------------------------------------------- }
+
+procedure TRtlListViewTest.IconCellsFillFromTheRightEdgeOfTheViewport;
+var
+  c0, c1: TRect;
+begin
+  Build(True, lvsIcon);
+  c0 := FL.Cell(0);
+  c1 := FL.Cell(1);
+  AssertEquals('cell 0 ends flush against the viewport''s right edge',
+    FL.Metrics.ViewportW, c0.Right);
+  AssertTrue('and cell 1 sits to its left', c1.Right <= c0.Left);
+end;
+
+{ tyControls.ListView.Layout.pas states as its own contract that TyListItemAt is
+  TyListItemRect's exact inverse. A mirror that reaches the rect and not the guess breaks
+  precisely that, and only away from a cell's middle -- so the sweep covers every pixel of
+  the row, gaps included. }
+procedure TRtlListViewTest.TheItemHitTestIsTheExactInverseOfTheMirroredCells;
+var
+  x, y, i, expect: Integer;
+  cell: TRect;
+begin
+  Build(True, lvsIcon);
+  y := RowMidY(0);
+  for x := 0 to FL.Metrics.ViewportW - 1 do
+  begin
+    expect := -1;
+    for i := 0 to FL.Items.Count - 1 do
+    begin
+      cell := FL.Cell(i);
+      if (x >= cell.Left) and (x < cell.Right) and
+         (y >= cell.Top) and (y < cell.Bottom) then
+      begin
+        expect := i;
+        Break;
+      end;
+    end;
+    AssertEquals('item hit and paint disagree at x=' + IntToStr(x),
+      expect, FL.GetItemAt(x, y));
+  end;
+end;
+
+procedure TRtlListViewTest.AColumnMajorListFillsItsFirstTrackAgainstTheRightEdge;
+var
+  c0, c1: TRect;
+begin
+  Build(True, lvsList, 20);
+  c0 := FL.Cell(0);
+  c1 := FL.Cell(1);
+  AssertEquals('the first track ends flush against the right edge',
+    FL.Metrics.ViewportW, c0.Right);
+  AssertEquals('and the next item is directly below it, same track', c0.Left, c1.Left);
+end;
+
+procedure TRtlListViewTest.TheFlowCheckBoxMovesToTheCellsReadingStartAndTheLabelStepsAside;
+var
+  cell, chk: TRect;
+  bmp: TBGRABitmap;
+begin
+  Build(True, lvsSmallIcon);
+  FL.Checkboxes := True;
+  cell := FL.Cell(0);
+  chk  := FL.CheckBox(cell);
+  AssertTrue('a box was placed', chk.Right > chk.Left);
+  AssertTrue('against the cell''s reading start, i.e. the right end',
+    chk.Left > (cell.Left + cell.Right) div 2);
+  bmp := Shot;
+  try
+    AssertEquals('and the label has stepped aside off the box',
+      0, ChannelInkCount(bmp, chBlue, chk.Left, chk.Right));
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ EVERY cell, not one: the candidate track range a marquee derives is computed with the
+  same `div PitchX` the hit test uses, so it has to be taken into reading space too -- and
+  a band over a cell NEAR the axis of reflection is covered by the +/-1 pad that range
+  carries whether or not anyone remembered. Only the cells far from the axis, i.e. the far
+  end of the row, can see it. Sweeping all of them removes the choice. }
+procedure TRtlListViewTest.AMarqueeSelectsTheCellsItActuallyCovers;
+var
+  i, j: Integer;
+  c: TRect;
+begin
+  Build(True, lvsIcon);
+  FL.MultiSelect := True;
+  for i := 0 to FL.Items.Count - 1 do
+  begin
+    FL.ClearSelection;
+    c := FL.Cell(i);
+    { The press must land on NO item, or the control treats it as a click and never opens
+      a band at all -- which is how a marquee guard can look like one and test selection
+      instead. Just below the cell is the inter-row gap (or, on the last row, empty
+      space); the drag then reaches back up into the cell and nothing else. }
+    AssertEquals('precondition: the press point is not on an item',
+      -1, FL.GetItemAt(c.Left + 2, c.Bottom + 2));
+    FL.PressDown(c.Left + 2, c.Bottom + 2);
+    FL.PressMove(c.Right - 2, c.Top + 2);
+    FL.PressUp(c.Right - 2, c.Top + 2);
+    AssertTrue('the item under the band is selected: ' + IntToStr(i), FL.Selected[i]);
+    for j := 0 to FL.Items.Count - 1 do
+      if j <> i then
+        AssertFalse('and nothing else is: ' + IntToStr(i) + '/' + IntToStr(j),
+          FL.Selected[j]);
+  end;
+end;
+
+{ Grouping is a SECOND copy of the flat cell arithmetic in the same unit, so it needs its
+  own probe: mirroring one copy and not the other leaves a list that is correct until
+  somebody switches grouping on. Asserted as a symmetry of the CONTROL's own hit test
+  against its unmirrored self -- an assertion an unmirrored grouped layout cannot satisfy
+  -- and anchored to the bitmap by the selection fill, which says where the paint put the
+  cell without consulting the geometry function the hit test also reads. }
+procedure TRtlListViewTest.GroupedCellsMirrorTogetherWithTheFlatOnes;
+var
+  ltr: array of Integer;
+  x, y, vw: Integer;
+  bmp: TBGRABitmap;
+  l, r: Integer;
+
+  procedure BuildGrouped(ARtl: Boolean);
+  var
+    i: Integer;
+  begin
+    Build(ARtl, lvsIcon, 8);
+    FL.Groups.Add.Caption := 'G0';
+    FL.Groups.Add.Caption := 'G1';
+    for i := 0 to FL.Items.Count - 1 do
+      FL.Items[i].GroupIndex := i div 4;
+    FL.GroupView := True;
+    FL.Remeasure;
+  end;
+
+begin
+  BuildGrouped(False);
+  vw := FL.Metrics.ViewportW;
+  y  := FL.Metrics.HeaderH + FL.Metrics.CellH div 2 + GroupProbeOffset;
+  SetLength(ltr, vw);
+  for x := 0 to vw - 1 do ltr[x] := FL.GetItemAt(x, y);
+  AssertTrue('precondition: the unmirrored grouped list has items under this row',
+    ltr[2] >= 0);
+  FreeAndNil(FForm); FreeAndNil(FCtl);
+
+  BuildGrouped(True);
+  for x := 0 to vw - 1 do
+    AssertEquals('grouped item at x=' + IntToStr(x) + ' must mirror x=' +
+      IntToStr(vw - 1 - x), ltr[vw - 1 - x], FL.GetItemAt(x, y));
+
+  { And the paint agrees: the first item's fill is against the right edge. }
+  FL.Selected[0] := True;
+  bmp := Shot;
+  try
+    ChannelSpanX(bmp, chRed, l, r);
+    AssertTrue('the selected grouped cell was filled', l >= 0);
+    AssertEquals('and it ends flush against the viewport''s right edge', vw - 1, r);
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ The flat counterpart of the ink half above, kept separate because it is the one probe in
+  this class that answers "where did the paint put cell 0" from PIXELS alone. }
+procedure TRtlListViewTest.ASelectedCellIsFilledWhereTheHitTestSaysItIs;
+var
+  bmp: TBGRABitmap;
+  l, r, y: Integer;
+begin
+  Build(True, lvsIcon);
+  FL.Selected[0] := True;
+  bmp := Shot;
+  try
+    ChannelSpanX(bmp, chRed, l, r);
+    AssertTrue('the selected cell was filled', l >= 0);
+    AssertEquals('its fill ends flush against the viewport''s right edge',
+      FL.Metrics.ViewportW - 1, r);
+    y := (FL.Cell(0).Top + FL.Cell(0).Bottom) div 2;
+    AssertEquals('and the hit test names item 0 on the fill''s first pixel',
+      0, FL.GetItemAt(l, y));
+    AssertEquals('and on its last', 0, FL.GetItemAt(r, y));
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ MirrorHorizontal is opt-in and NOT wired to BiDiMode, precisely so a bar cannot mirror
+  ahead of the content it scrolls. Now that this control's content does mirror, the control
+  is the one that must say so -- and the vertical bar must be left alone, because up/down
+  is an axis the reading direction does not touch. }
+procedure TRtlListViewTest.TheHorizontalBarIsToldToMirrorAndTheVerticalOneIsNot;
+var
+  bars, i: Integer;
+  b: TTyScrollBar;
+  sawH, sawV: Boolean;
+begin
+  { A wide report in a narrow control, so both bars are needed at once. }
+  Build(True, lvsReport, 40, 200);
+  sawH := False; sawV := False;
+  bars := 0;
+  for i := 0 to FL.ControlCount - 1 do
+    if FL.Controls[i] is TTyScrollBar then
+    begin
+      b := TTyScrollBar(FL.Controls[i]);
+      if not b.Visible then Continue;
+      Inc(bars);
+      if b.Kind = sbHorizontal then
+      begin
+        sawH := True;
+        AssertTrue('the horizontal bar is told to mirror', b.MirrorHorizontal);
+      end
+      else
+      begin
+        sawV := True;
+        AssertFalse('the vertical bar is not', b.MirrorHorizontal);
+      end;
+    end;
+  AssertTrue('precondition: a horizontal bar is showing', sawH);
+  AssertTrue('precondition: a vertical bar is showing', sawV);
+  AssertEquals('and there are exactly two', 2, bars);
+end;
+
+{ --- keyboard -------------------------------------------------------------- }
+
+procedure TRtlListViewTest.ArrowKeysFollowTheEyeAndHomeEndStayLogical;
+begin
+  Build(True, lvsIcon);
+  FL.ItemIndex := 1;
+  FL.Key(VK_RIGHT);
+  AssertEquals('right moves towards the physical right, i.e. one item EARLIER',
+    0, FL.ItemIndex);
+  FL.Key(VK_LEFT);
+  AssertEquals('and left moves one item later', 1, FL.ItemIndex);
+  FL.Key(VK_HOME);
+  AssertEquals('Home is the logical first', 0, FL.ItemIndex);
+  FL.Key(VK_END);
+  AssertEquals('End the logical last', FL.Items.Count - 1, FL.ItemIndex);
+end;
+
+procedure TRtlListViewTest.ReportModeLeftAndRightStillDoNotMoveTheSelection;
+begin
+  Build(True, lvsReport);
+  FL.ItemIndex := 2;
+  FL.Key(VK_LEFT);
+  AssertEquals('report rows have one track, so left is a no-op', 2, FL.ItemIndex);
+  FL.Key(VK_RIGHT);
+  AssertEquals('and so is right', 2, FL.ItemIndex);
+end;
+
+procedure TRtlListViewTest.MirroringChangesNoCellSizeAndNoItemOrder;
+var
+  wLtr, hLtr: Integer;
+  c: TRect;
+begin
+  Build(False, lvsIcon);
+  c := FL.Cell(0);
+  wLtr := c.Right - c.Left; hLtr := c.Bottom - c.Top;
+  AssertEquals('item 0 is first', 'i0', FL.Items[0].Caption);
+  FreeAndNil(FForm); FreeAndNil(FCtl);
+  Build(True, lvsIcon);
+  c := FL.Cell(0);
+  AssertEquals('the cell keeps its width', wLtr, c.Right - c.Left);
+  AssertEquals('and its height', hLtr, c.Bottom - c.Top);
+  AssertEquals('and item 0 is still first', 'i0', FL.Items[0].Caption);
+end;
+
 { ---------------------------------------------------------- TRtlExclusionTest }
 
 { TTyDropDownButton splits its face into a caption zone and an arrow zone, and decides which
@@ -4424,6 +6026,116 @@ begin
     L.Parent := Form;
     L.BiDiMode := bdRightToLeft;
     AssertFalse('the filter list declines to mirror its rows', L.Mirrors);
+  finally
+    Form.Free;
+  end;
+end;
+
+{ The list view mirrors its columns and its cells, and does NOT move its vertical bar --
+  the same cut the grid made and for the same reason. The bar's gutter is outside the
+  viewport, and the viewport is the axis every reflection in the control is taken about;
+  docking the bar on the left would move that axis and put the same added constant in
+  front of every full-width expression in the file. §5 item 7 of the scoping document
+  ranks a bar on the wrong side as the most visible and therefore the safest omission.
+
+  Pinned as a PAIR: the bar's edge and the reflection axis have to stay consistent, so
+  whoever moves the bar has to move the axis in the same commit. }
+procedure TRtlExclusionTest.TheListViewsVerticalBarStaysOnTheRightAndSoDoesItsMirrorAxis;
+var
+  Form: TForm;
+  Ctl: TTyStyleController;
+  L: TRtlListAccess;
+  i: Integer;
+  ax: TTyColumnAxis;
+begin
+  Form := TForm.CreateNew(nil);
+  Ctl := TTyStyleController.Create(nil);
+  try
+    L := TRtlListAccess.Create(Form);
+    L.Parent := Form;
+    L.Controller := Ctl;
+    L.Font.PixelsPerInch := 96;
+    L.ViewStyle := lvsReport;
+    L.RowHeight := 24;
+    L.SetBounds(0, 0, 300, 80);
+    (L.Header.Columns.Add as TTyColumn).Width := 100;
+    for i := 0 to 39 do L.Items.Add.Caption := 'row';
+    L.BiDiMode := bdRightToLeft;
+    L.Remeasure;
+    AssertTrue('precondition: the content overflows, so a bar exists',
+      (L.VBar <> nil) and L.VBar.Visible);
+    AssertTrue('the form really is mirrored', L.Mirrors);
+    AssertEquals('the vertical bar still ends at the client''s right edge',
+      L.ClientWidth, L.VBar.Left + L.VBar.Width);
+    ax := L.Axis;
+    AssertEquals('and the mirror axis is the viewport, which stops short of it',
+      L.Metrics.ViewportW, ax.BandRight);
+    AssertEquals('starting at zero', 0, ax.BandLeft);
+    AssertTrue('so the axis really is narrower than the client',
+      ax.BandRight < L.ClientWidth);
+  finally
+    Form.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TRtlExclusionTest.TheTreeViewsVerticalBarStaysOnTheRightAndSoDoesItsMirrorAxis;
+var
+  Form: TForm;
+  Ctl: TTyStyleController;
+  T: TRtlTreeAccess;
+  ax: TTyColumnAxis;
+begin
+  Form := TForm.CreateNew(nil);
+  Ctl := TTyStyleController.Create(nil);
+  try
+    T := TRtlTreeAccess.Create(Form);
+    T.Parent := Form;
+    T.Controller := Ctl;
+    T.Font.PixelsPerInch := 96;
+    T.DefaultNodeHeight := 24;
+    T.SetBounds(0, 0, 300, 80);
+    (T.Header.Columns.Add as TTyColumn).Width := 100;
+    T.RootNodeCount := 40;
+    T.BiDiMode := bdRightToLeft;
+    AssertTrue('the form really is mirrored', T.Mirrors);
+    ax := T.Axis;
+    AssertEquals('the mirror axis is the content rect, which the bar has already left',
+      T.ContentRect.Right, ax.BandRight);
+    AssertEquals('and it starts at the content rect''s own left',
+      T.ContentRect.Left, ax.BandLeft);
+    AssertTrue('so the axis stops short of the client edge the bar owns',
+      ax.BandRight <= T.ClientWidth);
+  finally
+    Form.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ The opposite of an exclusion, and it belongs here because the QUESTION is the same one:
+  does this descendant compute an x of its own? TTyShellListView and TTyShellTreeView both
+  replace only the data accessors -- GetItemCount / GetItemText / GetItemImageIndex /
+  GetItemGroup on one, DoGetText / DoInitNode / DoGetImageIndex / DoExpanding on the other
+  -- plus a column-WIDTH distribution, which is direction-free. Neither overrides a paint
+  or a hit test, so neither has an x to keep in step, so neither opts out. Pinned so that a
+  descendant which later grows one has to come back to this line. }
+procedure TRtlExclusionTest.BothShellDescendantsMirrorBecauseNeitherDerivesAnXOfItsOwn;
+var
+  Form: TForm;
+  SL: TRtlShellListAccess;
+  ST: TRtlShellTreeAccess;
+begin
+  Form := TForm.CreateNew(nil);
+  try
+    SL := TRtlShellListAccess.Create(Form);
+    SL.Parent := Form;
+    SL.BiDiMode := bdRightToLeft;
+    AssertTrue('the shell list view mirrors with its base', SL.Mirrors);
+
+    ST := TRtlShellTreeAccess.Create(Form);
+    ST.Parent := Form;
+    ST.BiDiMode := bdRightToLeft;
+    AssertTrue('and so does the shell tree view', ST.Mirrors);
   finally
     Form.Free;
   end;
@@ -5185,6 +6897,8 @@ initialization
   RegisterTest(TRtlHeaderTest);
   RegisterTest(TRtlTabStripTest);
   RegisterTest(TRtlGridTest);
+  RegisterTest(TRtlTreeViewTest);
+  RegisterTest(TRtlListViewTest);
   RegisterTest(TRtlExclusionTest);
   RegisterTest(TRtlScrollBarGeometryTest);
   RegisterTest(TRtlScrollBarControlTest);

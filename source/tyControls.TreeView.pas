@@ -21,28 +21,51 @@ type
   { Where one node's chrome slots and caption sit INSIDE one cell. Device px,
     all absolute (already offset by the cell left the caller passed in).
 
-    A main-column cell lays out strictly left to right:
+    A main-column cell lays out in READING order:
         [ ...indent... ][ button ][ checkbox? ][ image? ][ caption ]
                         ^ButtonSlotX          ^ImageX    ^CaptionX
                                   ^CheckX
     where the button slot is the Indent-wide strip ENDING at IndentPx (it sits
     inside the indent, not after it), and the optional slots are present only when
-    CheckW / ImageW are non-zero. A non-main cell has no chrome: CaptionX is the
-    cell left and TextPad is the only inset.
+    CheckW / ImageW are non-zero. A non-main cell has no chrome: the caption spans
+    the cell and TextPad is the only inset.
 
     The caption's x used to be re-accumulated by four separate `Inc(captionX, ..)`
     runs -- two paints, the hit test and CellTextRect -- under a comment asking a
-    human to keep them in step. This record is what they now all read. }
+    human to keep them in step. This record is what they now all read.
+
+    MIRRORING, and what the four *X fields mean when it happens.
+
+    They stay PHYSICAL LEFT EDGES. Right-to-left, the picture above is reflected inside
+    the cell, so the indent is against the cell's RIGHT edge and the caption against its
+    left -- but ButtonSlotX is still the smaller x of the button slot, CheckX still the
+    smaller x of the check slot, and so on. That is a decision, and the reason for it is
+    the consumers: five of the six turn a slot into a rectangle as [X, X+W), an expression
+    that is correct in BOTH directions only while X is the physical left. Renaming these
+    to "leading edge" would silently invert all five and force each one to re-derive
+    `X - W` under mirroring -- five new x computations in a control family whose entire
+    recent history is the removal of duplicated x computations.
+
+    The one consumer that reads an ORDER rather than a rectangle is the hit-test ladder in
+    GetNodeAtPoint, and one direction bit serves it exactly. Hence RightToLeft below.
+
+    CaptionRight exists for the same reason the four keep their meaning: the caption is a
+    REMAINDER, not a fixed-width slot, so it is the one piece that needs both of its edges
+    named. Left-to-right it is the cell's right edge and nothing has changed; mirrored it
+    is where the icon slot begins. A consumer that kept using the cell's own right edge
+    would draw the caption straight through the chrome. }
   TTyTreeCaptionSlots = record
     IndentPx:    Integer;   { Scale((level + Ord(ShowRoot)) * Indent) }
-    ButtonSlotX: Integer;   { left of the expander slot }
+    ButtonSlotX: Integer;   { LEFT of the expander slot, in either direction }
     ButtonSlotW: Integer;   { Scale(Indent) }
-    CheckX:      Integer;   { left of the checkbox slot; valid iff CheckW > 0 }
+    CheckX:      Integer;   { LEFT of the checkbox slot; valid iff CheckW > 0 }
     CheckW:      Integer;   { Scale(16), or 0 when this node shows no checkbox }
-    ImageX:      Integer;   { left of the image slot; valid iff ImageW > 0 }
+    ImageX:      Integer;   { LEFT of the image slot; valid iff ImageW > 0 }
     ImageW:      Integer;   { Scale(Indent), or 0 when no image list is assigned }
-    CaptionX:    Integer;   { where the caption starts, BEFORE TextPad }
+    CaptionX:    Integer;   { LEFT of the caption region, BEFORE TextPad }
+    CaptionRight:Integer;   { RIGHT of the caption region, before the same pad }
     TextPad:     Integer;   { Scale(2) in the main column, Scale(4) elsewhere }
+    RightToLeft: Boolean;   { the direction the walk ran in; read by the hit-test ladder }
   end;
 
   { B1: per-tree option flags (VTV-style set; default [] = ③a/③b behaviour) }
@@ -428,6 +451,12 @@ type
     procedure SetCheckState(Node: PTyTreeNode; AValue: TTyCheckState);
     function  GetChecked(Node: PTyTreeNode): Boolean;
     procedure SetChecked(Node: PTyTreeNode; AValue: Boolean);
+    { 方向键的两个动作:向"深"走(展开 / 进第一个子节点)与向"浅"走(收起 / 回父节点)。
+      抽成两个方法而不是在 KeyDown 里写两遍 `if RtlLayout`:方向键漏翻是本程序记在案的
+      第三号静默故障,而"翻了一个没翻另一个"的树是**收得起、再也打不开**。
+      分开之后这种状态在结构上写不出来。 }
+    procedure KeyStepIn(Node: PTyTreeNode);
+    procedure KeyStepOut(Node: PTyTreeNode);
     { E3: internal — process a header section click (toggle sort direction / set sort column) }
     procedure _HandleHeaderClick(ColIndex: Integer);
     procedure VScrollChange(Sender: TObject);
@@ -532,16 +561,20 @@ type
       painted Scale(MainColumn.Left) px right of where the hit test looked for it,
       so the expander a user clicked answered hpLabel and the node never expanded.
       Every caller now names the same cell. }
-    function  NodeCaptionSlots(Node: PTyTreeNode; ACellLeft, APPI: Integer;
+    function  NodeCaptionSlots(Node: PTyTreeNode; ACellLeft, ACellRight, APPI: Integer;
                 AIsMainColumn: Boolean): TTyTreeCaptionSlots;
     { The main column's cell left, expressed in GetNodeAtPoint's CONTENT space
       (x 0 = logical x 0, i.e. CR.Left + FOffsetX). That is Scale(MainColumn.Left)
       in multi-column mode and 0 in the 0-column tree, whose single cell is anchored
       at contentLeft by the paint. Derived from InternalCellRect -- the cell rect the
       PAINT fills -- so neither the geometry nor the "which column is the main one"
-      policy (range check, coVisible, NoColumn -> MainColumn) exists twice. }
-    function  MainCellAnchor(const CR: TRect; APPI: Integer): Integer;
+      policy (range check, coVisible, NoColumn -> MainColumn) exists twice.
+
+      BOTH edges, because the slot walk needs the cell it is reflected in and not just
+      the point it starts from. }
+    procedure MainCellAnchor(const CR: TRect; APPI: Integer; out ALeft, ARight: Integer);
     { A5 helpers }
+
     function  ComputeExpandedSubtreeHeight(Node: PTyTreeNode): Integer;
     function  GetExpanded(Node: PTyTreeNode): Boolean;
     procedure SetExpanded(Node: PTyTreeNode; AValue: Boolean);
@@ -617,6 +650,30 @@ type
       in isolation — same rationale as DragNode/DropModeFromY above. No Invalidate
       (the caller paints explicitly). }
     procedure SetActiveDragState(ASource, ATarget: PTyTreeNode; AMode: TTyTreeDropMode);
+    { --- 横轴镜像(RTL)-------------------------------------------------------
+
+      本控件这一帧的横轴要不要镜像。**按类回答,不按实例**:默认跟着窗体的阅读方向
+      (TControl.IsRightToLeft),后代在自己的 x 命中还没和绘制收口成一个来源之前
+      覆写成 False。与 TTyListBox.RtlRowLayout / TTyCustomGrid.RtlLayout 同一条约定,
+      `grep -n "RtlLayout"` 就是"谁镜像了"的诚实清单。
+      TTyShellTreeView 不覆写:它只换了 DoGetText / DoInitNode / DoGetImageIndex,
+      一个 x 也没有自己算。
+
+      **BiDiMode 不 published** —— 见 tests/test.parity.pas 的
+      LyingPropertiesStayUnpublished。 }
+    function  RtlLayout: Boolean; virtual;
+    { 本控件列轴的唯一描述(原点、密度、方向、反射带)。绘制的四处、命中的三处、
+      拖列浮标全部从这里取 —— 于是"列往哪边排"在本控件里只存在一份答案。
+      反射带是内容矩形 CR:padding 内缩、扣掉滚动条之后那一条,也就是列真正铺开的带。 }
+    function  ColumnAxis(const CR: TRect; APPI: Integer): TTyColumnAxis;
+    { 树线那条**手写 x 累加**的唯一出口。
+
+      树线按**祖先**层级重算缩进,而槽位记录只覆盖本节点这一层 —— 所以它是本文件里
+      最后一处没有被 TyTreeCaptionSlots 收进去的 x。镜像时它必须和槽位反射在同一个
+      格子里、用同一条算术:节点镜像了而连线没有,连线就会横穿标题,比两边都不镜像更糟。
+      三个调用点(祖先竖线、肘部竖线、肘部横段)全部走这里,于是"反射了两处漏了一处"
+      在结构上不再可能。LTR 恒等。 }
+    function  TreeLineX(ACellLeft, ACellRight, AX: Integer): Integer;
     function GetStyleTypeKey: string; override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure Paint; override;
@@ -969,44 +1026,75 @@ type
   The ONE place a node's caption x is worked out.
   --------------------------------------------------------------------------- }
 
-{ Lay out one cell's chrome slots, left to right, from ACellLeft.
+{ Lay out one cell's chrome slots in reading order, across [ACellLeft, ACellRight).
 
-  Pure on purpose: it takes the four control settings it needs (Indent, ShowRoot)
+  Pure on purpose: it takes the two control settings it needs (Indent, ShowRoot)
   and the two per-node answers (has a checkbox / has an image) as plain arguments,
   so it can be reasoned about and tested without a tree, and so that every caller
   is forced to state WHICH cell it is laying out. That last part matters: the
-  callers do not currently agree on the answer -- see NodeCaptionSlots.
+  callers did not always agree on the answer -- see NodeCaptionSlots.
 
   APPI scales; 96 is the identity. AIsMainColumn = False short-circuits to a bare
-  text pad, which is what a non-main cell has always drawn. }
-function TyTreeCaptionSlots(ACellLeft, APPI, AIndent, ALevel: Integer;
-  AShowRoot, AHasCheckBox, AHasImage, AIsMainColumn: Boolean): TTyTreeCaptionSlots;
+  text pad, which is what a non-main cell has always drawn.
+
+  ARightToLeft REFLECTS the finished walk inside the cell rather than re-tiling it
+  backwards from ACellRight. Same reason as TyColumnSpan and TyHeaderSectionRects: the
+  widths, the scaling and the "is this slot present at all" decisions are made once, above,
+  and a reflection cannot round or re-decide any of them. A reverse accumulation would be a
+  second copy of the walk, and the first time a slot was added only one copy would get it.
+  It is also the only version under which a mirrored cell provably has no gap the
+  unmirrored one lacked. LTR leaves every field byte-identical to before. }
+function TyTreeCaptionSlots(ACellLeft, ACellRight, APPI, AIndent, ALevel: Integer;
+  AShowRoot, AHasCheckBox, AHasImage, AIsMainColumn, ARightToLeft: Boolean): TTyTreeCaptionSlots;
 
 implementation
 
 { TTyTreeView }
 
-function TyTreeCaptionSlots(ACellLeft, APPI, AIndent, ALevel: Integer;
-  AShowRoot, AHasCheckBox, AHasImage, AIsMainColumn: Boolean): TTyTreeCaptionSlots;
+{ Reflect one x INSIDE a cell. It reflects the PIXEL [AX, AX+1), not the boundary at AX,
+  which is the difference between a mirrored line landing on the column of pixels it was
+  drawn in and landing half a pixel off it -- the classic "painted here, answers there". }
+function TyTreeMirrorX(AX, ACellLeft, ACellRight: Integer): Integer;
+begin
+  Result := BidiFlipRect(Rect(AX, 0, AX + 1, 0),
+                         Rect(ACellLeft, 0, ACellRight, 0), True).Left;
+end;
+
+function TyTreeCaptionSlots(ACellLeft, ACellRight, APPI, AIndent, ALevel: Integer;
+  AShowRoot, AHasCheckBox, AHasImage, AIsMainColumn, ARightToLeft: Boolean): TTyTreeCaptionSlots;
+
+  { Reflect a [X, X+W) slot about the cell and return its new LEFT. Width is invariant,
+    which is exactly why the fields can stay physical-left and every consumer's [X, X+W)
+    keeps working. }
+  function Flip(AX, AW: Integer): Integer;
+  begin
+    Result := BidiFlipRect(Rect(AX, 0, AX + AW, 0),
+                           Rect(ACellLeft, 0, ACellRight, 0), True).Left;
+  end;
+
 begin
   FillChar(Result, SizeOf(Result), 0);
+  Result.RightToLeft := ARightToLeft;
   if not AIsMainColumn then
   begin
     { A non-main cell carries no indent, no expander, no checkbox and no icon --
-      only the flat margin the painter has always used (colMargin = Scale(4)). }
-    Result.CaptionX := ACellLeft;
-    Result.TextPad  := MulDiv(4, APPI, 96);
+      only the flat margin the painter has always used (colMargin = Scale(4)).
+      It is symmetric, so mirroring leaves it alone; the caption INSIDE it still changes
+      sides, but that is the painter's alignment lever, not this walk's business. }
+    Result.CaptionX     := ACellLeft;
+    Result.CaptionRight := ACellRight;
+    Result.TextPad      := MulDiv(4, APPI, 96);
     Exit;
   end;
 
   Result.IndentPx    := MulDiv((ALevel + Ord(AShowRoot)) * AIndent, APPI, 96);
   { The expander occupies the Indent-wide slot that ENDS at IndentPx, so it is
     drawn inside the indent the node has already earned rather than pushing the
-    caption further right at every level. }
+    caption further along at every level. }
   Result.ButtonSlotW := MulDiv(AIndent, APPI, 96);
   Result.ButtonSlotX := ACellLeft + Result.IndentPx - Result.ButtonSlotW;
 
-  { CaptionX walks right past each slot that is actually present. This walk is the
+  { CaptionX walks past each slot that is actually present. This walk is the
     thing that used to be copied out four times; a slot's width is 0 exactly when
     it is absent, which is also how a consumer tells whether CheckX/ImageX mean
     anything. }
@@ -1023,12 +1111,83 @@ begin
     Result.ImageX := Result.CaptionX;
     Inc(Result.CaptionX, Result.ImageW);
   end;
-  Result.TextPad := MulDiv(2, APPI, 96);
+  Result.CaptionRight := ACellRight;
+  Result.TextPad      := MulDiv(2, APPI, 96);
+
+  if not ARightToLeft then Exit;
+  { One reflection, applied to every slot including the caption remainder. Reflecting the
+    caption as a RECTANGLE rather than reflecting its two edges separately is what keeps
+    it from coming out inverted when the chrome fills most of a narrow cell. }
+  Result.ButtonSlotX := Flip(Result.ButtonSlotX, Result.ButtonSlotW);
+  if Result.CheckW > 0 then Result.CheckX := Flip(Result.CheckX, Result.CheckW);
+  if Result.ImageW > 0 then Result.ImageX := Flip(Result.ImageX, Result.ImageW);
+  ACellLeft := Flip(Result.CaptionX, Result.CaptionRight - Result.CaptionX);
+  Result.CaptionRight := ACellLeft + (Result.CaptionRight - Result.CaptionX);
+  Result.CaptionX     := ACellLeft;
 end;
 
 function TTyTreeView.GetStyleTypeKey: string;
 begin
   Result := 'TyTreeView';
+end;
+
+function TTyTreeView.RtlLayout: Boolean;
+begin
+  Result := IsRightToLeft;
+end;
+
+function TTyTreeView.ColumnAxis(const CR: TRect; APPI: Integer): TTyColumnAxis;
+begin
+  { CR.Left + FOffsetX is this control's content origin -- FOffsetX is <= 0 here, so it is
+    ADDED; the list view stores the same quantity >= 0 and subtracts. Both mean "where
+    logical x 0 currently sits", which is exactly what an origin is. }
+  Result := TyColumnAxis(CR.Left + FOffsetX, APPI, RtlLayout, CR.Left, CR.Right);
+end;
+
+function TTyTreeView.TreeLineX(ACellLeft, ACellRight, AX: Integer): Integer;
+begin
+  if not RtlLayout then Exit(AX);
+  Result := TyTreeMirrorX(AX, ACellLeft, ACellRight);
+end;
+
+procedure TTyTreeView.KeyStepIn(Node: PTyTreeNode);
+{ Deeper: expand a collapsed node, else descend to its first child. }
+var
+  nxt: PTyTreeNode;
+begin
+  if Node = nil then Exit;
+  InitNode(Node);
+  if (nsHasChildren in Node^.States) and not (nsExpanded in Node^.States) then
+  begin
+    Expanded[Node] := True;
+    Exit;
+  end;
+  { Already expanded or no children: move to first child }
+  nxt := GetNextVisibleNoInit(Node);
+  if (nxt <> nil) and (nxt^.Parent = Node) then
+  begin
+    FocusedNode := nxt;
+    ScrollIntoView(nxt);
+  end;
+end;
+
+procedure TTyTreeView.KeyStepOut(Node: PTyTreeNode);
+{ Shallower: collapse an expanded node, else climb to its parent. }
+var
+  nxt: PTyTreeNode;
+begin
+  if Node = nil then Exit;
+  if nsExpanded in Node^.States then
+  begin
+    Expanded[Node] := False;
+    Exit;
+  end;
+  nxt := GetParent(Node);
+  if nxt <> nil then
+  begin
+    FocusedNode := nxt;
+    ScrollIntoView(nxt);
+  end;
 end;
 
 procedure TTyTreeView.Notification(AComponent: TComponent; Operation: TOperation);
@@ -2051,6 +2210,12 @@ begin
   begin
     FHScroll.Height     := SBThick;
     FHScroll.Controller := Self.Controller;
+    { A mirrored tree scrolls from the RIGHT: Position = Min shows the reading start, which
+      is now the right-hand end of the content. The bar has to be told, because
+      MirrorHorizontal is opt-in and deliberately NOT wired to BiDiMode -- a bar must never
+      mirror ahead of the content it scrolls, and until this commit this one's content did
+      not. Same call TTyCustomGrid makes for the same reason. }
+    FHScroll.MirrorHorizontal := RtlLayout;
     { Position the bar along the bottom edge (left of the vertical bar). }
     if not FHScroll.Dragging then
     begin
@@ -3494,13 +3659,13 @@ end;
 
   Returns False only when a REAL column index does not resolve to a visible
   column (out of range / coVisible off); the main/0-column cases always succeed. }
-function TTyTreeView.NodeCaptionSlots(Node: PTyTreeNode; ACellLeft, APPI: Integer;
+function TTyTreeView.NodeCaptionSlots(Node: PTyTreeNode; ACellLeft, ACellRight, APPI: Integer;
   AIsMainColumn: Boolean): TTyTreeCaptionSlots;
 var
   level: Integer;
 begin
   if Node <> nil then level := GetNodeLevel(Node) else level := 0;
-  Result := TyTreeCaptionSlots(ACellLeft, APPI, FIndent, level,
+  Result := TyTreeCaptionSlots(ACellLeft, ACellRight, APPI, FIndent, level,
     FShowRoot,
     { A checkbox slot is reserved only when the tree supports check marks AND this
       node actually asked for one -- the paint, the hit test and the editor all
@@ -3510,28 +3675,37 @@ begin
       resolves no icon: a row whose caption slid left when its icon was missing
       would read as a layout fault, so the slot is held open. }
     (FImages <> nil) and (FImages.Count > 0),
-    AIsMainColumn);
+    AIsMainColumn,
+    { The direction is asked here and NOT passed in by the caller, so the six consumers
+      cannot disagree about which way this tree reads. }
+    RtlLayout);
 end;
 
-function TTyTreeView.MainCellAnchor(const CR: TRect; APPI: Integer): Integer;
-{ 主列单元格的左边,换算到 GetNodeAtPoint 的内容坐标系(x=0 即 contentLeft)。
+procedure TTyTreeView.MainCellAnchor(const CR: TRect; APPI: Integer;
+  out ALeft, ARight: Integer);
+{ 主列单元格的两条边,换算到 GetNodeAtPoint 的内容坐标系(x=0 即 contentLeft)。
   绘制侧的单元格来自 InternalCellRect,其 Left = (CR.Left + FOffsetX) + Scale(col.Left);
-  这里减掉同一个 contentLeft,得到的就是 Scale(col.Left) —— 同一个 MulDiv、同一个整数,
+  这里减掉同一个 contentLeft,得到的就是同一组整数 —— 同一个 MulDiv、同一次反射,
   不会有第二次取整。走 InternalCellRect 而不是自己取列,是为了不让"哪一列是主列"
-  (越界判断、coVisible、NoColumn→MainColumn)这套策略出现第二份。 }
+  (越界判断、coVisible、NoColumn→MainColumn)这套策略出现第二份。
+
+  两条边一起给:槽位走查镜像时要知道自己被反射在哪个格子里,只给左边就得让调用方
+  自己再算一次宽度,那就又是一份重复。 }
 var
   cell: TRect;
 begin
-  Result := 0;
+  ALeft  := 0;
   { 0-column tree: the single cell IS the main column and the paint anchors it at
     contentLeft, which is content x 0. Guarded here rather than left to
     InternalCellRect, whose 0-column branch answers CR.Left (not contentLeft) —
     the two differ by FOffsetX once such a tree scrolls horizontally. }
+  ARight := (CR.Right - CR.Left) - FOffsetX;
   if (FHeader = nil) or (FHeader.Columns.Count = 0) then Exit;
   { False when MainColumn is out of range or hidden — exactly the case in which the
     paint's `colIdx = MainColumn` branch never fires and no chrome is drawn at all. }
   if not InternalCellRect(CR, 0, 0, NoColumn, APPI, cell) then Exit;
-  Result := cell.Left - (CR.Left + FOffsetX);
+  ALeft  := cell.Left  - (CR.Left + FOffsetX);
+  ARight := cell.Right - (CR.Left + FOffsetX);
 end;
 
 function TTyTreeView.InternalCellRect(const CR: TRect;
@@ -3564,11 +3738,10 @@ begin
   col := TTyColumn(colObj);
   if not (coVisible in col.Options) then Exit;
 
-  { The ONE column-x source (tyControls.Columns.TyColumnSpan). CR.Left + FOffsetX is
-    this control's content origin -- FOffsetX is <= 0 here, so it is ADDED; the
-    list view stores the same quantity >= 0 and subtracts. Both mean "where logical
-    x 0 currently sits", which is exactly what the span source takes. }
-  span := col.Span(CR.Left + FOffsetX, APPI);
+  { The ONE column-x source (tyControls.Columns.TyColumnSpan), asked through the ONE
+    description of this control's axis -- origin, density and reading direction together,
+    so a mirrored tree cannot have a paint on one axis and a hit test on another. }
+  span := col.Span(ColumnAxis(CR, APPI));
   ACellRect := Rect(span.Left, ARowTop, span.Right, ARowTop + ARowH);
   Result := True;
 end;
@@ -3754,7 +3927,11 @@ begin
 
   P := TTyPainter.Create;
   try
-    P.BeginPaint(ACanvas, ARect, APPI);
+    { The painter's own direction flag: it resolves every alignment this method passes from
+      a reading-order one to a physical one, which is what puts the cell captions and the
+      header captions on the correct side. The BOXES are moved by the axis and the slot
+      walk below; this lever only moves text inside them. }
+    P.BeginPaint(ACanvas, ARect, APPI, RtlLayout);
     S := CurrentStyle;
 
     pendingCount := 0;
@@ -3852,8 +4029,9 @@ begin
         colIdx := col.Index;
 
         { Column cell x range (scroll-adjusted, device pixels) -- from the shared
-          span source, so the header cell sits exactly over the body cell below it. }
-        colSpan   := col.Span(CR.Left + FOffsetX, APPI);
+          span source AND the shared axis, so the header cell sits exactly over the body
+          cell below it in either reading direction. }
+        colSpan   := col.Span(ColumnAxis(CR, APPI));
         cellLeft  := colSpan.Left;
         cellRight := colSpan.Right;
 
@@ -3884,14 +4062,20 @@ begin
            (colIdx = FHeader.SortColumn) then
           sortGlyphSize := P.Scale(10);
 
-        { Column caption rect }
+        { Column caption rect. The sort glyph's gutter comes off the cell's READING END,
+          so mirrored it is taken off the left; leaving it on the right would let the
+          caption (which the painter now right-aligns) run under the glyph. }
         colMargin := P.Scale(4);
-        colCaptionX := clipR.Left + colMargin;
-
-        textRect := Rect(colCaptionX,
-                         headerBandRect.Top,
-                         clipR.Right - colMargin - sortGlyphSize,
-                         headerBandRect.Bottom);
+        if RtlLayout then
+          textRect := Rect(clipR.Left + colMargin + sortGlyphSize,
+                           headerBandRect.Top,
+                           clipR.Right - colMargin,
+                           headerBandRect.Bottom)
+        else
+          textRect := Rect(clipR.Left + colMargin,
+                           headerBandRect.Top,
+                           clipR.Right - colMargin - sortGlyphSize,
+                           headerBandRect.Bottom);
 
         if textRect.Left < textRect.Right then
         begin
@@ -3912,11 +4096,19 @@ begin
         { Sort glyph in sort column }
         if sortGlyphSize > 0 then
         begin
-          { Draw an arrow glyph at the right of the header cell using DrawGlyph }
-          sortBandR := Rect(clipR.Right - sortGlyphSize - colMargin,
-                            headerBandRect.Top + P.Scale(2),
-                            clipR.Right - colMargin,
-                            headerBandRect.Bottom - P.Scale(2));
+          { The glyph sits in the gutter the caption rect just gave up -- the cell's
+            reading end. Up/down is a direction of ORDER, not of reading, so the arrow
+            itself is left alone. }
+          if RtlLayout then
+            sortBandR := Rect(clipR.Left + colMargin,
+                              headerBandRect.Top + P.Scale(2),
+                              clipR.Left + colMargin + sortGlyphSize,
+                              headerBandRect.Bottom - P.Scale(2))
+          else
+            sortBandR := Rect(clipR.Right - sortGlyphSize - colMargin,
+                              headerBandRect.Top + P.Scale(2),
+                              clipR.Right - colMargin,
+                              headerBandRect.Bottom - P.Scale(2));
           if sortBandR.Right > sortBandR.Left then
           begin
             if tpTextColor in headerSecStyle.Present then
@@ -3940,12 +4132,15 @@ begin
           end;
         end;
 
-        { Right-edge divider line (not on the last visible column) }
+        { The divider on the edge this section shares with its SUCCESSOR -- its right
+          reading rightward, its left when mirrored. It has to be the same edge
+          DetermineSplitterIndex grabs, or the line a user aims at is not the line that
+          resizes; both read it off the span, neither recomputes it. }
         if posIdx < colCount - 1 then
         begin
-          { Check if next column is visible }
-          P.Bitmap.DrawLine(cellRight - 1, headerBandRect.Top,
-                            cellRight - 1, headerBandRect.Bottom,
+          if RtlLayout then colCaptionX := cellLeft else colCaptionX := cellRight - 1;
+          P.Bitmap.DrawLine(colCaptionX, headerBandRect.Top,
+                            colCaptionX, headerBandRect.Bottom,
                             TyColorToBGRA(S.BorderColor), False);
         end;
       end;
@@ -3967,7 +4162,7 @@ begin
         { Ghost: draw a semi-transparent filled rect over the dragged column's
           header cell at its current position (not yet moved) }
         col := FHeader.Columns.Items[FDragColumn] as TTyColumn;
-        colSpan   := col.Span(CR.Left + FOffsetX, APPI);
+        colSpan   := col.Span(ColumnAxis(CR, APPI));
         cellLeft  := colSpan.Left;
         cellRight := colSpan.Right;
         { Clamp to visible area }
@@ -3988,10 +4183,12 @@ begin
           col := FHeader.Columns.ColumnByPosition(FDragTargetPos);
           if col <> nil then
           begin
-            { Insert caret at the LEFT edge of the target column's position -- the
-              same span edge the ghost above and the cells below are drawn from, so
-              the drop mark always lands on a real column boundary. }
-            cellLeft := col.Span(CR.Left + FOffsetX, APPI).Left;
+            { Insert caret at the target position's READING START -- the same span edge
+              the ghost above and the cells below are drawn from, so the drop mark always
+              lands on a real column boundary. Mirrored that is the span's right: a caret
+              on the left would mark the gap AFTER the target, i.e. one slot along. }
+            colSpan := col.Span(ColumnAxis(CR, APPI));
+            if RtlLayout then cellLeft := colSpan.Right - 2 else cellLeft := colSpan.Left;
             if cellLeft < CR.Left  then cellLeft := CR.Left;
             if cellLeft > CR.Right then cellLeft := CR.Right;
             { Draw a 2px wide vertical accent bar }
@@ -4139,10 +4336,9 @@ begin
             { mainColBase is the left of the main column cell (like contentLeft in ③a) }
             mainColBase := colCellLeft;
             { Every chrome x below is READ from this one walk. The anchor is the
-              main column's own cell left, so the indent/expander/checkbox/icon
-              land in the column being painted -- which is exactly the argument
-              GetNodeAtPoint gets wrong (it passes 0); see NodeCaptionSlots. }
-            slots := NodeCaptionSlots(node, mainColBase, APPI, True);
+              main column's own cell, so the indent/expander/checkbox/icon land in the
+              column being painted; see NodeCaptionSlots. }
+            slots := NodeCaptionSlots(node, mainColBase, colCellRight, APPI, True);
 
             { Tree lines (anchored at mainColBase) }
             if FShowTreeLines and (level > 0) then
@@ -4151,21 +4347,23 @@ begin
               while (anc <> nil) and (anc <> FRoot) and (anc <> PTyTreeNode(Self)) do
               begin
                 ancLevel := GetNodeLevel(anc);
-                ancSlotX := mainColBase
-                            + P.Scale((ancLevel + Ord(FShowRoot)) * FIndent)
-                            - (slots.ButtonSlotW shr 1);
+                ancSlotX := TreeLineX(mainColBase, colCellRight,
+                              mainColBase + P.Scale((ancLevel + Ord(FShowRoot)) * FIndent)
+                                          - (slots.ButtonSlotW shr 1));
                 if anc^.NextSibling <> nil then
                   P.Bitmap.DrawLine(ancSlotX, rowTop, ancSlotX, rowTop + rowH,
                     TyColorToBGRA(S.BorderColor), False);
                 anc := anc^.Parent;
               end;
-              ancMidX := mainColBase
-                         + P.Scale((level - 1 + Ord(FShowRoot)) * FIndent + FIndent)
-                         - (slots.ButtonSlotW shr 1);
+              ancMidX := TreeLineX(mainColBase, colCellRight,
+                           mainColBase
+                             + P.Scale((level - 1 + Ord(FShowRoot)) * FIndent + FIndent)
+                             - (slots.ButtonSlotW shr 1));
               ancMidY := rowTop + rowH div 2;
               P.Bitmap.DrawLine(ancMidX, rowTop,    ancMidX, ancMidY,
                 TyColorToBGRA(S.BorderColor), False);
-              P.Bitmap.DrawLine(ancMidX, ancMidY,   mainColBase + slots.IndentPx, ancMidY,
+              P.Bitmap.DrawLine(ancMidX, ancMidY,
+                TreeLineX(mainColBase, colCellRight, mainColBase + slots.IndentPx), ancMidY,
                 TyColorToBGRA(S.BorderColor), False);
               if node^.NextSibling <> nil then
                 P.Bitmap.DrawLine(ancMidX, ancMidY, ancMidX, rowTop + rowH,
@@ -4325,8 +4523,11 @@ begin
               else
                 DoGetText(node, colTxt);
 
+              { Both edges from the walk: mirrored, the caption's far end is where the
+                icon slot begins, and using the cell's own right edge would run the text
+                straight under the chrome. }
               textRect := Rect(slots.CaptionX + slots.TextPad, rowTop,
-                               colCellRight - slots.TextPad, rowTop + rowH);
+                               slots.CaptionRight - slots.TextPad, rowTop + rowH);
               if (textRect.Left < textRect.Right) and (colTxt <> '') then
                 P.DrawText(textRect, colTxt,
                   NodeStyle.FontName, ResolveFontSize(NodeStyle), NodeStyle.FontWeight,
@@ -4345,7 +4546,7 @@ begin
               { The non-main branch of the SAME walk: no chrome, just the flat pad.
                 Sourced here too so CellTextRect (which the inline editor sits on)
                 and this paint cannot disagree about what that pad is. }
-              slots := NodeCaptionSlots(node, colCellLeft, APPI, False);
+              slots := NodeCaptionSlots(node, colCellLeft, colCellRight, APPI, False);
               colMargin := slots.TextPad;
               colCaptionX := slots.CaptionX + slots.TextPad;
 
@@ -4357,7 +4558,7 @@ begin
 
               colAlign := col.Alignment;
               textRect := Rect(colCaptionX, rowTop,
-                               colCellRight - colMargin, rowTop + rowH);
+                               slots.CaptionRight - colMargin, rowTop + rowH);
               if (textRect.Left < textRect.Right) and (colTxt <> '') then
                 P.DrawText(textRect, colTxt,
                   NodeStyle.FontName, ResolveFontSize(NodeStyle), NodeStyle.FontWeight,
@@ -4385,9 +4586,10 @@ begin
         InternalCellRect(CR, rowTop, rowH, -1, APPI, cellRect);
 
         { The 0-column tree's single cell IS the main column, so the same walk runs
-          with the content origin as its anchor. This is the one branch where the
-          hit test's assumption (main column starts at content x 0) is true. }
-        slots := NodeCaptionSlots(node, contentLeft, APPI, True);
+          with the content origin as its anchor. Its far edge is the VISIBLE frame
+          (CR.Right), which is what the caption has always been clipped to and therefore
+          what the mirrored walk must reflect in. }
+        slots := NodeCaptionSlots(node, contentLeft, CR.Right, APPI, True);
 
         { ③d D1: 0-column owner-draw — Column = -1 (the whole row cell). Same
           collection as the multi-column paths; default caption/image skipped
@@ -4421,9 +4623,9 @@ begin
           while (anc <> nil) and (anc <> FRoot) and (anc <> PTyTreeNode(Self)) do
           begin
             ancLevel := GetNodeLevel(anc);
-            ancSlotX := contentLeft
-                        + P.Scale((ancLevel + Ord(FShowRoot)) * FIndent)
-                        - (slots.ButtonSlotW shr 1);
+            ancSlotX := TreeLineX(contentLeft, CR.Right,
+                          contentLeft + P.Scale((ancLevel + Ord(FShowRoot)) * FIndent)
+                                      - (slots.ButtonSlotW shr 1));
             if anc^.NextSibling <> nil then
               P.Bitmap.DrawLine(ancSlotX, rowTop, ancSlotX, rowTop + rowH,
                 TyColorToBGRA(S.BorderColor), False);
@@ -4431,13 +4633,15 @@ begin
           end;
 
           { Elbow at this node's level: vertical half + horizontal stub. }
-          ancMidX := contentLeft
-                     + P.Scale((level - 1 + Ord(FShowRoot)) * FIndent + FIndent)
-                     - (slots.ButtonSlotW shr 1);
+          ancMidX := TreeLineX(contentLeft, CR.Right,
+                       contentLeft
+                         + P.Scale((level - 1 + Ord(FShowRoot)) * FIndent + FIndent)
+                         - (slots.ButtonSlotW shr 1));
           ancMidY := rowTop + rowH div 2;
           P.Bitmap.DrawLine(ancMidX, rowTop,    ancMidX, ancMidY,
             TyColorToBGRA(S.BorderColor), False);
-          P.Bitmap.DrawLine(ancMidX, ancMidY,   contentLeft + slots.IndentPx, ancMidY,
+          P.Bitmap.DrawLine(ancMidX, ancMidY,
+            TreeLineX(contentLeft, CR.Right, contentLeft + slots.IndentPx), ancMidY,
             TyColorToBGRA(S.BorderColor), False);
           if node^.NextSibling <> nil then
             P.Bitmap.DrawLine(ancMidX, ancMidY, ancMidX, rowTop + rowH,
@@ -4609,7 +4813,8 @@ begin
 
         if not ownerDrawCell then
         begin
-          textRect := Rect(slots.CaptionX + slots.TextPad, rowTop, CR.Right, rowTop + rowH);
+          textRect := Rect(slots.CaptionX + slots.TextPad, rowTop,
+                           slots.CaptionRight, rowTop + rowH);
           if (textRect.Left < textRect.Right) and (txt <> '') then
             P.DrawText(textRect, txt,
               NodeStyle.FontName, ResolveFontSize(NodeStyle), NodeStyle.FontWeight,
@@ -4620,14 +4825,16 @@ begin
         end;
 
         { ── FRangeX accumulation ─────────────────────────────────────────── }
-        { Pure content WIDTH for this row — independent of CR.Left and FOffsetX so
-          the H-scroll range never drifts with the scroll position. Taken as the
-          DISTANCE the shared walk travelled (CaptionX - the anchor it started at),
-          which is by construction indent + cbSlot + image slot; restating that sum
-          here is what used to let the scroll range disagree with the paint. }
+        { Pure content WIDTH for this row — independent of CR.Left, FOffsetX and now of
+          the reading direction, so the H-scroll range never drifts with either. It is the
+          chrome the shared walk reserved, read back off the record's own widths rather
+          than restated: restating that sum is what used to let the scroll range disagree
+          with the paint. Taking it as (CaptionX - anchor) was the same quantity only
+          while the walk ran left-to-right; mirrored, CaptionX is the caption's own left
+          and that subtraction answers ~0. }
         if txt <> '' then
         begin
-          measW := (slots.CaptionX - contentLeft) + slots.TextPad +
+          measW := slots.IndentPx + slots.CheckW + slots.ImageW + slots.TextPad +
             P.MeasureText(txt, NodeStyle.FontName, ResolveFontSize(NodeStyle),
                           NodeStyle.FontWeight).cx + P.Scale(4);
           if measW > rangeXNew then
@@ -4814,7 +5021,7 @@ var
   nodeTop: Integer;
   node: PTyTreeNode;
   slots: TTyTreeCaptionSlots;
-  mainX: Integer;
+  mainX, mainR: Integer;
 begin
   Result   := nil;
   APart    := hpNowhere;
@@ -4845,30 +5052,56 @@ begin
     and then every zone below sat Scale(MainColumn.Left) px left of the chrome on
     screen — the expander a user clicked answered hpLabel and the node would not
     expand. MainCellAnchor is 0 in exactly the cases where the old constant was right. }
-  mainX := MainCellAnchor(CR, PPI);
-  slots := NodeCaptionSlots(node, mainX, PPI, True);
+  MainCellAnchor(CR, PPI, mainX, mainR);
+  slots := NodeCaptionSlots(node, mainX, mainR, PPI, True);
 
-  if absX < 0 then
+  { The ladder below is the ONE consumer of this record that reads an ORDER rather than a
+    rectangle, which is why the record carries a direction bit at all (see its comment).
+    Every chrome test is now a half-open CONTAINMENT of a [X, X+W) slot, and those are
+    direction-free -- a reflected slot is still a slot. Only the OPEN-ENDED zones need
+    the bit: "outside the main cell", "off the content's leading edge" and "the indent
+    before the expander" sit on opposite sides in the two directions, and they are the
+    only three things here that are not a box. Testing the boxes FIRST is what shrinks
+    the directional part to those three. }
+  if (not slots.RightToLeft) and (absX < 0) then
   begin
-    { Off the content's left edge entirely (scrolled past x 0). }
+    { Off the content's leading edge entirely (scrolled past x 0). }
     APart := hpIndent;
     Result := node;
   end
-  else if absX < mainX then
+  else if (not slots.RightToLeft) and (absX < mainX) then
   begin
-    { Left of the main column's cell: a NON-main cell's body, which carries no
-      chrome — the paint draws none there. Same answer a non-main cell to the RIGHT
-      of the main column has always given; only the left side is new, because before
-      the anchor moved there was never anything to the left of it. }
+    { Outside the main column's cell, on the side that carries no chrome: a NON-main
+      cell's body — the paint draws none there. }
     APart  := hpLabel;
     Result := node;
   end
-  else if absX < slots.ButtonSlotX then
+  else if slots.RightToLeft and (absX >= mainR) then
   begin
-    APart  := hpIndent;
+    { The mirror of the same thing: past the main cell's trailing edge. It has to be
+      tested BEFORE the indent zone below, exactly as its left-to-right twin is, because
+      the indent runs right up to the cell edge and would otherwise swallow the whole of
+      the next column. }
+    APart  := hpLabel;
     Result := node;
   end
-  else if absX < slots.ButtonSlotX + slots.ButtonSlotW then
+  else if (slots.CheckW > 0) and
+          (absX >= slots.CheckX) and (absX < slots.CheckX + slots.CheckW) then
+  begin
+    { A slot with zero width is one this node does not have, so this falls through
+      exactly when the painter drew nothing. }
+    APart  := hpCheckBox;
+    Result := node;
+    { Column detection happens below — don't Exit here }
+  end
+  else if (slots.ImageW > 0) and
+          (absX >= slots.ImageX) and (absX < slots.ImageX + slots.ImageW) then
+  begin
+    APart  := hpImage;
+    Result := node;
+  end
+  else if (absX >= slots.ButtonSlotX) and
+          (absX < slots.ButtonSlotX + slots.ButtonSlotW) then
   begin
     { In the button slot — classify as hpButton only if the node has children
       AND buttons are shown.  Otherwise treat as hpIndent. }
@@ -4878,22 +5111,24 @@ begin
       APart := hpIndent;
     Result := node;
   end
-  { Past the indent zone. A slot with zero width is one this node does not have,
-    so these two tests fall through exactly when the painter drew nothing. }
-  else if (slots.CheckW > 0) and (absX < slots.CheckX + slots.CheckW) then
+  else if (not slots.RightToLeft) and (absX < slots.ButtonSlotX) then
   begin
-    APart  := hpCheckBox;
+    { The indent the node earned, before the expander slot at its inner end. }
+    APart  := hpIndent;
     Result := node;
-    { Column detection happens below — don't Exit here }
   end
-  else if (slots.ImageW > 0) and (absX < slots.ImageX + slots.ImageW) then
+  else if slots.RightToLeft and (absX >= slots.ButtonSlotX + slots.ButtonSlotW) then
   begin
-    APart  := hpImage;
+    { The exact mirror of the branch above it: everything past the expander slot, with no
+      upper bound of its own. The bound belongs to the outside-the-cell test earlier in
+      the ladder -- writing it here as well would make that test redundant, and a
+      redundant branch is one no test can hold in place. }
+    APart  := hpIndent;
     Result := node;
   end
   else
   begin
-    { Everything from CaptionX rightward is the label area }
+    { Everything past the chrome is the label area, whichever way "past" is. }
     APart  := hpLabel;
     Result := node;
   end;
@@ -4905,7 +5140,7 @@ begin
     px first, which rounded the same edge twice and could hand the last device pixel
     of a column to its right-hand neighbour. }
   if (Result <> nil) and (FHeader <> nil) and (FHeader.Columns.Count > 0) then
-    AColumn := FHeader.Columns.ColumnFromPosition(X, CR.Left + FOffsetX, PPI);
+    AColumn := FHeader.Columns.ColumnFromPosition(X, ColumnAxis(CR, PPI));
 end;
 
 { GetNodeAtPoint (2-out overload — backward-compatible delegator) }
@@ -4922,7 +5157,8 @@ end;
   CR = ContentRect (which already has headerH added to its Top). }
 function TTyTreeView.GetHeaderHitAt(X, Y: Integer; out APart: TTyTreeHitPart; out AColumn: Integer): Boolean;
 var
-  PPI, originX, colIdx: Integer;
+  PPI, colIdx: Integer;
+  axis: TTyColumnAxis;
   CR: TRect;
 begin
   Result  := False;
@@ -4944,16 +5180,17 @@ begin
   { We're in the header band }
   PPI := Font.PixelsPerInch;
 
-  { The header strip shares the body's horizontal geometry, so it shares its origin:
-    device X against CR.Left + FOffsetX, exactly what the cells are painted from. }
-  originX := CR.Left + FOffsetX;
+  { The header strip shares the body's horizontal geometry, so it shares its AXIS --
+    origin, density and reading direction together, exactly what the cells are painted
+    from. }
+  axis := ColumnAxis(CR, PPI);
 
-  { Check for divider (resizable column right-edge within tolerance) — only when
+  { Check for divider (the resizable column's trailing edge within tolerance) — only when
     column resize is enabled; otherwise the divider zone belongs to the clickable
     (sortable) header section so a click near a border still sorts. }
   colIdx := NoColumn;
   if hoColumnResize in FHeader.Options then
-    colIdx := FHeader.Columns.DetermineSplitterIndex(X, originX, PPI);
+    colIdx := FHeader.Columns.DetermineSplitterIndex(X, axis);
   if colIdx <> NoColumn then
   begin
     APart   := hpHeaderDivider;
@@ -4963,7 +5200,7 @@ begin
   else
   begin
     { Plain header section hit }
-    AColumn := FHeader.Columns.ColumnFromPosition(X, originX, PPI);
+    AColumn := FHeader.Columns.ColumnFromPosition(X, axis);
     APart   := hpHeaderSection;
     Result  := True;
   end;
@@ -5289,7 +5526,15 @@ begin
   if FResizeColumn <> NoColumn then
   begin
     PPI := Font.PixelsPerInch;
-    newWidth := FResizeStartWidth + MulDiv(X - FResizeStartX, 96, PPI);
+    { The grip is the column's TRAILING edge, and a drag AWAY from the reading start is
+      what widens it: rightwards reading rightward, LEFTWARDS when mirrored. This sign is
+      not inside any *Rect function, which is why it is the classic silent half-mirror --
+      a static screenshot is perfect and the column grows the wrong way the moment anyone
+      drags it (§5 item 2). }
+    if RtlLayout then
+      newWidth := FResizeStartWidth + MulDiv(FResizeStartX - X, 96, PPI)
+    else
+      newWidth := FResizeStartWidth + MulDiv(X - FResizeStartX, 96, PPI);
     col := FHeader.Columns.Items[FResizeColumn] as TTyColumn;
     col.Width := newWidth;  // setter clamps + UpdatePositions + fires HeaderChanged → repaint
     if Assigned(FOnColumnResized) then
@@ -5328,7 +5573,7 @@ begin
         the header strip is painted from, so the column the pointer is over is the
         column under the pointer. }
       PPI       := Font.PixelsPerInch;
-      hitColIdx := FHeader.Columns.ColumnFromPosition(X, ContentRect.Left + FOffsetX, PPI);
+      hitColIdx := FHeader.Columns.ColumnFromPosition(X, ColumnAxis(ContentRect, PPI));
 
       if hitColIdx <> NoColumn then
       begin
@@ -5607,44 +5852,22 @@ begin
       Key := 0;
     end;
 
+    { ←/→ move a NODE between slots, not a caret between characters, so by the criterion
+      in §6.3 item 4 of plans/2026-08-04-rtl-mirroring-scope.md they are LAYOUT direction
+      and they flip. Which physical key means "deeper" is the only thing that changes:
+      children are drawn further along the reading direction, so it is → normally and ←
+      when the tree reads right-to-left. Both are routed through one pair of methods so
+      that flipping one and not the other -- a tree that collapses and never reopens --
+      is not expressible here. }
     VK_RIGHT:
     begin
-      if cur <> nil then
-      begin
-        InitNode(cur);
-        if (nsHasChildren in cur^.States) and not (nsExpanded in cur^.States) then
-          Expanded[cur] := True          // expand collapsed node
-        else
-        begin
-          { Already expanded or no children: move to first child }
-          nxt := GetNextVisibleNoInit(cur);
-          if (nxt <> nil) and (nxt^.Parent = cur) then
-          begin
-            FocusedNode := nxt;
-            ScrollIntoView(nxt);
-          end;
-        end;
-      end;
+      if RtlLayout then KeyStepOut(cur) else KeyStepIn(cur);
       Key := 0;
     end;
 
     VK_LEFT:
     begin
-      if cur <> nil then
-      begin
-        if nsExpanded in cur^.States then
-          Expanded[cur] := False         // collapse expanded node
-        else
-        begin
-          { Move to parent (if not root-level) }
-          nxt := GetParent(cur);
-          if nxt <> nil then
-          begin
-            FocusedNode := nxt;
-            ScrollIntoView(nxt);
-          end;
-        end;
-      end;
+      if RtlLayout then KeyStepIn(cur) else KeyStepOut(cur);
       Key := 0;
     end;
 
@@ -6130,9 +6353,11 @@ begin
   { The cell band's own left IS the anchor here — this is the one consumer that is
     handed the cell rect directly, so it can never be looking at a different cell
     from the one it was asked about. }
-  slots := NodeCaptionSlots(Node, ACellRect.Left, PPI, isMain);
-  Result.Left := slots.CaptionX + slots.TextPad;
-  Dec(Result.Right, slots.TextPad);   { the painter's matching right pad }
+  slots := NodeCaptionSlots(Node, ACellRect.Left, ACellRect.Right, PPI, isMain);
+  Result.Left  := slots.CaptionX + slots.TextPad;
+  { The walk's own far edge, not the cell's: mirrored they are different numbers, and
+    using the cell's would open the editor across the chrome it must sit beside. }
+  Result.Right := slots.CaptionRight - slots.TextPad;
 
   if Result.Right < Result.Left then Result.Right := Result.Left;   // never inverted
 end;
@@ -6717,7 +6942,7 @@ begin
     only the centred-square sizing is this function's own. }
   PPI       := Font.PixelsPerInch;
   rowH      := cell.Bottom - cell.Top;
-  slots     := NodeCaptionSlots(Node, cell.Left, PPI, True);
+  slots     := NodeCaptionSlots(Node, cell.Left, cell.Right, PPI, True);
   gSz       := slots.ButtonSlotW;
   if rowH < gSz then gSz := rowH;
   slotBaseX := slots.ButtonSlotX + (slots.ButtonSlotW - gSz) div 2;

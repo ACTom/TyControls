@@ -1103,6 +1103,14 @@ end;
   way OUT of this list is to make the property true, not to relax the test -- and the new
   obligation is guarded in test.parity.onpaint, which asserts the ORDERING in pixels rather
   than merely that something was called. }
+{ The mirrored set has grown again -- the grid, then the list view and the tree (each of
+  which mirrors its hit tests as well as its paint, see docs/rtl.md) -- and BiDiMode still
+  must not be published, because the controls that IGNORE it are still the majority: every
+  edit, every memo, the date pickers, the tool bars, the breadcrumbs. Publishing it would
+  put a switch in the Object Inspector that most of the library does nothing about, which
+  is the definition of a lying property. Setting it from code, or inheriting it from the
+  form, works today for everything docs/rtl.md lists.
+  Update this COMMENT as the set grows; never the assertion. }
 procedure TParityTest.LyingPropertiesStayUnpublished;
 begin
   AssertTrue('BiDiMode must not be published until the whole library honours it',

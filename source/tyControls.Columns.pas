@@ -25,6 +25,33 @@ type
     Left, Right: Integer;
   end;
 
+  { EVERYTHING a column needs in order to become an x, in one value.
+
+    OriginX is where LOGICAL x 0 currently sits in the caller's space (a scroll offset
+    already folded in, with whatever sign the caller stores it with); PPI is the density
+    to scale by (96 = no scaling); RightToLeft plus the band [BandLeft, BandRight) say
+    whether the finished tiling is reflected, and inside what.
+
+    It is a RECORD and not four loose parameters for one reason: the origin/PPI pair was
+    already restated at nine call sites, and mirroring would have made it a quintuple.
+    Nine copies of a five-term description is nine chances to get eight of them right --
+    the exact failure TyColumnSpan was extracted to end. Each host now answers it ONCE
+    (TTyTreeView.ColumnAxis / TTyListView.ColumnAxis) and hands the same value to its
+    paints and its hit tests, so those cannot describe different axes.
+
+    The default-constructed record (all zeros) is a left-to-right axis at logical scale
+    anchored at 0 -- which is why the legacy (AOriginX, APPI) overloads below can build
+    one and produce byte-identical output to before mirroring existed. }
+  TTyColumnAxis = record
+    OriginX:     Integer;
+    PPI:         Integer;
+    RightToLeft: Boolean;
+    { Only read when RightToLeft. The band the tiling is reflected in -- for both hosts
+      the VIEWPORT, i.e. the strip the columns are actually painted across. }
+    BandLeft:    Integer;
+    BandRight:   Integer;
+  end;
+
   { Column-level option flags (mirrors VTV's TVTColumnOption subset) }
   TTyColumnOption = (
     coVisible,       { column is shown in the header and body }
@@ -96,7 +123,8 @@ type
       A thin accessor over the unit-level TyColumnSpan (which see) -- it exists only
       so a call site reads `col.Span(cellOrigin, PPI)` rather than restating which
       two fields feed the formula. }
-    function Span(AOriginX, APPI: Integer): TTyColumnSpan;
+    function Span(AOriginX, APPI: Integer): TTyColumnSpan; overload;
+    function Span(const AAxis: TTyColumnAxis): TTyColumnSpan; overload;
     { Read-only public: current absolute left edge (set by UpdatePositions).
       Note: this is NOT scroll-adjusted — paint code subtracts FOffsetX itself.
       PUBLIC and read by hosts, so its meaning is fixed: LOGICAL px, un-scrolled,
@@ -217,7 +245,10 @@ type
       px and the paint PPI -- so a hit test is literally the paint's own span
       arithmetic re-run, not a second derivation of it. Returns NoColumn when AX
       is beyond all visible columns. }
-    function  ColumnFromPosition(AX, AOriginX, APPI: Integer): Integer;
+    function  ColumnFromPosition(AX, AOriginX, APPI: Integer): Integer; overload;
+    { The mirroring-aware form: AX is a device x in the SAME space AAxis places the
+      columns in, so a mirrored strip answers on the side it now paints. }
+    function  ColumnFromPosition(AX: Integer; const AAxis: TTyColumnAxis): Integer; overload;
 
     { Return the collection Index of a resizable column whose right screen-edge
       is within [right-ATolLeft, right+ATolRight] of AX, or NoColumn.
@@ -226,7 +257,14 @@ type
       px and are scaled by APPI here (see the body). }
     function  DetermineSplitterIndex(AX, AOriginX, APPI: Integer;
                                      ATolLeft: Integer = 3;
-                                     ATolRight: Integer = 5): Integer;
+                                     ATolRight: Integer = 5): Integer; overload;
+    { The mirroring-aware form. The grabbable edge is the column's TRAILING one -- its
+      right when the columns run rightward, its LEFT when they are mirrored -- because
+      that is the divider the user can see between this column and its successor.
+      Read off the span, never recomputed, exactly as TyHeaderResizeEdgeAtX does. }
+    function  DetermineSplitterIndex(AX: Integer; const AAxis: TTyColumnAxis;
+                                     ATolLeft: Integer = 3;
+                                     ATolRight: Integer = 5): Integer; overload;
 
     { Set column AAutoSizeIndex.Width so that TotalWidth = AClientWidth,
       clamped to that column's [MinWidth, MaxWidth]. }
@@ -372,19 +410,72 @@ type
     * TTyTreeView paint + hit tests -> ContentRect.Left + FOffsetX (FOffsetX <= 0), APPI = PPI
     * TTyListView paint + hit tests -> -FOffsetX                   (FOffsetX >= 0), APPI = Dpi
   Nothing else may compute a column x. }
-function TyColumnSpan(ALogicalLeft, ALogicalWidth, AOriginX, APPI: Integer): TTyColumnSpan;
+function TyColumnSpan(ALogicalLeft, ALogicalWidth, AOriginX, APPI: Integer): TTyColumnSpan; overload;
+
+{ The same thing, taking the whole axis -- which is the form every in-library caller now
+  uses, because it is the form that can carry a reading direction (see TTyColumnAxis).
+
+  Mirroring is a REFLECTION of the finished span, not a second tiling run backwards from
+  the band's right edge. That is deliberate and it is what keeps the two directions in
+  step: the scaling, the rounding and the origin are all decided once, above, and
+  reflecting cannot round any of them differently. A reverse accumulation would be a
+  second copy of the MulDiv, and the first time it changed only one copy would be edited.
+  It is also why a mirrored strip cannot grow a hairline seam between two columns: a
+  seamless tiling stays seamless under reflection whatever the widths are.
+  LCL's BidiFlipRect (controls.pp:2966) does the arithmetic so nobody here writes the
+  off-by-one -- the same call TyHeaderSectionRects makes for the same reason. }
+function TyColumnSpan(ALogicalLeft, ALogicalWidth: Integer;
+  const AAxis: TTyColumnAxis): TTyColumnSpan; overload;
+
+{ Build an axis. The two-argument form is a LEFT-TO-RIGHT axis and is what the legacy
+  (AOriginX, APPI) overloads construct, which is how they stay byte-identical. }
+function TyColumnAxis(AOriginX, APPI: Integer): TTyColumnAxis; overload;
+function TyColumnAxis(AOriginX, APPI: Integer; ARightToLeft: Boolean;
+  ABandLeft, ABandRight: Integer): TTyColumnAxis; overload;
 
 implementation
 
-function TyColumnSpan(ALogicalLeft, ALogicalWidth, AOriginX, APPI: Integer): TTyColumnSpan;
+function TyColumnAxis(AOriginX, APPI: Integer): TTyColumnAxis;
+begin
+  Result.OriginX     := AOriginX;
+  Result.PPI         := APPI;
+  Result.RightToLeft := False;
+  Result.BandLeft    := 0;
+  Result.BandRight   := 0;
+end;
+
+function TyColumnAxis(AOriginX, APPI: Integer; ARightToLeft: Boolean;
+  ABandLeft, ABandRight: Integer): TTyColumnAxis;
+begin
+  Result.OriginX     := AOriginX;
+  Result.PPI         := APPI;
+  Result.RightToLeft := ARightToLeft;
+  Result.BandLeft    := ABandLeft;
+  Result.BandRight   := ABandRight;
+end;
+
+function TyColumnSpan(ALogicalLeft, ALogicalWidth: Integer;
+  const AAxis: TTyColumnAxis): TTyColumnSpan;
+var
+  r: TRect;
 begin
   { MulDiv, not a hand-rolled (a*p) div 96: it is what every existing call site used
     (ScaleI, TTyPainter.Scale and the inline MulDivs are all MulDiv(n, PPI, 96)), and
     its round-half-away-from-zero differs from div's truncation on exactly the odd
     half-pixels where a column edge is most likely to land. APPI = 96 is the identity,
     which is how the logical-space hit tests get today's arithmetic unchanged. }
-  Result.Left  := AOriginX + MulDiv(ALogicalLeft, APPI, 96);
-  Result.Right := Result.Left + MulDiv(ALogicalWidth, APPI, 96);
+  Result.Left  := AAxis.OriginX + MulDiv(ALogicalLeft, AAxis.PPI, 96);
+  Result.Right := Result.Left + MulDiv(ALogicalWidth, AAxis.PPI, 96);
+  if not AAxis.RightToLeft then Exit;
+  r := BidiFlipRect(Rect(Result.Left, 0, Result.Right, 0),
+                    Rect(AAxis.BandLeft, 0, AAxis.BandRight, 0), True);
+  Result.Left  := r.Left;
+  Result.Right := r.Right;
+end;
+
+function TyColumnSpan(ALogicalLeft, ALogicalWidth, AOriginX, APPI: Integer): TTyColumnSpan;
+begin
+  Result := TyColumnSpan(ALogicalLeft, ALogicalWidth, TyColumnAxis(AOriginX, APPI));
 end;
 
 { ---------------------------------------------------------------------------
@@ -393,7 +484,12 @@ end;
 
 function TTyColumn.Span(AOriginX, APPI: Integer): TTyColumnSpan;
 begin
-  Result := TyColumnSpan(FLeft, FWidth, AOriginX, APPI);
+  Result := TyColumnSpan(FLeft, FWidth, TyColumnAxis(AOriginX, APPI));
+end;
+
+function TTyColumn.Span(const AAxis: TTyColumnAxis): TTyColumnSpan;
+begin
+  Result := TyColumnSpan(FLeft, FWidth, AAxis);
 end;
 
 constructor TTyColumn.Create(ACollection: TCollection);
@@ -815,7 +911,12 @@ begin
 end;
 
 function TTyColumns.ColumnFromPosition(AX, AOriginX, APPI: Integer): Integer;
-{ Left-to-right scan; return the collection Index whose on-screen span
+begin
+  Result := ColumnFromPosition(AX, TyColumnAxis(AOriginX, APPI));
+end;
+
+function TTyColumns.ColumnFromPosition(AX: Integer; const AAxis: TTyColumnAxis): Integer;
+{ Position-order scan; return the collection Index whose on-screen span
   contains AX.
 
   ONE SPACE, DEVICE PX. AX, AOriginX and APPI are exactly what the caller's PAINT
@@ -832,7 +933,12 @@ function TTyColumns.ColumnFromPosition(AX, AOriginX, APPI: Integer): Integer;
   FOffsetX <= 0 and passes CR.Left + FOffsetX, TTyListView stores it >= 0 and passes
   -FOffsetX. Both mean "where logical x 0 currently sits", which is what an origin is
   -- and it is the quantity a right-to-left reflection has to mirror, so the axis is
-  now expressed in the one form mirroring can consume. }
+  now expressed in the one form mirroring can consume.
+
+  MIRRORING: nothing below computes an x. It reads the span back out of Span(AAxis),
+  the identical call the paints make, so a mirrored strip cannot answer a click on the
+  side it stopped painting. The half-open test [Left, Right) is direction-agnostic --
+  a reflected span is still a span. }
 var
   i, colIndex: Integer;
   col: TTyColumn;
@@ -849,7 +955,7 @@ begin
     col := Items[colIndex] as TTyColumn;
     if not (coVisible in col.FOptions) then Continue;
 
-    span := col.Span(AOriginX, APPI);
+    span := col.Span(AAxis);
 
     if (AX >= span.Left) and (AX < span.Right) then
       Exit(colIndex);
@@ -858,17 +964,34 @@ end;
 
 function TTyColumns.DetermineSplitterIndex(AX, AOriginX, APPI: Integer;
   ATolLeft: Integer; ATolRight: Integer): Integer;
-{ Reverse-iterate visible+resizable columns; return the Index of the one
-  whose right screen-edge is within [edge-ATolLeft, edge+ATolRight] of AX.
+begin
+  Result := DetermineSplitterIndex(AX, TyColumnAxis(AOriginX, APPI), ATolLeft, ATolRight);
+end;
 
-  AX/AOriginX/APPI are device px (see ColumnFromPosition). THE TOLERANCES ARE NOT:
+function TTyColumns.DetermineSplitterIndex(AX: Integer; const AAxis: TTyColumnAxis;
+  ATolLeft: Integer; ATolRight: Integer): Integer;
+{ Reverse-iterate visible+resizable columns; return the Index of the one whose TRAILING
+  screen-edge is within [edge-ATolLeft, edge+ATolRight] of AX.
+
+  AX and the axis are device px (see ColumnFromPosition). THE TOLERANCES ARE NOT:
   ±3/5 describes how big the grab zone should FEEL, so it is a logical measurement
   and is scaled here. Leaving it in device px would silently halve the physical grip
   at 192 PPI -- the same class of regression as any other unscaled constant, and the
   reason the tolerance did not simply follow AX into device space when the rest did.
-  At APPI = 96 the scaling is the identity, so nothing moves at the default density. }
+  At APPI = 96 the scaling is the identity, so nothing moves at the default density.
+
+  MIRRORING: which SIDE of the span the grabbable edge is on is the whole of it. The
+  edge a drag widens the column by is the one it shares with its successor -- its right
+  when the columns run rightward, its LEFT when they are mirrored -- and it is read off
+  the span the tiling produced, never recomputed. Same shape as TyHeaderResizeEdgeAtX
+  (tyControls.HeaderControl.pas), for the same reason: the grip must be on the divider
+  the user can see, not on the boundary the paint stopped drawing.
+  The tolerances keep their names and are NOT swapped: ±3 left / ±5 right describes an
+  asymmetric grab zone in SCREEN space (a pointer overshooting rightwards is the common
+  slip in either reading direction), and swapping them would change the feel of a
+  mirrored grip for no reason anyone could see. }
 var
-  i, colIndex, tolL, tolR: Integer;
+  i, colIndex, tolL, tolR, edge: Integer;
   col: TTyColumn;
   span: TTyColumnSpan;
 begin
@@ -876,8 +999,8 @@ begin
   if Length(FPositionToIndex) <> Count then
     RebuildPositionMap;
 
-  tolL := MulDiv(ATolLeft,  APPI, 96);
-  tolR := MulDiv(ATolRight, APPI, 96);
+  tolL := MulDiv(ATolLeft,  AAxis.PPI, 96);
+  tolR := MulDiv(ATolRight, AAxis.PPI, 96);
 
   for i := Count - 1 downto 0 do
   begin
@@ -887,12 +1010,13 @@ begin
     if not (coVisible in col.FOptions) then Continue;
     if not (coResizable in col.FOptions) then Continue;
 
-    { The grip is the span's RIGHT edge -- read off the same span the body hit test
+    { The grip is the span's TRAILING edge -- read off the same span the body hit test
       and the paints use, never recomputed, so the divider can never end up beside
       the border it is supposed to be on. }
-    span := col.Span(AOriginX, APPI);
+    span := col.Span(AAxis);
+    if AAxis.RightToLeft then edge := span.Left else edge := span.Right;
 
-    if (AX >= span.Right - tolL) and (AX <= span.Right + tolR) then
+    if (AX >= edge - tolL) and (AX <= edge + tolR) then
       Exit(colIndex);
   end;
 end;

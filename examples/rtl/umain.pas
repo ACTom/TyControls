@@ -521,8 +521,8 @@ const
     ('MIRRORS: column order, the row-number gutter, the two frozen columns, header captions, the sort triangle, the filter funnel, the tree chevron and its indent, the check-box cell and the button cell. DELIBERATELY DOES NOT: the vertical scroll bar stays on the right, and the filter drop-down does not mirror its own rows - both are pinned by tests, not accidents. Note a resize grip is a columns LEFT edge under RTL, and dragging it left widens the column.',
      #1610#1606#1593#1603#1587': '#1578#1585#1578#1610#1576' '#1575#1604#1571#1593#1605#1583#1577', '#1575#1604#1593#1606#1608#1575#1606', '#1575#1604#1571#1585#1602#1575#1605' '#1575#1604#1580#1575#1606#1576#1610#1577', '#1582#1575#1606#1577' '#1575#1604#1575#1582#1578#1610#1575#1585', '#1586#1585' '#1573#1580#1585#1575#1569'. '#1604#1575' '#1610#1606#1593#1603#1587': '#1588#1585#1610#1591' '#1575#1604#1578#1605#1585#1610#1585' '#1575#1604#1585#1571#1587#1610'. '#1575#1604#1571#1585#1602#1575#1605' '#1578#1576#1602#1609' '#1605#1606' '#1575#1604#1610#1587#1575#1585' '#1573#1604#1609' '#1575#1604#1610#1605#1610#1606'.'),
     { sidDivLv }
-    ('TTyListView - DOES NOT MIRROR yet',
-     'TTyListView - '#1604#1575' '#1610#1606#1593#1603#1587),
+    ('TTyListView - MIRRORS: columns, rows, check boxes, icon cells, arrow keys',
+     'TTyListView - '#1610#1606#1593#1603#1587': '#1575#1604#1571#1593#1605#1583#1577' '#1608#1575#1604#1589#1601#1608#1601' '#1608#1605#1585#1576#1593#1575#1578' '#1575#1604#1575#1582#1578#1610#1575#1585),
     { sidColSize }
     ('Size',
      #1575#1604#1581#1580#1605),
@@ -530,8 +530,8 @@ const
     ('Kind',
      #1575#1604#1606#1608#1593),
     { sidDivTv }
-    ('TTyTreeView - DOES NOT MIRROR yet',
-     'TTyTreeView - '#1604#1575' '#1610#1606#1593#1603#1587),
+    ('TTyTreeView - MIRRORS: indent, expander, check box, icon, tree lines, arrow keys',
+     'TTyTreeView - '#1610#1606#1593#1603#1587': '#1575#1604#1573#1586#1575#1581#1577' '#1608#1575#1604#1587#1607#1605' '#1608#1605#1585#1576#1593' '#1575#1604#1575#1582#1578#1610#1575#1585' '#1608#1575#1604#1571#1610#1602#1608#1606#1577' '#1608#1582#1591#1608#1591' '#1575#1604#1588#1580#1585#1577),
     { sidColNode }
     ('Node',
      #1593#1602#1583#1577),
@@ -1018,8 +1018,11 @@ end;
 { ------------------------------------------------------------ tree view data --
 
   A virtual tree: nodes are never in the .lfm. Two roots' worth of children are synthesised
-  on demand. This control does NOT mirror -- its expander stays on the left and its indent
-  still grows rightwards -- and that is the point of putting it beside the grid. }
+  on demand. This control DOES mirror now, and it is worth expanding a node to see the part
+  a static screenshot cannot show: the indent grows leftwards, the expander sits at the
+  right-hand end of it, the connecting lines follow the indent rather than staying put, and
+  the arrow keys swap -- Left opens a node, Right closes it, because the children are drawn
+  towards the left. }
 
 procedure TMainForm.TreeInitNode(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
   var InitStates: TTyNodeInitStates);

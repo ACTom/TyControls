@@ -432,10 +432,6 @@ type
       const AStyle: TTyStyleSet);
     procedure DrawImage(P: TTyPainter; AList: TTyVirtualImageList;
       AImageIndex, AX, AY, ASizePx: Integer);
-    { The single box-geometry source for the control: it computes the main-column sub-rect
-      (report) or passes the whole cell (flow) into the pure TyListCheckRect. Paint and
-      hit-test both call it. ACell is a client-coord cell rect. Empty rect = no box. }
-    function  CheckRectForCell(const ACell: TRect): TRect;
     procedure RenderCheckBox(P: TTyPainter; const ABox: TRect; AChecked: Boolean);
 
     { inline rename }
@@ -473,15 +469,58 @@ type
       icon at the left edge, where the box would otherwise sit on top of it. 0 when
       checkboxes are off or the box does not fit. }
     function  FlowCheckShift(const ACell: TRect): Integer;
+    { Where a flow cell's icon and its label go, given the box's shift. Two functions
+      rather than four mirrored expressions inside RenderFlowCell: the tile branch and
+      the small-icon branch are the same layout written twice, and mirroring one and not
+      the other is exactly the shape this pass exists to make impossible. }
+    function  FlowIconLeft(const ACell: TRect; ACbShift, APad, AImgPx: Integer): Integer;
+    function  FlowLabelRect(const ACell: TRect; AIconLeft, AImgPx, APad,
+                            ATop, ABottom: Integer): TRect;
+    { The single box-geometry source for the control: it computes the main-column sub-rect
+      (report) or passes the whole cell (flow) into the pure TyListCheckRect. Paint and
+      hit-test both call it. ACell is a client-coord cell rect. Empty rect = no box.
+      Protected rather than private so a guard can ask the paint and the hit test the same
+      question -- the box is the one piece of row chrome this control both draws AND clicks. }
+    function  CheckRectForCell(const ACell: TRect): TRect;
 
     { The embedded bars, read-only. A descendant may want to observe them, and the thumb's
       Max/PageSize contract is otherwise only verifiable by eye -- which is exactly how a
       wrong Max survived the first pass. }
     property VScrollBar: TTyScrollBar read FVScroll;
     property HScrollBar: TTyScrollBar read FHScroll;
+    { The device-px scroll offsets the current layout pass is using. Read-only, and
+      protected for the same reason CurrentMetrics is: a descendant (or a guard) that wants
+      the cell rect the PAINT drew has to pass the paint's own offsets to TyListItemRect,
+      and re-deriving them from the bars would be a second answer to a question that
+      already has one. }
+    property ScrollOffsetX: Integer read FOffsetX;
+    property ScrollOffsetY: Integer read FOffsetY;
     procedure UpdateScrollBars;
     { The device-px metrics of the current layout pass. A RenderItem override needs them. }
     function  CurrentMetrics: TTyListMetrics;
+
+    { --- 横轴镜像(RTL)-------------------------------------------------------
+
+      本控件这一帧的横轴要不要镜像。**按类回答,不按实例**:默认跟着窗体的阅读方向
+      (TControl.IsRightToLeft),后代在自己的 x 命中还没和绘制收口成一个来源之前
+      覆写成 False。与 TTyListBox.RtlRowLayout / TTyCustomGrid.RtlLayout 同一条约定,
+      `grep -n "RtlLayout"` 就是"谁镜像了"的诚实清单。
+
+      本控件的两个后代(TTyShellListView / TTyShellTreeView 的列表半边)都不覆写:
+      它们只换了数据源(GetItemCount/GetItemText/…)和列宽分配,一个 x 也没有自己算,
+      所以镜像与否对它们是透明的。加后代时要先问这句话再决定要不要覆写。
+
+      **BiDiMode 不 published** —— 见 tests/test.parity.pas 的
+      LyingPropertiesStayUnpublished。阅读方向从窗体继承,不在列表上单独摆一个开关。 }
+    function  RtlLayout: Boolean; virtual;
+    { 本控件列轴的唯一描述:原点、密度、方向,以及镜像时反射用的那条带。
+      九个消费者(三处绘制、两处列命中、勾选框、格线、拖列、表头)全部从这里取,
+      于是"往哪边排"这个答案在本控件里只存在一份。反射带是**视口**
+      [0, ViewportW) —— 竖滚动条占掉的那一条不属于视口(见 §"不镜像的"文档)。 }
+    function  ColumnAxis: TTyColumnAxis;
+    { 屏幕 x → 阅读空间 x 的精确逆(LTR 恒等)。命中侧凡是要按"第几格"反推的地方
+      都先过这里,`div PitchX` 那套算术就一个字都不用改。 }
+    function  ToReadingX(AX: Integer): Integer;
 
     { The single data intake. Painting, hit-testing, sorting and type-ahead call ONLY
       these four; there is no second "if OwnerData" anywhere else. Override two of them
@@ -1154,6 +1193,32 @@ begin
   Result := MulDiv(ADevice, 96, Dpi);
 end;
 
+function TTyListView.RtlLayout: Boolean;
+begin
+  Result := IsRightToLeft;
+end;
+
+function TTyListView.ColumnAxis: TTyColumnAxis;
+begin
+  { -FOffsetX is this control's content origin (FOffsetX >= 0 here, unlike the tree's <= 0);
+    the span source takes the origin so the sign lives in one place. The reflection band is
+    the VIEWPORT -- [0, ViewportW) -- which is the strip RenderHeader and the report rows
+    are painted across; the vertical bar's gutter beyond it is not part of it. }
+  Result := TyColumnAxis(-FOffsetX, Dpi, RtlLayout, 0, CurrentMetrics.ViewportW);
+end;
+
+function TTyListView.ToReadingX(AX: Integer): Integer;
+begin
+  { The exact inverse of the reflection, done by reflecting a 1px rect rather than writing
+    `VW - 1 - X` out by hand: "X is inside ToScreen(R)" and "ToReadingX(X) is inside R" have
+    to be the SAME predicate, and a hand-written version that is half a pixel out is exactly
+    the "painted right, answers left" defect. LTR is the identity. }
+  Result := AX;
+  if not RtlLayout then Exit;
+  Result := BidiFlipRect(Rect(AX, 0, AX + 1, 0),
+                         Rect(0, 0, CurrentMetrics.ViewportW, 0), True).Left;
+end;
+
 { ---------------------------------------------------------------------------
   Order / rank / selection housekeeping
   --------------------------------------------------------------------------- }
@@ -1585,6 +1650,10 @@ begin
   AMetrics.ViewStyle := FViewStyle;
   AMetrics.ViewportW := AViewW;
   AMetrics.ViewportH := AViewH;
+  { Asked ONCE per layout pass and carried in the record, so the geometry functions, the
+    hit tests and the navigation all read the same answer -- they take the metrics, not
+    the control, and a second question could be answered differently mid-frame. }
+  AMetrics.RightToLeft := RtlLayout;
   AMetrics.HGap := ScaleI(ActiveController.Metric('--listview-hgap', TyLvHGap));
   AMetrics.VGap := ScaleI(ActiveController.Metric('--listview-vgap', TyLvVGap));
   AMetrics.Pad  := ScaleI(ActiveController.Metric('--listview-cell-padding', TyLvPad));
@@ -1710,6 +1779,12 @@ begin
   begin
     FHScroll.Height := sb;
     FHScroll.Controller := Self.Controller;
+    { A mirrored list scrolls from the RIGHT: Position = Min shows the reading start, which
+      is now the right-hand end of the content. The bar has to be told, because
+      MirrorHorizontal is opt-in and deliberately NOT wired to BiDiMode -- a bar must never
+      mirror ahead of the content it scrolls, and until this commit this one's content did
+      not. Same call TTyCustomGrid makes for the same reason. }
+    FHScroll.MirrorHorizontal := RtlLayout;
     if not FHScroll.Dragging then
       FHScroll.SetBounds(0, ClientHeight - sb, ClientWidth - IfThen(needV, sb, 0), sb);
     FSyncingScroll := True;
@@ -2155,7 +2230,7 @@ begin
       from. Converting down to logical first rounded the edge twice and could put
       the grip one device pixel off the border it belongs to. }
     if (hoColumnResize in FHeader.Options) and
-       (FHeader.Columns.DetermineSplitterIndex(X, -FOffsetX, Dpi) <> NoColumn) then
+       (FHeader.Columns.DetermineSplitterIndex(X, ColumnAxis) <> NoColumn) then
       Result := lhpDivider
     else
       Result := lhpHeader;
@@ -2694,23 +2769,31 @@ var
   sub: TRect;
   mainIdx: Integer;
   mainCol: TTyColumn;
+  span: TTyColumnSpan;
 begin
   Result := Rect(0, 0, 0, 0);
   if not FCheckboxes then Exit;
   if FViewStyle = lvsReport then
   begin
     { Report: the box lives in the MAIN COLUMN's sub-rect. The layout unit knows nothing
-      about columns, so compute that sub-rect here and pass it to the pure function. }
+      about columns, so the sub-rect is resolved here -- but through Span and the shared
+      axis, NOT by re-deriving `ACell.Left + ScaleI(mainCol.Left)` as it used to. That
+      hand-rolled pair happened to equal the span reading left-to-right, so nothing ever
+      caught it; mirrored it is a different number, and the box would have been drawn and
+      clicked in the column the main one used to occupy. }
     mainIdx := FHeader.MainColumn;
     if (mainIdx < 0) or (mainIdx >= FHeader.Columns.Count) then Exit;
     mainCol := FHeader.Columns.Items[mainIdx] as TTyColumn;
     if not (coVisible in mainCol.Options) then Exit;
-    sub := Rect(ACell.Left + ScaleI(mainCol.Left), ACell.Top,
-                ACell.Left + ScaleI(mainCol.Left) + ScaleI(mainCol.Width), ACell.Bottom);
+    span := mainCol.Span(ColumnAxis);
+    sub  := Rect(span.Left, ACell.Top, span.Right, ACell.Bottom);
   end
   else
     sub := ACell;   { flow: the whole cell }
-  Result := TyListCheckRect(sub, FViewStyle, ScaleI(ActiveController.Metric('--listview-check-size', TyLvCheckPx)), ScaleI(ActiveController.Metric('--listview-cell-padding', TyLvPad)));
+  Result := TyListCheckRect(sub, FViewStyle,
+    ScaleI(ActiveController.Metric('--listview-check-size', TyLvCheckPx)),
+    ScaleI(ActiveController.Metric('--listview-cell-padding', TyLvPad)),
+    RtlLayout);
 end;
 
 function TTyListView.FlowCheckShift(const ACell: TRect): Integer;
@@ -2722,6 +2805,27 @@ begin
   chk := CheckRectForCell(ACell);
   if chk.Right > chk.Left then
     Result := ScaleI(ActiveController.Metric('--listview-check-size', TyLvCheckPx)) + ScaleI(ActiveController.Metric('--listview-cell-padding', TyLvPad));
+end;
+
+function TTyListView.FlowIconLeft(const ACell: TRect;
+  ACbShift, APad, AImgPx: Integer): Integer;
+begin
+  if RtlLayout then
+    Result := ACell.Right - APad - ACbShift - AImgPx
+  else
+    Result := ACell.Left + APad + ACbShift;
+end;
+
+function TTyListView.FlowLabelRect(const ACell: TRect; AIconLeft, AImgPx, APad,
+  ATop, ABottom: Integer): TRect;
+begin
+  { The label starts two pads past the icon, on whichever side "past" is, and runs to the
+    cell's far pad. Anchored on the icon's own rect rather than recomputed from the cell,
+    so a label can never be laid out for an icon that is somewhere else. }
+  if RtlLayout then
+    Result := Rect(ACell.Left + APad, ATop, AIconLeft - 2 * APad, ABottom)
+  else
+    Result := Rect(AIconLeft + AImgPx + 2 * APad, ATop, ACell.Right - APad, ABottom);
 end;
 
 { Draw the box resolving this control's own 'TyListViewCheckBox' token ([tysActive] when
@@ -2757,7 +2861,8 @@ end;
 procedure TTyListView.RenderReportRow(P: TTyPainter; AIndex: Integer; const ACell: TRect;
   const AStyle: TTyStyleSet);
 var
-  posIdx, colIdx, colLeft, colRight, textLeft, mainCol, imgPx, ii, cbShift: Integer;
+  posIdx, colIdx, colLeft, colRight, mainCol, imgPx, ii, cbShift: Integer;
+  lead, trail, sign, margin, textLead, imgLead: Integer;
   col: TTyColumn;
   span: TTyColumnSpan;
   txt: string;
@@ -2774,16 +2879,24 @@ begin
     if col = nil then Continue;
     if not (coVisible in col.Options) then Continue;
     colIdx := col.Index;
-    { The report row's cell rect already starts at -FOffsetX, so it IS this column
-      family's content origin -- pass it straight to the one span source. }
-    span     := col.Span(ACell.Left, Dpi);
+    { The ONE column-x source, through the ONE description of this control's axis. The
+      row rect is NOT used as the origin any more: it happened to equal -FOffsetX reading
+      left-to-right, but a mirrored row band starts somewhere else entirely, and an origin
+      taken from it would place the columns inside a reflection of themselves. }
+    span     := col.Span(ColumnAxis);
     colLeft  := span.Left;
     colRight := span.Right;
-    textLeft := colLeft + ScaleI(ActiveController.Metric('--listview-text-margin', TyLvTextMargin));
+    margin   := ScaleI(ActiveController.Metric('--listview-text-margin', TyLvTextMargin));
+    { The chrome (box, icon) sits at the cell's READING START and the text steps aside from
+      it; lead/trail name the two ends so the arithmetic below is written once. }
+    if RtlLayout then begin lead := colRight; trail := colLeft; sign := -1; end
+    else begin lead := colLeft; trail := colRight; sign := 1; end;
+    textLead := lead + sign * margin;
     if colIdx = mainCol then
     begin
-      { When checkboxes are on the box occupies the main column's left; the icon+text shift
-        right by CheckPx + Pad. The box rect comes from the single geometry source. }
+      { When checkboxes are on the box occupies the main column's reading start; the
+        icon+text shift along by CheckPx + Pad. The box rect comes from the single
+        geometry source, which now knows which end that is. }
       cbShift := 0;
       if FCheckboxes then
       begin
@@ -2794,17 +2907,22 @@ begin
           cbShift := ScaleI(ActiveController.Metric('--listview-check-size', TyLvCheckPx)) + ScaleI(ActiveController.Metric('--listview-cell-padding', TyLvPad));
         end;
       end;
-      textLeft := colLeft + cbShift + ScaleI(ActiveController.Metric('--listview-text-margin', TyLvTextMargin));
+      textLead := lead + sign * (cbShift + margin);
       ii := GetItemImageIndex(AIndex, colIdx);
       if (FSmallImages <> nil) and (ii >= 0) then
       begin
-        DrawImage(P, FSmallImages, ii, colLeft + cbShift + ScaleI(2),
+        imgLead := lead + sign * (cbShift + ScaleI(2));
+        if RtlLayout then Dec(imgLead, imgPx);
+        DrawImage(P, FSmallImages, ii, imgLead,
           ACell.Top + (ACell.Bottom - ACell.Top - imgPx) div 2, imgPx);
-        textLeft := colLeft + cbShift + ScaleI(ActiveController.Metric('--listview-text-margin', TyLvTextMargin)) + imgPx + ScaleI(2);
+        textLead := lead + sign * (cbShift + margin + imgPx + ScaleI(2));
       end;
     end;
     txt := GetItemText(AIndex, colIdx);
-    tr := Rect(textLeft, ACell.Top, colRight - ScaleI(ActiveController.Metric('--listview-text-margin', TyLvTextMargin)), ACell.Bottom);
+    if RtlLayout then
+      tr := Rect(trail + margin, ACell.Top, textLead, ACell.Bottom)
+    else
+      tr := Rect(textLead, ACell.Top, trail - margin, ACell.Bottom);
     if tr.Left < tr.Right then
       P.DrawText(tr, txt, AStyle.FontName, ResolveFontSize(AStyle), AStyle.FontWeight,
         tc, col.Alignment, tlCenter, True);
@@ -2815,7 +2933,7 @@ procedure TTyListView.RenderFlowCell(P: TTyPainter; AIndex: Integer; const ACell
   const AStyle: TTyStyleSet);
 var
   imgList: TTyVirtualImageList;
-  imgPx, ii, pad, ix, iy, tx, cbShift: Integer;
+  imgPx, ii, pad, ix, iy, cbShift: Integer;
   tc: TTyColor;
   lbl, sub: string;
   tr, chk: TRect;
@@ -2851,29 +2969,29 @@ begin
       end;
     lvsTile:
       begin
-        { icon at left, two text lines at right }
-        ix := ACell.Left + pad + cbShift;
+        { icon at the reading start, two text lines after it }
+        ix := FlowIconLeft(ACell, cbShift, pad, imgPx);
         iy := ACell.Top + (ACell.Bottom - ACell.Top - imgPx) div 2;
         DrawImage(P, imgList, ii, ix, iy, imgPx);
-        tx  := ix + imgPx + 2 * pad;
         sub := GetItemText(AIndex, 1);
-        tr := Rect(tx, ACell.Top + pad, ACell.Right - pad, ACell.Top + pad + ScaleI(ActiveController.Metric('--listview-label-height', TyLvLabelH)));
+        tr := FlowLabelRect(ACell, ix, imgPx, pad,
+                ACell.Top + pad,
+                ACell.Top + pad + ScaleI(ActiveController.Metric('--listview-label-height', TyLvLabelH)));
         if tr.Left < tr.Right then
           P.DrawText(tr, lbl, AStyle.FontName, ResolveFontSize(AStyle), AStyle.FontWeight,
             tc, taLeftJustify, tlCenter, True);
-        tr := Rect(tx, tr.Bottom, ACell.Right - pad, ACell.Bottom - pad);
+        tr := FlowLabelRect(ACell, ix, imgPx, pad, tr.Bottom, ACell.Bottom - pad);
         if (tr.Left < tr.Right) and (sub <> '') then
           P.DrawText(tr, sub, AStyle.FontName, ResolveFontSize(AStyle), AStyle.FontWeight,
             tc, taLeftJustify, tlCenter, True);
       end;
   else
     begin
-      { lvsSmallIcon / lvsList: icon at left, single label at right }
-      ix := ACell.Left + pad + cbShift;
+      { lvsSmallIcon / lvsList: icon at the reading start, single label after it }
+      ix := FlowIconLeft(ACell, cbShift, pad, imgPx);
       iy := ACell.Top + (ACell.Bottom - ACell.Top - imgPx) div 2;
       DrawImage(P, imgList, ii, ix, iy, imgPx);
-      tx := ix + imgPx + 2 * pad;
-      tr := Rect(tx, ACell.Top, ACell.Right - pad, ACell.Bottom);
+      tr := FlowLabelRect(ACell, ix, imgPx, pad, ACell.Top, ACell.Bottom);
       if tr.Left < tr.Right then
         P.DrawText(tr, lbl, AStyle.FontName, ResolveFontSize(AStyle), AStyle.FontWeight,
           tc, taLeftJustify, tlCenter, True);
@@ -2921,7 +3039,8 @@ procedure TTyListView.RenderHeader(P: TTyPainter; const M: TTyListMetrics;
   const AFrame: TTyStyleSet);
 var
   hb, hs: TTyStyleSet;
-  posIdx, colLeft, colRight, sortSz, textLeft, icoPx, icoGap: Integer;
+  posIdx, colLeft, colRight, sortSz, icoPx, icoGap: Integer;
+  lead, sign, margin, textLead, icoLeft, divX: Integer;
   col: TTyColumn;
   span: TTyColumnSpan;
   cellR, tr, sortR: TRect;
@@ -2957,9 +3076,9 @@ begin
     col := FHeader.Columns.ColumnByPosition(posIdx);
     if col = nil then Continue;
     if not (coVisible in col.Options) then Continue;
-    { -FOffsetX is this control's content origin (FOffsetX >= 0 here, unlike the
-      tree's <= 0); the span source takes the origin so the sign lives in one place. }
-    span     := col.Span(-FOffsetX, Dpi);
+    { The shared axis: origin, density and reading direction in one value, so the header
+      strip cannot end up on a different axis from the rows under it. }
+    span     := col.Span(ColumnAxis);
     colLeft  := span.Left;
     colRight := span.Right;
     if colRight <= 0 then Continue;
@@ -2975,7 +3094,13 @@ begin
     if (hoShowSortGlyphs in FHeader.Options) and (col.Index = FSortColumn) then
       sortSz := ScaleI(10);
 
-    textLeft := cellR.Left + ScaleI(ActiveController.Metric('--listview-text-margin', TyLvTextMargin));
+    { The icon leads the caption, so it sits at the cell's READING START and the caption
+      box gives up that end. Written as lead/sign once rather than as two mirrored
+      expressions per piece. }
+    margin := ScaleI(ActiveController.Metric('--listview-text-margin', TyLvTextMargin));
+    if IsRightToLeft then begin lead := cellR.Right; sign := -1; end
+    else begin lead := cellR.Left; sign := 1; end;
+    textLead := lead + sign * margin;
     { Column icon, left of the caption -- TTyColumn.ImageIndex (tyControls.Columns.pas:95),
       LCL's THeaderSection.ImageIndex (comctrls.pp:3991). The caption STEPS ASIDE for it:
       drawing the icon without moving textLeft would just stamp it over the first
@@ -2987,15 +3112,20 @@ begin
       is still worth carrying: Draw's flag used to be AGhosted while LCL's carries Enabled
       in the same slot with the OPPOSITE sense, so a call written from LCL muscle memory
       compiled clean and inverted the result. Draw now matches LCL's order and polarity. }
-    if (icoList <> nil) and (col.ImageIndex >= 0) and (icoPx > 0)
-       and (textLeft + icoPx <= cellR.Right) then
+    if (icoList <> nil) and (col.ImageIndex >= 0) and (icoPx > 0) and
+       (textLead + sign * icoPx >= cellR.Left) and
+       (textLead + sign * icoPx <= cellR.Right) then
     begin
-      DrawImage(P, icoList, col.ImageIndex, textLeft,
+      if IsRightToLeft then icoLeft := textLead - icoPx else icoLeft := textLead;
+      DrawImage(P, icoList, col.ImageIndex, icoLeft,
         (M.HeaderH - icoPx) div 2, icoPx);
-      Inc(textLeft, icoPx + icoGap);
+      Inc(textLead, sign * (icoPx + icoGap));
     end;
-    tr := Rect(textLeft, 0,
-               cellR.Right - ScaleI(ActiveController.Metric('--listview-text-margin', TyLvTextMargin)) - sortSz, M.HeaderH);
+    { The sort glyph's gutter comes off the cell's OTHER end -- see the sortR block. }
+    if IsRightToLeft then
+      tr := Rect(cellR.Left + margin + sortSz, 0, textLead, M.HeaderH)
+    else
+      tr := Rect(textLead, 0, cellR.Right - margin - sortSz, M.HeaderH);
     if tr.Left < tr.Right then
     begin
       if useSec then
@@ -3008,8 +3138,14 @@ begin
 
     if sortSz > 0 then
     begin
-      sortR := Rect(cellR.Right - sortSz - ScaleI(ActiveController.Metric('--listview-text-margin', TyLvTextMargin)), ScaleI(2),
-                    cellR.Right - ScaleI(ActiveController.Metric('--listview-text-margin', TyLvTextMargin)), M.HeaderH - ScaleI(2));
+      { The gutter the caption box just gave up, at the cell's reading END. Up/down is a
+        direction of ORDER, not of reading, so the arrow itself does not turn round. }
+      if IsRightToLeft then
+        sortR := Rect(cellR.Left + margin, ScaleI(2),
+                      cellR.Left + margin + sortSz, M.HeaderH - ScaleI(2))
+      else
+        sortR := Rect(cellR.Right - sortSz - margin, ScaleI(2),
+                      cellR.Right - margin, M.HeaderH - ScaleI(2));
       if sortR.Right > sortR.Left then
       begin
         if FSortDirection = sdAscending then
@@ -3019,9 +3155,12 @@ begin
       end;
     end;
 
-    { right-edge divider }
-    if colRight - 1 < M.ViewportW then
-      P.Bitmap.DrawLine(colRight - 1, 0, colRight - 1, M.HeaderH, border, False);
+    { The divider on the edge this section shares with its successor -- the SAME edge
+      DetermineSplitterIndex grabs (its right reading rightward, its left when mirrored),
+      so the line a user aims at is the line that resizes. }
+    if IsRightToLeft then divX := colLeft else divX := colRight - 1;
+    if (divX >= 0) and (divX < M.ViewportW) then
+      P.Bitmap.DrawLine(divX, 0, divX, M.HeaderH, border, False);
   end;
 
   { bottom border of the header band }
@@ -3033,6 +3172,7 @@ procedure TTyListView.RenderGridLines(P: TTyPainter; const M: TTyListMetrics;
 var
   first, last, pos, posIdx, x: Integer;
   col: TTyColumn;
+  span: TTyColumnSpan;
   cell: TRect;
   lineS: TTyStyleSet;
   border: TBGRAPixel;
@@ -3058,11 +3198,14 @@ begin
     col := FHeader.Columns.ColumnByPosition(posIdx);
     if col = nil then Continue;
     if not (coVisible in col.Options) then Continue;
-    { The grid line sits on the column's right edge -- the same span edge the header
-      cell and the report row are drawn from, so the rule cannot drift off the cell. }
-    x := col.Span(-FOffsetX, Dpi).Right;
-    if (x > 0) and (x < M.ViewportW) then
-      P.Bitmap.DrawLine(x - 1, M.HeaderH, x - 1, M.ViewportH, border, False);
+    { The rule sits on the column's LAST pixel on the side it shares with its successor --
+      the same span edge the header divider and the report row are drawn from, so the rule
+      cannot drift off the cell. Reading rightward that is Right-1; mirrored it is Left,
+      which is that same pixel reflected. }
+    span := col.Span(ColumnAxis);
+    if RtlLayout then x := span.Left else x := span.Right - 1;
+    if (x >= 0) and (x < M.ViewportW) then
+      P.Bitmap.DrawLine(x, M.HeaderH, x, M.ViewportH, border, False);
   end;
 end;
 
@@ -3252,7 +3395,10 @@ begin
 
   P := TTyPainter.Create;
   try
-    P.BeginPaint(ACanvas, ARect, APPI);
+    { The painter's alignment lever: it resolves every alignment passed below from a
+      reading-order one to a physical one, which is what moves the TEXT inside the boxes.
+      The boxes themselves are moved by the axis and the metrics' own direction flag. }
+    P.BeginPaint(ACanvas, ARect, APPI, RtlLayout);
     w := ARect.Right - ARect.Left;
     h := ARect.Bottom - ARect.Top;
     clientBox := Rect(0, 0, w, h);
@@ -3466,7 +3612,7 @@ begin
       (see GetHitPart). }
     dividerCol := NoColumn;
     if hoColumnResize in FHeader.Options then
-      dividerCol := FHeader.Columns.DetermineSplitterIndex(X, -FOffsetX, Dpi);
+      dividerCol := FHeader.Columns.DetermineSplitterIndex(X, ColumnAxis);
     if dividerCol <> NoColumn then
     begin
       { Double-click on a divider fits the column to its content, as in Explorer. }
@@ -3482,10 +3628,10 @@ begin
       { A press with no prior MouseMove (a tap, a synthetic click) still shows the grab
         cursor for the duration of the drag; MouseMove exits early while FResizing. }
       SetDividerCursor(True);
-      MouseCapture := True;
+      if HandleAllocated then MouseCapture := True;   { headless: no handle to capture with — same guard TTyTreeView already carries }
       Exit;
     end;
-    clickCol := FHeader.Columns.ColumnFromPosition(X, -FOffsetX, Dpi);
+    clickCol := FHeader.Columns.ColumnFromPosition(X, ColumnAxis);
     if clickCol <> NoColumn then
     begin
       if Assigned(FOnColumnClick) then FOnColumnClick(Self, clickCol);
@@ -3541,7 +3687,7 @@ begin
         FMarquee := True;
         FMarqueeStart := Point(X, Y);
         FMarqueeCur := Point(X, Y);
-        MouseCapture := True;
+        if HandleAllocated then MouseCapture := True;   { headless: no handle to capture with — same guard TTyTreeView already carries }
       end;
     end;
     Exit;
@@ -3574,7 +3720,7 @@ begin
       FMarquee := True;
       FMarqueeStart := Point(X, Y);
       FMarqueeCur := Point(X, Y);
-      MouseCapture := True;
+      if HandleAllocated then MouseCapture := True;   { headless: no handle to capture with — same guard TTyTreeView already carries }
     end;
   end;
 end;
@@ -3679,7 +3825,14 @@ begin
   begin
     { A stolen MouseUp would otherwise leave us dragging forever. }
     if not (ssLeft in Shift) then begin EndInteractions; Exit; end;
-    newW := FResizeStartW + UnscaleI(X - FResizeStartX);   { device delta -> logical }
+    { A drag AWAY from the reading start widens the column, and the grip is the column's
+      trailing edge -- so the sign flips with the direction. This one is not inside any
+      *Rect function, which is why it is the classic silent half-mirror: the screenshot is
+      perfect and the column grows the wrong way the moment anyone drags it. }
+    if RtlLayout then
+      newW := FResizeStartW + UnscaleI(FResizeStartX - X)   { device delta -> logical }
+    else
+      newW := FResizeStartW + UnscaleI(X - FResizeStartX);
     (FHeader.Columns.Items[FResizeCol] as TTyColumn).Width := newW;   { clamps internally }
     UpdateScrollBars;
     Invalidate;

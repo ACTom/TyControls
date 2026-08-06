@@ -76,6 +76,12 @@ type
                               width of its OWN: deriving the cell width from the icon size
                               leaves room for about four characters. }
     Pad:         Integer;   { cell inner padding, input to TyListCellSize }
+    { Which way this layout pass reads. The whole of mirroring in this unit is a
+      REFLECTION of the finished tiling about [0, ViewportW) -- see TyListItemRect -- so
+      every width, gap, pitch and track count stays exactly what it was and only the
+      x of a finished cell moves. Default False leaves every existing caller (and every
+      existing test, which builds these records through FillChar) byte-identical. }
+    RightToLeft: Boolean;
   end;
 
   { --- Grouped view (SP2b) -------------------------------------------------
@@ -146,12 +152,13 @@ function TyListItemRect(ADisplayPos, ACount: Integer; const M: TTyListMetrics;
     - ACell: in report mode this is the MAIN COLUMN's sub-rect; in every other mode it
       is the whole cell. (This unit knows nothing about the column model, so the control
       computes the column geometry and passes the sub-rect in.)
-    - lvsIcon: pinned to the TOP-LEFT corner, inset by APad.
-    - every other style: at the LEFT, VERTICALLY CENTERED, inset by APad.
+    - lvsIcon: pinned to the READING-START top corner, inset by APad.
+    - every other style: at the READING START, VERTICALLY CENTERED, inset by APad.
     - ACheckPx <= 0, or a cell too small to hold the box (width OR height less than
-      ACheckPx + APad) -> Rect(0,0,0,0). }
+      ACheckPx + APad) -> Rect(0,0,0,0).
+    - ARightToLeft puts the box against the cell's right edge instead of its left. }
 function TyListCheckRect(const ACell: TRect; AStyle: TTyListViewStyle;
-  ACheckPx, APad: Integer): TRect;
+  ACheckPx, APad: Integer; ARightToLeft: Boolean = False): TRect;
 
 { Inverse of TyListItemRect. Takes a CLIENT-coord point, returns the display position
   under it, or -1. -1 means: inside the header band, inside an inter-cell gap, or past
@@ -411,6 +418,28 @@ end;
   TyListItemRect
   --------------------------------------------------------------------------- }
 
+{ Reflect a finished cell about the viewport. ONE function, called at the end of both
+  geometry producers (flat and grouped) and inverted by TyListReadingX for both hit tests
+  -- so "which way does this list read" is answered in one place and cannot be answered
+  differently by the two halves. LTR is the identity, to the byte. }
+function TyListMirror(const M: TTyListMetrics; const ARect: TRect): TRect;
+begin
+  Result := ARect;
+  if not M.RightToLeft then Exit;
+  Result.Left  := M.ViewportW - ARect.Right;
+  Result.Right := M.ViewportW - ARect.Left;
+end;
+
+function TyListReadingX(const M: TTyListMetrics; AX: Integer): Integer;
+begin
+  { The exact inverse of the reflection above, on a PIXEL rather than a boundary: the two
+    have to be the same predicate, and a hand-written one that is half a pixel out is
+    precisely the "painted here, answers there" defect. }
+  Result := AX;
+  if not M.RightToLeft then Exit;
+  Result := M.ViewportW - 1 - AX;
+end;
+
 function TyListItemRect(ADisplayPos, ACount: Integer; const M: TTyListMetrics;
   AScrollX, AScrollY: Integer): TRect;
 var
@@ -426,6 +455,7 @@ begin
     Result.Top    := M.HeaderH + ADisplayPos * M.RowH - AScrollY;
     Result.Right  := Result.Left + M.ReportWidth;
     Result.Bottom := Result.Top + M.RowH;
+    Result := TyListMirror(M, Result);
     Exit;
   end;
 
@@ -448,6 +478,11 @@ begin
   Result.Top    := M.HeaderH + row * PitchY - AScrollY;
   Result.Right  := Result.Left + M.CellW;
   Result.Bottom := Result.Top + M.CellH;
+  { The index arithmetic above is left ALONE and the finished cell is reflected instead.
+    Re-tiling backwards (col := Tracks - 1 - col) would have been a second copy of the
+    row/column decomposition, and it also answers wrongly on the last, partly-filled
+    track -- reflecting the cell does not care how many cells the track holds. }
+  Result := TyListMirror(M, Result);
 end;
 
 { ---------------------------------------------------------------------------
@@ -455,7 +490,7 @@ end;
   --------------------------------------------------------------------------- }
 
 function TyListCheckRect(const ACell: TRect; AStyle: TTyListViewStyle;
-  ACheckPx, APad: Integer): TRect;
+  ACheckPx, APad: Integer; ARightToLeft: Boolean): TRect;
 var
   cw, ch, l, t: Integer;
 begin
@@ -465,14 +500,16 @@ begin
   cw := ACell.Right - ACell.Left;
   ch := ACell.Bottom - ACell.Top;
   { The box needs its own edge length plus one inset; a cell that cannot spare that on
-    either axis shows no box at all. }
+    either axis shows no box at all. Direction-free: mirroring changes which edge the
+    box hugs, never whether it fits. }
   if (cw < ACheckPx + APad) or (ch < ACheckPx + APad) then
     Exit;
-  l := ACell.Left + APad;
+  if ARightToLeft then l := ACell.Right - APad - ACheckPx
+  else l := ACell.Left + APad;
   if AStyle = lvsIcon then
-    t := ACell.Top + APad                    { icon flow: top-left corner }
+    t := ACell.Top + APad                    { icon flow: the reading-start top corner }
   else
-    t := ACell.Top + (ch - ACheckPx) div 2;  { else: left edge, vertically centred }
+    t := ACell.Top + (ch - ACheckPx) div 2;  { else: reading-start edge, vertically centred }
   Result := Rect(l, t, l + ACheckPx, t + ACheckPx);
 end;
 
@@ -514,7 +551,11 @@ begin
     PitchY := M.CellH + M.VGap;
     if (PitchX <= 0) or (PitchY <= 0) then
       Exit;   { degenerate cells: nothing is hittable }
-    col := (APt.X + AScrollX) div PitchX;
+    { Back into READING space before the `div PitchX` -- so the arithmetic that names a
+      track is the same arithmetic in both directions, and only one line knows about the
+      mirror. The verify below then runs against the MIRRORED rect and the ORIGINAL
+      point, which is what makes the two halves provably inverse. }
+    col := (TyListReadingX(M, APt.X) + AScrollX) div PitchX;
     row := (APt.Y - M.HeaderH + AScrollY) div PitchY;
     if FlowIsColMajor(M.ViewStyle) then
       cand := col * Tracks + row
@@ -687,7 +728,20 @@ begin
   end;
 
   { Arrow keys: compute a signed delta by flow direction. A delta of 0 (e.g. Left/Right
-    in report mode) naturally returns the unchanged current position below. }
+    in report mode) naturally returns the unchanged current position below.
+
+    MIRRORING: ←/→ move the SELECTED ITEM between cells, not a caret between characters,
+    so by the criterion in §6.3 item 4 of plans/2026-08-04-rtl-mirroring-scope.md they are
+    layout direction and they flip -- the item to the physical right of the current one is
+    the EARLIER one. Done by swapping the two keys once, here, rather than by negating
+    each delta: the two flows disagree about what ← means (one item in row-major, one
+    whole track in column-major) and negating in two places is how one of them gets
+    missed. Home/End/PageUp/PageDown are LOGICAL ends and are handled above, untouched. }
+  if M.RightToLeft then
+  begin
+    if AKey = lnLeft then AKey := lnRight
+    else if AKey = lnRight then AKey := lnLeft;
+  end;
   Tracks := TyListTracks(M);
   delta := 0;
   if M.ViewStyle = lvsReport then
@@ -755,6 +809,7 @@ var
   Tracks, PitchX, PitchY: Integer;
   r0, r1, c0, c1, row, col, pos, maxLine: Integer;
   cell: TRect;
+  rl, rr: Integer;   { box.Left/Right in READING space -- see below }
 
   procedure Append(APos: Integer);
   begin
@@ -779,6 +834,17 @@ begin
   begin
     swap := box.Top; box.Top := box.Bottom; box.Bottom := swap;
   end;
+
+  { The candidate TRACK range below is derived with `div PitchX`, so it is computed in
+    READING space like both hit tests; reflection reverses the order, so the two ends
+    swap. `box` itself stays in SCREEN space -- every candidate is verified against the
+    mirrored cell rect with RectsTouch(cell, box), and reflecting the box as well would
+    reflect the comparison twice. Getting the range wrong misplaces nothing (the verify
+    still governs); it silently drops cells from the band, which is the harder failure
+    to see. }
+  rl := TyListReadingX(M, box.Left);
+  rr := TyListReadingX(M, box.Right);
+  if rl > rr then begin swap := rl; rl := rr; rr := swap; end;
 
   if M.ViewStyle = lvsReport then
   begin
@@ -808,8 +874,8 @@ begin
   begin
     { column-major: outer loop over columns, inner over rows -> ascending positions
       because pos = col*Tracks + row and row is bounded by Tracks-1. }
-    c0 := (box.Left  + AScrollX) div PitchX - 1;
-    c1 := (box.Right + AScrollX) div PitchX + 1;
+    c0 := (rl + AScrollX) div PitchX - 1;
+    c1 := (rr + AScrollX) div PitchX + 1;
     if c0 < 0 then c0 := 0;
     maxLine := (ACount - 1) div Tracks;   { last column index }
     if c1 > maxLine then c1 := maxLine;
@@ -833,8 +899,8 @@ begin
   begin
     { row-major: outer loop over rows, inner over columns -> ascending positions
       because pos = row*Tracks + col and col is bounded by Tracks-1. }
-    c0 := (box.Left  + AScrollX) div PitchX - 1;
-    c1 := (box.Right + AScrollX) div PitchX + 1;
+    c0 := (rl + AScrollX) div PitchX - 1;
+    c1 := (rr + AScrollX) div PitchX + 1;
     if c0 < 0 then c0 := 0;
     if c1 > Tracks - 1 then c1 := Tracks - 1;
     r0 := (box.Top    - M.HeaderH + AScrollY) div PitchY - 1;
@@ -1122,6 +1188,7 @@ begin
     Result.Top    := M.HeaderH + bodyTopCy + AIndexInGroup * M.RowH - AScrollY;
     Result.Right  := Result.Left + M.ReportWidth;
     Result.Bottom := Result.Top + M.RowH;
+    Result := TyListMirror(M, Result);
     Exit;
   end;
 
@@ -1135,6 +1202,10 @@ begin
   Result.Top    := M.HeaderH + bodyTopCy + row * PitchY - AScrollY;
   Result.Right  := Result.Left + M.CellW;
   Result.Bottom := Result.Top + M.CellH;
+  { The grouped path is the SECOND copy of the same arithmetic, so it gets the same one
+    reflection at the same point -- mirroring one and not the other would leave a grouped
+    list correct until someone switched grouping on. }
+  Result := TyListMirror(M, Result);
 end;
 
 { ---------------------------------------------------------------------------
@@ -1255,7 +1326,7 @@ begin
     PitchY := M.CellH + M.VGap;
     if (PitchX <= 0) or (PitchY <= 0) then
       Exit;   { degenerate cells: nothing hittable }
-    col := (APt.X + AScrollX) div PitchX;
+    col := (TyListReadingX(M, APt.X) + AScrollX) div PitchX;   { see TyListItemAt }
     row := localY div PitchY;
     cand := row * Tracks + col;
   end;
@@ -1390,6 +1461,15 @@ begin
   if cur < 0 then
     { No current item: the first arrow/page press lands on 0. }
     Exit(0);
+
+  { ←/→ are layout direction here too, and for the same reason as in TyListNavigate: a
+    grouped list still steps the SELECTION between cells. Swapped once, before the case,
+    so the flat step below reads identically in both directions. }
+  if M.RightToLeft then
+  begin
+    if AKey = lnLeft then AKey := lnRight
+    else if AKey = lnRight then AKey := lnLeft;
+  end;
 
   { Flat and paging keys are independent of grouping. }
   case AKey of
