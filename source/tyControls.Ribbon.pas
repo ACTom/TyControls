@@ -25,6 +25,7 @@ interface
 
 uses
   Classes, SysUtils, Types, Controls, Graphics, Forms, LCLType,
+  ComCtrls,                          // TTabPosition, for the HeaderTabPosition decline
   tyControls.Types, tyControls.Controller, tyControls.Painter, tyControls.Base,
   tyControls.TabStrip, tyControls.RibbonBackstage, tyControls.PopupSurface,
   tyControls.Button, tyControls.KeyTips;
@@ -104,6 +105,15 @@ type
       move that chrome and those hit tests in the same commit as deleting this override.
       tests/test.rtl.pas TRtlExclusionTest pins it. }
     function  HeaderRightToLeft: Boolean; override;
+    { And the ribbon does NOT move its tab band off the top edge, for the same reason and
+      with the same evidence: the File tab is painted and hit-tested at x in
+      [0, FileTabWidthPx), the collapse chevron sits at CollapseRectPx, and MouseDown gates
+      two gestures on `X >= HeaderLeftInset` -- all of which assume a horizontal band along
+      the top. TabPosition is deliberately NOT published on this class (it is published on
+      TTyPageControl and TTyTabSet only), but it IS public on the base, so hand-written code
+      could still set it; refusing here is what makes that harmless rather than a strip
+      drawn down the left with the ribbon's own chrome left behind at the top. }
+    function  HeaderTabPosition: TTabPosition; override;
     procedure AdjustClientRect(var ARect: TRect); override;
     procedure Paint; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -607,6 +617,11 @@ end;
 function TTyRibbon.HeaderRightToLeft: Boolean;
 begin
   Result := False;   // see the declaration: the ribbon's own chrome is not mirrored yet
+end;
+
+function TTyRibbon.HeaderTabPosition: TTabPosition;
+begin
+  Result := tpTop;   // see the declaration: the ribbon's own chrome is pinned to the top
 end;
 
 procedure TTyRibbon.AdjustClientRect(var ARect: TRect);

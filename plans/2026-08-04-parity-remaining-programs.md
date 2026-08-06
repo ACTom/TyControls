@@ -84,7 +84,7 @@ LCL 的 `TSpeedButton` 和 `TPaintBox` 都是 `TGraphicControl` —— **没有�
 | ~~`TTyStringGrid`~~ | ~~`Cols[]`/`Rows[]` 可赋值的 `TStrings`、`Objects[c,r]`~~ | **已做**:对象槽进 `TTyGridCellAttr`(跟着排序/增删行搬家,**不进撤销栈**),`Cols[]`/`Rows[]` 是 `TTyGridStrings` 活视图,赋值不改结构。见 `docs/controls/grid.md`《对象槽与整行整列赋值》 |
 | `TTyCustomGrid` | `Options: TGridOptions`(~32 个行为标志集合) | 设计器里一个地方翻所有行为开关的入口没有 |
 | `TTyComboBox` | `Style` 的 7 个取值(含 owner-draw 三种) | 只有一种下拉形态 |
-| `TTyComboBoxEx` | `ItemsEx` 集合(`TComboExItem`) | 这个控件存在的理由本身 |
+| ~~`TTyComboBoxEx`~~ | ~~`ItemsEx` 集合(`TComboExItem`)~~ | **审计写错了 —— 这个早就有**:`TTyComboExItem` 的 `Caption`/`ImageIndex`/`Indent`/`OverlayImageIndex`/`SelectedImageIndex`/`Data` 与 LCL 的 `TComboExItem` 逐项对得上,`ItemsEx` 是 published 的集合、设计期可编辑。核过 `source/tyControls.ComboBoxEx.pas` |
 | `TTyMaskEdit` | LCL 掩码语言(~20 个 token)、槽内定位编辑 | 掩码语言是我们自己的三码;光标不能落进任意槽 |
 | `TTyDateTimePicker` | 整个 null/空日期模型(`NullInputAllowed`/`NullDate`) | 字段清不空,"未填写"表达不了 |
 | `TTySpinEdit` | `TFloatSpinEdit`(`Value: Double`、`DecimalPlaces`) | 小数版本整个没有 |

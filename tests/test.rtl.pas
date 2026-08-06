@@ -43,7 +43,8 @@ unit test.rtl;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType, ExtCtrls, fpcunit, testregistry, Forms,
+  Classes, SysUtils, Types, Controls, Graphics, LCLType, ExtCtrls, ComCtrls,
+  fpcunit, testregistry, Forms,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.Base,
   tyControls.TyLabel, tyControls.Divider, tyControls.CheckBox, tyControls.GroupBox,
@@ -612,6 +613,7 @@ type
     procedure ButtonGroupSegmentsAreNotMirroredWhileSegmentAtReadsRawX;
     procedure ValueListEditorIsNotMirroredWhileItsSplitterIsHitTestedTwice;
     procedure RibbonDeclinesToMirrorTheHeaderBandItInherits;
+    procedure RibbonDeclinesToMoveItsTabBandOffTheTopEdge;
     procedure TheGridsVerticalBarStaysOnTheRightAndItsViewportOriginStaysAtZero;
     procedure TheGridsFilterDropDownDeclinesToMirrorItsRows;
     procedure TheListViewsVerticalBarStaysOnTheRightAndSoDoesItsMirrorAxis;
@@ -6012,6 +6014,55 @@ begin
     AssertEquals('and it still starts at the reading-left of the band',
       0, Rib.IndexOfTabAt((after.Left + after.Right) div 2,
                           (after.Top + after.Bottom) div 2));
+  finally
+    Form.Free;
+  end;
+end;
+
+{ The same decline, for the same chrome, on the other axis-generic knob the tab-strip engine
+  grew. TabPosition is public on the base and published only on TTyPageControl and TTyTabSet,
+  so the ribbon's Object Inspector never offers it -- but public is still reachable from
+  hand-written code, and without the override a single line would put the tab band down the
+  left edge while the File tab, the collapse chevron and the KeyTip chips stayed at the top.
+  Deleting TTyRibbon.HeaderTabPosition alone turns this red. }
+procedure TRtlExclusionTest.RibbonDeclinesToMoveItsTabBandOffTheTopEdge;
+var
+  Form: TForm;
+  Rib: TTyRibbon;
+  before, after: TRect;
+begin
+  Form := TForm.CreateNew(nil);
+  try
+    Rib := TTyRibbon.Create(Form);
+    Rib.Parent := Form;
+    Rib.Font.PixelsPerInch := 96;
+    Rib.SetBounds(0, 0, 400, 120);
+    Rib.AddPage('Home');
+    Rib.AddPage('Insert');
+    before := Rib.TabRect(0);
+    AssertTrue('precondition: the ribbon draws a first tab', before.Right > before.Left);
+
+    { Ask for every edge the engine understands, one at a time. A band that actually moved
+      would change this tab's rect on at least one of them. }
+    Rib.TabPosition := tpBottom;
+    after := Rib.TabRect(0);
+    AssertEquals('tpBottom leaves the first tab where it was (top)', before.Top, after.Top);
+    AssertEquals('tpBottom leaves the first tab where it was (left)', before.Left, after.Left);
+
+    Rib.TabPosition := tpLeft;
+    after := Rib.TabRect(0);
+    AssertEquals('tpLeft leaves the first tab where it was (top)', before.Top, after.Top);
+    AssertEquals('tpLeft leaves the first tab where it was (left)', before.Left, after.Left);
+    AssertEquals('tpLeft leaves the first tab where it was (right)', before.Right, after.Right);
+
+    Rib.TabPosition := tpRight;
+    after := Rib.TabRect(0);
+    AssertEquals('tpRight leaves the first tab where it was (left)', before.Left, after.Left);
+
+    { And the hit test agrees with the paint -- the half of this that a rect comparison
+      alone cannot see. Probe one pixel INSIDE the tab's leading edge, not its centre. }
+    AssertEquals('the first tab still answers a click at its own leading edge',
+      0, Rib.IndexOfTabAt(after.Left + 1, (after.Top + after.Bottom) div 2));
   finally
     Form.Free;
   end;
