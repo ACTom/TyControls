@@ -1269,7 +1269,7 @@ var
   pendingIconCount: Integer;
   pendingDraw: array of record Item: TMenuItem; R: TRect; St: TOwnerDrawState; end;
   pendingDrawCount: Integer;
-  k, savedDC: Integer;
+  k: Integer;
   IconRes: TScaledImageListResolution;
   rtl: Boolean;
   Slot, Banner: TRect;
@@ -1494,11 +1494,27 @@ begin
       Everything above went into the painter's BGRA layer, which EndPaint has just
       blitted over ACanvas; a GDI draw made before that point is simply erased. Both
       passes are clipped to their own row so nothing can bleed into a neighbour, and
-      the painter-local rects are offset by ARect into ACanvas device coords. }
+      the painter-local rects are offset by ARect into ACanvas device coords.
+
+      The per-row bracket is Canvas.SaveHandleState/RestoreHandleState and NOT the raw
+      SaveDC/RestoreDC it used to be. RestoreDC swaps the DC's selected pen/font/brush
+      back, but an LCL TCanvas caches which of ITS objects it believes are selected and
+      only re-selects one when a property actually CHANGES -- so after the first callback
+      the cache is a lie, and a handler that assigns the same Font.Color (or Pen.Color)
+      it assigned last row gets a silent no-op and draws with whatever the restore put
+      back. From the app's side that is undefendable: an OnDrawItem doing the ordinary
+      thing -- same ink on every row -- would paint row one correctly and every row after
+      it in a foreign colour. The canvas-aware pair calls DeselectHandles on BOTH sides,
+      so the cache never outlives the DC state it describes; it is the same bracket LCL's
+      own per-cell owner-draw hook uses (TCustomGrid.DoDrawCell around OnDrawCell,
+      grids.pas), and what LCLIntf's own header tells LCL users to reach for instead of
+      SaveDC/RestoreDC. Note FillRect is NOT affected (LCL hands it the brush handle
+      explicitly), which is why the fill-based owner-draw tests stayed green through it.
+      The sibling defect in TTyTreeView's per-cell dispatch was the same construct. }
     if pendingIconCount > 0 then
       for k := 0 to pendingIconCount - 1 do
       begin
-        savedDC := SaveDC(ACanvas.Handle);
+        ACanvas.SaveHandleState;
         try
           IntersectClipRect(ACanvas.Handle,
             ARect.Left + pendingIcon[k].Clip.Left,  ARect.Top + pendingIcon[k].Clip.Top,
@@ -1506,14 +1522,14 @@ begin
           pendingIcon[k].Res.Draw(ACanvas, ARect.Left + pendingIcon[k].X,
             ARect.Top + pendingIcon[k].Y, pendingIcon[k].Idx, pendingIcon[k].Enabled);
         finally
-          RestoreDC(ACanvas.Handle, savedDC);
+          ACanvas.RestoreHandleState;
         end;
       end;
 
     if pendingDrawCount > 0 then
       for k := 0 to pendingDrawCount - 1 do
       begin
-        savedDC := SaveDC(ACanvas.Handle);
+        ACanvas.SaveHandleState;
         try
           IntersectClipRect(ACanvas.Handle,
             ARect.Left + pendingDraw[k].R.Left,  ARect.Top + pendingDraw[k].R.Top,
@@ -1525,7 +1541,7 @@ begin
             of the two exists, so this never returns False and never derefs a nil menu. }
           TMenuItemAccess(pendingDraw[k].Item).DoDrawItem(ACanvas, RowRect, pendingDraw[k].St);
         finally
-          RestoreDC(ACanvas.Handle, savedDC);
+          ACanvas.RestoreHandleState;
         end;
       end;
   finally

@@ -13,7 +13,7 @@ unit test.parity.menu;
 interface
 uses
   Classes, SysUtils, Math, Types, Controls, Graphics, Forms, Menus, ImgList,
-  LCLType, fpcunit, testregistry,
+  LCLType, LCLIntf, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.ImageCollection, tyControls.Menu;
 
@@ -102,10 +102,18 @@ type
     FLastRect: TRect;
     FMeasureCalls: Integer;
     FMeasureHeight: Integer;
+    FStaleInkRows: Integer;      // rows whose DC ink was NOT the one the handler asked for
+    FProbeRect: array of TRect;  // each call's own ARect, in canvas coords
+    FProbeCount: Integer;
     procedure HandleDrawItem(Sender: TObject; ACanvas: TCanvas; ARect: TRect;
       AState: TOwnerDrawState);
     procedure HandleMeasureItem(Sender: TObject; ACanvas: TCanvas;
       var AWidth, AHeight: Integer);
+    { OnDrawItem: ask for the SAME pen + ink on EVERY call -- the shape that catches a
+      canvas whose cached state no longer describes its DC. Strokes the row's own edge
+      pixels and records the rect it was handed. }
+    procedure HandleDrawItemSameStateEveryCall(Sender: TObject; ACanvas: TCanvas;
+      ARect: TRect; AState: TOwnerDrawState);
     { Three plain rows on FMenu; returns the middle one. }
     function ThreeRows: TMenuItem;
   published
@@ -120,6 +128,13 @@ type
     procedure TestMeasureItemIsAskedOncePerRow;
     procedure TestOwnerDrawReachesTheRendererView;
     procedure TestOwnerDrawReachesAMenuBarDropdown;
+    { EVERY owner-drawn row inks with what its handler asked for -- not with what the
+      previous row left in the DC. The view brackets each callback in a DC save/restore;
+      if that restore is not one the LCL canvas knows about, the canvas keeps believing
+      its Pen/Font are still selected and a handler that re-assigns the SAME value draws
+      with the restored (foreign) object instead. Renders an icon row alongside, so both
+      post-EndPaint GDI passes are live on the one popup. }
+    procedure TestOwnerDrawStateSurvivesEveryRow;
   end;
 
 implementation
@@ -139,6 +154,11 @@ end;
 function IsRedInk(const P: TBGRAPixel): Boolean;
 begin
   Result := (P.red > 100) and (P.red > P.green + 40) and (P.red > P.blue + 40);
+end;
+
+function IsBlueInk(const P: TBGRAPixel): Boolean;
+begin
+  Result := (P.blue > 100) and (P.blue > P.red + 40) and (P.blue > P.green + 40);
 end;
 
 { A one-image LCL list holding an opaque square of ASize px in AColor. Built through BGRA
@@ -185,8 +205,12 @@ begin
   for y := 0 to ABmp.Height - 1 do
     for x := 0 to ABmp.Width - 1 do
     begin
-      if AProbe = 0 then hit := IsGreenInk(ABmp.GetPixel(x, y))
-      else hit := IsRedInk(ABmp.GetPixel(x, y));
+      case AProbe of
+        0: hit := IsGreenInk(ABmp.GetPixel(x, y));
+        2: hit := IsBlueInk(ABmp.GetPixel(x, y));
+      else
+        hit := IsRedInk(ABmp.GetPixel(x, y));
+      end;
       if hit then Inc(Result);
     end;
 end;
@@ -901,6 +925,144 @@ begin
   finally
     bar.Free;
     mm.Free;
+  end;
+end;
+
+{ The shape that catches a canvas whose cached state no longer describes its DC: the SAME
+  pen colour and the SAME ink on every call. An LCL TCanvas only re-selects an object when
+  one of its properties actually CHANGES, so from the second row on nothing is re-selected
+  and the stroke lands with whatever object the DC is currently holding.
+
+  Brush + FillRect is deliberately NOT used -- LCL hands FillRect the brush handle
+  explicitly, so it is the one primitive this defect cannot bite, and a guard written
+  around it passes against the broken code. (TestOwnerDrawPaintsTheRowAndSuppressesThe-
+  DefaultContent above is exactly that shape, which is why it never saw any of this.)
+
+  The strokes run along the row's own top and bottom edges, never across it: the four
+  corner pixels are what gets probed, because a probe in the middle of a row survives any
+  drift that leaves SOME of the row green. }
+procedure TMenuOwnerDrawTest.HandleDrawItemSameStateEveryCall(Sender: TObject;
+  ACanvas: TCanvas; ARect: TRect; AState: TOwnerDrawState);
+const
+  Probe = TColor($00C800);   // GREEN, identical on every call
+begin
+  Inc(FDrawCalls);
+  if FProbeCount = Length(FProbeRect) then
+    SetLength(FProbeRect, Length(FProbeRect) + 8);
+  FProbeRect[FProbeCount] := ARect;
+  Inc(FProbeCount);
+
+  ACanvas.Pen.Color   := Probe;
+  ACanvas.Brush.Style := bsClear;
+  ACanvas.Font.Color  := Probe;
+
+  { LineTo stops one short of its end point, so these two strokes cover exactly the four
+    corners: (Left,Top), (Right-1,Top), (Left,Bottom-1) and (Right-1,Bottom-1). }
+  ACanvas.MoveTo(ARect.Left, ARect.Top);
+  ACanvas.LineTo(ARect.Right, ARect.Top);
+  ACanvas.MoveTo(ARect.Left, ARect.Bottom - 1);
+  ACanvas.LineTo(ARect.Right, ARect.Bottom - 1);
+
+  { The same question asked of the text path, which is what an owner-drawn caption
+    actually rides on: after a text op the DC must hold the ink we asked for. LCL sets
+    the DC's text colour inside the FONT selection, so a cached-valid font means
+    SetTextColor is never reached and the ink is whatever the restore put back. }
+  ACanvas.TextOut(ARect.Left + 2, ARect.Top + 2, 'x');
+  if LCLIntf.GetTextColor(ACanvas.Handle) <> Probe then Inc(FStaleInkRows);
+end;
+
+{ Every owner-drawn row must ink with what ITS handler asked for. The view brackets each
+  callback in a DC save/restore so one handler cannot leak its clip into the next; the
+  restore has to be one the LCL canvas knows about, or the canvas goes on believing its
+  Pen/Font are still selected into the DC while the restore has swapped them out -- and
+  the second row onwards paints with the previous DC state instead of the app's.
+
+  Non-vacuous by construction: the canvas's pen and ink are seeded RED and driven into the
+  DC first, so a row that skips the re-select strokes red, not green.
+
+  An icon row rides along on the same popup. Unlike the tree -- where an owner-drawn cell
+  can never also collect an icon -- the menu's owner-draw gate is PER ITEM, so a row with
+  no OnDrawItem keeps its ordinary icon and both post-EndPaint GDI passes are live at
+  once. This is the case that makes the icon pass a neighbour of the callback pass. }
+procedure TMenuOwnerDrawTest.TestOwnerDrawStateSurvivesEveryRow;
+const
+  SeedRed  = TColor($0000DC);   // BGR literal: pure red
+  CanvasH  = 240;
+var
+  i, k, xr: Integer;
+  it: TMenuItem;
+  list: TCustomImageList;
+  Bmp: TBitmap;
+  Img: TBGRABitmap;
+  R: TRect;
+
+  procedure AssertGreenAt(const AWhere: string; x, y: Integer);
+  var P: TBGRAPixel;
+  begin
+    P := Img.GetPixel(x, y);
+    AssertTrue(Format('%s at (%d,%d) drew with the DC''s pen, not the handler''s ' +
+      '(got R%d G%d B%d, seeded red)', [AWhere, x, y, P.red, P.green, P.blue]),
+      (P.green > 160) and (P.red < 96) and (P.blue < 96));
+  end;
+
+begin
+  { Rows 0-1 carry an LCL icon and NO handler; rows 2-4 are owner-drawn. Three callbacks
+    is the point -- the defect starts at the second one. }
+  list := MakeImageList(16, BGRA(0, 0, 255, 255));   // BLUE, distinct from seed and probe
+  Bmp := TBitmap.Create;
+  try
+    FMenu.Images := list;
+    for i := 0 to 4 do
+    begin
+      it := TMenuItem.Create(FMenu);
+      it.Caption := 'Row' + IntToStr(i);
+      if i < 2 then it.ImageIndex := 0
+      else it.OnDrawItem := @HandleDrawItemSameStateEveryCall;
+      FMenu.Items.Add(it);
+    end;
+    FView.OwnerDraw := True;
+    FView.SetRows(TyBuildMenuRows(FMenu.Items));
+    FDrawCalls := 0; FProbeCount := 0; FStaleInkRows := 0;
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(ViewW, CanvasH);
+    Bmp.Canvas.Brush.Style := bsSolid;
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(0, 0, ViewW, CanvasH);
+    { Seed the canvas's PEN and INK red and drive BOTH into the DC, so "whatever the DC is
+      currently holding" is a colour the handler never asks for. Off-surface, so the seed
+      strokes themselves cannot be mistaken for a probe. }
+    Bmp.Canvas.Pen.Color  := SeedRed;
+    Bmp.Canvas.Font.Color := SeedRed;
+    Bmp.Canvas.MoveTo(-8, -8);
+    Bmp.Canvas.LineTo(-4, -8);
+    Bmp.Canvas.TextOut(-40, -40, 'x');
+
+    FView.RenderTo(Bmp.Canvas, Rect(0, 0, ViewW, CanvasH), 96);
+    Img := TBGRABitmap.Create(Bmp);
+    try
+      AssertEquals('three rows were owner-drawn', 3, FDrawCalls);
+      AssertTrue('...and the icon rows kept their own pass alive on the same popup',
+        CountInk(Img, 2) > 50);
+
+      for k := 0 to FProbeCount - 1 do
+      begin
+        R := FProbeRect[k];
+        xr := Min(R.Right - 1, ViewW - 1);
+        AssertTrue('the probed row has room to stroke', (R.Left < xr) and (R.Bottom - R.Top >= 4));
+        AssertGreenAt(Format('row %d: top-left', [k]),     R.Left, R.Top);
+        AssertGreenAt(Format('row %d: top-right', [k]),    xr,     R.Top);
+        AssertGreenAt(Format('row %d: bottom-left', [k]),  R.Left, R.Bottom - 1);
+        AssertGreenAt(Format('row %d: bottom-right', [k]), xr,     R.Bottom - 1);
+      end;
+      AssertEquals('every row inked with the colour its handler set', 0, FStaleInkRows);
+    finally
+      Img.Free;
+    end;
+  finally
+    FMenu.Images := nil;
+    Bmp.Free;
+    list.Free;
   end;
 end;
 

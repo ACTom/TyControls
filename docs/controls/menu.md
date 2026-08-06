@@ -179,7 +179,7 @@ TyMenuItem:disabled { color: var(--muted); }                          /* 禁用�
 - **图标列的两个来源与优先级：** 左槽的图标可以来自两处——库自己的 `TTyVirtualImageList`（`TTyImagesMenu.Images`，BGRA 名称键），或按 `GetImageList` 解析出的 **LCL `TCustomImageList`**（`SubMenuImages` 链 → 菜单的 `Images`）。**解析出的 LCL 列表优先**：`SubMenuImages` 是「这一层子菜单就要用这套图标」的明确声明，理应压过菜单级来源；二者在设计器里也不会撞车，因为 `TTyImagesMenu.Images` 遮蔽了 `TMenu.Images`。两条路径都先经 `GlyphShowMode` 门控，`Checked` 的勾选字形仍然优先于图标。
 - **图标尺寸决定槽宽与行高下限：** 主题的 `--menu-check-slot`（18px）与文本行高是**下限**而非上限——LCL 图像列表自带像素尺寸，`SubMenuImagesWidth` 还能要求更大的，所以左槽与行高会被撑到刚好容纳图标（否则 32px 图标会盖住标题、上下被裁）。撑开量来自应用自己的图像列表，不是写死的视觉值。
 - **禁用行的图标变灰：** LCL 图像列表按 `Enabled` 绘制，禁用行传 `False` 得到灰化图标（`TScaledImageListResolution.Draw` 的第 5 参是 `AEnabled` 而**不是** "greyed"，且它还有一个 `TGraphicsDrawEffect` 重载，传反了照样能编译）。
-- **GDI 两趟后置绘制：** LCL 图像列表的图标与 `OnDrawItem` 都是 GDI 绘制，必须在 `TTyPainter.EndPaint` **之后**画到 `ACanvas` 上——在此之前直接画到 `ACanvas` 的内容会被 BGRA 图层的合成覆盖掉。两趟都按各自行矩形裁剪，互不越界。
+- **GDI 两趟后置绘制：** LCL 图像列表的图标与 `OnDrawItem` 都是 GDI 绘制，必须在 `TTyPainter.EndPaint` **之后**画到 `ACanvas` 上——在此之前直接画到 `ACanvas` 的内容会被 BGRA 图层的合成覆盖掉。两趟都按各自行矩形裁剪，互不越界。裁剪用 `TCanvas.SaveHandleState` / `RestoreHandleState` 括起来，**不是**裸的 `SaveDC` / `RestoreDC`：后者换掉 DC 里的对象却不通知画布的句柄缓存，会让宿主 `OnDrawItem` 从第二行起用错颜色（见 §7 自绘边界）。
 - **助记符下划线：** 标题中的 `&` 由 `TyParseMnemonic` 解析（共享设施 `tyControls.Accel`），`&` 从显示文本移除，其后字符在**按住 Alt 时**显示下划线；菜单栏的下划线经 `TyAccelGatePos` 门控（仅 Alt 态显示）。
 - **弹出圆角：** 弹出窗体用与 `TyMenuPopup` 的 `border-radius` 匹配的圆角区域做窗口遮罩（`SetWindowRgn`/`CreateRoundRectRgn`，跨 win32/gtk2/qt）；半径为 0 或非 Windows 时留矩形；Wayland 无法遮罩窗口，改为方角绘制（`ForceSquareSurface`）。
 
@@ -270,6 +270,8 @@ end;
   - 触发自绘的行：**先**铺该行的主题背景（含 `:active` 高亮），**再**调处理器，并在 `AState` 中带上 `odBackgroundPainted` 告知这一点——只画文字的处理器因此仍能落在正确的高亮上。其余状态按行如实映射：`odSelected`（当前高亮行）、`odDisabled` + `odGrayed`、`odChecked`、`odDefault`。
   - **不覆盖 TyControls 专有的「章节标题」行**（`TTyMenuEx` 的 `-Text`）：它在 LCL 里没有对应的项类型，自绘协议管不到它，仍按主题绘制。普通项与分隔线都参与自绘。
   - 自绘只改**内容**，不改弹出体的背景/边框/圆角——那仍由 `TyMenuView` / `TyMenuPopup` 令牌决定。
+  - **每次回调拿到的画布状态都是干净的**：库对每一行的回调用 `TCanvas.SaveHandleState` / `RestoreHandleState` 括起来（而不是裸的 `SaveDC` / `RestoreDC`）。这一条是有实际后果的——LCL 的 `TCanvas` 会缓存"我的 Pen/Brush/Font 已经选进 DC 了"，而属性只有在**值真的变了**时才重新选入；裸 `RestoreDC` 把 DC 里的对象换回去却动不了那份缓存，于是从**第二行**起，处理器里 `ACanvas.Font.Color := 同一个值` 就是一句空操作，字会用上一行残留在 DC 里的颜色画出来。换成画布自己的这对方法后，两侧都会 `DeselectHandles`，缓存不会比它描述的 DC 状态活得更久。因此「每一行都设同一个 `Font.Color` / `Pen.Color`」是可靠写法，不必靠交替改值去骗重选。（`FillRect` 不受此影响——LCL 是把画刷句柄显式传进去的。）
+  - **处理器借的是宿主画布，改了什么就要还回去**：`ACanvas` 是控件自己的画布，同一次绘制里后面每一行、以及下一次绘制，都继承你留下的 `Font.Color` / `Brush` / `Pen`。上面那条保证的是「你设的值一定生效」，不是「你不用收拾」——留下的状态照样会流到别处去。
 - **`TrackButton` 的含义：** `tbRightButton`（默认）不是「只能右键」，而是「左右键都能选中」，与 Win32 `TPM_RIGHTBUTTON` 一致；左键路径（`TControl.Click`）在两种取值下都可用，`tbLeftButton` 只是把右键关掉。
 - **`TTyPopupMenu` 是真正的 `TPopupMenu`：** 它重写虚方法 `PopUp(X, Y)`（已核实 `menus.pp` 中该方法为 `virtual`），因此赋给任意控件的 `PopupMenu` 属性、走 LCL 的 `DoContextPopup` 右键路径即可弹出主题化菜单，无需额外接线。
 - **主题必须先加载：** 弹出体的背景/边框/圆角/高亮全部来自 `.tycss` 令牌；未加载主题时样式解析没有可用令牌。视觉值一律由主题驱动，代码中不写死颜色。
