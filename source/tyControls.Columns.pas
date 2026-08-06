@@ -278,6 +278,7 @@ type
     FOnChange:      TNotifyEvent;
 
     procedure SetHeight(AValue: Integer);
+    procedure SetColumns(AValue: TTyColumns);
     procedure SetMainColumn(AValue: Integer);
     procedure SetSortColumn(AValue: Integer);
     procedure SetSortDirection(AValue: TTySortDirection);
@@ -304,7 +305,21 @@ type
     property HeightIsExplicit: Boolean read FHeightExplicit;
   published
     property Height:        Integer              read FHeight        write SetHeight        default 22;
-    property Columns:       TTyColumns       read FColumns;
+    { The setter is what makes this collection STREAM, and it is not optional.
+
+      FPC gates both halves of streaming on SetProc being present, for every property
+      kind including a TCollection:
+        - TWriter.WriteProperty (writer.inc) returns immediately for a property with no
+          setter unless it is a TComponent subcomponent -- so the DESIGNER silently never
+          wrote Header.Columns into the .lfm, and a user's columns vanished on save;
+        - TReader.ReadPropValue (reader.inc) raises EReadError('Property is read-only')
+          before it looks at the kind -- so a hand-written `Header.Columns = <...>` in a
+          .lfm blew up at CreateForm.
+      The reader never actually CALLS this setter for a collection (it takes vaCollection
+      to ReadCollection(GetObjectProp(...)) and fills the existing instance), but its mere
+      presence is the gate. It still has to be correct for a direct assignment, which is
+      what TTyStatusBar.Panels and TTyListView.Items already do. }
+    property Columns:       TTyColumns       read FColumns       write SetColumns;
     property MainColumn:    Integer              read FMainColumn    write SetMainColumn    default 0;
     property SortColumn:    Integer              read FSortColumn    write SetSortColumn    default -1;
     property SortDirection: TTySortDirection     read FSortDirection write SetSortDirection default sdAscending;
@@ -1109,6 +1124,16 @@ begin
   if FHeight = AValue then Exit;
   FHeight := AValue;
   Changed;
+end;
+
+{ Direct assignment (H1.Columns := H2.Columns). TCollection.Assign clears and re-adds
+  through the DESTINATION's item class, so a grid header stays full of TTyGridColumns
+  even when assigned from a plain TTyColumns. Guarding against self-assign matters:
+  TCollection.Assign would Clear first and hand back an empty collection. }
+procedure TTyHeader.SetColumns(AValue: TTyColumns);
+begin
+  if AValue = FColumns then Exit;
+  FColumns.Assign(AValue);
 end;
 
 procedure TTyHeader.SetMainColumn(AValue: Integer);

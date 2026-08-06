@@ -1,0 +1,372 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols-rtl_example 2.99\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+# --- .lfm captions/text/hints (auto-generated, msgid=English source) ---
+
+#: tmainform.caption
+msgid "TyControls - right-to-left mirroring and bidirectional text"
+msgstr "TyControls —— 从右往左镜像与双向文本"
+
+#: tmainform.titlebar1.caption
+msgid "RTL / BiDi  -  TyControls"
+msgstr "RTL / BiDi  ·  TyControls"
+
+#: tmainform.darkswitch.caption
+msgid "Dark"
+msgstr "暗色"
+
+#: tmainform.dirswitch.caption
+msgid "Right-to-left (BiDiMode)"
+msgstr "从右往左 (BiDiMode)"
+
+#: tmainform.lbldirstate.caption
+msgid "Direction: left-to-right (bdLeftToRight)"
+msgstr "方向:从左往右 (bdLeftToRight)"
+
+#: tmainform.lbllegend.caption
+msgid "Mirroring is PARTIAL and that is the point. Each area below states what moves and what does not - anything unlabelled has not been built yet, it is not broken."
+msgstr "镜像是**部分**完成的,这正是本例要说明的事。下面每一区都写明了什么会动、什么不动 —— 没标注的是还没做,不是坏了。"
+
+#: tmainform.lbltry.caption
+msgid "Try to break it: click the exact pixel a glyph was drawn on (check box, sort triangle, filter funnel, tree chevron, tab close x); drag the status bar's bottom-LEFT corner; open a menu and then its submenu; drag a grid column edge; right-click this strip for a popup with a submenu."
+msgstr "试着把它弄坏:对着某个图元实际画出来的那一个像素点下去(复选框、排序三角、筛选漏斗、树形折叠箭头、页签关闭 x);拖状态栏**左下角**;打开菜单再打开它的子菜单;拖网格的列边;在这条上右键弹出带子菜单的快捷菜单。"
+
+#: tmainform.pgform.caption
+msgid "1  Form controls"
+msgstr "1  表单控件"
+
+#: tmainform.divformall.caption
+msgid "ALL of these MIRROR - indicators, glyph slots, swatches, badges and captions change ends"
+msgstr "这一页**全部会镜像** —— 指示器、图标槽、色块、角标与文字都换边"
+
+#: tmainform.lblalignleft.caption
+msgid "TTyLabel Alignment=taLeftJustify -> right edge"
+msgstr "TTyLabel Alignment=taLeftJustify → 靠右边"
+
+#: tmainform.lblalignright.caption
+msgid "TTyLabel Alignment=taRightJustify -> left edge"
+msgstr "TTyLabel Alignment=taRightJustify → 靠左边"
+
+#: tmainform.lblaligncenter.caption
+msgid "TTyLabel taCenter - stays put"
+msgstr "TTyLabel taCenter —— 不动"
+
+#: tmainform.chkplain.caption
+msgid "TTyCheckBox - the indicator swaps sides"
+msgstr "TTyCheckBox —— 勾选框换边"
+
+#: tmainform.chkflipped.caption
+msgid "Alignment=taLeftJustify - explicitly set, still flips"
+msgstr "Alignment=taLeftJustify —— 显式设过,照样翻"
+
+#: tmainform.chkgrayed.caption
+msgid "Tri-state (cbGrayed)"
+msgstr "三态 (cbGrayed)"
+
+#: tmainform.radone.caption
+msgid "TTyRadioButton - first"
+msgstr "TTyRadioButton —— 第一项"
+
+#: tmainform.radtwo.caption
+msgid "TTyRadioButton - second"
+msgstr "TTyRadioButton —— 第二项"
+
+#: tmainform.divindent.caption
+msgid "LeftIndent=40 counts from the other end"
+msgstr "LeftIndent=40 从另一端起算"
+
+#: tmainform.panelcap.caption
+msgid "TTyPanel caption (taLeftJustify) - right-click me"
+msgstr "TTyPanel 标题 (taLeftJustify) —— 右键点我"
+
+#: tmainform.lblcontainernote.caption
+msgid "DOES NOT MIRROR, on purpose: containers never mirror their children's Align/Anchors layout, so these three columns keep their order. LCL's own align engine has no BiDi branch, and diverging from it would misplace every ported .lfm."
+msgstr "**故意不镜像**:容器从不镜像子控件的 Align/Anchors 布局,所以这三栏保持原顺序。LCL 自己的对齐引擎就没有 BiDi 分支,跟它分叉会让每一个移植过来的 .lfm 全错位。"
+
+#: tmainform.radgrp.caption
+msgid "TTyRadioGroup (Columns=2) - columns fill from the right"
+msgstr "TTyRadioGroup (Columns=2) —— 列从右边开始填"
+
+#: tmainform.chkgrp.caption
+msgid "TTyCheckGroup (Columns=2) - each box flips its own indicator"
+msgstr "TTyCheckGroup (Columns=2) —— 每个勾选框各自翻自己的指示器"
+
+#: tmainform.grpbox.caption
+msgid "TTyGroupBox - the caption band changes ends"
+msgstr "TTyGroupBox —— 标题带换到另一端"
+
+#: tmainform.lblgrpfield.caption
+msgid "Field:"
+msgstr "字段:"
+
+#: tmainform.edgrp.text
+msgid "edit inside a group box"
+msgstr "分组框里的编辑框"
+
+#: tmainform.lblgrpnote.caption
+msgid "The band moves; the children inside do not."
+msgstr "标题带会动,里面的子控件不动。"
+
+#: tmainform.lblgrpafter.caption
+msgid "Arrow keys in the two groups follow the columns."
+msgstr "两个分组里的方向键跟着列走。"
+
+#: tmainform.btnplain.caption
+msgid "TTyButton (taCenter)"
+msgstr "TTyButton (taCenter)"
+
+#: tmainform.btncapleft.caption
+msgid "taLeftJustify"
+msgstr "taLeftJustify"
+
+#: tmainform.btnglyphleft.caption
+msgid "Glyph glLeft"
+msgstr "图标 glLeft"
+
+#: tmainform.btnglyphright.caption
+msgid "Glyph glRight"
+msgstr "图标 glRight"
+
+#: tmainform.btncolor.dialogcaption
+msgid "Pick a colour"
+msgstr "选择颜色"
+
+#: tmainform.btnbadge.caption
+msgid "Badge -> bottom-left"
+msgstr "角标 → 左下角"
+
+#: tmainform.divglyphnote.caption
+msgid "What to press here"
+msgstr "这里该按什么"
+
+#: tmainform.lblformnote.caption
+msgid "These controls answer clicks over their whole face, so paint and hit test cannot come apart - which is why they shipped first. The group boxes are the exception worth pressing: they hold real child check boxes and radio buttons, each flipping its own indicator, so click the exact pixel an indicator was drawn on after switching direction. The colour swatch and the badge corner are the other two small targets; a taCenter button caption is expected NOT to move. The glyph buttons take their star from the system symbol font, whose family name differs per platform - an empty slot is a missing font, not a mirroring fault, and the SLOT still changes sides."
+msgstr "这些控件的整个面都响应点击，所以绘制与命中不可能对不上 —— 这也是它们最先落地的原因。值得按的例外是两个分组框：它们装着真正的子复选框/单选钮，各自翻自己的指示器，所以换向之后请对着指示器画出来的那一个像素点下去。颜色色块和角标那个角是另外两个小目标；taCenter 的按钮文字**本来就不该动**。图标按钮的星号取自系统符号字体，而那个字族名各平台不同 —— 槽位空着是字体缺失，不是镜像出错，而且**槽位本身照样换边**。"
+
+#: tmainform.pgdata.caption
+msgid "2  Data views"
+msgstr "2  数据视图"
+
+#: tmainform.divgrid.caption
+msgid "TTyStringGrid - MIRRORS, and every hit test follows the paint"
+msgstr "TTyStringGrid —— **会镜像**,而且每一处命中都跟着绘制走"
+
+#: tmainform.lblgridnote.caption
+msgid "MIRRORS: column order, the row-number gutter, the two frozen columns, header captions, the sort triangle, the filter funnel, the tree chevron and its indent, the check-box cell and the button cell. DELIBERATELY DOES NOT: the vertical scroll bar stays on the right, and the filter drop-down does not mirror its own rows - both are pinned by tests, not accidents. Note a resize grip is a column's LEFT edge under RTL, and dragging it left widens the column."
+msgstr "**会镜像**:列顺序、行号槽、两个冻结列、表头文字、排序三角、筛选漏斗、树形折叠箭头与缩进、复选框单元格与按钮单元格。**故意不镜像**:竖向滚动条留在右边,筛选下拉不镜像它自己的行 —— 两处都有测试钉着,不是遗漏。另注意:RTL 下改列宽的手柄是列的**左**边,往左拖是把列**加宽**。"
+
+#: tmainform.divlv.caption
+msgid "TTyListView - DOES NOT MIRROR yet"
+msgstr "TTyListView —— **还不镜像**"
+
+#: tmainform.divtv.caption
+msgid "TTyTreeView - DOES NOT MIRROR yet"
+msgstr "TTyTreeView —— **还不镜像**"
+
+#: tmainform.lbldatanote.caption
+msgid "Side by side on purpose - the contrast is the documentation. Flip the switch: the grid turns round whole, these two do not move at all. That is a stated gap. Their column model writes a per-column left field that nine separate expressions independently turn into a screen x, so mirroring the paint alone would leave every click behind."
+msgstr "故意并排放 —— 对比本身就是文档。拨开关:网格整个翻过来,这两个纹丝不动。这是写在案上的缺口。它们的列模型写的是每列一个 left 字段,有九处互不相干的表达式各自把它算成屏幕 x,所以只镜像绘制会把所有点击留在原地。"
+
+#: tmainform.pgtext.caption
+msgid "3  Text and chrome"
+msgstr "3  文本与窗口外框"
+
+#: tmainform.divtext.caption
+msgid "Text - word order, shaping and the caret are bidirectional. The BLOCK does not mirror."
+msgstr "文本 —— 词序、字形连写与光标都是双向的。**文本块本身不镜像**。"
+
+#: tmainform.lblarabic.caption
+msgid "Arabic"
+msgstr "阿拉伯文"
+
+#: tmainform.lblhebrew.caption
+msgid "Hebrew"
+msgstr "希伯来文"
+
+#: tmainform.lblmixed.caption
+msgid "Mixed"
+msgstr "混排"
+
+#: tmainform.lblchinese.caption
+msgid "Chinese"
+msgstr "中文"
+
+#: tmainform.divchrome.caption
+msgid "What to press in this area"
+msgstr "这一区该按什么"
+
+#: tmainform.lbltextnote.caption
+msgid "MIRRORS here: nothing in the four rows above. An edit and a memo keep their text block, margins and scroll bar on the left in either direction - only the reordering INSIDE a line is bidirectional, and that half is always on and needs no switch. What IS bidirectional: click a glyph and the caret lands on THAT glyph, including at the far side of an embedded run; Left/Right move one glyph the way the key points, crossing runs in screen order; Home/End stay logical, so on a right-to-left line Home puts the caret at the right of the ink. Drag across the Mixed memo line: a selection crossing a direction boundary paints one band PER RUN, so it can highlight glyphs the pointer never passed over - that is the range between the two endpoints, and it is what every other editor does. The Arabic rows are also the shaping test: the letters must JOIN into their contextual forms, not stand isolated. That was measured and pinned on Windows only; on GTK and Cocoa it is the platform text engine's answer and this window is the only way to see it."
+msgstr "这里**没有任何东西镜像**:上面四行都不。编辑框与备注框在两个方向下都把文本块、边距和滚动条留在左边 —— 只有**行内的重排**是双向的,而那一半一直开着,不需要开关。**确实是双向的**:点某个字形,光标就落到**那个**字形上,包括嵌入段落远端的那一侧;Left/Right 按键朝哪边就走一个字形,跨段按屏幕顺序走;Home/End 保持**逻辑**含义,所以在一行从右往左的文字上,Home 把光标放在字迹的**右**端。在混排的备注框那一行上拖选:跨方向边界的选区会**按段分成多条高亮带**,因此可能高亮到指针没划过的字形 —— 那就是两个端点之间的范围,别的编辑器也都这么做。阿拉伯文那两行同时是**字形连写**的检验:字母必须按上下文**连**起来,不能各自孤立。这一条只在 Windows 上量过并钉成了测试;GTK 与 Cocoa 上答案归平台文字引擎,而这个窗口是唯一能看见的办法。"
+
+#: tmainform.divscroll.caption
+msgid "TTyScrollBox - MIRRORS"
+msgstr "TTyScrollBox —— **会镜像**"
+
+#: tmainform.sbbtn1.caption
+msgid "Oversized child 1"
+msgstr "超出范围的子控件 1"
+
+#: tmainform.sbbtn2.caption
+msgid "Oversized child 2"
+msgstr "超出范围的子控件 2"
+
+#: tmainform.sbbtn3.caption
+msgid "Oversized child 3"
+msgstr "超出范围的子控件 3"
+
+#: tmainform.sbbtn4.caption
+msgid "Oversized child 4"
+msgstr "超出范围的子控件 4"
+
+#: tmainform.sbbtn5.caption
+msgid "Oversized child 5"
+msgstr "超出范围的子控件 5"
+
+#: tmainform.sbbtn6.caption
+msgid "Oversized child 6"
+msgstr "超出范围的子控件 6"
+
+#: tmainform.lblscrollnote.caption
+msgid "The vertical bar docks LEFT and the viewport starts after it - the loudest signal a window gives that it reads right-to-left."
+msgstr "竖向滚动条停靠到**左**边,视口从它之后开始 —— 这是一个窗口表明自己从右往左读的最响亮的信号。"
+
+#: tmainform.divmini.caption
+msgid "TTyPageControl - MIRRORS"
+msgstr "TTyPageControl —— **会镜像**"
+
+#: tmainform.mpone.caption
+msgid "One"
+msgstr "一"
+
+#: tmainform.lblmpone.caption
+msgid "Tab 0 becomes the RIGHTMOST tab and the strip packs leftwards. The close x moves to each header's left edge."
+msgstr "第 0 个页签变成**最右**的那个,整条标签带往左排。关闭 x 移到每个页签头的左边。"
+
+#: tmainform.mptwo.caption
+msgid "Two"
+msgstr "二"
+
+#: tmainform.lblmptwo.caption
+msgid "The page BODY does not move, and a page's own children are not mirrored."
+msgstr "**页面主体不动**,页面自己的子控件也不镜像。"
+
+#: tmainform.mpthree.caption
+msgid "Three"
+msgstr "三"
+
+#: tmainform.lblmpthree.caption
+msgid "Left/Right arrows follow the eye. Drag a header to reorder it and the drop slot must match what you see."
+msgstr "左右方向键跟着眼睛走。拖动页签头重排,落点必须和你看到的一致。"
+
+#: tmainform.mpfour.caption
+msgid "Four"
+msgstr "四"
+
+#: tmainform.lblmpfour.caption
+msgid "Narrow the window until the overflow arrows appear: they swap ends and turn round."
+msgstr "把窗口拖窄到出现溢出箭头:它们会互换两端并掉头。"
+
+#: tmainform.lblmininote.caption
+msgid "The outer pager at the top of this window mirrors too - watch tab 1 jump to the right."
+msgstr "本窗口顶部那个外层页签控件同样会镜像 —— 看着第 1 页跳到右边去。"
+
+#: tmainform.mnufile.caption
+msgid "&File"
+msgstr "文件(&F)"
+
+#: tmainform.mnufilenew.caption
+msgid "&New"
+msgstr "新建(&N)"
+
+#: tmainform.mnufileopen.caption
+msgid "&Open"
+msgstr "打开(&O)"
+
+#: tmainform.mnufilerecent.caption
+msgid "Recent files"
+msgstr "最近的文件"
+
+#: tmainform.mnurecentmore.caption
+msgid "Older still"
+msgstr "更早的"
+
+#: tmainform.mnufileexit.caption
+msgid "E&xit"
+msgstr "退出(&X)"
+
+#: tmainform.mnuedit.caption
+msgid "&Edit"
+msgstr "编辑(&E)"
+
+#: tmainform.mnueditcut.caption
+msgid "Cu&t"
+msgstr "剪切(&T)"
+
+#: tmainform.mnueditcopy.caption
+msgid "&Copy"
+msgstr "复制(&C)"
+
+#: tmainform.mnueditdisabled.caption
+msgid "Paste (disabled)"
+msgstr "粘贴(已禁用)"
+
+#: tmainform.mnudirection.caption
+msgid "&Direction"
+msgstr "方向(&D)"
+
+#: tmainform.mnudirltr.caption
+msgid "&Left to right"
+msgstr "从左往右(&L)"
+
+#: tmainform.mnudirrtl.caption
+msgid "&Right to left"
+msgstr "从右往左(&R)"
+
+#: tmainform.mnuhelpright.caption
+msgid "&Help"
+msgstr "帮助(&H)"
+
+#: tmainform.mnuhelpabout.caption
+msgid "&About this example"
+msgstr "关于本示例(&A)"
+
+#: tmainform.pophdr.caption
+msgid "-Popup"
+msgstr "-快捷菜单"
+
+#: tmainform.popfirst.caption
+msgid "A popup takes its direction from its host"
+msgstr "快捷菜单的方向取自它的宿主控件"
+
+#: tmainform.popsub.caption
+msgid "Cascade a submenu"
+msgstr "展开一个子菜单"
+
+#: tmainform.popsub1.caption
+msgid "Submenus hang the other way"
+msgstr "子菜单朝另一边挂"
+
+#: tmainform.popsub2.caption
+msgid "and the arrow turns round"
+msgstr "箭头也会掉头"
+
+#: tmainform.popsubdeep.caption
+msgid "Deeper still"
+msgstr "再深一层"
+
+#: tmainform.popsubdeep1.caption
+msgid "third level"
+msgstr "第三层"
+
+#: tmainform.popshortcut.caption
+msgid "Shortcut moves to the left"
+msgstr "快捷键文字移到左边"

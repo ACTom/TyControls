@@ -3,7 +3,8 @@ unit test.grid.streaming;
 interface
 uses
   Classes, SysUtils, TypInfo, Controls, Forms, fpcunit, testregistry,
-  tyControls.Grid, tyControls.GridPanel, tyControls.GridCell, tyControls.Button;
+  tyControls.Columns, tyControls.Grid, tyControls.GridPanel, tyControls.GridCell,
+  tyControls.Button, tyControls.ListView, tyControls.TreeView;
 
 type
   { 拿真实的示例 .lfm 去校验控件的**发布面**。
@@ -17,12 +18,24 @@ type
     procedure TestGridPublishesStandardLayoutProperties;
     procedure TestGridPanelCellsSurviveRoundTrip;
     procedure TestGridPanelPublishesDesignerProps;
+    procedure TestHeaderColumnsSurviveRoundTrip;
+    procedure TestListViewAndTreeHeaderColumnsSurviveRoundTrip;
+    procedure TestHeaderColumnsAssignmentReplacesTheCollection;
   end;
 
   { A streamable root that owns the design tree (mirrors test.pagecontrol.streaming). }
   TGridHostForm = class(TForm)
   published
     Grid: TTyGridPanel;
+  end;
+
+  { Roots for the header-column round trips below. Each holds one control whose columns
+    live under the shared TTyHeader. }
+  TColHostForm = class(TForm)
+  published
+    Grid: TTyStringGrid;
+    LV: TTyListView;
+    Tree: TTyTreeView;
   end;
 
 implementation
@@ -196,8 +209,178 @@ begin
       GetPropInfo(TTyGridPanel, cMust[i]) <> nil);
 end;
 
+{ ------------------------------------------------- TTyHeader.Columns streaming --
+
+  The columns of a grid, a list view and a tree view all live in ONE collection type
+  reached through ONE property: TTyHeader.Columns. That property used to be declared
+  `read FColumns` with no writer, and FPC gates BOTH halves of streaming on the writer
+  being present -- for every property kind, collections included:
+
+    - TWriter.WriteProperty (writer.inc) returns immediately when SetProc is nil unless
+      the value is a TComponent subcomponent. A TTyColumns is a TCollection, so the
+      designer wrote nothing: a user who added columns in the Object Inspector got them
+      on screen and lost them on save, silently.
+    - TReader.ReadPropValue (reader.inc) raises EReadError('Property is read-only')
+      before it even looks at the kind, so a hand-written `Header.Columns = <...>` in a
+      .lfm took the whole form down at CreateForm.
+
+  Nothing headless had ever streamed a designer-authored grid, so neither half showed up
+  until examples/rtl/umain.lfm declared its columns in the form file. These three tests
+  are the guard. The first two are round trips rather than RTTI-shape assertions on
+  purpose: `GetPropInfo(...)^.SetProc <> nil` would pass against a setter that dropped
+  the columns on the floor. }
+
+procedure TTyGridStreamingTest.TestHeaderColumnsSurviveRoundTrip;
+var
+  Src, Dst: TColHostForm;
+  MS: TMemoryStream;
+  col: TTyGridColumn;
+  DstGrid: TTyStringGrid;
+  Txt: TStringStream;
+begin
+  Src := TColHostForm.CreateNew(nil);
+  Dst := TColHostForm.CreateNew(nil);
+  MS := TMemoryStream.Create;
+  Txt := TStringStream.Create('');
+  try
+    Src.Name := 'ColHost1';
+    Src.Grid := TTyStringGrid.Create(Src);
+    Src.Grid.Name := 'Grid';
+    Src.Grid.Parent := Src;
+
+    col := Src.Grid.Header.Columns.Add as TTyGridColumn;
+    col.Text := 'Name';   col.Width := 168; col.Alignment := taLeftJustify;
+    col := Src.Grid.Header.Columns.Add as TTyGridColumn;
+    col.Text := 'Qty';    col.Width := 68;  col.Alignment := taRightJustify;
+    col.SortKind := gskNumber;
+    col := Src.Grid.Header.Columns.Add as TTyGridColumn;
+    col.Text := 'Action'; col.Width := 96;  col.CellDisplay := gcdButton;
+    AssertEquals('3 columns pre-stream', 3, Src.Grid.Header.Columns.Count);
+
+    { The WRITER half. A property the writer skips leaves no trace in the text form,
+      which is exactly what the designer would have saved. }
+    MS.WriteComponent(Src);
+    MS.Position := 0;
+    ObjectBinaryToText(MS, Txt);
+    AssertTrue('the writer must emit Header.Columns (a skipped property = columns lost '
+      + 'on every designer save)', Pos('Columns', Txt.DataString) > 0);
+    AssertTrue('and the column captions with it', Pos('Action', Txt.DataString) > 0);
+
+    { The READER half. }
+    MS.Position := 0;
+    MS.ReadComponent(Dst);
+
+    DstGrid := Dst.FindComponent('Grid') as TTyStringGrid;
+    AssertNotNull('grid survived', DstGrid);
+    AssertEquals('3 columns after round trip', 3, DstGrid.Header.Columns.Count);
+    AssertEquals('column 0 caption', 'Name',
+      (DstGrid.Header.Columns.Items[0] as TTyColumn).Text);
+    AssertEquals('column 1 caption', 'Qty',
+      (DstGrid.Header.Columns.Items[1] as TTyColumn).Text);
+    AssertEquals('column 1 width', 68,
+      (DstGrid.Header.Columns.Items[1] as TTyColumn).Width);
+    AssertTrue('column 1 alignment', taRightJustify =
+      (DstGrid.Header.Columns.Items[1] as TTyColumn).Alignment);
+    { A grid's collection is created with TTyGridColumn, so the reader must re-add that
+      class and its own published fields must survive too. }
+    AssertTrue('reloaded items are TTyGridColumn',
+      DstGrid.Header.Columns.Items[2] is TTyGridColumn);
+    AssertTrue('column 2 CellDisplay', gcdButton =
+      (DstGrid.Header.Columns.Items[2] as TTyGridColumn).CellDisplay);
+    AssertTrue('column 1 SortKind', gskNumber =
+      (DstGrid.Header.Columns.Items[1] as TTyGridColumn).SortKind);
+  finally
+    Txt.Free;
+    MS.Free;
+    Dst.Free;
+    Src.Free;
+  end;
+end;
+
+{ The same header type backs all three controls, so a fix that only reached the grid
+  would be a fix in the wrong place. }
+procedure TTyGridStreamingTest.TestListViewAndTreeHeaderColumnsSurviveRoundTrip;
+var
+  Src, Dst: TColHostForm;
+  MS: TMemoryStream;
+  c: TTyColumn;
+begin
+  Src := TColHostForm.CreateNew(nil);
+  Dst := TColHostForm.CreateNew(nil);
+  MS := TMemoryStream.Create;
+  try
+    Src.Name := 'ColHost2';
+    Src.LV := TTyListView.Create(Src);
+    Src.LV.Name := 'LV';
+    Src.LV.Parent := Src;
+    c := Src.LV.Header.Columns.Add as TTyColumn; c.Text := 'File'; c.Width := 190;
+    c := Src.LV.Header.Columns.Add as TTyColumn; c.Text := 'Size'; c.Width := 90;
+
+    Src.Tree := TTyTreeView.Create(Src);
+    Src.Tree.Name := 'Tree';
+    Src.Tree.Parent := Src;
+    c := Src.Tree.Header.Columns.Add as TTyColumn; c.Text := 'Node'; c.Width := 280;
+    c := Src.Tree.Header.Columns.Add as TTyColumn; c.Text := 'Kind'; c.Width := 150;
+    Src.Tree.Header.MainColumn := 0;
+
+    MS.WriteComponent(Src);
+    MS.Position := 0;
+    MS.ReadComponent(Dst);
+
+    AssertEquals('list view keeps 2 columns', 2,
+      (Dst.FindComponent('LV') as TTyListView).Header.Columns.Count);
+    AssertEquals('list view column 0 caption', 'File',
+      ((Dst.FindComponent('LV') as TTyListView).Header.Columns.Items[0] as TTyColumn).Text);
+    AssertEquals('tree keeps 2 columns', 2,
+      (Dst.FindComponent('Tree') as TTyTreeView).Header.Columns.Count);
+    AssertEquals('tree column 1 caption', 'Kind',
+      ((Dst.FindComponent('Tree') as TTyTreeView).Header.Columns.Items[1] as TTyColumn).Text);
+    { MainColumn is clamped to NoColumn while Columns.Count = 0. It may only survive
+      because the columns arrived first -- which is the whole point of them arriving. }
+    AssertEquals('tree MainColumn survived', 0,
+      (Dst.FindComponent('Tree') as TTyTreeView).Header.MainColumn);
+  finally
+    MS.Free;
+    Dst.Free;
+    Src.Free;
+  end;
+end;
+
+{ The setter also has to be correct as a plain assignment -- that is the contract
+  TTyStatusBar.Panels and TTyListView.Items already keep. Self-assignment is the case
+  that bites: TCollection.Assign clears the destination first, so `H.Columns := H.Columns`
+  through a naive setter empties it. }
+procedure TTyGridStreamingTest.TestHeaderColumnsAssignmentReplacesTheCollection;
+var
+  A, B: TTyHeader;
+  c: TTyColumn;
+begin
+  A := TTyHeader.Create;
+  B := TTyHeader.Create;
+  try
+    c := A.Columns.Add as TTyColumn; c.Text := 'one'; c.Width := 40;
+    c := A.Columns.Add as TTyColumn; c.Text := 'two'; c.Width := 50;
+
+    c := B.Columns.Add as TTyColumn; c.Text := 'stale';
+
+    B.Columns := A.Columns;
+    AssertEquals('assignment replaces, not appends', 2, B.Columns.Count);
+    AssertEquals('copied caption 0', 'one', (B.Columns.Items[0] as TTyColumn).Text);
+    AssertEquals('copied width 1', 50, (B.Columns.Items[1] as TTyColumn).Width);
+
+    A.Columns := A.Columns;
+    AssertEquals('self-assignment must not empty the collection', 2, A.Columns.Count);
+    AssertEquals('self-assignment keeps caption 1', 'two',
+      (A.Columns.Items[1] as TTyColumn).Text);
+  finally
+    B.Free;
+    A.Free;
+  end;
+end;
+
 initialization
   { The reader instantiates streamed children by class name — register them. }
-  RegisterClasses([TTyGridPanel, TTyGridCell, TTyButton]);
+  RegisterClasses([TTyGridPanel, TTyGridCell, TTyButton,
+                   TTyStringGrid, TTyListView, TTyTreeView]);
   RegisterTest(TTyGridStreamingTest);
 end.

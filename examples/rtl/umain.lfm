@@ -1,0 +1,985 @@
+object MainForm: TMainForm
+  Left = 120
+  Height = 700
+  Top = 40
+  Width = 1200
+  Caption = 'TyControls - right-to-left mirroring and bidirectional text'
+  ClientHeight = 700
+  ClientWidth = 1200
+  Font.Height = -12
+  Position = poScreenCenter
+  LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
+  TitleBar = TitleBar1
+  MenuBar = MenuBar1
+  object Surface: TTyFormSurface
+    Left = 0
+    Height = 700
+    Top = 0
+    Width = 1200
+    Align = alClient
+    object TitleBar1: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 1200
+      Align = alTop
+      Caption = 'RTL / BiDi  -  TyControls'
+      TitleAlignment = taLeftJustify
+      object DarkSwitch: TTyToggleSwitch
+        Left = 848
+        Height = 24
+        Top = 5
+        Width = 74
+        Anchors = [akTop, akRight]
+        Caption = 'Dark'
+        OnChange = DarkSwitchChange
+      end
+      object ThemeCombo: TTyComboBox
+        Left = 934
+        Height = 26
+        Top = 4
+        Width = 120
+        Anchors = [akTop, akRight]
+        OnChange = ThemeComboChange
+      end
+    end
+    object MenuBar1: TTyMenuBar
+      Left = 0
+      Height = 30
+      Top = 34
+      Width = 1200
+      Align = alTop
+      Menu = MainMenu1
+    end
+    object HeadPanel: TTyPanel
+      Left = 0
+      Height = 92
+      Top = 64
+      Width = 1200
+      Align = alTop
+      Caption = ''
+      PopupMenu = Popup1
+      object DirSwitch: TTyToggleSwitch
+        Left = 16
+        Height = 26
+        Top = 10
+        Width = 250
+        Caption = 'Right-to-left (BiDiMode)'
+        OnChange = DirSwitchChange
+      end
+      object LblDirState: TTyLabel
+        Left = 282
+        Height = 22
+        Top = 12
+        Width = 300
+        AutoSize = False
+        Alignment = taLeftJustify
+        Caption = 'Direction: left-to-right (bdLeftToRight)'
+      end
+      object LblLegend: TTyLabel
+        Left = 16
+        Height = 20
+        Top = 42
+        Width = 1168
+        AutoSize = False
+        Alignment = taLeftJustify
+        Caption = 'Mirroring is PARTIAL and that is the point. Each area below states what moves and what does not - anything unlabelled has not been built yet, it is not broken.'
+      end
+      object LblTry: TTyLabel
+        Left = 16
+        Height = 40
+        Top = 62
+        Width = 1168
+        AutoSize = False
+        WordWrap = True
+        Alignment = taLeftJustify
+        Caption = 'Try to break it: click the exact pixel a glyph was drawn on (check box, sort triangle, filter funnel, tree chevron, tab close x); drag the status bar''s bottom-LEFT corner; open a menu and then its submenu; drag a grid column edge; right-click this strip for a popup with a submenu.'
+      end
+    end
+    object Pages: TTyPageControl
+      Left = 0
+      Height = 520
+      Top = 156
+      Width = 1200
+      Align = alClient
+      TabHeight = 32
+      ActivePageIndex = 0
+      object PgForm: TTyTabSheet
+        Caption = '1  Form controls'
+        object DivFormAll: TTyDivider
+          Left = 16
+          Height = 22
+          Top = 6
+          Width = 1168
+          Caption = 'ALL of these MIRROR - indicators, glyph slots, swatches, badges and captions change ends'
+          Alignment = taLeftJustify
+        end
+        object LblAlignLeft: TTyLabel
+          Left = 16
+          Height = 22
+          Top = 36
+          Width = 364
+          AutoSize = False
+          Alignment = taLeftJustify
+          Caption = 'TTyLabel Alignment=taLeftJustify -> right edge'
+        end
+        object LblAlignRight: TTyLabel
+          Left = 16
+          Height = 22
+          Top = 60
+          Width = 364
+          AutoSize = False
+          Alignment = taRightJustify
+          Caption = 'TTyLabel Alignment=taRightJustify -> left edge'
+        end
+        object LblAlignCenter: TTyLabel
+          Left = 16
+          Height = 22
+          Top = 84
+          Width = 364
+          AutoSize = False
+          Alignment = taCenter
+          Caption = 'TTyLabel taCenter - stays put'
+        end
+        object ChkPlain: TTyCheckBox
+          Left = 16
+          Height = 24
+          Top = 114
+          Width = 364
+          Caption = 'TTyCheckBox - the indicator swaps sides'
+          Checked = True
+          State = cbChecked
+        end
+        object ChkFlipped: TTyCheckBox
+          Left = 16
+          Height = 24
+          Top = 142
+          Width = 364
+          Caption = 'Alignment=taLeftJustify - explicitly set, still flips'
+          Alignment = taLeftJustify
+        end
+        object ChkGrayed: TTyCheckBox
+          Left = 16
+          Height = 24
+          Top = 170
+          Width = 364
+          Caption = 'Tri-state (cbGrayed)'
+          AllowGrayed = True
+          State = cbGrayed
+        end
+        object RadOne: TTyRadioButton
+          Left = 16
+          Height = 26
+          Top = 200
+          Width = 364
+          Caption = 'TTyRadioButton - first'
+          Checked = True
+          GroupIndex = 1
+        end
+        object RadTwo: TTyRadioButton
+          Left = 16
+          Height = 26
+          Top = 228
+          Width = 364
+          Caption = 'TTyRadioButton - second'
+          GroupIndex = 1
+        end
+        object DivIndent: TTyDivider
+          Left = 16
+          Height = 22
+          Top = 262
+          Width = 364
+          Caption = 'LeftIndent=40 counts from the other end'
+          Alignment = taLeftJustify
+          LeftIndent = 40
+        end
+        object PanelCap: TTyPanel
+          Left = 16
+          Height = 56
+          Top = 292
+          Width = 364
+          Caption = 'TTyPanel caption (taLeftJustify) - right-click me'
+          Alignment = taLeftJustify
+          PopupMenu = Popup1
+        end
+        object LblContainerNote: TTyLabel
+          Left = 16
+          Height = 100
+          Top = 358
+          Width = 364
+          AutoSize = False
+          WordWrap = True
+          Alignment = taLeftJustify
+          Caption = 'DOES NOT MIRROR, on purpose: containers never mirror their children''s Align/Anchors layout, so these three columns keep their order. LCL''s own align engine has no BiDi branch, and diverging from it would misplace every ported .lfm.'
+        end
+        object RadGrp: TTyRadioGroup
+          Left = 396
+          Height = 110
+          Top = 36
+          Width = 374
+          Caption = 'TTyRadioGroup (Columns=2) - columns fill from the right'
+          Columns = 2
+          Items.Strings = (
+            'Riyadh'
+            'Cairo'
+            'Tel Aviv'
+            'Dubai'
+          )
+          ItemIndex = 0
+        end
+        object ChkGrp: TTyCheckGroup
+          Left = 396
+          Height = 138
+          Top = 156
+          Width = 374
+          Caption = 'TTyCheckGroup (Columns=2) - each box flips its own indicator'
+          Columns = 2
+          Items.Strings = (
+            'Shaping'
+            'Word order'
+            'Caret'
+            'Selection'
+            'Mirroring'
+            'Hit test'
+          )
+        end
+        object GrpBox: TTyGroupBox
+          Left = 396
+          Height = 110
+          Top = 304
+          Width = 374
+          Caption = 'TTyGroupBox - the caption band changes ends'
+          object LblGrpField: TTyLabel
+            Left = 12
+            Height = 22
+            Top = 32
+            Width = 96
+            AutoSize = False
+            Caption = 'Field:'
+          end
+          object EdGrp: TTyEdit
+            Left = 116
+            Height = 30
+            Top = 28
+            Width = 240
+            Text = 'edit inside a group box'
+          end
+          object LblGrpNote: TTyLabel
+            Left = 12
+            Height = 22
+            Top = 70
+            Width = 344
+            AutoSize = False
+            Caption = 'The band moves; the children inside do not.'
+          end
+        end
+        object LblGrpAfter: TTyLabel
+          Left = 396
+          Height = 22
+          Top = 420
+          Width = 374
+          AutoSize = False
+          Alignment = taLeftJustify
+          Caption = 'Arrow keys in the two groups follow the columns.'
+        end
+        object BtnPlain: TTyButton
+          Left = 786
+          Height = 34
+          Top = 36
+          Width = 190
+          Caption = 'TTyButton (taCenter)'
+        end
+        object BtnCapLeft: TTyButton
+          Left = 992
+          Height = 34
+          Top = 36
+          Width = 192
+          Caption = 'taLeftJustify'
+          Alignment = taLeftJustify
+        end
+        object BtnGlyphLeft: TTyGlyphButton
+          Left = 786
+          Height = 34
+          Top = 80
+          Width = 190
+          Caption = 'Glyph glLeft'
+          GlyphName = 'star'
+          IconFont = Icons
+        end
+        object BtnGlyphRight: TTyGlyphButton
+          Left = 992
+          Height = 34
+          Top = 80
+          Width = 192
+          Caption = 'Glyph glRight'
+          GlyphName = 'star'
+          GlyphLayout = glRight
+          IconFont = Icons
+        end
+        object BtnColor: TTyColorButton
+          Left = 786
+          Height = 34
+          Top = 124
+          Width = 190
+          ShowText = True
+          DialogCaption = 'Pick a colour'
+        end
+        object BtnBadge: TTyButton
+          Left = 992
+          Height = 34
+          Top = 124
+          Width = 192
+          Caption = 'Badge -> bottom-left'
+          ShowBadge = True
+          BadgeValue = 7
+        end
+        object DivGlyphNote: TTyDivider
+          Left = 786
+          Height = 22
+          Top = 172
+          Width = 398
+          Caption = 'What to press here'
+          Alignment = taLeftJustify
+        end
+        object LblFormNote: TTyLabel
+          Left = 786
+          Height = 280
+          Top = 200
+          Width = 398
+          AutoSize = False
+          WordWrap = True
+          Alignment = taLeftJustify
+          Caption = 'These controls answer clicks over their whole face, so paint and hit test cannot come apart - which is why they shipped first. The group boxes are the exception worth pressing: they hold real child check boxes and radio buttons, each flipping its own indicator, so click the exact pixel an indicator was drawn on after switching direction. The colour swatch and the badge corner are the other two small targets; a taCenter button caption is expected NOT to move. The glyph buttons take their star from the system symbol font, whose family name differs per platform - an empty slot is a missing font, not a mirroring fault, and the SLOT still changes sides.'
+        end
+      end
+      object PgData: TTyTabSheet
+        Caption = '2  Data views'
+        object DivGrid: TTyDivider
+          Left = 16
+          Height = 22
+          Top = 6
+          Width = 700
+          Caption = 'TTyStringGrid - MIRRORS, and every hit test follows the paint'
+          Alignment = taLeftJustify
+        end
+        object Grid: TTyStringGrid
+          Left = 16
+          Height = 336
+          Top = 32
+          Width = 700
+          DefaultRowHeight = 24
+          ShowIndicator = True
+          ShowRowNumbers = True
+          IndicatorWidth = 44
+          ShowFilterButtons = True
+          FixedCols = 2
+          TreeColumn = 0
+          TreeIndent = 16
+          Header.Height = 26
+          Header.Columns = <
+            item
+              Text = 'Name'
+              Width = 168
+              Alignment = taLeftJustify
+            end
+            item
+              Text = 'Region'
+              Width = 96
+              Alignment = taLeftJustify
+            end
+            item
+              Text = 'Qty'
+              Width = 68
+              Alignment = taRightJustify
+              SortKind = gskNumber
+            end
+            item
+              Text = 'Settled'
+              Width = 78
+              Alignment = taCenter
+              EditorKind = gekCheckBox
+            end
+            item
+              Text = 'Action'
+              Width = 96
+              Alignment = taCenter
+              CellDisplay = gcdButton
+            end>
+          Header.SortColumn = 2
+          Header.SortDirection = sdDescending
+          Header.Options = [hoVisible, hoColumnResize, hoShowSortGlyphs, hoHeaderClickAutoSort, hoDrag]
+          OnCellButtonClick = GridCellButtonClick
+          OnGetNodeLevel = GridGetNodeLevel
+          OnGetHasChildren = GridGetHasChildren
+        end
+        object LblGridNote: TTyLabel
+          Left = 16
+          Height = 110
+          Top = 372
+          Width = 700
+          AutoSize = False
+          WordWrap = True
+          Alignment = taLeftJustify
+          Caption = 'MIRRORS: column order, the row-number gutter, the two frozen columns, header captions, the sort triangle, the filter funnel, the tree chevron and its indent, the check-box cell and the button cell. DELIBERATELY DOES NOT: the vertical scroll bar stays on the right, and the filter drop-down does not mirror its own rows - both are pinned by tests, not accidents. Note a resize grip is a column''s LEFT edge under RTL, and dragging it left widens the column.'
+        end
+        object DivLv: TTyDivider
+          Left = 732
+          Height = 22
+          Top = 6
+          Width = 452
+          Caption = 'TTyListView - DOES NOT MIRROR yet'
+          Alignment = taLeftJustify
+        end
+        object LV: TTyListView
+          Left = 732
+          Height = 150
+          Top = 32
+          Width = 452
+          GridLines = True
+          HotTrack = True
+          Header.Columns = <
+            item
+              Text = 'Name'
+              Width = 190
+              Alignment = taLeftJustify
+            end
+            item
+              Text = 'Size'
+              Width = 90
+              Alignment = taRightJustify
+            end
+            item
+              Text = 'Kind'
+              Width = 140
+              Alignment = taLeftJustify
+            end>
+          Header.Options = [hoVisible, hoColumnResize, hoShowSortGlyphs, hoHeaderClickAutoSort]
+          Items = <
+            item
+              Caption = 'readme.txt'
+              SubItems.Strings = (
+                '2 KB'
+                'Text document'
+              )
+            end
+            item
+              Caption = 'report.pdf'
+              SubItems.Strings = (
+                '184 KB'
+                'PDF document'
+              )
+            end
+            item
+              Caption = 'archive.zip'
+              SubItems.Strings = (
+                '9 MB'
+                'Compressed folder'
+              )
+            end
+            item
+              Caption = 'notes.md'
+              SubItems.Strings = (
+                '7 KB'
+                'Markdown'
+              )
+            end
+            item
+              Caption = 'photo.png'
+              SubItems.Strings = (
+                '1 MB'
+                'Image'
+              )
+            end>
+        end
+        object DivTv: TTyDivider
+          Left = 732
+          Height = 22
+          Top = 188
+          Width = 452
+          Caption = 'TTyTreeView - DOES NOT MIRROR yet'
+          Alignment = taLeftJustify
+        end
+        object Tree: TTyTreeView
+          Left = 732
+          Height = 154
+          Top = 214
+          Width = 452
+          ShowButtons = True
+          ShowTreeLines = True
+          ShowRoot = True
+          NodeDataSize = 0
+          RootNodeCount = 5
+          Header.Height = 26
+          Header.Columns = <
+            item
+              Text = 'Node'
+              Width = 280
+              Alignment = taLeftJustify
+            end
+            item
+              Text = 'Kind'
+              Width = 150
+              Alignment = taLeftJustify
+            end>
+          Header.MainColumn = 0
+          Header.Options = [hoVisible, hoColumnResize]
+          OnInitNode = TreeInitNode
+          OnInitChildren = TreeInitChildren
+          OnGetTextWithType = TreeGetText
+        end
+        object LblDataNote: TTyLabel
+          Left = 732
+          Height = 110
+          Top = 372
+          Width = 452
+          AutoSize = False
+          WordWrap = True
+          Alignment = taLeftJustify
+          Caption = 'Side by side on purpose - the contrast is the documentation. Flip the switch: the grid turns round whole, these two do not move at all. That is a stated gap. Their column model writes a per-column left field that nine separate expressions independently turn into a screen x, so mirroring the paint alone would leave every click behind.'
+        end
+      end
+      object PgText: TTyTabSheet
+        Caption = '3  Text and chrome'
+        object DivText: TTyDivider
+          Left = 16
+          Height = 22
+          Top = 6
+          Width = 790
+          Caption = 'Text - word order, shaping and the caret are bidirectional. The BLOCK does not mirror.'
+          Alignment = taLeftJustify
+        end
+        object LblArabic: TTyLabel
+          Left = 16
+          Height = 22
+          Top = 38
+          Width = 96
+          AutoSize = False
+          Alignment = taLeftJustify
+          Caption = 'Arabic'
+        end
+        object EdArabic: TTyEdit
+          Left = 118
+          Height = 30
+          Top = 34
+          Width = 320
+          Text = #1605#1585#1581#1576#1575' '#1576#1575#1604#1593#1575#1604#1605
+        end
+        object MeArabic: TTyMemo
+          Left = 452
+          Height = 54
+          Top = 32
+          Width = 354
+          ScrollBars = ssAutoVertical
+          Lines.Strings = (
+            #1605#1585#1581#1576#1575' '#1576#1575#1604#1593#1575#1604#1605
+            #1575#1604#1593#1583#1583' 12345 '#1575#1604#1593#1585#1576#1610
+          )
+        end
+        object LblHebrew: TTyLabel
+          Left = 16
+          Height = 22
+          Top = 98
+          Width = 96
+          AutoSize = False
+          Alignment = taLeftJustify
+          Caption = 'Hebrew'
+        end
+        object EdHebrew: TTyEdit
+          Left = 118
+          Height = 30
+          Top = 94
+          Width = 320
+          Text = #1513#1500#1493#1501' '#1506#1493#1500#1501
+        end
+        object MeHebrew: TTyMemo
+          Left = 452
+          Height = 54
+          Top = 92
+          Width = 354
+          ScrollBars = ssAutoVertical
+          Lines.Strings = (
+            #1513#1500#1493#1501' '#1506#1493#1500#1501
+            'v3.0 '#1513#1500#1493#1501' 2026'
+          )
+        end
+        object LblMixed: TTyLabel
+          Left = 16
+          Height = 22
+          Top = 158
+          Width = 96
+          AutoSize = False
+          Alignment = taLeftJustify
+          Caption = 'Mixed'
+        end
+        object EdMixed: TTyEdit
+          Left = 118
+          Height = 30
+          Top = 154
+          Width = 320
+          Text = 'Build 42 '#1575#1604#1593#1585#1576#1610#1577' v3.0 '#1513#1500#1493#1501' end'
+        end
+        object MeMixed: TTyMemo
+          Left = 452
+          Height = 54
+          Top = 152
+          Width = 354
+          ScrollBars = ssAutoVertical
+          Lines.Strings = (
+            'Build 42 '#1575#1604#1593#1585#1576#1610#1577' v3.0 '#1513#1500#1493#1501' end'
+            'drag across this line to get two bands'
+          )
+        end
+        object LblChinese: TTyLabel
+          Left = 16
+          Height = 22
+          Top = 218
+          Width = 96
+          AutoSize = False
+          Alignment = taLeftJustify
+          Caption = 'Chinese'
+        end
+        object EdChinese: TTyEdit
+          Left = 118
+          Height = 30
+          Top = 214
+          Width = 320
+          Text = #20013#25991#25991#26412#19981#36208#21452#21521#24067#23616
+        end
+        object MeChinese: TTyMemo
+          Left = 452
+          Height = 54
+          Top = 212
+          Width = 354
+          ScrollBars = ssAutoVertical
+          Lines.Strings = (
+            #20013#25991#25991#26412#19981#36208#21452#21521#24067#23616
+            #20013#25991#25353#30721#28857#26029#34892
+          )
+        end
+        object DivChrome: TTyDivider
+          Left = 16
+          Height = 22
+          Top = 274
+          Width = 790
+          Caption = 'What to press in this area'
+          Alignment = taLeftJustify
+        end
+        object LblTextNote: TTyLabel
+          Left = 16
+          Height = 180
+          Top = 300
+          Width = 790
+          AutoSize = False
+          WordWrap = True
+          Alignment = taLeftJustify
+          Caption = 'MIRRORS here: nothing in the four rows above. An edit and a memo keep their text block, margins and scroll bar on the left in either direction - only the reordering INSIDE a line is bidirectional, and that half is always on and needs no switch. What IS bidirectional: click a glyph and the caret lands on THAT glyph, including at the far side of an embedded run; Left/Right move one glyph the way the key points, crossing runs in screen order; Home/End stay logical, so on a right-to-left line Home puts the caret at the right of the ink. Drag across the Mixed memo line: a selection crossing a direction boundary paints one band PER RUN, so it can highlight glyphs the pointer never passed over - that is the range between the two endpoints, and it is what every other editor does. The Arabic rows are also the shaping test: the letters must JOIN into their contextual forms, not stand isolated. That was measured and pinned on Windows only; on GTK and Cocoa it is the platform text engine''s answer and this window is the only way to see it.'
+        end
+        object DivScroll: TTyDivider
+          Left = 822
+          Height = 22
+          Top = 6
+          Width = 362
+          Caption = 'TTyScrollBox - MIRRORS'
+          Alignment = taLeftJustify
+        end
+        object ScrollDemo: TTyScrollBox
+          Left = 822
+          Height = 180
+          Top = 32
+          Width = 362
+          object SbBtn1: TTyButton
+            Left = 8
+            Height = 36
+            Top = 8
+            Width = 430
+            Caption = 'Oversized child 1'
+          end
+          object SbBtn2: TTyButton
+            Left = 8
+            Height = 36
+            Top = 52
+            Width = 430
+            Caption = 'Oversized child 2'
+          end
+          object SbBtn3: TTyButton
+            Left = 8
+            Height = 36
+            Top = 96
+            Width = 430
+            Caption = 'Oversized child 3'
+          end
+          object SbBtn4: TTyButton
+            Left = 8
+            Height = 36
+            Top = 140
+            Width = 430
+            Caption = 'Oversized child 4'
+          end
+          object SbBtn5: TTyButton
+            Left = 8
+            Height = 36
+            Top = 184
+            Width = 430
+            Caption = 'Oversized child 5'
+          end
+          object SbBtn6: TTyButton
+            Left = 8
+            Height = 36
+            Top = 228
+            Width = 430
+            Caption = 'Oversized child 6'
+          end
+        end
+        object LblScrollNote: TTyLabel
+          Left = 822
+          Height = 52
+          Top = 216
+          Width = 362
+          AutoSize = False
+          WordWrap = True
+          Alignment = taLeftJustify
+          Caption = 'The vertical bar docks LEFT and the viewport starts after it - the loudest signal a window gives that it reads right-to-left.'
+        end
+        object DivMini: TTyDivider
+          Left = 822
+          Height = 22
+          Top = 274
+          Width = 362
+          Caption = 'TTyPageControl - MIRRORS'
+          Alignment = taLeftJustify
+        end
+        object MiniPager: TTyPageControl
+          Left = 822
+          Height = 146
+          Top = 300
+          Width = 362
+          TabHeight = 30
+          TabsClosable = True
+          ActivePageIndex = 0
+          object MpOne: TTyTabSheet
+            Caption = 'One'
+            object LblMpOne: TTyLabel
+              Left = 12
+              Height = 60
+              Top = 12
+              Width = 330
+              AutoSize = False
+              WordWrap = True
+              Caption = 'Tab 0 becomes the RIGHTMOST tab and the strip packs leftwards. The close x moves to each header''s left edge.'
+            end
+          end
+          object MpTwo: TTyTabSheet
+            Caption = 'Two'
+            object LblMpTwo: TTyLabel
+              Left = 12
+              Height = 60
+              Top = 12
+              Width = 330
+              AutoSize = False
+              WordWrap = True
+              Caption = 'The page BODY does not move, and a page''s own children are not mirrored.'
+            end
+          end
+          object MpThree: TTyTabSheet
+            Caption = 'Three'
+            object LblMpThree: TTyLabel
+              Left = 12
+              Height = 60
+              Top = 12
+              Width = 330
+              AutoSize = False
+              WordWrap = True
+              Caption = 'Left/Right arrows follow the eye. Drag a header to reorder it and the drop slot must match what you see.'
+            end
+          end
+          object MpFour: TTyTabSheet
+            Caption = 'Four'
+            object LblMpFour: TTyLabel
+              Left = 12
+              Height = 60
+              Top = 12
+              Width = 330
+              AutoSize = False
+              WordWrap = True
+              Caption = 'Narrow the window until the overflow arrows appear: they swap ends and turn round.'
+            end
+          end
+        end
+        object LblMiniNote: TTyLabel
+          Left = 822
+          Height = 34
+          Top = 450
+          Width = 362
+          AutoSize = False
+          WordWrap = True
+          Alignment = taLeftJustify
+          Caption = 'The outer pager at the top of this window mirrors too - watch tab 1 jump to the right.'
+        end
+      end
+    end
+    object StatusBar1: TTyStatusBar
+      Left = 0
+      Height = 24
+      Top = 676
+      Width = 1200
+      Align = alBottom
+      SizeGrip = True
+      Panels = <
+        item
+          Text = 'Ready'
+          Width = 0
+          Alignment = taLeftJustify
+        end
+        item
+          Text = 'left-to-right'
+          Width = 180
+          Alignment = taCenter
+        end
+        item
+          Text = 'drag the grip ->'
+          Width = 160
+          Alignment = taRightJustify
+        end>
+    end
+  end
+  object MainMenu1: TMainMenu
+    Left = 24
+    Top = 176
+    object MnuFile: TMenuItem
+      Caption = '&File'
+      object MnuFileNew: TMenuItem
+        Caption = '&New'
+        ShortCut = 16462
+        OnClick = MenuItemClicked
+      end
+      object MnuFileOpen: TMenuItem
+        Caption = '&Open'
+        ShortCut = 16463
+        OnClick = MenuItemClicked
+      end
+      object MnuFileSep: TMenuItem
+        Caption = '-'
+      end
+      object MnuFileRecent: TMenuItem
+        Caption = 'Recent files'
+        object MnuRecent1: TMenuItem
+          Caption = 'first.txt'
+          OnClick = MenuItemClicked
+        end
+        object MnuRecent2: TMenuItem
+          Caption = 'second.txt'
+          OnClick = MenuItemClicked
+        end
+        object MnuRecentMore: TMenuItem
+          Caption = 'Older still'
+          object MnuRecentOld1: TMenuItem
+            Caption = 'third.txt'
+            OnClick = MenuItemClicked
+          end
+          object MnuRecentOld2: TMenuItem
+            Caption = 'fourth.txt'
+            OnClick = MenuItemClicked
+          end
+        end
+      end
+      object MnuFileSep2: TMenuItem
+        Caption = '-'
+      end
+      object MnuFileExit: TMenuItem
+        Caption = 'E&xit'
+        OnClick = MenuFileExitClick
+      end
+    end
+    object MnuEdit: TMenuItem
+      Caption = '&Edit'
+      object MnuEditCut: TMenuItem
+        Caption = 'Cu&t'
+        ShortCut = 16472
+        OnClick = MenuItemClicked
+      end
+      object MnuEditCopy: TMenuItem
+        Caption = '&Copy'
+        ShortCut = 16451
+        OnClick = MenuItemClicked
+      end
+      object MnuEditDisabled: TMenuItem
+        Caption = 'Paste (disabled)'
+        Enabled = False
+      end
+    end
+    object MnuDirection: TMenuItem
+      Caption = '&Direction'
+      object MnuDirLtr: TMenuItem
+        AutoCheck = True
+        Caption = '&Left to right'
+        Checked = True
+        GroupIndex = 1
+        RadioItem = True
+        OnClick = MenuDirectionClick
+      end
+      object MnuDirRtl: TMenuItem
+        AutoCheck = True
+        Caption = '&Right to left'
+        GroupIndex = 1
+        RadioItem = True
+        OnClick = MenuDirectionClick
+      end
+    end
+    object MnuHelpRight: TMenuItem
+      Caption = '&Help'
+      RightJustify = True
+      object MnuHelpAbout: TMenuItem
+        Caption = '&About this example'
+        OnClick = MenuItemClicked
+      end
+    end
+  end
+  object Popup1: TTyMenuEx
+    BannerCaption = 'TyControls'
+    BannerWidth = 26
+    Left = 96
+    Top = 176
+    object PopHdr: TMenuItem
+      Caption = '-Popup'
+    end
+    object PopFirst: TMenuItem
+      Caption = 'A popup takes its direction from its host'
+      OnClick = MenuItemClicked
+    end
+    object PopSub: TMenuItem
+      Caption = 'Cascade a submenu'
+      object PopSub1: TMenuItem
+        Caption = 'Submenus hang the other way'
+        OnClick = MenuItemClicked
+      end
+      object PopSub2: TMenuItem
+        Caption = 'and the arrow turns round'
+        OnClick = MenuItemClicked
+      end
+      object PopSubDeep: TMenuItem
+        Caption = 'Deeper still'
+        object PopSubDeep1: TMenuItem
+          Caption = 'third level'
+          OnClick = MenuItemClicked
+        end
+      end
+    end
+    object PopSep: TMenuItem
+      Caption = '-'
+    end
+    object PopShortcut: TMenuItem
+      Caption = 'Shortcut moves to the left'
+      ShortCut = 116
+      OnClick = MenuItemClicked
+    end
+  end
+  object Icons: TTyIconFont
+    FontFamily = 'Segoe UI Symbol'
+    Glyphs.Strings = (
+      'star=2605'
+    )
+    Left = 168
+    Top = 176
+  end
+end
