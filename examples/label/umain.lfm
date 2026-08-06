@@ -116,7 +116,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 304
       Width = 150
-      Caption = 'Name(&N):'
+      Caption = '&Name:'
       FocusControl = EdName
     end
     object LblLayoutHead: TTyLabel

@@ -54,7 +54,7 @@ object MainForm: TMainForm
       Height = 24
       Top = 78
       Width = 280
-      Caption = 'Include all children(&A)'
+      Caption = 'Include &all children'
       AllowGrayed = True
       State = cbGrayed
       OnChange = TriChange
@@ -77,7 +77,7 @@ object MainForm: TMainForm
       Height = 24
       Top = 174
       Width = 280
-      Caption = 'Receive email notifications(&N)'
+      Caption = 'Receive email &notifications'
       OnChange = PlainChange
     end
     object LblStatus: TTyLabel

@@ -227,13 +227,25 @@ msgstr "命令 11"
 msgid "Command 12"
 msgstr "命令 12"
 
-#: tmainform.band1.caption
-msgid "Band 1 (grip: drag down for its own row, sideways to resize)"
-msgstr "带 1(抓手:下拖独占一行·左右拖改宽)"
+#: tmainform.rebaropen.caption
+msgid "Open"
+msgstr "打开"
 
-#: tmainform.band2.caption
-msgid "Band 2 (grip: drag down for its own row, sideways to resize)"
-msgstr "带 2(抓手:下拖独占一行·左右拖改宽)"
+#: tmainform.rebarsave.caption
+msgid "Save"
+msgstr "保存"
+
+#: tmainform.rebarprint.caption
+msgid "Print"
+msgstr "打印"
+
+#: tmainform.band2.texthint
+msgid "Search…"
+msgstr "搜索…"
+
+#: tmainform.lblrebar.caption
+msgid "Each band hosts a real control. Drag a band grip down for its own row, sideways to resize it."
+msgstr "每个带里承载的都是真控件。抓住带子的抓柄：向下拖独占一行，横向拖改宽度。"
 
 #: tmainform.lblgrip.caption
 msgid "Bottom-right → size grip TTySizeBox (drag to resize the window)"

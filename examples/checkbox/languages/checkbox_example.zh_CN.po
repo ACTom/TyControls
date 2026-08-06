@@ -24,7 +24,7 @@ msgid "Tri-state check box (click cycles unchecked → checked → grayed):"
 msgstr "三态复选框（点击循环 未选 → 选中 → 半选）："
 
 #: tmainform.cbtri.caption
-msgid "Include all children(&A)"
+msgid "Include &all children"
 msgstr "包含全部子项(&A)"
 
 #: tmainform.lblplain.caption
@@ -32,7 +32,7 @@ msgid "Plain two-state checkbox (OnChange echo):"
 msgstr "普通两态复选框（OnChange 回显）："
 
 #: tmainform.cbplain.caption
-msgid "Receive email notifications(&N)"
+msgid "Receive email &notifications"
 msgstr "接收邮件通知(&N)"
 
 #: tmainform.cbchecked.caption

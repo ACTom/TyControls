@@ -20,15 +20,15 @@ msgid "Dark"
 msgstr "暗色"
 
 #: tmainform.btndefault.caption
-msgid "Default button(&D)"
+msgid "&Default button"
 msgstr "默认按钮(&D)"
 
 #: tmainform.btnprimary.caption
-msgid "Primary button(&P)"
+msgid "&Primary button"
 msgstr "主要按钮(&P)"
 
 #: tmainform.btndanger.caption
-msgid "Danger button(&X)"
+msgid "D&anger button"
 msgstr "危险按钮(&X)"
 
 #: tmainform.btndisabled.caption

@@ -154,19 +154,19 @@ object MainForm: TMainForm
   end
   object MainMenu1: TMainMenu
     object MnuFile: TMenuItem
-      Caption = 'File(&F)'
+      Caption = '&File'
       object MnuFileNew: TMenuItem
-        Caption = 'New(&N)'
+        Caption = '&New'
         ShortCut = 16462
         OnClick = MenuItemClicked
       end
       object MnuFileOpen: TMenuItem
-        Caption = 'Open…(&O)'
+        Caption = '&Open…'
         ShortCut = 16463
         OnClick = MenuItemClicked
       end
       object MnuFileSave: TMenuItem
-        Caption = 'Save(&S)'
+        Caption = '&Save'
         ShortCut = 16467
         OnClick = MenuItemClicked
       end
@@ -174,19 +174,19 @@ object MainForm: TMainForm
         Caption = '-'
       end
       object MnuFileExit: TMenuItem
-        Caption = 'Exit(&X)'
+        Caption = 'E&xit'
         OnClick = MenuItemClicked
       end
     end
     object MnuEdit: TMenuItem
-      Caption = 'Edit(&E)'
+      Caption = '&Edit'
       object MnuEditUndo: TMenuItem
-        Caption = 'Undo(&U)'
+        Caption = '&Undo'
         ShortCut = 16474
         OnClick = MenuItemClicked
       end
       object MnuEditRedo: TMenuItem
-        Caption = 'Redo(&R)'
+        Caption = '&Redo'
         Enabled = False
         ShortCut = 16473
         OnClick = MenuItemClicked
@@ -195,36 +195,36 @@ object MainForm: TMainForm
         Caption = '-'
       end
       object MnuEditCut: TMenuItem
-        Caption = 'Cut(&T)'
+        Caption = 'Cu&t'
         ShortCut = 16472
         OnClick = MenuItemClicked
       end
       object MnuEditCopy: TMenuItem
-        Caption = 'Copy(&C)'
+        Caption = '&Copy'
         ShortCut = 16451
         OnClick = MenuItemClicked
       end
       object MnuEditPaste: TMenuItem
-        Caption = 'Paste(&P)'
+        Caption = '&Paste'
         ShortCut = 16470
         OnClick = MenuItemClicked
       end
     end
     object MnuView: TMenuItem
-      Caption = 'View(&V)'
+      Caption = '&View'
       object MnuViewZoomIn: TMenuItem
-        Caption = 'Zoom in(&I)'
+        Caption = 'Zoom &in'
         OnClick = MenuItemClicked
       end
       object MnuViewZoomOut: TMenuItem
-        Caption = 'Zoom out(&O)'
+        Caption = 'Zoom &out'
         OnClick = MenuItemClicked
       end
       object MnuViewSep1: TMenuItem
         Caption = '-'
       end
       object MnuViewFull: TMenuItem
-        Caption = 'Full screen(&F)'
+        Caption = '&Full screen'
         OnClick = MenuItemClicked
       end
       object MnuViewSep2: TMenuItem
@@ -256,17 +256,17 @@ object MainForm: TMainForm
         Caption = '-'
       end
       object MnuViewTheme: TMenuItem
-        Caption = 'Theme(&T)'
+        Caption = '&Theme'
         object MnuThemeLight: TMenuItem
-          Caption = 'Light(&L)'
+          Caption = '&Light'
           OnClick = MenuItemClicked
         end
         object MnuThemeDark: TMenuItem
-          Caption = 'Dark(&D)'
+          Caption = '&Dark'
           OnClick = MenuItemClicked
         end
         object MnuThemeSystem: TMenuItem
-          Caption = 'System(&S)'
+          Caption = '&System'
           OnClick = MenuItemClicked
         end
       end
@@ -274,7 +274,7 @@ object MainForm: TMainForm
   end
   object MiniMenu: TMainMenu
     object MnuTools: TMenuItem
-      Caption = 'Tools(&T)'
+      Caption = '&Tools'
       object MnuToolsOptions: TMenuItem
         Caption = 'Options'
         OnClick = MenuItemClicked
@@ -285,7 +285,7 @@ object MainForm: TMainForm
       end
     end
     object MnuHelp: TMenuItem
-      Caption = 'Help(&H)'
+      Caption = '&Help'
       object MnuHelpContents: TMenuItem
         Caption = 'Contents'
         OnClick = MenuItemClicked
@@ -304,17 +304,17 @@ object MainForm: TMainForm
       Caption = '-Clipboard'
     end
     object PopCut: TMenuItem
-      Caption = 'Cut(&T)'
+      Caption = 'Cu&t'
       ImageIndex = 0
       OnClick = MenuItemClicked
     end
     object PopCopy: TMenuItem
-      Caption = 'Copy(&C)'
+      Caption = '&Copy'
       ImageIndex = 1
       OnClick = MenuItemClicked
     end
     object PopPaste: TMenuItem
-      Caption = 'Paste(&P)'
+      Caption = '&Paste'
       Enabled = False
       ImageIndex = 2
       OnClick = MenuItemClicked
@@ -332,7 +332,7 @@ object MainForm: TMainForm
       OnClick = MenuItemClicked
     end
     object PopRefresh: TMenuItem
-      Caption = 'Refresh(&R)'
+      Caption = '&Refresh'
       Default = True
       ShortCut = 116
       OnClick = MenuItemClicked
@@ -356,21 +356,21 @@ object MainForm: TMainForm
       Caption = '-'
     end
     object PopProps: TMenuItem
-      Caption = 'Properties(&P)'
+      Caption = 'Pr&operties'
       OnClick = MenuItemClicked
     end
   end
   object PlainPopup: TTyPopupMenu
     object PlainCut: TMenuItem
-      Caption = 'Cut(&T)'
+      Caption = 'Cu&t'
       OnClick = MenuItemClicked
     end
     object PlainCopy: TMenuItem
-      Caption = 'Copy(&C)'
+      Caption = '&Copy'
       OnClick = MenuItemClicked
     end
     object PlainPaste: TMenuItem
-      Caption = 'Paste(&P)'
+      Caption = '&Paste'
       OnClick = MenuItemClicked
     end
   end

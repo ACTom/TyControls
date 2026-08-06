@@ -570,24 +570,58 @@ object MainForm: TMainForm
     end
     object Rebar: TTyCoolBar
       Left = 600
-      Height = 58
+      Height = 66
       Top = 620
-      Width = 580
+      Width = 360
       Align = alNone
-      object Band1: TTyPanel
+      BandHeight = 30
+      object Band1: TTyToolBarEx
         Left = 0
-        Height = 26
+        Height = 30
         Top = 0
-        Width = 220
-        Caption = 'Band 1 (grip: drag down for its own row, sideways to resize)'
+        Width = 170
+        Align = alNone
+        Wrapable = False
+        ButtonHeight = 22
+        Indent = 2
+        object RebarOpen: TTyButton
+          Left = 0
+          Height = 22
+          Top = 0
+          Width = 52
+          Caption = 'Open'
+        end
+        object RebarSave: TTyButton
+          Left = 0
+          Height = 22
+          Top = 0
+          Width = 52
+          Caption = 'Save'
+        end
+        object RebarPrint: TTyButton
+          Left = 0
+          Height = 22
+          Top = 0
+          Width = 52
+          Caption = 'Print'
+        end
       end
-      object Band2: TTyPanel
+      object Band2: TTyEdit
         Left = 0
-        Height = 26
+        Height = 30
         Top = 0
-        Width = 260
-        Caption = 'Band 2 (grip: drag down for its own row, sideways to resize)'
+        Width = 140
+        TextHint = 'Search…'
       end
+    end
+    object LblRebar: TTyLabel
+      Left = 972
+      Height = 62
+      Top = 620
+      Width = 208
+      Caption = 'Each band hosts a real control. Drag a band grip down for its own row, sideways to resize it.'
+      Layout = tlTop
+      WordWrap = True
     end
     object LblGrip: TTyLabel
       Left = 20

@@ -656,7 +656,7 @@ object MainForm: TMainForm
               TabOrder = 10
               OnClick = SubmitClick
               StyleClass = 'primary'
-              Caption = 'Submit(&S)'
+              Caption = '&Submit'
             end
             object BtnReset: TTyButton
               Left = 108
@@ -665,7 +665,7 @@ object MainForm: TMainForm
               Width = 88
               TabOrder = 11
               OnClick = ResetClick
-              Caption = 'Reset(&R)'
+              Caption = '&Reset'
             end
           end
           object CardFormTodo: TTyCard
@@ -1486,38 +1486,38 @@ object MainForm: TMainForm
     Left = 240
     Top = 500
     object MnuFile: TMenuItem
-      Caption = 'File(&F)'
+      Caption = '&File'
       object MnuFileNew: TMenuItem
-        Caption = 'New(&N)'
+        Caption = '&New'
         OnClick = MenuItemClick
       end
       object MnuFileOpen: TMenuItem
-        Caption = 'Open…(&O)'
+        Caption = '&Open…'
         OnClick = MenuItemClick
       end
       object MnuFileSep1: TMenuItem
         Caption = '-'
       end
       object MnuFileExit: TMenuItem
-        Caption = 'Exit(&X)'
+        Caption = 'E&xit'
         OnClick = MenuItemClick
       end
     end
     object MnuView: TMenuItem
-      Caption = 'View(&V)'
+      Caption = '&View'
       object MnuViewSider: TMenuItem
-        Caption = 'Collapse / expand the side navigation(&S)'
+        Caption = '&Collapse / expand the side navigation'
         OnClick = MenuItemClick
       end
       object MnuViewRefresh: TMenuItem
-        Caption = 'Refresh(&R)'
+        Caption = '&Refresh'
         OnClick = MenuItemClick
       end
     end
     object MnuHelp: TMenuItem
-      Caption = 'Help(&H)'
+      Caption = '&Help'
       object MnuHelpAbout: TMenuItem
-        Caption = 'About(&A)'
+        Caption = '&About'
         OnClick = MenuItemClick
       end
     end

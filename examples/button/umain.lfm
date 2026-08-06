@@ -56,7 +56,7 @@ object MainForm: TMainForm
       Width = 168
       TabOrder = 1
       OnClick = ButtonClicked
-      Caption = 'Default button(&D)'
+      Caption = '&Default button'
     end
     object BtnPrimary: TTyButton
       Left = 24
@@ -66,7 +66,7 @@ object MainForm: TMainForm
       TabOrder = 2
       OnClick = ButtonClicked
       StyleClass = 'primary'
-      Caption = 'Primary button(&P)'
+      Caption = '&Primary button'
     end
     object BtnDanger: TTyButton
       Left = 24
@@ -76,7 +76,7 @@ object MainForm: TMainForm
       TabOrder = 3
       OnClick = ButtonClicked
       StyleClass = 'danger'
-      Caption = 'Danger button(&X)'
+      Caption = 'D&anger button'
     end
     object BtnDisabled: TTyButton
       Left = 24

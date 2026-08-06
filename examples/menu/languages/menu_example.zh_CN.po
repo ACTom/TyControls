@@ -32,63 +32,63 @@ msgid "Ready: shortcuts fire with the menu closed - press Ctrl+N. Submenus open 
 msgstr "就绪：菜单关闭时快捷键照样生效 —— 按 Ctrl+N 试试。子菜单悬停即开（→ 进入，← 退出）。变灰的项（重做、粘贴）是 Enabled = False。"
 
 #: tmainform.mnufile.caption
-msgid "File(&F)"
+msgid "&File"
 msgstr "文件(&F)"
 
 #: tmainform.mnufilenew.caption
-msgid "New(&N)"
+msgid "&New"
 msgstr "新建(&N)"
 
 #: tmainform.mnufileopen.caption
-msgid "Open…(&O)"
+msgid "&Open…"
 msgstr "打开…(&O)"
 
 #: tmainform.mnufilesave.caption
-msgid "Save(&S)"
+msgid "&Save"
 msgstr "保存(&S)"
 
 #: tmainform.mnufileexit.caption
-msgid "Exit(&X)"
+msgid "E&xit"
 msgstr "退出(&X)"
 
 #: tmainform.mnuedit.caption
-msgid "Edit(&E)"
+msgid "&Edit"
 msgstr "编辑(&E)"
 
 #: tmainform.mnueditundo.caption
-msgid "Undo(&U)"
+msgid "&Undo"
 msgstr "撤销(&U)"
 
 #: tmainform.mnueditredo.caption
-msgid "Redo(&R)"
+msgid "&Redo"
 msgstr "重做(&R)"
 
 #: tmainform.mnueditcut.caption
-msgid "Cut(&T)"
+msgid "Cu&t"
 msgstr "剪切(&T)"
 
 #: tmainform.mnueditcopy.caption
-msgid "Copy(&C)"
+msgid "&Copy"
 msgstr "复制(&C)"
 
 #: tmainform.mnueditpaste.caption
-msgid "Paste(&P)"
+msgid "&Paste"
 msgstr "粘贴(&P)"
 
 #: tmainform.mnuview.caption
-msgid "View(&V)"
+msgid "&View"
 msgstr "视图(&V)"
 
 #: tmainform.mnuviewzoomin.caption
-msgid "Zoom in(&I)"
+msgid "Zoom &in"
 msgstr "放大(&I)"
 
 #: tmainform.mnuviewzoomout.caption
-msgid "Zoom out(&O)"
+msgid "Zoom &out"
 msgstr "缩小(&O)"
 
 #: tmainform.mnuviewfull.caption
-msgid "Full screen(&F)"
+msgid "&Full screen"
 msgstr "全屏(&F)"
 
 #: tmainform.pophdrclip.caption
@@ -96,15 +96,15 @@ msgid "-Clipboard"
 msgstr "-剪贴板"
 
 #: tmainform.popcut.caption
-msgid "Cut(&T)"
+msgid "Cu&t"
 msgstr "剪切(&T)"
 
 #: tmainform.popcopy.caption
-msgid "Copy(&C)"
+msgid "&Copy"
 msgstr "复制(&C)"
 
 #: tmainform.poppaste.caption
-msgid "Paste(&P)"
+msgid "&Paste"
 msgstr "粘贴(&P)"
 
 #: tmainform.pophdrview.caption
@@ -116,11 +116,11 @@ msgid "Show grid"
 msgstr "显示网格"
 
 #: tmainform.poprefresh.caption
-msgid "Refresh(&R)"
+msgid "&Refresh"
 msgstr "刷新(&R)"
 
 #: tmainform.popprops.caption
-msgid "Properties(&P)"
+msgid "Pr&operties"
 msgstr "属性(&P)"
 
 #: tmainform.lblmenuhint.caption
@@ -184,23 +184,23 @@ msgid "-"
 msgstr "-"
 
 #: tmainform.mnuviewtheme.caption
-msgid "Theme(&T)"
+msgid "&Theme"
 msgstr "主题(&T)"
 
 #: tmainform.mnuthemelight.caption
-msgid "Light(&L)"
+msgid "&Light"
 msgstr "亮色(&L)"
 
 #: tmainform.mnuthemedark.caption
-msgid "Dark(&D)"
+msgid "&Dark"
 msgstr "暗色(&D)"
 
 #: tmainform.mnuthemesystem.caption
-msgid "System(&S)"
+msgid "&System"
 msgstr "系统(&S)"
 
 #: tmainform.mnutools.caption
-msgid "Tools(&T)"
+msgid "&Tools"
 msgstr "工具(&T)"
 
 #: tmainform.mnutoolsoptions.caption
@@ -212,7 +212,7 @@ msgid "Macros"
 msgstr "宏"
 
 #: tmainform.mnuhelp.caption
-msgid "Help(&H)"
+msgid "&Help"
 msgstr "帮助(&H)"
 
 #: tmainform.mnuhelpcontents.caption
@@ -248,15 +248,15 @@ msgid "-"
 msgstr "-"
 
 #: tmainform.plaincut.caption
-msgid "Cut(&T)"
+msgid "Cu&t"
 msgstr "剪切(&T)"
 
 #: tmainform.plaincopy.caption
-msgid "Copy(&C)"
+msgid "&Copy"
 msgstr "复制(&C)"
 
 #: tmainform.plainpaste.caption
-msgid "Paste(&P)"
+msgid "&Paste"
 msgstr "粘贴(&P)"
 
 #: tmainform.hintpanel2.caption

@@ -48,7 +48,7 @@ msgid "WordWrap=True : this label wraps onto several lines because the words are
 msgstr "WordWrap=True : this label wraps onto several lines because the words are separated by spaces — 中文 与 English 混排 也 能 在 空格 处 换行，超出 控件 宽度 就 自动 折行。"
 
 #: tmainform.lblfocus.caption
-msgid "Name(&N):"
+msgid "&Name:"
 msgstr "姓名(&N)："
 
 #: tmainform.lbllayouthead.caption

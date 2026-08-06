@@ -172,11 +172,11 @@ msgid "Mark colour"
 msgstr "标记颜色"
 
 #: tmainform.btnsubmit.caption
-msgid "Submit(&S)"
+msgid "&Submit"
 msgstr "提交(&S)"
 
 #: tmainform.btnreset.caption
-msgid "Reset(&R)"
+msgid "&Reset"
 msgstr "重置(&R)"
 
 #: tmainform.cardformtodo.title
@@ -432,39 +432,39 @@ msgid "Sign out"
 msgstr "退出登录"
 
 #: tmainform.mnufile.caption
-msgid "File(&F)"
+msgid "&File"
 msgstr "文件(&F)"
 
 #: tmainform.mnufilenew.caption
-msgid "New(&N)"
+msgid "&New"
 msgstr "新建(&N)"
 
 #: tmainform.mnufileopen.caption
-msgid "Open…(&O)"
+msgid "&Open…"
 msgstr "打开…(&O)"
 
 #: tmainform.mnufileexit.caption
-msgid "Exit(&X)"
+msgid "E&xit"
 msgstr "退出(&X)"
 
 #: tmainform.mnuview.caption
-msgid "View(&V)"
+msgid "&View"
 msgstr "视图(&V)"
 
 #: tmainform.mnuviewsider.caption
-msgid "Collapse / expand the side navigation(&S)"
+msgid "&Collapse / expand the side navigation"
 msgstr "折叠 / 展开侧边导航(&S)"
 
 #: tmainform.mnuviewrefresh.caption
-msgid "Refresh(&R)"
+msgid "&Refresh"
 msgstr "刷新(&R)"
 
 #: tmainform.mnuhelp.caption
-msgid "Help(&H)"
+msgid "&Help"
 msgstr "帮助(&H)"
 
 #: tmainform.mnuhelpabout.caption
-msgid "About(&A)"
+msgid "&About"
 msgstr "关于(&A)"
 
 #: umain.rsnavworkbench

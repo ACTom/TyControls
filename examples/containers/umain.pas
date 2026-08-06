@@ -21,7 +21,7 @@ uses
   tyControls.ScrollBox, tyControls.ScrollContent, tyControls.ScrollPanel, tyControls.ExPanel, tyControls.Button,
   tyControls.CheckBox,
   tyControls.GridPanel, tyControls.GridCell, tyControls.RelativePanel, tyControls.Edit,
-  tyControls.ToolBarEx, tyControls.ControlBar, tyControls.CoolBar, tyControls.Panel,
+  tyControls.ToolBarEx, tyControls.ControlBar, tyControls.CoolBar,
   tyControls.HeaderControl, tyControls.ListGroupPanel, tyControls.ImageCollection,
   tyControls.BuiltinThemes, tyControls.ComboBox, tyControls.ToggleSwitch;
 
@@ -114,8 +114,8 @@ type
     BarBtn11: TTyButton;
     BarBtn12: TTyButton;
     Rebar: TTyCoolBar;
-    Band1: TTyPanel;
-    Band2: TTyPanel;
+    Band1: TTyToolBarEx;   { band 1 hosts a real toolbar }
+    Band2: TTyEdit;        { band 2 hosts a real search field }
     LblGrip: TTyLabel;
     Grip: TTySizeBox;
     DivMore: TTyDivider;
@@ -489,8 +489,9 @@ end;
 procedure TMainForm.WireBands;
 begin
   // Rebar: two bands resizable via drag grips (band width / min width are code-level, not .lfm properties).
-  Rebar.SetBandWidth(Band1, 220);   Rebar.SetBandMinWidth(Band1, 90);
-  Rebar.SetBandWidth(Band2, 260);   Rebar.SetBandMinWidth(Band2, 90);
+  // The floors are low on purpose: squeeze the toolbar band and its buttons fold into the » chevron.
+  Rebar.SetBandWidth(Band1, 170);   Rebar.SetBandMinWidth(Band1, 60);
+  Rebar.SetBandWidth(Band2, 140);   Rebar.SetBandMinWidth(Band2, 60);
 end;
 
 procedure TMainForm.PaintSurface(Sender: TObject; APainter: TTyPainter; const AContent: TRect);
