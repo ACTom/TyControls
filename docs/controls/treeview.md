@@ -466,6 +466,8 @@ Tree.OnNodeMoved := @OnMoved;
 - **变高节点**：`toVariableNodeHeight` + `OnMeasureItem` 才生效；测量在 `InitNode` 末尾进行一次。未启用时每行都用 `DefaultNodeHeight`。
 - **`OnNodeDragOver` 只能收紧不能放宽**：`CanMoveNode` 是硬闸（非空、模式非 `dmNone`、目标不在源子树内、非空操作等），对无效移动即便 handler 设 `Allowed := True` 也会被 `MoveNode` 拦下。
 - **`OnAfterCellPaint` 与 `OnDrawNode` 的裁剪时机**：二者都在 BGRA 图层合成到画布**之后**触发（跨平台后处理路径）。因此没有「在默认文本下方绘制背景」的 `OnBeforeCellPaint`——那需要不同的绘制路径，目前未实现。
+- **`ACellRect` 是整个单元格，不是标题文字的位置**：0 列树里它就是整行（`Column = -1`），左边缘属于缩进、展开箭头和图标槽。从 `ACellRect.Left` 起画，不同层级的标题会全落在同一个 x 上、压在箭头和树线上。要问「这一行的标题该从哪开始」，用 `DisplayRect(Node, True, R)`（或 `DisplayTextLeft`）——它走的是绘制侧同一次槽位走查，与默认标题的落点逐像素一致。
+- **自绘 handler 借的是宿主画布，改了什么就要还回去**：`ACanvas` 是控件自己的画布，同一次绘制里后面每个单元格、以及下一次绘制，都继承你留下的 `Font.Color` / `Brush` / `Pen`。本库自带的 Owner-draw 示例就栽在这上面：叠加层把 `Font.Color` 留成了 `clWhite`，白底上的子行标题整片消失。
 - **`toCheckSupport` 是复选框总开关**：未加入 `Options` 时，即使给节点设了 `CheckType`，`ToggleCheck` 也直接返回、不绘制复选槽。三态自动传播还额外需要 `toAutoTristateTracking`。
 - **单选 vs 多选事件**：单选走 `OnChange`（`FSelectedNode` 变化）；多选走 `OnSelectionChanged`（每次手势后一次）。二者是不同的通道。
 - **`Enabled = False` 不响应输入**：与全库一致，禁用时不触发点击 / 键盘 / 滚轮驱动的事件。

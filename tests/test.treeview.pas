@@ -2,7 +2,7 @@
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Graphics, Forms, Controls, ImgList, LCLType,
+  Classes, SysUtils, Types, Graphics, Forms, Controls, ImgList, LCLType, LCLIntf,
   fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.TreeView,
@@ -287,6 +287,7 @@ type
     FLastDrawCol:     Integer;
     FLastDrawNode:    PTyTreeNode;
     FCapturedNode:    PTyTreeNode;  // node to capture ACellRect for (compare vs GetCellRect)
+    FStaleInkCells:   Integer;   // cells whose DC ink was NOT the one the handler asked for
     procedure OnGetTextWithType(Sender: TTyTreeView; Node: PTyTreeNode;
       Column: Integer; TextType: TTyVSTTextType; var CellText: string);
     procedure OnInitNodeHasChildren(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
@@ -298,6 +299,14 @@ type
       Node: PTyTreeNode; Column: Integer; const ACellRect: TRect);
     { OnAfterCellPaint: paint a small BLUE probe rect near the cell's top-left. }
     procedure OnAfterPaintBlueDot(Sender: TTyTreeView; ACanvas: TCanvas;
+      Node: PTyTreeNode; Column: Integer; const ACellRect: TRect);
+    { OnDrawNode / OnAfterCellPaint: ask for the SAME pen + ink on every call —
+      the shape that catches a canvas whose cached state no longer describes its
+      DC. The two passes stroke DIFFERENT pixels (horizontals vs verticals) in
+      DIFFERENT colours, so neither can repaint over the other's evidence. }
+    procedure OnDrawNodeSameStateEveryCall(Sender: TTyTreeView; ACanvas: TCanvas;
+      Node: PTyTreeNode; Column: Integer; const ACellRect: TRect);
+    procedure OnAfterCellSameStateEveryCall(Sender: TTyTreeView; ACanvas: TCanvas;
       Node: PTyTreeNode; Column: Integer; const ACellRect: TRect);
     function BuildTree(out Ctl: TTyStyleController; out F: TForm;
       out ARoot, AChild0: PTyTreeNode): TTyTreeView;
@@ -315,6 +324,12 @@ type
     procedure TestDefaultOffIdenticalToC3;
     { OnDrawNode assigned but toOwnerDraw OFF → NOT called, default text drawn. }
     procedure TestDrawNodeIgnoredWithoutOption;
+    { EVERY owner-drawn cell inks with what its handler asked for — not with what
+      the previous cell left in the DC. The control brackets each callback in a
+      DC save/restore; if that restore is not one the LCL canvas knows about, the
+      canvas keeps believing its Brush/Font are still selected and a handler that
+      re-assigns the SAME value draws with the restored (foreign) object instead. }
+    procedure TestOwnerDrawStateSurvivesEveryCell;
   end;
 
 implementation
@@ -8798,6 +8813,161 @@ begin
             inkFound := True;
         end;
       AssertTrue('noopt: default caption ink present (no owner-draw without option)', inkFound);
+    finally
+      outBmp.Free;
+    end;
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+{ The shape that catches a canvas whose cached state no longer describes its DC:
+  the SAME pen colour and the SAME ink on every call. An LCL TCanvas only
+  re-selects an object when one of its properties actually CHANGES, so from the
+  second cell on nothing is re-selected and the stroke lands with whatever object
+  the DC is currently holding. (FillRect is deliberately not used here: LCL hands
+  it the brush handle explicitly, so it is the one primitive this cannot bite.)
+  Lines are drawn along the cell's own top and bottom edges, never across it. }
+procedure TTreeD1OwnerDrawTest.OnDrawNodeSameStateEveryCall(Sender: TTyTreeView;
+  ACanvas: TCanvas; Node: PTyTreeNode; Column: Integer; const ACellRect: TRect);
+const
+  Probe = TColor($00C800);   // GREEN, identical on every call
+begin
+  Inc(FDrawNodeCalls);
+  ACanvas.Pen.Color   := Probe;
+  ACanvas.Brush.Style := bsClear;
+  ACanvas.Font.Color  := Probe;
+
+  ACanvas.MoveTo(ACellRect.Left, ACellRect.Top);
+  ACanvas.LineTo(ACellRect.Right, ACellRect.Top);
+  ACanvas.MoveTo(ACellRect.Left, ACellRect.Bottom - 1);
+  ACanvas.LineTo(ACellRect.Right, ACellRect.Bottom - 1);
+
+  { Same question asked of the text path, which is what an owner-drawn caption
+    actually rides on: after a text op the DC must hold the ink we asked for. }
+  ACanvas.TextOut(ACellRect.Left + 2, ACellRect.Top + 2, 'x');
+  if LCLIntf.GetTextColor(ACanvas.Handle) <> Probe then Inc(FStaleInkCells);
+end;
+
+{ The overlay pass asks the same question, in its own colour and on its own
+  pixels: a vertical stroke inset from the corners, so the OnDrawNode pass's
+  horizontals can neither cover it nor be covered by it. Without that separation
+  a correct pass would repaint over a broken one and hide it. }
+procedure TTreeD1OwnerDrawTest.OnAfterCellSameStateEveryCall(Sender: TTyTreeView;
+  ACanvas: TCanvas; Node: PTyTreeNode; Column: Integer; const ACellRect: TRect);
+const
+  Probe = TColor($C80000);   // BLUE, identical on every call
+begin
+  Inc(FAfterCalls);
+  ACanvas.Pen.Color   := Probe;
+  ACanvas.Brush.Style := bsClear;
+  ACanvas.Font.Color  := Probe;
+
+  ACanvas.MoveTo(ACellRect.Left, ACellRect.Top + 1);
+  ACanvas.LineTo(ACellRect.Left, ACellRect.Bottom - 1);
+
+  ACanvas.TextOut(ACellRect.Left + 2, ACellRect.Top + 2, 'x');
+  if LCLIntf.GetTextColor(ACanvas.Handle) <> Probe then Inc(FStaleInkCells);
+end;
+
+{ Every owner-drawn cell must ink with what ITS handler asked for. The control
+  brackets each callback in a DC save/restore so one handler cannot leak its clip
+  into the next; the restore has to be one the LCL canvas knows about, or the
+  canvas goes on believing its Brush/Font are still selected into the DC while the
+  restore has swapped them out — and the second cell onwards paints with the
+  previous DC state instead of the app's.
+
+  Non-vacuous by construction: the canvas's pen and ink are seeded RED and driven
+  into the DC first, so a cell that skips the re-select strokes red, not green.
+  Probes sit on each cell's EDGE pixels (a centre probe would survive any drift
+  that keeps SOME of the cell green). }
+procedure TTreeD1OwnerDrawTest.TestOwnerDrawStateSurvivesEveryCell;
+var
+  Ctl: TTyStyleController; F: TForm;
+  t: TTyTreeView; root, child0: PTyTreeNode;
+  outBmp: TBitmap; r, CR: TRect;
+  n: PTyTreeNode;
+  colIdx, cells, xr: Integer;
+  seedRed: TColor;
+
+  procedure AssertGreenAt(const AWhere: string; x, y: Integer);
+  var c: Integer;
+  begin
+    c := ColorToRGB(outBmp.Canvas.Pixels[x, y]);
+    AssertTrue(Format('%s at (%d,%d) drew with the handler''s pen, not the DC''s ' +
+      '(got $%.6x, seeded $%.6x)', [AWhere, x, y, LongWord(c), LongWord(seedRed)]),
+      (Green(c) > 160) and (Red(c) < 96) and (Blue(c) < 96));
+  end;
+
+  procedure AssertBlueAt(const AWhere: string; x, y: Integer);
+  var c: Integer;
+  begin
+    c := ColorToRGB(outBmp.Canvas.Pixels[x, y]);
+    AssertTrue(Format('%s at (%d,%d) drew with the handler''s pen, not the DC''s ' +
+      '(got $%.6x, seeded $%.6x)', [AWhere, x, y, LongWord(c), LongWord(seedRed)]),
+      (Blue(c) > 160) and (Red(c) < 96) and (Green(c) < 96));
+  end;
+
+begin
+  FProbeCol := -1; FDrawNodeCalls := 0; FAfterCalls := 0; FCapturedNode := nil;
+  FStaleInkCells := 0;
+  seedRed := RGBToColor(220, 0, 0);
+  t := BuildTree(Ctl, F, root, child0);
+  try
+    t.Options          := t.Options + [toOwnerDraw];
+    t.OnDrawNode       := @OnDrawNodeSameStateEveryCall;
+    t.OnAfterCellPaint := @OnAfterCellSameStateEveryCall;
+    CR := t.ContentRect;
+
+    outBmp := TBitmap.Create;
+    try
+      outBmp.PixelFormat := pf32bit;
+      outBmp.SetSize(t.Width, t.Height);
+      outBmp.Canvas.Brush.Style := bsSolid;
+      outBmp.Canvas.Brush.Color := clWhite;
+      outBmp.Canvas.FillRect(0, 0, outBmp.Width, outBmp.Height);
+      { Seed the canvas's PEN and INK with red and drive both into the DC, so
+        "whatever the DC is currently holding" is a colour the handler never asks
+        for. Off-surface, so the seed strokes cannot be mistaken for a probe. }
+      outBmp.Canvas.Pen.Color  := seedRed;
+      outBmp.Canvas.Font.Color := seedRed;
+      outBmp.Canvas.MoveTo(-8, -8);
+      outBmp.Canvas.LineTo(-4, -8);
+      outBmp.Canvas.TextOut(-40, -40, 'x');
+      {$PUSH}{$HINTS OFF}
+      TTyTreeViewAccess(t).RenderTo(outBmp.Canvas, Rect(0, 0, outBmp.Width, outBmp.Height), 96);
+      {$POP}
+
+      AssertTrue('cellstate: more than one cell was owner-drawn', FDrawNodeCalls > 1);
+      AssertTrue('cellstate: more than one cell was overlaid',    FAfterCalls > 1);
+
+      cells := 0;
+      n := root;
+      while n <> nil do
+      begin
+        for colIdx := 0 to t.Header.Columns.Count - 1 do
+        begin
+          if not t.GetCellRect(n, colIdx, r) then Continue;
+          { Cells at the right end are clipped to the content rect; probe the
+            visible edge, never the middle. }
+          xr := r.Right - 1;
+          if xr > CR.Right - 1 then xr := CR.Right - 1;
+          if (r.Left >= xr) or (r.Top >= r.Bottom) then Continue;
+          Inc(cells);
+          if r.Bottom - r.Top < 4 then Continue;
+          AssertGreenAt('cellstate/draw: top-left',     r.Left, r.Top);
+          AssertGreenAt('cellstate/draw: bottom-left',  r.Left, r.Bottom - 1);
+          AssertGreenAt('cellstate/draw: top-right',    xr,     r.Top);
+          AssertGreenAt('cellstate/draw: bottom-right', xr,     r.Bottom - 1);
+          { The overlay pass owns the left edge between those corners. }
+          AssertBlueAt('cellstate/after: left edge top',    r.Left, r.Top + 1);
+          AssertBlueAt('cellstate/after: left edge bottom', r.Left, r.Bottom - 2);
+        end;
+        n := t.GetNextVisibleNoInit(n);
+      end;
+      AssertTrue('cellstate: probed more than one cell', cells > 1);
+      AssertEquals('cellstate: every cell inked with the colour its handler set',
+        0, FStaleInkCells);
     finally
       outBmp.Free;
     end;

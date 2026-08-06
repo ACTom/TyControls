@@ -214,6 +214,8 @@ type
       per-cell paint hooks). }
     function  DrawRowPercent(Sender: TTyTreeView; Node: PTyTreeNode): Integer;
     function  DrawPillRect(const ACellRect: TRect): TRect;
+    function  DrawCaptionRect(Sender: TTyTreeView; Node: PTyTreeNode;
+      const ACellRect: TRect): TRect;
     function  OwnerDrawInk: TColor;
   end;
 
@@ -1329,6 +1331,20 @@ begin
   Result := ((Node^.Index * 37) mod 101);
 end;
 
+{ Where this row's CAPTION belongs. OnDrawNode hands over the whole cell -- in a
+  0-column tree that is the whole ROW, from the content edge -- so drawing from
+  ACellRect.Left would put every caption in the same place whatever its depth,
+  right on top of the expander and the tree lines the theme drew there. The tree
+  publishes the answer per node (indent + expander + checkbox + image slots
+  already consumed), so the owner-drawn caption lands exactly where the default
+  one would have. Falls back to the cell for a node that is not on screen. }
+function TShowcaseForm.DrawCaptionRect(Sender: TTyTreeView; Node: PTyTreeNode;
+  const ACellRect: TRect): TRect;
+begin
+  if not Sender.DisplayRect(Node, True, Result) then
+    Result := Rect(ACellRect.Left + 4, ACellRect.Top, ACellRect.Right, ACellRect.Bottom);
+end;
+
 { The pill occupies the right end of the cell, vertically centred. }
 function TShowcaseForm.DrawPillRect(const ACellRect: TRect): TRect;
 const
@@ -1354,23 +1370,25 @@ procedure TShowcaseForm.DrawDrawNode(Sender: TTyTreeView; ACanvas: TCanvas;
 var
   txt:  string;
   pill: TRect;
+  cap:  TRect;
   pct:  Integer;
   ink:  TColor;
 begin
   ink := OwnerDrawInk;
   DrawGetText(Sender, Node, txt);
+  cap := DrawCaptionRect(Sender, Node, ACellRect);
 
   ACanvas.Brush.Style := bsClear;
   ACanvas.Font.Color  := ink;
   ACanvas.Font.Bold   := Sender.GetNodeLevel(Node) = 0;
-  ACanvas.TextOut(ACellRect.Left + 4,
+  ACanvas.TextOut(cap.Left,
     (ACellRect.Top + ACellRect.Bottom - ACanvas.TextHeight('Hg')) div 2, txt);
   ACanvas.Font.Bold := False;
 
   { Only builds carry a progress pill; the stages are plain text rows. }
   if Sender.GetNodeLevel(Node) <> 0 then Exit;
   pill := DrawPillRect(ACellRect);
-  if pill.Left <= ACellRect.Left + ACanvas.TextWidth(txt) + 16 then Exit;  // no room
+  if pill.Left <= cap.Left + ACanvas.TextWidth(txt) + 16 then Exit;  // no room
 
   pct := DrawRowPercent(Sender, Node);
   ACanvas.Brush.Style := bsSolid;
@@ -1385,28 +1403,55 @@ begin
 end;
 
 { Runs for EVERY cell, with or without toOwnerDraw -- an overlay hook rather than a
-  replacement one. Every fifth build gets a NEW badge. }
+  replacement one. Every fifth build gets a NEW badge.
+
+  The badge sits AFTER the caption, not at the cell's left edge: the cell handed to
+  an overlay is the whole row, whose left edge belongs to the indent and the expander,
+  and a badge stamped there lands on the chevron and on the first letters of the
+  caption OnDrawNode just wrote.
+
+  The ink is put back before returning. An overlay borrows the host's canvas; the
+  next cell -- and the next paint -- inherits whatever it leaves behind, and this one
+  used to leave clWhite, which is how the child captions ended up white on white. }
 procedure TShowcaseForm.DrawAfterCellPaint(Sender: TTyTreeView; ACanvas: TCanvas;
   Node: PTyTreeNode; Column: Integer; const ACellRect: TRect);
+const
+  BadgeW = 34;
+  BadgeH = 14;
 var
-  badge: TRect;
+  badge, cap: TRect;
+  txt:  string;
+  keepInk: TColor;
+  keepBrush: TBrushStyle;
 begin
   if Sender.GetNodeLevel(Node) <> 0 then Exit;
   if (Node^.Index mod 5) <> 0 then Exit;
 
-  badge.Left   := ACellRect.Left + 4;
-  badge.Top    := ACellRect.Top + 2;
-  badge.Right  := badge.Left + 34;
-  badge.Bottom := badge.Top + 14;
-  if badge.Right > ACellRect.Right then Exit;
+  DrawGetText(Sender, Node, txt);
+  cap := DrawCaptionRect(Sender, Node, ACellRect);
 
-  ACanvas.Brush.Style := bsSolid;
-  ACanvas.Brush.Color := TyColorToLCL(
-    TyDefaultController.Model.ResolveStyle('TyBadge', '', []).Background.Color);
-  ACanvas.FillRect(badge);
-  ACanvas.Brush.Style := bsClear;
-  ACanvas.Font.Color  := clWhite;
-  ACanvas.TextOut(badge.Left + 5, badge.Top, 'NEW');
+  keepInk   := ACanvas.Font.Color;
+  keepBrush := ACanvas.Brush.Style;
+  try
+    badge.Left   := cap.Left + ACanvas.TextWidth(txt) + 8;
+    badge.Top    := (ACellRect.Top + ACellRect.Bottom - BadgeH) div 2;
+    badge.Right  := badge.Left + BadgeW;
+    badge.Bottom := badge.Top + BadgeH;
+    if badge.Right > ACellRect.Right then Exit;
+
+    ACanvas.Brush.Style := bsSolid;
+    ACanvas.Brush.Color := TyColorToLCL(
+      TyDefaultController.Model.ResolveStyle('TyBadge', '', []).Background.Color);
+    ACanvas.FillRect(badge);
+    ACanvas.Brush.Style := bsClear;
+    ACanvas.Font.Color  := TyColorToLCL(
+      TyDefaultController.Model.ResolveStyle('TyBadge', '', []).TextColor);
+    ACanvas.TextOut(badge.Left + 5,
+      (badge.Top + badge.Bottom - ACanvas.TextHeight('Hg')) div 2, 'NEW');
+  finally
+    ACanvas.Font.Color  := keepInk;
+    ACanvas.Brush.Style := keepBrush;
+  end;
 end;
 
 procedure TShowcaseForm.DrawChange(Sender: TTyTreeView; Node: PTyTreeNode);

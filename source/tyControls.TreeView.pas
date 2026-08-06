@@ -3908,7 +3908,7 @@ var
     a `var Ghosted := True` from an app had no effect anywhere. }
   pendingIcons: array of record X, Y, Idx: Integer; Ghost: Boolean; end;
   pendingCount: Integer;
-  iIcon, savedDC: Integer;
+  iIcon: Integer;
   { ③d D1: per-cell owner-draw — collected during the row loop, drawn onto
     ACanvas AFTER P.EndPaint (the same post-composite path as pendingIcons,
     because any GDI draw to ACanvas DURING RenderTo is erased by the EndPaint
@@ -4917,13 +4917,31 @@ begin
 
       Draw ORDER (matters): 1) OnDrawNode (replaced cell content, on the row bg)
       → 2) node images (existing; already skipped for owner-drawn cells) →
-      3) OnAfterCellPaint (overlays, on top of everything). }
+      3) OnAfterCellPaint (overlays, on top of everything).
+
+      The per-cell bracket is Canvas.SaveHandleState/RestoreHandleState and NOT
+      the raw SaveDC/RestoreDC it used to be. RestoreDC swaps the DC's selected
+      font/pen/brush back, but an LCL TCanvas caches which of ITS objects it
+      believes are selected and only re-selects one when a property actually
+      CHANGES -- so after the first callback the cache is a lie, and a handler
+      that assigns the same Font.Color (or Pen.Color) it assigned last cell gets
+      a silent no-op and draws with whatever the restore put back. That is not a
+      defect a host can see or defend against: the tree's own Owner-draw example
+      lost every child caption to it (white ink on a white row), while the rows
+      whose handler happened to flip Font.Bold escaped, because the flip forced
+      the re-select. The canvas-aware pair calls DeselectHandles on both sides,
+      so the cache never outlives the DC state it describes -- the same bracket
+      LCL's own per-cell owner-draw hook uses (TCustomGrid.DoDrawCell around
+      OnDrawCell, grids.pas), and what LCLIntf's own header tells LCL users to
+      reach for instead of SaveDC/RestoreDC. Note FillRect is NOT affected (LCL
+      hands it the brush handle explicitly), which is why the fill-based tests
+      here stayed green through all of it. }
 
     { 1) OnDrawNode — full cell-content replacement (toOwnerDraw + handler). }
     if pendingDrawCount > 0 then
       for iCb := 0 to pendingDrawCount - 1 do
       begin
-        savedDC := SaveDC(ACanvas.Handle);
+        ACanvas.SaveHandleState;
         try
           IntersectClipRect(ACanvas.Handle,
             ARect.Left + CR.Left,  ARect.Top + CR.Top,
@@ -4934,7 +4952,7 @@ begin
           FOnDrawNode(Self, ACanvas, pendingDrawNode[iCb].Node,
             pendingDrawNode[iCb].Col, pendingDrawNode[iCb].R);
         finally
-          RestoreDC(ACanvas.Handle, savedDC);
+          ACanvas.RestoreHandleState;
         end;
       end;
 
@@ -4945,7 +4963,7 @@ begin
       by ARect. Owner-drawn cells were already skipped at collection time. }
     if (pendingCount > 0) and (FImages <> nil) then
     begin
-      savedDC := SaveDC(ACanvas.Handle);
+      ACanvas.SaveHandleState;
       try
         IntersectClipRect(ACanvas.Handle,
           ARect.Left + CR.Left,  ARect.Top + CR.Top,
@@ -4960,7 +4978,7 @@ begin
           FImages.Draw(ACanvas, pendingIcons[iIcon].X, pendingIcons[iIcon].Y,
             pendingIcons[iIcon].Idx, not pendingIcons[iIcon].Ghost);
       finally
-        RestoreDC(ACanvas.Handle, savedDC);
+        ACanvas.RestoreHandleState;
       end;
     end;
 
@@ -4968,7 +4986,7 @@ begin
     if pendingAfterCount > 0 then
       for iCb := 0 to pendingAfterCount - 1 do
       begin
-        savedDC := SaveDC(ACanvas.Handle);
+        ACanvas.SaveHandleState;
         try
           IntersectClipRect(ACanvas.Handle,
             ARect.Left + CR.Left,  ARect.Top + CR.Top,
@@ -4979,7 +4997,7 @@ begin
           FOnAfterCellPaint(Self, ACanvas, pendingAfter[iCb].Node,
             pendingAfter[iCb].Col, pendingAfter[iCb].R);
         finally
-          RestoreDC(ACanvas.Handle, savedDC);
+          ACanvas.RestoreHandleState;
         end;
       end;
   finally
