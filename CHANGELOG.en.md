@@ -105,6 +105,54 @@ Linux and macOS.
   comes back whole: width, title, alignment, editor kind, read-only, pick list,
   and the filter that was on it. Column structure previously could not enter the
   undo stack at all, so any column change simply cleared it.
+- **An object slot on every cell**: `Objects[ACol, ARow]` -- "which record is this
+  row?" finally has somewhere to live. It travels with its cell: sorting (including
+  the physical sort that really moves the data), inserting and deleting rows, moving
+  and swapping them -- the object stays on its row. Hosts previously had to keep a
+  parallel array keyed by row index and re-align it after every structural change,
+  and the symptom of getting that wrong is reading somebody else's record after a
+  sort, silently. **The grid does not own these objects** (never frees, copies or
+  persists them), and they **do not enter the undo stack** -- restoring one would let
+  Ctrl+Z hand back a pointer you may already have freed.
+- **A whole row or column as a `TStrings`**: `Grid.Rows[3] := MyList`,
+  `Memo.Lines := Grid.Cols[2]`, `Grid.Rows[r].CommaText` -- lines that appear in
+  nearly every ported program, and that previously had to be rewritten as per-cell
+  loops. What you get is a **live view**: reads and writes land on the cells
+  directly. **Assignment never changes the grid's structure** (a shorter list leaves
+  the tail alone, a longer one is truncated), matching LCL exactly.
+
+### Added -- the walls people hit first when porting from LCL
+
+- **A node object model on the tree**: `Tree.Items.AddChild(nil, 'Root')` compiles and
+  runs, along with `Add` / `AddFirst` / `AddChildFirst` / `Insert` / `DeleteItem` /
+  `TopLvlItems[]`; a node's caption reads back as `Tree.NodeText[Node]`. At design time
+  the `Items` ellipsis in the Object Inspector (or a double-click on the control) opens a
+  node editor, and the tree's shape is visible in it. **The virtual mode is untouched**:
+  leave `Items` empty and it is the same million-node tree as before, not one byte
+  heavier. Filling in both sides (say `Items` AND an `OnGetText` handler) **raises at
+  once and names both** -- quietly preferring either one turns into "my event stopped
+  firing" or "the nodes I filled in at design time are gone at run time".
+- **Tabs on any edge, with icons**: `TabPosition` takes top/bottom/left/right, and
+  `Images` + a per-page `ImageIndex` puts a glyph on each tab. Side tabs do **not**
+  rotate their captions -- a 28px rail cannot hold a line of text; the band becomes a
+  stack of full-width rows sized to the widest caption, which is what modern tab rails
+  do.
+- **Owner-drawn combo boxes**: `Style` gains `csOwnerDrawFixed` and
+  `csOwnerDrawEditableFixed`, with `OnDrawItem` for painting each row (and, for the
+  first of those, the closed field). **With no handler attached the themed default still
+  paints**, so setting `Style` alone can never blank the control.
+- **The mask edit speaks LCL's mask language**, and **the caret can sit in any slot** and
+  overwrite it in place -- previously entry was append-only, left to right, and only the
+  last character could be deleted.
+- **The date picker can say "not filled in"**: `NullInputAllowed` lets the user clear the
+  field with Del or Ctrl+N, `NullDate` is LCL's own sentinel (so it round-trips through
+  an LCL picker or a shared database column), and `TextForNullDate` decides what an empty
+  field shows.
+- **`TTyUpDown.Associate`**: bind the spin buttons to an edit. **It reads back** -- type a
+  number in the field and the next arrow click steps from *that* number, not from the one
+  the buttons were holding.
+- **A toolbar can say where the row breaks**: `TyToolbarLayout` takes a per-item "start a
+  new row here" flag instead of only wrapping when something no longer fits.
 
 ### Changed -- parity with Delphi/Lazarus (**includes breaking changes**)
 
@@ -211,6 +259,20 @@ below change the behaviour of existing code -- read before upgrading.**
     as four coordinates.
   - `GridLineStyle` keeps our meaning: the enum types differ, so every ported use is a
     compile error rather than a silent misread.
+  - **The new `Objects` / `Cols` / `Rows` collide with descendant members of the same
+    name.** Code that derives from `TTyStringGrid` and declares any of those three names
+    itself (property, field or method) no longer compiles -- "duplicate identifier".
+    It is a **compile-time** error and it points straight at the line, so the fix is a
+    rename; still worth a grep before you upgrade.
+- **The mask edit's mask language changed (breaking).** It used to be this library's own
+  three codes (`#` digit, `L` letter, `C` anything); it is now **LCL / Delphi's**: `0`
+  required digit, `9` optional digit, `L`/`l` letter, `A`/`a` alphanumeric, `C`/`c`
+  anything, `H` hex, `B` binary, plus the `>` `<` `<>` case regions, the `\` escape, `!`,
+  and the trailing `;save literals;blank char` fields. **A `#` in an old mask now
+  raises** rather than going quiet. This change is itself the fix for a worse problem: a
+  Lazarus `EditMask` string used to be ACCEPTED and mean something else -- `'000-0000'`
+  had no editable slot at all in the old language, so the field could never take a
+  keystroke, silently.
 - **Out-of-range writes raise instead of going quiet.** `TTyCalendar.Date` (outside
   `MinDate` / `MaxDate`), `TTyCheckGroup.Checked[i]` and `TTyRadioGroup.ItemIndex` used to
   clamp silently, read back `False` and write nothing, and silently become `-1`
