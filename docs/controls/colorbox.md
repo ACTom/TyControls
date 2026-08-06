@@ -99,5 +99,5 @@ CB.Selected := clRed;        // 选中红;不在板里的色 -> ItemIndex = -1(�
 - **地基控件:** 它证明并建立了逐项自绘钩子;`ColorListBox` / `FontComboBox` 等会复用同一套。
 - **写 `Selected` 不再撑大色板:** 选色器的语义是"从板里挑",不是"往板里加"——`TColorBox.Selected` 同样是写不匹配的色就置 `ItemIndex := -1`。会追加的 setter 还不幂等:写二十次就多二十行。要把色**加进**板里请显式调 `AddColor`。共用函数 `TySelectColorIndex` 保留了 `AAppendIfMissing` 参数(默认 `True`),供确实需要"当前值必须可显示"的**编辑器**类调用方使用;两个选色控件都传 `False`。
 - **颜色存在 `Items.Objects[i]`:** 与名称**天然对齐**——`Sorted:=True` 重排名称、`Items.Delete` 删除、直接改 `Items` 都不会让色块错位(没有并行数组)。
-- **锁定只选不编辑:** `Style` 被强制为 `csDropDownList`(覆写 `SetStyle` 忽略 `csDropDown`)——可编辑模式的下拉是**前缀过滤**的,会打乱行索引→色块映射,所以禁掉。
+- **锁定只选不编辑,但只锁编辑框:** 覆写的 `SetStyle` 走 `TyComboStylePickOnly(AValue)`——可编辑模式的下拉是**前缀过滤**的,会打乱行索引→色块映射,所以摘掉编辑框;**自绘与逐行高度是另一回事,照常通过**(`TTyComboBox(Box).Style := csOwnerDrawFixed` 有效)。以前这里把**任何**值都压成 `csDropDownList`,顺手把跟过滤毫无关系的自绘一起禁掉了。下拉行的自绘已接进 `TTyColorPopupList`,见 `combobox.md` §8.2。
 - **色块轮廓:** 用主题的文字色描 1px 边,浅色色块(白等)也可见——不硬编码。

@@ -15,7 +15,7 @@ procedure TyDrawFontRow(P: TTyPainter; const ARect: TRect; const AFontName: stri
 type
   { The drop-down list for TTyFontComboBox: each row is drawn IN ITS OWN font (the row's
     text is a font-family name, so it is rendered using that family). }
-  TTyFontPopupList = class(TTyListBox)
+  TTyFontPopupList = class(TTyComboPopupList)
   protected
     procedure PaintItemContent(P: TTyPainter; const ARowRect: TRect; AIndex: Integer;
       const AStyle: TTyStyleSet); override;
@@ -58,6 +58,12 @@ end;
 procedure TTyFontPopupList.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
   AIndex: Integer; const AStyle: TTyStyleSet);
 begin
+  { Owner-draw first, and it has to be spelled out here rather than left to the ancestor:
+    this override replaces the whole row, so an inherited call would already be too late.
+    True only when the combo really has both an owner-draw Style and a handler; the row
+    background is already down and the dispatch runs after EndPaint, from the Paint override
+    inherited from TTyComboPopupList. }
+  if TyComboCollectRowOwnerDraw(Self, ARowRect, AIndex) then Exit;
   // Font name = the row's own text -> draw it in that very family (WYSIWYG).
   TyDrawFontRow(P, ARowRect, Items[AIndex], AStyle, ResolveFontSize(AStyle));
 end;

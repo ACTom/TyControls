@@ -35,9 +35,11 @@ type
       const AStyle: TTyStyleSet); override;
     { The owner-draw dispatch TTyComboPopupList carries for every OTHER list in this family.
       Copied rather than inherited because this one descends from TTyCheckListBox, and a
-      class cannot have two ancestors -- the reason the protocol is three free functions
-      instead of a shim class. }
+      class cannot have two ancestors -- the reason the protocol is free functions instead
+      of a shim class. }
     procedure Paint; override;
+    { Per-row heights, for the same reason and by the same route. }
+    function RowHeight(AIndex: Integer): Integer; override;
   public
     { The twin of TTyComboPopupList.RenderWithOwnerDraw: canvas-taking, so a headless test
       can drive the whole post-composite dispatch into a bitmap. Paint needs a window. }
@@ -245,6 +247,11 @@ end;
 procedure TTyCheckComboPopupList.Paint;
 begin
   RenderWithOwnerDraw(Canvas, ClientRect, Font.PixelsPerInch);
+end;
+
+function TTyCheckComboPopupList.RowHeight(AIndex: Integer): Integer;
+begin
+  Result := TyComboMeasureRowHeight(Self, AIndex, inherited RowHeight(AIndex));
 end;
 
 { TTyCheckComboBox }

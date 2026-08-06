@@ -31,7 +31,8 @@ uses tyControls.ListBox;
 | `Items` | `TStrings` | `''`（空列表） | 条目集合。**类型是抽象的 `TStrings`（对齐 LCL `stdctrls.pp:435`）**，所以 `LB.Items := Memo.Lines` / `:= 任意 TStrings` 这种日常写法能直接编译；以前声明成具体的 `TStringList`，这一句是硬编译错误。底层仍是 `TStringList`（`Sorted` 就骑在它上面），需要 `TStringList` 独有成员（尤其是挂 `OnChange` 钩子）时用只读的 `ItemsList` 拿到同一个对象。通过赋值触发整体替换（`Assign`），同时校正 `TopIndex` 与 `ItemIndex`，自动更新滚动条并重绘。直接调用 `Items.Add` / `Items.Clear` 等方法也有效，但不触发自动夹取——`TopIndex` 会在下次重绘（`Paint` → `UpdateScrollBar`）时自动收敛到合法范围。 |
 | `ItemIndex` | `Integer` | `-1` | 当前焦点行（光标行）的从 0 起始的索引；`-1` 表示无焦点。写入等价于调用 `SelectItem`：范围外的值被夹为 `-1`，并触发 `EnsureSelectionVisible`、滚动条更新及 `OnChange`。 |
 | `MultiSelect` | `Boolean` | `False` | 是否允许多选。`False` 时为单选模式，行为与旧版相同；`True` 时启用多选，`Selected[]`、`SelCount`、`ClearSelection`、`SelectAll` 等多选方法生效。切换此属性会清空所有选择位。 |
-| `ItemHeight` | `Integer` | `24` | 每行条目的逻辑像素高度（最小为 1）；写入时触发滚动条更新和重绘。实际像素高度在绘制时按 PPI 缩放。 |
+| `ItemHeight` | `Integer` | `24` | 每行条目的逻辑像素高度（最小为 1）；写入时触发滚动条更新和重绘。实际像素高度在绘制时按 PPI 缩放。**逐行不同高度**见下面的 `RowHeight`。 |
+| `ScrollWidth` | `Integer` | `0` | **（LCL 同名，`stdctrls.pp:676`）** 一行内容的**逻辑像素宽度**。`0` = 行与列表框等宽，不横向滚动；比列表框**宽**时底部出现横向滚动条，可以把行里放不下的那一段滚进来；比列表框窄时无效（行不会比它所在的框还窄）。<br>**这是一个你自己设的数，不是量出来的**：LCL 与本控件都不会去遍历条目找最长的一条，因为字符串是应用的，只有应用知道自己怎么画（带色块或图标的行比它的文字宽）。要自适应就自己量出最宽的一行赋进来。 |
 | `TopIndex` | `Integer` | `0` | 当前最顶部可见行的索引，范围 `[0, MaxTopIndex]`，写入时自动夹紧。直接改 `Items` 后 `TopIndex` 会在下次更新时自动收敛。 |
 | `Sorted` | `Boolean` | `False` | **（API parity 新增）** 为 `True` 时 `Items` 保持升序（不区分大小写）。切换时按**文本**快照当前选择（单选 / 多选均支持），重排后再依文本重新定位选中项——保持同一逻辑选择且**不**触发 `OnChange`。 |
 | `OnChange` | `TNotifyEvent` | `nil` | 选中行变化时触发（`SelectItem` 中，仅当 `ItemIndex` 真正变化时触发）。 |
@@ -201,6 +202,20 @@ TyListItem:active { background: var(--accent); color: #FFFFFF; }
 
 当 `Items.Count > VisibleRows` 时，右侧自动出现一个宽度为 12 逻辑像素（DPI 缩放后为物理像素）的 `TTyScrollBar`；条目减少到可见行内后自动隐藏。滚动条与列表框共用同一 `Controller`，样式由 `TyScrollBar` 规则决定。
 
+`ScrollWidth` 超过列表框宽度时，底部再出现一条同样厚度的横向滚动条（`Align = alBottom`）。**两条条是一起结算的**：各自占掉的槽都要从对方的可视区里扣（横条吃掉一行的高度，竖条吃掉一行的宽度），所以判定跑两遍——一遍只能拿到对方还没让出槽时的尺寸。两条同时出现时，横条占满整宽、竖条让出右下角（LCL 的对齐引擎先排 `alBottom` 后排 `alRight`），这也是各平台列表框的排法。
+
+横向滚动的三件事，缺一不可：
+
+| 责任 | 落在哪 |
+|---|---|
+| 槽从**另一根轴**的可视区里扣 | `ViewportHeight`（横条的带子不算进行数），`RowContentBounds`（竖条的槽不算进行宽） |
+| 行沿滚动轴**延伸到内容宽度** | `RowContentBounds` 把行右端推到 `ScrollWidth`；只裁到可视宽的话根本没有可滚的东西 |
+| 原点**跟着偏移走** | `RowContentBounds` 把行的**前导**边按偏移平移；绘制时的硬裁剪负责把溢出的部分挡在框外 |
+
+**RTL 下前导边是右边**：内容从右端起、向右滑，所以偏移加在 `Right` 上。两边都按左端算的话，镜像列表会往反方向滚——用户要行首，给的是行尾。
+
+**滚动手势**：拖条、点箭头（一次一个字号，取自主题的 `font-size`，不是 1 像素）、点轨道翻一页，以及 **Shift + 滚轮**横向滚。普通滚轮仍是纵向。
+
 ---
 
 ## 7. 代码示例
@@ -262,6 +277,25 @@ end;
 滚动条的 `Align` 在**每次** `UpdateScrollBar` 都重写一遍，而不是创建时写一次：`BiDiMode` 运行时可改，而 LCL 的 `CMBiDiModeChanged` 只是重绘、通知子控件、`AdjustSize`，没有一样会重跑一个手写的 `Align`。控件因此覆写了 `CMBiDiModeChanged` 回到 `UpdateScrollBar`——不然就是"行换了边、条没换"。
 
 **LCL 的对齐引擎不认 BiDi**，`alRight` 在镜像窗体上仍然是右边缘，所以哪一边是显式选的，`RowContentBounds` 按同一个选择内缩行矩形。绘制与命中读的是同一个函数，这是勾选列能安全镜像的前提。
+
+---
+
+## 逐行不同高度：`RowHeight`
+
+```pascal
+function RowHeight(AIndex: Integer): Integer; virtual;   // protected，逻辑像素
+```
+
+行循环在 `TTyListBox.RenderTo` 里，`ItemRect` / `RowAtY` / `VisibleRows` / `MaxTopIndex` / 滚动条量程**全部**改从这一个方法取行高。所以要做"一行一行文字、另一行两行文字"的列表，**只需覆写这一个方法**——绘制与命中测试会一起跟上，不存在画对了点错行的中间状态。
+
+- 默认实现返回 `ItemHeight`，所以不覆写它的类与以前**逐字节相同**。
+- 返回值 `< 1` 会被夹到 1。高度为 0 的行不是行，是走不动的行遍历。
+- **`AIndex` 可能越界**：行遍历会故意数过列表末尾（空列表也要能回答"这个框装得下几行"，`VisibleRows` 一直是这个语义，`MaxTopIndex` 拿它去减 `Items.Count`）。覆写时不要假设 `Items[AIndex]` 存在。
+- `MaxTopIndex` 是**从最后一行往回**数出来的，不再是 `Count - VisibleRows`：决定列表能翻到多深的是**末尾那几行**的高度，而它们不必和光标底下那几行一样高。行高一致时两者等值。
+
+组合框家族通过它把 `OnMeasureItem` 接了进来（`csOwnerDrawVariable`，见 `combobox.md` §8.1.1）。
+
+---
 
 ### 后代的边界
 

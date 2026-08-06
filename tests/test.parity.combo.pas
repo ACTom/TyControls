@@ -10,7 +10,13 @@ uses
   LCLType, LCLIntf, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.ComboBox, tyControls.ComboBoxEx, tyControls.CheckComboBox,
-  tyControls.ListBox, tyControls.CheckListBox;
+  tyControls.ListBox, tyControls.CheckListBox,
+  { The rest of the family. Every one of these ships its OWN drop-down list or its own
+    Style lock, and a protocol wired only into the base is a protocol six controls do not
+    have -- which is what these units are here to stop. }
+  tyControls.ColorBox, tyControls.ColorComboBox, tyControls.FontComboBox,
+  tyControls.OfficeComboBox, tyControls.ShellComboBox, tyControls.AdvancedComboBox,
+  tyControls.FilterComboBox;
 
 type
   { Exposes the protected RenderTo so a paint-path claim (TextHint) can be pinned by
@@ -103,6 +109,12 @@ type
     FStateSeen: array of TOwnerDrawState;
     FRectSeen: array of TRect;
     FStaleInkRows: Integer;    // calls whose DC ink was NOT the one the handler asked for
+    FMeasureCalls: Integer;
+    FMeasureSeen: array of Integer;    // the Index each measure call was told
+    FMeasureSeed: array of Integer;    // ...and the height it arrived seeded with
+    procedure HandleMeasureTallEvenRows(Sender: TObject; Index: Integer;
+      var AHeight: Integer);
+    procedure HandleMeasureZero(Sender: TObject; Index: Integer; var AHeight: Integer);
     procedure RecordCall(AIndex: Integer; const ARect: TRect; AState: TOwnerDrawState);
     procedure HandleDrawSilent(Sender: TObject; ACanvas: TCanvas; Index: Integer;
       ARect: TRect; AState: TOwnerDrawState);
@@ -132,6 +144,19 @@ type
     procedure TestOwnerDrawReachesComboBoxEx;
     procedure TestOwnerDrawReachesCheckComboBox;
     procedure TestPickOnlyLockDropsTheEditBoxNotTheOwnerDraw;
+    { --- the rest of the family: one drop-down list each, one Style lock each ---------- }
+    procedure TestOwnerDrawReachesEveryPopupListInTheFamily;
+    procedure TestEveryPickOnlyLockKeepsOwnerDraw;
+    { --- csOwnerDrawVariable / csOwnerDrawEditableVariable + OnMeasureItem ------------- }
+    procedure TestVariableStyleValuesAppendedAndHelpersAgree;   // stdctrls.pp:266/:277
+    procedure TestMeasureItemDrivesTheRowHeights;               // stdctrls.pp:402
+    procedure TestMeasureItemIsInertWithoutAVariableStyle;
+    procedure TestMeasureItemArrivesSeededWithTheDefault;
+    procedure TestMeasureItemIndexIsAnItemsIndex;
+    procedure TestMeasureItemZeroAnswerKeepsTheSeed;
+    procedure TestPopupHeightSumsTheMeasuredRows;
+    procedure TestAssigningTheMeasureHandlerRepaints;
+    procedure TestVariableStyleReachesTheCheckComboList;
   end;
 
 implementation
@@ -932,6 +957,9 @@ begin
   FCalls := 0;
   FSeen := 0;
   FStaleInkRows := 0;
+  FMeasureCalls := 0;
+  SetLength(FMeasureSeen, 0);
+  SetLength(FMeasureSeed, 0);
   SetLength(FIndexSeen, 0);
   SetLength(FStateSeen, 0);
   SetLength(FRectSeen, 0);
@@ -1569,6 +1597,376 @@ begin
   AssertTrue(TyComboStylePickOnly(csOwnerDrawEditableFixed) = csOwnerDrawFixed);
   AssertTrue(TyComboStylePickOnly(csOwnerDrawFixed) = csOwnerDrawFixed);
   AssertTrue(TyComboStylePickOnly(csDropDownList) = csDropDownList);
+  AssertTrue('the Variable pair maps the same way',
+    TyComboStylePickOnly(csOwnerDrawEditableVariable) = csOwnerDrawVariable);
+  AssertTrue(TyComboStylePickOnly(csOwnerDrawVariable) = csOwnerDrawVariable);
+end;
+
+{ ---- the rest of the family ---------------------------------------------------------- }
+
+type
+  { Calls the virtual factory, so the list under test is the one the control REALLY builds
+    -- not one the test picked by name and could pick wrongly. }
+  TComboFactoryAccess = class(TTyComboBox)
+  public
+    function MakePopupList: TTyListBox;
+  end;
+
+function TComboFactoryAccess.MakePopupList: TTyListBox;
+begin
+  Result := CreatePopupList;
+end;
+
+{ Three rows, chosen so each list takes its OWN painting branch rather than falling through
+  to the ancestor -- the grouped combo needs a real header row, or its override never runs
+  and the guard passes against unwired code. }
+procedure PopulateForFamily(C: TTyComboBox);
+begin
+  C.Items.Clear;
+  if C is TTyOfficeComboBox then
+  begin
+    TTyOfficeComboBox(C).AddHeader('Group');
+    TTyOfficeComboBox(C).AddItem('Alpha');
+    TTyOfficeComboBox(C).AddItem('Beta');
+  end
+  else if C is TTyColorBox then
+  begin
+    TTyColorBox(C).AddColor('Red', clRed);
+    TTyColorBox(C).AddColor('Lime', clLime);
+    TTyColorBox(C).AddColor('Blue', clBlue);
+  end
+  else
+  begin
+    C.Items.Add('Alpha'); C.Items.Add('Beta'); C.Items.Add('Gamma');
+  end;
+end;
+
+procedure TComboOwnerDrawTest.TestOwnerDrawReachesEveryPopupListInTheFamily;
+const
+  Rows = 3;
+var
+  k, before: Integer;
+  cOwn, cPlain: TTyComboBox;
+  lOwn, lPlain: TTyListBox;
+  klass: string;
+
+  function Build(AIndex: Integer; AHandler: TTyDrawItemEvent): TTyComboBox;
+  begin
+    case AIndex of
+      0: Result := TTyFontComboBox.Create(FForm);
+      1: Result := TTyOfficeComboBox.Create(FForm);
+      2: Result := TTyShellComboBox.Create(FForm);
+      3: Result := TTyAdvancedComboBox.Create(FForm);
+      4: Result := TTyColorBox.Create(FForm);
+    else Result := TTyColorComboBox.Create(FForm);
+    end;
+    PopulateForFamily(Result);
+    Result.OnDrawItem := AHandler;
+    { Assigned through a TTyComboBox reference on purpose: on a colour box `Style` is the
+      PALETTE set, and the combo mode is reachable only this way -- which is precisely the
+      route a host has to take, so it is the route the guard has to take. }
+    if AHandler <> nil then Result.Style := csOwnerDrawFixed;
+  end;
+
+  function BuildList(ACombo: TTyComboBox): TTyListBox;
+  begin
+    Result := TComboFactoryAccess(ACombo).MakePopupList;
+    Result.Parent := FForm;
+    Result.Font.PixelsPerInch := 96;
+    Result.ItemHeight := 24;
+    Result.SetBounds(0, 0, ListW, ListH);
+    Result.Items.Assign(ACombo.Items);
+    Result.TopIndex := 0;
+  end;
+
+begin
+  { SIX drop-down lists, none of which shared the ancestor that carries the protocol. Each
+    replaces the row painter outright -- a font family drawn in its own face, a tinted group
+    band, a folder glyph, a two-line rich row, a colour swatch -- so for every one of them
+    the skip has to be spelled out in ITS OWN PaintItemContent; an inherited call is already
+    too late. A fix that lands on the base and not on the overrides is half a fix, and this
+    is the half that was missing. }
+  for k := 0 to 5 do
+  begin
+    cOwn := Build(k, @HandleDrawSilent);
+    klass := cOwn.ClassName;
+    lOwn := BuildList(cOwn);
+    AssertTrue(klass + '''s drop-down list descends from TTyComboPopupList (which is what ' +
+      'carries the post-composite dispatch)', lOwn is TTyComboPopupList);
+    cPlain := Build(k, nil);
+    lPlain := BuildList(cPlain);
+    before := FCalls;
+    AssertTrue(klass + ' rows reach the host handler',
+      ListRenderDiffers(lOwn, lPlain, ListW, ListH));
+    AssertEquals(klass + ': once per visible row', Rows, FCalls - before);
+  end;
+end;
+
+procedure TComboOwnerDrawTest.TestEveryPickOnlyLockKeepsOwnerDraw;
+var
+  k: Integer;
+  c: TTyComboBox;
+  klass: string;
+begin
+  { FIVE controls locked themselves pick-only by flattening every Style value to
+    csDropDownList. The lock they each need is on the EDIT BOX -- a prefix-filtered editable
+    popup is what breaks a swatch/place/spec mapping, and what lets the grouped combo commit
+    a header row -- and owner-draw has nothing to do with any of that. It went down with the
+    edit box, so on these five the whole capability was unreachable. }
+  for k := 0 to 4 do
+  begin
+    case k of
+      0: c := TTyColorBox.Create(FForm);
+      1: c := TTyColorComboBox.Create(FForm);
+      2: c := TTyAdvancedComboBox.Create(FForm);
+      3: c := TTyOfficeComboBox.Create(FForm);
+      4: c := TTyShellComboBox.Create(FForm);
+    end;
+    klass := c.ClassName;
+    c.Style := csDropDown;
+    AssertTrue(klass + ': an editable style is still refused', c.Style = csDropDownList);
+    c.Style := csOwnerDrawFixed;
+    AssertTrue(klass + ': the pick-only owner-draw style passes through',
+      c.Style = csOwnerDrawFixed);
+    c.Style := csOwnerDrawEditableFixed;
+    AssertTrue(klass + ': the editable owner-draw style lands as its pick-only twin',
+      c.Style = csOwnerDrawFixed);
+    c.Style := csOwnerDrawVariable;
+    AssertTrue(klass + ': and so does the variable one',
+      c.Style = csOwnerDrawVariable);
+  end;
+  { The filter combo carries the same lock over the base's own popup list. }
+  c := TTyFilterComboBox.Create(FForm);
+  c.Style := csDropDown;
+  AssertTrue('TTyFilterComboBox: editable refused', c.Style = csDropDownList);
+  c.Style := csOwnerDrawFixed;
+  AssertTrue('TTyFilterComboBox: owner-draw passes', c.Style = csOwnerDrawFixed);
+end;
+
+{ ---- csOwnerDrawVariable + OnMeasureItem --------------------------------------------- }
+
+const
+  MeasTall  = 44;
+  MeasShort = 18;
+
+procedure TComboOwnerDrawTest.HandleMeasureTallEvenRows(Sender: TObject; Index: Integer;
+  var AHeight: Integer);
+begin
+  if FMeasureCalls = Length(FMeasureSeen) then
+  begin
+    SetLength(FMeasureSeen, FMeasureCalls + 16);
+    SetLength(FMeasureSeed, FMeasureCalls + 16);
+  end;
+  FMeasureSeen[FMeasureCalls] := Index;
+  FMeasureSeed[FMeasureCalls] := AHeight;
+  Inc(FMeasureCalls);
+  if Index mod 2 = 0 then AHeight := MeasTall else AHeight := MeasShort;
+end;
+
+procedure TComboOwnerDrawTest.HandleMeasureZero(Sender: TObject; Index: Integer;
+  var AHeight: Integer);
+begin
+  Inc(FMeasureCalls);
+  AHeight := 0;
+end;
+
+procedure TComboOwnerDrawTest.TestVariableStyleValuesAppendedAndHelpersAgree;
+begin
+  { The ordinals are the streaming contract: `default csDropDownList` writes an ORDINAL, and
+    every .lfm that omits Style is read against it. The four values that existed keep the
+    positions they had; the new pair is appended after them. }
+  AssertEquals('csDropDownList still streams as 0',        0, Ord(csDropDownList));
+  AssertEquals('csDropDown still 1',                       1, Ord(csDropDown));
+  AssertEquals('csOwnerDrawFixed still 2',                 2, Ord(csOwnerDrawFixed));
+  AssertEquals('csOwnerDrawEditableFixed still 3',         3, Ord(csOwnerDrawEditableFixed));
+  AssertEquals('csOwnerDrawVariable APPENDED at 4',        4, Ord(csOwnerDrawVariable));
+  AssertEquals('csOwnerDrawEditableVariable at 5',         5, Ord(csOwnerDrawEditableVariable));
+  { The three questions, each answered for both new values. }
+  AssertFalse('csOwnerDrawVariable is pick-only',
+    TyComboStyleHasEditBox(csOwnerDrawVariable));
+  AssertTrue ('csOwnerDrawEditableVariable is not',
+    TyComboStyleHasEditBox(csOwnerDrawEditableVariable));
+  AssertTrue ('csOwnerDrawVariable is owner-drawn',
+    TyComboStyleIsOwnerDrawn(csOwnerDrawVariable));
+  AssertTrue ('csOwnerDrawEditableVariable too',
+    TyComboStyleIsOwnerDrawn(csOwnerDrawEditableVariable));
+  AssertTrue ('csOwnerDrawVariable is variable',
+    TyComboStyleIsVariable(csOwnerDrawVariable));
+  AssertTrue ('csOwnerDrawEditableVariable too',
+    TyComboStyleIsVariable(csOwnerDrawEditableVariable));
+  AssertFalse('a FIXED owner-draw style is NOT variable -- that is the whole difference',
+    TyComboStyleIsVariable(csOwnerDrawFixed));
+  AssertFalse('and neither is the plain one', TyComboStyleIsVariable(csDropDownList));
+end;
+
+procedure TComboOwnerDrawTest.TestMeasureItemDrivesTheRowHeights;
+var
+  c: TTyComboBox;
+  l: TTyComboPopupList;
+  r0, r1, r2: TRect;
+begin
+  { The seam, end to end: the list's row geometry has to come back with the HOST's numbers.
+    ItemRect is the one every caller of "where is row N" goes through, so it is the honest
+    place to read them -- and the rows must STACK, not merely differ. }
+  c := MakeCombo(csOwnerDrawVariable, @HandleDrawSilent);
+  c.OnMeasureItem := @HandleMeasureTallEvenRows;
+  l := MakeList(c);
+  r0 := l.ItemRect(0); r1 := l.ItemRect(1); r2 := l.ItemRect(2);
+  AssertEquals('row 0 took the handler''s tall answer',  MeasTall,  r0.Bottom - r0.Top);
+  AssertEquals('row 1 took the short one',               MeasShort, r1.Bottom - r1.Top);
+  AssertEquals('row 2 tall again',                       MeasTall,  r2.Bottom - r2.Top);
+  AssertEquals('and they stack without a gap', r0.Bottom, r1.Top);
+  AssertEquals('...all the way down',          r1.Bottom, r2.Top);
+  AssertTrue('the handler was actually asked', FMeasureCalls > 0);
+end;
+
+procedure TComboOwnerDrawTest.TestMeasureItemIsInertWithoutAVariableStyle;
+var
+  c: TTyComboBox;
+  l: TTyComboPopupList;
+begin
+  { A published event no Style can reach would be a property the control does not honour --
+    the defect class this whole pass exists to remove. The pairing has to hold in BOTH
+    directions: the handler alone does nothing, and the Style alone does nothing. }
+  c := MakeCombo(csOwnerDrawFixed, @HandleDrawSilent);
+  c.OnMeasureItem := @HandleMeasureTallEvenRows;
+  l := MakeList(c);
+  AssertEquals('a FIXED owner-draw style keeps the one shared height',
+    24, l.ItemRect(0).Bottom - l.ItemRect(0).Top);
+  AssertEquals('and never asks the handler', 0, FMeasureCalls);
+  AssertFalse('MeasuresRows answers on the STYLE too', c.MeasuresRows);
+
+  c := MakeCombo(csOwnerDrawVariable, @HandleDrawSilent);
+  l := MakeList(c);                      // variable Style, NO handler
+  AssertEquals('a variable Style with no handler also keeps the shared height',
+    24, l.ItemRect(0).Bottom - l.ItemRect(0).Top);
+  AssertFalse('...so assigning Style alone can never collapse a list', c.MeasuresRows);
+end;
+
+procedure TComboOwnerDrawTest.TestMeasureItemArrivesSeededWithTheDefault;
+var
+  c: TTyComboBox;
+  l: TTyComboPopupList;
+begin
+  { The seed is what lets a handler change SOME rows: leave AHeight alone and the row keeps
+    the theme's height. An unseeded (zero) parameter would force every handler to know the
+    default, and get it wrong the first time density moved. }
+  c := MakeCombo(csOwnerDrawVariable, @HandleDrawSilent);
+  c.OnMeasureItem := @HandleMeasureTallEvenRows;
+  l := MakeList(c);                       // MakeList pins ItemHeight to 24
+  { Drop the calls that building the list made (SetBounds re-counts the rows before there
+    are any items), so what is read below is a measure of a row that EXISTS. }
+  FMeasureCalls := 0;
+  l.ItemRect(0);
+  AssertTrue('the handler was asked', FMeasureCalls > 0);
+  AssertEquals('and arrived seeded with the height the row would otherwise be',
+    24, FMeasureSeed[0]);
+end;
+
+procedure TComboOwnerDrawTest.TestMeasureItemIndexIsAnItemsIndex;
+var
+  c: TTyComboBox;
+  l: TTyComboPopupList;
+begin
+  { Same guarantee OnDrawItem gives, and it has to be the same mapping: the popup may be
+    holding the prefix-FILTERED subset, and a handler sizing rows off Items[Index] would
+    measure the wrong row. }
+  c := MakeCombo(csOwnerDrawEditableVariable, @HandleDrawSilent);
+  c.OnMeasureItem := @HandleMeasureTallEvenRows;
+  l := TTyComboPopupList.Create(c);
+  l.Parent := FForm;
+  l.Font.PixelsPerInch := 96;
+  l.ItemHeight := 24;
+  l.SetBounds(0, 0, ListW, ListH);
+  l.Items.Add('Gamma');                   // the filtered subset: Items' LAST row
+  { Drop the calls made while the list was still empty -- SetBounds counts rows before
+    there are any, and an index past the end maps to itself by definition. }
+  FMeasureCalls := 0;
+  l.ItemRect(0);
+  AssertTrue('the handler was asked', FMeasureCalls > 0);
+  AssertEquals('Index is the row''s position in ITEMS, not in the filtered list',
+    2, FMeasureSeen[0]);
+end;
+
+procedure TComboOwnerDrawTest.TestMeasureItemZeroAnswerKeepsTheSeed;
+var
+  c: TTyComboBox;
+  l: TTyComboPopupList;
+begin
+  { A zero-height row is not a row, it is a walker that never advances -- and it is exactly
+    what a handler with one branch of its case statement missing returns. Keep the seed
+    rather than propagate it. }
+  c := MakeCombo(csOwnerDrawVariable, @HandleDrawSilent);
+  c.OnMeasureItem := @HandleMeasureZero;
+  l := MakeList(c);
+  AssertEquals('a zero answer is ignored and the seed kept',
+    24, l.ItemRect(0).Bottom - l.ItemRect(0).Top);
+  AssertTrue('...but the handler really was consulted', FMeasureCalls > 0);
+  AssertEquals('and the list still walks -- 100px of box at the seeded 24px row',
+    100 div 24, l.VisibleRows);
+end;
+
+procedure TComboOwnerDrawTest.TestPopupHeightSumsTheMeasuredRows;
+var
+  cVar, cFixed: TTyComboBox;
+begin
+  { The popup's own height. With one shared height it is a multiplication and always was;
+    with per-row heights it must be a SUM, or the drop-down opens the wrong size and clips
+    its own last row. Three rows: tall + short + tall, + the 2px frame chrome. }
+  cFixed := MakeCombo(csDropDownList, nil);
+  cFixed.ItemHeight := 24;
+  AssertEquals('the uniform arithmetic is unchanged: 3 x 24 + 2',
+    3 * 24 + 2, cFixed.ComputePopupHeightForTest(96));
+
+  cVar := MakeCombo(csOwnerDrawVariable, @HandleDrawSilent);
+  cVar.ItemHeight := 24;
+  cVar.OnMeasureItem := @HandleMeasureTallEvenRows;
+  AssertEquals('and the variable one sums what the handler answered',
+    MeasTall + MeasShort + MeasTall + 2, cVar.ComputePopupHeightForTest(96));
+end;
+
+procedure TComboOwnerDrawTest.TestAssigningTheMeasureHandlerRepaints;
+var p: TComboInvalidateProbe;
+begin
+  { Style first, handler second is the ordinary order, and it is the SECOND write that
+    changes every row height in the list. }
+  p := TComboInvalidateProbe.Create(nil);
+  try
+    p.Style := csOwnerDrawVariable;
+    p.Invalidations := 0;
+    p.OnMeasureItem := @HandleMeasureTallEvenRows;
+    AssertTrue('assigning OnMeasureItem repaints', p.Invalidations > 0);
+    p.Invalidations := 0;
+    p.OnMeasureItem := nil;
+    AssertTrue('and so does clearing it', p.Invalidations > 0);
+  finally p.Free; end;
+end;
+
+procedure TComboOwnerDrawTest.TestVariableStyleReachesTheCheckComboList;
+var
+  c: TTyCheckComboBox;
+  l: TTyCheckComboPopupList;
+begin
+  { The list that cannot inherit the seam -- it descends from TTyCheckListBox -- so it
+    copies the one call, exactly as it copies the draw dispatch. A capability wired
+    everywhere except here is the shape this family keeps producing. }
+  c := TTyCheckComboBox.Create(FForm);
+  c.Items.Add('Alpha'); c.Items.Add('Beta'); c.Items.Add('Gamma');
+  c.OnMeasureItem := @HandleMeasureTallEvenRows;
+  c.Style := csOwnerDrawVariable;
+  AssertTrue('the pick-only lock lets the variable style through',
+    c.Style = csOwnerDrawVariable);
+  l := TTyCheckComboPopupList.Create(c);
+  l.Parent := FForm;
+  l.Font.PixelsPerInch := 96;
+  l.ItemHeight := 24;
+  l.SetBounds(0, 0, ListW, ListH);
+  l.Items.Assign(c.Items);
+  l.TopIndex := 0;
+  AssertEquals('row 0 took the handler''s answer here too',
+    MeasTall, l.ItemRect(0).Bottom - l.ItemRect(0).Top);
+  AssertEquals('and row 1 the short one',
+    MeasShort, l.ItemRect(1).Bottom - l.ItemRect(1).Top);
 end;
 
 initialization

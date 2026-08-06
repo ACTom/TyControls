@@ -248,8 +248,10 @@ end;
 
 procedure TTyFilterComboBox.SetStyle(AValue: TTyComboBoxStyle);
 begin
-  { Pick-only: a filtered editable popup would desync the row<->spec mapping. }
-  inherited SetStyle(csDropDownList);
+  { Pick-only, and ONLY pick-only: a FILTERED editable popup would desync the row<->spec
+    mapping, so the edit box is what has to go. Owner-draw is a different question and used
+    to be lost with it, because this flattened every value to csDropDownList. }
+  inherited SetStyle(TyComboStylePickOnly(AValue));
 end;
 
 initialization

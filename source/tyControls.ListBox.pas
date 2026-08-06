@@ -27,6 +27,15 @@ type
     FHoverRow: Integer;       // -1 = none; set in MouseMove, cleared in MouseLeave
     FScrollBar: TTyScrollBar; // nil until first needed
     FSyncingScroll: Boolean;  // reentrancy guard
+    { --- horizontal scrolling ------------------------------------------------------------
+      FScrollWidth is LCL's property: the row content's width in LOGICAL px, 0 = the rows
+      are exactly as wide as the box and nothing scrolls. FHOffset is how far the content
+      has been slid, in DEVICE px, always within [0, MaxHOffset]. FHScrollBar is the bottom
+      bar; like the vertical one it is created the first time it is actually needed. }
+    FScrollWidth: Integer;
+    FHOffset: Integer;
+    FHScrollBar: TTyScrollBar;
+    FSyncingHScroll: Boolean;
     FMultiSelect: Boolean;
     FSelected: array of Boolean;
     FSelAnchor: Integer;
@@ -55,10 +64,35 @@ type
     procedure SetItemIndex(const AValue: Integer);
     function GetItemHeight: Integer;
     procedure SetItemHeight(const AValue: Integer);
-    function ScaledItemHeight: Integer;
     function MaxTopIndex: Integer;
     procedure EnsureSelectionVisible;
     procedure ScrollBarChange(Sender: TObject);
+    procedure HScrollBarChange(Sender: TObject);
+    procedure SetScrollWidth(const AValue: Integer);
+    { A bar's thickness in device px -- the same '--scrollbar-size' metric for both, so the
+      horizontal one is as thick as the vertical one is wide on every theme and density. }
+    function ScrollBarThickness: Integer;
+    { The row area BEFORE horizontal scrolling: the padding off both sides and the VERTICAL
+      bar's gutter off its own. RowContentBounds is this plus the offset and the extension
+      to the content width; MaxHOffset needs it WITHOUT them, or the clamp would be reading
+      a width that already has the very offset it is clamping folded into it. }
+    procedure RowViewportBounds(AWidth, APPI: Integer; out ALeft, ARight: Integer);
+    { How far the content can slide: the scaled ScrollWidth beyond one screenful, or 0 when
+      the rows already fit. }
+    function MaxHOffset: Integer;
+    { Slide the content to AValue device px (clamped). }
+    procedure SetHOffset(AValue: Integer);
+    { Height available to ROWS: the box, less the horizontal bar's gutter when it shows. }
+    function ViewportHeight: Integer;
+    { How many WHOLE rows of AHeight px fit walking FORWARD from AStart / BACKWARD from
+      AEnd. Two directions because they answer different questions: forward is "what is on
+      screen now" (VisibleRows), backward is "how far can TopIndex go" (MaxTopIndex), and
+      with per-row heights those stop being the same number. }
+    function RowsFittingIn(AStart, AHeight: Integer): Integer;
+    function RowsFittingBackIn(AEnd, AHeight: Integer): Integer;
+    { Does the list reach ALimit device px? Sums only until it does, so a long list costs
+      one screenful of RowHeight calls rather than one per item. }
+    function ContentFillsHeight(ALimit, APPI: Integer): Boolean;
     procedure EnsureSelectedLen;
     function GetSelected(AIndex: Integer): Boolean;
     procedure SetSelected(AIndex: Integer; AValue: Boolean);
@@ -91,6 +125,22 @@ type
       for a row its ItemEnabled[] turns off, which is what makes such a row look disabled
       instead of merely refusing to toggle. Default: unchanged. }
     function ItemStatesFor(AIndex: Integer; ABaseStates: TTyStateSet): TTyStateSet; virtual;
+    { THE HEIGHT OF ONE ROW, in LOGICAL px. Virtual, and the only per-row height there is:
+      the row loop lives in RenderTo and every geometry function (ItemRect, RowAtY,
+      VisibleRows, MaxTopIndex, the scrollbar range) reads rows through here, so this is the
+      single seam a descendant needs to make a list whose rows are not all the same height.
+      TTyComboPopupList overrides it to ask the owning combo's OnMeasureItem, which is what
+      csOwnerDrawVariable means.
+
+      Default: the box's one ItemHeight -- a class that does not override this is byte for
+      byte the uniform-height list it was. AIndex may be out of range (the row walkers count
+      past the end of a short list on purpose; see RowsFittingIn), so an override must
+      answer for any index rather than assume Items[AIndex] exists. }
+    function RowHeight(AIndex: Integer): Integer; virtual;
+    { RowHeight in DEVICE px. The APPI form is what RenderTo uses (it is handed the scale);
+      the other reads Font.PixelsPerInch, which is the same number outside a paint. }
+    function ScaledRowHeightAt(AIndex, APPI: Integer): Integer;
+    function ScaledRowHeight(AIndex: Integer): Integer;
     { DOES THIS CLASS'S ROW LAYOUT MIRROR? Answered per CLASS, not per instance, and the
       default answer is "whatever the form says" -- IsRightToLeft.
 
@@ -154,6 +204,10 @@ type
       MousePos: TPoint): Boolean; override;
     procedure Resize; override;
     procedure UpdateScrollBar;
+    { How far the rows have been slid sideways, in DEVICE px. Protected because it is
+      runtime view state, never something a .lfm should carry (ScrollWidth is the streamed
+      half); a subclass that hit-tests an x coordinate needs it, and so do the tests. }
+    property HScrollOffset: Integer read FHOffset write SetHOffset;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -226,6 +280,18 @@ type
     property Sorted: Boolean read FSorted write SetSorted default False;
     { Unset it follows --item-height (24 classic / 38 modern); set it pins and is streamed. }
     property ItemHeight: Integer read GetItemHeight write SetItemHeight stored FItemHeightExplicit;
+    { THE WIDTH OF ONE ROW'S CONTENT, in logical px. 0 (the default, and LCL's) means the
+      rows are exactly as wide as the box and there is nothing to scroll; a value WIDER than
+      the box gives the list a horizontal bar along the bottom and lets the part of a row
+      that does not fit be scrolled into view. Below the box's own width it is inert -- a
+      row is never narrower than the box it is painted in.
+
+      LCL: stdctrls.pp:676 / :721, where it is the Win32 LB_SETHORIZONTALEXTENT the widgetset
+      forwards. It is a NUMBER YOU SET, not a measurement: neither LCL nor this box walks the
+      items to find the longest one, because the strings are the application's and only the
+      application knows how it draws them (a row with a swatch or a glyph is wider than its
+      text). An app that wants auto-fit measures its own widest row and assigns it here. }
+    property ScrollWidth: Integer read FScrollWidth write SetScrollWidth default 0;
     property TopIndex: Integer read FTopIndex write SetTopIndex default 0;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
     { LCL's name and shape for the same notification (stdctrls.pp:668). Fires alongside
@@ -260,6 +326,10 @@ begin
   FHoverRow := -1;
   FScrollBar := nil;
   FSyncingScroll := False;
+  FScrollWidth := 0;              { no horizontal scrolling until a host sets an extent }
+  FHOffset := 0;
+  FHScrollBar := nil;
+  FSyncingHScroll := False;
   FSelAnchor := -1;
   FExtendedSelect := True;        { LCL's default discipline }
   FLockSelectionChange := 0;
@@ -450,7 +520,12 @@ end;
 
 function TTyListBox.MaxTopIndex: Integer;
 begin
-  Result := FItems.Count - VisibleRows;
+  { The furthest TopIndex that still fills the box, counted from the LAST row backwards.
+    With one height for every row this is Count - VisibleRows and always was; with per-row
+    heights the two stop agreeing, because the rows at the end of the list need not be the
+    same size as the ones under the cursor -- and it is the ones at the end that decide how
+    far down the list can go. }
+  Result := FItems.Count - RowsFittingBackIn(FItems.Count - 1, ViewportHeight);
   if Result < 0 then Result := 0;
 end;
 
@@ -476,22 +551,98 @@ begin
   Invalidate;
 end;
 
-function TTyListBox.ScaledItemHeight: Integer;
+function TTyListBox.RowHeight(AIndex: Integer): Integer;
 begin
-  Result := MulDiv(GetItemHeight, Font.PixelsPerInch, 96);
+  Result := GetItemHeight;
+end;
+
+function TTyListBox.ScaledRowHeightAt(AIndex, APPI: Integer): Integer;
+begin
+  Result := MulDiv(RowHeight(AIndex), APPI, 96);
+  { A row of zero px would make every walker below spin forever, so the floor is not
+    defensive tidiness -- it is what stops a host answering 0 from OnMeasureItem hanging
+    the paint. }
   if Result < 1 then Result := 1;
 end;
 
-function TTyListBox.VisibleRows: Integer;
-var
-  SH: Integer;
+function TTyListBox.ScaledRowHeight(AIndex: Integer): Integer;
 begin
-  SH := ScaledItemHeight;
+  Result := ScaledRowHeightAt(AIndex, Font.PixelsPerInch);
+end;
+
+function TTyListBox.ViewportHeight: Integer;
+begin
   // Use Height rather than ClientHeight so the result is testable headlessly
   // (in headless LCL without a native handle, ClientHeight can lag behind SetBounds).
   // For this borderless control Height = ClientHeight at runtime.
-  Result := Height div SH;
+  Result := Height;
+  { The horizontal bar's gutter is the one thing that DOES come off it: the bar is a real
+    child window along the bottom, so a row counted into that band would be painted behind
+    it. This is the vertical half of the gutter rule -- RowContentBounds is the other. }
+  if (FHScrollBar <> nil) and FHScrollBar.Visible then
+    Dec(Result, ScrollBarThickness);
   if Result < 1 then Result := 1;
+end;
+
+function TTyListBox.RowsFittingIn(AStart, AHeight: Integer): Integer;
+var
+  y, i: Integer;
+begin
+  { Counts ROWS, not items: past the end of the list it keeps counting at whatever
+    RowHeight answers for an out-of-range index (the default height). That is deliberate --
+    "how many rows fit in the box" has never depended on how many there are, an empty
+    100px box with 24px rows has always reported 4, and MaxTopIndex subtracts the count
+    from Items.Count. Stopping at the last item would quietly change what every caller of
+    VisibleRows means. }
+  Result := 0;
+  y := 0;
+  i := AStart;
+  while y < AHeight do
+  begin
+    Inc(y, ScaledRowHeightAt(i, Font.PixelsPerInch));
+    Inc(Result);
+    Inc(i);
+  end;
+  { The row that crossed the edge is PARTIAL. The uniform-height form was Height div SH,
+    which counted whole rows only, so drop it unless it landed exactly on the edge. }
+  if y > AHeight then Dec(Result);
+  if Result < 1 then Result := 1;
+end;
+
+function TTyListBox.RowsFittingBackIn(AEnd, AHeight: Integer): Integer;
+var
+  y, i: Integer;
+begin
+  Result := 0;
+  y := 0;
+  i := AEnd;
+  while (y < AHeight) and (i >= 0) do
+  begin
+    Inc(y, ScaledRowHeightAt(i, Font.PixelsPerInch));
+    Inc(Result);
+    Dec(i);
+  end;
+  if y > AHeight then Dec(Result);
+  if Result < 1 then Result := 1;
+end;
+
+function TTyListBox.ContentFillsHeight(ALimit, APPI: Integer): Boolean;
+var
+  y, i: Integer;
+begin
+  y := 0;
+  i := 0;
+  while (i < FItems.Count) and (y < ALimit) do
+  begin
+    Inc(y, ScaledRowHeightAt(i, APPI));
+    Inc(i);
+  end;
+  Result := y >= ALimit;
+end;
+
+function TTyListBox.VisibleRows: Integer;
+begin
+  Result := RowsFittingIn(FTopIndex, ViewportHeight);
 end;
 
 procedure TTyListBox.EnsureSelectionVisible;
@@ -503,7 +654,12 @@ begin
   if FItemIndex < FTopIndex then
     FTopIndex := FItemIndex
   else if FItemIndex >= FTopIndex + VR then
-    FTopIndex := FItemIndex - VR + 1;
+    { How many rows fit ABOVE and including the selected one -- counted BACKWARDS from it,
+      not by subtracting the forward count. With one height for every row the two are the
+      same number and this is FItemIndex - VisibleRows + 1, as it was; with per-row heights
+      they are not, and the forward count (measured from the OLD top) would leave the row it
+      was asked to reveal hanging off the bottom edge. }
+    FTopIndex := FItemIndex - RowsFittingBackIn(FItemIndex, ViewportHeight) + 1;
   // Clamp TopIndex to valid range
   if FTopIndex < 0 then FTopIndex := 0;
   if FTopIndex > MaxTopIndex then FTopIndex := MaxTopIndex;
@@ -534,6 +690,74 @@ begin
   finally
     FSyncingScroll := False;
   end;
+end;
+
+procedure TTyListBox.HScrollBarChange(Sender: TObject);
+begin
+  if FSyncingHScroll then Exit;
+  FSyncingHScroll := True;
+  try
+    SetHOffset(FHScrollBar.Position);
+  finally
+    FSyncingHScroll := False;
+  end;
+end;
+
+function TTyListBox.ScrollBarThickness: Integer;
+begin
+  Result := MulDiv(ActiveController.Metric('--scrollbar-size', TyScrollbarSize),
+    Font.PixelsPerInch, 96);
+  if Result < 1 then Result := 1;
+end;
+
+function TTyListBox.MaxHOffset: Integer;
+var
+  l, r: Integer;
+begin
+  Result := 0;
+  if FScrollWidth <= 0 then Exit;
+  RowViewportBounds(Width, Font.PixelsPerInch, l, r);
+  Result := MulDiv(FScrollWidth, Font.PixelsPerInch, 96) - (r - l);
+  if Result < 0 then Result := 0;
+end;
+
+procedure TTyListBox.SetHOffset(AValue: Integer);
+var
+  m: Integer;
+begin
+  m := MaxHOffset;
+  if AValue > m then AValue := m;
+  if AValue < 0 then AValue := 0;
+  if FHOffset = AValue then Exit;
+  { COMMIT THE OFFSET FIRST, then move the bar. Everything downstream -- RowContentBounds,
+    the row hit tests, a subclass's check-box column -- reads this field, so a bar told to
+    move while the field still held the old value would leave the two describing different
+    origins for the length of the notification. }
+  FHOffset := AValue;
+  if (not FSyncingHScroll) and (FHScrollBar <> nil) and FHScrollBar.Visible then
+  begin
+    FSyncingHScroll := True;
+    try
+      FHScrollBar.Position := FHOffset;
+    finally
+      FSyncingHScroll := False;
+    end;
+  end;
+  Invalidate;
+end;
+
+procedure TTyListBox.SetScrollWidth(const AValue: Integer);
+begin
+  if FScrollWidth = AValue then Exit;
+  if AValue < 0 then FScrollWidth := 0 else FScrollWidth := AValue;
+  { Narrowing the extent (or switching it off) has to pull the view back, or the rows would
+    stay slid off an edge that no longer exists -- and UpdateScrollBar is where that happens,
+    because settling the bars is what tells it how wide the viewport now is. A re-clamp HERE
+    as well would be dead code that reads like a safeguard: this line runs immediately after
+    it and could not reach a state it has not already corrected. (A mutation pass removed
+    exactly such a call and no test moved, which is what it is for.) }
+  UpdateScrollBar;
+  Invalidate;
 end;
 
 procedure TTyListBox.EnsureSelectedLen;
@@ -691,14 +915,71 @@ end;
 
 procedure TTyListBox.UpdateScrollBar;
 var
-  VR, MaxPos, MaxTop: Integer;
+  VR, MaxPos, MaxTop, pass, thick, availH, viewW, extentW, step, padW, PPI,
+  maxH: Integer;
+  wantV, wantH: Boolean;
+  S: TTyStyleSet;
 begin
-  VR := VisibleRows;
-  // Clamp FTopIndex in case Items were mutated directly (Clear/Add without SetItems)
-  MaxTop := FItems.Count - VR;
-  if MaxTop < 0 then MaxTop := 0;
-  if FTopIndex > MaxTop then FTopIndex := MaxTop;
-  if FItems.Count > VR then
+  PPI   := Font.PixelsPerInch;
+  thick := ScrollBarThickness;
+  { CurrentStyle resolves the whole cascade and is NOT cached, and this runs at the top of
+    every RenderTo -- i.e. on every hover. Read it ONCE here and derive the padding from it,
+    rather than calling RowViewportBounds (which reads it again) inside the settle loop. }
+  S    := CurrentStyle;
+  { Each side scaled SEPARATELY and then added, which is what RowViewportBounds does with
+    the same two numbers. Scaling the sum instead rounds once where that rounds twice, and
+    the two can differ by a pixel -- which would put the decision "is there an overhang" and
+    the answer "how big is it" a pixel apart, from two copies of one formula. }
+  padW := MulDiv(S.Padding.Left, PPI, 96) + MulDiv(S.Padding.Right, PPI, 96);
+  extentW := MulDiv(FScrollWidth, PPI, 96);
+  { --- settle the TWO bars together ----------------------------------------------------
+    Each bar's gutter comes out of the other's viewport, so one pass can decide "no
+    horizontal bar" from a width the vertical bar has not given up yet, and the other way
+    round. Two passes is the fixed point for two bars -- the second sees both gutters -- and
+    a third could not move anything, because neither gutter has more than one size. }
+  wantV := False;
+  wantH := False;
+  for pass := 1 to 2 do
+  begin
+    viewW := Width - padW;
+    if wantV then Dec(viewW, thick);
+    wantH := (FScrollWidth > 0) and (extentW > viewW);
+    availH := Height;
+    if wantH then Dec(availH, thick);
+    if availH < 1 then availH := 1;
+    wantV := FItems.Count > RowsFittingIn(FTopIndex, availH);
+  end;
+
+  { --- COMMIT BOTH BARS' VISIBILITY BEFORE EITHER RANGE IS COMPUTED --------------------
+    ViewportHeight reads the horizontal bar's Visible and RowViewportBounds reads the
+    vertical one's, so a range worked out while one of them was still carrying its previous
+    state would be measured against the wrong viewport. }
+  if wantH then
+  begin
+    if FHScrollBar = nil then
+    begin
+      FHScrollBar := TTyScrollBar.Create(Self);
+      FHScrollBar.Parent := Self;
+      FHScrollBar.Kind := sbHorizontal;
+      { Same reasoning as the vertical bar: an EMBEDDED bar must not take focus off the
+        list, or dragging it would cost the box its focus ring and its arrow keys. }
+      FHScrollBar.TabStop := False;
+      FHScrollBar.OnChange := @HScrollBarChange;
+      FHScrollBar.AnimationsEnabled := False;
+      FHScrollBar.ControlStyle := FHScrollBar.ControlStyle + [csNoDesignVisible];
+    end;
+    { alBottom, and LCL aligns alBottom BEFORE alRight/alLeft -- so the horizontal bar takes
+      the full width and the vertical one gives up the corner, which is the arrangement
+      every platform's list box has. }
+    FHScrollBar.Align := alBottom;
+    FHScrollBar.Height := thick;
+    FHScrollBar.Controller := Self.Controller;
+    FHScrollBar.Visible := True;
+  end
+  else if FHScrollBar <> nil then
+    FHScrollBar.Visible := False;
+
+  if wantV then
   begin
     // Ensure scrollbar created
     if FScrollBar = nil then
@@ -726,10 +1007,48 @@ begin
     else
       FScrollBar.Align := alRight;
     // Update DPI-dependent width and controller every call so DPI changes take effect
-    FScrollBar.Width := MulDiv(ActiveController.Metric('--scrollbar-size', TyScrollbarSize), Font.PixelsPerInch, 96);
+    FScrollBar.Width := thick;
     FScrollBar.Controller := Self.Controller;
-    MaxPos := FItems.Count - VR;
-    if MaxPos < 0 then MaxPos := 0;
+    FScrollBar.Visible := True;
+  end
+  else if FScrollBar <> nil then
+    FScrollBar.Visible := False;
+
+  { How far the content may slide, asked of the ONE function that defines it -- once, into a
+    local. Re-clamp the offset against it now: a bar that just appeared narrowed the
+    viewport, which can only ever REDUCE the overhang. }
+  maxH := MaxHOffset;
+  if FHOffset > maxH then FHOffset := maxH;
+  if FHOffset < 0 then FHOffset := 0;
+
+  if wantH then
+  begin
+    { One arrow click moves one line of text, not one pixel: the step is the resolved font
+      size, so it tracks the theme's type scale and the density pack instead of being a
+      number picked here. }
+    step := MulDiv(ResolveFontSize(S), PPI, 96);
+    if step < 1 then step := 1;
+    FSyncingHScroll := True;
+    try
+      FHScrollBar.Min := 0;
+      FHScrollBar.Max := maxH;
+      { The thumb spans one screenful of the extent: extent - overhang IS the viewport, so
+        this cannot disagree with the range above however the padding is themed. }
+      FHScrollBar.PageSize := extentW - maxH;
+      FHScrollBar.SmallChange := step;
+      FHScrollBar.Position := FHOffset;
+    finally
+      FSyncingHScroll := False;
+    end;
+  end;
+
+  VR := VisibleRows;
+  // Clamp FTopIndex in case Items were mutated directly (Clear/Add without SetItems)
+  MaxTop := MaxTopIndex;
+  if FTopIndex > MaxTop then FTopIndex := MaxTop;
+  if wantV then
+  begin
+    MaxPos := MaxTop;
     FSyncingScroll := True;
     try
       FScrollBar.Min := 0;
@@ -739,12 +1058,6 @@ begin
     finally
       FSyncingScroll := False;
     end;
-    FScrollBar.Visible := True;
-  end
-  else
-  begin
-    if FScrollBar <> nil then
-      FScrollBar.Visible := False;
   end;
 end;
 
@@ -821,14 +1134,14 @@ end;
 procedure TTyListBox.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   Row: Integer;
-  SH: Integer;
 begin
   if not Enabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
   if Button = mbLeft then
   begin
-    SH := ScaledItemHeight;
-    Row := FTopIndex + ((Y - ContentTopOffset) div SH);
+    { RowAtY, not a division of its own: with per-row heights there is no single row height
+      a second copy of the arithmetic could use, and there never should have been two. }
+    Row := RowAtY(Y);
     if (Row >= 0) and (Row < FItems.Count) then
     begin
       Inc(FUserAction);   { everything below is the USER moving the selection }
@@ -881,13 +1194,10 @@ end;
 
 procedure TTyListBox.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
-  SH, NewRow: Integer;
+  NewRow: Integer;
 begin
   inherited MouseMove(Shift, X, Y);
-  SH := ScaledItemHeight;
-  NewRow := FTopIndex + ((Y - ContentTopOffset) div SH);
-  if (NewRow < 0) or (NewRow >= FItems.Count) then
-    NewRow := -1;
+  NewRow := RowAtY(Y);
   if NewRow <> FHoverRow then
   begin
     FHoverRow := NewRow;
@@ -917,6 +1227,17 @@ begin
     Result := True;
     Exit;
   end;
+  { Shift+wheel scrolls SIDEWAYS -- the gesture every list with a horizontal extent has,
+    and the only one a trackpad user has for it. Only while the bar is actually showing;
+    otherwise the wheel keeps its ordinary vertical meaning. }
+  if (ssShift in Shift) and (FHScrollBar <> nil) and FHScrollBar.Visible then
+  begin
+    Delta := 3 * FHScrollBar.SmallChange;
+    if WheelDelta > 0 then Delta := -Delta;
+    SetHOffset(FHOffset + Delta);
+    Result := True;
+    Exit;
+  end;
   // WheelDelta > 0 = scroll up (TopIndex decreases)
   // WheelDelta < 0 = scroll down (TopIndex increases)
   if WheelDelta > 0 then
@@ -938,7 +1259,7 @@ var
   P: TTyPainter;
   BoxStyle, RowStyle: TTyStyleSet;
   R, ContentRect, RowRect: TRect;
-  SBWidth, SH, i, LastRow: Integer;
+  SBWidth, SBHeight, SH, i, LastRow, rowTop: Integer;
   cLeft, cRight, leadSB, trailSB: Integer;
   ItemStates: TTyStateSet;
   capR, fillTop, fillBottom, inset, insetLogical: Integer;
@@ -968,12 +1289,6 @@ begin
       is docked to. The hit tests read the same function, so "where a row starts" has one
       definition rather than a painted one and a clicked one. }
     RowContentBounds(R.Right - R.Left, APPI, cLeft, cRight);
-    ContentRect := Rect(
-      cLeft,
-      R.Top    + P.Scale(BoxStyle.Padding.Top),
-      cRight,
-      R.Bottom - P.Scale(BoxStyle.Padding.Bottom)
-    );
 
     // The bar's gutter, and which side of the row FILL it comes off (the fills are measured
     // from the frame, not from the padding, so they need the number separately).
@@ -982,9 +1297,19 @@ begin
       SBWidth := MulDiv(ActiveController.Metric('--scrollbar-size', TyScrollbarSize), APPI, 96);
     if RtlRowLayout then begin leadSB := SBWidth; trailSB := 0; end
     else                 begin leadSB := 0;       trailSB := SBWidth; end;
+    { The horizontal bar's band along the bottom -- the rows stop above it, so the last-row
+      cap below reaches the bar rather than disappearing behind it. }
+    SBHeight := 0;
+    if (FHScrollBar <> nil) and FHScrollBar.Visible then
+      SBHeight := MulDiv(ActiveController.Metric('--scrollbar-size', TyScrollbarSize), APPI, 96);
 
-    SH := MulDiv(GetItemHeight, APPI, 96);
-    if SH < 1 then SH := 1;
+    ContentRect := Rect(
+      cLeft,
+      R.Top    + P.Scale(BoxStyle.Padding.Top),
+      cRight,
+      R.Bottom - P.Scale(BoxStyle.Padding.Bottom) - SBHeight
+    );
+
     LastRow := FTopIndex + VisibleRows - 1;
     if LastRow >= FItems.Count - 1 then
       LastRow := FItems.Count - 1;
@@ -1006,10 +1331,22 @@ begin
     if insetLogical > 0 then Inc(insetLogical);
     inset := P.Scale(insetLogical);
     savedClip := P.Bitmap.ClipRect;
-    P.Bitmap.ClipRect := Rect(R.Left + inset, R.Top + inset, R.Right - inset, R.Bottom - inset);
+    { The clip is what makes the horizontal scroll safe: RowContentBounds hands the rows a
+      rect that runs PAST the box on the trailing side (out to ScrollWidth), and this is
+      what stops the overflow being painted. Its bottom also gives up the horizontal bar's
+      band, so a partially-scrolled row does not bleed under it. }
+    P.Bitmap.ClipRect := Rect(R.Left + inset, R.Top + inset, R.Right - inset,
+      R.Bottom - inset - SBHeight);
 
+    { Asked ONCE, not once per row: with per-row heights the answer is a walk, and inside the
+      loop it would turn one screenful of paint into a walk per row. It cannot change
+      mid-loop -- nothing in the loop touches Items or a row height. }
+    contentFills := ContentFillsHeight(ContentRect.Bottom - ContentRect.Top, APPI);
+
+    rowTop := ContentRect.Top;
     for i := FTopIndex to LastRow do
     begin
+      SH := ScaledRowHeightAt(i, APPI);
       // Determine item states
       ItemStates := [];
       if (FMultiSelect and GetSelected(i)) or ((not FMultiSelect) and (i = FItemIndex)) then
@@ -1025,12 +1362,7 @@ begin
 
       // Row rect: the content width (RowContentBounds already gave up the bar's gutter on
       // whichever side the bar is on), height = scaledItemHeight
-      RowRect := Rect(
-        ContentRect.Left,
-        ContentRect.Top + (i - FTopIndex) * SH,
-        ContentRect.Right,
-        ContentRect.Top + (i - FTopIndex + 1) * SH
-      );
+      RowRect := Rect(ContentRect.Left, rowTop, ContentRect.Right, rowTop + SH);
 
       // Fill row background if the style has one. The highlight spans the full interior
       // width (to the edges, minus the scrollbar). The first/last rows extend to the listbox
@@ -1048,7 +1380,6 @@ begin
         // short list's last row would bleed into the empty space below). Middle rows square.
         capR := BoxStyle.BorderRadius - insetLogical;
         if capR < 0 then capR := 0;
-        contentFills := (FItems.Count * SH) >= (ContentRect.Bottom - ContentRect.Top);
         fillTop := RowRect.Top;
         fillBottom := RowRect.Bottom;
         rowCorners := TyCorners(0, 0, 0, 0);
@@ -1059,7 +1390,7 @@ begin
         end;
         if (i = FItems.Count - 1) and contentFills then
         begin
-          fillBottom := R.Bottom - inset;
+          fillBottom := R.Bottom - inset - SBHeight;
           rowCorners.BR := capR; rowCorners.BL := capR;
         end;
         P.FillBackground(Rect(R.Left + inset + leadSB, fillTop, R.Right - inset - trailSB, fillBottom),
@@ -1068,6 +1399,7 @@ begin
 
       // Per-item content (default: the text; a subclass draws a swatch/glyph + text).
       PaintItemContent(P, RowRect, i, RowStyle);
+      Inc(rowTop, SH);
     end;
 
     P.Bitmap.ClipRect := savedClip;   // restore (rows were clipped to the interior)
@@ -1129,16 +1461,18 @@ end;
 
 function TTyListBox.ItemRect(AIndex: Integer): TRect;
 var
-  SH, rowTop: Integer;
+  i, rowTop: Integer;
 begin
   Result := Rect(0, 0, 0, 0);
   if (AIndex < 0) or (AIndex >= FItems.Count) then Exit;
-  SH := ScaledItemHeight;
-  if SH <= 0 then Exit;
-  { The inverse of RowAtY, deliberately -- one formula, so what a caller is told and what
-    gets painted cannot drift. }
-  rowTop := ContentTopOffset + (AIndex - FTopIndex) * SH;
-  Result := Rect(0, rowTop, ClientWidth, rowTop + SH);
+  { The inverse of RowAtY, deliberately -- one accumulation of the same per-row heights, so
+    what a caller is told and what gets painted cannot drift. }
+  rowTop := ContentTopOffset;
+  if AIndex >= FTopIndex then
+    for i := FTopIndex to AIndex - 1 do Inc(rowTop, ScaledRowHeight(i))
+  else
+    for i := AIndex to FTopIndex - 1 do Dec(rowTop, ScaledRowHeight(i));
+  Result := Rect(0, rowTop, ClientWidth, rowTop + ScaledRowHeight(AIndex));
 end;
 
 function TTyListBox.GetIndexAtY(AY: Integer): Integer;
@@ -1226,11 +1560,40 @@ begin
 end;
 
 function TTyListBox.RowAtY(AY: Integer): Integer;
-var SH: Integer;
+var
+  d, h, idx: Integer;
 begin
-  SH := ScaledItemHeight;
-  if SH <= 0 then Exit(-1);
-  Result := FTopIndex + ((AY - ContentTopOffset) div SH);
+  d := AY - ContentTopOffset;
+  idx := FTopIndex;
+  if d >= 0 then
+  begin
+    { Walk DOWN, one row's own height at a time. With one height for every row this is the
+      division it replaces; with per-row heights it is the only thing that can be right. }
+    while True do
+    begin
+      h := ScaledRowHeight(idx);
+      if d < h then Break;
+      Dec(d, h);
+      Inc(idx);
+      if idx > FItems.Count then Break;   // ran off the list; the range check below rejects it
+    end;
+  end
+  else
+  begin
+    { Walk UP, reproducing what Pascal's `div` did on the negative side: it truncates
+      TOWARD ZERO, so a PARTIAL row above the first one still read as the first one -- the
+      top padding band clamping to row 0 is exactly that, and a test pins it. Count only
+      WHOLE rows going up. }
+    d := -d;
+    while d > 0 do
+    begin
+      h := ScaledRowHeight(idx - 1);
+      if d < h then Break;
+      Dec(d, h);
+      Dec(idx);
+    end;
+  end;
+  Result := idx;
   if (Result < 0) or (Result >= FItems.Count) then Result := -1;
 end;
 
@@ -1245,7 +1608,7 @@ begin
   Result := IsRightToLeft;
 end;
 
-procedure TTyListBox.RowContentBounds(AWidth, APPI: Integer; out ALeft, ARight: Integer);
+procedure TTyListBox.RowViewportBounds(AWidth, APPI: Integer; out ALeft, ARight: Integer);
 var
   S: TTyStyleSet;
   sb: Integer;
@@ -1264,6 +1627,37 @@ begin
   else
     Dec(ARight, sb);
   if ARight < ALeft then ARight := ALeft;
+end;
+
+procedure TTyListBox.RowContentBounds(AWidth, APPI: Integer; out ALeft, ARight: Integer);
+var
+  viewW, contentW: Integer;
+begin
+  RowViewportBounds(AWidth, APPI, ALeft, ARight);
+  { --- horizontal scrolling, both halves of it ----------------------------------------
+    The row EXTENDS along the scrolled axis to the CONTENT width -- a row still cut at the
+    viewport would have nothing to scroll to, which is the whole complaint -- and its
+    ORIGIN follows the offset. Which end moves is a reading-direction question: left to
+    right the content starts at the left and slides left, right to left it starts at the
+    right and slides right, so in both cases it is the LEADING edge that the offset moves
+    and the trailing one that runs off the box. RenderTo hard-clips the rows to the box
+    interior, so what now hangs past the viewport is simply not painted.
+
+    Inert while ScrollWidth is 0 or no wider than the box: the rows come back byte for byte
+    what they were, which is what keeps every list that never asked for this unchanged. }
+  viewW := ARight - ALeft;
+  contentW := MulDiv(FScrollWidth, APPI, 96);
+  if contentW <= viewW then Exit;
+  if RtlRowLayout then
+  begin
+    Inc(ARight, FHOffset);
+    ALeft := ARight - contentW;
+  end
+  else
+  begin
+    Dec(ALeft, FHOffset);
+    ARight := ALeft + contentW;
+  end;
 end;
 
 procedure TTyListBox.CMBiDiModeChanged(var Message: TLMessage);

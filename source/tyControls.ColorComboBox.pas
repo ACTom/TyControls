@@ -9,7 +9,7 @@ uses
 type
   { The drop-down list for TTyColorComboBox: like TTyColorPopupList, but a row whose colour
     is clNone (the "more…" sentinel) is drawn as plain text instead of a swatch. }
-  TTyColorMorePopupList = class(TTyListBox)
+  TTyColorMorePopupList = class(TTyComboPopupList)
   protected
     procedure PaintItemContent(P: TTyPainter; const ARowRect: TRect; AIndex: Integer;
       const AStyle: TTyStyleSet); override;
@@ -44,6 +44,9 @@ procedure TTyColorMorePopupList.PaintItemContent(P: TTyPainter; const ARowRect: 
   AIndex: Integer; const AStyle: TTyStyleSet);
 var c: TColor;
 begin
+  { Owner-draw first: both branches below replace the whole row, so an inherited call would
+    be too late. Inert unless the combo has both an owner-draw Style and a handler. }
+  if TyComboCollectRowOwnerDraw(Self, ARowRect, AIndex) then Exit;
   c := TyColorOfItem(Items, AIndex);
   if c = clNone then
     // the "more…" row: plain text, no swatch.

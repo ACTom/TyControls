@@ -17,16 +17,21 @@ type
     csOwnerDrawFixed / csOwnerDrawEditableFixed are those same two shapes with the ROWS
     (and, for the pick-only one, the closed field) handed to the application's OnDrawItem
     instead of painted from the theme -- LCL's stdctrls.pp:266/:268 spelling and meaning.
+    csOwnerDrawVariable / csOwnerDrawEditableVariable are the Fixed pair plus per-row
+    HEIGHTS: OnMeasureItem is asked for each row, so a list can mix a one-line entry with a
+    two-line one. That is the ONLY thing the Variable pair adds -- everything else about
+    them, including OnDrawItem, is the Fixed behaviour.
 
     THE NEW VALUES ARE APPENDED, NOT INSERTED. A .lfm stores the identifier, so order does
     not matter there -- but `default csDropDownList` on the published property stores the
     ORDINAL, and every .lfm that omits Style is read against it. csDropDownList has to stay
     at 0 or every existing form silently changes mode.
 
-    Still absent, and deliberately so (docs/controls/combobox.md §8.1): csSimple, and the
-    two Variable owner-draw styles. Naming them here without honouring them would turn a
-    compile error into a silent wrong render, which is the worse of the two. }
-  TTyComboBoxStyle = (csDropDownList, csDropDown, csOwnerDrawFixed, csOwnerDrawEditableFixed);
+    Still absent, and deliberately so (docs/controls/combobox.md §8.1): csSimple. Naming it
+    here without honouring it would turn a compile error into a silent wrong render, which
+    is the worse of the two. }
+  TTyComboBoxStyle = (csDropDownList, csDropDown, csOwnerDrawFixed, csOwnerDrawEditableFixed,
+                      csOwnerDrawVariable, csOwnerDrawEditableVariable);
 
   { The three questions LCL asks of a combo style through TComboBoxStyleHelper
     (stdctrls.pp:271-278). Plain functions rather than a type helper because a helper on an
@@ -36,6 +41,10 @@ type
   function TyComboStyleHasEditBox(AStyle: TTyComboBoxStyle): Boolean;
   { Do the drop-down rows belong to OnDrawItem? }
   function TyComboStyleIsOwnerDrawn(AStyle: TTyComboBoxStyle): Boolean;
+  { Do the rows get their HEIGHT from OnMeasureItem? LCL: TComboBoxStyleHelper.IsVariable
+    (stdctrls.pp:277). Separate from IsOwnerDrawn because they are separate questions --
+    every Variable style is owner-drawn, but the Fixed ones share one height. }
+  function TyComboStyleIsVariable(AStyle: TTyComboBoxStyle): Boolean;
   { The same style with the edit box taken off -- LCL's SetEditBox(False). What a combo that
     is pick-only BY CONSTRUCTION (the check combo, the colour box) should apply instead of
     swallowing the value whole, so an orthogonal choice like owner-draw still gets through. }
@@ -61,6 +70,20 @@ type
     Sender is the combo either way, so Items[Index] reads the same as it would in LCL. }
   TTyDrawItemEvent = procedure(Sender: TObject; ACanvas: TCanvas; Index: Integer;
     ARect: TRect; AState: TOwnerDrawState) of object;
+
+  { How tall ONE drop-down row should be, in LOGICAL px. LCL's TMeasureItemEvent
+    (stdctrls.pp:284) with the same shape: AHeight arrives SEEDED with what the row would
+    otherwise be (the pinned ItemHeight, or the list's themed one), and the handler
+    overwrites it -- so a handler that only wants to change SOME rows can leave the rest
+    alone by not touching the parameter. An answer below 1 is ignored and the seed kept,
+    because a zero-height row is not a row, it is a hung paint loop.
+
+    No canvas parameter, and LCL's has none either: measuring is arithmetic on the app's own
+    data. A handler that must measure TEXT can reach the combo's Canvas through Sender.
+    Index is an index into ITEMS, mapped back for you when the popup is showing the
+    autocomplete's filtered subset -- the same guarantee OnDrawItem gives. }
+  TTyMeasureItemEvent = procedure(Sender: TObject; Index: Integer;
+    var AHeight: Integer) of object;
 
   { One collected owner-draw row: the rect the list actually painted it in, the index into
     the COMBO's Items (not the popup list's -- they differ under the autocomplete filter),
@@ -111,7 +134,10 @@ type
     FOnDrawItem: TTyDrawItemEvent;
     FRowDraw: array of TTyComboRowDraw;
     FRowDrawCount: Integer;
+    { Per-row heights (the two Variable styles). }
+    FOnMeasureItem: TTyMeasureItemEvent;
     procedure SetOnDrawItem(const AValue: TTyDrawItemEvent);
+    procedure SetOnMeasureItem(const AValue: TTyMeasureItemEvent);
     { OnDrawItem's Index is an index into ITEMS. The popup may be holding the
       prefix-filtered subset instead, so map it back. }
     function RowSourceIndex(AList: TTyListBox; ARow: Integer): Integer;
@@ -182,6 +208,12 @@ type
       rows are visible before the dropdown scrolls. Separated from DropDown so it
       can be exercised without building a real win32 popup form. }
     function ComputePopupHeight(APPI: Integer): Integer;
+    { The height of the first min(ACount, DropDownCount) rows of whatever the popup list is
+      CURRENTLY holding, plus the 2px frame chrome. Factored out because the plain drop and
+      the autocomplete's filtered one differ in exactly one number -- how many rows there
+      are -- and because with per-row heights the answer is a SUM, not a multiplication, so
+      having two copies of it would mean two places to get the measure calls right. }
+    function PopupHeightFor(ACount, APPI: Integer): Integer;
     { The dropdown's width: the field, widened to ItemWidth when that is larger. Same
       separation as ComputePopupHeight — one formula, exercised headless. }
     function ComputePopupWidth(APPI: Integer): Integer;
@@ -284,6 +316,25 @@ type
     procedure DispatchRowOwnerDraw(ACanvas: TCanvas; const ARect: TRect);
     { Test seam: how many rows the last list paint handed to the host. }
     function RowOwnerDrawCountForTest: Integer;
+    { --- the per-row HEIGHT protocol -------------------------------------------------
+      True when the rows really do have their own heights: a Variable Style AND a handler.
+      Without the handler the one shared height stays, so assigning Style alone can never
+      collapse a list -- the same rule OwnerDrawsRows follows, for the same reason.
+
+      MeasureRowHeight is the one call a drop-down list makes: hand it the list, the row and
+      the height the row would otherwise have, and it comes back with the host's answer (or
+      the seed, unchanged, when nobody is listening). It is a METHOD with a free-function
+      wrapper for the same reason the draw protocol is -- the popup lists in this family do
+      not share an ancestor, TTyCheckComboBox's descends from TTyCheckListBox.
+
+      NOT CACHED, deliberately: this is called from the row walkers, so a handler is asked
+      about a row several times per layout. A dropdown shows DropDownCount rows (8 by
+      default) and OnMeasureItem is arithmetic on the app's own data; a cache would have to
+      be invalidated on Items, on Style, on the handler and on density, and getting one of
+      those wrong is a stale row height nobody can explain. If a host ever needs the calls
+      counted down, it can memoise inside its own handler. }
+    function MeasuresRows: Boolean;
+    function MeasureRowHeight(AList: TTyListBox; ARow, ADefault: Integer): Integer;
     { The three control-level list methods LCL's combo has. Clear empties Items AND blanks
       Text -- doing only the first leaves the field displaying an item that is no longer in
       the list, which is the bug you get from calling Items.Clear by hand. }
@@ -321,10 +372,11 @@ type
     property CharCase: TEditCharCase read FCharCase write SetCharCase default ecNormal;
     { csDropDownList (default) = read-only; csDropDown = editable + prefix autocomplete;
       csOwnerDrawFixed / csOwnerDrawEditableFixed = the same two with the rows drawn by
-      OnDrawItem.
+      OnDrawItem; csOwnerDrawVariable / csOwnerDrawEditableVariable = those two again, with
+      each row's HEIGHT coming from OnMeasureItem.
       NOTE the default is the OPPOSITE of LCL's csDropDown, and deliberately so: every
       .lfm in this repo and in users' projects omits Style and expects a pick-only combo.
-      See docs/controls/combobox.md for the three LCL Style values we do not have. }
+      See docs/controls/combobox.md for the one LCL Style value we do not have (csSimple). }
     property Style: TTyComboBoxStyle read FStyle write SetStyle default csDropDownList;
     { Pixel height of one dropdown row. 0 (default) = follow the theme's --item-height,
       so a density change still moves the rows; a positive value pins them. }
@@ -348,6 +400,13 @@ type
       bleed into its neighbour. Index is an index into Items -- mapped back for you when the
       popup is showing the autocomplete's filtered subset. }
     property OnDrawItem: TTyDrawItemEvent read FOnDrawItem write SetOnDrawItem;
+    { The application says how tall ONE drop-down row is. LCL's OnMeasureItem
+      (stdctrls.pp:402). Consulted ONLY by the two Variable styles -- csOwnerDrawVariable
+      and csOwnerDrawEditableVariable -- because they are the only ones that have per-row
+      heights at all; under any other Style every row is ItemHeight and this never fires.
+      That pairing is the reason the event and the styles landed together: an event no Style
+      could reach would be a published property the control does not honour. }
+    property OnMeasureItem: TTyMeasureItemEvent read FOnMeasureItem write SetOnMeasureItem;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
     property OnSelect: TNotifyEvent read FOnSelect write FOnSelect;
     property OnDropDown: TNotifyEvent read FOnDropDown write FOnDropDown;
@@ -372,6 +431,11 @@ type
   protected
     procedure PaintItemContent(P: TTyPainter; const ARowRect: TRect; AIndex: Integer;
       const AStyle: TTyStyleSet); override;
+    { Per-row heights, asked of the owning combo. Inert unless the combo is in a Variable
+      Style with a handler, in which case the seed -- the one shared height this would
+      otherwise be -- goes out as OnMeasureItem's starting value and comes back as the
+      row's own. }
+    function RowHeight(AIndex: Integer): Integer; override;
     procedure Paint; override;
   public
     { Paint the rows AND run the owning combo's post-composite owner-draw pass. Public and
@@ -389,6 +453,10 @@ procedure TyComboBeginRowOwnerDraw(AList: TTyListBox);
 function  TyComboCollectRowOwnerDraw(AList: TTyListBox; const ARowRect: TRect;
   AIndex: Integer): Boolean;
 procedure TyComboDispatchRowOwnerDraw(AList: TTyListBox; ACanvas: TCanvas; const ARect: TRect);
+{ The height half of the same story: a popup list whose ancestor is fixed elsewhere calls
+  this from its own RowHeight override. ADefault is what the row would be without a host
+  answer, and it is what comes back when there is none. }
+function  TyComboMeasureRowHeight(AList: TTyListBox; ARow, ADefault: Integer): Integer;
 
 implementation
 uses
@@ -396,19 +464,26 @@ uses
 
 function TyComboStyleHasEditBox(AStyle: TTyComboBoxStyle): Boolean;
 begin
-  Result := AStyle in [csDropDown, csOwnerDrawEditableFixed];
+  Result := AStyle in [csDropDown, csOwnerDrawEditableFixed, csOwnerDrawEditableVariable];
 end;
 
 function TyComboStyleIsOwnerDrawn(AStyle: TTyComboBoxStyle): Boolean;
 begin
-  Result := AStyle in [csOwnerDrawFixed, csOwnerDrawEditableFixed];
+  Result := AStyle in [csOwnerDrawFixed, csOwnerDrawEditableFixed,
+                       csOwnerDrawVariable, csOwnerDrawEditableVariable];
+end;
+
+function TyComboStyleIsVariable(AStyle: TTyComboBoxStyle): Boolean;
+begin
+  Result := AStyle in [csOwnerDrawVariable, csOwnerDrawEditableVariable];
 end;
 
 function TyComboStylePickOnly(AStyle: TTyComboBoxStyle): TTyComboBoxStyle;
 begin
   case AStyle of
-    csDropDown:               Result := csDropDownList;
-    csOwnerDrawEditableFixed: Result := csOwnerDrawFixed;
+    csDropDown:                  Result := csDropDownList;
+    csOwnerDrawEditableFixed:    Result := csOwnerDrawFixed;
+    csOwnerDrawEditableVariable: Result := csOwnerDrawVariable;
   else
     Result := AStyle;
   end;
@@ -443,6 +518,14 @@ begin
   if C <> nil then C.DispatchRowOwnerDraw(ACanvas, ARect);
 end;
 
+function TyComboMeasureRowHeight(AList: TTyListBox; ARow, ADefault: Integer): Integer;
+var C: TTyComboBox;
+begin
+  C := TyComboOwnerOf(AList);
+  if C = nil then Exit(ADefault);
+  Result := C.MeasureRowHeight(AList, ARow, ADefault);
+end;
+
 { TTyComboPopupList }
 
 procedure TTyComboPopupList.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
@@ -453,6 +536,11 @@ begin
     is told so via odBackgroundPainted -- the same division TTyMenuView draws. }
   if TyComboCollectRowOwnerDraw(Self, ARowRect, AIndex) then Exit;
   inherited PaintItemContent(P, ARowRect, AIndex, AStyle);
+end;
+
+function TTyComboPopupList.RowHeight(AIndex: Integer): Integer;
+begin
+  Result := TyComboMeasureRowHeight(Self, AIndex, inherited RowHeight(AIndex));
 end;
 
 procedure TTyComboPopupList.RenderWithOwnerDraw(ACanvas: TCanvas; const ARect: TRect;
@@ -918,9 +1006,42 @@ begin
   Invalidate;
 end;
 
+procedure TTyComboBox.SetOnMeasureItem(const AValue: TTyMeasureItemEvent);
+begin
+  { Assigning (or clearing) this changes every ROW HEIGHT in the drop-down, so an already-
+    built list has to repaint -- its row geometry is derived live from RowHeight, but nothing
+    tells it the answers just changed. The popup's own HEIGHT is re-sized on the next
+    DropDown, the same rule DropDownCount and ItemWidth already follow: no live resize of an
+    open popup. }
+  FOnMeasureItem := AValue;
+  if FPopupList <> nil then FPopupList.Invalidate;
+  Invalidate;
+end;
+
 function TTyComboBox.OwnerDrawsRows: Boolean;
 begin
   Result := TyComboStyleIsOwnerDrawn(FStyle) and Assigned(FOnDrawItem);
+end;
+
+function TTyComboBox.MeasuresRows: Boolean;
+begin
+  Result := TyComboStyleIsVariable(FStyle) and Assigned(FOnMeasureItem);
+end;
+
+function TTyComboBox.MeasureRowHeight(AList: TTyListBox; ARow, ADefault: Integer): Integer;
+var
+  h: Integer;
+begin
+  Result := ADefault;
+  if not MeasuresRows then Exit;
+  { Seeded with what the row would otherwise be, so a handler that only cares about SOME
+    rows leaves the rest at the theme's height by not touching the parameter. }
+  h := ADefault;
+  FOnMeasureItem(Self, RowSourceIndex(AList, ARow), h);
+  { A zero (or negative) answer is not a row, it is a paint loop that never advances -- and
+    it is the shape a handler that forgot one branch of its case statement returns. Keep the
+    seed rather than propagate it. }
+  if h > 0 then Result := h;
 end;
 
 function TTyComboBox.RowOwnerDrawCountForTest: Integer;
@@ -1145,23 +1266,33 @@ begin
 end;
 
 function TTyComboBox.ComputePopupHeight(APPI: Integer): Integer;
+begin
+  Result := PopupHeightFor(FItems.Count, APPI);
+end;
+
+function TTyComboBox.PopupHeightFor(ACount, APPI: Integer): Integer;
 var
-  RowH, ScaledIH, VisibleRows: Integer;
+  RowH, i, n: Integer;
 begin
   { Row height = the popup list's ItemHeight (a subclass may draw taller rich rows —
     e.g. TTyAdvancedComboBox uses 40); fall back to the TTyListBox default (24) before the
     popup list exists (headless calc). Visible rows = min(Items.Count, DropDownCount), each
     scaled to the given PPI, + the 2px popup frame chrome. Single source of the sizing
     formula — DropDown calls this so the live popup and the headless calc stay in sync.
-    An explicit ItemHeight wins over both, and is readable before the popup exists. }
+    An explicit ItemHeight wins over both, and is readable before the popup exists.
+
+    A SUM, not a multiplication: under a Variable Style each row answers for itself, so the
+    popup is exactly as tall as the rows it will show. With one shared height the sum is
+    n * scaled(RowH) + 2, which is the arithmetic this replaced, digit for digit. }
   RowH := 24;
   if FItemHeight > 0 then
     RowH := FItemHeight
   else if FPopupList <> nil then
     RowH := FPopupList.ItemHeight;
-  ScaledIH := MulDiv(RowH, APPI, 96);
-  VisibleRows := Min(FItems.Count, FDropDownCount);
-  Result := VisibleRows * ScaledIH + 2;
+  n := Min(ACount, FDropDownCount);
+  Result := 2;
+  for i := 0 to n - 1 do
+    Inc(Result, MulDiv(MeasureRowHeight(FPopupList, i, RowH), APPI, 96));
 end;
 
 function TTyComboBox.ComputePopupWidth(APPI: Integer): Integer;
@@ -1276,7 +1407,7 @@ end;
   subset (FVisibleItems) instead of the full list. Mirrors DropDown otherwise. }
 procedure TTyComboBox.DropDownFiltered;
 var
-  PopupH, PopupW, ScaledIH, VisibleRows: Integer;
+  PopupH, PopupW: Integer;
   S: TTyStyleSet;
 begin
   if FVisibleItems.Count = 0 then Exit;
@@ -1297,17 +1428,11 @@ begin
   S := ActiveController.Model.ResolveStyle('TyListBox', '', []);
   FPopup.CornerRadiusLogical := S.BorderRadius;
 
-  { Height off the FILTERED count (mirrors ComputePopupHeight's formula but on
-    FVisibleItems, which is what is actually shown). }
-  if FItemHeight > 0 then                              // an explicit ItemHeight wins
-    ScaledIH := MulDiv(FItemHeight, Font.PixelsPerInch, 96)
-  else if FPopupList <> nil then                       // honour a subclass's taller rows
-    ScaledIH := MulDiv(FPopupList.ItemHeight, Font.PixelsPerInch, 96)
-  else
-    ScaledIH := MulDiv(24, Font.PixelsPerInch, 96);
-  VisibleRows := Min(FVisibleItems.Count, FDropDownCount);
-  PopupH      := VisibleRows * ScaledIH + 2;
-  PopupW      := ComputePopupWidth(Font.PixelsPerInch);
+  { Height off the FILTERED count -- the SAME formula ComputePopupHeight uses, called on
+    the count that is actually showing. It used to be a second copy of the arithmetic here,
+    which is one copy too many now that a row's height can be the host's answer. }
+  PopupH := PopupHeightFor(FVisibleItems.Count, Font.PixelsPerInch);
+  PopupW := ComputePopupWidth(Font.PixelsPerInch);
 
   { First open: show the popup, then immediately return focus to the editor. LCL
     focuses the popup's list on Show (which WS_EX_NOACTIVATE alone does not stop),
@@ -1505,7 +1630,8 @@ begin
     a handler to show -- the same split Windows makes, where an owner-draw combo gets a
     WM_DRAWITEM for its edit area only when it is CBS_DROPDOWNLIST. And no handler means the
     themed default: assigning Style must never be able to blank a control on its own. }
-  FieldOwnerDraw := (FStyle = csOwnerDrawFixed) and Assigned(FOnDrawItem);
+  FieldOwnerDraw := TyComboStyleIsOwnerDrawn(FStyle)
+    and not TyComboStyleHasEditBox(FStyle) and Assigned(FOnDrawItem);
   P := TTyPainter.Create;
   try
     R := Types.Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);

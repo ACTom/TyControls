@@ -286,22 +286,56 @@ Combo.StyleClass := 'compact';
 7. **弹出窗口生命周期：** `FPopup` 在首次 `DropDown` 时懒创建，在控件 `Destroy` 时释放。`FPopupList` 由 `FPopup` 拥有，随之释放。
 8. **类型超前在下拉打开时不生效：** `UTF8KeyPress` 中无 `DroppedDown` 检查，但下拉打开时焦点转移至弹出窗口，实际键盘事件不会路由到组合框，因此 type-ahead 仅在关闭态有效。
 
-## 8. 与 LCL `TComboBox` 已知的差异（未做）
+## 8. `Style` 家族、自绘协议，以及与 LCL 的已知差异
 
-移植 LCL 代码前请先看这里——下面这些**故意**没有对齐，写了会编译不过或行为不同。
+移植 LCL 代码前请先看这里。8.1 / 8.1.1 / 8.2 讲**已经做了**的部分（六个 `Style` 值、`OnDrawItem`、`OnMeasureItem`）以及各自的边界；8.1 末尾与 8.3 列的是**故意没有对齐**的，写了会编译不过或行为不同。
 
-### 8.1 `Style`：4 个值（LCL 有 7 个），且默认相反
+### 8.1 `Style`：6 个值（LCL 有 7 个），且默认相反
 
-LCL 的 `TComboBoxStyle` 有 7 个值（`stdctrls.pp:262`），默认 `csDropDown`（可编辑）；本控件的 `TTyComboBoxStyle` 有 4 个：`csDropDownList` / `csDropDown` / `csOwnerDrawFixed` / `csOwnerDrawEditableFixed`，默认 `csDropDownList`（只读）。
+LCL 的 `TComboBoxStyle` 有 7 个值（`stdctrls.pp:262`），默认 `csDropDown`（可编辑）；本控件的 `TTyComboBoxStyle` 有 6 个：`csDropDownList` / `csDropDown` / `csOwnerDrawFixed` / `csOwnerDrawEditableFixed` / `csOwnerDrawVariable` / `csOwnerDrawEditableVariable`，默认 `csDropDownList`（只读）。
 
 - **默认相反是有意保留的。** 库里和用户工程里的 `.lfm` 普遍不写 `Style`，改默认会把**每一个**已有组合框翻成可编辑的——`default` 指令一改，所有省略该属性的 `.lfm` 都被重新解释。
 - **新值是追加的，不是插进去的。** `.lfm` 按标识符存 `Style`，但 published 属性上的 `default csDropDownList` 存的是**序数**，所有省略 `Style` 的 `.lfm` 都按它读。所以 `csDropDownList` 必须一直是 0。
-- 注意两边的标识符**同名**：`csDropDownList` / `csDropDown` / `csOwnerDrawFixed` / `csOwnerDrawEditableFixed` 在两边都能编译且含义相同，所以只有下面 3 个缺的值会报错，默认值的差异是**静默**的。
-- **仍缺的 3 个值**：`csSimple`（列表常驻在字段下方，不是弹层）、`csOwnerDrawVariable` / `csOwnerDrawEditableVariable`（逐行不同高度）。写了**编译不过**——这是有意的：给一个不兑现的枚举值，会把编译错误换成一次静默的错误渲染。
+- **仍缺的 1 个值**：`csSimple`（列表常驻在字段下方，不是弹层）。写了**编译不过**——这是有意的：给一个不兑现的枚举值，会把编译错误换成一次静默的错误渲染。
+- 其余 6 个标识符两边**同名同义**，所以只有 `csSimple` 会报错，默认值的差异是**静默**的。
 
-**为什么 Variable 两个值没做**：下拉行由 `TTyListBox` 画，而它只有**一个** `ItemHeight`；行循环在 `TTyListBox.RenderTo` 里，`ItemRect` / `RowAtY` / `VisibleRows` / 滚动条量程全部从这一个高度算出来。要让每行有自己的高度，必须在 `tyControls.ListBox.pas` 里开口子（本次改动不碰该文件）。`OnMeasureItem` 同理一并未做——只有 Variable 才会问它，published 一个永远不被调用的事件比没有更糟。
+### 8.1.1 逐行高度（`csOwnerDrawVariable` / `csOwnerDrawEditableVariable` + `OnMeasureItem`）
 
-### 8.2 自绘（`csOwnerDrawFixed` / `csOwnerDrawEditableFixed` + `OnDrawItem`）
+```pascal
+type
+  TTyMeasureItemEvent = procedure(Sender: TObject; Index: Integer;
+    var AHeight: Integer) of object;
+```
+
+Variable 两个值与对应的 Fixed 值**只差一件事**：每行的**高度**改由 `OnMeasureItem` 回答，其余（包括 `OnDrawItem`、字段自绘、编辑框有无）完全相同。
+
+| 项 | 说明 |
+|----|------|
+| `AHeight` | 进来时已经**预置**成这行本来的高度（`ItemHeight` 或主题的 `--item-height`）。只想改一部分行的话，不碰这个参数即可保持原状——不要假设它是 0。 |
+| 返回 `<= 0` | 忽略，保留预置值。高度为 0 的行不是行，是走不动的行遍历。 |
+| `Index` | 与 `OnDrawItem` 同口径：是 `Items` 的下标，弹层装前缀过滤子集时库会替你映射回去。 |
+| 单位 | **逻辑像素**，绘制时才按 DPI 缩放。 |
+| 何时触发 | 只有 Variable 两个 `Style` 会问；其他 `Style` 下这个事件**永远不会被调用**（行高一律是 `ItemHeight`）。 |
+| 没挂 handler | 照旧一行一个高度。**光设 `Style` 不会改变任何行。** |
+| 弹层高度 | `min(Items.Count, DropDownCount)` 行的高度**求和**（不是相乘），所以下拉框正好装下它要显示的那些行。 |
+
+**没有缓存。** 行遍历每次布局会问同一行若干次。下拉最多显示 `DropDownCount`（默认 8）行，而 `OnMeasureItem` 通常只是对宿主自己的数据做算术；加缓存就得在 `Items`、`Style`、handler、密度四处失效，漏一处就是一个谁也解释不了的过期行高。真需要压调用次数，请在自己的 handler 里记忆化。
+
+```pascal
+procedure TForm1.ComboMeasureItem(Sender: TObject; Index: Integer; var AHeight: Integer);
+begin
+  // 带副标题的行画两行文字，其余保持主题高度（不碰 AHeight）
+  if Pos(#10, TTyComboBox(Sender).Items[Index]) > 0 then AHeight := 40;
+end;
+
+Combo.OnMeasureItem := @ComboMeasureItem;
+Combo.OnDrawItem    := @ComboDrawItem;
+Combo.Style         := csOwnerDrawVariable;
+```
+
+底层是 `TTyListBox.RowHeight`（protected virtual，逻辑像素）：`ItemRect` / `RowAtY` / `VisibleRows` / `MaxTopIndex` / 行循环全部改从它取值，所以自己写 `TTyListBox` 后代时，override 这一个方法就够了，命中测试与绘制会一起跟上。
+
+### 8.2 自绘（四个 `csOwnerDraw*` 值 + `OnDrawItem`）
 
 ```pascal
 type
@@ -311,19 +345,32 @@ type
 
 | 项 | 说明 |
 |----|------|
-| `csOwnerDrawFixed` | 只读下拉 + 自绘行，**并且自绘关闭态字段**（对应 Windows 给 `CBS_DROPDOWNLIST` 的 edit 区发 `WM_DRAWITEM`）。 |
-| `csOwnerDrawEditableFixed` | 可编辑（内嵌 `TTyEdit`）+ 自绘行。字段**不**走 `OnDrawItem`：那块被真实编辑器盖住，handler 画了也看不见——LCL/Win32 也是这么分的。 |
+| `csOwnerDrawFixed` / `csOwnerDrawVariable` | 只读下拉 + 自绘行，**并且自绘关闭态字段**（对应 Windows 给 `CBS_DROPDOWNLIST` 的 edit 区发 `WM_DRAWITEM`）。 |
+| `csOwnerDrawEditableFixed` / `csOwnerDrawEditableVariable` | 可编辑（内嵌 `TTyEdit`）+ 自绘行。字段**不**走 `OnDrawItem`：那块被真实编辑器盖住，handler 画了也看不见——LCL/Win32 也是这么分的。 |
 | 没挂 `OnDrawItem` | 照旧走主题默认绘制。**光设 `Style` 永远不会把控件画空。** |
 | `Index` | 是 `Items` 的下标。弹层可能装的是前缀过滤后的子集（可编辑模式的自动补全），库会替你映射回去（重名行映射到第一个，与 `PopupListChange` 的提交口径一致）。 |
 | `ARect` | 行/字段实际绘制的矩形，**并且剪裁区就设成它**：handler 画到界外的部分被裁掉，不会串到邻行、边框或箭头区上。 |
 | `AState` | 行：`odBackgroundPainted` 恒有（主题的行底色/选中高亮已经画好了，别再自己铺一层），选中行加 `odSelected`，控件 disabled 时加 `odDisabled + odGrayed`。字段：额外带 `odComboBoxEdit`（这是共用一个 handler 时区分"字段"与"行"的标志），聚焦时加 `odFocused`。 |
-| 行高 | 由 `ItemHeight` 决定（名字里的 Fixed 就是这个意思）；`0` = 跟随主题。 |
+| 行高 | 两个 `*Fixed` 值由 `ItemHeight` 决定（名字里的 Fixed 就是这个意思），`0` = 跟随主题；两个 `*Variable` 值改问 `OnMeasureItem`，见 8.1.1。 |
 
 **`ACanvas` 是本库多出来的参数。** LCL 的 `TDrawItemEvent`（`stdctrls.pp:282`）没有画布参数，host 走 `Control.Canvas`——因为 LCL 的 `TCustomComboBox` 继承自 `TWinControl`，自己 new 了一个 `TControlCanvas`（`customcombobox.inc:891`），画谁就把它的 Handle 指到谁的 DC 上。**本控件继承自 `TCustomControl`，已经有一个绑定在自己窗口上的 `Canvas`**，而下拉行是**另一个控件、另一个窗口**画的——`Control.Canvas` 不可能是它们的画布。照抄 LCL 的路子就得用另一个对象去遮蔽继承来的属性，任何走到祖先 `Canvas` 的代码都会画到错窗口上。所以画布进签名，这也是本库另外两个自绘控件（`TTyTreeView.OnDrawNode`，以及 LCL **自己**的菜单自绘 `TMenuDrawItemEvent`）的做法。`Sender` 仍是组合框，`Items[Index]` 的写法与 LCL 一致。
 
 **回调在合成之后跑。** 画笔先把内容画进 BGRA 层，`EndPaint` 再整层贴到画布上——在那之前画到 `ACanvas` 上的东西会被抹掉。所以字段的回调在 `RenderTo` 的 `P.EndPaint` **之后**，行的回调在下拉列表 `Paint` 的 `inherited` **之后**。每次回调用 `ACanvas.SaveHandleState` / `RestoreHandleState` 包起来（**不是** `SaveDC` / `RestoreDC`：后者换回 DC 里选中的字体/画笔，而 LCL 的 `TCanvas` 还以为自己的对象仍被选中，于是从**第二次**回调起 `Font.Color := X` 变成静默空操作，用上一行的墨色画——这个缺陷在 `TTyTreeView` 和 `TTyPopupMenu` 上都发过货，见 `2477173` / `7629c14`）。
 
-**覆盖到哪些子类**：`TTyComboBox` 自身、`TTyComboBoxEx`、`TTyCheckComboBox`（自绘时行上的**勾选框**也一并交给 handler，因为你要的就是整行自己画；点击切换不受影响，命中测试不在绘制路径上）。另外 6 个自带下拉列表的子类（`TTyAdvancedComboBox` / `TTyColorBox` / `TTyColorComboBox` / `TTyFontComboBox` / `TTyOfficeComboBox` / `TTyShellComboBox`）**行**还没接进来：它们的字段照常自绘（`RenderTo` 是唯一入口），行则仍走各自的 `PaintItemContent`。接进来的做法是两行：让它的 popup list 改继承 `TTyComboPopupList`，并在它的 `PaintItemContent` 开头加 `if TyComboCollectRowOwnerDraw(Self, ARowRect, AIndex) then Exit;`。其中 `TTyAdvancedComboBox` 与 `TTyColorBox`（含 `TTyColorComboBox`）的 `SetStyle` 目前把**任何**值都压成 `csDropDownList`，要先照 `TTyCheckComboBox` 改成 `inherited SetStyle(TyComboStylePickOnly(AValue))` 才能设进自绘模式。
+**覆盖到哪些子类**：**全家都接进来了**——`TTyComboBox` 自身、`TTyComboBoxEx`、`TTyCheckComboBox`、`TTyAdvancedComboBox`、`TTyColorBox`、`TTyColorComboBox`、`TTyFontComboBox`、`TTyOfficeComboBox`、`TTyShellComboBox`、`TTyFilterComboBox`。字段自绘一直是全覆盖的（`RenderTo` 是唯一入口，没有子类替换它）；行自绘要求下拉列表继承 `TTyComboPopupList`，并在它自己的 `PaintItemContent` **开头**收口，因为这些子类都是整行替换绘制，交给 `inherited` 已经太晚。
+
+自绘会连**该子类特有的那部分**一起交给 handler，这是"整行自己画"的应有之义：`TTyCheckComboBox` 的**勾选框**、`TTyOfficeComboBox` 的**分组标题条**都不再由库画。点击/选中行为不受影响——命中测试不在绘制路径上（分组标题依旧不可选）。
+
+**只读锁与自绘是两回事。** `TTyColorBox`（含 `TTyColorComboBox`）/ `TTyAdvancedComboBox` / `TTyOfficeComboBox` / `TTyShellComboBox` / `TTyFilterComboBox` / `TTyCheckComboBox` 都强制只读，理由都只是"前缀过滤的可编辑弹层会打乱行与数据的对应"。它们的 `SetStyle` 现在一律走 `inherited SetStyle(TyComboStylePickOnly(AValue))`——只摘掉**编辑框**（对应 LCL 的 `SetEditBox(False)`），自绘与逐行高度照常通过：
+
+| 赋值 | 结果 |
+|------|------|
+| `csDropDown` | `csDropDownList`（编辑框被摘掉） |
+| `csOwnerDrawEditableFixed` | `csOwnerDrawFixed` |
+| `csOwnerDrawEditableVariable` | `csOwnerDrawVariable` |
+| `csOwnerDrawFixed` / `csOwnerDrawVariable` / `csDropDownList` | 原样通过 |
+
+注意 `TTyColorBox` 的 `Style` 是**调色板集合**（见 `colorbox.md`），组合框模式要写 `TTyComboBox(Box).Style := csOwnerDrawFixed`。
 
 ```pascal
 procedure TForm1.ComboDrawItem(Sender: TObject; ACanvas: TCanvas; Index: Integer;
@@ -349,5 +396,4 @@ Combo.Style := csOwnerDrawFixed;
 | `Items: TStrings` | 本控件是 `TStringList`。`Combo.Items := Screen.Fonts`（`TStrings`）编译不过，要写 `Items.Assign(...)`。 |
 | `AutoComplete` / `AutoCompleteText` / `AutoDropDown` / `AutoSelect` | 全无。本控件可编辑模式下**恒定**在每次按键时过滤并弹出建议列表（`AutoDropDown` 相当于永远开着且无法关闭），也没有"把匹配的剩余部分补进字段"的就地补全，没有获得焦点自动全选。 |
 | `AutoSize`（LCL 默认 `True`） | 未 published。高度在构造函数里定死（`TyDensityHeight(..., 26)`）。 |
-| `OnMeasureItem` | 无。只有 `csOwnerDrawVariable*` 会用到它，而那两个值没做（见 8.1）。 |
 | `ArrowKeysTraverseList` / `Canvas` / `EmulatedTextHintStatus` / `MatchListItem` | 无。 |

@@ -31,7 +31,7 @@ type
     the TTyListBox.PaintItemContent hook, reading its OWN Items (the combo copies its
     Items — including Objects[] image indices — into this list via Items.Assign) and the
     owning combo's Images. Its Owner is the combo (CreatePopupList does Create(Self)). }
-  TTyAdvancedComboPopupList = class(TTyListBox)
+  TTyAdvancedComboPopupList = class(TTyComboPopupList)
   protected
     procedure PaintItemContent(P: TTyPainter; const ARowRect: TRect; AIndex: Integer;
       const AStyle: TTyStyleSet); override;
@@ -75,7 +75,11 @@ implementation
 
 procedure TTyAdvancedComboBox.SetStyle(AValue: TTyComboBoxStyle);
 begin
-  inherited SetStyle(csDropDownList);   // pick-only: ignore attempts to make it editable
+  { Pick-only, and ONLY pick-only: the edit box is what the joined two-line item string
+    cannot survive, so that is what comes off. Flattening the whole value to csDropDownList
+    also killed owner-draw, which is orthogonal to editability and which a rich-row combo is
+    the likeliest of all of them to want. }
+  inherited SetStyle(TyComboStylePickOnly(AValue));
 end;
 
 { TTyAdvancedComboPopupList }
@@ -85,6 +89,9 @@ procedure TTyAdvancedComboPopupList.PaintItemContent(P: TTyPainter; const ARowRe
 var
   imgs: TTyVirtualImageList;
 begin
+  { Owner-draw first: the rich-row branch below replaces the whole row, so an inherited call
+    would be too late. Inert unless the combo has both an owner-draw Style and a handler. }
+  if TyComboCollectRowOwnerDraw(Self, ARowRect, AIndex) then Exit;
   // The Owner is the combo (Create(Self) in CreatePopupList); it supplies the Images
   // reference. The image index rides in Objects[] (copied from the combo via Items.Assign):
   // PtrInt(Objects[i]) - 1, so 0 => -1 (no image).

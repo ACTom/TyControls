@@ -104,7 +104,7 @@ type
     TTyListBox.PaintItemContent hook. The colour is carried in each item's Objects[] entry
     (the combo copies its Items — including Objects — into this list), so there is no side
     array that could desync from the names. }
-  TTyColorPopupList = class(TTyListBox)
+  TTyColorPopupList = class(TTyComboPopupList)
   protected
     procedure PaintItemContent(P: TTyPainter; const ARowRect: TRect; AIndex: Integer;
       const AStyle: TTyStyleSet); override;
@@ -455,6 +455,11 @@ var
   c: TColor;
   w, off: Integer;
 begin
+  { Owner-draw first: the swatch branch below replaces the whole row, so an inherited call
+    would be too late. Inert unless the combo has both an owner-draw Style and a handler --
+    which on a colour box means TTyComboBox(Box).Style, since Style on this class is the
+    palette composition. }
+  if TyComboCollectRowOwnerDraw(Self, ARowRect, AIndex) then Exit;
   c := TyColorOfItem(Items, AIndex);
   w := 0; off := 0;
   // The popup is created by the combo (Create(Self)), so its owner is the control whose
@@ -488,10 +493,15 @@ end;
 
 procedure TTyColorBox.SetStyle(AValue: TTyComboBoxStyle);
 begin
-  // A colour box is always pick-only: the editable csDropDown popup is prefix-FILTERED,
-  // which would map row indices to the wrong swatches. Ignore any attempt to change it.
-  // (Reachable only as TTyComboBox(Box).Style now -- `Style` on this class is the palette.)
-  inherited SetStyle(csDropDownList);
+  { A colour box is always PICK-ONLY: the editable csDropDown popup is prefix-FILTERED,
+    which would map row indices to the wrong swatches. But pick-only is the only thing this
+    class needs to insist on, and flattening every value to csDropDownList took the
+    ORTHOGONAL choice down with it -- owner-draw, which has nothing to do with filtering,
+    became unreachable. TyComboStylePickOnly takes off exactly the edit box, the way LCL's
+    SetEditBox(False) does, so csOwnerDrawFixed and csOwnerDrawVariable get through and the
+    editable spellings of them land on their pick-only twins.
+    (Reachable only as TTyComboBox(Box).Style -- `Style` on this class is the palette.) }
+  inherited SetStyle(TyComboStylePickOnly(AValue));
 end;
 
 procedure TTyColorBox.SetPaletteStyle(const AValue: TTyColorBoxStyle);

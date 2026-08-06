@@ -10,7 +10,7 @@ type
   { The drop-down list for TTyOfficeComboBox. A row whose Objects[i] holds PtrInt(1) is a
     group HEADER (tinted band, bold text); all others are normal items. The flags are copied
     into this list's Items via Items.Assign from the combo, so it reads its OWN Objects[]. }
-  TTyOfficeComboPopupList = class(TTyListBox)
+  TTyOfficeComboPopupList = class(TTyComboPopupList)
   protected
     procedure PaintItemContent(P: TTyPainter; const ARowRect: TRect; AIndex: Integer;
       const AStyle: TTyStyleSet); override;
@@ -78,6 +78,12 @@ end;
 procedure TTyOfficeComboPopupList.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
   AIndex: Integer; const AStyle: TTyStyleSet);
 begin
+  { Owner-draw first: the header branch below replaces the whole row, so leaving the collect
+    to the inherited call would skip exactly the rows a grouped combo most wants to restyle.
+    Note what it costs — a host that takes the rows over paints the GROUP HEADERS too; the
+    band is default content like any other. Selectability is unaffected: that is a hit test,
+    not a paint. }
+  if TyComboCollectRowOwnerDraw(Self, ARowRect, AIndex) then Exit;
   // Read this list's OWN Objects[] (copied via Assign from the combo).
   if (AIndex >= 0) and (AIndex < Items.Count) and (PtrInt(Items.Objects[AIndex]) = 1) then
     DrawHeaderBand(P, ARowRect, Items[AIndex], ActiveController)
@@ -138,7 +144,12 @@ end;
 
 procedure TTyOfficeComboBox.SetStyle(AValue: TTyComboBoxStyle);
 begin
-  inherited SetStyle(csDropDownList);   // pick-only: ignore attempts to make it editable
+  { Pick-only, and ONLY pick-only. The reason is the edit box and nothing else: the editable
+    popup commits a pick by assigning FItemIndex directly, bypassing the SelectItem override
+    that keeps headers unselectable. Owner-draw does not go anywhere near that path, so
+    taking it off with the edit box (which flattening to csDropDownList did) removed a
+    capability for a reason that never applied to it. }
+  inherited SetStyle(TyComboStylePickOnly(AValue));
 end;
 
 end.
