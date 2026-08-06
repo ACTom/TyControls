@@ -27,7 +27,6 @@ object MainForm: TMainForm
       TabOrder = 0
       Caption = 'TyControls Pro  ·  Ant Design Pro layout'
       Align = alTop
-      ButtonWidth = 46
       object DarkSwitch: TTyToggleSwitch
         Left = 718
         Height = 28

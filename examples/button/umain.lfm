@@ -26,7 +26,6 @@ object MainForm: TMainForm
       TabOrder = 0
       Caption = 'TTyButton  ·  TyControls'
       Align = alTop
-      ButtonWidth = 46
       object DarkSwitch: TTyToggleSwitch
         Left = 112
         Height = 24

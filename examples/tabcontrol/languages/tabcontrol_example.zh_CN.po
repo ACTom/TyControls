@@ -49,7 +49,7 @@ msgstr "浅色"
 
 #: tmainform.btndark.caption
 msgid "Dark"
-msgstr "深色"
+msgstr "暗色"
 
 #: tmainform.pgabout.caption
 msgid "A&bout"

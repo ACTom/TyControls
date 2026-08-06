@@ -378,7 +378,7 @@ msgstr "点击列头排序；漏斗按钮筛选该列。"
 
 #: tdemomainform.mnufilesep.caption
 msgid "-"
-msgstr ""
+msgstr "-"
 
 #: tdemomainform.densitycombo.text
 msgid "Classic"

@@ -27,6 +27,7 @@ object MainForm: TMainForm
         Height = 26
         Top = 4
         Width = 70
+        Anchors = [akTop, akRight]
         Caption = 'Accent colour'
         OnClick = BtnAccentClick
       end
@@ -35,6 +36,7 @@ object MainForm: TMainForm
         Height = 22
         Top = 6
         Width = 88
+        Anchors = [akTop, akRight]
         Caption = 'Dark'
         OnChange = DarkSwitchChange
       end
@@ -43,6 +45,7 @@ object MainForm: TMainForm
         Height = 24
         Top = 5
         Width = 150
+        Anchors = [akTop, akRight]
         OnChange = ThemeComboChange
       end
     end

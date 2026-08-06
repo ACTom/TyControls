@@ -27,7 +27,6 @@ object DemoMainForm: TDemoMainForm
       Caption = 'TyControls Demo'
       TitleAlignment = taRightJustify
       Align = alTop
-      ButtonWidth = 46
       object TyMenuBar1: TTyMenuBar
         Left = 4
         Height = 24
@@ -44,6 +43,7 @@ object DemoMainForm: TDemoMainForm
         Top = 4
         Width = 104
         TabOrder = 4
+        Anchors = [akTop, akRight]
         Controller = TyController
         ItemIndex = -1
         OnChange = ThemeComboChange
@@ -54,6 +54,7 @@ object DemoMainForm: TDemoMainForm
         Top = 4
         Width = 54
         TabOrder = 5
+        Anchors = [akTop, akRight]
         OnClick = ApLightClick
         StyleClass = 'ghost'
         Controller = TyController
@@ -65,6 +66,7 @@ object DemoMainForm: TDemoMainForm
         Top = 4
         Width = 48
         TabOrder = 6
+        Anchors = [akTop, akRight]
         OnClick = ApDarkClick
         StyleClass = 'ghost'
         Controller = TyController
@@ -76,6 +78,7 @@ object DemoMainForm: TDemoMainForm
         Top = 4
         Width = 48
         TabOrder = 9
+        Anchors = [akTop, akRight]
         OnClick = ApAutoClick
         StyleClass = 'ghost'
         Controller = TyController
@@ -87,6 +90,7 @@ object DemoMainForm: TDemoMainForm
         Top = 4
         Width = 64
         TabOrder = 7
+        Anchors = [akTop, akRight]
         OnClick = PickAccent
         StyleClass = 'ghost'
         Controller = TyController
@@ -99,6 +103,7 @@ object DemoMainForm: TDemoMainForm
         Width = 54
         Enabled = False
         TabOrder = 8
+        Anchors = [akTop, akRight]
         OnClick = ResetAccentClick
         StyleClass = 'ghost'
         Controller = TyController
