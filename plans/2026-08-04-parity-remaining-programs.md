@@ -156,41 +156,65 @@ LCL 的 `TSpeedButton` 和 `TPaintBox` 都是 `TGraphicControl` —— **没有�
 
 ---
 
-## 剩下 26 条真正的单控件大特性(按受众排)
+## 剩下的单控件大特性(按受众排)
+
+> **2026-08-07 更新**:这张表原来是 26 条。经过两轮并行推进,**13 条已做完**、
+> **2 条查明审计本来就写错了**(`TTyComboBoxEx.ItemsEx`、`TTyColorBox.Style` 一直都在)、
+> **2 条判定不做并写明了理由**(`TTySplitter.ResizeAnchor`、`TTyProgressBar` 的焦点成员)。
+> 划掉的行保留原文,后面接的是**做成了什么**和**仍缺什么** —— 下一批要挑的活都在那些
+> "仍缺"里,不必再回头读审计。
 
 | 控件 | 缺什么 | 一句话影响 |
 |---|---|---|
-| `TTyTreeView` | `Items: TTreeNodes` 整个节点对象模型 + `Node.Text` | 移植过来的 `Items.AddChild(nil,'Root')` 全部编译不过;OI 里没有树节点编辑器 |
-| `TTyCustomTabStrip` | `TabPosition`、`MultiLine`/`RaggedRight`/`RowCount`、整套标签图标 | 标签条只能在顶边、只能一行、不能带图标 |
-| `TTyToolBar` | `TToolButton` 整个类(6 种 style、`Down`、`Grouped`、`DropdownMenu`…) | 工具条按钮的类型系统整个没有 |
+| ~~`TTyTreeView`~~ | ~~`Items` 节点对象模型 + `Node.Text`~~ | **已做**(`a8d98b7`):扁平 `TCollection` + `Level`(集合顺序即先序,`Items[i]` 直接对上 LCL 的绝对下标);模式由 `Items.Count > 0` 派生,虚拟路径按构造不受影响;两边都给内容当场抛 `ETyTreeItemMode` 并同时点名。`TTyShellTreeView` 覆写 `SupportsItemModel` 拒绝 |
+| ~~`TTyCustomTabStrip`~~ | ~~`TabPosition`、`MultiLine`/`RaggedRight`/`RowCount`、标签图标~~ | **已做**(`b7cbdef` + `d1362d2`):轴无关的一套变换(沿主轴滑动→在条带盒里嵌入→反射屏幕 x),侧边条带**不旋转文字**(与 comctl32 的 `TCS_VERTICAL` 故意不同)。`ScrollOpposite` **不做**——它与拖拽重排是同一件事,见 `plans/2026-08-06-tabstrip-multiline-spec.md` |
+| ~~`TTyToolBar`~~ | ~~`TToolButton` 整个类~~ | **已做**(`38bde80`):`TTyToolButton` 六种样式全建。`Grouped`(相邻成组)而非 `GroupIndex`,两向可译且都钉住;`ImageIndex` 落到既有的 `ImageName` 上,只有一份图标状态;`Marked`/`Indeterminate` **故意不做**——它们在 LCL 自己那儿就是不生效的属性。**仍缺**(条本身的成员,下一批):`ButtonWidth`、`DropDownWidth`、`List`、`HotImages`、`DisabledImages`、`OnPaintButton` |
 | ~~`TTyStringGrid`~~ | ~~`Cols[]`/`Rows[]` 可赋值的 `TStrings`、`Objects[c,r]`~~ | **已做**:对象槽进 `TTyGridCellAttr`(跟着排序/增删行搬家,**不进撤销栈**),`Cols[]`/`Rows[]` 是 `TTyGridStrings` 活视图,赋值不改结构。见 `docs/controls/grid.md`《对象槽与整行整列赋值》 |
-| `TTyCustomGrid` | `Options: TGridOptions`(~32 个行为标志集合) | 设计器里一个地方翻所有行为开关的入口没有 |
-| `TTyComboBox` | `Style` 的 7 个取值(含 owner-draw 三种) | 只有一种下拉形态 |
+| ~~`TTyCustomGrid`~~ | ~~`Options: TGridOptions`~~ | **已做**(`251db2d`):32 个标志逐条判过,21 个进枚举(其中 9 个是既有状态的**视图**,不二次存储)、11 个不做且各写了理由。`goHeaderPushedLook` 需要 `themes/light.tycss` 里的 `TyGridHeaderSection:active`,`goThumbTracking` 需要滚动条的缝——两个缝都指明了 |
+| ~~`TTyComboBox`~~ | ~~`Style` 的 7 个取值~~ | **已做**(`feedabc` + `3643653`):四个取值 + `OnDrawItem` + `OnMeasureItem`,全家 6 个类接线。**仍缺 `csSimple`**——常驻列表是另一种控件形态,已在文档里写明 |
 | ~~`TTyComboBoxEx`~~ | ~~`ItemsEx` 集合(`TComboExItem`)~~ | **审计写错了 —— 这个早就有**:`TTyComboExItem` 的 `Caption`/`ImageIndex`/`Indent`/`OverlayImageIndex`/`SelectedImageIndex`/`Data` 与 LCL 的 `TComboExItem` 逐项对得上,`ItemsEx` 是 published 的集合、设计期可编辑。核过 `source/tyControls.ComboBoxEx.pas` |
-| `TTyMaskEdit` | LCL 掩码语言(~20 个 token)、槽内定位编辑 | 掩码语言是我们自己的三码;光标不能落进任意槽 |
-| `TTyDateTimePicker` | 整个 null/空日期模型(`NullInputAllowed`/`NullDate`) | 字段清不空,"未填写"表达不了 |
+| ~~`TTyMaskEdit`~~ | ~~LCL 掩码语言、槽内定位编辑~~ | **已做**(`a3e9c87`,**破坏性**):掩码编译成逐位的 `TTyMaskCell`,十二个槽码 + `\` 转义 + 大小写区 + `;存字面量;占位符`。`#` 现在直接抛 |
+| ~~`TTyDateTimePicker`~~ | ~~null/空日期模型~~ | **已做**(`d93d782`):`TyNullDate` 用 LCL 的那个值,`SetDateTime` **先判空再钳位**(反过来会把"没填"变成 9999-12-31)。**仍缺**:月份/星期名取自 OS 区域而非应用语言(`Calendar` 与本控件各一处) |
 | ~~`TTySpinEdit`~~ | ~~`TFloatSpinEdit`(`Value: Double`、`DecimalPlaces`)~~ | **已做**:新控件 `TTyFloatSpinEdit = class(TTyNumericEdit)`(自己的单元 `tyControls.FloatSpinEdit`),不是 `TTySpinEdit` 的后代——LCL 把家族反着建(`spin.pp:146`),且本控件三个 `Integer` 的 public virtual 缝已有外部覆写者。按钮走 `TTyEdit` 的 `RightReserve`/`PaintTrailing`/`TrailingZone`。`DecimalPlaces` 沿用本库既有拼法 `Decimals`(继承自 `TTyNumericEdit`)。见 `docs/controls/floatspinedit.md` |
-| `TTyUpDown` | `Associate`、`ArrowKeys` | 上下按钮绑不到伴随编辑框 |
-| `TTyImageCollection` | 设计期像素流式化、多分辨率母版 | 图标进不了 `.lfm`;HiDPI 只能缩放不能换母版 |
-| `TTyValueListEditor` | `KeyOptions` | 运行时能不能改键/加行/删行,没有开关 |
+| ~~`TTyUpDown`~~ | ~~`Associate`、`ArrowKeys`~~ | **已做**(`0f4f0a2`):`Associate` 是**双向**的(照 LCL 的 `GetPosition` 回读),值走 RTTI 找 published 的 `Text` 而不是 LCL 的 `Caption`——照抄 LCL 会让它对本库自己的编辑框静默失效。`ArrowKeys` 从前被以"结构性不可能"拒掉,那是量错了控件 |
+| ~~`TTyImageCollection`~~ | ~~设计期像素流式化、多分辨率母版~~ | **已做**:published 的 `Images` 集合,每项 `ImageName` + base64 PNG(base64 是唯一真相,解码出的 BGRA 只是缓存)。**不走 `DefineProperties` 伪属性**——那种窗体在 IDE 里打不开(`examples/demo/mainform.pas:182` 记着这件事)。同名多项 = 多分辨率母版,取"最小的够用的" |
+| ~~`TTyValueListEditor`~~ | ~~`KeyOptions`~~ | **已做**(`825138c`):`keyUnique` 按**同级**判重而不是全表——本控件的行是嵌套的,嵌套本身就会造出合法的重名。**仍缺**:`Keys[]` 只读(LCL 的可写) |
 | `TTyHeaderControl` | `Sections` 作为对象集合 | (已判定**不做**:见 017d3b9,索引可达全部 facet) |
-| `TTyListBox` | `ScrollWidth` 与横向滚动 | 比客户区宽的项看不全 |
-| `TTyColorBox` | `Style` 作为集合(组合调色板) | 调色板内容不可组合 |
+| ~~`TTyListBox`~~ | ~~`ScrollWidth` 与横向滚动~~ | **已做**(`3643653`):`ScrollWidth` 是你设的数(LCL 语义),超宽出底部滚动条;顺带开了逐行高度的缝。**横条的实际落点没人验过**——那是 LCL 对齐引擎的事,headless 跑不到,只有 `examples/listbox` 的开关能看 |
+| ~~`TTyColorBox`~~ | ~~`Style` 作为集合~~ | **审计写错了 —— 早在 `4e3376a` 就是集合**,八个成员与 LCL 一一对应。只有文档里那句"`Style` 被强制为 `csDropDownList`"是错的,已改 |
 | `TTyPanel` | `ChildSizing` 子对象 | (基类已 republish,需确认子对象是否真生效) |
-| `TTySplitter` | `ResizeAnchor` | 只能按 `Align` 推断改哪边 |
-| `TTyProgressBar` | `TabStop`/`TabOrder`/`OnEnter`/`OnExit` | 它在 LCL 里是能拿焦点的 |
+| `TTySplitter` | `ResizeAnchor` | **判定:不做,原因不是工作量**(`825138c`)。LCL 里给它赋值的意思是"离开 Align 模式、进入**锚定模式**"(`SetResizeAnchor` 在 `csLoading` 外强制 `Align := alNone`),而本控件没有锚定模式。挡路的是**验证**:锚定模式的位移全由 LCL 对齐引擎产生,而 `AutoSizeDelayed` 让没句柄的窗体整棵树不对齐 —— 任何 headless 守卫都是假绿。前置条件=一条真分配句柄的测试路径。规格见 `docs/controls/splitter.md` §8 |
+| `TTyProgressBar` | `TabStop`/`TabOrder`/`OnEnter`/`OnExit` | **判定:不做**(`825138c`)。它是 `TTyGraphicControl`,**没有句柄**;这四个成员声明在 `TWinControl` 上,所以"补上"等于**新声明四个**没人读的成员。守卫钉的是**基类**,将来若改成窗口化控件会当场变红,把决定重新摆到台面上 |
 
 ---
 
 ## 建议的下一步顺序
 
-1. ~~**程序 B 的实证**~~ **已做完(2026-08-06)。结论是"几行搞定"。**
-   剩余动作只有一个:给 `TTyGroupBox` 和 `TTyPageControl` 各补 9 行 `property`
-   (照抄 `tyControls.Panel.pas:76-84`),外加两条 RTTI 守卫。
-   `TTyPanel`(`4e3376a`)和 `TTyControlBar`(继承)这两条**已经可以直接勾掉**。
-2. **RTL 定性**(一句话决定):做,还是在文档里写明不支持。**现在这种既不做也不说的状态最差。**
-3. **26 条单控件特性**按上表受众排,继续按控件分区并行推进。
-4. ~~**程序 C 先量后改**~~ **已量完(2026-08-06)。结论是不改,建议关掉这一条**
-   ——`TTyPaintPanel` 是能放子控件的真容器,变不了图形控件;而原本的视觉理由已被
-   `a1c31d1` 用一个函数修掉了。**替代动作**:开一张小票修 `aero` 主题下窗口化控件的黑角
-   (1/17 主题,`FillCornerGaps` 在"渐变底 + 带 alpha 阴影"下疑似丢 alpha)。
+1. ~~**程序 B 的实证**~~ **做完了(2026-08-06),而且四条全收(`240956c` / `aa1a776`)。**
+   `TTyPanel`(`4e3376a`)、`TTyControlBar`(继承)、`TTyGroupBox`、`TTyPageControl` 现在都
+   published 了那九个成员,RTTI 守卫覆盖四个站。**这一条可以关掉。**
+2. ~~**RTL 定性**~~ **定了:做,而且做了。**状态与逐控件的完成度见 `docs/rtl.md`;
+   仍然拒绝镜像的地方(功能区、网格竖条、下拉箭头、值列表编辑器…)由
+   `tests/test.rtl.pas` 的 `TRtlExclusionTest` 逐条钉住,每条都写了拒绝的理由。
+3. **单控件特性**:上表里划掉的行后面那些"**仍缺**"就是下一批的清单。按受众排,现在最靠前的是
+   —— `TTyToolBar` 条本身的六个成员(`ButtonWidth`/`DropDownWidth`/`List`/`HotImages`/
+   `DisabledImages`/`OnPaintButton`)、`TTyComboBox.csSimple`、日历与日期框的
+   月份/星期名跟随应用语言而不是 OS 区域、`TTyValueListEditor.Keys[]` 可写。
+4. ~~**程序 C 先量后改**~~ **量完了(2026-08-06),结论是不改。**
+   `TTyPaintPanel` 是能放子控件的真容器(实测:子控件有真 Win32 父子句柄),变不了图形控件;
+   原本的视觉理由已被 `a1c31d1` 用一个函数修掉。**这一条可以关掉。**
+   **替代动作(仍未做)**:`aero` 主题下窗口化控件的四角是纯黑硬角块(17 个内置主题里只有它一个)。
+   `aero` 的特殊之处是**同时**有渐变的 `TyForm` 底和带 alpha 的控件阴影,怀疑 `FillCornerGaps` 
+   在这个组合下把 `#00000014` 当成 `#000000` 写了进去。
+
+## 这一轮之后仍然欠的账(不在上表里的)
+
+- **39 个 example 仍从代码字面量拼用户可见文案**(已修 `tabset`、`ribbon`)。按量排:
+  `listview` 16、`theming` 14、`tabcontrol` 12、`edit`/`grid`/`treeview` 各 10、
+  `inputs`/`trackbar` 各 7、`shapes` 6,再往下是长尾。机械但量大。
+- **`examples/inputs` 十三个列标题被右边缘切掉**。要逐列决定是折行、缩写还是重排,
+  不是一次扫描能扫完的,所以整条留着没动。
+- **`TTyPanel` 的 `Caption` 垂直居中且没有 `Layout`**,任何盖住面板中部的子控件都会和它撞字。
+  真正的修法是给 `TTyPanel` 加 `Layout`。
+- **网格的 `ReadOnly` 拦得住七条编辑路径,拦不住 Ctrl+V / Ctrl+X / 填充柄**。
+  已写进 `docs/controls/grid.md` 的已知缺口,修法三行,但它改的是数据写入语义,要单独定。
