@@ -588,21 +588,21 @@ object MainForm: TMainForm
           Left = 0
           Height = 22
           Top = 0
-          Width = 52
+          Width = 60
           Caption = 'Open'
         end
         object RebarSave: TTyButton
           Left = 0
           Height = 22
           Top = 0
-          Width = 52
+          Width = 60
           Caption = 'Save'
         end
         object RebarPrint: TTyButton
           Left = 0
           Height = 22
           Top = 0
-          Width = 52
+          Width = 60
           Caption = 'Print'
         end
       end
