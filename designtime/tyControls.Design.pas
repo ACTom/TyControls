@@ -57,7 +57,10 @@ uses
   { The vocabularies the value-list editors below read: the compiled-in theme pack and the
     process-wide named-theme registry. TypInfo is for the RTTI hop from a control to its
     IconFont — two unrelated classes publish that property and share no ancestor carrying it. }
-  TypInfo, tyControls.BuiltinThemes, tyControls.ThemeRegistry;
+  TypInfo, tyControls.BuiltinThemes, tyControls.ThemeRegistry,
+  { The image-payload editor loads a picked file straight into a TBGRABitmap and encodes
+    it with the collection's own codec — no TPicture anywhere on that path. }
+  BGRABitmap;
 type
   TTyStyleClassPropertyEditor = class(TStringPropertyEditor)
   public
@@ -113,8 +116,10 @@ type
   end;
 
   { GlyphName: the keys of the associated TTyIconFont's Glyphs map ('name=HEX' lines). That
-    map is a published TStrings, so unlike an image collection — filled only by runtime code —
-    it is populated at DESIGN time and the list is real. Reached by RTTI rather than by a cast:
+    map is a published TStrings, so it is populated at DESIGN time and the list is real.
+    (It used to say "unlike an image collection, filled only by runtime code" — no longer
+    true: TTyImageCollection.Images streams too, see TTyImagePayloadPropertyEditor.)
+    Reached by RTTI rather than by a cast:
     TTyCharImage and TTyGlyphButtonBase both publish IconFont but share no ancestor that
     declares it, and a future control publishing the same pair gets the dropdown for free. }
   TTyGlyphNamePropertyEditor = class(TStringPropertyEditor)
@@ -137,6 +142,28 @@ type
   public
     function GetFilter: string; override;
     function GetDialogTitle: string; override;
+  end;
+
+  { TTyImageItem.PngBase64 — the pixels of one master, held as a base64 PNG.
+
+    Read-only in the grid with a '...' button that picks an image FILE and encodes it.
+    Nobody hand-types four kilobytes of base64, and letting them try is exactly how a
+    payload gets truncated into an icon that silently stops decoding; the grid shows a
+    summary ('PNG 32x32') instead of the payload, which would otherwise make the row
+    unreadable and the Object Inspector crawl.
+
+    This editor is the design-time INTAKE for the whole collection: TTyImageCollection
+    streams its masters through Images, so a picture loaded here is written into the .lfm
+    and comes back at run time. Before it, images could only be added by runtime code. }
+  TTyImagePayloadPropertyEditor = class(TPropertyEditor)
+  private
+    { The collection item this property belongs to, or nil if the editor was somehow
+      attached elsewhere (defensive: an editor must never bring the IDE down). }
+    function EditedItem: TTyImageItem;
+  public
+    function GetAttributes: TPropertyAttributes; override;
+    function GetValue: string; override;
+    procedure Edit; override;
   end;
 
   { TTyRibbonPage.Context: the contextual-tab group this page belongs to. The vocabulary is
@@ -311,6 +338,12 @@ resourcestring
   rsDtThemeFileTitle   = 'Select a .tycss stylesheet';
   rsDtFontFileFilter   = 'Font files (*.ttf;*.otf;*.ttc)|*.ttf;*.otf;*.ttc|All files|*';
   rsDtFontFileTitle    = 'Select an icon-font file';
+  rsDtImageFileFilter  = 'Image files (*.png;*.bmp;*.jpg;*.jpeg;*.gif)|' +
+    '*.png;*.bmp;*.jpg;*.jpeg;*.gif|All files|*';
+  rsDtImageFileTitle   = 'Select an image for this collection entry';
+  rsDtImageNoPayload   = '(no image)';
+  rsDtImageBadPayload  = '(unreadable image data)';
+  rsDtImageLoadFailed  = 'That file could not be read as an image.';
   rsDtThemeNameHint    = 'The theme to load by name. The list offers the themes compiled into ' +
     'TyControls plus any registered in this IDE; a name your application registers at run time ' +
     'is equally valid, so you may type one that is not listed. Setting this clears ThemeFile.';
@@ -565,6 +598,89 @@ end;
 function TTyFontFilePropertyEditor.GetDialogTitle: string;
 begin
   Result := rsDtFontFileTitle;
+end;
+
+{ TTyImagePayloadPropertyEditor }
+
+function TTyImagePayloadPropertyEditor.EditedItem: TTyImageItem;
+var
+  p: TPersistent;
+begin
+  Result := nil;
+  if PropCount <> 1 then Exit;   // multi-select: one file cannot mean several rows
+  p := GetComponent(0);
+  if p is TTyImageItem then
+    Result := TTyImageItem(p);
+end;
+
+function TTyImagePayloadPropertyEditor.GetAttributes: TPropertyAttributes;
+begin
+  // paReadOnly greys the cell (the payload is not typeable), paDialog gives the '...'
+  // button that does the real work. Same shape as TTyVersionEditor above.
+  Result := [paReadOnly, paDialog];
+end;
+
+function TTyImagePayloadPropertyEditor.GetValue: string;
+var
+  it: TTyImageItem;
+  m: TBGRABitmap;
+begin
+  it := EditedItem;
+  if it = nil then Exit(rsDtImageNoPayload);
+  if it.PngBase64 = '' then Exit(rsDtImageNoPayload);
+  m := it.Master;
+  // Non-empty but nil master = the payload is there and does not decode. Saying so is
+  // the difference between "I forgot to load it" and "my .lfm got mangled".
+  if m = nil then Exit(rsDtImageBadPayload);
+  Result := Format('PNG %dx%d', [m.Width, m.Height]);
+end;
+
+procedure TTyImagePayloadPropertyEditor.Edit;
+var
+  dlg: TOpenDialog;
+  it: TTyImageItem;
+  bmp: TBGRABitmap;
+  ok: Boolean;
+begin
+  it := EditedItem;
+  if it = nil then Exit;
+  dlg := TOpenDialog.Create(nil);
+  try
+    dlg.Filter := rsDtImageFileFilter;
+    dlg.Title := rsDtImageFileTitle;
+    dlg.Options := dlg.Options + [ofFileMustExist];
+    if not dlg.Execute then Exit;
+
+    bmp := TBGRABitmap.Create;
+    try
+      ok := True;
+      try
+        // BGRA-native load: the pixels never pass through TPicture, which is the round
+        // trip that turns a BGRA bitmap black (memory/bgra-makebitmapcopy-black).
+        bmp.LoadFromFile(dlg.FileName);
+      except
+        ok := False;   // not an image, or a corrupt one — report, never escape into the IDE
+      end;
+      if ok then
+        ok := (bmp.Width > 0) and (bmp.Height > 0);
+      if not ok then
+      begin
+        ShowMessage(rsDtImageLoadFailed);
+        Exit;
+      end;
+      it.SetBitmap(bmp);
+      // The NAME is the lookup key, and an unnamed master is unreachable. Defaulting it
+      // to the file's base name makes the common case (drop in save.png, get 'save')
+      // work without a second edit, while never overwriting a name already chosen.
+      if it.ImageName = '' then
+        it.ImageName := ChangeFileExt(ExtractFileName(dlg.FileName), '');
+    finally
+      bmp.Free;
+    end;
+    Modified;
+  finally
+    dlg.Free;
+  end;
 end;
 
 { TTyRibbonContextPropertyEditor }
@@ -1154,6 +1270,11 @@ begin
     TTyFontFamilyPropertyEditor);
   RegisterPropertyEditor(TypeInfo(string), TTyIconFont, 'FontFile',
     TTyFontFilePropertyEditor);
+  { The design-time way pixels get INTO an image collection. Registered on the collection
+    ITEM, so it applies inside the stock collection editor that TTyImageCollection.Images
+    opens — no custom collection editor needed. }
+  RegisterPropertyEditor(TypeInfo(string), TTyImageItem, 'PngBase64',
+    TTyImagePayloadPropertyEditor);
   RegisterPropertyEditor(TypeInfo(string), TTyCharImage, 'GlyphName',
     TTyGlyphNamePropertyEditor);
   RegisterPropertyEditor(TypeInfo(string), TTyGlyphButtonBase, 'GlyphName',

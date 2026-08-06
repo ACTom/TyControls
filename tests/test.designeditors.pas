@@ -32,7 +32,8 @@ uses
   tyControls.FormSurface, tyControls.Menu, tyControls.Popover, tyControls.IconFont,
   tyControls.CharImage, tyControls.GlyphButtons, tyControls.Ribbon,
   tyControls.Dialogs.FileDialog, tyControls.Dialogs.SelectPath, tyControls.FilterComboBox,
-  tyControls.ShellComboBox, tyControls.ShellListView, tyControls.ShellTreeView;
+  tyControls.ShellComboBox, tyControls.ShellListView, tyControls.ShellTreeView,
+  tyControls.ImageCollection;
 
 type
   TDesignEditorsTest = class(TTestCase)
@@ -385,7 +386,11 @@ initialization
     TTyGraphicControl, TTyCustomControl, TTyComponent, TTyStyleController, TTyForm,
     TTyFormSurface, TTyPopupMenu, TTyPopover, TTyIconFont, TTyCharImage, TTyGlyphButtonBase,
     TTyRibbonPage, TTyCustomFileDialog, TTyFilterComboBox, TTySelectPathDialog,
-    TTyShellComboBox, TTyShellListView, TTyShellTreeView]);
+    TTyShellComboBox, TTyShellListView, TTyShellTreeView,
+    { A collection ITEM, not a component — the image-payload editor is registered on
+      TTyImageItem so it applies inside the stock collection editor for
+      TTyImageCollection.Images. GetClass needs it registered to resolve the name. }
+    TTyImageItem]);
   RegisterTest(TDesignEditorsTest);
 
 end.

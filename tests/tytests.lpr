@@ -105,6 +105,7 @@ uses
   test.glyphimagelist,
   test.image,
   test.imagecollection,
+  test.imagecollection.streaming,
   test.glyphbuttons,
   test.dropbuttons,
   test.colorbutton,

@@ -54,6 +54,26 @@ msgstr ""
 msgid "TyControls Form"
 msgstr ""
 
+#: tycontrols.design.rsdtimagebadpayload
+msgid "(unreadable image data)"
+msgstr ""
+
+#: tycontrols.design.rsdtimagefilefilter
+msgid "Image files (*.png;*.bmp;*.jpg;*.jpeg;*.gif)|*.png;*.bmp;*.jpg;*.jpeg;*.gif|All files|*"
+msgstr ""
+
+#: tycontrols.design.rsdtimagefiletitle
+msgid "Select an image for this collection entry"
+msgstr ""
+
+#: tycontrols.design.rsdtimageloadfailed
+msgid "That file could not be read as an image."
+msgstr ""
+
+#: tycontrols.design.rsdtimagenopayload
+msgid "(no image)"
+msgstr ""
+
 #: tycontrols.design.rsdtmainformdescription
 msgid "A themed TTyForm carrying its own TTyStyleController, with the form and the title bar already associated to it —the root window for a TyControls application."
 msgstr ""

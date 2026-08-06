@@ -120,6 +120,26 @@ msgstr "选择一个图标字体文件"
 msgid "Font files (*.ttf;*.otf;*.ttc)|*.ttf;*.otf;*.ttc|All files|*"
 msgstr "字体文件 (*.ttf;*.otf;*.ttc)|*.ttf;*.otf;*.ttc|所有文件|*"
 
+#: tycontrols.design.rsdtimagefiletitle
+msgid "Select an image for this collection entry"
+msgstr "为该集合条目选择一张图片"
+
+#: tycontrols.design.rsdtimagefilefilter
+msgid "Image files (*.png;*.bmp;*.jpg;*.jpeg;*.gif)|*.png;*.bmp;*.jpg;*.jpeg;*.gif|All files|*"
+msgstr "图像文件 (*.png;*.bmp;*.jpg;*.jpeg;*.gif)|*.png;*.bmp;*.jpg;*.jpeg;*.gif|所有文件|*"
+
+#: tycontrols.design.rsdtimagenopayload
+msgid "(no image)"
+msgstr "(无图像)"
+
+#: tycontrols.design.rsdtimagebadpayload
+msgid "(unreadable image data)"
+msgstr "(图像数据无法解析)"
+
+#: tycontrols.design.rsdtimageloadfailed
+msgid "That file could not be read as an image."
+msgstr "该文件无法作为图像读取。"
+
 #: tycontrols.design.rsdtthemenamehint
 msgid "The theme to load by name. The list offers the themes compiled into TyControls plus any registered in this IDE; a name your application registers at run time is equally valid, so you may type one that is not listed. Setting this clears ThemeFile."
 msgstr "按名称加载的主题。下拉列表给出编译进 TyControls 的内置主题,以及本 IDE 中已注册的主题;你的程序在运行期注册的名称同样合法,所以列表之外的名字也可以直接输入。设置本属性会清空 ThemeFile。"

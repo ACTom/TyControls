@@ -5,13 +5,45 @@ unit tyControls.ImageCollection;
   font (tyControls.IconFont / tyControls.GlyphImageList).
 
   TTyImageCollection is a DPI-aware NAMED raster image store. You Add named
-  images from a TBGRABitmap or a TPicture; the collection keeps each as a master
-  (highest-res source) bitmap. Consumers then ask for a name at a target PIXEL
-  size and get a bitmap scaled to that size (aspect preserved, centered on a
-  transparent square) — so one master serves every DPI without the caller
-  juggling per-size raster sets. It is a plain non-visual TComponent; headless-safe,
+  images from a TBGRABitmap or a TPicture; the collection keeps each as one or
+  more master bitmaps. Consumers then ask for a name at a target PIXEL size and
+  get a bitmap scaled to that size (aspect preserved, centered on a transparent
+  square) — so one master serves every DPI without the caller juggling per-size
+  raster sets, and where several masters are authored for a name the closest one
+  is picked before scaling. It is a plain non-visual TComponent; headless-safe,
   no timers. It complements the vector icon font: photos / true-colour PNGs live
   here, monochrome scalable glyphs live in the icon font.
+
+  §STORAGE / .lfm — the masters live in the published `Images` collection, and
+  that collection IS the store: each TTyImageItem holds its pixels as a PNG in
+  `PngBase64`, and the decoded TBGRABitmap hanging off it is a derived cache.
+  So images dropped in at design time are saved into the .lfm and come back at
+  run time, which is the whole point — before this the pixels lived only in a
+  private TStringList and nothing survived a save.
+
+  Why base64-PNG text and not LCL's binary blob. TCustomImageList streams its
+  pixels through DefineProperties (imglist.pp:314) as an opaque `Bitmap`/`Data`
+  hex run. We deliberately do not, for the same reason TTyTreeView's Items does
+  not (commit a8d98b7): a pseudo-property is INVISIBLE TO THE IDE. Lazarus's LFM
+  checker resolves every identifier in a .lfm against the class's published RTTI,
+  and DefineProperties adds no RTTI — so the IDE rejects the whole form with
+  "identifier Data not found in class ..." and offers to strip it. This library
+  has already been bitten: examples/demo/mainform.pas builds its NATIVE LCL tree
+  in code, with a comment saying exactly that, because the streamed form would
+  not open. Every property in this unit's streaming path is therefore a real
+  published property with real RTTI, and nothing anywhere calls DefineProperties.
+  The cost is size — base64 is 4/3 of the PNG, and an icon set is not three tree
+  nodes — and the gain is a form that opens, an item-level diff that shows WHICH
+  icon changed, and the stock collection editor for free.
+
+  §MULTI-RESOLUTION — a name may appear on SEVERAL items, each a master authored
+  at a different size; the format is identical whether a name has one master or
+  five, so nothing about the .lfm changes when a second resolution is added. At
+  render time GetBitmap picks the smallest master that is still at least the
+  requested size (falling back to the largest available), then scales THAT. This
+  is what makes a HiDPI render sharp: a 32px request against a 16px and a 48px
+  master downsamples the 48 rather than doubling the 16. `Count` counts distinct
+  NAMES, not masters — Images.Count is the master count.
 
   Scaled renders are CACHED per (name, sizePx), bounded by CacheCapacity with LRU
   eviction, and invalidated whenever ChangeStamp changes (every mutation bumps it). Two
@@ -37,13 +69,24 @@ unit tyControls.ImageCollection;
 interface
 
 uses
-  Classes, SysUtils, Graphics, BGRABitmap, BGRABitmapTypes,
+  Classes, SysUtils, Graphics, base64, BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Component;
 
 { Recolor a BGRA icon bitmap's RGB to AColor while KEEPING its alpha (antialiased edges
   included), so an icon authored as an opaque alpha mask takes on any theme text color.
   In-place; a nil / empty bitmap is a no-op. }
 procedure TyTintBitmapAlpha(ABmp: TBGRABitmap; AColor: TTyColor);
+
+{ The .lfm payload codec, exported because the design-time editor encodes with it and
+  because a round trip is only assertable if both halves are reachable from a test.
+  Both are BGRA-native (SaveToStreamAsPng / LoadFromStream) and neither touches TPicture
+  — see the black-bitmap note on TTyImageItem.
+
+  Encode ABmp as a base64 PNG; '' for a nil / empty bitmap. }
+function TyBitmapToPngBase64(ABmp: TBGRABitmap): string;
+{ Decode a base64 PNG into a NEW caller-owned bitmap; nil when AText is empty or does
+  not decode. Never raises — a mangled .lfm payload must not stop a form from loading. }
+function TyPngBase64ToBitmap(const AText: string): TBGRABitmap;
 
 const
   { Default number of (name, sizePx) renders the collection keeps alive. Icons are
@@ -52,15 +95,79 @@ const
   TyImageCacheDefaultCapacity = 64;
 
 type
-  { Internal wrapper: owns one master TBGRABitmap, so a TStringList(OwnsObjects)
-    frees every master when the collection is cleared / destroyed. }
-  TTyImageEntry = class(TObject)
+  TTyImageCollection = class;
+
+  { ONE authored master: a name plus its pixels, held as a base64-encoded PNG.
+    PngBase64 is the single source of truth — Master is decoded FROM it and
+    cached, never the other way round, so what a running program draws is
+    byte-for-byte what a save would write. (Seeding the decoded bitmap straight
+    from the caller's TBGRABitmap would be faster and would let in-memory and
+    post-load pixels drift apart if the codec were ever not an identity; one
+    source of truth costs an encode+decode per Add, which is not a hot path.) }
+  TTyImageItem = class(TCollectionItem)
   private
-    FMaster: TBGRABitmap;   // owned; the highest-res source for this name
+    FImageName: string;
+    FPngBase64: string;
+    FMaster: TBGRABitmap;   // owned; decoded from FPngBase64 on demand, nil until then
+    FDecoded: Boolean;      // True once decoding has been ATTEMPTED (success or not)
+    procedure SetImageName(const AValue: string);
+    procedure SetPngBase64(const AValue: string);
+    procedure DropDecoded;
+    function GetMaster: TBGRABitmap;
+  protected
+    function GetDisplayName: string; override;
   public
-    constructor Create(AMaster: TBGRABitmap);   // takes ownership of AMaster
+    constructor Create(ACollection: TCollection); override;
     destructor Destroy; override;
-    property Master: TBGRABitmap read FMaster;
+    procedure Assign(ASource: TPersistent); override;
+
+    { Replace this master's pixels from ABmp. A PNG copy is encoded, so the caller
+      keeps ownership of theirs. A nil / empty ABmp clears the payload. }
+    procedure SetBitmap(ABmp: TBGRABitmap);
+
+    { The decoded master — a BORROWED reference owned by this item. nil when the
+      payload is empty OR could not be decoded. Do not free it; it dies with the
+      item or when PngBase64 is reassigned. }
+    property Master: TBGRABitmap read GetMaster;
+
+    { A pure query: True when PngBase64 is non-empty AND decodes to a usable bitmap.
+      It is False for BOTH "empty" and "corrupt" — so it does not separate them on its
+      own; the PAIR does. `PngBase64 <> ''` with IsDecodable False means a MANGLED
+      payload (a .lfm whose base64 a bad merge or a hand edit broke), which renders as
+      a blank square rather than raising and is otherwise completely invisible. Master
+      cannot be used for this: it returns nil in both cases. Decodes on first call. }
+    function IsDecodable: Boolean;
+
+    { Master's edge in pixels — Max(Width, Height), which is what the resolution
+      pick compares. 0 when there is no usable master. }
+    function MasterSize: Integer;
+  published
+    { The image key. NOT unique: several items may share a name, one per authored
+      resolution (see §MULTI-RESOLUTION). Case-sensitive, like every lookup here. }
+    property ImageName: string read FImageName write SetImageName;
+    { The master's pixels: a PNG, base64-encoded. Readable and diffable in the
+      .lfm on purpose — see the format note in the unit header. }
+    property PngBase64: string read FPngBase64 write SetPngBase64;
+  end;
+
+  { The masters. Order is authoring order; Count is the number of MASTERS, which
+    is only the number of images when every name has exactly one. }
+  TTyImageItems = class(TCollection)
+  private
+    FOwner: TTyImageCollection;
+    function GetItem(AIndex: Integer): TTyImageItem;
+    procedure SetItem(AIndex: Integer; AValue: TTyImageItem);
+  protected
+    function GetOwner: TPersistent; override;
+    { Both funnel into the owner's Changed, so ANY route into the store — the
+      Object Inspector, the .lfm reader, Add/Clear, a direct Items[i].PngBase64 —
+      invalidates the render cache and the name index. }
+    procedure Notify(AItem: TCollectionItem; AAction: TCollectionNotification); override;
+    procedure Update(AItem: TCollectionItem); override;
+  public
+    constructor Create(AOwner: TTyImageCollection);
+    function Add: TTyImageItem;
+    property Items[AIndex: Integer]: TTyImageItem read GetItem write SetItem; default;
   end;
 
   { Internal wrapper: owns one scaled render plus its LRU stamp. }
@@ -75,16 +182,25 @@ type
 
   TTyImageCollection = class(TTyComponent)
   private
-    FItems: TStringList;   // name -> TTyImageEntry (OwnsObjects)
+    FImages: TTyImageItems;   // THE store: every master, streamed to the .lfm
+    FNames: TStringList;      // distinct names in first-appearance order; lazy
+    FNamesStamp: Cardinal;    // the FChangeStamp FNames was built at
     FChangeStamp: Cardinal;   // bumped by every mutation; see Changed
     FCache: TStringList;   // 'name'#1'sizePx' -> TTyImageCacheEntry (OwnsObjects, Sorted)
     FCacheStamp: Cardinal;
     FCacheCapacity: Integer;
     FTick: Int64;          // monotonic LRU clock
-    { Store ABmp (already owned by us) under AName, replacing any prior entry. }
-    procedure StoreMaster(const AName: string; AOwnedBmp: TBGRABitmap);
-    { Scale the master for AName into an ASizePx square. Caller owns the result.
-      Assumes AName exists and ASizePx >= 1. }
+    procedure SetImages(AValue: TTyImageItems);
+    { Rebuild FNames from FImages when a mutation has staled it. }
+    procedure SyncNames;
+    { Delete every master carrying AName. Returns how many went. }
+    function RemoveMasters(const AName: string): Integer;
+    { The master to scale for (AName, ASizePx): the SMALLEST authored master whose
+      edge is still >= ASizePx, else the largest available. Borrowed; nil when the
+      name has no usable master. See §MULTI-RESOLUTION. }
+    function PickMaster(const AName: string; ASizePx: Integer): TBGRABitmap;
+    { Scale the picked master for AName into an ASizePx square. Caller owns the
+      result. Assumes ASizePx >= 1. }
     function RenderMaster(const AName: string; ASizePx: Integer): TBGRABitmap;
     { The composite cache key for (AName, ASizePx). }
     class function CacheKey(const AName: string; ASizePx: Integer): string; static;
@@ -103,9 +219,28 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
 
-    { Add (or replace) the image AName from ABmp. A COPY is taken (ABmp.Duplicate),
-      so the caller keeps ownership of theirs. No-op when AName is '' or ABmp nil. }
+    { Add (or replace) the image AName from ABmp. Replaces EVERY master carrying
+      AName, so a name added this way ends up single-resolution — that is the old
+      contract and the common case. Use AddMasterBitmap to add a resolution rather
+      than replace the name. The pixels are copied (encoded to PNG), so the caller
+      keeps ownership of theirs. No-op when AName is '' or ABmp nil. }
     procedure AddBitmap(const AName: string; ABmp: TBGRABitmap);
+
+    { Add ABmp as an ADDITIONAL master for AName, keeping any already there, so a
+      name can carry several authored resolutions. Order does not matter: the pick
+      is by size, not by position. A master whose edge equals one already stored
+      REPLACES it — two masters at the same size are indistinguishable to the pick
+      and would just waste .lfm. The pixels are copied. No-op when AName is '' or
+      ABmp nil. }
+    procedure AddMasterBitmap(const AName: string; ABmp: TBGRABitmap);
+
+    { How many authored masters carry AName. 0 when the name is absent. }
+    function MasterCount(const AName: string): Integer;
+    { The edge (Max(W,H)) of the master that a request for ASizePx would scale,
+      or 0 when there is nothing to draw. This is the only external way to observe
+      WHICH master was picked — the rendered square is ASizePx either way, so a
+      pick regression is otherwise invisible. }
+    function PickedMasterSize(const AName: string; ASizePx: Integer): Integer;
     { Add (or replace) the image AName built from APicture's current graphic. The
       caller keeps ownership of APicture. No-op when AName is '' or the picture is
       empty / has no graphic. }
@@ -161,8 +296,18 @@ type
     property ChangeStamp: Cardinal read FChangeStamp;
     { Upper bound on cached renders; least-recently-used entries are evicted past
       it. Lowering it evicts immediately. Values < 1 clamp to 1 (a cap of 0 would
-      evict the very entry GetCachedBitmap is about to return). }
+      evict the very entry GetCachedBitmap is about to return). Public, not
+      published: it is a memory knob with no visual effect, and publishing it would
+      put a number in every .lfm that nobody authored. }
     property CacheCapacity: Integer read FCacheCapacity write SetCacheCapacity;
+  published
+    { The masters, and the .lfm's whole picture payload. The setter looks redundant
+      — nothing "assigns a collection" — but TWriter.WriteProperty SKIPS a property
+      with no setter, so without it the designer would save a form with no images
+      at all and no error to explain it. That exact bug shipped once here already
+      (commit 7d2c03d, the grid's Columns). The reader does not use the setter:
+      vaCollection goes through ReadCollection. }
+    property Images: TTyImageItems read FImages write SetImages;
   end;
 
   TTyVirtualImageList = class(TTyComponent)
@@ -283,18 +428,246 @@ begin
   ABmp.InvalidateBitmap;
 end;
 
-{ ---- TTyImageEntry ---- }
+{ ---- PNG <-> base64 ---- }
 
-constructor TTyImageEntry.Create(AMaster: TBGRABitmap);
+type
+  { Scratch buffer for the decode loop. 8 KB is well past a typical icon PNG, so
+    most payloads come out in one or two reads. }
+  TTyB64Buf = array[0..8191] of Byte;
+
+{ Encode ABmp as a PNG and return it base64-encoded. '' for a nil / empty bitmap.
+  Deliberately BGRA-native (TBGRABitmap.SaveToStreamAsPng): the pixels never pass
+  through TPicture or MakeBitmapCopy, which is the round trip that has already
+  turned a runtime BGRA bitmap ENTIRELY BLACK in this library. }
+function TyBitmapToPngBase64(ABmp: TBGRABitmap): string;
+var
+  raw: TMemoryStream;
+  b64: TStringStream;
+  enc: TBase64EncodingStream;
 begin
-  inherited Create;
-  FMaster := AMaster;   // takes ownership
+  Result := '';
+  if (ABmp = nil) or (ABmp.Width <= 0) or (ABmp.Height <= 0) then Exit;
+  raw := TMemoryStream.Create;
+  try
+    ABmp.SaveToStreamAsPng(raw);
+    raw.Position := 0;
+    b64 := TStringStream.Create('');
+    try
+      enc := TBase64EncodingStream.Create(b64);
+      try
+        enc.CopyFrom(raw, raw.Size);
+      finally
+        enc.Free;   // flushes the tail; MUST precede reading b64
+      end;
+      Result := b64.DataString;
+    finally
+      b64.Free;
+    end;
+  finally
+    raw.Free;
+  end;
 end;
 
-destructor TTyImageEntry.Destroy;
+{ Decode a base64 PNG back into a NEW caller-owned TBGRABitmap, or nil when the
+  text is empty or does not decode. Never raises: a hand-edited .lfm with a
+  mangled payload must leave the icon blank, not stop the form from loading. }
+function TyPngBase64ToBitmap(const AText: string): TBGRABitmap;
+var
+  b64: TStringStream;
+  dec: TBase64DecodingStream;
+  raw: TMemoryStream;
+  bmp: TBGRABitmap;
+  buf: TTyB64Buf;
+  n: LongInt;
+begin
+  Result := nil;
+  if AText = '' then Exit;
+  try
+    b64 := TStringStream.Create(AText);
+    try
+      dec := TBase64DecodingStream.Create(b64);
+      try
+        raw := TMemoryStream.Create;
+        try
+          // Read until the decoder runs dry, rather than CopyFrom(dec, 0): that
+          // overload seeks the SOURCE to 0 and trusts its Size, and a base64
+          // decoding stream knows neither reliably.
+          buf := Default(TTyB64Buf);
+          repeat
+            n := dec.Read(buf, SizeOf(buf));
+            if n > 0 then raw.WriteBuffer(buf, n);
+          until n <= 0;
+          if raw.Size <= 0 then Exit;
+          raw.Position := 0;
+          bmp := TBGRABitmap.Create;
+          try
+            bmp.LoadFromStream(raw);
+          except
+            bmp.Free;
+            raise;
+          end;
+          if (bmp.Width <= 0) or (bmp.Height <= 0) then
+          begin
+            bmp.Free;
+            Exit;
+          end;
+          Result := bmp;
+        finally
+          raw.Free;
+        end;
+      finally
+        dec.Free;
+      end;
+    finally
+      b64.Free;
+    end;
+  except
+    // Corrupt base64 or corrupt PNG. Swallowed on purpose (see above); the item's
+    // IsDecodable is how a caller tells "corrupt" from "empty".
+    Result := nil;
+  end;
+end;
+
+{ ---- TTyImageItem ---- }
+
+constructor TTyImageItem.Create(ACollection: TCollection);
+begin
+  inherited Create(ACollection);
+  FImageName := '';
+  FPngBase64 := '';
+  FMaster := nil;
+  FDecoded := False;
+end;
+
+destructor TTyImageItem.Destroy;
 begin
   FMaster.Free;
   inherited Destroy;
+end;
+
+procedure TTyImageItem.DropDecoded;
+begin
+  FreeAndNil(FMaster);
+  FDecoded := False;
+end;
+
+function TTyImageItem.GetMaster: TBGRABitmap;
+begin
+  if not FDecoded then
+  begin
+    // Decode once per payload, success or failure; a corrupt payload must not be
+    // re-decoded on every paint.
+    FMaster := TyPngBase64ToBitmap(FPngBase64);
+    FDecoded := True;
+  end;
+  Result := FMaster;
+end;
+
+function TTyImageItem.IsDecodable: Boolean;
+begin
+  Result := GetMaster <> nil;
+end;
+
+function TTyImageItem.MasterSize: Integer;
+var
+  m: TBGRABitmap;
+begin
+  m := GetMaster;
+  if m = nil then Exit(0);
+  if m.Width >= m.Height then
+    Result := m.Width
+  else
+    Result := m.Height;
+end;
+
+function TTyImageItem.GetDisplayName: string;
+begin
+  // What the stock collection editor lists. The size makes a multi-resolution
+  // name readable at a glance ('save (48)' next to 'save (16)') instead of two
+  // identical rows.
+  if FImageName = '' then
+    Result := inherited GetDisplayName
+  else if MasterSize > 0 then
+    Result := FImageName + ' (' + IntToStr(MasterSize) + ')'
+  else
+    Result := FImageName + ' (empty)';
+end;
+
+procedure TTyImageItem.SetImageName(const AValue: string);
+begin
+  if FImageName = AValue then Exit;
+  FImageName := AValue;
+  Changed(False);   // -> TTyImageItems.Update -> the owner's Changed
+end;
+
+procedure TTyImageItem.SetPngBase64(const AValue: string);
+begin
+  if FPngBase64 = AValue then Exit;
+  FPngBase64 := AValue;
+  DropDecoded;      // the cached bitmap belongs to the OLD payload
+  Changed(False);
+end;
+
+procedure TTyImageItem.SetBitmap(ABmp: TBGRABitmap);
+begin
+  SetPngBase64(TyBitmapToPngBase64(ABmp));
+end;
+
+procedure TTyImageItem.Assign(ASource: TPersistent);
+begin
+  if ASource is TTyImageItem then
+  begin
+    FImageName := TTyImageItem(ASource).FImageName;
+    // Copy the PAYLOAD, not the decoded bitmap: two items must never share one
+    // TBGRABitmap, and the payload is the source of truth anyway.
+    FPngBase64 := TTyImageItem(ASource).FPngBase64;
+    DropDecoded;
+    Changed(False);
+  end
+  else
+    inherited Assign(ASource);
+end;
+
+{ ---- TTyImageItems ---- }
+
+constructor TTyImageItems.Create(AOwner: TTyImageCollection);
+begin
+  inherited Create(TTyImageItem);
+  FOwner := AOwner;
+end;
+
+function TTyImageItems.GetOwner: TPersistent;
+begin
+  Result := FOwner;   // makes the collection editor and the streamer find the component
+end;
+
+function TTyImageItems.GetItem(AIndex: Integer): TTyImageItem;
+begin
+  Result := TTyImageItem(inherited Items[AIndex]);
+end;
+
+procedure TTyImageItems.SetItem(AIndex: Integer; AValue: TTyImageItem);
+begin
+  inherited Items[AIndex] := AValue;
+end;
+
+function TTyImageItems.Add: TTyImageItem;
+begin
+  Result := TTyImageItem(inherited Add);
+end;
+
+procedure TTyImageItems.Notify(AItem: TCollectionItem; AAction: TCollectionNotification);
+begin
+  inherited Notify(AItem, AAction);
+  if FOwner <> nil then
+    FOwner.Changed;   // add / delete / extract all stale the name index and cache
+end;
+
+procedure TTyImageItems.Update(AItem: TCollectionItem);
+begin
+  inherited Update(AItem);
+  if FOwner <> nil then
+    FOwner.Changed;   // an item's ImageName / PngBase64 changed
 end;
 
 { ---- TTyImageCacheEntry ---- }
@@ -317,9 +690,10 @@ end;
 constructor TTyImageCollection.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
-  FItems := TStringList.Create;
-  FItems.OwnsObjects := True;    // frees each TTyImageEntry (and its master)
-  FItems.CaseSensitive := True;  // names are case-sensitive keys (per the contract)
+  FImages := TTyImageItems.Create(Self);
+  FNames := TStringList.Create;
+  FNames.CaseSensitive := True;  // names are case-sensitive keys (per the contract)
+  FNamesStamp := FChangeStamp;   // both start empty, so the snapshot starts valid
 
   FCache := TStringList.Create;
   FCache.OwnsObjects := True;    // frees each TTyImageCacheEntry (and its render)
@@ -332,8 +706,12 @@ end;
 
 destructor TTyImageCollection.Destroy;
 begin
-  FCache.Free;   // OwnsObjects frees every cached render
-  FItems.Free;   // OwnsObjects frees every entry -> every master bitmap
+  FCache.Free;    // OwnsObjects frees every cached render
+  // Detach first: TCollection.Clear notifies per item, and each notification would
+  // otherwise call Changed on a half-destroyed component.
+  FImages.FOwner := nil;
+  FImages.Free;   // frees every item -> every decoded master
+  FNames.Free;
   inherited Destroy;
 end;
 
@@ -407,27 +785,123 @@ begin
   Result := FCache.IndexOf(CacheKey(AName, ASizePx)) >= 0;
 end;
 
-procedure TTyImageCollection.StoreMaster(const AName: string; AOwnedBmp: TBGRABitmap);
-var
-  idx: Integer;
+procedure TTyImageCollection.SetImages(AValue: TTyImageItems);
 begin
-  // Replace an existing entry (freeing its old master) or append a new one.
-  idx := FItems.IndexOf(AName);
-  if idx >= 0 then
+  // Assign, never take the instance: the collection is ours for our whole life.
+  // Only here so TWriter.WriteProperty does not skip Images — see the property.
+  FImages.Assign(AValue);
+end;
+
+procedure TTyImageCollection.SyncNames;
+var
+  i: Integer;
+  nm: string;
+begin
+  if FNamesStamp = FChangeStamp then Exit;
+  FNames.Clear;
+  for i := 0 to FImages.Count - 1 do
   begin
-    FItems.Objects[idx].Free;   // free the old wrapper+master before overwrite
-    FItems.Objects[idx] := TTyImageEntry.Create(AOwnedBmp);
-  end
-  else
-    FItems.AddObject(AName, TTyImageEntry.Create(AOwnedBmp));
-  Changed;   // any cached render of AName is now stale
+    nm := FImages[i].ImageName;
+    // Skip unnamed masters (a freshly-added OI row before it is filled in) and
+    // fold a name's several resolutions into ONE entry: Count counts images.
+    if (nm <> '') and (FNames.IndexOf(nm) < 0) then
+      FNames.Add(nm);
+  end;
+  FNamesStamp := FChangeStamp;
+end;
+
+function TTyImageCollection.RemoveMasters(const AName: string): Integer;
+var
+  i: Integer;
+begin
+  Result := 0;
+  // Backwards: deleting shifts every later index down, and a forward loop would
+  // step over the item that slid into the hole.
+  for i := FImages.Count - 1 downto 0 do
+    if FImages[i].ImageName = AName then
+    begin
+      FImages.Delete(i);
+      Inc(Result);
+    end;
 end;
 
 procedure TTyImageCollection.AddBitmap(const AName: string; ABmp: TBGRABitmap);
+var
+  it: TTyImageItem;
 begin
   if (AName = '') or (ABmp = nil) then Exit;
-  // Take a COPY so the caller keeps ownership of theirs.
-  StoreMaster(AName, ABmp.Duplicate as TBGRABitmap);
+  RemoveMasters(AName);   // replace the NAME, not just one resolution
+  it := FImages.Add;
+  it.ImageName := AName;
+  it.SetBitmap(ABmp);     // encodes a PNG copy; the caller keeps theirs
+  // Each of those already called Changed through the collection's Notify/Update.
+end;
+
+procedure TTyImageCollection.AddMasterBitmap(const AName: string; ABmp: TBGRABitmap);
+var
+  i, edge: Integer;
+  it: TTyImageItem;
+begin
+  if (AName = '') or (ABmp = nil) then Exit;
+  if ABmp.Width >= ABmp.Height then edge := ABmp.Width else edge := ABmp.Height;
+  // A same-size master would be unreachable — the pick compares sizes — so replace
+  // it rather than leaving a second copy nothing can ever choose.
+  for i := FImages.Count - 1 downto 0 do
+    if (FImages[i].ImageName = AName) and (FImages[i].MasterSize = edge) then
+      FImages.Delete(i);
+  it := FImages.Add;
+  it.ImageName := AName;
+  it.SetBitmap(ABmp);
+end;
+
+function TTyImageCollection.MasterCount(const AName: string): Integer;
+var
+  i: Integer;
+begin
+  Result := 0;
+  if AName = '' then Exit;
+  for i := 0 to FImages.Count - 1 do
+    if FImages[i].ImageName = AName then
+      Inc(Result);
+end;
+
+function TTyImageCollection.PickMaster(const AName: string; ASizePx: Integer): TBGRABitmap;
+var
+  i, edge, bestFitEdge, largestEdge: Integer;
+  m, bestFit, largest: TBGRABitmap;
+begin
+  bestFit := nil; bestFitEdge := 0;
+  largest := nil; largestEdge := 0;
+  for i := 0 to FImages.Count - 1 do
+  begin
+    if FImages[i].ImageName <> AName then Continue;
+    m := FImages[i].Master;          // decodes on demand; nil when empty / corrupt
+    if m = nil then Continue;
+    edge := FImages[i].MasterSize;
+    if edge <= 0 then Continue;
+    // The smallest master that still covers the request: downscaling keeps detail,
+    // upscaling invents it. Ties keep the first, which is authoring order.
+    if (edge >= ASizePx) and ((bestFit = nil) or (edge < bestFitEdge)) then
+    begin
+      bestFit := m; bestFitEdge := edge;
+    end;
+    if edge > largestEdge then
+    begin
+      largest := m; largestEdge := edge;
+    end;
+  end;
+  // Nothing big enough -> the largest there is, which is the least bad upscale.
+  if bestFit <> nil then Result := bestFit else Result := largest;
+end;
+
+function TTyImageCollection.PickedMasterSize(const AName: string; ASizePx: Integer): Integer;
+var
+  m: TBGRABitmap;
+begin
+  if ASizePx < 1 then ASizePx := 1;
+  m := PickMaster(AName, ASizePx);
+  if m = nil then Exit(0);
+  if m.Width >= m.Height then Result := m.Width else Result := m.Height;
 end;
 
 procedure TTyImageCollection.AddPicture(const AName: string; APicture: TPicture);
@@ -448,51 +922,60 @@ begin
   finally
     tmp.Free;
   end;
-  StoreMaster(AName, master);
+  try
+    AddBitmap(AName, master);   // encodes the PNG payload; keeps its own copy
+  finally
+    master.Free;                // ...so this intermediate is ours to release
+  end;
 end;
 
 procedure TTyImageCollection.Clear;
 begin
-  FItems.Clear;   // OwnsObjects frees every entry+master
+  FImages.Clear;  // frees every item -> every decoded master; Notify -> Changed
+  // Unconditionally, NOT just via the per-item Notify: clearing an already-empty
+  // collection notifies nothing, and a consumer that keyed anything off ChangeStamp
+  // would keep serving what it had. (ChangeStampBumpsOnClear pins exactly this.)
   Changed;
   FlushCache;     // "drop everything" should release the render memory now, not lazily
 end;
 
 function TTyImageCollection.Count: Integer;
 begin
-  Result := FItems.Count;
+  SyncNames;
+  Result := FNames.Count;
 end;
 
 function TTyImageCollection.NameOf(AIndex: Integer): string;
 begin
-  if (AIndex >= 0) and (AIndex < FItems.Count) then
-    Result := FItems[AIndex]
+  SyncNames;
+  if (AIndex >= 0) and (AIndex < FNames.Count) then
+    Result := FNames[AIndex]
   else
     Result := '';
 end;
 
 function TTyImageCollection.IndexOf(const AName: string): Integer;
 begin
-  Result := FItems.IndexOf(AName);
+  SyncNames;
+  Result := FNames.IndexOf(AName);
 end;
 
 function TTyImageCollection.Contains(const AName: string): Boolean;
 begin
-  Result := FItems.IndexOf(AName) >= 0;
+  Result := IndexOf(AName) >= 0;
 end;
 
 function TTyImageCollection.RenderMaster(const AName: string; ASizePx: Integer): TBGRABitmap;
 var
-  idx, dw, dh, ox, oy: Integer;
+  dw, dh, ox, oy: Integer;
   master, scaled: TBGRABitmap;
   sc: Double;
 begin
   // Always a non-nil transparent square of the requested size; we paint the scaled
   // master (if any) centered onto it, so consumers can blit unconditionally.
   Result := TBGRABitmap.Create(ASizePx, ASizePx, BGRAPixelTransparent);
-  idx := FItems.IndexOf(AName);
-  if idx < 0 then Exit;   // missing name -> empty square
-  master := TTyImageEntry(FItems.Objects[idx]).FMaster;
+  // Borrowed from the item that owns it — never freed here.
+  master := PickMaster(AName, ASizePx);
   if (master = nil) or (master.Width <= 0) or (master.Height <= 0) then Exit;
 
   // Fit the master into the square, preserving aspect (contain).
@@ -531,7 +1014,7 @@ begin
   Result := nil;
   if ASizePx < 1 then ASizePx := 1;
   SyncCache;                                // drop renders staled by a mutation
-  if FItems.IndexOf(AName) < 0 then Exit;   // unknown name -> nothing to draw
+  if IndexOf(AName) < 0 then Exit;          // unknown name -> nothing to draw
 
   key := CacheKey(AName, ASizePx);
   idx := FCache.IndexOf(key);
@@ -689,5 +1172,14 @@ begin
     dim.Free;
   end;
 end;
+
+initialization
+  { Required for the .lfm half of the streaming to work at RUN time: the reader
+    instantiates a child component by looking its class name up in this registry,
+    so without it a form carrying an image collection fails to load with "Class
+    TTyImageCollection not found" — the design-time pixels would stream out and
+    never come back. TTyTreeView registers itself the same way. }
+  RegisterClass(TTyImageCollection);
+  RegisterClass(TTyVirtualImageList);
 
 end.
