@@ -53,7 +53,7 @@ shows how far a theme can go — translucent controls floating over a photo back
   **orthogonal** to colour, switched by one `Controller.Density` property.
 - **Follows the OS** — light/dark mode and accent colour can track the operating system; a
   single-file `@mode` carries both sets of values.
-- **161 droppable controls** across 16 component-palette pages — see the [control list](#control-list).
+- **162 droppable controls** across 16 component-palette pages — see the [control list](#control-list).
 - **Designer-first** — `TTyPageControl`'s pages and `TTyGridPanel`'s cells are **real designer
   containers**: drop controls straight in, see the finished look in the designer, and it persists
   to the `.lfm` with no layout code. Theme changes show up in the designer too.
@@ -128,7 +128,7 @@ Select `Surface` in the designer; its `Purpose` property says the same thing.
 
 ## Control list
 
-161 controls you can drop from the component palette, across 16 pages. Per-control
+162 controls you can drop from the component palette, across 16 pages. Per-control
 properties / events / states / theme keys are in **[docs/controls/](docs/controls/)**.
 
 ### Core · `TyControls` (2)
@@ -245,7 +245,7 @@ properties / events / states / theme keys are in **[docs/controls/](docs/control
 | `TTySparkline` | Mini trend chart for cards and table cells |
 | `TTyRating` | Star rating with hover preview |
 
-### Bars · `TyControls Bars` (14)
+### Bars · `TyControls Bars` (15)
 
 | Control | What it is for |
 |---|---|
@@ -254,6 +254,7 @@ properties / events / states / theme keys are in **[docs/controls/](docs/control
 | `TTyScrollBar` | Scroll bar |
 | `TTyStatusBar` | Bottom status bar with panels |
 | `TTyToolBar` | Tool bar |
+| `TTyToolButton` | Tool bar button: six styles (command / toggle / split drop-down / attached-arrow drop-down / space holder / divider), adjacency radio groups, forced row breaks |
 | `TTyToolSeparator` | Tool bar separator |
 | `TTyToolBarEx` | Tool bar that folds what does not fit into an overflow menu |
 | `TTyControlBar` | Container that wraps child controls into bands (packing only -- no drag yet) |

@@ -275,6 +275,17 @@ begin
   FillCirc(b,16.5,7,1.8,Ink);
 end;
 
+{ TTyToolButton: one flat tool button — a faint tool-bar strip behind it, an accent glyph
+  square, and the trailing drop-down chevron that is this class's own (tbsDropDown) }
+procedure GToolButton(b: TBGRABitmap);
+begin
+  Line(b,2,19,22,19,Faint,1.2);                     // the bar it sits on
+  RRect(b,4,5,20,17,2.5,Ink);                       // the button face
+  FillRRect(b,6.5,8,12,13.5,1.5,Acc);               // its glyph
+  Line(b,14.5,6,14.5,16,Faint,1.1);                 // the split divider
+  FillPolyG(b,[PointF(16,10),PointF(19,10),PointF(17.5,12.6)],Ink);   // the arrow
+end;
+
 { TTyToolSeparator: a single short vertical line centred in the icon }
 procedure GToolSeparator(b: TBGRABitmap);
 begin
@@ -865,7 +876,7 @@ procedure GCascader(b: TBGRABitmap); begin RRect(b,3,3,21,10,2,Ink); PolyL(b,[Po
 procedure GPopover(b: TBGRABitmap); begin RRect(b,2,4,22,17,2,Ink); PolyL(b,[PointF(9,17),PointF(11.5,20.5),PointF(14,17)],Ink); FillRRect(b,5,7.5,10.5,13.5,1,Acc); Line(b,12.5,9,19,9,Ink,1.3); Line(b,12.5,12,17.5,12,Ink,1.3); end;
 
 const
-  Glyphs: array[0..160] of TGlyph = (
+  Glyphs: array[0..161] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -959,6 +970,7 @@ const
     (Name:'TTySplitter';        Draw:@GSplitter),
     (Name:'TTyStatusBar';       Draw:@GStatusBar),
     (Name:'TTyToolBar';         Draw:@GToolBar),
+    (Name:'TTyToolButton';      Draw:@GToolButton),
     (Name:'TTyToolSeparator';   Draw:@GToolSeparator),
     (Name:'TTyCalendar';        Draw:@GCalendar),
     (Name:'TTyDateTimePicker';  Draw:@GDateTimePicker),

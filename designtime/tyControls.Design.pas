@@ -1074,7 +1074,7 @@ begin
   // Bars: sliders / progress / scroll / status / tool bars + header.
   RegisterComponents('TyControls Bars',
     [TTyTrackBar, TTyProgressBar, TTyScrollBar, TTyStatusBar,
-     TTyToolBar, TTyToolSeparator, TTyToolBarEx, TTyControlBar, TTyCoolBar,
+     TTyToolBar, TTyToolButton, TTyToolSeparator, TTyToolBarEx, TTyControlBar, TTyCoolBar,
      TTyAlert, TTyPagination, TTySteps, TTyBreadcrumb, TTyHeaderControl]);
   // Containers & layout.
   RegisterComponents('TyControls Containers',

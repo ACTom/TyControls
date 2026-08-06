@@ -430,7 +430,7 @@ initialization
     TTyShellComboBox, TTyGauge, TTyMeter, TTyLevelMeter, TTyDial, TTyGearDial, TTyAnalogClock,
     TTyCircularProgress, TTyActivityIndicator, TTyActivityBar, TTyGearActivityIndicator,
     TTySparkline, TTyRating, TTyTrackBar, TTyProgressBar, TTyScrollBar, TTyStatusBar,
-    TTyToolBar, TTyToolSeparator, TTyToolBarEx]);
+    TTyToolBar, TTyToolButton, TTyToolSeparator, TTyToolBarEx]);
   Reg([
     TTyControlBar, TTyCoolBar, TTyAlert, TTyPagination, TTySteps, TTyBreadcrumb,
     TTyHeaderControl, TTyPanel, TTyGroupBox, TTyBevel, TTyDivider, TTySplitter, TTyPaintPanel,

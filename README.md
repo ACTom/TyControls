@@ -40,7 +40,7 @@
 - **结构级换肤** —— 主题不只是换配色:`render-style` 能把按钮从扁平换成 3D 立体边框,几何令牌能改变控件的固有尺寸。
 - **两代密度** —— 经典(Win32 尺度)与现代(Web 尺度)是一条与配色**正交**的轴,`Controller.Density` 一个属性切换。
 - **跟随系统** —— 亮/暗模式与强调色可跟随操作系统;单文件 `@mode` 同时携带两套值。
-- **161 个可拖放控件**,分 16 个组件面板分页 —— 见[控件清单](#控件清单)。
+- **162 个可拖放控件**,分 16 个组件面板分页 —— 见[控件清单](#控件清单)。
 - **设计器优先** —— `TTyPageControl` 的页与 `TTyGridPanel` 的格子是**真正的设计器容器**:直接往里拖控件、在设计器里看到最终效果、随 `.lfm` 存盘,不需要写一行布局代码。换主题在设计器里就能看到。
 - **HiDPI** —— 所有长度按 PPI 缩放,矢量绘制天然清晰。
 - **国际化** —— 库自身的界面字符串走 `resourcestring` + `.po`,随库提供英文与简体中文。
@@ -91,7 +91,7 @@ Lazarus 里打开 `tycontrols_dt.lpk`(设计期包)→ **Use → Install**,IDE �
 
 ## 控件清单
 
-161 个可从组件面板拖放的控件,分 16 个分页。逐控件的属性 / 事件 / 状态 / 主题键说明见 **[docs/controls/](docs/controls/)**。
+162 个可从组件面板拖放的控件,分 16 个分页。逐控件的属性 / 事件 / 状态 / 主题键说明见 **[docs/controls/](docs/controls/)**。
 
 ### 核心 · `TyControls`(2)
 
@@ -207,7 +207,7 @@ Lazarus 里打开 `tycontrols_dt.lpk`(设计期包)→ **Use → Install**,IDE �
 | `TTySparkline` | 迷你趋势图,嵌在卡片或表格里 |
 | `TTyRating` | 星级评分,支持悬停预览 |
 
-### 条状控件 · `TyControls Bars`(14)
+### 条状控件 · `TyControls Bars`(15)
 
 | 控件 | 用来干嘛 |
 |---|---|
@@ -216,6 +216,7 @@ Lazarus 里打开 `tycontrols_dt.lpk`(设计期包)→ **Use → Install**,IDE �
 | `TTyScrollBar` | 滚动条 |
 | `TTyStatusBar` | 底部多分区状态栏 |
 | `TTyToolBar` | 工具条 |
+| `TTyToolButton` | 工具条按钮:六种样式(命令 / 开关 / 分裂下拉 / 附箭头下拉 / 空位 / 分隔线)、相邻单选组、强制断行 |
 | `TTyToolSeparator` | 工具条分隔符 |
 | `TTyToolBarEx` | 装不下的按钮自动折进溢出菜单的工具条 |
 | `TTyControlBar` | 按宽度自动折行分带的多带容器（仅排布，暂无拖动） |

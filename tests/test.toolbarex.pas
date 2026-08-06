@@ -55,6 +55,7 @@ type
     procedure TestWrapableGeometryIsTheBaseSolvers;
     procedure TestFreedChildDropsFromOverflow;
     procedure TestSteadyRelayoutDoesNotReshowOverflow;
+    procedure TestSpaceHolderIsNotGivenTheGhostVariant;
   end;
 
 implementation
@@ -431,6 +432,31 @@ begin
   AssertEquals('B4 never re-shown during steady re-layout', 0, B4.ShowCount);
   AssertFalse('B3 still hidden', B3.Visible);
   AssertFalse('B4 still hidden', B4.Visible);
+end;
+
+procedure TToolBarExControlTest.TestSpaceHolderIsNotGivenTheGhostVariant;
+var
+  TB: TTyToolBarExAccess;
+  cmd, sep: TTyToolButton;
+begin
+  { This override keeps its OWN copy of the base's flat/ghost rule (it never calls
+    ApplyToButton), so it needs its own copy of the space-holder exception too — a tbsSeparator
+    resolves the 'TyToolSeparator' key, where a 'ghost' variant no skin defines is meaningless
+    and leaves a StyleClass on a control the host never styled. The Ex bar has already been the
+    place where one copy of this rule was fixed and the other was not. }
+  TB := TTyToolBarExAccess.Create(FForm);
+  TB.Parent := FForm;
+  TB.Align := alNone;
+  TB.Wrapable := False;
+  TB.Width := 300;
+  AssertTrue('the bar is flat (or this proves nothing)', TB.Flat);
+
+  cmd := TTyToolButton.Create(FForm); cmd.Parent := TB; cmd.Width := 40;
+  sep := TTyToolButton.Create(FForm); sep.Parent := TB; sep.Style := tbsSeparator;
+  TB.ForceLayout;
+
+  AssertEquals('a command tool button DOES take the flat variant', 'ghost', cmd.StyleClass);
+  AssertEquals('a space holder is left alone', '', sep.StyleClass);
 end;
 
 initialization

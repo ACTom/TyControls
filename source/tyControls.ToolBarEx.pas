@@ -223,7 +223,14 @@ begin
     SetLength(widths, n);
     for i := 0 to n - 1 do
     begin
-      if list[i] is TTyButton then
+      { A tbsSeparator / tbsDivider tool button is a SPACE HOLDER: it resolves the
+        'TyToolSeparator' key, so the button-family 'ghost' variant would ask the theme for a
+        rule no skin defines AND leave a StyleClass on a control the host never styled. The
+        base's ApplyToButton skips them for the same reason; this override has its own copy of
+        the flat rule and so needs its own copy of the exception. }
+      if (list[i] is TTyButton)
+         and not ((list[i] is TTyToolButton)
+                  and (TTyToolButton(list[i]).Style in [tbsSeparator, tbsDivider])) then
       begin
         { Only manage a class the bar itself put there -- the same rule TTyToolBar's
           ApplyToButton follows. Assigning unconditionally (which is what this did) wiped

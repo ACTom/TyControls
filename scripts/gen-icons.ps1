@@ -16,7 +16,7 @@ $classes = @(
   'TTyMemo','TTyTitleBar','TTyMenuBar','TTyStyleController','TTyPopupMenu','TTyImagesMenu','TTyMenuEx',
   'TTyNativeStyler','TTyHint','TTyBalloonHint',
   'TTyIconFont','TTyCharImage','TTyGlyphImageList','TTyImage','TTyImageCollection','TTyVirtualImageList',
-  'TTySplitter','TTyStatusBar','TTyToolBar','TTyToolSeparator',
+  'TTySplitter','TTyStatusBar','TTyToolBar','TTyToolButton','TTyToolSeparator',
   'TTyCalendar','TTyDateTimePicker',
   'TTyTreeView',
   # Dialogs palette group (RegisterComponents('TyControls Dialogs', ...))

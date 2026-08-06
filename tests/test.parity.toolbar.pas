@@ -23,7 +23,7 @@ uses
   Classes, SysUtils, Types, TypInfo, Controls, Graphics, Forms,
   fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Controller,
+  tyControls.Types, tyControls.Controller, tyControls.Base,
   tyControls.ImageCollection, tyControls.GlyphButtons, tyControls.ToolBar;
 
 type
@@ -66,6 +66,26 @@ type
     procedure TestExplicitShowCaptionPinsEvenWhenItMatchesTheBar;
     procedure TestIconOnlyRectCenters;
     procedure TestIconOnlyRectClampsAndDegenerates;
+  end;
+
+  { TTyToolButton's LCL surface: the six styles under LCL's own identifiers, the properties
+    that exist, and — just as load-bearing — the ones that deliberately do NOT.
+
+    The whole class exists because plans/2026-08-04 lists "TToolButton 整个类" as missing, so
+    what is guarded here is the SHAPE of the port: an .lfm line copied out of an LCL form has
+    to read back, and no property may be offered that the control does not honour. }
+  TToolButtonApiParityTest = class(TTestCase)
+  published
+    procedure TestStyleEnumIsLclsSixInLclsOrder;
+    procedure TestStyleIsPublishedAndDefaultsToButton;
+    procedure TestGroupedIsTheOneGroupingModel;
+    procedure TestLclsLyingPropertiesAreNotCopied;
+    procedure TestImageIndexIsPublishedAndDefaultsMinusOne;
+    procedure TestWrapIsPublishedAndDefaultsFalse;
+    procedure TestDropDownMenuIsTheThemedMenu;
+    procedure TestArrowEventIsPublished;
+    procedure TestATabStopWouldBreakTheBar;
+    procedure TestSpaceHolderBorrowsTheSeparatorKey;
   end;
 
   { Pixel proof that ShowCaption changes what is painted, not just a field. }
@@ -356,6 +376,215 @@ begin
   AssertEquals('degenerate box -> empty (h)', 0, R.Bottom - R.Top);
 end;
 
+{ ---- TToolButtonApiParityTest --------------------------------------------- }
+
+procedure TToolButtonApiParityTest.TestStyleEnumIsLclsSixInLclsOrder;
+var
+  PI: PPropInfo;
+  TD: PTypeData;
+  B: TTyToolButton;
+const
+  { LCL's TToolButtonStyle, comctrls.pp:2068. An .lfm stores an enum by IDENTIFIER, so a
+    `Style = tbsDropDown` copied out of an LCL form only loads here if the name matches — and
+    the ORDER matters too, because `default tbsButton` and any ordinal cast ride on it. }
+  Expect: array[0..5] of string = (
+    'tbsButton', 'tbsCheck', 'tbsDropDown', 'tbsSeparator', 'tbsDivider', 'tbsButtonDrop');
+var
+  i: Integer;
+begin
+  B := TTyToolButton.Create(nil);
+  try
+    PI := GetPropInfo(B, 'Style');
+    AssertTrue('Style is published', PI <> nil);
+    AssertEquals('Style is an enumeration', Ord(tkEnumeration), Ord(PI^.PropType^.Kind));
+    TD := GetTypeData(PI^.PropType);
+    AssertEquals('exactly six members — no more, no fewer', 5, TD^.MaxValue);
+    AssertEquals('and they start at 0', 0, TD^.MinValue);
+    for i := 0 to High(Expect) do
+      AssertEquals(Format('member %d', [i]), Expect[i],
+        GetEnumName(PI^.PropType, i));
+  finally
+    B.Free;
+  end;
+end;
+
+procedure TToolButtonApiParityTest.TestStyleIsPublishedAndDefaultsToButton;
+var
+  B: TTyToolButton;
+begin
+  B := TTyToolButton.Create(nil);
+  try
+    AssertEquals('a fresh tool button is a plain command button',
+      Ord(tbsButton), Ord(B.Style));
+    // The declared default has to agree with the constructor, or the streamer writes Style
+    // into every .lfm just to restate what Create already did.
+    AssertEquals('the declared default agrees with the constructor',
+      Ord(tbsButton), GetPropInfo(B, 'Style')^.Default);
+  finally
+    B.Free;
+  end;
+end;
+
+procedure TToolButtonApiParityTest.TestGroupedIsTheOneGroupingModel;
+var
+  B: TTyToolButton;
+begin
+  { THE DECISION, pinned. LCL's TToolButton groups by ADJACENCY (Grouped: Boolean); this
+    library's TTySpeedButton groups by NUMBER (GroupIndex: Integer). They answer the same
+    question two different ways, so a class that published BOTH would let a host set a
+    GroupIndex the adjacency rule silently ignores — a lying property by construction.
+    TTyToolButton takes Grouped (it is the LCL class being ported) and must NOT carry
+    GroupIndex; TTySpeedButton keeps GroupIndex and is the control to reach for when groups
+    must be numbered. The two are inter-translatable: give each maximal Grouped run its own
+    GroupIndex. }
+  B := TTyToolButton.Create(nil);
+  try
+    AssertTrue('Grouped is published', IsPublishedProp(B, 'Grouped'));
+    AssertFalse('...and defaults off', B.Grouped);
+    AssertTrue('GroupIndex must NOT be published beside it',
+      GetPropInfo(B, 'GroupIndex') = nil);
+    AssertTrue('AllowAllUp is published (Grouped is unusable without it)',
+      IsPublishedProp(B, 'AllowAllUp'));
+  finally
+    B.Free;
+  end;
+  // The other half of the decision: the numbered model still exists, on the other class.
+  AssertTrue('TTySpeedButton keeps GroupIndex',
+    GetPropInfo(TTySpeedButton, 'GroupIndex') <> nil);
+  AssertTrue('...and does not carry Grouped either',
+    GetPropInfo(TTySpeedButton, 'Grouped') = nil);
+end;
+
+procedure TToolButtonApiParityTest.TestLclsLyingPropertiesAreNotCopied;
+begin
+  { TToolButton.Marked and TToolButton.Indeterminate are declared, stored and Invalidate in
+    LCL — and are then read by NOTHING in its Paint or GetButtonDrawDetail. They are lying
+    properties in the REFERENCE implementation, and copying a property list wholesale is
+    exactly how a port imports a defect. Left absent rather than declared-and-unhonoured, which
+    is the same rule the six styles were judged by.
+    If either is ever built here, build the PAINT first and delete the line — do not relax it.
+    MenuItem is absent for a different reason (scope: a second menu model on top of
+    DropdownMenu), and gets no assertion because it is not a lie, just missing. }
+  AssertTrue('Marked must not be published until something draws it',
+    GetPropInfo(TTyToolButton, 'Marked') = nil);
+  AssertTrue('Indeterminate must not be published until something draws it',
+    GetPropInfo(TTyToolButton, 'Indeterminate') = nil);
+end;
+
+procedure TToolButtonApiParityTest.TestImageIndexIsPublishedAndDefaultsMinusOne;
+var
+  B: TTyToolButton;
+  PI: PPropInfo;
+begin
+  B := TTyToolButton.Create(nil);
+  try
+    PI := GetPropInfo(B, 'ImageIndex');
+    AssertTrue('ImageIndex is published', PI <> nil);
+    AssertEquals('the declared default is LCL''s -1', -1, PI^.Default);
+    AssertEquals('and a fresh button reads back as -1', -1, B.ImageIndex);
+    // It must be READABLE as well as writable: TWriter skips a setter-less property and the
+    // IDE reports "Cannot read property" for a write-only one.
+    AssertTrue('has a getter', PI^.GetProc <> nil);
+    AssertTrue('has a setter', PI^.SetProc <> nil);
+  finally
+    B.Free;
+  end;
+end;
+
+procedure TToolButtonApiParityTest.TestWrapIsPublishedAndDefaultsFalse;
+var
+  B: TTyToolButton;
+begin
+  B := TTyToolButton.Create(nil);
+  try
+    AssertTrue('Wrap is published', IsPublishedProp(B, 'Wrap'));
+    AssertFalse('and defaults off', B.Wrap);
+    AssertEquals('the declared default agrees', 0, GetPropInfo(B, 'Wrap')^.Default);
+  finally
+    B.Free;
+  end;
+end;
+
+procedure TToolButtonApiParityTest.TestDropDownMenuIsTheThemedMenu;
+var
+  B: TTyToolButton;
+  PI: PPropInfo;
+begin
+  { LCL types it TPopupMenu. Here it is TTyPopupMenu — which IS a TPopupMenu descendant, so
+    this is a NARROWING and not a different concept, and it is the type the library's other two
+    drop-down buttons already take. A plain TPopupMenu here would pop the platform menu in the
+    middle of a self-drawn tool bar. }
+  B := TTyToolButton.Create(nil);
+  try
+    PI := GetPropInfo(B, 'DropdownMenu');
+    AssertTrue('DropdownMenu is published', PI <> nil);
+    AssertEquals('and is the themed menu', 'TTyPopupMenu', string(PI^.PropType^.Name));
+    { LCL spells it DropdownMenu (lower-case d); TTyDropDownButton spells its own property
+      DropDownMenu. The two live side by side in this library, so the one on the LCL port has
+      to carry the LCL spelling or reading either class's source is a coin flip.
+      Asserted on PI^.Name — the identifier RTTI actually recorded — and NOT by asking
+      GetPropInfo for the other spelling: GetPropInfo compares case-INSENSITIVELY in FPC, so
+      that form of the check passes whichever way the property was declared. }
+    AssertEquals('the LCL spelling is the one declared', 'DropdownMenu', string(PI^.Name));
+  finally
+    B.Free;
+  end;
+end;
+
+procedure TToolButtonApiParityTest.TestArrowEventIsPublished;
+var
+  B: TTyToolButton;
+begin
+  B := TTyToolButton.Create(nil);
+  try
+    AssertTrue('OnArrowClick is published', IsPublishedProp(B, 'OnArrowClick'));
+  finally
+    B.Free;
+  end;
+end;
+
+procedure TToolButtonApiParityTest.TestATabStopWouldBreakTheBar;
+var
+  B: TTyToolButton;
+begin
+  { A bar of ten tools must not plant ten dead stops in the Tab cycle, and a click on one must
+    not pull focus out of the editor the command acts upon. Same call TTySpeedButton makes.
+    The DECLARED default has to be False too, or a host that wants a focusable tool writes
+    TabStop=True and the streamer drops it as equal to the inherited default. }
+  B := TTyToolButton.Create(nil);
+  try
+    AssertFalse('a tool button is not a tab stop', B.TabStop);
+    AssertEquals('and the declared default says so', 0, GetPropInfo(B, 'TabStop')^.Default);
+  finally
+    B.Free;
+  end;
+end;
+
+procedure TToolButtonApiParityTest.TestSpaceHolderBorrowsTheSeparatorKey;
+var
+  B: TTyToolButton;
+begin
+  { A tbsDivider draws the standalone separator's rule, so it resolves the standalone
+    separator's key: a skin that dims one dims the other, and a theme author has no second
+    spelling to keep in step. A command tool button stays on 'TyButton' — it IS a push button,
+    and the bar hands it the 'ghost' variant for the flat toolbar look. }
+  B := TTyToolButton.Create(nil);
+  try
+    AssertEquals('a command tool button is a button',
+      'TyButton', (B as ITyStyleable).GetStyleTypeKey);
+    B.Style := tbsSeparator;
+    AssertEquals('a tbsSeparator is a separator',
+      'TyToolSeparator', (B as ITyStyleable).GetStyleTypeKey);
+    B.Style := tbsDivider;
+    AssertEquals('and so is a tbsDivider',
+      'TyToolSeparator', (B as ITyStyleable).GetStyleTypeKey);
+    B.Style := tbsDropDown;
+    AssertEquals('back to a button', 'TyButton', (B as ITyStyleable).GetStyleTypeKey);
+  finally
+    B.Free;
+  end;
+end;
+
 { ---- TGlyphButtonCaptionPaintTest ---------------------------------------- }
 
 procedure TGlyphButtonCaptionPaintTest.SetUp;
@@ -469,5 +698,6 @@ end;
 initialization
   RegisterTest(TToolBarImagesParityTest);
   RegisterTest(TToolBarShowCaptionsParityTest);
+  RegisterTest(TToolButtonApiParityTest);
   RegisterTest(TGlyphButtonCaptionPaintTest);
 end.
