@@ -774,7 +774,7 @@ object MainForm: TMainForm
       OnMouseDown = PanDemoMouseDown
       OnMouseMove = PanDemoMouseMove
       OnMouseUp = PanDemoMouseUp
-      AutoScroll = True
+      AutoPan = True
       EdgeMargin = 24
       MaxSpeed = 16
       object PanView: TTyScrollContent
