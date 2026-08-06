@@ -43,7 +43,7 @@ uses tyControls.ToolBar, tyControls.Button;
 | `ButtonHeight` | `Integer` | 跟随密度轴 | 所有子按钮的统一逻辑高度；排布时每个子控件的高度被强制设为此值（`AlignControls` 中 `SetBounds(..., bh)`）。**未显式赋值时跟随主题的 `--control-height`**（经典 24 / 现代 38），一经写入即固定并写进 `.lfm`。改值触发 `Relayout`。 |
 | `ButtonSpacing` | `Integer` | `2` | 相邻工具项之间的水平间距（换行时也用作行间距）。改值触发 `Relayout`。 |
 | `Indent` | `Integer` | `4` | 工具条**前缘**（每行第一项之前）的留白，仅此而已。改值触发 `Relayout`。**曾经它还兼任上下内边距**，工具条自动增高时算的是 `Indent*2 + rows`，于是 `Indent := 24`（在 LCL 里是再普通不过的取值，用来给一个 logo 或前置标签让位）会静悄悄地把工具条撑高 48px、把所有工具往下推 24px——那不是任何 LCL 窗体设这个值时想要的。纵向留白现在是它自己的值（主题令牌 `--toolbar-pad-y`，缺省 4 = 原来 `Indent` 的缺省），两个旋钮各走各的。与 LCL 仍有一处不同：`TToolBar.Indent` 的缺省是 1，这里是 4。这一点是**有意保留**的——`default` 指令决定的是所有省略了该值的既有 `.lfm` 怎么被读回，改掉它等于给现存的每一条工具条重新缩进。从 LCL 移植、依赖缺省 1 的窗体请显式写 `Indent := 1`。 |
-| `Wrapable` | `Boolean` | `True` | 为 `True` 时，一行放不下的工具项自动折到下一行；`Align in [alTop, alBottom]` 时工具条随行数自动增高。改值触发 `Relayout`。 |
+| `Wrapable` | `Boolean` | `True` | 为 `True` 时，一行放不下的工具项自动折到下一行；`Align in [alTop, alBottom]` 时工具条随行数自动增高。改值触发 `Relayout`。**这只管"宽度不够时自动换行"这一条规则**，与"某一项强制另起一行"是两回事——后者走排布函数的 `ABreakBefore` 参数（见 [第 5.1 节](#51-排布函数-tytoolbarlayout)），且**两种模式下都生效**。 |
 | `ShowCaptions` | `Boolean` | `False` | 与 LCL 一致：`False`（默认）让工具项**只显示图标**，`True` 才画标题。它下发到每个**能画图标**的子控件（`TTyGlyphButtonBase` 一族：`TTyGlyphButton` / `TTySpeedButton` / `TTyGlyphContainerButton`），走 `AdoptShowCaption`——对已被宿主自己写过 `ShowCaption` 的工具项是空操作。普通 `TTyButton` 没有图标模型，不受影响；**解析不出图标的工具项保留标题**（否则画出来是个空盒子），所以 `False` 这个默认值不会把现有的纯文字工具条抹白。改值触发 `Relayout`。 |
 | `Flat` | `Boolean` | `True` | 为 `True` 时，工具条把子 `TTyButton` 的 `StyleClass` 设为 `'ghost'`（平面外观）——但**只在它还是空串时**；为 `False` 时只把 `'ghost'` 改回 `''`。宿主自己写的 `StyleClass := 'primary'` 会保留下来。改值触发 `Relayout`。 |
 | `Images` | `TTyImageCollection` | `nil` | 工具项的图标来源：**没有自己 `Images` 的子图标按钮由工具条把这个集合借给它**，于是工具项只需设 `ImageName`。已经自带集合的工具项不受影响——工具条只管自己借出去的那一份引用（重新指向或收回）。用 `FreeNotification` 挂钩，集合被释放时连同"借出标记"一起置 `nil`。改值触发 `Relayout`。 |
@@ -93,6 +93,49 @@ uses tyControls.ToolBar, tyControls.Button;
 ---
 
 ## 5. 状态与主题
+
+### 5.1 排布函数 `TyToolbarLayout`
+
+排布本身是单元级的**纯函数**，不需要窗口句柄，测试直接喂它、直接读结果；控件只是薄壳，在 `AlignControls` 里跑它、再把结果 `SetBounds` 到子控件上。它有两个重载：
+
+```pascal
+{ 无强制断行——既有调用方一直用的这个 }
+function TyToolbarLayout(const AItemSizes: array of TSize;
+  ABarWidth, AIndent, ATopPad, ASpacing, AButtonHeight: Integer;
+  AWrapable: Boolean; out ARows: Integer): TTyRectArray; overload;
+
+{ 带强制断行 }
+function TyToolbarLayout(const AItemSizes: array of TSize;
+  const ABreakBefore: array of Boolean;
+  ABarWidth, AIndent, ATopPad, ASpacing, AButtonHeight: Integer;
+  AWrapable: Boolean; out ARows: Integer): TTyRectArray; overload;
+```
+
+| 参数 | 含义 |
+|------|------|
+| `AItemSizes` | 各工具项尺寸；`cy` 不参与排布（行高由 `AButtonHeight` 决定），只是让调用方少建一个数组 |
+| `ABreakBefore` | **强制断行**，与 `AItemSizes` 平行：第 `i` 项**另起一行**，不管它本来放不放得下 |
+| `ABarWidth` | 工具条可用宽度（控件传 `ClientWidth`） |
+| `AIndent` | 每行**前缘**留白（横向） |
+| `ATopPad` | 第一行**上方**留白（纵向，控件传 `ContentPadY`） |
+| `ASpacing` | 项间距，同时用作行间距 |
+| `AButtonHeight` | 统一行高 |
+| `AWrapable` | 宽度不够时是否自动换行 |
+| `ARows` | 出参：占用的行数——**工具条的自动高度就是按它算的** |
+
+`ABreakBefore` 有三条不那么显然的规则：
+
+- **可以短，也可以不给。** 越界的条目读作 `False`。所以只知道前几项标志的调用方传前几项就行，传空数组等于"一处都不断"。这与 `TyCoolBarPack`（`tyControls.CoolBar`）的 `ABreaks` 是同一套形状和同一套容差——两个 packer 并排读起来是一样的。
+- **标志是"前置"的**：`ABreakBefore[i]` 表示"第 i 项**开始**新的一行"。LCL 的 `TToolButton.Wrap` 是"**后置**"的——`toolbar.inc` 在"挪到下一个位置"那一步才处理它，所以它推动的是**下一个**控件。两者的换算是
+
+  ```pascal
+  breakBefore[i] := (i > 0) and wrapAfter[i - 1];
+  ```
+
+  这道位移是最容易差一位的地方，所以它由测试钉死（`TToolBarBreakTest.TestLclWrapAfterMapsOntoBreakBefore`），而不是留给调用方自己重新想一遍。选"前置"还有一个好处：**空行根本表达不出来**。第 0 项没有上一行可以离开，它的断行标志被忽略；而 LCL 那边，最后一个按钮上的 `Wrap` 照样会把 `FRowCount` 加一，于是报出一行什么都没有的高度。
+- **不受 `AWrapable` 约束。** `AWrapable = False` 时这正是 LCL 的行为（LCL 也只在这个模式下才读 `Wrap`）；`AWrapable = True` 时我们**额外**允许强制断行与宽度换行叠加，这一点 LCL 不做。宿主已经明说要断在哪里，照办不算意外；反过来，若也跟着 LCL 把它禁掉，这个能力在默认工具条上就永远够不着——`Wrapable` 的缺省值是 `True`。
+
+> **无断行时与从前逐像素相同。** 不带 `ABreakBefore` 的重载是一次**纯转发**，不是第二份循环——只有一份实现，所以"没设断行就跟以前一模一样"是构造上成立的，不靠两份代码互相看齐。
 
 ### 支持的伪类状态
 
@@ -169,6 +212,8 @@ end;
 - **命令响应走子按钮：** 工具条自身无 `OnClick` 语义的专有事件；请挂接各子按钮的 `OnClick`（Tier A 基线事件）。
 - **Wrapable 自动增高：** 当 `Align in [alTop, alBottom]` 且 `Wrapable=True` 时，一行放不下的工具项换行，工具条高度按 `padY*2 + rows*ButtonHeight + (rows-1)*ButtonSpacing` 自动调整（`padY` = 主题令牌 `--toolbar-pad-y`，缺省 4；**不再是 `Indent`**，横向留白不该参与高度）——不要在代码里硬设一个与之冲突的 `Height`。
 - **重入守卫：** `AlignControls` 末尾对 `Height` 的赋值会再次触发 `AlignControls`，`FInLayout` 守卫防止无限递归。
+- **强制断行目前只在排布函数上：** `TyToolbarLayout` 已经接受 `ABreakBefore`（见 [第 5.1 节](#51-排布函数-tytoolbarlayout)），但 `TTyToolBar` 自身还**没有**哪个 published 属性去填它——控件调用的仍是无断行的那个重载。它是为 `TToolButton.Wrap` 预备的输入，等那个类落地时再接线。
+- **`TTyToolBarEx` 整份重写了 `AlignControls`：** `Wrapable = True` 时它把活儿原样交回基类（`inherited AlignControls`），于是走的是同一个排布函数、同一套几何；`Wrapable = False` 时它走自己的溢出 chevron 路径，**完全不调用 `TyToolbarLayout`**，那条路上只有一行，也就没有"断行"可言。改基类的排布时这两条路都要一起验——`TToolBarExControlTest.TestWrapableGeometryIsTheBaseSolvers` 就是钉住前者的那颗钉子。
 - **ShowCaptions 的默认值是 `False`（与 LCL 一致）：** 它只对**能画图标**的工具项（`TTyGlyphButtonBase` 一族）生效，且只把标题换成图标——**解析不出图标的工具项照旧显示标题**，所以给一条纯文字工具条打开这个默认值不会把它抹白。工具项上一旦有人写过 `ShowCaption`，工具条就不再管它。
 - **Images 借给工具项：** 工具条把自己的 `TTyImageCollection` 借给**没有 `Images` 的**子图标按钮，于是工具项只需设 `ImageName`；自带集合的工具项不受影响。工具项**加入工具条之后**才设 `Images` 也有效（`InsertControl` 里也会下发一次）。
 - **无四周边框：** 主题的 `border-color` / `border-width` 只画工具条**底部一条 hairline**，不绘制四周边框；工具条不参与任何伪类状态。

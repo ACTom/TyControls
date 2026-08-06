@@ -111,21 +111,72 @@ type
 
 { AIndent is the LEADING (horizontal) gap before the first tool on every row; ATopPad is the
   vertical gap above the first row. They used to be one number, so a bar could not be indented
-  without also being padded — see TTyToolBar.Indent. }
-function TyToolbarLayout(const AItemSizes: array of TSize; ABarWidth, AIndent, ATopPad, ASpacing, AButtonHeight: Integer; AWrapable: Boolean; out ARows: Integer): TTyRectArray;
+  without also being padded — see TTyToolBar.Indent.
+
+  ABreakBefore is a FORCED row division, parallel to AItemSizes: item i opens a new row whether
+  or not it would have fitted. It is what LCL's TToolButton.Wrap needs and what the width rule
+  alone can never express — a group division the width did not ask for. Same shape and same
+  tolerance as TyCoolBarPack's ABreaks (tyControls.CoolBar): a SHORTER array is legal and a
+  missing entry reads as False, so a caller that knows only the leading flags may pass just
+  those, and an empty array means "no breaks at all".
+
+  Two rules that are not obvious:
+
+  * The flag is LEADING — "item i STARTS a row" — matching TyCoolBarPack. LCL's Wrap is
+    TRAILING: toolbar.inc:1003 applies it in the step-to-next-position, so it moves the NEXT
+    control. The mapping is `breakBefore[i] := (i > 0) and wrapAfter[i-1]`, and it is pinned by
+    a test rather than left for the caller to rediscover. Leading also makes an empty row
+    unrepresentable: a break on item 0 has no row above it to leave and is ignored, where LCL's
+    trailing Wrap on the LAST button still bumps its FRowCount and leaves the bar a row too tall.
+
+  * The break is honoured REGARDLESS of AWrapable. With AWrapable=False this is exactly LCL's
+    behaviour (that is the only mode in which LCL reads Wrap at all); with AWrapable=True we
+    additionally let an explicit break compose with the width rule, which LCL does not. Honouring
+    a division the host asked for in so many words is not a surprise, and refusing it would put
+    the feature out of reach of the default bar — Wrapable defaults to True here. }
+function TyToolbarLayout(const AItemSizes: array of TSize; ABarWidth, AIndent, ATopPad, ASpacing, AButtonHeight: Integer; AWrapable: Boolean; out ARows: Integer): TTyRectArray; overload;
+function TyToolbarLayout(const AItemSizes: array of TSize; const ABreakBefore: array of Boolean;
+  ABarWidth, AIndent, ATopPad, ASpacing, AButtonHeight: Integer; AWrapable: Boolean;
+  out ARows: Integer): TTyRectArray; overload;
 
 implementation
 
+{ The break-free entry point is a pure DELEGATION, not a second copy of the loop: there is one
+  implementation, so "no break set lays out exactly as it did before" is true by construction
+  rather than by two bodies being kept in step. Kept as an overload rather than folded into the
+  new signature because every existing caller — the control below, and the tests that pin its
+  arithmetic — passes no flags, and a source break for all of them buys nothing. }
 function TyToolbarLayout(const AItemSizes: array of TSize; ABarWidth, AIndent, ATopPad, ASpacing, AButtonHeight: Integer; AWrapable: Boolean; out ARows: Integer): TTyRectArray;
 var
-  i, x, y: Integer;
+  noBreaks: array of Boolean;   // nil -> Length 0 -> every entry reads as False
 begin
+  noBreaks := nil;
+  Result := TyToolbarLayout(AItemSizes, noBreaks, ABarWidth, AIndent, ATopPad, ASpacing,
+    AButtonHeight, AWrapable, ARows);
+end;
+
+function TyToolbarLayout(const AItemSizes: array of TSize; const ABreakBefore: array of Boolean;
+  ABarWidth, AIndent, ATopPad, ASpacing, AButtonHeight: Integer; AWrapable: Boolean;
+  out ARows: Integer): TTyRectArray;
+var
+  i, x, y: Integer;
+  brk: Boolean;
+begin
+  Result := nil;
   SetLength(Result, Length(AItemSizes));
   ARows := 1;
   x := AIndent; y := ATopPad;
   for i := 0 to High(AItemSizes) do
   begin
-    if AWrapable and (i > 0) and (x + AItemSizes[i].cx > ABarWidth - AIndent) then
+    { A missing flag reads as False, so a short (or absent) array is legal — TyCoolBarPack's
+      tolerance, and what makes the break-free overload a delegation rather than a fork. }
+    brk := (i < Length(ABreakBefore)) and ABreakBefore[i];
+    { `i > 0` guards BOTH rules, which is what keeps the break from opening an empty leading
+      row. It also leaves the width rule byte-for-byte what it was: with brk always False this
+      whole condition collapses to `AWrapable and (i > 0) and overflow` — the original, with its
+      operands merely regrouped. The break is deliberately OUTSIDE the AWrapable test: see the
+      interface comment for why it is honoured in both modes. }
+    if (i > 0) and (brk or (AWrapable and (x + AItemSizes[i].cx > ABarWidth - AIndent))) then
     begin
       x := AIndent; Inc(y, AButtonHeight + ASpacing); Inc(ARows);
     end;

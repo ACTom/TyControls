@@ -52,6 +52,7 @@ type
     procedure TestChevronIsNoDesignVisible;
     procedure TestChevronNotInOverflowSet;
     procedure TestWrapableSkipsOverflow;
+    procedure TestWrapableGeometryIsTheBaseSolvers;
     procedure TestFreedChildDropsFromOverflow;
     procedure TestSteadyRelayoutDoesNotReshowOverflow;
   end;
@@ -318,6 +319,49 @@ begin
 
   AssertEquals('wrapping never overflows', 0, TB.OverflowCount);
   AssertFalse('wrapping shows no chevron', TB.OverflowVisible);
+end;
+
+procedure TToolBarExControlTest.TestWrapableGeometryIsTheBaseSolvers;
+var
+  TB: TTyToolBarExAccess;
+  B1, B2, B3: TTyButton;
+begin
+  { TestWrapableSkipsOverflow proves the chevron path is BYPASSED when Wrapable=True. It does
+    not prove what the buttons then do -- so a change to the base solver could move every tool
+    on every Ex bar and nothing here would notice. This subclass overrides AlignControls
+    WHOLESALE and reaches the base only through that one `inherited` call, which is exactly the
+    seam that has been missed in this file before.
+
+    The widths are chosen to land on the wrap rule's BOUNDARY, so this also pins the comparison
+    itself through the subclass: bar 100, indent 4 -> the usable edge is 96. B2 ends at
+    4+46+2+44 = 96 exactly. The rule is `>`, so 96 does NOT wrap and B2 stays on row 1 at
+    x = 4+46+2 = 52; a rule of `>=` would drop it to row 2 at the indent. B3 then genuinely
+    overflows (98+60 = 158) and opens row 2.
+
+    Tops are asserted as a DIFFERENCE, never as an absolute: the first row starts at
+    ContentPadY, a theme token (--toolbar-pad-y) whose value is not this test's business. The
+    difference is ButtonHeight + ButtonSpacing = 26 and is pure layout arithmetic. }
+  TB := TTyToolBarExAccess.Create(FForm);
+  TB.Parent := FForm;
+  TB.Font.PixelsPerInch := 96;
+  TB.Align := alNone;
+  TB.Wrapable := True;
+  TB.Indent := 4;
+  TB.ButtonSpacing := 2;
+  TB.ButtonHeight := 24;
+  TB.Width := 100;
+
+  B1 := MakeBtn(TB, 46);
+  B2 := MakeBtn(TB, 44);
+  B3 := MakeBtn(TB, 60);
+  TB.ForceLayout;
+
+  AssertEquals('b1 starts at the indent', 4, B1.Left);
+  AssertEquals('b2 ends exactly ON the usable edge, so it does NOT wrap', 52, B2.Left);
+  AssertEquals('b2 shares b1''s row', B1.Top, B2.Top);
+  AssertEquals('b3 overflows and restarts at the indent', 4, B3.Left);
+  AssertEquals('b3 is one row down: buttonHeight + spacing', 26, B3.Top - B1.Top);
+  AssertEquals('wrapping still never overflows', 0, TB.OverflowCount);
 end;
 
 procedure TToolBarExControlTest.TestFreedChildDropsFromOverflow;
