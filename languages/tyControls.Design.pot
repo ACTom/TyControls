@@ -109,3 +109,7 @@ msgstr ""
 msgid "The theme to load by name. The list offers the themes compiled into TyControls plus any registered in this IDE; a name your application registers at run time is equally valid, so you may type one that is not listed. Setting this clears ThemeFile."
 msgstr ""
 
+#: tycontrols.design.rsdttreeeditnodes
+msgid "Edit Nodes..."
+msgstr ""
+

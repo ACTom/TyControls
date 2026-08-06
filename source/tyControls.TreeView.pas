@@ -258,11 +258,143 @@ type
     NodeTop: Integer;   // absolute Y of Node.NodeHeight's top pixel
   end;
 
+{ ==========================================================================
+  条目模型(TTyTreeNodes / TTyTreeNodeItem)—— 为什么它存在,以及它凭什么
+  不动虚拟内核
+
+  本控件是**虚拟树**:节点是定长记录,标题由 OnGetText 现算,百万节点是它的
+  卖点。LCL 的 TTreeView 恰好相反:Items 是一棵 TTreeNode 对象树,每个节点自己
+  拿着 Text,能进 .lfm,设计器里有节点编辑器。两者看上去互斥 —— 但**本库一个
+  文件之外已经把这道题做完了**:TTyListView 同时有 TTyListItems 集合和
+  OwnerData 虚拟模式,靠一个显式开关选路,并且"只有一处 if OwnerData"
+  (见 tyControls.ListView.pas §"The single data intake")。
+
+  这里照抄那条约定,只改一处:模式不是布尔开关,而是 **Items 空不空**。
+  原因是默认值:TTyListView 的默认是集合模式,所以 OwnerData 默认 False 读得通;
+  本控件的默认从第一天起就是虚拟模式,一个同名的 OwnerData 就得默认 True ——
+  隔壁同名同义的属性一个默认 False 一个默认 True,比没有开关更坏。
+  而"Items 非空"不是对旧行为的推断:**空 Items 是今天所有代码的状态**,
+  非空 Items 是一个以前根本不可能出现的新状态,所以虚拟路径逐字节不变。
+
+  两个来源同时出现怎么办 —— 这是本轮一直在清理的那类缺陷,所以**报错,不择一**:
+  Items 非空的同时再挂 OnGetText / OnGetTextWithType,或者反过来,抛
+  ETyTreeItemMode 并在消息里同时点名两边。静默偏向任何一边都会变成
+  "设计器里填的节点在运行时不见了"或者"我的 OnGetText 不触发了"这种
+  查半天的 bug。流式化期间(csLoading)冲突只记账,到 Loaded 再抛,
+  否则 .lfm 里属性顺序会决定报不报错。
+
+  形状:**扁平集合 + Level 缩进**,不是对象树。三个理由 ——
+  ① TCollection 的流式化与 OI 集合编辑器都是现成的,.lfm 里是**可读可 diff 的
+     文本块**,比 LCL 那个 Items.Data 十六进制 blob 好;
+  ② 集合顺序天然就是**前序**,于是 Items[i] 与 LCL 的绝对下标语义逐个对上;
+  ③ 父子关系由 Level 推出,AddChild 只是"插在父子树末尾、Level+1"。
+
+  代价(诚实记账):条目模式下节点数据块的头 4 字节被控件征用为条目下标,
+  所以 NodeDataSize 与 Items 也互斥(同样报错)。虚拟模式下这 4 字节不存在,
+  分配步长与从前完全一样。
+  ========================================================================== }
+
+  ETyTreeItemMode = class(Exception);
+
+  TTyTreeNodes = class;
+
+  { 一个条目 = 一个节点。published 的部分进 .lfm 与对象查看器;
+    Data 是 app 的负载(不流式化),Node 是物化之后的记录指针。 }
+  TTyTreeNodeItem = class(TCollectionItem)
+  private
+    FText:          TCaption;
+    FLevel:         Integer;
+    FImageIndex:    Integer;
+    FSelectedIndex: Integer;
+    FExpanded:      Boolean;
+    FCheckType:     TTyCheckType;
+    FCheckState:    TTyCheckState;
+    FData:          Pointer;
+    FNode:          PTyTreeNode;
+    function  GetTreeNodes: TTyTreeNodes;
+    procedure SetText(const AValue: TCaption);
+    procedure SetLevel(AValue: Integer);
+    procedure SetImageIndex(AValue: Integer);
+    procedure SetSelectedIndex(AValue: Integer);
+    procedure SetExpanded(AValue: Boolean);
+    procedure SetCheckType(AValue: TTyCheckType);
+    procedure SetCheckState(AValue: TTyCheckState);
+  protected
+    function GetDisplayName: string; override;
+  public
+    constructor Create(ACollection: TCollection); override;
+    procedure Assign(ASource: TPersistent); override;
+    { 结构导航 —— 全部从扁平序 + Level 推出,LCL 的 TTreeNode 同名成员语义。 }
+    function  Parent: TTyTreeNodeItem;
+    function  Count: Integer;                              { 直接子条目数 }
+    function  Items(AIndex: Integer): TTyTreeNodeItem;     { 第 AIndex 个直接子条目 }
+    function  HasChildren: Boolean;
+    { 本条目子树(含自身)占的条目个数 —— 插入点计算用。 }
+    function  SubTreeCount: Integer;
+    property  Data: Pointer read FData write FData;
+    { 物化之后对应的记录节点;未物化 / 虚拟模式下为 nil。只读:节点由条目层建。 }
+    property  Node: PTyTreeNode read FNode;
+    property  TreeNodes: TTyTreeNodes read GetTreeNodes;
+  published
+    { 节点标题。条目模式下这是标题的**唯一**来源(DoGetText 从这里取)。 }
+    property Text:          TCaption      read FText          write SetText;
+    { 缩进层级 = 树形。0 是顶层;每一项至多比**前一项**深 1 层(越界会被夹紧),
+      于是任何一串 Level 都对应唯一一棵合法的树,.lfm 里手写也不会崩。 }
+    property Level:         Integer       read FLevel         write SetLevel default 0;
+    property ImageIndex:    Integer       read FImageIndex    write SetImageIndex default -1;
+    property SelectedIndex: Integer       read FSelectedIndex write SetSelectedIndex default -1;
+    property Expanded:      Boolean       read FExpanded      write SetExpanded default False;
+    property CheckType:     TTyCheckType  read FCheckType     write SetCheckType default ctNone;
+    property CheckState:    TTyCheckState read FCheckState    write SetCheckState default csUnchecked;
+  end;
+
+  { 条目集合。顺序 = 前序遍历序,所以 Count / Item[i] 与 LCL 的
+    TTreeNodes.Count / Item[i](绝对下标)是同一个意思。 }
+  TTyTreeNodes = class(TCollection)
+  private
+    FOwner:      TPersistent;
+    FStructural: Boolean;   { 本批变更动了树形(增删 / Level),EndUpdate 时要重建 }
+    function  GetItem(AIndex: Integer): TTyTreeNodeItem;
+    procedure SetItem(AIndex: Integer; AValue: TTyTreeNodeItem);
+    function  GetTopLvlCount: Integer;
+    function  GetTopLvlItems(AIndex: Integer): TTyTreeNodeItem;
+    { 在 AIndex 处插入一个 Level=ALevel 的条目(内部,已算好落点)。 }
+    function  InsertAt(AIndex, ALevel: Integer; const S: string): TTyTreeNodeItem;
+  protected
+    function  GetOwner: TPersistent; override;
+    { 变更传给控件的唯一两条路:Notify 记下"这一批动了树形",
+      Update 决定整棵重建还是只回写那一个节点。 }
+    procedure Notify(Item: TCollectionItem; Action: TCollectionNotification); override;
+    procedure Update(Item: TCollectionItem); override;
+  public
+    constructor Create(AOwner: TPersistent);
+    { LCL TTreeNodes 的建节点 API(comctrls.pp)。ASibling / AParent 为 nil = 顶层。 }
+    function Add(ASibling: TTyTreeNodeItem; const S: string): TTyTreeNodeItem;
+    function AddFirst(ASibling: TTyTreeNodeItem; const S: string): TTyTreeNodeItem;
+    function AddChild(AParent: TTyTreeNodeItem; const S: string): TTyTreeNodeItem;
+    function AddChildFirst(AParent: TTyTreeNodeItem; const S: string): TTyTreeNodeItem;
+    function Insert(ASibling: TTyTreeNodeItem; const S: string): TTyTreeNodeItem;
+    { 删除一个条目**连同它的整棵子树** —— 光 Delete(i) 会把子条目留成孤儿
+      (它们的 Level 突然比前一项深 2 层),所以删子树必须是一个动作。 }
+    procedure DeleteItem(AItem: TTyTreeNodeItem);
+    function  GetFirstNode: TTyTreeNodeItem;
+    property Items[AIndex: Integer]: TTyTreeNodeItem read GetItem write SetItem; default;
+    property TopLvlCount: Integer read GetTopLvlCount;
+    property TopLvlItems[AIndex: Integer]: TTyTreeNodeItem read GetTopLvlItems;
+  end;
+
   TTyTreeView = class(TTyCustomControl)
   private
     FRoot: PTyTreeNode;
     FNodeDataSize: Integer;     // -1 until set
     FNodeAllocSize: Integer;    // TreeNodeSize + Max(0, FNodeDataSize)
+    { 条目模型(见单元中部 §条目模型)。FItemMode 只由 RebuildFromItems 改;
+      FRebuildingItems 是物化期间给虚拟 API 开的唯一后门;FPendingConflict 存
+      csLoading 期间发现、要留到 Loaded 才抛的冲突消息。 }
+    FItems:            TTyTreeNodes;
+    FItemMode:         Boolean;
+    FRebuildingItems:  Boolean;
+    FPendingConflict:  string;
     FDefaultNodeHeight: Integer;         { classic fallback (18); the density value comes
                                            from GetDefaultNodeHeight unless explicitly pinned }
     FDefaultNodeHeightExplicit: Boolean; { True once a host/.lfm sets DefaultNodeHeight; False =
@@ -529,6 +661,24 @@ type
     procedure SetNodeDataSize(AValue: Integer);
     function  GetRootNodeCount: Cardinal;
     procedure SetRootNodeCount(AValue: Cardinal);
+    { --- 条目模型的控件侧(见单元中部 §条目模型)------------------------------ }
+    procedure SetItems(AValue: TTyTreeNodes);
+    procedure SetOnGetText(AValue: TTyTreeGetTextEvent);
+    procedure SetOnGetTextWithType(AValue: TTyTreeGetTextWithTypeEvent);
+    { 分配步长的唯一出口:条目模式征用块首 4 字节存条目下标;虚拟模式与从前一样。 }
+    procedure UpdateNodeAllocSize;
+    { 冲突闸门。ARaise 描述"另一边是谁";csLoading 期间只记账,Loaded 再抛。 }
+    procedure ItemModeConflict(const AWhat: string);
+    { 虚拟结构 API 的入口守卫(RootNodeCount / SetChildCount / AddChild)。 }
+    procedure GuardVirtualStructure(const AWhat: string);
+    { Items 变了:结构变更整棵重建,属性变更只回写那一个节点。 }
+    procedure ItemsStructureChanged;
+    procedure ItemStateChanged(AItem: TTyTreeNodeItem);
+    procedure RebuildFromItems;
+    procedure ApplyItemToNode(AItem: TTyTreeNodeItem);
+    procedure StampItemRef(ANode: PTyTreeNode; AItemIndex: Integer);
+    function  GetNodeItem(Node: PTyTreeNode): TTyTreeNodeItem;
+    function  GetNodeText(Node: PTyTreeNode): string;
     procedure AdjustTotalCount(Node: PTyTreeNode; Delta: Integer);
     procedure AdjustTotalHeight(Node: PTyTreeNode; Delta: Integer);
     { ③c A1 / ③f F1: re-stamp a parent's child list with consecutive 0-based Index
@@ -676,6 +826,10 @@ type
     function  TreeLineX(ACellLeft, ACellRight, AX: Integer): Integer;
     function GetStyleTypeKey: string; override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+    { 流式化结束:.lfm 里的 Items 现在才物化(读期间条目是一条一条到的,
+      每来一条就重建一次既慢又会在半棵树上算 Level),同时把读期间攒下的
+      模式冲突抛出来 —— 在读期间抛会让报不报错取决于 .lfm 的属性顺序。 }
+    procedure Loaded; override;
     procedure Paint; override;
     function  DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
                 MousePos: TPoint): Boolean; override;
@@ -694,6 +848,39 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor  Destroy; override;
     function  GetNodeData(Node: PTyTreeNode): Pointer;
+    { --- 条目模型的公开面(见单元中部 §条目模型)------------------------------
+      IsItemMode:「这棵树现在的数据源是 Items 还是事件」——模式是推出来的
+      (Items 非空),所以必须能被读出来,否则就成了只有控件自己知道的状态。
+      NodeItem[]:记录节点 → 条目对象。虚拟模式下恒为 nil。
+      NodeText[]:LCL `Node.Text` 的等价物。节点是**记录**不是类,挂不了成员,
+      所以按本控件既有约定挂到控件上做带下标属性 —— 与 NodeSelected[] /
+      NodeVisible[] 同一条命名规则(见 docs 第 7 节)。两种模式都答得出:
+      条目模式取条目的 Text,虚拟模式走 OnGetTextWithType / OnGetText,
+      也就是**屏幕上那一行真正显示的字**。只读:虚拟模式下没有可写的去处。 }
+    { 这个后代能**不能**用条目模型(与 IsItemMode 的"现在是不是"是两个问题)。
+
+      默认 True。**自己拥有数据源的后代必须覆写成 False** —— 判据是"有没有覆写
+      DoGetText / 自己调 AddChild 建树"。TTyShellTreeView 正是这样一个:它的
+      DoGetText 不调 inherited(标题来自文件系统),并且在 InitChildren 里自己
+      AddChild 建子节点。给它填了 Items 的话,条目层会先按条目重建一棵树,
+      然后它自己的填充代码撞上虚拟结构闸门抛异常 —— 响是响,但报的是 AddChild,
+      指不到真正的原因。覆写成 False 之后,RebuildFromItems 当场用一句说得清的话
+      拒绝,设计期的节点编辑器也不会挂到它上面。
+
+      public 而不是 protected:设计期包要问这句话(决定给不给节点编辑动词),
+      而它是个纯查询。
+
+      本库里唯一覆写成 False 的是 TTyShellTreeView —— 它自己从文件系统建节点。 }
+    function  SupportsItemModel: Boolean; virtual;
+    property  IsItemMode: Boolean read FItemMode;
+    { 一个节点占多少字节。本控件的卖点是"恒定内存下的百万节点",所以
+      "一百万个节点要多少内存"必须是能问出来的 —— 而不是只能靠读代码推。
+      同时它是那句承诺唯一的可断言形式:条目模式在块首征用 4 字节,虚拟模式
+      一个字节都不多占,除此之外没有任何外部可观测量能区分这两件事
+      (GetNodeData 的偏移恒为 TreeNodeSize,与分配步长无关)。 }
+    property  NodeMemSize: Integer read FNodeAllocSize;
+    property  NodeItem[Node: PTyTreeNode]: TTyTreeNodeItem read GetNodeItem;
+    property  NodeText[Node: PTyTreeNode]: string read GetNodeText;
     procedure SetChildCount(Node: PTyTreeNode; NewCount: Cardinal);
     function  AddChild(AParent: PTyTreeNode): PTyTreeNode;
     procedure DeleteNode(Node: PTyTreeNode);
@@ -927,6 +1114,12 @@ type
     property Options: TTyTreeOptions read FOptions write SetOptions default [];
     { B (columns): header sub-object }
     property Header: TTyHeader read FHeader write SetHeader;
+    { 设计期 / .lfm 里的节点树(见单元中部 §条目模型)。非空 = 条目模式。
+      **setter 必须在**,哪怕读者从不调用它:FPC 的 TWriter.WriteProperty 对
+      没有 setter 的属性直接返回(设计器于是静默不保存),TReader.ReadPropValue
+      在看属性种类之前就抛 EReadError。本库两天前刚在 TTyHeader.Columns 上
+      栽过这一次(7d2c03d)。 }
+    property Items: TTyTreeNodes read FItems write SetItems;
     property NodeDataSize: Integer read FNodeDataSize write SetNodeDataSize default -1;
     { Default node/row height in logical px. Left unset it follows the theme's
       --item-height token, so nodes get denser rows at classic density (18) and
@@ -981,8 +1174,10 @@ type
     property OnNodeClick:     TTyTreeNodeEvent         read FOnNodeClick     write FOnNodeClick;
     property OnNodeDblClick:  TTyTreeNodeEvent         read FOnNodeDblClick  write FOnNodeDblClick;
     { C3: paint events }
-    property OnGetText:            TTyTreeGetTextEvent           read FOnGetText            write FOnGetText;
-    property OnGetTextWithType:    TTyTreeGetTextWithTypeEvent   read FOnGetTextWithType    write FOnGetTextWithType;
+    { 两个 setter 不是装饰:它们是条目模式的冲突闸门之一(另一半在
+      RebuildFromItems)。Items 非空时再挂标题事件 = 标题有两个主人,抛异常。 }
+    property OnGetText:            TTyTreeGetTextEvent           read FOnGetText            write SetOnGetText;
+    property OnGetTextWithType:    TTyTreeGetTextWithTypeEvent   read FOnGetTextWithType    write SetOnGetTextWithType;
     property OnGetImageIndex:      TTyTreeGetImageIndexEvent     read FOnGetImageIndex      write FOnGetImageIndex;
     property OnPaintText:          TTyTreePaintTextEvent         read FOnPaintText          write FOnPaintText;
     { ③d D1: per-cell owner-draw — full replacement (gated by toOwnerDraw) + overlay }
@@ -1048,6 +1243,357 @@ function TyTreeCaptionSlots(ACellLeft, ACellRight, APPI, AIndent, ALevel: Intege
   AShowRoot, AHasCheckBox, AHasImage, AIsMainColumn, ARightToLeft: Boolean): TTyTreeCaptionSlots;
 
 implementation
+
+{ ===========================================================================
+  TTyTreeNodeItem —— 一个条目
+
+  所有结构问题(父、子、子树大小)都由**扁平序 + Level** 现算,条目自己不存
+  任何指针。这样 .lfm 里手写一串 Level 与用 AddChild 建出来的树是同一个东西,
+  不存在"指针对了但 Level 没跟上"这种第二真相。
+  =========================================================================== }
+
+constructor TTyTreeNodeItem.Create(ACollection: TCollection);
+begin
+  inherited Create(ACollection);
+  FImageIndex    := -1;
+  FSelectedIndex := -1;
+  FLevel         := 0;
+  FCheckType     := ctNone;
+  FCheckState    := csUnchecked;
+end;
+
+procedure TTyTreeNodeItem.Assign(ASource: TPersistent);
+var
+  src: TTyTreeNodeItem;
+begin
+  if ASource is TTyTreeNodeItem then
+  begin
+    src := TTyTreeNodeItem(ASource);
+    FText          := src.FText;
+    FLevel         := src.FLevel;
+    FImageIndex    := src.FImageIndex;
+    FSelectedIndex := src.FSelectedIndex;
+    FExpanded      := src.FExpanded;
+    FCheckType     := src.FCheckType;
+    FCheckState    := src.FCheckState;
+    FData          := src.FData;
+    { Assign 会搬 Level,所以是结构变更。 }
+    Changed(True);
+  end
+  else
+    inherited Assign(ASource);
+end;
+
+function TTyTreeNodeItem.GetTreeNodes: TTyTreeNodes;
+begin
+  if Collection is TTyTreeNodes then
+    Result := TTyTreeNodes(Collection)
+  else
+    Result := nil;
+end;
+
+{ 对象查看器集合编辑器左边那一列。带上缩进,于是那个通用编辑器里也能一眼看出树形
+  —— 这是"扁平集合 + Level"这个形状白拿的好处。 }
+function TTyTreeNodeItem.GetDisplayName: string;
+begin
+  if FText <> '' then
+    Result := StringOfChar(' ', 2 * FLevel) + FText
+  else
+    Result := inherited GetDisplayName;
+end;
+
+procedure TTyTreeNodeItem.SetText(const AValue: TCaption);
+begin
+  if FText = AValue then Exit;
+  FText := AValue;
+  Changed(False);
+end;
+
+{ Level 是树形本身,所以它是**结构**变更(Changed(True) → Update(nil) → 整棵重建)。
+
+  这里**不**夹紧。规范化("首项是 0,其余至多比前一项深 1 层")只在
+  RebuildFromItems 里做一次,并写回 FLevel —— 一处规范化,一个真相。
+  两处都夹的第一版反而更弱:物化那次写回会把 setter 的结果盖掉,于是删掉
+  setter 里的夹紧,测试照样全绿(变异体 M11 存活)。真正兜底的一直是物化那一处,
+  而它才是 .lfm 手写、InsertAt 直写字段、Assign 搬运三条路的共同必经之地。 }
+procedure TTyTreeNodeItem.SetLevel(AValue: Integer);
+begin
+  if AValue < 0 then AValue := 0;
+  if FLevel = AValue then Exit;
+  FLevel := AValue;
+  Changed(True);
+end;
+
+procedure TTyTreeNodeItem.SetImageIndex(AValue: Integer);
+begin
+  if FImageIndex = AValue then Exit;
+  FImageIndex := AValue;
+  Changed(False);
+end;
+
+procedure TTyTreeNodeItem.SetSelectedIndex(AValue: Integer);
+begin
+  if FSelectedIndex = AValue then Exit;
+  FSelectedIndex := AValue;
+  Changed(False);
+end;
+
+procedure TTyTreeNodeItem.SetExpanded(AValue: Boolean);
+begin
+  if FExpanded = AValue then Exit;
+  FExpanded := AValue;
+  Changed(False);
+end;
+
+procedure TTyTreeNodeItem.SetCheckType(AValue: TTyCheckType);
+begin
+  if FCheckType = AValue then Exit;
+  FCheckType := AValue;
+  Changed(False);
+end;
+
+procedure TTyTreeNodeItem.SetCheckState(AValue: TTyCheckState);
+begin
+  if FCheckState = AValue then Exit;
+  FCheckState := AValue;
+  Changed(False);
+end;
+
+{ 父 = 往前找第一个 Level 更小的条目。 }
+function TTyTreeNodeItem.Parent: TTyTreeNodeItem;
+var
+  i: Integer;
+begin
+  Result := nil;
+  if (Collection = nil) or (FLevel = 0) then Exit;
+  for i := Index - 1 downto 0 do
+    if TTyTreeNodeItem(Collection.Items[i]).FLevel < FLevel then
+      Exit(TTyTreeNodeItem(Collection.Items[i]));
+end;
+
+{ 子树 = 紧跟其后、Level 一直更深的那一段。 }
+function TTyTreeNodeItem.SubTreeCount: Integer;
+var
+  i: Integer;
+begin
+  Result := 1;
+  if Collection = nil then Exit;
+  for i := Index + 1 to Collection.Count - 1 do
+  begin
+    if TTyTreeNodeItem(Collection.Items[i]).FLevel <= FLevel then Break;
+    Inc(Result);
+  end;
+end;
+
+function TTyTreeNodeItem.Count: Integer;
+var
+  i: Integer;
+begin
+  Result := 0;
+  if Collection = nil then Exit;
+  for i := Index + 1 to Collection.Count - 1 do
+  begin
+    if TTyTreeNodeItem(Collection.Items[i]).FLevel <= FLevel then Break;
+    if TTyTreeNodeItem(Collection.Items[i]).FLevel = FLevel + 1 then Inc(Result);
+  end;
+end;
+
+function TTyTreeNodeItem.Items(AIndex: Integer): TTyTreeNodeItem;
+var
+  i, n: Integer;
+begin
+  Result := nil;
+  if (Collection = nil) or (AIndex < 0) then Exit;
+  n := 0;
+  for i := Index + 1 to Collection.Count - 1 do
+  begin
+    if TTyTreeNodeItem(Collection.Items[i]).FLevel <= FLevel then Break;
+    if TTyTreeNodeItem(Collection.Items[i]).FLevel = FLevel + 1 then
+    begin
+      if n = AIndex then Exit(TTyTreeNodeItem(Collection.Items[i]));
+      Inc(n);
+    end;
+  end;
+end;
+
+function TTyTreeNodeItem.HasChildren: Boolean;
+begin
+  Result := (Collection <> nil) and (Index + 1 < Collection.Count)
+        and (TTyTreeNodeItem(Collection.Items[Index + 1]).FLevel > FLevel);
+end;
+
+{ ===========================================================================
+  TTyTreeNodes —— 条目集合(顺序 = 前序)
+  =========================================================================== }
+
+constructor TTyTreeNodes.Create(AOwner: TPersistent);
+begin
+  inherited Create(TTyTreeNodeItem);
+  FOwner := AOwner;
+end;
+
+function TTyTreeNodes.GetOwner: TPersistent;
+begin
+  Result := FOwner;
+end;
+
+function TTyTreeNodes.GetItem(AIndex: Integer): TTyTreeNodeItem;
+begin
+  Result := TTyTreeNodeItem(inherited Items[AIndex]);
+end;
+
+procedure TTyTreeNodes.SetItem(AIndex: Integer; AValue: TTyTreeNodeItem);
+begin
+  inherited Items[AIndex] := AValue;
+end;
+
+function TTyTreeNodes.GetTopLvlCount: Integer;
+var
+  i: Integer;
+begin
+  Result := 0;
+  for i := 0 to Count - 1 do
+    if GetItem(i).Level = 0 then Inc(Result);
+end;
+
+function TTyTreeNodes.GetTopLvlItems(AIndex: Integer): TTyTreeNodeItem;
+var
+  i, n: Integer;
+begin
+  Result := nil;
+  if AIndex < 0 then Exit;
+  n := 0;
+  for i := 0 to Count - 1 do
+    if GetItem(i).Level = 0 then
+    begin
+      if n = AIndex then Exit(GetItem(i));
+      Inc(n);
+    end;
+end;
+
+function TTyTreeNodes.GetFirstNode: TTyTreeNodeItem;
+begin
+  if Count = 0 then Result := nil else Result := GetItem(0);
+end;
+
+procedure TTyTreeNodes.Notify(Item: TCollectionItem; Action: TCollectionNotification);
+begin
+  inherited Notify(Item, Action);
+  { 增 / 删都改树形。cnAdded 之后 TCollection 还会走 Changed → Update,
+    这里只把"这一批是结构变更"记下来。 }
+  if Action in [cnAdded, cnExtracting, cnDeleting] then
+    FStructural := True;
+end;
+
+procedure TTyTreeNodes.Update(Item: TCollectionItem);
+begin
+  inherited Update(Item);
+  if not (FOwner is TTyTreeView) then Exit;
+  if FStructural or (Item = nil) then
+  begin
+    FStructural := False;
+    TTyTreeView(FOwner).ItemsStructureChanged;
+  end
+  else
+    TTyTreeView(FOwner).ItemStateChanged(TTyTreeNodeItem(Item));
+end;
+
+{ 唯一的建条目出口:在 AIndex 处插入,Level 由调用者算好。
+  五个 LCL 形状的 Add* 全部落到这里,于是"插到哪、几层"只有一处算术。 }
+function TTyTreeNodes.InsertAt(AIndex, ALevel: Integer; const S: string): TTyTreeNodeItem;
+begin
+  BeginUpdate;
+  try
+    Result := TTyTreeNodeItem(inherited Add);
+    if AIndex < Result.Index then Result.Index := AIndex;
+    { 直接写字段:SetLevel 会按"前一项"夹紧,而这里的落点是算准的,
+      在插入的瞬间前一项可能还没就位。 }
+    Result.FLevel := ALevel;
+    Result.FText  := S;
+    FStructural := True;
+  finally
+    EndUpdate;
+  end;
+end;
+
+{ LCL: Add(Sibling, S) = 加成 Sibling 的**最后一个**兄弟。Sibling=nil → 顶层末尾。 }
+function TTyTreeNodes.Add(ASibling: TTyTreeNodeItem; const S: string): TTyTreeNodeItem;
+var
+  parent: TTyTreeNodeItem;
+begin
+  if ASibling = nil then
+    Result := InsertAt(Count, 0, S)
+  else
+  begin
+    parent := ASibling.Parent;
+    if parent = nil then
+      Result := InsertAt(Count, 0, S)
+    else
+      Result := InsertAt(parent.Index + parent.SubTreeCount, ASibling.Level, S);
+  end;
+end;
+
+function TTyTreeNodes.AddFirst(ASibling: TTyTreeNodeItem; const S: string): TTyTreeNodeItem;
+var
+  parent: TTyTreeNodeItem;
+begin
+  if ASibling = nil then
+    Result := InsertAt(0, 0, S)
+  else
+  begin
+    parent := ASibling.Parent;
+    if parent = nil then
+      Result := InsertAt(0, 0, S)
+    else
+      Result := InsertAt(parent.Index + 1, parent.Level + 1, S);
+  end;
+end;
+
+{ **移植过来的那一行**:Tree.Items.AddChild(nil, 'Root')。
+  加成 AParent 的最后一个子条目 = 插在 AParent 子树的末尾。 }
+function TTyTreeNodes.AddChild(AParent: TTyTreeNodeItem; const S: string): TTyTreeNodeItem;
+begin
+  if AParent = nil then
+    Result := InsertAt(Count, 0, S)
+  else
+    Result := InsertAt(AParent.Index + AParent.SubTreeCount, AParent.Level + 1, S);
+end;
+
+function TTyTreeNodes.AddChildFirst(AParent: TTyTreeNodeItem; const S: string): TTyTreeNodeItem;
+begin
+  if AParent = nil then
+    Result := InsertAt(0, 0, S)
+  else
+    Result := InsertAt(AParent.Index + 1, AParent.Level + 1, S);
+end;
+
+{ LCL: Insert(Sibling, S) = 插在 Sibling **之前**。 }
+function TTyTreeNodes.Insert(ASibling: TTyTreeNodeItem; const S: string): TTyTreeNodeItem;
+begin
+  if ASibling = nil then
+    Result := InsertAt(Count, 0, S)
+  else
+    Result := InsertAt(ASibling.Index, ASibling.Level, S);
+end;
+
+{ 删子树。只 Delete(i) 会让子条目变孤儿:它们的 Level 突然比前一项深 2 层,
+  下一次物化时会被夹紧成别人的孩子 —— 树默默换了形状,比报错难查得多。 }
+procedure TTyTreeNodes.DeleteItem(AItem: TTyTreeNodeItem);
+var
+  i, first, n: Integer;
+begin
+  if (AItem = nil) or (AItem.Collection <> Self) then Exit;
+  first := AItem.Index;
+  n     := AItem.SubTreeCount;
+  BeginUpdate;
+  try
+    for i := 1 to n do
+      Delete(first);
+    FStructural := True;
+  finally
+    EndUpdate;
+  end;
+end;
 
 { TTyTreeView }
 
@@ -1598,7 +2144,9 @@ end;
   assigned the app fully decides (AMatch seeded False). }
 function TTyTreeView.NodeMatchesSearch(Node: PTyTreeNode; const ASearchText: string): Boolean;
 var
-  nodeText, upSearch: string;
+  { 局部名不能再叫 nodeText:控件上现在有带下标属性 NodeText[]（LCL Node.Text
+    的等价物），Pascal 不区分大小写，同名局部会把它遮掉。 }
+  nodeTxt, upSearch: string;
 begin
   Result := False;
   if (Node = nil) or (Node = FRoot) or (ASearchText = '') then Exit;
@@ -1608,11 +2156,11 @@ begin
     Exit;
   end;
   { Default: case-insensitive prefix match on the main-column caption. }
-  nodeText := UTF8UpperCase(GetNodeSearchText(Node));
+  nodeTxt  := UTF8UpperCase(GetNodeSearchText(Node));
   upSearch := UTF8UpperCase(ASearchText);
   Result := (upSearch <> '')
-            and (UTF8Length(nodeText) >= UTF8Length(upSearch))
-            and (UTF8Copy(nodeText, 1, UTF8Length(upSearch)) = upSearch);
+            and (UTF8Length(nodeTxt) >= UTF8Length(upSearch))
+            and (UTF8Copy(nodeTxt, 1, UTF8Length(upSearch)) = upSearch);
 end;
 
 { DoIncrementalSearch — walk the VISIBLE nodes (wrapping through the whole visible
@@ -2362,6 +2910,9 @@ begin
   inherited Create(AOwner);
   FNodeDataSize := -1;
   FNodeAllocSize := TreeNodeSize;
+  { 条目集合总是存在(空 = 虚拟模式);published 的子对象属性不能是 nil。 }
+  FItems := TTyTreeNodes.Create(Self);
+  FItemMode := False;
   FDefaultNodeHeight := 18;              // classic fallback; unused while FDefaultNodeHeightExplicit=False
   FDefaultNodeHeightExplicit := False;   // follow --item-height (density-aware) until pinned
   FRoot := MakeNewNode;                  // hidden root
@@ -2466,6 +3017,12 @@ end;
 
 destructor TTyTreeView.Destroy;
 begin
+  { 拆控件时条目层先退场:此后 Clear / DeleteNode 走的是纯虚拟路径,
+    不会再回流到条目层去重建一棵正在被销毁的树。两个赋值必须在
+    FItems.Free 之前 —— 释放集合会触发 Notify。 }
+  FItemMode        := False;
+  FRebuildingItems := True;
+  FreeAndNil(FItems);
   // Null out selection/focus pointers before Clear so no dangling refs remain.
   FFocusedNode  := nil;
   FSelectedNode := nil;
@@ -2503,10 +3060,25 @@ end;
 procedure TTyTreeView.SetNodeDataSize(AValue: Integer);
 begin
   if FNodeDataSize = AValue then Exit;
+  { 条目模式征用了数据块的头 4 字节,所以 app 的数据块与 Items 互斥 —— 同一段
+    内存两个主人,静默让一边赢就是数据损坏。 }
+  if (AValue > 0) and (FItems <> nil) and (FItems.Count > 0) then
+    ItemModeConflict('NodeDataSize');
   // Must be set before any nodes exist (changes the allocation stride).
   FNodeDataSize := AValue;
-  if AValue > 0 then FNodeAllocSize := TreeNodeSize + AValue
-  else FNodeAllocSize := TreeNodeSize;
+  UpdateNodeAllocSize;
+end;
+
+{ 分配步长的唯一出口。条目模式下块首 4 字节是控件自己的条目下标槽;虚拟模式下
+  这一段不存在,步长与条目模型进来之前逐字节相同。 }
+procedure TTyTreeView.UpdateNodeAllocSize;
+begin
+  if FItemMode then
+    FNodeAllocSize := TreeNodeSize + SizeOf(Cardinal)
+  else if FNodeDataSize > 0 then
+    FNodeAllocSize := TreeNodeSize + FNodeDataSize
+  else
+    FNodeAllocSize := TreeNodeSize;
 end;
 
 function TTyTreeView.GetNodeData(Node: PTyTreeNode): Pointer;
@@ -2515,6 +3087,179 @@ begin
     Result := nil
   else
     Result := PByte(Node) + TreeNodeSize;
+end;
+
+{ ===========================================================================
+  条目模型 —— 控件侧(设计理由见单元中部 §条目模型)
+  =========================================================================== }
+
+{ 冲突闸门。两个数据源同时出现时**报错,不择一**。csLoading 期间只记账:
+  .lfm 里 Items 与 OnGetText 谁先流进来是不确定的,在读期间抛会让"报不报错"
+  取决于属性顺序,而顺序不是用户写的。 }
+procedure TTyTreeView.ItemModeConflict(const AWhat: string);
+var
+  msg: string;
+begin
+  msg := Format('TTyTreeView "%s": Items 与 %s 不能同时使用。'
+    + 'Items 非空时节点的标题与结构由条目集合拥有;%s 属于虚拟模式。'
+    + '二选一:清空 Items 走虚拟模式,或者移除 %s 走条目模式。',
+    [Name, AWhat, AWhat, AWhat]);
+  if csLoading in ComponentState then
+  begin
+    if FPendingConflict = '' then FPendingConflict := msg;
+    Exit;
+  end;
+  raise ETyTreeItemMode.Create(msg);
+end;
+
+{ 虚拟结构 API 的守卫。物化自己要用 AddChild/SetChildCount,所以留一个后门。 }
+procedure TTyTreeView.GuardVirtualStructure(const AWhat: string);
+begin
+  if FItemMode and not FRebuildingItems then
+    ItemModeConflict(AWhat);
+end;
+
+procedure TTyTreeView.SetOnGetText(AValue: TTyTreeGetTextEvent);
+begin
+  if Assigned(AValue) and (FItems <> nil) and (FItems.Count > 0) then
+    ItemModeConflict('OnGetText');
+  FOnGetText := AValue;
+end;
+
+procedure TTyTreeView.SetOnGetTextWithType(AValue: TTyTreeGetTextWithTypeEvent);
+begin
+  if Assigned(AValue) and (FItems <> nil) and (FItems.Count > 0) then
+    ItemModeConflict('OnGetTextWithType');
+  FOnGetTextWithType := AValue;
+end;
+
+{ 直接赋值(Tree1.Items := Tree2.Items)。TCollection.Assign 清空再按**目标**的
+  条目类重建,所以类型不会被源带跑。自赋值必须挡:Assign 会先 Clear,
+  然后把空集合还给你。 }
+procedure TTyTreeView.SetItems(AValue: TTyTreeNodes);
+begin
+  if AValue = FItems then Exit;
+  FItems.Assign(AValue);
+end;
+
+{ 条目下标槽:存 下标+1,于是 AllocMem 的零值天然表示"不是条目建的节点"。 }
+procedure TTyTreeView.StampItemRef(ANode: PTyTreeNode; AItemIndex: Integer);
+begin
+  if (ANode = nil) or (ANode = FRoot) then Exit;
+  PCardinal(PByte(ANode) + TreeNodeSize)^ := Cardinal(AItemIndex) + 1;
+end;
+
+function TTyTreeView.GetNodeItem(Node: PTyTreeNode): TTyTreeNodeItem;
+var
+  ref: Cardinal;
+begin
+  Result := nil;
+  if (not FItemMode) or (Node = nil) or (Node = FRoot) or (FItems = nil) then Exit;
+  ref := PCardinal(PByte(Node) + TreeNodeSize)^;
+  if (ref = 0) or (ref > Cardinal(FItems.Count)) then Exit;
+  Result := FItems[Integer(ref) - 1];
+end;
+
+{ LCL `Node.Text` 的等价物 —— 两种模式都答"屏幕上那一行真正显示的字"。
+  与 GetNodeSearchText 走同一条解析(主列 / ttNormal),于是"显示的"与
+  "搜到的"永远是同一个字符串。 }
+function TTyTreeView.GetNodeText(Node: PTyTreeNode): string;
+begin
+  Result := '';
+  if (Node = nil) or (Node = FRoot) then Exit;
+  Result := GetNodeSearchText(Node);
+end;
+
+{ 结构变了:整棵重建。设计期 / 移植来的树是几十到几百个节点,重建是一瞬间的事;
+  虚拟模式下这条路根本不会被走到(FItems 为空 → 直接退回虚拟模式)。 }
+procedure TTyTreeView.ItemsStructureChanged;
+begin
+  if csLoading in ComponentState then Exit;   { 到 Loaded 再一次性物化 }
+  RebuildFromItems;
+end;
+
+{ 属性变了(标题 / 图标 / 展开 / 复选):只回写那一个节点,不动树形。
+  否则改一个标题会把整棵树重建掉,选中与展开态全丢 —— 运行时改标题是常事。 }
+procedure TTyTreeView.ItemStateChanged(AItem: TTyTreeNodeItem);
+begin
+  if csLoading in ComponentState then Exit;
+  if not FItemMode then Exit;
+  ApplyItemToNode(AItem);
+  Invalidate;
+end;
+
+procedure TTyTreeView.ApplyItemToNode(AItem: TTyTreeNodeItem);
+begin
+  if (AItem = nil) or (AItem.Node = nil) then Exit;
+  AItem.Node^.CheckType  := AItem.CheckType;
+  AItem.Node^.CheckState := AItem.CheckState;
+  if AItem.Expanded <> (nsExpanded in AItem.Node^.States) then
+    ToggleNode(AItem.Node, AItem.Expanded);
+end;
+
+{ 物化:把扁平的(Level, Text)序列变成记录树。
+
+  进出模式都在这里,所以"这棵树现在归谁"只有一个决定点:
+  Items 空 → 退回虚拟模式(步长复原,树清空);非空 → 条目模式。 }
+procedure TTyTreeView.RebuildFromItems;
+var
+  i, lvl: Integer;
+  it: TTyTreeNodeItem;
+  node: PTyTreeNode;
+  { stack[k] = 当前 Level k 上最后建出来的节点,即 Level k+1 的父亲。 }
+  stack: array of PTyTreeNode;
+begin
+  if FRebuildingItems then Exit;
+
+  if (FItems = nil) or (FItems.Count = 0) then
+  begin
+    if not FItemMode then Exit;          { 本来就是虚拟模式:一个字节都不动 }
+    FItemMode := False;
+    UpdateNodeAllocSize;
+    Clear;
+    Exit;
+  end;
+
+  { 自己拥有数据源的后代不能走条目层(见 SupportsItemModel 的说明)。
+    这一条要排在其它冲突之前:对这种后代来说,"Items 根本用不了"比
+    "Items 和 OnGetText 撞了"更接近真正的原因。 }
+  if not SupportsItemModel then
+    raise ETyTreeItemMode.CreateFmt('%s "%s" 自己拥有节点数据(它覆写了 DoGetText '
+      + '并自行建树),不支持 Items 条目模型。请清空 Items,用它自己的数据源属性。',
+      [ClassName, Name]);
+  { 进条目模式前先把两边的冲突问清楚 —— 事件是在 Items 之前挂上的那一半。 }
+  if Assigned(FOnGetText) then ItemModeConflict('OnGetText');
+  if Assigned(FOnGetTextWithType) then ItemModeConflict('OnGetTextWithType');
+  if FNodeDataSize > 0 then ItemModeConflict('NodeDataSize');
+  if FPendingConflict <> '' then Exit;   { csLoading 期间发现的冲突,留到 Loaded 抛 }
+
+  FRebuildingItems := True;
+  try
+    FItemMode := True;
+    UpdateNodeAllocSize;      { 必须在 Clear 之前:新节点要按新步长分配 }
+    Clear;
+    SetLength(stack, FItems.Count + 1);
+    for i := 0 to FItems.Count - 1 do
+    begin
+      it := FItems[i];
+      lvl := it.Level;
+      { 夹紧:.lfm 可以手写出任何一串 Level。首项必须 0,其余至多深 1 层。 }
+      if lvl < 0 then lvl := 0;
+      if i = 0 then lvl := 0
+      else if lvl > FItems[i - 1].Level + 1 then lvl := FItems[i - 1].Level + 1;
+      if lvl = 0 then node := AddChild(nil) else node := AddChild(stack[lvl - 1]);
+      it.FNode := node;
+      it.FLevel := lvl;
+      StampItemRef(node, i);
+      stack[lvl] := node;
+    end;
+    { 展开态要在整棵树建好之后再施加:展开一个节点要它的孩子已经在位。 }
+    for i := 0 to FItems.Count - 1 do
+      ApplyItemToNode(FItems[i]);
+  finally
+    FRebuildingItems := False;
+  end;
+  InvalidateTreeLayout;
 end;
 
 procedure TTyTreeView.AdjustTotalCount(Node: PTyTreeNode; Delta: Integer);
@@ -2611,6 +3356,9 @@ var
   child, prev: PTyTreeNode;
   addedH, addedC: Integer;
 begin
+  { 条目模式下树形归 Items。这里放行就等于让两边同时改结构,而条目下标槽
+    立刻对不上 —— 静默错行比报错难查得多。物化自己走 FRebuildingItems 后门。 }
+  GuardVirtualStructure('SetChildCount / RootNodeCount');
   if NewCount = Node^.ChildCount then Exit;
   if NewCount > Node^.ChildCount then
   begin
@@ -2651,6 +3399,8 @@ function TTyTreeView.AddChild(AParent: PTyTreeNode): PTyTreeNode;
 var
   p: PTyTreeNode;
 begin
+  { 自己的名字报自己的错 —— 转手给 SetChildCount 会让消息指向调用者没写的成员。 }
+  GuardVirtualStructure('AddChild(PTyTreeNode)（条目模式请用 Items.AddChild）');
   if AParent = nil then p := FRoot else p := AParent;
   SetChildCount(p, p^.ChildCount + 1);
   Result := p^.LastChild;
@@ -2665,6 +3415,9 @@ var
   dh, dc:     Integer;
   anc:        PTyTreeNode;   { ③e E4: ancestor walk to detect the edited subtree }
 begin
+  { 条目模式:删节点要走 Items.DeleteItem,否则条目还在、节点没了,
+    下标槽从此错行。 }
+  GuardVirtualStructure('DeleteNode（条目模式请用 Items.DeleteItem）');
   if (Node = nil) or (Node = FRoot) then Exit;
 
   { ③e E4: if the active edit lives in the subtree about to be freed (the node
@@ -3063,6 +3816,16 @@ end;
 
 procedure TTyTreeView.Clear;
 begin
+  { 条目模式下 Items 才是树形的真相,所以"清空这棵树"必须连它一起清 ——
+    只清记录会留下一集合对不上任何节点的条目。这里不报错而是**照做**:
+    Clear 的语义在两种模式下是同一件事("这棵树空了"),不像 AddChild 那样
+    在问"谁来决定结构"。清空 Items 会回流到 RebuildFromItems,由它退回虚拟
+    模式并走下面真正的清空。物化自己的那次 Clear 走 FRebuildingItems 后门。 }
+  if FItemMode and not FRebuildingItems and (FItems <> nil) and (FItems.Count > 0) then
+  begin
+    FItems.Clear;
+    Exit;
+  end;
   { ③e E4: any active edit is on a node about to be freed — CANCEL it (no commit)
     BEFORE the teardown so FEditNode can't dangle. (DeleteNode's own subtree check
     would also catch it per-node, but cancelling once up-front is cheaper + clearer
@@ -5433,9 +6196,48 @@ end;
 { Borrow Cursor for the duration of a gesture and give the caller's own cursor back
   when it ends. Mid-gesture swaps (crDrag <-> crNoDrop) go through without disturbing
   the remembered one. Mirrors TTyListView.SetDividerCursor. }
-procedure TTyTreeView.DoGetText(Node: PTyTreeNode; var AText: string);
+{ 标题的唯一分流点。
+
+  绘制、命中、类型搜索、就地编辑一共五处取标题,写法都是
+  `if Assigned(FOnGetTextWithType) then ... else DoGetText(...)`。条目模式下
+  OnGetTextWithType 必定为 nil(冲突闸门保证),所以五处**全部**落到这里 ——
+  于是"条目模式的标题从哪来"只需要改这一个函数,五处一个字都不用动。
+  这同时也是"未使用时逐字节不变"的保证:FItemMode=False 时下面这段不存在。 }
+function TTyTreeView.SupportsItemModel: Boolean;
 begin
+  Result := True;
+end;
+
+procedure TTyTreeView.DoGetText(Node: PTyTreeNode; var AText: string);
+var
+  it: TTyTreeNodeItem;
+begin
+  if FItemMode then
+  begin
+    it := GetNodeItem(Node);
+    if it <> nil then AText := it.Text;
+    Exit;
+  end;
   if Assigned(FOnGetText) then FOnGetText(Self, Node, AText);
+end;
+
+{ 流式化收尾。.lfm 里的条目是一条一条读进来的,每条都重建一次既慢、又会在
+  只读到一半的序列上算 Level(第 3 条的父亲可能还没读到),所以物化推迟到这里。
+  读期间攒下的模式冲突也在这里抛:在读期间抛会让"报不报错"取决于 .lfm 里
+  Items 与 OnGetText 谁先出现,而那个顺序不是用户写的。 }
+procedure TTyTreeView.Loaded;
+var
+  msg: string;
+begin
+  inherited Loaded;
+  if FPendingConflict <> '' then
+  begin
+    msg := FPendingConflict;
+    FPendingConflict := '';
+    raise ETyTreeItemMode.Create(msg);
+  end;
+  if (FItems <> nil) and (FItems.Count > 0) then
+    RebuildFromItems;
 end;
 
 procedure TTyTreeView.DoInitNode(AParent, Node: PTyTreeNode;
@@ -5449,9 +6251,24 @@ begin
   if Assigned(FOnExpanding) then FOnExpanding(Self, Node, AAllowed);
 end;
 
+{ 图标与标题同一条约定:条目模式下 ImageIndex / SelectedIndex 由条目拥有。
+  和标题不同的是 OnGetImageIndex **不**参与冲突判定 —— 它不是模式的决定者,
+  条目没给出图标(-1)时仍然让 app 补一个是合理的组合,不是两个主人。 }
 procedure TTyTreeView.DoGetImageIndex(Node: PTyTreeNode; AKind: TTyVTImageKind;
   AColumn: Integer; var AGhosted: Boolean; var AIndex: Integer);
+var
+  it: TTyTreeNodeItem;
 begin
+  if FItemMode then
+  begin
+    it := GetNodeItem(Node);
+    if it <> nil then
+      case AKind of
+        ikNormal:   if it.ImageIndex    >= 0 then AIndex := it.ImageIndex;
+        ikSelected: if it.SelectedIndex >= 0 then AIndex := it.SelectedIndex
+                    else if it.ImageIndex >= 0 then AIndex := it.ImageIndex;
+      end;
+  end;
   if Assigned(FOnGetImageIndex) then
     FOnGetImageIndex(Self, Node, AKind, AColumn, AGhosted, AIndex);
 end;

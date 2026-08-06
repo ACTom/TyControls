@@ -160,6 +160,28 @@ type
     procedure ExecuteVerb(Index: Integer); override;
   end;
 
+  { Opens the node editor when a TTyTreeView is double-clicked in the designer.
+
+    The node collection itself needs no custom property editor: Items is a published
+    TCollection, and propedits.pp:9256 registers TCollectionPropertyEditor for every
+    TCollection descendant, so the Object Inspector already shows the '...' and the
+    standard add/delete/move editor, with Text and Level per item. What is missing
+    without this class is the DOUBLE-CLICK -- which is how LCL's own TTreeView opens
+    its 'TreeView Items Editor', and the only way a user discovers the feature at all
+    (nobody scrolls the property grid looking for a collection they don't know exists).
+
+    Descendants that own their own data (TTyShellTreeView) answer SupportsItemModel
+    False and get no verb -- offering to hand-edit the nodes of a tree that repopulates
+    itself from the filesystem would be an invitation to a runtime exception. }
+  TTyTreeViewComponentEditor = class(TComponentEditor)
+  private
+    function Tree: TTyTreeView;
+  public
+    function GetVerbCount: Integer; override;
+    function GetVerb(Index: Integer): string; override;
+    procedure ExecuteVerb(Index: Integer); override;
+  end;
+
   { Previews a dialog component when it is double-clicked in the designer (verb 0),
     mirroring LCL's TCommonDialogComponentEditor. Modal wrappers call Execute; the two
     modeless ones (Find/Replace, Progress) call a guard-free PreviewInDesigner because
@@ -271,6 +293,7 @@ resourcestring
   rsDtPageShowNext = 'Show Next Page';
   rsDtPageShowPrev = 'Show Previous Page';
   rsDtDialogPreview = 'Preview';
+  rsDtTreeEditNodes = 'Edit Nodes...';
   rsDtSurfacePurposeTitle = 'Why this control exists';
   rsDtSurfacePurposeText =
     'TyFormSurface is the content host of a TTyForm —the panel every control on the form lives on.' +
@@ -637,6 +660,33 @@ begin
     3: if PC.PageCount > 0 then
          PC.ActivePageIndex := (PC.ActivePageIndex + PC.PageCount - 1) mod PC.PageCount;
   end;
+end;
+
+{ TTyTreeViewComponentEditor }
+
+function TTyTreeViewComponentEditor.Tree: TTyTreeView;
+begin
+  Result := Component as TTyTreeView;
+end;
+
+function TTyTreeViewComponentEditor.GetVerbCount: Integer;
+begin
+  { A tree that owns its own data (the shell tree) offers nothing to hand-edit. }
+  if Tree.SupportsItemModel then Result := 1 else Result := 0;
+end;
+
+function TTyTreeViewComponentEditor.GetVerb(Index: Integer): string;
+begin
+  if (Index = 0) and Tree.SupportsItemModel then Result := rsDtTreeEditNodes
+  else Result := inherited GetVerb(Index);
+end;
+
+procedure TTyTreeViewComponentEditor.ExecuteVerb(Index: Integer);
+begin
+  if (Index <> 0) or not Tree.SupportsItemModel then Exit;
+  { The stock collection editor, aimed at Items -- the same form the '...' button in
+    the Object Inspector opens, so there is exactly one node-editing UI to learn. }
+  TCollectionPropertyEditor.ShowCollectionEditor(Tree.Items, Tree, 'Items');
 end;
 
 { TTyDialogComponentEditor }
@@ -1190,6 +1240,13 @@ begin
   RegisterPropertyEditor(TypeInfo(string), TTyFormSurface, 'Purpose', TTySurfacePurposeEditor);
   // Page management verbs (Add/Delete/Show Next/Prev) for the page control.
   RegisterComponentEditor(TTyPageControl, TTyPageControlEditor);
+  // Double-click a tree in the designer to open its node editor, the way LCL's own
+  // TTreeView opens the "TreeView Items Editor". The Items collection itself already
+  // has an editor (propedits registers TCollectionPropertyEditor for every TCollection);
+  // this only supplies the double-click, which is how the feature is discovered.
+  // GetComponentEditor picks the most-derived registration, so this also covers
+  // TTyShellTreeView -- the editor asks SupportsItemModel and offers no verb there.
+  RegisterComponentEditor(TTyTreeView, TTyTreeViewComponentEditor);
   // Double-click a dialog component in the designer to preview it (verb 0 = Preview),
   // mirroring LCL's TCommonDialogComponentEditor.
   RegisterComponentEditor(

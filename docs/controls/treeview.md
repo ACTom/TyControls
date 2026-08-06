@@ -4,6 +4,8 @@
 
 `TTyTreeView` 是 TyControls 库中的**虚拟树控件**，继承自 `TTyCustomControl`。它借鉴 VirtualTreeView 的架构：节点不是常规对象树，而是紧凑的 `TTyTreeNode` 记录链，**按需（懒惰）初始化**——控件只知道每层有多少节点，节点的文本 / 图标 / 子节点数量全部通过事件在真正需要绘制时才计算。因此它能在恒定内存下承载百万级节点。典型用途：文件资源管理器、多列数据表、带复选框 / 单选钮的层级列表、可拖拽重排的分组树。
 
+在这之上还有一层**可选的**节点对象模型 `Items`（`TTyTreeNodes`），给"设计器里把树填好"和"从 LCL `TTreeView` 移植过来的代码"用。两种模式互斥，同时用会报错。`Items` 为空时（默认）控件与这层不存在时逐字节相同。详见第 3.5 节。
+
 ---
 
 ## 2. 单元与 typeKey
@@ -30,6 +32,7 @@ uses tyControls.TreeView, tyControls.Columns;
 |------|------|--------|------|
 | `Options` | `TTyTreeOptions` | `[]` | 树级功能开关集合（见下表），默认全部关闭 |
 | `Header` | `TTyHeader` | 见下 | 表头 / 列模型子对象（`TPersistent`，随控件流式保存） |
+| `Items` | `TTyTreeNodes` | 空 | **设计期 / `.lfm` 里的节点树**（集合，随控件流式保存）。**非空即进入条目模式**，此时节点的标题与结构由集合拥有。空集合＝虚拟模式，与本属性存在之前逐字节相同。详见第 3.5 节 |
 | `NodeDataSize` | `Integer` | `-1` | 每个节点尾部附带的用户数据块字节数；`-1` 表示无数据块。设置后每个节点分配 `TreeNodeSize + NodeDataSize` 字节 |
 | `DefaultNodeHeight` | `Integer` | `18` | 未启用变高时每行的逻辑像素高度 |
 | `RootNodeCount` | `Cardinal` | `0` | 根级（顶层）节点数量。写入即创建这么多未初始化的根节点骨架 |
@@ -127,6 +130,73 @@ uses tyControls.TreeView, tyControls.Columns;
 | `Visible` | `Boolean` | `True` | 列可见性。**存储仍是 `Options` 里的 `coVisible`**,这是它的一个视图(对标 LCL `TGridColumn.Visible`);`stored False`,由 `Options` 负责流式化 |
 | `MinSize` / `MaxSize` | `Integer` | 同 `MinWidth` / `MaxWidth` | LCL 对宽度上下限的叫法,别名。注意默认值与 LCL 不同:LCL 的 `DEFMINSIZE`/`DEFMAXSIZE` 都是 0(无界),这里是 10 / 10000 —— 要无界请显式写 0 |
 | `SizePriority` | `Integer` | `1` | 分配多余宽度时这一列的权重(见 `TTyCustomGrid.AutoFillColumns`)。0 = 永不自动调宽。对标 LCL `TGridColumn.SizePriority` |
+
+### 3.5 两种数据模式：虚拟 与 条目（`Items`）
+
+本控件有**两个互斥的数据来源**，选哪个由 `Items` 空不空决定：
+
+| | 虚拟模式（默认） | 条目模式 |
+|---|---|---|
+| 触发 | `Items.Count = 0` | `Items.Count > 0` |
+| 结构 | `RootNodeCount` / `SetChildCount` / `AddChild` / `OnInitChildren` | `Items.AddChild(...)`、`.lfm` 里的 `Items` 块 |
+| 标题 | `OnGetText` / `OnGetTextWithType` 现算 | `TTyTreeNodeItem.Text` |
+| 每节点内存 | `TreeNodeSize`（+ `NodeDataSize`） | `TreeNodeSize + 4`（块首 4 字节存条目下标） |
+| 适用 | 百万节点、数据在 app 手里 | 设计期填好的树、从 LCL `TTreeView` 移植过来的代码 |
+
+**两边同时用会抛 `ETyTreeItemMode`，不会静默择一。** 这是有意的：静默偏向 `Items`
+就是"我的 `OnGetText` 不触发了"，静默偏向事件就是"设计器里填的节点运行时不见了"——
+两种都是要查很久的 bug。具体的闸门：
+
+- `Items` 非空时再挂 `OnGetText` / `OnGetTextWithType` → 抛（反方向同样抛）；
+- `Items` 非空时设 `NodeDataSize > 0` → 抛（条目模式征用了数据块头 4 字节；反方向同样抛）；
+- 条目模式下调 `RootNodeCount :=` / `SetChildCount` / `AddChild` / `DeleteNode` → 抛，
+  消息里会指出对应的条目层方法；
+- 流式化（`csLoading`）期间发现的冲突**记账、到 `Loaded` 再抛**——否则报不报错就
+  取决于 `.lfm` 里 `Items` 和 `OnGetText` 谁先出现，而那个顺序不是用户写的。
+
+`Clear` 是例外：它在两种模式下是同一件事（"这棵树空了"），所以条目模式下它**照做**，
+连 `Items` 一起清空，然后退回虚拟模式。
+
+#### 为什么是"扁平集合 + `Level`"而不是对象树
+
+`TTyTreeNodes` 是 `TCollection`，顺序就是**前序遍历序**，父子关系由 `Level` 缩进推出。
+三个好处：`.lfm` 里是可读可 diff 的文本块（LCL 存的是 `Items.Data` 十六进制 blob）；
+对象查看器的集合编辑器开箱即用；`Items[i]` 与 LCL 的绝对下标语义逐个对上。
+
+`Level` 的规范化只在物化时做一次并写回：**首项必须是 0，其余至多比前一项深 1 层**。
+于是手写 `.lfm` 里任何一串 `Level` 都对应唯一一棵合法树。
+
+#### `TTyTreeNodeItem` 成员
+
+| 成员 | 类型 | 说明 |
+|------|------|------|
+| `Text` | `TCaption` | 节点标题。条目模式下这是标题的**唯一**来源 |
+| `Level` | `Integer` | 缩进层级＝树形。0 是顶层 |
+| `ImageIndex` / `SelectedIndex` | `Integer` | 常态 / 选中态图标下标（`-1` = 交给 `OnGetImageIndex`） |
+| `Expanded` | `Boolean` | 展开态，物化后施加到记录节点上 |
+| `CheckType` / `CheckState` | 枚举 | 复选框类型与状态 |
+| `Data` | `Pointer` | app 的负载，**不流式化**（LCL `TTreeNode.Data` 的等价物） |
+| `Node` | `PTyTreeNode` | 物化后对应的记录节点（只读） |
+| `Parent` / `Count` / `Items(i)` / `HasChildren` / `SubTreeCount` | | 结构导航，全部由扁平序 + `Level` 现算 |
+
+`TTyTreeNodes` 的建节点方法沿用 LCL `TTreeNodes` 的形状：
+`Add(Sibling, S)` / `AddFirst` / `AddChild(Parent, S)` / `AddChildFirst` / `Insert(Sibling, S)`，
+外加 `DeleteItem(Item)`（**连子树一起删**——只 `Delete(i)` 会把子条目留成孤儿）、
+`GetFirstNode`、`TopLvlCount` / `TopLvlItems[]`。
+
+#### 设计期
+
+`Items` 是 published `TCollection`，所以对象查看器自动给它省略号 + 标准集合编辑器
+（`propedits.pp` 为所有 `TCollection` 后代注册了 `TCollectionPropertyEditor`）。
+设计期包另外注册了 `TTyTreeViewComponentEditor`，**双击树**即打开同一个节点编辑器——
+LCL 的 `TTreeView` 双击就是 "TreeView Items Editor"，这也是这个功能唯一的发现路径。
+条目左侧的显示名带缩进，所以在那个通用编辑器里也能一眼看出树形。
+
+#### 后代：`SupportsItemModel`
+
+自己拥有数据源的后代（覆写了 `DoGetText`、自己调 `AddChild` 建树的那种，
+典型如 `TTyShellTreeView`）**必须覆写 `SupportsItemModel` 返回 `False`**。
+返回 `False` 时 `Items` 被当场拒绝（一句说得清的异常），设计期也不给它挂节点编辑动词。
 
 ### 继承的通用成员
 
@@ -312,7 +382,42 @@ TyTreeCheckBox:disabled { color: var(--muted); }
 
 ## 6. 代码示例
 
-下例镜像 showcase 中「Columns + Sort」页的用法：多列 + 数据在节点 + 稳定排序 + 就地编辑 + 图标。
+### 6.1 条目模式：把一棵小树直接写出来
+
+设计期填树用对象查看器（双击控件即可）；代码里就是下面这样——这也是从 LCL
+`TTreeView` 移植过来的写法，`Items.AddChild(nil, 'Root')` 一字不改：
+
+```pascal
+uses tyControls.TreeView;
+
+var
+  Tree: TTyTreeView;
+  Root, Docs: TTyTreeNodeItem;
+begin
+  Tree := TTyTreeView.Create(Self);
+  Tree.Parent := Self;
+  Tree.Align  := alClient;
+
+  Root := Tree.Items.AddChild(nil,  'This PC');
+  Docs := Tree.Items.AddChild(Root, 'Documents');
+          Tree.Items.AddChild(Docs, 'report.odt');
+          Tree.Items.AddChild(Root, 'Pictures');
+  Root.Expanded := True;
+
+  // 树上显示的字就是条目的 Text
+  Assert(Tree.NodeText[Docs.Node] = 'Documents');
+  Assert(Tree.IsItemMode);
+
+  // 注意:此时再挂 OnGetText 会抛 ETyTreeItemMode —— 两个数据源不能同时用
+end;
+```
+
+批量建树请包在 `Tree.Items.BeginUpdate` / `EndUpdate` 里：每次结构变更都会重物化
+一次整棵树，批处理里只做一次。
+
+### 6.2 虚拟模式：多列 + 数据在节点 + 排序 + 就地编辑
+
+下例镜像 showcase 中「Columns + Sort」页的用法：多列 + 数据在节点 + 稳定排序 + 就地编辑 + 图标。**注意它没有用 `Items`**——两种模式互斥。
 
 ```pascal
 uses
@@ -447,10 +552,18 @@ Tree.OnNodeMoved := @OnMoved;
 | `GetHitTestInfoAt(X, Y): THitTests` | LCL 的**集合**型命中结果（`comctrls.pp:41`），能同时表达 `htOnItem` + `htOnLabel`；我们自己的 `GetNodeAtPoint` 返回的是单值枚举，表达不了这种组合 |
 | `AlphaSort(Node = nil)` | 按节点主列文本排序，**不需要任何 compare handler**。`Sort` / `SortTree` 都走 `DoCompare` → `OnCompareNodes`，没挂 handler 时返回 0，也就是说"按字母排序"这个最常见的需求以前是个静默的空操作 |
 | `CustomSort(SortProc, Node = nil)` | 用一个**普通函数**（非方法指针）排序；结束后归还 app 原来的 `OnCompareNodes` |
+| `Items: TTyTreeNodes` | 可流式化、设计期可编辑的节点集合。`Items.AddChild(nil, 'Root')` 这一行移植过来现在编得过也真的建树。详见第 3.5 节 |
+| `NodeText[Node]: string` | LCL `Node.Text` 的等价物（只读）。节点是**记录**不是类，挂不了成员，所以按本控件既有约定挂到控件上做带下标属性——与 `NodeSelected[]` / `NodeVisible[]` 同一条命名规则。两种模式都答"屏幕上那一行真正显示的字" |
+| `NodeItem[Node]: TTyTreeNodeItem` | 记录节点 → 条目对象的 O(1) 反查；虚拟模式下恒为 `nil` |
+| `IsItemMode: Boolean` | 当前数据源是 `Items` 还是事件。模式是从 `Items` 空不空推出来的，所以必须能读出来 |
+| `SupportsItemModel: Boolean`（virtual） | 这个后代**能不能**用条目模型。自己拥有数据源的后代覆写成 `False` |
+| `NodeMemSize: Integer` | 一个节点占多少字节。"一百万个节点要多少内存"是这个控件该能回答的问题，也是"虚拟模式一个字节都不多占"唯一的可断言形式 |
 
 ### 已知仍未对齐
 
-- `Items` / `TTreeNodes` / `Node.Text` 那套**可流式化的节点对象模型**没有，也不打算有：本控件是虚拟树，节点是定长记录 + 用户数据块，文本由 `OnGetText` 现算。设计期的"TreeView Items Editor"与 `.lfm` 里的节点树因此都不存在。
+- ~~`Items` / `TTreeNodes` / `Node.Text` 那套可流式化的节点对象模型没有，也不打算有~~ —— **已实现**，见第 3.5 节。结论从"不打算有"翻过来的理由：本库一个文件之外的 `TTyListView` 早就同时有集合模式与虚拟模式（`OwnerData`），并且只有一处模式分支；树照抄那条约定即可，虚拟路径逐字节不变。仍与 LCL 有两处**有意**的差异：
+  - `.lfm` 里存的是**可读的集合文本块**（`Items = <item Text=... Level=...>`），不是 LCL 的 `Items.Data` 十六进制 blob——所以 LCL 的 `.lfm` 节点块不能直接拷过来，反之亦然；
+  - 条目**没有** `SubItems`：LCL 的 `TTreeNode` 也没有，所以多列树的第 2 列及以后在条目模式下是空的。要多列内容仍需虚拟模式。这是个纯增量的缺口，以后补不会破坏现在的行为。
 - `ikState` / `StateImages`：需要第二个图像列表**和它自己的行内槽位**（会牵动命中测试、标题矩形、编辑器定位三处几何），本轮没做。`ikNormal` / `ikSelected` / `ikOverlay` 已可用。
 - `ToolTips`：没有"标题被裁剪时自动弹出完整文本"的逐项提示，只有继承自 `TControl` 的整控件 `Hint`。
 - `SortType`（插入时自动保持有序）、`Cut` / `DropTarget` 逐节点显示态、逐节点 `Enabled` / `DisabledFontColor`、`OnCustomDraw*` 整行/整控件分阶段绘制、`InsertMark*` 外部拖放插入标记——均未实现。
@@ -461,7 +574,8 @@ Tree.OnNodeMoved := @OnMoved;
 ## 8. 注意事项
 
 - **`MainColumn` 必须在列添加之后设置**（本文档最重要的陷阱）：`Columns.Count = 0` 时 `SetMainColumn` 把值夹紧为 `NoColumn(-1)`，主列块永不匹配 → 展开按钮 / 图标 / 主列文字全部消失。控件仅在**添加第一列时**自动把 `NoColumn` 兜底为 `0`；显式错误顺序仍会出问题。删除列时控件会自动跟随重编号修正 `MainColumn`。
-- **虚拟 = 数据在你手里，不在树里**：树本身不存文本 / 图标 / 子节点。文本经 `OnGetText` / `OnGetTextWithType` 现算；子节点数经 `OnInitChildren` 现算。持久数据放进节点数据块（`NodeDataSize` + `GetNodeData`），**不要**用 `Node^.Index` 作为持久 key——排序会重新戳 `Index`，稳定 key 必须存在数据块里。
+- **`Items` 与 `OnGetText` 不能同时用**（本轮新增的第二重要陷阱）：`Items` 非空即进入条目模式，此时再挂 `OnGetText` / `OnGetTextWithType` / 设 `NodeDataSize` / 调 `RootNodeCount :=` 都会抛 `ETyTreeItemMode`，反方向同样。控件**不会**静默择一。二选一：清空 `Items` 走虚拟模式，或者移除事件走条目模式。见第 3.5 节。
+- **虚拟 = 数据在你手里，不在树里**（这一段只适用于虚拟模式，即 `Items` 为空时）：树本身不存文本 / 图标 / 子节点。文本经 `OnGetText` / `OnGetTextWithType` 现算；子节点数经 `OnInitChildren` 现算。持久数据放进节点数据块（`NodeDataSize` + `GetNodeData`），**不要**用 `Node^.Index` 作为持久 key——排序会重新戳 `Index`，稳定 key 必须存在数据块里。
 - **三阶段懒惰初始化**：① `RootNodeCount :=` 创建根节点骨架（未初始化）；② 首次需要一个节点时 `InitNode` 触发 `OnInitNode`，app 声明 `ivsHasChildren` / `ivsExpanded` / `ivsSelected`；③ 展开一个声明了有子节点的节点时 `InitChildren` 触发 `OnInitChildren` 物化子节点。恒定内存直到用户实际展开。
 - **变高节点**：`toVariableNodeHeight` + `OnMeasureItem` 才生效；测量在 `InitNode` 末尾进行一次。未启用时每行都用 `DefaultNodeHeight`。
 - **`OnNodeDragOver` 只能收紧不能放宽**：`CanMoveNode` 是硬闸（非空、模式非 `dmNone`、目标不在源子树内、非空操作等），对无效移动即便 handler 设 `Allowed := True` 也会被 `MoveNode` 拦下。

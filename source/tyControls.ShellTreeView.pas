@@ -239,6 +239,15 @@ type
       resolve a path from a draw handler, a drag source or a multi-selection. }
     function  GetPathFromNode(ANode: PTyTreeNode): string;
 
+    { False: this tree owns its data. It builds its own nodes from the filesystem and
+      renders their captions in DoGetText, so the base's Items collection has nothing to
+      say here. Without this override, filling Items on a shell tree would still fail --
+      the item layer would rebuild the tree, and then PopulateRoots would walk into the
+      virtual-structure gate and raise from AddChild. Loud, but pointing at the wrong
+      cause. Refusing here means RebuildFromItems says so in one sentence, and the
+      design-time node editor never attaches to this control in the first place. }
+    function  SupportsItemModel: Boolean; override;
+
     { Clear the tree and re-seed it: one node per TyFsRoots place, or the single
       Root directory when one is set. }
     procedure PopulateRoots;
@@ -582,6 +591,11 @@ begin
   Result := NodePath(ANode);
   if (Result <> '') and NodeIsDir(ANode) then
     Result := AppendPathDelim(Result);
+end;
+
+function TTyShellTreeView.SupportsItemModel: Boolean;
+begin
+  Result := False;
 end;
 
 function TTyShellTreeView.FindNode(const APath: string): PTyTreeNode;

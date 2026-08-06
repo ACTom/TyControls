@@ -111,6 +111,12 @@ type
     { OnPathChange fires when the focused directory changes, and SelectedPath is
       the new path. }
     procedure TestOnPathChangeFiresOnDirectoryChangeWithNewPath;
+    { This tree owns its data, so the base's item collection is refused OUT LOUD
+      rather than half-working. Without the refusal the item layer would rebuild
+      the tree and PopulateRoots would then raise from AddChild -- loud, but
+      naming the wrong cause. The message must be about the shell tree, not about
+      a node insertion. }
+    procedure TestItemsAreRefusedBecauseThisTreeOwnsItsData;
   end;
 
 implementation
@@ -474,6 +480,29 @@ begin
     SamePath(FTree.SelectedPath, childPath));
   AssertTrue('SelectedPath seen at fire time is the new path',
     SamePath(FPathChangeSeen, childPath));
+end;
+
+procedure TShellTreeViewTest.TestItemsAreRefusedBecauseThisTreeOwnsItsData;
+var
+  raised: Boolean;
+begin
+  AssertFalse('这棵树自己拥有节点数据,不支持条目模型', FTree.SupportsItemModel);
+
+  raised := False;
+  try
+    FTree.Items.AddChild(nil, 'Root');
+  except
+    on E: ETyTreeItemMode do
+    begin
+      raised := True;
+      { 报错要指向真正的原因。走到 AddChild 才抛的话消息里不会有 DoGetText —— 那种
+        消息响是响,指的却是节点插入,而不是"这棵树的数据源归它自己"。 }
+      AssertTrue('报错要说清是数据源归它自己,而不是某次节点插入失败',
+        Pos('DoGetText', E.Message) > 0);
+    end;
+  end;
+  AssertTrue('填 Items 必须当场被拒', raised);
+  AssertFalse('并且没有半路切进条目模式', FTree.IsItemMode);
 end;
 
 initialization

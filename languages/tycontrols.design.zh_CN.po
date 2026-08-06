@@ -66,6 +66,10 @@ msgstr "显示下一页"
 msgid "Show Previous Page"
 msgstr "显示上一页"
 
+#: tycontrols.design.rsdttreeeditnodes
+msgid "Edit Nodes..."
+msgstr "编辑节点..."
+
 #: tycontrols.design.rsdtdialogname
 msgid "TyControls Dialog"
 msgstr "TyControls 对话框"

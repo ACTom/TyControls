@@ -256,12 +256,12 @@ Lazarus 里打开 `tycontrols_dt.lpk`(设计期包)→ **Use → Install**,IDE �
 |---|---|
 | `TTyStringGrid` | **数据网格**:冻结、虚拟化、编辑、筛选、分组、撤销重做 |
 | `TTyDrawGrid` | 数据由事件提供的网格,内容自绘 |
-| `TTyTreeView` | **虚拟树**:按需加载,可承载百万节点;多列、复选、内联编辑、拖放 |
+| `TTyTreeView` | **虚拟树**:按需加载,可承载百万节点;多列、复选、内联编辑、拖放;另有可选的 `Items` 节点集合,设计器里就能把树填好 |
 | `TTyListView` | 列表视图:报表 / 图标 / 平铺 / 列表 / 小图标五视图 + 分组 + 虚拟模式 |
 | `TTyShellTreeView` | 文件系统目录树 |
 | `TTyShellListView` | 文件系统文件列表 |
 | `TTyCalendar` | 日历:日 / 月 / 年下钻 |
-| `TTyDateTimePicker` | 日期时间选择器,下拉日历 + 分段时间微调 |
+| `TTyDateTimePicker` | 日期时间选择器,下拉日历 + 分段时间微调;可表示"未选日期"(`DateIsNull`) |
 | `TTyImageView` | 图片查看器:平移、缩放、BGRA 滤镜 |
 | `TTyPreviewBox` | 文件预览框,配合文件对话框使用 |
 
@@ -335,7 +335,7 @@ Lazarus 里打开 `tycontrols_dt.lpk`(设计期包)→ **Use → Install**,IDE �
 
 > 有三个控件的能力远超一行清单能写下的:
 > **[`TTyStringGrid`](docs/controls/grid.md)** —— 冻结行列、百万行虚拟化、16 种内建编辑器、Excel 式列筛选、分组小计、撤销/重做、剪贴板与 CSV 导入导出;
-> **[`TTyTreeView`](docs/controls/treeview.md)** —— 数据按需加载的虚拟树、多列可拖表头、三态复选、内联编辑、节点拖放;
+> **[`TTyTreeView`](docs/controls/treeview.md)** —— 数据按需加载的虚拟树、多列可拖表头、三态复选、内联编辑、节点拖放,以及设计期可编辑的 `Items` 节点集合;
 > **[`TTyForm`](docs/controls/ttyform.md)** —— 无边框自绘窗口,含原生缩放、系统圆角与投影。
 
 ---

@@ -294,12 +294,12 @@ properties / events / states / theme keys are in **[docs/controls/](docs/control
 |---|---|
 | `TTyStringGrid` | **Data grid**: freeze, virtualize, edit, filter, group, undo/redo |
 | `TTyDrawGrid` | Grid whose contents come from events and are drawn by you |
-| `TTyTreeView` | **Virtual tree**: lazy-loaded, million-node capable; multi-column, checks, inline edit, drag-drop |
+| `TTyTreeView` | **Virtual tree**: lazy-loaded, million-node capable; multi-column, checks, inline edit, drag-drop; plus an optional `Items` node collection you can fill in the designer |
 | `TTyListView` | Report / icon / tile / list / small-icon views, grouping, virtual mode |
 | `TTyShellTreeView` | File-system directory tree |
 | `TTyShellListView` | File-system file list |
 | `TTyCalendar` | Calendar with day / month / year drill-down |
-| `TTyDateTimePicker` | Date-time picker: dropdown calendar and segmented time spinner |
+| `TTyDateTimePicker` | Date-time picker: dropdown calendar and segmented time spinner; can hold "no date chosen" (`DateIsNull`) |
 | `TTyImageView` | Image viewer: pan, zoom, BGRA filters |
 | `TTyPreviewBox` | File preview pane for the file dialogs |
 
@@ -375,7 +375,8 @@ properties / events / states / theme keys are in **[docs/controls/](docs/control
 > **[`TTyStringGrid`](docs/controls/grid.md)** — frozen rows/cols, million-row virtualization,
 > 16 built-in editors, Excel-style column filters, group subtotals, undo/redo, clipboard & CSV;
 > **[`TTyTreeView`](docs/controls/treeview.md)** — lazy-loaded virtual tree, multi-column
-> draggable header, tri-state checks, inline edit, node drag-drop;
+> draggable header, tri-state checks, inline edit, node drag-drop, plus a designer-editable
+> `Items` node collection;
 > **[`TTyForm`](docs/controls/ttyform.md)** — borderless custom window with native resize,
 > system rounded corners and drop shadow.
 
