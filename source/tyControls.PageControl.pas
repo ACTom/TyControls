@@ -77,6 +77,28 @@ type
       the base would have offered the ribbon a designer property that moves the tabs and
       leaves that chrome where it was. }
     property TabPosition;
+    { Promoted for the same reason and with the same boundary: a folded band is RowCount rows
+      thick, and the ribbon's File tab / collapse chevron / KeyTip chips are all one row tall.
+      RowCount itself stays PUBLIC -- it is read-only, and a published property with no setter
+      is skipped by TWriter and reported unreadable by the Object Inspector. }
+    property MultiLine;
+    property RaggedRight;
+    { Docking, republished exactly as TPageControl does. Same story as TTyPanel and
+      TTyGroupBox: every member is TWinControl's or TControl's own, the dock manager is
+      LCL code we do not touch, and a real drag docks a control into a ty page control with
+      no source change -- measured, and written up in
+      plans/2026-08-04-parity-remaining-programs.md. Four of the nine
+      (OnGetSiteInfo/OnGetDockCaption/OnStartDock/OnEndDock) are PROTECTED upstream, so
+      before this no route reached them at all. }
+    property DockSite;
+    property UseDockManager;
+    property OnDockDrop;
+    property OnDockOver;
+    property OnUnDock;
+    property OnGetSiteInfo;
+    property OnGetDockCaption;
+    property OnStartDock;
+    property OnEndDock;
   end;
 
 implementation

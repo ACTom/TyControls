@@ -322,10 +322,13 @@ begin
       take nine designer properties away with it and nothing else would notice. }
     AssertTrue('TTyControlBar must publish ' + Names[I],
       GetPropInfo(TTyControlBar, Names[I]) <> nil);
-    { A group box is a dock site in LCL and answers a real drag here -- the empirical run
-      is written up in plans/2026-08-04-parity-remaining-programs.md. }
+    { A group box and a page control are both dock sites in LCL and both answer a real
+      drag here -- the empirical run is written up in
+      plans/2026-08-04-parity-remaining-programs.md. }
     AssertTrue('TTyGroupBox must publish ' + Names[I],
       GetPropInfo(TTyGroupBox, Names[I]) <> nil);
+    AssertTrue('TTyPageControl must publish ' + Names[I],
+      GetPropInfo(TTyPageControl, Names[I]) <> nil);
   end;
 end;
 

@@ -6059,8 +6059,21 @@ begin
     after := Rib.TabRect(0);
     AssertEquals('tpRight leaves the first tab where it was (left)', before.Left, after.Left);
 
+    { The third knob on the same engine and the same refusal: folding the band onto more
+      rows would leave the File tab, the chevron and both MouseDown gates measuring one.
+      Narrow enough that two tabs cannot fit on a row, so a strip that DID fold would. }
+    Rib.TabPosition := tpTop;
+    Rib.MultiLine := True;
+    Rib.SetBounds(0, 0, 60, 120);
+    after := Rib.TabRect(1);
+    AssertEquals('a ribbon does not fold its tabs onto a second row',
+      Rib.TabRect(0).Top, after.Top);
+    Rib.SetBounds(0, 0, 400, 120);
+    Rib.MultiLine := False;
+
     { And the hit test agrees with the paint -- the half of this that a rect comparison
       alone cannot see. Probe one pixel INSIDE the tab's leading edge, not its centre. }
+    after := Rib.TabRect(0);
     AssertEquals('the first tab still answers a click at its own leading edge',
       0, Rib.IndexOfTabAt(after.Left + 1, (after.Top + after.Bottom) div 2));
   finally

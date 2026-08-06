@@ -114,6 +114,12 @@ type
       could still set it; refusing here is what makes that harmless rather than a strip
       drawn down the left with the ribbon's own chrome left behind at the top. }
     function  HeaderTabPosition: TTabPosition; override;
+    { And it does not fold its tabs onto a second row, for the third time and the same
+      evidence: the File tab is sized `MulDiv(TabHeight, ppi, 96)` tall, the collapse
+      chevron is placed against that same one-row height, the minimised fly-out hangs off
+      it, and both MouseDown gates test `Y < h` for a single row. A folded band would be
+      RowCount rows deep with all of that still measuring one. }
+    function  HeaderMultiLine: Boolean; override;
     procedure AdjustClientRect(var ARect: TRect); override;
     procedure Paint; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -622,6 +628,11 @@ end;
 function TTyRibbon.HeaderTabPosition: TTabPosition;
 begin
   Result := tpTop;   // see the declaration: the ribbon's own chrome is pinned to the top
+end;
+
+function TTyRibbon.HeaderMultiLine: Boolean;
+begin
+  Result := False;   // see the declaration: the ribbon's own chrome is one row tall
 end;
 
 procedure TTyRibbon.AdjustClientRect(var ARect: TRect);
