@@ -567,3 +567,8 @@ msgstr ""
 msgid "TTyForm content host — click for details"
 msgstr ""
 
+#: tycontrols.strconsts.rstyupdownalreadyassociated
+#, object-pascal-format
+msgid "\"%s\" is already associated with the up-down \"%s\"."
+msgstr ""
+

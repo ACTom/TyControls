@@ -14,7 +14,7 @@ uses
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller,
   tyControls.SpinEdit, tyControls.UpDown, tyControls.TrackBar,
-  tyControls.ProgressBar, tyControls.ScrollBar;
+  tyControls.ProgressBar, tyControls.ScrollBar, tyControls.Edit;
 
 type
   { --- probes: the protected input/paint seams these controls keep to themselves --- }
@@ -153,6 +153,75 @@ type
   published
     procedure DefaultMatchesLCL;
     procedure ClampedUpToTwentyFive;
+  end;
+
+  { --- 8b. TTyUpDown: Associate, AlignButton, Thousands, ArrowKeys (claims 30, 33, 35, 36)
+
+    The four land together because three of them are inert without the first: LCL's
+    AlignButton positions the pair against the associate, Thousands formats the text written
+    INTO the associate, and ArrowKeys forwards keys pressed INSIDE it.
+
+    ArrowKeys had been refused as structural -- graphic control, no handle, no focus. That
+    measures the wrong control: LCL's ArrowKeys never delivers a key to the up-down, it hangs
+    a key-down handler on the ASSOCIATE (customupdown.inc:408), which has both. The refusal
+    was answering a different question (can the pair ITSELF be tabbed to -- still no). --- }
+
+  { A field whose text lives in a published `Text` -- the TTyEdit shape, and the one LCL's
+    Caption-only write would have missed. }
+  TAssocEditProbe = class(TTyEdit)
+  public
+    { What KeyDown left in Key. A bound pair consumes an arrow by zeroing it, and "was the
+      key consumed" is half of what these guards check -- an up-down that steps but leaves
+      the arrow alive moves the caret as well as the value. }
+    FLastKeyAfter: Word;
+    procedure DoKey(K: Word; Shift: TShiftState);
+    function DoWheel(ADelta: Integer): Boolean;
+  end;
+
+  { The other shape: a windowed control with a Caption and NO published Text. Declared here
+    rather than borrowed from the library so the fallback path is pinned by its SHAPE, and
+    keeps being tested even if every shipping control grows a Text. }
+  TAssocCaptionOnly = class(TCustomControl)
+  published
+    property Caption;
+  end;
+
+  TUpDownAssociateTest = class(TTestCase)
+  private
+    FForm: TCustomForm;
+    FEd: TAssocEditProbe;
+    FUD: TTyUpDown;
+    FVetoes: Boolean;
+    FChanging, FChanges, FArrows: Integer;
+    FLastArrow: TTyUpDownButton;
+    procedure Veto(Sender: TObject; var AAllowChange: Boolean);
+    procedure CountChange(Sender: TObject);
+    procedure CountArrow(Sender: TObject; AButton: TTyUpDownButton);
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure BindingWritesThePositionIntoTheFieldsText;
+    procedure BindingFallsBackToCaptionWhenThereIsNoText;
+    procedure AStepRewritesTheField;
+    procedure AStepResumesFromWhatTheUserTyped;
+    procedure ReadingPositionReportsWhatTheUserTyped;
+    procedure UnreadableFieldTextKeepsTheValue;
+    procedure AProgrammaticWriteMovesTheFieldButAsksNoPermission;
+    procedure AnArrowInTheFieldIsAGestureAndAsksPermission;
+    procedure AnArrowInTheFieldReportsThroughOnArrowClick;
+    procedure AModifiedArrowIsLeftToTheField;
+    procedure ArrowKeysOffLeavesTheKeyAlone;
+    procedure HorizontalUsesLeftAndRight;
+    procedure TheWheelOverTheFieldStepsToo;
+    procedure ThousandsGroupsAndRegroupsOnDemand;
+    procedure AlignButtonSnapsThePairToEachSide;
+    procedure MovingTheFieldMovesThePair;
+    procedure EnabledAndVisibleFollowTheField;
+    procedure UnbindingStopsTheTracking;
+    procedure AFreedFieldLeavesNoDanglingPointer;
+    procedure TwoPairsOnOneFieldIsRefusedOutLoud;
+    procedure DefaultsMatchLCL;
   end;
 
   { --- 9. TTyTrackBar: Reversed (claim 5) --- }
@@ -1308,6 +1377,421 @@ begin
   finally S.Free; end;
 end;
 
+{ --- 8b. TTyUpDown.Associate ------------------------------------------------- }
+
+procedure TAssocEditProbe.DoKey(K: Word; Shift: TShiftState);
+var W: Word;
+begin
+  W := K;
+  KeyDown(W, Shift);
+  { KeyDown takes Key by reference and a consumed key comes back 0. That is how a bound
+    pair tells the field "this arrow was mine"; the tests below read it back. }
+  FLastKeyAfter := W;
+end;
+
+function TAssocEditProbe.DoWheel(ADelta: Integer): Boolean;
+begin
+  Result := DoMouseWheel([], ADelta, Point(0, 0));
+end;
+
+procedure TUpDownAssociateTest.Veto(Sender: TObject; var AAllowChange: Boolean);
+begin
+  Inc(FChanging);
+  if FVetoes then AAllowChange := False;
+end;
+
+procedure TUpDownAssociateTest.CountChange(Sender: TObject);
+begin
+  Inc(FChanges);
+end;
+
+procedure TUpDownAssociateTest.CountArrow(Sender: TObject; AButton: TTyUpDownButton);
+begin
+  Inc(FArrows);
+  FLastArrow := AButton;
+end;
+
+procedure TUpDownAssociateTest.SetUp;
+begin
+  { A real parent, because Associate's duplicate check and its auto-positioning both read
+    Parent. The form is never shown -- nothing here depends on the align engine, every
+    bound is set and read explicitly. }
+  FForm := TCustomForm.CreateNew(nil);
+  FForm.SetBounds(0, 0, 400, 300);
+  FEd := TAssocEditProbe.Create(FForm);
+  FEd.Parent := FForm;
+  FEd.SetBounds(100, 50, 80, 24);
+  FUD := TTyUpDown.Create(FForm);
+  FUD.Parent := FForm;
+  FUD.SetBounds(0, 0, 20, 34);
+  FUD.Min := 0; FUD.Max := 1000;
+  FVetoes := False;
+  FChanging := 0; FChanges := 0; FArrows := 0;
+end;
+
+procedure TUpDownAssociateTest.TearDown;
+begin
+  FForm.Free;      // owns both controls
+  FForm := nil; FEd := nil; FUD := nil;
+end;
+
+procedure TUpDownAssociateTest.BindingWritesThePositionIntoTheFieldsText;
+{ The headline behaviour, and the one that would have been silently dead had this followed
+  LCL literally: LCL writes Associate.CAPTION, which reaches the visible string on an LCL
+  TEdit but not on a TTyEdit -- TTyEdit paints its own FText and leaves TControl.Caption
+  pointing at the handle's invisible native text. }
+begin
+  FUD.Position := 42;
+  FEd.Text := 'not a number yet';
+  FUD.Associate := FEd;
+  AssertEquals('binding seeds the field from Position', '42', FEd.Text);
+end;
+
+procedure TUpDownAssociateTest.BindingFallsBackToCaptionWhenThereIsNoText;
+var c: TAssocCaptionOnly;
+begin
+  c := TAssocCaptionOnly.Create(FForm);
+  try
+    c.Parent := FForm;
+    c.SetBounds(10, 200, 60, 20);
+    FUD.Position := 17;
+    FUD.Associate := c;
+    AssertEquals('a Caption-only field is driven through Caption', '17', c.Caption);
+    FUD.Position := 18;
+    AssertEquals('and keeps being driven through it', '18', c.Caption);
+  finally
+    FUD.Associate := nil;
+    c.Free;
+  end;
+end;
+
+procedure TUpDownAssociateTest.AStepRewritesTheField;
+var P: TUpDownArrowProbe;
+begin
+  P := TUpDownArrowProbe.Create(FForm);
+  try
+    P.Parent := FForm;
+    P.SetBounds(0, 0, 20, 34);
+    P.Min := 0; P.Max := 100; P.Position := 5;
+    P.Associate := FEd;
+    AssertEquals('seeded', '5', FEd.Text);
+    P.PressUp;
+    AssertEquals('the click moved the value', 6, P.Position);
+    AssertEquals('and the field says so', '6', FEd.Text);
+    P.PressDown; P.PressDown;
+    AssertEquals('4', FEd.Text);
+  finally P.Free; end;
+end;
+
+procedure TUpDownAssociateTest.AStepResumesFromWhatTheUserTyped;
+{ The load-bearing half of the round trip, and the half a write-only Associate would get
+  backwards. LCL's Position is a FUNCTION that re-parses the associate before every step
+  (customupdown.inc:623-642); step from the last value the pair itself wrote instead and
+  everything the user typed in between is discarded without a word. }
+var P: TUpDownArrowProbe;
+begin
+  P := TUpDownArrowProbe.Create(FForm);
+  try
+    P.Parent := FForm;
+    P.SetBounds(0, 0, 20, 34);
+    P.Min := 0; P.Max := 100; P.Position := 5;
+    P.Associate := FEd;
+    FEd.Text := '42';        // the user types straight into the field
+    P.PressUp;
+    AssertEquals('stepped from what the field said, not from 5', 43, P.Position);
+    AssertEquals('43', FEd.Text);
+  finally P.Free; end;
+end;
+
+procedure TUpDownAssociateTest.ReadingPositionReportsWhatTheUserTyped;
+begin
+  FUD.Position := 5;
+  FUD.Associate := FEd;
+  FEd.Text := '77';
+  AssertEquals('the bound field IS the value while it is bound', 77, FUD.Position);
+  { Out-of-range typing is clamped on the way in, as LCL clamps it (customupdown.inc:635-639). }
+  FEd.Text := '99999';
+  AssertEquals('clamped to Max on read-back', 1000, FUD.Position);
+end;
+
+procedure TUpDownAssociateTest.UnreadableFieldTextKeepsTheValue;
+{ Half-typed input must not reset the pair under the user's cursor: '' on the way to a new
+  number, and '-' on the way to '-5', are both unreadable and both mean "not yet". }
+begin
+  FUD.Min := -100;
+  FUD.Position := 9;
+  FUD.Associate := FEd;
+  FEd.Text := '';
+  AssertEquals('an emptied field is not the value zero', 9, FUD.Position);
+  FEd.Text := '-';
+  AssertEquals('a lone sign is not a value either', 9, FUD.Position);
+  FEd.Text := 'abc';
+  AssertEquals('nor is a word', 9, FUD.Position);
+end;
+
+procedure TUpDownAssociateTest.AProgrammaticWriteMovesTheFieldButAsksNoPermission;
+{ The state/intent split, applied to Associate. Writing the field is a STATE consequence --
+  the field is a second view of the one number, and a view that ignored code writes would
+  be showing something false -- so it happens. The veto hooks ask an INTENT question, and
+  `Position := N` is an instruction rather than a proposal, so they are not consulted.
+  OnChange is state as well, so it does fire. }
+begin
+  FUD.Associate := FEd;
+  FUD.OnChanging := @Veto;
+  FUD.OnChange := @CountChange;
+  FUD.OnArrowClick := @CountArrow;
+  FVetoes := True;               // would refuse anything it was asked about
+  FUD.Position := 33;
+  AssertEquals('the write went through unrefused', 33, FUD.Position);
+  AssertEquals('and reached the field', '33', FEd.Text);
+  AssertEquals('nobody was asked for permission', 0, FChanging);
+  AssertEquals('no arrow was pressed, so none is reported', 0, FArrows);
+  AssertEquals('but the value really did move, so OnChange fired', 1, FChanges);
+end;
+
+procedure TUpDownAssociateTest.AnArrowInTheFieldIsAGestureAndAsksPermission;
+{ The other side of the same rule: an arrow pressed in the bound field IS the user pressing
+  that arrow, so it takes the gesture path and can be refused. LCL routes it the same way --
+  AssociateKeyDown -> AdjustPos -> the button's Click, which is what calls CanChange. }
+begin
+  FUD.Position := 10;
+  FUD.Associate := FEd;
+  FUD.OnChanging := @Veto;
+
+  FVetoes := False;
+  FEd.DoKey(VK_UP, []);
+  AssertEquals('asked', 1, FChanging);
+  AssertEquals('allowed, so it moved', 11, FUD.Position);
+  AssertEquals('11', FEd.Text);
+
+  FVetoes := True;
+  FEd.DoKey(VK_UP, []);
+  AssertEquals('asked again', 2, FChanging);
+  AssertEquals('refused, so nothing moved', 11, FUD.Position);
+  AssertEquals('and the field was not rewritten', '11', FEd.Text);
+
+  { Both halves, because they are two separate branches of the key handler and a mutant
+    that routes only ONE of them past the veto is exactly the shape of LCL's own bug (its
+    widgetset path reaches SetPosition directly and never asks CanChange). Down was
+    previously covered only indirectly, by the arrow-click counter. }
+  FEd.DoKey(VK_DOWN, []);
+  AssertEquals('down asks too', 3, FChanging);
+  AssertEquals('and down can be refused too', 11, FUD.Position);
+  FVetoes := False;
+  FEd.DoKey(VK_DOWN, []);
+  AssertEquals('down asked once more', 4, FChanging);
+  AssertEquals('allowed, so down moved', 10, FUD.Position);
+  AssertEquals('10', FEd.Text);
+end;
+
+procedure TUpDownAssociateTest.AnArrowInTheFieldReportsThroughOnArrowClick;
+begin
+  FUD.Position := 10;
+  FUD.Associate := FEd;
+  FUD.OnArrowClick := @CountArrow;
+
+  FEd.DoKey(VK_UP, []);
+  AssertEquals('one press reported', 1, FArrows);
+  AssertTrue('up reports udbNext', FLastArrow = udbNext);
+  AssertEquals('and the key was consumed', 0, FEd.FLastKeyAfter);
+
+  FEd.DoKey(VK_DOWN, []);
+  AssertEquals('two presses reported', 2, FArrows);
+  AssertTrue('down reports udbPrev', FLastArrow = udbPrev);
+end;
+
+procedure TUpDownAssociateTest.AModifiedArrowIsLeftToTheField;
+{ Swallowing Shift+Up would make binding an up-down quietly break selection in the field.
+  LCL only acts on the bare arrow (customupdown.inc:440). }
+begin
+  FUD.Position := 10;
+  FUD.Associate := FEd;
+  FEd.DoKey(VK_UP, [ssShift]);
+  AssertEquals('Shift+Up is the field''s business', 10, FUD.Position);
+  AssertEquals('and the key was NOT consumed', VK_UP, FEd.FLastKeyAfter);
+  FEd.DoKey(VK_UP, [ssCtrl]);
+  AssertEquals('Ctrl+Up likewise', 10, FUD.Position);
+end;
+
+procedure TUpDownAssociateTest.ArrowKeysOffLeavesTheKeyAlone;
+begin
+  FUD.Position := 10;
+  FUD.Associate := FEd;
+  FUD.ArrowKeys := False;
+  FEd.DoKey(VK_UP, []);
+  AssertEquals('opted out, so nothing stepped', 10, FUD.Position);
+  AssertEquals('and the field still gets its key', VK_UP, FEd.FLastKeyAfter);
+end;
+
+procedure TUpDownAssociateTest.HorizontalUsesLeftAndRight;
+{ A horizontal pair paints down-left / up-right, so its keys have to be left/right too --
+  the same mapping LCL uses (customupdown.inc:452-467). }
+begin
+  FUD.Position := 10;
+  FUD.Orientation := udoHorizontal;
+  FUD.Associate := FEd;
+  FEd.DoKey(VK_RIGHT, []);
+  AssertEquals('right is up', 11, FUD.Position);
+  FEd.DoKey(VK_LEFT, []);
+  AssertEquals('left is down', 10, FUD.Position);
+  FEd.DoKey(VK_UP, []);
+  AssertEquals('up means nothing to a horizontal pair', 10, FUD.Position);
+  AssertEquals('so the field keeps that key', VK_UP, FEd.FLastKeyAfter);
+end;
+
+procedure TUpDownAssociateTest.TheWheelOverTheFieldStepsToo;
+begin
+  FUD.Position := 10;
+  FUD.Associate := FEd;
+  AssertTrue('the pair consumed the wheel', FEd.DoWheel(120));
+  AssertEquals('11', FEd.Text);
+  AssertTrue(FEd.DoWheel(-120));
+  AssertEquals('10', FEd.Text);
+end;
+
+procedure TUpDownAssociateTest.ThousandsGroupsAndRegroupsOnDemand;
+begin
+  FUD.Max := 100000;
+  FUD.Position := 12345;
+  FUD.Associate := FEd;
+  AssertEquals('LCL groups by default', '12,345', FEd.Text);
+  { LCL's own setter is a bare field assignment, so flipping it there leaves the old
+    spelling on screen until something else happens to rewrite it. A display switch that
+    does not change the display is not one. }
+  FUD.Thousands := False;
+  AssertEquals('turning it off re-renders at once', '12345', FEd.Text);
+  FUD.Thousands := True;
+  AssertEquals('and back', '12,345', FEd.Text);
+  { And the grouped form still reads back, so the round trip survives the switch. }
+  AssertEquals(12345, FUD.Position);
+end;
+
+procedure TUpDownAssociateTest.AlignButtonSnapsThePairToEachSide;
+begin
+  FUD.Associate := FEd;      // default udaRight
+  AssertEquals('right by default: hugs the field', 180, FUD.Left);
+  AssertEquals('shares the top', 50, FUD.Top);
+  AssertEquals('takes the field''s height', 24, FUD.Height);
+  AssertEquals('keeps its own width', 20, FUD.Width);
+
+  FUD.AlignButton := udaLeft;
+  AssertEquals('left: its own width before the field', 80, FUD.Left);
+  FUD.AlignButton := udaBottom;
+  AssertEquals('bottom: under the field', 74, FUD.Top);
+  AssertEquals('bottom: takes the field''s width', 80, FUD.Width);
+  FUD.AlignButton := udaTop;
+  AssertEquals('top: above the field', 50 - FUD.Height, FUD.Top);
+end;
+
+procedure TUpDownAssociateTest.MovingTheFieldMovesThePair;
+{ Without this the pair is glued to where the field WAS: any layout change, any anchor,
+  any runtime SetBounds leaves it stranded. }
+begin
+  FUD.Associate := FEd;
+  AssertEquals(180, FUD.Left);
+  FEd.SetBounds(200, 120, 60, 30);
+  AssertEquals('followed the move', 260, FUD.Left);
+  AssertEquals('followed the move', 120, FUD.Top);
+  AssertEquals('and the resize', 30, FUD.Height);
+end;
+
+procedure TUpDownAssociateTest.EnabledAndVisibleFollowTheField;
+begin
+  FUD.Associate := FEd;
+  FEd.Enabled := False;
+  AssertFalse('a disabled field disables its stepper', FUD.Enabled);
+  FEd.Enabled := True;
+  AssertTrue(FUD.Enabled);
+  FEd.Visible := False;
+  AssertFalse('a hidden field hides its stepper', FUD.Visible);
+  FEd.Visible := True;
+  AssertTrue(FUD.Visible);
+end;
+
+procedure TUpDownAssociateTest.UnbindingStopsTheTracking;
+{ Every handler has to come off, or an unbound pair keeps stepping on the field's keys and
+  keeps chasing its bounds -- with no property left that says why. }
+begin
+  FUD.Position := 10;
+  FUD.Associate := FEd;
+  FUD.Associate := nil;
+  AssertTrue('unbound', FUD.Associate = nil);
+
+  FEd.Text := '55';
+  AssertEquals('no read-back any more', 10, FUD.Position);
+  FEd.DoKey(VK_UP, []);
+  AssertEquals('no key forwarding any more', 10, FUD.Position);
+  AssertEquals('and the field keeps its key', VK_UP, FEd.FLastKeyAfter);
+  FUD.Position := 12;
+  AssertEquals('no write-through any more', '55', FEd.Text);
+  FEd.SetBounds(300, 200, 40, 20);
+  AssertTrue('and no position chasing', FUD.Left <> 340);
+end;
+
+procedure TUpDownAssociateTest.AFreedFieldLeavesNoDanglingPointer;
+{ Freeing the field must clear Associate. Without it the pair holds freed memory and the
+  next step writes through it -- and a headless run is exactly where that goes unnoticed,
+  because the address is usually still mapped. So the guard is the PROPERTY reading nil,
+  not a crash that may or may not happen. }
+var
+  ed2: TAssocEditProbe;
+begin
+  ed2 := TAssocEditProbe.Create(FForm);
+  ed2.Parent := FForm;
+  ed2.SetBounds(10, 150, 80, 24);
+  FUD.Associate := ed2;
+  AssertTrue('bound', FUD.Associate = ed2);
+  ed2.Free;
+  AssertTrue('the dying field took the binding with it', FUD.Associate = nil);
+  FUD.Position := 7;             // must not write through a dead pointer
+  AssertEquals('and the pair still works', 7, FUD.Position);
+end;
+
+procedure TUpDownAssociateTest.TwoPairsOnOneFieldIsRefusedOutLoud;
+{ Two steppers writing one field is a fight, not a setting, and the silent version is a box
+  that jumps by two. LCL raises here too -- but reaches Parent.ControlCount with no nil
+  check, so its version access-violates when the pair has no parent yet. }
+var
+  ud2: TTyUpDown;
+  raised: Boolean;
+  orphan: TTyUpDown;
+begin
+  FUD.Associate := FEd;
+  ud2 := TTyUpDown.Create(FForm);
+  ud2.Parent := FForm;
+  raised := False;
+  try
+    ud2.Associate := FEd;
+  except
+    on E: Exception do raised := True;
+  end;
+  AssertTrue('the second pair was refused', raised);
+  AssertTrue('and did not take the field', ud2.Associate = nil);
+  AssertTrue('while the first keeps it', FUD.Associate = FEd);
+
+  { The nil-Parent path LCL crashes on: `Ud.Associate := Ed` written before
+    `Ud.Parent := Self` is ordinary code and must simply work. }
+  orphan := TTyUpDown.Create(nil);
+  try
+    orphan.Associate := FEd;
+    AssertTrue('a parentless pair can still bind', orphan.Associate = FEd);
+  finally orphan.Free; end;
+end;
+
+procedure TUpDownAssociateTest.DefaultsMatchLCL;
+{ A ported .lfm almost never stores a property that equals the LCL default, so a default
+  that disagrees arrives silently. }
+var u: TTyUpDown;
+begin
+  u := TTyUpDown.Create(nil);
+  try
+    AssertTrue('no associate out of the box', u.Associate = nil);
+    AssertTrue('AlignButton udRight (comctrls.pp:1988)', u.AlignButton = udaRight);
+    AssertTrue('Thousands True (comctrls.pp:2000)', u.Thousands);
+    AssertTrue('ArrowKeys True (comctrls.pp:1989)', u.ArrowKeys);
+  finally u.Free; end;
+end;
+
 initialization
   RegisterTest(TSpinDefaultRangeTest);
   RegisterTest(TSpinEditorEnabledTest);
@@ -1317,6 +1801,7 @@ initialization
   RegisterTest(TUpDownArrowOrderTest);
   RegisterTest(TUpDownVetoTest);
   RegisterTest(TUpDownRepeatTest);
+  RegisterTest(TUpDownAssociateTest);
   RegisterTest(TTrackReversedTest);
   RegisterTest(TTrackTickTest);
   RegisterTest(TTrackPreferredSizeTest);

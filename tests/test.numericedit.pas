@@ -2,11 +2,21 @@ unit test.numericedit;
 {$mode objfpc}{$H+}
 interface
 uses Classes, SysUtils, LCLType, fpcunit, testregistry,
-  tyControls.NumericEdit, tyControls.SpinEdit;
+  tyControls.NumericEdit, tyControls.CurrencyEdit, tyControls.SpinEdit;
 type
   { DoEnter / DoExit are protected and real focus never happens in a headless run, so the
     focus-in / blur reformats have to be driven directly. }
   TNumericFocusProbe = class(TTyNumericEdit)
+  public
+    procedure SimulateEnter;
+    procedure SimulateExit;
+  end;
+
+  { The THIRD control of the spin-shaped family. It reaches the dirty-flag rule only by
+    inheritance -- it has no reformat of its own, its two setters call TTyNumericEdit's --
+    so nothing pinned it, and a `Text := Formatted(...)` added to CurrencyEdit later would
+    break the contract silently while every existing guard stayed green. }
+  TCurrencyFocusProbe = class(TTyCurrencyEdit)
   public
     procedure SimulateEnter;
     procedure SimulateExit;
@@ -43,6 +53,16 @@ begin
 end;
 
 procedure TNumericFocusProbe.SimulateExit;
+begin
+  DoExit;
+end;
+
+procedure TCurrencyFocusProbe.SimulateEnter;
+begin
+  DoEnter;
+end;
+
+procedure TCurrencyFocusProbe.SimulateExit;
 begin
   DoExit;
 end;
@@ -184,16 +204,24 @@ begin
 end;
 
 procedure TNumericEditTest.TestNumericAndSpinAgreeAfterTheirOwnReformat;
-{ Two spin-shaped controls in one library must answer "did the user touch this" the same
+{ The spin-shaped controls in one library must answer "did the user touch this" the same
   way. Each reformats its own text at the end of an edit -- the numeric edit on blur, the
-  spin edit on commit -- and both of those are bookkeeping, not a programmatic overwrite.
-  This guard fails if EITHER side drifts, which is the point: it has no preferred side. }
+  spin edit on commit, the currency edit on blur through its parent's Reformat -- and none
+  of those is a programmatic overwrite. This guard fails if ANY side drifts, which is the
+  point: it has no preferred side.
+
+  The currency edit is here because it is the one that agrees by ACCIDENT of inheritance:
+  it owns no reformat and no dirty-flag code at all, so the two guards above cover it only
+  as long as it stays that way. Add one `Text := Formatted(...)` to CurrencyEdit and the
+  contract breaks with every other test still green. }
 var
   n: TNumericFocusProbe;
   s: TSpinModifiedProbe;
+  c: TCurrencyFocusProbe;
 begin
   n := TNumericFocusProbe.Create(nil);
   s := TSpinModifiedProbe.Create(nil);
+  c := TCurrencyFocusProbe.Create(nil);
   try
     n.Text := '';
     n.InjectKey('5'); n.InjectKey('9');
@@ -203,13 +231,26 @@ begin
     s.TypeChar('5'); s.TypeChar('9');
     s.DoKey(VK_RETURN);                 // the spin edit's own reformat
 
+    c.Text := '';
+    c.InjectKey('5'); c.InjectKey('9');
+    c.SimulateExit;                     // the currency edit's INHERITED reformat
+
     AssertEquals('both committed the same number', 59, Round(n.Value));
     AssertEquals('both committed the same number', 59, s.Value);
+    AssertEquals('and so did the third', 59, Round(c.Value));
     AssertEquals('the two siblings agree on Modified after their own reformat',
       s.Modified, n.Modified);
+    AssertEquals('and the currency edit agrees with them',
+      n.Modified, c.Modified);
     AssertTrue('and they agree on TRUE -- the user did type it', n.Modified);
+    { The other direction, on the currency edit specifically: its OWN setters go through
+      the same Reformat, so changing the symbol must not read as the user editing either. }
+    c.CurrencySymbol := 'EUR';
+    AssertTrue('changing the symbol is a display change, not an edit', c.Modified);
+    c.Value := 12;
+    AssertFalse('but a programmatic value write still cleans it', c.Modified);
   finally
-    n.Free; s.Free;
+    n.Free; s.Free; c.Free;
   end;
 end;
 

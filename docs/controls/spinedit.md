@@ -192,3 +192,5 @@ end;
 11. **空白状态与占位文字（API parity 新增）：** `ValueEmpty := True` 让字段真的空着（`0` 是一个合法值，拿它冒充"没填"是在说谎）；配合 `TextHint` 就能显示"请选择年份"这类提示。真实输入会清掉空白状态，这与 LCL 一致（`include/spinedit.inc:76`）——它是程序设置的状态，不是键入能产生的状态。
 12. **`OnChange` 是状态问题，`Modified` 是意图问题：** `OnChange` 回答"字段现在是什么"，所以程序赋值也触发（每一次变化都是事实）；`Modified` 回答"用户碰过没有"，所以程序赋值把它清成 `False`（把代码写的值算成用户输入就是在撒谎）。
 13. **I-beam 光标（batch⑤+⑥）：** 构造时把 `Cursor` 设为 `crIBeam`，鼠标移到控件上时呈现标准的文本输入「I 形」光标，提示内联数字编辑区可直接键入。
+14. **和 `TTyUpDown` + `TTyEdit` 的分工：** [`TTyUpDown.Associate`](updown.md#31-绑定伴随字段associate) 现在可以把一对上下按钮绑到任意编辑框上，双向同步。两条路的区别只有一个，但它很关键：绑定方案里的输入框是一个**完整的 `TTyEdit`**（选区、剪贴板、撤销、IME 全都在），而 `TTySpinEdit` 自带的是轻量行缓冲（见第 8 条）。需要在数字字段里选择 / 粘贴 / 撤销，就用绑定方案；要一个开箱即用、能 Tab 进去的一体控件，用 `TTySpinEdit`。
+15. **小数版本(`TFloatSpinEdit` 对标)尚未提供。** 需要带步进按钮的小数字段，眼下用 [`TTyNumericEdit`](numericedit.md)（有 `Value: Double` 与 `Decimals`，但没有按钮），或给它绑一个 `TTyUpDown`（按钮会步进整数）。

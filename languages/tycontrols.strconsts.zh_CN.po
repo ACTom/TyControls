@@ -562,3 +562,8 @@ msgstr "(全选)"
 #: tycontrols.strconsts.rsgridcheckedword
 msgid ""
 msgstr "是"
+
+#: tycontrols.strconsts.rstyupdownalreadyassociated
+#, object-pascal-format
+msgid "\"%s\" is already associated with the up-down \"%s\"."
+msgstr "\"%s\" 已经绑定到上下按钮对 \"%s\" 上了。"

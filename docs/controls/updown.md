@@ -41,8 +41,61 @@ uses tyControls.UpDown;
 | `MinRepeatInterval` | `Byte` | `100` | **(API parity 新增)** 按住不放时连发的间隔下限(毫秒),小于 25 会被抬到 25——与 LCL 的 setter 同一个下限(`customupdown.inc:666-670`),默认值也一致。早前连发速度是写死的常量(60ms),`0..10000` 这种范围快得没法停在想要的值上,无障碍设置想调慢也无从调起。 |
 | `OnChanging` | `TTyUpDownChangingEvent` | — | **(API parity 新增)** 否决钩子:`procedure(Sender: TObject; var AAllowChange: Boolean) of object`。在步进**提交之前**询问;把 `AAllowChange` 置 `False` 就拒绝这一步——值不动,`OnChange` 不发,`OnArrowClick` 也不发。早前只能在 `OnChange` 里把值写回去,而那会重入 setter 再发一次 `OnChange`。 |
 | `OnChangingEx` | `TTyUpDownChangingEventEx` | — | **(API parity 新增)** 同一个否决,但多告诉你**这一步会落到哪个值**与方向:`procedure(Sender: TObject; var AAllowChange: Boolean; ANewValue: Integer; ADirection: TTyUpDownDirection) of object`。两个钩子依次共用同一个 `AAllowChange`,任一个都能拒绝(LCL `CanChange`,`customupdown.inc:332-341`)。 |
+| `Associate` | `TWinControl` | `nil` | **(API parity 新增)** 绑定的伴随字段。见第 6 节。 |
+| `AlignButton` | `TTyUpDownAlignButton` | `udaRight` | **(API parity 新增)** 按钮对贴在 `Associate` 的哪一侧:`udaLeft` / `udaRight` / `udaTop` / `udaBottom`。没绑定时不起作用。 |
+| `Thousands` | `Boolean` | `True` | **(API parity 新增)** 写进 `Associate` 的数字是否按三位分组(`12,345`)。与 LCL 默认值一致。 |
+| `ArrowKeys` | `Boolean` | `True` | **(API parity 新增)** 在 `Associate` **内部**按方向键是否步进。与 LCL 默认值一致。 |
 
 继承:`Align` / `Anchors` / `StyleClass` / `Controller`。
+
+---
+
+## 3.1 绑定伴随字段(`Associate`)
+
+这是大家往窗体上放一个上下按钮对的**头号理由**:"把它粘到 `Edit1` 上"。绑上之后:
+
+```pascal
+uses tyControls.UpDown, tyControls.Edit;
+
+Ed := TTyEdit.Create(Self);   Ed.Parent := Self;  Ed.SetBounds(20, 20, 80, 24);
+Ud := TTyUpDown.Create(Self); Ud.Parent := Self;
+Ud.Min := 0; Ud.Max := 1000; Ud.Position := 5;
+Ud.Associate := Ed;           // 自己贴到 Ed 右边,并把 5 写进去
+```
+
+| 绑定之后会发生什么 | 说明 |
+|---|---|
+| **写入** | 每次步进(点击 / 连发 / 方向键 / 滚轮)、以及代码写 `Position`,都会改写字段文字。 |
+| **读回** | 读 `Position` 会**先去解析字段的文字**。用户在框里敲 42 再点向上 → 得 43,而不是"按钮上次写进去的值 + 1"。文字读不成整数(空串、只有一个 `-`、一串字母)时**保留当前值** —— 半截输入不会把值重置。 |
+| **位置** | 按 `AlignButton` 贴到字段一侧;字段移动 / 改大小时跟着走。 |
+| **状态** | 字段的 `Enabled` / `Visible` 变化会同步过来。 |
+| **键盘 / 滚轮** | `ArrowKeys` 开时,在**字段里**按 ↑/↓(横排时 ←/→)步进;在字段上滚滚轮也步进。 |
+
+**它认字段的哪个属性:** 优先写字段 published 的 `Text`(`TTyEdit`、`TTyMemo`、LCL 的 `TEdit`),
+没有才退回 `Caption`。LCL 只写 `Caption` —— 那在 LCL 里没问题,因为它家的编辑框都把 `Caption`
+经 `RealSetText` 路由到同一根字符串上;而 `TTyEdit` 画的是自己的 `FText`,`TControl.Caption`
+指向的是句柄那份**看不见的**原生文字。照抄 LCL,绑本库自家的编辑框会**一个字都不动**。
+
+**一个字段只能被一个按钮对驱动。** 绑第二个会抛异常(LCL 同样如此)——两个微调器抢一个框,
+症状是"点一下加二",不出声的话根本没法查。
+
+**与 LCL 的两处有意差异:**
+
+1. **不因为父控件不同而拒绝绑定。** LCL 要求 `Associate.Parent = Self.Parent`,不满足就**默默**
+   不绑 —— 而 `.lfm` 流式化时这会**悄悄丢掉**那条属性。这里改成:绑定照常成立,只有**自动贴位**
+   跳过(别人家坐标系里的 `Left`/`Top` 贴过来只会落到莫名其妙的地方)。
+2. **`Thousands` 的 setter 会立刻重画字段。** LCL 那个 setter 只是赋值,于是改完之后
+   屏幕上还是旧写法,要等下一次步进才换过来。
+
+**事件怎么算(与本族"状态 vs 意图"的规矩一致):**
+
+| | 会不会发生 | 为什么 |
+|---|---|---|
+| 代码写 `Position := N` → 改写字段 | **会** | 字段是这个数字的**第二个视图**。视图跟不上值,那就是在显示假的。 |
+| 代码写 `Position := N` → 问 `OnChanging` / `OnChangingEx` | **不会** | 否决钩子问的是**意图**("用户可以这么做吗"),而赋值是命令,不是提案。 |
+| 代码写 `Position := N` → 发 `OnChange` | **会** | `OnChange` 是**状态**事件:值确实变了。 |
+| 在字段里按方向键 → 问 `OnChanging` / 发 `OnArrowClick` | **会** | 在绑定字段里按方向键**就是**在按那个箭头,和点鼠标走同一条手势路径。LCL 也一样(`AssociateKeyDown` → `AdjustPos` → 按钮的 `Click` → `CanChange`)。 |
+| 读回同步(用户敲了字)→ 发 `OnChange` | **会** | 同上:值真的变了,而且是用户改的。 |
 
 ---
 
@@ -90,17 +143,24 @@ uses tyControls.Controller, tyControls.UpDown, tyControls.Edit;
 
 var Ud: TTyUpDown; Ed: TTyEdit;
 Ed := TTyEdit.Create(Self); Ed.Parent := Self; Ed.SetBounds(20, 20, 60, 26);
-Ud := TTyUpDown.Create(Self); Ud.Parent := Self; Ud.SetBounds(82, 20, 22, 26);
+Ud := TTyUpDown.Create(Self); Ud.Parent := Self;
 Ud.Min := 0; Ud.Max := 20; Ud.Position := 5;
-Ud.OnChange := @UpDownChanged;   // 在处理器里:Ed.Text := IntToStr(Ud.Position);
+Ud.Associate := Ed;   // 贴到 Ed 右侧,双向同步,方向键与滚轮都能用
+```
+
+要**手动**驱动别的东西(不是编辑框、或者要自己决定格式),不绑 `Associate`,照旧读 `Position`:
+
+```pascal
+Ud.OnChange := @UpDownChanged;   // 在处理器里:Lbl.Caption := Format('%d 件', [Ud.Position]);
 ```
 
 ---
 
 ## 7. 注意事项
 
-- **分离 vs 一体:** 一体式数值框用 [TTySpinEdit](spinedit.md);需要把上下按钮贴到别处(如自定义布局)时用 TTyUpDown。
-- **自动连发:** 按住某一半会先延迟 ~0.4s 再以 ~60ms 间隔连续步进,松开 / 移出即停。连发的每一 tick 都会发 `OnArrowClick`。
+- **分离 vs 一体:** 一体式数值框用 [TTySpinEdit](spinedit.md);需要把上下按钮贴到别处(如自定义布局)时用 TTyUpDown。绑了 `Associate` 的 TTyUpDown + TTyEdit 与 TTySpinEdit 很接近,区别在于前者的输入框是**一个完整的 TTyEdit**(选区、剪贴板、撤销、IME 都在),后者是控件自带的轻量行缓冲。
+- **自动连发:** 按住某一半会先延迟 ~0.4s 再以 `MinRepeatInterval`(默认 100ms)的间隔连续步进,松开 / 移出即停。连发的每一 tick 都会发 `OnArrowClick`。
+- **按钮对自己仍然不能被 Tab 选中。** 它是 `TTyGraphicControl`,没有窗口句柄,拿不到焦点 —— `ArrowKeys` 解决的是**在被绑定字段里**按方向键,那个键是送到字段(有句柄、能聚焦)上的。想要一个能 Tab 进去的数值框,用 [TTySpinEdit](spinedit.md)。
 - **`Wrap` 带进位:** 回绕不丢溢出量(见第 3 节 `Wrap`);`Wrap=False` 时仍是贴到边界停住。
 - **纯逻辑可测:** 半区命中 `TyUpDownHit`、半区矩形 `TyUpDownButtonRect`、夹紧 / 回绕 `TyUpDownClamp` 都是纯函数,已单元测试(`test.updown`)。
 - **主题驱动:** 颜色取自 `TyUpDown`,不硬编码;唯一例外是悬停 / 按下半边的背景仍解析 `TyButton`(见第 5 节)。

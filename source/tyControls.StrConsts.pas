@@ -199,6 +199,15 @@ resourcestring
     中文 .po 里译成 '是')。 }
   rsGridCheckedWord = '';
 
+  { --- TTyUpDown -------------------------------------------------------------
+    Raised when a second up-down is pointed at a control another one already drives.
+    Two steppers writing one field is not a configuration, it is a fight, and the
+    silent version of it is unbearable to debug -- so it is refused out loud, the way
+    LCL refuses it (customupdown.inc:380-389). %s = the field's name, %s = the name of
+    the up-down that already has it. }
+  rsTyUpDownAlreadyAssociated =
+    '"%s" is already associated with the up-down "%s".';
+
   // --- Design-time hints (shown in the IDE designer) ---
   rsTyGraphicControlOnForm =
     'The graphic control "%s" was placed directly on the form.'#10 +
