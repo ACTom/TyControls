@@ -3,8 +3,10 @@ unit tyControls.TabStrip;
 interface
 uses
   Classes, SysUtils, Types, Math, Controls, Graphics, LCLType, LMessages, ExtCtrls,
+  ComCtrls,                          // TTabPosition -- LCL's type, so a port streams
+  BGRABitmap, BGRABitmapTypes,       // the borrowed bitmap CachedIndex hands back
   tyControls.Types, tyControls.Controller, tyControls.Painter, tyControls.Base,
-  tyControls.Animation, tyControls.Accel;
+  tyControls.Animation, tyControls.Accel, tyControls.ImageCollection;
 
 const
   { Assign to TabHeight to hand the band's height back to the theme, so it follows
@@ -22,9 +24,23 @@ const
     at classic size on a modern-density theme). }
   TyTabHeightAuto = -1;
 
+  { Fallbacks for the two icon metrics, in logical px. They are Metric() DEFAULTS, not
+    hard-coded values: a skin that defines --tab-icon-size / --tab-icon-gap overrides both,
+    exactly as --tab-padding and --tab-gap already work. They live here rather than in
+    tyControls.Types because they are this unit's own tokens and nothing else reads them. }
+  TyTabIconSize = 16;
+  TyTabIconGap  = 6;
+
 type
   TTyTabCloseEvent = procedure(Sender: TObject; AIndex: Integer;
     var AllowClose: Boolean) of object;
+
+  { Last-word override of a tab's icon. Fired AFTER the per-tab ImageIndex has been read,
+    with AImageIndex seeded from it, so a handler sees what it is replacing and a control
+    with no handler keeps the per-tab value. Same shape and same precedence rule as
+    TTyTreeView.OnGetImageIndex; -1 means "no icon". }
+  TTyTabGetImageIndexEvent = procedure(Sender: TObject; AIndex: Integer;
+    var AImageIndex: Integer) of object;
 
   { Pre-switch veto. Fired before the selection moves to ANewIndex (the clamped
     proposed index); clearing AllowChange aborts the switch (no page change, no
@@ -56,13 +72,29 @@ type
     FOnTabClose: TTyTabCloseEvent;
     FHeaderRects: array of TRect;
     FCloseRects:  array of TRect;
+    FIconRects:   array of TRect;
+
+    { Which edge the band sits on. The layout is built in the SAME content space for all
+      four (see ToScreenRect); this only chooses how that 1-D run is embedded in the
+      control's box. }
+    FTabPosition: TTabPosition;
+    { Device-px thickness of the band across its minor axis, recomputed by RebuildLayout.
+      Equal to TabHPx on a horizontal band; on a vertical one it is the widest caption box,
+      because the captions are NOT rotated (see RebuildLayout). }
+    FBandThickness: Integer;
+
+    { Tab icons: one list on the control, an index per tab, an event with the last word. }
+    FImages: TTyVirtualImageList;
+    FImagesWidth: Integer;
+    FOnGetImageIndex: TTyTabGetImageIndexEvent;
 
     { Drag-reorder gesture state. FDragTab is the collection index of the tab a
-      press armed as a drag candidate (-1 = none). FDragStartX is the device-px X
-      of that press; FDragging flips True once the pointer travels past the drag
-      threshold, switching the gesture from a click into a live reorder. }
+      press armed as a drag candidate (-1 = none). FDragStartMain is the device-px
+      MAIN-AXIS coordinate of that press (x on a top/bottom band, y on a left/right
+      one); FDragging flips True once the pointer travels past the drag threshold,
+      switching the gesture from a click into a live reorder. }
     FDragTab:    Integer;
-    FDragStartX: Integer;
+    FDragStartMain: Integer;
     FDragging:   Boolean;
     { Collection index the dragged tab occupied when the press armed the gesture.
       FDragTab tracks the live (current) index as the tab is reseated during the
@@ -85,11 +117,35 @@ type
     function  GetTabHeight: Integer;
     procedure SetTabHeight(AValue: Integer);
     procedure SetTabsClosable(AValue: Boolean);
+    procedure SetTabPosition(AValue: TTabPosition);
+    procedure SetImages(AValue: TTyVirtualImageList);
+    procedure SetImagesWidth(AValue: Integer);
     procedure RebuildLayout(APPI: Integer);
     procedure DoCloseClick(AIndex: Integer);
     function  TabHPx(APPI: Integer): Integer;
+    function  IconPx(APPI: Integer): Integer;
     function  TabCaptionWidth(const ACaption: string;
                               const AStyle: TTyStyleSet; APPI: Integer): Integer;
+    { Half-open point-in-rect, spelled out rather than borrowed from Types.PtInRect so the
+      [Left,Right) x [Top,Bottom) convention every hit test in this unit already uses is
+      visible at the one place it is now shared from. }
+    function  HitRect(const R: TRect; AX, AY: Integer): Boolean;
+    { The screen coordinate along the band's MAIN axis, and the same test restricted to
+      that axis. Every scan in this unit used to hard-code X for both; a left/right band
+      turns the main axis vertical and these two are the only places that has to know. }
+    function  MainOf(AX, AY: Integer): Integer;
+    function  HitMainSpan(const R: TRect; AX, AY: Integer): Boolean;
+    function  HitBandMinor(AX, AY: Integer): Boolean;
+    { The band's physical rect BEFORE the mirror, and the control's extent along the
+      band's main axis. See the implementations. }
+    function  BandBoxPx(AW, AH, AThickness: Integer): TRect;
+    function  MainVisiblePx: Integer;
+    { Which edge the band is DRAWN on, mirror applied, and the three edge-picking rules
+      that take that one answer. See the implementations. }
+    function  EffectiveBandSide: TTabPosition;
+    procedure InsetForBand(var ARect: TRect);
+    procedure GrowTowardBand(var ARect: TRect; AAmount: Integer);
+    function  BandEdgeOf(const ARect: TRect; AThick: Integer): TRect;
   protected
     { Active selection index (-1 = none) and the TabIndex captured during
       csLoading (-1 = none). Protected so subclasses can read/write them while
@@ -120,6 +176,18 @@ type
     function GetTabCount: Integer; virtual; abstract;
     function GetTabCaption(AIndex: Integer): string; virtual; abstract;
     function GetTabClosableAt(AIndex: Integer): Boolean; virtual;
+    { The per-tab half of the icon rule: the index into Images this tab carries, or -1.
+      The base has no tab data, so it has no index either; TTyPageControl overrides it to
+      return the page's ImageIndex. This is the value TabImageIndex seeds OnGetImageIndex
+      with -- the event is the override, this is what it overrides. }
+    function GetTabImageIndex(AIndex: Integer): Integer; virtual;
+    { Which edge the band sits on, as the LAYOUT sees it -- the ONE answer the band box,
+      AdjustClientRect, DisplayRect and the arrow ends all take, exactly as
+      HeaderRightToLeft is the one answer for direction. A subclass whose own chrome is
+      pinned to the top (TTyRibbon: a File tab, a collapse chevron and KeyTip chips, all
+      of which assume a top band) declines here in one place instead of shipping a strip
+      whose band moved and whose chrome did not. }
+    function HeaderTabPosition: TTabPosition; virtual;
     { Protected so a subclass can publish the selection under its own name
       (TTyPageControl: ActivePageIndex). Clamps against GetTabCount, fires
       OnChanging/OnChange, calls DoSelectTab. }
@@ -149,6 +217,11 @@ type
       still sit on a line — and drops the rest of the box. }
     function HasPageBody: Boolean; virtual;
     procedure SetController(AValue: TTyStyleController); override;
+    { Drops the Images reference when the list is freed. The setter also registers a
+      FreeNotification, because opRemove only reaches us for a component we asked about:
+      a list owned by another form (or created with Owner = nil) would be freed without a
+      word and leave FImages dangling. }
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     function DialogChar(var Message: TLMKey): Boolean; override;
@@ -201,7 +274,7 @@ type
 
     { --- The ONE content-space <-> screen transform, and its exact inverse ------------
 
-      A tab strip has FOUR consumers of the same x axis -- the paint, the click hit test,
+      A tab strip has FOUR consumers of the same axis -- the paint, the click hit test,
       the drag-reorder midpoint rule and the overflow scroll offset -- and every one of them
       used to apply `OffsetRect(R, HeaderShiftPx, 0)` for itself, six copies of the same
       line. That was survivable while the transform was a translation, because a translation
@@ -211,15 +284,57 @@ type
 
       So both directions are named here and nothing in this unit converts by hand.
 
-      ToScreenRect: CONTENT space (what RebuildLayout builds -- reading order, tab 0 first,
-        origin at the strip's start) -> control-local device px as drawn.
-      ToReadingX:   the same reflection applied to a single x, i.e. ToScreenRect run
-        backwards. A reflection is its own inverse, so `X in ToScreenRect(R)` and
-        `ToReadingX(X) in shifted R` are the SAME predicate -- which is what lets the drag
-        resolver keep one left-to-right comparison instead of growing a mirrored copy of it
-        one character away from the original. }
+      CONTENT SPACE is what RebuildLayout builds and is the SAME for all four TabPositions:
+      a 1-D run of tabs along a MAIN axis (reading order, tab 0 first, origin 0), each tab
+      spanning the band's thickness on the CROSS axis. x carries main, y carries cross. The
+      layout problem genuinely is 1-D -- tabs of varying length, one uniform thickness -- so
+      the four positions differ ONLY in how that run is embedded in the control's box, which
+      is what a transform is for and not what a second builder would be for.
+
+      ToScreenRect runs three steps, in this order:
+        1. slide along MAIN by HeaderShiftPx (scroll offset + arrow band + subclass inset);
+        2. embed: (main, cross) -> (x, y) at the band box for the current TabPosition. At
+           tpTop the band box starts at (0,0) and the map is the identity, so every step is
+           a no-op and the result is byte-identical to what this did before TabPosition
+           existed;
+        3. reflect the SCREEN x about the control's Width when the strip reads
+           right-to-left. Reflecting last rather than first is what makes one line cover
+           two different meanings of "mirrored": on a top/bottom band the reflected axis IS
+           the main one (tab order reverses, as it always did), and on a left/right band it
+           is the CROSS one, so the band moves to the opposite edge and the close slot moves
+           to the other end of its row -- with no second branch anywhere.
+
+      ToReadingMain: a screen POINT -> the main-axis coordinate in SHIFTED content space,
+        i.e. steps 3 and 2 run backwards. `MainOf(pt) in ToScreenRect(R)` and
+        `ToReadingMain(pt) in shifted R` are then the same predicate for every point, which
+        is the property TyDropIndexAt relies on to keep a single forward comparison instead
+        of growing a mirrored copy of it one character away from the original. }
     function ToScreenRect(const AContentRect: TRect): TRect;
+    function ToReadingMain(const APt: TPoint): Integer;
+    { The horizontal-band form of ToReadingMain, kept because it is public API and because
+      a top/bottom band is the only shape whose main axis is x. On a LEFT/RIGHT band the
+      main axis is y and an x alone cannot answer: ask ToReadingMain. }
     function ToReadingX(AX: Integer): Integer;
+
+    { --- Where the band is ------------------------------------------------------------
+
+      BandIsVertical:  does the tab run go down the side rather than across the top?
+      BandThicknessPx: the band's device-px extent across its MINOR axis -- TabHPx on a
+        top/bottom band; on a left/right band the widest caption box, because captions are
+        never rotated (see RebuildLayout) and a 28px-wide rail could not hold one.
+      BandRect:        the band's physical rect in the control, mirror applied. The arrow
+        ends, the paint's backdrop fill and the clip all come off this one rect. }
+    function BandIsVertical: Boolean;
+    function BandThicknessPx: Integer;
+    function BandRect: TRect;
+
+    { The icon a tab draws, or -1 for none: the per-tab index (GetTabImageIndex) with
+      OnGetImageIndex given the last word over it. }
+    function TabImageIndex(AIndex: Integer): Integer;
+    { The icon's slot inside the tab, as drawn (device px, mirror applied), or an empty
+      rect when this tab draws no icon. }
+    function TabImageRect(AIndex: Integer): TRect;
+
     procedure SetHeaderScroll(AValue: Integer);
     procedure ScrollTabIntoView(AIndex: Integer);
 
@@ -261,12 +376,15 @@ type
     { Drag-reorder helpers (pure, no mutation; device px).
       TyDragThresholdPx: how far (in device px at APPI) a press must move before
         a drag counts as a reorder rather than a click. Small + PPI-scaled.
-      TyDropIndexAt: the collection index a drag at device-X should drop into,
-        using shifted header midpoints. Returns the first index i whose shifted
-        midpoint lies to the right of X; clamped to [0, Count-1] (default the
-        last index when X is past every midpoint). }
+      TyDropIndexAtPoint: the collection index a drag at a device-px POINT should drop
+        into, using shifted header midpoints along the band's main axis. Returns the first
+        index i whose shifted midpoint lies past the pointer; clamped to [0, Count-1]
+        (default the last index when the pointer is past every midpoint).
+      TyDropIndexAt: the same for a top/bottom band, where the main axis is x. Kept
+        because it is public API; on a left/right band ask TyDropIndexAtPoint. }
     function TyDragThresholdPx(APPI: Integer): Integer;
     function TyDropIndexAt(X, APPI: Integer): Integer;
+    function TyDropIndexAtPoint(const APt: TPoint; APPI: Integer): Integer;
 
     { The tab index whose close (x) button the pointer currently hovers, or -1
       when none. Distinct from whole-tab hover (FHoverTab): the x lights up on
@@ -284,7 +402,41 @@ type
       data. Routes through SetTabIndex, which clamps against GetTabCount, fires
       the OnChanging veto + DoSelectTab + OnChange, and arms the header fade. }
     property TabIndex: Integer read FTabIndex write SetTabIndex;
+
+    { Which edge the tab band sits on. LCL's type and LCL's four values, so a ported
+      `TabPosition := tpBottom` compiles and a ported .lfm streams.
+
+      PUBLIC here and PUBLISHED on the concrete subclasses (TTyPageControl, TTyTabSet)
+      rather than published here, because TTyRibbon is the third subclass of this engine
+      and its own chrome -- the File tab, the collapse chevron, the KeyTip chips -- is
+      pinned to a top band. Publishing on the base would have put a property in the
+      ribbon's Object Inspector that moves the tabs and leaves that chrome behind.
+      A subclass that wants to refuse outright overrides HeaderTabPosition.
+
+      One respect in which this is NOT LCL's tpLeft/tpRight, deliberately: LCL delegates to
+      comctl32's TCS_VERTICAL, which ROTATES the caption 90 degrees. We do not rotate --
+      the band becomes a stack of full-width rows with upright captions, sized to the widest
+      one, which is what every modern themed tab rail does and what this painter can draw
+      crisply at any DPI. docs/controls/pagecontrol.md records the divergence. }
+    property TabPosition: TTabPosition read FTabPosition write SetTabPosition default tpTop;
   published
+    { The icon source for the tab headers, indexed by the per-tab image index.
+
+      Typed TTyVirtualImageList, not LCL's TCustomImageList, and that is not a preference:
+      TTyVirtualImageList renders on demand rather than holding a fixed-resolution set, so
+      it is not a TCustomImageList descendant -- which means a TCustomImageList-typed
+      property would accept only the lists no TTyPainter can draw. TTyHeader.Images was
+      retyped for exactly this reason (Columns.pas), and this follows it rather than
+      inventing a third rule. }
+    property Images: TTyVirtualImageList read FImages write SetImages;
+    { Logical-px edge to render tab icons at. 0 (the default) follows the --tab-icon-size
+      theme token, which is what keeps icons in step with a density change; a non-zero
+      value pins them. LCL's ImagesWidth picks a RESOLUTION out of a multi-resolution list;
+      ours is a size request, because a virtual list renders at whatever size it is asked. }
+    property ImagesWidth: Integer read FImagesWidth write SetImagesWidth default 0;
+    { Last word on a tab's icon -- fired after the per-tab index has been read, with
+      AImageIndex seeded from it. -1 draws no icon. }
+    property OnGetImageIndex: TTyTabGetImageIndexEvent read FOnGetImageIndex write FOnGetImageIndex;
     { Header band height in logical px, DPI-scaled at paint time. Left unset it follows
       the theme's --control-height token, so the strip is 28 at classic density and 38 at
       modern density automatically. Set it explicitly and that value wins; assign
@@ -336,6 +488,9 @@ begin
   FDragging  := False;
   FDragOrigin := -1;
   FTabsClosable := False;
+  FTabPosition := tpTop;
+  FBandThickness := 0;
+  FImagesWidth := 0;
   FAnimationsEnabled := True;
   { Active-tab header cross-fade: rests at 1 (settled = active style), ~120ms full
     traversal, decelerating. Mirrors the Button hover-fade timing. }
@@ -404,6 +559,17 @@ end;
 function TTyCustomTabStrip.HeaderRightToLeft: Boolean;
 begin
   Result := IsRightToLeft;
+end;
+
+function TTyCustomTabStrip.HeaderTabPosition: TTabPosition;
+begin
+  Result := FTabPosition;
+end;
+
+function TTyCustomTabStrip.GetTabImageIndex(AIndex: Integer): Integer;
+begin
+  { The base owns no tab data, so it owns no per-tab index either. }
+  Result := -1;
 end;
 
 function TTyCustomTabStrip.HasPageBody: Boolean;
@@ -507,22 +673,191 @@ begin
   Invalidate;
 end;
 
-{ Single-pass cached layout. Builds FHeaderRects/FCloseRects for all tabs.
-  Geometry: device px, (0,0)-local. Headers laid left-to-right;
-  width = text width + 2×Scale(12), minimum Scale(48). When closable, a
-  close-glyph slot is reserved on the right of each header. }
+{ Moving the band moves the client rect's inset from one edge to another, so the pages
+  must be RE-ALIGNED and not merely repainted -- the same reason SetTabHeight calls
+  Realign. Invalidate alone would leave every alClient page covering the new band. }
+procedure TTyCustomTabStrip.SetTabPosition(AValue: TTabPosition);
+begin
+  if FTabPosition = AValue then Exit;
+  FTabPosition := AValue;
+  { The scroll offset is measured along the main axis, and the main axis just changed
+    length (Width <-> Height): an offset valid for the old axis is meaningless on the new
+    one. Reset rather than clamp -- clamping would silently keep a fraction of it. }
+  FHeaderScroll := 0;
+  Realign;
+  Invalidate;
+end;
+
+procedure TTyCustomTabStrip.SetImages(AValue: TTyVirtualImageList);
+begin
+  if FImages = AValue then Exit;
+  if FImages <> nil then FImages.RemoveFreeNotification(Self);
+  FImages := AValue;
+  if FImages <> nil then FImages.FreeNotification(Self);
+  { Icons take room inside every header, so this is a LAYOUT change, not a repaint:
+    gaining or losing the list re-measures each tab. Realign because the band's thickness
+    on a left/right band is the widest caption box and the icon slot is inside it. }
+  Realign;
+  Invalidate;
+end;
+
+procedure TTyCustomTabStrip.SetImagesWidth(AValue: Integer);
+begin
+  if AValue < 0 then AValue := 0;   // 0 = follow the theme token; negative is not a size
+  if FImagesWidth = AValue then Exit;
+  FImagesWidth := AValue;
+  Realign;
+  Invalidate;
+end;
+
+procedure TTyCustomTabStrip.Notification(AComponent: TComponent; Operation: TOperation);
+begin
+  inherited Notification(AComponent, Operation);
+  if (Operation = opRemove) and (AComponent = FImages) then FImages := nil;
+end;
+
+{ Device-px edge of a tab icon at APPI. 0 -- meaning "no icon slot at all", which is what
+  the layout keys on -- when there is no list to draw from, so a strip without Images
+  measures and paints exactly as it did before icons existed. }
+function TTyCustomTabStrip.IconPx(APPI: Integer): Integer;
+var
+  Logical: Integer;
+begin
+  if FImages = nil then Exit(0);
+  if FImagesWidth > 0 then
+    Logical := FImagesWidth
+  else
+    Logical := ActiveController.Metric('--tab-icon-size', TyTabIconSize);
+  if Logical <= 0 then Exit(0);
+  Result := MulDiv(Logical, APPI, 96);
+  if Result < 1 then Result := 1;
+end;
+
+function TTyCustomTabStrip.HitRect(const R: TRect; AX, AY: Integer): Boolean;
+begin
+  Result := (AX >= R.Left) and (AX < R.Right) and (AY >= R.Top) and (AY < R.Bottom);
+end;
+
+function TTyCustomTabStrip.MainOf(AX, AY: Integer): Integer;
+begin
+  if BandIsVertical then Result := AY else Result := AX;
+end;
+
+function TTyCustomTabStrip.HitMainSpan(const R: TRect; AX, AY: Integer): Boolean;
+begin
+  if BandIsVertical then
+    Result := (AY >= R.Top) and (AY < R.Bottom)
+  else
+    Result := (AX >= R.Left) and (AX < R.Right);
+end;
+
+{ Is the point on the band, measured across the band's MINOR axis ONLY?
+
+  Only the minor one, and that is not laziness: an overflowing run reaches PAST the control
+  along the major axis (the paint clips it, the layout does not), so gating on the major
+  axis too would make every hit test disagree with what is drawn -- and the strip's own
+  overflow tests press at shifted midpoints that lie beyond Width. At tpTop the band is
+  Rect(0, 0, Width, TabH) and this is the `Y < TabH` each caller used to spell for itself. }
+function TTyCustomTabStrip.HitBandMinor(AX, AY: Integer): Boolean;
+var
+  Band: TRect;
+begin
+  if TabHPx(Font.PixelsPerInch) <= 0 then Exit(False);   // TabHeight = 0: no band to hit
+  Band := BandRect;
+  if BandIsVertical then
+    Result := (AX >= Band.Left) and (AX < Band.Right)
+  else
+    Result := (AY >= Band.Top) and (AY < Band.Bottom);
+end;
+
+{ --- Where the band is. See the declarations. ------------------------------------- }
+
+function TTyCustomTabStrip.BandIsVertical: Boolean;
+begin
+  Result := HeaderTabPosition in [tpLeft, tpRight];
+end;
+
+{ Thickness across the band's MINOR axis. A top/bottom band is one tab-height thick and
+  costs nothing to answer. A left/right band is as thick as its widest caption box, which
+  only RebuildLayout knows -- so the measuring pass runs only for the shapes that need it,
+  and a default strip pays exactly what it paid before. }
+function TTyCustomTabStrip.BandThicknessPx: Integer;
+begin
+  if not BandIsVertical then Exit(TabHPx(Font.PixelsPerInch));
+  if TabHPx(Font.PixelsPerInch) <= 0 then Exit(0);   // TabHeight = 0 still means NO band
+  RebuildLayout(Font.PixelsPerInch);
+  Result := FBandThickness;
+end;
+
+{ The band's physical rect, mirror applied -- so on a right-to-left strip a tpLeft band
+  really is drawn at the right edge, and everything derived from this rect (the arrow ends,
+  the backdrop fill, the paint clip) follows without a branch of its own. }
+function TTyCustomTabStrip.BandRect: TRect;
+begin
+  Result := BandBoxPx(Width, Height, BandThicknessPx);
+  if HeaderRightToLeft then
+    Result := BidiFlipRect(Result, Rect(0, 0, Width, 0), True);
+end;
+
+{ The band's physical rect BEFORE the mirror, for an AW x AH box. Split out from BandRect
+  because ToScreenRect needs the unmirrored origin: it embeds first and reflects last, and
+  reflecting a rect that was already placed at the mirrored edge would mirror it twice. }
+function TTyCustomTabStrip.BandBoxPx(AW, AH, AThickness: Integer): TRect;
+begin
+  case HeaderTabPosition of
+    tpBottom: Result := Rect(0, AH - AThickness, AW, AH);
+    tpLeft:   Result := Rect(0, 0, AThickness, AH);
+    tpRight:  Result := Rect(AW - AThickness, 0, AW, AH);
+  else
+    { tpTop -- origin (0,0), which is what makes ToScreenRect's embed step the identity
+      and the whole transform byte-identical to the pre-TabPosition one. }
+    Result := Rect(0, 0, AW, AThickness);
+  end;
+end;
+
+{ The control extent along the band's MAIN axis: what the strip has to fit into before it
+  overflows, and what the scroll arithmetic measures against. }
+function TTyCustomTabStrip.MainVisiblePx: Integer;
+begin
+  if BandIsVertical then Result := Height else Result := Width;
+end;
+
+{ Single-pass cached layout, and the ONLY layout builder in this unit. Builds
+  FHeaderRects/FCloseRects/FIconRects for all tabs in CONTENT space (device px, origin 0,
+  reading order, x carries the MAIN axis and y the CROSS axis -- see ToScreenRect).
+
+  Every TabPosition goes through this one builder because they share the whole of the
+  problem: the CAPTION BOX of a tab -- padding + optional icon slot + caption + optional
+  close slot, floored at --tab-min-width -- is measured identically whichever edge the band
+  is on. The four positions differ only in which of the two measured numbers becomes the
+  tab's extent along the run:
+
+    top/bottom  main extent = the caption box; band thickness = one tab height
+    left/right  main extent = one tab height;  band thickness = the WIDEST caption box
+
+  because we do not rotate captions (see the TabPosition declaration), so a side band is a
+  stack of uniform-height rows whose common width has to hold the longest label. That is
+  one `if` inside one loop, which is the whole cost of being axis-generic; a second builder
+  would have had to duplicate the measuring, the min-width floor, the close-slot reserve,
+  the overflow test and the scroll clamp to buy nothing. }
 procedure TTyCustomTabStrip.RebuildLayout(APPI: Integer);
 var
   TabH, Pad, MinW, CloseSize, Gap, CloseSlot, Margin: Integer;
+  IconSize, IconGap, IconSlot: Integer;
   TabStyle: TTyStyleSet;
-  I, X, TW, HW, Cy: Integer;
-  VisibleWidth, AffordanceW, ArrowW, MaxScroll: Integer;
+  I, X, TW, MainExt, Cross, Cy, Lead: Integer;
+  MainVisible, AffordanceW, ArrowW, MaxScroll: Integer;
+  Vert: Boolean;
+  Boxes: array of Integer;
+  Band: TRect;
   dispCap: string;
   mpm: Integer;
 begin
   SetLength(FHeaderRects, GetTabCount);
   SetLength(FCloseRects, GetTabCount);
+  SetLength(FIconRects, GetTabCount);
 
+  Vert      := BandIsVertical;
   TabH      := TabHPx(APPI);
   Pad       := MulDiv(ActiveController.Metric('--tab-padding', TyTabPad), APPI, 96);
   MinW      := MulDiv(ActiveController.Metric('--tab-min-width', TyTabMinWidth), APPI, 96);
@@ -530,14 +865,25 @@ begin
   Gap       := MulDiv(ActiveController.Metric('--tab-gap', TyTabGap),  APPI, 96);
   Margin    := MulDiv(ActiveController.Metric('--tab-margin', TyTabMargin),  APPI, 96);
   CloseSlot := CloseSize + Gap;
+  IconSize  := IconPx(APPI);                    // 0 when there is no image list
+  if IconSize > 0 then
+    IconGap := MulDiv(ActiveController.Metric('--tab-icon-gap', TyTabIconGap), APPI, 96)
+  else
+    IconGap := 0;
+  IconSlot  := IconSize + IconGap;              // 0 without a list -> pre-icon arithmetic
 
   TabStyle := ActiveController.Model.ResolveStyle('TyTab', '', [tysNormal]);
 
-  X := 0;
+  { Pass 1 -- measure each tab's CAPTION BOX. This is the number the old single-position
+    builder called TW and used directly as the header width; it still is, and on a
+    top/bottom band nothing below changes it. }
+  SetLength(Boxes, GetTabCount);
+  Cross := TabH;
   for I := 0 to GetTabCount - 1 do
   begin
     TyParseMnemonic(GetTabCaption(I), dispCap, mpm);
     TW := TabCaptionWidth(dispCap, TabStyle, APPI) + 2 * Pad;
+    if (IconSize > 0) and (TabImageIndex(I) >= 0) then Inc(TW, IconSlot);
     if GetTabClosableAt(I) then
     begin
       Inc(TW, CloseSlot);
@@ -545,52 +891,106 @@ begin
     end
     else
       if TW < MinW then TW := MinW;
+    Boxes[I] := TW;
+    { A side band is only as wide as it has to be, and never narrower than one row. }
+    if Vert and (TW > Cross) then Cross := TW;
+  end;
+  FBandThickness := Cross;
 
-    HW := TW;
-    FHeaderRects[I] := Rect(X, 0, X + HW, TabH);
+  { Pass 2 -- lay the run out. The close slot sits at the trailing edge of the caption
+    box and the icon at its leading edge; the caption box runs along the MAIN axis on a
+    top/bottom band and along the CROSS axis on a left/right one, because the text itself
+    is upright in all four. }
+  X := 0;
+  for I := 0 to GetTabCount - 1 do
+  begin
+    if Vert then MainExt := TabH else MainExt := Boxes[I];
+    FHeaderRects[I] := Rect(X, 0, X + MainExt, Cross);
 
     if GetTabClosableAt(I) then
     begin
-      Cy := (TabH - CloseSize) div 2;
-      FCloseRects[I] := Rect(X + HW - Margin - CloseSize, Cy,
-                             X + HW - Margin, Cy + CloseSize);
+      if Vert then
+      begin
+        Cy := X + (TabH - CloseSize) div 2;      // centred down the row
+        FCloseRects[I] := Rect(Cy, Cross - Margin - CloseSize,
+                               Cy + CloseSize, Cross - Margin);
+      end
+      else
+      begin
+        Cy := (TabH - CloseSize) div 2;
+        FCloseRects[I] := Rect(X + MainExt - Margin - CloseSize, Cy,
+                               X + MainExt - Margin, Cy + CloseSize);
+      end;
     end
     else
       FCloseRects[I] := Rect(0, 0, 0, 0);
 
-    Inc(X, HW);
+    if (IconSize > 0) and (TabImageIndex(I) >= 0) then
+    begin
+      if Vert then
+      begin
+        Lead := X + (TabH - IconSize) div 2;     // centred down the row
+        FIconRects[I] := Rect(Lead, Pad, Lead + IconSize, Pad + IconSize);
+      end
+      else
+      begin
+        Cy := (TabH - IconSize) div 2;
+        FIconRects[I] := Rect(X + Pad, Cy, X + Pad + IconSize, Cy + IconSize);
+      end;
+    end
+    else
+      FIconRects[I] := Rect(0, 0, 0, 0);
+
+    Inc(X, MainExt);
   end;
 
-  { X is now the total (unshifted) header strip width. Decide whether the strip
-    overflows the visible control width and, if so, reserve a left/right arrow
-    affordance band (two Scale(16) arrows) at the far ends of the header band. }
-  VisibleWidth := Width;
+  { X is now the total (unshifted) length of the run. Decide whether it overflows the
+    control along the MAIN axis and, if so, reserve an arrow affordance band (two
+    Scale(16) arrows) at the run's two ends. }
+  MainVisible  := MainVisiblePx;
   AffordanceW  := MulDiv(ActiveController.Metric('--tab-arrow-band', TyTabArrowBand), APPI, 96) * 2;
-  FShowScrollAffordance := X > VisibleWidth;
+  FShowScrollAffordance := X > MainVisible;
   if FShowScrollAffordance then
   begin
     ArrowW := MulDiv(ActiveController.Metric('--tab-arrow-band', TyTabArrowBand), APPI, 96);
     FArrowBandPx     := ArrowW;
     { The two arrows change ENDS when the strip reads right-to-left, and their names do not:
       FScrollLeftRect is the BACK arrow (a click on it decreases the scroll) and belongs at
-      the reading START, which is the right edge here. Renaming the fields would be a
+      the reading START, which is the right edge there. Renaming the fields would be a
       breaking change for no behavioural gain, so the plan rules it out (§6.3.6) and the
       documentation carries the warning instead -- which is also why every test for this
       asserts the SCROLL DIRECTION a click produces and not the field name.
 
-      Written as two explicit branches rather than a BidiFlipRect over the pair, because
-      these two rects are the only geometry in the unit that is NOT in content space: they
-      are already physical, so putting them through the content transform would mirror them
-      twice. }
+      Cut from BandRect rather than from Rect(0,0,Width,TabH), so the two arrows land on
+      whichever edge the band is on and mirror with it; and written as explicit branches
+      rather than a BidiFlipRect over the pair, because these two rects are the only
+      geometry in the unit that is NOT in content space -- they are already physical, so
+      putting them through the content transform would mirror them twice.
+
+      A VERTICAL band's reading start is the TOP, mirrored or not: reflecting the screen's
+      x axis cannot reorder a run that goes down the page (the plan's logical-vs-visual
+      rule, §6.3.3), so only the horizontal case has ends to trade.
+
+      Built from the LOCAL Cross rather than from BandRect, which is the same rect: BandRect
+      asks BandThicknessPx, and on a vertical band BandThicknessPx asks RebuildLayout --
+      i.e. this function. Cross is that answer, already computed above. }
+    Band := BandBoxPx(Width, Height, Cross);
     if HeaderRightToLeft then
+      Band := BidiFlipRect(Band, Rect(0, 0, Width, 0), True);
+    if Vert then
     begin
-      FScrollLeftRect  := Rect(VisibleWidth - ArrowW, 0, VisibleWidth, TabH);
-      FScrollRightRect := Rect(0, 0, ArrowW, TabH);
+      FScrollLeftRect  := Rect(Band.Left, Band.Top, Band.Right, Band.Top + ArrowW);
+      FScrollRightRect := Rect(Band.Left, Band.Bottom - ArrowW, Band.Right, Band.Bottom);
+    end
+    else if HeaderRightToLeft then
+    begin
+      FScrollLeftRect  := Rect(Band.Right - ArrowW, Band.Top, Band.Right, Band.Bottom);
+      FScrollRightRect := Rect(Band.Left, Band.Top, Band.Left + ArrowW, Band.Bottom);
     end
     else
     begin
-      FScrollLeftRect  := Rect(0, 0, ArrowW, TabH);
-      FScrollRightRect := Rect(VisibleWidth - ArrowW, 0, VisibleWidth, TabH);
+      FScrollLeftRect  := Rect(Band.Left, Band.Top, Band.Left + ArrowW, Band.Bottom);
+      FScrollRightRect := Rect(Band.Right - ArrowW, Band.Top, Band.Right, Band.Bottom);
     end;
   end
   else
@@ -602,9 +1002,9 @@ begin
   end;
 
   { Clamp the current scroll to the new maximum. Max scroll is the overshoot of
-    the strip past the visible width minus the affordance band. }
+    the run past the visible extent minus the affordance band. }
   if FShowScrollAffordance then
-    MaxScroll := X - (VisibleWidth - AffordanceW)
+    MaxScroll := X - (MainVisible - AffordanceW)
   else
     MaxScroll := 0;
   if MaxScroll < 0 then MaxScroll := 0;
@@ -643,11 +1043,11 @@ begin
     Result := FHeaderRects[High(FHeaderRects)].Right;
 end;
 
-{ Largest valid scroll: the overshoot of the strip past the visible width minus
+{ Largest valid scroll: the overshoot of the run past the visible MAIN extent minus
   the reserved arrow band. 0 when the strip fits. Mirrors RebuildLayout's clamp. }
 function TTyCustomTabStrip.TyMaxHeaderScroll: Integer;
 var
-  StripW, VisibleWidth, AffordanceW: Integer;
+  StripW, MainVisible, AffordanceW: Integer;
 begin
   RebuildLayout(Font.PixelsPerInch);
   if not FShowScrollAffordance then Exit(0);
@@ -655,9 +1055,9 @@ begin
     StripW := 0
   else
     StripW := FHeaderRects[High(FHeaderRects)].Right;
-  VisibleWidth := Width;
+  MainVisible  := MainVisiblePx;
   AffordanceW  := MulDiv(ActiveController.Metric('--tab-arrow-band', TyTabArrowBand), Font.PixelsPerInch, 96) * 2;
-  Result := StripW - (VisibleWidth - AffordanceW);
+  Result := StripW - (MainVisible - AffordanceW);
   if Result < 0 then Result := 0;
 end;
 
@@ -695,36 +1095,70 @@ begin
   Result := FArrowBandPx - FHeaderScroll + HeaderLeftInset;
 end;
 
-{ Shift, then -- when the strip reads right-to-left -- reflect about the control's width.
+{ Slide along MAIN, embed at the band, then -- when the strip reads right-to-left --
+  reflect the SCREEN x about the control's width. See the declaration for why that order.
 
   A REFLECTION of the finished layout, not a reversed accumulation loop: a reflection of a
   gapless tiling is gapless by construction, so the mirrored strip cannot grow a 1px seam of
-  page body between two headers, and every derived rect (the close slot, which lives INSIDE
-  a header) lands in the right place without a second formula. LCL's BidiFlipRect
-  (controls.pp:2966) is that five-line arithmetic, used here rather than rewritten so nobody
-  has to check a `-1` twice.
+  page body between two headers, and every derived rect (the close slot and the icon slot,
+  which live INSIDE a header) lands in the right place without a second formula. LCL's
+  BidiFlipRect (controls.pp:2966) is that five-line arithmetic, used here rather than
+  rewritten so nobody has to check a `-1` twice.
 
-  The reflection uses the control's own Width -- the same quantity RebuildLayout measures the
-  overflow against and pins the arrow ends to -- so the band between the two arrows maps onto
-  itself and the scroll arithmetic, which is all in content space, needs no mirror of its own. }
+  The reflection uses the control's own Width -- the same quantity RebuildLayout pins the
+  arrow ends to -- so the band between the two arrows maps onto itself and the scroll
+  arithmetic, which is all in content space, needs no mirror of its own. }
 function TTyCustomTabStrip.ToScreenRect(const AContentRect: TRect): TRect;
+var
+  R, Band: TRect;
 begin
-  Result := AContentRect;
-  OffsetRect(Result, HeaderShiftPx, 0);
+  R := AContentRect;
+  OffsetRect(R, HeaderShiftPx, 0);
+  Band := BandBoxPx(Width, Height, BandThicknessPx);
+  if BandIsVertical then
+    { main -> y, cross -> x }
+    Result := Rect(Band.Left + R.Top,    Band.Top + R.Left,
+                   Band.Left + R.Bottom, Band.Top + R.Right)
+  else
+    { main -> x, cross -> y. At tpTop the band origin is (0,0), so this is R unchanged. }
+    Result := Rect(Band.Left + R.Left,  Band.Top + R.Top,
+                   Band.Left + R.Right, Band.Top + R.Bottom);
   if HeaderRightToLeft then
     Result := BidiFlipRect(Result, Rect(0, 0, Width, 0), True);
 end;
 
-{ The same reflection on a 1px-wide rect, which is what makes this the EXACT inverse of
-  ToScreenRect rather than a hand-written `Width - 1 - X` that could drift from it by one
-  pixel. `X in ToScreenRect(R)` and `ToReadingX(X) in shifted R` are then the same predicate
-  for every integer X, which is the property TyDropIndexAt relies on to keep a single
-  left-to-right comparison. }
+{ ToScreenRect run backwards as far as the shift -- un-reflect, then un-embed -- which is
+  what makes this its EXACT inverse rather than a hand-written `Width - 1 - X` that could
+  drift from it by one pixel. `MainOf(pt) in ToScreenRect(R)` and `ToReadingMain(pt) in
+  shifted R` are then the same predicate for every point, which is the property
+  TyDropIndexAtPoint relies on to keep a single forward comparison.
+
+  The reflection is undone on a 1px-wide rect for the same reason it is applied on one. }
+function TTyCustomTabStrip.ToReadingMain(const APt: TPoint): Integer;
+var
+  MX: Integer;
+  Band: TRect;
+begin
+  MX := APt.X;
+  if HeaderRightToLeft then
+    MX := BidiFlipRect(Rect(MX, 0, MX + 1, 0), Rect(0, 0, Width, 0), True).Left;
+  { The thickness is passed as 0 deliberately. BandBoxPx uses it only to place the band
+    across its MINOR axis, and the two lines below read the MAJOR one -- so the answer is
+    the same for every thickness, while asking for the real one would mean measuring the
+    entire strip (on a side band BandThicknessPx rebuilds the layout) to learn a number
+    this cannot use. Still routed through BandBoxPx rather than a hand-written 0, so that
+    if the band ever grows a leading gap this inverse picks it up out of the same function
+    ToScreenRect placed it with. }
+  Band := BandBoxPx(Width, Height, 0);
+  if BandIsVertical then
+    Result := APt.Y - Band.Top     // main runs down the side; x carried the cross axis
+  else
+    Result := MX - Band.Left;      // at tpTop Band.Left is 0, so this is the un-reflected x
+end;
+
 function TTyCustomTabStrip.ToReadingX(AX: Integer): Integer;
 begin
-  Result := AX;
-  if HeaderRightToLeft then
-    Result := BidiFlipRect(Rect(AX, 0, AX + 1, 0), Rect(0, 0, Width, 0), True).Left;
+  Result := ToReadingMain(Point(AX, 0));
 end;
 
 { Clamp the requested scroll into [0, TyMaxHeaderScroll] and repaint. }
@@ -755,16 +1189,16 @@ begin
   if FShowScrollAffordance then
   begin
     ArrowW   := MulDiv(ActiveController.Metric('--tab-arrow-band', TyTabArrowBand), Font.PixelsPerInch, 96);
-    { Tabs render inset by ArrowW (HeaderShiftPx), so content-x 0 maps to the band's
-      left edge. Measure "into view" in content-minus-scroll space, where the visible
-      band is [0, Width - 2*ArrowW] with BOTH arrow bands reserved. }
+    { Tabs render inset by ArrowW (HeaderShiftPx), so content-main 0 maps to the band's
+      starting edge. Measure "into view" in content-minus-scroll space, where the visible
+      run is [0, MainVisiblePx - 2*ArrowW] with BOTH arrow bands reserved. }
     VisLeft  := 0;
-    VisRight := Width - 2 * ArrowW;
+    VisRight := MainVisiblePx - 2 * ArrowW;
   end
   else
   begin
     VisLeft  := 0;
-    VisRight := Width;
+    VisRight := MainVisiblePx;
   end;
 
   Want := FHeaderScroll;
@@ -791,37 +1225,95 @@ begin
 end;
 
 function TTyCustomTabStrip.DisplayRect: TRect;
-var
-  TabH: Integer;
 begin
   Result := Rect(0, 0, Width, Height);
-  TabH := TabHPx(Font.PixelsPerInch);
-  Inc(Result.Top, TabH);          // the same inset AdjustClientRect applies
-  if Result.Top > Result.Bottom then Result.Top := Result.Bottom;
+  InsetForBand(Result);           // the same inset AdjustClientRect applies
+end;
+
+{ The edge the band is DRAWN on, mirror applied -- the one answer every edge-picking rule
+  below takes. On a right-to-left strip tpLeft and tpRight trade places, because
+  ToScreenRect's reflection moves the band to the other side and the client-rect inset, the
+  frame overlap and the baseline rail all have to move with it. Top and bottom do not trade:
+  reflecting the x axis cannot swap them. }
+function TTyCustomTabStrip.EffectiveBandSide: TTabPosition;
+begin
+  Result := HeaderTabPosition;
+  if HeaderRightToLeft then
+    case Result of
+      tpLeft:  Result := tpRight;
+      tpRight: Result := tpLeft;
+    end;
+end;
+
+{ Take the band's edge out of ARect. The ONE place that turns "which edge is the band on"
+  into a client-rect inset, shared by AdjustClientRect (which the align engine uses to lay
+  the pages out) and DisplayRect (which reports the body to callers), so the two cannot
+  disagree about where the body starts. }
+procedure TTyCustomTabStrip.InsetForBand(var ARect: TRect);
+var
+  T: Integer;
+begin
+  T := BandThicknessPx;
+  if T <= 0 then Exit;            // TabHeight = 0: no band, the body fills the control
+  case EffectiveBandSide of
+    tpBottom: Dec(ARect.Bottom, T);
+    tpLeft:   Inc(ARect.Left,   T);
+    tpRight:  Dec(ARect.Right,  T);
+  else
+    Inc(ARect.Top, T);
+  end;
+  if ARect.Top  > ARect.Bottom then ARect.Top  := ARect.Bottom;
+  if ARect.Left > ARect.Right  then ARect.Left := ARect.Right;
+end;
+
+{ Push ARect's band-facing edge BACK into the band by AAmount px, so the page frame and the
+  active tab merge into one another. At tpTop this is the old `ContentTop := TabH - 1px`. }
+procedure TTyCustomTabStrip.GrowTowardBand(var ARect: TRect; AAmount: Integer);
+begin
+  if AAmount <= 0 then Exit;
+  case EffectiveBandSide of
+    tpBottom: Inc(ARect.Bottom, AAmount);
+    tpLeft:   Dec(ARect.Left,   AAmount);
+    tpRight:  Inc(ARect.Right,  AAmount);
+  else
+    Dec(ARect.Top, AAmount);
+  end;
+end;
+
+{ The AThick-px sliver of ARect that lies ALONG the band -- the baseline rail a caption-only
+  strip keeps when it drops the rest of the page box. At tpTop this is
+  `Rect(0, Top, W, Top + AThick)`, the row the frame's top border occupied. }
+function TTyCustomTabStrip.BandEdgeOf(const ARect: TRect; AThick: Integer): TRect;
+begin
+  case EffectiveBandSide of
+    tpBottom: Result := Rect(ARect.Left, ARect.Bottom - AThick, ARect.Right, ARect.Bottom);
+    tpLeft:   Result := Rect(ARect.Left, ARect.Top, ARect.Left + AThick, ARect.Bottom);
+    tpRight:  Result := Rect(ARect.Right - AThick, ARect.Top, ARect.Right, ARect.Bottom);
+  else
+    Result := Rect(ARect.Left, ARect.Top, ARect.Right, ARect.Top + AThick);
+  end;
 end;
 
 function TTyCustomTabStrip.IndexOfTabAt(X, Y: Integer): Integer;
 var
-  PPI, TabH, I: Integer;
+  PPI, I: Integer;
   HR: TRect;
 begin
   Result := -1;
   PPI  := Font.PixelsPerInch;
-  TabH := TabHPx(PPI);
-  if TabH <= 0 then Exit;         // no band: nothing to hit
-  if (Y < 0) or (Y >= TabH) then Exit;
+  if not HitBandMinor(X, Y) then Exit;   // no band, or the point is off it
   RebuildLayout(PPI);
   { The overflow arrows sit ON the band but are not tabs; a click there scrolls, so a
     hit-test that named a tab would put a context menu on a tab the user never aimed at. }
   if FShowScrollAffordance then
   begin
-    if (X >= FScrollLeftRect.Left) and (X < FScrollLeftRect.Right) then Exit;
-    if (X >= FScrollRightRect.Left) and (X < FScrollRightRect.Right) then Exit;
+    if HitRect(FScrollLeftRect, X, Y) then Exit;
+    if HitRect(FScrollRightRect, X, Y) then Exit;
   end;
   for I := 0 to GetTabCount - 1 do
   begin
     HR := ToScreenRect(FHeaderRects[I]);
-    if (X >= HR.Left) and (X < HR.Right) then Exit(I);
+    if HitMainSpan(HR, X, Y) then Exit(I);
   end;
 end;
 
@@ -870,20 +1362,28 @@ end;
   of half-mirroring to spot. ToReadingX is exactly ToScreenRect run backwards, so the slot
   a drag drops into is by construction the slot the paint drew and the hit test names. }
 function TTyCustomTabStrip.TyDropIndexAt(X, APPI: Integer): Integer;
+begin
+  Result := TyDropIndexAtPoint(Point(X, 0), APPI);
+end;
+
+function TTyCustomTabStrip.TyDropIndexAtPoint(const APt: TPoint; APPI: Integer): Integer;
 var
-  I, Mid, RX: Integer;
+  I, Mid, RM: Integer;
   HR: TRect;
 begin
   if GetTabCount = 0 then Exit(0);
   RebuildLayout(APPI);
-  RX := ToReadingX(X);
+  RM := ToReadingMain(APt);
   Result := GetTabCount - 1; // default: past every midpoint -> last
   for I := 0 to GetTabCount - 1 do
   begin
     HR := FHeaderRects[I];
     OffsetRect(HR, HeaderShiftPx, 0); // shifted midpoint (incl. arrow-band inset)
+    { Content space always carries MAIN in x, whichever edge the band ended up on -- so
+      this stays the one forward comparison, and it is the paint's own midpoint because
+      ToReadingMain is exactly the transform that placed the paint run backwards. }
     Mid := (HR.Left + HR.Right) div 2;
-    if RX < Mid then
+    if RM < Mid then
     begin
       Result := I;
       Break;
@@ -891,6 +1391,28 @@ begin
   end;
   if Result < 0 then Result := 0;
   if Result > GetTabCount - 1 then Result := GetTabCount - 1;
+end;
+
+{ --- Tab icons ------------------------------------------------------------------- }
+
+{ The per-tab index first, the event last -- the order TTyListView and TTyTreeView already
+  use, so a handler sees the value it is replacing and a control with no handler keeps the
+  per-tab one. }
+function TTyCustomTabStrip.TabImageIndex(AIndex: Integer): Integer;
+begin
+  Result := -1;
+  if (AIndex < 0) or (AIndex >= GetTabCount) then Exit;
+  Result := GetTabImageIndex(AIndex);
+  if Assigned(FOnGetImageIndex) then
+    FOnGetImageIndex(Self, AIndex, Result);
+end;
+
+function TTyCustomTabStrip.TabImageRect(AIndex: Integer): TRect;
+begin
+  RebuildLayout(Font.PixelsPerInch);
+  if (AIndex < 0) or (AIndex >= Length(FIconRects)) then Exit(Rect(0, 0, 0, 0));
+  if FIconRects[AIndex].Right <= FIconRects[AIndex].Left then Exit(Rect(0, 0, 0, 0));
+  Result := ToScreenRect(FIconRects[AIndex]);
 end;
 
 procedure TTyCustomTabStrip.DoCloseClick(AIndex: Integer);
@@ -908,7 +1430,7 @@ end;
 procedure TTyCustomTabStrip.AdjustClientRect(var ARect: TRect);
 begin
   inherited AdjustClientRect(ARect);
-  Inc(ARect.Top, TabHPx(Font.PixelsPerInch));
+  InsetForBand(ARect);
 end;
 
 procedure TTyCustomTabStrip.SetTabIndex(AValue: Integer);
@@ -1015,11 +1537,13 @@ var
   P: TTyPainter;
   BoxStyle, TabStyle, ArrowStyle, CloseS, InactiveS, ActiveS: TTyStyleSet;
   R: TRect;
-  W, H, TabH, I, ContentTop: Integer;
-  HdrRect, CloseRect, TextRect, BandRect, SavedClip: TRect;
+  W, H, TabH, I, Overlap: Integer;
+  HdrRect, CloseRect, TextRect, IconRect, SavedClip: TRect;
+  Band, Body, ClipBand: TRect;
   TabStates: TTyStateSet;
   CloseHi, BaseFill: TTyFill;
-  BaseW: Integer;
+  BaseW, IconIdx: Integer;
+  IconBmp: TBGRABitmap;
   FadeEased: Single;
   disp: string;
   mp: Integer;
@@ -1039,32 +1563,38 @@ begin
     P.BeginPaint(ACanvas, ARect, APPI, Rtl);
 
     BoxStyle := CurrentStyle;
-    TabH := TabHPx(APPI);
+    TabH := BandThicknessPx;
+    Band := BandRect;
 
-    { The header strip is only painted where tab headers land; the empty area to the
-      right of the last tab would otherwise be a stale gap. On an image theme fill
+    { The header strip is only painted where tab headers land; the empty area past
+      the last tab would otherwise be a stale gap. On an image theme fill
       the whole strip with the form's photo; off-image fill it with the OPAQUE
       resolved parent background (the tabs sit on the form backdrop) so the gap is
       not a transparent hole the Win10 DWM glass shows as the system color. }
-    if not FillSharpBackdrop(P, Rect(0, 0, W, TabH)) then
-      TyFillParentBg(Self, P, Rect(0, 0, W, TabH), BoxStyle);
+    if not FillSharpBackdrop(P, Band) then
+      TyFillParentBg(Self, P, Band, BoxStyle);
 
     { Fill the content area with the form's photo (image theme) or the opaque parent bg
       (solid) FIRST, so a transparent content surface (e.g. green's ribbon body) shows the
       photo instead of a white hole; DrawFrame's own (possibly transparent) fill goes on top. }
     { The content frame overlaps the strip by 1px so the active tab merges into it — but with
-      NO strip (TabHeight = 0) that would pull the frame's top border off the control. }
-    ContentTop := TabH - MulDiv(1, APPI, 96);
-    if ContentTop < 0 then ContentTop := 0;
-    if not FillSharpBackdrop(P, Rect(0, ContentTop, W, H)) then
-      TyFillParentBg(Self, P, Rect(0, ContentTop, W, H), BoxStyle);
+      NO strip (TabHeight = 0) that would pull the frame's border off the control. Which
+      EDGE it overlaps follows the band, so a bottom band's frame reaches down and a side
+      band's reaches sideways; at tpTop this is the old `ContentTop := TabH - 1px`. }
+    Body := Rect(0, 0, W, H);
+    InsetForBand(Body);
+    Overlap := MulDiv(1, APPI, 96);
+    if TabH > 0 then
+      GrowTowardBand(Body, Min(Overlap, TabH));
+    if not FillSharpBackdrop(P, Body) then
+      TyFillParentBg(Self, P, Body, BoxStyle);
     if HasPageBody then
-      DrawFrame(P, Rect(0, ContentTop, W, H), BoxStyle)
+      DrawFrame(P, Body, BoxStyle)
     else
     begin
-      { Caption-only strip: no page container, so no box. Keep just the frame's top
-        border as a baseline the tabs sit on — same pixel row, same themed colour and
-        width, so the rail stays and only the empty body goes. Laid down as a crisp
+      { Caption-only strip: no page container, so no box. Keep just the frame's border
+        along the band as a baseline the tabs sit on — same pixel row, same themed colour
+        and width, so the rail stays and only the empty body goes. Laid down as a crisp
         fill rather than StrokeBorder's antialiased edge (a hairline rail reads
         sharper that way, and there is no rounded box left for it to follow). Drawn
         BEFORE the headers, as the frame was, so an active tab still merges into it. }
@@ -1075,7 +1605,7 @@ begin
         BaseFill := Default(TTyFill);
         BaseFill.Kind  := tfkSolid;
         BaseFill.Color := BoxStyle.BorderColor;
-        P.FillBackground(Rect(0, ContentTop, W, ContentTop + BaseW), BaseFill, 0);
+        P.FillBackground(BandEdgeOf(Body, BaseW), BaseFill, 0);
       end;
     end;
 
@@ -1090,21 +1620,28 @@ begin
     { Draw each tab header }
     RebuildLayout(APPI);
 
-    { When overflowing, clip the header strip to the band between the two arrow
+    { When overflowing, clip the header strip to the stretch of band between the two arrow
       affordances so shifted headers do not paint over the arrows or past the
-      control. When it fits, clip to the full header band (offset is 0 anyway). }
+      control. When it fits, clip to the whole band (offset is 0 anyway). }
     SavedClip := P.Bitmap.ClipRect;
     if FShowScrollAffordance then
       { The band BETWEEN the arrows, whichever end each of them is on. The old expression
         named FScrollLeftRect.Right and FScrollRightRect.Left directly, which is the same
         band only while the back arrow is the left one -- mirrored, it names an INVERTED
         (empty) clip and every header disappears. Min/Max is the same two numbers in
-        left-to-right, so this is byte-identical there. }
-      BandRect := Rect(Min(FScrollLeftRect.Right, FScrollRightRect.Right), 0,
-                       Max(FScrollLeftRect.Left,  FScrollRightRect.Left),  TabH)
+        left-to-right, so this is byte-identical there; and taken along the MAIN axis only,
+        so a side band clips top-and-bottom instead. }
+      if BandIsVertical then
+        ClipBand := Rect(Band.Left,
+                         Min(FScrollLeftRect.Bottom, FScrollRightRect.Bottom),
+                         Band.Right,
+                         Max(FScrollLeftRect.Top,    FScrollRightRect.Top))
+      else
+        ClipBand := Rect(Min(FScrollLeftRect.Right, FScrollRightRect.Right), Band.Top,
+                         Max(FScrollLeftRect.Left,  FScrollRightRect.Left),  Band.Bottom)
     else
-      BandRect := Rect(0, 0, W, TabH);
-    P.Bitmap.ClipRect := BandRect;
+      ClipBand := Band;
+    P.Bitmap.ClipRect := ClipBand;
 
     for I := 0 to GetTabCount - 1 do
     begin
@@ -1148,10 +1685,12 @@ begin
       if tpBackground in TabStyle.Present then
         P.FillBackground(HdrRect, TabStyle.Background, TyEffectiveCorners(TabStyle));
 
-      { Draw caption centered in header, clipped off the close glyph. The close slot is at
-        the header's TRAILING edge -- the right one normally, the left one when the strip
-        reads right-to-left (the reflection put it there) -- so it is the opposite edge of
-        the caption box that has to give way. }
+      { Draw caption centered in header, clipped off the close glyph and the icon. The
+        close slot is at the header's TRAILING edge -- the right one normally, the left one
+        when the strip reads right-to-left (the reflection put it there) -- so it is the
+        opposite edge of the caption box that has to give way. Both rects are already
+        SCREEN rects and the caption is upright in every TabPosition, so this rule needs no
+        branch for a side band: the reflection has already decided which end is which. }
       TextRect := HdrRect;
       if GetTabClosableAt(I) then
       begin
@@ -1160,6 +1699,27 @@ begin
         else
           TextRect.Right := CloseRect.Left;
       end;
+
+      { The icon sits at the caption box's LEADING edge, and the caption steps aside by
+        exactly the slot RebuildLayout reserved for it. Blitted through CachedIndex, which
+        hands back a borrowed bitmap and allocates nothing -- the path every other icon
+        consumer in this library uses (TTyListView.DrawImage). }
+      IconIdx := TabImageIndex(I);
+      if (FImages <> nil) and (IconIdx >= 0) and
+         (FIconRects[I].Right > FIconRects[I].Left) then
+      begin
+        IconRect := ToScreenRect(FIconRects[I]);
+        IconBmp := FImages.CachedIndex(IconIdx, IconRect.Right - IconRect.Left);
+        if IconBmp <> nil then
+          P.Bitmap.PutImage(IconRect.Left, IconRect.Top, IconBmp, dmDrawWithTransparency);
+        if Rtl then
+        begin
+          if IconRect.Left < TextRect.Right then TextRect.Right := IconRect.Left;
+        end
+        else
+          if IconRect.Right > TextRect.Left then TextRect.Left := IconRect.Right;
+      end;
+
       TyParseMnemonic(GetTabCaption(I), disp, mp);
       P.DrawText(TextRect,
         disp,
@@ -1198,10 +1758,16 @@ begin
         P.FillBackground(FScrollRightRect, ArrowStyle.Background, 0);
       end;
       { The chevrons point the way the strip MOVES, so they turn round with the ends: on a
-        mirrored strip the back arrow is at the right and points right. Two arrows both
+        mirrored strip the back arrow is at the right and points right, and on a side band
+        the run goes down the page so they point up and down instead. Two arrows both
         pointing the old way over swapped rects would be the "size grip drawn on one side,
         grabbed on the other" defect (§5.5) in miniature. }
-      if Rtl then
+      if BandIsVertical then
+      begin
+        P.DrawGlyph(FScrollLeftRect,  tgArrowUp,   ArrowStyle.TextColor, 2);
+        P.DrawGlyph(FScrollRightRect, tgArrowDown, ArrowStyle.TextColor, 2);
+      end
+      else if Rtl then
       begin
         P.DrawGlyph(FScrollLeftRect,  tgArrowRight, ArrowStyle.TextColor, 2);
         P.DrawGlyph(FScrollRightRect, tgArrowLeft,  ArrowStyle.TextColor, 2);
@@ -1228,7 +1794,7 @@ end;
 procedure TTyCustomTabStrip.MouseDown(Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
 var
-  PPI, TabH, Step, I: Integer;
+  PPI, Step, I: Integer;
   HdrRect, CloseRect: TRect;
 begin
   if not Enabled then Exit;
@@ -1236,8 +1802,7 @@ begin
   if Button = mbLeft then
   begin
     PPI  := Font.PixelsPerInch;
-    TabH := TabHPx(PPI);
-    if Y < TabH then
+    if HitBandMinor(X, Y) then
     begin
       RebuildLayout(PPI);
 
@@ -1246,14 +1811,12 @@ begin
       if FShowScrollAffordance then
       begin
         Step := MulDiv(40, PPI, 96);
-        if (X >= FScrollLeftRect.Left) and (X < FScrollLeftRect.Right) and
-           (Y >= FScrollLeftRect.Top) and (Y < FScrollLeftRect.Bottom) then
+        if HitRect(FScrollLeftRect, X, Y) then
         begin
           SetHeaderScroll(FHeaderScroll - Step);
           Exit;
         end;
-        if (X >= FScrollRightRect.Left) and (X < FScrollRightRect.Right) and
-           (Y >= FScrollRightRect.Top) and (Y < FScrollRightRect.Bottom) then
+        if HitRect(FScrollRightRect, X, Y) then
         begin
           SetHeaderScroll(FHeaderScroll + Step);
           Exit;
@@ -1263,12 +1826,10 @@ begin
       for I := 0 to GetTabCount - 1 do
       begin
         HdrRect := HeaderRectShifted(I);
-        if (X >= HdrRect.Left) and (X < HdrRect.Right) then
+        if HitMainSpan(HdrRect, X, Y) then
         begin
           CloseRect := ToScreenRect(FCloseRects[I]);
-          if GetTabClosableAt(I) and
-             (X >= CloseRect.Left) and (X < CloseRect.Right) and
-             (Y >= CloseRect.Top) and (Y < CloseRect.Bottom) then
+          if GetTabClosableAt(I) and HitRect(CloseRect, X, Y) then
             DoCloseClick(I)
           else
           begin
@@ -1278,7 +1839,7 @@ begin
               FDragOrigin pins the start index so MouseUp can report the net move. }
             FDragTab    := I;
             FDragOrigin := I;
-            FDragStartX := X;
+            FDragStartMain := MainOf(X, Y);
             FDragging   := False;
           end;
           Break;
@@ -1295,13 +1856,12 @@ end;
 
 procedure TTyCustomTabStrip.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
-  PPI, TabH, NewHover, NewHoverClose, I, Target: Integer;
+  PPI, NewHover, NewHoverClose, I, Target: Integer;
   HdrRect, CloseRect: TRect;
   OverArrow: Boolean;
 begin
   inherited MouseMove(Shift, X, Y);
   PPI  := Font.PixelsPerInch;
-  TabH := TabHPx(PPI);
 
   { Drag-reorder gesture. While a candidate is armed and the left button is held,
     a move past the threshold flips into live reorder mode. Each subsequent move
@@ -1311,11 +1871,20 @@ begin
     Skip the hover scan while dragging. }
   if (FDragTab >= 0) and (ssLeft in Shift) then
   begin
-    if (not FDragging) and (Abs(X - FDragStartX) >= TyDragThresholdPx(PPI)) then
+    { Travel is measured along the band's MAIN axis -- the axis the tabs are strung out on
+      and therefore the only one a reorder can happen along. On a top/bottom band MainOf is
+      X and this is the old `Abs(X - FDragStartX)`. }
+    if (not FDragging) and
+       (Abs(MainOf(X, Y) - FDragStartMain) >= TyDragThresholdPx(PPI)) then
       FDragging := True;
     if FDragging then
     begin
-      Target := TyDropIndexAt(X, PPI);
+      { The POINT form, not TyDropIndexAt(X, ...): the midpoint rule has to follow the
+        paint onto whichever axis the band runs along, and handing it an x on a side band
+        would leave the drag resolving against a coordinate the paint never used. That is
+        the one desync this control is most prone to -- the header and the body have come
+        apart here before -- so the drag takes the same transform the paint does. }
+      Target := TyDropIndexAtPoint(Point(X, Y), PPI);
       if (Target >= 0) and (Target <> FDragTab) then
       begin
         DoReorderTabs(FDragTab, Target); // subclass reseats its own tab data
@@ -1333,18 +1902,17 @@ begin
 
   NewHover := -1;
   NewHoverClose := -1;
-  if Y < TabH then
+  if HitBandMinor(X, Y) then
   begin
     RebuildLayout(PPI);
     { Over an affordance arrow counts as no tab hover. }
     OverArrow := FShowScrollAffordance and
-      (((X >= FScrollLeftRect.Left)  and (X < FScrollLeftRect.Right)) or
-       ((X >= FScrollRightRect.Left) and (X < FScrollRightRect.Right)));
+      (HitRect(FScrollLeftRect, X, Y) or HitRect(FScrollRightRect, X, Y));
     if not OverArrow then
       for I := 0 to GetTabCount - 1 do
       begin
         HdrRect := HeaderRectShifted(I);
-        if (X >= HdrRect.Left) and (X < HdrRect.Right) then
+        if HitMainSpan(HdrRect, X, Y) then
         begin
           NewHover := I;
           { Independent close (x) hover: only when closable and the pointer is
@@ -1353,9 +1921,7 @@ begin
           if GetTabClosableAt(I) then
           begin
             CloseRect := ToScreenRect(FCloseRects[I]);
-            if (X >= CloseRect.Left) and (X < CloseRect.Right) and
-               (Y >= CloseRect.Top)  and (Y < CloseRect.Bottom) then
-              NewHoverClose := I;
+            if HitRect(CloseRect, X, Y) then NewHoverClose := I;
           end;
           Break;
         end;
@@ -1422,18 +1988,17 @@ end;
 function TTyCustomTabStrip.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
   MousePos: TPoint): Boolean;
 var
-  PPI, TabH, Step: Integer;
+  PPI, Step: Integer;
 begin
   if not Enabled then Exit(False);
   if inherited DoMouseWheel(Shift, WheelDelta, MousePos) then
     Exit(True);
 
   PPI  := Font.PixelsPerInch;
-  TabH := TabHPx(PPI);
   RebuildLayout(PPI);
 
   Result := False;
-  if (MousePos.Y < TabH) and FShowScrollAffordance then
+  if HitBandMinor(MousePos.X, MousePos.Y) and FShowScrollAffordance then
   begin
     Step := MulDiv(40, PPI, 96);
     if WheelDelta > 0 then
@@ -1484,7 +2049,10 @@ begin
 
     One `Step` rather than two mirrored branches: the branches differ only by a sign, which
     §5.3 lists as the flip reviewers cannot see. }
-  if HeaderRightToLeft then Step := -1 else Step := 1;
+  { Reflecting the screen's x axis cannot reverse a run that goes DOWN the page, so a
+    left/right band's order never turns -- the same logical-vs-visual line §6.3.3 draws for
+    Home/End. Only a top/bottom band trades its two arrows. }
+  if HeaderRightToLeft and not BandIsVertical then Step := -1 else Step := 1;
   case Key of
     VK_HOME:  begin TabIndex := 0; Key := 0; end;
     VK_END:   begin TabIndex := Cnt - 1; Key := 0; end;
@@ -1500,6 +2068,23 @@ begin
         NewIndex := FTabIndex - Step;
         if NewIndex > Cnt - 1 then NewIndex := Cnt - 1;
         if NewIndex < 0 then NewIndex := 0;
+        TabIndex := NewIndex; Key := 0;
+      end;
+    { Up/Down step the selection only on a band whose run IS vertical. Handling them on a
+      top/bottom band would swallow two keys the strip has never consumed -- a host that
+      routes Up/Down to the active page's content would stop receiving them. }
+    VK_UP:
+      if BandIsVertical then
+      begin
+        NewIndex := FTabIndex - 1;
+        if NewIndex < 0 then NewIndex := 0;
+        TabIndex := NewIndex; Key := 0;
+      end;
+    VK_DOWN:
+      if BandIsVertical then
+      begin
+        NewIndex := FTabIndex + 1;
+        if NewIndex > Cnt - 1 then NewIndex := Cnt - 1;
         TabIndex := NewIndex; Key := 0;
       end;
   end;

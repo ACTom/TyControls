@@ -21,6 +21,10 @@ type
   protected
     function  GetTabCount: Integer; override;
     function  GetTabCaption(AIndex: Integer): string; override;
+    { The page's own ImageIndex -- the per-item half of the icon rule, which OnGetImageIndex
+      then has the last word over. Reading it off the PAGE rather than off a parallel array
+      is what makes a reorder carry the icon with its tab. }
+    function  GetTabImageIndex(AIndex: Integer): Integer; override;
     function  GetStyleTypeKey: string; override;
     procedure DoSelectTab(AIndex: Integer); override;
     procedure DoReorderTabs(AFromIndex, AToIndex: Integer); override;
@@ -67,6 +71,12 @@ type
       not. ActivePageIndex stays for code that prefers it; both address one selection. }
     property ActivePage: TTyTabSheet read GetActivePage write SetActivePage;
     property ActivePageIndex: Integer read FTabIndex write SetTabIndex default -1;
+    { Promoted from public on the header engine. Published HERE and on TTyTabSet rather
+      than on the shared base, because TTyRibbon is the base's third subclass and its File
+      tab, collapse chevron and KeyTip chips are all pinned to a top band -- publishing on
+      the base would have offered the ribbon a designer property that moves the tabs and
+      leaves that chrome where it was. }
+    property TabPosition;
   end;
 
 implementation
@@ -92,6 +102,14 @@ begin
     Result := FPages[AIndex].Caption
   else
     Result := '';
+end;
+
+function TTyPageControl.GetTabImageIndex(AIndex: Integer): Integer;
+begin
+  if (AIndex >= 0) and (AIndex < Length(FPages)) and (FPages[AIndex] <> nil) then
+    Result := FPages[AIndex].ImageIndex
+  else
+    Result := -1;
 end;
 
 function TTyPageControl.GetPage(AIndex: Integer): TTyTabSheet;

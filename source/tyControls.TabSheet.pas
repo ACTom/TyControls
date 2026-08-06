@@ -16,10 +16,12 @@ type
   private
     FOnShow: TNotifyEvent;
     FOnHide: TNotifyEvent;
+    FImageIndex: Integer;
     function  GetPageControl: TTyCustomTabStrip;
     procedure SetPageControl(AValue: TTyCustomTabStrip);
     function  GetPageIndex: Integer;
     procedure SetPageIndex(AValue: Integer);
+    procedure SetImageIndex(AValue: Integer);
   protected
     { Repaint when Caption/Text changes -- the LCL hook that replaces our old setter. }
     procedure TextChanged; override;
@@ -68,6 +70,15 @@ type
       carried by the order the pages stream in, and storing it too would give the .lfm two
       sources of truth for one fact. }
     property PageIndex: Integer read GetPageIndex write SetPageIndex stored False;
+    { Index into the PAGER's Images list, or -1 for no icon. Same name, same type and same
+      default as TTabSheet.ImageIndex (comctrls.pp:541), so a ported page streams.
+
+      It lives on the PAGE and not in a parallel list on the pager for the same reason
+      Caption does: reordering pages must carry the icon with the page, and a second array
+      indexed by position would silently hand tab 2's icon to whatever moved into slot 2.
+      The pager reads it through GetTabImageIndex, and OnGetImageIndex still has the last
+      word over whatever this says. }
+    property ImageIndex: Integer read FImageIndex write SetImageIndex default -1;
     { Fired when this page becomes / stops being the shown page. Per-page enter/leave logic
       (lazy content loading, validate-on-leave) previously had to be centralised in the
       pager's OnChange and dispatched with an if/case chain on the index, so a page could
@@ -102,8 +113,19 @@ begin
   inherited Create(AOwner);
   ControlStyle := ControlStyle + [csAcceptsControls, csDesignFixedBounds,
     csNoDesignVisible, csNoFocus];
+  FImageIndex := -1;
   Align := alClient;
   Visible := False;
+end;
+
+{ The icon is measured INTO the tab header's width, so changing it re-lays the strip --
+  the same reason TextChanged invalidates the host rather than the page. }
+procedure TTyTabSheet.SetImageIndex(AValue: Integer);
+begin
+  if AValue < -1 then AValue := -1;
+  if FImageIndex = AValue then Exit;
+  FImageIndex := AValue;
+  if Parent <> nil then Parent.Invalidate;
 end;
 
 function TTyTabSheet.GetStyleTypeKey: string;

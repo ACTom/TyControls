@@ -56,6 +56,7 @@ uses tyControls.TabSet;
 |------|------|--------|------|
 | `Tabs` | `TStrings` | `[]`（空列表） | 页签标题列表。内部由 `TStringList` 支撑（以获得其 `OnChange`），但声明类型为 `TStrings`。写入时调用 `Assign` 复制内容；列表变化（增删改）触发重绘并把 `TabIndex` 上界夹紧到 `Count-1`。 |
 | `TabIndex` | `Integer` | `-1` | 当前选中页签索引；`-1` 表示无选中。写入等价于调用 `SetTabIndex`（夹紧、触发 `OnChanging` 否决钩子、`DoSelectTab`、`OnChange`）。声明了 `default -1`。 |
+| `TabPosition` | `TTabPosition` | `tpTop` | 标签条贴哪条边。在标签头引擎上是 `public`，在 `TTyTabSet` 与 `TTyPageControl` 上才 published（`TTyRibbon` 是同一引擎的第三个子类，它的 File 页签与 KeyTip 角标钉死在顶边）。`tpLeft` 的纯页签条正是"侧边栏"那个形态，也是本属性在这个控件上最主要的用途。**侧边标签不旋转文字**，条带宽度取最宽的标题——完整规则与和 LCL 的分歧见 [`pagecontrol.md` §6](pagecontrol.md)。 |
 
 ### 继承自 `TTyCustomTabStrip` 的 published 成员
 
@@ -65,6 +66,9 @@ uses tyControls.TabSet;
 |------|------|--------|------|
 | `TabHeight` | `Integer` | 不设时跟随主题（经典 `28` / 现代 `38`） | 页签条高度（逻辑像素）。`0` = 完全不要条带；`TyTabHeightAuto`（`-1`，任意负值同义）= 交回主题。完整取值表与和 LCL 的差异见 [`pagecontrol.md` §6](pagecontrol.md)。 |
 | `TabsClosable` | `Boolean` | `False` | 为 `True` 时每个页签头右侧渲染关闭 × 字形，点击触发 `OnTabClose`。 |
+| `Images` | `TTyVirtualImageList` | `nil` | 页签图标来源。`TTyTabSet` 的标题只是一串字符串、没有可挂 `ImageIndex` 的逐项对象，所以在这个控件上图标由 **`OnGetImageIndex`** 提供（引擎的逐项那一层在基类返回 -1）。类型与 `FreeNotification` 语义见 [`pagecontrol.md` §3](pagecontrol.md)。 |
+| `ImagesWidth` | `Integer` | `0` | 图标边长（逻辑像素），`0` = 跟随 `--tab-icon-size`。 |
+| `OnGetImageIndex` | 事件 | `nil` | `procedure(Sender; AIndex; var AImageIndex)`；`-1` = 无图标。 |
 | `TabStop` | `Boolean` | `True` | 参与键盘 Tab 焦点循环（`Create` 中设 `True`）。 |
 | `Align` | `TAlign` | — | 父容器内的停靠方式。 |
 | `Anchors` | `TAnchors` | — | 锚点布局。 |
@@ -223,3 +227,4 @@ end;
 - **DFM 序列化：** `TabIndex` 声明 `default -1`、`TabsClosable` 声明 `default False`，取默认值时不写入 `.lfm`/`.dfm`。`TabHeight` 走的是 `stored`（宿主钉过才写），所以显式设的 `0`（不要条带）也会被写进去并原样还原。
 - **Alt+助记符：** 页签标题支持 `&` 助记符——`DialogChar` 在 `Enabled` 时扫描标题的加速键并 `SetTabIndex` 切换到匹配页签。
 - **右到左镜像：** `BiDiMode := bdRightToLeft` 时整条标签带镜像，行为与 `TTyPageControl` 完全一致（同一个 `TTyCustomTabStrip` 引擎）：第 0 个页签在**最右**、往左排，关闭 × 在每个页签头的**左**边，两个溢出箭头对调两端并各自转向，向后滚动时标签带往**右**滑，`←/→` 跟着眼睛走而 `Home/End`、`Ctrl+Tab` 不翻。取指针坐标用 `TabRect(i)`；`TyTabHeaderRect(i)` 是阅读序的内容空间矩形，镜像时不是屏幕坐标。细节与那个"名字会骗人"的 `TyTabScrollLeftRect` 见 [pagecontrol.md](pagecontrol.md) §6。
+  `TabPosition = tpLeft/tpRight` 时镜像是**换边**而不是倒序：条带整条搬到对面那条边，条带内每行的关闭 × / 图标换端，而上下顺序与 `↑/↓` 不变（横向反射不可能给一条竖着走的行程重新排序）。

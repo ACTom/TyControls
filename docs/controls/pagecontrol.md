@@ -39,7 +39,11 @@
 | `MovePage(from, to)` | 方法 | 把某页（连同它的页签）从一个位置挪到另一个位置。重排原语一直存在，但只是个由页签拖拽驱动的 **protected** 钩子，应用代码根本无从排序页面。两端都会裁剪，越界或原地不动直接忽略。`TTyTabSheet.PageIndex` 的公开入口 |
 | `IndexOfPageAt(X, Y)` / `IndexOfPageAt(P)` | `: Integer` | 某点落在哪一**页**上，无则 -1。与 `IndexOfTabAt` 问的是不同的问题：那个问页签头，这个问页面体，所以落在页签条上不算页命中，反之亦然。只有活动页有像素，因此最多只有一个索引会应答 |
 | `TabHeight` | `Integer`（不设时跟随主题：经典 28 / 现代 38） | 页签头条带逻辑高度（按 PPI 缩放）。`0` = **完全不要条带**（页面铺满控件，由宿主自己驱动切页）；`TyTabHeightAuto`（-1，含任意负值）= 交回主题的 `--control-height`。详见 §注意事项 |
+| `TabPosition` | `TTabPosition`（published, 默认 `tpTop`） | 标签条贴在哪条边：`tpTop` / `tpBottom` / `tpLeft` / `tpRight`。LCL 的类型与 LCL 的四个取值，所以移植过来的 `TabPosition := tpBottom` 直接编译、`.lfm` 直接流入。**与 LCL 的一处刻意分歧见 §6「侧边标签不旋转文字」** |
 | `TabsClosable` | `Boolean`（默认 False） | 页签头是否显示关闭 × |
+| `Images` | `TTyVirtualImageList`（published, 默认 nil） | 页签图标的来源，按各页的 `ImageIndex` 取。类型是 `TTyVirtualImageList` 而不是 LCL 的 `TCustomImageList`：本库的虚拟列表按需渲染、因而**不是** `TCustomImageList` 的后代，属性若写成 LCL 类型，能赋进去的就只剩下 `TTyPainter` 一个都画不出来的那些（`TTyHeader.Images` 正是为此改的类型）。赋值会注册 `FreeNotification`，列表先被释放时引用自动置 nil |
+| `ImagesWidth` | `Integer`（published, 默认 0） | 图标渲染边长（逻辑像素）。`0` = 跟随主题令牌 `--tab-icon-size`（默认 16），密度换挡时图标跟着走；非 0 = 钉死。LCL 的 `ImagesWidth` 是从多分辨率列表里**挑一档**，本库的虚拟列表要多大画多大，所以这里是一个尺寸请求。负值按 0 处理 |
+| `OnGetImageIndex` | `procedure(Sender; AIndex; var AImageIndex)` | 图标索引的**最终决定权**。在读过该页自己的 `ImageIndex` **之后**触发，`AImageIndex` 以那个值作**种子**——所以处理器看得见自己在覆盖什么，没有处理器时逐页的值原样生效。与 `TTyTreeView.OnGetImageIndex` 同一条优先级规则（控件级列表 → 逐项覆盖 → 事件最后），不另立第三套 |
 | `AnimationsEnabled` | `Boolean`（默认 True） | 切页时活动页签头是否交叉淡入（无窗口句柄时直接定格，保证 headless 测试稳定） |
 | `OnChange` / `OnChanging` / `OnTabClose` / `OnReorder` | 事件 | 切换后 / 切换前可否决 / 点关闭×可否决 / 拖拽重排提交后 |
 
@@ -50,6 +54,7 @@
 | 成员 | 说明 |
 |---|---|
 | `Caption`（published） | 该页的**标签文字**；改动时通知宿主重排标签头（经重写 `TextChanged`）；**不**画在页面体上。**它就是 `TControl.Caption`**：`Caption` 与 `Text` 是同一个字符串，早先的 `FCaption` 影子字段已去掉 |
+| `ImageIndex`（published, 默认 -1） | 该页页签的图标，索引进宿主的 `Images`；-1 = 无图标。名字、类型、默认值都与 `TTabSheet.ImageIndex` 一致。**它长在页上而不是宿主的一个平行数组里**，理由与 `Caption` 相同：重排必须把图标连同页一起带走，而按位置索引的第二个数组会把 2 号槽的图标悄悄交给挪进 2 号槽的那一页 |
 | `PageIndex`（published, `stored False`） | 该页在宿主里的位置，**可写**：赋值即**移动**该页（连同页签）。此前排序只能靠用户拖页签——重排原语是 protected 且没有任何入口——所以"最近使用顺序""按文档名排序"这类由数据决定的顺序，从代码里完全表达不出来。`stored False`（与 `TTabSheet` 一致）：顺序已经由页流式化的先后承载，再存一份就是同一个事实有两个真相来源 |
 | `PageControl`（public, 读/写） | 该页所属的宿主，**读/写**——赋值即把页搬到另一个宿主，与 `TTabSheet.PageControl` 一致。此前只能读 `Parent` 再硬转型，那对任何 parent 都编译得过、只在运行期才炸。类型是 `TTyCustomTabStrip` 而非 `TTyPageControl`，这一点由单元依赖图决定：`tyControls.PageControl` 的 **interface** 需要 `TTyTabSheet`（页数组、`AddPage` 的返回类型），所以具体宿主类型无法出现在本单元的 interface 里，否则 interface 段循环引用。标签条基类是编译期能表达"这是个标签宿主"的最近类型；页级成员仍需转型 |
 | `OnShow` / `OnHide`（published） | 本页成为 / 不再是活动页时触发。此前逐页的进入/离开逻辑（延迟加载内容、离开时校验）只能集中到宿主的 `OnChange` 里再按索引 if/case 分发，页无法拥有自己的行为；移植过来的 `OnShow`/`OnHide` 处理器也无处可挂。名字、签名与触发时机都与 `TCustomPage` 一致（经 `CM_VISIBLECHANGED`） |
@@ -100,8 +105,20 @@ PageCtrl.ActivePage := Pg;           // 切到该页
 - **可关闭页签**：`TabsClosable = True` 时每页签头右侧有关闭 ×，点击触发 `OnTabClose`（可否决）。
 - **活动页交叉淡入**：切页时活动页签头背景从非活动样式淡入活动样式（仅页签头颜色淡入，页内容瞬时切换）。
 - **键盘**：`←/→` 上一/下一页（右到左镜像时两键对调，见下），`Home/End` 首/末页，`Ctrl+Tab` / `Ctrl+PageUp/PageDown` 切页。
-- **右到左镜像**：`BiDiMode := bdRightToLeft` 时整条标签带镜像——第 0 页的页签在**最右**，往左排；关闭 × 挪到每个页签头的**左**边；两个溢出箭头对调两端并且各自转向（"上一批"那个永远在阅读起点，也就是镜像时的右端）；向后滚动时标签带往**右**滑；`←/→` 跟着眼睛走（左键=下一页）。`Home/End` 与 `Ctrl+Tab` 是**逻辑**首尾/循环，不翻。
-  **页面体不镜像**：`TabPosition` 目前没有左/右边标签这一形态，所以页面体的左右边界没有可镜像的东西，`AdjustClientRect` 照旧只扣顶部条带。**页内子控件也不镜像**（`Align`/`Anchors` 排布跟随 LCL，见 [panel.md](panel.md)）；但 `BiDiMode` 会按 LCL 的 `ParentBiDiMode` 传播给页里的控件，所以页上的复选框、标签等各自会翻自己的指示器与文字。
+- **`TabPosition`——标签条贴哪条边**：`tpTop`（默认）/ `tpBottom` / `tpLeft` / `tpRight`。四种形态走**同一套布局与同一个坐标变换**：`RebuildLayout` 始终把标签排成一条**一维的行程**（沿"主轴"，阅读序，第 0 个在起点），`ToScreenRect` 再把这条行程嵌进控件的方框里。`tpTop` 时那个嵌入是恒等映射，所以默认形态与加这个属性之前**逐字节相同**。
+  - 顶/底：主轴是横的，每个页签**宽度**=标题盒，条带**厚度**=一个 `TabHeight`。
+  - 左/右：主轴是竖的，每个页签**高度**=一个 `TabHeight`，条带**厚度**=**最宽的那个标题盒**。
+  - **侧边标签不旋转文字（与 LCL 的刻意分歧）**：LCL 的 `tpLeft/tpRight` 转交给 comctl32 的 `TCS_VERTICAL`，那会把标题**旋转 90°**；本库不旋转——侧边条带是一摞等高、文字正立的行，宽度取最长的标题。这既是当代主题化侧边栏（VS Code、Ant Design 的 `tabPosition="left"`）的做法，也是本库画笔在任意 DPI 下能画清楚的做法；转一次 90° 的文字在自绘管线里要么糊要么得另开一条渲染路径。
+  - `AdjustClientRect` / `DisplayRect` 跟着扣**对应那条边**：`tpBottom` 扣底、`tpLeft` 扣左、`tpRight` 扣右。
+  - **键盘**：主轴是竖的时候 `↑/↓` 走上一/下一页；主轴是横的时候 `↑/↓` **不被吞掉**（顶部条带上的 `↑/↓` 一直是留给宿主/页内容的，加了侧边形态也不能改这一点）。`←/→` 四种形态下都走。
+  - **溢出箭头**跟着主轴转向：侧边条带上是"上/下"两个 V 形，分别贴在条带的上下两端。
+  - `TTyRibbon` 也是这套标签头引擎的子类，但它自己的 File 页签、折叠 V 形与 KeyTip 角标都钉死在顶边，所以 `TabPosition` **只在 `TTyPageControl` / `TTyTabSet` 上 published**，功能区的对象检查器里看不到它。
+
+- **页签图标**：`Images`（控件级列表）+ 每页的 `ImageIndex`（逐项覆盖）+ `OnGetImageIndex`（最终决定权），三层的顺序与 `TTyListView` / `TTyTreeView` 一致。图标槽位在**测量阶段**就预留进标题盒（`--tab-icon-size` + `--tab-icon-gap`），所以页签会按图标宽度**变宽**，它旁边的页签一个像素都不动。没有 `Images` 时整条路径不产生任何开销、也不改变任何一个像素。
+
+- **右到左镜像**：`BiDiMode := bdRightToLeft` 时整条标签带镜像——第 0 页的页签在**最右**，往左排；关闭 × 挪到每个页签头的**左**边（图标也跟着挪到右边）；两个溢出箭头对调两端并且各自转向（"上一批"那个永远在阅读起点，也就是镜像时的右端）；向后滚动时标签带往**右**滑；`←/→` 跟着眼睛走（左键=下一页）。`Home/End` 与 `Ctrl+Tab` 是**逻辑**首尾/循环，不翻。
+  **左/右边标签的镜像是"换边"，不是"倒序"**：镜像反射的是**屏幕横轴**。顶/底条带的主轴就是横轴，所以反射把页签顺序倒过来（一直如此）；左/右条带的主轴是竖的，横轴反射碰不到它——反射到的是**次轴**，于是 `tpLeft` 的条带整条搬到**右**边（`tpRight` 搬到左边），条带内每一行里的关闭 × 与图标也各自换端，而**上下顺序不变**，`↑/↓` 也不对调。这与"`Home/End` 是逻辑首尾"是同一条判据：横向反射不可能给一条竖着走的行程重新排序。相应地，页面体现在会被扣在**镜像后**的那条边上。
+  **页内子控件不镜像**（`Align`/`Anchors` 排布跟随 LCL，见 [panel.md](panel.md)）；但 `BiDiMode` 会按 LCL 的 `ParentBiDiMode` 传播给页里的控件，所以页上的复选框、标签等各自会翻自己的指示器与文字。
   一个**名字会骗人的成员**：`TyTabScrollLeftRect` 是"上一批"箭头，镜像时它在**右**端；`TyTabScrollRightRect` 在左端。改名是破坏性变更，收益不抵成本，所以名字保留、在这里写清楚。取指针坐标请用 `TabRect(i)`（绘制时的矩形），不要用 `TyTabHeaderRect(i)`——后者是**阅读序内容空间**的矩形，镜像时它不是屏幕坐标。
 - **`TabHeight` 的三种取值（与 LCL 的差异，刻意保留）**：
   | 取值 | 含义 |

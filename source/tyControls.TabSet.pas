@@ -34,6 +34,10 @@ type
   published
     property Tabs: TStrings read FTabs write SetTabs;
     property TabIndex: Integer read FTabIndex write SetTabIndex default -1;
+    { Promoted from public on the header engine -- see TTyPageControl.TabPosition for why
+      it is published on the concrete strips and not on the shared base. A caption-only
+      strip on the left edge is the "sider" shape, which is the main reason to want it. }
+    property TabPosition;
   end;
 implementation
 
