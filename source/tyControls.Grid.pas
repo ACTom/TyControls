@@ -400,7 +400,14 @@ type
                      gukColDelete, gukColInsert, gukColMove);
 
   { 逐格属性的**值快照**。撤销栈不能存 TTyGridCellAttr 的引用 ——
-    那个对象会被后来的 MoveEntry 就地改写、被 Remove 释放。 }
+    那个对象会被后来的 MoveEntry 就地改写、被 Remove 释放。
+
+    **Obj 故意不在这里。** 这个栈是值语义的(上面那句就是它的立身之本),
+    而 Obj 是宿主的指针、网格不拥有它:把它记进来,就等于允许一次 Ctrl+Z
+    交还一个宿主在删掉那一行时已经释放掉的地址 —— 撤销变成 use-after-free,
+    而且是网格无从察觉的那一种。代价是撤销**不**把对象槽搬回原位;
+    那顶多是"槽位需要宿主照自己的数据重挂一遍",比崩溃便宜得多。
+    RestoreAttr 因此也不许**销毁**对象槽,见那里。 }
   TTyGridAttrSnapshot = record
     Present:          Boolean;      { False = 当时这一格根本没有属性条目 }
     ColSpan, RowSpan: Integer;
@@ -613,10 +620,25 @@ type
     HasCellDisplay:   Boolean;
     CellDisplay:      TTyGridCellDisplay;
     Comment:          string;
+    { 宿主挂在这一格上的任意对象(Objects[ACol,ARow])。放这里而不是另开一张表:
+      属性存储已经会跟着行置换搬家 —— 排序、插删行、换行、拖行全都经过
+      MoveEntry/Assign,所以对象**不用再写一遍搬家逻辑**就跟着走了。
+      另开一张表得把那几条路径逐条重做,而漏搬一条的症状是"排完序拿到别人的记录"
+      且一声不响(合并区当年就是这么漏的,见本类开头那段)。
+
+      代价:每条**已有属性**的记录多一个指针(64 位 8 字节)。没有属性的格子
+      一分钱不花 —— 稀疏存储里它根本没有条目。
+
+      **网格不拥有它**:不释放、不复制。也正因为它是别人的指针,它不进撤销栈
+      (见 TTyGridAttrSnapshot 的说明)。 }
+    Obj:              TObject;
     constructor Create;
     { 全是默认值 = 这条可以丢掉,别让稀疏存储攒垃圾。 }
     function IsDefault: Boolean;
     procedure Assign(ASrc: TTyGridCellAttr);
+    { 把**可撤销的那些字段**清回默认值,保留 Obj。撤销要还原"当时没有这一条"
+      时用它 —— 整条删掉会连宿主挂的对象一起删,而对象不在撤销模型里。 }
+    procedure ResetKeepingObject;
   end;
 
   { 逐格属性的稀疏存储,键空间与单元格文本一致('col:row')。 }
@@ -635,6 +657,10 @@ type
     { 已有条目 → 通知一次并交出对象;没有则 nil。"我要改这条现成的"。 }
     function  Mutate(const AKey: string): TTyGridCellAttr;
     function  Ensure(const AKey: string): TTyGridCellAttr;
+    { 与 Ensure 一样建/取条目,但**不发 Changing**。只给撤销模型之外的槽位用
+      —— 目前只有 Obj。发通知就等于往撤销栈压一条记录,而那条记录会带着
+      一个网格不拥有的指针(见 TTyGridAttrSnapshot)。 }
+    function  EnsureQuiet(const AKey: string): TTyGridCellAttr;
     property OnChanging: TTyGridAttrChangingEvent read FOnChanging write FOnChanging;
     procedure Remove(const AKey: string);
     { 条目退化成全默认值时把它丢掉。 }
@@ -1817,6 +1843,12 @@ type
     { 逐格附加属性(合并跨度、以及留给后面几批的底色/字体/只读)。
       与 FCells 同一套键。**合并信息从前是自己一张表**,增删行时漏搬,已并进来。 }
     FAttrs: TTyGridCellAttrStore;
+    { Cols[]/Rows[] 交出去的活视图,按下标缓存(键是 IntToStr(下标),
+      **只用来查,从不按这个顺序遍历** —— 字典序下 "9" 排在 "10" 后面,
+      拿它当次序用就会踩到那个老坑)。缓存是必须的:视图对象归网格所有,
+      每次取都新建一个等于每次调用泄漏一个。惰性建,随网格释放。 }
+    FColViews: TStringList;
+    FRowViews: TStringList;
     FOnGetFooterText: TTyGridGetFooterTextEvent;
     { 分组列,从外到内。空 = 不分组。
       单列分组是它只有一项的退化情形,所以老的 GroupByColumn / GroupColumn
@@ -1895,6 +1927,10 @@ type
     FMergeCount: Integer;
     FMaxColSpan: Integer;
     FMaxRowSpan: Integer;
+    { Cols[] 与 Rows[] 只差"哪条轴",取视图的那一段一模一样 —— 合成一处,
+      免得将来只改一边(缓存的两份逻辑走散是这类代码最常见的坏法)。 }
+    function  ColsRowsView(var ACache: TStringList; AIsCol: Boolean;
+      AIndex: Integer): TStrings;
   protected
     procedure FilterSearchChanged(Sender: TObject);
     procedure FilterItemChecked(Sender: TObject);
@@ -2260,6 +2296,23 @@ type
     procedure SetCellDisplay(ACol, ARow: Integer; AValue: TTyGridCellDisplay);
     property  CellDisplays[ACol, ARow: Integer]: TTyGridCellDisplay
       read GetCellDisplay write SetCellDisplay;
+    { 宿主挂在某一格上的任意对象 —— LCL 的 TCustomStringGrid.Objects[ACol,ARow]
+      (grids.pas:1795)。"这一行是哪一条记录"的标准落点。
+
+      **网格不拥有它**:不释放、不复制、不流式化。设成 nil 即取下。
+
+      它与这一格的其他属性住同一条稀疏记录里,所以物理排序(SortMode = gsmData)、
+      插行、删行、换行、拖行**都会带着它一起搬** —— 宿主不必再维护一张按行下标
+      记账的平行表并在每次结构变动后重新对齐,那张表正是这个属性要消灭的东西。
+
+      **不进撤销栈**:撤销栈是值语义的,而这是别人的指针 —— 记进去就等于允许
+      Ctrl+Z 交还一个宿主可能已经释放的地址。因此撤销既不把对象槽搬回原位,
+      也绝不销毁它;结构性编辑撤销之后,槽位停在正向操作把它放下的地方,
+      需要精确还原的宿主请照自己的数据重挂一遍。 }
+    function  GetObjects(ACol, ARow: Integer): TObject;
+    procedure SetObjects(ACol, ARow: Integer; AValue: TObject);
+    property  Objects[ACol, ARow: Integer]: TObject
+      read GetObjects write SetObjects;
     { 批注标记的矩形(格子右上角的小三角)。没有批注时是空矩形。 }
     function  CommentMarkRect(ACol, ARow: Integer): TRect;
     { 强制重算**某一列**的汇总。宿主改了外部数据源时需要一个明确的入口 ——
@@ -2297,6 +2350,9 @@ type
     procedure Clear;
     { 写过的单元格个数 —— 稀疏性的可观测证据。 }
     function StoredCellCount: Integer;
+    { 逐格属性记录的条数 —— 上一条在属性侧的对偶。合并、底色、批注、
+      对象槽…… 每一格顶多占一条,而"设了又清"必须把条目还回来。 }
+    function StoredCellAttrCount: Integer;
 
     { 开始编辑当前(或指定)单元格。只读、或该格编辑器为 gekNone 时不开。 }
     function BeginEdit: Boolean; overload;
@@ -2689,6 +2745,29 @@ type
     property  SelectedColumn: TTyGridColumn read GetSelectedColumn;
     property PickEditor: TTyComboBox read FPickEditor;
     property Cells[ACol, ARow: Integer]: string read GetCells write SetCells;
+    { 一整列 / 一整行,当成 TStrings 交出去 —— LCL 的 Cols[]/Rows[]
+      (grids.pas:1794/1798)。`Memo.Lines := Grid.Cols[2]` 与
+      `Grid.Rows[3] := MyList` 这两条几乎每个移植程序都有的写法就靠它们。
+
+      交出来的是**活视图**,不是副本:读写都直接落到格子上,长度跟着网格走。
+      对象也通过它可达(视图的 Objects[i] 就是那一格的 Objects[])。
+
+      **赋值不改网格的结构**,逐字照 LCL(grids.pas:10882):只覆盖
+      min(源长度, 视图长度) 项 —— 源短了,尾巴上那几格**原样留着**(不清空);
+      源长了,多出来的项丢掉(不加行、不加列)。要"整行换掉"请先
+      `Rows[r].Clear` 再赋值。整次赋值算**一条**撤销记录。
+
+      视图对象归网格所有,按下标缓存 —— 同一个下标每次交出同一个对象,
+      随网格一起释放。代价是"碰过多少个不同下标就留下多少个空壳视图",
+      所以**别拿它遍历百万行的表**:那条路是 CSV / 剪贴板。
+      缓存按下标而不是按列对象记账(与 LCL 同),删列/移列之后旧视图指的是
+      那个**位置**,不是原来那一列。 }
+    function  GetCols(AIndex: Integer): TStrings;
+    procedure SetCols(AIndex: Integer; AValue: TStrings);
+    function  GetRows(AIndex: Integer): TStrings;
+    procedure SetRows(AIndex: Integer; AValue: TStrings);
+    property Cols[AIndex: Integer]: TStrings read GetCols write SetCols;
+    property Rows[AIndex: Integer]: TStrings read GetRows write SetRows;
     { 自建表 / 上一次装载或清零以来,有没有格子被改过。对标 LCL 的
       TCustomStringGrid.Modified(grids.pas:1797,在 TStringGrid 上 published)。
 
@@ -2829,6 +2908,49 @@ type
       default gsmDisplay;
     { 拖填充柄产生的一次填充;置 AHandled 可接管(自定义序列)。 }
     property OnFillCells: TTyGridFillEvent read FOnFillCells write FOnFillCells;
+  end;
+
+  { 一整列 / 一整行的 TStrings **活视图** —— 对标 LCL 的 TStringGridStrings
+    (grids.pas:1724)。Cols[] / Rows[] 交出来的就是它。
+
+    它自己**一个字符串都不存**:Get/Put 直接落到网格的格子上,GetObject/PutObject
+    直接落到 Objects[]。所以它永远看得见网格此刻的样子,而不是取的那一刻。
+
+    长度 = 网格在那条轴上的尺寸(列视图 = RowCount,行视图 = 列数),**不可改**:
+    Insert / Delete 一律抛 EListError(LCL 同样,grids.pas:10902/10907)——
+    视图的长度是网格的**结构**,不该被一次数据操作悄悄改掉。
+    要加行加列请走 InsertRow / Header.Columns.Add。
+
+    Add 是个例外,而且是必须的:CommaText / DelimitedText 的赋值走的是
+    Clear + Add,所以 Add 必须"往下一个还没被 Add 写过的槽里写",写满了返回 -1
+    而不抛异常(逐字照 LCL 的 FAddedCount,grids.pas:10791)。 }
+  TTyGridStrings = class(TStrings)
+  private
+    FGrid:   TTyStringGrid;
+    FIsCol:  Boolean;
+    FIndex:  Integer;
+    { Add 写到哪儿了。Clear 归零 —— 这就是 CommaText 赋值能从头填的原因。
+      Put 不动它:直接按下标写与"顺序追加"是两回事。 }
+    FAdded:  Integer;
+    { 把视图下标翻成格坐标;越界返回 False(调用方各自决定是给空值还是抛)。 }
+    function Locate(AIndex: Integer; out ACol, ARow: Integer): Boolean;
+  protected
+    function  Get(AIndex: Integer): string; override;
+    function  GetCount: Integer; override;
+    function  GetObject(AIndex: Integer): TObject; override;
+    procedure Put(AIndex: Integer; const S: string); override;
+    procedure PutObject(AIndex: Integer; AObject: TObject); override;
+  public
+    constructor Create(AGrid: TTyStringGrid; AIsCol: Boolean; AIndex: Integer);
+    function  Add(const S: string): Integer; override;
+    procedure Clear; override;
+    procedure Delete(AIndex: Integer); override;
+    procedure Insert(AIndex: Integer; const S: string); override;
+    procedure Assign(ASource: TPersistent); override;
+    { 这个视图看的是哪条轴的第几根。删列 / 移列之后它指的是那个**位置**,
+      不是原来那一列 —— 与 LCL 一样按下标记账。 }
+    property IsColumn: Boolean read FIsCol;
+    property Index: Integer read FIndex;
   end;
 
 var
@@ -3291,7 +3413,10 @@ begin
     and not HasBackground and not HasTextColor
     and not HasAlignment and not HasFontStyle
     and not ReadOnly
-    and not HasCellDisplay and (Comment = '');
+    and not HasCellDisplay and (Comment = '')
+    { 挂着对象的条目**不是**可回收的默认条目 —— 漏了这一条,
+      "涂个底色再清掉"就会连宿主的指针一起被 DropIfDefault 抹了。 }
+    and (Obj = nil);
 end;
 
 procedure TTyGridCellAttr.Assign(ASrc: TTyGridCellAttr);
@@ -3305,6 +3430,25 @@ begin
   ReadOnly := ASrc.ReadOnly;
   HasCellDisplay := ASrc.HasCellDisplay; CellDisplay := ASrc.CellDisplay;
   Comment := ASrc.Comment;
+  { 搬家走的就是这一句(MoveEntry / 物理排序 / SwapRows 都调它)——
+    漏抄 Obj 的症状是排完序文字换了位置、对象留在原地。 }
+  Obj := ASrc.Obj;
+end;
+
+procedure TTyGridCellAttr.ResetKeepingObject;
+var
+  keep: TObject;
+begin
+  keep := Obj;
+  ColSpan := 1;               RowSpan := 1;
+  HasBackground := False;     Background := 0;
+  HasTextColor := False;      TextColor := 0;
+  HasAlignment := False;      Alignment := taLeftJustify;
+  HasFontStyle := False;      FontStyle := [];
+  ReadOnly := False;
+  HasCellDisplay := False;    CellDisplay := gcdText;
+  Comment := '';
+  Obj := keep;
 end;
 
 constructor TTyGridCellAttrStore.Create;
@@ -3342,12 +3486,17 @@ begin
 end;
 
 function TTyGridCellAttrStore.Ensure(const AKey: string): TTyGridCellAttr;
-var
-  i: Integer;
 begin
   { 已存在也要通知 —— 调用方接着就要改它的字段。
     不存在时同样通知:"原本没有这一条"本身就是要恢复的状态。 }
   Changing(AKey);
+  Result := EnsureQuiet(AKey);
+end;
+
+function TTyGridCellAttrStore.EnsureQuiet(const AKey: string): TTyGridCellAttr;
+var
+  i: Integer;
+begin
   Result := Find(AKey);
   if Result <> nil then Exit;
   Result := TTyGridCellAttr.Create;
@@ -7310,6 +7459,10 @@ begin
   FAggregates.Free;
   FCollapsed.Free;
   FAttrs.Free;
+  { 视图对象归网格所有(OwnsObjects),交给宿主的引用随网格一起失效 ——
+    与 LCL 的 MapFree 同一条所有权(grids.pas:11324)。 }
+  FColViews.Free;
+  FRowViews.Free;
   FHiddenRows.Free;
   inherited Destroy;
 end;
@@ -7691,7 +7844,17 @@ begin
   nowMerged := ASnap.Present and ((ASnap.ColSpan > 1) or (ASnap.RowSpan > 1));
 
   if not ASnap.Present then
-    FAttrs.Remove(AKey)
+  begin
+    { "当时根本没有这一条"从前是整条删掉来还原的 —— 而那会把**后来**挂上去的
+      Obj 一起删掉,而 Obj 不在撤销模型里(见 TTyGridAttrSnapshot):撤销既不
+      恢复它,就更不该销毁它。留一个只剩 Obj 的空壳条目,语义上与"没有这一条"
+      等价 —— IsDefault 只多认一个 Obj,其余查询读到的都是默认值。 }
+    a := FAttrs.Find(AKey);
+    if (a <> nil) and (a.Obj <> nil) then
+      a.ResetKeepingObject
+    else
+      FAttrs.Remove(AKey);
+  end
   else
   begin
     a := FAttrs.Ensure(AKey);
@@ -8163,6 +8326,11 @@ end;
 function TTyStringGrid.StoredCellCount: Integer;
 begin
   Result := FCells.Count;
+end;
+
+function TTyStringGrid.StoredCellAttrCount: Integer;
+begin
+  Result := FAttrs.Count;
 end;
 
 function TTyStringGrid.GetCellText(ACol, ARow: Integer): string;
@@ -8725,19 +8893,19 @@ end;
 procedure TTyStringGrid.UnHideAllRows;
 var
   i: Integer;
-  rows: array of Integer;
+  hidden: array of Integer;   { 别叫 rows —— 与 Rows[] 属性撞名 }
 begin
   if FHiddenRows.Count = 0 then Exit;
   { 逐行走记录点,而不是把表 Clear 掉 —— 直接清表的话这一步撤销不了
     (栈里那些 HideRow 的记录还原的是"本来就没藏"的行,按下去毫无动静)。
     整批算一条。 }
-  SetLength(rows, FHiddenRows.Count);
+  SetLength(hidden, FHiddenRows.Count);
   for i := 0 to FHiddenRows.Count - 1 do
-    rows[i] := StrToIntDef(FHiddenRows[i], -1);
+    hidden[i] := StrToIntDef(FHiddenRows[i], -1);
   BeginUpdate;
   try
-    for i := 0 to High(rows) do
-      if rows[i] >= 0 then SetRowHidden(rows[i], False);
+    for i := 0 to High(hidden) do
+      if hidden[i] >= 0 then SetRowHidden(hidden[i], False);
   finally
     EndUpdate;
   end;
@@ -10320,6 +10488,92 @@ begin
   if FAttrs.IsEmpty then Exit;
   a := FAttrs.Find(CellKey(ACol, ARow));
   if (a <> nil) and a.HasCellDisplay then Result := a.CellDisplay;
+end;
+
+function TTyStringGrid.GetObjects(ACol, ARow: Integer): TObject;
+var a: TTyGridCellAttr;
+begin
+  Result := nil;
+  if FAttrs.IsEmpty then Exit;      { 见 GetCellReadOnly:空存储别建临时键 }
+  a := FAttrs.Find(CellKey(ACol, ARow));
+  if a <> nil then Result := a.Obj;
+end;
+
+procedure TTyStringGrid.SetObjects(ACol, ARow: Integer; AValue: TObject);
+var
+  k: string;
+  a: TTyGridCellAttr;
+begin
+  if GetObjects(ACol, ARow) = AValue then Exit;   { 见 SetCellColor }
+  k := CellKey(ACol, ARow);
+  if AValue = nil then
+  begin
+    a := FAttrs.Find(k);
+    if a = nil then Exit;
+    a.Obj := nil;
+    FAttrs.DropIfDefault(k);        { 只剩空壳就还回去,别让稀疏存储攒垃圾 }
+  end
+  else
+  begin
+    { **EnsureQuiet,不是 Ensure。** 挂一个对象不是一次可撤销的改动
+      (见 Objects[] 属性的说明),走 Ensure 就会在撤销栈上压一条带着
+      宿主指针的记录。 }
+    a := FAttrs.EnsureQuiet(k);
+    if a = nil then Exit;
+    a.Obj := AValue;
+  end;
+  { 对象槽不参与任何绘制 —— **不要** Invalidate:给十万行逐行挂对象
+    就会变成十万次重画请求。 }
+end;
+
+{ ---- Cols[] / Rows[] ------------------------------------------------------- }
+
+function TTyStringGrid.ColsRowsView(var ACache: TStringList; AIsCol: Boolean;
+  AIndex: Integer): TStrings;
+var
+  i: Integer;
+  k: string;
+begin
+  if ACache = nil then
+  begin
+    ACache := TStringList.Create;
+    ACache.Sorted := True;          { 二分查找;这里**只查不遍历**,见字段处说明 }
+    ACache.Duplicates := dupIgnore;
+    ACache.OwnsObjects := True;
+  end;
+  k := IntToStr(AIndex);
+  i := ACache.IndexOf(k);
+  if i >= 0 then Exit(TStrings(ACache.Objects[i]));
+
+  Result := TTyGridStrings.Create(Self, AIsCol, AIndex);
+  i := ACache.AddObject(k, Result);
+  { dupIgnore 时重复键不会收下对象 —— 不管的话就是内存泄漏(与 Ensure 同坑)。 }
+  if (i < 0) or (ACache.Objects[i] <> Result) then
+  begin
+    Result.Free;
+    if i < 0 then Exit(nil);
+    Result := TStrings(ACache.Objects[i]);
+  end;
+end;
+
+function TTyStringGrid.GetCols(AIndex: Integer): TStrings;
+begin
+  Result := ColsRowsView(FColViews, True, AIndex);
+end;
+
+function TTyStringGrid.GetRows(AIndex: Integer): TStrings;
+begin
+  Result := ColsRowsView(FRowViews, False, AIndex);
+end;
+
+procedure TTyStringGrid.SetCols(AIndex: Integer; AValue: TStrings);
+begin
+  GetCols(AIndex).Assign(AValue);
+end;
+
+procedure TTyStringGrid.SetRows(AIndex: Integer; AValue: TStrings);
+begin
+  GetRows(AIndex).Assign(AValue);
 end;
 
 procedure TTyStringGrid.SetCellDisplay(ACol, ARow: Integer;
@@ -12111,14 +12365,14 @@ function TTyStringGrid.SaveLayoutToString: string;
 var
   i: Integer;
   c: TTyColumn;          { 别叫 col —— 与网格的 Col 属性撞名 }
-  cols, sorts: string;
+  colTxt, sorts: string; { 别叫 cols —— 同理,与 Cols[] 属性撞名 }
 begin
-  cols := '';
+  colTxt := '';
   for i := 0 to Header.Columns.Count - 1 do
   begin
     c := TTyColumn(Header.Columns.Items[i]);
-    if cols <> '' then cols := cols + ',';
-    cols := cols + Format('%d:%d:%d',
+    if colTxt <> '' then colTxt := colTxt + ',';
+    colTxt := colTxt + Format('%d:%d:%d',
       [c.Width, Ord(coVisible in c.Options), c.Position]);
   end;
 
@@ -12130,7 +12384,7 @@ begin
   end;
 
   Result := Format('%s|cols=%s|sort=%s|frozen=%d,%d,%d,%d',
-    [TyGridLayoutTag, cols, sorts,
+    [TyGridLayoutTag, colTxt, sorts,
      FFixedCols, EffectiveFixedColsRight, FFixedRows, FFixedRowsBottom]);
 end;
 
@@ -12933,7 +13187,7 @@ procedure TTyStringGrid.LoadFromCSVText(const AText: string; ADelimiter: Char;
   AAppend: Boolean; AMaxRows, AIgnoreRows: Integer; AUseTitles: Boolean;
   ASkipEmptyLines: Boolean);
 var
-  rows: TTyCsvRows;
+  csvRows: TTyCsvRows;   { 别叫 rows —— 与 Rows[] 属性撞名 }
   i, j, dataRow, first, titleRows, taken, base, keep: Integer;
 
   { 这一条是不是"空行":没有字段,或者所有字段都是空串。
@@ -12950,7 +13204,7 @@ var
 begin
   EndEdit(False);
   { 字符级解析:引号内的换行不断行(见 TyCsvParse 的说明)。 }
-  rows := TyCsvParse(AText, ADelimiter);
+  csvRows := TyCsvParse(AText, ADelimiter);
 
   { 空行剔除**在数到表头/AIgnoreRows 之前**做,否则"跳过前 2 条说明行"会把
     分隔用的空行数进去,而用户数的是看得见的那几条。
@@ -12960,34 +13214,34 @@ begin
   if ASkipEmptyLines then
   begin
     keep := 0;
-    for i := 0 to High(rows) do
-      if not RowIsBlank(rows[i]) then
+    for i := 0 to High(csvRows) do
+      if not RowIsBlank(csvRows[i]) then
       begin
-        rows[keep] := rows[i];
+        csvRows[keep] := csvRows[i];
         Inc(keep);
       end;
-    SetLength(rows, keep);
+    SetLength(csvRows, keep);
   end;
 
-  if Length(rows) = 0 then Exit;
+  if Length(csvRows) = 0 then Exit;
 
   { 第一行当表头:按它建列(列数不足就补)。
     追加模式下不动列标题 —— 追加的是数据,不是重新定义这张表。
 
-    列的**补建**照做,AUseTitles 与否都一样:没有表头行时 rows[0] 是数据,但它
+    列的**补建**照做,AUseTitles 与否都一样:没有表头行时 csvRows[0] 是数据,但它
     有几个字段仍然就是这张表有几列 —— 不补的话第一条记录会被截掉右半边。 }
-  while Header.Columns.Count < Length(rows[0]) do
+  while Header.Columns.Count < Length(csvRows[0]) do
     Header.Columns.Add;
   if AUseTitles and (not AAppend) then
-    for j := 0 to High(rows[0]) do
-      TTyColumn(Header.Columns.Items[j]).Text := rows[0][j];
+    for j := 0 to High(csvRows[0]) do
+      TTyColumn(Header.Columns.Items[j]).Text := csvRows[0][j];
 
   { 数据从第 1 行起(第 0 行是表头),再跳过 AIgnoreRows 条说明行。
     没有表头行时从第 0 行起 —— 不减这一行就会把第一条**记录**当标题吃掉。 }
   if AUseTitles then titleRows := 1 else titleRows := 0;
   first := titleRows + AIgnoreRows;
   if first < titleRows then first := titleRows;
-  taken := Length(rows) - first;
+  taken := Length(csvRows) - first;
   if taken < 0 then taken := 0;
   if (AMaxRows >= 0) and (taken > AMaxRows) then taken := AMaxRows;
 
@@ -13010,10 +13264,10 @@ begin
     for i := 0 to taken - 1 do
     begin
       dataRow := base + i;
-      for j := 0 to High(rows[first + i]) do
+      for j := 0 to High(csvRows[first + i]) do
       begin
         if j >= Header.Columns.Count then Break;
-        Cells[j, dataRow] := rows[first + i][j];
+        Cells[j, dataRow] := csvRows[first + i][j];
       end;
     end;
   finally
@@ -14630,6 +14884,155 @@ begin
       end;
     end;
   inherited RenderCells(P, M, AFrame);
+end;
+
+{ ---- TTyGridStrings -------------------------------------------------------- }
+
+constructor TTyGridStrings.Create(AGrid: TTyStringGrid; AIsCol: Boolean;
+  AIndex: Integer);
+begin
+  inherited Create;
+  FGrid := AGrid;
+  FIsCol := AIsCol;
+  FIndex := AIndex;
+  FAdded := 0;
+end;
+
+function TTyGridStrings.Locate(AIndex: Integer; out ACol, ARow: Integer): Boolean;
+begin
+  ACol := 0; ARow := 0;
+  if AIndex < 0 then Exit(False);
+  if AIndex >= GetCount then Exit(False);
+  if FIsCol then
+  begin
+    ACol := FIndex;                 { 列视图:视图下标就是行号 }
+    ARow := AIndex;
+  end
+  else
+  begin
+    ACol := AIndex;                 { 行视图:视图下标就是列号 }
+    ARow := FIndex;
+  end;
+  Result := True;
+end;
+
+function TTyGridStrings.GetCount: Integer;
+begin
+  { 长度**永远现问网格**,不缓存 —— 缓存下来的那一刻它就可能过期
+    (行数、列数都可以在视图被人拿着的时候变)。 }
+  if FIsCol then Result := FGrid.RowCount
+  else Result := FGrid.Header.Columns.Count;
+end;
+
+function TTyGridStrings.Get(AIndex: Integer): string;
+var c, r: Integer;
+begin
+  { 越界给空串而不是抛 —— 读一个不存在的槽在 LCL 那边也是空串
+    (grids.pas:10803),而 TStrings 的通用代码会去读 Count 之外的位置。 }
+  if Locate(AIndex, c, r) then Result := FGrid.Cells[c, r] else Result := '';
+end;
+
+function TTyGridStrings.GetObject(AIndex: Integer): TObject;
+var c, r: Integer;
+begin
+  if Locate(AIndex, c, r) then Result := FGrid.Objects[c, r] else Result := nil;
+end;
+
+procedure TTyGridStrings.Put(AIndex: Integer; const S: string);
+var c, r: Integer;
+begin
+  { 写越界要吭声:静静丢掉一次写入是最难查的那种 bug(LCL 同样抛,
+    grids.pas:10831)。 }
+  if not Locate(AIndex, c, r) then
+    raise EListError.CreateFmt(
+      'TTyGridStrings: index %d is outside the grid (count = %d)',
+      [AIndex, GetCount]);
+  FGrid.Cells[c, r] := S;
+end;
+
+procedure TTyGridStrings.PutObject(AIndex: Integer; AObject: TObject);
+var c, r: Integer;
+begin
+  if not Locate(AIndex, c, r) then
+    raise EListError.CreateFmt(
+      'TTyGridStrings: index %d is outside the grid (count = %d)',
+      [AIndex, GetCount]);
+  FGrid.Objects[c, r] := AObject;
+end;
+
+function TTyGridStrings.Add(const S: string): Integer;
+begin
+  { 往"下一个还没被 Add 写过的槽"里写,写满返回 -1 而**不**抛 ——
+    CommaText / DelimitedText 的赋值走的正是 Clear + Add,少了这条计数器
+    它们一个字都写不进去。逐字照 LCL 的 FAddedCount(grids.pas:10791)。 }
+  if (FAdded < 0) or (FAdded >= GetCount) then Exit(-1);
+  Put(FAdded, S);
+  Result := FAdded;
+  Inc(FAdded);
+end;
+
+procedure TTyGridStrings.Clear;
+var
+  i: Integer;
+begin
+  { 清的是**内容**,不是结构:长度不变(那是网格的行数/列数)。
+    整批一条撤销记录 —— 与 SetRowColor / ClearRowContents 同一条规矩。 }
+  FGrid.BeginUpdate;
+  try
+    for i := 0 to GetCount - 1 do
+    begin
+      Put(i, '');
+      PutObject(i, nil);
+    end;
+  finally
+    FGrid.EndUpdate;
+  end;
+  FAdded := 0;
+end;
+
+procedure TTyGridStrings.Delete(AIndex: Integer);
+begin
+  raise EListError.Create('TTyGridStrings: a row/column view has a fixed length; '
+    + 'use TTyStringGrid.DeleteRow / DeleteColumn to change the structure');
+end;
+
+procedure TTyGridStrings.Insert(AIndex: Integer; const S: string);
+begin
+  raise EListError.Create('TTyGridStrings: a row/column view has a fixed length; '
+    + 'use TTyStringGrid.InsertRow / InsertColumn to change the structure');
+end;
+
+procedure TTyGridStrings.Assign(ASource: TPersistent);
+var
+  i, n: Integer;
+begin
+  if ASource is TStrings then
+  begin
+    { **网格的尺寸说了算**,逐字照 LCL(grids.pas:10882):只覆盖
+      min(源长度, 视图长度) 项。源短了,尾巴上那几格**原样留着**;
+      源长了,多出来的项丢掉。
+
+      两条都容易吓一跳,但它们是移植代码依赖的行为:`Rows[r] := 短列表`
+      在 LCL 那边从来就不是"整行换掉"。真要换掉整行,先 Clear 再赋值。
+      更要紧的是**绝不在这里改行数/列数** —— 一次数据赋值偷偷做结构变更,
+      而结构变更在撤销栈里是另一种记录,两者混在一起撤不干净。 }
+    n := TStrings(ASource).Count;
+    if n > GetCount then n := GetCount;
+    FGrid.BeginUpdate;              { 整次赋值算一条撤销记录、只重画一次 }
+    BeginUpdate;
+    try
+      for i := 0 to n - 1 do
+      begin
+        Put(i, TStrings(ASource)[i]);
+        PutObject(i, TStrings(ASource).Objects[i]);
+      end;
+    finally
+      EndUpdate;
+      FGrid.EndUpdate;
+    end;
+    Exit;
+  end;
+  inherited Assign(ASource);
 end;
 
 initialization
