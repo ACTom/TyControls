@@ -164,4 +164,4 @@ Bar.SimpleText := '正在保存…';
 - **状态栏顶线而非边框：** 主题的 `border-color`/`border-width` 只作用于**顶部一条细线**，不绘制四周完整边框；面板之间的分隔线同样依赖 `border-color` 令牌存在才绘制。
 - **视觉全部由主题驱动：** 背景、文字颜色、字号、字重均取自 `.tycss` 令牌（见上表），不在控件代码中写死；控件也不暴露 `Color`/`Font`（族/字号）等与主题冲突的原生属性。
 - **右到左镜像（`BiDiMode := bdRightToLeft`）：** 面板从右往左铺，第一个面板顶到右边缘、最后一个顶到左边缘（“末个面板顶边”那条规则跟着换边），面板分隔线画在各面板的**前导**边；面板文本的 `Alignment` 按阅读序解释（`taLeftJustify` 落在格子右侧）。**尺寸手柄移到左下角**，交给操作系统的拖拽边码也从 `HTBOTTOMRIGHT` 换成 `HTBOTTOMLEFT`。
-- **手柄的绘制与命中现在共用一处：** 面板矩形一直只有 `TyStatusPanelRects` 一个出处（`PanelAtPos` 与绘制各调一次），但手柄从前是两份——绘制里的 `W - Scale(3) - k*Scale(4)` 与 `ResizeHitAt` 里的 `X >= W - grip` 各自声明了一遍“手柄在右下角”。现在两边都从 `TyStatusGripRect` 取那个角，只是要的方框大小不同（抓取区比三个点大一圈）。底边细条两端的 `HTBOTTOMLEFT`/`HTBOTTOMRIGHT` **不镜像**：那两个说的是真实的窗口角，窗口的左下角在哪种阅读方向下都还是左下角。见 [KNOWN_GAPS.md](../KNOWN_GAPS.md#bidirectional-right-to-left-text)。
+- **手柄的绘制与命中现在共用一处：** 面板矩形一直只有 `TyStatusPanelRects` 一个出处（`PanelAtPos` 与绘制各调一次），但手柄从前是两份——绘制里的 `W - Scale(3) - k*Scale(4)` 与 `ResizeHitAt` 里的 `X >= W - grip` 各自声明了一遍“手柄在右下角”。现在两边都从 `TyStatusGripRect` 取那个角，只是要的方框大小不同（抓取区比三个点大一圈）。底边细条两端的 `HTBOTTOMLEFT`/`HTBOTTOMRIGHT` **不镜像**：那两个说的是真实的窗口角，窗口的左下角在哪种阅读方向下都还是左下角。见 [rtl.md](../rtl.md)。

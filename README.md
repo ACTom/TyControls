@@ -394,6 +394,7 @@ Lazarus 里打开 `tycontrols_dt.lpk`(设计期包)→ **Use → Install**,IDE �
 | [themes.md](docs/themes.md) | 写自己的主题 |
 | [tycss-reference.md](docs/tycss-reference.md) | `.tycss` 语言权威参考:属性、函数、选择器、合并顺序、typeKey 目录 |
 | [events.md](docs/events.md) | 通用事件分层约定 |
+| [rtl.md](docs/rtl.md) | 双向文本与右到左布局:哪些控件已镜像、哪些还没有、怎么打开 |
 | [CHANGELOG.md](CHANGELOG.md) | 版本更新日志 |
 
 ---

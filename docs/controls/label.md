@@ -142,4 +142,4 @@ Lbl.Caption := Format('已处理 %d 条记录', [RecordCount]);
 - **无障碍：** 构造时声明 `AccessibleRole := larLabel`。自绘控件没有可供辅助技术回退的原生对等物，不声明的话读屏软件只会读到一个身份不明的自定义控件。
 - **单元名陷阱：** 单元名是 `tyControls.TyLabel`（含 `Ty` 前缀），与其他控件单元（如 `tyControls.Button`）的命名规律不同，容易拼错。
 - **双向文本（阿拉伯语 / 希伯来语）：词序与镜像是两件事，都做了，但触发条件不同。** 标题里只要含右到左文字，`TTyPainter.DrawText` 就会走 Unicode 双向算法排版，词序与阿拉伯字母连写形都是对的（这条路径只在检测到右到左码点时才走，拉丁与中日韩文本逐像素不变）。**这一条看的是"这句话怎么读"，与控件的 `BiDiMode` 无关**——右到左标题放在从左往右的窗体上，词序正确而位置不动。
-  布局镜像看的是另一个问题："这个窗体怎么读"，由 `BiDiMode`（`TControl` 的成员，可从代码设置）决定：`BiDiMode := bdRightToLeft` 时 `Alignment` 被当作**阅读序**解释，`taLeftJustify` 落在右边。`Alignment` 属性本身不会被改写，只是当帧生效的值翻了。全库哪些控件镜像、哪些还没有，见 [KNOWN_GAPS.md](../KNOWN_GAPS.md#bidirectional-right-to-left-text)。
+  布局镜像看的是另一个问题："这个窗体怎么读"，由 `BiDiMode`（`TControl` 的成员，可从代码设置）决定：`BiDiMode := bdRightToLeft` 时 `Alignment` 被当作**阅读序**解释，`taLeftJustify` 落在右边。`Alignment` 属性本身不会被改写，只是当帧生效的值翻了。全库哪些控件镜像、哪些还没有，见 [rtl.md](../rtl.md)。

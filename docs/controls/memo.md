@@ -248,7 +248,7 @@ end;
 >
 > 仍然**没有**做的是**镜像**那一半（与 `TTyEdit` 一致）：本控件自己的滚动条、边距、对齐都不翻转，
 > 选中换行符时那条延伸到行尾的提示带也仍画在行的右侧。守卫在 `tests/test.memo.bidi.pas`，详见
-> [KNOWN_GAPS.md](../KNOWN_GAPS.md#bidirectional-right-to-left-text)。
+> [rtl.md](../rtl.md)。
 > **无障碍：** 构造时声明 `AccessibleRole := larTextEditorMultiline`（`TTyEdit` 是 `larTextEditorSingleline`）。
 
 
@@ -263,7 +263,7 @@ end;
 > **v1.11 已交付：** 文本选区、区间剪贴板（`Ctrl/Cmd+A/C/X/V`）、以及按词 / `Shift` 扩展导航均已落地（见 §5），不再是缺口。
 > **v1.12 已交付：** 基于快照的**撤销 / 重做**（`Ctrl/Cmd+Z`、`Ctrl/Cmd+Y` / `Ctrl/Cmd+Shift+Z`）已落地（见 §11），不再是缺口。
 > **Batch ①（本批次）已交付：** `ReadOnly`、`MaxLength`（`published` 属性，见 §3）、运行期光标闪烁（约 530 ms，无头静态）均已落地，不再是缺口。
-> 以上剩余条目均为可在后续 Tier-2 增强层补齐的项；当前不实现它们是经过权衡的范围决策，而非缺陷。`TTyEdit` 的相关说明亦记录于 [docs/KNOWN_GAPS.md](../KNOWN_GAPS.md)。
+> 以上剩余条目均为可在后续 Tier-2 增强层补齐的项；当前不实现它们是经过权衡的范围决策，而非缺陷。`TTyEdit` 的相关说明亦记录于 [docs/rtl.md](../rtl.md)。
 
 ---
 

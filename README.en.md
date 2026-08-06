@@ -443,6 +443,7 @@ tabset / chart / gauge / hint / htmllabel / imageview / filedialog / shell) are 
 | [themes.md](docs/themes.md) | writing your own theme |
 | [tycss-reference.md](docs/tycss-reference.md) | the `.tycss` language reference: properties, functions, selectors, merge order, typeKey catalogue |
 | [events.md](docs/events.md) | the tiered common-event convention |
+| [rtl.md](docs/rtl.md) | bidirectional text and right-to-left layout: what mirrors, what does not, how to switch it on |
 | [CHANGELOG.en.md](CHANGELOG.en.md) | changelog |
 
 ---

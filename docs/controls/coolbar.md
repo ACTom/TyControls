@@ -141,4 +141,4 @@ end;
 - **DFM 序列化：** `GripperWidth`（`default 10`）/ `DefaultBandMinWidth`（`default 24`）声明了默认值，等于默认值时不写入 `.lfm`/`.dfm`。
 - **右到左镜像（`BiDiMode := bdRightToLeft`）：** 每条带的专属夹具移到该带的**右**侧，带从右往左铺，`Break` 换行规则不变。横向 `TyCoolBarPack` 与纵向 `TyCoolBarPackVertical` 都新增了 `ARightToLeft`（纵向另需 `ACrossExtent`，因为它的 `AAvail` 描述的是**列的行程**即高度，要镜像的是另一根轴）；纵向镜像只反转**列序**，夹具仍在各自带的正上方——上下不是阅读方向。
 - **拖动的符号跟着翻：** 带是朝着背离夹具的方向长的，镜像后夹具在右，所以**向左**拖才是变宽；纵向拖动换列同理改从右边缘计数。这类符号错误在任何静态截图上都看不出来——界面完全正确，一拖就朝反方向走。
-- **夹具的绘制与命中共用一处：** `PaintGrippers` 画 `BandRectFor` 返回的条，`BandAtPoint` 命中同一个 `BandRectFor`，所以不存在“画在一边、抓在另一边”。纯函数 `TyCoolGripperHit` 有意**不加**方向参数：控件的命中不走它，给它加一个只会多出一份没人用的“夹具在哪一侧”的说法。见 [KNOWN_GAPS.md](../KNOWN_GAPS.md#bidirectional-right-to-left-text)。
+- **夹具的绘制与命中共用一处：** `PaintGrippers` 画 `BandRectFor` 返回的条，`BandAtPoint` 命中同一个 `BandRectFor`，所以不存在“画在一边、抓在另一边”。纯函数 `TyCoolGripperHit` 有意**不加**方向参数：控件的命中不走它，给它加一个只会多出一份没人用的“夹具在哪一侧”的说法。见 [rtl.md](../rtl.md)。

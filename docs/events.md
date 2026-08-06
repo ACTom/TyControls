@@ -154,4 +154,4 @@ TyControls 的硬性原则是**视觉由主题（.tycss）拥有**：颜色、�
 
 - 各控件的事件 / 属性细节见 `docs/controls/<控件>.md` 的「事件」与「属性表」节。
 - 主题令牌与子部件 typeKey 见 [tycss-reference.md](tycss-reference.md)。
-- 已知缺口与延后项见 [KNOWN_GAPS.md](KNOWN_GAPS.md)。
+- 双向文本与右到左布局的现状见 [rtl.md](rtl.md)。

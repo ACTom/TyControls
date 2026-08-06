@@ -164,4 +164,4 @@ R4.Caption := '蓝色';
 4. **RadioButton 分组由 Parent 决定：** `TTyRadioButton.UncheckSiblings` 只遍历同一 `Parent` 下的兄弟控件。将两组单选按钮分别放在两个 `TTyGroupBox` 内即可实现独立互斥，无需额外的 GroupName 属性。
 5. **`AutoSize` 一直是 published 的：** 它由 `TTyCustomControl`（`tyControls.Base.pas`）发布，本库每个控件都有。曾有审计说"ty 分组框没法裹住内容因为 `AutoSize` 没发布"，那是事实错误：`TWinControl` 本来就会按子控件算容器的 preferred size，`AdjustClientRect` 也早就留出了标题带与内边距，整条路径一直是通的。这里记一笔，免得有人再"修"一次。
 6. **标题文字宽度用 Canvas 精确测量：** 渲染器使用临时 `TBitmap.Canvas` 测量文字宽度（正确处理 CJK 等可变宽字体），而非简单估算。
-- **右到左镜像：** `BiDiMode := bdRightToLeft` 时标题带移到顶边的另一端（`Alignment` 按阅读序解释）。**子控件的排布不镜像**——`Align`/`Anchors` 由 LCL 的对齐引擎负责，而它本身不认 BiDi，我们跟着不认，否则同一个窗体里 ty 容器与原生容器会朝相反方向排。见 [KNOWN_GAPS.md](../KNOWN_GAPS.md#bidirectional-right-to-left-text)。
+- **右到左镜像：** `BiDiMode := bdRightToLeft` 时标题带移到顶边的另一端（`Alignment` 按阅读序解释）。**子控件的排布不镜像**——`Align`/`Anchors` 由 LCL 的对齐引擎负责，而它本身不认 BiDi，我们跟着不认，否则同一个窗体里 ty 容器与原生容器会朝相反方向排。见 [rtl.md](../rtl.md)。

@@ -169,4 +169,4 @@ ShowMessage(Format('TB3 在第 %d 条 band', [Bar.BandIndexOf(TB3)]));
 - **实时拖拽换带：** band 间拖拽换带属于真机交互，当前版本的排布是纯几何的（`TyControlBarPack`）；`BandIndexOf` 提供只读的 band 归属查询，供拖拽逻辑将来更新分配。
 - **DFM 序列化：** `BandHeight`/`RowSize`/`GripperWidth`/`BandSpacing` 均声明了默认值，等于默认值时不写入 `.lfm`/`.dfm`。
 - **右到左镜像（`BiDiMode := bdRightToLeft`）：** 抓手列移到每条 band 的**右**端，子控件从抓手左侧起往左排，放不下时照样换到下一条 band——换行判据一并翻转（“越过右端”变成“越过左端”）。实现方式是把左到右的排布结果整体沿垂直中线反射（LCL 的 `BidiFlipRect`），因此**反射一条无缝的行仍然无缝**：手写 `contentRight - x - w` 正是差一像素的缝隙的来源。`TyControlBarPack` 新增可选参数 `ARightToLeft`，缺省 `False`，左到右的输出逐字节不变。
-- **改 `BiDiMode` 会立即重排：** LCL 自带的 `CM_BIDIMODECHANGED` 只 Invalidate + AdjustSize，两者都不会重跑一次用 `SetBounds` 做的排布，所以本控件自己接了这个消息并直接跑打包（走 `Realign` 的话经 `AdjustSize`，对尚未显示的窗体会被 LCL 延迟，抓手换了边而子控件原地不动）。**band 内子控件自身的 `Align`/`Anchors` 不镜像**，理由同 [`TTyPanel`](panel.md)。见 [KNOWN_GAPS.md](../KNOWN_GAPS.md#bidirectional-right-to-left-text)。
+- **改 `BiDiMode` 会立即重排：** LCL 自带的 `CM_BIDIMODECHANGED` 只 Invalidate + AdjustSize，两者都不会重跑一次用 `SetBounds` 做的排布，所以本控件自己接了这个消息并直接跑打包（走 `Realign` 的话经 `AdjustSize`，对尚未显示的窗体会被 LCL 延迟，抓手换了边而子控件原地不动）。**band 内子控件自身的 `Align`/`Anchors` 不镜像**，理由同 [`TTyPanel`](panel.md)。见 [rtl.md](../rtl.md)。

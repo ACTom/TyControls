@@ -339,4 +339,4 @@ end;
 
 绘制与命中共用 `TyScrollThumbRect` 同一次调用，翻转本身只有 `TyScrollMirrorOffset` 一处，绘制与拖拽反算都经过它——所以"只翻了一半"在结构上不可能。守卫在 `tests/test.rtl.pas`（`TRtlScrollBarGeometryTest` / `TRtlScrollBarControlTest`）。
 
-`BidiMode` / `ParentBidiMode` 本身仍然不 published（全库一致，见 `docs/KNOWN_GAPS.md`）。
+`BidiMode` / `ParentBidiMode` 本身仍然不 published（全库一致，见 `docs/rtl.md`）。

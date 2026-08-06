@@ -218,4 +218,4 @@ end;
 - **标题占满宽度时细线会消失：** 当标题宽度加间隙后剩余空间不足 `AMinRule`（默认 4 逻辑像素），对应细线段整段丢弃，只显示文字——这是有意为之，避免残留 1 像素小凸起。
 - **透明叠加、不画背景：** 控件不填充主题背景，直接叠在宿主表面上；确保它所在的父背景已铺好（如放在 `TTyPanel` 内会显出面板底色）。仍然尊重 `opacity`，禁用时整体变淡。
 - **默认尺寸：** 构造时 `Width=150, Height=24`；通常用 `SetBounds` 或 `Align := alTop` 调整为实际所需宽度。高度决定细线垂直居中的位置。
-- **右到左镜像：`LeftIndent` 会改变含义，名字不变。** 宿主 `BiDiMode := bdRightToLeft` 时，标题与细线整体左右翻转：`Alignment` 按阅读序解释（`taLeftJustify` = 标题贴右边），`LeftIndent` 也从**右**边缘往里数。属性名保持 `LeftIndent` 是刻意的——改名会让每一份写了它的 `.lfm` 失效，代价大于收益，因此在文档里说明而不在代码里改（见 [KNOWN_GAPS.md](../KNOWN_GAPS.md#bidirectional-right-to-left-text)）。
+- **右到左镜像：`LeftIndent` 会改变含义，名字不变。** 宿主 `BiDiMode := bdRightToLeft` 时，标题与细线整体左右翻转：`Alignment` 按阅读序解释（`taLeftJustify` = 标题贴右边），`LeftIndent` 也从**右**边缘往里数。属性名保持 `LeftIndent` 是刻意的——改名会让每一份写了它的 `.lfm` 失效，代价大于收益，因此在文档里说明而不在代码里改（见 [rtl.md](../rtl.md)）。

@@ -265,4 +265,4 @@ end;
 
 ### 后代的边界
 
-`RtlRowLayout` 是**按类**回答的（`protected virtual`，默认 `IsRightToLeft`）：本控件有十五个后代，各自在 `PaintItemContent` 里切自己的槽位。凡是自己**再算一遍 x**（而不是从传进来的行矩形里切）的后代，必须覆写它返回 `False`，否则基类翻了行、它的命中没翻。`TTyValueListEditor` 就是这样一个，已经覆写；组合框家族的弹出列表没有 x 命中，只是内部槽位还没镜像——那是外观问题，不会点错。详见 `docs/KNOWN_GAPS.md`。
+`RtlRowLayout` 是**按类**回答的（`protected virtual`，默认 `IsRightToLeft`）：本控件有十五个后代，各自在 `PaintItemContent` 里切自己的槽位。凡是自己**再算一遍 x**（而不是从传进来的行矩形里切）的后代，必须覆写它返回 `False`，否则基类翻了行、它的命中没翻。`TTyValueListEditor` 就是这样一个，已经覆写；组合框家族的弹出列表没有 x 命中，只是内部槽位还没镜像——那是外观问题，不会点错。详见 `docs/rtl.md`。

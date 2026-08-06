@@ -70,4 +70,4 @@ CL.Selected := clNavy;
 
 可以安全镜像，是因为本控件**只按 Y 命中**（`TTyListBox.RowAtY`），没有任何读 x 的点击目标会被落在旧位置上。
 
-同一个 `TyDrawColorRow` 也被 `TTyColorBox` 的弹出列表和 `TTyColorComboBox` 用着，它们**还没有**传这个参数（参数默认 `False`，所以它们一个像素都没变）。见 `docs/KNOWN_GAPS.md`。
+同一个 `TyDrawColorRow` 也被 `TTyColorBox` 的弹出列表和 `TTyColorComboBox` 用着，它们**还没有**传这个参数（参数默认 `False`，所以它们一个像素都没变）。见 `docs/rtl.md`。

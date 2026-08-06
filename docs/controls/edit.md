@@ -345,4 +345,4 @@ end;
 
   **对左到右文本零代价**：判定走 `TyTextHasRTL` 字节扫描，且**每次文本变化只问一次**，之后每次光标查询只多一个布尔判断（实测 ≤ 0.2 µs，对比光标查询本身约 23 µs，落在噪声里）；它挡住的那份排版建一次约 3.3 ms。掩码（`PasswordChar`）字段按**显示串**判定，所以密码框永远走不到双向路径。
 
-  由本控件派生的 `TTyNumericEdit` / `TTyCurrencyEdit` / `TTyCalcEdit` / `TTyTrackEdit` / `TTyMaskEdit` / `TTyURLEdit` / `TTyComboEdit` / `TTyValueEdit` 都不覆写光标与绘制路径，因此一并生效。`TTyMemo` 尚未跟进，仍是逻辑序前缀和。详见 [KNOWN_GAPS.md](../KNOWN_GAPS.md#bidirectional-right-to-left-text)。
+  由本控件派生的 `TTyNumericEdit` / `TTyCurrencyEdit` / `TTyCalcEdit` / `TTyTrackEdit` / `TTyMaskEdit` / `TTyURLEdit` / `TTyComboEdit` / `TTyValueEdit` 都不覆写光标与绘制路径，因此一并生效。`TTyMemo` 尚未跟进，仍是逻辑序前缀和。详见 [rtl.md](../rtl.md)。

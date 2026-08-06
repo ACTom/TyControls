@@ -99,7 +99,7 @@ begin
     copy of its geometry here. Safe to mirror because this control hit-tests rows on Y only
     (TTyListBox.RowAtY) -- there is no x-axis click target that could be left behind on the
     old side, and a swatch is not one. Its sibling TTyColorBox's popup list draws through the
-    same function and does NOT pass the flag yet; see docs/KNOWN_GAPS.md. }
+    same function and does NOT pass the flag yet; see docs/rtl.md. }
   TyDrawColorRow(P, ARowRect, SwatchColorFor(TyColorOfItem(Items, AIndex)), Items[AIndex],
     AStyle, ResolveFontSize(AStyle), EffectiveRectWidth, EffectiveRectOffset, RtlRowLayout);
 end;

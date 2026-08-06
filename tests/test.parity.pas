@@ -1063,7 +1063,7 @@ end;
       out of one pure function -- TyHeaderSectionRects -- so the strip, the section a click
       lands in and the boundary a resize drag grabs cannot disagree by construction. That
       shape is the target the column model has to reach before a grid or a list view can
-      mirror; see docs/KNOWN_GAPS.md for why TTyColumns is not there yet.
+      mirror; see docs/rtl.md for why TTyColumns is not there yet.
 
   Note that (4) does NOT carry to the list-view and tree-view column headers even though they
   are the same SHAPE. They run on tyControls.Columns.pas, whose UpdatePositions writes a

@@ -2894,7 +2894,7 @@ begin
 end;
 
 { TabPosition has no left-edge or right-edge tabs -- the band is always the top one
-  (docs/KNOWN_GAPS.md records the gap) -- so the page body's horizontal edges have nothing
+  (docs/rtl.md records the gap) -- so the page body's horizontal edges have nothing
   to mirror, and AdjustClientRect keeps insetting only the top. Pinned so that nobody builds
   a mirroring branch for a feature that does not exist (§6.3.7), and so that the day left/
   right tabs DO arrive, this test is the thing that has to be rewritten on purpose. }

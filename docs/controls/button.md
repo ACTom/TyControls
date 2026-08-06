@@ -272,4 +272,4 @@ BadgeBtn.BadgePosition := bpBottomRight;
 //   begin AVisible := AValue >= 3; end;
 //   BadgeBtn.OnBadgeDisplay := @OnBadge;
 ```
-- **右到左镜像：** `Alignment` 默认 `taCenter`，而居中在镜像下是不动点——所以**绝大多数按钮在右到左窗体上逐像素不变**，只有显式设了左/右对齐的才移动。数字徽标的 `BadgePosition` 会水平翻转：默认的 `bpBottomRight`（尾角）在镜像下是**左下角**。见 [KNOWN_GAPS.md](../KNOWN_GAPS.md#bidirectional-right-to-left-text)。
+- **右到左镜像：** `Alignment` 默认 `taCenter`，而居中在镜像下是不动点——所以**绝大多数按钮在右到左窗体上逐像素不变**，只有显式设了左/右对齐的才移动。数字徽标的 `BadgePosition` 会水平翻转：默认的 `bpBottomRight`（尾角）在镜像下是**左下角**。见 [rtl.md](../rtl.md)。

@@ -147,4 +147,4 @@ ChkRemember.Enabled := False;
 - **opacity / shadow 现已生效（v1.1）：** `DrawFrame` 路径现在同样应用于 `TTyCheckBox` 的外层绘制；`opacity` 和 `shadow` 属性可在主题中正常使用（例如 `TyCheckBox:disabled { opacity: 0.5; }`）。
 - **控件整体无背景：** 主题中的 `background` 和 `border` 只作用于小方块本身，控件整体（Caption 文字区域）保持透明，不绘制整体背景框。
 - **DFM 序列化：** `Checked` 声明了 `default False`，因此值为 `False` 时不写入 `.lfm`/`.dfm` 文件；值为 `True` 时才写入。
-- **右到左镜像：`Alignment` 被覆盖，不是被忽略。** 宿主 `BiDiMode := bdRightToLeft` 时指示框移到标题**右侧**，标题跟着贴过去（仍然紧挨指示框，不会跑到另一头）。注意这是**覆盖**：本来显式设成 `taLeftJustify`（指示框在右）的复选框，镜像后指示框在**左**——开关的两端都翻。`Alignment` 属性本身不会被改写，只是当帧生效的值翻了；LCL 自己也是这么做的（`checklst.pas:199`）。见 [KNOWN_GAPS.md](../KNOWN_GAPS.md#bidirectional-right-to-left-text)。
+- **右到左镜像：`Alignment` 被覆盖，不是被忽略。** 宿主 `BiDiMode := bdRightToLeft` 时指示框移到标题**右侧**，标题跟着贴过去（仍然紧挨指示框，不会跑到另一头）。注意这是**覆盖**：本来显式设成 `taLeftJustify`（指示框在右）的复选框，镜像后指示框在**左**——开关的两端都翻。`Alignment` 属性本身不会被改写，只是当帧生效的值翻了；LCL 自己也是这么做的（`checklst.pas:199`）。见 [rtl.md](../rtl.md)。

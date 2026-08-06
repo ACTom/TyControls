@@ -161,7 +161,7 @@ function TyHeaderSortTriangle(const ACellRect: TRect;
 **最后**一节,而不是第 0 节。
 
 `BiDiMode` 目前**没有 published**(不在对象查看器里),要用请在代码里赋值;
-原因见 `docs/KNOWN_GAPS.md`:整库尚未全部镜像,提前 published 会给出一个在网格、
+原因见 `docs/rtl.md`:整库尚未全部镜像,提前 published 会给出一个在网格、
 树、列表上无效的属性。
 
 > **实现上只有一处算 x。** `TyHeaderSectionRects` 是唯一的平铺来源,绘制(`RenderTo`)、

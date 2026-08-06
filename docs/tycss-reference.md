@@ -306,7 +306,7 @@ TyButton { background: #00FF00; }   /* 只覆盖 background;color 仍是 #111111
 
 引擎可识别的属性共 23 个(另有 `background-color` 作为 `background` 的别名),其余属性名一律被静默忽略。
 本节展开其中通用的 16 个。另外 7 个是窗框 / 材质专用,本手册尚未逐条展开
-(`render-style` 见 §9 第 17 条,`window-shadow` 见 [KNOWN_GAPS.md](KNOWN_GAPS.md);
+(`render-style` 见 §9 第 17 条;
 其余 `background-size`、`background-blur`、`glass-blur`、`glass-tint`、
 `background-under-titlebar` 目前只有源码 `TyApplyDeclaration` 为准)。
 所有长度均为**逻辑像素**(96 DPI 基准),绘制时按控件实际 DPI 缩放。
@@ -1219,7 +1219,7 @@ TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth
 
 ## 9. 限制汇总(v1)
 
-引擎层限制(均已在上文相应小节展开,另见 [KNOWN_GAPS.md](KNOWN_GAPS.md)):
+引擎层限制(均已在上文相应小节展开):
 
 1. **无组合选择器**:不支持后代/子/通配/多变体/纯类/纯状态选择器(§4.2)。
 2. **重复选择器后写者胜**,且是**逐属性**合并(§4.4)——与浏览器一致。
