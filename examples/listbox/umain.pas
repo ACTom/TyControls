@@ -46,6 +46,7 @@ type
     BtnSelAll: TTyButton;
     BtnClear: TTyButton;
     BtnScroll: TTyButton;      // TopIndex: programmatic scrolling
+    BtnWide: TTyButton;        // ScrollWidth: the horizontal bar
     BtnAlternate: TTyButton;   // Selected[]: programmatic per-item selection
     LblHint: TTyLabel;
     LblStatus: TTyLabel;
@@ -57,6 +58,7 @@ type
     procedure DoSelectAll(Sender: TObject);
     procedure DoClear(Sender: TObject);
     procedure DoScroll(Sender: TObject);
+    procedure DoWide(Sender: TObject);
     procedure DoAlternate(Sender: TObject);
     procedure ListBoxDblClick(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
@@ -197,6 +199,23 @@ begin
     control clamps the value to MaxTopIndex (Items.Count - VisibleRows), so it can never
     scroll past the end, and it syncs the built-in scrollbar to the new position. }
   ListBox.TopIndex := 20;
+end;
+
+procedure TMainForm.DoWide(Sender: TObject);
+begin
+  { ScrollWidth is the CONTENT width in logical px -- the number you set, not one measured
+    from the items (LCL's semantics). Exceed the box and a horizontal bar appears along the
+    bottom; the row area keeps its own width and the rows slide under it.
+
+    Worth demonstrating rather than only unit-testing: where that bar actually ENDS UP is
+    the LCL align engine's decision, and a headless test never runs the align engine at
+    all (an unshown form leaves the whole tree unaligned). This button is the only place
+    the placement gets checked by anyone. }
+  if ListBox.ScrollWidth = 0 then
+    ListBox.ScrollWidth := 700
+  else
+    ListBox.ScrollWidth := 0;
+  UpdateStatus;
 end;
 
 procedure TMainForm.DoAlternate(Sender: TObject);

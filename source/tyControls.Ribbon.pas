@@ -45,7 +45,7 @@ type
     FMinimized: Boolean;
     FExpandedHeight: Integer;               // Height to restore when un-minimized
     FShowFileTab: Boolean;
-    FFileTabCaption: string;
+    FFileTabCaption: TCaption;
     FFileTabWidth: Integer;                 // logical px
     FFileTabWidthExplicit: Boolean;         // True once a host/.lfm pins FileTabWidth; else follow --ribbon-file-tab-width
     FBackstage: TTyRibbonBackstage;
@@ -68,7 +68,7 @@ type
     procedure DrawKeyTips;
     procedure SetMinimized(AValue: Boolean);
     procedure SetShowFileTab(AValue: Boolean);
-    procedure SetFileTabCaption(const AValue: string);
+    procedure SetFileTabCaption(const AValue: TCaption);
     procedure SetFileTabWidth(AValue: Integer);
     function  GetFileTabWidth: Integer;
     procedure SetBackstage(AValue: TTyRibbonBackstage);
@@ -160,7 +160,19 @@ type
     { A modern-Office "File" tab at the LEFT of the tab strip (accent-styled). Clicking
       it opens Backstage (if assigned) and/or fires OnFileTab — it does NOT switch pages. }
     property FileTab: Boolean read FShowFileTab write SetShowFileTab default False;
-    property FileTabCaption: string read FFileTabCaption write SetFileTabCaption;
+    { Typed TCaption, not string, and that is load-bearing rather than cosmetic: LCL's
+      form translator only walks a property whose type is exactly TTranslateString (which
+      TCaption is) -- lcltranslator.pas GetIdentifierPath bails on anything else. Declared
+      as a plain string, a caption set in the designer was UNREACHABLE by the translator,
+      which is why the File tab was the one part of examples/ribbon that stayed English
+      under every locale.
+
+      The default is the English literal 'File' and NOT a resourcestring, for the same
+      reason TTyDateTimePicker.TextForNullDate is a literal: a property default that
+      changes with the locale makes the .lfm a form writes depend on the language it was
+      saved under. A localised File tab comes from the designer (where the translator now
+      picks it up automatically) or from assigning a resourcestring in code. }
+    property FileTabCaption: TCaption read FFileTabCaption write SetFileTabCaption;
     { Left File-tab width in logical px. Left unset it follows the theme's
       --ribbon-file-tab-width token (density-aware); set it explicitly and that value wins
       and is streamed. Streamed only when explicitly set (stored FFileTabWidthExplicit). }
@@ -347,7 +359,7 @@ begin
   Height := ActiveController.Metric('--ribbon-height', TyRibbonDefaultHeight);
   FExpandedHeight := Height;   // restored height if Minimized is set before any resize
   FShowFileTab := False;
-  FFileTabCaption := '文件';
+  FFileTabCaption := 'File';
   FFileTabWidth := 52;
   FFileTabWidthExplicit := False;   // follow --ribbon-file-tab-width until a host pins it
   FShowCollapseBtn := True;
@@ -661,7 +673,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyRibbon.SetFileTabCaption(const AValue: string);
+procedure TTyRibbon.SetFileTabCaption(const AValue: TCaption);
 begin
   if FFileTabCaption = AValue then Exit;
   FFileTabCaption := AValue;

@@ -114,6 +114,15 @@ object MainForm: TMainForm
       Caption = 'Select every 2nd'
       OnClick = DoAlternate
     end
+    object BtnWide: TTyButton
+      Left = 276
+      Height = 30
+      Top = 370
+      Width = 132
+      Caption = 'Wide content on/off'
+      AutoSize = True
+      OnClick = DoWide
+    end
     object LblHint: TTyLabel
       Left = 16
       Height = 60

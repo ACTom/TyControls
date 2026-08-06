@@ -530,6 +530,10 @@ msgstr ""
 msgid "slice() needs 4 values: %s"
 msgstr ""
 
+#: tycontrols.strconsts.rstoolbarmorecommands
+msgid "More commands"
+msgstr ""
+
 #: tycontrols.strconsts.rstyfilesizebytes
 msgid "B"
 msgstr ""

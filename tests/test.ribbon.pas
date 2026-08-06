@@ -277,7 +277,14 @@ begin
   Rib := TTyRibbon.Create(nil);
   try
     AssertFalse('File tab off by default', Rib.FileTab);
-    AssertEquals('default caption', '文件', Rib.FileTabCaption);
+    { English, and a LITERAL rather than a resourcestring. It used to be a hardcoded
+      Chinese caption, which an English application had no way to avoid. It is not a
+      resourcestring for the same reason TTyDateTimePicker.TextForNullDate is not: a
+      property default that follows the locale makes the .lfm a form writes depend on the
+      language it was saved under. A localised File tab comes from the designer -- the
+      property is TCaption now, so LCL's form translator walks it -- or from assigning a
+      resourcestring in code. }
+    AssertEquals('default caption', 'File', Rib.FileTabCaption);
     AssertEquals('default width', 52, Rib.FileTabWidth);
     Rib.FileTab := True;
     Rib.FileTabCaption := 'File';

@@ -250,11 +250,13 @@ resourcestring
   rsPickAccent        = 'Choose accent colour';
   rsTxtFilter         = 'Text file (*.txt)|*.txt|All files (*.*)|*.*';
   rsAccentFollow      = 'Follow theme';
-  { The File tab is set here, not in umain.lfm, because TTyRibbon.FileTabCaption is declared
-    `string` rather than TTranslateString -- LCL's LFM translator only rewrites properties of
-    that exact type, so an .lfm-authored FileTabCaption is unreachable and stayed English
-    while every tab beside it translated. See the report: the property's declared type is a
-    library-side gap, and this line is the example's own way around it. }
+  { The File tab is set here rather than left to the .lfm. It used to be the only way:
+    TTyRibbon.FileTabCaption was declared `string`, and LCL's LFM translator only rewrites
+    properties whose type is exactly TTranslateString, so an .lfm-authored caption was
+    unreachable and stayed English while every tab beside it translated. The property is
+    TCaption now, so the .lfm route works too -- this line stays because assigning a
+    resourcestring is the explicit way to say "this string is translated", and it is what
+    an application that builds its ribbon in code has to do anyway. }
   rsFileTab           = 'File';
   rsTipPictureGroup   = 'This group has ShowCaption = False'#10 +
                         'No caption band, no dialog launcher - the content fills the whole group height.';

@@ -207,6 +207,12 @@ resourcestring
     由 test.i18n 的 TestEveryStrConstsResourcestringIsInThePot 钉住。 }
   rsGridCheckedWord = 'yes';
 
+  { --- TTyToolBarEx ----------------------------------------------------------
+    Tooltip on the overflow chevron that appears when the bar is too narrow for all
+    its buttons. It was a hardcoded Chinese literal in library code, so an English
+    application showed a Chinese tooltip and no catalogue could reach it. }
+  rsToolBarMoreCommands = 'More commands';
+
   { --- TTyUpDown -------------------------------------------------------------
     Raised when a second up-down is pointed at a control another one already drives.
     Two steppers writing one field is not a configuration, it is a fight, and the

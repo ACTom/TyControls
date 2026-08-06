@@ -23,7 +23,7 @@ interface
 
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType, Forms,
-  tyControls.Base, tyControls.Button,
+  tyControls.Base, tyControls.Button, tyControls.StrConsts,
   tyControls.PopupSurface, tyControls.ToolBar;
 
 type
@@ -157,7 +157,7 @@ begin
   // is a tab stop by default; the bar's own speed buttons are not either.)
   FMoreBtn.TabStop := False;
   FMoreBtn.Caption := '»';
-  FMoreBtn.Hint := '更多命令';
+  FMoreBtn.Hint := rsToolBarMoreCommands;
   FMoreBtn.ShowHint := True;
   FMoreBtn.StyleClass := 'ghost';            // match the flat toolbar look
   FMoreBtn.OnClick := @MoreClick;

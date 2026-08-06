@@ -563,6 +563,10 @@ msgstr "搜索"
 msgid "(Select all)"
 msgstr "(全选)"
 
+#: tycontrols.strconsts.rstoolbarmorecommands
+msgid "More commands"
+msgstr "更多命令"
+
 #: tycontrols.strconsts.rstyupdownalreadyassociated
 #, object-pascal-format
 msgid "\"%s\" is already associated with the up-down \"%s\"."
