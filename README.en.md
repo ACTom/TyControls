@@ -467,7 +467,11 @@ Application.CreateForm(TMainForm, MainForm);
 ```
 
 Deploy `languages/tycontrols.<lang>.po` next to your own `.po` in the `languages/` folder beside
-the executable.
+the executable. **An English deployment should ship `tycontrols.en.po` too** — it is nearly
+empty, but its language sentinel is what switches the calendar's and date picker's month and
+weekday names from "follow the OS locale" to "follow the app language"; without it those two
+controls keep showing OS-locale names under `--lang=en` (mechanism:
+[docs/controls/calendar.md](docs/controls/calendar.md) §8).
 
 > **The file's base name must not contain a dot.** The third argument must be `'tycontrols'` —
 > LCL's `FindLocaleFileName` calls `ChangeFileExt` on it, so `'tycontrols.strconsts'` would have

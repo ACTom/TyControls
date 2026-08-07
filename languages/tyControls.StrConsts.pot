@@ -534,6 +534,10 @@ msgstr ""
 msgid "More commands"
 msgstr ""
 
+#: tycontrols.strconsts.rstydatetimenameslang
+msgid "__locale__"
+msgstr ""
+
 #: tycontrols.strconsts.rstyfilesizebytes
 msgid "B"
 msgstr ""
@@ -560,6 +564,160 @@ msgid ""
 "The graphic control \"%s\" was placed directly on the form.\n"
 "Windowless (graphic) controls paint onto the form itself and will be HIDDEN behind the \n"
 "content area. Move it into the Surface content container so it stays visible."
+msgstr ""
+
+#: tycontrols.strconsts.rstylongday1
+msgid "Sunday"
+msgstr ""
+
+#: tycontrols.strconsts.rstylongday2
+msgid "Monday"
+msgstr ""
+
+#: tycontrols.strconsts.rstylongday3
+msgid "Tuesday"
+msgstr ""
+
+#: tycontrols.strconsts.rstylongday4
+msgid "Wednesday"
+msgstr ""
+
+#: tycontrols.strconsts.rstylongday5
+msgid "Thursday"
+msgstr ""
+
+#: tycontrols.strconsts.rstylongday6
+msgid "Friday"
+msgstr ""
+
+#: tycontrols.strconsts.rstylongday7
+msgid "Saturday"
+msgstr ""
+
+#: tycontrols.strconsts.rstylongmonth1
+msgid "January"
+msgstr ""
+
+#: tycontrols.strconsts.rstylongmonth10
+msgid "October"
+msgstr ""
+
+#: tycontrols.strconsts.rstylongmonth11
+msgid "November"
+msgstr ""
+
+#: tycontrols.strconsts.rstylongmonth12
+msgid "December"
+msgstr ""
+
+#: tycontrols.strconsts.rstylongmonth2
+msgid "February"
+msgstr ""
+
+#: tycontrols.strconsts.rstylongmonth3
+msgid "March"
+msgstr ""
+
+#: tycontrols.strconsts.rstylongmonth4
+msgid "April"
+msgstr ""
+
+#: tycontrols.strconsts.rstylongmonth5
+msgctxt "tycontrols.strconsts.rstylongmonth5"
+msgid "May"
+msgstr ""
+
+#: tycontrols.strconsts.rstylongmonth6
+msgid "June"
+msgstr ""
+
+#: tycontrols.strconsts.rstylongmonth7
+msgid "July"
+msgstr ""
+
+#: tycontrols.strconsts.rstylongmonth8
+msgid "August"
+msgstr ""
+
+#: tycontrols.strconsts.rstylongmonth9
+msgid "September"
+msgstr ""
+
+#: tycontrols.strconsts.rstyshortday1
+msgid "Sun"
+msgstr ""
+
+#: tycontrols.strconsts.rstyshortday2
+msgid "Mon"
+msgstr ""
+
+#: tycontrols.strconsts.rstyshortday3
+msgid "Tue"
+msgstr ""
+
+#: tycontrols.strconsts.rstyshortday4
+msgid "Wed"
+msgstr ""
+
+#: tycontrols.strconsts.rstyshortday5
+msgid "Thu"
+msgstr ""
+
+#: tycontrols.strconsts.rstyshortday6
+msgid "Fri"
+msgstr ""
+
+#: tycontrols.strconsts.rstyshortday7
+msgid "Sat"
+msgstr ""
+
+#: tycontrols.strconsts.rstyshortmonth1
+msgid "Jan"
+msgstr ""
+
+#: tycontrols.strconsts.rstyshortmonth10
+msgid "Oct"
+msgstr ""
+
+#: tycontrols.strconsts.rstyshortmonth11
+msgid "Nov"
+msgstr ""
+
+#: tycontrols.strconsts.rstyshortmonth12
+msgid "Dec"
+msgstr ""
+
+#: tycontrols.strconsts.rstyshortmonth2
+msgid "Feb"
+msgstr ""
+
+#: tycontrols.strconsts.rstyshortmonth3
+msgid "Mar"
+msgstr ""
+
+#: tycontrols.strconsts.rstyshortmonth4
+msgid "Apr"
+msgstr ""
+
+#: tycontrols.strconsts.rstyshortmonth5
+msgctxt "tycontrols.strconsts.rstyshortmonth5"
+msgid "May"
+msgstr ""
+
+#: tycontrols.strconsts.rstyshortmonth6
+msgid "Jun"
+msgstr ""
+
+#: tycontrols.strconsts.rstyshortmonth7
+msgid "Jul"
+msgstr ""
+
+#: tycontrols.strconsts.rstyshortmonth8
+msgid "Aug"
+msgstr ""
+
+#: tycontrols.strconsts.rstyshortmonth9
+msgid "Sep"
 msgstr ""
 
 #: tycontrols.strconsts.rstysurfacedeleted

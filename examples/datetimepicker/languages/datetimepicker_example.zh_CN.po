@@ -40,8 +40,8 @@ msgid "Read-only:"
 msgstr "只读："
 
 #: tmainform.lblreadonlyhint.caption
-msgid "ReadOnly: typing and Up/Down are ignored, the calendar still opens"
-msgstr "ReadOnly：键入与 Up/Down 无效，日历仍可打开"
+msgid "ReadOnly: typing and Up/Down are ignored, the calendar still opens. The 'mmmm' name follows the app language"
+msgstr "ReadOnly：键入与 Up/Down 无效，日历仍可打开。'mmmm' 月份名跟随应用语言"
 
 #: tmainform.lblrange.caption
 msgid "Limited range:"

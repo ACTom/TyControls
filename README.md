@@ -416,6 +416,9 @@ Application.CreateForm(TMainForm, MainForm);
 ```
 
 把 `languages/tycontrols.<lang>.po` 与你自己的 `.po` 一起放进可执行文件旁的 `languages/` 目录。
+**英文部署也要带上 `tycontrols.en.po`** —— 它几乎是空的,但里面的语言哨兵是日历/日期框
+把月份、星期名从"跟随操作系统区域"切到"跟随应用语言"的开关;不带它,`--lang=en` 下这两个控件
+仍显示 OS 区域的名字(机制详见 [docs/controls/calendar.md](docs/controls/calendar.md) §8)。
 
 > **文件主名不能带点号。** 第三个参数必须是 `'tycontrols'` —— LCL 的 `FindLocaleFileName` 会对它调 `ChangeFileExt`,传 `'tycontrols.strconsts'` 会把 `.strconsts` 当扩展名剥掉。第四个参数才传真实的带点单元名 `tyControls.StrConsts`。
 >

@@ -406,3 +406,165 @@ msgstr "关于"
 #: tycontrols.strconsts.rsdlgbasiccolors
 msgid "Basic colors"
 msgstr "基本颜色"
+
+# The entry below is a LOAD MARKER, not prose: its being translated at all is
+# how the library knows a catalogue was deliberately loaded, which switches
+# TTyCalendar / TTyDateTimePicker month & weekday names from the OS locale to
+# this catalogue's language (tyControls.Calendar.TyDateTimeNames). Set it to
+# this catalogue's language code; never copy '__locale__' through. Leaving it
+# untranslated is the deliberate opt-out that keeps OS-locale names.
+#: tycontrols.strconsts.rstydatetimenameslang
+msgid "__locale__"
+msgstr "zh_CN"
+
+#: tycontrols.strconsts.rstylongmonth1
+msgid "January"
+msgstr "一月"
+
+#: tycontrols.strconsts.rstylongmonth2
+msgid "February"
+msgstr "二月"
+
+#: tycontrols.strconsts.rstylongmonth3
+msgid "March"
+msgstr "三月"
+
+#: tycontrols.strconsts.rstylongmonth4
+msgid "April"
+msgstr "四月"
+
+#: tycontrols.strconsts.rstylongmonth5
+msgid "May"
+msgstr "五月"
+
+#: tycontrols.strconsts.rstylongmonth6
+msgid "June"
+msgstr "六月"
+
+#: tycontrols.strconsts.rstylongmonth7
+msgid "July"
+msgstr "七月"
+
+#: tycontrols.strconsts.rstylongmonth8
+msgid "August"
+msgstr "八月"
+
+#: tycontrols.strconsts.rstylongmonth9
+msgid "September"
+msgstr "九月"
+
+#: tycontrols.strconsts.rstylongmonth10
+msgid "October"
+msgstr "十月"
+
+#: tycontrols.strconsts.rstylongmonth11
+msgid "November"
+msgstr "十一月"
+
+#: tycontrols.strconsts.rstylongmonth12
+msgid "December"
+msgstr "十二月"
+
+#: tycontrols.strconsts.rstyshortmonth1
+msgid "Jan"
+msgstr "1月"
+
+#: tycontrols.strconsts.rstyshortmonth2
+msgid "Feb"
+msgstr "2月"
+
+#: tycontrols.strconsts.rstyshortmonth3
+msgid "Mar"
+msgstr "3月"
+
+#: tycontrols.strconsts.rstyshortmonth4
+msgid "Apr"
+msgstr "4月"
+
+#: tycontrols.strconsts.rstyshortmonth5
+msgid "May"
+msgstr "5月"
+
+#: tycontrols.strconsts.rstyshortmonth6
+msgid "Jun"
+msgstr "6月"
+
+#: tycontrols.strconsts.rstyshortmonth7
+msgid "Jul"
+msgstr "7月"
+
+#: tycontrols.strconsts.rstyshortmonth8
+msgid "Aug"
+msgstr "8月"
+
+#: tycontrols.strconsts.rstyshortmonth9
+msgid "Sep"
+msgstr "9月"
+
+#: tycontrols.strconsts.rstyshortmonth10
+msgid "Oct"
+msgstr "10月"
+
+#: tycontrols.strconsts.rstyshortmonth11
+msgid "Nov"
+msgstr "11月"
+
+#: tycontrols.strconsts.rstyshortmonth12
+msgid "Dec"
+msgstr "12月"
+
+#: tycontrols.strconsts.rstylongday1
+msgid "Sunday"
+msgstr "星期日"
+
+#: tycontrols.strconsts.rstylongday2
+msgid "Monday"
+msgstr "星期一"
+
+#: tycontrols.strconsts.rstylongday3
+msgid "Tuesday"
+msgstr "星期二"
+
+#: tycontrols.strconsts.rstylongday4
+msgid "Wednesday"
+msgstr "星期三"
+
+#: tycontrols.strconsts.rstylongday5
+msgid "Thursday"
+msgstr "星期四"
+
+#: tycontrols.strconsts.rstylongday6
+msgid "Friday"
+msgstr "星期五"
+
+#: tycontrols.strconsts.rstylongday7
+msgid "Saturday"
+msgstr "星期六"
+
+#: tycontrols.strconsts.rstyshortday1
+msgid "Sun"
+msgstr "周日"
+
+#: tycontrols.strconsts.rstyshortday2
+msgid "Mon"
+msgstr "周一"
+
+#: tycontrols.strconsts.rstyshortday3
+msgid "Tue"
+msgstr "周二"
+
+#: tycontrols.strconsts.rstyshortday4
+msgid "Wed"
+msgstr "周三"
+
+#: tycontrols.strconsts.rstyshortday5
+msgid "Thu"
+msgstr "周四"
+
+#: tycontrols.strconsts.rstyshortday6
+msgid "Fri"
+msgstr "周五"
+
+#: tycontrols.strconsts.rstyshortday7
+msgid "Sat"
+msgstr "周六"

@@ -1,0 +1,22 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols 2.0\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+# This catalogue is deliberately MINIMAL. English is the msgid baseline, so an
+# English build needs no translations -- with exactly one exception, below.
+# Loading this file is how '--lang=en' (or SetDefaultLang('en')) tells the
+# library that English was CHOSEN rather than merely defaulted to, which is
+# what lets TTyCalendar / TTyDateTimePicker show English month & weekday names
+# on a machine whose OS locale says otherwise
+# (tyControls.Calendar.TyDateTimeNames). Removing the entry breaks no other
+# string; it silently re-points the names at the OS locale. Keep it.
+#: tycontrols.strconsts.rstydatetimenameslang
+msgid "__locale__"
+msgstr "en"

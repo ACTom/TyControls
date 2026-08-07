@@ -4,6 +4,7 @@ interface
 uses
   Classes, SysUtils, Types, DateUtils, Graphics, Forms, Controls, LCLType,
   fpcunit, testregistry,
+  Translations,          // TPOFile — drive the name-source seam the way a real catalogue does
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.Base,
   tyControls.Calendar;
@@ -166,6 +167,33 @@ type
     procedure TestRenderMonthsNoException;
     procedure TestRenderYearsNoException;
     procedure TestRenderDecadesNoException;
+  end;
+
+  { Month & weekday name resolution (TyDateTimeNames): precedence order
+      app override (TyDateTimeNameSource) > loaded translation > OS locale
+    and the render paths actually consuming it. The "loaded translation" tier is
+    driven through the REAL machinery -- an in-memory TPOFile translating the
+    rsTyDateTimeNamesLang sentinel by identifier -- so these tests break if the
+    identifier, the unit name or the marker comparison ever drift, exactly the
+    ways the feature can die silently in an application. }
+  TCalendarNameSourceTest = class(TTestCase)
+  private
+    FSavedSource: TTyDateTimeNameSource;
+    FSavedFmt: TFormatSettings;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure AutoWithNothingLoadedFollowsTheLocale;
+    procedure AutoWithACatalogueLoadedFollowsTheCatalogue;
+    procedure AnEnglishIdentityCatalogueStillCountsAsLoaded;
+    procedure ForcedLocaleBeatsALoadedCatalogue;
+    procedure ForcedTranslationBeatsAnUnloadedLocale;
+    procedure SeparatorsStayTheLocalesEvenWhenNamesAreTranslated;
+    procedure TheMarkerConstantMatchesTheResourcestringDefault;
+    procedure TheTitleAndWeekdayRowRenderTheResolvedNames;
+    procedure TheMonthsViewRendersTheResolvedNames;
+    procedure TheTitleHitTestMeasuresTheResolvedNames;
   end;
 
 implementation
@@ -1085,10 +1113,381 @@ begin
   end;
 end;
 
+{ TCalendarNameSourceTest }
+
+{ Patches ONLY the load-marker resourcestring, through the same LazUtils call a
+  real catalogue load uses (identifier-keyed, so this also pins the identifier). }
+procedure SetNameSentinel(const AValue: string);
+var
+  po: TPOFile;
+begin
+  po := TPOFile.Create(True);
+  try
+    po.ReadPOText(
+      'msgid ""'                                            + LineEnding +
+      'msgstr ""'                                           + LineEnding +
+      '"Content-Type: text/plain; charset=UTF-8\n"'         + LineEnding +
+      ''                                                    + LineEnding +
+      '#: tycontrols.strconsts.rstydatetimenameslang'       + LineEnding +
+      'msgid "__locale__"'                                  + LineEnding +
+      'msgstr "' + AValue + '"'                             + LineEnding);
+    TranslateUnitResourceStrings('tyControls.StrConsts', po);
+  finally
+    po.Free;
+  end;
+end;
+
+var
+  CapturedSentinelDefault: string;
+
+{ TResourceIterator for SetUnitResourceStrings. Returning '' means "change
+  nothing"; Value is the COMPILE-TIME default straight out of the resource
+  table, unaffected by any catalogue loaded since. }
+function CaptureSentinelDefault(Name, Value: AnsiString; {%H-}Hash: Longint;
+  {%H-}arg: pointer): AnsiString;
+begin
+  Result := '';
+  if Pos('rstydatetimenameslang', LowerCase(Name)) > 0 then
+    CapturedSentinelDefault := Value;
+end;
+
+procedure TCalendarNameSourceTest.SetUp;
+begin
+  FSavedSource := TyDateTimeNameSource;
+  FSavedFmt    := DefaultFormatSettings;
+end;
+
+procedure TCalendarNameSourceTest.TearDown;
+begin
+  TyDateTimeNameSource  := FSavedSource;
+  DefaultFormatSettings := FSavedFmt;
+  { Whatever a test loaded, unload: the sentinel back at its marker value is
+    what every OTHER suite's dnAuto means by "no catalogue in this process". }
+  SetNameSentinel(TyDateTimeNamesUntranslatedMark);
+end;
+
+procedure TCalendarNameSourceTest.AutoWithNothingLoadedFollowsTheLocale;
+begin
+  TyDateTimeNameSource := dnAuto;
+  { This precondition is the tytests.lpr contract: nothing in the suite leaves a
+    catalogue loaded. If it fails, find the test that translated the sentinel
+    and did not restore it -- do not weaken this assert. }
+  AssertFalse('precondition: no catalogue loaded in the test process',
+    TyDateTimeNamesTranslated);
+  DefaultFormatSettings.LongMonthNames[8] := 'LocaleProbeAug';
+  DefaultFormatSettings.ShortDayNames[1]  := 'LP';
+  AssertEquals('dnAuto+untranslated takes the locale month',
+    'LocaleProbeAug', TyDateTimeNames.LongMonthNames[8]);
+  AssertEquals('dnAuto+untranslated takes the locale day',
+    'LP', TyDateTimeNames.ShortDayNames[1]);
+end;
+
+procedure TCalendarNameSourceTest.AutoWithACatalogueLoadedFollowsTheCatalogue;
+begin
+  TyDateTimeNameSource := dnAuto;
+  DefaultFormatSettings.LongMonthNames[8] := 'LocaleProbeAug';
+  SetNameSentinel('xx');
+  AssertTrue('a translated sentinel reads as "catalogue loaded"',
+    TyDateTimeNamesTranslated);
+  AssertEquals('the names now come from the resourcestrings, not the locale',
+    'August', TyDateTimeNames.LongMonthNames[8]);
+  AssertEquals('weekdays too', 'Sun', TyDateTimeNames.ShortDayNames[1]);
+end;
+
+procedure TCalendarNameSourceTest.AnEnglishIdentityCatalogueStillCountsAsLoaded;
+{ The shipped en catalogue's exact shape: every NAME entry equals its msgid (or
+  is simply absent), ONLY the sentinel differs. This is the case a naive
+  "compare a month name against its default" detector gets wrong -- and the
+  reason the sentinel is a dedicated string no real catalogue leaves alone. }
+begin
+  TyDateTimeNameSource := dnAuto;
+  DefaultFormatSettings.LongMonthNames[8] := #229#133#171#230#156#136; // 八月, a Chinese-locale machine
+  SetNameSentinel('en');
+  AssertTrue('an English catalogue is still "loaded"', TyDateTimeNamesTranslated);
+  AssertEquals('--lang=en on a Chinese-locale machine says August, not the locale name',
+    'August', TyDateTimeNames.LongMonthNames[8]);
+end;
+
+procedure TCalendarNameSourceTest.ForcedLocaleBeatsALoadedCatalogue;
+{ Tier 1 beats tier 2: the app said "OS names", a loaded catalogue must lose. }
+begin
+  SetNameSentinel('xx');
+  TyDateTimeNameSource := dnLocale;
+  DefaultFormatSettings.LongMonthNames[8] := 'LocaleProbeAug';
+  AssertFalse('forced locale wins over a loaded catalogue', TyDateTimeNamesTranslated);
+  AssertEquals('and the names prove it',
+    'LocaleProbeAug', TyDateTimeNames.LongMonthNames[8]);
+end;
+
+procedure TCalendarNameSourceTest.ForcedTranslationBeatsAnUnloadedLocale;
+{ Tier 1 beats tier 3: the app said "resourcestrings", no catalogue needed. }
+begin
+  TyDateTimeNameSource := dnTranslation;
+  DefaultFormatSettings.LongMonthNames[8] := 'LocaleProbeAug';
+  AssertTrue('forced translation needs no catalogue', TyDateTimeNamesTranslated);
+  AssertEquals('English defaults win over the locale',
+    'August', TyDateTimeNames.LongMonthNames[8]);
+end;
+
+procedure TCalendarNameSourceTest.SeparatorsStayTheLocalesEvenWhenNamesAreTranslated;
+{ The seam replaces NAMES only. Date order and separators are conventions the
+  machine's locale owns whatever language the app speaks -- an English UI on a
+  German machine still writes 30.07.2026. }
+begin
+  TyDateTimeNameSource := dnTranslation;
+  DefaultFormatSettings.DateSeparator := '#';
+  DefaultFormatSettings.ShortDateFormat := 'yyyy#mm';
+  AssertEquals('separator untouched', '#', TyDateTimeNames.DateSeparator);
+  AssertEquals('short-date pattern untouched', 'yyyy#mm', TyDateTimeNames.ShortDateFormat);
+end;
+
+procedure TCalendarNameSourceTest.TheMarkerConstantMatchesTheResourcestringDefault;
+{ The load detector is a comparison between rsTyDateTimeNamesLang and the
+  TyDateTimeNamesUntranslatedMark constant. They are two literals in two files;
+  this reads the COMPILE-TIME default out of the FPC resource table (immune to
+  any catalogue loaded meanwhile) and pins them together. If this goes red,
+  someone edited one literal without the other and dnAuto is now permanently
+  stuck on one tier. }
+begin
+  CapturedSentinelDefault := '(sentinel not found in tyControls.StrConsts)';
+  SetUnitResourceStrings('tyControls.StrConsts', @CaptureSentinelDefault, nil);
+  AssertEquals('marker constant = compile-time sentinel default',
+    TyDateTimeNamesUntranslatedMark, CapturedSentinelDefault);
+end;
+
+procedure TCalendarNameSourceTest.TheTitleAndWeekdayRowRenderTheResolvedNames;
+{ End of the chain: the PIXELS. Render the same calendar twice, once forced to
+  the (poked, unmistakable) locale names and once forced to the translation
+  names, and require the title band AND the weekday band to differ. A call site
+  still reading DefaultFormatSettings renders both frames identical -- that is
+  the mutant this catches, per band. Then render the translation frame twice
+  and require byte-equality, so "differs" above cannot pass on noise.
+  Layout at 240x220 / 96ppi: title band y in [0,28), weekday row y in [28,48). }
+var
+  Ctl: TTyStyleController;
+  Form: TForm;
+  Cal: TTyCalendarProbe;
+  BmpA, BmpB, BmpC: TBitmap;
+
+  function RenderFrame: TBitmap;
+  begin
+    Result := TBitmap.Create;
+    Result.PixelFormat := pf32bit;
+    Result.SetSize(240, 220);
+    Result.Canvas.Brush.Color := clWhite;
+    Result.Canvas.FillRect(0, 0, 240, 220);
+    Cal.RenderTo(Result.Canvas, Rect(0, 0, 240, 220), 96);
+  end;
+
+  function BandsDiffer(A, B: TBitmap; Y1, Y2: Integer): Boolean;
+  var
+    RA, RB: TBGRABitmap;
+    x, y: Integer;
+    pa, pb: TBGRAPixel;
+  begin
+    Result := False;
+    RA := TBGRABitmap.Create(A);
+    RB := TBGRABitmap.Create(B);
+    try
+      for y := Y1 to Y2 - 1 do
+        for x := 0 to 239 do
+        begin
+          pa := RA.GetPixel(x, y);
+          pb := RB.GetPixel(x, y);
+          if (pa.red <> pb.red) or (pa.green <> pb.green) or (pa.blue <> pb.blue) then
+            Exit(True);
+        end;
+    finally
+      RA.Free;
+      RB.Free;
+    end;
+  end;
+
+begin
+  Ctl  := TTyStyleController.Create(nil);
+  Form := TForm.CreateNew(nil);
+  BmpA := nil; BmpB := nil; BmpC := nil;
+  try
+    Ctl.LoadThemeCss('TyCalendar { background: #FFFFFF; color: #111111; }');
+    Cal := TTyCalendarProbe.Create(Form);
+    Cal.Parent     := Form;
+    Cal.Controller := Ctl;
+    Cal.SetBounds(0, 0, 240, 220);
+    Cal.Font.PixelsPerInch := 96;
+    Cal.FirstDayOfWeek := wdSunday;
+    Cal.Date := EncodeDate(2026, 6, 15);
+
+    DefaultFormatSettings.LongMonthNames[6] := 'WWWWWWWWWW';   // the title's month
+    DefaultFormatSettings.ShortDayNames[1] := 'ZZ';            // Sunday-first: col 0
+    DefaultFormatSettings.ShortDayNames[2] := 'ZZ';
+    DefaultFormatSettings.ShortDayNames[3] := 'ZZ';
+    DefaultFormatSettings.ShortDayNames[4] := 'ZZ';
+    DefaultFormatSettings.ShortDayNames[5] := 'ZZ';
+    DefaultFormatSettings.ShortDayNames[6] := 'ZZ';
+    DefaultFormatSettings.ShortDayNames[7] := 'ZZ';
+
+    TyDateTimeNameSource := dnLocale;
+    BmpA := RenderFrame;
+    TyDateTimeNameSource := dnTranslation;
+    BmpB := RenderFrame;
+    BmpC := RenderFrame;
+
+    AssertTrue('title band [0..28) renders the resolved month name '
+      + '(equal frames = the title still reads DefaultFormatSettings)',
+      BandsDiffer(BmpA, BmpB, 0, 28));
+    AssertTrue('weekday band [28..48) renders the resolved day names '
+      + '(equal frames = the weekday row still reads DefaultFormatSettings)',
+      BandsDiffer(BmpA, BmpB, 28, 48));
+    AssertFalse('noise control: two identical-source renders are byte-identical',
+      BandsDiffer(BmpB, BmpC, 0, 220));
+  finally
+    BmpA.Free; BmpB.Free; BmpC.Free;
+    Form.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TCalendarNameSourceTest.TheMonthsViewRendersTheResolvedNames;
+{ Same shape as above for the drill-down months grid (RenderMonthsView), whose
+  cells draw ShortMonthNames. Title click at (120,14) zooms Days -> Months. }
+var
+  Ctl: TTyStyleController;
+  Form: TForm;
+  Cal: TTyCalendarProbe;
+  BmpA, BmpB: TBitmap;
+  m: Integer;
+
+  function RenderFrame: TBitmap;
+  begin
+    Result := TBitmap.Create;
+    Result.PixelFormat := pf32bit;
+    Result.SetSize(240, 220);
+    Result.Canvas.Brush.Color := clWhite;
+    Result.Canvas.FillRect(0, 0, 240, 220);
+    Cal.RenderTo(Result.Canvas, Rect(0, 0, 240, 220), 96);
+  end;
+
+  function GridsDiffer(A, B: TBitmap): Boolean;
+  var
+    RA, RB: TBGRABitmap;
+    x, y: Integer;
+    pa, pb: TBGRAPixel;
+  begin
+    Result := False;
+    RA := TBGRABitmap.Create(A);
+    RB := TBGRABitmap.Create(B);
+    try
+      for y := 28 to 219 do            // below the header band
+        for x := 0 to 239 do
+        begin
+          pa := RA.GetPixel(x, y);
+          pb := RB.GetPixel(x, y);
+          if (pa.red <> pb.red) or (pa.green <> pb.green) or (pa.blue <> pb.blue) then
+            Exit(True);
+        end;
+    finally
+      RA.Free;
+      RB.Free;
+    end;
+  end;
+
+begin
+  Ctl  := TTyStyleController.Create(nil);
+  Form := TForm.CreateNew(nil);
+  BmpA := nil; BmpB := nil;
+  try
+    Ctl.LoadThemeCss('TyCalendar { background: #FFFFFF; color: #111111; }');
+    Cal := TTyCalendarProbe.Create(Form);
+    Cal.Parent     := Form;
+    Cal.Controller := Ctl;
+    Cal.SetBounds(0, 0, 240, 220);
+    Cal.Font.PixelsPerInch := 96;
+    Cal.FirstDayOfWeek := wdSunday;
+    Cal.Date := EncodeDate(2026, 6, 15);
+    Cal.SimulateMouseDown(120, 14);      // Days -> Months
+    AssertEquals('precondition: months view', Ord(cvmMonths), Ord(Cal.ViewMode));
+
+    for m := 1 to 12 do
+      DefaultFormatSettings.ShortMonthNames[m] := 'QQQ';
+
+    TyDateTimeNameSource := dnLocale;
+    BmpA := RenderFrame;
+    TyDateTimeNameSource := dnTranslation;
+    BmpB := RenderFrame;
+
+    AssertTrue('months grid renders the resolved short month names '
+      + '(equal frames = RenderMonthsView still reads DefaultFormatSettings)',
+      GridsDiffer(BmpA, BmpB));
+  finally
+    BmpA.Free; BmpB.Free;
+    Form.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TCalendarNameSourceTest.TheTitleHitTestMeasuresTheResolvedNames;
+{ HitTest splits the title into cpTitleMonth / cpTitleYear by MEASURING the
+  title string, so it must measure the string RenderTo drew -- the resolved
+  names, not raw DefaultFormatSettings. Probe: sweep the title band under two
+  forced tiers whose June names have wildly different widths and require the
+  answer pattern to move. A HitTest still measuring DefaultFormatSettings
+  answers identically both times (that mutant dies here); one measuring the
+  resolved names cannot -- 'June' and 'WWWWWWWWWWWWWWWW' span different
+  pixels. Render agreement is the previous test; measure-source agreement is
+  this one, and the two consuming ONE resolver is what keeps them in step. }
+var
+  Ctl: TTyStyleController;
+  Form: TForm;
+  Cal: TTyCalendarProbe;
+  PatLocale, PatTrans: string;
+
+  function Sweep: string;
+  var
+    xx: Integer;
+  begin
+    Result := '';
+    for xx := 30 to 209 do          // inside the title band, clear of both arrows
+      case Cal.HitTest(Point(xx, 14)) of
+        cpTitleMonth: Result := Result + 'M';
+        cpTitleYear:  Result := Result + 'Y';
+      else
+        Result := Result + '.';
+      end;
+  end;
+
+begin
+  Ctl  := TTyStyleController.Create(nil);
+  Form := TForm.CreateNew(nil);
+  try
+    Ctl.LoadThemeCss('TyCalendar { background: #FFFFFF; color: #111111; }');
+    Cal := TTyCalendarProbe.Create(Form);
+    Cal.Parent     := Form;
+    Cal.Controller := Ctl;
+    Cal.SetBounds(0, 0, 240, 220);
+    Cal.Font.PixelsPerInch := 96;
+    Cal.FirstDayOfWeek := wdSunday;
+    Cal.Date := EncodeDate(2026, 6, 15);
+
+    DefaultFormatSettings.LongMonthNames[6] := 'WWWWWWWWWWWWWWWW';
+    TyDateTimeNameSource := dnLocale;
+    PatLocale := Sweep;
+    TyDateTimeNameSource := dnTranslation;
+    PatTrans := Sweep;
+
+    AssertTrue('the month/year click split follows the resolved month name '
+      + '(identical sweeps = HitTest still measures DefaultFormatSettings)',
+      PatLocale <> PatTrans);
+  finally
+    Form.Free;
+    Ctl.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TCalendarGeomTest);
   RegisterTest(TCalendarControlTest);
   RegisterTest(TCalendarPixelTest);
   RegisterTest(TCalendarZoomTest);
   RegisterTest(TCalendarDrillDownTest);
+  RegisterTest(TCalendarNameSourceTest);
 end.

@@ -304,6 +304,26 @@ type
     procedure TestDropDownNilControllerNoCrash;
   end;
 
+  { Month & weekday names in the FIELD TEXT follow TyDateTimeNames (the
+    app-language seam in tyControls.Calendar), not raw DefaultFormatSettings.
+    The precedence machinery itself is tested beside the seam in test.calendar;
+    here the two tiers are FORCED and the assertions read the control's own
+    output -- FormattedText and the preferred width -- so a BuildDisplay or
+    CalculatePreferredSize still passing DefaultFormatSettings goes red. }
+  TDateTimePickerNameSourceTest = class(TTestCase)
+  private
+    FSavedSource: TTyDateTimeNameSource;
+    FSavedFmt: TFormatSettings;
+    FPicker: TTyDateTimePickerProbe;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TheFieldTextFollowsTheForcedTranslationTier;
+    procedure TheFieldTextFollowsTheForcedLocaleTier;
+    procedure ThePreferredWidthMeasuresTheSameNamesTheFieldRenders;
+  end;
+
 implementation
 
 { ── helpers ──────────────────────────────────────────────────────────────── }
@@ -2195,6 +2215,63 @@ begin
   end;
 end;
 
+{ ── TDateTimePickerNameSourceTest ────────────────────────────────────────── }
+
+procedure TDateTimePickerNameSourceTest.SetUp;
+begin
+  FSavedSource := TyDateTimeNameSource;
+  FSavedFmt    := DefaultFormatSettings;
+  FPicker      := TTyDateTimePickerProbe.Create(nil);
+  FPicker.Font.PixelsPerInch := 96;
+  FPicker.Kind       := dtkDate;
+  FPicker.DateFormat := 'dd mmmm yyyy';          // a format that ASKS for a name
+  FPicker.DateTime   := EncodeDate(2026, 8, 15);
+end;
+
+procedure TDateTimePickerNameSourceTest.TearDown;
+begin
+  FPicker.Free;
+  TyDateTimeNameSource  := FSavedSource;
+  DefaultFormatSettings := FSavedFmt;
+end;
+
+procedure TDateTimePickerNameSourceTest.TheFieldTextFollowsTheForcedTranslationTier;
+{ DisplayTextForTest is the PAINT's own recorded string (RenderOffscreen ->
+  FPaintedText), so this pins the pixel path, not a parallel formatter. }
+begin
+  DefaultFormatSettings.LongMonthNames[8] := 'LocaleProbeAug';
+  TyDateTimeNameSource := dnTranslation;
+  AssertEquals('the field text renders the app language''s month name',
+    '15 August 2026', FPicker.DisplayTextForTest);
+end;
+
+procedure TDateTimePickerNameSourceTest.TheFieldTextFollowsTheForcedLocaleTier;
+begin
+  DefaultFormatSettings.LongMonthNames[8] := 'LocaleProbeAug';
+  TyDateTimeNameSource := dnLocale;
+  AssertEquals('the field text renders the locale''s month name when forced to',
+    '15 LocaleProbeAug 2026', FPicker.DisplayTextForTest);
+end;
+
+procedure TDateTimePickerNameSourceTest.ThePreferredWidthMeasuresTheSameNamesTheFieldRenders;
+{ CalculatePreferredSize measures the WIDEST renderable value (30 September). Give
+  the locale a September name three times as long as English's: if the width
+  query still measured DefaultFormatSettings while the paint renders the
+  translation, the two answers converge and this assertion dies. }
+var
+  wTrans, hTrans, wLocale, hLocale: Integer;
+begin
+  DefaultFormatSettings.LongMonthNames[9] := 'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWW';
+  TyDateTimeNameSource := dnTranslation;
+  FPicker.InvalidatePreferredSize;      // LCL caches; a stale cache would compare
+  FPicker.GetPreferredSize(wTrans, hTrans);
+  TyDateTimeNameSource := dnLocale;
+  FPicker.InvalidatePreferredSize;      // ...one measurement against itself
+  FPicker.GetPreferredSize(wLocale, hLocale);
+  AssertTrue(Format('width follows the name source: locale(W*30)=%d must exceed '
+    + 'translation(September)=%d', [wLocale, wTrans]), wLocale > wTrans);
+end;
+
 initialization
   RegisterTest(TDateTimePickerPureTest);
   RegisterTest(TDateTimeNullTest);
@@ -2203,5 +2280,6 @@ initialization
   RegisterTest(TDateTimePickerControlTest);
   RegisterTest(TDateTimePickerPixelTest);
   RegisterTest(TDateTimePickerC3Test);
+  RegisterTest(TDateTimePickerNameSourceTest);
 
 end.

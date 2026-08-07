@@ -1354,6 +1354,12 @@ end;
 
 function TTyDateTimePicker.ActiveFormat: string;
 begin
+  { The fallback PATTERNS deliberately stay DefaultFormatSettings even when a
+    translation is loaded: field order (2026/8/7 vs 8/7/2026) and separators are
+    locale conventions, not language, and an English-speaking user on a Chinese
+    machine still reads that machine's date order. Only NAMES the pattern asks
+    for ('mmmm', 'ddd') follow the app's language -- BuildDisplay resolves those
+    through TyDateTimeNames. }
   if FKind = dtkDate then
   begin
     if FDateFormat <> '' then
@@ -1443,7 +1449,11 @@ begin
   else
     Base := FDateTime;
 
-  AText := TyRenderDateTime(Base, ActiveFormat, DefaultFormatSettings,
+  { TyDateTimeNames, not raw DefaultFormatSettings: 'mmmm'/'ddd' names follow the
+    app's language (tier order in tyControls.Calendar), separators and field
+    order stay the locale's. Resolved here on every rebuild, so a language
+    switched at run time is honoured by the next repaint. }
+  AText := TyRenderDateTime(Base, ActiveFormat, TyDateTimeNames,
              FLeadingZeros, ASpans);
   if (FDigitBuffer = '') or (FActiveSeg < 0) or (FActiveSeg > High(ASpans)) then Exit;
 
@@ -2194,7 +2204,9 @@ begin
     to September, and LeadingZeros=False makes that a routine occurrence. 30 September
     is the widest month name in most locales and gives two-digit day/hour/minute. }
   Widest := EncodeDateTime(2026, 9, 30, 22, 58, 58, 888);
-  Txt := TyRenderDateTime(Widest, ActiveFormat, DefaultFormatSettings,
+  { Same name source as BuildDisplay -- measuring the locale's names for a field
+    that renders the app language's would size the box for the wrong string. }
+  Txt := TyRenderDateTime(Widest, ActiveFormat, TyDateTimeNames,
            FLeadingZeros, Spans);
   Bmp := TBGRABitmap.Create(1, 1);
   try

@@ -265,7 +265,17 @@ function TyEqualDateTime(const A, B: TDateTime): Boolean;
 
 ---
 
-## 9. 右到左镜像
+## 9. 月份 / 星期名跟谁的语言（3.0 起的行为变更）
+
+`DateFormat` 里的 `mmm`/`mmmm`/`ddd`/`dddd` 会渲染出月份 / 星期**名字**，下拉里的 `TTyCalendar` 也画标题月名与星期行。这些名字统一走 `tyControls.Calendar` 的 `TyDateTimeNames` 解析，优先级为 **应用显式指定（`TyDateTimeNameSource`）> 已加载的翻译目录 > 系统区域**——完整机制、目录哨兵与自定义方法见 [`calendar.md` 第 8 节](calendar.md)。本控件额外要点：
+
+- **名字换语言，惯例不换。** `DateFormat`/`TimeFormat` **留空时**回落的短日期 / 短时间**格式**、`/'` 与 `':'` 展开成的分隔符，始终来自 `DefaultFormatSettings`：英文应用在中文机器上仍是 `2026/8/7` 的顺序，只有名字类字段说英文。
+- **宽度测量同源。** `CalculatePreferredSize` 用与渲染**相同**的解析结果去量"最宽可渲染值"——语言切换后首选宽度随之变化，字段不会按另一种语言的月名定宽。注意 LCL 会**缓存**首选尺寸：运行中切语言后，`AutoSize` 的 picker 要重新量宽需调 `InvalidatePreferredSize`（重绘不用，渲染每帧现取）。
+- **与 `TextForNullDate` 的分工别搞混**（见第 3 节属性表）：`TextForNullDate` 是**属性默认值**，翻译它会让窗体存出的 `.lfm` 随保存时语言变，所以它保持字面量、由应用自己赋值；月 / 星期名是**渲染期输出**，不进 `.lfm`，所以它们跟随语言是安全的。一个是存进窗体的值，一个是画在屏幕上的字——两条规则各管各的，并不矛盾。
+
+---
+
+## 10. 右到左镜像
 
 `BiDiMode := bdRightToLeft` 时整个字段镜像。跨控件的部分见 [`../rtl.md`](../rtl.md)。
 

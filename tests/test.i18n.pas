@@ -4,7 +4,8 @@ interface
 uses
   Classes, SysUtils, fpcunit, testregistry, FileUtil,
   Translations,            // TPOFile, TranslateUnitResourceStrings (LazUtils)
-  tyControls.StrConsts;    // the unit that DECLARES the resourcestrings
+  tyControls.StrConsts,    // the unit that DECLARES the resourcestrings
+  tyControls.Calendar;     // TyDateTimeNamesUntranslatedMark (the load sentinel's default)
 type
   TI18NTest = class(TTestCase)
   published
@@ -12,6 +13,8 @@ type
     procedure TestNoCatalogueEntryIsWhollyEmpty;
     procedure TestEveryStrConstsResourcestringIsInThePot;
     procedure TestTheShippedChineseCatalogueReallyGivesTheGridItsTruthyWord;
+    procedure TestTheShippedCataloguesCarryTheDateTimeNames;
+    procedure TestTheExampleCataloguesCarryTheLoadSentinel;
   end;
 
 implementation
@@ -242,6 +245,88 @@ begin
   end;
   AssertEquals('and reading the catalogue did not translate the running process',
     'yes', rsGridCheckedWord);
+end;
+
+{ The month/weekday-name chain, end to end against the catalogues that ship.
+  TTyCalendar and TTyDateTimePicker take their names from the resourcestrings
+  whenever a catalogue is loaded (tyControls.Calendar.TyDateTimeNames), and "a
+  catalogue is loaded" is the rsTyDateTimeNamesLang sentinel differing from its
+  compile-time marker. Two things must therefore be true of the SHIPPED files,
+  or the feature dies with all tests green:
+
+  * zh_CN must translate the sentinel AND the names -- or a Chinese app quietly
+    falls back to OS-locale names and nobody notices on a Chinese machine.
+  * the en catalogue must exist and translate the sentinel -- it is otherwise
+    empty (English is the msgid baseline), and deleting it as "useless" is
+    exactly the mistake this guard exists to catch: without it --lang=en keeps
+    showing the OS locale's month names.
+
+  Read through TPOFile so the running process's resourcestrings are untouched. }
+procedure TI18NTest.TestTheShippedCataloguesCarryTheDateTimeNames;
+var
+  po: TPOFile;
+  root: string;
+begin
+  root := ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'languages' + PathDelim;
+
+  po := TPOFile.Create(root + 'tycontrols.strconsts.zh_CN.po');
+  try
+    AssertEquals('zh_CN translates the load sentinel to its language code',
+      'zh_CN', po.Translate('tycontrols.strconsts.rstydatetimenameslang',
+                            TyDateTimeNamesUntranslatedMark));
+    AssertEquals('zh_CN August', '八月',
+      po.Translate('tycontrols.strconsts.rstylongmonth8', rsTyLongMonth8));
+    AssertEquals('zh_CN short Sunday', '周日',
+      po.Translate('tycontrols.strconsts.rstyshortday1', rsTyShortDay1));
+  finally
+    po.Free;
+  end;
+
+  AssertTrue('the English catalogue ships (its one job is the sentinel)',
+    FileExists(root + 'tycontrols.strconsts.en.po'));
+  po := TPOFile.Create(root + 'tycontrols.strconsts.en.po');
+  try
+    AssertEquals('en translates the load sentinel -- the entry that makes '
+      + '--lang=en mean English month names',
+      'en', po.Translate('tycontrols.strconsts.rstydatetimenameslang',
+                         TyDateTimeNamesUntranslatedMark));
+  finally
+    po.Free;
+  end;
+
+  AssertEquals('and reading the catalogues did not translate the running process',
+    TyDateTimeNamesUntranslatedMark, rsTyDateTimeNamesLang);
+end;
+
+{ The per-example copies are what the example EXES actually load (their .lpr
+  points TranslateUnitResourceStringsEx at their own languages/ dir). A library
+  catalogue updated without the copies leaves the two date demos -- the ones this
+  feature was built for -- still showing the OS locale's names. }
+procedure TI18NTest.TestTheExampleCataloguesCarryTheLoadSentinel;
+const
+  EXAMPLES: array[0..1] of string = ('calendar', 'datetimepicker');
+  LANGS:    array[0..1] of string = ('zh_CN', 'en');
+var
+  po: TPOFile;
+  root, f: string;
+  e, l: Integer;
+begin
+  root := ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'examples' + PathDelim;
+  for e := 0 to High(EXAMPLES) do
+    for l := 0 to High(LANGS) do
+    begin
+      f := root + EXAMPLES[e] + PathDelim + 'languages' + PathDelim
+         + 'tycontrols.' + LANGS[l] + '.po';
+      AssertTrue('catalogue exists: ' + f, FileExists(f));
+      po := TPOFile.Create(f);
+      try
+        AssertEquals('sentinel translated in ' + EXAMPLES[e] + '/' + LANGS[l],
+          LANGS[l], po.Translate('tycontrols.strconsts.rstydatetimenameslang',
+                                 TyDateTimeNamesUntranslatedMark));
+      finally
+        po.Free;
+      end;
+    end;
 end;
 
 initialization

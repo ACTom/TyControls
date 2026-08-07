@@ -114,9 +114,9 @@ object MainForm: TMainForm
       Left = 150
       Height = 26
       Top = 174
-      Width = 180
+      Width = 200
       Kind = dtkDate
-      DateFormat = 'yyyy-mm-dd'
+      DateFormat = 'dd mmmm yyyy'
       ReadOnly = True
     end
     object LblReadOnlyHint: TTyLabel
@@ -124,7 +124,8 @@ object MainForm: TMainForm
       Height = 32
       Top = 204
       Width = 380
-      Caption = 'ReadOnly: typing and Up/Down are ignored, the calendar still opens'
+      Caption = 'ReadOnly: typing and Up/Down are ignored, the calendar still opens. ' +
+        'The ''mmmm'' name follows the app language'
       WordWrap = True
     end
     object LblRange: TTyLabel

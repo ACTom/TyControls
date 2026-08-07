@@ -210,3 +210,29 @@ Cal.ReadOnly := True;   // 禁止选择；表头翻页/下钻仍可用
 - **键盘导航：** 方向键移动一天 / 一周（越界自动夹紧），`PageUp`/`PageDown` 换上 / 下月（保留日、月末夹紧），`Home`/`End` 跳到当月首 / 末个可选日，`Enter`/`Space` 触发 `OnAccept`。这些键在 Days 视图 + 非 `ReadOnly` 时生效。
 - **主体无成员状态字段：** 与 CheckBox 等不同，本控件不缓存 `FHover`/`FPressed`；格子的 `:selected`/`:disabled`/`:hover` 由渲染时逐格向 `ActiveController.Model.ResolveStyle` 查询决定。
 - **视觉由主题令牌驱动：** 颜色 / 字体 / 圆角一律来自 `.tycss` 令牌（`--accent`、`--muted`、`--surface-hover` 等），不在控件代码写死；可通过 `StyleClass` 或覆盖上述子部件 typeKey 规则定制外观。
+
+---
+
+## 8. 月份 / 星期名跟谁的语言（3.0 起的行为变更）
+
+标题里的"八月 2026"、星期行的"周日 周一"、月视图格子里的"1月..12月"——这些是本控件唯一**自己生产**的文字，而它们有两个都讲得通的来源：
+
+- **操作系统区域**（`DefaultFormatSettings`，3.0 之前的唯一来源）——不做国际化的应用在中文机器上理应看到中文月名；
+- **应用语言**（库的翻译目录）——一个切到英文的应用在同一台机器上理应看到 `August`，旧行为在这里是 bug（应用全英文、日历标题却是八月）。
+
+两个来源各对一半，所以现在渲染统一经过 `tyControls.Calendar` 里的一个解析口，按固定优先级取值：
+
+| 优先级 | 来源 | 生效条件 |
+|--------|------|----------|
+| 1 | 应用显式指定 | `TyDateTimeNameSource := dnLocale`（强制系统区域）或 `dnTranslation`（强制库 resourcestring） |
+| 2 | 已加载的翻译目录 | 默认值 `dnAuto` 下，检测到进程加载过 tycontrols 目录（含英文目录） |
+| 3 | 操作系统区域 | `dnAuto` 且没加载过任何目录——**不做 i18n 的应用行为与 2.x 完全一致** |
+
+要点：
+
+- **"加载过目录"怎么判定：** 库里有一个哨兵 resourcestring（`rsTyDateTimeNamesLang`，缺省值 `'__locale__'`）；每个随库发布的目录——**包括英文目录**——都会把它翻成自己的语言码。于是"哨兵 ≠ 缺省值"精确等价于"有人主动加载了目录"：英文目录其余条目虽与 msgid 相同，哨兵是 `'en'`，照样判得出来；而进程里没有别的东西会改 resourcestring，不会误报。`languages/tycontrols.strconsts.en.po` 因此**不是可删的空文件**——删掉它，`--lang=en` 的月名就静默退回系统区域（test.i18n 有守卫钉住）。
+- **只换名字，不换写法：** 分隔符、年月日顺序、`DateFormat` 留空时回落的短日期**格式**始终跟系统区域——英文应用在中文机器上仍写 `2026/8/7`，只是要月名的地方写 `August`。语言管名字，区域管惯例。
+- **每次重绘现取：** 解析发生在渲染时，不在构造时缓存；运行中切语言（重新 `SetDefaultLang`）下一次重绘即生效。
+- **自定义名字：** 想要两个来源都没有的名字（自定义缩写、第三种语言），要么改写 `DefaultFormatSettings` 各名字数组并强制 `dnLocale`，要么自带一份 tycontrols 目录（记得翻哨兵）走 `dnAuto`。库不再设第三份名字存储。
+- **给某语言保留系统月名：** 某语言的目录若**故意不翻**哨兵，该语言就停在第 3 层（系统区域名）——这是文档化的退出通道，不是缺陷。
+- **测试注意：** 断言里出现月 / 星期名时，别盲读机器的 `DefaultFormatSettings`——要么 `TyDateTimeNameSource := dnTranslation`（固定英文，跨机器稳定），要么本地保存 / 改写 / 还原 `DefaultFormatSettings`。见 `tests/tytests.lpr` 头部注释。

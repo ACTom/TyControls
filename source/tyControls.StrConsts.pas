@@ -228,6 +228,73 @@ resourcestring
     'Windowless (graphic) controls paint onto the form itself and will be HIDDEN behind the '#10 +
     'content area. Move it into the Surface content container so it stays visible.';
 
+  { --- Calendar / DateTimePicker: month & weekday names ----------------------
+    The names TTyCalendar and TTyDateTimePicker render ('August', 'Sun', ...).
+    These are the one place where the runtime controls draw prose the APP never
+    supplied, and the app's language and the OS locale can disagree about it: a
+    Chinese-locale machine running an app translated to English must say
+    'August', and an untranslated app on the same machine must keep saying
+    八月. Neither source is right on its own, so the render path resolves them
+    through TyDateTimeNames (tyControls.Calendar), with this precedence:
+
+      1. the app's explicit choice   (TyDateTimeNameSource := dnLocale / dnTranslation)
+      2. a loaded translation        (these resourcestrings, IF a catalogue is loaded)
+      3. the OS locale               (DefaultFormatSettings -- the pre-3.0 source)
+
+    "A catalogue is loaded" is decided by rsTyDateTimeNamesLang below: every
+    shipped catalogue -- INCLUDING the English one, whose name entries are
+    identical to the msgids -- translates it to its own language code, so the
+    value differing from the compile-time '__locale__' means exactly "someone
+    loaded a catalogue on purpose" and can neither false-positive (nothing else
+    in the process writes resourcestrings) nor miss an English catalogue (its
+    sentinel msgstr is 'en', which differs from '__locale__' even though every
+    other entry equals its msgid). A catalogue that deliberately does NOT
+    translate the sentinel keeps tier 3: that is the documented opt-out for a
+    language that prefers the OS's own month names.
+
+    Order and indices are TFormatSettings' (day 1 = Sunday .. 7 = Saturday).
+    Keep '__locale__' equal to TyDateTimeNamesUntranslatedMark in
+    tyControls.Calendar.pas -- test.calendar pins the two together. }
+  rsTyDateTimeNamesLang = '__locale__';
+  rsTyLongMonth1  = 'January';
+  rsTyLongMonth2  = 'February';
+  rsTyLongMonth3  = 'March';
+  rsTyLongMonth4  = 'April';
+  rsTyLongMonth5  = 'May';
+  rsTyLongMonth6  = 'June';
+  rsTyLongMonth7  = 'July';
+  rsTyLongMonth8  = 'August';
+  rsTyLongMonth9  = 'September';
+  rsTyLongMonth10 = 'October';
+  rsTyLongMonth11 = 'November';
+  rsTyLongMonth12 = 'December';
+  rsTyShortMonth1  = 'Jan';
+  rsTyShortMonth2  = 'Feb';
+  rsTyShortMonth3  = 'Mar';
+  rsTyShortMonth4  = 'Apr';
+  rsTyShortMonth5  = 'May';
+  rsTyShortMonth6  = 'Jun';
+  rsTyShortMonth7  = 'Jul';
+  rsTyShortMonth8  = 'Aug';
+  rsTyShortMonth9  = 'Sep';
+  rsTyShortMonth10 = 'Oct';
+  rsTyShortMonth11 = 'Nov';
+  rsTyShortMonth12 = 'Dec';
+  rsTyLongDay1 = 'Sunday';
+  rsTyLongDay2 = 'Monday';
+  rsTyLongDay3 = 'Tuesday';
+  rsTyLongDay4 = 'Wednesday';
+  rsTyLongDay5 = 'Thursday';
+  rsTyLongDay6 = 'Friday';
+  rsTyLongDay7 = 'Saturday';
+  rsTyShortDay1 = 'Sun';
+  rsTyShortDay2 = 'Mon';
+  rsTyShortDay3 = 'Tue';
+  rsTyShortDay4 = 'Wed';
+  rsTyShortDay5 = 'Thu';
+  rsTyShortDay6 = 'Fri';
+  rsTyShortDay7 = 'Sat';
+
 implementation
 
 end.

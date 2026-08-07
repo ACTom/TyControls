@@ -185,6 +185,19 @@ begin
   // one column. Pin it here so a new calendar test cannot inherit the machine's
   // answer by omission; the one test that is ABOUT locale resolution overrides this
   // variable itself and restores it.
+  //
+  // The THIRD source of machine-dependence -- month/weekday NAMES -- needs no pin
+  // here, because its default already resolves deterministically in this process:
+  // TyDateTimeNameSource = dnAuto renders DefaultFormatSettings' names unless a
+  // catalogue is loaded, and no test leaves one loaded (test.calendar's
+  // TearDown restores the rsTyDateTimeNamesLang sentinel it translates; the
+  // AutoWithNothingLoadedFollowsTheLocale precondition enforces the contract).
+  // A test whose ASSERTION mentions a month or weekday name must not read the
+  // machine's names into its expected value blind: either force
+  // TyDateTimeNameSource := dnTranslation (fixed English resourcestrings,
+  // machine-independent) or pin DefaultFormatSettings locally -- save, poke,
+  // restore, as test.chart does for the numeric separators. Both knobs are
+  // plain globals precisely so tests can inject them.
   TyLocaleFirstDayOfWeek := wdSunday;
   Application := TTyTestRunner.Create(nil);
   Application.Initialize;

@@ -90,6 +90,59 @@ var
 function TyResolveFirstDayOfWeek(AValue: TTyWeekDay): TTyWeekDay;
 
 type
+  { Where the calendar and the date-time picker take their month & weekday names
+    from. The two sources can legitimately disagree -- the OS locale is the
+    MACHINE's language, a loaded catalogue is the APP's -- and 3.0's bug was
+    picking the machine unconditionally: an app translated to English still
+    titled its calendar 八月 on a Chinese-locale Windows.
+
+      dnAuto         names follow a loaded translation when one is loaded,
+                     the OS locale otherwise (the default; see TyDateTimeNames)
+      dnLocale       always DefaultFormatSettings -- the pre-3.0 behaviour
+      dnTranslation  always the library resourcestrings (compile-time English
+                     until a catalogue patches them)
+
+    An app that wants names NEITHER source has (say, its own abbreviations)
+    already holds both pens: write DefaultFormatSettings and force dnLocale, or
+    ship a tycontrols catalogue and let dnAuto see it. There is deliberately no
+    third name store to keep in sync with those two. }
+  TTyDateTimeNameSource = (dnAuto, dnLocale, dnTranslation);
+
+var
+  { The app's explicit choice -- tier 1 of the precedence, set once at startup
+    (or on a language switch; the controls re-resolve on every paint). A global
+    and not a property because the app's language is one fact, not 40 per-form
+    facts -- same shape as TyLocaleFirstDayOfWeek above and TyFallbackFontName. }
+  TyDateTimeNameSource: TTyDateTimeNameSource = dnAuto;
+
+const
+  { rsTyDateTimeNamesLang's COMPILE-TIME value, for comparing against its current
+    one. The comparison is the whole load-detector, so the two literals must stay
+    identical -- test.calendar pins them. Public so tests and diagnostic code name
+    the marker instead of repeating the string. }
+  TyDateTimeNamesUntranslatedMark = '__locale__';
+
+{ True when TyDateTimeNames will take the names from the resourcestrings rather
+  than from DefaultFormatSettings. Under dnAuto this is "has any catalogue been
+  loaded": every shipped tycontrols catalogue (including the English one, whose
+  name entries equal their msgids) translates the rsTyDateTimeNamesLang sentinel
+  to its language code, so the sentinel differing from its compile-time value is
+  proof of a deliberate load. It cannot false-positive -- nothing else in the
+  process writes resourcestrings -- and a hand-rolled catalogue that omits the
+  sentinel keeps OS-locale names, which is the documented opt-out. }
+function TyDateTimeNamesTranslated: Boolean;
+
+{ The format settings the calendar and the picker RENDER with: the process
+  DefaultFormatSettings, with the month/weekday names replaced from the library
+  resourcestrings when TyDateTimeNamesTranslated says so. Everything that is a
+  CONVENTION rather than a language -- separators, date order, the short-date
+  pattern an empty DateFormat falls back to -- always stays the locale's: a
+  Chinese-locale machine forced to English still writes 2026/8/7, it just says
+  'August' where a name is asked for. Resolved at call time, never cached, so a
+  catalogue loaded (or switched) after startup is honoured by the next paint. }
+function TyDateTimeNames: TFormatSettings;
+
+type
   { Array of 7 day-of-week indices (0=Sunday .. 6=Saturday) in display order
     starting at AFirst. }
   TTyWeekdayOrderArray = array[0..6] of Integer;
@@ -284,6 +337,72 @@ type
   end;
 
 implementation
+
+uses
+  { Only for the name resourcestrings + the load sentinel; kept out of the
+    interface uses so the dependency stays one-way and invisible to hosts. }
+  tyControls.StrConsts;
+
+{ TyDateTimeNamesTranslated }
+
+function TyDateTimeNamesTranslated: Boolean;
+begin
+  case TyDateTimeNameSource of
+    dnLocale:      Result := False;
+    dnTranslation: Result := True;
+  else // dnAuto
+    { Read the resourcestring EVERY time, never a copy taken at unit init:
+      catalogues load from the program body, long after this unit initialised,
+      and an init-time copy would freeze the English default forever. }
+    Result := rsTyDateTimeNamesLang <> TyDateTimeNamesUntranslatedMark;
+  end;
+end;
+
+{ TyDateTimeNames }
+
+function TyDateTimeNames: TFormatSettings;
+begin
+  Result := DefaultFormatSettings;
+  if not TyDateTimeNamesTranslated then Exit;
+  Result.LongMonthNames[1]   := rsTyLongMonth1;
+  Result.LongMonthNames[2]   := rsTyLongMonth2;
+  Result.LongMonthNames[3]   := rsTyLongMonth3;
+  Result.LongMonthNames[4]   := rsTyLongMonth4;
+  Result.LongMonthNames[5]   := rsTyLongMonth5;
+  Result.LongMonthNames[6]   := rsTyLongMonth6;
+  Result.LongMonthNames[7]   := rsTyLongMonth7;
+  Result.LongMonthNames[8]   := rsTyLongMonth8;
+  Result.LongMonthNames[9]   := rsTyLongMonth9;
+  Result.LongMonthNames[10]  := rsTyLongMonth10;
+  Result.LongMonthNames[11]  := rsTyLongMonth11;
+  Result.LongMonthNames[12]  := rsTyLongMonth12;
+  Result.ShortMonthNames[1]  := rsTyShortMonth1;
+  Result.ShortMonthNames[2]  := rsTyShortMonth2;
+  Result.ShortMonthNames[3]  := rsTyShortMonth3;
+  Result.ShortMonthNames[4]  := rsTyShortMonth4;
+  Result.ShortMonthNames[5]  := rsTyShortMonth5;
+  Result.ShortMonthNames[6]  := rsTyShortMonth6;
+  Result.ShortMonthNames[7]  := rsTyShortMonth7;
+  Result.ShortMonthNames[8]  := rsTyShortMonth8;
+  Result.ShortMonthNames[9]  := rsTyShortMonth9;
+  Result.ShortMonthNames[10] := rsTyShortMonth10;
+  Result.ShortMonthNames[11] := rsTyShortMonth11;
+  Result.ShortMonthNames[12] := rsTyShortMonth12;
+  Result.LongDayNames[1]     := rsTyLongDay1;
+  Result.LongDayNames[2]     := rsTyLongDay2;
+  Result.LongDayNames[3]     := rsTyLongDay3;
+  Result.LongDayNames[4]     := rsTyLongDay4;
+  Result.LongDayNames[5]     := rsTyLongDay5;
+  Result.LongDayNames[6]     := rsTyLongDay6;
+  Result.LongDayNames[7]     := rsTyLongDay7;
+  Result.ShortDayNames[1]    := rsTyShortDay1;
+  Result.ShortDayNames[2]    := rsTyShortDay2;
+  Result.ShortDayNames[3]    := rsTyShortDay3;
+  Result.ShortDayNames[4]    := rsTyShortDay4;
+  Result.ShortDayNames[5]    := rsTyShortDay5;
+  Result.ShortDayNames[6]    := rsTyShortDay6;
+  Result.ShortDayNames[7]    := rsTyShortDay7;
+end;
 
 { TyResolveFirstDayOfWeek }
 
@@ -673,11 +792,13 @@ var
   CellRect: TRect;
   CellStates: TTyStateSet;
   DateY, DateM, DateD: Word;
+  Names: TFormatSettings;
 begin
   W      := ARect.Right - ARect.Left;
   ArrowW := HeaderH;
   FontSz := ResolveFontSize(S);
   FontWt := S.FontWeight;
+  Names  := TyDateTimeNames;   // app language > loaded catalogue > OS locale
 
   // Header: [←] [YYYY] [→]
   ArrowLeftRect  := Rect(0, 0, ArrowW, HeaderH);
@@ -724,7 +845,7 @@ begin
     if tpBackground in CellStyle.Present then
       P.FillBackground(CellRect, CellStyle.Background, 0);
 
-    P.DrawText(CellRect, DefaultFormatSettings.ShortMonthNames[i + 1],
+    P.DrawText(CellRect, Names.ShortMonthNames[i + 1],
       CellStyle.FontName, ResolveFontSize(CellStyle),
       FontWt, CellStyle.TextColor, taCenter, tlCenter, False);
   end;
@@ -974,6 +1095,7 @@ var
   WeekOrderArr: TTyWeekdayOrderArray;
   DayName, TitleText: string;
   FontSz, FontWt: Integer;
+  Names: TFormatSettings;
   MutedColor: TTyColor;
   TodayRingStyle: TTyStyleSet;
   TodayRingW: Integer;
@@ -1010,6 +1132,7 @@ begin
 
     FontSz := ResolveFontSize(S);
     FontWt := S.FontWeight;
+    Names  := TyDateTimeNames;   // app language > loaded catalogue > OS locale
 
     CalcLayout(ARect, APPI, HeaderH, WeekdayH, WkNumW, ColW, RowH, GridRect);
 
@@ -1024,8 +1147,12 @@ begin
       P.DrawGlyph(ArrowLeftRect,  tgArrowLeft,  S.TextColor, 1);
       P.DrawGlyph(ArrowRightRect, tgArrowRight, S.TextColor, 1);
 
-      // Title text
-      TitleText := FormatDateTime('mmmm yyyy', EncodeDate(FViewYear, FViewMonth, 1));
+      { Title text. The month name goes through TyDateTimeNames, NOT the bare
+        DefaultFormatSettings: the app's language wins over the machine's.
+        HitTest measures this same string with the same settings -- change one,
+        change the other, or the month/year click split drifts off the glyphs. }
+      TitleText := FormatDateTime('mmmm yyyy',
+        EncodeDate(FViewYear, FViewMonth, 1), Names);
       CellStyle := ActiveController.Model.ResolveStyle('TyCalendarTitle', '', [tysNormal]);
       if not (tpTextColor in CellStyle.Present) then
         CellStyle.TextColor := S.TextColor;
@@ -1055,8 +1182,8 @@ begin
 
       for col := 0 to 6 do
       begin
-        // ShortDayNames: 1=Sunday .. 7=Saturday in FPC/Delphi DefaultFormatSettings
-        DayName  := DefaultFormatSettings.ShortDayNames[WeekOrderArr[col] + 1];
+        // ShortDayNames: 1=Sunday .. 7=Saturday, TFormatSettings order
+        DayName  := Names.ShortDayNames[WeekOrderArr[col] + 1];
         CellRect := Rect(
           GridRect.Left + col * ColW,
           HeaderH,
@@ -1226,7 +1353,12 @@ begin
   begin
     if (APoint.X < ArrowW) or (APoint.X >= W - ArrowW) then
       Exit(cpTitleBtn);
-    TitleText  := FormatDateTime('mmmm yyyy', EncodeDate(FViewYear, FViewMonth, 1));
+    { The SAME string RenderTo draws, from the SAME name source -- measuring the
+      locale's 八月 while the renderer drew 'August' would put the month/year
+      split at the wrong pixel, which is the exact drift this measure exists
+      to prevent. }
+    TitleText  := FormatDateTime('mmmm yyyy',
+      EncodeDate(FViewYear, FViewMonth, 1), TyDateTimeNames);
     S          := CurrentStyle;
     TitleStyle := ActiveController.Model.ResolveStyle('TyCalendarTitle', '', [tysNormal]);
     if TitleStyle.FontSize <= 0 then TitleStyle.FontSize := ResolveFontSize(S);
