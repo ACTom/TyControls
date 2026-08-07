@@ -30,7 +30,8 @@ uses
   Classes, SysUtils, StrUtils, Types, TypInfo, Controls, Forms, Graphics, LCLType,
   BGRABitmap, BGRABitmapTypes,
   fpcunit, testregistry,
-  tyControls.Types, tyControls.Controller, tyControls.Columns, tyControls.Grid;
+  tyControls.Types, tyControls.Controller, tyControls.Columns, tyControls.ScrollBar,
+  tyControls.Grid;
 
 type
   { 只开必要的口子。刻意不去复用 test.grid.pas 里那个大 accessor:
@@ -79,6 +80,9 @@ type
     procedure TestShowRowNumbersIsOneStateWithOptions;
     procedure TestShowFocusCellIsOneStateWithOptions;
     procedure TestNoOpWriteKeepsColumnSelection;
+    procedure TestThumbTrackingIsOneStateWithTheScrollBars;
+    procedure TestThumbTrackingWritesBothScrollBars;
+    procedure TestNoOpWriteKeepsAOneSidedLiveTracking;
     procedure TestDerivedBitsAreNeverCached;
     { --- 行为 --- }
     procedure TestRangeSelectGatesDragSelection;
@@ -282,9 +286,10 @@ begin
   AssertEquals('goCellEllipsis',        19, Ord(goCellEllipsis));
   AssertEquals('goRowHighlight',        20, Ord(goRowHighlight));
   AssertEquals('goHeaderPushedLook',    21, Ord(goHeaderPushedLook));
+  AssertEquals('goThumbTracking',       22, Ord(goThumbTracking));
   { 总数。新成员追加在末尾时这一行也要动 —— 那正是提醒"你在改一个流式化过的
     类型"的时刻。 }
-  AssertEquals('成员总数', 22, Ord(High(TTyGridOption)) + 1);
+  AssertEquals('成员总数', 23, Ord(High(TTyGridOption)) + 1);
 end;
 
 { 实证上一条注释里的说法:写出去的 .lfm 里是**名字**。
@@ -416,6 +421,14 @@ begin
     躺在 FOptions 里,且不许被登记成派生位。 }
   AssertFalse('goHeaderPushedLook 不是派生位',
     goHeaderPushedLook in TyGridDerivedOptions);
+  { 反过来:goThumbTracking **是**视图,真相在两条滚动条的 LiveTracking 上。
+    滚动条出厂 LiveTracking=True(它一直就是实时滚的),所以出厂**在**。 }
+  AssertTrue('滚动条出厂 LiveTracking=True → goThumbTracking 在',
+    goThumbTracking in FGrid.Options);
+  AssertTrue('goThumbTracking 必须登记成派生位,否则 FOptions 里会多一份副本',
+    goThumbTracking in TyGridDerivedOptions);
+  AssertTrue('前置:两条滚动条出厂都实时跟拖',
+    FGrid.VScrollBar.LiveTracking and FGrid.HScrollBar.LiveTracking);
   { 派生位一个都不许躺在自有存储里 —— 躺进去就是那份会发霉的副本。 }
   AssertTrue('FOptions 里不该含任何派生位',
     (FGrid.StoredOptionBits * TyGridDerivedOptions) = []);
@@ -529,6 +542,88 @@ begin
   { 真的翻这一位时才动 —— 而且答案是明确的。 }
   FGrid.Options := FGrid.Options + [goRowSelect];
   AssertTrue('显式加 goRowSelect → gsmRow', FGrid.SelectionMode = gsmRow);
+end;
+
+{ goThumbTracking 是两条内嵌滚动条 LiveTracking 的视图,两个方向都要通。
+
+  这一位从前**不在**枚举里,理由(251db2d)是"我们的滚动条恒为实时拖动,
+  seam 在滚动条不在本控件" —— 发布一个控件办不到的标志就是"说谎的属性"。
+  af73f18 把 seam 切出来之后那条理由过期了,这里是接线。 }
+procedure TGridOptionsTest.TestThumbTrackingIsOneStateWithTheScrollBars;
+begin
+  Build(3, 5, 80);
+
+  { 方向一:绕过 Options 改滚动条 → Options 立刻跟着变(有副本的话这里答旧值)。 }
+  FGrid.VScrollBar.LiveTracking := False;
+  AssertFalse('VScrollBar.LiveTracking := False 之后 goThumbTracking 必须没了',
+    goThumbTracking in FGrid.Options);
+  FGrid.VScrollBar.LiveTracking := True;
+  AssertTrue('改回 True → goThumbTracking 回来', goThumbTracking in FGrid.Options);
+
+  { 方向二:改 Options → 滚动条立刻跟着变。 }
+  FGrid.Options := FGrid.Options - [goThumbTracking];
+  AssertFalse('去掉 goThumbTracking → 纵向滚动条不再实时提交',
+    FGrid.VScrollBar.LiveTracking);
+  FGrid.Options := FGrid.Options + [goThumbTracking];
+  AssertTrue('加回 goThumbTracking → 纵向滚动条恢复实时提交',
+    FGrid.VScrollBar.LiveTracking);
+
+  { 派生位一律不许落进自有存储。 }
+  AssertFalse('goThumbTracking 不许躺在 FOptions 里',
+    goThumbTracking in FGrid.StoredOptionBits);
+end;
+
+{ **两条都要写。**
+
+  只写纵向那条的话,横向拖动照样实时提交:用户在设计器里关掉了这一位,
+  横向滑块却我行我素 —— 属性只生效一半,比根本没有它更坏。
+  把 SetOptions 里那两行删掉任意一行,这条立刻红。 }
+procedure TGridOptionsTest.TestThumbTrackingWritesBothScrollBars;
+begin
+  Build(3, 5, 80);
+  AssertTrue('前置:两条都实时',
+    FGrid.VScrollBar.LiveTracking and FGrid.HScrollBar.LiveTracking);
+
+  FGrid.Options := FGrid.Options - [goThumbTracking];
+  AssertFalse('纵向滚动条必须跟着关', FGrid.VScrollBar.LiveTracking);
+  AssertFalse('**横向**滚动条也必须跟着关 —— 少写一条就是半个属性',
+    FGrid.HScrollBar.LiveTracking);
+
+  FGrid.Options := FGrid.Options + [goThumbTracking];
+  AssertTrue('纵向滚动条必须跟着开', FGrid.VScrollBar.LiveTracking);
+  AssertTrue('**横向**滚动条也必须跟着开', FGrid.HScrollBar.LiveTracking);
+end;
+
+{ "翻位才写"在这一位上的意义 —— 和 NoOpWriteKeepsColumnSelection 是同一个坑。
+
+  goRowSelect 那边是三态(gsmCell/gsmRow/gsmColumn)被压成两态;这边是**一对**
+  布尔(纵、横 → 四种组合)被一个 bit 表达。GetOptions 只问纵向那条,所以
+  "纵开横关"这个状态在 Options 里读出来是**开**。无条件写回的话,设计器每次
+  流式化都会做的那一下 `Options := Options` 就会把横向那条悄悄扳回开 ——
+  宿主直接设的 `HScrollBar.LiveTracking := False` 无声无息地没了。 }
+procedure TGridOptionsTest.TestNoOpWriteKeepsAOneSidedLiveTracking;
+begin
+  Build(3, 5, 80);
+  { 宿主绕过 Options,只关横向那条。 }
+  FGrid.HScrollBar.LiveTracking := False;
+  AssertTrue('前置:纵向仍开,所以 Options 里这一位读出来是开',
+    goThumbTracking in FGrid.Options);
+
+  { 无变化的一次写 —— 正是流式化会做的那一下。 }
+  FGrid.Options := FGrid.Options;
+  AssertFalse('无变化的写不许把横向那条扳回来',
+    FGrid.HScrollBar.LiveTracking);
+
+  { 动别的位也不许殃及它。 }
+  FGrid.Options := FGrid.Options + [goRowHighlight];
+  AssertFalse('改别的位时横向那条仍要保持关',
+    FGrid.HScrollBar.LiveTracking);
+
+  { 真的翻这一位时才动 —— 而且答案是明确的:两条一起。 }
+  FGrid.Options := FGrid.Options - [goThumbTracking];
+  AssertFalse('显式去掉 → 纵向也关', FGrid.VScrollBar.LiveTracking);
+  FGrid.Options := FGrid.Options + [goThumbTracking];
+  AssertTrue('显式加回 → 横向也开', FGrid.HScrollBar.LiveTracking);
 end;
 
 { 派生位在 FOptions 里**不留副本**。直接把整个出厂集合硬写进去也一样 ——

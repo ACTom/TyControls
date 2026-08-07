@@ -244,8 +244,8 @@ msgid "Search…"
 msgstr "搜索…"
 
 #: tmainform.lblrebar.caption
-msgid "Each band hosts a real control. Drag a band grip down for its own row, sideways to resize it."
-msgstr "每个带里承载的都是真控件。抓住带子的抓柄：向下拖独占一行，横向拖改宽度。"
+msgid "Each band hosts a real control. Drag a grip down for its own row, sideways to move its left boundary, past a neighbour to reorder."
+msgstr "每个带里承载的都是真控件。抓住带子的抓柄：向下拖独占一行，横向拖移动它左侧的那条边界，拖过相邻的带则交换次序。"
 
 #: tmainform.lblgrip.caption
 msgid "Bottom-right → size grip TTySizeBox (drag to resize the window)"

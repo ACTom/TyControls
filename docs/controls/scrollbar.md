@@ -118,15 +118,20 @@ Bar.OnScroll := @PreviewRow;      // scTrack 里更新提示，不动数据
 Bar.OnChange := @CommitScroll;    // 松手时才发生，整个手势一次
 ```
 
-**`goThumbTracking`（LCL 网格）**：`TTyGrid` 的 `Options` 目前没有这一位（见
-`docs/controls/grid.md` 的对照表），原因就是这道缝当时不存在。缝已经在了，宿主现在可以直接写：
+**`goThumbTracking`(LCL 对标)**:`TTyGrid.Options` 现在有这一位了——`goThumbTracking`,
+它是这个属性的**视图**(读写都落到两条滚动条的 `LiveTracking` 上,不另存一份),
+详见 [grid.md](grid.md) 的对照表。
+
+逐条设置仍然可用,而且是唯一能只关一条轴的写法:
 
 ```pascal
 Grid.VScrollBar.LiveTracking := False;   // VScrollBar / HScrollBar 是 TTyCustomGrid 的公开只读属性
 Grid.HScrollBar.LiveTracking := False;
 ```
 
-把它做成 `Options` 里的一位需要改 `source/tyControls.Grid.pas`，不在本控件的范围内。
+注意两者的粒度不同:`Options` 里那一位是**两条一起**翻,而直接写属性可以只关一条。
+只关了一条时 `goThumbTracking` 读出来是**关**(getter 读纵向那条),再写 `Options`
+的别的位不会把横向那条带回来。
 
 #### `function GetStyleTypeKey: string`（override）
 

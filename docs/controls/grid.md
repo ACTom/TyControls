@@ -587,7 +587,7 @@ LTR 因此逐字节不变。**不要在控件里写第二组 `if RtlLayout then 
 
 ### 三条纪律
 
-1. **只收我们真的照办的标志。** LCL 有 32 个,这里 21 个。少掉的 11 个不是漏了:
+1. **只收我们真的照办的标志。** LCL 有 32 个,这里 22 个。少掉的 10 个不是漏了:
    一个勾得动却没人理的开关比根本没有它更坏,因为用户会以为自己已经关掉了
    某个行为。`test.grid.options` 里的 `NoInertOptionMembers` 逐个成员去源码里
    找强制点,找不到就红。
@@ -606,7 +606,8 @@ LTR 因此逐字节不变。**不要在控件里写第二组 `if RtlLayout then 
 TyDefaultGridOptions =
   [goVertLine, goHorzLine, goRangeSelect, goDrawFocusSelected, goRowSizing,
    goColSizing, goRowMoving, goColMoving, goEditing, goTabs,
-   goDblClickAutoSize, goFixedColSizing, goCellHints, goCellEllipsis];
+   goDblClickAutoSize, goFixedColSizing, goCellHints, goCellEllipsis,
+   goThumbTracking];
 ```
 
 出厂值**逐位复刻加这个属性之前的行为**,不是复刻 LCL 的 `DefaultGridOptions`。
@@ -640,7 +641,7 @@ TyDefaultGridOptions =
 | `goTabs` | 自有 | `goTabs` | 开 | 关掉后 Tab 交给对话框换焦点(不置 `Key := 0`) |
 | `goRowSelect` | 视图 | `SelectionMode = gsmRow` | 关 | 三态压两态:`Options` 只在这一位**真的翻了**时才写回,所以 `gsmColumn` 不会被一次无变化的写压成 `gsmCell` |
 | `goAlwaysShowEditor` | 不收 | — | — | 我们的编辑器是一个**共享的隐藏子控件**,`MoveCursor` 每次都无条件 `EndEdit`。常驻编辑器要么每格一个实例,要么重做光标移动那条路 —— 是一个独立的改动 |
-| `goThumbTracking` | 暂不收(**缝已在路上,接线已写好**) | — | — | 从前的理由是"我们的 `TTyScrollBar` 恒为实时拖动,seam 在 ScrollBar 不在本控件"。**那条理由已经过期**:滚动条侧新增了 `TTyScrollBar.LiveTracking: Boolean`(published,default `True` = 今天的行为)与只读 `TrackPosition`——关掉后拇指照样跟手、`scTrack` 仍作为通知发出,但 `Position` / `OnChange` / `scPosition` 推迟到松手,两种模式落在同一个终值上;方向键 / 翻页 / 滚轮不受影响。**但该属性尚未合入本分支**(仍在滚动条那位 agent 的工作树里),所以本控件这一位现在接不上——`FVScroll.LiveTracking` 编译不过。落地后按这五步接,一次就能收口:① `goThumbTracking` **追加**到枚举末尾(不得改名/重排,`test.grid.options` 钉着序号);② 登记进 `TyGridDerivedOptions`——它是滚动条状态的**视图**,`FOptions` 里不许留副本;③ 加进 `TyDefaultGridOptions`,因为滚动条出厂 `LiveTracking=True`,不加则 `DefaultsMatchAFreshStringGrid` 变红;④ `GetOptions` 里 `if FVScroll.LiveTracking then Include(Result, goThumbTracking);`;⑤ `SetOptions` 里**仅在这一位真的翻了时**同时写回 `FVScroll` 与 `FHScroll`(与其余派生位同一条"翻位才写"的规矩)。在此之前宿主已经可以直接 `Grid.VScrollBar.LiveTracking := False` |
+| `goThumbTracking` | 视图 | 两条内嵌滚动条的 `LiveTracking` | 开 | **曾经不收**,理由是"我们的 `TTyScrollBar` 恒为实时拖动,seam 在 ScrollBar 不在本控件" —— 发布一个控件办不到的标志就是"说谎的属性"。缝已补上(`af73f18`):`TTyScrollBar.LiveTracking`(published,default `True` = 一直以来的行为)加只读 `TrackPosition`。关掉后滑块照样跟手、`OnScroll(scTrack)` 仍带着提议值发出,但 `Position` / `OnChange` / `scPosition` 推迟到松手,两种模式落在同一个终值上;方向键、翻页、滚轮**不受影响**(它们是离散步,原生滚动条也不推迟)。出厂**开**,因为滚动条出厂 `LiveTracking=True`。写的时候**两条一起写**——只写纵向那条的话横向拖动照样实时提交,属性只生效一半。且只在这一位**真的翻了**时才写:`GetOptions` 只问纵向那条,所以"纵开横关"在 `Options` 里读出来是开,无条件写回会把宿主直接设的 `HScrollBar.LiveTracking := False` 悄悄扳回去(与 `goRowSelect` 三态压两态同一个坑,`NoOpWriteKeepsAOneSidedLiveTracking` 钉着)。宿主要单独控制一条,仍可直接设 `Grid.VScrollBar.LiveTracking` |
 | `goColSpanning` | 不收 | — | — | 合并格是**按需自动**的:`HasMergedCells` 看 `FMergeCount > 0`,没有合并就不走那条路径。一个开关只能用来"禁用用户显式请求的合并",没有意义 |
 | `goRelaxedRowSelect` | 不收 | — | — | 我们**恒为 relaxed**:`FCol` 始终被跟踪,`SelectionMode` 的 setter 不动光标,`gsmRow` 下焦点格照样有自己的底色 |
 | `goDblClickAutoSize` | 自有 | `goDblClickAutoSize` | ⚠ 开 | LCL 默认关。关掉后双击**落到普通拖拽改宽**上,不是被吞掉 |

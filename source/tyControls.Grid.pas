@@ -174,7 +174,14 @@ type
       那个字段只有在 hoDrag 且该列 coDraggable 时才置位,而"按住了"与"能不能拖"
       是两件事。出厂**关**:这个观感以前根本不存在,默认开会改掉每一张现有窗体,
       而这个属性是来描述现状的,不是来偷偷改现状的。 }
-    goHeaderPushedLook
+    goHeaderPushedLook,
+    { 拖滑块时是不是**边拖边滚**。**追加在末尾**(见上面的序号约定)。
+
+      派生位,真相在两条内嵌滚动条的 `LiveTracking` 上 —— 见 TyGridDerivedOptions。
+      关掉之后滑块照样跟手、`OnScroll(scTrack)` 照样发,但 `Position`/`OnChange`
+      推迟到松手;方向键、翻页、滚轮不受影响(它们是离散步,原生滚动条也不推迟)。
+      出厂**开**:滚动条一直就是实时滚的,出厂值描述现状,不改现状。 }
+    goThumbTracking
   );
   TTyGridOptions = set of TTyGridOption;
 
@@ -193,7 +200,8 @@ const
     也因此这两个常量必须声明在 TTyCustomGrid **之前** —— Pascal 先声明后使用。 }
   TyGridDerivedOptions =
     [goVertLine, goHorzLine, goDrawFocusSelected, goColSizing, goColMoving,
-     goEditing, goRowSelect, goFixedRowNumbering, goHeaderHotTracking];
+     goEditing, goRowSelect, goFixedRowNumbering, goHeaderHotTracking,
+     goThumbTracking];
 
   { 出厂值。**逐位复刻加这个属性之前的行为** —— 不是复刻 LCL 的
     DefaultGridOptions(grids.pas:189)。三处刻意与 LCL 不同,原因写在
@@ -208,13 +216,15 @@ const
 
     goVertLine/goHorzLine 跟着 GridLineStyle 的 glsBoth 走;
     goColSizing/goColMoving 跟着 TTyHeader 出厂的 [hoColumnResize, hoDrag] 走;
-    goHeaderHotTracking 不在里面,因为 hoHotTrack 也不在列头的出厂集合里。
+    goHeaderHotTracking 不在里面,因为 hoHotTrack 也不在列头的出厂集合里;
+    goThumbTracking **在**里面,因为 TTyScrollBar 出厂 LiveTracking=True。
     这几位是**算出来的**,写在这里只是为了让 default 子句与新控件的实际读数
     一致 —— 不一致的话 TWriter 会漏写或多写。DefaultsMatchAFreshGrid 钉着它。 }
   TyDefaultGridOptions =
     [goVertLine, goHorzLine, goRangeSelect, goDrawFocusSelected, goRowSizing,
      goColSizing, goRowMoving, goColMoving, goEditing, goTabs,
-     goDblClickAutoSize, goFixedColSizing, goCellHints, goCellEllipsis];
+     goDblClickAutoSize, goFixedColSizing, goCellHints, goCellEllipsis,
+     goThumbTracking];
 
 type
   { 列聚合方式(汇总带用)。一律只统计**通过过滤的行** —— 筛完总计要跟着变。 }
@@ -4233,6 +4243,19 @@ begin
   if hoHotTrack     in FHeader.Options          then Include(Result, goHeaderHotTracking);
   if GetOptEditing                              then Include(Result, goEditing);
   if GetOptRowSelect                            then Include(Result, goRowSelect);
+  { **这里不加 nil 判断,是量过的,不是忘了。** 两条滚动条确实是构造函数
+    **最末尾**才建的(其余派生位读的 FHeader/FGridLineStyle/FShowFocusCell 都在
+    开头),所以"构造到一半有人读 Options"这个窗口理论上存在;而 SyncScrollBars
+    与 UpdateScrollBars 里那两句 `if (FVScroll = nil) ... then Exit` 看着像证据。
+    实测**不成立**:拿一个覆写 UpdateScrollBars 的探针网格去数,构造全程一次
+    都没有在 nil 状态下进去过 —— 挂 Parent 那一下 LCL 因为网格自己还没有 Parent
+    和句柄而把对齐整个推迟了(AutoSizeDelayed)。加了判断就是一条永远走不到、
+    也没法让它变红的分支。
+    真要有人在构造函数里 `FHeader.OnChange := @HeaderChanged` 与
+    `FVScroll := TTyScrollBar.Create(Self)` 之间插一句会碰表头/行数的代码
+    (HeaderChanged / SetRowCount 都通向 UpdateScrollBars),这个窗口才会活过来
+    —— 那时这一行会 AV,而修法是把两条滚动条挪到构造函数前面去,不是在这里补 nil。 }
+  if FVScroll.LiveTracking                      then Include(Result, goThumbTracking);
 end;
 
 procedure TTyCustomGrid.SetOptions(AValue: TTyGridOptions);
@@ -4288,6 +4311,18 @@ begin
     SetOptEditing(goEditing in AValue);
   if (goRowSelect in cur) <> (goRowSelect in AValue) then
     SetOptRowSelect(goRowSelect in AValue);
+
+  { **两条都要写。** 只写纵向的那条,横向拖动照样实时提交 —— 一个属性只生效
+    一半,比根本没有它更坏,因为用户会以为自己已经关掉了。
+    这一位同样只在**真的翻了**的时候才写(与上面那些派生位同一条规矩):
+    无条件写回会让每一次流式化的 `Options := Options` 都去碰两条滚动条,
+    而宿主完全可以绕过 Options 直接设 `VScrollBar.LiveTracking` —— 那份设置
+    会被下一次空写抹掉。 }
+  if (goThumbTracking in cur) <> (goThumbTracking in AValue) then
+  begin
+    FVScroll.LiveTracking := goThumbTracking in AValue;
+    FHScroll.LiveTracking := goThumbTracking in AValue;
+  end;
 
   { 自己存的那一半里有影响外观的(goCellEllipsis / goRowHighlight),
     而上面那些具名 setter 只在自己翻位时才重画 —— 所以这里补一次。

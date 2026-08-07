@@ -263,14 +263,23 @@ LCL 的 `TSpeedButton` 和 `TPaintBox` 都是 `TGraphicControl` —— **没有�
   守卫:`tests/test.themes.pas` 的 `TestPressedGridHeaderSectionIsNotInert` 逐主题×逐模式断言
   按下态与静止态**解析不同**;golden 第 2 号状态槽(`STATES[2] = [tysActive]`)记着值
   (light/dark/showcase 各改 1 行:`bg=k0` → 实心)。变异(删规则)当场红。
-  **仍欠控件侧,收标志前必须做完**(`source/tyControls.Grid.pas`,本轮不在改动范围):
+  **控件侧也已做完(2026-08-08,`5b5ae45`),标志已发布、出厂关**。当时列出的三步:
   ①`TTyGridOption` 末尾追加 `goHeaderPushedLook`(只增不改序);②记录被按住的列头段
   (照 `FHoverHeaderCol` 那套);③`RenderHeaderSections` 对该段用 `[tysActive]` 解析。
   **注意**:该标志此前并非“已发布却无效”,而是**明确拒收**(`TTyGridOption` 21/32 的取舍里没有它),
   拒收理由正是缺这条规则——所以现在是“缝补好了、可以收了”,不是“修好了一个 bug”。
-- **`goThumbTracking` 等着滚动条的缝**(`251db2d` 指名)。
-- **工具条逐状态换形图标**:需要 `GlyphButtons.pas` 的受保护 glyph 源解析器缝(`b133548` 指名);
-  换**色**已由主题管。另:绘制箭头与命中区差一个右内边距的既有偏差(与 `TTyDropDownButton` 同源,两处必须同改)。
+- ~~**`goThumbTracking` 等着滚动条的缝**~~ **两半都完成了**:缝是 `TTyScrollBar.LiveTracking`
+  (`af73f18`,默认 True = 一贯行为;关掉后拇指照样跟手、`scTrack` 照发,但 `Position`/`OnChange`
+  推迟到松手,两种模式落点一致),Options 位是它的**视图**(读写都落到两条滚动条上,不二次存储)。
+  粒度差异写进文档了:`Options` 那一位是两条一起翻,直接写属性可以只关一条。
+- ~~**工具条逐状态换形图标**~~ **已做**(`99bc41c`):缝 = `TTyGlyphButtonBase.GetGlyphSource(AStates)`
+  (protected virtual,基类逐状态盲、有测试证明;**刻意不管**"有没有图标"和"多大",所以覆写它
+  不可能让按钮在指针下改变尺寸)。`HotImages`/`DisabledImages` 据此重新评估后**收了**——它们是
+  对**条自己那份图**的覆盖,只在工具已经在画 `bar.Images` 且备用集合 `Contains` 同一个 `ImageName`
+  时才生效(比 LCL 更严:LCL 在备用表更短时直接把图抹掉)。
+  ~~箭头绘制与命中差一个右内边距~~ **同commit 修好**:两处并到一个从**带内距的内容盒**量起的纯函数;
+  原缺陷很具体——默认 6px 内距下,画出来的分隔线和大约 6px 的箭头跑的是**主操作**。
+  老守卫看不见它,因为它把 padding 设成 0,而那正是两条公式重合的唯一取值。
 - ~~**`TTyPanel.ChildSizing`**:基类已 republish,**子对象是否真生效从未验过**(headless 跑不到对齐引擎,要真机探针)。~~
   **验过,生效,行已收**(2026-08-07,真机探针;细节见上表 `TTyPanel` 行——含 `ShrinkHorizontal` 不缩到首选以下是 LCL 全局语义的实证)。
 - ~~**`examples/panel` 左上面板标题被 Say hello 按钮盖住**(一处 .lfm 布局)。~~
