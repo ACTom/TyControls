@@ -341,9 +341,59 @@ Antek(主要测试者)两页反馈逐条对账:
 | #4/#5 | demo 右/下不能拉伸、dialogs 客户区花 | **已修**(TTyFormSurface,作者已回) |
 | #7a | Aero Snap 拖顶不最大化 | **已修**,Antek #13 亲测确认 |
 | #7b | 最大化窗口不能拖动还原 | **早已修**(`55adc88`,`TyRestoreDragBounds` 按光标比例还原继续拖;Antek 用的旧 commit)。我 triage 时只看论坛引用的旧注释没先 grep 代码——又一次 capability-built-but-not-wired 类错误。**真机复验通过**(2026-08-07,agent a2b19d,真鼠标 mouse_event):双击最大化→按住标题栏拖 >4px→窗口还原为保存尺寸(520x340 精确)、光标按比例扣在标题栏(74% 屏宽处握在 72% 窗宽,注入异步误差 ±10px)、拖拽无缝继续(两段拖 grab offset 恒定 (374,26)、跟手到落点);双击最大化按住不放+12px 移动**不拽走**,最大化条上双击还原按住不放+50px 移动**也不拽走**(历史回归双向钉死)。手势级 headless 钉子已存在(TMaximizedChromeTest 3 条+TRestoreDragBoundsTest 7 条),无需新增;截图 a2b19d_gesture_*.png |
-| #8 | **TTySteps 方向键无效**(焦点拿不到);作者当时说"整个焦点系统要系统性修" | → 新单(连带点击取焦点全面复核) |
+| #8 | **TTySteps 方向键无效**(焦点拿不到);作者当时说"整个焦点系统要系统性修" | **早已修 + 全面复核完毕**(2026-08-08,agent a316120)。Steps 半边死在 `55adc88`(`Loaded` 重新耦合 `Clickable→TabStop`,手写 .lfm 不带 TabStop);antdesign 例子确实接了 `Clickable=True` + `OnChange`,所以契约是"可交互",键盘必须跟上——**是真 bug、已修、现已端到端钉死**。**焦点大扫除结论:没有第二个缺陷。** 129 个窗口化 TTy 类静态过一遍(见下"焦点矩阵"),再用真句柄探针点 67 个可聚焦控件家族:**66 通过**,唯一 FAIL(TTyRibbonBackstage)是探针点打在它自己的"返回"带上、被它正确地关掉了,不是缺陷。TabStop 声明默认值与构造值也全部一致(含继承链解析),`test.focus.tabstop` 的两张表无一条需要改判 |
 | #12/#15 | **TTyScrollBox 四连**:滚动条被子面板盖住 / 滚轮第一格方向反 / 拖滑块闪烁 / 内容跳动;tyscrollcontent 一度不可用 | 拖拽已修过一轮,**其余待复现修复** → 新单 |
 | #14 | **`window-shadow: false` 不生效**(border-radius 局部生效);另问 TTyForm 有没有运行时 StyleOverride | **已修 + 已建**(2026-08-07,agent a2b19d 工作树)。根因:可缩放 TTyForm 是 WS_CAPTION\|WS_THICKFRAME 窗口,阴影是 DWM **标准窗框阴影**,与 DwmExtendFrameIntoClientArea margins 无关——解析层一直是对的,死在 DWM 应用层。修法:关阴影=DWMWA_NCRENDERING_POLICY:=DISABLED + WM_NCCALCSIZE 全窗框吞并(关渲染后 L/R/B 窗框带会被画成经典残框,Win10 19044 实测);开阴影=ENABLED(显式设,同 HWND 可实时翻转;顺带修好固定尺寸 WS_POPUP 窗口从未有过阴影的老缺口)。TTyForm.StyleOverride 已建:复用 ResolveOverride+TyMergeStyleSet(一个解析器),经 ResolveChromeStyle 进入全部 7 个 TyForm 解析点,赋值即重铺 chrome(实时翻 shadow/radius 真机验过)。守卫:TFormStyleOverrideTest(7)+TWindowEffectsTest 扩(3,含 DWMWA_NCRENDERING_ENABLED 真句柄回读);真机截图 a2b19d_auto_*.png(scratchpad)。border-radius"局部生效"=Win10 上圆角偏好本来就是 no-op(永远方角),三个时机在 apply seam 全钉;Win11 真机(shadow-off 连带方角?)仍待验 |
 | #16 | **HighDPI PerMonitorV2**:跨屏 2-4 秒重算、回来布局永久坏、TyTitleBar 过高 | **未修,作者承诺下周** → 新单(最大) |
 | #18a | containers 编译报 unknown property autoscroll | **已修**(d93e676 + check-lfm-props 守卫,他用的 a1c31d1 太旧) |
-| #18b | **antdesign 反馈页的输入对话框偶尔关不掉** | 未复现过 → 新单(复现优先;怀疑 EnableWindow 时序,见 swallowed-cm-message-inherited) |
+| #18b | **antdesign 反馈页的输入对话框偶尔关不掉** | **认真复现过一轮,未复现**(2026-08-08,agent a316120)。锤子跑了 1600 次开关(400 + 1200),8 条关闭路径 × 3 种"开之前谁持焦点"轮转:OK 点击 / Cancel 点击 / Enter / Esc / 标题栏 X(`Close`)/ 直接写 `ModalResult` / **模态里再开一个模态** / **下拉弹层还开着时开对话框**。判据是"4 秒内没关掉"= 卡死,外加每轮结束在**真句柄上**查 `IsWindowEnabled(host)`——因为怀疑的正是"EnableWindow 顺序错了、LCL 以为开着而 OS 关着"。**结果 0 卡死、0 次宿主被留在 disabled、0 异常。** 唯一一次疑似(第一轮 50 次全落在 nested 路径)是锤子自己的错:`FindDialog` 取到了**外层**对话框,而外层在内层模态活着时本来就关不掉;改成取最内层(`Screen.ActiveCustomForm`)后 nested 路径也全绿。锤子留在 scratchpad(`a316120_dlghammer/`),下次接手直接跑。**未证伪的剩余面**:真机锁屏导致**真鼠标输入无法注入**(见下),所以"OS 级点击 + 真实模态循环"这一层没跑到;下一个人应在**解锁的机器**上用真 mouse_event 驱动 antdesign 例子本身复跑一遍 |
+
+### 焦点矩阵与"点击取焦点"守卫(2026-08-08,agent a316120)
+
+**为什么原来的守卫看不见这类 bug。** `tests/test.focus.tabstop.pas` 只读**标志位**(TabStop),没有一条断言证明这个标志位接到了任何东西。
+把 `TTyCustomControl.MouseDown` 里的 `SetFocus` 整个删掉——**它 6 条测试全绿**(实测)。
+也就是说:一个 `MouseDown` 覆写忘了 `inherited`、或者一个 `CM_*` 吞掉了没往下传,TabStop 照样是 True,控件照样永远聚不上焦,
+用户报告照样是"点这个控件没反应",而整套 tabstop 测试**一条都不会红**。这正是作者当初不得不向论坛承诺"整个焦点系统要系统性修"的那个洞。
+
+新增 `TTyClickFocusTest`(与两张决策表同文件,共用 `FocusableControls` 名单,避免第二份真相):
+真句柄、**真可见**(离屏 -4000 摆放)的窗体上,先把焦点停在一个已知 TTyEdit 上,再把 widgetset 收到 OS 点击时发的那条 `LM_LBUTTONDOWN`
+用 `Perform` 打进控件自己的 WindowProc,断言焦点**移动**到了该控件(或它自己的内嵌子控件)。三个要点,都是踩过才知道的:
+
+- **必须真 `Visible`**,不能只 `HandleNeeded`:隐藏控件 `CanFocus=False`,而 `MouseDown` 的闸门就是 `CanFocus`——
+  隐藏窗体版本会对**所有**控件包括被删掉 `SetFocus` 的那个**空转通过**。
+- **只发 press,不发 release**:焦点在 press 上就拿到了,而 release 会触发 `Click`——`TTyColorButton` 的 Click 弹模态取色对话框,
+  把整个 console runner 卡死且无路可退。
+- **探针点取左下四分之一**,不是左上:左上四分之一正好落在 `TTyRibbonBackstage` 的"返回"带上,它的职责就是隐藏该浮层——
+  于是"点击成功聚焦、然后控件把自己关了"会被读成焦点失败。右侧一律避开(chevron / 微调对 / 滚动条)。
+
+**变异表**(每条都重编包 + 重跑):
+
+| 变异 | 新守卫 | 旧守卫 |
+|---|---|---|
+| M1 `TTyCustomControl.MouseDown` 去掉 `SetFocus` | **红**,`TTyButton: a click must land focus on it…Focus ended on: TTyEdit` | `TTyFocusTabStopTest` 6/6 **全绿**(即上面说的洞) |
+| M2 `TTySteps.MouseDown` 去掉 `inherited` | **红**,`the click must focus the rail, or no key can ever reach it` | `TTyStepsControlTest` 23/23 **全绿** |
+| M3 `TTySteps.KeyDown` 前进键 delta 1→0 | **红**,`Right on a focused horizontal rail steps forward one expected: <1> but was: <0>` | 同上全绿 |
+
+**踩坑:键要发 `CN_KEYDOWN`,不是 `LM_KEYDOWN`。** widgetset 把按键投给**焦点控件**用的是 CN_ 通知,那才是 `TWinControl` 转成 `KeyDown` 的入口;
+发 LM_KEYDOWN 能进控件却永远进不了它的 `KeyDown`,于是台阶不动、测试会去冤枉控件。
+`test.steps` 自己的 `SendKey` 是**直接调 `KeyDown`**,天然分辨不了这两者——这正是新测试要和它并存的理由。
+
+**被提议并被实验否决的改动:放宽 `Base.pas:1682` 的 `TabStop` 闸门。**
+提议(来自 RadioGroup agent,理由充分):Win32 的惯例是**点击必然让可聚焦控件取焦点**,`WS_TABSTOP` 只管 **Tab 遍历**;
+原生控件不带 WS_TABSTOP 也照样点击取焦点。所以 `if TabStop and CanFocus and not Focused` 里的 `TabStop` 是多余且有害的。
+**前半句是对的,结论在本库不成立。** 实测(M4:把闸门改成 `if CanFocus and not Focused`,重编包 + 重跑):
+`TTyClickFocusTest.TestTheGuardIsNotVacuousForANonFocusableControl` **立刻变红——点 `TTyPanel` 会把焦点从它的子控件手里抢走**。
+
+**为什么类比不能照搬**:在 Win32,"点击取焦点"这行代码住在**每个控件自己的窗口过程**里,所以容器**根本没写**这段,自然不抢焦点。
+在本库,`TTyCustomControl` 是**交互控件和容器共用的同一个基类**,这段代码只写了一份——基类必须有一个判别器来区分两者,
+而 `TabStop` 正是本库一直在用的那个判别器。放宽它会一次性破坏 5 处**有文档、有测试表**的既定行为:
+容器背景(TTyPanel/TTyCard/TTyScrollBox/TTyGroupBox…)、**内嵌滚动条**(拖它会把焦点从被滚的表格/树/列表上夺走)、
+**计算器键盘**(点一个键把焦点挪到键上,下一次击键就去按那个键而不是输入)、`TTySpeedButton`(经典 SpeedButton 不取焦点)、
+`TTyTransfer` 的搬运箭头。**结论:闸门保留,Base.pas 不动。**
+RadioGroup 侧在**组这一层**用先于闸门运行的 `OnMouseDown` 修掉自己的问题是**正确解法**——它不依赖闸门,闸门也就不必为它让路。
+(旧的 `TTyFocusTabStopTest` 在 M4 下**依旧 6/6 全绿**:它只读标志位,看不见这个回归。又一次同样的洞。)
+
+**本轮环境限制(重要,别当成结论)**:这台机器全程**锁屏**(LogonUI 在跑、`OpenInputDesktop` 返回 0、`GetForegroundWindow` 返回 0),
+真 `mouse_event` 注入**完全无效**。第一版真鼠标探针 67 个控件**全 FAIL**,那是假象不是缺陷——
+教训:**真输入探针必须先断言自己拿到了前台**(现已把 `mode=REAL-INPUT / SYNTHETIC-WM` 和 `fg=` 打进日志头),
+否则一次锁屏就能伪造出一份 67 条的"重大缺陷"清单。探针留在 `scratchpad/a316120_focusprobe/`,解锁后重跑即得 OS 级 `GetFocus` 那一列。

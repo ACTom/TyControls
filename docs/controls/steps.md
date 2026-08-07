@@ -56,7 +56,7 @@ uses tyControls.Steps;
 | `StyleClass` | `string` | `''` | **变体入口**：对应 `.tycss` 里 `TySteps.<classname>`。解析每一步 / 每条连线时**带上同一个 `StyleClass`**，所以 `TyStepsItem.compact` 能跟着轨道一起换。 |
 | `StyleOverride` | `string` | `''` | 单实例内联 CSS 声明块（可引用 `var(--...)` 令牌）。 |
 | `Controller` | `TTyStyleController` | `nil`（用全局 `TyDefaultController`） | 指定样式控制器。 |
-| `TabStop` | `Boolean` | **`False`**（构造时显式设置） | 跟着 `Clickable` 走：`Clickable := True` 把它设为 `True`，`:= False` 再还回去。**流式加载（`.lfm`）期间不动它**——设计器里跑过同一个 setter，存下来的值本就是对的。 |
+| `TabStop` | `Boolean` | **`False`**（构造时显式设置） | 跟着 `Clickable` 走：`Clickable := True` 把它设为 `True`，`:= False` 再还回去。**流式加载（`.lfm`）期间 setter 不动它**，改由 `Loaded` 在所有流式值就位后**重新断言**这条耦合。曾经的理由是「设计器跑过同一个 setter，存下来的值本就是对的」——**那是错的**：`TabStop` 的**声明默认值**是 `False`（`TWinControl` 的），所以设计器写出的 `TabStop = True` 只是因为 setter 已经先翻过它；而**手写的 `.lfm`（本仓库每个 example 都是手写的）只会写 `Clickable = True`，对 `TabStop` 只字不提**。于是轨道曾以 `TabStop = False` 流进来：Tab 到不了，鼠标也点不到焦点（`TTyCustomControl.MouseDown` 的点击取焦点以 `TabStop` 为闸门），方向键——`Clickable` 买来的另一半——于是永远拿不到按键。这就是论坛 #8「方向键无效」的真正成因，`55adc88` 修的正是这里。想要「可点但不可聚焦」的轨道，仍可在加载后自行赋 `TabStop`。 |
 
 另暴露 `Enabled` / `Font` / `Align` / `Anchors` / `OnClick` 及 `TTyCustomControl` 基线事件集（含 `OnKeyDown` / `OnEnter` / `OnExit` 等），见 [../events.md](../events.md)。
 

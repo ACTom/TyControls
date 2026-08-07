@@ -2,7 +2,8 @@ unit test.focus.tabstop;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, TypInfo, Controls, Forms, fpcunit, testregistry,
+  Classes, SysUtils, TypInfo, Controls, Forms, LCLType, LMessages,
+  fpcunit, testregistry,
   tyControls.Base, tyControls.ScrollBar,
   { focusable side }
   tyControls.Button, tyControls.ColorButton, tyControls.DropButtons,
@@ -58,6 +59,44 @@ type
     procedure TestEmbeddedScrollBarsNeverTakeFocusFromTheirHost;
     procedure TestTransferRailStaysOutOfTheTabOrder;
     procedure TestCalculatorKeypadIsNotTheTabOrder;
+  end;
+
+  { WHY a SECOND suite, on top of the TabStop tables above.
+
+    Everything above reads a FLAG. Not one assertion in it proves the flag is connected to
+    anything: TTyCustomControl.MouseDown is what turns a click into focus, and a descendant
+    that overrides MouseDown and forgets `inherited`, or that swallows a CM_ message without
+    passing it on, keeps TabStop=True and still cannot be focused by clicking. The user's
+    report ("clicking this control does nothing") would be identical, and every test above
+    would stay green. That gap is the whole reason the author had to promise the forum a
+    systematic focus pass.
+
+    So this suite drives the CHAIN, not the flag: a real, handle-allocated, visible form;
+    focus parked on a known control; then the very LM_LBUTTONDOWN the widgetset posts when
+    the OS reports a click, delivered by Perform straight into the control's own WindowProc.
+    Perform rather than a Win32 PostMessage on purpose -- it is the same entry point every
+    widgetset uses, so the guard is not Win32-only, and it still runs the whole real path
+    (WindowProc -> WMLButtonDown -> TControl.MouseDown -> TTyCustomControl.MouseDown ->
+    SetFocus).
+
+    The form must be genuinely VISIBLE, not merely handle-allocated: CanFocus is False for a
+    hidden control, and TTyCustomControl.MouseDown gates on CanFocus, so a hidden-form
+    version of this test would pass vacuously for every control -- including a control whose
+    SetFocus call had been deleted. It is parked off-screen so the suite stays quiet. }
+  TTyClickFocusTest = class(TTestCase)
+  private
+    FForm: TForm;
+    FPark: TTyEdit;
+    { Build AClass on the visible form, park focus on FPark, click it, and report where
+      focus ended up. Frees the control before returning. }
+    function ClickAndReportFocus(AClass: TTyCtlClass; out AMoved: Boolean): string;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestAClickActuallyLandsFocusOnEveryFocusableControl;
+    procedure TestTheGuardIsNotVacuousForANonFocusableControl;
+    procedure TestClickThenArrowWalksAClickableStepsRail;
   end;
 
 implementation
@@ -286,6 +325,189 @@ begin
   AssertTrue('the keypad was actually built (the loop above must not be vacuous)', keys > 10);
 end;
 
+{ ---------------------------------------------------------------------------------------
+  TTyClickFocusTest -- the chain, not the flag.
+  --------------------------------------------------------------------------------------- }
+
+{ The console runner registers no window classes until the widgetset is up, and CreateHandle
+  then fails with error 1407. Same lazy bootstrap test.base / test.form already use. }
+var
+  ClickFocusWidgetSet: Boolean = False;
+
+procedure NeedWidgetSetForClicks;
+begin
+  if ClickFocusWidgetSet then Exit;
+  Forms.Application.Initialize;
+  ClickFocusWidgetSet := True;
+end;
+
+{ The lParam the widgetset packs a click position into. }
+function MousePos(X, Y: Integer): PtrInt;
+begin
+  Result := PtrInt((Y shl 16) or (X and $FFFF));
+end;
+
+procedure TTyClickFocusTest.SetUp;
+begin
+  NeedWidgetSetForClicks;
+  FForm := TForm.CreateNew(nil);
+  { Off-screen, but genuinely shown: CanFocus needs Visible all the way up, and the whole
+    point of this suite is that the gate TTyCustomControl.MouseDown checks is really open. }
+  FForm.SetBounds(-4000, -4000, 640, 480);
+  FForm.Visible := True;
+  FForm.HandleNeeded;
+  FPark := TTyEdit.Create(FForm);
+  FPark.Parent := FForm;
+  FPark.SetBounds(8, 8, 160, 26);
+  FPark.HandleNeeded;
+end;
+
+procedure TTyClickFocusTest.TearDown;
+begin
+  FForm.Free;      // owns every control the test built
+  FForm := nil;
+  FPark := nil;
+end;
+
+function TTyClickFocusTest.ClickAndReportFocus(AClass: TTyCtlClass;
+  out AMoved: Boolean): string;
+var
+  c: TTyCustomControl;
+  before, after: TWinControl;
+begin
+  AMoved := False;
+  Result := '<none>';
+  c := AClass.Create(FForm);
+  try
+    c.Parent := FForm;
+    { Roomy enough that a quarter-in probe point lands on the control's own body rather than
+      on a scroll bar, a chevron or a spin pair parked at the far edge. }
+    c.SetBounds(220, 60, 260, 150);
+    { A rail is inert by contract until Clickable is on, and that property is what couples
+      TabStop -- probe the configured-interactive rail, which is what the roster means. }
+    if c is TTySteps then
+    begin
+      TTySteps(c).Items.Text := 'One' + LineEnding + 'Two' + LineEnding + 'Three';
+      TTySteps(c).Clickable := True;
+    end;
+    { A few roster members are born hidden because their host shows them on demand (the
+      ribbon backstage overlay). CanFocus is False while hidden, so probing them as-built
+      would assert on visibility, not on the focus chain. }
+    c.Visible := True;
+    c.HandleNeeded;
+    Forms.Application.ProcessMessages;
+
+    { Park focus elsewhere FIRST, so a pass proves the click MOVED focus rather than
+      finding it already there. }
+    if FPark.CanFocus then FPark.SetFocus;
+    Forms.Application.ProcessMessages;
+    before := FForm.ActiveControl;
+
+    { PRESS only, deliberately -- no matching LM_LBUTTONUP. Focus is taken on the press
+      (TTyCustomControl.MouseDown), so the release adds nothing to what is being asserted,
+      while it DOES fire Click: TTyColorButton's click opens a modal colour dialog, which
+      wedges the whole console runner with no way out. Press-only keeps the guard on the
+      thing it is guarding.
+
+      LOWER-left quadrant, not upper: a quarter down the left edge sits on TTyRibbonBackstage's
+      "Back" band, whose whole job is to hide the overlay -- the click focused the control and
+      then closed it, which reads as a focus failure and is not one. Three-quarters down is
+      clear of that band, and a quarter in from the left stays clear of the chevrons, spin
+      pairs and scroll bars that live at the right edge. }
+    c.Perform(LM_LBUTTONDOWN, MK_LBUTTON, MousePos(c.Width div 4, (c.Height * 3) div 4));
+    Forms.Application.ProcessMessages;
+
+    after := FForm.ActiveControl;
+    if after <> nil then Result := after.ClassName;
+    { Focus must have MOVED, and must have landed on the control itself or on one of its own
+      embedded children (a composite legitimately hands focus to its inner editor). An
+      ANCESTOR does not count -- focus falling back to the form is the failure, not a pass --
+      and `after = before` never counts, or a control that focuses nothing would ride on the
+      park edit's focus and every row would be green. }
+    AMoved := (after <> nil) and (after <> before)
+              and ((after = c) or c.IsParentOf(after));
+  finally
+    c.Free;
+  end;
+end;
+
+procedure TTyClickFocusTest.TestAClickActuallyLandsFocusOnEveryFocusableControl;
+var
+  list: TTyCtlClassArray;
+  i: Integer;
+  moved: Boolean;
+  landed: string;
+begin
+  list := FocusableControls;
+  AssertTrue('the roster must not be empty (a vacuous loop proves nothing)',
+    Length(list) > 0);
+  for i := 0 to High(list) do
+  begin
+    landed := ClickAndReportFocus(list[i], moved);
+    AssertTrue(list[i].ClassName + ': a click must land focus on it. TabStop is True, so '
+      + 'the gate is open -- if this fails the MouseDown chain is broken (an override that '
+      + 'forgot `inherited`, or a swallowed CM_ message). Focus ended on: ' + landed,
+      moved);
+  end;
+end;
+
+{ The mutation guard for the guard above. A container is deliberately NOT a tab stop, so
+  clicking it must leave focus where it was -- if this ever reports "moved", the helper is
+  counting something other than the click (the park edit's own focus, say) and every PASS
+  in the roster test is worthless. }
+procedure TTyClickFocusTest.TestTheGuardIsNotVacuousForANonFocusableControl;
+var
+  moved: Boolean;
+begin
+  ClickAndReportFocus(TTyPanel, moved);
+  AssertFalse('a click on a TTyPanel must NOT move focus -- it is not a tab stop. '
+    + 'If this passes, ClickAndReportFocus is not measuring the click at all.', moved);
+end;
+
+{ The forum report behind this suite (#8): the rail took no focus, so its arrow keys -- the
+  half of Clickable that is not the mouse -- were dead code. Both halves, end to end, on a
+  real handle: nothing else in the suite joins them up. test.steps drives the protected
+  PressAt/SendKey seams directly, which cannot see a focus failure at all. }
+procedure TTyClickFocusTest.TestClickThenArrowWalksAClickableStepsRail;
+var
+  s: TTySteps;
+  wasIndex: Integer;
+begin
+  s := TTySteps.Create(FForm);
+  s.Parent := FForm;
+  s.SetBounds(220, 60, 300, 90);
+  s.Items.Text := 'One' + LineEnding + 'Two' + LineEnding + 'Three';
+  s.Clickable := True;
+  s.StepIndex := 0;
+  s.HandleNeeded;
+  Forms.Application.ProcessMessages;
+
+  if FPark.CanFocus then FPark.SetFocus;
+  Forms.Application.ProcessMessages;
+
+  s.Perform(LM_LBUTTONDOWN, MK_LBUTTON, MousePos(4, s.Height div 2));
+  Forms.Application.ProcessMessages;
+  AssertSame('the click must focus the rail, or no key can ever reach it',
+    TWinControl(s), TWinControl(FForm.ActiveControl));
+
+  { CN_KEYDOWN, not LM_KEYDOWN: the widgetset delivers a keystroke to the FOCUSED control as
+    the CN_ notification, and that is the message TWinControl turns into KeyDown. Driving
+    LM_KEYDOWN instead reaches the control but never its KeyDown, so the rail would not move
+    and the test would blame the control for the harness. (test.steps' own SendKey calls
+    KeyDown directly and so cannot tell these two apart -- which is exactly why this test
+    exists alongside it.) }
+  wasIndex := s.StepIndex;
+  s.Perform(CN_KEYDOWN, VK_RIGHT, 0);
+  Forms.Application.ProcessMessages;
+  AssertEquals('Right on a focused horizontal rail steps forward one',
+    wasIndex + 1, s.StepIndex);
+
+  s.Perform(CN_KEYDOWN, VK_LEFT, 0);
+  Forms.Application.ProcessMessages;
+  AssertEquals('...and Left steps back', wasIndex, s.StepIndex);
+end;
+
 initialization
   RegisterTest(TTyFocusTabStopTest);
+  RegisterTest(TTyClickFocusTest);
 end.

@@ -199,8 +199,20 @@ implementation
 
 const
   DIR_NAME = 'tyfs_test_readdir';
+
   { the four Chinese code points -> UTF-8 via UTF8Encode, then '.bin' appended }
   CN_TEST  = UnicodeString(#$6D4B#$8BD5#$6587#$4EF6);
+
+{ Every temp root here is per-PROCESS. These suites create, list and DELETE whole trees
+  under one fixed name in the shared temp directory, so two runners on one machine --
+  parallel agents, or a plain second console -- delete each other's fixtures mid-test.
+  It presents as a lone red in one runner that passes when the suite is run alone, which
+  is the most expensive kind of flake to chase. }
+function TempRootFor(const ATag: string): string;
+begin
+  Result := ChompPathDelim(AppendPathDelim(GetTempDir) + ATag + '_' +
+                           IntToStr(GetProcessID));
+end;
 
 { ===========================================================================
   TFsReadDirTest
@@ -255,7 +267,7 @@ procedure TFsReadDirTest.SetUp;
 var
   hidden: string;
 begin
-  FRoot := ChompPathDelim(AppendPathDelim(GetTempDir) + DIR_NAME);
+  FRoot := TempRootFor(DIR_NAME);
   { start clean }
   if DirectoryExistsUTF8(FRoot) then
     DeleteDirectory(FRoot, False);
@@ -716,7 +728,7 @@ end;
 
 procedure TFsResolveTest.SetUp;
 begin
-  FDir := ChompPathDelim(AppendPathDelim(GetTempDir) + 'tyfs_test_resolve');
+  FDir := TempRootFor('tyfs_test_resolve');
   if DirectoryExistsUTF8(FDir) then
     DeleteDirectory(FDir, False);
   ForceDirectoriesUTF8(FDir);
@@ -817,7 +829,7 @@ end;
 
 procedure TFsPathTest.SetUp;
 begin
-  FRoot := ChompPathDelim(AppendPathDelim(GetTempDir) + 'tyfs_test_path');
+  FRoot := TempRootFor('tyfs_test_path');
   if DirectoryExistsUTF8(FRoot) then
     DeleteDirectory(FRoot, False);
   FSub := AppendPathDelim(FRoot) + 'child';
