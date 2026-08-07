@@ -69,6 +69,8 @@ uses tyControls.ToolBar, tyControls.Button;
 | `ShowCaptions` | `Boolean` | `False` | 与 LCL 一致：`False`（默认）让工具项**只显示图标**，`True` 才画标题。它下发到每个**能画图标**的子控件（`TTyGlyphButtonBase` 一族：`TTyGlyphButton` / `TTySpeedButton` / `TTyGlyphContainerButton`），走 `AdoptShowCaption`——对已被宿主自己写过 `ShowCaption` 的工具项是空操作。普通 `TTyButton` 没有图标模型，不受影响；**解析不出图标的工具项保留标题**（否则画出来是个空盒子），所以 `False` 这个默认值不会把现有的纯文字工具条抹白。改值触发 `Relayout`。 |
 | `Flat` | `Boolean` | `True` | 为 `True` 时，工具条把子 `TTyButton` 的 `StyleClass` 设为 `'ghost'`（平面外观）——但**只在它还是空串时**；为 `False` 时只把 `'ghost'` 改回 `''`。宿主自己写的 `StyleClass := 'primary'` 会保留下来。改值触发 `Relayout`。 |
 | `Images` | `TTyImageCollection` | `nil` | 工具项的图标来源：**没有自己 `Images` 的子图标按钮由工具条把这个集合借给它**，于是工具项只需设 `ImageName`。已经自带集合的工具项不受影响——工具条只管自己借出去的那一份引用（重新指向或收回）。用 `FreeNotification` 挂钩，集合被释放时连同"借出标记"一起置 `nil`。改值触发 `Relayout`。 |
+| `HotImages` | `TTyImageCollection` | `nil` | **悬停时的替换图**，用**同一个 `ImageName`** 去这份集合里取。见下方 [3.1.2 节](#312-hotimages--disabledimages按状态换形状不换颜色)。 |
+| `DisabledImages` | `TTyImageCollection` | `nil` | **禁用时的替换图**，同上。两者都到齐时**禁用优先**（LCL 同序：禁用的工具即使指针在上面也不算悬停）。 |
 | `Align` | `TAlign` | `alTop` | 停靠方式（**默认 `alTop`**，与原生工具条一致）。 |
 | `Anchors` | `TAnchors` | — | 锚点布局（继承）。 |
 
@@ -81,12 +83,6 @@ uses tyControls.ToolBar, tyControls.Button;
 > （`InsertControl`）——**刻意不放在排布过程里**：排布一次 resize 要跑很多遍，那样反复覆写宿主可见的状态，
 > 正是 `Flat` 从前覆写 `StyleClass` 会出事的原因。
 
-#### 条上有意**没有**做的成员
-
-| LCL 成员 | 为什么没有 |
-|---|---|
-| `HotImages` / `DisabledImages` | LCL 用它们在悬停 / 禁用时**换一份图集**（同一个 `ImageIndex` 打到另一个 `TImageList` 上），经典用途是"彩色图标禁用时换灰度版"。本库不带它们，两个原因：**其一**，本库的图形管线把集合里的每张图**染成当前状态解析出的 `TextColor`**（`TyTintBitmapAlpha` 整体替换 RGB、保留 alpha）——"每个状态换个颜色处理"这份工作**本来就是主题的**，每套皮肤经 `:hover` / `:disabled` 规则自己定；换进来的图照样会被同样染色，第二份集合唯一能加的只有"每个状态换个**形状**"。**其二**，为这点残余开两个属性，等于在主题的状态模型旁边再立一套按条配置的图像状态模型，还带着按名字的静默回退（备选集合里缺某个名字就显示基础图标）——一个"有时生效"的表面。真要按状态换形状，正确的缝是在 `TTyGlyphButtonBase` 上加一个受保护的虚 glyph 源解析器、让它的 `DrawContent` 咨询——先把那个建出来，再删 `TToolBarMembersApiParityTest.TestHotAndDisabledImagesAreDeliberatelyAbsent` 里的断言；不要放宽它。 |
-
 ### 3.1.1 TTyToolBar 的按钮列表（LCL 的 `Buttons[]`）
 
 | 成员 | 类型 | 说明 |
@@ -98,6 +94,43 @@ uses tyControls.ToolBar, tyControls.Button;
 > **只装 `TTyToolButton`，别的都不算。** 这与 LCL 一致：`TToolBar.FButtons` 里只有 `TToolButton`。
 > 于是夹在两个单选按钮之间的普通 `TTyButton`、编辑框或 `TTyToolSeparator` **不会把它们的单选组切断**
 > ——它们根本不在这个下标空间里。`Grouped` 与 `TTyToolButton.Index` 说的都是这个下标空间。
+
+### 3.1.2 `HotImages` / `DisabledImages`：按状态换**形状**，不换颜色
+
+对标 LCL 的同名成员（`comctrls.pp`）。LCL 那边是并排的几个 `TImageList`，用**同一个 `ImageIndex`** 打到
+不同的表上；本库按**名字**取图，所以忠实的译法不是并排的表，而是并排的**集合**、用**同一个 `ImageName`** 取
+——顺便也是唯一一种"宿主重排了其中一份集合、另一份没重排"之后还成立的译法。
+
+**它们能加什么（这一点被认真质疑过一次）。** 本库的绘制管线会把集合里的图**染成当前状态解析出的
+`TextColor`**（`TyTintBitmapAlpha` 整体替换 RGB、保留 alpha），而每套皮肤又可以用 `:hover` / `:disabled`
+规则各自定义那个颜色——所以**"按状态换颜色"根本不需要属性，那是主题的活，以后也是**。这两个属性一点也
+不碰颜色。它们服务的是剩下那一半：**按状态换形状**——悬停时从描边图标换成实心图标，或者禁用时换一张
+"灰一层"表达不了的图（一把锁、一道斜杠）。这件事全库没有第二个地方能表达。
+
+**它是"替换"，绝不是"新增"。** 一个工具项只在下面**全部**成立时才去看这两份集合：
+
+1. 它本来就在画**工具条自己的** `Images`（自带集合的工具项，工具条没有发言权——和"借而不夺"同一条规矩）；
+2. 备选集合非 `nil`；
+3. 备选集合里**确实有**这个 `ImageName`。
+
+否则一律画原图。于是：备选集合只填了一半**不会**让图标在悬停时消失（LCL 那边会）；只设 `HotImages`
+不设 `Images` 则**什么也不发生**——本来就没有图可替换，这是诚实的答案；而**量出来的图标槽位不会动**，
+因为槽位读的是 published 属性、不是这条按状态的缝（见下）。指针一进来按钮就变宽，会是比这两个属性
+所修的问题严重得多的 bug。
+
+**底下的缝。** 走的是 `TTyGlyphButtonBase.GetGlyphSource(AStates)`——一个受保护的虚方法，`DrawContent`
+在每次绘制时带着当前状态问它一次，基类**完全无视 `AStates`**、照答 published 的四个字段（所以加这条缝
+没有改变任何现有按钮的渲染，`TGlyphSourceSeamTest.TestBaseIsStateBlind` 钉住）。`TTyToolButton` 重写它来做
+上面那三条判断。**自己写子类**的人照样可以用这条缝做别的按状态换图，契约只有一条：**换图片，别换"有没有图"
+和"多大"**——那两件事是 published 属性的事，`CanShowGlyph` / `CalculatePreferredSize` 刻意**不**走这条缝。
+
+> **一度被拒，现在做了，原因写在这里免得来回。** 上一轮拒绝的理由是"颜色是主题的活、剩下的形状残余
+> 需要一条 `TTyGlyphButtonBase` 上的 glyph 源缝，而那条缝不存在"。前半句到今天仍然成立，后半句是**缺一条缝**，
+> 不是一个反对意见。缝建好了，理由就没了。当时另一条顾虑"按名字静默回退 = 一个'有时生效'的表面"，
+> 靠**收窄属性的承诺**解决：它们是工具条自己那份图标的**覆盖**，不是一套独立的图像状态模型；这样一来
+> "备选集合里没有这个名字"就不是静默失败，而是写明了的答案。钉住的测试见
+> `TToolBarStateImagesTest`（其中 `TestHoverReallyDrawsTheHotArt` 从像素里读回换过的图，
+> 保证这不是两个"绘制路径根本不看"的属性）与 `TToolBarMembersApiParityTest.TestHotAndDisabledImagesArePublishedAndHonoured`。
 
 ### 3.2 TTyToolButton（工具按钮）
 
@@ -131,7 +164,7 @@ TTyToolButtonStyle = (tbsButton, tbsCheck, tbsDropDown, tbsSeparator, tbsDivider
 |------|------|------|
 | `tbsButton` | 普通命令按钮（默认值） | 触发 `OnClick` |
 | `tbsCheck` | 开关：点击翻转 `Down`；可用 `Grouped` 组成单选组 | 先翻 `Down`，再触发 `OnClick` |
-| `tbsDropDown` | **分裂**：主区 + 右侧箭头区，两个独立命中区，中间一条 1px 分隔线 | 主区 → `OnClick`；箭头区 → 弹 `DropdownMenu`，**没有菜单时**才触发 `OnArrowClick`，且**永远不**触发主区的 `OnClick` |
+| `tbsDropDown` | **分裂**：主区 + 右侧箭头区，两个独立命中区，中间一条 1px 分隔线（墨色见 [渲染细节](#渲染细节)——扁平工具条上不能用 `BorderColor`，否则整条线是透明的） | 主区 → `OnClick`；箭头区 → 弹 `DropdownMenu`，**没有菜单时**才触发 `OnArrowClick`，且**永远不**触发主区的 `OnClick` |
 | `tbsSeparator` | 占位：占 8 逻辑像素的宽度，**不画任何墨迹** | 吞掉（不是控件表面） |
 | `tbsDivider` | 占位 + 一条 1px 竖线，占 5 逻辑像素 | 吞掉 |
 | `tbsButtonDrop` | 按钮 + **附着**的箭头：只有一个命中区，没有分隔线 | 任意位置点击都弹 `DropdownMenu`，**并且**照常触发 `OnClick`；`OnArrowClick` 在这个样式上够不着 |
@@ -149,16 +182,27 @@ TTyToolButtonStyle = (tbsButton, tbsCheck, tbsDropDown, tbsSeparator, tbsDivider
 > 这个属性就放在**工具条**上）钉住本条的箭头区：`0`（默认）= 令牌做主，正值 = 本条工具按钮统一用这个
 > 逻辑宽度——标签条 `ImagesWidth` 的既有约定。三处读的是同一个仲裁值（按钮的 `DropArrowLogicalWidth`）：
 > 画出来的箭头区、命中测试、首选宽度，所以钉住之后三者一起动。
-> 命中测试与绘制走的是**同一个** `TyDropArrowHit`（`tyControls.DropButtons`）——和 `TTyDropDownButton` 共用一条规则，
-> 两个控件不可能对"箭头区从哪开始"产生分歧。
+> 命中测试与绘制走的是**同一个** `TyDropArrowZoneLeft`（`tyControls.DropButtons`）——和 `TTyDropDownButton`
+> 共用一条规则，两个控件不可能对"箭头区从哪开始"产生分歧。
 >
-> **已知偏差（与 `TTyDropDownButton` 同源，非本类新引入）：** 命中区是从控件**右边缘**往回量的
-> （`TyDropArrowHit(X, Width, …)`），而箭头是画在**内容区**里的——内容区已经被主题的 `padding`
-> （`--pad-button`，缺省 6px）内缩过。于是两者错开约一个右内边距：画出来的箭头最左边那几像素点下去会走主区，
-> 而最右边紧贴边框的那几像素虽然没画东西却算箭头区。修法是命中区也按解析出的右内边距内缩一次
-> （`tyControls.DropButtons.pas` 的 `TTyDropDownButton.IsInArrowZone` 与本类的 `IsInArrowZone` 一起改，
-> 两处必须同时改，否则就把共用那条规则的意义破坏了）。本轮**没有**改，因为 `DropButtons` 不在本次改动范围内，
-> 单改一边会让两个控件对"箭头区从哪开始"产生分歧。
+> **原先那处偏差已修（两个控件在同一次改动里一起改）。** 从前命中区是从控件**右边缘**往回量的，
+> 而箭头画在**内容区**里——内容区已被主题的 `padding`（`--pad-button`，缺省 6px）内缩过。于是两者
+> 恰好错开一个右内边距：**画出来的那条分隔线、以及它右边那几像素画着箭头的地方，点下去走的是主操作**
+> ——用户按在写着"这里有菜单"的那条线上，得到的是一次保存。现在两边都过
+> `TyDropArrowZoneLeft(内容区左, 内容区右, 箭头设备宽)`，分隔线画在哪一列，哪一列就是第一个算命中的像素。
+>
+> 命中区的**右**端是**控件边缘**而不是内容区右边缘：右内边距里没有墨，但它仍然是按钮的箭头那一头，
+> 排除掉只会把死区从箭头左边挪到右边。
+>
+> 钉住它的是**边缘探针**：`TToolBarMembersTest.TestDrawnDividerIsTheFirstHitPixelUnderRealPadding`
+> 先从真实渲染的像素里读出分隔线所在列，再断言 `PointInArrow` 在那一列为真、在它左边一列为假。
+> **中点探针抓不到这个 bug**——两个区在中间是重叠的，这正是它活了这么久的原因；同一节里的
+> `TestPinnedZoneMovesTheDrawnSplit` 为了算术干净把 padding 设成 0，而 padding 为 0 时两条规则**恰好重合**，
+> 所以它永远看不见这个问题。`TTyDropDownButton` 那边的对应探针在 `test.dropbuttons.pas` 的
+> `TDropArrowZoneEdgeTest`（含一个**真窗口**的点击验证）。
+>
+> 箭头装不下时（箭头宽 ≥ 内容区宽）**两边一起拒绝**：不画、也不算命中，整个按钮面归主操作。
+> 从前绘制那边是"折半"、命中那边是"拒绝"，在同一条规则下两者必须一致，取了更保守的那个。
 
 #### 3.2.2 自有 published 属性
 
@@ -359,7 +403,23 @@ TyToolBar, TyToolSeparator {
 
 - **工具条背景：** 先铺一层 `FillSharpBackdrop`（图片主题下透出照片，纯色主题为 no-op），再在存在 `background` 令牌时用 `S.Background` 直接填充整块——alpha 背景会叠加在照片之上（毛玻璃效果），与 `TTyPanel` 一致。
 - **底部发丝线：** 存在 `border-color` 令牌时，在工具条底部画一条高度为 `Scale(BorderWidth)`（最小 1px）的水平线（`Rect(0, H-bw, W, H)`）；工具条**只有底边一条 hairline**，无四周边框。
-- **分隔线：** `TTyToolSeparator` 同样先铺 backdrop、再（若有）填自身样式的 `background` 与工具条无缝衔接，最后在中央画一条自身 `BorderColor` 的 1px 竖线（上下内缩 `Scale(3)`）。
+- **分隔线：** `TTyToolSeparator` 同样先铺 backdrop、再（若有）填自身样式的 `background` 与工具条无缝衔接，最后在中央画一条 1px 竖线（上下内缩 `Scale(3)`），墨色取自 `TyToolRuleInk`（见下条）。
+- **1px 细线（分隔线与 `tbsDropDown` 分割线）的墨色：`TyToolRuleInk`，不是直接的 `BorderColor`。**
+  规则是：`BorderColor` 只要有一点不透明度就**原样使用**（所有画真边框的皮肤逐像素不变）；只有当它
+  **完全透明**（alpha = 0）时，才回退成**解析出的文字色**按 `--tool-rule-alpha` 调淡。
+  > **为什么需要这条回退。** `Flat = True` 是**默认值**，而扁平工具条会给每个工具项打上 `ghost` 变体，
+  > `ghost` 的边框按设计就是"占位但不显形"——`light.tycss` 写的是 `alpha(var(--border), 0)`。于是
+  > `tbsDropDown` 那条分割线被用**纯透明**画了出来，等于没画：**默认工具条上 `tbsDropDown` 和
+  > `tbsButtonDrop` 看起来一模一样，点按钮主体却一个走 `OnClick`、一个弹菜单**。代码里那句注释管这条线
+  > 叫"命中测试看得见的那一半"，那就得真的看得见。（真机发现：把 `Flat` 临时改成 `False`，两条分割线立刻出现。）
+  >
+  > 回退值**派生自主题颜色**（文字色），不是写死的颜色；淡化系数也走主题：`--tool-rule-alpha`（0..255），
+  > 皮肤可以自己调，设 0 就等于不画这条线。目前没有皮肤定义它，缺省 `TyToolRuleGhostAlpha = 50`
+  > ——这个数不是随手取的：文字色按 50/255 叠在 `light.tycss` 的 `--surface`（`#FFFFFF`）上得到
+  > `(211,213,216)`，与 `--border`（`#D1D5DB`）每通道相差不超过 2，也就是"长得像它本该有的那条边框"。
+  > 钉住的测试：`TestSplitDividerIsVisibleOnADefaultFlatBar`（**默认扁平**配置下，先断言"确实打上了 ghost"
+  > 与"ghost 的边框确实全透明"这两个前提，再在分割线那一列与它左边两列上做**边缘**取样，要求前者明显更暗）
+  > 与 `TestRuleInkKeepsABorderedSkinExactlyAsItWas`（纯函数两个分支，含 alpha=1 仍算边框）。
 - **子按钮 ghost 变体：** 当 `Flat = True`（默认）时，工具条在排布阶段把 `StyleClass` **为空**的子 `TTyButton` 设为 `'ghost'`，使按钮呈平面外观；`Flat = False` 时把 `'ghost'` 改回 `''`。**宿主自己设的 `StyleClass` 会保留**——从前这里是无条件赋值，于是每次排布都抹掉调用方写的 `StyleClass := 'primary'`，而排布随任何一次尺寸变化触发，样式是在一个说不准的时刻消失的。
 - **工具项图标：** `Images` + `ShowCaptions` 由 `ApplyToolProperties` 下发给子图标按钮（见 [第 3.1 节](#31-ttytoolbar-自有-published-属性)），**不在排布阶段做**。
 

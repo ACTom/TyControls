@@ -80,6 +80,20 @@ type
     tile were simply unreachable before — TyGlyphButtonSplit had no branch for either. }
   TTyGlyphLayout = (glLeft, glTop, glRight, glBottom);
 
+  { WHICH picture a glyph button draws — the four published glyph fields gathered into one
+    value so they can be answered as a set. An image-collection entry (Images + ImageName)
+    WINS over an icon-font glyph (IconFont + GlyphName), the same precedence the published
+    properties have always had.
+
+    This exists for GetGlyphSource (below): resolving the source became a QUESTION, asked
+    per visual state, instead of four field reads spread across the draw. }
+  TTyGlyphSource = record
+    Images: TTyImageCollection;
+    ImageName: string;
+    IconFont: TTyIconFont;
+    GlyphName: string;
+  end;
+
   { Shared base: TTyButton + an icon-font glyph placed per GlyphLayout. Usable on
     its own (it defaults to glyph-left) but primarily the parent of the three
     concrete controls below; it is NOT registered on the palette itself. }
@@ -104,14 +118,37 @@ type
     procedure SetImages(AValue: TTyImageCollection);
     procedure SetImageName(const AValue: string);
     procedure SetShowCaption(AValue: Boolean);
-    { The glyph bitmap to draw at ASizePx in AColor: from Images[ImageName] (tinted to
+    { The glyph bitmap for ASource at ASizePx in AColor: from Images[ImageName] (tinted to
       AColor) when an image source is set, else from IconFont[GlyphName]. Caller owns it. }
-    function ResolveGlyphBitmap(ASizePx: Integer; AColor: TTyColor): TBGRABitmap;
+    function ResolveGlyphBitmap(const ASource: TTyGlyphSource; ASizePx: Integer;
+      AColor: TTyColor): TBGRABitmap;
   protected
     { The orientation this button paints in. Set once in each concrete class's
       constructor (glLeft for TTyGlyphButton/TTySpeedButton, glTop for
       TTyGlyphContainerButton); honored by DrawContent. }
     FGlyphLayout: TTyGlyphLayout;
+    { THE per-state glyph-source seam. DrawContent asks this — once, with the states it is
+      painting — for the picture to draw; the base answers with the published Images/
+      ImageName/IconFont/GlyphName and ignores AStates entirely, so every existing button
+      renders exactly as before.
+
+      It exists because per-state COLOUR is already the theme's job (the image is tinted to
+      the resolved TextColor, and a skin restates that per :hover/:disabled), which leaves
+      per-state SHAPE — a filled icon on hover against an outline at rest, bespoke
+      disabled art a tint cannot produce — as the only thing a subclass could not reach.
+      Before this it had to reimplement the whole draw to get at four private fields.
+
+      CONTRACT for an override, and it is load-bearing rather than advice: answer with a
+      DIFFERENT PICTURE, never a different PRESENCE or SIZE. Whether a glyph exists at all
+      (CanShowGlyph) and how much room it takes (MeasureGlyphSlot/FixedGlyphPx/
+      CalculatePreferredSize) are deliberately NOT routed through here — they read the
+      published fields directly, so the measured box cannot move when the pointer enters
+      the control. An override that invents a glyph the published fields do not have would
+      paint into a slot nothing reserved; one that withholds a glyph they DO have would
+      leave a reserved slot empty. TTyToolButton's override (the bar's HotImages/
+      DisabledImages) keeps the contract structurally: it only ever swaps the COLLECTION,
+      and only when the alternate really holds the same ImageName. }
+    function GetGlyphSource(AStates: TTyStateSet): TTyGlyphSource; virtual;
     { Draw the glyph (if any) then the inherited caption in the leftover rect. }
     procedure DrawContent(APainter: TTyPainter; const AContentRect: TRect;
       const AStyle: TTyStyleSet); override;
@@ -576,16 +613,28 @@ begin
   Invalidate;
 end;
 
-function TTyGlyphButtonBase.ResolveGlyphBitmap(ASizePx: Integer; AColor: TTyColor): TBGRABitmap;
+function TTyGlyphButtonBase.GetGlyphSource(AStates: TTyStateSet): TTyGlyphSource;
 begin
-  if (FImages <> nil) and (FImageName <> '') then
+  { The base is state-BLIND on purpose: AStates is accepted and not read, so this answers
+    the published source and nothing else. That is what makes the seam free — every button
+    that does not override it draws the same four fields it always did. }
+  Result.Images    := FImages;
+  Result.ImageName := FImageName;
+  Result.IconFont  := FIconFont;
+  Result.GlyphName := FGlyphName;
+end;
+
+function TTyGlyphButtonBase.ResolveGlyphBitmap(const ASource: TTyGlyphSource;
+  ASizePx: Integer; AColor: TTyColor): TBGRABitmap;
+begin
+  if (ASource.Images <> nil) and (ASource.ImageName <> '') then
   begin
     // Image source wins: a cross-platform BGRA icon, tinted to the text color.
-    Result := FImages.GetBitmap(FImageName, ASizePx);
+    Result := ASource.Images.GetBitmap(ASource.ImageName, ASizePx);
     TyTintBitmapAlpha(Result, AColor);
   end
-  else if FIconFont <> nil then
-    Result := FIconFont.RenderGlyph(FGlyphName, ASizePx, AColor)
+  else if ASource.IconFont <> nil then
+    Result := ASource.IconFont.RenderGlyph(ASource.GlyphName, ASizePx, AColor)
   else
     Result := TBGRABitmap.Create(ASizePx, ASizePx);   // empty (guarded by DrawContent)
 end;
@@ -716,10 +765,13 @@ var
 begin
   cw := AContentRect.Right - AContentRect.Left;
   ch := AContentRect.Bottom - AContentRect.Top;
-  // No glyph source (neither an image nor a font glyph) / degenerate box: fall straight
-  // through to the inherited centered caption over the whole content rect (plain button).
-  if (((FImages = nil) or (FImageName = '')) and ((FIconFont = nil) or (FGlyphName = '')))
-     or (cw <= 0) or (ch <= 0) then
+  { No glyph source (neither an image nor a font glyph) / degenerate box: fall straight
+    through to the inherited centered caption over the whole content rect (plain button).
+    This asks CanShowGlyph rather than re-spelling its condition: the two used to be the
+    same boolean written out twice, one of the paint/query splits this file exists to not
+    have. Whether a glyph EXISTS is decided by the published fields here, never by the
+    per-state seam below — see GetGlyphSource's contract. }
+  if not CanShowGlyph or (cw <= 0) or (ch <= 0) then
   begin
     inherited DrawContent(APainter, AContentRect, AStyle);
     Exit;
@@ -784,9 +836,12 @@ begin
   if (glyphRect.Bottom - glyphRect.Top) < renderPx then
     renderPx := glyphRect.Bottom - glyphRect.Top;
   if renderPx < 1 then renderPx := 1;
-  // Image icon (tinted) or font glyph — never nil; an empty transparent bitmap when the
-  // name is unmapped or the font family is unset, still safe to center + free (headless).
-  glyph := ResolveGlyphBitmap(renderPx, glyphCol);
+  { WHICH picture, asked once for the states being painted — the seam a subclass overrides
+    to give hover/disabled a different SHAPE (colour is already the theme's). The base
+    answers the published fields, so this is the same bitmap it always resolved.
+    Image icon (tinted) or font glyph — never nil; an empty transparent bitmap when the
+    name is unmapped or the font family is unset, still safe to center + free (headless). }
+  glyph := ResolveGlyphBitmap(GetGlyphSource(CurrentStates), renderPx, glyphCol);
   try
     gx := glyphRect.Left + ((glyphRect.Right - glyphRect.Left) - glyph.Width) div 2;
     gy := glyphRect.Top  + ((glyphRect.Bottom - glyphRect.Top) - glyph.Height) div 2;

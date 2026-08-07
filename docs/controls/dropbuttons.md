@@ -61,17 +61,35 @@ uses tyControls.Menu, tyControls.DropButtons;
 
 LCL 在鼠标抬起**之后**才合成 `Click`，因此分裂判定分两步：`MouseDown` 记下**按下点的 X**，随后 `Click` 读这个 X 决定去向：
 
-- 按下点落在**箭头区**（右侧 `ArrowWidth` 逻辑像素内） → 调 `DoDropDown`（下拉），并**吞掉**主 `OnClick`。
+- 按下点落在**箭头区**（从画出来的那条分隔线起，到控件右边缘） → 调 `DoDropDown`（下拉），并**吞掉**主 `OnClick`。
 - 落在**标题区**（或键盘触发的 `Click`，此时无按下点） → 走正常 `TTyButton.Click`（`OnClick` + `ModalResult` 语义）。
 
-命中判定抽成纯函数 **`TyDropArrowHit`**（可无头单测）：
+"箭头区从哪开始"抽成纯函数 **`TyDropArrowZoneLeft`**（可无头单测），**绘制与命中共用同一个它**：
+
+```pascal
+function TyDropArrowZoneLeft(AContentLeft, AContentRight, AArrowWidthPx: Integer): Integer;
+```
+
+- 返回箭头区的**左边界**（客户区 x）＝ `AContentRight - AArrowWidthPx`。传的是**内容区**——即客户区已被
+  主题 `padding` 内缩过之后的那块，也正是 `RenderTo` 交给 `DrawContent` 的 `AContentRect`。
+- 返回 `-1` 表示**没有箭头区**：箭头非正、内容区退化、或箭头**装不下**（箭头宽 ≥ 内容区宽）。
+  装不下时**拒绝**而不是把箭头折半——箭头比自己的内容区还宽是配置错误，保守的答案是把整个按钮面
+  留给主操作；**绘制走的是同一个判断**，所以点不到的箭头也绝不会被画出来。
+- 命中区的**右**端是**控件边缘**，不是内容区右边缘：右内边距里没有墨，但它仍然是按钮的箭头那一头。
+
+> **为什么是"内容区"而不是"控件宽"。** 从前绘制从内容区往回量、命中从控件右边缘往回量，两者恰好错开
+> 一个右内边距：**画出来的那条分隔线、连同它右边一个内边距宽的箭头，点下去走的是主操作**。
+> 现在两边读同一个数，分隔线画在哪一列，哪一列就是第一个算命中的像素。钉住它的是
+> `test.dropbuttons.pas` 的 `TDropArrowZoneEdgeTest`：从真实渲染的像素里读出分隔线的列，然后在**那一列
+> 和它左边一列**上各探一次（还有一个**真窗口**、真 `HWND`、走真 `WindowProc` 的点击验证）。
+> **中点探针没有用**——两个区在中间重叠，那正是这个偏差活下来的原因。
+
+不带主题的那条规则仍以 **`TyDropArrowHit`** 的形式导出（就是 `TyDropArrowZoneLeft` 在"无内边距"上的写法，
+文档与纯单测引用的也是它）：
 
 ```pascal
 function TyDropArrowHit(AClickX, AWidthPx, AArrowWidthPx: Integer): Boolean;
 ```
-
-- 箭头区是控件最右侧的 `AArrowWidthPx` 像素；点击 X 恰为 `(AWidthPx - AArrowWidthPx)` 即落入第一个箭头像素。
-- 退化宽度（箭头 ≥ 控件宽、或非正数）一律返回 `False`，保证极小/零宽按钮不会把每次点击都当成箭头命中。
 
 例（控件宽 100、箭头区 20）：`x=90 → True`、`x=99 → True`、`x=80 → True`（首个箭头像素）、`x=79 → False`、`x=50 → False`。
 
@@ -97,7 +115,7 @@ DropDownMenu.PopUp(p.X, p.Y);
 
 两者都**只重写** `DrawContent`（各自重写 `Create`/路由方法），不触碰框架/状态/角标绘制路径：基类 `RenderTo`（继承自 TTyButton）先画框架、算内边距，再把已内缩的内容矩形交给 `DrawContent`。
 
-- **`TTyDropDownButton.DrawContent`**：把内容矩形切成「标题矩形（左）+ 箭头矩形（右 `ArrowWidth`）」；`inherited DrawContent(P, 标题矩形, S)` 居中画标题；箭头矩形里用 `Canvas2D` 画一个居中的**向下三角**（`FillPolyG` 语义，填 `S.TextColor`）；两者之间画一条 1px 竖直**分隔线**（`S.BorderColor`）。箭头区过窄时自动退让，绝不把标题挤没。
+- **`TTyDropDownButton.DrawContent`**：把内容矩形切成「标题矩形（左）+ 箭头矩形（右 `ArrowWidth`）」；`inherited DrawContent(P, 标题矩形, S)` 居中画标题；箭头矩形里用 `Canvas2D` 画一个居中的**向下三角**（`FillPolyG` 语义，填 `S.TextColor`）；两者之间画一条 1px 竖直**分隔线**（`S.BorderColor`）。切法来自 `TyDropArrowZoneLeft`——**和命中判定同一个**。箭头装不下时（箭头宽 ≥ 内容区宽）**整个箭头区不画**，标题拿走全部内容区；命中那边用的是同一个判断，所以不会出现"画着却点不到"或"点得到却没画"。
 - **`TTyMenuButton.DrawContent`**：同样切出标题 + 尾随箭头区，画居中标题 + 向下三角，但**无分隔线**（整按钮一体）。
 
 ---
@@ -155,7 +173,10 @@ SortBtn.DropDownMenu := Menu;
 - **弹菜单需要真机（GUI 窗口）：** `PopUp` 依赖 `ClientToScreen` 与一个真实的 GUI 事件循环，只在控件已分配窗口句柄时执行。**无头/单元测试环境**下 `DoDropDown` 只走到「记录 `RequestedPopup`」并触发 `OnDropDown`，绝不打开窗口——因此命中判定、路由决策、事件触发都可无头测试。
 - **无菜单即普通按钮：** `DropDownMenu = nil` 时，分裂按钮点箭头区仅触发 `OnDropDown`（供处理器临时赋菜单）却不弹；菜单按钮的 `Click` 也照常触发 `OnClick`。均不崩溃。
 - **`OnDropDown` 在弹出之前触发**：可在此惰性/动态构建 `DropDownMenu.Items`，做到「按需生成菜单」。
-- **分裂命中用整控件宽度**：`TyDropArrowHit` 以控件**整宽**为基准把最右 `ArrowWidth` 划为箭头区（可点区域是整个右侧竖条）；而绘制的三角在内边距**之内**——即可视三角略微内缩，但可点箭头区是右侧整条，这正是分裂按钮的自然手感。
+- **分裂命中从画出来的那条分隔线开始**：箭头区 = `[分隔线, 控件右边缘)`。分隔线的位置由
+  `TyDropArrowZoneLeft` 决定，**绘制和命中读的是同一个它**，所以"看见的箭头"和"点得到的箭头"是同一块。
+  右侧那一个内边距宽虽然没画东西，也算箭头区——它是按钮的箭头那一头，排除掉只会把死区换个边。
+  （**这条以前是反的**：命中从控件右边缘往回量，于是分隔线左右各一小条都判错，详见第 4.1 节。）
 - **尺寸随 PPI 缩放**：`ArrowWidth` 是逻辑像素，命中判定与绘制都经同一套 `MulDiv`/`TTyPainter.Scale` 换算到设备像素，两者对齐。
 - **不要遮蔽 `TControl`/`TComponent` 成员**：设 `DropDownMenu`、`ArrowWidth` 后 `Invalidate` 重绘。
 

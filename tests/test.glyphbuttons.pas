@@ -5,6 +5,7 @@ uses
   Classes, SysUtils, Types, TypInfo, fpcunit, testregistry, Forms, Controls, Graphics,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Base, tyControls.Types, tyControls.Button, tyControls.IconFont,
+  tyControls.ImageCollection,
   tyControls.GlyphButtons, tyControls.Controller, tyControls.ToolBar;
 type
   { Exposes the protected RenderTo so the glyph paint path is exercisable headlessly,
@@ -17,6 +18,44 @@ type
     procedure CallPreferred(out AW, AH: Integer);
     // The caption measurement the size floor's HEIGHT is derived from.
     procedure CallMeasure(APPI: Integer; out AW, AH: Integer);
+    // The per-state glyph-source seam, as the base answers it.
+    function CallGlyphSource(AStates: TTyStateSet): TTyGlyphSource;
+  end;
+
+  { A subclass that USES the seam, which is the only way to show it is a seam at all: it
+    swaps the glyph NAME on hover and leaves every other state alone. If the base ever stops
+    routing its paint through GetGlyphSource, this one silently stops working. }
+  TStateGlyphButton = class(TTyGlyphButton)
+  protected
+    function GetGlyphSource(AStates: TTyStateSet): TTyGlyphSource; override;
+  public
+    HotGlyphName: string;
+    { Deliberately supplied TOGETHER with HotGlyphName, so the hover answer is a COMPLETE
+      glyph source the button does not otherwise have. That is a knowing violation of
+      GetGlyphSource's contract, and the point: the base must make it not matter, because
+      presence is read from the published fields and never from the seam. }
+    HotIconFont: TTyIconFont;
+    AskedWith: TTyStateSet;
+    Asked: Integer;
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    procedure SetHoverForTest(AValue: Boolean);
+    procedure CallPreferred(out AW, AH: Integer);
+  end;
+
+  { The glyph-source seam (TTyGlyphButtonBase.GetGlyphSource): the protected question
+    "which picture, in THIS state?" that per-state artwork needs and that used to require
+    reimplementing the whole draw to reach four private fields.
+
+    Two things are being pinned. First that the BASE ignores the state entirely, so adding
+    the seam changed no existing button's rendering. Second that the seam is genuinely wired
+    into the paint and genuinely NOT wired into the measurement — a glyph's presence and size
+    stay the published properties' business, or a button would resize under the pointer. }
+  TGlyphSourceSeamTest = class(TTestCase)
+  published
+    procedure TestBaseIsStateBlind;
+    procedure TestImageSourceStillWinsOverTheFont;
+    procedure TestPaintAsksTheSeamWithTheCurrentStates;
+    procedure TestSeamNeverDecidesWhetherAGlyphExists;
   end;
 
   TContainerButtonAccess = class(TTyGlyphContainerButton)
@@ -1184,8 +1223,199 @@ begin
   end;
 end;
 
+{ TStateGlyphButton }
+
+function TStateGlyphButton.GetGlyphSource(AStates: TTyStateSet): TTyGlyphSource;
+begin
+  Result := inherited GetGlyphSource(AStates);
+  Inc(Asked);
+  AskedWith := AStates;
+  if (tysHover in AStates) and (HotGlyphName <> '') then
+  begin
+    Result.GlyphName := HotGlyphName;
+    if HotIconFont <> nil then Result.IconFont := HotIconFont;
+  end;
+end;
+
+procedure TStateGlyphButton.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin
+  inherited RenderTo(ACanvas, ARect, APPI);
+end;
+
+procedure TStateGlyphButton.SetHoverForTest(AValue: Boolean);
+begin
+  FHover := AValue;
+end;
+
+procedure TStateGlyphButton.CallPreferred(out AW, AH: Integer);
+begin
+  AW := 0; AH := 0;
+  CalculatePreferredSize(AW, AH, True);
+end;
+
+{ TGlyphSourceSeamTest }
+
+function TGlyphButtonAccess.CallGlyphSource(AStates: TTyStateSet): TTyGlyphSource;
+begin
+  Result := GetGlyphSource(AStates);
+end;
+
+procedure TGlyphSourceSeamTest.TestBaseIsStateBlind;
+var
+  B: TGlyphButtonAccess;
+  Icons: TTyIconFont;
+  st: TTyState;
+  src: TTyGlyphSource;
+begin
+  { The seam's whole claim to being free: the base reads AStates and does nothing with it, so
+    every button that does not override it resolves what the published properties say and
+    nothing else. Asserted over EVERY state, singly and all at once — a base that special-cased
+    even one of them would be a behaviour change smuggled in with the refactor. }
+  Icons := TTyIconFont.Create(nil);
+  B := TGlyphButtonAccess.Create(nil);
+  try
+    B.IconFont := Icons;
+    B.GlyphName := 'save';
+    for st := Low(TTyState) to High(TTyState) do
+    begin
+      src := B.CallGlyphSource([st]);
+      AssertEquals(Format('state %d resolves the published glyph name', [Ord(st)]),
+        'save', src.GlyphName);
+      AssertTrue('and the published font', src.IconFont = Icons);
+      AssertTrue('with no image source invented', src.Images = nil);
+      AssertEquals('and no image name', '', src.ImageName);
+    end;
+    src := B.CallGlyphSource([tysHover, tysActive, tysFocused, tysDisabled, tysSelected]);
+    AssertEquals('every state at once changes nothing either', 'save', src.GlyphName);
+    src := B.CallGlyphSource([]);
+    AssertEquals('nor does the empty set', 'save', src.GlyphName);
+  finally
+    B.Free;
+    Icons.Free;
+  end;
+end;
+
+procedure TGlyphSourceSeamTest.TestImageSourceStillWinsOverTheFont;
+var
+  B: TGlyphButtonAccess;
+  Icons: TTyIconFont;
+  coll: TTyImageCollection;
+  m: TBGRABitmap;
+  src: TTyGlyphSource;
+begin
+  { The precedence the published properties always had (Images+ImageName beat
+    IconFont+GlyphName) lives in the bitmap resolver, so the seam must hand BOTH pairs
+    through untouched rather than pre-deciding. }
+  Icons := TTyIconFont.Create(nil);
+  coll := TTyImageCollection.Create(nil);
+  B := TGlyphButtonAccess.Create(nil);
+  try
+    m := TBGRABitmap.Create(8, 8, BGRAWhite);
+    try coll.AddBitmap('save', m); finally m.Free; end;
+    B.IconFont := Icons;
+    B.GlyphName := 'font-glyph';
+    B.Images := coll;
+    B.ImageName := 'save';
+    src := B.CallGlyphSource([]);
+    AssertTrue('the collection comes through', src.Images = coll);
+    AssertEquals('with its name', 'save', src.ImageName);
+    AssertTrue('and so does the font', src.IconFont = Icons);
+    AssertEquals('with ITS name — the seam decides nothing, the resolver does',
+      'font-glyph', src.GlyphName);
+  finally
+    B.Free;
+    coll.Free;
+    Icons.Free;
+  end;
+end;
+
+procedure TGlyphSourceSeamTest.TestPaintAsksTheSeamWithTheCurrentStates;
+var
+  B: TStateGlyphButton;
+  Icons: TTyIconFont;
+  bmp: TBitmap;
+begin
+  { A seam nothing calls is not a seam. The paint must ASK, and ask with the states it is
+    actually painting — otherwise an override could never tell rest from hover. }
+  Icons := TTyIconFont.Create(nil);
+  B := TStateGlyphButton.Create(nil);
+  bmp := TBitmap.Create;
+  try
+    B.IconFont := Icons;
+    B.GlyphName := 'save';
+    B.SetBounds(0, 0, 90, 28);
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(90, 28);
+
+    B.Asked := 0;
+    B.RenderTo(bmp.Canvas, Rect(0, 0, 90, 28), 96);
+    AssertTrue('the paint asked the seam', B.Asked > 0);
+    AssertFalse('at rest it asked without tysHover', tysHover in B.AskedWith);
+
+    B.SetHoverForTest(True);
+    B.Asked := 0;
+    B.RenderTo(bmp.Canvas, Rect(0, 0, 90, 28), 96);
+    AssertTrue('and asked again while hovered', B.Asked > 0);
+    AssertTrue('this time WITH tysHover', tysHover in B.AskedWith);
+  finally
+    bmp.Free;
+    B.Free;
+    Icons.Free;
+  end;
+end;
+
+procedure TGlyphSourceSeamTest.TestSeamNeverDecidesWhetherAGlyphExists;
+var
+  B: TStateGlyphButton;
+  Icons: TTyIconFont;
+  bmp: TBitmap;
+  w0, h0: Integer;
+begin
+  { The contract, from the side that matters. A button with NO published glyph source paints
+    a plain caption and reserves no slot — and it must keep doing both even when a subclass's
+    seam would happily invent a glyph, because presence and size are read from the published
+    fields and never from the seam. If DrawContent ever routed its early-exit through
+    GetGlyphSource, this button would start painting a glyph into a slot nothing measured. }
+  Icons := TTyIconFont.Create(nil);
+  B := TStateGlyphButton.Create(nil);
+  bmp := TBitmap.Create;
+  try
+    { A COMPLETE glyph source on hover — font and name both — that the published properties do
+      not have. If presence were read from the seam, this button would grow an icon under the
+      pointer, in a slot nothing measured. }
+    B.HotGlyphName := 'save';
+    B.HotIconFont := Icons;
+    B.Caption := 'Plain';
+    B.SetBounds(0, 0, 90, 28);
+    AssertFalse('with no published source there is no glyph', B.CanShowGlyph);
+
+    w0 := 0; h0 := 0;
+    B.SetHoverForTest(True);
+    AssertFalse('and hovering does not conjure one: presence is the published fields'' '
+      + 'business, never the per-state seam''s', B.CanShowGlyph);
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(90, 28);
+    B.Asked := 0;
+    B.RenderTo(bmp.Canvas, Rect(0, 0, 90, 28), 96);
+    AssertEquals('the paint never even asked: there is nothing to substitute for',
+      0, B.Asked);
+
+    // And the measurement is the plain-caption one, hover or not.
+    B.IconFont := Icons;
+    B.GlyphName := '';
+    AssertFalse('an empty glyph name is still no glyph', B.CanShowGlyph);
+    B.CallPreferred(w0, h0);
+    AssertTrue('so the width reserves no slot', w0 > 0);
+  finally
+    bmp.Free;
+    B.Free;
+    Icons.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TGlyphButtonTest);
   RegisterTest(TGlyphButtonFloorTest);
   RegisterTest(TSpeedButtonTest);
+  RegisterTest(TGlyphSourceSeamTest);
 end.

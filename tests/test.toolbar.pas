@@ -71,6 +71,10 @@ type
     procedure TestDropDownWidthZeroFollowsTheToken;
     procedure TestDropDownWidthPinsZoneHitAndPreferredTogether;
     procedure TestPinnedZoneMovesTheDrawnSplit;
+    procedure TestDrawnDividerIsTheFirstHitPixelUnderRealPadding;
+    procedure TestSplitDividerIsVisibleOnADefaultFlatBar;
+    procedure TestThemeCanRetuneTheRuleAlpha;
+    procedure TestRuleInkKeepsABorderedSkinExactlyAsItWas;
     procedure TestButtonDropSharesThePinnedZone;
     // List
     procedure TestListMapsOntoTheGlyphLayouts;
@@ -133,6 +137,18 @@ type
       pins the DRAWN split to the same arbitration the hit test reads. DoRenderTo above is
       the space-holder path only. }
     procedure RenderWhole(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    { The per-state glyph-source seam, so a test can ask WHICH picture a state resolves to
+      without having to read it back out of pixels. (The pixel test exists too — this one
+      alone would not prove the paint uses the answer.) }
+    function CallGlyphSource(AStates: TTyStateSet): TTyGlyphSource;
+    { Force the hover flag the way a real mouse-enter would, so CurrentStates reports
+      tysHover on a control with no window and no pointer. }
+    procedure SetHoverForTest(AValue: Boolean);
+    { The resolved border colour, so a test can assert the PRECONDITION of the ghost-divider
+      bug (a fully transparent border) instead of assuming it. }
+    function CallBorderColor: TTyColor;
+    { The resolved right padding, for tests that locate the drawn divider by arithmetic. }
+    function CallPadRight: Integer;
   end;
 
   { The separator control, rendered on the same canvas so its ink can be compared byte for
@@ -140,6 +156,39 @@ type
   TToolSeparatorAccess = class(TTyToolSeparator)
   public
     procedure DoRenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+  end;
+
+  { TTyToolBar.HotImages / DisabledImages — per-state ALTERNATE artwork, keyed by the same
+    ImageName as Images.
+
+    They were refused once, on the grounds that the pipeline already tints the icon with the
+    state's TextColor so per-state COLOUR is the theme's job. That much still holds and these
+    properties do not touch colour. What was left over is per-state SHAPE, which no theme can
+    express, and reaching it needed a glyph-source seam in GlyphButtons.pas that did not exist
+    yet. It does now (TTyGlyphButtonBase.GetGlyphSource), and this is what it buys.
+
+    Every test below is about the SWAP staying a swap: same name, same slot, declined whenever
+    the alternate has nothing to say. TestHoverReallyDrawsTheHotArt is the one that stops these
+    from joining the class of published properties the paint quietly ignores. }
+  TToolBarStateImagesTest = class(TTestCase)
+  private
+    FForm: TForm;
+    FBar: TTyToolBar;
+    FTool: TToolButtonAccess;
+    FNormal, FHot, FDisabled: TTyImageCollection;
+    function MakeHalfMask(ALeft: Boolean): TBGRABitmap;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestHoverSwapsToHotImages;
+    procedure TestDisabledOutranksHover;
+    procedure TestAlternateMissingTheNameIsDeclined;
+    procedure TestToolWithItsOwnCollectionIsLeftAlone;
+    procedure TestNoIconNothingToSubstitute;
+    procedure TestTheSlotDoesNotMoveWhenTheStateDoes;
+    procedure TestHoverReallyDrawsTheHotArt;
+    procedure TestFreeingAnAlternateNilsTheReference;
   end;
 
   TToolButtonTest = class(TTestCase)
@@ -761,6 +810,289 @@ begin
   end;
 end;
 
+procedure TToolBarMembersTest.TestDrawnDividerIsTheFirstHitPixelUnderRealPadding;
+const
+  W = 140; H = 28; ArrowW = 18; PadX = 10;
+var
+  Ctl: TTyStyleController;
+  a: TToolButtonAccess;
+  img: TBGRABitmap;
+  bmp: TBitmap;
+  x, y, divX: Integer;
+  P: TBGRAPixel;
+begin
+  { The twin of test.dropbuttons' TDropArrowZoneEdgeTest, on the OTHER control that shares the
+    rule — both had to be corrected in one change, so both have to be pinned or the next
+    person can fix one and re-split the pair.
+
+    TestPinnedZoneMovesTheDrawnSplit above deliberately zeroes the padding to make its
+    arithmetic plain. That is exactly the condition under which the drawn zone and a
+    control-edge-relative zone COINCIDE — so it could never have seen this bug. This one uses
+    a real 10px horizontal padding and probes the boundary a pixel at a time. }
+  Ctl := TTyStyleController.Create(nil);
+  img := nil;
+  try
+    Ctl.LoadThemeCss(Format(':root { --drop-arrow-width: %dpx; }' +
+      'TyButton { background: #000000; color: #FF0000; border-color: #00FF00; ' +
+      'border-width: 0px; padding: 4px %dpx; font-size: 12px; }', [ArrowW, PadX]));
+    a := TToolButtonAccess.Create(FForm);
+    a.Parent := FBar;
+    a.Controller := Ctl;
+    a.Font.PixelsPerInch := 96;   // Scale() 1:1, so logical == device px
+    a.Style := tbsDropDown;
+    a.SetBounds(0, 0, W, H);
+
+    // Read the divider's column out of a real render — never from the code's own arithmetic.
+    bmp := TBitmap.Create;
+    try
+      bmp.PixelFormat := pf32bit;
+      bmp.SetSize(W, H);
+      bmp.Canvas.Brush.Style := bsSolid;
+      bmp.Canvas.Brush.Color := clWhite;
+      bmp.Canvas.FillRect(0, 0, W, H);
+      a.RenderWhole(bmp.Canvas, Rect(0, 0, W, H), 96);
+      img := TBGRABitmap.Create(bmp);
+    finally
+      bmp.Free;
+    end;
+    divX := -1;
+    for x := 0 to W - 1 do
+    begin
+      for y := 0 to H - 1 do
+      begin
+        P := img.GetPixel(x, y);
+        if (P.green > 160) and (P.red < 96) and (P.blue < 96) then
+        begin
+          divX := x;
+          Break;
+        end;
+      end;
+      if divX >= 0 then Break;
+    end;
+    AssertTrue('sanity: the tbsDropDown drew its split divider', divX >= 0);
+    { Stated as a number so the gap is visible in the source: the zone opens one arrow-width
+      in from the CONTENT edge (140-10-18 = 112). Measuring from the control edge would put
+      it at 122 — ten px of drawn arrow, divider included, that ran the primary action. }
+    AssertEquals('the divider sits one right-padding in from the control edge',
+      W - PadX - ArrowW, divX);
+
+    // THE EDGE PROBE: one px either side of the drawn boundary, never the middle.
+    AssertTrue('the drawn divider IS the first pixel PointInArrow answers True for',
+      a.PointInArrow(divX, H div 2));
+    AssertFalse('and one px to its left is still the main area',
+      a.PointInArrow(divX - 1, H div 2));
+    AssertTrue('the control''s last pixel is in the zone too',
+      a.PointInArrow(W - 1, H div 2));
+    a.Free;   // before its controller
+  finally
+    img.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TToolBarMembersTest.TestSplitDividerIsVisibleOnADefaultFlatBar;
+const
+  W = 140; H = 28; ArrowW = 18; PadX = 10;
+var
+  Ctl: TTyStyleController;
+  a: TToolButtonAccess;
+  img: TBGRABitmap;
+  bmp: TBitmap;
+  divX, padR, y: Integer;
+  darkOnRule, darkBeside: Integer;
+  P: TBGRAPixel;
+
+  function Luma(const APix: TBGRAPixel): Integer;
+  begin
+    Result := (APix.red + APix.green + APix.blue) div 3;
+  end;
+
+begin
+  { THE DEFAULT CONFIGURATION, which is where this was broken. Flat defaults to True, a flat bar
+    stamps 'ghost' on every tool, and ghost's border is deliberately fully transparent
+    (light.tycss: `alpha(var(--border), 0)`) — so the split divider, drawn in AStyle.BorderColor,
+    was drawn in NOTHING. A tbsDropDown and a tbsButtonDrop then looked identical on screen while
+    routing a click on the button body to two different places.
+
+    The theme below reproduces exactly that: a ghost variant with a transparent border and a
+    black text colour on a white backdrop. Both preconditions are ASSERTED rather than assumed,
+    because if a future theme edit gave ghost a real border this test would still pass while
+    testing nothing. }
+  Ctl := TTyStyleController.Create(nil);
+  img := nil;
+  try
+    Ctl.LoadThemeCss(Format(
+      ':root { --drop-arrow-width: %dpx; }' +
+      'TyButton { background: alpha(#FFFFFF, 0); color: #000000; border-color: #00FF00; ' +
+      '  border-width: 0px; padding: 4px %dpx; font-size: 12px; }' +
+      'TyButton.ghost { background: alpha(#FFFFFF, 0); color: #000000; ' +
+      '  border-color: alpha(#00FF00, 0); border-width: 0px; padding: 4px %dpx; ' +
+      '  font-size: 12px; }', [ArrowW, PadX, PadX]));
+    FBar.Controller := Ctl;
+    AssertTrue('sanity: a tool bar is flat by DEFAULT — that is what makes this the '
+      + 'default configuration', FBar.Flat);
+
+    a := TToolButtonAccess.Create(FForm);
+    a.Parent := FBar;
+    a.Controller := Ctl;
+    a.Font.PixelsPerInch := 96;
+    a.Style := tbsDropDown;
+    a.Caption := '';          // no caption ink to confuse the column comparison
+    a.SetBounds(0, 0, W, H);
+    FBar.ForceLayout;         // this is what stamps 'ghost' on the tools
+
+    AssertEquals('the flat bar really did hand this tool the ghost variant',
+      'ghost', a.StyleClass);
+    AssertEquals('and ghost really does resolve a FULLY TRANSPARENT border — the exact '
+      + 'condition that used to make the divider invisible', 0, TyAlphaOf(a.CallBorderColor));
+
+    padR := a.CallPadRight;
+    divX := W - padR - ArrowW;
+
+    bmp := TBitmap.Create;
+    try
+      bmp.PixelFormat := pf32bit;
+      bmp.SetSize(W, H);
+      bmp.Canvas.Brush.Style := bsSolid;
+      bmp.Canvas.Brush.Color := clWhite;
+      bmp.Canvas.FillRect(0, 0, W, H);
+      a.RenderWhole(bmp.Canvas, Rect(0, 0, W, H), 96);
+      img := TBGRABitmap.Create(bmp);
+    finally
+      bmp.Free;
+    end;
+
+    { EDGE probe, on the divider's own column and the column two to its left (plain button
+      face). "Visible" is stated as what it actually means: this column is measurably darker
+      than the face beside it. Return the ink to AStyle.BorderColor and the two columns become
+      identical — which is exactly the mutant. }
+    { Scanned across the button's vertical MIDDLE only. The frame's rounded corners are
+      antialiased against the backdrop, so a full-height scan would pick up corner ink in the
+      comparison column and compare the divider against that instead of against the face. }
+    darkOnRule := 255;
+    darkBeside := 255;
+    for y := (H div 2) - 2 to (H div 2) + 2 do
+    begin
+      P := img.GetPixel(divX, y);
+      if Luma(P) < darkOnRule then darkOnRule := Luma(P);
+      P := img.GetPixel(divX - 2, y);
+      if Luma(P) < darkBeside then darkBeside := Luma(P);
+    end;
+    { The face is the BAR's surface showing through the ghost button's transparent background
+      (TyFillParentBg), not the white the bitmap was cleared to — so this is "light and
+      uninked", not "255". What matters is that it carries no ink of its own to compare against. }
+    AssertTrue(Format('the button face beside the divider is uninked (luma %d)',
+      [darkBeside]), darkBeside > 200);
+    AssertTrue(Format('the split divider must be VISIBLE on a default flat bar: its column '
+      + 'reads luma %d against a face of %d', [darkOnRule, darkBeside]),
+      darkOnRule < darkBeside - 20);
+    a.Free;
+    FBar.Controller := nil;
+  finally
+    img.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TToolBarMembersTest.TestThemeCanRetuneTheRuleAlpha;
+const
+  W = 140; H = 28; ArrowW = 18; PadX = 10;
+var
+  Ctl: TTyStyleController;
+  a: TToolButtonAccess;
+  img: TBGRABitmap;
+  bmp: TBitmap;
+  divX, y, darkest: Integer;
+  P: TBGRAPixel;
+begin
+  { The docs promise a skin can retune the fallback rule (or suppress it with 0) through
+    '--tool-rule-alpha' without any control-code change. That is a claim about plumbing that
+    has to be exercised, not asserted in prose: the metric goes through TyEvalLength, and a
+    token it cannot parse would silently fall back to the default and nobody would notice.
+    200/255 over the bar's face is unmistakably darker than the default 50/255. }
+  Ctl := TTyStyleController.Create(nil);
+  img := nil;
+  try
+    Ctl.LoadThemeCss(Format(
+      ':root { --drop-arrow-width: %dpx; --tool-rule-alpha: 200; }' +
+      'TyButton.ghost { background: alpha(#FFFFFF, 0); color: #000000; ' +
+      '  border-color: alpha(#00FF00, 0); border-width: 0px; padding: 4px %dpx; ' +
+      '  font-size: 12px; }', [ArrowW, PadX]));
+    AssertEquals('sanity: the theme''s metric is readable at all (a unit-less token must '
+      + 'parse, or the control silently keeps the default)',
+      200, Ctl.Metric(TyToolRuleAlphaVar, TyToolRuleGhostAlpha));
+
+    FBar.Controller := Ctl;
+    a := TToolButtonAccess.Create(FForm);
+    a.Parent := FBar;
+    a.Controller := Ctl;
+    a.Font.PixelsPerInch := 96;
+    a.Style := tbsDropDown;
+    a.Caption := '';
+    a.SetBounds(0, 0, W, H);
+    FBar.ForceLayout;
+    AssertEquals('sanity: still the ghost variant', 'ghost', a.StyleClass);
+    divX := W - a.CallPadRight - ArrowW;
+
+    bmp := TBitmap.Create;
+    try
+      bmp.PixelFormat := pf32bit;
+      bmp.SetSize(W, H);
+      bmp.Canvas.Brush.Style := bsSolid;
+      bmp.Canvas.Brush.Color := clWhite;
+      bmp.Canvas.FillRect(0, 0, W, H);
+      a.RenderWhole(bmp.Canvas, Rect(0, 0, W, H), 96);
+      img := TBGRABitmap.Create(bmp);
+    finally
+      bmp.Free;
+    end;
+
+    darkest := 255;
+    for y := (H div 2) - 2 to (H div 2) + 2 do
+    begin
+      P := img.GetPixel(divX, y);
+      if ((P.red + P.green + P.blue) div 3) < darkest then
+        darkest := (P.red + P.green + P.blue) div 3;
+    end;
+    { At the default 50/255 this column reads about 193 against the bar's ~240 face; at
+      200/255 it is about 52. A threshold of 100 cannot be reached by the default. }
+    AssertTrue(Format('the themed alpha really reached the paint (divider luma %d)',
+      [darkest]), darkest < 100);
+    a.Free;
+    FBar.Controller := nil;
+  finally
+    img.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TToolBarMembersTest.TestRuleInkKeepsABorderedSkinExactlyAsItWas;
+var
+  S: TTyStyleSet;
+begin
+  { The pure rule, both branches. A skin that draws a real border must come through BYTE for
+    byte — the fallback exists for the transparent case and must never touch the other one. }
+  S := Default(TTyStyleSet);
+  S.BorderColor := TyRGBA(17, 34, 51, 255);
+  S.TextColor := TyRGBA(255, 0, 0, 255);
+  AssertEquals('an opaque border is used exactly as the theme stated it',
+    Int64(TyRGBA(17, 34, 51, 255)), Int64(TyToolRuleInk(S, TyToolRuleGhostAlpha)));
+
+  // Even a barely-there border is still the THEME speaking; only alpha 0 means "no ink".
+  S.BorderColor := TyRGBA(17, 34, 51, 1);
+  AssertEquals('alpha 1 is a border, not an absence',
+    Int64(TyRGBA(17, 34, 51, 1)), Int64(TyToolRuleInk(S, TyToolRuleGhostAlpha)));
+
+  S.BorderColor := TyRGBA(17, 34, 51, 0);
+  AssertEquals('a fully transparent border falls back to the TEXT colour, dimmed',
+    Int64(TyRGBA(255, 0, 0, TyToolRuleGhostAlpha)),
+    Int64(TyToolRuleInk(S, TyToolRuleGhostAlpha)));
+  AssertEquals('the dim factor is the caller''s (the theme metric), not a constant here',
+    Int64(TyRGBA(255, 0, 0, 200)), Int64(TyToolRuleInk(S, 200)));
+  AssertEquals('a theme may suppress the rule entirely with 0',
+    Int64(TyRGBA(255, 0, 0, 0)), Int64(TyToolRuleInk(S, 0)));
+end;
+
 procedure TToolBarMembersTest.TestButtonDropSharesThePinnedZone;
 var
   a: TToolButtonAccess;
@@ -1092,6 +1424,26 @@ end;
 procedure TToolButtonAccess.RenderWhole(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   RenderTo(ACanvas, ARect, APPI);
+end;
+
+function TToolButtonAccess.CallGlyphSource(AStates: TTyStateSet): TTyGlyphSource;
+begin
+  Result := GetGlyphSource(AStates);
+end;
+
+procedure TToolButtonAccess.SetHoverForTest(AValue: Boolean);
+begin
+  FHover := AValue;
+end;
+
+function TToolButtonAccess.CallBorderColor: TTyColor;
+begin
+  Result := CurrentStyle.BorderColor;
+end;
+
+function TToolButtonAccess.CallPadRight: Integer;
+begin
+  Result := CurrentStyle.Padding.Right;
 end;
 
 procedure TToolSeparatorAccess.DoRenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -1839,6 +2191,266 @@ begin
   end;
 end;
 
+{ TToolBarStateImagesTest }
+
+procedure TToolBarStateImagesTest.SetUp;
+var
+  m: TBGRABitmap;
+begin
+  FForm := TForm.CreateNew(nil);
+  FBar := TTyToolBar.Create(FForm);
+  FBar.Parent := FForm;
+
+  { Three collections carrying the SAME name 'save', so the swap is a swap and nothing else.
+    The shapes differ by which half of the square is opaque — alpha survives the tint (the
+    paint replaces RGB only), so which collection was drawn is readable from the pixels.
+    That is the point: a colour difference would prove nothing, because the theme already
+    recolours per state and the whole reason these properties exist is per-state SHAPE. }
+  FNormal := TTyImageCollection.Create(FForm);
+  FHot := TTyImageCollection.Create(FForm);
+  FDisabled := TTyImageCollection.Create(FForm);
+
+  m := MakeHalfMask(True);            // opaque LEFT half
+  try FNormal.AddBitmap('save', m); finally m.Free; end;
+  m := MakeHalfMask(False);           // opaque RIGHT half
+  try FHot.AddBitmap('save', m); finally m.Free; end;
+  m := MakeHalfMask(False);
+  try FDisabled.AddBitmap('save', m); finally m.Free; end;
+
+  FBar.Images := FNormal;
+  FTool := TToolButtonAccess.Create(FForm);
+  FTool.Parent := FBar;
+  FTool.ImageName := 'save';
+end;
+
+procedure TToolBarStateImagesTest.TearDown;
+begin
+  FForm.Free;
+  FForm := nil;
+end;
+
+{ A 16px square whose LEFT (or RIGHT) half is opaque white and the other half fully
+  transparent. The opaque half is what the tint keeps and the paint blits. }
+function TToolBarStateImagesTest.MakeHalfMask(ALeft: Boolean): TBGRABitmap;
+var
+  x, y: Integer;
+  opaque: Boolean;
+begin
+  Result := TBGRABitmap.Create(16, 16, BGRAPixelTransparent);
+  for y := 0 to 15 do
+    for x := 0 to 15 do
+    begin
+      opaque := (x < 8) = ALeft;
+      if opaque then
+        Result.SetPixel(x, y, BGRAWhite);
+    end;
+end;
+
+procedure TToolBarStateImagesTest.TestHoverSwapsToHotImages;
+var
+  src: TTyGlyphSource;
+begin
+  src := FTool.CallGlyphSource([]);
+  AssertTrue('at rest the tool draws the bar''s normal collection', src.Images = FNormal);
+  AssertEquals('and the name never changes', 'save', src.ImageName);
+
+  // Not assigned yet: hover must still resolve the normal art rather than nothing.
+  src := FTool.CallGlyphSource([tysHover]);
+  AssertTrue('with no HotImages, hover is still the normal collection', src.Images = FNormal);
+
+  FBar.HotImages := FHot;
+  src := FTool.CallGlyphSource([tysHover]);
+  AssertTrue('hover now resolves the hot collection', src.Images = FHot);
+  AssertEquals('by the SAME name — this is a swap, not a re-key', 'save', src.ImageName);
+  src := FTool.CallGlyphSource([]);
+  AssertTrue('and at rest it is unchanged', src.Images = FNormal);
+end;
+
+procedure TToolBarStateImagesTest.TestDisabledOutranksHover;
+var
+  src: TTyGlyphSource;
+begin
+  FBar.HotImages := FHot;
+  FBar.DisabledImages := FDisabled;
+  src := FTool.CallGlyphSource([tysDisabled]);
+  AssertTrue('disabled resolves the disabled collection', src.Images = FDisabled);
+  { A disabled tool can still have the pointer over it, so both states arrive together.
+    LCL resolves the same way: disabled wins. }
+  src := FTool.CallGlyphSource([tysDisabled, tysHover]);
+  AssertTrue('disabled beats hover when both are set', src.Images = FDisabled);
+end;
+
+procedure TToolBarStateImagesTest.TestAlternateMissingTheNameIsDeclined;
+var
+  empty: TTyImageCollection;
+  other: TTyImageCollection;
+  m: TBGRABitmap;
+  src: TTyGlyphSource;
+begin
+  { The difference between a NAME-keyed library and an index-keyed one. LCL indexes parallel
+    lists and blanks the icon when HotImages is shorter; here an alternate that does not carry
+    this name simply has nothing to say, and the normal art is drawn. }
+  empty := TTyImageCollection.Create(FForm);
+  FBar.HotImages := empty;
+  src := FTool.CallGlyphSource([tysHover]);
+  AssertTrue('an empty alternate cannot blank the icon on hover', src.Images = FNormal);
+
+  other := TTyImageCollection.Create(FForm);
+  m := MakeHalfMask(False);
+  try other.AddBitmap('open', m); finally m.Free; end;
+  FBar.HotImages := other;
+  src := FTool.CallGlyphSource([tysHover]);
+  AssertTrue('an alternate carrying only OTHER names is declined too', src.Images = FNormal);
+end;
+
+procedure TToolBarStateImagesTest.TestToolWithItsOwnCollectionIsLeftAlone;
+var
+  own: TTyImageCollection;
+  m: TBGRABitmap;
+  src: TTyGlyphSource;
+begin
+  { The bar's alternates describe the BAR's icons. A tool that brought its own collection is
+    not something the bar has an opinion about — and the lend-and-return rule already says the
+    bar only manages the reference it put there. }
+  own := TTyImageCollection.Create(FForm);
+  m := MakeHalfMask(True);
+  try own.AddBitmap('save', m); finally m.Free; end;
+  FTool.Images := own;
+  FBar.HotImages := FHot;
+  src := FTool.CallGlyphSource([tysHover]);
+  AssertTrue('a tool drawing its OWN collection keeps it on hover', src.Images = own);
+end;
+
+procedure TToolBarStateImagesTest.TestNoIconNothingToSubstitute;
+var
+  src: TTyGlyphSource;
+begin
+  FBar.HotImages := FHot;
+  FTool.ImageName := '';
+  src := FTool.CallGlyphSource([tysHover]);
+  AssertEquals('a tool with no icon name resolves no name', '', src.ImageName);
+  AssertTrue('and the alternate is not smuggled in behind it', src.Images = FNormal);
+end;
+
+procedure TToolBarStateImagesTest.TestTheSlotDoesNotMoveWhenTheStateDoes;
+var
+  w0, h0, w1, h1: Integer;
+begin
+  { The contract that makes the seam safe: it may change the PICTURE, never the PRESENCE or
+    the SIZE. Layout reads the published fields, not the seam — so assigning alternates, and
+    entering the hover state, must leave the measured box exactly where it was. A button that
+    resized under the pointer would be a far worse bug than the one these properties fix. }
+  FTool.CallPreferred(w0, h0);
+  AssertTrue('sanity: the tool reports a width', w0 > 0);
+  AssertTrue('sanity: it has an icon to measure', FTool.CanShowGlyph);
+
+  FBar.HotImages := FHot;
+  FBar.DisabledImages := FDisabled;
+  FTool.SetHoverForTest(True);
+  FTool.CallPreferred(w1, h1);
+  AssertEquals('the preferred width is untouched by the alternates and by hover', w0, w1);
+  AssertEquals('and so is the preferred height', h0, h1);
+  AssertTrue('the glyph still exists as far as layout is concerned', FTool.CanShowGlyph);
+end;
+
+procedure TToolBarStateImagesTest.TestHoverReallyDrawsTheHotArt;
+const
+  W = 40; H = 28;
+var
+  Ctl: TTyStyleController;
+  leftInk0, rightInk0, leftInk1, rightInk1: Integer;
+
+  { Count opaque-ish ink pixels either side of the button's vertical centre line. The masks
+    are half-opaque squares, so which collection was blitted decides which side carries ink. }
+  procedure RenderAndCount(out ALeft, ARight: Integer);
+  var
+    bmp: TBitmap;
+    img: TBGRABitmap;
+    x, y: Integer;
+    P: TBGRAPixel;
+  begin
+    ALeft := 0; ARight := 0;
+    bmp := TBitmap.Create;
+    img := nil;
+    try
+      bmp.PixelFormat := pf32bit;
+      bmp.SetSize(W, H);
+      bmp.Canvas.Brush.Style := bsSolid;
+      bmp.Canvas.Brush.Color := clWhite;
+      bmp.Canvas.FillRect(0, 0, W, H);
+      FTool.RenderWhole(bmp.Canvas, Rect(0, 0, W, H), 96);
+      img := TBGRABitmap.Create(bmp);
+      for y := 0 to H - 1 do
+        for x := 0 to W - 1 do
+        begin
+          P := img.GetPixel(x, y);
+          // The glyph is tinted to the theme's colour (#FF0000) on a black background.
+          if (P.red > 150) and (P.green < 100) and (P.blue < 100) then
+          begin
+            if x < W div 2 then Inc(ALeft) else Inc(ARight);
+          end;
+        end;
+    finally
+      img.Free;
+      bmp.Free;
+    end;
+  end;
+
+begin
+  { The test that stops these from being properties the paint ignores. Everything above asks
+    the seam what it WOULD answer; this one reads the answer back out of the pixels. }
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Ctl.LoadThemeCss('TyButton { background: #000000; color: #FF0000; border-width: 0px; '
+      + 'padding: 4px 4px; font-size: 12px; }');
+    FBar.Controller := Ctl;
+    FTool.Controller := Ctl;
+    FTool.Font.PixelsPerInch := 96;
+    FTool.Caption := '';
+    FTool.ShowCaption := False;      // icon only, so the glyph owns the content box
+    FTool.GlyphSize := 16;
+    FTool.SetBounds(0, 0, W, H);
+    FBar.HotImages := FHot;
+
+    RenderAndCount(leftInk0, rightInk0);
+    AssertTrue('at rest the LEFT-half mask is drawn', leftInk0 > 0);
+    AssertEquals('and nothing on the right', 0, rightInk0);
+
+    FTool.SetHoverForTest(True);
+    RenderAndCount(leftInk1, rightInk1);
+    AssertTrue('hovered, the RIGHT-half hot mask is drawn instead', rightInk1 > 0);
+    AssertEquals('and nothing on the left', 0, leftInk1);
+    AssertEquals('the same amount of ink — a swap, not a resize', leftInk0, rightInk1);
+
+    FTool.Free;   // before its controller
+    FTool := nil;
+    FBar.Controller := nil;
+  finally
+    Ctl.Free;
+  end;
+end;
+
+procedure TToolBarStateImagesTest.TestFreeingAnAlternateNilsTheReference;
+var
+  tmp: TTyImageCollection;
+  m: TBGRABitmap;
+begin
+  { FreeNotification, not just the Notification override: a collection created with Owner=nil
+    would be freed without a word and every tool paint reads these references. }
+  tmp := TTyImageCollection.Create(nil);
+  try
+    m := MakeHalfMask(False);
+    try tmp.AddBitmap('save', m); finally m.Free; end;
+    FBar.HotImages := tmp;
+    AssertTrue('assigned', FBar.HotImages = tmp);
+  finally
+    tmp.Free;
+  end;
+  AssertTrue('freeing the collection nils HotImages', FBar.HotImages = nil);
+  AssertTrue('and a hover still resolves the normal art rather than a dangling pointer',
+    FTool.CallGlyphSource([tysHover]).Images = FNormal);
+end;
+
 initialization
   RegisterTest(TToolBarGeomTest);
   RegisterTest(TToolBarBreakTest);
@@ -1850,4 +2462,5 @@ initialization
   RegisterTest(TToolWrapShiftTest);
   RegisterTest(TToolButtonTest);
   RegisterTest(TToolButtonSeparatorPixelTest);
+  RegisterTest(TToolBarStateImagesTest);
 end.

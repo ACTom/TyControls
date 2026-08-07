@@ -180,6 +180,16 @@ type
       second hit zone starts; tbsButtonDrop does NOT (LCL: "not separated from each other"). }
     procedure DrawContent(APainter: TTyPainter; const AContentRect: TRect;
       const AStyle: TTyStyleSet); override;
+    { Substitute the bar's HotImages / DisabledImages for the bar's Images when this tool is
+      hovered / disabled. A SWAP of the collection only — same ImageName, same slot — so the
+      base's contract (a different picture, never a different presence or size) holds by
+      construction rather than by discipline. Declines, leaving the normal icon, unless ALL
+      of: the bar exists, this tool is drawing the bar's OWN collection (a tool that brought
+      its own is not something the bar's alternates describe), an alternate is assigned, and
+      that alternate really CONTAINS this ImageName. That last test is what a name-keyed
+      library needs and an index-keyed one cannot express: LCL blanks the icon when
+      HotImages is shorter than Images; here a missing name simply means "no alternate". }
+    function GetGlyphSource(AStates: TTyStateSet): TTyGlyphSource; override;
     { A space holder is its fixed width and asks for no caption room; the two arrow styles add
       the zone DrawContent carves off, or AutoSize (and the size FLOOR that rides on it) would
       report a fit while the chevron ate the caption. }
@@ -350,6 +360,12 @@ type
       choice and is left alone. Nil'd with FImages in Notification — a freed collection's
       address can be re-used, and a stale marker would make us adopt a stranger's. }
     FLentImages: TTyImageCollection;
+    { Per-state ALTERNATES for FImages, looked up by the SAME ImageName. Deliberately NOT
+      lent to the tools the way FImages is: lending exists so a tool can own its icon
+      source, and these are the BAR's statement about the bar's own icons. A tool asks for
+      them at paint time (TTyToolButton.GetGlyphSource) and only when it is drawing FImages. }
+    FHotImages: TTyImageCollection;
+    FDisabledImages: TTyImageCollection;
     FInLayout: Boolean;
     function GetButtonHeight: Integer;
     function GetButtonWidth: Integer;
@@ -364,6 +380,8 @@ type
     procedure SetWrapable(AValue: Boolean);
     procedure SetShowCaptions(AValue: Boolean);
     procedure SetImages(AValue: TTyImageCollection);
+    procedure SetHotImages(AValue: TTyImageCollection);
+    procedure SetDisabledImages(AValue: TTyImageCollection);
     procedure SetFlat(AValue: Boolean);
     procedure SetOnPaintButton(AValue: TTyToolBarOnPaintButton);
     procedure Relayout;
@@ -374,6 +392,14 @@ type
       existing bar changes height. Protected because TTyToolBarEx lays its own row out and
       must use the SAME pad, or the two bars would sit their tools at different heights. }
     function ContentPadY: Integer;
+    { The device-px height of the bottom hairline RenderTo strokes at APPI -- the bar's only
+      painted border. Extracted from RenderTo (which is still its only caller for drawing) so
+      the LAYOUT can read the same number: a tool button is a WINDOWED child, so it paints
+      after the bar AND erases its whole rect to the surface colour. A row that reaches into
+      this strip does not merely draw over the line, it wipes it -- which is exactly what the
+      containers demo showed, the hairline surviving only in the gaps between buttons.
+      Paint and layout must not each carry their own copy of this number. }
+    function BottomBorderPx(APPI: Integer): Integer;
     { Protected rather than private so a test can drive the one call a relayout makes
       without needing a window handle and a live align pass. }
     procedure ApplyToButton(B: TTyButton);
@@ -491,6 +517,32 @@ type
       could never reach a tool button no matter what a host assigned — which is exactly why
       this property used to do nothing. }
     property Images: TTyImageCollection read FImages write SetImages;
+    { Per-state ALTERNATE artwork, keyed by the same ImageName as Images.
+
+      LCL's pair (comctrls.pp: HotImages/DisabledImages) are parallel TImageLists indexed by
+      the same ImageIndex. This library is NAME-keyed, so the faithful translation is not a
+      parallel list but a parallel COLLECTION read with the same NAME — which is also the
+      only translation that survives a host reordering one collection and not the other.
+
+      What they add, stated because it was nearly refused: the paint already tints the
+      icon with the resolved TextColor, and a skin restates that colour per :hover and
+      :disabled — so per-state COLOUR needs no property here and never will. These exist
+      for per-state SHAPE, the one thing a tint cannot reach: a filled icon on hover
+      against an outline at rest, or disabled art that says something a wash of grey does
+      not (a padlock, a slash). Nothing else in the library could express that.
+
+      THE OVERRIDE IS A SWAP, NEVER AN ADDITION. A tool consults these only when it is
+      already drawing the bar's own Images AND the alternate collection really holds that
+      ImageName; otherwise the normal icon is drawn. So a half-filled HotImages cannot blank
+      an icon on hover (LCL's does), a tool carrying its OWN collection is left alone, and
+      the measured glyph slot — which reads the published fields, not the per-state seam —
+      cannot move when the pointer arrives. Setting these without Images does nothing at
+      all, which is the honest answer: there is no icon to substitute for.
+
+      Precedence when a button is both disabled and hot: DISABLED wins (LCL orders it the
+      same way, and a disabled tool is not really hovered — it just has a pointer over it). }
+    property HotImages: TTyImageCollection read FHotImages write SetHotImages;
+    property DisabledImages: TTyImageCollection read FDisabledImages write SetDisabledImages;
     property Align default alTop;
     property Anchors;
     property StyleClass;
@@ -589,14 +641,49 @@ const
     LCL's two poles under LCL's own meaning of the flag. }
   TyToolListLayout: array[Boolean] of TTyGlyphLayout = (glTop, glLeft);
 
+const
+  { The theme metric that dims the FALLBACK rule ink (0..255). See TyToolRuleInk. }
+  TyToolRuleAlphaVar = '--tool-rule-alpha';
+  { Default for it, and not an arbitrary pick: the resolved text colour at 50/255 laid over
+    light.tycss's --surface (#FFFFFF) lands on (211,213,216), which is --border (#D1D5DB) to
+    within two levels per channel. So the fallback rule looks like the border it would have
+    had if the variant had given it one — which is exactly what it is standing in for. }
+  TyToolRuleGhostAlpha = 50;
+
+{ The ink for an inset 1px tool rule: the separator's vertical line, and the tbsDropDown split
+  divider.
+
+  NOT simply AStyle.BorderColor, and that is the entire point. A bar with Flat = True — THE
+  DEFAULT — hands every tool the 'ghost' variant, and ghost's whole idea is a border that keeps
+  its width but shows nothing at rest: light.tycss spells it `alpha(var(--border), 0)`. A rule
+  drawn in that colour is drawn in nothing, so on a default tool bar a tbsDropDown looked
+  IDENTICAL to a tbsButtonDrop while behaving differently — click the body of the first and it
+  runs OnClick, of the second and it opens the menu. DrawContent's own comment calls this rule
+  "the visible half of the hit test"; it was not visible. (Found on a real screen: forcing
+  Flat := False made both dividers appear at once.)
+
+  So: the border's colour whenever the theme gave it ANY ink, and otherwise the resolved TEXT
+  colour dimmed to AFallbackAlpha. The fallback is DERIVED FROM A THEME COLOUR, never a literal
+  one, and it triggers only on a FULLY transparent border (alpha = 0 — the exact thing ghost
+  states), so every skin that draws a real border stays pixel-identical.
+
+  AFallbackAlpha comes from the theme too ('--tool-rule-alpha'), so a skin can retune the rule
+  or set 0 to suppress it without a line of control code changing. No skin defines it today;
+  TyToolRuleGhostAlpha is the documented default until one does.
+
+  Pure, so the decision is unit-testable without a canvas. }
+function TyToolRuleInk(const AStyle: TTyStyleSet; AFallbackAlpha: Integer): TTyColor;
+
 { The separator/divider INK, shared by TTyToolSeparator and by a space-holder TTyToolButton so
   a skin physically cannot make the two disagree — they resolve the same 'TyToolSeparator' key
   and then run this same routine. The caller does its own BeginPaint + FillSharpBackdrop first
   (that part needs the control), and passes the already-resolved style.
   ADrawRule = False lays only the seamless backdrop, which is what a tbsSeparator is: room, and
-  no ink. }
+  no ink.
+  AFallbackAlpha is handed in rather than read here so this stays canvas-and-theme-free; the
+  callers, which have a controller, read the metric. }
 procedure TyDrawToolSeparatorInk(P: TTyPainter; AWidth, AHeight: Integer;
-  const AStyle: TTyStyleSet; ADrawRule: Boolean);
+  const AStyle: TTyStyleSet; ADrawRule: Boolean; AFallbackAlpha: Integer);
 
 implementation
 
@@ -718,14 +805,27 @@ begin
   Result.Color := AColor;
 end;
 
+function TyToolRuleInk(const AStyle: TTyStyleSet; AFallbackAlpha: Integer): TTyColor;
+begin
+  // The theme gave the border ink: use it, unchanged. Every bordered skin is untouched.
+  if TyAlphaOf(AStyle.BorderColor) > 0 then
+    Exit(AStyle.BorderColor);
+  if AFallbackAlpha < 0 then AFallbackAlpha := 0;
+  if AFallbackAlpha > 255 then AFallbackAlpha := 255;
+  // A fully transparent border says "no border ink at all" — so the rule has to find its own,
+  // and the only other colour the variant DOES state is the text colour.
+  Result := TyRGBA(TyRedOf(AStyle.TextColor), TyGreenOf(AStyle.TextColor),
+    TyBlueOf(AStyle.TextColor), AFallbackAlpha);
+end;
+
 procedure TyDrawToolSeparatorInk(P: TTyPainter; AWidth, AHeight: Integer;
-  const AStyle: TTyStyleSet; ADrawRule: Boolean);
+  const AStyle: TTyStyleSet; ADrawRule: Boolean; AFallbackAlpha: Integer);
 begin
   if tpBackground in AStyle.Present then
     P.FillBackground(Rect(0, 0, AWidth, AHeight), AStyle.Background, 0);   // seamless with the bar
   if not ADrawRule then Exit;
   P.FillBackground(Rect(AWidth div 2, P.Scale(3), AWidth div 2 + 1, AHeight - P.Scale(3)),
-    TyToolRuleFill(AStyle.BorderColor), 0);
+    TyToolRuleFill(TyToolRuleInk(AStyle, AFallbackAlpha)), 0);
 end;
 
 { TTyToolSeparator }
@@ -750,7 +850,8 @@ begin
     FillSharpBackdrop(P, Rect(0, 0, W, H));   // photo through the separator on an image theme (no-op on solid)
     // The bg fill (seamless with the bar) + the inset 1px rule now live in TyDrawToolSeparatorInk,
     // which a tbsDivider TTyToolButton runs too — one routine, so the two can never drift apart.
-    TyDrawToolSeparatorInk(P, W, H, S, True);
+    TyDrawToolSeparatorInk(P, W, H, S, True,
+      ActiveController.Metric(TyToolRuleAlphaVar, TyToolRuleGhostAlpha));
     P.EndPaint;
   finally P.Free; end;
 end;
@@ -1095,6 +1196,32 @@ begin
   if not anyDown then Down := True;
 end;
 
+function TTyToolButton.GetGlyphSource(AStates: TTyStateSet): TTyGlyphSource;
+var
+  bar: TTyToolBar;
+  alt: TTyImageCollection;
+begin
+  Result := inherited GetGlyphSource(AStates);
+  bar := GetToolBar;
+  if bar = nil then Exit;
+  // Nothing to substitute FOR: a font-glyph tool, or one with no icon at all.
+  if (Result.Images = nil) or (Result.ImageName = '') then Exit;
+  // Only the bar's OWN icons have bar-provided alternates; a tool's own collection is its own.
+  if Result.Images <> bar.Images then Exit;
+  { Disabled outranks hover: a disabled tool can still have the pointer over it, and LCL
+    orders the two the same way. }
+  if tysDisabled in AStates then
+    alt := bar.DisabledImages
+  else if tysHover in AStates then
+    alt := bar.HotImages
+  else
+    alt := nil;
+  { Contains, not "assigned": an alternate that does not carry THIS name has nothing to say
+    about this tool, and drawing its miss would blank the icon on hover. }
+  if (alt <> nil) and alt.Contains(Result.ImageName) then
+    Result.Images := alt;
+end;
+
 { ---- arrow zone / drop-down ----------------------------------------------- }
 
 function TTyToolButton.DropArrowLogicalWidth: Integer;
@@ -1121,11 +1248,22 @@ begin
 end;
 
 function TTyToolButton.IsInArrowZone(AX: Integer): Boolean;
+var
+  ppi, cl, cr, zoneLeft: Integer;
 begin
   // tbsButtonDrop draws an arrow but is ONE hit zone (LCL: "not separated from each other"),
   // so only tbsDropDown has a zone to be inside.
   if FStyle <> tbsDropDown then Exit(False);
-  Result := TyDropArrowHit(AX, Width, ArrowZoneWidth(Font.PixelsPerInch));
+  { From the PADDED CONTENT box, through the same TyDropArrowZoneLeft DrawContent places the
+    divider with — so the divider a user can see is the first pixel that answers. Both this
+    control and TTyDropDownButton were previously measuring from the control's right edge
+    while drawing from the content box, which put the two a right-padding apart; the fix had
+    to land on both at once or they would stop sharing the one rule. }
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  TyButtonContentSpanX(Width, ppi, CurrentStyle, cl, cr);
+  zoneLeft := TyDropArrowZoneLeft(cl, cr, ArrowZoneWidth(ppi));
+  Result := (zoneLeft >= 0) and (AX >= zoneLeft) and (AX < Width);
 end;
 
 function TTyToolButton.PointInArrow(const X, Y: Integer): Boolean;
@@ -1257,7 +1395,7 @@ end;
 procedure TTyToolButton.DrawContent(APainter: TTyPainter; const AContentRect: TRect;
   const AStyle: TTyStyleSet);
 var
-  arrowW, divX, boxW: Integer;
+  divX, zoneLeft: Integer;
   mainRect, arrowRect: TRect;
 begin
   if not (FStyle in [tbsDropDown, tbsButtonDrop]) then
@@ -1265,39 +1403,44 @@ begin
     inherited DrawContent(APainter, AContentRect, AStyle);
     Exit;
   end;
-  boxW := AContentRect.Right - AContentRect.Left;
   { The same ARBITRATED logical width ArrowZoneWidth converts (APainter.Scale IS that
     MulDiv), so the drawn zone and the hit-tested zone are the same WIDTH — including when
-    the bar's DropDownWidth pins it away from the theme token.
-    They are not yet at the same OFFSET: this one is measured from the padded content box,
-    while IsInArrowZone measures from the control's right edge — so the two are out by the
-    theme's right padding. That deviation is inherited from TTyDropDownButton, which hit-tests
-    through the very same TyDropArrowHit; correcting it on one control alone would break the
-    single rule the two share, so it is recorded in docs/controls/toolbar.md (3.2.1) as a
-    both-sites fix rather than silently forked here. }
-  arrowW := APainter.Scale(DropArrowLogicalWidth);
-  if arrowW < 0 then arrowW := 0;
-  // Never let the zone swallow the whole caption area on a too-narrow button.
-  if arrowW >= boxW then arrowW := boxW div 2;
+    the bar's DropDownWidth pins it away from the theme token — AND now at the same OFFSET:
+    both go through TyDropArrowZoneLeft over the padded content box. They used to differ,
+    this one measuring from the content box and IsInArrowZone from the control's right edge,
+    which left the divider and the first padding-width of drawn arrow beside it running the
+    PRIMARY action. Fixed on this control and TTyDropDownButton in the same change, because
+    the whole point of the shared rule is that they cannot disagree. }
+  zoneLeft := TyDropArrowZoneLeft(AContentRect.Left, AContentRect.Right,
+    APainter.Scale(DropArrowLogicalWidth));
+  if zoneLeft < 0 then
+  begin
+    // No room for an arrow, so nothing hit-tests as one either: glyph + caption, full box.
+    inherited DrawContent(APainter, AContentRect, AStyle);
+    Exit;
+  end;
 
-  arrowRect := Rect(AContentRect.Right - arrowW, AContentRect.Top,
-    AContentRect.Right, AContentRect.Bottom);
-  mainRect := Rect(AContentRect.Left, AContentRect.Top,
-    AContentRect.Right - arrowW, AContentRect.Bottom);
+  arrowRect := Rect(zoneLeft, AContentRect.Top, AContentRect.Right, AContentRect.Bottom);
+  mainRect := Rect(AContentRect.Left, AContentRect.Top, zoneLeft, AContentRect.Bottom);
 
   inherited DrawContent(APainter, mainRect, AStyle);   // glyph + caption in what is left
 
-  if arrowW <= 0 then Exit;
-
   { The DIVIDER is the visible half of the hit test: it is what tells a user that the right end
     of a tbsDropDown is a second target. tbsButtonDrop has one target, so it gets no divider —
-    LCL says the same thing ("button with arrow (not separated from each other)"). }
+    LCL says the same thing ("button with arrow (not separated from each other)").
+
+    Its ink comes from TyToolRuleInk, NOT from AStyle.BorderColor directly. On the DEFAULT bar
+    (Flat = True) every tool wears the 'ghost' variant, whose border is deliberately fully
+    transparent — so this line used to be drawn in nothing at all, and a tbsDropDown was
+    pixel-identical to a tbsButtonDrop while routing clicks differently. A comment calling a
+    rule "the visible half of the hit test" is a claim the paint has to actually keep. }
   if FStyle = tbsDropDown then
   begin
     divX := arrowRect.Left;
     APainter.FillBackground(Rect(divX, arrowRect.Top + APainter.Scale(3),
       divX + 1, arrowRect.Bottom - APainter.Scale(3)),
-      TyToolRuleFill(AStyle.BorderColor), 0);
+      TyToolRuleFill(TyToolRuleInk(AStyle,
+        ActiveController.Metric(TyToolRuleAlphaVar, TyToolRuleGhostAlpha))), 0);
   end;
   APainter.DrawDropChevron(arrowRect, AStyle.TextColor);
 end;
@@ -1315,7 +1458,8 @@ begin
     W := ARect.Right - ARect.Left;
     H := ARect.Bottom - ARect.Top;
     FillSharpBackdrop(P, Rect(0, 0, W, H));
-    TyDrawToolSeparatorInk(P, W, H, S, FStyle = tbsDivider);
+    TyDrawToolSeparatorInk(P, W, H, S, FStyle = tbsDivider,
+      ActiveController.Metric(TyToolRuleAlphaVar, TyToolRuleGhostAlpha));
     P.EndPaint;
   finally
     P.Free;
@@ -1382,6 +1526,16 @@ function TTyToolBar.ContentPadY: Integer;
 begin
   Result := ActiveController.Metric('--toolbar-pad-y', 4);
   if Result < 0 then Result := 0;
+end;
+
+function TTyToolBar.BottomBorderPx(APPI: Integer): Integer;
+var S: TTyStyleSet;
+begin
+  { No border colour resolved -> RenderTo strokes nothing -> there is no strip to keep clear. }
+  S := CurrentStyle;
+  if not (tpBorderColor in S.Present) then Exit(0);
+  Result := MulDiv(S.BorderWidth, APPI, 96);   // == TTyPainter.Scale at the same PPI
+  if Result < 1 then Result := 1;              // RenderTo floors its own stroke at 1px
 end;
 
 function TTyToolBar.GetButtonCount: Integer;
@@ -1499,6 +1653,27 @@ begin
   if FImages <> nil then FImages.FreeNotification(Self);
   ApplyToolProperties;
   Relayout;
+end;
+
+procedure TTyToolBar.SetHotImages(AValue: TTyImageCollection);
+begin
+  if FHotImages = AValue then Exit;
+  if FHotImages <> nil then FHotImages.RemoveFreeNotification(Self);
+  FHotImages := AValue;
+  if FHotImages <> nil then FHotImages.FreeNotification(Self);
+  { No ApplyToolProperties and no Relayout: these are never lent, and by contract they can
+    only change the PICTURE, never the slot — so nothing to push and nothing to re-measure.
+    Invalidate reaches the tools because a bar repaint repaints its children. }
+  Invalidate;
+end;
+
+procedure TTyToolBar.SetDisabledImages(AValue: TTyImageCollection);
+begin
+  if FDisabledImages = AValue then Exit;
+  if FDisabledImages <> nil then FDisabledImages.RemoveFreeNotification(Self);
+  FDisabledImages := AValue;
+  if FDisabledImages <> nil then FDisabledImages.FreeNotification(Self);
+  Invalidate;
 end;
 
 procedure TTyToolBar.ApplyToButton(B: TTyButton);
@@ -1681,6 +1856,9 @@ begin
     // dangling address that a freshly allocated collection could land on, and the next
     // pass would then mistake a tool's OWN collection for one of ours and overwrite it.
     if AComponent = FLentImages then FLentImages := nil;
+    // Same dangling-address reasoning as FImages: these are read on every tool paint.
+    if AComponent = FHotImages then FHotImages := nil;
+    if AComponent = FDisabledImages then FDisabledImages := nil;
   end;
 end;
 
@@ -1700,7 +1878,9 @@ begin
     // honored OVER the backdrop instead of replacing it with an opaque tint.
     if tpBackground in S.Present then P.FillBackground(Rect(0, 0, W, H), S.Background, 0);
     bg := Default(TTyFill); bg.Kind := tfkSolid;
-    bw := P.Scale(S.BorderWidth); if bw < 1 then bw := 1;
+    { The SAME number the layout keeps its rows out of -- see BottomBorderPx. It returns 0
+      when no border colour resolved, which is precisely when the branch below draws nothing. }
+    bw := BottomBorderPx(APPI); if bw < 1 then bw := 1;
     if tpBorderColor in S.Present then
     begin
       bg.Color := S.BorderColor;

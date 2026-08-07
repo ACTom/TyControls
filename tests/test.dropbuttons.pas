@@ -16,7 +16,8 @@ unit test.dropbuttons;
       等于什么都没测。 }
 interface
 uses
-  Classes, SysUtils, TypInfo, Types, Controls, Graphics, Forms, LCLType, fpcunit, testregistry,
+  Classes, SysUtils, TypInfo, Types, Controls, Graphics, Forms, LCLType, LCLMessageGlue,
+  BGRABitmap, BGRABitmapTypes, fpcunit, testregistry,
   tyControls.Base, tyControls.Types, tyControls.Controller, tyControls.Menu,
   tyControls.DropButtons, tyControls.ToolBar;
 
@@ -37,6 +38,12 @@ type
     procedure CallPreferred(out AW, AH: Integer);
     { The caption measurement the size floor's HEIGHT is derived from. }
     procedure CallMeasure(APPI: Integer; out AW, AH: Integer);
+    { The hit-test half of the arrow zone, so a test can probe it at the pixel the PAINT
+      half put the divider on. }
+    function CallIsInArrowZone(AX: Integer): Boolean;
+    { The resolved theme's right padding — the gap the two halves used to differ by. A test
+      asserts it is non-zero, or it would be pinning nothing. }
+    function CallPadRight: Integer;
   end;
 
   { Probe subclass exposing TTyMenuButton's protected RenderTo. }
@@ -112,6 +119,31 @@ type
     procedure TestFloorSurvivesAHeightPinningToolBar;
   end;
 
+  { WHERE the arrow zone begins — drawn and hit-tested, pinned against each other.
+
+    The two used to be computed separately: the paint measured back from the padded CONTENT
+    box, the hit test from the CONTROL's right edge, so they stood exactly one right-padding
+    apart. The drawn divider, and the slice of drawn arrow beside it, ran the PRIMARY action.
+
+    Every probe here sits ON the boundary — the divider column that the paint actually
+    produced, read back out of the rendered pixels, and the column one to its left. A CENTRE
+    probe is worthless for this: the two zones overlapped in the middle, which is exactly how
+    the divergence survived. The theme below therefore also has a DELIBERATELY NON-ZERO
+    horizontal padding, and the test asserts that it does: with padding 0 the two rules
+    coincide and every assertion here would pass no matter which one the code used. }
+  TDropArrowZoneEdgeTest = class(TTestCase)
+  private
+    FDropped: Integer;
+    FClicked: Integer;
+    procedure HandleDropDown(Sender: TObject);
+    procedure HandleClick(Sender: TObject);
+  published
+    procedure TestDrawnDividerIsTheFirstHitPixel;
+    procedure TestClickAtTheDrawnDividerRoutesToTheMenu;
+    procedure TestRealWindowClickOnTheDrawnEdgeOpensTheMenu;
+    procedure TestZoneLeftIsPureAndRefusesAnArrowThatCannotFit;
+  end;
+
 implementation
 
 const
@@ -156,6 +188,16 @@ end;
 procedure TDropDownAccess.CallMeasure(APPI: Integer; out AW, AH: Integer);
 begin
   MeasureCaption(APPI, AW, AH);
+end;
+
+function TDropDownAccess.CallIsInArrowZone(AX: Integer): Boolean;
+begin
+  Result := IsInArrowZone(AX);
+end;
+
+function TDropDownAccess.CallPadRight: Integer;
+begin
+  Result := CurrentStyle.Padding.Right;
 end;
 
 procedure TMenuButtonAccess.CallMeasure(APPI: Integer; out AW, AH: Integer);
@@ -950,9 +992,239 @@ begin
   end;
 end;
 
+{ TDropArrowZoneEdgeTest }
+
+{ The one test here that needs a real HWND. The console runner never calls
+  Application.Initialize, so the widgetset's window classes are unregistered and CreateHandle
+  fails with 1407. Lazy + local, the same pattern test.base and test.combobox.simple use. }
+var
+  WidgetSetReady: Boolean = False;
+
+procedure NeedWidgetSet;
+begin
+  if WidgetSetReady then Exit;
+  Forms.Application.Initialize;
+  WidgetSetReady := True;
+end;
+
+const
+  { A theme built for this one question. border-width 0 so the frame contributes no ink;
+    background BLACK and the divider colour (border-color) PURE GREEN so the divider column
+    is the only green in the bitmap; the chevron and caption RED so neither can be mistaken
+    for it. The padding is 4px 10px — the LEFT/RIGHT 10 is the whole point: it is the gap the
+    paint and the hit test used to disagree by. }
+  cDropEdgeCss =
+    ':root { --drop-arrow-width: 18px; }' +
+    'TyButton { background: #000000; color: #FF0000; border-color: #00FF00; ' +
+    'border-width: 0px; padding: 4px 10px; font-size: 12px; }';
+  cEdgeW = 140;
+  cEdgeH = 28;
+
+{ The x of the drawn split divider, read out of a real render of B — never computed from the
+  same arithmetic the code under test uses, or the probe would agree with a fork of it. -1
+  when no divider was drawn. }
+function DrawnDividerX(B: TDropDownAccess): Integer;
+var
+  bmp: TBitmap;
+  img: TBGRABitmap;
+  x, y: Integer;
+  P: TBGRAPixel;
+begin
+  Result := -1;
+  bmp := TBitmap.Create;
+  img := nil;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(cEdgeW, cEdgeH);
+    bmp.Canvas.Brush.Style := bsSolid;
+    bmp.Canvas.Brush.Color := clWhite;
+    bmp.Canvas.FillRect(0, 0, cEdgeW, cEdgeH);
+    B.DoRenderTo(bmp.Canvas, Rect(0, 0, cEdgeW, cEdgeH), 96);
+    img := TBGRABitmap.Create(bmp);
+    for x := 0 to cEdgeW - 1 do
+      for y := 0 to cEdgeH - 1 do
+      begin
+        P := img.GetPixel(x, y);
+        // Green ink, and not the red chevron/caption: the divider and nothing else.
+        if (P.green > 150) and (P.red < 100) and (P.blue < 100) then
+          Exit(x);
+      end;
+  finally
+    img.Free;
+    bmp.Free;
+  end;
+end;
+
+procedure TDropArrowZoneEdgeTest.HandleDropDown(Sender: TObject);
+begin
+  Inc(FDropped);
+end;
+
+procedure TDropArrowZoneEdgeTest.HandleClick(Sender: TObject);
+begin
+  Inc(FClicked);
+end;
+
+procedure TDropArrowZoneEdgeTest.TestDrawnDividerIsTheFirstHitPixel;
+var
+  Ctl: TTyStyleController;
+  B: TDropDownAccess;
+  divX, padRight: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  B := nil;
+  try
+    Ctl.LoadThemeCss(cDropEdgeCss);
+    B := TDropDownAccess.Create(nil);
+    B.Controller := Ctl;
+    B.Font.PixelsPerInch := 96;    // Scale() 1:1, so logical px == device px
+    B.Caption := 'Save';
+    B.SetBounds(0, 0, cEdgeW, cEdgeH);
+
+    { The test is only meaningful with a real right padding — with 0 the drawn zone and a
+      control-edge-relative zone coincide and every assertion below passes either way. }
+    padRight := B.CallPadRight;
+    AssertTrue('the fixture theme must have a NON-ZERO right padding, or this test cannot '
+      + 'tell the two rules apart', padRight > 0);
+
+    divX := DrawnDividerX(B);
+    AssertTrue('sanity: a split button drew its divider somewhere', divX >= 0);
+    { Where the paint really put it: back from the CONTENT box, not the control edge. Stated
+      as a number so a reader can see the gap this test exists for -- the old hit rule
+      started the zone at cEdgeW - 18 = 122, ten px to the right of this. }
+    AssertEquals('the divider sits one right-padding in from the control edge',
+      cEdgeW - padRight - 18, divX);
+
+    // THE EDGE PROBE. One px either side of the drawn boundary; never the middle.
+    AssertTrue('the drawn divider IS the first pixel that answers as arrow',
+      B.CallIsInArrowZone(divX));
+    AssertFalse('and the pixel just left of it is still the primary area',
+      B.CallIsInArrowZone(divX - 1));
+    // The far end: the right padding carries no ink but still belongs to the arrow.
+    AssertTrue('the last pixel of the control is in the zone',
+      B.CallIsInArrowZone(cEdgeW - 1));
+  finally
+    B.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TDropArrowZoneEdgeTest.TestClickAtTheDrawnDividerRoutesToTheMenu;
+var
+  Ctl: TTyStyleController;
+  B: TDropDownAccess;
+  divX: Integer;
+begin
+  { The probe above asks the hit test; this one asks the ROUTER, which is what a user
+    actually experiences: press on the drawn divider and the menu must be what happens. }
+  Ctl := TTyStyleController.Create(nil);
+  B := nil;
+  FDropped := 0; FClicked := 0;
+  try
+    Ctl.LoadThemeCss(cDropEdgeCss);
+    B := TDropDownAccess.Create(nil);
+    B.Controller := Ctl;
+    B.Font.PixelsPerInch := 96;
+    B.Caption := 'Save';
+    B.SetBounds(0, 0, cEdgeW, cEdgeH);
+    B.OnDropDown := @HandleDropDown;
+    B.OnClick := @HandleClick;
+
+    divX := DrawnDividerX(B);
+    AssertTrue('sanity: the divider was drawn', divX >= 0);
+
+    B.PressAndClickAt(divX);
+    AssertEquals('a press ON the drawn divider drops the menu', 1, FDropped);
+    AssertEquals('and never runs the primary action', 0, FClicked);
+
+    B.PressAndClickAt(divX - 1);
+    AssertEquals('one px to its left is the primary action', 1, FClicked);
+    AssertEquals('and does not drop', 1, FDropped);
+  finally
+    B.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TDropArrowZoneEdgeTest.TestRealWindowClickOnTheDrawnEdgeOpensTheMenu;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  B: TDropDownAccess;
+  divX: Integer;
+begin
+  { The headless probes drive MouseDown/Click directly. This one goes through the control's
+    real WindowProc on a real HWND (LCLSendMouse*Msg is the path the widgetset itself uses),
+    because the whole defect class here is "the drawing is right and the WINDOW answers
+    something else" — and that is precisely what a handle-less test cannot see.
+
+    DropDownMenu is left nil ON PURPOSE: with a live handle DoDropDown would call the real
+    PopUp, which spins a modal menu loop and would hang the suite. OnDropDown fires either
+    way, so the routing is still what is being measured. }
+  NeedWidgetSet;
+  Ctl := TTyStyleController.Create(nil);
+  F := TForm.CreateNew(nil);
+  FDropped := 0; FClicked := 0;
+  try
+    Ctl.LoadThemeCss(cDropEdgeCss);
+    F.SetBounds(0, 0, 300, 120);
+    B := TDropDownAccess.Create(F);
+    B.Parent := F;
+    B.Controller := Ctl;
+    B.Font.PixelsPerInch := 96;
+    B.Caption := 'Save';
+    B.SetBounds(10, 10, cEdgeW, cEdgeH);
+    B.OnDropDown := @HandleDropDown;
+    B.OnClick := @HandleClick;
+    F.HandleNeeded;
+    B.HandleNeeded;
+    AssertTrue('sanity: the button really has a window', B.HandleAllocated);
+    AssertTrue('sanity: no menu is assigned, so nothing can pop modally',
+      B.DropDownMenu = nil);
+
+    divX := DrawnDividerX(B);
+    AssertTrue('sanity: the divider was drawn', divX >= 0);
+
+    LCLSendMouseDownMsg(B, divX, cEdgeH div 2, mbLeft, []);
+    LCLSendMouseUpMsg(B, divX, cEdgeH div 2, mbLeft, []);
+    AssertEquals('a real click on the drawn arrow edge opens the menu', 1, FDropped);
+    AssertEquals('and the primary action stays out of it', 0, FClicked);
+
+    LCLSendMouseDownMsg(B, divX - 1, cEdgeH div 2, mbLeft, []);
+    LCLSendMouseUpMsg(B, divX - 1, cEdgeH div 2, mbLeft, []);
+    AssertEquals('one px to its left is still the primary action', 1, FClicked);
+    AssertEquals('and does not drop', 1, FDropped);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TDropArrowZoneEdgeTest.TestZoneLeftIsPureAndRefusesAnArrowThatCannotFit;
+begin
+  { The shared rule on its own, with no control around it. Content box [10..130) of a 140
+    control, 18px arrow -> the zone opens at 112, NOT at 122 (which is what measuring from
+    the control edge gives). }
+  AssertEquals('the zone opens one arrow-width in from the CONTENT edge',
+    112, TyDropArrowZoneLeft(10, 130, 18));
+  AssertEquals('a zero arrow has no zone', -1, TyDropArrowZoneLeft(10, 130, 0));
+  AssertEquals('a negative arrow has no zone', -1, TyDropArrowZoneLeft(10, 130, -4));
+  AssertEquals('an empty content box has no zone', -1, TyDropArrowZoneLeft(130, 130, 18));
+  AssertEquals('an inverted content box has no zone', -1, TyDropArrowZoneLeft(130, 10, 18));
+  { REFUSE, do not halve: an arrow at least as wide as the content box is a misconfiguration,
+    and the conservative answer leaves the primary action the whole face. The PAINT applies
+    the identical test, so an arrow that cannot be hit is never drawn either. }
+  AssertEquals('an arrow exactly as wide as the content box is refused',
+    -1, TyDropArrowZoneLeft(10, 130, 120));
+  AssertEquals('and a wider one too', -1, TyDropArrowZoneLeft(10, 130, 121));
+  AssertEquals('one px narrower fits, and opens at the content left',
+    11, TyDropArrowZoneLeft(10, 130, 119));
+end;
+
 initialization
   RegisterTest(TDropDownButtonTest);
   RegisterTest(TMenuButtonTest);
   RegisterTest(TDropButtonsAutoSizeTest);
   RegisterTest(TDropButtonsFloorTest);
+  RegisterTest(TDropArrowZoneEdgeTest);
 end.

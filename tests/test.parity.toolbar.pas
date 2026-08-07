@@ -98,7 +98,7 @@ type
     procedure TestDropDownWidthIsPublishedAndDefaultsToTheToken;
     procedure TestListIsPublishedAndTheInvertedDefaultIsDeliberate;
     procedure TestOnPaintButtonIsPublishedWithLclsShape;
-    procedure TestHotAndDisabledImagesAreDeliberatelyAbsent;
+    procedure TestHotAndDisabledImagesArePublishedAndHonoured;
     procedure TestGlyphLayoutStreamsOnlyWhenTheHostWroteIt;
   end;
 
@@ -677,28 +677,48 @@ begin
     'TTyToolBarOnPaintButton', string(PI^.PropType^.Name));
 end;
 
-procedure TToolBarMembersApiParityTest.TestHotAndDisabledImagesAreDeliberatelyAbsent;
+procedure TToolBarMembersApiParityTest.TestHotAndDisabledImagesArePublishedAndHonoured;
+var
+  pi: PPropInfo;
 begin
-  { THE REFUSAL, pinned the LyingPropertiesStayUnpublished way. LCL's HotImages /
-    DisabledImages swap in a SECOND image list, keyed by the same ImageIndex, when a button
-    is hovered / disabled. Two reasons they are not carried:
+  { These two were REFUSED once, and this test is the inversion of that refusal — kept in the
+    same place so the history reads in one file rather than vanishing from it.
 
-    * This library's glyph pipeline TINTS every collection image to the state's resolved
-      TextColor (TyTintBitmapAlpha replaces RGB wholesale, keeping alpha) — so the classic
-      job of those lists, a different COLOUR treatment per state, is already the THEME's,
-      per skin, via the :hover / :disabled rules. A swapped image would be re-tinted the
-      same way, so all a second collection could ever add is a different SHAPE per state.
-    * Serving that residue would put a second, per-bar image-state model beside the theme's
-      state model, with a per-name silent fallback (a name missing from the alternate
-      collection shows the base icon) — a "sometimes works" surface.
+    The refusal's reasoning was half right and is still in force: this library TINTS every
+    collection image to the state's resolved TextColor (TyTintBitmapAlpha replaces RGB
+    wholesale, keeping alpha), so per-state COLOUR is the THEME's job, per skin, through the
+    :hover / :disabled rules — and these properties do not touch colour. What the refusal
+    then had to concede was the residue, per-state SHAPE, which no skin can express; and the
+    reason it refused ANYWAY was that reaching it needed a protected glyph-source seam on
+    TTyGlyphButtonBase that did not exist. That was a missing seam, not a real objection.
 
-    If a per-state SHAPE swap is ever really wanted, the seam is a protected virtual
-    glyph-source resolver on TTyGlyphButtonBase consulted by its DrawContent — build that
-    first, then delete these lines; do not relax them. }
-  AssertTrue('HotImages must not be published until something honours it',
-    GetPropInfo(TTyToolBar, 'HotImages') = nil);
-  AssertTrue('DisabledImages must not be published until something honours it',
-    GetPropInfo(TTyToolBar, 'DisabledImages') = nil);
+    The seam exists now (TTyGlyphButtonBase.GetGlyphSource, pinned by
+    test.glyphbuttons' TGlyphSourceSeamTest), and the other worry — a silent per-name
+    fallback making a "sometimes works" surface — is answered by narrowing what the
+    properties CLAIM: they are an override of the bar's own icons, never an independent
+    image-state model. A tool consults them only when it is already drawing the bar's own
+    collection and the alternate really contains that ImageName. Stated that way, "the
+    alternate does not carry this name" is not a silent failure, it is the documented answer.
+
+    Published is the easy half; HONOURED is the half that matters, and it is pinned by
+    test.toolbar's TToolBarStateImagesTest.TestHoverReallyDrawsTheHotArt, which reads the
+    swapped artwork back out of the rendered pixels. Do not let these two assertions stand
+    alone if that one is ever deleted. }
+  pi := GetPropInfo(TTyToolBar, 'HotImages');
+  AssertTrue('HotImages is published', pi <> nil);
+  AssertTrue('and readable — a write-only published property makes the IDE report '
+    + '"Cannot read property"', pi^.GetProc <> nil);
+  AssertTrue('and has a setter — TWriter.WriteProperty skips a setter-less one, so the '
+    + '.lfm would lose the reference with no error', pi^.SetProc <> nil);
+  AssertEquals('and is the name-keyed BGRA collection, not an LCL TImageList',
+    'TTyImageCollection', string(pi^.PropType^.Name));
+
+  pi := GetPropInfo(TTyToolBar, 'DisabledImages');
+  AssertTrue('DisabledImages is published', pi <> nil);
+  AssertTrue('and readable', pi^.GetProc <> nil);
+  AssertTrue('and has a setter', pi^.SetProc <> nil);
+  AssertEquals('and the same collection type',
+    'TTyImageCollection', string(pi^.PropType^.Name));
 end;
 
 procedure TToolBarMembersApiParityTest.TestGlyphLayoutStreamsOnlyWhenTheHostWroteIt;

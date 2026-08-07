@@ -37,12 +37,57 @@ const
     arrow zone. Scaled to device px at paint / hit-test time. }
   TyDefaultDropArrowWidth = 18;
 
+{ THE trailing drop-arrow zone — one pure rule, read by the PAINT and by the HIT TEST of
+  every split control in the library (TTyDropDownButton, TTyToolButton's tbsDropDown).
+
+  WHY IT EXISTS. The two used to compute the zone separately and got different answers.
+  The paint measured back from the PADDED CONTENT box (AContentRect.Right, the rect
+  TTyButton.RenderTo hands DrawContent); the hit test measured back from the CONTROL's
+  right edge. They therefore stood exactly one right-padding apart — 6 device px under the
+  default --pad-button. The visible cost was a strip of drawn arrow, starting AT the split
+  divider, that ran the PRIMARY action: the user pressed the line that says "menu here" and
+  got a save instead. A CENTRE probe never caught it, because the two zones overlap in the
+  middle; only a probe at the divider itself can. (Recorded at the time in
+  docs/controls/toolbar.md 3.2.1 as a both-sites fix, and it is now made.)
+
+  WHAT IT ANSWERS. The zone's LEFT edge in client x — deliberately ONE number and not a
+  span, because the left edge is the whole of what the paint and the hit test have to agree
+  on, and a function that also returned a right edge would have to invent one for the paint
+  (which draws to the content edge) different from the hit test's (which runs to the control
+  edge, since the right padding holds no ink but is still the arrow end of the button).
+  Each caller states its own far end, in its own units, right where it is used.
+
+  -1 = NO ZONE: the arrow is non-positive, the content box is degenerate, or the arrow does
+  not FIT inside the content box. "Does not fit" refuses rather than halving the arrow: a
+  control configured with an arrow wider than its own content box is misconfigured, and
+  leaving the primary action the whole face is the conservative reading. The paint refuses
+  on the identical test, so an arrow that cannot be hit is never drawn either.
+
+  AContentLeft/AContentRight  the content box in client x — the client rect already inset by
+                              the theme's padding (TyButtonContentSpanX computes it for a
+                              caller that has a style but no painter).
+  AArrowWidthPx               the arrow zone's DEVICE width. }
+function TyDropArrowZoneLeft(AContentLeft, AContentRight, AArrowWidthPx: Integer): Integer;
+
+{ The content box's horizontal span in client x for a themed button: the client rect inset
+  by the resolved style's left/right padding, converted with the SAME 96-baseline MulDiv
+  that TTyPainter.Scale applies — so this reproduces exactly the AContentRect.Left/.Right
+  that TTyButton.RenderTo hands to DrawContent. It exists so a HIT TEST, which has a style
+  but no painter, can ask the question the paint answers from its rect. }
+procedure TyButtonContentSpanX(AWidth, APPI: Integer; const AStyle: TTyStyleSet;
+  out ALeft, ARight: Integer);
+
 { Pure hit-test seam: True iff a click at device-x AClickX (0-based within the
   control) falls in the RIGHT arrow zone of a split button AWidthPx wide whose arrow
   zone is AArrowWidthPx wide. The arrow zone is the rightmost AArrowWidthPx of the
   control; a click at exactly (AWidthPx - AArrowWidthPx) is the first arrow-zone
   pixel. Degenerate widths (arrow >= control, or non-positive) fall back sanely so a
-  tiny/zero button never traps every click as an arrow hit. }
+  tiny/zero button never traps every click as an arrow hit.
+
+  This is TyDropArrowZone over an UNPADDED box, kept as a named function because it is the
+  arrow rule stated without a theme in the way — the form the pure unit tests pin and the
+  form documentation quotes. The controls call TyDropArrowZone directly, with their real
+  padding; see TTyDropDownButton.IsInArrowZone. }
 function TyDropArrowHit(AClickX, AWidthPx, AArrowWidthPx: Integer): Boolean;
 
 type
@@ -167,13 +212,32 @@ type
 
 implementation
 
-function TyDropArrowHit(AClickX, AWidthPx, AArrowWidthPx: Integer): Boolean;
+function TyDropArrowZoneLeft(AContentLeft, AContentRight, AArrowWidthPx: Integer): Integer;
 begin
-  // Degenerate: no arrow zone, or it would swallow the whole (or an impossibly wide)
-  // control — treat nothing as an arrow hit so the primary action still works.
-  if (AArrowWidthPx <= 0) or (AWidthPx <= 0) or (AArrowWidthPx >= AWidthPx) then
-    Exit(False);
-  Result := AClickX >= (AWidthPx - AArrowWidthPx);
+  // No arrow, or an empty/inverted content box (this also covers a zero-width control:
+  // its content right, already inset by the padding, cannot exceed its content left).
+  if (AArrowWidthPx <= 0) or (AContentRight <= AContentLeft) then
+    Exit(-1);
+  // An arrow that does not fit inside the content box is not drawn and not hit (see header).
+  if AArrowWidthPx >= (AContentRight - AContentLeft) then
+    Exit(-1);
+  Result := AContentRight - AArrowWidthPx;
+end;
+
+procedure TyButtonContentSpanX(AWidth, APPI: Integer; const AStyle: TTyStyleSet;
+  out ALeft, ARight: Integer);
+begin
+  ALeft  := MulDiv(AStyle.Padding.Left, APPI, 96);
+  ARight := AWidth - MulDiv(AStyle.Padding.Right, APPI, 96);
+end;
+
+function TyDropArrowHit(AClickX, AWidthPx, AArrowWidthPx: Integer): Boolean;
+var
+  zoneLeft: Integer;
+begin
+  // The same rule, over a box with no padding: content box == the whole control.
+  zoneLeft := TyDropArrowZoneLeft(0, AWidthPx, AArrowWidthPx);
+  Result := (zoneLeft >= 0) and (AClickX >= zoneLeft) and (AClickX < AWidthPx);
 end;
 
 { TTyDropDownButton }
@@ -220,8 +284,21 @@ begin
 end;
 
 function TTyDropDownButton.IsInArrowZone(AX: Integer): Boolean;
+var
+  ppi, cl, cr, zoneLeft: Integer;
 begin
-  Result := TyDropArrowHit(AX, Width, ArrowZoneWidth(Font.PixelsPerInch));
+  { Measured from the PADDED CONTENT box — the same box DrawContent carves the arrow out of —
+    so the divider the user can see is the first pixel that answers. It used to measure from
+    the control's right edge, which put the boundary one right-padding to the RIGHT of the
+    drawn divider and made the leading slice of the drawn arrow run the primary action. }
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  TyButtonContentSpanX(Width, ppi, CurrentStyle, cl, cr);
+  zoneLeft := TyDropArrowZoneLeft(cl, cr, ArrowZoneWidth(ppi));
+  // Far end = the CONTROL edge, not the content edge: the right padding carries no ink but
+  // it is still the arrow end of the button, and stopping at the content edge would only
+  // move the dead strip from the left of the chevron to its right.
+  Result := (zoneLeft >= 0) and (AX >= zoneLeft) and (AX < Width);
 end;
 
 procedure TTyDropDownButton.DoDropDown;
@@ -284,30 +361,29 @@ end;
 procedure TTyDropDownButton.DrawContent(APainter: TTyPainter; const AContentRect: TRect;
   const AStyle: TTyStyleSet);
 var
-  arrowW, divX: Integer;
+  divX, zoneLeft: Integer;
   captionRect, arrowRect: TRect;
   ctx: TBGRACanvas2D;
 begin
-  // The painter's Scale is the canonical logical->device (96-baseline) conversion,
-  // the same one RenderTo used to inset AContentRect — so the drawn arrow zone lines
-  // up with the device-space arrow zone the MouseUp hit-test (ArrowZoneWidth) uses.
-  arrowW := APainter.Scale(FArrowWidth);
-  if arrowW < 0 then arrowW := 0;
+  { The painter's Scale is the canonical logical->device (96-baseline) conversion, the same
+    one RenderTo used to inset AContentRect. The zone itself comes from TyDropArrowZoneLeft —
+    the ONE rule IsInArrowZone routes the click through — so the divider drawn below IS the
+    first pixel that answers as an arrow. Fork this expression and the edge probe in
+    tests/test.dropbuttons.pas goes red. }
+  zoneLeft := TyDropArrowZoneLeft(AContentRect.Left, AContentRect.Right,
+    APainter.Scale(FArrowWidth));
+  if zoneLeft < 0 then
+  begin
+    // No room for an arrow (and so nothing hit-tests as one): a plain caption button.
+    inherited DrawContent(APainter, AContentRect, AStyle);
+    Exit;
+  end;
 
-  // Guard against a too-narrow content rect: never let the arrow zone consume the
-  // whole caption area (leave at least a sliver for the caption).
-  if arrowW >= (AContentRect.Right - AContentRect.Left) then
-    arrowW := (AContentRect.Right - AContentRect.Left) div 2;
-
-  arrowRect := Rect(AContentRect.Right - arrowW, AContentRect.Top,
-    AContentRect.Right, AContentRect.Bottom);
-  captionRect := Rect(AContentRect.Left, AContentRect.Top,
-    AContentRect.Right - arrowW, AContentRect.Bottom);
+  arrowRect := Rect(zoneLeft, AContentRect.Top, AContentRect.Right, AContentRect.Bottom);
+  captionRect := Rect(AContentRect.Left, AContentRect.Top, zoneLeft, AContentRect.Bottom);
 
   // Caption in the left sub-rect (base class centres it there).
   inherited DrawContent(APainter, captionRect, AStyle);
-
-  if arrowW <= 0 then Exit;
 
   // 1px vertical divider between caption and arrow zone, in the themed border colour,
   // inset a few px top/bottom so it reads as a hairline. Canvas2D anti-aliases it.
