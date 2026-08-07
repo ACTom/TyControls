@@ -173,6 +173,15 @@ Linux and macOS.
 
 ### Fixed
 
+- **Toggling dark on aero produced a half-black, half-white window** (the user's screenshot):
+  aero defines only 19 typeKeys and everything else falls back to the base layer; its
+  `@mode dark` was a verbatim copy of light that never pinned the base mode seeds, so its own
+  controls stayed light while the fallbacks went black. **aero now has a real dark-glass
+  palette** (the deep blue-black of Win7's dark colorization), and **classic pins "no dark
+  mode"** (Win95 has no such thing -- the toggle keeps the whole window as-is). A new guard
+  sweeps all 17 themes in both modes: form background and fallback surfaces must agree in
+  luminance and body ink must clear 60 luma of contrast, so this class of mixed window cannot
+  ship again.
 - **On the aero theme, every windowed control drew opaque black corner notches** -- and the
   painter was innocent: a gradient-backed form never sets `Color`, which idles at `clDefault`,
   and that reads as RGB that IS pure black -- exactly what children received when rebuilding

@@ -2,10 +2,16 @@
    3-stop buttons, thin cool blue borders, 3px corners, crisp white fields, soft shadow.
    Gradient angle note: 90deg runs TOP->BOTTOM, so the first stop is the top sheen.
 
-   DUAL-MODE: Aero glass is inherently light and has no natural dark variant, so @mode dark is
-   made IDENTICAL to @mode light — the palette below is duplicated verbatim in both blocks.
-   --accent stays the brand seed (used via var(--accent) in both modes) so the runtime
-   accent-picker still recolours the whole skin. */
+   DUAL-MODE: @mode dark used to be a verbatim copy of @mode light ("Aero has no natural dark
+   variant"). That was wrong in practice: a skin restyles only its OWN typeKeys, and the BASE
+   layer's three seeds (--surface/--on-surface/--border) still swap per mode underneath it — so
+   in dark mode every base-fallback surface (list box, panel, status bar, memo, …) turned dark
+   while aero's own keys (form, buttons, title bar) stayed light. One MIXED window, dark-slate
+   ink on black panels (the reported bug; test.modecoherence pins it). The dark block below is
+   therefore a REAL palette now: the deep blue-black glass of Win7's own dark colorization
+   slider, sitting coherently on the base layer's dark surfaces. --accent stays the brand seed
+   (used via var(--accent) in both modes) so the runtime accent-picker still recolours the
+   whole skin. */
 
 /* Mode-invariant derived value: focus ring is always the accent at 55% (accent is per-mode). */
 :root {
@@ -57,54 +63,78 @@
 
     --primary-shadow:    #10467A33; /* deeper accent shadow under primary */
     --danger-shadow:     #7A101033; /* deeper red shadow under danger */
+
+    /* Per-mode split-outs. In light they alias the values the rules always used, so the light
+       resolve is unchanged; dark gives each its own value because one token cannot serve both
+       modes there (see the dark block). */
+    --card-sheen:        var(--glass);              /* card top stop = the white glass sheet */
+    --card-title-ink:    darken(var(--accent), 15%);/* Win7 headings: darkened accent on pale glass */
+    --ghost-hover-bg:    alpha(var(--glass), 0.5);  /* ghost hover = faint white glass panel */
     --on-titlebar: var(--titlebar-ink);   /* ink for controls hosted on the title bar */
 }
 }
 
-/* ---- DARK palette (Aero has no natural dark variant — IDENTICAL to light) ---- */
+/* ---- DARK palette: Win7 dark colorization — deep blue-black glass, wet gloss kept.
+   Sits on the base layer's dark surfaces (#1E1E1E family), so fallback controls and aero's
+   own chrome read as ONE dark window. Ink is pale slate, not white: glass, not console.
+   Notes on the values that are NOT simple darkenings:
+   - --accent lifts a touch but stays luma < 0.5, so on(--accent) keeps white ink on
+     primary/badge/checked fills (a lazier, lighter blue flips them to black ink).
+   - --glass is the caption-button lift MEDIUM: pale steel, so hover chips lighten the bar
+     without blinding the near-white caption ink (white glass at 55% would).
+   - --ghost-hover-bg is a DARK chip: ghost ink is the accent (mid blue), and no half-alpha
+     light wash over a dark toolbar can stay 60 luma away from it — only a darker host can.
+   - --card-sheen replaces the card's white glass sheet with a lifted dark one; a pale top
+     stop would put a light card on a dark window (the exact mixed look this block removes).
+   - --card-title-ink LIGHTENS the accent: the light mode's darkened accent sinks into the
+     dark caption band (the directional-derivation trap, cf. green-image-theme borders). */
 @mode dark {
   :root {
-    --accent:            #2C7FD6;
-    --ink:               #1E2B3A;
-    --titlebar-ink:      #0A1A2A;
+    --accent:            #3B8ADF;   /* lifted brand blue; luma < 0.5 keeps on() = white ink */
+    --ink:               #D9E4F0;   /* pale cool-slate body text */
+    --titlebar-ink:      #ECF3FB;   /* near-white glass-caption ink */
 
-    --form-1:            #EEF3F9;
-    --form-2:            #DCE6F0;
+    --form-1:            #1B2531;   /* window glass wash, top (deep steel) */
+    --form-2:            #121924;   /* window glass wash, bottom (deeper) */
 
-    --titlebar-1:        #E4EEF7;
-    --titlebar-2:        #C4D8EC;
+    --titlebar-1:        #2C3E54;   /* dark glass caption, top sheen */
+    --titlebar-2:        #17212E;   /* dark glass caption, base */
 
-    --field-bg:          #FFFFFF;
-    --field-border:      #7DA2CE;
-    --field-focus:       #3C7FB1;
+    --field-bg:          #141C27;   /* sunken dark field well */
+    --field-border:      #46648A;   /* steel blue, readable on the dark wash */
+    --field-focus:       #5E9AD6;   /* brighter focus blue */
 
-    --btn-1:             #FDFEFF;
-    --btn-2:             #ECF2F9;
-    --btn-3:             #DBE7F4;
-    --btn-border:        #718DB5;
-    --btn-shadow:        #00000014;
+    --btn-1:             #33455C;   /* button gloss: upper sheen */
+    --btn-2:             #243346;   /* button gloss: mid */
+    --btn-3:             #1A2634;   /* button gloss: deeper base */
+    --btn-border:        #4E6B90;
+    --btn-shadow:        #00000059; /* a dark ground needs a denser shadow to read */
 
-    --btn-h1:            #EAF6FD;
-    --btn-h2:            #D2ECFB;
+    --btn-h1:            #3E5878;   /* hover glow: bluer and lighter, the Win7 hover light-up */
+    --btn-h2:            #2C4260;
 
-    --btn-a1:            #C4DCF0;
-    --btn-a2:            #D9E9F8;
+    --btn-a1:            #15202E;   /* pressed, top (darker -> sunken) */
+    --btn-a2:            #23344A;   /* pressed, base (lifts back up) */
 
-    --check-bg:          #FFFFFF;
+    --check-bg:          #141C27;   /* check well matches the field well */
 
-    --track:             #DCE6F0;
-    --progress-border:   #A7C0D8;
+    --track:             #202C3C;
+    --progress-border:   #3C5677;
 
-    --glass:             #FFFFFF;
+    --glass:             #55708E;   /* lift medium: caption hover chips lighten, never blind */
 
-    --close:             #E04747;
+    --close:             #E04747;   /* the close glow is already at home on dark glass */
     --close-active:      #C23030;
     --close-ink:         #FFFFFF;
 
-    --danger:            #E04747;
+    --danger:            #E04747;   /* luma < 0.5: on() keeps white ink on danger fills */
 
-    --primary-shadow:    #10467A33;
-    --danger-shadow:     #7A101033;
+    --primary-shadow:    #05192E66;
+    --danger-shadow:     #40080866;
+
+    --card-sheen:        #26344A;   /* card top stop: a lifted dark sheet, not white glass */
+    --card-title-ink:    lighten(var(--accent), 25%);
+    --ghost-hover-bg:    alpha(#1E3A5C, 0.92);
     --on-titlebar: var(--titlebar-ink);   /* ink for controls hosted on the title bar */
 }
 }
@@ -196,7 +226,7 @@ TyButton.ghost, TySpeedButton.ghost, TyGlyphContainerButton.ghost, TyRibbonAppMe
   border-radius: 3px;
   padding: 6px;
   font-weight: normal;
-}TyButton.ghost:hover, TySpeedButton.ghost:hover, TyGlyphContainerButton.ghost:hover, TyRibbonAppMenu.ghost:hover, TyButtonGroup.ghost:hover, TyUpDown.ghost:hover    { background: alpha(var(--glass), 0.5); border-color: var(--field-focus); }TyButton.ghost:active, TySpeedButton.ghost:active, TyGlyphContainerButton.ghost:active, TyRibbonAppMenu.ghost:active, TyButtonGroup.ghost:active, TyUpDown.ghost:active   { background: alpha(var(--btn-a1), 0.9); border-color: var(--field-focus); }TyButton.ghost:selected, TySpeedButton.ghost:selected, TyGlyphContainerButton.ghost:selected, TyRibbonAppMenu.ghost:selected, TyButtonGroup.ghost:selected, TyUpDown.ghost:selected { background: alpha(var(--btn-a1), 0.95); border-color: var(--accent); }TyButton.ghost:focus, TySpeedButton.ghost:focus, TyGlyphContainerButton.ghost:focus, TyRibbonAppMenu.ghost:focus, TyButtonGroup.ghost:focus, TyUpDown.ghost:focus    { outline: 2px var(--focus-ring); outline-offset: 1px; }TyButton.ghost:disabled, TySpeedButton.ghost:disabled, TyGlyphContainerButton.ghost:disabled, TyRibbonAppMenu.ghost:disabled, TyButtonGroup.ghost:disabled, TyUpDown.ghost:disabled { opacity: 0.5; }
+}TyButton.ghost:hover, TySpeedButton.ghost:hover, TyGlyphContainerButton.ghost:hover, TyRibbonAppMenu.ghost:hover, TyButtonGroup.ghost:hover, TyUpDown.ghost:hover    { background: var(--ghost-hover-bg); border-color: var(--field-focus); }TyButton.ghost:active, TySpeedButton.ghost:active, TyGlyphContainerButton.ghost:active, TyRibbonAppMenu.ghost:active, TyButtonGroup.ghost:active, TyUpDown.ghost:active   { background: alpha(var(--btn-a1), 0.9); border-color: var(--field-focus); }TyButton.ghost:selected, TySpeedButton.ghost:selected, TyGlyphContainerButton.ghost:selected, TyRibbonAppMenu.ghost:selected, TyButtonGroup.ghost:selected, TyUpDown.ghost:selected { background: alpha(var(--btn-a1), 0.95); border-color: var(--accent); }TyButton.ghost:focus, TySpeedButton.ghost:focus, TyGlyphContainerButton.ghost:focus, TyRibbonAppMenu.ghost:focus, TyButtonGroup.ghost:focus, TyUpDown.ghost:focus    { outline: 2px var(--focus-ring); outline-offset: 1px; }TyButton.ghost:disabled, TySpeedButton.ghost:disabled, TyGlyphContainerButton.ghost:disabled, TyRibbonAppMenu.ghost:disabled, TyButtonGroup.ghost:disabled, TyUpDown.ghost:disabled { opacity: 0.5; }
 
 /* Fields: crisp white wells, cool blue border, 3px corners, blue focus glow. */
 TyEdit {
@@ -267,11 +297,12 @@ TyProgressFill {
 
 /* ---- Card + Tag (Ant Design-gap batch 1) ---- */
 
-/* Card: an Aero content pane — a white glass sheet lifted off the steel window wash, thin cool
-   blue border, the same 3px corners as every other frame here, soft neutral shadow. Hovering
-   lifts it the way a glass button lifts: focus-blue rim and a little more shadow. */
+/* Card: an Aero content pane — a glass sheet lifted off the steel window wash (white in light,
+   a lifted dark sheet in dark — the per-mode --card-sheen), thin cool blue border, the same 3px
+   corners as every other frame here, soft neutral shadow. Hovering lifts it the way a glass
+   button lifts: focus-blue rim and a little more shadow. */
 TyCard {
-  background: linear-gradient(90deg, var(--glass), var(--form-1));
+  background: linear-gradient(90deg, var(--card-sheen), var(--form-1));
   color: var(--ink);
   border-color: var(--field-border);
   border-width: 1px;
@@ -284,13 +315,14 @@ TyCard:disabled { opacity: 0.5; }
 
 /* Header band: the card gets its own little Aero caption — the window title bar's glass sheen, so
    the band reads as chrome on the white sheet (the form wash would sink into the card's own
-   gradient and vanish). Title ink is a darkened accent: Win7 headings are blue, not black, and
-   darkening keeps them legible on the pale glass while still following the accent picker. Weight
+   gradient and vanish). Title ink is the per-mode --card-title-ink: Win7 headings are blue, not
+   black — a darkened accent on light's pale glass, a LIGHTENED one on dark's (each direction
+   keeps it legible on its own band) — still following the accent picker either way. Weight
    stays normal — nothing in Aero shouts. The separator is the field blue faded right down: a
    hairline, not a second frame inside the card. */
 TyCardHeader {
   background: linear-gradient(90deg, var(--titlebar-1), var(--titlebar-2));
-  color: darken(var(--accent), 15%);
+  color: var(--card-title-ink);
   border-color: alpha(var(--field-border), 0.55);
   border-width: 1px;
   font-weight: normal;

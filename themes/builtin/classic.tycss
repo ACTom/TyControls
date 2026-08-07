@@ -1,7 +1,18 @@
 /* Classic 3D skin — inspired by the Windows 9x look (an ORIGINAL take, not a pixel clone).
    Shows the v3 skin engine composing: render-style bevels (D + B2), a grey system palette,
    square corners, and a gradient title bar (B1). Loaded as a FILE by the theming example.
-   DUAL-MODE: this skin has no natural dark variant, so @mode dark is IDENTICAL to @mode light. */
+
+   DUAL-MODE: Win95 has no dark mode, so dark is a documented NO-OP — the WHOLE window must
+   render byte-identical to light. Duplicating classic's own palette verbatim (the old state)
+   is not enough for that: the skin styles only its OWN typeKeys, and the BASE layer's seeds
+   (--surface/--on-surface/--border, TyBuiltinBaseModeCss) still swap per mode underneath — so
+   every base-fallback surface (list box, panel, status bar, memo, …) turned dark while the
+   grey 3D chrome stayed light: a mixed window (the aero bug's twin; test.modecoherence pins
+   both). ENFORCEMENT: the @mode dark block restates classic's own palette AND pins those base
+   seeds to their light values (--border is already classic's own #808080 in both blocks), so
+   the base layer's derived family (--input-bg, --chrome-bar-bg, --muted, …) re-derives to the
+   exact light results. If the base ever grows another mode-swapped seed, the coherence guard
+   goes red here — pin the new seed the same way. */
 
 /* Mode-invariant metrics. Win9x caption buttons were small squares in the top-right, so the
    classic skin shrinks the title-bar buttons from the 46px default via the --caption-button-width
@@ -37,7 +48,7 @@
 }
 @mode dark {
   :root {
-    --accent:       #10318C;   /* identical to light — no natural dark variant */
+    --accent:       #10318C;   /* identical to light — dark is a whole-window no-op (header) */
     --title-mid:    #7BA2E0;
     --title-light:  #A6CAF0;
     --title-ink:    #FFFFFF;
@@ -49,6 +60,12 @@
     --danger:       #800000;
     --field:        #FFFFFF;
     --border:       #808080;
+    /* Base-seed pins (see header): hold the BASE layer's mode-swapped seeds at their light
+       values so base-fallback controls (list box, panel, status bar, …) stay light too —
+       without these, dark mode renders a mixed window. Values = the base light seeds
+       (TyBuiltinBaseModeCss); --border needs no pin, classic's own #808080 above covers it. */
+    --surface:      #FFFFFF;
+    --on-surface:   #1F2937;
     --on-titlebar: var(--title-ink);   /* ink for controls hosted on the title bar */
 }
 }

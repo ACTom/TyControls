@@ -1406,10 +1406,16 @@ begin
     '   3-stop buttons, thin cool blue borders, 3px corners, crisp white fields, soft shadow.' + LineEnding +
     '   Gradient angle note: 90deg runs TOP->BOTTOM, so the first stop is the top sheen.' + LineEnding +
     '' + LineEnding +
-    '   DUAL-MODE: Aero glass is inherently light and has no natural dark variant, so @mode dark is' + LineEnding +
-    '   made IDENTICAL to @mode light — the palette below is duplicated verbatim in both blocks.' + LineEnding +
-    '   --accent stays the brand seed (used via var(--accent) in both modes) so the runtime' + LineEnding +
-    '   accent-picker still recolours the whole skin. */' + LineEnding +
+    '   DUAL-MODE: @mode dark used to be a verbatim copy of @mode light ("Aero has no natural dark' + LineEnding +
+    '   variant"). That was wrong in practice: a skin restyles only its OWN typeKeys, and the BASE' + LineEnding +
+    '   layer''s three seeds (--surface/--on-surface/--border) still swap per mode underneath it — so' + LineEnding +
+    '   in dark mode every base-fallback surface (list box, panel, status bar, memo, …) turned dark' + LineEnding +
+    '   while aero''s own keys (form, buttons, title bar) stayed light. One MIXED window, dark-slate' + LineEnding +
+    '   ink on black panels (the reported bug; test.modecoherence pins it). The dark block below is' + LineEnding +
+    '   therefore a REAL palette now: the deep blue-black glass of Win7''s own dark colorization' + LineEnding +
+    '   slider, sitting coherently on the base layer''s dark surfaces. --accent stays the brand seed' + LineEnding +
+    '   (used via var(--accent) in both modes) so the runtime accent-picker still recolours the' + LineEnding +
+    '   whole skin. */' + LineEnding +
     '' + LineEnding +
     '/* Mode-invariant derived value: focus ring is always the accent at 55% (accent is per-mode). */' + LineEnding +
     ':root {' + LineEnding +
@@ -1461,54 +1467,78 @@ begin
     '' + LineEnding +
     '    --primary-shadow:    #10467A33; /* deeper accent shadow under primary */' + LineEnding +
     '    --danger-shadow:     #7A101033; /* deeper red shadow under danger */' + LineEnding +
+    '' + LineEnding +
+    '    /* Per-mode split-outs. In light they alias the values the rules always used, so the light' + LineEnding +
+    '       resolve is unchanged; dark gives each its own value because one token cannot serve both' + LineEnding +
+    '       modes there (see the dark block). */' + LineEnding +
+    '    --card-sheen:        var(--glass);              /* card top stop = the white glass sheet */' + LineEnding +
+    '    --card-title-ink:    darken(var(--accent), 15%);/* Win7 headings: darkened accent on pale glass */' + LineEnding +
+    '    --ghost-hover-bg:    alpha(var(--glass), 0.5);  /* ghost hover = faint white glass panel */' + LineEnding +
     '    --on-titlebar: var(--titlebar-ink);   /* ink for controls hosted on the title bar */' + LineEnding +
     '}' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
-    '/* ---- DARK palette (Aero has no natural dark variant — IDENTICAL to light) ---- */' + LineEnding +
+    '/* ---- DARK palette: Win7 dark colorization — deep blue-black glass, wet gloss kept.' + LineEnding +
+    '   Sits on the base layer''s dark surfaces (#1E1E1E family), so fallback controls and aero''s' + LineEnding +
+    '   own chrome read as ONE dark window. Ink is pale slate, not white: glass, not console.' + LineEnding +
+    '   Notes on the values that are NOT simple darkenings:' + LineEnding +
+    '   - --accent lifts a touch but stays luma < 0.5, so on(--accent) keeps white ink on' + LineEnding +
+    '     primary/badge/checked fills (a lazier, lighter blue flips them to black ink).' + LineEnding +
+    '   - --glass is the caption-button lift MEDIUM: pale steel, so hover chips lighten the bar' + LineEnding +
+    '     without blinding the near-white caption ink (white glass at 55% would).' + LineEnding +
+    '   - --ghost-hover-bg is a DARK chip: ghost ink is the accent (mid blue), and no half-alpha' + LineEnding +
+    '     light wash over a dark toolbar can stay 60 luma away from it — only a darker host can.' + LineEnding +
+    '   - --card-sheen replaces the card''s white glass sheet with a lifted dark one; a pale top' + LineEnding +
+    '     stop would put a light card on a dark window (the exact mixed look this block removes).' + LineEnding +
+    '   - --card-title-ink LIGHTENS the accent: the light mode''s darkened accent sinks into the' + LineEnding +
+    '     dark caption band (the directional-derivation trap, cf. green-image-theme borders). */' + LineEnding +
     '@mode dark {' + LineEnding +
     '  :root {' + LineEnding +
-    '    --accent:            #2C7FD6;' + LineEnding +
-    '    --ink:               #1E2B3A;' + LineEnding +
-    '    --titlebar-ink:      #0A1A2A;' + LineEnding +
+    '    --accent:            #3B8ADF;   /* lifted brand blue; luma < 0.5 keeps on() = white ink */' + LineEnding +
+    '    --ink:               #D9E4F0;   /* pale cool-slate body text */' + LineEnding +
+    '    --titlebar-ink:      #ECF3FB;   /* near-white glass-caption ink */' + LineEnding +
     '' + LineEnding +
-    '    --form-1:            #EEF3F9;' + LineEnding +
-    '    --form-2:            #DCE6F0;' + LineEnding +
+    '    --form-1:            #1B2531;   /* window glass wash, top (deep steel) */' + LineEnding +
+    '    --form-2:            #121924;   /* window glass wash, bottom (deeper) */' + LineEnding +
     '' + LineEnding +
-    '    --titlebar-1:        #E4EEF7;' + LineEnding +
-    '    --titlebar-2:        #C4D8EC;' + LineEnding +
+    '    --titlebar-1:        #2C3E54;   /* dark glass caption, top sheen */' + LineEnding +
+    '    --titlebar-2:        #17212E;   /* dark glass caption, base */' + LineEnding +
     '' + LineEnding +
-    '    --field-bg:          #FFFFFF;' + LineEnding +
-    '    --field-border:      #7DA2CE;' + LineEnding +
-    '    --field-focus:       #3C7FB1;' + LineEnding +
+    '    --field-bg:          #141C27;   /* sunken dark field well */' + LineEnding +
+    '    --field-border:      #46648A;   /* steel blue, readable on the dark wash */' + LineEnding +
+    '    --field-focus:       #5E9AD6;   /* brighter focus blue */' + LineEnding +
     '' + LineEnding +
-    '    --btn-1:             #FDFEFF;' + LineEnding +
-    '    --btn-2:             #ECF2F9;' + LineEnding +
-    '    --btn-3:             #DBE7F4;' + LineEnding +
-    '    --btn-border:        #718DB5;' + LineEnding +
-    '    --btn-shadow:        #00000014;' + LineEnding +
+    '    --btn-1:             #33455C;   /* button gloss: upper sheen */' + LineEnding +
+    '    --btn-2:             #243346;   /* button gloss: mid */' + LineEnding +
+    '    --btn-3:             #1A2634;   /* button gloss: deeper base */' + LineEnding +
+    '    --btn-border:        #4E6B90;' + LineEnding +
+    '    --btn-shadow:        #00000059; /* a dark ground needs a denser shadow to read */' + LineEnding +
     '' + LineEnding +
-    '    --btn-h1:            #EAF6FD;' + LineEnding +
-    '    --btn-h2:            #D2ECFB;' + LineEnding +
+    '    --btn-h1:            #3E5878;   /* hover glow: bluer and lighter, the Win7 hover light-up */' + LineEnding +
+    '    --btn-h2:            #2C4260;' + LineEnding +
     '' + LineEnding +
-    '    --btn-a1:            #C4DCF0;' + LineEnding +
-    '    --btn-a2:            #D9E9F8;' + LineEnding +
+    '    --btn-a1:            #15202E;   /* pressed, top (darker -> sunken) */' + LineEnding +
+    '    --btn-a2:            #23344A;   /* pressed, base (lifts back up) */' + LineEnding +
     '' + LineEnding +
-    '    --check-bg:          #FFFFFF;' + LineEnding +
+    '    --check-bg:          #141C27;   /* check well matches the field well */' + LineEnding +
     '' + LineEnding +
-    '    --track:             #DCE6F0;' + LineEnding +
-    '    --progress-border:   #A7C0D8;' + LineEnding +
+    '    --track:             #202C3C;' + LineEnding +
+    '    --progress-border:   #3C5677;' + LineEnding +
     '' + LineEnding +
-    '    --glass:             #FFFFFF;' + LineEnding +
+    '    --glass:             #55708E;   /* lift medium: caption hover chips lighten, never blind */' + LineEnding +
     '' + LineEnding +
-    '    --close:             #E04747;' + LineEnding +
+    '    --close:             #E04747;   /* the close glow is already at home on dark glass */' + LineEnding +
     '    --close-active:      #C23030;' + LineEnding +
     '    --close-ink:         #FFFFFF;' + LineEnding +
     '' + LineEnding +
-    '    --danger:            #E04747;' + LineEnding +
+    '    --danger:            #E04747;   /* luma < 0.5: on() keeps white ink on danger fills */' + LineEnding +
     '' + LineEnding +
-    '    --primary-shadow:    #10467A33;' + LineEnding +
-    '    --danger-shadow:     #7A101033;' + LineEnding +
+    '    --primary-shadow:    #05192E66;' + LineEnding +
+    '    --danger-shadow:     #40080866;' + LineEnding +
+    '' + LineEnding +
+    '    --card-sheen:        #26344A;   /* card top stop: a lifted dark sheet, not white glass */' + LineEnding +
+    '    --card-title-ink:    lighten(var(--accent), 25%);' + LineEnding +
+    '    --ghost-hover-bg:    alpha(#1E3A5C, 0.92);' + LineEnding +
     '    --on-titlebar: var(--titlebar-ink);   /* ink for controls hosted on the title bar */' + LineEnding +
     '}' + LineEnding +
     '}' + LineEnding +
@@ -1600,7 +1630,7 @@ begin
     '  border-radius: 3px;' + LineEnding +
     '  padding: 6px;' + LineEnding +
     '  font-weight: normal;' + LineEnding +
-    '}TyButton.ghost:hover, TySpeedButton.ghost:hover, TyGlyphContainerButton.ghost:hover, TyRibbonAppMenu.ghost:hover, TyButtonGroup.ghost:hover, TyUpDown.ghost:hover    { background: alpha(var(--glass), 0.5); border-color: var(--field-focus); }TyButton.ghost:active, TySpeedButton.ghost:active, TyGlyphContainerButton.ghost:active, TyRibbonAppMenu.ghost:active, TyButtonGroup.ghost:active, TyUpDown.ghost:active   { background: alpha(var(--btn-a1), 0.9); border-color: var(--field-focus); }TyButton.ghost:selected, TySpeedButton.ghost:selected, TyGlyphContainerButton.ghost:selected, TyRibbonAppMenu.ghost:selected, TyButtonGroup.ghost:selected, TyUpDown.ghost:selected { background: alpha(var(--btn-a1), 0.95); border-color: var(--accent); }TyButton.ghost:focus, TySpeedButton.ghost:focus, TyGlyphContainerButton.ghost:focus, TyRibbonAppMenu.ghost:focus, TyButtonGroup.ghost:focus, TyUpDown.ghost:focus    { outline: 2px var(--focus-ring); outline-offset: 1px; }TyButton.ghost:disabled, TySpeedButton.ghost:disabled, TyGlyphContainerButton.ghost:disabled, TyRibbonAppMenu.ghost:disabled, TyButtonGroup.ghost:disabled, TyUpDown.ghost:disabled { opacity: 0.5; }' + LineEnding +
+    '}TyButton.ghost:hover, TySpeedButton.ghost:hover, TyGlyphContainerButton.ghost:hover, TyRibbonAppMenu.ghost:hover, TyButtonGroup.ghost:hover, TyUpDown.ghost:hover    { background: var(--ghost-hover-bg); border-color: var(--field-focus); }TyButton.ghost:active, TySpeedButton.ghost:active, TyGlyphContainerButton.ghost:active, TyRibbonAppMenu.ghost:active, TyButtonGroup.ghost:active, TyUpDown.ghost:active   { background: alpha(var(--btn-a1), 0.9); border-color: var(--field-focus); }TyButton.ghost:selected, TySpeedButton.ghost:selected, TyGlyphContainerButton.ghost:selected, TyRibbonAppMenu.ghost:selected, TyButtonGroup.ghost:selected, TyUpDown.ghost:selected { background: alpha(var(--btn-a1), 0.95); border-color: var(--accent); }TyButton.ghost:focus, TySpeedButton.ghost:focus, TyGlyphContainerButton.ghost:focus, TyRibbonAppMenu.ghost:focus, TyButtonGroup.ghost:focus, TyUpDown.ghost:focus    { outline: 2px var(--focus-ring); outline-offset: 1px; }TyButton.ghost:disabled, TySpeedButton.ghost:disabled, TyGlyphContainerButton.ghost:disabled, TyRibbonAppMenu.ghost:disabled, TyButtonGroup.ghost:disabled, TyUpDown.ghost:disabled { opacity: 0.5; }' + LineEnding +
     '' + LineEnding +
     '/* Fields: crisp white wells, cool blue border, 3px corners, blue focus glow. */' + LineEnding +
     'TyEdit {' + LineEnding +
@@ -1671,11 +1701,12 @@ begin
     '' + LineEnding +
     '/* ---- Card + Tag (Ant Design-gap batch 1) ---- */' + LineEnding +
     '' + LineEnding +
-    '/* Card: an Aero content pane — a white glass sheet lifted off the steel window wash, thin cool' + LineEnding +
-    '   blue border, the same 3px corners as every other frame here, soft neutral shadow. Hovering' + LineEnding +
-    '   lifts it the way a glass button lifts: focus-blue rim and a little more shadow. */' + LineEnding +
+    '/* Card: an Aero content pane — a glass sheet lifted off the steel window wash (white in light,' + LineEnding +
+    '   a lifted dark sheet in dark — the per-mode --card-sheen), thin cool blue border, the same 3px' + LineEnding +
+    '   corners as every other frame here, soft neutral shadow. Hovering lifts it the way a glass' + LineEnding +
+    '   button lifts: focus-blue rim and a little more shadow. */' + LineEnding +
     'TyCard {' + LineEnding +
-    '  background: linear-gradient(90deg, var(--glass), var(--form-1));' + LineEnding +
+    '  background: linear-gradient(90deg, var(--card-sheen), var(--form-1));' + LineEnding +
     '  color: var(--ink);' + LineEnding +
     '  border-color: var(--field-border);' + LineEnding +
     '  border-width: 1px;' + LineEnding +
@@ -1688,13 +1719,14 @@ begin
     '' + LineEnding +
     '/* Header band: the card gets its own little Aero caption — the window title bar''s glass sheen, so' + LineEnding +
     '   the band reads as chrome on the white sheet (the form wash would sink into the card''s own' + LineEnding +
-    '   gradient and vanish). Title ink is a darkened accent: Win7 headings are blue, not black, and' + LineEnding +
-    '   darkening keeps them legible on the pale glass while still following the accent picker. Weight' + LineEnding +
+    '   gradient and vanish). Title ink is the per-mode --card-title-ink: Win7 headings are blue, not' + LineEnding +
+    '   black — a darkened accent on light''s pale glass, a LIGHTENED one on dark''s (each direction' + LineEnding +
+    '   keeps it legible on its own band) — still following the accent picker either way. Weight' + LineEnding +
     '   stays normal — nothing in Aero shouts. The separator is the field blue faded right down: a' + LineEnding +
     '   hairline, not a second frame inside the card. */' + LineEnding +
     'TyCardHeader {' + LineEnding +
     '  background: linear-gradient(90deg, var(--titlebar-1), var(--titlebar-2));' + LineEnding +
-    '  color: darken(var(--accent), 15%);' + LineEnding +
+    '  color: var(--card-title-ink);' + LineEnding +
     '  border-color: alpha(var(--field-border), 0.55);' + LineEnding +
     '  border-width: 1px;' + LineEnding +
     '  font-weight: normal;' + LineEnding +
@@ -2651,7 +2683,18 @@ begin
     '/* Classic 3D skin — inspired by the Windows 9x look (an ORIGINAL take, not a pixel clone).' + LineEnding +
     '   Shows the v3 skin engine composing: render-style bevels (D + B2), a grey system palette,' + LineEnding +
     '   square corners, and a gradient title bar (B1). Loaded as a FILE by the theming example.' + LineEnding +
-    '   DUAL-MODE: this skin has no natural dark variant, so @mode dark is IDENTICAL to @mode light. */' + LineEnding +
+    '' + LineEnding +
+    '   DUAL-MODE: Win95 has no dark mode, so dark is a documented NO-OP — the WHOLE window must' + LineEnding +
+    '   render byte-identical to light. Duplicating classic''s own palette verbatim (the old state)' + LineEnding +
+    '   is not enough for that: the skin styles only its OWN typeKeys, and the BASE layer''s seeds' + LineEnding +
+    '   (--surface/--on-surface/--border, TyBuiltinBaseModeCss) still swap per mode underneath — so' + LineEnding +
+    '   every base-fallback surface (list box, panel, status bar, memo, …) turned dark while the' + LineEnding +
+    '   grey 3D chrome stayed light: a mixed window (the aero bug''s twin; test.modecoherence pins' + LineEnding +
+    '   both). ENFORCEMENT: the @mode dark block restates classic''s own palette AND pins those base' + LineEnding +
+    '   seeds to their light values (--border is already classic''s own #808080 in both blocks), so' + LineEnding +
+    '   the base layer''s derived family (--input-bg, --chrome-bar-bg, --muted, …) re-derives to the' + LineEnding +
+    '   exact light results. If the base ever grows another mode-swapped seed, the coherence guard' + LineEnding +
+    '   goes red here — pin the new seed the same way. */' + LineEnding +
     '' + LineEnding +
     '/* Mode-invariant metrics. Win9x caption buttons were small squares in the top-right, so the' + LineEnding +
     '   classic skin shrinks the title-bar buttons from the 46px default via the --caption-button-width' + LineEnding +
@@ -2687,7 +2730,7 @@ begin
     '}' + LineEnding +
     '@mode dark {' + LineEnding +
     '  :root {' + LineEnding +
-    '    --accent:       #10318C;   /* identical to light — no natural dark variant */' + LineEnding +
+    '    --accent:       #10318C;   /* identical to light — dark is a whole-window no-op (header) */' + LineEnding +
     '    --title-mid:    #7BA2E0;' + LineEnding +
     '    --title-light:  #A6CAF0;' + LineEnding +
     '    --title-ink:    #FFFFFF;' + LineEnding +
@@ -2699,6 +2742,12 @@ begin
     '    --danger:       #800000;' + LineEnding +
     '    --field:        #FFFFFF;' + LineEnding +
     '    --border:       #808080;' + LineEnding +
+    '    /* Base-seed pins (see header): hold the BASE layer''s mode-swapped seeds at their light' + LineEnding +
+    '       values so base-fallback controls (list box, panel, status bar, …) stay light too —' + LineEnding +
+    '       without these, dark mode renders a mixed window. Values = the base light seeds' + LineEnding +
+    '       (TyBuiltinBaseModeCss); --border needs no pin, classic''s own #808080 above covers it. */' + LineEnding +
+    '    --surface:      #FFFFFF;' + LineEnding +
+    '    --on-surface:   #1F2937;' + LineEnding +
     '    --on-titlebar: var(--title-ink);   /* ink for controls hosted on the title bar */' + LineEnding +
     '}' + LineEnding +
     '}' + LineEnding +

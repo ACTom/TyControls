@@ -48,6 +48,7 @@ uses
   test.menu,
   test.builtinthemes,
   test.builtinskins,
+  test.modecoherence,
   test.paletteicons,
   test.tabsheet,
   test.pagecontrol,
