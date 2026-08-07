@@ -57,3 +57,8 @@ Thumbs.db
 # committed golden. Tracking it makes every intended golden update a two-file edit
 # and hides the mismatch it exists to show.
 tests/golden/*.golden.txt.actual
+
+# Test-runner output an agent left at the repo root; swept in once by a careless
+# `git add -A`. Named so, they are scratch, not deliverables.
+/m[0-9].txt
+/*.actual
