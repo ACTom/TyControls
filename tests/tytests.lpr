@@ -61,6 +61,7 @@ uses
   test.splitter,
   test.statusbar,
   test.toolbar,
+  test.toolbar.paintbutton,
   test.litetrio.events,
   test.datetime.events,
   test.popup,

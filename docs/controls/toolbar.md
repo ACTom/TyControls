@@ -60,7 +60,10 @@ uses tyControls.ToolBar, tyControls.Button;
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `ButtonHeight` | `Integer` | 跟随密度轴 | 所有子按钮的统一逻辑高度；排布时每个子控件的高度被强制设为此值（`AlignControls` 中 `SetBounds(..., bh)`）。**未显式赋值时跟随主题的 `--control-height`**（经典 24 / 现代 38），一经写入即固定并写进 `.lfm`。改值触发 `Relayout`。 |
+| `ButtonWidth` | `Integer` | 未设 = 无下限 | LCL 语义的**宽度下限**，不是统一宽度：比它窄的**真按钮**（`tbsButton` / `tbsCheck` / `tbsDropDown`——LCL 自己的样式集合，**不含** `tbsButtonDrop`）按此宽度排布，比它宽的保留自己的宽度。`AutoSize` 的按钮、占位样式、非 `TTyToolButton` 子控件一概不碰——四条豁免全是 LCL 的（`toolbar.inc` `CalculatePosition`）。**调低下限会还原各按钮自己的宽度**：工具条记着自己"借"出去的宽度（`FLentImages` 模式的宽度版），所以设计器里试一个值不会把 `.lfm` 里的宽度棘轮掉。与 `ButtonHeight` 同单位、同 `stored` 机制（写过才存）。**与 LCL 的差异**：LCL 未设时是主题化的 ~23px 下限（它的按钮宽度本来就逐次从内容推导）；这里按钮宽度是 `.lfm` 拥有的**设计值**，默认下限会悄悄改宽现存的每一条工具条，故未设 = 完全没有下限（读回 0）。 |
 | `ButtonSpacing` | `Integer` | `2` | 相邻工具项之间的水平间距（换行时也用作行间距）。改值触发 `Relayout`。 |
+| `DropDownWidth` | `Integer` | `0`（跟随令牌） | 两种下拉样式箭头区的**逻辑宽度**。`0`（默认）跟随主题令牌 `--drop-arrow-width`（全库尾随箭头共用的那一个）；正值则**钉住本条工具按钮**的箭头区——画出来的箭头区、`tbsDropDown` 的命中测试、首选宽度三者读的是**同一个**仲裁值（`DropArrowLogicalWidth`），一起动。这是标签条 `ImagesWidth` 的既有约定：0 = 跟令牌，非零 = 钉住。LCL 把 `tbsButtonDrop` 的箭头也钥在同一属性上（其 `ButtonDropWidth` 推导），这里两种样式读同一个值，有测试钉住。**碰不到**恰好摆在工具条上的 `TTyDropDownButton` / `TTyMenuButton`——那些不是工具按钮，箭头仍跟令牌。负值按 0 处理。 |
+| `List` | `Boolean` | `True`（**与 LCL 反向**） | LCL 的列表模式：`True` 图标在标题**旁边**（`glLeft`），`False` 图标叠在标题**上方**（`glTop`）。只下发给 `TTyToolButton`（LCL 的 `List` 也只够得着它的 `FButtons`），走 `AdoptGlyphLayout`——宿主自己写过 `GlyphLayout` 的工具项永远不碰（`AdoptShowCaption` 的同一契约）。**默认值反向是有意的**（先例：组合框反向的 pick-only 默认）：本库自动尺寸的图标按内容盒推导（`MeasureGlyphSlot`），叠放布局 + 自动 `GlyphSize` 会占满行高、把标题挤成零高——若默认 `False`，`ShowCaptions=True` 会在每个图标工具上**一个标题都画不出来**，按构造就是说谎属性。要用 `False`（叠放）请**同时设显式 `GlyphSize`**：高度下限（`MeasureContentHeight`）会把行撑高给标题留位，与 ribbon 大按钮一直以来的做法相同。另一处差异顺带记录：LCL 只在列表模式下承认逐按钮的 `ShowCaption=False`（"allow hide caption only in list mode"），这里**两种模式都承认**——既有机制本来就更强。 |
 | `Indent` | `Integer` | `4` | 工具条**前缘**（每行第一项之前）的留白，仅此而已。改值触发 `Relayout`。**曾经它还兼任上下内边距**，工具条自动增高时算的是 `Indent*2 + rows`，于是 `Indent := 24`（在 LCL 里是再普通不过的取值，用来给一个 logo 或前置标签让位）会静悄悄地把工具条撑高 48px、把所有工具往下推 24px——那不是任何 LCL 窗体设这个值时想要的。纵向留白现在是它自己的值（主题令牌 `--toolbar-pad-y`，缺省 4 = 原来 `Indent` 的缺省），两个旋钮各走各的。与 LCL 仍有一处不同：`TToolBar.Indent` 的缺省是 1，这里是 4。这一点是**有意保留**的——`default` 指令决定的是所有省略了该值的既有 `.lfm` 怎么被读回，改掉它等于给现存的每一条工具条重新缩进。从 LCL 移植、依赖缺省 1 的窗体请显式写 `Indent := 1`。 |
 | `Wrapable` | `Boolean` | `True` | 为 `True` 时，一行放不下的工具项自动折到下一行；`Align in [alTop, alBottom]` 时工具条随行数自动增高。改值触发 `Relayout`。**这只管"宽度不够时自动换行"这一条规则**，与"某一项强制另起一行"是两回事——后者走排布函数的 `ABreakBefore` 参数（见 [第 5.1 节](#51-排布函数-tytoolbarlayout)），且**两种模式下都生效**。 |
 | `ShowCaptions` | `Boolean` | `False` | 与 LCL 一致：`False`（默认）让工具项**只显示图标**，`True` 才画标题。它下发到每个**能画图标**的子控件（`TTyGlyphButtonBase` 一族：`TTyGlyphButton` / `TTySpeedButton` / `TTyGlyphContainerButton`），走 `AdoptShowCaption`——对已被宿主自己写过 `ShowCaption` 的工具项是空操作。普通 `TTyButton` 没有图标模型，不受影响；**解析不出图标的工具项保留标题**（否则画出来是个空盒子），所以 `False` 这个默认值不会把现有的纯文字工具条抹白。改值触发 `Relayout`。 |
@@ -77,6 +80,12 @@ uses tyControls.ToolBar, tyControls.Button;
 > 工具项，自带集合的工具项永远不动。它在三个时机跑——两个 setter，以及工具项加入工具条时
 > （`InsertControl`）——**刻意不放在排布过程里**：排布一次 resize 要跑很多遍，那样反复覆写宿主可见的状态，
 > 正是 `Flat` 从前覆写 `StyleClass` 会出事的原因。
+
+#### 条上有意**没有**做的成员
+
+| LCL 成员 | 为什么没有 |
+|---|---|
+| `HotImages` / `DisabledImages` | LCL 用它们在悬停 / 禁用时**换一份图集**（同一个 `ImageIndex` 打到另一个 `TImageList` 上），经典用途是"彩色图标禁用时换灰度版"。本库不带它们，两个原因：**其一**，本库的图形管线把集合里的每张图**染成当前状态解析出的 `TextColor`**（`TyTintBitmapAlpha` 整体替换 RGB、保留 alpha）——"每个状态换个颜色处理"这份工作**本来就是主题的**，每套皮肤经 `:hover` / `:disabled` 规则自己定；换进来的图照样会被同样染色，第二份集合唯一能加的只有"每个状态换个**形状**"。**其二**，为这点残余开两个属性，等于在主题的状态模型旁边再立一套按条配置的图像状态模型，还带着按名字的静默回退（备选集合里缺某个名字就显示基础图标）——一个"有时生效"的表面。真要按状态换形状，正确的缝是在 `TTyGlyphButtonBase` 上加一个受保护的虚 glyph 源解析器、让它的 `DrawContent` 咨询——先把那个建出来，再删 `TToolBarMembersApiParityTest.TestHotAndDisabledImagesAreDeliberatelyAbsent` 里的断言；不要放宽它。 |
 
 ### 3.1.1 TTyToolBar 的按钮列表（LCL 的 `Buttons[]`）
 
@@ -99,6 +108,13 @@ uses tyControls.ToolBar, tyControls.Button;
 因为继承自 `TTyGlyphButtonBase`，它**白拿**了整套图标机制：`Images` / `ImageName` / `IconFont` / `GlyphName` /
 `GlyphSize` / `GlyphColor` / `GlyphLayout` / `Spacing` / `ShowCaption` / `AutoSize`（见 [glyphbuttons.md](glyphbuttons.md)），
 工具条现成的"借出 Images / 下发 ShowCaptions"也就直接对它生效，没有一行新代码。
+
+> **`GlyphLayout` 在本类上改了存储方式**（语义不变）：工具条的 `List` 会把布局**下发**给从没被宿主写过
+> `GlyphLayout` 的工具按钮（`AdoptGlyphLayout`，`AdoptShowCaption` 的同一契约），所以下发来的布局**不许**
+> 写进 `.lfm`——否则重载后经 setter 变成"宿主写过"，`List` 从此再也动不了它。于是本类重声明
+> `property GlyphLayout stored FGlyphLayoutExplicit nodefault`：写过才存，且去掉基类的 `default glLeft`
+> （不去掉的话，`List=False` 的条上显式写 `glLeft` 恰好等于旧默认、会被 streamer 略过，round-trip 就丢）。
+> 与 `ShowCaption` 的安排逐字相同，由 `TestGlyphLayoutStreamsOnlyWhenTheHostWroteIt` 钉住。
 
 #### 3.2.1 `Style`——六种样式
 
@@ -128,9 +144,11 @@ TTyToolButtonStyle = (tbsButton, tbsCheck, tbsDropDown, tbsSeparator, tbsDivider
 > `Style` 行掰回 8，设计值永远存不下来。交互式改 `Style` 照旧会吸附到 8 / 5——那正是这个属性在设计器里好用的原因。
 > 由 `TToolButtonTest.TestStreamedWidthOutranksTheStylesDefault` 钉住。
 
-> **箭头区有多宽？** 走主题度量 `--drop-arrow-width`（缺省 18px），**不是** published 属性。
-> LCL 把 `DropDownWidth` / `ButtonDropWidth` 放在**工具条**上；本库的硬规则是"静态视觉值属于令牌"，
-> 而且这正是 `TTyMenuButton` 用的同一个度量，所以全库的下拉箭头宽度是一个数、换肤一起动。
+> **箭头区有多宽？** 默认走主题度量 `--drop-arrow-width`（缺省 18px）——这正是 `TTyMenuButton` 用的
+> 同一个度量，所以全库的下拉箭头宽度是一个数、换肤一起动。宿主工具条可以用 `DropDownWidth`（LCL 把
+> 这个属性就放在**工具条**上）钉住本条的箭头区：`0`（默认）= 令牌做主，正值 = 本条工具按钮统一用这个
+> 逻辑宽度——标签条 `ImagesWidth` 的既有约定。三处读的是同一个仲裁值（按钮的 `DropArrowLogicalWidth`）：
+> 画出来的箭头区、命中测试、首选宽度，所以钉住之后三者一起动。
 > 命中测试与绘制走的是**同一个** `TyDropArrowHit`（`tyControls.DropButtons`）——和 `TTyDropDownButton` 共用一条规则，
 > 两个控件不可能对"箭头区从哪开始"产生分歧。
 >
@@ -257,7 +275,21 @@ function TyToolWrapToBreakBefore(const AWrapAfter: array of Boolean): TBooleanDy
 
 ## 4. 事件
 
-`TTyToolBar` 与 `TTyToolSeparator` **均无自有专有事件**——工具条只 published 布局属性，不发出 `OnChange` 之类的通知。用户交互（点击）发生在**子按钮**上，请挂接各个子 `TTyButton` 的 `OnClick`（见 [第 6 节](#6-代码示例)）。
+### 4.1 `OnPaintButton`——逐按钮自绘（LCL 同名同义）
+
+```pascal
+TTyToolBarOnPaintButton = procedure(Sender: TTyToolButton; AState: Integer) of object;
+property OnPaintButton: TTyToolBarOnPaintButton;
+```
+
+挂上它之后，本条**每个** `TTyToolButton` 的绘制被处理器**整体替换**——六种样式全部，分隔占位也在内（LCL 就是在样式分派**之前**调用并返回的），设计器里同样触发（LCL 也没有 `csDesigning` 门）。清掉处理器恢复主题默认绘制——所以只"赋一个什么都不画的处理器"会得到一个空白按钮（那正是"整体替换"的证明），而**不赋**它则一个像素都不变。
+
+- **画布**是 `Sender.Canvas`（与 LCL 相同——按钮自己就是绘制表面，所以事件签名不必带画布参数，LCL 手写的处理器原样可用）。回调外层已套 `SaveHandleState` / `RestoreHandleState` 并按按钮裁剪，处理器画出界不会污染邻居。
+- **`AState`** 是 LCL 的主题状态整数：`1` 常态 / `2` 悬停 / `3` 按下（指针仍在按钮上）/ `4` 禁用 / `5` 选中（`Down`）/ `6` 选中+悬停。禁用**压过**选中（LCL 先判 `Enabled`）。换算是纯函数 `TyToolButtonPaintState`，无窗口可测。
+- **差异（有意）**：LCL 在 `Flat = False` 时把状态 1 / 4 谎报成 2（Win32 "常抬起"渲染补偿，会把禁用按钮说成悬停）；这里 `AState` 永远是真实状态，`Flat` 只管它本来那根杆（ghost `StyleClass`）。由 `TToolBarPaintButtonTest.TestFlatDoesNotDistortTheState` 钉住。
+- 它是 **Paint 路径**的钩子（与 LCL 一致）：走 `RenderTo` 的离屏渲染（golden 等）不经过它。
+
+除此之外 `TTyToolBar` 与 `TTyToolSeparator` **无别的自有事件**——工具条不发出 `OnChange` 之类的通知。用户交互（点击）发生在**子按钮**上，请挂接各个子 `TTyButton` 的 `OnClick`（见 [第 6 节](#6-代码示例)）。
 
 > 两个控件都暴露**基线事件集**（Tier A 鼠标 / 通用事件 + Tier B 键盘 / 焦点事件，因二者均为 `TTyCustomControl`）。完整清单见 [../events.md](../events.md)。工具条自身通常无需挂接这些事件；命令响应走子按钮的 `OnClick`。
 
@@ -439,11 +471,13 @@ B.Wrap := True;                        // 这一行到此为止，后面的工�
 - **Wrapable 自动增高：** 当 `Align in [alTop, alBottom]` 且 `Wrapable=True` 时，一行放不下的工具项换行，工具条高度按 `padY*2 + rows*ButtonHeight + (rows-1)*ButtonSpacing` 自动调整（`padY` = 主题令牌 `--toolbar-pad-y`，缺省 4；**不再是 `Indent`**，横向留白不该参与高度）——不要在代码里硬设一个与之冲突的 `Height`。
 - **重入守卫：** `AlignControls` 末尾对 `Height` 的赋值会再次触发 `AlignControls`，`FInLayout` 守卫防止无限递归。
 - **强制断行已经接线了：** `TyToolbarLayout` 的 `ABreakBefore`（见 [第 5.1 节](#51-排布函数-tytoolbarlayout)）由 `TTyToolButton.Wrap` 填入——`AlignControls` 把每个**可见**工具项的 `Wrap` 收成一个后置数组，再过一遍 `TyToolWrapToBreakBefore` 换成前置标志。没有任何工具项设 `Wrap` 时结果是全 `False`，排布函数读它与从前的无断行重载**逐像素相同**，所以既有工具条一个像素都不会动。两处与 LCL 的差异见 [第 3.2.4 节](#324-wrap两处与-lcl-的差异)。
-- **工具项不必是 `TTyToolButton`：** 工具条照旧排布任何可见子控件（`TTyButton`、`TTyToolSeparator`、编辑框、下拉框……）。只是 `Wrap` / `Grouped` / `Index` / `ImageIndex` / 六种 `Style` 这些**工具条语义**只有 `TTyToolButton` 才有，别的子控件在这些规则里读作"没有标志"。`Buttons[]` 里也只有 `TTyToolButton`。
+- **工具项不必是 `TTyToolButton`：** 工具条照旧排布任何可见子控件（`TTyButton`、`TTyToolSeparator`、编辑框、下拉框……）。只是 `Wrap` / `Grouped` / `Index` / `ImageIndex` / 六种 `Style` 这些**工具条语义**只有 `TTyToolButton` 才有，别的子控件在这些规则里读作"没有标志"——条上的 `ButtonWidth` 下限、`DropDownWidth`、`List` 同理，只够得着 `TTyToolButton`。`Buttons[]` 里也只有 `TTyToolButton`。
+- **`ButtonWidth` 是可逆的下限：** 调低（或清成 0）会还原各按钮自己的设计宽度——工具条记着它借出的宽度，不会把 `.lfm` 值棘轮掉。但**内容下限仍在**：按钮自己的 `Constraints.MinWidth`（标题 + 内边距 + 箭头区）比 `ButtonWidth` 大时按内容算，这与 LCL"取 preferred 与 ButtonWidth 的较大者"一致。
+- **`OnPaintButton` 是整体替换：** 挂上即接管每个工具按钮的全部绘制（含分隔占位），清掉即恢复主题默认。要"在主题绘制**之上**补一笔"用继承来的 `OnPaint`（[../events.md](../events.md)），不要用它。
 - **占位样式不吃 `Flat` 的 ghost：** `Flat = True` 时工具条会把空 `StyleClass` 的子 `TTyButton` 设成 `'ghost'`，但 `Style` 为 `tbsSeparator` / `tbsDivider` 的工具按钮**被跳过**——它解析的是 `TyToolSeparator` 键，套上按钮族的变体等于向主题要一条 `TyToolSeparator.ghost`（没有哪套皮肤定义过），还会在宿主从没设过样式的控件上留下一个 `StyleClass`。
 - **`TTyToolBarEx` 整份重写了 `AlignControls`：** `Wrapable = True` 时它把活儿原样交回基类（`inherited AlignControls`），于是走的是同一个排布函数、同一套几何；`Wrapable = False` 时它走自己的溢出 chevron 路径，**完全不调用 `TyToolbarLayout`**，那条路上只有一行，也就没有"断行"可言。改基类的排布时这两条路都要一起验——`TToolBarExControlTest.TestWrapableGeometryIsTheBaseSolvers` 就是钉住前者的那颗钉子。
 - **ShowCaptions 的默认值是 `False`（与 LCL 一致）：** 它只对**能画图标**的工具项（`TTyGlyphButtonBase` 一族）生效，且只把标题换成图标——**解析不出图标的工具项照旧显示标题**，所以给一条纯文字工具条打开这个默认值不会把它抹白。工具项上一旦有人写过 `ShowCaption`，工具条就不再管它。
 - **Images 借给工具项：** 工具条把自己的 `TTyImageCollection` 借给**没有 `Images` 的**子图标按钮，于是工具项只需设 `ImageName`；自带集合的工具项不受影响。工具项**加入工具条之后**才设 `Images` 也有效（`InsertControl` 里也会下发一次）。
 - **无四周边框：** 主题的 `border-color` / `border-width` 只画工具条**底部一条 hairline**，不绘制四周边框；工具条不参与任何伪类状态。
 - **分隔线有独立 typeKey：** `TTyToolSeparator.GetStyleTypeKey` 返回 `'TyToolSeparator'`。内建主题让它与 `TyToolBar` 共写一条规则，所以默认观感不变；但要调竖线的颜色/底色，请写 `TyToolSeparator` 选择器，改 `TyToolBar` 会顺带改掉整条工具条。
-- **DFM 序列化：** `Align` 声明了 `default alTop`，`ButtonHeight`/`ButtonSpacing`/`Indent`/`Wrapable`/`ShowCaptions`/`Flat` 均声明了默认值，等于默认值时不写入 `.lfm`/`.dfm`。
+- **DFM 序列化：** `Align` 声明了 `default alTop`，`ButtonSpacing`/`Indent`/`Wrapable`/`ShowCaptions`/`Flat`/`DropDownWidth`（`default 0`）/`List`（`default True`）均声明了默认值，等于默认值时不写入 `.lfm`/`.dfm`；`ButtonHeight` 与 `ButtonWidth` 走 `stored` 旗（显式写过才存）。工具按钮的 `GlyphLayout` 同样走 `stored` 旗且 `nodefault`（见 [第 3.2 节](#32-ttytoolbutton工具按钮)的存储说明）。

@@ -6,6 +6,8 @@ uses Classes, SysUtils, Types, Controls, Graphics, Forms, LCLType,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.Base,
   tyControls.ImageCollection, tyControls.Menu,
+  tyControls.GlyphButtons,   // TTyGlyphLayout + TTySpeedButton — the List tests speak both
+  tyControls.DropButtons,    // TyDefaultDropArrowWidth — the drawn-split pixel test names it
   tyControls.ToolBar, tyControls.Button;
 type
   TToolBarGeomTest = class(TTestCase)
@@ -39,6 +41,43 @@ type
   TToolBarControlTest = class(TTestCase)
   published
     procedure TestArrangesButtons;
+  end;
+
+  { LCL's ButtonWidth rule, pure — the floor's style set and the AutoSize exemption. }
+  TToolFloorWidthTest = class(TTestCase)
+  published
+    procedure TestFloorRaisesNeverCaps;
+    procedure TestOnlyLclsThreeStylesAreFloored;
+    procedure TestAutoSizeIsExempt;
+  end;
+
+  { The bar-level members this batch added, driven through a live (headless) layout. }
+  TToolBarMembersTest = class(TTestCase)
+  private
+    FForm: TForm;
+    FBar: TTyToolBarAccess;
+    function AddTool(AWidth: Integer): TTyToolButton;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    // ButtonWidth
+    procedure TestFloorWidensNarrowButtonsInTheLayout;
+    procedure TestFloorIsAFloorNotACap;
+    procedure TestFloorSkipsWhatLclSkips;
+    procedure TestLoweringTheFloorRestoresTheNaturalWidth;
+    procedure TestHostWidthWrittenWhileFlooredWins;
+    // DropDownWidth
+    procedure TestDropDownWidthZeroFollowsTheToken;
+    procedure TestDropDownWidthPinsZoneHitAndPreferredTogether;
+    procedure TestPinnedZoneMovesTheDrawnSplit;
+    procedure TestButtonDropSharesThePinnedZone;
+    // List
+    procedure TestListMapsOntoTheGlyphLayouts;
+    procedure TestListOffAdoptsTheStackedLayout;
+    procedure TestExplicitGlyphLayoutSurvivesTheBar;
+    procedure TestExplicitPinsEvenWhenItMatchesTheAdopted;
+    procedure TestListDoesNotReachASpeedButton;
   end;
 
   TToolBarPixelTest = class(TTestCase)
@@ -87,6 +126,13 @@ type
       while it writes the streamed properties. Protected there; Loaded is already public on
       TTyButton, so only this end of the pair needs exposing. }
     procedure EnterLoading;
+    { The arrow zone in device px — protected on the button; the DropDownWidth tests need
+      the number itself, not only the hit test built on it. }
+    function CallArrowZoneWidth(APPI: Integer): Integer;
+    { The FULL themed composite (frame + content + zone divider), for the pixel test that
+      pins the DRAWN split to the same arbitration the hit test reads. DoRenderTo above is
+      the space-holder path only. }
+    procedure RenderWhole(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
   end;
 
   { The separator control, rendered on the same canvas so its ink can be compared byte for
@@ -449,6 +495,347 @@ begin
   end;
 end;
 
+{ ---- TToolFloorWidthTest --------------------------------------------------- }
+
+procedure TToolFloorWidthTest.TestFloorRaisesNeverCaps;
+begin
+  AssertEquals('narrower than the floor -> the floor', 60, TyToolFloorWidth(23, 60, tbsButton, False));
+  AssertEquals('wider than the floor -> its own width', 80, TyToolFloorWidth(80, 60, tbsButton, False));
+  AssertEquals('exactly the floor', 60, TyToolFloorWidth(60, 60, tbsButton, False));
+  AssertEquals('no floor set (0) is the identity', 23, TyToolFloorWidth(23, 0, tbsButton, False));
+  AssertEquals('a negative floor is no floor', 23, TyToolFloorWidth(23, -5, tbsButton, False));
+end;
+
+procedure TToolFloorWidthTest.TestOnlyLclsThreeStylesAreFloored;
+begin
+  { LCL's CalculatePosition floors [tbsButton, tbsDropDown, tbsCheck] and nothing else —
+    its own list EXCLUDES tbsButtonDrop, and the port mirrors the list rather than
+    "improving" it so a form moved between the two toolkits lays out the same. }
+  AssertEquals('tbsButton floored', 60, TyToolFloorWidth(23, 60, tbsButton, False));
+  AssertEquals('tbsCheck floored', 60, TyToolFloorWidth(23, 60, tbsCheck, False));
+  AssertEquals('tbsDropDown floored', 60, TyToolFloorWidth(23, 60, tbsDropDown, False));
+  AssertEquals('tbsButtonDrop is NOT (LCL excludes it)', 23, TyToolFloorWidth(23, 60, tbsButtonDrop, False));
+  AssertEquals('tbsSeparator keeps its space-holder width', 8, TyToolFloorWidth(8, 60, tbsSeparator, False));
+  AssertEquals('tbsDivider too', 5, TyToolFloorWidth(5, 60, tbsDivider, False));
+end;
+
+procedure TToolFloorWidthTest.TestAutoSizeIsExempt;
+begin
+  // An AutoSize button hugs its content — LCL's `not CurControl.AutoSize` condition.
+  AssertEquals('AutoSize wins over the floor', 23, TyToolFloorWidth(23, 60, tbsButton, True));
+end;
+
+{ ---- TToolBarMembersTest --------------------------------------------------- }
+
+procedure TToolBarMembersTest.SetUp;
+begin
+  FForm := TForm.CreateNew(nil);
+  FForm.SetBounds(0, 0, 500, 200);
+  FBar := TTyToolBarAccess.Create(FForm);
+  FBar.Parent := FForm;
+  FBar.Align := alNone;   // keep the LCL align engine off our explicit bounds
+  FBar.SetBounds(0, 0, 400, 30);
+end;
+
+procedure TToolBarMembersTest.TearDown;
+begin
+  FreeAndNil(FForm);
+end;
+
+function TToolBarMembersTest.AddTool(AWidth: Integer): TTyToolButton;
+begin
+  Result := TTyToolButton.Create(FForm);
+  Result.Parent := FBar;
+  Result.Width := AWidth;
+end;
+
+procedure TToolBarMembersTest.TestFloorWidensNarrowButtonsInTheLayout;
+var
+  a, b: TTyToolButton;
+begin
+  a := AddTool(23);
+  b := AddTool(23);
+  FBar.ButtonWidth := 60;
+  FBar.ForceLayout;
+  AssertEquals('first button laid out at the floor', 60, a.Width);
+  AssertEquals('second too', 60, b.Width);
+  AssertEquals('and the second slot starts past the FLOORED first',
+    FBar.Indent + 60 + FBar.ButtonSpacing, b.Left);
+end;
+
+procedure TToolBarMembersTest.TestFloorIsAFloorNotACap;
+var
+  a: TTyToolButton;
+begin
+  a := AddTool(90);
+  FBar.ButtonWidth := 60;
+  FBar.ForceLayout;
+  AssertEquals('a wider button keeps its own width', 90, a.Width);
+end;
+
+procedure TToolBarMembersTest.TestFloorSkipsWhatLclSkips;
+var
+  chk, drp, bdrop, sep: TTyToolButton;
+  plain: TTyButton;
+begin
+  { 40-wide naturals, NOT 23: an arrow style's own content minimum (theme padding + the
+    ~18px arrow zone) is near 30, and a natural below it would be raised by the
+    Constraints clamp — the assertion would then measure the content floor, not the
+    ButtonWidth exclusion it is here to pin. }
+  chk := AddTool(40);   chk.Style := tbsCheck;
+  drp := AddTool(40);   drp.Style := tbsDropDown;
+  bdrop := AddTool(40); bdrop.Style := tbsButtonDrop;
+  sep := AddTool(40);   sep.Style := tbsSeparator;   // SetStyle snaps it to 8
+  plain := TTyButton.Create(FForm);
+  plain.Parent := FBar;
+  plain.Width := 40;
+  FBar.ButtonWidth := 60;
+  FBar.ForceLayout;
+  AssertEquals('tbsCheck floored', 60, chk.Width);
+  AssertEquals('tbsDropDown floored', 60, drp.Width);
+  AssertEquals('tbsButtonDrop kept (LCL''s own exclusion)', 40, bdrop.Width);
+  AssertEquals('a separator keeps its space-holder width', 8, sep.Width);
+  AssertEquals('a non-tool child is never touched', 40, plain.Width);
+end;
+
+procedure TToolBarMembersTest.TestLoweringTheFloorRestoresTheNaturalWidth;
+var
+  a: TTyToolButton;
+begin
+  { THE reversibility rule — LCL gets it free by recomputing every width from content; here
+    a width is a designed value, so the bar REMEMBERS what it lent (the FLentImages pattern
+    in width space) and hands it back when the floor drops. Without the memory this test's
+    last assertion reads 60: the floor would be a ratchet that permanently rewrites .lfm
+    widths the moment a designer tries a value. }
+  a := AddTool(23);
+  FBar.ButtonWidth := 60;
+  FBar.ForceLayout;
+  AssertEquals('floored', 60, a.Width);
+  FBar.ButtonWidth := 0;
+  FBar.ForceLayout;
+  AssertEquals('lowering the floor restores the designed width', 23, a.Width);
+end;
+
+procedure TToolBarMembersTest.TestHostWidthWrittenWhileFlooredWins;
+var
+  a: TTyToolButton;
+begin
+  a := AddTool(23);
+  FBar.ButtonWidth := 60;
+  FBar.ForceLayout;
+  AssertEquals('floored', 60, a.Width);
+  a.Width := 100;         // the host makes a NEW choice while the floor is in force
+  FBar.ForceLayout;
+  AssertEquals('the host''s wider width is honoured', 100, a.Width);
+  FBar.ButtonWidth := 0;
+  FBar.ForceLayout;
+  AssertEquals('and it IS the natural width now — not the pre-floor 23', 100, a.Width);
+end;
+
+procedure TToolBarMembersTest.TestDropDownWidthZeroFollowsTheToken;
+var
+  a: TToolButtonAccess;
+  tokenW: Integer;
+begin
+  a := TToolButtonAccess.Create(FForm);
+  a.Parent := FBar;
+  a.Style := tbsDropDown;
+  tokenW := a.CallArrowZoneWidth(96);   // whatever the theme token resolves to today
+  AssertTrue('the token gives the zone SOME width', tokenW > 0);
+  FBar.DropDownWidth := tokenW + 13;
+  AssertEquals('a pinned bar overrides the token', tokenW + 13, a.CallArrowZoneWidth(96));
+  FBar.DropDownWidth := 0;
+  AssertEquals('0 hands the zone back to the token', tokenW, a.CallArrowZoneWidth(96));
+  FBar.DropDownWidth := -7;
+  AssertEquals('negative clamps to the one auto value', 0, FBar.DropDownWidth);
+end;
+
+procedure TToolBarMembersTest.TestDropDownWidthPinsZoneHitAndPreferredTogether;
+var
+  a: TToolButtonAccess;
+  w0, h0, w1, h1, zone0, zone1: Integer;
+begin
+  { The zone is ONE arbitrated number: the drawn chevron zone, the tbsDropDown hit test and
+    the preferred width must all move by the same delta, or a pinned bar would draw one
+    split and click another. The zone is read at the button's OWN Font.PixelsPerInch — the
+    PPI CalculatePreferredSize measures at — because the fixture's PPI is the machine's,
+    not necessarily 96, and an assumed 96 here measured the runner instead of the code. }
+  a := TToolButtonAccess.Create(FForm);
+  a.Parent := FBar;
+  a.Style := tbsDropDown;
+  a.Width := 100;
+  zone0 := a.CallArrowZoneWidth(a.Font.PixelsPerInch);
+  a.CallPreferred(w0, h0);
+  FBar.DropDownWidth := 40;
+  zone1 := a.CallArrowZoneWidth(a.Font.PixelsPerInch);
+  a.CallPreferred(w1, h1);
+  AssertTrue('pinning really widened the zone', zone1 > zone0);
+  AssertEquals('the preferred width moved by exactly the zone delta', zone1 - zone0, w1 - w0);
+  { The hit test reads the same arbitration: a point just inside the pinned zone's inner
+    edge is IN, and out again when the pin narrows. PointInArrow measures device px from
+    the right edge at the button's own PPI, which zone1 already is. }
+  AssertTrue('a point just inside the pinned zone hits',
+    a.PointInArrow(a.Width - zone1 + 2, a.Height div 2));
+  FBar.DropDownWidth := 10;
+  AssertFalse('...and misses once the zone is pinned narrower',
+    a.PointInArrow(a.Width - zone1 + 2, a.Height div 2));
+end;
+
+procedure TToolBarMembersTest.TestPinnedZoneMovesTheDrawnSplit;
+const
+  W = 100; H = 24;
+var
+  Ctl: TTyStyleController;
+  a: TToolButtonAccess;
+  img: TBGRABitmap;
+
+  function ColumnHasDividerInk(AX: Integer): Boolean;
+  var
+    y: Integer;
+    P: TBGRAPixel;
+  begin
+    Result := False;
+    for y := 0 to H - 1 do
+    begin
+      P := img.GetPixel(AX, y);
+      if (P.green > 160) and (P.red < 96) and (P.blue < 96) then Exit(True);
+    end;
+  end;
+
+  { A FRESH target each render: reading a TBitmap back through BGRA detaches its canvas DC,
+    so a second render into the same bitmap can land somewhere other than the pixels read
+    (the trap test.parity.onpaint documents). }
+  procedure Render;
+  var
+    bmp: TBitmap;
+  begin
+    bmp := TBitmap.Create;
+    try
+      bmp.PixelFormat := pf32bit;
+      bmp.SetSize(W, H);
+      bmp.Canvas.Brush.Style := bsSolid;
+      bmp.Canvas.Brush.Color := clWhite;
+      bmp.Canvas.FillRect(0, 0, W, H);
+      a.RenderWhole(bmp.Canvas, Rect(0, 0, W, H), 96);
+      FreeAndNil(img);
+      img := TBGRABitmap.Create(bmp);
+    finally
+      bmp.Free;
+    end;
+  end;
+
+begin
+  { The DRAWN half of the arbitration: DrawContent re-derives the zone width to place the
+    1px split divider, and re-deriving it from the raw token instead of the shared
+    DropArrowLogicalWidth would draw the split in one place and hit-test another — the
+    "drawn right, answers left" bug this library has been bitten by three times. The theme
+    below zeroes padding and paints the divider (border-color) pure green on black, so the
+    divider column is the only green ink and its x IS the zone's inner edge. }
+  Ctl := TTyStyleController.Create(nil);
+  img := nil;
+  try
+    Ctl.LoadThemeCss('TyButton { background: #000000; color: #FF0000; ' +
+      'border-color: #00FF00; border-width: 0px; padding: 0px; font-size: 14px; }');
+    a := TToolButtonAccess.Create(FForm);
+    a.Parent := FBar;
+    a.Controller := Ctl;
+    a.Font.PixelsPerInch := 96;   // Scale() 1:1, so logical == device px
+    a.Style := tbsDropDown;
+    a.SetBounds(0, 0, W, H);
+
+    FBar.DropDownWidth := 40;
+    Render;
+    AssertTrue('pinned 40: the split divider sits at x = W-40', ColumnHasDividerInk(W - 40));
+    AssertFalse('...and not at the token''s inner edge',
+      ColumnHasDividerInk(W - TyDefaultDropArrowWidth));
+
+    FBar.DropDownWidth := 0;
+    Render;
+    AssertTrue('token again: the divider is back at the token''s inner edge',
+      ColumnHasDividerInk(W - TyDefaultDropArrowWidth));
+    AssertFalse('...and gone from W-40', ColumnHasDividerInk(W - 40));
+    a.Free;   // before its controller
+  finally
+    img.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TToolBarMembersTest.TestButtonDropSharesThePinnedZone;
+var
+  a: TToolButtonAccess;
+begin
+  // LCL keys tbsButtonDrop's arrow to the same property (its ButtonDropWidth derivation);
+  // here both drop styles read the one arbitration.
+  a := TToolButtonAccess.Create(FForm);
+  a.Parent := FBar;
+  a.Style := tbsButtonDrop;
+  FBar.DropDownWidth := 33;
+  AssertEquals('the attached-arrow style reads the same pinned zone', 33, a.CallArrowZoneWidth(96));
+end;
+
+procedure TToolBarMembersTest.TestListMapsOntoTheGlyphLayouts;
+var
+  a: TTyToolButton;
+begin
+  // The mapping table itself, then the live toggle in both directions.
+  AssertTrue('List=True lays the icon BESIDE the caption', TyToolListLayout[True] = glLeft);
+  AssertTrue('List=False stacks it ABOVE', TyToolListLayout[False] = glTop);
+  a := AddTool(40);
+  AssertTrue('a fresh bar (List=True) adopts glyph-beside', a.GlyphLayout = glLeft);
+  FBar.List := False;
+  AssertTrue('List off adopts the stacked layout', a.GlyphLayout = glTop);
+  FBar.List := True;
+  AssertTrue('and back', a.GlyphLayout = glLeft);
+end;
+
+procedure TToolBarMembersTest.TestListOffAdoptsTheStackedLayout;
+var
+  a: TTyToolButton;
+begin
+  // The other join order: the bar's mode is set BEFORE the tool arrives.
+  FBar.List := False;
+  a := AddTool(40);
+  AssertTrue('a tool joining a List=False bar comes up stacked', a.GlyphLayout = glTop);
+end;
+
+procedure TToolBarMembersTest.TestExplicitGlyphLayoutSurvivesTheBar;
+var
+  a: TTyToolButton;
+begin
+  a := AddTool(40);
+  a.GlyphLayout := glRight;     // the host's own choice for this one tool
+  FBar.List := False;
+  AssertTrue('a per-tool GlyphLayout survives the bar''s mode', a.GlyphLayout = glRight);
+  FBar.List := True;
+  AssertTrue('...and every later change to it', a.GlyphLayout = glRight);
+end;
+
+procedure TToolBarMembersTest.TestExplicitPinsEvenWhenItMatchesTheAdopted;
+var
+  a: TTyToolButton;
+begin
+  a := AddTool(40);              // joins with the bar's default: adopted glLeft
+  a.GlyphLayout := glLeft;       // the host asks for EXACTLY that, in so many words
+  // Writing the property is the claim, not the value change: if the claim were only
+  // recorded when the value moved, this tool would silently follow the bar down.
+  FBar.List := False;
+  AssertTrue('writing the value the bar already pushed still pins the tool',
+    a.GlyphLayout = glLeft);
+end;
+
+procedure TToolBarMembersTest.TestListDoesNotReachASpeedButton;
+var
+  s: TTySpeedButton;
+begin
+  { LCL's List reaches only its FButtons — TToolButtons and nothing else. A speed button on
+    the bar keeps its own published GlyphLayout, whatever the bar's mode. }
+  s := TTySpeedButton.Create(FForm);
+  s.Parent := FBar;
+  FBar.List := False;
+  AssertTrue('a speed button is not the bar''s to relayout', s.GlyphLayout = glLeft);
+end;
+
 { TToolBarPixelTest }
 
 procedure TToolBarPixelTest.TestBottomHairlineIsLighterThanBody;
@@ -695,6 +1082,16 @@ end;
 procedure TToolButtonAccess.EnterLoading;
 begin
   Loading;
+end;
+
+function TToolButtonAccess.CallArrowZoneWidth(APPI: Integer): Integer;
+begin
+  Result := ArrowZoneWidth(APPI);
+end;
+
+procedure TToolButtonAccess.RenderWhole(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin
+  RenderTo(ACanvas, ARect, APPI);
 end;
 
 procedure TToolSeparatorAccess.DoRenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -1446,6 +1843,8 @@ initialization
   RegisterTest(TToolBarGeomTest);
   RegisterTest(TToolBarBreakTest);
   RegisterTest(TToolBarControlTest);
+  RegisterTest(TToolFloorWidthTest);
+  RegisterTest(TToolBarMembersTest);
   RegisterTest(TToolBarPixelTest);
   RegisterTest(TToolGroupBoundsTest);
   RegisterTest(TToolWrapShiftTest);

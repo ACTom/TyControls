@@ -56,6 +56,7 @@ type
     procedure TestFreedChildDropsFromOverflow;
     procedure TestSteadyRelayoutDoesNotReshowOverflow;
     procedure TestSpaceHolderIsNotGivenTheGhostVariant;
+    procedure TestOverflowFitUsesFlooredWidths;
   end;
 
 implementation
@@ -457,6 +458,53 @@ begin
 
   AssertEquals('a command tool button DOES take the flat variant', 'ghost', cmd.StyleClass);
   AssertEquals('a space holder is left alone', '', sep.StyleClass);
+end;
+
+procedure TToolBarExControlTest.TestOverflowFitUsesFlooredWidths;
+var
+  TB: TTyToolBarExAccess;
+  B1, B2, B3: TTyToolButton;
+  i: Integer;
+begin
+  { The base bar's ButtonWidth floor must reach the OVERFLOW fit too: the decision has to be
+    made over the widths the buttons are actually laid out at, or a floored button would be
+    judged to fit by its narrower natural width and then be drawn overlapping the chevron. }
+  TB := TTyToolBarExAccess.Create(FForm);
+  TB.Parent := FForm;
+  TB.Font.PixelsPerInch := 96;
+  TB.Align := alNone;
+  TB.Wrapable := False;
+  TB.Indent := 0;
+  TB.ButtonSpacing := 0;
+  TB.ButtonHeight := 24;
+  TB.Width := 200;   // avail - chevron(30) = 170
+
+  for i := 1 to 3 do
+  begin
+    with TTyToolButton.Create(FForm) do
+    begin
+      Parent := TB;
+      Width := 30;
+    end;
+  end;
+  B1 := TTyToolButton(TB.Controls[0]);
+  B2 := TTyToolButton(TB.Controls[1]);
+  B3 := TTyToolButton(TB.Controls[2]);
+
+  TB.ForceLayout;
+  AssertEquals('3x30 = 90 fits a 200 bar with room to spare', 0, TB.OverflowCount);
+
+  TB.ButtonWidth := 80;   // floored: 3x80 = 240 > 200; 2 fit in avail-chevron (160 <= 170)
+  TB.ForceLayout;
+  AssertEquals('the fit is decided over the FLOORED widths', 1, TB.OverflowCount);
+  AssertEquals('and the lead buttons are laid out at the floor', 80, B1.Width);
+  AssertEquals('...both of them', 80, B2.Width);
+  AssertFalse('the third went to the overflow', B3.Visible);
+
+  TB.ButtonWidth := 0;    // floor off: everything fits again, widths restored
+  TB.ForceLayout;
+  AssertEquals('no overflow once the floor is lowered', 0, TB.OverflowCount);
+  AssertEquals('and the natural width comes back', 30, B1.Width);
 end;
 
 initialization

@@ -3,6 +3,7 @@ unit tyControls.ToolBar;
 interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType,
+  LCLIntf,                      // IntersectClipRect — the per-button owner-draw clip
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Button,
   tyControls.GlyphButtons, tyControls.ImageCollection,
   tyControls.DropButtons,       // TyDropArrowHit — ONE arrow-zone hit rule for the whole library
@@ -82,6 +83,18 @@ type
     { The index LAST WRITTEN through ImageIndex. It is not the icon — ImageName is (see
       ImageIndex) — it is what a write asked for, kept so an unresolvable request survives. }
     FImageIndex: Integer;
+    { True once anything has WRITTEN GlyphLayout on this button (the .lfm reader and host
+      code both come through the setter). The bar's List adoption then leaves it alone
+      forever — the exact FShowCaptionExplicit contract, restated here because the base's
+      flag is private to its unit and List did not exist when it was built. }
+    FGlyphLayoutExplicit: Boolean;
+    { The WIDTH FLOOR bookkeeping — the FLentImages pattern, in width space. When the bar's
+      ButtonWidth widens this button, FBarLentWidth records what the bar imposed and
+      FBarNaturalWidth what the host had; a Width still equal to the lent value is ours to
+      re-derive from (so lowering ButtonWidth restores the host's width), anything else is
+      the host having written Width meanwhile and is the new natural value. 0 = nothing lent. }
+    FBarLentWidth: Integer;
+    FBarNaturalWidth: Integer;
     { True while an ImageIndex write has not yet been turned into an ImageName because there
       was no collection to look it up in. Cleared the moment it is resolved, so a later retry
       can never overwrite a name the host set afterwards. }
@@ -125,7 +138,26 @@ type
     { True iff device-x AX is in the arrow zone. tbsDropDown only — every other style is one
       hit zone, which is what makes the split a property of the STYLE and not of the geometry. }
     function IsInArrowZone(AX: Integer): Boolean;
+    { The arrow zone's LOGICAL width — the ONE place the bar's DropDownWidth and the theme's
+      '--drop-arrow-width' are arbitrated, so the hit test (ArrowZoneWidth), the paint
+      (DrawContent) and the preferred width cannot disagree about how wide the zone is.
+      Bar's DropDownWidth > 0 pins it; 0 (or no bar) follows the token — the ImagesWidth
+      precedent from the tab strip. }
+    function DropArrowLogicalWidth: Integer;
+    { The width the HOST owns, with the bar's imposed floor peeled off: Width, unless Width
+      still equals what the bar lent (then the remembered natural width). See FBarLentWidth. }
+    function BarNaturalWidth: Integer;
+    { Record what the bar is about to SetBounds: AImposed <> natural marks a lend, equality
+      clears it. Called by the bar (private is unit-wide) right before it applies the floor. }
+    procedure RecordBarImposedWidth(AImposed: Integer);
+    { Container DEFAULT for GlyphLayout (the bar's List pushes glLeft/glTop through here).
+      A no-op once the host wrote GlyphLayout itself — AdoptShowCaption's contract. }
+    procedure AdoptGlyphLayout(AValue: TTyGlyphLayout);
   protected
+    { Marks FGlyphLayoutExplicit BEFORE the no-change early-exit (writing the value the bar
+      happens to have pushed is still the host claiming the property), then defers to the
+      base. The claim rule is TTyGlyphButtonBase.SetShowCaption's, for the same reason. }
+    procedure SetGlyphLayout(AValue: TTyGlyphLayout); override;
     { 'TyToolSeparator' for the two space-holder styles, the inherited 'TyButton' otherwise.
       The key follows the STYLE because the ink does: a tbsDivider draws the standalone
       TTyToolSeparator's rule, and giving it a key of its own would let a skin dim one and not
@@ -134,10 +166,11 @@ type
       toolbar look from the 'ghost' StyleClass the bar hands it when Flat is on, which is the
       one lever LCL's Flat pulls too. }
     function GetStyleTypeKey: string; override;
-    { The arrow zone in DEVICE px at APPI, 0 for a style that has none. A THEME metric
-      ('--drop-arrow-width'), not a published width: LCL puts DropDownWidth/ButtonDropWidth on
-      the TOOLBAR, and in this library a resting visual value belongs to a token. Same metric
-      TTyMenuButton reserves, so every trailing chevron in the library is one width. }
+    { The arrow zone in DEVICE px at APPI, 0 for a style that has none. The LOGICAL width is
+      DropArrowLogicalWidth's arbitration: the theme's '--drop-arrow-width' (same metric
+      TTyMenuButton reserves, so every trailing chevron in the library is one width) unless
+      the host bar pinned TTyToolBar.DropDownWidth — LCL puts that property on the TOOLBAR,
+      and here 0 keeps the token in charge, exactly as the tab strip's ImagesWidth does. }
     function ArrowZoneWidth(APPI: Integer): Integer;
     { The space-holder's logical width (0 for a real button) — the value SetStyle applies and
       CalculatePreferredSize reports, from one place so they cannot disagree. }
@@ -279,17 +312,38 @@ type
       on the other styles it is just the ':selected' look. Caption / Enabled / Visible / Hint /
       ShowHint / Align / Anchors / StyleClass / Controller / OnClick all come from the bases. }
     property Down;
+    { Re-declared for its STORAGE, not its meaning: the host bar's List pushes a layout onto
+      every tool that never chose one (AdoptGlyphLayout), so an ADOPTED layout must not
+      stream — reloading would turn it into an explicit choice and List could never move the
+      button again. `stored FGlyphLayoutExplicit` is ShowCaption's exact arrangement, and
+      `nodefault` removes the base's `default glLeft` for the same reason ShowCaption carries
+      no default: an EXPLICIT glLeft written on a List=False bar must survive the round trip,
+      and a default directive would suppress writing exactly that case. }
+    property GlyphLayout stored FGlyphLayoutExplicit nodefault;
   end;
+
+  { LCL's TToolBarOnPaintButton (comctrls.pp:2253), member for member: the button, and the
+    themed STATE as the same integer LCL passes (1 normal / 2 hot / 3 pressed / 4 disabled /
+    5 checked / 6 checked-hot — TyToolButtonPaintState below is that table as a function).
+    The canvas is NOT a parameter because LCL's is not, and here — unlike the combo rows,
+    which are painted by a different control — Sender.Canvas IS the surface the handler must
+    use, so the LCL-ported handler works unchanged. }
+  TTyToolBarOnPaintButton = procedure(Sender: TTyToolButton; AState: Integer) of object;
 
   TTyToolBar = class(TTyCustomControl)
   private
     FButtonHeight: Integer;
     FButtonHeightExplicit: Boolean;
+    FButtonWidth: Integer;
+    FButtonWidthExplicit: Boolean;
     FButtonSpacing: Integer;
+    FDropDownWidth: Integer;
     FIndent: Integer;
+    FList: Boolean;
     FWrapable: Boolean;
     FShowCaptions: Boolean;
     FFlat: Boolean;
+    FOnPaintButton: TTyToolBarOnPaintButton;
     FImages: TTyImageCollection;
     { The collection this bar last LENT to its tools. A tool still holding it is one we
       handed it to, so we may re-point or take it back; anything else is the host's own
@@ -298,15 +352,20 @@ type
     FLentImages: TTyImageCollection;
     FInLayout: Boolean;
     function GetButtonHeight: Integer;
+    function GetButtonWidth: Integer;
     function GetButtonCount: Integer;
     function GetButton(AIndex: Integer): TTyToolButton;
     procedure SetButtonHeight(AValue: Integer);
+    procedure SetButtonWidth(AValue: Integer);
     procedure SetButtonSpacing(AValue: Integer);
+    procedure SetDropDownWidth(AValue: Integer);
     procedure SetIndent(AValue: Integer);
+    procedure SetList(AValue: Boolean);
     procedure SetWrapable(AValue: Boolean);
     procedure SetShowCaptions(AValue: Boolean);
     procedure SetImages(AValue: TTyImageCollection);
     procedure SetFlat(AValue: Boolean);
+    procedure SetOnPaintButton(AValue: TTyToolBarOnPaintButton);
     procedure Relayout;
   protected
     { The vertical breathing room above the first row and below the last, in logical px.
@@ -318,9 +377,15 @@ type
     { Protected rather than private so a test can drive the one call a relayout makes
       without needing a window handle and a live align pass. }
     procedure ApplyToButton(B: TTyButton);
-    { Push Images + ShowCaptions onto every tool that can draw an icon. Protected for the
-      same reason. }
+    { Push Images + ShowCaptions (and, to tool buttons, List's glyph layout) onto every tool
+      that can draw an icon. Protected for the same reason. }
     procedure ApplyToolProperties;
+    { The width the LAYOUT gives ACtl this pass: its own (natural) width, raised to
+      ButtonWidth for a real tool button (TyToolFloorWidth's rule), with the lend recorded on
+      the button so lowering ButtonWidth later can find the natural width again. Protected
+      because TTyToolBarEx lays its own row out and must impose the SAME floor, or the two
+      bars would disagree about how wide a button is. Call it once per control per pass. }
+    function EffectiveToolWidth(ACtl: TControl): Integer;
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
@@ -347,7 +412,33 @@ type
     { Density-aware: unset follows --control-height (classic 24 / modern 38). A host/.lfm value
       pins it (streamed only when explicitly set -- stored FButtonHeightExplicit). }
     property ButtonHeight: Integer read GetButtonHeight write SetButtonHeight stored FButtonHeightExplicit;
+    { LCL's WIDTH FLOOR, not a uniform width: a real tool button (tbsButton / tbsCheck /
+      tbsDropDown — LCL's exact style set, which EXCLUDES tbsButtonDrop) that is narrower
+      than this is laid out at this width; one that needs more keeps its own. AutoSize
+      buttons, space holders and non-TTyToolButton children are never touched — all four
+      exclusions are LCL's own (toolbar.inc CalculatePosition).
+
+      Unset (the default) means NO floor at all, which is where this deliberately leaves
+      LCL: there an unset ButtonWidth is a themed ~23px floor on every button, because LCL
+      derives every button's width from its content at each layout. Here a button's width is
+      a DESIGNED value the .lfm owns, so a default floor would silently widen existing bars.
+      LOWERING the floor restores each button's own width (the bar remembers what it lent —
+      the FLentImages pattern, in width space). Same units as ButtonHeight.
+      Reading it back while unset answers 0 ("no floor"). stored FButtonWidthExplicit, the
+      ButtonHeight arrangement. }
+    property ButtonWidth: Integer read GetButtonWidth write SetButtonWidth stored FButtonWidthExplicit;
     property ButtonSpacing: Integer read FButtonSpacing write SetButtonSpacing default 2;
+    { The arrow zone of the two drop-down styles, in LOGICAL px. 0 (the default) keeps the
+      theme's '--drop-arrow-width' in charge — the same token every trailing chevron in the
+      library shares — and a positive value pins it for THIS bar's tool buttons: the drawn
+      chevron zone, the tbsDropDown hit test and the preferred width all move together,
+      because all three read the one DropArrowLogicalWidth arbitration. (The ImagesWidth
+      precedent from the tab strip: 0 = follow the token, non-zero pins.)
+      LCL keys the same property to both styles (tbsButtonDrop via its ButtonDropWidth
+      derivation); here both styles read the same zone width, pinned by a test. Note it does
+      NOT reach a TTyDropDownButton / TTyMenuButton that happens to sit on the bar — those
+      are not tool buttons, and their chevron stays with the token. }
+    property DropDownWidth: Integer read FDropDownWidth write SetDropDownWidth default 0;
     { Blank space at the LEADING edge of the bar, before the first tool — and nothing else.
       LCL's TToolBar.Indent (comctrls.pp:2398) means exactly that, and ours used to mean
       two more things besides: it was also the TOP pad every row started at, and the bar's
@@ -362,6 +453,26 @@ type
       OMITTED the value is read, so changing it would re-indent every toolbar already out
       there. A ported form that relied on LCL's 1 should set Indent := 1 explicitly. }
     property Indent: Integer read FIndent write SetIndent default 4;
+    { LCL's List mode: True lays a tool button's icon BESIDE its caption, False stacks the
+      icon ABOVE it. It reaches TTyToolButtons only (LCL's List reaches only TToolButtons —
+      its FButtons list holds nothing else), through AdoptGlyphLayout: a tool whose
+      GlyphLayout the host wrote itself is never touched, the AdoptShowCaption contract.
+
+      THE DEFAULT IS INVERTED from LCL's False, deliberately (the combo's inverted
+      pick-only default is the precedent). In this library an auto-sized glyph takes the box
+      it is given — MeasureGlyphSlot derives it FROM the content box — so the stacked layout
+      with an auto GlyphSize fills the row height and collapses the caption to nothing:
+      a False default would make ShowCaptions=True paint NO caption on every icon tool,
+      which is a lying property by construction. List=True (icon beside caption) is the
+      library's resting look and every caption stays visible. Use List=False WITH an
+      explicit GlyphSize: the height floor (MeasureContentHeight) then grows the row so the
+      stacked caption has room, which is also how the ribbon tile has always done it.
+
+      A second divergence rides on the existing ShowCaption machinery: LCL honours a
+      per-button ShowCaption=False only in List mode ("allow hide caption only in list
+      mode"); here a per-tool ShowCaption is honoured in BOTH modes — strictly more capable,
+      and the machinery predates List. }
+    property List: Boolean read FList write SetList default True;
     property Wrapable: Boolean read FWrapable write SetWrapable default True;
     { LCL parity: False (the default) makes the tools ICON-ONLY, True draws their captions.
       It reaches every child that CAN draw an icon (TTyGlyphButtonBase — TTyGlyphButton /
@@ -384,6 +495,17 @@ type
     property Anchors;
     property StyleClass;
     property Controller;
+    { LCL's per-button owner draw (comctrls.pp:2416): while assigned, EVERY tool button's
+      paint — all six styles, separators included, exactly as LCL routes it — is REPLACED by
+      this handler; clearing it restores the themed default, so assigning it can never blank
+      a bar by accident and not assigning it changes nothing. The handler draws on
+      Sender.Canvas, clipped to the button, inside a SaveHandleState/RestoreHandleState
+      bracket (see TTyToolButton.Paint). AState is LCL's themed-state integer
+      (TyToolButtonPaintState). DIVERGENCE, recorded: LCL additionally reports states 1 and
+      4 as 2 ("hot") when Flat=False — a Win32 always-raised rendering kludge that makes
+      State lie about a disabled button; here AState is always the true state, and Flat
+      keeps to the one lever it already pulls (the ghost StyleClass). }
+    property OnPaintButton: TTyToolBarOnPaintButton read FOnPaintButton write SetOnPaintButton;
   end;
 
 { AIndent is the LEADING (horizontal) gap before the first tool on every row; ATopPad is the
@@ -443,6 +565,29 @@ function TyToolWrapToBreakBefore(const AWrapAfter: array of Boolean): TBooleanDy
 function TyToolGroupBounds(const AGrouped: array of Boolean;
   const AStyles: array of TTyToolButtonStyle; AIndex: Integer;
   out AStart, AEnd: Integer): Boolean;
+
+{ LCL's ButtonWidth rule as a pure function (toolbar.inc, CalculatePosition's row branch):
+  the width item gets is its own NATURAL width, raised to AFloorPx — a FLOOR, never a cap —
+  and only for the three styles LCL floors (tbsButton / tbsCheck / tbsDropDown; LCL's own
+  list excludes tbsButtonDrop, mirrored here so a ported form lays out the same) and only
+  when the button is not AutoSize (an AutoSize button hugs its content, LCL's exclusion
+  too). AFloorPx <= 0 means no floor. Headless-testable — no bar, no window. }
+function TyToolFloorWidth(ANaturalPx, AFloorPx: Integer; AStyle: TTyToolButtonStyle;
+  AAutoSize: Boolean): Integer;
+
+{ LCL's OnPaintButton State integer (the TThemedToolBar state numbers its GetButtonDrawDetail
+  produces): 1 normal / 2 hot / 3 pressed / 4 disabled / 5 checked / 6 checked-hot.
+  Disabled WINS over Down — LCL tests Enabled first, so a disabled checked button reports 4,
+  not 5. "Pressed" only counts while the pointer is still over the button (LCL requires
+  tbfPressed AND FMouseInControl both), which is also when this library sets tysActive. }
+function TyToolButtonPaintState(AEnabled, ADown, APressed, AHover: Boolean): Integer;
+
+const
+  { TTyToolBar.List -> the glyph layout its tool buttons adopt. A table rather than an
+    if-expression so the mapping is checkable at a glance and pinned by one assertion:
+    List=True lays the icon BESIDE the caption (glLeft), False stacks it ABOVE (glTop) —
+    LCL's two poles under LCL's own meaning of the flag. }
+  TyToolListLayout: array[Boolean] of TTyGlyphLayout = (glTop, glLeft);
 
 { The separator/divider INK, shared by TTyToolSeparator and by a space-holder TTyToolButton so
   a skin physically cannot make the two disagree — they resolve the same 'TyToolSeparator' key
@@ -534,6 +679,31 @@ begin
   while (AEnd < n - 1) and AGrouped[AEnd + 1]
     and (AStyles[AEnd + 1] in [tbsCheck, tbsSeparator, tbsDivider]) do
     Inc(AEnd);
+end;
+
+function TyToolFloorWidth(ANaturalPx, AFloorPx: Integer; AStyle: TTyToolButtonStyle;
+  AAutoSize: Boolean): Integer;
+begin
+  Result := ANaturalPx;
+  if AAutoSize then Exit;                                        // hugs its content (LCL)
+  if not (AStyle in [tbsButton, tbsCheck, tbsDropDown]) then Exit;  // LCL's exact style set
+  if AFloorPx > Result then Result := AFloorPx;                  // a floor, never a cap
+end;
+
+function TyToolButtonPaintState(AEnabled, ADown, APressed, AHover: Boolean): Integer;
+begin
+  // The exact increments of LCL's GetButtonDrawDetail (toolbutton.inc:985+), collapsed to
+  // the state numbers its TThemedElementDetails carries. Enabled is tested FIRST, so
+  // disabled wins over checked; pressed needs the pointer still over the button.
+  if not AEnabled then Exit(4);
+  if APressed and AHover then Exit(3);
+  if ADown then
+  begin
+    if AHover then Exit(6);
+    Exit(5);
+  end;
+  if AHover then Exit(2);
+  Result := 1;
 end;
 
 { A 1px hairline / rule fill. Factored out because `Default(TTyFill)` is NOT usable inside
@@ -748,6 +918,55 @@ begin
     ImageName := Images.NameOf(FImageIndex);   // '' when the index is past the end
 end;
 
+{ ---- the bar's adopted defaults ------------------------------------------- }
+
+procedure TTyToolButton.SetGlyphLayout(AValue: TTyGlyphLayout);
+begin
+  { Mark BEFORE the base's no-change early-exit: writing the very value the bar happens to
+    have adopted is still the host claiming the property, and must pin it — otherwise
+    `Tool.GlyphLayout := glLeft` on a List=True bar would silently follow the bar back down
+    the moment List was switched off. (SetShowCaption states the same rule.) }
+  FGlyphLayoutExplicit := True;
+  inherited SetGlyphLayout(AValue);
+end;
+
+procedure TTyToolButton.AdoptGlyphLayout(AValue: TTyGlyphLayout);
+begin
+  if FGlyphLayoutExplicit then Exit;   // the host owns it; the container must not fight
+  if FGlyphLayout = AValue then Exit;
+  FGlyphLayout := AValue;
+  { Invalidate, not a bare repaint: the layout moves the slot between the width axis and the
+    height axis, and TTyButton.Invalidate is where the size floor and an AutoSize re-fit
+    live (the same reason the base's SetGlyphLayout routes there). }
+  Invalidate;
+end;
+
+function TTyToolButton.BarNaturalWidth: Integer;
+begin
+  { Width still equal to what the bar lent -> the bar may re-derive from the remembered
+    natural width; anything else means the HOST wrote Width since, and that write is the new
+    natural value (the FLentImages equality rule). A host write that lands exactly on the
+    lent value is indistinguishable and reads as still-lent — same value either way. }
+  if (FBarLentWidth > 0) and (Width = FBarLentWidth) then
+    Result := FBarNaturalWidth
+  else
+    Result := Width;
+end;
+
+procedure TTyToolButton.RecordBarImposedWidth(AImposed: Integer);
+var
+  nat: Integer;
+begin
+  nat := BarNaturalWidth;
+  if AImposed <> nat then
+  begin
+    FBarNaturalWidth := nat;
+    FBarLentWidth := AImposed;
+  end
+  else
+    FBarLentWidth := 0;   // laying out at the natural width is not a lend
+end;
+
 { ---- grouping ------------------------------------------------------------- }
 
 function TTyToolButton.GetGroupBounds(out AStart, AEnd: Integer): Boolean;
@@ -878,13 +1097,26 @@ end;
 
 { ---- arrow zone / drop-down ----------------------------------------------- }
 
+function TTyToolButton.DropArrowLogicalWidth: Integer;
+var
+  bar: TTyToolBar;
+begin
+  bar := GetToolBar;
+  if (bar <> nil) and (bar.DropDownWidth > 0) then
+    Result := bar.DropDownWidth
+  else
+    // Same metric TTyMenuButton reserves, so a skin that retunes '--drop-arrow-width'
+    // moves every chevron in the library together — unless THIS bar pinned its own.
+    Result := ActiveController.Metric('--drop-arrow-width', TyDefaultDropArrowWidth);
+  if Result < 0 then Result := 0;
+end;
+
 function TTyToolButton.ArrowZoneWidth(APPI: Integer): Integer;
 begin
   if not (FStyle in [tbsDropDown, tbsButtonDrop]) then Exit(0);
-  // Same metric and same 96-baseline conversion TTyMenuButton reserves, so a skin that
-  // retunes '--drop-arrow-width' moves every chevron in the library together.
-  Result := MulDiv(ActiveController.Metric('--drop-arrow-width', TyDefaultDropArrowWidth),
-    APPI, 96);
+  // The same 96-baseline conversion TTyMenuButton uses (and APainter.Scale IS this MulDiv),
+  // over the one arbitrated logical width — hit test, paint and preferred width agree.
+  Result := MulDiv(DropArrowLogicalWidth, APPI, 96);
   if Result < 0 then Result := 0;
 end;
 
@@ -1034,15 +1266,16 @@ begin
     Exit;
   end;
   boxW := AContentRect.Right - AContentRect.Left;
-  { Same metric and same 96-baseline conversion ArrowZoneWidth uses (APainter.Scale IS that
-    MulDiv), so the drawn zone and the hit-tested zone are the same WIDTH.
+  { The same ARBITRATED logical width ArrowZoneWidth converts (APainter.Scale IS that
+    MulDiv), so the drawn zone and the hit-tested zone are the same WIDTH — including when
+    the bar's DropDownWidth pins it away from the theme token.
     They are not yet at the same OFFSET: this one is measured from the padded content box,
     while IsInArrowZone measures from the control's right edge — so the two are out by the
     theme's right padding. That deviation is inherited from TTyDropDownButton, which hit-tests
     through the very same TyDropArrowHit; correcting it on one control alone would break the
     single rule the two share, so it is recorded in docs/controls/toolbar.md (3.2.1) as a
     both-sites fix rather than silently forked here. }
-  arrowW := APainter.Scale(ActiveController.Metric('--drop-arrow-width', TyDefaultDropArrowWidth));
+  arrowW := APainter.Scale(DropArrowLogicalWidth);
   if arrowW < 0 then arrowW := 0;
   // Never let the zone swallow the whole caption area on a too-narrow button.
   if arrowW >= boxW then arrowW := boxW div 2;
@@ -1090,7 +1323,37 @@ begin
 end;
 
 procedure TTyToolButton.Paint;
+var
+  bar: TTyToolBar;
 begin
+  { LCL's OnPaintButton contract, whole: while the BAR's handler is assigned it REPLACES the
+    default paint for every style — LCL calls it and exits before the themed draw, separators
+    included — and runs in the designer too (LCL has no csDesigning gate here). The handler
+    draws on Sender.Canvas, which for a windowed control is bound to the paint DC right now.
+
+    The bracket is Canvas.SaveHandleState / RestoreHandleState and NOT raw SaveDC/RestoreDC:
+    RestoreDC swaps the DC's pen/font back while the LCL canvas goes on believing its own
+    objects are selected, so the SECOND callback on the same bound canvas that assigns the
+    SAME Pen.Color gets a silent no-op and inks with whatever the restore put back. The
+    canvas-aware pair deselects on both sides, so the cache never outlives the DC state it
+    describes (the combo's DispatchRowOwnerDraw states the full history; 2477173 and 7629c14
+    are the shipped instances). The second call is REACHABLE: TCustomControl.PaintWindow
+    only rebinds the canvas when the DC actually CHANGED, so successive paints against one
+    DC share one binding. The clip stops a handler bleeding past its own button — on a
+    shared/parent DC the window no longer does that for us. }
+  bar := GetToolBar;
+  if (bar <> nil) and Assigned(bar.FOnPaintButton) then
+  begin
+    Canvas.SaveHandleState;
+    try
+      LCLIntf.IntersectClipRect(Canvas.Handle, 0, 0, ClientWidth, ClientHeight);
+      bar.FOnPaintButton(Self,
+        TyToolButtonPaintState(Enabled, Down, FPressed, FHover));
+    finally
+      Canvas.RestoreHandleState;
+    end;
+    Exit;
+  end;
   // A space holder has no frame, no padding, no content box and no badge — so it does not go
   // through the button's paint at all.
   if FStyle in [tbsSeparator, tbsDivider] then
@@ -1105,7 +1368,10 @@ begin
   inherited Create(AOwner);
   ControlStyle := ControlStyle + [csAcceptsControls];   // hosts the tool buttons
   FButtonHeight := 24; FButtonHeightExplicit := False;   // follow --control-height (density-aware) until set
+  FButtonWidth := 0; FButtonWidthExplicit := False;      // no width floor until set (see ButtonWidth)
+  FDropDownWidth := 0;                                   // follow --drop-arrow-width until set
   FButtonSpacing := 2; FIndent := 4; FWrapable := True; FFlat := True;
+  FList := True;   // icon BESIDE caption — the inverted LCL default, argued at the property
   Align := alTop;
   Width := 300; Height := 30;
 end;
@@ -1164,12 +1430,62 @@ begin
   else
     Result := TyDensityMetric(ActiveController, 24, '--control-height');
 end;
+function TTyToolBar.GetButtonWidth: Integer;
+begin
+  // Unlike ButtonHeight there is no token to follow: unset means NO floor (0), because a
+  // button's width here is a designed value — see the published property for the argument.
+  if FButtonWidthExplicit then
+    Result := FButtonWidth
+  else
+    Result := 0;
+end;
 procedure TTyToolBar.SetButtonHeight(AValue: Integer); begin FButtonHeightExplicit := True; if FButtonHeight = AValue then Exit; FButtonHeight := AValue; Relayout; end;
+procedure TTyToolBar.SetButtonWidth(AValue: Integer);
+begin
+  if AValue < 0 then AValue := 0;   // one "no floor" value, not a range of them
+  FButtonWidthExplicit := True;     // mark first — ButtonHeight's arrangement
+  if FButtonWidth = AValue then Exit;
+  FButtonWidth := AValue;
+  Relayout;
+end;
 procedure TTyToolBar.SetButtonSpacing(AValue: Integer); begin if FButtonSpacing = AValue then Exit; FButtonSpacing := AValue; Relayout; end;
+procedure TTyToolBar.SetDropDownWidth(AValue: Integer);
+var
+  i: Integer;
+begin
+  if AValue < 0 then AValue := 0;   // 0 = the token's; there is no second kind of auto
+  if FDropDownWidth = AValue then Exit;
+  FDropDownWidth := AValue;
+  // The zone is part of every drop-style button's preferred width, so the buttons must
+  // RE-MEASURE, not just repaint — TTyButton.Invalidate is where the size floor re-runs
+  // (the same reason a theme switch arrives as a bare Invalidate).
+  for i := 0 to ControlCount - 1 do
+    if Controls[i] is TTyToolButton then Controls[i].Invalidate;
+  Relayout;
+end;
 procedure TTyToolBar.SetIndent(AValue: Integer); begin if FIndent = AValue then Exit; FIndent := AValue; Relayout; end;
+procedure TTyToolBar.SetList(AValue: Boolean);
+begin
+  if FList = AValue then Exit;
+  FList := AValue;
+  ApplyToolProperties;   // adopt the new layout onto every tool that never chose its own
+  Relayout;
+end;
 procedure TTyToolBar.SetWrapable(AValue: Boolean); begin if FWrapable = AValue then Exit; FWrapable := AValue; Relayout; end;
 procedure TTyToolBar.SetShowCaptions(AValue: Boolean); begin if FShowCaptions = AValue then Exit; FShowCaptions := AValue; ApplyToolProperties; Relayout; end;
 procedure TTyToolBar.SetFlat(AValue: Boolean); begin if FFlat = AValue then Exit; FFlat := AValue; Relayout; end;
+procedure TTyToolBar.SetOnPaintButton(AValue: TTyToolBarOnPaintButton);
+var
+  i: Integer;
+begin
+  { Assigning (or clearing) the handler is what switches every button between the host's
+    paint and the themed default, so the BUTTONS have to repaint — the combo's SetOnDrawItem
+    states the same rule. The bar's own chrome is untouched by the event, so only the
+    buttons are invalidated. }
+  FOnPaintButton := AValue;
+  for i := 0 to ControlCount - 1 do
+    if Controls[i] is TTyToolButton then Controls[i].Invalidate;
+end;
 
 procedure TTyToolBar.SetImages(AValue: TTyImageCollection);
 begin
@@ -1231,10 +1547,33 @@ begin
       request; the line above may just have handed it the collection that resolves it. (Private
       is unit-wide in Object Pascal, which is why the button can live in this unit and keep its
       retry out of the public surface.) }
-    if G is TTyToolButton then TTyToolButton(G).ResolveImageIndex;
+    if G is TTyToolButton then
+    begin
+      { List reaches TOOL buttons only — LCL's List reaches only its FButtons — and through
+        the same adopt contract ShowCaption uses: a tool whose GlyphLayout the host wrote is
+        never touched. A TTySpeedButton on the bar keeps its own published GlyphLayout. }
+      TTyToolButton(G).AdoptGlyphLayout(TyToolListLayout[FList]);
+      TTyToolButton(G).ResolveImageIndex;
+    end;
   end;
   // Remember what a later pass must recognise as "ours to re-point or take back".
   FLentImages := FImages;
+end;
+
+function TTyToolBar.EffectiveToolWidth(ACtl: TControl): Integer;
+var
+  btn: TTyToolButton;
+  nat: Integer;
+begin
+  if not (ACtl is TTyToolButton) then Exit(ACtl.Width);   // LCL floors only tool buttons
+  btn := TTyToolButton(ACtl);
+  nat := btn.BarNaturalWidth;
+  Result := TyToolFloorWidth(nat, GetButtonWidth, btn.Style, btn.AutoSize);
+  { Record the lend NOW, against the natural width just read — the SetBounds that applies
+    Result follows in the same pass. For a button the pass then hides instead (the Ex bar's
+    overflow set), Width keeps the natural value, the equality test fails, and the stale
+    record self-heals to "the host's width" on the next read. }
+  btn.RecordBarImposedWidth(Result);
 end;
 
 procedure TTyToolBar.InsertControl(AControl: TControl; Index: Integer);
@@ -1263,7 +1602,7 @@ var
   sizes: array of TSize;
   rects: TTyRectArray;
   ctl: TControl;
-  list: array of TControl;
+  kids: array of TControl;
   wrapAfter: array of Boolean;
   breaks: TBooleanDynArray;
   newH, bh, padY: Integer;
@@ -1273,22 +1612,24 @@ begin
   FInLayout := True;
   try
     // collect visible children in child order
-    SetLength(list, ControlCount); n := 0;
+    SetLength(kids, ControlCount); n := 0;
     for i := 0 to ControlCount - 1 do
     begin
       ctl := Controls[i];
-      if ctl.Visible then begin list[n] := ctl; Inc(n); end;
+      if ctl.Visible then begin kids[n] := ctl; Inc(n); end;
     end;
-    SetLength(list, n); SetLength(sizes, n); SetLength(wrapAfter, n);
+    SetLength(kids, n); SetLength(sizes, n); SetLength(wrapAfter, n);
     for i := 0 to n - 1 do
     begin
-      if list[i] is TTyButton then ApplyToButton(TTyButton(list[i]));
-      sizes[i].cx := list[i].Width;
-      sizes[i].cy := list[i].Height;  // cy is not used by TyToolbarLayout (AButtonHeight governs row height)
+      if kids[i] is TTyButton then ApplyToButton(TTyButton(kids[i]));
+      { The natural width, raised to ButtonWidth for a real tool button (LCL's floor).
+        With ButtonWidth unset this is exactly kids[i].Width — no existing bar moves. }
+      sizes[i].cx := EffectiveToolWidth(kids[i]);
+      sizes[i].cy := kids[i].Height;  // cy is not used by TyToolbarLayout (AButtonHeight governs row height)
       { TToolButton.Wrap, collected over the VISIBLE tools only — an invisible tool is not laid
         out, so it has no row to end. Any other kind of child reads as False: only a tool button
         carries the flag. }
-      wrapAfter[i] := (list[i] is TTyToolButton) and TTyToolButton(list[i]).Wrap;
+      wrapAfter[i] := (kids[i] is TTyToolButton) and TTyToolButton(kids[i]).Wrap;
     end;
     { ButtonHeight is what the bar ASKS for; a child may refuse to be that short. Controls
       whose caption decides their size publish Constraints.MinHeight, and SetBounds clamps to
@@ -1297,7 +1638,7 @@ begin
       that did fit. Take the tallest floor in the row first, then lay out against that. }
     bh := GetButtonHeight;
     for i := 0 to n - 1 do
-      if list[i].Constraints.MinHeight > bh then bh := list[i].Constraints.MinHeight;
+      if kids[i].Constraints.MinHeight > bh then bh := kids[i].Constraints.MinHeight;
     padY := ContentPadY;
     { LCL's TRAILING Wrap -> the solver's LEADING break, through the one function that shift
       lives in. With no tool button carrying Wrap the result is all-False, which the solver
@@ -1309,10 +1650,12 @@ begin
       { Centre each child in the row. A child SHORTER than the row (a separator, a combo that
         is happy at 24 while a CJK caption needs 29) must sit on the row's centre line, or the
         bar reads as ragged -- which is the second half of the same report. }
-      ih := list[i].Height;
+      ih := kids[i].Height;
       if ih > bh then ih := bh;
-      if list[i].Constraints.MinHeight > ih then ih := list[i].Constraints.MinHeight;
-      list[i].SetBounds(rects[i].Left, rects[i].Top + (bh - ih) div 2, list[i].Width, ih);
+      if kids[i].Constraints.MinHeight > ih then ih := kids[i].Constraints.MinHeight;
+      // The FLOORED width the slot was solved for, not kids[i].Width — with no floor the
+      // two are the same number, so nothing moves until ButtonWidth is actually set.
+      kids[i].SetBounds(rects[i].Left, rects[i].Top + (bh - ih) div 2, sizes[i].cx, ih);
     end;
     // grow the bar to fit the rows when alTop/alBottom
     if (Align in [alTop, alBottom]) and (rows > 0) then

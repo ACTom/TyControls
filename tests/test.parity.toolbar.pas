@@ -88,6 +88,20 @@ type
     procedure TestSpaceHolderBorrowsTheSeparatorKey;
   end;
 
+  { The BAR's own LCL members this batch added — the published surface and, just as
+    load-bearing, the two that are deliberately absent. Behaviour lives in
+    tests/test.toolbar.pas (TToolBarMembersTest) and test.toolbar.paintbutton.pas;
+    what is pinned HERE is the API shape an .lfm and the Object Inspector see. }
+  TToolBarMembersApiParityTest = class(TTestCase)
+  published
+    procedure TestButtonWidthIsPublishedAndUnsetMeansNoFloor;
+    procedure TestDropDownWidthIsPublishedAndDefaultsToTheToken;
+    procedure TestListIsPublishedAndTheInvertedDefaultIsDeliberate;
+    procedure TestOnPaintButtonIsPublishedWithLclsShape;
+    procedure TestHotAndDisabledImagesAreDeliberatelyAbsent;
+    procedure TestGlyphLayoutStreamsOnlyWhenTheHostWroteIt;
+  end;
+
   { Pixel proof that ShowCaption changes what is painted, not just a field. }
   TGlyphButtonCaptionPaintTest = class(TTestCase)
   private
@@ -585,6 +599,138 @@ begin
   end;
 end;
 
+{ ---- TToolBarMembersApiParityTest ----------------------------------------- }
+
+procedure TToolBarMembersApiParityTest.TestButtonWidthIsPublishedAndUnsetMeansNoFloor;
+var
+  Bar: TTyToolBar;
+  PI: PPropInfo;
+begin
+  Bar := TTyToolBar.Create(nil);
+  try
+    PI := GetPropInfo(Bar, 'ButtonWidth');
+    AssertTrue('ButtonWidth is published', PI <> nil);
+    AssertTrue('readable', PI^.GetProc <> nil);
+    AssertTrue('and writable', PI^.SetProc <> nil);
+    { DIVERGENCE from LCL, pinned: there an unset ButtonWidth is a themed ~23px floor,
+      because LCL derives every button's width from content each layout. Here a width is a
+      DESIGNED value the .lfm owns, so unset must mean NO floor — a default floor would
+      silently widen every existing bar the day it shipped. }
+    AssertEquals('unset reads back as 0 — no floor', 0, Bar.ButtonWidth);
+    // The ButtonHeight storage arrangement: streamed only once the host actually wrote it.
+    AssertFalse('unset does not stream', IsStoredProp(Bar, PI));
+    Bar.ButtonWidth := 60;
+    AssertTrue('an explicit value streams', IsStoredProp(Bar, PI));
+  finally
+    Bar.Free;
+  end;
+end;
+
+procedure TToolBarMembersApiParityTest.TestDropDownWidthIsPublishedAndDefaultsToTheToken;
+var
+  Bar: TTyToolBar;
+  PI: PPropInfo;
+begin
+  Bar := TTyToolBar.Create(nil);
+  try
+    PI := GetPropInfo(Bar, 'DropDownWidth');
+    AssertTrue('DropDownWidth is published', PI <> nil);
+    { 0 = "the theme's --drop-arrow-width owns the zone" — the tab strip's ImagesWidth
+      convention, where LCL instead defaults to a native-theme measurement. The declared
+      default must agree with the constructor or the streamer writes the 0 into every .lfm. }
+    AssertEquals('a fresh bar follows the token', 0, Bar.DropDownWidth);
+    AssertEquals('and the declared default says so', 0, PI^.Default);
+  finally
+    Bar.Free;
+  end;
+end;
+
+procedure TToolBarMembersApiParityTest.TestListIsPublishedAndTheInvertedDefaultIsDeliberate;
+var
+  Bar: TTyToolBar;
+  PI: PPropInfo;
+begin
+  Bar := TTyToolBar.Create(nil);
+  try
+    PI := GetPropInfo(Bar, 'List');
+    AssertTrue('List is published', PI <> nil);
+    { THE INVERSION, pinned (the combo's inverted pick-only default is the precedent): LCL
+      defaults List=False (icon stacked above the caption). Here an auto-sized glyph takes
+      the box it is given, so the stacked layout with an auto GlyphSize fills the row and
+      collapses the caption — a False default would make ShowCaptions=True paint NO caption
+      on every icon tool, a lying property by construction. True (icon beside caption) is
+      the library's resting look; False remains available WITH an explicit GlyphSize. }
+    AssertTrue('a fresh bar is in list mode — the inverted default is deliberate', Bar.List);
+    AssertEquals('the declared default agrees with the constructor', 1, PI^.Default);
+  finally
+    Bar.Free;
+  end;
+end;
+
+procedure TToolBarMembersApiParityTest.TestOnPaintButtonIsPublishedWithLclsShape;
+var
+  PI: PPropInfo;
+begin
+  PI := GetPropInfo(TTyToolBar, 'OnPaintButton');
+  AssertTrue('OnPaintButton is published', PI <> nil);
+  AssertEquals('and is the two-argument LCL shape (Sender + State), typed to the tool button',
+    'TTyToolBarOnPaintButton', string(PI^.PropType^.Name));
+end;
+
+procedure TToolBarMembersApiParityTest.TestHotAndDisabledImagesAreDeliberatelyAbsent;
+begin
+  { THE REFUSAL, pinned the LyingPropertiesStayUnpublished way. LCL's HotImages /
+    DisabledImages swap in a SECOND image list, keyed by the same ImageIndex, when a button
+    is hovered / disabled. Two reasons they are not carried:
+
+    * This library's glyph pipeline TINTS every collection image to the state's resolved
+      TextColor (TyTintBitmapAlpha replaces RGB wholesale, keeping alpha) — so the classic
+      job of those lists, a different COLOUR treatment per state, is already the THEME's,
+      per skin, via the :hover / :disabled rules. A swapped image would be re-tinted the
+      same way, so all a second collection could ever add is a different SHAPE per state.
+    * Serving that residue would put a second, per-bar image-state model beside the theme's
+      state model, with a per-name silent fallback (a name missing from the alternate
+      collection shows the base icon) — a "sometimes works" surface.
+
+    If a per-state SHAPE swap is ever really wanted, the seam is a protected virtual
+    glyph-source resolver on TTyGlyphButtonBase consulted by its DrawContent — build that
+    first, then delete these lines; do not relax them. }
+  AssertTrue('HotImages must not be published until something honours it',
+    GetPropInfo(TTyToolBar, 'HotImages') = nil);
+  AssertTrue('DisabledImages must not be published until something honours it',
+    GetPropInfo(TTyToolBar, 'DisabledImages') = nil);
+end;
+
+procedure TToolBarMembersApiParityTest.TestGlyphLayoutStreamsOnlyWhenTheHostWroteIt;
+var
+  Bar: TTyToolBar;
+  B: TTyToolButton;
+  PI: PPropInfo;
+begin
+  { The storage half of List's adopt contract. An ADOPTED layout must not stream — the
+    reload would come back through the setter, claim the property for the host, and List
+    could never move that button again. And the base's `default glLeft` must be GONE
+    (nodefault): an explicit glLeft on a List=False bar equals the old default, so the
+    default directive would suppress writing exactly the case that must survive. }
+  Bar := TTyToolBar.Create(nil);
+  B := TTyToolButton.Create(nil);
+  try
+    PI := GetPropInfo(B, 'GlyphLayout');
+    AssertTrue('GlyphLayout is published on the tool button', PI <> nil);
+    AssertEquals('the inherited default directive is removed (nodefault)',
+      Longint($80000000), PI^.Default);
+    AssertFalse('a fresh button does not stream it', IsStoredProp(B, PI));
+    B.Parent := Bar;                 // joins List=True -> adopts glLeft
+    Bar.List := False;               // adopts glTop
+    AssertFalse('an ADOPTED layout does not stream either', IsStoredProp(B, PI));
+    B.GlyphLayout := glTop;          // the host writes the very value the bar adopted
+    AssertTrue('an explicit write streams, even at the adopted value', IsStoredProp(B, PI));
+  finally
+    B.Free;
+    Bar.Free;
+  end;
+end;
+
 { ---- TGlyphButtonCaptionPaintTest ---------------------------------------- }
 
 procedure TGlyphButtonCaptionPaintTest.SetUp;
@@ -699,5 +845,6 @@ initialization
   RegisterTest(TToolBarImagesParityTest);
   RegisterTest(TToolBarShowCaptionsParityTest);
   RegisterTest(TToolButtonApiParityTest);
+  RegisterTest(TToolBarMembersApiParityTest);
   RegisterTest(TGlyphButtonCaptionPaintTest);
 end.

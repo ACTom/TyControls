@@ -168,7 +168,7 @@ LCL 的 `TSpeedButton` 和 `TPaintBox` 都是 `TGraphicControl` —— **没有�
 |---|---|---|
 | ~~`TTyTreeView`~~ | ~~`Items` 节点对象模型 + `Node.Text`~~ | **已做**(`a8d98b7`):扁平 `TCollection` + `Level`(集合顺序即先序,`Items[i]` 直接对上 LCL 的绝对下标);模式由 `Items.Count > 0` 派生,虚拟路径按构造不受影响;两边都给内容当场抛 `ETyTreeItemMode` 并同时点名。`TTyShellTreeView` 覆写 `SupportsItemModel` 拒绝 |
 | ~~`TTyCustomTabStrip`~~ | ~~`TabPosition`、`MultiLine`/`RaggedRight`/`RowCount`、标签图标~~ | **已做**(`b7cbdef` + `d1362d2`):轴无关的一套变换(沿主轴滑动→在条带盒里嵌入→反射屏幕 x),侧边条带**不旋转文字**(与 comctl32 的 `TCS_VERTICAL` 故意不同)。`ScrollOpposite` **不做**——它与拖拽重排是同一件事,见 `plans/2026-08-06-tabstrip-multiline-spec.md` |
-| ~~`TTyToolBar`~~ | ~~`TToolButton` 整个类~~ | **已做**(`38bde80`):`TTyToolButton` 六种样式全建。`Grouped`(相邻成组)而非 `GroupIndex`,两向可译且都钉住;`ImageIndex` 落到既有的 `ImageName` 上,只有一份图标状态;`Marked`/`Indeterminate` **故意不做**——它们在 LCL 自己那儿就是不生效的属性。**仍缺**(条本身的成员,下一批):`ButtonWidth`、`DropDownWidth`、`List`、`HotImages`、`DisabledImages`、`OnPaintButton` |
+| ~~`TTyToolBar`~~ | ~~`TToolButton` 整个类~~ | **已做**(`38bde80`):`TTyToolButton` 六种样式全建。`Grouped`(相邻成组)而非 `GroupIndex`,两向可译且都钉住;`ImageIndex` 落到既有的 `ImageName` 上,只有一份图标状态;`Marked`/`Indeterminate` **故意不做**——它们在 LCL 自己那儿就是不生效的属性。**条本身的六个成员也做完了**(本批):`ButtonWidth` = LCL 语义的**下限**(不是统一宽,LCL 的样式集合原样含"不含 `tbsButtonDrop`"这条豁免;可逆——条记着借出的宽度,`FLentImages` 模式的宽度版,Ex 条的溢出判定同一来源);`DropDownWidth` = 0 跟 `--drop-arrow-width` 令牌、正值钉住(标签条 `ImagesWidth` 先例,画/命中/首选宽一个仲裁值);`List` **默认反向**(`True`=图标在旁)——自动尺寸图标占满行高,LCL 的 `False` 默认会让 `ShowCaptions=True` 一个标题都画不出;下发走 `AdoptGlyphLayout`(`AdoptShowCaption` 契约),`GlyphLayout` 在工具按钮上重声明 `stored`+`nodefault`;`OnPaintButton` = LCL 的整体替换签名(六样式全过,`AState` 1-6 真值,不做 LCL 非 Flat 时 1/4→2 的谎报),`SaveHandleState` 括号+按钮裁剪+角探针守卫;`HotImages`/`DisabledImages` **拒绝**——管线把集合图**染成状态 TextColor**,逐状态换色本来就是主题的,残余只有逐状态换形状,拒绝钉在 `TestHotAndDisabledImagesAreDeliberatelyAbsent`,将来要做的缝(`TTyGlyphButtonBase` 受保护虚 glyph 源解析器)写在 `docs/controls/toolbar.md` |
 | ~~`TTyStringGrid`~~ | ~~`Cols[]`/`Rows[]` 可赋值的 `TStrings`、`Objects[c,r]`~~ | **已做**:对象槽进 `TTyGridCellAttr`(跟着排序/增删行搬家,**不进撤销栈**),`Cols[]`/`Rows[]` 是 `TTyGridStrings` 活视图,赋值不改结构。见 `docs/controls/grid.md`《对象槽与整行整列赋值》 |
 | ~~`TTyCustomGrid`~~ | ~~`Options: TGridOptions`~~ | **已做**(`251db2d`):32 个标志逐条判过,21 个进枚举(其中 9 个是既有状态的**视图**,不二次存储)、11 个不做且各写了理由。`goHeaderPushedLook` 需要 `themes/light.tycss` 里的 `TyGridHeaderSection:active`,`goThumbTracking` 需要滚动条的缝——两个缝都指明了 |
 | ~~`TTyComboBox`~~ | ~~`Style` 的 7 个取值~~ | **已做**(`feedabc` + `3643653`):四个取值 + `OnDrawItem` + `OnMeasureItem`,全家 6 个类接线。**仍缺 `csSimple`**——常驻列表是另一种控件形态,已在文档里写明 |
@@ -196,10 +196,10 @@ LCL 的 `TSpeedButton` 和 `TPaintBox` 都是 `TGraphicControl` —— **没有�
 2. ~~**RTL 定性**~~ **定了:做,而且做了。**状态与逐控件的完成度见 `docs/rtl.md`;
    仍然拒绝镜像的地方(功能区、网格竖条、下拉箭头、值列表编辑器…)由
    `tests/test.rtl.pas` 的 `TRtlExclusionTest` 逐条钉住,每条都写了拒绝的理由。
-3. **单控件特性**:上表里划掉的行后面那些"**仍缺**"就是下一批的清单。按受众排,现在最靠前的是
-   —— `TTyToolBar` 条本身的六个成员(`ButtonWidth`/`DropDownWidth`/`List`/`HotImages`/
-   `DisabledImages`/`OnPaintButton`)、`TTyComboBox.csSimple`、日历与日期框的
-   月份/星期名跟随应用语言而不是 OS 区域、`TTyValueListEditor.Keys[]` 可写。
+3. **单控件特性**:上表里划掉的行后面那些"**仍缺**"就是下一批的清单。~~最靠前的
+   `TTyToolBar` 条本身的六个成员~~(**已做**,见上表工具条行)。剩下按受众排:
+   `TTyComboBox.csSimple`、日历与日期框的月份/星期名跟随应用语言而不是 OS 区域、
+   `TTyValueListEditor.Keys[]` 可写。
 4. ~~**程序 C 先量后改**~~ **量完了(2026-08-06),结论是不改。**
    `TTyPaintPanel` 是能放子控件的真容器(实测:子控件有真 Win32 父子句柄),变不了图形控件;
    原本的视觉理由已被 `a1c31d1` 用一个函数修掉。**这一条可以关掉。**

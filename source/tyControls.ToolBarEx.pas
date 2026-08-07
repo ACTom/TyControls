@@ -174,7 +174,7 @@ end;
 procedure TTyToolBarEx.AlignControls(AControl: TControl; var ARect: TRect);
 var
   i, n, visCount, x, chevW, padY: Integer;
-  list: array of TControl;
+  kids: array of TControl;
   widths: array of Integer;
   ctl: TControl;
 begin
@@ -197,16 +197,16 @@ begin
     // Collect content children (everything except the chevron) in child order. Our own
     // overflow-hidden buttons remain candidates: they are re-shown below so the fit is
     // re-computed over the FULL set every layout (a wider bar restores hidden buttons).
-    SetLength(list, ControlCount);
+    SetLength(kids, ControlCount);
     n := 0;
     for i := 0 to ControlCount - 1 do
     begin
       ctl := Controls[i];
       if IsInternalChild(ctl) then Continue;   // the chevron is placed by us, not laid out
-      list[n] := ctl;
+      kids[n] := ctl;
       Inc(n);
     end;
-    SetLength(list, n);
+    SetLength(kids, n);
 
     if n = 0 then
     begin
@@ -228,9 +228,9 @@ begin
         rule no skin defines AND leave a StyleClass on a control the host never styled. The
         base's ApplyToButton skips them for the same reason; this override has its own copy of
         the flat rule and so needs its own copy of the exception. }
-      if (list[i] is TTyButton)
-         and not ((list[i] is TTyToolButton)
-                  and (TTyToolButton(list[i]).Style in [tbsSeparator, tbsDivider])) then
+      if (kids[i] is TTyButton)
+         and not ((kids[i] is TTyToolButton)
+                  and (TTyToolButton(kids[i]).Style in [tbsSeparator, tbsDivider])) then
       begin
         { Only manage a class the bar itself put there -- the same rule TTyToolBar's
           ApplyToButton follows. Assigning unconditionally (which is what this did) wiped
@@ -240,14 +240,19 @@ begin
           ApplyToButton, kept the old line. }
         if Flat then
         begin
-          if TTyButton(list[i]).StyleClass = '' then
-            TTyButton(list[i]).StyleClass := 'ghost';
+          if TTyButton(kids[i]).StyleClass = '' then
+            TTyButton(kids[i]).StyleClass := 'ghost';
         end
         else
-          if TTyButton(list[i]).StyleClass = 'ghost' then
-            TTyButton(list[i]).StyleClass := '';
+          if TTyButton(kids[i]).StyleClass = 'ghost' then
+            TTyButton(kids[i]).StyleClass := '';
       end;
-      widths[i] := list[i].Width;
+      { The base bar's ButtonWidth floor, through the base's own arbitration — the overflow
+        fit must be decided over the widths the buttons will actually be laid out at, or a
+        floored button would be judged to fit by its narrower natural width. With ButtonWidth
+        unset this is exactly kids[i].Width. (For a button this pass then HIDES, the recorded
+        lend self-heals — see EffectiveToolWidth.) }
+      widths[i] := EffectiveToolWidth(kids[i]);
     end;
 
     chevW := ChevronWidthPx;
@@ -263,18 +268,20 @@ begin
     x := Indent;
     for i := 0 to n - 1 do
     begin
-      list[i].Align := alNone;
+      kids[i].Align := alNone;
       if i < visCount then
       begin
-        list[i].SetBounds(x, padY, list[i].Width, ButtonHeight);
-        list[i].Visible := True;
-        Inc(x, list[i].Width + ButtonSpacing);
+        // The FLOORED width the fit was decided over, not kids[i].Width — same rule as the
+        // base bar's SetBounds, and the two are equal until ButtonWidth is set.
+        kids[i].SetBounds(x, padY, widths[i], ButtonHeight);
+        kids[i].Visible := True;
+        Inc(x, widths[i] + ButtonSpacing);
       end
       else
       begin
-        list[i].Visible := False;
+        kids[i].Visible := False;
         SetLength(FOverflow, Length(FOverflow) + 1);
-        FOverflow[High(FOverflow)] := list[i];
+        FOverflow[High(FOverflow)] := kids[i];
       end;
     end;
 

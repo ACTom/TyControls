@@ -129,6 +129,7 @@ end;
 - **自动、无开关：** `»` 的显示 / 隐藏由每次重排时的 fit 计算自动决定，没有 published 属性来手动控制它。
 - **溢出按钮仍然工作：** 被折进浮层的按钮只是**临时改 `Parent`** 到浮层，控件实例不变——`OnClick` 照常触发；浮层关闭后它们被移回工具条（保持隐藏，直到下次重排重新决定谁放得下）。
 - **变宽会恢复：** 每次布局都在**完整按钮集**上重算，因此工具条变宽后先前隐藏的尾部按钮会自动重新显示。
+- **`ButtonWidth` 下限也管溢出判定：** 基类的宽度下限（[toolbar.md 3.1](toolbar.md#31-ttytoolbar-自有-published-属性)）经同一个 `EffectiveToolWidth` 进入 fit 计算——判定用的是按钮**将被排布**的宽度，而不是它较窄的自然宽度，否则一个被垫宽的按钮会被误判"放得下"再画到 chevron 底下。由 `TToolBarExControlTest.TestOverflowFitUsesFlooredWidths` 钉住。
 - **`»` 不进设计器、不进溢出集：** chevron 是 `csNoDesignVisible` 的内部子控件，在布局扫描中被跳过，不会被误当成一个溢出内容按钮。
 - **子按钮释放：** 溢出集按子控件记录，某子按钮被 `Free` 时经 `Notification` 自动剔除。
 - **点击浮层里的项 = 真实机器行为：** fit 决策与"哪些按钮被隐藏"的集合是 headless 可测的；`»` 弹出浮层、把按钮移入、路由点击这部分薄壳逻辑需在真实 GUI 上验证。
