@@ -121,6 +121,69 @@ Linux and macOS.
   directly. **Assignment never changes the grid's structure** (a shorter list leaves
   the tail alone, a longer one is truncated), matching LCL exactly.
 
+### Fixed -- this round of user and forum reports
+
+- **A click on a radio item moved the dot but not the focus ring** — you had to click twice.
+  Two correct rules collided: the group gives TabStop only to the CHECKED item (as LCL does),
+  and the base class uses TabStop to decide whether a click takes focus — so the only item a
+  click could focus was the one already selected. LCL escapes this because its children are
+  native radio buttons and Windows focuses a clicked control regardless of TabStop.
+- **Every row in a radio/check group overlapped the one above it.** The pitch came from
+  `--row-height` (22) while a hosted item's own minimum height is 25, and LCL clamps every
+  SetBounds up to the minimum — so rows overlapped by 3px, and the lower row (a later sibling,
+  higher in the z-order) painted over the bottom of the focus ring above it. The last row had
+  nothing below it, which is why it alone looked right.
+- **Children erased the bottom border of CoolBar / ToolBarEx / ControlBar** — layout used a
+  client rect that was not inset by the painted frame.
+- **The CoolBar gripper resized the wrong band.** A real rebar gripper moves the BOUNDARY with
+  the neighbour to its left; ours resized the dragged band itself. A row's first band has no
+  boundary, so the gesture becomes a move, as in LCL.
+- **CoolBar bands can be reordered now** — drag past a neighbour to swap, below the last row for
+  a row of its own. The code's claim that this was impossible was wrong:
+  `TWinControl.SetControlIndex` places a child anywhere in its parent's list, and the packer
+  reads that list, so moving the child IS the reorder.
+- **Scroll box: flicker while dragging the thumb, and content that did not follow.** The bar's
+  position was computed by TWO formulas that disagreed by the border width, so every scroll step
+  moved both bars and moved them back, each SetBounds re-entering the align pass — 12 drag steps
+  cost 120 align rounds, now 24. Separately, when a viewport exists the content lives in the
+  viewport while the scroll-origin hooks sat on the outer box: aligned children inside a viewport
+  did not move at all.
+- **`goHeaderPushedLook` and `goThumbTracking` now work.** The latter can also be set per axis:
+  `Grid.VScrollBar.LiveTracking := False`.
+- **Ctrl+X on the grid** — the gesture never existed, only the public method.
+- **Grid-panel cells showed the system background under a gradient theme**: `TTyGridCell.Paint`
+  was empty AND it borrowed the data grid's theme key, which is transparent by design. It has
+  its own key now and inherits the parent's painted background — not a flat fill, which would
+  have flattened every gradient.
+- **Bevel highlights glowed on dark themes** — the blend pushed 55% toward white in both modes.
+- **A split drop-down button showed no divider under the default flat style**, making
+  `tbsDropDown` indistinguishable from `tbsButtonDrop` while behaving differently: the rule is
+  inked with the border colour, and a flat toolbar puts every tool in the `ghost` variant, whose
+  border colour is fully transparent.
+- **The drop arrow was drawn one padding away from where it was hit** — at the default padding
+  the drawn divider and some six pixels of drawn arrow ran the PRIMARY action. Both now read one
+  pure function.
+- **`TyForm { window-shadow: false; }` never removed the shadow** — see the previous section.
+- **Per-monitor DPI: dragging to a high-DPI screen and back left the layout wrong forever.**
+  Six controls write their size floor in device pixels, and LCL scales the same Constraints
+  again, so one crossing applies it TWICE: a button went 29 → 175 → **70**. The floor is no
+  longer recomputed during the DPI pass and is re-derived once on the settled PPI, so a round
+  trip restores the layout exactly. It also cut the synchronous pass by 42%, because the double
+  application was double caption MEASURING.
+- **42 examples shipped with no manifest at all** — every `.lpi` set `UseXPManifest`, but only 4
+  `.lpr` files linked the project resource, so the rest had neither common-controls v6 nor any
+  DPI-awareness declaration.
+
+### Added
+
+- **`TTyToolBar.HotImages` / `DisabledImages`** — a different GLYPH on hover/disabled (per-state
+  colour has always been the theme's job). Keyed by name, and consulted only when the tool is
+  already drawing the bar's own collection and the alternate contains that name.
+- **`TTyScrollBar.LiveTracking`** — with it off, dragging the thumb moves only the thumb and the
+  position commits on release.
+- **`TTyForm.StyleOverride`** — a form can take a runtime CSS snippet over its own chrome, the
+  way every other control can.
+
 ### Added -- a new control: `TTyFloatSpinEdit`
 
 - **The decimal spin edit**: `Value: Double`, `Decimals`, `Increment` (**may be below 1** -- a

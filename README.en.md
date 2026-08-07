@@ -62,7 +62,7 @@ shows how far a theme can go — translucent controls floating over a photo back
   dragging out to a 250% screen and back returns the layout to where it started.
 - **Internationalised** — the library's own UI strings go through `resourcestring` + `.po`,
   shipped in English and Simplified Chinese.
-- **3949 unit tests**, whole suite leak-free (heaptrc-verified). Appearance additionally has a
+- **6016 unit tests**, whole suite leak-free (heaptrc-verified). Appearance additionally has a
   pixel-level golden guard — every change to a theme's resolved styles must be deliberate.
 
 ---
