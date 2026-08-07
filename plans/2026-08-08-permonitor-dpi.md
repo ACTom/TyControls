@@ -55,10 +55,21 @@ Consequences, both worth stating:
   by running them, which is why it reached a user first.
 - Antek's own app declares PMv2, so he is on a path the library had never run.
 
-Not changed here: flipping the examples to `PerMonitorV2` is a real behaviour change for
-every example and belongs with whoever owns `examples/`. It is, however, the only way this
-class of bug gets caught in-house. **Recommended: set `DpiAware = True/PM` on at least
-`examples/containers` and `examples/demo` and re-shoot their screenshots.**
+**DONE (ac2363).** `examples/containers` and `examples/demo` now declare
+`<DpiAware Value="True/PM_V2"/>`, which is the value the IDE writes for PerMonitorV2 and
+which emits `<dpiAwareness>PerMonitorV2, PerMonitor</dpiAwareness>` into the manifest.
+Both still build and open.
+
+One thing the flip uncovered: **`examples/containers/containers_example.lpr` had no
+`{$R *.res}`**, so its project resource was never linked and `UseXPManifest = True` had
+been doing nothing at all — no common-controls v6 either. The `.lpi` change alone would
+have been cosmetic there. Verified the fix by searching the built `.exe` for the
+`<dpiAwareness>` element: absent before, present after. Worth a sweep of the other 44
+examples for the same missing line; not done here.
+
+The remaining 44 examples are still DPI-unaware. Flipping them is a real behaviour change
+per example and still belongs with whoever owns `examples/`; two are enough to make the
+defect class reachable in-house.
 
 ---
 
@@ -130,18 +141,45 @@ Indistinguishable against a canary that itself ranged 320–614 ms. LCL already 
 recursion in `DisableAutoSizing`/`EnableAutoSizing`, so there was little left to collapse.
 **Do not re-add it without a measurement that clears the noise floor.**
 
-### 2e. The next lever, and why it is not mine
+### 2e. The next lever — CONFIRMED, and half of it is already gone (ac2363)
 
-The remaining suspect is the controls' own re-fit work, which runs *inside* that synchronous
-pass: `TTyButton.Invalidate` triggers an AutoSize re-fit (note the `FRefitting` re-entry
-guard at `tyControls.Button.pas:28`), and that re-fit **measures the caption** through BGRA.
-The DPI pass changes the font and the bounds of every control, so every control re-measures
-its text, repeatedly. That is the same family as the already-known
-`memory/memo-text-perf` (uncached text measurement) finding.
+The suspect was the controls' own re-fit work running *inside* the synchronous pass:
+`TTyButton.Invalidate` triggers an AutoSize re-fit (note the `FRefitting` re-entry guard at
+`tyControls.Button.pas:28`) and that re-fit **measures the caption** through BGRA. Same
+family as `memory/memo-text-perf`.
 
-To confirm: instrument `MeasureCaption`/`CalculatePreferredSize` with a call counter and a
-QPC total, run the injected transition, and compare against the 1.8 s. If it lands, the fix
-is a per-(text, font, PPI) measurement memo, and it belongs in the control base.
+Measured, without touching the library: both measuring methods (`CalculatePreferredSize`
+and the new `DoUpdateSizeConstraints`) are virtual, so a probe subclass wraps them with QPC.
+60 controls, 96 → 240, injected exactly as §0 describes. Both arms built and run
+**alternately in the same load window**, 3 samples each; the per-call cost is carried as the
+canary and is identical across arms, so the difference is call COUNT and not machine load.
+
+| 60 controls, 96 → 240 | synchronous pass (median) | inside caption measurement |
+|---|---|---|
+| before the §4 fix (guard removed) | **1070 ms** | 791 ms in **1120** calls — 74% |
+| after the §4 fix | **622 ms** | 362 ms in **480** calls — 57% |
+| per measuring call, both arms | — | 0.70–0.76 ms (the canary) |
+
+Two readings, both honest:
+
+1. **The suspicion was right.** Caption re-measurement is 57–74% of the synchronous pass —
+   i.e. the majority of the ~73% of the transition that §2c located there. Nothing else in
+   the pass comes close.
+2. **Roughly half of that work was redundant** and the §4 correctness fix removed it as a
+   side effect: suppressing the mid-pass floor recompute takes the measuring calls from
+   1120 to 480 and the synchronous pass from ~1.07 s to ~0.62 s, a **42% cut**, with no
+   optimisation work at all. The double measurement and the double scaling were the same
+   defect seen from two sides.
+
+**Still on the table, NOT built:** the remaining 480 calls (~0.36 s at 60 controls, and it
+is linear in control count) are genuine first-time measurements at the new PPI. Killing
+them needs a per-`(text, font-name, size, weight, PPI)` measurement memo in the control
+base. It was not attempted here because its risk is not performance but *staleness*: every
+one of these controls re-measures precisely because a theme switch arrives as a bare
+`Invalidate`, and a memo keyed on the wrong tuple silently keeps the old theme's width —
+which is the ellipsised-toolbar-button bug those `Invalidate` overrides were written to
+fix. The key must include the resolved style's font identity, not just the caption. Budget
+it as its own change with its own theme-switch test.
 
 **Hypotheses from the brief that did NOT hold** — do not re-test these:
 
@@ -193,7 +231,7 @@ Verified by the harness: **`FORM` and `TITLEBAR` bounds now round-trip byte-iden
 
 ---
 
-## 4. "Broken forever" — NOT the chrome. It is the controls' `Constraints` floor.
+## 4. "Broken forever" — NOT the chrome. It is the controls' `Constraints` floor. FIXED.
 
 Harness output after the chrome fix, 96 → 240 → 96:
 
@@ -219,26 +257,193 @@ Each computes `Constraints.MinWidth/MinHeight` in device px from the live
 way the title bar's did — the observed 29 → 175 is `floor(240dpi) × 2.5` — except this one
 does not come back, because the floor re-clamps `Height` on the way down.
 
-**NOT FIXED HERE: those files belong to other agents this round.**
+**FIXED (ac2363).** What follows is what was built, what the original specification got
+wrong, and what is still true and not fixed.
 
-### Specification for whoever picks it up
+### 4a. Two corrections to the diagnosis above
 
-The invariant to restore is the one the chrome now obeys: *PPI-derived state must be a pure
-function of (PPI-independent input, current PPI) — never `X := f(X)`.*
+**`ChangeScale`/`ScaleConstraints` are not on this path.** The composition is
+`TControl.DoAutoAdjustLayout` → `Constraints.AutoAdjustLayout` (`control.inc:3232` →
+`sizeconstraints.inc:267`), which multiplies `MinWidth/MinHeight` by the proportion.
+`ScaleConstraints` is only reached from `ChangeScale`, which the per-monitor path never
+calls. The arithmetic is the same either way, so the conclusion stands; the file:line does
+not.
 
-Concretely, in `tyControls.Base.pas` (shared base, so it is one change rather than five):
+**The trigger is LCL's own font scaling, not a stray repaint.** `TControl.AutoAdjustLayout`
+calls `ScaleFontsPPI` **before** `DoAutoAdjustLayout` (`control.inc:4224`); that sets
+`Font.PixelsPerInch` to the new value, `TControl.FontChanged` calls `Invalidate`
+(`control.inc:623`), and every one of these controls recomputes its floor from its
+`Invalidate` override. So by the time LCL scales `Constraints`, the control has *already*
+re-derived them at the new PPI. That is the second application, and knowing it is what
+makes the fix one line rather than a redesign.
 
-1. Add a protected `procedure ApplyMetricFloor(AMinW, AMinH: Integer)` that records the
-   **logical** floor and the PPI it was computed at, and writes `Constraints` from that pair.
-2. Override `TControl.DoAutoAdjustLayout` (currently overridden **nowhere** in the entire
-   library — `grep` for it returns zero hits, which is the deeper finding) in the TyControls
-   windowed and graphic bases so that the control re-derives its floor at the new PPI
-   **instead of** letting LCL multiply the recorded one. LCL's `ScaleConstraints` must not
-   also run on a value the control re-derives.
-3. Pin it with the same three shapes used for the title bar:
-   *scales with PPI*, *idempotent at one PPI*, *exact across three 96→240→96 trips*.
+### 4b. What was built
 
-Verification cannot be headless: `AutoSizeDelayedHandle` means the align engine never runs
-without a shown window (`memory/headless-tests-never-run-lcl-align`). Use the harness in §0
-— a shown form plus a bounds dump — and keep the plain-LCL control group in it, because
-that control group is the only reason the ownership question was answerable in one run.
+`tyControls.Base.pas`, twice — the two bases descend from `TGraphicControl` and
+`TCustomControl` and share no ancestor below `TControl`:
+
+- `UpdateSizeConstraints` becomes a **guarded entry point** that no-ops while the DPI pass
+  is running on this control; the work moves to a new virtual `DoUpdateSizeConstraints`.
+  Every existing call site is unchanged, so the guard cannot be forgotten at one of them.
+  **This is the fix**; everything else here is secondary.
+- `AutoAdjustLayout` is overridden (**it was overridden nowhere in the library before** —
+  that part of the finding was exactly right) to raise the flag around `inherited` and then,
+  with the flag clear, re-derive the floor once at the settled PPI.
+
+**A third correction, and the one that cost the most: `ParentFont`.** The re-derivation
+above must NOT run when the control's font has not yet reached the new PPI, and for the LCL
+default (`ParentFont = True`) it has not. `TControl.AutoAdjustLayout` brackets the pass with
+`savedParentFont := ParentFont … finally ParentFont := savedParentFont`
+(`control.inc:4221/4228`), and restoring `ParentFont` **re-copies the parent's font**, which
+is still at the old PPI because `TWinControl.AutoAdjustLayout` walks the children *before*
+itself (`wincontrol.inc:3932`). So a ParentFont child leaves its own pass with the font it
+started with; the new one arrives later, through the parent's pass and
+`CM_PARENTFONTCHANGED`, which reaches `Invalidate` and re-derives the floor correctly with
+the guard already down.
+
+Hence the `Font.PixelsPerInch = AToPPI` test on the post-pass call. Without it, the first
+version of this fix measured the caption at the OLD PPI and (via a bounds-clamping step
+since removed) left `TTyButton` at **175x70 having started at 100x29** — the crossing looked
+right and the return was still "broken forever", by a different route. The unit tests all
+passed while that was true, because pinning a control's own font to make the harness
+host-independent sets `ParentFont := False`. Caught by the §0 probe, which uses the LCL
+default. `TestRoundTripsWithTheLclDefaultParentFontToo` now covers it.
+
+The six controls that own a floor rename their method to `DoUpdateSizeConstraints; override`
+and change nothing else: `TTyButton`, `TTyCheckBox`, `TTyRadioButton`, `TTyToggleSwitch`,
+`TTyButtonGroup`, `TTyLabel`. A sweep of `source/` for device-px `Constraints` writes found
+no others — the remaining writes are one-shot LOGICAL values in dialog constructors
+(`Dialogs.FileDialog.pas:297`, `Dialogs.Font.pas:133`, `Dialogs.SelectPath.pas:157`,
+`Dialogs.pas:877`), which LCL scales correctly and reversibly, exactly like a plain
+`TButton`'s. `TTyToolButton` inherits `TTyButton`'s and needs nothing.
+
+Note the shape of the cure, because it is NOT what the specification above proposed. The
+floor is **not** converted to a stored logical value scaled by `MulDiv`. It stays MEASURED
+at the live PPI, because a measured floor is the only kind that cannot drift from what the
+control actually draws — that is what those long comments in the controls are defending,
+and a `MulDiv`-scaled floor would re-introduce the clipping they exist to prevent. It is
+already a pure function of PPI; the defect was only that it was being applied twice.
+
+### 4c. Verification — and it IS headless
+
+The whole defect reproduces without a window handle. `memory/headless-tests-never-run-lcl-align`
+is about the ALIGN engine; `AutoAdjustLayout` is a direct recursion over `Controls[]` that
+never asks the align engine for anything. Confirmed identical with a shown window.
+
+`TControlDpiRoundTripTest` in `tests/test.form.pas`, 7 tests, keeping the plain-LCL control
+group in the form for exactly the reason given above. Before/after on the §0 probe (a shown
+window, LCL-default `ParentFont`):
+
+| control | before: 96 → 240 → 96 | after |
+|---|---|---|
+| `TButton` (plain LCL) | 26 → 65 → **26** | unchanged |
+| `TTyEdit` | 26 → 65 → **26** | unchanged |
+| `TTyButton` | 29 → 175 → **70** | 29 → 72 → **29** |
+| `TTyLabel` | 26 → 100 → **40** | 26 → 65 → **26** |
+| `TTyCheckBox` | 26 → 150 → **60** | 26 → 65 → **26** |
+| `TTyToggleSwitch` | w 120 → 488 → 195 → **219** (3 trips) | 120 → 300 → **120** |
+| `TTyButtonGroup` | 28 → 98 → **39** | 28 → 70 → **28** |
+
+### 4d. Two limits this fix does NOT remove — read before "improving" the test
+
+**A control sitting exactly on its floor ratchets.** LCL scales bounds and `Constraints`
+**proportionally**; a measured floor is **not** exactly proportional to PPI (a caption's ink
+is quantised per glyph, and how far from linear depends on the font). A control with no
+slack therefore grows at the high PPI — correctly, it needs the pixels — and the
+proportional return cannot know to undo it. Measured: with an unpinned system font,
+`TTyCheckBox` at exactly its floor came back 4 px wider, `TTyToggleSwitch` 10 px. It
+converges after one trip rather than diverging, but it is not byte-exact. That is why
+`TControlDpiRoundTripTest` keeps `TySlack` = 4 logical px above each floor, with both bounds
+on that number stated at the constant. Closing the gap for real would mean scaling bounds
+from LCL's remembered `FBaseBounds` rather than from the current ones — changing what LCL
+does — and was not attempted.
+
+**A control can be ~1 px under its floor immediately after a crossing.** `Round(21 × 2.5)`
+is 52 (FPC's `Round` is half-to-even) against a re-derived floor of 53. It is corrected by
+the next `SetBounds` of any kind, since that is where `Constraints` are applied.
+
+A version of this fix DID push the bounds up at the end of the pass (`ApplySizeFloorToBounds`)
+and it was **built, measured and removed**: it does not survive the parent's own pass, which
+ends in `EnableAutoSizing` whose deferred autosize restores the child from `FBaseBounds` and
+puts the pixel straight back. It worked in the configuration it was written against and
+silently did nothing in others, which is worse than a documented tolerance. Do not re-add it
+without a test that shows it holding after the FORM's pass, not just the control's.
+
+### 4e. Mutants — including two that SURVIVED, and why they are kept anyway
+
+| # | what was broken | result |
+|---|---|---|
+| M1a | guard removed from `TTyCustomControl.UpdateSizeConstraints` | **killed** — `TTyButton: 96->240 should scale by about 240/96, got 30 -> 162` + 3 more |
+| M1b | guard removed from `TTyGraphicControl.UpdateSizeConstraints` only | **killed** — `TTyLabel: one 96->240 crossing applied the factor TWICE (18 -> 88)` |
+| M3 | `TTyButton.Invalidate` calls `DoUpdateSizeConstraints` directly, bypassing the guard (the brief's required mutant: a control mutating its own Constraints) | **killed** — `TTyButton: width after three 96->240->96 trips expected <70> but was <165>` |
+| M2 | post-pass re-derivation deleted (LCL's proportional rescale left as the final floor) | **SURVIVED** |
+| M5 | the `Font.PixelsPerInch = AToPPI` condition deleted | **SURVIVED** |
+
+M1b is worth its own line: it survived the FIRST version of this test class, because
+`TTyLabel` was 26 px tall against a 9 px floor and even a doubly-scaled floor still fitted
+inside the box — a textbook centre probe. Sizing every control off its own floor instead of
+off a designer's round number is what turned the class into an edge probe.
+
+**M2 and M5 survive, and the code is kept.** Both are first-suspected weak guards, and that
+is the right suspicion — here is what was tried and what the evidence is:
+
+- **M2.** Two harsher probes were built and both still passed it: crossing to 137 rather
+  than 240 (a non-round ratio), and comparing the crossed floor against a control *born* at
+  that PPI (`TestFloorAfterCrossingEqualsFloorBornAtThatPPI`). The reason is that with the
+  harness's pinned 9 pt font every floor rescales to exactly the value a fresh measurement
+  gives, so "re-derived" and "rescaled" are the same number. They separate only where a
+  caption's ink is non-linear in PPI, and the clean font is not. Kept because it is what
+  makes the floor `F(current PPI)` rather than a product of round-off factors — the
+  invariant the whole document is about — and because deleting it would leave the floor
+  provisional until the next repaint.
+- **M5.** Made observable, once: adding an `AutoSize` control to the harness killed it
+  (100 -> 165), because an AutoSize control resizes the instant `Constraints` move, through
+  `DoConstraintsChange -> AdjustSize`, so a floor computed at the wrong PPI shows up in its
+  bounds immediately. That control was then **removed** from the harness — AutoSize does not
+  run headless (`AutoSizeDelayedHandle`, `memory/headless-tests-never-run-lcl-align`), so it
+  drifted 100 -> 165 -> 165 even with correct code and would have been a false red. The
+  condition is kept on that evidence plus the direct measurement in §4b.
+
+Both survivors want the same thing to become observable: **a shown-window test**. The §0
+probe is exactly that and it catches both; it is not in the suite because the suite is
+headless. If someone builds a GUI test target, port the probe into it first.
+
+### 5. A SECOND latch, found by this work, NOT fixed
+
+`Font.Height` defaults to 0, meaning "the widgetset default". LCL's DPI pass **replaces**
+that 0 with an explicit value on the FIRST crossing, deliberately, so that the font scales
+at all — `DoScaleFontPPI`, `control.inc:1972-1973`:
+
+```pascal
+if (AFont.Height = 0) and not (csDesigning in ComponentState) then
+  AFont.Height := MulDiv(GetFontData(AFont.Reference.Handle).Height,
+                         AFont.PixelsPerInch, Screen.PixelsPerInch);
+```
+
+The reference is **`Screen.PixelsPerInch`**, not the form's. Those agree on the machine that
+drew the form and disagree everywhere else, and the ratio is applied ONCE and never undone.
+So a form whose `Font.PixelsPerInch` is 96 (which is what `Application.Scaled` gives it,
+`customdesigncontrol.inc:21`) running with a 144-DPI *primary* monitor has every caption
+permanently rescaled by 96/144 the first time the window crosses a monitor boundary — before
+any of the library's own code runs.
+
+Measured here in the console runner, which reports `Screen.PixelsPerInch` = 72 against fonts
+at 96, so the factor is 96/72 = 1.33: across one 96→240→96 trip `TTyCheckBox`'s floor goes
+70x17 → 78x20 and `TTyToggleSwitch`'s width floor 108 → 126, and neither comes back. Same
+family as everything above — PPI-derived state latched instead of derived — but it happens
+one layer below this library and a control cannot see it coming.
+
+Not fixed, and not guard-shaped. Once LCL has written a height there is nothing left to
+distinguish "the author chose 12 pt" from "LCL wrote 12 pt on the way past", so any fix has
+to decide what an unset font size means. Two candidates, neither tried: remember before the
+pass whether `Font.Height` was 0 and restore that afterwards (self-drawn controls read the
+THEME's size, not `Font`, so it would cost them nothing — but it changes what
+`Control.Font` reports to anything else that reads it); or make `TyResolveFontSize`
+(`tyControls.Base.pas:1691`, whose last fallback is the control's `Font.Size`) prefer the
+theme over a height it did not author. The blast radius is every control's font resolution
+and the interesting case cannot be reproduced from here — it needs a machine whose primary
+monitor is not 96 DPI.
+
+`TControlDpiRoundTripTest` keeps this out of the round-trip tests by giving the FORM an
+explicit `Font.Size := 9`, so a ParentFont child inherits a non-zero height and LCL never
+has to invent one. The pin says so, at the pin.

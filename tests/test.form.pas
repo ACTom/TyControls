@@ -5,11 +5,16 @@ unit test.form;
 interface
 
 uses
-  Classes, SysUtils, Types, Controls, Graphics, Forms, Menus, LCLType, LMessages,
+  Classes, SysUtils, Types, Controls, Graphics, Forms, Menus, StdCtrls, LCLType, LMessages,
   BGRABitmap, BGRABitmapTypes,
   fpcunit, testregistry,
   tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.Form,
   tyControls.Base, tyControls.Menu, tyControls.ThemeRegistry, tyControls.BuiltinThemes,
+  { ac2363: the control half of the same per-monitor DPI report -- see
+    TControlDpiRoundTripTest. StdCtrls is here for the plain LCL TButton that rides in the
+    same form as the control group. }
+  tyControls.Button, tyControls.CheckBox, tyControls.TyLabel, tyControls.ToggleSwitch,
+  tyControls.ButtonGroup, tyControls.Edit,
   tyControls.WindowEffects;   // TyLastWindowEffect/TyWindowEffectApplies apply-pipe seam
 
 type
@@ -193,6 +198,67 @@ type
     procedure TestExplicitButtonWidthRoundTripsExactly;
   end;
 
+  { ===== ac2363: the CONTROL half of the same per-monitor DPI report ==========
+    a6256 fixed the chrome (the title bar was multiplying an already-scaled height).
+    The controls had the same shape one layer down, and it is what the tester meant
+    by "layout broken FOREVER": a control that writes a DEVICE-px Constraints floor
+    recomputed that floor from the new Font.PixelsPerInch (LCL's ScaleFontsPPI runs
+    first, control.inc:4224, and the font change reaches Invalidate) WHILE LCL was
+    independently scaling the very same Constraints (control.inc:3232). One crossing,
+    two applications.
+
+    Measured on this harness before the fix, 96 -> 240 -> 96:
+
+      TButton  (plain LCL)  26 ->  65 ->  26   exact       <- the control group
+      TTyEdit               26 ->  65 ->  26   exact
+      TTyButton             29 -> 175 ->  70   *** stuck ***
+      TTyLabel              26 -> 100 ->  40   *** stuck ***
+      TTyCheckBox           26 -> 150 ->  60   *** stuck ***
+      TTyToggleSwitch      120 -> 488 -> 195 -> 219 (w)     *** and COMPOUNDING ***
+
+    The plain LCL button and TTyEdit are IN THE SAME FORM on purpose: they are the
+    control group that makes "this is ours, not LCL's" answerable in one run, and
+    TTyToggleSwitch is the reason the trip count is three -- its width kept climbing
+    on trips a single there-and-back never reached.
+
+    These run headless. The plan for this work said verification could not be
+    (citing memory/headless-tests-never-run-lcl-align), and that is true of the
+    ALIGN engine but not of this: AutoAdjustLayout is a direct recursion over
+    Controls[], it never asks the align engine for anything, and the whole defect
+    reproduces without a handle. Confirmed identical with a shown window. }
+  TControlDpiRoundTripTest = class(TTestCase)
+  private
+    { False = leave the LCL default ParentFont = True; see Build and
+      TestRoundTripsWithTheLclDefaultParentFontToo. }
+    FPinOwnFont: Boolean;
+    { >= 0: shrink every control to its own floor plus this many logical px, which is what
+      makes most of these tests edge probes. < 0: leave the designed bounds alone. }
+    FTighten: Integer;
+    FForm: TTyForm;
+    FCtl: TTyStyleController;
+    FCtls: array of TControl;
+    FNames: array of string;
+    FStart: array of TRect;
+    procedure Track(const AName: string; ACtl: TControl);
+    procedure Build(APPI: Integer = 96);
+    procedure SitOnFloor(ASlackPx: Integer);
+    procedure Cross(APPI: Integer);
+    procedure SnapStart;
+    function BoundsOf(AIndex: Integer): TRect;
+    procedure AssertThreeTripsAreExact;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestPlainLclControlRoundTripsExactly;
+    procedure TestEveryControlRoundTripsExactlyOverThreeTrips;
+    procedure TestRoundTripsWithTheLclDefaultParentFontToo;
+    procedure TestFloorScalesWithPPI;
+    procedure TestSingleCrossingDoesNotSquareTheFactor;
+    procedure TestCrossingIsIdempotentAtOnePPI;
+    procedure TestFloorAfterCrossingEqualsFloorBornAtThatPPI;
+  end;
+
   TRescaleMetricTest = class(TTestCase)
   published
     procedure TestScaleUp;
@@ -365,7 +431,21 @@ type
 
 implementation
 
+const
+  { ac2363: logical px of headroom TControlDpiRoundTripTest leaves above each control's own
+    floor. Small enough that a DOUBLE-scaled floor (~6.25x at 240, against a box of 2.5x)
+    still overflows the box -- that is what makes the class an edge probe, and a mutant
+    proved it necessary. Large enough to absorb the measurement's own non-linearity in PPI.
+    See TControlDpiRoundTripTest.Build. }
+  TySlack = 4;
+
 type
+  { ac2363: ParentFont is PROTECTED on TControl (published only from TWinControl down), and
+    TControlDpiRoundTripTest holds its controls as plain TControl so that a plain LCL
+    TButton can ride in the same array as the control group. A descendant declared here
+    reaches the protected member. }
+  TParentFontAccess = class(TControl);
+
   TCaptionButtonAccess = class(TTyCaptionButton)
   public
     procedure SmokeRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -2661,6 +2741,396 @@ begin
   end;
 end;
 
+{ ===== ac2363: TControlDpiRoundTripTest ===================================== }
+
+procedure TControlDpiRoundTripTest.Track(const AName: string; ACtl: TControl);
+begin
+  SetLength(FCtls, Length(FCtls) + 1);
+  SetLength(FNames, Length(FCtls));
+  SetLength(FStart, Length(FCtls));
+  FCtls[High(FCtls)] := ACtl;
+  FNames[High(FCtls)] := AName;
+end;
+
+procedure TControlDpiRoundTripTest.Build(APPI: Integer);
+{ One form, eight controls, all of them at a genuine APPI (96 unless a caller says otherwise)
+  and an explicit font size. Every design number below is written at 96 and scaled by APPI/96
+  on the way in, so Build(240) produces the form a machine whose ONLY monitor is 250% would
+  have built -- which is what TestFloorAfterCrossingEqualsFloorBornAtThatPPI compares against.
+
+  Both normalising lines are load-bearing; neither is there to make the test pass.
+
+  Font.PixelsPerInch := 96 -- TFont is born at the SCREEN's PPI (font.inc:625) and the
+  console runner reports 72, so without this the "before" state would be measured at a PPI
+  the trip never returns to, and the round trip would be asserted against a start that never
+  existed on a 96 DPI monitor.
+
+  TySlack is the logical px of headroom each control keeps above its own floor -- small
+  enough to keep this an edge probe, large enough to absorb the measurement's own
+  non-linearity in PPI. See the loop at the bottom.
+
+  Font.Size := 9 -- pins the caption measurement so it says the same thing before and after
+  the trip. Leaving it at 0 hits a SEPARATE latent defect that would otherwise be blamed on
+  this one: with Font.Height = 0 (the default) LCL's DPI pass ASSIGNS an explicit height on
+  the first crossing (DoScaleFontPPI, control.inc:1972-1973), so Font.Size goes 0 -> 12; and
+  TyResolveFontSize's last fallback (tyControls.Base.pas:1705) uses the control's Font.Size
+  whenever the theme supplies neither a per-type font-size nor --font-size-base. The caption
+  is then measured with a bigger font after the crossing than before it, permanently.
+  Measured with Size unset: TTyCheckBox's floor 70x17 -> 78x20, TTyToggleSwitch's 108 -> 126,
+  and neither comes back. Same family (PPI-derived state latched instead of derived), a
+  DIFFERENT defect, written up in plans/2026-08-08-permonitor-dpi.md section 5 rather than
+  fixed here -- it needs a decision about what an unset font size means, not a guard. }
+var
+  i: Integer;
+  b: TButton;
+  e: TTyEdit;
+  tb: TTyButton;
+  lb: TTyLabel;
+  cb: TTyCheckBox;
+  rb: TTyRadioButton;
+  ts: TTyToggleSwitch;
+  bg: TTyButtonGroup;
+  function S(AValue: Integer): Integer;   // one design number, at APPI
+  begin
+    Result := MulDiv(AValue, APPI, 96);
+  end;
+
+begin
+  SetLength(FCtls, 0); SetLength(FNames, 0); SetLength(FStart, 0);
+  { A controller of this test's own, so the caption measurements do not depend on whichever
+    theme an earlier test happened to leave on TyDefaultController. That order-dependence is
+    not hypothetical: with the ambient theme the full suite leaves behind, TTyButton's width
+    floor at 240 is 175 px where 2.5x the 96 answer is 165, and the extra 10 px is enough to
+    ratchet a control that sits exactly on its floor. Declaring the tokens the floors are
+    derived from makes the run say the same thing whatever ran before it. No type rules --
+    an empty rule set for a typeKey falls through to the base layer, and writing partial
+    ones is how a theme erases a control (see memory/variant-only-rule-erases-control). }
+  FreeAndNil(FCtl);
+  FCtl := TTyStyleController.Create(nil);
+  FCtl.LoadThemeCss(':root { --font-size-base: 9; --line-height: 14; ' +
+                    '--checkbox-size: 14; --checkbox-gap: 6; }');
+
+  FForm := TTyForm.CreateNew(nil);
+  FForm.SetBounds(50, 50, S(640), S(480));
+  FForm.Font.PixelsPerInch := APPI;
+  { The FORM's font carries the explicit size, so that a ParentFont child inherits a
+    non-zero Font.Height and LCL never has to invent one. That conversion --
+    `if AFont.Height = 0 then AFont.Height := MulDiv(GetFontData(...).Height,
+    AFont.PixelsPerInch, Screen.PixelsPerInch)`, DoScaleFontPPI, control.inc:1972 -- uses
+    Screen.PixelsPerInch as its reference, and the console test runner reports 72 while
+    these fonts claim 96, so it would silently enlarge every caption by a third on the
+    FIRST crossing and never undo it. That is a property of the harness's screen, not of
+    the library, and it would otherwise be indistinguishable from a real drift. }
+  FForm.Font.Size := 9;
+
+  b := TButton.Create(FForm);   b.Parent := FForm;  b.SetBounds(S(10), S(10), S(100), S(26));
+  b.Caption := 'Plain LCL';                                Track('TButton (plain LCL)', b);
+  e := TTyEdit.Create(FForm);   e.Parent := FForm;  e.SetBounds(S(10), S(50), S(120), S(26));
+  e.Controller := FCtl;                                    Track('TTyEdit', e);
+  tb := TTyButton.Create(FForm); tb.Parent := FForm; tb.SetBounds(S(10), S(90), S(100), S(29));
+  tb.Caption := 'Ty button'; tb.Controller := FCtl;        Track('TTyButton', tb);
+  lb := TTyLabel.Create(FForm);  lb.Parent := FForm; lb.SetBounds(S(10), S(130), S(120), S(26));
+  lb.Caption := 'Ty label'; lb.Controller := FCtl;         Track('TTyLabel', lb);
+  cb := TTyCheckBox.Create(FForm); cb.Parent := FForm; cb.SetBounds(S(10), S(170), S(120), S(26));
+  cb.Caption := 'Ty check'; cb.Controller := FCtl;         Track('TTyCheckBox', cb);
+  rb := TTyRadioButton.Create(FForm); rb.Parent := FForm; rb.SetBounds(S(10), S(210), S(120), S(26));
+  rb.Caption := 'Ty radio'; rb.Controller := FCtl;         Track('TTyRadioButton', rb);
+  ts := TTyToggleSwitch.Create(FForm); ts.Parent := FForm; ts.SetBounds(S(10), S(250), S(120), S(26));
+  ts.Caption := 'Ty switch'; ts.Controller := FCtl;        Track('TTyToggleSwitch', ts);
+  bg := TTyButtonGroup.Create(FForm); bg.Parent := FForm; bg.SetBounds(S(10), S(290), S(200), S(28));
+  bg.Items.Text := 'One'#10'Two'#10'Three'; bg.Controller := FCtl;
+                                                           Track('TTyButtonGroup', bg);
+
+  for i := 0 to High(FCtls) do
+  begin
+    FCtls[i].Font.PixelsPerInch := APPI;
+    if FPinOwnFont then
+      FCtls[i].Font.Size := 9
+    else
+      { Put back what touching the font just cleared (TControl.FontChanged sets
+        FParentFont := False, control.inc:621). ParentFont = True is the LCL DEFAULT and it
+        takes a completely different route through the DPI pass -- see
+        TestRoundTripsWithTheLclDefaultParentFontToo. Re-copies the form's font, which the
+        line above has already put at APPI. }
+      TParentFontAccess(FCtls[i]).ParentFont := True;
+    FCtls[i].Invalidate;   // settles each control's own floor AT APPI, before anything moves
+  end;
+
+  { Now bring every control down to just above its own floor.
+
+    Sizing the box off the FLOOR rather than off a designer's round number is what makes
+    this an edge probe, and a mutant is why. With the original TTyLabel -- 26 px tall
+    against a 9 px floor -- even a floor that had been scaled TWICE (57 px) still fitted
+    inside the 65 px box the crossing produced, so nothing was ever clamped and the mutant
+    that deleted the graphic base's guard passed all six tests. The slack has to be small
+    enough that a doubled floor (~6.25x at 240, against a box of 2.5x) overflows it, which
+    at these floor sizes it does by tens of pixels.
+
+    Not ZERO slack, though, and the reason is worth stating because it is a real limit of
+    the fix rather than a convenience: a MEASURED floor is not exactly proportional to PPI,
+    while LCL scales bounds and Constraints proportionally. A control sitting exactly on its
+    floor therefore ratchets by however much the measurement is super-proportional -- it
+    grows at 240 and the proportional return cannot undo it. TySlack px of slack at 96 buys
+    2.5x that at 240, which absorbs the couple of pixels the measurement actually moves
+    under a pinned theme and font size. See plans/2026-08-08-permonitor-dpi.md section 4.
+
+    The second pass matters too: TTyToggleSwitch's WIDTH floor is derived from its Height
+    (the 44:24 pill), so shrinking the box moves the floor and the pair has to settle. }
+  if FTighten >= 0 then SitOnFloor(S(FTighten));
+  SnapStart;
+end;
+
+procedure TControlDpiRoundTripTest.SitOnFloor(ASlackPx: Integer);
+{ Size every control to its own floor plus ASlackPx. Twice, because two of these floors are
+  functions of the box as well as of the PPI and have to settle against each other. }
+var i, pass: Integer;
+begin
+  for pass := 1 to 2 do
+    for i := 0 to High(FCtls) do
+    begin
+      if FCtls[i].Constraints.MinHeight > 0 then
+        FCtls[i].Height := FCtls[i].Constraints.MinHeight + ASlackPx;
+      if FCtls[i].Constraints.MinWidth > 0 then
+        FCtls[i].Width := FCtls[i].Constraints.MinWidth + ASlackPx;
+      FCtls[i].Invalidate;
+    end;
+end;
+
+procedure TControlDpiRoundTripTest.Cross(APPI: Integer);
+{ Exactly what a monitor crossing does: TCustomForm.WMDPIChanged (customform.inc:2273)
+  turns WM_DPICHANGED into this one call. Nothing here is simulated except the message. }
+begin
+  FForm.AutoAdjustLayout(lapAutoAdjustForDPI, FForm.PixelsPerInch, APPI,
+    FForm.Width, MulDiv(FForm.Width, APPI, FForm.PixelsPerInch));
+end;
+
+function TControlDpiRoundTripTest.BoundsOf(AIndex: Integer): TRect;
+begin
+  Result := Rect(FCtls[AIndex].Left, FCtls[AIndex].Top,
+                 FCtls[AIndex].Width, FCtls[AIndex].Height);  // R/B carry W/H, not edges
+end;
+
+procedure TControlDpiRoundTripTest.SnapStart;
+var i: Integer;
+begin
+  for i := 0 to High(FCtls) do FStart[i] := BoundsOf(i);
+end;
+
+procedure TControlDpiRoundTripTest.SetUp;
+begin
+  inherited SetUp;
+  FPinOwnFont := True;
+  FTighten := TySlack;
+end;
+
+procedure TControlDpiRoundTripTest.TearDown;
+begin
+  FreeAndNil(FForm);
+  FreeAndNil(FCtl);
+  SetLength(FCtls, 0);
+  SetLength(FNames, 0);
+  SetLength(FStart, 0);
+  inherited TearDown;
+end;
+
+procedure TControlDpiRoundTripTest.TestPlainLclControlRoundTripsExactly;
+{ THE CONTROL GROUP, asserted first and on its own. If this one ever fails, the harness or
+  LCL is at fault and nothing else in this class means anything. Stated as its own test so
+  that distinction survives in the failure list rather than in someone's memory. }
+var r: TRect;
+begin
+  Build;
+  Cross(240);
+  Cross(96);
+  r := BoundsOf(0);
+  AssertEquals('plain LCL TButton width after 96->240->96', FStart[0].Right, r.Right);
+  AssertEquals('plain LCL TButton height after 96->240->96', FStart[0].Bottom, r.Bottom);
+  AssertEquals('plain LCL TButton top after 96->240->96', FStart[0].Top, r.Top);
+end;
+
+procedure TControlDpiRoundTripTest.TestEveryControlRoundTripsExactlyOverThreeTrips;
+{ THE "broken FOREVER" GUARD. Three trips, not one: TTyToggleSwitch's width was 195 after
+  one there-and-back and 219 after three, so a single trip hides exactly the error that
+  compounds -- and compounding is what "forever" means to the person dragging the window. }
+begin
+  Build;
+  AssertThreeTripsAreExact;
+end;
+
+procedure TControlDpiRoundTripTest.AssertThreeTripsAreExact;
+var i, t: Integer; r: TRect;
+begin
+  for t := 1 to 3 do
+  begin
+    Cross(240);
+    Cross(96);
+  end;
+  for i := 0 to High(FCtls) do
+  begin
+    r := BoundsOf(i);
+    AssertEquals(FNames[i] + ': left after three 96->240->96 trips', FStart[i].Left, r.Left);
+    AssertEquals(FNames[i] + ': top after three 96->240->96 trips', FStart[i].Top, r.Top);
+    AssertEquals(FNames[i] + ': width after three 96->240->96 trips', FStart[i].Right, r.Right);
+    AssertEquals(FNames[i] + ': height after three 96->240->96 trips', FStart[i].Bottom, r.Bottom);
+  end;
+end;
+
+procedure TControlDpiRoundTripTest.TestRoundTripsWithTheLclDefaultParentFontToo;
+{ THE SECOND ROUTE, and the one the first version of this test was blind to.
+
+  ParentFont = True is the LCL default, and it changes WHEN the control's font reaches the
+  new PPI. TControl.AutoAdjustLayout saves ParentFont and restores it in a finally
+  (control.inc:4221/4228), and restoring it re-copies the PARENT's font -- which is still at
+  the old PPI, because TWinControl.AutoAdjustLayout walks the children before itself. So on
+  exit from a ParentFont child's own pass its font is back where it started, and the new one
+  only arrives later, via the parent's pass and CM_PARENTFONTCHANGED.
+
+  A fix that re-derives the floor at the end of the child's own pass therefore measures at
+  the OLD PPI in this configuration and clamps the bounds to that. Measured before the
+  Font.PixelsPerInch = AToPPI test was added to tyControls.Base.pas: TTyButton went
+  100x29 -> 250x72 -> 175x70 -- the crossing looked right and the return was still
+  "broken forever". Every other test in this class pins the control's own font (which sets
+  ParentFont = False) and all of them passed while that was broken.
+
+  This one keeps the DESIGNED bounds rather than shrinking to the floor, because it probes
+  a different edge: the route the font takes, not the margin between the box and the floor.
+  Shrinking as well would stack the section-4d ratchet on top and confuse the two -- and
+  with an unpinned font that ratchet is larger, because the ink is the system font's and
+  further from linear in PPI. The defect this test exists for needs no tight box at all:
+  with the designed bounds and no fix, TTyButton ends at 175x70 having started at 100x29. }
+begin
+  FPinOwnFont := False;
+  FTighten := -1;
+  Build;
+  AssertThreeTripsAreExact;
+end;
+
+procedure TControlDpiRoundTripTest.TestFloorScalesWithPPI;
+{ The other half of the contract, and the reason the fix is not "stop scaling": a control
+  must actually FOLLOW the monitor. Asserted as a band around 2.5x rather than an absolute,
+  because the exact device height at 240 comes from a font measurement and is not required
+  to be linear -- only proportional. }
+var i, h240: Integer;
+begin
+  Build;
+  Cross(240);
+  for i := 0 to High(FCtls) do
+  begin
+    h240 := FCtls[i].Height;
+    AssertTrue(Format('%s: 96->240 must make it taller (%d -> %d)',
+      [FNames[i], FStart[i].Bottom, h240]), h240 > FStart[i].Bottom);
+    AssertTrue(Format('%s: 96->240 should scale by about 240/96, got %d -> %d',
+      [FNames[i], FStart[i].Bottom, h240]),
+      (h240 * 10 >= FStart[i].Bottom * 22) and (h240 * 10 <= FStart[i].Bottom * 29));
+  end;
+end;
+
+procedure TControlDpiRoundTripTest.TestSingleCrossingDoesNotSquareTheFactor;
+{ THE "far too tall" GUARD, in the form the report described. Double application squares
+  the factor: 2.5 becomes 6.25, and the measured TTyButton went 29 -> 175 (6.03x, the
+  shortfall being the font's own non-linearity). 4x is a floor no correct answer can reach
+  and no squared one can stay under, so it separates the two cases with room to spare. }
+var i: Integer;
+begin
+  Build;
+  Cross(240);
+  for i := 0 to High(FCtls) do
+    AssertTrue(Format('%s: one 96->240 crossing applied the factor TWICE (%d -> %d)',
+      [FNames[i], FStart[i].Bottom, FCtls[i].Height]),
+      FCtls[i].Height < FStart[i].Bottom * 4);
+end;
+
+procedure TControlDpiRoundTripTest.TestCrossingIsIdempotentAtOnePPI;
+{ Re-running the pass at the PPI the control is ALREADY at must not move it. LCL short-
+  circuits this at the form (TCustomDesignControl.AutoAdjustLayout returns when AToPPI is
+  the current one), so the call is made on each control directly -- which is also the only
+  way to see whether the post-pass re-derivation is itself idempotent, i.e. whether the
+  floor is a function of the PPI or of how many times it has been asked.
+
+  Run at the class's normal slack, not on the floor: a control sitting exactly on its floor
+  can end a crossing a pixel or two under it (plans/2026-08-08-permonitor-dpi.md section 4d
+  says why that is a documented limit and not a bug), and a second pass would legitimately
+  clamp that back, which is a different thing from the pass not being idempotent. }
+var i, w, h: Integer;
+begin
+  Build;
+  Cross(240);
+  for i := 0 to High(FCtls) do
+  begin
+    w := FCtls[i].Width;
+    h := FCtls[i].Height;
+    FCtls[i].AutoAdjustLayout(lapAutoAdjustForDPI, 240, 240, FForm.Width, FForm.Width);
+    AssertEquals(FNames[i] + ': a second pass at the same PPI must not change the width',
+      w, FCtls[i].Width);
+    AssertEquals(FNames[i] + ': a second pass at the same PPI must not change the height',
+      h, FCtls[i].Height);
+  end;
+end;
+
+procedure TControlDpiRoundTripTest.TestFloorAfterCrossingEqualsFloorBornAtThatPPI;
+{ THE "derived, not scaled" GUARD, and the only one that fails if the post-pass
+  re-derivation is deleted.
+
+  After a crossing to 240 a control's Constraints floor must be the floor it would have
+  computed had it been BORN on a 250% monitor -- not LCL's proportional rescale of the 96
+  answer. The two are close but not equal, because a caption's measured width is not linear
+  in PPI: measured here, TTyCheckBox is 70 px at 96 and 171 px at 240, where the rescale
+  would say 175. That gap is the whole point. A floor that is a product of round-off factors
+  drifts a little further every crossing; a floor that is F(current PPI) cannot.
+
+  Crossed to 137 rather than 240 because 137/96 is not a round ratio and is therefore the
+  harsher probe of the two. Stated honestly: it is not harsh ENOUGH. A mutant that deletes
+  the re-derivation entirely -- leaving LCL's proportional rescale of the old floor as the
+  final answer -- survives this test at 240 AND at 137, because with the pinned 9 pt font
+  every floor in this harness happens to rescale to exactly the value a fresh measurement
+  gives. The two answers only separate where a caption's ink is non-linear in PPI, which
+  this deliberately clean font is not. So read this test as pinning the SHAPE (the floor is
+  asked for, not inherited) rather than as proof that the re-derivation is load-bearing;
+  plans/2026-08-08-permonitor-dpi.md section 4e records that survivor and why the code is
+  kept anyway. }
+const
+  AwkwardPPI = 137;
+var
+  i: Integer;
+  crossedW, crossedH: array of Integer;
+  crossedBounds: array of TRect;
+  names: array of string;
+begin
+  Build(96);
+  Cross(AwkwardPPI);
+  SetLength(crossedW, Length(FCtls));
+  SetLength(crossedH, Length(FCtls));
+  SetLength(crossedBounds, Length(FCtls));
+  SetLength(names, Length(FCtls));
+  for i := 0 to High(FCtls) do
+  begin
+    crossedW[i] := FCtls[i].Constraints.MinWidth;
+    crossedH[i] := FCtls[i].Constraints.MinHeight;
+    crossedBounds[i] := BoundsOf(i);
+    names[i] := FNames[i];
+  end;
+  FreeAndNil(FForm);
+
+  Build(AwkwardPPI);   // the same form, born on that monitor
+  { Give the born-at-240 controls the crossed form's exact geometry before comparing. Two
+    of these floors are functions of the box as well as the PPI (TTyToggleSwitch's width
+    from its Height), so without this the comparison would be measuring the difference
+    between two box sizes and calling it a difference between two floors. }
+  for i := 0 to High(FCtls) do
+  begin
+    FCtls[i].SetBounds(crossedBounds[i].Left, crossedBounds[i].Top,
+                       crossedBounds[i].Right, crossedBounds[i].Bottom);
+    FCtls[i].Invalidate;
+  end;
+  for i := 0 to High(FCtls) do
+  begin
+    AssertEquals(names[i] + ': width floor after 96->240 must equal the floor born at 240',
+      FCtls[i].Constraints.MinWidth, crossedW[i]);
+    AssertEquals(names[i] + ': height floor after the crossing must equal the floor born there',
+      FCtls[i].Constraints.MinHeight, crossedH[i]);
+  end;
+end;
+
 initialization
   RegisterTest(TFormHelpersTest);
   RegisterTest(TResizeHitForTest);
@@ -2687,5 +3157,6 @@ initialization
   RegisterTest(TRollUpTest);
   RegisterTest(TFormStyleOverrideTest);
   RegisterTest(TTitleBarDpiTest);   // a6256: cross-monitor DPI contract for the title bar
+  RegisterTest(TControlDpiRoundTripTest);   // ac2363: the same contract for the CONTROLS
 
 end.

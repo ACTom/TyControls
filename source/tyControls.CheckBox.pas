@@ -36,8 +36,12 @@ type
       刻意用 Constraints,而不是 CalculatePreferredSize 的高度:提议高度等于让控件跟父容器
       谈判,TTyButton 当初就是这么在 TTyToolBar 上和 ButtonHeight 来回弹,直到 LCL 抛
       "ChangeBounds loop detected" 把 demo 在启动时弄死的。Constraints 是在 SetBounds 内部
-      直接钳,不谈判 —— 只要容器要的高度本身放得下,高度就还是容器说了算。 }
-    procedure UpdateSizeConstraints;
+      直接钳,不谈判 —— 只要容器要的高度本身放得下,高度就还是容器说了算。
+
+      覆盖基类钩子而不是自立门户:基类的 UpdateSizeConstraints 是带守卫的入口,LCL 的跨屏
+      DPI 流程正在缩放同一份 Constraints 时,它会挡住这里的重算(见 tyControls.Base.pas)。
+      没有那道守卫,一次 100%->250% 就把系数应用了两遍,来回一趟后高度停在 60px 回不去。 }
+    procedure DoUpdateSizeConstraints; override;
     { 运行期改 Caption 走这里(CM_TEXTCHANGED);开了 AutoSize 就得按新文字重新量。 }
     procedure TextChanged; override;
     { 换主题是以一个裸 Invalidate 的形式传到控件的,而新主题的字体、padding 和
@@ -107,8 +111,8 @@ type
       WithThemeSpace: Boolean); override;
     { 标题在 APPI 下画出来的尺寸(设备像素),已去掉 & 助记符标记。 }
     procedure MeasureCaption(APPI: Integer; out AWidth, AHeight: Integer);
-    { 尺寸地板,理由见 TTyCheckBox.UpdateSizeConstraints;圆点读的是自己的 --radio-size。 }
-    procedure UpdateSizeConstraints;
+    { 尺寸地板,理由见 TTyCheckBox.DoUpdateSizeConstraints;圆点读的是自己的 --radio-size。 }
+    procedure DoUpdateSizeConstraints; override;
     { 运行期改 Caption 走这里;开了 AutoSize 就得按新文字重新量。 }
     procedure TextChanged; override;
     { 换主题以裸 Invalidate 的形式到达控件,新主题的字体/padding/指示器令牌都可能不同,
@@ -391,7 +395,7 @@ begin
   PreferredHeight := 0;
 end;
 
-procedure TTyCheckBox.UpdateSizeConstraints;
+procedure TTyCheckBox.DoUpdateSizeConstraints;
 var
   S: TTyStyleSet;
   ppi, tw, th, padH, boxSize, prefW, prefH, minH: Integer;
@@ -688,8 +692,8 @@ begin
   PreferredHeight := 0;
 end;
 
-procedure TTyRadioButton.UpdateSizeConstraints;
-{ 见 TTyCheckBox.UpdateSizeConstraints —— 同一套推导,只是圆点读的是 --radio-size。 }
+procedure TTyRadioButton.DoUpdateSizeConstraints;
+{ 见 TTyCheckBox.DoUpdateSizeConstraints —— 同一套推导,只是圆点读的是 --radio-size。 }
 var
   S: TTyStyleSet;
   ppi, tw, th, padH, dotSize, prefW, prefH, minH: Integer;

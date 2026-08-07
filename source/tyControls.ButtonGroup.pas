@@ -65,8 +65,12 @@ type
       Constraints, deliberately, and NOT a proposed PreferredHeight: proposing one makes the
       bar negotiate with its parent, and a child on a TTyToolBar bounced against the bar's
       ButtonHeight until LCL aborted with "ChangeBounds loop detected". Constraints clamp
-      inside SetBounds instead, with no negotiation. }
-    procedure UpdateSizeConstraints;
+      inside SetBounds instead, with no negotiation.
+
+      覆盖基类钩子:基类的 UpdateSizeConstraints 带守卫,LCL 跨屏 DPI 流程正在缩放同一份
+      Constraints 时会挡住这里的重算(见 tyControls.Base.pas)。没有它,一次 100%->250%
+      把系数应用了两遍,分段条来回一趟从 200x28 变成 336x39。 }
+    procedure DoUpdateSizeConstraints; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     { A theme switch reaches every control as a bare Invalidate, and the new theme's font and
       padding change the width the captions need — so an AutoSize bar must re-fit here too. }
@@ -459,7 +463,7 @@ begin
   PreferredHeight := 0;
 end;
 
-procedure TTyButtonGroup.UpdateSizeConstraints;
+procedure TTyButtonGroup.DoUpdateSizeConstraints;
 var
   w, h: Integer;
 begin

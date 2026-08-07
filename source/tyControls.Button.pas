@@ -98,8 +98,14 @@ type
       Constraints, deliberately, and NOT CalculatePreferredSize's height: proposing a height
       makes the control negotiate with its parent, and a button on a TTyToolBar bounced
       against the bar's ButtonHeight until LCL aborted with "ChangeBounds loop detected".
-      Constraints clamp inside SetBounds instead, with no negotiation. }
-    procedure UpdateSizeConstraints;
+      Constraints clamp inside SetBounds instead, with no negotiation.
+
+      Overrides the base hook rather than declaring its own method: the base's
+      UpdateSizeConstraints is the guarded entry point that suppresses this recompute while
+      LCL's per-monitor DPI pass is scaling the SAME Constraints (see tyControls.Base.pas).
+      Without that, one 100%->250% crossing applied the factor twice and this button went
+      29 -> 175 -> 70 px across a there-and-back trip. }
+    procedure DoUpdateSizeConstraints; override;
     { Caption changes at runtime route here (CM_TEXTCHANGED); with AutoSize the button must
       re-measure to the new text (mirrors TTyTag / TTyLabel). }
     procedure TextChanged; override;
@@ -670,7 +676,7 @@ begin
   Result := th;
 end;
 
-procedure TTyButton.UpdateSizeConstraints;
+procedure TTyButton.DoUpdateSizeConstraints;
 var
   S: TTyStyleSet;
   ppi, padH, pw, ph: Integer;

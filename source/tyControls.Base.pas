@@ -83,12 +83,50 @@ type
     procedure SetController(AValue: TTyStyleController);
   protected
     FHover, FPressed: Boolean;
+    FDpiAdjusting: Boolean;
     function _AddRef: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
     function _Release: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
     function GetStyleTypeKey: string; virtual; abstract;
     function ActiveController: TTyStyleController;
     function CurrentStates: TTyStateSet; virtual;
     function CurrentStyle: TTyStyleSet;
+    { ===== PER-MONITOR DPI: the size floor (see the twin on TTyCustomControl, and
+      plans/2026-08-08-permonitor-dpi.md) =====================================
+
+      A control that clamps itself with Constraints computes that clamp in DEVICE px from
+      the live Font.PixelsPerInch. LCL's per-monitor pass ALSO scales Constraints
+      (TControl.DoAutoAdjustLayout -> TSizeConstraints.AutoAdjustLayout, control.inc:3232),
+      and LCL's pass RE-DERIVES the floor for us on the way: ScaleFontsPPI runs first
+      (control.inc:4224), the font change reaches TControl.FontChanged -> Invalidate
+      (control.inc:623), and every one of these controls recomputes its floor from that
+      Invalidate. So one monitor crossing applied the factor TWICE -- exactly the shape
+      that made the title bar "far too tall" (tyControls.Form.pas, TyTitleBarDeviceHeight),
+      here on the controls instead of the chrome. Measured 96->240->96 on a TTyButton:
+      29 -> 175 -> 70 px, and it never comes back, because the inflated floor re-clamps
+      the height on the way down. A plain LCL TButton in the same form is exact.
+
+      The cure is the invariant the chrome now obeys: PPI-derived state is a pure function
+      of (PPI-independent input, current PPI), never X := f(X). UpdateSizeConstraints
+      ALREADY is such a function -- it measures the caption at the current PPI and reads
+      the theme, it never reads the old Constraints -- so the fix is not to change how the
+      floor is computed but to make sure it is applied ONCE per crossing:
+
+        - during the pass the recompute is suppressed (InDpiAdjust), leaving LCL's own
+          proportional scaling of Constraints as the single application, which keeps the
+          bounds clamp inside DoAutoAdjustLayout meaningful;
+        - after the pass the floor is re-derived exactly at the settled PPI, so what
+          finally sits in Constraints is F(PPI) and not a product of round-off factors.
+
+      Call UpdateSizeConstraints (guarded); override DoUpdateSizeConstraints (the work). }
+    function InDpiAdjust: Boolean;
+    { Re-derive the Constraints floor at the CURRENT PPI. Empty here: most controls have no
+      floor and pay nothing. Overridden by every control that writes Constraints. }
+    procedure DoUpdateSizeConstraints; virtual;
+    { The guarded entry point every call site uses. A no-op while LCL's DPI pass is running
+      on this control; see InDpiAdjust's comment for why that is the whole fix. }
+    procedure UpdateSizeConstraints;
+    procedure AutoAdjustLayout(AMode: TLayoutAdjustmentPolicy;
+      const AFromPPI, AToPPI, AOldFormWidth, ANewFormWidth: Integer); override;
     procedure DrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);
     procedure MouseEnter; override;
     procedure MouseLeave; override;
@@ -203,6 +241,7 @@ type
     procedure SetStyleOverride(const AValue: string);
   protected
     FHover, FPressed: Boolean;
+    FDpiAdjusting: Boolean;
     procedure SetController(AValue: TTyStyleController); virtual;
     function _AddRef: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
     function _Release: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
@@ -210,6 +249,17 @@ type
     function ActiveController: TTyStyleController;
     function CurrentStates: TTyStateSet; virtual;
     function CurrentStyle: TTyStyleSet;
+    { ===== PER-MONITOR DPI: the size floor ===================================
+      The twin of the block on TTyGraphicControl -- read it there. Duplicated, not shared,
+      because the two bases descend from TGraphicControl and TCustomControl and have no
+      common ancestor below TControl; five of the six controls that own a floor
+      (TTyButton, TTyCheckBox, TTyRadioButton, TTyToggleSwitch, TTyButtonGroup) are on
+      this side and TTyLabel is on the other. }
+    function InDpiAdjust: Boolean;
+    procedure DoUpdateSizeConstraints; virtual;
+    procedure UpdateSizeConstraints;
+    procedure AutoAdjustLayout(AMode: TLayoutAdjustmentPolicy;
+      const AFromPPI, AToPPI, AOldFormWidth, ANewFormWidth: Integer); override;
     {$IFDEF LCLGTK3}
     { LCL-GTK3 is the only widgetset that never clears a damaged region -- see the body. This
       hands its remaining clear a colour to work with, ONCE per theme change. }
@@ -583,6 +633,62 @@ begin
     Result := FController
   else
     Result := TyDefaultController;
+end;
+
+function TTyGraphicControl.InDpiAdjust: Boolean;
+begin
+  Result := FDpiAdjusting;
+end;
+
+procedure TTyGraphicControl.DoUpdateSizeConstraints;
+begin
+  // Most controls own no size floor. Overridden where one exists.
+end;
+
+procedure TTyGraphicControl.UpdateSizeConstraints;
+begin
+  { The one guard, in the one place every call site already goes through. See the
+    declaration: while LCL's DPI pass is running it is LCL that scales this control's
+    Constraints, and a recompute here would compose with it into a squared factor. }
+  if InDpiAdjust then Exit;
+  DoUpdateSizeConstraints;
+end;
+
+procedure TTyGraphicControl.AutoAdjustLayout(AMode: TLayoutAdjustmentPolicy;
+  const AFromPPI, AToPPI, AOldFormWidth, ANewFormWidth: Integer);
+begin
+  { Overridden NOWHERE in this library before a6256/ac2363 -- no control took part in LCL's
+    DPI protocol at all, which is why every control that scaled did so by mutating its own
+    state and the trip was one-way. }
+  FDpiAdjusting := True;
+  try
+    inherited AutoAdjustLayout(AMode, AFromPPI, AToPPI, AOldFormWidth, ANewFormWidth);
+  finally
+    FDpiAdjusting := False;
+  end;
+  { The flag is clear again, so THIS call runs: one exact re-derivation at the settled PPI.
+    It is what keeps the floor a function of the current PPI rather than of however many
+    proportional steps the control has been dragged through.
+
+    ...but ONLY once this control's font has actually arrived at the new PPI, and for the
+    LCL default (ParentFont = True) it has NOT yet. TControl.AutoAdjustLayout brackets the
+    pass with `savedParentFont := ParentFont ... finally ParentFont := savedParentFont`
+    (control.inc:4221/4228), and restoring ParentFont RE-COPIES the parent's font -- which
+    is still at the old PPI, because TWinControl.AutoAdjustLayout walks the children BEFORE
+    itself (wincontrol.inc:3932). So on exit from `inherited` a ParentFont child's
+    Font.PixelsPerInch is back where it started, and re-deriving here would measure the
+    caption at the OLD PPI and then clamp the bounds to that -- undoing the scaling LCL had
+    just done correctly. Measured without this test: TTyButton 100x29 -> 250x72 -> 175x70,
+    i.e. still "broken forever", just by a different route.
+
+    Skipping is safe and is not a hole: the parent's own pass pushes the new font down
+    through CM_PARENTFONTCHANGED, that reaches TControl.FontChanged -> Invalidate
+    (control.inc:623), the guard above is down by then, and the control re-derives its floor
+    at the correct PPI in the ordinary way. The explicit call here exists for the OTHER
+    case -- ParentFont = False -- where nothing arrives later and this is the only chance. }
+  if (AMode in [lapAutoAdjustWithoutHorizontalScrolling, lapAutoAdjustForDPI])
+     and (AToPPI > 0) and (Font.PixelsPerInch = AToPPI) then
+    UpdateSizeConstraints;
 end;
 
 function TTyGraphicControl.CurrentStates: TTyStateSet;
@@ -1529,6 +1635,40 @@ begin
     Result := FController
   else
     Result := TyDefaultController;
+end;
+
+function TTyCustomControl.InDpiAdjust: Boolean;
+begin
+  Result := FDpiAdjusting;
+end;
+
+procedure TTyCustomControl.DoUpdateSizeConstraints;
+begin
+  // Most controls own no size floor. Overridden where one exists.
+end;
+
+procedure TTyCustomControl.UpdateSizeConstraints;
+begin
+  // See the TTyGraphicControl twin.
+  if InDpiAdjust then Exit;
+  DoUpdateSizeConstraints;
+end;
+
+procedure TTyCustomControl.AutoAdjustLayout(AMode: TLayoutAdjustmentPolicy;
+  const AFromPPI, AToPPI, AOldFormWidth, ANewFormWidth: Integer);
+begin
+  // See the TTyGraphicControl twin.
+  FDpiAdjusting := True;
+  try
+    inherited AutoAdjustLayout(AMode, AFromPPI, AToPPI, AOldFormWidth, ANewFormWidth);
+  finally
+    FDpiAdjusting := False;
+  end;
+  { See the TTyGraphicControl twin for why the font PPI is tested here -- it is the
+    ParentFont default, and getting it wrong reintroduces the whole defect. }
+  if (AMode in [lapAutoAdjustWithoutHorizontalScrolling, lapAutoAdjustForDPI])
+     and (AToPPI > 0) and (Font.PixelsPerInch = AToPPI) then
+    UpdateSizeConstraints;
 end;
 
 function TTyCustomControl.CurrentStates: TTyStateSet;

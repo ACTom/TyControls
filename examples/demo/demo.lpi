@@ -9,6 +9,9 @@
       <Title Value="TyControls Demo"/>
       <Scaled Value="True"/>
       <UseXPManifest Value="True"/>
+      <XPManifest>
+        <DpiAware Value="True/PM_V2"/>
+      </XPManifest>
       <Icon Value="0"/>
     </General>
     <i18n>

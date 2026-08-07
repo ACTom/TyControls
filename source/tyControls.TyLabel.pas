@@ -57,8 +57,14 @@ type
         block at the CURRENT width would have been the tempting answer and is a trap — it
         is a different number for every width, so a label whose bounds are set width-and-
         height together (again: the message dialog) would be clamped by a height measured
-        at the width it had a moment ago. }
-    procedure UpdateSizeConstraints;
+        at the width it had a moment ago.
+
+      Overrides the base hook rather than declaring its own method: the base's
+      UpdateSizeConstraints is the guarded entry point that suppresses this recompute while
+      LCL's per-monitor DPI pass is scaling the SAME Constraints (see tyControls.Base.pas).
+      Without that, one 100%->250% crossing applied the factor twice and this label went
+      26 -> 100 -> 40 px across a there-and-back trip. }
+    procedure DoUpdateSizeConstraints; override;
     { A theme switch reaches every control as a bare Invalidate, and the new theme owns the
       font and the padding the floor is derived from — so it has to be recomputed here. }
     procedure Invalidate; override;
@@ -203,7 +209,7 @@ begin
     FFocusControl.SetFocus;
 end;
 
-procedure TTyLabel.UpdateSizeConstraints;
+procedure TTyLabel.DoUpdateSizeConstraints;
 var
   S: TTyStyleSet;
   ppi, padH, w, h: Integer;

@@ -57,7 +57,9 @@ shows how far a theme can go — translucent controls floating over a photo back
 - **Designer-first** — `TTyPageControl`'s pages and `TTyGridPanel`'s cells are **real designer
   containers**: drop controls straight in, see the finished look in the designer, and it persists
   to the `.lfm` with no layout code. Theme changes show up in the designer too.
-- **HiDPI** — every length scales by PPI; vector drawing stays crisp.
+- **HiDPI** — every length scales by PPI; vector drawing stays crisp. Across monitors
+  (PerMonitorV2) the window and its controls **re-derive** their sizes from the new DPI, so
+  dragging out to a 250% screen and back returns the layout to where it started.
 - **Internationalised** — the library's own UI strings go through `resourcestring` + `.po`,
   shipped in English and Simplified Chinese.
 - **3949 unit tests**, whole suite leak-free (heaptrc-verified). Appearance additionally has a

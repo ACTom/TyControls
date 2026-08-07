@@ -50,8 +50,12 @@ type
       Constraints, deliberately, and NOT CalculatePreferredSize's height: proposing a height
       makes the control negotiate with its parent, and that is what once bounced a TTyButton
       against a TTyToolBar's ButtonHeight until LCL aborted with "ChangeBounds loop detected".
-      Constraints clamp inside SetBounds instead, with no negotiation. }
-    procedure UpdateSizeConstraints;
+      Constraints clamp inside SetBounds instead, with no negotiation.
+
+      覆盖基类钩子:基类的 UpdateSizeConstraints 带守卫,LCL 跨屏 DPI 流程正在缩放同一份
+      Constraints 时会挡住这里的重算(见 tyControls.Base.pas)。没有它,一次 100%->250%
+      把系数应用了两遍,来回三趟宽度还会继续往上爬。 }
+    procedure DoUpdateSizeConstraints; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     { A theme switch reaches every control as a bare Invalidate, and the new theme's font
       changes the width the caption needs — so an AutoSize switch must re-fit here too. }
@@ -274,7 +278,7 @@ begin
   PreferredHeight := 0;
 end;
 
-procedure TTyToggleSwitch.UpdateSizeConstraints;
+procedure TTyToggleSwitch.DoUpdateSizeConstraints;
 var
   ppi, tw, th, prefW, prefH: Integer;
 begin
