@@ -53,10 +53,19 @@ const
     fill from ONE token (--chrome-bar-bg), and a skin that retunes it in a plain :root —
     instead of per-@mode — drags its light chrome into dark mode (the aero chrome fix sets
     it per-mode; this sweep is what makes that shape mandatory). The ink floor applies to
-    them like any surface: labels and captions do get parented to tool bars. }
-  cSurfaceKeys: array[0..7] of string =
+    them like any surface: labels and captions do get parented to tool bars.
+    TyCoolBar and TyControlBar joined when aero forked them from TyPanel (the first
+    ALIAS_EXEMPTIONS rows in test.themes): once a key stops being a donor clone it can
+    carry its own mistakes, and a rebar fill in a plain :root would drag light chrome
+    into dark exactly like the bars above. In every non-diverged theme they resolve as
+    TyPanel and the check is a free duplicate. TyTab rides for the same reason: aero
+    re-seats the strip's rest state on the chrome family per-mode (--surface-tab-rest),
+    and this sweep is what makes per-mode the mandatory shape for it. Labels are not
+    parented to tab headers, but the tab's OWN rest ink is the same --on-surface seed
+    the TyLabel floor models, so the floor transfers. }
+  cSurfaceKeys: array[0..10] of string =
     ('TyForm', 'TyListBox', 'TyPanel', 'TyStatusBar', 'TyMemo', 'TyGroupBox',
-     'TyToolBar', 'TyScrollBar');
+     'TyToolBar', 'TyScrollBar', 'TyCoolBar', 'TyControlBar', 'TyTab');
 
   { Light/dark class boundary on the 0..255 luma axis. Every shipped surface sits well
     clear of it (light skins >= ~190, dark ones <= ~70); a MIXED window straddles it by

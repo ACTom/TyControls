@@ -41,7 +41,9 @@ Controller.Follow := tfFollowSystem;
 1. **真深色调色板**——皮肤自己的键随之变深,与 base 回落面共同构成一整扇深色窗口(aero 现在如此:Win7 深色 colorization 的蓝黑玻璃);
 2. **整窗 no-op**——皮肤没有深色概念时(classic / Win95),必须在 `@mode dark` 里**把 base 的三个种子钉回浅色值**,让回落控件也保持浅色。只复制自己的浅色调色板是不够的:那会渲染出"自家键浅、回落面黑"的**半黑窗口**(即已修复的 aero/classic 混窗 bug)。
 
-守卫:`tests/test.modecoherence.pas` 对每套内置主题 × 两种模式解析代表性表面(TyForm / TyListBox / TyPanel / TyStatusBar / TyMemo / TyGroupBox),断言亮度同类(全亮或全暗)、且窗口正文 ink 在每个表面上可读(Rec.601 luma 差 ≥ 60)。新皮肤两条路都不走时,这个测试会点名失败。
+守卫:`tests/test.modecoherence.pas` 对每套内置主题 × 两种模式解析代表性表面(TyForm / TyListBox / TyPanel / TyStatusBar / TyMemo / TyGroupBox / TyToolBar / TyScrollBar / TyCoolBar / TyControlBar / TyTab),断言亮度同类(全亮或全暗)、且窗口正文 ink 在每个表面上可读(Rec.601 luma 差 ≥ 60)。新皮肤两条路都不走时,这个测试会点名失败。
+
+另一道守卫管**借来的 typeKey**:几十个从别的控件拆分出来的键(TyCoolBar/TyControlBar→TyPanel、TyListView→TyTreeView 等)被 `tests/test.themes.pas` 钉死为在每套出厂主题里与其 donor 逐字节同解析,防止皮肤**无意间**分叉它们。想让某个键**有意**走自己的样式,唯一通路是在该文件的 `ALIAS_EXEMPTIONS` 表登记(主题, 键, 理由)——理由必填,守卫失败时会连表带扩展方法一起打印;aero 的 rebar(TyCoolBar/TyControlBar 改走 `--chrome-bar-bg` 命令带)是首个案例。
 
 ## 自定义主题
 

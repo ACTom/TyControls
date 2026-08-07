@@ -1494,6 +1494,20 @@ begin
     '    --surface-chrome: #DCE6F0;   /* header bands, grid fixed rim, datetime chip: --form-2 itself */' + LineEnding +
     '    --chrome-bar-bg:  #D2DFEC;   /* tool band, status bar, scroll track: a deeper cold steel */' + LineEnding +
     '    --border:         #AFC4DA;   /* fallback frames, bar hairlines, scroll thumb: cold, not neutral */' + LineEnding +
+    '' + LineEnding +
+    '    /* Tab family: same disease, same cure as the chrome family above. aero leaves TyTab to' + LineEnding +
+    '       the base layer, whose MAP derives the strip''s rest/hover from the WHITE base surface' + LineEnding +
+    '       (darken 5%/2% = neutral greys): a second design system sitting on the cold wash.' + LineEnding +
+    '       Alias both into the chrome family instead — rest is the command-band fill, hover' + LineEnding +
+    '       lifts one step to the header steel — and the base rule''s selected state stays' + LineEnding +
+    '       var(--surface): the white page sheet with accent ink. So rest (#D2DFEC, luma ~221)' + LineEnding +
+    '       < hover (#DCE6F0, ~228) < selected (#FFFFFF, 255) is one strictly cold ramp, and the' + LineEnding +
+    '       strip''s own ink (base --on-surface #1F2937, luma ~40) keeps ~180 luma of contrast on' + LineEnding +
+    '       every step — triple the coherence guard''s 60 floor. var() references, not copies:' + LineEnding +
+    '       a future retune of the chrome family carries the strip along. Per-mode like the' + LineEnding +
+    '       chrome family — a plain-:root steel would drag into dark mode. */' + LineEnding +
+    '    --surface-tab-rest:  var(--chrome-bar-bg);   /* a resting tab is command chrome */' + LineEnding +
+    '    --surface-tab-hover: var(--surface-chrome);  /* hover lifts a step toward the page */' + LineEnding +
     '}' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
@@ -1573,6 +1587,19 @@ begin
     '    --surface-chrome: #273544;   /* header bands, grid fixed rim, datetime chip */' + LineEnding +
     '    --chrome-bar-bg:  #22303F;   /* tool band, status bar, scroll track */' + LineEnding +
     '    --border:         #3D5068;   /* fallback frames, bar hairlines, scroll-thumb seed */' + LineEnding +
+    '' + LineEnding +
+    '    /* Tab family, dark side (the light block has the full story). Rest sits on the band' + LineEnding +
+    '       fill; hover LIGHTS UP one step to the header steel — the same direction as' + LineEnding +
+    '       --btn-h1, the Win7 hover light-up — and selected keeps the base rule''s' + LineEnding +
+    '       var(--surface): the dark page sheet (#1E1E1E, luma ~30). Dark chrome lifts off the' + LineEnding +
+    '       wash, so rest (#22303F, ~46) and hover (#273544, ~51) sit ABOVE the page value' + LineEnding +
+    '       where light''s sit below the white one; the strip still reads as one family because' + LineEnding +
+    '       both values are cut from the same form-to-titlebar axis, and the selected tab' + LineEnding +
+    '       stays legible by CONNECTING to the page rather than by luma distance alone (its' + LineEnding +
+    '       ink flips to the accent, ~94 luma above the sheet). Base dark ink #E5E7EB keeps' + LineEnding +
+    '       ~180 luma on both steps. */' + LineEnding +
+    '    --surface-tab-rest:  var(--chrome-bar-bg);   /* a resting tab is command chrome */' + LineEnding +
+    '    --surface-tab-hover: var(--surface-chrome);  /* hover lights up a step */' + LineEnding +
     '}' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
@@ -1820,16 +1847,25 @@ begin
     '  padding: 0px 4px;' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
-    '/* NOT restyled, and why: the rebar hosts (TyCoolBar/TyControlBar). Win7''s rebar was' + LineEnding +
-    '   command-band chrome, and under aero they render as base TyPanel = white panels around' + LineEnding +
-    '   the cold TyToolBar bands they host. But tests/test.themes.pas' + LineEnding +
-    '   (TestNewKeysMatchTheirDonorInEveryTheme) pins both keys to resolve EXACTLY like TyPanel' + LineEnding +
-    '   in every shipped theme — the hook the alias refactor opened is asserted unused. Giving' + LineEnding +
-    '   aero the rule `TyCoolBar, TyControlBar { background: var(--chrome-bar-bg); color:' + LineEnding +
-    '   var(--ink); border-color: var(--border); border-width: 1px; border-radius: 3px;' + LineEnding +
-    '   padding: var(--pad-container); }` (a FULL block — a skin rule suppresses the donor''s' + LineEnding +
-    '   whole base entry, see UserHasTypeKey) needs that guard to grow a per-theme exemption' + LineEnding +
-    '   first. Until then the rebar stays panel-white here; the bands inside it are cold. */' + LineEnding +
+    '/* Rebar hosts (TyCoolBar/TyControlBar): Win7''s rebar was command-band chrome, and under' + LineEnding +
+    '   the base alias both rendered as TyPanel — WHITE panels around the cold TyToolBar bands' + LineEnding +
+    '   they host (dark: the neutral base panel on blue-black glass). Now they take the chrome' + LineEnding +
+    '   family''s band fill, per-mode, so band and host are ONE command surface with the family' + LineEnding +
+    '   hairline around it. FULL block on purpose: a skin rule suppresses the donor''s whole' + LineEnding +
+    '   base entry (UserHasTypeKey), so everything TyPanel carried is restated at aero''s own' + LineEnding +
+    '   geometry (3px corners, 1px cold border). These are the alias guard''s first sanctioned' + LineEnding +
+    '   divergences: tests/test.themes.pas (TestNewKeysMatchTheirDonorInEveryTheme) still pins' + LineEnding +
+    '   both keys to resolve exactly like TyPanel in every OTHER theme; (aero, TyCoolBar) and' + LineEnding +
+    '   (aero, TyControlBar) are carried, each with its reason, in ALIAS_EXEMPTIONS there.' + LineEnding +
+    '   Extend that table deliberately — never weaken the guard itself. */' + LineEnding +
+    'TyCoolBar, TyControlBar {' + LineEnding +
+    '  background: var(--chrome-bar-bg);' + LineEnding +
+    '  color: var(--ink);' + LineEnding +
+    '  border-color: var(--border);' + LineEnding +
+    '  border-width: 1px;' + LineEnding +
+    '  border-radius: 3px;' + LineEnding +
+    '  padding: var(--pad-container);' + LineEnding +
+    '}' + LineEnding +
     '' + LineEnding +
     '/* Controls hosted ON the title bar. A skin that paints the bar in a strong colour leaves an' + LineEnding +
     '   ordinary button''s surface-tuned ink nearly invisible there; the control appends the' + LineEnding +

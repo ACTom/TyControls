@@ -53,10 +53,17 @@ type
     procedure CheckGolden(const AThemeName: string);
     procedure CheckAlias(AModel: TTyStyleModel; const ATheme, ANew, ADonor,
       AVariant: string; ABaseStateOnly: Boolean);
+    procedure CheckAliasExemptionsWellFormed;
   published
     procedure TestLightGolden;
     procedure TestDarkGolden;
     procedure TestShowcaseGolden;
+    { The exemption table itself is under test: every row must name a shipped theme, a
+      known alias pair, and a NON-EMPTY reason. An exemption without a reason is
+      indistinguishable from an accident, which is the exact thing the alias guard exists
+      to prevent — so a blank one fails here AND in the sweep (which validates before it
+      skips anything). }
+    procedure TestAliasExemptionsAreDeliberate;
     { 3.0 themability pass: every key minted by splitting a borrowed one must still
       resolve BYTE-IDENTICALLY to the key it was split from, in EVERY shipped theme —
       the five under themes/ and all fifteen skins. This is the test that proves the
@@ -64,7 +71,11 @@ type
       It also proves the base-layer claim honestly: a skin that overrides the donor key
       does NOT automatically pass, because base-layer inheritance would hand the new key
       light.tycss's values instead of the skin's. That is precisely why the new selectors
-      had to be added to the skins' own rules and not left to inherit. }
+      had to be added to the skins' own rules and not left to inherit.
+      DELIBERATE divergence is possible but rationed: a (theme, key) pair listed in
+      ALIAS_EXEMPTIONS (with a mandatory reason) is skipped here — and only here; the
+      example-theme check below never consults the table. The guard's failure message
+      prints the table so the next person extends it instead of blunting the guard. }
     procedure TestNewKeysMatchTheirDonorInEveryTheme;
     { The same check, aimed at the two HAND-WRITTEN example themes under examples/theming/.
       Nothing else in the suite loads them, and that blind spot is not cosmetic: they are the
@@ -818,13 +829,94 @@ const
     (NewKey: 'TyHeaderControl';           Donor: 'TyTreeHeader'; BaseStateOnly: False; Variants: '')
   );
 
+type
+  { One DELIBERATE divergence: a (theme, key) pair TestNewKeysMatchTheirDonorInEveryTheme
+    skips. The alias guard exists to stop borrowed typeKeys drifting from their donor BY
+    ACCIDENT — a skin author touches a rule and silently forks a key nobody meant to fork.
+    This table is the only sanctioned way to diverge ON PURPOSE: name the theme, name the
+    key, and write down WHY. The reason is not decoration — an exemption with a blank
+    reason fails TestAliasExemptionsAreDeliberate AND the sweep itself, because a
+    reason-less exemption is indistinguishable from the accident the guard prevents. }
+  TTyAliasExemption = record
+    Theme: string;     { a name from ALIAS_THEMES }
+    NewKey: string;    { a NewKey from ALIAS_PAIRS }
+    Reason: string;    { REQUIRED: why this theme deliberately forks the key }
+  end;
+
+const
+  ALIAS_EXEMPTIONS: array[0..1] of TTyAliasExemption = (
+    (Theme: 'aero'; NewKey: 'TyCoolBar';
+     Reason: 'Win7 rebar is command-band chrome: the cold --chrome-bar-bg band (per-mode), '
+       + 'not TyPanel''s white content sheet around the cold toolbar bands it hosts'),
+    (Theme: 'aero'; NewKey: 'TyControlBar';
+     Reason: 'the second rebar host: same Win7 command-band chrome as TyCoolBar')
+  );
+
+{ -1 when (theme, key) is not exempted; otherwise the row index. }
+function AliasExemptionIndex(const ATheme, ANewKey: string): Integer;
+var i: Integer;
+begin
+  for i := 0 to High(ALIAS_EXEMPTIONS) do
+    if (ALIAS_EXEMPTIONS[i].Theme = ATheme) and (ALIAS_EXEMPTIONS[i].NewKey = ANewKey) then
+      Exit(i);
+  Result := -1;
+end;
+
+{ Rendered into every alias-guard failure so the next deliberate divergence is a table row,
+  not a weakened guard. }
+function AliasExemptionTableText: string;
+var i: Integer;
+begin
+  Result := 'The alias guard pins borrowed typeKeys to their donor so a theme cannot fork '
+    + 'them BY ACCIDENT. If THIS divergence is deliberate, add a (Theme, NewKey, Reason) '
+    + 'row to ALIAS_EXEMPTIONS in tests/test.themes.pas — the reason is mandatory. '
+    + 'Current exemptions:';
+  for i := 0 to High(ALIAS_EXEMPTIONS) do
+    Result := Result + LineEnding + Format('  (%s, %s): %s',
+      [ALIAS_EXEMPTIONS[i].Theme, ALIAS_EXEMPTIONS[i].NewKey, ALIAS_EXEMPTIONS[i].Reason]);
+end;
+
+procedure TTestThemeGolden.CheckAliasExemptionsWellFormed;
+var
+  i, j: Integer;
+  known: Boolean;
+begin
+  for i := 0 to High(ALIAS_EXEMPTIONS) do
+  begin
+    if Trim(ALIAS_EXEMPTIONS[i].Reason) = '' then
+      Fail(Format('ALIAS_EXEMPTIONS[%d] (%s, %s) has an EMPTY reason. An exemption without '
+        + 'a reason is indistinguishable from the accident the alias guard exists to stop '
+        + '— write down why this theme deliberately forks the key.',
+        [i, ALIAS_EXEMPTIONS[i].Theme, ALIAS_EXEMPTIONS[i].NewKey]));
+    known := False;
+    for j := 0 to High(ALIAS_THEMES) do
+      if ALIAS_THEMES[j] = ALIAS_EXEMPTIONS[i].Theme then known := True;
+    if not known then
+      Fail(Format('ALIAS_EXEMPTIONS[%d] names theme ''%s'', which is not in ALIAS_THEMES '
+        + '— a stale exemption exempts nothing and misleads the reader.',
+        [i, ALIAS_EXEMPTIONS[i].Theme]));
+    known := False;
+    for j := 0 to High(ALIAS_PAIRS) do
+      if ALIAS_PAIRS[j].NewKey = ALIAS_EXEMPTIONS[i].NewKey then known := True;
+    if not known then
+      Fail(Format('ALIAS_EXEMPTIONS[%d] names key ''%s'', which is not in ALIAS_PAIRS '
+        + '— a stale exemption exempts nothing and misleads the reader.',
+        [i, ALIAS_EXEMPTIONS[i].NewKey]));
+  end;
+end;
+
+procedure TTestThemeGolden.TestAliasExemptionsAreDeliberate;
+begin
+  CheckAliasExemptionsWellFormed;
+end;
+
 procedure TTestThemeGolden.CheckAlias(AModel: TTyStyleModel; const ATheme, ANew,
   ADonor, AVariant: string; ABaseStateOnly: Boolean);
 const
   STATES: array[0..4] of TTyStateSet = ([], [tysHover], [tysActive], [tysFocused], [tysDisabled]);
 var
   si, last: Integer;
-  tag: string;
+  tag, donorDump, newDump: string;
 begin
   if ABaseStateOnly then last := 0 else last := High(STATES);
   for si := 0 to last do
@@ -832,9 +924,13 @@ begin
     tag := ATheme + ': ' + ANew;
     if AVariant <> '' then tag := tag + '.' + AVariant;
     tag := tag + ' state#' + IntToStr(si) + ' must resolve exactly like ' + ADonor;
-    AssertEquals(tag,
-      GDumpStyle(AModel.ResolveStyle(ADonor, AVariant, STATES[si])),
-      GDumpStyle(AModel.ResolveStyle(ANew, AVariant, STATES[si])));
+    donorDump := GDumpStyle(AModel.ResolveStyle(ADonor, AVariant, STATES[si]));
+    newDump := GDumpStyle(AModel.ResolveStyle(ANew, AVariant, STATES[si]));
+    if donorDump <> newDump then
+      Fail(tag + LineEnding
+        + 'donor (' + ADonor + ') resolved: ' + donorDump + LineEnding
+        + 'key (' + ANew + ') resolved: ' + newDump + LineEnding
+        + AliasExemptionTableText);
   end;
 end;
 
@@ -876,6 +972,9 @@ var
   variants: TStringList;
   vi: Integer;
 begin
+  { Validate the table BEFORE honouring it: a malformed row (blank reason, stale name)
+    must never buy its exemption. }
+  CheckAliasExemptionsWellFormed;
   for ti := 0 to High(ALIAS_THEMES) do
   begin
     m := TTyStyleModel.Create;
@@ -887,6 +986,8 @@ begin
       m.Mode := 'light';   // dual-mode files need an active mode; no-op for single-mode
       for pi := 0 to High(ALIAS_PAIRS) do
       begin
+        if AliasExemptionIndex(ALIAS_THEMES[ti], ALIAS_PAIRS[pi].NewKey) >= 0 then
+          Continue;   { deliberately diverged; the reason lives in ALIAS_EXEMPTIONS }
         CheckAlias(m, ALIAS_THEMES[ti], ALIAS_PAIRS[pi].NewKey,
           ALIAS_PAIRS[pi].Donor, '', ALIAS_PAIRS[pi].BaseStateOnly);
         if ALIAS_PAIRS[pi].Variants = '' then Continue;
