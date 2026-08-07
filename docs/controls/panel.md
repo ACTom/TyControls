@@ -27,9 +27,9 @@ uses tyControls.Panel;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `Caption` | `TCaption` | `''` | 面板标题文字，显示在内容区顶部（按 `Alignment` 水平对齐、垂直居中）；为空字符串时不绘制文字。**它就是 `TControl.Caption`**：`Caption` 与 `Text` 是同一个字符串（早先本控件另有一个自己的 `FCaption` 影子字段，写 `Caption` 时 `Text` 仍是空的），重绘经重写 `TextChanged` 触发 |
+| `Caption` | `TCaption` | `''` | 面板标题文字（按 `Alignment` 水平对齐、按 `VerticalAlignment` 垂直定位，默认居中）；为空字符串时不绘制文字。**它就是 `TControl.Caption`**：`Caption` 与 `Text` 是同一个字符串（早先本控件另有一个自己的 `FCaption` 影子字段，写 `Caption` 时 `Text` 仍是空的），重绘经重写 `TextChanged` 触发 |
 | `Alignment` | `TAlignment` | `taCenter` | 标题文字在内容区内的水平对齐方式：`taLeftJustify`（左对齐）/ `taCenter`（居中，默认）/ `taRightJustify`（右对齐）；赋值时触发 `Invalidate` |
-| `VerticalAlignment` | `TTextLayout` | `tlCenter` | 标题文字的**垂直**位置：`tlTop` / `tlCenter`（默认）/ `tlBottom`。此前这一轴是写死的居中，因此"标题贴顶、子控件在下"的分区标题栏用面板自己的 `Caption` 根本表达不出来 |
+| `VerticalAlignment` | `TVerticalAlignment` | `taVerticalCenter` | 标题文字的**垂直**位置：`taAlignTop` / `taAlignBottom` / `taVerticalCenter`（默认）——**与 `TCustomPanel` 同名、同型、同默认值**（`extctrls.pp:1154`；枚举来自 RTL `Classes`，`classesh.inc:94`，序号 0/1/2 是 API）。此前这一轴是写死的居中，因此"标题贴顶、子控件在下"的分区标题栏用面板自己的 `Caption` 根本表达不出来。⚠ **破坏性（仅限未发布的开发窗口）**：本属性在 2026-08-04（4e3376a）曾以 `TTextLayout`（`tlTop`/`tlCenter`/`tlBottom`）短暂入库，从未随版本发布。那三天里保存的 `.lfm` 若写入了非默认值（`tlTop`/`tlBottom`），现在**大声地**读不进来（"Invalid property value"），绝不会被悄悄读成别的挡位；代码里的 `tlTop` 等赋值编译报错，改成 `taAlignTop` 即可。换来的是从 LCL/Delphi 的 `TPanel` 移植的 `.lfm`（`VerticalAlignment = taAlignBottom`）与代码原样可用——这才是 parity 的本义。两个方向都有测试钉着（`tests/test.controls.panel.pas`） |
 | `WordWrap` | `Boolean` | `False` | 标题过长时折行显示，而不是省略号截断。折行走库内统一的 `TyWrapTextCJK`（既按空格断，也按 CJK 码点断，所以中文标题会正常折行）。默认 `False` = 现有窗体行为不变 |
 | `ShowAccelChar` | `Boolean` | `False` | 把 `&` 解释为助记符标记：`&` 被吃掉，其后字符在按住 Alt 时显示下划线。关闭时 `&` 就是普通字符、照常绘制。与 `TCustomPanel.ShowAccelChar` 同义、同默认值；**仅影响显示**（面板不接受焦点，没有可供 Alt+字母 激活的目标）。折行与助记符下划线不能同时生效——画笔的多行分支没有逐行助记符偏移，但 `&` 仍会被吃掉，标题文字本身是对的 |
 | `Align` | `TAlign` | `alNone` | 父容器内的停靠方式 |

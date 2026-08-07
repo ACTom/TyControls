@@ -2,7 +2,10 @@ unit test.grid;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, DateUtils, Types, Graphics, Controls, Forms, LCLType, fpcunit, testregistry,
+  Classes, SysUtils, DateUtils, Types, Graphics, Controls, Forms, LCLType, Clipbrd,
+  Translations,            // TPOFile / TranslateUnitResourceStrings(目录晚装载的守卫)
+  tyControls.StrConsts,    // rsGridCheckedWord(同一守卫的前置断言)
+  fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.Columns, tyControls.Grid, tyControls.ComboBox,
   tyControls.Painter, tyControls.ImageCollection, tyControls.Edit, StdCtrls,
@@ -334,6 +337,11 @@ type
     procedure TestRowDragRefusedWhenDisplayOrderIsNotDataOrder;
     procedure TestFillHandleGeometryMatchesWhatIsDrawn;
     procedure TestFillCopiesRepeatsAndExtrapolates;
+    procedure TestReadOnlyRefusesPaste;
+    procedure TestReadOnlyCutCopiesButDoesNotClear;
+    procedure TestReadOnlyHidesAndInertsTheFillHandle;
+    procedure TestFillSkipsReadOnlyCellsAndColumns;
+    procedure TestCheckedWordFollowsACatalogueLoadedAfterUnitInit;
     procedure TestProgrammaticCursorMoveDoesNotStretchSelection;
     procedure TestBulkFillStaysLinear;
     procedure TestBeginUpdateCollapsesRepaints;
@@ -2599,8 +2607,10 @@ begin
 end;
 
 { 读的时候宽松(外部系统真值写法五花八门),写回时收敛成 '1'/''。
-  注意 '是' 这类**本地化**真值由 TyGridCheckedWord 驱动(从 resourcestring 播种,英文基线为空),
-  所以这里显式设置它来模拟中文语境 —— 不能假设运行时加载了哪个 .po。 }
+  注意 '是' 这类**本地化**真值由 TyGridCheckedWord 驱动(出厂哨兵 = 实时跟随
+  rsGridCheckedWord,英文基线 'yes';赋值即 override),所以这里显式设置它来模拟
+  中文语境 —— 不能假设运行时加载了哪个 .po。目录晚装载的那条契约另有专门守卫
+  TestCheckedWordFollowsACatalogueLoadedAfterUnitInit。 }
 procedure TTyStringGridTest.TestCheckBoxReadsLooseTruthyValuesButWritesCanonical;
 var
   G: TStrGridAccess;
@@ -2616,7 +2626,7 @@ begin
   AssertTrue('YES 算勾上(不分大小写)', G.CellChecked(0, 1));
   AssertTrue('本地化真值词算勾上', G.CellChecked(0, 2));
 
-  { 清掉本地化词后,它就不该再算真 —— 证明这条判定确实由 resourcestring 驱动。 }
+  { 清成空串后它就不该再算真 —— 空 override = 明确禁用本地化词(不是退回跟随)。 }
   TyGridCheckedWord := '';
   AssertFalse('本地化词为空时不再认它', G.CellChecked(0, 2));
   AssertTrue('通用真值不受影响', G.CellChecked(0, 0));
@@ -7539,6 +7549,221 @@ begin
   G.DragFromTo((h.Left + h.Right) div 2, (h.Top + h.Bottom) div 2,
                (cell.Left + cell.Right) div 2, (cell.Top + cell.Bottom) div 2);
   AssertEquals('拖柄之后第 4 行被填上', '5', G.Cells[3, 4]);
+end;
+
+{ ReadOnly 必须挡住**用户手势**的写入,而程序化写入(Cells[..] :=)照旧 ——
+  与本库每个编辑控件的 ReadOnly 同义(TTyEdit.PasteFromClipboard 开头就是
+  `if FReadOnly then Exit`),也与 LCL 网格一致(DoPasteFromClipboard 由
+  EditingAllowed 把门,grids.pas:11768)。从前粘贴不看 FReadOnly,一张只读表
+  能被 Ctrl+V 改掉 —— docs/controls/grid.md 里挂了整版《已知缺口》。 }
+procedure TTyStringGridTest.TestReadOnlyRefusesPaste;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.Cells[0, 0] := 'a0'; G.Cells[1, 0] := 'b0';
+  G.MoveCursor(0, 0);
+  G.ReadOnly := True;
+  G.ClearUndo;
+
+  G.PasteFromText('X' + #9 + 'Y' + LineEnding);
+  AssertEquals('只读时粘贴整体被拒(左格)', 'a0', G.Cells[0, 0]);
+  AssertEquals('只读时粘贴整体被拒(右格)', 'b0', G.Cells[1, 0]);
+  AssertEquals('被拒的粘贴不留撤销记录', 0, G.UndoCountForTest);
+
+  { goEditing 是 ReadOnly 的反视图 —— 两种拼法必须是**同一个**答案,
+    不许出现双重否定绕回去的路。 }
+  G.ReadOnly := False;
+  G.Options := G.Options - [goEditing];
+  G.PasteFromText('X' + #9 + 'Y' + LineEnding);
+  AssertEquals('Options-[goEditing] 这个拼法同样拒绝', 'a0', G.Cells[0, 0]);
+
+  { 程序化写入不受影响 —— ReadOnly 管的是用户,不是宿主。 }
+  G.Cells[0, 0] := 'prog';
+  AssertEquals('Cells[..] := 照旧可写', 'prog', G.Cells[0, 0]);
+
+  { 正向对照:开回可编辑,同一份文本要粘得进去 —— 否则上面两条绿着
+    也可能只是粘贴本身坏了。 }
+  G.Options := G.Options + [goEditing];
+  G.MoveCursor(0, 0);
+  G.PasteFromText('X' + #9 + 'Y' + LineEnding);
+  AssertEquals('可编辑时同一份文本粘得进去', 'X', G.Cells[0, 0]);
+  AssertEquals('第二列也进去了', 'Y', G.Cells[1, 0]);
+end;
+
+{ 只读下剪切**退化为复制**:剪贴板照拿选区,表里的数据一个不少 ——
+  与 TTyEdit/TTyMemo 的 ReadOnly 剪切完全同规(Edit.pas:1684)。LCL 的网格
+  在 EditingAllowed=False 时剪切什么都不做(grids.pas:11753-11758);
+  这里保住复制那一半,因为"只读=能看能拷、不能改"才是本库一贯的含义。 }
+procedure TTyStringGridTest.TestReadOnlyCutCopiesButDoesNotClear;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.Cells[0, 0] := 'keepme';
+  G.MoveCursor(0, 0);
+  G.ReadOnly := True;
+  G.ClearUndo;
+
+  Clipboard.AsText := 'sentinel';
+  G.CutToClipboard;
+  AssertEquals('数据一个没少', 'keepme', G.Cells[0, 0]);
+  AssertTrue('复制那一半照跑:剪贴板拿到了选区',
+    Pos('keepme', Clipboard.AsText) > 0);
+  AssertEquals('退化的剪切不留撤销记录', 0, G.UndoCountForTest);
+end;
+
+{ 只读表**没有填充柄**:FillHandleRect 变空,于是既不画也点不中
+  (绘制与命中读的是同一个矩形 —— 画一个拖了没反应的柄,正是
+  "published 却不照办"那类谎话的像素版)。API 直调也被拒。 }
+procedure TTyStringGridTest.TestReadOnlyHidesAndInertsTheFillHandle;
+var
+  G: TStrGridAccess;
+  h: TRect;
+  cell: TRect;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.Cells[0, 0] := '5';
+  G.SelectRange(0, 0, 0, 0);
+
+  h := G.FillHandleRect;
+  AssertTrue('前置:可编辑时柄在', not IsRectEmpty(h));
+
+  G.ReadOnly := True;
+  AssertTrue('只读时柄消失(空矩形 = 不画也点不中)',
+    IsRectEmpty(G.FillHandleRect));
+
+  { 从可编辑时柄所在的位置往下拖 —— 现在那里只是普通单元格,
+    这一下必须一格数据都不写。 }
+  cell := G.CellRect(0, 4);
+  G.DragFromTo((h.Left + h.Right) div 2, (h.Top + h.Bottom) div 2,
+               (cell.Left + cell.Right) div 2, (cell.Top + cell.Bottom) div 2);
+  AssertEquals('拖拽写不进任何格', '', G.Cells[0, 4]);
+
+  { API 直调同样被拒 —— 宿主自己的"填充"菜单项也不能改只读表。 }
+  G.SelectRange(0, 0, 0, 0);
+  G.FillFromSelectionTo(0, 3);
+  AssertEquals('FillFromSelectionTo 被拒', '', G.Cells[0, 3]);
+  AssertEquals('源格自身也原样', '5', G.Cells[0, 0]);
+end;
+
+{ 逐格/逐列只读:粘贴与剪切一直走 EditorKindFor 这道门,填充柄从前**不走**——
+  同一份"这格不能改"对三条路径答两种话。现在填充也逐格问它。 }
+procedure TTyStringGridTest.TestFillSkipsReadOnlyCellsAndColumns;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 8;
+
+  { 一、逐格只读:等差外推跳过锁定格,而**位置阶梯不乱** ——
+    10,20 往下铺,第 3 行锁着,得到 30,_,50,不是 30,_,40。 }
+  G.Cells[0, 0] := '10';
+  G.Cells[0, 1] := '20';
+  G.Cells[0, 3] := 'locked';
+  G.CellReadOnly[0, 3] := True;
+  G.SelectRange(0, 0, 0, 1);
+  G.FillFromSelectionTo(0, 4);
+  AssertEquals('锁定格之前照填', '30', G.Cells[0, 2]);
+  AssertEquals('锁定格原样', 'locked', G.Cells[0, 3]);
+  AssertEquals('锁定格之后按**位置**续,不是按跳过数续', '50', G.Cells[0, 4]);
+
+  { 二、循环重复分支同规。 }
+  G.Cells[1, 0] := 'a';
+  G.Cells[1, 2] := 'keep';
+  G.CellReadOnly[1, 2] := True;
+  G.SelectRange(1, 0, 1, 0);
+  G.FillFromSelectionTo(1, 3);
+  AssertEquals('重复分支照填', 'a', G.Cells[1, 1]);
+  AssertEquals('重复分支跳过锁定格', 'keep', G.Cells[1, 2]);
+  AssertEquals('锁定格之后继续', 'a', G.Cells[1, 3]);
+
+  { 三、整列只读(列模型的 ReadOnly)同一道门。 }
+  G.Cells[2, 0] := 'z';
+  TTyGridColumn(G.Header.Columns.Items[2]).ReadOnly := True;
+  G.SelectRange(2, 0, 2, 0);
+  G.FillFromSelectionTo(2, 2);
+  AssertEquals('只读列一格不写', '', G.Cells[2, 1]);
+  AssertEquals('只读列一格不写', '', G.Cells[2, 2]);
+end;
+
+const
+  { 一个"晚到"的目录:只带 rsGridCheckedWord 一条,译成 '真值'(刻意不用 '是',
+    免得撞上别的测试塞进 override 的词)。目录按标识符键入,msgid 是英文基线。 }
+  LATE_PO_ZH =
+    'msgid ""'                                        + LineEnding +
+    'msgstr ""'                                       + LineEnding +
+    '"Content-Type: text/plain; charset=UTF-8\n"'     + LineEnding +
+    '"Language: zh_CN\n"'                             + LineEnding +
+    ''                                                + LineEnding +
+    '#: tycontrols.strconsts.rsgridcheckedword'       + LineEnding +
+    'msgid "yes"'                                     + LineEnding +
+    'msgstr "真值"'                                    + LineEnding;
+  { 还原用的恒等目录(进程级的 resourcestring 没有"取消翻译"的 API)。 }
+  LATE_PO_EN =
+    'msgid ""'                                        + LineEnding +
+    'msgstr ""'                                       + LineEnding +
+    '"Content-Type: text/plain; charset=UTF-8\n"'     + LineEnding +
+    '"Language: en\n"'                                + LineEnding +
+    ''                                                + LineEnding +
+    '#: tycontrols.strconsts.rsgridcheckedword'       + LineEnding +
+    'msgid "yes"'                                     + LineEnding +
+    'msgstr "yes"'                                    + LineEnding;
+
+{ 初始化顺序缺陷的守卫。语言目录在**单元初始化之后**才装载(SetDefaultLang 跑在
+  .lpr 主体里),而从前 Grid.pas 的 initialization 里有一句
+  `TyGridCheckedWord := rsGridCheckedWord;` —— 拷贝抓到的永远是未翻译的英文 'yes',
+  zh_CN 目录里的 '是' 永远生效不了。契约("默认跟随 resourcestring,运行时可
+  override")要求判定**实时**读 resourcestring:这里按真实启动顺序演一遍 ——
+  初始化早就结束,现在才装目录 —— override 全程不动,判定必须跟上。 }
+procedure TTyStringGridTest.TestCheckedWordFollowsACatalogueLoadedAfterUnitInit;
+var
+  G: TStrGridAccess;
+  po: TPOFile;
+  saved: string;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.Cells[0, 0] := '真值';
+  G.Cells[0, 1] := '对';
+
+  saved := TyGridCheckedWord;
+  try
+    { 出厂态:override 无人动过(别的测试可能塞过词,先归位)。 }
+    TyGridCheckedWord := TyGridCheckedWordFollowRs;
+    AssertEquals('前置:英文基线', 'yes', rsGridCheckedWord);
+    AssertFalse('前置:目录未装载时 ''真值'' 不算真', G.CellChecked(0, 0));
+
+    po := TPOFile.Create(True);
+    try
+      po.ReadPOText(LATE_PO_ZH);
+      AssertTrue('目录装载成功',
+        TranslateUnitResourceStrings('tyControls.StrConsts', po));
+    finally
+      po.Free;
+    end;
+    AssertEquals('前置:resourcestring 真的翻过去了', '真值', rsGridCheckedWord);
+
+    AssertTrue('目录装载**晚于**单元初始化也必须生效 —— override 全程没人动,'
+      + '判定必须实时读 resourcestring,不是读 initialization 抓走的那份拷贝',
+      G.CellChecked(0, 0));
+
+    { override 赢过 resourcestring;空串 = 明确禁用,不是"跟随"。 }
+    TyGridCheckedWord := '对';
+    AssertTrue('override 生效', G.CellChecked(0, 1));
+    AssertFalse('override 一设,resourcestring 的词就不再认', G.CellChecked(0, 0));
+    TyGridCheckedWord := '';
+    AssertFalse('空 override = 禁用本地化词(不是退回跟随)', G.CellChecked(0, 1));
+  finally
+    { 进程级状态双双还原,别让翻译漏进后面的测试。 }
+    TyGridCheckedWord := saved;
+    po := TPOFile.Create(True);
+    try
+      po.ReadPOText(LATE_PO_EN);
+      TranslateUnitResourceStrings('tyControls.StrConsts', po);
+    finally
+      po.Free;
+    end;
+  end;
 end;
 
 { 在**行头槽**里按下并拖动 = 拖行(与列头拖列对称)。

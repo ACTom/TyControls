@@ -155,8 +155,8 @@ type
     goColSizing,           { 在列头里拖分隔线改列宽 —— hoColumnResize 的视图 }
     goRowMoving,           { 在行头槽里拖动整行重排(仍需 ShowIndicator) }
     goColMoving,           { 拖动列头重排列 —— hoDrag 的视图 }
-    goEditing,             { 能开出**编辑器** —— ReadOnly 的**反**视图。
-                             注意它挡不住 Ctrl+V/Ctrl+X/填充柄,见 ReadOnly 声明处 }
+    goEditing,             { 用户手势能改数据(编辑器 + 粘贴/剪切/填充柄)——
+                             ReadOnly 的**反**视图,范围见 ReadOnly 声明处 }
     goTabs,                { Tab 在格之间走;关掉则 Tab 把焦点交给下一个控件 }
     goRowSelect,           { 整行选择 —— SelectionMode = gsmRow 的视图 }
     goDblClickAutoSize,    { 双击列分隔线按内容适宽 }
@@ -2944,12 +2944,13 @@ type
     property Col: Integer read FCol write SetCol default 0;
     property Row: Integer read FRow write SetRow default 0;
     property OnSelectCell: TTyGridSelectCellEvent read FOnSelectCell write FOnSelectCell;
-    { 整表只读:任何**编辑器**都开不起来(双击 / F2 / 直接打字 / 勾选框 /
-      评分 / 颜色 / "…" 七条路都问它)。`Options` 里的 goEditing 是它的反视图。
-
-      **它今天挡不住 Ctrl+V、Ctrl+X 和填充柄拖拽** —— 那三条路径不看 FReadOnly,
-      所以一张"只读"的表仍然能被粘贴改掉。这是这个属性自带的缺口,
-      补法(三行)与不顺手补的理由都写在 docs/controls/grid.md 的《已知缺口》里。 }
+    { 整表只读:**用户手势写不进数据**。编辑器七条路都问它(双击 / F2 / 直接打字 /
+      勾选框 / 评分 / 颜色 / "…"),三条非编辑器的写入手势也问它 —— 粘贴整体被拒
+      (PasteFromText,含 Ctrl+V)、剪切退化为复制(CutToClipboard,与 TTyEdit 同规)、
+      填充柄消失且 API 直调被拒(FillHandleRect / FillFromSelectionTo)。
+      程序化写入(Cells[..] :=、LoadFromCSVText、Undo/Redo)**不受它管** ——
+      ReadOnly 管用户,不管宿主,与本库每个编辑控件的含义一致。
+      `Options` 里的 goEditing 是它的反视图。 }
     property ReadOnly: Boolean read FReadOnly write FReadOnly default False;
     { 选择粒度:单元格矩形 / 整行 / 整列。 }
     { 分组行的格式串:%s = 分组值,%d = 组内行数。 }
@@ -3113,11 +3114,27 @@ type
     property Index: Integer read FIndex;
   end;
 
+const
+  { TyGridCheckedWord 的出厂值:哨兵,含义是"跟随 resourcestring"(判定时**实时**读
+    rsGridCheckedWord,随语言目录走)。控制字符不可能是用户的真值词 ——
+    与下面 TyFilterOrSep 用 #1 是同一个论证。 }
+  TyGridCheckedWordFollowRs = #1;
+
 var
   { 勾选框额外认作"真"的**本地化**词(中文表里常见 '是')。
-    默认从 resourcestring 播种,可在运行时改 —— 与本库 TyFallbackFontName 同一惯例。
-    通用真值 1/true/yes/y 永远认,不受它影响。 }
-  TyGridCheckedWord: string;
+
+    这是一个 OVERRIDE 槽:出厂是上面的哨兵 = 判定时实时读 rsGridCheckedWord;
+    宿主运行时赋任何别的值就改说宿主的话,**空串 = 明确禁用**本地化词
+    (三态都有测试钉着)。通用真值 1/true/yes/y 永远认,不受它影响。
+    运行时可改这一点与本库 TyFallbackFontName 同一惯例。
+
+    它**不能**在 initialization 里 `:= rsGridCheckedWord` 播种(从前正是这么写的):
+    语言目录装载在单元初始化**之后**(SetDefaultLang 跑在 .lpr 主体里),那份拷贝
+    抓到的永远是未翻译的英文 'yes',zh_CN 目录里的 '是' 就此永远生效不了 ——
+    "从 resourcestring 播种、可运行时改"的契约被初始化顺序整个废掉。钉住这条的
+    守卫:test.grid.pas 的 TestCheckedWordFollowsACatalogueLoadedAfterUnitInit,
+    它模拟"目录晚于单元初始化才装载"并要求判定仍然跟上。 }
+  TyGridCheckedWord: string = TyGridCheckedWordFollowRs;
 
 const
   { 同列多条件之间的分隔(编码里用,不是用户打的那个分号)。
@@ -10776,7 +10793,7 @@ end;
 
 function TTyStringGrid.CellChecked(ACol, ARow: Integer): Boolean;
 var
-  v, wc, wu: string;
+  v, wc, wu, w: string;
 begin
   v := LowerCase(Trim(GetCellText(ACol, ARow)));
   { 本列自己的词汇先说话 —— 'Y'/'N' 那种表里 'n' 落不进内建词表算是碰巧对了,
@@ -10787,9 +10804,15 @@ begin
 
   { 宽松识别:从 CSV/外部系统进来的真值写法五花八门,读的时候都认。 }
   Result := (v = '1') or (v = 'true') or (v = 'yes') or (v = 'y');
-  { 再认一个本地化的真值写法(中文表里常见 '是')—— 空的本地化词不参与判定。 }
-  if (not Result) and (TyGridCheckedWord <> '') then
-    Result := v = LowerCase(TyGridCheckedWord);
+  { 再认一个本地化的真值写法(中文表里常见 '是')。哨兵 = **实时**读 resourcestring
+    —— 不能读初始化时抓的拷贝,语言目录装载晚于单元初始化(见 TyGridCheckedWord
+    声明处)。空的本地化词(显式 override 成空)不参与判定。 }
+  if not Result then
+  begin
+    w := TyGridCheckedWord;
+    if w = TyGridCheckedWordFollowRs then w := rsGridCheckedWord;
+    if w <> '' then Result := v = LowerCase(w);
+  end;
 end;
 
 function TTyStringGrid.CellCheckState(ACol, ARow: Integer): TCheckBoxState;
@@ -11990,6 +12013,14 @@ var
   pos, dataRow, colIdx: Integer;
 begin
   CopySelectionToClipboard;
+  { ReadOnly 下剪切**退化为复制**:剪贴板照拿选区(上一行已经拿了),表里一格不清。
+    与 TTyEdit.CutToClipboard 完全同规(Edit.pas:1684 `if FReadOnly then begin
+    CopyToClipboard; Exit end`)——"只读=能看能拷、不能改"是本库每个编辑控件的含义。
+    LCL 的网格在 EditingAllowed=False 时剪切干脆什么都不做(grids.pas:11753),
+    这里保住复制那一半,跟自己库里的编辑控件对齐,不跟 LCL 的网格。
+    放在 BeginUpdate 之前:被拒的手势不该开事务(空事务虽被 PushUndoStep 丢弃,
+    但"否决在开事务之前"是 InsertRow 起就立下的规矩)。 }
+  if FReadOnly then Exit;
   { 剪掉一片 = **一条**撤销记录。逐格记的话,剪 20 格要按 20 次 Ctrl+Z。 }
   BeginUpdate;
   try
@@ -12750,6 +12781,10 @@ var
   sz: Integer;
 begin
   Result := Rect(0, 0, 0, 0);
+  { 只读表**没有柄**:空矩形让绘制(RenderSelectionFrame)与命中(MouseDown)同时
+    消失 —— 两处读的都是这一个矩形。画一个拖了没反应的柄,是"published 却不照办"
+    的像素版;数据侧另有 FillFromSelectionTo 自己的守卫接住 API 直调。 }
+  if FReadOnly then Exit;
   { No fill handle outside cell-selection mode — keep "what's drawn" == "what's hit". }
   if FSelectionMode <> gsmCell then Exit;
   b := SelectionBoundsRect;
@@ -12804,6 +12839,10 @@ var
   handled: Boolean;
   c, r, n, srcH, idx, first, step: Integer;
 begin
+  { ReadOnly 下填充被拒。柄本身在 FillHandleRect 里已经变空(不画、点不中),
+    这一句守的是 API 直调 —— 宿主自己的"向下填充"菜单项也改不了只读表。
+    放在 OnFillCells 之前,与粘贴那头同一个理由:不请宿主否决一个不会发生的操作。 }
+  if FReadOnly then Exit;
   src := Selection;                          { 数据行坐标 }
   if (src.Right < src.Left) or (src.Bottom < src.Top) then Exit;
   if ARow < 0 then ARow := 0;
@@ -12823,13 +12862,19 @@ begin
   try
     for c := src.Left to src.Right do
     begin
+      { 逐格/逐列只读走 EditorKindFor 这同一道门 —— 粘贴(PasteFromText)与剪切
+        (CutToClipboard)一直这么问,填充从前**不问**,于是同一格"不能改"对三条
+        路径答两种话。跳过的是**写入**,计数器照走:位置阶梯保持一致,10,20 铺过
+        一格锁定的第 3 行得到 30,_,50,而不是 30,_,40(等差的值由**位置**定,
+        不由"跳过了几个"定;循环重复分支同理)。 }
       if ArithmeticStep(c, src.Top, src.Bottom, first, step) then
       begin
         { 等差:接着往下推。 }
         n := 1;
         for r := tgt.Top to tgt.Bottom do
         begin
-          Cells[c, r] := IntToStr(first + (srcH - 1 + n) * step);
+          if EditorKindFor(c, r) <> gekNone then
+            Cells[c, r] := IntToStr(first + (srcH - 1 + n) * step);
           Inc(n);
         end;
       end
@@ -12839,7 +12884,8 @@ begin
         idx := 0;
         for r := tgt.Top to tgt.Bottom do
         begin
-          Cells[c, r] := GetCellText(c, src.Top + (idx mod srcH));
+          if EditorKindFor(c, r) <> gekNone then
+            Cells[c, r] := GetCellText(c, src.Top + (idx mod srcH));
           Inc(idx);
         end;
       end;
@@ -13468,6 +13514,14 @@ var
   txt, cellTxt: string;
   allow: Boolean;
 begin
+  { ReadOnly 拒绝**整个**粘贴 —— Ctrl+V 手势(PasteFromClipboard)与这个文本入口
+    一视同仁:宿主把自己的"粘贴"菜单接到这里,接出来的必须还是只读表。
+    与本库编辑控件同规(TTyEdit.PasteFromClipboard 开头就是 `if FReadOnly then
+    Exit`,Edit.pas:1704),也与 LCL 网格一致(DoPasteFromClipboard 由
+    EditingAllowed 把门,grids.pas:11768)。放在 OnClipboardPaste **之前**:
+    不给宿主否决一个本就不会发生的操作的机会。程序化写入(Cells[..] :=、
+    LoadFromCSVText)不受影响 —— ReadOnly 管用户,不管宿主。 }
+  if FReadOnly then Exit;
   if AText = '' then Exit;
   EndEdit(True);
 
@@ -15547,6 +15601,8 @@ end;
 initialization
   { 设计器与 .lfm 流式化按类名查类,必须登记。 }
   RegisterClasses([TTyCustomGrid, TTyDrawGrid, TTyStringGrid]);
-  TyGridCheckedWord := rsGridCheckedWord;
+  { 这里**没有** `TyGridCheckedWord := rsGridCheckedWord;`,并且不能加回来:
+    语言目录装载晚于单元初始化,那份拷贝抓到的永远是英文 —— 判定在 CellChecked
+    里实时读 resourcestring(见 TyGridCheckedWord 声明处)。 }
 
 end.

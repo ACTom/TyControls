@@ -12,13 +12,13 @@ type
     FPaintCache: TTyPaintCache;
   private
     FAlignment: TAlignment;
-    FVerticalAlignment: TTextLayout;
+    FVerticalAlignment: TVerticalAlignment;
     FWordWrap: Boolean;
     FShowAccelChar: Boolean;
     { Repaint when Caption/Text changes -- the LCL hook that replaces our old setter. }
     procedure TextChanged; override;
     procedure SetAlignment(AValue: TAlignment);
-    procedure SetVerticalAlignment(AValue: TTextLayout);
+    procedure SetVerticalAlignment(AValue: TVerticalAlignment);
     procedure SetWordWrap(AValue: Boolean);
     procedure SetShowAccelChar(AValue: Boolean);
   protected
@@ -52,9 +52,21 @@ type
     { The caption's VERTICAL placement. The horizontal Alignment has been here since the
       start and this axis was hardcoded to the middle, so a section-header band -- label at
       the top, children below -- could not be expressed with the panel's own Caption at all.
-      Same three values and same default as TCustomPanel (extctrls.pp:1155). }
-    property VerticalAlignment: TTextLayout read FVerticalAlignment
-      write SetVerticalAlignment default tlCenter;
+
+      THE TYPE IS THE PARITY CLAIM. TCustomPanel declares
+        VerticalAlignment: TVerticalAlignment ... default taVerticalCenter  (extctrls.pp:1154)
+      over the RTL's enum (taAlignTop, taAlignBottom, taVerticalCenter -- classesh.inc:94,
+      ordinals 0/1/2, and the `default` directive below stores that ordinal). This property
+      briefly shipped in-dev typed Graphics.TTextLayout: same name, wrong type, so
+      `P.VerticalAlignment := taAlignBottom` did not compile and an .lfm written by a real
+      TPanel ('VerticalAlignment = taAlignBottom') refused to load -- the exact collision
+      class (LCL's name, not LCL's meaning) this library keeps removing. BREAKING for any
+      .lfm saved by the three-day dev window that streamed `tlTop`/`tlBottom`: those now
+      fail to read LOUDLY (never silently reinterpreted); the streamed DEFAULT wrote no
+      line at all and is unaffected. The painter still thinks in TTextLayout -- RenderTo
+      maps through LCL's own name-map (see VerticalAlignmentToTextLayout there). }
+    property VerticalAlignment: TVerticalAlignment read FVerticalAlignment
+      write SetVerticalAlignment default taVerticalCenter;
     { Wrap a long caption instead of ellipsising it. The painter has taken AMultiLine since
       multi-line text landed and the panel simply never passed it, so a banner/caption panel
       silently clipped its second line to "...". Default False = the behaviour every existing
@@ -94,7 +106,7 @@ begin
   // Designer container: the IDE drops child controls INTO the panel.
   ControlStyle := ControlStyle + [csAcceptsControls];
   FAlignment := taCenter;
-  FVerticalAlignment := tlCenter;
+  FVerticalAlignment := taVerticalCenter;
   FWordWrap := False;
   FShowAccelChar := False;
   { A screen reader had nothing to announce a ty container as: every control in the library
@@ -135,7 +147,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyPanel.SetVerticalAlignment(AValue: TTextLayout);
+procedure TTyPanel.SetVerticalAlignment(AValue: TVerticalAlignment);
 begin
   if FVerticalAlignment = AValue then Exit;
   FVerticalAlignment := AValue;
@@ -162,6 +174,14 @@ begin
   Invalidate;
 end;
 procedure TTyPanel.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+const
+  { LCL's own map, verbatim (custompanel.inc:147) -- and it maps by NAME, not by ordinal:
+    the two enums order their members differently ((top, BOTTOM, centre) on the RTL side,
+    (top, CENTRE, bottom) on the painter's), so a Delphi-style typecast here would swap
+    bottom and centre and compile clean. This array is the single seam between the
+    published LCL-typed axis and the painter's TTextLayout; paint has no other source. }
+  VerticalAlignmentToTextLayout: array[TVerticalAlignment] of TTextLayout =
+    (tlTop, tlBottom, tlCenter);
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -233,7 +253,8 @@ begin
       { Ellipsis and wrapping are the two halves of "the caption does not fit": wrapping ON
         means the text may use more lines, so it must NOT also be cut at one. }
       P.DrawText(ContentRect, Disp, S.FontName, ResolveFontSize(S), S.FontWeight,
-        S.TextColor, FAlignment, FVerticalAlignment, not FWordWrap,
+        S.TextColor, FAlignment, VerticalAlignmentToTextLayout[FVerticalAlignment],
+        not FWordWrap,
         TyAccelGatePos(MnPos), False, FWordWrap, TyLineHeight(ActiveController));
     end;
     P.EndPaint;

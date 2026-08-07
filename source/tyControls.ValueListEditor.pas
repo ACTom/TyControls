@@ -154,6 +154,7 @@ type
     procedure AppendFlat(ARow: TTyValueRow; ALevel: Integer);
     procedure FreeRows;
     function GetKey(AIndex: Integer): string;
+    procedure SetKey(AIndex: Integer; const AValue: string);
     function GetRowCount: Integer;
     procedure SetRowCount(AValue: Integer);
     { Root-row index of the row the user currently has selected, or -1. Selection is a FLAT
@@ -320,7 +321,10 @@ type
       over there), and it is public rather than published -- a live row count in a .lfm would
       make the designer manufacture blank rows on every load. }
     property RowCount: Integer read GetRowCount write SetRowCount;
-    property Keys[AIndex: Integer]: string read GetKey;                 // root rows
+    { Root rows, read/WRITE -- LCL's shape (valedit.pas:201 `read GetKey write SetKey`).
+      The setter is the PROGRAMMATIC rename path and deliberately bypasses keyUnique --
+      see SetKey's body for why that is LCL-faithful and not an oversight. }
+    property Keys[AIndex: Integer]: string read GetKey write SetKey;
     { Values[] is indexed BY KEY, matching TValueListEditor on LCL / Delphi:
         property Values[const Key: string]: string read GetValue write SetValue;
       -- C:\lazarus\lcl\valedit.pas:202. It is the class's most-used member, so the identifier
@@ -348,9 +352,10 @@ type
     property KeyOptions: TTyKeyOptions read FKeyOptions write SetKeyOptions default [];
     property Images: TTyVirtualImageList read FImages write SetImages;
     property OnValueChanged: TTyValueEditEvent read FOnValueChanged write FOnValueChanged;
-    { A keyEdit rename COMMITTED (ARow.Key already holds the new name). Distinct from
-      OnValueChanged on purpose -- that one is documented as naming the row whose VALUE moved,
-      and firing it for a rename would make it lie. }
+    { A rename COMMITTED (ARow.Key already holds the new name) -- via the keyEdit gesture
+      or a programmatic Keys[] write, the same two routes OnValueChanged covers for values.
+      Distinct from OnValueChanged on purpose -- that one is documented as naming the row
+      whose VALUE moved, and firing it for a rename would make it lie. }
     property OnKeyChanged: TTyValueEditEvent read FOnKeyChanged write FOnKeyChanged;
     { A keyUnique rename REFUSED. The row kept its old key; the app decides whether to tell the
       user (LCL pops its own ShowMessage from inside the control; we do not). }
@@ -803,6 +808,30 @@ end;
 function TTyValueListEditor.GetKey(AIndex: Integer): string;
 begin
   if (AIndex >= 0) and (AIndex <= High(FRoot)) then Result := FRoot[AIndex].Key else Result := '';
+end;
+
+{ The PROGRAMMATIC rename path (LCL: valedit.pas:1084, SetKey = `Cells[0,Index]:=Value`).
+
+  It deliberately does NOT consult keyUnique, and that is LCL's shape, not an oversight:
+  over there the uniqueness check lives ONLY in the editor path (ValidateEntry, :1614),
+  so `VLE.Keys[i] := name` rewrites a colliding key too. keyUnique polices the USER's
+  gesture (CommitKeyEdit above); the API is the host's own responsibility -- the same
+  split as ReadOnly, which stops the editor but not this write (nor SetValueFromIndex's).
+  Routing this through CommitKeyEdit instead would make the two flags gate the API the
+  moment somebody turned them on for the UI, which is exactly the coupling LCL avoids.
+
+  Out of range is a no-op like SetValueFromIndex, and for the same reason: the row form
+  addresses EXISTING rows only, and must never manufacture one from a stray index.
+  A committed rename fires OnKeyChanged whichever path it took -- programmatic value
+  writes report through OnValueChanged, so a programmatic rename reporting through
+  OnKeyChanged is the same contract on the other column. }
+procedure TTyValueListEditor.SetKey(AIndex: Integer; const AValue: string);
+begin
+  if (AIndex < 0) or (AIndex > High(FRoot)) then Exit;
+  if FRoot[AIndex].Key = AValue then Exit;
+  FRoot[AIndex].Key := AValue;
+  Invalidate;
+  if Assigned(FOnKeyChanged) then FOnKeyChanged(Self, FRoot[AIndex]);
 end;
 
 function TTyValueListEditor.GetValueFromIndex(AIndex: Integer): string;

@@ -47,7 +47,7 @@ end;
 | `Cols[列]` / `Rows[行]` | 整列 / 整行的 `TStrings` **活视图**(可读可写、可赋值)。`Memo.Lines := Grid.Cols[2]`、`Grid.Rows[3] := MyList`、`Rows[r].CommaText` 都能用。赋值**不改网格结构**,见下面《整行整列赋值》 |
 | `Col` / `Row` | 当前单元格(二维光标) |
 | `Options` | 行为开关的集合(`TTyGridOptions`),对标 LCL 的 `TCustomGrid.Options`。设计器里一次看全所有交互开关 —— 见下面《`Options` 与 LCL 标志对照》 |
-| `ReadOnly` | 整表只读:任何**编辑器**都开不起来(等价于 `Options` 里去掉 `goEditing`)。⚠ 今天**不挡** Ctrl+V / Ctrl+X / 填充柄 —— 见《已知缺口》 |
+| `ReadOnly` | 整表只读:**用户手势写不进数据**——编辑器开不出来,粘贴被拒,剪切退化为复制,填充柄消失(等价于 `Options` 里去掉 `goEditing`)。程序化写入(`Cells[..] :=` 等)不受管 —— 边界详见下文《`ReadOnly` / `goEditing` 的边界》 |
 | `SortColumn` / `SortDirection` | 当前排序列与方向(只读;用 `SortByColumn` / `ToggleSortColumn` 改) |
 | `ShowFooter` / `FooterHeight` | 底部汇总带 |
 | `FixedRowsBottom` | 冻结在**底部**的显示行数(与 `FixedRows` 对称)。常见用途是把合计行钉在视口下沿 |
@@ -131,7 +131,7 @@ end;
 - **区域多选**:`Shift+方向键` 或 `Shift+点击` 拉出矩形选区;普通方向键/点击收回一格
 - **排序**:列头选项加上 `hoHeaderClickAutoSort` 后,点列头即 升序 → 降序 → 取消
 - **过滤**:`SetColumnFilter(列, 文本)` 做包含匹配(不区分大小写);`OnFilterRow` 可逐行否决
-- **剪贴板**:`Ctrl+C` / `Ctrl+V` / `Ctrl+A`。制表符分隔 = Excel 剪贴板格式,可直接互粘
+- **剪贴板**:`Ctrl+C` / `Ctrl+V` / `Ctrl+A`。制表符分隔 = Excel 剪贴板格式,可直接互粘。`ReadOnly` 下 `Ctrl+V` 被拒、`Ctrl+C` 照常;剪切没有默认快捷键(`Ctrl+X` 未接),宿主接 `CutToClipboard` 时它在 `ReadOnly` 下退化为复制
 - **汇总**:`SetColumnAggregate(列, gagSum/gagAvg/gagMin/gagMax/gagCount)`;**只统计筛选后可见的行**,非数值格跳过
 - **列头筛选**:`ShowFilterButtons := True` 后列头出现 ▾,点开是 Excel 式的下拉:
   搜索框 + 逐值行数 + `(全选)` + `(空白)` + 确定/取消。候选与计数都取自**全部数据行**
@@ -140,7 +140,8 @@ end;
   取数用 `DistinctColumnValueCounts`
 - **填充柄**:选区右下角的小方块,往下拖把选区的值铺开 ——
   单格复制、整数等差外推、其余按源区循环重复;`OnFillCells` 可接管做自定义序列。
-  只做纵向:横向拖柄少见得多,而半成品的可供性比没有更糟
+  只做纵向:横向拖柄少见得多,而半成品的可供性比没有更糟。
+  `ReadOnly` 下柄不出现;逐格/逐列只读的目标格被跳过(位置阶梯不乱)
 - **列宽/列序**:拖列头右边缘改宽;拖列头本体换位(需 `hoDrag` + `coDraggable`,位移超阈值才生效)
 - **分组**:`GroupByColumn(列)` 在显示序里插入**合成分组行**(带成员计数),点分组行折叠/展开。折叠状态按**分组值**记账,重排后不会张冠李戴。
   多级请用 `GroupByColumns([地区列, 城市列])`(从外到内),分组行按层级缩进;
@@ -328,6 +329,11 @@ TyGridButton                按钮单元格(:hover / :active)
 - 逐列勾选词汇 `TTyGridColumn.ValueChecked` / `ValueUnchecked`:
   一张 `'Y'`/`'N'` 的表被点一下勾选框,从前会被写进一个 `'1'` ——
   宿主的数据词汇被控件换掉了。两个都留空时行为与从前逐字节相同
+- 本地化真值词 `TyGridCheckedWord`(单元级全局):出厂是哨兵
+  `TyGridCheckedWordFollowRs` = 判定时**实时**读 `rsGridCheckedWord`(zh_CN 目录给
+  `是`,**目录晚于单元初始化装载也生效** —— 从前 initialization 里的一份拷贝把这条
+  契约废掉了,拷到的永远是英文);赋值即 override,空串 = 明确禁用。
+  通用真值 `1`/`true`/`yes`/`y` 永远认
 
 ### 选择
 - `SelectAll` / `SelectRange` / `SelectRows` / `ClearSelection` /
@@ -624,7 +630,7 @@ TyDefaultGridOptions =
 | `goColSizing` | 视图 | `Header.Options` 含 `hoColumnResize` | 开 | |
 | `goRowMoving` | 自有 | `goRowMoving` | 开 | 仍需 `ShowIndicator`,且排序/过滤生效时不可拖(显示序 ≠ 数据序) |
 | `goColMoving` | 视图 | `Header.Options` 含 `hoDrag` | 开 | 单列还要 `coDraggable` |
-| `goEditing` | 视图 | `ReadOnly` 取反 | 开 | ⚠ **范围比名字窄**:它挡的是**编辑器**(双击 / F2 / 直接打字 / 勾选框 / 评分 / 颜色 / "…"),不挡 Ctrl+V、Ctrl+X 和填充柄拖拽 —— 那三条路径今天不看 `ReadOnly`。这是 `ReadOnly` 自带的遗留缺口,不是 `Options` 引入的;补法见下 |
+| `goEditing` | 视图 | `ReadOnly` 取反 | 开 | 关掉 = 用户手势写不进数据:编辑器七条路 + 粘贴 + 剪切的清空半边 + 填充柄,全部认它。程序化写入不受管 —— 边界见《`ReadOnly` / `goEditing` 的边界》 |
 | `goAutoAddRows` | 不收 | — | — | **可以做,但语义要先定。** 我们有排序/过滤/分组的显示序,在最后一行编辑完自动追加的那一行该出现在**显示序**的哪儿并不显然;而且要不要进撤销栈也得定。seam 在 `TTyStringGrid.EndEdit` |
 | `goAutoAddRowsSkipContentCheck` | 不收 | — | — | 上一条的修饰位,一起等 |
 | `goTabs` | 自有 | `goTabs` | 开 | 关掉后 Tab 交给对话框换焦点(不置 `Key := 0`) |
@@ -647,21 +653,34 @@ TyDefaultGridOptions =
 | `goCellEllipsis` | 自有 | `goCellEllipsis` | ⚠ 开 | LCL 默认关。关掉后单行文字硬裁(末字被切一半) |
 | `goRowHighlight` | 自有 | `goRowHighlight` | 关 | 高亮光标所在**整行**。底色复用 `TyGridActiveCell`(本控件自己的键)—— 代价是主题分不开"焦点格"与"高亮行",要分开得加一个 `TyGridRowHighlight` 键 |
 
-### 已知缺口:`ReadOnly` / `goEditing` 管不到剪贴板与填充柄
+### `ReadOnly` / `goEditing` 的边界:用户手势 vs 程序化写入
 
-`FReadOnly` 今天只在五处被读到 —— `DoBeginEdit`、`ToggleCellChecked`、
-`SetRatingByPoint`、`ToggleCellColor`、`InvokeEllipsis`。也就是说
-`ReadOnly := True`(等价于 `Options - [goEditing]`)之后,用户仍可以用
-**Ctrl+V 粘贴、Ctrl+X 剪切、拖填充柄**改掉数据。
+规则一句话:**用户手势写不进只读表,程序化写入不受管。** 与本库每个编辑控件的
+`ReadOnly` 同义(`TTyEdit` / `TTyMemo`),也与 LCL 网格一致(它的粘贴/剪切由
+`EditingAllowed` 把门,`grids.pas:11753/11768`)。
 
-这不是 `Options` 带来的,`ReadOnly` 一直如此;但既然 `goEditing` 是它的视图,
-这里必须写明,免得两个名字一起说同一句不成立的话。
+用户侧,`ReadOnly := True`(= `Options - [goEditing]`)之后:
 
-补法(三行,方向已经确定):在 `TTyStringGrid.PasteFromClipboard`、
-`CutToClipboard`、`FillFromSelectionTo` 的开头各加一句 `if FReadOnly then Exit;`。
-**没有顺手改**是因为它改的是数据写入语义,不属于本次"给行为开关做一个入口"
-的范围;要改就该配一组自己的测试(含"宿主主动调 `PasteFromClipboard` 时
-要不要也挡"这个决定 —— 挡用户手势是显然的,挡宿主 API 则未必)。
+- **编辑器七条路**开不出来(双击 / F2 / 直接打字 / 勾选框 / 评分 / 颜色 / "…")。
+- **粘贴整体被拒**(`PasteFromText`,Ctrl+V 与宿主接的"粘贴"菜单同一入口),
+  `OnClipboardPaste` 不触发(不请宿主否决一个不会发生的操作),不留撤销记录。
+- **剪切退化为复制**(`CutToClipboard`):剪贴板照拿选区,表里一格不清 ——
+  与 `TTyEdit.CutToClipboard` 同规;LCL 的网格是整个不做,我们跟自己库里的
+  编辑控件对齐,不跟它。Ctrl+C 复制**始终可用**。
+- **填充柄消失**(`FillHandleRect` 返回空矩形,绘制与命中同源,所以不画也点不中
+  —— 画一个拖了没反应的柄是"published 却不照办"的像素版);`FillFromSelectionTo`
+  的 API 直调同样被拒。
+
+宿主侧,`Cells[..] :=`、`LoadFromCSVText`、`Undo`/`Redo` 等程序化路径**照旧可写**
+—— "宿主主动调 `PasteFromClipboard` 要不要也挡"当年悬着的那个决定,答案是**挡**:
+它们就是粘贴/剪切/填充这三个**操作本身**,宿主把自己的菜单项接上去,接出来的必须
+还是只读表;宿主想绕开语义,走的路是 `Cells[..] :=`。
+
+逐格 / 逐列的只读(`CellReadOnly[c,r]` / 列的 `ReadOnly`)三条路径同样认:粘贴与
+剪切一直走 `EditorKindFor` 这道门逐格跳过,填充柄从前**不走**、现在同门 —— 且跳过
+的只是**写入**,位置计数照走,等差外推隔着锁定格仍按位置续(10,20 铺过锁定的
+第 3 行得到 30,\_,50,不是 30,\_,40)。守卫在 `tests/test.grid.pas` 的四条
+`TestReadOnly*` / `TestFillSkips*`。
 
 `TGridOptions2`(`goScrollToLastCol` / `goScrollToLastRow` / `goEditorParentColor` /
 `goEditorParentFont` / `goCopyWithoutTrailingLinebreak`)整套不收:前两个是 LCL 逐格

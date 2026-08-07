@@ -43,6 +43,7 @@ type
     procedure TestValuesWriteOfUnknownKeyAppendsRow;
     procedure TestValuesReadOfUnknownKeyIsEmpty;
     procedure TestValueFromIndexIsRowIndexed;
+    procedure TestKeysAreWritableAndRowIndexed;
   end;
 
   { The second collision on this class, and the same shape as the first: a public member whose
@@ -145,6 +146,8 @@ type
     procedure TestKeyUniqueDoesNotRefuseARowItsOwnName;
     { ReadOnly outranks all four }
     procedure TestReadOnlyOutranksEveryKeyOption;
+    { ...but neither ReadOnly nor keyUnique gates the Keys[] SETTER }
+    procedure TestKeysWriteIsTheProgrammaticRenamePath;
   end;
 
 implementation
@@ -268,6 +271,30 @@ begin
       or a stray index would quietly grow the list with an empty-keyed row. }
     e.ValueFromIndex[99] := 'x';
     AssertEquals('out-of-range write appended nothing', 2, e.RowCount);
+  finally e.Free; end;
+end;
+
+{ Keys[] is read/WRITE, as LCL declares it (valedit.pas:201 `read GetKey write SetKey`).
+  It used to be read-only here, so the programmatic half of a rename had to poke
+  Row(i).Key directly -- which repainted nothing and told nobody. Row-indexed like
+  GetKey / ValueFromIndex, and with ValueFromIndex's out-of-range contract: a stray
+  index is a no-op, never an append. }
+procedure TValueListParityTest.TestKeysAreWritableAndRowIndexed;
+var e: TTyValueListEditor;
+begin
+  e := MakeWH;   // Width=100, Height=50
+  try
+    e.Keys[0] := 'Left';
+    AssertEquals('the key changed', 'Left', e.Keys[0]);
+    AssertEquals('the VALUE did not move with it', '100', e.ValueFromIndex[0]);
+    AssertEquals('the keyed lookup finds the row under its new name', '100', e.Values['Left']);
+    AssertEquals('and no longer under the old one', '', e.Values['Width']);
+    AssertEquals('the other row is untouched', 'Height', e.Keys[1]);
+
+    e.Keys[99] := 'stray';
+    AssertEquals('an out-of-range write appends nothing', 2, e.RowCount);
+    e.Keys[-1] := 'stray';
+    AssertEquals('...negative neither', 2, e.RowCount);
   finally e.Free; end;
 end;
 
@@ -858,6 +885,36 @@ begin
     e.Press(VK_F2, [ssShift]);
     AssertEquals('not by keyboard either', -1, e.EditingRow);
     AssertEquals('and the list is exactly as it was', 'B', e.Keys[1]);
+  finally e.Free; end;
+end;
+
+{ The programmatic rename path. Two deliberate bypasses, both LCL's own shape and both
+  the kind a well-meaning tidy-up would "fix":
+
+  - keyUnique does NOT gate it. LCL's SetKey is `Cells[0,Index]:=Value` (valedit.pas:1084)
+    with no uniqueness check anywhere in it -- the check lives ONLY in the editor path
+    (ValidateEntry, :1614). keyUnique polices the USER's gesture; the API is the host's
+    own responsibility, exactly like ReadOnly vs `Text :=` on every edit control here.
+  - ReadOnly does not gate it either, for the same reason SetValueFromIndex ignores it:
+    programmatic writes are not user edits. }
+procedure TValueListKeyOptionsTest.TestKeysWriteIsTheProgrammaticRenamePath;
+var e: TValueListKeyDriver;
+begin
+  e := Make([keyEdit, keyUnique], -1);   // A/B/C with the uniqueness flag ON
+  try
+    e.Keys[0] := 'C';                    // collides with root row 2 -- and lands anyway
+    AssertEquals('the write took effect DESPITE keyUnique', 'C', e.Keys[0]);
+    AssertEquals('nothing was refused', 0, FRejects);
+    AssertEquals('and the rename was reported through OnKeyChanged', 1, FRenames);
+    AssertSame('naming the row that changed', e.Row(0), FLastRenamed);
+
+    e.ReadOnly := True;
+    e.Keys[1] := 'ZZ';
+    AssertEquals('ReadOnly does not gate the programmatic write either', 'ZZ', e.Keys[1]);
+    AssertEquals('and it was reported too', 2, FRenames);
+
+    e.Keys[1] := 'ZZ';                   // the same name again
+    AssertEquals('a same-name write is not a rename and fires nothing', 2, FRenames);
   finally e.Free; end;
 end;
 

@@ -2,7 +2,7 @@ unit test.controls.panel;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Graphics, Forms, Controls, StdCtrls, fpcunit, testregistry,
+  Classes, SysUtils, Types, TypInfo, Graphics, Forms, Controls, StdCtrls, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Base, tyControls.Panel;
 type
@@ -21,6 +21,8 @@ type
     procedure TestPaintSmoke;
     procedure TestAlignmentMovesCaptionInk;
     procedure TestIsDesignerContainer;
+    procedure TestVerticalAlignmentIsLclsExactShape;
+    procedure TestVerticalAlignmentLoadsAnLclLfmAndRefusesTheOldDevIdentifier;
   end;
 implementation
 type
@@ -119,6 +121,79 @@ begin
   AssertTrue('panel is a designer container', csAcceptsControls in FPanel.ControlStyle);
 end;
 
+{ The TYPE is the parity claim. TCustomPanel declares
+    VerticalAlignment: TVerticalAlignment ... default taVerticalCenter  (extctrls.pp:1154)
+  over the RTL enum (taAlignTop, taAlignBottom, taVerticalCenter) from classesh.inc:94.
+  Ours shipped in-dev (4e3376a, never released) typed Graphics.TTextLayout instead -- so
+  `P.VerticalAlignment := taAlignBottom` did not compile and an .lfm written by a real
+  TPanel did not load. Same name, wrong meaning, is the collision class this pass removes. }
+procedure TTyPanelTest.TestVerticalAlignmentIsLclsExactShape;
+var
+  pi: PPropInfo;
+begin
+  pi := GetPropInfo(TTyPanel, 'VerticalAlignment');
+  AssertTrue('published', pi <> nil);
+  AssertEquals('typed with the RTL''s TVerticalAlignment, as TCustomPanel is',
+    'TVerticalAlignment', pi^.PropType^.Name);
+  { The default DIRECTIVE stores an ordinal, so the enum's ordinals are API.
+    taVerticalCenter is 2 in the RTL; if either assertion ever moves, every default
+    already relied on by a streamed .lfm moves with it. }
+  AssertEquals('default clause = Ord(taVerticalCenter)', Ord(taVerticalCenter), pi^.Default);
+  AssertEquals('which is ordinal 2 in the RTL enum', 2, Ord(taVerticalCenter));
+  AssertTrue('a fresh panel reads the default', FPanel.VerticalAlignment = taVerticalCenter);
+end;
+
+{ Both directions of the retype's compatibility decision, pinned:
+  - an .lfm written by an LCL/Delphi TPanel (`taAlignBottom`) now LOADS -- the point;
+  - an .lfm saved by an in-dev build of THIS library (`tlBottom`, the three days the
+    property was mistyped) fails LOUDLY, not silently-as-centre. Loud is the acceptable
+    half of the trade; a silent reinterpretation would not be. }
+procedure TTyPanelTest.TestVerticalAlignmentLoadsAnLclLfmAndRefusesTheOldDevIdentifier;
+
+  function LoadFragment(const AValueIdent: string; APanel: TTyPanel): Boolean;
+  var
+    txt: TStringStream;
+    bin: TMemoryStream;
+  begin
+    txt := TStringStream.Create(
+      'object P: TTyPanel' + LineEnding +
+      '  VerticalAlignment = ' + AValueIdent + LineEnding +
+      'end');
+    bin := TMemoryStream.Create;
+    try
+      Result := True;
+      try
+        ObjectTextToBinary(txt, bin);
+        bin.Position := 0;
+        bin.ReadComponent(APanel);
+      except
+        Result := False;   // the reader refused the identifier
+      end;
+    finally
+      bin.Free;
+      txt.Free;
+    end;
+  end;
+
+var
+  P: TTyPanel;
+begin
+  P := TTyPanel.Create(nil);
+  try
+    AssertTrue('an LCL .lfm value (taAlignBottom) must load',
+      LoadFragment('taAlignBottom', P));
+    AssertTrue('...and land on the property', P.VerticalAlignment = taAlignBottom);
+  finally P.Free; end;
+
+  P := TTyPanel.Create(nil);
+  try
+    AssertFalse('the mistyped dev identifier (tlBottom) must FAIL to read -- loudly, '
+      + 'never silently reinterpreted', LoadFragment('tlBottom', P));
+  finally P.Free; end;
+end;
+
 initialization
   RegisterTest(TTyPanelTest);
+  { .lfm 文本要能被 ObjectTextToBinary 认出类名。 }
+  RegisterClass(TTyPanel);
 end.

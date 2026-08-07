@@ -376,8 +376,12 @@ begin
   end;
 end;
 
+{ The probe drives the LCL-typed axis end to end: the enum orders differ between
+  TVerticalAlignment (top, BOTTOM, centre) and the painter's TTextLayout (top, CENTRE,
+  bottom), so an ordinal typecast in the panel's mapping would swap bottom and centre
+  and compile clean -- these three centroids are what catches it. }
 procedure TTyPanelMemberParity.VerticalAlignmentMovesTheCaptionInk;
-  function Centre(AV: TTextLayout): Double;
+  function Centre(AV: TVerticalAlignment): Double;
   var
     P: TPanelInk;
     t, b, n: Integer;
@@ -395,12 +399,12 @@ procedure TTyPanelMemberParity.VerticalAlignmentMovesTheCaptionInk;
 var
   top, mid, bot: Double;
 begin
-  top := Centre(tlTop);
-  mid := Centre(tlCenter);
-  bot := Centre(tlBottom);
+  top := Centre(taAlignTop);
+  mid := Centre(taVerticalCenter);
+  bot := Centre(taAlignBottom);
   AssertTrue('a top-aligned caption must have ink', top > 0);
-  AssertTrue('tlTop must sit above tlCenter', top < mid - 8);
-  AssertTrue('tlBottom must sit below tlCenter', bot > mid + 8);
+  AssertTrue('taAlignTop must sit above taVerticalCenter', top < mid - 8);
+  AssertTrue('taAlignBottom must sit below taVerticalCenter', bot > mid + 8);
 end;
 
 procedure TTyPanelMemberParity.WordWrapPutsInkOnASecondLine;
@@ -413,7 +417,7 @@ procedure TTyPanelMemberParity.WordWrapPutsInkOnASecondLine;
     try
       P.Caption := 'wrapping this caption over more than one single line';
       P.WordWrap := AWrap;
-      P.VerticalAlignment := tlTop;
+      P.VerticalAlignment := taAlignTop;
       if not InkRows(P, 90, 90, t, b, n) then Exit(0);
       Result := b - t + 1;
     finally

@@ -73,7 +73,7 @@ uses tyControls.ValueListEditor;
 | `RowCount` | **(API parity 变更)根行数,现在是可读写的属性**(LCL `valedit.pas:237` 也是属性),所以能被 RTTI / 绑定层读到,`VLE.RowCount := 0` 这条"一行清空"的写法也能编译。写入时**从末尾**增删(增出来的是空行)。两处与 LCL 有意不同:只数**数据行**(LCL 的还含固定标题行,同一份列表在那边多 1),且是 public 而非 published —— 把活的行数写进 `.lfm` 会让设计器每次加载都凭空造出空行。 |
 | `DisplayRowCount` | **(API parity 重命名,破坏性)** 当前**有显示位置**的行数 = 根行 + 已展开节点的后代。折叠会让它变小,改控件大小不会。**这个含义从前叫 `VisibleRowCount`。** |
 | `VisibleRowCount` | **(API parity 变更,破坏性)视口**里现在装得下几行 —— 即 LCL `TCustomGrid.VisibleRowCount` 的含义(`grids.pas:1301`,实现 `:2274`),`TValueListEditor` 经 `TCustomStringGrid` → `TCustomDrawGrid`(`:1538` public 转发)继承而来,因为在那边这个类**就是**一个 grid。**它不是"有几行展开着"** —— 那是 `DisplayRowCount`。两者都是 `Integer`、都是 public,所以移植来的翻页算式编译得过、算出垃圾:500 行展开着就一次翻 500 行。与 LCL 一致到那个差一:答的是 `VisibleGrid.Bottom - VisibleGrid.Top`,比"碰到视口的行数"少一行(翻页留一行重叠);整份列表都装得下时不留重叠。这与 `TTyCustomGrid` 在 03c29b3 修的是同一个撞名,当时没落到这个类上,因为我们这个是 `TTyListBox` 不是 grid。 |
-| `Keys[i]` | 第 i 根行的键(只读)。 |
+| `Keys[i]` | 第 i 根行的键,**可读写**(LCL `valedit.pas:201` 就是 `read GetKey write SetKey`)。写入是**程序化改名**:触发 `OnKeyChanged` 并重绘,但**不查 `keyUnique`、不看 `ReadOnly`**——见 §7 末条。下标越界时写入是空操作(与 `ValueFromIndex[]` 同一条契约:行式索引只寻址**既有**行,绝不凭空造行)。 |
 | `Values[key]` | **按键**读写根行的值(与 LCL / Delphi 的 `TValueListEditor.Values[const Key: string]` 同义)。查找**不分大小写**;写一个**不存在的键会追加一行**——移植过来的代码正是这样填这个控件的。 |
 | `ValueFromIndex[i]` | **按行号**读写根行的值,与 `Keys[i]` 配对(名字取自 RTL 自己的 `TStrings.Values[Name]` / `ValueFromIndex[Index]` 一对)。 |
 | `DeleteRow(i)` / `Clear` | 删根行 / 清空。 |
@@ -86,7 +86,7 @@ uses tyControls.ValueListEditor;
 | `BeginKeyEdit(flat)` | **(新增)** 编程打开某行的**键**编辑器(等同点键列 / Shift+F2);没开 `keyEdit` 或 `ReadOnly` 时是空操作。与 `BeginEdit`(值列)配对。 |
 | `IsEditingKey: Boolean` | **(新增)** 当前打开的编辑器是否盖在**键**列上。`EditingRow` 只说是哪一行,说不出是哪一列,而"哪个单元格开着"决定提交写到哪儿。 |
 | `ReadOnly` / `Images` / `OnValueChanged(Sender, ARow)` | 全局只读 / 值单元图像源 / 值提交事件。 |
-| `OnKeyChanged(Sender, ARow)` | **(新增)** 一次 `keyEdit` 改名**已提交**(`ARow.Key` 已是新名)。**刻意不复用 `OnValueChanged`**——那个事件的约定是"哪一行的**值**变了",拿它报改名会让它说谎。 |
+| `OnKeyChanged(Sender, ARow)` | **(新增)** 一次改名**已提交**(`ARow.Key` 已是新名)——`keyEdit` 手势或程序化 `Keys[i] :=` 两条路都报,与 `OnValueChanged` 对值的两条路对称。**刻意不复用 `OnValueChanged`**——那个事件的约定是"哪一行的**值**变了",拿它报改名会让它说谎。 |
 | `OnKeyRejected(Sender, ARow, AKey)` | **(新增)** 一次改名被 `keyUnique` **拒绝**(该行仍是旧名),`AKey` 是用户想取的名字。LCL 在控件内部直接弹 `ShowMessage`(`valedit.pas:1614`);控件库不该这么干,所以只把拒绝报出来,要不要提示由应用决定。 |
 
 **`TTyValueRow`**:`Key`、`DisplayKey`、`Value`、`DisplayValue`、`EditorKind`、`EnumValues`、`ReadOnly`、`Bold`、`TextColor`、`ImageIndex`、`Expanded`;`AddChild(k,v)` / `ChildCount` / `Child[i]` / `Parent` / `HasChildren` / `EffectiveKey` / `EffectiveValue`。
@@ -172,7 +172,7 @@ VLE.KeyOptions := [keyEdit, keyAdd, keyDelete, keyUnique];
 - **被拒时控件不弹窗。** LCL 在控件内部直接 `ShowMessage`;这里改成触发 `OnKeyRejected`,要不要提示、用哪个对话框由应用定(库自带 `TyMessageDlg`)。**没有处理器时改名就是静静地不生效**——这是刻意的,"改名不落地"才是 `keyUnique` 的义务,提示只是附带。
 - **枚举的序号是 API。** 集合属性是按**位序**流式化的,所以 `TTyKeyOption` **只能往后追加**;插在中间会让所有已存的 `.lfm` 悄悄换意思(旧的 `[keyAdd]` 会读成 `keyDelete`)。守卫在 `tests/test.parity.valuelist.pas` 的 `TestKeyOptionOrdinalsAreFrozen`,外加一条真实的流式化往返 `TestKeyOptionsRoundTripsThroughTheStream`。
 - **没有对应 LCL 的 `goAutoAddRows` 联动。** LCL 的 setter 会顺手开关 grid 的 `goAutoAddRows`(`valedit.pas:1040-1043`),因为它**是**一个 grid;我们这个是 `TTyListBox`,没有那套 `Options`,所以这条不存在。
-- **`Keys[]` 仍是只读的。** 用户改名走 `keyEdit`,代码改名写 `Row(i).Key`。LCL 的 `Keys[]` 可写但**不查重**(查重只在编辑器路径上),所以补一个可写 `Keys[]` 是另一件事,不在这条里。
+- **`Keys[]` 可写,且写入不查 `keyUnique`、不看 `ReadOnly` —— 两条都是有意的,也都是 LCL 的原样。** LCL 的 `SetKey` 就是 `Cells[0,Index]:=Value`(`valedit.pas:1084`),从头到尾**没有**查重——查重只活在编辑器路径里(`ValidateEntry`,`:1614`),所以那边 `Keys[i] :=` 也会写进一个重名。`keyUnique` 管的是**用户手势**,API 归宿主自己负责——与 `ReadOnly` 挡编辑器却不挡 `Text :=` 是同一条分界。两条 bypass 都有测试钉着(`TestKeysWriteIsTheProgrammaticRenamePath`);别在某次"整理"里把 setter 绕去 `CommitKeyEdit`,那会让两个开关一开就顺带锁死 API。写入触发 `OnKeyChanged` 并重绘——从前只能 `Row(i).Key :=`,谁也不知道、界面也不刷。
 
 ---
 
