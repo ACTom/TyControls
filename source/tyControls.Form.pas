@@ -272,6 +272,20 @@ type
     FRolledUp: Boolean;               // window-shade state (rolled to the title bar)
     FUnrolledHeight: Integer;         // full height saved while rolled up
     FSavedMinHeight: Integer;         // Constraints.MinHeight saved while rolled up
+    { A9 per-instance StyleOverride for the window chrome (the TyForm typeKey), mirroring
+      TTyCustomControl exactly — same parser (TTyStyleModel.ResolveOverride), same merge
+      (TyMergeStyleSet), same (text, ThemeVersion)-keyed cache so var(--x) re-binds on a switch. }
+    FStyleOverride: string;
+    FOvrCache: TTyStyleSet;
+    FOvrCacheText: string;
+    FOvrCacheVer: Cardinal;
+    FOvrCacheValid: Boolean;
+    procedure SetStyleOverride(const AValue: string);
+    { The form's chrome style: ACtrl's resolved 'TyForm' set with the per-instance StyleOverride
+      merged on top. EVERY site that used to call Model.ResolveStyle('TyForm', ...) resolves
+      through here, so an override reaches the background paint, the backdrop rebuild, the
+      title-bar colour fallback, ThemedBgColor AND the OS window effects alike. ACtrl <> nil. }
+    function ResolveChromeStyle(ACtrl: TTyStyleController): TTyStyleSet;
     procedure DoFollowTick(Sender: TObject);
     { Deferred so the dialog runs AFTER the designer's delete finishes. Showing it straight from
       Notification(opRemove) — i.e. inside a destruction notification — ran a modal loop in the middle
@@ -376,6 +390,12 @@ type
       when CaptionAction = tcaRollUp. }
     procedure ToggleRollUp;
     property RolledUp: Boolean read FRolledUp;
+    { The fully-resolved chrome style this window is rendered from: the active theme's TyForm
+      token with StyleOverride merged on top — exactly what ApplyWindowEffects and the
+      background paint consume. Falls back to the built-in default controller when no
+      Controller is assigned (same policy as ApplyWindowEffects / ThemedBgColor). Public as the
+      one honest query for tests and tooling. }
+    function CurrentStyle: TTyStyleSet;
     function GetVersion: string;
   published
     { Read-only library version (TyVersion); the design-time editor for this property opens
@@ -387,6 +407,16 @@ type
       exists. Leave it unset to use the built-in default theme (TyDefaultController), or wire
       it to the main window's controller so the whole app shares one theme. }
     property Controller: TTyStyleController read FController write SetController;
+    { Per-instance chrome override: a bare CSS declaration block merged over the resolved TyForm
+      style for THIS window only — the same property every styled Ty control has, parsed by the
+      same engine (var(--x) binds to the active theme and re-binds after a switch). Assigning it
+      at runtime re-applies the whole chrome immediately, so e.g.
+        Form.StyleOverride := 'window-shadow: false; border-radius: 0;'
+      flips the native OS shadow/corners live, and 'background: #202030;' recolours the window.
+      The OS corner/shadow path works with or without a Controller (built-in default controller
+      fallback); the themed background paint keeps its existing rule of drawing only when a
+      Controller is assigned. }
+    property StyleOverride: string read FStyleOverride write SetStyleOverride;
     property TitleBar: TTyTitleBar read FTitleBar write SetTitleBar;
     { Designate the primary application menu bar. Non-mac: the bar stays visible and
       owns shortcut dispatch (IsShortcut forwards to its TMainMenu). Mac: the bar's
@@ -519,7 +549,8 @@ function TyRescaleChromeMetric(AValue, AFromPPI, AToPPI: Integer): Integer;
 implementation
 
 uses
-  tyControls.Win32WS   // native Win32 NC edge-resize glue (no-op off Windows)
+  tyControls.Win32WS,  // native Win32 NC edge-resize glue (no-op off Windows)
+  tyControls.StyleModel   // ResolveOverride + TyMergeStyleSet: the ONE StyleOverride parse/merge
   {$IFDEF LCLCOCOA}, CocoaAll{$ENDIF}
   {$IFDEF WINDOWS}, strings{$ENDIF}   // StrComp(PAnsiChar) for the WM_SETTINGCHANGE area check
   ;
@@ -2073,7 +2104,7 @@ end;
 
 procedure TTyForm.ApplyResizeStrategy;
 {$IFDEF LCLWin32}
-var capH, zone: Integer; resiz: Boolean;
+var capH, zone: Integer; resiz, noFrame: Boolean; ctrl: TTyStyleController;
 {$ENDIF}
 begin
   if csDesigning in ComponentState then Exit;   // never poke the window on the design surface
@@ -2090,9 +2121,17 @@ begin
     // minimum window height that would otherwise leave a content sliver under the title bar, and
     // a collapsed window needs no edge-resize anyway. Restored when unrolled.
     resiz := FResizable and not FRolledUp;
+    // window-shadow:false rides the NC strategy too: with DWM NC rendering disabled
+    // (ApplyWindowEffects), the L/R/B frame bands would be legacy-painted as a classic ring, so
+    // the NCCALCSIZE goes full-frame-eat while the opt-out is active. Same resolve (chrome style
+    // incl. StyleOverride) + same controller fallback as ApplyWindowEffects, so the two stay in
+    // lock-step across first show / theme switch / live override flip / maximize-restore.
+    if FController <> nil then ctrl := FController else ctrl := TyDefaultController;
+    noFrame := not TyResolveWindowEffect(ResolveChromeStyle(ctrl), False).Shadow;
     TyWin32ApplyNcResize(Self, resiz, zone, capH,
       (FEngine <> nil) and FEngine.Maximized,   // engine (work-area) maximize -> no NC inset
-      resiz and (biMaximize in BorderIcons));   // allow native maximize (WS_MAXIMIZEBOX)
+      resiz and (biMaximize in BorderIcons),    // allow native maximize (WS_MAXIMIZEBOX)
+      noFrame);
   end;
   {$ENDIF}
   // GTK/Qt: the AdjustClientRect gutter + WM handoff (Phase C). Cocoa: resizable styleMask
@@ -2117,7 +2156,7 @@ end;
 function TTyForm.GlassUnderTitlebar: Boolean;
 begin
   Result := (FController <> nil)
-    and FController.Model.ResolveStyle('TyForm', '', []).BackgroundUnderTitlebar;
+    and ResolveChromeStyle(FController).BackgroundUnderTitlebar;
 end;
 
 procedure TTyForm.RebuildBackdrop;
@@ -2135,7 +2174,7 @@ begin
     FGlassKey := '';
     Exit;
   end;
-  bg := FController.Model.ResolveStyle('TyForm', '', []);
+  bg := ResolveChromeStyle(FController);
   if not ((tpBackground in bg.Present) and (bg.Background.Kind = tfkImage)) then
   begin
     FreeAndNil(FSharpBackdrop);   // non-image theme: drop any stale backdrop
@@ -2195,7 +2234,7 @@ begin
   // via EnsureBackdrop. App controls paint on top in their own windows.
   if FController <> nil then
   begin
-    bg := FController.Model.ResolveStyle('TyForm', '', []);
+    bg := ResolveChromeStyle(FController);
     if tpBackground in bg.Present then
     begin
       P := TTyPainter.Create;
@@ -2251,7 +2290,7 @@ var
 begin
   Result := False;
   if FController <> nil then ctrl := FController else ctrl := TyDefaultController;
-  bg := ctrl.Model.ResolveStyle('TyForm', '', []);
+  bg := ResolveChromeStyle(ctrl);
   if (tpBackground in bg.Present) and (bg.Background.Kind = tfkSolid) then
   begin
     AColor := bg.Background.Color;
@@ -2316,12 +2355,14 @@ begin
       FTitleBar.Color := TyColorToLCL(tbBg.Background.Color)
     else
     begin
-      tbBg := AController.Model.ResolveStyle('TyForm', '', []);
+      // TyForm fallback: the form's OWN style — StyleOverride included, so an overridden
+      // window background carries into the bar's erase colour too.
+      tbBg := ResolveChromeStyle(AController);
       if (tpBackground in tbBg.Present) and (tbBg.Background.Kind = tfkSolid) then
         FTitleBar.Color := TyColorToLCL(tbBg.Background.Color);
     end;
   end;
-  bg := AController.Model.ResolveStyle('TyForm', '', []);
+  bg := ResolveChromeStyle(AController);
   if (tpBackground in bg.Present) and (bg.Background.Kind = tfkSolid) then
     Color := TyColorToLCL(bg.Background.Color);
   // arm/disarm the OS-follow poll to match the controller's Follow policy. Never at design
@@ -2359,6 +2400,63 @@ begin
   end;
 end;
 
+procedure TTyForm.SetStyleOverride(const AValue: string);
+begin
+  if FStyleOverride = AValue then Exit;
+  FStyleOverride := AValue;
+  FOvrCacheValid := False;   // force a re-parse on the next resolve
+  // Streaming: record only; Loaded runs ApplyChromeTheme/ApplyWindowEffects once the .lfm is in.
+  if csLoading in ComponentState then Exit;
+  // Design surface: preview via repaint only (children's parent-bg resolves through
+  // ThemedBgColor -> ResolveChromeStyle); never poke DWM / the NC strategy in the IDE.
+  if csDesigning in ComponentState then
+  begin
+    Invalidate;
+    Exit;
+  end;
+  // Runtime: re-apply the WHOLE chrome so the override lands immediately — background + LCL
+  // Color + backdrop + title-bar colour + OS corner/shadow (the forum use case is flipping
+  // window-shadow / border-radius live). Without a controller there is no themed background to
+  // rebuild, but the OS effects still resolve via the built-in default controller.
+  if FController <> nil then
+    ApplyChromeTheme(FController)
+  else
+  begin
+    ApplyWindowEffects;
+    ApplyResizeStrategy;   // the shadow opt-out changes the NC model too (full-frame-eat)
+    Invalidate;
+  end;
+end;
+
+function TTyForm.ResolveChromeStyle(ACtrl: TTyStyleController): TTyStyleSet;
+begin
+  Result := ACtrl.Model.ResolveStyle('TyForm', '', []);
+  // A9 layer 2 — the SAME layering as TTyCustomControl.CurrentStyle: overlay the per-instance
+  // override LAST, re-parsing only when stale (text changed, or the theme version bumped so a
+  // var(--x) re-binds). One parser (TTyStyleModel.ResolveOverride), one merge (TyMergeStyleSet);
+  // the form forks nothing.
+  if FStyleOverride <> '' then
+  begin
+    if (not FOvrCacheValid) or (FOvrCacheText <> FStyleOverride)
+       or (FOvrCacheVer <> ACtrl.Model.ThemeVersion) then
+    begin
+      FOvrCache := ACtrl.Model.ResolveOverride(FStyleOverride);
+      FOvrCacheText := FStyleOverride;
+      FOvrCacheVer := ACtrl.Model.ThemeVersion;
+      FOvrCacheValid := True;
+    end;
+    TyMergeStyleSet(Result, FOvrCache);
+  end;
+end;
+
+function TTyForm.CurrentStyle: TTyStyleSet;
+begin
+  if FController <> nil then
+    Result := ResolveChromeStyle(FController)
+  else
+    Result := ResolveChromeStyle(TyDefaultController);
+end;
+
 procedure TTyForm.ApplyWindowEffects;
 var maximized: Boolean; ctrl: TTyStyleController;
 begin
@@ -2371,7 +2469,7 @@ begin
   // The chrome engine fakes maximize via BoundsRect, so read ITS flag (not WindowState).
   maximized := (FEngine <> nil) and FEngine.Maximized;
   TyApplyWindowEffects(Self,
-    TyResolveWindowEffect(ctrl.Model.ResolveStyle('TyForm', '', []), maximized));
+    TyResolveWindowEffect(ResolveChromeStyle(ctrl), maximized));
 end;
 
 procedure TTyForm.DoShow;

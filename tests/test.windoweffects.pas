@@ -2,6 +2,7 @@ unit test.windoweffects;
 {$mode objfpc}{$H+}
 interface
 uses Classes, SysUtils, fpcunit, testregistry, Forms,
+  {$IFDEF LCLWin32}Windows,{$ENDIF}
   tyControls.Types, tyControls.StyleModel, tyControls.WindowEffects;
 type
   TWindowEffectsTest = class(TTestCase)
@@ -14,8 +15,36 @@ type
     procedure TestBorderRadiusZeroTurnsCornersOff;
     procedure TestWindowShadowFalseTurnsShadowOff;
     procedure TestMergeCopiesWindowShadowValue;
+    { The TyLastWindowEffect/TyWindowEffectApplies seam: records REAL applies only (a window
+      handle existed), verbatim. This is what lets the form-level tests in test.form pin that a
+      theme's / StyleOverride's window-shadow + border-radius actually reach the platform apply
+      layer — the exact seam the forum "window-shadow: false is ignored" bug slipped past. }
+    procedure TestApplySeamSkipsWhenNoHandle;
+    procedure TestApplySeamRecordsEffectVerbatim;
+    { Windows only (Ignore elsewhere): read DWMWA_NCRENDERING_ENABLED back from the REAL HWND
+      after each apply. This pins the actual DWM mechanism of the fix — window-shadow:false must
+      DISABLE per-window NC rendering (the standard frame shadow of a resizable TTyForm ignores
+      the DwmExtendFrameIntoClientArea margins entirely), and a later shadow-on flip must
+      re-enable it on the SAME window. Without this read-back, deleting the
+      DWMWA_NCRENDERING_POLICY call would survive every headless test and only die on a real
+      screenshot. }
+    procedure TestShadowTogglesNcRenderingOnRealWindow;
   end;
 implementation
+
+{ The console runner never calls Application.Initialize, so widget window classes are
+  unregistered and CreateHandle fails with 1407. Lazy one-shot init, only for the tests that
+  need a REAL native window — the same pattern (and reasoning) as test.base's NeedWidgetSet. }
+var
+  WidgetSetReady: Boolean = False;
+
+procedure NeedWidgetSet;
+begin
+  if WidgetSetReady then Exit;
+  Forms.Application.Initialize;
+  WidgetSetReady := True;
+end;
+
 procedure TWindowEffectsTest.TestWindowShadowParsesTrue;
 var M: TTyStyleModel; S: TTyStyleSet;
 begin
@@ -101,6 +130,86 @@ begin
     AssertFalse('override window-shadow:false copied into base', base.WindowShadow);
   finally M.Free; end;
 end;
+procedure TWindowEffectsTest.TestApplySeamSkipsWhenNoHandle;
+var F: TForm; E: TTyWindowEffect; c0: Cardinal;
+begin
+  F := TForm.CreateNew(nil);   // no handle -> the guard exits BEFORE the seam records
+  try
+    E.RadiusPx := 3; E.Shadow := False; E.Maximized := False; E.BorderColorRGB := 0;
+    c0 := TyWindowEffectApplies;
+    TyApplyWindowEffects(F, E);
+    AssertEquals('no-handle apply must not count as a real apply', c0, TyWindowEffectApplies);
+  finally F.Free; end;
+end;
+procedure TWindowEffectsTest.TestApplySeamRecordsEffectVerbatim;
+var F: TForm; E: TTyWindowEffect; c0: Cardinal;
+begin
+  NeedWidgetSet;
+  F := TForm.CreateNew(nil);
+  try
+    F.HandleNeeded;   // real HWND, no Show needed
+    AssertTrue('precondition: handle allocated', F.HandleAllocated);
+    E.RadiusPx := 5; E.Shadow := False; E.Maximized := True; E.BorderColorRGB := TyDwmColorNone;
+    c0 := TyWindowEffectApplies;
+    TyApplyWindowEffects(F, E);
+    AssertEquals('one real apply counted', c0 + 1, TyWindowEffectApplies);
+    AssertEquals('radius recorded verbatim', 5, TyLastWindowEffect.RadiusPx);
+    AssertFalse('shadow recorded verbatim', TyLastWindowEffect.Shadow);
+    AssertTrue('maximized recorded verbatim', TyLastWindowEffect.Maximized);
+  finally F.Free; end;
+end;
+procedure TWindowEffectsTest.TestShadowTogglesNcRenderingOnRealWindow;
+{$IFDEF LCLWin32}
+type
+  TDwmGetAttr = function(h: HWND; a: DWORD; pv: Pointer; cb: DWORD): HRESULT; stdcall;
+const
+  DWMWA_NCRENDERING_ENABLED = 1;   // read-only query: is DWM rendering this window's NC?
+var
+  F: TForm; E: TTyWindowEffect;
+  lib: HMODULE; GetAttr: TDwmGetAttr;
+  en: BOOL;
+begin
+  NeedWidgetSet;
+  lib := LoadLibrary('dwmapi.dll');
+  if lib = 0 then begin Ignore('no dwmapi.dll (pre-Vista)'); Exit; end;
+  try
+    Pointer(GetAttr) := GetProcAddress(lib, 'DwmGetWindowAttribute');
+    if not Assigned(GetAttr) then begin Ignore('no DwmGetWindowAttribute'); Exit; end;
+    F := TForm.CreateNew(nil);
+    try
+      F.HandleNeeded;
+      E.RadiusPx := 8; E.Maximized := False; E.BorderColorRGB := TyDwmColorNone;
+      // OFF: the shadow of a frame window is DWM NC rendering — margins can't remove it,
+      // the policy must. Read the LIVE state back from the window.
+      E.Shadow := False;
+      TyApplyWindowEffects(F, E);
+      en := True;
+      if GetAttr(F.Handle, DWMWA_NCRENDERING_ENABLED, @en, SizeOf(en)) <> 0 then
+        begin Ignore('DwmGetWindowAttribute failed (no composition?)'); Exit; end;
+      AssertFalse('window-shadow:false must DISABLE DWM NC rendering on the window', en);
+      // ON again, SAME window: the flip back must re-enable it (a granted opt-out is undoable).
+      E.Shadow := True;
+      TyApplyWindowEffects(F, E);
+      en := False;
+      GetAttr(F.Handle, DWMWA_NCRENDERING_ENABLED, @en, SizeOf(en));
+      AssertTrue('window-shadow:true must re-enable DWM NC rendering live', en);
+      // And OFF once more — the ordering never wedges.
+      E.Shadow := False;
+      TyApplyWindowEffects(F, E);
+      en := True;
+      GetAttr(F.Handle, DWMWA_NCRENDERING_ENABLED, @en, SizeOf(en));
+      AssertFalse('second opt-out still lands', en);
+    finally F.Free; end;
+  finally
+    FreeLibrary(lib);
+  end;
+end;
+{$ELSE}
+begin
+  Ignore('DWM NC rendering is a Win32-only mechanism');
+end;
+{$ENDIF}
+
 initialization
   RegisterTest(TWindowEffectsTest);
 end.

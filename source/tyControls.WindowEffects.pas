@@ -9,10 +9,12 @@ unit tyControls.WindowEffects;
   - Windows: dwmapi.dll loaded DYNAMICALLY (GetProcAddress) so the binary still launches
     on XP/7 (no static import). Win11 -> DWM corner preference (anti-aliased) + free shadow +
     a pinned (COLOR_NONE) window-border so the 1px DWM frame stops flashing white/gray on
-    activation; Vista..10 -> square + SHEET-OF-GLASS DwmExtendFrameIntoClientArea (margins -1)
-    for the native shadow WITHOUT the WS_THICKFRAME activation-coloured 1px edge ring (Win10's
-    equivalent of the Win11 COLOR_NONE fix; DWMWA_BORDER_COLOR is a no-op < Win11); XP -> square,
-    no shadow.
+    activation; Vista..10 -> square + a top-1px DwmExtendFrameIntoClientArea for the popup-model
+    shadow WITHOUT the WS_THICKFRAME activation-coloured 1px edge ring (Win10's equivalent of
+    the Win11 COLOR_NONE fix; DWMWA_BORDER_COLOR is a no-op < Win11); XP -> square, no shadow.
+    window-shadow: false -> DWMWA_NCRENDERING_POLICY=DISABLED, because on a RESIZABLE form the
+    shadow is the STANDARD DWM frame shadow (left/right/bottom stay real frame under the
+    top-only WM_NCCALCSIZE) and no margins call can remove that one — see ApplyWindows.
   - macOS (Cocoa): contentView.layer cornerRadius (anti-aliased) + NSWindow.hasShadow.
   - Linux: documented no-op extension point (see TyApplyWindowEffects). }
 
@@ -50,6 +52,16 @@ function TyRadiusToCornerPref(ARadiusPx: Integer; AMaximized: Boolean): Integer;
 { Apply rounded corners + native shadow to AForm's window per platform/widgetset.
   Safe to call repeatedly and when AForm has no handle (no-op). Never raises. }
 procedure TyApplyWindowEffects(AForm: TCustomForm; const AEffect: TTyWindowEffect);
+
+var
+  { TEST SEAM. The last effect TyApplyWindowEffects actually applied (i.e. the handle guard
+    passed), plus a monotonic apply counter. Headless tests pin the whole form -> resolve ->
+    apply pipe through these — e.g. that a TTyForm.StyleOverride 'window-shadow: false' really
+    reaches the platform layer, at first apply AND on a live flip AND across maximize/restore —
+    without reading DWM/Cocoa state back (which headless cannot). Library code must never make
+    decisions from them. }
+  TyLastWindowEffect: TTyWindowEffect;
+  TyWindowEffectApplies: Cardinal = 0;
 
 { True when AControl's window is an OS-resizable, non-maximized window (WS_THICKFRAME on Windows;
   False on other platforms). }
@@ -99,6 +111,10 @@ end;
 
 {$IFDEF LCLWin32}
 const
+  DWMWA_NCRENDERING_POLICY       = 2;           // Vista+: force DWM non-client rendering on/off per window
+  DWMNCRP_USEWINDOWSTYLE         = 0;           //   default: the window STYLE decides (frame windows render NC)
+  DWMNCRP_DISABLED               = 1;           //   no DWM NC rendering: no frame visuals -> NO window shadow
+  DWMNCRP_ENABLED                = 2;           //   force NC rendering even for styles that wouldn't (popup)
   DWMWA_WINDOW_CORNER_PREFERENCE = 33;
   DWMWA_BORDER_COLOR             = 34;          // Win11 22000+: the 1px DWM window-border color
   DWMWA_COLOR_NONE               = $FFFFFFFE;   // "no visible border" sentinel for DWMWA_BORDER_COLOR
@@ -127,12 +143,35 @@ begin
 end;
 
 procedure ApplyWindows(AForm: TCustomForm; const E: TTyWindowEffect);
-var h: HWND; pref, bcol: DWORD; m: TDwmMargins; comp: BOOL;
+var h: HWND; ncrp, pref, bcol: DWORD; m: TDwmMargins; comp: BOOL;
 begin
   LoadDwm;
   h := AForm.Handle;
   if Assigned(FnSetAttr) then       // Win11: corner preference (no-op error on <Win11)
   begin
+    // window-shadow OPT-OUT — the fix for "window-shadow: false is ignored" (forum #14).
+    // A RESIZABLE TTyForm is a WS_CAPTION|WS_THICKFRAME window whose WM_NCCALCSIZE eats only the
+    // TOP (tyControls.Win32WS): left/right/bottom remain a REAL DWM-rendered frame, and DWM draws
+    // the STANDARD frame shadow for any window whose non-client area it renders. That shadow is
+    // entirely independent of DwmExtendFrameIntoClientArea, so the margins={0,0,0,0} below never
+    // removed it — the opt-out silently did nothing on every resizable form (the default).
+    // DWMWA_NCRENDERING_POLICY=DISABLED is the canonical per-window kill switch: DWM stops
+    // rendering ALL frame visuals (standard shadow, Win11 1px border, and the frame-extension
+    // glass, so the popup-model shadow dies with the same stone).
+    // The Shadow=True branch must EXPLICITLY set a policy (not skip the call): a live theme
+    // switch / StyleOverride flip false->true has to re-enable rendering on the SAME HWND — DWM
+    // keeps per-window attributes until told otherwise, exactly like the corner preference. It
+    // sets ENABLED, not USEWINDOWSTYLE: for the resizable (WS_CAPTION|WS_THICKFRAME) window the
+    // two are identical, but a FIXED TTyForm is a bare WS_POPUP whose style renders no NC — under
+    // USEWINDOWSTYLE its DwmExtendFrameIntoClientArea glass stays inert and it never had a shadow
+    // at all (observed on Win10 19044); ENABLED arms the machinery so the top-1px extension below
+    // yields the popup-model shadow too.
+    // COMPANION: with NC rendering disabled, the L/R/B sizing bands of the resizable window get
+    // LEGACY-painted as a classic frame ring (observed on Win10 19044), so ApplyResizeStrategy
+    // resolves the same opt-out and makes WM_NCCALCSIZE full-frame-eat while it is active
+    // (TyWin32ApplyNcResize's ANoFrame) — no NC band left to paint, clean edges.
+    if E.Shadow then ncrp := DWMNCRP_ENABLED else ncrp := DWMNCRP_DISABLED;
+    FnSetAttr(h, DWMWA_NCRENDERING_POLICY, @ncrp, SizeOf(ncrp));
     pref := DWORD(TyRadiusToCornerPref(E.RadiusPx, E.Maximized));
     FnSetAttr(h, DWMWA_WINDOW_CORNER_PREFERENCE, @pref, SizeOf(pref));
     // Pin the 1px DWM window border so it stops showing as a hairline edge (a faint light line in a
@@ -205,6 +244,8 @@ end;
 procedure TyApplyWindowEffects(AForm: TCustomForm; const AEffect: TTyWindowEffect);
 begin
   if (AForm = nil) or (not AForm.HandleAllocated) then Exit;
+  TyLastWindowEffect := AEffect;   // test seam (see declaration): record only REAL applies,
+  Inc(TyWindowEffectApplies);      // after the guard, before the platform branches
   try
     {$IFDEF LCLWin32}ApplyWindows(AForm, AEffect);{$ENDIF}
     {$IFDEF LCLCOCOA}ApplyCocoa(AForm, AEffect);{$ENDIF}

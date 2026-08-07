@@ -173,6 +173,21 @@ Linux and macOS.
 
 ### Fixed
 
+- **`TyForm { window-shadow: false; }` never actually removed the shadow.** The property was read,
+  merged and timed correctly all along; it died at the last step: a resizable TTyForm keeps a real
+  DWM frame, and a frame's shadow has nothing to do with `DwmExtendFrameIntoClientArea` margins --
+  which is exactly what the old code zeroed in order to switch it off. The real switch is
+  `DWMWA_NCRENDERING_POLICY`. Two things came with it: turning NC rendering off exposed a ring of
+  classic GDI frame on the left, right and bottom (now swallowed, edge resizing unaffected), and
+  **fixed-size windows had never had a shadow at all** (the glass extension is inert for them) --
+  they do now.
+- **`TTyForm.StyleOverride`**: a form can take a runtime CSS snippet over its own chrome, the way
+  every other control can -- `Form.StyleOverride := 'window-shadow: false; border-radius: 0;'`
+  applies immediately, so nobody needs a whole theme to change one window. It reuses the controls'
+  own parse-and-merge machinery (one parser, not a fork); the form's seven separate style
+  resolutions now route through it.
+
+
 - **Toggling dark on aero produced a half-black, half-white window** (the user's screenshot):
   aero defines only 19 typeKeys and everything else falls back to the base layer; its
   `@mode dark` was a verbatim copy of light that never pinned the base mode seeds, so its own

@@ -126,6 +126,16 @@
 
 ### 修复
 
+- **`TyForm { window-shadow: false; }` 从来没关掉过阴影** —— 属性一直读得对、合得对、时机也对,
+  死在最后一步:可缩放的 TTyForm 是真实 DWM 窗框,它的阴影是**窗框阴影**,与
+  `DwmExtendFrameIntoClientArea` 的 margins 毫无关系,而旧代码正是靠"把 margins 清零"去关它。
+  真正的开关是 `DWMWA_NCRENDERING_POLICY`。顺带两件:关掉后左右下会露出一圈 GDI 的经典残框(已一并吞掉,
+  边缘缩放不受影响);以及**固定尺寸窗口从来就没有过阴影**(玻璃扩展对它是死的),现在默认也有了。
+- **`TTyForm.StyleOverride`**:窗体也能像其他控件那样,运行时塞一小段 CSS 覆盖自己的 chrome ——
+  `Form.StyleOverride := 'window-shadow: false; border-radius: 0;'` **当场生效**,不必为了一个窗口做一套主题。
+  用的是控件那一套解析与合并器(同一份代码,不是另起炉灶),窗体里原先七处各自解析样式的地方也都改走它。
+
+
 - **aero 切暗色是半黑半白的混窗**(你截图那个):aero 只定义了 19 个 typeKey,其余控件回落基础层;
   而它的 `@mode dark` 是浅色的逐字复制、又没钉住基础层的模式种子,于是自家控件保持浅色、
   回落的全变黑。现在 **aero 有一套真正的暗色玻璃**(Win7 深色 colorization 那种深蓝黑),

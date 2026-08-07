@@ -9,7 +9,8 @@ uses
   BGRABitmap, BGRABitmapTypes,
   fpcunit, testregistry,
   tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.Form,
-  tyControls.Base, tyControls.Menu, tyControls.ThemeRegistry, tyControls.BuiltinThemes;
+  tyControls.Base, tyControls.Menu, tyControls.ThemeRegistry, tyControls.BuiltinThemes,
+  tyControls.WindowEffects;   // TyLastWindowEffect/TyWindowEffectApplies apply-pipe seam
 
 type
   TFormHelpersTest = class(TTestCase)
@@ -311,6 +312,27 @@ type
     procedure TestRollUpRestoresFullHeight;
     procedure TestDblClickRollsUpWhenModeSet;
     procedure TestNoOpWithoutTitleBar;
+  end;
+
+  { TTyForm.StyleOverride (runtime per-window chrome override) + the window-effects apply pipe.
+    Two seams under pin:
+    - CurrentStyle / ResolveChromeStyle: the override merges OVER the resolved TyForm style via
+      the ONE shared parser+merge (TTyStyleModel.ResolveOverride + TyMergeStyleSet), leaving
+      unmentioned theme properties intact and re-binding var(--x) on a theme switch.
+    - TyApplyWindowEffects' TyLastWindowEffect seam: window-shadow / border-radius — from the
+      THEME and from a runtime StyleOverride assignment — reach the platform apply layer, at
+      first apply, on a live flip, and across an engine maximize/restore. This is the headless
+      guard for forum bug #14 ("window-shadow: false is ignored"): before the fix the value
+      died between resolve and DWM; the resolve-level tests alone stayed green. }
+  TFormStyleOverrideTest = class(TTestCase)
+  published
+    procedure TestOverrideWinsOverThemeAndKeepsUnmentioned;
+    procedure TestThemeShadowOffReachesApplyPipe;
+    procedure TestOverrideFlipsShadowLiveThroughApplyPipe;
+    procedure TestOverrideRadiusZeroReachesApplyPipe;
+    procedure TestOverrideWithoutControllerStillFlipsShadow;
+    procedure TestOverrideSurvivesMaximizeRestore;
+    procedure TestOverrideVarRebindsOnThemeSwitch;
   end;
 
 implementation
@@ -2278,6 +2300,172 @@ begin
   finally f.Free; end;
 end;
 
+{ TFormStyleOverrideTest }
+
+{ Same lazy widgetset bootstrap as test.base's NeedWidgetSet (console runner registers no
+  window classes -> CreateHandle error 1407); needed here because the apply-pipe tests pin the
+  effects layer through a REAL HWND. }
+var
+  WidgetSetReady: Boolean = False;
+
+procedure NeedWidgetSet;
+begin
+  if WidgetSetReady then Exit;
+  Forms.Application.Initialize;
+  WidgetSetReady := True;
+end;
+
+procedure TFormStyleOverrideTest.TestOverrideWinsOverThemeAndKeepsUnmentioned;
+var F: TTyFormAccess; Ctl: TTyStyleController; S: TTyStyleSet;
+begin
+  F := TTyFormAccess.CreateNew(nil);
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Ctl.LoadThemeCss('TyForm { window-shadow: true; border-radius: 10; }');
+    F.ApplyChromeTheme(Ctl);
+    F.StyleOverride := 'window-shadow: false;';
+    S := F.CurrentStyle;
+    AssertTrue('window-shadow present after merge', tpWindowShadow in S.Present);
+    AssertFalse('override window-shadow:false WINS over the theme''s true', S.WindowShadow);
+    AssertEquals('unmentioned theme border-radius survives the merge', 10, S.BorderRadius);
+  finally
+    Ctl.Free; F.Free;
+  end;
+end;
+
+procedure TFormStyleOverrideTest.TestThemeShadowOffReachesApplyPipe;
+var F: TTyFormAccess; Ctl: TTyStyleController; c0: Cardinal;
+begin
+  { Forum #14's exact scenario, pinned at the APPLY seam (not just resolve): a theme's
+    TyForm { window-shadow: false; } must arrive at TyApplyWindowEffects with Shadow=False. }
+  NeedWidgetSet;
+  F := TTyFormAccess.CreateNew(nil);
+  Ctl := TTyStyleController.Create(nil);
+  try
+    F.HandleNeeded;
+    Ctl.LoadThemeCss('TyForm { window-shadow: false; }');
+    c0 := TyWindowEffectApplies;
+    F.ApplyChromeTheme(Ctl);
+    AssertTrue('theme apply reached the effects layer', TyWindowEffectApplies > c0);
+    AssertFalse('theme window-shadow:false arrived at the apply layer', TyLastWindowEffect.Shadow);
+  finally
+    Ctl.Free; F.Free;
+  end;
+end;
+
+procedure TFormStyleOverrideTest.TestOverrideFlipsShadowLiveThroughApplyPipe;
+var F: TTyFormAccess; Ctl: TTyStyleController; c0: Cardinal;
+begin
+  { The forum user's ACTUAL use case for StyleOverride: flip the native shadow at runtime on
+    one window. The setter must re-apply the chrome immediately — no repaint/show needed. }
+  NeedWidgetSet;
+  F := TTyFormAccess.CreateNew(nil);
+  Ctl := TTyStyleController.Create(nil);
+  try
+    F.HandleNeeded;
+    Ctl.LoadThemeCss('TyForm { background: #FFFFFF; }');   // no shadow token -> default ON
+    F.ApplyChromeTheme(Ctl);
+    AssertTrue('default-on shadow before the flip', TyLastWindowEffect.Shadow);
+    c0 := TyWindowEffectApplies;
+    F.StyleOverride := 'window-shadow: false;';
+    AssertTrue('assignment re-applied the chrome by itself', TyWindowEffectApplies > c0);
+    AssertFalse('live flip OFF landed at the apply layer', TyLastWindowEffect.Shadow);
+    F.StyleOverride := '';
+    AssertTrue('clearing the override restores default-on live', TyLastWindowEffect.Shadow);
+  finally
+    Ctl.Free; F.Free;
+  end;
+end;
+
+procedure TFormStyleOverrideTest.TestOverrideRadiusZeroReachesApplyPipe;
+var F: TTyFormAccess; Ctl: TTyStyleController; c0: Cardinal;
+begin
+  { border-radius: 0 against a theme that HAD a radius — the "partly working" report's other
+    half — at first apply and on a live override flip. }
+  NeedWidgetSet;
+  F := TTyFormAccess.CreateNew(nil);
+  Ctl := TTyStyleController.Create(nil);
+  try
+    F.HandleNeeded;
+    Ctl.LoadThemeCss('TyForm { border-radius: 12; }');
+    F.ApplyChromeTheme(Ctl);
+    AssertEquals('theme radius at the apply layer', 12, TyLastWindowEffect.RadiusPx);
+    c0 := TyWindowEffectApplies;
+    F.StyleOverride := 'border-radius: 0;';
+    AssertTrue('assignment re-applied the chrome', TyWindowEffectApplies > c0);
+    AssertEquals('radius 0 landed at the apply layer', 0, TyLastWindowEffect.RadiusPx);
+  finally
+    Ctl.Free; F.Free;
+  end;
+end;
+
+procedure TFormStyleOverrideTest.TestOverrideWithoutControllerStillFlipsShadow;
+var F: TTyFormAccess;
+begin
+  { No Controller assigned: the effects path resolves via the built-in default controller, and
+    StyleOverride must merge there too (the default theme sets no window-shadow -> default on). }
+  NeedWidgetSet;
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.HandleNeeded;
+    F.ApplyWindowEffects;
+    AssertTrue('built-in default resolves shadow-on (default-on policy)', TyLastWindowEffect.Shadow);
+    F.StyleOverride := 'window-shadow: false;';
+    AssertFalse('override flips the shadow with no Controller assigned', TyLastWindowEffect.Shadow);
+    F.StyleOverride := '';
+    AssertTrue('cleared override returns to default-on', TyLastWindowEffect.Shadow);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TFormStyleOverrideTest.TestOverrideSurvivesMaximizeRestore;
+var F: TTyFormAccess; Ctl: TTyStyleController;
+begin
+  { Third timing: engine maximize/restore re-applies the effects (ApplyMaximizedState), and the
+    override + theme values must survive both transitions. }
+  NeedWidgetSet;
+  F := TTyFormAccess.CreateNew(nil);
+  Ctl := TTyStyleController.Create(nil);
+  try
+    F.MakeTitleBar;
+    F.SetBounds(10, 10, 400, 300);
+    F.HandleNeeded;
+    Ctl.LoadThemeCss('TyForm { border-radius: 9; }');
+    F.ApplyChromeTheme(Ctl);
+    F.StyleOverride := 'window-shadow: false;';
+    AssertFalse('precondition: shadow off before maximize', TyLastWindowEffect.Shadow);
+    F.Engine.ToggleMaximize;
+    AssertTrue('maximize re-applied with Maximized=True', TyLastWindowEffect.Maximized);
+    AssertFalse('shadow-off survives maximize', TyLastWindowEffect.Shadow);
+    AssertEquals('theme radius still resolved while maximized', 9, TyLastWindowEffect.RadiusPx);
+    F.Engine.ToggleMaximize;
+    AssertFalse('restore re-applied with Maximized=False', TyLastWindowEffect.Maximized);
+    AssertFalse('shadow-off survives restore', TyLastWindowEffect.Shadow);
+  finally
+    Ctl.Free; F.Free;
+  end;
+end;
+
+procedure TFormStyleOverrideTest.TestOverrideVarRebindsOnThemeSwitch;
+var F: TTyFormAccess; Ctl: TTyStyleController;
+begin
+  { var(--x) in an override binds against the ACTIVE theme and re-binds after a switch (the
+    override cache is keyed on ThemeVersion — same contract as every control's StyleOverride). }
+  F := TTyFormAccess.CreateNew(nil);
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Ctl.LoadThemeCss(':root { --edge: 4; } TyForm { background: #FFFFFF; }');
+    F.ApplyChromeTheme(Ctl);
+    F.StyleOverride := 'border-radius: var(--edge);';
+    AssertEquals('override var bound against the first theme', 4, F.CurrentStyle.BorderRadius);
+    Ctl.LoadThemeCss(':root { --edge: 7; } TyForm { background: #FFFFFF; }');
+    AssertEquals('override var re-bound after the theme switch', 7, F.CurrentStyle.BorderRadius);
+  finally
+    Ctl.Free; F.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TFormHelpersTest);
   RegisterTest(TResizeHitForTest);
@@ -2302,5 +2490,6 @@ initialization
   RegisterTest(TFormDrivesBarTest);
   RegisterTest(TTitleBarGuardTest);
   RegisterTest(TRollUpTest);
+  RegisterTest(TFormStyleOverrideTest);
 
 end.

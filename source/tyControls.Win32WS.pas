@@ -35,9 +35,17 @@ uses
 { Assert/clear WS_THICKFRAME on AForm's window per AResizable and refresh the frame
   (SetWindowPos SWP_FRAMECHANGED), then install (idempotent) or refresh the NC subclass so
   WM_NCCALCSIZE/WM_NCHITTEST are handled with the current Resizable / border-zone / caption
-  height. Safe to call repeatedly and when AForm has no handle (no-op). No-op off Windows. }
+  height. ANoFrame accompanies the window-shadow:false opt-out (tyControls.WindowEffects sets
+  DWMWA_NCRENDERING_POLICY=DISABLED): with DWM NC rendering off, the L/R/B sizing bands the
+  top-only WM_NCCALCSIZE normally leaves as real frame get LEGACY-painted as a classic ring —
+  so ANoFrame makes WM_NCCALCSIZE eat the WHOLE frame (client := window rect, like the fixed
+  branch) and the bands cease to exist. Edge-resize survives: WM_NCHITTEST's own zone mapper
+  answers HTLEFT..HTBOTTOMRIGHT from inside the window, and WS_THICKFRAME still makes
+  DefWindowProc run the native resize loop on those codes. Safe to call repeatedly and when
+  AForm has no handle (no-op). No-op off Windows. }
 procedure TyWin32ApplyNcResize(AForm: TCustomForm; AResizable: Boolean;
-  ABorderZone, ACaptionHeight: Integer; AMaximized, AAllowMaximize: Boolean);
+  ABorderZone, ACaptionHeight: Integer; AMaximized, AAllowMaximize: Boolean;
+  ANoFrame: Boolean = False);
 
 { Begin a native top-edge resize of AForm. The flush title bar covers the top (there is no NC
   strip there), so the OS can't start a top resize itself; the title bar calls this from its top
@@ -74,6 +82,7 @@ type
     BorderZone: Integer;
     CaptionH: Integer;
     Maximized: Boolean;   // engine (work-area) maximize -> suppress the NC resize inset
+    NoFrame: Boolean;     // window-shadow:false companion -> full-frame-eat (see TyWin32ApplyNcResize)
     WorkArea: TRect;      // last known monitor work area -> fallback pin for the maximized client
   end;
 
@@ -175,6 +184,17 @@ begin
             ncp^.rgrc[0].Right  := wa.Right;
             ncp^.rgrc[0].Bottom := wa.Bottom;
           end;
+          Result := 0;
+          Exit;
+        end;
+        if st^.NoFrame then
+        begin
+          // window-shadow:false opt-out. NC rendering is DISABLED for this window (WindowEffects
+          // sets DWMWA_NCRENDERING_POLICY=DISABLED to kill the standard frame shadow), and with
+          // it disabled the L/R/B sizing bands are no longer rendered by DWM but LEGACY-painted —
+          // a pale classic frame ring (observed on Win10 19044). Client := whole window rect, so
+          // there is no NC band left to paint; the in-window WM_NCHITTEST zone mapper below keeps
+          // edge-resize alive (WS_THICKFRAME still makes DefWindowProc run the resize loop).
           Result := 0;
           Exit;
         end;
@@ -292,7 +312,8 @@ begin
 end;
 
 procedure TyWin32ApplyNcResize(AForm: TCustomForm; AResizable: Boolean;
-  ABorderZone, ACaptionHeight: Integer; AMaximized, AAllowMaximize: Boolean);
+  ABorderZone, ACaptionHeight: Integer; AMaximized, AAllowMaximize: Boolean;
+  ANoFrame: Boolean);
 var
   Wnd: HWND;
   st: PNcState;
@@ -315,6 +336,7 @@ begin
   st^.BorderZone := ABorderZone;
   st^.CaptionH := ACaptionHeight;
   st^.Maximized := AMaximized;
+  st^.NoFrame := ANoFrame;
   if AForm.Monitor <> nil then
     st^.WorkArea := AForm.Monitor.WorkareaRect;   // LCL-sourced fallback for the maximized client pin
   ApplyThickFrame(Wnd, AResizable, AAllowMaximize);
@@ -344,7 +366,8 @@ end;
 {$ELSE}
 
 procedure TyWin32ApplyNcResize(AForm: TCustomForm; AResizable: Boolean;
-  ABorderZone, ACaptionHeight: Integer; AMaximized, AAllowMaximize: Boolean);
+  ABorderZone, ACaptionHeight: Integer; AMaximized, AAllowMaximize: Boolean;
+  ANoFrame: Boolean);
 begin
   // Non-Windows widgetset: native NC resize is a Win32-only strategy. GTK/Qt use the
   // AdjustClientRect gutter + WM handoff; Cocoa uses the resizable styleMask (later phases).

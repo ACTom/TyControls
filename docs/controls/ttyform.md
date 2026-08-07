@@ -170,23 +170,35 @@ TyForm {
 
 > **默认开启：** 内置主题的 `TyForm` 规则未设置这两个令牌，因此走代码默认值（半径 8 + 阴影开）。要关闭就显式写 `border-radius: 0` / `window-shadow: false`。默认半径常量 `TyDefaultWindowRadiusPx` 是代码里唯一的视觉默认值，且完全可被 css 覆盖——仍符合"视觉由主题令牌驱动"的原则。
 
+### 运行时按窗覆盖：`StyleOverride`
+
+`TTyForm` 与所有 Ty 控件一样发布了 `StyleOverride`（无选择器的裸 CSS 声明块，叠加在解析后的 `TyForm` 样式**之上**，仅作用于这一个窗口实例；同一套解析/合并引擎，`var(--x)` 绑定当前主题并随换肤重绑）。运行时赋值**立即生效**——包括实时开关原生阴影/圆角：
+
+```pascal
+Form1.StyleOverride := 'window-shadow: false; border-radius: 0;';  // 本窗关阴影+方角
+Form1.StyleOverride := '';                                         // 恢复主题默认
+```
+
+覆盖会到达窗体背景绘制、玻璃底图重建、标题栏回退色、`ThemedBgColor` 与 OS 窗口特效的**全部**消费点。注意：主题化背景绘制仍遵守既有规则（仅在赋了 `Controller` 时绘制）；OS 阴影/圆角路径无 Controller 时也生效（走内置默认控制器）。
+
 ### 平台支持矩阵
 
-| 平台 | 圆角 | 阴影 |
-|------|------|------|
-| Windows 11 | 抗锯齿（DWM 圆角偏好） | 随圆角自带的原生阴影 |
-| Windows Vista–10 | 方角（不上锯齿 region） | 原生矩形阴影（`DwmExtendFrameIntoClientArea`） |
-| Windows XP | 方角 | 无（无 DWM 合成器） |
-| macOS | 抗锯齿（`CALayer.cornerRadius`） | 原生（`NSWindow.hasShadow`） |
-| Linux（GTK / Qt） | 由桌面环境决定 | 由桌面环境决定 |
+| 平台 | 圆角 | 阴影（开） | 阴影（关，`window-shadow: false`） |
+|------|------|------|------|
+| Windows 11 | 抗锯齿（DWM 圆角偏好） | DWM 标准窗框阴影 | 关闭 per-window DWM 非客户区渲染（**待 Win11 真机验证**：预计连带失去 DWM 圆角与 1px 边框） |
+| Windows Vista–10 | 方角（不上锯齿 region） | 可缩放窗口=DWM **标准窗框阴影**；固定尺寸窗口=玻璃扩展阴影（`DWMNCRP_ENABLED` + `DwmExtendFrameIntoClientArea` 顶部 1px） | 关闭 per-window DWM 非客户区渲染 + 全窗框吞并（Win10 19044 实测：干净直角边缘，无阴影无残框） |
+| Windows XP | 方角 | 无（无 DWM 合成器） | 本来就无 |
+| macOS | 抗锯齿（`CALayer.cornerRadius`） | 原生（`NSWindow.hasShadow`） | `NSWindow.hasShadow := false` |
+| Linux（GTK / Qt） | 由桌面环境决定 | 由桌面环境决定 | 由桌面环境决定 |
 
 ### 实现要点
 
 - **抗锯齿优先：** 只在能做出**平滑**圆角的平台圆角（Win11、macOS）；老版 Windows 保持方角，但仍可加原生阴影。这是经过权衡的取舍——锯齿圆角比方角更难看。
 - **不限定 Win10+：** Windows 路径通过运行期 `GetProcAddress` 动态加载 `dwmapi.dll`（绝不静态 `external`），因此可执行文件在 Win7/XP 上**照常启动**，查不到 DWM 函数时优雅降级。
 - **半径映射：** Win11 的 DWM 只接受枚举（round≈8px / small≈4px / none），无法精确到任意像素，`border-radius` 据此映射到 round/small；macOS 使用精确逻辑像素。
+- **阴影开关的真实机制（Windows）：** 可缩放的 `TTyForm` 是 `WS_CAPTION|WS_THICKFRAME` 窗口，其阴影是 DWM 为"有窗框的窗口"画的**标准窗框阴影**，与 `DwmExtendFrameIntoClientArea` 的 margins 完全无关——这正是 3.0-alpha 里 `window-shadow: false` 曾经完全无效的根因（margins 清零根本删不掉标准阴影）。现在关阴影 = `DWMWA_NCRENDERING_POLICY := DISABLED`（per-window 关掉 DWM 非客户区渲染）；同时由于关渲染后左/右/下三条真实窗框带会被旧式 GDI 画成一圈经典残框，`WM_NCCALCSIZE` 在关阴影期间改为**全窗框吞并**（client = 整个窗口矩形），残框带不复存在，边缘缩放照常（命中测试自带边带映射）。开阴影 = `ENABLED`（显式设置，同一 HWND 上可反复实时翻转）；`ENABLED` 而非默认值还顺带修好了固定尺寸窗口（`WS_POPUP`）从未有过阴影的老缺口——弹出式窗框不渲染非客户区，玻璃扩展在默认策略下是死的。
 - **最大化变方角：** 最大化时圆角自动关闭（否则四角会露出桌面），还原时恢复——由 chrome 引擎的 `ToggleMaximize` 触发重新应用。
-- **应用时机：** 首次显示（`DoShow`）、`Loaded`、主题切换（`ApplyChromeTheme`）、最大化/还原时各应用一次。半径为逻辑像素，故 DPI 变化无需重新应用。
+- **应用时机：** 首次显示（`DoShow`）、`Loaded`、主题切换（`ApplyChromeTheme`）、`StyleOverride` 赋值、最大化/还原时各应用一次。半径为逻辑像素，故 DPI 变化无需重新应用。
 - **架构隔离：** 所有平台/widgetset 代码集中在 `tyControls.WindowEffects` 单元，对外只暴露 `TyApplyWindowEffects` 一个入口；Linux 各 widgetset 留有 widgetset-aware 扩展口（Qt 透明窗 + 自绘抗锯齿圆角 + 自定义阴影是未来最有希望的路径）。
 
 ## 9. 未来条带（bands）与 ribbon —— 仅锁定命名/设计

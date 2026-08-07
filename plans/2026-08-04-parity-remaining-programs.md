@@ -292,10 +292,10 @@ Antek(主要测试者)两页反馈逐条对账:
 |---|---|---|
 | #4/#5 | demo 右/下不能拉伸、dialogs 客户区花 | **已修**(TTyFormSurface,作者已回) |
 | #7a | Aero Snap 拖顶不最大化 | **已修**,Antek #13 亲测确认 |
-| #7b | 最大化窗口不能拖动还原 | **早已修**(`55adc88`,`TyRestoreDragBounds` 按光标比例还原继续拖;Antek 用的旧 commit)。我 triage 时只看论坛引用的旧注释没先 grep 代码——又一次 capability-built-but-not-wired 类错误。待真机复验手势 + 确认双击最大化旧回归仍被钉住 |
+| #7b | 最大化窗口不能拖动还原 | **早已修**(`55adc88`,`TyRestoreDragBounds` 按光标比例还原继续拖;Antek 用的旧 commit)。我 triage 时只看论坛引用的旧注释没先 grep 代码——又一次 capability-built-but-not-wired 类错误。**真机复验通过**(2026-08-07,agent a2b19d,真鼠标 mouse_event):双击最大化→按住标题栏拖 >4px→窗口还原为保存尺寸(520x340 精确)、光标按比例扣在标题栏(74% 屏宽处握在 72% 窗宽,注入异步误差 ±10px)、拖拽无缝继续(两段拖 grab offset 恒定 (374,26)、跟手到落点);双击最大化按住不放+12px 移动**不拽走**,最大化条上双击还原按住不放+50px 移动**也不拽走**(历史回归双向钉死)。手势级 headless 钉子已存在(TMaximizedChromeTest 3 条+TRestoreDragBoundsTest 7 条),无需新增;截图 a2b19d_gesture_*.png |
 | #8 | **TTySteps 方向键无效**(焦点拿不到);作者当时说"整个焦点系统要系统性修" | → 新单(连带点击取焦点全面复核) |
 | #12/#15 | **TTyScrollBox 四连**:滚动条被子面板盖住 / 滚轮第一格方向反 / 拖滑块闪烁 / 内容跳动;tyscrollcontent 一度不可用 | 拖拽已修过一轮,**其余待复现修复** → 新单 |
-| #14 | **`window-shadow: false` 不生效**(border-radius 局部生效);另问 TTyForm 有没有运行时 StyleOverride | **未修**(作者回"回头看") → 新单 |
+| #14 | **`window-shadow: false` 不生效**(border-radius 局部生效);另问 TTyForm 有没有运行时 StyleOverride | **已修 + 已建**(2026-08-07,agent a2b19d 工作树)。根因:可缩放 TTyForm 是 WS_CAPTION\|WS_THICKFRAME 窗口,阴影是 DWM **标准窗框阴影**,与 DwmExtendFrameIntoClientArea margins 无关——解析层一直是对的,死在 DWM 应用层。修法:关阴影=DWMWA_NCRENDERING_POLICY:=DISABLED + WM_NCCALCSIZE 全窗框吞并(关渲染后 L/R/B 窗框带会被画成经典残框,Win10 19044 实测);开阴影=ENABLED(显式设,同 HWND 可实时翻转;顺带修好固定尺寸 WS_POPUP 窗口从未有过阴影的老缺口)。TTyForm.StyleOverride 已建:复用 ResolveOverride+TyMergeStyleSet(一个解析器),经 ResolveChromeStyle 进入全部 7 个 TyForm 解析点,赋值即重铺 chrome(实时翻 shadow/radius 真机验过)。守卫:TFormStyleOverrideTest(7)+TWindowEffectsTest 扩(3,含 DWMWA_NCRENDERING_ENABLED 真句柄回读);真机截图 a2b19d_auto_*.png(scratchpad)。border-radius"局部生效"=Win10 上圆角偏好本来就是 no-op(永远方角),三个时机在 apply seam 全钉;Win11 真机(shadow-off 连带方角?)仍待验 |
 | #16 | **HighDPI PerMonitorV2**:跨屏 2-4 秒重算、回来布局永久坏、TyTitleBar 过高 | **未修,作者承诺下周** → 新单(最大) |
 | #18a | containers 编译报 unknown property autoscroll | **已修**(d93e676 + check-lfm-props 守卫,他用的 a1c31d1 太旧) |
 | #18b | **antdesign 反馈页的输入对话框偶尔关不掉** | 未复现过 → 新单(复现优先;怀疑 EnableWindow 时序,见 swallowed-cm-message-inherited) |
