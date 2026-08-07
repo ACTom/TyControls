@@ -266,8 +266,11 @@ LCL 的 `TSpeedButton` 和 `TPaintBox` 都是 `TGraphicControl` —— **没有�
   选它不选挪按钮:默认标题带**就是**面板垂直中线,190 高的面板里 Top=80 的按钮怎么摆都在带上,而 0..40 顶条按构造无子控件;
   文字零改动 → 两个 `.po` 的 msgid 天然同步。中英截图:`a5db2fbf_panel_en.png` / `a5db2fbf_panel_zh.png`(scratchpad)。
 - **README 双语的 "3949 个单元测试" 计数已烂**(2026-08-07 实测 5904,且各 agent 还在加);发版前以 `tytests --all` 的输出为准顺手改。
-- **CHANGELOG 未覆盖最近两波**(344c9ae 之后的全部特性:grid Options/对象槽、TTyToolButton、横向滚动、
-  MultiLine、dock、FloatSpinEdit、ImageCollection 流式化、csSimple、日历语言、Panel 垂直轴、ReadOnly 收口、aero 修复……)。
+- ~~**CHANGELOG 未覆盖最近两波**~~ **已补齐(2026-08-07)**:`ec37153` 一次补两波(新控件 + 继续补齐 + 修复三节),
+  aero 暗色/chrome 归族随各自提交带了条目(`e294f45`/`c23e45c`/`abc6c42`)。
+- **2026-08-07 晚间新开的两单(在途)**:examples/toolbar 补 TTyToolButton 演示面(六样式+Grouped+DropdownMenu+OnPaintButton,
+  顺带改掉"未接线"旧说明);暗色残留键诊断修复(TyScrollContent/TyGridCell/Bevel/BarWrap 在暗 aero 下仍是亮面,
+  修完进一致性扫描)。
 - **真机目验清单**:aero 修复前后对比(agent 已截图,但用户没看过)、csSimple、日历/日期框语言切换、
   ~~listbox 横向滚动条的真实落点(demo 开关在,没人看过)~~、~~日期框**弹出**日历的语言(程序化拉不起来,手动点一次)~~、
   ~~`OnPaintButton` 赋值后的即时重绘~~、`examples/rtl` 的既有清单。
