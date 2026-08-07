@@ -4,7 +4,13 @@ program hint_example;
 
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
-  Interfaces, Forms, umain, LCLTranslator, SysUtils;
+  Interfaces, Forms, umain, LCLTranslator, SysUtils;
+
+{ Without this the project resource -- where the XP manifest lives -- is never
+  linked, so UseXPManifest in the .lpi has no effect: no common-controls v6 and
+  no DPI-awareness declaration. 42 of the 46 examples were missing it. }
+{$R *.res}
+
 function LangDir: string;
 var Dir: string; i: Integer;
 begin
