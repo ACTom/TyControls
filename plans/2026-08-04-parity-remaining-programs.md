@@ -255,8 +255,20 @@ LCL 的 `TSpeedButton` 和 `TPaintBox` 都是 `TGraphicControl` —— **没有�
 - ~~**网格 Ctrl+X 手势未接线**(从来就没有过;守卫已就位,接=一行 `Ord('X'): CutToClipboard`,grid.md 已写明)。~~
   **已接(2026-08-07)**:`KeyDown` 里与 C/V 一排(修饰键跟自家 C/V 用 Ctrl,不跟 LCL 的 Shift+X——grids.pas:7815 它家 C/V 用 ssModifier、X 却写成 ssShift)。
   手势级测试 `TestCtrlXGestureCutsAndReadOnlyDegradesToCopy` 只走 KeyDown 不直调方法;两个变异(删绑定/绑成复制)都当场红。grid.md 剪贴板一节已同步。
-- **`goHeaderPushedLook` 等着 `themes/light.tycss` 的 `TyGridHeaderSection:active` 规则**、
-  **`goThumbTracking` 等着滚动条的缝**(`251db2d` 的两处指名)。
+- ~~**`goHeaderPushedLook` 等着 `themes/light.tycss` 的 `TyGridHeaderSection:active` 规则**~~
+  **主题那一半已就位(2026-08-08)**:`TyGridHeaderSection:active { background: var(--surface-active); }`
+  写进 `themes/light.tycss` 基础层(`--surface-active` = 本库“按下”的既有令牌,同 `TyButton:active`;
+  它比列头带自己的 `--surface-chrome` 深,按下那段在带子上读得出来)。**15 套内置皮肤无一改写
+  `TyGridHeaderSection`,因此全部继承**——没有“皮肤要跟进”的欠账。
+  守卫:`tests/test.themes.pas` 的 `TestPressedGridHeaderSectionIsNotInert` 逐主题×逐模式断言
+  按下态与静止态**解析不同**;golden 第 2 号状态槽(`STATES[2] = [tysActive]`)记着值
+  (light/dark/showcase 各改 1 行:`bg=k0` → 实心)。变异(删规则)当场红。
+  **仍欠控件侧,收标志前必须做完**(`source/tyControls.Grid.pas`,本轮不在改动范围):
+  ①`TTyGridOption` 末尾追加 `goHeaderPushedLook`(只增不改序);②记录被按住的列头段
+  (照 `FHoverHeaderCol` 那套);③`RenderHeaderSections` 对该段用 `[tysActive]` 解析。
+  **注意**:该标志此前并非“已发布却无效”,而是**明确拒收**(`TTyGridOption` 21/32 的取舍里没有它),
+  拒收理由正是缺这条规则——所以现在是“缝补好了、可以收了”,不是“修好了一个 bug”。
+- **`goThumbTracking` 等着滚动条的缝**(`251db2d` 指名)。
 - **工具条逐状态换形图标**:需要 `GlyphButtons.pas` 的受保护 glyph 源解析器缝(`b133548` 指名);
   换**色**已由主题管。另:绘制箭头与命中区差一个右内边距的既有偏差(与 `TTyDropDownButton` 同源,两处必须同改)。
 - ~~**`TTyPanel.ChildSizing`**:基类已 republish,**子对象是否真生效从未验过**(headless 跑不到对齐引擎,要真机探针)。~~
@@ -268,9 +280,45 @@ LCL 的 `TSpeedButton` 和 `TPaintBox` 都是 `TGraphicControl` —— **没有�
 - **README 双语的 "3949 个单元测试" 计数已烂**(2026-08-07 实测 5904,且各 agent 还在加);发版前以 `tytests --all` 的输出为准顺手改。
 - ~~**CHANGELOG 未覆盖最近两波**~~ **已补齐(2026-08-07)**:`ec37153` 一次补两波(新控件 + 继续补齐 + 修复三节),
   aero 暗色/chrome 归族随各自提交带了条目(`e294f45`/`c23e45c`/`abc6c42`)。
-- **2026-08-07 晚间新开的两单(在途)**:examples/toolbar 补 TTyToolButton 演示面(六样式+Grouped+DropdownMenu+OnPaintButton,
-  顺带改掉"未接线"旧说明);暗色残留键诊断修复(TyScrollContent/TyGridCell/Bevel/BarWrap 在暗 aero 下仍是亮面,
-  修完进一致性扫描)。
+- **2026-08-07 晚间新开的两单**:examples/toolbar 补 TTyToolButton 演示面(六样式+Grouped+DropdownMenu+OnPaintButton,
+  顺带改掉"未接线"旧说明);~~暗色残留键诊断修复(TyScrollContent/TyGridCell/Bevel/BarWrap 在暗 aero 下仍是亮面,
+  修完进一致性扫描)~~ **四个键已逐一定性(2026-08-08),只有一个是主题层的账:**
+  - **`TyScrollContent` —— 是主题层的账,已修。** 这个键**在任何一层都没有规则**;
+    而 `TTyScrollContent.Paint` 只做一次 `FillBackground`,还包在 `if tpBackground in S.Present` 里,
+    于是守卫恒假、视口**一个像素都不画**,露出 widgetset 给那个窗口的擦除色。
+    `TTyForm.ApplyChromeTheme` 只为**纯色**窗体底重新播种擦除色 → 渐变底皮肤(aero)留着系统灰。
+    **真机取色实证**(探针读控件自己的 HWND DC,取四角+中心;源码留在 scratchpad `a90d73f1_probe/`):
+    | | 修复前 | 修复后 |
+    |---|---|---|
+    | aero / light | `F0F0F0` (luma 240) | `FFFFFF` |
+    | **aero / dark** | **`F0F0F0` (luma 240) ← 亮斑** | **`1E1E1E` (luma 30)** |
+    | default / light | `F5F5F5` | `FFFFFF` |
+    | default / dark | `1E1E1E` | `1E1E1E` |
+    最后一行正是**为什么这个 bug 只在 aero 上看得见**:`default` 是纯色窗体底,擦除色被按模式重播了;
+    aero 是渐变,没人重播。顺带暴露 aero **浅色**模式下视口也一直是 `F0F0F0` 而非主题的白——没人注意过。
+    修法:`themes/light.tycss` 基础层加 `TyScrollContent { background: var(--surface); }`(随模式种子走)。
+    守卫:`test.modecoherence` 把它加进 `cSurfaceKeys`,**并新增 `cMustPaintKeys` 不透明下限**——
+    因为该扫描对"透明"是宽容跳过的,而对这类"只画底色"的控件,**缺失就是 bug**,宽容正好把它放过去。
+    变异证明:删规则 → 新守卫红(点名 `default/light`);删规则**且**把下限中和 → **旧扫描全绿**,
+    可见这条下限是真新增信号,不是与既有断言重复。
+  - **`TyGridCell` —— 不是主题层的账。** `TTyGridPanel` 的窗口化布局格**借用**了 `TTyGrid` 数据格的键
+    (`GridPanel.pas` 的 `TTyGridCell.GetStyleTypeKey` → `'TyGridCell'`,典型的"借来的 typeKey"),
+    而基础层 `background: none` 对网格正文**是刻意且正确的**。关键是 **`TTyGridCell.Paint` 是个空方法**——
+    它根本不解析、不填任何东西,所以**在这个键(或任何键)下写什么值都不会改变一个像素**。
+    亮斑纯粹是一个"拒绝作画的窗口化控件"的擦除色。**控件侧**两条路:给布局格自己的 typeKey,
+    或让它的 `Paint` 像 `TTyGridPanel` 那样填父背景。
+  - **`TyBevel` —— 不是主题层的账。** 解析出来的底色本就随模式一致(走容器族那条共享规则),而控件从不填它。
+    暗色下刺眼的亮轨来自 **`source/tyControls.Bevel.pas:197`** 的
+    `hiC := TyBevelLighten(baseC, 0.55)`:**不分模式**地把边框色朝**纯白**混 55%
+    (配套的 `loC := TyBevelDarken(baseC, 0.45)` 朝黑)。暗色下 `#3F3F46` 混成约 `#A5A5A9` → 亮轨。
+    这是控件内部的**模式盲派生**,任何 resolve 级扫描都看不见。修在那处派生(按模式选混向,或走令牌)。
+  - **`BarWrap`(换行工具条)—— 未复现为独立缺陷。** `TTyToolBarEx` 不覆写 `GetStyleTypeKey`,
+    走的就是 `TyToolBar`;而 `TyToolBar` 早已在 `cSurfaceKeys` 里、且随 `--chrome-bar-bg` 按模式定义
+    (`abc6c42` 那波已把 aero 的 rebar/tabs 归入冷色 chrome 族)。`Wrapable = True` 时它**完全走基类布局**。
+    真正显浅的是它**所在的容器**(scroll 视口),即上面第一条——修完这条,那条带子跟着对。
+    若真机复验仍见异常,再单独立项。
+  **本轮只动主题层**(`themes/light.tycss` + 两个生成源 + 测试 + 文档);Bevel/GridPanel 两处**控件侧**修复
+  按分工留给后续,理由与确切行号如上,不必重新推导。
 - **真机目验清单**:aero 修复前后对比(agent 已截图,但用户没看过)、csSimple、日历/日期框语言切换、
   ~~listbox 横向滚动条的真实落点(demo 开关在,没人看过)~~、~~日期框**弹出**日历的语言(程序化拉不起来,手动点一次)~~、
   ~~`OnPaintButton` 赋值后的即时重绘~~、`examples/rtl` 的既有清单。

@@ -3,7 +3,8 @@ unit test.themes;
 interface
 uses
   Classes, SysUtils, fpcunit, testregistry,
-  tyControls.Types, tyControls.StyleModel;
+  tyControls.Types, tyControls.StyleModel, tyControls.Controller,
+  tyControls.BuiltinThemes;
 type
   TTestThemes = class(TTestCase)
   private
@@ -36,6 +37,8 @@ type
     procedure TestGreenAfterLightSwitch;
     { every bundled theme ships the ghost variant + TyBadge tokens }
     procedure TestAllThemesHaveGhostAndBadge;
+    { a pressed column header must RESOLVE differently from a resting one }
+    procedure TestPressedGridHeaderSectionIsNotInert;
   end;
 
   { Golden resolved-style dump. Loads each shipped theme, resolves a full grid of
@@ -129,6 +132,69 @@ begin
     finally
       m.Free;
     end;
+  end;
+end;
+
+procedure TTestThemes.TestPressedGridHeaderSectionIsNotInert;
+{ `TyGridHeaderSection:active` — the PRESSED column header.
+
+  Why this test exists. docs/controls/grid.md records LCL's goHeaderPushedLook as a
+  REFUSED flag ("不收"), and the stated reason was this rule's absence: with no :active
+  rule, a pressed header resolved straight back to the base's `background: none`, i.e.
+  looked exactly like a resting one. Publishing a set member the control cannot honour is
+  the defect class TTyGridOption's 21-of-32 census exists to prevent, so the flag was
+  correctly withheld until the theme layer could express the state. This rule is that
+  half; it must therefore be provably NOT inert, or withholding was pointless.
+
+  The assertion is comparative, not a colour: a pressed header must resolve a background
+  that is actually PAINTABLE and that DIFFERS from the resting resolve. Pinning a literal
+  colour here would just duplicate the golden and would break on every legitimate reskin.
+
+  Swept over every BUILT-IN theme, which is also the skin-follows guard: the rule lives in
+  the base layer (light.tycss) and no shipped skin restyles TyGridHeaderSection today, so
+  all of them inherit it. A future skin that takes the key over WITHOUT restating :active
+  loses the pressed look, and this sweep is what reports that rather than letting it ship
+  as a silently inert flag a second time. }
+var
+  c: TTyStyleController;
+  names: TStringArray;
+  i, m: Integer;
+  mode: string;
+  rest, down: TTyStyleSet;
+begin
+  TyRegisterBuiltinThemes;
+  c := TTyStyleController.Create(nil);
+  try
+    names := TyBuiltinThemeNames;
+    AssertTrue('there are built-in themes to check', Length(names) > 0);
+    for i := 0 to High(names) do
+      for m := 0 to 1 do
+      begin
+        if m = 0 then mode := 'light' else mode := 'dark';
+        c.ThemeName := names[i];
+        c.Mode := mode;
+
+        rest := c.Model.ResolveStyle('TyGridHeaderSection', '', []);
+        down := c.Model.ResolveStyle('TyGridHeaderSection', '', [tysActive]);
+
+        AssertTrue(Format('%s/%s: TyGridHeaderSection:active must declare a background',
+          [names[i], mode]), tpBackground in down.Present);
+        AssertTrue(Format('%s/%s: TyGridHeaderSection:active must be a PAINTABLE fill — '
+          + 'resolving to `none` is what made the pressed look inert', [names[i], mode]),
+          down.Background.Kind <> tfkNone);
+        { The inertness assertion proper: pressed must not look like resting. Compare the
+          whole fill, not just the colour — a skin could legally move from a solid to a
+          gradient here. }
+        AssertFalse(Format('%s/%s: a pressed column header resolves IDENTICALLY to a '
+          + 'resting one — goHeaderPushedLook would be visually inert again',
+          [names[i], mode]),
+          (rest.Background.Kind = down.Background.Kind)
+          and (rest.Background.Color = down.Background.Color)
+          and (rest.Background.GradFrom = down.Background.GradFrom)
+          and (rest.Background.GradTo = down.Background.GradTo));
+      end;
+  finally
+    c.Free;
   end;
 end;
 
@@ -434,7 +500,7 @@ begin
 end;
 
 const
-  GGRID: array[0..202] of string = (
+  GGRID: array[0..203] of string = (
     'TyForm|', 'TyButton|', 'TyButton|primary', 'TyButton|danger', 'TyLabel|',
     'TyEdit|', 'TyCheckBox|', 'TyRadioButton|', 'TyPanel|', 'TyComboBox|',
     'TyScrollBar|', 'TyScrollThumb|', 'TyTitleBar|', 'TyCaptionButton|',
@@ -493,7 +559,12 @@ const
     'TySparkline|', 'TySparklineFill|', 'TySparklineDot|',
     'TyRating|', 'TyRatingStar|',
     'TyLColorPicker|', 'TyHSColorPicker|', 'TyColorArea|',
-    'TyScrollBox|', 'TyExPanel|', 'TyExPanelHeader|',
+    { TyScrollContent joined in the aero-dark residue pass. The key had no rule in ANY
+      layer and no guard anywhere, so the scroll viewport painted nothing and showed the
+      host's erase colour — a light well in a dark window. Its five rows here pin the
+      resolved surface per theme; test.modecoherence additionally holds it OPAQUE in both
+      modes across every built-in skin (an absent resolve is the defect, not a style). }
+    'TyScrollBox|', 'TyScrollContent|', 'TyExPanel|', 'TyExPanelHeader|',
     'TyToolGroupPanel|', 'TyToolSeparator|',
     'TySpeedButton|', 'TyGlyphContainerButton|',
     'TyRibbonAppMenu|', 'TyRibbonAppMenu|primary',

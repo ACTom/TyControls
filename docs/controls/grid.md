@@ -227,7 +227,7 @@ TyGridCellMarked            选区盖在"用户显式指定了底色"的格上�
 TyGridFixed                 冻结区(固定行列)
 TyGridIndicator             行头 / 行号槽
 TyGridHeader                列头带
-TyGridHeaderSection         列头分段(:hover / :selected)
+TyGridHeaderSection         列头分段(:hover / :selected / :active)
 TyGridHeaderGroup           分组表头带(横跨若干列的上层标题)
 TyGridFilterRow             内嵌筛选行的底色与文字色
 TyGridLine                  格线(读 background)
@@ -644,7 +644,7 @@ TyDefaultGridOptions =
 | `goFixedRowNumbering` | 视图 | `ShowRowNumbers` | 关 | 还需 `ShowIndicator` 才有槽可画;行号按**显示序**、1 起 |
 | `goScrollKeepVisible` | 自有 | `goScrollKeepVisible` | 关 | 默认视口与光标解耦(滚走了光标留在原地)。打开后滚动落定时把光标拖进新视口,横纵都管 |
 | `goHeaderHotTracking` | 视图 | `Header.Options` 含 `hoHotTrack` | 关 | |
-| `goHeaderPushedLook` | 不收 | — | — | **缺主题 token。** 列头段只定义了 `TyGridHeaderSection:hover` 和 `:selected`,没有 `:active`;按下态解析出来会退回 base,看起来毫无变化 —— 那正是"发布了却不照办"。seam:在 `themes/light.tycss` 加 `TyGridHeaderSection:active`,重跑 `gen-defaulttheme.ps1` / `gen-builtinthemes.ps1`,再在 `RenderHeaderSections` 里解析 `[tysActive]` |
+| `goHeaderPushedLook` | 暂不收(主题层已就位,控件侧未接) | — | — | **主题 token 已补上,缺的只剩控件侧接线。** 原先拒收的理由是"列头段只有 `:hover` / `:selected`,没有 `:active`,按下态解析回 base 看不出变化"——那条 `TyGridHeaderSection:active { background: var(--surface-active); }` 现已写进 `themes/light.tycss`(基础层,15 个内置皮肤无一改写这个键,因此全部继承)。现在按下态解析出来的底色与静止态**确实不同**,`tests/test.themes.pas` 的 `TestPressedGridHeaderSectionIsNotInert` 逐主题、逐模式钉住这一点,golden 的第 2 号状态槽(`STATES[2] = [tysActive]`)也记着值。<br>**仍未做的是控件侧**,做完才能收这个标志:①`TTyGridOption` 末尾追加 `goHeaderPushedLook`(只增不改序);②记录"当前被按住的是哪一段"(参照 `FHoverHeaderCol` 那套);③`RenderHeaderSections` 对那一段用 `[tysActive]` 解析。三步齐了再 published,否则又是一个"发布了却不照办" |
 | `goSelectionActive` | 不收 | — | — | 我们**恒为 active**:`SetSelection` → `SelectRange` 直接写 `FCol`/`FRow` |
 | `goFixedColSizing` | 自有 | `goFixedColSizing` | ⚠ 开 | LCL 默认关。关掉后冻结列(前 `FixedCols` + 后 `FixedColsRight`)的分隔线不再命中,可滚动列不受影响 |
 | `goDontScrollPartCell` | 自有 | `goDontScrollPartCell` | 关 | 只管**点击**;键盘导航仍然把光标滚进视口 |

@@ -605,7 +605,7 @@ TyGridHeaderGroup||3 => pres[0,1,2,] bg=k1/FFE6E6E6 ut=0 txt=FF1F2937 bd=FFD1D5D
 TyGridHeaderGroup||4 => pres[0,1,2,] bg=k1/FFE6E6E6 ut=0 txt=FF1F2937 bd=FFD1D5DB/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyGridHeaderSection||0 => pres[0,1,2,] bg=k0 ut=0 txt=FF1F2937 bd=FFD1D5DB/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyGridHeaderSection||1 => pres[0,1,2,] bg=k1/FFF5F5F5 ut=0 txt=FF1F2937 bd=FFD1D5DB/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
-TyGridHeaderSection||2 => pres[0,1,2,] bg=k0 ut=0 txt=FF1F2937 bd=FFD1D5DB/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyGridHeaderSection||2 => pres[0,1,2,] bg=k1/FFE6E6E6 ut=0 txt=FF1F2937 bd=FFD1D5DB/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyGridHeaderSection||3 => pres[0,1,2,] bg=k0 ut=0 txt=FF1F2937 bd=FFD1D5DB/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyGridHeaderSection||4 => pres[0,1,2,] bg=k0 ut=0 txt=FF1F2937 bd=FFD1D5DB/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyGridHyperlink||0 => pres[1,] bg=k0 ut=0 txt=FF3B82F6 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
@@ -893,6 +893,11 @@ TyScrollBox||1 => pres[0,1,2,3,4,5,] bg=k1/FFFFFFFF ut=0 txt=FF1F2937 bd=FFD1D5D
 TyScrollBox||2 => pres[0,1,2,3,4,5,] bg=k1/FFFFFFFF ut=0 txt=FF1F2937 bd=FFD1D5DB/1/0 rad=6/6,6,6,6 pad=8,8,8,8 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyScrollBox||3 => pres[0,1,2,3,4,5,] bg=k1/FFFFFFFF ut=0 txt=FF1F2937 bd=FFD1D5DB/1/0 rad=6/6,6,6,6 pad=8,8,8,8 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyScrollBox||4 => pres[0,1,2,3,4,5,] bg=k1/FFFFFFFF ut=0 txt=FF1F2937 bd=FFD1D5DB/1/0 rad=6/6,6,6,6 pad=8,8,8,8 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyScrollContent||0 => pres[0,] bg=k1/FFFFFFFF ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyScrollContent||1 => pres[0,] bg=k1/FFFFFFFF ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyScrollContent||2 => pres[0,] bg=k1/FFFFFFFF ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyScrollContent||3 => pres[0,] bg=k1/FFFFFFFF ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyScrollContent||4 => pres[0,] bg=k1/FFFFFFFF ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyExPanel||0 => pres[0,1,2,3,4,5,] bg=k1/FFFFFFFF ut=0 txt=FF1F2937 bd=FFD1D5DB/1/0 rad=6/6,6,6,6 pad=8,8,8,8 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyExPanel||1 => pres[0,1,2,3,4,5,] bg=k1/FFFFFFFF ut=0 txt=FF1F2937 bd=FFD1D5DB/1/0 rad=6/6,6,6,6 pad=8,8,8,8 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyExPanel||2 => pres[0,1,2,3,4,5,] bg=k1/FFFFFFFF ut=0 txt=FF1F2937 bd=FFD1D5DB/1/0 rad=6/6,6,6,6 pad=8,8,8,8 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0

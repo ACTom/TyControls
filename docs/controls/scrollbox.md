@@ -29,7 +29,9 @@ uses tyControls.ScrollBox;
 |----|--------|
 | `TyScrollBox` | 滚动框本体的框：`background` / `border-color` / `border-width` / `border-radius` / `padding`（`padding` 只影响本体绘制，不约束子控件） |
 | `TyScrollBar` / `TyScrollThumb` | 两条内嵌滚动条的轨道与缩略块，由 `TTyScrollBar` 自身解析（见 [scrollbar.md](scrollbar.md)） |
-| `TyScrollContent` | 显式视口 `TTyScrollContent` 的**表面**（只画 `background`，**不画边框**——框归外面的滚动框画，视口再画一条会正好压在内容该穿过去的地方） |
+| `TyScrollContent` | 显式视口 `TTyScrollContent` 的**表面**（只画 `background`，**不画边框**——框归外面的滚动框画，视口再画一条会正好压在内容该穿过去的地方）。**必须有值且不透明**，理由见下 |
+
+> **`TyScrollContent` 必须解析出一个不透明底色。** 视口是**窗口化**控件，而它的 `Paint` **除了这块底色什么都不画**（还包在 `if tpBackground in S.Present` 里）。所以主题不给值 ≠ "视口透明",而是**屏幕上留着 widgetset 给那个窗口的擦除色**。`TTyForm.ApplyChromeTheme` 只为**纯色**窗体底重新播种擦除色,渐变底皮肤(aero)因此会把一块陈旧的系统灰 `#F0F0F0` 留在井里——暗色模式下就是一圈刺眼的**亮斑**(真机取色实测:修复前 aero/dark 视口读到 `F0F0F0`,修复后读到 `1E1E1E`)。这个键此前**在任何一层都没有规则**,现已写进 `themes/light.tycss` 基础层;`tests/test.modecoherence.pas` 的 `cMustPaintKeys` 用不透明下限钉住它。自定义主题若整体覆盖了容器族,记得把它一并带上。
 
 > **主题说明：** 早期版本里 `TTyScrollBox` 返回 `'TyPanel'`，于是滚动井与面板在主题层完全无法分辨；那时文档给出的变通办法是"用 `StyleClass` 加个类选择器（如 `TyPanel.scroll`）"。**这个变通已经不需要了，也不该再用**——直接写 `TyScrollBox { ... }` 就只作用于滚动框。内置主题把 `TyScrollBox` 与 `TyPanel` 等键写在同一条规则里（取值相同、名字独立），所以默认观感不变；第三方主题若只覆盖了 `TyPanel`，需要补上 `TyScrollBox`（主题层按 typeKey 全有全无地回落，否则会掉回内置 light 取值）。
 >

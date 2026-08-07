@@ -62,10 +62,44 @@ const
     re-seats the strip's rest state on the chrome family per-mode (--surface-tab-rest),
     and this sweep is what makes per-mode the mandatory shape for it. Labels are not
     parented to tab headers, but the tab's OWN rest ink is the same --on-surface seed
-    the TyLabel floor models, so the floor transfers. }
-  cSurfaceKeys: array[0..10] of string =
+    the TyLabel floor models, so the floor transfers.
+    TyScrollContent is the scrolling containers' windowed VIEWPORT (the child that clips
+    the content inside TTyScrollBox / TTyScrollPanel). It joined when the aero-dark residue
+    pass found the key had NO rule in ANY layer: TTyScrollContent.Paint fills its resolved
+    background and nothing else, behind `if tpBackground in S.Present`, so an absent resolve
+    left the widgetset's erase colour on screen. ApplyChromeTheme re-seeds that colour only
+    for SOLID form backgrounds, so on a gradient-form skin (aero) it stayed a stale light
+    grey — a LIGHT well lining a dark window. It is ALSO in cMustPaintKeys below, because
+    for this key "absent" is precisely the bug and the transparent-skip below would wave it
+    straight through.
+    Keys the same residue pass examined and deliberately did NOT add, each because no
+    resolve-level assertion can see the defect:
+    - TyGridCell: TTyGridPanel's windowed layout cells borrow TTyGrid's DATA-cell key
+      (tyControls.GridPanel.pas, TTyGridCell.GetStyleTypeKey -> 'TyGridCell'), whose base
+      `background: none` is correct BY DESIGN for the grid body. But TTyGridCell.Paint is an
+      EMPTY method — it never resolves or fills anything — so no value written under this
+      key, or any other, would change one pixel. The light patch is purely the erase colour
+      of a windowed control that declines to paint. Control-side fix, two options: give the
+      layout cell its own typeKey (the borrowed-typeKey rule), or have its Paint fill the
+      parent's background the way TTyGridPanel already does.
+    - TyBevel: its resolved background is the shared container surface and is already
+      mode-coherent; the control never fills it. The bright dark-mode rails come from
+      tyControls.Bevel.pas:197, `TyBevelLighten(baseC, 0.55)`, which blends the border
+      colour 55% toward pure WHITE regardless of mode. Mode-blind derivation inside the
+      control; invisible to any resolve sweep. Fix belongs in that derivation. }
+  cSurfaceKeys: array[0..11] of string =
     ('TyForm', 'TyListBox', 'TyPanel', 'TyStatusBar', 'TyMemo', 'TyGroupBox',
-     'TyToolBar', 'TyScrollBar', 'TyCoolBar', 'TyControlBar', 'TyTab');
+     'TyToolBar', 'TyScrollBar', 'TyCoolBar', 'TyControlBar', 'TyTab',
+     'TyScrollContent');
+
+  { Keys whose control paints NOTHING except its resolved background fill. For these an
+    absent or transparent resolve does not mean "styled transparent", it means the pixels
+    on screen are the host's unthemed erase colour — and that colour is re-seeded only for
+    solid form backgrounds, so a gradient-form skin leaves it a stale light grey. The
+    transparent-skip in the sweep below is a deliberate lenience for keys that MAY legally
+    be see-through (TyGroupBox); for these keys the same lenience would hide exactly the
+    defect being guarded, so they carry an opacity floor instead. }
+  cMustPaintKeys: array[0..0] of string = ('TyScrollContent');
 
   { Light/dark class boundary on the 0..255 luma axis. Every shipped surface sits well
     clear of it (light skins >= ~190, dark ones <= ~70); a MIXED window straddles it by
@@ -145,7 +179,7 @@ procedure TModeCoherenceTest.TestEveryBuiltinIsCoherentInBothModes;
 var
   c: TTyStyleController;
   names: TStringArray;
-  i, m, k: Integer;
+  i, m, k, mp: Integer;
   mode, detail: string;
   s, lbl: TTyStyleSet;
   lumas: array[0..High(cSurfaceKeys)] of Double;
@@ -173,6 +207,16 @@ begin
         begin
           s := c.Model.ResolveStyle(cSurfaceKeys[k], '', []);
           opaque[k] := (tpBackground in s.Present) and FillIsOpaque(s.Background);
+          { The opacity floor (cMustPaintKeys). For a control that paints its background
+            and nothing else, an absent/transparent resolve IS the light-patch defect —
+            and skipping it below is exactly how the defect stayed invisible to this
+            sweep for as long as it did. Fail loudly, before the skip. }
+          for mp := 0 to High(cMustPaintKeys) do
+            if cSurfaceKeys[k] = cMustPaintKeys[mp] then
+              AssertTrue(Format('%s/%s: %s must resolve an OPAQUE background — its control '
+                + 'paints nothing else, so what shows instead is the host''s unthemed erase '
+                + 'colour (a light patch in dark mode)', [names[i], mode, cSurfaceKeys[k]]),
+                opaque[k]);
           if not opaque[k] then Continue;
           lumas[k] := FillLuma(s.Background);
           Inc(measured);

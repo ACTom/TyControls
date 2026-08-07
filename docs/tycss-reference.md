@@ -849,6 +849,7 @@ TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth
 |---|---|---|
 | `TyPanel` | 通用容器面板 | `TTyPanel`;`TTyRelativePanel` / `TTyPaintPanel` 刻意共用(§8.5) |
 | `TyScrollBox` | 滚动**井**(约定上比面板下沉) | `TTyScrollBox`;`TTyScrollPanel` 继承 |
+| `TyScrollContent` | 滚动容器的**视口**(裁剪内容的那个窗口化子控件)。**只画 `background`,不画边框**——框归外面的滚动框画。这个键**必须有值且必须不透明**:控件除了这块底色什么都不画,解析不到就露出宿主未主题化的擦除色(渐变底皮肤如 aero 在暗色模式下就是一块**亮斑**) | `TTyScrollContent`(`TTyScrollBox` / `TTyScrollPanel` 的视口) |
 | `TyExPanel` | 可折叠卡片的外框(其 `padding.right` 同时决定标题右内缩) | `TTyExPanel` |
 | `TyChart` | 图表外框、标题、图例、刻度标签、两轴与网格线 | `TTyChart` |
 | `TyCalculator` | 计算器背板(显示条另解析 `TyEdit`,按键是真的 `TTyButton`) | `TTyCalculator` |
@@ -935,7 +936,7 @@ TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth
 | `TyGridFixed` | 冻结行列区 | — |
 | `TyGridIndicator` | 行头槽 | — |
 | `TyGridHeader` | 列头带 | — |
-| `TyGridHeaderSection` | 一个列头单元格 | `:hover` `:selected` |
+| `TyGridHeaderSection` | 一个列头单元格 | `:hover` `:selected` `:active` |
 | `TyGridHeaderGroup` | 分组表头带(横跨若干列的上层标题) | — |
 | `TyGridFilterRow` | 内嵌筛选行(底色跟表面走、边框跟输入框走,以示"这里能打字") | — |
 | `TyGridGroupRow` | 分组带。内置 `background: none` **是刻意的**当前观感;想要 chrome 底色自行声明 | — |

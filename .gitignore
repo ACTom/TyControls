@@ -52,3 +52,8 @@ Thumbs.db
 
 # 发布包输出（make-release.ps1 生成，上传 GitHub release 用，不入库）
 /dist/
+
+# Golden-test scratch: written only on a MISMATCH so you can diff it against the
+# committed golden. Tracking it makes every intended golden update a two-file edit
+# and hides the mismatch it exists to show.
+tests/golden/*.golden.txt.actual

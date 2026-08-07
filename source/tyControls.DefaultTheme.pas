@@ -344,6 +344,22 @@ begin
     '  border-radius: var(--radius);' + LineEnding +
     '  padding: var(--pad-container);' + LineEnding +
     '}' + LineEnding +
+    '/* The scrolling containers'' VIEWPORT (TTyScrollContent — the windowed child that clips the' + LineEnding +
+    '   scrolled content inside TTyScrollBox / TTyScrollPanel). Background only, ON PURPOSE: the' + LineEnding +
+    '   frame belongs to the box around it, and a second frame here would land exactly where the' + LineEnding +
+    '   content is meant to run under — so this is TyScrollBox''s surface, alone, under its own key.' + LineEnding +
+    '   This rule EXISTING AT ALL is the fix, not its value. TTyScrollContent.Paint fills its' + LineEnding +
+    '   resolved background and nothing else, guarded by `if tpBackground in S.Present`; no layer' + LineEnding +
+    '   defined this key, so the guard was always False and the viewport painted NOTHING — leaving' + LineEnding +
+    '   whatever the widgetset erased the window with. TTyForm.ApplyChromeTheme re-seeds that erase' + LineEnding +
+    '   colour only for SOLID form backgrounds, so on a gradient-form skin (aero) it stays a stale' + LineEnding +
+    '   light grey: in dark mode the viewport surfaced as a LIGHT patch lining every scroll well.' + LineEnding +
+    '   Solid on purpose too: the viewport is a real window compositing over that erase colour, so' + LineEnding +
+    '   a translucent value here would blend with garbage rather than with the page.' + LineEnding +
+    '   test.modecoherence sweeps this key in BOTH modes and holds it to an opacity floor' + LineEnding +
+    '   (cMustPaintKeys) — for a paint-nothing-else control, "absent" IS the bug, and the sweep''s' + LineEnding +
+    '   transparent-skip lenience would otherwise wave it straight through. */' + LineEnding +
+    'TyScrollContent { background: var(--surface); }' + LineEnding +
     '/* The collapsible panel''s HEADER BAND — caption + chevron ink, and the band''s own hover.' + LineEnding +
     '   Only `color` is declared, and it is TyPanel''s colour, so the caption and caret draw' + LineEnding +
     '   exactly as they did when they read the panel''s own style. Background is left out ON' + LineEnding +
@@ -778,6 +794,20 @@ begin
     'TyGridHeaderSection { background: none; color: var(--on-surface); border-color: var(--border); }' + LineEnding +
     'TyGridHeaderSection:hover    { background: var(--surface-hover); }' + LineEnding +
     'TyGridHeaderSection:selected { background: var(--surface-active); }' + LineEnding +
+    '/* 按下态(“列头按下去”的观感)。这条规则以前不存在,于是按下的列头解析回 base 的' + LineEnding +
+    '   `background: none` —— 与静止态一模一样,看不出被按下。docs/controls/grid.md 因此' + LineEnding +
+    '   把 LCL 的 goHeaderPushedLook 记为“不收:缺主题 token”,理由正是这里缺一条规则:' + LineEnding +
+    '   与其发布一个控件不照办的标志,不如先把缝补上。这条规则补的就是那个缝。' + LineEnding +
+    '   取值走 --surface-active(darken(--surface,10%))—— 本库“按下”一律用它' + LineEnding +
+    '   (见 TyButton:active),不新造硬编码值。它比列头带自己的 --surface-chrome' + LineEnding +
+    '   (darken 6%)更深,所以按下的那一段在带子上读得出来。' + LineEnding +
+    '   与 :selected 同值是有意的:两者都是“这一段正被使用”,而真正的差别是相对 base' + LineEnding +
+    '   的 `none` —— 按下去现在有底色了。tests/test.themes 的 golden 第 2 号状态槽' + LineEnding +
+    '   (STATES[2] = [tysActive])把这条钉住。' + LineEnding +
+    '   注意:主题这一层到此为止。控件侧(把 goHeaderPushedLook 加进 TTyGridOption、' + LineEnding +
+    '   在 RenderHeaderSections 里按 [tysActive] 解析被按住的那一段)仍未接线,' + LineEnding +
+    '   属 source/tyControls.Grid.pas,不在本次改动范围内。 */' + LineEnding +
+    'TyGridHeaderSection:active   { background: var(--surface-active); }' + LineEnding +
     '/* 分组表头带(横跨若干列的上层标题)。自己的键 —— 与叶子列头分开配才有意义。 */' + LineEnding +
     'TyGridHeaderGroup { background: var(--surface-active); color: var(--on-surface); border-color: var(--border); }' + LineEnding +
     '/* 内嵌筛选行。它是"能打字的地方",所以底色跟表面走、边框跟输入框走 ——' + LineEnding +
