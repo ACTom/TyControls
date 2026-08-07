@@ -87,6 +87,13 @@ type
     FCloseButton: TTyCaptionButton;
     FButtonWidth: Integer;
     FButtonWidthExplicit: Boolean;   // True once ButtonWidth is set in code/OI (overrides the theme metric)
+    { a6256. The PPI at which ButtonWidth was pinned. ButtonWidth stays a DEVICE-px property
+      (setting 50 makes the button 50 px wide right there -- test.form.pas pins that), so the
+      pin alone cannot say what 50 should become on a 250% monitor. Keeping the PPI it was
+      taken at turns the pair into a PPI-independent fact, and EffectiveButtonWidthPx derives
+      from the pair rather than multiplying the running field. Deriving is what makes a
+      monitor round trip land back on the pinned number instead of drifting away from it. }
+    FButtonWidthPPI: Integer;
     FTitleAlignment: TAlignment;
     FEngine: TTyChromeEngine;
     procedure SetCaption(const AValue: TCaption);
@@ -258,6 +265,12 @@ type
   private
     FTitleBar: TTyTitleBar;
     FTitleHeightExplicit: Boolean;    // True once TitleHeight is set in code/.lfm (pins it; else follows density)
+    { a6256. The pinned title-bar height in LOGICAL (96-PPI) px. A pinned height must scale
+      with the monitor like the theme-driven one does, and it must come BACK to the same
+      number when the window returns to a 96-PPI monitor -- so what is remembered is the
+      PPI-independent value, and every use derives device px from it. Storing the device
+      value and re-multiplying it per crossing is what made the bar grow without bound. }
+    FTitleHeightLogical: Integer;
     FSurface: TTyFormSurface;         // Phase 1: runtime child content-host (covers the WS_THICKFRAME dead band)
     FMenuBar: TTyMenuBar;             // the primary menu bar (shortcut dispatch / mac global bar)
     FResizable: Boolean;              // window edge-resize opt-out (default True); see SetResizable
@@ -545,6 +558,12 @@ function TyMaximizedBounds(const AWorkArea: TRect): TRect;
   window can never restore to nothing. Pure (no handle) -> unit-tested. }
 function TyRestoreDragBounds(const AMaxBounds, ANormalBounds: TRect; const ACursor: TPoint): TRect;
 function TyRescaleChromeMetric(AValue, AFromPPI, AToPPI: Integer): Integer;
+{ a6256. The title bar's height in DEVICE px at APPI. Unlike TyRescaleChromeMetric above --
+  which converts a value BETWEEN two PPIs and therefore accumulates when it is fed its own
+  output -- this DERIVES the height from PPI-independent inputs, so it is idempotent and a
+  monitor round trip is exact. Exported so the contract can be pinned directly; see
+  TTitleBarDpiTest in tests/test.form.pas. }
+function TyTitleBarDeviceHeight(AForm: TCustomForm; ABar: TTyTitleBar; APPI: Integer): Integer;
 
 implementation
 
@@ -813,6 +832,24 @@ begin
   Result := (AValue * AToPPI + AFromPPI div 2) div AFromPPI;
 end;
 
+function TyTitleBarDeviceHeight(AForm: TCustomForm; ABar: TTyTitleBar; APPI: Integer): Integer;
+{ a6256. The title bar's height in DEVICE px at APPI, derived from PPI-independent inputs
+  only: either the height the host pinned (remembered as logical px) or the active theme's
+  --titlebar-height under the current density. Because the answer is a pure function of
+  (pin-or-metric, APPI), applying it twice is the same as applying it once and 96->250->96
+  lands back on the 96 value exactly. That is the whole cure for "the layout is broken
+  forever": nothing accumulates. }
+var logical: Integer;
+begin
+  logical := 0;
+  if (AForm is TTyForm) and TTyForm(AForm).FTitleHeightExplicit then
+    logical := TTyForm(AForm).FTitleHeightLogical;
+  if logical <= 0 then
+    logical := TyTitleBarHeightFor(ABar.ActiveController);
+  if APPI <= 0 then APPI := 96;
+  Result := MulDiv(logical, APPI, 96);
+end;
+
 { TTyCaptionButton }
 
 procedure TTyCaptionButton.SetKind(AValue: TTyCaptionButtonKind);
@@ -935,6 +972,7 @@ begin
   // AdjustClientRect carves out (left pad .. start of the caption buttons).
   ControlStyle := ControlStyle + [csAcceptsControls];
   FButtonWidth := TyTitleButtonWidth;
+  FButtonWidthPPI := 96;   // a6256: the un-pinned default is a LOGICAL constant
   FTitleAlignment := taLeftJustify;
   // A title bar belongs at the top of the window by default. (The streaming default stays
   // alNone, so existing .lfm files keep writing `Align = alTop` explicitly — no change for
@@ -977,6 +1015,11 @@ end;
 procedure TTyTitleBar.SetButtonWidth(AValue: Integer);
 begin
   FButtonWidthExplicit := True;   // an explicit set pins the width, overriding the theme metric
+  { a6256: stamp the PPI the pin was taken at, so a later monitor change can derive from
+    (value, PPI) instead of multiplying the field. Stamped even when the value is unchanged
+    -- re-pinning the same number on a different monitor is a legitimate re-anchor. }
+  FButtonWidthPPI := Font.PixelsPerInch;
+  if FButtonWidthPPI <= 0 then FButtonWidthPPI := 96;
   if FButtonWidth = AValue then
     Exit;
   FButtonWidth := AValue;
@@ -986,8 +1029,13 @@ end;
 
 function TTyTitleBar.EffectiveButtonWidthPx: Integer;
 begin
+  if FButtonWidthPPI <= 0 then
+    FButtonWidthPPI := 96;   // a pin taken before the stamp existed reads as logical px
   if FButtonWidthExplicit then
-    Result := FButtonWidth   // already device-px (form DPI-rescales it); honour the per-instance value
+    { a6256: derive from the pinned (width @ PPI) pair. At the PPI it was pinned at this is
+      the identity -- so ButtonWidth := 50 still measures exactly 50 -- and on another
+      monitor it scales once, from the pin, never from the last scaled value. }
+    Result := MulDiv(FButtonWidth, Font.PixelsPerInch, FButtonWidthPPI)
   else
     // Theme-driven default: --caption-button-width is logical px; scale to the current PPI. A skin
     // (e.g. classic's small Win9x caption buttons) sets it; unset falls back to TyTitleButtonWidth.
@@ -1559,8 +1607,57 @@ begin
     CurPPI := Screen.PixelsPerInch;
   if (FInstalledPPI > 0) and (CurPPI <> FInstalledPPI) then
   begin
-    FTitleBar.Height := TyRescaleChromeMetric(FTitleBar.Height, FInstalledPPI, CurPPI);
-    FTitleBar.FButtonWidth := TyRescaleChromeMetric(FTitleBar.FButtonWidth, FInstalledPPI, CurPPI);
+    { ===== a6256: DERIVED, not MUTATED ======================================
+      This used to read
+
+        FTitleBar.Height       := TyRescaleChromeMetric(FTitleBar.Height, From, To);
+        FTitleBar.FButtonWidth := TyRescaleChromeMetric(FTitleBar.FButtonWidth, From, To);
+
+      i.e. it multiplied the CURRENT height by To/From on every monitor crossing.
+
+      THE DEFECT IS DOUBLE APPLICATION, not rounding. LCL already scales this bar:
+      WM_DPICHANGED -> TCustomForm.WMDPIChanged -> AutoAdjustLayout ->
+      TControl.DoAutoAdjustLayout multiplies the bounds of every alTop,
+      AutoSize=False child by To/From (control.inc:3168). Crossing a monitor then
+      fired ChangeBounds, and THIS method multiplied the already-scaled height a
+      second time. Measured on the reporter's 100% -> 250% pair, a 32 px bar came
+      out at 216 px instead of 83 -- 6.75x rather than 2.6x. That is exactly the
+      "TyTitleBar is far too tall at high DPI" half of the report.
+
+      Rounding was NOT a contributor, and the original suspicion that it was is
+      recorded here so nobody re-derives it: TyRescaleChromeMetric rounds half-up,
+      and over 16..120 px against 120/144/240/250 PPI, three there-and-back trips
+      return the exact starting value for EVERY height. (scripts were run; see
+      TTitleBarDpiTest.TestAccumulatingRescaleSquares for the shape that does bite.)
+      The "layout broken forever" half of the report is a DIFFERENT defect, in the
+      controls rather than the chrome -- see the FOLLOW-UP note at the end of this
+      comment.
+
+      Deriving the height from the theme metric at the current PPI removes the
+      double application: the value is a pure function of (metric, CurPPI), so
+      running it twice is the same as running it once, and it can no longer compose
+      with LCL's pass into a squared factor. It is the same expression
+      ApplyChromeTheme already uses, which is why the two no longer fight.
+
+      FOLLOW-UP (measured, NOT fixed here -- the files belong to other controls):
+      TTyButton/TTyCheckBox/TTyToggleSwitch/TTyButtonGroup write a DEVICE-px floor
+      into Constraints.MinHeight (e.g. tyControls.Button.pas:697) that they derive
+      from the live PPI, while LCL independently scales both Constraints and Height
+      in its own pass. The two compose the same way this one did, and that one does
+      NOT come back: a TTyButton measured 29 px at 96, 175 px at 240, and 70 px on
+      return to 96. A plain LCL TButton in the same form round-tripped exactly.
+
+      An EXPLICIT TitleHeight is honoured by scaling the LOGICAL value the user
+      pinned (captured at its own PPI), not the running device value -- derived
+      again, so it round-trips too.
+
+      FButtonWidth is deliberately NOT touched any more: when the width is not
+      pinned, EffectiveButtonWidthPx already derives it from --caption-button-width
+      at the live Font.PixelsPerInch, so there is no state here to rescale; when it
+      IS pinned, TTyTitleBar.SetButtonWidth records the logical value and
+      EffectiveButtonWidthPx scales that. Rescaling the field as well was the third
+      multiplication in the same chain. }
+    FTitleBar.Height := TyTitleBarDeviceHeight(FForm, FTitleBar, CurPPI);
     FTitleBar.LayoutButtons;
     FInstalledPPI := CurPPI;
     FForm.Invalidate;
@@ -2058,8 +2155,17 @@ begin
 end;
 
 procedure TTyForm.SetTitleHeight(AValue: Integer);
+var ppi: Integer;
 begin
   FTitleHeightExplicit := True;   // an explicit set (code/.lfm) pins the height, overriding the density metric
+  { a6256. Remember the pin in LOGICAL px so a later monitor crossing can DERIVE the device
+    height from it (see TyTitleBarDeviceHeight) instead of multiplying the running value.
+    At 96 PPI -- the designer, the .lfm, and every single-monitor 100% run -- this is the
+    identity, so nothing about the existing behaviour moves. }
+  ppi := 96;
+  if FTitleBar <> nil then ppi := FTitleBar.Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  FTitleHeightLogical := MulDiv(AValue, 96, ppi);
   if (FTitleBar <> nil) and (FTitleBar.Height <> AValue) then FTitleBar.Height := AValue;
 end;
 

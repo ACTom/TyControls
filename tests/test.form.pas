@@ -165,6 +165,34 @@ type
     procedure TestPaintSmoke;
   end;
 
+  { ===== a6256: the cross-monitor DPI contract for the title bar ==============
+    Forum report (Antek, PerMonitorV2 manifest, real hardware): dragging a window
+    from a 100% monitor to a 250% one made TyTitleBar "far too tall", and dragging
+    back left the layout "broken FOREVER".
+
+    Root cause: TTyChromeEngine.HandleChangeBounds used to do
+
+      FTitleBar.Height := TyRescaleChromeMetric(FTitleBar.Height, FInstalled, ACur)
+
+    -- it multiplied the CURRENT height. That composes with LCL's own DPI pass
+    (TControl.DoAutoAdjustLayout scales the same alTop child), so one crossing
+    scaled twice; and `X := round(X*a)` is not invertible, so it never came back.
+
+    These tests pin the cure: the height is DERIVED from PPI-independent inputs,
+    which makes it (a) idempotent -- applying it twice at the same PPI cannot grow
+    it -- and (b) exactly reversible across a 96 -> 240 -> 96 round trip. They are
+    written against the accumulating helper too, so that if anyone re-introduces
+    the multiply-the-running-value shape the difference is visible in one file. }
+  TTitleBarDpiTest = class(TTestCase)
+  published
+    procedure TestDeviceHeightScalesWithPPI;
+    procedure TestDeviceHeightIsIdempotent;
+    procedure TestDeviceHeightRoundTripsExactly;
+    procedure TestPinnedTitleHeightRoundTripsExactly;
+    procedure TestAccumulatingRescaleSquares;
+    procedure TestExplicitButtonWidthRoundTripsExactly;
+  end;
+
   TRescaleMetricTest = class(TTestCase)
   published
     procedure TestScaleUp;
@@ -1251,6 +1279,173 @@ begin
 end;
 
 { TRescaleMetricTest }
+
+{ ===== a6256: TTitleBarDpiTest ============================================== }
+
+procedure TTitleBarDpiTest.TestDeviceHeightScalesWithPPI;
+{ The bar must actually follow the monitor: a 250% monitor gets a taller bar. Asserted as a
+  RATIO against the 96 answer rather than an absolute, so a density/theme change to
+  --titlebar-height cannot make this test lie about what it is checking. }
+var f: TTyForm; b: TTyTitleBar; h96, h240: Integer;
+begin
+  f := TTyForm.CreateNew(nil);
+  b := TTyTitleBar.Create(f);
+  try
+    b.Parent := f;
+    f.TitleBar := b;
+    h96  := TyTitleBarDeviceHeight(f, b, 96);
+    h240 := TyTitleBarDeviceHeight(f, b, 240);
+    AssertTrue('a bar height at 96 PPI is positive', h96 > 0);
+    AssertEquals('96 -> 240 scales the bar by exactly 240/96',
+      MulDiv(h96, 240, 96), h240);
+  finally
+    f.Free;
+  end;
+end;
+
+procedure TTitleBarDpiTest.TestDeviceHeightIsIdempotent;
+{ THE "far too tall" GUARD. The old code fed the running height back into the rescaler, so
+  two passes over one monitor change squared the factor (96->240 twice = 6.25x, not 2.5x).
+  A derived height cannot do that: asking for the height at 240 twice gives 240's height. }
+var f: TTyForm; b: TTyTitleBar; first, second: Integer;
+begin
+  f := TTyForm.CreateNew(nil);
+  b := TTyTitleBar.Create(f);
+  try
+    b.Parent := f;
+    f.TitleBar := b;
+    first := TyTitleBarDeviceHeight(f, b, 240);
+    b.Height := first;                      // simulate the first pass having been applied
+    second := TyTitleBarDeviceHeight(f, b, 240);
+    AssertEquals('asking twice at the same PPI must not grow the bar', first, second);
+  finally
+    f.Free;
+  end;
+end;
+
+procedure TTitleBarDpiTest.TestDeviceHeightRoundTripsExactly;
+{ THE "broken FOREVER" GUARD. Drag out to 250% and back: the bar must be byte-identical to
+  where it started. Three crossings each way, because the reported failure was cumulative --
+  one trip looked nearly right, repeated trips did not. }
+var f: TTyForm; b: TTyTitleBar; start, i: Integer;
+begin
+  f := TTyForm.CreateNew(nil);
+  b := TTyTitleBar.Create(f);
+  try
+    b.Parent := f;
+    f.TitleBar := b;
+    start := TyTitleBarDeviceHeight(f, b, 96);
+    for i := 1 to 3 do
+    begin
+      b.Height := TyTitleBarDeviceHeight(f, b, 240);
+      b.Height := TyTitleBarDeviceHeight(f, b, 96);
+    end;
+    AssertEquals('three 96->240->96 round trips leave the bar exactly as it started',
+      start, TyTitleBarDeviceHeight(f, b, 96));
+    AssertEquals('and the applied height agrees', start, b.Height);
+  finally
+    f.Free;
+  end;
+end;
+
+procedure TTitleBarDpiTest.TestPinnedTitleHeightRoundTripsExactly;
+{ A host that PINS TitleHeight must get the same treatment: the pin scales with the monitor
+  and comes back unchanged, because what is remembered is the PPI-independent value, not the
+  running device one.
+
+  Deliberately stated WITHOUT any absolute pixel number. The headless suite does not run at
+  96 PPI (TTitleBarTest.TestButtonWidthFollowsThemeMetric says so in as many words), so an
+  `expected 40` here would be asserting the test host's DPI, not the library's contract. }
+var f: TTyForm; b: TTyTitleBar; i, unpinned, h96, h240: Integer;
+begin
+  f := TTyForm.CreateNew(nil);
+  b := TTyTitleBar.Create(f);
+  try
+    b.Parent := f;
+    f.TitleBar := b;
+    unpinned := TyTitleBarDeviceHeight(f, b, 96);
+    f.TitleHeight := 200;              // far from any density metric, so "honoured" is unambiguous
+    h96 := TyTitleBarDeviceHeight(f, b, 96);
+    AssertTrue('an explicit TitleHeight overrides the density metric', h96 <> unpinned);
+
+    h240 := TyTitleBarDeviceHeight(f, b, 240);
+    AssertEquals('the pin scales with the monitor, exactly 240/96',
+      MulDiv(h96, 240, 96), h240);
+
+    for i := 1 to 3 do
+    begin
+      b.Height := TyTitleBarDeviceHeight(f, b, 240);
+      b.Height := TyTitleBarDeviceHeight(f, b, 96);
+    end;
+    AssertEquals('a pinned height survives three 96->240->96 round trips unchanged',
+      h96, TyTitleBarDeviceHeight(f, b, 96));
+    AssertEquals('and the applied height agrees', h96, b.Height);
+  finally
+    f.Free;
+  end;
+end;
+
+procedure TTitleBarDpiTest.TestAccumulatingRescaleSquares;
+{ Not a test of new code -- a test of WHY the new code has the shape it has, so nobody
+  "simplifies" the derived helper back into the accumulating one.
+
+  TyRescaleChromeMetric is still correct AT WHAT IT DOES (convert one value between two
+  PPIs) and is still used that way. The defect was that it ran on a value LCL had ALREADY
+  scaled, so one monitor crossing applied the factor twice.
+
+  Recorded here because the first guess about this bug was wrong: the suspicion was
+  round-trip ROUNDING loss, and there is none -- over 16..120 px against 120/144/240/250
+  PPI, three there-and-back trips return the exact starting value for every height. The
+  companion assert below pins that, so the real mechanism stays legible. }
+var one, two, i, v: Integer;
+begin
+  { The shape that DOES bite: two applications of one crossing. 96 -> 250 on a 32 px bar. }
+  one := TyRescaleChromeMetric(32, 96, 250);
+  two := TyRescaleChromeMetric(one, 96, 250);
+  AssertEquals('one application scales 32 px by 250/96', 83, one);
+  AssertEquals('a SECOND application squares the factor -- the "far too tall" bug', 216, two);
+  AssertTrue('so double application is not a rounding nuisance, it is 2.6x too big',
+    two > 2 * one);
+
+  { And the thing it was NOT: rounding across a there-and-back trip is exact. }
+  v := 32;
+  for i := 1 to 3 do
+  begin
+    v := TyRescaleChromeMetric(v, 96, 250);
+    v := TyRescaleChromeMetric(v, 250, 96);
+  end;
+  AssertEquals('rounding alone round-trips exactly (it was never the defect)', 32, v);
+end;
+
+procedure TTitleBarDpiTest.TestExplicitButtonWidthRoundTripsExactly;
+{ The caption buttons were the third multiplication in the same chain: HandleChangeBounds
+  also rescaled FButtonWidth in place. A pin now carries the PPI it was taken at, so the
+  effective width is derived from that pair -- identity at the pinning PPI (which
+  TTitleBarTest.TestExplicitButtonWidthOverridesMetric pins) and reversible elsewhere. }
+var T: TTyTitleBar; c: TTyStyleController; i: Integer;
+begin
+  T := TTyTitleBar.Create(nil);
+  c := TTyStyleController.Create(nil);
+  try
+    T.SetBounds(0, 0, 300, 32);
+    T.Controller := c;
+    T.ButtonWidth := 50;
+    AssertEquals('at the PPI it was pinned at, the pin is the identity',
+      50, T.CloseButton.Width);
+    { Force three more layout passes through public API (ShowMinimize re-lays the cluster).
+      Each pass re-derives the effective width; none of them may move the pin. }
+    for i := 1 to 3 do
+    begin
+      T.ShowMinimize := False;
+      T.ShowMinimize := True;
+    end;
+    AssertEquals('re-deriving the width three times does not drift the pin',
+      50, T.CloseButton.Width);
+    AssertEquals('and the published property still reads back what was set', 50, T.ButtonWidth);
+  finally
+    T.Free; c.Free;
+  end;
+end;
 
 procedure TRescaleMetricTest.TestScaleUp;
 begin
@@ -2491,5 +2686,6 @@ initialization
   RegisterTest(TTitleBarGuardTest);
   RegisterTest(TRollUpTest);
   RegisterTest(TFormStyleOverrideTest);
+  RegisterTest(TTitleBarDpiTest);   // a6256: cross-monitor DPI contract for the title bar
 
 end.

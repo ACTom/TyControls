@@ -61,6 +61,7 @@ type
     procedure TestVariantOnlyRuleDoesNotSuppressBase;
     procedure TestStateOnlyRuleDoesNotSuppressBase;
     procedure TestBaseRuleWithAVariantStillSuppresses;
+    procedure TestFlippingTheFlagAfterAResolveTakesEffect;
   end;
 
   { Phase 2 (theme v2): @import (A8) — file-level compose, cycle guard, diamond dedup }
@@ -464,6 +465,38 @@ begin
   AssertFalse('base background suppressed (all-or-nothing)', tpBackground in s.Present);
   AssertFalse('base border-color suppressed (all-or-nothing)', tpBorderColor in s.Present);
   AssertFalse('base border-width suppressed (all-or-nothing)', tpBorderWidth in s.Present);
+end;
+
+procedure TTestStylePropertyCascade.TestFlippingTheFlagAfterAResolveTakesEffect;
+{ a6256. ORDER MATTERS, and only this order catches the bug: resolve FIRST, then flip
+  PropertyCascade, then resolve again. Every other cascade test in this class flips the
+  flag before its first resolve, so a memo that failed to notice the flip would still
+  answer them correctly -- which is exactly what happened: removing the version bump from
+  SetPropertyCascade left all 5923 tests green until this one existed.
+
+  ResolveStyle is memoised on ThemeVersion (see tyControls.StyleModel.pas), and the
+  cascade flag is the one resolve input that is not a theme load, so its setter has to
+  bump the version by hand. This pins that it does. }
+var before, after: TTyStyleSet;
+begin
+  FModel.LoadFromCss('TyButton { color: #FF0000; }');
+
+  { Flag OFF: the thin user rule suppresses the whole built-in TyButton layer. }
+  before := FModel.ResolveStyle('TyButton', '', []);
+  AssertFalse('precondition: base background suppressed while the flag is off',
+    tpBackground in before.Present);
+
+  { Flip AFTER the answer above has been memoised. }
+  FModel.PropertyCascade := True;
+  after := FModel.ResolveStyle('TyButton', '', []);
+  AssertTrue('flipping PropertyCascade after a resolve must re-cascade, not serve the memo',
+    tpBackground in after.Present);
+  AssertEquals('and the user colour still wins', $FF, TyRedOf(after.TextColor));
+
+  { And back, so the bump is not a one-way door. }
+  FModel.PropertyCascade := False;
+  AssertFalse('flipping it back re-suppresses the base layer',
+    tpBackground in FModel.ResolveStyle('TyButton', '', []).Present);
 end;
 
 procedure TTestStylePropertyCascade.TestVariantOnlyRuleDoesNotSuppressBase;

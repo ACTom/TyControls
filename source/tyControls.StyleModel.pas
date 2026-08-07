@@ -33,6 +33,15 @@ type
     Decls: array of TTyCssDeclaration;
   end;
 
+  { ===== a6256 / DPI-storm fix: one boxed resolve result, so the cascade below can be
+    memoised. ResolveStyle is a PURE function of (FVersion, FPropertyCascade, typeKey,
+    styleClass, states) — every input that can change resolution bumps FVersion (load,
+    Clear, SetMode, RefreshSystemTokens, the var-override setters) or is the cascade flag,
+    which now bumps it too. So a version-keyed memo cannot serve a stale style. }
+  TTyResolvedStyle = class
+    Value: TTyStyleSet;
+  end;
+
   TTyStyleModel = class
   private
     FRules: TFPList;          // user layer — owns TTyStyleRuleEntry
@@ -49,6 +58,50 @@ type
                               // dual-mode user theme so a skin that omits a per-mode token (e.g. --on-surface) inherits
                               // the base's readable per-mode value for the controls it does not restyle.
     FVarOverrides: TStringList; // v3/A: runtime var overrides (accent picker). TOP merge layer — above @mode + system tokens. name=value, no leading '--'. Cleared on REPLACE load / Clear.
+    { ===== a6256 / DPI-storm fix ==============================================
+      Memo for ResolveStyle, keyed on typeKey|styleClass|states and ANCHORED on
+      FVersion. Measured before this existed: one ResolveStyle('TyButton') cost
+      0.576 ms, because every call re-scanned both rule layers and re-EVALUATED
+      every declaration (var() lookups, darken()/lighten(), gradient parsing).
+      With the memo it is below the timer floor -- a 20x+ win per call.
+
+      SCOPE OF THE CLAIM, because it is easy to overstate: this was found while
+      chasing the PerMonitorV2 DPI stall, but a controlled A/B (3 samples per arm,
+      same load window) showed it does NOT measurably shorten that stall -- 73% of
+      a WM_DPICHANGED is inside LCL's synchronous per-control pass, and
+      TTyPaintCache already blits unchanged controls instead of re-resolving them.
+      It is kept because 0.576 ms for a style lookup is indefensible on any path
+      that does many (theme switching, first paint, layout arithmetic), NOT because
+      it cured the stall. See plans/2026-08-08-permonitor-dpi.md §2 for the numbers
+      and for the next lever (per-control caption re-measurement).
+
+      No PPI in the key: ResolveStyle returns LOGICAL values and every call site
+      scales them with MulDiv, so the resolve is PPI-independent.
+
+      FCacheVer <> FVersion is the ONLY invalidation, and every mutator bumps
+      FVersion, so a theme switch after a DPI change still restyles.
+
+      INVARIANT A CALLER MUST NOT BREAK: a cached TTyStyleSet is handed out BY
+      VALUE, but TTyFill.GradStops is a dynamic array, so the copy SHARES that
+      array with the cache. Assigning whole records/fields is fine (it replaces
+      the reference); writing GradStops[i] of a resolved style in place would
+      corrupt every later reader. Nothing does today -- TyRebaseGradient nils the
+      array before rebuilding it for exactly this reason -- and nothing may start.
+      Audited at the time this cache landed: tyControls.Base.pas:803 (nils first),
+      Painter/Base gradient scanners (read-only), StyleModel's parser (builds into
+      its own fresh local). }
+    FResolveCache: TStringList;   // sorted; Objects[] own TTyResolvedStyle
+    FCacheVer: Cardinal;          // FVersion the cache was built against
+    FCacheVerValid: Boolean;      // False until the first fill (FVersion 0 is a legal version)
+    { Same story for the named length metrics. ResolveMetric measured 0.096 ms/call: the
+      FMergedVars.Values[] lookup is a LINEAR scan that splits 'name=value' on every entry,
+      and TyEvalLength then re-parses the result. Controls pull several metrics per layout
+      AND per paint, so this rides the same storm. Same FVersion anchor, same key shape;
+      the value is a plain Integer stashed in Objects[] (no box to free). }
+    FMetricCache: TStringList;
+    procedure InvalidateResolveCache;
+    function ResolveCacheKey(const ATypeKey, AStyleClass: string; AStates: TTyStateSet): string;
+    procedure SetPropertyCascade(AValue: Boolean);
     procedure ClearList(ARules: TFPList);
     procedure ClearModeVars;
     procedure ClearBaseModeVars;
@@ -147,8 +200,12 @@ type
       typeKey suppresses the ENTIRE built-in layer for that typeKey (golden baseline).
       True = ResolveStyle ALWAYS applies the base layer then the user layer, so a thin
       theme that sets only one property inherits the base's other properties (omitted
-      = inherited, D4). Default stays False so the golden is byte-identical until a theme opts in. }
-    property PropertyCascade: Boolean read FPropertyCascade write FPropertyCascade;
+      = inherited, D4). Default stays False so the golden is byte-identical until a theme opts in.
+
+      a6256: this now goes through a SETTER that bumps ThemeVersion. It is the one resolve
+      input that is not a var/rule load, so a bare field write would leave the ResolveStyle
+      memo (keyed on ThemeVersion) serving pre-flip results. }
+    property PropertyCascade: Boolean read FPropertyCascade write SetPropertyCascade;
   end;
 
 procedure TyMergeStyleSet(var ABase: TTyStyleSet; const AOver: TTyStyleSet);
@@ -832,6 +889,18 @@ begin
   FModeVars := TStringList.Create;
   FBaseModeVars := TStringList.Create;
   FVarOverrides := TStringList.Create;
+  { a6256: the ResolveStyle memo. SORTED so IndexOf is a binary search (an unsorted
+    IndexOf would be a linear scan and would give most of the win straight back), and
+    CASE-SENSITIVE so the compare is a plain byte compare — two differently-cased
+    spellings of the same typeKey simply memoise twice with identical values. }
+  FResolveCache := TStringList.Create;
+  FResolveCache.CaseSensitive := True;
+  FResolveCache.Sorted := True;
+  FResolveCache.Duplicates := dupIgnore;
+  FMetricCache := TStringList.Create;
+  FMetricCache.CaseSensitive := True;
+  FMetricCache.Sorted := True;
+  FMetricCache.Duplicates := dupIgnore;
   { Seed the built-in default skin once. It is never cleared by user theme
     loads — it only applies (per-typeKey) when the user layer is silent. }
   { Seed the light base PLUS the per-mode contrast @mode snippet, so FModeVars picks up the base's
@@ -851,6 +920,9 @@ begin
   ClearList(FBaseRules);
   ClearModeVars;
   ClearBaseModeVars;
+  InvalidateResolveCache;   // a6256: free the boxed styles before the list itself
+  FResolveCache.Free;
+  FMetricCache.Free;
   FRules.Free;
   FBaseRules.Free;
   FVars.Free;
@@ -1026,17 +1098,40 @@ begin
 end;
 
 function TTyStyleModel.ResolveMetric(const AName: string; ADefault: Integer): Integer;
-{ v3/C. Named length metric from the merged vars; ADefault when absent/unparseable. }
-var v: string;
+{ v3/C. Named length metric from the merged vars; ADefault when absent/unparseable.
+  a6256: memoised on the same FVersion anchor as ResolveStyle — see FMetricCache. The
+  DEFAULT is part of the key: the same token is legitimately asked for with different
+  fallbacks (--caption-button-width defaults to 46 on the bar and to a skin value
+  elsewhere), and an unset token returns the caller's default, so keying on the name
+  alone would hand one caller another caller's fallback. }
+var
+  v, key: string;
+  idx: Integer;
 begin
+  if FCacheVerValid and (FCacheVer = FVersion) then
+  begin
+    key := AName + '|' + IntToStr(ADefault);
+    idx := FMetricCache.IndexOf(key);
+    if idx >= 0 then
+      Exit(Integer(PtrInt(FMetricCache.Objects[idx])));
+  end
+  else
+  begin
+    InvalidateResolveCache;
+    FCacheVer := FVersion;
+    FCacheVerValid := True;
+    key := AName + '|' + IntToStr(ADefault);
+  end;
+
   Result := ADefault;
   v := Trim(FMergedVars.Values[TyNormVarName(AName)]);
-  if v = '' then Exit;
-  try
-    Result := TyEvalLength(v, FMergedVars);
-  except
-    Result := ADefault;
-  end;
+  if v <> '' then
+    try
+      Result := TyEvalLength(v, FMergedVars);
+    except
+      Result := ADefault;
+    end;
+  FMetricCache.AddObject(key, TObject(PtrInt(Result)));
 end;
 
 function TTyStyleModel.RawVar(const AName: string): string;
@@ -1524,10 +1619,67 @@ begin
   end;
 end;
 
+procedure TTyStyleModel.InvalidateResolveCache;
+{ a6256. Drop every memoised style. Called from the ONE place that can serve a stale
+  entry — a FVersion mismatch seen at lookup time — so no mutator has to remember to
+  call it; forgetting one is exactly how a cache turns into a wrong-colour bug. }
+var i: Integer;
+begin
+  if FResolveCache = nil then Exit;
+  for i := 0 to FResolveCache.Count - 1 do
+    FResolveCache.Objects[i].Free;
+  FResolveCache.Clear;
+  FMetricCache.Clear;   // metrics ride the same FVersion anchor; Objects[] are plain ints
+end;
+
+function TTyStyleModel.ResolveCacheKey(const ATypeKey, AStyleClass: string;
+  AStates: TTyStateSet): string;
+{ The full identity of a resolve request. States are a set of at most 8 members, so a
+  byte carries them exactly; '|' cannot occur in a typeKey or a class token. }
+var b: Byte; st: TTyState;
+begin
+  b := 0;
+  for st := Low(TTyState) to High(TTyState) do
+    if st in AStates then b := b or (1 shl Ord(st));
+  Result := ATypeKey + '|' + AStyleClass + '|' + IntToStr(b);
+end;
+
+procedure TTyStyleModel.SetPropertyCascade(AValue: Boolean);
+{ a6256. Flipping the cascade changes what ResolveStyle returns for every typeKey the
+  user theme defines, so it must bump the memo's anchor exactly like a theme load does. }
+begin
+  if FPropertyCascade = AValue then Exit;
+  FPropertyCascade := AValue;
+  Inc(FVersion);
+end;
+
 function TTyStyleModel.ResolveStyle(const ATypeKey, AStyleClass: string;
   AStates: TTyStateSet): TTyStyleSet;
-var savedBaseDir: string;
+var
+  savedBaseDir: string;
+  key: string;
+  idx: Integer;
+  box: TTyResolvedStyle;
 begin
+  { a6256 / DPI-storm fix. Serve from the memo when the theme has not changed since it
+    was filled. See the FResolveCache declaration for the measured cost this removes. }
+  if FCacheVerValid and (FCacheVer = FVersion) then
+  begin
+    key := ResolveCacheKey(ATypeKey, AStyleClass, AStates);
+    idx := FResolveCache.IndexOf(key);
+    if idx >= 0 then
+      Exit(TTyResolvedStyle(FResolveCache.Objects[idx]).Value);
+  end
+  else
+  begin
+    { Version moved (or first call): everything memoised was resolved against the OLD
+      theme. Drop it all and re-anchor. }
+    InvalidateResolveCache;
+    FCacheVer := FVersion;
+    FCacheVerValid := True;
+    key := ResolveCacheKey(ATypeKey, AStyleClass, AStates);
+  end;
+
   Result := EmptyStyleSet;
   { merge-then-resolve evaluates raw decls HERE, so a background-image url() is resolved
     now — long after LoadFromFile cleared the GThemeBaseDir global. Restore the loaded
@@ -1547,6 +1699,13 @@ begin
   finally
     GThemeBaseDir := savedBaseDir;
   end;
+
+  { Memoise. Only reached on a miss, and only with FCacheVer already equal to FVersion
+    (the else-branch above re-anchors before computing), so what goes in matches what
+    the key promises. }
+  box := TTyResolvedStyle.Create;
+  box.Value := Result;
+  FResolveCache.AddObject(key, box);
 end;
 
 procedure TTyStyleModel.GetVariantsForType(const ATypeKey: string; AList: TStrings);

@@ -141,6 +141,25 @@ TyTitleBar {
 
 标题栏上**宿主自己放的子控件**不会被镜像（`Align`/`Anchors` 由 LCL 的对齐引擎管，而 LCL 不认 BiDi）。标题文本仍然取这些子控件让出的**最宽空隙**，所以不会被压在它们下面。
 
+### 跨显示器 DPI（PerMonitorV2）
+
+把窗口从 100% 显示器拖到 250% 显示器，标题栏高度和按钮宽度都要跟着变，**再拖回来必须一模一样地回到原值**。
+
+做法是**推导，不是累乘**。高度永远由「与 DPI 无关的输入」现算：
+
+```
+设备高度 = MulDiv(逻辑高度, 当前 PPI, 96)
+逻辑高度 = 显式 TitleHeight（按逻辑 px 记住）或主题的 --titlebar-height
+```
+
+`ButtonWidth` 同理：显式设置时会连同**设置那一刻的 PPI** 一起记住，之后由这对 `(值, PPI)` 推导，所以在设置它的那台显示器上它就是你写的那个数，换到别的显示器则只缩放一次。
+
+> **为什么强调「不累乘」。** LCL 自己已经缩放过一遍了：`WM_DPICHANGED` → `TCustomForm.WMDPIChanged` → `AutoAdjustLayout` → `TControl.DoAutoAdjustLayout` 会把每个 `alTop`、`AutoSize=False` 子控件的 bounds 乘上 `新PPI/旧PPI`。早先 `TTyChromeEngine.HandleChangeBounds` 又在此基础上把**当前**高度再乘一次，一次跨屏就乘了两遍：32px 的标题栏在 100%→250% 后变成 216px 而不是 83px——这就是论坛反馈里「高 DPI 下标题栏高得离谱」的来源。
+>
+> 顺带纠正一个容易想当然的猜测：**四舍五入不是元凶**。`TyRescaleChromeMetric` 半入取整，在 16..120px 高度 × 120/144/240/250 PPI 的全组合上，来回三趟都精确回到原值。真正的问题只有「同一次跨屏被应用了两次」。`TTitleBarDpiTest.TestAccumulatingRescaleSquares` 把这两点都钉住了。
+
+推导式写法还顺带保证了**幂等**：同一个 PPI 上算两次和算一次结果相同，所以即使某条路径重复触发也不会越长越高。
+
 ## 6. 代码示例
 
 ### 配合 TTyForm（推荐方式）
