@@ -25,6 +25,8 @@ type
   public
     function StyleTypeKey: string;
     procedure ForceLayout;
+    function FrameInset: Integer;
+    function ContentBox: TRect;
   end;
 
   { The control: typeKey reuse, band assignment keyed by child, drop-on-free. }
@@ -40,6 +42,8 @@ type
     procedure TestWrapAssignsSecondBand;
     procedure TestBandAssignmentDroppedOnFree;
     procedure TestBandIndexOfUnknownIsMinusOne;
+    procedure TestBandsClearTheFrameStroke;
+    procedure TestAutoGrowPaysForBothFrameEdges;
   end;
 
 implementation
@@ -58,6 +62,16 @@ end;
 function TControlBarAccess.StyleTypeKey: string;
 begin
   Result := GetStyleTypeKey;
+end;
+
+function TControlBarAccess.FrameInset: Integer;
+begin
+  Result := FrameInsetPx;
+end;
+
+function TControlBarAccess.ContentBox: TRect;
+begin
+  Result := BandContentRect;
 end;
 
 procedure TControlBarAccess.ForceLayout;
@@ -193,9 +207,15 @@ begin
   B := MakeChild(CB, 60, 20);
   CB.ForceLayout;
 
-  // A starts past the gripper; B right after A + spacing; both on band 0.
-  AssertEquals('A.Left = gripperWidth', 12, A.Left);
-  AssertEquals('B.Left = gripper + A.width + spacing', 75, B.Left);
+  { A starts past the gripper; B right after A + spacing; both on band 0.
+    Offsets are measured from the CONTENT box, not from the client rect. They used to be
+    literals (12 and 75) and so pinned the pre-fix geometry, in which the bands sat ON the
+    frame stroke and erased it -- exactly the defect this file now guards against a few tests
+    down. Written against ContentBox.Left, the arithmetic stays true under a padding-heavier
+    skin that strokes a wider border. }
+  AssertEquals('A.Left = content left + gripperWidth', CB.ContentBox.Left + 12, A.Left);
+  AssertEquals('B.Left = content left + gripper + A.width + spacing',
+    CB.ContentBox.Left + 75, B.Left);
   AssertEquals('A on band 0', 0, CB.BandIndexOf(A));
   AssertEquals('B on band 0', 0, CB.BandIndexOf(B));
   AssertEquals('band height applied to child', 26, A.Height);
@@ -248,6 +268,75 @@ begin
   // B is still a child and still resolvable after a relayout.
   CB.ForceLayout;
   AssertEquals('surviving child still on band 0', 0, CB.BandIndexOf(B));
+end;
+
+{ ── the frame overpaint ────────────────────────────────────────────────────────
+  Reported from the containers demo: the rebar's top edge was drawn in the corner arc and then
+  nothing -- the bands sat at (0,0), i.e. ON the stroke TTyPanel's DrawFrame lays INSIDE the
+  client rect. A band is a windowed child, so it paints after its parent AND erases its own
+  rect: the stroke was wiped, not merely covered.
+
+  Written against FrameInset rather than a literal, so it keeps meaning under a
+  padding-heavier skin (xp/classic) that widens the border. }
+
+procedure TControlBarControlTest.TestBandsClearTheFrameStroke;
+var
+  CB: TControlBarAccess;
+  A, B, C: TControl;
+  box: TRect;
+  i: Integer;
+  kid: TControl;
+begin
+  CB := TControlBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  CB.Align := alNone;
+  CB.SetBounds(0, 0, 100, 200);
+  CB.GripperWidth := 12;
+  CB.BandSpacing := 3;
+  CB.BandHeight := 26;
+  A := MakeChild(CB, 40, 20);
+  B := MakeChild(CB, 40, 20);
+  C := MakeChild(CB, 40, 20);   // wraps to band 1
+  CB.ForceLayout;
+
+  AssertTrue('the bar really does stroke a frame -- with no border this guard is vacuous',
+    CB.FrameInset >= 1);
+  box := CB.ContentBox;
+  for i := 0 to CB.ControlCount - 1 do
+  begin
+    kid := CB.Controls[i];
+    AssertTrue(Format('band %d left edge (%d) is inside the frame (>= %d)',
+      [i, kid.Left, box.Left]), kid.Left >= box.Left);
+    AssertTrue(Format('band %d top edge (%d) is inside the frame (>= %d)',
+      [i, kid.Top, box.Top]), kid.Top >= box.Top);
+    AssertTrue(Format('band %d right edge (%d) is inside the frame (<= %d)',
+      [i, kid.Left + kid.Width, box.Right]), kid.Left + kid.Width <= box.Right);
+  end;
+  if (A = nil) or (B = nil) or (C = nil) then ;   // silence unused-assignment hints
+end;
+
+procedure TControlBarControlTest.TestAutoGrowPaysForBothFrameEdges;
+var
+  CB: TControlBarAccess;
+  A: TControl;
+begin
+  { A docked bar sizes itself to its bands. With the bands now starting at the content top, the
+    frame has to be paid for on BOTH edges -- billed once, the bar came out one inset short and
+    the bottom stroke landed back under the last band, which is the same defect upside down. }
+  CB := TControlBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  CB.GripperWidth := 12;
+  CB.BandSpacing := 3;
+  CB.BandHeight := 26;
+  CB.Align := alTop;
+  A := MakeChild(CB, 40, 20);
+  CB.ForceLayout;
+  AssertEquals('one band + breathing room + a frame stroke on each edge',
+    26 + 2 * 3 + 2 * CB.FrameInset, CB.Height);
+  AssertTrue('and the band still ends above the bottom stroke',
+    A.Top + A.Height <= CB.ContentBox.Bottom);
 end;
 
 procedure TControlBarControlTest.TestBandIndexOfUnknownIsMinusOne;

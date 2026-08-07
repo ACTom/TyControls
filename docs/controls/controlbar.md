@@ -161,7 +161,8 @@ ShowMessage(Format('TB3 在第 %d 条 band', [Bar.BandIndexOf(TB3)]));
 ## 8. 注意事项
 
 - **子控件即 band 项：** 把控件的 `Parent` 设为 band 宿主即完成停靠；宿主是 `csAcceptsControls` 容器（继承自 `TTyPanel`），在 `AlignControls` 里按子控件顺序（仅可见者）逐个装带。band 高度由 `BandHeight` 统一覆盖子控件高度，子控件只需设 `Width`。
-- **Align 自动增高：** 当 `Align in [alTop, alBottom]` 时，宿主高度按 band 行数自动调整（`bands*BandHeight + (bands-1)*BandSpacing + 边距`）——不要在代码里硬设与之冲突的 `Height`。
+- **Align 自动增高：** 当 `Align in [alTop, alBottom]` 时，宿主高度按 band 行数自动调整（`bands*BandHeight + (bands-1)*BandSpacing + 2*BandSpacing + 两条边框描边`）——不要在代码里硬设与之冲突的 `Height`。
+- **band 排在 `BandContentRect` 里，不是 `ClientRect` 里：** `TTyPanel` 的 `DrawFrame` 把 `border-width` 描在客户区**内侧**，而 band 是窗口化子控件——它在父控件之后绘制，并且会把自己的矩形整个擦成表面色。所以一条排在 `(0,0)` 的 band 不是"盖住"边框，是**抹掉**它（表现为 rebar 顶边只剩圆角那一小段）。排布、夹具绘制、自动增高三处都读同一个 `BandContentRect`，内缩宽度取自同一个 `border-width` 主题令牌，边框更粗的皮肤会自动一起让位。**注意 LCL 的 `ClientRect` 不含 `AdjustClientRect` 的内缩**，自己 `SetBounds` 子控件的容器必须自己算这一圈。
 - **重入守卫：** `AlignControls` 末尾对 `Height` 的赋值会再次触发 `AlignControls`，`FInLayout` 守卫防止无限递归。
 - **band 分配以子控件为键：** 每个子控件所属 band 索引存于以子控件为键的并行数组，跨重排保留；子控件被释放时经 `Notification(opRemove)` 从数组中剔除并压实，不会留下悬挂键。
 - **超宽子控件：** 比一行可用宽度还宽的子控件被钳制到可用宽度并独占其 band（不会死循环）；如需完整显示，请增大宿主宽度或减小 `GripperWidth`。

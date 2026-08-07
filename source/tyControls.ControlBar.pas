@@ -57,6 +57,18 @@ type
       an override cannot re-lay-out or draw a grip without them. }
     procedure Relayout;
     function BandCount: Integer;
+    { The device-px strip the PAINTED frame owns on each edge. TTyPanel's DrawFrame strokes
+      CurrentStyle.BorderWidth INSIDE the client rect, so a band laid out at (0,0) sits on that
+      stroke -- and a band is a windowed child, which paints after its parent AND erases its own
+      rect, so the stroke is wiped rather than merely covered. Derived from the same theme token
+      the painter strokes: nothing is hardcoded, and a padding-heavier skin (xp/classic) widens
+      its border with the bands stepping in to match. }
+    function FrameInsetPx: Integer;
+    { The box the bands live in: the client rect minus that frame strip. ONE definition, read by
+      the packer, by the gripper painter, by the auto-grow height and by TTyCoolBar -- four
+      places that each used to assume the whole client rect, which is why the containers demo
+      showed the rebar's top edge drawn in the corner arc and then nothing. }
+    function BandContentRect: TRect;
     procedure DrawGripper(P: TTyPainter; const ABandRect: TRect; const AStyle: TTyStyleSet);
     { Packing and gripper placement are the ONE thing a CoolBar does differently from a
       ControlBar -- a grip per BAND rather than one per row -- so they are the seam a subclass
@@ -247,16 +259,20 @@ procedure TTyControlBar.PaintGrippers(APainter: TTyPainter; const AStyle: TTySty
   ABandCount, ABandHeight, AGripperW, ASpacing: Integer);
 var
   i, bandTop: Integer;
-  strip: TRect;
+  strip, content: TRect;
 begin
+  { The SAME box AlignControls packed into. Drawn from ClientRect instead, every gripper sat one
+    frame-inset up and to the left of the band it belongs to. }
+  content := BandContentRect;
   for i := 0 to ABandCount - 1 do
   begin
-    bandTop := i * (ABandHeight + ASpacing);
-    strip := Rect(0, bandTop, AGripperW, bandTop + ABandHeight);
+    bandTop := content.Top + i * (ABandHeight + ASpacing);
+    strip := Rect(content.Left, bandTop, content.Left + AGripperW, bandTop + ABandHeight);
     { MIRRORING: the gripper column is the strip TyControlBarPack indented the children past,
-      so it moves with them. Reflected about the same ClientWidth the packer was handed --
+      so it moves with them. Reflected about the same content span the packer was handed --
       restating it as `ClientWidth - AGripperW` would be a second copy of the same fact. }
-    if IsRightToLeft then strip := BidiFlipRect(strip, Rect(0, 0, ClientWidth, 0), True);
+    if IsRightToLeft then
+      strip := BidiFlipRect(strip, Rect(content.Left, 0, content.Right, 0), True);
     DrawGripper(APainter, strip, AStyle);
   end;
 end;
@@ -266,6 +282,32 @@ begin
   if csDestroying in ComponentState then Exit;
   Realign;
   Invalidate;
+end;
+
+function TTyControlBar.FrameInsetPx: Integer;
+var
+  S: TTyStyleSet;
+begin
+  S := CurrentStyle;
+  { TyBorderVisible is DrawFrame's own guard -- ask the same question, so "no frame is stroked"
+    and "no strip is reserved" cannot disagree. }
+  if not TyBorderVisible(S) then Exit(0);
+  Result := MulDiv(S.BorderWidth, Font.PixelsPerInch, 96);   // == TTyPainter.Scale at this PPI
+  if Result < 0 then Result := 0;
+end;
+
+function TTyControlBar.BandContentRect: TRect;
+var
+  ins: Integer;
+begin
+  { NOTE ClientRect is LCL's RAW rect -- it is NOT inset by AdjustClientRect, so a control that
+    positions children itself has to apply its own inset (see the note on TTyPanel.BorderWidth).
+    That is this function. }
+  Result := ClientRect;
+  ins := FrameInsetPx;
+  InflateRect(Result, -ins, -ins);
+  if Result.Right < Result.Left then Result.Right := Result.Left;
+  if Result.Bottom < Result.Top then Result.Bottom := Result.Top;
 end;
 
 function TTyControlBar.BandIndexOf(AControl: TControl): Integer;
@@ -297,6 +339,7 @@ var
   ppi: Integer;
   ctl: TControl;
   newH: Integer;
+  content: TRect;
 begin
   // Re-entrancy guard: the trailing Height assignment triggers another AlignControls.
   if FInLayout then Exit;
@@ -324,7 +367,12 @@ begin
       sizes[I].cy := list[I].Height;
     end;
 
-    rects := PackBands(list, sizes, ClientWidth, bandH, gripW, spacing);
+    { Pack into the CONTENT box, not the raw client rect: the packer works in a (0,0)-local
+      space, so it is handed the content WIDTH and its results are translated by the content
+      origin below. Keeping the mirror inside the packer (one reflection, about the content
+      width) is what stops a mirrored bar acquiring a one-pixel seam at the frame. }
+    content := BandContentRect;
+    rects := PackBands(list, sizes, content.Right - content.Left, bandH, gripW, spacing);
 
     // Rebuild the per-child band assignment from the packed rects (band index = the row
     // ordinal, derived from Top / (bandH + spacing)). Keyed by the child control so it
@@ -334,11 +382,14 @@ begin
     for I := 0 to N - 1 do
     begin
       FAssignCtl[I] := list[I];
+      { The band ordinal is read off the CONTENT-local Top, which is what the packer returned --
+        translating first would make every row index drift by the frame inset. }
       if (bandH + spacing) > 0 then
         FAssignBand[I] := rects[I].Top div (bandH + spacing)
       else
         FAssignBand[I] := 0;
-      list[I].SetBounds(rects[I].Left, rects[I].Top, rects[I].Right - rects[I].Left, bandH);
+      list[I].SetBounds(rects[I].Left + content.Left, rects[I].Top + content.Top,
+                        rects[I].Right - rects[I].Left, bandH);
     end;
     bands := BandCount;
 
@@ -346,8 +397,10 @@ begin
     if (Align in [alTop, alBottom]) and (bands > 0) then
     begin
       newH := bands * bandH + (bands - 1) * spacing;
-      // Add the frame padding so the outermost bands aren't flush with the border.
-      Inc(newH, 2 * spacing);
+      // Breathing room below the last band, plus the frame strip on BOTH edges -- the bands now
+      // start at the content top, so the frame has to be paid for twice or the bar would be one
+      // inset too short and the bottom stroke would land back under the last band.
+      Inc(newH, 2 * spacing + 2 * FrameInsetPx);
       if Height <> newH then
         Height := newH;   // re-lays via a fresh AlignControls once FInLayout clears
     end;

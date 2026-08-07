@@ -4,7 +4,7 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, Forms, LCLType,
   fpcunit, testregistry,
-  tyControls.ToolBar, tyControls.ToolBarEx, tyControls.Button;
+  tyControls.ToolBar, tyControls.ToolBarEx, tyControls.Button, tyControls.Panel;
 type
   { The pure fit/overflow decision — the headless-tested core. }
   TToolBarExOverflowTest = class(TTestCase)
@@ -24,6 +24,9 @@ type
   public
     procedure ForceLayout;
     function StyleTypeKey: string;
+    function PadY: Integer;
+    function BorderPx: Integer;
+    procedure PaintTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
   end;
 
   { A button that counts hidden->visible transitions, to prove a steady re-layout does not
@@ -57,6 +60,14 @@ type
     procedure TestSteadyRelayoutDoesNotReshowOverflow;
     procedure TestSpaceHolderIsNotGivenTheGhostVariant;
     procedure TestOverflowFitUsesFlooredWidths;
+    { The reported border overpaint, as two halves of one invariant: the PAINT side (the
+      hairline really is the last BottomBorderPx rows) and the LAYOUT side (no child ever
+      reaches into them). Split because each half has its own way of going wrong. }
+    procedure TestBottomHairlineOccupiesTheEdgeRows;
+    procedure TestTallButtonStaysOffTheBottomBorder;
+    procedure TestChevronStaysOffTheBottomBorder;
+    procedure TestRowIsUniformWhenAChildDemandsMoreHeight;
+    procedure TestFittingRowIsUnmoved;
   end;
 
 implementation
@@ -132,6 +143,21 @@ begin
   Result := GetStyleTypeKey;
 end;
 
+function TTyToolBarExAccess.PadY: Integer;
+begin
+  Result := ContentPadY;
+end;
+
+function TTyToolBarExAccess.BorderPx: Integer;
+begin
+  Result := BottomBorderPx(Font.PixelsPerInch);
+end;
+
+procedure TTyToolBarExAccess.PaintTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin
+  RenderTo(ACanvas, ARect, APPI);
+end;
+
 { TToolBarExControlTest }
 
 procedure TToolBarExControlTest.SetUp;
@@ -150,6 +176,184 @@ begin
   Result := TTyButton.Create(FForm);
   Result.Parent := ABar;
   Result.Width := AWidth;
+end;
+
+{ ── the bottom-border overpaint ────────────────────────────────────────────────
+  Reported from the containers demo: the bar's bottom hairline vanished under the tool
+  buttons and survived only in the gaps between them. The mechanism is NOT that the buttons
+  are drawn over the line -- a tool button is a WINDOWED child, so it paints after its parent
+  and ERASES its whole rect to the surface colour. Any child whose rect reaches the last
+  BottomBorderPx rows wipes the line.
+
+  The override made that reachable because it laid every child out at exactly ButtonHeight and
+  SetBounds silently CLAMPS UP to Constraints.MinHeight -- so a caption that needs more height
+  than ButtonHeight grew the button downward, out of the bar. It is font-dependent, which is
+  why the suite never saw it: the headless fallback font measures 21 where the real CJK font
+  measures 28. These force the condition with an explicit MinHeight instead of relying on the
+  ambient font, or the guard would be green on this machine and blind on the user's. }
+
+procedure TToolBarExControlTest.TestBottomHairlineOccupiesTheEdgeRows;
+var
+  TB: TTyToolBarExAccess;
+  bmp: TBitmap;
+  bw, H, W: Integer;
+  edge, above: TColor;
+begin
+  { The PAINT half. Probes the two rows that matter -- the last one (must be border) and the
+    one just above the strip (must not be) -- so the strip is pinned to be exactly BottomBorderPx
+    tall, at the edge. A centre probe would be immune to every drift this can suffer. }
+  W := 120; H := 32;
+  TB := TTyToolBarExAccess.Create(FForm);
+  TB.Parent := FForm;
+  TB.Font.PixelsPerInch := 96;
+  TB.SetBounds(0, 0, W, H);
+  bw := TB.BorderPx;
+  AssertTrue('the bar really does stroke a bottom border -- without one every assertion '
+    + 'below is vacuously true', bw >= 1);
+
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(W, H);
+    bmp.Canvas.Brush.Color := clBlack;
+    bmp.Canvas.FillRect(0, 0, W, H);
+    TB.PaintTo(bmp.Canvas, Rect(0, 0, W, H), 96);
+    edge  := bmp.Canvas.Pixels[W div 2, H - 1];          // last row: the hairline
+    above := bmp.Canvas.Pixels[W div 2, H - 1 - bw];     // first row the layout may use
+    AssertTrue('the hairline is not the black ground -- something was painted', edge <> clBlack);
+    AssertTrue('the row just above the strip is NOT the hairline, so the strip is exactly '
+      + 'BottomBorderPx tall and BottomBorderPx is what RenderTo actually strokes',
+      above <> edge);
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ A real TTyButton MEASURES its own caption and writes the answer into Constraints.MinHeight,
+  overwriting anything a test assigns. So the defect's precondition -- "a child refuses to be as
+  short as ButtonHeight" -- cannot be faked by assignment; it has to be created the way the
+  reporter's machine created it, by asking the bar for a row shorter than the button's own
+  measurement. Every guard below therefore ASSERTS the precondition it just set up: if the
+  ambient font ever changes so the button no longer overflows, these fail loudly instead of
+  passing while testing nothing. (On the reporter's machine the CJK font measured 28 against a
+  ButtonHeight of 26; the headless fallback measures ~21, which is exactly why the suite was
+  green while the demo was visibly broken.) }
+function ShortRowBar(AOwner: TForm; AWidth: Integer): TTyToolBarExAccess;
+begin
+  Result := TTyToolBarExAccess.Create(AOwner);
+  Result.Parent := AOwner;
+  Result.Font.PixelsPerInch := 96;
+  Result.Align := alNone;
+  Result.Wrapable := False;
+  Result.Width := AWidth;
+  Result.ButtonHeight := 12;   // deliberately below any real caption's measured height
+end;
+
+procedure TToolBarExControlTest.TestTallButtonStaysOffTheBottomBorder;
+var TB: TTyToolBarExAccess; b: TTyButton; i, bw, mh: Integer;
+begin
+  { The LAYOUT half, and the regression guard for the report. }
+  TB := ShortRowBar(FForm, 560);
+  b := nil;
+  for i := 1 to 3 do
+  begin
+    b := MakeBtn(TB, 78);
+    b.Caption := 'Command ' + IntToStr(i);
+  end;
+  mh := b.Constraints.MinHeight;
+  AssertTrue(Format('precondition: the button refuses to be as short as ButtonHeight '
+    + '(it measured %d against ButtonHeight %d). If this fails the guard below has stopped '
+    + 'exercising the defect and is fake-green.', [mh, TB.ButtonHeight]),
+    mh > TB.ButtonHeight);
+  { Tall enough for the button, too short for padY + the button + the stroke: the row has to be
+    pulled UP. (Squashing it would not work -- SetBounds clamps the height back up to MinHeight.) }
+  TB.Height := mh + 3;
+  bw := TB.BorderPx;
+  AssertTrue('the bar really does stroke a bottom border -- else this guard is vacuous', bw >= 1);
+  TB.ForceLayout;
+  for i := 0 to TB.ControlCount - 1 do
+    AssertTrue(Format('child %d (top=%d h=%d) must not reach into the bottom hairline '
+      + '(clientH=%d, border=%d)',
+      [i, TB.Controls[i].Top, TB.Controls[i].Height, TB.ClientHeight, bw]),
+      TB.Controls[i].Top + TB.Controls[i].Height <= TB.ClientHeight - bw);
+end;
+
+procedure TToolBarExControlTest.TestChevronStaysOffTheBottomBorder;
+var TB: TTyToolBarExAccess; b: TTyButton; i, bw, mh: Integer;
+begin
+  { The chevron is placed by its own SetBounds call, so it needs its own guard: it used to be
+    pinned at (padY, ButtonHeight) while the tools beside it followed the row. }
+  TB := ShortRowBar(FForm, 120);      // far too narrow for 4 x 78 -> the chevron appears
+  b := nil;
+  for i := 1 to 4 do
+  begin
+    b := MakeBtn(TB, 78);
+    b.Caption := 'Command ' + IntToStr(i);
+  end;
+  mh := b.Constraints.MinHeight;
+  AssertTrue('precondition: the row is taller than ButtonHeight', mh > TB.ButtonHeight);
+  TB.Height := mh + 3;
+  bw := TB.BorderPx;
+  AssertTrue('there is a border strip to stay out of', bw >= 1);
+  TB.ForceLayout;
+  AssertTrue('the bar really is overflowing, so there IS a chevron to check',
+    TB.OverflowVisible);
+  for i := 0 to TB.ControlCount - 1 do
+    if TB.Controls[i].Visible then
+      AssertTrue(Format('visible child %d (incl. the chevron: top=%d h=%d) must clear the '
+        + 'hairline (clientH=%d, border=%d)',
+        [i, TB.Controls[i].Top, TB.Controls[i].Height, TB.ClientHeight, bw]),
+        TB.Controls[i].Top + TB.Controls[i].Height <= TB.ClientHeight - bw);
+end;
+
+procedure TToolBarExControlTest.TestRowIsUniformWhenAChildDemandsMoreHeight;
+var TB: TTyToolBarExAccess; tall: TTyPanel; short: TTyButton;
+begin
+  { The base bar takes the tallest floor in the row FIRST and lays out against it. The override
+    kept the pre-fix line, so one clamped-taller child left the row ragged -- the second half of
+    the same report. The tall child is a TTyPanel because, unlike TTyButton, it does not
+    overwrite an assigned Constraints.MinHeight. }
+  TB := TTyToolBarExAccess.Create(FForm);
+  TB.Parent := FForm;
+  TB.Font.PixelsPerInch := 96;
+  TB.Align := alNone;
+  TB.Wrapable := False;
+  TB.ButtonHeight := 40;      // above every child's own measurement, so only the panel raises it
+  TB.Width := 400;
+  TB.Height := 80;
+  tall := TTyPanel.Create(FForm);
+  tall.Parent := TB;
+  tall.Width := 60;
+  tall.Constraints.MinHeight := 50;
+  short := MakeBtn(TB, 60);
+  TB.ForceLayout;
+  AssertEquals('the row is as tall as its tallest child asked for', 50, tall.Height);
+  AssertEquals('and every other child matches it, so the row is not ragged',
+    tall.Height, short.Height);
+  AssertEquals('they share one top', tall.Top, short.Top);
+end;
+
+procedure TToolBarExControlTest.TestFittingRowIsUnmoved;
+var TB: TTyToolBarExAccess; b: TTyButton; i: Integer;
+begin
+  { The fix must engage ONLY when the row would otherwise overflow. A bar whose content fits
+    has to be byte-identical to before, or every existing .lfm shifts. }
+  TB := TTyToolBarExAccess.Create(FForm);
+  TB.Parent := FForm;
+  TB.Font.PixelsPerInch := 96;
+  TB.Align := alNone;
+  TB.Wrapable := False;
+  TB.ButtonHeight := 26;
+  TB.Width := 560;
+  TB.Height := 32;
+  for i := 1 to 3 do b := MakeBtn(TB, 78);
+  TB.ForceLayout;
+  for i := 0 to TB.ControlCount - 1 do
+  begin
+    AssertEquals('a fitting row still sits at ContentPadY', TB.PadY, TB.Controls[i].Top);
+    AssertEquals('and is still exactly ButtonHeight tall', 26, TB.Controls[i].Height);
+  end;
+  if b = nil then ;   // silence the unused-assignment hint
 end;
 
 procedure TToolBarExControlTest.TestInheritsToolBarTypeKey;

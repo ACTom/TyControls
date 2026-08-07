@@ -43,6 +43,10 @@ type
   TControlBarAccess2 = class(TTyControlBar)
   public
     procedure ForceLayout;
+    { The band box: the client rect minus the strip the painted frame owns. Every geometry
+      assertion below is stated relative to it rather than to the bar's edge, so it survives a
+      skin that strokes a wider border. }
+    function ContentBox: TRect;
     { The grippers are drawn from Paint, straight onto the control's Canvas -- there is no
       RenderTo seam to call -- so the probe builds the painter itself and calls the same
       protected overridable the live Paint calls. }
@@ -52,6 +56,8 @@ type
   TCoolBarAccess2 = class(TTyCoolBar)
   public
     procedure ForceLayout;
+    function ContentBox: TRect;
+    function SeamOwner(ACtl: TControl): TControl;
     function BandRect(ACtl: TControl): TRect;
     procedure CallMouseDown(X, Y: Integer);
     procedure CallMouseMove(X, Y: Integer);
@@ -173,6 +179,8 @@ begin
   AlignControls(nil, dummy);
 end;
 
+function TControlBarAccess2.ContentBox: TRect; begin Result := BandContentRect; end;
+
 procedure TControlBarAccess2.DrawGripsTo(ACanvas: TCanvas; AW, AH: Integer);
 var
   P: TTyPainter;
@@ -197,6 +205,8 @@ begin
   dummy := Rect(0, 0, Width, Height);
   AlignControls(nil, dummy);
 end;
+function TCoolBarAccess2.ContentBox: TRect;                 begin Result := BandContentRect; end;
+function TCoolBarAccess2.SeamOwner(ACtl: TControl): TControl; begin Result := SeamOwnerOf(ACtl); end;
 function TCoolBarAccess2.BandRect(ACtl: TControl): TRect; begin Result := BandRectFor(ACtl); end;
 procedure TCoolBarAccess2.CallMouseDown(X, Y: Integer);    begin MouseDown(mbLeft, [ssLeft], X, Y); end;
 procedure TCoolBarAccess2.CallMouseMove(X, Y: Integer);    begin MouseMove([ssLeft], X, Y); end;
@@ -685,8 +695,8 @@ begin
     a := MakeChild(CB, 80, 20);
     b := MakeChild(CB, 60, 20);
     CB.ForceLayout;
-    AssertEquals('the first child ends a gripper in from the right edge',
-      300 - 12, a.Left + a.Width);
+    AssertEquals('the first child ends a gripper in from the content''s right edge',
+      CB.ContentBox.Right - 12, a.Left + a.Width);
     AssertTrue('the second child is entirely left of the first', b.Left + b.Width <= a.Left);
   finally
     Form.Free;
@@ -759,10 +769,13 @@ begin
     a := MakeChild(CB, 80, 20);
     CB.ForceLayout;
     before := a.Left;
-    AssertEquals('laid out from the left to begin with', 12, before);
+    { Measured from the CONTENT box: the bands sit inside the stroke the frame paints, not on
+      top of it. Stated as a bare 12 this pinned the pre-fix layout, in which a band overwrote
+      the bar's own border. }
+    AssertEquals('laid out from the left to begin with', CB.ContentBox.Left + 12, before);
     CB.BiDiMode := bdRightToLeft;
     AssertTrue('changing direction moved the child, not merely the paint', a.Left <> before);
-    AssertEquals('and it moved to the mirrored position', 300 - 12 - 80, a.Left);
+    AssertEquals('and it moved to the mirrored position', CB.ContentBox.Right - 12 - 80, a.Left);
   finally
     Form.Free;
   end;
@@ -806,8 +819,8 @@ begin
     a := MakeChild(CB, 80, 20);
     b := MakeChild(CB, 60, 20);
     CB.ForceLayout;
-    AssertEquals('the first band ends a gripper in from the right edge',
-      300 - 10, a.Left + a.Width);
+    AssertEquals('the first band ends a gripper in from the content''s right edge',
+      CB.ContentBox.Right - 10, a.Left + a.Width);
     AssertTrue('the second band is entirely left of the first', b.Left + b.Width <= a.Left);
     AssertTrue('with room for its own gripper between them',
       a.Left - (b.Left + b.Width) >= 10);
@@ -838,7 +851,8 @@ begin
     a := MakeChild(CB, 24, 60);
     b := MakeChild(CB, 24, 60);
     CB.ForceLayout;
-    AssertEquals('the first column ends at the right edge', 300, a.Left + a.Width);
+    AssertEquals('the first column ends at the content''s right edge',
+      CB.ContentBox.Right, a.Left + a.Width);
     AssertTrue('and the second column is left of it', b.Left + b.Width <= a.Left);
   finally
     Form.Free;
@@ -898,15 +912,38 @@ begin
     CB.BiDiMode := bdRightToLeft;
     b := TTyPanel.Create(CB);
     b.Parent := CB;
-    b.SetBounds(110, 0, 80, 30);   // where the mirrored packer puts it: 200 - 10 - 80
+    { Where the mirrored packer puts it: content.Right - gripper - width. }
+    b.SetBounds(CB.ContentBox.Right - 10 - 80, CB.ContentBox.Top, 80, 30);
     r := CB.BandRect(b);
-    AssertEquals('the gripper starts where the band ends', 190, r.Left);
-    AssertEquals('and runs a grip width to its right', 200, r.Right);
-    AssertEquals('band top', 0, r.Top);
-    AssertEquals('band bottom', 30, r.Bottom);
+    AssertEquals('the gripper starts where the band ends', CB.ContentBox.Right - 10, r.Left);
+    AssertEquals('and runs a grip width to its right, stopping at the frame',
+      CB.ContentBox.Right, r.Right);
+    AssertEquals('band top', CB.ContentBox.Top, r.Top);
+    AssertEquals('band bottom', CB.ContentBox.Top + 30, r.Bottom);
   finally
     Form.Free;
   end;
+end;
+
+{ Two mirrored bands sharing a row: band0 hard against the reading start (the right edge),
+  band1 to its left. Band1's gripper is on band1's RIGHT -- i.e. it is the SEAM between the two
+  -- so dragging it is what resizes band0.
+
+  Both tests below used to use a SINGLE band and drag its own gripper, expecting that band to
+  resize. That pinned the defect: a lone band opens its row, so under the reference semantics
+  its gripper is a move handle, not a resize handle. }
+procedure MakeMirroredPair(CB: TCoolBarAccess2; out b0, b1: TControl);
+var box: TRect;
+begin
+  box := CB.ContentBox;
+  b0 := TTyPanel.Create(CB);
+  b0.Parent := CB;
+  b0.SetBounds(box.Right - 10 - 80, box.Top, 80, 30);      // mirrored first band
+  b1 := TTyPanel.Create(CB);
+  b1.Parent := CB;
+  b1.SetBounds(box.Right - 10 - 80 - 4 - 60, box.Top, 60, 30);   // and the one left of it
+  CB.SetBandWidth(b0, 80);
+  CB.SetBandWidth(b1, 60);
 end;
 
 { The hit test, reached the way a user reaches it: press on the mirrored strip and drag. If
@@ -916,7 +953,8 @@ procedure TRtlBandBarTest.CoolBarGripperHitTestFindsTheMirroredStrip;
 var
   Form: TForm;
   CB: TCoolBarAccess2;
-  b: TControl;
+  b0, b1: TControl;
+  gx: Integer;
 begin
   Form := TForm.CreateNew(nil);
   try
@@ -925,29 +963,31 @@ begin
     CB.Font.PixelsPerInch := 96;
     CB.SetBounds(0, 0, 200, 60);
     CB.BiDiMode := bdRightToLeft;
-    b := TTyPanel.Create(CB);
-    b.Parent := CB;
-    CB.SetBandWidth(b, 80);
-    b.SetBounds(110, 0, 80, 30);
-    { x = 195 is on the mirrored strip [190, 200) and nowhere near the old one at [100, 110). }
-    CB.CallMouseDown(195, 15);
-    CB.CallMouseMove(145, 15);
-    CB.CallMouseUp(145, 15);
+    MakeMirroredPair(CB, b0, b1);
+    AssertSame('precondition: band0 is the seam under band1''s gripper', b0, CB.SeamOwner(b1));
+    { Band1's gripper is the strip immediately RIGHT of band1 -- nowhere near the left-hand
+      strip an unmirrored hit test would look at. }
+    gx := b1.Left + b1.Width + 5;
+    CB.CallMouseDown(gx, CB.ContentBox.Top + 15);
+    CB.CallMouseMove(gx - 50, CB.ContentBox.Top + 15);
+    CB.CallMouseUp(gx - 50, CB.ContentBox.Top + 15);
     AssertTrue('a press on the mirrored gripper started a real drag',
-      CB.GetBandWidth(b) <> 80);
+      CB.GetBandWidth(b0) <> 80);
   finally
     Form.Free;
   end;
 end;
 
 { The drag SIGN -- the failure mode no static render can catch (§5 item 2): the screenshot is
-  perfect and the band shrinks when you pull it open. A band grows away from its gripper, and
-  mirrored the gripper is on its right, so dragging LEFT is what widens it. }
+  perfect and the band shrinks when you pull it open. The seam owner grows AWAY from the
+  gripper, and mirrored the gripper is on the dragged band's right, so dragging LEFT is what
+  widens it. }
 procedure TRtlBandBarTest.MirroredResizeDragGrowsTheBandTowardsTheReadingEnd;
 var
   Form: TForm;
   CB: TCoolBarAccess2;
-  b: TControl;
+  b0, b1: TControl;
+  gx: Integer;
 begin
   Form := TForm.CreateNew(nil);
   try
@@ -956,15 +996,15 @@ begin
     CB.Font.PixelsPerInch := 96;
     CB.SetBounds(0, 0, 200, 60);
     CB.BiDiMode := bdRightToLeft;
-    b := TTyPanel.Create(CB);
-    b.Parent := CB;
-    CB.SetBandWidth(b, 80);
-    b.SetBounds(110, 0, 80, 30);
-    CB.CallMouseDown(195, 15);
-    CB.CallMouseMove(145, 15);     // 50 px towards the reading end
-    CB.CallMouseUp(145, 15);
-    AssertEquals('dragging away from the mirrored gripper grew the band by the delta',
-      130, CB.GetBandWidth(b));
+    MakeMirroredPair(CB, b0, b1);
+    gx := b1.Left + b1.Width + 5;
+    CB.CallMouseDown(gx, CB.ContentBox.Top + 15);
+    CB.CallMouseMove(gx - 50, CB.ContentBox.Top + 15);   // 50 px towards the reading end
+    CB.CallMouseUp(gx - 50, CB.ContentBox.Top + 15);
+    AssertEquals('dragging away from the mirrored gripper grew the SEAM OWNER by the delta',
+      130, CB.GetBandWidth(b0));
+    AssertEquals('and the grabbed band was not resized in isolation', 60,
+      CB.GetBandWidth(b1));
   finally
     Form.Free;
   end;
@@ -1007,10 +1047,12 @@ begin
     CB.BiDiMode := bdRightToLeft;
     b := TTyPanel.Create(CB);
     b.Parent := CB;
-    b.SetBounds(176, 10, 24, 60);
+    b.SetBounds(CB.ContentBox.Right - 24, CB.ContentBox.Top + 10, 24, 60);
     r := CB.BandRect(b);
-    AssertEquals('the grip still ends where the band begins', 10, r.Bottom);
-    AssertEquals('and still starts a grip height above it', 0, r.Top);
+    AssertEquals('the grip still ends where the band begins',
+      CB.ContentBox.Top + 10, r.Bottom);
+    AssertEquals('and still starts a grip height above it, inside the frame',
+      CB.ContentBox.Top, r.Top);
     AssertEquals('spanning the band, on whichever side of the bar it landed', b.Left, r.Left);
   finally
     Form.Free;

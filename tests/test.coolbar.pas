@@ -37,6 +37,20 @@ type
     procedure TestVerticalPackRunsBandsDownAColumn;
     procedure TestVerticalPackWrapsIntoTheNextColumn;
     procedure TestVerticalPackHonoursABreak;
+    // which band a gripper's seam belongs to
+    procedure TestSeamOwnerIsThePrecedingBandOnTheRow;
+    procedure TestSeamOwnerSkipsBandsOnOtherRows;
+    procedure TestRowLeadingBandHasNoSeam;
+    procedure TestSeamOwnerVerticalUsesColumns;
+    procedure TestSeamOwnerOutOfRange;
+    // where a dragged band lands
+    procedure TestDropPastANeighbourReorders;
+    procedure TestDropBeforeANeighbourReorders;
+    procedure TestDropOnItselfChangesNothing;
+    procedure TestDropBelowTheLastRowAsksForANewRow;
+    procedure TestDropMirroredFlipsTheMidpointTest;
+    procedure TestDropOffEveryRowChangesNothing;
+    procedure TestDropVerticalTransposesTheAxes;
   end;
 
   { A probe exposing the protected geometry + the private band map indirectly. }
@@ -45,6 +59,8 @@ type
     function StyleTypeKey: string;
     function BandRect(ACtl: TControl): TRect;
     function GripPx: Integer;
+    function ContentBox: TRect;
+    function SeamOwner(ACtl: TControl): TControl;
     procedure CallMouseDown(X, Y: Integer);
     procedure CallMouseMove(X, Y: Integer);
     procedure CallMouseUp(X, Y: Integer);
@@ -79,8 +95,12 @@ type
     procedure TestFreeingAChildDropsItsBand;
     procedure TestBandDisplayNamePrefersItsCaption;
     procedure TestVerticalPutsTheGripAboveTheBand;
-    procedure TestGripperDragResizesBand;
+    procedure TestGripperDragMovesTheSeamNotTheDraggedBand;
     procedure TestGripperDragHonoursMinClamp;
+    procedure TestRowLeadingGripperIsAMoveNotAResize;
+    procedure TestDragPastANeighbourReordersTheBands;
+    procedure TestDragBelowTheLastRowGivesTheBandItsOwnRow;
+    procedure TestDragBelowTheLastRowMovesAnAlreadyBrokenBand;
   end;
 
 implementation
@@ -89,6 +109,8 @@ implementation
 function TCoolBarAccess.StyleTypeKey: string;               begin Result := GetStyleTypeKey; end;
 function TCoolBarAccess.BandRect(ACtl: TControl): TRect;    begin Result := BandRectFor(ACtl); end;
 function TCoolBarAccess.GripPx: Integer;                    begin Result := GripperWidthPx; end;
+function TCoolBarAccess.ContentBox: TRect;                  begin Result := BandContentRect; end;
+function TCoolBarAccess.SeamOwner(ACtl: TControl): TControl; begin Result := SeamOwnerOf(ACtl); end;
 procedure TCoolBarAccess.CallMouseDown(X, Y: Integer);      begin MouseDown(mbLeft, [ssLeft], X, Y); end;
 procedure TCoolBarAccess.CallMouseMove(X, Y: Integer);      begin MouseMove([ssLeft], X, Y); end;
 procedure TCoolBarAccess.CallMouseUp(X, Y: Integer);        begin MouseUp(mbLeft, [], X, Y); end;
@@ -277,13 +299,18 @@ begin
   CB := TCoolBarAccess.Create(FForm);
   CB.Parent := FForm;
   CB.Font.PixelsPerInch := 96;
-  b := MakeBand(CB, 10, 0, 80, 30);   // first-of-row child sits at Left = gripW (10)
+  { The child is placed where the LAYOUT would place a first-of-row band: content left + gripW.
+    It used to be placed at a bare 10 with the gripper expected to reach 0 -- which pinned the
+    pre-fix geometry, in which the gripper backed onto the frame stroke and a band sat on top
+    of it. Everything here is now expressed relative to the content box. }
+  b := MakeBand(CB, CB.ContentBox.Left + 10, CB.ContentBox.Top, 80, 30);
   AssertEquals('gripper is 10px at 96 PPI', 10, CB.GripPx);
   r := CB.BandRect(b);
-  AssertEquals('gripper starts a grip-width left of the child', 0, r.Left);
-  AssertEquals('and ends where the child begins', 10, r.Right);
-  AssertEquals('band top = child top', 0, r.Top);
-  AssertEquals('band bottom = child bottom', 30, r.Bottom);
+  AssertEquals('gripper starts a grip-width left of the child, inside the frame',
+    CB.ContentBox.Left, r.Left);
+  AssertEquals('and ends where the child begins', CB.ContentBox.Left + 10, r.Right);
+  AssertEquals('band top = child top', CB.ContentBox.Top, r.Top);
+  AssertEquals('band bottom = child bottom', CB.ContentBox.Top + 30, r.Bottom);
 end;
 
 procedure TCoolBarControlTest.TestEveryBandIsGrippable;
@@ -312,34 +339,150 @@ begin
   Inc(FChangeCount);
 end;
 
-procedure TCoolBarControlTest.TestGripperDragResizesBand;
-var CB: TCoolBarAccess; b: TControl;
+{ ── a gripper moves the SEAM, not its own band ─────────────────────────────────
+  These two USED TO assert the opposite: that dragging the FIRST band's gripper resized THAT
+  band. Both halves of that were wrong. A rebar gripper is the boundary between its band and
+  the one before it on the row, so a drag resizes the PREDECESSOR
+  (lcl/include/coolbar.inc:938); and the first band on a row has no predecessor, so its
+  gripper is not a resize handle at all -- the reference makes that gesture a move
+  (coolbar.inc:899). The old tests pinned the defect the user reported, which is why the suite
+  stayed green while the gesture was visibly wrong. }
+
+procedure TCoolBarControlTest.TestGripperDragMovesTheSeamNotTheDraggedBand;
+var CB: TCoolBarAccess; b0, b1: TControl;
 begin
-  // Grab the row-left gripper (x in 0..10), drag right by 50 -> the band width grows 50.
   CB := TCoolBarAccess.Create(FForm);
   CB.Parent := FForm;
   CB.Font.PixelsPerInch := 96;
-  b := MakeBand(CB, 10, 0, 80, 30);     // first-of-row: gripper column = x in [0..10)
-  CB.SetBandWidth(b, 80);
-  CB.CallMouseDown(5, 15);              // on the gripper
-  CB.CallMouseMove(55, 15);            // +50 px
-  CB.CallMouseUp(55, 15);
-  AssertEquals('band width grew by the drag delta', 130, CB.GetBandWidth(b));
+  { Two bands on ONE row. b1's gripper is the seam between them, so dragging it right must grow
+    b0 -- the band to its LEFT -- and leave b1's own assigned width alone. }
+  b0 := MakeBand(CB, CB.ContentBox.Left + 10, CB.ContentBox.Top, 80, 30);
+  b1 := MakeBand(CB, CB.ContentBox.Left + 200, CB.ContentBox.Top, 80, 30);
+  CB.SetBandWidth(b0, 80);
+  CB.SetBandWidth(b1, 80);
+  // b1's gripper column is the 10px strip immediately left of b1.
+  CB.CallMouseDown(CB.ContentBox.Left + 195, CB.ContentBox.Top + 15);
+  CB.CallMouseMove(CB.ContentBox.Left + 245, CB.ContentBox.Top + 15);   // +50 px
+  CB.CallMouseUp(CB.ContentBox.Left + 245, CB.ContentBox.Top + 15);
+  AssertEquals('the band BEFORE the grabbed one grew by the drag delta', 130,
+    CB.GetBandWidth(b0));
+  AssertEquals('and the grabbed band was NOT resized in isolation', 80, CB.GetBandWidth(b1));
 end;
 
 procedure TCoolBarControlTest.TestGripperDragHonoursMinClamp;
-var CB: TCoolBarAccess; b: TControl;
+var CB: TCoolBarAccess; b0, b1: TControl;
 begin
+  { The clamp that applies is the SEAM OWNER's, since that is the band being resized. }
   CB := TCoolBarAccess.Create(FForm);
   CB.Parent := FForm;
   CB.Font.PixelsPerInch := 96;
-  b := MakeBand(CB, 10, 0, 80, 30);
-  CB.SetBandWidth(b, 80);
-  CB.SetBandMinWidth(b, 50);
-  CB.CallMouseDown(5, 15);
-  CB.CallMouseMove(5 - 500, 15);        // drag far left, way past the floor
-  CB.CallMouseUp(5 - 500, 15);
-  AssertEquals('drag clamps to the per-band min', 50, CB.GetBandWidth(b));
+  b0 := MakeBand(CB, CB.ContentBox.Left + 10, CB.ContentBox.Top, 80, 30);
+  b1 := MakeBand(CB, CB.ContentBox.Left + 200, CB.ContentBox.Top, 80, 30);
+  CB.SetBandWidth(b0, 80);
+  CB.SetBandMinWidth(b0, 50);
+  CB.CallMouseDown(CB.ContentBox.Left + 195, CB.ContentBox.Top + 15);
+  CB.CallMouseMove(CB.ContentBox.Left + 195 - 500, CB.ContentBox.Top + 15);  // far past the floor
+  CB.CallMouseUp(CB.ContentBox.Left + 195 - 500, CB.ContentBox.Top + 15);
+  AssertEquals('drag clamps to the seam owner''s min', 50, CB.GetBandWidth(b0));
+  if b1 = nil then ;
+end;
+
+procedure TCoolBarControlTest.TestDragPastANeighbourReordersTheBands;
+var CB: TCoolBarAccess; b0, b1: TControl; L, T: Integer;
+begin
+  { The user's question, as a test: can the toolbar band be dragged BEHIND the search band?
+    Yes -- and "behind" is a real reorder of the child list, which is what the packer reads, so
+    the new order survives the next relayout instead of being cosmetic. }
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  L := CB.ContentBox.Left;
+  T := CB.ContentBox.Top;
+  b0 := MakeBand(CB, L + 10, T, 80, 30);     // the "Open/Save" toolbar
+  b1 := MakeBand(CB, L + 200, T, 80, 30);    // the search box
+  AssertEquals('b0 starts first in the child list', 0, CB.GetControlIndex(b0));
+
+  // Grab b0's gripper and drag right, past b1's midpoint (b1 spans 200..280, midpoint 240).
+  CB.CallMouseDown(L + 5, T + 15);
+  CB.CallMouseMove(L + 250, T + 15);
+  CB.CallMouseUp(L + 250, T + 15);
+
+  AssertEquals('the dragged band really moved behind its neighbour', 1,
+    CB.GetControlIndex(b0));
+  AssertEquals('and the neighbour took its place', 0, CB.GetControlIndex(b1));
+end;
+
+procedure TCoolBarControlTest.TestDragBelowTheLastRowGivesTheBandItsOwnRow;
+var CB: TCoolBarAccess; b0, b1: TControl; L, T: Integer;
+begin
+  { The other half of the user's question: can it be dragged UNDER the search band? Below every
+    row means a row of its own -- the reference's cNewRowBelow. }
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  L := CB.ContentBox.Left;
+  T := CB.ContentBox.Top;
+  b0 := MakeBand(CB, L + 10, T, 80, 30);
+  b1 := MakeBand(CB, L + 200, T, 80, 30);
+  AssertFalse('no band starts a new row yet', CB.BandBreak(b0));
+
+  // Drag b0's gripper well below the single row (the bands are 30 tall, from T).
+  CB.CallMouseDown(L + 5, T + 15);
+  CB.CallMouseMove(L + 30, T + 120);
+  CB.CallMouseUp(L + 30, T + 120);
+
+  AssertTrue('the band now starts a row of its own', CB.BandBreak(b0));
+  AssertEquals('and it moved to the end of the list, so it breaks its OWN row rather than '
+    + 'splitting the bands after it onto a third', 1, CB.GetControlIndex(b0));
+  if b1 = nil then ;
+end;
+
+procedure TCoolBarControlTest.TestDragBelowTheLastRowMovesAnAlreadyBrokenBand;
+var CB: TCoolBarAccess; b0, b1: TControl; L, T: Integer;
+begin
+  { The band already starts a row, so setting Break is a no-op -- and BandsChanged, which is
+    what normally relays and fires OnChange, never runs. The list order still changed, so the
+    move has to be reported anyway or it is applied to the model and invisible on screen. }
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  L := CB.ContentBox.Left;
+  T := CB.ContentBox.Top;
+  b0 := MakeBand(CB, L + 10, T, 80, 30);
+  b1 := MakeBand(CB, L + 200, T, 80, 30);
+  CB.SetBandBreak(b0, True);
+  AssertTrue('precondition: b0 already starts a row', CB.BandBreak(b0));
+  FChangeCount := 0;
+  CB.OnChange := @CountChange;
+
+  CB.CallMouseDown(L + 5, T + 15);
+  CB.CallMouseMove(L + 30, T + 120);      // below every row
+  CB.CallMouseUp(L + 30, T + 120);
+
+  AssertEquals('it still moved to the end of the list', 1, CB.GetControlIndex(b0));
+  AssertTrue('and the move was reported even though Break did not change',
+    FChangeCount > 0);
+  if b1 = nil then ;
+end;
+
+procedure TCoolBarControlTest.TestRowLeadingGripperIsAMoveNotAResize;
+var CB: TCoolBarAccess; b0, b1: TControl;
+begin
+  { The band that OPENS a row has no seam under its gripper. The reference turns that drag into
+    a move rather than letting it resize anything (coolbar.inc:899). Nothing may change width. }
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  b0 := MakeBand(CB, CB.ContentBox.Left + 10, CB.ContentBox.Top, 80, 30);
+  b1 := MakeBand(CB, CB.ContentBox.Left + 200, CB.ContentBox.Top, 80, 30);
+  CB.SetBandWidth(b0, 80);
+  CB.SetBandWidth(b1, 80);
+  AssertTrue('precondition: b0 really does open the row', CB.SeamOwner(b0) = nil);
+  CB.CallMouseDown(CB.ContentBox.Left + 5, CB.ContentBox.Top + 15);      // b0's own gripper
+  CB.CallMouseMove(CB.ContentBox.Left + 55, CB.ContentBox.Top + 15);     // sideways
+  CB.CallMouseUp(CB.ContentBox.Left + 55, CB.ContentBox.Top + 15);
+  AssertEquals('the leading band did not resize itself', 80, CB.GetBandWidth(b0));
+  AssertEquals('and neither did its neighbour', 80, CB.GetBandWidth(b1));
 end;
 
 { ── per-band packing ───────────────────────────────────────────────────────────
@@ -484,21 +627,30 @@ begin
 end;
 
 procedure TCoolBarControlTest.TestFixedBandRefusesAResize;
-var CB: TCoolBarAccess; b: TControl; w0: Integer;
+var CB: TCoolBarAccess; b0, b1: TControl; w0: Integer;
 begin
-  { FixedSize stops a RESIZE, not a move: nailing a width down is not nailing the band down. }
+  { FixedSize stops a RESIZE, not a move: nailing a width down is not nailing the band down.
+
+    It is the SEAM OWNER's FixedSize that decides, because that is the band a gripper drag
+    would resize (coolbar.inc:903 gates on FVisiBands[aBand-1].FFixedSize). This test used to
+    set FixedSize on a lone first-of-row band and drag its own gripper -- which under the
+    corrected semantics is a MOVE, so it would have passed no matter what the FixedSize check
+    did. Now it drags a real seam. }
   CB := TCoolBarAccess.Create(FForm);
   CB.Parent := FForm;
   CB.Font.PixelsPerInch := 96;
-  b := MakeBand(CB, 10, 0, 80, 30);
-  CB.SetBandWidth(b, 80);
-  CB.SetBandFixedSize(b, True);
-  w0 := CB.GetBandWidth(b);
-  CB.CallMouseDown(5, 15);              // on the band's own gripper
-  CB.CallMouseMove(65, 15);             // clearly horizontal -> a resize attempt
-  CB.CallMouseUp(65, 15);
-  AssertEquals('a fixed band keeps its width', w0, CB.GetBandWidth(b));
-  AssertTrue('but it is still movable', CB.BandFixedSize(b));
+  b0 := MakeBand(CB, CB.ContentBox.Left + 10, CB.ContentBox.Top, 80, 30);
+  b1 := MakeBand(CB, CB.ContentBox.Left + 200, CB.ContentBox.Top, 80, 30);
+  CB.SetBandWidth(b0, 80);
+  CB.SetBandFixedSize(b0, True);
+  AssertSame('precondition: b0 really is the seam under b1''s gripper', b0, CB.SeamOwner(b1));
+  w0 := CB.GetBandWidth(b0);
+  CB.CallMouseDown(CB.ContentBox.Left + 195, CB.ContentBox.Top + 15);   // b1's gripper
+  CB.CallMouseMove(CB.ContentBox.Left + 255, CB.ContentBox.Top + 15);   // clearly horizontal
+  CB.CallMouseUp(CB.ContentBox.Left + 255, CB.ContentBox.Top + 15);
+  AssertEquals('a fixed band keeps its width even when its seam is dragged', w0,
+    CB.GetBandWidth(b0));
+  AssertTrue('but it is still movable', CB.BandFixedSize(b0));
 end;
 
 procedure TCoolBarControlTest.TestLayoutChangeFiresOnChange;
@@ -621,6 +773,173 @@ begin
   AssertEquals('and starts at the column top', 10, r[1].Top);
 end;
 
+{ ── the seam rule, pure ────────────────────────────────────────────────────────
+  A gripper is the boundary between its band and the one before it ON THE SAME ROW. Getting
+  "on the same row" wrong is the failure mode worth guarding: a naive AIndex-1 would hand a
+  drag the last band of the PREVIOUS row, so dragging the first band of row 2 would silently
+  resize something on row 1. }
+
+function RectsAt(const ATops, ALefts: array of Integer): TTyRectArray;
+var i: Integer;
+begin
+  SetLength(Result, Length(ATops));
+  for i := 0 to High(ATops) do
+    Result[i] := Rect(ALefts[i], ATops[i], ALefts[i] + 40, ATops[i] + 24);
+end;
+
+procedure TCoolBarMathTest.TestSeamOwnerIsThePrecedingBandOnTheRow;
+var r: TTyRectArray;
+begin
+  r := RectsAt([0, 0, 0], [10, 60, 110]);
+  AssertEquals('band 1''s seam belongs to band 0', 0, TyCoolBandSeamOwner(r, 1));
+  AssertEquals('band 2''s seam belongs to band 1', 1, TyCoolBandSeamOwner(r, 2));
+end;
+
+procedure TCoolBarMathTest.TestSeamOwnerSkipsBandsOnOtherRows;
+var r: TTyRectArray;
+begin
+  { Rows 0 and 1, with TWO bands on row 0. Band 2 opens row 1, band 3 follows it there.
+    Band 3's seam is band 2 -- NOT band 2's predecessor, and certainly not "index minus one"
+    reaching back across the row break. }
+  r := RectsAt([0, 0, 30, 30], [10, 60, 10, 60]);
+  AssertEquals('band 3''s seam is the band before it on ITS row', 2, TyCoolBandSeamOwner(r, 3));
+  AssertEquals('band 1''s seam is still band 0', 0, TyCoolBandSeamOwner(r, 1));
+end;
+
+procedure TCoolBarMathTest.TestRowLeadingBandHasNoSeam;
+var r: TTyRectArray;
+begin
+  r := RectsAt([0, 0, 30], [10, 60, 10]);
+  AssertEquals('band 0 opens the bar -> no seam', -1, TyCoolBandSeamOwner(r, 0));
+  AssertEquals('band 2 opens row 1 -> no seam, so its grip is a MOVE', -1,
+    TyCoolBandSeamOwner(r, 2));
+end;
+
+procedure TCoolBarMathTest.TestSeamOwnerVerticalUsesColumns;
+var r: TTyRectArray;
+begin
+  { Turned on its side every axis swaps: a "row" is a COLUMN, identified by Left. Reading Top
+    here would call two bands in different columns neighbours. }
+  r := RectsAt([0, 30, 0], [10, 10, 80]);   // col 0: bands 0,1 ; col 1: band 2
+  AssertEquals('band 1 follows band 0 down column 0', 0, TyCoolBandSeamOwner(r, 1, True));
+  AssertEquals('band 2 opens column 1 -> no seam', -1, TyCoolBandSeamOwner(r, 2, True));
+end;
+
+procedure TCoolBarMathTest.TestSeamOwnerOutOfRange;
+var r: TTyRectArray;
+begin
+  r := RectsAt([0], [10]);
+  AssertEquals('negative index', -1, TyCoolBandSeamOwner(r, -1));
+  AssertEquals('past the end', -1, TyCoolBandSeamOwner(r, 5));
+  SetLength(r, 0);
+  AssertEquals('empty', -1, TyCoolBandSeamOwner(r, 0));
+end;
+
+{ ── where a dragged band lands ─────────────────────────────────────────────────
+  Band reordering is a real rebar gesture (Win32's rebar and Lazarus's TCoolBar both do it).
+  These pin the drop rule; the control-level tests below pin that the drop is actually applied. }
+
+procedure TCoolBarMathTest.TestDropPastANeighbourReorders;
+var r: TTyRectArray;
+begin
+  // Three bands on one row: [10..50) [60..100) [110..150)
+  r := RectsAt([0, 0, 0], [10, 60, 110]);
+  // Drag band 0 rightwards past band 1's midpoint (80) -> it takes band 1's slot.
+  AssertEquals('band 0 dropped past band 1 lands at 1', 1,
+    TyCoolBandDropIndex(r, 0, Point(85, 12)));
+  // Past band 2's midpoint (130) -> the end.
+  AssertEquals('band 0 dropped past band 2 lands at 2', 2,
+    TyCoolBandDropIndex(r, 0, Point(135, 12)));
+end;
+
+procedure TCoolBarMathTest.TestDropBeforeANeighbourReorders;
+var r: TTyRectArray;
+begin
+  r := RectsAt([0, 0, 0], [10, 60, 110]);
+  // Drag band 2 LEFT to before band 0's midpoint (30) -> it becomes the row's first band.
+  AssertEquals('band 2 dropped before band 0 lands at 0', 0,
+    TyCoolBandDropIndex(r, 2, Point(15, 12)));
+  // Onto band 1's left half -> before band 1, i.e. index 1.
+  AssertEquals('band 2 dropped before band 1 lands at 1', 1,
+    TyCoolBandDropIndex(r, 2, Point(65, 12)));
+end;
+
+procedure TCoolBarMathTest.TestDropOnItselfChangesNothing;
+var r: TTyRectArray;
+begin
+  { The live-commit stability property: once a swap has happened the pointer sits over the
+    dragged band itself, and the answer must be "stay put" or the drag would oscillate. }
+  r := RectsAt([0, 0, 0], [10, 60, 110]);
+  AssertEquals('pointer over the dragged band -> no change', 1,
+    TyCoolBandDropIndex(r, 1, Point(80, 12)));
+  AssertEquals('out-of-range index is inert', 9, TyCoolBandDropIndex(r, 9, Point(80, 12)));
+end;
+
+procedure TCoolBarMathTest.TestDropBelowTheLastRowAsksForANewRow;
+var r: TTyRectArray;
+begin
+  { "Drag 打开/保存 UNDER the search band" -- the reference's cNewRowBelow. Rects are 24 tall,
+    so row 0 ends at y=24. }
+  r := RectsAt([0, 0], [10, 60]);
+  AssertEquals('below every band -> a row of its own', TyCoolDropNewRow,
+    TyCoolBandDropIndex(r, 0, Point(30, 40)));
+  AssertTrue('and inside the row it is an ordinary reorder, not a new row',
+    TyCoolBandDropIndex(r, 0, Point(85, 12)) <> TyCoolDropNewRow);
+end;
+
+procedure TCoolBarMathTest.TestDropMirroredFlipsTheMidpointTest;
+var r: TTyRectArray;
+begin
+  { Mirrored, "past" a band means to its LEFT. The same pointer therefore has to give opposite
+    answers under the two readings -- a sign nobody notices in review and no static render can
+    catch, exactly like the resize delta. }
+  r := RectsAt([0, 0, 0], [10, 60, 110]);
+  AssertEquals('LTR: right of band 1''s midpoint -> after it', 1,
+    TyCoolBandDropIndex(r, 0, Point(85, 12), False));
+  AssertEquals('RTL: the same point is BEFORE band 1, so band 0 stays put', 0,
+    TyCoolBandDropIndex(r, 0, Point(85, 12), True));
+  AssertEquals('RTL: left of band 1''s midpoint -> after it', 1,
+    TyCoolBandDropIndex(r, 0, Point(65, 12), True));
+end;
+
+procedure TCoolBarMathTest.TestDropOffEveryRowChangesNothing;
+var r: TTyRectArray;
+begin
+  { Above the first row (a negative Y) is on no row at all. It must be inert rather than
+    silently landing on row 0 -- and it must not be confused with the below-everything case. }
+  r := RectsAt([0, 0], [10, 60]);
+  AssertEquals('above every row -> no change', 1, TyCoolBandDropIndex(r, 1, Point(30, -20)));
+end;
+
+procedure TCoolBarMathTest.TestDropVerticalTransposesTheAxes;
+var r: TTyRectArray;
+begin
+  { Turned on its side, bands run DOWN a column: the group is picked by X and the order within
+    it by Y. Reading the axes the horizontal way round would call two bands in different columns
+    neighbours and reorder against the wrong one.
+
+    Column 0 at x 10..50 holds bands 0 and 1 (y 0..24 and 30..54); band 2 opens column 1. }
+  SetLength(r, 3);
+  r[0] := Rect(10, 0, 50, 24);
+  r[1] := Rect(10, 30, 50, 54);
+  r[2] := Rect(60, 0, 100, 24);
+
+  // Band 0 dragged DOWN past band 1's midpoint (y = 42) -> it takes band 1's slot.
+  AssertEquals('down past the next band in the column reorders', 1,
+    TyCoolBandDropIndex(r, 0, Point(30, 45), False, True));
+  // Still inside its own band -> no change.
+  AssertEquals('over itself, nothing moves', 0,
+    TyCoolBandDropIndex(r, 0, Point(30, 10), False, True));
+  // Right of every column -> a column of its own.
+  AssertEquals('right of the last column -> a new one', TyCoolDropNewRow,
+    TyCoolBandDropIndex(r, 0, Point(140, 10), False, True));
+  { The SAME geometry read the horizontal way must give a different answer, or the flag is
+    doing nothing. x=140 is right of every column (a new column when vertical) but it is level
+    with row 0, so read horizontally it is merely a drop past the last band on that row. }
+  AssertEquals('read horizontally the same point is an ordinary reorder, not a new group', 2,
+    TyCoolBandDropIndex(r, 0, Point(140, 10), False, False));
+end;
+
 procedure TCoolBarControlTest.TestVerticalPutsTheGripAboveTheBand;
 var CB: TCoolBarAccess; b: TControl; r: TRect;
 begin
@@ -629,12 +948,16 @@ begin
   CB := TCoolBarAccess.Create(FForm);
   CB.Parent := FForm;
   CB.Font.PixelsPerInch := 96;
-  b := MakeBand(CB, 0, 10, 24, 60);
+  { Placed where the vertical layout would place a first-in-column band: content top + gripW.
+    Same correction as TestBandRectIsRowLeftGripper -- the old literals pinned a grip that
+    backed onto the frame stroke. }
+  b := MakeBand(CB, CB.ContentBox.Left, CB.ContentBox.Top + 10, 24, 60);
   CB.Vertical := True;
   r := CB.BandRect(b);
   AssertFalse('a vertical band is still grippable', IsRectEmpty(r));
-  AssertEquals('the grip ends where the band begins', 10, r.Bottom);
-  AssertEquals('and starts a grip-height above it', 0, r.Top);
+  AssertEquals('the grip ends where the band begins', CB.ContentBox.Top + 10, r.Bottom);
+  AssertEquals('and starts a grip-height above it, inside the frame',
+    CB.ContentBox.Top, r.Top);
   AssertEquals('spanning the band width', b.Left, r.Left);
 end;
 

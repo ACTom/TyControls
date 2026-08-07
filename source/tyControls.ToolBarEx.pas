@@ -173,7 +173,7 @@ end;
 
 procedure TTyToolBarEx.AlignControls(AControl: TControl; var ARect: TRect);
 var
-  i, n, visCount, x, chevW, padY: Integer;
+  i, n, visCount, x, chevW, padY, rowH, rowTop, bottomBorder: Integer;
   kids: array of TControl;
   widths: array of Integer;
   ctl: TControl;
@@ -265,6 +265,31 @@ begin
       the two and this override has to stop too, or a bar with a non-default Indent would sit
       its tools at one height here and another there. }
     padY := ContentPadY;
+
+    { ROW HEIGHT — ButtonHeight is what the bar ASKS for; a child may refuse to be that short.
+      A control whose caption decides its size publishes Constraints.MinHeight and SetBounds
+      CLAMPS UP to it, silently. The base bar takes the tallest floor in the row first and lays
+      out against that; this override kept the old, pre-fix line (SetBounds(.., ButtonHeight))
+      and so re-opened the very defect the base closed -- a clamped-taller button overflowed its
+      slot downward and left the row ragged. Same bug shape as the StyleClass one above: the
+      base was fixed, the override that duplicates its layout was not. }
+    rowH := ButtonHeight;
+    for i := 0 to n - 1 do
+      if kids[i].Constraints.MinHeight > rowH then rowH := kids[i].Constraints.MinHeight;
+
+    { ROW TOP — keep the row OUT of the strip RenderTo strokes the bottom hairline into.
+      A tool button is a windowed child: it paints after the bar and erases its whole rect to
+      the surface colour, so a row reaching into that strip WIPES the line rather than drawing
+      over it. (The containers demo showed exactly this: the hairline survived only in the gaps
+      between buttons.) Pull the row up rather than squash it -- the child's own MinHeight would
+      defeat a squash anyway, since SetBounds clamps back up. When the row already fits, padY is
+      unchanged and no existing bar moves a pixel. }
+    bottomBorder := BottomBorderPx(Font.PixelsPerInch);
+    rowTop := padY;
+    if rowTop + rowH > ClientHeight - bottomBorder then
+      rowTop := ClientHeight - bottomBorder - rowH;
+    if rowTop < 0 then rowTop := 0;
+
     x := Indent;
     for i := 0 to n - 1 do
     begin
@@ -273,7 +298,7 @@ begin
       begin
         // The FLOORED width the fit was decided over, not kids[i].Width — same rule as the
         // base bar's SetBounds, and the two are equal until ButtonWidth is set.
-        kids[i].SetBounds(x, padY, widths[i], ButtonHeight);
+        kids[i].SetBounds(x, rowTop, widths[i], rowH);
         kids[i].Visible := True;
         Inc(x, widths[i] + ButtonSpacing);
       end
@@ -288,7 +313,10 @@ begin
     if visCount < n then
     begin
       EnsureMoreButton;
-      FMoreBtn.SetBounds(ClientWidth - chevW - Indent, padY, chevW, ButtonHeight);
+      { The chevron shares the row's box, not its own -- it sat at (padY, ButtonHeight) while
+        the tools beside it could be taller, so it drifted off the row's centre line the moment
+        a caption forced the row up. }
+      FMoreBtn.SetBounds(ClientWidth - chevW - Indent, rowTop, chevW, rowH);
       FMoreBtn.Visible := True;
       FMoreBtn.BringToFront;
     end

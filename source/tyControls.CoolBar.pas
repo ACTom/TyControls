@@ -11,15 +11,32 @@ unit tyControls.CoolBar;
     * MOVED   — grab a band's gripper and drag it DOWN to give the band a row of its own,
                 or UP to return it to the row above. Every band has its own gripper, drawn
                 immediately to its left, so every band can be grabbed.
-    * RESIZED — grab that gripper and drag HORIZONTALLY to widen/narrow the band, honouring
-                a per-band minimum / maximum width.
+    * RESIZED — grab that gripper and drag HORIZONTALLY to move the SEAM it sits on: the band
+                BEFORE it on the row grows or shrinks, honouring that band's minimum/maximum.
 
     The pointer's direction picks between the two (TyCoolDragMode), as it does in Delphi's and
     Lazarus's TCoolBar.
 
-    NOT implemented: reordering bands WITHIN a row. That needs a child-index primitive and the
-    LCL exposes only SetZOrder(TopMost), so a control cannot be placed at an arbitrary position
-    in its parent's list. Row membership is the whole of the model for now.
+    WHAT A GRIPPER RESIZE MEANS (corrected -- this used to be wrong). A rebar gripper is not a
+    handle on its own band; it is the BOUNDARY between that band and its row predecessor.
+    Dragging it moves the boundary, so one band grows by what the other gives up. Ours used to
+    resize the DRAGGED band in isolation, which is not the reference behaviour and is why the
+    gesture read as pointless. Lazarus's TCoolBar assigns to FVisiBands[FDraggedBandIndex-1]
+    (lcl/include/coolbar.inc:938) -- the band BEFORE the dragged one. TyCoolBandSeamOwner is
+    that rule, and FDragSeam is the band it names.
+
+    A band that OPENS its row has no seam under its gripper. The reference does not leave that
+    gesture dead: MouseDown routes it to a MOVE instead (coolbar.inc:899, IsFirstAtRow), and so
+    does this unit -- a sideways drag on the leading band reorders it rather than doing nothing.
+
+    * REORDERED — dragging a band past a neighbour swaps the two; dragging it below the last
+                row gives it a row of its own at the end. This unit used to say reordering was
+                impossible because "the LCL exposes only SetZOrder(TopMost)". That was simply
+                false: TWinControl.SetControlIndex (controls.pp:2400) places a child anywhere
+                in its parent's list, and since the packer reads Controls[] in child order,
+                moving the child IS the reorder -- pack, gripper paint and hit-test all derive
+                from that one list, so there is nothing to keep in sync. TyCoolBandDropIndex is
+                the (pure) rule for where a drop lands.
 
   Per-band metadata (a fixed/min Width the band is given) is stored keyed by the child
   TControl in FBands and dropped when the child is freed (Notification/opRemove) — never
@@ -49,6 +66,9 @@ type
   { One band's per-child metadata, keyed by the child control (position-independent). }
   { What a gripper drag means once the pointer commits to an axis. }
   TTyCoolDrag = (cdNone, cdMove, cdResize);
+
+  { The hosted band controls in packing order, parallel to a TTyRectArray of their rects. }
+  TTyCoolBandCtls = array of TControl;
 
   TTyCoolBar = class;
 
@@ -121,9 +141,13 @@ type
     FOnChange: TNotifyEvent;
     // --- live drag state (real-machine) ---
     FDragging: Boolean;
-    FDragCtl: TControl;                // the band being resized
+    FDragCtl: TControl;                // the band whose gripper was grabbed
+    FDragSeam: TControl;               // the band that gripper's SEAM belongs to (its row
+                                       // predecessor) -- the one a resize actually moves.
+                                       // nil when FDragCtl opens its row: no seam, so the
+                                       // gesture is a MOVE (see TyCoolBandSeamOwner).
     FDragStartX: Integer;             // mouse X (device px) at grab
-    FDragStartW: Integer;             // the band's logical width at grab
+    FDragStartW: Integer;             // the SEAM OWNER's logical width at grab
     function BandTextWidth(const AText: string; const AStyle: TTyStyleSet): Integer;
     procedure SetShowText(AValue: Boolean);
     procedure SetVertical(AValue: Boolean);
@@ -133,6 +157,23 @@ type
     procedure BandsChanged;
     function BandAtPoint(AX, AY: Integer): TControl;   // the band whose gripper is under (X,Y)
   protected
+    { The laid-out bands, in the order the packer sees them, with their current rects. ONE
+      reading of the layout, shared by the seam lookup and anything else that needs to know
+      which bands share a row, so none of them can invent a geometry the packer never produced. }
+    procedure CollectLaidOutBands(out ACtls: TTyCoolBandCtls; out ARects: TTyRectArray);
+    { The band whose trailing edge ACtl's gripper sits against -- the band a gripper drag
+      resizes -- or nil when ACtl opens its row and there is no seam. Thin shell over the pure
+      TyCoolBandSeamOwner; protected so a test can assert the drag's precondition directly
+      instead of inferring it from a width that happened not to change. }
+    function SeamOwnerOf(ACtl: TControl): TControl;
+    { REORDER the dragged band to wherever the pointer now indicates. True when the band
+      actually moved, so the caller can stop and let the fresh layout be re-read on the next
+      mouse-move rather than reasoning about rects it has just invalidated.
+
+      The move itself is TWinControl.SetControlIndex: the packer reads Controls[] in child
+      order, so changing a child's position in that list IS the reorder -- layout, gripper
+      paint and hit-test all follow from the same list with nothing to keep in sync. }
+    function ReorderFromPointer(AX, AY: Integer): Boolean;
     function GetStyleTypeKey: string; override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -262,6 +303,63 @@ function TyCoolBandResize(AStartW, ADx, AMinW, AMaxW: Integer): Integer;
   strip BandRectFor returns, which is already on the correct side and axis), so giving this
   one a direction flag would add a second, unused statement of where the gripper is. }
 function TyCoolGripperHit(const ABandRect: TRect; AGripperW: Integer; const APt: TPoint): Boolean;
+
+{ The band whose TRAILING edge the gripper of band AIndex sits against -- the band the
+  boundary belongs to, and therefore the band a gripper drag actually resizes.
+
+  A rebar gripper is NOT a handle on its own band. It is the SEAM between that band and the one
+  before it on the same row: dragging it moves the seam, so one band grows by exactly what the
+  other gives up. That is what Win32's rebar does and what Lazarus's TCoolBar does --
+  lcl/include/coolbar.inc:938 assigns to FVisiBands[FDraggedBandIndex-1].Width, i.e. the band
+  BEFORE the dragged one, never the dragged one itself.
+
+  Returns -1 when AIndex OPENS its row, because then there is no seam to move. The reference
+  turns that gesture into a MOVE rather than a resize (coolbar.inc:899, the IsFirstAtRow branch
+  of MouseDown), which is what TTyCoolBar now does too.
+
+  Rows are identified by the packer's own Top (Left when AVertical) -- the same number
+  BandRectFor reads -- so pack, paint and hit-test cannot disagree about who shares a row.
+  Direction-agnostic on purpose: mirrored, band i-1 sits to the RIGHT of band i, but it is
+  still the band the seam belongs to, so the index rule needs no bidi flag. }
+function TyCoolBandSeamOwner(const ARects: TTyRectArray; AIndex: Integer;
+  AVertical: Boolean = False): Integer;
+
+const
+  { TyCoolBandDropIndex: the pointer is past the last row, so the band gets a row of its own at
+    the end. A distinct sentinel rather than Length(ARects), which would be indistinguishable
+    from the ordinary "insert at the end of the current row" answer. }
+  TyCoolDropNewRow = -2;
+
+{ Where a dragged band should sit, from the pointer's position over the CURRENT layout.
+
+  Returns the layout index the band should end up at (already accounting for its own removal,
+  so the caller can hand it straight to a list move), ADragIndex when the drop changes nothing,
+  or TyCoolDropNewRow to mean "past every row -- give it a row of its own at the end".
+
+  Band reordering IS a real rebar gesture: Win32's rebar and Lazarus's TCoolBar both do it, the
+  latter by assigning TCoolBand.Index on drop (lcl/include/coolbar.inc:1043-1079). This unit
+  used to claim it was impossible because "the LCL exposes only SetZOrder(TopMost)" -- that is
+  simply wrong; TWinControl.SetControlIndex (controls.pp:2400) places a child at any position
+  in its parent's list, which is the whole primitive needed.
+
+  The band is picked by MIDPOINT rather than by the reference's trailing edge, because this
+  commits LIVE during the drag rather than on mouse-up: once two bands have swapped, the
+  pointer sits over the dragged band itself, which returns ADragIndex and settles. A
+  trailing-edge rule re-evaluated every mouse-move would oscillate across the boundary.
+
+  AVertical TRANSPOSES the whole question rather than branching inside it: bands then run down a
+  COLUMN, so the group a drop lands in is picked by X and the order within it by Y, and "past
+  the last row" becomes "right of the last column". Done by swapping the axes of the inputs and
+  running the identical rule, because two hand-written copies of this logic is exactly how one
+  axis ends up a pixel or a comparison out of step with the other. ARightToLeft is ignored when
+  vertical: mirroring a vertical rebar reverses the column ORDER, and within a column top-to-
+  bottom is not a reading direction.
+
+  Pure -- rects in, index out, no control and no canvas -- so every rule above is testable
+  without a mouse. }
+function TyCoolBandDropIndex(const ARects: TTyRectArray; ADragIndex: Integer;
+  const APt: TPoint; ARightToLeft: Boolean = False;
+  AVertical: Boolean = False): Integer;
 
 implementation
 
@@ -403,6 +501,77 @@ begin
     if AMaxW < AMinW then AMaxW := AMinW;   // an inverted range collapses to the floor
     if Result > AMaxW then Result := AMaxW;
   end;
+end;
+
+function TyCoolBandSeamOwner(const ARects: TTyRectArray; AIndex: Integer;
+  AVertical: Boolean = False): Integer;
+var
+  i: Integer;
+begin
+  Result := -1;
+  if (AIndex <= 0) or (AIndex > High(ARects)) then Exit;
+  for i := AIndex - 1 downto 0 do
+    if (AVertical and (ARects[i].Left = ARects[AIndex].Left))
+       or ((not AVertical) and (ARects[i].Top = ARects[AIndex].Top)) then
+      Exit(i);
+  { Fell off the front without meeting a band on this row -> AIndex opens the row. }
+end;
+
+function TyCoolBandDropIndex(const ARects: TTyRectArray; ADragIndex: Integer;
+  const APt: TPoint; ARightToLeft: Boolean = False;
+  AVertical: Boolean = False): Integer;
+var
+  n, i, target, insertAt, maxBottom, mid: Integer;
+  after: Boolean;
+  r: TTyRectArray;
+  p: TPoint;
+begin
+  Result := ADragIndex;
+  n := Length(ARects);
+  if (n = 0) or (ADragIndex < 0) or (ADragIndex >= n) then Exit;
+
+  { Transpose once, up front, and the rest of this function never mentions the axis again. }
+  if AVertical then
+  begin
+    SetLength(r, n);
+    for i := 0 to n - 1 do
+      r[i] := Rect(ARects[i].Top, ARects[i].Left, ARects[i].Bottom, ARects[i].Right);
+    p := Point(APt.Y, APt.X);
+    ARightToLeft := False;   // see the header: not a reading direction once transposed
+    Exit(TyCoolBandDropIndex(r, ADragIndex, p, ARightToLeft, False));
+  end;
+
+  { Below EVERY band -> a row of its own at the end. This is the gesture the reference spells
+    cNewRowBelow (coolbar.inc:976) and it is what "drag the toolbar under the search box"
+    means. }
+  maxBottom := ARects[0].Bottom;
+  for i := 1 to n - 1 do
+    if ARects[i].Bottom > maxBottom then maxBottom := ARects[i].Bottom;
+  if APt.Y >= maxBottom then Exit(TyCoolDropNewRow);
+
+  { The band the pointer is over, searched WITHIN the pointer's row. Falling back to the last
+    band seen on that row is what lets a pointer dragged off the end of a row still land after
+    the final band there instead of doing nothing. }
+  target := -1;
+  for i := 0 to n - 1 do
+  begin
+    if (APt.Y < ARects[i].Top) or (APt.Y >= ARects[i].Bottom) then Continue;
+    target := i;
+    if (APt.X >= ARects[i].Left) and (APt.X < ARects[i].Right) then Break;
+  end;
+  if (target < 0) or (target = ADragIndex) then Exit;
+
+  { Past the target's midpoint -> the dragged band goes after it. Mirrored, "after" is to the
+    LEFT, so the comparison flips with the reading direction and nothing else does. }
+  mid := ARects[target].Left + (ARects[target].Right - ARects[target].Left) div 2;
+  if ARightToLeft then after := APt.X < mid else after := APt.X >= mid;
+
+  if after then insertAt := target + 1 else insertAt := target;
+  { The dragged band leaves its own slot first, so every slot after it shifts down one. }
+  if insertAt > ADragIndex then Dec(insertAt);
+  if insertAt < 0 then insertAt := 0;
+  if insertAt > n - 1 then insertAt := n - 1;
+  Result := insertAt;
 end;
 
 function TyCoolGripperHit(const ABandRect: TRect; AGripperW: Integer; const APt: TPoint): Boolean;
@@ -624,6 +793,7 @@ end;
 function TTyCoolBar.BandRectFor(ACtl: TControl): TRect;
 var
   gw: Integer;
+  content: TRect;
 begin
   // The base (TTyControlBar) reserves + draws ONE gripper per band-ROW, at the row's left edge
   // (x = 0..gw). So only the row's FIRST child — the one placed at Left = gw (the content-left
@@ -638,13 +808,16 @@ begin
     The old rule returned an empty rect for anything that was not the row's first child, which
     is a ControlBar's one-grip-per-row model: band 2 had no handle to grab and none drawn. }
   Result := ACtl.BoundsRect;
+  { Clamped to the CONTENT box, not to the raw client rect: a gripper for a band on the first
+    row/column would otherwise be allowed to back onto the frame stroke it must stay inside. }
+  content := BandContentRect;
   if FVertical then
   begin
     { Above the band on either reading -- up is not a reading direction, so a mirrored
       vertical rebar reverses which COLUMN a band is in and nothing about its gripper. }
     Result.Bottom := Result.Top;
     Dec(Result.Top, gw);
-    if Result.Top < 0 then Result.Top := 0;
+    if Result.Top < content.Top then Result.Top := content.Top;
   end
   else if IsRightToLeft then
   begin
@@ -655,13 +828,13 @@ begin
       BandAtPoint hit-tests what it returns -- so paint and hit cannot take different sides. }
     Result.Left := Result.Right;
     Inc(Result.Right, gw);
-    if Result.Right > ClientWidth then Result.Right := ClientWidth;
+    if Result.Right > content.Right then Result.Right := content.Right;
   end
   else
   begin
     Result.Right := Result.Left;
     Dec(Result.Left, gw);
-    if Result.Left < 0 then Result.Left := 0;
+    if Result.Left < content.Left then Result.Left := content.Left;
   end;
 end;
 
@@ -802,8 +975,13 @@ begin
     { AAvail is the run the bands travel along, so vertically it is the bar's HEIGHT, and the
       band's fixed extent is its width. The caller measures the horizontal case, so swap here
       -- and hand the width on separately, because mirroring a vertical rebar reverses the
-      COLUMN order, which is the axis AAvail is no longer describing. }
-    Result := TyCoolBarPackVertical(ASizes, brks, leads, Height, ABandHeight, AGripperW, ASpacing,
+      COLUMN order, which is the axis AAvail is no longer describing.
+
+      The height comes from BandContentRect, NOT from Height: the caller already handed us the
+      content WIDTH as AAvail, so reading the raw Height here would mix a frame-inset axis with
+      a raw one and let a vertical rebar's last band run out under the bottom stroke. }
+    Result := TyCoolBarPackVertical(ASizes, brks, leads,
+      BandContentRect.Bottom - BandContentRect.Top, ABandHeight, AGripperW, ASpacing,
       IsRightToLeft, AAvail)
   else
     Result := TyCoolBarPack(ASizes, brks, leads, AAvail, ABandHeight, AGripperW, ASpacing,
@@ -846,6 +1024,100 @@ begin
   end;
 end;
 
+procedure TTyCoolBar.CollectLaidOutBands(out ACtls: TTyCoolBandCtls; out ARects: TTyRectArray);
+var
+  i, n: Integer;
+  ctl: TControl;
+begin
+  { Read straight off the children's BoundsRect -- what the packer last wrote and what
+    BandRectFor derives every gripper from. Recomputing a packing here instead would open the
+    door to the seam lookup and the paint disagreeing about which bands share a row. }
+  SetLength(ACtls, ControlCount);
+  SetLength(ARects, ControlCount);
+  n := 0;
+  for i := 0 to ControlCount - 1 do
+  begin
+    ctl := Controls[i];
+    if (ctl = nil) or (not ctl.Visible) then Continue;   // an invisible band is not on any row
+    ACtls[n] := ctl;
+    ARects[n] := ctl.BoundsRect;
+    Inc(n);
+  end;
+  SetLength(ACtls, n);
+  SetLength(ARects, n);
+end;
+
+function TTyCoolBar.SeamOwnerOf(ACtl: TControl): TControl;
+var
+  ctls: TTyCoolBandCtls;
+  rects: TTyRectArray;
+  i, idx, seam: Integer;
+begin
+  Result := nil;
+  if ACtl = nil then Exit;
+  CollectLaidOutBands(ctls, rects);
+  idx := -1;
+  for i := 0 to High(ctls) do
+    if ctls[i] = ACtl then begin idx := i; Break; end;
+  if idx < 0 then Exit;
+  seam := TyCoolBandSeamOwner(rects, idx, FVertical);
+  if seam >= 0 then Result := ctls[seam];
+end;
+
+function TTyCoolBar.ReorderFromPointer(AX, AY: Integer): Boolean;
+var
+  ctls: TTyCoolBandCtls;
+  rects: TTyRectArray;
+  i, idx, drop: Integer;
+begin
+  Result := False;
+  if FDragCtl = nil then Exit;
+  CollectLaidOutBands(ctls, rects);
+  idx := -1;
+  for i := 0 to High(ctls) do
+    if ctls[i] = FDragCtl then begin idx := i; Break; end;
+  if idx < 0 then Exit;
+
+  drop := TyCoolBandDropIndex(rects, idx, Point(AX, AY), IsRightToLeft, FVertical);
+  if drop = TyCoolDropNewRow then
+  begin
+    { Past the last row: the band goes to the end of the list AND starts a row of its own.
+      Both are needed -- Break alone would leave it breaking the row it is already in the
+      middle of, splitting the bands after it onto a third row. }
+    if idx <> High(ctls) then
+    begin
+      SetControlIndex(FDragCtl, ControlCount - 1);
+      Result := True;
+    end;
+    if not BandBreak(FDragCtl) then
+    begin
+      SetBandBreak(FDragCtl, True);   // relays and fires OnChange through BandsChanged
+      Result := True;
+    end
+    else if Result then
+    begin
+      { The band moved but its Break was already set, so BandsChanged never ran -- the list
+        order changed with nothing to act on it. Relay here or the move is invisible. }
+      Relayout;
+      Changed;
+    end;
+    Exit;
+  end;
+  if drop = idx then Exit;
+
+  { Land the band where ctls[drop] currently sits. TFPList.Move (which SetChildZPosition uses)
+    removes then re-inserts, so this one index is correct in BOTH directions: moving later, the
+    bands in between shift back and the dragged band lands after ctls[drop]; moving earlier, it
+    lands before it. }
+  SetControlIndex(FDragCtl, GetControlIndex(ctls[drop]));
+  { A reorder inside a row must not leave a stale Break behind: the band that used to open the
+    row would otherwise keep breaking it from its new position. }
+  if BandBreak(FDragCtl) and (drop > 0) then SetBandBreak(FDragCtl, False);
+  Relayout;
+  Changed;
+  Result := True;
+end;
+
 function TTyCoolBar.BandAtPoint(AX, AY: Integer): TControl;
 var
   i: Integer;
@@ -878,23 +1150,31 @@ begin
   if Button <> mbLeft then Exit;
   hit := BandAtPoint(X, Y);
   if hit = nil then Exit;
-  // Begin a gripper drag: remember the band + the starting width so MouseMove can apply
-  // the clamped resize. (Reorder-vs-resize disambiguation by drag direction is a
-  // real-machine refinement; the resize math is what we test.)
+  { Begin a gripper drag. The gripper is the SEAM between this band and its row predecessor, so
+    what a resize moves is the PREDECESSOR's trailing edge -- remember that band and ITS width,
+    not the grabbed one's. Grabbing a band that opens its row leaves FDragSeam nil, and the
+    gesture becomes a move (see MouseMove). }
   FDragging := True;
   FDragCtl := hit;
+  FDragSeam := SeamOwnerOf(hit);
   FDragStartX := X;
   FDragStartY := Y;
   FDragMode := cdNone;   // undecided until the pointer commits to an axis
-  if GetBandWidth(hit) > 0 then
-    FDragStartW := GetBandWidth(hit)
+  if FDragSeam <> nil then
+  begin
+    if GetBandWidth(FDragSeam) > 0 then
+      FDragStartW := GetBandWidth(FDragSeam)
+    else
+      FDragStartW := FDragSeam.Width;
+  end
   else
-    FDragStartW := hit.Width;
+    FDragStartW := 0;
 end;
 
 procedure TTyCoolBar.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   dxLogical, newW, minW, maxW, ppi, step, curRow, wantRow: Integer;
+  content: TRect;
 begin
   inherited MouseMove(Shift, X, Y);
   if not (FDragging and (FDragCtl <> nil)) then Exit;
@@ -908,12 +1188,20 @@ begin
       FDragMode := TyCoolDragMode(Y - FDragStartY, X - FDragStartX, MulDiv(4, ppi, 96))
     else
       FDragMode := TyCoolDragMode(X - FDragStartX, Y - FDragStartY, MulDiv(4, ppi, 96));
+    { A band that OPENS its row has no seam under its gripper, so there is nothing for a
+      sideways drag to resize. The reference does not make that a dead gesture -- it makes the
+      whole drag a MOVE (lcl/include/coolbar.inc:899). Doing anything else here is what made
+      the grip feel pointless on the leading band: it looked draggable and did nothing. }
+    if (FDragMode = cdResize) and (FDragSeam = nil) then FDragMode := cdMove;
   end;
 
   case FDragMode of
     cdResize:
       begin
-        if BandFixedSize(FDragCtl) then Exit;   // fixed: the drag simply does nothing
+        { The SEAM OWNER's FixedSize is what refuses the resize -- it is that band's trailing
+          edge the drag would move. (coolbar.inc:903 gates on FVisiBands[aBand-1].FFixedSize
+          for the same reason.) }
+        if (FDragSeam = nil) or BandFixedSize(FDragSeam) then Exit;
         // Device-px delta -> logical (band widths are logical), clamped, then applied; the
         // base re-packs from the child width.
         if FVertical then
@@ -927,23 +1215,30 @@ begin
             backwards (plans/2026-08-04-rtl-mirroring-scope.md §5 item 2). }
           if IsRightToLeft then dxLogical := -dxLogical;
         end;
-        minW := BandMinWidth(FDragCtl);
-        maxW := BandMaxWidth(FDragCtl);
+        { Clamps come from the band being resized -- the seam owner -- not from the grabbed one. }
+        minW := BandMinWidth(FDragSeam);
+        maxW := BandMaxWidth(FDragSeam);
         newW := TyCoolBandResize(FDragStartW, dxLogical, minW, maxW);
-        if newW <> GetBandWidth(FDragCtl) then
-          SetBandWidth(FDragCtl, newW);
+        if newW <> GetBandWidth(FDragSeam) then
+          SetBandWidth(FDragSeam, newW);
       end;
     cdMove:
       begin
-        { Which row the pointer is over, versus which row the band is on. Moving DOWN gives the
-          band a row of its own (Break); moving back UP returns it to the row above. That is the
-          whole of the row model -- a band either starts a row or continues one.
+        { A move does TWO things, and the pointer says which apply. First REORDER -- dragging a
+          band past a neighbour swaps them, dragging it below the last row gives it a row of its
+          own at the end. Then the row-break rule below. Both read the SAME laid-out rects the
+          packer wrote and the painter draws from (CollectLaidOutBands), so the drop indicator,
+          the hit test and the packing cannot disagree about where a band is. }
+        if ReorderFromPointer(X, Y) then Exit;   // the layout moved; re-read it next mouse-move
 
-          Reordering WITHIN a row is deliberately not attempted: it needs a child-index
-          primitive, and the LCL exposes only SetZOrder(TopMost), so there is no way to place a
-          control at an arbitrary position in its parent's list. }
+        { Which row the pointer is over, versus which row the band is on. Moving DOWN gives the
+          band a row of its own (Break); moving back UP returns it to the row above. }
         step := MulDiv(BandHeight, ppi, 96) + MulDiv(BandSpacing, ppi, 96);
         if step <= 0 then Exit;
+        { Counted from the CONTENT origin, which is where the packer starts the first row. Read
+          off the raw client rect the two counts drift by the frame inset, so a pointer inside
+          row 0 could read as row 1 on a skin with a wide border. }
+        content := BandContentRect;
         if FVertical then
         begin
           { Columns, not rows -- and mirrored they are counted from the right edge, matching
@@ -951,19 +1246,19 @@ begin
             side (Left + Width) so the two counts agree on which column a band occupies. }
           if IsRightToLeft then
           begin
-            curRow := (ClientWidth - FDragCtl.Left - FDragCtl.Width) div step;
-            wantRow := (ClientWidth - X) div step;
+            curRow := (content.Right - FDragCtl.Left - FDragCtl.Width) div step;
+            wantRow := (content.Right - X) div step;
           end
           else
           begin
-            curRow := FDragCtl.Left div step;
-            wantRow := X div step;
+            curRow := (FDragCtl.Left - content.Left) div step;
+            wantRow := (X - content.Left) div step;
           end;
         end
         else
         begin
-          curRow := FDragCtl.Top div step;
-          wantRow := Y div step;
+          curRow := (FDragCtl.Top - content.Top) div step;
+          wantRow := (Y - content.Top) div step;
         end;
         if wantRow < 0 then wantRow := 0;
         if wantRow > curRow then SetBandBreak(FDragCtl, True)
@@ -979,6 +1274,7 @@ begin
   begin
     FDragging := False;
     FDragCtl := nil;
+    FDragSeam := nil;
     FDragMode := cdNone;
   end;
 end;
@@ -993,10 +1289,13 @@ begin
     // Drop the freed child's band (found by control, never by position).
     bnd := FBandList.FindBand(TControl(AComponent));
     if bnd <> nil then bnd.Free;
-    if FDragCtl = AComponent then
+    { A freed band must not survive as EITHER end of the drag -- the seam owner is dereferenced
+      on every MouseMove, so leaving it dangling is a use-after-free one mouse move away. }
+    if (FDragCtl = AComponent) or (FDragSeam = AComponent) then
     begin
       FDragging := False;
       FDragCtl := nil;
+      FDragSeam := nil;
     end;
   end;
 end;
