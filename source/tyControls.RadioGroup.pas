@@ -19,7 +19,20 @@ type
     Layout fills across Columns columns in the order ColumnLayout names -- across each row
     first by default, which is what LCL's TRadioGroup does (ColumnLayout
     = clHorizontalThenVertical, extctrls.pp:777). The geometry is a pure unit-level function
-    (TyRadioGroupCellRect) so it is headless-testable in isolation. }
+    (TyRadioGroupCellRect) so it is headless-testable in isolation; the row PITCH it tiles
+    with is a second pure function shared with TTyCheckGroup (TyGroupRowPitch, in
+    tyControls.GroupBox) -- see RowPitch below for why the pitch is not simply the token.
+
+    THE RING AND THE DOT ARE ONE GESTURE. Two separate defects used to pull them apart, and
+    both are worth knowing about before touching this file:
+      * a click moved the DOT but not the RING (only the second click moved it) -- the group
+        hands out a single tab stop and TTyCustomControl.MouseDown gates focus-on-click on
+        it; see ItemMouseDown;
+      * the ring's bottom edge was CLIPPED by the row below it -- the pitch was shorter than
+        the children LCL was clamping into it; see RowPitch.
+    Neither is visible from the headless suite (no caret on a form that was never shown, and
+    the test process measures the caption font short enough that the overlap cannot arise).
+    tests/radiofocusverify is the real-window half and is not optional cover. }
   TTyRadioGroup = class(TTyGroupBox)
   private
     FItems: TStrings;
@@ -45,6 +58,22 @@ type
     procedure ChildChanged(Sender: TObject);
     procedure NotifySelection;
     procedure UpdateTabStops;
+    { The row PITCH the grid tiles with, in device pixels.
+
+      --row-height is the theme's say in it, but it is only the FLOOR-of-taste: the hosted
+      radio has its own minimum height (caption line + the themed --pad-control, never less
+      than --radio-size; TTyRadioButton.UpdateSizeConstraints), LCL clamps every SetBounds
+      up to Constraints.MinHeight, and a pitch shorter than that clamp does not produce
+      shorter rows -- it produces OVERLAPPING ones. On the default light theme at 96ppi the
+      token says 22 and the radio's own minimum is 25, so consecutive rows used to overlap
+      by 3px; the next row is a LATER sibling and therefore higher in the z-order, so it
+      painted over the bottom 3px of the row above -- taking the whole bottom edge of the
+      2px :focus ring with it. That is the "the ring is cut off along the bottom" report,
+      and it is invisible on the LAST row (nothing below it to paint over it), which is why
+      only a probe at the row BOUNDARY finds it.
+      Both halves stay theme-driven: the token is a token, and the floor is derived from the
+      radio's own themed metrics. No pixel constant is introduced here. }
+    function RowPitch: Integer;
     { Move the selection one cell in the direction (AHorzDiff, AVertDiff), honouring
       ColumnLayout, skipping items that cannot take it, and focusing the one it lands on.
       See ItemKeyDown for why this is the group's job and not the radio's. }
@@ -61,7 +90,30 @@ type
     procedure ItemUTF8KeyPress(Sender: TObject; var UTF8Key: TUTF8Char);
     procedure ItemEnter(Sender: TObject);
     procedure ItemExit(Sender: TObject);
+    { A left press on one option. The group has to hand the caret over ITSELF because it is
+      the group that took the tab stop away from every unchosen option: UpdateTabStops leaves
+      TabStop True on the CHECKED item only (LCL does the same -- radiogroup.inc:561), and
+      TTyCustomControl.MouseDown gates focus-on-click on `TabStop and CanFocus and not
+      Focused` (tyControls.Base.pas). So the one option that could take the caret from a
+      click was the one that already had the selection: clicking any OTHER option moved the
+      DOT and left the RING behind, and only the second click -- by which time the first had
+      handed that option the tab stop -- moved the ring. LCL's own radio group is not exposed
+      to this because its children are NATIVE TRadioButtons and Windows focuses a clicked
+      control whatever WS_TABSTOP says; a self-drawn child gets no such favour.
+      Wired to OnMouseDown, which TControl.MouseDown fires BEFORE that gate is evaluated, so
+      by the time the gate runs the option is already focused and the gate is a no-op --
+      one SetFocus per press, not two. }
+    procedure ItemMouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState;
+      X, Y: Integer);
   protected
+    { The ONE place this group asks for the caret -- mouse and keyboard both come through
+      here, so "the ring follows the dot" is a single rule with a single implementation
+      rather than two that can drift apart.
+      Virtual on purpose: the OS half (SetFocus) cannot run on a form that was never shown
+      -- CanFocus answers False there -- so a headless test asserting Focused would be
+      permanently, falsely green. A test overrides this to watch the REQUEST, and
+      tests/radiofocusverify proves on a real window that the request lands. }
+    procedure FocusItem(AIndex: Integer); virtual;
     procedure SetParent(AParent: TWinControl); override;
     procedure DoOnResize; override;
     // Keep the internal radio children on the group's controller so a controller assigned
@@ -78,6 +130,12 @@ type
     destructor Destroy; override;
     { Number of item rows == number of radio children. }
     function Count: Integer;
+    { Which option currently holds the caret (the FOCUS RING), or -1 when the group does not
+      have the focus at all. Deliberately separate from ItemIndex, which answers the other
+      question -- which option is CHECKED (the dot). The two are the same after any single
+      gesture, and a user report that they had come apart is what this accessor exists to
+      make sayable: before, nothing in the public surface could even state the symptom. }
+    function FocusedIndex: Integer;
     { The hosted radio itself -- the way to reach one option's Hint, Font, PopupMenu or
       Enabled. LCL publishes the same accessor under the same name (extctrls.pp:773) and
       raises out of range (include/radiogroup.inc:534-540), so this does too. The group
@@ -224,6 +282,66 @@ begin
   Result := Length(FButtons);
 end;
 
+function TTyRadioGroup.FocusedIndex: Integer;
+var
+  i: Integer;
+begin
+  Result := -1;
+  for i := 0 to High(FButtons) do
+    if (FButtons[i] <> nil) and FButtons[i].Focused then
+      Exit(i);
+end;
+
+procedure TTyRadioGroup.FocusItem(AIndex: Integer);
+begin
+  if (AIndex < 0) or (AIndex > High(FButtons)) then Exit;
+  if FButtons[AIndex] = nil then Exit;
+  if not FButtons[AIndex].Enabled then Exit;
+  { CanFocus alone is not enough -- it answers from Visible/Enabled up the parent chain and
+    says True for a control on a form that was never shown, so SetFocus then raises "TForm
+    Can not focus"; it would raise in an app too, for a group on a hidden or inactive form.
+    A realised handle is the honest test that a caret exists at all. }
+  if FButtons[AIndex].HandleAllocated and FButtons[AIndex].CanFocus
+     and not FButtons[AIndex].Focused then
+    { Swallowed the way TTyCustomControl.MouseDown swallows its own: SetFocus can still
+      refuse (a modal form elsewhere owns the caret), and this runs inside a mouse-down
+      handler, where letting it out means an exception dialog in the middle of a click.
+      Losing the ring is cosmetic; losing the click is not. }
+    try FButtons[AIndex].SetFocus except end;
+end;
+
+procedure TTyRadioGroup.ItemMouseDown(Sender: TObject; Button: TMouseButton;
+  Shift: TShiftState; X, Y: Integer);
+var
+  i: Integer;
+begin
+  if Button <> mbLeft then Exit;          // a right press opens a menu; it moves nothing
+  for i := 0 to High(FButtons) do
+    if FButtons[i] = Sender then
+    begin
+      FocusItem(i);
+      Exit;
+    end;
+end;
+
+function TTyRadioGroup.RowPitch: Integer;
+var
+  i, itemMin, ppi: Integer;
+begin
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  itemMin := 0;
+  for i := 0 to High(FButtons) do
+    if (FButtons[i] <> nil) and (FButtons[i].Constraints.MinHeight > itemMin) then
+      itemMin := FButtons[i].Constraints.MinHeight;
+  { The token is LOGICAL pixels; the cell rects are device pixels of our own client area.
+    Without this MulDiv a 150% display laid 22-device-px rows under 37-device-px radios --
+    the same overlap TyGroupRowPitch exists to stop, only worse, and only on a HiDPI
+    machine where nobody was looking. }
+  Result := TyGroupRowPitch(
+    MulDiv(ActiveController.Metric('--row-height', TyRadioRowH), ppi, 96), itemMin);
+end;
+
 procedure TTyRadioGroup.SetItems(AValue: TStrings);
 begin
   FItems.Assign(AValue);   // fires ItemsChanged -> RebuildButtons + LayoutButtons
@@ -320,6 +438,7 @@ begin
       rb.OnUTF8KeyPress := @ItemUTF8KeyPress;
       rb.OnEnter := @ItemEnter;
       rb.OnExit := @ItemExit;
+      rb.OnMouseDown := @ItemMouseDown;     // the ring follows the pointer -- see ItemMouseDown
       // Inherit the group's controller so the radios theme with the same style set.
       rb.Controller := Controller;
       FButtons[i] := rb;
@@ -366,7 +485,7 @@ begin
     // MIRRORING: columns reverse; each hosted radio flips its own dot via ParentBiDiMode.
     // See TTyCheckGroup.LayoutCheckBoxes -- there is no hit test on this side either.
     cell := TyRadioGroupCellRect(client, n, FColumns, i,
-      ActiveController.Metric('--row-height', TyRadioRowH), FColumnLayout, IsRightToLeft);
+      RowPitch, FColumnLayout, IsRightToLeft);
     FButtons[i].SetBounds(cell.Left, cell.Top, cell.Right - cell.Left, cell.Bottom - cell.Top);
   end;
 end;
@@ -514,13 +633,9 @@ begin
       { Through the property, not the field: a keyboard move IS a selection change, so it
         must notify exactly as a click does and must re-hand the single tab stop. }
       ItemIndex := i;
-      { Follow the selection with the caret, but only when there is really a focus to move.
-        CanFocus alone is not enough: it answers from Visible/Enabled up the parent chain and
-        says True for a control on a form that was never shown, so SetFocus then raises
-        "TForm Can not focus" -- and it would raise in an app too, for a group on a hidden or
-        inactive form. A realised handle is the honest test that a caret exists at all. }
-      if FButtons[i].HandleAllocated and FButtons[i].CanFocus then
-        FButtons[i].SetFocus;
+      { Follow the selection with the caret. Through FocusItem, the same seam the mouse uses:
+        "the ring goes where the dot went" is one rule, so it gets one implementation. }
+      FocusItem(i);
       Exit;
     end;
     Inc(i, step);

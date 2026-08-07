@@ -41,6 +41,15 @@ type
     procedure ClearCheckBoxes;
     procedure RebuildCheckBoxes;
     procedure LayoutCheckBoxes;
+    { The row PITCH the grid tiles with, in device pixels -- the same rule, and for the same
+      measured reason, as TTyRadioGroup.RowPitch (read the comment there).
+      This used to be a bare `rowH := 24`, which is both a hardcoded visual value and, on the
+      default light theme at 96ppi, one pixel SHORT of what a hosted TTyCheckBox's own
+      Constraints.MinHeight (25) forces LCL to clamp every SetBounds up to -- so consecutive
+      rows overlapped by 1px and the later row, being higher in the z-order, shaved the
+      bottom edge off the row above it (the :focus ring lives exactly there). Milder than the
+      radio group's 3px, same defect. }
+    function RowPitch: Integer;
     procedure ChildChanged(Sender: TObject);   // wired to each child's OnChange
     { Re-raise a hosted item's key events ON THE GROUP. The group never holds focus --
       every pixel of it is covered by its children -- so without these its OnKeyDown /
@@ -343,6 +352,20 @@ begin
   Invalidate;
 end;
 
+function TTyCheckGroup.RowPitch: Integer;
+var
+  i, itemMin, ppi: Integer;
+begin
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  itemMin := 0;
+  for i := 0 to High(FCheckBoxes) do
+    if (FCheckBoxes[i] <> nil) and (FCheckBoxes[i].Constraints.MinHeight > itemMin) then
+      itemMin := FCheckBoxes[i].Constraints.MinHeight;
+  Result := TyGroupRowPitch(
+    MulDiv(ActiveController.Metric('--row-height', TyGroupDefaultRowH), ppi, 96), itemMin);
+end;
+
 procedure TTyCheckGroup.LayoutCheckBoxes;
 var
   cr: TRect;
@@ -353,9 +376,7 @@ begin
   if n = 0 then Exit;
   cr := ClientRect;
   AdjustClientRect(cr);             // TTyGroupBox insets Top below the caption band
-  rowH := 24;                       // logical row pitch; each checkbox is 22 high
-  if Font.PixelsPerInch <> 96 then
-    rowH := MulDiv(rowH, Font.PixelsPerInch, 96);
+  rowH := RowPitch;                 // device px, never shorter than a hosted checkbox
   for i := 0 to n - 1 do
   begin
     if FCheckBoxes[i] = nil then Continue;

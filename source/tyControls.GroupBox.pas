@@ -73,7 +73,43 @@ type
     property Controller;
   end;
 
+{ TyGroupRowPitch — PURE, and the shared row-pitch rule of every item-grid group that hosts
+  real child controls (TTyRadioGroup, TTyCheckGroup). Both arguments are DEVICE pixels.
+
+  AThemeRowH is what the theme asks for (--row-height, already scaled to the control's ppi).
+  AItemMinH is what one hosted item's own Constraints.MinHeight demands -- itself entirely
+  theme-derived (caption line + --pad-control, floored at --radio-size / --checkbox-size).
+
+  The larger wins, and that is not a preference. LCL clamps EVERY SetBounds up to
+  Constraints.MinHeight, so laying rows AThemeRowH apart while each row is drawn AItemMinH
+  tall does not produce shorter rows -- it produces OVERLAPPING ones, and the lower row is a
+  later sibling and therefore higher in the child z-order, so it paints over the bottom of
+  the row above it. The 2px :focus ring lives exactly at that edge, which is how "the focus
+  ring's bottom edge is cut off" was reported. On the default light theme at 96ppi the
+  numbers were 22 and 25: three pixels of overlap, and the whole bottom of the ring.
+
+  Pure and unit-level ON PURPOSE. A console test process measures the caption font at 9px
+  where a GUI process measures 17, so the hosted item's own minimum comes out at 17 instead
+  of 25 there and the overlap never arises in the test runner at all -- an assertion made on
+  those ambient numbers is permanently, falsely green (measured: it was, and it let a mutant
+  that deleted this whole rule survive). Stating the rule as a function of its two inputs is
+  the only form of it a headless test can actually hold. }
+function TyGroupRowPitch(AThemeRowH, AItemMinH: Integer): Integer;
+
+const
+  { The fallback for --row-height, used ONLY when a theme defines no such token. Not a
+    layout constant: every theme in the tree defines it, so this value never reaches a
+    real skin. }
+  TyGroupDefaultRowH = 22;
+
 implementation
+
+function TyGroupRowPitch(AThemeRowH, AItemMinH: Integer): Integer;
+begin
+  Result := AThemeRowH;
+  if AItemMinH > Result then Result := AItemMinH;
+  if Result < 1 then Result := 1;   // a zero pitch would stack every row on row 0
+end;
 
 { TTyGroupBox }
 

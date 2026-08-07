@@ -4,12 +4,35 @@ interface
 uses
   Classes, SysUtils, Types, Graphics, Forms, Controls, ExtCtrls, LCLType,
   fpcunit, testregistry,
-  tyControls.Base, tyControls.Controller, tyControls.CheckBox, tyControls.RadioGroup;
+  tyControls.Base, tyControls.Controller, tyControls.CheckBox, tyControls.GroupBox,
+  tyControls.RadioGroup;
 type
+  { Reaches TTyCustomControl's protected MouseDown / KeyDown / AdjustClientRect, so a test
+    can drive a hosted radio the way the widgetset does instead of calling Click (which
+    skips the mouse path entirely -- and the mouse path is where the defect lived). }
+  TCtlAccess = class(TTyCustomControl);
+
+  { Watches the group's REQUEST for the caret.
+
+    The OS half cannot be tested here and must not be pretended: on a form that was never
+    shown CanFocus answers False, TTyRadioGroup.FocusItem correctly declines to call
+    SetFocus, and any assertion on Focused would be vacuously true forever. So the seam is
+    virtual and this spy counts the requests; tests/radiofocusverify then proves on a real
+    window, with real handles, that the request lands on the caret. Splitting it that way
+    is the only honest split -- see memory: headless tests never run LCL's focus engine. }
+  TSpyRadioGroup = class(TTyRadioGroup)
+  public
+    FocusRequests: Integer;
+    LastFocusRequest: Integer;
+    constructor Create(AOwner: TComponent); override;
+    procedure FocusItem(AIndex: Integer); override;
+  end;
+
   TRadioGroupTest = class(TTestCase)
   private
     FForm: TForm;
     FGrp: TTyRadioGroup;
+    function BuildSpy: TSpyRadioGroup;
     function SelChangeFired: Boolean;
     procedure OnSel(Sender: TObject);
   private
@@ -46,6 +69,16 @@ type
     // events
     procedure TestClickFiresSelectionChanged;
     procedure TestProgrammaticSetNotifiesToo;
+    // the ring follows the dot (bug: one click moved the dot only)
+    procedure TestOneLeftPressAsksForTheCaretOnThePressedItem;
+    procedure TestASecondPressOnTheSameItemDoesNotReAskForTheCaret;
+    procedure TestARightPressMovesNothing;
+    procedure TestArrowKeysAskForTheCaretThroughTheSameSeam;
+    procedure TestFocusedIndexIsMinusOneWhenTheGroupHasNoCaret;
+    // row pitch (bug: rows overlapped and the next row ate the ring's bottom edge)
+    procedure TestRowsNeverOverlapSoTheFocusRingSurvives;
+    procedure TestEveryRowStaysInsideTheGroupClientArea;
+    procedure TestRowPitchIsNeverShorterThanAHostedRadio;
     // designer hygiene
     procedure TestChildrenAreNoDesignVisible;
     procedure TestChildrenOwnedByGroup;
@@ -53,6 +86,36 @@ type
   end;
 
 implementation
+
+{ TSpyRadioGroup }
+
+constructor TSpyRadioGroup.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  FocusRequests := 0;
+  LastFocusRequest := -99;
+end;
+
+procedure TSpyRadioGroup.FocusItem(AIndex: Integer);
+begin
+  Inc(FocusRequests);
+  LastFocusRequest := AIndex;
+  inherited FocusItem(AIndex);   // still exercise the real guard (it no-ops headless)
+end;
+
+function TRadioGroupTest.BuildSpy: TSpyRadioGroup;
+begin
+  { The containers example's own box, so these numbers are the reported numbers. }
+  Result := TSpyRadioGroup.Create(FForm);
+  Result.Parent := FForm;
+  Result.Font.PixelsPerInch := 96;
+  Result.SetBounds(0, 0, 290, 94);
+  Result.Columns := 2;
+  Result.Items.CommaText := '"Extra small",Small,Medium,Large';
+  Result.ItemIndex := 1;             // "Small": the ONLY item with a tab stop
+  Result.FocusRequests := 0;
+  Result.LastFocusRequest := -99;
+end;
 
 procedure TRadioGroupTest.TestRebuildPreservesSelectionByIdentity;
 begin
@@ -404,6 +467,199 @@ begin
   AssertEquals('and the index took', 1, FGrp.ItemIndex);
   FGrp.ItemIndex := 1;
   AssertEquals('an unchanged write stays silent', 1, FSelCount);
+end;
+
+{ ---- the ring follows the dot -------------------------------------------- }
+
+{ THE REPORTED BUG. "I clicked Small: the dot moved, the ring stayed on Extra small; only a
+  SECOND click moved the ring."
+
+  Mechanism: UpdateTabStops leaves TabStop True on the CHECKED item only, and
+  TTyCustomControl.MouseDown gates focus-on-click on `TabStop and CanFocus and not Focused`.
+  So the one option that could take the caret from a press was the one that already held the
+  selection. The first press checked the item (which then handed IT the tab stop), and only
+  the second press got past the gate. LCL's TRadioGroup is not exposed to it: its children
+  are native TRadioButtons and Windows focuses a clicked control whatever WS_TABSTOP says
+  (its own UpdateTabStops is the same roving rule -- radiogroup.inc:561).
+
+  Asserted on the REQUEST, not on Focused: see TSpyRadioGroup. }
+procedure TRadioGroupTest.TestOneLeftPressAsksForTheCaretOnThePressedItem;
+var
+  g: TSpyRadioGroup;
+begin
+  g := BuildSpy;
+  AssertEquals('precondition: only the checked item is a tab stop', 1, g.ItemIndex);
+  AssertFalse('precondition: the item about to be pressed has no tab stop',
+    g.Buttons[0].TabStop);
+
+  TCtlAccess(g.Buttons[0]).MouseDown(mbLeft, [ssLeft], 5, 5);
+
+  AssertEquals('ONE left press must ask for the caret exactly once -- if this is 0 the '
+    + 'group is back to letting TTyCustomControl''s TabStop gate decide, and the gate '
+    + 'refuses every item except the already-selected one', 1, g.FocusRequests);
+  AssertEquals('...and it must ask for the item that was pressed, not the checked one',
+    0, g.LastFocusRequest);
+
+  { and the same gesture still checks it -- the two halves of one click }
+  g.Buttons[0].Click;
+  AssertEquals('the press+click checks the pressed item', 0, g.ItemIndex);
+end;
+
+{ Pressing the item that already has the caret must not re-ask: FocusItem's own guard
+  (`not Focused`) is what makes one press cost one SetFocus rather than two, once
+  TTyCustomControl.MouseDown's gate runs immediately after this handler returns. Headless
+  the caret is never actually taken, so this asserts the guard that CAN be observed here:
+  the request is still made once per press and never twice for one press. }
+procedure TRadioGroupTest.TestASecondPressOnTheSameItemDoesNotReAskForTheCaret;
+var
+  g: TSpyRadioGroup;
+begin
+  g := BuildSpy;
+  TCtlAccess(g.Buttons[2]).MouseDown(mbLeft, [ssLeft], 5, 5);
+  AssertEquals('first press asks once', 1, g.FocusRequests);
+  AssertEquals('for item 2', 2, g.LastFocusRequest);
+  TCtlAccess(g.Buttons[2]).MouseDown(mbLeft, [ssLeft], 5, 5);
+  AssertEquals('a press is one request, never two', 2, g.FocusRequests);
+end;
+
+{ A right press opens a context menu; it must not move the caret or the selection. }
+procedure TRadioGroupTest.TestARightPressMovesNothing;
+var
+  g: TSpyRadioGroup;
+begin
+  g := BuildSpy;
+  TCtlAccess(g.Buttons[0]).MouseDown(mbRight, [ssRight], 5, 5);
+  AssertEquals('a right press asks for nothing', 0, g.FocusRequests);
+  AssertEquals('and changes no selection', 1, g.ItemIndex);
+end;
+
+{ Keyboard parity. MoveSelection used to call SetFocus inline; it now goes through the same
+  FocusItem seam the mouse does, so "the ring goes where the dot went" has ONE
+  implementation and the two routes cannot drift apart. }
+procedure TRadioGroupTest.TestArrowKeysAskForTheCaretThroughTheSameSeam;
+var
+  g: TSpyRadioGroup;
+  k: Word;
+begin
+  g := BuildSpy;                 // 4 items, 2 columns, row-major: 0 1 / 2 3 ; checked = 1
+  k := VK_DOWN;
+  TCtlAccess(g.Buttons[1]).KeyDown(k, []);
+  AssertEquals('VK_DOWN moves one row down (1 -> 3)', 3, g.ItemIndex);
+  AssertEquals('and the caret was asked for, through FocusItem', 1, g.FocusRequests);
+  AssertEquals('on the item the selection landed on', 3, g.LastFocusRequest);
+
+  g.FocusRequests := 0;
+  k := VK_LEFT;
+  TCtlAccess(g.Buttons[3]).KeyDown(k, []);
+  AssertEquals('VK_LEFT moves one column left (3 -> 2)', 2, g.ItemIndex);
+  AssertEquals('caret asked for once more', 1, g.FocusRequests);
+  AssertEquals('on item 2', 2, g.LastFocusRequest);
+end;
+
+{ FocusedIndex answers the question ItemIndex deliberately does not: which option has the
+  RING. On a form that was never shown nothing is focused, so it must say -1 rather than
+  quietly mirroring the selection -- a FocusedIndex that just returned ItemIndex would make
+  the very bug this pass fixes unreportable. }
+procedure TRadioGroupTest.TestFocusedIndexIsMinusOneWhenTheGroupHasNoCaret;
+begin
+  FGrp.Items.CommaText := 'A,B,C';
+  FGrp.ItemIndex := 2;
+  AssertEquals('the selection is item 2', 2, FGrp.ItemIndex);
+  AssertEquals('but nothing holds the caret on an unshown form', -1, FGrp.FocusedIndex);
+end;
+
+{ ---- row pitch ----------------------------------------------------------- }
+
+{ THE SECOND REPORTED BUG: "the focus ring's bottom edge is cut off."
+
+  LayoutButtons used --row-height (22 logical px on the default light theme) as the row
+  PITCH, but a hosted TTyRadioButton's own Constraints.MinHeight is 25 there (caption line
+  + --pad-control, floored at --radio-size) and LCL clamps every SetBounds up to it. So
+  each row was laid 22 apart and drawn 25 tall: consecutive rows overlapped by 3px, and the
+  lower row -- a LATER sibling, therefore higher in the child z-order -- painted over the
+  bottom 3px of the row above, taking the whole bottom edge of the 2px :focus ring with it.
+
+  EDGE probe on purpose. The overlap is at the boundary BETWEEN rows; the last row has
+  nothing below it and looks perfect, so a probe that only checked the last row (or a cell
+  centre) would have been green throughout.
+
+  HONESTY NOTE: this is the ambient net, not the guard. In THIS process the caption font
+  measures 9px instead of 17, so a hosted radio asks for 17 rather than 25 and never
+  exceeds the 22 token at all -- the overlap cannot arise here, and a mutant that deletes
+  the pitch floor walks straight past this test (measured). The rule itself is pinned by
+  TestRowPitchIsNeverShorterThanAHostedRadio and by tests/radiofocusverify. What this test
+  still catches is a pitch that goes below the TOKEN, which no font can hide. }
+procedure TRadioGroupTest.TestRowsNeverOverlapSoTheFocusRingSurvives;
+var
+  i, above: Integer;
+begin
+  FGrp.SetBounds(0, 0, 290, 94);
+  FGrp.Columns := 2;
+  FGrp.Items.CommaText := '"Extra small",Small,Medium,Large';
+  for i := 2 to FGrp.Count - 1 do        // 2 columns -> item i sits under item i-2
+  begin
+    above := FGrp.Buttons[i - 2].Top + FGrp.Buttons[i - 2].Height;
+    AssertTrue(Format('item %d must start at or below item %d''s bottom, but Top=%d and '
+      + 'that bottom is %d (%d px of overlap). An overlapping row is a later sibling, so it '
+      + 'paints OVER the row above and the 2px focus ring at that edge disappears.',
+      [i, i - 2, FGrp.Buttons[i].Top, above, above - FGrp.Buttons[i].Top]),
+      FGrp.Buttons[i].Top >= above);
+  end;
+end;
+
+{ The other half of the same question, and the one the brief asked first: does the LAST row
+  run off the client edge? Measured answer on the reported box: no -- it ends at 78 while
+  AdjustClientRect's bottom is 90. Pinned anyway, because the pitch just grew and this is
+  the constraint that growth could break next. Only asserted while the grid FITS; a grid
+  taller than its box pins to the top by design (see TyRadioGroupCellRect). }
+procedure TRadioGroupTest.TestEveryRowStaysInsideTheGroupClientArea;
+var
+  i: Integer;
+  client: TRect;
+begin
+  FGrp.SetBounds(0, 0, 290, 94);
+  FGrp.Columns := 2;
+  FGrp.Items.CommaText := '"Extra small",Small,Medium,Large';
+  client := FGrp.ClientRect;
+  TCtlAccess(FGrp).AdjustClientRect(client);
+  AssertTrue('precondition: the 2-row grid fits this box',
+    2 * FGrp.Buttons[0].Height <= client.Bottom - client.Top);
+  for i := 0 to FGrp.Count - 1 do
+  begin
+    AssertTrue(Format('item %d top %d must clear the caption band at %d',
+      [i, FGrp.Buttons[i].Top, client.Top]), FGrp.Buttons[i].Top >= client.Top);
+    AssertTrue(Format('item %d bottom %d must stay above the client bottom %d',
+      [i, FGrp.Buttons[i].Top + FGrp.Buttons[i].Height, client.Bottom]),
+      FGrp.Buttons[i].Top + FGrp.Buttons[i].Height <= client.Bottom);
+  end;
+end;
+
+{ THE guard for the pitch rule, and the reason it is stated on the pure function rather than
+  on a live group's bounds.
+
+  This test process is a console app: LCL measures the caption font at 9px where a GUI
+  process measures 17, so a hosted radio's own Constraints.MinHeight comes out at 17 here
+  and 25 on a real machine. --row-height is 22. So on a real machine the item's minimum
+  EXCEEDS the token (25 > 22, the reported 3px overlap) and in this process it does not
+  (17 < 22, no overlap possible). Measured, not reasoned: the first version of this guard
+  asserted on the live bounds, ran green, and a mutant that deleted the entire floor
+  SURVIVED it. Ambient numbers cannot hold this rule; its two inputs can.
+
+  tests/radiofocusverify holds the other half on a real window with real handles. }
+procedure TRadioGroupTest.TestRowPitchIsNeverShorterThanAHostedRadio;
+begin
+  { the reported case, exactly: theme says 22, the radio needs 25 }
+  AssertEquals('a hosted item taller than the token decides the pitch (the reported case)',
+    25, TyGroupRowPitch(22, 25));
+  { and the theme still decides whenever it asks for more }
+  AssertEquals('a token taller than the item decides the pitch',
+    32, TyGroupRowPitch(32, 25));
+  AssertEquals('equal inputs are not a special case', 24, TyGroupRowPitch(24, 24));
+  { HiDPI: both arguments are device px, so 150% is the same comparison at bigger numbers }
+  AssertEquals('the same rule at 150%', 37, TyGroupRowPitch(33, 37));
+  { a degenerate theme must never collapse the grid onto row 0 }
+  AssertEquals('a zero pitch is floored to 1', 1, TyGroupRowPitch(0, 0));
+  AssertEquals('a negative token is floored to 1', 1, TyGroupRowPitch(-5, -5));
 end;
 
 { ---- designer hygiene ---------------------------------------------------- }

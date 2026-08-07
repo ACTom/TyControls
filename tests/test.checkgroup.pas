@@ -5,7 +5,7 @@ uses
   Classes, SysUtils, Types, Forms, Controls, ExtCtrls, LCLType,
   fpcunit, testregistry,
   tyControls.Types, tyControls.Controller, tyControls.Base,
-  tyControls.CheckBox, tyControls.CheckGroup;
+  tyControls.CheckBox, tyControls.GroupBox, tyControls.CheckGroup;
 type
   { Exposes protected seams + a handle on the internal children for assertions. }
   TCheckGroupAccess = class(TTyCheckGroup)
@@ -38,6 +38,8 @@ type
     procedure TestRebuildPreservesCheckedByIdentityOnDelete;
     procedure TestRebuildDoesNotFireOnItemChange;
     procedure TestIsDesignerContainerInherited;
+    procedure TestRowsNeverOverlapSoTheFocusRingSurvives;
+    procedure TestRowPitchIsNeverShorterThanAHostedCheckBox;
   end;
 
   { The pure column-layout function is the headless-tested geometry core. }
@@ -125,6 +127,62 @@ procedure TCheckGroupTest.HItemChange(Sender: TObject; AIndex: Integer);
 begin
   Inc(FItemChangeCount);
   FLastItemChangeIdx := AIndex;
+end;
+
+{ The check group had the radio group's row-pitch defect too, one pixel deep instead of
+  three: LayoutCheckBoxes tiled at a hardcoded 24 while a hosted TTyCheckBox's own
+  Constraints.MinHeight is 25 on the default light theme (caption line + --pad-control,
+  floored at --checkbox-size), and LCL clamps every SetBounds up to that minimum. So rows
+  overlapped by 1px, and the lower row -- a later sibling, higher in the child z-order --
+  shaved the bottom edge off the row above it, which is exactly where the 2px :focus ring
+  is drawn. Measured, not assumed: on a real window item0 came back (16..41) and item2
+  (40..65).
+
+  EDGE probe: the overlap is at the boundary between rows and is invisible on the last one.
+  HONESTY NOTE: this is the ambient net, not the guard -- in this console process the
+  caption font measures short enough that the item minimum never exceeds the token, so the
+  overlap cannot arise here at all. TestRowPitchIsNeverShorterThanAHostedCheckBox states the
+  rule; tests/radiofocusverify checks it on a real window. }
+procedure TCheckGroupTest.TestRowsNeverOverlapSoTheFocusRingSurvives;
+var
+  F: TForm;
+  G: TCheckGroupAccess;
+  i, above: Integer;
+begin
+  F := TForm.CreateNew(nil);
+  try
+    G := TCheckGroupAccess.Create(F);
+    G.Parent := F;
+    G.Font.PixelsPerInch := 96;
+    G.SetBounds(0, 0, 290, 94);
+    G.Columns := 2;
+    G.Items.CommaText := 'Alpha,Beta,Gamma,Delta';
+    for i := 2 to G.Count - 1 do          // 2 columns -> item i sits under item i-2
+    begin
+      above := G.ChildBounds(i - 2).Bottom;
+      AssertTrue(Format('item %d must start at or below item %d''s bottom, but Top=%d and '
+        + 'that bottom is %d (%d px of overlap) -- the lower row paints over the ring at '
+        + 'that edge', [i, i - 2, G.ChildBounds(i).Top, above,
+                        above - G.ChildBounds(i).Top]),
+        G.ChildBounds(i).Top >= above);
+    end;
+  finally
+    F.Free;
+  end;
+end;
+
+{ The rule the check group now shares with the radio group, stated where a headless test can
+  actually hold it -- see TRadioGroupTest.TestRowPitchIsNeverShorterThanAHostedRadio for the
+  measured reason live bounds cannot (this process measures the caption font at 9px, a GUI
+  process at 17, so the item minimum is 17 here and 25 there and the overlap never arises in
+  the runner). The check group's own numbers were a hardcoded pitch of 24 against a hosted
+  checkbox minimum of 25: one pixel, same defect, same lost ring edge. }
+procedure TCheckGroupTest.TestRowPitchIsNeverShorterThanAHostedCheckBox;
+begin
+  AssertEquals('the check group''s own reported case: pitch 24, checkbox needs 25',
+    25, TyGroupRowPitch(24, 25));
+  AssertEquals('a token taller than the item still decides', 32, TyGroupRowPitch(32, 25));
+  AssertEquals('a zero pitch is floored to 1', 1, TyGroupRowPitch(0, 0));
 end;
 
 procedure TCheckGroupTest.TestTypeKeyInheritedGroupBox;

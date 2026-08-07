@@ -49,6 +49,7 @@ uses tyControls.RadioGroup;
 | 方法 | 返回 | 说明 |
 |------|------|------|
 | `Count` | `Integer` | 当前子单选按钮数量（等于 `Items.Count`）。 |
+| `FocusedIndex` | `Integer` | 当前**持有焦点环**的选项索引，分组框整体没有焦点时返回 `-1`。刻意与 `ItemIndex` 分开：后者回答的是"哪一项被**选中**（圆点）"。任何一次完整手势之后两者相同——过去它们会分家（点一下只挪圆点、焦点环留在原处，要点第二下环才跟上），而在此之前公开接口里连"环在哪一项"都说不出来。 |
 | `Buttons[AIndex]` | `TTyRadioButton`（索引属性，只读） | 交出第 `AIndex` 个**托管单选钮本身**——单独禁用某个选项、给某项挂 `Hint` 或 `PopupMenu`、在测试里对某一项断言，都要它。越界抛 `EListError`（消息形如 `TTyRadioGroup Index 7 out of bounds 0 .. 2`）。对应 LCL `TCustomRadioGroup.Buttons[]`（`extctrls.pp:773`，public；`include/radiogroup.inc:534-540` 同样越界抛异常）。以前**任何可见性下都没有这个入口**，只能自己遍历 `Controls[]` 做类型判断。**分组仍然拥有子控件的生命周期与布局**：不要通过这个句柄换父容器或释放它。 |
 
 ---
@@ -182,8 +183,11 @@ end;
 4. **程序化设值同样通知：** `ItemIndex :=` 赋值与用户点击走同一条通知路径（`OnSelectionChanged` + `OnClick`）。以前它是静默的，于是"让详情面板跟着选择走"这类处理器在用户点击时有效、在程序恢复一个存档选择时静默失效。内部的重入守卫只负责把"选中目标 + 取消兄弟"这一串子控件事件收敛成**一次**通知，不负责让程序化赋值变哑。只有 `Items` 重建恢复选中仍保持静默——重建不是一次选择。
 5. **整组只占一个 Tab 位：** 只有当前选中项（未选中时为第 0 项）`TabStop = True`，选择变化与 `Items` 重建后都会重算。以前每个子控件各占一位，于是一个五项的单选组在 Tab 序里就是五站，而真正用来移动选择的方向键反倒无事可做。
 6. **方向键在组内移动选择（3.0 起）：** ←/→/↑/↓ 把选择移到相邻的一项，**按 `ColumnLayout` 换算步长**（行优先里"向右"是 +1，列优先里是 +行数），跳过不可用（`Enabled` / `Visible` 为假）的项而不是停在上面——一个禁用的选项不该变成键盘过不去的墙——到两端就停住，不回绕。落到新项后焦点跟过去（仅当子控件已有真实句柄；否则只改选择，不去动一个还不存在的焦点）。这与第 5 条是一件事的两半：整组一个 Tab 位进来，然后方向键在组内走，这才是平台惯例。方向键触发的选择变化和点击一样会发 `OnSelectionChanged` / `OnClick`。
-7. **布局纯几何：** 位置由纯函数 `TyRadioGroupCellRect` 计算（按 `ColumnLayout` 填充、最后一列吸收余数、垂直居中）；控件在 `SetParent` / 尺寸变化 / `Columns` / `ColumnLayout` 变化 / 重建时调用它重新摆放子控件。若需自定义排布，可直接调用该函数。
-8. **网格填充顺序改了（3.0 起的破坏性变更）：** 本控件原先**硬编码列优先**（先竖着填满第 0 列），且没有任何开关；单元头部注释当年记下了这条分歧，却没有修它。LCL 的 `TCustomRadioGroup` 默认是行优先（`ColumnLayout = clHorizontalThenVertical`，`extctrls.pp:777`），于是同一份 .lfm 在 Lazarus 里和在这里排出来的**选项顺序不一样**——6 项 2 列，那边读作 `1 2 / 3 4 / 5 6`，这边读作 `1 4 / 2 5 / 3 6`，既不报错也没有别的迹象。现在默认与 LCL 一致，旧顺序仍可通过 `ColumnLayout := clVerticalThenHorizontal` 取回。**迁移**：单列分组（也就是默认的 `Columns = 1`）完全不受影响；只有多列分组需要看一眼。
-9. **复用 `TyGroupBox` 主题：** 本控件不引入任何新 typeKey 或新 .tycss 规则；框体走 `TyGroupBox`，子控件走 `TyRadioButton`。
+7. **布局纯几何：** 位置由纯函数 `TyRadioGroupCellRect` 计算（按 `ColumnLayout` 填充、最后一列吸收余数、垂直居中）；控件在 `SetParent` / 尺寸变化 / `Columns` / `ColumnLayout` 变化 / 重建时调用它重新摆放子控件。若需自定义排布，可直接调用该函数。行高（**行距**）由 `TyGroupRowPitch`（`tyControls.GroupBox`）给出，见第 11 条。
+8. **一次点击同时挪圆点和焦点环（3.0 起修复）：** 在此之前，点未选中的那一项只挪圆点，焦点环留在原处，**要再点一下环才跟上**。原因是第 5 条与自绘子控件撞在一起：整组只有已选中项 `TabStop = True`，而 `TTyCustomControl.MouseDown` 用 `TabStop` 来决定这一次点击是否夺取焦点——于是唯一能被点出焦点的，恰好是已经选中的那一项。LCL 的 `TRadioGroup` 不会遇到这个问题：它的子控件是**原生** `TRadioButton`，Windows 无视 `WS_TABSTOP` 一律给被点控件焦点（它自己的 `UpdateTabStops` 同样只给选中项，`radiogroup.inc:561`）。现在分组框自己在 `OnMouseDown` 里把焦点交给被按下的那一项，键盘（方向键）与鼠标共用同一个入口 `FocusItem`，两条路不会再各走各的。用 `FocusedIndex` 可以随时问"环在哪一项"。
+9. **行距不会短于一个托管单选钮（3.0 起修复）：** 布局用的行距取 `--row-height` 与**托管单选钮自身 `Constraints.MinHeight`** 中的较大者（`TyGroupRowPitch`）。两者都由主题推导，这里不引入任何硬编码像素。之前只取前者：默认浅色主题 96ppi 下主题说 22、单选钮自己要 25，而 LCL 会把每一次 `SetBounds` 上钳到 `MinHeight`——于是**相邻两行重叠 3px**；下面那一行是更晚创建的兄弟窗口、z 序更高，就把上一行底部 3px 盖掉，正好吃掉 2px 焦点环的整条下边。最后一行下面没有东西，所以看起来完好——只有**贴着行与行的交界**去量才看得见。同一处缺陷在 `TTyCheckGroup` 里是 1px（它当年写死 `rowH := 24`），已一并修掉。顺带补上了 `--row-height` 漏掉的 ppi 换算，HiDPI 下原本重叠得更狠。
+10. **网格填充顺序改了（3.0 起的破坏性变更）：** 本控件原先**硬编码列优先**（先竖着填满第 0 列），且没有任何开关；单元头部注释当年记下了这条分歧，却没有修它。LCL 的 `TCustomRadioGroup` 默认是行优先（`ColumnLayout = clHorizontalThenVertical`，`extctrls.pp:777`），于是同一份 .lfm 在 Lazarus 里和在这里排出来的**选项顺序不一样**——6 项 2 列，那边读作 `1 2 / 3 4 / 5 6`，这边读作 `1 4 / 2 5 / 3 6`，既不报错也没有别的迹象。现在默认与 LCL 一致，旧顺序仍可通过 `ColumnLayout := clVerticalThenHorizontal` 取回。**迁移**：单列分组（也就是默认的 `Columns = 1`）完全不受影响；只有多列分组需要看一眼。
+11. **复用 `TyGroupBox` 主题：** 本控件不引入任何新 typeKey 或新 .tycss 规则；框体走 `TyGroupBox`，子控件走 `TyRadioButton`。
+12. **`TyGroupRowPitch(AThemeRowH, AItemMinH)`（`tyControls.GroupBox`）：** 纯函数，取两者较大值（并保证 ≥ 1），单位都是**设备像素**。`TTyRadioGroup` 与 `TTyCheckGroup` 共用它。之所以把这条规则抽成纯函数而不是靠实控件断言：控制台测试进程量出的标题字高是 9px，GUI 进程是 17px，于是托管单选钮在测试里只要 17（<22，不重叠）、在真机上要 25（>22，重叠 3px）——**这个缺陷在无头测试进程里根本不会发生**，照实控件写的断言永远是假绿（实测如此，一个删掉整条规则的变异体从它旁边走了过去）。真机那一半由 `tests/radiofocusverify` 守着。
 ```
 - **右到左镜像：** `BiDiMode := bdRightToLeft` 时列序反转（第 0 项落在最右列），每个圆钮各自翻转指示器，**方向键跟着列走**——镜像后按 ← 是走向下一项，因为下一项在视觉上就在左边。上下方向键不变（纵向没有阅读方向）。

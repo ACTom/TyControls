@@ -87,7 +87,8 @@ uses tyControls.CheckGroup;
 - 子复选框在**分组框客户区**内排列——`TTyGroupBox.AdjustClientRect` 已把客户区顶边下移到标题带之下，因此子复选框不会遮盖标题。
 - `Columns` 列**等分客户区宽度**，最后一列吸收整数除法余数（无缝拼贴）。
 - 填充**顺序**由 `ColumnLayout` 决定：默认 `clHorizontalThenVertical` 先横着填满一行再换行；`clVerticalThenHorizontal` 先竖着填满一列再换列。两种顺序的行数都是 `ceil(项数 / 列数)`——它们是同一张网格的两种走法，不是两张网格。
-- 每个复选框行高固定为 24 逻辑像素（按 `Font.PixelsPerInch` 缩放），复选框本体 22 高。
+- 行距（**行高**）取 `--row-height` 与**托管复选框自身 `Constraints.MinHeight`** 中的较大者，都换算到设备像素后比较——见 `TyGroupRowPitch`（`tyControls.GroupBox`），与 `TTyRadioGroup` 共用同一条规则。
+  之前这里写死 `rowH := 24`：既是硬编码视觉值，又比默认浅色主题 96ppi 下托管复选框自己要的 25 少 1px，而 LCL 会把每一次 `SetBounds` 上钳到 `MinHeight`——于是**相邻两行重叠 1px**，下面那一行（更晚创建的兄弟窗口、z 序更高）就把上一行底部刮掉，正好是 2px 焦点环下边所在的位置。与 `TTyRadioGroup` 的 3px 是同一个缺陷，只是浅一些。
 - 布局在 `Items` 变化、`Columns` 变化、控件 `Resize` 与 `SetParent` 时自动重算。
 
 ### 子控件生命周期
@@ -100,10 +101,11 @@ uses tyControls.CheckGroup;
 
 ## 6. 纯布局辅助函数（可单元测试）
 
-单元级导出一个**纯函数**（无控件状态），是列布局的几何内核，被测试直接覆盖：
+单元级导出**纯函数**（无控件状态），是列布局的几何内核，被测试直接覆盖：
 
 | 函数 | 签名 | 说明 |
 |------|------|------|
+| `TyGroupRowPitch`（在 `tyControls.GroupBox`） | `function TyGroupRowPitch(AThemeRowH, AItemMinH: Integer): Integer` | 行距规则：取两者较大值（并保证 ≥ 1），单位都是**设备像素**。`TTyCheckGroup` 与 `TTyRadioGroup` 共用。抽成纯函数是因为这条规则**在无头测试进程里不可断言**：控制台进程量出的标题字高是 9px、GUI 进程是 17px，托管复选框在测试里只要 17（< 24，不重叠）、在真机上要 25（> 24，重叠 1px），照实控件写的断言永远是假绿。真机那一半由 `tests/radiofocusverify` 守着。 |
 | `TyCheckGroupCellRect` | `function TyCheckGroupCellRect(const AClientRect: TRect; ACount, AColumns, AIndex, ARowH: Integer; ALayout: TColumnLayout = clHorizontalThenVertical): TRect` | 第 `AIndex` 项在客户区 `AClientRect` 内的设备像素单元矩形，共 `ACount` 项、`AColumns` 列、行高 `ARowH`，按 `ALayout` 指定的顺序填充。列等分宽度（末列吸收余数）。`AIndex` 越界、`ACount <= 0`、`AColumns <= 0` 或 `ARowH <= 0` 返回空矩形。 |
 
 ```pascal
@@ -172,6 +174,7 @@ Feats.Items.CommaText := '自动保存,拼写检查,深色模式,行号,自动�
 5. **越界访问抛异常（3.0 起的行为变更）：** `Checked[]`、`Buttons[]`、`CheckEnabled[]` 无论读写，下标越界都抛 `EListError` 并写明类名、越界下标与最大合法下标——与 LCL 的 `TCustomCheckGroup` 一致（`include/customcheckgroup.inc:173-177`、`:313-338`）。以前是越界读返回 `False`、越界写静默丢弃，而"不存在的项"和"用户没勾的项"读起来一模一样，填充顺序错了或差一都会被这层静默盖住。用 `Count` / `CheckedCount` 先问范围。
 6. **`CheckEnabled[]` 按标题存活：** 逐项禁用的状态在 `Items` 重建时**按标题**恢复，与 `Checked[]` 同一条身份规则；否则改一次列表就会把置灰全部丢掉。
 7. **`Controller` 传播：** 给本控件设 `Controller` 会同步应用到所有内部子复选框，整组主题保持一致。
+8. **一次点击就会同时勾选并聚焦：** 本控件**不**在子控件之间轮换 `TabStop`——每个子复选框都保持 `TabStop = True`，所以 `TTyCustomControl.MouseDown` 里那道 `TabStop` 焦点闸门总是放行。`TTyRadioGroup` 需要额外修一处"点一下只挪圆点、焦点环不动"，正是因为它按平台惯例只让选中项当 Tab 位（见 [TTyRadioGroup 注意事项 §8](radiogroup.md#8-注意事项)）；这里不存在那个前提，因此也不存在那个缺陷——实测确认过，不是推断。代价是一个 N 项的复选组在 Tab 序里占 N 站，这与 LCL 的 `TCheckGroup` 一致（各项彼此独立，本来就没有"当前项"可言）。
 8. **复用 `TyGroupBox` 主题：** 外框走 `TyGroupBox` 令牌，子复选框走 `TyCheckBox` 令牌；`.tycss` 中不新增 `TyCheckGroup` 规则。请确保主题为 `TyGroupBox` 声明了 `background`（用于遮盖标题处边框线，见 [TTyGroupBox 注意事项](groupbox.md#7-注意事项)）。
 
 ---
