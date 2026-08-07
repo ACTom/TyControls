@@ -115,9 +115,97 @@ msgstr "新建 / 打开 / 保存 是 TTyGlyphButton —— 工具条接受任何
 msgid "Second bar — Flat = False: the bar clears the ghost class, so its tools are framed push buttons. Wrapable = False: they stay on one row, so the last tool runs off the right edge instead of wrapping. ButtonHeight is left unset, so its tool height follows the theme --control-height (classic 24 / modern 38) — switch skins and watch this bar alone change height."
 msgstr "第二条工具条 —— Flat = False:清掉 ghost 类,工具变成带边框的按钮。Wrapable = False:它们只留一行,最后一个工具不折行,直接溢出右边缘。ButtonHeight 未设,工具高度跟随主题 --control-height(经典 24 / 现代 38) —— 换皮肤时只有这条工具条会变高。"
 
-#: tmainform.lblreserved.caption
-msgid "ShowCaptions and Images are published for LCL parity but are not wired: in the reuse-TTyButton model each tool owns its own caption and glyph."
-msgstr "ShowCaptions 与 Images 为对齐 LCL 而 published,但并未接线:复用 TTyButton 的模型里,每个工具自带标题与图标。"
+#: tmainform.lbllendhint.caption
+msgid "ShowCaptions and Images are wired: the bar lends its image collection to any icon-capable tool that has none of its own, and pushes ShowCaptions the same way — a tool the host configured itself is never overridden. This demo's tools use TTyIconFont glyphs instead."
+msgstr "ShowCaptions 与 Images 已接线:工具条把自己的图片集合借给没有集合的可绘图标工具,ShowCaptions 也同样下发 —— 宿主自己配置过的工具永远不被覆盖。本示例的工具用的是 TTyIconFont 字体图标。"
+
+#: tmainform.btntbrun.caption
+msgid "Run"
+msgstr "运行"
+
+#: tmainform.btntbpin.caption
+msgid "Pin"
+msgstr "固定"
+
+#: tmainform.btnviewday.caption
+msgid "Day"
+msgstr "日"
+
+#: tmainform.btnviewweek.caption
+msgid "Week"
+msgstr "周"
+
+#: tmainform.btnviewmonth.caption
+msgid "Month"
+msgstr "月"
+
+#: tmainform.btntbsave.caption
+msgid "Save"
+msgstr "保存"
+
+#: tmainform.btntbexport.caption
+msgid "Export"
+msgstr "导出"
+
+#: tmainform.btntbshare.caption
+msgid "Share"
+msgstr "分享"
+
+#: tmainform.mnusaveas.caption
+msgid "Save as…"
+msgstr "另存为…"
+
+#: tmainform.mnusavecopy.caption
+msgid "Save a copy"
+msgstr "保存副本"
+
+#: tmainform.mnusaveall.caption
+msgid "Save all"
+msgstr "全部保存"
+
+#: tmainform.mnusharelink.caption
+msgid "Copy link"
+msgstr "复制链接"
+
+#: tmainform.mnusharemail.caption
+msgid "Send by mail"
+msgstr "邮件发送"
+
+#: tmainform.btnthcrimson.caption
+msgid "Crimson"
+msgstr "绯红"
+
+#: tmainform.btnthteal.caption
+msgid "Teal"
+msgstr "水鸭青"
+
+#: tmainform.btnthamber.caption
+msgid "Amber"
+msgstr "琥珀"
+
+#: tmainform.btnswcrimson.caption
+msgid "Crimson"
+msgstr "绯红"
+
+#: tmainform.btnswteal.caption
+msgid "Teal"
+msgstr "水鸭青"
+
+#: tmainform.btnswamber.caption
+msgid "Amber"
+msgstr "琥珀"
+
+#: tmainform.lbltoolbtnhint.caption
+msgid "Third bar — real TTyToolButtons, all six styles: Run = tbsButton, Pin = tbsCheck, a tbsSeparator gap, Day / Week / Month = adjacent Grouped checks (one exclusive group), a tbsDivider line, and both drop-down styles. Wrap = True on Month ends the first row there even though Wrapable is True."
+msgstr "第三条 —— 真正的 TTyToolButton,六种样式齐全:运行 = tbsButton,固定 = tbsCheck,一个 tbsSeparator 空位,日 / 周 / 月 = 相邻的 Grouped 开关(互斥一组),一条 tbsDivider 竖线,以及两种下拉样式。「月」上的 Wrap = True 让第一行在此断开 —— 即使 Wrapable 为 True。"
+
+#: tmainform.lbldrophint.caption
+msgid "Save (tbsDropDown) is split: only its arrow zone pops the DropdownMenu, the body is a plain click. Export has no menu, so its arrow fires OnArrowClick instead — an assigned menu suppresses that event. Share (tbsButtonDrop) pops its menu from a click anywhere on the face."
+msgstr "保存(tbsDropDown)是分裂按钮:只有箭头区弹出 DropdownMenu,主区是普通点击。导出没挂菜单,箭头区改为触发 OnArrowClick —— 挂上菜单就会抑制这个事件。分享(tbsButtonDrop)在按钮面任意位置点击都弹出菜单。"
+
+#: tmainform.lblpainthint.caption
+msgid "Fourth and fifth bars — the same three buttons twice: the fourth draws the themed default, the fifth assigns OnPaintButton and that one handler replaces the paint of every button on its bar (LCL's signature and AState integer). Crimson starts Down on both, so compare the checked state."
+msgstr "第四、第五条 —— 同样的三个按钮画两遍:第四条是主题默认绘制,第五条挂了 OnPaintButton,这一个处理器就整体替换该条上每个按钮的绘制(签名与 AState 整数照抄 LCL)。两条上「绯红」都初始按下,可对照选中状态。"
 
 #: tmainform.bar.caption
 msgid "TTyToolBar  · TyControls"
@@ -134,3 +222,15 @@ msgstr "触发了工具：%s"
 #, object-pascal-format
 msgid "%s: Down = %s"
 msgstr "%s：Down = %s"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rsarrowfmt
+#, object-pascal-format
+msgid "Arrow zone clicked: %s"
+msgstr "点击了箭头区:%s"
+
+#: umain.rsmenufmt
+#, object-pascal-format
+msgid "Menu item picked: %s"
+msgstr "选择了菜单项:%s"

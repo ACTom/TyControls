@@ -1,10 +1,10 @@
 object MainForm: TMainForm
   Left = 0
-  Height = 500
+  Height = 920
   Top = 0
   Width = 520
   Caption = 'TTyToolBar example'
-  ClientHeight = 500
+  ClientHeight = 920
   ClientWidth = 520
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
@@ -12,7 +12,7 @@ object MainForm: TMainForm
   TitleBar = Bar
   object Surface: TTyFormSurface
     Left = 0
-    Height = 500
+    Height = 920
     Top = 0
     Width = 520
     Align = alClient
@@ -250,10 +250,208 @@ object MainForm: TMainForm
         OnClick = ToolClicked
       end
     end
+    object ToolButtons: TTyToolBar
+      Left = 0
+      Height = 68
+      Top = 174
+      Width = 520
+      Align = alTop
+      ButtonHeight = 28
+      ButtonSpacing = 4
+      Indent = 6
+      ShowCaptions = True
+      object BtnTbRun: TTyToolButton
+        Left = 6
+        Height = 28
+        Top = 4
+        Width = 52
+        AutoSize = True
+        Caption = 'Run'
+        OnClick = ToolClicked
+      end
+      object BtnTbPin: TTyToolButton
+        Left = 62
+        Height = 28
+        Top = 4
+        Width = 44
+        AutoSize = True
+        Caption = 'Pin'
+        Style = tbsCheck
+        OnClick = ToolButtonChecked
+      end
+      object SepTb1: TTyToolButton
+        Left = 110
+        Height = 28
+        Top = 4
+        Width = 8
+        Style = tbsSeparator
+      end
+      object BtnViewDay: TTyToolButton
+        Left = 122
+        Height = 28
+        Top = 4
+        Width = 48
+        AutoSize = True
+        Caption = 'Day'
+        Down = True
+        Grouped = True
+        Style = tbsCheck
+        OnClick = ToolButtonChecked
+      end
+      object BtnViewWeek: TTyToolButton
+        Left = 174
+        Height = 28
+        Top = 4
+        Width = 56
+        AutoSize = True
+        Caption = 'Week'
+        Grouped = True
+        Style = tbsCheck
+        OnClick = ToolButtonChecked
+      end
+      object BtnViewMonth: TTyToolButton
+        Left = 234
+        Height = 28
+        Top = 4
+        Width = 60
+        AutoSize = True
+        Caption = 'Month'
+        Grouped = True
+        Style = tbsCheck
+        Wrap = True
+        OnClick = ToolButtonChecked
+      end
+      object BtnTbSave: TTyToolButton
+        Left = 6
+        Height = 28
+        Top = 36
+        Width = 92
+        AutoSize = True
+        Caption = 'Save'
+        IconFont = Icons
+        GlyphName = 'save'
+        GlyphSize = 16
+        Style = tbsDropDown
+        DropdownMenu = SaveMenu
+        OnClick = ToolClicked
+      end
+      object BtnTbExport: TTyToolButton
+        Left = 102
+        Height = 28
+        Top = 36
+        Width = 80
+        AutoSize = True
+        Caption = 'Export'
+        Style = tbsDropDown
+        OnClick = ToolClicked
+        OnArrowClick = ToolArrowClicked
+      end
+      object DivTb1: TTyToolButton
+        Left = 186
+        Height = 28
+        Top = 36
+        Width = 5
+        Style = tbsDivider
+      end
+      object BtnTbShare: TTyToolButton
+        Left = 195
+        Height = 28
+        Top = 36
+        Width = 76
+        AutoSize = True
+        Caption = 'Share'
+        Style = tbsButtonDrop
+        DropdownMenu = ShareMenu
+        OnClick = ToolClicked
+      end
+    end
+    object ToolBarThemed: TTyToolBar
+      Left = 0
+      Height = 36
+      Top = 242
+      Width = 520
+      Align = alTop
+      ButtonHeight = 28
+      ButtonSpacing = 4
+      Indent = 6
+      object BtnThCrimson: TTyToolButton
+        Left = 6
+        Height = 28
+        Top = 4
+        Width = 66
+        AutoSize = True
+        Caption = 'Crimson'
+        Down = True
+        Style = tbsCheck
+        OnClick = ToolButtonChecked
+      end
+      object BtnThTeal: TTyToolButton
+        Left = 76
+        Height = 28
+        Top = 4
+        Width = 48
+        AutoSize = True
+        Caption = 'Teal'
+        Style = tbsCheck
+        OnClick = ToolButtonChecked
+      end
+      object BtnThAmber: TTyToolButton
+        Left = 128
+        Height = 28
+        Top = 4
+        Width = 58
+        AutoSize = True
+        Caption = 'Amber'
+        Style = tbsCheck
+        OnClick = ToolButtonChecked
+      end
+    end
+    object ToolBarPainted: TTyToolBar
+      Left = 0
+      Height = 36
+      Top = 278
+      Width = 520
+      Align = alTop
+      ButtonHeight = 28
+      ButtonSpacing = 4
+      Indent = 6
+      OnPaintButton = PaintedBarPaintButton
+      object BtnSwCrimson: TTyToolButton
+        Left = 6
+        Height = 28
+        Top = 4
+        Width = 66
+        AutoSize = True
+        Caption = 'Crimson'
+        Down = True
+        Style = tbsCheck
+        OnClick = ToolButtonChecked
+      end
+      object BtnSwTeal: TTyToolButton
+        Left = 76
+        Height = 28
+        Top = 4
+        Width = 48
+        AutoSize = True
+        Caption = 'Teal'
+        Style = tbsCheck
+        OnClick = ToolButtonChecked
+      end
+      object BtnSwAmber: TTyToolButton
+        Left = 128
+        Height = 28
+        Top = 4
+        Width = 58
+        AutoSize = True
+        Caption = 'Amber'
+        Style = tbsCheck
+        OnClick = ToolButtonChecked
+      end
+    end
     object LblWrapHint: TTyLabel
       Left = 24
-      Height = 36
-      Top = 200
+      Height = 54
+      Top = 336
       Width = 472
       Caption = 'Top bar — Wrapable = True (the default): the 12 tools wrap into 3 rows and the bar grows to 104 px to fit them. Flat = True hands every tool the ghost StyleClass.'
       WordWrap = True
@@ -261,7 +459,7 @@ object MainForm: TMainForm
     object LblDownHint: TTyLabel
       Left = 24
       Height = 36
-      Top = 242
+      Top = 396
       Width = 472
       Caption = 'Down = True — a pressed tool keeps the ghost:selected look. Bold starts pressed; click Bold / Italic / Underline to toggle one.'
       WordWrap = True
@@ -269,31 +467,55 @@ object MainForm: TMainForm
     object LblGlyphHint: TTyLabel
       Left = 24
       Height = 36
-      Top = 284
+      Top = 438
       Width = 472
       Caption = 'New / Open / Save are TTyGlyphButtons — the bar accepts any TTyButton descendant and gives it the same ghost style and row metrics.'
       WordWrap = True
     end
     object LblFramedHint: TTyLabel
       Left = 24
-      Height = 72
-      Top = 326
+      Height = 90
+      Top = 480
       Width = 472
       Caption = 'Second bar — Flat = False: the bar clears the ghost class, so its tools are framed push buttons. Wrapable = False: they stay on one row, so the last tool runs off the right edge instead of wrapping. ButtonHeight is left unset, so its tool height follows the theme --control-height (classic 24 / modern 38) — switch skins and watch this bar alone change height.'
       WordWrap = True
     end
-    object LblReserved: TTyLabel
+    object LblToolBtnHint: TTyLabel
       Left = 24
-      Height = 36
-      Top = 404
+      Height = 72
+      Top = 576
       Width = 472
-      Caption = 'ShowCaptions and Images are published for LCL parity but are not wired: in the reuse-TTyButton model each tool owns its own caption and glyph.'
+      Caption = 'Third bar — real TTyToolButtons, all six styles: Run = tbsButton, Pin = tbsCheck, a tbsSeparator gap, Day / Week / Month = adjacent Grouped checks (one exclusive group), a tbsDivider line, and both drop-down styles. Wrap = True on Month ends the first row there even though Wrapable is True.'
+      WordWrap = True
+    end
+    object LblDropHint: TTyLabel
+      Left = 24
+      Height = 72
+      Top = 654
+      Width = 472
+      Caption = 'Save (tbsDropDown) is split: only its arrow zone pops the DropdownMenu, the body is a plain click. Export has no menu, so its arrow fires OnArrowClick instead — an assigned menu suppresses that event. Share (tbsButtonDrop) pops its menu from a click anywhere on the face.'
+      WordWrap = True
+    end
+    object LblPaintHint: TTyLabel
+      Left = 24
+      Height = 72
+      Top = 732
+      Width = 472
+      Caption = 'Fourth and fifth bars — the same three buttons twice: the fourth draws the themed default, the fifth assigns OnPaintButton and that one handler replaces the paint of every button on its bar (LCL''s signature and AState integer). Crimson starts Down on both, so compare the checked state.'
+      WordWrap = True
+    end
+    object LblLendHint: TTyLabel
+      Left = 24
+      Height = 72
+      Top = 810
+      Width = 472
+      Caption = 'ShowCaptions and Images are wired: the bar lends its image collection to any icon-capable tool that has none of its own, and pushes ShowCaptions the same way — a tool the host configured itself is never overridden. This demo''s tools use TTyIconFont glyphs instead.'
       WordWrap = True
     end
     object LblStatus: TTyLabel
       Left = 24
       Height = 24
-      Top = 450
+      Top = 888
       Width = 472
       Caption = 'Ready: click any toolbar button'
     end
@@ -305,5 +527,29 @@ object MainForm: TMainForm
       'open=1F4C2'
       'save=1F4BE'
     )
+  end
+  object SaveMenu: TTyPopupMenu
+    object MnuSaveAs: TMenuItem
+      Caption = 'Save as…'
+      OnClick = MenuPicked
+    end
+    object MnuSaveCopy: TMenuItem
+      Caption = 'Save a copy'
+      OnClick = MenuPicked
+    end
+    object MnuSaveAll: TMenuItem
+      Caption = 'Save all'
+      OnClick = MenuPicked
+    end
+  end
+  object ShareMenu: TTyPopupMenu
+    object MnuShareLink: TMenuItem
+      Caption = 'Copy link'
+      OnClick = MenuPicked
+    end
+    object MnuShareMail: TMenuItem
+      Caption = 'Send by mail'
+      OnClick = MenuPicked
+    end
   end
 end
