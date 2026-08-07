@@ -292,7 +292,7 @@ Antek(主要测试者)两页反馈逐条对账:
 |---|---|---|
 | #4/#5 | demo 右/下不能拉伸、dialogs 客户区花 | **已修**(TTyFormSurface,作者已回) |
 | #7a | Aero Snap 拖顶不最大化 | **已修**,Antek #13 亲测确认 |
-| #7b | **最大化窗口不能拖动还原**(Windows 惯例:拖标题栏即还原并继续拖) | **待核/大概率未做** —— Form.pas 注释就是故意挡掉的;→ 新单 |
+| #7b | 最大化窗口不能拖动还原 | **早已修**(`55adc88`,`TyRestoreDragBounds` 按光标比例还原继续拖;Antek 用的旧 commit)。我 triage 时只看论坛引用的旧注释没先 grep 代码——又一次 capability-built-but-not-wired 类错误。待真机复验手势 + 确认双击最大化旧回归仍被钉住 |
 | #8 | **TTySteps 方向键无效**(焦点拿不到);作者当时说"整个焦点系统要系统性修" | → 新单(连带点击取焦点全面复核) |
 | #12/#15 | **TTyScrollBox 四连**:滚动条被子面板盖住 / 滚轮第一格方向反 / 拖滑块闪烁 / 内容跳动;tyscrollcontent 一度不可用 | 拖拽已修过一轮,**其余待复现修复** → 新单 |
 | #14 | **`window-shadow: false` 不生效**(border-radius 局部生效);另问 TTyForm 有没有运行时 StyleOverride | **未修**(作者回"回头看") → 新单 |
