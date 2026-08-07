@@ -216,9 +216,9 @@ LCL 的 `TSpeedButton` 和 `TPaintBox` 都是 `TGraphicControl` —— **没有�
 | ~~`TTyImageCollection`~~ | ~~设计期像素流式化、多分辨率母版~~ | **已做**:published 的 `Images` 集合,每项 `ImageName` + base64 PNG(base64 是唯一真相,解码出的 BGRA 只是缓存)。**不走 `DefineProperties` 伪属性**——那种窗体在 IDE 里打不开(`examples/demo/mainform.pas:182` 记着这件事)。同名多项 = 多分辨率母版,取"最小的够用的" |
 | ~~`TTyValueListEditor`~~ | ~~`KeyOptions`~~ | **已做**(`825138c`):`keyUnique` 按**同级**判重而不是全表——本控件的行是嵌套的,嵌套本身就会造出合法的重名。~~仍缺:`Keys[]` 只读~~ **也已做**(`14d98dc`,LCL 形状:不查重、不看 ReadOnly、越界空操作) |
 | `TTyHeaderControl` | `Sections` 作为对象集合 | (已判定**不做**:见 017d3b9,索引可达全部 facet) |
-| ~~`TTyListBox`~~ | ~~`ScrollWidth` 与横向滚动~~ | **已做**(`3643653`):`ScrollWidth` 是你设的数(LCL 语义),超宽出底部滚动条;顺带开了逐行高度的缝。**横条的实际落点没人验过**——那是 LCL 对齐引擎的事,headless 跑不到,只有 `examples/listbox` 的开关能看 |
+| ~~`TTyListBox`~~ | ~~`ScrollWidth` 与横向滚动~~ | **已做**(`3643653`):`ScrollWidth` 是你设的数(LCL 语义),超宽出底部滚动条;顺带开了逐行高度的缝。~~**横条的实际落点没人验过**——那是 LCL 对齐引擎的事,headless 跑不到,只有 `examples/listbox` 的开关能看~~ **落点真机验过(2026-08-07)**:贴底、全宽、拖得动,截图 `a5db2fbf_listbox_*`(见下方真机目验清单) |
 | ~~`TTyColorBox`~~ | ~~`Style` 作为集合~~ | **审计写错了 —— 早在 `4e3376a` 就是集合**,八个成员与 LCL 一一对应。只有文档里那句"`Style` 被强制为 `csDropDownList`"是错的,已改 |
-| `TTyPanel` | `ChildSizing` 子对象 | (基类已 republish,需确认子对象是否真生效) |
+| ~~`TTyPanel`~~ | ~~`ChildSizing` 子对象~~ | **真机验过,生效(2026-08-07)**:表格布局(`.lfm` 流式的 `Layout`+`ControlsPerLine`)把六个叠在 (8,8) 的按钮铺成 3×2;运行时改 `EnlargeHorizontal:=crsHomogenousChildResize` 当场把 80px 按钮拉到 105 填满行;同探针里一块裸 `TPanel`(同设置同子控件)三个轴逐项同行为。唯一意外:`ShrinkHorizontal:=crsScaleChilds` **不把子控件缩到首选尺寸以下**(窄到 100 的面板里 28px 按钮原样溢出)——`TPanel` 上一模一样(27px 照样溢出),是 LCL 全局语义不是本库的缝。探针与截图:`a5db2fbf_csprobe*`(scratchpad) |
 | `TTySplitter` | `ResizeAnchor` | **判定:不做,原因不是工作量**(`825138c`)。LCL 里给它赋值的意思是"离开 Align 模式、进入**锚定模式**"(`SetResizeAnchor` 在 `csLoading` 外强制 `Align := alNone`),而本控件没有锚定模式。挡路的是**验证**:锚定模式的位移全由 LCL 对齐引擎产生,而 `AutoSizeDelayed` 让没句柄的窗体整棵树不对齐 —— 任何 headless 守卫都是假绿。前置条件=一条真分配句柄的测试路径。规格见 `docs/controls/splitter.md` §8 |
 | `TTyProgressBar` | `TabStop`/`TabOrder`/`OnEnter`/`OnExit` | **判定:不做**(`825138c`)。它是 `TTyGraphicControl`,**没有句柄**;这四个成员声明在 `TWinControl` 上,所以"补上"等于**新声明四个**没人读的成员。守卫钉的是**基类**,将来若改成窗口化控件会当场变红,把决定重新摆到台面上 |
 
@@ -252,16 +252,30 @@ LCL 的 `TSpeedButton` 和 `TPaintBox` 都是 `TGraphicControl` —— **没有�
 > `inputs` 截断 `fc24079`、Panel 垂直轴 `14d98dc`(改型对齐 LCL 的 `TVerticalAlignment`)、
 > 网格 `ReadOnly` 三缺口 `14d98dc`。现在欠的是下面这些:
 
-- **网格 Ctrl+X 手势未接线**(从来就没有过;守卫已就位,接=一行 `Ord('X'): CutToClipboard`,grid.md 已写明)。
+- ~~**网格 Ctrl+X 手势未接线**(从来就没有过;守卫已就位,接=一行 `Ord('X'): CutToClipboard`,grid.md 已写明)。~~
+  **已接(2026-08-07)**:`KeyDown` 里与 C/V 一排(修饰键跟自家 C/V 用 Ctrl,不跟 LCL 的 Shift+X——grids.pas:7815 它家 C/V 用 ssModifier、X 却写成 ssShift)。
+  手势级测试 `TestCtrlXGestureCutsAndReadOnlyDegradesToCopy` 只走 KeyDown 不直调方法;两个变异(删绑定/绑成复制)都当场红。grid.md 剪贴板一节已同步。
 - **`goHeaderPushedLook` 等着 `themes/light.tycss` 的 `TyGridHeaderSection:active` 规则**、
   **`goThumbTracking` 等着滚动条的缝**(`251db2d` 的两处指名)。
 - **工具条逐状态换形图标**:需要 `GlyphButtons.pas` 的受保护 glyph 源解析器缝(`b133548` 指名);
   换**色**已由主题管。另:绘制箭头与命中区差一个右内边距的既有偏差(与 `TTyDropDownButton` 同源,两处必须同改)。
-- **`TTyPanel.ChildSizing`**:基类已 republish,**子对象是否真生效从未验过**(headless 跑不到对齐引擎,要真机探针)。
-- **`examples/panel` 左上面板标题被 Say hello 按钮盖住**(一处 .lfm 布局)。
-- **README 双语的 "3949 个单元测试" 计数已烂**(实际 5903);发版前顺手改。
+- ~~**`TTyPanel.ChildSizing`**:基类已 republish,**子对象是否真生效从未验过**(headless 跑不到对齐引擎,要真机探针)。~~
+  **验过,生效,行已收**(2026-08-07,真机探针;细节见上表 `TTyPanel` 行——含 `ShrinkHorizontal` 不缩到首选以下是 LCL 全局语义的实证)。
+- ~~**`examples/panel` 左上面板标题被 Say hello 按钮盖住**(一处 .lfm 布局)。~~
+  **已修(2026-08-07)**:`OuterPanel` 加 `VerticalAlignment = taAlignTop`(`14d98dc` 刚落的属性,顺带在 example 里露了脸)。
+  选它不选挪按钮:默认标题带**就是**面板垂直中线,190 高的面板里 Top=80 的按钮怎么摆都在带上,而 0..40 顶条按构造无子控件;
+  文字零改动 → 两个 `.po` 的 msgid 天然同步。中英截图:`a5db2fbf_panel_en.png` / `a5db2fbf_panel_zh.png`(scratchpad)。
+- **README 双语的 "3949 个单元测试" 计数已烂**(2026-08-07 实测 5904,且各 agent 还在加);发版前以 `tytests --all` 的输出为准顺手改。
 - **CHANGELOG 未覆盖最近两波**(344c9ae 之后的全部特性:grid Options/对象槽、TTyToolButton、横向滚动、
   MultiLine、dock、FloatSpinEdit、ImageCollection 流式化、csSimple、日历语言、Panel 垂直轴、ReadOnly 收口、aero 修复……)。
 - **真机目验清单**:aero 修复前后对比(agent 已截图,但用户没看过)、csSimple、日历/日期框语言切换、
-  listbox 横向滚动条的真实落点(demo 开关在,没人看过)、日期框**弹出**日历的语言(程序化拉不起来,手动点一次)、
-  `OnPaintButton` 赋值后的即时重绘、`examples/rtl` 的既有清单。
+  ~~listbox 横向滚动条的真实落点(demo 开关在,没人看过)~~、~~日期框**弹出**日历的语言(程序化拉不起来,手动点一次)~~、
+  ~~`OnPaintButton` 赋值后的即时重绘~~、`examples/rtl` 的既有清单。
+  **2026-08-07 划掉的三条全部真机验过(agent a5db2fbf,截图在 scratchpad)**:
+  - listbox 横条:开关一按,横条**贴着列表框底边、全宽、厚度合理**(吃掉一行高度),拇指长度 ≈ 388/700 成比例;
+    真鼠标拖拽后拇指右移、行内容左滑。`a5db2fbf_listbox_before.png` / `_hbar_on.png` / `_hbar_scrolled.png`(+ 底条放大 `*_bottomcrop.png`)。
+  - `OnPaintButton`:真点击运行时赋值,点完**零后续输入**,工具条三个按钮自己变成了 handler 的洋红块(`b133548` 那条闭环)。
+    `a5db2fbf_paintbtn_before.png` / `_after.png`。
+  - 日期框弹出日历:真鼠标点 chevron 拉开(弹层是懒建的独立顶层窗,240×220,贴着字段正下方);
+    **OS 区域是 zh-CN** 而 `--lang=en` 下月份/星期是 **August 2026 / Mon..Sun**,`--lang=zh_CN` 下是 **八月 2026 / 周一..周日**——
+    跟应用语言、不跟 OS,`d674fd4` 最后一个缺口闭合。`a5db2fbf_dtp_popup_en.png` / `_dtp_popup_zh.png`(主窗 `_dtp_main_*.png`)。

@@ -2408,7 +2408,7 @@ type
     procedure MoveRow(AFrom, ATo: Integer);
     procedure SwapRows(ARow1, ARow2: Integer);
     procedure MoveColumn(AFrom, ATo: Integer);
-    { 剪切 = 复制 + 清空(只读格不清)。 }
+    { 剪切 = 复制 + 清空(只读格不清)。键盘手势 Ctrl+X(KeyDown 里与 C/V 一排)。 }
     procedure CutToClipboard;
 
     { 把某列宽度自动适配到内容(取表头与**已写入**单元格里最宽的那个)。
@@ -9153,6 +9153,11 @@ begin
     VK_SPACE: if EditorKindFor(FCol, FRow) = gekCheckBox then
               begin ToggleCellChecked(FCol, FRow); Key := 0; end;
     Ord('C'): if ssCtrl in Shift then begin CopySelectionToClipboard; Key := 0; end;
+    { 手势层从前接了 C/V/Z/Y/A,唯独漏了 X —— CutToClipboard 方法早就在
+      (ReadOnly 退化为复制),但键盘上按 Ctrl+X 一直无声。修饰键跟自己库的
+      C/V 同规(Ctrl);LCL 的网格绑的是 Shift+X(grids.pas:7815-7817,
+      它家 C/V 都用 ssModifier,X 却写成 ssShift),不跟。 }
+    Ord('X'): if ssCtrl in Shift then begin CutToClipboard; Key := 0; end;
     Ord('V'): if ssCtrl in Shift then begin PasteFromClipboard; Key := 0; end;
     Ord('Z'): if ssCtrl in Shift then begin Undo; Key := 0; end;
     Ord('Y'): if ssCtrl in Shift then begin Redo; Key := 0; end;

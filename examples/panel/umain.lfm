@@ -49,6 +49,7 @@ object MainForm: TMainForm
       Width = 276
       Caption = 'User info (Caption left-aligned)'
       Alignment = taLeftJustify
+      VerticalAlignment = taAlignTop
       object NameLabel: TTyLabel
         Left = 12
         Height = 24

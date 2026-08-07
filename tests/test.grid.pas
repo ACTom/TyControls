@@ -339,6 +339,7 @@ type
     procedure TestFillCopiesRepeatsAndExtrapolates;
     procedure TestReadOnlyRefusesPaste;
     procedure TestReadOnlyCutCopiesButDoesNotClear;
+    procedure TestCtrlXGestureCutsAndReadOnlyDegradesToCopy;
     procedure TestReadOnlyHidesAndInertsTheFillHandle;
     procedure TestFillSkipsReadOnlyCellsAndColumns;
     procedure TestCheckedWordFollowsACatalogueLoadedAfterUnitInit;
@@ -7611,6 +7612,44 @@ begin
   AssertTrue('复制那一半照跑:剪贴板拿到了选区',
     Pos('keepme', Clipboard.AsText) > 0);
   AssertEquals('退化的剪切不留撤销记录', 0, G.UndoCountForTest);
+end;
+
+{ 键盘手势 Ctrl+X。方法(CutToClipboard)与手势(KeyDown 接 X)是两根线:
+  方法早就对、手势从来没接上,API 测试全绿也没人知道 —— 与 Ctrl+Z/Y 那次
+  同一类漏(TestUndoRedo... 的"只测 API 的话,键没接上也无人知晓")。
+  所以这条**只走 KeyDown**,不直接调方法。 }
+procedure TTyStringGridTest.TestCtrlXGestureCutsAndReadOnlyDegradesToCopy;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.Cells[0, 0] := 'cutme'; G.Cells[1, 0] := 'and-me';
+  G.SelectRange(0, 0, 1, 0);
+
+  { 一、可编辑:敲 Ctrl+X → 剪贴板拿到选区,且格子清空。 }
+  Clipboard.AsText := 'sentinel';
+  AssertTrue('Ctrl+X 被手势层消费(Key 置 0)', G.PressKeyCtrl(Ord('X')));
+  AssertTrue('剪贴板拿到左格', Pos('cutme', Clipboard.AsText) > 0);
+  AssertTrue('剪贴板拿到右格', Pos('and-me', Clipboard.AsText) > 0);
+  AssertEquals('左格清空', '', G.Cells[0, 0]);
+  AssertEquals('右格清空', '', G.Cells[1, 0]);
+
+  { 二、ReadOnly:同一手势退化为复制 —— 剪贴板照拿,表里一格不清。 }
+  G.Cells[0, 0] := 'keepme';
+  G.SelectRange(0, 0, 0, 0);
+  G.ReadOnly := True;
+  Clipboard.AsText := 'sentinel';
+  G.PressKeyCtrl(Ord('X'));
+  AssertTrue('只读:剪贴板照拿选区', Pos('keepme', Clipboard.AsText) > 0);
+  AssertEquals('只读:数据一个没少', 'keepme', G.Cells[0, 0]);
+
+  { 三、光按 X 不带 Ctrl 不能剪 —— 修饰键那半也得是接对的
+    (LCL 自家就把 X 绑成了 Shift+X,grids.pas:7815;这类错真的会发生)。 }
+  G.ReadOnly := False;
+  G.SelectRange(0, 0, 0, 0);
+  Clipboard.AsText := 'sentinel';
+  G.PressKey(Ord('X'), []);
+  AssertEquals('裸 X 不动剪贴板', 'sentinel', Clipboard.AsText);
 end;
 
 { 只读表**没有填充柄**:FillHandleRect 变空,于是既不画也点不中
