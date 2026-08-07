@@ -80,12 +80,21 @@ type
   TBoxAccess = class(TTyScrollBox)
   public
     function ChildArea: TRect;
+    { 主题边框宽度(设备 px)。cef6109 之后视口要让出这一圈:两条停在框**里面**、
+      布局区两边各内缩它、滚动到底时内容末端对齐的也是内缩后的视口下缘。
+      这个探针原来把它当成 0,于是修好之后反而红了 8 条 —— 陈旧的期望值,不是回归。 }
+    function Frame: Integer;
   end;
 
 function TBoxAccess.ChildArea: TRect;
 begin
   Result := GetLogicalClientRect;
   AdjustClientRect(Result);
+end;
+
+function TBoxAccess.Frame: Integer;
+begin
+  Result := FrameInset;
 end;
 
 { 相邻 alTop 兄弟必须首尾相接:返回最坏的一处间隙(0 = 都接上了,负 = 有重叠)。
@@ -164,6 +173,7 @@ var
 procedure Case_StreamedChildrenShowBars;
 var
   V, H: TTyScrollBar;
+  bw: Integer;
 begin
   Say('[1] .lfm 流进来的子控件 —— 溢出了就该有条(不用手动调 UpdateScrollRange)');
   Say(Format('     Box %dx%d,内容包围盒应为 432x322,--scrollbar-size=%d',
@@ -185,15 +195,16 @@ begin
   Check('垂直条可见(内容 322 > 视口 200)', (V <> nil) and V.Visible, VisS(V));
   Check('水平条可见(内容 432 > 视口 300)', (H <> nil) and H.Visible, VisS(H));
 
+  bw := TBoxAccess(SForm.Box).Frame;
   if (V <> nil) and V.Visible then
-    Check('垂直条贴右缘、让开水平条',
-      (V.Left = SForm.Box.Width - Thick) and (V.Top = 0)
-      and (V.Width = Thick) and (V.Height = SForm.Box.Height - Thick),
+    Check('垂直条贴右缘、停在框里面、让开水平条',
+      (V.Left = SForm.Box.Width - Thick - bw) and (V.Top = bw)
+      and (V.Width = Thick) and (V.Height = SForm.Box.Height - Thick - 2 * bw),
       R2S(V.BoundsRect));
   if (H <> nil) and H.Visible then
-    Check('水平条贴下缘、让开垂直条',
-      (H.Left = 0) and (H.Top = SForm.Box.Height - Thick)
-      and (H.Height = Thick) and (H.Width = SForm.Box.Width - Thick),
+    Check('水平条贴下缘、停在框里面、让开垂直条',
+      (H.Left = bw) and (H.Top = SForm.Box.Height - Thick - bw)
+      and (H.Height = Thick) and (H.Width = SForm.Box.Width - Thick - 2 * bw),
       R2S(H.BoundsRect));
 
   Shot(SForm.Box, '1-streamed-box');
@@ -306,7 +317,8 @@ begin
   end;
   V.Position := V.Max;
   Application.ProcessMessages;
-  viewH := CodeBox.Height;                      { 只有垂直条时视口高 = 全高 }
+  { 视口 = 全高减去上下两道主题边框(只有垂直条,横轴不占高)。 }
+  viewH := CodeBox.Height - 2 * TBoxAccess(CodeBox).Frame;
   bottom := CodeChild.Top + CodeChild.Height;   { 客户坐标下的内容末端 }
   Say(Format('     ScrollY=%d  max=%d  child.Top=%d  末端=%d  视口高=%d',
     [CodeBox.ScrollY, V.Max, CodeChild.Top, bottom, viewH]));
@@ -339,6 +351,7 @@ end;
 procedure Case_BarsFollowResize;
 var
   V, H: TTyScrollBar;
+  bw: Integer;
 begin
   Say('[7] 滚动中途改尺寸 —— 两条要跟着新边缘走');
   CodeChild.SetBounds(0, 0, 800, 600);
@@ -353,14 +366,15 @@ begin
   Application.ProcessMessages;
   Say('     vbar: ' + VisS(V));
   Say('     hbar: ' + VisS(H));
+  bw := TBoxAccess(CodeBox).Frame;
   if (V <> nil) and V.Visible then
     Check('垂直条跟到了新的右缘',
-      (V.Left = CodeBox.Width - Thick) and (V.Top = 0)
-      and (V.Height = CodeBox.Height - Thick), R2S(V.BoundsRect));
+      (V.Left = CodeBox.Width - Thick - bw) and (V.Top = bw)
+      and (V.Height = CodeBox.Height - Thick - 2 * bw), R2S(V.BoundsRect));
   if (H <> nil) and H.Visible then
     Check('水平条跟到了新的下缘',
-      (H.Top = CodeBox.Height - Thick) and (H.Left = 0)
-      and (H.Width = CodeBox.Width - Thick), R2S(H.BoundsRect));
+      (H.Top = CodeBox.Height - Thick - bw) and (H.Left = bw)
+      and (H.Width = CodeBox.Width - Thick - 2 * bw), R2S(H.BoundsRect));
   Shot(CodeBox, '7-after-resize');
 end;
 
@@ -406,6 +420,7 @@ procedure Case_ClientRectExcludesBars;
 var
   V, H: TTyScrollBar;
   area: TRect;
+  bw: Integer;
 begin
   Say('[10] 容器契约 —— 子控件布局区的大小与原点');
   { 注意:量的是 AdjustClientRect(LCL 摆放子控件用的那个矩形),不是 ClientRect。
@@ -439,15 +454,18 @@ begin
   if (V <> nil) and V.Visible then V.Position := 60;
   area := TBoxAccess(CodeBox).ChildArea;
   Say(Format('     滚动 %d 后布局区=%s', [CodeBox.ScrollY, R2S(area)]));
-  Check('布局原点跟着滚动偏移走', area.Top = -CodeBox.ScrollY,
-    Format('%d,期望 %d', [area.Top, -CodeBox.ScrollY]));
+  { 未滚动时原点是框**里面**(边框宽),所以滚动之后是 bw - ScrollY。 }
+  bw := TBoxAccess(CodeBox).Frame;
+  Check('布局原点跟着滚动偏移走', area.Top = bw - CodeBox.ScrollY,
+    Format('%d,期望 %d', [area.Top, bw - CodeBox.ScrollY]));
 
   CodeChild.SetBounds(0, 0, 100, 80);      { 两轴都放得下 -> 两条都收起 }
   Application.ProcessMessages;
   area := TBoxAccess(CodeBox).ChildArea;
   Say(Format('     内容缩回后布局区=%s', [R2S(area)]));
-  Check('没有条时布局区就是整框', (area.Right - area.Left = CodeBox.Width)
-    and (area.Bottom - area.Top = CodeBox.Height), R2S(area));
+  Check('没有条时布局区就是整框减去主题边框',
+    (area.Right - area.Left = CodeBox.Width - 2 * bw)
+    and (area.Bottom - area.Top = CodeBox.Height - 2 * bw), R2S(area));
 end;
 
 { [11] 对齐的子控件 —— 容器最基本的用法:往滚动框里丢一排 alTop。
@@ -476,8 +494,11 @@ begin
     没有足够的布局空间就会看到后几行叠在一起。 }
   gap := WorstGap(SForm.AlignBox, detail);
   Check('每一行首尾相接,没有重叠', gap = 0, detail);
-  Check('内容高 = 8 行 x 40', SForm.AlignBox.ContentHeight = 320,
-    Format('实际 %d', [SForm.AlignBox.ContentHeight]));
+  { 首行从框**里面**起排(布局原点内缩了一个边框宽),所以包围盒是 bw + 8x40。 }
+  Check('内容高 = 边框 + 8 行 x 40',
+    SForm.AlignBox.ContentHeight = TBoxAccess(SForm.AlignBox).Frame + 320,
+    Format('实际 %d,期望 %d',
+      [SForm.AlignBox.ContentHeight, TBoxAccess(SForm.AlignBox).Frame + 320]));
 
   if (V <> nil) and V.Visible then
   begin

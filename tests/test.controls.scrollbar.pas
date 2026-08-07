@@ -105,6 +105,36 @@ type
     procedure TestHugeRangeDragToBottomYieldsMaxPosition;
   end;
 
+  { LiveTracking —— goThumbTracking 所需要的那道缝。
+
+    251db2d 把 goThumbTracking 从 TTyGrid.Options 里排除掉,理由写得很清楚:
+    "needs a seam in the scroll bar, which always tracks live"。所以这一组既要钉住
+    关掉之后**真的**推迟提交,也要钉住打开时的行为**一个字节都没变** —— 后者才是
+    这道缝能被加进一个已经发布的控件里的前提。 }
+  TTyScrollBarLiveTrackingTest = class(TTestCase)
+  private
+    FBar: TTyScrollBar;
+    FChanges: Integer;
+    FCodes: string;
+    FLastTrackProposal: Integer;
+    procedure OnBarChange(Sender: TObject);
+    procedure OnBarScroll(Sender: TObject; ScrollCode: TScrollCode;
+      var ScrollPos: Integer);
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestLiveTrackingDefaultsTrueAndIsPublished;
+    procedure TestLiveDragCommitsEveryMove;
+    procedure TestDeferredDragLeavesPositionAlone;
+    procedure TestDeferredDragMovesTheThumbAnyway;
+    procedure TestDeferredDragCommitsOnRelease;
+    procedure TestDeferredDragStillFiresScTrack;
+    procedure TestDeferredDragFiresOneOnChange;
+    procedure TestDeferredModeLeavesDiscreteStepsImmediate;
+    procedure TestTrackPositionEqualsPositionOutsideADrag;
+  end;
+
 implementation
 type
   TScrollAccess = class(TTyScrollBar)
@@ -1168,6 +1198,173 @@ begin
   end;
 end;
 
+{ ── LiveTracking ──────────────────────────────────────────────────────────── }
+
+procedure TTyScrollBarLiveTrackingTest.OnBarChange(Sender: TObject);
+begin
+  Inc(FChanges);
+end;
+
+procedure TTyScrollBarLiveTrackingTest.OnBarScroll(Sender: TObject;
+  ScrollCode: TScrollCode; var ScrollPos: Integer);
+begin
+  FCodes := FCodes + GetEnumName(TypeInfo(TScrollCode), Ord(ScrollCode)) + ';';
+  if ScrollCode = scTrack then FLastTrackProposal := ScrollPos;
+end;
+
+procedure TTyScrollBarLiveTrackingTest.SetUp;
+begin
+  FBar := TTyScrollBar.Create(nil);
+  FBar.Kind := sbVertical;
+  FBar.SetBounds(0, 0, 12, 200);
+  FBar.Min := 0;
+  FBar.Max := 100;
+  FBar.PageSize := 10;
+  FBar.Position := 0;
+  FBar.OnChange := @OnBarChange;
+  FBar.OnScroll := @OnBarScroll;
+  FChanges := 0;
+  FCodes := '';
+  FLastTrackProposal := -1;
+end;
+
+procedure TTyScrollBarLiveTrackingTest.TearDown;
+begin
+  FreeAndNil(FBar);
+end;
+
+procedure TTyScrollBarLiveTrackingTest.TestLiveTrackingDefaultsTrueAndIsPublished;
+var
+  pi: PPropInfo;
+begin
+  { 出厂值必须是"照旧" —— 这道缝是加给已经发布的控件的,默认换行为就是给每一张
+    现有窗体换行为。 }
+  AssertTrue('LiveTracking 出厂为 True', FBar.LiveTracking);
+  pi := GetPropInfo(FBar, 'LiveTracking');
+  AssertTrue('LiveTracking 是 published(设计器/流式化都要够得着)', pi <> nil);
+  { 只写属性会让 IDE 报 Cannot read property,而没有 default 子句的话
+    TWriter 每次都会把它写进 .lfm。两条都要。 }
+  AssertTrue('可读', pi^.GetProc <> nil);
+  AssertTrue('可写', pi^.SetProc <> nil);
+  AssertEquals('default 子句声明为 True', 1, pi^.Default);
+end;
+
+procedure TTyScrollBarLiveTrackingTest.TestLiveDragCommitsEveryMove;
+begin
+  { 打开时的行为必须**逐字不变**:每一步拖动都落到 Position 上。 }
+  FBar.BeginThumbDrag(0);
+  FBar.DragThumbTo(20);
+  AssertTrue('实时模式下第一步就动了 Position', FBar.Position > 0);
+  AssertEquals('拖动中 TrackPosition 就是 Position', FBar.Position, FBar.TrackPosition);
+  AssertTrue('实时模式下每一步都发 OnChange', FChanges >= 1);
+  FBar.EndThumbDrag;
+end;
+
+procedure TTyScrollBarLiveTrackingTest.TestDeferredDragLeavesPositionAlone;
+begin
+  FBar.LiveTracking := False;
+  FBar.BeginThumbDrag(0);
+  FBar.DragThumbTo(20);
+  FBar.DragThumbTo(40);
+  FBar.DragThumbTo(60);
+  AssertEquals('关掉之后拖动过程中 Position 一动不动', 0, FBar.Position);
+  AssertEquals('也一次 OnChange 都没有', 0, FChanges);
+end;
+
+procedure TTyScrollBarLiveTrackingTest.TestDeferredDragMovesTheThumbAnyway;
+var
+  pending: Integer;
+begin
+  { 推迟的是**提交**,不是拇指。拇指不动的拖动就是个死控件。 }
+  FBar.LiveTracking := False;
+  FBar.BeginThumbDrag(0);
+  FBar.DragThumbTo(60);
+  pending := FBar.TrackPosition;
+  AssertTrue(Format('拇指跟着走了(TrackPosition=%d)', [pending]), pending > 0);
+  AssertEquals('而 Position 还留在原处', 0, FBar.Position);
+  FBar.EndThumbDrag;
+  AssertEquals('松手之后落到的正是拖到的那个值', pending, FBar.Position);
+end;
+
+procedure TTyScrollBarLiveTrackingTest.TestDeferredDragCommitsOnRelease;
+var
+  live, deferred: Integer;
+begin
+  { 两种模式**落点必须一样** —— 差别只在中途。 }
+  FBar.BeginThumbDrag(0);
+  FBar.DragThumbTo(20);
+  FBar.DragThumbTo(55);
+  FBar.EndThumbDrag;
+  live := FBar.Position;
+
+  FBar.Position := 0;
+  FBar.LiveTracking := False;
+  FBar.BeginThumbDrag(0);
+  FBar.DragThumbTo(20);
+  FBar.DragThumbTo(55);
+  FBar.EndThumbDrag;
+  deferred := FBar.Position;
+
+  AssertTrue('前置条件:这一串拖动确实滚出去了', live > 0);
+  AssertEquals('推迟提交与实时提交落在同一个位置', live, deferred);
+end;
+
+procedure TTyScrollBarLiveTrackingTest.TestDeferredDragStillFiresScTrack;
+begin
+  { 原生滚动条在关掉实时跟随时**照样**发 SB_THUMBTRACK,宿主自己决定理不理。
+    宿主想在拖动中预览(行号提示之类)就靠这个,不发的话这个模式只剩"卡住"。 }
+  FBar.LiveTracking := False;
+  FBar.BeginThumbDrag(0);
+  FBar.DragThumbTo(60);
+  AssertTrue('拖动中仍然发 scTrack', Pos('scTrack', FCodes) > 0);
+  AssertTrue(Format('scTrack 带的是**建议值**而不是旧值(%d)', [FLastTrackProposal]),
+    FLastTrackProposal > 0);
+  AssertEquals('但 Position 依然没动', 0, FBar.Position);
+  FBar.EndThumbDrag;
+end;
+
+procedure TTyScrollBarLiveTrackingTest.TestDeferredDragFiresOneOnChange;
+begin
+  { 整个手势换来一次 OnChange —— 这正是 goThumbTracking 关掉之后宿主买到的东西。 }
+  FBar.LiveTracking := False;
+  FBar.BeginThumbDrag(0);
+  FBar.DragThumbTo(20);
+  FBar.DragThumbTo(40);
+  FBar.DragThumbTo(60);
+  FBar.DragThumbTo(80);
+  AssertEquals('拖动全程 0 次 OnChange', 0, FChanges);
+  FBar.EndThumbDrag;
+  AssertEquals('松手一次 OnChange', 1, FChanges);
+  AssertTrue('并且发了 scPosition', Pos('scPosition', FCodes) > 0);
+  AssertTrue('也发了 scEndScroll', Pos('scEndScroll', FCodes) > 0);
+end;
+
+procedure TTyScrollBarLiveTrackingTest.TestDeferredModeLeavesDiscreteStepsImmediate;
+begin
+  { 只有拖动这一个连续手势被推迟。方向键/翻页/滚轮是离散的一步,原生也不推迟 ——
+    推迟它们等于把控件按坏了。 }
+  FBar.LiveTracking := False;
+  TScrollAccess(FBar).DoKeyDown(VK_DOWN, []);
+  AssertTrue('方向键仍然立刻改 Position', FBar.Position > 0);
+  AssertTrue('并且立刻发 OnChange', FChanges >= 1);
+
+  FChanges := 0;
+  TScrollAccess(FBar).CallMouseWheel(-120);
+  AssertTrue('滚轮也仍然立刻生效', FChanges >= 1);
+end;
+
+procedure TTyScrollBarLiveTrackingTest.TestTrackPositionEqualsPositionOutsideADrag;
+begin
+  { 手势之外这两个数必须是同一个,否则宿主会读到一个陈旧的"待提交值"。 }
+  FBar.LiveTracking := False;
+  FBar.Position := 37;
+  AssertEquals('没在拖动时两者相等', FBar.Position, FBar.TrackPosition);
+  FBar.BeginThumbDrag(0);
+  FBar.DragThumbTo(70);
+  FBar.EndThumbDrag;
+  AssertEquals('拖完之后两者又相等', FBar.Position, FBar.TrackPosition);
+end;
+
 initialization
   RegisterTest(TTyScrollGeometryTest);
   RegisterTest(TTyScrollBarDragTest);
@@ -1176,4 +1373,5 @@ initialization
   RegisterTest(TTyScrollBarAnimationTest);
   RegisterTest(TTyScrollBarOnScrollTest);
   RegisterTest(TTyScrollBarHugeRangeTest);
+  RegisterTest(TTyScrollBarLiveTrackingTest);
 end.

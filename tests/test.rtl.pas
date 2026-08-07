@@ -6687,14 +6687,25 @@ procedure TRtlScrollBoxTest.ReDockingAfterAScrollKeepsTheBarsOnTheMirroredSide;
 var
   B: TBoxAccess;
 begin
-  { ScrollBy moves EVERY child, the two bars included, so the box re-docks them straight
-    afterwards -- from a second copy of the placement. Both copies have to agree about the
-    side or the bar snaps back to the right on the first drag. }
+  { ScrollBy moves EVERY child, the two bars included, so the box puts them back straight
+    afterwards. There is no longer a SECOND COPY of the placement to disagree with the first:
+    the re-dock restores the rect MeasureAndDock computed (TTyScrollBox.FVBarRect), so the
+    only thing left to assert is that a scroll does not move the bars at all.
+
+    THESE TWO NUMBERS CHANGED, and they changed because they were pinning the defect. The
+    second copy placed the mirrored bar at Left=0 and the horizontal one at Left=VBar.Width;
+    the dock places them at Frame and Frame+VBar.Width -- inside the themed border, which is
+    where a bar belongs and where every UNSCROLLED assertion in this file (see `lead` in
+    TheScrolledOriginStillFollowsTheOffsetWhenMirrored, which is B.Frame + B.VBar.Width)
+    already said they were. So the file disagreed with itself: the bar sat one frame-width
+    inside before a scroll and on the border line after one. That one-pixel jump, on every
+    scroll step, is the "flicker while dragging the thumb" from the forum thread. }
   B := MakeBox(FForm, True, 800, 600);
   B.ScrollTo(60, 60);
-  AssertEquals('the vertical bar is still on the left after a scroll', 0, B.VBar.Left);
+  AssertEquals('the vertical bar is still on the mirrored side, inside the frame, after a scroll',
+    B.Frame, B.VBar.Left);
   AssertEquals('and the horizontal bar still starts after its gutter',
-    B.VBar.Width, B.HBar.Left);
+    B.Frame + B.VBar.Width, B.HBar.Left);
 end;
 
 procedure TRtlScrollBoxTest.TheBoxsOwnHorizontalBarDoesNotMirrorItsOrigin;

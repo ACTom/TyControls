@@ -18,9 +18,12 @@ type
     A scroll offset (FScrollX/FScrollY, both >= 0) tracks how far the content has been
     scrolled, and it is the SINGLE SOURCE OF TRUTH: on a scrollbar change we commit the
     new offset first, then call inherited ScrollBy(-dx,-dy) to move the child controls,
-    then re-dock the two scrollbars back to the right/bottom edge (ScrollBy moved them
-    too). The content RANGE is the bounding box of the NON-scrollbar children in LOGICAL
-    (un-scrolled) coordinates — each child's current position plus the current offset.
+    then put the two scrollbars back on their gutters (ScrollBy moved them too) — back to
+    the rect MeasureAndDock decided on, never to a second copy of that arithmetic; see
+    FVBarRect. The whole move runs inside one DisableAutoSizing/EnableAutoSizing pair so
+    it costs a single layout pass. The content RANGE is the bounding box of the
+    NON-scrollbar children in LOGICAL (un-scrolled) coordinates — each child's current
+    position plus the current offset.
 
     Being a CONTAINER is the other half of the job, and it is all in AdjustClientRect
     (see there): the LCL alignment engine has to know that a visible bar owns a gutter,
@@ -41,6 +44,24 @@ type
     FSyncing: Boolean;           // reentrancy guard while we drive the bars
     FInScrollBy: Boolean;        // guard so re-docking the bars is ignored by range calc
     FInUpdate: Boolean;          // reentrancy guard for UpdateScrollRange (see there)
+    { WHERE THE BARS BELONG — computed once, by MeasureAndDock, and read back by the
+      re-dock in ScrollContentTo.
+
+      There used to be two copies of this arithmetic and they DISAGREED: MeasureAndDock
+      docked the vertical bar at (Width-thick-bw, bw) while ScrollContentTo put it back at
+      (Width-thick, 0). Every single scroll step therefore yanked both bars one frame-width
+      off their gutter and the next measure pass shoved them back — a 1px twitch at drag
+      rate, which is what "flicker while dragging the thumb" looks like, and each of those
+      SetBounds calls costs a full child-realign pass of the whole box. Measured on the
+      forum's own scenario (tests/scrollcluster): 12 thumb-drag steps produced 120
+      ControlsAligned passes, i.e. ten layout passes per mouse move.
+
+      Storing the rect instead of recomputing it means the re-dock cannot drift from the
+      dock: it restores exactly what the dock decided, so once the bars are where they
+      belong the restore is a no-op and LCL's SetBounds early-returns. }
+    FVBarRect: TRect;
+    FHBarRect: TRect;
+    procedure RedockBars;
     procedure EnsureBars;
     procedure VScrollBarChange(Sender: TObject);
     procedure HScrollBarChange(Sender: TObject);
@@ -529,9 +550,10 @@ begin
       before a single word is legible, which is why this one placement is the phase's headline
       even though the arithmetic around it is larger than phase 2's. }
     if lead > 0 then
-      FVScrollBar.SetBounds(bw, bw, thick, viewH)
+      FVBarRect := Bounds(bw, bw, thick, viewH)
     else
-      FVScrollBar.SetBounds(Width - thick - bw, bw, thick, viewH);
+      FVBarRect := Bounds(Width - thick - bw, bw, thick, viewH);
+    FVScrollBar.BoundsRect := FVBarRect;
     vMax := TyScrollMax(FContentH, viewH);
     FSyncing := True;
     try
@@ -557,7 +579,8 @@ begin
       scrolls are laid out left-to-right (see AdjustClientRect), so the content's origin IS
       the left edge, and a bar that put Position=Min on the right would point at the wrong end
       of its own document. The bar mirrors when the thing it scrolls does. }
-    FHScrollBar.SetBounds(bw + lead, Height - thick - bw, viewW, thick);
+    FHBarRect := Bounds(bw + lead, Height - thick - bw, viewW, thick);
+    FHScrollBar.BoundsRect := FHBarRect;
     hMax := TyScrollMax(FContentW, viewW);
     FSyncing := True;
     try
@@ -577,7 +600,13 @@ begin
     Sizing it here rather than by Align keeps it in step with the very numbers the scroll range
     was computed from. }
   if FContent <> nil then
+  begin
     FContent.SetBounds(bw + lead, bw, viewW, viewH);
+    { The extent can change without the offset moving (a child grew, a row was added), and
+      the viewport's layout area is derived from it -- so push here too, not only from
+      ScrollContentTo. }
+    FContent.SetScrollOrigin(Point(FScrollX, FScrollY), FContentW, FContentH);
+  end;
 
   Result := (FContentW <> oldW) or (FContentH <> oldH)
          or (FVScrollBar.Visible <> oldV) or (FHScrollBar.Visible <> oldH2);
@@ -759,39 +788,60 @@ begin
   // eat the scroll. The offset is the single source of truth — ScrollBy just applies it.
   FScrollX := ANewX;
   FScrollY := ANewY;
-  // Move the child controls. ScrollBy moves EVERY child (incl. our two scrollbars),
-  // so guard the range recompute and re-dock the bars right after.
-  FInScrollBy := True;
-  try
-    { Scroll INSIDE the viewport when there is one: moving its children is what the viewport's
-      window then clips. Scrolling the box itself would move the viewport, and the frame with
-      it. }
-    if FContent <> nil then
-      FContent.ScrollBy(-dx, -dy)
-    else
-      { INHERITED: the child-mover, not our own view-scroll override -- which would call
-        straight back into here. }
-      inherited ScrollBy(-dx, -dy);
-  finally
-    FInScrollBy := False;
-  end;
-  { Re-dock the bars to the edges (ScrollBy shifted them off): vbar on the LEADING side, hbar
-    on the bottom starting after it. Bounds/PageSize/Max stay as UpdateScrollRange set them.
+  { Hand the viewport the new origin BEFORE anything moves. Its own layout hooks read it,
+    and the ScrollBy below ends in an EnableAutoSizing that can realign its children on the
+    spot -- with the old origin still in place that realign puts every ALIGNED child back
+    where it was and eats the scroll. Same ordering rule as the offset commit above, one
+    container down. }
+  if FContent <> nil then
+    FContent.SetScrollOrigin(Point(FScrollX, FScrollY), FContentW, FContentH);
 
-    This is MeasureAndDock's placement written a second time, and it already disagreed with it
-    by the frame width before any of this (there: bw and Width-thick-bw; here: 0 and
-    Width-Width_of_bar). That predates the mirror and is left alone -- what the mirror must not
-    do is disagree about the SIDE as well, so both docks take it from the same LeadingInset. }
-  if (FVScrollBar <> nil) and FVScrollBar.Visible then
-    if LeadingInset > 0 then
-      FVScrollBar.SetBounds(0, 0, FVScrollBar.Width, FVScrollBar.Height)
-    else
-      FVScrollBar.SetBounds(Width - FVScrollBar.Width, 0,
-        FVScrollBar.Width, FVScrollBar.Height);
-  if (FHScrollBar <> nil) and FHScrollBar.Visible then
-    FHScrollBar.SetBounds(LeadingInset, Height - FHScrollBar.Height,
-      FHScrollBar.Width, FHScrollBar.Height);
+  { ONE layout pass for the whole move. Without the outer Disable/EnableAutoSizing each of
+    the three steps below (the child move, and the two bar re-docks) ends its own autosize
+    cycle, so a single thumb-drag tick paid for several full realigns of every child -- and
+    each realign re-entered UpdateScrollRange, which re-docked the bars, which asked for
+    another realign. Nesting the lock collapses that to the single pass the move actually
+    needs. }
+  DisableAutoSizing{$IFDEF DebugDisableAutoSizing}('TTyScrollBox.ScrollContentTo'){$ENDIF};
+  try
+    // Move the child controls. ScrollBy moves EVERY child (incl. our two scrollbars),
+    // so guard the range recompute and re-dock the bars right after.
+    FInScrollBy := True;
+    try
+      { Scroll INSIDE the viewport when there is one: moving its children is what the viewport's
+        window then clips. Scrolling the box itself would move the viewport, and the frame with
+        it. }
+      if FContent <> nil then
+        FContent.ScrollBy(-dx, -dy)
+      else
+        { INHERITED: the child-mover, not our own view-scroll override -- which would call
+          straight back into here. }
+        inherited ScrollBy(-dx, -dy);
+      { Put the bars back on their gutters -- ScrollBy shifted them off with everything else.
+        Inside the FInScrollBy guard on purpose: the SetBounds is bookkeeping for a move we
+        are still in the middle of, not a new fact about the content, so it must not kick off
+        a fresh measure. }
+      RedockBars;
+    finally
+      FInScrollBy := False;
+    end;
+  finally
+    EnableAutoSizing{$IFDEF DebugDisableAutoSizing}('TTyScrollBox.ScrollContentTo'){$ENDIF};
+  end;
   Invalidate;
+end;
+
+{ Restore both bars to the rect MeasureAndDock last decided on.
+
+  Deliberately NOT a second copy of that arithmetic: see the FVBarRect declaration for what
+  the second copy cost. When the bars are already there (the viewport case -- FContent.ScrollBy
+  never touches them) every call here is a no-op that LCL's SetBounds drops on the floor. }
+procedure TTyScrollBox.RedockBars;
+begin
+  if (FVScrollBar <> nil) and FVScrollBar.Visible and not IsRectEmpty(FVBarRect) then
+    FVScrollBar.BoundsRect := FVBarRect;
+  if (FHScrollBar <> nil) and FHScrollBar.Visible and not IsRectEmpty(FHBarRect) then
+    FHScrollBar.BoundsRect := FHBarRect;
 end;
 
 procedure TTyScrollBox.VScrollBarChange(Sender: TObject);

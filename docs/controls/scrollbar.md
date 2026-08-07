@@ -30,6 +30,7 @@
 | `LargeChange` | `Integer` | `0` | **（API parity 新增）** 翻页步进量：点轨道、`PageUp`/`PageDown`、`scPageUp`/`scPageDown`。早前 `PageSize` 身兼两职，于是**滑块比例与翻页步长无法分开选**：把 `PageSize` 调小去瘦滑块，翻页也跟着变成一行。LCL 里两者分开（`stdctrls.pp:106`；`PageSize` 只喂 `ScrollInfo.nPage`，`LargeChange` 只驱动翻页）。**默认值有意与 LCL 不同**：LCL 是 `1`，而本库的列表框 / 网格 / 备忘录 / 树 / 滚动容器全都内嵌这个滑块并把 `PageSize` 设为视口大小，跟随 LCL 会让每一次点轨道只走 1 个单位。`0` = “按 `PageSize` 翻页”，即这个属性存在之前的行为。 |
 | `SmallChange` | `Integer` | `1` | 单步步进量：点击端部箭头按钮、按方向键各步进 ±`SmallChange`。最小为 1（赋值 <1 被夹为 1）。 |
 | `AnimationsEnabled` | `Boolean` | `True` | **（API parity 新增 published）** 控制程序化 Position 变化（键盘 / 滚轮 / 轨道点击）时 thumb 的缓动动画（约 120 ms，EaseOutCubic）；实时拖拽与无头环境瞬时跟随。 |
+| `LiveTracking` | `Boolean` | `True` | **（新增）** 拖动 thumb 时 `Position` 是**持续跟随**（`True`，出厂值，也是本控件一贯的行为）还是**只在松手时落一次**（`False`）。这就是 LCL `goThumbTracking` 所需要的那道缝，详见下方 §4「拖动的两种提交方式」。 |
 | `OnChange` | `TNotifyEvent` | `nil` | Position 真实变化时触发（包括 `DragThumbTo` 引起的变化）。 |
 | `OnScroll` | `TScrollEvent` | `nil` | **（API parity 新增）** 键盘 / 轨道点击 / 端部按钮触发的滚动；签名 `(Sender; ScrollCode: TScrollCode; var ScrollPos: Integer)`，可在 handler 中改写 `ScrollPos` 覆盖目标位置。**鼠标滚轮直接改写 Position（触发 `OnChange`），不经 `DoScroll`，因此不触发 `OnScroll`。** |
 | `Align` | `TAlign` | — | 布局对齐方式。 |
@@ -69,13 +70,63 @@ TTyScrollBarKind = (sbHorizontal, sbVertical);
 2. `FreeSpace := TrackLength - ThumbLen`（最小为 1）。
 3. `NewTop := APosAlongTrack - FDragGrabOffset`，夹紧至 `[0, FreeSpace]`。
 4. `NewPos := Min + (NewTop * (Max - Min)) div FreeSpace`。
-5. 通过 `Position := NewPos` 赋值（自动夹紧并在变化时触发 `OnChange`）。
+5. 触发 `OnScroll(scTrack, NewPos)`。
+6. `LiveTracking = True`（默认）时通过 `Position := NewPos` 赋值（自动夹紧并在变化时触发
+   `OnChange`）；`LiveTracking = False` 时**只**把 `NewPos` 记作待提交值并重画 thumb，
+   `Position` 不动。
 
 通常在 `OnMouseMove` 中调用。
 
 #### `procedure EndThumbDrag`
 
-结束拖动，仅将 `FDragging := False`。通常在 `OnMouseUp` 中调用。
+结束拖动。触发 `OnScroll(scPosition)` 与 `OnScroll(scEndScroll)`，然后将 `FDragging := False`。
+`LiveTracking = False` 时**这里才是整个拖动手势唯一一次写 `Position`**（因而也是唯一一次
+`OnChange`）。通常在 `OnMouseUp` 中调用。
+
+#### `property TrackPosition: Integer`（只读）
+
+thumb **当前所在**的位置值。除了 `LiveTracking = False` 的拖动过程中，它恒等于 `Position`；
+在那段过程里 thumb 已经动了而 `Position` 还没动，两者之差就是这个模式本身。宿主想在拖动中做
+预览（比如在 thumb 旁边浮一个行号提示）就读它，其余场合一律读 `Position`。
+
+### 拖动的两种提交方式（`LiveTracking`）
+
+| | `LiveTracking = True`（默认） | `LiveTracking = False` |
+|---|---|---|
+| 拖动中 thumb | 跟随鼠标 | 跟随鼠标（**一样**跟手） |
+| 拖动中 `Position` | 每步都变 | 不变 |
+| 拖动中 `OnChange` | 每步一次 | 不触发 |
+| 拖动中 `OnScroll(scTrack)` | 每步一次 | **每步一次**（建议值） |
+| 松手 | `scPosition` / `scEndScroll` | `scPosition` / `scEndScroll` + 一次 `OnChange` |
+| 最终落点 | 相同 | 相同 |
+
+要点：
+
+- **推迟的是提交，不是 thumb。** thumb 不动的拖动就是个死控件，所以关掉之后 thumb 照样跟手。
+- **`scTrack` 照发。** 原生滚动条在关掉实时跟随时也照样发 `SB_THUMBTRACK`，是宿主自己决定
+  理不理。这条不发的话这个模式就只剩「卡住」，而不是「便宜」——一个每行都要查一次数据库的
+  宿主正是靠 `scTrack` 做预览、靠松手才真的跳过去。
+- **只影响拖动这一个连续手势。** 端部箭头、点轨道翻页、滚轮、键盘都是离散的一步，两种模式下
+  都立刻生效；原生滚动条也不推迟它们。
+- **出厂为 `True`**，即这个属性存在之前的行为——本控件已经发布，默认换行为等于给每一张现有
+  窗体换行为。
+
+```pascal
+// 昂贵的宿主：拖动中只预览，松手才真滚
+Bar.LiveTracking := False;
+Bar.OnScroll := @PreviewRow;      // scTrack 里更新提示，不动数据
+Bar.OnChange := @CommitScroll;    // 松手时才发生，整个手势一次
+```
+
+**`goThumbTracking`（LCL 网格）**：`TTyGrid` 的 `Options` 目前没有这一位（见
+`docs/controls/grid.md` 的对照表），原因就是这道缝当时不存在。缝已经在了，宿主现在可以直接写：
+
+```pascal
+Grid.VScrollBar.LiveTracking := False;   // VScrollBar / HScrollBar 是 TTyCustomGrid 的公开只读属性
+Grid.HScrollBar.LiveTracking := False;
+```
+
+把它做成 `Options` 里的一位需要改 `source/tyControls.Grid.pas`，不在本控件的范围内。
 
 #### `function GetStyleTypeKey: string`（override）
 

@@ -2,7 +2,8 @@ unit test.scrollbox;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Graphics, Forms, Controls, LCLType, fpcunit, testregistry,
+  Classes, SysUtils, Types, Graphics, Forms, Controls, LCLType, LMessages,
+  fpcunit, testregistry,
   tyControls.Types, tyControls.Controller,
   tyControls.Base, tyControls.Panel, tyControls.ScrollBar, tyControls.ScrollBox,
   tyControls.ScrollContent;
@@ -57,6 +58,40 @@ type
     procedure TestChildAreaGrowsToContentOnScrollingAxisOnly;
     procedure TestChildAreaFollowsScrollOffset;
     procedure TestChildAreaIsFullBoxWithoutBars;
+    { 论坛 #12/#15:拖滑块时闪烁。机理是**两处**停靠代码算出不同的矩形 ——
+      MeasureAndDock 停在 (Width-thick-bw, bw),ScrollContentTo 里的补停回
+      (Width-thick, 0)。于是每滚一步两条都被搬开一个边框宽再被搬回去,
+      肉眼就是 1px 抖动,而每一次 SetBounds 都要整框重排一轮子控件。
+      真机计数见 tests/scrollcluster:12 步拖动 → 120 轮对齐(修后 24 轮)。 }
+    procedure TestScrollLeavesTheBarsOnTheirGutter;
+    procedure TestRepeatedScrollsNeverDriftTheBars;
+    { 论坛 #12/#15:滚轮第一格方向反。TestWheelScrollsVertically 测不到它 —— 它直接调
+      DoMouseWheel,而真滚轮进来的是一条 LM_MOUSEWHEEL,先经 TControl.WMMouseWheel
+      才到 DoMouseWheel。而且它只滚一格,"第一格和后面不一样"这种坏法要**连滚**才看得见。 }
+    procedure TestFirstWheelTickGoesTheSameWayAsTheSecond;
+    procedure TestWheelIsSymmetricAndClampsAtTheTop;
+  end;
+
+  { 视口的容器契约。
+
+    一旦给盒子配了 TTyScrollContent,内容就住在**视口**里,于是 TTyScrollBox 为自己
+    的子控件讲的那两条(布局原点跟着偏移走、布局区涨到内容)对它们统统失效 —— 那两个
+    钩子在盒子上,而它们不是盒子的子控件。表现:视口里的对齐子控件**一格都不滚**
+    (真机计数见 tests/scrollcluster A4c:ScrollY 走到 76,首行 Top 158 → 158)。
+
+    这里量的正是那两个钩子,不是"子控件滚没滚" —— 无头环境下 LCL 的对齐引擎根本
+    不跑(AutoSizeDelayedHandle),对子控件位置下断言在坏代码上一样是绿的。 }
+  TTyScrollViewportTest = class(TTestCase)
+  private
+    FForm: TForm;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestViewportLayoutOriginFollowsTheScrollOffset;
+    procedure TestViewportLayoutAreaGrowsToTheContent;
+    procedure TestViewportLayoutAreaStaysTheViewportWhenContentFits;
+    procedure TestViewportOriginIsZeroBeforeAnyScroll;
   end;
 implementation
 
@@ -605,7 +640,229 @@ begin
   AssertTrue('measured from them', SB.ContentHeight >= 600);
 end;
 
+{ ── 停靠只能有一处权威 ─────────────────────────────────────────────────── }
+
+procedure TTyScrollBoxTest.TestScrollLeavesTheBarsOnTheirGutter;
+var
+  SB: TScrollBoxAccess;
+  vBefore, hBefore: TRect;
+begin
+  SB := TScrollBoxAccess.Create(FForm);
+  SB.Parent := FForm;
+  SB.Font.PixelsPerInch := 96;
+  SB.SetBounds(0, 0, 300, 200);
+  MakeChild(SB, 0, 0, 800, 600);          { 两轴都溢出 -> 两条都在 }
+  SB.UpdateScrollRange;
+  AssertTrue('前置条件:两条都出来了', SB.VBar.Visible and SB.HBar.Visible);
+  vBefore := SB.VBar.BoundsRect;
+  hBefore := SB.HBar.BoundsRect;
+
+  { 滚一步。ScrollBy 会把**每一个**子控件搬走(两条也在内),补停那一步必须把它们
+    放回**停靠代码算出来的同一个矩形**,而不是再算一遍。 }
+  SB.CallScrollByDelta(0, 40);
+  AssertEquals('滚动后垂直条还在原来的槽上(左)', vBefore.Left, SB.VBar.BoundsRect.Left);
+  AssertEquals('滚动后垂直条还在原来的槽上(上)', vBefore.Top, SB.VBar.BoundsRect.Top);
+  AssertEquals('滚动后垂直条尺寸没变(高)',
+    vBefore.Bottom - vBefore.Top, SB.VBar.Height);
+  AssertEquals('滚动后水平条还在原来的槽上(左)', hBefore.Left, SB.HBar.BoundsRect.Left);
+  AssertEquals('滚动后水平条还在原来的槽上(上)', hBefore.Top, SB.HBar.BoundsRect.Top);
+end;
+
+procedure TTyScrollBoxTest.TestRepeatedScrollsNeverDriftTheBars;
+var
+  SB: TScrollBoxAccess;
+  vBefore: TRect;
+  i: Integer;
+begin
+  { 一步看不出漂移的话,连滚会。两处停靠不一致时每一步都要来回搬一次,
+    所以这一条既盯住"最终位置对",也盯住"过程中不来回"。 }
+  SB := TScrollBoxAccess.Create(FForm);
+  SB.Parent := FForm;
+  SB.Font.PixelsPerInch := 96;
+  SB.SetBounds(0, 0, 300, 200);
+  MakeChild(SB, 0, 0, 800, 600);
+  SB.UpdateScrollRange;
+  vBefore := SB.VBar.BoundsRect;
+  for i := 1 to 8 do
+  begin
+    SB.CallScrollByDelta(0, 20);
+    AssertEquals(Format('第 %d 次滚动后垂直条没有离开槽', [i]),
+      vBefore.Left, SB.VBar.BoundsRect.Left);
+    AssertEquals(Format('第 %d 次滚动后垂直条顶端没动', [i]),
+      vBefore.Top, SB.VBar.BoundsRect.Top);
+  end;
+  AssertTrue('前置条件:这 8 步真的滚出去了', SB.ScrollY > 0);
+end;
+
+{ ── 滚轮:第一格 ───────────────────────────────────────────────────────── }
+
+{ 真滚轮走的是 WndProc:LCL 把 WM_MOUSEWHEEL 变成一条 LM_MOUSEWHEEL 派发给控件,
+  由 TControl.WMMouseWheel 接住再调 DoMouseWheel。这里照那条路投递,而不是直接调
+  DoMouseWheel —— 报的是"第一格",而第一格与后面的差别只可能出在路上。 }
+procedure WheelTick(ATarget: TControl; ADelta: Integer);
+var
+  msg: TLMMouseEvent;
+begin
+  FillChar(msg{%H-}, SizeOf(msg), 0);
+  msg.Msg := LM_MOUSEWHEEL;
+  msg.WheelDelta := ADelta;
+  ATarget.Dispatch(msg);
+end;
+
+procedure TTyScrollBoxTest.TestFirstWheelTickGoesTheSameWayAsTheSecond;
+var
+  SB: TScrollBoxAccess;
+  y0, y1, y2, y3: Integer;
+begin
+  SB := TScrollBoxAccess.Create(FForm);
+  SB.Parent := FForm;
+  SB.Font.PixelsPerInch := 96;
+  SB.SetBounds(0, 0, 300, 200);
+  MakeChild(SB, 0, 0, 100, 900);
+  SB.UpdateScrollRange;
+  AssertTrue('前置条件:有垂直条', SB.VBar.Visible);
+  SB.ScrollTo(0, 0);
+
+  y0 := SB.ScrollY;
+  WheelTick(SB, -120);                { 第一格:向下 }
+  y1 := SB.ScrollY;
+  WheelTick(SB, -120);                { 第二格:同向 }
+  y2 := SB.ScrollY;
+  WheelTick(SB, -120);
+  y3 := SB.ScrollY;
+
+  AssertTrue(Format('第一格向下滚就要动(%d -> %d)', [y0, y1]), y1 > y0);
+  AssertEquals('第一格与第二格步长相同', y1 - y0, y2 - y1);
+  AssertEquals('第三格也一样', y2 - y1, y3 - y2);
+end;
+
+procedure TTyScrollBoxTest.TestWheelIsSymmetricAndClampsAtTheTop;
+var
+  SB: TScrollBoxAccess;
+  down, back: Integer;
+begin
+  SB := TScrollBoxAccess.Create(FForm);
+  SB.Parent := FForm;
+  SB.Font.PixelsPerInch := 96;
+  SB.SetBounds(0, 0, 300, 200);
+  MakeChild(SB, 0, 0, 100, 900);
+  SB.UpdateScrollRange;
+  SB.ScrollTo(0, 0);
+
+  { 顶端向上滚一格:必须原地不动,不能反向跑出去。 }
+  WheelTick(SB, 120);
+  AssertEquals('顶端向上滚不动', 0, SB.ScrollY);
+
+  WheelTick(SB, -120);
+  down := SB.ScrollY;
+  AssertTrue('向下滚动了', down > 0);
+  WheelTick(SB, 120);
+  back := SB.ScrollY;
+  AssertEquals('一下一上回到原点(两个方向步长相同)', 0, back);
+  AssertTrue('前置条件:确实来回走了一格', down > back);
+end;
+
+{ ── 视口的容器契约 ──────────────────────────────────────────────────────── }
+
+type
+  TViewportAccess = class(TTyScrollContent)
+  public
+    { LCL 摆放子控件时真正用的那个矩形:
+        TWinControl.AlignControl:  ARect := GetLogicalClientRect;
+        TWinControl.AlignControls: AdjustClientRect(ARect); }
+    function ChildArea: TRect;
+  end;
+
+function TViewportAccess.ChildArea: TRect;
+begin
+  Result := GetLogicalClientRect;
+  AdjustClientRect(Result);
+end;
+
+procedure TTyScrollViewportTest.SetUp;
+begin
+  FForm := TForm.CreateNew(nil);
+end;
+
+procedure TTyScrollViewportTest.TearDown;
+begin
+  FreeAndNil(FForm);
+end;
+
+function MakeBoxWithViewport(AForm: TForm; out AVp: TViewportAccess;
+  AChildW, AChildH: Integer): TScrollBoxAccess;
+var
+  kid: TTyPanel;
+begin
+  Result := TScrollBoxAccess.Create(AForm);
+  Result.Parent := AForm;
+  Result.Font.PixelsPerInch := 96;
+  Result.SetBounds(0, 0, 300, 200);
+  AVp := TViewportAccess.Create(Result);
+  AVp.Parent := Result;
+  if (AChildW > 0) and (AChildH > 0) then
+  begin
+    kid := TTyPanel.Create(AVp);
+    kid.Parent := AVp;
+    kid.SetBounds(0, 0, AChildW, AChildH);
+  end;
+  Result.UpdateScrollRange;
+end;
+
+procedure TTyScrollViewportTest.TestViewportOriginIsZeroBeforeAnyScroll;
+var
+  SB: TScrollBoxAccess;
+  vp: TViewportAccess;
+begin
+  SB := MakeBoxWithViewport(FForm, vp, 100, 600);
+  AssertEquals('没滚动时视口的布局原点就是 0', 0, vp.ChildArea.Top);
+  AssertEquals('横向同理', 0, vp.ChildArea.Left);
+  AssertEquals('前置条件:还没滚', 0, SB.ScrollY);
+end;
+
+procedure TTyScrollViewportTest.TestViewportLayoutOriginFollowsTheScrollOffset;
+var
+  SB: TScrollBoxAccess;
+  vp: TViewportAccess;
+begin
+  { 这一条就是"视口里的对齐子控件不滚"的根因。子控件的 Left/Top 被 ScrollBy 搬成了
+    **已滚动**坐标,视口的布局原点却还停在 0 —— 于是每一轮 realign 都把对齐的那些
+    原样拉回去,滑块走了、内容没动。 }
+  SB := MakeBoxWithViewport(FForm, vp, 100, 600);
+  AssertTrue('前置条件:内容溢出,有垂直条', SB.VBar.Visible);
+  SB.CallScrollByDelta(0, 120);
+  AssertEquals('前置条件:盒子的偏移真的走到了 120', 120, SB.ScrollY);
+  AssertEquals('视口的布局原点跟着偏移走', -120, vp.ChildArea.Top);
+end;
+
+procedure TTyScrollViewportTest.TestViewportLayoutAreaGrowsToTheContent;
+var
+  SB: TScrollBoxAccess;
+  vp: TViewportAccess;
+begin
+  { 溢出的对齐行要有地方堆:DoAlign(alTop) 把running offset 钳在这个矩形的 Bottom 上,
+    不涨的话越过折线的每一行都会叠在最后一行可见的那一行上。 }
+  SB := MakeBoxWithViewport(FForm, vp, 100, 600);
+  AssertTrue('前置条件:测到了 600 的内容高', SB.ContentHeight >= 600);
+  AssertEquals('视口的布局区涨到了内容高', 600,
+    vp.ChildArea.Bottom - vp.ChildArea.Top);
+end;
+
+procedure TTyScrollViewportTest.TestViewportLayoutAreaStaysTheViewportWhenContentFits;
+var
+  SB: TScrollBoxAccess;
+  vp: TViewportAccess;
+begin
+  { 无条件涨会把轴**锁死**:对齐子控件的尺寸来自这个矩形、又反过来喂给内容测量,
+    涨一次就再也回不来。放得下的时候必须还是视口本身那么大。 }
+  SB := MakeBoxWithViewport(FForm, vp, 60, 40);
+  AssertFalse('前置条件:放得下,没有条', SB.VBar.Visible);
+  AssertEquals('布局区就是视口高', vp.Height, vp.ChildArea.Bottom - vp.ChildArea.Top);
+  AssertEquals('布局区就是视口宽', vp.Width, vp.ChildArea.Right - vp.ChildArea.Left);
+end;
+
 initialization
   RegisterTest(TTyScrollBoxMathTest);
   RegisterTest(TTyScrollBoxTest);
+  RegisterTest(TTyScrollViewportTest);
 end.

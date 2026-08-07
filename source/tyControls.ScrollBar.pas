@@ -17,6 +17,11 @@ type
     FOnScroll: TScrollEvent;
     FDragGrabOffset: Integer;
     FDragStartTop: Integer;
+    FLiveTracking: Boolean;
+    { The value the thumb is being DRAGGED to while LiveTracking is off. It is the painted
+      position for the duration of the drag and becomes Position on mouse-up; FPosition is
+      left alone until then, which is the whole point of the mode. }
+    FTrackPos: Integer;
     FAnimEnabled: Boolean;
     { 上一次缓动滴答的时刻(0 = 还没开始)。用来算真实经过时间。 }
     FLastTickMs: QWord;
@@ -43,6 +48,7 @@ type
     procedure SetLargeChange(const AValue: Integer);
     { How far one page action moves: LargeChange when set, PageSize otherwise. }
     function EffectiveLargeChange: Integer;
+    function GetTrackPosition: Integer;
     procedure EnsureTimer;
     procedure HandleTimer(Sender: TObject);
   protected
@@ -90,7 +96,32 @@ type
     procedure EndThumbDrag;
     { True while the user is dragging the thumb with the mouse. }
     property Dragging: Boolean read FDragging;
+    { Where the thumb currently SITS, which is Position except in the middle of a
+      LiveTracking=False drag -- there the thumb has moved and Position has not yet. A host
+      that wants to preview the pending value (a row-number tooltip beside the thumb, say)
+      reads this; everything else should keep reading Position. }
+    property TrackPosition: Integer read GetTrackPosition;
   published
+    { LIVE TRACKING -- whether dragging the thumb moves Position continuously (True, the
+      default and what this bar has always done) or only on mouse-up (False).
+
+      This is the seam LCL's goThumbTracking needs. That flag was left out of TTyGrid.Options
+      in 251db2d with the reason "needs a seam in the scroll bar, which always tracks live":
+      publishing it while the bar could not honour it would have been a lying property, which
+      is the exact defect class test.parity's LyingPropertiesStayUnpublished exists to stop.
+      With this property a host CAN honour it -- see docs/controls/scrollbar.md.
+
+      Off, the thumb still follows the mouse (the drag has to feel connected); what is deferred
+      is the COMMIT -- Position, OnChange, and OnScroll(scPosition). OnScroll(scTrack) still
+      fires on every move with the proposed value, exactly as a native bar keeps sending
+      SB_THUMBTRACK; a host that does not want to act on it simply does not. That split is
+      what makes the mode useful at all: an expensive host (a grid re-querying a database per
+      row) previews on scTrack and only really moves once.
+
+      Only the THUMB DRAG is affected. Arrow buttons, track paging, the wheel and the keyboard
+      commit immediately in both modes -- they are discrete steps, not a continuous gesture,
+      and native bars do not defer them either. }
+    property LiveTracking: Boolean read FLiveTracking write FLiveTracking default True;
     // On by default. When enabled and the control has a window handle, a
     // PROGRAMMATIC Position change (keyboard/wheel/track-click) eases the painted
     // thumb to the new value; with no handle (every render test) or while
@@ -266,6 +297,8 @@ begin
   FSmallChange := 1;
   FLargeChange := 0;           // 0 == page by PageSize (see the property comment)
   FMirrorH := False;           // opt-in; see the MirrorHorizontal property comment
+  FLiveTracking := True;       // what this bar has always done; see the property comment
+  FTrackPos := FPosition;
   FAnimEnabled := True;
   // Thumb-glide animator: 0..1 traversal in ~120ms, decelerating. Start settled
   // at the rest endpoint so DisplayPos == FPosition before any change.
@@ -372,6 +405,13 @@ end;
 
 function TTyScrollBar.DisplayPos: Single;
 begin
+  { Mid-drag with LiveTracking off, the thumb is ahead of Position on purpose -- that gap IS
+    the mode. Everything that PAINTS the thumb goes through here, so putting the exception in
+    this one function is what keeps the hit test and the paint agreeing: MouseDown's thumb-rect
+    test uses FPosition, and during such a drag the hit test is irrelevant (we already have the
+    capture), while at rest FTrackPos = FPosition and the two are the same number again. }
+  if FDragging and not FLiveTracking then
+    Exit(FTrackPos);
   Result := TyLerpF(FAnimFrom, FAnimTo, FPosAnim.Eased);
 end;
 
@@ -525,6 +565,17 @@ begin
     FLargeChange := 0
   else
     FLargeChange := AValue;
+end;
+
+{ FTrackPos is only meaningful for the duration of a deferred drag; outside one the pending
+  value IS the committed value, and deriving that here rather than keeping the field in sync
+  from every setter leaves exactly one place that can be wrong. }
+function TTyScrollBar.GetTrackPosition: Integer;
+begin
+  if FDragging and not FLiveTracking then
+    Result := FTrackPos
+  else
+    Result := FPosition;
 end;
 
 function TTyScrollBar.EffectiveLargeChange: Integer;
@@ -691,6 +742,9 @@ begin
   FDragging := True;
   FDragStartTop := ThumbStart;
   FDragGrabOffset := AGrabPosAlongTrack - ThumbStart;
+  // The pending value starts where the committed one is; with LiveTracking off this is
+  // what the thumb is painted from until mouse-up.
+  FTrackPos := FPosition;
   // Sync the displayed thumb to the logical position on grab so DisplayPos ==
   // FPosition at drag start (subsequent drag SetPosition calls snap).
   FAnimFrom := FPosition;
@@ -733,7 +787,25 @@ begin
   if NewPos < FMin then NewPos := FMin;
   if NewPos > FMax then NewPos := FMax;
   DoScroll(scTrack, NewPos);
-  Position := NewPos;
+  if FLiveTracking then
+    Position := NewPos
+  else
+  begin
+    { Deferred commit. The thumb still has to MOVE -- a drag whose thumb sat still would read
+      as a dead control -- so record the pending value and repaint from it (RenderTo paints
+      DisplayPos, which returns FTrackPos for the duration of this drag). Position, OnChange
+      and scPosition all wait for EndThumbDrag.
+
+      Repaint synchronously, for the same reason the live path does: the bar is its own window
+      and WM_PAINT is the lowest-priority message, so on a busy host a queued repaint lands a
+      frame or two after the mouse and the thumb visibly lags the cursor. }
+    if FTrackPos <> NewPos then
+    begin
+      FTrackPos := NewPos;
+      Invalidate;
+      if HandleAllocated then Update;
+    end;
+  end;
 end;
 
 procedure TTyScrollBar.EndThumbDrag;
@@ -742,10 +814,20 @@ var
 begin
   if FDragging then
   begin
-    // Final committed value of the drag: scPosition then scEndScroll.
-    P := FPosition;
+    { Final committed value of the drag: scPosition then scEndScroll.
+
+      With LiveTracking off this is the ONLY place the drag reaches Position, so the proposed
+      value is the pending one, not the (still untouched) current one. Position is written
+      unconditionally in that case -- the `if P <> FPosition` short-circuit below is about a
+      handler having ADJUSTED an already-committed value, and here there is nothing committed
+      yet. FDragging is still True, so the setter snaps rather than gliding, and the content
+      lands exactly where the thumb was let go. }
+    if FLiveTracking then
+      P := FPosition
+    else
+      P := FTrackPos;
     DoScroll(scPosition, P);
-    if P <> FPosition then
+    if (P <> FPosition) or not FLiveTracking then
       Position := P;
     P := FPosition;
     DoScroll(scEndScroll, P);
@@ -753,6 +835,7 @@ begin
       Position := P;
   end;
   FDragging := False;
+  FTrackPos := FPosition;
 end;
 
 function TTyScrollBar.PosAlong(X, Y: Integer): Integer;
