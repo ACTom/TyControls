@@ -110,3 +110,24 @@ msgstr "RadioButton  · TyControls"
 #: tmainform.groupc.caption
 msgid "Size = GroupIndex 0        Delivery = GroupIndex 1"
 msgstr "尺寸 = GroupIndex 0        配送 = GroupIndex 1"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rseventcountfmt
+#, object-pascal-format
+msgid "OnChange x%d, OnClick x%d - one pick fires OnChange twice"
+msgstr "OnChange x%d，OnClick x%d —— 选一次会触发两次 OnChange"
+
+#: umain.rsgroupidxfmt
+#, object-pascal-format
+msgid "GroupIndex 0: %s     GroupIndex 1: %s"
+msgstr "GroupIndex 0：%s     GroupIndex 1：%s"
+
+#: umain.rsnone
+msgid "(none)"
+msgstr "（无）"
+
+#: umain.rsselectedfmt
+#, object-pascal-format
+msgid "Currently selected  →  Fruit: %s     Colour: %s"
+msgstr "当前选中  →  水果：%s     颜色：%s"

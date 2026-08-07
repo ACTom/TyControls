@@ -94,6 +94,19 @@ implementation
 
 {$R *.lfm}
 
+resourcestring
+  { Status-bar texts composed at run time, so they live here rather than in the .lfm. }
+  rsCurInputFmt   = 'Current input:%s';
+  rsReadOnlyClick = 'Read-only box clicked (OnClick still fires)';
+  rsNothingToCopy = 'Nothing to copy - type into the top box first';
+  rsCopiedFmt     = 'Copied to clipboard: %s';
+  rsNothingToCut  = 'Nothing to cut - type into the top box first';
+  rsCutFmt        = 'Cut to clipboard: %s';
+  rsPastedFmt     = 'Pasted, the box now reads: %s';
+  rsPwdCopyBlock  = 'Nothing was copied - PasswordChar blocks Copy and Cut';
+  rsSelPosFmt     = 'SelStart=%d, SelLength=%d';
+  rsSelTextFmt    = 'SelText = "%s"';
+
 procedure TMainForm.FormCreate(Sender: TObject);
 var
   names: TStringArray;
@@ -130,7 +143,7 @@ end;
 procedure TMainForm.EditChanged(Sender: TObject);
 begin
   // read TTyEdit.Text live
-  LblStatus.Caption := 'Current input:' + (Sender as TTyEdit).Text;
+  LblStatus.Caption := Format(rsCurInputFmt, [(Sender as TTyEdit).Text]);
   UpdateUndoRedo;   // every edit changes what the undo stack can offer
 end;
 
@@ -145,7 +158,7 @@ end;
 procedure TMainForm.ReadOnlyClicked(Sender: TObject);
 begin
   // ReadOnly blocks editing, not events -- OnClick still reaches the app.
-  LblStatus.Caption := 'Read-only box clicked (OnClick still fires)';
+  LblStatus.Caption := rsReadOnlyClick;
 end;
 
 procedure TMainForm.BtnUndoClick(Sender: TObject);
@@ -168,11 +181,11 @@ begin
     EdHint.SelectAll;
   if not EdHint.HasSelection then
   begin
-    LblStatus.Caption := 'Nothing to copy - type into the top box first';
+    LblStatus.Caption := rsNothingToCopy;
     Exit;
   end;
   EdHint.CopyToClipboard;
-  LblStatus.Caption := 'Copied to clipboard: ' + EdHint.SelText;
+  LblStatus.Caption := Format(rsCopiedFmt, [EdHint.SelText]);
 end;
 
 procedure TMainForm.BtnCutClick(Sender: TObject);
@@ -183,21 +196,21 @@ begin
     EdHint.SelectAll;
   if not EdHint.HasSelection then
   begin
-    LblStatus.Caption := 'Nothing to cut - type into the top box first';
+    LblStatus.Caption := rsNothingToCut;
     Exit;
   end;
   taken := EdHint.SelText;
   EdHint.CutToClipboard;   // copy + delete land in a SINGLE undo step
   UpdateUndoRedo;
   // set the caption after the cut: it fires OnChange, which rewrites the label
-  LblStatus.Caption := 'Cut to clipboard: ' + taken;
+  LblStatus.Caption := Format(rsCutFmt, [taken]);
 end;
 
 procedure TMainForm.BtnPasteClick(Sender: TObject);
 begin
   EdHint.PasteFromClipboard;   // line breaks stripped; also a single undo step
   UpdateUndoRedo;
-  LblStatus.Caption := 'Pasted, the box now reads: ' + EdHint.Text;
+  LblStatus.Caption := Format(rsPastedFmt, [EdHint.Text]);
 end;
 
 procedure TMainForm.BtnCopyPwdClick(Sender: TObject);
@@ -206,14 +219,13 @@ begin
   // no-ops, so masked text can never reach the clipboard.
   EdPassword.SelectAll;
   EdPassword.CopyToClipboard;
-  LblStatus.Caption := 'Nothing was copied - PasswordChar blocks Copy and Cut';
+  LblStatus.Caption := rsPwdCopyBlock;
 end;
 
 procedure TMainForm.BtnSelectAllClick(Sender: TObject);
 begin
   EdReadOnly.SelectAll;   // the same thing a double-click in the box does
-  LblStatus.Caption := 'SelStart=' + IntToStr(EdReadOnly.SelStart) +
-    ', SelLength=' + IntToStr(EdReadOnly.SelLength);
+  LblStatus.Caption := Format(rsSelPosFmt, [EdReadOnly.SelStart, EdReadOnly.SelLength]);
 end;
 
 procedure TMainForm.BtnSelectRangeClick(Sender: TObject);
@@ -222,7 +234,7 @@ begin
   // it. Indices are codepoints, not bytes.
   EdReadOnly.SelStart := 2;
   EdReadOnly.SelLength := 5;
-  LblStatus.Caption := 'SelText = "' + EdReadOnly.SelText + '"';
+  LblStatus.Caption := Format(rsSelTextFmt, [EdReadOnly.SelText]);
 end;
 
 end.

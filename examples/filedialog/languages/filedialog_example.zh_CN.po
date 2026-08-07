@@ -126,3 +126,67 @@ msgstr "打开(带预览)"
 #: tmainform.dlgsaveprev.title
 msgid "Save (with preview)"
 msgstr "保存(带预览)"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rscancelsuffix
+msgid ":(cancel)"
+msgstr "：（取消）"
+
+#: umain.rscustomprevfmt
+#, object-pascal-format
+msgid "Custom preview (OnPreview)\r\n\r\nFile:%s\r\nExtension:%s\r\n\r\nThis format has no built-in previewer; it is handled by the app's OnPreview.\r\nIn a real scenario you could decode it into a bitmap (ShowImage) or text (ShowText)."
+msgstr "自定义预览（OnPreview）\n\n文件：%s\n扩展名：%s\n\n这种格式没有内置预览器；由应用的 OnPreview 处理。\n真实场景里可以把它解码成位图（ShowImage）或文本（ShowText）。"
+
+#: umain.rsemptyfile
+msgid "Empty file (0 bytes) — nothing to preview"
+msgstr "空文件（0 字节）—— 没有可预览的内容"
+
+#: umain.rsfilterall
+msgid "All files (*.*)|*.*"
+msgstr "所有文件 (*.*)|*.*"
+
+#: umain.rsfiltertext
+msgid "Text (*.txt)|*.txt|All files (*.*)|*.*"
+msgstr "文本 (*.txt)|*.txt|所有文件 (*.*)|*.*"
+
+#: umain.rsmanyfmt
+#, object-pascal-format
+msgid "%s: %d item(s) selected"
+msgstr "%s：选了 %d 项"
+
+#: umain.rsonclose
+msgid "--- OnClose: the Open dialog is gone ---"
+msgstr "--- OnClose：打开对话框关掉了 ---"
+
+#: umain.rsonshow
+msgid "--- OnShow: the Open dialog is up ---"
+msgstr "--- OnShow：打开对话框出现了 ---"
+
+#: umain.rstitleopen
+msgid "Open"
+msgstr "打开"
+
+#: umain.rstitleopenpic
+msgid "Open picture"
+msgstr "打开图片"
+
+#: umain.rstitleopenprev
+msgid "Open preview"
+msgstr "打开（带预览）"
+
+#: umain.rstitlesave
+msgid "Save"
+msgstr "保存"
+
+#: umain.rstitlesavepic
+msgid "Save picture"
+msgstr "保存图片"
+
+#: umain.rstitlesaveprev
+msgid "Save preview"
+msgstr "保存（带预览）"
+
+#: umain.rsvetoed
+msgid "Save: OnCanClose returned False — the dialog stays open"
+msgstr "保存：OnCanClose 返回 False —— 对话框留在原地"

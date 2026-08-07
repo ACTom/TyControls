@@ -66,3 +66,31 @@ msgstr "OnChange 与 OnClick"
 #: tmainform.switchnoanim.caption
 msgid "AnimationsEnabled = False (the knob snaps)"
 msgstr "AnimationsEnabled = False（滑块直接跳）"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rsevtandclick
+msgid " + OnClick"
+msgstr " + OnClick"
+
+#: umain.rsevtchange
+msgid "OnChange"
+msgstr "OnChange"
+
+#: umain.rsgesture
+#, object-pascal-format
+msgid "Last gesture: %s"
+msgstr "最近操作：%s"
+
+#: umain.rsoff
+msgid "Off"
+msgstr "关"
+
+#: umain.rson
+msgid "On"
+msgstr "开"
+
+#: umain.rsstatusfmt
+#, object-pascal-format
+msgid "Dark mode: %s   Receive notifications: %s   Auto-save: %s"
+msgstr "暗色模式：%s   接收通知：%s   自动保存：%s"

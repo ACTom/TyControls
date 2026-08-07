@@ -512,7 +512,7 @@ msgid "Current user: Administrator · role: Super Admin"
 msgstr "当前用户:管理员 · 角色:超级管理员"
 
 #: umain.rstoastthememsg
-msgid "The skin dropdown and the "Dark" toggle are on the right of the title bar; the skin dropdown is focused."
+msgid "The skin dropdown and the \"Dark\" toggle are on the right of the title bar; the skin dropdown is focused."
 msgstr "皮肤下拉和“暗色”开关在标题栏右侧;已聚焦皮肤下拉。"
 
 #: umain.rsdlgsignout
@@ -544,11 +544,11 @@ msgid "Submit this work order?"
 msgstr "提交这条工单?"
 
 #: umain.rsfbconfirmyes
-msgid "Confirmation dialog: chose "Yes"."
+msgid "Confirmation dialog: chose \"Yes\"."
 msgstr "确认对话框:选择了“是”。"
 
 #: umain.rsfbconfirmno
-msgid "Confirmation dialog: chose "No"."
+msgid "Confirmation dialog: chose \"No\"."
 msgstr "确认对话框:选择了“否”。"
 
 #: umain.rsdlginputprompt
@@ -556,7 +556,7 @@ msgid "Enter a group name:"
 msgstr "输入分组名称:"
 
 #: umain.rsfbinputgot
-msgid "Input dialog: got "%s"."
+msgid "Input dialog: got \"%s\"."
 msgstr "输入对话框:得到“%s”。"
 
 #: umain.rsfbinputcancel
@@ -572,7 +572,7 @@ msgid "3 new work orders"
 msgstr "3 条新工单"
 
 #: umain.rstoast3ordersmsg1
-msgid "from the "Channel" group."
+msgid "from the \"Channel\" group."
 msgstr "来自“渠道”分组。"
 
 #: umain.rstoast3ordersmsg2
@@ -592,11 +592,11 @@ msgid "33,908 transactions this month · MoM +12.4%"
 msgstr "本月 33,908 笔成交 · 环比 +12.4%"
 
 #: umain.rsechotab
-msgid "Tab strip: switched to "%s" — TTyTabSet only reports the selected item; the content below is swapped by the host (it hosts no page)."
+msgid "Tab strip: switched to \"%s\" — TTyTabSet only reports the selected item; the content below is swapped by the host (it hosts no page)."
 msgstr "页签条:切到了“%s” —— TTyTabSet 只报告选中项;下面的内容由宿主自己换(它不承载页面)。"
 
 #: umain.rsechoseg
-msgid "Segmented control: switched to "%s" — it switches a value (the view range), not a page: the numbers on the right just changed their basis."
+msgid "Segmented control: switched to \"%s\" — it switches a value (the view range), not a page: the numbers on the right just changed their basis."
 msgstr "分段控制器:切到了“%s” —— 它切的是一个值(视图范围),不是页面:右侧的数字刚换了口径。"
 
 #: umain.rsechostepout
@@ -604,19 +604,19 @@ msgid "Step bar: moved outside the list (-1 = not started / Count = finished, bo
 msgstr "步骤条:移到了列表之外(-1 = 未开始 / Count = 已完成,两个都是真实状态)。"
 
 #: umain.rsechostep
-msgid "Step bar: moved to step %d "%s" — everything before is done, everything after is waiting."
+msgid "Step bar: moved to step %d \"%s\" — everything before is done, everything after is waiting."
 msgstr "步骤条:移到第 %d 步“%s” —— 之前的都已完成,之后的都在等待。"
 
 #: umain.rsechocrumb
-msgid "Breadcrumb: clicked "%s" — the last segment is the current location, not a link; it does not fire this event at all."
+msgid "Breadcrumb: clicked \"%s\" — the last segment is the current location, not a link; it does not fire this event at all."
 msgstr "面包屑:点了“%s” —— 末节是当前所在位置,不是链接;它根本不触发这个事件。"
 
 #: umain.rsechotool
-msgid "Toolbar: clicked "%s"."
+msgid "Toolbar: clicked \"%s\"."
 msgstr "工具条:点了“%s”。"
 
 #: umain.rsechomenu
-msgid "Menu: clicked "%s"."
+msgid "Menu: clicked \"%s\"."
 msgstr "菜单:点了“%s”。"
 
 #: umain.rstaboverview
@@ -660,11 +660,11 @@ msgid "1,330 transactions this month · 230 refunds · fulfilment rate 82.7%"
 msgstr "本月 1,330 笔成交 · 230 笔退款 · 履约率 82.7%"
 
 #: umain.rstabbodyoverview2
-msgid "vs last month +12.4%, mainly from the "Channel" group."
+msgid "vs last month +12.4%, mainly from the \"Channel\" group."
 msgstr "环比 +12.4%,主要来自“渠道”分组。"
 
 #: umain.rstabbodydetail1
-msgid "Work order TY-2041 "Card container TTyCard landed""
+msgid "Work order TY-2041 \"Card container TTyCard landed\""
 msgstr "工单 TY-2041“卡片容器 TTyCard 已落地”"
 
 #: umain.rstabbodydetail2
@@ -866,3 +866,327 @@ msgstr "这是一条角落通知。"
 #: tmainform.toasterr.message
 msgid "Still failed after 3 retries.\nThis one has Duration = 0 and stays until you close it."
 msgstr "重试 3 次后仍然失败。\n这条 Duration = 0,会一直留到你关闭它。"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rscardchart
+msgid "Turnover / refunds, last six months"
+msgstr "近六个月成交 / 退款"
+
+#: umain.rscardcpu
+msgid "CPU usage"
+msgstr "CPU 占用"
+
+#: umain.rscardcrumb
+msgid "Breadcrumb (TTyBreadcrumb)"
+msgstr "面包屑（TTyBreadcrumb）"
+
+#: umain.rscardfloat
+msgid "Popover feedback"
+msgstr "浮层反馈"
+
+#: umain.rscardform
+msgid "New work order"
+msgstr "新建工单"
+
+#: umain.rscardformtodo
+msgid "Advanced entry"
+msgstr "高级录入"
+
+#: umain.rscardhealth
+msgid "Service health"
+msgstr "服务健康度"
+
+#: umain.rscardimage
+msgid "Picture"
+msgstr "图片"
+
+#: umain.rscardinline
+msgid "Inline alert bar (TTyAlert)"
+msgstr "页内警示条（TTyAlert）"
+
+#: umain.rscardmodal
+msgid "Modal feedback (existing)"
+msgstr "模态反馈（已有）"
+
+#: umain.rscardorders
+msgid "Order volume"
+msgstr "订单量"
+
+#: umain.rscardprogress
+msgid "Progress & busy"
+msgstr "进度与忙碌"
+
+#: umain.rscardseg
+msgid "Segmented control (TTySegmented)"
+msgstr "分段控件（TTySegmented）"
+
+#: umain.rscardstatus
+msgid "System status"
+msgstr "系统状态"
+
+#: umain.rscardsteps
+msgid "Step bar (TTySteps)"
+msgstr "步骤条（TTySteps）"
+
+#: umain.rscardtabs
+msgid "Tab strip (TTyTabSet)"
+msgstr "标签条（TTyTabSet）"
+
+#: umain.rscardtags
+msgid "Tags & badges"
+msgstr "标签与徽标"
+
+#: umain.rscardtree
+msgid "Org tree"
+msgstr "组织树"
+
+#: umain.rscardvisits
+msgid "Visits today"
+msgstr "今日访问"
+
+#: umain.rscoltitle
+msgid "Title"
+msgstr "标题"
+
+#: umain.rscrumbinteraction
+msgid "Interaction"
+msgstr "交互"
+
+#: umain.rscrumbnavigation
+msgid "Navigation"
+msgstr "导航"
+
+#: umain.rsdark
+msgid "Dark"
+msgstr "暗色"
+
+#: umain.rsdlginputtitle
+msgid "Input dialog"
+msgstr "输入对话框"
+
+#: umain.rsechofilter
+#, object-pascal-format
+msgid "Filter chip: showing %s work orders (%d rows on this page) — the table itself is a read-only data view."
+msgstr "筛选片：正在显示 %s 工单（本页 %d 行）—— 表格本身是只读数据视图。"
+
+#: umain.rsechopophidden
+msgid "Popover closed (OnHide) — one event for every dismissal: a button inside it, Escape, or Hide."
+msgstr "Popover 已关闭（OnHide）—— 每种关法都发这一个事件：里面的按钮、Esc 或 Hide。"
+
+#: umain.rsechopopplace
+#, object-pascal-format
+msgid "Popover: asked for the %s side. Placement is a PREFERENCE — with no room there the popup flips to the opposite side."
+msgstr "Popover：要求放在 %s 侧。位置只是偏好 —— 那边没空间时弹层会翻到对侧。"
+
+#: umain.rsechopopshown
+msgid "Popover opened (OnShow). CloseOnClickOutside is off, so clicking away leaves it up: its content is a question. Escape still closes it."
+msgstr "Popover 已打开（OnShow）。CloseOnClickOutside 关着，点外面它不走：它的内容是一个问题。Esc 仍然能关。"
+
+#: umain.rsechosteperr
+#, object-pascal-format
+msgid "Step %d stays marked failed (ErrorIndex): the error mark wins wherever it sits — on the step you are on, and on one you already walked past."
+msgstr "第 %d 步保持失败标记（ErrorIndex）：错误标记在哪都赢 —— 在你所在的步骤上，也在你已走过的步骤上。"
+
+#: umain.rsechotoasterr
+msgid "The error toast is pinned to the BOTTOM-RIGHT corner (Position); the other one keeps the top right. A toast picks any of the four, and toasts sharing one stack in it."
+msgstr "错误吐司钉在右下角（Position）；另一个仍在右上。吐司四个角都能选，同角的会叠成一摞。"
+
+#: umain.rsexpdatacaption
+msgid "Collapse panel (≈ Ant Design's Collapse)"
+msgstr "折叠面板（≈ Ant Design 的 Collapse）"
+
+#: umain.rsgrpnotifychan
+msgid "Notification channel"
+msgstr "通知渠道"
+
+#: umain.rsmsgpersonal1
+msgid "Personal settings"
+msgstr "个人设置"
+
+#: umain.rsnavdashboard
+msgid "Dashboard"
+msgstr "仪表盘"
+
+#: umain.rsnavdatadisplay
+msgid "Data display"
+msgstr "数据展示"
+
+#: umain.rsnavfeedback
+msgid "Feedback"
+msgstr "反馈"
+
+#: umain.rsnavformentry
+msgid "Form / entry"
+msgstr "表单 / 录入"
+
+#: umain.rsnavlistgrid
+msgid "List / grid"
+msgstr "列表 / 网格"
+
+#: umain.rsnavnavigation
+msgid "Navigation"
+msgstr "导航"
+
+#: umain.rspopplacebottom
+msgid "Bottom"
+msgstr "下"
+
+#: umain.rspopplaceleft
+msgid "Left"
+msgstr "左"
+
+#: umain.rspopplaceright
+msgid "Right"
+msgstr "右"
+
+#: umain.rspopplacetop
+msgid "Top"
+msgstr "上"
+
+#: umain.rssegday
+msgid "1,330 transactions today · MoM +4.2%"
+msgstr "今日 1,330 笔成交 · 环比 +4.2%"
+
+#: umain.rsstatedraft
+msgid "Draft"
+msgstr "草稿"
+
+#: umain.rsstatepublished
+msgid "Published"
+msgstr "已发布"
+
+#: umain.rstoasterrtitle
+msgid "Settlement service unavailable"
+msgstr "结算服务不可用"
+
+#: umain.rstoastopok
+msgid "Operation succeeded"
+msgstr "操作成功"
+
+#: umain.rstoastpublished
+msgid "Published"
+msgstr "已发布"
+
+#: umain.rstoasttheme
+msgid "Theme settings"
+msgstr "主题设置"
+
+#: umain.rstypefeature
+msgid "Feature request"
+msgstr "功能需求"
+
+#: umain.rsurgenton
+msgid "On"
+msgstr "开"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rsalertclosedfmt
+#, object-pascal-format
+msgid "Alert bar closed: \"%s\""
+msgstr "警示条已关闭：「%s」"
+
+#: umain.rsalertclosednote
+msgid "(without vetoing AllowClose, the control just hides itself)"
+msgstr "（不否决 AllowClose 的话，控件就自己隐藏了）"
+
+#: umain.rsinputseed
+msgid "Ops on-call"
+msgstr "运维值班"
+
+#: umain.rsorderowner1
+msgid "Zhang San"
+msgstr "张三"
+
+#: umain.rsorderowner2
+msgid "Li Si"
+msgstr "李四"
+
+#: umain.rsorderowner3
+msgid "Wang Wu"
+msgstr "王五"
+
+#: umain.rsorderowner4
+msgid "Zhao Liu"
+msgstr "赵六"
+
+#: umain.rsordertitle0
+msgid "Card container TTyCard landed"
+msgstr "卡片容器 TTyCard 落地"
+
+#: umain.rsordertitle1
+msgid "Tag TTyTag landed"
+msgstr "标签 TTyTag 落地"
+
+#: umain.rsordertitle10
+msgid "Transfer box TTyTransfer"
+msgstr "穿梭框 TTyTransfer"
+
+#: umain.rsordertitle11
+msgid "Tree dropdown TTyTreeSelect"
+msgstr "树形下拉 TTyTreeSelect"
+
+#: umain.rsordertitle12
+msgid "Cascading select TTyCascader"
+msgstr "级联选择 TTyCascader"
+
+#: umain.rsordertitle13
+msgid "Popover TTyPopover"
+msgstr "气泡卡片 TTyPopover"
+
+#: umain.rsordertitle2
+msgid "Badge TTyBadge split into its own control"
+msgstr "徽标 TTyBadge 拆分为独立控件"
+
+#: umain.rsordertitle3
+msgid "Inline alert bar TTyAlert"
+msgstr "页内警示条 TTyAlert"
+
+#: umain.rsordertitle4
+msgid "Corner toast TTyNotification"
+msgstr "角落吐司 TTyNotification"
+
+#: umain.rsordertitle5
+msgid "Empty state TTyEmpty"
+msgstr "空状态 TTyEmpty"
+
+#: umain.rsordertitle6
+msgid "Segmented control TTySegmented"
+msgstr "分段控件 TTySegmented"
+
+#: umain.rsordertitle7
+msgid "Pager TTyPagination"
+msgstr "分页器 TTyPagination"
+
+#: umain.rsordertitle8
+msgid "Step bar TTySteps"
+msgstr "步骤条 TTySteps"
+
+#: umain.rsordertitle9
+msgid "Breadcrumb TTyBreadcrumb"
+msgstr "面包屑 TTyBreadcrumb"
+
+#: umain.rspageinfofmt
+#, object-pascal-format
+msgid "Page %d / %d · %d total"
+msgstr "第 %d / %d 页 · 共 %d 条"
+
+#: umain.rssubmitline1fmt
+#, object-pascal-format
+msgid "%s · amount %.2f · %s"
+msgstr "%s · 金额 %.2f · %s"
+
+#: umain.rssubmitline2fmt
+#, object-pascal-format
+msgid "Weight %d · satisfaction %.1f"
+msgstr "权重 %d · 满意度 %.1f"
+
+#: umain.rssubmitline3fmt
+#, object-pascal-format
+msgid "Dept %s · region %s · notify %d people"
+msgstr "部门 %s · 区域 %s · 通知 %d 人"
+
+#: umain.rstoastsubmitted
+msgid "Work order submitted"
+msgstr "工单已提交"

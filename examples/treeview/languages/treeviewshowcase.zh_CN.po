@@ -114,3 +114,276 @@ msgstr "自绘"
 #: tshowcaseform.lbldraw.caption
 msgid "toOwnerDraw + OnDrawNode replaces the cell content: every caption and progress pill here is drawn by the example, over the theme row background, expand button and tree lines.  OnAfterCellPaint runs for EVERY cell (with or without the option) and stamps the NEW badge on each fifth build.  Row heights come from OnMeasureItem (toVariableNodeHeight) - 40 px builds, 22 px stages.  Click a row and OnChange reports it below."
 msgstr "toOwnerDraw + OnDrawNode 接管单元格内容：这里的每一段文字和每一个进度条都是示例自己画的，画在主题提供的行背景、展开按钮和树形连线之上。OnAfterCellPaint 对每一个单元格都会执行（不管有没有开这个选项），并给每第 5 次构建盖上 NEW 徽标。行高来自 OnMeasureItem（toVariableNodeHeight）—— 构建行 40 px，阶段行 22 px。点一行，OnChange 会在下方报出来。"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: showcasemain.rsasc
+msgid "ascending"
+msgstr "升序"
+
+#: showcasemain.rsbuildfmt
+#, object-pascal-format
+msgid "Build #%d"
+msgstr "构建 #%d"
+
+#: showcasemain.rschangefmt
+#, object-pascal-format
+msgid "%s - OnChange"
+msgstr "%s - OnChange"
+
+#: showcasemain.rscheckedfmt
+#, object-pascal-format
+msgid "Checked: %s"
+msgstr "已勾选：%s"
+
+#: showcasemain.rsclearedfmt
+#, object-pascal-format
+msgid "Cleared - OnFreeNode released %d node(s), %d in total. The centred text is the control's own EmptyListMessage."
+msgstr "已清空 —— OnFreeNode 释放了 %d 个节点，累计 %d 个。中间那行字是控件自己的 EmptyListMessage。"
+
+#: showcasemain.rsclickedfmt
+#, object-pascal-format
+msgid "Clicked %s  (OnNodeClick)"
+msgstr "点击了 %s（OnNodeClick）"
+
+#: showcasemain.rscollapsealldone
+msgid "FullCollapse(nil) — back to the three root folders"
+msgstr "FullCollapse(nil) —— 回到三个根文件夹"
+
+#: showcasemain.rscollapsedfmt
+#, object-pascal-format
+msgid "Collapsed Node %d  (OnCollapsed)"
+msgstr "已折叠节点 %d（OnCollapsed）"
+
+#: showcasemain.rscolmodified
+msgid "Modified"
+msgstr "修改时间"
+
+#: showcasemain.rscolmovedfmt
+#, object-pascal-format
+msgid "Column moved %d -> %d  (OnColumnReorder)"
+msgstr "列已移动 %d -> %d（OnColumnReorder）"
+
+#: showcasemain.rscolname
+msgid "Name"
+msgstr "名称"
+
+#: showcasemain.rscolresizedfmt
+#, object-pascal-format
+msgid "Column %d resized to %d px  (OnColumnResized)"
+msgstr "第 %d 列宽度调到 %d px（OnColumnResized）"
+
+#: showcasemain.rscolsize
+msgid "Size"
+msgstr "大小"
+
+#: showcasemain.rscoltype
+msgid "Type"
+msgstr "类型"
+
+#: showcasemain.rsdblclickedfmt
+#, object-pascal-format
+msgid "Double-clicked %s  (OnNodeDblClick)"
+msgstr "双击了 %s（OnNodeDblClick）"
+
+#: showcasemain.rsdeletedfmt
+#, object-pascal-format
+msgid "Deleted - OnFreeNode released %d node(s), %d in total"
+msgstr "已删除 —— OnFreeNode 释放了 %d 个节点，累计 %d 个"
+
+#: showcasemain.rsdesc
+msgid "descending"
+msgstr "降序"
+
+#: showcasemain.rsdraganimals
+msgid "Animals"
+msgstr "动物"
+
+#: showcasemain.rsdragapple
+msgid "Apple"
+msgstr "苹果"
+
+#: showcasemain.rsdragbanana
+msgid "Banana"
+msgstr "香蕉"
+
+#: showcasemain.rsdragblue
+msgid "Blue"
+msgstr "蓝"
+
+#: showcasemain.rsdragcat
+msgid "Cat"
+msgstr "猫"
+
+#: showcasemain.rsdragcherry
+msgid "Cherry"
+msgstr "樱桃"
+
+#: showcasemain.rsdragcolors
+msgid "Colors"
+msgstr "颜色"
+
+#: showcasemain.rsdragdog
+msgid "Dog"
+msgstr "狗"
+
+#: showcasemain.rsdragfruits
+msgid "Fruits"
+msgstr "水果"
+
+#: showcasemain.rsdraggreen
+msgid "Green"
+msgstr "绿"
+
+#: showcasemain.rsdragotter
+msgid "Otter"
+msgstr "水獭"
+
+#: showcasemain.rsdragred
+msgid "Red"
+msgstr "红"
+
+#: showcasemain.rsdragrefused
+msgid "OnNodeDragOver: refused - a leaf cannot take children (drop ABOVE or BELOW instead)"
+msgstr "OnNodeDragOver：拒绝 —— 叶子不能收孩子（改放到它上方或下方）"
+
+#: showcasemain.rsexpandalldone
+msgid "FullExpand(nil) — every branch open"
+msgstr "FullExpand(nil) —— 每个分支都打开了"
+
+#: showcasemain.rsexpandedfmt
+#, object-pascal-format
+msgid "Expanded Node %d  (OnExpanded)"
+msgstr "已展开节点 %d（OnExpanded）"
+
+#: showcasemain.rsfocusedfmt
+#, object-pascal-format
+msgid "Focused: item %d (level %d)"
+msgstr "焦点：第 %d 项（第 %d 层）"
+
+#: showcasemain.rsfolderdocuments
+msgid "Documents"
+msgstr "文档"
+
+#: showcasemain.rsfoldergames
+msgid "Games"
+msgstr "游戏"
+
+#: showcasemain.rsfoldermusic
+msgid "Music"
+msgstr "音乐"
+
+#: showcasemain.rsfolderpictures
+msgid "Pictures"
+msgstr "图片"
+
+#: showcasemain.rsfolderprojects
+msgid "Projects"
+msgstr "项目"
+
+#: showcasemain.rsfoldervideos
+msgid "Videos"
+msgstr "视频"
+
+#: showcasemain.rsgrouplocked
+msgid "Group 0 is locked - OnChecking refused the toggle"
+msgstr "组 0 被锁定 —— OnChecking 拒绝了这次切换"
+
+#: showcasemain.rsindentfmt
+#, object-pascal-format
+msgid "Indent = %d px per level"
+msgstr "Indent = 每层 %d px"
+
+#: showcasemain.rsitemfmt
+#, object-pascal-format
+msgid "Item %d  (level %d)"
+msgstr "第 %d 项（第 %d 层）"
+
+#: showcasemain.rsjumped1000
+msgid "ScrollIntoView: jumped to root node 1000 (Index 999)"
+msgstr "ScrollIntoView：跳到第 1000 个根节点（Index 999）"
+
+#: showcasemain.rskindarchive
+msgid "Archive"
+msgstr "压缩包"
+
+#: showcasemain.rskinddocument
+msgid "Document"
+msgstr "文档"
+
+#: showcasemain.rskindfolder
+msgid "Folder"
+msgstr "文件夹"
+
+#: showcasemain.rskindsheet
+msgid "Spreadsheet"
+msgstr "电子表格"
+
+#: showcasemain.rskindtext
+msgid "Text"
+msgstr "文本"
+
+#: showcasemain.rslookfmt
+#, object-pascal-format
+msgid "ShowButtons = %s, ShowTreeLines = %s, ShowRoot = %s"
+msgstr "ShowButtons = %s, ShowTreeLines = %s, ShowRoot = %s"
+
+#: showcasemain.rsmovedfmt
+#, object-pascal-format
+msgid "Moved %s"
+msgstr "移动了 %s"
+
+#: showcasemain.rsnode1000missing
+msgid "Node 1000 not found"
+msgstr "没找到第 1000 个节点"
+
+#: showcasemain.rsnothingtodelete
+msgid "Nothing to delete - click a row first"
+msgstr "没有可删的 —— 先点中一行"
+
+#: showcasemain.rspillfmt
+#, object-pascal-format
+msgid "%s - %d%% (owner-drawn pill), OnChange"
+msgstr "%s - %d%%（自绘进度胶囊），OnChange"
+
+#: showcasemain.rsready
+msgid "Ready"
+msgstr "就绪"
+
+#: showcasemain.rsrebuilt
+msgid "Rebuilt the three groups"
+msgstr "已重建三个组"
+
+#: showcasemain.rsrenamecancelled
+msgid "Rename cancelled (Esc) — OnEditCancelled, nothing written to the node"
+msgstr "重命名已取消（Esc）—— OnEditCancelled，节点里什么都没写"
+
+#: showcasemain.rsrenamedfmt
+#, object-pascal-format
+msgid "Renamed to \"%s\""
+msgstr "已重命名为「%s」"
+
+#: showcasemain.rsselectedfmt
+#, object-pascal-format
+msgid "Selected: %d"
+msgstr "已选：%d"
+
+#: showcasemain.rssortedfmt
+#, object-pascal-format
+msgid "Sorted by %s, %s  (OnHeaderClick)"
+msgstr "按 %s 排序，%s（OnHeaderClick）"
+
+#: showcasemain.rsstagefmt
+#, object-pascal-format
+msgid "Stage %d"
+msgstr "阶段 %d"
+
+#: showcasemain.rsvetol3fmt
+#, object-pascal-format
+msgid "Level-3 expansion vetoed (OnExpanding) — Node %d stays shut"
+msgstr "第 3 层展开被否决（OnExpanding）—— 节点 %d 保持关闭"
+
+#: showcasemain.rsvirtnodefmt
+#, object-pascal-format
+msgid "Node %d  (L%d)"
+msgstr "节点 %d  (L%d)"

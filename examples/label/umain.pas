@@ -67,6 +67,9 @@ implementation
 
 {$R *.lfm}
 
+resourcestring
+  rsClickedFmt = 'Clicked %d time(s) - labels raise OnClick too';
+
 procedure TMainForm.FormCreate(Sender: TObject);
 var
   names: TStringArray;
@@ -104,8 +107,7 @@ end;
 procedure TMainForm.LblClickClick(Sender: TObject);
 begin
   Inc(FClicks);
-  LblClick.Caption := 'Clicked ' + IntToStr(FClicks) +
-    ' time(s) - labels raise OnClick too';
+  LblClick.Caption := Format(rsClickedFmt, [FClicks]);
 end;
 
 end.

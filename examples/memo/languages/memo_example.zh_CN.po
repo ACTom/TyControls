@@ -94,3 +94,23 @@ msgstr "横向滚动条需关 WordWrap"
 #: tmainform.bar.caption
 msgid "TTyMemo  · TyControls"
 msgstr "TTyMemo  · TyControls"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rscaretfmt
+#, object-pascal-format
+msgid "CaretPos %d · SelStart %d · SelLength %d · selected: \"%s\""
+msgstr "CaretPos %d · SelStart %d · SelLength %d · 选中：\"%s\""
+
+#: umain.rscountsfmt
+#, object-pascal-format
+msgid "Line count: %d    Char count: %d / %s"
+msgstr "行数：%d    字符数：%d / %s"
+
+#: umain.rsdefaultbtn
+msgid "Default button fired - Enter fell through because WantReturns=False"
+msgstr "默认按钮触发了 —— WantReturns=False 让回车穿透下来"
+
+#: umain.rsnocap
+msgid "no cap"
+msgstr "不限"

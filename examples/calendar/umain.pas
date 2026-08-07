@@ -60,14 +60,29 @@ implementation
 
 {$R *.lfm}
 
+resourcestring
+  { View names and status texts (FormatDateTime patterns are data). }
+  rsViewMonths  = 'Month view (cvmMonths)';
+  rsViewYears   = 'Year view (cvmYears)';
+  rsViewDecades = 'Decade view (cvmDecades)';
+  rsViewDays    = 'Day view (cvmDays)';
+  rsNotConfirmed = 'Not confirmed yet (click a date cell or press Enter)';
+  rsPickedFmt    = 'Selected date:%s';
+  rsAcceptedFmt  = 'Confirmed:%s(click a date cell / Enter fires OnAccept)';
+  rsCurViewFmt   = 'Current view:%s(click a header to drill down, click a date cell to drill up)';
+  rsRangeFree    = 'Range available: unbounded (MinDate = MaxDate = 0)';
+  rsRangeFmt     = 'Range available: %s ~ %s';
+  rsKeysHint     = 'Keyboard: arrow keys move, PageUp/PageDown change month,'
+    + sLineBreak + 'Home/End go to the start/end of the month.';
+
 function ViewName(AView: TTyCalView): string;
 begin
   case AView of
-    cvmMonths:  Result := 'Month view (cvmMonths)';
-    cvmYears:   Result := 'Year view (cvmYears)';
-    cvmDecades: Result := 'Decade view (cvmDecades)';
+    cvmMonths:  Result := rsViewMonths;
+    cvmYears:   Result := rsViewYears;
+    cvmDecades: Result := rsViewDecades;
   else
-    Result := 'Day view (cvmDays)';
+    Result := rsViewDays;
   end;
 end;
 
@@ -101,7 +116,7 @@ begin
   // initialize the status echo
   CalChange(nil);
   CalViewChange(nil);
-  LblAccepted.Caption := 'Not confirmed yet (click a date cell or press Enter)';
+  LblAccepted.Caption := rsNotConfirmed;
 end;
 
 procedure TMainForm.ThemeComboChange(Sender: TObject);
@@ -123,19 +138,17 @@ end;
 
 procedure TMainForm.CalChange(Sender: TObject);
 begin
-  LblPicked.Caption := 'Selected date:' + FormatDateTime('yyyy-mm-dd', Cal.Date);
+  LblPicked.Caption := Format(rsPickedFmt, [FormatDateTime('yyyy-mm-dd', Cal.Date)]);
 end;
 
 procedure TMainForm.CalAccept(Sender: TObject);
 begin
-  LblAccepted.Caption := 'Confirmed:' + FormatDateTime('yyyy-mm-dd', Cal.Date) +
-    '(click a date cell / Enter fires OnAccept)';
+  LblAccepted.Caption := Format(rsAcceptedFmt, [FormatDateTime('yyyy-mm-dd', Cal.Date)]);
 end;
 
 procedure TMainForm.CalViewChange(Sender: TObject);
 begin
-  LblView.Caption := 'Current view:' + ViewName(Cal.ViewMode) +
-    '(click a header to drill down, click a date cell to drill up)';
+  LblView.Caption := Format(rsCurViewFmt, [ViewName(Cal.ViewMode)]);
 end;
 
 { The range switch: ON constrains the calendar to the 3 months either side of today, OFF
@@ -173,13 +186,11 @@ var
   s: string;
 begin
   if Cal.MinDate = 0 then
-    s := 'Range available: unbounded (MinDate = MaxDate = 0)'
+    s := rsRangeFree
   else
-    s := 'Range available: ' + FormatDateTime('yyyy-mm-dd', Cal.MinDate) + ' ~ ' +
-         FormatDateTime('yyyy-mm-dd', Cal.MaxDate);
-  LblRange.Caption := s + sLineBreak +
-    'Keyboard: arrow keys move, PageUp/PageDown change month,' + sLineBreak +
-    'Home/End go to the start/end of the month.';
+    s := Format(rsRangeFmt, [FormatDateTime('yyyy-mm-dd', Cal.MinDate),
+         FormatDateTime('yyyy-mm-dd', Cal.MaxDate)]);
+  LblRange.Caption := s + sLineBreak + rsKeysHint;
 end;
 
 end.

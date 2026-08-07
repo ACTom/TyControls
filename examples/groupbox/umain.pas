@@ -63,6 +63,14 @@ implementation
 
 {$R *.lfm}
 
+resourcestring
+  rsNoneSelected = '(none selected)';
+  rsStyleBold    = 'Bold ';
+  rsStyleItalic  = 'Italic';
+  rsStyleNone    = '(none)';
+  rsStatusFmt    = 'Font size: %s    Style: %s    Name: %s';
+  rsEmptyName    = '(empty)';
+
 procedure TMainForm.FormCreate(Sender: TObject);
 var
   names: TStringArray;
@@ -99,7 +107,7 @@ end;
 
 function TMainForm.SelectedRadio: string;
 begin
-  Result := '(none selected)';
+  Result := rsNoneSelected;
   if RadioA.Checked then Result := RadioA.Caption
   else if RadioB.Checked then Result := RadioB.Caption
   else if RadioC.Checked then Result := RadioC.Caption;
@@ -125,13 +133,13 @@ var
   Styles: string;
 begin
   Styles := '';
-  if CheckBold.Checked then Styles := Styles + 'Bold ';
-  if CheckItalic.Checked then Styles := Styles + 'Italic';
-  if Styles = '' then Styles := '(none)';
+  if CheckBold.Checked then Styles := Styles + rsStyleBold;
+  if CheckItalic.Checked then Styles := Styles + rsStyleItalic;
+  if Styles = '' then Styles := rsStyleNone;
 
-  LblStatus.Caption := Format('Font size: %s    Style: %s    Name: %s',
+  LblStatus.Caption := Format(rsStatusFmt,
     [SelectedRadio, Trim(Styles),
-     IfThen(NameEdit.Text = '', '(empty)', NameEdit.Text)]);
+     IfThen(NameEdit.Text = '', rsEmptyName, NameEdit.Text)]);
 end;
 
 end.

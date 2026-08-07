@@ -24,7 +24,7 @@ msgid "Read-only dropdown (Sorted, keyboard type-ahead):"
 msgstr "只读下拉（Sorted 排序，可键盘 type-ahead）："
 
 #: tmainform.lbledit.caption
-msgid "Editable (Text preset, prefix autocomplete / uppercase / max length 10):"
+msgid "Editable (prefix autocomplete / uppercase / MaxLength 10):"
 msgstr "可编辑（预置 Text，前缀自动完成 / 大写 / 限长 10）："
 
 #: tmainform.lblstatus.caption
@@ -46,3 +46,38 @@ msgstr "TTyComboBox  ·  TyControls"
 #: tmainform.editcombo.text
 msgid "MANGO"
 msgstr "MANGO"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rsawaiting
+msgid "Event state: (awaiting action, try expanding or typing a prefix)"
+msgstr "事件状态：（等待操作，试试展开或输入前缀）"
+
+#: umain.rseditable
+msgid "Editable"
+msgstr "可编辑"
+
+#: umain.rsevchange
+msgid "OnChange"
+msgstr "OnChange"
+
+#: umain.rsevcloseup
+msgid "OnCloseUp (collapse)"
+msgstr "OnCloseUp（收起）"
+
+#: umain.rsevdropdown
+msgid "OnDropDown (expand)"
+msgstr "OnDropDown（展开）"
+
+#: umain.rseventfmt
+#, object-pascal-format
+msgid "Event state: [%s] %s → Text=\"%s\" (ItemIndex=%d)"
+msgstr "事件状态：[%s] %s → Text=\"%s\"（ItemIndex=%d）"
+
+#: umain.rsevselect
+msgid "OnSelect"
+msgstr "OnSelect"
+
+#: umain.rsreadonly
+msgid "Read-only"
+msgstr "只读"

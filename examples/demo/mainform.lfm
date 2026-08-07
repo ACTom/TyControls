@@ -543,10 +543,10 @@ object DemoMainForm: TDemoMainForm
         Controller = TyController
       end
       object GroupBox1: TTyGroupBox
-        Left = 452
+        Left = 444
         Height = 110
         Top = 207
-        Width = 152
+        Width = 144
         TabOrder = 8
         OnClick = GroupBox1Click
         Controller = TyController

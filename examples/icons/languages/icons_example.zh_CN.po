@@ -86,3 +86,14 @@ msgstr "Segoe UI Symbol"
 #: tmainform.fontfamilyedit.texthint
 msgid "Font family name…"
 msgstr "字体族名…"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rsclickedfmt
+#, object-pascal-format
+msgid "Clicked: %s"
+msgstr "点击了：%s"
+
+#: umain.rsfontfilter
+msgid "Font files|*.ttf;*.otf|All files|*.*"
+msgstr "字体文件|*.ttf;*.otf|所有文件|*.*"

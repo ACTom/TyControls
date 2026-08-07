@@ -73,6 +73,19 @@ implementation
 
 {$R *.lfm}
 
+resourcestring
+  { Menu items and status texts built in code (icon keys stay literals). }
+  rsMenuSaveCopy  = 'Save a copy';
+  rsMenuExportPdf = 'Export as PDF';
+  rsMenuPrint     = 'Print…';
+  rsMenuSnapshotFmt = 'Snapshot %s';
+  rsSplitPrimary  = 'Save: primary half clicked (the arrow half opens the menu)';
+  rsColourChangedFmt = 'Colour changed to %s';
+  rsGroupPickFmt  = 'ButtonGroup: %s';
+  rsGroupNone     = 'ButtonGroup: nothing selected';
+  rsPickedNone    = 'none';
+  rsMultiPickFmt  = 'MultiSelect group: %s';
+
 { Append one plain item to AMenu (the menu owns it, so a later Items.Clear frees it). }
 procedure AddMenuItem(AMenu: TTyPopupMenu; const ACaption: string);
 var mi: TMenuItem;
@@ -110,9 +123,9 @@ procedure TMainForm.BuildMenu;
 begin
   FMenu := TTyPopupMenu.Create(Self);
   FMenu.Controller := TyDefaultController;
-  AddItem('Save a copy');
-  AddItem('Export as PDF');
-  AddItem('Print…');
+  AddItem(rsMenuSaveCopy);
+  AddItem(rsMenuExportPdf);
+  AddItem(rsMenuPrint);
 end;
 
 procedure TMainForm.FormCreate(Sender: TObject);
@@ -170,7 +183,7 @@ procedure TMainForm.SaveClicked(Sender: TObject);
 begin
   // A split button's caption half is a normal button: this is the primary action.
   // A click in the arrow zone never reaches here -- it drops the menu instead.
-  LblStatus.Caption := 'Save: primary half clicked (the arrow half opens the menu)';
+  LblStatus.Caption := rsSplitPrimary;
 end;
 
 procedure TMainForm.SaveDropDown(Sender: TObject);
@@ -178,24 +191,24 @@ begin
   // OnDropDown fires just BEFORE the menu pops, so the menu can be rebuilt each time.
   // The timestamped last item makes that visible: drop it twice and the time changes.
   FSaveMenu.Items.Clear;
-  AddMenuItem(FSaveMenu, 'Save a copy');
-  AddMenuItem(FSaveMenu, 'Export as PDF');
-  AddMenuItem(FSaveMenu, 'Snapshot ' + FormatDateTime('hh:nn:ss', Now));
+  AddMenuItem(FSaveMenu, rsMenuSaveCopy);
+  AddMenuItem(FSaveMenu, rsMenuExportPdf);
+  AddMenuItem(FSaveMenu, Format(rsMenuSnapshotFmt, [FormatDateTime('hh:nn:ss', Now)]));
 end;
 
 procedure TMainForm.ColorChanged(Sender: TObject);
 begin
   // Fires only when the dialog was accepted AND the colour really changed --
   // a programmatic SelectedColor write (see FormCreate) never lands here.
-  LblStatus.Caption := 'Colour changed to ' + TyColorHex(BtnColor.SelectedColor);
+  LblStatus.Caption := Format(rsColourChangedFmt, [TyColorHex(BtnColor.SelectedColor)]);
 end;
 
 procedure TMainForm.GrpChange(Sender: TObject);
 begin
   if Grp.ItemIndex >= 0 then
-    LblStatus.Caption := 'ButtonGroup: ' + Grp.Items[Grp.ItemIndex]
+    LblStatus.Caption := Format(rsGroupPickFmt, [Grp.Items[Grp.ItemIndex]])
   else
-    LblStatus.Caption := 'ButtonGroup: nothing selected';
+    LblStatus.Caption := rsGroupNone;
 end;
 
 procedure TMainForm.GrpMultiChange(Sender: TObject);
@@ -211,8 +224,8 @@ begin
       if picked <> '' then picked := picked + ', ';
       picked := picked + GrpMulti.Items[i];
     end;
-  if picked = '' then picked := 'none';
-  LblStatus.Caption := 'MultiSelect group: ' + picked;
+  if picked = '' then picked := rsPickedNone;
+  LblStatus.Caption := Format(rsMultiPickFmt, [picked]);
 end;
 
 end.

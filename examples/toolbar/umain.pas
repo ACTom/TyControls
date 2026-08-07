@@ -73,6 +73,10 @@ implementation
 
 {$R *.lfm}
 
+resourcestring
+  rsFiredFmt  = 'Fired tool: %s';
+  rsToggleFmt = '%s: Down = %s';
+
 procedure TMainForm.FormCreate(Sender: TObject);
 var
   names: TStringArray;
@@ -107,7 +111,7 @@ end;
 
 procedure TMainForm.ToolClicked(Sender: TObject);
 begin
-  LblStatus.Caption := Format('Fired tool: %s', [(Sender as TTyButton).Caption]);
+  LblStatus.Caption := Format(rsFiredFmt, [(Sender as TTyButton).Caption]);
 end;
 
 procedure TMainForm.ToolToggle(Sender: TObject);
@@ -119,7 +123,7 @@ begin
   // owns the state, which is why this flips it by hand.
   B := Sender as TTyButton;
   B.Down := not B.Down;
-  LblStatus.Caption := Format('%s: Down = %s', [B.Caption, BoolToStr(B.Down, True)]);
+  LblStatus.Caption := Format(rsToggleFmt, [B.Caption, BoolToStr(B.Down, True)]);
 end;
 
 end.

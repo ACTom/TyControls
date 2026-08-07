@@ -105,6 +105,28 @@ implementation
 
 {$R *.lfm}
 
+resourcestring
+  { Dialog titles, preview texts and result lines (patterns keep dialog syntax). }
+  rsEmptyFile   = 'Empty file (0 bytes) — nothing to preview';
+  rsCustomPrevFmt = 'Custom preview (OnPreview)' + LineEnding + LineEnding
+    + 'File:%s' + LineEnding + 'Extension:%s' + LineEnding + LineEnding
+    + 'This format has no built-in previewer; it is handled by the app''s OnPreview.'
+    + LineEnding
+    + 'In a real scenario you could decode it into a bitmap (ShowImage) or text (ShowText).';
+  rsCancelSuffix = ':(cancel)';
+  rsManyFmt      = '%s: %d item(s) selected';
+  rsTitleOpen     = 'Open';
+  rsTitleSave     = 'Save';
+  rsTitleOpenPic  = 'Open picture';
+  rsTitleSavePic  = 'Save picture';
+  rsTitleOpenPrev = 'Open preview';
+  rsTitleSavePrev = 'Save preview';
+  rsOnShow  = '--- OnShow: the Open dialog is up ---';
+  rsOnClose = '--- OnClose: the Open dialog is gone ---';
+  rsVetoed  = 'Save: OnCanClose returned False — the dialog stays open';
+  rsFilterAll  = 'All files (*.*)|*.*';
+  rsFilterText = 'Text (*.txt)|*.txt|All files (*.*)|*.*';
+
 function ThemesDir: string;
 var
   Dir: string;
@@ -172,7 +194,7 @@ begin
     extension claims, so take it over before the built-in image/text dispatch runs. }
   if FileSizeOf(AFileName) = 0 then
   begin
-    APreview.ShowMessage('Empty file (0 bytes) — nothing to preview');
+    APreview.ShowMessage(rsEmptyFile);
     AHandled := True;
     Exit;
   end;
@@ -193,12 +215,8 @@ begin
   end;
 
   { ShowText -- hand back a block of text instead of the "cannot preview" placeholder. }
-  APreview.ShowText(
-    'Custom preview (OnPreview)' + LineEnding + LineEnding +
-    'File:' + ExtractFileName(AFileName) + LineEnding +
-    'Extension:' + ExtractFileExt(AFileName) + LineEnding + LineEnding +
-    'This format has no built-in previewer; it is handled by the app''s OnPreview.' + LineEnding +
-    'In a real scenario you could decode it into a bitmap (ShowImage) or text (ShowText).');
+  APreview.ShowText(Format(rsCustomPrevFmt,
+    [ExtractFileName(AFileName), ExtractFileExt(AFileName)]));
   AHandled := True;
 end;
 
@@ -227,12 +245,12 @@ var
 begin
   if not AOk then
   begin
-    ResultMemo.Lines.Add(ATitle + ':(cancel)');
+    ResultMemo.Lines.Add(ATitle + rsCancelSuffix);
     Exit;
   end;
   if ADlg.Files.Count > 1 then
   begin
-    ResultMemo.Lines.Add(Format('%s: %d item(s) selected', [ATitle, ADlg.Files.Count]));
+    ResultMemo.Lines.Add(Format(rsManyFmt, [ATitle, ADlg.Files.Count]));
     for i := 0 to ADlg.Files.Count - 1 do
       ResultMemo.Lines.Add('    ' + ADlg.Files[i]);
   end
@@ -242,32 +260,32 @@ end;
 
 procedure TMainForm.BtnOpenClick(Sender: TObject);
 begin
-  Report('Open', DlgOpen.Execute, DlgOpen);
+  Report(rsTitleOpen, DlgOpen.Execute, DlgOpen);
 end;
 
 procedure TMainForm.BtnSaveClick(Sender: TObject);
 begin
-  Report('Save', DlgSave.Execute, DlgSave);
+  Report(rsTitleSave, DlgSave.Execute, DlgSave);
 end;
 
 procedure TMainForm.BtnOpenPicClick(Sender: TObject);
 begin
-  Report('Open picture', DlgOpenPic.Execute, DlgOpenPic);
+  Report(rsTitleOpenPic, DlgOpenPic.Execute, DlgOpenPic);
 end;
 
 procedure TMainForm.BtnSavePicClick(Sender: TObject);
 begin
-  Report('Save picture', DlgSavePic.Execute, DlgSavePic);
+  Report(rsTitleSavePic, DlgSavePic.Execute, DlgSavePic);
 end;
 
 procedure TMainForm.BtnOpenPrevClick(Sender: TObject);
 begin
-  Report('Open preview', DlgOpenPrev.Execute, DlgOpenPrev);
+  Report(rsTitleOpenPrev, DlgOpenPrev.Execute, DlgOpenPrev);
 end;
 
 procedure TMainForm.BtnSavePrevClick(Sender: TObject);
 begin
-  Report('Save preview', DlgSavePrev.Execute, DlgSavePrev);
+  Report(rsTitleSavePrev, DlgSavePrev.Execute, DlgSavePrev);
 end;
 
 { ---------------------------------------------------------------------------
@@ -276,12 +294,12 @@ end;
 
 procedure TMainForm.DlgOpenShow(Sender: TObject);
 begin
-  ResultMemo.Lines.Add('--- OnShow: the Open dialog is up ---');
+  ResultMemo.Lines.Add(rsOnShow);
 end;
 
 procedure TMainForm.DlgOpenClose(Sender: TObject; var CloseAction: TCloseAction);
 begin
-  ResultMemo.Lines.Add('--- OnClose: the Open dialog is gone ---');
+  ResultMemo.Lines.Add(rsOnClose);
 end;
 
 procedure TMainForm.DlgSaveCanClose(Sender: TObject; var CanClose: Boolean);
@@ -292,7 +310,7 @@ begin
   if ChkVetoSave.Checked then
   begin
     CanClose := False;
-    ResultMemo.Lines.Add('Save: OnCanClose returned False — the dialog stays open');
+    ResultMemo.Lines.Add(rsVetoed);
   end;
 end;
 
@@ -305,7 +323,7 @@ var
   fn: string;
 begin
   fn := '';
-  if TyOpenDialog(fn, 'All files (*.*)|*.*') then
+  if TyOpenDialog(fn, rsFilterAll) then
     ResultMemo.Lines.Add('TyOpenDialog(): ' + fn)
   else
     ResultMemo.Lines.Add('TyOpenDialog(): (cancel)');
@@ -316,7 +334,7 @@ var
   fn: string;
 begin
   fn := '';
-  if TySaveDialog(fn, 'Text (*.txt)|*.txt|All files (*.*)|*.*', 'txt') then
+  if TySaveDialog(fn, rsFilterText, 'txt') then
     ResultMemo.Lines.Add('TySaveDialog(): ' + fn)
   else
     ResultMemo.Lines.Add('TySaveDialog(): (cancel)');

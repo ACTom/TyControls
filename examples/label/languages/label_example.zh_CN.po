@@ -86,3 +86,10 @@ msgstr "StyleOverride = color: var(--accent) —— 仍跟随主题"
 #: tmainform.bar.caption
 msgid "TTyLabel  ·  TyControls"
 msgstr "TTyLabel  ·  TyControls"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rsclickedfmt
+#, object-pascal-format
+msgid "Clicked %d time(s) - labels raise OnClick too"
+msgstr "点了 %d 次 —— 标签也会触发 OnClick"

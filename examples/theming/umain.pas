@@ -98,6 +98,24 @@ implementation
 
 {$R *.lfm}
 
+resourcestring
+  { Status-line texts composed at run time, so they live here rather than in the .lfm.
+    Theme names, file names and the CSS overlay snippet are data -- they stay literals. }
+  rsCurThemeFmt   = 'Current theme: %s';
+  rsModeLight     = 'Mode: Light (manual)';
+  rsModeDark      = 'Mode: Dark (manual)';
+  rsFollowsOS     = 'Appearance: follows the OS light/dark setting';
+  rsThemeGreen    = 'Current theme: green (image background)';
+  rsThemeCustom   = 'Current theme: custom.tycss (a hand-written file, partial by design)';
+  rsDensityModern = 'Density: modern (Web scale) - same skin, roomier geometry';
+  rsDensityClassic = 'Density: classic';
+  rsHotOnFmt      = 'Hot-reload ON - save an edit to %s and the window re-themes';
+  rsHotOff        = 'Hot-reload OFF';
+  rsOverlayDone   = 'Additive layer applied - skin kept, two tokens overridden';
+  rsPickAccent    = 'Choose accent colour';
+  rsAccentFmt     = 'Accent colour: %s (overlaid on the current theme)';
+  rsAccentReset   = 'Accent colour: restored to theme default';
+
 { Find a file shipped alongside this example (its own green.tycss) by walking up from the exe --
   the built binary sits in examples/theming/lib/<cpu>-<os>/, the theme + its assets/ two levels up. }
 function LocalThemeFile(const AName: string): string;
@@ -184,7 +202,7 @@ begin
   if ThemeCombo.ItemIndex < 0 then Exit;
   TyDefaultController.ThemeName := ThemeCombo.Items[ThemeCombo.ItemIndex];
   ApplyChromeTheme(TyDefaultController);   // re-theme the shell on every skin change
-  LblStatus.Caption := 'Current theme: ' + ThemeCombo.Items[ThemeCombo.ItemIndex];
+  LblStatus.Caption := Format(rsCurThemeFmt, [ThemeCombo.Items[ThemeCombo.ItemIndex]]);
   UpdateAccentBtn;   // a theme switch clears any accent override (D2)
 end;
 
@@ -199,7 +217,7 @@ begin
   TyDefaultController.Follow := tfManual;
   TyDefaultController.Mode := 'light';
   ApplyChromeTheme(TyDefaultController);
-  LblStatus.Caption := 'Mode: Light (manual)';
+  LblStatus.Caption := rsModeLight;
 end;
 
 procedure TMainForm.SwitchDark(Sender: TObject);
@@ -207,7 +225,7 @@ begin
   TyDefaultController.Follow := tfManual;
   TyDefaultController.Mode := 'dark';
   ApplyChromeTheme(TyDefaultController);
-  LblStatus.Caption := 'Mode: Dark (manual)';
+  LblStatus.Caption := rsModeDark;
 end;
 
 { The third appearance state: hand the light/dark axis back to the OS. Setting Follow immediately
@@ -217,7 +235,7 @@ procedure TMainForm.SwitchAuto(Sender: TObject);
 begin
   TyDefaultController.Follow := tfFollowSystem;
   ApplyChromeTheme(TyDefaultController);
-  LblStatus.Caption := 'Appearance: follows the OS light/dark setting';
+  LblStatus.Caption := rsFollowsOS;
 end;
 
 procedure TMainForm.SwitchGreen(Sender: TObject);
@@ -227,7 +245,7 @@ begin
     themes/. Loading it as a FILE resolves its url(assets/background.jpg) relative to that copy. }
   TyDefaultController.ThemeFile := LocalThemeFile('green.tycss');
   ApplyChromeTheme(TyDefaultController);
-  LblStatus.Caption := 'Current theme: green (image background)';
+  LblStatus.Caption := rsThemeGreen;
   UpdateAccentBtn;
 end;
 
@@ -238,7 +256,7 @@ procedure TMainForm.SwitchCustom(Sender: TObject);
 begin
   TyDefaultController.ThemeFile := LocalThemeFile('custom.tycss');
   ApplyChromeTheme(TyDefaultController);
-  LblStatus.Caption := 'Current theme: custom.tycss (a hand-written file, partial by design)';
+  LblStatus.Caption := rsThemeCustom;
   UpdateAccentBtn;
 end;
 
@@ -250,12 +268,12 @@ begin
   if SwitchDensity.Checked then
   begin
     TyDefaultController.Density := tdModern;
-    LblStatus.Caption := 'Density: modern (Web scale) - same skin, roomier geometry';
+    LblStatus.Caption := rsDensityModern;
   end
   else
   begin
     TyDefaultController.Density := tdClassic;
-    LblStatus.Caption := 'Density: classic';
+    LblStatus.Caption := rsDensityClassic;
   end;
   ApplyChromeTheme(TyDefaultController);
 end;
@@ -270,13 +288,13 @@ begin
     if TyDefaultController.ThemeFile = '' then
       TyDefaultController.ThemeFile := LocalThemeFile('green.tycss');
     TyDefaultController.HotReload := True;
-    LblStatus.Caption := 'Hot-reload ON - save an edit to ' +
-      ExtractFileName(TyDefaultController.ThemeFile) + ' and the window re-themes';
+    LblStatus.Caption := Format(rsHotOnFmt,
+      [ExtractFileName(TyDefaultController.ThemeFile)]);
   end
   else
   begin
     TyDefaultController.HotReload := False;
-    LblStatus.Caption := 'Hot-reload OFF';
+    LblStatus.Caption := rsHotOff;
   end;
   ApplyChromeTheme(TyDefaultController);
   UpdateAccentBtn;
@@ -289,7 +307,7 @@ procedure TMainForm.OverlayClick(Sender: TObject);
 begin
   TyDefaultController.LoadThemeCssAdditive(':root { --accent: #7C3AED; --radius: 12px; }');
   ApplyChromeTheme(TyDefaultController);
-  LblStatus.Caption := 'Additive layer applied - skin kept, two tokens overridden';
+  LblStatus.Caption := rsOverlayDone;
 end;
 
 procedure TMainForm.UpdateAccentBtn;
@@ -306,7 +324,7 @@ var
 begin
   dlg := TTyColorDialog.Create(nil);
   try
-    dlg.Caption := 'Choose accent colour';
+    dlg.Caption := rsPickAccent;
     // Seed the picker with the current override, if any.
     if TyDefaultController.AccentOverride <> '' then
       dlg.Color := TyParseColor(TyDefaultController.AccentOverride);
@@ -316,7 +334,7 @@ begin
                  + IntToHex(TyBlueOf(dlg.Color), 2);
       TyDefaultController.SetAccent(hex);          // recolours every registered control + chrome
       ApplyChromeTheme(TyDefaultController);
-      LblStatus.Caption := 'Accent colour: ' + hex + ' (overlaid on the current theme)';
+      LblStatus.Caption := Format(rsAccentFmt, [hex]);
     end;
   finally
     dlg.Free;
@@ -328,7 +346,7 @@ procedure TMainForm.ResetAccentClick(Sender: TObject);
 begin
   TyDefaultController.ResetAccent;                 // back to the theme's own accent
   ApplyChromeTheme(TyDefaultController);
-  LblStatus.Caption := 'Accent colour: restored to theme default';
+  LblStatus.Caption := rsAccentReset;
   UpdateAccentBtn;
 end;
 

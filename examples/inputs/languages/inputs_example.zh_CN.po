@@ -100,7 +100,7 @@ msgid "Swatch grid ColorGrid + lightness LColorPicker:"
 msgstr "色板 ColorGrid + 明度 LColorPicker:"
 
 #: tmainform.l20.caption
-msgid "HS colour square (TTyHSColorPicker):"
+msgid "HS square (TTyHSColorPicker):"
 msgstr "HS 取色方块(TTyHSColorPicker):"
 
 #: tmainform.l21.caption
@@ -116,7 +116,7 @@ msgid "Name/value editor (TTyValueListEditor, click the value column / F2 to edi
 msgstr "名/值编辑器(TTyValueListEditor,点值列 / F2 编辑):"
 
 #: tmainform.l25.caption
-msgid "Calculator value (TTyCalcEdit, click the small button at the end):"
+msgid "Calculator value (TTyCalcEdit, click the end button):"
 msgstr "计算器数值(TTyCalcEdit,点尾部小按钮):"
 
 #: tmainform.l26.caption
@@ -128,7 +128,7 @@ msgid "Clamped value = 42.00"
 msgstr "限幅值 = 42.00"
 
 #: tmainform.lhint.caption
-msgid "Try: digits / minus / decimal point only; the thousands separator is dropped on focus for easy editing and regrouped on blur; enter a value >100 in the clamped field and it clamps to 100 on blur."
+msgid "Try: digits / minus / decimal point only; grouping drops on focus and returns on blur; >100 in the clamped field clamps back."
 msgstr "试试:只能输数字 / 负号 / 小数点;聚焦时去掉千分位方便编辑,失焦后重新分组;限幅框输入 >100 的值,失焦后夹紧到 100。"
 
 #: tmainform.furl.text
@@ -170,3 +170,260 @@ msgstr "锁定整张表 —— ValueListEditor.ReadOnly 禁掉所有值单元格
 #: tmainform.bar.caption
 msgid "Rich Inputs  · TyControls"
 msgstr "Rich Inputs  · TyControls"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rsaboutdesc
+msgid "ValueListEditor host-side custom row-handling demo"
+msgstr "ValueListEditor 宿主侧自定义行处理演示"
+
+#: umain.rsabouttitle
+msgid "TyControls Rich Inputs example"
+msgstr "TyControls 富输入示例"
+
+#: umain.rsadvchoosefile
+msgid "Choose file"
+msgstr "选择文件"
+
+#: umain.rsadvnoicon
+msgid "Item with no icon"
+msgstr "没有图标的条目"
+
+#: umain.rsadvnoiconsub
+msgid "Subtitle may be left blank"
+msgstr "副标题可以留空"
+
+#: umain.rsadvopenproject
+msgid "Open project"
+msgstr "打开项目"
+
+#: umain.rsadvprintreport
+msgid "Print report"
+msgstr "打印报表"
+
+#: umain.rsadvprintsub
+msgid "Default printer"
+msgstr "默认打印机"
+
+#: umain.rsadvsavedraft
+msgid "Save draft"
+msgstr "保存草稿"
+
+#: umain.rsadvsavesub
+msgid "Not synced · 2 minutes ago"
+msgstr "未同步 · 2 分钟前"
+
+#: umain.rsadvsendprinter
+msgid "Send to printer"
+msgstr "发送到打印机"
+
+#: umain.rsadvwritedisk
+msgid "Write to disk"
+msgstr "写入磁盘"
+
+#: umain.rschangedfmt
+#, object-pascal-format
+msgid "Changed \"%s\" = %s"
+msgstr "已修改「%s」= %s"
+
+#: umain.rschkbold
+msgid "Bold"
+msgstr "加粗"
+
+#: umain.rschkitalic
+msgid "Italic"
+msgstr "斜体"
+
+#: umain.rschklinenums
+msgid "Line numbers"
+msgstr "行号"
+
+#: umain.rschkstrikeout
+msgid "Strikeout"
+msgstr "删除线"
+
+#: umain.rschkstrikethrough
+msgid "Strikethrough"
+msgstr "删除线"
+
+#: umain.rschkunderline
+msgid "Underline"
+msgstr "下划线"
+
+#: umain.rschkwordwrap
+msgid "Word wrap"
+msgstr "自动换行"
+
+#: umain.rschoosepath
+msgid "Choose data path"
+msgstr "选择数据路径"
+
+#: umain.rsclampedfmt
+#, object-pascal-format
+msgid "Clamped value = %.2f  (clamped to 0..100 on blur)"
+msgstr "钳制后的值 = %.2f（失焦时钳到 0..100）"
+
+#: umain.rshdrfruit
+msgid "Fruit"
+msgstr "水果"
+
+#: umain.rshdrinbox
+msgid "Inbox"
+msgstr "收件箱"
+
+#: umain.rshdrsent
+msgid "Sent"
+msgstr "已发送"
+
+#: umain.rshdrvegetables
+msgid "Vegetables"
+msgstr "蔬菜"
+
+#: umain.rsitemapple
+msgid "Apple"
+msgstr "苹果"
+
+#: umain.rsitemcarrot
+msgid "Carrot"
+msgstr "胡萝卜"
+
+#: umain.rsitemmango
+msgid "Mango"
+msgstr "芒果"
+
+#: umain.rsitemminutes
+msgid "Meeting minutes"
+msgstr "会议纪要"
+
+#: umain.rsitemquote
+msgid "Quote for the customer"
+msgstr "给客户的报价"
+
+#: umain.rsitemreceipt
+msgid "Receipt confirmation"
+msgstr "回执确认"
+
+#: umain.rsitemweekly
+msgid "Weekly report"
+msgstr "周报"
+
+#: umain.rsmru1
+msgid "First search"
+msgstr "第一次搜索"
+
+#: umain.rsmru2
+msgid "Second search"
+msgstr "第二次搜索"
+
+#: umain.rsmru3
+msgid "Most recent (on top)"
+msgstr "最近一次（置顶）"
+
+#: umain.rsopen
+msgid "Open"
+msgstr "打开"
+
+#: umain.rspickedfmt
+#, object-pascal-format
+msgid "Picked: %s = %s"
+msgstr "拾取：%s = %s"
+
+#: umain.rspickednone
+msgid "Picked: (none)"
+msgstr "拾取：（无）"
+
+#: umain.rsprint
+msgid "Print"
+msgstr "打印"
+
+#: umain.rssave
+msgid "Save"
+msgstr "保存"
+
+#: umain.rsvleabout
+msgid "About"
+msgstr "关于"
+
+#: umain.rsvlealign
+msgid "Align"
+msgstr "对齐"
+
+#: umain.rsvlebold
+msgid "Bold"
+msgstr "加粗"
+
+#: umain.rsvlecolor
+msgid "Color"
+msgstr "颜色"
+
+#: umain.rsvledatapath
+msgid "Data path"
+msgstr "数据路径"
+
+#: umain.rsvlefgcolour
+msgid "Foreground colour"
+msgstr "前景色"
+
+#: umain.rsvlefont
+msgid "Font"
+msgstr "字体"
+
+#: umain.rsvlehidden
+msgid "(hidden)"
+msgstr "（已隐藏）"
+
+#: umain.rsvleitalic
+msgid "Italic"
+msgstr "斜体"
+
+#: umain.rsvlelicence
+msgid "Licence key"
+msgstr "许可证密钥"
+
+#: umain.rsvlename
+msgid "Name"
+msgstr "名称"
+
+#: umain.rsvleopacity
+msgid "Opacity"
+msgstr "不透明度"
+
+#: umain.rsvleregular
+msgid "Regular"
+msgstr "常规"
+
+#: umain.rsvlesize
+msgid "Size"
+msgstr "字号"
+
+#: umain.rsvlestrikeout
+msgid "StrikeOut"
+msgstr "删除线"
+
+#: umain.rsvlestyle
+msgid "Style"
+msgstr "样式"
+
+#: umain.rsvletheme
+msgid "Theme"
+msgstr "主题"
+
+#: umain.rsvlethemero
+msgid "Theme (read-only)"
+msgstr "主题（只读）"
+
+#: umain.rsvletitle
+msgid "Title"
+msgstr "标题"
+
+#: umain.rsvletitleval
+msgid "Rich Inputs example"
+msgstr "富输入示例"
+
+#: umain.rsvleunderline
+msgid "Underline"
+msgstr "下划线"
+
+#: umain.rsvlewidth
+msgid "Width"
+msgstr "宽度"

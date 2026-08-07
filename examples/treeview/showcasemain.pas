@@ -226,6 +226,104 @@ implementation
 
 {$R *.lfm}
 
+resourcestring
+  { Composed or assigned at run time, so they live here rather than in the .lfm.
+    File names stay literals (they are file-system sample data); the folder and
+    kind words are display vocabulary and translate with the UI. }
+  rsFolderDocuments = 'Documents';
+  rsFolderPictures  = 'Pictures';
+  rsFolderProjects  = 'Projects';
+  rsFolderMusic     = 'Music';
+  rsFolderVideos    = 'Videos';
+  rsFolderGames     = 'Games';
+  rsKindFolder   = 'Folder';
+  rsKindDocument = 'Document';
+  rsKindSheet    = 'Spreadsheet';
+  rsKindText     = 'Text';
+  rsKindArchive  = 'Archive';
+  rsColName     = 'Name';
+  rsColType     = 'Type';
+  rsColSize     = 'Size';
+  rsColModified = 'Modified';
+  rsDragFruits  = 'Fruits';
+  rsDragApple   = 'Apple';
+  rsDragBanana  = 'Banana';
+  rsDragCherry  = 'Cherry';
+  rsDragAnimals = 'Animals';
+  rsDragCat     = 'Cat';
+  rsDragDog     = 'Dog';
+  rsDragOtter   = 'Otter';
+  rsDragColors  = 'Colors';
+  rsDragRed     = 'Red';
+  rsDragGreen   = 'Green';
+  rsDragBlue    = 'Blue';
+  rsFocusedFmt = 'Focused: item %d (level %d)';
+  rsLookFmt    = 'ShowButtons = %s, ShowTreeLines = %s, ShowRoot = %s';
+  rsIndentFmt  = 'Indent = %d px per level';
+  rsReady      = 'Ready';
+  rsVirtNodeFmt   = 'Node %d  (L%d)';
+  rsVetoL3Fmt     = 'Level-3 expansion vetoed (OnExpanding) — Node %d stays shut';
+  rsExpandedFmt   = 'Expanded Node %d  (OnExpanded)';
+  rsCollapsedFmt  = 'Collapsed Node %d  (OnCollapsed)';
+  rsClickedFmt    = 'Clicked %s  (OnNodeClick)';
+  rsDblClickedFmt = 'Double-clicked %s  (OnNodeDblClick)';
+  rsNode1000Missing = 'Node 1000 not found';
+  rsJumped1000      = 'ScrollIntoView: jumped to root node 1000 (Index 999)';
+  rsRenamedFmt      = 'Renamed to "%s"';
+  rsRenameCancelled = 'Rename cancelled (Esc) — OnEditCancelled, nothing written to the node';
+  rsAsc  = 'ascending';
+  rsDesc = 'descending';
+  rsSortedFmt     = 'Sorted by %s, %s  (OnHeaderClick)';
+  rsColResizedFmt = 'Column %d resized to %d px  (OnColumnResized)';
+  rsColMovedFmt   = 'Column moved %d -> %d  (OnColumnReorder)';
+  rsExpandAllDone   = 'FullExpand(nil) — every branch open';
+  rsCollapseAllDone = 'FullCollapse(nil) — back to the three root folders';
+  rsCheckedFmt  = 'Checked: %s';
+  rsGroupLocked = 'Group 0 is locked - OnChecking refused the toggle';
+  rsItemFmt     = 'Item %d  (level %d)';
+  rsSelectedFmt = 'Selected: %d';
+  rsDragRefused     = 'OnNodeDragOver: refused - a leaf cannot take children (drop ABOVE or BELOW instead)';
+  rsNothingToDelete = 'Nothing to delete - click a row first';
+  rsDeletedFmt = 'Deleted - OnFreeNode released %d node(s), %d in total';
+  rsClearedFmt = 'Cleared - OnFreeNode released %d node(s), %d in total. The centred text is the control''s own EmptyListMessage.';
+  rsRebuilt    = 'Rebuilt the three groups';
+  rsMovedFmt   = 'Moved %s';
+  rsBuildFmt = 'Build #%d';
+  rsStageFmt = 'Stage %d';
+  rsPillFmt   = '%s - %d%% (owner-drawn pill), OnChange';
+  rsChangeFmt = '%s - OnChange';
+
+{ Display names for the data tables below. The TABLES keep English keys (a
+  typed const cannot hold a resourcestring, and ColGetImageIndex matches kinds
+  by key); these mappers translate at the moment a key becomes visible text. }
+function FolderDisplay(AIndex: Integer): string;
+begin
+  case AIndex of
+    0: Result := rsFolderDocuments;
+    1: Result := rsFolderPictures;
+  else Result := rsFolderProjects;
+  end;
+end;
+
+function CheckFolderDisplay(AIndex: Integer): string;
+begin
+  case AIndex of
+    0: Result := rsFolderMusic;
+    1: Result := rsFolderVideos;
+  else Result := rsFolderGames;
+  end;
+end;
+
+function KindDisplay(const AKey: string): string;
+begin
+  if AKey = 'Folder' then Result := rsKindFolder
+  else if AKey = 'Document' then Result := rsKindDocument
+  else if AKey = 'Spreadsheet' then Result := rsKindSheet
+  else if AKey = 'Text' then Result := rsKindText
+  else if AKey = 'Archive' then Result := rsKindArchive
+  else Result := AKey;   { PDF / JPEG / PNG / Markdown are proper names }
+end;
+
 { -----------------------------------------------------------------------
   Column-tab data tables (mirrors demo's ColTree* constants).
   4 columns: Name / Type / Size / Modified.
@@ -275,7 +373,7 @@ begin
   if Node = nil then
     SetFocusInfo('')
   else
-    SetFocusInfo(Format('Focused: item %d (level %d)',
+    SetFocusInfo(Format(rsFocusedFmt,
       [Node^.Index, Sender.GetNodeLevel(Node)]));
 end;
 
@@ -299,7 +397,7 @@ begin
   MultiTree.ShowButtons   := ChkButtons.Checked;
   MultiTree.ShowTreeLines := ChkLines.Checked;
   MultiTree.ShowRoot      := ChkRoot.Checked;
-  SetStatus(Format('ShowButtons = %s, ShowTreeLines = %s, ShowRoot = %s',
+  SetStatus(Format(rsLookFmt,
     [BoolToStr(ChkButtons.Checked, True), BoolToStr(ChkLines.Checked, True),
      BoolToStr(ChkRoot.Checked, True)]));
 end;
@@ -307,7 +405,7 @@ end;
 procedure TShowcaseForm.TrkIndentChange(Sender: TObject);
 begin
   MultiTree.Indent := TrkIndent.Position;
-  SetStatus(Format('Indent = %d px per level', [TrkIndent.Position]));
+  SetStatus(Format(rsIndentFmt, [TrkIndent.Position]));
 end;
 
 { =======================================================================
@@ -342,7 +440,7 @@ begin
     can both stay visible instead of overwriting one another. }
   Panel := StatusBar.Panels.Add;
   Panel.Width := 580;
-  Panel.Text  := 'Ready';
+  Panel.Text  := rsReady;
 
   Panel := StatusBar.Panels.Add;
   Panel.Width := 300;
@@ -445,7 +543,7 @@ end;
 procedure TShowcaseForm.VirtualGetText(Sender: TTyTreeView;
   Node: PTyTreeNode; var AText: string);
 begin
-  AText := Format('Node %d  (L%d)', [Node^.Index, Sender.GetNodeLevel(Node)]);
+  AText := Format(rsVirtNodeFmt, [Node^.Index, Sender.GetNodeLevel(Node)]);
 end;
 
 { OnExpanding runs BEFORE OnInitChildren, so a veto here is free: the ten child
@@ -458,21 +556,20 @@ begin
   if (Node <> nil) and (Sender.GetNodeLevel(Node) = 3) then
   begin
     Allowed := False;
-    SetStatus(Format('Level-3 expansion vetoed (OnExpanding) — Node %d stays shut',
-      [Node^.Index]));
+    SetStatus(Format(rsVetoL3Fmt, [Node^.Index]));
   end;
 end;
 
 procedure TShowcaseForm.VirtualExpanded(Sender: TTyTreeView; Node: PTyTreeNode);
 begin
   if Node = nil then Exit;
-  SetStatus(Format('Expanded Node %d  (OnExpanded)', [Node^.Index]));
+  SetStatus(Format(rsExpandedFmt, [Node^.Index]));
 end;
 
 procedure TShowcaseForm.VirtualCollapsed(Sender: TTyTreeView; Node: PTyTreeNode);
 begin
   if Node = nil then Exit;
-  SetStatus(Format('Collapsed Node %d  (OnCollapsed)', [Node^.Index]));
+  SetStatus(Format(rsCollapsedFmt, [Node^.Index]));
 end;
 
 procedure TShowcaseForm.VirtualNodeClick(Sender: TTyTreeView; Node: PTyTreeNode);
@@ -482,7 +579,7 @@ begin
   if Node = nil then Exit;
   s := '';
   VirtualGetText(Sender, Node, s);
-  SetStatus('Clicked ' + s + '  (OnNodeClick)');
+  SetStatus(Format(rsClickedFmt, [s]));
 end;
 
 procedure TShowcaseForm.VirtualNodeDblClick(Sender: TTyTreeView; Node: PTyTreeNode);
@@ -492,7 +589,7 @@ begin
   if Node = nil then Exit;
   s := '';
   VirtualGetText(Sender, Node, s);
-  SetStatus('Double-clicked ' + s + '  (OnNodeDblClick)');
+  SetStatus(Format(rsDblClickedFmt, [s]));
 end;
 
 { ScrollIntoView on a 1M-row list: walk the ROOT sibling chain (never GetNext —
@@ -512,12 +609,12 @@ begin
   end;
   if n = nil then
   begin
-    SetStatus('Node 1000 not found');
+    SetStatus(rsNode1000Missing);
     Exit;
   end;
   VirtualTree.FocusedNode := n;
   VirtualTree.ScrollIntoView(n);
-  SetStatus('ScrollIntoView: jumped to root node 1000 (Index 999)');
+  SetStatus(rsJumped1000);
 end;
 
 { =======================================================================
@@ -695,7 +792,7 @@ begin
                 hoHeaderClickAutoSort, hoDrag, hoAutoResize, hoHotTrack];
 
     col := Columns.Add as TTyColumn;
-    col.Text := 'Name';
+    col.Text := rsColName;
     col.Width := 200;
     col.Alignment := taLeftJustify;
     { Pinned: the default set includes coDraggable — drop it and this column can
@@ -703,12 +800,12 @@ begin
     col.Options := [coVisible, coResizable, coAllowClick];
 
     col := Columns.Add as TTyColumn;
-    col.Text := 'Type';
+    col.Text := rsColType;
     col.Width := 110;
     col.Alignment := taLeftJustify;
 
     col := Columns.Add as TTyColumn;
-    col.Text := 'Size';
+    col.Text := rsColSize;
     col.Width := 90;
     col.Alignment := taRightJustify;
     { Clamped drag range + a caption that follows the (right-aligned) data. }
@@ -717,7 +814,7 @@ begin
     col.CaptionAlignment := taRightJustify;
 
     col := Columns.Add as TTyColumn;
-    col.Text := 'Modified';
+    col.Text := rsColModified;
     col.Width := 120;
     col.Alignment := taLeftJustify;
 
@@ -808,8 +905,8 @@ begin
       0: if (data <> nil) and (data^.EditedName <> '') then
            CellText := string(data^.EditedName)   { in-place edit wins }
          else
-           CellText := ColFolders[fi];
-      1: CellText := 'Folder';
+           CellText := FolderDisplay(fi);
+      1: CellText := rsKindFolder;
       2: CellText := '';
       3: CellText := ColFolderDates[fi];
     else
@@ -826,7 +923,7 @@ begin
            CellText := string(data^.EditedName)   { in-place edit wins }
          else
            CellText := ColChildNames[fi][ci];
-      1: CellText := ColChildKinds[fi][ci];
+      1: CellText := KindDisplay(ColChildKinds[fi][ci]);
       2: begin
            sz := ColChildSizes[fi][ci];
            if sz = 0 then CellText := ''
@@ -900,7 +997,7 @@ begin
     if d1 <> nil then fi1 := d1^.NameIdx else fi1 := Integer(Node1^.Index);
     if d2 <> nil then fi2 := d2^.NameIdx else fi2 := Integer(Node2^.Index);
     case Column of
-      0: CompareResult := CompareStr(ColFolders[fi1], ColFolders[fi2]);
+      0: CompareResult := CompareStr(FolderDisplay(fi1), FolderDisplay(fi2));
       3: CompareResult := CompareStr(ColFolderDates[fi1], ColFolderDates[fi2]);
     else
       CompareResult := 0;
@@ -943,7 +1040,7 @@ begin
   data^.EditedName := ShortString(NewText);
   Sender.Invalidate;   { re-read via ColGetText (EndEditNode also repaints) }
   if (StatusBar <> nil) and (StatusBar.Panels.Count > 0) then
-    StatusBar.Panels[0].Text := 'Renamed to "' + NewText + '"';
+    StatusBar.Panels[0].Text := Format(rsRenamedFmt, [NewText]);
 end;
 
 { FIX 8: gate which cells open an editor. Only the Name column (0) is writable
@@ -960,7 +1057,7 @@ end;
 procedure TShowcaseForm.ColEditCancelled(Sender: TTyTreeView; Node: PTyTreeNode;
   Column: Integer);
 begin
-  SetStatus('Rename cancelled (Esc) — OnEditCancelled, nothing written to the node');
+  SetStatus(rsRenameCancelled);
 end;
 
 { Header notifications. OnHeaderClick fires AFTER the automatic sort has run
@@ -971,24 +1068,23 @@ var
   dir: string;
 begin
   if (Column < 0) or (Column >= ColTree.Header.Columns.Count) then Exit;
-  if ColTree.Header.SortDirection = sdAscending then dir := 'ascending'
-  else dir := 'descending';
-  SetStatus(Format('Sorted by %s, %s  (OnHeaderClick)',
+  if ColTree.Header.SortDirection = sdAscending then dir := rsAsc
+  else dir := rsDesc;
+  SetStatus(Format(rsSortedFmt,
     [TTyColumn(ColTree.Header.Columns.Items[Column]).Text, dir]));
 end;
 
 procedure TShowcaseForm.ColColumnResized(Sender: TTyTreeView; Column: Integer);
 begin
   if (Column < 0) or (Column >= ColTree.Header.Columns.Count) then Exit;
-  SetStatus(Format('Column %d resized to %d px  (OnColumnResized)',
+  SetStatus(Format(rsColResizedFmt,
     [Column, TTyColumn(ColTree.Header.Columns.Items[Column]).Width]));
 end;
 
 procedure TShowcaseForm.ColColumnReorder(Sender: TTyTreeView;
   OldPosition, NewPosition: Integer);
 begin
-  SetStatus(Format('Column moved %d -> %d  (OnColumnReorder)',
-    [OldPosition, NewPosition]));
+  SetStatus(Format(rsColMovedFmt, [OldPosition, NewPosition]));
 end;
 
 { FullExpand / FullCollapse: the programmatic counterparts of clicking every
@@ -997,13 +1093,13 @@ end;
 procedure TShowcaseForm.BtnExpandAllClick(Sender: TObject);
 begin
   ColTree.FullExpand(nil);
-  SetStatus('FullExpand(nil) — every branch open');
+  SetStatus(rsExpandAllDone);
 end;
 
 procedure TShowcaseForm.BtnCollapseAllClick(Sender: TObject);
 begin
   ColTree.FullCollapse(nil);
-  SetStatus('FullCollapse(nil) — back to the three root folders');
+  SetStatus(rsCollapseAllDone);
 end;
 
 { =======================================================================
@@ -1057,7 +1153,7 @@ var
   fi, ci: Integer;
 begin
   if Sender.GetNodeLevel(Node) = 0 then
-    AText := CheckFolders[Node^.Index]
+    AText := CheckFolderDisplay(Integer(Node^.Index))
   else
   begin
     fi := Integer(Node^.Parent^.Index);
@@ -1072,7 +1168,7 @@ var
 begin
   NodeName := '';
   CheckGetText(Sender, Node, NodeName);
-  StatusBar.Panels[0].Text := 'Checked: ' + NodeName;
+  StatusBar.Panels[0].Text := Format(rsCheckedFmt, [NodeName]);
 end;
 
 { =======================================================================
@@ -1089,7 +1185,7 @@ begin
   if (Sender.GetNodeLevel(Node) = 0) and (Node^.Index = 0) then
   begin
     Allowed := False;
-    SetStatus('Group 0 is locked - OnChecking refused the toggle');
+    SetStatus(rsGroupLocked);
   end;
 end;
 
@@ -1127,7 +1223,7 @@ end;
 procedure TShowcaseForm.MultiGetText(Sender: TTyTreeView;
   Node: PTyTreeNode; var AText: string);
 begin
-  AText := Format('Item %d  (level %d)', [Node^.Index, Sender.GetNodeLevel(Node)]);
+  AText := Format(rsItemFmt, [Node^.Index, Sender.GetNodeLevel(Node)]);
 end;
 
 procedure TShowcaseForm.MultiSelectionChanged(Sender: TObject);
@@ -1135,9 +1231,9 @@ var n: Integer;
 begin
   n := MultiTree.SelectedCount;
   if n = 0 then
-    StatusBar.Panels[0].Text := 'Ready'
+    StatusBar.Panels[0].Text := rsReady
   else
-    StatusBar.Panels[0].Text := Format('Selected: %d', [n]);
+    StatusBar.Panels[0].Text := Format(rsSelectedFmt, [n]);
 end;
 
 { =======================================================================
@@ -1148,12 +1244,26 @@ end;
   reads that id, so a node keeps its caption when reparented or reordered (NOT a
   [parent][childIndex] lookup, which would go out of bounds after a reparent).
   ======================================================================= }
-const
-  { 12 stable captions, indexed by the id stored in each node's data blob. }
-  DragLabels: array[0..11] of string = (
-    'Fruits', 'Apple', 'Banana', 'Cherry',
-    'Animals', 'Cat', 'Dog', 'Otter',
-    'Colors', 'Red', 'Green', 'Blue');
+{ 12 stable captions, indexed by the id stored in each node's data blob.
+  (A typed const array cannot hold resourcestrings, hence a mapper.) }
+function DragLabelText(AId: Integer): string;
+begin
+  case AId of
+    0:  Result := rsDragFruits;
+    1:  Result := rsDragApple;
+    2:  Result := rsDragBanana;
+    3:  Result := rsDragCherry;
+    4:  Result := rsDragAnimals;
+    5:  Result := rsDragCat;
+    6:  Result := rsDragDog;
+    7:  Result := rsDragOtter;
+    8:  Result := rsDragColors;
+    9:  Result := rsDragRed;
+    10: Result := rsDragGreen;
+  else  Result := rsDragBlue;
+  end;
+end;
+
 type
   { one Integer per node: the stable index into DragLabels. }
   PDragRec = ^TDragRec;
@@ -1210,9 +1320,8 @@ var
   data: PDragRec;
 begin
   data := PDragRec(Sender.GetNodeData(Node));
-  if (data <> nil) and (data^.LabelId >= Low(DragLabels)) and
-     (data^.LabelId <= High(DragLabels)) then
-    AText := DragLabels[data^.LabelId]
+  if (data <> nil) and (data^.LabelId >= 0) and (data^.LabelId <= 11) then
+    AText := DragLabelText(data^.LabelId)
   else
     AText := '?';
 end;
@@ -1229,7 +1338,7 @@ begin
   if (Mode = dmOn) and (Target <> nil) and (Sender.GetNodeLevel(Target) > 0) then
   begin
     Allowed := False;
-    SetStatus('OnNodeDragOver: refused - a leaf cannot take children (drop ABOVE or BELOW instead)');
+    SetStatus(rsDragRefused);
   end;
 end;
 
@@ -1248,13 +1357,12 @@ begin
   node := DragTree.FocusedNode;
   if node = nil then
   begin
-    SetStatus('Nothing to delete - click a row first');
+    SetStatus(rsNothingToDelete);
     Exit;
   end;
   before := FFreedNodes;
   DragTree.DeleteNode(node);   // a branch takes its children with it
-  SetStatus(Format('Deleted - OnFreeNode released %d node(s), %d in total',
-    [FFreedNodes - before, FFreedNodes]));
+  SetStatus(Format(rsDeletedFmt, [FFreedNodes - before, FFreedNodes]));
 end;
 
 procedure TShowcaseForm.BtnDragClearClick(Sender: TObject);
@@ -1263,15 +1371,13 @@ var
 begin
   before := FFreedNodes;
   DragTree.Clear;
-  SetStatus(Format('Cleared - OnFreeNode released %d node(s), %d in total. '
-    + 'The centred text is the control''s own EmptyListMessage.',
-    [FFreedNodes - before, FFreedNodes]));
+  SetStatus(Format(rsClearedFmt, [FFreedNodes - before, FFreedNodes]));
 end;
 
 procedure TShowcaseForm.BtnDragRebuildClick(Sender: TObject);
 begin
   BuildDragNodes;
-  SetStatus('Rebuilt the three groups');
+  SetStatus(rsRebuilt);
 end;
 
 procedure TShowcaseForm.DragNodeMoved(Sender: TTyTreeView; Node: PTyTreeNode);
@@ -1281,7 +1387,7 @@ begin
   s := '';
   DragGetText(Sender, Node, s);
   if (StatusBar <> nil) and (StatusBar.Panels.Count > 0) then
-    StatusBar.Panels[0].Text := 'Moved ' + s;
+    StatusBar.Panels[0].Text := Format(rsMovedFmt, [s]);
 end;
 
 
@@ -1313,9 +1419,9 @@ procedure TShowcaseForm.DrawGetText(Sender: TTyTreeView; Node: PTyTreeNode;
   var AText: string);
 begin
   if Sender.GetNodeLevel(Node) = 0 then
-    AText := Format('Build #%d', [Node^.Index + 1])
+    AText := Format(rsBuildFmt, [Node^.Index + 1])
   else
-    AText := Format('Stage %d', [Node^.Index + 1]);
+    AText := Format(rsStageFmt, [Node^.Index + 1]);
 end;
 
 { toVariableNodeHeight makes the control ask per row instead of using one height. }
@@ -1461,10 +1567,9 @@ begin
   if Node = nil then Exit;
   DrawGetText(Sender, Node, txt);
   if Sender.GetNodeLevel(Node) = 0 then
-    SetStatus(Format('%s - %d%% (owner-drawn pill), OnChange',
-      [txt, DrawRowPercent(Sender, Node)]))
+    SetStatus(Format(rsPillFmt, [txt, DrawRowPercent(Sender, Node)]))
   else
-    SetStatus(Format('%s - OnChange', [txt]));
+    SetStatus(Format(rsChangeFmt, [txt]));
 end;
 
 

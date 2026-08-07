@@ -66,3 +66,29 @@ msgstr "（点击数量框以查看 OnClick）"
 #: tmainform.bar.caption
 msgid "TTySpinEdit  ·  TyControls"
 msgstr "TTySpinEdit  ·  TyControls"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rsqtyclicked
+msgid "Quantity clicked (field or +/- button)"
+msgstr "数量被点击（输入区或 +/- 按钮）"
+
+#: umain.rstagcentred
+msgid "Centred"
+msgstr "居中"
+
+#: umain.rstaglocked
+msgid "Locked"
+msgstr "锁定"
+
+#: umain.rstagoffset
+msgid "Offset"
+msgstr "偏移"
+
+#: umain.rstagquantity
+msgid "Quantity"
+msgstr "数量"
+
+#: umain.rstagyear
+msgid "Year"
+msgstr "年份"

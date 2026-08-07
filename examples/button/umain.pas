@@ -63,6 +63,12 @@ implementation
 
 {$R *.lfm}
 
+resourcestring
+  rsClickCountFmt   = 'Click count: %d (%s)';
+  rsClickDefaultFmt = 'Click count: %d (Default button · Enter/ModalResult=mrOk)';
+  rsClickCancelFmt  = 'Click count: %d (Cancel button · Esc/ModalResult=mrCancel)';
+  rsClickInboxFmt   = 'Click count: %d (Inbox badge value = %d)';
+
 procedure TMainForm.FormCreate(Sender: TObject);
 var
   names: TStringArray;
@@ -98,8 +104,7 @@ end;
 procedure TMainForm.ButtonClicked(Sender: TObject);
 begin
   Inc(FCount);
-  LblStatus.Caption := Format('Click count: %d (%s)',
-    [FCount, (Sender as TTyButton).Caption]);
+  LblStatus.Caption := Format(rsClickCountFmt, [FCount, (Sender as TTyButton).Caption]);
 end;
 
 procedure TMainForm.GhostToggle(Sender: TObject);
@@ -112,13 +117,13 @@ end;
 procedure TMainForm.DefaultClicked(Sender: TObject);
 begin
   Inc(FCount);
-  LblStatus.Caption := Format('Click count: %d (Default button · Enter/ModalResult=mrOk)', [FCount]);
+  LblStatus.Caption := Format(rsClickDefaultFmt, [FCount]);
 end;
 
 procedure TMainForm.CancelClicked(Sender: TObject);
 begin
   Inc(FCount);
-  LblStatus.Caption := Format('Click count: %d (Cancel button · Esc/ModalResult=mrCancel)', [FCount]);
+  LblStatus.Caption := Format(rsClickCancelFmt, [FCount]);
 end;
 
 procedure TMainForm.InboxBadgeDisplay(Sender: TObject; AValue: Integer;
@@ -133,8 +138,7 @@ procedure TMainForm.AddInbox(Sender: TObject);
 begin
   BtnInbox.BadgeValue := BtnInbox.BadgeValue + 1;   // 0 -> 1 makes the badge appear
   Inc(FCount);
-  LblStatus.Caption := Format('Click count: %d (Inbox badge value = %d)',
-    [FCount, BtnInbox.BadgeValue]);
+  LblStatus.Caption := Format(rsClickInboxFmt, [FCount, BtnInbox.BadgeValue]);
 end;
 
 end.

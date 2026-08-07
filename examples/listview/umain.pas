@@ -131,6 +131,36 @@ implementation
 
 {$R *.lfm}
 
+resourcestring
+  { Composed or assigned at run time, so they live here rather than in the .lfm.
+    File names, icon keys and theme names are data, not UI text -- they stay literals. }
+  rsColName        = 'Name';
+  rsColSize        = 'Size';
+  rsColType        = 'Type';
+  rsColModified    = 'Modified time';
+  rsColRowNo       = 'Row number';
+  rsColValue       = 'Value';
+  { Kind words: shown in the Type column AND used as the folder predicate. }
+  rsKindFolder     = 'Folder';
+  rsKindTextDoc    = 'Text document';
+  rsKindSheet      = 'Spreadsheet';
+  rsKindImage      = 'Image';
+  rsVGroupFmt      = 'Value %s – %s';
+  rsRenamedFmt     = 'Renamed item index %d → %s';
+  rsRenameVetoed   = 'OnEditing vetoed the rename — folders are not editable';
+  rsStateCollapsed = 'collapsed';
+  rsStateExpanded  = 'expanded';
+  rsGroupNowFmt    = 'Group %d (%s) is now %s';
+  rsOpenedFmt      = 'Double-click opened: %s (item index = %d)';
+  rsFocusNone      = 'None';
+  rsFocusItemFmt   = '%s(item index = %d)';
+  rsStatusFmt      = 'Focus: %s   Selected: %d item(s)   Sort: column %d%s';
+  rsVirtRowFmt     = 'Row %d · value %.6d';
+  rsVFocusFmt      = 'ItemCount = %d, row objects = 0   ·   focused item index = %d';
+  rsVCheckedFmt    = 'ItemCount = %d, row objects = 0   ·   %d item(s) checked';
+  rsVEnoughFmt     = 'ItemCount = %d — that is enough rows for one demo';
+  rsVGrownFmt      = 'ItemCount = %d, row objects = 0   ·   still one relayout';
+
 function ThemesDir: string;
 var
   Dir: string;
@@ -260,21 +290,21 @@ begin
   { Columns are code-created, like examples/treeview: a TCollection streams as anonymous
     `item ... end` blocks, so hand-writing them into the .lfm buys nothing. }
   c := LV1.Header.Columns.Add as TTyColumn;
-  c.Text := 'Name';  c.Width := 260;
+  c.Text := rsColName;  c.Width := 260;
   c := LV1.Header.Columns.Add as TTyColumn;
-  c.Text := 'Size';  c.Width := 110;  c.Alignment := taRightJustify;
+  c.Text := rsColSize;  c.Width := 110;  c.Alignment := taRightJustify;
   c := LV1.Header.Columns.Add as TTyColumn;
-  c.Text := 'Type';  c.Width := 120;
+  c.Text := rsColType;  c.Width := 120;
   c := LV1.Header.Columns.Add as TTyColumn;
-  c.Text := 'Modified time'; c.Width := 180;
+  c.Text := rsColModified; c.Width := 180;
 
   LV1.Header.Options := LV1.Header.Options + [hoVisible, hoColumnResize,
     hoShowSortGlyphs, hoHeaderClickAutoSort, hoHotTrack];
 
   c := LV2.Header.Columns.Add as TTyColumn;
-  c.Text := 'Row number';  c.Width := 120;  c.Alignment := taRightJustify;
+  c.Text := rsColRowNo;  c.Width := 120;  c.Alignment := taRightJustify;
   c := LV2.Header.Columns.Add as TTyColumn;
-  c.Text := 'Value';    c.Width := 300;
+  c.Text := rsColValue;    c.Width := 300;
   LV2.Header.Options := LV2.Header.Options + [hoVisible, hoColumnResize, hoShowSortGlyphs];
 end;
 
@@ -287,10 +317,10 @@ procedure TMainForm.BuildGroups;
 
 begin
   { One group per kind; the index lines up with the item's ImageIndex/GroupIndex. }
-  AddGroup('Folder');       // 0
-  AddGroup('Text document');     // 1
-  AddGroup('Spreadsheet');     // 2
-  AddGroup('Image');         // 3
+  AddGroup(rsKindFolder);    // 0
+  AddGroup(rsKindTextDoc);   // 1
+  AddGroup(rsKindSheet);     // 2
+  AddGroup(rsKindImage);     // 3
 
   { A band can start life folded: Collapsed is a plain published property of the group, so
     the list opens with "Image" already closed the first time Group is ticked. Clicking a
@@ -322,15 +352,24 @@ procedure TMainForm.BuildRows;
     begin
       Caption := AName;
       SubItems.Add('');
-      SubItems.Add('Folder');
+      SubItems.Add(rsKindFolder);
       SubItems.Add('');
       ImageIndex := 0;
       GroupIndex := 0;   { folders group }
     end;
   end;
 
-const
-  Kinds: array[0..2] of string = ('Text document', 'Spreadsheet', 'Image');
+  { A resourcestring is not a compile-time constant, so the kind words cannot sit in a
+    typed const array -- this replaces `Kinds: array[0..2] of string`. }
+  function KindName(AIndex: Integer): string;
+  begin
+    case AIndex of
+      0: Result := rsKindTextDoc;
+      1: Result := rsKindSheet;
+    else Result := rsKindImage;
+    end;
+  end;
+
 var
   i: Integer;
 begin
@@ -344,17 +383,17 @@ begin
     AddFolder('build');
     AddFolder('docs');
 
-    AddFile('README.md',        '4096',    'Text document', '2026-07-10 08:30', 1);
-    AddFile('CHANGELOG.md',     '18944',   'Text document', '2026-07-09 17:02', 1);
-    AddFile('budget-2026.xlsx', '284672',  'Spreadsheet', '2026-06-28 11:45', 2);
-    AddFile('logo.png',         '90112',   'Image',     '2026-05-14 09:12', 3);
-    AddFile('screenshot.png',   '1638400', 'Image',     '2026-07-08 21:37', 3);
-    AddFile('notes.txt',        '512',     'Text document', '2026-07-01 07:05', 1);
+    AddFile('README.md',        '4096',    rsKindTextDoc, '2026-07-10 08:30', 1);
+    AddFile('CHANGELOG.md',     '18944',   rsKindTextDoc, '2026-07-09 17:02', 1);
+    AddFile('budget-2026.xlsx', '284672',  rsKindSheet, '2026-06-28 11:45', 2);
+    AddFile('logo.png',         '90112',   rsKindImage,   '2026-05-14 09:12', 3);
+    AddFile('screenshot.png',   '1638400', rsKindImage,   '2026-07-08 21:37', 3);
+    AddFile('notes.txt',        '512',     rsKindTextDoc, '2026-07-01 07:05', 1);
 
     for i := 1 to 21 do
       AddFile(Format('sample-%.2d.%s', [i, Copy('txtxlspng', 1 + (i mod 3) * 3, 3)]),
               IntToStr(1024 * (i * i + 7)),
-              Kinds[i mod 3],
+              KindName(i mod 3),
               Format('2026-%.2d-%.2d %.2d:%.2d', [1 + (i mod 12), 1 + (i mod 27),
                                                   (i * 3) mod 24, (i * 7) mod 60]),
               1 + (i mod 3));
@@ -382,10 +421,10 @@ begin
     real collection even here. Only the mapping is virtual: OnGetItemGroup is asked, per row,
     which band it belongs to. Bucketing by the value (not by the row number) keeps all four
     bands meaningful after "Add 50,000 rows" has changed the count. }
-  AddGroup('Value 0 – 249,999');          // 0
-  AddGroup('Value 250,000 – 499,999');    // 1
-  AddGroup('Value 500,000 – 749,999');    // 2
-  AddGroup('Value 750,000 – 999,999');    // 3
+  AddGroup(Format(rsVGroupFmt, ['0', '249,999']));          // 0
+  AddGroup(Format(rsVGroupFmt, ['250,000', '499,999']));    // 1
+  AddGroup(Format(rsVGroupFmt, ['500,000', '749,999']));    // 2
+  AddGroup(Format(rsVGroupFmt, ['750,000', '999,999']));    // 3
 end;
 
 procedure TMainForm.FormCreate(Sender: TObject);
@@ -481,7 +520,7 @@ procedure TMainForm.LV1Edited(Sender: TObject; AIndex: Integer; var AText: strin
 begin
   { AIndex is an ITEM index and stays valid across a re-sort. Returning AText unchanged
     lets the control write it into Items[AIndex].Caption. Blank it to abandon. }
-  LblStatus.Caption := Format('Renamed item index %d → %s', [AIndex, AText]);
+  LblStatus.Caption := Format(rsRenamedFmt, [AIndex, AText]);
 end;
 
 { The two row predicates the escape-hatch events share. A "folder" row is the one whose
@@ -490,7 +529,7 @@ function TMainForm.IsFolderRow(AIndex: Integer): Boolean;
 begin
   Result := (AIndex >= 0) and (AIndex < LV1.Items.Count) and
             (LV1.Items[AIndex].SubItems.Count > 1) and
-            (LV1.Items[AIndex].SubItems[1] = 'Folder');
+            (LV1.Items[AIndex].SubItems[1] = rsKindFolder);
 end;
 
 { Column 0 is the caption, columns 1..N are SubItems -- the same mapping the control's own
@@ -557,7 +596,7 @@ procedure TMainForm.LV1Editing(Sender: TObject; AIndex: Integer; var AAllow: Boo
 begin
   AAllow := not IsFolderRow(AIndex);
   if not AAllow then
-    LblStatus.Caption := 'OnEditing vetoed the rename — folders are not editable';
+    LblStatus.Caption := rsRenameVetoed;
 end;
 
 { Fires AFTER a band click flipped Collapsed and the order was rebuilt. AGroup is a GROUP
@@ -567,8 +606,8 @@ var
   state: string;
 begin
   if (AGroup < 0) or (AGroup >= LV1.Groups.Count) then Exit;
-  if LV1.Groups[AGroup].Collapsed then state := 'collapsed' else state := 'expanded';
-  LblStatus.Caption := Format('Group %d (%s) is now %s',
+  if LV1.Groups[AGroup].Collapsed then state := rsStateCollapsed else state := rsStateExpanded;
+  LblStatus.Caption := Format(rsGroupNowFmt,
     [AGroup, LV1.Groups[AGroup].Caption, state]);
 end;
 
@@ -624,7 +663,7 @@ end;
 procedure TMainForm.LV1ItemActivate(Sender: TObject; AIndex: Integer);
 begin
   { AIndex is an ITEM index and stays valid across a re-sort. }
-  LblStatus.Caption := Format('Double-click opened: %s (item index = %d)',
+  LblStatus.Caption := Format(rsOpenedFmt,
     [LV1.Items[AIndex].Caption, AIndex]);
 end;
 
@@ -634,9 +673,9 @@ var
   idx, shown: Integer;
 begin
   if (LV1.ItemIndex >= 0) and (LV1.ItemIndex < LV1.Items.Count) then
-    focus := Format('%s(item index = %d)', [LV1.Items[LV1.ItemIndex].Caption, LV1.ItemIndex])
+    focus := Format(rsFocusItemFmt, [LV1.Items[LV1.ItemIndex].Caption, LV1.ItemIndex])
   else
-    focus := 'None';
+    focus := rsFocusNone;
   { The selection iterator: seed it with -1 for "before the first", then keep calling until
     it returns False. It yields ITEM indices in ascending order, whatever the sort order is,
     so the names below never scramble when a header is clicked. }
@@ -650,7 +689,7 @@ begin
     Inc(shown);
   end;
   if picks <> '' then picks := '   ·   ' + picks;
-  LblStatus.Caption := Format('Focus: %s   Selected: %d item(s)   Sort: column %d%s',
+  LblStatus.Caption := Format(rsStatusFmt,
     [focus, LV1.SelCount, LV1.SortColumn, picks]);
 end;
 
@@ -672,7 +711,7 @@ begin
     sort cannot make this return the wrong row's text. }
   case AColumn of
     0: AText := IntToStr(AIndex);
-    1: AText := Format('Row %d · value %.6d', [AIndex, VirtualValue(AIndex)]);
+    1: AText := Format(rsVirtRowFmt, [AIndex, VirtualValue(AIndex)]);
   end;
 end;
 
@@ -700,8 +739,7 @@ begin
   { Only the row that was CHOSEN names itself here; the abandoned one also arrives, with
     ASelected = False, and would otherwise overwrite the caption with a stale index. }
   if ASelected and (AIndex >= 0) then
-    LblVirtual.Caption := Format('ItemCount = %d, row objects = 0   ·   focused item index = %d',
-      [LV2.ItemCount, AIndex]);
+    LblVirtual.Caption := Format(rsVFocusFmt, [LV2.ItemCount, AIndex]);
 end;
 
 { OwnerData: the control asks us for every row's state, and never remembers the answer. }
@@ -723,8 +761,7 @@ begin
   n := 0;
   for i := 0 to High(FVChecked) do
     if FVChecked[i] then Inc(n);
-  LblVirtual.Caption := Format('ItemCount = %d, row objects = 0   ·   %d item(s) checked',
-    [LV2.ItemCount, n]);
+  LblVirtual.Caption := Format(rsVCheckedFmt, [LV2.ItemCount, n]);
 end;
 
 procedure TMainForm.BtnSortVirtualClick(Sender: TObject);
@@ -751,8 +788,7 @@ var
 begin
   if LV2.ItemCount >= 1000000 then
   begin
-    LblVirtual.Caption := Format('ItemCount = %d — that is enough rows for one demo',
-      [LV2.ItemCount]);
+    LblVirtual.Caption := Format(rsVEnoughFmt, [LV2.ItemCount]);
     Exit;
   end;
   n := LV2.ItemCount + 50000;
@@ -764,8 +800,7 @@ begin
     Setting ItemCount already triggered it -- this is the call you need when the count did
     NOT change but the rows behind it did. }
   LV2.ItemsChanged;
-  LblVirtual.Caption := Format('ItemCount = %d, row objects = 0   ·   still one relayout',
-    [LV2.ItemCount]);
+  LblVirtual.Caption := Format(rsVGrownFmt, [LV2.ItemCount]);
 end;
 
 procedure TMainForm.ChkGroupVirtualChange(Sender: TObject);

@@ -42,3 +42,20 @@ msgstr "Splitter  · TyControls"
 #: tmainform.inspectorpanel.caption
 msgid "Inspector (alRight)"
 msgstr "检查器 (alRight)"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rsdragdonefmt
+#, object-pascal-format
+msgid "Drag complete · left column %d px · top band %d px · inspector %d px"
+msgstr "拖动完成 · 左栏 %d px · 顶带 %d px · 检查器 %d px"
+
+#: umain.rsdraggingfmt
+#, object-pascal-format
+msgid "Dragging · target size %d px"
+msgstr "拖动中 · 目标尺寸 %d px"
+
+#: umain.rsrejectedfmt
+#, object-pascal-format
+msgid "Rejected · %d px exceeds the 400 px cap"
+msgstr "已拒绝 · %d px 超过 400 px 上限"

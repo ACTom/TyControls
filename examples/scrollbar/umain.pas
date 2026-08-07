@@ -67,6 +67,15 @@ var
 implementation
 {$R *.lfm}
 
+resourcestring
+  { Status texts composed at run time. TScrollCode spellings and the VBar/HBar
+    component names are identifiers, not prose -- they stay literals. }
+  rsLineFmt   = 'Line %.2d - scrollable content';
+  rsBarsFmt   = 'Vertical:  Position = %d   (Min %d / Max %d / PageSize %d / SmallChange %d)';
+  rsBarsFmt2  = 'Horizontal:  Position = %d   (Min %d / Max %d / PageSize %d / SmallChange %d)';
+  rsVetoedFmt = '%s OnScroll: scTop vetoed - Home clamps to 10, not Min';
+  rsScrollFmt = '%s OnScroll: %s -> %d';
+
 procedure TMainForm.FormCreate(Sender: TObject);
 var
   names: TStringArray;
@@ -98,7 +107,7 @@ begin
   for i := 1 to 20 do
   begin
     if s <> '' then s := s + LineEnding;
-    s := s + Format('Line %.2d - scrollable content', [i]);
+    s := s + Format(rsLineFmt, [i]);
   end;
   LblContent.Caption := s;
   LblContent.Top := -VBar.Position;
@@ -124,9 +133,7 @@ end;
 procedure TMainForm.UpdateStatus;
 begin
   LblStatus.Caption := Format(
-    'Vertical:  Position = %d   (Min %d / Max %d / PageSize %d / SmallChange %d)' + LineEnding +
-    LineEnding +
-    'Horizontal:  Position = %d   (Min %d / Max %d / PageSize %d / SmallChange %d)',
+    rsBarsFmt + LineEnding + LineEnding + rsBarsFmt2,
     [VBar.Position, VBar.Min, VBar.Max, VBar.PageSize, VBar.SmallChange,
      HBar.Position, HBar.Min, HBar.Max, HBar.PageSize, HBar.SmallChange]);
 end;
@@ -173,11 +180,10 @@ begin
   begin
     // The veto: Home proposes Min, we overrule it to 10 and that is what gets committed.
     ScrollPos := 10;
-    LblCode.Caption := who + ' OnScroll: scTop vetoed - Home clamps to 10, not Min';
+    LblCode.Caption := Format(rsVetoedFmt, [who]);
     Exit;
   end;
-  LblCode.Caption := Format('%s OnScroll: %s -> %d',
-    [who, ScrollCodeName(ScrollCode), ScrollPos]);
+  LblCode.Caption := Format(rsScrollFmt, [who, ScrollCodeName(ScrollCode), ScrollPos]);
 end;
 
 procedure TMainForm.BtnSnapClick(Sender: TObject);

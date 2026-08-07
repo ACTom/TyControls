@@ -63,13 +63,23 @@ implementation
 
 {$R *.lfm}
 
+resourcestring
+  { Status texts composed at run time, so they live here rather than in the .lfm. }
+  rsStChecked   = 'Checked (cbChecked)';
+  rsStGrayed    = 'Grayed (cbGrayed)';
+  rsStUnchecked = 'Unchecked (cbUnchecked)';
+  rsTriFmt        = 'Tri-state:%s';
+  rsTwoChecked    = 'Two-state: checked';
+  rsTwoUnchecked  = 'Two-state: unchecked';
+  rsEventCountFmt = 'OnChange fired %d time(s), OnClick %d time(s)';
+
 function StateName(AState: TCheckBoxState): string;
 begin
   case AState of
-    cbChecked: Result := 'Checked (cbChecked)';
-    cbGrayed:  Result := 'Grayed (cbGrayed)';
+    cbChecked: Result := rsStChecked;
+    cbGrayed:  Result := rsStGrayed;
   else
-    Result := 'Unchecked (cbUnchecked)';
+    Result := rsStUnchecked;
   end;
 end;
 
@@ -111,21 +121,20 @@ end;
 
 procedure TMainForm.TriChange(Sender: TObject);
 begin
-  LblTriStatus.Caption := 'Tri-state:' + StateName(CbTri.State);
+  LblTriStatus.Caption := Format(rsTriFmt, [StateName(CbTri.State)]);
 end;
 
 procedure TMainForm.PlainChange(Sender: TObject);
 begin
   if CbPlain.Checked then
-    LblStatus.Caption := 'Two-state: checked'
+    LblStatus.Caption := rsTwoChecked
   else
-    LblStatus.Caption := 'Two-state: unchecked';
+    LblStatus.Caption := rsTwoUnchecked;
 end;
 
 procedure TMainForm.ShowEventCounts;
 begin
-  LblEvents.Caption := Format('OnChange fired %d time(s), OnClick %d time(s)',
-    [FChangeCount, FClickCount]);
+  LblEvents.Caption := Format(rsEventCountFmt, [FChangeCount, FClickCount]);
 end;
 
 procedure TMainForm.EventsChange(Sender: TObject);

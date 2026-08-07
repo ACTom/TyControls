@@ -284,6 +284,56 @@ resourcestring
   rsDemoMsgWarn    = 'Disk space is running low.';
   rsDemoMsgError   = 'The file could not be opened.';
   rsDemoMsgConfirm = 'Save the changes before closing?';
+  rsWatchingFmt   = 'Watching %s';
+  rsWatchOff      = 'Theme watch off';
+  rsDensityFmt    = 'Density: %s';
+  rsAccentTitle   = 'Accent';
+  rsDlgInput      = 'Input';
+  rsDlgInputAsk   = 'Enter some text:';
+  rsDlgPassword   = 'Password';
+  rsDlgPasswordAsk = 'Enter a password:';
+  rsPwdCharsFmt   = 'Password: %d chars';
+  rsDlgText       = 'Text';
+  rsDlgTextAsk    = 'Enter a note:';
+  rsDlgSelValue   = 'SelValue';
+  rsDlgSelValueAsk = 'Pick a value:';
+  rsSelectedFmt   = 'Selected: %s';
+  rsDlgColor      = 'Color';
+  rsWorkingFmt    = 'Working… %d%%';
+  rsProgCancelled = 'Progress: cancelled';
+  rsProgDone      = 'Progress: done';
+  rsAnswerOk      = 'OK';
+  rsAnswerCancel  = 'Cancel';
+  rsAnswerYes     = 'Yes';
+  rsAnswerNo      = 'No';
+  rsMessageFmt    = 'Message: %s';
+  rsFindFmt       = 'Find: %s';
+  rsReplaceFmt    = 'Replace "%s" -> "%s"';
+  rsReplaceAll    = ' (all)';
+  rsProgCancelReq = 'Progress: cancel requested';
+  rsVirtNodeFmt   = 'Node %d  (L%d)';
+  rsFolderDocuments = 'Documents';
+  rsFolderPictures  = 'Pictures';
+  rsFolderProjects  = 'Projects';
+  rsColName     = 'Name';
+  rsColSize     = 'Size';
+  rsColModified = 'Modified';
+  rsCheckedFmt  = 'Checked: %s';
+  rsReady       = 'Ready';
+  rsSelCountFmt = 'Selected: %d item(s)';
+  rsColOrder    = 'Order';
+  rsColRegion   = 'Region';
+  rsColProduct  = 'Product';
+  rsColAmount   = 'Amount';
+  rsRegionNorth = 'North';
+  rsRegionSouth = 'South';
+  rsRegionEast  = 'East';
+  rsRegionWest  = 'West';
+  rsProdWidget  = 'Widget';
+  rsProdGadget  = 'Gadget';
+  rsProdSprocket = 'Sprocket';
+  rsProdCog     = 'Cog';
+  rsProdFlange  = 'Flange';
 
 function TDemoMainForm.ThemeDir: string;
 var
@@ -412,9 +462,9 @@ procedure TDemoMainForm.ChkHotReloadChange(Sender: TObject);
 begin
   TyController.HotReload := ChkHotReload.Checked;
   if ChkHotReload.Checked then
-    StatusBar1.Panels[0].Text := 'Watching ' + ExtractFileName(TyController.ThemeFile)
+    StatusBar1.Panels[0].Text := Format(rsWatchingFmt, [ExtractFileName(TyController.ThemeFile)])
   else
-    StatusBar1.Panels[0].Text := 'Theme watch off';
+    StatusBar1.Panels[0].Text := rsWatchOff;
 end;
 
 { The density axis: same skin, other geometry pack. Switching it reloads the theme layer, so
@@ -429,7 +479,7 @@ begin
   else
     TyController.Density := tdClassic;
   ApplyChromeTheme(TyController);
-  StatusBar1.Panels[0].Text := 'Density: ' + DensityCombo.Text;
+  StatusBar1.Panels[0].Text := Format(rsDensityFmt, [DensityCombo.Text]);
 end;
 
 { 'Native' tab. The styler always recolours; family and size are opt-in because pushing a
@@ -467,7 +517,7 @@ begin
   end
   else
     col := RGBToColor($33, $66, $CC);
-  if TySelectColor('Accent', col, alpha) then
+  if TySelectColor(rsAccentTitle, col, alpha) then
   begin
     hex := '#' + IntToHex(Red(col), 2) + IntToHex(Green(col), 2) + IntToHex(Blue(col), 2);
     TyController.SetAccent(hex);                      // recolours every registered control + chrome
@@ -566,23 +616,23 @@ procedure TDemoMainForm.BtnDlgInputClick(Sender: TObject);
 var s: string;
 begin
   s := LblHello.Caption;
-  if TyInputQuery('Input', 'Enter some text:', s) then
+  if TyInputQuery(rsDlgInput, rsDlgInputAsk, s) then
     LblHello.Caption := s;
 end;
 
 procedure TDemoMainForm.BtnDlgPasswordClick(Sender: TObject);
 var pwd: string;
 begin
-  pwd := TyPasswordBox('Password', 'Enter a password:');
+  pwd := TyPasswordBox(rsDlgPassword, rsDlgPasswordAsk);
   if pwd <> '' then
-    StatusBar1.Panels[0].Text := Format('Password: %d chars', [Length(pwd)]);
+    StatusBar1.Panels[0].Text := Format(rsPwdCharsFmt, [Length(pwd)]);
 end;
 
 procedure TDemoMainForm.BtnDlgTextClick(Sender: TObject);
 var note: string;
 begin
   note := LblHello.Caption;
-  if TyTextQuery('Text', 'Enter a note:', note) then
+  if TyTextQuery(rsDlgText, rsDlgTextAsk, note) then
     LblHello.Caption := TrimRight(note);   // TyTextQuery result ends with a LineEnding
 end;
 
@@ -596,8 +646,8 @@ begin
     items.Add('Gamma');
     items.Add('Delta');
     idx := 0;
-    if TySelectValue('SelValue', 'Pick a value:', items, idx) then
-      LblHello.Caption := 'Selected: ' + items[idx];
+    if TySelectValue(rsDlgSelValue, rsDlgSelValueAsk, items, idx) then
+      LblHello.Caption := Format(rsSelectedFmt, [items[idx]]);
   finally
     items.Free;
   end;
@@ -608,7 +658,7 @@ var col: TColor; alpha: Byte;
 begin
   col := LblHello.Font.Color;
   alpha := 255;
-  if TySelectColor('Color', col, alpha) then
+  if TySelectColor(rsDlgColor, col, alpha) then
   begin
     LblHello.Font.Color := col;
     LblHello.Invalidate;
@@ -645,15 +695,15 @@ begin
       // small busy-wait so the bar visibly advances
       x := 0;
       for j := 1 to 400000 do x := x + Sqrt(j);
-      ProgressDlg.SetProgress(i, Format('Working… %d%%', [i]));
+      ProgressDlg.SetProgress(i, Format(rsWorkingFmt, [i]));
     end;
   finally
     ProgressDlg.Close;
   end;
   if ProgressDlg.Cancelled then
-    StatusBar1.Panels[0].Text := 'Progress: cancelled'
+    StatusBar1.Panels[0].Text := rsProgCancelled
   else
-    StatusBar1.Panels[0].Text := 'Progress: done';
+    StatusBar1.Panels[0].Text := rsProgDone;
 end;
 
 { TTyMessage is streamed with the plain information/OK pair; DlgType picks the icon and
@@ -679,14 +729,14 @@ begin
     TyMessage1.Buttons := [mbOK];
   end;
   case mr of
-    mrOk:     answer := 'OK';
-    mrCancel: answer := 'Cancel';
-    mrYes:    answer := 'Yes';
-    mrNo:     answer := 'No';
+    mrOk:     answer := rsAnswerOk;
+    mrCancel: answer := rsAnswerCancel;
+    mrYes:    answer := rsAnswerYes;
+    mrNo:     answer := rsAnswerNo;
   else
     answer := IntToStr(mr);
   end;
-  StatusBar1.Panels[0].Text := 'Message: ' + answer;
+  StatusBar1.Panels[0].Text := Format(rsMessageFmt, [answer]);
 end;
 
 procedure TDemoMainForm.BtnMsgWarnClick(Sender: TObject);
@@ -706,21 +756,21 @@ end;
 
 procedure TDemoMainForm.FindDlgFind(Sender: TObject);
 begin
-  StatusBar1.Panels[0].Text := 'Find: ' + FindDlg.FindText;
+  StatusBar1.Panels[0].Text := Format(rsFindFmt, [FindDlg.FindText]);
 end;
 
 procedure TDemoMainForm.ReplaceDlgReplace(Sender: TObject);
 var s: string;
 begin
-  s := Format('Replace "%s" -> "%s"', [ReplaceDlg.FindText, ReplaceDlg.ReplaceText]);
-  if frReplaceAll in ReplaceDlg.Options then s := s + ' (all)';
+  s := Format(rsReplaceFmt, [ReplaceDlg.FindText, ReplaceDlg.ReplaceText]);
+  if frReplaceAll in ReplaceDlg.Options then s := s + rsReplaceAll;
   StatusBar1.Panels[0].Text := s;
 end;
 
 procedure TDemoMainForm.ProgressDlgCancel(Sender: TObject);
 begin
   // MUST NOT Free ProgressDlg here — the busy loop reads Cancelled and calls Close.
-  StatusBar1.Panels[0].Text := 'Progress: cancel requested';
+  StatusBar1.Panels[0].Text := rsProgCancelReq;
 end;
 
 procedure TDemoMainForm.MnuViewToggleClick(Sender: TObject);
@@ -784,7 +834,7 @@ end;
 procedure TDemoMainForm.TyTree1GetText(Sender: TTyTreeView; Node: PTyTreeNode;
   var AText: string);
 begin
-  AText := Format('Node %d  (L%d)', [Node^.Index, Sender.GetNodeLevel(Node)]);
+  AText := Format(rsVirtNodeFmt, [Node^.Index, Sender.GetNodeLevel(Node)]);
 end;
 
 { ---------------------------------------------------------------------------
@@ -805,9 +855,18 @@ type
   TColNode  = record FolderIdx, ChildIdx: Integer; end;
   PColNode  = ^TColNode;
 
+{ Display names for the folder table: a typed const cannot hold resourcestrings,
+  so the mapper translates at the moment the name becomes visible text. }
+function ColTreeFolderDisplay(AIndex: Integer): string;
+begin
+  case AIndex of
+    0: Result := rsFolderDocuments;
+    1: Result := rsFolderPictures;
+  else Result := rsFolderProjects;
+  end;
+end;
+
 const
-  { Top-level folder names }
-  ColTreeFolders: array[0..2] of string = ('Documents', 'Pictures', 'Projects');
 
   { Child names per folder [folder, child] }
   ColTreeChildNames: array[0..2] of array[0..4] of string = (
@@ -864,17 +923,17 @@ begin
     MainColumn := 0;
     { Column 0: Name }
     col := Columns.Add as TTyColumn;
-    col.Text := 'Name';
+    col.Text := rsColName;
     col.Width := 180;
     col.Alignment := taLeftJustify;
     { Column 1: Size }
     col := Columns.Add as TTyColumn;
-    col.Text := 'Size';
+    col.Text := rsColSize;
     col.Width := 80;
     col.Alignment := taRightJustify;
     { Column 2: Modified }
     col := Columns.Add as TTyColumn;
-    col.Text := 'Modified';
+    col.Text := rsColModified;
     col.Width := 120;
     col.Alignment := taLeftJustify;
   end;
@@ -964,7 +1023,7 @@ begin
     if data <> nil then folderIdx := data^.FolderIdx
     else folderIdx := Integer(Node^.Index);
     case Column of
-      0: CellText := ColTreeFolders[folderIdx];
+      0: CellText := ColTreeFolderDisplay(folderIdx);
       1: CellText := '';                          { folders have no size }
       2: CellText := ColTreeFolderDates[folderIdx];
     else
@@ -1022,7 +1081,7 @@ begin
     if d2 <> nil then fi2 := d2^.FolderIdx else fi2 := Integer(Node2^.Index);
     { Folder level: only Name and Modified are meaningful }
     case Column of
-      0: CompareResult := CompareStr(ColTreeFolders[fi1], ColTreeFolders[fi2]);
+      0: CompareResult := CompareStr(ColTreeFolderDisplay(fi1), ColTreeFolderDisplay(fi2));
       2: CompareResult := CompareStr(ColTreeFolderDates[fi1], ColTreeFolderDates[fi2]);
     else
       CompareResult := 0;
@@ -1060,7 +1119,7 @@ var
 begin
   nodeName := '';
   TyColTreeGetText(Sender, Node, 0, ttNormal, nodeName);
-  StatusBar1.Panels[0].Text := 'Checked: ' + nodeName;
+  StatusBar1.Panels[0].Text := Format(rsCheckedFmt, [nodeName]);
 end;
 
 { E4: update StatusBar panel 0 after the multi-select set changes. }
@@ -1070,9 +1129,9 @@ var
 begin
   n := TyColTree.SelectedCount;
   if n = 0 then
-    StatusBar1.Panels[0].Text := 'Ready'
+    StatusBar1.Panels[0].Text := rsReady
   else
-    StatusBar1.Panels[0].Text := Format('Selected: %d item(s)', [n]);
+    StatusBar1.Panels[0].Text := Format(rsSelCountFmt, [n]);
 end;
 
 { ---------------------------------------------------------------------------
@@ -1094,28 +1153,46 @@ procedure TDemoMainForm.InitDemoGrid;
 { Columns are a TCollection and the rows are data: same documented exception as InitColTree —
   hand-writing a TPersistent hierarchy into the .lfm is error-prone, the code path is simpler
   and equally correct as long as it runs before the first paint. }
-const
-  cGridRegions: array[0..3] of string = ('North', 'South', 'East', 'West');
-  cGridProducts: array[0..4] of string =
-    ('Widget', 'Gadget', 'Sprocket', 'Cog', 'Flange');
 var
   col: TTyColumn;
   r: Integer;
+
+  function GridRegion(AIndex: Integer): string;
+  begin
+    case AIndex mod 4 of
+      0: Result := rsRegionNorth;
+      1: Result := rsRegionSouth;
+      2: Result := rsRegionEast;
+    else Result := rsRegionWest;
+    end;
+  end;
+
+  function GridProduct(AIndex: Integer): string;
+  begin
+    case AIndex mod 5 of
+      0: Result := rsProdWidget;
+      1: Result := rsProdGadget;
+      2: Result := rsProdSprocket;
+      3: Result := rsProdCog;
+    else Result := rsProdFlange;
+    end;
+  end;
+
 begin
   with DemoGrid.Header do
   begin
     Options := [hoVisible, hoColumnResize, hoShowSortGlyphs, hoHeaderClickAutoSort];
     col := Columns.Add as TTyColumn;
-    col.Text := 'Order';
+    col.Text := rsColOrder;
     col.Width := 120;
     col := Columns.Add as TTyColumn;
-    col.Text := 'Region';
+    col.Text := rsColRegion;
     col.Width := 100;
     col := Columns.Add as TTyColumn;
-    col.Text := 'Product';
+    col.Text := rsColProduct;
     col.Width := 130;
     col := Columns.Add as TTyColumn;
-    col.Text := 'Amount';
+    col.Text := rsColAmount;
     col.Width := 110;
     col.Alignment := taRightJustify;
   end;
@@ -1123,8 +1200,8 @@ begin
   for r := 0 to DemoGrid.RowCount - 1 do
   begin
     DemoGrid.Cells[0, r] := Format('SO-%d', [1001 + r]);
-    DemoGrid.Cells[1, r] := cGridRegions[r mod Length(cGridRegions)];
-    DemoGrid.Cells[2, r] := cGridProducts[r mod Length(cGridProducts)];
+    DemoGrid.Cells[1, r] := GridRegion(r);
+    DemoGrid.Cells[2, r] := GridProduct(r);
     DemoGrid.Cells[3, r] := Format('%.2f', [120.5 + r * 37.25]);
   end;
 end;

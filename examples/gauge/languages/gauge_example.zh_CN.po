@@ -74,3 +74,25 @@ msgstr "Gauge  · TyControls"
 #: tmainform.busyswitch.caption
 msgid "Running"
 msgstr "运行中"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rsgaugesfmt
+#, object-pascal-format
+msgid "Arc=%.0f%%  Ring=%.0f  Linear=%.0f%%"
+msgstr "弧形=%.0f%%  圆环=%.0f  线形=%.0f%%"
+
+#: umain.rsknobsfmt
+#, object-pascal-format
+msgid "Dial = %.0f   Gear = %.0f   Rating = %.1f"
+msgstr "旋钮 = %.0f   齿轮 = %.0f   评分 = %.1f"
+
+#: umain.rsspinnerfmt
+#, object-pascal-format
+msgid "Spinner (TTyUpDown) = %d"
+msgstr "步进器（TTyUpDown）= %d"
+
+#: umain.rsspinnerhfmt
+#, object-pascal-format
+msgid "Horizontal spinner: Increment 5, Wrap 20 -> 0 (Position = %d)"
+msgstr "水平步进器：Increment 5，Wrap 20 -> 0（Position = %d）"

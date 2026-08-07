@@ -70,3 +70,56 @@ msgstr "选一种视图样式;取消\"文件夹优先\"再点两次 Name 列头,
 #: tmainform.lblselection.caption
 msgid "Ctrl/Shift-click rows: SelCount and SelectedFile report the selection here"
 msgstr "Ctrl/Shift 点击行:SelCount 与 SelectedFile 在这里报告选中情况"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rscurdirfmt
+#, object-pascal-format
+msgid "Current directory:%s"
+msgstr "当前目录：%s"
+
+#: umain.rsfilterall
+msgid "All files (*.*)"
+msgstr "所有文件 (*.*)"
+
+#: umain.rsfiltercode
+msgid "Code (*.pas;*.lpr;*.inc)"
+msgstr "代码 (*.pas;*.lpr;*.inc)"
+
+#: umain.rsfilterdoc
+msgid "Document (*.md;*.txt)"
+msgstr "文档 (*.md;*.txt)"
+
+#: umain.rsopenfmt
+#, object-pascal-format
+msgid "Open file:%s"
+msgstr "打开文件：%s"
+
+#: umain.rsselfmt
+#, object-pascal-format
+msgid "SelectedFile: %s - SelCount %d"
+msgstr "SelectedFile：%s - SelCount %d"
+
+#: umain.rsselnone
+msgid "SelectedFile: (none) - SelCount 0"
+msgstr "SelectedFile：（无）- SelCount 0"
+
+#: umain.rsviewicons
+msgid "Icons"
+msgstr "图标"
+
+#: umain.rsviewlist
+msgid "List"
+msgstr "列表"
+
+#: umain.rsviewreport
+msgid "Report"
+msgstr "报表"
+
+#: umain.rsviewsmall
+msgid "Small icons"
+msgstr "小图标"
+
+#: umain.rsviewtile
+msgid "Tile"
+msgstr "平铺"

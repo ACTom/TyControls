@@ -262,3 +262,30 @@ msgstr "粘贴(&P)"
 #: tmainform.hintpanel2.caption
 msgid "Right-click: plain themed menu"
 msgstr "右键：普通主题菜单"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rscaptionactionfmt
+#, object-pascal-format
+msgid "CaptionAction = %s -- double-click the title bar to see it"
+msgstr "CaptionAction = %s —— 双击标题栏看看效果"
+
+#: umain.rscmdcheckedfmt
+#, object-pascal-format
+msgid "Menu command selected: %s (now checked)"
+msgstr "选了菜单命令：%s（现已勾选）"
+
+#: umain.rscmdfmt
+#, object-pascal-format
+msgid "Menu command selected: %s"
+msgstr "选了菜单命令：%s"
+
+#: umain.rsradiopickedfmt
+#, object-pascal-format
+msgid "Radio item selected: %s (the other two in GroupIndex 1 turned off)"
+msgstr "选了单选项：%s（GroupIndex 1 的另外两项已关闭）"
+
+#: umain.rsrolledupfmt
+#, object-pascal-format
+msgid "RolledUp = %s (double-click the title bar to toggle it too)"
+msgstr "RolledUp = %s（双击标题栏也能切换）"

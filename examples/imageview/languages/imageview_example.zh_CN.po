@@ -98,3 +98,18 @@ msgstr "TTyImageView  ·  TyControls"
 #: tmainform.div2.caption
 msgid "View behaviour — wheel zoom stops at ZoomMin 10% and ZoomMax 800%"
 msgstr "视图行为 — 滚轮缩放止于 ZoomMin 10% 与 ZoomMax 800%"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rsopenpicture
+msgid "Open picture"
+msgstr "打开图片"
+
+#: umain.rszoomfmt
+#, object-pascal-format
+msgid "Zoom: %.0f%%   (clamped 10%%..800%%)"
+msgstr "缩放：%.0f%%   （钳制在 10%%..800%%）"
+
+#: umain.rszoomnone
+msgid "Zoom: —"
+msgstr "缩放：—"

@@ -2,10 +2,10 @@ object MainForm: TMainForm
   Left = 0
   Height = 840
   Top = 0
-  Width = 1300
+  Width = 1316
   Caption = 'Rich Inputs example'
   ClientHeight = 840
-  ClientWidth = 1300
+  ClientWidth = 1316
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
@@ -59,10 +59,11 @@ object MainForm: TMainForm
     end
     object L2: TTyLabel
       Left = 24
-      Height = 20
+      Height = 36
       Top = 100
-      Width = 200
+      Width = 208
       Caption = 'Amount (2 decimals + thousands separator):'
+      WordWrap = True
     end
     object FPrice: TTyNumericEdit
       Left = 240
@@ -72,10 +73,11 @@ object MainForm: TMainForm
     end
     object L3: TTyLabel
       Left = 24
-      Height = 20
+      Height = 36
       Top = 144
-      Width = 200
+      Width = 208
       Caption = 'Clamp (MinValue=0 / MaxValue=100):'
+      WordWrap = True
     end
     object FRanged: TTyNumericEdit
       Left = 240
@@ -87,10 +89,11 @@ object MainForm: TMainForm
     end
     object L4: TTyLabel
       Left = 24
-      Height = 20
+      Height = 36
       Top = 188
-      Width = 200
+      Width = 208
       Caption = 'Currency (TTyCurrencyEdit, ¥):'
+      WordWrap = True
     end
     object FMoney: TTyCurrencyEdit
       Left = 240
@@ -129,10 +132,11 @@ object MainForm: TMainForm
     end
     object L7: TTyLabel
       Left = 24
-      Height = 20
+      Height = 36
       Top = 320
-      Width = 200
+      Width = 208
       Caption = 'Dropdown (TTyComboEdit hosts any popup):'
+      WordWrap = True
     end
     object FCombo: TTyComboEdit
       Left = 240
@@ -143,10 +147,11 @@ object MainForm: TMainForm
     end
     object L8: TTyLabel
       Left = 24
-      Height = 20
+      Height = 36
       Top = 364
-      Width = 200
+      Width = 208
       Caption = 'Slider value (TTyTrackEdit, 0..255):'
+      WordWrap = True
     end
     object FTrack: TTyTrackEdit
       Left = 240
@@ -235,10 +240,11 @@ object MainForm: TMainForm
     end
     object L14: TTyLabel
       Left = 640
-      Height = 20
-      Top = 380
+      Height = 32
+      Top = 368
       Width = 190
       Caption = 'Colour + more (TTyColorComboBox):'
+      WordWrap = True
     end
     object FColorCombo: TTyColorComboBox
       Left = 640
@@ -250,10 +256,11 @@ object MainForm: TMainForm
     end
     object L23: TTyLabel
       Left = 640
-      Height = 20
-      Top = 452
+      Height = 32
+      Top = 440
       Width = 190
       Caption = 'Checkable dropdown (TTyCheckComboBox):'
+      WordWrap = True
     end
     object FCheckCombo: TTyCheckComboBox
       Left = 640
@@ -268,6 +275,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 52
       Width = 200
+      AutoSize = True
       Caption = 'Recently used (TTyMRUComboBox):'
     end
     object FMRU: TTyMRUComboBox
@@ -282,6 +290,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 116
       Width = 200
+      AutoSize = True
       Caption = 'Image + text (TTyComboBoxEx):'
     end
     object FComboEx: TTyComboBoxEx
@@ -295,6 +304,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 180
       Width = 200
+      AutoSize = True
       Caption = 'Grouped combo (TTyOfficeComboBox):'
     end
     object FOfficeCombo: TTyOfficeComboBox
@@ -308,6 +318,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 244
       Width = 200
+      AutoSize = True
       Caption = 'Grouped list (TTyOfficeListBox):'
     end
     object FOfficeList: TTyOfficeListBox
@@ -318,10 +329,11 @@ object MainForm: TMainForm
     end
     object L19: TTyLabel
       Left = 840
-      Height = 20
-      Top = 428
-      Width = 220
+      Height = 32
+      Top = 420
+      Width = 228
       Caption = 'Swatch grid ColorGrid + lightness LColorPicker:'
+      WordWrap = True
     end
     object FColorGrid: TTyColorGrid
       Left = 840
@@ -346,7 +358,8 @@ object MainForm: TMainForm
       Height = 20
       Top = 52
       Width = 220
-      Caption = 'HS colour square (TTyHSColorPicker):'
+      AutoSize = True
+      Caption = 'HS square (TTyHSColorPicker):'
     end
     object FHS: TTyHSColorPicker
       Left = 1080
@@ -360,10 +373,11 @@ object MainForm: TMainForm
     end
     object L21: TTyLabel
       Left = 1080
-      Height = 20
-      Top = 218
-      Width = 220
+      Height = 32
+      Top = 210
+      Width = 228
       Caption = 'Rich-row list (TTyAdvancedListBox):'
+      WordWrap = True
     end
     object FAdvList: TTyAdvancedListBox
       Left = 1080
@@ -373,10 +387,11 @@ object MainForm: TMainForm
     end
     object L22: TTyLabel
       Left = 1080
-      Height = 20
-      Top = 404
-      Width = 220
+      Height = 32
+      Top = 394
+      Width = 228
       Caption = 'Rich-row combo (TTyAdvancedComboBox):'
+      WordWrap = True
     end
     object FAdvCombo: TTyAdvancedComboBox
       Left = 1080
@@ -386,10 +401,11 @@ object MainForm: TMainForm
     end
     object L24: TTyLabel
       Left = 24
-      Height = 20
-      Top = 600
-      Width = 340
+      Height = 32
+      Top = 590
+      Width = 360
       Caption = 'Name/value editor (TTyValueListEditor, click the value column / F2 to edit):'
+      WordWrap = True
     end
     object FVLE: TTyValueListEditor
       Left = 24
@@ -403,7 +419,8 @@ object MainForm: TMainForm
       Height = 20
       Top = 600
       Width = 260
-      Caption = 'Calculator value (TTyCalcEdit, click the small button at the end):'
+      AutoSize = True
+      Caption = 'Calculator value (TTyCalcEdit, click the end button):'
     end
     object FCalcEdit: TTyCalcEdit
       Left = 410
@@ -416,6 +433,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 662
       Width = 260
+      AutoSize = True
       Caption = 'Calculator currency (SymbolBefore = False → 1,234.50 €):'
     end
     object FCalcCurr: TTyCalcCurrencyEdit
@@ -438,12 +456,13 @@ object MainForm: TMainForm
       Height = 40
       Top = 536
       Width = 400
-      Caption = 'Try: digits / minus / decimal point only; the thousands separator is dropped on focus for easy editing and regrouped on blur; enter a value >100 in the clamped field and it clamps to 100 on blur.'
+      Caption = 'Try: digits / minus / decimal point only; grouping drops on focus and returns on blur; >100 in the clamped field clamps back.'
+      WordWrap = True
     end
     object L27: TTyLabel
       Left = 840
-      Height = 36
-      Top = 560
+      Height = 50
+      Top = 550
       Width = 220
       Caption = 'Every picker reports through OnChange — read Selected / SelectedColor:'
       WordWrap = True
@@ -466,7 +485,7 @@ object MainForm: TMainForm
       Left = 1080
       Height = 36
       Top = 470
-      Width = 220
+      Width = 228
       Caption = 'SelectedFont + FontSize drive this preview (size capped at 28 to fit):'
       WordWrap = True
     end
@@ -481,7 +500,7 @@ object MainForm: TMainForm
       Left = 1080
       Height = 40
       Top = 574
-      Width = 220
+      Width = 228
       Caption = 'SelectedFont / FontSize land here'
       WordWrap = True
     end

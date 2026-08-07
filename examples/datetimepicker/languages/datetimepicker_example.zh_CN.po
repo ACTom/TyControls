@@ -74,3 +74,23 @@ msgstr "打开按钮设 DatePicker.DroppedDown := True；关闭后回读"
 #: tmainform.bar.caption
 msgid "TTyDateTimePicker  ·  TyControls"
 msgstr "TTyDateTimePicker  ·  TyControls"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rscalopened
+msgid "Calendar opened: click a date or press Enter to confirm, Esc to cancel."
+msgstr "日历已打开：点日期或按回车确认，Esc 取消。"
+
+#: umain.rsdroppedfmt
+#, object-pascal-format
+msgid "DroppedDown = %s"
+msgstr "DroppedDown = %s"
+
+#: umain.rsempty
+msgid "(empty)"
+msgstr "（空）"
+
+#: umain.rsstatusfmt
+#, object-pascal-format
+msgid "Date:%s\r\nTime:%s\r\nNullable:%s\r\nTip: ←/→ switch field, ↑/↓ or wheel to step, type a digit directly, chevron opens the calendar."
+msgstr "日期：%s\n时间：%s\n可空：%s\n提示：←/→ 切换字段，↑/↓ 或滚轮步进，可直接输入数字，点箭头打开日历。"

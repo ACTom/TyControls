@@ -122,3 +122,116 @@ msgstr "TTyListView  ·  TyControls"
 #: tmainform.divextras.caption
 msgid "Driving the list from code — selection API, header band, custom comparator, virtual grouping and growth"
 msgstr "用代码驱动列表 — 选择 API、表头条、自定义比较器、虚拟分组与扩容"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rscolmodified
+msgid "Modified time"
+msgstr "修改时间"
+
+#: umain.rscolname
+msgid "Name"
+msgstr "名称"
+
+#: umain.rscolrowno
+msgid "Row number"
+msgstr "行号"
+
+#: umain.rscolsize
+msgid "Size"
+msgstr "大小"
+
+#: umain.rscoltype
+msgid "Type"
+msgstr "类型"
+
+#: umain.rscolvalue
+msgid "Value"
+msgstr "值"
+
+#: umain.rsfocusitemfmt
+#, object-pascal-format
+msgid "%s(item index = %d)"
+msgstr "%s（条目索引 = %d）"
+
+#: umain.rsfocusnone
+msgid "None"
+msgstr "无"
+
+#: umain.rsgroupnowfmt
+#, object-pascal-format
+msgid "Group %d (%s) is now %s"
+msgstr "组 %d（%s）现已%s"
+
+#: umain.rskindfolder
+msgid "Folder"
+msgstr "文件夹"
+
+#: umain.rskindimage
+msgid "Image"
+msgstr "图片"
+
+#: umain.rskindsheet
+msgid "Spreadsheet"
+msgstr "电子表格"
+
+#: umain.rskindtextdoc
+msgid "Text document"
+msgstr "文本文档"
+
+#: umain.rsopenedfmt
+#, object-pascal-format
+msgid "Double-click opened: %s (item index = %d)"
+msgstr "双击打开：%s（条目索引 = %d）"
+
+#: umain.rsrenamedfmt
+#, object-pascal-format
+msgid "Renamed item index %d → %s"
+msgstr "已重命名条目索引 %d → %s"
+
+#: umain.rsrenamevetoed
+msgid "OnEditing vetoed the rename — folders are not editable"
+msgstr "OnEditing 否决了重命名 —— 文件夹不可编辑"
+
+#: umain.rsstatecollapsed
+msgid "collapsed"
+msgstr "折叠"
+
+#: umain.rsstateexpanded
+msgid "expanded"
+msgstr "展开"
+
+#: umain.rsstatusfmt
+#, object-pascal-format
+msgid "Focus: %s   Selected: %d item(s)   Sort: column %d%s"
+msgstr "焦点：%s   已选：%d 项   排序：第 %d 列%s"
+
+#: umain.rsvcheckedfmt
+#, object-pascal-format
+msgid "ItemCount = %d, row objects = 0   ·   %d item(s) checked"
+msgstr "ItemCount = %d，行对象 = 0   ·   已勾选 %d 项"
+
+#: umain.rsvenoughfmt
+#, object-pascal-format
+msgid "ItemCount = %d — that is enough rows for one demo"
+msgstr "ItemCount = %d —— 一个演示有这么多行足够了"
+
+#: umain.rsvfocusfmt
+#, object-pascal-format
+msgid "ItemCount = %d, row objects = 0   ·   focused item index = %d"
+msgstr "ItemCount = %d，行对象 = 0   ·   焦点条目索引 = %d"
+
+#: umain.rsvgroupfmt
+#, object-pascal-format
+msgid "Value %s – %s"
+msgstr "值 %s – %s"
+
+#: umain.rsvgrownfmt
+#, object-pascal-format
+msgid "ItemCount = %d, row objects = 0   ·   still one relayout"
+msgstr "ItemCount = %d，行对象 = 0   ·   仍只重排一次"
+
+#: umain.rsvirtrowfmt
+#, object-pascal-format
+msgid "Row %d · value %.6d"
+msgstr "第 %d 行 · 值 %.6d"

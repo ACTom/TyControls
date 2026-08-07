@@ -62,3 +62,30 @@ msgstr "TTyScrollBar  ·  TyControls"
 #: tmainform.swanim.caption
 msgid "Animated thumb"
 msgstr "滑块动画"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rsbarsfmt
+#, object-pascal-format
+msgid "Vertical:  Position = %d   (Min %d / Max %d / PageSize %d / SmallChange %d)"
+msgstr "垂直：Position = %d   （Min %d / Max %d / PageSize %d / SmallChange %d）"
+
+#: umain.rsbarsfmt2
+#, object-pascal-format
+msgid "Horizontal:  Position = %d   (Min %d / Max %d / PageSize %d / SmallChange %d)"
+msgstr "水平：Position = %d   （Min %d / Max %d / PageSize %d / SmallChange %d）"
+
+#: umain.rslinefmt
+#, object-pascal-format
+msgid "Line %.2d - scrollable content"
+msgstr "第 %.2d 行 —— 可滚动内容"
+
+#: umain.rsscrollfmt
+#, object-pascal-format
+msgid "%s OnScroll: %s -> %d"
+msgstr "%s OnScroll：%s -> %d"
+
+#: umain.rsvetoedfmt
+#, object-pascal-format
+msgid "%s OnScroll: scTop vetoed - Home clamps to 10, not Min"
+msgstr "%s OnScroll：scTop 被否决 —— Home 只回到 10，不是 Min"

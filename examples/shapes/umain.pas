@@ -118,6 +118,15 @@ implementation
 
 {$R *.lfm}
 
+resourcestring
+  { Slider captions composed at run time (.tycss file names are data). }
+  rsPointsClampedFmt = 'Point count Points = %d (asked for 1)';
+  rsInnerClampedFmt  = 'Inner radius ratio InnerRatio = %.2f (asked for 2.00)';
+  rsPointsFmt = 'Point count Points = %d';
+  rsInnerFmt  = 'Inner radius ratio InnerRatio = %.2f';
+  rsHeadFmt   = 'Head-length ratio HeadRatio = %.2f';
+  rsShaftFmt  = 'Shaft-width ratio ShaftRatio = %.2f';
+
 { Walk up from the exe location looking for themes/, so the theme is found both when
   double-clicking the exe and when running from the repo root. }
 function ThemesDir: string;
@@ -185,33 +194,32 @@ begin
   // actually stuck.
   TrackPoints.Position := StarBig.Points;
   TrackInner.Position := Round(StarBig.InnerRatio * 100);
-  LblPoints.Caption := Format('Point count Points = %d (asked for 1)', [StarBig.Points]);
-  LblInner.Caption := Format('Inner radius ratio InnerRatio = %.2f (asked for 2.00)',
-    [StarBig.InnerRatio]);
+  LblPoints.Caption := Format(rsPointsClampedFmt, [StarBig.Points]);
+  LblInner.Caption := Format(rsInnerClampedFmt, [StarBig.InnerRatio]);
 end;
 
 procedure TMainForm.TrackPointsChange(Sender: TObject);
 begin
   StarBig.Points := TrackPoints.Position;
-  LblPoints.Caption := Format('Point count Points = %d', [StarBig.Points]);
+  LblPoints.Caption := Format(rsPointsFmt, [StarBig.Points]);
 end;
 
 procedure TMainForm.TrackInnerChange(Sender: TObject);
 begin
   StarBig.InnerRatio := TrackInner.Position / 100;
-  LblInner.Caption := Format('Inner radius ratio InnerRatio = %.2f', [StarBig.InnerRatio]);
+  LblInner.Caption := Format(rsInnerFmt, [StarBig.InnerRatio]);
 end;
 
 procedure TMainForm.TrackHeadChange(Sender: TObject);
 begin
   ArrowBig.HeadRatio := TrackHead.Position / 100;
-  LblHead.Caption := Format('Head-length ratio HeadRatio = %.2f', [ArrowBig.HeadRatio]);
+  LblHead.Caption := Format(rsHeadFmt, [ArrowBig.HeadRatio]);
 end;
 
 procedure TMainForm.TrackShaftChange(Sender: TObject);
 begin
   ArrowBig.ShaftRatio := TrackShaft.Position / 100;
-  LblShaft.Caption := Format('Shaft-width ratio ShaftRatio = %.2f', [ArrowBig.ShaftRatio]);
+  LblShaft.Caption := Format(rsShaftFmt, [ArrowBig.ShaftRatio]);
 end;
 
 procedure TMainForm.BtnLightClick(Sender: TObject);

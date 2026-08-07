@@ -47,7 +47,7 @@ msgstr "浅色"
 
 #: tdemomainform.btnapdark.caption
 msgid "Dark"
-msgstr "深色"
+msgstr "暗色"
 
 #: tdemomainform.tbbtnnew.caption
 msgid "&New"
@@ -407,3 +407,275 @@ msgstr "演示"
 #: tdemomainform.tyaboutdlg.title
 msgid "TyControls About"
 msgstr "关于 TyControls"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: mainform.rsdemomsgconfirm
+msgid "Save the changes before closing?"
+msgstr "关闭前保存修改吗？"
+
+#: mainform.rsdemomsgerror
+msgid "The file could not be opened."
+msgstr "文件打不开。"
+
+#: mainform.rsdemomsgwarn
+msgid "Disk space is running low."
+msgstr "磁盘空间快用完了。"
+
+#: mainform.rsdemonativenode
+#, object-pascal-format
+msgid "Item %d"
+msgstr "条目 %d"
+
+#: mainform.rsdemooptions
+msgid "Options"
+msgstr "选项"
+
+#: mainform.rsdemotab1
+msgid "Tab 1"
+msgstr "标签页 1"
+
+#: mainform.rsdemotab2
+msgid "Tab 2"
+msgstr "标签页 2"
+
+#: mainform.rsdemotab3
+msgid "Tab 3"
+msgstr "标签页 3"
+
+#: mainform.rsdemotabcmd
+msgid "Command buttons"
+msgstr "命令按钮"
+
+#: mainform.rsdemotabgauges
+msgid "Gauges"
+msgstr "仪表"
+
+#: mainform.rsdemotabgrid
+msgid "Grid"
+msgstr "网格"
+
+#: mainform.rsdemotabicons
+msgid "Icons · text"
+msgstr "图标 · 文本"
+
+#: mainform.rsdemotabnative
+msgid "Native"
+msgstr "原生"
+
+#: mainform.rsdemotabtree
+msgid "Tree"
+msgstr "树"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: mainform.rsaccenttitle
+msgid "Accent"
+msgstr "强调色"
+
+#: mainform.rsanswercancel
+msgid "Cancel"
+msgstr "取消"
+
+#: mainform.rsanswerno
+msgid "No"
+msgstr "否"
+
+#: mainform.rsanswerok
+msgid "OK"
+msgstr "确定"
+
+#: mainform.rsansweryes
+msgid "Yes"
+msgstr "是"
+
+#: mainform.rscheckedfmt
+#, object-pascal-format
+msgid "Checked: %s"
+msgstr "已勾选：%s"
+
+#: mainform.rscolamount
+msgid "Amount"
+msgstr "金额"
+
+#: mainform.rscolmodified
+msgid "Modified"
+msgstr "修改时间"
+
+#: mainform.rscolname
+msgid "Name"
+msgstr "名称"
+
+#: mainform.rscolorder
+msgid "Order"
+msgstr "订单"
+
+#: mainform.rscolproduct
+msgid "Product"
+msgstr "产品"
+
+#: mainform.rscolregion
+msgid "Region"
+msgstr "区域"
+
+#: mainform.rscolsize
+msgid "Size"
+msgstr "大小"
+
+#: mainform.rsdensityfmt
+#, object-pascal-format
+msgid "Density: %s"
+msgstr "密度：%s"
+
+#: mainform.rsdlgcolor
+msgid "Color"
+msgstr "颜色"
+
+#: mainform.rsdlginput
+msgid "Input"
+msgstr "输入"
+
+#: mainform.rsdlginputask
+msgid "Enter some text:"
+msgstr "输入一些文字："
+
+#: mainform.rsdlgpassword
+msgid "Password"
+msgstr "密码"
+
+#: mainform.rsdlgpasswordask
+msgid "Enter a password:"
+msgstr "输入密码："
+
+#: mainform.rsdlgselvalue
+msgid "SelValue"
+msgstr "选值"
+
+#: mainform.rsdlgselvalueask
+msgid "Pick a value:"
+msgstr "挑一个值："
+
+#: mainform.rsdlgtext
+msgid "Text"
+msgstr "文本"
+
+#: mainform.rsdlgtextask
+msgid "Enter a note:"
+msgstr "输入一条备注："
+
+#: mainform.rsfindfmt
+#, object-pascal-format
+msgid "Find: %s"
+msgstr "查找：%s"
+
+#: mainform.rsfolderdocuments
+msgid "Documents"
+msgstr "文档"
+
+#: mainform.rsfolderpictures
+msgid "Pictures"
+msgstr "图片"
+
+#: mainform.rsfolderprojects
+msgid "Projects"
+msgstr "项目"
+
+#: mainform.rsmessagefmt
+#, object-pascal-format
+msgid "Message: %s"
+msgstr "消息：%s"
+
+#: mainform.rsprodcog
+msgid "Cog"
+msgstr "齿轮"
+
+#: mainform.rsprodflange
+msgid "Flange"
+msgstr "法兰"
+
+#: mainform.rsprodgadget
+msgid "Gadget"
+msgstr "装置"
+
+#: mainform.rsprodsprocket
+msgid "Sprocket"
+msgstr "链轮"
+
+#: mainform.rsprodwidget
+msgid "Widget"
+msgstr "部件"
+
+#: mainform.rsprogcancelled
+msgid "Progress: cancelled"
+msgstr "进度：已取消"
+
+#: mainform.rsprogcancelreq
+msgid "Progress: cancel requested"
+msgstr "进度：请求取消"
+
+#: mainform.rsprogdone
+msgid "Progress: done"
+msgstr "进度：完成"
+
+#: mainform.rspwdcharsfmt
+#, object-pascal-format
+msgid "Password: %d chars"
+msgstr "密码：%d 个字符"
+
+#: mainform.rsready
+msgid "Ready"
+msgstr "就绪"
+
+#: mainform.rsregioneast
+msgid "East"
+msgstr "东区"
+
+#: mainform.rsregionnorth
+msgid "North"
+msgstr "北区"
+
+#: mainform.rsregionsouth
+msgid "South"
+msgstr "南区"
+
+#: mainform.rsregionwest
+msgid "West"
+msgstr "西区"
+
+#: mainform.rsreplaceall
+msgid " (all)"
+msgstr "（全部）"
+
+#: mainform.rsreplacefmt
+#, object-pascal-format
+msgid "Replace \"%s\" -> \"%s\""
+msgstr "替换「%s」->「%s」"
+
+#: mainform.rsselcountfmt
+#, object-pascal-format
+msgid "Selected: %d item(s)"
+msgstr "已选：%d 项"
+
+#: mainform.rsselectedfmt
+#, object-pascal-format
+msgid "Selected: %s"
+msgstr "已选：%s"
+
+#: mainform.rsvirtnodefmt
+#, object-pascal-format
+msgid "Node %d  (L%d)"
+msgstr "节点 %d  (L%d)"
+
+#: mainform.rswatchingfmt
+#, object-pascal-format
+msgid "Watching %s"
+msgstr "正在监视 %s"
+
+#: mainform.rswatchoff
+msgid "Theme watch off"
+msgstr "主题监视已关"
+
+#: mainform.rsworkingfmt
+#, object-pascal-format
+msgid "Working… %d%%"
+msgstr "处理中… %d%%"

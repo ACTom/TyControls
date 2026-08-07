@@ -116,6 +116,13 @@ implementation
 
 {$R *.lfm}
 
+resourcestring
+  rsRadioPickedFmt   = 'Radio item selected: %s (the other two in GroupIndex 1 turned off)';
+  rsCmdCheckedFmt    = 'Menu command selected: %s (now checked)';
+  rsCmdFmt           = 'Menu command selected: %s';
+  rsRolledUpFmt      = 'RolledUp = %s (double-click the title bar to toggle it too)';
+  rsCaptionActionFmt = 'CaptionAction = %s -- double-click the title bar to see it';
+
 { Draw a 16px rounded-square icon (in the given color) and add it to the collection; AddBitmap stores a copy, the caller keeps ownership }
 procedure AddIcon(AColl: TTyImageCollection; const AName: string; AColor: TBGRAPixel);
 var bmp: TBGRABitmap;
@@ -176,19 +183,17 @@ begin
   Item := TMenuItem(Sender);
   // echo with the mnemonic '&' stripped (StripHotkey is provided by the Menus unit)
   if Item.RadioItem then
-    StatusLabel.Caption := Format('Radio item selected: %s (the other two in GroupIndex 1 turned off)',
-      [StripHotkey(Item.Caption)])
+    StatusLabel.Caption := Format(rsRadioPickedFmt, [StripHotkey(Item.Caption)])
   else if Item.Checked then
-    StatusLabel.Caption := Format('Menu command selected: %s (now checked)', [StripHotkey(Item.Caption)])
+    StatusLabel.Caption := Format(rsCmdCheckedFmt, [StripHotkey(Item.Caption)])
   else
-    StatusLabel.Caption := Format('Menu command selected: %s', [StripHotkey(Item.Caption)]);
+    StatusLabel.Caption := Format(rsCmdFmt, [StripHotkey(Item.Caption)]);
 end;
 
 procedure TMainForm.RollUpClick(Sender: TObject);
 begin
   ToggleRollUp;   // TTyForm's window-shade toggle -- same entry point as the caption double-click
-  StatusLabel.Caption := Format('RolledUp = %s (double-click the title bar to toggle it too)',
-    [BoolToStr(RolledUp, True)]);
+  StatusLabel.Caption := Format(rsRolledUpFmt, [BoolToStr(RolledUp, True)]);
 end;
 
 procedure TMainForm.CaptionActionChange(Sender: TObject);
@@ -196,7 +201,7 @@ begin
   if CmbCaptionAction.ItemIndex < 0 then Exit;
   // The combo's rows are in TTyCaptionAction order: tcaMaximize, tcaRollUp, tcaNone.
   CaptionAction := TTyCaptionAction(CmbCaptionAction.ItemIndex);
-  StatusLabel.Caption := Format('CaptionAction = %s -- double-click the title bar to see it',
+  StatusLabel.Caption := Format(rsCaptionActionFmt,
     [CmbCaptionAction.Items[CmbCaptionAction.ItemIndex]]);
 end;
 

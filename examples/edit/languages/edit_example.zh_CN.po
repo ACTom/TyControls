@@ -154,3 +154,51 @@ msgstr "输入将转换为小写"
 #: tmainform.edcenter.text
 msgid "42"
 msgstr "42"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rscopiedfmt
+#, object-pascal-format
+msgid "Copied to clipboard: %s"
+msgstr "已复制到剪贴板：%s"
+
+#: umain.rscurinputfmt
+#, object-pascal-format
+msgid "Current input:%s"
+msgstr "当前输入：%s"
+
+#: umain.rscutfmt
+#, object-pascal-format
+msgid "Cut to clipboard: %s"
+msgstr "已剪切到剪贴板：%s"
+
+#: umain.rsnothingtocopy
+msgid "Nothing to copy - type into the top box first"
+msgstr "没有可复制的内容 —— 先在最上面的框里输入"
+
+#: umain.rsnothingtocut
+msgid "Nothing to cut - type into the top box first"
+msgstr "没有可剪切的内容 —— 先在最上面的框里输入"
+
+#: umain.rspastedfmt
+#, object-pascal-format
+msgid "Pasted, the box now reads: %s"
+msgstr "已粘贴，框里现在是：%s"
+
+#: umain.rspwdcopyblock
+msgid "Nothing was copied - PasswordChar blocks Copy and Cut"
+msgstr "什么都没复制 —— PasswordChar 会拦下复制和剪切"
+
+#: umain.rsreadonlyclick
+msgid "Read-only box clicked (OnClick still fires)"
+msgstr "点了只读框（OnClick 仍会触发）"
+
+#: umain.rsselposfmt
+#, object-pascal-format
+msgid "SelStart=%d, SelLength=%d"
+msgstr "SelStart=%d, SelLength=%d"
+
+#: umain.rsseltextfmt
+#, object-pascal-format
+msgid "SelText = \"%s\""
+msgstr "SelText = \"%s\""

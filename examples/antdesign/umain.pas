@@ -523,6 +523,32 @@ resourcestring
   rsPopPlaceRight  = 'Right';
   rsPopPlaceBottom = 'Bottom';
   rsPopPlaceLeft   = 'Left';
+  rsPageInfoFmt    = 'Page %d / %d · %d total';
+  rsInputSeed      = 'Ops on-call';
+  rsAlertClosedFmt = 'Alert bar closed: "%s"';
+  rsAlertClosedNote = '(without vetoing AllowClose, the control just hides itself)';
+  rsToastSubmitted = 'Work order submitted';
+  rsSubmitLine1Fmt = '%s · amount %.2f · %s';
+  rsSubmitLine2Fmt = 'Weight %d · satisfaction %.1f';
+  rsSubmitLine3Fmt = 'Dept %s · region %s · notify %d people';
+  rsOrderOwner1 = 'Zhang San';
+  rsOrderOwner2 = 'Li Si';
+  rsOrderOwner3 = 'Wang Wu';
+  rsOrderOwner4 = 'Zhao Liu';
+  rsOrderTitle0  = 'Card container TTyCard landed';
+  rsOrderTitle1  = 'Tag TTyTag landed';
+  rsOrderTitle2  = 'Badge TTyBadge split into its own control';
+  rsOrderTitle3  = 'Inline alert bar TTyAlert';
+  rsOrderTitle4  = 'Corner toast TTyNotification';
+  rsOrderTitle5  = 'Empty state TTyEmpty';
+  rsOrderTitle6  = 'Segmented control TTySegmented';
+  rsOrderTitle7  = 'Pager TTyPagination';
+  rsOrderTitle8  = 'Step bar TTySteps';
+  rsOrderTitle9  = 'Breadcrumb TTyBreadcrumb';
+  rsOrderTitle10 = 'Transfer box TTyTransfer';
+  rsOrderTitle11 = 'Tree dropdown TTyTreeSelect';
+  rsOrderTitle12 = 'Cascading select TTyCascader';
+  rsOrderTitle13 = 'Popover TTyPopover';
 
 procedure TMainForm.LocalizeTexts;
 begin
@@ -1073,25 +1099,38 @@ end;
   一页的模板是这 14 张工单(AntD-gap 三批落地的 14 个控件),编号与日期跟着页号走:
   第 n 页 = TY-(2041 + n*20 + i)、日期后推 n 天 —— 翻页真的换数据,而不是换一个计数器。 }
 procedure TMainForm.FillOrders;
+  { A typed const cannot hold resourcestrings, so titles and owners come from
+    the two mappers below. }
+  function OrderTitle(AIndex: Integer): string;
+  begin
+    case AIndex mod 14 of
+      0:  Result := rsOrderTitle0;
+      1:  Result := rsOrderTitle1;
+      2:  Result := rsOrderTitle2;
+      3:  Result := rsOrderTitle3;
+      4:  Result := rsOrderTitle4;
+      5:  Result := rsOrderTitle5;
+      6:  Result := rsOrderTitle6;
+      7:  Result := rsOrderTitle7;
+      8:  Result := rsOrderTitle8;
+      9:  Result := rsOrderTitle9;
+      10: Result := rsOrderTitle10;
+      11: Result := rsOrderTitle11;
+      12: Result := rsOrderTitle12;
+    else  Result := rsOrderTitle13;
+    end;
+  end;
+
+  function OrderOwner(AIndex: Integer): string;
+  begin
+    case AIndex mod 14 of
+      0, 3, 8, 12: Result := rsOrderOwner1;
+      1, 5, 9, 13: Result := rsOrderOwner2;
+      2, 6, 10:    Result := rsOrderOwner3;
+    else           Result := rsOrderOwner4;
+    end;
+  end;
 const
-  OrderTitle: array[0..13] of string = (
-    'Card container TTyCard landed',
-    'Tag TTyTag landed',
-    'Badge TTyBadge split into its own control',
-    'Inline alert bar TTyAlert',
-    'Corner toast TTyNotification',
-    'Empty state TTyEmpty',
-    'Segmented control TTySegmented',
-    'Pager TTyPagination',
-    'Step bar TTySteps',
-    'Breadcrumb TTyBreadcrumb',
-    'Transfer box TTyTransfer',
-    'Tree dropdown TTyTreeSelect',
-    'Cascading select TTyCascader',
-    'Popover TTyPopover');
-  OrderOwner: array[0..13] of string = (
-    'Zhang San', 'Li Si', 'Wang Wu', 'Zhang San', 'Zhao Liu', 'Li Si', 'Wang Wu',
-    'Zhao Liu', 'Zhang San', 'Li Si', 'Wang Wu', 'Zhao Liu', 'Zhang San', 'Li Si');
   { 状态码:0 已发布 / 1 草稿 / 2 待排期 —— 筛选片匹配的就是它。文字要到填格时才从
     resourcestring 取(typed const 里放不下 resourcestring)。 }
   OrderState: array[0..13] of Integer = (0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2);
@@ -1106,19 +1145,19 @@ begin
   if page < 0 then page := 0;
 
   cnt := 0;
-  for i := Low(OrderTitle) to High(OrderTitle) do
+  for i := 0 to 13 do
     if (FOrderFilter < 0) or (OrderState[i] = FOrderFilter) then Inc(cnt);
 
   GridOrders.BeginUpdate;
   try
     GridOrders.RowCount := cnt;
     r := 0;
-    for i := Low(OrderTitle) to High(OrderTitle) do
+    for i := 0 to 13 do
     begin
       if (FOrderFilter >= 0) and (OrderState[i] <> FOrderFilter) then Continue;
       GridOrders.Cells[0, r] := Format('TY-%d', [2041 + page * 20 + i]);
-      GridOrders.Cells[1, r] := OrderTitle[i];
-      GridOrders.Cells[2, r] := OrderOwner[i];
+      GridOrders.Cells[1, r] := OrderTitle(i);
+      GridOrders.Cells[2, r] := OrderOwner(i);
       case OrderState[i] of
         0: GridOrders.Cells[3, r] := rsStatePublished;
         1: GridOrders.Cells[3, r] := rsStateDraft;
@@ -1212,7 +1251,7 @@ end;
 procedure TMainForm.PageChange(Sender: TObject);
 begin
   FillOrders;
-  LblPageInfo.Caption := Format('Page %d / %d · %d total',
+  LblPageInfo.Caption := Format(rsPageInfoFmt,
     [PagOrders.PageIndex + 1, PagOrders.PageCount, PagOrders.PageCount * 20]);
 end;
 
@@ -1235,7 +1274,7 @@ procedure TMainForm.InputClick(Sender: TObject);
 var
   s: string;
 begin
-  s := 'Ops on-call';
+  s := rsInputSeed;
   if TyInputQuery(rsDlgInputTitle, rsDlgInputPrompt, s) then
     LblFeedback.Caption := Format(rsFbInputGot, [s])
   else
@@ -1256,8 +1295,8 @@ end;
 procedure TMainForm.AlertClosed(Sender: TObject; var AllowClose: Boolean);
 begin
   AllowClose := True;
-  LblAlertNote.Caption := 'Alert bar closed: "' + (Sender as TTyAlert).Message + '」' +
-    LineEnding + '(without vetoing AllowClose, the control just hides itself)';
+  LblAlertNote.Caption := Format(rsAlertClosedFmt, [(Sender as TTyAlert).Message]) +
+    LineEnding + rsAlertClosedNote;
 end;
 
 procedure TMainForm.ToastClick(Sender: TObject);
@@ -1586,11 +1625,11 @@ end;
 procedure TMainForm.SubmitClick(Sender: TObject);
 begin
   Toast.NotificationType := atSuccess;
-  Toast.Title := 'Work order submitted';
+  Toast.Title := rsToastSubmitted;
   Toast.Message :=
-    Format('%s · amount %.2f · %s', [EdName.Text, EdAmount.Value, CbKind.Text]) + LineEnding +
-    Format('Weight %d · satisfaction %.1f', [TrkWeight.Position, RateScore.Value]) + LineEnding +
-    Format('Dept %s · region %s · notify %d people',
+    Format(rsSubmitLine1Fmt, [EdName.Text, EdAmount.Value, CbKind.Text]) + LineEnding +
+    Format(rsSubmitLine2Fmt, [TrkWeight.Position, RateScore.Value]) + LineEnding +
+    Format(rsSubmitLine3Fmt,
       [TsDept.Text, CasRegion.Text, TrfMembers.Selected.Count]);
   Toast.Show;
 end;

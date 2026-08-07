@@ -94,3 +94,49 @@ msgstr "（点击按钮、分段或颜色按钮）"
 #: tmainform.bar.caption
 msgid "Buttons  · TyControls"
 msgstr "Buttons  · TyControls"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rscolourchangedfmt
+#, object-pascal-format
+msgid "Colour changed to %s"
+msgstr "颜色改为 %s"
+
+#: umain.rsgroupnone
+msgid "ButtonGroup: nothing selected"
+msgstr "ButtonGroup：未选择"
+
+#: umain.rsgrouppickfmt
+#, object-pascal-format
+msgid "ButtonGroup: %s"
+msgstr "ButtonGroup：%s"
+
+#: umain.rsmenuexportpdf
+msgid "Export as PDF"
+msgstr "导出为 PDF"
+
+#: umain.rsmenuprint
+msgid "Print…"
+msgstr "打印…"
+
+#: umain.rsmenusavecopy
+msgid "Save a copy"
+msgstr "保存副本"
+
+#: umain.rsmenusnapshotfmt
+#, object-pascal-format
+msgid "Snapshot %s"
+msgstr "快照 %s"
+
+#: umain.rsmultipickfmt
+#, object-pascal-format
+msgid "MultiSelect group: %s"
+msgstr "多选组：%s"
+
+#: umain.rspickednone
+msgid "none"
+msgstr "无"
+
+#: umain.rssplitprimary
+msgid "Save: primary half clicked (the arrow half opens the menu)"
+msgstr "保存：点了主半区（箭头半区才弹菜单）"

@@ -413,18 +413,216 @@ implementation
 uses
   Math, Clipbrd;
 
+resourcestring
+  { Sample-data pools. They are what the user READS in the cells (and what the
+    pick lists / filter examples must match), so they translate with the UI.
+    A resourcestring is not a compile-time constant, so the arrays became the
+    RegionName / ProductName / NoteText functions below. }
+  rsRegionE  = 'East China';
+  rsRegionN  = 'North China';
+  rsRegionS  = 'South China';
+  rsRegionSW = 'Southwest';
+  rsRegionNE = 'Northeast';
+  rsRegionNW = 'Northwest';
+  rsProdHost    = 'Cloud host';
+  rsProdStorage = 'Object storage';
+  rsProdDb      = 'Database';
+  rsProdCdn     = 'CDN';
+  rsProdLb      = 'Load balancing';
+  rsNoteSplit    = 'The customer requested split shipment; the first batch arrives this week, the rest scheduled for next month; the contact has changed to Engineer Wang.';
+  rsNoteContract = 'The contract attachment is missing the stamped page and has been returned for completion.';
+  rsNoteExpress  = 'This one goes express, freight on us; note the express reason in the invoice remarks.';
+  rsMon = 'Mon'; rsTue = 'Tue'; rsWed = 'Wed'; rsThu = 'Thu';
+  rsFri = 'Fri'; rsSat = 'Sat'; rsSun = 'Sun';
+
+  { Column titles (shared by the ten pages). }
+  rsColOrderNo  = 'Order No.';
+  rsColRegion   = 'Region';
+  rsColProduct  = 'Product';
+  rsColQty      = 'Quantity';
+  rsColAmount   = 'Amount';
+  rsColDate     = 'Date';
+  rsColDone     = 'Settled';
+  rsColRate     = 'Rating';
+  rsColMark     = 'Mark colour';
+  rsColNote     = 'Notes';
+  rsColDiscount = 'Discount%';
+  rsColProgress = 'Progress%';
+  rsColETA      = 'Lead time';
+  rsColPin      = 'Passcode';
+
+  { Status-line and dialog texts composed at run time. }
+  rsOn  = 'On';
+  rsOff = 'Off';
+  rsWelcome = 'Each page demonstrates one feature set — read them left to right';
+  rsSelManyFmt = 'Current (col %d, row %d)  ·  %d rows / %d shown / %d cells stored  ·  %d cells selected, sum %.2f, average %.2f';
+  rsSelOneFmt  = 'Current (col %d, row %d) = %s  ·  %d rows / %d shown / %d cells stored';
+  rs10kRows  = '10k rows — only the few dozen rows in the visible window are drawn; try scrolling';
+  rs100kRows = '100k rows — this time all 900k cells are **really filled**; compare "stored cells" against the million-row page above';
+  rs1MRows   = '1M rows — content is generated on demand by a callback, "stored cells" is still 0: that is virtualization + sparse storage';
+  rsRestored200 = 'Restored 200 rows';
+  rsJumped      = 'Jumped to (col 2, row 5000)';
+  rsPickCellColor     = 'Pick a background colour for the selected cells';
+  rsCellsColoredFmt   = '%d cells coloured — this colour is **persisted** and follows the data row when sorted';
+  rsCellsUncoloredFmt = 'Cleared the background of %d cell(s)';
+  rsRowColoredFmt     = 'Row %d whole-row coloured';
+  rsNeedWrapFirst  = 'Tick "word wrap" first, then click auto row height — without wrapping every row has a single line and there is nothing to expand';
+  rsRowsAutoFit    = 'Row height auto-fitted to the wrapped content (bounded by MinRowHeight / MaxRowHeight)';
+  rsRowHeightReset = 'Row height restored to default';
+  rsGroupRowFmt = '%s   —   %d orders';
+  rsSortQtyAsc  = 'Sort "Qty" ascending — column-level SortKind = gskNumber, so 9 comes before 100';
+  rsSortQtyDesc = 'Sort "Qty" descending';
+  rsSortAddedFmt = 'Added a secondary sort column — there are now %d sort keys, the header shows order badges';
+  rsSortCleared  = 'Sort cleared — the row order jumps back to the original import order';
+  rsNullPosNote  = 'The null position is **independent** of ascending/descending — flip the sort and the empty-date rows stay at the same end';
+  rsFilteredFmt   = '%d rows after filtering / %d total — the column''s funnel is lit';
+  rsFilterCleared = 'Filter cleared — the funnel goes dark';
+  rsBtnGroupRegion = 'Group by region';
+  rsUngrouped      = 'Ungrouped';
+  rsBtnUngroup     = 'Ungroup';
+  rsGroupedNote    = 'Grouped by region — click a group row to collapse; note the sort column was not swallowed by grouping · the group row''s caption comes from GroupRowFormat (%s = the group value, %d = how many rows are in it)';
+  rsBtnGroup2   = 'Group by region + product';
+  rsBtnUngroup2 = 'Remove multi-level grouping';
+  rsGrouped2Note = 'Two-level grouping — subtotals are computed per level; collapse state is tracked by **path**, so the same-named product under different regions does not interfere';
+  rsPhysicalOn  = 'Sorting really moves the data (undoable) — after sorting, merge and row-drag are no longer refused; attaching a filter or grouping falls back to ordinary sort automatically';
+  rsPhysicalOff = 'Sort only changes the display order, the data does not move (default)';
+  rsLayoutSaved    = 'Layout recorded — now drag column widths, reorder columns, change the freeze count, then click "Restore layout"';
+  rsLayoutNone     = 'No layout recorded yet — click "Remember layout" first';
+  rsLayoutRestored = 'Layout restored (column width / order / visibility / sort keys / freeze count)';
+  rsLayoutBad      = 'This layout string is unrecognized — nothing changed';
+  rsRowMoveVetoFmt = 'OnRowMove vetoed: row %d may not be dragged to the first row';
+  rsEditorPropFmt  = 'OnGetEditorProp: tinted the editor at (%d, %d) red';
+  rsFilterRowOn  = 'Filter row on — try typing >20 in the "Qty" column, or East China;North China in the "Region" column (; means OR, a..b means a range)';
+  rsFilterRowOff = 'Filter row off';
+  rsTreeOn  = 'Tree column on — click the triangle in the first column to collapse/expand; the hierarchy is supplied by the host; the control does not own the tree';
+  rsTreeOff = 'Tree column off';
+  rsExpandAll   = 'Expand all';
+  rsCollapseAll = 'Collapse all — collapse state is kept by **group value**, so it still matches after reordering';
+  rsPickProduct    = 'Choose product';
+  rsPickProductFmt = 'Product for row %d (available: %s)';
+  rsBtnCellFmt   = 'Button cell clicked: (col %d, row %d) — pressing then dragging off the button before releasing does not count';
+  rsEditorKindOn = 'OnGetEditorKind is on: double-click "Region" — a settled order gets the picker, an unsettled one a plain text box. The per-cell event beats the kind declared on the column';
+  rsCellROFmt = '(col %d, row %d) set read-only — one level finer than "whole column read-only"';
+  rsCellRW    = 'This cell is editable again';
+  rsSelModeNote = 'In whole-row/whole-column mode the focused cell still has its own background — you can see which cell the cursor is on';
+  rsMerged    = 'Merged — note there are **no grid lines running through the inside** of the merged area, the outer edge still has them';
+  rsNotMerged = 'Not merged: either you did not drag out a region, or these rows are not actually adjacent in the data (sorted / rows hidden) — merged into one block, they scatter on a different sort';
+  rsUnmerged  = 'Unmerged (an existing background colour on the cells is not cleared by association)';
+  rsCopiedNote = 'Copied — export follows **display order**, so what you copy after sorting/filtering is that block on screen';
+  rsCutNote    = 'Cut (the content of read-only cells is not removed)';
+  rsPastedGridFmt = 'Pasted — now %d rows x %d columns';
+  rsFillMine    = 'Select a block, then drag the small square at its bottom-right corner downwards: the fill is mine now — weekday names instead of the built-in "repeat / continue the arithmetic run"';
+  rsFillBuiltin = 'The built-in fill is back: drag the small square at the bottom-right corner of the selection downwards and it repeats the block, or continues an arithmetic run';
+  rsAutoGrowOn  = 'On paste the table grows to fit · drag the small square at the bottom-right corner of the selection to fill downwards (Excel-style)';
+  rsAutoGrowOff = 'Auto table growth is off — rows beyond the range are dropped (this is the old silent data-loss behaviour)';
+  rsFillWroteFmt = 'OnFillCells wrote %d cell(s) itself — the control did not touch the data (untick the switch to get its built-in series back)';
+  rsRowInserted = 'Inserted a row above the current row';
+  rsRowDeleted  = 'Current row deleted';
+  rsHidRowFmt   = 'Hid row %d — %d row(s) hidden in total. Clearing the filter will not bring it back';
+  rsAllUnhidden = 'All unhidden';
+  rsInsColFmt  = 'Inserted a column before column %d — Ctrl+Z can undo it';
+  rsOneColLeft = 'Only one column left, will not delete';
+  rsDelColFmt  = 'Deleted "%s" (width %d) — press Ctrl+Z and it comes back together with its width / title / editor kind / filter';
+  rsLastCol    = 'Already the last column';
+  rsColSwapped = 'This column swapped places with its right neighbour — swapping can be undone too';
+  rsNothingUndo = 'Nothing left to undo';
+  rsUndone      = 'Undone — background colour, row height and merge span come back with it';
+  rsNothingRedo = 'Nothing left to redo';
+  rsRedone      = 'Redone';
+  rsExportedCsvFmt  = 'Exported %d rows to %s (display order: filtered-out rows do not appear)';
+  rsExportedHtmlFmt = 'Exported HTML to %s';
+  rsDrawCellTaken = 'OnDrawCell took the amount column over completely — the control still painted the background and the selection, the host only drew the content';
+  rsHintAmountFmt = 'Amount %s (tax incl.)';
+  rsHintNoDate    = 'This order is not scheduled yet';
+  rsHintDateFmt   = 'Delivery date:%s';
+  rsRightClickFmt  = 'Right-clicked at (col %d, row %d) — note the selection box on the left did not follow';
+  rsHeaderClickFmt = 'Header click: column %d — the event fires first, the built-in sort proceeds as usual (the host rides along, it does not take over the default)';
+  rsHeaderRClickFmt = 'Header right-click: column %d auto-fitted to its content width';
+  rsColWidthFmt  = 'Column %d width set to %d — dragging fired %d Sizing events, release fires this single EndSize (the host uses it to save column-width preferences)';
+  rsRowHeightFmt = 'Data row %d height set to %d (drag row height in the row-number gutter on the left)';
+  rsCol0Pinned  = 'Column 0 is pinned — you cannot drag it, nor drag another column in front of it';
+  rsColMovedFmt = 'Column moved: %d → %d';
+  rsRowLockedFmt   = 'Row %d is locked and cannot be checked (but the cursor can still move over it)';
+  rsRowCheckedFmt  = 'Row %d checked';
+  rsRowUncheckedFmt = 'Row %d unchecked';
+  rsClipComment  = '// from TTyStringGrid';
+  rsClipCopyNote = 'The copied content had a comment line added by a hook — paste it into Notepad and look';
+  rsPasteWroteFmt = 'This paste wrote %d cell(s) (changed cells are tinted)';
+  rsPasteBlockFmt = 'OnClipboardPaste saw the whole block first: %d line(s), uppercased before the grid parsed it';
+  rsFoundFmt      = 'Found — the cursor jumped to (col %d, row %d) and scrolled into view';
+  rsNoMoreMatches = 'No more matches';
+  rsReplacedFmt   = 'Replaced %d occurrence(s) (read-only cells are skipped automatically)';
+  rsImportedCsv   = 'Imported — note that the first row''s note **contains a line break** but did not scramble the row count, and the comma did not split the field';
+  rsAccentRestored   = 'Restored the theme''s own accent colour';
+  rsChooseAccent     = 'Choose accent colour';
+  rsAccentChangedFmt = 'Accent colour changed to %s(click again to restore)';
+  rsSampleComment = 'This is a sample comment — hover the small triangle in the top-right to show it';
+  rsPage7 = 'Page 7: comments/bold/display type all live in per-cell properties — after sorting and inserting rows they still follow the original record';
+  rsCellsSwitchesFmt = 'tri-state=%s · formatting=%s · link column=%s · icon column=%s';
+  rsCommentAtFmt   = 'In %s comment added';
+  rsGotCommentFmt  = '(%d, %d) got a comment — a small triangle appears top-right, shown on hover; Ctrl+Z to undo';
+  rsCommentCleared = 'Comment cleared — the small triangle disappears with it';
+  rsBoldedFmt = '(%d, %d) bolded — per-cell font style, also on the undo stack';
+  rsUnbolded  = 'Unbolded';
+  rsDispTypeFmt = '(%d, %d) changed its display type — per-cell beats per-column and overrides the column-level declaration';
+  rsCaseChanged = 'The case rule of the order-no. column changed — double-click into edit to see it';
+  rsNoLenLimit  = 'The notes column has no length limit';
+  rsMaxLenFmt   = 'The notes column allows up to %d characters';
+  rsLinkClickFmt = 'Clicked link: %s (row %d) — in a real app this opens the detail';
+  rsPage8 = 'Page 8: scrollbar tri-state, background image, focus/selection display, header wrap and grouping';
+  rsHdrGroupOrder  = 'Order info';
+  rsHdrGroupAmount = 'Amount & progress';
+  rsHdrGroupKey    = 'Key & ownership';
+  rsHdrGroupQty    = 'Qty / amount';
+  rsViewSwitchesFmt = 'Header wrap=%s · auto row height=%s · grouping levels=%d';
+  rsScrollbarNote = 'The scrollbar "hidden" only means it is not shown — the wheel, arrow keys and PageDown still reach the bottom';
+  rsBackScopeNote = 'The range decides **which rectangle the image is fitted to** — the header band is repainted every frame, whatever is laid under it is invisible';
+  rsLongTitle   = 'This is a very long column title used to demonstrate wrapping and auto height';
+  rsHdrWrapHint = 'Also tick "header wrap" and "auto header height" to see the effect';
+  rsPage9 = 'Page 9: export/import/stream round-trip/footer takeover · the summary band does count / average / sum / min / max — one aggregate per column';
+  rsIoSwitchesFmt = 'Footer hook=%s · amount column takeover=%s';
+  rsJsonHead        = 'JSON export (first 800 chars):';
+  rsJsonExportedFmt = 'Exported %d bytes of JSON — keys are the column titles, only visible rows exported';
+  rsHtmlHead        = 'HTML export (first 800 chars):';
+  rsHtmlExportedFmt = 'Exported %d bytes of HTML';
+  rsSelCsvHead    = 'Selection CSV:';
+  rsSelExportedFmt = 'Exported %d rows x %d columns of the selection';
+  rsStreamFmt     = 'Stream round trip: %d rows → %d bytes → %d rows';
+  rsSelTextHead   = 'Selection text (tab-separated, clipboard untouched):';
+  rsPasted2Lines  = 'Pasted 2 lines from a hardcoded text — via the same path as the clipboard';
+  rsClearedRowsFmt = 'Cleared the content of %d row(s) — the whole batch counts as **one** undo record, one Ctrl+Z brings it back';
+  rsClearedColFmt  = 'Cleared column %d — also a single undo record';
+  rsImportFmt  = 'Import: %d rows → %d rows (%s, up to %s rows, %d note rows skipped)';
+  rsImpAppend  = 'Append';
+  rsImpReplace = 'Replace';
+  rsImpAny     = 'any';
+  rsRecalcNote = 'Recompute only the amount column — invalidating the whole table (InvalidateAggregates) is too blunt for this';
+  rsFooterTotalFmt = 'Total ¥%s';
+  rsHooksApplied = 'Hook switches applied — go operate the grid, this line will say what the hook intervened in';
+  rsEnterFmt     = 'Enter: open the detail of row %d (Enter while editing still means "commit and move down", unchanged)';
+  rsCtrlEnterFmt = 'Ctrl+Enter: row %d — a separate action, distinct from plain Enter';
+  rsScrollHintFmt = 'Row %d / %d total';
+  rsRow2NoEdit   = 'Row 2 is not editable — note its checkbox is still drawn as a checkbox, it just cannot be clicked';
+  rsTypingFmt    = 'Typing at (%d, %d): "%s" — fired on every keystroke, not on commit';
+  rsCommitVetoFmt = '(%d, %d) may not be cleared — the commit was vetoed, the cell still holds "%s"';
+  rsCellEditedFmt = '(%d, %d):「%s」→「%s」';
+  rsInsertVetoed = 'Insertion vetoed — not a single row was inserted (in the plural version, if any row is vetoed the whole batch is skipped)';
+  rsDeleteVetoed = 'Deletion vetoed';
+  rsCol0NoCursor = 'The cursor cannot enter column 0 — the arrow keys skip straight over it';
+  rsClickFmt    = 'Click (%d, %d)';
+  rsDblClickFmt = 'Double-click (%d, %d) — in a real app this usually "opens the detail"';
+  rsRatingFmt   = 'Rating changed to %d star(s) (row %d) — the star you click is the score, no editor pops up';
+  rsRegionNoSort = 'The region column may not be sorted locally — in a real scenario this would become a server request';
+  rsFilterValsMore = '(more on the server)';
+  rsDrawEndNote = 'Row 1,000,000 — getting there cost nothing: no rows were ever built, the last screenful was simply asked for';
+  rsDrawTopNote = 'Back at the top — TTyDrawGrid holds no cells at all, so there is nothing to reload';
+
 const
-  cRegions: array[0..5] of string =
-    ('East China', 'North China', 'South China', 'Southwest', 'Northeast', 'Northwest');
-  cProducts: array[0..4] of string =
-    ('Cloud host', 'Object storage', 'Database', 'CDN', 'Load balancing');
+  cRegionCount = 6;
+  cProductCount = 5;
+  cNoteCount = 4;
   cMarkColors: array[0..3] of string =
     ('#3B82F6', '#22C55E', '#F59E0B', '#EF4444');
-  cNotes: array[0..3] of string =
-    ('The customer requested split shipment; the first batch arrives this week, the rest scheduled for next month; the contact has changed to Engineer Wang.',
-     'The contract attachment is missing the stamped page and has been returned for completion.',
-     'This one goes express, freight on us; note the express reason in the invoice remarks.',
-     '');
 
   { 列索引 —— 用常量而不是散落的魔数,否则加一列就要满文件找 3、4、7。 }
   cOrderNo = 0; cRegion = 1; cProduct = 2; cQty = 3; cAmount = 4;
@@ -432,6 +630,45 @@ const
   { 只有「编辑与单元格类型」那一页才建的额外列 —— 每一列专门演示一种内建编辑器,
     否则 16 种编辑器里有好几种在示例里根本露不了面。 }
   cDiscount = 10; cProgress = 11; cETA = 12; cPin = 13;
+
+function RegionName(AIndex: Integer): string;
+begin
+  case AIndex mod cRegionCount of
+    0: Result := rsRegionE;
+    1: Result := rsRegionN;
+    2: Result := rsRegionS;
+    3: Result := rsRegionSW;
+    4: Result := rsRegionNE;
+  else Result := rsRegionNW;
+  end;
+end;
+
+function ProductName(AIndex: Integer): string;
+begin
+  case AIndex mod cProductCount of
+    0: Result := rsProdHost;
+    1: Result := rsProdStorage;
+    2: Result := rsProdDb;
+    3: Result := rsProdCdn;
+  else Result := rsProdLb;
+  end;
+end;
+
+function NoteText(AIndex: Integer): string;
+begin
+  case AIndex mod cNoteCount of
+    0: Result := rsNoteSplit;
+    1: Result := rsNoteContract;
+    2: Result := rsNoteExpress;
+  else Result := '';
+  end;
+end;
+
+function AllRegionsCsv: string;
+begin
+  Result := rsRegionE + ',' + rsRegionN + ',' + rsRegionS + ','
+          + rsRegionSW + ',' + rsRegionNE + ',' + rsRegionNW;
+end;
 
 { ============ 宿主自定义编辑器 ============ }
 
@@ -488,23 +725,23 @@ procedure TMainForm.BuildOrderColumns(AGrid: TTyStringGrid; AWithNote: Boolean;
 begin
   AGrid.Header.Columns.BeginUpdate;
   try
-    AddCol('Order No.', 108, taLeftJustify);
-    AddCol('Region',    70, taLeftJustify);
-    AddCol('Product',   100, taLeftJustify);
+    AddCol(rsColOrderNo, 108, taLeftJustify);
+    AddCol(rsColRegion,    70, taLeftJustify);
+    AddCol(rsColProduct,   100, taLeftJustify);
     { 数值列必须按**数值**排,否则会排出 '100' < '9'。这是列的属性,不是全表开关。 }
-    AddCol('Quantity',    70, taRightJustify).SortKind := gskNumber;
-    AddCol('Amount',    96, taRightJustify).SortKind := gskNumber;
-    AddCol('Date',    96, taLeftJustify).SortKind := gskDate;
-    AddCol('Settled',  70, taCenter);
-    AddCol('Rating',    86, taLeftJustify);
-    AddCol('Mark colour',  76, taCenter);
-    if AWithNote then AddCol('Notes', 300, taLeftJustify);
+    AddCol(rsColQty,    70, taRightJustify).SortKind := gskNumber;
+    AddCol(rsColAmount,    96, taRightJustify).SortKind := gskNumber;
+    AddCol(rsColDate,    96, taLeftJustify).SortKind := gskDate;
+    AddCol(rsColDone,  70, taCenter);
+    AddCol(rsColRate,    86, taLeftJustify);
+    AddCol(rsColMark,  76, taCenter);
+    if AWithNote then AddCol(rsColNote, 300, taLeftJustify);
     if AWithEditorCols then
     begin
-      AddCol('Discount%', 70, taRightJustify).SortKind := gskNumber;
-      AddCol('Progress%', 96, taLeftJustify).SortKind := gskNumber;
-      AddCol('Lead time',   80, taCenter);
-      AddCol('Passcode',   90, taLeftJustify);
+      AddCol(rsColDiscount, 70, taRightJustify).SortKind := gskNumber;
+      AddCol(rsColProgress, 96, taLeftJustify).SortKind := gskNumber;
+      AddCol(rsColETA,   80, taCenter);
+      AddCol(rsColPin,   90, taLeftJustify);
     end;
   finally
     AGrid.Header.Columns.EndUpdate;
@@ -530,8 +767,8 @@ begin
     if r mod 9 = 4 then amount := -amount;
 
     AGrid.Cells[cOrderNo, r] := Format('SO-2026%04d', [r + 1]);
-    AGrid.Cells[cRegion,  r] := cRegions[r mod Length(cRegions)];
-    AGrid.Cells[cProduct, r] := cProducts[r mod Length(cProducts)];
+    AGrid.Cells[cRegion,  r] := RegionName(r);
+    AGrid.Cells[cProduct, r] := ProductName(r);
     AGrid.Cells[cQty,     r] := IntToStr(qty);
     AGrid.Cells[cAmount,  r] := Format('%.2f', [amount]);
     { 每 11 行留一个空日期 —— 页 3 的"空值排最前/最后"要靠它。 }
@@ -541,7 +778,7 @@ begin
     if r mod 3 = 0 then AGrid.Cells[cDone, r] := '1';
     AGrid.Cells[cRate, r] := IntToStr(1 + r mod 5);
     AGrid.Cells[cMark, r] := cMarkColors[r mod Length(cMarkColors)];
-    if AWithNote then AGrid.Cells[cNote, r] := cNotes[r mod Length(cNotes)];
+    if AWithNote then AGrid.Cells[cNote, r] := NoteText(r);
     if AWithEditorCols then
     begin
       AGrid.Cells[cDiscount, r] := IntToStr(r mod 30);
@@ -584,7 +821,7 @@ begin
   SetupIo;
   SetupDraw;
 
-  Status('Each page demonstrates one feature set — read them left to right');
+  Status(rsWelcome);
 end;
 
 function TMainForm.ActiveGrid: TTyStringGrid;
@@ -615,12 +852,11 @@ var
 begin
   G := ActiveGrid;
   if G.SelectedCellCount > 1 then
-    Status(Format('Current (col %d, row %d)  ·  %d rows / %d shown / %d cells stored'
-      + '  ·  %d cells selected, sum %.2f, average %.2f',
+    Status(Format(rsSelManyFmt,
       [G.Col, G.Row, G.RowCount, G.DisplayRowCount, G.StoredCellCount,
        G.SelectedCellCount, G.SelectionSum, G.SelectionAvg]))
   else
-    Status(Format('Current (col %d, row %d) = %s  ·  %d rows / %d shown / %d cells stored',
+    Status(Format(rsSelOneFmt,
       [G.Col, G.Row, G.Cells[G.Col, G.Row], G.RowCount, G.DisplayRowCount,
        G.StoredCellCount]));
 end;
@@ -645,14 +881,14 @@ procedure TMainForm.BtnRows1WClick(Sender: TObject);
 begin
   GridBasic.OnGetCellText := nil;   { 摘掉虚拟数据源 }
   FillOrders(GridBasic, 10000, False);
-  Status('10k rows — only the few dozen rows in the visible window are drawn; try scrolling');
+  Status(rs10kRows);
 end;
 
 procedure TMainForm.BtnRows10WClick(Sender: TObject);
 begin
   GridBasic.OnGetCellText := nil;   { 摘掉虚拟数据源 }
   FillOrders(GridBasic, 100000, False);
-  Status('100k rows — this time all 900k cells are **really filled**; compare "stored cells" against the million-row page above');
+  Status(rs100kRows);
 end;
 
 { 一百万行:**一格都不写**,内容由 OnGetCellText 按需生成。
@@ -669,8 +905,8 @@ begin
   qty := 1 + (ARow * 7) mod 40;
   case ACol of
     cOrderNo: AText := Format('SO-2026%06d', [ARow + 1]);
-    cRegion:  AText := cRegions[ARow mod Length(cRegions)];
-    cProduct: AText := cProducts[ARow mod Length(cProducts)];
+    cRegion:  AText := RegionName(ARow);
+    cProduct: AText := ProductName(ARow);
     cQty:     AText := IntToStr(qty);
     cAmount:  AText := Format('%.2f', [qty * 128.5]);
     cDate:    AText := FormatDateTime('yyyy-mm-dd',
@@ -691,7 +927,7 @@ begin
   GridBasic.OnGetCellText := @VirtualCellText;
   GridBasic.RowCount := 1000000;
   GridBasic.MoveCursor(0, 0);
-  Status('1M rows — content is generated on demand by a callback, "stored cells" is still 0: that is virtualization + sparse storage');
+  Status(rs1MRows);
 end;
 
 procedure TMainForm.BtnRowsResetClick(Sender: TObject);
@@ -700,7 +936,7 @@ begin
   GridBasic.ClearCells;
   FillOrders(GridBasic, 200, False);
   GridBasic.MoveCursor(0, 0);
-  Status('Restored 200 rows');
+  Status(rsRestored200);
 end;
 
 { 跳转:MoveCursor 之后显式 ScrollIntoView。横向滚动会**跳过冻结列**。 }
@@ -710,7 +946,7 @@ begin
   if GridBasic.RowCount < 5001 then FillOrders(GridBasic, 10000, False);
   GridBasic.MoveCursor(2, 5000);
   GridBasic.ScrollIntoView(2, 5000);
-  Status('Jumped to (col 2, row 5000)');
+  Status(rsJumped);
 end;
 
 procedure TMainForm.ChkBasicChange(Sender: TObject);
@@ -820,31 +1056,30 @@ var
   c: TTyColor;
 begin
   c := TyRGB(255, 236, 179);
-  if TySelectColor('Pick a background colour for the selected cells', c) then
-    Status(Format('%d cells coloured — this colour is **persisted** and follows the data row when sorted',
-      [ColorSelectedCells(c)]));
+  if TySelectColor(rsPickCellColor, c) then
+    Status(Format(rsCellsColoredFmt, [ColorSelectedCells(c)]));
 end;
 
 procedure TMainForm.BtnCellUncolorClick(Sender: TObject);
 begin
-  Status(Format('Cleared the background of %d cell(s)', [ColorSelectedCells(0)]));
+  Status(Format(rsCellsUncoloredFmt, [ColorSelectedCells(0)]));
 end;
 
 procedure TMainForm.BtnRowColorClick(Sender: TObject);
 begin
   GridLook.SetRowColor(GridLook.Row, TyRGB(209, 250, 229));
-  Status(Format('Row %d whole-row coloured', [GridLook.Row]));
+  Status(Format(rsRowColoredFmt, [GridLook.Row]));
 end;
 
 procedure TMainForm.BtnAutoFitRowsClick(Sender: TObject);
 begin
   if not GridLook.WordWrap then
   begin
-    Status('Tick "word wrap" first, then click auto row height — without wrapping every row has a single line and there is nothing to expand');
+    Status(rsNeedWrapFirst);
     Exit;
   end;
   GridLook.AutoFitRows;
-  Status('Row height auto-fitted to the wrapped content (bounded by MinRowHeight / MaxRowHeight)');
+  Status(rsRowsAutoFit);
 end;
 
 procedure TMainForm.BtnResetRowsClick(Sender: TObject);
@@ -861,7 +1096,7 @@ begin
   finally
     GridLook.EndUpdate;
   end;
-  Status('Row height restored to default');
+  Status(rsRowHeightReset);
 end;
 
 { 条件着色:负数金额标红加粗、空日期那行标黄。
@@ -928,20 +1163,20 @@ begin
   GridSort.SetColumnAggregate(cAmount, gagSum);
   { 分组行的抬头是一条格式串,不是写死的 '值 (行数)':%s = 分组值,%d = 组内行数。
     留空就用控件自带的那条。 }
-  GridSort.GroupRowFormat := '%s   —   %d orders';
+  GridSort.GroupRowFormat := rsGroupRowFmt;
   CbFilterChange(nil);
 end;
 
 procedure TMainForm.BtnSortQtyClick(Sender: TObject);
 begin
   GridSort.SortByColumn(cQty, sdAscending);
-  Status('Sort "Qty" ascending — column-level SortKind = gskNumber, so 9 comes before 100');
+  Status(rsSortQtyAsc);
 end;
 
 procedure TMainForm.BtnSortQtyDClick(Sender: TObject);
 begin
   GridSort.SortByColumn(cQty, sdDescending);
-  Status('Sort "Qty" descending');
+  Status(rsSortQtyDesc);
 end;
 
 { 追加次级排序列:数量相同的行,再按大区排。表头会出现 1 / 2 的顺位徽标。 }
@@ -949,14 +1184,13 @@ procedure TMainForm.BtnSortAddClick(Sender: TObject);
 begin
   if GridSort.SortColumnCount = 0 then GridSort.SortByColumn(cQty, sdAscending);
   GridSort.AddSortColumn(cRegion, sdAscending);
-  Status(Format('Added a secondary sort column — there are now %d sort keys, the header shows order badges',
-    [GridSort.SortColumnCount]));
+  Status(Format(rsSortAddedFmt, [GridSort.SortColumnCount]));
 end;
 
 procedure TMainForm.BtnSortClearClick(Sender: TObject);
 begin
   GridSort.ClearSortColumns;
-  Status('Sort cleared — the row order jumps back to the original import order');
+  Status(rsSortCleared);
 end;
 
 procedure TMainForm.ChkSortChange(Sender: TObject);
@@ -967,7 +1201,7 @@ begin
   { 重排一次让改动立刻可见。 }
   if GridSort.SortColumn >= 0 then
     GridSort.SortByColumn(GridSort.SortColumn, sdAscending);
-  Status('The null position is **independent** of ascending/descending — flip the sort and the empty-date rows stay at the same end');
+  Status(rsNullPosNote);
 end;
 
 procedure TMainForm.CbFilterChange(Sender: TObject);
@@ -987,15 +1221,14 @@ begin
   end;
   GridSort.ClearFilters;
   GridSort.SetColumnFilterEx(CbFilterCol.ItemIndex, op, EdFilterVal.Text);
-  Status(Format('%d rows after filtering / %d total — the column''s funnel is lit',
-    [GridSort.FilteredRowCount, GridSort.RowCount]));
+  Status(Format(rsFilteredFmt, [GridSort.FilteredRowCount, GridSort.RowCount]));
 end;
 
 procedure TMainForm.BtnFilterClearClick(Sender: TObject);
 begin
   GridSort.ClearFilters;
   EdFilterVal.Text := '';
-  Status('Filter cleared — the funnel goes dark');
+  Status(rsFilterCleared);
 end;
 
 procedure TMainForm.BtnGroupClick(Sender: TObject);
@@ -1003,15 +1236,14 @@ begin
   if GridSort.GroupColumn >= 0 then
   begin
     GridSort.UngroupRows;
-    BtnGroup.Caption := 'Group by region';
-    Status('Ungrouped');
+    BtnGroup.Caption := rsBtnGroupRegion;
+    Status(rsUngrouped);
   end
   else
   begin
     GridSort.GroupByColumn(cRegion);
-    BtnGroup.Caption := 'Ungroup';
-    Status('Grouped by region — click a group row to collapse; note the sort column was not swallowed by grouping'
-      + ' · the group row''s caption comes from GroupRowFormat (%s = the group value, %d = how many rows are in it)');
+    BtnGroup.Caption := rsBtnUngroup;
+    Status(rsGroupedNote);
   end;
 end;
 
@@ -1022,15 +1254,14 @@ begin
   if Length(GridSort.GroupColumns) > 1 then
   begin
     GridSort.UngroupRows;
-    BtnGroup2.Caption := 'Group by region + product';
-    Status('Ungrouped');
+    BtnGroup2.Caption := rsBtnGroup2;
+    Status(rsUngrouped);
   end
   else
   begin
     GridSort.GroupByColumns([cRegion, cProduct]);
-    BtnGroup2.Caption := 'Remove multi-level grouping';
-    Status('Two-level grouping — subtotals are computed per level; collapse state is tracked by **path**,' +
-      'so the same-named product under different regions does not interfere');
+    BtnGroup2.Caption := rsBtnUngroup2;
+    Status(rsGrouped2Note);
   end;
 end;
 
@@ -1042,13 +1273,12 @@ begin
   if ChkPhysicalSort.Checked then
   begin
     GridSort.SortMode := gsmData;
-    Status('Sorting really moves the data (undoable) — after sorting, merge and row-drag are no longer refused;' +
-      'attaching a filter or grouping falls back to ordinary sort automatically');
+    Status(rsPhysicalOn);
   end
   else
   begin
     GridSort.SortMode := gsmDisplay;
-    Status('Sort only changes the display order, the data does not move (default)');
+    Status(rsPhysicalOff);
   end;
 end;
 
@@ -1059,22 +1289,22 @@ end;
 procedure TMainForm.BtnSaveLayoutClick(Sender: TObject);
 begin
   FSavedLayout := GridBasic.SaveLayoutToString;
-  Status('Layout recorded — now drag column widths, reorder columns, change the freeze count, then click "Restore layout"');
+  Status(rsLayoutSaved);
 end;
 
 procedure TMainForm.BtnLoadLayoutClick(Sender: TObject);
 begin
   if FSavedLayout = '' then
   begin
-    Status('No layout recorded yet — click "Remember layout" first');
+    Status(rsLayoutNone);
     Exit;
   end;
   { 读回来是**全有或全无**:整串先校验完才动控件。
     半套版式(列宽还原了、列序没还原)比完全不还原更难排查。 }
   if GridBasic.LoadLayoutFromString(FSavedLayout) then
-    Status('Layout restored (column width / order / visibility / sort keys / freeze count)')
+    Status(rsLayoutRestored)
   else
-    Status('This layout string is unrecognized — nothing changed');
+    Status(rsLayoutBad);
 end;
 
 { 拖行之前问一句。返回 False 就否决这一次移动。 }
@@ -1083,7 +1313,7 @@ procedure TMainForm.HandleRowMoveVeto(Sender: TObject; AFrom, ATo: Integer;
 begin
   AAllow := ATo > 0;
   if not AAllow then
-    Status(Format('OnRowMove vetoed: row %d may not be dragged to the first row', [AFrom]));
+    Status(Format(rsRowMoveVetoFmt, [AFrom]));
 end;
 
 { 编辑器建好之后、交回调用方之前触发,拿到的是**真正那个控件**。
@@ -1094,7 +1324,7 @@ begin
   if AEditor is TTyEdit then
   begin
     TTyEdit(AEditor).Font.Color := clRed;
-    Status(Format('OnGetEditorProp: tinted the editor at (%d, %d) red', [ACol, ARow]));
+    Status(Format(rsEditorPropFmt, [ACol, ARow]));
   end;
 end;
 
@@ -1105,10 +1335,9 @@ procedure TMainForm.ChkFilterRowChange(Sender: TObject);
 begin
   GridSort.ShowFilterRow := ChkFilterRow.Checked;
   if ChkFilterRow.Checked then
-    Status('Filter row on — try typing >20 in the "Qty" column, or East China;North China in the "Region" column' +
-      '(; means OR, a..b means a range)')
+    Status(rsFilterRowOn)
   else
-    Status('Filter row off');
+    Status(rsFilterRowOff);
 end;
 
 { 树形单元格:**控件不持有树** —— 层级和"有没有孩子"由这两个回调回答。
@@ -1132,28 +1361,27 @@ begin
     GridSort.OnGetNodeLevel := @TreeNodeLevel;
     GridSort.OnGetHasChildren := @TreeHasChildren;
     GridSort.TreeColumn := cOrderNo;
-    Status('Tree column on — click the triangle in the first column to collapse/expand;' +
-      'The hierarchy is supplied by the host; the control does not own the tree');
+    Status(rsTreeOn);
   end
   else
   begin
     GridSort.TreeColumn := -1;
     GridSort.OnGetNodeLevel := nil;
     GridSort.OnGetHasChildren := nil;
-    Status('Tree column off');
+    Status(rsTreeOff);
   end;
 end;
 
 procedure TMainForm.BtnExpandAllClick(Sender: TObject);
 begin
   GridSort.ExpandAllGroups;
-  Status('Expand all');
+  Status(rsExpandAll);
 end;
 
 procedure TMainForm.BtnCollapseAllClick(Sender: TObject);
 begin
   GridSort.CollapseAllGroups;
-  Status('Collapse all — collapse state is kept by **group value**, so it still matches after reordering');
+  Status(rsCollapseAll);
 end;
 
 { ============ 页 4:编辑与单元格类型 ============ }
@@ -1171,7 +1399,7 @@ begin
 
   c := TTyGridColumn(GridEdit.Header.Columns.Items[cRegion]);
   c.EditorKind := gekPickList;              { 下拉,候选项也挂在列上 }
-  c.PickList.CommaText := 'East China, North China, South China, Southwest, Northeast, Northwest';
+  c.PickList.CommaText := AllRegionsCsv;
 
   c := TTyGridColumn(GridEdit.Header.Columns.Items[cQty]);
   c.EditorKind := gekSpin;                  { 数值微调:带上下按钮 }
@@ -1261,15 +1489,15 @@ var
   v: string;
 begin
   v := AText;
-  AAccept := TyInputQuery('Choose product',
-    Format('Product for row %d (available: %s)', [ARow + 1, string.Join('/', cProducts)]), v);
+  AAccept := TyInputQuery(rsPickProduct,
+    Format(rsPickProductFmt, [ARow + 1,
+      rsProdHost + '/' + rsProdStorage + '/' + rsProdDb + '/' + rsProdCdn + '/' + rsProdLb]), v);
   if AAccept then AText := v;
 end;
 
 procedure TMainForm.EditCellButtonClick(Sender: TObject; ACol, ARow: Integer);
 begin
-  Status(Format('Button cell clicked: (col %d, row %d) — pressing then dragging off the button before releasing does not count',
-    [ACol, ARow]));
+  Status(Format(rsBtnCellFmt, [ACol, ARow]));
 end;
 
 procedure TMainForm.ChkEditChange(Sender: TObject);
@@ -1283,7 +1511,7 @@ begin
   if ChkEditByRow.Checked then GridEdit.OnGetEditorKind := @EditGetEditorKind
   else GridEdit.OnGetEditorKind := nil;
   if (Sender = ChkEditByRow) and ChkEditByRow.Checked then
-    Status('OnGetEditorKind is on: double-click "Region" — a settled order gets the picker, an unsettled one a plain text box. The per-cell event beats the kind declared on the column');
+    Status(rsEditorKindOn);
 end;
 
 { 编辑器随**行内数据**变:结清的订单只许从候选里选,其余的随便打。
@@ -1306,14 +1534,13 @@ end;
 procedure TMainForm.BtnCellROClick(Sender: TObject);
 begin
   GridEdit.CellReadOnly[GridEdit.Col, GridEdit.Row] := True;
-  Status(Format('(col %d, row %d) set read-only — one level finer than "whole column read-only"',
-    [GridEdit.Col, GridEdit.Row]));
+  Status(Format(rsCellROFmt, [GridEdit.Col, GridEdit.Row]));
 end;
 
 procedure TMainForm.BtnCellRWClick(Sender: TObject);
 begin
   GridEdit.CellReadOnly[GridEdit.Col, GridEdit.Row] := False;
-  Status('This cell is editable again');
+  Status(rsCellRW);
 end;
 
 { ============ 页 5:选择 · 数据 · 剪贴板 ============ }
@@ -1331,7 +1558,7 @@ begin
     2: GridData.SelectionMode := gsmColumn;
   else GridData.SelectionMode := gsmCell;
   end;
-  Status('In whole-row/whole-column mode the focused cell still has its own background — you can see which cell the cursor is on');
+  Status(rsSelModeNote);
 end;
 
 procedure TMainForm.BtnSelAllClick(Sender: TObject);
@@ -1351,35 +1578,33 @@ begin
     两个数据行下标之差在任何空间里都不是"几行"(排过序的表上这么算,
     会吞掉几十行)。 }
   if GridData.MergeSelection then
-    Status('Merged — note there are **no grid lines running through the inside** of the merged area, the outer edge still has them')
+    Status(rsMerged)
   else
-    Status('Not merged: either you did not drag out a region,'
-      + 'or these rows are not actually adjacent in the data (sorted / rows hidden) — merged into one block, they scatter on a different sort');
+    Status(rsNotMerged);
 end;
 
 procedure TMainForm.BtnUnmergeClick(Sender: TObject);
 begin
   GridData.UnmergeCells(GridData.Col, GridData.Row);
-  Status('Unmerged (an existing background colour on the cells is not cleared by association)');
+  Status(rsUnmerged);
 end;
 
 procedure TMainForm.BtnCopyClick(Sender: TObject);
 begin
   GridData.CopySelectionToClipboard;
-  Status('Copied — export follows **display order**, so what you copy after sorting/filtering is that block on screen');
+  Status(rsCopiedNote);
 end;
 
 procedure TMainForm.BtnCutClick(Sender: TObject);
 begin
   GridData.CutToClipboard;
-  Status('Cut (the content of read-only cells is not removed)');
+  Status(rsCutNote);
 end;
 
 procedure TMainForm.BtnPasteClick(Sender: TObject);
 begin
   GridData.PasteFromClipboard;
-  Status(Format('Pasted — now %d rows x %d columns',
-    [GridData.RowCount, GridData.Header.Columns.Count]));
+  Status(Format(rsPastedGridFmt, [GridData.RowCount, GridData.Header.Columns.Count]));
 end;
 
 procedure TMainForm.ChkDataChange(Sender: TObject);
@@ -1394,25 +1619,36 @@ begin
   if Sender = ChkFillSeries then
   begin
     if ChkFillSeries.Checked then
-      Status('Select a block, then drag the small square at its bottom-right corner downwards: the fill is mine now — weekday names instead of the built-in "repeat / continue the arithmetic run"')
+      Status(rsFillMine)
     else
-      Status('The built-in fill is back: drag the small square at the bottom-right corner of the selection downwards and it repeats the block, or continues an arithmetic run');
+      Status(rsFillBuiltin);
   end
   else if ChkAutoGrow.Checked then
-    Status('On paste the table grows to fit · drag the small square at the bottom-right corner of the selection to fill downwards (Excel-style)')
+    Status(rsAutoGrowOn)
   else
-    Status('Auto table growth is off — rows beyond the range are dropped (this is the old silent data-loss behaviour)');
+    Status(rsAutoGrowOff);
 end;
 
 { 接管一次拖填充。ATarget 是控件算好的目标区(数据行坐标),源区不动。
   写完置 AHandled := True,控件就不再套用它自己那套"等差/循环"规则。 }
 procedure TMainForm.EvFillCells(Sender: TObject; const ASource, ATarget: TRect;
   var AHandled: Boolean);
-const
-  cWeekdays: array[0..6] of string =
-    ('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun');
 var
   c, r, n: Integer;
+
+  function WeekdayName(AIndex: Integer): string;
+  begin
+    case AIndex mod 7 of
+      0: Result := rsMon;
+      1: Result := rsTue;
+      2: Result := rsWed;
+      3: Result := rsThu;
+      4: Result := rsFri;
+      5: Result := rsSat;
+    else Result := rsSun;
+    end;
+  end;
+
 begin
   n := 0;
   GridData.BeginUpdate;
@@ -1420,27 +1656,26 @@ begin
     for c := ATarget.Left to ATarget.Right do
       for r := ATarget.Top to ATarget.Bottom do
       begin
-        GridData.Cells[c, r] := cWeekdays[(r - ATarget.Top) mod Length(cWeekdays)];
+        GridData.Cells[c, r] := WeekdayName(r - ATarget.Top);
         Inc(n);
       end;
   finally
     GridData.EndUpdate;
   end;
   AHandled := True;
-  Status(Format('OnFillCells wrote %d cell(s) itself — the control did not touch the data (untick the switch to get its built-in series back)',
-    [n]));
+  Status(Format(rsFillWroteFmt, [n]));
 end;
 
 procedure TMainForm.BtnInsRowClick(Sender: TObject);
 begin
   GridData.InsertRow(GridData.Row);
-  Status('Inserted a row above the current row');
+  Status(rsRowInserted);
 end;
 
 procedure TMainForm.BtnDelRowClick(Sender: TObject);
 begin
   GridData.DeleteRow(GridData.Row);
-  Status('Current row deleted');
+  Status(rsRowDeleted);
 end;
 
 { 上移/下移会把底色、行高、合并跨度一起搬走,不是只换文字。
@@ -1465,14 +1700,13 @@ end;
 procedure TMainForm.BtnHideRowClick(Sender: TObject);
 begin
   GridData.HideRow(GridData.Row);
-  Status(Format('Hid row %d — %d row(s) hidden in total. Clearing the filter will not bring it back',
-    [GridData.Row, GridData.NumHiddenRows]));
+  Status(Format(rsHidRowFmt, [GridData.Row, GridData.NumHiddenRows]));
 end;
 
 procedure TMainForm.BtnUnhideAllClick(Sender: TObject);
 begin
   GridData.UnHideAllRows;
-  Status('All unhidden');
+  Status(rsAllUnhidden);
 end;
 
 { 撤销覆盖的不只是格里的字。给某行涂个底色、拖高它、再上移一格,
@@ -1484,7 +1718,7 @@ end;
 procedure TMainForm.BtnInsColClick(Sender: TObject);
 begin
   GridData.InsertColumn(GridData.Col);
-  Status(Format('Inserted a column before column %d — Ctrl+Z can undo it', [GridData.Col]));
+  Status(Format(rsInsColFmt, [GridData.Col]));
 end;
 
 procedure TMainForm.BtnDelColClick(Sender: TObject);
@@ -1493,12 +1727,11 @@ var
 begin
   if GridData.Header.Columns.Count <= 1 then
   begin
-    Status('Only one column left, will not delete');
+    Status(rsOneColLeft);
     Exit;
   end;
   c := TTyColumn(GridData.Header.Columns.Items[GridData.Col]);
-  Status(Format('Deleted "%s" (width %d) — press Ctrl+Z and it comes back together with its width / title /' +
-    'Editor kind / filter come back together', [c.Text, c.Width]));
+  Status(Format(rsDelColFmt, [c.Text, c.Width]));
   GridData.DeleteColumn(GridData.Col);
 end;
 
@@ -1506,33 +1739,33 @@ procedure TMainForm.BtnMoveColClick(Sender: TObject);
 begin
   if GridData.Col >= GridData.Header.Columns.Count - 1 then
   begin
-    Status('Already the last column');
+    Status(rsLastCol);
     Exit;
   end;
   GridData.MoveColumn(GridData.Col, GridData.Col + 1);
-  Status('This column swapped places with its right neighbour — swapping can be undone too');
+  Status(rsColSwapped);
 end;
 
 procedure TMainForm.BtnUndoClick(Sender: TObject);
 begin
   if not GridData.CanUndo then
   begin
-    Status('Nothing left to undo');
+    Status(rsNothingUndo);
     Exit;
   end;
   GridData.Undo;
-  Status('Undone — background colour, row height and merge span come back with it');
+  Status(rsUndone);
 end;
 
 procedure TMainForm.BtnRedoClick(Sender: TObject);
 begin
   if not GridData.CanRedo then
   begin
-    Status('Nothing left to redo');
+    Status(rsNothingRedo);
     Exit;
   end;
   GridData.Redo;
-  Status('Redone');
+  Status(rsRedone);
 end;
 
 procedure TMainForm.BtnExportCsvClick(Sender: TObject);
@@ -1541,8 +1774,7 @@ var
 begin
   fn := ExtractFilePath(ParamStr(0)) + 'grid-export.csv';
   GridData.SaveToCSVFile(fn);
-  Status(Format('Exported %d rows to %s (display order: filtered-out rows do not appear)',
-    [GridData.DisplayRowCount, fn]));
+  Status(Format(rsExportedCsvFmt, [GridData.DisplayRowCount, fn]));
 end;
 
 procedure TMainForm.BtnExportHtmlClick(Sender: TObject);
@@ -1551,7 +1783,7 @@ var
 begin
   fn := ExtractFilePath(ParamStr(0)) + 'grid-export.html';
   GridData.SaveToHTMLFile(fn);
-  Status('Exported HTML to ' + fn);
+  Status(Format(rsExportedHtmlFmt, [fn]));
 end;
 
 
@@ -1652,7 +1884,7 @@ begin
   GridEvents.Invalidate;
 
   if (Sender = ChkEvDrawCell) and ChkEvDrawCell.Checked then
-    Status('OnDrawCell took the amount column over completely — the control still painted the background and the selection, the host only drew the content');
+    Status(rsDrawCellTaken);
 end;
 
 { 悬停提示:控件只在**换格**时才回调,所以气泡内容跟着格变而不卡顿。 }
@@ -1660,9 +1892,9 @@ procedure TMainForm.EvGetCellHint(Sender: TObject; ACol, ARow: Integer;
   var AHint: string);
 begin
   case ACol of
-    cAmount: AHint := Format('Amount %s (tax incl.)', [GridEvents.Cells[cAmount, ARow]]);
-    cDate:   if GridEvents.Cells[cDate, ARow] = '' then AHint := 'This order is not scheduled yet'
-             else AHint := 'Delivery date:' + GridEvents.Cells[cDate, ARow];
+    cAmount: AHint := Format(rsHintAmountFmt, [GridEvents.Cells[cAmount, ARow]]);
+    cDate:   if GridEvents.Cells[cDate, ARow] = '' then AHint := rsHintNoDate
+             else AHint := Format(rsHintDateFmt, [GridEvents.Cells[cDate, ARow]]);
   else       AHint := '';      { 空串 = 这一列不弹提示 }
   end;
 end;
@@ -1679,21 +1911,19 @@ end;
   先左键选中某格,再右键别处 —— 选中框不会跑。 }
 procedure TMainForm.EvRightClickCell(Sender: TObject; ACol, ARow: Integer);
 begin
-  Status(Format('Right-clicked at (col %d, row %d) — note the selection box on the left did not follow',
-    [ACol, ARow]));
+  Status(Format(rsRightClickFmt, [ACol, ARow]));
 end;
 
 procedure TMainForm.EvHeaderClick(Sender: TObject; ACol: Integer);
 begin
-  Status(Format('Header click: column %d — the event fires first, the built-in sort proceeds as usual (the host rides along, it does not take over the default)',
-    [ACol]));
+  Status(Format(rsHeaderClickFmt, [ACol]));
 end;
 
 procedure TMainForm.EvHeaderRightClick(Sender: TObject; ACol: Integer);
 begin
   { 表头右键的典型用途:自适应列宽 / 隐藏列 / 清除排序。这里演示自适应。 }
   GridEvents.AutoFitColumn(ACol);
-  Status(Format('Header right-click: column %d auto-fitted to its content width', [ACol]));
+  Status(Format(rsHeaderRClickFmt, [ACol]));
 end;
 
 { 拖动过程中每一帧都发 Sizing(可改写尺寸、也可否决),松手才发一次 EndSize。
@@ -1707,8 +1937,7 @@ end;
 
 procedure TMainForm.EvEndColumnSize(Sender: TObject; AIndex, ANewSize: Integer);
 begin
-  Status(Format('Column %d width set to %d — dragging fired %d Sizing events, release fires this single EndSize'
-    + '(the host uses it to save column-width preferences)', [AIndex, ANewSize, FSizingCount]));
+  Status(Format(rsColWidthFmt, [AIndex, ANewSize, FSizingCount]));
   FSizingCount := 0;
 end;
 
@@ -1721,8 +1950,7 @@ end;
 procedure TMainForm.EvEndRowSize(Sender: TObject; AIndex, ANewSize: Integer);
 begin
   { AIndex 是**数据行** —— 排序/筛选之后它仍然指向同一条记录。 }
-  Status(Format('Data row %d height set to %d (drag row height in the row-number gutter on the left)',
-    [AIndex, ANewSize]));
+  Status(Format(rsRowHeightFmt, [AIndex, ANewSize]));
   FSizingCount := 0;
 end;
 
@@ -1733,10 +1961,10 @@ begin
   if (AFromCol = 0) or (AToCol = 0) then
   begin
     AAllow := False;
-    Status('Column 0 is pinned — you cannot drag it, nor drag another column in front of it');
+    Status(rsCol0Pinned);
   end
   else
-    Status(Format('Column moved: %d → %d', [AFromCol, AToCol]));
+    Status(Format(rsColMovedFmt, [AFromCol, AToCol]));
 end;
 
 { 勾选框否决:点得中、光标会移过去,但勾不上 —— 与 OnCanClickCell 挡住整格不同。 }
@@ -1746,7 +1974,7 @@ begin
   if ARow mod 5 = 0 then
   begin
     AAllow := False;
-    Status(Format('Row %d is locked and cannot be checked (but the cursor can still move over it)', [ARow]));
+    Status(Format(rsRowLockedFmt, [ARow]));
   end;
 end;
 
@@ -1754,16 +1982,16 @@ end;
 procedure TMainForm.EvCheckBoxChange(Sender: TObject; ACol, ARow: Integer;
   AChecked: Boolean);
 begin
-  if AChecked then Status(Format('Row %d checked', [ARow]))
-  else Status(Format('Row %d unchecked', [ARow]));
+  if AChecked then Status(Format(rsRowCheckedFmt, [ARow]))
+  else Status(Format(rsRowUncheckedFmt, [ARow]));
 end;
 
 { 复制前改写将要进剪贴板的文本。 }
 procedure TMainForm.EvClipboardCopy(Sender: TObject; var AText: string;
   var AAllow: Boolean);
 begin
-  AText := '// from TTyStringGrid' + LineEnding + AText;
-  Status('The copied content had a comment line added by a hook — paste it into Notepad and look');
+  AText := rsClipComment + LineEnding + AText;
+  Status(rsClipCopyNote);
 end;
 
 { 逐格校验:数量列只收数字,非法的格直接跳过(不是整块放弃)。 }
@@ -1781,7 +2009,7 @@ procedure TMainForm.EvAfterPasteCell(Sender: TObject; ACol, ARow: Integer);
 begin
   Inc(FPasteCount);
   GridEvents.CellColors[ACol, ARow] := TyRGB(254, 240, 138);
-  Status(Format('This paste wrote %d cell(s) (changed cells are tinted)', [FPasteCount]));
+  Status(Format(rsPasteWroteFmt, [FPasteCount]));
 end;
 
 { 整块粘贴:剪贴板文本**还没被切成行列**之前先过宿主一遍 ——
@@ -1801,8 +2029,7 @@ begin
   end;
   { 改写整块 —— 之后控件才去解析行列,所以逐格钩子看到的已经是改过的值。 }
   AText := UpperCase(AText);
-  Status(Format('OnClipboardPaste saw the whole block first: %d line(s), uppercased before the grid parsed it',
-    [lines]));
+  Status(Format(rsPasteBlockFmt, [lines]));
 end;
 
 { 完全接管「金额」那一列的绘制:画一条按比例的数据条,数字自己写。
@@ -1861,10 +2088,9 @@ end;
 procedure TMainForm.BtnEvFindClick(Sender: TObject);
 begin
   if GridEvents.FindNext(EdEvFind.Text, False, False) then
-    Status(Format('Found — the cursor jumped to (col %d, row %d) and scrolled into view',
-      [GridEvents.Col, GridEvents.Row]))
+    Status(Format(rsFoundFmt, [GridEvents.Col, GridEvents.Row]))
   else
-    Status('No more matches');
+    Status(rsNoMoreMatches);
 end;
 
 procedure TMainForm.BtnEvReplaceClick(Sender: TObject);
@@ -1872,7 +2098,7 @@ var
   n: Integer;
 begin
   n := GridEvents.ReplaceCells(EdEvFind.Text, EdEvRepl.Text, True, False, False);
-  Status(Format('Replaced %d occurrence(s) (read-only cells are skipped automatically)', [n]));
+  Status(Format(rsReplacedFmt, [n]));
 end;
 
 { 导入:第一行当表头自动建列、清空旧数据、并复位筛选与排序。
@@ -1886,7 +2112,7 @@ const
     '3,ByteDance,plain note';
 begin
   GridEvents.LoadFromCSVText(cSample, ',');
-  Status('Imported — note that the first row''s note **contains a line break** but did not scramble the row count, and the comma did not split the field');
+  Status(rsImportedCsv);
 end;
 
 { ============ 换肤 ============ }
@@ -1908,15 +2134,15 @@ begin
   begin
     TyDefaultController.ResetAccent;
     ApplyChromeTheme(TyDefaultController);
-    Status('Restored the theme''s own accent colour');
+    Status(rsAccentRestored);
     Exit;
   end;
   c := TyDefaultController.Model.ResolveStyle('TyButton', 'primary', []).Background.Color;
-  if TySelectColor('Choose accent colour', c) then
+  if TySelectColor(rsChooseAccent, c) then
   begin
     TyDefaultController.SetAccent(TyColorToHex(c, False));
     ApplyChromeTheme(TyDefaultController);
-    Status('Accent colour changed to ' + TyColorToHex(c, False) + '(click again to restore)');
+    Status(Format(rsAccentChangedFmt, [TyColorToHex(c, False)]));
   end;
 end;
 
@@ -1979,15 +2205,15 @@ begin
   { 候选列:**非编辑态也会画一个下拉箭头** —— 不点进去也看得出这格有候选项。 }
   c := TTyGridColumn(GridCells.Header.Columns.Items[cRegion]);
   c.EditorKind := gekPickList;
-  c.PickList.CommaText := 'East China, North China, South China, Southwest, Northeast, Northwest';
+  c.PickList.CommaText := AllRegionsCsv;
 
   GridCells.OnCellLinkClick := @CellsLinkClick;
 
   { 开局先放一条批注和一处加粗,免得用户对着一张干净的表猜"该点哪儿"。 }
-  GridCells.CellComment[cNote, 2] := 'This is a sample comment — hover the small triangle in the top-right to show it';
+  GridCells.CellComment[cNote, 2] := rsSampleComment;
   GridCells.CellFontStyles[cProduct, 2] := [fsBold];
 
-  Status('Page 7: comments/bold/display type all live in per-cell properties — after sorting and inserting rows they still follow the original record');
+  Status(rsPage7);
 end;
 
 procedure TMainForm.ChkCellsChange(Sender: TObject);
@@ -2042,39 +2268,38 @@ begin
   end;
 
   GridCells.Invalidate;
-  Status('tri-state=' + BoolToStr(ChkTriState.Checked, 'On', 'Off')
-    + ' · formatting=' + BoolToStr(ChkFormat.Checked, 'On', 'Off')
-    + ' · link column=' + BoolToStr(ChkLinkCol.Checked, 'On', 'Off')
-    + ' · icon column=' + BoolToStr(ChkColImage.Checked, 'On', 'Off'));
+  Status(Format(rsCellsSwitchesFmt,
+    [BoolToStr(ChkTriState.Checked, rsOn, rsOff),
+     BoolToStr(ChkFormat.Checked, rsOn, rsOff),
+     BoolToStr(ChkLinkCol.Checked, rsOn, rsOff),
+     BoolToStr(ChkColImage.Checked, rsOn, rsOff)]));
 end;
 
 procedure TMainForm.BtnCommentClick(Sender: TObject);
 var
   txt: string;
 begin
-  txt := 'In ' + FormatDateTime('hh:nn:ss', Now) + ' comment added';
+  txt := Format(rsCommentAtFmt, [FormatDateTime('hh:nn:ss', Now)]);
   GridCells.CellComment[GridCells.Col, GridCells.Row] := txt;
-  Status(Format('(%d, %d) got a comment — a small triangle appears top-right, shown on hover; Ctrl+Z to undo',
-    [GridCells.Col, GridCells.Row]));
+  Status(Format(rsGotCommentFmt, [GridCells.Col, GridCells.Row]));
 end;
 
 procedure TMainForm.BtnCommentClearClick(Sender: TObject);
 begin
   GridCells.CellComment[GridCells.Col, GridCells.Row] := '';
-  Status('Comment cleared — the small triangle disappears with it');
+  Status(rsCommentCleared);
 end;
 
 procedure TMainForm.BtnBoldClick(Sender: TObject);
 begin
   GridCells.CellFontStyles[GridCells.Col, GridCells.Row] := [fsBold];
-  Status(Format('(%d, %d) bolded — per-cell font style, also on the undo stack',
-    [GridCells.Col, GridCells.Row]));
+  Status(Format(rsBoldedFmt, [GridCells.Col, GridCells.Row]));
 end;
 
 procedure TMainForm.BtnBoldClearClick(Sender: TObject);
 begin
   GridCells.CellFontStyles[GridCells.Col, GridCells.Row] := [];
-  Status('Unbolded');
+  Status(rsUnbolded);
 end;
 
 { 逐格显示类型:比列级更具体,压过列级。 }
@@ -2087,8 +2312,7 @@ begin
   if (CbCellDisp.ItemIndex < 0) or (CbCellDisp.ItemIndex > High(kinds)) then Exit;
   GridCells.CellDisplays[GridCells.Col, GridCells.Row] :=
     kinds[CbCellDisp.ItemIndex];
-  Status(Format('(%d, %d) changed its display type — per-cell beats per-column and overrides the column-level declaration',
-    [GridCells.Col, GridCells.Row]));
+  Status(Format(rsDispTypeFmt, [GridCells.Col, GridCells.Row]));
 end;
 
 procedure TMainForm.CbCaseChange(Sender: TObject);
@@ -2100,7 +2324,7 @@ begin
   if CbCase.ItemIndex < 0 then Exit;
   c := TTyGridColumn(GridCells.Header.Columns.Items[cOrderNo]);
   c.CharCase := cases[CbCase.ItemIndex];
-  Status('The case rule of the order-no. column changed — double-click into edit to see it');
+  Status(rsCaseChanged);
 end;
 
 procedure TMainForm.SpMaxLenChange(Sender: TObject);
@@ -2109,8 +2333,8 @@ var
 begin
   c := TTyGridColumn(GridCells.Header.Columns.Items[cNote]);
   c.MaxEditLength := SpMaxLen.Value;
-  if SpMaxLen.Value = 0 then Status('The notes column has no length limit')
-  else Status(Format('The notes column allows up to %d characters', [SpMaxLen.Value]));
+  if SpMaxLen.Value = 0 then Status(rsNoLenLimit)
+  else Status(Format(rsMaxLenFmt, [SpMaxLen.Value]));
 end;
 
 { 只作用于显示。**别在这里改数据** —— 编辑器、导出、排序拿到的都必须是原值。 }
@@ -2125,8 +2349,7 @@ end;
 
 procedure TMainForm.CellsLinkClick(Sender: TObject; ACol, ARow: Integer);
 begin
-  Status(Format('Clicked link: %s (row %d) — in a real app this opens the detail',
-    [GridCells.Cells[ACol, ARow], ARow]));
+  Status(Format(rsLinkClickFmt, [GridCells.Cells[ACol, ARow], ARow]));
 end;
 
 { ============ 页 8:呈现与表头 ============ }
@@ -2136,7 +2359,7 @@ begin
   BuildOrderColumns(GridView, True, False);
   FillOrders(GridView, 40, True, False);
   GridView.Header.Options := GridView.Header.Options + [hoVisible];
-  Status('Page 8: scrollbar tri-state, background image, focus/selection display, header wrap and grouping');
+  Status(rsPage8);
 end;
 
 { 分组带按勾选重建。**每次重建而不是增量改** —— 组是"哪几列属于同一类"的声明,
@@ -2153,22 +2376,22 @@ begin
   end;
 
   g := GridView.HeaderGroups.Add;
-  g.Text := 'Order info';
+  g.Text := rsHdrGroupOrder;
   g.FirstCol := cOrderNo; g.LastCol := cProduct; g.Level := 0;
 
   g := GridView.HeaderGroups.Add;
-  g.Text := 'Amount & progress';
+  g.Text := rsHdrGroupAmount;
   g.FirstCol := cQty; g.LastCol := cRate; g.Level := 0;
 
   { 第二级:Level=1 画在 0 级下面那一条里。分组带会自动长高一条。 }
   if ChkHdrGroups2.Checked then
   begin
     g := GridView.HeaderGroups.Add;
-    g.Text := 'Key & ownership';
+    g.Text := rsHdrGroupKey;
     g.FirstCol := cOrderNo; g.LastCol := cRegion; g.Level := 1;
 
     g := GridView.HeaderGroups.Add;
-    g.Text := 'Qty / amount';
+    g.Text := rsHdrGroupQty;
     g.FirstCol := cQty; g.LastCol := cAmount; g.Level := 1;
   end;
   GridView.Invalidate;
@@ -2196,11 +2419,11 @@ begin
   else GridView.FixedColsRight := 0;
 
   ApplyHeaderGroups;
-  Status('Header wrap=' + BoolToStr(ChkHdrWrap.Checked, 'On', 'Off')
-    + ' · auto row height=' + BoolToStr(ChkHdrAuto.Checked, 'On', 'Off')
-    { 级数由**宿主自己**算 —— 分组是宿主建的,它本来就知道有几级;
-      为了一句状态文案去扩控件的公开面是本末倒置。 }
-    + ' · grouping levels=' + IntToStr(HeaderGroupLevels));
+  { 级数由**宿主自己**算 —— 分组是宿主建的,它本来就知道有几级;
+    为了一句状态文案去扩控件的公开面是本末倒置。 }
+  Status(Format(rsViewSwitchesFmt,
+    [BoolToStr(ChkHdrWrap.Checked, rsOn, rsOff),
+     BoolToStr(ChkHdrAuto.Checked, rsOn, rsOff), HeaderGroupLevels]));
 end;
 
 procedure TMainForm.CbScrollChange(Sender: TObject);
@@ -2211,7 +2434,7 @@ begin
     GridView.VertScrollBarMode := modes[CbVScroll.ItemIndex];
   if CbHScroll.ItemIndex >= 0 then
     GridView.HorzScrollBarMode := modes[CbHScroll.ItemIndex];
-  Status('The scrollbar "hidden" only means it is not shown — the wheel, arrow keys and PageDown still reach the bottom');
+  Status(rsScrollbarNote);
 end;
 
 procedure TMainForm.CbBackChange(Sender: TObject);
@@ -2223,7 +2446,7 @@ begin
     GridView.BackgroundMode := bmodes[CbBackMode.ItemIndex];
   if CbBackScope.ItemIndex >= 0 then
     GridView.BackgroundScope := scopes[CbBackScope.ItemIndex];
-  Status('The range decides **which rectangle the image is fitted to** — the header band is repainted every frame, whatever is laid under it is invisible');
+  Status(rsBackScopeNote);
 end;
 
 procedure TMainForm.BtnLongCaptionClick(Sender: TObject);
@@ -2231,10 +2454,13 @@ var
   c: TTyColumn;
 begin
   c := TTyColumn(GridView.Header.Columns.Items[cNote]);
-  if Pos('Word wrap', c.Text) > 0 then c.Text := 'Notes'
-  else c.Text := 'This is a very long column title used to demonstrate wrapping and auto height';
+  { Compare against the resourcestring, not a substring: the old Pos('Word wrap', ...)
+    probe never matched the English long title, so the button could not toggle back --
+    and any substring probe breaks again the moment the title is translated. }
+  if c.Text = rsLongTitle then c.Text := rsColNote
+  else c.Text := rsLongTitle;
   GridView.Invalidate;
-  Status('Also tick "header wrap" and "auto header height" to see the effect');
+  Status(rsHdrWrapHint);
 end;
 
 function TMainForm.HeaderGroupLevels: Integer;
@@ -2279,7 +2505,7 @@ begin
   GridIo.SetColumnAggregate(cAmount, gagSum);
   GridIo.SetColumnAggregate(cRate, gagMin);
   GridIo.SetColumnAggregate(cDone, gagMax);
-  Status('Page 9: export/import/stream round-trip/footer takeover · the summary band does count / average / sum / min / max — one aggregate per column');
+  Status(rsPage9);
 end;
 
 procedure TMainForm.ChkIoChange(Sender: TObject);
@@ -2291,8 +2517,9 @@ begin
   else GridIo.OnColumnCalc := nil;
 
   GridIo.Invalidate;
-  Status('Footer hook=' + BoolToStr(ChkIoFooterHook.Checked, 'On', 'Off')
-    + ' · amount column takeover=' + BoolToStr(ChkIoColCalc.Checked, 'On', 'Off'));
+  Status(Format(rsIoSwitchesFmt,
+    [BoolToStr(ChkIoFooterHook.Checked, rsOn, rsOff),
+     BoolToStr(ChkIoColCalc.Checked, rsOn, rsOff)]));
 end;
 
 procedure TMainForm.BtnIoJsonClick(Sender: TObject);
@@ -2300,8 +2527,8 @@ var
   js: string;
 begin
   js := GridIo.SaveToJSONText;
-  TyShowMessage('JSON export (first 800 chars):' + LineEnding + LineEnding + Copy(js, 1, 800));
-  Status(Format('Exported %d bytes of JSON — keys are the column titles, only visible rows exported', [Length(js)]));
+  TyShowMessage(rsJsonHead + LineEnding + LineEnding + Copy(js, 1, 800));
+  Status(Format(rsJsonExportedFmt, [Length(js)]));
 end;
 
 procedure TMainForm.BtnIoHtmlClick(Sender: TObject);
@@ -2309,8 +2536,8 @@ var
   h: string;
 begin
   h := GridIo.SaveToHTMLText;
-  TyShowMessage('HTML export (first 800 chars):' + LineEnding + LineEnding + Copy(h, 1, 800));
-  Status(Format('Exported %d bytes of HTML', [Length(h)]));
+  TyShowMessage(rsHtmlHead + LineEnding + LineEnding + Copy(h, 1, 800));
+  Status(Format(rsHtmlExportedFmt, [Length(h)]));
 end;
 
 { 同一个方法,加上行列范围参数就是"只导选区"。 }
@@ -2322,9 +2549,8 @@ begin
   sel := GridIo.Selection;
   csv := GridIo.SaveToCSVText(',', sel.Top, sel.Bottom - sel.Top + 1,
                                    sel.Left, sel.Right - sel.Left + 1);
-  TyShowMessage('Selection CSV:' + LineEnding + LineEnding + Copy(csv, 1, 800));
-  Status(Format('Exported %d rows x %d columns of the selection',
-    [sel.Bottom - sel.Top + 1, sel.Right - sel.Left + 1]));
+  TyShowMessage(rsSelCsvHead + LineEnding + LineEnding + Copy(csv, 1, 800));
+  Status(Format(rsSelExportedFmt, [sel.Bottom - sel.Top + 1, sel.Right - sel.Left + 1]));
 end;
 
 { 存进内存流再读回来 —— 证明流接口两头对得上。 }
@@ -2339,8 +2565,7 @@ begin
     GridIo.SaveToStream(st);
     st.Position := 0;
     GridIo.LoadFromStream(st);
-    Status(Format('Stream round trip: %d rows → %d bytes → %d rows',
-      [before, st.Size, GridIo.RowCount]));
+    Status(Format(rsStreamFmt, [before, st.Size, GridIo.RowCount]));
   finally
     st.Free;
   end;
@@ -2348,7 +2573,7 @@ end;
 
 procedure TMainForm.BtnIoSelTextClick(Sender: TObject);
 begin
-  TyShowMessage('Selection text (tab-separated, clipboard untouched):' + LineEnding + LineEnding
+  TyShowMessage(rsSelTextHead + LineEnding + LineEnding
     + Copy(GridIo.SelectionAsText, 1, 800));
 end;
 
@@ -2358,7 +2583,7 @@ const
   blk = 'AAA'#9'East China'#9'Product A'#13#10'BBB'#9'North China'#9'Product B';
 begin
   GridIo.PasteFromText(blk);
-  Status('Pasted 2 lines from a hardcoded text — via the same path as the clipboard');
+  Status(rsPasted2Lines);
 end;
 
 procedure TMainForm.BtnIoClearRowsClick(Sender: TObject);
@@ -2367,14 +2592,13 @@ var
 begin
   sel := GridIo.Selection;
   GridIo.ClearRowContents(sel.Top, sel.Bottom - sel.Top + 1);
-  Status(Format('Cleared the content of %d row(s) — the whole batch counts as **one** undo record, one Ctrl+Z brings it back',
-    [sel.Bottom - sel.Top + 1]));
+  Status(Format(rsClearedRowsFmt, [sel.Bottom - sel.Top + 1]));
 end;
 
 procedure TMainForm.BtnIoClearColsClick(Sender: TObject);
 begin
   GridIo.ClearColContents(GridIo.Col, 1);
-  Status(Format('Cleared column %d — also a single undo record', [GridIo.Col]));
+  Status(Format(rsClearedColFmt, [GridIo.Col]));
 end;
 
 { 追加 / 最多读几行 / 跳过前几行,三个参数一起演示。 }
@@ -2393,23 +2617,23 @@ begin
   maxRows := SpIoMax.Value;
   if maxRows = 0 then maxRows := -1;      { 0 = 不限 }
   GridIo.LoadFromCSVText(csv, ',', ChkIoAppend.Checked, maxRows, SpIoSkip.Value);
-  Status(Format('Import: %d rows → %d rows (%s, up to %s rows, %d note rows skipped)',
+  Status(Format(rsImportFmt,
     [before, GridIo.RowCount,
-     BoolToStr(ChkIoAppend.Checked, 'Append', 'Replace'),
-     BoolToStr(maxRows < 0, 'any', IntToStr(maxRows)), SpIoSkip.Value]));
+     BoolToStr(ChkIoAppend.Checked, rsImpAppend, rsImpReplace),
+     BoolToStr(maxRows < 0, rsImpAny, IntToStr(maxRows)), SpIoSkip.Value]));
 end;
 
 procedure TMainForm.BtnIoRecalcClick(Sender: TObject);
 begin
   GridIo.CalcFooter(cAmount);
   GridIo.Invalidate;
-  Status('Recompute only the amount column — invalidating the whole table (InvalidateAggregates) is too blunt for this');
+  Status(rsRecalcNote);
 end;
 
 procedure TMainForm.IoGetFooterText(Sender: TObject; ACol: Integer;
   var AText: string);
 begin
-  if (ACol = cAmount) and (AText <> '') then AText := 'Total ¥' + AText;
+  if (ACol = cAmount) and (AText <> '') then AText := Format(rsFooterTotalFmt, [AText]);
 end;
 
 { 宿主接管这一列的汇总。**不进缓存** —— 外部数据变了控件收不到通知,
@@ -2529,24 +2753,23 @@ begin
   else GridEvents.OnGetPickList := nil;
 
   GridEvents.Invalidate;
-  Status('Hook switches applied — go operate the grid, this line will say what the hook intervened in');
+  Status(rsHooksApplied);
 end;
 
 procedure TMainForm.EvReturn(Sender: TObject; ACol, ARow: Integer);
 begin
-  Status(Format('Enter: open the detail of row %d (Enter while editing still means "commit and move down", unchanged)',
-    [ARow]));
+  Status(Format(rsEnterFmt, [ARow]));
 end;
 
 procedure TMainForm.EvCtrlReturn(Sender: TObject; ACol, ARow: Integer);
 begin
-  Status(Format('Ctrl+Enter: row %d — a separate action, distinct from plain Enter', [ARow]));
+  Status(Format(rsCtrlEnterFmt, [ARow]));
 end;
 
 procedure TMainForm.EvScrollHint(Sender: TObject; ARow: Integer;
   var AHint: string);
 begin
-  AHint := Format('Row %d / %d total', [ARow + 1, GridEvents.RowCount]);
+  AHint := Format(rsScrollHintFmt, [ARow + 1, GridEvents.RowCount]);
 end;
 
 { 与"只读"的区别:被拦下的格子**照样按原来的样子显示**(勾选框还是勾选框),
@@ -2557,15 +2780,14 @@ begin
   if ARow = 2 then
   begin
     AAllow := False;
-    Status('Row 2 is not editable — note its checkbox is still drawn as a checkbox, it just cannot be clicked');
+    Status(rsRow2NoEdit);
   end;
 end;
 
 procedure TMainForm.EvEditChange(Sender: TObject; ACol, ARow: Integer;
   const AText: string);
 begin
-  Status(Format('Typing at (%d, %d): "%s" — fired on every keystroke, not on commit',
-    [ACol, ARow, AText]));
+  Status(Format(rsTypingFmt, [ACol, ARow, AText]));
 end;
 
 procedure TMainForm.EvCellEdited(Sender: TObject; ACol, ARow: Integer;
@@ -2574,25 +2796,24 @@ begin
   if Trim(ANewText) = '' then
   begin
     AAccept := False;
-    Status(Format('(%d, %d) may not be cleared — the commit was vetoed, the cell still holds "%s"',
-      [ACol, ARow, AOldText]));
+    Status(Format(rsCommitVetoFmt, [ACol, ARow, AOldText]));
   end
   else
-    Status(Format('(%d, %d):「%s」→「%s」', [ACol, ARow, AOldText, ANewText]));
+    Status(Format(rsCellEditedFmt, [ACol, ARow, AOldText, ANewText]));
 end;
 
 procedure TMainForm.EvCanInsertRow(Sender: TObject; ARow: Integer;
   var AAllow: Boolean);
 begin
   AAllow := False;
-  Status('Insertion vetoed — not a single row was inserted (in the plural version, if any row is vetoed the whole batch is skipped)');
+  Status(rsInsertVetoed);
 end;
 
 procedure TMainForm.EvCanDeleteRow(Sender: TObject; ARow: Integer;
   var AAllow: Boolean);
 begin
   AAllow := False;
-  Status('Deletion vetoed');
+  Status(rsDeleteVetoed);
 end;
 
 procedure TMainForm.EvSelectCell(Sender: TObject; ACol, ARow: Integer;
@@ -2601,25 +2822,24 @@ begin
   if ACol = 0 then
   begin
     ACanSelect := False;
-    Status('The cursor cannot enter column 0 — the arrow keys skip straight over it');
+    Status(rsCol0NoCursor);
   end;
 end;
 
 procedure TMainForm.EvClickCell(Sender: TObject; ACol, ARow: Integer);
 begin
-  Status(Format('Click (%d, %d)', [ACol, ARow]));
+  Status(Format(rsClickFmt, [ACol, ARow]));
 end;
 
 procedure TMainForm.EvDblClickCell(Sender: TObject; ACol, ARow: Integer);
 begin
-  Status(Format('Double-click (%d, %d) — in a real app this usually "opens the detail"', [ACol, ARow]));
+  Status(Format(rsDblClickFmt, [ACol, ARow]));
 end;
 
 procedure TMainForm.EvRatingChange(Sender: TObject; ACol, ARow: Integer;
   AValue: Integer);
 begin
-  Status(Format('Rating changed to %d star(s) (row %d) — the star you click is the score, no editor pops up',
-    [AValue, ARow]));
+  Status(Format(rsRatingFmt, [AValue, ARow]));
 end;
 
 { 接服务端排序时的必需品:拦下本地排序,自己去请求。 }
@@ -2629,22 +2849,19 @@ begin
   if ACol = cRegion then
   begin
     AAllow := False;
-    Status('The region column may not be sorted locally — in a real scenario this would become a server request');
+    Status(rsRegionNoSort);
   end;
 end;
 
 { 按业务顺序排,而不是按字面。 }
 procedure TMainForm.EvCompareCells(Sender: TObject; ACol, ARow1, ARow2: Integer;
   var AResult: Integer);
-const
-  order: array[0..5] of string = ('East China', 'North China', 'South China', 'Southwest', 'Northeast', 'Northwest');
-
   function Rank(const AText: string): Integer;
   var i: Integer;
   begin
-    for i := 0 to High(order) do
-      if order[i] = AText then Exit(i);
-    Result := High(order) + 1;
+    for i := 0 to cRegionCount - 1 do
+      if RegionName(i) = AText then Exit(i);
+    Result := cRegionCount;
   end;
 
 begin
@@ -2667,9 +2884,9 @@ procedure TMainForm.EvGetFilterValues(Sender: TObject; ACol: Integer;
 begin
   if ACol <> cRegion then Exit;
   AItems.Clear;
-  AItems.Add('East China');
-  AItems.Add('North China');
-  AItems.Add('(more on the server)');
+  AItems.Add(rsRegionE);
+  AItems.Add(rsRegionN);
+  AItems.Add(rsFilterValsMore);
   AHandled := True;
 end;
 
@@ -2679,8 +2896,10 @@ begin
   if ACol <> cRegion then Exit;
   AItems.Clear;
   { 逐格给不同的候选 —— 静态 PickList 做不到这件事。 }
-  if ARow mod 2 = 0 then AItems.CommaText := 'East China, North China, South China'
-  else AItems.CommaText := 'Southwest, Northeast, Northwest';
+  if ARow mod 2 = 0 then
+    AItems.CommaText := rsRegionE + ',' + rsRegionN + ',' + rsRegionS
+  else
+    AItems.CommaText := rsRegionSW + ',' + rsRegionNE + ',' + rsRegionNW;
 end;
 
 { ============ 页 10:TTyDrawGrid ============
@@ -2706,10 +2925,10 @@ procedure TMainForm.SetupDraw;
 begin
   GridDraw.Header.Columns.BeginUpdate;
   try
-    AddCol('Order No.', 140, taLeftJustify);
-    AddCol('Region',    120, taLeftJustify);
-    AddCol('Product',   140, taLeftJustify);
-    AddCol('Amount',    120, taRightJustify);
+    AddCol(rsColOrderNo, 140, taLeftJustify);
+    AddCol(rsColRegion,    120, taLeftJustify);
+    AddCol(rsColProduct,   140, taLeftJustify);
+    AddCol(rsColAmount,    120, taRightJustify);
   finally
     GridDraw.Header.Columns.EndUpdate;
   end;
@@ -2723,8 +2942,8 @@ procedure TMainForm.DrawGridCellText(Sender: TObject; ACol, ARow: Integer;
 begin
   case ACol of
     0: AText := Format('SO-2026%07d', [ARow + 1]);
-    1: AText := cRegions[ARow mod Length(cRegions)];
-    2: AText := cProducts[ARow mod Length(cProducts)];
+    1: AText := RegionName(ARow);
+    2: AText := ProductName(ARow);
     3: AText := Format('%.2f', [(1 + (ARow * 7) mod 40) * 128.5]);
   else
     AText := '';
@@ -2734,13 +2953,13 @@ end;
 procedure TMainForm.BtnDrawEndClick(Sender: TObject);
 begin
   GridDraw.ScrollIntoView(0, GridDraw.RowCount - 1);
-  Status('Row 1,000,000 — getting there cost nothing: no rows were ever built, the last screenful was simply asked for');
+  Status(rsDrawEndNote);
 end;
 
 procedure TMainForm.BtnDrawTopClick(Sender: TObject);
 begin
   GridDraw.ScrollIntoView(0, 0);
-  Status('Back at the top — TTyDrawGrid holds no cells at all, so there is nothing to reload');
+  Status(rsDrawTopNote);
 end;
 
 end.

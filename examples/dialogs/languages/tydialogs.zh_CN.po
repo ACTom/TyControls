@@ -60,7 +60,7 @@ msgid "Password: %d character(s) entered"
 msgstr "密码：已输入 %d 个字符"
 
 #: mainform.rspwdempty
-msgid "Password: empty / cancelled"
+msgid "Password: OK pressed, but empty"
 msgstr "密码：为空/已取消"
 
 #: mainform.rstexttitle
@@ -316,3 +316,153 @@ msgstr "重命名"
 #: tdialogsmainform.dlgcolor.caption
 msgid "Select a colour"
 msgstr "选择颜色"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: mainform.rscolorlclresult
+#, object-pascal-format
+msgid "Color (TColor + alpha overload): R=%d G=%d B=%d A=%d"
+msgstr "Color（TColor + alpha 重载）：R=%d G=%d B=%d A=%d"
+
+#: mainform.rscolorlcltitle
+msgid "Select an LCL colour"
+msgstr "选择 LCL 颜色"
+
+#: mainform.rscompcanclose
+#, object-pascal-format
+msgid "Component OnCanClose: \"%s\" is allowed to close"
+msgstr "组件 OnCanClose：「%s」允许关闭"
+
+#: mainform.rscompcolorcancel
+msgid "DlgColor.Execute: cancelled"
+msgstr "DlgColor.Execute：已取消"
+
+#: mainform.rscompcolorresult
+#, object-pascal-format
+msgid "DlgColor.Execute: R=%d G=%d B=%d A=%d"
+msgstr "DlgColor.Execute：R=%d G=%d B=%d A=%d"
+
+#: mainform.rscompinputcancel
+msgid "DlgInput.Execute: cancelled"
+msgstr "DlgInput.Execute：已取消"
+
+#: mainform.rscompinputresult
+#, object-pascal-format
+msgid "DlgInput.Execute: %s (the component remembers it for next time)"
+msgstr "DlgInput.Execute：%s（组件会记住它，下次直接带出）"
+
+#: mainform.rscompmsgresult
+#, object-pascal-format
+msgid "DlgMessage.Execute: %s"
+msgstr "DlgMessage.Execute：%s"
+
+#: mainform.rscompshown
+#, object-pascal-format
+msgid "Component OnShow: \"%s\" is on screen"
+msgstr "组件 OnShow：「%s」已显示"
+
+#: mainform.rscustomcancel
+msgid "Cancel"
+msgstr "取消"
+
+#: mainform.rscustomcancelled
+msgid "Custom dialog: cancelled"
+msgstr "自定义对话框：已取消"
+
+#: mainform.rscustomresult
+#, object-pascal-format
+msgid "Custom dialog: %s"
+msgstr "自定义对话框：%s"
+
+#: mainform.rscustomsave
+msgid "Save"
+msgstr "保存"
+
+#: mainform.rscustomseed
+msgid "Type something here"
+msgstr "在这里输入点什么"
+
+#: mainform.rscustomtitle
+msgid "Custom dialog"
+msgstr "自定义对话框"
+
+#: mainform.rsfindclosed
+msgid "Find: CloseDialog dismissed the modeless window"
+msgstr "查找：CloseDialog 关掉了这个非模态窗口"
+
+#: mainform.rsinputboxresult
+#, object-pascal-format
+msgid "InputBox (returns the default on cancel): %s"
+msgstr "InputBox（取消时返回默认值）：%s"
+
+#: mainform.rsmodeapplied
+#, object-pascal-format
+msgid "Mode: %s"
+msgstr "模式：%s"
+
+#: mainform.rsmsgerrortext
+msgid "Could not open the file."
+msgstr "文件打不开。"
+
+#: mainform.rsmsginfotext
+msgid "Export finished."
+msgstr "导出完成。"
+
+#: mainform.rsmsgposresult
+#, object-pascal-format
+msgid "MessageDlgPos: %s"
+msgstr "MessageDlgPos：%s"
+
+#: mainform.rsmsgpostext
+msgid "This one opened at screen position 40,40."
+msgstr "这个在屏幕坐标 40,40 打开。"
+
+#: mainform.rsmsgtyperesult
+#, object-pascal-format
+msgid "Message (%s): %s"
+msgstr "消息（%s）：%s"
+
+#: mainform.rsmsgwarntext
+msgid "Unsaved changes will be lost."
+msgstr "未保存的修改将会丢失。"
+
+#: mainform.rsprogcancelevt
+msgid "Progress: OnCancel fired"
+msgstr "进度：OnCancel 触发了"
+
+#: mainform.rsprogpreparing
+msgid "Preparing…"
+msgstr "正在准备…"
+
+#: mainform.rspwdcancelled
+msgid "Password: cancelled"
+msgstr "密码：已取消"
+
+#: mainform.rsshowmsgclosed
+msgid "ShowMessage: closed (no result to inspect)"
+msgstr "ShowMessage：已关闭（没有可检查的结果）"
+
+#: mainform.rsshowmsgtext
+msgid "Done."
+msgstr "完成。"
+
+#: mainform.rssprootresult
+#, object-pascal-format
+msgid "SelectPath (rooted at the app folder): %s"
+msgstr "SelectPath（根定在应用目录）：%s"
+
+#: mainform.rssproottitle
+msgid "Pick a sub-folder"
+msgstr "选择子文件夹"
+
+#: mainform.rsthemeapplied
+#, object-pascal-format
+msgid "Theme: \"%s\" — open any dialog now, it adopts the app theme"
+msgstr "主题：「%s」—— 现在打开任何对话框，它都会采用应用主题"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: mainform.rsversionfmt
+#, object-pascal-format
+msgid "Version %s"
+msgstr "版本 %s"

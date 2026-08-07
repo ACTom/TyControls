@@ -74,3 +74,30 @@ msgstr "GroupBox  ·  TyControls"
 #: tmainform.nameedit.texthint
 msgid "Enter a name…"
 msgstr "请输入姓名…"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rsemptyname
+msgid "(empty)"
+msgstr "（空）"
+
+#: umain.rsnoneselected
+msgid "(none selected)"
+msgstr "（未选择）"
+
+#: umain.rsstatusfmt
+#, object-pascal-format
+msgid "Font size: %s    Style: %s    Name: %s"
+msgstr "字号：%s    样式：%s    名字：%s"
+
+#: umain.rsstylebold
+msgid "Bold "
+msgstr "加粗 "
+
+#: umain.rsstyleitalic
+msgid "Italic"
+msgstr "斜体"
+
+#: umain.rsstylenone
+msgid "(none)"
+msgstr "（无）"

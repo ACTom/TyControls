@@ -69,7 +69,7 @@ object MainForm: TMainForm
       Top = 52
       Width = 224
       WordWrap = True
-      Caption = 'Editable (Text preset, prefix autocomplete / uppercase / max length 10):'
+      Caption = 'Editable (prefix autocomplete / uppercase / MaxLength 10):'
     end
     object EditCombo: TTyComboBox
       Left = 272

@@ -81,6 +81,11 @@ implementation
 
 {$R *.lfm}
 
+resourcestring
+  rsOpenPicture = 'Open picture';
+  rsZoomNone    = 'Zoom: —';
+  rsZoomFmt     = 'Zoom: %.0f%%   (clamped 10%%..800%%)';
+
 { The startup picture. Plain GDI on a TBitmap, because it is fed in through the published
   Picture property -- the one path the Object Inspector and .lfm streaming also use. }
 function MakeStartupBitmap: TBitmap;
@@ -121,7 +126,7 @@ begin
   end;
 
   FOpenPic := TTyOpenPictureDialog.Create(Self);
-  FOpenPic.Title := 'Open picture';
+  FOpenPic.Title := rsOpenPicture;
   FOpenPic.InitialDir := ExcludeTrailingPathDelimiter(GetUserDir);
 
   ApplyChromeTheme(TyDefaultController);
@@ -200,7 +205,7 @@ begin
   { Empty state: no source at all. The view keeps painting its themed matte -- no crash, and
     the wheel/drag/double-click paths all no-op. Clear does not fire OnZoomChange. }
   View.Clear;
-  LblZoom.Caption := 'Zoom: —';
+  LblZoom.Caption := rsZoomNone;
 end;
 
 procedure TMainForm.ChkGrayChange(Sender: TObject);    begin View.Grayscale := ChkGray.Checked;   end;
@@ -243,7 +248,7 @@ end;
 procedure TMainForm.ViewZoomChange(Sender: TObject);
 begin
   { ZoomMin/ZoomMax are set on the view in umain.lfm; the wheel and the buttons both stop there. }
-  LblZoom.Caption := Format('Zoom: %.0f%%   (clamped 10%%..800%%)', [View.Zoom * 100]);
+  LblZoom.Caption := Format(rsZoomFmt, [View.Zoom * 100]);
 end;
 
 end.

@@ -122,3 +122,64 @@ msgstr "主题、模式、主题色、密度或热重载的任何变化都会触
 #: tmainform.switchdensity.caption
 msgid "Modern density"
 msgstr "现代密度"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rsaccentfmt
+#, object-pascal-format
+msgid "Accent colour: %s (overlaid on the current theme)"
+msgstr "强调色：%s（叠加在当前主题上）"
+
+#: umain.rsaccentreset
+msgid "Accent colour: restored to theme default"
+msgstr "强调色：已恢复为主题默认值"
+
+#: umain.rscurthemefmt
+#, object-pascal-format
+msgid "Current theme: %s"
+msgstr "当前主题：%s"
+
+#: umain.rsdensityclassic
+msgid "Density: classic"
+msgstr "密度：经典"
+
+#: umain.rsdensitymodern
+msgid "Density: modern (Web scale) - same skin, roomier geometry"
+msgstr "密度：现代（Web 尺度）—— 皮肤不变，几何更宽松"
+
+#: umain.rsfollowsos
+msgid "Appearance: follows the OS light/dark setting"
+msgstr "外观：跟随操作系统的明暗设置"
+
+#: umain.rshotoff
+msgid "Hot-reload OFF"
+msgstr "热重载已关"
+
+#: umain.rshotonfmt
+#, object-pascal-format
+msgid "Hot-reload ON - save an edit to %s and the window re-themes"
+msgstr "热重载已开 —— 编辑并保存 %s，窗口会随之重新换肤"
+
+#: umain.rsmodedark
+msgid "Mode: Dark (manual)"
+msgstr "模式：暗色（手动）"
+
+#: umain.rsmodelight
+msgid "Mode: Light (manual)"
+msgstr "模式：浅色（手动）"
+
+#: umain.rsoverlaydone
+msgid "Additive layer applied - skin kept, two tokens overridden"
+msgstr "已叠加附加层 —— 皮肤保留，仅覆盖两个令牌"
+
+#: umain.rspickaccent
+msgid "Choose accent colour"
+msgstr "选择强调色"
+
+#: umain.rsthemecustom
+msgid "Current theme: custom.tycss (a hand-written file, partial by design)"
+msgstr "当前主题：custom.tycss（手写的主题文件，特意只写了一部分）"
+
+#: umain.rsthemegreen
+msgid "Current theme: green (image background)"
+msgstr "当前主题：green（图片背景）"

@@ -64,6 +64,10 @@ implementation
 
 {$R *.lfm}
 
+resourcestring
+  rsProgressFmt = 'Progress: %d / %d  (%d%%)';
+  rsRangeFmt    = 'Position %d in %d..%d  (%d%%)';
+
 procedure TMainForm.FormCreate(Sender: TObject);
 var
   names: TStringArray;
@@ -107,8 +111,7 @@ begin
     Pct := Round((ProgBar.Position - ProgBar.Min) * 100 / Span)
   else
     Pct := 0;
-  LblReadout.Caption := Format('Progress: %d / %d  (%d%%)',
-    [ProgBar.Position, ProgBar.Max, Pct]);
+  LblReadout.Caption := Format(rsProgressFmt, [ProgBar.Position, ProgBar.Max, Pct]);
   // The vertical bar and the docked strip share this bar's Position outright, so the
   // only difference on screen is Orientation / Align. RangeBar re-maps the same PERCENT
   // onto its own 20..60 range, which is what Min/Max actually do.
@@ -116,7 +119,7 @@ begin
   DockBar.Position := ProgBar.Position;
   RangeBar.Position := RangeBar.Min +
     Round((RangeBar.Max - RangeBar.Min) * Pct / 100);
-  LblRangeReadout.Caption := Format('Position %d in %d..%d  (%d%%)',
+  LblRangeReadout.Caption := Format(rsRangeFmt,
     [RangeBar.Position, RangeBar.Min, RangeBar.Max, Pct]);
 end;
 

@@ -91,6 +91,22 @@ implementation
 
 {$R *.lfm}
 
+resourcestring
+  { View-style names, filter captions and status texts. Patterns keep their
+    dialog syntax; only the description half of each filter translates. }
+  rsViewReport = 'Report';
+  rsViewList   = 'List';
+  rsViewSmall  = 'Small icons';
+  rsViewIcons  = 'Icons';
+  rsViewTile   = 'Tile';
+  rsFilterAll  = 'All files (*.*)';
+  rsFilterCode = 'Code (*.pas;*.lpr;*.inc)';
+  rsFilterDoc  = 'Document (*.md;*.txt)';
+  rsCurDirFmt  = 'Current directory:%s';
+  rsSelNone    = 'SelectedFile: (none) - SelCount 0';
+  rsSelFmt     = 'SelectedFile: %s - SelCount %d';
+  rsOpenFmt    = 'Open file:%s';
+
 function ThemesDir: string;
 var
   Dir: string;
@@ -124,19 +140,19 @@ begin
   { View styles, in TTyListViewStyle order for the case in ViewComboChange. The list already
     feeds the SAME kind-glyph list to both SmallImages and LargeImages, so every mode has
     icons without any extra wiring. }
-  ViewCombo.Items.Add('Report');
-  ViewCombo.Items.Add('List');
-  ViewCombo.Items.Add('Small icons');
-  ViewCombo.Items.Add('Icons');
-  ViewCombo.Items.Add('Tile');
+  ViewCombo.Items.Add(rsViewReport);
+  ViewCombo.Items.Add(rsViewList);
+  ViewCombo.Items.Add(rsViewSmall);
+  ViewCombo.Items.Add(rsViewIcons);
+  ViewCombo.Items.Add(rsViewTile);
   ViewCombo.ItemIndex := 0;
 
   { Filter presets: a segment Caption + its ';'-separated pattern list. Selecting one sets
     List1.Mask via OnFilterChange. Directories are always shown regardless of the mask. }
   FilterCombo.Filter :=
-    'All files (*.*)|*.*|' +
-    'Code (*.pas;*.lpr;*.inc)|*.pas;*.lpr;*.inc|' +
-    'Document (*.md;*.txt)|*.md;*.txt';
+    rsFilterAll + '|*.*|' +
+    rsFilterCode + '|*.pas;*.lpr;*.inc|' +
+    rsFilterDoc + '|*.md;*.txt';
   FilterCombo.FilterIndex := 1;
 
   Tree1.PopulateRoots;
@@ -159,7 +175,7 @@ end;
   never fires OnSelectPath, so this is safe to call outside the FSyncing guard. }
 procedure TMainForm.ShowCurrent(const APath: string);
 begin
-  LblStatus.Caption := 'Current directory:' + APath;
+  LblStatus.Caption := Format(rsCurDirFmt, [APath]);
   LookIn.Directory := APath;
 end;
 
@@ -172,10 +188,9 @@ var
 begin
   cur := List1.SelectedFile;
   if cur = '' then
-    LblSelection.Caption := 'SelectedFile: (none) - SelCount 0'
+    LblSelection.Caption := rsSelNone
   else
-    LblSelection.Caption := Format('SelectedFile: %s - SelCount %d',
-      [ExtractFileName(cur), List1.SelCount]);
+    LblSelection.Caption := Format(rsSelFmt, [ExtractFileName(cur), List1.SelCount]);
 end;
 
 { Drive the list; its OnDirectoryChange then reveals the path in the tree + look-in. }
@@ -227,7 +242,7 @@ end;
 procedure TMainForm.List1FileActivate(Sender: TObject; AIndex: Integer);
 begin
   { Only files reach here -- a folder double-click navigates instead (handled by the control). }
-  LblStatus.Caption := 'Open file:' + List1.FileAt(AIndex);
+  LblStatus.Caption := Format(rsOpenFmt, [List1.FileAt(AIndex)]);
 end;
 
 procedure TMainForm.List1SelectItem(Sender: TObject; AIndex: Integer);

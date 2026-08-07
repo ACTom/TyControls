@@ -58,3 +58,43 @@ msgstr "删除最后一个面板"
 #: tmainform.bar.caption
 msgid "TTyStatusBar  ·  TyControls"
 msgstr "TTyStatusBar  ·  TyControls"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rsclickedpanelfmt
+#, object-pascal-format
+msgid "You clicked panel %d"
+msgstr "你点了面板 %d"
+
+#: umain.rsclicksfmt
+#, object-pascal-format
+msgid "Clicks: %d"
+msgstr "点击：%d"
+
+#: umain.rsgripfmt
+#, object-pascal-format
+msgid "SizeGrip = %s"
+msgstr "SizeGrip = %s"
+
+#: umain.rsnewpanelfmt
+#, object-pascal-format
+msgid "New %d"
+msgstr "新面板 %d"
+
+#: umain.rsready
+msgid "Ready"
+msgstr "就绪"
+
+#: umain.rssimpleclicksfmt
+#, object-pascal-format
+msgid "SimplePanel mode · clicked %d time(s)"
+msgstr "SimplePanel 模式 · 点击了 %d 次"
+
+#: umain.rssimpletext
+msgid "SimplePanel: a single full-width status text"
+msgstr "SimplePanel：一条占满整条的状态文字"
+
+#: umain.rsupdatedfmt
+#, object-pascal-format
+msgid "Updated · %s"
+msgstr "已更新 · %s"

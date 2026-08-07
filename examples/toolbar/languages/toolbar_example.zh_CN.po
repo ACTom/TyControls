@@ -122,3 +122,15 @@ msgstr "ShowCaptions 与 Images 为对齐 LCL 而 published,但并未接线:复�
 #: tmainform.bar.caption
 msgid "TTyToolBar  · TyControls"
 msgstr "TTyToolBar  · TyControls"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rsfiredfmt
+#, object-pascal-format
+msgid "Fired tool: %s"
+msgstr "触发了工具：%s"
+
+#: umain.rstogglefmt
+#, object-pascal-format
+msgid "%s: Down = %s"
+msgstr "%s：Down = %s"

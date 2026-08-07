@@ -69,10 +69,13 @@ resourcestring
   rsGesture     = 'Last gesture: %s';
   rsEvtChange   = 'OnChange';
   rsEvtAndClick = ' + OnClick';
+  rsOn          = 'On';
+  rsOff         = 'Off';
+  rsStatusFmt   = 'Dark mode: %s   Receive notifications: %s   Auto-save: %s';
 
 function OnOff(B: Boolean): string;
 begin
-  if B then Result := 'On' else Result := 'Off';
+  if B then Result := rsOn else Result := rsOff;
 end;
 
 procedure TMainForm.FormCreate(Sender: TObject);
@@ -147,7 +150,7 @@ end;
 
 procedure TMainForm.UpdateStatus;
 begin
-  LblStatus.Caption := Format('Dark mode: %s   Receive notifications: %s   Auto-save: %s',
+  LblStatus.Caption := Format(rsStatusFmt,
     [OnOff(SwitchDark.Checked), OnOff(SwitchNotify.Checked),
      OnOff(SwitchCaption.Checked)]);
 end;

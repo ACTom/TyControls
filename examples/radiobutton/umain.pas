@@ -68,6 +68,13 @@ implementation
 
 {$R *.lfm}
 
+resourcestring
+  { Status texts composed at run time, so they live here rather than in the .lfm. }
+  rsNone         = '(none)';
+  rsSelectedFmt  = 'Currently selected  →  Fruit: %s     Colour: %s';
+  rsGroupIdxFmt  = 'GroupIndex 0: %s     GroupIndex 1: %s';
+  rsEventCountFmt = 'OnChange x%d, OnClick x%d - one pick fires OnChange twice';
+
 procedure TMainForm.FormCreate(Sender: TObject);
 var
   names: TStringArray;
@@ -129,30 +136,29 @@ begin
   if A.Checked then Result := A.Caption
   else if B.Checked then Result := B.Caption
   else if C.Checked then Result := C.Caption
-  else Result := '(none)';
+  else Result := rsNone;
 end;
 
 procedure TMainForm.UpdateStatus;
 var
   Delivery: string;
 begin
-  LblStatus.Caption := Format('Currently selected  →  Fruit: %s     Colour: %s',
+  LblStatus.Caption := Format(rsSelectedFmt,
     [SelectedIn(FFruitApple, FFruitBanana, FFruitMango),
      SelectedIn(FColorRed, FColorGreen, FColorBlue)]);
   { GroupC holds all five of these, so the ONLY thing keeping the two columns apart
     is GroupIndex -- UncheckSiblings ignores a sibling with a different index. }
   if ShipStandard.Checked then Delivery := ShipStandard.Caption
   else if ShipExpress.Checked then Delivery := ShipExpress.Caption
-  else Delivery := '(none)';
-  LblGroupIdxStatus.Caption := Format('GroupIndex 0: %s     GroupIndex 1: %s',
+  else Delivery := rsNone;
+  LblGroupIdxStatus.Caption := Format(rsGroupIdxFmt,
     [PlainCaption(SelectedIn(SizeSmall, SizeMedium, SizeLarge)),
      PlainCaption(Delivery)]);
 end;
 
 procedure TMainForm.UpdateEventCounts;
 begin
-  LblEvents.Caption := Format('OnChange x%d, OnClick x%d - one pick fires OnChange twice',
-    [FChangeCount, FClickCount]);
+  LblEvents.Caption := Format(rsEventCountFmt, [FChangeCount, FClickCount]);
 end;
 
 procedure TMainForm.RadioChanged(Sender: TObject);

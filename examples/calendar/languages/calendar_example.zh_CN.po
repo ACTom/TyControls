@@ -42,3 +42,53 @@ msgstr "TTyCalendar  ·  TyControls"
 #: tmainform.swlimit.caption
 msgid "Limit the range to 3 months"
 msgstr "范围限制为 3 个月"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rsacceptedfmt
+#, object-pascal-format
+msgid "Confirmed:%s(click a date cell / Enter fires OnAccept)"
+msgstr "已确认：%s（点日期格 / 回车触发 OnAccept）"
+
+#: umain.rscurviewfmt
+#, object-pascal-format
+msgid "Current view:%s(click a header to drill down, click a date cell to drill up)"
+msgstr "当前视图：%s（点表头往上钻，点日期格往下钻）"
+
+#: umain.rskeyshint
+msgid "Keyboard: arrow keys move, PageUp/PageDown change month,\r\nHome/End go to the start/end of the month."
+msgstr "键盘：方向键移动，PageUp/PageDown 换月，\nHome/End 到月初/月末。"
+
+#: umain.rsnotconfirmed
+msgid "Not confirmed yet (click a date cell or press Enter)"
+msgstr "尚未确认（点日期格或按回车）"
+
+#: umain.rspickedfmt
+#, object-pascal-format
+msgid "Selected date:%s"
+msgstr "选中日期：%s"
+
+#: umain.rsrangefmt
+#, object-pascal-format
+msgid "Range available: %s ~ %s"
+msgstr "可用范围：%s ~ %s"
+
+#: umain.rsrangefree
+msgid "Range available: unbounded (MinDate = MaxDate = 0)"
+msgstr "可用范围：不限（MinDate = MaxDate = 0）"
+
+#: umain.rsviewdays
+msgid "Day view (cvmDays)"
+msgstr "日视图（cvmDays）"
+
+#: umain.rsviewdecades
+msgid "Decade view (cvmDecades)"
+msgstr "十年视图（cvmDecades）"
+
+#: umain.rsviewmonths
+msgid "Month view (cvmMonths)"
+msgstr "月视图（cvmMonths）"
+
+#: umain.rsviewyears
+msgid "Year view (cvmYears)"
+msgstr "年视图（cvmYears）"

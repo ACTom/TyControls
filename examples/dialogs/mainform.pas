@@ -155,6 +155,7 @@ resourcestring
   rsAboutTitle     = 'About TyControls';
   rsAboutDesc      = 'A skinnable / styleable Lazarus component library';
   rsAboutShown     = 'About: dialog shown';
+  rsVersionFmt     = 'Version %s';
   rsThemeApplied   = 'Theme: "%s" — open any dialog now, it adopts the app theme';
   rsModeApplied    = 'Mode: %s';
   rsMsgInfoText    = 'Export finished.';
@@ -544,7 +545,7 @@ end;
 procedure TDialogsMainForm.BtnAboutClick(Sender: TObject);
 begin
   // Global one-liner: a themed About box. Empty fields (here: copyright) are hidden.
-  TyShowAbout(rsAboutTitle, 'TyControls', 'Version ' + TyVersion, rsAboutDesc,
+  TyShowAbout(rsAboutTitle, 'TyControls', Format(rsVersionFmt, [TyVersion]), rsAboutDesc,
     '', 'LGPL', 'https://github.com/ACTom/TyControls');
   Log(rsAboutShown);
 end;

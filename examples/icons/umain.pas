@@ -79,6 +79,10 @@ implementation
 
 {$R *.lfm}
 
+resourcestring
+  rsClickedFmt = 'Clicked: %s';
+  rsFontFilter = 'Font files|*.ttf;*.otf|All files|*.*';
+
 { A small colorful source bitmap drawn in code (so the demo needs no asset file). }
 function MakeSampleBitmap: TBitmap;
 begin
@@ -161,7 +165,7 @@ end;
   usable as plain clickable icons. }
 procedure TMainForm.IconClick(Sender: TObject);
 begin
-  LblStatus.Caption := 'Clicked: ' + TComponent(Sender).Name;
+  LblStatus.Caption := Format(rsClickedFmt, [TComponent(Sender).Name]);
 end;
 
 { TTyGlyphImageList renders vectors on demand rather than holding a fixed-resolution raster
@@ -212,7 +216,7 @@ var
   FileName: string;
 begin
   FileName := '';
-  if not TyOpenDialog(FileName, 'Font files|*.ttf;*.otf|All files|*.*') then Exit;
+  if not TyOpenDialog(FileName, rsFontFilter) then Exit;
   // Setting FontFile registers the file PRIVATE to this process (Windows
   // AddFontResourceEx/FR_PRIVATE, Qt addApplicationFont, Cocoa CTFontManager,
   // GTK2 fontconfig) — the font never has to be installed on the machine. The

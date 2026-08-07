@@ -126,3 +126,68 @@ msgstr "TTyPageControl  · TyControls"
 #: tmainform.eduser.text
 msgid "admin"
 msgstr "admin"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rsclosevetofmt
+#, object-pascal-format
+msgid "\"%s\" is a designed page - OnTabClose vetoed the close."
+msgstr "「%s」是设计期页面 —— OnTabClose 否决了关闭。"
+
+#: umain.rsclosingfmt
+#, object-pascal-format
+msgid "Closing page: %s"
+msgstr "正在关闭页面：%s"
+
+#: umain.rscurpagefmt
+#, object-pascal-format
+msgid "Current page: %s (index %d of %d pages)"
+msgstr "当前页：%s（第 %d 页，共 %d 页）"
+
+#: umain.rshidestrip
+msgid "Hide tab strip"
+msgstr "隐藏标签条"
+
+#: umain.rsneedusername
+msgid "Enter a username before leaving this page (blocked by OnChanging)."
+msgstr "离开本页前请先输入用户名（被 OnChanging 拦下了）。"
+
+#: umain.rsnewpagebody
+#, object-pascal-format
+msgid "This is the %dth page added at runtime."
+msgstr "这是运行时添加的第 %d 个页面。"
+
+#: umain.rsnewpagefmt
+#, object-pascal-format
+msgid "New page %d"
+msgstr "新页面 %d"
+
+#: umain.rsnopage
+msgid "(none)"
+msgstr "（无）"
+
+#: umain.rsonlyruntime
+msgid "Only a page added at run time can be removed - add one first."
+msgstr "只有运行时添加的页面才能移除 —— 请先添加一个。"
+
+#: umain.rsremovedfmt
+#, object-pascal-format
+msgid "RemovePage removed \"%s\"; %d pages left."
+msgstr "RemovePage 移除了「%s」；还剩 %d 页。"
+
+#: umain.rsreorderedfmt
+#, object-pascal-format
+msgid "Pages reordered: %d -> %d (current: %s)"
+msgstr "页面已重排：%d -> %d（当前：%s）"
+
+#: umain.rsshowstrip
+msgid "Show tab strip"
+msgstr "显示标签条"
+
+#: umain.rsstripback
+msgid "TabHeight = 32: the header strip is back."
+msgstr "TabHeight = 32：标签条回来了。"
+
+#: umain.rsstripgone
+msgid "TabHeight = 0: no strip - the buttons above are the only pager."
+msgstr "TabHeight = 0：没有标签条 —— 上面的按钮是唯一的翻页方式。"

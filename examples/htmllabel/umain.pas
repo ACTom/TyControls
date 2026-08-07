@@ -38,6 +38,9 @@ implementation
 
 {$R *.lfm}
 
+resourcestring
+  rsClickedLinkFmt = 'Clicked link: %s';
+
 procedure TMainForm.FormCreate(Sender: TObject);
 var
   names: TStringArray;
@@ -79,7 +82,7 @@ procedure TMainForm.RichLinkClick(Sender: TObject; const AHref: string);
 begin
   // AHref is whatever the clicked <a href="..."> carried -- the two links in Rich
   // report two different URLs through this one handler.
-  LblStatus.Caption := 'Clicked link: ' + AHref;
+  LblStatus.Caption := Format(rsClickedLinkFmt, [AHref]);
 end;
 
 end.

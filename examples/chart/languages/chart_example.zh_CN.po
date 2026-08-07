@@ -70,3 +70,19 @@ msgstr "TTyChart  ·  TyControls"
 #: tmainform.chart.title
 msgid "Quarterly sales"
 msgstr "季度销售额"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rshitfmt
+#, object-pascal-format
+msgid "Hit: series %d, point %d"
+msgstr "命中：系列 %d，点 %d"
+
+#: umain.rshitnothing
+msgid "Hit: nothing there"
+msgstr "命中：什么都没有"
+
+#: umain.rstooltipfmt
+#, object-pascal-format
+msgid "(series %d, point %d)"
+msgstr "（系列 %d，点 %d）"

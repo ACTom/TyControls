@@ -57,6 +57,16 @@ implementation
 
 {$R *.lfm}
 
+resourcestring
+  rsSimpleClicksFmt = 'SimplePanel mode · clicked %d time(s)';
+  rsUpdatedFmt      = 'Updated · %s';
+  rsClicksFmt       = 'Clicks: %d';
+  rsSimpleText      = 'SimplePanel: a single full-width status text';
+  rsReady           = 'Ready';
+  rsGripFmt         = 'SizeGrip = %s';
+  rsNewPanelFmt     = 'New %d';
+  rsClickedPanelFmt = 'You clicked panel %d';
+
 procedure TMainForm.FormCreate(Sender: TObject);
 var
   names: TStringArray;
@@ -94,12 +104,12 @@ begin
   Inc(FClicks);
   if StatusBar.SimplePanel then
     // simple mode: update the whole-bar text (SetSimpleText triggers a repaint)
-    StatusBar.SimpleText := Format('SimplePanel mode · clicked %d time(s)', [FClicks])
+    StatusBar.SimpleText := Format(rsSimpleClicksFmt, [FClicks])
   else
   begin
     // multi-panel mode: update the fill panel and the count panel separately
-    StatusBar.Panels[0].Text := Format('Updated · %s', [FormatDateTime('hh:nn:ss', Now)]);
-    StatusBar.Panels[1].Text := Format('Clicks: %d', [FClicks]);
+    StatusBar.Panels[0].Text := Format(rsUpdatedFmt, [FormatDateTime('hh:nn:ss', Now)]);
+    StatusBar.Panels[1].Text := Format(rsClicksFmt, [FClicks]);
   end;
 end;
 
@@ -107,9 +117,9 @@ procedure TMainForm.ToggleSimple(Sender: TObject);
 begin
   StatusBar.SimplePanel := not StatusBar.SimplePanel;   // switch between multi-panel and whole-bar text
   if StatusBar.SimplePanel then
-    StatusBar.SimpleText := 'SimplePanel: a single full-width status text'
+    StatusBar.SimpleText := rsSimpleText
   else
-    StatusBar.Panels[0].Text := 'Ready';
+    StatusBar.Panels[0].Text := rsReady;
 end;
 
 procedure TMainForm.ToggleGrip(Sender: TObject);
@@ -118,9 +128,9 @@ begin
   // handing the drag to the OS window resize -- the bar is then purely informational.
   StatusBar.SizeGrip := not StatusBar.SizeGrip;
   if StatusBar.SimplePanel then
-    StatusBar.SimpleText := Format('SizeGrip = %s', [BoolToStr(StatusBar.SizeGrip, True)])
+    StatusBar.SimpleText := Format(rsGripFmt, [BoolToStr(StatusBar.SizeGrip, True)])
   else
-    StatusBar.Panels[0].Text := Format('SizeGrip = %s', [BoolToStr(StatusBar.SizeGrip, True)]);
+    StatusBar.Panels[0].Text := Format(rsGripFmt, [BoolToStr(StatusBar.SizeGrip, True)]);
 end;
 
 procedure TMainForm.AddPanel(Sender: TObject);
@@ -130,7 +140,7 @@ begin
   // panel has Width = 0 (the fill panel), so it simply shrinks to make room.
   with StatusBar.Panels.Add do
   begin
-    Text := Format('New %d', [StatusBar.Panels.Count - 1]);
+    Text := Format(rsNewPanelFmt, [StatusBar.Panels.Count - 1]);
     Width := 80;
     Alignment := taCenter;
   end;
@@ -154,7 +164,7 @@ begin
   // mode (where there are no panel rectangles to hit).
   i := StatusBar.PanelAtPos(X, Y);
   if i >= 0 then
-    StatusBar.Panels[0].Text := Format('You clicked panel %d', [i]);
+    StatusBar.Panels[0].Text := Format(rsClickedPanelFmt, [i]);
 end;
 
 end.

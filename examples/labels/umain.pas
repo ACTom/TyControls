@@ -54,6 +54,9 @@ implementation
 
 {$R *.lfm}
 
+resourcestring
+  rsActionClicked = 'OnClick fired — AutoOpen = False lets the app decide';
+
 procedure TMainForm.FormCreate(Sender: TObject);
 var
   names: TStringArray;
@@ -82,7 +85,7 @@ procedure TMainForm.LblActionClick(Sender: TObject);
 begin
   // AutoOpen = False, so the click never reaches OpenURL: the app decides what the link does.
   // This is the mode you want for "next step", "show details", "undo" and friends.
-  LblAction.Caption := 'OnClick fired — AutoOpen = False lets the app decide';
+  LblAction.Caption := rsActionClicked;
 end;
 
 procedure TMainForm.ThemeComboChange(Sender: TObject);

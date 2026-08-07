@@ -74,3 +74,15 @@ msgstr "Align = alBottom —— 随窗口拉伸的条带"
 #: tmainform.bar.caption
 msgid "TTyProgressBar  ·  TyControls"
 msgstr "TTyProgressBar  ·  TyControls"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rsprogressfmt
+#, object-pascal-format
+msgid "Progress: %d / %d  (%d%%)"
+msgstr "进度：%d / %d  （%d%%）"
+
+#: umain.rsrangefmt
+#, object-pascal-format
+msgid "Position %d in %d..%d  (%d%%)"
+msgstr "Position %d 位于 %d..%d  （%d%%）"

@@ -84,6 +84,12 @@ implementation
 
 {$R *.lfm}
 
+resourcestring
+  rsNoCap       = 'no cap';
+  rsCountsFmt   = 'Line count: %d    Char count: %d / %s';
+  rsCaretFmt    = 'CaretPos %d · SelStart %d · SelLength %d · selected: "%s"';
+  rsDefaultBtn  = 'Default button fired - Enter fell through because WantReturns=False';
+
 procedure TMainForm.FormCreate(Sender: TObject);
 var
   names: TStringArray;
@@ -136,16 +142,15 @@ begin
   if Memo.MaxLength > 0 then
     cap := IntToStr(Memo.MaxLength)
   else
-    cap := 'no cap';
-  LblInfo.Caption := Format('Line count: %d    Char count: %d / %s',
-    [Memo.Lines.Count, chars, cap]);
+    cap := rsNoCap;
+  LblInfo.Caption := Format(rsCountsFmt, [Memo.Lines.Count, chars, cap]);
 end;
 
 procedure TMainForm.UpdateCaretInfo;
 begin
   // The flat accessors address the whole document by codepoint offset (one offset
   // for the line break between two lines), exactly like a native TMemo.
-  LblCaret.Caption := Format('CaretPos %d · SelStart %d · SelLength %d · selected: "%s"',
+  LblCaret.Caption := Format(rsCaretFmt,
     [Memo.CaretPos, Memo.SelStart, Memo.SelLength, UTF8Copy(Memo.SelText, 1, 20)]);
 end;
 
@@ -245,7 +250,7 @@ end;
 
 procedure TMainForm.DefaultButtonClick(Sender: TObject);
 begin
-  LblInfo.Caption := 'Default button fired - Enter fell through because WantReturns=False';
+  LblInfo.Caption := rsDefaultBtn;
 end;
 
 procedure TMainForm.ScrollBarsChange(Sender: TObject);

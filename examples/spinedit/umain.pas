@@ -65,6 +65,14 @@ implementation
 
 {$R *.lfm}
 
+resourcestring
+  rsTagQuantity = 'Quantity';
+  rsTagOffset   = 'Offset';
+  rsTagYear     = 'Year';
+  rsTagLocked   = 'Locked';
+  rsTagCentred  = 'Centred';
+  rsQtyClicked  = 'Quantity clicked (field or +/- button)';
+
 procedure TMainForm.FormCreate(Sender: TObject);
 var
   names: TStringArray;
@@ -105,15 +113,15 @@ end;
 procedure TMainForm.SpinChange(Sender: TObject);
 begin
   if Sender = SpinQty then
-    UpdateStatus('Quantity', SpinQty)
+    UpdateStatus(rsTagQuantity, SpinQty)
   else if Sender = SpinOfs then
-    UpdateStatus('Offset', SpinOfs)
+    UpdateStatus(rsTagOffset, SpinOfs)
   else if Sender = SpinYear then
-    UpdateStatus('Year', SpinYear)
+    UpdateStatus(rsTagYear, SpinYear)
   else if Sender = SpinLock then
-    UpdateStatus('Locked', SpinLock)
+    UpdateStatus(rsTagLocked, SpinLock)
   else if Sender = SpinCentre then
-    UpdateStatus('Centred', SpinCentre);
+    UpdateStatus(rsTagCentred, SpinCentre);
 end;
 
 procedure TMainForm.SpinClick(Sender: TObject);
@@ -121,7 +129,7 @@ begin
   // The only published event besides OnChange. It fires on a click anywhere in the
   // control, including the +/- buttons (which step the value first, so the status
   // line above shows the new value and this line shows the click).
-  LblClick.Caption := 'Quantity clicked (field or +/- button)';
+  LblClick.Caption := rsQtyClicked;
 end;
 
 procedure TMainForm.PokeClick(Sender: TObject);

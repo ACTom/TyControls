@@ -77,7 +77,7 @@ msgstr "浅色"
 
 #: tmainform.btndark.caption
 msgid "Dark"
-msgstr "深色"
+msgstr "暗色"
 
 #: tmainform.btngreen.caption
 msgid "Green"
@@ -166,3 +166,35 @@ msgstr "例如在 .tycss 里:  TyStarShape { background: #E8C547; border-color: 
 #: tmainform.darkswitch.caption
 msgid "Dark"
 msgstr "暗色"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rsheadfmt
+#, object-pascal-format
+msgid "Head-length ratio HeadRatio = %.2f"
+msgstr "箭头长度比 HeadRatio = %.2f"
+
+#: umain.rsinnerclampedfmt
+#, object-pascal-format
+msgid "Inner radius ratio InnerRatio = %.2f (asked for 2.00)"
+msgstr "内径比 InnerRatio = %.2f（要求设为 2.00）"
+
+#: umain.rsinnerfmt
+#, object-pascal-format
+msgid "Inner radius ratio InnerRatio = %.2f"
+msgstr "内径比 InnerRatio = %.2f"
+
+#: umain.rspointsclampedfmt
+#, object-pascal-format
+msgid "Point count Points = %d (asked for 1)"
+msgstr "角数 Points = %d（要求设为 1）"
+
+#: umain.rspointsfmt
+#, object-pascal-format
+msgid "Point count Points = %d"
+msgstr "角数 Points = %d"
+
+#: umain.rsshaftfmt
+#, object-pascal-format
+msgid "Shaft-width ratio ShaftRatio = %.2f"
+msgstr "杆宽比 ShaftRatio = %.2f"

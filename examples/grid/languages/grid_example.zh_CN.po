@@ -690,3 +690,864 @@ msgstr "20"
 #: tmainform.pgdraw.caption
 msgid "Draw grid"
 msgstr "纯自绘网格"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rs100krows
+msgid "100k rows — this time all 900k cells are **really filled**; compare \"stored cells\" against the million-row page above"
+msgstr "10 万行 —— 这次 90 万格**真的全部灌满**；把「已存格数」与上面的百万行页对比一下"
+
+#: umain.rs10krows
+msgid "10k rows — only the few dozen rows in the visible window are drawn; try scrolling"
+msgstr "1 万行 —— 只有可视窗口里那几十行真的在画；滚动试试"
+
+#: umain.rs1mrows
+msgid "1M rows — content is generated on demand by a callback, \"stored cells\" is still 0: that is virtualization + sparse storage"
+msgstr "100 万行 —— 内容由回调按需生成，「已存格数」仍是 0：这就是虚拟化 + 稀疏存储"
+
+#: umain.rsaccentchangedfmt
+#, object-pascal-format
+msgid "Accent colour changed to %s(click again to restore)"
+msgstr "强调色已改为 %s（再点一次恢复）"
+
+#: umain.rsaccentrestored
+msgid "Restored the theme's own accent colour"
+msgstr "已恢复主题自带的强调色"
+
+#: umain.rsallunhidden
+msgid "All unhidden"
+msgstr "全部取消隐藏"
+
+#: umain.rsautogrowoff
+msgid "Auto table growth is off — rows beyond the range are dropped (this is the old silent data-loss behaviour)"
+msgstr "自动扩容已关 —— 超出范围的行被丢弃（这是旧的静默丢数据行为）"
+
+#: umain.rsautogrowon
+msgid "On paste the table grows to fit · drag the small square at the bottom-right corner of the selection to fill downwards (Excel-style)"
+msgstr "粘贴时表格自动扩容 · 拖选区右下角的小方块向下填充（Excel 手感）"
+
+#: umain.rsbackscopenote
+msgid "The range decides **which rectangle the image is fitted to** — the header band is repainted every frame, whatever is laid under it is invisible"
+msgstr "范围决定**图片贴合哪个矩形** —— 表头带每帧都重画，垫在它下面的部分看不见"
+
+#: umain.rsboldedfmt
+#, object-pascal-format
+msgid "(%d, %d) bolded — per-cell font style, also on the undo stack"
+msgstr "(%d, %d) 已加粗 —— 逐格字体样式，同样进撤销栈"
+
+#: umain.rsbtncellfmt
+#, object-pascal-format
+msgid "Button cell clicked: (col %d, row %d) — pressing then dragging off the button before releasing does not count"
+msgstr "按钮格被点击：(列 %d, 行 %d) —— 按下后拖出按钮再松手不算数"
+
+#: umain.rsbtngroup2
+msgid "Group by region + product"
+msgstr "按大区 + 产品分组"
+
+#: umain.rsbtngroupregion
+msgid "Group by region"
+msgstr "按大区分组"
+
+#: umain.rsbtnungroup
+msgid "Ungroup"
+msgstr "取消分组"
+
+#: umain.rsbtnungroup2
+msgid "Remove multi-level grouping"
+msgstr "取消多级分组"
+
+#: umain.rscasechanged
+msgid "The case rule of the order-no. column changed — double-click into edit to see it"
+msgstr "订单号列的大小写规则变了 —— 双击进编辑看看"
+
+#: umain.rscelleditedfmt
+#, object-pascal-format
+msgid "(%d, %d):「%s」→「%s」"
+msgstr "(%d, %d)：「%s」→「%s」"
+
+#: umain.rscellrofmt
+#, object-pascal-format
+msgid "(col %d, row %d) set read-only — one level finer than \"whole column read-only\""
+msgstr "(列 %d, 行 %d) 已设为只读 —— 比「整列只读」再细一级"
+
+#: umain.rscellrw
+msgid "This cell is editable again"
+msgstr "这一格又可以编辑了"
+
+#: umain.rscellscoloredfmt
+#, object-pascal-format
+msgid "%d cells coloured — this colour is **persisted** and follows the data row when sorted"
+msgstr "%d 格已着色 —— 这个颜色**持久保存**，排序后跟着数据行走"
+
+#: umain.rscellsswitchesfmt
+#, object-pascal-format
+msgid "tri-state=%s · formatting=%s · link column=%s · icon column=%s"
+msgstr "三态=%s · 格式化=%s · 链接列=%s · 图标列=%s"
+
+#: umain.rscellsuncoloredfmt
+#, object-pascal-format
+msgid "Cleared the background of %d cell(s)"
+msgstr "已清掉 %d 格的底色"
+
+#: umain.rschooseaccent
+msgid "Choose accent colour"
+msgstr "选择强调色"
+
+#: umain.rsclearedcolfmt
+#, object-pascal-format
+msgid "Cleared column %d — also a single undo record"
+msgstr "清空了第 %d 列 —— 同样是一条撤销记录"
+
+#: umain.rsclearedrowsfmt
+#, object-pascal-format
+msgid "Cleared the content of %d row(s) — the whole batch counts as **one** undo record, one Ctrl+Z brings it back"
+msgstr "清空了 %d 行的内容 —— 整批算**一条**撤销记录，一次 Ctrl+Z 全回来"
+
+#: umain.rsclickfmt
+#, object-pascal-format
+msgid "Click (%d, %d)"
+msgstr "单击 (%d, %d)"
+
+#: umain.rsclipcomment
+msgid "// from TTyStringGrid"
+msgstr "// 来自 TTyStringGrid"
+
+#: umain.rsclipcopynote
+msgid "The copied content had a comment line added by a hook — paste it into Notepad and look"
+msgstr "复制的内容被钩子加了一行注释 —— 粘到记事本里看看"
+
+#: umain.rscol0nocursor
+msgid "The cursor cannot enter column 0 — the arrow keys skip straight over it"
+msgstr "光标进不了第 0 列 —— 方向键直接跳过它"
+
+#: umain.rscol0pinned
+msgid "Column 0 is pinned — you cannot drag it, nor drag another column in front of it"
+msgstr "第 0 列被钉住 —— 拖不动它，也不能把别的列拖到它前面"
+
+#: umain.rscolamount
+msgid "Amount"
+msgstr "金额"
+
+#: umain.rscoldate
+msgid "Date"
+msgstr "日期"
+
+#: umain.rscoldiscount
+msgid "Discount%"
+msgstr "折扣%"
+
+#: umain.rscoldone
+msgid "Settled"
+msgstr "已结清"
+
+#: umain.rscoleta
+msgid "Lead time"
+msgstr "交期"
+
+#: umain.rscollapseall
+msgid "Collapse all — collapse state is kept by **group value**, so it still matches after reordering"
+msgstr "全部折叠 —— 折叠状态按**分组值**记，重排之后仍能对上"
+
+#: umain.rscolmark
+msgid "Mark colour"
+msgstr "标记色"
+
+#: umain.rscolmovedfmt
+#, object-pascal-format
+msgid "Column moved: %d → %d"
+msgstr "列已移动：%d → %d"
+
+#: umain.rscolnote
+msgid "Notes"
+msgstr "备注"
+
+#: umain.rscolorderno
+msgid "Order No."
+msgstr "订单号"
+
+#: umain.rscolpin
+msgid "Passcode"
+msgstr "口令"
+
+#: umain.rscolproduct
+msgid "Product"
+msgstr "产品"
+
+#: umain.rscolprogress
+msgid "Progress%"
+msgstr "进度%"
+
+#: umain.rscolqty
+msgid "Quantity"
+msgstr "数量"
+
+#: umain.rscolrate
+msgid "Rating"
+msgstr "评分"
+
+#: umain.rscolregion
+msgid "Region"
+msgstr "大区"
+
+#: umain.rscolswapped
+msgid "This column swapped places with its right neighbour — swapping can be undone too"
+msgstr "这一列与右邻交换了位置 —— 交换也能撤销"
+
+#: umain.rscolwidthfmt
+#, object-pascal-format
+msgid "Column %d width set to %d — dragging fired %d Sizing events, release fires this single EndSize (the host uses it to save column-width preferences)"
+msgstr "第 %d 列宽度设为 %d —— 拖动中发了 %d 次 Sizing，松手只发这一次 EndSize（宿主用它保存列宽偏好）"
+
+#: umain.rscommentatfmt
+#, object-pascal-format
+msgid "In %s comment added"
+msgstr "于 %s 添加批注"
+
+#: umain.rscommentcleared
+msgid "Comment cleared — the small triangle disappears with it"
+msgstr "批注已清除 —— 小三角跟着消失"
+
+#: umain.rscommitvetofmt
+#, object-pascal-format
+msgid "(%d, %d) may not be cleared — the commit was vetoed, the cell still holds \"%s\""
+msgstr "(%d, %d) 不许清空 —— 提交被否决，格里仍是 \"%s\""
+
+#: umain.rscopiednote
+msgid "Copied — export follows **display order**, so what you copy after sorting/filtering is that block on screen"
+msgstr "已复制 —— 导出走**显示序**，排序/筛选之后复制到的就是屏幕上那一块"
+
+#: umain.rsctrlenterfmt
+#, object-pascal-format
+msgid "Ctrl+Enter: row %d — a separate action, distinct from plain Enter"
+msgstr "Ctrl+Enter：第 %d 行 —— 独立动作，与普通 Enter 区分"
+
+#: umain.rscutnote
+msgid "Cut (the content of read-only cells is not removed)"
+msgstr "已剪切（只读格的内容不会被删掉）"
+
+#: umain.rsdblclickfmt
+#, object-pascal-format
+msgid "Double-click (%d, %d) — in a real app this usually \"opens the detail\""
+msgstr "双击 (%d, %d) —— 真实应用里这通常是「打开详情」"
+
+#: umain.rsdelcolfmt
+#, object-pascal-format
+msgid "Deleted \"%s\" (width %d) — press Ctrl+Z and it comes back together with its width / title / editor kind / filter"
+msgstr "删除了「%s」（宽 %d）—— 按 Ctrl+Z，它连同宽度 / 标题 / 编辑器种类 / 筛选一起回来"
+
+#: umain.rsdeletevetoed
+msgid "Deletion vetoed"
+msgstr "删除被否决"
+
+#: umain.rsdisptypefmt
+#, object-pascal-format
+msgid "(%d, %d) changed its display type — per-cell beats per-column and overrides the column-level declaration"
+msgstr "(%d, %d) 换了显示类型 —— 逐格压过逐列，盖掉列级声明"
+
+#: umain.rsdrawcelltaken
+msgid "OnDrawCell took the amount column over completely — the control still painted the background and the selection, the host only drew the content"
+msgstr "OnDrawCell 完全接管了金额列 —— 背景与选中底色仍由控件铺好，宿主只画了内容"
+
+#: umain.rsdrawendnote
+msgid "Row 1,000,000 — getting there cost nothing: no rows were ever built, the last screenful was simply asked for"
+msgstr "第 1,000,000 行 —— 到这儿没花任何代价：从未建过行，只是把最后一屏问了出来"
+
+#: umain.rsdrawtopnote
+msgid "Back at the top — TTyDrawGrid holds no cells at all, so there is nothing to reload"
+msgstr "回到顶部 —— TTyDrawGrid 根本不存格子，所以没有什么可重新加载"
+
+#: umain.rseditorkindon
+msgid "OnGetEditorKind is on: double-click \"Region\" — a settled order gets the picker, an unsettled one a plain text box. The per-cell event beats the kind declared on the column"
+msgstr "OnGetEditorKind 已开：双击「大区」—— 已结清的订单弹候选，未结清的是普通文本框。逐格事件压过列上声明的种类"
+
+#: umain.rseditorpropfmt
+#, object-pascal-format
+msgid "OnGetEditorProp: tinted the editor at (%d, %d) red"
+msgstr "OnGetEditorProp：把 (%d, %d) 的编辑器染成了红字"
+
+#: umain.rsenterfmt
+#, object-pascal-format
+msgid "Enter: open the detail of row %d (Enter while editing still means \"commit and move down\", unchanged)"
+msgstr "Enter：打开第 %d 行的详情（编辑态里的 Enter 仍是「提交并下移」，没变）"
+
+#: umain.rsexpandall
+msgid "Expand all"
+msgstr "全部展开"
+
+#: umain.rsexportedcsvfmt
+#, object-pascal-format
+msgid "Exported %d rows to %s (display order: filtered-out rows do not appear)"
+msgstr "导出 %d 行到 %s（按显示序：被筛掉的行不会出现）"
+
+#: umain.rsexportedhtmlfmt
+#, object-pascal-format
+msgid "Exported HTML to %s"
+msgstr "已导出 HTML 到 %s"
+
+#: umain.rsfillbuiltin
+msgid "The built-in fill is back: drag the small square at the bottom-right corner of the selection downwards and it repeats the block, or continues an arithmetic run"
+msgstr "内建填充回来了：把选区右下角的小方块往下拖，它会重复整块，或续上等差数列"
+
+#: umain.rsfillmine
+msgid "Select a block, then drag the small square at its bottom-right corner downwards: the fill is mine now — weekday names instead of the built-in \"repeat / continue the arithmetic run\""
+msgstr "选一块，然后把右下角的小方块往下拖：这次填充归我 —— 填的是星期名，不是内建的「重复 / 续等差」"
+
+#: umain.rsfillwrotefmt
+#, object-pascal-format
+msgid "OnFillCells wrote %d cell(s) itself — the control did not touch the data (untick the switch to get its built-in series back)"
+msgstr "OnFillCells 自己写了 %d 格 —— 控件没碰数据（取消勾选可换回它内建的序列）"
+
+#: umain.rsfiltercleared
+msgid "Filter cleared — the funnel goes dark"
+msgstr "筛选已清除 —— 漏斗熄灭"
+
+#: umain.rsfilteredfmt
+#, object-pascal-format
+msgid "%d rows after filtering / %d total — the column's funnel is lit"
+msgstr "筛选后 %d 行 / 共 %d 行 —— 该列的漏斗亮了"
+
+#: umain.rsfilterrowoff
+msgid "Filter row off"
+msgstr "筛选行已关"
+
+#: umain.rsfilterrowon
+msgid "Filter row on — try typing >20 in the \"Qty\" column, or East China;North China in the \"Region\" column (; means OR, a..b means a range)"
+msgstr "筛选行已开 —— 在「数量」列试试输入 >20，或在「大区」列输入 华东;华北（; 表示或，a..b 表示区间）"
+
+#: umain.rsfiltervalsmore
+msgid "(more on the server)"
+msgstr "（更多在服务端）"
+
+#: umain.rsfootertotalfmt
+#, object-pascal-format
+msgid "Total ¥%s"
+msgstr "合计 ¥%s"
+
+#: umain.rsfoundfmt
+#, object-pascal-format
+msgid "Found — the cursor jumped to (col %d, row %d) and scrolled into view"
+msgstr "找到了 —— 光标跳到 (列 %d, 行 %d) 并滚进视野"
+
+#: umain.rsfri
+msgid "Fri"
+msgstr "周五"
+
+#: umain.rsgotcommentfmt
+#, object-pascal-format
+msgid "(%d, %d) got a comment — a small triangle appears top-right, shown on hover; Ctrl+Z to undo"
+msgstr "(%d, %d) 有了批注 —— 右上角出现小三角，悬停显示；Ctrl+Z 可撤销"
+
+#: umain.rsgrouped2note
+msgid "Two-level grouping — subtotals are computed per level; collapse state is tracked by **path**, so the same-named product under different regions does not interfere"
+msgstr "两级分组 —— 小计按层级各算各的；折叠状态按**路径**记，不同大区下的同名产品互不影响"
+
+#: umain.rsgroupednote
+#, object-pascal-format
+msgid "Grouped by region — click a group row to collapse; note the sort column was not swallowed by grouping · the group row's caption comes from GroupRowFormat (%s = the group value, %d = how many rows are in it)"
+msgstr "已按大区分组 —— 点组行可折叠；注意排序列没有被分组吞掉 · 组行的抬头来自 GroupRowFormat（%s = 分组值，%d = 组内行数）"
+
+#: umain.rsgrouprowfmt
+#, object-pascal-format
+msgid "%s   —   %d orders"
+msgstr "%s   —   %d 单"
+
+#: umain.rshdrgroupamount
+msgid "Amount & progress"
+msgstr "金额与进度"
+
+#: umain.rshdrgroupkey
+msgid "Key & ownership"
+msgstr "关键与归属"
+
+#: umain.rshdrgrouporder
+msgid "Order info"
+msgstr "订单信息"
+
+#: umain.rshdrgroupqty
+msgid "Qty / amount"
+msgstr "数量 / 金额"
+
+#: umain.rshdrwraphint
+msgid "Also tick \"header wrap\" and \"auto header height\" to see the effect"
+msgstr "同时勾上「表头换行」和「自动表头高」才看得出效果"
+
+#: umain.rsheaderclickfmt
+#, object-pascal-format
+msgid "Header click: column %d — the event fires first, the built-in sort proceeds as usual (the host rides along, it does not take over the default)"
+msgstr "表头点击：第 %d 列 —— 事件先发，内建排序照常进行（宿主搭车，不接管默认行为）"
+
+#: umain.rsheaderrclickfmt
+#, object-pascal-format
+msgid "Header right-click: column %d auto-fitted to its content width"
+msgstr "表头右键：第 %d 列已按内容宽度自适应"
+
+#: umain.rshidrowfmt
+#, object-pascal-format
+msgid "Hid row %d — %d row(s) hidden in total. Clearing the filter will not bring it back"
+msgstr "隐藏了第 %d 行 —— 共隐藏 %d 行。清筛选不会把它放出来"
+
+#: umain.rshintamountfmt
+#, object-pascal-format
+msgid "Amount %s (tax incl.)"
+msgstr "金额 %s（含税）"
+
+#: umain.rshintdatefmt
+#, object-pascal-format
+msgid "Delivery date:%s"
+msgstr "交货日期：%s"
+
+#: umain.rshintnodate
+msgid "This order is not scheduled yet"
+msgstr "这单还没排期"
+
+#: umain.rshooksapplied
+msgid "Hook switches applied — go operate the grid, this line will say what the hook intervened in"
+msgstr "钩子开关已生效 —— 去操作网格，这一行会说出钩子介入了什么"
+
+#: umain.rshtmlexportedfmt
+#, object-pascal-format
+msgid "Exported %d bytes of HTML"
+msgstr "导出了 %d 字节 HTML"
+
+#: umain.rshtmlhead
+msgid "HTML export (first 800 chars):"
+msgstr "HTML 导出（前 800 字符）："
+
+#: umain.rsimpany
+msgid "any"
+msgstr "不限"
+
+#: umain.rsimpappend
+msgid "Append"
+msgstr "追加"
+
+#: umain.rsimportedcsv
+msgid "Imported — note that the first row's note **contains a line break** but did not scramble the row count, and the comma did not split the field"
+msgstr "已导入 —— 注意第一行的备注**含一个换行**但没有打乱行数，逗号也没有把字段切开"
+
+#: umain.rsimportfmt
+#, object-pascal-format
+msgid "Import: %d rows → %d rows (%s, up to %s rows, %d note rows skipped)"
+msgstr "导入：%d 行 → %d 行（%s，最多 %s 行，跳过 %d 行注释）"
+
+#: umain.rsimpreplace
+msgid "Replace"
+msgstr "替换"
+
+#: umain.rsinscolfmt
+#, object-pascal-format
+msgid "Inserted a column before column %d — Ctrl+Z can undo it"
+msgstr "在第 %d 列前插入了一列 —— Ctrl+Z 可撤销"
+
+#: umain.rsinsertvetoed
+msgid "Insertion vetoed — not a single row was inserted (in the plural version, if any row is vetoed the whole batch is skipped)"
+msgstr "插入被否决 —— 一行都没插进来（复数版本里只要有一行被否决，整批都跳过）"
+
+#: umain.rsioswitchesfmt
+#, object-pascal-format
+msgid "Footer hook=%s · amount column takeover=%s"
+msgstr "页脚钩子=%s · 金额列接管=%s"
+
+#: umain.rsjsonexportedfmt
+#, object-pascal-format
+msgid "Exported %d bytes of JSON — keys are the column titles, only visible rows exported"
+msgstr "导出了 %d 字节 JSON —— 键是列标题，只导出可见行"
+
+#: umain.rsjsonhead
+msgid "JSON export (first 800 chars):"
+msgstr "JSON 导出（前 800 字符）："
+
+#: umain.rsjumped
+msgid "Jumped to (col 2, row 5000)"
+msgstr "已跳到 (列 2, 行 5000)"
+
+#: umain.rslastcol
+msgid "Already the last column"
+msgstr "已经是最后一列"
+
+#: umain.rslayoutbad
+msgid "This layout string is unrecognized — nothing changed"
+msgstr "这串版式无法识别 —— 什么都没改"
+
+#: umain.rslayoutnone
+msgid "No layout recorded yet — click \"Remember layout\" first"
+msgstr "还没记录过版式 —— 先点「记住版式」"
+
+#: umain.rslayoutrestored
+msgid "Layout restored (column width / order / visibility / sort keys / freeze count)"
+msgstr "版式已恢复（列宽 / 列序 / 可见性 / 排序键 / 冻结数）"
+
+#: umain.rslayoutsaved
+msgid "Layout recorded — now drag column widths, reorder columns, change the freeze count, then click \"Restore layout\""
+msgstr "版式已记录 —— 现在去拖列宽、换列序、改冻结数，然后点「恢复版式」"
+
+#: umain.rslinkclickfmt
+#, object-pascal-format
+msgid "Clicked link: %s (row %d) — in a real app this opens the detail"
+msgstr "点了链接：%s（第 %d 行）—— 真实应用里这里打开详情"
+
+#: umain.rslongtitle
+msgid "This is a very long column title used to demonstrate wrapping and auto height"
+msgstr "这是一个很长的列标题，用来演示换行与自动高度"
+
+#: umain.rsmaxlenfmt
+#, object-pascal-format
+msgid "The notes column allows up to %d characters"
+msgstr "备注列最多允许 %d 个字符"
+
+#: umain.rsmerged
+msgid "Merged — note there are **no grid lines running through the inside** of the merged area, the outer edge still has them"
+msgstr "已合并 —— 注意合并区**内部没有格线穿过**，外缘的格线还在"
+
+#: umain.rsmon
+msgid "Mon"
+msgstr "周一"
+
+#: umain.rsneedwrapfirst
+msgid "Tick \"word wrap\" first, then click auto row height — without wrapping every row has a single line and there is nothing to expand"
+msgstr "先勾「自动换行」再点自动行高 —— 不换行时每行只有一行字，没有可撑开的内容"
+
+#: umain.rsnolenlimit
+msgid "The notes column has no length limit"
+msgstr "备注列不限长度"
+
+#: umain.rsnomorematches
+msgid "No more matches"
+msgstr "没有更多匹配了"
+
+#: umain.rsnotecontract
+msgid "The contract attachment is missing the stamped page and has been returned for completion."
+msgstr "合同附件缺盖章页，已退回补办。"
+
+#: umain.rsnoteexpress
+msgid "This one goes express, freight on us; note the express reason in the invoice remarks."
+msgstr "这单走快递，运费我们出；发票备注里写明快递原因。"
+
+#: umain.rsnotesplit
+msgid "The customer requested split shipment; the first batch arrives this week, the rest scheduled for next month; the contact has changed to Engineer Wang."
+msgstr "客户要求分批发货；第一批本周到，其余排到下月；对接人已换成王工。"
+
+#: umain.rsnothingredo
+msgid "Nothing left to redo"
+msgstr "没有可重做的了"
+
+#: umain.rsnothingundo
+msgid "Nothing left to undo"
+msgstr "没有可撤销的了"
+
+#: umain.rsnotmerged
+msgid "Not merged: either you did not drag out a region, or these rows are not actually adjacent in the data (sorted / rows hidden) — merged into one block, they scatter on a different sort"
+msgstr "没有合并：要么没拖出一个区域，要么这些行在数据里并不真的相邻（排过序 / 藏过行）—— 合成一块后，换个排序它们就散开了"
+
+#: umain.rsnullposnote
+msgid "The null position is **independent** of ascending/descending — flip the sort and the empty-date rows stay at the same end"
+msgstr "空值位置与升降序**互相独立** —— 翻转排序，空日期的行仍待在同一端"
+
+#: umain.rsoff
+msgid "Off"
+msgstr "关"
+
+#: umain.rson
+msgid "On"
+msgstr "开"
+
+#: umain.rsonecolleft
+msgid "Only one column left, will not delete"
+msgstr "只剩一列了，不删"
+
+#: umain.rspage7
+msgid "Page 7: comments/bold/display type all live in per-cell properties — after sorting and inserting rows they still follow the original record"
+msgstr "页 7：批注/加粗/显示类型都存在逐格属性里 —— 排序、插行之后仍跟着原来那条记录"
+
+#: umain.rspage8
+msgid "Page 8: scrollbar tri-state, background image, focus/selection display, header wrap and grouping"
+msgstr "页 8：滚动条三态、背景图、焦点/选中显示、表头换行与分组"
+
+#: umain.rspage9
+msgid "Page 9: export/import/stream round-trip/footer takeover · the summary band does count / average / sum / min / max — one aggregate per column"
+msgstr "页 9：导出/导入/流往返/页脚接管 · 汇总带做 count / average / sum / min / max —— 每列一种聚合"
+
+#: umain.rspasteblockfmt
+#, object-pascal-format
+msgid "OnClipboardPaste saw the whole block first: %d line(s), uppercased before the grid parsed it"
+msgstr "OnClipboardPaste 先看到了整块：%d 行，在网格解析之前被转成了大写"
+
+#: umain.rspasted2lines
+msgid "Pasted 2 lines from a hardcoded text — via the same path as the clipboard"
+msgstr "从硬编码文本粘了 2 行进来 —— 与剪贴板走同一条路"
+
+#: umain.rspastedgridfmt
+#, object-pascal-format
+msgid "Pasted — now %d rows x %d columns"
+msgstr "已粘贴 —— 现在是 %d 行 x %d 列"
+
+#: umain.rspastewrotefmt
+#, object-pascal-format
+msgid "This paste wrote %d cell(s) (changed cells are tinted)"
+msgstr "这次粘贴写入了 %d 格（被改过的格已染色）"
+
+#: umain.rsphysicaloff
+msgid "Sort only changes the display order, the data does not move (default)"
+msgstr "排序只改显示顺序，数据不动（默认）"
+
+#: umain.rsphysicalon
+msgid "Sorting really moves the data (undoable) — after sorting, merge and row-drag are no longer refused; attaching a filter or grouping falls back to ordinary sort automatically"
+msgstr "排序真的搬动数据（可撤销）—— 排完之后合并、拖行不再被拒绝；挂上筛选或分组会自动退回普通排序"
+
+#: umain.rspickcellcolor
+msgid "Pick a background colour for the selected cells"
+msgstr "为选中的单元格挑一个底色"
+
+#: umain.rspickproduct
+msgid "Choose product"
+msgstr "选择产品"
+
+#: umain.rspickproductfmt
+#, object-pascal-format
+msgid "Product for row %d (available: %s)"
+msgstr "第 %d 行的产品（可选：%s）"
+
+#: umain.rsprodcdn
+msgid "CDN"
+msgstr "CDN"
+
+#: umain.rsproddb
+msgid "Database"
+msgstr "数据库"
+
+#: umain.rsprodhost
+msgid "Cloud host"
+msgstr "云主机"
+
+#: umain.rsprodlb
+msgid "Load balancing"
+msgstr "负载均衡"
+
+#: umain.rsprodstorage
+msgid "Object storage"
+msgstr "对象存储"
+
+#: umain.rsratingfmt
+#, object-pascal-format
+msgid "Rating changed to %d star(s) (row %d) — the star you click is the score, no editor pops up"
+msgstr "评分改为 %d 星（第 %d 行）—— 点第几颗星就是几分，不弹编辑器"
+
+#: umain.rsrecalcnote
+msgid "Recompute only the amount column — invalidating the whole table (InvalidateAggregates) is too blunt for this"
+msgstr "只重算金额列 —— 整表失效（InvalidateAggregates）对这件事太钝了"
+
+#: umain.rsredone
+msgid "Redone"
+msgstr "已重做"
+
+#: umain.rsregione
+msgid "East China"
+msgstr "华东"
+
+#: umain.rsregionn
+msgid "North China"
+msgstr "华北"
+
+#: umain.rsregionne
+msgid "Northeast"
+msgstr "东北"
+
+#: umain.rsregionnosort
+msgid "The region column may not be sorted locally — in a real scenario this would become a server request"
+msgstr "大区列不许本地排序 —— 真实场景里这会变成一次服务端请求"
+
+#: umain.rsregionnw
+msgid "Northwest"
+msgstr "西北"
+
+#: umain.rsregions
+msgid "South China"
+msgstr "华南"
+
+#: umain.rsregionsw
+msgid "Southwest"
+msgstr "西南"
+
+#: umain.rsreplacedfmt
+#, object-pascal-format
+msgid "Replaced %d occurrence(s) (read-only cells are skipped automatically)"
+msgstr "替换了 %d 处（只读格自动跳过）"
+
+#: umain.rsrestored200
+msgid "Restored 200 rows"
+msgstr "已恢复 200 行"
+
+#: umain.rsrightclickfmt
+#, object-pascal-format
+msgid "Right-clicked at (col %d, row %d) — note the selection box on the left did not follow"
+msgstr "右键点在 (列 %d, 行 %d) —— 注意左边的选中框没有跟过来"
+
+#: umain.rsrow2noedit
+msgid "Row 2 is not editable — note its checkbox is still drawn as a checkbox, it just cannot be clicked"
+msgstr "第 2 行不可编辑 —— 注意它的勾选框仍画成勾选框，只是点不动"
+
+#: umain.rsrowcheckedfmt
+#, object-pascal-format
+msgid "Row %d checked"
+msgstr "第 %d 行已勾选"
+
+#: umain.rsrowcoloredfmt
+#, object-pascal-format
+msgid "Row %d whole-row coloured"
+msgstr "第 %d 行整行着色"
+
+#: umain.rsrowdeleted
+msgid "Current row deleted"
+msgstr "当前行已删除"
+
+#: umain.rsrowheightfmt
+#, object-pascal-format
+msgid "Data row %d height set to %d (drag row height in the row-number gutter on the left)"
+msgstr "数据行 %d 高度设为 %d（在左边行号槽里拖行高）"
+
+#: umain.rsrowheightreset
+msgid "Row height restored to default"
+msgstr "行高已恢复默认"
+
+#: umain.rsrowinserted
+msgid "Inserted a row above the current row"
+msgstr "在当前行上方插入了一行"
+
+#: umain.rsrowlockedfmt
+#, object-pascal-format
+msgid "Row %d is locked and cannot be checked (but the cursor can still move over it)"
+msgstr "第 %d 行被锁定，勾不上（但光标仍能移过去）"
+
+#: umain.rsrowmovevetofmt
+#, object-pascal-format
+msgid "OnRowMove vetoed: row %d may not be dragged to the first row"
+msgstr "OnRowMove 否决：第 %d 行不许拖到首行"
+
+#: umain.rsrowsautofit
+msgid "Row height auto-fitted to the wrapped content (bounded by MinRowHeight / MaxRowHeight)"
+msgstr "行高已按换行后的内容自适应（受 MinRowHeight / MaxRowHeight 约束）"
+
+#: umain.rsrowuncheckedfmt
+#, object-pascal-format
+msgid "Row %d unchecked"
+msgstr "第 %d 行已取消勾选"
+
+#: umain.rssamplecomment
+msgid "This is a sample comment — hover the small triangle in the top-right to show it"
+msgstr "这是一条示例批注 —— 悬停右上角的小三角就能看到"
+
+#: umain.rssat
+msgid "Sat"
+msgstr "周六"
+
+#: umain.rsscrollbarnote
+msgid "The scrollbar \"hidden\" only means it is not shown — the wheel, arrow keys and PageDown still reach the bottom"
+msgstr "滚动条「隐藏」只是不显示 —— 滚轮、方向键和 PageDown 照样能到底"
+
+#: umain.rsscrollhintfmt
+#, object-pascal-format
+msgid "Row %d / %d total"
+msgstr "第 %d 行 / 共 %d 行"
+
+#: umain.rsselcsvhead
+msgid "Selection CSV:"
+msgstr "选区 CSV："
+
+#: umain.rsselexportedfmt
+#, object-pascal-format
+msgid "Exported %d rows x %d columns of the selection"
+msgstr "导出了选区的 %d 行 x %d 列"
+
+#: umain.rsselmanyfmt
+#, object-pascal-format
+msgid "Current (col %d, row %d)  ·  %d rows / %d shown / %d cells stored  ·  %d cells selected, sum %.2f, average %.2f"
+msgstr "当前 (列 %d, 行 %d)  ·  %d 行 / 显示 %d 行 / 已存 %d 格  ·  选中 %d 格，合计 %.2f，平均 %.2f"
+
+#: umain.rsselmodenote
+msgid "In whole-row/whole-column mode the focused cell still has its own background — you can see which cell the cursor is on"
+msgstr "整行/整列模式下焦点格仍有自己的底色 —— 看得出光标在哪一格"
+
+#: umain.rsselonefmt
+#, object-pascal-format
+msgid "Current (col %d, row %d) = %s  ·  %d rows / %d shown / %d cells stored"
+msgstr "当前 (列 %d, 行 %d) = %s  ·  %d 行 / 显示 %d 行 / 已存 %d 格"
+
+#: umain.rsseltexthead
+msgid "Selection text (tab-separated, clipboard untouched):"
+msgstr "选区文本（制表符分隔，不动剪贴板）："
+
+#: umain.rssortaddedfmt
+#, object-pascal-format
+msgid "Added a secondary sort column — there are now %d sort keys, the header shows order badges"
+msgstr "追加了次级排序列 —— 现在有 %d 个排序键，表头出现顺位徽标"
+
+#: umain.rssortcleared
+msgid "Sort cleared — the row order jumps back to the original import order"
+msgstr "排序已清除 —— 行序跳回原始导入顺序"
+
+#: umain.rssortqtyasc
+msgid "Sort \"Qty\" ascending — column-level SortKind = gskNumber, so 9 comes before 100"
+msgstr "按「数量」升序 —— 列级 SortKind = gskNumber，所以 9 排在 100 前面"
+
+#: umain.rssortqtydesc
+msgid "Sort \"Qty\" descending"
+msgstr "按「数量」降序"
+
+#: umain.rsstreamfmt
+#, object-pascal-format
+msgid "Stream round trip: %d rows → %d bytes → %d rows"
+msgstr "流往返：%d 行 → %d 字节 → %d 行"
+
+#: umain.rssun
+msgid "Sun"
+msgstr "周日"
+
+#: umain.rsthu
+msgid "Thu"
+msgstr "周四"
+
+#: umain.rstreeoff
+msgid "Tree column off"
+msgstr "树形列已关"
+
+#: umain.rstreeon
+msgid "Tree column on — click the triangle in the first column to collapse/expand; the hierarchy is supplied by the host; the control does not own the tree"
+msgstr "树形列已开 —— 点第一列的三角可折叠/展开；层级由宿主提供，控件不持有树"
+
+#: umain.rstue
+msgid "Tue"
+msgstr "周二"
+
+#: umain.rstypingfmt
+#, object-pascal-format
+msgid "Typing at (%d, %d): \"%s\" — fired on every keystroke, not on commit"
+msgstr "正在 (%d, %d) 输入：\"%s\" —— 每次击键都发，不是提交才发"
+
+#: umain.rsunbolded
+msgid "Unbolded"
+msgstr "已取消加粗"
+
+#: umain.rsundone
+msgid "Undone — background colour, row height and merge span come back with it"
+msgstr "已撤销 —— 底色、行高、合并跨度跟着一起回来"
+
+#: umain.rsungrouped
+msgid "Ungrouped"
+msgstr "已取消分组"
+
+#: umain.rsunmerged
+msgid "Unmerged (an existing background colour on the cells is not cleared by association)"
+msgstr "已取消合并（格上原有的底色不会被连带清掉）"
+
+#: umain.rsviewswitchesfmt
+#, object-pascal-format
+msgid "Header wrap=%s · auto row height=%s · grouping levels=%d"
+msgstr "表头换行=%s · 自动行高=%s · 分组级数=%d"
+
+#: umain.rswed
+msgid "Wed"
+msgstr "周三"
+
+#: umain.rswelcome
+msgid "Each page demonstrates one feature set — read them left to right"
+msgstr "每页演示一组能力 —— 从左到右挨个看"

@@ -211,6 +211,17 @@ resourcestring
   rsLogSort      = 'Sort by %s';
   rsLogColWidth  = 'Column %s width = %d';
   rsLogPanel     = 'Panel %s: %s';
+  rsColName     = 'Name';
+  rsColSize     = 'Size';
+  rsColModified = 'Modified date';
+  rsGrpContact  = 'Contact';
+  rsPersonA     = 'Alice';
+  rsPersonB     = 'Bob';
+  rsPersonC     = 'Carol';
+  rsGrpTask     = 'Task';
+  rsTaskReport  = 'Write report';
+  rsTaskPublish = 'Publish version';
+  rsPaintCaption = 'OnPaintSurface — the app draws it itself with TTyPainter';
 
 function ThemesDir: string;
 var Dir: string; i: Integer;
@@ -293,9 +304,9 @@ var
   sec: TTyHeaderSection;
 begin
   // Header bar: click a title to toggle sorting, drag a section boundary to resize.
-  HeaderCols.AddSection('Name', 96);
-  HeaderCols.AddSection('Size', 60);
-  HeaderCols.AddSection('Modified date', 64);
+  HeaderCols.AddSection(rsColName, 96);
+  HeaderCols.AddSection(rsColSize, 60);
+  HeaderCols.AddSection(rsColModified, 64);
   // Open already sorted on 'Name' so the sort triangle is visible without a click, and
   // right-align the numeric 'Size' column (per-section Alignment lives in the record).
   HeaderCols.Sort[0] := hsdAscending;
@@ -305,14 +316,14 @@ begin
 
   // Outlook-style collapsible grouped list (accordion). The trailing index picks an icon
   // out of ListGroups.Images (built in BuildListIcons) -- that icon column IS the Outlook look.
-  g := ListGroups.AddGroup('Contact', 0);
-  ListGroups.AddItem(g, 'Alice', 1);
-  ListGroups.AddItem(g, 'Bob', 1);
-  ListGroups.AddItem(g, 'Carol', 1);
+  g := ListGroups.AddGroup(rsGrpContact, 0);
+  ListGroups.AddItem(g, rsPersonA, 1);
+  ListGroups.AddItem(g, rsPersonB, 1);
+  ListGroups.AddItem(g, rsPersonC, 1);
   ListGroups.Expanded[g] := True;
-  g := ListGroups.AddGroup('Task', 2);
-  ListGroups.AddItem(g, 'Write report', 3);
-  ListGroups.AddItem(g, 'Publish version', 3);
+  g := ListGroups.AddGroup(rsGrpTask, 2);
+  ListGroups.AddItem(g, rsTaskReport, 3);
+  ListGroups.AddItem(g, rsTaskPublish, 3);
 end;
 
 { The grouped list's icon set. Bitmaps are runtime data (a .lfm cannot carry them), so the
@@ -505,7 +516,7 @@ begin
   ctx.beginPath;
   ctx.arc(AContent.Left + 96, AContent.Top + 36, 22, 0, 2 * Pi, False);
   ctx.fill;
-  APainter.DrawText(AContent, 'OnPaintSurface — the app draws it itself with TTyPainter', 'Segoe UI', 12, 500,
+  APainter.DrawText(AContent, rsPaintCaption, 'Segoe UI', 12, 500,
     TyColorFromLCL(clWhite, 255), taCenter, tlBottom, True);
 end;
 

@@ -84,6 +84,12 @@ uses Math;
 
 {$R *.lfm}
 
+resourcestring
+  rsGaugesFmt   = 'Arc=%.0f%%  Ring=%.0f  Linear=%.0f%%';
+  rsSpinnerFmt  = 'Spinner (TTyUpDown) = %d';
+  rsSpinnerHFmt = 'Horizontal spinner: Increment 5, Wrap 20 -> 0 (Position = %d)';
+  rsKnobsFmt    = 'Dial = %.0f   Gear = %.0f   Rating = %.1f';
+
 procedure TMainForm.FormCreate(Sender: TObject);
 var
   names: TStringArray;
@@ -139,26 +145,24 @@ begin
   Level.Value := a;
   LevelV.Value := a;              // same value, loVertical instead of loHorizontal
   Circ.Position := Round(r / 100 * 250);   // map 0..100 -> the ring's 0..250 scale
-  LblStatus.Caption := Format('Arc=%.0f%%  Ring=%.0f  Linear=%.0f%%', [a, r, b]);
+  LblStatus.Caption := Format(rsGaugesFmt, [a, r, b]);
 end;
 
 procedure TMainForm.UpDownChange(Sender: TObject);
 begin
-  UpDownLbl.Caption := Format('Spinner (TTyUpDown) = %d', [UpDown.Position]);
+  UpDownLbl.Caption := Format(rsSpinnerFmt, [UpDown.Position]);
 end;
 
 procedure TMainForm.UpDownHChange(Sender: TObject);
 begin
   // Increment = 5 with Wrap = True: 5, 10, 15, 20, then straight back to 0.
-  LblUpDownH.Caption := Format('Horizontal spinner: Increment 5, Wrap 20 -> 0 (Position = %d)',
-    [UpDownH.Position]);
+  LblUpDownH.Caption := Format(rsSpinnerHFmt, [UpDownH.Position]);
 end;
 
 procedure TMainForm.KnobChange(Sender: TObject);
 begin
   // One handler for all three interactive instruments (Dial / GearDial / Rating).
-  LblKnobs.Caption := Format('Dial = %.0f   Gear = %.0f   Rating = %.1f',
-    [Dial.Value, Gear.Value, Rating.Value]);
+  LblKnobs.Caption := Format(rsKnobsFmt, [Dial.Value, Gear.Value, Rating.Value]);
 end;
 
 procedure TMainForm.BusyChange(Sender: TObject);

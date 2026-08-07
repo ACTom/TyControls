@@ -62,6 +62,13 @@ implementation
 
 {$R *.lfm}
 
+resourcestring
+  rsNeedName   = 'Please enter a name first!';
+  rsHelloFmt   = 'Hello, %s! Welcome to TyControls.';
+  rsEvClick    = 'OnClick — a panel dispatches the whole mouse event set, not just paint.';
+  rsEvEnter    = 'OnMouseEnter — the pointer is over the panel.';
+  rsEvLeave    = 'OnMouseLeave — the pointer left the panel.';
+
 procedure TMainForm.FormCreate(Sender: TObject);
 var
   names: TStringArray;
@@ -100,24 +107,24 @@ var
 begin
   UserName := NameEdit.Text;
   if UserName = '' then
-    ResultLabel.Caption := 'Please enter a name first!'
+    ResultLabel.Caption := rsNeedName
   else
-    ResultLabel.Caption := Format('Hello, %s! Welcome to TyControls.', [UserName]);
+    ResultLabel.Caption := Format(rsHelloFmt, [UserName]);
 end;
 
 procedure TMainForm.HotPanelClick(Sender: TObject);
 begin
-  PanelEventLabel.Caption := 'OnClick — a panel dispatches the whole mouse event set, not just paint.';
+  PanelEventLabel.Caption := rsEvClick;
 end;
 
 procedure TMainForm.HotPanelMouseEnter(Sender: TObject);
 begin
-  PanelEventLabel.Caption := 'OnMouseEnter — the pointer is over the panel.';
+  PanelEventLabel.Caption := rsEvEnter;
 end;
 
 procedure TMainForm.HotPanelMouseLeave(Sender: TObject);
 begin
-  PanelEventLabel.Caption := 'OnMouseLeave — the pointer left the panel.';
+  PanelEventLabel.Caption := rsEvLeave;
 end;
 
 end.

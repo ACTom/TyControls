@@ -126,6 +126,74 @@ implementation
 
 {$R *.lfm}
 
+resourcestring
+  { Runtime-built list items, value-sheet keys and status texts. CSS snippets,
+    enum literals (taCenter, False), colour/font names, paths and licence data
+    are machine-read values and stay literals. }
+  rsChkBold      = 'Bold';
+  rsChkItalic    = 'Italic';
+  rsChkUnderline = 'Underline';
+  rsChkStrikeout = 'Strikeout';
+  rsChkStrikethrough = 'Strikethrough';
+  rsChkWordWrap  = 'Word wrap';
+  rsChkLineNums  = 'Line numbers';
+  rsMru1 = 'First search';
+  rsMru2 = 'Second search';
+  rsMru3 = 'Most recent (on top)';
+  rsSave  = 'Save';
+  rsOpen  = 'Open';
+  rsPrint = 'Print';
+  rsHdrFruit      = 'Fruit';
+  rsItemApple     = 'Apple';
+  rsItemMango     = 'Mango';
+  rsHdrVegetables = 'Vegetables';
+  rsItemCarrot    = 'Carrot';
+  rsHdrInbox    = 'Inbox';
+  rsItemMinutes = 'Meeting minutes';
+  rsItemWeekly  = 'Weekly report';
+  rsHdrSent     = 'Sent';
+  rsItemQuote   = 'Quote for the customer';
+  rsItemReceipt = 'Receipt confirmation';
+  rsAdvSaveDraft    = 'Save draft';
+  rsAdvSaveSub      = 'Not synced · 2 minutes ago';
+  rsAdvOpenProject  = 'Open project';
+  rsAdvPrintReport  = 'Print report';
+  rsAdvPrintSub     = 'Default printer';
+  rsAdvNoIcon       = 'Item with no icon';
+  rsAdvNoIconSub    = 'Subtitle may be left blank';
+  rsAdvWriteDisk    = 'Write to disk';
+  rsAdvChooseFile   = 'Choose file';
+  rsAdvSendPrinter  = 'Send to printer';
+  rsVleWidth    = 'Width';
+  rsVleOpacity  = 'Opacity';
+  rsVleTitle    = 'Title';
+  rsVleTitleVal = 'Rich Inputs example';
+  rsVleAlign    = 'Align';
+  rsVleFgColour = 'Foreground colour';
+  rsVleFont     = 'Font';
+  rsVleDataPath = 'Data path';
+  rsVleLicence  = 'Licence key';
+  rsVleHidden   = '(hidden)';
+  rsVleAbout    = 'About';
+  rsVleTheme    = 'Theme';
+  rsVleThemeRO  = 'Theme (read-only)';
+  rsVleName     = 'Name';
+  rsVleSize     = 'Size';
+  rsVleColor    = 'Color';
+  rsVleStyle    = 'Style';
+  rsVleRegular  = 'Regular';
+  rsVleBold      = 'Bold';
+  rsVleItalic    = 'Italic';
+  rsVleUnderline = 'Underline';
+  rsVleStrikeOut = 'StrikeOut';
+  rsClampedFmt = 'Clamped value = %.2f  (clamped to 0..100 on blur)';
+  rsChangedFmt = 'Changed "%s" = %s';
+  rsAboutTitle = 'TyControls Rich Inputs example';
+  rsAboutDesc  = 'ValueListEditor host-side custom row-handling demo';
+  rsChoosePath = 'Choose data path';
+  rsPickedNone = 'Picked: (none)';
+  rsPickedFmt  = 'Picked: %s = %s';
+
 procedure TMainForm.FormCreate(Sender: TObject);
 var
   names: TStringArray;
@@ -173,27 +241,27 @@ begin
   FSize.FontSize := 14;   // FontSize is a public (not published) property → set it here.
 
   // Check list (CheckListBox: click the box / Space to toggle; checked state stored in Objects)
-  FCheckList.Items.Add('Bold');
-  FCheckList.Items.Add('Italic');
-  FCheckList.Items.Add('Underline');
-  FCheckList.Items.Add('Strikeout');
-  FCheckList.Items.Add('Word wrap');
-  FCheckList.Items.Add('Line numbers');
+  FCheckList.Items.Add(rsChkBold);
+  FCheckList.Items.Add(rsChkItalic);
+  FCheckList.Items.Add(rsChkUnderline);
+  FCheckList.Items.Add(rsChkStrikeout);
+  FCheckList.Items.Add(rsChkWordWrap);
+  FCheckList.Items.Add(rsChkLineNums);
   FCheckList.Checked[0] := True;
   FCheckList.Checked[2] := True;
 
   // Check dropdown (CheckComboBox: multi-select, popup stays open, field shows a summary of the checks)
-  FCheckCombo.Items.Add('Bold');
-  FCheckCombo.Items.Add('Italic');
-  FCheckCombo.Items.Add('Underline');
-  FCheckCombo.Items.Add('Strikethrough');
+  FCheckCombo.Items.Add(rsChkBold);
+  FCheckCombo.Items.Add(rsChkItalic);
+  FCheckCombo.Items.Add(rsChkUnderline);
+  FCheckCombo.Items.Add(rsChkStrikethrough);
   FCheckCombo.Checked[0] := True;
   FCheckCombo.Checked[2] := True;
 
   // Most-recently-used combo (MRUComboBox: editable; selecting/typing auto-dedupes and moves to top)
-  FMRU.AddToHistory('First search');
-  FMRU.AddToHistory('Second search');
-  FMRU.AddToHistory('Most recent (on top)');
+  FMRU.AddToHistory(rsMru1);
+  FMRU.AddToHistory(rsMru2);
+  FMRU.AddToHistory(rsMru3);
 
   // Combo with icons (ComboBoxEx: every item carries an icon). Icon source = 3 symbols rendered from the icon font → image collection → virtual image list.
   Icf := TTyIconFont.Create(Self);
@@ -206,76 +274,76 @@ begin
   AddGlyph('print', $2699, clMaroon);  // ⚙ print
 
   FComboEx.Images := Imgs;
-  FComboEx.AddItem('Save', 0);
-  FComboEx.AddItem('Open', 1);
-  FComboEx.AddItem('Print', 2);
+  FComboEx.AddItem(rsSave, 0);
+  FComboEx.AddItem(rsOpen, 1);
+  FComboEx.AddItem(rsPrint, 2);
   FComboEx.ItemIndex := 0;
 
   // Grouped combo (OfficeComboBox: dropdown split into sections by group, header rows not selectable)
-  FOfficeCombo.AddHeader('Fruit');
-  FOfficeCombo.AddItem('Apple');
-  FOfficeCombo.AddItem('Mango');
-  FOfficeCombo.AddHeader('Vegetables');
-  FOfficeCombo.AddItem('Carrot');
+  FOfficeCombo.AddHeader(rsHdrFruit);
+  FOfficeCombo.AddItem(rsItemApple);
+  FOfficeCombo.AddItem(rsItemMango);
+  FOfficeCombo.AddHeader(rsHdrVegetables);
+  FOfficeCombo.AddItem(rsItemCarrot);
   FOfficeCombo.ItemIndex := 1;
 
   // Grouped list (OfficeListBox: header rows bold and not selectable)
-  FOfficeList.AddHeader('Inbox');
-  FOfficeList.AddItem('Meeting minutes');
-  FOfficeList.AddItem('Weekly report');
-  FOfficeList.AddHeader('Sent');
-  FOfficeList.AddItem('Quote for the customer');
-  FOfficeList.AddItem('Receipt confirmation');
+  FOfficeList.AddHeader(rsHdrInbox);
+  FOfficeList.AddItem(rsItemMinutes);
+  FOfficeList.AddItem(rsItemWeekly);
+  FOfficeList.AddHeader(rsHdrSent);
+  FOfficeList.AddItem(rsItemQuote);
+  FOfficeList.AddItem(rsItemReceipt);
 
   // Luminance bar drives the HS square's brightness (classic HSL linkage); wire after all controls exist.
   FLColor.OnChange := @LumChange;
 
   // Rich-row list (AdvancedListBox: each row has icon + bold title + dimmed subtitle; reuses the Imgs above)
   FAdvList.Images := Imgs;
-  FAdvList.AddItem('Save draft', 'Not synced · 2 minutes ago', 0);
-  FAdvList.AddItem('Open project', 'D:\work\ty-controls', 1);
-  FAdvList.AddItem('Print report', 'Default printer', 2);
-  FAdvList.AddItem('Item with no icon', 'Subtitle may be left blank', -1);
+  FAdvList.AddItem(rsAdvSaveDraft, rsAdvSaveSub, 0);
+  FAdvList.AddItem(rsAdvOpenProject, 'D:\work\ty-controls', 1);
+  FAdvList.AddItem(rsAdvPrintReport, rsAdvPrintSub, 2);
+  FAdvList.AddItem(rsAdvNoIcon, rsAdvNoIconSub, -1);
 
   // Rich-row combo (AdvancedComboBox: two-line rich items in the dropdown, field shows icon + title)
   FAdvCombo.Images := Imgs;
-  FAdvCombo.AddItem('Save', 'Write to disk', 0);
-  FAdvCombo.AddItem('Open', 'Choose file', 1);
-  FAdvCombo.AddItem('Print', 'Send to printer', 2);
+  FAdvCombo.AddItem(rsSave, rsAdvWriteDisk, 0);
+  FAdvCombo.AddItem(rsOpen, rsAdvChooseFile, 1);
+  FAdvCombo.AddItem(rsPrint, rsAdvSendPrinter, 2);
   FAdvCombo.ItemIndex := 0;
 
   // Name/value editor (ValueListEditor: property sheet, inline editing in the value column)
   FVLE.Images := Imgs;                             // row images come from the same virtual image list
-  VR := FVLE.AddRow('Width', '1280');
+  VR := FVLE.AddRow(rsVleWidth, '1280');
   VR.EditorKind := vekInteger;
   VR.Bold := True;                                 // per-row value styling: bold + colour
   VR.TextColor := clNavy;
-  FVLE.AddRow('Opacity', '0.85').EditorKind := vekFloat;   // float: digits, one '.', a leading '-'
-  FVLE.AddRow('Title', 'Rich Inputs example');         // plain text
-  VR := FVLE.AddRow('Align', 'taCenter');           // enum → dropdown
+  FVLE.AddRow(rsVleOpacity, '0.85').EditorKind := vekFloat;   // float: digits, one '.', a leading '-'
+  FVLE.AddRow(rsVleTitle, rsVleTitleVal);         // plain text
+  VR := FVLE.AddRow(rsVleAlign, 'taCenter');           // enum → dropdown
   VR.EditorKind := vekEnum;
   VR.EnumValues := 'taLeftJustify'#10'taCenter'#10'taRightJustify';
-  FVLE.AddRow('Foreground colour', 'clNavy').EditorKind := vekColor;    // color → swatch dropdown (last "More…" row opens the dialog)
-  FVLE.AddRow('Font', 'Segoe UI, 9').EditorKind := vekFont;  // leaf font → text + "…" opens the font dialog
-  VR := FVLE.AddRow('Data path', 'D:\data');         // text + "…" → the library's own path dialog (OnEditRow)
+  FVLE.AddRow(rsVleFgColour, 'clNavy').EditorKind := vekColor;    // color → swatch dropdown (last "More…" row opens the dialog)
+  FVLE.AddRow(rsVleFont, 'Segoe UI, 9').EditorKind := vekFont;  // leaf font → text + "…" opens the font dialog
+  VR := FVLE.AddRow(rsVleDataPath, 'D:\data');         // text + "…" → the library's own path dialog (OnEditRow)
   VR.EditorKind := vekDialog;
   VR.ImageIndex := 1;                              // a row image (index into FVLE.Images)
-  FVLE.AddRow('Licence key', 'ABCD-1234-EFGH').DisplayValue := '(hidden)';   // DisplayValue masks the real Value
-  VR := FVLE.AddRow('About', 'TyControls ' + TyVersion);   // user-side custom: "…" opens a read-only About dialog, no write-back
+  FVLE.AddRow(rsVleLicence, 'ABCD-1234-EFGH').DisplayValue := rsVleHidden;   // DisplayValue masks the real Value
+  VR := FVLE.AddRow(rsVleAbout, 'TyControls ' + TyVersion);   // user-side custom: "…" opens a read-only About dialog, no write-back
   VR.EditorKind := vekDialog;
-  VR := FVLE.AddRow('Theme', 'light.tycss');        // read-only + display-name override (i18n)
-  VR.DisplayKey := 'Theme (read-only)';
+  VR := FVLE.AddRow(rsVleTheme, 'light.tycss');        // read-only + display-name override (i18n)
+  VR.DisplayKey := rsVleThemeRO;
   VR.ReadOnly := True;
-  VR := FVLE.AddRow('Font', 'Segoe UI, 9');        // expandable multi-level + vekFont: "…" opens the font dialog and writes back the child properties
+  VR := FVLE.AddRow(rsVleFont, 'Segoe UI, 9');        // expandable multi-level + vekFont: "…" opens the font dialog and writes back the child properties
   VR.EditorKind := vekFont;
-  VR.AddChild('Name', 'Segoe UI');
-  VR.AddChild('Size', '9').EditorKind := vekInteger;
-  VR.AddChild('Color', 'clWindowText').EditorKind := vekColor;
-  VS := VR.AddChild('Style', 'Regular');           // second-level child (unlimited nesting: Font→Style→Bold)
-  VS.AddChild('Bold', 'False').EditorKind := vekBoolean;
-  VS.AddChild('Italic', 'False').EditorKind := vekBoolean;
-  VS.AddChild('Underline', 'False').EditorKind := vekBoolean;
-  VS.AddChild('StrikeOut', 'False').EditorKind := vekBoolean;
+  VR.AddChild(rsVleName, 'Segoe UI');
+  VR.AddChild(rsVleSize, '9').EditorKind := vekInteger;
+  VR.AddChild(rsVleColor, 'clWindowText').EditorKind := vekColor;
+  VS := VR.AddChild(rsVleStyle, rsVleRegular);           // second-level child (unlimited nesting: Font→Style→Bold)
+  VS.AddChild(rsVleBold, 'False').EditorKind := vekBoolean;
+  VS.AddChild(rsVleItalic, 'False').EditorKind := vekBoolean;
+  VS.AddChild(rsVleUnderline, 'False').EditorKind := vekBoolean;
+  VS.AddChild(rsVleStrikeOut, 'False').EditorKind := vekBoolean;
   FVLE.UpdateRows;                                 // refresh after adding child rows
   FVLE.OnValueChanged := @VleChange;
   FVLE.OnEditRow := @VleEditDialog;
@@ -317,7 +385,7 @@ end;
 
 procedure TMainForm.RangedChange(Sender: TObject);
 begin
-  FEcho.Caption := Format('Clamped value = %.2f  (clamped to 0..100 on blur)', [FRanged.Value]);
+  FEcho.Caption := Format(rsClampedFmt, [FRanged.Value]);
 end;
 
 procedure TMainForm.ComboDrop(Sender: TObject);
@@ -365,26 +433,26 @@ end;
 
 procedure TMainForm.VleChange(Sender: TObject; ARow: TTyValueRow);
 begin
-  FEcho.Caption := Format('Changed "%s" = %s', [ARow.Key, ARow.Value]);
+  FEcho.Caption := Format(rsChangedFmt, [ARow.Key, ARow.Value]);
 end;
 
 procedure TMainForm.VleEditDialog(Sender: TObject; ARow: TTyValueRow);
 var dir: string;
 begin
   // vekDialog = fully user-side custom: clicking "…" fires this event; each row decides what to pop up and whether to write the value back.
-  if SameText(ARow.Key, 'About') then
+  if SameText(ARow.Key, rsVleAbout) then
     // Informational only (read-only content): pop the library's own read-only About dialog; leave ARow.Value unchanged.
-    TyShowAbout('About', 'TyControls Rich Inputs example', 'v' + TyVersion,
-      'ValueListEditor host-side custom row-handling demo', '© 2026 ACTom', 'MIT License',
+    TyShowAbout(rsVleAbout, rsAboutTitle, 'v' + TyVersion,
+      rsAboutDesc, '© 2026 ACTom', 'MIT License',
       'https://github.com/ACTom/TyControls')
   else
   begin
     // Pop the [library's own] path dialog (not the native one), then write the result back into ARow.Value (which updates the display).
     dir := ARow.Value;
-    if TySelectDirectory('Choose data path', '', dir) then
+    if TySelectDirectory(rsChoosePath, '', dir) then
     begin
       ARow.Value := dir;
-      FEcho.Caption := Format('Changed "%s" = %s', [ARow.Key, ARow.Value]);
+      FEcho.Caption := Format(rsChangedFmt, [ARow.Key, ARow.Value]);
     end;
   end;
 end;
@@ -415,13 +483,13 @@ begin
   if c = clNone then
   begin
     PickPreview.StyleOverride := '';
-    LblPick.Caption := 'Picked: (none)';
+    LblPick.Caption := rsPickedNone;
     Exit;
   end;
   { TTyShape has no Color property on purpose — its fill is a theme token. To tint ONE
     instance, push a per-instance CSS declaration block through StyleOverride. }
   PickPreview.StyleOverride := 'background: ' + TyColorToHex(TyColorFromLCL(c), False) + ';';
-  LblPick.Caption := Format('Picked: %s = %s', [src, ColorToString(c)]);
+  LblPick.Caption := Format(rsPickedFmt, [src, ColorToString(c)]);
 end;
 
 procedure TMainForm.FontPickChange(Sender: TObject);

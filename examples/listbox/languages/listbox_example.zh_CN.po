@@ -58,3 +58,28 @@ msgstr "行高跟随主题（--item-height），直到你固定 ItemHeight —�
 #: tmainform.bar.caption
 msgid "TTyListBox  ·  TyControls"
 msgstr "TTyListBox  ·  TyControls"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rsactivatedfmt
+#, object-pascal-format
+msgid "Double-clicked (activate): %s"
+msgstr "双击（激活）：%s"
+
+#: umain.rscurselfmt
+#, object-pascal-format
+msgid "Currently selected: %s (item %d of %d)"
+msgstr "当前选中：%s（第 %d 项，共 %d 项）"
+
+#: umain.rscurselnone
+msgid "Currently selected: (none)"
+msgstr "当前选中：（无）"
+
+#: umain.rsmultiselfmt
+#, object-pascal-format
+msgid "Multi-select: %d selected — %s"
+msgstr "多选：已选 %d 项 —— %s"
+
+#: umain.rsnoneshort
+msgid "(none)"
+msgstr "（无）"

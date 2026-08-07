@@ -58,6 +58,19 @@ implementation
 
 {$R *.lfm}
 
+resourcestring
+  { Status texts. City items stay literals: Sorted=True orders them by the
+    byte sequence, and translating them re-orders the list underneath the
+    "preselect the first item" comment. }
+  rsAwaiting   = 'Event state: (awaiting action, try expanding or typing a prefix)';
+  rsReadOnly   = 'Read-only';
+  rsEditable   = 'Editable';
+  rsEventFmt   = 'Event state: [%s] %s → Text="%s" (ItemIndex=%d)';
+  rsEvChange   = 'OnChange';
+  rsEvSelect   = 'OnSelect';
+  rsEvDropDown = 'OnDropDown (expand)';
+  rsEvCloseUp  = 'OnCloseUp (collapse)';
+
 procedure TMainForm.FormCreate(Sender: TObject);
 var
   names: TStringArray;
@@ -86,7 +99,7 @@ begin
   // EditCombo needs no code: its Items and its initial Text are set in umain.lfm.
 
   // Restore the initial "waiting" status (setting ItemIndex above fires OnChange)
-  LblStatus.Caption := 'Event state: (awaiting action, try expanding or typing a prefix)';
+  LblStatus.Caption := rsAwaiting;
 end;
 
 procedure TMainForm.ThemeComboChange(Sender: TObject);
@@ -111,32 +124,32 @@ var
   Which: string;
 begin
   if ACombo = ListCombo then
-    Which := 'Read-only'
+    Which := rsReadOnly
   else
-    Which := 'Editable';
-  LblStatus.Caption := Format('Event state: [%s] %s → Text="%s" (ItemIndex=%d)',
+    Which := rsEditable;
+  LblStatus.Caption := Format(rsEventFmt,
     [Which, AEvt, ACombo.Text, ACombo.ItemIndex]);
 end;
 
 procedure TMainForm.ComboChange(Sender: TObject);
 begin
-  SetStatus('OnChange', Sender as TTyComboBox);
+  SetStatus(rsEvChange, Sender as TTyComboBox);
 end;
 
 procedure TMainForm.ComboSelect(Sender: TObject);
 begin
-  SetStatus('OnSelect', Sender as TTyComboBox);
+  SetStatus(rsEvSelect, Sender as TTyComboBox);
 end;
 
 procedure TMainForm.ComboDropDown(Sender: TObject);
 begin
-  SetStatus('OnDropDown (expand)', Sender as TTyComboBox);
+  SetStatus(rsEvDropDown, Sender as TTyComboBox);
 end;
 
 procedure TMainForm.ComboCloseUp(Sender: TObject);
 begin
   FLastCloseUp := GetTickCount64;
-  SetStatus('OnCloseUp (collapse)', Sender as TTyComboBox);
+  SetStatus(rsEvCloseUp, Sender as TTyComboBox);
 end;
 
 procedure TMainForm.BtnToggleListClick(Sender: TObject);

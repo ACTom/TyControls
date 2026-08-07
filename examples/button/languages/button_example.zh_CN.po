@@ -86,3 +86,25 @@ msgstr "AutoSize=True:我会撑大以显示这段长标题"
 #: tmainform.bar.caption
 msgid "TTyButton  ·  TyControls"
 msgstr "TTyButton  ·  TyControls"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rsclickcancelfmt
+#, object-pascal-format
+msgid "Click count: %d (Cancel button · Esc/ModalResult=mrCancel)"
+msgstr "点击次数：%d（取消按钮 · Esc/ModalResult=mrCancel）"
+
+#: umain.rsclickcountfmt
+#, object-pascal-format
+msgid "Click count: %d (%s)"
+msgstr "点击次数：%d（%s）"
+
+#: umain.rsclickdefaultfmt
+#, object-pascal-format
+msgid "Click count: %d (Default button · Enter/ModalResult=mrOk)"
+msgstr "点击次数：%d（默认按钮 · Enter/ModalResult=mrOk）"
+
+#: umain.rsclickinboxfmt
+#, object-pascal-format
+msgid "Click count: %d (Inbox badge value = %d)"
+msgstr "点击次数：%d（收件箱徽标值 = %d）"

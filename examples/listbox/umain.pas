@@ -74,6 +74,16 @@ implementation
 
 {$R *.lfm}
 
+resourcestring
+  { Status texts composed at run time. The city names are locale-neutral sample
+    data and stay literals (translating 30 city names buys the demo nothing:
+    they are recognisable romanisations either way). }
+  rsNoneShort    = '(none)';
+  rsMultiSelFmt  = 'Multi-select: %d selected — %s';
+  rsCurSelFmt    = 'Currently selected: %s (item %d of %d)';
+  rsCurSelNone   = 'Currently selected: (none)';
+  rsActivatedFmt = 'Double-clicked (activate): %s';
+
 procedure TMainForm.FormCreate(Sender: TObject);
 const
   Cities: array[0..29] of string = (
@@ -142,15 +152,15 @@ begin
         end;
       end;
     if shown > 4 then names := names + ', …';
-    if names = '' then names := '(none)';
-    LblStatus.Caption := Format('Multi-select: %d selected — %s', [ListBox.SelCount, names]);
+    if names = '' then names := rsNoneShort;
+    LblStatus.Caption := Format(rsMultiSelFmt, [ListBox.SelCount, names]);
   end
   else if ListBox.ItemIndex >= 0 then
-    LblStatus.Caption := Format('Currently selected: %s (item %d of %d)',
+    LblStatus.Caption := Format(rsCurSelFmt,
       [ListBox.Items[ListBox.ItemIndex], ListBox.ItemIndex + 1,
        ListBox.Items.Count])
   else
-    LblStatus.Caption := 'Currently selected: (none)';
+    LblStatus.Caption := rsCurSelNone;
 end;
 
 procedure TMainForm.ListBoxChange(Sender: TObject);
@@ -235,8 +245,7 @@ begin
   { Single click selects, DOUBLE click activates — the idiom every listbox user expects.
     OnDblClick comes from the shared TTy control base, so every control has it. }
   if ListBox.ItemIndex >= 0 then
-    LblStatus.Caption := Format('Double-clicked (activate): %s',
-      [ListBox.Items[ListBox.ItemIndex]]);
+    LblStatus.Caption := Format(rsActivatedFmt, [ListBox.Items[ListBox.ItemIndex]]);
 end;
 
 end.

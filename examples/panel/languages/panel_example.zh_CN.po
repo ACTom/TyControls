@@ -102,3 +102,26 @@ msgstr "Enabled = False"
 #: tmainform.bottompanel.caption
 msgid "Align = alBottom"
 msgstr "Align = alBottom"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rsevclick
+msgid "OnClick — a panel dispatches the whole mouse event set, not just paint."
+msgstr "OnClick —— 面板派发整套鼠标事件，不只是绘制。"
+
+#: umain.rseventer
+msgid "OnMouseEnter — the pointer is over the panel."
+msgstr "OnMouseEnter —— 指针在面板上。"
+
+#: umain.rsevleave
+msgid "OnMouseLeave — the pointer left the panel."
+msgstr "OnMouseLeave —— 指针离开了面板。"
+
+#: umain.rshellofmt
+#, object-pascal-format
+msgid "Hello, %s! Welcome to TyControls."
+msgstr "你好，%s！欢迎使用 TyControls。"
+
+#: umain.rsneedname
+msgid "Please enter a name first!"
+msgstr "请先输入名字！"

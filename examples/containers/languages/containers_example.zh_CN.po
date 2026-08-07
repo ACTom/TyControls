@@ -390,3 +390,106 @@ msgstr "电话号码"
 #: tmainform.divmore.caption
 msgid "More container modes — wrapping toolbar · auto-pan scroll container · a panel that starts collapsed · vertical edge lines · an invisible spacer"
 msgstr "更多容器形态 — 换行工具条 · 自动平移滚动容器 · 初始折叠面板 · 竖边线 · 不可见间隔"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rscollapsed
+msgid "collapsed"
+msgstr "已折叠"
+
+#: umain.rsexpanded
+msgid "expanded"
+msgstr "已展开"
+
+#: umain.rslogcolwidth
+#, object-pascal-format
+msgid "Column %s width = %d"
+msgstr "列 %s 宽度 = %d"
+
+#: umain.rslogfeature
+#, object-pascal-format
+msgid "Feature %s = %s"
+msgstr "功能 %s = %s"
+
+#: umain.rsloggroup
+#, object-pascal-format
+msgid "Group %s %s"
+msgstr "分组 %s %s"
+
+#: umain.rslogpanel
+#, object-pascal-format
+msgid "Panel %s: %s"
+msgstr "面板 %s：%s"
+
+#: umain.rslogselected
+#, object-pascal-format
+msgid "Selected: %s"
+msgstr "选中：%s"
+
+#: umain.rslogsize
+#, object-pascal-format
+msgid "Size = %s"
+msgstr "尺寸 = %s"
+
+#: umain.rslogsizenone
+msgid "Size = (nothing selected)"
+msgstr "尺寸 =（未选择）"
+
+#: umain.rslogsort
+#, object-pascal-format
+msgid "Sort by %s"
+msgstr "按 %s 排序"
+
+#: umain.rsoff
+msgid "off"
+msgstr "关"
+
+#: umain.rson
+msgid "on"
+msgstr "开"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rscolmodified
+msgid "Modified date"
+msgstr "修改日期"
+
+#: umain.rscolname
+msgid "Name"
+msgstr "名称"
+
+#: umain.rscolsize
+msgid "Size"
+msgstr "大小"
+
+#: umain.rsgrpcontact
+msgid "Contact"
+msgstr "联系人"
+
+#: umain.rsgrptask
+msgid "Task"
+msgstr "任务"
+
+#: umain.rspaintcaption
+msgid "OnPaintSurface — the app draws it itself with TTyPainter"
+msgstr "OnPaintSurface —— 应用用 TTyPainter 自己画"
+
+#: umain.rspersona
+msgid "Alice"
+msgstr "张三"
+
+#: umain.rspersonb
+msgid "Bob"
+msgstr "李四"
+
+#: umain.rspersonc
+msgid "Carol"
+msgstr "王五"
+
+#: umain.rstaskpublish
+msgid "Publish version"
+msgstr "发布版本"
+
+#: umain.rstaskreport
+msgid "Write report"
+msgstr "写报告"

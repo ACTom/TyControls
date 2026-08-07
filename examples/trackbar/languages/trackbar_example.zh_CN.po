@@ -78,3 +78,38 @@ msgstr "TrackBar  · TyControls"
 #: tmainform.animswitch.caption
 msgid "Animate thumb"
 msgstr "滑块动画"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rsanimoff
+msgid "AnimationsEnabled = False (thumb jumps)"
+msgstr "AnimationsEnabled = False（滑块直接跳）"
+
+#: umain.rsanimon
+msgid "AnimationsEnabled = True (thumb eases)"
+msgstr "AnimationsEnabled = True（滑块渐移）"
+
+#: umain.rsbalancefmt
+#, object-pascal-format
+msgid "Balance: %d"
+msgstr "平衡：%d"
+
+#: umain.rsbrightnessfmt
+#, object-pascal-format
+msgid "Brightness: %d"
+msgstr "亮度：%d"
+
+#: umain.rsfinefmt
+#, object-pascal-format
+msgid "Fine: %d"
+msgstr "微调：%d"
+
+#: umain.rsverticalfmt
+#, object-pascal-format
+msgid "Vertical: %d"
+msgstr "垂直：%d"
+
+#: umain.rsvolumefmt
+#, object-pascal-format
+msgid "Volume: %d"
+msgstr "音量：%d"

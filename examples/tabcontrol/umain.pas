@@ -84,6 +84,24 @@ implementation
 
 {$R *.lfm}
 
+resourcestring
+  { Status texts and run-time page captions composed in code, so they live here
+    rather than in the .lfm. }
+  rsCurPageFmt   = 'Current page: %s (index %d of %d pages)';
+  rsNoPage       = '(none)';
+  rsNeedUsername = 'Enter a username before leaving this page (blocked by OnChanging).';
+  rsClosingFmt   = 'Closing page: %s';
+  rsCloseVetoFmt = '"%s" is a designed page - OnTabClose vetoed the close.';
+  rsReorderedFmt = 'Pages reordered: %d -> %d (current: %s)';
+  rsNewPageFmt   = 'New page %d';
+  rsNewPageBody  = 'This is the %dth page added at runtime.';
+  rsOnlyRuntime  = 'Only a page added at run time can be removed - add one first.';
+  rsRemovedFmt   = 'RemovePage removed "%s"; %d pages left.';
+  rsHideStrip    = 'Hide tab strip';
+  rsStripBack    = 'TabHeight = 32: the header strip is back.';
+  rsShowStrip    = 'Show tab strip';
+  rsStripGone    = 'TabHeight = 0: no strip - the buttons above are the only pager.';
+
 procedure TMainForm.FormCreate(Sender: TObject);
 var
   names: TStringArray;
@@ -99,7 +117,7 @@ begin
   ApplyChromeTheme(TyDefaultController);   // theme the window chrome + background
 
   { Reflect the initially active page in the status bar (OnChange is not fired during load) }
-  LblStatus.Caption := Format('Current page: %s (index %d of %d pages)',
+  LblStatus.Caption := Format(rsCurPageFmt,
     [PageTitle(PageCtrl.ActivePage), PageCtrl.ActivePageIndex, PageCtrl.PageCount]);
 end;
 
@@ -113,7 +131,7 @@ var
   MnemonicPos: Integer;
 begin
   if APage = nil then
-    Exit('(none)');
+    Exit(rsNoPage);
   TyParseMnemonic(APage.Caption, Display, MnemonicPos);
   Result := Display;
 end;
@@ -149,7 +167,7 @@ end;
 procedure TMainForm.PageChanged(Sender: TObject);
 begin
   if LblStatus = nil then Exit;   { the status bar isn't streamed yet during the initial auto-select }
-  LblStatus.Caption := Format('Current page: %s (index %d of %d pages)',
+  LblStatus.Caption := Format(rsCurPageFmt,
     [PageTitle(PageCtrl.ActivePage), PageCtrl.ActivePageIndex, PageCtrl.PageCount]);
 end;
 
@@ -164,7 +182,7 @@ begin
   if (PageCtrl.ActivePage = PgGeneral) and (Trim(EdUser.Text) = '') then
   begin
     AllowChange := False;
-    LblStatus.Caption := 'Enter a username before leaving this page (blocked by OnChanging).';
+    LblStatus.Caption := rsNeedUsername;
   end;
 end;
 
@@ -180,10 +198,9 @@ begin
   AllowClose := not IsFixedPage(Page);
   if LblStatus = nil then Exit;
   if AllowClose then
-    LblStatus.Caption := Format('Closing page: %s', [PageTitle(Page)])
+    LblStatus.Caption := Format(rsClosingFmt, [PageTitle(Page)])
   else
-    LblStatus.Caption := Format('"%s" is a designed page - OnTabClose vetoed the close.',
-      [PageTitle(Page)]);
+    LblStatus.Caption := Format(rsCloseVetoFmt, [PageTitle(Page)]);
 end;
 
 { Drag-reorder notification (OnReorder): fired once per committed gesture with the
@@ -191,7 +208,7 @@ end;
 procedure TMainForm.PagesReordered(Sender: TObject; AFromIndex, AToIndex: Integer);
 begin
   if LblStatus = nil then Exit;
-  LblStatus.Caption := Format('Pages reordered: %d -> %d (current: %s)',
+  LblStatus.Caption := Format(rsReorderedFmt,
     [AFromIndex, AToIndex, PageTitle(PageCtrl.ActivePage)]);
 end;
 
@@ -219,11 +236,11 @@ var
   NewPage: TTyTabSheet;
 begin
   Inc(FExtraCount);
-  NewPage := PageCtrl.AddPage(Format('New page %d', [FExtraCount]));
+  NewPage := PageCtrl.AddPage(Format(rsNewPageFmt, [FExtraCount]));
   with TTyLabel.Create(Self) do
   begin
     Parent  := NewPage;
-    Caption := Format('This is the %dth page added at runtime.', [FExtraCount]);
+    Caption := Format(rsNewPageBody, [FExtraCount]);
     SetBounds(16, 20, 460, 22);
   end;
   { switch to the page just added (it's the last one) }
@@ -242,13 +259,12 @@ begin
   if Page = nil then Exit;
   if IsFixedPage(Page) then
   begin
-    LblStatus.Caption := 'Only a page added at run time can be removed - add one first.';
+    LblStatus.Caption := rsOnlyRuntime;
     Exit;
   end;
   Gone := PageTitle(Page);
   PageCtrl.RemovePage(PageCtrl.ActivePageIndex);
-  LblStatus.Caption := Format('RemovePage removed "%s"; %d pages left.',
-    [Gone, PageCtrl.PageCount]);
+  LblStatus.Caption := Format(rsRemovedFmt, [Gone, PageCtrl.PageCount]);
 end;
 
 { TabHeight = 0 means NO header strip: the pages fill the whole control and the host
@@ -259,14 +275,14 @@ begin
   if PageCtrl.TabHeight = 0 then
   begin
     PageCtrl.TabHeight := 32;
-    BtnToggleStrip.Caption := 'Hide tab strip';
-    LblStatus.Caption := 'TabHeight = 32: the header strip is back.';
+    BtnToggleStrip.Caption := rsHideStrip;
+    LblStatus.Caption := rsStripBack;
   end
   else
   begin
     PageCtrl.TabHeight := 0;
-    BtnToggleStrip.Caption := 'Show tab strip';
-    LblStatus.Caption := 'TabHeight = 0: no strip - the buttons above are the only pager.';
+    BtnToggleStrip.Caption := rsShowStrip;
+    LblStatus.Caption := rsStripGone;
   end;
 end;
 

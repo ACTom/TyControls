@@ -73,6 +73,15 @@ implementation
 
 {$R *.lfm}
 
+resourcestring
+  { Status texts composed at run time (FormatDateTime patterns are data). }
+  rsEmpty     = '(empty)';
+  rsStatusFmt = 'Date:%s' + sLineBreak + 'Time:%s' + sLineBreak + 'Nullable:%s'
+    + sLineBreak
+    + 'Tip: ←/→ switch field, ↑/↓ or wheel to step, type a digit directly, chevron opens the calendar.';
+  rsCalOpened = 'Calendar opened: click a date or press Enter to confirm, Esc to cancel.';
+  rsDroppedFmt = 'DroppedDown = %s';
+
 procedure TMainForm.FormCreate(Sender: TObject);
 var
   names: TStringArray;
@@ -144,12 +153,10 @@ begin
   if CheckPicker.Checked then
     CheckState := FormatDateTime('yyyy/mm/dd', CheckPicker.DateTime)
   else
-    CheckState := '(empty)';
-  LblStatus.Caption :=
-    'Date:' + FormatDateTime('yyyy-mm-dd', DatePicker.DateTime) + sLineBreak +
-    'Time:' + FormatDateTime('hh:nn:ss',   TimePicker.DateTime) + sLineBreak +
-    'Nullable:' + CheckState + sLineBreak +
-    'Tip: ←/→ switch field, ↑/↓ or wheel to step, type a digit directly, chevron opens the calendar.';
+    CheckState := rsEmpty;
+  LblStatus.Caption := Format(rsStatusFmt,
+    [FormatDateTime('yyyy-mm-dd', DatePicker.DateTime),
+     FormatDateTime('hh:nn:ss',   TimePicker.DateTime), CheckState]);
 end;
 
 procedure TMainForm.DateChanged(Sender: TObject);
@@ -174,7 +181,7 @@ end;
 
 procedure TMainForm.DropDownOpened(Sender: TObject);
 begin
-  LblStatus.Caption := 'Calendar opened: click a date or press Enter to confirm, Esc to cancel.';
+  LblStatus.Caption := rsCalOpened;
 end;
 
 procedure TMainForm.DropDownClosed(Sender: TObject);
@@ -182,7 +189,7 @@ begin
   RefreshStatus;
   // Read the state back: by the time OnCloseUp fires the popup is already shut.
   LblStatus.Caption := LblStatus.Caption + sLineBreak +
-    'DroppedDown = ' + BoolToStr(DatePicker.DroppedDown, True);
+    Format(rsDroppedFmt, [BoolToStr(DatePicker.DroppedDown, True)]);
 end;
 
 end.

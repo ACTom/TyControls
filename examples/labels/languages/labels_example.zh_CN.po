@@ -66,3 +66,9 @@ msgstr "GlowRadius = 14 —— 一圈宽而柔的光晕（更大的值钳到 64�
 #: tmainform.bar.caption
 msgid "Labels  · TyControls"
 msgstr "Labels  · TyControls"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rsactionclicked
+msgid "OnClick fired — AutoOpen = False lets the app decide"
+msgstr "OnClick 已触发 —— AutoOpen = False 让应用自己决定"

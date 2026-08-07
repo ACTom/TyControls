@@ -70,3 +70,35 @@ msgstr "键盘：Alt+A / Alt+N 激活标有 && 的复选框（按住 Alt 时显�
 #: tmainform.bar.caption
 msgid "TTyCheckBox  ·  TyControls"
 msgstr "TTyCheckBox  ·  TyControls"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rseventcountfmt
+#, object-pascal-format
+msgid "OnChange fired %d time(s), OnClick %d time(s)"
+msgstr "OnChange 触发 %d 次，OnClick %d 次"
+
+#: umain.rsstchecked
+msgid "Checked (cbChecked)"
+msgstr "已勾选（cbChecked）"
+
+#: umain.rsstgrayed
+msgid "Grayed (cbGrayed)"
+msgstr "半选（cbGrayed）"
+
+#: umain.rsstunchecked
+msgid "Unchecked (cbUnchecked)"
+msgstr "未勾选（cbUnchecked）"
+
+#: umain.rstrifmt
+#, object-pascal-format
+msgid "Tri-state:%s"
+msgstr "三态：%s"
+
+#: umain.rstwochecked
+msgid "Two-state: checked"
+msgstr "两态：已勾选"
+
+#: umain.rstwounchecked
+msgid "Two-state: unchecked"
+msgstr "两态：未勾选"

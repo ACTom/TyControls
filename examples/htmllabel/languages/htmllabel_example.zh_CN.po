@@ -38,3 +38,10 @@ msgstr "AutoSize = True —— 把窗口拖窄，看这个标签自己变高"
 #: tmainform.titlebar1.caption
 msgid "TTyHtmlLabel  ·  TyControls"
 msgstr "TTyHtmlLabel  ·  TyControls"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rsclickedlinkfmt
+#, object-pascal-format
+msgid "Clicked link: %s"
+msgstr "点了链接：%s"

@@ -51,6 +51,11 @@ implementation
 
 {$R *.lfm}
 
+resourcestring
+  rsDragDoneFmt = 'Drag complete · left column %d px · top band %d px · inspector %d px';
+  rsRejectedFmt = 'Rejected · %d px exceeds the 400 px cap';
+  rsDraggingFmt = 'Dragging · target size %d px';
+
 procedure TMainForm.FormCreate(Sender: TObject);
 var
   names: TStringArray;
@@ -87,7 +92,7 @@ procedure TMainForm.HandleMoved(Sender: TObject);
 begin
   // Fires once per drag, and only when the target's size actually changed. All three
   // splitters share it -- the readout simply reports every pane.
-  LblStatus.Caption := Format('Drag complete · left column %d px · top band %d px · inspector %d px',
+  LblStatus.Caption := Format(rsDragDoneFmt,
     [LeftPanel.Width, TopPanel.Height, InspectorPanel.Width]);
 end;
 
@@ -99,14 +104,14 @@ begin
   if ANewSize > 400 then
   begin
     AAccept := False;
-    LblStatus.Caption := Format('Rejected · %d px exceeds the 400 px cap', [ANewSize]);
+    LblStatus.Caption := Format(rsRejectedFmt, [ANewSize]);
     Exit;
   end;
   // All three splitters share this handler, but they reach it very differently: VSplit and
   // RSplit are rsUpdate, so this runs on every mouse move and the caption reads as a live
   // preview; HSplit is rsLine, so the whole drag is deferred and this runs exactly once,
   // on mouse-up.
-  LblStatus.Caption := Format('Dragging · target size %d px', [ANewSize]);
+  LblStatus.Caption := Format(rsDraggingFmt, [ANewSize]);
 end;
 
 end.

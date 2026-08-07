@@ -57,6 +57,11 @@ implementation
 
 {$R *.lfm}
 
+resourcestring
+  rsTooltipFmt = '(series %d, point %d)';
+  rsHitFmt     = 'Hit: series %d, point %d';
+  rsHitNothing = 'Hit: nothing there';
+
 procedure TMainForm.FormCreate(Sender: TObject);
 var
   names: TStringArray;
@@ -104,7 +109,7 @@ procedure TMainForm.ChartGetTooltip(Sender: TObject; ASeries, APoint: Integer;
 begin
   // AText arrives holding the chart's own default text; append rather than replace, so the
   // reader can see both the built-in wording and the app's addition.
-  AText := AText + LineEnding + Format('(series %d, point %d)', [ASeries, APoint]);
+  AText := AText + LineEnding + Format(rsTooltipFmt, [ASeries, APoint]);
 end;
 
 procedure TMainForm.ChartMouseDown(Sender: TObject; Button: TMouseButton;
@@ -115,9 +120,9 @@ begin
   // HitTestAt answers the SAME datum the tooltip reads, so click-to-drill needs no geometry.
   Hit := Chart.HitTestAt(X, Y);
   if TyChartHitValid(Hit) then
-    LblHit.Caption := Format('Hit: series %d, point %d', [Hit.SeriesIndex, Hit.PointIndex])
+    LblHit.Caption := Format(rsHitFmt, [Hit.SeriesIndex, Hit.PointIndex])
   else
-    LblHit.Caption := 'Hit: nothing there';
+    LblHit.Caption := rsHitNothing;
 end;
 
 end.

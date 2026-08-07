@@ -63,6 +63,16 @@ implementation
 
 {$R *.lfm}
 
+resourcestring
+  { Status texts composed at run time, so they live here rather than in the .lfm. }
+  rsVolumeFmt     = 'Volume: %d';
+  rsBalanceFmt    = 'Balance: %d';
+  rsVerticalFmt   = 'Vertical: %d';
+  rsBrightnessFmt = 'Brightness: %d';
+  rsFineFmt       = 'Fine: %d';
+  rsAnimOn  = 'AnimationsEnabled = True (thumb eases)';
+  rsAnimOff = 'AnimationsEnabled = False (thumb jumps)';
+
 procedure TMainForm.FormCreate(Sender: TObject);
 var
   names: TStringArray;
@@ -97,29 +107,29 @@ end;
 
 procedure TMainForm.Track1Change(Sender: TObject);
 begin
-  LblStatus.Caption := Format('Volume: %d', [(Sender as TTyTrackBar).Position]);
+  LblStatus.Caption := Format(rsVolumeFmt, [(Sender as TTyTrackBar).Position]);
 end;
 
 procedure TMainForm.Track2Change(Sender: TObject);
 begin
-  LblStatus.Caption := Format('Balance: %d', [(Sender as TTyTrackBar).Position]);
+  LblStatus.Caption := Format(rsBalanceFmt, [(Sender as TTyTrackBar).Position]);
 end;
 
 procedure TMainForm.Track3Change(Sender: TObject);
 begin
-  LblStatus.Caption := Format('Vertical: %d', [(Sender as TTyTrackBar).Position]);
+  LblStatus.Caption := Format(rsVerticalFmt, [(Sender as TTyTrackBar).Position]);
 end;
 
 procedure TMainForm.Track4Change(Sender: TObject);
 begin
-  LblStatus.Caption := Format('Brightness: %d', [(Sender as TTyTrackBar).Position]);
+  LblStatus.Caption := Format(rsBrightnessFmt, [(Sender as TTyTrackBar).Position]);
 end;
 
 { LineSize = 5: every arrow key and every wheel notch moves this bar by 5, while
   PageUp/PageDown still move by PageSize (25). }
 procedure TMainForm.Track5Change(Sender: TObject);
 begin
-  LblStatus.Caption := Format('Fine: %d', [(Sender as TTyTrackBar).Position]);
+  LblStatus.Caption := Format(rsFineFmt, [(Sender as TTyTrackBar).Position]);
 end;
 
 { AnimationsEnabled is PUBLIC, not published, so no .lfm can reach it -- only code.
@@ -133,9 +143,9 @@ begin
   Track4.AnimationsEnabled := AnimSwitch.Checked;
   Track5.AnimationsEnabled := AnimSwitch.Checked;
   if AnimSwitch.Checked then
-    LblStatus.Caption := 'AnimationsEnabled = True (thumb eases)'
+    LblStatus.Caption := rsAnimOn
   else
-    LblStatus.Caption := 'AnimationsEnabled = False (thumb jumps)';
+    LblStatus.Caption := rsAnimOff;
 end;
 
 end.
