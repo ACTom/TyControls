@@ -453,16 +453,33 @@ begin
       st := c.Model.ResolveStyle('TyGridPanel', '', []);
       AssertFalse('主题 ' + names[i] + ' 不该给 TyGridPanel 背景(否则间隔变白块)',
         tpBackground in st.Present);
+      { 格子本身同理。它有**自己的**键(TyGridPanelCell),不再借数据网格的
+        TyGridCell —— 借着的时候,给数据格上色会连带把布局格也上了色,
+        而想单独给布局格上色又办不到(数据格的 base 是 `background: none`)。 }
+      st := c.Model.ResolveStyle('TyGridPanelCell', '', []);
+      AssertFalse('主题 ' + names[i] + ' 不该给 TyGridPanelCell 背景(格子是脚手架,'
+        + '要透出它所在的表面 —— 渐变也要透)', tpBackground in st.Present);
     end;
+    { 对照:数据网格的 TyGridCell **是**定义了的。这一条证明上面那个 False
+      不是因为解析器对什么键都返回空 —— 也钉住了两个键确实是分开的两条规则。 }
+    c.ThemeName := 'default';
+    st := c.Model.ResolveStyle('TyGridCell', '', []);
+    AssertTrue('数据网格的 TyGridCell 有自己的规则(对照)',
+      (tpTextColor in st.Present) or (tpPadding in st.Present));
     // Contrast: TyPanel (the key the grid used to borrow) DOES carry a surface — proving the
     // resolver isn't simply returning empty for every key.
     c.ThemeName := 'default';
     st := c.Model.ResolveStyle('TyPanel', '', []);
     AssertTrue('TyPanel 本身应有背景(对照)', tpBackground in st.Present);
-    // And a theme CAN opt in to a visible grid surface.
-    c.LoadThemeCss('TyGridPanel { background: #FF0000; }');
+    // And a theme CAN opt in to a visible grid surface — for the host and the cell alike.
+    // (Transparent is the DEFAULT, not the only option: the cell paints through DrawFrame,
+    //  so a skin that defines the key gets surface + border + radius for free.)
+    c.LoadThemeCss('TyGridPanel { background: #FF0000; }'
+      + 'TyGridPanelCell { background: #00FF00; }');
     st := c.Model.ResolveStyle('TyGridPanel', '', []);
     AssertTrue('主题显式定义后应有背景', tpBackground in st.Present);
+    st := c.Model.ResolveStyle('TyGridPanelCell', '', []);
+    AssertTrue('格子的键同样可以被主题接管', tpBackground in st.Present);
   finally
     c.Free;
   end;

@@ -46,6 +46,10 @@ type
     procedure SetParent(AParent: TWinControl); override;
     function GetStyleTypeKey: string; override;
     procedure AdjustClientRect(var ARect: TRect); override;
+    { Split out of Paint so the paint path is drivable with NO window handle (the
+      test.bevel / test.card access-subclass pattern) — a cell's whole visual job is
+      "show what is behind me", and that is exactly what a headless render can check. }
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
   public
     constructor Create(AOwner: TComponent); override;
@@ -659,7 +663,19 @@ end;
 
 function TTyGridCell.GetStyleTypeKey: string;
 begin
-  Result := 'TyGridCell';
+  { Its OWN key, and NOT 'TyGridCell' — that name belongs to the DATA grid's body cell
+    (TTyGrid; themes/light.tycss defines it, plus :hover/:selected/padding). Two unrelated
+    controls answering to one key is the borrowed-typeKey defect: a skin that wanted to tint
+    data cells silently tinted every layout cell as well, and a skin that wanted to give the
+    layout cell a surface could not — the data cell's base rule is `background: none` BY
+    DESIGN (a body cell must let the grid surface through), so the layout cell inherited a
+    transparency it never asked for and could never override.
+
+    Named 'TyGridPanelCell' to sit beside its host's 'TyGridPanel'. Like that key, the
+    shipped themes leave it UNDEFINED on purpose — see the note in themes/light.tycss, and
+    tests/test.gridpanel.pas's TestGutterIsTransparentUnlessThemed, which sweeps every
+    built-in theme for BOTH keys (and pins that a theme CAN still claim either one). }
+  Result := 'TyGridPanelCell';
 end;
 
 procedure TTyGridCell.SetPadding(AValue: Integer);
@@ -693,10 +709,45 @@ begin
     TTyGridPanel(AParent).RegisterCell(Self);
 end;
 
+procedure TTyGridCell.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+var
+  P: TTyPainter;
+  R: TRect;
+begin
+  R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
+  if (R.Right <= 0) or (R.Bottom <= 0) then Exit;
+  P := TTyPainter.Create;
+  try
+    P.BeginPaint(ACanvas, ARect, APPI);
+    { DrawFrame's FIRST act is TyFillParentBg (tyControls.Base) — and that is the whole fix.
+
+      A cell is a WINDOWED control, so it does not inherit its parent's painted pixels: its
+      own HWND is erased by the widgetset with the control's LCL Color before Paint runs.
+      With an EMPTY Paint nothing ever overwrote that erase, so every cell showed the raw
+      system colour — a LIGHT rectangle punched through a dark window, and on a gradient form
+      background a flat patch that broke the sweep. (The same defect, and the same fix, as
+      the host: see TTyGridPanel.GetStyleTypeKey.)
+
+      TyFillParentBg re-expresses the PARENT's backdrop in this cell's rect — a gradient
+      hands down the slice of its sweep that this cell covers, and an image theme hands down
+      the form photo at the right offset — so the cell reads as genuinely transparent instead
+      of as a hole. That is why this is a fill and not `background: var(--surface)`: a solid
+      mode-following fill would fix the dark-mode patch and still band a gradient.
+
+      And because it goes through DrawFrame rather than calling TyFillParentBg directly, a
+      skin that DOES define TyGridPanelCell gets the full treatment — surface, border, radius,
+      shadow — for free. Transparent is the default, not the only option. }
+    DrawFrame(P, R, CurrentStyle);
+    P.EndPaint;
+  finally
+    P.Free;
+  end;
+end;
+
 procedure TTyGridCell.Paint;
 begin
-  // Transparent: draw nothing at runtime. (Design-time grid lines are painted by
-  // the parent TTyGridPanel, not per-cell.)
+  { Design-time grid guides are painted by the parent TTyGridPanel, not per-cell. }
+  RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
 initialization

@@ -168,7 +168,13 @@ type
     goCellHints,           { 逐格提示(批注 + OnGetCellHint) }
     goTruncCellHints,      { 文字放不下时用完整文本当提示 }
     goCellEllipsis,        { 放不下的单行文字末尾加"…";关掉则硬裁 }
-    goRowHighlight         { 高亮光标所在的整行 }
+    goRowHighlight,        { 高亮光标所在的整行 }
+    { 按住的列头段画成"按下去"的样子。**追加在末尾**(见上面的序号约定)。
+      自有位,不是视图:按下态的观感在别处没有第二个开关,FDragCol 也不是它 ——
+      那个字段只有在 hoDrag 且该列 coDraggable 时才置位,而"按住了"与"能不能拖"
+      是两件事。出厂**关**:这个观感以前根本不存在,默认开会改掉每一张现有窗体,
+      而这个属性是来描述现状的,不是来偷偷改现状的。 }
+    goHeaderPushedLook
   );
   TTyGridOptions = set of TTyGridOption;
 
@@ -835,6 +841,11 @@ type
       那个只在正文格上有值,而列头带上根本不是格 —— 合成一个的话,
       鼠标移到列头会把正文里的 hover 一起点亮。 }
     FHoverHeaderCol:   Integer;
+    { 正被**按住**的列头段(-1 = 没有)。goHeaderPushedLook 的状态源。
+      与 FHoverHeaderCol 分开:鼠标停在一段上和把它按下去是两回事,按下的那段
+      要压过 hover 的观感。也与 FDragCol 分开:后者只在 hoDrag + coDraggable
+      时才置位,是"这一列可能要被拖走"的候选,不是"这一段被按住了"。 }
+    FPressedHeaderCol: Integer;
     { 逐格样式解析的记忆化。**这是 A2 渲染管线逐格化能不掉速的全部原因**:
       按状态组合缓存,绝大多数格状态相同(空集)于是整帧只解析一次;
       只有 hover/选中/被钩子改过的那几格才多解析几次。 }
@@ -3794,6 +3805,7 @@ begin
   FHoverCol := -1;
   FHoverRow := -1;
   FHoverHeaderCol := -1;
+  FPressedHeaderCol := -1;
   FPressedBtnCol := -1;
   FPressedBtnRow := -1;
   FResizeRow := -1;
@@ -6506,6 +6518,10 @@ begin
   if d >= 0 then
   begin
     if Assigned(FOnHeaderClick) then FOnHeaderClick(Self, d);
+    { 记下被按住的那一段。**状态总是记**、重绘只在 goHeaderPushedLook 开着时做:
+      标志关掉时这条路径与从前逐位一致(连重绘次数都一样),不给现有窗体添一帧。 }
+    FPressedHeaderCol := d;
+    if goHeaderPushedLook in Options then Invalidate;
     col := TTyColumn(FHeader.Columns.Items[d]);
     if (hoDrag in FHeader.Options) and (coDraggable in col.Options) then
     begin
@@ -6618,6 +6634,12 @@ begin
   FResizeRow := -1;
   FDragCol := -1;
   FDragRow := -1;
+  { 松手 = 不再按住。同样只在标志开着时重绘(见 MouseDown)。 }
+  if FPressedHeaderCol >= 0 then
+  begin
+    FPressedHeaderCol := -1;
+    if goHeaderPushedLook in Options then Invalidate;
+  end;
   inherited MouseUp(Button, Shift, X, Y);
 end;
 
@@ -6710,14 +6732,24 @@ var
   col: TTyColumn;
   bmp: TBGRABitmap;
   imgList: TTyVirtualImageList;
-  secS, hdrS, actHdrS, hotS: TTyStyleSet;
-  hotTrack: Boolean;
+  secS, hdrS, actHdrS, hotS, pushS: TTyStyleSet;
+  hotTrack, pushed: Boolean;
   ink: TTyColor;
   r, textR: TRect;
   line: TBGRAPixel;
 begin
-  hdrS := ActiveController.Model.ResolveStyle('TyGridHeader', StyleClass, CurrentStates);
-  secS := ActiveController.Model.ResolveStyle('TyGridHeaderSection', StyleClass, CurrentStates);
+  { **`tysActive` 必须从这两趟里剔掉。** CurrentStates 是**整个控件**的状态:鼠标在
+    表格里任何地方按下去,控件就带上 tysActive。列头带和列头段是 chrome,不是按钮 ——
+    "用户正在这张表上按着鼠标"不等于"这一段被按下去了"。
+
+    不剔的话,新加的 TyGridHeaderSection:active 规则会从这里漏进来:随便点一下正文,
+    整条列头带的每一段都换底,而且 goHeaderPushedLook 关着也照样发生。按下去的观感
+    **只有一个来源** —— 下面那趟按 FPressedHeaderCol 逐段判定、且由标志把门的解析。
+    (加这条规则之前 :active 不存在,所以剔掉它对既有主题逐像素无影响。) }
+  hdrS := ActiveController.Model.ResolveStyle('TyGridHeader', StyleClass,
+    CurrentStates - [tysActive]);
+  secS := ActiveController.Model.ResolveStyle('TyGridHeaderSection', StyleClass,
+    CurrentStates - [tysActive]);
   if tpTextColor in secS.Present then ink := secS.TextColor
   else if tpTextColor in hdrS.Present then ink := hdrS.TextColor
   else ink := CurrentStyle.TextColor;
@@ -6740,6 +6772,17 @@ begin
   if hotTrack then
     hotS := ActiveController.Model.ResolveStyle('TyGridHeaderSection',
       StyleClass, [tysHover]);
+
+  { 按下去的那一段 —— goHeaderPushedLook。这个标志从前**没有进枚举**,理由写在
+    docs/controls/grid.md 的对照表里:主题当时没有 TyGridHeaderSection:active,
+    按下态解析出来会退回 base 的 `background: none`,与静止态一模一样 ——
+    发布一个控件不照办的标志正是这一轮要清掉的缺陷类。规则补上了(themes/light.tycss),
+    这里才是接线的地方。
+    与 hotS 同样**在循环外解析一次**:每段各解析一遍会把逐格记忆化的好处全赔掉。 }
+  pushed := (goHeaderPushedLook in Options) and (FPressedHeaderCol >= 0);
+  if pushed then
+    pushS := ActiveController.Model.ResolveStyle('TyGridHeaderSection',
+      StyleClass, [tysActive]);
 
   imgList := HeaderImageList;
 
@@ -6776,6 +6819,17 @@ begin
         hdrHasBg := True;
       end;
       if tpTextColor in hotS.Present then hdrInk := hotS.TextColor;
+    end;
+    { 按住的那一段压过 hover:鼠标当然还停在它上面,但"按下去"是更强的状态。
+      顺序即优先级 —— 这一段必须在 hover 之后、宿主钩子之前。 }
+    if pushed and (i = FPressedHeaderCol) then
+    begin
+      if (tpBackground in pushS.Present) and (pushS.Background.Kind <> tfkNone) then
+      begin
+        hdrBg := pushS.Background;
+        hdrHasBg := True;
+      end;
+      if tpTextColor in pushS.Present then hdrInk := pushS.TextColor;
     end;
     hdrFontName := hdrS.FontName;
     hdrFontSize := ResolveFontSize(hdrS);

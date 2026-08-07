@@ -794,19 +794,16 @@ begin
     'TyGridHeaderSection { background: none; color: var(--on-surface); border-color: var(--border); }' + LineEnding +
     'TyGridHeaderSection:hover    { background: var(--surface-hover); }' + LineEnding +
     'TyGridHeaderSection:selected { background: var(--surface-active); }' + LineEnding +
-    '/* 按下态(“列头按下去”的观感)。这条规则以前不存在,于是按下的列头解析回 base 的' + LineEnding +
-    '   `background: none` —— 与静止态一模一样,看不出被按下。docs/controls/grid.md 因此' + LineEnding +
-    '   把 LCL 的 goHeaderPushedLook 记为“不收:缺主题 token”,理由正是这里缺一条规则:' + LineEnding +
-    '   与其发布一个控件不照办的标志,不如先把缝补上。这条规则补的就是那个缝。' + LineEnding +
-    '   取值走 --surface-active(darken(--surface,10%))—— 本库“按下”一律用它' + LineEnding +
+    '/* 按下态("列头按下去"的观感)。这条规则以前不存在,于是按下的列头解析回 base 的' + LineEnding +
+    '   `background: none` —— 与静止态一模一样,看不出被按下。与其发布一个控件不照办的标志,' + LineEnding +
+    '   不如先把缝补上;这条规则补的就是那个缝,控件侧的 goHeaderPushedLook 随后接上。' + LineEnding +
+    '   取值走 --surface-active(darken(--surface,10%))—— 本库"按下"一律用它' + LineEnding +
     '   (见 TyButton:active),不新造硬编码值。它比列头带自己的 --surface-chrome' + LineEnding +
     '   (darken 6%)更深,所以按下的那一段在带子上读得出来。' + LineEnding +
-    '   与 :selected 同值是有意的:两者都是“这一段正被使用”,而真正的差别是相对 base' + LineEnding +
+    '   只写在**基层**这一份:--surface-active 是派生式,各模式的 seed 自己会换,dark 下无需再写一条。' + LineEnding +
+    '   与 :selected 同值是有意的:两者都是"这一段正被使用",而真正的差别是相对 base' + LineEnding +
     '   的 `none` —— 按下去现在有底色了。tests/test.themes 的 golden 第 2 号状态槽' + LineEnding +
-    '   (STATES[2] = [tysActive])把这条钉住。' + LineEnding +
-    '   注意:主题这一层到此为止。控件侧(把 goHeaderPushedLook 加进 TTyGridOption、' + LineEnding +
-    '   在 RenderHeaderSections 里按 [tysActive] 解析被按住的那一段)仍未接线,' + LineEnding +
-    '   属 source/tyControls.Grid.pas,不在本次改动范围内。 */' + LineEnding +
+    '   (STATES[2] = [tysActive])把这条钉住。 */' + LineEnding +
     'TyGridHeaderSection:active   { background: var(--surface-active); }' + LineEnding +
     '/* 分组表头带(横跨若干列的上层标题)。自己的键 —— 与叶子列头分开配才有意义。 */' + LineEnding +
     'TyGridHeaderGroup { background: var(--surface-active); color: var(--on-surface); border-color: var(--border); }' + LineEnding +
@@ -1131,9 +1128,16 @@ begin
     '   row''s key text unreadable. A skin that wants them must declare the :active/:hover' + LineEnding +
     '   variants too.' + LineEnding +
     '' + LineEnding +
-    '   Also undefined ON PURPOSE and NOT part of this list: TyGridPanel (transparent so the' + LineEnding +
-    '   cell gutters are not white — tests/test.gridpanel.pas asserts no theme gives it a' + LineEnding +
-    '   background) and TyFormSurface. */' + LineEnding +
+    '   Also undefined ON PURPOSE and NOT part of this list: TyGridPanel and TyGridPanelCell' + LineEnding +
+    '   (the layout grid and its cells are scaffolding, not surfaces — both stay transparent so' + LineEnding +
+    '   the gutters and the cells alike take the colour of whatever the grid sits on, gradient' + LineEnding +
+    '   included; their Paint falls back to TyFillParentBg. tests/test.gridpanel.pas asserts no' + LineEnding +
+    '   theme gives EITHER of them a background, and that a theme which defines one still gets' + LineEnding +
+    '   it) and TyFormSurface.' + LineEnding +
+    '' + LineEnding +
+    '   TyGridPanelCell is NOT the data grid''s TyGridCell, which IS defined above: the layout' + LineEnding +
+    '   cell used to answer to that name, which both leaked the data cell''s rules onto it and' + LineEnding +
+    '   left it unreachable from the theme layer. */' + LineEnding +
     '' + LineEnding +
     '/* Controls hosted ON the title bar. A skin that paints the bar in a strong colour leaves an' + LineEnding +
     '   ordinary button''s surface-tuned ink nearly invisible there; the control appends the' + LineEnding +

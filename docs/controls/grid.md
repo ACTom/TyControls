@@ -228,6 +228,10 @@ TyGridFixed                 冻结区(固定行列)
 TyGridIndicator             行头 / 行号槽
 TyGridHeader                列头带
 TyGridHeaderSection         列头分段(:hover / :selected / :active)
+                            :active = 被按住的那一段,只在 goHeaderPushedLook 开着时解析。
+                            **它不吃控件级的按下态**:CurrentStates 是整个表格的状态,
+                            鼠标在表里任何地方按下都会带上 tysActive,若不剔掉,随便点一下
+                            正文就会让整条列头换底(RenderHeaderSections 里显式减掉了它)。
 TyGridHeaderGroup           分组表头带(横跨若干列的上层标题)
 TyGridFilterRow             内嵌筛选行的底色与文字色
 TyGridLine                  格线(读 background)
@@ -636,7 +640,7 @@ TyDefaultGridOptions =
 | `goTabs` | 自有 | `goTabs` | 开 | 关掉后 Tab 交给对话框换焦点(不置 `Key := 0`) |
 | `goRowSelect` | 视图 | `SelectionMode = gsmRow` | 关 | 三态压两态:`Options` 只在这一位**真的翻了**时才写回,所以 `gsmColumn` 不会被一次无变化的写压成 `gsmCell` |
 | `goAlwaysShowEditor` | 不收 | — | — | 我们的编辑器是一个**共享的隐藏子控件**,`MoveCursor` 每次都无条件 `EndEdit`。常驻编辑器要么每格一个实例,要么重做光标移动那条路 —— 是一个独立的改动 |
-| `goThumbTracking` | 不收 | — | — | 我们的 `TTyScrollBar` **恒为实时拖动**(`DragThumbTo` 每步 `DoScroll(scTrack)`)。要做成可关,seam 在 `source/tyControls.ScrollBar.pas` 的 `DragThumbTo` / `EndThumbDrag`,不在本控件 |
+| `goThumbTracking` | 暂不收(**缝已在路上,接线已写好**) | — | — | 从前的理由是"我们的 `TTyScrollBar` 恒为实时拖动,seam 在 ScrollBar 不在本控件"。**那条理由已经过期**:滚动条侧新增了 `TTyScrollBar.LiveTracking: Boolean`(published,default `True` = 今天的行为)与只读 `TrackPosition`——关掉后拇指照样跟手、`scTrack` 仍作为通知发出,但 `Position` / `OnChange` / `scPosition` 推迟到松手,两种模式落在同一个终值上;方向键 / 翻页 / 滚轮不受影响。**但该属性尚未合入本分支**(仍在滚动条那位 agent 的工作树里),所以本控件这一位现在接不上——`FVScroll.LiveTracking` 编译不过。落地后按这五步接,一次就能收口:① `goThumbTracking` **追加**到枚举末尾(不得改名/重排,`test.grid.options` 钉着序号);② 登记进 `TyGridDerivedOptions`——它是滚动条状态的**视图**,`FOptions` 里不许留副本;③ 加进 `TyDefaultGridOptions`,因为滚动条出厂 `LiveTracking=True`,不加则 `DefaultsMatchAFreshStringGrid` 变红;④ `GetOptions` 里 `if FVScroll.LiveTracking then Include(Result, goThumbTracking);`;⑤ `SetOptions` 里**仅在这一位真的翻了时**同时写回 `FVScroll` 与 `FHScroll`(与其余派生位同一条"翻位才写"的规矩)。在此之前宿主已经可以直接 `Grid.VScrollBar.LiveTracking := False` |
 | `goColSpanning` | 不收 | — | — | 合并格是**按需自动**的:`HasMergedCells` 看 `FMergeCount > 0`,没有合并就不走那条路径。一个开关只能用来"禁用用户显式请求的合并",没有意义 |
 | `goRelaxedRowSelect` | 不收 | — | — | 我们**恒为 relaxed**:`FCol` 始终被跟踪,`SelectionMode` 的 setter 不动光标,`gsmRow` 下焦点格照样有自己的底色 |
 | `goDblClickAutoSize` | 自有 | `goDblClickAutoSize` | ⚠ 开 | LCL 默认关。关掉后双击**落到普通拖拽改宽**上,不是被吞掉 |
@@ -644,7 +648,7 @@ TyDefaultGridOptions =
 | `goFixedRowNumbering` | 视图 | `ShowRowNumbers` | 关 | 还需 `ShowIndicator` 才有槽可画;行号按**显示序**、1 起 |
 | `goScrollKeepVisible` | 自有 | `goScrollKeepVisible` | 关 | 默认视口与光标解耦(滚走了光标留在原地)。打开后滚动落定时把光标拖进新视口,横纵都管 |
 | `goHeaderHotTracking` | 视图 | `Header.Options` 含 `hoHotTrack` | 关 | |
-| `goHeaderPushedLook` | 暂不收(主题层已就位,控件侧未接) | — | — | **主题 token 已补上,缺的只剩控件侧接线。** 原先拒收的理由是"列头段只有 `:hover` / `:selected`,没有 `:active`,按下态解析回 base 看不出变化"——那条 `TyGridHeaderSection:active { background: var(--surface-active); }` 现已写进 `themes/light.tycss`(基础层,15 个内置皮肤无一改写这个键,因此全部继承)。现在按下态解析出来的底色与静止态**确实不同**,`tests/test.themes.pas` 的 `TestPressedGridHeaderSectionIsNotInert` 逐主题、逐模式钉住这一点,golden 的第 2 号状态槽(`STATES[2] = [tysActive]`)也记着值。<br>**仍未做的是控件侧**,做完才能收这个标志:①`TTyGridOption` 末尾追加 `goHeaderPushedLook`(只增不改序);②记录"当前被按住的是哪一段"(参照 `FHoverHeaderCol` 那套);③`RenderHeaderSections` 对那一段用 `[tysActive]` 解析。三步齐了再 published,否则又是一个"发布了却不照办" |
+| `goHeaderPushedLook` | 自有 | `goHeaderPushedLook` | 关 | 按住的列头段画成"按下去"。**曾经不收**,理由是缺主题 token(列头段只有 `:hover` / `:selected`,按下态会退回 base 而毫无变化 —— 与其发布一个不照办的标志,不如先补缝)。缝已补上:`themes/light.tycss` 的 `TyGridHeaderSection:active` 走 `--surface-active`,只写在**基层**一份,各模式 seed 自己换。出厂**关**:这个观感以前根本不存在,默认开等于改掉每一张现有窗体 |
 | `goSelectionActive` | 不收 | — | — | 我们**恒为 active**:`SetSelection` → `SelectRange` 直接写 `FCol`/`FRow` |
 | `goFixedColSizing` | 自有 | `goFixedColSizing` | ⚠ 开 | LCL 默认关。关掉后冻结列(前 `FixedCols` + 后 `FixedColsRight`)的分隔线不再命中,可滚动列不受影响 |
 | `goDontScrollPartCell` | 自有 | `goDontScrollPartCell` | 关 | 只管**点击**;键盘导航仍然把光标滚进视口 |

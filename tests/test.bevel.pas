@@ -19,6 +19,11 @@ type
     procedure TestDarkenTowardBlack;
     procedure TestLightenDarkenPreserveAlpha;
     procedure TestLightenClampsAmount;
+    procedure TestLumaMatchesRec601;
+    procedure TestLightSurfaceRailsAreUnchanged;
+    procedure TestDarkSurfaceSwapsTheFractions;
+    procedure TestDarkSurfaceHighlightStopsGlowing;
+    procedure TestRailsAlwaysStraddleTheBase;
     // Headless behaviour
     procedure TestTypeKey;
     procedure TestDefaultProps;
@@ -166,6 +171,109 @@ begin
   AssertEquals('over-range darken clamps to black', 0, TyRedOf(c));
   c := TyBevelLighten(TyRGB(10, 20, 30), -3.0);
   AssertEquals('under-range lighten is identity', 10, TyRedOf(c));
+end;
+
+{ ---- rails: the mode-aware pair ---- }
+
+const
+  { The shipped surface seeds, so the numbers below are the REAL ones a user sees. }
+  CDarkSurface  = 30;   { #1E1E1E — dark.tycss --surface, luma 30 }
+  CLightSurface = 255;  { #FFFFFF — light.tycss --surface }
+
+procedure TTyBevelTest.TestLumaMatchesRec601;
+begin
+  AssertEquals('white', 255.0, TyBevelLuma(TyRGB(255, 255, 255)), 0.01);
+  AssertEquals('black', 0.0,   TyBevelLuma(TyRGB(0, 0, 0)), 0.01);
+  { Rec.601 is NOT a plain mean — green dominates. A helper that averaged the channels
+    would return 85 for pure green; the whole rail choice would then class surfaces wrong. }
+  AssertEquals('pure green is Rec.601-weighted, not averaged',
+    149.685, TyBevelLuma(TyRGB(0, 255, 0)), 0.01);
+  { dark.tycss --surface #1E1E1E and light.tycss --surface #FFFFFF land either side of the
+    128 boundary the rail choice uses — i.e. the shipped themes are not near the cut. }
+  AssertTrue('dark surface classes dark',  TyBevelLuma(TyRGB($1E, $1E, $1E)) < 128);
+  AssertTrue('light surface classes light', TyBevelLuma(TyRGB(255, 255, 255)) >= 128);
+end;
+
+{ **The no-regression proof.** On a light surface the rails must be EXACTLY the two calls
+  the pre-fix code made — same function, same fractions, same direction. Asserted against
+  TyBevelLighten/TyBevelDarken themselves rather than against baked hex, so it stays a
+  statement about the maths and not about one theme's border colour. }
+procedure TTyBevelTest.TestLightSurfaceRailsAreUnchanged;
+var
+  base, hi, lo: TTyColor;
+begin
+  base := TyRGB($D1, $D5, $DB);           { light.tycss --border }
+  TyBevelRails(base, TyRGB(CLightSurface, CLightSurface, CLightSurface), hi, lo);
+  AssertEquals('light-surface highlight = the old lighten(base, 0.55)',
+    Integer(TyBevelLighten(base, 0.55)), Integer(hi));
+  AssertEquals('light-surface shadow = the old darken(base, 0.45)',
+    Integer(TyBevelDarken(base, 0.45)), Integer(lo));
+end;
+
+{ On a DARK surface the two fractions swap sides. Stated against the primitives for the
+  same reason as above. }
+procedure TTyBevelTest.TestDarkSurfaceSwapsTheFractions;
+var
+  base, hi, lo: TTyColor;
+begin
+  base := TyRGB($3F, $3F, $46);           { dark.tycss --border }
+  TyBevelRails(base, TyRGB(CDarkSurface, CDarkSurface, CDarkSurface), hi, lo);
+  AssertEquals('dark-surface highlight takes the SMALL fraction',
+    Integer(TyBevelLighten(base, 0.45)), Integer(hi));
+  AssertEquals('dark-surface shadow takes the LARGE fraction',
+    Integer(TyBevelDarken(base, 0.55)), Integer(lo));
+end;
+
+{ The user-visible symptom, in numbers: on the shipped dark theme the highlight rail used
+  to be pushed 55% toward white and came out around luma 169 on a luma-30 window — the
+  bright rail. It must now be strictly darker than that, while staying visible (still
+  lighter than the surface it sits on, or it stops being a highlight). }
+procedure TTyBevelTest.TestDarkSurfaceHighlightStopsGlowing;
+var
+  base, surf, hi, lo: TTyColor;
+  oldHi: TTyColor;
+begin
+  base := TyRGB($3F, $3F, $46);
+  surf := TyRGB(CDarkSurface, CDarkSurface, CDarkSurface);
+  oldHi := TyBevelLighten(base, 0.55);    { what the mode-blind code produced }
+  TyBevelRails(base, surf, hi, lo);
+  AssertTrue(Format('dark highlight (luma %.0f) must be darker than the old mode-blind '
+    + 'rail (luma %.0f)', [TyBevelLuma(hi), TyBevelLuma(oldHi)]),
+    TyBevelLuma(hi) < TyBevelLuma(oldHi));
+  AssertTrue('…but still lighter than the dark surface, or it is not a highlight',
+    TyBevelLuma(hi) > TyBevelLuma(surf));
+  AssertTrue('…and the shadow still reads against the surface too',
+    TyBevelLuma(lo) < TyBevelLuma(hi));
+end;
+
+{ The invariant that makes raised/lowered mean anything, in BOTH modes: the lit rail is
+  lighter than the base and the shaded rail darker. A "fix" that merely damped the
+  highlight until it crossed the base would pass the symptom test above and destroy the
+  control; this is the guard that stops that. }
+procedure TTyBevelTest.TestRailsAlwaysStraddleTheBase;
+var
+  hi, lo, base: TTyColor;
+  i: Integer;
+const
+  { A spread of bases across the whole axis, checked on both a dark and a light surface. }
+  CBases: array[0..4] of Byte = (10, 63, 128, 200, 245);
+begin
+  for i := 0 to High(CBases) do
+  begin
+    base := TyRGB(CBases[i], CBases[i], CBases[i]);
+
+    TyBevelRails(base, TyRGB(CDarkSurface, CDarkSurface, CDarkSurface), hi, lo);
+    AssertTrue(Format('dark surface, base %d: highlight must be lighter than base',
+      [CBases[i]]), TyBevelLuma(hi) >= TyBevelLuma(base));
+    AssertTrue(Format('dark surface, base %d: shadow must be darker than base',
+      [CBases[i]]), TyBevelLuma(lo) <= TyBevelLuma(base));
+
+    TyBevelRails(base, TyRGB(CLightSurface, CLightSurface, CLightSurface), hi, lo);
+    AssertTrue(Format('light surface, base %d: highlight must be lighter than base',
+      [CBases[i]]), TyBevelLuma(hi) >= TyBevelLuma(base));
+    AssertTrue(Format('light surface, base %d: shadow must be darker than base',
+      [CBases[i]]), TyBevelLuma(lo) <= TyBevelLuma(base));
+  end;
 end;
 
 { ---- headless behaviour ---- }

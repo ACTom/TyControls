@@ -18,7 +18,7 @@
 |------|-----|-----|
 | 单元 | `tyControls.GridPanel` | `tyControls.GridPanel`(与网格同单元;`tyControls.GridCell` 是兼容再导出) |
 | 基类 | `TTyPanel`(→ `TTyCustomControl` → `TCustomControl`) | `TTyCustomControl`(→ `TCustomControl`) |
-| `GetStyleTypeKey` | `'TyGridPanel'`(**默认无主题规则 → 透明布局宿主**;格间距露出父容器颜色。主题可定义该键来要一个可见的网格表面) | `'TyGridCell'`(默认无主题规则,**透明**) |
+| `GetStyleTypeKey` | `'TyGridPanel'`(**默认无主题规则 → 透明布局宿主**;格间距露出父容器颜色。主题可定义该键来要一个可见的网格表面) | `'TyGridPanelCell'`(同上:**默认无主题规则 → 透明**,主题可接管) |
 | 默认尺寸 / 网格 | 200 × 150;默认 2 × 2 全等分 | 由网格定位,不单独设尺寸 |
 | 设计器注册 | 面板:`TyControls Containers` 组 | `RegisterNoIcon`(网格自动建,不从面板单独拖) |
 
@@ -27,6 +27,28 @@ uses tyControls.GridPanel, tyControls.GridCell;
 ```
 
 `TTyGridCell` 默认**不画背景、不画边框**——它只负责定位 + 裁剪 + 逐格内边距。可见内容由你放进去的控件(卡片、输入框等)提供。
+
+> **"不画背景" ≠ "什么都不画"(3.0 修复)。** 格子是**窗口化**控件:它有自己的 HWND,
+> 不会继承父容器已经画好的像素,而是先被 widgetset 用控件的 LCL `Color` 擦一遍底。
+> 从前 `Paint` 是空实现,于是**擦出来的那层系统色就是最终画面**——在深色主题下
+> 是一块透出来的**浅色方块**,在渐变窗体背景上则是一块打断渐变的平色块。
+> 现在 `Paint` 走 `DrawFrame`,而 `DrawFrame` 的第一件事就是 `TyFillParentBg`:
+> 它把**父容器的背景按本格所在的位置重新取一遍**——渐变交下来的是它自己那一片斜率,
+> 图片主题交下来的是对齐好的照片切片——所以格子读起来是真正的透明,而不是一个洞。
+> 这也是它**不用** `background: var(--surface)` 的原因:纯色能修好深色下的浅块,却会把渐变切平。
+>
+> 真机实测(`GetDC(cell.Handle)` 读格子**自己那个窗口**的像素——只有这样才看得见擦除色;
+> `GetFormImage` 看不到窗口化子控件):
+>
+> | 主题 / 模式 | 修复前 | 修复后 |
+> |---|---|---|
+> | aero / dark | `#F0F0F0`(亮度 **240**)——系统 `clBtnFace`,深色窗口上的一块白斑 | 左上 `#1A2430` / 右下 `#17202B`(亮度 **34**) |
+> | aero / light | `#F0F0F0`(亮度 240)——**也是错的**,aero 浅色表面其实是 `#EDF2F8` | `#EDF2F8`(亮度 241) |
+> | default / dark | `#1E1E1E` | `#1E1E1E` |
+> | default / light | `#F5F5F5` | `#F5F5F5` |
+>
+> 注意 aero / dark 修复后**左上角与右下角不是同一个值**(`1A2430` vs `17202B`):
+> 那正是渐变被按格子的位置切片交下来的证据——换成一句纯色填充,两角会一模一样。
 
 > **主题说明:** `TTyGridPanel` 有自己的 typeKey `TyGridPanel`,而**随库主题刻意不定义它**——
 > 网格本体是个纯布局宿主,间隔区应当透明地露出父容器,而不是自己涂一层面板底色

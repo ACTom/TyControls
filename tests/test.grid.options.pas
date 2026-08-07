@@ -95,6 +95,7 @@ type
     procedure TestCellHintsIsTheMasterSwitch;
     procedure TestTruncCellHintsShowsTheFullText;
     procedure TestRowHighlightPaintsTheWholeRow;
+    procedure TestHeaderPushedLookGatesThePressedFill;
     { --- 流式化 --- }
     procedure TestOptionsSurviveARoundTrip;
     procedure TestOldLfmWithOnlyTheNamedPropertyStillLoads;
@@ -280,9 +281,10 @@ begin
   AssertEquals('goTruncCellHints',      18, Ord(goTruncCellHints));
   AssertEquals('goCellEllipsis',        19, Ord(goCellEllipsis));
   AssertEquals('goRowHighlight',        20, Ord(goRowHighlight));
+  AssertEquals('goHeaderPushedLook',    21, Ord(goHeaderPushedLook));
   { 总数。新成员追加在末尾时这一行也要动 —— 那正是提醒"你在改一个流式化过的
     类型"的时刻。 }
-  AssertEquals('成员总数', 21, Ord(High(TTyGridOption)) + 1);
+  AssertEquals('成员总数', 22, Ord(High(TTyGridOption)) + 1);
 end;
 
 { 实证上一条注释里的说法:写出去的 .lfm 里是**名字**。
@@ -407,6 +409,13 @@ begin
     goRowSelect in FGrid.Options);
   AssertFalse('ShowRowNumbers 出厂 False → goFixedRowNumbering 不在',
     goFixedRowNumbering in FGrid.Options);
+  { 这个观感以前根本不存在,所以出厂必须是关的 —— 出厂值描述现状,不改现状。 }
+  AssertFalse('goHeaderPushedLook 出厂不在(以前没有"按下去"的观感)',
+    goHeaderPushedLook in FGrid.Options);
+  { 而且它是**自有位**,不是视图:没有第二个属性表达同一件事,所以它必须
+    躺在 FOptions 里,且不许被登记成派生位。 }
+  AssertFalse('goHeaderPushedLook 不是派生位',
+    goHeaderPushedLook in TyGridDerivedOptions);
   { 派生位一个都不许躺在自有存储里 —— 躺进去就是那份会发霉的副本。 }
   AssertTrue('FOptions 里不该含任何派生位',
     (FGrid.StoredOptionBits * TyGridDerivedOptions) = []);
@@ -1012,6 +1021,100 @@ begin
   AssertTrue('…而且与焦点格用的是同一层底色',
     sameRowOther.Background.Color = focused.Background.Color);
   AssertFalse('…别的行不许被波及', otherRow.HasBackground);
+end;
+
+{ **按下去的列头**。这个标志从前被**刻意扣着不发布**(不是"发布了却不照办"):
+  主题里没有 TyGridHeaderSection:active,按下态解析回 base 的 `background: none`,
+  与静止态一模一样。规则补上之后才接的线,所以这一条钉的是那根线本身。
+
+  按整段数**变了多少像素**,而不是挑一个点:挑点会踩到标题文字或排序箭头,
+  而"底色换了"的表现就是整段大面积改变。三次渲染互相对照:
+    静止               —— 基准
+    按住 + 标志关       —— 必须与基准**逐像素相同**(现有窗体一帧都不许动)
+    按住 + 标志开       —— 必须大面积不同(那就是按下去的底)
+  把 RenderHeaderSections 里 [tysActive] 那一趟解析删掉(或改成 []),
+  第三条断言立刻变红。 }
+procedure TGridOptionsTest.TestHeaderPushedLookGatesThePressedFill;
+var
+  rest, pressedOff, pressedOn: TBGRABitmap;
+  secL, secR, hdrH, x, y, diffOff, diffOn, area: Integer;
+  boxOff, boxOn: string;
+
+  { 第 1 列的列头段里,和基准比有多少个像素不一样;顺带把它们的**包围盒**记下来
+    —— 数字单说"变了 22 个点"没法查,包围盒直接指出是哪一块(排序箭头?焦点框?)。 }
+  function DiffInSection(A, B: TBGRABitmap; out ABox: string): Integer;
+  var
+    px, py, x0, y0, x1, y1: Integer;
+  begin
+    Result := 0;
+    x0 := MaxInt; y0 := MaxInt; x1 := -1; y1 := -1;
+    for py := 1 to hdrH - 2 do
+      for px := secL + 1 to secR - 2 do
+        if (A.GetPixel(px, py).red   <> B.GetPixel(px, py).red)
+           or (A.GetPixel(px, py).green <> B.GetPixel(px, py).green)
+           or (A.GetPixel(px, py).blue  <> B.GetPixel(px, py).blue) then
+        begin
+          Inc(Result);
+          if px < x0 then x0 := px;
+          if py < y0 then y0 := py;
+          if px > x1 then x1 := px;
+          if py > y1 then y1 := py;
+        end;
+    if Result = 0 then ABox := '(none)'
+    else ABox := Format('x %d..%d, y %d..%d (段 x %d..%d, 带高 %d)',
+      [x0, x1, y0, y1, secL, secR, hdrH]);
+  end;
+
+begin
+  Build(3, 6, 80);
+  { 点列头默认还会**排序**,排序会在段的右端画/换一个排序三角(第一版就栽在这:
+    标志关着也有 22 个像素在动,包围盒正好落在三角那 6x6 上)。这条测试要量的是
+    "按下去换不换底",所以先把点击排序摘掉,免得两件事混在一个数字里。 }
+  FGrid.Header.Options := FGrid.Header.Options - [hoHeaderClickAutoSort];
+  hdrH := FGrid.HeaderH;
+  AssertTrue('列头带要有高度,否则这条测试什么也没看', hdrH > 4);
+  { 列头段与正文列同一套列几何,所以拿正文格的左右边当段的左右边。 }
+  secL := FGrid.CellRectOf(1, 0).Left;
+  secR := FGrid.CellRectOf(1, 0).Right;
+  AssertTrue('第 1 列要在可视区里', secR > secL + 8);
+  area := (hdrH - 2) * (secR - secL - 2);
+  AssertTrue('取样面积要有意义', area > 100);
+
+  x := secL + (secR - secL) div 2;    { 按在第 1 列的列头上 }
+  y := hdrH div 2;
+
+  rest := TBGRABitmap.Create;
+  pressedOff := TBGRABitmap.Create;
+  pressedOn := TBGRABitmap.Create;
+  try
+    FGrid.RenderInto(rest);
+
+    { 标志关(出厂态):按住列头,画面必须与静止时一模一样。 }
+    AssertFalse('前置:出厂不含 goHeaderPushedLook',
+      goHeaderPushedLook in FGrid.Options);
+    FGrid.MouseDown(mbLeft, [], x, y);
+    FGrid.RenderInto(pressedOff);
+    FGrid.MouseUp(mbLeft, [], x, y);
+
+    { 标志开:同一个按下动作现在要解析出 :active 的底。 }
+    FGrid.Options := FGrid.Options + [goHeaderPushedLook];
+    FGrid.MouseDown(mbLeft, [], x, y);
+    FGrid.RenderInto(pressedOn);
+    FGrid.MouseUp(mbLeft, [], x, y);
+
+    diffOff := DiffInSection(rest, pressedOff, boxOff);
+    diffOn  := DiffInSection(rest, pressedOn, boxOn);
+
+    AssertEquals('标志关着时按下列头不许改变任何一个像素'
+      + '(否则就是偷偷改了现有窗体)。变化区域:' + boxOff, 0, diffOff);
+    AssertTrue(Format('标志开着时按下的那一段必须换底 —— 与静止相比只有 %d/%d '
+      + '个像素变了。RenderHeaderSections 里那趟 [tysActive] 解析没接上?',
+      [diffOn, area]), diffOn > area div 3);
+  finally
+    rest.Free;
+    pressedOff.Free;
+    pressedOn.Free;
+  end;
 end;
 
 { ================= 流式化 ================= }

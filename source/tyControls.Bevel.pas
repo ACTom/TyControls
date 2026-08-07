@@ -62,6 +62,37 @@ function TyBevelLighten(AColor: TTyColor; AAmount: Single): TTyColor;
 { Blend AColor toward pure black by AAmount (0..1); the SHADOW line. }
 function TyBevelDarken(AColor: TTyColor; AAmount: Single): TTyColor;
 
+{ Rec.601 luma of AColor, 0..255. The same measure — and below, the same 128 class
+  boundary — tests/test.modecoherence.pas uses to class a window's surfaces as light
+  or dark. Exposed so the rail choice is checkable without a canvas. }
+function TyBevelLuma(AColor: TTyColor): Single;
+
+{ The bevel's two rails: AHigh (the lit edge) and ALow (the shaded edge), derived from
+  ABase and from ASurface — the surface the bevel is drawn ON.
+
+  WHY THE SURFACE IS AN INPUT. The rails are blends toward the two extremes, so each one
+  spends a FRACTION OF THE HEADROOM in its direction. The two shipped fractions (0.55
+  toward white, 0.45 toward black) were tuned on a LIGHT surface, where the base — the
+  theme's --border — sits near white: light.tycss's #D1D5DB has only ~42 luma of headroom
+  up but ~213 down, so the LARGE fraction lands on the SHORT run (+23 luma) and the small
+  one on the LONG run (-96). That pairing is what makes the pair read as a bevel rather
+  than as two stripes.
+
+  On a DARK surface both headrooms invert (dark.tycss's --border #3F3F46: ~192 up, ~63
+  down), so applying the same fraction to the same direction puts the LARGE fraction on
+  the LONG run — the two amplifications compound and the highlight lands at luma ~169 on
+  a luma-30 window. That is the glowing rail this fixes; it was never a tuning choice,
+  just the light-surface numbers applied with the mode unread.
+
+  Swapping the two fractions on a dark surface restores the pairing the original tuning
+  intended (large fraction <-> short headroom). Nothing else moves: the highlight is still
+  lighter than the base and the shadow still darker, so raised/lowered keep their meaning.
+
+  A LIGHT surface returns exactly what this control always returned, so the fix cannot move
+  a light-mode pixel — TestLightSurfaceRailsAreUnchanged pins that against the raw
+  TyBevelLighten/TyBevelDarken calls the old code made. }
+procedure TyBevelRails(ABase, ASurface: TTyColor; out AHigh, ALow: TTyColor);
+
 implementation
 
 function TyBevelEdges(AShape: TTyBevelShape): TTyBevelEdges;
@@ -108,6 +139,40 @@ begin
     TyAlphaOf(AColor));
 end;
 
+const
+  { The two blend fractions. Named rather than inlined because WHICH direction each one is
+    applied to is now the whole point (see TyBevelRails); as bare literals at the call site
+    the swap read as a typo. These are geometry, not colour — every colour stays theme-driven. }
+  cBevelHighAmount = 0.55;   { the LARGE fraction — belongs on the SHORT headroom }
+  cBevelLowAmount  = 0.45;   { the SMALL fraction — belongs on the LONG headroom }
+
+  { Luma below which a surface counts as dark. Same value and same Rec.601 measure as
+    tests/test.modecoherence.pas's cClassBoundary: every shipped surface sits far clear of
+    it (light skins >= ~190, dark ones <= ~70), so the exact cut is not delicate. }
+  cBevelDarkSurfaceLuma = 128.0;
+
+function TyBevelLuma(AColor: TTyColor): Single;
+begin
+  Result := 0.299 * TyRedOf(AColor) + 0.587 * TyGreenOf(AColor)
+          + 0.114 * TyBlueOf(AColor);
+end;
+
+procedure TyBevelRails(ABase, ASurface: TTyColor; out AHigh, ALow: TTyColor);
+begin
+  if TyBevelLuma(ASurface) < cBevelDarkSurfaceLuma then
+  begin
+    { Dark surface: the headrooms are inverted, so the fractions swap with them. }
+    AHigh := TyBevelLighten(ABase, cBevelLowAmount);
+    ALow  := TyBevelDarken(ABase, cBevelHighAmount);
+  end
+  else
+  begin
+    { Light surface: byte-for-byte what this control has always produced. }
+    AHigh := TyBevelLighten(ABase, cBevelHighAmount);
+    ALow  := TyBevelDarken(ABase, cBevelLowAmount);
+  end;
+end;
+
 { Resolve the theme base colour the 3D lines are derived from: the border token if
   present, else the surface (background) colour, else the text colour, else a mid
   grey (never reached with a real theme). All theme-driven — no literal colour. }
@@ -121,6 +186,38 @@ begin
     Result := AStyle.TextColor
   else
     Result := TyRGB(128, 128, 128);
+end;
+
+{ The surface the bevel is drawn ON, for the rail choice only (it never reaches a pixel).
+
+  A bevel is a GRAPHIC control that fills nothing, so what shows around its rails is its
+  own resolved background token when the theme gives it one — TyBevel rides the TyPanel
+  rule, whose `background: var(--surface)` is precisely the mode's surface seed — and
+  otherwise whatever the parent painted. Returns False only when neither is knowable. }
+function BevelSurfaceColor(const AStyle: TTyStyleSet; AControl: TControl;
+  out AColor: TTyColor): Boolean;
+begin
+  Result := True;
+  if tpBackground in AStyle.Present then
+    case AStyle.Background.Kind of
+      tfkSolid:
+        if TyAlphaOf(AStyle.Background.Color) > 0 then
+        begin
+          AColor := AStyle.Background.Color;
+          Exit;
+        end;
+      tfkLinearGradient:
+        begin
+          { Judge a gradient by the mean of its end stops — TTyFill.Color is not the paint
+            for a gradient (the FillLuma precedent in test.modecoherence). }
+          AColor := TyRGB(
+            (TyRedOf(AStyle.Background.GradFrom)   + TyRedOf(AStyle.Background.GradTo))   div 2,
+            (TyGreenOf(AStyle.Background.GradFrom) + TyGreenOf(AStyle.Background.GradTo)) div 2,
+            (TyBlueOf(AStyle.Background.GradFrom)  + TyBlueOf(AStyle.Background.GradTo))  div 2);
+          Exit;
+        end;
+    end;
+  Result := TyResolveParentBg(AControl, AColor);
 end;
 
 constructor TTyBevel.Create(AOwner: TComponent);
@@ -160,7 +257,7 @@ var
   S: TTyStyleSet;
   R: TRect;
   edges: TTyBevelEdges;
-  baseC, hiC, loC, topLeftC, botRightC: TTyColor;
+  baseC, surfC, hiC, loC, topLeftC, botRightC: TTyColor;
   hiPx, loPx: TBGRAPixel;
   th, w, h, gw, gap: Integer;
 
@@ -194,8 +291,12 @@ begin
     if th < 1 then th := 1;
 
     baseC := BevelBaseColor(S);
-    hiC := TyBevelLighten(baseC, 0.55);   // highlight — toward white
-    loC := TyBevelDarken(baseC, 0.45);    // shadow    — toward black
+    { The rails now read the SURFACE, not just the base. An unknown surface (no themed
+      background AND no parent) falls back to white, which selects the light branch —
+      i.e. exactly the pre-fix behaviour. It is a branch selector, never a painted value. }
+    if not BevelSurfaceColor(S, Self, surfC) then
+      surfC := TyRGB(255, 255, 255);
+    TyBevelRails(baseC, surfC, hiC, loC);
 
     // Raised: highlight sits on the TOP/LEFT edges; lowered: shadow does. The
     // opposite pair carries the other colour so both lines are always present.
