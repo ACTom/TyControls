@@ -48,9 +48,15 @@ const
   { The probe set: the form itself plus surfaces a skin typically does NOT restyle, so they
     exercise the base-layer fallback (TyListBox and TyPanel are the two the bug was
     reported on). TyGroupBox rides along: its base fill is transparent (alpha 0), so it
-    only contributes where a skin paints it — the transparent-skip below must hold. }
-  cSurfaceKeys: array[0..5] of string =
-    ('TyForm', 'TyListBox', 'TyPanel', 'TyStatusBar', 'TyMemo', 'TyGroupBox');
+    only contributes where a skin paints it — the transparent-skip below must hold.
+    TyToolBar and TyScrollBar complete the chrome-bar family TyStatusBar opened: all three
+    fill from ONE token (--chrome-bar-bg), and a skin that retunes it in a plain :root —
+    instead of per-@mode — drags its light chrome into dark mode (the aero chrome fix sets
+    it per-mode; this sweep is what makes that shape mandatory). The ink floor applies to
+    them like any surface: labels and captions do get parented to tool bars. }
+  cSurfaceKeys: array[0..7] of string =
+    ('TyForm', 'TyListBox', 'TyPanel', 'TyStatusBar', 'TyMemo', 'TyGroupBox',
+     'TyToolBar', 'TyScrollBar');
 
   { Light/dark class boundary on the 0..255 luma axis. Every shipped surface sits well
     clear of it (light skins >= ~190, dark ones <= ~70); a MIXED window straddles it by

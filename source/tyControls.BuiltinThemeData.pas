@@ -1475,6 +1475,25 @@ begin
     '    --card-title-ink:    darken(var(--accent), 15%);/* Win7 headings: darkened accent on pale glass */' + LineEnding +
     '    --ghost-hover-bg:    alpha(var(--glass), 0.5);  /* ghost hover = faint white glass panel */' + LineEnding +
     '    --on-titlebar: var(--titlebar-ink);   /* ink for controls hosted on the title bar */' + LineEnding +
+    '' + LineEnding +
+    '    /* Chrome family. aero leaves the base seeds (--surface/--on-surface) alone, so before' + LineEnding +
+    '       these three lines the base MAP derived every chrome surface from the WHITE base' + LineEnding +
+    '       surface: darken(#FFFFFF, 6%) = #F0F0F0 — a neutral warm grey. Real Win7 never' + LineEnding +
+    '       painted chrome neutral: Explorer''s command band and status bar were cold blue-greys' + LineEnding +
+    '       of the window''s own glass family, so the neutral bars read as a second design system' + LineEnding +
+    '       sitting on the steel-glass wash (the reported bug). Both values sit on the' + LineEnding +
+    '       --form-2 (#DCE6F0) -> --titlebar-2 (#C4D8EC) axis, so well > wash > band stays one' + LineEnding +
+    '       strictly cold ramp. MUST be per-mode: a :root-level chrome value would drag these' + LineEnding +
+    '       light steels into dark mode (test.modecoherence sweeps the bars for exactly that).' + LineEnding +
+    '       --border rides along, and is load-bearing, not cosmetic: the bars draw their' + LineEnding +
+    '       hairline — and the scroll bar its RESTING THUMB (--scroll-handle: var(--border)) —' + LineEnding +
+    '       in var(--border), and the base''s neutral #D1D5DB is ~2 luma from the new bar fill:' + LineEnding +
+    '       a warm line on cold glass, and a thumb that vanishes into its own track. The cold' + LineEnding +
+    '       value also turns every base-fallback frame (list/tree/memo/grid) cold, which is the' + LineEnding +
+    '       point: one family. Derivations (--border-hover, --scroll-handle-hover) re-derive. */' + LineEnding +
+    '    --surface-chrome: #DCE6F0;   /* header bands, grid fixed rim, datetime chip: --form-2 itself */' + LineEnding +
+    '    --chrome-bar-bg:  #D2DFEC;   /* tool band, status bar, scroll track: a deeper cold steel */' + LineEnding +
+    '    --border:         #AFC4DA;   /* fallback frames, bar hairlines, scroll thumb: cold, not neutral */' + LineEnding +
     '}' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
@@ -1540,6 +1559,20 @@ begin
     '    --card-title-ink:    lighten(var(--accent), 25%);' + LineEnding +
     '    --ghost-hover-bg:    alpha(#1E3A5C, 0.92);' + LineEnding +
     '    --on-titlebar: var(--titlebar-ink);   /* ink for controls hosted on the title bar */' + LineEnding +
+    '' + LineEnding +
+    '    /* Chrome family, dark side (see the light block for the full story). The base MAP' + LineEnding +
+    '       would derive these from the base dark surface: darken(#1E1E1E, 4%) = #191919 —' + LineEnding +
+    '       neutral near-black bars on blue-black glass, the same off-family neutral as light''s' + LineEnding +
+    '       #F0F0F0, only quieter. These sit on the --form-1 (#1B2531) -> --titlebar-1 (#2C3E54)' + LineEnding +
+    '       axis instead: bars and headers LIFT off the dark wash (dark chrome rises where' + LineEnding +
+    '       light chrome sinks). --border again carries the bar hairlines and the resting' + LineEnding +
+    '       scroll thumb. NOTE the skin''s base layer is light.tycss''s MAP plus only the three' + LineEnding +
+    '       per-mode seeds (TyBuiltinBaseModeCss) — auto.tycss''s dark MAP does NOT apply here —' + LineEnding +
+    '       so the thumb rests at raw var(--border) in dark too (measured #3F3F46 before,' + LineEnding +
+    '       #3D5068 after): this seed IS the dark thumb, pick it readable on the lifted track. */' + LineEnding +
+    '    --surface-chrome: #273544;   /* header bands, grid fixed rim, datetime chip */' + LineEnding +
+    '    --chrome-bar-bg:  #22303F;   /* tool band, status bar, scroll track */' + LineEnding +
+    '    --border:         #3D5068;   /* fallback frames, bar hairlines, scroll-thumb seed */' + LineEnding +
     '}' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
@@ -1786,6 +1819,17 @@ begin
     '  font-weight: bold;' + LineEnding +
     '  padding: 0px 4px;' + LineEnding +
     '}' + LineEnding +
+    '' + LineEnding +
+    '/* NOT restyled, and why: the rebar hosts (TyCoolBar/TyControlBar). Win7''s rebar was' + LineEnding +
+    '   command-band chrome, and under aero they render as base TyPanel = white panels around' + LineEnding +
+    '   the cold TyToolBar bands they host. But tests/test.themes.pas' + LineEnding +
+    '   (TestNewKeysMatchTheirDonorInEveryTheme) pins both keys to resolve EXACTLY like TyPanel' + LineEnding +
+    '   in every shipped theme — the hook the alias refactor opened is asserted unused. Giving' + LineEnding +
+    '   aero the rule `TyCoolBar, TyControlBar { background: var(--chrome-bar-bg); color:' + LineEnding +
+    '   var(--ink); border-color: var(--border); border-width: 1px; border-radius: 3px;' + LineEnding +
+    '   padding: var(--pad-container); }` (a FULL block — a skin rule suppresses the donor''s' + LineEnding +
+    '   whole base entry, see UserHasTypeKey) needs that guard to grow a per-theme exemption' + LineEnding +
+    '   first. Until then the rebar stays panel-white here; the bands inside it are cold. */' + LineEnding +
     '' + LineEnding +
     '/* Controls hosted ON the title bar. A skin that paints the bar in a strong colour leaves an' + LineEnding +
     '   ordinary button''s surface-tuned ink nearly invisible there; the control appends the' + LineEnding +

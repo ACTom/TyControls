@@ -349,7 +349,7 @@ function TyToolbarLayout(const AItemSizes: array of TSize;
 ```css
 /* 两个键共写一条规则：解析值完全相同，但现在可以各写各的 */
 TyToolBar, TyToolSeparator {
-  background: var(--surface-chrome);
+  background: var(--chrome-bar-bg);   /* 缺省 = var(--surface-chrome);皮肤定这一个令牌即可让三条 bar 齐平 */
   border-color: var(--border);
   border-width: var(--input-border-width);
 }

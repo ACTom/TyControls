@@ -84,7 +84,7 @@ TTyStatusBar 继承自 `TTyCustomControl`（`tyControls.Base`）：
 
 ```css
 TyStatusBar {
-  background: var(--surface-chrome);
+  background: var(--chrome-bar-bg);   /* 缺省 = var(--surface-chrome);皮肤定这一个令牌即可让三条 bar 齐平 */
   color: var(--on-surface);
   border-color: var(--border);
   border-width: var(--input-border-width);
