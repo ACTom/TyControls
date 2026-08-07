@@ -147,6 +147,7 @@ type
     { --- the rest of the family: one drop-down list each, one Style lock each ---------- }
     procedure TestOwnerDrawReachesEveryPopupListInTheFamily;
     procedure TestEveryPickOnlyLockKeepsOwnerDraw;
+    procedure TestSimpleFlattensToDropDownListAcrossThePickOnlyFamily;
     { --- csOwnerDrawVariable / csOwnerDrawEditableVariable + OnMeasureItem ------------- }
     procedure TestVariableStyleValuesAppendedAndHelpersAgree;   // stdctrls.pp:266/:277
     procedure TestMeasureItemDrivesTheRowHeights;               // stdctrls.pp:402
@@ -1055,6 +1056,12 @@ begin
   AssertEquals('csDropDown is still ordinal 1', 1, Ord(csDropDown));
   AssertEquals('the owner-draw values were APPENDED, not inserted', 2, Ord(csOwnerDrawFixed));
   AssertEquals('...both of them', 3, Ord(csOwnerDrawEditableFixed));
+  { csSimple is ordinal 1 in LCL and 6 HERE -- appended after everything that already
+    shipped, because the `default csDropDownList` directive stores an ordinal and every
+    .lfm omitting Style is read against it. An .lfm crosses by identifier and never
+    notices; only Ord()-arithmetic diverges, and docs/controls/combobox.md §8.1 says so. }
+  AssertEquals('csSimple was APPENDED at the tail, ordinal 6, not at LCL''s 1',
+    6, Ord(csSimple));
   c := TTyComboBox.Create(nil);
   try
     AssertTrue('a fresh combo is STILL pick-only -- the inverted default is deliberate',
@@ -1068,6 +1075,11 @@ begin
   AssertFalse('csDropDown is not owner-drawn',  TyComboStyleIsOwnerDrawn(csDropDown));
   AssertTrue ('csOwnerDrawFixed is',            TyComboStyleIsOwnerDrawn(csOwnerDrawFixed));
   AssertTrue ('csOwnerDrawEditableFixed is',    TyComboStyleIsOwnerDrawn(csOwnerDrawEditableFixed));
+  { csSimple's three rows of LCL's tables (customcombobox.inc:1255/:1270/:1285): an edit
+    box yes, owner-draw no, variable no. }
+  AssertTrue ('csSimple has an edit box',       TyComboStyleHasEditBox(csSimple));
+  AssertFalse('csSimple is not owner-drawn',    TyComboStyleIsOwnerDrawn(csSimple));
+  AssertFalse('csSimple is not variable',       TyComboStyleIsVariable(csSimple));
 end;
 
 procedure TComboOwnerDrawTest.TestEditableOwnerDrawStyleShowsTheEditor;
@@ -1741,6 +1753,42 @@ begin
   AssertTrue('TTyFilterComboBox: editable refused', c.Style = csDropDownList);
   c.Style := csOwnerDrawFixed;
   AssertTrue('TTyFilterComboBox: owner-draw passes', c.Style = csOwnerDrawFixed);
+end;
+
+procedure TComboOwnerDrawTest.TestSimpleFlattensToDropDownListAcrossThePickOnlyFamily;
+var
+  k: Integer;
+  c: TTyComboBox;
+  klass: string;
+begin
+  { csSimple ON A PICK-ONLY COMBO lands as csDropDownList -- all SEVEN of them, stated
+    loudly here because the old defect in this family was a SILENT flatten. The mapping is
+    LCL's own: SetEditBox(False) on csSimple answers csDropDownList
+    (customcombobox.inc:1300), because there is no pick-only simple value in the enum --
+    taking the edit box off a simple combo takes the permanent list with it. A host that
+    wants a permanently-visible pick-only swatch/check list has the corresponding LIST
+    control (TTyColorListBox, TTyCheckListBox, ...), which is LCL's answer too.
+    docs/controls/combobox.md §8.2 carries the same row. }
+  for k := 0 to 6 do
+  begin
+    case k of
+      0: c := TTyColorBox.Create(FForm);
+      1: c := TTyColorComboBox.Create(FForm);
+      2: c := TTyAdvancedComboBox.Create(FForm);
+      3: c := TTyOfficeComboBox.Create(FForm);
+      4: c := TTyShellComboBox.Create(FForm);
+      5: c := TTyFilterComboBox.Create(FForm);
+      6: c := TTyCheckComboBox.Create(FForm);
+    end;
+    klass := c.ClassName;
+    c.Style := csSimple;
+    AssertTrue(klass + ': csSimple lands as csDropDownList, not silently kept and not' +
+      ' silently something else', c.Style = csDropDownList);
+    AssertNull(klass + ': and no docked list was left behind by the refused mode',
+      c.PopupList);
+  end;
+  { The mapping stated once, on the function itself -- LCL's SetEditBox(False) row. }
+  AssertTrue(TyComboStylePickOnly(csSimple) = csDropDownList);
 end;
 
 { ---- csOwnerDrawVariable + OnMeasureItem --------------------------------------------- }

@@ -19,7 +19,7 @@
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `Style` | `TTyComboBoxStyle` | `csDropDownList` | 下拉模式，4 个值。`csDropDownList` 为只读下拉（点击任意处均展开）；`csDropDown` 显示内嵌编辑器，文本可直接输入，此时只有点击右侧箭头才展开；`csOwnerDrawFixed` / `csOwnerDrawEditableFixed` 是这两者的自绘版本，下拉行（前者还包括关闭态字段）交给 `OnDrawItem`。切换会显示/隐藏编辑器并同步 `Text`。详见 [§8.1](#81-style4-个值lcl-有-7-个且默认相反) / [§8.2](#82-自绘csownerdrawfixed--csownerdraweditablefixed--ondrawitem)。 |
+| `Style` | `TTyComboBoxStyle` | `csDropDownList` | 下拉模式，7 个值（与 LCL 同集合，序数不同，见 §8.1）。`csDropDownList` 为只读下拉（点击任意处均展开）；`csDropDown` 显示内嵌编辑器，文本可直接输入，此时只有点击右侧箭头才展开；`csOwnerDrawFixed` / `csOwnerDrawEditableFixed` 是这两者的自绘版本，下拉行（前者还包括关闭态字段）交给 `OnDrawItem`；`csOwnerDrawVariable` / `csOwnerDrawEditableVariable` 在自绘之上加逐行高度（`OnMeasureItem`）；`csSimple` 是编辑框 + **常驻停靠在字段下方的列表**——无弹层、无箭头，`Height` 覆盖字段+列表（见 [§8.1.2](#812-cssimple字段下常驻列表)）。切换会显示/隐藏编辑器并同步 `Text`。详见 [§8.1](#81-style7-个值与-lcl-同集合但序数与默认都不同) / [§8.2](#82-自绘csownerdrawfixed--csownerdraweditablefixed--ondrawitem)。 |
 | `Items` | `TStringList` | `[]`（空列表） | 可选项列表。赋值时调用 `Assign` 复制内容并触发 `Invalidate`。 |
 | `ItemIndex` | `Integer` | `-1` | 当前选中项的索引。写入时等价于调用 `SelectItem(AValue)`。读取返回当前索引；-1 表示无选中项。 |
 | `Text` | `string` | `''` | 当前显示的文本。独立于 `Items`，可手动赋值（不触发 `OnChange`）；`SelectItem` 同步更新此字段。 |
@@ -67,6 +67,8 @@
 读：弹出窗口已创建且可见时为 `True`。写：`True` 调用 `DropDown`（虚方法，子类覆写照常生效），`False` 调用 `CloseUp`。
 
 > **（API parity 修正）** 这里从前是 `function DroppedDown: Boolean`，于是 `Combo.DroppedDown := True`——"用按钮 / 快捷键打开下拉"的标准写法——**编译不过**。现在与 LCL 和本库的 `TTyDateTimePicker` 一致。属性是 **public 不是 published**：开合是运行期状态，不该进 `.lfm`。
+>
+> **`Style = csSimple` 时**：读**恒为 `True`**，写**双向忽略**。这是照实测的 Win32 语义：CBS_SIMPLE 组合框对 `CB_GETDROPPEDSTATE` 回答 1（列表可见即"已展开"），而 `CB_SHOWDROPDOWN` 对它无效——常驻列表无所谓开合。相应地 `OnDropDown` / `OnCloseUp` 在此模式下**永不触发**。见 [§8.1.2](#812-cssimple字段下常驻列表)。
 
 #### `procedure DropDown`
 
@@ -147,7 +149,7 @@ DroppedDown = False → DropDown
 | `Alt+↓` 或 `F4` | 打开下拉列表（已打开则关闭） |
 | `ESC` | 关闭下拉列表（未打开时无操作） |
 
-以上导航键直接调用 `SelectItem`，因此会触发 `OnChange`（仅当选项实际变化时）。上表描述的是默认的 `csDropDownList`（只读下拉）；`Style = csDropDown` 时字段由内嵌 `TTyEdit` 承担，关闭态可直接键入文本（带前缀自动补全，见第 3 节 `Style`）。
+以上导航键直接调用 `SelectItem`，因此会触发 `OnChange`（仅当选项实际变化时）。上表描述的是默认的 `csDropDownList`（只读下拉）；`Style = csDropDown` 时字段由内嵌 `TTyEdit` 承担，关闭态可直接键入文本（带前缀自动补全，见第 3 节 `Style`）；`Style = csSimple` 时字段内 `↓`/`↑` 直接移动常驻列表的选中，`Esc`/`F4` 不再被占用（见 [§8.1.2](#812-cssimple字段下常驻列表)）。
 
 #### 类型超前（Type-ahead，`UTF8KeyPress` override）
 
@@ -278,7 +280,7 @@ Combo.StyleClass := 'compact';
 ## 7. 注意事项
 
 1. **单击切换弹出层：** 单击控件会打开或关闭下拉列表，不再循环切换 `Items`。
-2. **两种模式：** 默认 `Style = csDropDownList` 为只读下拉，关闭态不接受任意文本输入；`Style = csDropDown` 显示内嵌编辑器，可直接键入（前缀自动补全），此时只有点击右侧箭头才展开完整列表。
+2. **三种形态：** 默认 `Style = csDropDownList` 为只读下拉，关闭态不接受任意文本输入；`Style = csDropDown` 显示内嵌编辑器，可直接键入（前缀自动补全），此时只有点击右侧箭头才展开完整列表；`Style = csSimple` 是编辑器 + 常驻停靠列表，无弹层无箭头（[§8.1.2](#812-cssimple字段下常驻列表)）。
 3. **Text 与 Items 独立：** 直接写 `Text` 属性不会修改 `ItemIndex`，也不触发 `OnChange`；应优先使用 `SelectItem` 或写 `ItemIndex`。
 4. **Items 赋值用 Assign：** 写入 `Items` 属性时内部调用 `FItems.Assign(AValue)`，原有内容被替换，`ItemIndex` 和 `Text` 不自动重置，需手动调用 `SelectItem(-1)`（或 `ClearSelection`）清空选中状态。要连列表一起清空并同步字段显示，用控件自己的 `Clear` 而非 `Items.Clear`（见第 4 节）。
 5. **OnChange 防重入：** 若 `SelectItem` 被调用但新值与旧值完全相同，则不触发 `OnChange`，无需在回调中判断是否重复。
@@ -290,14 +292,24 @@ Combo.StyleClass := 'compact';
 
 移植 LCL 代码前请先看这里。8.1 / 8.1.1 / 8.2 讲**已经做了**的部分（六个 `Style` 值、`OnDrawItem`、`OnMeasureItem`）以及各自的边界；8.1 末尾与 8.3 列的是**故意没有对齐**的，写了会编译不过或行为不同。
 
-### 8.1 `Style`：6 个值（LCL 有 7 个），且默认相反
+### 8.1 `Style`：7 个值（与 LCL 同集合，但序数与默认都不同）
 
-LCL 的 `TComboBoxStyle` 有 7 个值（`stdctrls.pp:262`），默认 `csDropDown`（可编辑）；本控件的 `TTyComboBoxStyle` 有 6 个：`csDropDownList` / `csDropDown` / `csOwnerDrawFixed` / `csOwnerDrawEditableFixed` / `csOwnerDrawVariable` / `csOwnerDrawEditableVariable`，默认 `csDropDownList`（只读）。
+LCL 的 `TComboBoxStyle` 有 7 个值（`stdctrls.pp:262`），默认 `csDropDown`（可编辑）；本控件的 `TTyComboBoxStyle` 现在也是 7 个——**同名同义**，默认 `csDropDownList`（只读），**序数排布不同**：
+
+| 标识符 | 本库序数 | LCL 序数 |
+|--------|---------|---------|
+| `csDropDownList` | **0** | 2 |
+| `csDropDown` | 1 | 0 |
+| `csOwnerDrawFixed` | 2 | 3 |
+| `csOwnerDrawEditableFixed` | 3 | 5 |
+| `csOwnerDrawVariable` | 4 | 4 |
+| `csOwnerDrawEditableVariable` | 5 | 6 |
+| `csSimple` | **6** | **1** |
 
 - **默认相反是有意保留的。** 库里和用户工程里的 `.lfm` 普遍不写 `Style`，改默认会把**每一个**已有组合框翻成可编辑的——`default` 指令一改，所有省略该属性的 `.lfm` 都被重新解释。
-- **新值是追加的，不是插进去的。** `.lfm` 按标识符存 `Style`，但 published 属性上的 `default csDropDownList` 存的是**序数**，所有省略 `Style` 的 `.lfm` 都按它读。所以 `csDropDownList` 必须一直是 0。
-- **仍缺的 1 个值**：`csSimple`（列表常驻在字段下方，不是弹层）。写了**编译不过**——这是有意的：给一个不兑现的枚举值，会把编译错误换成一次静默的错误渲染。
-- 其余 6 个标识符两边**同名同义**，所以只有 `csSimple` 会报错，默认值的差异是**静默**的。
+- **新值是追加的，不是插进去的。** `.lfm` 按标识符存 `Style`，但 published 属性上的 `default csDropDownList` 存的是**序数**，所有省略 `Style` 的 `.lfm` 都按它读。所以 `csDropDownList` 必须一直是 0，而 `csSimple` 只能排在末尾的 **6**——不是 LCL 的 1。测试 `TestStyleValuesAppendedAndDefaultOrdinalHeld` 钉死整张表。
+- **序数分歧的可见面**：`.lfm` 跨两边按标识符走，无感；受影响的只有对 `Ord(Style)` 做算术 / 持久化序数的代码（罕见，但移植时值得知道）。
+- 七个标识符两边**同名同义**，任何 LCL 的 `Style :=` 赋值原样编译；语义差异集中在默认值（静默）与 §8.1.2/§8.3 列出的行为细节上。
 
 ### 8.1.1 逐行高度（`csOwnerDrawVariable` / `csOwnerDrawEditableVariable` + `OnMeasureItem`）
 
@@ -335,6 +347,31 @@ Combo.Style         := csOwnerDrawVariable;
 
 底层是 `TTyListBox.RowHeight`（protected virtual，逻辑像素）：`ItemRect` / `RowAtY` / `VisibleRows` / `MaxTopIndex` / 行循环全部改从它取值，所以自己写 `TTyListBox` 后代时，override 这一个方法就够了，命中测试与绘制会一起跟上。
 
+### 8.1.2 `csSimple`：字段下常驻列表
+
+`Style = csSimple` 把控件变成 **编辑框 + 永远可见、停靠在字段正下方的列表**——LCL `stdctrls.pp:264` "like an TEdit plus a TListBox"。下面每一条都先在真实的 Win32 CBS_SIMPLE 控件上量过再实现（探针记录：`CB_GETDROPPEDSTATE`=1、`CB_SHOWDROPDOWN` 无效、`GetComboBoxInfo.rcButton` 为空、edit 子窗口存在、LCL Height 原样生效）：
+
+| 方面 | 行为 |
+|------|------|
+| **几何** | `Height` 覆盖**字段+列表**，你设多少就是多少（Win32 同）。字段保持**主题字段高**（经典 26 / 现代 `--control-height`，随密度与 DPI 缩放），剩余全部是列表。控件比字段还矮时只见字段（列表 0 高，不为负）。 |
+| **箭头** | 无。字段文本区一直延伸到右内距（Win32 的 rcButton 为空）。点击不再开合任何东西。 |
+| **字段** | 真 `TTyEdit`，可自由输入（`MaxLength`/`CharCase`/`TextHint`/`ReadOnly`/`Sel*` 全部照常转发）。 |
+| **输入与选中** | 键入**不过滤、不弹建议层**（Win32 的 CBS_SIMPLE 没有自动补全；这与本库 `csDropDown` 的"恒定过滤弹层"是有意分开的两种模式）。文本与某项**完全相等**时选中该项，否则 `ItemIndex = -1` 且自由文本保留。 |
+| **键盘** | 字段内 `↓`/`↑` 移动列表选中（Win32 同）并触发 `OnChange`/`OnSelect`；`Home`/`End` 留给编辑器移光标；`Esc`/`F4`/`Alt+↓` **不被吞掉**（没有可开合的东西）。 |
+| **`DroppedDown`** | 读恒 `True`，写双向忽略（见 §4）。 |
+| **`DropDown` / `CloseUp`** | 完全空操作；`OnDropDown` / `OnCloseUp` / `OnGetItems` **永不触发**（LCL 亦然——widgetset 的开合通知对 CBS_SIMPLE 不存在。懒加载请直接填 `Items`）。 |
+| **`DropDownCount` / `ItemWidth`** | 惰性（没有弹层可量）。`ItemHeight` 照常钉行高。 |
+| **自绘** | `csSimple` **不是**自绘值（LCL `IsOwnerDrawn` 表为 False）；挂了 `OnDrawItem`/`OnMeasureItem` 也不会被问。要自绘行请用四个 `csOwnerDraw*` 值。 |
+| **列表实例** | 停靠列表就是弹层用的**同一个** `CreatePopupList` 工厂、**同一个实例**（子类的色板/字体预览行两种形态下逐像素一致——这正是共用实例要防的分叉缺陷）。它归控件内部所有：设计器里可见但不可选、不入 `.lfm`、不占 Tab 停靠位。 |
+| **流式** | `Height` 原样往返（进入 `csSimple` 不改 `Height`，即便 `.lfm` 被人为改成 `Style` 行在 `Height` 之前）。**离开** `csSimple` 时 `Height` 收回主题字段高（Win32 AdaptBounds 同款行为）。 |
+
+```pascal
+Combo.Style := csSimple;
+Combo.Height := 200;          // 字段 26 + 列表 174（经典密度、96dpi）
+Combo.Items.AddStrings(['Alpha', 'Beta']);
+Combo.ItemIndex := 0;         // 字段与列表同时跟上
+```
+
 ### 8.2 自绘（四个 `csOwnerDraw*` 值 + `OnDrawItem`）
 
 ```pascal
@@ -368,6 +405,7 @@ type
 | `csDropDown` | `csDropDownList`（编辑框被摘掉） |
 | `csOwnerDrawEditableFixed` | `csOwnerDrawFixed` |
 | `csOwnerDrawEditableVariable` | `csOwnerDrawVariable` |
+| `csSimple` | `csDropDownList`——LCL 自己的 `SetEditBox(False)` 表就是这么映射的（`customcombobox.inc:1300`）：枚举里没有"只读版 simple"，摘掉编辑框连常驻列表一起摘掉。想要"永远可见的只读色板/勾选列表"，用对应的**列表控件**（`TTyColorListBox`、`TTyCheckListBox`……）——这也是 LCL 的答案。七个类逐一有测试钉住（`TestSimpleFlattensToDropDownListAcrossThePickOnlyFamily`），因为这个家族的旧缺陷恰恰是**静默**压平。 |
 | `csOwnerDrawFixed` / `csOwnerDrawVariable` / `csDropDownList` | 原样通过 |
 
 注意 `TTyColorBox` 的 `Style` 是**调色板集合**（见 `colorbox.md`），组合框模式要写 `TTyComboBox(Box).Style := csOwnerDrawFixed`。

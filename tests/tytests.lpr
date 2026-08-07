@@ -119,6 +119,7 @@ uses
   test.popupsurface,
   test.keytips,
   test.combobox,
+  test.combobox.simple,
   test.tabset,
   test.columns.compat,
   test.listview.layout,

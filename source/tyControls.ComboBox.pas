@@ -11,6 +11,13 @@ function TyFilterItemsByPrefix(AItems: TStrings; const APrefix: string): TString
   (LCL passes it per call), so it lives with the list search rather than in the caller. }
 function TyComboIndexOfText(AItems: TStrings; const AText: string; ACaseSensitive: Boolean): Integer;
 
+const
+  { The classic field height, in logical px -- ONE constant because two places must agree on
+    it: Create (the default control Height) and the csSimple field zone (the strip the field
+    keeps while the rest of the Height belongs to the embedded list). Both read it through
+    TyDensityHeight, so modern density's --control-height still governs. }
+  TyComboClassicFieldHeight = 26;
+
 type
   { csDropDownList = read-only (pick from list only). csDropDown = editable field
     with prefix autocomplete (an embedded TTyEdit overlays the text zone).
@@ -22,16 +29,25 @@ type
     two-line one. That is the ONLY thing the Variable pair adds -- everything else about
     them, including OnDrawItem, is the Fixed behaviour.
 
+    csSimple is LCL's seventh value (stdctrls.pp:264): the edit field with the list
+    PERMANENTLY docked under it -- no popup, no drop arrow, and the control's Height spans
+    field + list. All of that is measured off the real Win32 control, not recalled: with
+    CBS_SIMPLE the LCL height is honoured verbatim (win32listsl.inc GetComboHeight returns
+    FSender.Height), GetComboBoxInfo reports an empty rcButton (no arrow) and a live edit
+    child, and CB_GETDROPPEDSTATE answers 1 while CB_SHOWDROPDOWN is documented and observed
+    to do nothing -- so here DroppedDown READS True and WRITES are ignored, and
+    OnDropDown/OnCloseUp/OnGetItems never fire, because nothing ever opens or closes.
+
     THE NEW VALUES ARE APPENDED, NOT INSERTED. A .lfm stores the identifier, so order does
     not matter there -- but `default csDropDownList` on the published property stores the
     ORDINAL, and every .lfm that omits Style is read against it. csDropDownList has to stay
-    at 0 or every existing form silently changes mode.
-
-    Still absent, and deliberately so (docs/controls/combobox.md §8.1): csSimple. Naming it
-    here without honouring it would turn a compile error into a silent wrong render, which
-    is the worse of the two. }
+    at 0 or every existing form silently changes mode. That is also why csSimple sits at
+    ordinal 6 HERE and ordinal 1 in LCL: appending is the streaming contract, LCL's order is
+    not. An .lfm moves between the two by identifier and never notices; code that stores
+    Ord(Style) or does arithmetic on it is the one thing that diverges, and it is documented
+    as such (docs/controls/combobox.md §8.1). }
   TTyComboBoxStyle = (csDropDownList, csDropDown, csOwnerDrawFixed, csOwnerDrawEditableFixed,
-                      csOwnerDrawVariable, csOwnerDrawEditableVariable);
+                      csOwnerDrawVariable, csOwnerDrawEditableVariable, csSimple);
 
   { The three questions LCL asks of a combo style through TComboBoxStyleHelper
     (stdctrls.pp:271-278). Plain functions rather than a type helper because a helper on an
@@ -125,7 +141,9 @@ type
     FOnGetItems: TNotifyEvent;
     { Dropdown popup state }
     FPopup: TTyDropdownPopup; // lazy; created on first DropDown; freed in Destroy
-    FPopupList: TTyListBox;   // owned by Self; parented into FPopup.Form via SetContent
+    FPopupList: TTyListBox;   // owned by Self; parented into FPopup.Form via SetContent --
+    // or, in csSimple, docked as a child of the combo itself (same instance, same class,
+    // whichever shape the Style asks for; see AttachEmbeddedList/DetachEmbeddedList)
     { Type-ahead state }
     FTypeAhead: string;
     FTypeAheadTick: QWord;
@@ -173,6 +191,29 @@ type
     procedure EditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure LayoutEditor;
     procedure DropDownFiltered;
+    { --- csSimple: the permanently-docked list ----------------------------------------
+      The embedded list IS FPopupList -- the same instance the popup styles show, made by
+      the same CreatePopupList factory, so a subclass's swatch/preview rows paint and
+      hit-test identically in both shapes. Two lists of the same class would already be one
+      too many; a second ROW PAINTER would be the classic divergence this shares an
+      instance to rule out. Attach re-parents it from the popup form (or nowhere) into the
+      combo below the field zone; Detach hands it back. }
+    procedure EnsureListBox;
+    procedure AttachEmbeddedList;
+    procedure DetachEmbeddedList;
+    procedure LayoutEmbeddedList;
+    { The windowed-ghost guard: a windowed child erases to its LCL Color before painting,
+      so the embedded list's Color is set to the theme's list surface -- never left at the
+      parent's Color (memory/windowed-ghost-erases-to-parent-color). }
+    procedure ApplyEmbeddedListColor;
+    { Mirror Items / the selection into the embedded list with its OnChange detached --
+      the same detach-assign-reattach DropDown uses, because TTyListBox.SelectItem fires
+      OnChange and the echo would commit right back into us. }
+    procedure SyncEmbeddedItems;
+    procedure SyncEmbeddedSelection;
+    { The strip the FIELD keeps in csSimple, in device px: the themed field height (the
+      same TyDensityHeight(...) number Create sizes the whole control by elsewhere). }
+    function FieldZoneHeight(APPI: Integer): Integer;
     function PointInChevron(const P: TPoint): Boolean;
     { Re-locate FItemIndex from the currently-selected text after the item list
       has been reordered (e.g. by sorting). Keeps the SAME item selected. }
@@ -254,6 +295,9 @@ type
     function FieldOwnerDrawState: TOwnerDrawState;
     procedure Paint; override;
     procedure Resize; override;
+    { After streaming: bounds are final only now, so the csSimple layout (field zone +
+      docked list) is re-run against the Height the .lfm actually carried. }
+    procedure Loaded; override;
     procedure Click; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
@@ -273,6 +317,17 @@ type
       sizing lives; these let a headless test pin the arithmetic, not just the setter). }
     function ComputePopupHeightForTest(APPI: Integer): Integer;
     function ComputePopupWidthForTest(APPI: Integer): Integer;
+    { Test seam: the csSimple field strip in device px -- what the docked list's Top must
+      equal, so a geometry test pins the EDGE and not a centre. }
+    function FieldZoneHeightForTest(APPI: Integer): Integer;
+    { Test seams that drive the REAL editor paths headlessly. SimulateTypedText writes the
+      embedded editor's text WITHOUT the FSyncingText guard, so EditorChange runs exactly
+      as it does for a keystroke (the guard exists to tell programmatic seeding apart from
+      typing -- this seam IS the typing). SimulateEditorKey routes through EditorKeyDown
+      and returns what is LEFT of the key, so a test can pin both halves: a taken key
+      comes back 0, an untaken one (csSimple must NOT swallow Escape) comes back as sent. }
+    procedure SimulateTypedTextForTest(const S: string);
+    function SimulateEditorKeyForTest(AKey: Word): Word;
     procedure SelectItem(AIndex: Integer); virtual;
     procedure DropDown; virtual;
     procedure CloseUp;
@@ -373,10 +428,12 @@ type
     { csDropDownList (default) = read-only; csDropDown = editable + prefix autocomplete;
       csOwnerDrawFixed / csOwnerDrawEditableFixed = the same two with the rows drawn by
       OnDrawItem; csOwnerDrawVariable / csOwnerDrawEditableVariable = those two again, with
-      each row's HEIGHT coming from OnMeasureItem.
+      each row's HEIGHT coming from OnMeasureItem; csSimple = the editable field with the
+      list PERMANENTLY docked under it (Height spans field + list, no popup, no arrow).
       NOTE the default is the OPPOSITE of LCL's csDropDown, and deliberately so: every
       .lfm in this repo and in users' projects omits Style and expects a pick-only combo.
-      See docs/controls/combobox.md for the one LCL Style value we do not have (csSimple). }
+      See docs/controls/combobox.md §8.1 for the full value table, including csSimple's
+      ordinal divergence from LCL (6 here, 1 there -- appended, never inserted). }
     property Style: TTyComboBoxStyle read FStyle write SetStyle default csDropDownList;
     { Pixel height of one dropdown row. 0 (default) = follow the theme's --item-height,
       so a density change still moves the rows; a positive value pins them. }
@@ -464,7 +521,10 @@ uses
 
 function TyComboStyleHasEditBox(AStyle: TTyComboBoxStyle): Boolean;
 begin
-  Result := AStyle in [csDropDown, csOwnerDrawEditableFixed, csOwnerDrawEditableVariable];
+  { csSimple is in the True row of LCL's own table (customcombobox.inc:1255): the simple
+    combo IS an edit with a list under it. }
+  Result := AStyle in [csDropDown, csOwnerDrawEditableFixed, csOwnerDrawEditableVariable,
+                       csSimple];
 end;
 
 function TyComboStyleIsOwnerDrawn(AStyle: TTyComboBoxStyle): Boolean;
@@ -484,6 +544,15 @@ begin
     csDropDown:                  Result := csDropDownList;
     csOwnerDrawEditableFixed:    Result := csOwnerDrawFixed;
     csOwnerDrawEditableVariable: Result := csOwnerDrawVariable;
+    { LCL's own SetEditBox(False) row for csSimple is csDropDownList
+      (customcombobox.inc:1300): there is no pick-only simple value in the enum, so taking
+      the edit box off a simple combo takes the permanent list with it. The pick-only
+      family (colour/check/office/shell/filter/advanced) therefore lands on csDropDownList
+      when handed csSimple -- decided HERE, once, tested per class, and written up in
+      docs/controls/combobox.md §8.2. A host that wants a permanently-visible pick-only
+      list has the corresponding LIST control (TTyColorListBox, TTyCheckListBox, ...);
+      that is LCL's answer too, which is why its mapping looks the way it does. }
+    csSimple:                    Result := csDropDownList;
   else
     Result := AStyle;
   end;
@@ -615,7 +684,7 @@ begin
   FPopupList := nil;
   TabStop := True;
   Width := 145;
-  Height := TyDensityHeight(ActiveController, 26);
+  Height := TyDensityHeight(ActiveController, TyComboClassicFieldHeight);
   { Editable-mode scaffolding. The editor stays hidden until Style := csDropDown. }
   FStyle := csDropDownList;
   FVisibleItems := TStringList.Create;
@@ -668,6 +737,14 @@ begin
   { Keep the embedded editor themed by the same controller. }
   if FEditor <> nil then
     FEditor.Controller := AValue;
+  { csSimple: the docked list re-reads its surface colour and the field zone re-measures
+    (a density flip moves --control-height, which moves where the list starts). }
+  if FStyle = csSimple then
+  begin
+    ApplyEmbeddedListColor;
+    LayoutEditor;
+    LayoutEmbeddedList;
+  end;
 end;
 
 procedure TTyComboBox.DoSelect;
@@ -755,6 +832,13 @@ begin
   FItems.Sorted := FSorted;
   FItems.OnChange := @ItemsChanged;
   ResyncIndexFromText;
+  { The reorder above ran with ItemsChanged detached, so the csSimple docked list --
+    which mirrors Items LIVE -- has to be told by hand. }
+  if FStyle = csSimple then
+  begin
+    SyncEmbeddedItems;
+    SyncEmbeddedSelection;
+  end;
   Invalidate;
 end;
 
@@ -810,6 +894,19 @@ begin
   Result := ComputePopupHeight(APPI);
 end;
 
+procedure TTyComboBox.SimulateTypedTextForTest(const S: string);
+begin
+  if FEditor = nil then Exit;
+  FEditor.Text := S;   // NOT SetEditorText: the guard must stay down so EditorChange runs
+end;
+
+function TTyComboBox.SimulateEditorKeyForTest(AKey: Word): Word;
+begin
+  Result := AKey;
+  if FEditor = nil then Exit;
+  EditorKeyDown(FEditor, Result, []);
+end;
+
 function TTyComboBox.ComputePopupWidthForTest(APPI: Integer): Integer;
 begin
   Result := ComputePopupWidth(APPI);
@@ -856,11 +953,21 @@ end;
 
 function TTyComboBox.GetDroppedDown: Boolean;
 begin
+  { csSimple: True, always. Measured, not assumed -- a real CBS_SIMPLE combo answers 1 to
+    CB_GETDROPPEDSTATE while its permanent list shows, which is what LCL's Win32
+    GetDroppedDown forwards. The list never opens or closes, so the answer never moves. }
+  if FStyle = csSimple then Exit(True);
   Result := (FPopup <> nil) and FPopup.IsOpen;
 end;
 
 procedure TTyComboBox.SetDroppedDown(const AValue: Boolean);
 begin
+  { csSimple: writes are ignored, both directions -- CB_SHOWDROPDOWN "has no effect on a
+    combo box created with the CBS_SIMPLE style", and the probe confirms DroppedDown stays
+    True through both writes. Routing them into DropDown/CloseUp would be worse than the
+    no-op: those are guarded too, but a subclass override (the check combo pushes state in
+    DropDown) would run for an open that cannot happen. }
+  if FStyle = csSimple then Exit;
   { Routed through the virtual DropDown / CloseUp so a subclass's override still runs
     (TTyCheckComboBox pushes its check states in DropDown, for one). }
   if AValue then
@@ -981,8 +1088,16 @@ begin
 end;
 
 procedure TTyComboBox.SetStyle(AValue: TTyComboBoxStyle);
+var
+  WasSimple: Boolean;
 begin
   if FStyle = AValue then Exit;
+  { Entering csSimple while a popup is open: close it under the OLD style's semantics,
+    BEFORE the flip -- once FStyle is csSimple, CloseUp is a guarded no-op and the popup
+    would be left showing over a control that no longer owns one. }
+  if (AValue = csSimple) and (FPopup <> nil) and FPopup.IsOpen then
+    CloseUp;
+  WasSimple := FStyle = csSimple;
   FStyle := AValue;
   if FEditor <> nil then
   begin
@@ -993,7 +1108,143 @@ begin
       LayoutEditor;
     end;
   end;
+  if FStyle = csSimple then
+    AttachEmbeddedList
+  else if WasSimple then
+  begin
+    DetachEmbeddedList;
+    { Leaving csSimple: the Height was field + list; a popup style's whole control IS the
+      field. Win32 does the same snap through AdaptBounds (win32wsstdctrls.pp:1139 --
+      every style but csSimple is forced back to the combo height). Skipped while
+      streaming: a load can only ever ENTER csSimple (FStyle starts at the default), so
+      this branch running under csLoading would mean a double Style write in one .lfm --
+      but guard it anyway, Height here would clobber the streamed one. }
+    if not (csLoading in ComponentState) then
+      Height := FieldZoneHeight(Font.PixelsPerInch);
+  end;
   Invalidate;
+end;
+
+function TTyComboBox.FieldZoneHeight(APPI: Integer): Integer;
+begin
+  { The themed field height (classic 26 / modern --control-height), scaled to device px --
+    the strip the FIELD keeps in csSimple. NOT derived from the control's Height: in
+    csSimple the Height is field + list and belongs to the user, exactly as on Win32 where
+    CBS_SIMPLE follows the LCL height verbatim (win32listsl.inc GetComboHeight). }
+  Result := MulDiv(TyDensityHeight(ActiveController, TyComboClassicFieldHeight), APPI, 96);
+end;
+
+function TTyComboBox.FieldZoneHeightForTest(APPI: Integer): Integer;
+begin
+  Result := FieldZoneHeight(APPI);
+end;
+
+procedure TTyComboBox.EnsureListBox;
+begin
+  if FPopupList <> nil then Exit;
+  FPopupList := CreatePopupList;  // virtual: a subclass returns its own list class, and
+  // that ONE factory serves both shapes -- popup and embedded -- so the rows cannot
+  // paint one way dropped down and another way docked.
+  { csNoDesignVisible BEFORE any Parent/Visible change (memory/designer-internal-
+    subcontrol-leak, and the PageControl ordering note: the show-state re-eval runs at the
+    VISIBLE change and must already see the flag). Set unconditionally at creation: in the
+    popup it is moot (the list lives in a runtime form), embedded it is what keeps the
+    non-simple styles' hidden list out of the IDE designer. While csSimple the list is
+    Visible=True, and the flag does not hide a visible control at design time -- the
+    design-shown state is `Visible or (csDesigning and not csNoDesignVisible)` -- so the
+    docked list still shows in the designer, unselectable there because its Owner is the
+    combo, not the form. }
+  FPopupList.ControlStyle := FPopupList.ControlStyle + [csNoDesignVisible];
+  { A pinned ItemHeight overrides whatever the list (or a subclass's factory) chose;
+    0 leaves that choice alone so themed / rich-row lists keep working. }
+  if FItemHeight > 0 then
+    FPopupList.ItemHeight := FItemHeight;
+  FPopupList.OnChange := @PopupListChange;
+end;
+
+procedure TTyComboBox.AttachEmbeddedList;
+begin
+  EnsureListBox;
+  { If the list is currently the popup form's content, take it back through SetContent(nil)
+    -- otherwise the LATER SetContent(FPopupList) on leaving csSimple would no-op on "same
+    content" while the list is actually parented to the combo. }
+  if FPopup <> nil then
+    FPopup.SetContent(nil);
+  FPopupList.Align := alNone;          // SetContent had set alClient; the field zone is ours
+  FPopupList.TabStop := False;         // one tab stop per combo: the field
+  { Square corners: the OS simple list is square, the docked seam wants no gap, and -- the
+    load-bearing half -- a rounded frame leaves corner pixels for the windowed control's
+    ERASE colour to show through (the ghost). ForceSquareSurface makes the paint cover the
+    full rect; ApplyEmbeddedListColor covers the pre-paint erase flash. }
+  FPopupList.ForceSquareSurface := True;
+  FPopupList.Controller := Self.Controller;
+  ApplyEmbeddedListColor;
+  SyncEmbeddedItems;
+  SyncEmbeddedSelection;
+  FPopupList.Parent := Self;
+  FPopupList.Visible := True;
+  LayoutEmbeddedList;
+end;
+
+procedure TTyComboBox.DetachEmbeddedList;
+begin
+  if FPopupList = nil then Exit;
+  FPopupList.Visible := False;         // hide first: no flash while it changes homes
+  FPopupList.Parent := nil;
+  if FPopup <> nil then
+    FPopup.SetContent(FPopupList);     // re-home into the popup form (alClient again)
+  FPopupList.ForceSquareSurface := TyIsWayland;   // the popup rule, as EnsurePopup set it
+  FPopupList.Visible := True;          // the popup form's Show/Hide is the gate again
+end;
+
+procedure TTyComboBox.LayoutEmbeddedList;
+var
+  FieldH, ListH: Integer;
+begin
+  if (FStyle <> csSimple) or (FPopupList = nil) or (FPopupList.Parent <> Self) then Exit;
+  FieldH := FieldZoneHeight(Font.PixelsPerInch);
+  ListH := ClientHeight - FieldH;
+  if ListH < 0 then ListH := 0;        // a field-height csSimple combo shows just the field,
+  // as the OS one does -- the list is there, zero rows tall, and grows with the control.
+  FPopupList.SetBounds(0, FieldH, ClientWidth, ListH);
+end;
+
+procedure TTyComboBox.ApplyEmbeddedListColor;
+var
+  S: TTyStyleSet;
+begin
+  if FPopupList = nil then Exit;
+  { The theme's list surface, not the parent's LCL Color: a windowed child erases to its
+    own Color before Paint, and inheriting the parent's leaves a foreign flash (and, on any
+    rounded theme, foreign corners -- squared off above, but the erase is still visible
+    between frames). Same resolution ApplyRegion makes for the popup form. Non-solid
+    backgrounds (image/gradient themes) keep the default: there is no one colour to erase
+    to, and the full-rect paint covers the surface anyway. }
+  S := ActiveController.Model.ResolveStyle('TyListBox', '', []);
+  if S.Background.Kind = tfkSolid then
+    FPopupList.Color := TyColorToLCL(S.Background.Color);
+end;
+
+procedure TTyComboBox.SyncEmbeddedItems;
+begin
+  if FPopupList = nil then Exit;
+  FPopupList.OnChange := nil;
+  try
+    FPopupList.Items.Assign(FItems);
+  finally
+    FPopupList.OnChange := @PopupListChange;
+  end;
+end;
+
+procedure TTyComboBox.SyncEmbeddedSelection;
+begin
+  if FPopupList = nil then Exit;
+  FPopupList.OnChange := nil;
+  try
+    FPopupList.SelectItem(FItemIndex);   // scrolls into view (EnsureSelectionVisible)
+  finally
+    FPopupList.OnChange := @PopupListChange;
+  end;
 end;
 
 procedure TTyComboBox.SetOnDrawItem(const AValue: TTyDrawItemEvent);
@@ -1151,12 +1402,25 @@ end;
 
 procedure TTyComboBox.LayoutEditor;
 var
-  BtnW, PPI, PadL, PadT, PadR, PadB: Integer;
+  BtnW, PPI, PadL, PadT, PadR, PadB, BottomY: Integer;
   S: TTyStyleSet;
 begin
   if (FEditor = nil) or not TyComboStyleHasEditBox(FStyle) then Exit;
   PPI  := Font.PixelsPerInch;
-  BtnW := MulDiv(ButtonWidthLogical, PPI, 96);
+  { csSimple: no chevron (the OS simple combo reports an EMPTY rcButton), so the field
+    spans the full width -- and only the FIELD ZONE's height, because everything under it
+    is the docked list, not more field. }
+  if FStyle = csSimple then
+  begin
+    BtnW := 0;
+    BottomY := FieldZoneHeight(PPI);
+    if BottomY > ClientHeight then BottomY := ClientHeight;
+  end
+  else
+  begin
+    BtnW := MulDiv(ButtonWidthLogical, PPI, 96);
+    BottomY := ClientHeight;
+  end;
   { Inset the editor to the same field rectangle RenderTo paints the text into:
     the resolved Padding on all sides, stopping short of the chevron zone. Keeps
     the embedded editor aligned with the frame on any theme. }
@@ -1167,7 +1431,7 @@ begin
   PadB := MulDiv(S.Padding.Bottom, PPI, 96);
   FEditor.SetBounds(PadL, PadT,
     ClientWidth - BtnW - PadL - PadR,
-    ClientHeight - PadT - PadB);
+    BottomY - PadT - PadB);
 end;
 
 procedure TTyComboBox.EditorChange(Sender: TObject);
@@ -1176,6 +1440,16 @@ begin
   if FSyncingText then Exit;
   FText := FEditor.Text;
   FItemIndex := FItems.IndexOf(FText);   // -1 if not a member; do NOT blank FText
+  { csSimple: typing NEVER filters and never pops a suggestion list -- the docked list
+    always shows every row, as the OS one does (CBS_SIMPLE has no autocomplete of its
+    own). What typing does move is the SELECTION, to the exact-text match just computed
+    (or off, at -1), and the docked list mirrors that. }
+  if FStyle = csSimple then
+  begin
+    SyncEmbeddedSelection;
+    if Assigned(FOnChange) then FOnChange(Self);
+    Exit;
+  end;
   filtered := TyFilterItemsByPrefix(FItems, FText);
   try
     FVisibleItems.Assign(filtered);
@@ -1199,13 +1473,41 @@ begin
   { Defer the close: if this blur was actually a click landing ON a popup row (an
     edge if the OS ever activates the popup on click despite WS_EX_NOACTIVATE), the
     row's PopupListChange still runs and commits first; the deferred CloseUp is
-    idempotent. Also avoids hiding the popup synchronously inside a focus event. }
-  if DroppedDown then Application.QueueAsyncCall(@DeferredCloseUp, 0);
+    idempotent. Also avoids hiding the popup synchronously inside a focus event.
+    csSimple is excluded by name, not by the guard chain: DroppedDown is pinned True
+    there, and queueing a (no-op) close for a list that cannot close is churn. }
+  if (FStyle <> csSimple) and DroppedDown then
+    Application.QueueAsyncCall(@DeferredCloseUp, 0);
   DoEditorCommit;   // genuine focus-out: let a subclass (MRU) remember the typed text
 end;
 
 procedure TTyComboBox.EditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin
+  { csSimple: Up/Down in the field move the LIST selection -- the Win32 simple combo's
+    behaviour, and the only way the docked list is keyboard-reachable while the field
+    keeps focus. Home/End are NOT taken: in an edit they move the caret, and stealing
+    them would make the field half an editor. Escape is NOT taken either: there is
+    nothing to dismiss (DroppedDown is pinned True here, so the popup branch below would
+    otherwise swallow every Escape into a no-op CloseUp). }
+  if FStyle = csSimple then
+  begin
+    if FItems.Count = 0 then Exit;
+    case Key of
+      VK_DOWN:
+        begin
+          if FItemIndex < 0 then UserSelect(0)
+          else if FItemIndex < FItems.Count - 1 then UserSelect(FItemIndex + 1);
+          Key := 0;
+        end;
+      VK_UP:
+        begin
+          if FItemIndex < 0 then UserSelect(0)
+          else if FItemIndex > 0 then UserSelect(FItemIndex - 1);
+          Key := 0;
+        end;
+    end;
+    Exit;
+  end;
   { Popup keys can't reach the popup form (it never focuses); handle the essential
     dismiss here so Escape closes the suggestion list. }
   if not DroppedDown then Exit;
@@ -1262,6 +1564,13 @@ begin
   { When items are added/removed (including a sorted insert that shifts indices),
     keep FItemIndex pinned to the selected item's text. }
   ResyncIndexFromText;
+  { csSimple: the docked list shows Items LIVE -- there is no DropDown moment to copy them
+    at, so every mutation pushes through here (rows first, then the re-pinned selection). }
+  if FStyle = csSimple then
+  begin
+    SyncEmbeddedItems;
+    SyncEmbeddedSelection;
+  end;
   Invalidate;
 end;
 
@@ -1332,6 +1641,16 @@ begin
   if (NewIndex = FItemIndex) and (NewText = FText) then Exit;
   FItemIndex := NewIndex;
   FText := NewText;
+  { csSimple keeps its two views in step with the model: the FIELD (a real TTyEdit --
+    seeded under the guard, so EditorChange does not echo) and the DOCKED LIST (synced
+    with OnChange detached, so the list's own change event does not commit back). The
+    popup styles have neither concern here: their list is re-populated on every DropDown,
+    and their editor is seeded by the pick/commit paths that already own that. }
+  if FStyle = csSimple then
+  begin
+    if FEditor <> nil then SetEditorText(FText);
+    SyncEmbeddedSelection;
+  end;
   Invalidate;
   if Assigned(FOnChange) then
     FOnChange(Self);
@@ -1346,15 +1665,14 @@ begin
   FPopup.Controller := Self.Controller;
   FPopup.OnClose    := @PopupClosed;
 
-  FPopupList := CreatePopupList;  // owned by the combo (virtual: a subclass may return a custom list)
+  { The list itself may already exist -- a combo that spent time in csSimple made it for
+    the embedded shape -- so its creation lives in EnsureListBox and only the POPUP wiring
+    happens here. DropDown's csSimple guard means this never runs while the list is
+    docked, so re-pointing the surface rule and the parent is safe. }
+  EnsureListBox;
   FPopupList.ForceSquareSurface := TyIsWayland;
-  { A pinned ItemHeight overrides whatever the list (or a subclass's factory) chose;
-    0 leaves that choice alone so themed / rich-row lists keep working. }
-  if FItemHeight > 0 then
-    FPopupList.ItemHeight := FItemHeight;
-  FPopupList.OnChange := @PopupListChange;
 
-  { Wire the list into the helper's form (alClient; SetContent is one-shot). }
+  { Wire the list into the helper's form (alClient; SetContent swaps stale content out). }
   FPopup.SetContent(FPopupList);
 
   { Key handling on the popup form. }
@@ -1368,6 +1686,11 @@ var
   PopupH: Integer;
   S: TTyStyleSet;
 begin
+  { csSimple has no popup to open -- the list is already on screen. First line, BEFORE
+    OnGetItems: LCL's simple combo never fires OnGetItems either, because the widgetset
+    about-to-drop notification this models never arrives for CBS_SIMPLE. A lazy-filled
+    simple combo populates Items itself; there is no open moment to hang it on. }
+  if FStyle = csSimple then Exit;
   { Lazy population, and it MUST come before the empty-list guard below: a lazy combo
     starts with no rows, so a hook fired after the guard could never fill anything and
     the user's first click would do nothing at all. This is the hole OnDropDown cannot
@@ -1460,10 +1783,29 @@ procedure TTyComboBox.Resize;
 begin
   inherited Resize;
   LayoutEditor;
+  LayoutEmbeddedList;   // csSimple only (guarded inside): the list zone tracks the bounds
+end;
+
+procedure TTyComboBox.Loaded;
+begin
+  inherited Loaded;
+  { Streaming order writes Height (a TControl property) before Style (ours), so SetStyle's
+    attach already saw the streamed Height -- but bounds can still be adjusted after that
+    (anchors, parent scaling). Re-run the csSimple layout against the FINAL geometry. }
+  if FStyle = csSimple then
+  begin
+    LayoutEditor;
+    LayoutEmbeddedList;
+  end;
 end;
 
 procedure TTyComboBox.CloseUp;
 begin
+  { csSimple: a full no-op, matching the wire. The list cannot hide, and OnCloseUp must
+    not fire for a close that did not happen -- LCL's fires from CBN_CLOSEUP, which a
+    CBS_SIMPLE combo never sends. (SetStyle closes an open popup BEFORE flipping into
+    csSimple, so this guard never strands one.) }
+  if FStyle = csSimple then Exit;
   { If the popup is open, close it — FPopup.Close fires PopupClosed (OnClose)
     which mirrors FCloseUpTick, Invalidates, and calls DoCloseUp. }
   if (FPopup <> nil) and FPopup.IsOpen then
@@ -1482,6 +1824,9 @@ procedure TTyComboBox.Click;
 begin
   if not Enabled then Exit;
   inherited Click;
+  { csSimple: nothing to toggle -- no popup, no chevron. The click still reached the
+    user's OnClick above; the field itself belongs to the embedded editor. }
+  if FStyle = csSimple then Exit;
   { In editable mode a click on the text zone belongs to the embedded editor
     (caret placement / focus); only a click on the chevron toggles the dropdown. }
   if TyComboStyleHasEditBox(FStyle) and not PointInChevron(ScreenToClient(Mouse.CursorPos)) then Exit;
@@ -1501,15 +1846,23 @@ var Cnt: Integer;
 begin
   if not Enabled then Exit;
   inherited KeyDown(Key, Shift);
-  if (Key = VK_ESCAPE) and DroppedDown then
+  { csSimple: there is no open/close, so Escape and F4/Alt+Down mean nothing here -- and
+    with DroppedDown pinned True they would otherwise EAT every Escape (breaking a
+    dialog's cancel) and every F4 for the sake of a no-op CloseUp. The plain
+    Up/Down/Home/End navigation below is exactly what the simple combo's list does, so it
+    falls through. }
+  if FStyle <> csSimple then
   begin
-    CloseUp; Key := 0; Exit;
-  end;
-  { Alt+Down or F4 toggles the dropdown. Must precede the plain VK_DOWN case. }
-  if ((Key = VK_DOWN) and (ssAlt in Shift)) or (Key = VK_F4) then
-  begin
-    if DroppedDown then CloseUp else DropDown;
-    Key := 0; Exit;
+    if (Key = VK_ESCAPE) and DroppedDown then
+    begin
+      CloseUp; Key := 0; Exit;
+    end;
+    { Alt+Down or F4 toggles the dropdown. Must precede the plain VK_DOWN case. }
+    if ((Key = VK_DOWN) and (ssAlt in Shift)) or (Key = VK_F4) then
+    begin
+      if DroppedDown then CloseUp else DropDown;
+      Key := 0; Exit;
+    end;
   end;
   Cnt := FItems.Count;
   if Cnt = 0 then Exit;
@@ -1579,7 +1932,17 @@ begin
     Invalidate;
     if Assigned(FOnChange) then FOnChange(Self);
     if FItemIndex <> OldIndex then DoSelect;
-    Application.QueueAsyncCall(@DeferredCloseUp, 0);
+    { csSimple takes this same commit path (it has an edit box, and its docked list holds
+      the FULL Items so the text→index map above is the identity) -- but there is no popup
+      to close and no OnCloseUp to earn, and the caret goes back to the field so typing
+      continues after a pick, which is where the OS simple combo keeps it. }
+    if FStyle = csSimple then
+    begin
+      if (FEditor <> nil) and FEditor.HandleAllocated and FEditor.CanFocus then
+        FEditor.SetFocus;
+    end
+    else
+      Application.QueueAsyncCall(@DeferredCloseUp, 0);
     Exit;
   end;
   DoPopupPick(FPopupList.ItemIndex);
@@ -1621,7 +1984,7 @@ procedure TTyComboBox.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integ
 var
   P: TTyPainter;
   S: TTyStyleSet;
-  R, TextR, BtnR, FieldR: TRect;
+  R, TextR, BtnR, FieldR, PaintR: TRect;
   BtnW: Integer;
   FieldOwnerDraw: Boolean;
 begin
@@ -1629,16 +1992,35 @@ begin
     editable one puts a real TTyEdit over the text zone, so there would be nothing left for
     a handler to show -- the same split Windows makes, where an owner-draw combo gets a
     WM_DRAWITEM for its edit area only when it is CBS_DROPDOWNLIST. And no handler means the
-    themed default: assigning Style must never be able to blank a control on its own. }
+    themed default: assigning Style must never be able to blank a control on its own.
+    (csSimple is never owner-drawn -- LCL's IsOwnerDrawn table says False -- and the
+    HasEditBox arm below already excludes it.) }
   FieldOwnerDraw := TyComboStyleIsOwnerDrawn(FStyle)
     and not TyComboStyleHasEditBox(FStyle) and Assigned(FOnDrawItem);
+  { csSimple: the combo's own paint is the FIELD STRIP only. Everything below it belongs
+    to the docked list -- a separate windowed child that paints itself -- so the frame is
+    clamped to the field zone and nothing is composited over the list's area (at design
+    time too, where the list is a design-visible child). }
+  PaintR := ARect;
+  if (FStyle = csSimple)
+     and (PaintR.Top + FieldZoneHeight(APPI) < PaintR.Bottom) then
+    PaintR.Bottom := PaintR.Top + FieldZoneHeight(APPI);
   P := TTyPainter.Create;
   try
-    R := Types.Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
-    P.BeginPaint(ACanvas, ARect, APPI);
+    R := Types.Rect(0, 0, PaintR.Right - PaintR.Left, PaintR.Bottom - PaintR.Top);
+    P.BeginPaint(ACanvas, PaintR, APPI);
     S := CurrentStyle;
     DrawFrame(P, R, S);
-    BtnW := P.Scale(ButtonWidthLogical);
+    { csSimple has no drop arrow: the OS control reports an empty rcButton, and there is
+      nothing a click on one would do. The text zone runs to the right padding instead.
+      BtnW = 0 is the ENFORCEMENT (an empty BtnR draws nothing and TextR spans the width);
+      the `FStyle <> csSimple` gate on the chevron below is intent + a skipped glyph
+      resolve. Mutation-tested as a pair: flipping either alone changes no visible pixel
+      (the editor overlays the text zone), flipping both paints an arrow and goes red. }
+    if FStyle = csSimple then
+      BtnW := 0
+    else
+      BtnW := P.Scale(ButtonWidthLogical);
     BtnR := Types.Rect(R.Right - BtnW, R.Top, R.Right, R.Bottom);
     // Content honours the resolved Padding (consistent with Button/Edit/Panel);
     // the right edge stops at the chevron button zone.
@@ -1647,8 +2029,9 @@ begin
     if not FieldOwnerDraw then
       PaintFieldContent(P, TextR, S);
     // v3/C5: the dropdown indicator is theme-overridable (--glyph-dropdown); else the built-in chevron.
-    if not TyTryDrawGlyphOverride(P, ActiveController, BtnR, '--glyph-dropdown', S.TextColor) then
-      P.DrawDropChevron(BtnR, S.TextColor);   // fixed small chevron (not stretched to height)
+    if FStyle <> csSimple then
+      if not TyTryDrawGlyphOverride(P, ActiveController, BtnR, '--glyph-dropdown', S.TextColor) then
+        P.DrawDropChevron(BtnR, S.TextColor);   // fixed small chevron (not stretched to height)
     P.EndPaint;
 
     { The host's field pass, on the COMPOSITED canvas. It cannot run above: the painter
