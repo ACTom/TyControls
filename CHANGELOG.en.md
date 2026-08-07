@@ -121,6 +121,81 @@ Linux and macOS.
   directly. **Assignment never changes the grid's structure** (a shorter list leaves
   the tail alone, a longer one is truncated), matching LCL exactly.
 
+### Added -- a new control: `TTyFloatSpinEdit`
+
+- **The decimal spin edit**: `Value: Double`, `Decimals`, `Increment` (**may be below 1** -- a
+  0.25 step is the point of its existence; a step finer than `Decimals` looks inert, and the
+  docs say so). Sibling of the integer `TTySpinEdit`, not its child: it derives from
+  `TTyNumericEdit`, so selection / clipboard / undo / IME come along, and thousands grouping
+  defaults **off** (as in LCL). On the `TyControls Edits` palette page -- 162 droppable
+  controls now.
+
+### Added -- the second and third waves of parity
+
+- **The grid's `Options`**: LCL's ~32 behaviour flags behind one Object Inspector entry.
+  21 made the set (9 of them are **views** onto existing named properties -- one state, so the
+  designer and code can never disagree), 11 are omitted each with its reason -- the full
+  census table is in [docs/controls/grid.md](docs/controls/grid.md).
+- **The toolbar finally has a button type system**: `TTyToolButton` with all six styles
+  (button / check / drop-down / grouped / separator / divider), `Grouped` grouping adjacent
+  buttons, `ImageIndex` stored as `ImageName` (re-ordering the image collection can no longer
+  silently swap a button's icon). The bar itself gains `ButtonWidth` (a **floor** -- lowering
+  it restores designed widths), `DropDownWidth`, `List` (icon beside caption; our default is
+  the opposite of LCL's, because stacked layout collapses captions to zero height here --
+  documented), and `OnPaintButton`, a whole-button owner-draw hook.
+- **Horizontal scrolling in list boxes**: `ScrollWidth` plus a bottom scroll bar -- an item
+  wider than the box can finally be read. The same work opened a **per-row height** seam, which
+  is what let the combo box gain `csOwnerDrawVariable` / `csOwnerDrawEditableVariable` +
+  `OnMeasureItem`, and **`csSimple`** -- the permanently visible list under the field, no
+  popup, no arrow, semantics measured against Win32 item by item.
+- **Multi-row tab strips**: `MultiLine` / `RaggedRight` / `RowCount` -- tabs that no longer fit
+  fold into rows instead of hiding behind scroll arrows; side bands become multiple columns.
+  `ScrollOpposite` is deliberately not built (it collides with drag-reorder; the plan has the
+  full reasoning).
+- **The dock surface on four containers**: `TTyPanel` / `TTyGroupBox` / `TTyPageControl` /
+  `TTyControlBar` all publish `DockSite` and the nine dock members -- verified per site with a
+  **real mouse drag**, not just `ManualDock`.
+- **Image collections stream into the `.lfm`**: `TTyImageCollection.Images` is a published
+  collection of name + PNG (base64 -- diffable and reviewable; **not** LCL's binary
+  pseudo-property, which the IDE cannot re-open). Repeating a name = **multi-resolution
+  masters**; HiDPI picks the smallest that covers instead of stretching one.
+- **Calendar and date-picker month/weekday names follow the app language**: under `--lang=en`
+  no more Chinese month names on an English UI. Precedence = explicit override > loaded
+  translation > OS locale, and **a program that loads no catalogue keeps today's OS behaviour
+  -- zero regression**. Note: an English deployment ships the nearly-empty `tycontrols.en.po`
+  (its language sentinel is the switch); the README explains.
+- **Value list editor**: `KeyOptions` (editable keys / Insert adds / Ctrl+Delete removes /
+  `keyUnique` deduplicates among **siblings**) plus a writable `Keys[]` (LCL's shape:
+  programmatic writes skip the uniqueness check).
+- **The panel caption's vertical axis**: `TTyPanel.VerticalAlignment` (LCL's type and
+  default) -- the caption can sit top or bottom instead of forever colliding with children in
+  the middle.
+
+### Fixed
+
+- **On the aero theme, every windowed control drew opaque black corner notches** -- and the
+  painter was innocent: a gradient-backed form never sets `Color`, which idles at `clDefault`,
+  and that reads as RGB that IS pure black -- exactly what children received when rebuilding
+  the parent background. Gradients now slice onto the child's own span.
+- **A read-only grid could still be modified three ways**: `ReadOnly` guarded seven editor
+  paths and neither **paste, cut, nor the fill handle**. Paste is refused whole, cut degrades
+  to copy, the fill handle vanishes; **per-cell / per-column locks now govern filling too**
+  (the arithmetic ladder numbers by position across a locked cell). And the grid's clipboard
+  set gains **Ctrl+X** alongside Ctrl+C/V.
+- **The checkbox's localized truthy word never worked in a real program** -- it was copied
+  from its resourcestring during unit initialization, before any catalogue loads. It resolves
+  live now; typing the localized word into a Chinese sheet really ticks the box.
+- **A toolbar button truncated to "Ne..." in English while the wider Chinese caption fit** --
+  `AutoSize` measured with one text engine and the painter ellipsised with another. They share
+  one now.
+- **The Ribbon's File tab is finally translatable** (its type was wrong, so the form translator
+  could not reach it; its default also moves from a hardcoded Chinese literal to English -- a
+  property default that followed the locale would make saved `.lfm`s locale-dependent, so the
+  default stays a literal and translation goes through the catalogue).
+- **All 43 examples' code-composed text is translatable** (~740 entries), whole-window
+  consistent under `--lang=en` and zh_CN; the maintenance tools
+  `scripts/example-rsj2po.py` / `check-example-po.py` ship with the repo.
+
 ### Added -- the walls people hit first when porting from LCL
 
 - **A node object model on the tree**: `Tree.Items.AddChild(nil, 'Root')` compiles and
