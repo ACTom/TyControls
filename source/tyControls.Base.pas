@@ -893,6 +893,54 @@ begin
     if TyAlphaOf(AFill.GradStops[i].Color) < 255 then Result := True;
 end;
 
+{ The gradient counterpart of ITyThemedBackground.ThemedBgColor: reconstruct a themed
+  form's LINEAR-GRADIENT background as the slice a child at ACR (in the form's client
+  space, laid out over APR) must paint. ThemedBgColor answers solid backgrounds only —
+  its out-param cannot carry a ramp, and widening the interface means changing its
+  implementor (tyControls.Form) — so before this the gradient case fell through to the
+  raw LCL Color fallback. ApplyChromeTheme never themes Color for a non-solid background
+  either, so that read clDefault, and ColorToRGB(clDefault) masks $20000000 to $000000:
+  on aero (the one built-in whose TyForm bg is a gradient, and whose controls carry
+  shadows) every windowed control painted OPAQUE BLACK corner notches, on every repaint.
+  Measured 2026-08-06/07; guarded by test.formgradientbg.
+
+  The style is resolved through the CHILD's ActiveController — ApplyChromeTheme hands
+  the same controller to the surface and (in every stock layout) to the controls, and
+  headless/designer fall back to TyDefaultController exactly as ThemedBgColor does. A
+  child given a DIFFERENT controller than its form would reconstruct its own theme's
+  form ramp; accepted, matching how such a child already resolves everything else.
+
+  APR is the FORM's client rect. A surface/title-bar layout paints the same sweep over
+  a rect shortened by the bar, so a vertical ramp's reconstruction can sit tbH early —
+  bounded by tbH/formH of the sweep (~1 RGB step on aero's 19-step wash). Knowing the
+  true layout rect would take the surface telling us it paints a delegated background;
+  not worth an interface for a sub-tolerance error. }
+function TyThemedFormGradient(AChild: TControl; const APR, ACR: TRect;
+  out AFill: TTyFill): Boolean;
+var
+  ctrl: TTyStyleController;
+  st: TTyStyleSet;
+begin
+  Result := False;
+  if AChild is TTyCustomControl then
+    ctrl := TTyCustomControl(AChild).ActiveController
+  else if AChild is TTyGraphicControl then
+    ctrl := TTyGraphicControl(AChild).ActiveController
+  else
+    ctrl := TyDefaultController;
+  if ctrl = nil then Exit;
+  st := ctrl.Model.ResolveStyle('TyForm', '', []);
+  if not ((tpBackground in st.Present) and (st.Background.Kind = tfkLinearGradient)) then
+    Exit;
+  AFill := TyRebaseGradient(st.Background, APR, ACR);
+  { The same opaque promise as every other branch: alpha stops are flattened. A top-level
+    form has nothing themed behind it, so the backdrop is white, matching the gradient
+    branch's own fallback for an unresolvable underlay. }
+  if TyFillHasAlpha(AFill) then
+    TyCompositeFill(AFill, TyRGB(255, 255, 255), True);
+  Result := True;
+end;
+
 function TyResolveParentBgFill(AChild: TControl; const ARect: TRect;
   out AFill: TTyFill): Boolean;
 var
@@ -984,11 +1032,27 @@ begin
   end
   // A TTyForm parent: use its THEMED TyForm bg (correct at design time too — the LCL
   // Color is only themed by ApplyChromeTheme at runtime). Same value as Color at runtime.
-  else if Supports(par, ITyThemedBackground, tb) and tb.ThemedBgColor(AFill.Color) then
-    Result := True
+  // Solid via the interface; a GRADIENT via TyThemedFormGradient (the interface's out-param
+  // is one colour — see that function for why, and for the aero black-corner history).
+  else if Supports(par, ITyThemedBackground, tb) then
+  begin
+    if tb.ThemedBgColor(AFill.Color) then
+      Result := True
+    else if TyThemedFormGradient(AChild, pr, cr, AFill) then
+      Result := True
+    else
+    begin
+      { An image bg with no live backdrop (headless), or no bg token at all: the LCL
+        colour — RESOLVED, never raw. ColorToRGB(clDefault) masks to $000000, and that
+        black is exactly what the aero corner notches were made of. }
+      RedGreenBlue(ColorToRGB(par.GetColorResolvingParent), r, g, b);
+      AFill.Color := TyRGB(r, g, b);
+      Result := True;
+    end;
+  end
   else
   begin
-    RedGreenBlue(ColorToRGB(par.Color), r, g, b);
+    RedGreenBlue(ColorToRGB(par.GetColorResolvingParent), r, g, b);
     AFill.Color := TyRGB(r, g, b);
     Result := True;
   end;

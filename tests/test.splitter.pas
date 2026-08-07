@@ -141,7 +141,18 @@ procedure TSplitterPixelTest.TestGripDotIsBlue;
   The 3 grip dots are at y ~ 44..46, 47..50, 50..53 centred in the column.
   Scan a 4px-wide band (x=4..7) around the centre column across all rows
   for any pixel with blue > red (blue channel clearly dominant).
-}
+
+  2026-08-07 recalibration (aero black-corner fix): the splitter's own background is
+  `none`, so its base coat is the RESOLVED parent background. This fixture's raw form
+  left Color = clDefault, which the resolver used to read via bare ColorToRGB — i.e.
+  BLACK (the aero defect class) — and the 2px anti-aliased dots blended over black read
+  (23,50,94): the old "blue > red + 50" margin was calibrated on that black, and only
+  cleared it by 21. Over the CORRECT light base the same ~38%-coverage dots read
+  (211,..,252)-ish and a 50 margin can never be met by ANY anti-aliased 2px dot. The
+  form colour is now pinned WHITE (deterministic — the old fallback would otherwise be
+  the OS clBtnFace) and the margin says what "clearly dominant" can honestly mean for a
+  38%-coverage dot: blue > red + 20 (measured: +41 over white; a token-ignoring grey
+  dot measures +3, an undrawn grip 0). }
 var
   Ctl: TTyStyleController;
   Form: TForm;
@@ -157,6 +168,7 @@ begin
   Bmp := TBitmap.Create;
   try
     Ctl.LoadThemeCss('TySplitter { color: #3B82F6; }');
+    Form.Color := clWhite;   // deterministic base coat under `background: none`
 
     Sp := TTySplitterPixAccess.Create(Form);
     Sp.Parent := Form;
@@ -175,14 +187,16 @@ begin
     Reread := TBGRABitmap.Create(Bmp);
     try
       // Scan a 4px-wide band around the centre column for any blue-dominant pixel
-      // #3B82F6 = R=59, G=130, B=246 — blue is distinctly > red
+      // #3B82F6 = R=59, G=130, B=246 — blue is distinctly > red. The dots are 2px and
+      // anti-aliased (~38% coverage), so over the white base the strongest dot pixel
+      // measures ~(211,..,252): +20 is the honest "clearly dominant" margin (see above).
       FoundBlue := False;
       for x := 4 to 7 do
       begin
         for y := 0 to 99 do
         begin
           px := Reread.GetPixel(x, y);
-          if px.blue > px.red + 50 then
+          if px.blue > px.red + 20 then
           begin
             FoundBlue := True;
             Break;

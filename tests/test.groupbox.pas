@@ -112,7 +112,16 @@ procedure TTyGroupBoxTest.TestCaptionBandErasedBorderNotVisible;
   (a) A border pixel on the top edge OUTSIDE the caption band x-range must be
       red-dominant (border visible where no text erasing occurred).
   (b) A pixel INSIDE the band at the border's y (capH div 2 = 8) must NOT be
-      red-dominant — the band was erased so the white backdrop shows through. }
+      red-dominant — the band was erased to the parent background, so the border
+      does not show there.
+
+  2026-08-07 recalibration (aero black-corner fix): the band is erased to the RESOLVED
+  parent background. This fixture's raw form left Color = clDefault, which the resolver
+  used to read via bare ColorToRGB — i.e. BLACK — so the old "red < 100" assertion was
+  green only because the band was black (the very defect class the aero fix removed;
+  its own comment claimed white showed through, which never held). The form colour is
+  now pinned WHITE so the band genuinely erases to white, and the assertion states the
+  actual contract: the band pixel is not red-dominant (the border is gone there). }
 var
   Ctl: TTyStyleController;
   Form: TForm;
@@ -121,6 +130,8 @@ var
   BgBmp: TBGRABitmap;
   Reread: TBGRABitmap;
   PxOutside, PxInside: TBGRAPixel;
+  BandX: Integer;
+  FoundWhite: Boolean;
   CapY: Integer;
 begin
   Ctl := TTyStyleController.Create(nil);
@@ -130,6 +141,7 @@ begin
     Ctl.LoadThemeCss(
       'TyGroupBox { border-color: #FF0000; border-width: 2px; border-radius: 0px; ' +
       'background: alpha(#000000,0); color: #000000; font-size: 12px; }');
+    Form.Color := clWhite;   // deterministic parent bg: the band must erase to THIS
     Probe := TTyGroupBoxProbe.Create(Form);
     Probe.Parent := Form;
     Probe.Controller := Ctl;
@@ -157,10 +169,26 @@ begin
       PxOutside := Reread.GetPixel(180, CapY);
       AssertTrue('border outside band: red > 100 (border visible)', PxOutside.red > 100);
       AssertTrue('border outside band: red > blue (red-dominant)', PxOutside.red > PxOutside.blue);
-      // (b) Pixel inside the erased band (x=20 is safely within the band gap)
-      PxInside := Reread.GetPixel(20, CapY);
-      AssertTrue('inside erased band: red < 100 (border not visible, white shows through)',
-        PxInside.red < 100);
+      // (b) The band interior at the border's y. A single pixel cannot be pinned here:
+      // the caption ink starts at BandLeft+Scale(4) and anti-aliases (a black glyph edge
+      // on the white band reads mid-grey — x=20 used to sit ON the ink, invisible only
+      // while the band was black), so assert over the band interior x=6..18 instead:
+      //   - the RED BORDER shows nowhere in it (no red-dominant pixel), and
+      //   - the erased parent WHITE shows somewhere in it (a light, neutral pixel).
+      FoundWhite := False;
+      for BandX := 6 to 18 do
+      begin
+        PxInside := Reread.GetPixel(BandX, CapY);
+        AssertTrue(Format('inside erased band: no border-red pixel at x=%d ' +
+          '(border erased; got %d,%d,%d)',
+          [BandX, PxInside.red, PxInside.green, PxInside.blue]),
+          PxInside.red <= PxInside.blue + 80);
+        if (PxInside.blue > 200) and (PxInside.red <= PxInside.blue + 20) then
+          FoundWhite := True;
+      end;
+      AssertTrue('inside erased band: the white parent bg shows through somewhere ' +
+        'in x=6..18 (band erased to the resolved parent colour, not left dark)',
+        FoundWhite);
     finally
       Reread.Free;
     end;

@@ -154,6 +154,42 @@ LCL 的 `TSpeedButton` 和 `TPaintBox` 都是 `TGraphicControl` —— **没有�
 另外探针内部那版"切主题连续采样"的扫描**不可信**(它给 `aero` 读到 `#FAFAFA`,
 那正好是上一个主题 `adwaita` 的背景色,典型的采到上一帧);**上表用的是每主题独立进程那一版。**
 
+### aero 黑角:已修(2026-08-07,真机验证)
+
+**上面那个怀疑(`FillCornerGaps` 丢 alpha)量出来是错的。** 画家侧的 alpha 合成一直是对的
+(`tests/test.painter.pas` 的 `TestFillCornerGapsPreservesAlpha` 钉死:`#00000014` 盖白底
+得 ~235 灰,不是黑)。真正的链条(逐环实测,探针在共享 scratchpad `a0105_probe/`):
+
+1. aero 是 17 个内置里唯一 `TyForm { background: linear-gradient }` 的主题;渐变底不建
+   photo backdrop(`RebuildBackdrop` 只认 `tfkImage`)→ 无 glass host;
+2. 窗口化子控件重建父背景走 `TyResolveParentBgFill` 的窗体分支,而
+   `ITyThemedBackground.ThemedBgColor` **只答纯色**(out 参数就一个颜色)→ 渐变时答 False;
+3. 回落读裸 LCL `Color`;`ApplyChromeTheme` 对非纯色背景**从不设** `Color` → 停在
+   `clDefault`;`ColorToRGB(clDefault)` = `$20000000 and $FFFFFF` = **纯黑**;
+4. 于是 `TyFillParentBg`(整块底)和 `FillCornerGaps`(角隙补丁)都拿到不透明黑——
+   画进去的颜色本来就是黑,不是谁丢了 alpha。(那次"切主题读到 #FAFAFA"其实也是
+   这个机制:上一主题设过的 `Color` 残留,不只是采到上一帧。)
+
+**修法**(`source/tyControls.Base.pas`,一处):窗体分支加 `TyThemedFormGradient` ——
+纯色仍走接口;渐变经 `TyRebaseGradient` 把窗体的 ramp 切成子控件所在的那一段(带 alpha
+则压到不透明);残余回落改 `GetColorResolvingParent`(clDefault 永远不再当黑读)。
+守卫:`tests/test.formgradientbg.pas`(5 条,全部探**角像素**;修前红,3 条失败信息在
+测试头注释里);变异测试 6 只全捕。
+
+**真机(每主题独立进程 + 屏幕 DC 读回)**:aero 角像素 `#000000` → `#EAF0F7`/`#E8EFF6`
+(与 6px 外背景差 1 阶,与同窗体图形控件 TTyLabel 的参照偏差同量级);light/showcase
+角=底完全相等,没动;其余主题由 golden/paint 套件守(全绿)。截图
+`a0105_before_aero.png` / `a0105_after_aero.png` + 4x 裁剪在共享 scratchpad。
+
+**顺带定死了前任没定死的那点:黑角是"一直在",不是仅首帧。** 修前探针在**不挪窗**的
+前提下 `RedrawWindow(ERASE|INVALIDATE|ALLCHILDREN)` 强刷,前后两轮角像素都是
+`#000000`(机制上也必然:解析器每次 DrawFrame 都确定性地返回同一个黑)。
+
+**连带**:裸 `TForm`(未设 Color)上的 TTy 控件同样黑角(同一 clDefault 类缺陷),
+修后为浅系统灰。两条老测试(`test.groupbox` 标题带、`test.splitter` 抓点)当年是
+**踩着黑底才绿的**(splitter 的 +50 蓝优阈值按黑底标定;groupbox 的 `red<100` 其实
+量的是黑带),已按白底重标(见各自注释)——又一例 tests-that-pin-the-bug。
+
 ---
 
 ## 剩下的单控件大特性(按受众排)
@@ -203,9 +239,12 @@ LCL 的 `TSpeedButton` 和 `TPaintBox` 都是 `TGraphicControl` —— **没有�
 4. ~~**程序 C 先量后改**~~ **量完了(2026-08-06),结论是不改。**
    `TTyPaintPanel` 是能放子控件的真容器(实测:子控件有真 Win32 父子句柄),变不了图形控件;
    原本的视觉理由已被 `a1c31d1` 用一个函数修掉。**这一条可以关掉。**
-   **替代动作(仍未做)**:`aero` 主题下窗口化控件的四角是纯黑硬角块(17 个内置主题里只有它一个)。
+   ~~**替代动作(仍未做)**:`aero` 主题下窗口化控件的四角是纯黑硬角块(17 个内置主题里只有它一个)。
    `aero` 的特殊之处是**同时**有渐变的 `TyForm` 底和带 alpha 的控件阴影,怀疑 `FillCornerGaps` 
-   在这个组合下把 `#00000014` 当成 `#000000` 写了进去。
+   在这个组合下把 `#00000014` 当成 `#000000` 写了进去。~~
+   **已修(2026-08-07),而且那个怀疑是错的**——黑来自渐变窗体背景解析不出、回落到
+   `ColorToRGB(clDefault)`,不是画家丢 alpha。链条、修法、真机前后对比见上面
+   "程序 C"一节末尾的《aero 黑角:已修》。
 
 ## 这一轮之后仍然欠的账(不在上表里的)
 

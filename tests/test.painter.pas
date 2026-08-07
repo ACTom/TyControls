@@ -38,6 +38,7 @@ type
     procedure TestChevronLeftIsTheApexMirrorOfChevronRight;
     procedure TestNineSliceCenterRegion;
     procedure TestEraseRectMakesTransparent;
+    procedure TestFillCornerGapsPreservesAlpha;
     procedure TestPerCornerTopRoundBottomSquare;
     procedure TestFallbackFontNameApplied;
     procedure TestMeasureTextAndUnscale;
@@ -344,6 +345,39 @@ begin
   AssertEquals('erased pixel alpha = 0', 0, pxInside.alpha);
   AssertEquals('outside pixel alpha = 255 (unchanged)', 255, pxOutside.alpha);
   AssertEquals('outside pixel red = 255 (unchanged)', 255, pxOutside.red);
+end;
+
+procedure TPainterTest.TestFillCornerGapsPreservesAlpha;
+{ Closes a recorded-but-WRONG suspicion from the aero black-corner investigation
+  (plans/2026-08-04-parity-remaining-programs.md): that FillCornerGaps treats an alpha
+  colour like the #00000014 shadow as opaque #000000. It does not — the patch is built
+  from TyColorToBGRA (alpha kept) and composited with dmDrawWithTransparency — and this
+  pins that: a 20/255-alpha black over a white base must leave the corner NEAR-WHITE
+  (255 * 235/255 = ~235), not black. The aero notches came from the colour HANDED to
+  FillCornerGaps (an unresolved clDefault), which test.formgradientbg guards.
+
+  The probe is the CORNER pixel, never the centre — and the centre must stay untouched:
+  FillCornerGaps' whole contract is to repaint only the gaps outside the rounded shape. }
+var
+  fill: TTyFill;
+  corner, centre: TBGRAPixel;
+begin
+  MakePainter(40, 40, 96);
+  FillChar(fill, SizeOf(fill), 0);
+  fill.Kind := tfkSolid;
+  fill.Color := TyRGBA(255, 255, 255, 255);
+  FPainter.FillBackground(Rect(0, 0, 40, 40), fill, 0);   // opaque white base everywhere
+  FPainter.FillCornerGaps(Rect(0, 0, 40, 40), TyUniformCorners(8), TyRGBA(0, 0, 0, 20));
+  corner := PixelAt(0, 0);
+  centre := PixelAt(20, 20);
+  AssertTrue(Format('corner blends the 20/255 alpha instead of going opaque black ' +
+    '(got #%.2x%.2x%.2x)', [corner.red, corner.green, corner.blue]),
+    (corner.red >= 225) and (corner.red <= 245) and
+    (corner.green >= 225) and (corner.green <= 245) and
+    (corner.blue >= 225) and (corner.blue <= 245));
+  AssertEquals('corner stays opaque (composited over the opaque base)', 255, corner.alpha);
+  AssertEquals('the centre inside the rounded shape is untouched (red)', 255, centre.red);
+  AssertEquals('the centre inside the rounded shape is untouched (alpha)', 255, centre.alpha);
 end;
 
 procedure TPainterTest.TestPerCornerTopRoundBottomSquare;
