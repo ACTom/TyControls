@@ -282,3 +282,20 @@ LCL 的 `TSpeedButton` 和 `TPaintBox` 都是 `TGraphicControl` —— **没有�
   - 日期框弹出日历:真鼠标点 chevron 拉开(弹层是懒建的独立顶层窗,240×220,贴着字段正下方);
     **OS 区域是 zh-CN** 而 `--lang=en` 下月份/星期是 **August 2026 / Mon..Sun**,`--lang=zh_CN` 下是 **八月 2026 / 周一..周日**——
     跟应用语言、不跟 OS,`d674fd4` 最后一个缺口闭合。`a5db2fbf_dtp_popup_en.png` / `_dtp_popup_zh.png`(主窗 `_dtp_main_*.png`)。
+
+
+## 论坛反馈 triage(2026-08-07,https://forum.lazarus.freepascal.org/index.php/topic,74355)
+
+Antek(主要测试者)两页反馈逐条对账:
+
+| # | 问题 | 状态 |
+|---|---|---|
+| #4/#5 | demo 右/下不能拉伸、dialogs 客户区花 | **已修**(TTyFormSurface,作者已回) |
+| #7a | Aero Snap 拖顶不最大化 | **已修**,Antek #13 亲测确认 |
+| #7b | **最大化窗口不能拖动还原**(Windows 惯例:拖标题栏即还原并继续拖) | **待核/大概率未做** —— Form.pas 注释就是故意挡掉的;→ 新单 |
+| #8 | **TTySteps 方向键无效**(焦点拿不到);作者当时说"整个焦点系统要系统性修" | → 新单(连带点击取焦点全面复核) |
+| #12/#15 | **TTyScrollBox 四连**:滚动条被子面板盖住 / 滚轮第一格方向反 / 拖滑块闪烁 / 内容跳动;tyscrollcontent 一度不可用 | 拖拽已修过一轮,**其余待复现修复** → 新单 |
+| #14 | **`window-shadow: false` 不生效**(border-radius 局部生效);另问 TTyForm 有没有运行时 StyleOverride | **未修**(作者回"回头看") → 新单 |
+| #16 | **HighDPI PerMonitorV2**:跨屏 2-4 秒重算、回来布局永久坏、TyTitleBar 过高 | **未修,作者承诺下周** → 新单(最大) |
+| #18a | containers 编译报 unknown property autoscroll | **已修**(d93e676 + check-lfm-props 守卫,他用的 a1c31d1 太旧) |
+| #18b | **antdesign 反馈页的输入对话框偶尔关不掉** | 未复现过 → 新单(复现优先;怀疑 EnableWindow 时序,见 swallowed-cm-message-inherited) |
