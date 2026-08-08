@@ -49,6 +49,10 @@ Thumbs.db
 /tools/genicons/lib/
 /tools/genicons/_smoke/
 /tools/genicons/*.png
+/tools/genappicon/genappicon.exe
+/tools/genappicon/lib/
+/tools/genappicon/*.png
+/tools/genappicon/*.ico
 
 # 发布包输出（make-release.ps1 生成，上传 GitHub release 用，不入库）
 /dist/

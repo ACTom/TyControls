@@ -50,6 +50,7 @@ uses
   test.builtinskins,
   test.modecoherence,
   test.paletteicons,
+  test.appicon,
   test.tabsheet,
   test.pagecontrol,
   test.pagecontrol.streaming,
