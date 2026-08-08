@@ -583,7 +583,7 @@ Both survivors want the same thing to become observable: **a shown-window test**
 probe is exactly that and it catches both; it is not in the suite because the suite is
 headless. If someone builds a GUI test target, port the probe into it first.
 
-### 5. A SECOND latch, found by this work, NOT fixed
+### 5. A SECOND latch, found by this work — FIXED on the controls, still open on TTyForm
 
 `Font.Height` defaults to 0, meaning "the widgetset default". LCL's DPI pass **replaces**
 that 0 with an explicit value on the FIRST crossing, deliberately, so that the font scales
@@ -608,17 +608,103 @@ at 96, so the factor is 96/72 = 1.33: across one 96→240→96 trip `TTyCheckBox
 family as everything above — PPI-derived state latched instead of derived — but it happens
 one layer below this library and a control cannot see it coming.
 
-Not fixed, and not guard-shaped. Once LCL has written a height there is nothing left to
-distinguish "the author chose 12 pt" from "LCL wrote 12 pt on the way past", so any fix has
-to decide what an unset font size means. Two candidates, neither tried: remember before the
-pass whether `Font.Height` was 0 and restore that afterwards (self-drawn controls read the
-THEME's size, not `Font`, so it would cost them nothing — but it changes what
-`Control.Font` reports to anything else that reads it); or make `TyResolveFontSize`
-(`tyControls.Base.pas:1691`, whose last fallback is the control's `Font.Size`) prefer the
-theme over a height it did not author. The blast radius is every control's font resolution
-and the interesting case cannot be reproduced from here — it needs a machine whose primary
-monitor is not 96 DPI.
+The original write-up called this "not guard-shaped" and said the interesting machine could
+not be reached from here. **Both of those were wrong, and the corrections are what made the
+fix a six-line one.** Recorded in full, because each one was a day saved.
 
-`TControlDpiRoundTripTest` keeps this out of the round-trip tests by giving the FORM an
-explicit `Font.Size := 9`, so a ParentFont child inherits a non-zero height and LCL never
-has to invent one. The pin says so, at the pin.
+#### 5a. Three corrections to the paragraph above
+
+**It IS guard-shaped, because there is a virtual seam.** `DoScaleFontPPI` is not virtual
+(`controls.pp:1561`) so it cannot be replaced — but its only caller,
+`TControl.ScaleFontsPPI` (`controls.pp:1695`, `control.inc:872`, invoked from
+`AutoAdjustLayout` at `control.inc:4224`), **is** public virtual. That is the boundary, and
+overriding it is enough: remember whether `Font.Height` was 0 before `inherited`, put the 0
+back after.
+
+**The latch is NOT host-dependent; only its DAMAGE is.** `GetFontData` of a realized font is
+never 0, so the `Height = 0 -> Height <> 0` transition fires on **every** machine, at every
+crossing, whatever `Screen.PixelsPerInch` says. What needs a non-96 primary is the written
+value being *wrong* (by `96/primaryDPI`). So the defect reproduces headless, right here,
+and the guard has a real test — which is the opposite of what this section originally
+concluded. (This host's `Screen.PixelsPerInch = 72` makes it a non-96-primary case anyway.)
+
+**The blast radius is one function argument, not "every control's font resolution".** A
+sweep of `source/` finds `Font.Height` read **nowhere**, and `Font.Size` read **only** as
+`TyResolveFontSize`'s `AControlFontSize` (every other hit is a `Canvas.Font.Size` write on a
+measuring bitmap). So "unset" has exactly one meaning to defend, and defending it costs the
+drawn text nothing: controls scale by `MulDiv(ResolveFontSize(style), Font.PixelsPerInch, 96)`
+and `Font.PixelsPerInch` is still set by `inherited`.
+
+Why `Height = 0` is the right representation rather than a remembered flag: `TFont.SetPixelsPerInch`
+rescales `Height` only `if Height<>0` (`font.inc:860`), so 0 is **PPI-invariant by
+construction** and survives every later crossing with no bookkeeping.
+
+**The other candidate is REJECTED, on a reason worth keeping.** Teaching `TyResolveFontSize`
+to prefer the theme over a height it did not author cannot work: after the pass an authored
+14 pt and a latched 14 pt are the same bytes, so it would have to demote *both*, breaking
+the explicit-`Font.Size` contract that `TFontCascadeTest.TestExplicitControlFontStillWins`
+pins. Guarding the representation keeps both cases expressible; guarding the consumer cannot.
+
+#### 5b. What was built
+
+`TTyGraphicControl.ScaleFontsPPI` and `TTyCustomControl.ScaleFontsPPI` in
+`tyControls.Base.pas` — twice, same reason as the size floor (no common ancestor below
+`TControl`). Rationale lives on the `TTyGraphicControl` declaration.
+
+`tests/test.dpi.fontlatch.pas`, 11 tests, carrying a plain LCL `TButton` as the control
+group so that "LCL still latches" is asserted rather than assumed.
+
+#### 5c. Mutants
+
+| # | what was broken | result |
+|---|---|---|
+| M1 | guard removed from `TTyCustomControl.ScaleFontsPPI` | **killed**, 5 tests — incl. `the THEME must still decide the font size after a round trip ... expected <9> but was <12>` and `TTyCheckBox width floor ... expected <68> but was <76>` |
+| M2 | guard removed from `TTyGraphicControl.ScaleFontsPPI` only | **killed**, 2 — `TTyLabel: unset font size after a crossing expected <0> but was <-40>` |
+| M3 | guard made unconditional (blanks an authored height too) | **killed**, 2 — `an AUTHORED font size must come back exactly ... expected <14> but was <0>` |
+| M4 | guard restores the whole font, not just the marker | **killed** — `the font must still arrive at the new monitor PPI ... expected <240> but was <96>` |
+
+**M3 survived the first version of the test, and that is the entry to read.**
+`TestAnAuthoredNegativeHeightIsNotTouched` wrote `Font.Height := -12` — which is exactly
+`Font.Size = 9` at 96 PPI, i.e. the value the probe had **already** inherited from the form.
+`TFont.SetHeight` exits without firing `Changed` when the value is unchanged, so `ParentFont`
+was never cleared, nothing was ever authored, and the `-30` the test saw after the crossing
+came from the form's font being copied down afterwards. A textbook centre probe, and
+invisible: every number in it looked right. Found only by instrumenting the run. The test now
+authors `-20` (differs from the inherited value, and round-trips exactly through `MulDiv`)
+and asserts `ParentFont = False` as a precondition, which is the line that stops it
+regressing.
+
+Instrumenting that also settled a scope question for free: **for a `ParentFont = True` child
+the guard is irrelevant either way.** `TWinControl.AutoAdjustLayout` walks children before
+itself (`wincontrol.inc:3932-3935`), so the parent's font arrives afterwards through
+`CM_PARENTFONTCHANGED` and overwrites whatever the child's own pass left. The guard earns its
+keep on `ParentFont = False` controls — which is exactly where `TyResolveFontSize` consults
+`Font.Size` at all.
+
+#### 5d. What is NOT fixed: TTyForm's own font
+
+`TTyForm` is neither of the two guarded bases, and `tyControls.Form.pas` was out of scope.
+A form's `Font.Height` is 0 by default, so it still latches, and the latched height still
+reaches every `ParentFont = True` child. Today that is harmless to font RESOLUTION —
+`TyResolveFontSize` ignores `Font.Size` entirely while `ParentFont` is True — but it is not
+harmless to the size floors, and it is why `TControlDpiRoundTripTest` still pins
+`FForm.Font.Size := 9`.
+
+Measured, both directions, so the next person does not have to:
+
+- delete the pin, keep everything else: **six of seven tests stay green**, and
+  `TestRoundTripsWithTheLclDefaultParentFontToo` — the only one running the LCL-default
+  `ParentFont = True` — fails with `TTyToggleSwitch: width after three 96->240->96 trips
+  expected <120> but was <126>`. That 126 is the same number this section recorded above.
+- delete the pin **and** add the identical six-line override to `TTyForm.ScaleFontsPPI`:
+  **all seven pass.**
+
+That is the whole of the follow-up: the same guard, on `TTyForm`, in `tyControls.Form.pas`,
+after which the pin in `TControlDpiRoundTripTest.Build` (both the form's and the per-control
+`FCtls[i].Font.Size := 9`) can go and the class becomes an unpinned round-trip test. The pin
+says all of this, at the pin.
+
+Still genuinely unreachable from here: whether the value LCL writes is *correct*. That needs
+a machine whose primary monitor is not 96 DPI. The guard makes the question moot for ty
+controls — an unset size never becomes a written one — but a plain LCL control in a ty form
+is still subject to it, and that is LCL's behaviour, not ours.

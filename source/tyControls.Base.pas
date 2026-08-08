@@ -127,6 +127,60 @@ type
     procedure UpdateSizeConstraints;
     procedure AutoAdjustLayout(AMode: TLayoutAdjustmentPolicy;
       const AFromPPI, AToPPI, AOldFormWidth, ANewFormWidth: Integer); override;
+    { ===== PER-MONITOR DPI: the SECOND latch -- an unset font SIZE =============
+      (plans/2026-08-08-permonitor-dpi.md section 5. Twin on TTyCustomControl.)
+
+      Font.Height = 0 means "the widgetset default", i.e. THE AUTHOR NEVER SET A SIZE, and
+      that is the representation this library reads: TyResolveFontSize consults the control's
+      Font.Size only when it is > 0 (and ParentFont is False), otherwise the THEME decides.
+      Font.Size is -Round(Height*72/PixelsPerInch), so Height = 0 IS Size = 0 IS "not set".
+
+      LCL destroys that representation on the first monitor crossing, deliberately and
+      irreversibly (TControl.DoScaleFontPPI, control.inc:1972-1973):
+
+        if (AFont.Height = 0) and not (csDesigning in ComponentState) then
+          AFont.Height := MulDiv(GetFontData(AFont.Reference.Handle).Height,
+                                 AFont.PixelsPerInch, Screen.PixelsPerInch);
+
+      It has to: with Height = 0 a plain LCL control's text would not follow the monitor at
+      all. But GetFontData of a realized font is NEVER 0, so this fires on every host and
+      every crossing, and afterwards nothing can tell "the author chose 12 pt" from "LCL
+      wrote 12 pt on the way past". A ty control then stops being theme-locked -- its caption
+      is measured and drawn at whatever height LCL happened to write, forever, and the
+      reference in that MulDiv is Screen.PixelsPerInch (the PRIMARY monitor), which agrees
+      with the form only on the machine that drew it. On a 144-DPI primary the written size
+      is out by 96/144 permanently. Measured in this repo's own console runner, which reports
+      Screen.PixelsPerInch = 72: TTyCheckBox's floor went 70x17 -> 78x20 and
+      TTyToggleSwitch's width floor 108 -> 126 across ONE 96->240->96 trip, neither coming
+      back.
+
+      DoScaleFontPPI is not virtual, so it cannot be replaced; ScaleFontsPPI (its only
+      caller, control.inc:872/4224) is, and that is the boundary this guard sits on. Remember
+      whether the size was unset, let LCL do its pass, then put "unset" back.
+
+      Three reasons this costs nothing and is not a font-stack rewrite:
+
+        - Font.Height = 0 is PPI-INVARIANT by construction: TFont.SetPixelsPerInch rescales
+          Height only `if Height<>0` (font.inc:860), so restoring 0 survives every later
+          crossing without any bookkeeping.
+        - Font.PixelsPerInch is still set to AToPPI by `inherited`, and that is the number ty
+          controls actually scale with -- they draw at MulDiv(ResolveFontSize(style),
+          Font.PixelsPerInch, 96). Restoring the height does not stop anything scaling.
+        - the blast radius inside this library is one argument: source/ reads Font.Height
+          NOWHERE, and reads Font.Size ONLY as TyResolveFontSize's AControlFontSize. So
+          "unset" has exactly one meaning to defend.
+
+      What is deliberately NOT done: hardening TyResolveFontSize to distrust a height it did
+      not author. That was the other candidate in section 5 and it is strictly worse -- it
+      cannot tell an authored 14 pt from a latched one either, so it would have to demote
+      BOTH, breaking the explicit-Font.Size contract that TFontCascadeTest pins. Guarding the
+      representation keeps the contract intact.
+
+      NOT covered: TTyForm's own font (a different unit, and out of scope for the change that
+      added this). It is harmless today -- a latched height reaches ParentFont = True children
+      through CM_PARENTFONTCHANGED, and TyResolveFontSize ignores Font.Size entirely while
+      ParentFont is True -- but see the plan before assuming that stays true. }
+    procedure ScaleFontsPPI(const AToPPI: Integer; const AProportion: Double); override;
     procedure DrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);
     procedure MouseEnter; override;
     procedure MouseLeave; override;
@@ -260,6 +314,8 @@ type
     procedure UpdateSizeConstraints;
     procedure AutoAdjustLayout(AMode: TLayoutAdjustmentPolicy;
       const AFromPPI, AToPPI, AOldFormWidth, ANewFormWidth: Integer); override;
+    { The SECOND latch. Twin of the one on TTyGraphicControl -- read it there. }
+    procedure ScaleFontsPPI(const AToPPI: Integer; const AProportion: Double); override;
     {$IFDEF LCLGTK3}
     { LCL-GTK3 is the only widgetset that never clears a damaged region -- see the body. This
       hands its remaining clear a colour to work with, ONCE per theme change. }
@@ -689,6 +745,29 @@ begin
   if (AMode in [lapAutoAdjustWithoutHorizontalScrolling, lapAutoAdjustForDPI])
      and (AToPPI > 0) and (Font.PixelsPerInch = AToPPI) then
     UpdateSizeConstraints;
+end;
+
+procedure TTyGraphicControl.ScaleFontsPPI(const AToPPI: Integer; const AProportion: Double);
+var
+  sizeWasUnset: Boolean;
+begin
+  { See the declaration for the whole story. Read the marker BEFORE the pass, because the
+    pass is what destroys it. }
+  sizeWasUnset := Font.Height = 0;
+  inherited ScaleFontsPPI(AToPPI, AProportion);
+  { Put "not set" back. Guarded on sizeWasUnset so an AUTHORED size is never touched -- LCL
+    does not touch one either, and demoting it would break the explicit-Font.Size contract.
+
+    No ParentFont bookkeeping here, and none is wanted. In the branch that runs, `inherited`
+    has ALREADY cleared ParentFont: DoScaleFontPPI writes a non-zero Height into a font whose
+    Height was 0, and that write fires TFont.Changed -> TControl.FontChanged, which clears
+    FParentFont (control.inc:621) whether or not the PPI itself moved. So this line adds no
+    side effect that was not already there, and TControl.AutoAdjustLayout puts ParentFont
+    back in its own finally (control.inc:4228). Restoring it HERE would re-copy the parent's
+    font -- still at the OLD PPI, because TWinControl.AutoAdjustLayout walks children before
+    itself (wincontrol.inc:3932) -- and undo the scaling LCL just did correctly. }
+  if sizeWasUnset then
+    Font.Height := 0;
 end;
 
 function TTyGraphicControl.CurrentStates: TTyStateSet;
@@ -1669,6 +1748,17 @@ begin
   if (AMode in [lapAutoAdjustWithoutHorizontalScrolling, lapAutoAdjustForDPI])
      and (AToPPI > 0) and (Font.PixelsPerInch = AToPPI) then
     UpdateSizeConstraints;
+end;
+
+procedure TTyCustomControl.ScaleFontsPPI(const AToPPI: Integer; const AProportion: Double);
+var
+  sizeWasUnset: Boolean;
+begin
+  // See the TTyGraphicControl twin -- the whole rationale is on its declaration.
+  sizeWasUnset := Font.Height = 0;
+  inherited ScaleFontsPPI(AToPPI, AProportion);
+  if sizeWasUnset then
+    Font.Height := 0;
 end;
 
 function TTyCustomControl.CurrentStates: TTyStateSet;

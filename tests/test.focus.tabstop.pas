@@ -4,6 +4,7 @@ interface
 uses
   Classes, SysUtils, TypInfo, Controls, Forms, LCLType, LMessages,
   fpcunit, testregistry,
+  test.designregistry,               // the runtime roster the completeness guard reads
   tyControls.Base, tyControls.ScrollBar,
   { focusable side }
   tyControls.Button, tyControls.ColorButton, tyControls.DropButtons,
@@ -13,6 +14,22 @@ uses
   tyControls.ListBox, tyControls.CheckBox, tyControls.Segmented,
   tyControls.TreeView, tyControls.ListView, tyControls.ToggleSwitch,
   tyControls.Menu, tyControls.RibbonBackstage,
+  { focusable side, added when the tables were extended from 47 classes to all 105 }
+  tyControls.MaskEdit, tyControls.URLEdit, tyControls.ComboEdit, tyControls.NumericEdit,
+  tyControls.CurrencyEdit, tyControls.CalcEdit, tyControls.CalcCurrencyEdit,
+  tyControls.TrackEdit, tyControls.FloatSpinEdit, tyControls.SpinEdit,
+  tyControls.ComboBox, tyControls.AdvancedComboBox, tyControls.CheckComboBox,
+  tyControls.ColorBox, tyControls.ColorComboBox, tyControls.ComboBoxEx,
+  tyControls.FilterComboBox, tyControls.FontComboBox, tyControls.FontSizeComboBox,
+  tyControls.MRUComboBox, tyControls.OfficeComboBox, tyControls.ShellComboBox,
+  tyControls.AdvancedListBox, tyControls.CheckListBox, tyControls.ColorListBox,
+  tyControls.FontListBox, tyControls.OfficeListBox, tyControls.ValueListEditor,
+  tyControls.ShellListView, tyControls.ShellTreeView,
+  tyControls.PageControl, tyControls.TabSet,
+  tyControls.Calendar, tyControls.DateTimePicker, tyControls.Dial, tyControls.GearDial,
+  tyControls.Rating, tyControls.TrackBar, tyControls.Pagination, tyControls.Memo,
+  tyControls.TreeSelect, tyControls.Cascader, tyControls.RibbonGallery,
+  tyControls.ListGroupPanel, tyControls.RibbonAppMenu,
   { non-focusable side }
   tyControls.Panel, tyControls.Card, tyControls.GroupBox, tyControls.TabSheet,
   tyControls.FormSurface, tyControls.ToolBar, tyControls.StatusBar,
@@ -20,7 +37,10 @@ uses
   tyControls.Splitter, tyControls.ExPanel, tyControls.CheckGroup,
   tyControls.RadioGroup, tyControls.ToolGroupPanel, tyControls.ScrollBox,
   tyControls.RelativePanel, tyControls.PaintPanel, tyControls.ControlBar,
-  tyControls.Transfer, tyControls.Steps;
+  tyControls.Transfer, tyControls.Steps,
+  { non-focusable side, same extension }
+  tyControls.GridPanel, tyControls.ScrollPanel, tyControls.CoolBar, tyControls.ToolBarEx,
+  tyControls.HtmlLabel, tyControls.PreviewBox, tyControls.Form;
 
 type
   { Any windowed TyControl, as a class reference — TabStop is published on
@@ -55,6 +75,7 @@ type
   published
     procedure TestControlsThatActOnInputAreTabStops;
     procedure TestContainersAndChromeStayOutOfTheFocusOrder;
+    procedure TestEveryRegisteredWindowedControlIsOnATable;
     procedure TestPublishedDefaultAgreesWithTheConstructedValue;
     procedure TestEmbeddedScrollBarsNeverTakeFocusFromTheirHost;
     procedure TestTransferRailStaysOutOfTheTabOrder;
@@ -108,6 +129,22 @@ type
   TGridAccess = class(TTyCustomGrid);
   TListViewAccess = class(TTyListView);
 
+function FocusableControls: TTyCtlClassArray; forward;
+
+{ Used by the click probe to prove its own (narrower) roster is a SUBSET of the declared
+  focusable table -- see the long note above ClickProbeControls. }
+function InFocusableTable(ACls: TTyCtlClass): Boolean;
+var
+  list: TTyCtlClassArray;
+  i: Integer;
+begin
+  list := FocusableControls;
+  for i := 0 to High(list) do
+    if list[i] = ACls then Exit(True);
+  Result := False;
+end;
+
+
 
 { Controls the user OPERATES: a click must land focus on them, and Tab must reach them.
   Each one either handles keys itself (button: Space/Enter; scroll bar: arrows/page/Home/
@@ -125,7 +162,72 @@ begin
     { already focusable before this pass — listed so a regression shows up as a failure,
       and because several of them only got their DECLARED default fixed in it }
     TTyEdit, TTyListBox, TTyCheckBox, TTySegmented, TTyTreeView, TTyListView,
-    TTyCalculator, TTyToggleSwitch, TTyMenuBar, TTyRibbonBackstage);
+    TTyCalculator, TTyToggleSwitch, TTyMenuBar, TTyRibbonBackstage,
+
+    { ===== the extension: the 47 focusable families the tables used to miss ==========
+      Everything above this line was written by the click-focus sweep, which listed the
+      classes it had touched: 47 entries across both tables, against 105 windowed TTy
+      classes a .lfm can actually name. So 58 families had no declared-default guard at all
+      -- not a known defect, a hole, and one that stayed invisible precisely because
+      everything listed was green. The completeness guard below
+      (TestEveryRegisteredWindowedControlIsOnATable) now derives the population from the
+      design-time registry instead of from a hand-kept list, so this table cannot silently
+      fall behind again.
+
+      All 58 turned out to be already correct -- extending the tables found no live defect,
+      which is the expected result for a coverage gap and is worth stating so nobody
+      re-derives it. What the extension buys is the FUTURE case: mutating one newly-covered
+      class's declared default (TTyDial, `default True` -> `default False`) now fails
+      TestPublishedDefaultAgreesWithTheConstructedValue, and before this change it passed.
+
+      An entry here is not decoration: TestPublishedDefaultAgreesWithTheConstructedValue
+      checks each one's `default` against what its constructor produces, which is the .lfm
+      streaming bug this file exists for. }
+
+    { the text-entry family. All descend from TTyEdit (or from TTyNumericEdit, which does)
+      and inherit its `default True` — listed individually because a DESCENDANT can re-set
+      TabStop in its own constructor and the declared default lives on the ancestor, so the
+      pair only stays consistent if each concrete class is checked. }
+    TTyMaskEdit, TTyURLEdit, TTyComboEdit, TTyNumericEdit, TTyCurrencyEdit,
+    TTyCalcEdit, TTyCalcCurrencyEdit, TTyTrackEdit, TTyFloatSpinEdit, TTySpinEdit,
+    { the drop-down family: the FIELD takes the tab stop and owns the keyboard (typing,
+      Alt+Down, arrows through the list). Their popup lists are separately forced to
+      TabStop=False so a combo is one stop and not two — tyControls.ComboBox.pas:1174. }
+    TTyComboBox, TTyAdvancedComboBox, TTyCheckComboBox, TTyColorBox, TTyColorComboBox,
+    TTyComboBoxEx, TTyFilterComboBox, TTyFontComboBox, TTyFontSizeComboBox,
+    TTyMRUComboBox, TTyOfficeComboBox, TTyShellComboBox,
+    { the list family: arrow keys move the selection, so the list itself must hold focus }
+    TTyAdvancedListBox, TTyCheckListBox, TTyColorListBox, TTyFontListBox, TTyOfficeListBox,
+    TTyValueListEditor,
+    { shell browsers — TTyListView / TTyTreeView with a directory behind them }
+    TTyShellListView, TTyShellTreeView,
+    { value pickers and data controls, each of which handles its own keys }
+    TTyCalendar, TTyDateTimePicker, TTyMemo, TTyTrackBar, TTyDial, TTyGearDial,
+    TTyRating, TTyPagination, TTyTreeSelect, TTyCascader, TTyRadioButton,
+
+    { ----- entries that need their reason stated, because the name suggests otherwise ----
+
+      TTyPageControl / TTyTabSet / TTyRibbon all descend from TTyCustomTabStrip, which is a
+      keyboard control: Left/Right (or Up/Down) move between tabs, so the STRIP holds focus
+      even though what it contains are pages full of other controls. That is the standard
+      behaviour of every native tab control, and it is why these three sit here rather than
+      with the containers — the container rule ("its interactive parts are its children")
+      would be the wrong call for a widget whose own arrow keys do something. Note
+      TTyRibbonGroup is on the OTHER table: a group is a plain box inside a ribbon page and
+      has no keyboard of its own. }
+    TTyPageControl, TTyTabSet, TTyRibbon,
+    { TTyListGroupPanel is a LIST that happens to be named Panel — it groups list items, not
+      child controls, and its arrow keys move the selected item. Constructor and declaration
+      both say True. Named here explicitly so nobody "corrects" it onto the container table
+      on the strength of the word Panel. }
+    TTyListGroupPanel,
+    { TTyRibbonGallery holds focus itself; its internal TTyGalleryGrid is forced to
+      TabStop=False (tyControls.RibbonGallery.pas:224) for the same one-stop-per-widget
+      reason the combos have. }
+    TTyRibbonGallery,
+    { TTyRibbonAppMenu is a TTyMenuButton — a button that opens the application menu, and a
+      button is a tab stop. }
+    TTyRibbonAppMenu);
 end;
 
 { Containers and chrome. Every one of these either holds the real controls as children
@@ -147,7 +249,53 @@ begin
     { a composite whose interaction lives entirely in its children }
     TTyTransfer,
     { a status rail, inert until Clickable is switched on (which sets TabStop) }
-    TTySteps);
+    TTySteps,
+
+    { ===== the extension: the 11 non-focusable families the tables used to miss =====
+      See the header of the focusable table for what this extension is and why. }
+
+    { containers — same rule as the ones above: the real controls are their children }
+    TTyGridPanel, TTyScrollPanel, TTyCoolBar, TTyToolBarEx,
+    { TTyGridCell is the designer cell INSIDE a TTyGridPanel (RegisterNoIcon, so it is
+      streamed and selectable but never dragged from the palette). It is a drop target for
+      other controls and has no keyboard of its own. }
+    TTyGridCell,
+    { TTyRibbonPage is the page a ribbon's tabs switch between — a box of TTyRibbonGroups.
+      The keyboard belongs to the STRIP (TTyRibbon, on the other table), not to the page. }
+    TTyRibbonPage,
+
+    { ----- entries that need their reason stated ------------------------------------
+
+      TTyToolButton and TTyToolSeparator are the one place a BUTTON legitimately stays out
+      of the tab order, and they are the mirror of TTySpeedButton above: a tool-bar command
+      acts on whatever the user was editing, so taking focus would move the caret out of it
+      and the button would then act on nothing. tyControls.ToolBar.pas:319/875 declares AND
+      constructs False, which is what makes it a legal disagreement with TTyButton's
+      `default True` rather than a bug — TTyToolButton descends from TTyGlyphButtonBase,
+      which redeclares `TabStop default False` (tyControls.GlyphButtons.pas:369) precisely so
+      the override streams. The separator is painted furniture with no behaviour at all. }
+    TTyToolButton, TTyToolSeparator,
+    { TTyHtmlLabel renders markup; it is a LABEL, so it stays out of the focus order like
+      every other label (TTyLinkLabel and friends are graphic controls and cannot be here at
+      all — this table only holds windowed classes). Its constructor says so explicitly,
+      tyControls.HtmlLabel.pas:366, because it descends from TTyCustomControl rather than
+      from a label base and would otherwise just inherit LCL's False by accident. }
+    TTyHtmlLabel,
+    { TTyPreviewBox displays a rendering; there is nothing to type into it and nothing its
+      arrow keys would move. }
+    TTyPreviewBox,
+    { TTyTitleBar is the form's own chrome and a designer container (a menu bar, a quick
+      access rail and a search box get dropped INTO it). Its buttons are TTyCaptionButtons
+      with their own focus story; the bar itself is a drag handle, and a tab stop on it would
+      mean Tab lands on the window's title.
+
+      Worth its own note for a second reason: this class is the one the STATIC sweep that
+      built this extension missed, because it is declared
+      `TTyTitleBar = class(TTyCustomControl, ITyTitleBarTag)` and a hand-written parser that
+      expects `class(TParent)` walks straight past an interface list. The completeness guard
+      below found it on the first run. That is the argument for deriving the population at
+      run time in one line rather than parsing sources cleverly. }
+    TTyTitleBar);
 end;
 
 procedure TTyFocusTabStopTest.SetUp;
@@ -195,6 +343,83 @@ begin
     AssertFalse(c.ClassName + ' must NOT be a tab stop: a click on its background would '
       + 'pull focus off the child that had it',
       c.TabStop);
+  end;
+end;
+
+{ THE REASON THE TABLES ABOVE CAN BE TRUSTED TOMORROW.
+
+  The tables are a decision, so they have to be written by hand. What must NOT be written by
+  hand is the POPULATION they are a decision about: the sweep that created this file listed
+  the classes it had touched, 47 of them, and by the time anybody checked, 58 more windowed
+  families had shipped with no declared-default guard at all. A hand-kept list of "all the
+  controls" falls behind on the first new control and never says so.
+
+  A static parse is not good enough either, and that is not a hypothesis: the sweep that
+  produced the 58 was itself a script over `source/*.pas` matching `T... = class(TParent)`,
+  and it silently missed TTyTitleBar, which is declared
+  `class(TTyCustomControl, ITyTitleBarTag)`. This test found it on its first run.
+
+  So the population is derived instead, the same way test.version.pas derives its own:
+  test.designregistry PARSES designtime/tyControls.Design.pas at run time and returns every
+  name in a RegisterComponents / RegisterNoIcon / RegisterDesignerBaseClass call. That file
+  is the one place a control MUST be edited to reach the palette at all, so a new control
+  appears here by construction, and this test fails until somebody decides which table it
+  belongs on. Deciding is the point; being reminded to decide is what was missing.
+
+  The filter is `InheritsFrom(TTyCustomControl)` — the windowed base, which is where TabStop
+  is published and where MouseDown's click-to-focus lives. Graphic controls, non-visual
+  components, forms and the two designer base classes drop out on their own; nothing is
+  exempted by name, because a by-name exemption list is the same hand-kept list one level
+  down. }
+procedure TTyFocusTabStopTest.TestEveryRegisteredWindowedControlIsOnATable;
+var
+  names, listed, missing: TStringList;
+  arr: TTyCtlClassArray;
+  cls: TPersistentClass;
+  i, windowed: Integer;
+begin
+  names := TStringList.Create;
+  listed := TStringList.Create;
+  missing := TStringList.Create;
+  try
+    arr := FocusableControls;
+    for i := 0 to High(arr) do listed.Add(arr[i].ClassName);
+    arr := ContainerAndChromeControls;
+    for i := 0 to High(arr) do listed.Add(arr[i].ClassName);
+    listed.Sorted := True;
+
+    CollectRegisteredClassNames(names);
+    { Sanity, so a parser that silently matched nothing cannot pass this test with an empty
+      population — the exact failure mode that makes a derived list worth having. }
+    AssertTrue('the design-registry parser found something at all', names.Count > 20);
+    AssertTrue('...including the palette groups', names.IndexOf('TTyButton') >= 0);
+    AssertTrue('...including the icon-less registrations', names.IndexOf('TTyGridCell') >= 0);
+
+    windowed := 0;
+    for i := 0 to names.Count - 1 do
+    begin
+      cls := GetClass(names[i]);
+      { An unresolvable name is test.version's TestEveryRegisteredNameResolves to report;
+        double-reporting it here would just make one omission look like two failures. }
+      if cls = nil then Continue;
+      if not cls.InheritsFrom(TTyCustomControl) then Continue;
+      Inc(windowed);
+      if listed.IndexOf(names[i]) < 0 then missing.Add(names[i]);
+    end;
+
+    { Second half of the same sanity check: the filter must not have rejected everything. }
+    AssertTrue('the TTyCustomControl filter kept a realistic number of classes',
+      windowed > 50);
+    AssertEquals('registered windowed control(s) with no declared focus default. Every'
+      + ' windowed TTy class a .lfm can name must appear in FocusableControls or in'
+      + ' ContainerAndChromeControls, so that its TabStop default is a decision somebody'
+      + ' wrote down (and so TestPublishedDefaultAgreesWithTheConstructedValue checks it).'
+      + ' Add each of these to the right table, with a comment if the choice is not obvious'
+      + ' from the class name:' + LineEnding + missing.Text, 0, missing.Count);
+  finally
+    missing.Free;
+    listed.Free;
+    names.Free;
   end;
 end;
 
@@ -431,6 +656,45 @@ begin
   end;
 end;
 
+{ THE CLICK PROBE HAS ITS OWN ROSTER, AND IT IS DELIBERATELY NARROWER THAN THE TABLE ABOVE.
+
+  This is the one place where "just iterate FocusableControls" is wrong, so it is written
+  out rather than derived. The tables above are cheap: construct, read a flag, read RTTI.
+  This suite is not -- every entry builds a real windowed control on a real visible form,
+  allocates a handle, pumps the message queue and delivers a synthetic LM_LBUTTONDOWN. It
+  was designed, and validated, against the 25 classes the click-focus sweep had touched.
+
+  Pointing it at the extended table was tried and REVERTED, on evidence:
+
+    * TTyCurrencyEdit DEADLOCKS the console runner on the synthetic press. Instrumented to
+      the statement: it gets past construction, handle allocation and the focus park
+      (`:created`, `:handled`, `:parked` all logged) and never returns from the
+      `Perform(LM_LBUTTONDOWN, ...)` / ProcessMessages pair. CPU flat at 0 for minutes,
+      one thread. Its own parent TTyNumericEdit, clicked identically one entry earlier,
+      passes -- so this is something TTyCurrencyEdit adds, not the edit family.
+      It is NOT a regression from any change in this pass: nothing had ever clicked this
+      control before, because it had never been on a roster. Reported, not fixed here
+      (tyControls.CurrencyEdit.pas was out of scope for this change).
+    * Beyond that, the roster would pull in the shell browsers (TTyShellTreeView,
+      TTyShellListView, TTyShellComboBox, TTyFilterComboBox), which enumerate the real
+      filesystem on handle creation. That is a machine-dependent cost and a machine-
+      dependent hang risk inside what is otherwise a pure unit suite.
+
+  So: the declared-default guard covers all 105 windowed classes, because reading a flag is
+  free. The click CHAIN is probed on this list. Adding to it is fine and welcome -- one
+  class at a time, each one actually run -- but do not wire it to FocusableControls, or the
+  next control with a blocking press takes the whole suite down with it. }
+function ClickProbeControls: TTyCtlClassArray;
+begin
+  Result := TTyCtlClassArray.Create(
+    TTyButton, TTyColorButton, TTyDropDownButton, TTyMenuButton,
+    TTyGlyphButton, TTyGlyphContainerButton,
+    TTyButtonGroup, TTyColorGrid, TTyDrawGrid, TTyStringGrid, TTyHeaderControl,
+    TTyHSColorPicker, TTyLColorPicker, TTyImageView, TTyScrollBar,
+    TTyEdit, TTyListBox, TTyCheckBox, TTySegmented, TTyTreeView, TTyListView,
+    TTyCalculator, TTyToggleSwitch, TTyMenuBar, TTyRibbonBackstage);
+end;
+
 procedure TTyClickFocusTest.TestAClickActuallyLandsFocusOnEveryFocusableControl;
 var
   list: TTyCtlClassArray;
@@ -438,9 +702,15 @@ var
   moved: Boolean;
   landed: string;
 begin
-  list := FocusableControls;
+  list := ClickProbeControls;
   AssertTrue('the roster must not be empty (a vacuous loop proves nothing)',
     Length(list) > 0);
+  { Every class on the click roster must also be on the DECLARED table, or the two would
+    drift apart silently and this suite could end up probing a control the tables no longer
+    consider focusable. The reverse does not hold, and must not -- see the note above. }
+  for i := 0 to High(list) do
+    AssertTrue(list[i].ClassName + ' is on the click roster but not in FocusableControls',
+      InFocusableTable(list[i]));
   for i := 0 to High(list) do
   begin
     landed := ClickAndReportFocus(list[i], moved);

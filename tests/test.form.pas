@@ -2770,16 +2770,35 @@ procedure TControlDpiRoundTripTest.Build(APPI: Integer);
   non-linearity in PPI. See the loop at the bottom.
 
   Font.Size := 9 -- pins the caption measurement so it says the same thing before and after
-  the trip. Leaving it at 0 hits a SEPARATE latent defect that would otherwise be blamed on
-  this one: with Font.Height = 0 (the default) LCL's DPI pass ASSIGNS an explicit height on
-  the first crossing (DoScaleFontPPI, control.inc:1972-1973), so Font.Size goes 0 -> 12; and
-  TyResolveFontSize's last fallback (tyControls.Base.pas:1705) uses the control's Font.Size
-  whenever the theme supplies neither a per-type font-size nor --font-size-base. The caption
-  is then measured with a bigger font after the crossing than before it, permanently.
-  Measured with Size unset: TTyCheckBox's floor 70x17 -> 78x20, TTyToggleSwitch's 108 -> 126,
-  and neither comes back. Same family (PPI-derived state latched instead of derived), a
-  DIFFERENT defect, written up in plans/2026-08-08-permonitor-dpi.md section 5 rather than
-  fixed here -- it needs a decision about what an unset font size means, not a guard. }
+  the trip. Leaving it at 0 hits a SEPARATE defect, the "second latch": with Font.Height = 0
+  (the default) LCL's DPI pass ASSIGNS an explicit height on the first crossing
+  (DoScaleFontPPI, control.inc:1972-1973), so Font.Size goes 0 -> 12, and TyResolveFontSize
+  then takes the explicit-size branch instead of the theme's. The caption is measured with a
+  bigger font after the crossing than before it, permanently. Measured with Size unset:
+  TTyCheckBox's floor 70x17 -> 78x20, TTyToggleSwitch's 108 -> 126, and neither comes back.
+
+  WHY THE PIN IS STILL HERE NOW THAT THE SECOND LATCH IS GUARDED -- read this before
+  deleting the line, because the obvious reading of the fix is that it can go.
+
+  The guard lives on the two CONTROL bases (TTyGraphicControl.ScaleFontsPPI and
+  TTyCustomControl.ScaleFontsPPI, tyControls.Base.pas; its own suite is
+  tests/test.dpi.fontlatch.pas). TTyForm is neither of those, and it is not guarded. The
+  children here inherit their font from the FORM, so what still latches is the form's
+  Font.Height, and the pin is what stops it.
+
+  MEASURED, not assumed. Deleting just this line and rebuilding leaves six of the seven
+  tests in this class GREEN and fails exactly one -- TestRoundTripsWithTheLclDefaultParentFontToo,
+  the only one that runs with the LCL default ParentFont = True, i.e. the only one whose
+  controls take their font FROM the form -- with `TTyToggleSwitch: width after three
+  96->240->96 trips expected <120> but was <126>`. That 126 is the same number section 5 of
+  the plan recorded for this defect. Adding the identical six-line guard to
+  TTyForm.ScaleFontsPPI and deleting this line makes all seven pass; that experiment was
+  run, and reverted, because tyControls.Form.pas was out of scope for the change that added
+  the control-side guard. It is the whole of the follow-up.
+
+  So: when TTyForm gets the same guard, this line and the FCtls[i].Font.Size pin below can
+  both go, and this class becomes an unpinned round-trip test. Until then the pin is load
+  bearing, and it is a pin against the FORM's font, not against the controls'. }
 var
   i: Integer;
   b: TButton;
@@ -2819,8 +2838,14 @@ begin
     AFont.PixelsPerInch, Screen.PixelsPerInch)`, DoScaleFontPPI, control.inc:1972 -- uses
     Screen.PixelsPerInch as its reference, and the console test runner reports 72 while
     these fonts claim 96, so it would silently enlarge every caption by a third on the
-    FIRST crossing and never undo it. That is a property of the harness's screen, not of
-    the library, and it would otherwise be indistinguishable from a real drift. }
+    FIRST crossing and never undo it.
+
+    THIS PIN IS STILL REQUIRED, and it is now a pin against the FORM's font specifically:
+    the control bases are guarded against that latch (tyControls.Base.pas ScaleFontsPPI,
+    tests/test.dpi.fontlatch.pas) but TTyForm is not. Deleting this line fails exactly one
+    test in this class -- the ParentFont = True one -- with TTyToggleSwitch 120 -> 126.
+    Measured, both directions; the full reasoning and the follow-up are in Build's header
+    comment above. Do not delete it on the strength of "the second latch is fixed now". }
   FForm.Font.Size := 9;
 
   b := TButton.Create(FForm);   b.Parent := FForm;  b.SetBounds(S(10), S(10), S(100), S(26));
