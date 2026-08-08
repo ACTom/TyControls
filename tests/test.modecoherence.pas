@@ -29,7 +29,7 @@ interface
 uses
   Classes, SysUtils, fpcunit, testregistry,
   tyControls.Types, tyControls.StyleModel, tyControls.Controller,
-  tyControls.BuiltinThemes;
+  tyControls.BuiltinThemes, tyControls.ToolBar;
 
 type
   TModeCoherenceTest = class(TTestCase)
@@ -37,9 +37,13 @@ type
     function Luma(AColor: TTyColor): Double;            // Rec.601, 0..255
     function FillLuma(const AFill: TTyFill): Double;    // gradient -> mean of end stops
     function FillIsOpaque(const AFill: TTyFill): Boolean;
+    procedure FillMeanRGB(const AFill: TTyFill; out R, G, B: Double);
+    function SameFill(const A, B: TTyFill): Boolean;
   published
     procedure TestFillLumaReadsGradientStops;
     procedure TestEveryBuiltinIsCoherentInBothModes;
+    procedure TestNoOpDarkThemesAreModeInvariant;
+    procedure TestToolRuleFallbackIsVisibleInBothModes;
   end;
 
 implementation
@@ -124,6 +128,32 @@ begin
     Result := (Luma(AFill.GradFrom) + Luma(AFill.GradTo)) / 2
   else
     Result := Luma(AFill.Color);
+end;
+
+procedure TModeCoherenceTest.FillMeanRGB(const AFill: TTyFill; out R, G, B: Double);
+{ The fill's paint as a single RGB triple, on the same reading as FillLuma: a gradient is
+  judged by the mean of its end stops, a solid by its colour. Needed as CHANNELS (not luma)
+  because the tool-rule check composites an alpha ink over this ground before measuring. }
+begin
+  if AFill.Kind = tfkLinearGradient then
+  begin
+    R := (TyRedOf(AFill.GradFrom)   + TyRedOf(AFill.GradTo))   / 2;
+    G := (TyGreenOf(AFill.GradFrom) + TyGreenOf(AFill.GradTo)) / 2;
+    B := (TyBlueOf(AFill.GradFrom)  + TyBlueOf(AFill.GradTo))  / 2;
+  end
+  else
+  begin
+    R := TyRedOf(AFill.Color); G := TyGreenOf(AFill.Color); B := TyBlueOf(AFill.Color);
+  end;
+end;
+
+function TModeCoherenceTest.SameFill(const A, B: TTyFill): Boolean;
+{ Whole-fill equality. Compares the gradient stops as well as Color, because a theme could
+  legally move a key from a solid to a gradient and comparing Color alone would call that
+  "unchanged" -- the same blind spot FillLuma exists to avoid. }
+begin
+  Result := (A.Kind = B.Kind) and (A.Color = B.Color)
+        and (A.GradFrom = B.GradFrom) and (A.GradTo = B.GradTo);
 end;
 
 function TModeCoherenceTest.FillIsOpaque(const AFill: TTyFill): Boolean;
@@ -247,6 +277,189 @@ begin
                Abs(inkLuma - lumas[k]), cInkContrastFloor]),
               Abs(inkLuma - lumas[k]) >= cInkContrastFloor);
       end;
+  finally
+    c.Free;
+  end;
+end;
+
+
+procedure TModeCoherenceTest.TestNoOpDarkThemesAreModeInvariant;
+{ The OTHER half of the dark contract, and the half that had no guard.
+
+  docs/themes.md gives a skin exactly two legal answers to @mode dark: a real dark palette,
+  or a WHOLE-WINDOW no-op that pins the base seeds back to their light values. The sweep
+  above polices the first one. For a no-op theme all it confirms is that the surfaces stayed
+  light -- and that is not the same thing as the no-op being complete.
+
+  xp is what a PARTIAL no-op looks like. The base swaps THREE seeds per mode
+  (--surface / --on-surface / --border); xp pinned the first two and left the third to fall
+  through, so its dark mode drew the base's dark #3F3F46 hairlines, fallback frames and
+  scroll thumb against its own unchanged Luna beige chrome -- 154 luma of contrast where the
+  light mode has 6. Every BACKGROUND it resolved was correctly light, so the luminance sweep
+  waved it past. A border is not a surface and was never measured.
+
+  This assertion needs NO threshold, which is exactly why it is the one worth having: if a
+  theme's dark surfaces come out light it has declared dark a no-op, and a no-op must be
+  total. So resolve both modes and require equality key for key -- background AND border AND
+  ink, the three things a seed feeds. A theme that means to go dark never reaches the
+  comparison, and a theme that means to do nothing has nothing to explain.
+
+  Failure prints the field that moved, because "xp/dark differs" without the field is half
+  an hour of bisecting a stylesheet. }
+var
+  c: TTyStyleController;
+  names: TStringArray;
+  i, k: Integer;
+  lightSet, darkSet: array[0..High(cSurfaceKeys)] of TTyStyleSet;
+  s: TTyStyleSet;
+  darkIsLight: Boolean;
+  measured, noOpThemes: Integer;
+begin
+  TyRegisterBuiltinThemes;
+  noOpThemes := 0;
+  c := TTyStyleController.Create(nil);
+  try
+    names := TyBuiltinThemeNames;
+    AssertTrue('there are built-in themes to check', Length(names) > 0);
+    for i := 0 to High(names) do
+    begin
+      c.ThemeName := names[i];
+
+      c.Mode := 'light';
+      for k := 0 to High(cSurfaceKeys) do
+        lightSet[k] := c.Model.ResolveStyle(cSurfaceKeys[k], '', []);
+
+      c.Mode := 'dark';
+      darkIsLight := True;
+      measured := 0;
+      for k := 0 to High(cSurfaceKeys) do
+      begin
+        s := c.Model.ResolveStyle(cSurfaceKeys[k], '', []);
+        darkSet[k] := s;
+        if (tpBackground in s.Present) and FillIsOpaque(s.Background) then
+        begin
+          Inc(measured);
+          if FillLuma(s.Background) < cClassBoundary then darkIsLight := False;
+        end;
+      end;
+
+      { Only a theme that actually rendered a LIGHT window in dark mode has taken the no-op
+        branch. `measured` guards against calling a theme that resolved nothing "light". }
+      if (measured < 3) or (not darkIsLight) then Continue;
+      Inc(noOpThemes);
+
+      for k := 0 to High(cSurfaceKeys) do
+      begin
+        AssertTrue(Format('%s: dark is a whole-window NO-OP (its surfaces stayed light), so '
+          + '%s must resolve the SAME background in both modes -- a seed left unpinned falls '
+          + 'through to the base''s dark value', [names[i], cSurfaceKeys[k]]),
+          SameFill(lightSet[k].Background, darkSet[k].Background));
+        AssertEquals(Format('%s: no-op dark, but %s''s BORDER moved between modes -- this is '
+          + 'the xp defect: --border left out of the @mode dark pin, so a dark hairline is '
+          + 'drawn on light chrome', [names[i], cSurfaceKeys[k]]),
+          Int64(lightSet[k].BorderColor), Int64(darkSet[k].BorderColor));
+        AssertEquals(Format('%s: no-op dark, but %s''s INK moved between modes',
+          [names[i], cSurfaceKeys[k]]),
+          Int64(lightSet[k].TextColor), Int64(darkSet[k].TextColor));
+      end;
+    end;
+
+    { A guard that never took its branch guards nothing. classic, showcase and xp are the
+      three shipped no-op themes; if a future retune gives them all real dark palettes this
+      number must be revisited deliberately, not silently. }
+    AssertTrue(Format('at least 2 built-ins must exercise the no-op branch (got %d) -- with '
+      + 'none, this test is vacuous', [noOpThemes]), noOpThemes >= 2);
+  finally
+    c.Free;
+  end;
+end;
+
+procedure TModeCoherenceTest.TestToolRuleFallbackIsVisibleInBothModes;
+{ TyToolRuleInk's fallback had exactly one pixel probe behind it, against a synthetic LIGHT
+  theme. The dimming factor (--tool-rule-alpha, now a real token in light.tycss rather than
+  a bare constant in control code) was chosen because 50/255 of the text colour over a white
+  surface lands within two levels of --border. Nobody had looked at what the same fraction
+  does on a DARK skin, where the ink is light and the ground is dark -- it could have read
+  far too bright, or vanished.
+
+  It does neither, and the reason is structural: the ink is the mode's OWN text colour and
+  the ground is the mode's OWN chrome, so the pair swaps together and the composite lands a
+  similar distance off the bar in both modes. Measured over all 17 built-ins x 2 modes, the
+  12 whose ghost ink is --on-surface sit 36..50 luma off the bar face in light AND in dark.
+
+  Four skins come in thin, and they are thin for a reason that is NOT the mode: their ghost
+  ink is a mid-luma ACCENT that they do not lift for dark, so the ink drifts toward the dark
+  ground. office 29 -> 9, macos 24 -> 12, aero 21 -> 15, ubuntu 25 -> 18. A per-mode GLOBAL
+  alpha cannot fix them: office would need ~161, which would take the base theme's dark
+  hairline from 40 to 128 -- three times the weight of a real border. The remedy is per-skin,
+  and the token is now in the theme layer precisely so those four can take it.
+
+  So the floor here is deliberately LOW. It is not a legibility certificate -- it is the
+  guard that the token still reaches the paint at a usable strength: a zeroed, mistyped or
+  unparseable --tool-rule-alpha (the new failure mode that shipping a token creates) drops
+  every theme to ~0..2 and dies here. The measured minimum today is 9 (office/dark), so the
+  floor has 3 luma of headroom and no more; a skin that retunes into that gap is meant to
+  fail and be looked at. }
+const
+  cRuleVisibilityFloor = 6.0;
+var
+  c: TTyStyleController;
+  names: TStringArray;
+  i, m, alpha: Integer;
+  mode: string;
+  ghost, bar: TTyStyleSet;
+  ink: TTyColor;
+  a, barR, barG, barB, cr, cg, cb, compLuma, barLuma: Double;
+  exercised: Integer;
+begin
+  TyRegisterBuiltinThemes;
+  exercised := 0;
+  c := TTyStyleController.Create(nil);
+  try
+    names := TyBuiltinThemeNames;
+    AssertTrue('there are built-in themes to check', Length(names) > 0);
+    for i := 0 to High(names) do
+      for m := 0 to 1 do
+      begin
+        if m = 0 then mode := 'light' else mode := 'dark';
+        c.ThemeName := names[i];
+        c.Mode := mode;
+
+        ghost := c.Model.ResolveStyle('TyButton', 'ghost', []);
+        bar := c.Model.ResolveStyle('TyToolBar', '', []);
+
+        { Only the FALLBACK branch is under test. A skin whose ghost keeps an opaque border
+          (bootstrap, win11) draws the rule in that border and is covered by the golden. }
+        if TyAlphaOf(ghost.BorderColor) > 0 then Continue;
+        if not ((tpBackground in bar.Present) and FillIsOpaque(bar.Background)) then Continue;
+
+        { The metric comes from the THEME, exactly as the control reads it -- so a skin that
+          retunes the token is measured at ITS value, not at the base default. }
+        alpha := c.Metric(TyToolRuleAlphaVar, TyToolRuleGhostAlpha);
+        ink := TyToolRuleInk(ghost, alpha);
+        a := TyAlphaOf(ink) / 255;
+        FillMeanRGB(bar.Background, barR, barG, barB);
+        cr := barR + (TyRedOf(ink)   - barR) * a;
+        cg := barG + (TyGreenOf(ink) - barG) * a;
+        cb := barB + (TyBlueOf(ink)  - barB) * a;
+        compLuma := 0.299 * cr + 0.587 * cg + 0.114 * cb;
+        barLuma := FillLuma(bar.Background);
+        Inc(exercised);
+
+        AssertTrue(Format('%s/%s: the fallback tool rule is invisible on its own bar -- '
+          + 'composited luma %.0f against bar %.0f (delta %.0f < %.0f) at alpha %d. A '
+          + 'tbsDropDown then looks identical to a tbsButtonDrop, which is the bug '
+          + 'TyToolRuleInk exists to prevent.',
+          [names[i], mode, compLuma, barLuma, Abs(compLuma - barLuma),
+           cRuleVisibilityFloor, alpha]),
+          Abs(compLuma - barLuma) >= cRuleVisibilityFloor);
+      end;
+
+    { The ghost variant is what a FLAT bar (the default) hands every tool, so most themes
+      must reach the fallback. If a refactor made ghost borders opaque everywhere this test
+      would silently stop testing anything. }
+    AssertTrue(Format('the fallback branch must actually be exercised (got %d theme/mode '
+      + 'pairs) -- a skip-everything sweep proves nothing', [exercised]), exercised >= 20);
   finally
     c.Free;
   end;

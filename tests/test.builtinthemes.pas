@@ -40,6 +40,7 @@ type
     procedure TestTrackBarShowValueHasVisibleInk;
     procedure TestOnTitleBarInkReadsOnTheBar;
     procedure TestAntDesignGhostIsAFlatTextButton;
+    procedure TestAeroTabRampIsOneColdFamilyInBothModes;
   end;
 implementation
 
@@ -524,6 +525,108 @@ begin
       AssertEquals(mode + ': ghost ink B = the text ink', TyBlueOf(plain.TextColor), TyBlueOf(ghost.TextColor));
     end;
   finally c.Free; end;
+end;
+
+procedure TControllerThemeNameTest.TestAeroTabRampIsOneColdFamilyInBothModes;
+{ aero's tab HOVER step shipped unverified -- it was reasoned about in the stylesheet
+  comment and never looked at. The reasoning is sound (hover aliases --surface-chrome, the
+  same cold family the chrome band is cut from) but "likely fine" is not a check, and the
+  one thing that could have gone wrong is cheap to measure: aero does not restyle TyTab at
+  all, it only re-seats two TOKENS per mode, so a token typo or a plain-:root slip would
+  leave the strip resolving the BASE layer's neutral greys (darken(white, 5%/2%)) on a cold
+  blue window -- the exact second-design-system look the chrome fix removed everywhere else.
+
+  What is checkable headlessly is the whole of that claim:
+    - hover resolves to --surface-chrome and rest to --chrome-bar-bg, i.e. the strip is cut
+      from the chrome family and not from the base MAP. Pinned by comparing against the
+      keys that own those tokens (TyToolBar's fill is --chrome-bar-bg) rather than against
+      hex literals, so a legitimate retune of the family carries the test with it.
+    - hover is NOT inert: a hovered tab must resolve a different fill from a resting one.
+      This is the goHeaderPushedLook defect class -- a state that resolves identically to
+      rest is a state the user cannot see. It is worth pinning here precisely because the
+      step is SUBTLE by design (7 luma in light, 5 in dark, Win7's own restraint); subtle
+      is one typo away from zero, and zero looks like "no hover at all".
+    - the ramp stays inside one luminance class in each mode, which is what makes it a
+      family rather than two designs. Direction differs by mode and that is deliberate:
+      light steps DOWN from the white page (rest 221 < hover 228 < selected 255), dark
+      steps UP off the wash (selected 30 < rest 46 < hover 51), because the selected tab
+      connects to the page sheet in both.
+
+  What this does NOT do is put it on a screen. The remaining risk after this test is a
+  painting risk (does TTyTabSet actually consult :hover for the strip), not a theme risk,
+  and it needs a real window. Recorded so the next person does not read a green test as
+  more than it is. }
+var
+  c: TTyStyleController;
+  m: Integer;
+  mode: string;
+  rest, hover, sel, bar, chromeHost: TTyStyleSet;
+
+  function L(const AFill: TTyFill): Double;
+  begin
+    if AFill.Kind = tfkLinearGradient then
+      Result := (0.299 * TyRedOf(AFill.GradFrom) + 0.587 * TyGreenOf(AFill.GradFrom)
+               + 0.114 * TyBlueOf(AFill.GradFrom)
+               + 0.299 * TyRedOf(AFill.GradTo) + 0.587 * TyGreenOf(AFill.GradTo)
+               + 0.114 * TyBlueOf(AFill.GradTo)) / 2
+    else
+      Result := 0.299 * TyRedOf(AFill.Color) + 0.587 * TyGreenOf(AFill.Color)
+              + 0.114 * TyBlueOf(AFill.Color);
+  end;
+
+begin
+  TyRegisterBuiltinThemes;
+  c := TTyStyleController.Create(nil);
+  try
+    c.ThemeName := 'aero';
+    for m := 0 to 1 do
+    begin
+      if m = 0 then mode := 'light' else mode := 'dark';
+      c.Mode := mode;
+
+      rest  := c.Model.ResolveStyle('TyTab', '', []);
+      hover := c.Model.ResolveStyle('TyTab', '', [tysHover]);
+      sel   := c.Model.ResolveStyle('TyTab', '', [tysActive]);
+      { The two keys that OWN the chrome tokens the strip is supposed to alias:
+        TyToolBar fills from --chrome-bar-bg, TyTreeHeader from --surface-chrome. }
+      bar         := c.Model.ResolveStyle('TyToolBar', '', []);
+      chromeHost  := c.Model.ResolveStyle('TyTreeHeader', '', []);
+
+      AssertEquals(Format('aero/%s: a resting tab must BE the command band '
+        + '(--chrome-bar-bg), not the base MAP''s neutral darken(surface,5%%)', [mode]),
+        Int64(bar.Background.Color), Int64(rest.Background.Color));
+      AssertEquals(Format('aero/%s: a hovered tab must lift to the header steel '
+        + '(--surface-chrome) -- the token the stylesheet claims, measured against the key '
+        + 'that owns it rather than a hex literal', [mode]),
+        Int64(chromeHost.Background.Color), Int64(hover.Background.Color));
+
+      AssertTrue(Format('aero/%s: hover resolves IDENTICALLY to rest — the state is '
+        + 'invisible (tab %.0f vs %.0f)', [mode, L(hover.Background), L(rest.Background)]),
+        hover.Background.Color <> rest.Background.Color);
+
+      { One family, not two designs: rest and hover must sit on the same side of the
+        light/dark cut as each other. The SELECTED tab is deliberately excluded — it is the
+        page sheet, and in dark mode it sits below both by design. }
+      AssertEquals(Format('aero/%s: rest (%.0f) and hover (%.0f) must be one luminance '
+        + 'class', [mode, L(rest.Background), L(hover.Background)]),
+        L(rest.Background) >= 128.0, L(hover.Background) >= 128.0);
+
+      { Direction, per mode, exactly as the stylesheet documents it. }
+      if m = 0 then
+        AssertTrue(Format('aero/light: the cold ramp must climb rest(%.0f) < hover(%.0f) '
+          + '< selected(%.0f)', [L(rest.Background), L(hover.Background), L(sel.Background)]),
+          (L(rest.Background) < L(hover.Background))
+          and (L(hover.Background) < L(sel.Background)))
+      else
+        AssertTrue(Format('aero/dark: chrome lifts OFF the wash — selected(%.0f) < '
+          + 'rest(%.0f) < hover(%.0f)',
+          [L(sel.Background), L(rest.Background), L(hover.Background)]),
+          (L(sel.Background) < L(rest.Background))
+          and (L(rest.Background) < L(hover.Background)));
+    end;
+  finally
+    c.Free;
+  end;
 end;
 
 initialization

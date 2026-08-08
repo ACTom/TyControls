@@ -4,7 +4,7 @@ interface
 uses
   Classes, SysUtils, fpcunit, testregistry,
   tyControls.Types, tyControls.StyleModel, tyControls.Controller,
-  tyControls.BuiltinThemes;
+  tyControls.BuiltinThemes, tyControls.ToolBar;
 type
   TTestThemes = class(TTestCase)
   private
@@ -39,6 +39,9 @@ type
     procedure TestAllThemesHaveGhostAndBadge;
     { a pressed column header must RESOLVE differently from a resting one }
     procedure TestPressedGridHeaderSectionIsNotInert;
+    { --tool-rule-alpha: the token now HAS a home, and must agree with the constant }
+    procedure TestToolRuleAlphaTokenMatchesTheControlDefault;
+    procedure TestToolRuleAlphaReachesEveryBuiltinInBothModes;
   end;
 
   { Golden resolved-style dump. Loads each shipped theme, resolves a full grid of
@@ -192,6 +195,91 @@ begin
           and (rest.Background.Color = down.Background.Color)
           and (rest.Background.GradFrom = down.Background.GradFrom)
           and (rest.Background.GradTo = down.Background.GradTo));
+      end;
+  finally
+    c.Free;
+  end;
+end;
+
+procedure TTestThemes.TestToolRuleAlphaTokenMatchesTheControlDefault;
+{ '--tool-rule-alpha' was PLUMBED before it was DECLARED: TyToolRuleInk read it through
+  ActiveController.Metric with a documented default (TyToolRuleGhostAlpha), and no theme
+  anywhere defined it. That works, but it puts a visual value in control code rather than
+  in the theme layer, which is the one hard rule the theme system has. Declaring it in
+  light.tycss's :root moves it — and the base layer is inherited by every theme, so one
+  declaration serves all of them.
+
+  Adding it is only SAFE if it agrees with the constant. A token of, say, 60 against a
+  documented default of 50 would retune every default flat tool bar's divider with no
+  control-code change and no other test in the suite comparing the two — precisely the
+  silent drift the golden cannot see, because no RULE references this token so no resolved
+  style changes.
+
+  The sentinel is a value no caller would ever pass and no theme could legally hold, so
+  "the token is missing" cannot masquerade as agreement: ResolveMetric hands back the
+  caller's default when the var is absent or unparseable. }
+const
+  cSentinel = -12345;
+var
+  m: TTyStyleModel;
+  got: Integer;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromFile(ThemePath('light.tycss'));
+    got := m.ResolveMetric(TyToolRuleAlphaVar, cSentinel);
+    AssertTrue(Format('light.tycss :root must DEFINE %s — got the sentinel back, which '
+      + 'means the token is absent or does not parse as a length',
+      [TyToolRuleAlphaVar]), got <> cSentinel);
+    AssertEquals(Format('%s and the control''s documented default (TyToolRuleGhostAlpha) '
+      + 'must agree, or shipping the token silently retunes every default flat tool bar''s '
+      + 'divider', [TyToolRuleAlphaVar]), TyToolRuleGhostAlpha, got);
+  finally
+    m.Free;
+  end;
+end;
+
+procedure TTestThemes.TestToolRuleAlphaReachesEveryBuiltinInBothModes;
+{ The declaration is worth nothing to a SKIN unless the skin can see it. It is declared in
+  the base :root ONLY, and RebuildMergedVars seeds the merged set from the base layer before
+  the user :root and the active @mode overlay it — so every built-in should read the same 50
+  in both modes without restating it. This sweep proves that inheritance instead of assuming
+  it; without it, "a skin can retune the rule" would be a claim about a code path nothing
+  exercises across the shipped skins.
+
+  It pins TODAY'S truth: no shipped skin overrides the token, so all 17 x 2 inherit 50. That
+  is deliberate rather than lazy — the first skin to retune it SHOULD have to come here, the
+  way a deliberate alias divergence has to enter ALIAS_EXEMPTIONS. What must not happen is a
+  retune landing by accident, or a theme setting a value the length parser cannot read (which
+  fails SILENTLY back to the control constant and looks like nothing happened).
+
+  If you are that first skin: docs/controls/toolbar.md names office/macos/aero/ubuntu as the
+  four whose dark fallback is thin and explains what they would each need. Relax this to a
+  range check for the overriding theme; do not delete it. }
+var
+  c: TTyStyleController;
+  names: TStringArray;
+  i, m: Integer;
+  mode: string;
+begin
+  TyRegisterBuiltinThemes;
+  c := TTyStyleController.Create(nil);
+  try
+    names := TyBuiltinThemeNames;
+    AssertTrue('there are built-in themes to check', Length(names) > 0);
+    for i := 0 to High(names) do
+      for m := 0 to 1 do
+      begin
+        if m = 0 then mode := 'light' else mode := 'dark';
+        c.ThemeName := names[i];
+        c.Mode := mode;
+        AssertEquals(Format('%s/%s: %s must reach this theme through the base layer at the '
+          + 'base value. Got something else: either the base declaration was lost (an '
+          + 'unparseable value falls back SILENTLY to the control constant), or this skin is '
+          + 'the first to retune the token deliberately — if the latter, see the comment '
+          + 'above rather than deleting this line.',
+          [names[i], mode, TyToolRuleAlphaVar]),
+          TyToolRuleGhostAlpha, c.Metric(TyToolRuleAlphaVar, -12345));
       end;
   finally
     c.Free;

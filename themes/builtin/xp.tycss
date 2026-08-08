@@ -24,6 +24,12 @@
     --on-accent:    #FFFFFF;
     --surface:      #ECE9D8;    /* the iconic XP client "beige" */
     --on-surface:   #1B1B1B;
+    /* The THIRD base seed. xp used to state only two of the three, and in LIGHT that was
+       invisible: the omitted --border fell through to the base light value, which is this
+       literal. Stated explicitly so the dark block below has something to mirror rather
+       than an absence to accidentally re-inherit — see the note there. Value chosen to be
+       exactly what xp resolved before, so every light-mode resolve is byte-identical. */
+    --border:       #D1D5DB;
     --field:        #FFFFFF;
     --field-border: #7B9EBD;    /* soft steel-blue field edge */
     --focus:        #E58B00;    /* orange focus edge */
@@ -40,13 +46,28 @@
 }
 }
 
-/* Dark palette — IDENTICAL to light (no natural dark Luna variant). */
+/* Dark palette — IDENTICAL to light (no natural dark Luna variant).
+
+   This block is the "whole-window no-op" half of the dark contract in docs/themes.md, and it
+   used to honour only two thirds of it. The base layer swaps THREE seeds per mode
+   (--surface / --on-surface / --border, TyBuiltinBaseModeCss); xp pinned the first two back
+   to their Luna values and left --border to fall through — so in dark mode every hairline,
+   fallback frame and scroll thumb resolved the base's DARK #3F3F46 (luma 64) against xp's
+   unchanged beige chrome (luma 218). A near-black rule on a light bar: 154 luma of contrast
+   where the light mode has 6.
+
+   The mode-coherence sweep could not see it, because that guard classes BACKGROUNDS and
+   xp's backgrounds were all correctly light in both modes. The border is not a surface and
+   was not measured. tests/test.modecoherence's mode-invariance assertion now covers it
+   without needing a threshold: a theme whose dark surfaces are light has declared dark a
+   no-op, so its dark resolves must EQUAL its light ones, key for key. */
 @mode dark {
   :root {
     --accent:       #2F6FE0;
     --on-accent:    #FFFFFF;
     --surface:      #ECE9D8;
     --on-surface:   #1B1B1B;
+    --border:       #D1D5DB;   /* the pin that was missing — mirrors the light block exactly */
     --field:        #FFFFFF;
     --field-border: #7B9EBD;
     --focus:        #E58B00;

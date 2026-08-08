@@ -5204,6 +5204,12 @@ begin
     '    --on-accent:    #FFFFFF;' + LineEnding +
     '    --surface:      #ECE9D8;    /* the iconic XP client "beige" */' + LineEnding +
     '    --on-surface:   #1B1B1B;' + LineEnding +
+    '    /* The THIRD base seed. xp used to state only two of the three, and in LIGHT that was' + LineEnding +
+    '       invisible: the omitted --border fell through to the base light value, which is this' + LineEnding +
+    '       literal. Stated explicitly so the dark block below has something to mirror rather' + LineEnding +
+    '       than an absence to accidentally re-inherit — see the note there. Value chosen to be' + LineEnding +
+    '       exactly what xp resolved before, so every light-mode resolve is byte-identical. */' + LineEnding +
+    '    --border:       #D1D5DB;' + LineEnding +
     '    --field:        #FFFFFF;' + LineEnding +
     '    --field-border: #7B9EBD;    /* soft steel-blue field edge */' + LineEnding +
     '    --focus:        #E58B00;    /* orange focus edge */' + LineEnding +
@@ -5220,13 +5226,28 @@ begin
     '}' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
-    '/* Dark palette — IDENTICAL to light (no natural dark Luna variant). */' + LineEnding +
+    '/* Dark palette — IDENTICAL to light (no natural dark Luna variant).' + LineEnding +
+    '' + LineEnding +
+    '   This block is the "whole-window no-op" half of the dark contract in docs/themes.md, and it' + LineEnding +
+    '   used to honour only two thirds of it. The base layer swaps THREE seeds per mode' + LineEnding +
+    '   (--surface / --on-surface / --border, TyBuiltinBaseModeCss); xp pinned the first two back' + LineEnding +
+    '   to their Luna values and left --border to fall through — so in dark mode every hairline,' + LineEnding +
+    '   fallback frame and scroll thumb resolved the base''s DARK #3F3F46 (luma 64) against xp''s' + LineEnding +
+    '   unchanged beige chrome (luma 218). A near-black rule on a light bar: 154 luma of contrast' + LineEnding +
+    '   where the light mode has 6.' + LineEnding +
+    '' + LineEnding +
+    '   The mode-coherence sweep could not see it, because that guard classes BACKGROUNDS and' + LineEnding +
+    '   xp''s backgrounds were all correctly light in both modes. The border is not a surface and' + LineEnding +
+    '   was not measured. tests/test.modecoherence''s mode-invariance assertion now covers it' + LineEnding +
+    '   without needing a threshold: a theme whose dark surfaces are light has declared dark a' + LineEnding +
+    '   no-op, so its dark resolves must EQUAL its light ones, key for key. */' + LineEnding +
     '@mode dark {' + LineEnding +
     '  :root {' + LineEnding +
     '    --accent:       #2F6FE0;' + LineEnding +
     '    --on-accent:    #FFFFFF;' + LineEnding +
     '    --surface:      #ECE9D8;' + LineEnding +
     '    --on-surface:   #1B1B1B;' + LineEnding +
+    '    --border:       #D1D5DB;   /* the pin that was missing — mirrors the light block exactly */' + LineEnding +
     '    --field:        #FFFFFF;' + LineEnding +
     '    --field-border: #7B9EBD;' + LineEnding +
     '    --focus:        #E58B00;' + LineEnding +

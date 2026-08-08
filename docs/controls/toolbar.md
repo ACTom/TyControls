@@ -414,9 +414,23 @@ TyToolBar, TyToolSeparator {
   > 叫"命中测试看得见的那一半"，那就得真的看得见。（真机发现：把 `Flat` 临时改成 `False`，两条分割线立刻出现。）
   >
   > 回退值**派生自主题颜色**（文字色），不是写死的颜色；淡化系数也走主题：`--tool-rule-alpha`（0..255），
-  > 皮肤可以自己调，设 0 就等于不画这条线。目前没有皮肤定义它，缺省 `TyToolRuleGhostAlpha = 50`
-  > ——这个数不是随手取的：文字色按 50/255 叠在 `light.tycss` 的 `--surface`（`#FFFFFF`）上得到
+  > 皮肤可以自己调，设 0 就等于不画这条线。这个令牌**定义在 `themes/light.tycss` 的 `:root` 里**（值 `50`）。
+  > base 层被所有主题继承，所以每套皮肤在两个模式下都读得到它，也都能在自己的 `@mode` 块里改写它。
+  > 控件侧的 `TyToolRuleGhostAlpha = 50` 是令牌缺失时的兜底，两者**必须一致**——不一致就等于悄悄改掉了
+  > 所有默认扁平工具条的分割线，而这既不经过任何控件代码、也不会动到任何 golden（没有规则引用这个令牌，
+  > 解析结果一个都不变）。由 `test.themes.TestToolRuleAlphaTokenMatchesTheControlDefault` 钉住。
+  > 这个数不是随手取的：文字色按 50/255 叠在 `light.tycss` 的 `--surface`（`#FFFFFF`）上得到
   > `(211,213,216)`，与 `--border`（`#D1D5DB`）每通道相差不超过 2，也就是"长得像它本该有的那条边框"。
+  >
+  > **一个值同时管浅色和深色，这是量出来的，不是推的。** 回退墨色取的是**当前模式自己的文字色**，铺的是
+  > **当前模式自己的 chrome**，两者随模式一起翻，所以合成后离工具条底色的距离在两个模式下差不多：17 套内置
+  > × 两个模式实测，ghost 墨色取 `--on-surface` 的那 12 套，浅色 36~50 luma、深色也是 36~50。
+  > 有四套偏薄——**office 29→9、macos 24→12、aero 21→15、ubuntu 25→18**——但根因**不是模式**，而是它们的
+  > ghost 墨色是一个中等亮度的**强调色**、深色模式下又没有提亮，墨色于是往深色底上靠。靠"深色模式统一调大
+  > alpha"救不了：office 要调到约 161，而同一个值会把 base 主题深色下的发丝线从 40 推到 128，是真边框的
+  > 三倍粗重。**正确的补法是这四套各自在 `@mode dark` 里改这个令牌**——把令牌搬进主题层，买到的正是这个。
+  > 守卫：`test.modecoherence.TestToolRuleFallbackIsVisibleInBothModes`（下限 6 luma；今天实测最小值是 9 =
+  > office/深色。它守的是"令牌被清零 / 写错 / 解析不了"这个**由发布令牌新引入**的失效模式，不是可读性证书）。
   > 钉住的测试：`TestSplitDividerIsVisibleOnADefaultFlatBar`（**默认扁平**配置下，先断言"确实打上了 ghost"
   > 与"ghost 的边框确实全透明"这两个前提，再在分割线那一列与它左边两列上做**边缘**取样，要求前者明显更暗）
   > 与 `TestRuleInkKeepsABorderedSkinExactlyAsItWas`（纯函数两个分支，含 alpha=1 仍算边框）。

@@ -95,6 +95,30 @@ begin
     '  --input-border-width: 1px;' + LineEnding +
     '  --radius-sm: 3px; --radius-pill: 8px; --radius-round: 12px; --radius-scroll: 4px;' + LineEnding +
     '  --font-size-base: 9px; --font-size-title: 9px;' + LineEnding +
+    '  /* Tool-bar 1px rules — TTyToolSeparator''s inset line and the tbsDropDown split divider —' + LineEnding +
+    '     when the variant''s border-color resolves FULLY transparent. That is the `ghost` case a' + LineEnding +
+    '     flat bar (the default) hands every tool, and a rule drawn in it is drawn in nothing; the' + LineEnding +
+    '     control then falls back to the resolved TEXT colour dimmed by this alpha (0..255), and 0' + LineEnding +
+    '     suppresses the rule entirely. Deliberately NOT in the geometry block below: it is a' + LineEnding +
+    '     chrome scalar, not a length, so the density packs must not sweep it up.' + LineEnding +
+    '' + LineEnding +
+    '     The value must equal TyToolRuleGhostAlpha, the default TyToolRuleInk documents — the' + LineEnding +
+    '     token was plumbed before it was declared, so declaring it with any other number would' + LineEnding +
+    '     retune every default flat bar with no control-code change. Pinned by' + LineEnding +
+    '     test.themes.TestToolRuleAlphaTokenMatchesTheControlDefault.' + LineEnding +
+    '' + LineEnding +
+    '     ONE value serves BOTH modes, and that is measured, not assumed. The fallback ink is the' + LineEnding +
+    '     mode''s own text colour and the ground is the mode''s own chrome, so the pair swaps' + LineEnding +
+    '     together: across the 12 built-ins whose ghost ink is --on-surface the composite lands' + LineEnding +
+    '     36-50 luma off the bar face in light AND 36-50 in dark. The four skins that come in thin' + LineEnding +
+    '     (office 29->9, macos 24->12, aero 21->15, ubuntu 25->18) are not a MODE problem — their' + LineEnding +
+    '     ghost ink is a mid-luma accent they do not lift for dark — and a per-mode global alpha' + LineEnding +
+    '     big enough to rescue office (~161) would take the base theme''s dark hairline from 40 to' + LineEnding +
+    '     128, three times a real border. Those four retune THIS token in their own @mode dark' + LineEnding +
+    '     instead; that is what having it in the theme layer buys. Full numbers and the reasoning' + LineEnding +
+    '     are in docs/controls/toolbar.md; the sweep is' + LineEnding +
+    '     test.modecoherence.TestToolRuleFallbackIsVisibleInBothModes. */' + LineEnding +
+    '  --tool-rule-alpha: 50;' + LineEnding +
     '' + LineEnding +
     '  /* ── 尺寸令牌(密度尺度第一期)───────────────────────────────────────' + LineEnding +
     '     经典密度 = 今天的实际值,一个都不动。现代密度由 density-modern.tycss' + LineEnding +
