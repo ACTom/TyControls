@@ -10,6 +10,9 @@
       <Title Value="TyControls Label Example"/>
       <Scaled Value="True"/>
       <UseXPManifest Value="True"/>
+      <XPManifest>
+        <DpiAware Value="True/PM_V2"/>
+      </XPManifest>
     </General>
     <i18n>
       <EnableI18N Value="True"/>

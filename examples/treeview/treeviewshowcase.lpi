@@ -10,6 +10,9 @@
       <Title Value="TyControls TreeView Showcase"/>
       <Scaled Value="True"/>
       <UseXPManifest Value="True"/>
+      <XPManifest>
+        <DpiAware Value="True/PM_V2"/>
+      </XPManifest>
     </General>
     <BuildModes Count="1">
       <Item1 Name="Default" Default="True"/>
