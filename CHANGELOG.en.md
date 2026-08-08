@@ -26,6 +26,8 @@ Linux and macOS.
   nothing in the tree changes.
 - **A menu button's drop mark** is the same chevron the drop-down button, the toolbar and every
   combo-family field draw, instead of its own hand-rolled triangle.
+- **The date field's drop mark** was STRETCHED to fill its button zone, so it came out wide and
+  flat, unlike any other drop field in the library. It is now pixel-identical to a combo box's.
 - **The track bar had no groove -- it WAS the groove.** It filled its whole client rect with
   `--surface-track`, which is why it read as a darker slab on every theme and as a neutral grey
   slab on aero, whose surface is blue; and the tick marks, drawn inside that same rect, sat ON
