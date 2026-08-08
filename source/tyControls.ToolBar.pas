@@ -1451,7 +1451,7 @@ begin
       TyToolRuleFill(TyToolRuleInk(AStyle,
         ActiveController.Metric(TyToolRuleAlphaVar, TyToolRuleGhostAlpha))), 0);
   end;
-  APainter.DrawDropChevron(arrowRect, AStyle.TextColor);
+  TyDrawDropChevron(APainter, ActiveController, arrowRect, AStyle.TextColor);
 end;
 
 procedure TTyToolButton.RenderSpaceHolder(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);

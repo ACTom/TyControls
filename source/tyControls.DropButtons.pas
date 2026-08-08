@@ -30,7 +30,7 @@ uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType,
   BGRABitmapTypes, BGRACanvas2D,
   tyControls.Types, tyControls.Painter, tyControls.Accel,
-  tyControls.Button, tyControls.Menu;
+  tyControls.Base, tyControls.Button, tyControls.Menu;
 
 const
   { Default width (logical px, 96-PPI baseline) of a split button's right-hand
@@ -398,7 +398,7 @@ begin
 
   // Centered small chevron (a shallow "v", fixed size), matching TTyComboBox's dropdown
   // chevron — a clean caret regardless of the button height/PPI.
-  APainter.DrawDropChevron(arrowRect, AStyle.TextColor);
+  TyDrawDropChevron(APainter, ActiveController, arrowRect, AStyle.TextColor);
 end;
 
 procedure TTyDropDownButton.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
@@ -502,9 +502,8 @@ end;
 procedure TTyMenuButton.DrawContent(APainter: TTyPainter; const AContentRect: TRect;
   const AStyle: TTyStyleSet);
 var
-  arrowW, cx, cy, half, hh: Integer;
+  arrowW: Integer;
   captionRect, arrowRect: TRect;
-  ctx: TBGRACanvas2D;
 begin
   arrowW := APainter.Scale(ActiveController.Metric('--drop-arrow-width', TyDefaultDropArrowWidth));
   if arrowW >= (AContentRect.Right - AContentRect.Left) then
@@ -522,21 +521,14 @@ begin
 
   if arrowW <= 0 then Exit;
 
-  cx := (arrowRect.Left + arrowRect.Right) div 2;
-  cy := (arrowRect.Top + arrowRect.Bottom) div 2;
-  half := APainter.Scale(4);
-  if half < 3 then half := 3;
-  hh := (half * 6) div 10;
-  if hh < 2 then hh := 2;
-
-  ctx := APainter.Bitmap.Canvas2D;
-  ctx.beginPath;
-  ctx.moveTo(cx - half, cy - hh);
-  ctx.lineTo(cx + half, cy - hh);
-  ctx.lineTo(cx, cy + hh);
-  ctx.closePath;
-  ctx.fillStyle(TyColorToBGRA(AStyle.TextColor));
-  ctx.fill;
+  { The same chevron TTyDropDownButton draws twenty lines up, and TTyToolBar, and every
+    combo-family field. This used to be a hand-rolled Canvas2D triangle with its own
+    coefficients -- one of four such copies in the library -- so a "drop down" mark looked
+    different depending on which button carried it. (Windows does draw the TOOLBAR split
+    button's mark as a solid triangle rather than a chevron, but its combo box uses a chevron,
+    and internal consistency across this library's own drop marks is worth more than matching
+    one of the two Windows idioms on one of the sites.) }
+  TyDrawDropChevron(APainter, ActiveController, arrowRect, AStyle.TextColor);
 end;
 
 end.

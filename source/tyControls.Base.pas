@@ -534,6 +534,12 @@ function TyGlyphKindToken(AKind: TTyGlyphKind): string;
   mark agree. TTyFloatSpinEdit worked this out first and kept it to itself; the other five
   spinner/scroller sites were in the hole it had climbed out of. }
 function TySquareGlyphBox(const ARect: TRect): TRect;
+{ The drop chevron, sized from the theme. Every drop field draws the same mark, so the size is
+  read from --glyph-chevron-size in ONE place rather than at nine call sites; it was a literal
+  default on TTyPainter.DrawDropChevron that no caller overrode, which made it the only visual
+  value in this path a skin or a density axis could not reach. }
+procedure TyDrawDropChevron(APainter: TTyPainter; AController: TTyStyleController;
+  const AZoneRect: TRect; AColor: TTyColor);
 
 { Contextual styling for a control hosted ON a title bar. A title bar is a container, and
   several skins paint it in a strong colour -- xp and classic use a blue gradient, office the
@@ -1422,6 +1428,16 @@ begin
   else
     Result := '';
   end;
+end;
+
+procedure TyDrawDropChevron(APainter: TTyPainter; AController: TTyStyleController;
+  const AZoneRect: TRect; AColor: TTyColor);
+var
+  ctrl: TTyStyleController;
+begin
+  if AController <> nil then ctrl := AController else ctrl := TyDefaultController;
+  APainter.DrawDropChevron(AZoneRect, AColor,
+    ctrl.Metric('--glyph-chevron-size', TyDropChevronSize));
 end;
 
 function TySquareGlyphBox(const ARect: TRect): TRect;

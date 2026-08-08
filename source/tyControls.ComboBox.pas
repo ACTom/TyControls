@@ -2038,7 +2038,7 @@ begin
     // v3/C5: the dropdown indicator is theme-overridable (--glyph-dropdown); else the built-in chevron.
     if FStyle <> csSimple then
       if not TyTryDrawGlyphOverride(P, ActiveController, BtnR, '--glyph-dropdown', S.TextColor) then
-        P.DrawDropChevron(BtnR, S.TextColor);   // fixed small chevron (not stretched to height)
+        TyDrawDropChevron(P, ActiveController, BtnR, S.TextColor);   // fixed small chevron (not stretched to height)
     P.EndPaint;
 
     { The host's field pass, on the COMPOSITED canvas. It cannot run above: the painter

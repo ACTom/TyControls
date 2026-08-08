@@ -107,6 +107,11 @@ const
   // duplicated hard-coded literals so they cannot silently drift; each call site
   // still scales them via MulDiv(..., APPI, 96) / TTyPainter.Scale().
   TyFieldButtonWidth = 18;   // SpinEdit up/down button width; ComboBox dropdown button width
+  TyDropChevronSize  = 9;    // the drop-down chevron's WIDTH. It was a literal default on
+                             // TTyPainter.DrawDropChevron that no caller ever overrode, i.e.
+                             // the one visual value in the drop-field path a theme could not
+                             // reach -- and the reason the chevron stays 9px while the button
+                             // zone grows to 25 on the modern density axis
   TyTrackThickness   = 4;    // TrackBar GROOVE thickness -- the recessed band the thumb rides,
                              // not the control height (the bar used to fill its whole client
                              // rect, which is why it read as a slab and swallowed its ticks)

@@ -4,7 +4,7 @@ interface
 uses
   Classes, SysUtils, Types, Controls, LCLType,
   tyControls.Types, tyControls.Painter, tyControls.StyleModel, tyControls.Edit,
-  tyControls.Controller;
+  tyControls.Base, tyControls.Controller;
 
 type
   { An edit with a trailing drop-down button. Clicking the button (or calling DropDown)
@@ -44,7 +44,7 @@ end;
 
 procedure TTyComboEdit.PaintTrailing(APainter: TTyPainter; const AZone: TRect; const AStyle: TTyStyleSet);
 begin
-  APainter.DrawDropChevron(AZone, AStyle.TextColor);   // fixed small chevron, like TTyComboBox
+  TyDrawDropChevron(APainter, ActiveController, AZone, AStyle.TextColor);   // like TTyComboBox
 end;
 
 procedure TTyComboEdit.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);

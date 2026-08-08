@@ -398,6 +398,11 @@ begin
   PPI := Font.PixelsPerInch;
   TW := ThumbWAtPPI(PPI);
   Off := TyTrackThumbOffset(MainLen, TW, FMin, FMax, FPosition, Inverted);
+  { The HIT rect spans the whole cross axis, which is deliberately more than the thumb now
+    paints: RenderTo confines the visible thumb to the slider band so it clears the tick
+    marks, but a pointer anywhere in the control's column should still grab it. A hit target
+    larger than the mark is the forgiving direction, and it is what every platform slider
+    does; shrinking this to the painted band would make the ticks a dead strip. }
   if FOrientation = toVertical then
     Result := Rect(0, Off, ClientWidth, Off + TW)
   else

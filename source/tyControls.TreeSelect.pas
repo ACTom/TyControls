@@ -745,7 +745,7 @@ begin
       // drift apart. Always the FIELD's ink — the chevron belongs to the field, not the hint.
       if not TyTryDrawGlyphOverride(P, ActiveController, Lay.ButtonRect, '--glyph-dropdown',
         S.TextColor) then
-        P.DrawDropChevron(Lay.ButtonRect, S.TextColor);
+        TyDrawDropChevron(P, ActiveController, Lay.ButtonRect, S.TextColor);
 
     P.EndPaint;
   finally

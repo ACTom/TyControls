@@ -633,7 +633,7 @@ begin
     // Drop-down arrow affordance on the right — a FIXED small chevron (not stretched to
     // the row height), consistent with TTyComboBox / TTyDropDownButton.
     arrowR := Rect(rowRight - arrowW, R.Top, rowRight, R.Bottom);
-    P.DrawDropChevron(arrowR, BoxStyle.TextColor);
+    TyDrawDropChevron(P, ActiveController, arrowR, BoxStyle.TextColor);
 
     // Re-stroke the box border LAST as a belt-and-braces tidy of its AA edge (the fills are
     // already inset away from it, so this no longer has to occlude anything).
