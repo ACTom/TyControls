@@ -40,10 +40,14 @@ Linux and macOS.
   box -- so the same 9px chevron was 3px from the border in a combo box, 7 in a `TTyComboEdit`,
   6 in a spin edit, 10 in a calc edit and 12 on a menu button. One definition now, shared by the
   painter and the hit test (they were two independent copies of the formula).
-- **`window-shadow: false` let the Windows Classic caption flash back** over the custom chrome
+- **`window-shadow: false` let the Windows Classic caption paint over the custom chrome**
   whenever the window was deactivated (reported on the forum). Turning the shadow off disables
-  DWM non-client rendering for the window, and Windows then falls back to LEGACY non-client
-  painting, which does not go through the suppression that was already in place.
+  DWM non-client rendering, and Windows then draws the legacy caption of any `WS_CAPTION`
+  window on an activation change -- without sending the window a paint message at all (a spy
+  on the real window logs `WM_NCACTIVATE`, `WM_ACTIVATE` and two `WM_NCCALCSIZE` round trips,
+  and nothing else). In that mode the whole frame is already eaten, so `WS_CAPTION` bought
+  nothing but the caption Windows insisted on painting; it is no longer set there. Aero Snap
+  and maximise were measured in both modes and are unaffected.
 
 ### Added — data grid `TTyStringGrid`
 

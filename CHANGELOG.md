@@ -31,9 +31,12 @@
   "尾部部件"接缝的控件是从**内缩后的内容框**量起 —— 于是同一个 9px 箭头,下拉框离边框 3px、
   ComboEdit 7px、SpinEdit 6px、CalcEdit 和 FloatSpinEdit 10px、MenuButton 12px。
   现在只有一个定义,画和点也共用它(此前是两份各自写死的算式)。
-- **`window-shadow: false` 时窗口失焦会闪出 Windows 经典标题栏**(论坛反馈)。
-  关阴影走的是 `DWMWA_NCRENDERING_POLICY=DISABLED`,DWM 退出后 Windows 回退到旧版非客户区绘制,
-  而旧版路径不走已有的那道抑制。
+- **`window-shadow: false` 时窗口失焦会盖出一整条 Windows 经典标题栏**(论坛反馈)。
+  关阴影走的是 `DWMWA_NCRENDERING_POLICY=DISABLED`,DWM 一退出,Windows 就用旧版方式去画
+  **带 `WS_CAPTION` 的窗口**的标题栏——而且不给窗口发任何绘制消息(消息探针上只有
+  `WM_NCACTIVATE`/`WM_ACTIVATE` 和两轮 `WM_NCCALCSIZE`)。这个模式下整圈边框本来就已经被吃掉,
+  `WS_CAPTION` 除了让系统画一条标题栏之外没有别的作用,所以关阴影时不再加它。实测 Aero Snap
+  与最大化不受影响。
 
 ### 新增 — 数据网格 `TTyStringGrid`
 

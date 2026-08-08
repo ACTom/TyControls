@@ -86,14 +86,6 @@ type
     WorkArea: TRect;      // last known monitor work area -> fallback pin for the maximized client
   end;
 
-const
-  { The two UNDOCUMENTED messages uxtheme sends a window whose non-client area it is about to
-    paint itself. They exist in every Windows since XP and there is no documented substitute;
-    every custom-frame application that has ever shipped swallows them. See the WM_NCPAINT case
-    for why they matter here and only here. }
-  WM_NCUAHDRAWCAPTION = $00AE;
-  WM_NCUAHDRAWFRAME   = $00AF;
-
 var
   GStates: array of PNcState;
 
@@ -249,26 +241,6 @@ begin
         end;
         // GetWindowRect failed (degenerate): fall through to the original proc.
       end;
-    WM_NCPAINT, WM_NCUAHDRAWCAPTION, WM_NCUAHDRAWFRAME:
-      begin
-        { ONLY on the window-shadow:false path, and this is why it is not the WM_NCACTIVATE case
-          below repeated. With the shadow on, DWM owns the non-client area: it composes the frame,
-          the lParam=-1 trick below stops the activation repaint, and WM_NCPAINT must still reach
-          DefWindowProc so the 1px DWM border keeps rendering.
-
-          With the shadow OFF we set DWMWA_NCRENDERING_POLICY=DISABLED, which takes DWM out of the
-          picture for this window entirely -- and Windows falls back to LEGACY non-client painting.
-          Legacy painting does not go through the activation path lParam=-1 suppresses: on
-          deactivation uxtheme sends WM_NCUAHDRAWCAPTION/WM_NCUAHDRAWFRAME and DefWindowProc paints
-          a full CLASSIC caption bar (title text, minimise/maximise/close) and frame straight over
-          our custom chrome. It clears again on the next client repaint, which is why it reads as a
-          FLICKER rather than a permanent frame: reported from the forum against
-          `StyleOverride := 'window-shadow: false; border-radius: 0;'` and reproduced here exactly.
-
-          WM_NCCALCSIZE has already eaten the whole frame in this mode (client := window rect), so
-          there is genuinely no non-client area left to paint and returning 0 loses nothing. }
-        if st^.NoFrame then Exit(0);
-      end;
     WM_NCACTIVATE:
       begin
         // Frameless custom-chrome window: when a popup (dialog / combobox dropdown / menu) steals
@@ -295,7 +267,7 @@ begin
   Result := CallWindowProc(orig, Wnd, Msg, WP, LP);
 end;
 
-procedure ApplyThickFrame(Wnd: HWND; AResizable, AAllowMaximize: Boolean);
+procedure ApplyThickFrame(Wnd: HWND; AResizable, AAllowMaximize, ANoFrame: Boolean);
 var style: PtrInt;
 begin
   style := GetWindowLongPtr(Wnd, GWL_STYLE);
@@ -317,10 +289,20 @@ begin
         WS_THICKFRAME, so it goes back to being a plain popup.
       - Vista/Win7 (the thick frosted Aero frame) keep the NON-CLIENT top strip — see the
         WM_NCCALCSIZE branch above — so a WS_CAPTION there would give them a real, painted OS
-        title bar sitting above ours. They stay as they were, snap included. }
+        title bar sitting above ours. They stay as they were, snap included.
+      - ANoFrame (window-shadow: false) is the case where "nothing native is DRAWN" stops being
+        true. That mode sets DWMWA_NCRENDERING_POLICY = DISABLED, which hands the window back to
+        LEGACY non-client rendering, and legacy rendering draws the caption of a WS_CAPTION window
+        whenever its activation state changes — over our chrome, without ever sending the window a
+        WM_NCPAINT (a message spy on the real window logs WM_NCACTIVATE, WM_ACTIVATE and two
+        WM_NCCALCSIZE round trips on deactivation, and no paint message at all). Stripping
+        WS_CAPTION is what actually stops it: verified by clearing the bit on the live window and
+        watching the classic caption disappear. The cost is the shell's snap/maximise logic in
+        THIS mode only, which is the right trade -- a caption Windows insists on painting is worse
+        than a gesture, and an app that turns the shadow off has already opted out of OS chrome. }
   if (style and WS_CHILD) = 0 then
   begin
-    if AResizable and (not TyOsThickAeroFrame) then
+    if AResizable and (not TyOsThickAeroFrame) and (not ANoFrame) then
       style := (style and (not WS_POPUP)) or WS_CAPTION
     else
       style := (style and (not WS_CAPTION)) or WS_POPUP;
@@ -367,7 +349,7 @@ begin
   st^.NoFrame := ANoFrame;
   if AForm.Monitor <> nil then
     st^.WorkArea := AForm.Monitor.WorkareaRect;   // LCL-sourced fallback for the maximized client pin
-  ApplyThickFrame(Wnd, AResizable, AAllowMaximize);
+  ApplyThickFrame(Wnd, AResizable, AAllowMaximize, ANoFrame);
 end;
 
 procedure TyWin32BeginTopResize(AForm: TCustomForm);
