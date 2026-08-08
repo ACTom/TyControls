@@ -286,10 +286,10 @@ LCL 的 `TSpeedButton` 和 `TPaintBox` 都是 `TGraphicControl` —— **没有�
   **已修(2026-08-07)**:`OuterPanel` 加 `VerticalAlignment = taAlignTop`(`14d98dc` 刚落的属性,顺带在 example 里露了脸)。
   选它不选挪按钮:默认标题带**就是**面板垂直中线,190 高的面板里 Top=80 的按钮怎么摆都在带上,而 0..40 顶条按构造无子控件;
   文字零改动 → 两个 `.po` 的 msgid 天然同步。中英截图:`a5db2fbf_panel_en.png` / `a5db2fbf_panel_zh.png`(scratchpad)。
-- **README 双语的 "3949 个单元测试" 计数已烂**(2026-08-07 实测 5904,且各 agent 还在加);发版前以 `tytests --all` 的输出为准顺手改。
+- ~~**README 测试计数已烂**~~ **已改**(2026-08-08):两份 README 都是 6060,与 `tytests --all` 一致。
 - ~~**CHANGELOG 未覆盖最近两波**~~ **已补齐(2026-08-07)**:`ec37153` 一次补两波(新控件 + 继续补齐 + 修复三节),
   aero 暗色/chrome 归族随各自提交带了条目(`e294f45`/`c23e45c`/`abc6c42`)。
-- **2026-08-07 晚间新开的两单**:examples/toolbar 补 TTyToolButton 演示面(六样式+Grouped+DropdownMenu+OnPaintButton,
+- ~~**2026-08-07 晚间新开的两单**~~ **都已落地**(`ea5adab` / `a139370`+`5b5ae45`):examples/toolbar 补 TTyToolButton 演示面(六样式+Grouped+DropdownMenu+OnPaintButton,
   顺带改掉"未接线"旧说明);~~暗色残留键诊断修复(TyScrollContent/TyGridCell/Bevel/BarWrap 在暗 aero 下仍是亮面,
   修完进一致性扫描)~~ **四个键已逐一定性(2026-08-08),只有一个是主题层的账:**
   - **`TyScrollContent` —— 是主题层的账,已修。** 这个键**在任何一层都没有规则**;
@@ -406,3 +406,43 @@ RadioGroup 侧在**组这一层**用先于闸门运行的 `OnMouseDown` 修掉�
 真 `mouse_event` 注入**完全无效**。第一版真鼠标探针 67 个控件**全 FAIL**,那是假象不是缺陷——
 教训:**真输入探针必须先断言自己拿到了前台**(现已把 `mode=REAL-INPUT / SYNTHETIC-WM` 和 `fg=` 打进日志头),
 否则一次锁屏就能伪造出一份 67 条的"重大缺陷"清单。探针留在 `scratchpad/a316120_focusprobe/`,解锁后重跑即得 OS 级 `GetFocus` 那一列。
+
+
+## 2026-08-08 收尾:这条分支上还开着的东西
+
+对标类的正账(697 → 566 → 26 条表)、三个"程序"、论坛反馈、以及用户当面报的 containers 三条,
+**全部清零**。下面是明确留着、且都写明了理由的:
+
+### 判定不做(不是欠账,是决定)
+
+| 项 | 理由 |
+|---|---|
+| `TTyHeaderControl.Sections` 对象集合 | 索引可达全部 facet(`017d3b9`) |
+| `TTySplitter.ResizeAnchor` | 它在 LCL 里意味着"进入锚定模式",本控件没有;挡路的是**验证**不是工作量 —— 锚定位移全由对齐引擎产生,headless 守卫必然假绿。前置=一条真分配句柄的测试路径 |
+| `TTyProgressBar` 的焦点四成员 | 它是图形控件、没有句柄;"补上"=新声明四个没人读的成员。守卫钉的是**基类**,改成窗口化会当场变红 |
+| TabStrip `ScrollOpposite` | 与拖拽重排是同一件事(spec §8.5) |
+| 主题**色相族**守卫 | 阈值落在调色板自身的量化噪声里(office-light 两个近灰差 30°);17 个浅色里 11 个完全中性,规则对它们空转。测量写在 `docs/themes.md` |
+| 放宽 `Base.pas` 的 `TabStop` 焦点闸门 | 实验否决:本库容器与交互控件共用基类,放宽会让点容器抢走子控件焦点,破坏 5 处有测试的行为 |
+
+### 已具名、有一行修法、等一个决定
+
+- **`--toolbar-pad-y: 0` 的主题下**,`alTop` 工具条的行仍会贴到底部 hairline。修法=把描边宽计进高度公式,代价是**该主题下每条工具条都会挪**。写在 `TTyToolBar.AlignControls` 现场。
+- **`TTyNumericEdit.DoExit` 在销毁期间触发 `OnChange`**(经典"关窗崩溃"形状)。修法=开头加 `csDestroying` 早退。**故意没做**:那会让唯一一个默认值能走到 `b06f8ef` 根因路径的 roster 条目够不着它,削弱刚建好的回归守卫 —— 要先有第二道根级守卫。
+- **`TTyTrackEdit.MouseDown` 吞掉滑块点击不调 `inherited`**,于是拖内嵌滑块永远不给编辑框焦点,键盘接不上刚设的值(`TrackEdit.pas:120-129`)。
+- **四个皮肤的 `--tool-rule-alpha` 偏薄**(office 9 / macos 12 / aero 15 / ubuntu 18 luma):它们的 ghost 墨是中亮度强调色、暗色下没抬。逐皮肤取值建议(~161/102/101/85)写在 `docs/controls/toolbar.md`,是**设计决定**不是 bug。
+
+### 只能真机做的
+
+- **本轮全程锁屏**(`OpenInputDesktop` = 0),真 `mouse_event` 一律无效,所有"真机"验证都是进程内合成消息 + `PrintWindow`。解锁后值得重跑的:焦点探针的 OS 级 `GetFocus` 一列(`scratchpad/a316120_focusprobe/`)、日期框弹层、`OnPaintButton` 即时重绘。
+- **Win11 上的 `window-shadow: false`**:本机是 Win10,DWM 圆角偏好在这儿是 no-op(很可能就是论坛说的 border-radius "部分生效")。预期关阴影会连带失去圆角,未验。
+- **非 Win 平台**:macOS/GTK2/Qt6 上的焦点环、IME、字体注册路径本轮一律未测。
+- **`DoScaleFontPPI` 闩锁的真实损害**:闩锁本身已被 `c162cb7` 挡住并有无头守卫,但"主显示器不是 96 DPI"那种机器这里造不出来。
+
+### 立项级(不是 bug,是新东西)
+
+重型对话框(Print / PageSetup)、Web 密度尺度体系、自带开源图标字体(先决=选许可)、
+controls-completion 的旧 deferred(shadows / spacing-tokens / 二波动效)、皮肤引擎 phase-4。
+
+### 仓库事务
+
+分支领先 `main` 190+ 个提交,**未 push、未合并**。合并前值得跑一遍真机目验清单。
