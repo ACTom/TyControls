@@ -446,3 +446,23 @@ controls-completion 的旧 deferred(shadows / spacing-tokens / 二波动效)、�
 ### 仓库事务
 
 分支领先 `main` 190+ 个提交,**未 push、未合并**。合并前值得跑一遍真机目验清单。
+
+## 2026-08-09:应用图标,以及 LCL 读不了的 ICO 格式
+
+46 个 example 现在都带同一个 "Ty" 字标(`tools/genappicon` 画,`scripts/gen-appicon.ps1` 分发),
+顺手补了 44 个 example 的 `dpiAware`——它们此前显式声明**DPI 不感知**,高分屏上会被 Windows 拉伸,
+本库那套 per-monitor DPI 代码一次都跑不到。
+
+**这条留给以后:给 LCL 用的 .ico,PNG 压缩条目只能放 256 那一格。**
+`lcl/include/icon.inc` 的 `TCustomIcon.ReadStream` 只在 `bWidth=0`(格式里 0 就是 256)时才嗅 PNG 签名,
+其它尺寸一律直接进 DIB reader,把 PNG 的 IHDR 宽度当成 `biCompression` 然后抛异常。而这个异常抛在
+`TApplication.Initialize` 里(它自己解析 MAINICON,且 `LoadFromResourceHandle` 会把**每个**条目都解一遍),
+比 `CreateForm` 还早——于是主窗体根本没被创建,`Run` 也没跑到。表现是:进程活着、烧 11 秒 CPU、
+没有窗口、没有报错框、构建全绿。第一版就是这么把 46 个 example 全干掉的,是用户先发现的。
+
+教训写在 `tools/genappicon/genappicon.lpr` 头注释和 `tests/test.appicon.pas` 里,并有两道守卫:
+生成器用 **LCL 自己的 TIcon** 回读自己的输出(读不了就 `Halt(3)`),测试套件对 46 个 .ico 做同样的事 +
+字节层面断言"256 以外不许有 PNG"。六条守卫都做了变异测试。
+
+**验证口径也一并修正**:资源类改动不能用"平台加载器读得到"代替"把程序跑起来"——
+`scripts/smoke-launch-examples.ps1` 就是为这个存在的,改 `.lpi`/资源/清单之后必须跑。
