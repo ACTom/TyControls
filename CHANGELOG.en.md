@@ -9,6 +9,40 @@ Linux and macOS.
 
 ## [Unreleased]
 
+### Fixed -- the visual round
+
+- **An editable combo box drew TWO frames** and the chevron fell between them. The arrow had not
+  moved at all: measured on a screenshot, its ink ends 3px from the outer frame in BOTH styles.
+  What differs is that the editable style puts a real edit over the text zone, and that editor
+  was painting its own field frame inside the combo's -- so the chevron sat in the strip between
+  an inner box and the outer border, 10px of air on its left and 3px on its right.
+- **Spin buttons, scroll-bar end arrows and tab-strip scrollers draw a filled TRIANGLE** now,
+  not a line arrow. That is the split Windows itself makes: a triangle to STEP or SCROLL (the
+  spin theme part is a solid 5x3 triangle, and the native tab control scrolls with that same
+  part), a chevron to DISCLOSE. The "icons squeezed against the border" half was the glyph pad,
+  which ate 9px per axis and left a 9x5 ink box in an 18x14 button half.
+  **Breaking for theme authors only:** a spinner's override token is now
+  `--glyph-triangle-up/down`, not `--glyph-arrow-up/down`. No shipped theme sets either, so
+  nothing in the tree changes.
+- **A menu button's drop mark** is the same chevron the drop-down button, the toolbar and every
+  combo-family field draw, instead of its own hand-rolled triangle.
+- **The track bar had no groove -- it WAS the groove.** It filled its whole client rect with
+  `--surface-track`, which is why it read as a darker slab on every theme and as a neutral grey
+  slab on aero, whose surface is blue; and the tick marks, drawn inside that same rect, sat ON
+  the track. Now the control paints no background and inherits the surface it sits on, the
+  recess is a thin centred band (a new `TyTrackGroove` key), and the ticks get a band of their
+  own on whichever side `TickMarks` names. aero also wires `--surface-track` to the `--track`
+  colour it already had and used only for the progress bar.
+- **Trailing widgets sit in one place now.** A combo box hangs its button zone on the frame,
+  while everything built on the edit's trailing-widget seam measured from the PADDED content
+  box -- so the same 9px chevron was 3px from the border in a combo box, 7 in a `TTyComboEdit`,
+  6 in a spin edit, 10 in a calc edit and 12 on a menu button. One definition now, shared by the
+  painter and the hit test (they were two independent copies of the formula).
+- **`window-shadow: false` let the Windows Classic caption flash back** over the custom chrome
+  whenever the window was deactivated (reported on the forum). Turning the shadow off disables
+  DWM non-client rendering for the window, and Windows then falls back to LEGACY non-client
+  painting, which does not go through the suppression that was already in place.
+
 ### Added — data grid `TTyStringGrid`
 
 - **Three layers**: `TTyCustomGrid` (geometry/painting/theming) → `TTyDrawGrid` (content supplied
