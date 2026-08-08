@@ -103,11 +103,32 @@ type
     The form must be genuinely VISIBLE, not merely handle-allocated: CanFocus is False for a
     hidden control, and TTyCustomControl.MouseDown gates on CanFocus, so a hidden-form
     version of this test would pass vacuously for every control -- including a control whose
-    SetFocus call had been deleted. It is parked off-screen so the suite stays quiet. }
+    SetFocus call had been deleted. It is parked off-screen so the suite stays quiet.
+
+    THE SUITE ALSO INSTALLS AN Application.OnException TRAP, and that is not decoration.
+
+    An exception raised on this path is raised INSIDE the widgetset's WindowProc -- the
+    click is dispatched by Perform, and the teardown at the end of every probe runs
+    RemoveFocus, which sends WM_KILLFOCUS synchronously. Nothing there propagates back to
+    the `try` in ClickAndReportFocus. LCL's TApplication.HandleException catches it instead
+    and, with no OnException handler, calls ShowException -> a MODAL dialog. A console
+    runner has nobody to dismiss it, so the whole suite stops dead in ShowModal with the
+    CPU flat -- which is exactly how TTyCurrencyEdit took this file down before
+    tyControls.Edit.pas's destructor was fixed. A trap turns that into a named failure, so
+    the next control with a raising press or teardown FAILS instead of wedging the run. }
   TTyClickFocusTest = class(TTestCase)
   private
     FForm: TForm;
     FPark: TTyEdit;
+    FPrevOnException: TExceptionEvent;
+    FTrapped: string;
+    procedure TrapException(Sender: TObject; E: Exception);
+    { Fail with whatever the trap caught, if anything. Called after every probe rather than
+      only in TearDown so the failure names the control that raised. }
+    procedure AssertNothingRaised(const AWhere: string);
+    { "Commit the field on the way out" -- the ordinary OnExit handler that used to land in
+      freed memory. See TestFreeingAFocusedEditWhoseExitWritesTextDoesNotRaise. }
+    procedure CommitTextOnExit(Sender: TObject);
     { Build AClass on the visible form, park focus on FPark, click it, and report where
       focus ended up. Frees the control before returning. }
     function ClickAndReportFocus(AClass: TTyCtlClass; out AMoved: Boolean): string;
@@ -118,6 +139,7 @@ type
     procedure TestAClickActuallyLandsFocusOnEveryFocusableControl;
     procedure TestTheGuardIsNotVacuousForANonFocusableControl;
     procedure TestClickThenArrowWalksAClickableStepsRail;
+    procedure TestFreeingAFocusedEditWhoseExitWritesTextDoesNotRaise;
   end;
 
 implementation
@@ -572,9 +594,40 @@ begin
   Result := PtrInt((Y shl 16) or (X and $FFFF));
 end;
 
+{ Record, do not re-raise: the exception arrived inside a WindowProc and there is no frame
+  of this test's to unwind to. Recording it lets the probe finish and the assertion below
+  turn it into an ordinary red test. }
+procedure TTyClickFocusTest.TrapException(Sender: TObject; E: Exception);
+begin
+  if FTrapped = '' then
+    FTrapped := E.ClassName + ': ' + E.Message;
+end;
+
+procedure TTyClickFocusTest.CommitTextOnExit(Sender: TObject);
+begin
+  { Must differ from what is already there: SetTextInternal short-circuits on an unchanged
+    string, and a no-op write never reaches the machinery this guard is about. }
+  TTyEdit(Sender).Text := 'committed on exit';
+end;
+
+procedure TTyClickFocusTest.AssertNothingRaised(const AWhere: string);
+var
+  s: string;
+begin
+  if FTrapped = '' then Exit;
+  s := FTrapped;
+  FTrapped := '';   // one report per probe, so a later probe is not blamed for this one
+  Fail(AWhere + ' raised an unhandled exception on the real message path: ' + s
+    + '. Nothing here propagates back to the caller -- untrapped, LCL would show a modal '
+    + 'error box and the console runner would block on it forever.');
+end;
+
 procedure TTyClickFocusTest.SetUp;
 begin
   NeedWidgetSetForClicks;
+  FTrapped := '';
+  FPrevOnException := Forms.Application.OnException;
+  Forms.Application.OnException := @TrapException;
   FForm := TForm.CreateNew(nil);
   { Off-screen, but genuinely shown: CanFocus needs Visible all the way up, and the whole
     point of this suite is that the gate TTyCustomControl.MouseDown checks is really open. }
@@ -592,6 +645,7 @@ begin
   FForm.Free;      // owns every control the test built
   FForm := nil;
   FPark := nil;
+  Forms.Application.OnException := FPrevOnException;
 end;
 
 function TTyClickFocusTest.ClickAndReportFocus(AClass: TTyCtlClass;
@@ -666,15 +720,21 @@ end;
 
   Pointing it at the extended table was tried and REVERTED, on evidence:
 
-    * TTyCurrencyEdit DEADLOCKS the console runner on the synthetic press. Instrumented to
-      the statement: it gets past construction, handle allocation and the focus park
-      (`:created`, `:handled`, `:parked` all logged) and never returns from the
-      `Perform(LM_LBUTTONDOWN, ...)` / ProcessMessages pair. CPU flat at 0 for minutes,
-      one thread. Its own parent TTyNumericEdit, clicked identically one entry earlier,
-      passes -- so this is something TTyCurrencyEdit adds, not the edit family.
-      It is NOT a regression from any change in this pass: nothing had ever clicked this
-      control before, because it had never been on a roster. Reported, not fixed here
-      (tyControls.CurrencyEdit.pas was out of scope for this change).
+    * TTyCurrencyEdit DEADLOCKED the console runner. FIXED, and back on the roster below.
+      The diagnosis in the first version of this note was wrong in one detail worth keeping,
+      because it is what a coarse probe does to you: the press was innocent. Instrumentation
+      stopped at `:parked`, so the block LOOKED like `Perform(LM_LBUTTONDOWN, ...)`; logging
+      one statement further showed the click completing, focus landing correctly, and the
+      probe blocking in `c.Free`. Freeing a FOCUSED edit runs TWinControl.Destroy ->
+      RemoveFocus -> WM_KILLFOCUS -> DoExit, TTyNumericEdit.DoExit reformats the field, and
+      the write reached an undo stack tyControls.Edit.pas's destructor had already freed --
+      EAccessViolation inside a WindowProc, so LCL showed a modal error box and the runner
+      waited on it forever with the CPU flat. It was never currency-specific: a bare TTyEdit
+      whose OnExit writes Text did the same, and so did any numeric edit holding a grouped
+      value. TTyCurrencyEdit was simply the only one whose DEFAULT value (the '$' makes the
+      display differ from the raw form at 0) reached it, where plain TTyNumericEdit's
+      `FText = AValue` short-circuit stepped over it. Root fix: tyControls.Edit.pas frees
+      the text engine AFTER `inherited Destroy`.
     * Beyond that, the roster would pull in the shell browsers (TTyShellTreeView,
       TTyShellListView, TTyShellComboBox, TTyFilterComboBox), which enumerate the real
       filesystem on handle creation. That is a machine-dependent cost and a machine-
@@ -692,7 +752,13 @@ begin
     TTyButtonGroup, TTyColorGrid, TTyDrawGrid, TTyStringGrid, TTyHeaderControl,
     TTyHSColorPicker, TTyLColorPicker, TTyImageView, TTyScrollBar,
     TTyEdit, TTyListBox, TTyCheckBox, TTySegmented, TTyTreeView, TTyListView,
-    TTyCalculator, TTyToggleSwitch, TTyMenuBar, TTyRibbonBackstage);
+    TTyCalculator, TTyToggleSwitch, TTyMenuBar, TTyRibbonBackstage,
+    { The numeric edit family, added with the teardown fix above. All five were run one at
+      a time before being listed. TTyCurrencyEdit and TTyCalcCurrencyEdit are the two that
+      actually exercise the fix at their default value -- the other three hold "0.00"/"0",
+      whose blur reformat is a no-op write -- but the family is listed whole so a future
+      change to any one of their Formatted overrides is clicked too. }
+    TTyNumericEdit, TTyCurrencyEdit, TTyCalcEdit, TTyCalcCurrencyEdit, TTyTrackEdit);
 end;
 
 procedure TTyClickFocusTest.TestAClickActuallyLandsFocusOnEveryFocusableControl;
@@ -714,6 +780,9 @@ begin
   for i := 0 to High(list) do
   begin
     landed := ClickAndReportFocus(list[i], moved);
+    { Before the focus assertion: a control that RAISED has not been measured at all, and
+      naming it here is the difference between a diagnosis and a wedged runner. }
+    AssertNothingRaised(list[i].ClassName);
     AssertTrue(list[i].ClassName + ': a click must land focus on it. TabStop is True, so '
       + 'the gate is open -- if this fails the MouseDown chain is broken (an override that '
       + 'forgot `inherited`, or a swallowed CM_ message). Focus ended on: ' + landed,
@@ -730,8 +799,49 @@ var
   moved: Boolean;
 begin
   ClickAndReportFocus(TTyPanel, moved);
+  AssertNothingRaised('TTyPanel');
   AssertFalse('a click on a TTyPanel must NOT move focus -- it is not a tab stop. '
     + 'If this passes, ClickAndReportFocus is not measuring the click at all.', moved);
+end;
+
+{ THE ROOT GUARD for the defect that used to hang this file, aimed at the ROOT and not at
+  the control that reported it.
+
+  TTyCurrencyEdit was only the messenger. What actually broke was tyControls.Edit.pas's
+  destructor: it freed the undo stack and the measuring bitmap BEFORE `inherited Destroy`,
+  and `inherited Destroy` is precisely what calls RemoveFocus -- so WM_KILLFOCUS came back
+  synchronously, ran CM_EXIT -> DoExit -> OnExit, and any handler that wrote Text landed in
+  SetTextInternal -> BeginUndoStep -> FUndoStack.Push on freed memory.
+
+  So this probes a BARE TTyEdit with the most ordinary handler anyone would write -- commit
+  the field on the way out -- rather than a currency edit. TTyCurrencyEdit reached the same
+  freed pointer only because its symbol makes the blur reformat CHANGE the string, where a
+  plain numeric edit at its default value short-circuits on `FText = AValue` and never gets
+  there; pinning the symptom would leave every OnExit handler in every application still
+  broken. TTyCurrencyEdit is on the click roster above, which covers the reported gesture. }
+procedure TTyClickFocusTest.TestFreeingAFocusedEditWhoseExitWritesTextDoesNotRaise;
+var
+  e: TTyEdit;
+begin
+  e := TTyEdit.Create(FForm);
+  e.Parent := FForm;
+  e.SetBounds(220, 60, 260, 26);
+  e.OnExit := @CommitTextOnExit;
+  e.Visible := True;
+  e.HandleNeeded;
+  Forms.Application.ProcessMessages;
+
+  { The edit must really HOLD focus, or RemoveFocus does nothing on Free and this passes
+    vacuously -- the whole failure lives in the focus handover. }
+  AssertTrue('the probe edit must be focusable, or this guard proves nothing', e.CanFocus);
+  e.SetFocus;
+  Forms.Application.ProcessMessages;
+  AssertSame('the probe edit must hold focus before it is freed',
+    TWinControl(e), TWinControl(FForm.ActiveControl));
+
+  e.Free;
+  Forms.Application.ProcessMessages;
+  AssertNothingRaised('freeing a focused TTyEdit whose OnExit writes Text');
 end;
 
 { The forum report behind this suite (#8): the rail took no focus, so its arrow keys -- the

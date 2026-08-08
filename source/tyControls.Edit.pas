@@ -419,10 +419,39 @@ begin
   // (mirrors TTyButton.Destroy). It is owned by Self but we free it explicitly.
   FreeAndNil(FBlinkTimer);
   TyQtUninstallIme(FImeHook);   // in case DestroyWnd never ran (Qt-only; no-op elsewhere)
-  FUndoStack.Free;
-  FMeasureBmp.Free;
-  FreeAndNil(FOnChangeHandlers);
+
+  { THE TEXT ENGINE MUST OUTLIVE `inherited Destroy`, and this order is load-bearing.
+
+    `inherited Destroy` is not a passive teardown: TWinControl.Destroy calls RemoveFocus,
+    which -- if this edit currently holds focus -- drives DefocusControl -> SetActiveControl
+    -> the widgetset's SetFocus, and the WM_KILLFOCUS that comes back is dispatched
+    SYNCHRONOUSLY into CM_EXIT -> DoExit -> OnExit. So arbitrary code runs INSIDE
+    `inherited Destroy`, on this object, and it is perfectly ordinary code: TTyNumericEdit
+    reformats the field on blur, and an application's OnExit handler that commits with
+    `Edit.Text := ...` is the most obvious thing anyone would write.
+
+    That write re-enters SetTextInternal -> BeginUndoStep -> FUndoStack.Push. When these
+    fields were freed ABOVE the inherited call it was a use-after-free: EAccessViolation,
+    raised inside the widgetset's WindowProc, so it never propagates back to whoever called
+    Free -- LCL's Application.HandleException catches it and shows a MODAL error dialog.
+    In a GUI the user gets an access-violation box on closing a form; in a console/test run
+    there is nobody to dismiss it and the process waits on ShowModal forever, CPU flat.
+    That is the "TTyCurrencyEdit hangs on a click" report: the click was innocent, the
+    control was simply the first one whose blur-reformat CHANGES the string (its currency
+    symbol makes the display differ from the raw form even at the default value 0, where
+    plain TTyNumericEdit's SetTextInternal short-circuits on `FText = AValue` and never
+    reaches the freed stack).
+
+    Freeing AFTER the inherited call is safe: the instance memory is not released until the
+    outermost destructor returns, so Self is fully valid here, and by this point the handle
+    is gone and the control is unparented -- nothing can call in again. FreeAndNil, not
+    Free: FMeasureBmp is lazily rebuilt behind `if FMeasureBmp = nil`, so a dangling
+    non-nil pointer there would be used as if it were live. }
   inherited Destroy;
+
+  FreeAndNil(FUndoStack);
+  FreeAndNil(FMeasureBmp);
+  FreeAndNil(FOnChangeHandlers);
 end;
 
 // ---- Multicast OnChange (LCL customedit.inc:91-97) ----
