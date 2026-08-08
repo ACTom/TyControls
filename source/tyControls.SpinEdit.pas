@@ -641,8 +641,11 @@ begin
     else
       P.DrawText(TextR, FEditText, S.FontName, EffSize, S.FontWeight,
         S.TextColor, FAlignment, tlCenter, True);
-    TyDrawGlyph(P, ActiveController, UpR, tgArrowUp, S.TextColor, 2);     // v3/C5 overridable
-    TyDrawGlyph(P, ActiveController, DownR, tgArrowDown, S.TextColor, 2);
+    { Filled triangles in a SQUARED half at pad 1 -- the Windows spin part's shape, and the
+      only pad that leaves a readable mark: the raw half is 18 x 14 and the default pad of 4
+      eats 9px per axis. See TySquareGlyphBox. (v3/C5 overridable.) }
+    TyDrawGlyph(P, ActiveController, TySquareGlyphBox(UpR),   tgTriangleUp,   S.TextColor, 2, 1);
+    TyDrawGlyph(P, ActiveController, TySquareGlyphBox(DownR), tgTriangleDown, S.TextColor, 2, 1);
     if Focused and FCaretVisible then
     begin
       cx := CaretPixelX(FCaret, APPI);

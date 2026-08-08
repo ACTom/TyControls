@@ -21,6 +21,17 @@ type
     // TTyScrollBar deliberately keeps its pair (tyControls.ScrollBar.pas:617).
     tgChevronLeft,
     tgArrowUp, tgArrowDown, tgArrowLeft, tgArrowRight,
+    { FILLED triangles -- the shape Windows itself uses for the STEP role. Rendering the live
+      uxtheme parts on a Win10 box: SPIN/SPNP_UP is a solid 5x3 triangle with no antialiasing,
+      identical in normal/hot/pressed, and the native tab control's scrollers are the same part
+      (it spawns an UPDOWN). The drop-down button is deliberately NOT this shape -- CP_DROPDOWN-
+      BUTTON is an antialiased hollow chevron -- so the two idioms are split by ROLE, not by
+      taste: triangle to step a value or scroll a strip, chevron to disclose something.
+      Before these existed the enum had no filled triangle at all, so the four controls that
+      wanted one hand-rolled a path with four different sets of coefficients, and the six that
+      wanted a spinner drew tgArrow* (a shaft with an open head) instead. AThicknessLogical is
+      meaningless here and ignored; a filled shape has no stroke. }
+    tgTriangleUp, tgTriangleDown, tgTriangleLeft, tgTriangleRight,
     tgDialogLauncher,
     // Semantic status marks (TTyAlert / TTyNotification). Drawn in ONE ink like every glyph
     // here, so they are outlines (ring + mark), not AntD's filled discs — a filled disc needs
@@ -1920,6 +1931,22 @@ begin
         FBmp.DrawPolyLineAntialias([PointF(r - w * 0.35, t + h * 0.25),
           PointF(r, cy), PointF(r - w * 0.35, b - h * 0.25)], px, th);
       end;
+    { Filled triangles. Base m, height 0.6*m -- the 5:3 proportion the Windows spin part uses,
+      kept as a ratio so the shape is the same at every density instead of a fixed 5x3 that
+      would vanish on a 200% display. Centred on the glyph box, so a caller that squares its
+      button half (TySquareGlyphBox) gets the same triangle up and down. }
+    tgTriangleUp:
+      FBmp.FillPolyAntialias([PointF(cx, cy - m * 0.3),
+        PointF(cx + m * 0.5, cy + m * 0.3), PointF(cx - m * 0.5, cy + m * 0.3)], px);
+    tgTriangleDown:
+      FBmp.FillPolyAntialias([PointF(cx, cy + m * 0.3),
+        PointF(cx - m * 0.5, cy - m * 0.3), PointF(cx + m * 0.5, cy - m * 0.3)], px);
+    tgTriangleLeft:
+      FBmp.FillPolyAntialias([PointF(cx - m * 0.3, cy),
+        PointF(cx + m * 0.3, cy - m * 0.5), PointF(cx + m * 0.3, cy + m * 0.5)], px);
+    tgTriangleRight:
+      FBmp.FillPolyAntialias([PointF(cx + m * 0.3, cy),
+        PointF(cx - m * 0.3, cy + m * 0.5), PointF(cx - m * 0.3, cy - m * 0.5)], px);
     tgDialogLauncher:
       begin
         // Office group dialog-launcher: a diagonal arrow into the bottom-right corner.

@@ -842,8 +842,9 @@ var
     end
     else
       halfS := S;
-    if AUp then P.DrawGlyph(AHalf, tgArrowUp, halfS.TextColor, 3)
-    else P.DrawGlyph(AHalf, tgArrowDown, halfS.TextColor, 3);
+    { The stand-alone spinner draws exactly what an embedded one does. }
+    if AUp then P.DrawGlyph(TySquareGlyphBox(AHalf), tgTriangleUp, halfS.TextColor, 3, 1)
+    else P.DrawGlyph(TySquareGlyphBox(AHalf), tgTriangleDown, halfS.TextColor, 3, 1);
   end;
 
 begin

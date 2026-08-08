@@ -2168,8 +2168,9 @@ begin
         P.DrawGlyph(L.Button, tgChevronDown, S.TextColor, 2)
       else if HasSpinButtons then
       begin
-        P.DrawGlyph(L.ButtonUp,   tgArrowUp,   S.TextColor, 2);
-        P.DrawGlyph(L.ButtonDown, tgArrowDown, S.TextColor, 2);
+        { Same spinner shape and slot rule as TTySpinEdit -- one element, one style. }
+        P.DrawGlyph(TySquareGlyphBox(L.ButtonUp),   tgTriangleUp,   S.TextColor, 2, 1);
+        P.DrawGlyph(TySquareGlyphBox(L.ButtonDown), tgTriangleDown, S.TextColor, 2, 1);
       end;
     end;
 

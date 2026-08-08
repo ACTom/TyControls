@@ -227,6 +227,10 @@ begin
   AssertEquals('arrow-down',   '--glyph-arrow-down',   TyGlyphKindToken(tgArrowDown));
   AssertEquals('arrow-left',   '--glyph-arrow-left',   TyGlyphKindToken(tgArrowLeft));
   AssertEquals('arrow-right',  '--glyph-arrow-right',  TyGlyphKindToken(tgArrowRight));
+  AssertEquals('triangle-up',    '--glyph-triangle-up',    TyGlyphKindToken(tgTriangleUp));
+  AssertEquals('triangle-down',  '--glyph-triangle-down',  TyGlyphKindToken(tgTriangleDown));
+  AssertEquals('triangle-left',  '--glyph-triangle-left',  TyGlyphKindToken(tgTriangleLeft));
+  AssertEquals('triangle-right', '--glyph-triangle-right', TyGlyphKindToken(tgTriangleRight));
   AssertEquals('chevron-down', '--glyph-chevron-down', TyGlyphKindToken(tgChevronDown));
   AssertEquals('check',        '--glyph-check',        TyGlyphKindToken(tgCheck));
   AssertEquals('close',        '--glyph-close',        TyGlyphKindToken(tgClose));
@@ -284,7 +288,15 @@ begin
   // Proves the derived TyDrawGlyph overload is wired in a real control: overriding both spin
   // arrows to a space codepoint erases the vector arrows (font-independent dispatch proof).
   inkVec := SpinUpArrowInk(SP);
-  inkOv := SpinUpArrowInk(':root { --glyph-arrow-up: "Arial" "\20"; --glyph-arrow-down: "Arial" "\20"; } ' + SP);
+  //
+  // The TOKEN NAMES matter and this test is the only thing that pins them for a real control.
+  // A spin button draws tgTriangleUp/Down, so its tokens are --glyph-triangle-*; it drew
+  // tgArrowUp/Down until the spinner family moved onto the filled triangle Windows itself
+  // uses, and --glyph-arrow-* now reaches nothing here. No shipped theme sets either (the
+  // only --glyph-* in themes/ is --glyph-button-gap), so nothing in the tree broke -- but a
+  // theme author who HAD overridden --glyph-arrow-up would silently stop being heard, which
+  // is why the rename is called out in the changelog.
+  inkOv := SpinUpArrowInk(':root { --glyph-triangle-up: "Arial" "\20"; --glyph-triangle-down: "Arial" "\20"; } ' + SP);
   AssertTrue('vector spin arrows draw ink', inkVec > 0);
   AssertEquals('override (space) leaves the spin arrows glyphless', 0, inkOv);
 end;

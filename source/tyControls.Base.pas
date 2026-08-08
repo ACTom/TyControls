@@ -527,6 +527,13 @@ procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyStyleController;
 function TyTryDrawGlyphOverride(APainter: TTyPainter; AController: TTyStyleController;
   const ARect: TRect; const ATokenName: string; AColor: TTyColor): Boolean;
 function TyGlyphKindToken(AKind: TTyGlyphKind): string;
+{ The largest CENTRED SQUARE inside ARect. A spinner's button half is wide and short (18 x 14
+  on a 28px field), and DrawGlyph derives its mark from min(width, height) AFTER the pad comes
+  off both axes -- so on the raw half the pad is measured against 18 while the mark is limited
+  by 14, and the arrow comes out a couple of pixels tall. Squaring first makes the pad and the
+  mark agree. TTyFloatSpinEdit worked this out first and kept it to itself; the other five
+  spinner/scroller sites were in the hole it had climbed out of. }
+function TySquareGlyphBox(const ARect: TRect): TRect;
 
 { Contextual styling for a control hosted ON a title bar. A title bar is a container, and
   several skins paint it in a strong colour -- xp and classic use a blue gradient, office the
@@ -1404,6 +1411,10 @@ begin
     tgArrowDown:          Result := '--glyph-arrow-down';
     tgArrowLeft:          Result := '--glyph-arrow-left';
     tgArrowRight:         Result := '--glyph-arrow-right';
+    tgTriangleUp:         Result := '--glyph-triangle-up';
+    tgTriangleDown:       Result := '--glyph-triangle-down';
+    tgTriangleLeft:       Result := '--glyph-triangle-left';
+    tgTriangleRight:      Result := '--glyph-triangle-right';
     tgInfo:               Result := '--glyph-info';
     tgSuccess:            Result := '--glyph-success';
     tgWarning:            Result := '--glyph-warning';
@@ -1411,6 +1422,20 @@ begin
   else
     Result := '';
   end;
+end;
+
+function TySquareGlyphBox(const ARect: TRect): TRect;
+var
+  w, h, s, dx, dy: Integer;
+begin
+  w := ARect.Right - ARect.Left;
+  h := ARect.Bottom - ARect.Top;
+  if (w <= 0) or (h <= 0) then Exit(Rect(0, 0, 0, 0));
+  s := w;
+  if h < s then s := h;
+  dx := (w - s) div 2;
+  dy := (h - s) div 2;
+  Result := Rect(ARect.Left + dx, ARect.Top + dy, ARect.Left + dx + s, ARect.Top + dy + s);
 end;
 
 procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyStyleController;

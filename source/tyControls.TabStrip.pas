@@ -2063,18 +2063,19 @@ begin
         grabbed on the other" defect (§5.5) in miniature. }
       if BandIsVertical then
       begin
-        P.DrawGlyph(FScrollLeftRect,  tgArrowUp,   ArrowStyle.TextColor, 2);
-        P.DrawGlyph(FScrollRightRect, tgArrowDown, ArrowStyle.TextColor, 2);
+        { Triangles: the native tab control scrolls with an UPDOWN, i.e. the spin part. }
+        P.DrawGlyph(TySquareGlyphBox(FScrollLeftRect),  tgTriangleUp,   ArrowStyle.TextColor, 2, 1);
+        P.DrawGlyph(TySquareGlyphBox(FScrollRightRect), tgTriangleDown, ArrowStyle.TextColor, 2, 1);
       end
       else if Rtl then
       begin
-        P.DrawGlyph(FScrollLeftRect,  tgArrowRight, ArrowStyle.TextColor, 2);
-        P.DrawGlyph(FScrollRightRect, tgArrowLeft,  ArrowStyle.TextColor, 2);
+        P.DrawGlyph(TySquareGlyphBox(FScrollLeftRect),  tgTriangleRight, ArrowStyle.TextColor, 2, 1);
+        P.DrawGlyph(TySquareGlyphBox(FScrollRightRect), tgTriangleLeft,  ArrowStyle.TextColor, 2, 1);
       end
       else
       begin
-        P.DrawGlyph(FScrollLeftRect,  tgArrowLeft,  ArrowStyle.TextColor, 2);
-        P.DrawGlyph(FScrollRightRect, tgArrowRight, ArrowStyle.TextColor, 2);
+        P.DrawGlyph(TySquareGlyphBox(FScrollLeftRect),  tgTriangleLeft,  ArrowStyle.TextColor, 2, 1);
+        P.DrawGlyph(TySquareGlyphBox(FScrollRightRect), tgTriangleRight, ArrowStyle.TextColor, 2, 1);
       end;
     end;
 

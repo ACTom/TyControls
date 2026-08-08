@@ -119,17 +119,11 @@ type
 implementation
 
 function TyFloatSpinGlyphBox(const AHalf: TRect): TRect;
-var
-  w, h, s, dx, dy: Integer;
 begin
-  w := AHalf.Right - AHalf.Left;
-  h := AHalf.Bottom - AHalf.Top;
-  if (w <= 0) or (h <= 0) then Exit(Rect(0, 0, 0, 0));
-  s := w;
-  if h < s then s := h;
-  dx := (w - s) div 2;
-  dy := (h - s) div 2;
-  Result := Rect(AHalf.Left + dx, AHalf.Top + dy, AHalf.Left + dx + s, AHalf.Top + dy + s);
+  { The body moved to TySquareGlyphBox in tyControls.Base once the other five spinner and
+    scroller sites turned out to need it too. Kept as a name because it is public and pinned
+    by tests/test.floatspinedit.pas; it now forwards rather than holding a second copy. }
+  Result := TySquareGlyphBox(AHalf);
 end;
 
 { TTyFloatSpinEdit }
@@ -216,10 +210,10 @@ begin
     painted arrows and the clickable halves the same two rectangles by construction. }
   TyDrawGlyph(APainter, ActiveController,
     TyFloatSpinGlyphBox(TySpinUpButtonRect(AZone, ppi, w)),
-    tgArrowUp, AStyle.TextColor, 2, 1);
+    tgTriangleUp, AStyle.TextColor, 2, 1);
   TyDrawGlyph(APainter, ActiveController,
     TyFloatSpinGlyphBox(TySpinDownButtonRect(AZone, ppi, w)),
-    tgArrowDown, AStyle.TextColor, 2, 1);
+    tgTriangleDown, AStyle.TextColor, 2, 1);
 end;
 
 procedure TTyFloatSpinEdit.StepValue(ADelta: Double);

@@ -655,8 +655,10 @@ begin
     begin
       if FKind = sbVertical then
       begin
-        TyDrawGlyph(P, ActiveController, LoR, tgArrowUp, S.TextColor, 2);     // v3/C5 overridable
-        TyDrawGlyph(P, ActiveController, HiR, tgArrowDown, S.TextColor, 2);
+        // v3/C5 overridable. Triangles: a scroll-bar end button steps the view, the same role
+        // the spin buttons have, and Windows draws both from the same triangular idiom.
+        TyDrawGlyph(P, ActiveController, TySquareGlyphBox(LoR), tgTriangleUp,   S.TextColor, 2, 1);
+        TyDrawGlyph(P, ActiveController, TySquareGlyphBox(HiR), tgTriangleDown, S.TextColor, 2, 1);
       end
       else
       begin
@@ -667,8 +669,8 @@ begin
           the left-end button now steps Position UP (see MouseDown), because that is the
           direction the thumb travels when it goes left. Drawing tgArrowRight on the left
           would make the button point away from where it sends the thumb. }
-        TyDrawGlyph(P, ActiveController, LoR, tgArrowLeft, S.TextColor, 2);
-        TyDrawGlyph(P, ActiveController, HiR, tgArrowRight, S.TextColor, 2);
+        TyDrawGlyph(P, ActiveController, TySquareGlyphBox(LoR), tgTriangleLeft,  S.TextColor, 2, 1);
+        TyDrawGlyph(P, ActiveController, TySquareGlyphBox(HiR), tgTriangleRight, S.TextColor, 2, 1);
       end;
     end;
     P.EndPaint;
