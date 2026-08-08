@@ -104,12 +104,29 @@
        chrome family — a plain-:root steel would drag into dark mode. */
     --surface-tab-rest:  var(--chrome-bar-bg);   /* a resting tab is command chrome */
     --surface-tab-hover: var(--surface-chrome);  /* hover lifts a step toward the page */
+
+    /* NO --surface / --on-surface pin here, and that is a decision, not an omission —
+       the dark block carries one (see there) and this block deliberately does not.
+       In light the pin would be a NO-OP for the surface: aero's --field-bg is #FFFFFF
+       and the base's light --surface is #FFFFFF, so the fallback page sheet already IS
+       aero's own page sheet. Writing `--surface: var(--field-bg)` here would change no
+       resolved byte and would only add a line to keep in sync. The ink is a near-no-op
+       for a different reason: base light --on-surface #1F2937 (31,41,55) is already a
+       cold slate two levels off aero's own --ink #1E2B3A (30,43,58) — 1.4 luma and 3
+       chroma apart, inside the palettes' own rounding, and nothing on screen separates
+       them. Pinning it would move real bytes for no visible gain, so light stays as it
+       resolves today. The dark side had neither escape: its --field-bg is #141C27 and
+       its ink b-r is +23 against the base's +6. */
 }
 }
 
 /* ---- DARK palette: Win7 dark colorization — deep blue-black glass, wet gloss kept.
-   Sits on the base layer's dark surfaces (#1E1E1E family), so fallback controls and aero's
-   own chrome read as ONE dark window. Ink is pale slate, not white: glass, not console.
+   This block also PINS the base layer's dark seeds (--surface / --on-surface, at the foot
+   of the block) to aero's own cold family, so fallback controls and aero's own chrome read
+   as ONE dark window. It did not always: leaving the seeds unpinned left every unstyled
+   surface on the base's neutral #1E1E1E, which is the same off-family neutral the chrome
+   fix removed from the bars, only bigger — see the seed comment for the full story.
+   Ink is pale slate, not white: glass, not console.
    Notes on the values that are NOT simple darkenings:
    - --accent lifts a touch but stays luma < 0.5, so on(--accent) keeps white ink on
      primary/badge/checked fills (a lazier, lighter blue flips them to black ink).
@@ -184,15 +201,50 @@
     --chrome-bar-bg:  #22303F;   /* tool band, status bar, scroll track */
     --border:         #3D5068;   /* fallback frames, bar hairlines, scroll-thumb seed */
 
+    /* PAGE SHEET seeds — the third and last off-family neutral, and the biggest one. The
+       chrome fix above retuned the BARS; these two retune everything the skin does not
+       style at all. --surface is the base layer's fill for TyPanel, TyBevel, TyScrollBox,
+       TyExPanel, TyScrollContent, TyImageView, TyChart … (one rule, light.tycss); leaving
+       it unpinned handed every one of them the base's dark seed #1E1E1E — a NEUTRAL
+       near-black (chroma 0) sitting at luma 30.0 against this skin's own form wash at
+       luma 29.8. Same lightness, different hue: the eye gets a colour boundary with no
+       depth cue to explain it, and the containers demo showed two backgrounds side by
+       side — aero's cold blue-black on the form/group boxes/cards, flat neutral on the
+       bevels, paint panel, scroll wells and the panels hosting the tool bar.
+
+       Why LIGHT needs no such pin, and is deliberately left alone: there the coincidence
+       already holds. aero's light --field-bg is #FFFFFF and the base's light --surface is
+       #FFFFFF — the same value, so the fallback page sheet already IS aero's own page
+       sheet, and light resolves stay byte-identical. The dark block broke that coincidence
+       when it gave --field-bg its own cold well (#141C27) and left --surface behind.
+       Restoring it is the whole fix: point the seed at the well the skin already chose.
+       (The secondary reason light reads fine even so: white sits 20 luma ABOVE the wash,
+       so it reads as a lighter sheet on a tinted ground — a legible depth relationship.
+       Dark's neutral sat at the SAME luma as the wash, which is a clash and nothing else.)
+
+       Luma is preserved on purpose — 26.9 against the old 30.0. Everything in this block
+       was tuned against a page sheet at ~30 (the tab ramp below cites it; the ink deltas
+       were measured on it), so moving the HUE alone fixes the reported defect and re-opens
+       none of that tuning. Every derived token re-derives correctly without help, because
+       darken() is a per-channel multiply: it scales a cold value to a darker cold value
+       and can no longer manufacture a neutral out of a coloured seed.
+
+       --on-surface is the matching ink: base dark #E5E7EB is near-neutral (b-r +6) where
+       this skin's own body ink is pale cool slate (b-r +23), so captions on a fallback
+       panel were drawn in a different white from captions on the form. var(), not a copy,
+       so a retune of the well or the ink carries the fallbacks along. */
+    --surface:        var(--field-bg);   /* #141C27 — the page sheet IS the field well, as in light */
+    --on-surface:     var(--ink);        /* #D9E4F0 — fallback captions in the skin's own ink */
+
     /* Tab family, dark side (the light block has the full story). Rest sits on the band
        fill; hover LIGHTS UP one step to the header steel — the same direction as
        --btn-h1, the Win7 hover light-up — and selected keeps the base rule's
-       var(--surface): the dark page sheet (#1E1E1E, luma ~30). Dark chrome lifts off the
+       var(--surface): the dark page sheet (#141C27, luma ~27). Dark chrome lifts off the
        wash, so rest (#22303F, ~46) and hover (#273544, ~51) sit ABOVE the page value
        where light's sit below the white one; the strip still reads as one family because
        both values are cut from the same form-to-titlebar axis, and the selected tab
        stays legible by CONNECTING to the page rather than by luma distance alone (its
-       ink flips to the accent, ~94 luma above the sheet). Base dark ink #E5E7EB keeps
+       ink flips to the accent, ~97 luma above the sheet). Dark ink #D9E4F0 keeps
        ~180 luma on both steps. */
     --surface-tab-rest:  var(--chrome-bar-bg);   /* a resting tab is command chrome */
     --surface-tab-hover: var(--surface-chrome);  /* hover lights up a step */
