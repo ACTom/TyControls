@@ -379,7 +379,31 @@ type
     property OnClick;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
   end;
+
+{ THE trailing-widget zone -- the strip an edit reserves at its right for a drop chevron, a
+  spin pair, an open button. ONE function, because there were two: the paint path built the
+  rect from the padded content box and the hit test built it again from ClientWidth. They
+  agreed, but only because nobody had touched either in a while.
+
+  It is FLUSH to the field's right edge. That is not a preference, it is what the rest of the
+  library already does: TTyComboBox, TTyCascader, TTyTreeSelect and TTySpinEdit all hang their
+  button zone on the frame (Rect(R.Right - BtnW, .., R.Right)). Only the controls built on this
+  seam measured from the PADDED box, so they carried Padding.Right on top of the zone's own
+  centring and sat that much further in -- a TTyComboEdit's chevron 7px from the border where a
+  TTyComboBox's is 3, and TTyCalcEdit / TTyFloatSpinEdit further still.
+
+  Vertical padding is kept: it does not move a centred glyph (the two pads are equal), and
+  dropping it would let a widget draw over the frame. }
+function TyTrailingZone(const ABox: TRect; AReserve, APadTop, APadBottom: Integer): TRect;
+
 implementation
+
+function TyTrailingZone(const ABox: TRect; AReserve, APadTop, APadBottom: Integer): TRect;
+begin
+  if AReserve <= 0 then Exit(Rect(0, 0, 0, 0));
+  Result := Rect(ABox.Right - AReserve, ABox.Top + APadTop,
+                 ABox.Right, ABox.Bottom - APadBottom);
+end;
 
 constructor TTyEdit.Create(AOwner: TComponent);
 begin
@@ -1068,15 +1092,10 @@ end;
 function TTyEdit.TrailingZone(APPI: Integer): TRect;
 var
   S: TTyStyleSet;
-  res, padR: Integer;
 begin
-  Result := Rect(0, 0, 0, 0);
-  res := RightReserve(APPI);
-  if res <= 0 then Exit;
   S := CurrentStyle;
-  padR := MulDiv(S.Padding.Right, APPI, 96);
-  Result := Rect(ClientWidth - padR - res, MulDiv(S.Padding.Top, APPI, 96),
-    ClientWidth - padR, ClientHeight - MulDiv(S.Padding.Bottom, APPI, 96));
+  Result := TyTrailingZone(Rect(0, 0, ClientWidth, ClientHeight), RightReserve(APPI),
+    MulDiv(S.Padding.Top, APPI, 96), MulDiv(S.Padding.Bottom, APPI, 96));
 end;
 
 function TTyEdit.DisplayText: string;
@@ -2345,7 +2364,7 @@ var
   EffSize: Integer;
   TextClipRight: Integer;
   HintColor: TTyColor;
-  Reserve, ContentFullRight: Integer;
+  Reserve: Integer;
 begin
   P := TTyPainter.Create;
   try
@@ -2363,7 +2382,6 @@ begin
     );
     // Reserve a trailing-widget zone on the right (Reserve=0 for a plain edit -> unchanged).
     Reserve := RightReserve(APPI);
-    ContentFullRight := ContentRect.Right;
     ContentRect.Right := ContentRect.Right - Reserve;
 
     // Horizontal alignment offset: shifts the text-start / caret / selection
@@ -2494,7 +2512,8 @@ begin
 
     // 4. Trailing widget (URL open button, combo drop arrow, …) in the reserved right zone.
     if Reserve > 0 then
-      PaintTrailing(P, Rect(ContentRect.Right, ContentRect.Top, ContentFullRight, ContentRect.Bottom), S);
+      PaintTrailing(P, TyTrailingZone(Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top),
+        Reserve, P.Scale(S.Padding.Top), P.Scale(S.Padding.Bottom)), S);
 
     P.EndPaint;
   finally

@@ -51,6 +51,7 @@ uses
   test.modecoherence,
   test.paletteicons,
   test.appicon,
+  test.trailingzone,
   test.tabsheet,
   test.pagecontrol,
   test.pagecontrol.streaming,
