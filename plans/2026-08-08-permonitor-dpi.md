@@ -171,15 +171,12 @@ Two readings, both honest:
    optimisation work at all. The double measurement and the double scaling were the same
    defect seen from two sides.
 
-**Still on the table, NOT built:** the remaining 480 calls (~0.36 s at 60 controls, and it
-is linear in control count) are genuine first-time measurements at the new PPI. Killing
-them needs a per-`(text, font-name, size, weight, PPI)` measurement memo in the control
-base. It was not attempted here because its risk is not performance but *staleness*: every
-one of these controls re-measures precisely because a theme switch arrives as a bare
-`Invalidate`, and a memo keyed on the wrong tuple silently keeps the old theme's width —
-which is the ellipsised-toolbar-button bug those `Invalidate` overrides were written to
-fix. The key must include the resolved style's font identity, not just the caption. Budget
-it as its own change with its own theme-switch test.
+**The remaining calls are genuine first-time measurements at the new PPI.** Killing them
+needs a measurement memo, and the risk is not performance but *staleness*: every one of
+these controls re-measures precisely because a theme switch arrives as a bare `Invalidate`,
+and a memo keyed on the wrong tuple silently keeps the old theme's width — which is the
+ellipsised-toolbar-button bug those `Invalidate` overrides were written to fix. **BUILT in
+§2f**, with the enumeration that makes the key safe.
 
 **Hypotheses from the brief that did NOT hold** — do not re-test these:
 
@@ -190,6 +187,184 @@ it as its own change with its own theme-switch test.
 - *"the whole style cascade with no per-PPI cache"* — the cascade was indeed uncached and is
   now memoised, but it is **not** where the seconds are (§2b). Note the memo needs no PPI in
   its key: `ResolveStyle` returns logical values and every call site scales with `MulDiv`.
+
+### 2f. The caption-measurement memo — BUILT (af881)
+
+`TyMeasureTextBlock` and `TyMeasureRenderedTextWidth` (`source/tyControls.Painter.pas`) are
+memoised. They are the chokepoint: every size floor in the library reaches the font engine
+through one of the two, so no caller changed.
+
+**Where it went, and why not in the control base.** §2e's specification said "a measurement
+memo in the control base". It is in the *painter* instead, because the base is not where the
+measuring happens — `TTyButton.MeasureCaption` and `TTyLabel.MeasureCaption` both delegate
+to these two functions, and a memo one level up would have to be added to each control that
+grows a floor and would drift the moment a seventh control appeared. One memo at the
+chokepoint covers all of them and cost zero lines in any control.
+
+#### The enumeration — every input, and where it is keyed
+
+The full version, with file:line, is the comment block at `TyInvalidateTextMeasureCache`.
+The conclusion:
+
+| # | input | how it is handled |
+|---|---|---|
+| 1 | caption | in the key |
+| 2 | font family | in the key, **as the effective name** — see (8) |
+| 3 | font size | in the key, **as the effective size** — see (9) |
+| 4 | font weight | in the key, RAW |
+| 5 | PPI | in the key |
+| 6 | wrap width | in the key (block measure only) |
+| 7 | line height | in the key (block measure only) |
+| 8 | `TyFallbackFontName` (global) | **folded** into the key via `TyEffectiveFontName` |
+| 9 | `TyFallbackFontSize` (global) | **folded** via the new `TyEffectiveFontSizeLogical` |
+| 10 | the process font registry | **not keyable** — `TyInvalidateTextMeasureCache` |
+| 11 | the widgetset text engine | compile-time; constant per binary |
+| 12 | `Screen.PixelsPerInch` | LCL samples it once at startup; process constant |
+
+Two of these decide whether the memo is safe at all:
+
+**(9) is the one that would have shipped the bug.** `TyFallbackFontSize` is rewritten from
+the theme's `--font-size-base` on **every** theme apply (`Controller.pas:602`). A control
+whose style rule omits `font-size` passes **0** down to the measurement, so the *parameter*
+is byte-identical before and after a theme switch and only the global moves. A key built
+from the raw parameter therefore hits, and hands back the previous theme's width. That is
+the ellipsised-toolbar-button defect arriving through a cache instead of through a stale
+`Constraints` floor. Folding the effective value in is what closes it; mutant M10 below is
+that hole, and it goes red.
+
+**The theme version is deliberately NOT in the key**, against what the brief proposed. It
+would be redundant: items 2,3,4,6,7 *are* the theme's font decision, passed by value by the
+caller that already resolved it, and 8/9 are folded. Keying the resolved font tuple is also
+strictly *stronger* than keying `ThemeVersion` — a per-control font override moves the tuple
+without moving any version counter. The controller drops the memo on `Changed` anyway (one
+line, belt and braces, so a *future* theme input to text measurement cannot go stale merely
+because nobody extended the key), and the test pins that wiring by entry count rather than
+by value, since a value assertion cannot tell "dropped and recomputed" from "the key made it
+miss anyway".
+
+**The one dependency that is not observable at measure time is (10).** Registering a font
+file makes a family that previously fell back to a default suddenly real, and nothing in the
+key can see it coming. So it is handled by explicit invalidation rather than by keying, and
+`TyInvalidateTextMeasureCache` is public for exactly that. **Follow-up, not done here
+because the file belongs to another agent's scope:** `TTyIconFont.LoadFontFile` and
+`UnloadFontFile` (`source/tyControls.IconFont.pas:240`) should each call it — one line each.
+Today this is only reachable by a theme naming an icon font as a control's `font-family`,
+and `FontFile` is normally set before any control measures, so it is a latent hole rather
+than a live defect.
+
+#### Measured — A/B, one binary, one load window
+
+`TyTextMeasureCacheEnabled` is a runtime switch, added so the arms alternate inside one
+process rather than across two builds (two builds vary more than the effect). Harness:
+`scratchpad/af881_dpiprof`, derived from `ac2363_dpiprof` so the numbers are comparable —
+same probe subclasses, same injection, **a fresh form per sample**. That last part matters:
+a form re-crossed in a loop asks for **120** measuring calls where a newly shown one asks
+for **360**, and 360 is what a real first monitor crossing produces.
+
+**A correction to §2e's call count, since it will not reproduce.** `ac2363_dpiprof`, copied
+byte-for-byte and rebuilt against the current tip, reports **360** measuring calls for 60
+controls, not the 480 in §2e's table — and a synchronous pass of 438–574 ms against the
+622 ms recorded there, at 0.44–0.80 ms per call. The *shape* of §2e's finding is intact
+(caption measurement is the majority of the pass and is linear in control count); the two
+absolute numbers are not reproducible on today's code and should not be quoted further.
+
+60 controls, 96 → 240, medians of 3, alternating arms, repeated over four runs:
+
+| | memo off | memo on | |
+|---|---|---|---|
+| canary (bare repaint) | 205–227 ms | 210–228 ms | agree within 5% — the run is valid |
+| **cold** synchronous pass | 548–582 ms | 439–502 ms | **76–86%** of it |
+| **cold** inside measuring | 288–303 ms | 186–195 ms | **63–66%** of it |
+| **cold** hit rate | — | **60%** (180 hits / 120 misses) | |
+| **warm** synchronous pass | 555–579 ms | 391–396 ms | **68–71%** of it |
+| **warm** inside measuring | 293–297 ms | 118–126 ms | **40–42%** of it |
+| **warm** hit rate | — | **100%** (300 / 0) | |
+
+At 180 controls the ratios are identical (cold 1617→1324 ms pass, 914→616 ms measuring), so
+it is linear in control count as §2e said.
+
+**Honest reading.** *Cold* is the headline — a first-ever crossing to a new PPI, which is
+what a user dragging a window across a monitor boundary for the first time gets. Its 60% hit
+rate is **intra-pass** duplication: one pass measures the same caption several times
+(360 measuring calls resolve to 120 distinct keys), which is real work removed but is not
+the whole prize. *Warm* — crossing back to a PPI already measured, i.e. dragging to and fro,
+which Antek's report describes — hits 100% and takes the measuring cost down to 40%.
+
+The measuring-time cut (63–66% cold, 40–42% warm) is the tight, reproducible number; the
+whole-pass cut is noisier because the pass contains other work. Both clear the canary's
+spread comfortably. **What this does NOT claim:** the pass is not made fast, only shorter.
+Caption measurement was 51–57% of it, so removing a third of that is a bounded win, and the
+remaining pass is still LCL's per-control recursion.
+
+#### Tests
+
+`tests/test.measurecache.pas`, 17 tests. The staleness half is the load-bearing half:
+each keyed input gets a test that measures under configuration A (which *populates* the
+memo), changes exactly that one input, measures again and demands a **different** answer —
+so an omitted key component makes the second call a hit and the assertion fires. Asserting
+the second number alone would pass with or without the memo, which is the fake-green version.
+
+Two things worth knowing before editing them:
+
+- The magnitudes were measured with `scratchpad/af881_probe` **before** the assertions were
+  written. Where two configurations happened to measure the same the pair was replaced, not
+  the assertion weakened: Arial and Courier New are **both 50 px** wide for the sample
+  caption on the LCL canvas, so the family tests use Times New Roman (46) instead. An
+  assertion against Courier New would have been green with a completely broken key.
+- `ThemeChangeChangesTheMeasuredFontSize` is weaker than it looks and says so at the test:
+  **every theme this repo ships declares `--font-size-base: 9`**, so a genuine switch cannot
+  currently move the measured number. What the switch proves is that an apply *rewrites* the
+  global; the second half stands in for the first theme that disagrees.
+
+#### Mutants — 14, all killed, no survivors
+
+Driver: `scratchpad/af881_mutate.py`. Per `memory/crlf-mutation-phantom-survivor` every
+mutant asserts its search-string **hit count** before building (the files are CRLF), and the
+source is compared byte-for-byte against a pristine snapshot after each revert — a
+replacement that did not land is reported BROKEN, never SURVIVED.
+
+| # | what was broken | killed by |
+|---|---|---|
+| M1 | key drops the caption | `CaptionChange…` — "a different caption must measure differently" |
+| M2 | key drops the font family | `FontFamilyChange…` — "block: a different family must re-measure (50 vs 50)" |
+| M3 | key drops the font size | `FontSizeChange…` — "(50 vs 50)" |
+| M4 | key drops the weight | `FontWeightChange…` — "block: bold must re-measure (50 vs 50)" |
+| M5 | key drops the PPI | `PPIChange…` — "96 vs 144 must differ (50 vs 50)" |
+| M6 | key drops the wrap width | `WrapWidthChange…` — "wrapping to 40px must re-measure taller (12 vs 12)" |
+| M7 | key drops the line height | `LineHeightChange…` — "a themed line box must re-measure (24 vs 24)" |
+| M8 | key drops the font-name LENGTH PREFIX | `FontNameAndCaptionCannotRunTogetherInTheKey` — "(10 vs 10)" |
+| M9 | key un-folds `TyFallbackFontName` | `FallbackFontNameChange…` — "(50 vs 50)" |
+| M10 | key un-folds `TyFallbackFontSize` | `FallbackFontSizeChange…` — "(50 vs 50)" |
+| M11 | controller's invalidation deleted | `TyTextMeasureCacheDropsOnThemeChange` — "expected: \<0\> but was: \<2\>" |
+| M12 | the entry cap removed | `CacheIsBounded…` — "5000 distinct captions must not all be retained (kept 5000)" |
+| M13 | a hit returns the width as the height | `MemoNeverChangesAnAnswer` — "block height, memo HIT vs memo off, expected: \<12\> but was: \<50\>" |
+| M14 | the memo stores but never reads | `RepeatedIdenticalMeasurement…` — "repeats add no misses, expected: \<1\> but was: \<3\>" |
+
+M8 is the one worth keeping: the key ends with the font name followed by the caption, so
+concatenated naively family `'A'` + caption `'BC'` and family `'AB'` + caption `'C'` are the
+**same string** and the second question is served the first one's answer —
+`memory/index-keyed-string-sort-trap` in a different costume. The name is length-prefixed so
+the encoding is injective.
+
+**No mutant survived, and nothing in the key is untested.** The only input without a guard is
+(10), the process font registry, and that is because it is not in the key by design: there is
+no observable hook to key on, so it is handled by explicit invalidation and the missing piece
+is the `IconFont` wiring named above, which is one line in a file outside this change's scope.
+
+#### Bounds, and what is NOT done
+
+- The cache is **capped at 4096 entries per cache** and CLEARED (not LRU-evicted) on
+  overflow, because the key contains the caption and a caller measuring a stream of distinct
+  strings would otherwise grow it for the life of the process. Clearing keeps the only
+  invariant that matters — every live entry was computed under the current globals —
+  trivially true. `CacheIsBoundedAndNeverGrowsWithoutLimit` asserts the bound, not the
+  constant.
+- **Not thread-safe**, exactly like `TTyStyleModel`'s resolve cache, and for the same reason:
+  both are reached only from control layout and paint, which are main-thread by LCL contract.
+- Not attempted: memoising `TTyPainter.MeasureText` (the per-frame painter method, 36 call
+  sites). It is on the PAINT path, not the size-floor path, and `TTyPaintCache` already
+  blits unchanged controls — the same reason §2b gives for the cascade memo not curing the
+  stall. Measure before assuming it is worth a key.
 
 ---
 

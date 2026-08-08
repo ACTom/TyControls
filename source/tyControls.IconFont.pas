@@ -254,6 +254,11 @@ var
 {$ENDIF}
 begin
   if (APath = '') or (not FileExists(APath)) then Exit;
+  { Registering a face makes a family that previously fell back suddenly REAL, so every
+    width already measured under the fallback is now wrong. The measure memo cannot key on
+    the process font registry -- it is global OS state with no version -- so the one thing
+    that changes it has to say so. See TyInvalidateTextMeasureCache. }
+  TyInvalidateTextMeasureCache;
   {$IFDEF LCLWin32}
   w := UTF8ToUTF16(APath);
   if AddFontResourceEx(PWideChar(w), FR_PRIVATE, nil) > 0 then
@@ -297,6 +302,7 @@ var
   {$ENDIF}
 {$ENDIF}
 begin
+  TyInvalidateTextMeasureCache;   { same reason as LoadFontFile, in reverse }
   {$IFDEF LCLWin32}
   if FLoadedFile <> '' then
   begin

@@ -600,6 +600,15 @@ begin
   // suppressed (0) font-size — a skin declaring its own typeKey rule drops the base font-size
   // under the all-or-nothing cascade — it then renders at the theme size, not a hardcoded default.
   TyFallbackFontSize := FModel.ResolveMetric('--font-size-base', TyFallbackFontSize);
+  { af881: and drop the caption-measurement memo, in the SAME place and for the same
+    reason -- this line above just moved a global the memo folds into its key, and the
+    Invalidate broadcast below is the only notice a control gets that the theme changed.
+    Strictly this is belt and braces: the memo keys on the resolved font tuple by value,
+    so a theme that moves the font already misses. It is here so that a FUTURE theme input
+    to text measurement cannot go stale merely because nobody remembered to extend the
+    key -- and TyTextMeasureCacheDropsOnThemeChange pins the wiring, not the value, since
+    a value assertion cannot tell "dropped and recomputed" from "never cached". }
+  TyInvalidateTextMeasureCache;
   for i := FControls.Count - 1 downto 0 do
     TControl(FControls[i]).Invalidate;
   FChangeListeners.CallNotifyEvents(Self);

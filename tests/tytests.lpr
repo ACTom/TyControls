@@ -56,7 +56,7 @@ uses
   test.version,
   test.windoweffects,
   test.accel,
-  test.i18n, test.paintcost, test.memo.linesadd, test.parity, test.parity.valuelist, test.parity.splitter, test.parity.listview, test.parity.memo, test.parity.toolbar, test.parity.maskedit, test.parity.shelldivider, test.parity.grid, test.parity.ranges, test.parity.menu, test.parity.header, test.parity.onpaint, test.parity.spincheck,
+  test.i18n, test.paintcost, test.measurecache, test.memo.linesadd, test.parity, test.parity.valuelist, test.parity.splitter, test.parity.listview, test.parity.memo, test.parity.toolbar, test.parity.maskedit, test.parity.shelldivider, test.parity.grid, test.parity.ranges, test.parity.menu, test.parity.header, test.parity.onpaint, test.parity.spincheck,
   test.controller.changelistener,
   test.nativestyler,
   test.splitter,

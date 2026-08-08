@@ -236,6 +236,14 @@ procedure TyConfigureTextFont(ABmp: TBGRABitmap; const AFontName: string;
 // few LCL-canvas caption-width measures (GroupBox/TabControl) go through this so
 // measured width matches drawn glyphs even when the theme sets no font-family.
 function TyEffectiveFontName(const AName: string): string;
+{ The size a measurement/draw will really use: the caller's, or TyFallbackFontSize when the
+  caller has none (a theme rule that omitted font-size). Named because THREE places applied
+  this same two-line rule -- both font-configuration procedures and, since the measurement
+  memo landed, its key -- and a near-copy is how a key stops agreeing with the thing it
+  keys. It matters that it is one function: TyFallbackFontSize is rewritten from
+  --font-size-base on every theme apply, so a key that computed it differently from the
+  measurement would serve a pre-switch width. }
+function TyEffectiveFontSizeLogical(AFontSizeLogical: Integer): Integer;
 { Greedy line wrap that understands both scripts. Western words break at spaces (runs
   collapse to one space); CJK text carries no spaces, so each ideograph / kana / hangul
   syllable is its own break opportunity — without this a Chinese run is one unbreakable
@@ -291,6 +299,83 @@ procedure TyMeasureTextBlock(const AText, AFontName: string;
   So: any control whose size floor feeds a clip must take the LARGER of the two. }
 function TyMeasureRenderedTextWidth(const AText, AFontName: string;
   AFontSizeLogical, AWeight, APPI: Integer): Integer;
+
+{ ===== The caption-measurement memo (af881) ==================================
+  Both measurement functions above are memoised. This block is the ARGUMENT that the
+  memo cannot go stale; read it before changing either of them, because the risk here
+  was never performance, it was staleness -- a theme change reaches these controls as a
+  bare Invalidate, so a memo keyed on too little silently keeps the previous theme's
+  width, which is precisely the ellipsised-toolbar-button defect (memory/
+  skin-variance-breaks-fixed-widths) that those Invalidate overrides exist to prevent.
+
+  WHY IT IS WORTH THE RISK. plans/2026-08-08-permonitor-dpi.md §2e measured a 60-control
+  form crossing 96->240 DPI: caption re-measurement is 51-57% of the synchronous
+  WM_DPICHANGED pass, several hundred calls at ~0.44-0.80 ms each, and linear in control
+  count. Nothing else in the pass comes close. §2f is what this memo then did to that.
+
+  THE ENUMERATION -- every input the measured value depends on, and where it is keyed:
+
+    1. AText                        parameter, in the key verbatim
+    2. AFontName                    parameter -- NOT keyed raw; see (8)
+    3. AFontSizeLogical             parameter -- NOT keyed raw; see (9)
+    4. AWeight                      parameter, keyed RAW (see the note below)
+    5. APPI                         parameter, in the key
+    6. AWrapWidthPx                 parameter, in the key (block measure only --
+                                    it selects TyWrapTextCJK over TySplitTextLines)
+    7. ALineHeightLogical           parameter, in the key (block measure only)
+    8. TyFallbackFontName  GLOBAL   folded: the key carries TyEffectiveFontName(AFontName),
+                                    which is the name the font is actually configured with.
+                                    The controller writes this global once from
+                                    Screen.SystemFont (tyControls.Controller.pas:210).
+    9. TyFallbackFontSize  GLOBAL   folded: the key carries the size AFTER the <=0
+                                    fallback. This global is rewritten from
+                                    --font-size-base on EVERY theme apply
+                                    (tyControls.Controller.pas:602), so keying the raw
+                                    parameter would be a genuine theme-staleness hole.
+   10. the process font registry     NOT keyable -- see TyInvalidateTextMeasureCache.
+   11. the widgetset text engine     compile-time -- the LCLQt/LCLGtk conditional in
+                                    TyConfigureTextFont picks fqSystemClearType over
+                                    fqFineAntialiasing (see also
+                                    memory/bgra-small-text-blur-linux). Constant per
+                                    binary, so it cannot make an entry stale.
+   12. Screen.PixelsPerInch          reaches the LCL path through TFont.Size->Height on the
+                                    scratch TBitmap. LCL samples it once at startup and
+                                    never revises it, so it is a process constant. (It is
+                                    also the subject of the §5 latch in the DPI plan -- a
+                                    defect one layer BELOW this library, unchanged here.)
+
+  FOLD OR KEY RAW -- the rule applied above, stated so the next edit follows it: key the
+  RAW parameter when the parameter alone determines what the font engine is configured
+  with; fold to the EFFECTIVE value when a global gets a vote. (8) and (9) are folded for
+  that reason. (4) is deliberately kept RAW even though only the AWeight>=600 bold test is
+  read today: keying the derived boolean would be correct-but-clever, and would rot the
+  instant a caller starts honouring real weights. Raw costs only hit rate.
+
+  NOT IN THE KEY, DELIBERATELY: the theme version. It would be redundant -- items 2,3,4,6,7
+  ARE the theme's font decision, passed by value by the caller that resolved them, and 8/9
+  are folded. The controller drops the memo on a theme change anyway (belt and braces, and
+  TyTextMeasureCacheDropsOnThemeChange pins that wiring), but the key is what makes it
+  SAFE: a per-control font override that moves no theme version still changes the key.
+
+  THE MEMO IS NOT THREAD-SAFE, exactly like TTyStyleModel's resolve cache. Both are
+  reached only from control layout and paint, which are main-thread by LCL contract. }
+
+{ Drop every memoised measurement. Call this after doing anything that changes what a
+  font NAME resolves to inside the process -- which is item (10) of the enumeration above
+  and the one dependency that is genuinely not observable at measure time: registering a
+  font file makes a family that previously fell back to a default suddenly real, and every
+  measurement taken before that is wrong by exactly the difference between the two faces.
+  TTyIconFont.LoadFontFile / UnloadFontFile (tyControls.IconFont.pas:240) is the library's
+  own instance of this and does NOT yet call it -- see the plan's §2f follow-up. Also
+  exposed so an application that loads fonts by its own route has a supported way to say so. }
+procedure TyInvalidateTextMeasureCache;
+{ Memo counters, for the A/B in the plan and for the tests that pin the invalidation
+  wiring (an entry count of 0 right after a theme switch is what proves the hook fired --
+  a value assertion alone cannot tell "dropped and recomputed" from "never cached").
+  AEntries is both caches' live entries; ResetStats zeroes the counters, not the caches. }
+procedure TyTextMeasureCacheStats(out AHits, AMisses: Int64; out AEntries: Integer);
+procedure TyResetTextMeasureCacheStats;
+
 { The prefix the ellipsis fitter uses when it has narrowed the text to ACharCount CHARACTERS.
   A named function purely so the invariant is testable: the version this replaced shortened by
   one BYTE, which cuts a three-byte CJK character in half. The headless BGRA path silently
@@ -344,6 +429,18 @@ var
   // guarding or each theme repeating font-size on every rule. Apps may lower/raise it.
   TyFallbackFontSize: Integer = 13;
 
+  { ===== af881: the caption-measurement memo ==================================
+    Off switch, for two reasons and no others:
+      - it makes the A/B honest. The hit-rate and timing numbers in
+        plans/2026-08-08-permonitor-dpi.md §2f were taken by flipping THIS, in ONE
+        binary, in one load window -- not by building two binaries, which on this
+        host varies more than the effect being measured;
+      - an application that registers fonts at run time by some route the library
+        cannot see (see TyInvalidateTextMeasureCache) can turn the memo off rather
+        than reason about when to drop it.
+    Flipping it to False never changes an answer, only how long it takes. }
+  TyTextMeasureCacheEnabled: Boolean = True;
+
 implementation
 
 function TyEffectiveFontName(const AName: string): string;
@@ -352,6 +449,98 @@ begin
     Result := TyFallbackFontName
   else
     Result := AName;
+end;
+
+function TyEffectiveFontSizeLogical(AFontSizeLogical: Integer): Integer;
+begin
+  if AFontSizeLogical <= 0 then
+    Result := TyFallbackFontSize
+  else
+    Result := AFontSizeLogical;
+end;
+
+{ ===== The caption-measurement memo -- storage ===============================
+  See the long block at the TyInvalidateTextMeasureCache declaration for the staleness
+  argument. This half is only mechanics. }
+type
+  { One memoised block measurement. BOXED rather than packed into Objects[] as a PtrInt:
+    two Integers do not fit a 32-bit pointer and this unit compiles for 32-bit targets.
+    TyMeasureRenderedTextWidth returns ONE Integer, so its cache stashes it in Objects[]
+    directly, the way TTyStyleModel's FMetricCache does. }
+  TTyTextBlockMeasure = class
+    W, H: Integer;
+  end;
+
+const
+  { A cap, because the key contains the CAPTION: a caller that measures a stream of
+    distinct strings (a data grid walking a column) would otherwise grow this without
+    bound for the rest of the process. On overflow the cache is CLEARED rather than
+    evicted least-recently-used -- an LRU needs a second index and a recency field to
+    save an allocation on a path that is already doing font metrics, and clearing keeps
+    the only invariant that matters (every live entry was computed under the CURRENT
+    globals) trivially true. }
+  TY_TEXT_MEASURE_CACHE_MAX = 4096;
+
+var
+  GBlockCache: TStringList = nil;    // sorted; Objects[] OWN TTyTextBlockMeasure
+  GRenderCache: TStringList = nil;   // sorted; Objects[] hold a plain Integer width
+  GMeasHits: Int64 = 0;
+  GMeasMisses: Int64 = 0;
+
+function TyTextMeasureCacheList(var AList: TStringList): TStringList;
+begin
+  if AList = nil then
+  begin
+    AList := TStringList.Create;
+    AList.CaseSensitive := True;     // font names and captions are case-significant
+    AList.Sorted := True;            // IndexOf is a binary search, not a linear scan
+    AList.Duplicates := dupIgnore;
+  end;
+  Result := AList;
+end;
+
+{ An INJECTIVE encoding of the key tuple -- distinct inputs can never collide onto one
+  string. That is not pedantry: memory/index-keyed-string-sort-trap is this repo's record
+  of a string key that silently merged two different things and destroyed data. The
+  numeric fields are fixed-arity and delimited; the FONT NAME is length-prefixed (so a
+  name containing the delimiter cannot eat into the next field); and the CAPTION is last,
+  so nothing follows it that its own content could be mistaken for. }
+function TyTextMeasureKey(const AText, AEffFontName: string;
+  AEffFontSizeLogical, AWeight, APPI, AWrapWidthPx, ALineHeightLogical: Integer): string;
+begin
+  Result := IntToStr(AEffFontSizeLogical) + '|' + IntToStr(AWeight) + '|'
+    + IntToStr(APPI) + '|' + IntToStr(AWrapWidthPx) + '|'
+    + IntToStr(ALineHeightLogical) + '|' + IntToStr(Length(AEffFontName)) + '|'
+    + AEffFontName + AText;
+end;
+
+procedure TyInvalidateTextMeasureCache;
+var
+  i: Integer;
+begin
+  if GBlockCache <> nil then
+  begin
+    for i := 0 to GBlockCache.Count - 1 do
+      GBlockCache.Objects[i].Free;
+    GBlockCache.Clear;
+  end;
+  if GRenderCache <> nil then
+    GRenderCache.Clear;             // Objects[] here are plain ints, nothing to free
+end;
+
+procedure TyTextMeasureCacheStats(out AHits, AMisses: Int64; out AEntries: Integer);
+begin
+  AHits := GMeasHits;
+  AMisses := GMeasMisses;
+  AEntries := 0;
+  if GBlockCache <> nil then Inc(AEntries, GBlockCache.Count);
+  if GRenderCache <> nil then Inc(AEntries, GRenderCache.Count);
+end;
+
+procedure TyResetTextMeasureCacheStats;
+begin
+  GMeasHits := 0;
+  GMeasMisses := 0;
 end;
 
 function TyTextHasRTL(const AText: string): Boolean;
@@ -589,7 +778,7 @@ procedure TyConfigureMeasureFont(ACanvas: TCanvas; const AFontName: string;
 begin
   // A missing font-size would measure at the canvas's own size, which is not what gets
   // drawn -- TyConfigureTextFont falls back the same way on the drawing side.
-  if AFontSizeLogical <= 0 then AFontSizeLogical := TyFallbackFontSize;
+  AFontSizeLogical := TyEffectiveFontSizeLogical(AFontSizeLogical);
   ACanvas.Font.Name := TyEffectiveFontName(AFontName);
   ACanvas.Font.Size := MulDiv(AFontSizeLogical, APPI, 96);
   if AWeight >= 600 then
@@ -611,9 +800,42 @@ var
   Meas: TBitmap;
   Lines: TStringList;
   i, w, lineH: Integer;
+  key: string;
+  idx: Integer;
+  box: TTyTextBlockMeasure;
+  cache: TStringList;
 begin
   AWidthPx := 0;
   AHeightPx := 0;
+
+  { The memo. The key is built from the EFFECTIVE font name and size -- the values the
+    configuration below will really use -- because both fall back to a mutable global.
+    TyFallbackFontSize in particular is rewritten from --font-size-base on every theme
+    apply, so keying the raw parameter would serve a pre-switch width. The enumeration
+    of every keyed and unkeyed input is at TyInvalidateTextMeasureCache.
+    NOTE the two calls below still pass the RAW AFontName/AFontSizeLogical, so the
+    fallback is applied by exactly the code it always was: if the key ever stopped
+    folding, the measurement would NOT follow it, and the difference is a stale answer a
+    test can see. Handing the effective values down instead would hide that. }
+  key := '';
+  if TyTextMeasureCacheEnabled then
+  begin
+    key := TyTextMeasureKey(AText, TyEffectiveFontName(AFontName),
+      TyEffectiveFontSizeLogical(AFontSizeLogical), AWeight, APPI,
+      AWrapWidthPx, ALineHeightLogical);
+    cache := TyTextMeasureCacheList(GBlockCache);
+    idx := cache.IndexOf(key);
+    if idx >= 0 then
+    begin
+      Inc(GMeasHits);
+      box := TTyTextBlockMeasure(cache.Objects[idx]);
+      AWidthPx := box.W;
+      AHeightPx := box.H;
+      Exit;
+    end;
+    Inc(GMeasMisses);
+  end;
+
   Meas := TBitmap.Create;
   Lines := TStringList.Create;
   try
@@ -642,13 +864,31 @@ begin
     Lines.Free;
     Meas.Free;
   end;
+
+  if TyTextMeasureCacheEnabled then
+  begin
+    cache := TyTextMeasureCacheList(GBlockCache);
+    if cache.Count >= TY_TEXT_MEASURE_CACHE_MAX then
+      TyInvalidateTextMeasureCache;
+    box := TTyTextBlockMeasure.Create;
+    box.W := AWidthPx;
+    box.H := AHeightPx;
+    { AddObject on a sorted dupIgnore list DROPS a duplicate key and leaks the object it
+      was handed, so check first. A duplicate cannot happen -- the miss above proved the
+      key was absent and nothing re-entrantly measures between there and here -- but the
+      cost of being wrong is a silent leak, and the cost of the guard is one search. }
+    if cache.IndexOf(key) < 0 then
+      cache.AddObject(key, box)
+    else
+      box.Free;
+  end;
 end;
 
 procedure TyConfigureTextFont(ABmp: TBGRABitmap; const AFontName: string;
   AFontSizeLogical, AWeight, APPI: Integer);
 begin
   // A missing font-size (0) would render invisible text; fall back to a visible default.
-  if AFontSizeLogical <= 0 then AFontSizeLogical := TyFallbackFontSize;
+  AFontSizeLogical := TyEffectiveFontSizeLogical(AFontSizeLogical);
   ABmp.FontName := TyEffectiveFontName(AFontName);
   ABmp.FontHeight := MulDiv(Round(AFontSizeLogical * 96 / 72), APPI, 96);
   // Text quality is a WIDGETSET choice, not a platform one. BGRABitmap's fqFineAntialiasing
@@ -669,9 +909,35 @@ var
   Meas: TBGRABitmap;
   Lines: TStringList;
   i, w: Integer;
+  key: string;
+  idx: Integer;
+  cache: TStringList;
 begin
   Result := 0;
   if AText = '' then Exit;
+
+  { Memoised on the same key shape as TyMeasureTextBlock minus the two block-only fields
+    (this one neither wraps nor stacks lines), and for the same reasons -- see the
+    enumeration at TyInvalidateTextMeasureCache. Kept a SEPARATE cache from the block one
+    rather than a shared key namespace: the two answer different questions on different
+    rasterisers (that is the whole point of this function's header comment), and one
+    namespace would need a discriminator byte doing the same job with more ways to get it
+    wrong. }
+  key := '';
+  if TyTextMeasureCacheEnabled then
+  begin
+    key := TyTextMeasureKey(AText, TyEffectiveFontName(AFontName),
+      TyEffectiveFontSizeLogical(AFontSizeLogical), AWeight, APPI, 0, 0);
+    cache := TyTextMeasureCacheList(GRenderCache);
+    idx := cache.IndexOf(key);
+    if idx >= 0 then
+    begin
+      Inc(GMeasHits);
+      Exit(Integer(PtrInt(cache.Objects[idx])));
+    end;
+    Inc(GMeasMisses);
+  end;
+
   { A 1x1 surface: TextSize asks the font, never the pixels, so the bitmap never has to be
     big enough to hold the string. Allocated per call for the same reason TyMeasureTextBlock
     allocates its TBitmap per call -- a cached one would carry the last caller's font across
@@ -697,6 +963,15 @@ begin
     Meas.Free;
   end;
   if Result < 0 then Result := 0;
+
+  if TyTextMeasureCacheEnabled then
+  begin
+    cache := TyTextMeasureCacheList(GRenderCache);
+    if cache.Count >= TY_TEXT_MEASURE_CACHE_MAX then
+      TyInvalidateTextMeasureCache;
+    if cache.IndexOf(key) < 0 then
+      cache.AddObject(key, TObject(PtrInt(Result)));
+  end;
 end;
 
 function TyColorToBGRA(c: TTyColor): TBGRAPixel;
@@ -2003,5 +2278,8 @@ initialization
 
 finalization
   FreeAndNil(GImgCache);  // OwnsObjects frees the cached bitmaps
+  TyInvalidateTextMeasureCache;   // frees the boxed block measurements
+  FreeAndNil(GBlockCache);
+  FreeAndNil(GRenderCache);
 
 end.
