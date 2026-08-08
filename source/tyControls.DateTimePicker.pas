@@ -2165,7 +2165,11 @@ begin
     if not IsRectEmpty(L.Button) then
     begin
       if HasDropDownButton then
-        P.DrawGlyph(L.Button, tgChevronDown, S.TextColor, 2)
+        { The same fixed-size chevron every other drop field draws. DrawGlyph STRETCHES its
+          mark to fill the rect it is given, so on a full-height button zone this came out a
+          wide flat V unlike any combo box in the library -- 'that drop arrow is ugly, make it
+          the same as the combo box's' was exactly right. }
+        TyDrawDropChevron(P, ActiveController, L.Button, S.TextColor)
       else if HasSpinButtons then
       begin
         { Same spinner shape and slot rule as TTySpinEdit -- one element, one style. }
