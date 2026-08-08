@@ -98,7 +98,13 @@ begin
     AssertBg('TyProgressBar', []);
     AssertBg('TyProgressFill', []);
     AssertBg('TyToggleSwitch', [tysActive]);
-    AssertBg('TyTrackBar', []);
+    { TyTrackBar deliberately declares NO background: the control inherits the surface it
+      sits on, and the recess it used to plate over its whole client rect is now a thin
+      groove of its own. Assert the groove instead -- swapping the key here rather than
+      deleting the line keeps a live assertion on the thing that IS painted. }
+    AssertBg('TyTrackGroove', []);
+    AssertFalse('TyTrackBar must NOT set Background (it inherits the parent surface)',
+      tpBackground in m.ResolveStyle('TyTrackBar', '', []).Present);
     AssertBg('TyTrackThumb', []);
     AssertBg('TyTabControl', []);
     AssertBg('TyTab', [tysActive]);

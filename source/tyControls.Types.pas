@@ -107,6 +107,9 @@ const
   // duplicated hard-coded literals so they cannot silently drift; each call site
   // still scales them via MulDiv(..., APPI, 96) / TTyPainter.Scale().
   TyFieldButtonWidth = 18;   // SpinEdit up/down button width; ComboBox dropdown button width
+  TyTrackThickness   = 4;    // TrackBar GROOVE thickness -- the recessed band the thumb rides,
+                             // not the control height (the bar used to fill its whole client
+                             // rect, which is why it read as a slab and swallowed its ticks)
   TyScrollbarSize    = 12;   // embedded vertical scrollbar width (Memo, ListBox)
   TyCheckBoxBox      = 16;   // CheckBox/RadioButton box (indicator) size
   TyCheckBoxGap      = 6;    // gap between the box and the caption

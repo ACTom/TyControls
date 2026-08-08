@@ -51,6 +51,12 @@
     --check-bg:          #FFFFFF;   /* white check box well */
 
     --track:             #DCE6F0;   /* progress track */
+    /* ...and the trackbar groove, which used to be the ONE recess in this skin that stayed
+       neutral: --surface-track derives from --surface, and aero deliberately leaves --surface
+       unpinned in light mode (see the note further down), so the groove came out #E6E6E6 --
+       a chroma-0 grey in the middle of a cold blue wash. aero already had the right colour
+       sitting here wired only to the progress bar. */
+    --surface-track:     var(--track);
     --progress-border:   #A7C0D8;   /* progress track border */
 
     --glass:             #FFFFFF;   /* white glass base for translucent lifts */

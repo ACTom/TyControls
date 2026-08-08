@@ -274,11 +274,11 @@ TyToggleSwitch:focus { outline: 2px var(--focus-ring); }
 TyToggleSwitch:disabled { opacity: var(--disabled-opacity); }
 
 TyTrackBar {
-  background: var(--surface-track);
+  /* NO background and NO radius: the recess moved to TyTrackGroove (a thin centred band), so
+     the control inherits the surface it sits on. See light.tycss for why. */
   /* Needed here too: a skin that writes ANY rule for a typeKey suppresses the whole
      built-in rule for it, so inheriting the base layer's ink is not an option. */
   color: var(--on-surface);
-  border-radius: 3px;
   padding: 0px;
 }
 TyTrackBar:focus    { outline: 2px var(--focus-ring); }

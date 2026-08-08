@@ -639,12 +639,13 @@ end;
 procedure TTyTrackBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
-  S, ThumbS: TTyStyleSet;
-  R, ThumbR: TRect;
+  S, ThumbS, GrooveS: TTyStyleSet;
+  R, SlideR, GrooveR, ThumbR: TRect;
   ThumbStates: TTyStateSet;
   TW, MLen, Off: Integer;
   TickFill: TTyFill;
   TickLen, TickW, V, TickOff, Idx: Integer;
+  Band, GrooveTh, Mid: Integer;
   vs, vw: TSize;
 
   { One tick at cross-axis-independent offset AC along the track, on whichever side(s)
@@ -709,15 +710,59 @@ begin
     else
       MLen := (R.Right - R.Left) - FValueAreaPx;
     if MLen < 1 then MLen := 1;
+
+    { THE TICK BAND. Ticks are drawn flush against the control's outer edge on whichever side
+      TickMarks names; reserve that strip so the groove and the thumb sit BESIDE the marks
+      instead of under them. Before this the slider spanned the whole cross axis and the ticks
+      were painted into the same pixels -- the reported "the ruler covers the slider". }
+    TickLen := P.Scale(4);
+    if FTickStyle = ttsNone then Band := 0 else Band := TickLen + P.Scale(2);
+    SlideR := R;
+    if FOrientation = toVertical then
+    begin
+      if FTickMarks in [ttmTopLeft, ttmBoth]     then Inc(SlideR.Left,  Band);
+      if FTickMarks in [ttmBottomRight, ttmBoth] then Dec(SlideR.Right, Band);
+      Dec(SlideR.Bottom, FValueAreaPx);
+    end
+    else
+    begin
+      if FTickMarks in [ttmTopLeft, ttmBoth]     then Inc(SlideR.Top,    Band);
+      if FTickMarks in [ttmBottomRight, ttmBoth] then Dec(SlideR.Bottom, Band);
+      Dec(SlideR.Right, FValueAreaPx);
+    end;
+    { A control too short to hold both bands keeps the slider rather than inverting it. }
+    if SlideR.Right <= SlideR.Left then SlideR := R;
+    if SlideR.Bottom <= SlideR.Top then SlideR := R;
+
+    { THE GROOVE. Its own theme key, because the recess is a part of the control and not the
+      control: TyTrackBar itself now declares no background and inherits the parent surface. }
+    GrooveS := ActiveController.Model.ResolveStyle('TyTrackGroove', '', []);
+    GrooveTh := P.Scale(ActiveController.Metric('--track-thickness', TyTrackThickness));
+    if GrooveTh < 1 then GrooveTh := 1;
+    if FOrientation = toVertical then
+    begin
+      Mid := (SlideR.Left + SlideR.Right) div 2;
+      GrooveR := Rect(Mid - GrooveTh div 2, SlideR.Top,
+                      Mid - GrooveTh div 2 + GrooveTh, SlideR.Top + MLen);
+    end
+    else
+    begin
+      Mid := (SlideR.Top + SlideR.Bottom) div 2;
+      GrooveR := Rect(SlideR.Left, Mid - GrooveTh div 2,
+                      SlideR.Left + MLen, Mid - GrooveTh div 2 + GrooveTh);
+    end;
+    if (tpBackground in GrooveS.Present) then
+      P.FillBackground(GrooveR, GrooveS.Background, GrooveS.BorderRadius);
     // The PAINTED thumb uses the displayed (possibly mid-animation) position; at
     // rest DisplayPos == FPosition so headless renders are pixel-identical. The
     // hover hit-test (ThumbRect), DragTo, hit math and keyboard keep using
     // FPosition for exact value semantics.
     Off := TyTrackThumbOffset(MLen, TW, FMin, FMax, Round(DisplayPos), Inverted);
+    { The thumb rides the SLIDER band -- taller than the groove, clear of the ticks. }
     if FOrientation = toVertical then
-      ThumbR := Rect(R.Left, R.Top + Off, R.Right, R.Top + Off + TW)
+      ThumbR := Rect(SlideR.Left, SlideR.Top + Off, SlideR.Right, SlideR.Top + Off + TW)
     else
-      ThumbR := Rect(R.Left + Off, R.Top, R.Left + Off + TW, R.Bottom);
+      ThumbR := Rect(SlideR.Left + Off, SlideR.Top, SlideR.Left + Off + TW, SlideR.Bottom);
 
     // Resolve thumb style with hover/drag states
     ThumbStates := [];
@@ -737,7 +782,6 @@ begin
       TickMarks'. Theme-driven colour (S.TextColor) either way. }
     if (FTickStyle <> ttsNone) and (FMax > FMin) then
     begin
-      TickLen := P.Scale(4);
       TickW := P.Scale(1);
       if TickW < 1 then TickW := 1;
       TickFill := Default(TTyFill);

@@ -255,11 +255,11 @@ begin
     'TyToggleSwitch:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     '' + LineEnding +
     'TyTrackBar {' + LineEnding +
-    '  background: var(--surface-track);' + LineEnding +
+    '  /* NO background and NO radius: the recess moved to TyTrackGroove (a thin centred band), so' + LineEnding +
+    '     the control inherits the surface it sits on. See light.tycss for why. */' + LineEnding +
     '  /* ShowValue''s readout ink. A skin that writes any rule for a typeKey suppresses' + LineEnding +
     '     the ENTIRE built-in rule for it, so this cannot be inherited from the base. */' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
-    '  border-radius: var(--radius-sm);' + LineEnding +
     '  padding: 0px;' + LineEnding +
     '}' + LineEnding +
     'TyTrackBar:focus    { outline: 2px var(--focus-ring); }' + LineEnding +
@@ -889,11 +889,11 @@ begin
     'TyToggleSwitch:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     '' + LineEnding +
     'TyTrackBar {' + LineEnding +
-    '  background: var(--surface-track);' + LineEnding +
+    '  /* NO background and NO radius: the recess moved to TyTrackGroove (a thin centred band), so' + LineEnding +
+    '     the control inherits the surface it sits on. See light.tycss for why. */' + LineEnding +
     '  /* ShowValue''s readout ink. A skin that writes any rule for a typeKey suppresses' + LineEnding +
     '     the ENTIRE built-in rule for it, so this cannot be inherited from the base. */' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
-    '  border-radius: var(--radius-sm);' + LineEnding +
     '  padding: 0px;' + LineEnding +
     '}' + LineEnding +
     'TyTrackBar:focus    { outline: 2px var(--focus-ring); }' + LineEnding +
@@ -1455,6 +1455,12 @@ begin
     '    --check-bg:          #FFFFFF;   /* white check box well */' + LineEnding +
     '' + LineEnding +
     '    --track:             #DCE6F0;   /* progress track */' + LineEnding +
+    '    /* ...and the trackbar groove, which used to be the ONE recess in this skin that stayed' + LineEnding +
+    '       neutral: --surface-track derives from --surface, and aero deliberately leaves --surface' + LineEnding +
+    '       unpinned in light mode (see the note further down), so the groove came out #E6E6E6 --' + LineEnding +
+    '       a chroma-0 grey in the middle of a cold blue wash. aero already had the right colour' + LineEnding +
+    '       sitting here wired only to the progress bar. */' + LineEnding +
+    '    --surface-track:     var(--track);' + LineEnding +
     '    --progress-border:   #A7C0D8;   /* progress track border */' + LineEnding +
     '' + LineEnding +
     '    --glass:             #FFFFFF;   /* white glass base for translucent lifts */' + LineEnding +
@@ -4294,11 +4300,11 @@ begin
     'TyToggleSwitch:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     '' + LineEnding +
     'TyTrackBar {' + LineEnding +
-    '  background: var(--surface-track);' + LineEnding +
+    '  /* NO background and NO radius: the recess moved to TyTrackGroove (a thin centred band), so' + LineEnding +
+    '     the control inherits the surface it sits on. See light.tycss for why. */' + LineEnding +
     '  /* Needed here too: a skin that writes ANY rule for a typeKey suppresses the whole' + LineEnding +
     '     built-in rule for it, so inheriting the base layer''s ink is not an option. */' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
-    '  border-radius: 3px;' + LineEnding +
     '  padding: 0px;' + LineEnding +
     '}' + LineEnding +
     'TyTrackBar:focus    { outline: 2px var(--focus-ring); }' + LineEnding +

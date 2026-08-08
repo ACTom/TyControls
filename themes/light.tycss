@@ -533,15 +533,28 @@ TyToggleSwitch:focus { outline: 2px var(--focus-ring); }
 TyToggleSwitch:disabled { opacity: var(--disabled-opacity); }
 
 TyTrackBar {
-  background: var(--surface-track);
+  /* NO background -- deliberately. The control INHERITS whatever surface it sits on, the same
+     way TyGridPanelCell does: leave the property unset and TyFillParentBg hands it the parent's
+     painted slice (gradient, photo, whatever), instead of plating over it.
+     It used to fill its whole client rect with --surface-track. Two complaints came out of that
+     single line: the bar read as a darker SLAB on every theme (and as a neutral grey slab on
+     aero, whose surface is cold blue), and the tick marks -- drawn inside that same rect -- sat
+     ON the track rather than beside it, because there WAS no track, only the control. The
+     recess now lives on TyTrackGroove below, which is what --surface-track was always for. */
   /* The ShowValue readout's ink. Without it TextColor resolves to the unset default
      $00000000 -- alpha 0 -- so ShowValue reserved the strip, shortened the track and then
      painted the number in a fully transparent colour. It has never been visible in any
      theme, which is why the trackbar example hand-rolled a readout out of a separate
      label instead of using the one the control already has. */
   color: var(--on-surface);
-  border-radius: var(--radius-sm);
   padding: var(--pad-none);
+}
+/* The groove: a thin recessed band the thumb rides in, centred in whatever height is left
+   after the tick bands are reserved. Rounded to its own half-thickness, which is what every
+   platform draws and what --radius-sm was never going to give a 4px band. */
+TyTrackGroove {
+  background: var(--surface-track);
+  border-radius: var(--radius-round);
 }
 TyTrackBar:focus    { outline: 2px var(--focus-ring); }
 TyTrackBar:disabled { opacity: var(--disabled-opacity); }

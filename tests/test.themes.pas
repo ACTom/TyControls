@@ -588,14 +588,14 @@ begin
 end;
 
 const
-  GGRID: array[0..203] of string = (
+  GGRID: array[0..204] of string = (
     'TyForm|', 'TyButton|', 'TyButton|primary', 'TyButton|danger', 'TyLabel|',
     'TyEdit|', 'TyCheckBox|', 'TyRadioButton|', 'TyPanel|', 'TyComboBox|',
     'TyScrollBar|', 'TyScrollThumb|', 'TyTitleBar|', 'TyCaptionButton|',
     'TyCaptionButton|close', 'TyCaptionButton|min', 'TyCaptionButton|max',
     'TyListBox|', 'TyListItem|', 'TyProgressBar|', 'TyProgressFill|',
     'TyGauge|', 'TyGaugeFill|', 'TyHint|', 'TyRibbon|', 'TyRibbonGroup|',
-    'TyToggleSwitch|', 'TyToggleKnob|', 'TyTrackBar|', 'TyTrackThumb|', 'TyLinkLabelLink|',
+    'TyToggleSwitch|', 'TyToggleKnob|', 'TyTrackBar|', 'TyTrackGroove|', 'TyTrackThumb|', 'TyLinkLabelLink|',
     { the explicit-borrow population — see docs/superpowers/plans/2026-07-23-typekey-explicit-borrowers.md }
     'TyHtmlLabel|', 'TyLinkLabel|', 'TyShadowLabel|', 'TyGlowLabel|', 'TyDivider|', 'TyCharImage|', 'TyButtonGroup|', 'TyUpDown|', 'TyChart|', 'TyCalculator|', 'TyBevel|', 'TySizeBox|', 'TyControlBar|', 'TyCoolBar|', 'TyColorGrid|', 'TyShape|', 'TyStarShape|', 'TyArrow|', 'TyImageView|', 'TyImage|', 'TyPreviewBox|', 'TyListGroupPanel|', 'TyRibbonBackstage|', 'TyRibbonQuickAccess|', 'TyRibbonGallery|', 'TyTabSet|', 'TyHeaderControl|',
     'TyGroupBox|', 'TyTabControl|', 'TyPageControl|', 'TyTabSheet|',

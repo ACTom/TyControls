@@ -566,15 +566,28 @@ begin
     'TyToggleSwitch:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     '' + LineEnding +
     'TyTrackBar {' + LineEnding +
-    '  background: var(--surface-track);' + LineEnding +
+    '  /* NO background -- deliberately. The control INHERITS whatever surface it sits on, the same' + LineEnding +
+    '     way TyGridPanelCell does: leave the property unset and TyFillParentBg hands it the parent''s' + LineEnding +
+    '     painted slice (gradient, photo, whatever), instead of plating over it.' + LineEnding +
+    '     It used to fill its whole client rect with --surface-track. Two complaints came out of that' + LineEnding +
+    '     single line: the bar read as a darker SLAB on every theme (and as a neutral grey slab on' + LineEnding +
+    '     aero, whose surface is cold blue), and the tick marks -- drawn inside that same rect -- sat' + LineEnding +
+    '     ON the track rather than beside it, because there WAS no track, only the control. The' + LineEnding +
+    '     recess now lives on TyTrackGroove below, which is what --surface-track was always for. */' + LineEnding +
     '  /* The ShowValue readout''s ink. Without it TextColor resolves to the unset default' + LineEnding +
     '     $00000000 -- alpha 0 -- so ShowValue reserved the strip, shortened the track and then' + LineEnding +
     '     painted the number in a fully transparent colour. It has never been visible in any' + LineEnding +
     '     theme, which is why the trackbar example hand-rolled a readout out of a separate' + LineEnding +
     '     label instead of using the one the control already has. */' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
-    '  border-radius: var(--radius-sm);' + LineEnding +
     '  padding: var(--pad-none);' + LineEnding +
+    '}' + LineEnding +
+    '/* The groove: a thin recessed band the thumb rides in, centred in whatever height is left' + LineEnding +
+    '   after the tick bands are reserved. Rounded to its own half-thickness, which is what every' + LineEnding +
+    '   platform draws and what --radius-sm was never going to give a 4px band. */' + LineEnding +
+    'TyTrackGroove {' + LineEnding +
+    '  background: var(--surface-track);' + LineEnding +
+    '  border-radius: var(--radius-round);' + LineEnding +
     '}' + LineEnding +
     'TyTrackBar:focus    { outline: 2px var(--focus-ring); }' + LineEnding +
     'TyTrackBar:disabled { opacity: var(--disabled-opacity); }' + LineEnding +

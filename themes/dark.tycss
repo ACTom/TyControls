@@ -278,11 +278,11 @@ TyToggleSwitch:focus { outline: 2px var(--focus-ring); }
 TyToggleSwitch:disabled { opacity: var(--disabled-opacity); }
 
 TyTrackBar {
-  background: var(--surface-track);
+  /* NO background and NO radius: the recess moved to TyTrackGroove (a thin centred band), so
+     the control inherits the surface it sits on. See light.tycss for why. */
   /* ShowValue's readout ink -- see light.tycss. Kept in step with auto.tycss's dark
      mode, which must resolve byte-identically to this file. */
   color: var(--on-surface);
-  border-radius: var(--radius-sm);
   padding: 0px;
 }
 TyTrackBar:focus    { outline: 2px var(--focus-ring); }
