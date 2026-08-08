@@ -619,7 +619,7 @@ object MainForm: TMainForm
       Height = 70
       Top = 620
       Width = 208
-      Caption = 'Each band hosts a real control. Drag a grip down for its own row, sideways to move its left boundary, past a neighbour to reorder.'
+      Caption = 'Each band hosts a real control. Drag a grip down for its own row, back up to rejoin the row above (which gives up width to make room), sideways to move its left boundary, past a neighbour to reorder.'
       Layout = tlTop
       WordWrap = True
     end

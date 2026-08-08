@@ -122,6 +122,7 @@ type
     procedure MirroredVerticalBandMovesColumnTowardsTheReadingEnd;
     procedure CoolBarGripperMovesToTheBandsRightWhenMirrored;
     procedure CoolBarGripperHitTestFindsTheMirroredStrip;
+    procedure MirroredRejoinSqueezesTheRowAndBringsTheBandBack;
     procedure MirroredResizeDragGrowsTheBandTowardsTheReadingEnd;
     procedure VerticalCoolBarColumnsRunFromTheRight;
     procedure VerticalCoolBarGripperStaysAboveItsBand;
@@ -1005,6 +1006,61 @@ begin
       130, CB.GetBandWidth(b0));
     AssertEquals('and the grabbed band was not resized in isolation', 60,
       CB.GetBandWidth(b1));
+  finally
+    Form.Free;
+  end;
+end;
+
+{ REJOINING a full row, mirrored. A band that overflowed onto row 1 is dragged back UP, and the
+  row has to give up the width to take it. Rows are the one axis mirroring does NOT touch --
+  top-to-bottom is not a reading direction -- so what this pins is that the mirrored geometry
+  still finds the right row, the right gripper strip and the right band to squeeze. The squeeze
+  itself is arithmetic on extents and is direction-agnostic by construction; if it were not,
+  b0's width would come out wrong here and right in the unmirrored test. }
+procedure TRtlBandBarTest.MirroredRejoinSqueezesTheRowAndBringsTheBandBack;
+var
+  Form: TForm;
+  CB: TCoolBarAccess2;
+  b0, b1: TControl;
+  box: TRect;
+  step, avail, w0, deficit: Integer;
+begin
+  Form := TForm.CreateNew(nil);
+  try
+    CB := TCoolBarAccess2.Create(Form);
+    CB.Parent := Form;
+    CB.Font.PixelsPerInch := 96;
+    CB.SetBounds(0, 0, 300, 120);
+    CB.BiDiMode := bdRightToLeft;
+    CB.BandHeight := 26;
+    CB.BandSpacing := 3;
+    CB.GripperWidth := 10;
+    box := CB.ContentBox;
+    step := CB.BandHeight + CB.BandSpacing;
+    avail := box.Right - box.Left;
+    w0 := avail - 40;
+    { Mirrored, a row fills from the RIGHT and each gripper is the strip immediately right of
+      its band. b1 overflowed onto row 1 and opens it. }
+    b0 := TTyPanel.Create(CB);
+    b0.Parent := CB;
+    b0.SetBounds(box.Right - 10 - w0, box.Top, w0, 26);
+    b1 := TTyPanel.Create(CB);
+    b1.Parent := CB;
+    b1.SetBounds(box.Right - 10 - 60, box.Top + step, 60, 26);
+    CB.SetBandWidth(b0, w0);
+    CB.SetBandWidth(b1, 60);
+    deficit := (10 + w0) + CB.BandSpacing + (10 + 60) - avail;
+    AssertTrue('precondition: the mirrored row really is over-full', deficit > 0);
+    AssertFalse('precondition: b1 came down by overflow, not by Break', CB.BandBreak(b1));
+
+    { Grab b1's gripper -- on its RIGHT once mirrored -- and drag straight up onto row 0. }
+    CB.CallMouseDown(b1.Left + 60 + 5, box.Top + step + 13);
+    CB.CallMouseMove(b0.Left + 5, box.Top + 13);
+    CB.CallMouseUp(b0.Left + 5, box.Top + 13);
+
+    AssertEquals('the mirrored row gave up exactly the room the band needed', w0 - deficit,
+      CB.GetBandWidth(b0));
+    AssertFalse('and the rejoined band does not break its new row', CB.BandBreak(b1));
   finally
     Form.Free;
   end;

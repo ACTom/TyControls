@@ -51,6 +51,28 @@ type
     procedure TestDropMirroredFlipsTheMidpointTest;
     procedure TestDropOffEveryRowChangesNothing;
     procedure TestDropVerticalTransposesTheAxes;
+    // making room on a full row for a band that wants to rejoin it
+    procedure TestMakeRoomLeavesAFittingRowAlone;
+    procedure TestMakeRoomChargesTheLeadsAndTheGaps;
+    procedure TestMakeRoomTakesFromTheNearestBandBeforeTheDrop;
+    procedure TestMakeRoomSpillsBackwardsWhenTheNearestBottomsOut;
+    procedure TestMakeRoomFallsBackToTheFarSideOfTheDrop;
+    procedure TestMakeRoomNeverGoesBelowAMinimum;
+    procedure TestMakeRoomRefusesWholeRatherThanHalfApplying;
+  end;
+
+  { A band content that DECLARES how wide it wants to be. The content cap has to be measured
+    against an exact number; a real control's preferred width depends on the machine's fonts
+    and the active theme, which would make the cap tests read as "roughly". }
+  TDeclaredWidthPanel = class(TTyPanel)
+  private
+    FDeclared: Integer;
+    procedure SetDeclared(AValue: Integer);
+  protected
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
+  public
+    property Declared: Integer read FDeclared write SetDeclared;
   end;
 
   { A probe exposing the protected geometry + the private band map indirectly. }
@@ -61,6 +83,8 @@ type
     function GripPx: Integer;
     function ContentBox: TRect;
     function SeamOwner(ACtl: TControl): TControl;
+    function ContentCap(ACtl: TControl): Integer;
+    function LeadPx(ACtl: TControl): Integer;
     procedure CallMouseDown(X, Y: Integer);
     procedure CallMouseMove(X, Y: Integer);
     procedure CallMouseUp(X, Y: Integer);
@@ -73,6 +97,7 @@ type
     FChangeCount: Integer;
     procedure CountChange(Sender: TObject);
     function MakeBand(AParent: TWinControl; AL, AT, AW, AH: Integer): TControl;
+    function MakeOverflowedPair(CB: TCoolBarAccess; out b0, b1: TControl): Integer;
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -101,6 +126,22 @@ type
     procedure TestDragPastANeighbourReordersTheBands;
     procedure TestDragBelowTheLastRowGivesTheBandItsOwnRow;
     procedure TestDragBelowTheLastRowMovesAnAlreadyBrokenBand;
+    // the user's report: a band pushed down by OVERFLOW can be dragged back up
+    procedure TestDragBackUpSqueezesTheRowAndRejoinsIt;
+    procedure TestRejoinIsNotSwallowedByTheReorder;
+    procedure TestRejoinTakesFromTheBandItLandsNextTo;
+    procedure TestRejoinHonoursAnExplicitBandMinWidth;
+    procedure TestRejoinFallsBackToDefaultBandMinWidth;
+    procedure TestRejoinThatCannotFitChangesNothingAtAll;
+    procedure TestVerticalRejoinSqueezesTheColumnOnTheOtherAxis;
+    // capping a widening drag at the hosted control's own content
+    procedure TestAutoMaxWidthIsOffByDefault;
+    procedure TestAutoMaxWidthCapsAtTheDeclaredContentWidth;
+    procedure TestAutoMaxWidthStopsAGripperDragAtTheContentEdge;
+    procedure TestAutoMaxWidthLeavesAnOpinionlessControlUncapped;
+    procedure TestAutoMaxWidthTakesWhicheverCeilingBindsFirst;
+    procedure TestAutoMaxWidthHonoursTheControlsOwnConstraint;
+    procedure TestABandWithNoControlIsNeverInTheLayout;
   end;
 
 implementation
@@ -111,9 +152,31 @@ function TCoolBarAccess.BandRect(ACtl: TControl): TRect;    begin Result := Band
 function TCoolBarAccess.GripPx: Integer;                    begin Result := GripperWidthPx; end;
 function TCoolBarAccess.ContentBox: TRect;                  begin Result := BandContentRect; end;
 function TCoolBarAccess.SeamOwner(ACtl: TControl): TControl; begin Result := SeamOwnerOf(ACtl); end;
+function TCoolBarAccess.ContentCap(ACtl: TControl): Integer; begin Result := BandContentCap(ACtl); end;
+function TCoolBarAccess.LeadPx(ACtl: TControl): Integer;    begin Result := BandLeadPx(ACtl); end;
 procedure TCoolBarAccess.CallMouseDown(X, Y: Integer);      begin MouseDown(mbLeft, [ssLeft], X, Y); end;
 procedure TCoolBarAccess.CallMouseMove(X, Y: Integer);      begin MouseMove([ssLeft], X, Y); end;
 procedure TCoolBarAccess.CallMouseUp(X, Y: Integer);        begin MouseUp(mbLeft, [], X, Y); end;
+
+{ TDeclaredWidthPanel }
+procedure TDeclaredWidthPanel.SetDeclared(AValue: Integer);
+begin
+  if FDeclared = AValue then Exit;
+  FDeclared := AValue;
+  { LCL CACHES the answer (cfPreferredSizeValid / cfPreferredMinSizeValid), so a test that set
+    the number after something had already asked would keep measuring the old one. }
+  InvalidatePreferredSize;
+end;
+
+procedure TDeclaredWidthPanel.CalculatePreferredSize(var PreferredWidth,
+  PreferredHeight: Integer; WithThemeSpace: Boolean);
+begin
+  { Answered for BOTH forms: the cap asks with WithThemeSpace=False, which routes to the
+    FPreferredMin* pair, and answering only the themed one would leave it reading 0. }
+  if WithThemeSpace then ;
+  PreferredWidth := FDeclared;
+  PreferredHeight := 0;
+end;
 
 { =========================== pure math =========================== }
 
@@ -940,6 +1003,113 @@ begin
     TyCoolBandDropIndex(r, 0, Point(140, 10), False, False));
 end;
 
+{ ── making room on a full row ──────────────────────────────────────────────────
+  The arithmetic behind "drag a band back up onto a row that is already full". Every number
+  below is in the PACKER's frame: a lead (gripper, plus caption when ShowText) before each
+  band, one gap between consecutive bands, and the row is full when the total exceeds AAvail.
+
+  Row used by most of these: three bands of 100 with leads of 10 and gaps of 5, so the row
+  costs 3*(10+100) + 2*5 = 340. A joiner of 50 with a lead of 10 pushes the total to
+  340 + 5 + 60 = 405. Against AAvail = 380 that is a deficit of 25. }
+
+procedure TCoolBarMathTest.TestMakeRoomLeavesAFittingRowAlone;
+var w: TTyCoolExtents;
+begin
+  AssertTrue('a row with room to spare accepts the band',
+    TyCoolRowMakeRoom([100, 100, 100], [20, 20, 20], [10, 10, 10], 3, 10, 50, 500, 5, w));
+  AssertEquals('and nobody gives up a pixel', 100, w[0]);
+  AssertEquals('nobody', 100, w[1]);
+  AssertEquals('nobody', 100, w[2]);
+end;
+
+procedure TCoolBarMathTest.TestMakeRoomChargesTheLeadsAndTheGaps;
+var w: TTyCoolExtents;
+begin
+  { The exact boundary, which is the whole point of stating the cost formula: 340 for the row,
+    +5 for the new gap, +10 lead +50 band = 405. At AAvail 405 it fits untouched; one pixel
+    less and someone has to give exactly one pixel. A cost that forgot the leads or the gap
+    would put the boundary tens of pixels away and this pair would straddle it. }
+  AssertTrue('405 is exactly enough',
+    TyCoolRowMakeRoom([100, 100, 100], [20, 20, 20], [10, 10, 10], 3, 10, 50, 405, 5, w));
+  AssertEquals('so nothing shrinks', 100, w[2]);
+  AssertTrue('404 is one short',
+    TyCoolRowMakeRoom([100, 100, 100], [20, 20, 20], [10, 10, 10], 3, 10, 50, 404, 5, w));
+  AssertEquals('and exactly one pixel is taken', 99, w[2]);
+  AssertEquals('from one band only', 100, w[1]);
+end;
+
+procedure TCoolBarMathTest.TestMakeRoomTakesFromTheNearestBandBeforeTheDrop;
+var w: TTyCoolExtents;
+begin
+  { WHO gives. The band immediately BEFORE the insertion point -- the seam the joining band is
+    about to own, the same boundary a gripper drag moves. Dropping at the END of the row that
+    is band 2; dropping in the middle it is whoever is now on the left. }
+  AssertTrue('drop at the end',
+    TyCoolRowMakeRoom([100, 100, 100], [20, 20, 20], [10, 10, 10], 3, 10, 50, 380, 5, w));
+  AssertEquals('the last band gave the whole 25', 75, w[2]);
+  AssertEquals('band 1 untouched', 100, w[1]);
+  AssertEquals('band 0 untouched', 100, w[0]);
+
+  AssertTrue('drop between bands 0 and 1',
+    TyCoolRowMakeRoom([100, 100, 100], [20, 20, 20], [10, 10, 10], 1, 10, 50, 380, 5, w));
+  AssertEquals('now band 0 is the one next door and gives', 75, w[0]);
+  AssertEquals('band 1 untouched', 100, w[1]);
+  AssertEquals('band 2 untouched', 100, w[2]);
+end;
+
+procedure TCoolBarMathTest.TestMakeRoomSpillsBackwardsWhenTheNearestBottomsOut;
+var w: TTyCoolExtents;
+begin
+  { Band 2 can only give 10 before it hits its minimum of 90, so the remaining 15 walks BACK
+    along the row rather than stopping there. }
+  AssertTrue('the deficit walks back along the row',
+    TyCoolRowMakeRoom([100, 100, 100], [20, 20, 90], [10, 10, 10], 3, 10, 50, 380, 5, w));
+  AssertEquals('band 2 gave everything it had', 90, w[2]);
+  AssertEquals('and band 1 covered the rest', 85, w[1]);
+  AssertEquals('band 0 never had to', 100, w[0]);
+end;
+
+procedure TCoolBarMathTest.TestMakeRoomFallsBackToTheFarSideOfTheDrop;
+var w: TTyCoolExtents;
+begin
+  { Everything BEFORE the drop is already at its floor, so the bands AFTER it give -- nearest
+    first. Refusing here while 80px of slack sat one band further along would be a far worse
+    answer than reaching for it. }
+  AssertTrue('the far side gives when the near side cannot',
+    TyCoolRowMakeRoom([100, 100, 100], [100, 20, 20], [10, 10, 10], 1, 10, 50, 380, 5, w));
+  AssertEquals('band 0 is pinned at its minimum', 100, w[0]);
+  AssertEquals('so band 1 -- the nearest on the other side -- gave', 75, w[1]);
+  AssertEquals('and band 2 was not needed', 100, w[2]);
+end;
+
+procedure TCoolBarMathTest.TestMakeRoomNeverGoesBelowAMinimum;
+var w: TTyCoolExtents;
+begin
+  { A deficit far larger than one band's slack must not push it through the floor on the way
+    past. Deficit here is 340+5+60-200 = 205; the row's total slack is 3*80 = 240. }
+  AssertTrue('a big deficit is still absorbed',
+    TyCoolRowMakeRoom([100, 100, 100], [20, 20, 20], [10, 10, 10], 3, 10, 50, 200, 5, w));
+  AssertTrue('band 2 stopped at its floor', w[2] >= 20);
+  AssertTrue('band 1 stopped at its floor', w[1] >= 20);
+  AssertTrue('band 0 stopped at its floor', w[0] >= 20);
+  AssertEquals('and between them they gave exactly the deficit', 205,
+    300 - (w[0] + w[1] + w[2]));
+end;
+
+procedure TCoolBarMathTest.TestMakeRoomRefusesWholeRatherThanHalfApplying;
+var w: TTyCoolExtents;
+begin
+  { The row's total slack is 3*(100-20) = 240; AAvail 164 makes the deficit 405-164 = 241, one
+    pixel more than the row can possibly give. The answer is False AND the row is handed back
+    untouched: a half-applied squeeze is the worst outcome of the three, because the layout
+    moves and the band still does not arrive. }
+  AssertFalse('a row with no slack left refuses',
+    TyCoolRowMakeRoom([100, 100, 100], [20, 20, 20], [10, 10, 10], 3, 10, 50, 164, 5, w));
+  AssertEquals('and nothing was taken from band 0', 100, w[0]);
+  AssertEquals('nor band 1', 100, w[1]);
+  AssertEquals('nor band 2', 100, w[2]);
+end;
+
 procedure TCoolBarControlTest.TestVerticalPutsTheGripAboveTheBand;
 var CB: TCoolBarAccess; b: TControl; r: TRect;
 begin
@@ -959,6 +1129,451 @@ begin
   AssertEquals('and starts a grip-height above it, inside the frame',
     CB.ContentBox.Top, r.Top);
   AssertEquals('spanning the band width', b.Left, r.Left);
+end;
+
+{ ── the user's report: a band pushed down by OVERFLOW can be dragged back up ────
+  Widen band 0 until band 1 no longer fits beside it and band 1 moves to row 1 -- correct. From
+  then on it could never be dragged back, because the gesture did exactly one thing (clear
+  Break) and band 1's Break had never been set: it came down by overflow. The rejoin takes the
+  width from the row instead.
+
+  All of these lay the bands out BY HAND, as every control test in this file does: the LCL
+  align engine does not run for a form that was never shown (AutoSizeDelayedHandle short-
+  circuits the tree), so a headless test pins the MODEL -- widths, Break, child order. That the
+  band actually lands on row 0 on screen is what tests/coolbarrejoin proves, on a real window
+  with real posted mouse messages. }
+
+{ A two-row scene: b0 alone on row 0 and so wide that b1, on row 1, cannot join it.
+  Returns the deficit -- exactly how much room b1 needs -- so each test can name the
+  arithmetic instead of guessing at it. }
+function TCoolBarControlTest.MakeOverflowedPair(CB: TCoolBarAccess;
+  out b0, b1: TControl): Integer;
+var
+  L, T, step, avail, w0: Integer;
+begin
+  CB.BandHeight := 26;      // pinned so the row pitch does not follow the active theme
+  CB.BandSpacing := 3;
+  CB.GripperWidth := 10;
+  L := CB.ContentBox.Left;
+  T := CB.ContentBox.Top;
+  step := CB.BandHeight + CB.BandSpacing;
+  avail := CB.ContentBox.Right - CB.ContentBox.Left;
+  w0 := avail - 40;
+  b0 := MakeBand(CB, L + 10, T, w0, 26);            // row 0, after its own gripper
+  b1 := MakeBand(CB, L + 10, T + step, 60, 26);     // row 1, pushed there by overflow
+  CB.SetBandWidth(b0, w0);
+  CB.SetBandWidth(b1, 60);
+  { What the row would cost with b1 back on it: lead+w0 for b0, one gap, lead+60 for b1. }
+  Result := (10 + w0) + CB.BandSpacing + (10 + 60) - avail;
+end;
+
+procedure TCoolBarControlTest.TestDragBackUpSqueezesTheRowAndRejoinsIt;
+var
+  CB: TCoolBarAccess; b0, b1: TControl; L, T, step, deficit, w0: Integer;
+begin
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  CB.SetBounds(0, 0, 300, 120);
+  deficit := MakeOverflowedPair(CB, b0, b1);
+  w0 := b0.Width;
+  L := CB.ContentBox.Left;
+  T := CB.ContentBox.Top;
+  step := CB.BandHeight + CB.BandSpacing;
+  AssertTrue('precondition: the row really is over-full', deficit > 0);
+  AssertFalse('precondition: b1 came down by OVERFLOW, so its Break is not set',
+    CB.BandBreak(b1));
+
+  { Grab b1's gripper (the strip immediately left of it) and drag straight up onto row 0,
+    landing past b0's midpoint -- the half where the drop rule answers "stay put", so the
+    reorder cannot be what produces the result. }
+  CB.CallMouseDown(L + 5, T + step + 13);
+  CB.CallMouseMove(L + 10 + w0 - 5, T + 13);
+  CB.CallMouseUp(L + 10 + w0 - 5, T + 13);
+
+  AssertEquals('row 0 gave up exactly the room the band needed', w0 - deficit,
+    CB.GetBandWidth(b0));
+  AssertEquals('and the hosted control followed', w0 - deficit, b0.Width);
+  AssertFalse('the rejoined band does not break its new row', CB.BandBreak(b1));
+  AssertEquals('and it stayed the row''s second band', 1, CB.GetControlIndex(b1));
+end;
+
+procedure TCoolBarControlTest.TestRejoinIsNotSwallowedByTheReorder;
+var
+  CB: TCoolBarAccess; b0, b1: TControl; L, T, step, deficit, w0: Integer;
+begin
+  { The other half of the report: the swap was the ONLY gesture that still responded. Dragging
+    up onto a band's LEADING half is exactly where the midpoint rule says "reorder", and the
+    old code ran the reorder first -- so the band and its neighbour swapped, the wide band was
+    pushed to row 1 in its place, and no width was ever released. A rejoin has to win that
+    race; it can still land the band at the head of the row, but it must MAKE ROOM doing it. }
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  CB.SetBounds(0, 0, 300, 120);
+  deficit := MakeOverflowedPair(CB, b0, b1);
+  w0 := b0.Width;
+  L := CB.ContentBox.Left;
+  T := CB.ContentBox.Top;
+  step := CB.BandHeight + CB.BandSpacing;
+
+  CB.CallMouseDown(L + 5, T + step + 13);
+  CB.CallMouseMove(L + 13, T + 13);            // b0's leading half -- the swap's home turf
+  CB.CallMouseUp(L + 13, T + 13);
+
+  AssertEquals('the row was squeezed, so this was a rejoin and not a bare swap',
+    w0 - deficit, CB.GetBandWidth(b0));
+  AssertEquals('and the band landed at the head of the row it joined', 0,
+    CB.GetControlIndex(b1));
+end;
+
+procedure TCoolBarControlTest.TestRejoinTakesFromTheBandItLandsNextTo;
+var
+  CB: TCoolBarAccess; b0, b1, b2, b3: TControl;
+  L, T, step, avail, w, deficit: Integer;
+begin
+  { WHICH band gives, wired through the control rather than only stated in the math. With one
+    band on the target row the question cannot even be asked -- and the row in the user's own
+    report has one -- so this builds a THREE-band row. The dragged band lands at the end of it,
+    so the band immediately before it is the one whose seam moves; taking from the head of the
+    row instead would leave b2 untouched and shrink b0. }
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  CB.SetBounds(0, 0, 500, 120);
+  CB.BandHeight := 26;
+  CB.BandSpacing := 3;
+  CB.GripperWidth := 10;
+  L := CB.ContentBox.Left;
+  T := CB.ContentBox.Top;
+  step := CB.BandHeight + CB.BandSpacing;
+  avail := CB.ContentBox.Right - CB.ContentBox.Left;
+  { Three bands of w on row 0 cost 3*(10+w) + 2*3; adding b3 costs a gap plus 10+60. Sized so
+    the shortfall is small enough for the LAST band alone to cover, which is what makes "who
+    gave" readable in the result. }
+  w := (avail - 79) div 3;
+  b0 := MakeBand(CB, L + 10, T, w, 26);
+  b1 := MakeBand(CB, L + 13 + w, T, w, 26);
+  b2 := MakeBand(CB, L + 2 * w + 26, T, w, 26);
+  b3 := MakeBand(CB, L + 10, T + step, 60, 26);
+  CB.SetBandWidth(b0, w);
+  CB.SetBandWidth(b1, w);
+  CB.SetBandWidth(b2, w);
+  CB.SetBandWidth(b3, 60);
+  deficit := 3 * (10 + w) + 2 * CB.BandSpacing + CB.BandSpacing + (10 + 60) - avail;
+  AssertTrue('precondition: the row is over-full', deficit > 0);
+  AssertTrue('precondition: the last band alone can cover it', w - CB.BandMinWidth(b2) >= deficit);
+
+  { Up onto row 0, past the LAST band's midpoint, so the band lands at the end of the row. }
+  CB.CallMouseDown(L + 5, T + step + 13);
+  CB.CallMouseMove(L + 3 * w + 21, T + 13);
+  CB.CallMouseUp(L + 3 * w + 21, T + 13);
+
+  AssertEquals('the band it landed next to is the one that gave', w - deficit,
+    CB.GetBandWidth(b2));
+  AssertEquals('the band before that was not asked', w, CB.GetBandWidth(b1));
+  AssertEquals('nor the head of the row', w, CB.GetBandWidth(b0));
+end;
+
+procedure TCoolBarControlTest.TestRejoinHonoursAnExplicitBandMinWidth;
+var
+  CB: TCoolBarAccess; b0, b1: TControl; L, T, step, deficit, w0: Integer;
+begin
+  { The floor is BandMinWidth -- the same number the gripper resize is handed -- so a band the
+    author pinned cannot be squeezed past it by the other gesture either. }
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  CB.SetBounds(0, 0, 300, 120);
+  deficit := MakeOverflowedPair(CB, b0, b1);
+  w0 := b0.Width;
+  L := CB.ContentBox.Left;
+  T := CB.ContentBox.Top;
+  step := CB.BandHeight + CB.BandSpacing;
+
+  { One pixel short of the room needed: the squeeze must refuse rather than dip under. }
+  CB.SetBandMinWidth(b0, w0 - deficit + 1);
+  CB.CallMouseDown(L + 5, T + step + 13);
+  CB.CallMouseMove(L + 10 + w0 - 5, T + 13);
+  CB.CallMouseUp(L + 10 + w0 - 5, T + 13);
+  AssertEquals('an explicit MinWidth one pixel too high refuses the rejoin', w0,
+    CB.GetBandWidth(b0));
+
+  { Exactly enough: the same gesture now succeeds and stops ON the floor. }
+  CB.SetBandMinWidth(b0, w0 - deficit);
+  CB.CallMouseDown(L + 5, T + step + 13);
+  CB.CallMouseMove(L + 10 + w0 - 5, T + 13);
+  CB.CallMouseUp(L + 10 + w0 - 5, T + 13);
+  AssertEquals('and a floor that leaves exactly enough is squeezed onto, not through',
+    w0 - deficit, CB.GetBandWidth(b0));
+end;
+
+procedure TCoolBarControlTest.TestRejoinFallsBackToDefaultBandMinWidth;
+var
+  CB: TCoolBarAccess; b0, b1: TControl; L, T, step, deficit, w0: Integer;
+begin
+  { A band with no MinWidth of its own falls back to the BAR's DefaultBandMinWidth -- and the
+    squeeze has to consult that fallback, not a constant of its own. Proved by moving the
+    fallback and watching the same gesture change answer. }
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  CB.SetBounds(0, 0, 300, 120);
+  deficit := MakeOverflowedPair(CB, b0, b1);
+  w0 := b0.Width;
+  L := CB.ContentBox.Left;
+  T := CB.ContentBox.Top;
+  step := CB.BandHeight + CB.BandSpacing;
+  AssertEquals('precondition: b0 has no MinWidth of its own, so the bar''s applies',
+    CB.DefaultBandMinWidth, CB.BandMinWidth(b0));
+
+  CB.DefaultBandMinWidth := w0 - deficit + 1;
+  CB.CallMouseDown(L + 5, T + step + 13);
+  CB.CallMouseMove(L + 10 + w0 - 5, T + 13);
+  CB.CallMouseUp(L + 10 + w0 - 5, T + 13);
+  AssertEquals('a bar-level fallback one pixel too high refuses the rejoin', w0,
+    CB.GetBandWidth(b0));
+
+  CB.DefaultBandMinWidth := 24;
+  CB.CallMouseDown(L + 5, T + step + 13);
+  CB.CallMouseMove(L + 10 + w0 - 5, T + 13);
+  CB.CallMouseUp(L + 10 + w0 - 5, T + 13);
+  AssertEquals('and a roomier fallback lets the same gesture through', w0 - deficit,
+    CB.GetBandWidth(b0));
+end;
+
+procedure TCoolBarControlTest.TestRejoinThatCannotFitChangesNothingAtAll;
+var
+  CB: TCoolBarAccess; b0, b1: TControl; L, T, step, w0, idx0, idx1: Integer;
+begin
+  { THE PINNED CONTRACT for a rejoin that cannot fit even at every minimum: refuse, and leave
+    the band where it is. Nothing moves -- no width, no child order, no Break, and no OnChange,
+    because a refusal is not a change. "Silently doing nothing" is what the bug was, so what
+    makes this different is that it is the ONLY case where nothing happens: every other upward
+    drag now moves something. }
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  CB.SetBounds(0, 0, 300, 120);
+  MakeOverflowedPair(CB, b0, b1);
+  w0 := b0.Width;
+  L := CB.ContentBox.Left;
+  T := CB.ContentBox.Top;
+  step := CB.BandHeight + CB.BandSpacing;
+  CB.SetBandMinWidth(b0, w0);          // nailed: the row has no slack whatsoever
+  idx0 := CB.GetControlIndex(b0);
+  idx1 := CB.GetControlIndex(b1);
+  FChangeCount := 0;
+  CB.OnChange := @CountChange;
+
+  CB.CallMouseDown(L + 5, T + step + 13);
+  CB.CallMouseMove(L + 10 + w0 - 5, T + 13);
+  CB.CallMouseUp(L + 10 + w0 - 5, T + 13);
+
+  AssertEquals('no width moved', w0, CB.GetBandWidth(b0));
+  AssertEquals('and none reached the control either', w0, b0.Width);
+  AssertEquals('no child order moved', idx0, CB.GetControlIndex(b0));
+  AssertEquals('no child order moved', idx1, CB.GetControlIndex(b1));
+  AssertFalse('no Break was set on the refused band', CB.BandBreak(b1));
+  AssertEquals('and the refusal was not reported as a change', 0, FChangeCount);
+end;
+
+procedure TCoolBarControlTest.TestVerticalRejoinSqueezesTheColumnOnTheOtherAxis;
+var
+  CB: TCoolBarAccess; b0, b1: TControl; L, T, step, avail, h0, deficit: Integer;
+begin
+  { Turned on its side EVERY axis swaps: a "row" is a column, the run is the y axis, and the
+    extent a band gives up is its HEIGHT. Reading widths here would squeeze the column
+    THICKNESS -- which the packer takes from the bar's band height and not from the band at
+    all -- so the gesture would be inert on exactly the same shape of bug. }
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  CB.SetBounds(0, 0, 200, 300);
+  CB.BandHeight := 26;
+  CB.BandSpacing := 3;
+  CB.GripperWidth := 10;
+  CB.Vertical := True;
+  L := CB.ContentBox.Left;
+  T := CB.ContentBox.Top;
+  step := CB.BandHeight + CB.BandSpacing;
+  avail := CB.ContentBox.Bottom - CB.ContentBox.Top;
+  h0 := avail - 40;
+  b0 := MakeBand(CB, L, T + 10, 26, h0);              // column 0, below its own gripper
+  b1 := MakeBand(CB, L + step, T + 10, 26, 60);       // column 1
+  CB.SetBandWidth(b0, h0);                            // vertically the assigned extent IS the height
+  CB.SetBandWidth(b1, 60);
+  deficit := (10 + h0) + CB.BandSpacing + (10 + 60) - avail;
+  AssertTrue('precondition: column 0 really is over-full', deficit > 0);
+  AssertEquals('an assigned band extent lands on the RUN axis when vertical', h0, b0.Height);
+
+  { Sideways is the MOVE gesture once the bar is vertical -- the axes swap with the layout. }
+  CB.CallMouseDown(L + step + 13, T + 5);
+  CB.CallMouseMove(L + 13, T + 5);
+  CB.CallMouseUp(L + 13, T + 5);
+
+  AssertEquals('the column gave up height, not width', h0 - deficit, b0.Height);
+  AssertEquals('and the model agrees', h0 - deficit, CB.GetBandWidth(b0));
+end;
+
+{ ── capping a widening drag at the hosted control's own content ─────────────────
+  MaxWidth is a number somebody typed and it goes stale the moment the content changes.
+  AutoMaxWidth asks the hosted control instead, so a drag stops where the content ends. }
+
+procedure TCoolBarControlTest.TestAutoMaxWidthIsOffByDefault;
+var CB: TCoolBarAccess; b: TDeclaredWidthPanel;
+begin
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  b := TDeclaredWidthPanel.Create(CB);
+  b.Parent := CB;
+  b.SetBounds(0, 0, 80, 26);
+  b.Declared := 120;
+  CB.SetBandWidth(b, 80);
+  AssertFalse('a fresh band does not cap itself', CB.BandAutoMaxWidth(b));
+  AssertEquals('so the ceiling is still unbounded even though the content declares one', 0,
+    CB.BandMaxWidth(b));
+end;
+
+procedure TCoolBarControlTest.TestAutoMaxWidthCapsAtTheDeclaredContentWidth;
+var CB: TCoolBarAccess; b: TDeclaredWidthPanel;
+begin
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  b := TDeclaredWidthPanel.Create(CB);
+  b.Parent := CB;
+  b.SetBounds(0, 0, 80, 26);
+  b.Declared := 120;
+  CB.SetBandWidth(b, 80);
+  CB.SetBandAutoMaxWidth(b, True);
+  AssertEquals('the ceiling is the content width the control declares', 120,
+    CB.ContentCap(b));
+  { The FRAME matters: the cap is the CHILD's width, gripper excluded, because that is what
+    TTyCoolBand.Width sets and TyCoolBandResize clamps. Including the lead here -- which is the
+    convention Lazarus's TCoolBand.Width uses -- would let the band grow one gripper PAST its
+    content, so the footprint is lead + cap and lands exactly on the content's last pixel. }
+  AssertEquals('and it is stated lead-exclusive', 120 + CB.LeadPx(b),
+    CB.ContentCap(b) + CB.LeadPx(b));
+  AssertEquals('which is what the effective ceiling becomes', 120, CB.BandMaxWidth(b));
+end;
+
+procedure TCoolBarControlTest.TestAutoMaxWidthStopsAGripperDragAtTheContentEdge;
+var CB: TCoolBarAccess; b0: TDeclaredWidthPanel; b1: TControl; L, T: Integer;
+begin
+  { The gesture, not just the number. b1's gripper is the seam, so dragging it right widens b0
+    -- and with the cap on, b0 stops when its content runs out instead of at whatever the
+    pointer reached. It STOPS rather than refuses: the band really moved first, which is what
+    separates a bounded gesture from the inert one this pass exists to remove. }
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  CB.SetBounds(0, 0, 500, 120);
+  CB.GripperWidth := 10;
+  L := CB.ContentBox.Left;
+  T := CB.ContentBox.Top;
+  b0 := TDeclaredWidthPanel.Create(CB);
+  b0.Parent := CB;
+  b0.SetBounds(L + 10, T, 80, 26);
+  b0.Declared := 120;
+  b1 := MakeBand(CB, L + 200, T, 80, 26);
+  CB.SetBandWidth(b0, 80);
+  CB.SetBandAutoMaxWidth(b0, True);
+
+  CB.CallMouseDown(L + 195, T + 13);
+  CB.CallMouseMove(L + 195 + 300, T + 13);      // far past the content
+  CB.CallMouseUp(L + 195 + 300, T + 13);
+
+  AssertEquals('the band grew to its content and stopped there', 120, CB.GetBandWidth(b0));
+  if b1 = nil then ;
+end;
+
+procedure TCoolBarControlTest.TestAutoMaxWidthLeavesAnOpinionlessControlUncapped;
+var CB: TCoolBarAccess; b: TControl;
+begin
+  { A control that declares no preferred width -- an edit, meaningfully any width -- is left
+    alone rather than pinned. This caps bands whose content HAS an end; it does not invent one.
+    (Measured: TTyEdit answers raw 0, and the non-raw form would answer its own current Width,
+    which is the very number the drag is changing.) }
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  b := MakeBand(CB, 0, 0, 80, 26);              // a plain TTyPanel: no preferred width
+  CB.SetBandWidth(b, 80);
+  CB.SetBandAutoMaxWidth(b, True);
+  AssertEquals('no declared content -> no ceiling', 0, CB.ContentCap(b));
+  AssertEquals('and therefore no effective ceiling', 0, CB.BandMaxWidth(b));
+end;
+
+procedure TCoolBarControlTest.TestAutoMaxWidthTakesWhicheverCeilingBindsFirst;
+var CB: TCoolBarAccess; b: TDeclaredWidthPanel;
+begin
+  { The precedence, stated once in BandMaxWidth: 0 means "no opinion" and drops out; of what
+    remains the SMALLEST binds. So the two ceilings never fight -- whichever runs out first
+    stops the drag. }
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  b := TDeclaredWidthPanel.Create(CB);
+  b.Parent := CB;
+  b.SetBounds(0, 0, 80, 26);
+  b.Declared := 120;
+  CB.SetBandWidth(b, 80);
+  CB.SetBandAutoMaxWidth(b, True);
+
+  CB.SetBandMaxWidth(b, 0);
+  AssertEquals('an unset MaxWidth drops out, leaving the content cap', 120, CB.BandMaxWidth(b));
+  CB.SetBandMaxWidth(b, 200);
+  AssertEquals('a roomier MaxWidth loses to the content', 120, CB.BandMaxWidth(b));
+  CB.SetBandMaxWidth(b, 80);
+  AssertEquals('a tighter MaxWidth wins', 80, CB.BandMaxWidth(b));
+end;
+
+procedure TCoolBarControlTest.TestAutoMaxWidthHonoursTheControlsOwnConstraint;
+var CB: TCoolBarAccess; b: TDeclaredWidthPanel;
+begin
+  { Constraints.MaxWidth is the hosted control's own statement that it cannot usefully be
+    wider, and it composes by the same rule. It lives behind the AutoMaxWidth opt-in so that
+    "default OFF changes nothing" stays literally true. }
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  b := TDeclaredWidthPanel.Create(CB);
+  b.Parent := CB;
+  b.SetBounds(0, 0, 80, 26);
+  b.Declared := 120;
+  b.Constraints.MaxWidth := 90;
+  CB.SetBandWidth(b, 80);
+  AssertEquals('with the opt-in off the constraint is not the band''s business', 0,
+    CB.BandMaxWidth(b));
+  CB.SetBandAutoMaxWidth(b, True);
+  AssertEquals('and with it on, the tighter of the two declared ceilings binds', 90,
+    CB.BandMaxWidth(b));
+end;
+
+procedure TCoolBarControlTest.TestABandWithNoControlIsNeverInTheLayout;
+var CB: TCoolBarAccess; b: TControl; sep: TTyCoolBand;
+begin
+  { The caption-only separator band. It hosts nothing, so the content-cap question never
+    arises for it: with no child it is never packed, never gripped and never resized. That is
+    the decision -- not "the cap is zero" but "the band is not in the layout at all" -- and it
+    is why AutoMaxWidth needs no special case for a control-less band. }
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  b := MakeBand(CB, 0, 0, 80, 26);
+  CB.SetBandWidth(b, 80);                 // gives b a collection item of its own
+  sep := CB.Bands.Add;
+  sep.Text := 'separator';
+  AssertEquals('both bands exist in the designable collection', 2, CB.Bands.Count);
+  AssertTrue('and the separator really hosts nothing', sep.Control = nil);
+  AssertEquals('but it contributes no child to pack', 1, CB.ControlCount);
+  AssertTrue('and it has no gripper strip to grab', IsRectEmpty(CB.BandRect(nil)));
+  AssertEquals('asking the ceiling of no control at all is unbounded, not a trap', 0,
+    CB.BandMaxWidth(nil));
+  AssertEquals('and so is its content cap', 0, CB.ContentCap(nil));
+  if b = nil then ;
 end;
 
 initialization
