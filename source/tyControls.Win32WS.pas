@@ -86,6 +86,14 @@ type
     WorkArea: TRect;      // last known monitor work area -> fallback pin for the maximized client
   end;
 
+const
+  { The two UNDOCUMENTED messages uxtheme sends a window whose non-client area it is about to
+    paint itself. They exist in every Windows since XP and there is no documented substitute;
+    every custom-frame application that has ever shipped swallows them. See the WM_NCPAINT case
+    for why they matter here and only here. }
+  WM_NCUAHDRAWCAPTION = $00AE;
+  WM_NCUAHDRAWFRAME   = $00AF;
+
 var
   GStates: array of PNcState;
 
@@ -240,6 +248,26 @@ begin
           Exit;
         end;
         // GetWindowRect failed (degenerate): fall through to the original proc.
+      end;
+    WM_NCPAINT, WM_NCUAHDRAWCAPTION, WM_NCUAHDRAWFRAME:
+      begin
+        { ONLY on the window-shadow:false path, and this is why it is not the WM_NCACTIVATE case
+          below repeated. With the shadow on, DWM owns the non-client area: it composes the frame,
+          the lParam=-1 trick below stops the activation repaint, and WM_NCPAINT must still reach
+          DefWindowProc so the 1px DWM border keeps rendering.
+
+          With the shadow OFF we set DWMWA_NCRENDERING_POLICY=DISABLED, which takes DWM out of the
+          picture for this window entirely -- and Windows falls back to LEGACY non-client painting.
+          Legacy painting does not go through the activation path lParam=-1 suppresses: on
+          deactivation uxtheme sends WM_NCUAHDRAWCAPTION/WM_NCUAHDRAWFRAME and DefWindowProc paints
+          a full CLASSIC caption bar (title text, minimise/maximise/close) and frame straight over
+          our custom chrome. It clears again on the next client repaint, which is why it reads as a
+          FLICKER rather than a permanent frame: reported from the forum against
+          `StyleOverride := 'window-shadow: false; border-radius: 0;'` and reproduced here exactly.
+
+          WM_NCCALCSIZE has already eaten the whole frame in this mode (client := window rect), so
+          there is genuinely no non-client area left to paint and returning 0 loses nothing. }
+        if st^.NoFrame then Exit(0);
       end;
     WM_NCACTIVATE:
       begin
