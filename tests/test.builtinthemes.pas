@@ -27,6 +27,7 @@ type
     procedure TestNamesCountAndContents;
     procedure TestAllBuiltinsLoad;
     procedure TestAllBuiltinsDrawGapControls;
+    procedure TestEveryBuiltinCarriesTheEmbeddedEditVariant;
     procedure TestDraculaPalette;
     procedure TestNordPalette;
   end;
@@ -211,6 +212,50 @@ begin
       CheckMode(m, n[i], 'dark');
     finally m.Free; end;
   end;
+end;
+
+procedure TBuiltinThemesTest.TestEveryBuiltinCarriesTheEmbeddedEditVariant;
+{ A VARIANT does not survive a skin's base rule. Writing ANY TyEdit rule suppresses the whole
+  built-in rule set for that typeKey -- variants included -- so TyEdit.embedded, defined once in
+  light.tycss, reached exactly ONE of the seventeen built-in themes (classic, and only because
+  its plain TyEdit happens to have border-width 0 anyway). The editable combo box went on drawing
+  its second frame under every other theme, and the headless suite was perfectly green, because
+  nothing resolved the variant.
+
+  So this asserts the property that actually matters: under EVERY built-in theme, an embedded
+  edit has no frame. It is also the guard for the next skin someone adds -- copy a skin, forget
+  these three lines, and this goes red instead of the defect coming back six months later. }
+var
+  n: TStringArray;
+  i, md: Integer;
+  m: TTyStyleModel;
+  base, emb: TTyStyleSet;
+  bad: string;
+begin
+  n := TyBuiltinThemeNames;
+  bad := '';
+  for i := 0 to High(n) do
+  begin
+    m := TTyStyleModel.Create;
+    try
+      m.LoadFromCss(TyBuiltinThemeCss(n[i]));
+      { A dual-mode theme leaves its @mode-only vars undefined until a mode is seeded, and
+        resolving without one RAISES rather than returning a default -- see the sibling
+        TestAllBuiltinsDrawGapControls, which walks both modes for the same reason. }
+      for md := 0 to 1 do
+      begin
+        if md = 0 then m.SetMode('light') else m.SetMode('dark');
+        base := m.ResolveStyle('TyEdit', '', []);
+        emb  := m.ResolveStyle('TyEdit', 'embedded', []);
+        if emb.BorderWidth <> 0 then
+          bad := bad + LineEnding + '  ' + n[i] + ' (' + BoolToStr(md = 0, 'light', 'dark') +
+                 '): TyEdit.embedded border-width = ' + IntToStr(emb.BorderWidth) +
+                 ' (plain TyEdit is ' + IntToStr(base.BorderWidth) + ')';
+      end;
+    finally m.Free; end;
+  end;
+  AssertEquals('themes whose embedded edit still draws a frame, so an editable combo box shows' +
+    ' two:' + bad, '', bad);
 end;
 
 procedure TBuiltinThemesTest.TestDraculaPalette;

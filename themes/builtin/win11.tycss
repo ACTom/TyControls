@@ -162,6 +162,14 @@ TyEdit          { background: var(--field); color: var(--ink); border-color: var
 TyEdit:hover    { border-color: var(--border-hover); }
 TyEdit:focus    { border-color: var(--accent); outline: 2px var(--accent); }
 TyEdit:disabled { background: var(--field-disabled); color: var(--disabled-ink); }
+/* An edit EMBEDDED in another control's field -- the editable combo box puts a real TTyEdit
+   over its text zone. The host already drew the field and owns the focus ring; a second frame
+   inside the first is what pushed the drop chevron into the gap between them. This has to be
+   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole
+   built-in TyEdit rule set for this typeKey -- variants included. */
+TyEdit.embedded         { border-width: 0; border-radius: 0; }
+TyEdit.embedded:hover   { border-color: transparent; }
+TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }
 
 TyComboBox          { background: var(--field); color: var(--ink); border-color: var(--border); border-width: 1px; border-radius: var(--radius); padding: 5px 8px; }
 TyComboBox:hover    { border-color: var(--border-hover); }

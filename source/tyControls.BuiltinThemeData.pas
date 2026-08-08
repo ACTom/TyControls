@@ -80,6 +80,14 @@ begin
     'TyEdit:hover    { border-color: var(--input-border-hover); }' + LineEnding +
     'TyEdit:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
     'TyEdit:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
+    '/* An edit EMBEDDED in another control''s field -- the editable combo box puts a real TTyEdit' + LineEnding +
+    '   over its text zone. The host already drew the field and owns the focus ring; a second frame' + LineEnding +
+    '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
+    '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
+    '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
+    'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
     'TyCheckBox {' + LineEnding +
     '  background: var(--input-bg);' + LineEnding +
@@ -716,6 +724,14 @@ begin
     'TyEdit:hover    { border-color: var(--input-border-hover); }' + LineEnding +
     'TyEdit:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
     'TyEdit:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
+    '/* An edit EMBEDDED in another control''s field -- the editable combo box puts a real TTyEdit' + LineEnding +
+    '   over its text zone. The host already drew the field and owns the focus ring; a second frame' + LineEnding +
+    '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
+    '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
+    '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
+    'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
     'TyCheckBox {' + LineEnding +
     '  background: var(--input-bg);' + LineEnding +
@@ -1323,6 +1339,14 @@ begin
     'TyEdit:hover      { border-color: darken(var(--border), 8); }' + LineEnding +
     'TyEdit:focus      { border-color: var(--accent); outline: 2 alpha(var(--accent), 0.45); outline-offset: 1; }' + LineEnding +
     'TyEdit:disabled   { background: var(--window); color: var(--muted); border-color: lighten(var(--border), 3); }' + LineEnding +
+    '/* An edit EMBEDDED in another control''s field -- the editable combo box puts a real TTyEdit' + LineEnding +
+    '   over its text zone. The host already drew the field and owns the focus ring; a second frame' + LineEnding +
+    '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
+    '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
+    '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
+    'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
     'TyComboBox        { background: var(--field); color: var(--ink); border: 1px solid var(--border); border-radius: 6; padding: 5px 8px; }' + LineEnding +
     'TyComboBox:hover  { border-color: darken(var(--border), 8); }' + LineEnding +
@@ -1762,6 +1786,14 @@ begin
     'TyEdit:hover    { border-color: var(--field-focus); }' + LineEnding +
     'TyEdit:focus    { border-color: var(--field-focus); outline: 2px var(--focus-ring); }' + LineEnding +
     'TyEdit:disabled { opacity: 0.5; }' + LineEnding +
+    '/* An edit EMBEDDED in another control''s field -- the editable combo box puts a real TTyEdit' + LineEnding +
+    '   over its text zone. The host already drew the field and owns the focus ring; a second frame' + LineEnding +
+    '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
+    '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
+    '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
+    'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
     'TyComboBox {' + LineEnding +
     '  background: var(--field-bg);' + LineEnding +
@@ -2054,6 +2086,14 @@ begin
     'TyEdit:hover      { border-color: lighten(var(--accent), 12); }' + LineEnding +
     'TyEdit:focus      { border-color: var(--accent); outline: 2 alpha(var(--accent), 0.12); outline-offset: 0; }' + LineEnding +
     'TyEdit:disabled   { background: var(--disabled-fill); color: var(--ink-disabled); border-color: var(--border); }' + LineEnding +
+    '/* An edit EMBEDDED in another control''s field -- the editable combo box puts a real TTyEdit' + LineEnding +
+    '   over its text zone. The host already drew the field and owns the focus ring; a second frame' + LineEnding +
+    '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
+    '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
+    '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
+    'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
     'TyComboBox          { background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: 6; padding: 4px 11px; }' + LineEnding +
     'TyComboBox:hover    { border-color: lighten(var(--accent), 12); }' + LineEnding +
@@ -2410,6 +2450,14 @@ begin
     '  color: var(--muted);' + LineEnding +
     '  border-color: var(--field-border);' + LineEnding +
     '}' + LineEnding +
+    '/* An edit EMBEDDED in another control''s field -- the editable combo box puts a real TTyEdit' + LineEnding +
+    '   over its text zone. The host already drew the field and owns the focus ring; a second frame' + LineEnding +
+    '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
+    '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
+    '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
+    'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
     'TyComboBox {' + LineEnding +
     '  background: var(--surface);' + LineEnding +
@@ -2716,6 +2764,14 @@ begin
     'TyEdit:hover    { border-color: var(--field-hover-brd); }' + LineEnding +
     'TyEdit:focus    { border-color: var(--accent); outline: 1 alpha(var(--accent), 0.5); outline-offset: 0px; }' + LineEnding +
     'TyEdit:disabled { background: var(--field-disabled); color: var(--ink-disabled); border-color: var(--border-disabled); }' + LineEnding +
+    '/* An edit EMBEDDED in another control''s field -- the editable combo box puts a real TTyEdit' + LineEnding +
+    '   over its text zone. The host already drew the field and owns the focus ring; a second frame' + LineEnding +
+    '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
+    '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
+    '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
+    'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
     'TyComboBox          { render-style: flat; background: var(--field); color: var(--ink); border: 1px solid var(--field-border); border-radius: 3; padding: 4px 6px; }' + LineEnding +
     'TyComboBox:hover    { border-color: var(--field-hover-brd); }' + LineEnding +
@@ -2917,6 +2973,14 @@ begin
     '' + LineEnding +
     '/* Fields: sunken white wells. */' + LineEnding +
     'TyEdit          { render-style: inset3d; background: var(--field); color: var(--ink); padding: 4px 6px; }' + LineEnding +
+    '/* An edit EMBEDDED in another control''s field -- the editable combo box puts a real TTyEdit' + LineEnding +
+    '   over its text zone. The host already drew the field and owns the focus ring; a second frame' + LineEnding +
+    '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
+    '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
+    '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
+    'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     'TyComboBox      { render-style: inset3d; background: var(--field); color: var(--ink); padding: 4px 6px; }' + LineEnding +
     '' + LineEnding +
     '/* Check box: a white well with a grey border (the indicator box is stroked, not beveled). */' + LineEnding +
@@ -3159,6 +3223,14 @@ begin
     'TyEdit:hover    { border-color: var(--btn-hover-bord); }' + LineEnding +
     'TyEdit:focus    { border-color: var(--accent); outline: 2px alpha(var(--accent), 0.3); outline-offset: 1px; }' + LineEnding +
     'TyEdit:disabled { opacity: var(--disabled); }' + LineEnding +
+    '/* An edit EMBEDDED in another control''s field -- the editable combo box puts a real TTyEdit' + LineEnding +
+    '   over its text zone. The host already drew the field and owns the focus ring; a second frame' + LineEnding +
+    '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
+    '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
+    '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
+    'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
     'TyComboBox {' + LineEnding +
     '  background: var(--field);' + LineEnding +
@@ -3447,6 +3519,14 @@ begin
     'TyEdit:hover    { border-color: var(--field-hover-border); }' + LineEnding +
     'TyEdit:focus    { border-color: var(--accent); outline: 3 alpha(var(--accent), 0.35); outline-offset: 0; }' + LineEnding +
     'TyEdit:disabled { background: var(--field-disabled-bg); color: var(--field-disabled-ink); border-color: var(--field-disabled-border); }' + LineEnding +
+    '/* An edit EMBEDDED in another control''s field -- the editable combo box puts a real TTyEdit' + LineEnding +
+    '   over its text zone. The host already drew the field and owns the focus ring; a second frame' + LineEnding +
+    '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
+    '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
+    '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
+    'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
     'TyComboBox          { background: var(--field); color: var(--ink); border: 1px solid var(--border); border-radius: 6; padding: 4px 8px; }' + LineEnding +
     'TyComboBox:hover    { border-color: var(--field-hover-border); }' + LineEnding +
@@ -3619,6 +3699,14 @@ begin
     'TyEdit:hover    { border-color: var(--ink); }' + LineEnding +
     'TyEdit:focus    { border: 2px solid var(--primary); }' + LineEnding +
     'TyEdit:disabled { background: alpha(var(--ink), 0.04); color: alpha(var(--ink), 0.38); border-color: alpha(var(--ink), 0.12); }' + LineEnding +
+    '/* An edit EMBEDDED in another control''s field -- the editable combo box puts a real TTyEdit' + LineEnding +
+    '   over its text zone. The host already drew the field and owns the focus ring; a second frame' + LineEnding +
+    '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
+    '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
+    '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
+    'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
     'TyComboBox          { background: var(--field); color: var(--ink); border: 1px solid var(--outline); border-radius: 4px; padding: 4px 8px; }' + LineEnding +
     'TyComboBox:hover    { border-color: var(--ink); }' + LineEnding +
@@ -3869,6 +3957,14 @@ begin
     'TyEdit:hover    { border: 1px solid var(--ink); }' + LineEnding +
     'TyEdit:focus    { border: 1px solid var(--accent); outline: 2px alpha(var(--accent), 0.35); outline-offset: 0px; }' + LineEnding +
     'TyEdit:disabled { background: var(--surface); color: var(--muted); border: 1px solid var(--line); }' + LineEnding +
+    '/* An edit EMBEDDED in another control''s field -- the editable combo box puts a real TTyEdit' + LineEnding +
+    '   over its text zone. The host already drew the field and owns the focus ring; a second frame' + LineEnding +
+    '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
+    '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
+    '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
+    'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
     'TyComboBox {' + LineEnding +
     '  background: var(--field);' + LineEnding +
@@ -4123,6 +4219,14 @@ begin
     'TyEdit:hover    { border-color: var(--input-border-hover); }' + LineEnding +
     'TyEdit:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
     'TyEdit:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
+    '/* An edit EMBEDDED in another control''s field -- the editable combo box puts a real TTyEdit' + LineEnding +
+    '   over its text zone. The host already drew the field and owns the focus ring; a second frame' + LineEnding +
+    '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
+    '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
+    '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
+    'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
     'TyCheckBox {' + LineEnding +
     '  background: var(--input-bg);' + LineEnding +
@@ -4695,6 +4799,14 @@ begin
     'TyEdit          { background: var(--field); color: var(--ink); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; }' + LineEnding +
     'TyEdit:focus    { border-color: var(--accent); outline: 2px alpha(var(--accent), 0.30); outline-offset: 0px; }' + LineEnding +
     'TyEdit:disabled { background: darken(var(--field), 3%); color: var(--muted); }' + LineEnding +
+    '/* An edit EMBEDDED in another control''s field -- the editable combo box puts a real TTyEdit' + LineEnding +
+    '   over its text zone. The host already drew the field and owns the focus ring; a second frame' + LineEnding +
+    '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
+    '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
+    '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
+    'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     'TyComboBox          { background: var(--field); color: var(--ink); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; }' + LineEnding +
     'TyComboBox:focus    { border-color: var(--accent); outline: 2px alpha(var(--accent), 0.30); }' + LineEnding +
     'TyComboBox:disabled { background: darken(var(--field), 3%); color: var(--muted); }' + LineEnding +
@@ -4904,6 +5016,14 @@ begin
     'TyEdit:hover    { border: 1px solid var(--field-hover-border); }' + LineEnding +
     'TyEdit:focus    { border: 1px solid var(--accent); }' + LineEnding +
     'TyEdit:disabled { background: var(--surface); color: var(--ink-dim); border: 1px solid var(--disabled-border); }' + LineEnding +
+    '/* An edit EMBEDDED in another control''s field -- the editable combo box puts a real TTyEdit' + LineEnding +
+    '   over its text zone. The host already drew the field and owns the focus ring; a second frame' + LineEnding +
+    '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
+    '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
+    '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
+    'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
     'TyComboBox          { render-style: flat; background: var(--field); color: var(--ink); border: 1px solid var(--field-border); border-radius: 0; padding: 4px; }' + LineEnding +
     'TyComboBox:hover    { border: 1px solid var(--field-hover-border); }' + LineEnding +
@@ -5149,6 +5269,14 @@ begin
     'TyEdit:hover    { border-color: var(--border-hover); }' + LineEnding +
     'TyEdit:focus    { border-color: var(--accent); outline: 2px var(--accent); }' + LineEnding +
     'TyEdit:disabled { background: var(--field-disabled); color: var(--disabled-ink); }' + LineEnding +
+    '/* An edit EMBEDDED in another control''s field -- the editable combo box puts a real TTyEdit' + LineEnding +
+    '   over its text zone. The host already drew the field and owns the focus ring; a second frame' + LineEnding +
+    '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
+    '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
+    '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
+    'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
     'TyComboBox          { background: var(--field); color: var(--ink); border-color: var(--border); border-width: 1px; border-radius: var(--radius); padding: 5px 8px; }' + LineEnding +
     'TyComboBox:hover    { border-color: var(--border-hover); }' + LineEnding +
@@ -5419,6 +5547,14 @@ begin
     'TyEdit:hover    { border-color: var(--accent); }' + LineEnding +
     'TyEdit:focus    { border-color: var(--focus); outline: 2px var(--focus); }' + LineEnding +
     'TyEdit:disabled { opacity: 0.5; }' + LineEnding +
+    '/* An edit EMBEDDED in another control''s field -- the editable combo box puts a real TTyEdit' + LineEnding +
+    '   over its text zone. The host already drew the field and owns the focus ring; a second frame' + LineEnding +
+    '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
+    '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
+    '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
+    'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
     'TyComboBox {' + LineEnding +
     '  background: var(--field);' + LineEnding +
