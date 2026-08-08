@@ -963,10 +963,18 @@ begin
     AssertTrue('builtin has primary', list.IndexOf('primary') >= 0);
     AssertTrue('builtin has danger',  list.IndexOf('danger')  >= 0);
     AssertTrue('builtin has ghost',   list.IndexOf('ghost')   >= 0);
-    // variants do not leak to other control types
+    // Variants do not LEAK across control types. TyEdit is the probe because it is a styled
+    // control that shares none of TyButton's classes; it used to have no variants at all, and
+    // then gained exactly one (`embedded`, the frameless editor a combo box puts over its text
+    // zone), so the assertion is on the CONTENT, not on emptiness -- an empty list would pass
+    // even if GetVariantsForType were broken outright.
     list.Clear;
     m.GetVariantsForType('TyEdit', list);
-    AssertEquals('TyEdit has no variants', 0, list.Count);
+    AssertTrue('TyEdit keeps its own variant',  list.IndexOf('embedded') >= 0);
+    AssertTrue('primary does not leak to TyEdit', list.IndexOf('primary') < 0);
+    AssertTrue('danger does not leak to TyEdit',  list.IndexOf('danger')  < 0);
+    AssertTrue('ghost does not leak to TyEdit',   list.IndexOf('ghost')   < 0);
+    AssertEquals('TyEdit has exactly one variant', 1, list.Count);
     // after loading a custom theme, the new class appears and is deduped (.cta and .cta:hover count once)
     list.Clear;
     m.LoadFromCss('TyButton.cta { background:#FF0000; } TyButton.cta:hover { background:#EE0000; }');

@@ -692,6 +692,13 @@ begin
   FShowingPopup := False;
   FEditor := TTyEdit.Create(Self);
   FEditor.Parent := Self;
+  { The combo has ALREADY drawn the field -- background, border, radius -- and owns the focus
+    ring. Without this the editor drew a SECOND rounded frame inside the first, and the drop
+    chevron ended up in the gap between the two, which is what "the arrow is jammed against the
+    edge in editable mode" turned out to be: the chevron never moved (measured 3px from the
+    outer border in BOTH styles), the inner box appeared next to it. The class is a themed
+    variant, not a hardcoded look -- see TyEdit.embedded in themes/light.tycss. }
+  FEditor.StyleClass := 'embedded';
   FEditor.Visible := False;
   FEditor.OnChange  := @EditorChange;
   FEditor.OnExit    := @EditorExit;

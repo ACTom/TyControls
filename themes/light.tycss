@@ -297,6 +297,18 @@ TyEdit:hover    { border-color: var(--input-border-hover); }
 TyEdit:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
 TyEdit:disabled { opacity: var(--disabled-opacity); }
 
+/* An edit EMBEDDED in another control's field. The editable combo box puts a real TTyEdit over
+   its text zone, and that editor was drawing its OWN field frame INSIDE the combo's -- two
+   rounded borders, with the drop chevron squeezed into the gap between them. The host already
+   drew the field (background, border, radius) and owns the focus ring; the embedded editor
+   carries the text and the caret only.
+   The BACKGROUND is deliberately left to the base rule rather than set transparent: this is a
+   windowed control, and a transparent windowed control erases to its parent's LCL Color, not to
+   the field its host painted. */
+TyEdit.embedded         { border-width: 0; border-radius: 0; }
+TyEdit.embedded:hover   { border-color: transparent; }
+TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }
+
 TyCheckBox {
   background: var(--input-bg);
   color: var(--on-surface);
