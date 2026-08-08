@@ -1514,8 +1514,13 @@ type
     { 按内容与视口决定两条滚动条的可见性、范围与位置。 }
     procedure UpdateScrollBars; virtual;
     { 把当前滚动量推给滑块。**每一次程序性滚动都必须调它** —— 滚轮、键盘跟随、
-      ScrollIntoView 改的都只是 FScrollX/Y,不同步的话内容滚了滑块还停在原处。 }
-    procedure SyncScrollBars;
+      ScrollIntoView 改的都只是 FScrollX/Y,不同步的话内容滚了滑块还停在原处。
+
+      virtual 的理由和旁边的 UpdateScrollBars 一样,而且是被这一条逼出来的:
+      这两个方法头上原本各有一句 `if (FVScroll = nil) or (FHScroll = nil) then Exit`,
+      而"那扇窗到底开不开"只能拿探针去数,数不到就没法判它是守卫还是死码
+      (测量记录在实现处)。没有这个座,SyncScrollBars 那一条就只能靠读代码猜。 }
+    procedure SyncScrollBars; virtual;
     procedure Resize; override;
   public
     constructor Create(AOwner: TComponent); override;
@@ -4179,7 +4184,26 @@ end;
 
 procedure TTyCustomGrid.SyncScrollBars;
 begin
-  if (FVScroll = nil) or (FHScroll = nil) then Exit;
+  { **这里原来有一句 `if (FVScroll = nil) or (FHScroll = nil) then Exit`,量过之后删的。**
+
+    两个字段能是 nil 的窗口只有一个:构造函数里,两条条是**最末尾**才建的,而在它们
+    之前构造函数已经跑了一大段(FHeader.OnChange、FRowCount、各种默认值)。除此之外
+    再无窗口 —— 网格没有为这两条写 Notification,析构里也不置 nil。所以析构之后它们是
+    **野指针而不是 nil**,判空在那边一点忙都帮不上;那一侧真正的护栏是
+    UpdateScrollBars 头上的 csDestroying(而 SyncScrollBars 够不着析构:它只有
+    SetScrollX / SetScrollY 两个调用者,TTyScrollBar 的析构不发 OnChange)。
+
+    实测(tests/test.grid.pas 的 TTyGridScrollBarNilWindowTest):拿一个把两个方法都
+    覆写掉的探针网格去数,**整个构造过程中这两个方法各进了 0 次** —— 挂 Parent 那一下
+    LCL 因为网格自己还没有 Parent 和句柄而把对齐整个推迟了(AutoSizeDelayed)。同一个
+    探针在随后的完整生命周期里数到 UpdateScrollBars 27 次、SyncScrollBars 3 次,
+    带 nil 的 0 次。留着就是一条永远走不到、也没法让它变红的分支。
+
+    真要有人在 `FHeader.OnChange := @HeaderChanged` 与
+    `FVScroll := TTyScrollBar.Create(Self)` 之间插一句会碰表头/行数的代码
+    (HeaderChanged / SetRowCount 都通向 UpdateScrollBars),窗口就活了 —— 那时探针
+    那条测试先红,而修法是把两条滚动条挪到构造函数**前面**去,不是在这里补 nil。
+    同一段推理见 GetOptions 里 goThumbTracking 那一行(30da2e0)。 }
   if FSyncingScroll then Exit;      { 正在由 UpdateScrollBars 推值,别自己撞自己 }
   FSyncingScroll := True;
   try
@@ -4251,6 +4275,8 @@ begin
     都没有在 nil 状态下进去过 —— 挂 Parent 那一下 LCL 因为网格自己还没有 Parent
     和句柄而把对齐整个推迟了(AutoSizeDelayed)。加了判断就是一条永远走不到、
     也没法让它变红的分支。
+    后话:那两句"看着像证据"的判空后来也各自量过,同样进不去,已经删掉 ——
+    完整测量记在 SyncScrollBars 的实现处。所以现在这三处是一条推理,不是三条。
     真要有人在构造函数里 `FHeader.OnChange := @HeaderChanged` 与
     `FVScroll := TTyScrollBar.Create(Self)` 之间插一句会碰表头/行数的代码
     (HeaderChanged / SetRowCount 都通向 UpdateScrollBars),这个窗口才会活过来
@@ -4419,8 +4445,11 @@ var
   sb, vw, vh, pass, bodyH, bodyW, maxV, maxH: Integer;
   needV, needH: Boolean;
 begin
+  { csDestroying 留着,判空删了 —— 两句看着像一对,实际管的是**两件事**。
+    析构那一侧:两个字段那时是野指针而不是 nil,判空救不了,csDestroying 才是护栏。
+    构造那一侧:那扇窗量过,一次都没开过 —— 完整的测量与"窗口真活了要怎么修"
+    记在 SyncScrollBars 的实现处,一处,别再抄一份。 }
   if csDestroying in ComponentState then Exit;
-  if (FVScroll = nil) or (FHScroll = nil) then Exit;
 
   sb := ScaleI(ActiveController.Metric('--scrollbar-size', TyScrollbarSize));
   needV := False;

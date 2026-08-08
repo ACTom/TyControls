@@ -835,7 +835,39 @@ end;
 
   Deliberately NOT a second copy of that arithmetic: see the FVBarRect declaration for what
   the second copy cost. When the bars are already there (the viewport case -- FContent.ScrollBy
-  never touches them) every call here is a no-op that LCL's SetBounds drops on the floor. }
+  never touches them) every call here is a no-op that LCL's SetBounds drops on the floor.
+
+  WHY THE `.Visible and` STAYS, so nobody "fixes" it again.
+
+  It is true, and it was measured, that a HIDDEN bar drifts: LCL's TWinControl.ScrollBy
+  (wincontrol.inc:6255) walks Controls[] and SetBounds every child unconditionally, Visible or
+  not, so the no-viewport path moves both bars and this restores only the visible one. A hidden
+  horizontal bar really does end up at (0,-43) after scrolling down 43px.
+
+  It is not observable, and that is not a guess either. Every read of a bar's geometry in this
+  unit -- LeadingInset, GetClientRect, AdjustClientRect, the wheel clamp, the offset sync, Paint
+  -- is gated on `.Visible`, and the bar's Left/Top are never read anywhere at all; only
+  written. The one moment a stale position could show is the moment the bar becomes visible, and
+  MeasureAndDock assigns BoundsRect before `Visible := True` in BOTH arms, so it cannot. Pinned
+  from both directions by TestHiddenBarIsDockedTheMomentItIsFirstShown (first reveal) and
+  TestHiddenBarIsDockedWhenItComesBackAfterBeingHidden (hidden and shown again); each asserts
+  the drift first, so if the drift ever stops happening the guards say so instead of passing
+  while testing nothing.
+
+  And the tempting one-line change -- dropping `.Visible and` -- does NOT fix the case that
+  prompted this note. What is left of the condition is `not IsRectEmpty(FHBarRect)`, and
+  FHBarRect is empty until the bar's first dock, which is exactly the (0,-43) bar: it never
+  moved off a gutter, it was never on one. The change would only pin bars that HAVE been docked
+  once, i.e. precisely the ones already provably harmless, while costing a SetBounds per hidden
+  bar per scroll step -- and SetBounds on a child is what the FVBarRect comment above exists to
+  stop paying.
+
+  That last paragraph is a measurement, not an argument. The change was applied as a mutant and
+  both guards were re-run: the never-docked case STILL drifted -- its precondition held and the
+  test passed completely unchanged -- and the only thing that moved was the docked-then-hidden
+  case, whose bar stopped drifting (its Top read 187 before and after the scroll, where the real
+  code moves it). So the one-liner buys exactly the half that was already provably harmless, and
+  leaves the reported bar where it was. Measured, understood, left alone. }
 procedure TTyScrollBox.RedockBars;
 begin
   if (FVScrollBar <> nil) and FVScrollBar.Visible and not IsRectEmpty(FVBarRect) then

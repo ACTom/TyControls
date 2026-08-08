@@ -384,6 +384,20 @@ function TyToolbarLayout(const AItemSizes: array of TSize;
 
 > **无断行时与从前逐像素相同。** 不带 `ABreakBefore` 的重载是一次**纯转发**，不是第二份循环——只有一份实现，所以"没设断行就跟以前一模一样"是构造上成立的，不靠两份代码互相看齐。
 
+#### 装不下的时候：行往上让，底边那条线不让
+
+`TyToolbarLayout` 只管排布，不知道工具条有多高；把结果按到子控件上去的是 `AlignControls`，行会不会顶出工具条也在那一步决定。
+
+`Align = alTop` / `alBottom` 的工具条**会自己长高**到 `ContentPadY × 2 + 行数 × 行高 + 行间距`，所以内容永远装得下。**其余对齐方式没有这条退路**——`alNone`（放进 `TTyCoolBar` 波段、`TTyControlBar` 行，或手工摆在面板上的工具条都是这个）、`alLeft` / `alRight` / `alClient` 的高度由宿主给定，内容比它高时行就会伸进工具条**底边那条 1px 主题线**所在的那一条像素带。
+
+伸进去的后果不是"画在线上面"，而是**把线擦掉**：工具按钮是**窗口化**子控件，它在父控件之后绘制，并把自己整个矩形擦成表面色。现象是底边线只在按钮之间的缝隙里还看得见。
+
+现在的规则:**整体上移，不压扁**。压扁没用——子控件自己的 `Constraints.MinHeight` 会被 `SetBounds` 原样顶回去。上移的额度以 `ContentPadY` 为上限（第一行不许被推到工具条外面）；内容比工具条高出的部分超过这个额度时（比如 20px 高的工具条里排五行），行仍会碰到底边——那时"内容看得见"优先于"保住一条 1px 的线"。
+
+会自动长高的工具条**一个像素都不动**：钳制读的是这一趟**即将**长到的高度，而不是它进来时的旧高度。
+
+守卫在 `tests/test.toolbar.pas` 的 `TToolBarBottomBorderTest`：一半量绘制（底边那条线确实是最后 `BottomBorderPx` 行，且**只有**那几行），一半量排布（没有任何子控件伸进去）；每一条都先断言自己的前提，免得主题或字体一变就变成"绿的但什么也没测"。`TTyToolBarEx` 在自己的 `AlignControls` 里有同一条规则（守卫在 `test.toolbarex.pas`）。
+
 ### 支持的伪类状态
 
 `TTyToolBar` 未重写 `CurrentStates`，且作为容器不跟踪 hover/pressed/focus，实际渲染时始终使用 `CurrentStyle`（`tysNormal` 基础样式）。因此内置主题**未为工具条定义任何伪类规则**（无 `:hover` / `:focus` / `:active` / `:disabled`），其外观仅由基础规则决定。

@@ -35,6 +35,26 @@ type
     procedure TestHeaderCaptionIndentsForColumnImage;
   end;
 
+  { **测量**,不是行为断言:UpdateScrollBars / SyncScrollBars 头上那两句
+    `if (FVScroll = nil) or (FHScroll = nil) then Exit` 究竟够不够得着。
+
+    这两个字段只在**构造函数**里可能是 nil —— 网格没有为它们写 Notification,
+    析构里也不置 nil(那时它们是**野指针**,不是 nil,判空一样救不了,见实现处的
+    注释)。所以整件事化约成一句:构造过程中有没有人从 nil 状态进过这两个方法。
+
+    30da2e0 拿一个覆写 UpdateScrollBars 的探针量过一次,结论是"进不去",并据此
+    删掉了 GetOptions 里同形状的判断;但那次量的是 GetOptions 的前提,这两个调用点
+    只是"顺带看着也像死码",没有各自量过。这里给两个都量。 }
+  TTyGridScrollBarNilWindowTest = class(TTestCase)
+  private
+    FForm: TForm;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestNeitherScrollBarHookIsEverEnteredWithANilBar;
+  end;
+
   { 纯自绘网格:内容全部来自宿主事件。 }
   TTyDrawGridTest = class(TTestCase)
   private
@@ -416,6 +436,27 @@ type
 implementation
 
 type
+  { 探针:数这两个方法各被进了多少次,其中多少次是**进来时**两条内嵌滚动条里有 nil 的。
+
+    覆写里刻意在 nil 时**不调 inherited** —— 这里是测量,不是给 nil 兜底。真让它走下去
+    就是一次 AV,那样测出来的是"崩没崩",而不是"那扇窗开没开几次"。 }
+  TScrollBarNilProbeGrid = class(TTyStringGrid)
+  private
+    FUpdCount, FUpdNil, FSyncCount, FSyncNil: Integer;
+    function BarsIncomplete: Boolean;
+  protected
+    procedure UpdateScrollBars; override;
+    procedure SyncScrollBars; override;
+  public
+    { 走公开路径滚动:TopRow -> SetScrollY -> SyncScrollBars。留一个直接的口子是因为
+      SetScrollX 那一侧没有等价的公开属性(LeftCol 有,但它按列钳制,滚不到任意值)。 }
+    procedure ScrollToXY(AX, AY: Integer);
+    property UpdCount: Integer read FUpdCount;
+    property UpdNil: Integer read FUpdNil;
+    property SyncCount: Integer read FSyncCount;
+    property SyncNil: Integer read FSyncNil;
+  end;
+
   { 够到 protected 的几何装配接缝。 }
   TGridAccess = class(TTyCustomGrid)
   public
@@ -425,6 +466,33 @@ type
     function ColLeft(ACol: Integer): Integer;
     procedure DoRenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
   end;
+
+{ TScrollBarNilProbeGrid }
+
+function TScrollBarNilProbeGrid.BarsIncomplete: Boolean;
+begin
+  Result := (VScrollBar = nil) or (HScrollBar = nil);
+end;
+
+procedure TScrollBarNilProbeGrid.UpdateScrollBars;
+begin
+  Inc(FUpdCount);
+  if BarsIncomplete then begin Inc(FUpdNil); Exit; end;
+  inherited UpdateScrollBars;
+end;
+
+procedure TScrollBarNilProbeGrid.SyncScrollBars;
+begin
+  Inc(FSyncCount);
+  if BarsIncomplete then begin Inc(FSyncNil); Exit; end;
+  inherited SyncScrollBars;
+end;
+
+procedure TScrollBarNilProbeGrid.ScrollToXY(AX, AY: Integer);
+begin
+  ScrollX := AX;
+  ScrollY := AY;
+end;
 
 procedure TGridAccess.DoRenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
@@ -982,6 +1050,65 @@ begin
     Bmp.Free;
     Ctl.Free;
   end;
+end;
+
+{ ── UpdateScrollBars / SyncScrollBars 的判空:够得着吗 ────────────────────── }
+
+procedure TTyGridScrollBarNilWindowTest.SetUp;
+begin
+  FForm := TForm.CreateNew(nil);
+  FForm.SetBounds(0, 0, 600, 400);
+end;
+
+procedure TTyGridScrollBarNilWindowTest.TearDown;
+begin
+  FreeAndNil(FForm);
+end;
+
+procedure TTyGridScrollBarNilWindowTest.TestNeitherScrollBarHookIsEverEnteredWithANilBar;
+var
+  g: TScrollBarNilProbeGrid;
+  ctorUpd, ctorSync, ctorUpdNil, ctorSyncNil: Integer;
+  i: Integer;
+begin
+  { 一、构造窗口。两条滚动条是构造函数**最末尾**才建的,而在它们之前构造函数已经
+    设过 FHeader.OnChange、FRowCount、列宽默认值……只要那一段里有任何一句碰到
+    表头或行数(两者都通向 UpdateScrollBars),窗口就活了。这里数的就是这个。 }
+  g := TScrollBarNilProbeGrid.Create(FForm);
+  ctorUpd := g.UpdCount;
+  ctorSync := g.SyncCount;
+  ctorUpdNil := g.UpdNil;
+  ctorSyncNil := g.SyncNil;
+  AssertEquals('构造全程没有一次在 nil 状态下进 UpdateScrollBars', 0, ctorUpdNil);
+  AssertEquals('构造全程没有一次在 nil 状态下进 SyncScrollBars', 0, ctorSyncNil);
+
+  { 二、非空性。构造期进了几次不重要(实测两个都是 0 —— 挂 Parent 那一下 LCL 因为
+    网格还没有 Parent 和句柄而把整个对齐推迟了),但整条生命周期里必须真的进过,
+    否则上面两条断言是空的:一个从不被调用的方法当然"从没在 nil 下被调用"。 }
+  g.Parent := FForm;
+  g.SetBounds(0, 0, 300, 200);
+  for i := 0 to 7 do             { 两轴都溢出 -> 两条滚动条都要真的装配 }
+    (g.Header.Columns.Add as TTyColumn).Width := 90;
+  g.RowCount := 60;
+  g.ScrollToXY(40, 120);         { -> SetScrollX/SetScrollY -> SyncScrollBars }
+  g.TopRow := 5;                 { 公开路径,同样落到 SetScrollY }
+  g.Height := 150;               { -> Resize -> UpdateScrollBars }
+
+  AssertTrue('探针非空:UpdateScrollBars 真的被走过', g.UpdCount > ctorUpd);
+  AssertTrue('探针非空:SyncScrollBars 真的被走过', g.SyncCount > ctorSync);
+  AssertEquals('整条生命周期里 UpdateScrollBars 一次也没在 nil 下进来', 0, g.UpdNil);
+  AssertEquals('整条生命周期里 SyncScrollBars 一次也没在 nil 下进来', 0, g.SyncNil);
+
+  { 三、前置条件:两条条真的在,而不是"因为网格根本没装滚动条所以判空恒假"。 }
+  AssertTrue('前置:纵向滚动条建起来了', g.VScrollBar <> nil);
+  AssertTrue('前置:横向滚动条建起来了', g.HScrollBar <> nil);
+
+  { 四、把量到的数钉死。构造期是 **0 次**(不是"进了几次但都非 nil")—— 这比
+    "没在 nil 下进过"强得多,也正是删掉那两句判空的依据。谁要是把两条条的创建挪到
+    构造函数后面、或者在它们之前插一句碰表头/行数的代码,这一条先红,而且红在
+    "构造期进了 n 次"上,直指原因。 }
+  AssertEquals('构造期 UpdateScrollBars 进入次数', 0, ctorUpd);
+  AssertEquals('构造期 SyncScrollBars 进入次数', 0, ctorSync);
 end;
 
 procedure TTyDrawGridTest.SetUp;
@@ -11049,6 +11176,7 @@ end;
 
 initialization
   RegisterTest(TTyGridControlTest);
+  RegisterTest(TTyGridScrollBarNilWindowTest);
   RegisterTest(TTyDrawGridTest);
   RegisterTest(TTyStringGridTest);
 end.

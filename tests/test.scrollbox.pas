@@ -65,6 +65,11 @@ type
       真机计数见 tests/scrollcluster:12 步拖动 → 120 轮对齐(修后 24 轮)。 }
     procedure TestScrollLeavesTheBarsOnTheirGutter;
     procedure TestRepeatedScrollsNeverDriftTheBars;
+    { 上面两条只管**可见**的那两条。RedockBars 的条件里有 `.Visible and`,所以藏着的
+      那一条会被 ScrollBy 搬走再也放不回来 —— 这两条量的就是"它露面的那一刻在哪"。
+      判决记在 RedockBars 的注释里,别把这两条读成"漂移无害"的许可。 }
+    procedure TestHiddenBarIsDockedTheMomentItIsFirstShown;
+    procedure TestHiddenBarIsDockedWhenItComesBackAfterBeingHidden;
     { 论坛 #12/#15:滚轮第一格方向反。TestWheelScrollsVertically 测不到它 —— 它直接调
       DoMouseWheel,而真滚轮进来的是一条 LM_MOUSEWHEEL,先经 TControl.WMMouseWheel
       才到 DoMouseWheel。而且它只滚一格,"第一格和后面不一样"这种坏法要**连滚**才看得见。 }
@@ -692,6 +697,95 @@ begin
       vBefore.Top, SB.VBar.BoundsRect.Top);
   end;
   AssertTrue('前置条件:这 8 步真的滚出去了', SB.ScrollY > 0);
+end;
+
+{ ── 藏着的那一条:漂了,但没人看得见 ─────────────────────────────────────────
+
+  RedockBars 只放回**可见**的条,于是一条藏着的条会跟着每一次 ScrollBy 走。这是真的:
+  LCL 的 TWinControl.ScrollBy(wincontrol.inc:6255)无条件遍历 Controls[] 逐个
+  SetBounds,不看 Visible。ScrollBox 那一轮的日志里 `hbar visible=False (0,-43 ...)`
+  就是它 —— 注意 Left=0:那条**从来没停靠过**,所以它不是"被搬离了槽",而是还在出厂
+  位置 (0,0) 上被搬。
+
+  那一轮把它判成无害,理由是"MeasureAndDock 在它变可见之前会先停靠它"。这两条把那句话
+  变成可执行的断言:一条量**第一次**露面(FHBarRect 还是空的,补停帮不上忙的那种),
+  一条量藏起来又回来(FHBarRect 非空,补停本可以帮忙的那种)。两条都盯同一个不变量 ——
+  **可见的那一刻,它在自己的槽上**。
+
+  顺带说清一件这一轮里差点做错的事:那一轮提议的"一行修法 —— 把 `.Visible and` 去掉"
+  修不了它自己看见的那个现象。去掉之后条件里还剩 `not IsRectEmpty(FHBarRect)`,而
+  从没露过面的条 FHBarRect 恒为空,补停照样跳过它,(0,-43) 一模一样。 }
+
+procedure TTyScrollBoxTest.TestHiddenBarIsDockedTheMomentItIsFirstShown;
+var
+  SB: TScrollBoxAccess;
+  child: TControl;
+  bw, thick, drifted: Integer;
+begin
+  SB := TScrollBoxAccess.Create(FForm);
+  SB.Parent := FForm;
+  SB.Font.PixelsPerInch := 96;
+  SB.SetBounds(0, 0, 300, 200);
+  child := MakeChild(SB, 0, 0, 200, 900);   { 只纵向溢出 -> 只有纵条 }
+  SB.UpdateScrollRange;
+  AssertTrue('前置:纵条出来了', SB.VBar.Visible);
+  AssertFalse('前置:横条还藏着', SB.HBar.Visible);
+
+  SB.CallScrollByDelta(0, 60);
+  drifted := SB.HBar.Top;
+  AssertTrue(Format('前置:藏着的横条确实跟着漂了(top=%d)—— 这一条要是不成立,'
+    + '下面量的就不是这个题目了', [drifted]), drifted <> 0);
+
+  { 内容加宽,横条第一次露面。 }
+  child.Width := 900;
+  SB.UpdateScrollRange;
+  AssertTrue('横条露面了', SB.HBar.Visible);
+
+  bw := SB.Frame;
+  thick := SB.VBar.Width;      { 两条同厚 —— 就是 ScrollbarThick }
+  AssertEquals('露面时它左端贴着框内边,而不是停在漂过的位置',
+    bw, SB.HBar.Left);
+  AssertEquals('露面时它贴着框的下内边', SB.Height - thick - bw, SB.HBar.Top);
+  AssertTrue(Format('而且它确实不在漂过的位置上(漂到 %d,停在 %d)',
+    [drifted, SB.HBar.Top]), SB.HBar.Top <> drifted);
+end;
+
+procedure TTyScrollBoxTest.TestHiddenBarIsDockedWhenItComesBackAfterBeingHidden;
+var
+  SB: TScrollBoxAccess;
+  child: TControl;
+  bw, thick, docked, drifted: Integer;
+begin
+  { 第二条路:先让它露过面(于是 FHBarRect 非空),再藏起来漂,再回来。 }
+  SB := TScrollBoxAccess.Create(FForm);
+  SB.Parent := FForm;
+  SB.Font.PixelsPerInch := 96;
+  SB.SetBounds(0, 0, 300, 200);
+  child := MakeChild(SB, 0, 0, 900, 900);   { 两轴都溢出 }
+  SB.UpdateScrollRange;
+  AssertTrue('前置:两条都出来了', SB.VBar.Visible and SB.HBar.Visible);
+  docked := SB.HBar.Top;
+
+  child.Width := 100;                        { 横向装得下了 -> 横条收起来 }
+  SB.UpdateScrollRange;
+  AssertFalse('前置:横条藏起来了', SB.HBar.Visible);
+
+  SB.CallScrollByDelta(0, 60);
+  drifted := SB.HBar.Top;
+  AssertTrue(Format('前置:藏着之后它又漂了(%d -> %d)。这一条**红了不一定是坏事**:'
+    + '把 RedockBars 里的 `.Visible and` 去掉,停靠过的条就不再漂,这里就会红在 %d -> %d 上。'
+    + '真要那么改,先读 RedockBars 的注释 —— 那一改修不了它想修的那个现象'
+    + '(从没停靠过的条 FVBarRect/FHBarRect 恒为空,照样漏掉),代价是每条藏着的条'
+    + '每滚一步多一次 SetBounds。改完把这一条改成断言"不漂"。', [docked, drifted, docked, drifted]),
+    drifted <> docked);
+
+  child.Width := 900;                        { 回来 }
+  SB.UpdateScrollRange;
+  AssertTrue('横条又露面了', SB.HBar.Visible);
+  bw := SB.Frame;
+  thick := SB.VBar.Width;
+  AssertEquals('回来时仍旧贴着框内左边', bw, SB.HBar.Left);
+  AssertEquals('回来时仍旧贴着框的下内边', SB.Height - thick - bw, SB.HBar.Top);
 end;
 
 { ── 滚轮:第一格 ───────────────────────────────────────────────────────── }

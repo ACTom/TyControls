@@ -8,7 +8,8 @@ uses Classes, SysUtils, Types, Controls, Graphics, Forms, LCLType,
   tyControls.ImageCollection, tyControls.Menu,
   tyControls.GlyphButtons,   // TTyGlyphLayout + TTySpeedButton — the List tests speak both
   tyControls.DropButtons,    // TyDefaultDropArrowWidth — the drawn-split pixel test names it
-  tyControls.ToolBar, tyControls.Button;
+  tyControls.ToolBar, tyControls.Button,
+  tyControls.Panel;           // the tall child the bottom-border guards need (see there)
 type
   TToolBarGeomTest = class(TTestCase)
   published
@@ -36,11 +37,35 @@ type
   public
     procedure ForceLayout;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    { The two numbers the row shift is decided from. Opened for the same reason the Ex
+      accessor opens them: a guard that recomputed either would be asserting its own copy. }
+    function PadY: Integer;
+    function BorderPx: Integer;
   end;
 
   TToolBarControlTest = class(TTestCase)
   published
     procedure TestArrangesButtons;
+  end;
+
+  { THE alNone HOLE — the base bar's half of the border overpaint 3ac97c6 closed on
+    TTyToolBarEx. Its own section because every case needs a bar the align engine is NOT
+    allowed to grow, which is the opposite of what the rest of the suite sets up. }
+  TToolBarBottomBorderTest = class(TTestCase)
+  private
+    FForm: TForm;
+    function TallChild(ABar: TTyToolBar; AWidth, AMinHeight: Integer): TTyPanel;
+    function ShortRowBar(AWidth, AHeight: Integer): TTyToolBarAccess;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestBottomHairlineOccupiesTheEdgeRows;
+    procedure TestAlNoneBarKeepsItsRowOffTheBottomBorder;
+    procedure TestAlNoneWrappedRowsKeepTheLastRowOffTheBottomBorder;
+    procedure TestAlLeftBarIsClampedToo;
+    procedure TestFittingAlNoneBarIsUnmoved;
+    procedure TestAlTopBarGrowsInsteadOfShifting;
   end;
 
   { LCL's ButtonWidth rule, pure — the floor's style set and the AutoSize exemption. }
@@ -263,6 +288,16 @@ end;
 procedure TTyToolBarAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   inherited RenderTo(ACanvas, ARect, APPI);
+end;
+
+function TTyToolBarAccess.PadY: Integer;
+begin
+  Result := ContentPadY;
+end;
+
+function TTyToolBarAccess.BorderPx: Integer;
+begin
+  Result := BottomBorderPx(Font.PixelsPerInch);
 end;
 procedure TToolBarGeomTest.TestLayoutSingleRow;
 var r: TTyRectArray; rows: Integer;
@@ -1235,6 +1270,258 @@ begin
     Form.Free;
     Ctl.Free;
   end;
+end;
+
+{ ── the alNone bottom-border hole ─────────────────────────────────────────────
+  3ac97c6 closed this on TTyToolBarEx and reported the base bar as still open. The
+  mechanism is identical and worth restating, because it is NOT "the buttons are drawn over
+  the line": a tool child is a WINDOWED control, so it paints after its parent and ERASES
+  its whole rect to the surface colour. Any child whose rect reaches the last BottomBorderPx
+  rows WIPES the hairline. (The containers demo showed exactly that -- the line surviving
+  only in the gaps between buttons.)
+
+  What made it reachable on the base bar is narrower than on the Ex bar. The base already
+  takes the tallest Constraints.MinHeight in the row and lays out against it, so the row is
+  never ragged; but the only thing that kept the row INSIDE the bar was the auto-grow at the
+  end of AlignControls, and that runs for alTop/alBottom alone. Give the bar any other
+  Align -- alNone is the reported one, and it is what every bar hosted in a CoolBar band, a
+  ControlBar row or a hand-placed panel has -- and there is nothing to grow: the content
+  simply overflows the bottom border.
+
+  Two halves, as on the Ex bar, because each has its own way of going wrong: the PAINT side
+  (the hairline really is the last BottomBorderPx rows, at the EDGE) and the LAYOUT side (no
+  child ever reaches into them). Every layout case ASSERTS its own precondition, so a theme
+  or font change that stops producing the overflow fails loudly instead of passing while
+  testing nothing. }
+
+procedure TToolBarBottomBorderTest.SetUp;
+begin
+  FForm := TForm.CreateNew(nil);
+  FForm.SetBounds(0, 0, 600, 300);
+end;
+
+procedure TToolBarBottomBorderTest.TearDown;
+begin
+  FreeAndNil(FForm);
+end;
+
+{ A TTyPanel, not a TTyButton: a real button MEASURES its own caption and writes the answer
+  into Constraints.MinHeight, overwriting anything a test assigns, so the precondition "a
+  child refuses to be as short as ButtonHeight" could only be produced by whatever font
+  happens to be installed. A panel keeps the number it is given, which is what makes these
+  guards say the same thing on every machine. }
+function TToolBarBottomBorderTest.TallChild(ABar: TTyToolBar; AWidth, AMinHeight: Integer): TTyPanel;
+begin
+  Result := TTyPanel.Create(FForm);
+  Result.Parent := ABar;
+  Result.Width := AWidth;
+  Result.Constraints.MinHeight := AMinHeight;
+end;
+
+function TToolBarBottomBorderTest.ShortRowBar(AWidth, AHeight: Integer): TTyToolBarAccess;
+begin
+  Result := TTyToolBarAccess.Create(FForm);
+  Result.Parent := FForm;
+  Result.Font.PixelsPerInch := 96;
+  Result.Align := alNone;        // the hole: nothing will grow this bar
+  Result.Wrapable := False;
+  Result.ButtonHeight := 12;     // below the children's floors, so the floors decide the row
+  Result.SetBounds(0, 0, AWidth, AHeight);
+end;
+
+procedure TToolBarBottomBorderTest.TestBottomHairlineOccupiesTheEdgeRows;
+var
+  TB: TTyToolBarAccess;
+  bmp: TBitmap;
+  bw, W, H: Integer;
+  edge, above: TColor;
+begin
+  { The PAINT half. Probes the two rows that matter -- the last one (must be the border) and
+    the one just above the strip (must not be) -- so the strip is pinned to be exactly
+    BottomBorderPx tall AND at the edge. A centre probe is immune to every drift this can
+    suffer, which is why the existing TestBottomHairlineIsLighterThanBody (edge vs. mid-body,
+    on a hand-written theme) does not replace this one: it cannot see the strip getting
+    THICKER than the number the layout keeps its rows out of. }
+  W := 120; H := 32;
+  TB := ShortRowBar(W, H);
+  bw := TB.BorderPx;
+  AssertTrue('the bar really does stroke a bottom border under the ambient theme -- without '
+    + 'one every assertion in this section is vacuously true', bw >= 1);
+
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(W, H);
+    bmp.Canvas.Brush.Color := clBlack;
+    bmp.Canvas.FillRect(0, 0, W, H);
+    TB.RenderTo(bmp.Canvas, Rect(0, 0, W, H), 96);
+    edge  := bmp.Canvas.Pixels[W div 2, H - 1];          // last row: the hairline
+    above := bmp.Canvas.Pixels[W div 2, H - 1 - bw];     // first row the layout may use
+    AssertTrue('the hairline is not the black ground -- something was painted', edge <> clBlack);
+    AssertTrue('the row just above the strip is NOT the hairline, so the strip is exactly '
+      + 'BottomBorderPx tall and BottomBorderPx is what RenderTo actually strokes',
+      above <> edge);
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TToolBarBottomBorderTest.TestAlNoneBarKeepsItsRowOffTheBottomBorder;
+var
+  TB: TTyToolBarAccess;
+  i, bw, pad, bh: Integer;
+begin
+  { The regression guard for the reported hole, in its MINIMAL form: the bar is exactly as
+    tall as its content, so the row lands ON the hairline rather than hanging out of the bar
+    entirely. That is the shape the demo actually showed, and it is the one an off-by-a-pixel
+    fix would miss. }
+  bh := 30;
+  TB := ShortRowBar(400, 100);
+  TallChild(TB, 60, bh);
+  TallChild(TB, 60, bh);
+  TB.ForceLayout;
+
+  pad := TB.PadY;
+  bw := TB.BorderPx;
+  AssertTrue('there is a border strip to stay out of', bw >= 1);
+  AssertTrue(Format('precondition: the pad (%d) can absorb the stroke (%d) -- with less the '
+    + 'rows have nowhere to go and the guard below would be asserting the give-up branch',
+    [pad, bw]), pad >= bw);
+
+  { Height, not ClientHeight, is what the host sets; drive it so ClientHeight comes out at
+    exactly the content bottom whatever inset the frame takes. }
+  TB.Height := TB.Height + (pad + bh - TB.ClientHeight);
+  AssertEquals('the bar is now exactly as tall as its content', pad + bh, TB.ClientHeight);
+  AssertTrue('precondition: laid out at the plain pad the row WOULD reach into the hairline '
+    + '-- if this stops holding the guard has stopped exercising the defect',
+    pad + bh > TB.ClientHeight - bw);
+
+  TB.ForceLayout;
+  AssertEquals('the bar did NOT grow -- an alNone bar has nothing to grow into, which is '
+    + 'the whole reason the row has to move instead', pad + bh, TB.ClientHeight);
+  for i := 0 to TB.ControlCount - 1 do
+  begin
+    AssertTrue(Format('child %d (top=%d h=%d) must not reach into the bottom hairline '
+      + '(clientH=%d, border=%d)',
+      [i, TB.Controls[i].Top, TB.Controls[i].Height, TB.ClientHeight, bw]),
+      TB.Controls[i].Top + TB.Controls[i].Height <= TB.ClientHeight - bw);
+    { The exact top, not merely "somewhere above the line": the inequality on its own is also
+      satisfied by a shift that always spends the whole pad, which would move every bar that
+      overflows by one pixel as far as one that overflows by ten. }
+    AssertEquals(Format('child %d is shifted up by exactly the overflow, no more', [i]),
+      pad - bw, TB.Controls[i].Top);
+  end;
+end;
+
+procedure TToolBarBottomBorderTest.TestAlNoneWrappedRowsKeepTheLastRowOffTheBottomBorder;
+var
+  TB: TTyToolBarAccess;
+  i, bw, pad, bh, spacing, bottom, lowest: Integer;
+begin
+  { Multi-row. The shift is applied to EVERY row, so the guard is the LAST row's bottom --
+    a fix that only moved the row it was handed (the Ex bar has exactly one) would pass the
+    single-row case and fail here. }
+  bh := 30;
+  TB := ShortRowBar(160, 200);
+  TB.Wrapable := True;
+  TallChild(TB, 60, bh);
+  TallChild(TB, 60, bh);
+  TallChild(TB, 60, bh);        // 3 x 60 will not fit 160 wide -> two rows
+  TB.ForceLayout;
+
+  pad := TB.PadY;
+  bw := TB.BorderPx;
+  spacing := TB.ButtonSpacing;
+  AssertTrue('there is a border strip to stay out of', bw >= 1);
+
+  lowest := 0;
+  for i := 0 to TB.ControlCount - 1 do
+    if TB.Controls[i].Top + TB.Controls[i].Height > lowest then
+      lowest := TB.Controls[i].Top + TB.Controls[i].Height;
+  AssertTrue(Format('precondition: the children really did wrap onto a second row '
+    + '(lowest bottom = %d, one row would end at %d)', [lowest, pad + bh]),
+    lowest > pad + bh);
+
+  bottom := pad + 2*bh + spacing;    // the second row's bottom, un-shifted
+  TB.Height := TB.Height + (bottom - TB.ClientHeight);
+  AssertTrue('precondition: the last row WOULD reach into the hairline',
+    bottom > TB.ClientHeight - bw);
+
+  TB.ForceLayout;
+  for i := 0 to TB.ControlCount - 1 do
+    AssertTrue(Format('child %d (top=%d h=%d) must clear the hairline (clientH=%d, border=%d)',
+      [i, TB.Controls[i].Top, TB.Controls[i].Height, TB.ClientHeight, bw]),
+      TB.Controls[i].Top + TB.Controls[i].Height <= TB.ClientHeight - bw);
+end;
+
+procedure TToolBarBottomBorderTest.TestAlLeftBarIsClampedToo;
+var
+  TB: TTyToolBarAccess;
+  i, bw, pad, bh: Integer;
+begin
+  { alNone is the reported case but not the rule. The rule is "the bar does not auto-grow",
+    and that is true of alLeft/alRight/alClient as well -- a guard written against alNone
+    alone would let the next report in through a different door. }
+  bh := 30;
+  TB := ShortRowBar(400, 100);
+  TallChild(TB, 60, bh);
+  TB.Align := alLeft;
+  TB.ForceLayout;
+  pad := TB.PadY;
+  bw := TB.BorderPx;
+  TB.Height := TB.Height + (pad + bh - TB.ClientHeight);
+  AssertTrue('precondition: the row WOULD reach into the hairline',
+    pad + bh > TB.ClientHeight - bw);
+  TB.ForceLayout;
+  for i := 0 to TB.ControlCount - 1 do
+    AssertTrue(Format('an alLeft bar does not auto-grow either, so child %d (top=%d h=%d) '
+      + 'must be shifted off the hairline (clientH=%d, border=%d)',
+      [i, TB.Controls[i].Top, TB.Controls[i].Height, TB.ClientHeight, bw]),
+      TB.Controls[i].Top + TB.Controls[i].Height <= TB.ClientHeight - bw);
+end;
+
+procedure TToolBarBottomBorderTest.TestFittingAlNoneBarIsUnmoved;
+var
+  TB: TTyToolBarAccess;
+  i: Integer;
+begin
+  { The shift must engage ONLY when the row would otherwise overflow. A bar whose content
+    fits has to be byte-identical to before, or every existing .lfm moves. }
+  TB := ShortRowBar(400, 100);
+  TallChild(TB, 60, 30);
+  TallChild(TB, 60, 30);
+  TB.ForceLayout;
+  AssertTrue('precondition: 100px is plenty for a 30px row', TB.ClientHeight > TB.PadY + 30);
+  for i := 0 to TB.ControlCount - 1 do
+  begin
+    AssertEquals('a fitting row still sits at ContentPadY', TB.PadY, TB.Controls[i].Top);
+    AssertEquals('and is still exactly the row height', 30, TB.Controls[i].Height);
+  end;
+end;
+
+procedure TToolBarBottomBorderTest.TestAlTopBarGrowsInsteadOfShifting;
+var
+  TB: TTyToolBarAccess;
+  i, pad: Integer;
+begin
+  { The auto-growing bar must not shift AT ALL -- it grows instead, and the shift has to see
+    the height the pass is ABOUT to reach rather than the stale one it starts from. Measured
+    against the stale height, an alTop bar that is currently too short squeezes its row up to
+    the top edge for one frame and springs back on the next: a twitch on every relayout, and
+    the reason the clamp reads `newH - Height` rather than plain ClientHeight. }
+  TB := ShortRowBar(400, 20);
+  TB.Align := alTop;
+  TallChild(TB, 60, 30);
+  TallChild(TB, 60, 30);
+  pad := TB.PadY;
+  AssertTrue('precondition: the bar starts SHORTER than its content needs, so a clamp read '
+    + 'off the stale height would fire', TB.ClientHeight < pad + 30);
+
+  TB.ForceLayout;
+  AssertEquals('the alTop bar grew to hold pad + row + pad', pad*2 + 30, TB.Height);
+  for i := 0 to TB.ControlCount - 1 do
+    AssertEquals(Format('child %d sits at the plain pad -- an auto-growing bar never shifts',
+      [i]), pad, TB.Controls[i].Top);
 end;
 
 { ===== TTyToolButton ======================================================== }
@@ -2458,6 +2745,7 @@ initialization
   RegisterTest(TToolFloorWidthTest);
   RegisterTest(TToolBarMembersTest);
   RegisterTest(TToolBarPixelTest);
+  RegisterTest(TToolBarBottomBorderTest);
   RegisterTest(TToolGroupBoundsTest);
   RegisterTest(TToolWrapShiftTest);
   RegisterTest(TToolButtonTest);

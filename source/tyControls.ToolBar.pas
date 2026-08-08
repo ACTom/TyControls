@@ -668,8 +668,17 @@ const
   states), so every skin that draws a real border stays pixel-identical.
 
   AFallbackAlpha comes from the theme too ('--tool-rule-alpha'), so a skin can retune the rule
-  or set 0 to suppress it without a line of control code changing. No skin defines it today;
-  TyToolRuleGhostAlpha is the documented default until one does.
+  or set 0 to suppress it without a line of control code changing. The BASE LAYER defines it --
+  light.tycss's :root carries it, so all seventeen built-in themes inherit it in both modes --
+  and per-skin overrides are the intended way to tune the rule. TyToolRuleGhostAlpha stays as
+  the fallback for a theme that drops the token entirely, and its value is the base layer's, so
+  nothing moved when the token arrived.
+
+  One alpha genuinely serves both modes: the fallback ink is the mode's own text colour over
+  the mode's own chrome, so the pair swaps together. Four skins still come in thin because their
+  ghost ink is a mid-luma accent they do not lift for dark, and the remedy is a per-skin value —
+  which is precisely what having the token in the theme layer buys. The four, and the measured
+  numbers behind that sentence, are in docs/controls/toolbar.md; they are not repeated here.
 
   Pure, so the decision is unit-testable without a canvas. }
 function TyToolRuleInk(const AStyle: TTyStyleSet; AFallbackAlpha: Integer): TTyColor;
@@ -1781,6 +1790,7 @@ var
   wrapAfter: array of Boolean;
   breaks: TBooleanDynArray;
   newH, bh, padY: Integer;
+  rowShift, limitH, contentBottom, bottomBorder: Integer;
 begin
   // re-entrancy guard: Height assignment at the end triggers another AlignControls call
   if FInLayout then Exit;
@@ -1820,6 +1830,45 @@ begin
       reads exactly as the break-free overload did — so an existing bar does not move a pixel. }
     breaks := TyToolWrapToBreakBefore(wrapAfter);
     rects := TyToolbarLayout(sizes, breaks, ClientWidth, FIndent, padY, FButtonSpacing, bh, FWrapable, rows);
+
+    { ROW SHIFT -- keep the LAST row out of the strip RenderTo strokes the bottom hairline into.
+
+      A tool button is a WINDOWED child: it paints after the bar and erases its whole rect to
+      the surface colour, so a row reaching into that strip WIPES the line rather than drawing
+      over it. TTyToolBarEx closed exactly this in its own override (3ac97c6); the base was left
+      with the same hole because the ONLY thing keeping its rows off the hairline was the
+      auto-grow below -- and that runs for alTop/alBottom alone. An alNone (or alLeft/alRight/
+      alClient) bar whose content is taller than the height the host gave it has nothing to
+      grow into, so its bottom row simply overflowed the border.
+
+      Pull the rows UP rather than squash them: the children's own Constraints.MinHeight would
+      defeat a squash anyway, since SetBounds clamps the height back up.
+
+      The clamp is measured against the height this pass is ABOUT to have, not the stale one.
+      For an auto-growing bar those differ, and using the stale one would squeeze the rows up
+      for one frame and let them spring back on the next -- a visible twitch on every relayout,
+      and a single ForceLayout in a test would read the transient. }
+    newH := padY*2 + rows*bh + (rows-1)*FButtonSpacing;
+    limitH := ClientHeight;
+    if (Align in [alTop, alBottom]) and (rows > 0) then
+      Inc(limitH, newH - Height);      { the grow at the end of this pass, applied in advance }
+    bottomBorder := BottomBorderPx(Font.PixelsPerInch);
+    rowShift := 0;
+    if n > 0 then
+    begin
+      { The last row's bottom: every child is centred INSIDE its row and clamped to bh (see the
+        loop), so the row's own bottom bounds all of them. }
+      contentBottom := padY + rows*bh + (rows-1)*FButtonSpacing;
+      rowShift := contentBottom - (limitH - bottomBorder);
+      if rowShift < 0 then rowShift := 0;
+      { Never above the top edge. rects[0].Top is padY, so padY is the whole budget. When the
+        content is so much taller than the bar that this is not enough (five rows in a 20px
+        bar, or a theme with --toolbar-pad-y: 0 whose auto-grow leaves exactly no room for the
+        stroke), the rows still reach the border -- showing the content wins over preserving a
+        1px line. Same call, and the same reasoning, as the Ex override's `if rowTop < 0`. }
+      if rowShift > padY then rowShift := padY;
+    end;
+
     for i := 0 to n - 1 do
     begin
       { Centre each child in the row. A child SHORTER than the row (a separator, a combo that
@@ -1830,14 +1879,14 @@ begin
       if kids[i].Constraints.MinHeight > ih then ih := kids[i].Constraints.MinHeight;
       // The FLOORED width the slot was solved for, not kids[i].Width — with no floor the
       // two are the same number, so nothing moves until ButtonWidth is actually set.
-      kids[i].SetBounds(rects[i].Left, rects[i].Top + (bh - ih) div 2, sizes[i].cx, ih);
+      kids[i].SetBounds(rects[i].Left, rects[i].Top - rowShift + (bh - ih) div 2, sizes[i].cx, ih);
     end;
     // grow the bar to fit the rows when alTop/alBottom
     if (Align in [alTop, alBottom]) and (rows > 0) then
     begin
       // The VERTICAL pad closes the bar, top and bottom -- Indent is horizontal and has no
       // business in a height (a bar indented 24px to clear a logo was 48px taller for it).
-      newH := padY*2 + rows*bh + (rows-1)*FButtonSpacing;
+      // newH was computed above, where the row shift needed the same number.
       if Height <> newH then
         Height := newH;
     end;
