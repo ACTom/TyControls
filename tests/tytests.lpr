@@ -53,6 +53,7 @@ uses
   test.appicon,
   test.trailingzone,
   test.lucide,
+  test.virtualimagelist.iconfont,
   test.tabsheet,
   test.pagecontrol,
   test.pagecontrol.streaming,

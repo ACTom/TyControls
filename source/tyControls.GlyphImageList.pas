@@ -85,7 +85,10 @@ begin
   inherited Create(AOwner);
   FGlyphs := TStringList.Create;
   FDefaultSize := 16;
-  FDefaultColor := 0;
+  { Opaque black, NOT 0. TTyColor is $AARRGGBB, so 0 is fully transparent -- this component
+    used to render every glyph invisible unless the caller happened to set a colour, which the
+    icons example does and nothing else did. Same trap, same fix, as TTyVirtualImageList.GlyphColor. }
+  FDefaultColor := $FF000000;
 end;
 
 destructor TTyGlyphImageList.Destroy;

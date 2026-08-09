@@ -70,7 +70,7 @@ interface
 
 uses
   Classes, SysUtils, Graphics, base64, BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Component;
+  tyControls.Types, tyControls.Component, tyControls.IconFont;
 
 { Recolor a BGRA icon bitmap's RGB to AColor while KEEPING its alpha (antialiased edges
   included), so an icon authored as an opaque alpha mask takes on any theme text color.
@@ -313,10 +313,27 @@ type
   TTyVirtualImageList = class(TTyComponent)
   private
     FCollection: TTyImageCollection;
+    FIconFont: TTyIconFont;
     FNames: TStrings;          // ordered image NAMES to expose (a TStringList)
     FDefaultSize: Integer;
+    FGlyphColor: TTyColor;
+    { The borrowed-bitmap contract of CachedIndex has to hold for glyphs too, and an icon
+      font has no cache of its own to borrow from -- RenderGlyph mints a new bitmap every
+      call. One slot is enough for the paint loops this feeds (a toolbar draws one icon at a
+      time at one size), and it keeps the promise without a second cache to invalidate. }
+    FGlyphCache: TBGRABitmap;
+    FGlyphCacheName: string;
+    FGlyphCacheSize: Integer;
+    FGlyphCacheColor: TTyColor;
+    FGlyphCacheVersion: Integer;
     procedure SetCollection(AValue: TTyImageCollection);
+    procedure SetIconFont(AValue: TTyIconFont);
+    procedure SetGlyphColor(AValue: TTyColor);
     procedure SetNames(AValue: TStrings);
+    procedure DropGlyphCache;
+    { Which source owns AIndex: the collection when it HAS the name, else the icon font when
+      it has the glyph. Returns '' in ASourceName when neither does. }
+    function ResolveSource(AIndex: Integer; out AName: string): Integer;
   protected
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   public
@@ -373,10 +390,34 @@ type
     { The raster image source. Setting it registers a FreeNotification so the
       reference is nil'd automatically if the collection is freed first. }
     property Collection: TTyImageCollection read FCollection write SetCollection;
-    { The ordered image NAMES, one per line — each a key into Collection. }
+    { A SECOND source: an icon font, so the same list can expose vector glyphs by name.
+
+      This is what puts icon-font icons on a toolbar or a menu at all. Sixteen published
+      Images properties in this library take a TTyVirtualImageList; none takes a
+      TTyGlyphImageList, so before this a bundled icon pack could not reach any of them.
+
+        VirtualImageList1.IconFont   := LucideIconFont1;
+        VirtualImageList1.Names.Text := 'house'#13'settings'#13'search';
+        ToolBar1.Images := VirtualImageList1;
+
+      BOTH sources may be set. Per NAME, the collection is asked first and the font second,
+      so a list can mix hand-drawn raster art with font glyphs. Deliberately per name and not
+      "collection wins outright": an outright winner would make the other property silently
+      inert, which is the defect class this library spends the most effort on. }
+    property IconFont: TTyIconFont read FIconFont write SetIconFont;
+    { The ordered image NAMES, one per line — a key into Collection, or a glyph name in
+      IconFont. }
     property Names: TStrings read FNames write SetNames;
     { Default item edge in LOGICAL px, used by consumers that don't pass a size. }
     property DefaultSize: Integer read FDefaultSize write FDefaultSize default 16;
+    { Ink for glyphs taken from IconFont. Raster images carry their own colour and ignore it.
+
+      Defaults to OPAQUE black, not 0. TTyColor is $AARRGGBB, so 0 is fully TRANSPARENT: a
+      zero default would have shipped a property whose out-of-the-box value draws nothing at
+      all, and "my icons are invisible" is a much worse first experience than "my icons are
+      the wrong colour". The same trap already cost this library a ShowValue readout nobody
+      could see in any theme. Set it from the theme's ink on a dark background. }
+    property GlyphColor: TTyColor read FGlyphColor write SetGlyphColor default $FF000000;
   end;
 
 const
@@ -1061,12 +1102,21 @@ begin
   inherited Create(AOwner);
   FNames := TStringList.Create;
   FDefaultSize := 16;
+  FGlyphColor := $FF000000;   { opaque black -- see the property's note }
+  FGlyphCacheVersion := -1;
 end;
 
 destructor TTyVirtualImageList.Destroy;
 begin
+  DropGlyphCache;
   FNames.Free;
   inherited Destroy;
+end;
+
+procedure TTyVirtualImageList.DropGlyphCache;
+begin
+  FreeAndNil(FGlyphCache);
+  FGlyphCacheName := '';
 end;
 
 procedure TTyVirtualImageList.SetCollection(AValue: TTyImageCollection);
@@ -1079,9 +1129,28 @@ begin
     FCollection.FreeNotification(Self);
 end;
 
+procedure TTyVirtualImageList.SetIconFont(AValue: TTyIconFont);
+begin
+  if FIconFont = AValue then Exit;
+  if FIconFont <> nil then
+    FIconFont.RemoveFreeNotification(Self);
+  FIconFont := AValue;
+  if FIconFont <> nil then
+    FIconFont.FreeNotification(Self);
+  DropGlyphCache;
+end;
+
+procedure TTyVirtualImageList.SetGlyphColor(AValue: TTyColor);
+begin
+  if FGlyphColor = AValue then Exit;
+  FGlyphColor := AValue;
+  DropGlyphCache;
+end;
+
 procedure TTyVirtualImageList.SetNames(AValue: TStrings);
 begin
   FNames.Assign(AValue);
+  DropGlyphCache;
 end;
 
 procedure TTyVirtualImageList.Notification(AComponent: TComponent; Operation: TOperation);
@@ -1089,6 +1158,22 @@ begin
   inherited Notification(AComponent, Operation);
   if (Operation = opRemove) and (AComponent = FCollection) then
     FCollection := nil;
+  if (Operation = opRemove) and (AComponent = FIconFont) then
+  begin
+    FIconFont := nil;
+    { The cached glyph belongs to a font that is going away. }
+    DropGlyphCache;
+  end;
+end;
+
+{ 0 = nothing, 1 = the collection, 2 = the icon font. }
+function TTyVirtualImageList.ResolveSource(AIndex: Integer; out AName: string): Integer;
+begin
+  Result := 0;
+  AName := NameOf(AIndex);
+  if AName = '' then Exit;
+  if (FCollection <> nil) and (FCollection.IndexOf(AName) >= 0) then Exit(1);
+  if (FIconFont <> nil) and FIconFont.HasGlyph(AName) then Exit(2);
 end;
 
 function TTyVirtualImageList.Count: Integer;
@@ -1114,14 +1199,14 @@ var
   nm: string;
 begin
   if ASizePx < 1 then ASizePx := 1;
-  nm := NameOf(AIndex);
-  // No collection, or index out of range -> an empty transparent square of the
-  // requested size (never nil). Otherwise delegate the fit/scale to the collection
-  // (which itself returns an empty square if the name is unknown).
-  if (FCollection = nil) or (nm = '') then
-    Result := TBGRABitmap.Create(ASizePx, ASizePx, BGRAPixelTransparent)
+  // Neither source has it (no source at all, index out of range, unknown name) -> an empty
+  // transparent square of the requested size. Never nil, as before.
+  case ResolveSource(AIndex, nm) of
+    1: Result := FCollection.GetBitmap(nm, ASizePx);
+    2: Result := FIconFont.RenderGlyph(nm, ASizePx, FGlyphColor);
   else
-    Result := FCollection.GetBitmap(nm, ASizePx);
+    Result := TBGRABitmap.Create(ASizePx, ASizePx, BGRAPixelTransparent);
+  end;
 end;
 
 function TTyVirtualImageList.CachedIndex(AIndex, ASizePx: Integer): TBGRABitmap;
@@ -1130,11 +1215,28 @@ var
 begin
   Result := nil;
   if ASizePx < 1 then ASizePx := 1;
-  if FCollection = nil then Exit;
-  nm := NameOf(AIndex);
-  if nm = '' then Exit;
-  // Borrowed: owned by the collection's render cache (nil when the name is missing).
-  Result := FCollection.GetCachedBitmap(nm, ASizePx);
+  case ResolveSource(AIndex, nm) of
+    1:
+      // Borrowed: owned by the collection's render cache (nil when the name is missing).
+      Result := FCollection.GetCachedBitmap(nm, ASizePx);
+    2:
+      begin
+        { The font has no cache to borrow from, so keep one slot here. The font's Version is
+          part of the key: editing its Glyphs or swapping its file changes what a name draws,
+          and a cache that ignored that would keep serving the old glyph. }
+        if (FGlyphCache = nil) or (FGlyphCacheName <> nm) or (FGlyphCacheSize <> ASizePx)
+           or (FGlyphCacheColor <> FGlyphColor) or (FGlyphCacheVersion <> FIconFont.Version) then
+        begin
+          FreeAndNil(FGlyphCache);
+          FGlyphCache := FIconFont.RenderGlyph(nm, ASizePx, FGlyphColor);
+          FGlyphCacheName := nm;
+          FGlyphCacheSize := ASizePx;
+          FGlyphCacheColor := FGlyphColor;
+          FGlyphCacheVersion := FIconFont.Version;
+        end;
+        Result := FGlyphCache;
+      end;
+  end;
 end;
 
 procedure TTyVirtualImageList.Draw(ACanvas: TCanvas; AX, AY, AIndex: Integer;
