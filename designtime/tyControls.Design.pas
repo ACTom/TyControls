@@ -37,7 +37,8 @@ uses
   tyControls.Memo, tyControls.Menu, tyControls.NativeStyler,
   tyControls.Splitter, tyControls.StatusBar, tyControls.ToolBar,
   tyControls.Calendar, tyControls.DateTimePicker, tyControls.TabSet,
-  ClipBrd,
+  ClipBrd,
+  tyControls.LCLImageList,
   tyControls.TreeView, tyControls.Dialogs, tyControls.Dialogs.SelectPath,
   tyControls.Dialogs.IconBrowser,
   tyControls.Dialogs.Color, tyControls.Dialogs.Font,
@@ -1349,7 +1350,8 @@ begin
   // Icon-font, images, hints.
   RegisterComponents('TyControls Images',
     [TTyIconFont, TTyLucideIconFont, TTyCharImage, TTyGlyphImageList, TTyImage,
-     TTyImageCollection, TTyVirtualImageList, TTyHint, TTyBalloonHint, TTyPopover]);
+     TTyImageCollection, TTyVirtualImageList, TTyLCLImageList, TTyHint, TTyBalloonHint,
+     TTyPopover]);
   // Decorative vector shapes + charts.
   RegisterComponents('TyControls Shapes & Charts',
     [TTyShape, TTyStarShape, TTyArrow, TTyChart]);
@@ -1440,6 +1442,11 @@ begin
   RegisterPropertyEditor(TypeInfo(string), TTyGraphicControl, 'Version', TTyVersionEditor);
   RegisterPropertyEditor(TypeInfo(string), TTyCustomControl, 'Version', TTyVersionEditor);
   RegisterPropertyEditor(TypeInfo(string), TTyComponent, 'Version', TTyVersionEditor);
+  { The bridge's root is LCL's TCustomImageList, not one of this library's bases, so the
+    Version editor has to be named for it explicitly -- the property is there, and without
+    this line it is the one component whose '...' would not open the About box.
+    test.version's TestEveryRegisteredComponentReportsTyVersion is what says so. }
+  RegisterPropertyEditor(TypeInfo(string), TTyLCLImageList, 'Version', TTyVersionEditor);
   RegisterPropertyEditor(TypeInfo(string), TTyPopupMenu, 'Version', TTyVersionEditor);
   RegisterPropertyEditor(TypeInfo(string), TTyForm, 'Version', TTyVersionEditor);
   // BorderStyle is locked to bsNone (TTyForm is a borderless custom-chrome window) —

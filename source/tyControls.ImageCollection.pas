@@ -69,7 +69,7 @@ unit tyControls.ImageCollection;
 interface
 
 uses
-  Classes, SysUtils, Graphics, base64, BGRABitmap, BGRABitmapTypes,
+  Classes, SysUtils, Graphics, base64, LazMethodList, BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Component, tyControls.IconFont;
 
 { Recolor a BGRA icon bitmap's RGB to AColor while KEEPING its alpha (antialiased edges
@@ -326,6 +326,15 @@ type
     FGlyphCacheSize: Integer;
     FGlyphCacheColor: TTyColor;
     FGlyphCacheVersion: Integer;
+    { Observers. This list had NO change notification of any kind, and its FNames was a bare
+      TStringList with no OnChange -- so anything holding rendered copies of these icons (the
+      LCL bridge is the first, but a cache in a control is the same shape) had no way to learn
+      that Names, Collection or IconFont had moved under it. Multicast rather than a single
+      published OnChange, and for the reason TTyEdit records: a control assigning the published
+      event would silently overwrite whatever the application had put there. }
+    FChangeHandlers: TMethodList;
+    procedure NamesChanged(Sender: TObject);
+    procedure Changed;
     procedure SetCollection(AValue: TTyImageCollection);
     procedure SetIconFont(AValue: TTyIconFont);
     procedure SetGlyphColor(AValue: TTyColor);
@@ -386,6 +395,11 @@ type
       polarity because that is what the callers upstream of it carry. }
     procedure DrawIndex(ACanvas: TCanvas; AIndex, AX, AY, ASizePx: Integer;
       AGhosted: Boolean = False);
+    { Subscribe to "something about this list changed": Names, Collection, IconFont,
+      DefaultSize or GlyphColor. Remove in your destructor. }
+    procedure AddHandlerOnChange(const AHandler: TNotifyEvent; AsFirst: Boolean = False);
+    procedure RemoveHandlerOnChange(const AHandler: TNotifyEvent);
+    procedure RemoveAllHandlersOfObject(AnObject: TObject);
   published
     { The raster image source. Setting it registers a FreeNotification so the
       reference is nil'd automatically if the collection is freed first. }
@@ -1097,10 +1111,41 @@ end;
 
 { ---- TTyVirtualImageList ---- }
 
+procedure TTyVirtualImageList.AddHandlerOnChange(const AHandler: TNotifyEvent;
+  AsFirst: Boolean);
+begin
+  if FChangeHandlers = nil then FChangeHandlers := TMethodList.Create;
+  FChangeHandlers.Add(TMethod(AHandler), not AsFirst);
+end;
+
+procedure TTyVirtualImageList.RemoveHandlerOnChange(const AHandler: TNotifyEvent);
+begin
+  if FChangeHandlers <> nil then FChangeHandlers.Remove(TMethod(AHandler));
+end;
+
+procedure TTyVirtualImageList.RemoveAllHandlersOfObject(AnObject: TObject);
+begin
+  if FChangeHandlers <> nil then FChangeHandlers.RemoveAllMethodsOfObject(AnObject);
+end;
+
+procedure TTyVirtualImageList.Changed;
+begin
+  if FChangeHandlers <> nil then FChangeHandlers.CallNotifyEvents(Self);
+end;
+
+procedure TTyVirtualImageList.NamesChanged(Sender: TObject);
+begin
+  { FNames was a bare TStringList with no OnChange, so `List.Names.Add('x')` -- the ordinary
+    way to use this component -- changed what it exposes and told nobody. }
+  DropGlyphCache;
+  Changed;
+end;
+
 constructor TTyVirtualImageList.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FNames := TStringList.Create;
+  TStringList(FNames).OnChange := @NamesChanged;
   FDefaultSize := 16;
   FGlyphColor := $FF000000;   { opaque black -- see the property's note }
   FGlyphCacheVersion := -1;
@@ -1109,7 +1154,9 @@ end;
 destructor TTyVirtualImageList.Destroy;
 begin
   DropGlyphCache;
+  TStringList(FNames).OnChange := nil;   { must not fire into a half-freed component }
   FNames.Free;
+  FChangeHandlers.Free;
   inherited Destroy;
 end;
 
@@ -1127,6 +1174,7 @@ begin
   FCollection := AValue;
   if FCollection <> nil then
     FCollection.FreeNotification(Self);
+  Changed;
 end;
 
 procedure TTyVirtualImageList.SetIconFont(AValue: TTyIconFont);
@@ -1138,6 +1186,7 @@ begin
   if FIconFont <> nil then
     FIconFont.FreeNotification(Self);
   DropGlyphCache;
+  Changed;
 end;
 
 procedure TTyVirtualImageList.SetGlyphColor(AValue: TTyColor);
@@ -1145,12 +1194,12 @@ begin
   if FGlyphColor = AValue then Exit;
   FGlyphColor := AValue;
   DropGlyphCache;
+  Changed;
 end;
 
 procedure TTyVirtualImageList.SetNames(AValue: TStrings);
 begin
-  FNames.Assign(AValue);
-  DropGlyphCache;
+  FNames.Assign(AValue);   { fires NamesChanged, which drops the cache and announces }
 end;
 
 procedure TTyVirtualImageList.Notification(AComponent: TComponent; Operation: TOperation);

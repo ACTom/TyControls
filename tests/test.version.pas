@@ -19,6 +19,7 @@ uses
   tyControls.Dialogs.Color, tyControls.Dialogs.FileDialog, tyControls.Dialogs.Find,
   tyControls.Dialogs.Font, tyControls.Dialogs.Progress, tyControls.Dialogs.SelectPath,
   tyControls.Dialogs.IconBrowser,
+  tyControls.LCLImageList,
   tyControls.Divider, tyControls.DropButtons, tyControls.Edit, tyControls.Empty,
   tyControls.ExPanel, tyControls.FilterComboBox, tyControls.FloatSpinEdit,
   tyControls.FontComboBox,
@@ -444,7 +445,8 @@ initialization
   Reg([
     TTyMenuEx, TTyRibbon, TTyRibbonPage, TTyRibbonGroup, TTyRibbonAppMenu,
     TTyRibbonQuickAccess, TTyRibbonGallery, TTyRibbonBackstage, TTyIconFont, TTyLucideIconFont, TTyCharImage,
-    TTyGlyphImageList, TTyImage, TTyImageCollection, TTyVirtualImageList, TTyHint,
+    TTyGlyphImageList, TTyImage, TTyImageCollection, TTyVirtualImageList,
+    TTyLCLImageList, TTyHint,
     TTyBalloonHint, TTyPopover, TTyShape, TTyStarShape, TTyArrow, TTyChart, TTyMessage,
     TTyInputDialog, TTyPasswordDialog, TTyTextDialog, TTySelectValueDialog,
     TTySelectPathDialog, TTyColorDialog, TTyFontDialog, TTyFindDialog, TTyReplaceDialog,

@@ -614,6 +614,18 @@ begin
   RRect(b,13,16.8,18,18.6,1,Ink);
 end;
 
+{ TTyLCLImageList: the BRIDGE -- a stack of icon slots with an arrow leaving it, i.e. these
+  icons handed onward to something else. }
+procedure GTyLCLImageList(b: TBGRABitmap);
+begin
+  RRect(b,3,5,13,15,1.5,Ink);          // the stack
+  RRect(b,5,8,15,18,1.5,Ink);
+  FillRRect(b,7,11,17,21,1.5,Acc);     // the front slot
+  Line(b,14,7,21,7,Ink,1.6);           // handed onward
+  Line(b,18,4,21,7,Ink,1.6);
+  Line(b,18,10,21,7,Ink,1.6);
+end;
+
 { TTyTabSet: a pure tab strip — one selected tab + two unselected + baseline }
 procedure GTabSet(b: TBGRABitmap); begin FillRRect(b,3,5,9,11,1.5,Acc); RRect(b,9.5,5,15.5,11,1.5,Ink); RRect(b,16,5,21,11,1.5,Ink); Line(b,3,11,21,11,Ink,1.4); end;
 
@@ -892,7 +904,7 @@ procedure GCascader(b: TBGRABitmap); begin RRect(b,3,3,21,10,2,Ink); PolyL(b,[Po
 procedure GPopover(b: TBGRABitmap); begin RRect(b,2,4,22,17,2,Ink); PolyL(b,[PointF(9,17),PointF(11.5,20.5),PointF(14,17)],Ink); FillRRect(b,5,7.5,10.5,13.5,1,Acc); Line(b,12.5,9,19,9,Ink,1.3); Line(b,12.5,12,17.5,12,Ink,1.3); end;
 
 const
-  Glyphs: array[0..163] of TGlyph = (
+  Glyphs: array[0..164] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -954,6 +966,7 @@ const
     (Name:'TTyImage';            Draw:@GImage),
     (Name:'TTyImageCollection';  Draw:@GImageCollection),
     (Name:'TTyVirtualImageList'; Draw:@GVirtualImageList),
+    (Name:'TTyLCLImageList';    Draw:@GTyLCLImageList),
     (Name:'TTyGlyphButton';      Draw:@GGlyphButton),
     (Name:'TTyGlyphContainerButton'; Draw:@GGlyphContainerButton),
     (Name:'TTySpeedButton';      Draw:@GSpeedButton),
