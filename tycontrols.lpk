@@ -301,6 +301,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.IconFont"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.Icons.Lucide.pas"/>
+        <UnitName Value="tyControls.Icons.Lucide"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.CharImage.pas"/>
         <UnitName Value="tyControls.CharImage"/>
       </Item>

@@ -332,12 +332,41 @@ properties / events / states / theme keys are in **[docs/controls/](docs/control
 
 | Control | What it is for |
 |---|---|
-| `TTyIconFont` | Icon font: vector icons by codepoint, coloured by the theme |
+| `TTyIconFont` | Icon font: vector icons by codepoint or **name**, coloured by the theme |
 | `TTyCharImage` | Uses one icon-font glyph as an image |
 | `TTyImage` | Image control with transparency and stretch modes |
 | `TTyGlyphImageList` | Image list driven by an icon font |
 | `TTyImageCollection` | Multi-resolution image set; picks the right one per DPI |
 | `TTyVirtualImageList` | Generates a sized image list on demand from a collection |
+
+### A set of icons in the box -- Lucide
+
+If you would rather not go looking for a font and hand-copy a codepoint table, one `uses` gets
+you 2022 icons:
+
+```pascal
+uses tyControls.Icons.Lucide;
+...
+CharImage1.IconFont  := TyLucideFont;
+CharImage1.GlyphName := TyIconHouse;   // or just 'house'
+```
+
+- **The font is embedded** -- nothing to ship beside your executable, nothing to install.
+- **It costs nothing if you do not use it.** The font lives in that unit rather than an LCL
+  resource, so smart linking drops the whole thing. Measured: +979 KB when the unit is used,
+  +0 when it is not.
+- **No `Glyphs` to fill in.** The unit registers a name resolver, so any `TTyIconFont` whose
+  `FontFamily` is `'lucide'` resolves names. Your own `Glyphs` entry still wins if you want to
+  override one.
+- **Licence is clean**: ISC, plus MIT for the Feather-derived icons. Nothing is asked of
+  **your users** -- no attribution on screen, no link, nothing at run time. Ship
+  [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) with your release and you are done.
+
+Twenty upstream names -- GitHub, Twitter and the other brand logos -- were removed in Lucide
+v1.0 but kept in the codepoint table. The generator checks whether the glyph has an outline and
+drops those names, so `HasGlyph('github')` answers False honestly instead of handing you a
+blank square.
+
 | `TTyHint` | Themed tooltip |
 | `TTyBalloonHint` | Balloon tooltip with a pointer |
 | `TTyPopover` | Popover that **hosts controls**, not just text |

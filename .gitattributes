@@ -3,3 +3,10 @@
 
 # PowerShell scripts are Windows-side; CRLF is fine and avoids editor churn.
 *.ps1  text eol=crlf
+
+# Vendored icon-font assets: byte-for-byte, never normalised.
+# tyControls.Icons.Lucide.pas carries a SHA-1 over lucide.ttf + codepoints.json and a test
+# recomputes it from these files, so a single LF->CRLF conversion on checkout would make the
+# drift guard fail on every fresh clone. The .ttf is binary anyway; the JSON is the one that
+# would actually have been rewritten.
+assets/lucide/**  -text

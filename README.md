@@ -292,12 +292,36 @@ Lazarus 里打开 `tycontrols_dt.lpk`(设计期包)→ **Use → Install**,IDE �
 
 | 控件 | 用来干嘛 |
 |---|---|
-| `TTyIconFont` | 图标字体:按码点取矢量图标,随主题着色 |
+| `TTyIconFont` | 图标字体:按码点或**名字**取矢量图标,随主题着色 |
 | `TTyCharImage` | 把一个图标字体字形当图片用 |
 | `TTyImage` | 图片控件,支持透明与缩放模式 |
 | `TTyGlyphImageList` | 图标字体驱动的图像列表 |
 | `TTyImageCollection` | 多分辨率图像集,按 DPI 取最合适的一张 |
 | `TTyVirtualImageList` | 从图像集按需生成指定尺寸的图像列表 |
+
+### 自带一套图标 —— Lucide
+
+不想自己找字体、也不想手抄码点表的话,加一行 `uses` 就有 2022 个图标:
+
+```pascal
+uses tyControls.Icons.Lucide;
+...
+CharImage1.IconFont  := TyLucideFont;
+CharImage1.GlyphName := TyIconHouse;   // 或者直接写 'house'
+```
+
+- **字体是内嵌的**,不用随程序发 `.ttf`、不用装到系统里。
+- **不 `uses` 就一个字节都不占**:字体放在这个单元里(不是 `.lrs`),智能链接会整块丢掉。
+  实测:用了 +979 KB,不用 +0。
+- **不用填 `Glyphs`**:这个单元注册了一个名字解析器,任何 `FontFamily = 'lucide'` 的
+  `TTyIconFont` 都能按名字取图标。想覆盖某个名字,照常写进自己的 `Glyphs` 即可,优先级更高。
+- **许可干净**:ISC(+ Feather 派生部分 MIT),对**你的用户**没有任何义务——不用署名、不用挂链接、
+  运行时不用显示任何东西。随发布包带上 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) 就够了。
+
+上游有 20 个名字(GitHub、Twitter 等品牌图标)在 Lucide v1.0 里被删了,但码点表仍然留着它们。
+生成器会检查字形有没有轮廓,**把这些名字剔掉**——所以 `HasGlyph('github')` 老实返回 False,
+而不是给你一个空白方块。
+
 | `TTyHint` | 主题化的提示气泡 |
 | `TTyBalloonHint` | 带箭头的气球提示 |
 | `TTyPopover` | **能放控件**的气泡浮层,不只是文字 |

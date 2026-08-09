@@ -31,7 +31,18 @@ type
     FFontFamily: string;
     FFontFile: string;
     FLoadedFile: string;       // the file currently registered (for clean removal)
-    FLoadError: string;        // why the last FontFile assignment did not take, '' when it did
+    FLoadError: string;        // why the last font source did not take, '' when it did
+    { "A source was asked for" vs "it registered". Available needs both: a component with only
+      a FontFamily is fine (the family is OS-installed), one that ASKED for a file or a byte
+      buffer and did not get it is not. }
+    FSourceRequested: Boolean;
+    FSourceLoaded: Boolean;
+    {$IFDEF LCLWin32}
+    FMemFont: THandle;         // AddFontMemResourceEx handle; there is no removal BY NAME
+    {$ENDIF}
+    {$IFDEF LCLGtk2}
+    FTempFile: string;         // fontconfig is path-only, so bytes have to land on disk
+    {$ENDIF}
     FVersion: Integer;         // bumped by every change a consumer would have to repaint for
     FOnChange: TNotifyEvent;
     { Controls observe through here, NOT through the published OnChange -- assigning that from
@@ -53,6 +64,9 @@ type
     procedure SetFontFamily(const AValue: string);
     procedure LoadFontFile(const APath: string);
     procedure UnloadFontFile;
+    {$IFDEF LCLGtk2}
+    function SpillToTempFile(ADataPtr: Pointer; ASize: PtrUInt): string;
+    {$ENDIF}
     procedure GlyphsChanged(Sender: TObject);
     procedure Changed;
     procedure RebuildIndex;
@@ -78,6 +92,21 @@ type
       centered in an ASizePx square with the current FontFamily. Caller owns the bitmap. }
     function RenderCodepoint(ACodepoint: Cardinal; ASizePx: Integer;
       AColor: TTyColor): TBGRABitmap;
+    { Register a font from BYTES -- the path a BUNDLED font takes, where there is no file on
+      disk to point FontFile at.
+
+      ADataPtr need only stay valid for the duration of the call: Windows, Qt and Cocoa all
+      COPY the buffer (measured on Windows -- the buffer was freed and the family still
+      resolved), and the GTK2 fallback writes it out before returning.
+
+      AFamily, when given, sets FontFamily too, because a caller with embedded bytes knows the
+      family name at build time and asking it to discover the name at run time would mean
+      shipping an sfnt parser for no reason.
+
+      Sets Available / LoadError exactly like FontFile does. Only ONE source at a time: this
+      unregisters whatever was registered before. }
+    procedure LoadFontFromMemory(ADataPtr: Pointer; ASize: PtrUInt; const AFamily: string = '');
+
     { Is this component in a state where a glyph can actually come out?
 
       It exists because the failure it reports is otherwise SILENT and looks like a different
@@ -160,6 +189,10 @@ uses
   {$IFDEF LCLCocoa}, MacOSAll{$ENDIF}
   ;
 
+const
+  { Prefix of the GTK2 spill files, shared by the writer and the stale-file sweep. }
+  TyFontSpillPrefix = 'tycontrols-iconfont-';
+
 {$IFDEF LCLGtk2}
 // GTK2/Pango resolve fonts through fontconfig; FPC ships no fontconfig binding, so
 // declare the two C calls we need (libfontconfig is already linked by the GTK2 stack).
@@ -182,6 +215,15 @@ function AddFontResourceEx(lpszFilename: PWideChar; fl: LongWord;
   pdv: Pointer): LongInt; stdcall; external 'gdi32' name 'AddFontResourceExW';
 function RemoveFontResourceEx(lpFileName: PWideChar; fl: LongWord;
   pdv: Pointer): LongBool; stdcall; external 'gdi32' name 'RemoveFontResourceExW';
+{ The MEMORY pair. Not in FPC's Windows unit either. AddFontMemResourceEx returns an opaque
+  HANDLE, NOT a face count -- the count comes back through the last parameter -- and that
+  handle is the only way to remove the face later, because there is no name-based removal.
+  GDI copies the buffer, so the caller's bytes can go immediately (verified by freeing the
+  buffer and re-resolving the family). }
+function AddFontMemResourceEx(pFileView: Pointer; cjSize: DWORD; pvResrved: Pointer;
+  pNumFonts: PDWORD): THandle; stdcall; external 'gdi32' name 'AddFontMemResourceEx';
+function RemoveFontMemResourceEx(h: THandle): LongBool; stdcall;
+  external 'gdi32' name 'RemoveFontMemResourceEx';
 {$ENDIF}
 
 var
@@ -340,7 +382,120 @@ end;
 
 function TTyIconFont.GetAvailable: Boolean;
 begin
-  Result := (FFontFamily <> '') and ((FFontFile = '') or (FLoadedFile <> ''));
+  Result := (FFontFamily <> '') and ((not FSourceRequested) or FSourceLoaded);
+end;
+
+{$IFDEF LCLGtk2}
+function TTyIconFont.SpillToTempFile(ADataPtr: Pointer; ASize: PtrUInt): string;
+{ fontconfig's three app-font entry points are ALL path-based -- there is no memory API in the
+  library at all -- so on GTK2 embedded bytes have to become a file. The discipline around that
+  file is the fiddly part, and every rule here exists because the obvious version is wrong:
+
+    - the name carries the PID, because a fixed name means a second instance TRUNCATES the very
+      file the first one already handed to fontconfig, and fontconfig caches on name+mtime;
+    - it is NOT deleted by UnloadFont, because fontconfig cannot un-register a single file
+      (only FcConfigAppFontClear, which wipes every app font) and FreeType may re-open the path
+      lazily for each new face -- so the file must outlive the component;
+    - it is deleted in this unit's finalization, i.e. at process exit;
+    - and stale files from crashed runs are swept at startup, or every SIGKILL leaks 850KB
+      permanently on a long-lived desktop session. }
+var
+  dir: string;
+  fs: TFileStream;
+begin
+  Result := '';
+  dir := GetEnvironmentVariable('XDG_RUNTIME_DIR');   { per-user, 0700, tmpfs, cleared at logout }
+  if (dir = '') or (not DirectoryExists(dir)) then dir := GetTempDir(False);
+  if (dir = '') or (not DirectoryExists(dir)) then dir := GetAppConfigDir(False);
+  if (dir = '') or (not DirectoryExists(dir)) then Exit;
+  Result := IncludeTrailingPathDelimiter(dir) +
+    Format(TyFontSpillPrefix + '%d-%p.ttf', [GetProcessID, ADataPtr]);
+  try
+    fs := TFileStream.Create(Result, fmCreate);
+    try
+      fs.WriteBuffer(ADataPtr^, ASize);
+    finally
+      fs.Free;
+    end;
+  except
+    Result := '';
+  end;
+end;
+{$ENDIF}
+
+procedure TTyIconFont.LoadFontFromMemory(ADataPtr: Pointer; ASize: PtrUInt;
+  const AFamily: string);
+{$IF DEFINED(LCLWin32) OR DEFINED(LCLQt5) OR DEFINED(LCLQt6) OR DEFINED(LCLCocoa) OR DEFINED(LCLGtk2)}
+var
+  {$IFDEF LCLWin32}
+  nFaces: DWORD;
+  {$ENDIF}
+  {$IF DEFINED(LCLQt5) OR DEFINED(LCLQt6)}
+  ba: QByteArrayH;
+  {$ENDIF}
+  {$IFDEF LCLCocoa}
+  prov: CGDataProviderRef;
+  cgf: CGFontRef;
+  err: CFErrorRef;
+  {$ENDIF}
+{$ENDIF}
+begin
+  UnloadFontFile;
+  FFontFile := '';                 { a byte source replaces any file source }
+  FSourceRequested := True;
+  FSourceLoaded := False;
+  FLoadError := 'the widgetset refused to register the embedded font';
+  if (ADataPtr = nil) or (ASize = 0) then
+    FLoadError := 'no font data given'
+  else
+  begin
+    { Registering a face makes a family that previously fell back suddenly REAL -- same reason
+      as the file path. See TyInvalidateTextMeasureCache. }
+    TyInvalidateTextMeasureCache;
+    {$IFDEF LCLWin32}
+    nFaces := 0;
+    FMemFont := THandle(AddFontMemResourceEx(ADataPtr, DWORD(ASize), nil, @nFaces));
+    if (FMemFont <> 0) and (nFaces > 0) then FSourceLoaded := True;
+    {$ENDIF}
+    {$IF DEFINED(LCLQt5) OR DEFINED(LCLQt6)}
+    { The SIZED QByteArray constructor is essential: font data is full of NULs, and the
+      single-argument form would stop at the first one. QByteArray(data, size) deep-copies,
+      so both the QByteArray and our buffer can go straight after the call. }
+    ba := QByteArray_Create(PAnsiChar(ADataPtr), Integer(ASize));
+    try
+      FQtFontId := QFontDatabase_addApplicationFontFromData(ba);
+      if FQtFontId >= 0 then FSourceLoaded := True;
+    finally
+      QByteArray_Destroy(ba);
+    end;
+    {$ENDIF}
+    {$IFDEF LCLCocoa}
+    prov := CGDataProviderCreateWithData(nil, ADataPtr, ASize, nil);
+    if prov <> nil then
+    try
+      cgf := CGFontCreateWithDataProvider(prov);
+      if cgf <> nil then
+      try
+        err := nil;
+        if CTFontManagerRegisterGraphicsFont(cgf, err) then FSourceLoaded := True;
+      finally
+        CGFontRelease(cgf);
+      end;
+    finally
+      CGDataProviderRelease(prov);
+    end;
+    {$ENDIF}
+    {$IFDEF LCLGtk2}
+    FTempFile := SpillToTempFile(ADataPtr, ASize);
+    if FTempFile = '' then
+      FLoadError := 'no writable directory for the font spill file'
+    else if FcConfigAppFontAddFile(FcConfigGetCurrent, PAnsiChar(FTempFile)) <> 0 then
+      FSourceLoaded := True;
+    {$ENDIF}
+  end;
+  if FSourceLoaded then FLoadError := '';
+  if AFamily <> '' then FFontFamily := AFamily;
+  Changed;
 end;
 
 procedure TTyIconFont.MapGlyph(const AName: string; ACodepoint: Cardinal);
@@ -427,6 +582,8 @@ begin
   UnloadFontFile;
   FFontFile := AValue;
   FLoadError := '';
+  FSourceRequested := False;
+  FSourceLoaded := False;
   if FFontFile <> '' then
     LoadFontFile(FFontFile);
   Changed;
@@ -452,6 +609,8 @@ begin
     family stays set, so RenderGlyph sails past its own guard and paints tofu. Say what
     happened -- Available and LoadError are the only way a caller can tell "the font is not
     there" from "that glyph name is not mapped". }
+  FSourceRequested := True;
+  FSourceLoaded := False;
   if APath = '' then
   begin
     FLoadError := 'no font file given';
@@ -474,6 +633,7 @@ begin
   begin
     FLoadedFile := APath;
     FLoadError := '';
+    FSourceLoaded := True;
   end;
   {$ENDIF}
   {$IF DEFINED(LCLQt5) OR DEFINED(LCLQt6)}
@@ -483,6 +643,7 @@ begin
   begin
     FLoadedFile := APath;
     FLoadError := '';
+    FSourceLoaded := True;
   end;
   {$ENDIF}
   {$IFDEF LCLCocoa}
@@ -496,6 +657,7 @@ begin
     begin
       FLoadedFile := APath;
       FLoadError := '';
+      FSourceLoaded := True;
     end;
   finally
     CFRelease(url);
@@ -507,6 +669,7 @@ begin
   begin
     FLoadedFile := APath;
     FLoadError := '';
+    FSourceLoaded := True;
   end;
   {$ENDIF}
 end;
@@ -530,6 +693,13 @@ begin
   begin
     w := UTF8ToUTF16(FLoadedFile);
     RemoveFontResourceEx(PWideChar(w), FR_PRIVATE, nil);
+  end;
+  { A memory-registered face has no name to remove it by -- the HANDLE is the only key, which
+    is why it has to be kept. }
+  if FMemFont <> 0 then
+  begin
+    RemoveFontMemResourceEx(FMemFont);
+    FMemFont := 0;
   end;
   {$ENDIF}
   {$IF DEFINED(LCLQt5) OR DEFINED(LCLQt6)}
@@ -559,6 +729,7 @@ begin
   // so an added font stays registered for the process lifetime — nothing to undo here.
   {$ENDIF}
   FLoadedFile := '';
+  FSourceLoaded := False;
 end;
 
 { v3/C5 glyph-override helpers }

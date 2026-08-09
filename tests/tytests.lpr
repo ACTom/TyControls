@@ -52,6 +52,7 @@ uses
   test.paletteicons,
   test.appicon,
   test.trailingzone,
+  test.lucide,
   test.tabsheet,
   test.pagecontrol,
   test.pagecontrol.streaming,
