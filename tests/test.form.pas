@@ -196,6 +196,7 @@ type
     procedure TestPinnedTitleHeightRoundTripsExactly;
     procedure TestAccumulatingRescaleSquares;
     procedure TestExplicitButtonWidthRoundTripsExactly;
+    procedure TestLclScalingAfterTheEngineDoesNotDoubleTheBar;
   end;
 
   { ===== ac2363: the CONTROL half of the same per-monitor DPI report ==========
@@ -1398,6 +1399,42 @@ begin
     b.Height := first;                      // simulate the first pass having been applied
     second := TyTitleBarDeviceHeight(f, b, 240);
     AssertEquals('asking twice at the same PPI must not grow the bar', first, second);
+  finally
+    f.Free;
+  end;
+end;
+
+procedure TTitleBarDpiTest.TestLclScalingAfterTheEngineDoesNotDoubleTheBar;
+{ THE ORDERING GUARD, and the reason "sometimes" was in the report.
+
+  a6256 made the height DERIVED, which fixes the case where LCL scales first and the engine
+  corrects afterwards. It does not fix the other order. Crossing a monitor can deliver
+  ChangeBounds BEFORE WM_DPICHANGED: the engine derives the right height and records the new
+  PPI, LCL's own pass then multiplies that already-correct height by the DPI ratio, and the
+  next ChangeBounds sees CurPPI = FInstalledPPI and declines to correct anything. The bar
+  stays ~2.5x too tall -- until some later crossing happens to arrive in the other order,
+  which is why a second run "could not reproduce it".
+
+  So: run LCL's own adjustment pass on a form whose bar is ALREADY correct for the new PPI,
+  and require the height to still be the derived one. }
+var
+  f: TTyForm;
+  b: TTyTitleBar;
+  want: Integer;
+begin
+  f := TTyForm.CreateNew(nil);
+  b := TTyTitleBar.Create(f);
+  try
+    b.Parent := f;
+    f.TitleBar := b;
+    { The engine got there first: the bar is already right for 240. }
+    want := TyTitleBarDeviceHeight(f, b, 240);
+    b.Height := want;
+    { Now LCL's pass runs, multiplying every alTop child by the ratio. Without the
+      DoAutoAdjustLayout override this leaves 2.5 * want. }
+    f.AutoAdjustLayout(lapAutoAdjustForDPI, 96, 240, f.Width, f.Width);
+    AssertEquals('LCL scaled a bar the engine had already sized; the height must be '
+      + 're-derived, not multiplied', want, b.Height);
   finally
     f.Free;
   end;

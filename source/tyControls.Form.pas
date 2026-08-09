@@ -241,6 +241,11 @@ type
       mouse re-enter). No-op while an actual resize drag is in progress. }
     procedure ClearResizeCursor;
     procedure HandleChangeBounds;
+    { Record the PPI the chrome is now installed at. TTyForm.DoAutoAdjustLayout re-derives
+      the bar height after LCL's own scaling pass and has to tell the engine, or the next
+      ChangeBounds would see a stale FInstalledPPI and "correct" a height that is already
+      right. }
+    procedure NoteInstalledPPI(APPI: Integer);
     procedure ToggleMaximize;
     property Form: TCustomForm read FForm write FForm;
     property TitleBar: TTyTitleBar read FTitleBar write FTitleBar;
@@ -385,6 +390,24 @@ type
     procedure Activate; override;
     {$ENDIF}
     procedure DoShow; override;   // first show: apply window corners + shadow once the handle exists
+    { Re-derive the title bar's height AFTER LCL has scaled the form for a new monitor.
+
+      a6256 removed the double application by DERIVING the height in HandleChangeBounds instead
+      of multiplying the running value. That fixed the case where LCL scaled first -- but it is
+      gated on CurPPI <> FInstalledPPI, so it only corrects ONCE per monitor change, and it does
+      not care who ran first. Cross a monitor and ChangeBounds can arrive BEFORE
+      WM_DPICHANGED: the engine then derives the correct height and records the new PPI, LCL's
+      pass multiplies that correct height by To/From a moment later, and the next ChangeBounds
+      sees CurPPI = FInstalledPPI and declines to fix it. The bar stays ~2.5x too tall until
+      something else moves the window across a DPI boundary again -- which is exactly the
+      reported "sometimes it works, sometimes the titlebar is 2x higher, only on the 250%
+      monitor", and exactly why it would not reproduce on the next run.
+
+      Overriding here removes the ordering from the question: this runs immediately after LCL's
+      own adjustment, and TyTitleBarDeviceHeight is a pure function of (pinned logical height or
+      theme metric, PPI), so re-deriving is idempotent no matter what ran before it. }
+    procedure DoAutoAdjustLayout(const AMode: TLayoutAdjustmentPolicy;
+      const AXProportion, AYProportion: Double); override;
   public
     constructor Create(AOwner: TComponent); override;
     constructor CreateNew(AOwner: TComponent; Num: Integer = 0); override;
@@ -1619,6 +1642,11 @@ begin
     FForm.Cursor := crDefault;
 end;
 
+procedure TTyChromeEngine.NoteInstalledPPI(APPI: Integer);
+begin
+  if APPI > 0 then FInstalledPPI := APPI;
+end;
+
 procedure TTyChromeEngine.HandleChangeBounds;
 var
   CurPPI: Integer;
@@ -2607,6 +2635,33 @@ begin
   maximized := (FEngine <> nil) and FEngine.Maximized;
   TyApplyWindowEffects(Self,
     TyResolveWindowEffect(ResolveChromeStyle(ctrl), maximized));
+end;
+
+procedure TTyForm.DoAutoAdjustLayout(const AMode: TLayoutAdjustmentPolicy;
+  const AXProportion, AYProportion: Double);
+var
+  ppi: Integer;
+begin
+  inherited DoAutoAdjustLayout(AMode, AXProportion, AYProportion);
+  if csDesigning in ComponentState then Exit;
+  if (FTitleBar = nil) or (FEngine = nil) then Exit;
+  if AMode <> lapAutoAdjustForDPI then Exit;
+  { LCL has just multiplied every alTop child's bounds by the DPI ratio, this bar included.
+    Derive the height back from (pinned logical height or theme metric, current PPI) -- see the
+    declaration for why the engine's own correction is not enough on its own. }
+  { Font.PixelsPerInch, NOT Monitor's: LCL has just finished its own pass and has already
+    updated the font PPI (ScaleFontsPPI runs inside AutoAdjustLayout), whereas Monitor still
+    answers for wherever the window physically is -- which during a WM_DPICHANGED is not
+    reliably the monitor being scaled TO. Font.PixelsPerInch is what every other control in
+    this library treats as the live PPI, for the same reason. }
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then
+  begin
+    if Monitor <> nil then ppi := Monitor.PixelsPerInch else ppi := Screen.PixelsPerInch;
+  end;
+  FTitleBar.Height := TyTitleBarDeviceHeight(Self, FTitleBar, ppi);
+  FTitleBar.LayoutButtons;
+  FEngine.NoteInstalledPPI(ppi);
 end;
 
 procedure TTyForm.DoShow;
