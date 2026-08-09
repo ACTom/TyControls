@@ -973,7 +973,7 @@ begin
       CY := R.Top + (R.Bottom - R.Top - GlyphSize) div 2;
       GlyphRect := Rect(CX, CY, CX + GlyphSize, CY + GlyphSize);
       // v3/C5: the caption glyph is theme-overridable with an icon-font codepoint.
-      TyDrawGlyph(P, ActiveController, GlyphRect, KindGlyphToken, KindGlyph, S.TextColor, P.Scale(1));
+      TyDrawGlyph(P, ActiveController, GlyphRect, KindGlyphToken, KindGlyph, S.TextColor, 1);
     end;
     P.EndPaint;
   finally

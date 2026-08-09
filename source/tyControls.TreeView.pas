@@ -4881,16 +4881,16 @@ begin
             if FHeader.SortDirection = sdAscending then
             begin
               if tpTextColor in headerSecStyle.Present then
-                P.DrawGlyph(sortBandR, tgArrowUp, headerSecStyle.TextColor, P.Scale(1), 1)
+                P.DrawGlyph(sortBandR, tgArrowUp, headerSecStyle.TextColor, 1, 1)
               else
-                P.DrawGlyph(sortBandR, tgArrowUp, S.TextColor, P.Scale(1), 1);
+                P.DrawGlyph(sortBandR, tgArrowUp, S.TextColor, 1, 1);
             end
             else
             begin
               if tpTextColor in headerSecStyle.Present then
-                P.DrawGlyph(sortBandR, tgArrowDown, headerSecStyle.TextColor, P.Scale(1), 1)
+                P.DrawGlyph(sortBandR, tgArrowDown, headerSecStyle.TextColor, 1, 1)
               else
-                P.DrawGlyph(sortBandR, tgArrowDown, S.TextColor, P.Scale(1), 1);
+                P.DrawGlyph(sortBandR, tgArrowDown, S.TextColor, 1, 1);
             end;
           end;
         end;
@@ -5152,9 +5152,9 @@ begin
                 reaches the tree too. Calling the painter straight bypassed an override
                 this library already supports everywhere else. }
               if nsExpanded in node^.States then
-                TyDrawGlyph(P, ActiveController, btnRect, tgChevronDown, NodeStyle.TextColor, P.Scale(1), 2)
+                TyDrawGlyph(P, ActiveController, btnRect, tgChevronDown, NodeStyle.TextColor, 1, 2)
               else
-                TyDrawGlyph(P, ActiveController, btnRect, tgChevronRight, NodeStyle.TextColor, P.Scale(1), 2);
+                TyDrawGlyph(P, ActiveController, btnRect, tgChevronRight, NodeStyle.TextColor, 1, 2);
             end;
 
             { B2: Checkbox slot (main column, after expand button, before image) }
@@ -5433,9 +5433,9 @@ begin
             the tree too. Calling the painter straight bypassed an override this library
             already supports everywhere else. }
           if nsExpanded in node^.States then
-            TyDrawGlyph(P, ActiveController, btnRect, tgChevronDown, NodeStyle.TextColor, P.Scale(1), 2)
+            TyDrawGlyph(P, ActiveController, btnRect, tgChevronDown, NodeStyle.TextColor, 1, 2)
           else
-            TyDrawGlyph(P, ActiveController, btnRect, tgChevronRight, NodeStyle.TextColor, P.Scale(1), 2);
+            TyDrawGlyph(P, ActiveController, btnRect, tgChevronRight, NodeStyle.TextColor, 1, 2);
         end;
 
         { ── B2: Checkbox slot (after expand button, before image) ──────── }

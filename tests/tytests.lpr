@@ -52,6 +52,7 @@ uses
   test.paletteicons,
   test.appicon,
   test.trailingzone,
+  test.glyphthickness,
   test.lucide, test.glyphnames,
   test.virtualimagelist.iconfont,
   test.tabsheet,
