@@ -1,9 +1,11 @@
 # 自带图标字体 + 设计期图标选择器 —— 方案
 
 > 状态:**已批准 —— Lucide + 先做 Slice 0**(2026-08-09)。
-> **Slice 0 已完成并提交**(`a6cb6e4`):`Available`/`LoadError`、resolver 注册表、
-> 版本计数 + 多播变更通知(TTyCharImage / TTyRibbonGallery 已接线)、哈希名字索引;
-> 12 条新测试,其中 3 条做过变异测试。**Slice 1(字体包)与 Slice 2(选择器)未开工。**
+> **Slice 0 已完成**(`a6cb6e4`):`Available`/`LoadError`、resolver 注册表、版本计数 +
+> 多播变更通知(TTyCharImage / TTyRibbonGallery 已接线)、哈希名字索引。
+> **Slice 1 已完成**(`38aa7e4`):Lucide 2022 个图标内嵌,一行 `uses` 可用;
+> 不 uses 就 +0 字节(实测 979 KB vs 0);内存加载四个 widgetset 都写了(Windows 实测过);
+> 20 个上游已删的品牌图标按轮廓检查剔除。**Slice 2(选择器对话框)未开工。**
 
 ## 一、选哪套字体:**Lucide(ISC)**,备选 Tabler(MIT)
 
