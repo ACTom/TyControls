@@ -8,7 +8,7 @@ uses
   tyControls.ComboBox, tyControls.ToggleSwitch, tyControls.Edit,
   tyControls.Dialogs, tyControls.Dialogs.SelectPath, tyControls.Dialogs.Color,
   tyControls.Dialogs.Font, tyControls.Dialogs.Find, tyControls.Dialogs.Progress,
-  tyControls.Dialogs.About;
+  tyControls.Dialogs.About, tyControls.Dialogs.IconBrowser, tyControls.IconFont;
 
 type
 
@@ -70,6 +70,7 @@ type
     procedure BtnReplaceClick(Sender: TObject);
     procedure BtnProgressClick(Sender: TObject);
     procedure BtnAboutClick(Sender: TObject);
+    procedure BtnIconBrowserClick(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
     procedure DarkSwitchChange(Sender: TObject);
     procedure BtnMsgInfoClick(Sender: TObject);
@@ -90,6 +91,8 @@ type
   private
     FFindDlg: TTyFindDialog;
     FReplaceDlg: TTyReplaceDialog;
+    FDemoFont: TTyIconFont;      // hand-mapped, so the example links no bundled pack
+    FDemoIconName: string;
     procedure InitThemes;
     procedure ApplyBuiltin(const AName: string);
     procedure Log(const AMsg: string);
@@ -111,6 +114,8 @@ resourcestring
     msgid; Simplified-Chinese lives in examples/dialogs/languages/tydialogs.zh_CN.po, which
     SetDefaultLang loads to translate BOTH these resourcestrings and the mainform.lfm captions. }
   rsReady          = 'Ready. Click a button to open the matching dialog.';
+  rsIconPicked     = 'Icon browser: picked %s';
+  rsIconCancelled  = 'Icon browser: cancelled';
   rsMsgPrompt      = 'Delete the selected item?';
   rsMsgYes         = 'Message: user chose Yes';
   rsMsgNo          = 'Message: user chose No';
@@ -196,6 +201,21 @@ var
   i: Integer;
 begin
   InitThemes;
+  { A hand-mapped icon font for the browser button. Deliberately NOT a bundled pack: linking
+    one would put ~833KB of font into an example about dialogs, and a hand-mapped font is the
+    case that must keep working anyway. Wingdings is on every Windows box; elsewhere the names
+    still resolve and the grid simply draws the fallback face. }
+  FDemoFont := TTyIconFont.Create(Self);
+  FDemoFont.FontFamily := 'Wingdings';
+  { Wingdings lives in the U+F020..U+F0FF private-use block; these are the ANSI codes it is
+    normally typed with, shifted into it. Bare hex -- TyParseCodepoint takes 'F031', '0xF031',
+    'U+F031' or '$F031', but a space inside would make the whole entry parse to 0 and the name
+    would silently not be offered at all. }
+  FDemoFont.Glyphs.Text :=
+    'folder=F031'#13'folder-open=F032'#13'document=F025'#13'printer=F026'#13'mouse=F027'
+    + #13'keyboard=F028'#13'phone=F028'#13'mail=F02A'#13'clock=F0AB'#13'hourglass=F029'
+    + #13'check=F0FC'#13'cross=F0FB'#13'star=F0AB'#13'arrow-right=F0E0'#13'arrow-left=F0DF';
+  FDemoIconName := 'folder';
   // Fill the title-bar theme switcher with every compiled-in theme. Switching it re-themes the
   // app AND every dialog opened afterwards — a CreateNew dialog adopts the owner form's
   // controller in TTyDialog.ApplyOwnerController, which is what makes the two match.
@@ -548,6 +568,23 @@ begin
   TyShowAbout(rsAboutTitle, 'TyControls', Format(rsVersionFmt, [TyVersion]), rsAboutDesc,
     '', 'LGPL', 'https://github.com/ACTom/TyControls');
   Log(rsAboutShown);
+end;
+
+procedure TDialogsMainForm.BtnIconBrowserClick(Sender: TObject);
+var
+  nm: string;
+begin
+  // The browser works with ANY TTyIconFont. This example has no bundled pack (adding one
+  // would link ~833KB of font into it), so it maps a few glyphs of a system font by hand --
+  // which is also the case a hand-mapped font has to keep working in.
+  nm := FDemoIconName;
+  if TyBrowseIcons('', FDemoFont, nm) then
+  begin
+    FDemoIconName := nm;
+    Log(Format(rsIconPicked, [nm]));
+  end
+  else
+    Log(rsIconCancelled);
 end;
 
 { ---- Build your own dialog on the shared base ---------------------------- }

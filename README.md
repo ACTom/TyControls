@@ -335,7 +335,7 @@ CharImage1.GlyphName := TyIconHouse;   // 或者直接写 'house'
 | `TTyArrow` | 方向箭头 |
 | `TTyChart` | 图表:折线 / 柱状 / 饼图 |
 
-### 对话框 · `TyControls Dialogs`(19)
+### 对话框 · `TyControls Dialogs`(20)
 
 | 控件 | 用来干嘛 |
 |---|---|
@@ -358,6 +358,7 @@ CharImage1.GlyphName := TyIconHouse;   // 或者直接写 'house'
 | `TTyOpenPreviewDialog` | 打开对话框 + 右侧自定义预览 |
 | `TTySavePreviewDialog` | 保存对话框 + 右侧自定义预览 |
 | `TTyNotification` | 角落浮出的通知,自动消失 |
+| `TTyIconBrowserDialog` | 图标浏览器(带搜索的字形网格;显示 ImageIndex) |
 
 > 有三个控件的能力远超一行清单能写下的:
 > **[`TTyStringGrid`](docs/controls/grid.md)** —— 冻结行列、百万行虚拟化、16 种内建编辑器、Excel 式列筛选、分组小计、撤销/重做、剪贴板与 CSV 导入导出;

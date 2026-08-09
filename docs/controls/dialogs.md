@@ -493,3 +493,64 @@ end;
 
 `SetProgress` pumps the message loop so the bar repaints and a Cancel click is seen. It is determinate
 only (no marquee).
+
+---
+
+## 11. 图标浏览器 — `TTyIconBrowserDialog` (S5)
+
+一个内嵌图标包有两千来个字形,而对象查看器里的 `GlyphName` 下拉框会把它们**全部**列出来 ——
+完整,但没人会在两千条字符串里滚动着找"保存"那个图标。这个对话框是拿来**看**的:
+带搜索框的网格。
+
+它**不绑定任何具体图标包**:它向 `TTyIconFont` 要 `GlyphNames`,所以手工映射的字体、内嵌包、
+或者同时两个包,它都能浏览。
+
+### 全局函数
+
+```pascal
+uses tyControls.Dialogs.IconBrowser;
+
+var nm: string;
+begin
+  nm := CharImage1.GlyphName;               // 传入 = 预选(会滚动到可见位置)
+  if TyBrowseIcons('', LucideIconFont1, nm) then
+    CharImage1.GlyphName := nm;             // 传出 = 用户选中的
+end;
+```
+
+`TyBrowseIcons` 取消时**不改动** `AGlyphName`,与 LCL 的 var 参数惯例一致。
+
+### 显示 ImageIndex
+
+多数控件是按 `ImageIndex` 而不是按名字引用图标的。把浏览器关联到一个
+`TTyVirtualImageList`,列表里已有的图标就会在角上显示它的 `ImageIndex`,状态行也会写明:
+
+```pascal
+d := TyBuildIconBrowserDialogFor('', LucideIconFont1, VirtualImageList1);
+```
+
+> 显示的是**在列表里的位置**,不是在网格里的位置。网格是过滤过的 —— 用网格位置的话,
+> 用户一敲搜索框那个数字就变了。列表里没有的图标不显示任何数字。
+
+### 设计期
+
+| 入口 | 在哪 | 做什么 |
+|---|---|---|
+| 右键「图标浏览器…」 | `TTyIconFont` / 内嵌图标包 | 选中的名字进剪贴板 |
+| 右键「图标浏览器…」 | `TTyVirtualImageList` | 选中的名字追加进 `Names`,并显示各项 `ImageIndex` |
+| `...` 按钮 | 任意 `GlyphName` 属性 | 挑完直接写回该属性 |
+
+### 组件
+
+| 属性 | 说明 |
+|---|---|
+| `Caption` | 窗口标题;空则用默认 |
+| `IconFont` | 要浏览的图标字体。未设置时对话框会说明,而不是开一个空网格 |
+| `GlyphName` | `Execute` 前作为预选传入,用户确定后写回 |
+| `OnShow` / `OnClose` / `OnCanClose` | 与其他对话框组件一致 |
+
+```pascal
+IconBrowserDialog1.IconFont := LucideIconFont1;
+if IconBrowserDialog1.Execute then
+  Button1.GlyphName := IconBrowserDialog1.GlyphName;
+```

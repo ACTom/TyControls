@@ -380,7 +380,7 @@ blank square.
 | `TTyArrow` | Directional arrow |
 | `TTyChart` | Chart: line / bar / pie |
 
-### Dialogs · `TyControls Dialogs` (19)
+### Dialogs · `TyControls Dialogs` (20)
 
 | Control | What it is for |
 |---|---|
@@ -403,6 +403,7 @@ blank square.
 | `TTyOpenPreviewDialog` | Open dialog with a custom preview pane |
 | `TTySavePreviewDialog` | Save dialog with a custom preview pane |
 | `TTyNotification` | Corner toast that fades away on its own |
+| `TTyIconBrowserDialog` | Icon browser (searchable glyph grid; shows ImageIndex) |
 
 > Three controls do far more than one list line can say:
 > **[`TTyStringGrid`](docs/controls/grid.md)** — frozen rows/cols, million-row virtualization,

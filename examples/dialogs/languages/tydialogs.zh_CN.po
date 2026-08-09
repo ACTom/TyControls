@@ -237,6 +237,19 @@ msgstr "进度"
 msgid "About"
 msgstr "关于"
 
+#: tdialogsmainform.btniconbrowser.caption
+msgid "Icon browser"
+msgstr "图标浏览器"
+
+#: mainform.rsiconpicked
+#, object-pascal-format
+msgid "Icon browser: picked %s"
+msgstr "图标浏览器:选中 %s"
+
+#: mainform.rsiconcancelled
+msgid "Icon browser: cancelled"
+msgstr "图标浏览器:已取消"
+
 #: mainform.rsabouttitle
 msgid "About TyControls"
 msgstr "关于 TyControls"

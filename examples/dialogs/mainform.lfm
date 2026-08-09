@@ -184,6 +184,16 @@ object DialogsMainForm: TDialogsMainForm
         Controller = TyController
         Caption = 'About'
       end
+      object BtnIconBrowser: TTyButton
+        Left = 16
+        Height = 32
+        Top = 140
+        Width = 140
+        TabOrder = 12
+        OnClick = BtnIconBrowserClick
+        Controller = TyController
+        Caption = 'Icon browser'
+      end
     end
     object LblMsgTypes: TTyLabel
       Left = 16
