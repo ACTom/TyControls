@@ -1,6 +1,9 @@
 # 自带图标字体 + 设计期图标选择器 —— 方案
 
-> 状态:**方案待批准**,尚未动工。前置判断已经做完,两条都是实测/查源得出的,不是回忆。
+> 状态:**已批准 —— Lucide + 先做 Slice 0**(2026-08-09)。
+> **Slice 0 已完成并提交**(`a6cb6e4`):`Available`/`LoadError`、resolver 注册表、
+> 版本计数 + 多播变更通知(TTyCharImage / TTyRibbonGallery 已接线)、哈希名字索引;
+> 12 条新测试,其中 3 条做过变异测试。**Slice 1(字体包)与 Slice 2(选择器)未开工。**
 
 ## 一、选哪套字体:**Lucide(ISC)**,备选 Tabler(MIT)
 
@@ -102,7 +105,19 @@ CharImage1.GlyphName := 'house';
 3. **字体在目标机注册失败会渲染成豆腐块**,而且现在是静默的:`IconFont.pas:256` 在 `not FileExists` 时早退,
    但 `FFontFamily` 已经设了,`RenderGlyph` 的守卫过得去,于是画出空框。Slice 0 的 `Available` 就是为这个。
 
-## 五、待你拍板的两件事
+## 五、拍板结果
+
+1. **选 Lucide**(ISC / 1641 / 853KB)。
+2. **先只做 Slice 0**,已完成。
+
+### Slice 0 落地后与原方案的两点差异
+
+- **设计期字族下拉框补「已注册但不可枚举」的字族**这条**没做**:它只有在真的从内存加载之后才有意义,
+  那是 Slice 1 的事,现在做属于凭空猜测。
+- **`TTyGlyphImageList` 没接变更通知**:它是按调用方要求即时渲染的,自己不缓存任何东西,没有可失效的状态。
+  接线的是 `TTyCharImage` 与 `TTyRibbonGallery`(这两个会持续重绘)。
+
+## 六、原先待拍板的两件事(留档)
 
 1. **Lucide(853KB / 1641 个 / ISC)还是 Tabler(2.83MB / 6150 个 / MIT)**。我的建议是 Lucide。
 2. **要不要先只做 Slice 0**(纯改进、无风险、可无头测试),把字体和选择器排到后面?我的建议是要。
