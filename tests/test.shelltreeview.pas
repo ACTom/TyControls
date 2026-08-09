@@ -33,7 +33,7 @@ unit test.shelltreeview;
 interface
 
 uses
-  Classes, SysUtils, Types,
+  Classes, SysUtils, Types, Graphics,
   LazFileUtils, FileUtil,
   fpcunit, testregistry,
   tyControls.FileSystem,   { TyFsHasSubdir, TyFsRoots, TTyFsRootArray, kinds }
@@ -505,6 +505,116 @@ begin
   AssertFalse('并且没有半路切进条目模式', FTree.IsItemMode);
 end;
 
+{ ===== The built-in glyphs, after the image list under them was replaced =========
+
+  BuildGlyphs used to hand-fill a TImageList at a hardcoded 16px; it now renders the same three
+  BGRA masters through a TTyVirtualImageList into a TTyLCLImageList. Nothing in this file said
+  anything about the icons before, so the swap was entirely unguarded -- and "the tests are
+  green" would have been true with three blank squares, or with the order reversed.
+
+  The order is load-bearing: TyShellTreeFolderGlyph/DriveGlyph/FileGlyph are 0/1/2 and the tree
+  looks a node's icon up by those constants. }
+type
+  TShellTreeGlyphTest = class(TTestCase)
+  private
+    { The dominant non-transparent colour of slot AIndex, as a coarse (r,g,b). }
+    function SlotInk(ATree: TTyShellTreeView; AIndex: Integer; out AR, AG, AB: Integer): Boolean;
+  published
+    procedure TheThreeBuiltinGlyphsAreThereInOrder;
+    procedure EachGlyphActuallyHasInk;
+    procedure TheThreeGlyphsAreDistinct;
+  end;
+
+function TShellTreeGlyphTest.SlotInk(ATree: TTyShellTreeView; AIndex: Integer;
+  out AR, AG, AB: Integer): Boolean;
+var
+  bmp: TBitmap;
+  x, y, n: Integer;
+  c: TColor;
+begin
+  AR := 0; AG := 0; AB := 0; n := 0;
+  Result := False;
+  if (ATree.Images = nil) or (AIndex >= ATree.Images.Count) then Exit;
+  bmp := TBitmap.Create;
+  try
+    ATree.Images.GetBitmap(AIndex, bmp);
+    if (bmp.Width = 0) or (bmp.Height = 0) then Exit;
+    for y := 0 to bmp.Height - 1 do
+      for x := 0 to bmp.Width - 1 do
+      begin
+        c := bmp.Canvas.Pixels[x, y];
+        { Skip the black/transparent surround; average what is left. }
+        if c = clBlack then Continue;
+        Inc(AR, Red(c)); Inc(AG, Green(c)); Inc(AB, Blue(c)); Inc(n);
+      end;
+    if n = 0 then Exit;
+    AR := AR div n; AG := AG div n; AB := AB div n;
+    Result := True;
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TShellTreeGlyphTest.TheThreeBuiltinGlyphsAreThereInOrder;
+var tree: TTyShellTreeView;
+begin
+  tree := TTyShellTreeView.Create(nil);
+  try
+    AssertTrue('the built-in icons are assigned', tree.Images <> nil);
+    AssertEquals('folder, drive, file -- and the constants below index them',
+      3, tree.Images.Count);
+    AssertEquals('at the documented size', TyShellTreeIconSize, tree.Images.Width);
+  finally
+    tree.Free;
+  end;
+end;
+
+procedure TShellTreeGlyphTest.EachGlyphActuallyHasInk;
+var
+  tree: TTyShellTreeView;
+  i, r, g, b: Integer;
+begin
+  { Three blank squares would satisfy a Count assertion perfectly. }
+  tree := TTyShellTreeView.Create(nil);
+  try
+    for i := 0 to 2 do
+      AssertTrue(Format('slot %d drew nothing at all', [i]), SlotInk(tree, i, r, g, b));
+  finally
+    tree.Free;
+  end;
+end;
+
+procedure TShellTreeGlyphTest.TheThreeGlyphsAreDistinct;
+var
+  tree: TTyShellTreeView;
+  r0, g0, b0, r1, g1, b1, r2, g2, b2: Integer;
+begin
+  { Amber folder, steel-blue drive, neutral-grey file. If the fill ever collapsed to one master
+    repeated -- the obvious way to get this wrong -- every node would wear the same icon and
+    Count would still say 3. }
+  tree := TTyShellTreeView.Create(nil);
+  try
+    AssertTrue('folder', SlotInk(tree, TyShellTreeFolderGlyph, r0, g0, b0));
+    AssertTrue('drive', SlotInk(tree, TyShellTreeDriveGlyph, r1, g1, b1));
+    AssertTrue('file', SlotInk(tree, TyShellTreeFileGlyph, r2, g2, b2));
+    { Each slot pinned to ITS OWN identity, not to an ordering. The first version compared them
+      relatively -- "folder warmer than drive", "drive bluer than file" -- and REVERSING the
+      three names passed it, because neutral grey sits between amber and blue on both counts.
+      Its own mutation test is what said so. Measured: folder (222,174,70), drive (104,122,151),
+      file (148,154,162); the margins below are wide against those and impossible for any other
+      slot. }
+    AssertTrue(Format('slot %d should be the AMBER folder, measured (%d,%d,%d)',
+      [TyShellTreeFolderGlyph, r0, g0, b0]), r0 - b0 > 100);
+    AssertTrue(Format('slot %d should be the STEEL-BLUE drive, measured (%d,%d,%d)',
+      [TyShellTreeDriveGlyph, r1, g1, b1]), b1 - r1 > 30);
+    AssertTrue(Format('slot %d should be the NEUTRAL-GREY file, measured (%d,%d,%d)',
+      [TyShellTreeFileGlyph, r2, g2, b2]), Abs(r2 - b2) < 25);
+  finally
+    tree.Free;
+  end;
+end;
+
 initialization
+  RegisterTest(TShellTreeGlyphTest);
   RegisterTest(TShellTreeViewTest);
 end.

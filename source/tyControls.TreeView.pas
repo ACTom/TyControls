@@ -507,6 +507,14 @@ type
       TImageList, so a TCustomImageList-typed reference -- TLCLGlyphs, or any custom
       descendant that is not a TImageList -- would not assign. }
     FImages:            TCustomImageList;
+    { LCL's own tree keeps one of these (treeview.inc:6262-6271) and this one did not: an image
+      list announces a content change through a TChangeLink, and nothing else does. Without it
+      an icon that was added, resized or re-rendered after the tree was painted simply never
+      appeared -- the tree redrew from its cache and had no idea anything had moved. It matters
+      more now than it did: TTyLCLImageList refills itself whenever its source changes, so with
+      no link the tree would show whatever the list happened to hold at assignment time and
+      never again. }
+    FImageChangeLink: TChangeLink;
     FEmptyListMessage:  string;
     FShowButtons:       Boolean;
     FShowTreeLines:     Boolean;
@@ -598,6 +606,7 @@ type
     procedure HeaderChanged(Sender: TObject);
     procedure SetHeader(AValue: TTyHeader);
     procedure SetIndent(AValue: Integer);
+    procedure ImagesChanged(Sender: TObject);
     procedure SetImages(AValue: TCustomImageList);
     procedure SetShowButtons(AValue: Boolean);
     procedure SetShowTreeLines(AValue: Boolean);
@@ -1739,7 +1748,14 @@ end;
 procedure TTyTreeView.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
-  if (Operation = opRemove) and (AComponent = FImages) then FImages := nil;
+  if (Operation = opRemove) and (AComponent = FImages) then
+  begin
+    { Do NOT UnRegisterChanges here: the list is already being destroyed, and reaching into it
+      during its own destructor is how a use-after-free starts. TImageList drops its links
+      itself when it goes. }
+    FImages := nil;
+    Invalidate;
+  end;
 end;
 
 { ── C1 ── selection / focus ────────────────────────────────────────────────── }
@@ -2313,10 +2329,28 @@ begin
   Invalidate;
 end;
 
+procedure TTyTreeView.ImagesChanged(Sender: TObject);
+begin
+  Invalidate;
+end;
+
 procedure TTyTreeView.SetImages(AValue: TCustomImageList);
 begin
   if FImages = AValue then Exit;
+  if FImageChangeLink = nil then
+  begin
+    FImageChangeLink := TChangeLink.Create;
+    FImageChangeLink.OnChange := @ImagesChanged;
+  end;
+  if FImages <> nil then
+    FImages.UnRegisterChanges(FImageChangeLink);
   FImages := AValue;
+  if FImages <> nil then
+  begin
+    FImages.RegisterChanges(FImageChangeLink);
+    { The tree already nils FImages on opRemove; this is what makes the notification arrive. }
+    FImages.FreeNotification(Self);
+  end;
   Invalidate;
 end;
 
@@ -3017,6 +3051,11 @@ end;
 
 destructor TTyTreeView.Destroy;
 begin
+  { Unhook from the image list first: a refill arriving while the tree is being torn down would
+    call Invalidate on a half-destroyed control. }
+  if (FImages <> nil) and (FImageChangeLink <> nil) then
+    FImages.UnRegisterChanges(FImageChangeLink);
+  FreeAndNil(FImageChangeLink);
   { 拆控件时条目层先退场:此后 Clear / DeleteNode 走的是纯虚拟路径,
     不会再回流到条目层去重建一棵正在被销毁的树。两个赋值必须在
     FItems.Free 之前 —— 释放集合会触发 Notify。 }

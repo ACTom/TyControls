@@ -52,10 +52,24 @@ type
     procedure TheBridgeReportsTheLibraryVersion;
   end;
 
+  { The other half of the bridge being useful: a tree that never hears about a change shows the
+    icons its list happened to hold at assignment time and never again. TTyTreeView.SetImages
+    only assigned and Invalidated -- no TChangeLink, which is the ONLY way an image list
+    announces a content change. LCL's own tree has always kept one (treeview.inc:6262-6271).
+
+    Invalidate is counted through a probe descendant because on a headless build there is no
+    handle and no paint; the count is the honest observable. }
+  TTreeImagesLinkTest = class(TTestCase)
+  published
+    procedure ARefillOfTheAssignedListRepaintsTheTree;
+    procedure DetachingTheListStopsTheNotifications;
+    procedure FreeingTheListDoesNotLeaveTheTreeHoldingIt;
+  end;
+
 implementation
 
 uses
-  Forms;
+  Forms, tyControls.TreeView;
 
 { Rendering a glyph needs a widgetset for the font, and the console runner never calls
   Application.Initialize -- the same one-shot init test.virtualimagelist.iconfont uses. }
@@ -258,7 +272,121 @@ begin
   AssertEquals(TyVersion, FBridge.Version);
 end;
 
+{ TTreeImagesLinkTest }
+
+type
+  TProbeTree = class(TTyTreeView)
+  public
+    Repaints: Integer;
+    procedure Invalidate; override;
+  end;
+
+procedure TProbeTree.Invalidate;
+begin
+  Inc(Repaints);
+  inherited Invalidate;
+end;
+
+function BuiltList(AColl: TTyImageCollection): TTyVirtualImageList;
+begin
+  Result := TTyVirtualImageList.Create(nil);
+  Result.Collection := AColl;
+  Result.Names.Text := 'red';
+end;
+
+procedure TTreeImagesLinkTest.ARefillOfTheAssignedListRepaintsTheTree;
+var
+  coll: TTyImageCollection;
+  list: TTyVirtualImageList;
+  bridge: TTyLCLImageList;
+  tree: TProbeTree;
+  before: Integer;
+  bmp: TBGRABitmap;
+begin
+  NeedWidgetSet;
+  coll := TTyImageCollection.Create(nil);
+  list := nil; bridge := nil; tree := nil;
+  try
+    bmp := TBGRABitmap.Create(32, 32, BGRA(255, 0, 0, 255));
+    try coll.AddBitmap('red', bmp); finally bmp.Free; end;
+    bmp := TBGRABitmap.Create(32, 32, BGRA(0, 255, 0, 255));
+    try coll.AddBitmap('green', bmp); finally bmp.Free; end;
+
+    list := BuiltList(coll);
+    bridge := TTyLCLImageList.Create(nil);
+    bridge.Source := list;
+    tree := TProbeTree.Create(nil);
+    tree.Images := bridge;
+
+    before := tree.Repaints;
+    { The whole chain in one line: the source's Names change -> the bridge refills -> the
+      bridge's Change fires the tree's TChangeLink -> the tree repaints. Break any link and
+      the icon the user just added never appears. }
+    list.Names.Add('green');
+    AssertEquals('the bridge picked it up', 2, bridge.Count);
+    AssertTrue('and the tree was told', tree.Repaints > before);
+  finally
+    tree.Free;
+    bridge.Free;
+    list.Free;
+    coll.Free;
+  end;
+end;
+
+procedure TTreeImagesLinkTest.DetachingTheListStopsTheNotifications;
+var
+  coll: TTyImageCollection;
+  list: TTyVirtualImageList;
+  bridge: TTyLCLImageList;
+  tree: TProbeTree;
+  before: Integer;
+  bmp: TBGRABitmap;
+begin
+  NeedWidgetSet;
+  coll := TTyImageCollection.Create(nil);
+  list := nil; bridge := nil; tree := nil;
+  try
+    bmp := TBGRABitmap.Create(32, 32, BGRA(255, 0, 0, 255));
+    try coll.AddBitmap('red', bmp); finally bmp.Free; end;
+    list := BuiltList(coll);
+    bridge := TTyLCLImageList.Create(nil);
+    bridge.Source := list;
+    tree := TProbeTree.Create(nil);
+    tree.Images := bridge;
+    tree.Images := nil;
+    before := tree.Repaints;
+    { Registering without unregistering is the classic half of this pattern, and it does not
+      merely waste work: the link outlives the relationship and the tree repaints for a list it
+      no longer draws. }
+    list.Names.Add('red2');
+    AssertEquals('a detached list must not drive the tree', before, tree.Repaints);
+  finally
+    tree.Free;
+    bridge.Free;
+    list.Free;
+    coll.Free;
+  end;
+end;
+
+procedure TTreeImagesLinkTest.FreeingTheListDoesNotLeaveTheTreeHoldingIt;
+var
+  bridge: TTyLCLImageList;
+  tree: TProbeTree;
+begin
+  bridge := TTyLCLImageList.Create(nil);
+  tree := TProbeTree.Create(nil);
+  try
+    tree.Images := bridge;
+    FreeAndNil(bridge);
+    AssertTrue('FreeNotification nil-ed it', tree.Images = nil);
+  finally
+    tree.Free;
+    bridge.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TLCLImageListTest);
+  RegisterTest(TTreeImagesLinkTest);
 
 end.
