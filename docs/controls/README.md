@@ -97,6 +97,7 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyShellTreeView](shelltreeview.md) | 文件系统后备的目录树（TTyTreeView 适配器）：只显示文件夹、懒加载展开、路径定位 |
 | [TTyFilterComboBox](filtercombobox.md) | 过滤预设下拉（TTyComboBox 适配器）：解析 LCL 过滤串，选中段即生效掩码 |
 | [TTyShellComboBox](shellcombobox.md) | 查找范围下拉（TTyComboBox 适配器）：当前目录面包屑 + 盘符，点行跳转 |
+| [tyControls.FileSystem](filesystem.md) | 上面这几个文件系统控件共用的**非可视工具单元**：目录枚举、根位置、排序与过滤（不是控件，不进面板） |
 | [TTyTransfer](transfer.md) | 双列表穿梭框(源/目标两栏 + 移动键;经典桌面控件) |
 | [TTyTreeSelect](treeselect.md) | 树形下拉(字段 + 弹出真 `TTyTreeView`) |
 | [TTyCascader](cascader.md) | 级联选择(省/市/区;选中左列展开右列) |

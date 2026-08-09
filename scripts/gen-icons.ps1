@@ -55,12 +55,16 @@ $classes = @(
 # 'TyControls Dialogs' group) and fail loudly if a registered control has no icon (would show
 # a blank palette icon) or an icon exists for an unregistered class.
 Write-Host '== checking icon set vs RegisterComponents =='
-$designPas = Join-Path $root 'designtime/tyControls.Design.pas'
+# EVERY design-time unit, not one hardcoded name: a second unit's RegisterComponents would
+# otherwise be invisible here and its components would ship with a blank palette icon — the
+# exact failure tests/test.paletteicons.pas was rewritten to end.
+$designPas = @(Get-ChildItem -Path (Join-Path $root 'designtime') -Filter '*.pas' -File | Sort-Object Name)
+if ($designPas.Count -eq 0) { throw "no design-time source found under $(Join-Path $root 'designtime')" }
 # Read as real UTF-8: PS 5.1 `Get-Content -Raw` decodes via the ANSI codepage and mangles
 # the em-dashes / CJK in Design.pas (the repo-wide rule — see other scripts).
-$design = [System.IO.File]::ReadAllText($designPas)
+$design = ($designPas | ForEach-Object { [System.IO.File]::ReadAllText($_.FullName) }) -join "`n"
 $groups = [regex]::Matches($design, "RegisterComponents\s*\(\s*'TyControls[^']*'\s*,\s*\[(?<list>[^\]]+)\]")
-if ($groups.Count -eq 0) { throw "could not find any RegisterComponents('TyControls...', [...]) in $designPas" }
+if ($groups.Count -eq 0) { throw "could not find any RegisterComponents('TyControls...', [...]) in $($designPas.Name -join ', ')" }
 $registered = @($groups | ForEach-Object {
   [regex]::Matches($_.Groups['list'].Value, 'TTy\w+') | ForEach-Object { $_.Value }
 }) | Sort-Object -Unique

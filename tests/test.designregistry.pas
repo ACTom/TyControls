@@ -22,12 +22,21 @@ unit test.designregistry;
 interface
 
 uses
-  Classes, SysUtils, StrUtils;
+  Classes, SysUtils, StrUtils, FileUtil;
 
 { Repo root — the test exe lives in tests/ (mirrors test.grid.streaming.pas). }
 function RepoRoot: string;
-{ Full path of the registration source everything here parses. }
-function DesignSourceFile: string;
+{ EVERY design-time registration source, sorted, at least one.
+
+  This was a single hardcoded file name, and that was a trap waiting for the first second
+  design-time unit: three separate guards draw their whole population from here
+  (test.paletteicons' palette-icon coverage, test.version's property-editor bases,
+  test.designeditors' RegisterPropertyEditor validity), and a file that is never READ raises
+  nothing anywhere -- the anti-shrink self-check in ParseCallLists compares parsed argument
+  lists against occurrences within the same string, so it cannot notice a string that was never
+  loaded. tycontrols_dt.lpk's search path is the whole directory, so a new unit also compiles
+  fine before it is listed anywhere: the developer sees nothing, and only the guards go quiet. }
+procedure CollectDesignSourceFiles(ADest: TStrings);
 { That source as CODE: comments blanked out (and, unless AKeepLiterals, string literals too), so
   a caller searching for an identifier cannot be answered by prose ABOUT it. The collectors below
   all read it through here; it is exported for the guards that ask a whole-file question rather
@@ -89,9 +98,20 @@ begin
   Result := ExtractFilePath(ParamStr(0)) + '..' + PathDelim;
 end;
 
-function DesignSourceFile: string;
+procedure CollectDesignSourceFiles(ADest: TStrings);
+var
+  found: TStringList;
 begin
-  Result := RepoRoot + 'designtime' + PathDelim + 'tyControls.Design.pas';
+  ADest.Clear;
+  found := FindAllFiles(RepoRoot + 'designtime', '*.pas', False);
+  try
+    found.Sort;   { stable population -> stable failure messages }
+    ADest.AddStrings(found);
+  finally
+    found.Free;
+  end;
+  if ADest.Count = 0 then
+    raise Exception.Create('no design-time registration source found under designtime/');
 end;
 
 { Blank out Pascal comments, and collapse string literals to ''. Both matter: the
@@ -148,21 +168,30 @@ begin
   end;
 end;
 
-{ Read the registration source, comments (and optionally literals) already removed. }
+{ Read the registration sources, comments (and optionally literals) already removed.
+
+  Concatenated, because every collector above asks a question of the form "does the registry
+  contain X" -- which is a question about the registry as a whole, not about any one file.
+  Stripped per file and then joined, so a construct cannot straddle a file boundary and a
+  comment cannot swallow the start of the next unit. }
 function LoadDesignSource(AKeepLiterals: Boolean = False): string;
 var
-  sl: TStringList;
-  fn: string;
+  files, sl: TStringList;
+  i: Integer;
 begin
-  fn := DesignSourceFile;
-  if not FileExists(fn) then
-    raise Exception.Create('design-time registration source not found: ' + fn);
+  Result := '';
+  files := TStringList.Create;
   sl := TStringList.Create;
   try
-    sl.LoadFromFile(fn);
-    Result := StripCommentsAndLiterals(sl.Text, AKeepLiterals);
+    CollectDesignSourceFiles(files);
+    for i := 0 to files.Count - 1 do
+    begin
+      sl.LoadFromFile(files[i]);
+      Result := Result + StripCommentsAndLiterals(sl.Text, AKeepLiterals) + LineEnding;
+    end;
   finally
     sl.Free;
+    files.Free;
   end;
 end;
 

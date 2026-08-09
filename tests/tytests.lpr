@@ -22,7 +22,7 @@ uses
   test.headercontrol, test.listgrouppanel,
   test.checkbox,
   test.radiobutton, test.controls.panel, test.controls.combobox,
-  test.controls.scrollbar, test.form, test.formsurface, test.edgepassthrough, test.themes,
+  test.controls.scrollbar, test.form, test.formsurface, test.edgepassthrough, test.release, test.themes,
   test.listbox, test.listbox.scroll,
   test.progressbar,
   test.toggleswitch,

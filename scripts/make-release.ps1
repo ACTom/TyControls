@@ -59,16 +59,24 @@ function Add-File {
 }
 
 Write-Host '-- root + packages'
+# THIRD-PARTY-NOTICES.md is not optional: the release ships source/tyControls.Icons.Lucide.pas,
+# which embeds the ISC/MIT-licensed Lucide font bytes, and that file IS how the obligation is
+# discharged (assets/lucide/ deliberately does not ship — nothing at run time reads it, and its
+# only consumers are the test suite and the generator, neither of which is in the archive).
 'README.md', 'README.en.md', 'CHANGELOG.md', 'CHANGELOG.en.md',
-'COPYING.LGPL.txt', 'COPYING.modifiedLGPL.txt',
+'COPYING.LGPL.txt', 'COPYING.modifiedLGPL.txt', 'THIRD-PARTY-NOTICES.md',
 'tycontrols.lpk', 'tycontrols_dt.lpk' | ForEach-Object { Add-File $_ }
 
-Write-Host '-- runtime source'
-Add-Tree 'source' @('.pas', '.inc')
+# source/ and designtime/ ship WHOLE. Both used to be filtered -- source/ by extension, and
+# designtime/ by two hardcoded file names -- and both filters were silent: a package .lfm, .lrs
+# or .res under source/, or a second design-time unit, would simply not be in the tarball, and
+# the developer could never see it because the .lpk search path finds the file on disk. The
+# user finds out when Lazarus fails to compile a unit the .lpk lists.
+Write-Host '-- runtime source (whole tree)'
+Add-Tree 'source' @()
 
-Write-Host '-- design-time (Design unit + packed icons .lrs; NOT the png source)'
-Add-File 'designtime/tyControls.Design.pas'
-Add-File 'designtime/tycontrols_icons.lrs'
+Write-Host '-- design-time (whole tree except the PNG regeneration source)'
+Add-Tree 'designtime' @() '(^|[\\/])icons([\\/]|$)'
 
 Write-Host '-- themes (+ image assets referenced via url(), e.g. green''s photo)'
 Add-Tree 'themes' @('.tycss', '.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif', '.svg')
@@ -80,7 +88,11 @@ Write-Host '-- docs (excluding docs/superpowers)'
 Add-Tree 'docs' @('.md', '.png', '.svg', '.gif') '(^|[\\/])superpowers([\\/]|$)'
 
 Write-Host '-- examples (source only)'
-Add-Tree 'examples' @('.pas', '.lpr', '.lpi', '.lfm', '.ico', '.tycss', '.inc', '.po', '.pot')
+# The image extensions are the same set the themes rule above uses, and they are here for the
+# same reason: examples/theming keeps its OWN copy of a skin plus the photo that skin's url()
+# points at, so without them that example shipped with a dead background-image.
+Add-Tree 'examples' @('.pas', '.lpr', '.lpi', '.lfm', '.ico', '.tycss', '.inc', '.po', '.pot',
+                      '.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif', '.svg')
 
 # --- zip -------------------------------------------------------------------
 Write-Host '-- zipping'
