@@ -62,9 +62,13 @@ type
     { Unified addressing across the top (Commands) + bottom (BottomCommands) blocks. }
     function TotalCount: Integer;
     function EntryCaption(AIdx: Integer): string;
-    function EntryGlyph(AIdx: Integer): string;
     function EntryIsSeparator(AIdx: Integer): Boolean;
   protected
+    { "What icon does row N draw?" -- protected rather than private because it is the one
+      answer here worth overriding (a descendant that sources icons differently), and because
+      the name/position pairing it performs is otherwise unassertable: a private member is
+      unit-scoped in FPC, so not even a descendant declared in a test can reach it. }
+    function EntryGlyph(AIdx: Integer): string;
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
@@ -86,8 +90,14 @@ type
     function ContentRect: TRect;
   published
     property Commands: TStrings read FCommands write SetCommands;
-    { Optional per-command glyph names (index-matched to Commands; an empty or missing
-      entry = no icon), rendered from IconFont at the left of each row. }
+    { Optional per-command glyph names, rendered from IconFont at the left of each row.
+
+      Two spellings, and the first is the one to use:
+        Open=folder-open     paired to the COMMAND TEXT -- survives reordering Commands
+        folder-open          matched by POSITION -- the original behaviour, kept working
+      Purely positional matching means inserting one command silently shifts every icon below
+      it onto the wrong row, which is why the paired form exists. An empty or missing entry is
+      no icon. }
     property CommandGlyphs: TStrings read FCommandGlyphs write SetCommandGlyphs;
     { A second command block PINNED to the BOTTOM of the sidebar (e.g. About / Options / Exit —
       fully caller-defined, not hardcoded). A thin separator is drawn above it. Their unified
@@ -232,15 +242,44 @@ begin
 end;
 
 function TTyRibbonBackstage.EntryGlyph(AIdx: Integer): string;
+
+  { BY NAME first, BY POSITION second.
+
+    These two lists were purely index-matched, which is the failure this library keeps finding:
+    insert one command at the top and every icon below it silently moves up one. Nothing errors,
+    nothing looks broken, and the wrong icon is simply on the wrong row.
+
+    So a glyph list entry may now be written `<command text>=<glyph name>`, and that pairing
+    survives any reordering of Commands. A plain entry with no '=' keeps its old positional
+    meaning, so every existing form behaves exactly as before -- this adds a spelling, it does
+    not change one.
+
+    A command caption containing '=' cannot be paired (TStrings splits on the first one) and
+    falls back to its position, which is the pre-existing behaviour anyway. }
+  function GlyphFor(AList: TStrings; ALocal: Integer; const ACaption: string): string;
+  begin
+    Result := '';
+    if AList = nil then Exit;
+    if ACaption <> '' then
+    begin
+      Result := AList.Values[ACaption];
+      if Result <> '' then Exit;
+    end;
+    if (ALocal >= 0) and (ALocal < AList.Count) then
+    begin
+      Result := AList[ALocal];
+      { A `name=value` entry that did NOT match this row must not be handed back whole -- it
+        would try to render a glyph called 'Open=folder-open'. }
+      if Pos('=', Result) > 0 then Result := '';
+    end;
+  end;
+
 begin
   Result := '';
   if (AIdx >= 0) and (AIdx < FCommands.Count) then
-  begin
-    if AIdx < FCommandGlyphs.Count then Result := FCommandGlyphs[AIdx];
-  end
+    Result := GlyphFor(FCommandGlyphs, AIdx, EntryCaption(AIdx))
   else if (AIdx >= FCommands.Count) and (AIdx < TotalCount) then
-    if (AIdx - FCommands.Count) < FBottomCommandGlyphs.Count then
-      Result := FBottomCommandGlyphs[AIdx - FCommands.Count];
+    Result := GlyphFor(FBottomCommandGlyphs, AIdx - FCommands.Count, EntryCaption(AIdx));
 end;
 
 function TTyRibbonBackstage.EntryIsSeparator(AIdx: Integer): Boolean;

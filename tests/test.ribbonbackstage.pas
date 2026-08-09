@@ -20,6 +20,11 @@ type
     procedure CommandsRoundTrip;
     procedure ItemIndexFiresSelectOnChange;
     procedure ItemIndexClampsToCommands;
+    procedure PositionalGlyphsStillWork;
+    procedure PairedGlyphsSurviveReorderingTheCommands;
+    procedure PositionalGlyphsDoNotSurviveReordering;
+    procedure AnUnmatchedPairIsNotRenderedAsAGlyphName;
+    procedure PairedGlyphsWorkForTheBottomBlockToo;
   end;
 
 implementation
@@ -134,6 +139,93 @@ begin
   finally
     B.Free;
   end;
+end;
+
+{ ===== glyph pairing =========================================================
+  CommandGlyphs was purely index-matched to Commands, which is this library's recurring
+  failure shape: insert one command and every icon below it moves silently onto the wrong row.
+  A `command text=glyph name` entry pairs instead, and a plain entry keeps its old positional
+  meaning so no existing form changes behaviour. }
+
+type
+  { EntryGlyph is private to the control, and rightly so -- it is how the control asks itself
+    what to draw. A same-unit descendant reaches it without widening the real API. }
+  TBackstageAccess = class(TTyRibbonBackstage);
+
+function BackstageWithCommands: TTyRibbonBackstage;
+begin
+  Result := TTyRibbonBackstage.Create(nil);
+  Result.Commands.Text := 'Open' + LineEnding + 'Save' + LineEnding + 'Print';
+end;
+
+procedure TBackstageTest.PositionalGlyphsStillWork;
+var b: TTyRibbonBackstage;
+begin
+  b := BackstageWithCommands;
+  try
+    b.CommandGlyphs.Text := 'folder-open' + LineEnding + 'save' + LineEnding + 'printer';
+    AssertEquals('folder-open', TBackstageAccess(b).EntryGlyph(0));
+    AssertEquals('save', TBackstageAccess(b).EntryGlyph(1));
+    AssertEquals('printer', TBackstageAccess(b).EntryGlyph(2));
+  finally b.Free; end;
+end;
+
+procedure TBackstageTest.PairedGlyphsSurviveReorderingTheCommands;
+var b: TTyRibbonBackstage;
+begin
+  b := BackstageWithCommands;
+  try
+    b.CommandGlyphs.Text := 'Open=folder-open' + LineEnding + 'Save=save'
+      + LineEnding + 'Print=printer';
+    AssertEquals('paired before', 'save', TBackstageAccess(b).EntryGlyph(1));
+    { Insert a command at the TOP -- the move that used to shift every icon down the list. }
+    b.Commands.Insert(0, 'New');
+    AssertEquals('Open kept its icon', 'folder-open', TBackstageAccess(b).EntryGlyph(1));
+    AssertEquals('Save kept its icon', 'save', TBackstageAccess(b).EntryGlyph(2));
+    AssertEquals('Print kept its icon', 'printer', TBackstageAccess(b).EntryGlyph(3));
+    AssertEquals('and the new command has none', '', TBackstageAccess(b).EntryGlyph(0));
+  finally b.Free; end;
+end;
+
+procedure TBackstageTest.PositionalGlyphsDoNotSurviveReordering;
+var b: TTyRibbonBackstage;
+begin
+  { The old behaviour, asserted rather than assumed -- it is what the paired form exists to
+    avoid, and it is still what a plain list does. If this ever starts passing, positional
+    entries have quietly changed meaning and every existing form has moved. }
+  b := BackstageWithCommands;
+  try
+    b.CommandGlyphs.Text := 'folder-open' + LineEnding + 'save' + LineEnding + 'printer';
+    b.Commands.Insert(0, 'New');
+    AssertEquals('positional entries follow the ROW, not the command',
+      'folder-open', TBackstageAccess(b).EntryGlyph(0));
+  finally b.Free; end;
+end;
+
+procedure TBackstageTest.AnUnmatchedPairIsNotRenderedAsAGlyphName;
+var b: TTyRibbonBackstage;
+begin
+  { A paired entry that matches no command must yield NOTHING, not the raw text -- otherwise
+    the row would try to render a glyph called 'Nope=whatever'. }
+  b := BackstageWithCommands;
+  try
+    b.CommandGlyphs.Text := 'Nope=whatever';
+    AssertEquals('', TBackstageAccess(b).EntryGlyph(0));
+  finally b.Free; end;
+end;
+
+procedure TBackstageTest.PairedGlyphsWorkForTheBottomBlockToo;
+var b: TTyRibbonBackstage;
+begin
+  { The bottom block is a second list with its own local indices; the pairing has to be done
+    against ITS captions, not the top block's. }
+  b := BackstageWithCommands;
+  try
+    b.BottomCommands.Text := 'Options' + LineEnding + 'Exit';
+    b.BottomCommandGlyphs.Text := 'Exit=log-out' + LineEnding + 'Options=settings';
+    AssertEquals('settings', TBackstageAccess(b).EntryGlyph(b.Commands.Count));
+    AssertEquals('log-out', TBackstageAccess(b).EntryGlyph(b.Commands.Count + 1));
+  finally b.Free; end;
 end;
 
 initialization

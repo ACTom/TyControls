@@ -1,10 +1,10 @@
 object MainForm: TMainForm
   Left = 0
-  Height = 780
+  Height = 1075
   Top = 0
   Width = 620
   Caption = 'Icons & Images example'
-  ClientHeight = 780
+  ClientHeight = 1075
   ClientWidth = 620
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
@@ -12,7 +12,7 @@ object MainForm: TMainForm
   TitleBar = Bar
   object Surface: TTyFormSurface
     Left = 0
-    Height = 780
+    Height = 1075
     Top = 0
     Width = 620
     Align = alClient
@@ -259,6 +259,54 @@ object MainForm: TMainForm
       Width = 588
       Caption = 'Click the star or the stretched picture — TTyImage and TTyCharImage both publish OnClick.'
     end
+    object LblPack: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 776
+      Width = 588
+      Caption = 'Bundled pack — 2000+ icons compiled in, opt-in: they cost nothing until you use the unit.'
+    end
+    object BtnBrowse: TTyButton
+      Left = 16
+      Height = 30
+      Top = 800
+      Width = 190
+      Caption = 'Icon browser…'
+      OnClick = BtnBrowseClick
+    end
+    object PackName: TTyEdit
+      Left = 216
+      Height = 30
+      Top = 800
+      Width = 200
+      Text = 'house'
+      TextHint = 'A Lucide glyph name…'
+      OnChange = PackNameChange
+    end
+    object PackIcon: TTyCharImage
+      Left = 428
+      Height = 30
+      Top = 800
+      Width = 30
+      IconFont = Lucide
+      GlyphName = 'house'
+      GlyphSize = 0
+    end
+    object LblChain: TTyLabel
+      Left = 16
+      Height = 62
+      Top = 842
+      Width = 588
+      WordWrap = True
+      Caption = 'The whole chain in one control: the bundled pack → a TTyVirtualImageList that names the icons it wants → TTyLCLImageList, which is what lets a stock TCustomImageList consumer eat them. The tree below is fed that way.'
+    end
+    object IconTree: TTyTreeView
+      Left = 16
+      Height = 150
+      Top = 908
+      Width = 588
+      Images = Bridge
+    end
   end
   object Icons: TTyIconFont
     FontFamily = 'Segoe UI Symbol'
@@ -270,6 +318,24 @@ object MainForm: TMainForm
       'gear=2699'
       'mail=2709'
     )
+  end
+  object Lucide: TTyLucideIconFont
+  end
+  object PackNames: TTyVirtualImageList
+    IconFont = Lucide
+    DefaultSize = 16
+    Names.Strings = (
+      'folder'
+      'file-text'
+      'image'
+      'music'
+      'settings'
+    )
+  end
+  object Bridge: TTyLCLImageList
+    Source = PackNames
+    ImageWidth = 16
+    MultiResolution = False
   end
   object GlyphList: TTyGlyphImageList
     IconFont = Icons

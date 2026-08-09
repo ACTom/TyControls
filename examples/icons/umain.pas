@@ -7,6 +7,10 @@ unit umain;
     GlyphColor beside one left unset (which follows the theme text colour —— try the Dark switch).
   · TTyGlyphImageList —— one icon font as an ordered list, drawn twice at two sizes (vectors on demand).
   · FontFile —— load any .ttf PRIVATE to this process (no OS install) and re-render every glyph above.
+  · Bundled pack —— TTyLucideIconFont dropped on the form: 2000+ icons by name, no Glyphs to fill in.
+    The icon browser finds one by eye; type a name and the TTyCharImage beside it follows.
+  · The chain that makes those icons reach a STOCK LCL consumer:
+    TTyLucideIconFont → TTyVirtualImageList (names) → TTyLCLImageList (bridge) → TTyTreeView.Images.
   The window, every control and the live theme switcher are designed in umain.lfm (a TTyForm + TTyTitleBar);
   the code here is theme setup, the code-generated sample bitmap, the glyph colours and the handlers. }
 
@@ -20,7 +24,12 @@ uses
   tyControls.Painter, tyControls.TyLabel, tyControls.Image, tyControls.IconFont,
   tyControls.CharImage, tyControls.GlyphImageList, tyControls.PaintPanel,
   tyControls.Button, tyControls.Edit, tyControls.Dialogs.FileDialog,
-  tyControls.ComboBox, tyControls.ToggleSwitch;
+  tyControls.ComboBox, tyControls.ToggleSwitch,
+  { The whole point of the block at the bottom of the window. tyControls.Icons.Lucide is what
+    compiles the ~833KB pack in -- an application that never names this unit pays nothing, which
+    is why the pack is a unit and not a resource. }
+  tyControls.TreeView, tyControls.ImageCollection, tyControls.LCLImageList,
+  tyControls.Icons.Lucide, tyControls.Dialogs.IconBrowser;
 
 type
   TMainForm = class(TTyForm)
@@ -58,7 +67,19 @@ type
     FontFamilyEdit: TTyEdit;
     BtnLoadFont: TTyButton;
     LblStatus: TTyLabel;
+    { The bundled pack and the chain that carries it into a stock LCL consumer. }
+    Lucide: TTyLucideIconFont;
+    PackNames: TTyVirtualImageList;
+    Bridge: TTyLCLImageList;
+    LblPack: TTyLabel;
+    BtnBrowse: TTyButton;
+    PackName: TTyEdit;
+    PackIcon: TTyCharImage;
+    LblChain: TTyLabel;
+    IconTree: TTyTreeView;
     procedure FormCreate(Sender: TObject);
+    procedure BtnBrowseClick(Sender: TObject);
+    procedure PackNameChange(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
     procedure DarkSwitchChange(Sender: TObject);
     procedure IconClick(Sender: TObject);
@@ -70,6 +91,7 @@ type
     { TTyIconFont has no change notification, so every consumer of the font is
       repainted by hand after FontFamily / FontFile changes. }
     procedure RefreshGlyphs;
+    procedure SeedTree;
   end;
 
 var
@@ -111,6 +133,11 @@ begin
     ThemeCombo.Items.Add(names[i]);
   ThemeCombo.ItemIndex := ThemeCombo.Items.IndexOf('default');
   TyDefaultController.ThemeName := 'default';
+
+  { A few nodes so the bridge has somewhere to show. ImageIndex is the position in
+    PackNames.Names -- which is exactly what the icon browser's corner badges tell you when
+    you right-click that list in the designer. }
+  SeedTree;
   ApplyChromeTheme(TyDefaultController);   // theme the window chrome + background
 
   // The sample bitmap is generated in code, so feed it into every designed image.
@@ -209,6 +236,44 @@ begin
   // FontFamily is a plain string write with no notification, so repaint by hand.
   Icons.FontFamily := Trim(FontFamilyEdit.Text);
   RefreshGlyphs;
+end;
+
+procedure TMainForm.SeedTree;
+
+  procedure Node(const AText: string; AImage: Integer);
+  var it: TTyTreeNodeItem;
+  begin
+    it := IconTree.Items.AddChild(nil, AText);
+    { The index is the position in PackNames.Names -- folder=0, file-text=1, image=2, music=3,
+      settings=4 -- which is what the browser's corner badges show for that list. }
+    it.ImageIndex := AImage;
+  end;
+
+begin
+  Node('Documents', 0);
+  Node('Readme.txt', 1);
+  Node('Photo.png',  2);
+  Node('Track.mp3',  3);
+  Node('Preferences', 4);
+end;
+
+procedure TMainForm.BtnBrowseClick(Sender: TObject);
+var
+  nm: string;
+begin
+  { Everything the browser needs is the font. It lists whatever GlyphNames offers, so it works
+    the same for a bundled pack (nothing in Glyphs) and for a hand-mapped font like Icons above. }
+  nm := PackName.Text;
+  if TyBrowseIcons('', Lucide, nm) then
+  begin
+    PackName.Text := nm;      { OnChange re-points the preview }
+    LblStatus.Caption := 'Picked: ' + nm;
+  end;
+end;
+
+procedure TMainForm.PackNameChange(Sender: TObject);
+begin
+  PackIcon.GlyphName := PackName.Text;
 end;
 
 procedure TMainForm.BtnLoadFontClick(Sender: TObject);
