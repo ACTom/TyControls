@@ -75,6 +75,7 @@ type
     procedure SetItems(const AValue: TStrings);
     procedure SetGlyphNames(const AValue: TStrings);
     procedure SetIconFont(const AValue: TTyIconFont);
+    procedure IconFontChanged(Sender: TObject);
     procedure SetItemIndex(const AValue: Integer);
     procedure SetVisibleColumns(const AValue: Integer);
     procedure ItemsChanged(Sender: TObject);
@@ -409,10 +410,26 @@ procedure TTyRibbonGallery.SetIconFont(const AValue: TTyIconFont);
 begin
   if FIconFont = AValue then Exit;
   if FIconFont <> nil then
+  begin
+    FIconFont.RemoveHandlerOnChange(@IconFontChanged);
     FIconFont.RemoveFreeNotification(Self);
+  end;
   FIconFont := AValue;
   if FIconFont <> nil then
+  begin
     FIconFont.FreeNotification(Self);
+    { Follow the font's CONTENT, not just its identity. FreeNotification tells us when the
+      component dies; nothing told us when its glyph map, family or file changed, so editing
+      Glyphs at run time left this control showing the previous glyph until some unrelated
+      repaint happened. The handler goes on the MULTICAST list, never on the published
+      OnChange, which belongs to the application. }
+    FIconFont.AddHandlerOnChange(@IconFontChanged);
+  end;
+  Invalidate;
+end;
+
+procedure TTyRibbonGallery.IconFontChanged(Sender: TObject);
+begin
   Invalidate;
 end;
 

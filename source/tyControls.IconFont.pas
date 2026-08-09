@@ -21,7 +21,7 @@ unit tyControls.IconFont;
 interface
 
 uses
-  Classes, SysUtils, Types, Graphics, BGRABitmap, BGRABitmapTypes,
+  Classes, SysUtils, Types, Graphics, LazMethodList, BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Component, tyControls.Painter;
 
 type
@@ -31,13 +31,32 @@ type
     FFontFamily: string;
     FFontFile: string;
     FLoadedFile: string;       // the file currently registered (for clean removal)
+    FLoadError: string;        // why the last FontFile assignment did not take, '' when it did
+    FVersion: Integer;         // bumped by every change a consumer would have to repaint for
+    FOnChange: TNotifyEvent;
+    { Controls observe through here, NOT through the published OnChange -- assigning that from
+      a control would silently overwrite whatever the application had put in it. Same pattern
+      and same reason as TTyEdit's multicast OnChange. }
+    FChangeHandlers: TMethodList;
+    { Name -> codepoint, sorted and case-insensitive, rebuilt lazily from FGlyphs. The published
+      list has to keep its authored ORDER (it is edited in the designer and round-trips through
+      the .lfm), and TStringList.Values on an unsorted list is a linear scan -- fine for the
+      dozen glyphs anyone maps by hand, not fine for a bundled set of 1600 with a picker asking
+      per cell. }
+    FIndex: TStringList;
+    FIndexValid: Boolean;
     {$IF DEFINED(LCLQt5) OR DEFINED(LCLQt6)}
     FQtFontId: Integer;        // Qt application-font id (>=0) for removeApplicationFont
     {$ENDIF}
     procedure SetGlyphs(AValue: TStringList);
     procedure SetFontFile(const AValue: string);
+    procedure SetFontFamily(const AValue: string);
     procedure LoadFontFile(const APath: string);
     procedure UnloadFontFile;
+    procedure GlyphsChanged(Sender: TObject);
+    procedure Changed;
+    procedure RebuildIndex;
+    function GetAvailable: Boolean;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -59,20 +78,68 @@ type
       centered in an ASizePx square with the current FontFamily. Caller owns the bitmap. }
     function RenderCodepoint(ACodepoint: Cardinal; ASizePx: Integer;
       AColor: TTyColor): TBGRABitmap;
+    { Is this component in a state where a glyph can actually come out?
+
+      It exists because the failure it reports is otherwise SILENT and looks like a different
+      bug. FontFile pointing at a missing or unregisterable file leaves FontFamily set, so
+      RenderGlyph passes its own guard and hands back a bitmap of tofu boxes -- indistinguishable,
+      to the caller and to the user, from "that glyph name is not mapped". And it cannot be
+      answered by looking at Screen.Fonts: a font registered from MEMORY (which the bundled-font
+      work will use) is not enumerable at all, while rendering by name works perfectly.
+
+      So: True when there is a family to render with and, if a FontFile was asked for, it
+      registered. LoadError carries the reason when this is False. }
+    property Available: Boolean read GetAvailable;
+    { Why the last FontFile assignment did not take, or '' if it did. }
+    property LoadError: string read FLoadError;
+    { Bumped by every change that alters what a glyph looks like -- the map, the family, the
+      file. A consumer that caches rendered glyphs compares this instead of re-rendering; one
+      that does not can just add a handler below. }
+    property Version: Integer read FVersion;
+    { Observe changes without taking the published OnChange away from the application. }
+    procedure AddHandlerOnChange(const AHandler: TNotifyEvent; AsFirst: Boolean = False);
+    procedure RemoveHandlerOnChange(const AHandler: TNotifyEvent);
+    procedure RemoveAllHandlersOfObject(AnObject: TObject);
   published
     { The font family name used to render (must match the registered/installed
       family). When FontFile is set, this is typically the file's family. }
-    property FontFamily: string read FFontFamily write FFontFamily;
+    property FontFamily: string read FFontFamily write SetFontFamily;
     { Optional path to a .ttf loaded PRIVATE to the process (Windows). Setting it
       registers the font; clearing/reassigning unregisters the previous one. }
     property FontFile: string read FFontFile write SetFontFile;   // .ttf, loaded per-OS native
     { 'name=HEX' codepoint map, e.g. save=F0C7. }
     property Glyphs: TStringList read FGlyphs write SetGlyphs;
+    { Fired after any change to the map, the family or the file -- the hook a control uses to
+      repaint. Before this existed, editing Glyphs at run time left every TTyCharImage,
+      TTyGlyphImageList consumer and ribbon gallery showing the previous glyph until something
+      else happened to invalidate them. }
+    property OnChange: TNotifyEvent read FOnChange write FOnChange;
   end;
 
 { Pure: parse a hex codepoint string ('F0C7', '0xF0C7', '$F0C7', 'U+F0C7'),
   returning 0 on empty/invalid. Headless-testable. }
 function TyParseCodepoint(const AHex: string): Cardinal;
+
+type
+  { A name -> codepoint source that is NOT the component's own Glyphs list. AFamily is the
+    icon font's FontFamily, so one registered resolver can serve several fonts and decline the
+    ones it does not know. Return False to pass to the next resolver. }
+  TTyGlyphResolveFunc = function(const AFamily, AName: string;
+    out ACodepoint: Cardinal): Boolean;
+
+{ Register/unregister a fallback resolver, consulted by CodepointOf when the component's own
+  Glyphs map has no entry for the name.
+
+  This is the seam a BUNDLED icon font hangs on. Without it, shipping a font means also
+  shipping 1600 'name=HEX' lines for the user to paste into Glyphs -- the exact chore that
+  makes the current TTyIconFont "machinery without batteries". With it, an optional unit
+  registers one function in its initialization and `CharImage.GlyphName := 'house'` works with
+  nothing in Glyphs at all. Registering the same function twice is a no-op; resolvers are
+  consulted in registration order. }
+procedure TyRegisterGlyphResolver(AFunc: TTyGlyphResolveFunc);
+procedure TyUnregisterGlyphResolver(AFunc: TTyGlyphResolveFunc);
+{ How many resolvers are registered -- the honest query for a test or a diagnostic. }
+function TyGlyphResolverCount: Integer;
 
 { v3/C5. Parse a glyph-override token '"Family" "\e5ca"' into a font family + codepoint.
   The two double-quoted parts are family then codepoint (a leading '\' on the codepoint is
@@ -117,6 +184,48 @@ function RemoveFontResourceEx(lpFileName: PWideChar; fl: LongWord;
   pdv: Pointer): LongBool; stdcall; external 'gdi32' name 'RemoveFontResourceExW';
 {$ENDIF}
 
+var
+  GResolvers: array of TTyGlyphResolveFunc;
+
+function TyGlyphResolverCount: Integer;
+begin
+  Result := Length(GResolvers);
+end;
+
+procedure TyRegisterGlyphResolver(AFunc: TTyGlyphResolveFunc);
+var i: Integer;
+begin
+  if AFunc = nil then Exit;
+  for i := 0 to High(GResolvers) do
+    if GResolvers[i] = AFunc then Exit;      // idempotent: a unit may initialize twice
+  SetLength(GResolvers, Length(GResolvers) + 1);
+  GResolvers[High(GResolvers)] := AFunc;
+end;
+
+procedure TyUnregisterGlyphResolver(AFunc: TTyGlyphResolveFunc);
+var i, last: Integer;
+begin
+  for i := 0 to High(GResolvers) do
+    if GResolvers[i] = AFunc then
+    begin
+      last := High(GResolvers);
+      GResolvers[i] := GResolvers[last];     // order only matters among the survivors
+      SetLength(GResolvers, last);
+      Exit;
+    end;
+end;
+
+function ResolveViaRegistry(const AFamily, AName: string; out ACodepoint: Cardinal): Boolean;
+var i: Integer;
+begin
+  ACodepoint := 0;
+  for i := 0 to High(GResolvers) do
+    if GResolvers[i](AFamily, AName, ACodepoint) and (ACodepoint > 0) then
+      Exit(True);
+  ACodepoint := 0;
+  Result := False;
+end;
+
 function TyParseCodepoint(const AHex: string): Cardinal;
 var
   s: string;
@@ -143,6 +252,11 @@ begin
   inherited Create(AOwner);
   FGlyphs := TStringList.Create;
   FGlyphs.NameValueSeparator := '=';
+  FGlyphs.OnChange := @GlyphsChanged;
+  FIndex := TStringList.Create;
+  FIndex.CaseSensitive := False;
+  FIndex.Sorted := True;
+  FIndex.Duplicates := dupIgnore;
   {$IF DEFINED(LCLQt5) OR DEFINED(LCLQt6)}
   FQtFontId := -1;
   {$ENDIF}
@@ -151,13 +265,82 @@ end;
 destructor TTyIconFont.Destroy;
 begin
   UnloadFontFile;
+  FGlyphs.OnChange := nil;   { the list outlives nothing, but the handler must not fire
+                               into a half-destroyed component while it is being freed }
   FGlyphs.Free;
+  FIndex.Free;
+  FChangeHandlers.Free;
   inherited Destroy;
+end;
+
+procedure TTyIconFont.GlyphsChanged(Sender: TObject);
+begin
+  FIndexValid := False;
+  Changed;
+end;
+
+procedure TTyIconFont.Changed;
+begin
+  Inc(FVersion);
+  if FChangeHandlers <> nil then FChangeHandlers.CallNotifyEvents(Self);
+  if Assigned(FOnChange) then FOnChange(Self);
+end;
+
+procedure TTyIconFont.AddHandlerOnChange(const AHandler: TNotifyEvent; AsFirst: Boolean);
+begin
+  if FChangeHandlers = nil then FChangeHandlers := TMethodList.Create;
+  FChangeHandlers.Add(TMethod(AHandler), not AsFirst);
+end;
+
+procedure TTyIconFont.RemoveHandlerOnChange(const AHandler: TNotifyEvent);
+begin
+  if FChangeHandlers <> nil then FChangeHandlers.Remove(TMethod(AHandler));
+end;
+
+procedure TTyIconFont.RemoveAllHandlersOfObject(AnObject: TObject);
+begin
+  { An observer being freed must leave the list, or the next change calls a method on a dead
+    object -- the same rule TTyEdit follows. (No inherited to chain: TTyComponent is not a
+    TControl, so this is the whole implementation rather than an override.) }
+  if FChangeHandlers <> nil then FChangeHandlers.RemoveAllMethodsOfObject(AnObject);
+end;
+
+procedure TTyIconFont.RebuildIndex;
+var
+  i: Integer;
+  nm: string;
+  cp: Cardinal;
+begin
+  FIndex.Clear;
+  for i := 0 to FGlyphs.Count - 1 do
+  begin
+    nm := FGlyphs.Names[i];
+    if nm = '' then Continue;
+    cp := TyParseCodepoint(FGlyphs.ValueFromIndex[i]);
+    if cp = 0 then Continue;               { an unparseable line is not a glyph }
+    { First entry wins on a duplicate name, because that is what TStringList.Values does and
+      the index must answer exactly what the list would have. }
+    if FIndex.IndexOf(nm) < 0 then
+      FIndex.AddObject(nm, TObject(PtrInt(cp)));
+  end;
+  FIndexValid := True;
 end;
 
 procedure TTyIconFont.SetGlyphs(AValue: TStringList);
 begin
-  FGlyphs.Assign(AValue);
+  FGlyphs.Assign(AValue);   { fires GlyphsChanged }
+end;
+
+procedure TTyIconFont.SetFontFamily(const AValue: string);
+begin
+  if FFontFamily = AValue then Exit;
+  FFontFamily := AValue;
+  Changed;
+end;
+
+function TTyIconFont.GetAvailable: Boolean;
+begin
+  Result := (FFontFamily <> '') and ((FFontFile = '') or (FLoadedFile <> ''));
 end;
 
 procedure TTyIconFont.MapGlyph(const AName: string; ACodepoint: Cardinal);
@@ -172,8 +355,18 @@ begin
 end;
 
 function TTyIconFont.CodepointOf(const AName: string): Cardinal;
+var
+  i: Integer;
 begin
-  Result := TyParseCodepoint(FGlyphs.Values[AName]);
+  if AName = '' then Exit(0);
+  if not FIndexValid then RebuildIndex;
+  i := FIndex.IndexOf(AName);
+  if i >= 0 then
+    Exit(Cardinal(PtrInt(FIndex.Objects[i])));
+  { Not in this component's own map: ask the registered resolvers. That is how a bundled font
+    unit supplies 1600 names without anyone pasting them into Glyphs. }
+  if not ResolveViaRegistry(FFontFamily, AName, Result) then
+    Result := 0;
 end;
 
 function TTyIconFont.HasGlyph(const AName: string): Boolean;
@@ -233,8 +426,10 @@ begin
   if FFontFile = AValue then Exit;
   UnloadFontFile;
   FFontFile := AValue;
+  FLoadError := '';
   if FFontFile <> '' then
     LoadFontFile(FFontFile);
+  Changed;
 end;
 
 procedure TTyIconFont.LoadFontFile(const APath: string);
@@ -253,7 +448,21 @@ var
   {$ENDIF}
 {$ENDIF}
 begin
-  if (APath = '') or (not FileExists(APath)) then Exit;
+  { Every early return here used to be silent, and a silent one is the worst outcome: the
+    family stays set, so RenderGlyph sails past its own guard and paints tofu. Say what
+    happened -- Available and LoadError are the only way a caller can tell "the font is not
+    there" from "that glyph name is not mapped". }
+  if APath = '' then
+  begin
+    FLoadError := 'no font file given';
+    Exit;
+  end;
+  if not FileExists(APath) then
+  begin
+    FLoadError := 'font file not found: ' + APath;
+    Exit;
+  end;
+  FLoadError := 'the widgetset refused to register ' + APath;   { cleared on success below }
   { Registering a face makes a family that previously fell back suddenly REAL, so every
     width already measured under the fallback is now wrong. The measure memo cannot key on
     the process font registry -- it is global OS state with no version -- so the one thing
@@ -262,12 +471,19 @@ begin
   {$IFDEF LCLWin32}
   w := UTF8ToUTF16(APath);
   if AddFontResourceEx(PWideChar(w), FR_PRIVATE, nil) > 0 then
+  begin
     FLoadedFile := APath;
+    FLoadError := '';
+  end;
   {$ENDIF}
   {$IF DEFINED(LCLQt5) OR DEFINED(LCLQt6)}
   ws := UTF8ToUTF16(APath);                          // Qt takes a QString (PWideString)
   FQtFontId := QFontDatabase_addApplicationFont(@ws);
-  if FQtFontId >= 0 then FLoadedFile := APath;       // font ids start at 0; -1 = failure
+  if FQtFontId >= 0 then                             // font ids start at 0; -1 = failure
+  begin
+    FLoadedFile := APath;
+    FLoadError := '';
+  end;
   {$ENDIF}
   {$IFDEF LCLCocoa}
   u8 := APath;                                        // UTF-8 filesystem path
@@ -277,7 +493,10 @@ begin
   try
     err := nil;
     if CTFontManagerRegisterFontsForURL(url, kCTFontManagerScopeProcess, err) <> 0 then
+    begin
       FLoadedFile := APath;
+      FLoadError := '';
+    end;
   finally
     CFRelease(url);
   end;
@@ -285,7 +504,10 @@ begin
   {$IFDEF LCLGtk2}
   // fontconfig wants the raw UTF-8 path; new Pango contexts then resolve the family.
   if FcConfigAppFontAddFile(FcConfigGetCurrent, PAnsiChar(APath)) <> 0 then
+  begin
     FLoadedFile := APath;
+    FLoadError := '';
+  end;
   {$ENDIF}
 end;
 
