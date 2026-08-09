@@ -116,6 +116,12 @@ resourcestring
   rsDlgNewFolderPrompt = 'Folder name:';
   rsDlgCreateFolderErr = 'Could not create folder: %s';
 
+  // --- Icon browser dialog — user-facing, translated ---
+  rsDlgIconBrowserTitle = 'Icon Browser';
+  rsDlgIconSearchHint   = 'Search icons by name';
+  rsDlgIconNoMatches    = 'No icons match';
+  rsDlgIconCount        = '%d icons';
+
   // --- Color picker dialog (S3) — section labels, user-facing, translated ---
   rsDlgHex             = 'Hex';
   rsDlgAlpha           = 'Alpha';

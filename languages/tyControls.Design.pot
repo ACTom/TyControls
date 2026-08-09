@@ -54,6 +54,14 @@ msgstr ""
 msgid "TyControls Form"
 msgstr ""
 
+#: tycontrols.design.rsdticonbrowse
+msgid "Icon browser..."
+msgstr ""
+
+#: tycontrols.design.rsdticonneedsfont
+msgid "Set IconFont first: there is no icon font to browse."
+msgstr ""
+
 #: tycontrols.design.rsdtimagebadpayload
 msgid "(unreadable image data)"
 msgstr ""

@@ -37,7 +37,9 @@ uses
   tyControls.Memo, tyControls.Menu, tyControls.NativeStyler,
   tyControls.Splitter, tyControls.StatusBar, tyControls.ToolBar,
   tyControls.Calendar, tyControls.DateTimePicker, tyControls.TabSet,
+  ClipBrd,
   tyControls.TreeView, tyControls.Dialogs, tyControls.Dialogs.SelectPath,
+  tyControls.Dialogs.IconBrowser,
   tyControls.Dialogs.Color, tyControls.Dialogs.Font,
   tyControls.Dialogs.Find, tyControls.Dialogs.Progress, tyControls.Dialogs.About,
   tyControls.Dialogs.FileDialog, tyControls.PreviewBox, tyControls.ImageView,
@@ -123,10 +125,29 @@ type
     Reached by RTTI rather than by a cast:
     TTyCharImage and TTyGlyphButtonBase both publish IconFont but share no ancestor that
     declares it, and a future control publishing the same pair gets the dropdown for free. }
+  { Right-click an icon font (or a bundled pack, or an image list fed by one) -> "Icon
+    browser...". A two-thousand-entry dropdown is technically complete and practically
+    useless; this is how a user actually finds the icon that means "save".
+
+    On an icon font the picked name goes to the CLIPBOARD, because the font itself has no
+    single name property to write it into -- the user is looking a name up to paste somewhere.
+    On a TTyVirtualImageList it is APPENDED to Names, which is the thing that list is for. }
+  TTyIconBrowserComponentEditor = class(TComponentEditor)
+  private
+    function FontOf(out AOwnerList: TTyVirtualImageList): TTyIconFont;
+  public
+    function GetVerbCount: Integer; override;
+    function GetVerb(Index: Integer): string; override;
+    procedure ExecuteVerb(Index: Integer); override;
+  end;
+
   TTyGlyphNamePropertyEditor = class(TStringPropertyEditor)
   public
     function GetAttributes: TPropertyAttributes; override;
     procedure GetValues(Proc: TGetStrProc); override;
+    { The '...' button: opens the icon browser on the host's IconFont and writes the picked
+      name back. The dropdown lists two thousand names; this is how you find one. }
+    procedure Edit; override;
   end;
 
   { TTyIconFont.FontFamily: the font families this machine can render with. A family loaded
@@ -322,6 +343,11 @@ resourcestring
   rsDtPageShowNext = 'Show Next Page';
   rsDtPageShowPrev = 'Show Previous Page';
   rsDtDialogPreview = 'Preview';
+  { The verb this library's icon fonts and image lists carry, and what to say when there is no
+    font to browse. IDE-facing, so they belong in THIS unit's table and not the runtime
+    package's -- the two have separate .po catalogues. }
+  rsDtIconBrowse    = 'Icon browser...';
+  rsDtIconNeedsFont = 'Set IconFont first: there is no icon font to browse.';
   rsDtTreeEditNodes = 'Edit Nodes...';
   rsDtSurfacePurposeTitle = 'Why this control exists';
   rsDtSurfacePurposeText =
@@ -534,11 +560,98 @@ begin
   Result := rsDtThemeFileTitle;
 end;
 
+{ TTyIconBrowserComponentEditor }
+
+function TTyIconBrowserComponentEditor.FontOf(out AOwnerList: TTyVirtualImageList): TTyIconFont;
+begin
+  AOwnerList := nil;
+  Result := nil;
+  if Component is TTyIconFont then
+    Result := TTyIconFont(Component)          { covers TTyIconPackFont / TTyLucideIconFont }
+  else if Component is TTyVirtualImageList then
+  begin
+    AOwnerList := TTyVirtualImageList(Component);
+    Result := AOwnerList.IconFont;
+  end;
+end;
+
+function TTyIconBrowserComponentEditor.GetVerbCount: Integer;
+begin
+  Result := 1;
+end;
+
+function TTyIconBrowserComponentEditor.GetVerb(Index: Integer): string;
+begin
+  if Index = 0 then Result := rsDtIconBrowse
+  else Result := inherited GetVerb(Index);
+end;
+
+procedure TTyIconBrowserComponentEditor.ExecuteVerb(Index: Integer);
+var
+  lst: TTyVirtualImageList;
+  fnt: TTyIconFont;
+  nm: string;
+begin
+  if Index <> 0 then begin inherited ExecuteVerb(Index); Exit; end;
+  fnt := FontOf(lst);
+  if fnt = nil then
+  begin
+    { An image list with no IconFont has nothing to browse. Say so rather than opening an
+      empty grid, which reads as "the browser is broken". }
+    TyMessageDlg(rsDtIconNeedsFont, mtInformation, [mbOK]);
+    Exit;
+  end;
+  nm := '';
+  if lst <> nil then
+  begin
+    { Seed with the last name in the list, so re-opening the browser lands where the user was. }
+    if lst.Names.Count > 0 then nm := lst.Names[lst.Names.Count - 1];
+  end;
+  if not TyBrowseIcons('', fnt, nm) then Exit;
+  if lst <> nil then
+  begin
+    if lst.Names.IndexOf(nm) < 0 then
+    begin
+      lst.Names.Add(nm);
+      Modified;        { tell the designer the form changed, or the edit is lost on close }
+    end;
+  end
+  else
+    { A font has no single name property to write into -- the user came here to look a name up.
+      The clipboard is where a looked-up name is useful. }
+    Clipboard.AsText := nm;
+end;
+
 { TTyGlyphNamePropertyEditor }
 
 function TTyGlyphNamePropertyEditor.GetAttributes: TPropertyAttributes;
 begin
-  Result := (inherited GetAttributes) + [paValueList];
+  { paValueList keeps the typeable dropdown; paDialog adds the '...' that opens the browser.
+    Both, not either: the dropdown is faster once you know the name, and the browser is the
+    only way to find one you do not. }
+  Result := (inherited GetAttributes) + [paValueList, paDialog];
+end;
+
+procedure TTyGlyphNamePropertyEditor.Edit;
+var
+  comp: TPersistent;
+  fnt: TObject;
+  nm: string;
+begin
+  comp := GetComponent(0);
+  if comp = nil then Exit;
+  { Same RTTI route as GetValues, and the same TypInfo. qualification -- TPropertyEditor has a
+    parameterless GetPropInfo of its own that would shadow the unit-level one. }
+  if TypInfo.GetPropInfo(comp, 'IconFont') = nil then Exit;
+  fnt := TypInfo.GetObjectProp(comp, 'IconFont');
+  if not (fnt is TTyIconFont) then
+  begin
+    TyMessageDlg(rsDtIconNeedsFont, mtInformation, [mbOK]);
+    Exit;
+  end;
+  nm := GetStrValue;
+  if TyBrowseIcons('', TTyIconFont(fnt), nm) then
+    SetStrValue(nm);
 end;
 
 procedure TTyGlyphNamePropertyEditor.GetValues(Proc: TGetStrProc);
@@ -840,7 +953,8 @@ begin
   else if Component is TTySelectPathDialog  then TTySelectPathDialog(Component).Execute
   else if Component is TTyColorDialog    then TTyColorDialog(Component).Execute
   else if Component is TTyFontDialog     then TTyFontDialog(Component).Execute
-  else if Component is TTyAboutDialog    then TTyAboutDialog(Component).Execute;
+  else if Component is TTyAboutDialog    then TTyAboutDialog(Component).Execute
+  else if Component is TTyIconBrowserDialog then TTyIconBrowserDialog(Component).Execute;
 end;
 
 { TTyFormFileDescriptor }
@@ -1234,7 +1348,8 @@ begin
      TTyColorDialog, TTyFontDialog,
      TTyFindDialog, TTyReplaceDialog, TTyProgressDialog, TTyAboutDialog,
      TTyOpenDialog, TTySaveDialog, TTyOpenPictureDialog, TTySavePictureDialog,
-     TTyOpenPreviewDialog, TTySavePreviewDialog, TTyNotification]);
+     TTyOpenPreviewDialog, TTySavePreviewDialog, TTyNotification,
+     TTyIconBrowserDialog]);
   { The content host MUST be a registered component class, or deleting it is unrecoverable. The
     designer records a delete by SERIALIZING the component to LFM text (TDesigner.AddUndoAction ->
     CopySelectionToStream) and undoes it by PASTING that text back —so undo runs through the same
@@ -1375,12 +1490,17 @@ begin
   // GetComponentEditor picks the most-derived registration, so this also covers
   // TTyShellTreeView -- the editor asks SupportsItemModel and offers no verb there.
   RegisterComponentEditor(TTyTreeView, TTyTreeViewComponentEditor);
+  { Right-click -> "Icon browser...". Registered on the BASE icon font, so every bundled pack
+    (TTyLucideIconFont and whatever follows it) inherits the verb without another line here;
+    GetComponentEditor picks the most-derived registration. }
+  RegisterComponentEditor([TTyIconFont, TTyVirtualImageList], TTyIconBrowserComponentEditor);
   // Double-click a dialog component in the designer to preview it (verb 0 = Preview),
   // mirroring LCL's TCommonDialogComponentEditor.
   RegisterComponentEditor(
     [TTyMessage, TTyInputDialog, TTyPasswordDialog, TTyTextDialog,
      TTySelectValueDialog, TTySelectPathDialog, TTyColorDialog, TTyFontDialog,
-     TTyFindDialog, TTyReplaceDialog, TTyProgressDialog, TTyAboutDialog],
+     TTyFindDialog, TTyReplaceDialog, TTyProgressDialog, TTyAboutDialog,
+     TTyIconBrowserDialog],
     TTyDialogComponentEditor);
   // File > New > "TyControls Form": a unit whose form descends from TTyForm, pre-fitted
   // with a top-aligned title bar.

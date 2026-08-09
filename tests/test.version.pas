@@ -18,6 +18,7 @@ uses
   tyControls.DateTimePicker, tyControls.Dial, tyControls.Dialogs, tyControls.Dialogs.About,
   tyControls.Dialogs.Color, tyControls.Dialogs.FileDialog, tyControls.Dialogs.Find,
   tyControls.Dialogs.Font, tyControls.Dialogs.Progress, tyControls.Dialogs.SelectPath,
+  tyControls.Dialogs.IconBrowser,
   tyControls.Divider, tyControls.DropButtons, tyControls.Edit, tyControls.Empty,
   tyControls.ExPanel, tyControls.FilterComboBox, tyControls.FloatSpinEdit,
   tyControls.FontComboBox,
@@ -448,7 +449,8 @@ initialization
     TTyInputDialog, TTyPasswordDialog, TTyTextDialog, TTySelectValueDialog,
     TTySelectPathDialog, TTyColorDialog, TTyFontDialog, TTyFindDialog, TTyReplaceDialog,
     TTyProgressDialog, TTyAboutDialog, TTyOpenDialog, TTySaveDialog, TTyOpenPictureDialog,
-    TTySavePictureDialog, TTyOpenPreviewDialog, TTySavePreviewDialog, TTyNotification]);
+    TTySavePictureDialog, TTyOpenPreviewDialog, TTySavePreviewDialog, TTyNotification,
+    TTyIconBrowserDialog]);
   Reg([
     TTyGridCell, TTyFormSurface, TTyForm, TTyDialog]);
   { The BASE classes the Version property editor is registered on. They are never dropped on

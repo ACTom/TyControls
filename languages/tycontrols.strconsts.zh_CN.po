@@ -733,3 +733,20 @@ msgstr "周五"
 #: tycontrols.strconsts.rstyshortday7
 msgid "Sat"
 msgstr "周六"
+
+#: tycontrols.strconsts.rsdlgiconbrowsertitle
+msgid "Icon Browser"
+msgstr "图标浏览器"
+
+#: tycontrols.strconsts.rsdlgiconcount
+#, object-pascal-format
+msgid "%d icons"
+msgstr "%d 个图标"
+
+#: tycontrols.strconsts.rsdlgiconnomatches
+msgid "No icons match"
+msgstr "没有匹配的图标"
+
+#: tycontrols.strconsts.rsdlgiconsearchhint
+msgid "Search icons by name"
+msgstr "按名称搜索图标"

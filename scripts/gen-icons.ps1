@@ -22,7 +22,7 @@ $classes = @(
   # Dialogs palette group (RegisterComponents('TyControls Dialogs', ...))
   'TTyMessage','TTyInputDialog','TTyPasswordDialog','TTyTextDialog',
   'TTySelectValueDialog','TTySelectPathDialog','TTyColorDialog','TTyFontDialog',
-  'TTyFindDialog','TTyReplaceDialog','TTyProgressDialog','TTyAboutDialog',
+  'TTyFindDialog','TTyReplaceDialog','TTyProgressDialog','TTyAboutDialog','TTyIconBrowserDialog',
   # Phase 5 containers & layout
   'TTyBevel','TTyDivider','TTyPaintPanel','TTySizeBox',
   'TTyRadioGroup','TTyCheckGroup','TTyToolGroupPanel',

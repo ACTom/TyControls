@@ -601,6 +601,19 @@ begin
   Line(b,12,11.2,12,16.8,Acc,2.2);    // stem (below)
 end;
 
+{ TTyIconBrowserDialog: dialog rect holding a 2x2 grid of glyph cells, one of them picked
+  (accent) -- the grid IS the dialog, so the icon says "choose an icon" and not just
+  "a dialog". }
+procedure GTyIconBrowserDialog(b: TBGRABitmap);
+begin
+  RRect(b,3,4,21,20,2.5,Ink);
+  Line(b,3,8,21,8,Faint,1.2);          // a title strip, so it reads as a dialog
+  FillRRect(b,6,10.5,11,15.5,1.2,Acc); // the picked cell
+  RRect(b,13,10.5,18,15.5,1.2,Ink);
+  RRect(b,6,16.8,11,18.6,1,Ink);
+  RRect(b,13,16.8,18,18.6,1,Ink);
+end;
+
 { TTyTabSet: a pure tab strip — one selected tab + two unselected + baseline }
 procedure GTabSet(b: TBGRABitmap); begin FillRRect(b,3,5,9,11,1.5,Acc); RRect(b,9.5,5,15.5,11,1.5,Ink); RRect(b,16,5,21,11,1.5,Ink); Line(b,3,11,21,11,Ink,1.4); end;
 
@@ -879,7 +892,7 @@ procedure GCascader(b: TBGRABitmap); begin RRect(b,3,3,21,10,2,Ink); PolyL(b,[Po
 procedure GPopover(b: TBGRABitmap); begin RRect(b,2,4,22,17,2,Ink); PolyL(b,[PointF(9,17),PointF(11.5,20.5),PointF(14,17)],Ink); FillRRect(b,5,7.5,10.5,13.5,1,Acc); Line(b,12.5,9,19,9,Ink,1.3); Line(b,12.5,12,17.5,12,Ink,1.3); end;
 
 const
-  Glyphs: array[0..162] of TGlyph = (
+  Glyphs: array[0..163] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -991,6 +1004,7 @@ const
     (Name:'TTyReplaceDialog';     Draw:@GTyReplaceDialog),
     (Name:'TTyProgressDialog';    Draw:@GTyProgressDialog),
     (Name:'TTyAboutDialog';       Draw:@GTyAboutDialog),
+    (Name:'TTyIconBrowserDialog'; Draw:@GTyIconBrowserDialog),
     (Name:'TTyTabSet';            Draw:@GTabSet),
     (Name:'TTyBevel';             Draw:@GBevel),
     (Name:'TTyDivider';           Draw:@GDivider),

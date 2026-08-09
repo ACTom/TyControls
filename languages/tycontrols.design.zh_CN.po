@@ -147,3 +147,11 @@ msgstr "按名称加载的主题。下拉列表给出编译进 TyControls 的内
 #: tycontrols.design.rsdtthememodehint
 msgid "Which \"@mode NAME\" block of the loaded theme is active. The list holds the modes THIS theme declares — the blank entry is the empty string, meaning no mode override at all. A single-mode theme therefore offers only the blank entry."
 msgstr "当前生效的是所加载主题的哪个 \"@mode 名称\" 区块。下拉列表列出的是「这个主题自己声明」的模式;其中的空白项就是空字符串,表示完全不套用模式覆盖。因此单模式主题只会给出那一个空白项。"
+
+#: tycontrols.design.rsdticonbrowse
+msgid "Icon browser..."
+msgstr "图标浏览器..."
+
+#: tycontrols.design.rsdticonneedsfont
+msgid "Set IconFont first: there is no icon font to browse."
+msgstr "请先设置 IconFont：没有可浏览的图标字体。"

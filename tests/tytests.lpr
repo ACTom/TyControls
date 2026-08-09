@@ -81,7 +81,7 @@ uses
   test.treeview.drag,
   test.dialogs,
   test.dialogs.chrome,
-  test.dialogs.selectpath,
+  test.dialogs.selectpath, test.dialogs.iconbrowser,
   test.colormath,
   test.dialogs.color,
   test.dialogs.font,

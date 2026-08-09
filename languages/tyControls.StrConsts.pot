@@ -189,6 +189,23 @@ msgstr ""
 msgid "Hex"
 msgstr ""
 
+#: tycontrols.strconsts.rsdlgiconbrowsertitle
+msgid "Icon Browser"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlgiconcount
+#, object-pascal-format
+msgid "%d icons"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlgiconnomatches
+msgid "No icons match"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlgiconsearchhint
+msgid "Search icons by name"
+msgstr ""
+
 #: tycontrols.strconsts.rsdlgmatchcase
 msgid "Match case"
 msgstr ""
