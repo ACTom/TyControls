@@ -53,6 +53,11 @@ const
     recomputes it from assets/lucide/, so editing an asset without re-running the
     generator is a red test rather than a wrong glyph in someone's application. }
   TyLucideAssetDigest = '91D710D648B2DFB772FB7C043E5BE7AD14A9D3AD';
+  { SHA-1 over scripts/gen-lucide.py itself, line-endings normalised. The asset digest
+    above pins the INPUTS; this pins the TRANSFORMATION, so a hand-edit of this generated
+    file -- or a generator change nobody re-ran -- is a red test instead of a silent
+    mismatch between the script and its output. }
+  TyLucideGeneratorDigest = '604D41C5A568E330D9DF6264DB65CFAA9A696501';
   { Icons in the bundled font (names plus upstream aliases). }
   TyLucideGlyphCount = 2022;
   { 20 upstream names are NOT here, and that is deliberate. Lucide keeps a codepoint
@@ -4786,6 +4791,26 @@ begin
   Result := ACodepoint > 0;
 end;
 
+{ The LIST half of the same seam, and the reason a picker or the Object Inspector's
+  GlyphName dropdown has anything to show for a bundled pack: this unit maps NOTHING into
+  Glyphs on purpose, so anything reading Glyphs directly saw an empty font. Only this unit
+  can answer it -- LucideMap is private here, and a lookup does not invert. }
+function LucideLister(const AFamily: string; ANames: TStrings): Boolean;
+var i: Integer;
+begin
+  if not SameText(AFamily, TyLucideFamily) then Exit(False);
+  { Suppresses the caller's OnChange two thousand times; Add still inserts in sorted
+    position, so the de-duplication against hand-mapped names is unaffected. }
+  ANames.BeginUpdate;
+  try
+    for i := Low(LucideMap) to High(LucideMap) do
+      ANames.Add(LucideMap[i].Name);
+  finally
+    ANames.EndUpdate;
+  end;
+  Result := True;
+end;
+
 function DecodeFont: RawByteString;
 var
   i, n: Integer;
@@ -4853,8 +4878,10 @@ initialization
   { Registered here, not in TyLucideFont, so a name resolves on a TTyIconFont the
     application created itself -- the singleton is a convenience, not the gate. }
   TyRegisterGlyphResolver(@LucideResolver);
+  TyRegisterGlyphLister(@LucideLister);
 
 finalization
+  TyUnregisterGlyphLister(@LucideLister);
   TyUnregisterGlyphResolver(@LucideResolver);
   FreeAndNil(GFont);
 

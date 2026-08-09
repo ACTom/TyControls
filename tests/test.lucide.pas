@@ -33,6 +33,7 @@ type
     function AssetsDir: string;
   published
     procedure TheGeneratedUnitMatchesTheAssets;
+    procedure TheGeneratedUnitMatchesTheGeneratorThatProducedIt;
     procedure NoCoreUnitReferencesTheBundledFont;
     procedure TheFontRegistersAndIsAvailable;
     procedure NamesResolveWithAnEmptyGlyphMap;
@@ -78,6 +79,36 @@ begin
     cps.Free;
     ttf.Free;
   end;
+end;
+
+procedure TLucideTest.TheGeneratedUnitMatchesTheGeneratorThatProducedIt;
+var
+  ms: TMemoryStream;
+  src: RawByteString;
+  d: TSHA1Digest;
+begin
+  { TheGeneratedUnitMatchesTheAssets pins the INPUTS. This pins the TRANSFORMATION -- and that
+    half had no guard at all: `gen-lucide.py --check` is the only thing that ever compared the
+    unit against the code that produced it, and NOTHING runs it. There is no CI here, and a
+    repo-wide grep finds --check only in the script's own docstring. So a hand-edit of the
+    generated 690KB unit, or a generator change nobody re-ran, shipped in silence.
+
+    Line endings are normalised on both sides because the .py is a text file under git and a
+    checkout with a different core.autocrlf must not turn this red for no reason. }
+  ms := TMemoryStream.Create;
+  try
+    AssertTrue('scripts/gen-lucide.py must exist',
+      FileExists(RepoRoot + 'scripts' + PathDelim + 'gen-lucide.py'));
+    ms.LoadFromFile(RepoRoot + 'scripts' + PathDelim + 'gen-lucide.py');
+    SetLength(src, ms.Size);
+    if ms.Size > 0 then Move(ms.Memory^, src[1], ms.Size);
+  finally
+    ms.Free;
+  end;
+  src := StringReplace(src, #13#10, #10, [rfReplaceAll]);
+  if src = '' then d := SHA1Buffer(src, 0) else d := SHA1Buffer(src[1], Length(src));
+  AssertEquals('tyControls.Icons.Lucide.pas was produced by a DIFFERENT gen-lucide.py -- '
+    + 'run python scripts/gen-lucide.py', TyLucideGeneratorDigest, UpperCase(SHA1Print(d)));
 end;
 
 procedure TLucideTest.NoCoreUnitReferencesTheBundledFont;

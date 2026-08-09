@@ -27,8 +27,14 @@ import hashlib
 import io
 import json
 import os
+import re
 import sys
 import zlib
+
+# Spelled as constants so the self-digest below cannot be broken by an editor, a heredoc or a
+# nested-escaping accident -- which is exactly how it was broken once already.
+CRLF = b'\x0d\x0a'
+LF = b'\x0a'
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ASSETS = os.path.join(ROOT, 'assets', 'lucide')
@@ -199,6 +205,15 @@ def build():
     spelled = sorted(n for n in names if '_' in consts[n])
 
     digest = hashlib.sha1(ttf + cps_raw).hexdigest().upper()
+    # The generator's OWN source, so editing this script without re-running it is caught too.
+    # TyLucideAssetDigest guards the inputs; this guards the transformation. Without it the
+    # only check on "the .pas matches the code that produced it" was `--check`, which nothing
+    # ever ran: no CI, no test, no build script -- a hand-edit of the generated unit, or an
+    # edit here that was never regenerated, would ship silently.
+    with io.open(__file__, 'rb') as fh:
+        self_src = fh.read()
+    # Normalise line endings so a git checkout under a different core.autocrlf still matches.
+    self_digest = hashlib.sha1(self_src.replace(CRLF, LF)).hexdigest().upper()
     # DEFLATE first. Base64 alone costs +33%, which put 1.6MB into any executable that opted
     # in; zlib takes the font to 46% and the encoded payload to 519KB, so the opt-in costs
     # roughly what the font itself weighs instead of twice that. paszlib is in the FPC RTL,
@@ -264,6 +279,11 @@ def build():
     a("    recomputes it from assets/lucide/, so editing an asset without re-running the")
     a("    generator is a red test rather than a wrong glyph in someone's application. }")
     a("  TyLucideAssetDigest = '%s';" % digest)
+    a("  { SHA-1 over scripts/gen-lucide.py itself, line-endings normalised. The asset digest")
+    a("    above pins the INPUTS; this pins the TRANSFORMATION, so a hand-edit of this generated")
+    a("    file -- or a generator change nobody re-ran -- is a red test instead of a silent")
+    a("    mismatch between the script and its output. }")
+    a("  TyLucideGeneratorDigest = '%s';" % self_digest)
     a("  { Icons in the bundled font (names plus upstream aliases). }")
     a("  TyLucideGlyphCount = %d;" % len(names))
     if dropped:
@@ -367,6 +387,26 @@ def build():
     a("  Result := ACodepoint > 0;")
     a("end;")
     a("")
+    a("{ The LIST half of the same seam, and the reason a picker or the Object Inspector's")
+    a("  GlyphName dropdown has anything to show for a bundled pack: this unit maps NOTHING into")
+    a("  Glyphs on purpose, so anything reading Glyphs directly saw an empty font. Only this unit")
+    a("  can answer it -- LucideMap is private here, and a lookup does not invert. }")
+    a("function LucideLister(const AFamily: string; ANames: TStrings): Boolean;")
+    a("var i: Integer;")
+    a("begin")
+    a("  if not SameText(AFamily, TyLucideFamily) then Exit(False);")
+    a("  { Suppresses the caller's OnChange two thousand times; Add still inserts in sorted")
+    a("    position, so the de-duplication against hand-mapped names is unaffected. }")
+    a("  ANames.BeginUpdate;")
+    a("  try")
+    a("    for i := Low(LucideMap) to High(LucideMap) do")
+    a("      ANames.Add(LucideMap[i].Name);")
+    a("  finally")
+    a("    ANames.EndUpdate;")
+    a("  end;")
+    a("  Result := True;")
+    a("end;")
+    a("")
     a("function DecodeFont: RawByteString;")
     a("var")
     a("  i, n: Integer;")
@@ -434,8 +474,10 @@ def build():
     a("  { Registered here, not in TyLucideFont, so a name resolves on a TTyIconFont the")
     a("    application created itself -- the singleton is a convenience, not the gate. }")
     a("  TyRegisterGlyphResolver(@LucideResolver);")
+    a("  TyRegisterGlyphLister(@LucideLister);")
     a("")
     a("finalization")
+    a("  TyUnregisterGlyphLister(@LucideLister);")
     a("  TyUnregisterGlyphResolver(@LucideResolver);")
     a("  FreeAndNil(GFont);")
     a("")
@@ -456,7 +498,9 @@ def main():
         print('tyControls.Icons.Lucide.pas is up to date')
         return
     io.open(OUT, 'w', encoding='utf-8', newline='').write(text)
-    print('wrote %s (%.1f KB, %d glyphs)' % (OUT, len(text) / 1024.0, text.count("  TyIcon")))
+    m = re.search(r'TyLucideGlyphCount = (\d+);', text)
+    print('wrote %s (%.1f KB, %s glyphs)' % (OUT, len(text) / 1024.0,
+                                             m.group(1) if m else '?'))
 
 
 if __name__ == '__main__':

@@ -52,7 +52,7 @@ uses
   test.paletteicons,
   test.appicon,
   test.trailingzone,
-  test.lucide,
+  test.lucide, test.glyphnames,
   test.virtualimagelist.iconfont,
   test.tabsheet,
   test.pagecontrol,

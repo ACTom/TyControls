@@ -56,6 +56,13 @@ type
       per cell. }
     FIndex: TStringList;
     FIndexValid: Boolean;
+    { The merged name list GlyphNames hands out, and the two things that can invalidate it.
+      Deliberately not FIndex: that is this component's OWN map, used for LOOKUP; this is
+      own-plus-listers, used for DISPLAY, and a bundled pack has an empty map and a full list. }
+    FNames: TStringList;
+    FNamesVersion: Integer;    // the FVersion it was built at; -1 = never built
+    FNamesGen: Integer;        // the TyGlyphListerGeneration it was built at
+    function GetGlyphNames: TStrings;
     {$IF DEFINED(LCLQt5) OR DEFINED(LCLQt6)}
     FQtFontId: Integer;        // Qt application-font id (>=0) for removeApplicationFont
     {$ENDIF}
@@ -89,6 +96,25 @@ type
     function GlyphText(const AName: string): string;
     { True when AName resolves to a mapped codepoint. }
     function HasGlyph(const AName: string): Boolean;
+    { Every name this font can actually render: the keys of its own Glyphs MERGED with whatever a
+      registered lister offers for FontFamily, sorted and case-insensitively de-duplicated.
+
+      The merge is the point. A hand-mapped component answers out of Glyphs; a bundled pack maps
+      nothing by hand and answers entirely through its lister; a pack with two hand-added
+      overrides answers from both -- and a picker or a property editor never has to know which
+      kind of font it is holding. Before this existed, everything that wanted to show a user
+      their choices read Glyphs directly, which is EMPTY for a bundled pack: the Object
+      Inspector's GlyphName dropdown offered nothing at all for a TTyLucideIconFont.
+
+      OWNED BY THIS COMPONENT and rebuilt in place -- read it, do not free or modify it. A
+      browser drawing two thousand cells asks per repaint, and minting a fresh list each time
+      would be two thousand string allocations a frame. It is rebuilt only when Version or the
+      lister generation has moved, so the steady-state cost is two integer comparisons. }
+    property GlyphNames: TStrings read GetGlyphNames;
+    { The same names copied into ANames (cleared first), for a caller that wants to keep, sort
+      differently or filter them without holding a reference into this component. Note that
+      TStrings.Assign does not carry Sorted/Duplicates across, so ANames keeps its own. }
+    procedure GetGlyphNamesInto(ANames: TStrings);
     { Render AName's glyph centered in an ASizePx square, colored AColor, on a
       transparent background. Caller owns the returned bitmap. Returns an empty
       transparent bitmap when the name is unmapped or ASizePx <= 0. }
@@ -201,6 +227,37 @@ procedure TyUnregisterGlyphResolver(AFunc: TTyGlyphResolveFunc);
 { How many resolvers are registered -- the honest query for a test or a diagnostic. }
 function TyGlyphResolverCount: Integer;
 
+type
+  { The LIST half of the resolver seam. A resolver answers "what is this name worth"; this
+    answers "what names are there at all" -- the only question a picker or a design-time dropdown
+    can start from, and one a resolver cannot be asked, because a lookup does not invert and a
+    pack's table is private to the pack's own unit.
+
+    AFamily is the icon font's FontFamily, so a lister declines a family it does not serve
+    exactly as a resolver does. APPEND to ANames; do not clear it. The caller has already put the
+    component's own Glyphs keys there, and every lister is consulted rather than just the first.
+    The Boolean is a diagnostic ("I serve this family"), not a stop signal. }
+  TTyGlyphListFunc = function(const AFamily: string; ANames: TStrings): Boolean;
+
+{ Register/unregister a name lister, consulted by TTyIconFont.GlyphNames and TyGlyphNamesFor.
+
+  Unlike a resolver, EVERY lister is consulted: a name list is additive and two packs sharing one
+  family is a merge, whereas a codepoint lookup has exactly one right answer and stops at the
+  first. Registering the same function twice is a no-op. }
+procedure TyRegisterGlyphLister(AFunc: TTyGlyphListFunc);
+procedure TyUnregisterGlyphLister(AFunc: TTyGlyphListFunc);
+{ How many listers are registered -- the honest query for a test or a diagnostic. }
+function TyGlyphListerCount: Integer;
+{ Bumped by every registration change. It is the ONLY event a cached name list can key on: a pack
+  unit's initialization may run after a component was already created, and nothing else would
+  tell that component its answer had changed. }
+function TyGlyphListerGeneration: Integer;
+
+{ Every name registered listers offer for AFamily, APPENDED to ANames -- not cleared, not sorted.
+  For a caller that has a family but no component (a picker opened on a family name);
+  TTyIconFont.GlyphNames is the same thing merged with the component's own map. }
+procedure TyGlyphNamesFor(const AFamily: string; ANames: TStrings);
+
 { Register AData under AFamily once per process; a second call for the same family is a no-op
   and reports the first call's outcome. The registration is held by this unit, not by any
   component, so it survives the component that triggered it. Used by TTyIconPackFont; exposed
@@ -270,6 +327,53 @@ var
 function TyGlyphResolverCount: Integer;
 begin
   Result := Length(GResolvers);
+end;
+
+var
+  GListers: array of TTyGlyphListFunc;
+  GListerGen: Integer = 0;
+
+function TyGlyphListerCount: Integer;
+begin
+  Result := Length(GListers);
+end;
+
+function TyGlyphListerGeneration: Integer;
+begin
+  Result := GListerGen;
+end;
+
+procedure TyRegisterGlyphLister(AFunc: TTyGlyphListFunc);
+var i: Integer;
+begin
+  if AFunc = nil then Exit;
+  for i := 0 to High(GListers) do
+    if GListers[i] = AFunc then Exit;      // idempotent: a unit may be initialized twice
+  SetLength(GListers, Length(GListers) + 1);
+  GListers[High(GListers)] := AFunc;
+  Inc(GListerGen);
+end;
+
+procedure TyUnregisterGlyphLister(AFunc: TTyGlyphListFunc);
+var i, last: Integer;
+begin
+  for i := 0 to High(GListers) do
+    if GListers[i] = AFunc then
+    begin
+      last := High(GListers);
+      GListers[i] := GListers[last];       // order is irrelevant: the result is a merge
+      SetLength(GListers, last);
+      Inc(GListerGen);
+      Exit;
+    end;
+end;
+
+procedure TyGlyphNamesFor(const AFamily: string; ANames: TStrings);
+var i: Integer;
+begin
+  if (ANames = nil) or (AFamily = '') then Exit;
+  for i := 0 to High(GListers) do
+    GListers[i](AFamily, ANames);          { every one -- see the declaration }
 end;
 
 procedure TyRegisterGlyphResolver(AFunc: TTyGlyphResolveFunc);
@@ -406,8 +510,53 @@ begin
                                into a half-destroyed component while it is being freed }
   FGlyphs.Free;
   FIndex.Free;
+  FNames.Free;
   FChangeHandlers.Free;
   inherited Destroy;
+end;
+
+function TTyIconFont.GetGlyphNames: TStrings;
+var
+  i: Integer;
+  nm: string;
+begin
+  if FNames = nil then
+  begin
+    FNames := TStringList.Create;
+    FNames.CaseSensitive := False;
+    FNames.Duplicates := dupIgnore;
+    { Sorted BEFORE anything is added, and that is not a style choice: FPC applies Duplicates
+      only inside Add on an already-sorted list, while assigning Sorted := True to a populated
+      one merely sorts and folds nothing. A name present in BOTH Glyphs and the lister would
+      then appear twice in the picker. Building sorted costs an insert-shift per name -- a few
+      milliseconds for two thousand, paid once per invalidation. }
+    FNames.Sorted := True;
+    FNamesVersion := -1;
+  end;
+  { Version covers Glyphs and FontFamily; the generation covers a pack unit whose initialization
+    ran AFTER this component was created. Nothing else can change the answer. }
+  if (FNamesVersion = FVersion) and (FNamesGen = TyGlyphListerGeneration) then
+    Exit(FNames);
+  FNames.Clear;
+  for i := 0 to FGlyphs.Count - 1 do
+  begin
+    nm := FGlyphs.Names[i];
+    { The same two rejections RebuildIndex makes -- a line with no '=' has no name, and one whose
+      value will not parse is not a glyph -- so the list never offers a name CodepointOf would
+      answer 0 for. }
+    if (nm <> '') and (TyParseCodepoint(FGlyphs.ValueFromIndex[i]) > 0) then
+      FNames.Add(nm);
+  end;
+  TyGlyphNamesFor(FFontFamily, FNames);
+  FNamesVersion := FVersion;
+  FNamesGen := TyGlyphListerGeneration;
+  Result := FNames;
+end;
+
+procedure TTyIconFont.GetGlyphNamesInto(ANames: TStrings);
+begin
+  if ANames = nil then Exit;
+  ANames.Assign(GetGlyphNames);
 end;
 
 procedure TTyIconFont.SetSourceState(ARequested, ALoaded: Boolean; const AError: string);
@@ -594,12 +743,24 @@ begin
       if cgf <> nil then
       try
         err := nil;
-        if CTFontManagerRegisterGraphicsFont(cgf, err) then FSourceLoaded := True;
+        { `<> 0`, not `if ... then`: CTFontManagerRegisterGraphicsFont returns CBool
+          (CTFontManager.pas:374), and CBool is NOT Boolean -- MacTypes.pas:345/347 defines it
+          as SInt32 or SInt8 depending on the target, so `if <cbool> then` fails to compile
+          ("Incompatible types: got ShortInt expected Boolean", reported building on macOS).
+          A Boolean() typecast would compile on whichever of the two the machine happened to
+          have and break on the other, since the sizes differ; comparing against zero is right
+          for both. }
+        if CTFontManagerRegisterGraphicsFont(cgf, err) <> 0 then FSourceLoaded := True;
       finally
         CGFontRelease(cgf);
       end;
     finally
-      CGDataProviderRelease(prov);
+      { CFRelease, not CGDataProviderRelease: Apple has the latter, FPC's univint bindings do
+        NOT bind it (CGDataProvider.pas declares the type and the callbacks and no release
+        function at all), so the obvious spelling is an "identifier not found" on macOS and
+        compiles nowhere. Every CG type is a CF type, and CFRelease takes CFTypeRef = UnivPtr,
+        which accepts the typed pointer as-is. }
+      CFRelease(prov);
     end;
     {$ENDIF}
     {$IFDEF LCLGtk2}

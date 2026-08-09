@@ -545,8 +545,8 @@ procedure TTyGlyphNamePropertyEditor.GetValues(Proc: TGetStrProc);
 var
   comp: TPersistent;
   fnt: TObject;
+  names: TStrings;
   i: Integer;
-  nm: string;
 begin
   comp := GetComponent(0);
   if comp = nil then Exit;
@@ -560,13 +560,18 @@ begin
   if TypInfo.GetPropInfo(comp, 'IconFont') = nil then Exit;
   fnt := TypInfo.GetObjectProp(comp, 'IconFont');
   if not (fnt is TTyIconFont) then Exit;
-  { Glyphs is a 'name=HEX' map. Names[] is the key half; an entry typed without '=' has no
-    name and is skipped rather than offered as a value that CodepointOf would reject. }
-  for i := 0 to TTyIconFont(fnt).Glyphs.Count - 1 do
-  begin
-    nm := TTyIconFont(fnt).Glyphs.Names[i];
-    if nm <> '' then Proc(nm);
-  end;
+  { GlyphNames, NOT Glyphs. A bundled pack maps nothing by hand -- TTyLucideIconFont ships an
+    empty Glyphs on purpose and answers through a registered lister -- so the old loop over
+    Glyphs.Names produced an EMPTY dropdown for the one icon font most users will have on the
+    form. GlyphNames merges the two and already drops the nameless and the unparseable, which
+    is what that loop's skip was for.
+
+    No paSortList in GetAttributes: the list arrives sorted, and paSortList would make the IDE
+    re-sort two thousand strings on the fill path for nothing. A two-thousand-entry combo is
+    usable but poor -- that is an argument for a browser dialog, not for changing the sort. }
+  names := TTyIconFont(fnt).GlyphNames;   { owned by the component -- do not free }
+  for i := 0 to names.Count - 1 do
+    Proc(names[i]);
 end;
 
 { TTyFontFamilyPropertyEditor }
