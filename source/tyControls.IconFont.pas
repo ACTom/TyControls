@@ -755,12 +755,7 @@ begin
         CGFontRelease(cgf);
       end;
     finally
-      { CFRelease, not CGDataProviderRelease: Apple has the latter, FPC's univint bindings do
-        NOT bind it (CGDataProvider.pas declares the type and the callbacks and no release
-        function at all), so the obvious spelling is an "identifier not found" on macOS and
-        compiles nowhere. Every CG type is a CF type, and CFRelease takes CFTypeRef = UnivPtr,
-        which accepts the typed pointer as-is. }
-      CFRelease(prov);
+      CGDataProviderRelease(prov);
     end;
     {$ENDIF}
     {$IFDEF LCLGtk2}
