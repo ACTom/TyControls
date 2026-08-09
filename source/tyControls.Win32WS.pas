@@ -30,7 +30,7 @@ unit tyControls.Win32WS;
 interface
 
 uses
-  Forms;
+  Forms, Controls;
 
 { Assert/clear WS_THICKFRAME on AForm's window per AResizable and refresh the frame
   (SetWindowPos SWP_FRAMECHANGED), then install (idempotent) or refresh the NC subclass so
@@ -46,6 +46,33 @@ uses
 procedure TyWin32ApplyNcResize(AForm: TCustomForm; AResizable: Boolean;
   ABorderZone, ACaptionHeight: Integer; AMaximized, AAllowMaximize: Boolean;
   ANoFrame: Boolean = False);
+
+{ The window-shadow:false companion for the CONTENT HOST, and the thing that makes the window
+  mouse-resizable at all in that mode.
+
+  ANoFrame makes WM_NCCALCSIZE hand the whole window rect to the client, which leaves the
+  alClient TTyFormSurface covering every pixel of the window. Mouse messages are routed to the
+  innermost child under the pointer, so the FORM is then never hit-tested and its zone mapper --
+  the only thing that can report HTLEFT..HTBOTTOMRIGHT once the frame has been eaten -- never
+  runs. Measured on Win10 19044: hovering the bottom-right corner produced 13 WM_NCHITTEST and
+  13 WM_NCMOUSEMOVE(HTBOTTOMRIGHT) with the shadow on, and 0 of each with it off. That is the
+  forum report "resizing the form via mouse only works once".
+
+  The fix is not to give the band back to the OS: letting the normal top-only branch run in this
+  mode paints the pale classic ring the full-frame-eat exists to avoid (scanned inward from the
+  left edge: 1px white, then 5px of 180-grey, in both activation states). Instead the SURFACE
+  reports HTTRANSPARENT inside the AZone band, which per MSDN makes the system keep hit-testing
+  the windows underneath -- i.e. the form -- so the mapper runs and the pixels stay ours to
+  paint. Nothing moves and nothing is inset; only the hit test changes.
+
+  A control of the surface's own that sits flush in the band still takes the hit, because a child
+  is above its parent in the search. That matches the shadow-on mode, where those pixels are OS
+  non-client and no child can reach them either.
+
+  Idempotent; the subclass is installed once per HWND and restored on WM_NCDESTROY. Call with
+  AEnabled False (shadow on, fixed size, maximized) to leave the surface reporting normally.
+  No-op off Windows and when AControl has no handle. }
+procedure TyWin32SetEdgePassthrough(AControl: TWinControl; AZone: Integer; AEnabled: Boolean);
 
 { Begin a native top-edge resize of AForm. The flush title bar covers the top (there is no NC
   strip there), so the OS can't start a top resize itself; the title bar calls this from its top
@@ -86,8 +113,42 @@ type
     WorkArea: TRect;      // last known monitor work area -> fallback pin for the maximized client
   end;
 
+  { Per-subclassed-SURFACE state. Separate from TNcState on purpose: this rides a CHILD window,
+    handles exactly one message, and must not be confused with the form's NC subclass if both
+    ever land on the same handle. }
+  PEdgeState = ^TEdgeState;
+  TEdgeState = record
+    Wnd: HWND;
+    OrigProc: WNDPROC;
+    Zone: Integer;
+    Enabled: Boolean;
+  end;
+
 var
   GStates: array of PNcState;
+  GEdges: array of PEdgeState;
+
+function FindEdge(Wnd: HWND): PEdgeState;
+var i: Integer;
+begin
+  for i := 0 to High(GEdges) do
+    if GEdges[i]^.Wnd = Wnd then Exit(GEdges[i]);
+  Result := nil;
+end;
+
+procedure DropEdge(Wnd: HWND);
+var i, last: Integer;
+begin
+  for i := 0 to High(GEdges) do
+    if GEdges[i]^.Wnd = Wnd then
+    begin
+      Dispose(GEdges[i]);
+      last := High(GEdges);
+      GEdges[i] := GEdges[last];            // swap-remove (order irrelevant)
+      SetLength(GEdges, last);
+      Exit;
+    end;
+end;
 
 function FindState(Wnd: HWND): PNcState;
 var i: Integer;
@@ -192,9 +253,20 @@ begin
           // window-shadow:false opt-out. NC rendering is DISABLED for this window (WindowEffects
           // sets DWMWA_NCRENDERING_POLICY=DISABLED to kill the standard frame shadow), and with
           // it disabled the L/R/B sizing bands are no longer rendered by DWM but LEGACY-painted —
-          // a pale classic frame ring (observed on Win10 19044). Client := whole window rect, so
-          // there is no NC band left to paint; the in-window WM_NCHITTEST zone mapper below keeps
-          // edge-resize alive (WS_THICKFRAME still makes DefWindowProc run the resize loop).
+          // a pale classic frame ring. Measured on Win10 19044 by letting the normal branch run
+          // in this mode and scanning the pixels inward from the window's left edge: 1px white
+          // then a 5px 180-grey band, in both activation states. So the band really cannot be
+          // left to the OS, and client := whole window rect stays.
+          //
+          // That has a consequence this comment used to get WRONG: it claimed "the in-window
+          // WM_NCHITTEST zone mapper below keeps edge-resize alive". It does not, on its own.
+          // The client now covers the whole window, so the alClient TTyFormSurface child covers
+          // every pixel too, and a mouse over the edge is routed to the CHILD -- this window is
+          // never hit-tested at all (measured: hovering the bottom-right corner produced 13
+          // WM_NCHITTEST + 13 WM_NCMOUSEMOVE(HTBOTTOMRIGHT) with the shadow on, and 0 of each
+          // with it off). What keeps the mapper reachable is TTyForm insetting its CLIENT RECT
+          // by the border zone in this mode, so the surface stops short of the band and the
+          // band's pixels belong to this window. See TTyForm.AdjustClientRect.
           Result := 0;
           Exit;
         end;
@@ -352,6 +424,63 @@ begin
   ApplyThickFrame(Wnd, AResizable, AAllowMaximize, ANoFrame);
 end;
 
+function EdgeWndProc(Wnd: HWND; Msg: UINT; WP: WPARAM; LP: LPARAM): LRESULT; stdcall;
+var
+  st: PEdgeState;
+  orig: WNDPROC;
+  pt: TPoint;
+  wr: TRect;
+begin
+  st := FindEdge(Wnd);
+  if st = nil then
+    Exit(DefWindowProc(Wnd, Msg, WP, LP));
+  orig := st^.OrigProc;
+  case Msg of
+    WM_NCHITTEST:
+      // lParam is a SCREEN point, so compare against the surface's screen rect directly. The
+      // decision itself is the pure TyEdgePassthrough, next to the other hit-test mappers and
+      // unit-tested there -- this proc only supplies the rect and the point.
+      if GetWindowRect(Wnd, @wr) then
+      begin
+        pt.X := SmallInt(LOWORD(DWORD(LP)));
+        pt.Y := SmallInt(HIWORD(DWORD(LP)));
+        if TyEdgePassthrough(wr, pt, st^.Zone, st^.Enabled) then
+          Exit(HTTRANSPARENT);   // "not mine" -> the system asks the form underneath
+      end;
+    WM_NCDESTROY:
+      begin
+        SetWindowLongPtr(Wnd, GWLP_WNDPROC, LONG_PTR(orig));
+        DropEdge(Wnd);
+        Exit(CallWindowProc(orig, Wnd, Msg, WP, LP));
+      end;
+  end;
+  Result := CallWindowProc(orig, Wnd, Msg, WP, LP);
+end;
+
+procedure TyWin32SetEdgePassthrough(AControl: TWinControl; AZone: Integer; AEnabled: Boolean);
+var
+  Wnd: HWND;
+  st: PEdgeState;
+begin
+  if (AControl = nil) or (not AControl.HandleAllocated) then Exit;
+  Wnd := AControl.Handle;
+  st := FindEdge(Wnd);
+  if st = nil then
+  begin
+    // Nothing to turn off and nothing installed: stay out of the window entirely, so a form
+    // that never uses the opt-out is byte-for-byte the window it was before.
+    if not AEnabled then Exit;
+    New(st);
+    st^.Wnd := Wnd;
+    st^.OrigProc := WNDPROC(GetWindowLongPtr(Wnd, GWLP_WNDPROC));
+    SetLength(GEdges, Length(GEdges) + 1);
+    GEdges[High(GEdges)] := st;
+    SetWindowLongPtr(Wnd, GWLP_WNDPROC, LONG_PTR(@EdgeWndProc));
+  end;
+  st^.Zone := AZone;
+  st^.Enabled := AEnabled;
+end;
+
 procedure TyWin32BeginTopResize(AForm: TCustomForm);
 begin
   if (AForm = nil) or (not AForm.HandleAllocated) then Exit;
@@ -381,6 +510,13 @@ procedure TyWin32ApplyNcResize(AForm: TCustomForm; AResizable: Boolean;
 begin
   // Non-Windows widgetset: native NC resize is a Win32-only strategy. GTK/Qt use the
   // AdjustClientRect gutter + WM handoff; Cocoa uses the resizable styleMask (later phases).
+end;
+
+procedure TyWin32SetEdgePassthrough(AControl: TWinControl; AZone: Integer; AEnabled: Boolean);
+begin
+  // The band this opens up only exists because Win32's WM_NCCALCSIZE gave the client the whole
+  // window. GTK/Qt keep their alClient children off the edge with the AdjustClientRect gutter
+  // instead, and Cocoa has a real resizable frame.
 end;
 
 procedure TyWin32BeginTopResize(AForm: TCustomForm);

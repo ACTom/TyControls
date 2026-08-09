@@ -48,6 +48,16 @@ Linux and macOS.
   and nothing else). In that mode the whole frame is already eaten, so `WS_CAPTION` bought
   nothing but the caption Windows insisted on painting; it is no longer set there. Aero Snap
   and maximise were measured in both modes and are unaffected.
+- **A `window-shadow: false` window could not be resized by dragging its edges** (reported on
+  the forum). To stop Windows painting a pale legacy frame ring, that mode hands the whole
+  window rect to the client -- and the content host, which fills the client, then covers every
+  pixel. Mouse messages go to that child, so the form itself was **never hit-tested**, and the
+  mapper that reports "left edge" / "bottom-right corner" never ran. Measured by hovering the
+  bottom-right corner: with the shadow on the form received 13 `WM_NCHITTEST` and 13
+  `WM_NCMOUSEMOVE(HTBOTTOMRIGHT)`; with it off, **zero of each**. The content host now answers
+  "not mine" inside the edge band, so the system asks the form underneath. The window looks
+  exactly as it did (the edge was pixel-scanned before and after), and clicks anywhere inside
+  it still belong to the content host.
 
 ### Added — data grid `TTyStringGrid`
 

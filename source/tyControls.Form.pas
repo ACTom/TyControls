@@ -476,6 +476,22 @@ function TyResizeHitFor(AResizable: Boolean; const AClient: TRect; const APt: TP
   (ANeedsGutter and AResizable and not AMaximized) — so alClient children stop short of the
   form edge and the edge strip receives the mouse — else returns AClient unchanged. }
 function TyResizeGutterRect(const AClient: TRect; AZone: Integer; AResizable, AMaximized, ANeedsGutter: Boolean): TRect;
+
+{ Win32's answer to the same problem the gutter solves on GTK/Qt, for the one mode where a gutter
+  cannot be used. With window-shadow:false the WM_NCCALCSIZE gives the client the WHOLE window
+  rect (anything less lets the OS legacy-paint a pale classic ring over the L/R/B bands), so the
+  alClient content host covers every pixel and the form is never hit-tested -- which is why such a
+  window could not be edge-resized with the mouse at all. Insetting the host instead would leave a
+  visible band of form background around it, so the host keeps its size and reports HTTRANSPARENT
+  in the band instead, handing the point down to the form.
+
+  True = "not mine, ask the window underneath". ASurface and APt are in the SAME space (the caller
+  uses screen coords, because that is what WM_NCHITTEST's lParam carries).
+
+  A host narrower than two zones is entirely band. That is deliberate and matches the OS: a window
+  shrunk to the sizing frame is all sizing frame. }
+function TyEdgePassthrough(const ASurface: TRect; const APt: TPoint;
+  AZone: Integer; AEnabled: Boolean): Boolean;
 { Which caption buttons a form's chrome shows, from the standard BorderIcons plus the
   Resizable flag: close<=biSystemMenu, minimize<=biMinimize, maximize<=(biMaximize and
   AResizable) — a fixed-size window shows no maximize. Pure (no window handle) so it is
@@ -734,6 +750,14 @@ begin
     if Result.Right < Result.Left then Result.Right := Result.Left;
     if Result.Bottom < Result.Top then Result.Bottom := Result.Top;
   end;
+end;
+
+function TyEdgePassthrough(const ASurface: TRect; const APt: TPoint;
+  AZone: Integer; AEnabled: Boolean): Boolean;
+begin
+  if (not AEnabled) or (AZone <= 0) then Exit(False);
+  Result := (APt.X < ASurface.Left + AZone) or (APt.X >= ASurface.Right - AZone)
+         or (APt.Y < ASurface.Top + AZone) or (APt.Y >= ASurface.Bottom - AZone);
 end;
 
 function TyNcHitTest(const AWinRect: TRect; const APt: TPoint;
@@ -2210,7 +2234,7 @@ end;
 
 procedure TTyForm.ApplyResizeStrategy;
 {$IFDEF LCLWin32}
-var capH, zone: Integer; resiz, noFrame: Boolean; ctrl: TTyStyleController;
+var capH, zone: Integer; resiz, noFrame, maxed: Boolean; ctrl: TTyStyleController;
 {$ENDIF}
 begin
   if csDesigning in ComponentState then Exit;   // never poke the window on the design surface
@@ -2234,10 +2258,17 @@ begin
     // lock-step across first show / theme switch / live override flip / maximize-restore.
     if FController <> nil then ctrl := FController else ctrl := TyDefaultController;
     noFrame := not TyResolveWindowEffect(ResolveChromeStyle(ctrl), False).Shadow;
+    maxed := (FEngine <> nil) and FEngine.Maximized;
     TyWin32ApplyNcResize(Self, resiz, zone, capH,
-      (FEngine <> nil) and FEngine.Maximized,   // engine (work-area) maximize -> no NC inset
+      maxed,                                    // engine (work-area) maximize -> no NC inset
       resiz and (biMaximize in BorderIcons),    // allow native maximize (WS_MAXIMIZEBOX)
       noFrame);
+    // The full-frame-eat above leaves the surface covering every pixel, so without this the
+    // form is never hit-tested and the window cannot be edge-resized with the mouse at all.
+    // See TyWin32SetEdgePassthrough for the measurements and for why the band is not simply
+    // handed back to the OS.
+    if (FSurface <> nil) and FSurface.HandleAllocated then
+      TyWin32SetEdgePassthrough(FSurface, zone, noFrame and resiz and not maxed);
   end;
   {$ENDIF}
   // GTK/Qt: the AdjustClientRect gutter + WM handoff (Phase C). Cocoa: resizable styleMask
