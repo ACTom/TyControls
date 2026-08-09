@@ -11,13 +11,18 @@ unit tyControls.Icons.Lucide;
   NO other unit in this library may reference this one. The dependency points inwards,
   from the application, and tests/test.lucide.pas asserts it.
 
-  Usage is one line each way:
+  TWO WAYS IN, and they share one registration:
+
+    - drop a TTyLucideIconFont on the form and point a TTyCharImage at it. Nothing to
+      write; a second icon pack later is a second component beside it rather than a
+      property to switch;
+    - or in code, TyLucideFont -- the same component, created once and owned here.
 
       CharImage1.IconFont  := TyLucideFont;
       CharImage1.GlyphName := TyIconHouse;   { or just 'house' }
 
-  and any TTyIconFont whose FontFamily is 'lucide' resolves Lucide names without a
-  Glyphs entry, because this unit registers a resolver on startup.
+  Either way there is nothing to put in Glyphs: this unit registers a name resolver on
+  startup, so any TTyIconFont whose FontFamily is 'lucide' resolves Lucide names.
 
   LICENCE. ISC (Lucide) plus MIT for the Feather-derived icons; both texts are in
   assets/lucide/LICENSE and reproduced in THIRD-PARTY-NOTICES.md, which is what an
@@ -27,7 +32,16 @@ unit tyControls.Icons.Lucide;
 interface
 
 uses
-  tyControls.IconFont;
+  Classes, tyControls.IconFont;
+
+type
+  { The bundled pack as a COMPONENT. TTyIconPackFont registers the embedded bytes once
+    per process, so any number of these on any number of forms cost one registration. }
+  TTyLucideIconFont = class(TTyIconPackFont)
+  protected
+    class function PackData: RawByteString; override;
+    class function PackFamily: string; override;
+  end;
 
 const
   { The sfnt family name of the vendored file, read out of the file by the generator.
@@ -69,10 +83,10 @@ const
       youtube
   }
 
-{ The shared icon font, created on first use and registered from the embedded bytes.
-  Owned by this unit and freed at finalization -- do not free it. Check Available on the
+{ The shared instance, for code that would rather not drop a component. Created on first
+  use, owned by this unit, freed at finalization -- do not free it. Check Available on the
   result if you want to know whether the registration actually took. }
-function TyLucideFont: TTyIconFont;
+function TyLucideFont: TTyLucideIconFont;
 
 { The codepoint for a Lucide name, or 0. Exposed because the picker and the drift guard
   both want the table without going through a component. }
@@ -2152,7 +2166,7 @@ const
 implementation
 
 uses
-  Classes, SysUtils, base64, zstream;
+  SysUtils, base64, zstream;   { Classes comes from the interface uses }
 
 type
   TLucideEntry = record
@@ -4739,7 +4753,7 @@ const
   );
 
 var
-  GFont: TTyIconFont = nil;
+  GFont: TTyLucideIconFont = nil;
   GData: RawByteString = '';
 
 function TyLucideCodepoint(const AName: string): Cardinal;
@@ -4817,18 +4831,21 @@ begin
   Result := GData;
 end;
 
-function TyLucideFont: TTyIconFont;
-var d: RawByteString;
+class function TTyLucideIconFont.PackData: RawByteString;
 begin
-  if GFont = nil then
-  begin
-    GFont := TTyIconFont.Create(nil);
-    d := DecodeFont;
-    if d <> '' then
-      GFont.LoadFontFromMemory(@d[1], Length(d), TyLucideFamily)
-    else
-      GFont.FontFamily := TyLucideFamily;
-  end;
+  Result := DecodeFont;   { cached -- this is a refcount, not an 833KB copy }
+end;
+
+class function TTyLucideIconFont.PackFamily: string;
+begin
+  Result := TyLucideFamily;
+end;
+
+function TyLucideFont: TTyLucideIconFont;
+begin
+  { Deliberately the same class the palette offers, so the code path and the design-time
+    path cannot drift -- and the pack base makes both share one registration. }
+  if GFont = nil then GFont := TTyLucideIconFont.Create(nil);
   Result := GFont;
 end;
 

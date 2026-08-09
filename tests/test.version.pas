@@ -26,6 +26,7 @@ uses
   tyControls.GlowLabel, tyControls.GlyphButtons, tyControls.GlyphImageList, tyControls.Grid,
   tyControls.GridPanel, tyControls.GroupBox, tyControls.HSColorPicker,
   tyControls.HeaderControl, tyControls.Hint, tyControls.HtmlLabel, tyControls.IconFont,
+  tyControls.Icons.Lucide,
   tyControls.Image, tyControls.ImageCollection, tyControls.ImageView, tyControls.LColorPicker,
   tyControls.LevelMeter, tyControls.LinkLabel, tyControls.ListBox, tyControls.ListGroupPanel,
   tyControls.ListView, tyControls.MRUComboBox, tyControls.MaskEdit, tyControls.Memo,
@@ -441,7 +442,7 @@ initialization
     TTyMenuBar, TTyPopupMenu, TTyImagesMenu]);
   Reg([
     TTyMenuEx, TTyRibbon, TTyRibbonPage, TTyRibbonGroup, TTyRibbonAppMenu,
-    TTyRibbonQuickAccess, TTyRibbonGallery, TTyRibbonBackstage, TTyIconFont, TTyCharImage,
+    TTyRibbonQuickAccess, TTyRibbonGallery, TTyRibbonBackstage, TTyIconFont, TTyLucideIconFont, TTyCharImage,
     TTyGlyphImageList, TTyImage, TTyImageCollection, TTyVirtualImageList, TTyHint,
     TTyBalloonHint, TTyPopover, TTyShape, TTyStarShape, TTyArrow, TTyChart, TTyMessage,
     TTyInputDialog, TTyPasswordDialog, TTyTextDialog, TTySelectValueDialog,

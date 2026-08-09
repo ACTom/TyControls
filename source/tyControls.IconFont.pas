@@ -71,6 +71,12 @@ type
     procedure Changed;
     procedure RebuildIndex;
     function GetAvailable: Boolean;
+  protected
+    { For a descendant whose font is registered somewhere ELSE -- a bundled pack, where one
+      keeper registers the bytes for every component that shares the family. Without it such a
+      component would report Available = True purely because it has a family name, which is the
+      exact lie Available exists to prevent. }
+    procedure SetSourceState(ARequested, ALoaded: Boolean; const AError: string);
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -145,6 +151,31 @@ type
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
   end;
 
+  { An icon font whose bytes are EMBEDDED in the program: a bundled icon pack, dropped on a
+    form like any other component.
+
+    Why a class per pack rather than one component with a "which pack" property: each pack is
+    its own optional unit, and a property would have to name every pack from a single unit --
+    which would link every font into every application that used any of them. A class per
+    pack keeps the dependency where it belongs, gives the palette one obvious entry per pack,
+    and lets two packs coexist on one form.
+
+    The base makes sure the process registers a given family ONCE, however many components are
+    dropped on however many forms. That matters twice over: registering 850KB N times is
+    wasteful, and the registration must NOT belong to an instance -- freeing the first component
+    would otherwise unregister the font out from under the others. The keeper lives in this
+    unit and outlives every component. }
+  TTyIconPackFont = class(TTyIconFont)
+  protected
+    { The font file's bytes. Return a cached value: this is called per instance and the string
+      is reference-counted, so a cached one costs a refcount and a fresh one costs a copy. }
+    class function PackData: RawByteString; virtual; abstract;
+    { The sfnt family name those bytes declare. }
+    class function PackFamily: string; virtual; abstract;
+  public
+    constructor Create(AOwner: TComponent); override;
+  end;
+
 { Pure: parse a hex codepoint string ('F0C7', '0xF0C7', '$F0C7', 'U+F0C7'),
   returning 0 on empty/invalid. Headless-testable. }
 function TyParseCodepoint(const AHex: string): Cardinal;
@@ -169,6 +200,13 @@ procedure TyRegisterGlyphResolver(AFunc: TTyGlyphResolveFunc);
 procedure TyUnregisterGlyphResolver(AFunc: TTyGlyphResolveFunc);
 { How many resolvers are registered -- the honest query for a test or a diagnostic. }
 function TyGlyphResolverCount: Integer;
+
+{ Register AData under AFamily once per process; a second call for the same family is a no-op
+  and reports the first call's outcome. The registration is held by this unit, not by any
+  component, so it survives the component that triggered it. Used by TTyIconPackFont; exposed
+  because a pack unit may want to register from its own initialization too. }
+function TyEnsurePackFont(const AFamily: string; const AData: RawByteString;
+  out AError: string): Boolean;
 
 { v3/C5. Parse a glyph-override token '"Family" "\e5ca"' into a font family + codepoint.
   The two double-quoted parts are family then codepoint (a leading '\' on the codepoint is
@@ -257,6 +295,63 @@ begin
     end;
 end;
 
+type
+  { One keeper per bundled family. It is a TTyIconFont only because that is where the
+    per-widgetset registration lives; nothing draws with it. }
+  TPackEntry = record
+    Family: string;
+    Keeper: TTyIconFont;
+    Loaded: Boolean;
+    Error: string;
+  end;
+
+var
+  GPacks: array of TPackEntry;
+
+function TyEnsurePackFont(const AFamily: string; const AData: RawByteString;
+  out AError: string): Boolean;
+var
+  i: Integer;
+begin
+  AError := '';
+  if AFamily = '' then
+  begin
+    AError := 'a bundled font needs a family name';
+    Exit(False);
+  end;
+  for i := 0 to High(GPacks) do
+    if SameText(GPacks[i].Family, AFamily) then
+    begin
+      AError := GPacks[i].Error;
+      Exit(GPacks[i].Loaded);
+    end;
+  SetLength(GPacks, Length(GPacks) + 1);
+  i := High(GPacks);
+  GPacks[i].Family := AFamily;
+  GPacks[i].Keeper := TTyIconFont.Create(nil);
+  if AData = '' then
+  begin
+    GPacks[i].Loaded := False;
+    GPacks[i].Error := 'the bundled font decoded to nothing';
+  end
+  else
+  begin
+    GPacks[i].Keeper.LoadFontFromMemory(@AData[1], Length(AData), AFamily);
+    GPacks[i].Loaded := GPacks[i].Keeper.Available;
+    GPacks[i].Error := GPacks[i].Keeper.LoadError;
+  end;
+  AError := GPacks[i].Error;
+  Result := GPacks[i].Loaded;
+end;
+
+procedure FreePacks;
+var i: Integer;
+begin
+  for i := 0 to High(GPacks) do
+    GPacks[i].Keeper.Free;
+  SetLength(GPacks, 0);
+end;
+
 function ResolveViaRegistry(const AFamily, AName: string; out ACodepoint: Cardinal): Boolean;
 var i: Integer;
 begin
@@ -313,6 +408,28 @@ begin
   FIndex.Free;
   FChangeHandlers.Free;
   inherited Destroy;
+end;
+
+procedure TTyIconFont.SetSourceState(ARequested, ALoaded: Boolean; const AError: string);
+begin
+  FSourceRequested := ARequested;
+  FSourceLoaded := ALoaded;
+  FLoadError := AError;
+end;
+
+{ TTyIconPackFont }
+
+constructor TTyIconPackFont.Create(AOwner: TComponent);
+var
+  err: string;
+  ok: Boolean;
+begin
+  inherited Create(AOwner);
+  ok := TyEnsurePackFont(PackFamily, PackData, err);
+  FontFamily := PackFamily;
+  { Say what really happened. A component that merely has a family name would otherwise
+    report Available = True even when the shared registration failed. }
+  SetSourceState(True, ok, err);
 end;
 
 procedure TTyIconFont.GlyphsChanged(Sender: TObject);
@@ -805,5 +922,7 @@ end;
 
 finalization
   FreeGlyphFontCache;
+  { The pack keepers outlive every component on purpose -- this is where they end. }
+  FreePacks;
 
 end.

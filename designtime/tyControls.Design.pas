@@ -25,7 +25,8 @@ uses
   tyControls.GearActivityIndicator, tyControls.UpDown,
   tyControls.LinkLabel, tyControls.ShadowLabel, tyControls.GlowLabel,
   tyControls.Hint, tyControls.BalloonHint,
-  tyControls.IconFont, tyControls.CharImage, tyControls.GlyphImageList,
+  tyControls.IconFont, tyControls.Icons.Lucide, tyControls.CharImage,
+  tyControls.GlyphImageList,
   tyControls.Image, tyControls.ImageCollection,
   tyControls.GlyphButtons, tyControls.DropButtons, tyControls.ColorButton,
   tyControls.ButtonGroup, tyControls.Ribbon, tyControls.RibbonAppMenu,
@@ -1216,7 +1217,7 @@ begin
      TTyRibbonQuickAccess, TTyRibbonGallery, TTyRibbonBackstage]);
   // Icon-font, images, hints.
   RegisterComponents('TyControls Images',
-    [TTyIconFont, TTyCharImage, TTyGlyphImageList, TTyImage,
+    [TTyIconFont, TTyLucideIconFont, TTyCharImage, TTyGlyphImageList, TTyImage,
      TTyImageCollection, TTyVirtualImageList, TTyHint, TTyBalloonHint, TTyPopover]);
   // Decorative vector shapes + charts.
   RegisterComponents('TyControls Shapes & Charts',

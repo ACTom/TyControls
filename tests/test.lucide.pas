@@ -40,6 +40,7 @@ type
     procedure EveryOfferedNameHasACodepoint;
     procedure GlyphNameRoundTripsByIndex;
     procedure RemovedBrandLogosAreNotOffered;
+    procedure TheComponentConfiguresItselfAndSharesOneRegistration;
 end;
 
 implementation
@@ -199,6 +200,37 @@ begin
       bad := bad + ' ' + Gone[i];
   AssertEquals('names whose glyph the font no longer contains are still offered:' + bad,
     '', bad);
+end;
+
+procedure TLucideTest.TheComponentConfiguresItselfAndSharesOneRegistration;
+var
+  a, b: TTyLucideIconFont;
+begin
+  { Dropped on a form, it needs no properties set: family, embedded bytes and the name
+    resolver are all its own doing. }
+  a := TTyLucideIconFont.Create(nil);
+  b := TTyLucideIconFont.Create(nil);
+  try
+    AssertEquals('family set by the component', TyLucideFamily, a.FontFamily);
+    AssertTrue('and it reports the SHARED registration, not just "I have a family": '
+      + a.LoadError, a.Available);
+    AssertTrue('a second instance is equally usable', b.Available);
+    AssertTrue('both resolve names with nothing in Glyphs', a.HasGlyph(TyIconHouse));
+    AssertEquals('and neither maps anything by hand', 0, b.Glyphs.Count);
+
+    { The registration belongs to the unit, not to an instance: freeing the first component
+      must not unregister the font out from under the second. That is the whole reason
+      TTyIconPackFont keeps a keeper. }
+    FreeAndNil(a);
+    AssertTrue('the survivor still has a font', b.Available);
+    AssertTrue('and can still resolve', b.CodepointOf(TyIconHouse) > 0);
+  finally
+    a.Free;
+    b.Free;
+  end;
+  { And the code-path singleton is the same class, so the two entry points cannot drift. }
+  AssertTrue('TyLucideFont is the component class',
+    TyLucideFont is TTyLucideIconFont);
 end;
 
 initialization

@@ -157,6 +157,9 @@ procedure GHint(b: TBGRABitmap); begin FillRRect(b,3,4,21,16,3,Faint); FillPolyG
 procedure GBalloonHint(b: TBGRABitmap); begin FillRRect(b,3,3,21,15,3,Faint); FillPolyG(b,[PointF(8,15),PointF(8,20),PointF(13,15)],Faint); RRect(b,3,3,21,15,3,Ink); FillCirc(b,8,9,2.6,Acc); Line(b,12,8,18,8,Ink,1.5); Line(b,12,11,17,11,Ink,1.4); end;
 { TTyIconFont: a glyph tile — a filled rounded frame with an accent asterisk (a font of symbols) }
 procedure GIconFont(b: TBGRABitmap); begin FillRRect(b,3,3,21,21,4,Faint); RRect(b,3,3,21,21,4,Ink); Line(b,12,7,12,17,Acc,1.8); Line(b,7.5,9.5,16.5,14.5,Acc,1.8); Line(b,16.5,9.5,7.5,14.5,Acc,1.8); end;
+{ TTyLucideIconFont: the same asterisk mark, but on a STACK of sheets -- a bundled pack 
+  rather than a font you point at. }
+procedure GLucideIconFont(b: TBGRABitmap); begin RRect(b,6,2,21,17,3,Faint); FillRRect(b,3,7,18,22,3,Faint); RRect(b,3,7,18,22,3,Ink); Line(b,10.5,11,10.5,18,Acc,1.6); Line(b,7.2,12.7,13.8,16.3,Acc,1.6); Line(b,13.8,12.7,7.2,16.3,Acc,1.6); end;
 { TTyCharImage: a rounded frame with an accent 5-point star (a single glyph char as an image) }
 procedure GCharImage(b: TBGRABitmap); begin RRect(b,3,3,21,21,4,Ink,2); FillPolyG(b,[PointF(12,6),PointF(13.6,10.1),PointF(18,10.4),PointF(14.6,13.2),PointF(15.7,17.5),PointF(12,15),PointF(8.3,17.5),PointF(9.4,13.2),PointF(6,10.4),PointF(10.4,10.1)],Acc); end;
 { TTyGlyphImageList: two overlapping glyph tiles, the front carrying an accent mark }
@@ -876,7 +879,7 @@ procedure GCascader(b: TBGRABitmap); begin RRect(b,3,3,21,10,2,Ink); PolyL(b,[Po
 procedure GPopover(b: TBGRABitmap); begin RRect(b,2,4,22,17,2,Ink); PolyL(b,[PointF(9,17),PointF(11.5,20.5),PointF(14,17)],Ink); FillRRect(b,5,7.5,10.5,13.5,1,Acc); Line(b,12.5,9,19,9,Ink,1.3); Line(b,12.5,12,17.5,12,Ink,1.3); end;
 
 const
-  Glyphs: array[0..161] of TGlyph = (
+  Glyphs: array[0..162] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -932,6 +935,7 @@ const
     (Name:'TTyHint';             Draw:@GHint),
     (Name:'TTyBalloonHint';      Draw:@GBalloonHint),
     (Name:'TTyIconFont';         Draw:@GIconFont),
+    (Name:'TTyLucideIconFont';   Draw:@GLucideIconFont),
     (Name:'TTyCharImage';        Draw:@GCharImage),
     (Name:'TTyGlyphImageList';   Draw:@GGlyphImageList),
     (Name:'TTyImage';            Draw:@GImage),
