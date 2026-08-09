@@ -24,7 +24,8 @@ uses
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Component,
   tyControls.Dialogs, tyControls.Edit, tyControls.TyLabel, tyControls.Button,
-  tyControls.ScrollBar, tyControls.IconFont, tyControls.Controller, tyControls.StrConsts;
+  tyControls.ScrollBar, tyControls.IconFont, tyControls.ImageCollection,
+  tyControls.Controller, tyControls.StrConsts;
 
 type
   { The glyph grid. Deliberately a private-ish control of this unit rather than a palette
@@ -46,6 +47,11 @@ type
     FScroll: TTyScrollBar;
     FOnChange: TNotifyEvent;
     FOnPick: TNotifyEvent;        // double-click / Enter: "this one, and I am done"
+    { The names of an image list, IN ITS OWN ORDER, so a cell can show the ImageIndex a
+      consumer would actually write. Only meaningful with a list: a font has no index, and the
+      cell's position in the FILTERED grid is not one either -- it moves as soon as the user
+      types in the search box, so showing it would be a number that lies. }
+    FIndexNames: TStringList;
     { One rendered glyph, kept for the size+colour it was rendered at. The grid asks for the
       same cell many times (hover, selection, scroll) and a rasterisation per repaint per cell
       would be visible. }
@@ -85,6 +91,10 @@ type
     function Count: Integer;
     function NameAt(AIndex: Integer): string;
     function IndexOfName(const AName: string): Integer;
+    { Borrowed: the caller keeps ownership, the contents are copied. nil clears the badges. }
+    procedure SetIndexNames(ANames: TStrings);
+    { The ImageIndex AName would have in that list, or -1. }
+    function ImageIndexOf(const AName: string): Integer;
     { Cell index at a device point, or -1 outside every cell (the trailing gap of a partly
       filled last row included). Test seam. }
     function CellAt(AX, AY: Integer): Integer;
@@ -104,6 +114,7 @@ type
     FStatus: TTyLabel;
     FFont: TTyIconFont;
     FAll: TStringList;            // every name the font offers, unfiltered
+    FIndexSource: TTyVirtualImageList;
     procedure SearchChanged(Sender: TObject);
     procedure GridChanged(Sender: TObject);
     procedure GridPick(Sender: TObject);
@@ -115,6 +126,17 @@ type
     destructor Destroy; override;
     { The font whose glyphs are shown. Setting it reloads the list. }
     procedure SetIconFont(AValue: TTyIconFont);
+    { Optional. When the browser is opened FROM an image list, this is that list: every icon
+      already in it shows its ImageIndex in the corner, and the status line names the index of
+      the selection. Consumers address icons by ImageIndex far more often than by name, so
+      without this the browser answers a question half its users are not asking.
+
+      The number shown is the position in the LIST, never in the grid -- the grid is filtered,
+      so its positions move as soon as anyone types in the search box. }
+    procedure SetIndexSource(AValue: TTyVirtualImageList);
+    { The ImageIndex of the current selection in that list, or -1 (no list, or a glyph the list
+      does not hold). Test seam. }
+    function SelectedImageIndex: Integer;
     { Narrow the grid to the names containing AText (case-insensitively); '' shows everything.
       Public so the filter is assertable without a window or a keystroke. }
     procedure ApplyFilter(const AText: string);
@@ -130,6 +152,9 @@ type
 { Construct-only builder (no ShowModal), so a test can assert the finished dialog. }
 function TyBuildIconBrowserDialog(const ACaption: string;
   AFont: TTyIconFont): TTyIconBrowserForm;
+{ As above, plus the image list whose ImageIndex numbers the browser should show. }
+function TyBuildIconBrowserDialogFor(const ACaption: string; AFont: TTyIconFont;
+  AIndexSource: TTyVirtualImageList): TTyIconBrowserForm;
 
 { The one-liner. LCL-parity var-param shape: AGlyphName is both the initial selection and the
   result, and it is left untouched when the user cancels. }
@@ -175,6 +200,7 @@ constructor TTyIconGrid.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FNames := TStringList.Create;
+  FIndexNames := TStringList.Create;
   FSelected := -1;
   FCellSize := TyIconCellDefault;
   TabStop := True;
@@ -188,6 +214,7 @@ end;
 destructor TTyIconGrid.Destroy;
 begin
   DropCache;
+  FIndexNames.Free;
   FNames.Free;
   inherited Destroy;
 end;
@@ -247,6 +274,22 @@ function TTyIconGrid.NameAt(AIndex: Integer): string;
 begin
   if (AIndex < 0) or (AIndex >= FNames.Count) then Exit('');
   Result := FNames[AIndex];
+end;
+
+procedure TTyIconGrid.SetIndexNames(ANames: TStrings);
+begin
+  if ANames = nil then FIndexNames.Clear else FIndexNames.Assign(ANames);
+  Invalidate;
+end;
+
+function TTyIconGrid.ImageIndexOf(const AName: string): Integer;
+var i: Integer;
+begin
+  { Deliberately case-insensitive and linear: the list is the handful of icons an application
+    actually uses, not the font's two thousand. }
+  for i := 0 to FIndexNames.Count - 1 do
+    if SameText(FIndexNames[i], AName) then Exit(i);
+  Result := -1;
 end;
 
 function TTyIconGrid.IndexOfName(const AName: string): Integer;
@@ -393,9 +436,9 @@ procedure TTyIconGrid.Paint;
 var
   P: TTyPainter;
   st, selSt: TTyStyleSet;
-  R, cellR: TRect;
-  cell, per, vis, idx, row, col, gsz, x, y: Integer;
-  ink, selInk: TTyColor;
+  R, cellR, badgeR: TRect;
+  cell, per, vis, idx, row, col, gsz, x, y, imgIdx, badgeH: Integer;
+  ink, selInk, badgeInk: TTyColor;
   bmp: TBGRABitmap;
 begin
   P := TTyPainter.Create;
@@ -427,6 +470,32 @@ begin
           cellR := Rect(x, y, x + cell, y + cell);
           if idx = FSelected then
             P.FillBackground(cellR, selSt.Background, 4);
+          { The ImageIndex badge. Drawn only for a name the associated list actually holds, so
+            the number is one a consumer can write into ImageIndex -- never the cell's position
+            in the filtered grid, which changes as the user types. }
+          if FIndexNames.Count > 0 then
+          begin
+            imgIdx := ImageIndexOf(FNames[idx]);
+            if imgIdx >= 0 then
+            begin
+              { On a filled pill, not as bare text. Plain small text over an icon is the one
+                thing that CANNOT be read here -- the glyph strokes run straight through it,
+                and this number is the reason half the users opened the dialog. The pill takes
+                the selected-item background, so it reads as a badge in every theme without a
+                colour of its own. }
+              badgeH := Math.Max(11, P.Scale(13));
+              badgeR := Rect(x + P.Scale(2), y + P.Scale(2),
+                             x + P.Scale(2) + Math.Max(badgeH,
+                               badgeH div 2 * Length(IntToStr(imgIdx)) + P.Scale(4)),
+                             y + P.Scale(2) + badgeH);
+              P.FillBackground(badgeR, selSt.Background, 3);
+              badgeInk := selSt.TextColor;
+              if TyAlphaOf(badgeInk) = 0 then badgeInk := ink;
+              P.DrawText(badgeR, IntToStr(imgIdx), st.FontName,
+                Math.Max(7, st.FontSize - 1), st.FontWeight, badgeInk,
+                taCenter, tlCenter, False, 0, True);
+            end;
+          end;
           bmp := GlyphFor(idx, gsz, IfThen(idx = FSelected, Int64(selInk), Int64(ink)));
           if bmp <> nil then
             P.DrawGlyphBitmap(Rect(x + (cell - bmp.Width) div 2, y + (cell - bmp.Height) div 2,
@@ -550,6 +619,19 @@ begin
   ApplyFilter(FSearch.Text);
 end;
 
+procedure TTyIconBrowserForm.SetIndexSource(AValue: TTyVirtualImageList);
+begin
+  FIndexSource := AValue;
+  if FIndexSource <> nil then FGrid.SetIndexNames(FIndexSource.Names)
+  else FGrid.SetIndexNames(nil);
+  UpdateStatus;
+end;
+
+function TTyIconBrowserForm.SelectedImageIndex: Integer;
+begin
+  Result := FGrid.ImageIndexOf(SelectedGlyphName);
+end;
+
 procedure TTyIconBrowserForm.ApplyFilter(const AText: string);
 var
   shown: TStringList;
@@ -595,12 +677,21 @@ begin
 end;
 
 procedure TTyIconBrowserForm.UpdateStatus;
+var idx: Integer;
 begin
   if FStatus = nil then Exit;
-  if SelectedGlyphName <> '' then
-    FStatus.Caption := SelectedGlyphName
-  else
+  if SelectedGlyphName = '' then
+  begin
     FStatus.Caption := Format(rsDlgIconCount, [FGrid.Count]);
+    Exit;
+  end;
+  idx := SelectedImageIndex;
+  { The index is the reason half the users are here -- spell it out for the selection rather
+    than making them read a small badge. A glyph not in the list yet has no index to show. }
+  if idx >= 0 then
+    FStatus.Caption := Format(rsDlgIconNameAndIndex, [SelectedGlyphName, idx])
+  else
+    FStatus.Caption := SelectedGlyphName;
 end;
 
 function TTyIconBrowserForm.GlyphCount: Integer;
@@ -644,14 +735,21 @@ end;
 
 { ============================================================ entry points =========== }
 
-function TyBuildIconBrowserDialog(const ACaption: string;
-  AFont: TTyIconFont): TTyIconBrowserForm;
+function TyBuildIconBrowserDialogFor(const ACaption: string; AFont: TTyIconFont;
+  AIndexSource: TTyVirtualImageList): TTyIconBrowserForm;
 begin
   Result := TTyIconBrowserForm.CreateNew(Application);
   if ACaption <> '' then Result.Caption := ACaption
   else Result.Caption := rsDlgIconBrowserTitle;
   Result.SetIconFont(AFont);
+  Result.SetIndexSource(AIndexSource);
   Result.LayoutContent;
+end;
+
+function TyBuildIconBrowserDialog(const ACaption: string;
+  AFont: TTyIconFont): TTyIconBrowserForm;
+begin
+  Result := TyBuildIconBrowserDialogFor(ACaption, AFont, nil);
 end;
 
 function TyBrowseIcons(const ACaption: string; AFont: TTyIconFont;

@@ -198,6 +198,11 @@ msgstr ""
 msgid "%d icons"
 msgstr ""
 
+#: tycontrols.strconsts.rsdlgiconnameandindex
+#, object-pascal-format
+msgid "%s   (ImageIndex %d)"
+msgstr ""
+
 #: tycontrols.strconsts.rsdlgiconnomatches
 msgid "No icons match"
 msgstr ""

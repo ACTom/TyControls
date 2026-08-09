@@ -26,7 +26,7 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Forms, fpcunit, testregistry,
   tyControls.Types, tyControls.Dialogs, tyControls.Button, tyControls.IconFont,
-  tyControls.Dialogs.IconBrowser;
+  tyControls.ImageCollection, tyControls.Dialogs.IconBrowser;
 
 type
   TIconBrowserTest = class(TTestCase)
@@ -49,6 +49,9 @@ type
     procedure NoFontMeansAnEmptyGridNotACrash;
     procedure LayoutFillsTheContentRect;
     procedure LayoutReflowsWhenTheDialogGrows;
+    procedure TheIndexShownIsTheListPositionNotTheGridPosition;
+    procedure AGlyphTheListDoesNotHoldHasNoIndex;
+    procedure WithoutAnIndexSourceThereIsNoIndexToShow;
     procedure TheComponentWrapperCarriesItsOwnState;
     procedure TheComponentDropsAFreedFont;
   end;
@@ -231,6 +234,73 @@ begin
     TBrowserAccess(d).LayoutContent;                       { Resize calls this for real }
     after := d.ContentRect.Right - d.ContentRect.Left;
     AssertTrue('the content area widened with the dialog', after > before);
+  finally d.Free; end;
+end;
+
+procedure TIconBrowserTest.TheIndexShownIsTheListPositionNotTheGridPosition;
+var
+  d: TTyIconBrowserForm;
+  lst: TTyVirtualImageList;
+begin
+  { THE property that makes the badge worth showing. A consumer writes ImageIndex, which counts
+    positions in the LIST. The grid is filtered, so its own positions move as soon as anyone
+    types in the search box -- showing those would be a number that is right until the user
+    touches the keyboard. }
+  lst := TTyVirtualImageList.Create(nil);
+  d := nil;
+  try
+    lst.IconFont := FFont;
+    lst.Names.Text := 'house' + LineEnding + 'search' + LineEnding + 'settings';
+    d := TyBuildIconBrowserDialogFor('', FFont, lst);
+    d.GlyphName := 'settings';
+    AssertEquals('index 2 in the list', 2, d.SelectedImageIndex);
+
+    { Now filter so 'settings' is the ONLY thing in the grid: grid position 0, list index 2. }
+    d.ApplyFilter('settings');
+    AssertEquals('only one cell', 1, d.GlyphCount);
+    d.SelectGlyph('settings');
+    AssertEquals('still the LIST index, not the grid position',
+      2, d.SelectedImageIndex);
+  finally
+    d.Free;
+    lst.Free;
+  end;
+end;
+
+procedure TIconBrowserTest.AGlyphTheListDoesNotHoldHasNoIndex;
+var
+  d: TTyIconBrowserForm;
+  lst: TTyVirtualImageList;
+begin
+  { Browsing a font from a list shows every glyph the FONT has, most of which the list does not
+    hold. Those must show no number at all -- inventing one would hand the user an ImageIndex
+    that points at a different icon. }
+  lst := TTyVirtualImageList.Create(nil);
+  d := nil;
+  try
+    lst.IconFont := FFont;
+    lst.Names.Text := 'house';
+    d := TyBuildIconBrowserDialogFor('', FFont, lst);
+    d.GlyphName := 'house';
+    AssertEquals('in the list', 0, d.SelectedImageIndex);
+    d.SelectGlyph('search');
+    AssertEquals('offered by the font, absent from the list', -1, d.SelectedImageIndex);
+  finally
+    d.Free;
+    lst.Free;
+  end;
+end;
+
+procedure TIconBrowserTest.WithoutAnIndexSourceThereIsNoIndexToShow;
+var d: TTyIconBrowserForm;
+begin
+  { Opened on a plain font -- from a GlyphName property, say. A font has no indices, and the
+    cell's position in the grid is not one. }
+  d := NewDialog;
+  try
+    d.GlyphName := 'house';
+    AssertEquals('house', d.SelectedGlyphName);
+    AssertEquals('no list, no index', -1, d.SelectedImageIndex);
   finally d.Free; end;
 end;
 

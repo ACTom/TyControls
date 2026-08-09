@@ -121,6 +121,8 @@ resourcestring
   rsDlgIconSearchHint   = 'Search icons by name';
   rsDlgIconNoMatches    = 'No icons match';
   rsDlgIconCount        = '%d icons';
+  { %s = the glyph name, %d = its ImageIndex in the associated image list. }
+  rsDlgIconNameAndIndex = '%s   (ImageIndex %d)';
 
   // --- Color picker dialog (S3) — section labels, user-facing, translated ---
   rsDlgHex             = 'Hex';

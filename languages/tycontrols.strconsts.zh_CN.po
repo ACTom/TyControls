@@ -750,3 +750,8 @@ msgstr "没有匹配的图标"
 #: tycontrols.strconsts.rsdlgiconsearchhint
 msgid "Search icons by name"
 msgstr "按名称搜索图标"
+
+#: tycontrols.strconsts.rsdlgiconnameandindex
+#, object-pascal-format
+msgid "%s   (ImageIndex %d)"
+msgstr "%s   (ImageIndex %d)"

@@ -590,6 +590,7 @@ procedure TTyIconBrowserComponentEditor.ExecuteVerb(Index: Integer);
 var
   lst: TTyVirtualImageList;
   fnt: TTyIconFont;
+  dlg: TTyIconBrowserForm;
   nm: string;
 begin
   if Index <> 0 then begin inherited ExecuteVerb(Index); Exit; end;
@@ -607,7 +608,18 @@ begin
     { Seed with the last name in the list, so re-opening the browser lands where the user was. }
     if lst.Names.Count > 0 then nm := lst.Names[lst.Names.Count - 1];
   end;
-  if not TyBrowseIcons('', fnt, nm) then Exit;
+  { Opened from a list, the browser shows each icon's ImageIndex -- which is what consumers
+    actually write. Opened from a font there is no index to show, and inventing one from the
+    grid position would be a number that changes every time the user types in the search box. }
+  dlg := TyBuildIconBrowserDialogFor('', fnt, lst);
+  try
+    dlg.GlyphName := nm;
+    if dlg.ShowModal <> mrOK then Exit;
+    nm := dlg.GlyphName;
+  finally
+    dlg.Free;
+  end;
+  if nm = '' then Exit;
   if lst <> nil then
   begin
     if lst.Names.IndexOf(nm) < 0 then
