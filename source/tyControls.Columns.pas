@@ -155,7 +155,7 @@ type
       the header's Images; writing turns the position into the name at that slot. Falls back to the
       last index written only when nothing resolves (no list, a foreign list, or an unknown name).
       Streams only when a name cannot capture the choice (see ImageIndexIsStored). }
-    property ImageIndex:       Integer              read GetImageIndex     write SetImageIndex       stored ImageIndexIsStored;
+    property ImageIndex:       Integer              read GetImageIndex     write SetImageIndex       stored ImageIndexIsStored default -1;
     property Options:          TTyColumnOptions read FOptions          write SetOptions;
     property Tag:              NativeInt            read FTag              write FTag                default 0;
     { Per-column visibility as its own boolean, the way LCL publishes it

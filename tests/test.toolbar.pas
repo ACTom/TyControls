@@ -1,7 +1,7 @@
 unit test.toolbar;
 {$mode objfpc}{$H+}
 interface
-uses Classes, SysUtils, Types, Controls, Graphics, Forms, LCLType,
+uses Classes, SysUtils, Types, Controls, Graphics, Forms, LCLType, TypInfo,
   fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.Base,
@@ -254,6 +254,7 @@ type
     procedure TestGroupingIgnoresANonToolSibling;
     { icons }
     procedure TestImageIndexIsASpellingOfImageName;
+    procedure TestANamedButtonStreamsOnlyTheName;
     procedure TestImageIndexSetBeforeTheCollectionSurvivesParenting;
     procedure TestImageIndexSurvivesTheBarGettingItsCollectionLater;
     procedure TestImageIndexSurvivesAnOwnCollectionFixedUpAtLoaded;
@@ -2144,6 +2145,36 @@ begin
   // An index past the end resolves to no name (and so no icon), not to a stale one.
   b.ImageIndex := 99;
   AssertEquals('an out-of-range index draws nothing', '', b.ImageName);
+end;
+
+procedure TToolButtonTest.TestANamedButtonStreamsOnlyTheName;
+var
+  b: TToolButtonAccess;
+  coll: TTyImageCollection;
+  m: TBGRABitmap;
+begin
+  { The reorder-clobber guard, now the same rule as every other ImageName-bearing control: when
+    a name captures the icon, ImageIndex must NOT also stream, or a stale index would overwrite
+    the name on the next load after the collection is reordered. IsStoredProp evaluates the
+    property's `stored` function -- exactly what the streamer consults. }
+  coll := TTyImageCollection.Create(FForm);
+  m := TBGRABitmap.Create(4, 4, BGRAWhite);
+  try
+    coll.AddBitmap('new', m);
+    coll.AddBitmap('open', m);
+  finally
+    m.Free;
+  end;
+  FBar.Images := coll;
+  b := AddButton(tbsButton, 30);
+  b.ImageIndex := 1;                                    // resolves to the name 'open'
+  AssertEquals('the index became a name', 'open', b.ImageName);
+  AssertFalse('a named button does not also stream its index',
+    IsStoredProp(b, 'ImageIndex'));
+  { A button that used ImageName directly is likewise index-free in the .lfm. }
+  b.ImageName := 'new';
+  AssertFalse('still name-only after a direct name write',
+    IsStoredProp(b, 'ImageIndex'));
 end;
 
 procedure TToolButtonTest.TestImageIndexSetBeforeTheCollectionSurvivesParenting;

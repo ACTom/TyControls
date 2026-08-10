@@ -361,11 +361,11 @@ type
     property ImageName:     string        read FImageName     write SetImageName;
     { The normal icon BY POSITION -- a view of ImageName (resolve on read, name-ify on write).
       Streams only when a name cannot capture it (see ImageIndexIsStored). }
-    property ImageIndex:    Integer       read GetImageIndex    write SetImageIndex    stored ImageIndexIsStored;
+    property ImageIndex:    Integer       read GetImageIndex    write SetImageIndex    stored ImageIndexIsStored default -1;
     { The selected-state icon BY NAME, same contract as ImageName, resolved against the same list. }
     property SelectedName:  string        read FSelectedName  write SetSelectedName;
     { The selected-state icon BY POSITION -- a view of SelectedName. }
-    property SelectedIndex: Integer       read GetSelectedIndex write SetSelectedIndex stored SelectedIndexIsStored;
+    property SelectedIndex: Integer       read GetSelectedIndex write SetSelectedIndex stored SelectedIndexIsStored default -1;
     property Expanded:      Boolean       read FExpanded      write SetExpanded default False;
     property CheckType:     TTyCheckType  read FCheckType     write SetCheckType default ctNone;
     property CheckState:    TTyCheckState read FCheckState    write SetCheckState default csUnchecked;

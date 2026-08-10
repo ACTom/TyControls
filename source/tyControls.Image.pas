@@ -147,7 +147,7 @@ type
       "no icon" sentinel (HasGraphic reads it the same way GetHasGraphic does: ImageIndex >= 0).
       It streams only when a NAME cannot capture the choice (see ImageIndexIsStored) -- a name is
       the durable, reorder-safe state and takes the .lfm slot whenever one is set. }
-    property ImageIndex: Integer read GetImageIndex write SetImageIndex stored ImageIndexIsStored;
+    property ImageIndex: Integer read GetImageIndex write SetImageIndex stored ImageIndexIsStored default -1;
     { The pixel EDGE to render the list entry at; 0 = the list's DefaultSize. LCL uses
       it to pick which authored resolution to serve; this collection resamples one
       master, so it is simply the requested size. }

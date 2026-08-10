@@ -116,6 +116,7 @@ type
     procedure SetDropdownMenu(AValue: TTyPopupMenu);
     function GetImageIndex: Integer;
     procedure SetImageIndex(AValue: Integer);
+    function ImageIndexIsStored: Boolean;
     function GetIndex: Integer;
     function GetToolBar: TTyToolBar;
     { Turn a pending ImageIndex into an ImageName as soon as a collection is available.
@@ -301,8 +302,13 @@ type
       is authoritative, so re-ordering the collection does not silently change which icon an
       existing button draws — it changes what its ImageIndex reads back as. -1 means "no icon
       by index" and clears the name (only once ImageIndex has actually been written; a button
-      that only ever used ImageName is never touched by this). }
-    property ImageIndex: Integer read GetImageIndex write SetImageIndex default -1;
+      that only ever used ImageName is never touched by this).
+
+      Streams only when a name cannot capture the choice (ImageIndexIsStored): the NAME is the
+      durable state and takes the .lfm slot whenever one is set, so a stale index cannot clobber
+      the name on the next load after the collection is reordered. Same rule as every other
+      ImageName-bearing control in the library. }
+    property ImageIndex: Integer read GetImageIndex write SetImageIndex stored ImageIndexIsStored default -1;
     { The themed menu dropped by a tbsDropDown's arrow zone or by any click on a tbsButtonDrop.
       TTyPopupMenu rather than LCL's TPopupMenu — it IS a TPopupMenu descendant, so this is a
       narrowing and not a different concept, and it is what the library's other two drop-down
@@ -1026,6 +1032,14 @@ begin
     ImageName := ''                      // an explicit -1 clears the icon, as LCL's does
   else
     ImageName := Images.NameOf(FImageIndex);   // '' when the index is past the end
+end;
+
+function TTyToolButton.ImageIndexIsStored: Boolean;
+begin
+  // The NAME (inherited) is the durable state; the index streams only as the fallback a name
+  // cannot hold -- a collection with no matching name, or plain index-only use. When a name IS
+  // set, streaming the index alongside would let a stale index clobber the name after a reorder.
+  Result := (ImageName = '') and (FImageIndex >= 0);
 end;
 
 { ---- the bar's adopted defaults ------------------------------------------- }

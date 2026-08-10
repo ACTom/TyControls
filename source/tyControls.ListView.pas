@@ -96,7 +96,7 @@ type
       list. '' = none. }
     property ImageName:  string  read FImageName  write SetImageName;
     { The item icon BY POSITION -- a view of ImageName. Streams only when a name cannot hold it. }
-    property ImageIndex: Integer read GetImageIndex write SetImageIndex stored ImageIndexIsStored;
+    property ImageIndex: Integer read GetImageIndex write SetImageIndex stored ImageIndexIsStored default -1;
     { Which group (index into TTyListView.Groups) owns this item, or -1 for the implicit
       headerless bucket. Only consulted when GroupView is on and the built-in collection is
       the data source; OwnerData routes through OnGetItemGroup instead. }

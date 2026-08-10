@@ -95,7 +95,7 @@ type
       The icon lives on the PAGE, not in a parallel list on the pager, for the same reason Caption
       does: reordering pages must carry the icon with the page. The pager reads it through
       GetTabImageIndex, and OnGetImageIndex still has the last word over whatever this says. }
-    property ImageIndex: Integer read GetImageIndex write SetImageIndex stored ImageIndexIsStored;
+    property ImageIndex: Integer read GetImageIndex write SetImageIndex stored ImageIndexIsStored default -1;
     { Fired when this page becomes / stops being the shown page. Per-page enter/leave logic
       (lazy content loading, validate-on-leave) previously had to be centralised in the
       pager's OnChange and dispatched with an if/case chain on the index, so a page could

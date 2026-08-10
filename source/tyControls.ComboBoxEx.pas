@@ -91,17 +91,17 @@ type
       against one of ours (survives a reorder); inert on a foreign list. '' = none. }
     property ImageName: string read FImageName write SetImageName;
     { The row icon BY POSITION -- a view of ImageName. Streams only when a name cannot hold it. }
-    property ImageIndex: Integer read GetImageIndex write SetImageIndex stored ImageIndexIsStored;
+    property ImageIndex: Integer read GetImageIndex write SetImageIndex stored ImageIndexIsStored default -1;
     { Left inset in logical px, for tree-like grouping. -1 = none. }
     property Indent: Integer read FIndent write SetIndent default -1;
     { The overlay (badge / status corner) BY NAME. }
     property OverlayImageName: string read FOverlayImageName write SetOverlayImageName;
     { Drawn on top of the row image. -1 = none; a view of OverlayImageName. }
-    property OverlayImageIndex: Integer read GetOverlayImageIndex write SetOverlayImageIndex stored OverlayImageIndexIsStored;
+    property OverlayImageIndex: Integer read GetOverlayImageIndex write SetOverlayImageIndex stored OverlayImageIndexIsStored default -1;
     { The selected-state icon BY NAME (used INSTEAD of ImageName while the row is selected). }
     property SelectedImageName: string read FSelectedImageName write SetSelectedImageName;
     { Used INSTEAD of ImageIndex while the row is the selected one. -1 = no swap; a view of name. }
-    property SelectedImageIndex: Integer read GetSelectedImageIndex write SetSelectedImageIndex stored SelectedImageIndexIsStored;
+    property SelectedImageIndex: Integer read GetSelectedImageIndex write SetSelectedImageIndex stored SelectedImageIndexIsStored default -1;
   end;
 
   { The published, design-time-editable collection. Add/AddItem/Insert are the typed
