@@ -337,7 +337,7 @@ properties / events / states / theme keys are in **[docs/controls/](docs/control
 | `TTyImage` | Image control with transparency and stretch modes |
 | `TTyGlyphImageList` | Image list driven by an icon font |
 | `TTyImageCollection` | Multi-resolution image set; picks the right one per DPI |
-| `TTyVirtualImageList` | Generates a sized image list on demand from a collection |
+| `TTyVirtualImageList` | Generates a sized image list on demand from a collection / icon font; **it IS a standard `TCustomImageList`**, so it assigns to any control (native LCL included). Icons can be addressed by `ImageName`, so a reorder does not swap them |
 
 ### A set of icons in the box -- Lucide
 
@@ -358,6 +358,9 @@ CharImage1.GlyphName := TyIconHouse;   // or just 'house'
 - **No `Glyphs` to fill in.** The unit registers a name resolver, so any `TTyIconFont` whose
   `FontFamily` is `'lucide'` resolves names. Your own `Glyphs` entry still wins if you want to
   override one.
+- **It is a droppable image list too.** The `TTyLucideImageList` on the palette comes pre-wired
+  to the Lucide font -- drop it, assign it to any control's `Images`. Its name list starts empty:
+  add the icon names you use (or pick them in the icon browser) and each becomes an image.
 - **Licence is clean**: ISC, plus MIT for the Feather-derived icons. Nothing is asked of
   **your users** -- no attribution on screen, no link, nothing at run time. Ship
   [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) with your release and you are done.

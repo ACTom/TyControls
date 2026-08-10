@@ -58,6 +58,40 @@ Linux and macOS.
   "not mine" inside the edge band, so the system asks the form underneath. The window looks
   exactly as it did (the edge was pixel-scanned before and after), and clicks anywhere inside
   it still belong to the content host.
+- **The title bar was sometimes twice as tall** (reported on the forum, at 250% scaling). A
+  bounds-change message can arrive **before** the system's `WM_DPICHANGED`, so the title bar
+  sized itself once at the old DPI and never re-derived, stacking to double height. Its
+  auto-adjust now re-derives the height from the font's `PixelsPerInch` (idempotent, order of
+  messages no longer matters).
+- **The min / max / close glyphs looked "bold" at 250%** (reported on the forum). Their stroke
+  width was scaled **twice** -- once computing the pen width, once drawing -- so at 250% they
+  came out 2-3x too heavy. Scaled once now.
+
+### Added — image lists: a vector list **is** an image list
+
+- **`TTyVirtualImageList` now descends from LCL's `TCustomImageList`.** It keeps its old trick
+  (render a vector / icon-font glyph on demand at any pixel size) AND is a real image list you
+  can assign anywhere a `TCustomImageList` is wanted (native LCL controls, third-party controls).
+  Conversely, every icon-bearing control in the library widens its `Images` to `TCustomImageList`
+  and judges the list at run time: ours takes the cleaner on-demand path, a plain LCL list is
+  drawn from its own resolutions. One code path, two branches, widget-set independent.
+- **Icons are keyed by NAME now, rolled out across almost every icon-bearing control.** `TTyImage`,
+  header columns (and grid columns with them), tab sheets, tree nodes (a normal AND a selected
+  slot), `TTyComboBoxEx` rows (image / overlay / selected -- three slots), and list-view items all
+  gain an `ImageName` paired with `ImageIndex` (tree nodes also `SelectedName`; combo rows also
+  `OverlayImageName` / `SelectedImageName`). **The name is the durable state; the index is a view
+  of it** -- reorder the image list and a control's icon follows its own name instead of being
+  swapped for whatever slid into the slot. Against a plain LCL list (no names) the name is inert
+  and the index is the key. The index streams to the `.lfm` only when a name cannot capture the
+  choice, so a reorder cannot let a stale index clobber the name on the next load.
+- **The bundled Lucide pack is now a droppable image list too, `TTyLucideImageList`.** Drop it,
+  assign it to any control's `Images` -- no font to wire, its `IconFont` is already the shared
+  Lucide font. Names start empty: fill the icon names you use (or pick them in the icon browser)
+  and each becomes an image, addressable by index or by name. Still optional -- it links only when
+  you use it.
+- **Icon browser dialog `TTyIconBrowserDialog`.** Nobody finds an icon by eye in a 2000-entry
+  dropdown, so there is now a searchable visual browser; each icon shows **both its name and its
+  ImageIndex**, so people who address by name and people who address by index can both copy it out.
 
 ### Added — data grid `TTyStringGrid`
 
@@ -509,11 +543,13 @@ below change the behaviour of existing code -- read before upgrading.**
   examples toggle at runtime) and AUTO moved onto the negatives, matching what a ported
   `TabHeight := -1` did in Lazarus. Fixed along the way: at modern density
   `TabHeight := 28` hit a no-change early-out, so the value shrank and the band did not.
-- **`TTyHeader.Images` is retyped to `TTyVirtualImageList`.** It was declared as LCL's
-  `TCustomImageList`, which this library's image collection does not descend from -- so
-  the only lists assignable to it were exactly the ones no painter can draw. The property
-  was unusable by construction, and the grid carried a private second list to work around
-  it.
+- **Every `Images` property is unified to LCL's `TCustomImageList` and accepts any standard
+  image list.** This follows from `TTyVirtualImageList` now BEING an image list (see "image
+  lists: a vector list is an image list") -- it both renders vectors on demand and is a real
+  `TCustomImageList` descendant. So `TTyHeader.Images`, the grid, the list view, the tree, the
+  menus, the combo boxes -- every icon-bearing control -- take both **our** vector list (drawn
+  on demand) and a **plain LCL** list (drawn from its own resolutions), judged at run time. The
+  grid no longer needs a private second list to work around anyone.
 - **The three `TTyHeaderControl` section events take `TTyHeaderControl` as their first
   parameter** instead of `TObject`, and `OnSectionTrack` carries an extra `AState` (grab /
   move / release) -- so "is this width mid-drag or final?" is finally answerable.

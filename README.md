@@ -297,7 +297,7 @@ Lazarus 里打开 `tycontrols_dt.lpk`(设计期包)→ **Use → Install**,IDE �
 | `TTyImage` | 图片控件,支持透明与缩放模式 |
 | `TTyGlyphImageList` | 图标字体驱动的图像列表 |
 | `TTyImageCollection` | 多分辨率图像集,按 DPI 取最合适的一张 |
-| `TTyVirtualImageList` | 从图像集按需生成指定尺寸的图像列表 |
+| `TTyVirtualImageList` | 从图像集/图标字体按需生成任意尺寸的图像列表;**本身就是标准 `TCustomImageList`**,可直接赋给任何控件(含原生 LCL 控件)。图标可按 `ImageName` 用,重排列表不换图 |
 
 ### 自带一套图标 —— Lucide
 
@@ -315,6 +315,8 @@ CharImage1.GlyphName := TyIconHouse;   // 或者直接写 'house'
   实测:用了 +979 KB,不用 +0。
 - **不用填 `Glyphs`**:这个单元注册了一个名字解析器,任何 `FontFamily = 'lucide'` 的
   `TTyIconFont` 都能按名字取图标。想覆盖某个名字,照常写进自己的 `Glyphs` 即可,优先级更高。
+- **也能当图像列表直接拖放**:组件面板上的 `TTyLucideImageList` 拖上窗体就已连好 Lucide 字体,
+  赋给任意控件的 `Images` 即可;名字表默认为空,填你用到的图标名(或用图标浏览器挑),每个名字成一张图。
 - **许可干净**:ISC(+ Feather 派生部分 MIT),对**你的用户**没有任何义务——不用署名、不用挂链接、
   运行时不用显示任何东西。随发布包带上 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) 就够了。
 
