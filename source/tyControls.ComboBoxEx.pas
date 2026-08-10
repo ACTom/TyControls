@@ -31,6 +31,7 @@ uses
 
 type
   TTyComboExItems = class;   { forward }
+  TTyComboBoxEx  = class;    { forward -- items resolve names against its Images }
 
   { How TTyComboExItems.Sort orders rows. Same members as LCL's TSortType (comctrls.pp),
     declared here so this unit does not have to drag ComCtrls in for one enum. }
@@ -47,33 +48,60 @@ type
   private
     FCaption: TCaption;
     FData: TObject;
-    FImageIndex: Integer;
+    FImageIndex: Integer;             { last written BY index; a fallback view (see ImageIndex) }
+    FImageName: string;
+    FImageIndexPending: Boolean;
     FIndent: Integer;
     FOverlayImageIndex: Integer;
+    FOverlayImageName: string;
+    FOverlayImageIndexPending: Boolean;
     FSelectedImageIndex: Integer;
+    FSelectedImageName: string;
+    FSelectedImageIndexPending: Boolean;
     { Sweep mark used by ReconcileFromItems; never streamed. }
     FLive: Boolean;
+    function  OwnerImages: TCustomImageList;
     procedure SetCaption(const AValue: TCaption);
+    function  GetImageIndex: Integer;
     procedure SetImageIndex(AValue: Integer);
+    procedure SetImageName(const AValue: string);
+    function  ImageIndexIsStored: Boolean;
     procedure SetIndent(AValue: Integer);
+    function  GetOverlayImageIndex: Integer;
     procedure SetOverlayImageIndex(AValue: Integer);
+    procedure SetOverlayImageName(const AValue: string);
+    function  OverlayImageIndexIsStored: Boolean;
+    function  GetSelectedImageIndex: Integer;
     procedure SetSelectedImageIndex(AValue: Integer);
+    procedure SetSelectedImageName(const AValue: string);
+    function  SelectedImageIndexIsStored: Boolean;
   public
     constructor Create(ACollection: TCollection); override;
     procedure Assign(ASource: TPersistent); override;
+    { Turn any pending image indices into durable names against the combo's list; called by
+      TTyComboBoxEx.SetImages when a list arrives after the rows. Idempotent. }
+    procedure ResolveIcons;
     property Live: Boolean read FLive write FLive;
     { The APPLICATION's object for this row. Not published (a TObject reference cannot be
       streamed); this is the slot Items.Objects[] used to be before the control took it. }
     property Data: TObject read FData write FData;
   published
     property Caption: TCaption read FCaption write SetCaption;
-    property ImageIndex: Integer read FImageIndex write SetImageIndex default -1;
+    { The row icon BY NAME -- the durable key, resolved against TTyComboBoxEx.Images. Name-keyed
+      against one of ours (survives a reorder); inert on a foreign list. '' = none. }
+    property ImageName: string read FImageName write SetImageName;
+    { The row icon BY POSITION -- a view of ImageName. Streams only when a name cannot hold it. }
+    property ImageIndex: Integer read GetImageIndex write SetImageIndex stored ImageIndexIsStored;
     { Left inset in logical px, for tree-like grouping. -1 = none. }
     property Indent: Integer read FIndent write SetIndent default -1;
-    { Drawn on top of the row image (a badge / status corner). -1 = none. }
-    property OverlayImageIndex: Integer read FOverlayImageIndex write SetOverlayImageIndex default -1;
-    { Used INSTEAD of ImageIndex while the row is the selected one. -1 = no swap. }
-    property SelectedImageIndex: Integer read FSelectedImageIndex write SetSelectedImageIndex default -1;
+    { The overlay (badge / status corner) BY NAME. }
+    property OverlayImageName: string read FOverlayImageName write SetOverlayImageName;
+    { Drawn on top of the row image. -1 = none; a view of OverlayImageName. }
+    property OverlayImageIndex: Integer read GetOverlayImageIndex write SetOverlayImageIndex stored OverlayImageIndexIsStored;
+    { The selected-state icon BY NAME (used INSTEAD of ImageName while the row is selected). }
+    property SelectedImageName: string read FSelectedImageName write SetSelectedImageName;
+    { Used INSTEAD of ImageIndex while the row is the selected one. -1 = no swap; a view of name. }
+    property SelectedImageIndex: Integer read GetSelectedImageIndex write SetSelectedImageIndex stored SelectedImageIndexIsStored;
   end;
 
   { The published, design-time-editable collection. Add/AddItem/Insert are the typed
@@ -92,6 +120,9 @@ type
     procedure Update(Item: TCollectionItem); override;
   public
     constructor Create(AOwner: TPersistent);
+    { The owning combo's Images, or nil. Wraps the inherited protected GetOwner so a row can
+      resolve its ImageName against the list without reaching into TOwnedCollection's internals. }
+    function OwnerImages: TCustomImageList;
     function Add: TTyComboExItem;
     { One-call row construction, argument-for-argument LCL's TComboExItems.AddItem. }
     function AddItem(const ACaption: string; AImageIndex: Integer = -1;
@@ -215,11 +246,20 @@ begin
   begin
     src := TTyComboExItem(ASource);
     FCaption := src.Caption;
-    FImageIndex := src.ImageIndex;
+    { Copy the RAW icon state (name + last index + pending), not the resolved views, so a
+      name-keyed row is copied as name-keyed rather than frozen to a current slot. }
+    FImageName := src.FImageName;
+    FImageIndex := src.FImageIndex;
+    FImageIndexPending := src.FImageIndexPending;
     FIndent := src.Indent;
-    FOverlayImageIndex := src.OverlayImageIndex;
-    FSelectedImageIndex := src.SelectedImageIndex;
+    FOverlayImageName := src.FOverlayImageName;
+    FOverlayImageIndex := src.FOverlayImageIndex;
+    FOverlayImageIndexPending := src.FOverlayImageIndexPending;
+    FSelectedImageName := src.FSelectedImageName;
+    FSelectedImageIndex := src.FSelectedImageIndex;
+    FSelectedImageIndexPending := src.FSelectedImageIndexPending;
     FData := src.Data;
+    ResolveIcons;
     Changed(False);
   end
   else
@@ -233,11 +273,44 @@ begin
   Changed(False);
 end;
 
+function TTyComboExItem.OwnerImages: TCustomImageList;
+begin
+  if Collection is TTyComboExItems then
+    Result := TTyComboExItems(Collection).OwnerImages
+  else
+    Result := nil;
+end;
+
+function TTyComboExItem.GetImageIndex: Integer;
+var n: Integer;
+begin
+  if FImageName <> '' then
+  begin
+    n := TyImageIndexOfName(OwnerImages, FImageName);
+    if n >= 0 then Exit(n);
+  end;
+  Result := FImageIndex;
+end;
+
 procedure TTyComboExItem.SetImageIndex(AValue: Integer);
 begin
-  if FImageIndex = AValue then Exit;
+  if AValue < -1 then AValue := -1;
   FImageIndex := AValue;
+  FImageIndexPending := True;
+  ResolveIcons;
   Changed(False);
+end;
+
+procedure TTyComboExItem.SetImageName(const AValue: string);
+begin
+  if FImageName = AValue then Exit;
+  FImageName := AValue;
+  Changed(False);
+end;
+
+function TTyComboExItem.ImageIndexIsStored: Boolean;
+begin
+  Result := (FImageName = '') and (FImageIndex >= 0);
 end;
 
 procedure TTyComboExItem.SetIndent(AValue: Integer);
@@ -247,18 +320,93 @@ begin
   Changed(False);
 end;
 
+function TTyComboExItem.GetOverlayImageIndex: Integer;
+var n: Integer;
+begin
+  if FOverlayImageName <> '' then
+  begin
+    n := TyImageIndexOfName(OwnerImages, FOverlayImageName);
+    if n >= 0 then Exit(n);
+  end;
+  Result := FOverlayImageIndex;
+end;
+
 procedure TTyComboExItem.SetOverlayImageIndex(AValue: Integer);
 begin
-  if FOverlayImageIndex = AValue then Exit;
+  if AValue < -1 then AValue := -1;
   FOverlayImageIndex := AValue;
+  FOverlayImageIndexPending := True;
+  ResolveIcons;
   Changed(False);
+end;
+
+procedure TTyComboExItem.SetOverlayImageName(const AValue: string);
+begin
+  if FOverlayImageName = AValue then Exit;
+  FOverlayImageName := AValue;
+  Changed(False);
+end;
+
+function TTyComboExItem.OverlayImageIndexIsStored: Boolean;
+begin
+  Result := (FOverlayImageName = '') and (FOverlayImageIndex >= 0);
+end;
+
+function TTyComboExItem.GetSelectedImageIndex: Integer;
+var n: Integer;
+begin
+  if FSelectedImageName <> '' then
+  begin
+    n := TyImageIndexOfName(OwnerImages, FSelectedImageName);
+    if n >= 0 then Exit(n);
+  end;
+  Result := FSelectedImageIndex;
 end;
 
 procedure TTyComboExItem.SetSelectedImageIndex(AValue: Integer);
 begin
-  if FSelectedImageIndex = AValue then Exit;
+  if AValue < -1 then AValue := -1;
   FSelectedImageIndex := AValue;
+  FSelectedImageIndexPending := True;
+  ResolveIcons;
   Changed(False);
+end;
+
+procedure TTyComboExItem.SetSelectedImageName(const AValue: string);
+begin
+  if FSelectedImageName = AValue then Exit;
+  FSelectedImageName := AValue;
+  Changed(False);
+end;
+
+function TTyComboExItem.SelectedImageIndexIsStored: Boolean;
+begin
+  Result := (FSelectedImageName = '') and (FSelectedImageIndex >= 0);
+end;
+
+procedure TTyComboExItem.ResolveIcons;
+var imgs: TCustomImageList;
+begin
+  imgs := OwnerImages;
+  if imgs = nil then Exit;   // no combo list yet; SetImages retries every row
+  if FImageIndexPending then
+  begin
+    FImageIndexPending := False;
+    if FImageIndex < 0 then SetImageName('')
+    else SetImageName(TyImageNameOfIndex(imgs, FImageIndex));
+  end;
+  if FOverlayImageIndexPending then
+  begin
+    FOverlayImageIndexPending := False;
+    if FOverlayImageIndex < 0 then SetOverlayImageName('')
+    else SetOverlayImageName(TyImageNameOfIndex(imgs, FOverlayImageIndex));
+  end;
+  if FSelectedImageIndexPending then
+  begin
+    FSelectedImageIndexPending := False;
+    if FSelectedImageIndex < 0 then SetSelectedImageName('')
+    else SetSelectedImageName(TyImageNameOfIndex(imgs, FSelectedImageIndex));
+  end;
 end;
 
 { TTyComboExItems }
@@ -268,6 +416,13 @@ begin
   inherited Create(AOwner, TTyComboExItem);
   FCaseSensitive := False;
   FSortType := stNone;
+end;
+
+function TTyComboExItems.OwnerImages: TCustomImageList;
+var own: TPersistent;
+begin
+  own := GetOwner;   // a class may call its own inherited protected GetOwner
+  if own is TTyComboBoxEx then Result := TTyComboBoxEx(own).Images else Result := nil;
 end;
 
 function TTyComboExItems.GetComboItem(AIndex: Integer): TTyComboExItem;
@@ -445,6 +600,7 @@ begin
 end;
 
 procedure TTyComboBoxEx.SetImages(const AValue: TCustomImageList);
+var i: Integer;
 begin
   if FImages = AValue then Exit;
   if FImages <> nil then
@@ -452,6 +608,11 @@ begin
   FImages := AValue;
   if FImages <> nil then
     FImages.FreeNotification(Self);
+  { A list arriving is when each row's streamed-but-pending image index can finally become a
+    durable name against it. }
+  if FItemsEx <> nil then
+    for i := 0 to FItemsEx.Count - 1 do
+      FItemsEx.ComboItems[i].ResolveIcons;
   Invalidate;
 end;
 

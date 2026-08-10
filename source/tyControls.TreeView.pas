@@ -304,18 +304,29 @@ type
   private
     FText:          TCaption;
     FLevel:         Integer;
-    FImageIndex:    Integer;
-    FSelectedIndex: Integer;
+    FImageIndex:    Integer;         // last written BY index; fallback view (see ImageIndex)
+    FImageName:     string;          // durable key for the normal icon, resolved via the tree list
+    FImageIndexPending: Boolean;
+    FSelectedIndex: Integer;         // as above, for the selected-state icon
+    FSelectedName:  string;
+    FSelectedIndexPending: Boolean;
     FExpanded:      Boolean;
     FCheckType:     TTyCheckType;
     FCheckState:    TTyCheckState;
     FData:          Pointer;
     FNode:          PTyTreeNode;
     function  GetTreeNodes: TTyTreeNodes;
+    function  OwnerImages: TCustomImageList;
     procedure SetText(const AValue: TCaption);
     procedure SetLevel(AValue: Integer);
+    function  GetImageIndex: Integer;
     procedure SetImageIndex(AValue: Integer);
+    procedure SetImageName(const AValue: string);
+    function  ImageIndexIsStored: Boolean;
+    function  GetSelectedIndex: Integer;
     procedure SetSelectedIndex(AValue: Integer);
+    procedure SetSelectedName(const AValue: string);
+    function  SelectedIndexIsStored: Boolean;
     procedure SetExpanded(AValue: Boolean);
     procedure SetCheckType(AValue: TTyCheckType);
     procedure SetCheckState(AValue: TTyCheckState);
@@ -335,14 +346,26 @@ type
     { 物化之后对应的记录节点;未物化 / 虚拟模式下为 nil。只读:节点由条目层建。 }
     property  Node: PTyTreeNode read FNode;
     property  TreeNodes: TTyTreeNodes read GetTreeNodes;
+    { Turn any pending ImageIndex/SelectedIndex into its durable name against the tree's list.
+      Called by TTyTreeView.SetImages when a list arrives after the items streamed in. Public
+      because the tree is a separate class; idempotent when nothing is pending. }
+    procedure ResolveIcons;
   published
     { 节点标题。条目模式下这是标题的**唯一**来源(DoGetText 从这里取)。 }
     property Text:          TCaption      read FText          write SetText;
     { 缩进层级 = 树形。0 是顶层;每一项至多比**前一项**深 1 层(越界会被夹紧),
       于是任何一串 Level 都对应唯一一棵合法的树,.lfm 里手写也不会崩。 }
     property Level:         Integer       read FLevel         write SetLevel default 0;
-    property ImageIndex:    Integer       read FImageIndex    write SetImageIndex default -1;
-    property SelectedIndex: Integer       read FSelectedIndex write SetSelectedIndex default -1;
+    { The node's normal icon BY NAME -- the durable key, resolved against TTyTreeView.Images. When
+      that list is one of ours the name outlives a reorder; '' = none. Inert on a foreign list. }
+    property ImageName:     string        read FImageName     write SetImageName;
+    { The normal icon BY POSITION -- a view of ImageName (resolve on read, name-ify on write).
+      Streams only when a name cannot capture it (see ImageIndexIsStored). }
+    property ImageIndex:    Integer       read GetImageIndex    write SetImageIndex    stored ImageIndexIsStored;
+    { The selected-state icon BY NAME, same contract as ImageName, resolved against the same list. }
+    property SelectedName:  string        read FSelectedName  write SetSelectedName;
+    { The selected-state icon BY POSITION -- a view of SelectedName. }
+    property SelectedIndex: Integer       read GetSelectedIndex write SetSelectedIndex stored SelectedIndexIsStored;
     property Expanded:      Boolean       read FExpanded      write SetExpanded default False;
     property CheckType:     TTyCheckType  read FCheckType     write SetCheckType default ctNone;
     property CheckState:    TTyCheckState read FCheckState    write SetCheckState default csUnchecked;
@@ -1281,7 +1304,11 @@ begin
     FText          := src.FText;
     FLevel         := src.FLevel;
     FImageIndex    := src.FImageIndex;
+    FImageName     := src.FImageName;
+    FImageIndexPending := src.FImageIndexPending;
     FSelectedIndex := src.FSelectedIndex;
+    FSelectedName  := src.FSelectedName;
+    FSelectedIndexPending := src.FSelectedIndexPending;
     FExpanded      := src.FExpanded;
     FCheckType     := src.FCheckType;
     FCheckState    := src.FCheckState;
@@ -1333,18 +1360,96 @@ begin
   Changed(True);
 end;
 
+function TTyTreeNodeItem.OwnerImages: TCustomImageList;
+var nodes: TTyTreeNodes;
+begin
+  Result := nil;
+  nodes := GetTreeNodes;
+  if (nodes <> nil) and (nodes.GetOwner is TTyTreeView) then
+    Result := TTyTreeView(nodes.GetOwner).Images;
+end;
+
+function TTyTreeNodeItem.GetImageIndex: Integer;
+var n: Integer;
+begin
+  if FImageName <> '' then
+  begin
+    n := TyImageIndexOfName(OwnerImages, FImageName);
+    if n >= 0 then Exit(n);
+  end;
+  Result := FImageIndex;
+end;
+
 procedure TTyTreeNodeItem.SetImageIndex(AValue: Integer);
 begin
-  if FImageIndex = AValue then Exit;
+  if AValue < -1 then AValue := -1;
   FImageIndex := AValue;
+  FImageIndexPending := True;   // mark first; a streamed index before the list is not lost
+  ResolveIcons;
   Changed(False);
+end;
+
+procedure TTyTreeNodeItem.SetImageName(const AValue: string);
+begin
+  if FImageName = AValue then Exit;
+  FImageName := AValue;
+  Changed(False);
+end;
+
+function TTyTreeNodeItem.ImageIndexIsStored: Boolean;
+begin
+  Result := (FImageName = '') and (FImageIndex >= 0);
+end;
+
+function TTyTreeNodeItem.GetSelectedIndex: Integer;
+var n: Integer;
+begin
+  if FSelectedName <> '' then
+  begin
+    n := TyImageIndexOfName(OwnerImages, FSelectedName);
+    if n >= 0 then Exit(n);
+  end;
+  Result := FSelectedIndex;
 end;
 
 procedure TTyTreeNodeItem.SetSelectedIndex(AValue: Integer);
 begin
-  if FSelectedIndex = AValue then Exit;
+  if AValue < -1 then AValue := -1;
   FSelectedIndex := AValue;
+  FSelectedIndexPending := True;
+  ResolveIcons;
   Changed(False);
+end;
+
+procedure TTyTreeNodeItem.SetSelectedName(const AValue: string);
+begin
+  if FSelectedName = AValue then Exit;
+  FSelectedName := AValue;
+  Changed(False);
+end;
+
+function TTyTreeNodeItem.SelectedIndexIsStored: Boolean;
+begin
+  Result := (FSelectedName = '') and (FSelectedIndex >= 0);
+end;
+
+procedure TTyTreeNodeItem.ResolveIcons;
+var imgs: TCustomImageList;
+begin
+  imgs := OwnerImages;
+  if imgs = nil then Exit;   // no tree list yet; SetImages retries every item
+  if FImageIndexPending then
+  begin
+    FImageIndexPending := False;
+    if FImageIndex < 0 then SetImageName('')
+    else SetImageName(TyImageNameOfIndex(imgs, FImageIndex));
+  end;
+  if FSelectedIndexPending then
+  begin
+    FSelectedIndexPending := False;
+    if FSelectedIndex < 0 then SetSelectedName('')
+    else SetSelectedName(TyImageNameOfIndex(imgs, FSelectedIndex));
+  end;
 end;
 
 procedure TTyTreeNodeItem.SetExpanded(AValue: Boolean);
@@ -2335,6 +2440,8 @@ begin
 end;
 
 procedure TTyTreeView.SetImages(AValue: TCustomImageList);
+var
+  i: Integer;
 begin
   if FImages = AValue then Exit;
   if FImageChangeLink = nil then
@@ -2351,6 +2458,11 @@ begin
     { The tree already nils FImages on opRemove; this is what makes the notification arrive. }
     FImages.FreeNotification(Self);
   end;
+  { A list arriving is when each streamed item's pending ImageIndex/SelectedIndex can finally
+    become its durable name. Only meaningful in item mode; virtual trees have no item collection. }
+  if FItemMode and (FItems <> nil) then
+    for i := 0 to FItems.Count - 1 do
+      FItems.Items[i].ResolveIcons;
   Invalidate;
 end;
 

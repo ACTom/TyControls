@@ -56,13 +56,19 @@ type
   private
     FCaption:    TCaption;
     FSubItems:   TStrings;
-    FImageIndex: Integer;
+    FImageIndex: Integer;             { last written BY index; a fallback view (see ImageIndex) }
+    FImageName:  string;              { durable key; resolves against Large- or SmallImages }
+    FImageIndexPending: Boolean;
     FData:       Pointer;
     FStates:     TTyListItemStates;
     FGroupIndex: Integer;
+    function  OwnerImages: TCustomImageList;
     procedure SetCaption(const AValue: TCaption);
     procedure SetSubItems(AValue: TStrings);
+    function  GetImageIndex: Integer;
     procedure SetImageIndex(AValue: Integer);
+    procedure SetImageName(const AValue: string);
+    function  ImageIndexIsStored: Boolean;
     procedure SetStates(AValue: TTyListItemStates);
     procedure SetGroupIndex(AValue: Integer);
     procedure SubItemsChanged(Sender: TObject);
@@ -72,6 +78,9 @@ type
     constructor Create(ACollection: TCollection); override;
     destructor Destroy; override;
     procedure Assign(ASource: TPersistent); override;
+    { Turn a pending ImageIndex into its durable name against the view's list; called by
+      TTyListView.SetLargeImages/SetSmallImages when a list arrives after the items. }
+    procedure ResolveImageIndex;
     { Opaque per-item payload; not streamed. }
     property Data: Pointer read FData write FData;
     { Item state flags (checked/cut/disabled). Public (not published) — the built-in
@@ -81,7 +90,13 @@ type
     property Caption:    TCaption  read FCaption    write SetCaption;
     { Columns 1..N (column 0 is Caption). }
     property SubItems:   TStrings read FSubItems  write SetSubItems;
-    property ImageIndex: Integer read FImageIndex write SetImageIndex default -1;
+    { The item icon BY NAME -- the durable key, resolved against the view's LargeImages (or
+      SmallImages when there is no large list). LCL keeps the two lists parallel, so one name is
+      right for both. Name-keyed against one of ours (survives a reorder); inert on a foreign
+      list. '' = none. }
+    property ImageName:  string  read FImageName  write SetImageName;
+    { The item icon BY POSITION -- a view of ImageName. Streams only when a name cannot hold it. }
+    property ImageIndex: Integer read GetImageIndex write SetImageIndex stored ImageIndexIsStored;
     { Which group (index into TTyListView.Groups) owns this item, or -1 for the implicit
       headerless bucket. Only consulted when GroupView is on and the built-in collection is
       the data source; OwnerData routes through OnGetItemGroup instead. }
@@ -357,6 +372,7 @@ type
     procedure SetAutoSort(AValue: Boolean);
     procedure SetLargeImages(AValue: TCustomImageList);
     procedure SetSmallImages(AValue: TCustomImageList);
+    procedure ResolveItemIcons;   { re-resolve every item's pending ImageIndex against a new list }
     function  GetItemIndex: Integer;
     procedure SetItemIndex(AValue: Integer);
     function  GetSelected(AIndex: Integer): Boolean;
@@ -777,8 +793,11 @@ begin
     FCaption := src.FCaption;
     FSubItems.Assign(src.FSubItems);
     FImageIndex := src.FImageIndex;
+    FImageName := src.FImageName;
+    FImageIndexPending := src.FImageIndexPending;
     FStates := src.FStates;
     FGroupIndex := src.FGroupIndex;
+    ResolveImageIndex;
     Changed(False);
   end
   else
@@ -806,11 +825,60 @@ begin
   Changed(False);
 end;
 
+function TTyListItem.OwnerImages: TCustomImageList;
+var own: TPersistent;
+begin
+  Result := nil;
+  if not (Collection is TTyListItems) then Exit;
+  own := TTyListItems(Collection).GetOwner;   // GetOwner is unit-visible
+  if own is TTyListView then
+  begin
+    { The two lists are parallel in LCL, so resolve against whichever exists -- large first,
+      because icon view is the mode that shows the name most prominently. }
+    Result := TTyListView(own).LargeImages;
+    if Result = nil then Result := TTyListView(own).SmallImages;
+  end;
+end;
+
+function TTyListItem.GetImageIndex: Integer;
+var n: Integer;
+begin
+  if FImageName <> '' then
+  begin
+    n := TyImageIndexOfName(OwnerImages, FImageName);
+    if n >= 0 then Exit(n);
+  end;
+  Result := FImageIndex;
+end;
+
 procedure TTyListItem.SetImageIndex(AValue: Integer);
 begin
-  if FImageIndex = AValue then Exit;
+  if AValue < -1 then AValue := -1;
   FImageIndex := AValue;
+  FImageIndexPending := True;
+  ResolveImageIndex;
   Changed(False);
+end;
+
+procedure TTyListItem.SetImageName(const AValue: string);
+begin
+  if FImageName = AValue then Exit;
+  FImageName := AValue;
+  Changed(False);
+end;
+
+function TTyListItem.ImageIndexIsStored: Boolean;
+begin
+  Result := (FImageName = '') and (FImageIndex >= 0);
+end;
+
+procedure TTyListItem.ResolveImageIndex;
+begin
+  if not FImageIndexPending then Exit;
+  if OwnerImages = nil then Exit;   // no view list yet; SetLargeImages/SetSmallImages retries
+  FImageIndexPending := False;
+  if FImageIndex < 0 then SetImageName('')
+  else SetImageName(TyImageNameOfIndex(OwnerImages, FImageIndex));
 end;
 
 procedure TTyListItem.SetStates(AValue: TTyListItemStates);
@@ -2676,12 +2744,23 @@ begin
   FAutoSort := AValue;
 end;
 
+procedure TTyListView.ResolveItemIcons;
+var i: Integer;
+begin
+  { A list arriving is when each streamed item's pending ImageIndex can finally become a durable
+    name against it. Only the built-in collection carries items to resolve. }
+  if FItems = nil then Exit;
+  for i := 0 to FItems.Count - 1 do
+    FItems[i].ResolveImageIndex;
+end;
+
 procedure TTyListView.SetLargeImages(AValue: TCustomImageList);
 begin
   if FLargeImages = AValue then Exit;
   if FLargeImages <> nil then FLargeImages.RemoveFreeNotification(Self);
   FLargeImages := AValue;
   if FLargeImages <> nil then FLargeImages.FreeNotification(Self);
+  ResolveItemIcons;
   Invalidate;
 end;
 
@@ -2691,6 +2770,7 @@ begin
   if FSmallImages <> nil then FSmallImages.RemoveFreeNotification(Self);
   FSmallImages := AValue;
   if FSmallImages <> nil then FSmallImages.FreeNotification(Self);
+  ResolveItemIcons;
   Invalidate;
 end;
 

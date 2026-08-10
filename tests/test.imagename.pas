@@ -45,6 +45,11 @@ type
     { control-level via a foreign owner list: TTyTabSheet against its pager }
     procedure APageResolvesAgainstThePagerList;
     procedure APagePendingIndexResolvesWhenThePagerGetsImages;
+    { multi-slot + two-list item controls }
+    procedure ATreeNodeResolvesBothIconSlots;
+    procedure ATreeNodePendingResolvesWhenTheTreeGetsImages;
+    procedure AComboRowResolvesAllThreeSlots;
+    procedure AListItemResolvesAgainstSmallWhenNoLarge;
   end;
 
 implementation
@@ -53,7 +58,8 @@ uses
   Types, Graphics, ImgList, Controls, TypInfo, Forms,
   BGRABitmap, BGRABitmapTypes,
   tyControls.ImageCollection, tyControls.ImageDraw,
-  tyControls.Image, tyControls.Columns, tyControls.TabSheet, tyControls.PageControl;
+  tyControls.Image, tyControls.Columns, tyControls.TabSheet, tyControls.PageControl,
+  tyControls.TreeView, tyControls.ComboBoxEx, tyControls.ListView;
 
 var
   WidgetSetReady: Boolean = False;
@@ -321,6 +327,72 @@ begin
     AssertEquals('and reads back the same slot', 2, sheet.ImageIndex);
   finally
     f.Free;
+  end;
+end;
+
+{ ---- multi-slot + two-list item controls ---------------------------------- }
+
+procedure TImageNameTest.ATreeNodeResolvesBothIconSlots;
+var tree: TTyTreeView; node: TTyTreeNodeItem;
+begin
+  tree := TTyTreeView.Create(nil);
+  try
+    tree.Images := TTyVirtualImageList(FList);
+    node := tree.Items.Add(nil, 'a node');
+    node.ImageName := 'home';        // slot 0
+    node.SelectedName := 'search';   // slot 2
+    AssertEquals('normal icon resolves', 0, node.ImageIndex);
+    AssertEquals('selected icon resolves against the same list', 2, node.SelectedIndex);
+  finally
+    tree.Free;
+  end;
+end;
+
+procedure TImageNameTest.ATreeNodePendingResolvesWhenTheTreeGetsImages;
+var tree: TTyTreeView; node: TTyTreeNodeItem;
+begin
+  tree := TTyTreeView.Create(nil);
+  try
+    node := tree.Items.Add(nil, 'a node');
+    node.ImageIndex := 1;            // no tree list yet -> pending, no name
+    AssertEquals('no name while the tree list is nil', '', node.ImageName);
+    tree.Images := TTyVirtualImageList(FList);
+    AssertEquals('the node pending index resolved', 'settings', node.ImageName);
+  finally
+    tree.Free;
+  end;
+end;
+
+procedure TImageNameTest.AComboRowResolvesAllThreeSlots;
+var combo: TTyComboBoxEx; row: TTyComboExItem;
+begin
+  combo := TTyComboBoxEx.Create(nil);
+  try
+    combo.Images := TTyVirtualImageList(FList);
+    row := combo.ItemsEx.AddItem('a row');
+    row.ImageName := 'home';             // 0
+    row.OverlayImageName := 'settings';  // 1
+    row.SelectedImageName := 'search';   // 2
+    AssertEquals('image slot resolves', 0, row.ImageIndex);
+    AssertEquals('overlay slot resolves', 1, row.OverlayImageIndex);
+    AssertEquals('selected slot resolves', 2, row.SelectedImageIndex);
+  finally
+    combo.Free;
+  end;
+end;
+
+procedure TImageNameTest.AListItemResolvesAgainstSmallWhenNoLarge;
+var lv: TTyListView; it: TTyListItem;
+begin
+  { The two-list case: only SmallImages is set, so the item's single name resolves against it. }
+  lv := TTyListView.Create(nil);
+  try
+    lv.SmallImages := TTyVirtualImageList(FList);
+    it := lv.Items.Add;
+    it.ImageName := 'search';
+    AssertEquals('resolves against SmallImages when there is no large list', 2, it.ImageIndex);
+  finally
+    lv.Free;
   end;
 end;
 
