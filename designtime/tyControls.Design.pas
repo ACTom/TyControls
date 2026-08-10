@@ -71,6 +71,14 @@ type
     procedure GetValues(Proc: TGetStrProc); override;
   end;
 
+  { License (TTyLucideImageList): read-only attribution. paReadOnly so it cannot be edited in
+    place; paDialog so the '...' pops the FULL ISC + MIT licence text in a Ty message box. }
+  TTyLucideLicenseProperty = class(TStringPropertyEditor)
+  public
+    function GetAttributes: TPropertyAttributes; override;
+    procedure Edit; override;
+  end;
+
   { WHY EVERY LIST BELOW IS ADVISORY, NEVER A FIXED PICK-LIST.
 
     The Object Inspector only knows two shapes for a string property: a plain edit box, or a
@@ -416,6 +424,20 @@ end;
 function TTyStyleClassPropertyEditor.GetAttributes: TPropertyAttributes;
 begin
   Result := (inherited GetAttributes) + [paValueList, paMultiSelect];
+end;
+
+function TTyLucideLicenseProperty.GetAttributes: TPropertyAttributes;
+begin
+  { Read-only text with a dialog: the '...' shows the full licence, but the field cannot be typed
+    into (it is not a setting). paReadOnly keeps it out of the inline-edit / streaming path. }
+  Result := (inherited GetAttributes) + [paReadOnly, paDialog];
+end;
+
+procedure TTyLucideLicenseProperty.Edit;
+begin
+  { The full ISC + MIT (Feather) text, in the library's own message box, out of respect for
+    Lucide. Design-time only -- no run-time dependency is added to the component. }
+  TyMessageDlg(TyLucideLicense, mtInformation, [mbOK], 0);
 end;
 
 procedure TTyStyleClassPropertyEditor.GetValues(Proc: TGetStrProc);
@@ -1404,6 +1426,9 @@ begin
     TTyFontFamilyPropertyEditor);
   RegisterPropertyEditor(TypeInfo(string), TTyIconFont, 'FontFile',
     TTyFontFilePropertyEditor);
+  // The droppable Lucide list carries its attribution: '...' pops the full ISC + MIT text.
+  RegisterPropertyEditor(TypeInfo(string), TTyLucideImageList, 'License',
+    TTyLucideLicenseProperty);
   { The design-time way pixels get INTO an image collection. Registered on the collection
     ITEM, so it applies inside the stock collection editor that TTyImageCollection.Images
     opens — no custom collection editor needed. }

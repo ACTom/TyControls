@@ -43,6 +43,7 @@ type
     procedure RemovedBrandLogosAreNotOffered;
     procedure TheComponentConfiguresItselfAndSharesOneRegistration;
     procedure TheDroppableListIsPreWiredToLucideAndStartsEmpty;
+    procedure TheEmbeddedLicenceMatchesTheSourceFile;
 end;
 
 implementation
@@ -285,6 +286,30 @@ begin
     AssertEquals('and the name resolves to slot 0', 0, TyImageIndexOfName(list, TyIconHouse));
   finally
     list.Free;
+  end;
+end;
+
+procedure TLucideTest.TheEmbeddedLicenceMatchesTheSourceFile;
+var
+  path, fileText, embedded: string;
+  sl: TStringList;
+begin
+  { The design-time editor shows TyLucideLicense (embedded from assets/lucide/LICENSE by
+    gen-lucide-license.ps1). This is the drift guard: edit the LICENSE and forget to re-run the
+    generator, and the embedded text no longer matches -> red. Normalise line endings + trailing
+    newline (the generator strips the trailing one; TStringList.Text adds one). }
+  path := ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'assets' + PathDelim + 'lucide'
+    + PathDelim + 'LICENSE';
+  AssertTrue('assets/lucide/LICENSE must exist for the sync check', FileExists(path));
+  sl := TStringList.Create;
+  try
+    sl.LoadFromFile(path);
+    fileText := TrimRight(StringReplace(sl.Text, #13#10, #10, [rfReplaceAll]));
+    embedded := TrimRight(StringReplace(TyLucideLicense, #13#10, #10, [rfReplaceAll]));
+    AssertEquals('embedded TyLucideLicense must equal assets/lucide/LICENSE verbatim',
+      fileText, embedded);
+  finally
+    sl.Free;
   end;
 end;
 

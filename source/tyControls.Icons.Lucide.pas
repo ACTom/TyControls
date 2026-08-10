@@ -43,24 +43,29 @@ type
     class function PackFamily: string; override;
   end;
 
-  { The bundled pack as a droppable IMAGE LIST -- the third way in, and the one the reparent
-    (TTyVirtualImageList IS a TCustomImageList now) made possible. Drop it on a form and assign
-    it straight to any control's Images: there is no font to wire, because its IconFont is the
-    shared Lucide font, set once in the constructor and not streamed.
+  { The bundled pack as a droppable IMAGE LIST -- the third way in, made possible by the
+    reparent (TTyVirtualImageList IS a TCustomImageList now). Drop it and assign it straight
+    to any control's Images: no font to wire, its IconFont is the shared Lucide font, set
+    once here and not streamed. Names start EMPTY -- fill the icon names you use (Names.Text,
+    or the icon browser) and each becomes an image, addressable by ImageIndex or ImageName.
 
-    Names start EMPTY on purpose. This list holds the icons you actually use, not all ~2000 --
-    add the names you need (Names.Text := 'house'#13'settings', or pick them in the icon browser),
-    and each becomes an image, addressable by ImageIndex OR (this library being name-keyed) by
-    ImageName on every control that draws from it. A control's icon then survives you reordering
-    this list, because the name is the key. }
+    Lives in THIS generated unit on purpose: a droppable list must reference TyLucideFont,
+    and the optionality rule (test.lucide.NoCoreUnitReferencesTheBundledFont) forbids any
+    OTHER source unit from doing so -- so the only home that keeps the font free-when-unused
+    is here, inside the unit the reference cannot escape. }
   TTyLucideImageList = class(TTyVirtualImageList)
+  private
+    function GetLicense: string;
   public
     constructor Create(AOwner: TComponent); override;
   published
-    { Always the bundled Lucide font. Redeclared stored False so it never streams: the
-      constructor sets it, and a streamed reference to the unit-owned shared font (no form owner,
-      no name) would resolve to nil on load and blank the list. }
+    { Always the bundled Lucide font. stored False: the constructor sets it, and a streamed
+      reference to the unit-owned shared font (no owner, no name) would nil on load. }
     property IconFont stored False;
+    { Attribution for the bundled icons, shown out of respect for Lucide -- though nothing is
+      required of YOUR end users at run time. Read-only: the value is the summary; the
+      design-time editor pops the full ISC + MIT text (TyLucideLicense) in a Ty message box. }
+    property License: string read GetLicense stored False;
   end;
 
 const
@@ -77,9 +82,16 @@ const
     above pins the INPUTS; this pins the TRANSFORMATION, so a hand-edit of this generated
     file -- or a generator change nobody re-ran -- is a red test instead of a silent
     mismatch between the script and its output. }
-  TyLucideGeneratorDigest = '604D41C5A568E330D9DF6264DB65CFAA9A696501';
+  TyLucideGeneratorDigest = '7FEAF7B410F16DB8CEA24DE2390426A466D6C424';
   { Icons in the bundled font (names plus upstream aliases). }
   TyLucideGlyphCount = 2022;
+  { One-liner shown in the object inspector for TTyLucideImageList.License; the '...' pops
+    the full text below. }
+  TyLucideLicenseSummary =
+    'Lucide icons -- ISC License + MIT (Feather-derived). Click the ... for the full text.';
+  { The full ISC + MIT (Feather) text, embedded verbatim from assets/lucide/LICENSE by
+    scripts/gen-lucide-license.ps1; test.lucide byte-checks it against that file. }
+  {$I tyControls.Icons.Lucide.License.inc}
   { 20 upstream names are NOT here, and that is deliberate. Lucide keeps a codepoint
     forever once allocated -- the property that makes these constants survive a font
     upgrade -- so codepoints.json still lists every icon it has ever had, including the
@@ -4897,9 +4909,13 @@ end;
 constructor TTyLucideImageList.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
-  { Wire the shared bundled font (one registration per process). Names stay empty: this list
-    holds the icons the form actually uses, filled by the developer, not all ~2000. }
+  { Wire the shared bundled font (one registration per process). Names stay empty. }
   IconFont := TyLucideFont;
+end;
+
+function TTyLucideImageList.GetLicense: string;
+begin
+  Result := TyLucideLicenseSummary;
 end;
 
 initialization
