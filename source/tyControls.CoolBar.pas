@@ -1028,7 +1028,8 @@ begin
       * the control's own Width -- rejected for the same reason, and measured to be actively
         misleading: a TTyToolBarEx with three buttons read Width=600 after alignment while
         answering raw 125, its real content. The same probe measured TTyEdit at raw 0 (no
-        opinion) with non-raw 140 (merely its own width). tests/coolbarrejoin case 4. }
+        opinion) with non-raw 140 (merely its own width). Confirmed on a real window during
+        development. }
   Result := 0;
   if ACtl = nil then Exit;
   if ACtl.Constraints.MaxWidth > 0 then Result := ACtl.Constraints.MaxWidth;

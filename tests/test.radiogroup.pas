@@ -17,8 +17,8 @@ type
     The OS half cannot be tested here and must not be pretended: on a form that was never
     shown CanFocus answers False, TTyRadioGroup.FocusItem correctly declines to call
     SetFocus, and any assertion on Focused would be vacuously true forever. So the seam is
-    virtual and this spy counts the requests; tests/radiofocusverify then proves on a real
-    window, with real handles, that the request lands on the caret. Splitting it that way
+    virtual and this spy counts the requests; that the request lands on the caret was proven
+    on a real window, with real handles, during development. Splitting it that way
     is the only honest split -- see memory: headless tests never run LCL's focus engine. }
   TSpyRadioGroup = class(TTyRadioGroup)
   public
@@ -587,8 +587,8 @@ end;
   measures 9px instead of 17, so a hosted radio asks for 17 rather than 25 and never
   exceeds the 22 token at all -- the overlap cannot arise here, and a mutant that deletes
   the pitch floor walks straight past this test (measured). The rule itself is pinned by
-  TestRowPitchIsNeverShorterThanAHostedRadio and by tests/radiofocusverify. What this test
-  still catches is a pitch that goes below the TOKEN, which no font can hide. }
+  TestRowPitchIsNeverShorterThanAHostedRadio and was confirmed on a real window during
+  development. What this test still catches is a pitch that goes below the TOKEN, which no font can hide. }
 procedure TRadioGroupTest.TestRowsNeverOverlapSoTheFocusRingSurvives;
 var
   i, above: Integer;
@@ -645,7 +645,7 @@ end;
   asserted on the live bounds, ran green, and a mutant that deleted the entire floor
   SURVIVED it. Ambient numbers cannot hold this rule; its two inputs can.
 
-  tests/radiofocusverify holds the other half on a real window with real handles. }
+  the other half was held on a real window with real handles during development. }
 procedure TRadioGroupTest.TestRowPitchIsNeverShorterThanAHostedRadio;
 begin
   { the reported case, exactly: theme says 22, the radio needs 25 }

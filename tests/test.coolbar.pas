@@ -1140,8 +1140,8 @@ end;
   All of these lay the bands out BY HAND, as every control test in this file does: the LCL
   align engine does not run for a form that was never shown (AutoSizeDelayedHandle short-
   circuits the tree), so a headless test pins the MODEL -- widths, Break, child order. That the
-  band actually lands on row 0 on screen is what tests/coolbarrejoin proves, on a real window
-  with real posted mouse messages. }
+  band actually lands on row 0 on screen was confirmed on a real window (real posted mouse
+  messages) during development. }
 
 { A two-row scene: b0 alone on row 0 and so wide that b1, on row 1, cannot join it.
   Returns the deficit -- exactly how much room b1 needs -- so each test can name the

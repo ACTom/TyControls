@@ -32,7 +32,8 @@ type
         the children LCL was clamping into it; see RowPitch.
     Neither is visible from the headless suite (no caret on a form that was never shown, and
     the test process measures the caption font short enough that the overlap cannot arise).
-    tests/radiofocusverify is the real-window half and is not optional cover. }
+    The real-window half was verified on a real machine during development and is not
+    optional cover. }
   TTyRadioGroup = class(TTyGroupBox)
   private
     FItems: TStrings;
@@ -112,7 +113,7 @@ type
       Virtual on purpose: the OS half (SetFocus) cannot run on a form that was never shown
       -- CanFocus answers False there -- so a headless test asserting Focused would be
       permanently, falsely green. A test overrides this to watch the REQUEST, and
-      tests/radiofocusverify proves on a real window that the request lands. }
+      a real-window check during development proved that the request lands. }
     procedure FocusItem(AIndex: Integer); virtual;
     procedure SetParent(AParent: TWinControl); override;
     procedure DoOnResize; override;

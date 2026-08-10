@@ -51,8 +51,8 @@ type
       scroll. That needs the LCL align engine to run, and it never does in this suite —
       TControl.AdjustSize walks to the top parent and bails out on AutoSizeDelayedHandle,
       which is always true for a TForm.CreateNew that is never shown. Asserting on aligned
-      children here passes on the BROKEN code too. That coverage lives in the real-machine
-      probe tests/scrollverify (cases 3, 4, 10, 11). }
+      children here passes on the BROKEN code too. That coverage was checked on a real
+      machine during development (scroll cases 3, 4, 10, 11). }
     procedure TestClientRectExcludesBarGutters;
     procedure TestChildAreaExcludesBarGutters;
     procedure TestChildAreaGrowsToContentOnScrollingAxisOnly;
@@ -62,7 +62,7 @@ type
       MeasureAndDock 停在 (Width-thick-bw, bw),ScrollContentTo 里的补停回
       (Width-thick, 0)。于是每滚一步两条都被搬开一个边框宽再被搬回去,
       肉眼就是 1px 抖动,而每一次 SetBounds 都要整框重排一轮子控件。
-      真机计数见 tests/scrollcluster:12 步拖动 → 120 轮对齐(修后 24 轮)。 }
+      真机计数(开发期实测):12 步拖动 → 120 轮对齐(修后 24 轮)。 }
     procedure TestScrollLeavesTheBarsOnTheirGutter;
     procedure TestRepeatedScrollsNeverDriftTheBars;
     { 上面两条只管**可见**的那两条。RedockBars 的条件里有 `.Visible and`,所以藏着的
@@ -82,7 +82,7 @@ type
     一旦给盒子配了 TTyScrollContent,内容就住在**视口**里,于是 TTyScrollBox 为自己
     的子控件讲的那两条(布局原点跟着偏移走、布局区涨到内容)对它们统统失效 —— 那两个
     钩子在盒子上,而它们不是盒子的子控件。表现:视口里的对齐子控件**一格都不滚**
-    (真机计数见 tests/scrollcluster A4c:ScrollY 走到 76,首行 Top 158 → 158)。
+    (真机计数,开发期实测 A4c:ScrollY 走到 76,首行 Top 158 → 158)。
 
     这里量的正是那两个钩子,不是"子控件滚没滚" —— 无头环境下 LCL 的对齐引擎根本
     不跑(AutoSizeDelayedHandle),对子控件位置下断言在坏代码上一样是绿的。 }

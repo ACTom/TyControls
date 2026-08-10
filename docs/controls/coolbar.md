@@ -90,7 +90,7 @@ uses tyControls.CoolBar, tyControls.ControlBar, tyControls.Panel;
 **优先级只有一条规则，且只写在 `BandMaxWidth` 一处：`0` 表示"无意见"、直接出局；剩下的取最小。** 所以两个上限永远不会打架——谁先用完谁停住手势；`AutoMaxWidth = False` 时答案与从前逐字节相同。
 
 - **为什么必须是 `Raw`。** 非 raw 的 `GetPreferredSize` 在控件没有首选宽度时会**用控件当前的 `Width` 顶上**（`lcl/include/control.inc:5635`），而带的当前宽度正是拖动在改的那个数——拿它当上限等于把每条带钉死在它当下的位置，第一次外拖就变成死手势，也就是本次修的那类 bug。
-- **为什么不用控件自己的 `Width`。** 同上，而且实测有误导性：本机上一条挂了三个按钮的 `TTyToolBarEx` 对齐后 `Width` 读到 600，raw 首选宽度是 125（它真正的内容宽）；`TTyEdit` raw 读 0（没有意见）、非 raw 读 140（只是它自己的宽度）。见 `tests/coolbarrejoin` case 4。
+- **为什么不用控件自己的 `Width`。** 同上，而且实测有误导性：本机上一条挂了三个按钮的 `TTyToolBarEx` 对齐后 `Width` 读到 600，raw 首选宽度是 125（它真正的内容宽）；`TTyEdit` raw 读 0（没有意见）、非 raw 读 140（只是它自己的宽度）。（开发期真机实测。）
 - **没有意见的控件不封顶。** 编辑框多宽都合理，本特性只给"内容有尽头"的带封顶，不替没有尽头的带凭空造一个。
 - **上限的坐标系是"子控件宽度"，不含夹具/标题条。** 因为 `TTyCoolBand.Width` 设的、`TyCoolBandResize` 钳的都是这个数。Lazarus 的 `TCoolBand.Width` 是另一套约定（它的 `CalcPreferredWidth` 会加上 `CalcControlLeft`），照搬过来会让带比内容**多长出一个夹具**。用户看到的整条带 = `夹具 + 上限`，正好落在内容最后一个像素上。
 - **到顶是"停住"，不是"没反应"。** 带先真的变宽、到内容边界才停——这与本次修掉的"从头到尾一动不动"是两回事。（到顶后继续拖确实不再动，这和 `MinWidth` 到底后继续拖一样。）

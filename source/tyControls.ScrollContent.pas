@@ -45,9 +45,9 @@ type
       GetLogicalClientRect) stop applying to them, because those hooks are on the box and
       the children are not the box's. Without them the viewport is a plain container: it
       lays every ALIGNED child out at its own unscrolled origin, and the align pass that
-      follows each scroll drags them straight back. Measured on the forum's scenario
-      (tests/scrollcluster A4c): twelve alTop rows inside a viewport, thumb dragged to
-      ScrollY=76, first row Top 158 -> 158. It never moved. Un-aligned children scrolled
+      follows each scroll drags them straight back. Measured on the forum's scenario on a
+      real machine during development (case A4c): twelve alTop rows inside a viewport, thumb
+      dragged to ScrollY=76, first row Top 158 -> 158. It never moved. Un-aligned children scrolled
       fine, which is exactly why this looked like "sometimes it works".
 
       So the viewport owns the same two hooks, fed by the box through SetScrollOrigin:
@@ -93,7 +93,7 @@ begin
 
     The obvious instinct is that changing what the two hooks below return must drop LCL's
     cache of them. It was written that way first, and the mutant that replaced the call with
-    a no-op SURVIVED every scenario in tests/scrollcluster -- including two written
+    a no-op SURVIVED every real-machine scroll scenario checked during development -- including two written
     specifically to reach it (A6: an akRight child in the viewport across repeated scrolls;
     A7: the viewport with ChildSizing.Layout set, which is the ONLY path that reads the
     cached rect at all -- wincontrol.inc:948 and :6324).

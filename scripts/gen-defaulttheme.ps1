@@ -3,7 +3,7 @@
 # The built-in default theme (TyBuiltinThemeCss) must equal light.tycss byte-for-byte
 # (enforced by test.defaulttheme's sync test). This makes light.tycss the SINGLE
 # SOURCE: edit light.tycss, then re-run this script — DefaultTheme.pas is generated,
-# never hand-maintained. Run from the repo root: powershell -File gen-defaulttheme.ps1
+# never hand-maintained. Run from the repo root: powershell -File scripts/gen-defaulttheme.ps1
 #
 # The unit also exports TyBuiltinBaseModeCss, which is NOT derived from light.tycss (a
 # single-mode theme has no @mode blocks). It is carried verbatim below, because this

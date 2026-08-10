@@ -111,7 +111,7 @@ uses tyControls.ScrollBox;
 
 > **无窗口句柄下的行为（headless / 测试）：** 纯滚动数学（范围 / 夹取 / 可见性阈值 / 缩略块 PageSize）是单元级纯函数，可直接验证；对齐子控件的实际布局需要 LCL 对齐引擎真的跑起来，而 `TForm.CreateNew` 且从不 `Show` 的窗体会命中 `AutoSizeDelayedHandle`，对齐被整体推迟——所以这一层要在真机验收探针里验，headless 断言会假绿。
 >
-> 两个探针：`tests/scrollverify`（重算时机：`.lfm` 流进来的子控件、运行期增删改、锚定、真 Z 序）与 `tests/scrollcluster`（论坛 #12/#15 那一串：槽的像素归属、滚轮第一格、拖动的重绘代价、内容跳动）。后者靠 **HWND 子类化数真 `WM_PAINT`**、靠 `PrintWindow` 取 DWM 合成表面（会话断开时 `GetDC(0)` 抓屏是一片空白，它会先自证再判定），并且先实测一遍本机 LCL 上"移动一个子控件"要几轮 `ControlsAligned`，拿它当判据而不是拍脑袋定 1。
+> 这一层在开发期于真机上验证过两组场景：一组是重算时机（`.lfm` 流进来的子控件、运行期增删改、锚定、真 Z 序）；另一组是论坛 #12/#15 那一串（槽的像素归属、滚轮第一格、拖动的重绘代价、内容跳动），靠 **HWND 子类化数真 `WM_PAINT`**、靠 `PrintWindow` 取 DWM 合成表面（会话断开时 `GetDC(0)` 抓屏是一片空白，先自证再判定），并先实测一遍本机 LCL 上"移动一个子控件"要几轮 `ControlsAligned`，拿它当判据而不是拍脑袋定 1。
 
 ### 显式视口 `TTyScrollContent`（可选）
 
@@ -124,7 +124,7 @@ uses tyControls.ScrollBox;
 - **认领时机：** 滚动框在 `InsertControl` 里认领视口，代码创建 / 设计器拖放 / `.lfm` 流式化三条路径都经过那里。`ContentHost` 返回视口（没有则返回滚动框自身）。
 - **视口自己也讲同一套容器契约。** 一旦有了视口，内容就住在**视口**里，于是上面那两条（布局原点跟着偏移走、布局区涨到内容）对它们就统统失效了——那两个钩子在滚动框上，而它们不是滚动框的子控件。表现是**视口里的对齐子控件一格都不滚**：滑块走了、`ScrollY` 变了，`alTop` 的行还钉在原处（未对齐的子控件却滚得好好的，所以这个坏法看上去像"时灵时不灵"）。因此 `TTyScrollContent` 自己也重写了 `AdjustClientRect` 与 `GetLogicalClientRect`，由滚动框通过 `SetScrollOrigin` 把偏移和内容范围喂给它——视口两者都**不自己算**，"滚动原点"只能有一处权威。
 
-> **两处停靠代码必然会走岔。** 滚动条的位置一度写了两遍：`MeasureAndDock` 停在 `(Width-thick-bw, bw)`，而 `ScrollContentTo` 里"`ScrollBy` 把条也搬走了，补停回去"那一步算成 `(Width-thick, 0)`。差一个边框宽，于是**每滚一步**两条都被搬开再搬回——肉眼就是 1px 抖动（论坛报的"拖滑块闪烁"），而每一次 `SetBounds` 都要整框重排一轮子控件，再由 `ControlsAligned` 触发一次重算、再把条搬回去。真机计数（`tests/scrollcluster`）：12 步拖动引发 **120 轮** `ControlsAligned`。现在停靠矩形由 `MeasureAndDock` 算一次、存进 `FVBarRect`/`FHBarRect`，补停只是把它**放回同一个矩形**（因而通常是个空操作），整个移动再包一层 `DisableAutoSizing`/`EnableAutoSizing` 合并成一轮——同样 12 步现在是 **24 轮**，正好等于本机 LCL 上"移动一个子控件"的实测底线（2 轮/步）。
+> **两处停靠代码必然会走岔。** 滚动条的位置一度写了两遍：`MeasureAndDock` 停在 `(Width-thick-bw, bw)`，而 `ScrollContentTo` 里"`ScrollBy` 把条也搬走了，补停回去"那一步算成 `(Width-thick, 0)`。差一个边框宽，于是**每滚一步**两条都被搬开再搬回——肉眼就是 1px 抖动（论坛报的"拖滑块闪烁"），而每一次 `SetBounds` 都要整框重排一轮子控件，再由 `ControlsAligned` 触发一次重算、再把条搬回去。真机计数（开发期实测）：12 步拖动引发 **120 轮** `ControlsAligned`。现在停靠矩形由 `MeasureAndDock` 算一次、存进 `FVBarRect`/`FHBarRect`，补停只是把它**放回同一个矩形**（因而通常是个空操作），整个移动再包一层 `DisableAutoSizing`/`EnableAutoSizing` 合并成一轮——同样 12 步现在是 **24 轮**，正好等于本机 LCL 上"移动一个子控件"的实测底线（2 轮/步）。
 
 ---
 

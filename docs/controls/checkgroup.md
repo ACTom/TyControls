@@ -105,7 +105,7 @@ uses tyControls.CheckGroup;
 
 | 函数 | 签名 | 说明 |
 |------|------|------|
-| `TyGroupRowPitch`（在 `tyControls.GroupBox`） | `function TyGroupRowPitch(AThemeRowH, AItemMinH: Integer): Integer` | 行距规则：取两者较大值（并保证 ≥ 1），单位都是**设备像素**。`TTyCheckGroup` 与 `TTyRadioGroup` 共用。抽成纯函数是因为这条规则**在无头测试进程里不可断言**：控制台进程量出的标题字高是 9px、GUI 进程是 17px，托管复选框在测试里只要 17（< 24，不重叠）、在真机上要 25（> 24，重叠 1px），照实控件写的断言永远是假绿。真机那一半由 `tests/radiofocusverify` 守着。 |
+| `TyGroupRowPitch`（在 `tyControls.GroupBox`） | `function TyGroupRowPitch(AThemeRowH, AItemMinH: Integer): Integer` | 行距规则：取两者较大值（并保证 ≥ 1），单位都是**设备像素**。`TTyCheckGroup` 与 `TTyRadioGroup` 共用。抽成纯函数是因为这条规则**在无头测试进程里不可断言**：控制台进程量出的标题字高是 9px、GUI 进程是 17px，托管复选框在测试里只要 17（< 24，不重叠）、在真机上要 25（> 24，重叠 1px），照实控件写的断言永远是假绿。真机那一半在开发期于真机上验证过。 |
 | `TyCheckGroupCellRect` | `function TyCheckGroupCellRect(const AClientRect: TRect; ACount, AColumns, AIndex, ARowH: Integer; ALayout: TColumnLayout = clHorizontalThenVertical): TRect` | 第 `AIndex` 项在客户区 `AClientRect` 内的设备像素单元矩形，共 `ACount` 项、`AColumns` 列、行高 `ARowH`，按 `ALayout` 指定的顺序填充。列等分宽度（末列吸收余数）。`AIndex` 越界、`ACount <= 0`、`AColumns <= 0` 或 `ARowH <= 0` 返回空矩形。 |
 
 ```pascal

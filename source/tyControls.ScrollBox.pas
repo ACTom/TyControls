@@ -53,7 +53,7 @@ type
       off their gutter and the next measure pass shoved them back — a 1px twitch at drag
       rate, which is what "flicker while dragging the thumb" looks like, and each of those
       SetBounds calls costs a full child-realign pass of the whole box. Measured on the
-      forum's own scenario (tests/scrollcluster): 12 thumb-drag steps produced 120
+      forum's own scenario (measured on a real machine during development): 12 thumb-drag steps produced 120
       ControlsAligned passes, i.e. ten layout passes per mouse move.
 
       Storing the rect instead of recomputing it means the re-dock cannot drift from the

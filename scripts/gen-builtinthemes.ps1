@@ -5,7 +5,7 @@
 # ALL of these are compiled into the binary so an app ships them with NO themes/ folder. The
 # themes/builtin/ FILES are a REFERENCE copy for users to base their own themes on -- they are
 # NOT scanned or dynamically loaded at runtime. Sync-tested byte-identical (test.builtinthemes).
-# Run from the repo root:  powershell -File gen-builtinthemes.ps1
+# Run from the repo root:  powershell -File scripts/gen-builtinthemes.ps1
 $ErrorActionPreference = 'Stop'
 $enc = New-Object System.Text.UTF8Encoding($false)   # UTF-8, no BOM
 

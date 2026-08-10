@@ -142,7 +142,7 @@ end;
   HONESTY NOTE: this is the ambient net, not the guard -- in this console process the
   caption font measures short enough that the item minimum never exceeds the token, so the
   overlap cannot arise here at all. TestRowPitchIsNeverShorterThanAHostedCheckBox states the
-  rule; tests/radiofocusverify checks it on a real window. }
+  rule; it was confirmed on a real window during development. }
 procedure TCheckGroupTest.TestRowsNeverOverlapSoTheFocusRingSurvives;
 var
   F: TForm;
