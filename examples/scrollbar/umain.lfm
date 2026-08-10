@@ -47,7 +47,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 48
       Width = 512
-      Caption = 'Drag the slider, click the track/arrows, spin the wheel, arrow keys, PageUp/PageDown, Home/End'
+      Caption = 'Drag slider, click track/arrows, spin wheel, arrow keys, PageUp/PageDown, Home/End'
     end
     object VBar: TTyScrollBar
       Left = 28

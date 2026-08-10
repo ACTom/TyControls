@@ -71,7 +71,7 @@ object MainForm: TMainForm
       Left = 20
       Height = 22
       Top = 140
-      Width = 260
+      Width = 280
       Caption = 'Enable fill animation (AnimationsEnabled)'
       Checked = True
       OnClick = AnimToggle

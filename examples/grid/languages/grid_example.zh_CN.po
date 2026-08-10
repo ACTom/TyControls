@@ -20,7 +20,7 @@ msgid "TTyStringGrid  · custom-drawn data grid · TyControls"
 msgstr "TTyStringGrid  · 自绘数据网格 · TyControls"
 
 #: tmainform.btnaccent.caption
-msgid "Accent colour"
+msgid "Accent"
 msgstr "主题色"
 
 #: tmainform.darkswitch.caption
@@ -36,7 +36,7 @@ msgid "Basics & virtualization"
 msgstr "基础与虚拟化"
 
 #: tmainform.lblbasichint.caption
-msgid "Hover a cell for the hover highlight · drag the bottom horizontal scrollbar, the left two columns stay pinned (frozen columns) · arrow keys / Home/End / PageUp/PageDown to navigate · tick \"Freeze 1 row\" then click a header to sort: the frozen band shows the top-ranked row, content still drawn with no blank"
+msgid "Hover a cell for the hover highlight · drag the bottom horizontal scrollbar, the left two columns stay pinned (frozen columns) · arrow keys / Home/End / PageUp/PageDown to navigate · tick \"Pin 1 row\" then click a header to sort: the frozen band shows the top-ranked row, content still drawn with no blank"
 msgstr "鼠标划过单元格看 hover 高亮 · 拖底部横向滚动条,左侧两列钉住不动(冻结列) · 方向键/Home/End/PageUp/PageDown 导航 · 勾上「固定 1 行」再点列头排序:冻结带里换成排在最前的那一行,内容照画不空白"
 
 #: tmainform.btnrows1w.caption
@@ -52,27 +52,27 @@ msgid "1M rows"
 msgstr "100 万行"
 
 #: tmainform.btnrowsreset.caption
-msgid "Restore 200 rows"
+msgid "Reset 200"
 msgstr "恢复 200 行"
 
 #: tmainform.btngoto.caption
-msgid "Jump to (2, 5000)"
+msgid "Go to (2, 5000)"
 msgstr "跳到 (2, 5000)"
 
 #: tmainform.chkfrozencols.caption
-msgid "Freeze 2 columns"
+msgid "Pin 2 cols"
 msgstr "冻结 2 列"
 
 #: tmainform.chkfixedrow.caption
-msgid "Freeze 1 row"
+msgid "Pin 1 row"
 msgstr "固定 1 行"
 
 #: tmainform.chkindicator.caption
-msgid "Row-number gutter"
+msgid "Row No."
 msgstr "行号槽"
 
 #: tmainform.chkfooter.caption
-msgid "Summary band"
+msgid "Summary"
 msgstr "汇总带"
 
 #: tmainform.btnsavelayout.caption
@@ -88,31 +88,31 @@ msgid "Appearance"
 msgstr "外观"
 
 #: tmainform.lbllookhint.caption
-msgid "\"Conditional colouring\" marks negative amounts red and overdue rows yellow (OnGetCellStyle, judged per data row, follows the record after sorting) · \"Per-cell border\" thickens the subtotal row's top line · thickening grid lines does **not** change column width, it only insets the content"
+msgid "\"Colour rule\" marks negative amounts red and overdue rows yellow (OnGetCellStyle, judged per data row, follows the record after sorting) · \"Cell border\" thickens the subtotal row's top line · thickening grid lines does **not** change column width, it only insets the content"
 msgstr "「条件着色」把负数金额标红、超期行标黄(OnGetCellStyle,按数据行判断,排序后仍跟着记录走) · 「逐格边框」给小计行加粗上边线 · 加粗格线时列宽**不变**,只是内容内缩"
 
 #: tmainform.chkzebra.caption
-msgid "Zebra stripes"
+msgid "Zebra"
 msgstr "斑马纹"
 
 #: tmainform.lbllines.caption
-msgid "Grid lines:"
+msgid "Lines:"
 msgstr "格线:"
 
 #: tmainform.lbllinew.caption
-msgid "Line width:"
+msgid "Width:"
 msgstr "线宽:"
 
 #: tmainform.chkcondcolor.caption
-msgid "Conditional colouring"
+msgid "Colour rule"
 msgstr "条件着色"
 
 #: tmainform.chkcellborder.caption
-msgid "Per-cell border"
+msgid "Cell border"
 msgstr "逐格边框"
 
 #: tmainform.chkhdrhilite.caption
-msgid "Sorted headers highlighted"
+msgid "Sorted headers"
 msgstr "排序列表头高亮"
 
 #: tmainform.chkhdricons.caption
@@ -124,7 +124,7 @@ msgid "Colour this cell"
 msgstr "本格上色"
 
 #: tmainform.btncelluncolor.caption
-msgid "Clear this cell's colour"
+msgid "Uncolour cell"
 msgstr "清除本格色"
 
 #: tmainform.btnrowcolor.caption
@@ -140,11 +140,11 @@ msgid "Auto row height"
 msgstr "自动行高"
 
 #: tmainform.btnresetrows.caption
-msgid "Restore row height"
+msgid "Reset row height"
 msgstr "恢复行高"
 
 #: tmainform.lbllooktip.caption
-msgid "The \"Notes\" column content is long — tick word wrap first, then click auto row height"
+msgid "The \"Notes\" column is long — tick word wrap first, then auto row height"
 msgstr "「备注」列内容很长 —— 先勾换行,再点自动行高"
 
 #: tmainform.pgsort.caption
@@ -176,11 +176,11 @@ msgid "Nulls first"
 msgstr "空值排最前"
 
 #: tmainform.chkcasesens.caption
-msgid "Sort is case-sensitive"
+msgid "Case-sensitive"
 msgstr "排序区分大小写"
 
 #: tmainform.chkphysicalsort.caption
-msgid "Sorting really moves the data"
+msgid "Sort moves the data"
 msgstr "排序真的搬数据"
 
 #: tmainform.lblfiltercol.caption
@@ -200,15 +200,15 @@ msgid "Expand all"
 msgstr "全部展开"
 
 #: tmainform.btncollapseall.caption
-msgid "Collapse all"
+msgid "Collapse"
 msgstr "全部折叠"
 
 #: tmainform.btngroup2.caption
-msgid "Group by region + product"
+msgid "Group region+product"
 msgstr "按大区 + 产品分组"
 
 #: tmainform.chkfilterrow.caption
-msgid "Filter row"
+msgid "Filter"
 msgstr "筛选行"
 
 #: tmainform.chktree.caption
@@ -224,23 +224,23 @@ msgid "**Just start typing** to edit (that keystroke is the first character) · 
 msgstr "**直接敲字**就进编辑(这一笔即第一个字符) · Enter 向下 · Tab 按格推进并折行 · F2 也行 · 「数量」微调 · 「金额」滑动条 · 「订单号」掩码 · 「大区」下拉 · 「日期」日历 · 「评分」点星 · 「备注」多行 —— 全在**列上**声明,没接事件"
 
 #: tmainform.chkskipro.caption
-msgid "Navigation skips read-only cells"
+msgid "Skip read-only"
 msgstr "导航跳过只读格"
 
 #: tmainform.btncellro.caption
-msgid "Set this cell read-only"
+msgid "Cell read-only"
 msgstr "本格设只读"
 
 #: tmainform.btncellrw.caption
-msgid "This cell is editable"
+msgid "Cell editable"
 msgstr "本格可编辑"
 
 #: tmainform.chkeditlink.caption
-msgid "The notes column uses a custom editor"
+msgid "Custom editor for notes"
 msgstr "备注列用自定义编辑器"
 
 #: tmainform.lbledittip.caption
-msgid "\"Completion\" progress bar · \"Rating\" stars · \"Settled\" checkbox · \"Mark colour\" click to pick · \"Actions\" button"
+msgid "\"Completion\" bar · \"Rating\" stars · \"Settled\" tick · \"Mark colour\" pick · \"Actions\""
 msgstr "「完成度」进度条 · 「评分」星标 · 「已结算」勾选框 · 「标记色」点开取色 · 「操作」按钮"
 
 #: tmainform.pgdata.caption
@@ -260,7 +260,7 @@ msgid "Select all"
 msgstr "全选"
 
 #: tmainform.btnselnone.caption
-msgid "Clear selection"
+msgid "Deselect all"
 msgstr "清除选择"
 
 #: tmainform.btnmerge.caption
@@ -284,7 +284,7 @@ msgid "Paste"
 msgstr "粘贴"
 
 #: tmainform.chkautogrow.caption
-msgid "Auto-grow table on paste"
+msgid "Auto-grow on paste"
 msgstr "粘贴时自动扩表"
 
 #: tmainform.btninsrow.caption
@@ -332,15 +332,15 @@ msgid "Insert a column"
 msgstr "插入一列"
 
 #: tmainform.btndelcol.caption
-msgid "Delete this column"
+msgid "Delete column"
 msgstr "删除本列"
 
 #: tmainform.btnmovecol.caption
-msgid "Swap this column with the one on its right"
+msgid "Swap with right"
 msgstr "本列与右邻换位"
 
 #: tmainform.lblcoltip.caption
-msgid "Adding and moving columns can now be undone too — width, title, editor kind, read-only and that column's filter all come back together"
+msgid "Adding/moving columns is undoable — width, title, editor kind, read-only and filter all return"
 msgstr "列的增删与换位现在也能撤销 —— 连宽度、标题、编辑器种类、只读、那一列上的筛选一起回来"
 
 #: tmainform.pgevents.caption
@@ -348,27 +348,27 @@ msgid "Events & hooks"
 msgstr "事件与钩子"
 
 #: tmainform.lblevhint.caption
-msgid "Each switch maps to a hook — tick it, then act, and the status bar tells you what it intervened in · \"Forbid clicking row 3\" makes the whole row unclickable (the cursor does not even move), which is OnCanClickCell showing restraint"
+msgid "Each switch maps to a hook — tick it, then act, and the status bar tells you what it intervened in · \"No clicking row 3\" makes the whole row unclickable (the cursor does not even move), which is OnCanClickCell showing restraint"
 msgstr "每个开关对应一个钩子 —— 勾上再去操作,状态栏会说出它介入了什么 · 「禁止点第 3 行」那条会让整行点不动(光标都不移),这是 OnCanClickCell 的克制之处"
 
 #: tmainform.chkevhint.caption
-msgid "Hover for a hint"
+msgid "Hover hint"
 msgstr "悬停出提示"
 
 #: tmainform.chkevlockrow.caption
-msgid "Forbid clicking row 3"
+msgid "No clicking row 3"
 msgstr "禁止点第 3 行"
 
 #: tmainform.chkevrightclick.caption
-msgid "Right-click reports position"
+msgid "Right-click logs"
 msgstr "右键报告位置"
 
 #: tmainform.chkevheader.caption
-msgid "Header click / right-click"
+msgid "Header clicks (L/R)"
 msgstr "表头点击/右键"
 
 #: tmainform.chkevsize.caption
-msgid "Column width / row height events"
+msgid "Col/row size events"
 msgstr "列宽/行高事件"
 
 #: tmainform.chkevcolmove.caption
@@ -376,7 +376,7 @@ msgid "Pin column 0"
 msgstr "钉住第 0 列"
 
 #: tmainform.chkevcheck.caption
-msgid "Checkbox events / veto"
+msgid "Checkbox event/veto"
 msgstr "勾选框事件/否决"
 
 #: tmainform.chkevclip.caption
@@ -404,11 +404,11 @@ msgid "Import CSV"
 msgstr "导入 CSV"
 
 #: tmainform.chkevrowmove.caption
-msgid "Forbid dragging to the first row"
+msgid "No drag to 1"
 msgstr "禁止拖到首行"
 
 #: tmainform.chkeveditorprop.caption
-msgid "Editor turns red"
+msgid "Editor red"
 msgstr "编辑器变红"
 
 #: tmainform.chkevreturn.caption
@@ -416,51 +416,51 @@ msgid "Enter opens detail"
 msgstr "回车打开明细"
 
 #: tmainform.chkevscrollhint.caption
-msgid "Drag-scrollbar hint"
+msgid "Scrollbar hint"
 msgstr "拖滚动条提示"
 
 #: tmainform.chkevcanedit.caption
-msgid "Row 2 not editable (still shown)"
+msgid "Row 2 read-only"
 msgstr "禁改第 2 行(仍显示)"
 
 #: tmainform.chkeveditchange.caption
-msgid "Validate as you type"
+msgid "Validate typing"
 msgstr "边打字边校验"
 
 #: tmainform.chkevcelledited.caption
-msgid "Veto empty-value commit"
+msgid "Veto empty commit"
 msgstr "否决空值提交"
 
 #: tmainform.chkevrowveto.caption
-msgid "Forbid adding/removing rows"
+msgid "No add/remove rows"
 msgstr "禁止增删行"
 
 #: tmainform.chkevselectcell.caption
-msgid "The cursor does not enter column 0"
+msgid "Cursor skips col 0"
 msgstr "光标不进第 0 列"
 
 #: tmainform.chkevclick.caption
-msgid "Single/double click report"
+msgid "Single/double click"
 msgstr "单击/双击报告"
 
 #: tmainform.chkevrating.caption
-msgid "Rating change event"
+msgid "Rating event"
 msgstr "评分变化事件"
 
 #: tmainform.chkevcansort.caption
-msgid "The region column may not be sorted"
+msgid "Region: no sort"
 msgstr "大区列不许排序"
 
 #: tmainform.chkevcompare.caption
-msgid "Region sorted in business order"
+msgid "Region business order"
 msgstr "大区按业务序排"
 
 #: tmainform.chkevfilterrow.caption
-msgid "Keep negative amounts only"
+msgid "Keep negatives only"
 msgstr "只留负数金额"
 
 #: tmainform.chkevfiltervals.caption
-msgid "Filter candidate values takeover"
+msgid "Filter values takeover"
 msgstr "筛选候选值接管"
 
 #: tmainform.chkevpicklist.caption
@@ -472,23 +472,23 @@ msgid "Rendering & headers"
 msgstr "呈现与表头"
 
 #: tmainform.lblviewhint.caption
-msgid "The scrollbar \"hidden\" only means it is not shown — the wheel and arrow keys still reach the bottom · \"Selection dims on blur\" only shows when you click onto another control · click \"Switch to a long column title\" first, then tick header wrap and auto height · each extra grouping level adds a band of height"
+msgid "The scrollbar \"hidden\" only means it is not shown — the wheel and arrow keys still reach the bottom · \"Selection dims on blur\" only shows when you click onto another control · click \"Long column title\" first, then tick header wrap and auto height · each extra grouping level adds a band of height"
 msgstr "滚动条「隐藏」只是不显示 —— 滚轮和方向键照样走得到底 · 「失焦时选区变淡」要点到别的控件上才看得出来 · 先点「换成长列标题」,再勾表头换行与自适应 · 分组带每多一级就长高一条"
 
 #: tmainform.lblvscroll.caption
-msgid "Vertical scrollbar:"
+msgid "V-scroll:"
 msgstr "纵滚条:"
 
 #: tmainform.lblhscroll.caption
-msgid "Horizontal scrollbar:"
+msgid "H-scroll:"
 msgstr "横滚条:"
 
 #: tmainform.chkbackimage.caption
-msgid "Background image"
+msgid "Backdrop"
 msgstr "背景图"
 
 #: tmainform.chkfocuscell.caption
-msgid "Focused-cell outline"
+msgid "Focus outline"
 msgstr "焦点格外框"
 
 #: tmainform.chkdiminactive.caption
@@ -508,19 +508,19 @@ msgid "Header grouping"
 msgstr "表头分组"
 
 #: tmainform.chkhdrgroups2.caption
-msgid "Add one more grouping level"
+msgid "Add a group level"
 msgstr "再加一级分组"
 
 #: tmainform.chkfixbottom.caption
-msgid "Freeze 1 row at the bottom"
+msgid "Freeze bottom row"
 msgstr "底部固定 1 行"
 
 #: tmainform.chkfixright.caption
-msgid "Freeze 1 column on the right"
+msgid "Freeze right col"
 msgstr "右侧冻结 1 列"
 
 #: tmainform.btnlongcaption.caption
-msgid "Switch to a long column title"
+msgid "Long column title"
 msgstr "换成长列标题"
 
 #: tmainform.pgio.caption
@@ -540,7 +540,7 @@ msgid "Export HTML"
 msgstr "导出 HTML"
 
 #: tmainform.btniocsvsel.caption
-msgid "Export selection as CSV only"
+msgid "Selection to CSV"
 msgstr "只导出选区 CSV"
 
 #: tmainform.btniostream.caption
@@ -552,11 +552,11 @@ msgid "Selection text"
 msgstr "选区文本"
 
 #: tmainform.btniopastetext.caption
-msgid "Paste a block of text in"
+msgid "Paste text block"
 msgstr "粘一块文本进来"
 
 #: tmainform.btnioclearrows.caption
-msgid "Clear selected rows"
+msgid "Clear chosen rows"
 msgstr "清空选中行"
 
 #: tmainform.btnioclearcols.caption
@@ -568,11 +568,11 @@ msgid "Append import"
 msgstr "追加导入"
 
 #: tmainform.lbliomax.caption
-msgid "Read at most:"
+msgid "Read up to:"
 msgstr "最多读:"
 
 #: tmainform.lblioskip.caption
-msgid "Skip leading rows:"
+msgid "Skip rows:"
 msgstr "跳过前几行:"
 
 #: tmainform.btnioimport.caption
@@ -584,7 +584,7 @@ msgid "Footer text hook"
 msgstr "页脚文案钩子"
 
 #: tmainform.chkiocolcalc.caption
-msgid "Amount column switched to median"
+msgid "Amount column: median"
 msgstr "金额列改算中位数"
 
 #: tmainform.btniorecalc.caption
@@ -596,11 +596,11 @@ msgid "Cell abilities"
 msgstr "单元格能力"
 
 #: tmainform.lblcellshint.caption
-msgid "Everything on this page **hangs on the cells or the columns**, no paint events · a comment leaves a small triangle in the cell's top-right, shown only on hover · \"Add currency symbol to amount\" changes display only: double-clicking into edit, and exporting, still show the raw value · the tri-state checkbox cycles unchecked→checked→grayed, consistent with TTyCheckBox"
+msgid "Everything on this page **hangs on the cells or the columns**, no paint events · a comment leaves a small triangle in the cell's top-right, shown only on hover · \"Currency on amount\" changes display only: double-clicking into edit, and exporting, still show the raw value · the tri-state checkbox cycles unchecked→checked→grayed, consistent with TTyCheckBox"
 msgstr "这一页的东西**都挂在格子或列上**,不接绘制事件 · 批注在格子右上角留一个小三角,鼠标停上去才显示 · 「金额加货币符号」只改显示:双击进编辑看到的、导出的都还是原值 · 三态勾选框的循环是 空→勾→灰,与 TTyCheckBox 一致"
 
 #: tmainform.chktristate.caption
-msgid "Checkbox tri-state"
+msgid "Tri-state"
 msgstr "勾选框三态"
 
 #: tmainform.btncomment.caption
@@ -620,19 +620,19 @@ msgid "Unbold"
 msgstr "取消加粗"
 
 #: tmainform.chkformat.caption
-msgid "Add currency symbol to amount"
+msgid "Currency on amount"
 msgstr "金额加货币符号"
 
 #: tmainform.chklinkcol.caption
-msgid "Order No. becomes a link"
+msgid "Order No. as a link"
 msgstr "订单号变链接"
 
 #: tmainform.lblcelldisp.caption
-msgid "This cell shows:"
+msgid "Cell shows:"
 msgstr "本格显示:"
 
 #: tmainform.chkcolprogress.caption
-msgid "Column-level declaration: progress column"
+msgid "Column-level progress"
 msgstr "列级声明:进度列"
 
 #: tmainform.lblcase.caption
@@ -640,7 +640,7 @@ msgid "Order No.:"
 msgstr "订单号:"
 
 #: tmainform.chkdigitsonly.caption
-msgid "The quantity column takes numbers only"
+msgid "Qty digits only"
 msgstr "数量列只收数字"
 
 #: tmainform.lblmaxlen.caption

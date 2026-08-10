@@ -20,7 +20,7 @@ msgid "Dark"
 msgstr "暗色"
 
 #: tmainform.lblintro.caption
-msgid "Hover the button for the themed tooltip; click \"Show popover\" for a pointer popover."
+msgid "Hover for a themed tooltip; \"Show popover\" for a pointer one."
 msgstr "悬停按钮看主题化 tooltip;点“显示气泡”看带指针气泡。"
 
 #: tmainform.btnsave.caption

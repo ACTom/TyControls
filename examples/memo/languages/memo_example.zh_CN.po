@@ -20,15 +20,15 @@ msgid "Dark"
 msgstr "暗色"
 
 #: tmainform.lblprompt.caption
-msgid "Multiline text editor (Enter for a new line, arrow keys to navigate, wheel to scroll):"
+msgid "Multiline editor (Enter = new line, arrows navigate, wheel scrolls):"
 msgstr "多行文本编辑器（回车换行、方向键导航、滚轮滚动）："
 
 #: tmainform.chkreadonly.caption
-msgid "Read-only (ReadOnly)"
+msgid "ReadOnly"
 msgstr "只读 (ReadOnly)"
 
 #: tmainform.chkwordwrap.caption
-msgid "Word wrap (WordWrap)"
+msgid "Word wrap"
 msgstr "自动换行 (WordWrap)"
 
 #: tmainform.btnselectall.caption
@@ -60,7 +60,7 @@ msgid "Same edits from the keyboard: Ctrl+Z undo, Ctrl+Y or Ctrl+Shift+Z redo."
 msgstr "键盘上同样可用：Ctrl+Z 撤销，Ctrl+Y 或 Ctrl+Shift+Z 重做。"
 
 #: tmainform.lbloptions.caption
-msgid "Tick a property, then type in the memo (HideSelection dims the band on blur):"
+msgid "Tick a property, then type in the memo (HideSelection dims on blur):"
 msgstr "勾一个属性，再到编辑框里打字（HideSelection 让失焦时选区变淡）："
 
 #: tmainform.chkhidesel.caption
@@ -88,7 +88,7 @@ msgid "ScrollBars"
 msgstr "ScrollBars"
 
 #: tmainform.lblscrollhint.caption
-msgid "horizontal bar needs WordWrap off"
+msgid "horizontal bar: WordWrap off"
 msgstr "横向滚动条需关 WordWrap"
 
 #: tmainform.bar.caption

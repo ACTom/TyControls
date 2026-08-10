@@ -28,7 +28,7 @@ object MainForm: TMainForm
         Top = 4
         Width = 70
         Anchors = [akTop, akRight]
-        Caption = 'Accent colour'
+        Caption = 'Accent'
         OnClick = BtnAccentClick
       end
       object DarkSwitch: TTyToggleSwitch
@@ -71,7 +71,8 @@ object MainForm: TMainForm
           Height = 34
           Top = 4
           Width = 1150
-          Caption = 'Hover a cell for the hover highlight · drag the bottom horizontal scrollbar, the left two columns stay pinned (frozen columns) · arrow keys / Home/End / PageUp/PageDown to navigate · tick "Freeze 1 row" then click a header to sort: the frozen band shows the top-ranked row, content still drawn with no blank'
+          WordWrap = True
+          Caption = 'Hover a cell for the hover highlight · drag the bottom horizontal scrollbar, the left two columns stay pinned (frozen columns) · arrow keys / Home/End / PageUp/PageDown to navigate · tick "Pin 1 row" then click a header to sort: the frozen band shows the top-ranked row, content still drawn with no blank'
         end
         object TbBasic: TTyPanel
           Left = 0
@@ -108,15 +109,15 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 96
-            Caption = 'Restore 200 rows'
+            Caption = 'Reset 200'
             OnClick = BtnRowsResetClick
           end
           object BtnGoto: TTyButton
             Left = 384
             Height = 26
             Top = 6
-            Width = 110
-            Caption = 'Jump to (2, 5000)'
+            Width = 116
+            Caption = 'Go to (2, 5000)'
             OnClick = BtnGotoClick
           end
           object ChkFrozenCols: TTyCheckBox
@@ -124,7 +125,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 96
-            Caption = 'Freeze 2 columns'
+            Caption = 'Pin 2 cols'
             Checked = True
             OnChange = ChkBasicChange
           end
@@ -133,7 +134,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 96
-            Caption = 'Freeze 1 row'
+            Caption = 'Pin 1 row'
             OnChange = ChkBasicChange
           end
           object ChkIndicator: TTyCheckBox
@@ -141,7 +142,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 84
-            Caption = 'Row-number gutter'
+            Caption = 'Row No.'
             Checked = True
             OnChange = ChkBasicChange
           end
@@ -150,7 +151,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 84
-            Caption = 'Summary band'
+            Caption = 'Summary'
             Checked = True
             OnChange = ChkBasicChange
           end
@@ -193,7 +194,8 @@ object MainForm: TMainForm
           Height = 34
           Top = 4
           Width = 1150
-          Caption = '"Conditional colouring" marks negative amounts red and overdue rows yellow (OnGetCellStyle, judged per data row, follows the record after sorting) · "Per-cell border" thickens the subtotal row''s top line · thickening grid lines does **not** change column width, it only insets the content'
+          WordWrap = True
+          Caption = '"Colour rule" marks negative amounts red and overdue rows yellow (OnGetCellStyle, judged per data row, follows the record after sorting) · "Cell border" thickens the subtotal row''s top line · thickening grid lines does **not** change column width, it only insets the content'
         end
         object TbLook1: TTyPanel
           Left = 0
@@ -206,7 +208,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 84
-            Caption = 'Zebra stripes'
+            Caption = 'Zebra'
             Checked = True
             OnChange = ChkLookChange
           end
@@ -215,7 +217,7 @@ object MainForm: TMainForm
             Height = 20
             Top = 10
             Width = 48
-            Caption = 'Grid lines:'
+            Caption = 'Lines:'
           end
           object CbLines: TTyComboBox
             Left = 146
@@ -236,7 +238,7 @@ object MainForm: TMainForm
             Height = 20
             Top = 10
             Width = 48
-            Caption = 'Line width:'
+            Caption = 'Width:'
           end
           object SpLineWidth: TTySpinEdit
             Left = 298
@@ -253,7 +255,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 108
-            Caption = 'Conditional colouring'
+            Caption = 'Colour rule'
             OnChange = ChkLookChange
           end
           object ChkCellBorder: TTyCheckBox
@@ -261,7 +263,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 108
-            Caption = 'Per-cell border'
+            Caption = 'Cell border'
             OnChange = ChkLookChange
           end
           object ChkHdrHilite: TTyCheckBox
@@ -269,7 +271,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 132
-            Caption = 'Sorted headers highlighted'
+            Caption = 'Sorted headers'
             OnChange = ChkLookChange
           end
           object ChkHdrIcons: TTyCheckBox
@@ -300,7 +302,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 108
-            Caption = 'Clear this cell''s colour'
+            Caption = 'Uncolour cell'
             OnClick = BtnCellUncolorClick
           end
           object BtnRowColor: TTyButton
@@ -331,8 +333,8 @@ object MainForm: TMainForm
             Left = 590
             Height = 26
             Top = 6
-            Width = 108
-            Caption = 'Restore row height'
+            Width = 120
+            Caption = 'Reset row height'
             OnClick = BtnResetRowsClick
           end
           object LblLookTip: TTyLabel
@@ -340,7 +342,7 @@ object MainForm: TMainForm
             Height = 20
             Top = 10
             Width = 460
-            Caption = 'The "Notes" column content is long — tick word wrap first, then click auto row height'
+            Caption = 'The "Notes" column is long — tick word wrap first, then auto row height'
           end
         end
         object GridLook: TTyStringGrid
@@ -365,6 +367,7 @@ object MainForm: TMainForm
           Height = 34
           Top = 4
           Width = 1150
+          WordWrap = True
           Caption = 'Click a header to sort (asc → desc → clear) · **Shift+click** a header to add a secondary sort column, the header shows 1/2/3 order badges · "Qty" and "Amount" sort numerically, "Date" sorts by date (column-level SortKind) · the funnel lights up on a column being filtered'
         end
         object TbSort1: TTyPanel
@@ -418,15 +421,15 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 132
-            Caption = 'Sort is case-sensitive'
+            Caption = 'Case-sensitive'
             OnChange = ChkSortChange
           end
           object ChkPhysicalSort: TTyCheckBox
             Left = 980
             Height = 22
             Top = 8
-            Width = 130
-            Caption = 'Sorting really moves the data'
+            Width = 148
+            Caption = 'Sort moves the data'
             OnChange = ChkPhysicalSortChange
           end
         end
@@ -515,15 +518,15 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 72
-            Caption = 'Collapse all'
+            Caption = 'Collapse'
             OnClick = BtnCollapseAllClick
           end
           object BtnGroup2: TTyButton
             Left = 826
             Height = 26
             Top = 6
-            Width = 138
-            Caption = 'Group by region + product'
+            Width = 144
+            Caption = 'Group region+product'
             OnClick = BtnGroup2Click
           end
           object ChkFilterRow: TTyCheckBox
@@ -531,14 +534,14 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 84
-            Caption = 'Filter row'
+            Caption = 'Filter'
             OnChange = ChkFilterRowChange
           end
           object ChkTree: TTyCheckBox
             Left = 1058
             Height = 22
             Top = 8
-            Width = 76
+            Width = 100
             Caption = 'Tree column'
             OnChange = ChkTreeChange
           end
@@ -565,6 +568,7 @@ object MainForm: TMainForm
           Height = 34
           Top = 4
           Width = 1150
+          WordWrap = True
           Caption = '**Just start typing** to edit (that keystroke is the first character) · Enter moves down · Tab advances by cell and wraps · F2 works too · "Qty" spinner · "Amount" slider · "Order No." mask · "Region" dropdown · "Date" calendar · "Rating" star click · "Notes" multiline — all declared **on the columns**, no events wired'
         end
         object TbEdit: TTyPanel
@@ -578,7 +582,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 132
-            Caption = 'Navigation skips read-only cells'
+            Caption = 'Skip read-only'
             OnChange = ChkEditChange
           end
           object BtnCellRO: TTyButton
@@ -586,7 +590,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 120
-            Caption = 'Set this cell read-only'
+            Caption = 'Cell read-only'
             OnClick = BtnCellROClick
           end
           object BtnCellRW: TTyButton
@@ -594,7 +598,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 120
-            Caption = 'This cell is editable'
+            Caption = 'Cell editable'
             OnClick = BtnCellRWClick
           end
           object ChkEditLink: TTyCheckBox
@@ -602,7 +606,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 168
-            Caption = 'The notes column uses a custom editor'
+            Caption = 'Custom editor for notes'
             OnChange = ChkEditChange
           end
           object LblEditTip: TTyLabel
@@ -610,7 +614,7 @@ object MainForm: TMainForm
             Height = 20
             Top = 10
             Width = 550
-            Caption = '"Completion" progress bar · "Rating" stars · "Settled" checkbox · "Mark colour" click to pick · "Actions" button'
+            Caption = '"Completion" bar · "Rating" stars · "Settled" tick · "Mark colour" pick · "Actions"'
           end
         end
         object TbEdit2: TTyPanel
@@ -654,6 +658,7 @@ object MainForm: TMainForm
           Height = 34
           Top = 4
           Width = 1150
+          WordWrap = True
           Caption = 'Drag to marquee-select · **Ctrl+click** to add non-adjacent blocks (discrete multi-select) · Ctrl+A select all · Ctrl+C/V interops with Excel, missing rows/columns are filled on paste · undo covers more than text: after move up/down, Ctrl+Z brings back background colour, row height and merge span too'
         end
         object TbData1: TTyPanel
@@ -695,7 +700,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 96
-            Caption = 'Clear selection'
+            Caption = 'Deselect all'
             OnClick = BtnSelNoneClick
           end
           object BtnMerge: TTyButton
@@ -742,8 +747,8 @@ object MainForm: TMainForm
             Left = 900
             Height = 22
             Top = 8
-            Width = 132
-            Caption = 'Auto-grow table on paste'
+            Width = 142
+            Caption = 'Auto-grow on paste'
             Checked = True
             OnChange = ChkDataChange
           end
@@ -838,7 +843,7 @@ object MainForm: TMainForm
             Left = 1082
             Height = 20
             Top = 10
-            Width = 86
+            Width = 90
             Caption = 'Ctrl+Z / Ctrl+Y'
           end
         end
@@ -861,7 +866,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 108
-            Caption = 'Delete this column'
+            Caption = 'Delete column'
             OnClick = BtnDelColClick
           end
           object BtnMoveCol: TTyButton
@@ -869,7 +874,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 132
-            Caption = 'Swap this column with the one on its right'
+            Caption = 'Swap with right'
             OnClick = BtnMoveColClick
           end
           object LblColTip: TTyLabel
@@ -877,7 +882,7 @@ object MainForm: TMainForm
             Height = 20
             Top = 10
             Width = 640
-            Caption = 'Adding and moving columns can now be undone too — width, title, editor kind, read-only and that column''s filter all come back together'
+            Caption = 'Adding/moving columns is undoable — width, title, editor kind, read-only and filter all return'
           end
           object ChkFillSeries: TTyCheckBox
             Left = 1034
@@ -907,7 +912,8 @@ object MainForm: TMainForm
           Height = 34
           Top = 4
           Width = 1150
-          Caption = 'Each switch maps to a hook — tick it, then act, and the status bar tells you what it intervened in · "Forbid clicking row 3" makes the whole row unclickable (the cursor does not even move), which is OnCanClickCell showing restraint'
+          WordWrap = True
+          Caption = 'Each switch maps to a hook — tick it, then act, and the status bar tells you what it intervened in · "No clicking row 3" makes the whole row unclickable (the cursor does not even move), which is OnCanClickCell showing restraint'
         end
         object TbEv1: TTyPanel
           Left = 0
@@ -920,7 +926,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 120
-            Caption = 'Hover for a hint'
+            Caption = 'Hover hint'
             OnChange = ChkEvChange
           end
           object ChkEvLockRow: TTyCheckBox
@@ -928,7 +934,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 132
-            Caption = 'Forbid clicking row 3'
+            Caption = 'No clicking row 3'
             OnChange = ChkEvChange
           end
           object ChkEvRightClick: TTyCheckBox
@@ -936,7 +942,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 132
-            Caption = 'Right-click reports position'
+            Caption = 'Right-click logs'
             Checked = True
             OnChange = ChkEvChange
           end
@@ -945,7 +951,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 144
-            Caption = 'Header click / right-click'
+            Caption = 'Header clicks (L/R)'
             Checked = True
             OnChange = ChkEvChange
           end
@@ -954,7 +960,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 156
-            Caption = 'Column width / row height events'
+            Caption = 'Col/row size events'
             Checked = True
             OnChange = ChkEvChange
           end
@@ -986,7 +992,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 156
-            Caption = 'Checkbox events / veto'
+            Caption = 'Checkbox event/veto'
             Checked = True
             OnChange = ChkEvChange
           end
@@ -1041,7 +1047,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 118
-            Caption = 'Forbid dragging to the first row'
+            Caption = 'No drag to 1'
             OnChange = ChkEvChange
           end
           object ChkEvEditorProp: TTyCheckBox
@@ -1049,7 +1055,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 108
-            Caption = 'Editor turns red'
+            Caption = 'Editor red'
             OnChange = ChkEvChange
           end
         end
@@ -1072,7 +1078,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 132
-            Caption = 'Drag-scrollbar hint'
+            Caption = 'Scrollbar hint'
             OnChange = ChkEv3Change
           end
           object ChkEvCanEdit: TTyCheckBox
@@ -1080,7 +1086,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 156
-            Caption = 'Row 2 not editable (still shown)'
+            Caption = 'Row 2 read-only'
             OnChange = ChkEv3Change
           end
           object ChkEvEditChange: TTyCheckBox
@@ -1088,7 +1094,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 144
-            Caption = 'Validate as you type'
+            Caption = 'Validate typing'
             OnChange = ChkEv3Change
           end
           object ChkEvCellEdited: TTyCheckBox
@@ -1096,7 +1102,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 156
-            Caption = 'Veto empty-value commit'
+            Caption = 'Veto empty commit'
             OnChange = ChkEv3Change
           end
           object ChkEvRowVeto: TTyCheckBox
@@ -1104,7 +1110,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 156
-            Caption = 'Forbid adding/removing rows'
+            Caption = 'No add/remove rows'
             OnChange = ChkEv3Change
           end
           object ChkEvSelectCell: TTyCheckBox
@@ -1112,7 +1118,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 144
-            Caption = 'The cursor does not enter column 0'
+            Caption = 'Cursor skips col 0'
             OnChange = ChkEv3Change
           end
         end
@@ -1127,7 +1133,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 156
-            Caption = 'Single/double click report'
+            Caption = 'Single/double click'
             OnChange = ChkEv3Change
           end
           object ChkEvRating: TTyCheckBox
@@ -1135,7 +1141,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 132
-            Caption = 'Rating change event'
+            Caption = 'Rating event'
             OnChange = ChkEv3Change
           end
           object ChkEvCanSort: TTyCheckBox
@@ -1143,7 +1149,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 156
-            Caption = 'The region column may not be sorted'
+            Caption = 'Region: no sort'
             OnChange = ChkEv3Change
           end
           object ChkEvCompare: TTyCheckBox
@@ -1151,7 +1157,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 168
-            Caption = 'Region sorted in business order'
+            Caption = 'Region business order'
             OnChange = ChkEv3Change
           end
           object ChkEvFilterRow: TTyCheckBox
@@ -1159,7 +1165,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 144
-            Caption = 'Keep negative amounts only'
+            Caption = 'Keep negatives only'
             OnChange = ChkEv3Change
           end
           object ChkEvFilterVals: TTyCheckBox
@@ -1167,14 +1173,14 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 168
-            Caption = 'Filter candidate values takeover'
+            Caption = 'Filter values takeover'
             OnChange = ChkEv3Change
           end
           object ChkEvPickList: TTyCheckBox
             Left = 968
             Height = 22
             Top = 8
-            Width = 132
+            Width = 142
             Caption = 'Dynamic candidates'
             OnChange = ChkEv3Change
           end
@@ -1202,7 +1208,8 @@ object MainForm: TMainForm
           Height = 34
           Top = 4
           Width = 1150
-          Caption = 'The scrollbar "hidden" only means it is not shown — the wheel and arrow keys still reach the bottom · "Selection dims on blur" only shows when you click onto another control · click "Switch to a long column title" first, then tick header wrap and auto height · each extra grouping level adds a band of height'
+          WordWrap = True
+          Caption = 'The scrollbar "hidden" only means it is not shown — the wheel and arrow keys still reach the bottom · "Selection dims on blur" only shows when you click onto another control · click "Long column title" first, then tick header wrap and auto height · each extra grouping level adds a band of height'
         end
         object TbView1: TTyPanel
           Left = 0
@@ -1215,7 +1222,7 @@ object MainForm: TMainForm
             Height = 20
             Top = 9
             Width = 60
-            Caption = 'Vertical scrollbar:'
+            Caption = 'V-scroll:'
           end
           object CbVScroll: TTyComboBox
             Left = 72
@@ -1235,7 +1242,7 @@ object MainForm: TMainForm
             Height = 20
             Top = 9
             Width = 60
-            Caption = 'Horizontal scrollbar:'
+            Caption = 'H-scroll:'
           end
           object CbHScroll: TTyComboBox
             Left = 246
@@ -1255,7 +1262,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 120
-            Caption = 'Background image'
+            Caption = 'Backdrop'
             OnChange = ChkViewChange
           end
           object CbBackMode: TTyComboBox
@@ -1288,7 +1295,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 132
-            Caption = 'Focused-cell outline'
+            Caption = 'Focus outline'
             Checked = True
             OnChange = ChkViewChange
           end
@@ -1296,7 +1303,7 @@ object MainForm: TMainForm
             Left = 868
             Height = 22
             Top = 8
-            Width = 156
+            Width = 166
             Caption = 'Selection dims on blur'
             OnChange = ChkViewChange
           end
@@ -1336,7 +1343,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 132
-            Caption = 'Add one more grouping level'
+            Caption = 'Add a group level'
             OnChange = ChkViewChange
           end
           object ChkFixBottom: TTyCheckBox
@@ -1344,7 +1351,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 132
-            Caption = 'Freeze 1 row at the bottom'
+            Caption = 'Freeze bottom row'
             OnChange = ChkViewChange
           end
           object ChkFixRight: TTyCheckBox
@@ -1352,7 +1359,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 132
-            Caption = 'Freeze 1 column on the right'
+            Caption = 'Freeze right col'
             OnChange = ChkViewChange
           end
           object BtnLongCaption: TTyButton
@@ -1360,7 +1367,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 132
-            Caption = 'Switch to a long column title'
+            Caption = 'Long column title'
             OnClick = BtnLongCaptionClick
           end
         end
@@ -1387,6 +1394,7 @@ object MainForm: TMainForm
           Height = 34
           Top = 4
           Width = 1150
+          WordWrap = True
           Caption = 'Export **only exports visible rows**: after sorting, filtering and collapsing, what you export is what is on screen · "Export selection only" uses the same method''s row/column range arguments · "Append import" does not touch column titles, it only appends data · host-managed footer values are not cached — the control is not notified when the external data changes'
         end
         object TbIo1: TTyPanel
@@ -1416,7 +1424,7 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 132
-            Caption = 'Export selection as CSV only'
+            Caption = 'Selection to CSV'
             OnClick = BtnIoCsvSelClick
           end
           object BtnIoStream: TTyButton
@@ -1440,15 +1448,15 @@ object MainForm: TMainForm
             Height = 26
             Top = 6
             Width = 132
-            Caption = 'Paste a block of text in'
+            Caption = 'Paste text block'
             OnClick = BtnIoPasteTextClick
           end
           object BtnIoClearRows: TTyButton
             Left = 776
             Height = 26
             Top = 6
-            Width = 120
-            Caption = 'Clear selected rows'
+            Width = 126
+            Caption = 'Clear chosen rows'
             OnClick = BtnIoClearRowsClick
           end
           object BtnIoClearCols: TTyButton
@@ -1479,7 +1487,7 @@ object MainForm: TMainForm
             Height = 20
             Top = 9
             Width = 72
-            Caption = 'Read at most:'
+            Caption = 'Read up to:'
           end
           object SpIoMax: TTySpinEdit
             Left = 196
@@ -1495,7 +1503,7 @@ object MainForm: TMainForm
             Height = 20
             Top = 9
             Width = 84
-            Caption = 'Skip leading rows:'
+            Caption = 'Skip rows:'
           end
           object SpIoSkip: TTySpinEdit
             Left = 368
@@ -1527,7 +1535,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 168
-            Caption = 'Amount column switched to median'
+            Caption = 'Amount column: median'
             OnChange = ChkIoChange
           end
           object BtnIoRecalc: TTyButton
@@ -1564,7 +1572,8 @@ object MainForm: TMainForm
           Height = 34
           Top = 4
           Width = 1150
-          Caption = 'Everything on this page **hangs on the cells or the columns**, no paint events · a comment leaves a small triangle in the cell''s top-right, shown only on hover · "Add currency symbol to amount" changes display only: double-clicking into edit, and exporting, still show the raw value · the tri-state checkbox cycles unchecked→checked→grayed, consistent with TTyCheckBox'
+          WordWrap = True
+          Caption = 'Everything on this page **hangs on the cells or the columns**, no paint events · a comment leaves a small triangle in the cell''s top-right, shown only on hover · "Currency on amount" changes display only: double-clicking into edit, and exporting, still show the raw value · the tri-state checkbox cycles unchecked→checked→grayed, consistent with TTyCheckBox'
         end
         object TbCells1: TTyPanel
           Left = 0
@@ -1577,7 +1586,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 132
-            Caption = 'Checkbox tri-state'
+            Caption = 'Tri-state'
             OnChange = ChkCellsChange
           end
           object BtnComment: TTyButton
@@ -1617,15 +1626,15 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 144
-            Caption = 'Add currency symbol to amount'
+            Caption = 'Currency on amount'
             OnChange = ChkCellsChange
           end
           object ChkLinkCol: TTyCheckBox
             Left = 736
             Height = 22
             Top = 8
-            Width = 132
-            Caption = 'Order No. becomes a link'
+            Width = 148
+            Caption = 'Order No. as a link'
             OnChange = ChkCellsChange
           end
         end
@@ -1640,7 +1649,7 @@ object MainForm: TMainForm
             Height = 20
             Top = 9
             Width = 76
-            Caption = 'This cell shows:'
+            Caption = 'Cell shows:'
           end
           object CbCellDisp: TTyComboBox
             Left = 88
@@ -1663,7 +1672,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 168
-            Caption = 'Column-level declaration: progress column'
+            Caption = 'Column-level progress'
             OnChange = ChkCellsChange
           end
           object LblCase: TTyLabel
@@ -1691,7 +1700,7 @@ object MainForm: TMainForm
             Height = 22
             Top = 8
             Width = 156
-            Caption = 'The quantity column takes numbers only'
+            Caption = 'Qty digits only'
             OnChange = ChkCellsChange
           end
           object LblMaxLen: TTyLabel

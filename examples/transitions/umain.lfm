@@ -47,7 +47,7 @@ object MainForm: TMainForm
       Height = 30
       Top = 46
       Width = 90
-      Caption = 'Fade in (window)'
+      Caption = 'Fade window'
       OnClick = BtnFadeClick
     end
     object BtnUp: TTyButton
@@ -55,7 +55,7 @@ object MainForm: TMainForm
       Height = 30
       Top = 46
       Width = 90
-      Caption = 'Slide in from top'
+      Caption = 'Slide top'
       OnClick = BtnUpClick
     end
     object BtnDown: TTyButton
@@ -63,7 +63,7 @@ object MainForm: TMainForm
       Height = 30
       Top = 46
       Width = 90
-      Caption = 'Slide in from bottom'
+      Caption = 'Slide down'
       OnClick = BtnDownClick
     end
     object BtnLeft: TTyButton
@@ -71,7 +71,7 @@ object MainForm: TMainForm
       Height = 30
       Top = 46
       Width = 90
-      Caption = 'Slide in from left'
+      Caption = 'Slide left'
       OnClick = BtnLeftClick
     end
     object BtnRight: TTyButton
@@ -79,7 +79,7 @@ object MainForm: TMainForm
       Height = 30
       Top = 46
       Width = 90
-      Caption = 'Slide in from right'
+      Caption = 'Slide right'
       OnClick = BtnRightClick
     end
     object BtnNone: TTyButton
@@ -87,7 +87,7 @@ object MainForm: TMainForm
       Height = 30
       Top = 46
       Width = 90
-      Caption = 'None (instant)'
+      Caption = 'None (snap)'
       OnClick = BtnNoneClick
     end
     object BtnHide: TTyButton

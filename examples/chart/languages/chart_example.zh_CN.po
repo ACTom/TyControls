@@ -36,7 +36,7 @@ msgid "Legend"
 msgstr "图例"
 
 #: tmainform.chkvalues.caption
-msgid "Value annotation"
+msgid "Value labels"
 msgstr "数值标注"
 
 #: tmainform.btndonut.caption

@@ -62,7 +62,7 @@ object MainForm: TMainForm
       Left = 16
       Height = 24
       Top = 300
-      Width = 130
+      Width = 132
       Caption = 'Multi-select mode'
       OnChange = MultiChange
     end

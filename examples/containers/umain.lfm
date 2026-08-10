@@ -220,7 +220,7 @@ object MainForm: TMainForm
         Height = 26
         Top = 0
         Width = 72
-        Caption = 'Format painter'
+        Caption = 'Format'
         StyleClass = 'ghost'
       end
     end
@@ -465,7 +465,7 @@ object MainForm: TMainForm
       Height = 18
       Top = 432
       Width = 230
-      Caption = 'Header: click a title to sort · drag the border to resize'
+      Caption = 'Click to sort · drag to resize'
     end
     object DivBands: TTyDivider
       Left = 20
@@ -743,7 +743,7 @@ object MainForm: TMainForm
       Height = 18
       Top = 812
       Width = 400
-      Caption = 'Vertical edge lines — tbsLeftLine (sunken) then tbsRightLine (raised):'
+      Caption = 'Vertical edges — tbsLeftLine (sunken), tbsRightLine (raised):'
     end
     object BevelLeftLine: TTyBevel
       Left = 20
@@ -938,7 +938,7 @@ object MainForm: TMainForm
       Height = 18
       Top = 716
       Width = 280
-      Caption = 'Starts collapsed · slow 500 ms open/close ease:'
+      Caption = 'Starts collapsed · 500 ms open/close ease:'
     end
     object ExDisplay: TTyExPanel
       Left = 900

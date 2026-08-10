@@ -119,7 +119,7 @@ object MainForm: TMainForm
       Left = 16
       Height = 22
       Top = 112
-      Width = 80
+      Width = 85
       Caption = 'Grayscale'
       OnChange = ChkGrayChange
     end

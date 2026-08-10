@@ -252,7 +252,7 @@ object MainForm: TMainForm
       Height = 18
       Top = 306
       Width = 140
-      Caption = '6px thick border (no edge clipping)'
+      Caption = '6px border, no clip'
     end
     object LblLineThick: TTyLabel
       Left = 784
@@ -347,7 +347,7 @@ object MainForm: TMainForm
       Height = 18
       Top = 620
       Width = 320
-      Caption = 'Points<3 and an out-of-range InnerRatio are clamped by the setter'
+      Caption = 'Points<3 or bad InnerRatio clamped by the setter'
     end
     object BtnClamp: TTyButton
       Left = 248

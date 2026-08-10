@@ -20,7 +20,7 @@ msgid "Dark"
 msgstr "暗色"
 
 #: tmainform.lbltip.caption
-msgid "Drag the slider, click the track/arrows, spin the wheel, arrow keys, PageUp/PageDown, Home/End"
+msgid "Drag slider, click track/arrows, spin wheel, arrow keys, PageUp/PageDown, Home/End"
 msgstr "拖动滑块、点击轨道/箭头、滚轮、方向键、PageUp/PageDown、Home/End"
 
 #: tmainform.lblcodetitle.caption

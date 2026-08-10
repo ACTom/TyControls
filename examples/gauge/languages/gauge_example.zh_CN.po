@@ -44,7 +44,7 @@ msgid "Spinner (TTyUpDown) = 5"
 msgstr "微调(TTyUpDown) = 5"
 
 #: tmainform.lblstatus.caption
-msgid "Every 1.2s the value changes at random (drag the knob / gear / wheel, click the stars) — watch the easing animation."
+msgid "Random value every 1.2s; drag knob / gear / wheel, click stars — eased."
 msgstr "每 1.2s 随机改变数值(旋钮 / 齿轮可拖动 / 滚轮,星星可点),观察缓动动画。"
 
 #: tmainform.lblknobs.caption

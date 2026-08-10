@@ -100,7 +100,7 @@ msgid "Selected record"
 msgstr "已选记录"
 
 #: tmainform.btntoggleempty.caption
-msgid "Toggle empty state"
+msgid "Toggle empty"
 msgstr "切换空态"
 
 #: tmainform.btnemptynew.caption
@@ -236,7 +236,7 @@ msgid "Message prompt"
 msgstr "消息提示"
 
 #: tmainform.btnconfirm.caption
-msgid "Confirmation dialog"
+msgid "Confirm dialog"
 msgstr "确认对话"
 
 #: tmainform.btninput.caption
@@ -276,7 +276,7 @@ msgid "Show notification"
 msgstr "弹出通知"
 
 #: tmainform.btntoasterr.caption
-msgid "Persistent error notification"
+msgid "Sticky error toast"
 msgstr "常驻错误通知"
 
 #: tmainform.btnpopover.caption

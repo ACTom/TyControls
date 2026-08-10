@@ -36,7 +36,7 @@ msgid "Experimental feature (disabled)"
 msgstr "试验功能（禁用）"
 
 #: tmainform.lblsecevents.caption
-msgid "OnChange vs OnClick — click the switch, then press the button:"
+msgid "OnChange vs OnClick — click switch, then press button:"
 msgstr "OnChange 与 OnClick —— 点开关，再按按钮："
 
 #: tmainform.btntoggleall.caption
@@ -48,7 +48,7 @@ msgid "Last gesture: (none yet)"
 msgstr "最近操作：（暂无）"
 
 #: tmainform.lblsecanim.caption
-msgid "AnimationsEnabled — public, so it is set in code, not here:"
+msgid "AnimationsEnabled — public, so set in code, not here:"
 msgstr "AnimationsEnabled 是 public，只能在代码里设，不在这里："
 
 #: tmainform.lblhint.caption

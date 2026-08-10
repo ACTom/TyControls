@@ -32,7 +32,7 @@ msgid "Literal colour"
 msgstr "字面色"
 
 #: tmainform.lblthick.caption
-msgid "6px thick border (no edge clipping)"
+msgid "6px border, no clip"
 msgstr "6px 粗边(不裁边)"
 
 #: tmainform.lbllinethick.caption
@@ -52,7 +52,7 @@ msgid "Inner radius ratio InnerRatio = 0.42"
 msgstr "内半径比 InnerRatio = 0.42"
 
 #: tmainform.lblstarhint.caption
-msgid "Points<3 and an out-of-range InnerRatio are clamped by the setter"
+msgid "Points<3 or bad InnerRatio clamped by the setter"
 msgstr "Points<3 与越界的 InnerRatio 会被 setter 夹紧"
 
 #: tmainform.divarrow.caption

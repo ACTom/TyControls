@@ -369,7 +369,7 @@ msgid "Activity + rating"
 msgstr "活动指示 + 评分"
 
 #: tdemomainform.lblspark.caption
-msgid "Sparkline (fed in code)"
+msgid "Sparkline (code-fed)"
 msgstr "迷你图(代码填数据)"
 
 #: tdemomainform.lblgridhint.caption

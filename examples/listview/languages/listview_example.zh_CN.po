@@ -32,11 +32,11 @@ msgid "List"
 msgstr "列表"
 
 #: tmainform.btnicon.caption
-msgid "Large icons"
+msgid "Big icons"
 msgstr "大图标"
 
 #: tmainform.btnsmallicon.caption
-msgid "Small icons"
+msgid "Mini icon"
 msgstr "小图标"
 
 #: tmainform.btntile.caption
@@ -44,15 +44,15 @@ msgid "Tile"
 msgstr "平铺"
 
 #: tmainform.chkgrid.caption
-msgid "Grid lines"
+msgid "Grid"
 msgstr "网格线"
 
 #: tmainform.chkmulti.caption
-msgid "Multi-select"
+msgid "Multi"
 msgstr "多选"
 
 #: tmainform.chkboxes.caption
-msgid "Checkbox"
+msgid "Check"
 msgstr "复选框"
 
 #: tmainform.chkgroup.caption
@@ -84,7 +84,7 @@ msgid "ItemCount = 100000, row objects = 0"
 msgstr "ItemCount = 100000,行对象 = 0"
 
 #: tmainform.lblvirtualnote.caption
-msgid "The checked state lives in the app's own array — in OwnerData mode the control caches no state"
+msgid "The app owns the checked state — OwnerData mode caches nothing"
 msgstr "勾选态存在 app 自己的数组里 —— OwnerData 模式下控件不缓存任何状态"
 
 #: tmainform.btngrow.caption

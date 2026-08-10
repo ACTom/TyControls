@@ -47,7 +47,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 78
       Width = 448
-      Caption = 'Multiline text editor (Enter for a new line, arrow keys to navigate, wheel to scroll):'
+      Caption = 'Multiline editor (Enter = new line, arrows navigate, wheel scrolls):'
     end
     object Memo: TTyMemo
       Left = 16
@@ -74,7 +74,7 @@ object MainForm: TMainForm
       Height = 24
       Top = 362
       Width = 120
-      Caption = 'Read-only (ReadOnly)'
+      Caption = 'ReadOnly'
       OnClick = ReadOnlyClick
     end
     object ChkWordWrap: TTyCheckBox
@@ -82,7 +82,7 @@ object MainForm: TMainForm
       Height = 24
       Top = 362
       Width = 140
-      Caption = 'Word wrap (WordWrap)'
+      Caption = 'Word wrap'
       OnClick = WordWrapClick
     end
     object LblInfo: TTyLabel
@@ -151,7 +151,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 336
       Width = 448
-      Caption = 'Tick a property, then type in the memo (HideSelection dims the band on blur):'
+      Caption = 'Tick a property, then type in the memo (HideSelection dims on blur):'
     end
     object ChkHideSel: TTyCheckBox
       Left = 300
@@ -175,7 +175,7 @@ object MainForm: TMainForm
       Left = 16
       Height = 24
       Top = 418
-      Width = 340
+      Width = 352
       Caption = 'WantReturns - untick it and Enter fires the OK button'
       Checked = True
       State = cbChecked
@@ -194,7 +194,7 @@ object MainForm: TMainForm
       Left = 16
       Height = 24
       Top = 446
-      Width = 448
+      Width = 454
       Caption = 'MaxLength = 800 - typing stops at the cap, a paste is truncated to fit'
       OnClick = MaxLengthClick
     end
@@ -227,7 +227,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 477
       Width = 190
-      Caption = 'horizontal bar needs WordWrap off'
+      Caption = 'horizontal bar: WordWrap off'
     end
     object LblCaret: TTyLabel
       Left = 16

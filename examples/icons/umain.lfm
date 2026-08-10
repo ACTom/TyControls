@@ -108,7 +108,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 186
       Width = 290
-      Caption = 'Transparent: left True (no surface) · right False (default)'
+      Caption = 'Transparent: left True · right False (default)'
     end
     object Img4: TTyImage
       Left = 16
@@ -233,7 +233,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 678
       Width = 588
-      Caption = 'FontFile: register a .ttf PRIVATE to this process — no OS install needed. Type the family, then load the file.'
+      Caption = 'FontFile: register a .ttf PRIVATE to the process — no install needed. Set family, then load.'
     end
     object FontFamilyEdit: TTyEdit
       Left = 16

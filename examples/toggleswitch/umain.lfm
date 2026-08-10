@@ -96,7 +96,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 224
       Width = 352
-      Caption = 'OnChange vs OnClick — click the switch, then press the button:'
+      Caption = 'OnChange vs OnClick — click switch, then press button:'
     end
     object SwitchEvents: TTyToggleSwitch
       Left = 24
@@ -128,7 +128,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 312
       Width = 352
-      Caption = 'AnimationsEnabled — public, so it is set in code, not here:'
+      Caption = 'AnimationsEnabled — public, so set in code, not here:'
     end
     object SwitchNoAnim: TTyToggleSwitch
       Left = 24

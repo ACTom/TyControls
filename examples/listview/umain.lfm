@@ -70,16 +70,16 @@ object MainForm: TMainForm
       Left = 176
       Height = 30
       Top = 72
-      Width = 74
-      Caption = 'Large icons'
+      Width = 78
+      Caption = 'Big icons'
       OnClick = BtnIconClick
     end
     object BtnSmallIcon: TTyButton
       Left = 256
       Height = 30
       Top = 72
-      Width = 74
-      Caption = 'Small icons'
+      Width = 80
+      Caption = 'Mini icon'
       OnClick = BtnSmallIconClick
     end
     object BtnTile: TTyButton
@@ -95,7 +95,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 76
       Width = 74
-      Caption = 'Grid lines'
+      Caption = 'Grid'
       OnChange = ChkGridChange
     end
     object ChkMulti: TTyCheckBox
@@ -103,7 +103,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 76
       Width = 66
-      Caption = 'Multi-select'
+      Caption = 'Multi'
       Checked = True
       State = cbChecked
       OnChange = ChkMultiChange
@@ -113,7 +113,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 76
       Width = 66
-      Caption = 'Checkbox'
+      Caption = 'Check'
       OnChange = ChkBoxesChange
     end
     object ChkGroup: TTyCheckBox
@@ -206,7 +206,7 @@ object MainForm: TMainForm
       Height = 18
       Top = 644
       Width = 448
-      Caption = 'The checked state lives in the app''s own array — in OwnerData mode the control caches no state'
+      Caption = 'The app owns the checked state — OwnerData mode caches nothing'
     end
     object DivExtras: TTyDivider
       Left = 16

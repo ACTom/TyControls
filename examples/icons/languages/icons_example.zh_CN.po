@@ -40,7 +40,7 @@ msgid "Center = False"
 msgstr "居中 Center = False"
 
 #: tmainform.lbltrans.caption
-msgid "Transparent: left True (no surface) · right False (default)"
+msgid "Transparent: left True · right False (default)"
 msgstr "Transparent:左 True(无表面) · 右 False(默认)"
 
 #: tmainform.lblauto.caption
@@ -64,7 +64,7 @@ msgid "TTyGlyphImageList: the same ordered list drawn twice below — DefaultSiz
 msgstr "TTyGlyphImageList:同一有序列表在下方画两次 — 先 DefaultSize,再一半大小"
 
 #: tmainform.lblfontfile.caption
-msgid "FontFile: register a .ttf PRIVATE to this process — no OS install needed. Type the family, then load the file."
+msgid "FontFile: register a .ttf PRIVATE to the process — no install needed. Set family, then load."
 msgstr "FontFile:把 .ttf 注册为本进程私有 — 无需安装到系统。先填字体族名,再加载文件。"
 
 #: tmainform.btnloadfont.caption

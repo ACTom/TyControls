@@ -406,7 +406,7 @@ object MainForm: TMainForm
             TabOrder = 2
             OnClick = ToggleEmptyClick
             StyleClass = 'ghost'
-            Caption = 'Toggle empty state'
+            Caption = 'Toggle empty'
             Anchors = [akTop, akRight]
           end
           object GridOrders: TTyStringGrid
@@ -846,7 +846,7 @@ object MainForm: TMainForm
               Width = 110
               TabOrder = 1
               OnClick = ConfirmClick
-              Caption = 'Confirmation dialog'
+              Caption = 'Confirm dialog'
             end
             object BtnInput: TTyButton
               Left = 248
@@ -989,7 +989,7 @@ object MainForm: TMainForm
               Width = 150
               TabOrder = 1
               OnClick = ToastErrClick
-              Caption = 'Persistent error notification'
+              Caption = 'Sticky error toast'
             end
             object BtnPopover: TTyButton
               Left = 12

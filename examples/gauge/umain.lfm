@@ -226,7 +226,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 596
       Width = 460
-      Caption = 'Every 1.2s the value changes at random (drag the knob / gear / wheel, click the stars) — watch the easing animation.'
+      Caption = 'Random value every 1.2s; drag knob / gear / wheel, click stars — eased.'
     end
     object LblKnobs: TTyLabel
       Left = 24

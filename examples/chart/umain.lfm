@@ -89,8 +89,8 @@ object MainForm: TMainForm
       Left = 442
       Height = 22
       Top = 50
-      Width = 100
-      Caption = 'Value annotation'
+      Width = 105
+      Caption = 'Value labels'
       OnChange = ChkValuesChange
     end
     object ChkGrid: TTyCheckBox

@@ -24,23 +24,23 @@ msgid "Dark"
 msgstr "暗色"
 
 #: tmainform.btnfade.caption
-msgid "Fade in (window)"
+msgid "Fade window"
 msgstr "淡入（整窗）"
 
 #: tmainform.btnup.caption
-msgid "Slide in from top"
+msgid "Slide top"
 msgstr "上滑入"
 
 #: tmainform.btndown.caption
-msgid "Slide in from bottom"
+msgid "Slide down"
 msgstr "下滑入"
 
 #: tmainform.btnleft.caption
-msgid "Slide in from left"
+msgid "Slide left"
 msgstr "左滑入"
 
 #: tmainform.btnright.caption
-msgid "Slide in from right"
+msgid "Slide right"
 msgstr "右滑入"
 
 #: tmainform.lblin.caption
@@ -48,7 +48,7 @@ msgid "This panel reappears with the chosen transition"
 msgstr "这个面板会以选定的过渡重新出现"
 
 #: tmainform.btnnone.caption
-msgid "None (instant)"
+msgid "None (snap)"
 msgstr "无（立即显示）"
 
 #: tmainform.btnhide.caption

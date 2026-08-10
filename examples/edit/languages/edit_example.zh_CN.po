@@ -20,7 +20,7 @@ msgid "Dark"
 msgstr "暗色"
 
 #: tmainform.lblhint.caption
-msgid "Placeholder hint + OnChange"
+msgid "TextHint + OnChange"
 msgstr "占位提示 + OnChange"
 
 #: tmainform.lblpassword.caption

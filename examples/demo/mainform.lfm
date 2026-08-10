@@ -1074,7 +1074,7 @@ object DemoMainForm: TDemoMainForm
             Top = 136
             Width = 132
             Controller = TyController
-            Caption = 'Sparkline (fed in code)'
+            Caption = 'Sparkline (code-fed)'
           end
           object DemoSpark: TTySparkline
             Left = 160

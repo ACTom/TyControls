@@ -48,7 +48,7 @@ object MainForm: TMainForm
       Height = 22
       Top = 57
       Width = 130
-      Caption = 'Placeholder hint + OnChange'
+      Caption = 'TextHint + OnChange'
     end
     object EdHint: TTyEdit
       Left = 160

@@ -80,7 +80,7 @@ msgid "Paste"
 msgstr "粘贴"
 
 #: tmainform.btnformat.caption
-msgid "Format painter"
+msgid "Format"
 msgstr "格式刷"
 
 #: tmainform.divscroll.caption
@@ -172,7 +172,7 @@ msgid "OK"
 msgstr "确定"
 
 #: tmainform.lblheader.caption
-msgid "Header: click a title to sort · drag the border to resize"
+msgid "Click to sort · drag to resize"
 msgstr "列头:点标题排序 · 拖边界调宽"
 
 #: tmainform.divbands.caption
@@ -304,7 +304,7 @@ msgid "Command 12"
 msgstr "命令 12"
 
 #: tmainform.lblvlines.caption
-msgid "Vertical edge lines — tbsLeftLine (sunken) then tbsRightLine (raised):"
+msgid "Vertical edges — tbsLeftLine (sunken), tbsRightLine (raised):"
 msgstr "竖边线 — tbsLeftLine(凹陷)、tbsRightLine(凸起):"
 
 #: tmainform.lblspacer.caption
@@ -356,7 +356,7 @@ msgid "Row 10"
 msgstr "第 10 行"
 
 #: tmainform.lblex2.caption
-msgid "Starts collapsed · slow 500 ms open/close ease:"
+msgid "Starts collapsed · 500 ms open/close ease:"
 msgstr "初始折叠 · 500 ms 缓慢展开/收起:"
 
 #: tmainform.exdisplay.caption

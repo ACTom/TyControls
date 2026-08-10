@@ -47,7 +47,7 @@ object MainForm: TMainForm
       Height = 24
       Top = 52
       Width = 392
-      Caption = 'Hover the button for the themed tooltip; click "Show popover" for a pointer popover.'
+      Caption = 'Hover for a themed tooltip; "Show popover" for a pointer one.'
     end
     object BtnSave: TTyButton
       Left = 24
