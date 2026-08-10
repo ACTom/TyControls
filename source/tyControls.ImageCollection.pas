@@ -69,7 +69,8 @@ unit tyControls.ImageCollection;
 interface
 
 uses
-  Classes, SysUtils, Graphics, base64, LazMethodList, BGRABitmap, BGRABitmapTypes,
+  Classes, SysUtils, Graphics, ImgList, LCLType, base64, LazMethodList,
+  BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Component, tyControls.IconFont;
 
 { Recolor a BGRA icon bitmap's RGB to AColor while KEEPING its alpha (antialiased edges
@@ -310,12 +311,42 @@ type
     property Images: TTyImageItems read FImages write SetImages;
   end;
 
-  TTyVirtualImageList = class(TTyComponent)
+  { An ordered, NAME-keyed selection of icons -- and, because it descends from LCL's
+    TCustomImageList, something a stock LCL control can consume directly.
+
+    TWO HALVES, and both are needed. Its own consumers render ON DEMAND: RenderIndex(i, anyPx)
+    rasterises a vector at exactly the size the paint asked for, at any DPI and any row height.
+    LCL's interface cannot express that -- Count is a non-virtual property over a private field,
+    the deepest Draw is bypassed whenever the canvas scale factor is not 1, and several
+    consumers take the native handle instead of drawing at all -- so for LCL it ALSO keeps a
+    baked set of rasters at registered widths. Descending costs the on-demand path nothing; the
+    two are additive, which is the whole point.
+
+    THREE INVARIANTS, each measured on a patched build rather than reasoned about:
+
+    * Count means ONE thing. This class used to declare `function Count` returning Names.Count,
+      which HIDES the inherited property with no diagnostic at all -- the same object answered
+      2 through a TTyVirtualImageList reference and 0 through a TCustomImageList one. It is
+      gone. The baked count is the count; where the NAME list is meant, Names.Count is spelled
+      out.
+
+    * The base width is registered FIRST. Count routes through GetResolution(FWidth), and
+      GetResolution CREATES a resolution when that width is not registered -- one bounds check
+      would then rescale every image (measured: ResolutionCount 2 -> 3 from a single Count).
+      ApplySize registers the base width first, which makes Count a read.
+
+    * DefaultSize and Width are the SAME state. They were two fields, and a patched build drew
+      the same object at 20px through one reference type and 16px through the other -- silently,
+      in the size a user actually sees. DefaultSize is now a view of Width. }
+  TTyVirtualImageList = class(TCustomImageList)
   private
     FCollection: TTyImageCollection;
     FIconFont: TTyIconFont;
     FNames: TStrings;          // ordered image NAMES to expose (a TStringList)
-    FDefaultSize: Integer;
+    FBaseSize: Integer;        // the authoritative logical edge; Width mirrors it
+    FMultiResolution: Boolean;
+    FFilling: Boolean;
+    FFillCount: Integer;
     FGlyphColor: TTyColor;
     { The borrowed-bitmap contract of CachedIndex has to hold for glyphs too, and an icon
       font has no cache of its own to borrow from -- RenderGlyph mints a new bitmap every
@@ -335,6 +366,16 @@ type
     FChangeHandlers: TMethodList;
     procedure NamesChanged(Sender: TObject);
     procedure Changed;
+    function GetDefaultSize: Integer;
+    procedure SetDefaultSize(AValue: Integer);
+    procedure SetMultiResolution(AValue: Boolean);
+    function GetTyVersion: string;
+    procedure ApplySize;
+    procedure ReadDesignLeft(Reader: TReader);
+    procedure WriteDesignLeft(Writer: TWriter);
+    procedure ReadDesignTop(Reader: TReader);
+    procedure WriteDesignTop(Writer: TWriter);
+    procedure SwallowLegacyBlob(AStream: TStream);
     procedure SetCollection(AValue: TTyImageCollection);
     procedure SetIconFont(AValue: TTyIconFont);
     procedure SetGlyphColor(AValue: TTyColor);
@@ -345,12 +386,14 @@ type
     function ResolveSource(AIndex: Integer; out AName: string): Integer;
   protected
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+    procedure Loaded; override;
+    { The pixel blob TCustomImageList would stream, dropped outright rather than emptied --
+      the body says why that distinction decides whether existing .lfm files get rewritten. }
+    procedure DefineProperties(Filer: TFiler); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
 
-    { Number of exposed items (= Names.Count). }
-    function Count: Integer;
     { The image name at AIndex, or '' when AIndex is out of range. }
     function NameOf(AIndex: Integer): string;
     { Index of the (case-sensitive) name AName, or -1 when absent. }
@@ -395,11 +438,18 @@ type
       polarity because that is what the callers upstream of it carry. }
     procedure DrawIndex(ACanvas: TCanvas; AIndex, AX, AY, ASizePx: Integer;
       AGhosted: Boolean = False);
+    { Re-render every BAKED slot from the names. Automatic on load and on every change; an
+      explicit call is only for a source this component cannot observe. }
+    procedure Refill;
+    { How many fills have actually run. Count cannot tell a refill from no refill. }
+    property FillCount: Integer read FFillCount;
     { Subscribe to "something about this list changed": Names, Collection, IconFont,
       DefaultSize or GlyphColor. Remove in your destructor. }
     procedure AddHandlerOnChange(const AHandler: TNotifyEvent; AsFirst: Boolean = False);
     procedure RemoveHandlerOnChange(const AHandler: TNotifyEvent);
-    procedure RemoveAllHandlersOfObject(AnObject: TObject);
+    { override, not a new method: TLCLComponent declares this virtual (lclclasses.pp:57), and
+      hiding it would give the wrong answer to anyone holding the list as a TLCLComponent. }
+    procedure RemoveAllHandlersOfObject(AnObject: TObject); override;
   published
     { The raster image source. Setting it registers a FreeNotification so the
       reference is nil'd automatically if the collection is freed first. }
@@ -423,7 +473,16 @@ type
       IconFont. }
     property Names: TStrings read FNames write SetNames;
     { Default item edge in LOGICAL px, used by consumers that don't pass a size. }
-    property DefaultSize: Integer read FDefaultSize write FDefaultSize default 16;
+    property DefaultSize: Integer read GetDefaultSize write SetDefaultSize default 16;
+    { Bake the 1.5x / 2x / 3x rasters too, so a stock consumer picks a crisp one per monitor
+      instead of stretching the base. Turn it off for a consumer that only ever pulls the base
+      width -- TTyTreeView paints through Images.Draw -> GetResolution(FWidth) and does exactly
+      that, so for a tree the other three are rendered for nothing. }
+    property MultiResolution: Boolean read FMultiResolution write SetMultiResolution default True;
+    { TCustomImageList publishes NOTHING, so the library-wide version property is re-declared
+      here rather than inherited. test.version requires it of every registered component, and
+      its editor is registered for this class explicitly in tyControls.Design. }
+    property Version: string read GetTyVersion stored False;
     { Ink for glyphs taken from IconFont. Raster images carry their own colour and ignore it.
 
       Defaults to OPAQUE black, not 0. TTyColor is $AARRGGBB, so 0 is fully TRANSPARENT: a
@@ -1138,6 +1197,7 @@ begin
   { FNames was a bare TStringList with no OnChange, so `List.Names.Add('x')` -- the ordinary
     way to use this component -- changed what it exposes and told nobody. }
   DropGlyphCache;
+  Refill;
   Changed;
 end;
 
@@ -1146,7 +1206,10 @@ begin
   inherited Create(AOwner);
   FNames := TStringList.Create;
   TStringList(FNames).OnChange := @NamesChanged;
-  FDefaultSize := 16;
+  FBaseSize := 16;
+  FMultiResolution := True;
+  { Lets LCL pick a registered resolution per monitor instead of stretching the base one. }
+  Scaled := True;
   FGlyphColor := $FF000000;   { opaque black -- see the property's note }
   FGlyphCacheVersion := -1;
 end;
@@ -1174,6 +1237,7 @@ begin
   FCollection := AValue;
   if FCollection <> nil then
     FCollection.FreeNotification(Self);
+  Refill;
   Changed;
 end;
 
@@ -1186,6 +1250,7 @@ begin
   if FIconFont <> nil then
     FIconFont.FreeNotification(Self);
   DropGlyphCache;
+  Refill;
   Changed;
 end;
 
@@ -1194,6 +1259,7 @@ begin
   if FGlyphColor = AValue then Exit;
   FGlyphColor := AValue;
   DropGlyphCache;
+  Refill;
   Changed;
 end;
 
@@ -1225,9 +1291,174 @@ begin
   if (FIconFont <> nil) and FIconFont.HasGlyph(AName) then Exit(2);
 end;
 
-function TTyVirtualImageList.Count: Integer;
+function TTyVirtualImageList.GetDefaultSize: Integer;
 begin
-  Result := FNames.Count;
+  { FBaseSize, not Width: they are the same after every Refill, but Width is public and
+    writable and writing it CLEARS the list (SetWidth -> SetWidthHeight -> Clear). Reporting
+    the size this list will actually rebuild at is the honest answer; the next Refill restores
+    Width to match. }
+  Result := FBaseSize;
+end;
+
+procedure TTyVirtualImageList.SetDefaultSize(AValue: Integer);
+begin
+  if AValue < 1 then AValue := 1;
+  if FBaseSize = AValue then Exit;
+  FBaseSize := AValue;
+  { One path: Refill -> ApplySize -> SetWidthHeight, so Width can never disagree with the size
+    this property reports. }
+  Refill;
+end;
+
+procedure TTyVirtualImageList.SetMultiResolution(AValue: Boolean);
+begin
+  if FMultiResolution = AValue then Exit;
+  FMultiResolution := AValue;
+  Refill;
+end;
+
+function TTyVirtualImageList.GetTyVersion: string;
+begin
+  Result := TyVersion;
+end;
+
+procedure TTyVirtualImageList.ApplySize;
+var
+  w: Integer;
+begin
+  w := FBaseSize;
+  if w < 1 then w := 1;
+  { SetWidthHeight CLEARS the list. Harmless here and only here, because Refill calls this
+    before it adds anything. }
+  SetWidthHeight(w, w);
+  { The BASE WIDTH FIRST -- see the class comment. Count routes through GetResolution(FWidth)
+    and GetResolution creates a resolution for a width that is not registered, so a plain
+    bounds check would rescale every image in the list. }
+  if FMultiResolution then
+    RegisterResolutions([w, MulDiv(w, 3, 2), w * 2, w * 3])
+  else
+    RegisterResolutions([w]);
+end;
+
+procedure TTyVirtualImageList.Loaded;
+begin
+  inherited Loaded;
+  { Not the constructor: the .lfm has not delivered Names/Collection/IconFont yet there. }
+  Refill;
+end;
+
+procedure TTyVirtualImageList.DefineProperties(Filer: TFiler);
+var
+  di, ancDi: LongInt;
+begin
+  { `inherited` is deliberately NOT called, and the whole chain is accounted for:
+      TPersistent.DefineProperties        - empty
+      TLCLComponent                       - does not override
+      TComponent.DefineProperties         - defines only Left/Top from DesignInfo, re-done below
+      TCustomImageList.DefineProperties   - defines only Bitmap/BitmapAdv, dropped on purpose
+    Dropping the blob outright rather than emptying it through WriteData is what keeps an
+    EXISTING .lfm byte-identical: empty overrides still leave `Bitmap = { }` and
+    `BitmapAdv = { }` behind, which rewrites every form holding one of these the first time the
+    IDE saves it. The blob is stale by construction anyway -- rasters baked on whatever machine
+    last saved the form, at that machine's DPI, discarded and rebuilt by Loaded. }
+  di := DesignInfo;
+  ancDi := 0;
+  if Filer.Ancestor is TComponent then ancDi := TComponent(Filer.Ancestor).DesignInfo;
+  Filer.DefineProperty('Left', @ReadDesignLeft, @WriteDesignLeft,
+    LongRec(di).Lo <> LongRec(ancDi).Lo);
+  Filer.DefineProperty('Top', @ReadDesignTop, @WriteDesignTop,
+    LongRec(di).Hi <> LongRec(ancDi).Hi);
+  { Read-only tolerance for an .lfm written by a build that DID emit the blob: the reader
+    ignores HasData and fires on a name match, so these consume and discard rather than
+    failing to load the form. }
+  Filer.DefineBinaryProperty('Bitmap', @SwallowLegacyBlob, nil, False);
+  Filer.DefineBinaryProperty('BitmapAdv', @SwallowLegacyBlob, nil, False);
+end;
+
+procedure TTyVirtualImageList.ReadDesignLeft(Reader: TReader);
+var di: LongInt;
+begin
+  di := DesignInfo;
+  LongRec(di).Lo := Reader.ReadInteger;
+  DesignInfo := di;
+end;
+
+procedure TTyVirtualImageList.WriteDesignLeft(Writer: TWriter);
+var di: LongInt;
+begin
+  di := DesignInfo;
+  Writer.WriteInteger(LongRec(di).Lo);
+end;
+
+procedure TTyVirtualImageList.ReadDesignTop(Reader: TReader);
+var di: LongInt;
+begin
+  di := DesignInfo;
+  LongRec(di).Hi := Reader.ReadInteger;
+  DesignInfo := di;
+end;
+
+procedure TTyVirtualImageList.WriteDesignTop(Writer: TWriter);
+var di: LongInt;
+begin
+  di := DesignInfo;
+  Writer.WriteInteger(LongRec(di).Hi);
+end;
+
+procedure TTyVirtualImageList.SwallowLegacyBlob(AStream: TStream);
+begin
+  if AStream <> nil then AStream.Seek(0, soEnd);
+end;
+
+procedure TTyVirtualImageList.Refill;
+var
+  widths: array of Integer;
+  i, k, w: Integer;
+  src: TBGRABitmap;
+  bmp: TBitmap;
+begin
+  { A refill can be provoked from inside a fill (Clear -> Change -> a listener -> Refill). }
+  if FFilling then Exit;
+  if csLoading in ComponentState then Exit;
+  FFilling := True;
+  try
+    Clear;
+    ApplySize;
+    if FNames.Count = 0 then Exit;
+    w := FBaseSize;
+    if w < 1 then w := 1;
+    if FMultiResolution then
+    begin
+      SetLength(widths, 4);
+      widths[0] := w; widths[1] := MulDiv(w, 3, 2); widths[2] := w * 2; widths[3] := w * 3;
+    end
+    else
+    begin
+      SetLength(widths, 1);
+      widths[0] := w;
+    end;
+    for i := 0 to FNames.Count - 1 do
+      for k := 0 to High(widths) do
+      begin
+        { RenderIndex never returns nil and always returns the requested square, so a name that
+          resolves to nothing lands as a blank slot and index i stays index i. Several controls
+          here carry hand-written index constants; a fill that skipped a bad name would
+          renumber everything after it. }
+        src := RenderIndex(i, widths[k]);
+        try
+          bmp := src.Bitmap;    { owned by src -- not freed separately }
+          if k = 0 then
+            AddSlice(bmp, Rect(0, 0, bmp.Width, bmp.Height))
+          else
+            ReplaceSliceCentered(i, widths[k], bmp, False);
+        finally
+          src.Free;
+        end;
+      end;
+    Inc(FFillCount);
+  finally
+    FFilling := False;
+  end;
 end;
 
 function TTyVirtualImageList.NameOf(AIndex: Integer): string;
@@ -1293,7 +1524,7 @@ procedure TTyVirtualImageList.Draw(ACanvas: TCanvas; AX, AY, AIndex: Integer;
 begin
   // The one place the two polarities meet. Named here rather than at each call site so
   // there is exactly one `not` to get wrong, and it is under a test.
-  DrawIndex(ACanvas, AIndex, AX, AY, FDefaultSize, not AEnabled);
+  DrawIndex(ACanvas, AIndex, AX, AY, FBaseSize, not AEnabled);
 end;
 
 procedure TTyVirtualImageList.DrawIndex(ACanvas: TCanvas; AIndex, AX, AY, ASizePx: Integer;

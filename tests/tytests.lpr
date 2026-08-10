@@ -56,6 +56,7 @@ uses
   test.lucide, test.glyphnames,
   test.virtualimagelist.iconfont,
   test.lclimagelist,
+  test.virtualimagelist.baked,
   test.tabsheet,
   test.pagecontrol,
   test.pagecontrol.streaming,

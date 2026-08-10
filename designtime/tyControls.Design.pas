@@ -1447,6 +1447,10 @@ begin
     this line it is the one component whose '...' would not open the About box.
     test.version's TestEveryRegisteredComponentReportsTyVersion is what says so. }
   RegisterPropertyEditor(TypeInfo(string), TTyLCLImageList, 'Version', TTyVersionEditor);
+  { Same reason, same shape: TTyVirtualImageList no longer descends from TTyComponent, so
+    the editor has to be named for it explicitly or its '...' stops opening the About box.
+    test.version's InheritsFromAnEditorBase resolves the bases it parses out of THIS file. }
+  RegisterPropertyEditor(TypeInfo(string), TTyVirtualImageList, 'Version', TTyVersionEditor);
   RegisterPropertyEditor(TypeInfo(string), TTyPopupMenu, 'Version', TTyVersionEditor);
   RegisterPropertyEditor(TypeInfo(string), TTyForm, 'Version', TTyVersionEditor);
   // BorderStyle is locked to bsNone (TTyForm is a borderless custom-chrome window) —
