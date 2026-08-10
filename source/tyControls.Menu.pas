@@ -4,7 +4,7 @@ interface
 uses Classes, SysUtils, Types, Controls, Graphics, Forms, ExtCtrls, LCLType, LCLProc, LCLIntf, LMessages, Menus,
   ImgList,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.Accel,
-  tyControls.QtWS, tyControls.PlatformWS, tyControls.ImageCollection;
+  tyControls.QtWS, tyControls.PlatformWS, tyControls.ImageCollection, tyControls.ImageDraw;
 
 const
   { Layout metrics (logical px, 96-PPI baseline). These are spacing/size tokens, not
@@ -90,7 +90,7 @@ type
   TTyMenuView = class(TTyCustomControl)
   private
     FRows: TTyMenuRowArray;
-    FImages: TTyVirtualImageList;   // icon-column source (transient; set per popup by the host)
+    FImages: TCustomImageList;      // icon-column source (transient; set per popup by the host)
     FBannerCaption: string;         // decorative left-strip caption (rotated), '' = no banner text
     FBannerWidth: Integer;          // decorative left-strip width in logical px, 0 = no banner
     FHighlight: Integer;
@@ -205,7 +205,7 @@ type
     ForceSquareSurface: Boolean;
     { Icon-column source: when set, an item's ImageIndex renders in the left slot (unless the
       item is checked, where the check glyph wins). Set transiently by the host each popup. }
-    property Images: TTyVirtualImageList read FImages write FImages;
+    property Images: TCustomImageList read FImages write FImages;
     { Decorative left banner (classic Office style): a themed accent strip BannerWidth px wide
       down the left, with BannerCaption drawn rotated. 0 width = no banner. Set per popup. }
     property BannerCaption: string read FBannerCaption write FBannerCaption;
@@ -254,7 +254,7 @@ type
     FOnNavigateAdjacent: TTyMenuAdjacentEvent;
     FOnClose: TNotifyEvent;   // fired by CloseAll so a host (bar) can reset its open state
     FAllowHeaders: Boolean;   // TTyMenuEx opt-in: build '-Text' items as section headers
-    FImages: TTyVirtualImageList;   // icon-column source (TTyImagesMenu/TTyMenuEx opt-in)
+    FImages: TCustomImageList;      // icon-column source (TTyImagesMenu/TTyMenuEx opt-in)
     FBannerCaption: string;   // decorative left-banner caption (root menu only)
     FBannerWidth: Integer;    // decorative left-banner width (logical px), 0 = none
     FOwnerDraw: Boolean;      // TMenu.OwnerDraw, forwarded to the view + submenu cascades
@@ -330,7 +330,7 @@ type
     { When True, '-Text' items build as section headers (propagated to submenu cascades). }
     property AllowHeaders: Boolean read FAllowHeaders write FAllowHeaders;
     { Icon-column source (propagated to the view + submenu cascades). }
-    property Images: TTyVirtualImageList read FImages write FImages;
+    property Images: TCustomImageList read FImages write FImages;
     { Decorative left banner on THIS level's view (root only — not propagated to submenus). }
     property BannerCaption: string read FBannerCaption write FBannerCaption;
     property BannerWidth: Integer read FBannerWidth write FBannerWidth;
@@ -535,19 +535,20 @@ type
     property Controller: TTyStyleController read FController write FController;
   end;
 
-  { Image-list-backed themed context menu: renders each item's ImageIndex icon (from Images,
-    a TTyVirtualImageList) in the left slot; a checked item shows its check glyph instead.
+  { Image-list-backed themed context menu: renders each item's ImageIndex icon (from Images --
+    a TTyVirtualImageList draws its vector exactly; a plain LCL list is materialised) in the left
+    slot; a checked item shows its check glyph instead.
     Same LCL TPopupMenu model + Controller; assign it to a control's PopupMenu like TTyPopupMenu. }
   TTyImagesMenu = class(TTyPopupMenu)
   private
-    FImages: TTyVirtualImageList;
-    procedure SetImages(AValue: TTyVirtualImageList);
+    FImages: TCustomImageList;
+    procedure SetImages(AValue: TCustomImageList);
   protected
     procedure ConfigureRenderer(ARenderer: TTyMenuPopup); override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   published
     { The icon source; each item's ImageIndex draws from here. }
-    property Images: TTyVirtualImageList read FImages write SetImages;
+    property Images: TCustomImageList read FImages write SetImages;
   end;
 
   { Enhanced themed context menu: everything TTyImagesMenu does (icon column) PLUS SECTION HEADERS
@@ -1259,7 +1260,6 @@ var
   RowStates: TTyStateSet;
   SepFill: TTyFill;
   SepY: Integer;
-  icon: TBGRABitmap;
   ownerDrawOn: Boolean;
   { Both GDI passes are COLLECTED here and run after P.EndPaint: anything drawn straight
     to ACanvas during the loop is erased by EndPaint's blit of the BGRA layer (the same
@@ -1450,15 +1450,15 @@ begin
         Inc(pendingIconCount);
       end
       else if FRows[i].GlyphVisible and (FImages <> nil) and (FRows[i].ImageIndex >= 0)
-              and (FRows[i].ImageIndex < FImages.Count) then
+              and (FRows[i].ImageIndex < TyImageCount(FImages)) then
       begin
         iconSz := leftSlot - P.Scale(2);
         if iconSz < 8 then iconSz := 8;
-        // BGRA, cross-platform; borrowed from the collection's render cache (do NOT free).
-        icon := FImages.CachedIndex(FRows[i].ImageIndex, iconSz);
-        if icon <> nil then
-          P.Bitmap.PutImage(Slot.Left + ((Slot.Right - Slot.Left) - icon.Width) div 2,
-            RowRect.Top + (rowH - icon.Height) div 2, icon, dmDrawWithTransparency);
+        { In-layer, both branches: our own list renders the vector exactly at iconSz, a foreign
+          list is materialised. Centred in the iconSz slot the check glyph would have used. }
+        TyBlitImage(P.Bitmap, FImages, FRows[i].ImageIndex,
+          Slot.Left + ((Slot.Right - Slot.Left) - iconSz) div 2,
+          RowRect.Top + (rowH - iconSz) div 2, iconSz, APPI, False);
       end;
 
       // Caption: left-aligned after the check slot, ellipsized before the right slot.
@@ -2645,7 +2645,7 @@ begin
   // Base: no extra configuration.
 end;
 
-procedure TTyImagesMenu.SetImages(AValue: TTyVirtualImageList);
+procedure TTyImagesMenu.SetImages(AValue: TCustomImageList);
 begin
   if FImages = AValue then Exit;
   if FImages <> nil then FImages.RemoveFreeNotification(Self);
