@@ -53,6 +53,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.Css.Catalog"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.Css.Complete.pas"/>
+        <UnitName Value="tyControls.Css.Complete"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.StyleModel.pas"/>
         <UnitName Value="tyControls.StyleModel"/>
       </Item>

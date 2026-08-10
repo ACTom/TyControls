@@ -25,13 +25,15 @@ type
     procedure KnownPseudoStatesParseAndUnknownFails;
     procedure GeneratedTokenCatalogMatchesLightTycss;
     procedure GeneratedTypeKeyCatalogIsSaneAndSorted;
+    procedure CompletionSuggestsByContext;
+    procedure UnknownPropsAreFlaggedKnownOnesAreNot;
   end;
 
 implementation
 
 uses
   tyControls.Types, tyControls.StyleModel, tyControls.Css.Values, tyControls.Css.Parser,
-  tyControls.Css.Catalog;
+  tyControls.Css.Catalog, tyControls.Css.Complete;
 
 { True when the resolver RECOGNISES AProp -- it entered a branch. A clean False means "unknown
   property" (the else Result:=False). A raise means it entered a branch but disliked the value,
@@ -320,6 +322,63 @@ begin
   for i := 1 to High(TyCatalogTokens) do
     AssertTrue('tokens sorted ascending, no dups at ' + IntToStr(i),
       TyCatalogTokens[i - 1] < TyCatalogTokens[i]);
+end;
+
+procedure TCssCatalogTest.CompletionSuggestsByContext;
+var
+  items: TStringList;
+  function Has(const AItem: string): Boolean;
+  begin
+    Result := items.IndexOf(AItem) >= 0;
+  end;
+begin
+  items := TStringList.Create;
+  try
+    { property position: inside a rule, at the start of a declaration -> property names. }
+    items.Clear;
+    TyCssCompletionItems('TyButton { ', True, items);
+    AssertTrue('property position offers a property', Has('border-width'));
+    AssertFalse('...not a typeKey', Has('TyButton'));
+
+    { value position: after a property colon -> that property''s value hints + colour fns. }
+    items.Clear;
+    TyCssCompletionItems('TyButton { border-style: ', True, items);
+    AssertTrue('value position offers the property hint', Has('solid'));
+    AssertTrue('...and colour functions', Has('darken'));
+    AssertFalse('...not a property here', Has('border-width'));
+
+    { typing a --token -> token names (both control and controller level). }
+    items.Clear;
+    TyCssCompletionItems('color: var(--acc', False, items);
+    AssertTrue('a --prefix offers tokens', Has('--accent'));
+
+    { selector position (controller level): typeKeys + pseudo-states. }
+    items.Clear;
+    TyCssCompletionItems('', True, items);
+    AssertTrue('selector mode offers typeKeys', Has('TyButton'));
+    AssertTrue('...and pseudo-states', Has('hover'));
+
+    { control level, no selectors: outside a rule offers nothing (no selector grammar). }
+    items.Clear;
+    TyCssCompletionItems('', False, items);
+    AssertEquals('control level has no selector suggestions', 0, items.Count);
+  finally
+    items.Free;
+  end;
+end;
+
+procedure TCssCatalogTest.UnknownPropsAreFlaggedKnownOnesAreNot;
+begin
+  { The editor''s only chance to warn -- the resolver silently drops unknowns. Control-level
+    (bare block) and controller-level (with selectors) both scanned. }
+  AssertEquals('a bare block of known props warns nothing', '',
+    TyCssUnknownProps('color: #fff; border-width: 2px;'));
+  AssertTrue('a misspelled bare prop is flagged',
+    Pos('bordr-width', TyCssUnknownProps('color: #fff; bordr-width: 2px;')) > 0);
+  AssertTrue('an unknown prop inside a selector rule is flagged',
+    Pos('zznope', TyCssUnknownProps('TyButton { zznope: 1; color: #fff; }')) > 0);
+  AssertEquals('the background-color alias is NOT flagged', '',
+    TyCssUnknownProps('TyEdit { background-color: #fff; }'));
 end;
 
 initialization

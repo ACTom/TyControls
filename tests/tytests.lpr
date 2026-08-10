@@ -59,6 +59,7 @@ uses
   test.imagedraw,
   test.imagename,
   test.css.catalog,
+  test.controller.styleoverride,
   test.tabsheet,
   test.pagecontrol,
   test.pagecontrol.streaming,

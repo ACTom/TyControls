@@ -63,7 +63,9 @@ uses
   TypInfo, tyControls.BuiltinThemes, tyControls.ThemeRegistry,
   { The image-payload editor loads a picked file straight into a TBGRABitmap and encodes
     it with the collection's own codec — no TPicture anywhere on that path. }
-  BGRABitmap;
+  BGRABitmap,
+  { The SynEdit-backed tycss editor for StyleOverride (design-time only). }
+  tyControls.Design.Css.Editor;
 type
   TTyStyleClassPropertyEditor = class(TStringPropertyEditor)
   public
@@ -1426,6 +1428,14 @@ begin
     TTyFontFamilyPropertyEditor);
   RegisterPropertyEditor(TypeInfo(string), TTyIconFont, 'FontFile',
     TTyFontFilePropertyEditor);
+  // StyleOverride: the '...' opens a SynEdit tycss editor with catalog completion. Control-level
+  // (no selectors) on the two bases; controller-level (with selectors) on the controller.
+  RegisterPropertyEditor(TypeInfo(string), TTyGraphicControl, 'StyleOverride',
+    TTyStyleOverrideProperty);
+  RegisterPropertyEditor(TypeInfo(string), TTyCustomControl, 'StyleOverride',
+    TTyStyleOverrideProperty);
+  RegisterPropertyEditor(TypeInfo(string), TTyStyleController, 'StyleOverride',
+    TTyStyleOverrideProperty);
   // The droppable Lucide list carries its attribution: '...' pops the full ISC + MIT text.
   RegisterPropertyEditor(TypeInfo(string), TTyLucideImageList, 'License',
     TTyLucideLicenseProperty);

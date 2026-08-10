@@ -51,7 +51,10 @@ type
     FLastAccent: string;         // last system-followed accent literal; poll change-anchor
     FChangeListeners: TMethodList;
     FDensity: TTyDensity;
+    FStyleOverride: string;       // a themable tycss patch composed on top of the active theme
     procedure SetDensity(AValue: TTyDensity);
+    procedure SetStyleOverride(const AValue: string);
+    procedure ApplyStyleOverride; // if set, append the patch as the LAST additive layer
     { 把当前主题重新装一遍(REPLACE layer-1),然后按密度决定叠不叠包。
       换主题/换密度都走它 —— 密度包是追加层,换主题的 REPLACE 会冲掉它,
       不重叠的话「先开现代、再换皮肤」会悄悄退回经典(两边同步的老坑)。 }
@@ -145,6 +148,14 @@ type
       override), and remains until the next RefreshFromSystem. }
     property Follow: TTyThemeFollow read FFollow write SetFollow default tfManual;
     property Density: TTyDensity read FDensity write SetDensity default tdClassic;
+    { A tycss PATCH composed on top of the active theme -- the "I just want to tweak the system
+      theme a little" door, without authoring a whole theme. Full tycss WITH selectors
+      (e.g. 'TyButton { --radius: 12px; } TyEdit:focus { border-color: #f00; }'), applied as the
+      LAST (highest-priority) layer, so it wins over the theme and the density pack. It PERSISTS
+      across theme switches and density changes: whenever layer-1 is (re)loaded, this patch is
+      re-composed on top. The design-time editor is the SynEdit tycss editor (same as a control's
+      StyleOverride); the default controller takes it in code. '' = no patch. }
+    property StyleOverride: string read FStyleOverride write SetStyleOverride;
     { E23 (DX) hot-reload. False (default). When True AND ThemeFile is set, the controller
       watches that file's content (last-modified stamp + size) and, on change, reloads the
       theme and repaints registered controls. The watch is driven at runtime by a lazily
@@ -251,6 +262,7 @@ begin
     // from the string + bump ThemeVersion. No file -> no hot-reload watch.
     FModel.LoadFromCss(css);
     ApplyDensityPack;
+    ApplyStyleOverride;   // the user's patch persists across a theme switch (accent does not)
     FThemeApplied := True;
     Changed;
     Result := True;
@@ -261,6 +273,7 @@ begin
     // ThemeVersion). Never additive: switching themes must not stack residual rules.
     FModel.LoadFromFile(src);
     ApplyDensityPack;
+    ApplyStyleOverride;
     FThemeApplied := True;
     Changed;
     Result := True;
@@ -312,12 +325,34 @@ begin
     FModel.LoadFromCssAdditive(TyDensityModernCss);
 end;
 
+procedure TTyStyleController.ApplyStyleOverride;
+begin
+  { The user's tycss patch, composed on top of everything as the last additive layer -- so it
+    wins over both the theme and the density pack. Applied AFTER ApplyDensityPack at every place
+    layer-1 is (re)loaded, which is what makes it persist across theme/density changes. }
+  if FStyleOverride <> '' then
+    FModel.LoadFromCssAdditive(FStyleOverride);
+end;
+
+procedure TTyStyleController.SetStyleOverride(const AValue: string);
+begin
+  if FStyleOverride = AValue then Exit;
+  FStyleOverride := AValue;
+  { An additive layer cannot be individually unloaded, so changing the patch means rebuilding the
+    whole layer chain: ReloadThemeLayer reloads layer-1 (REPLACE, clearing the old patch), then
+    re-applies density and this new patch on top. }
+  ReloadThemeLayer;
+end;
+
 procedure TTyStyleController.ReloadThemeLayer;
 var
-  src, css: string;
+  src, css, keepAccent: string;
 begin
-  { 重装 layer-1(REPLACE),再按密度叠包。用于切换密度:追加层没法「卸下」,
-    只能把底层重装一遍、再决定叠不叠。 }
+  { 重装 layer-1(REPLACE),再按密度、再按 StyleOverride 叠。用于换密度 / 换 StyleOverride:
+    追加层没法「卸下」,只能把底层重装一遍、再决定叠什么。
+    这不是换主题(FThemeFile/FThemeName 没变),所以取色器选的强调色必须保留 —— 而 REPLACE 会清掉
+    它(StyleModel:FVarOverrides.Clear),因此先存后还。 }
+  keepAccent := AccentOverride;
   if FThemeFile <> '' then
   begin
     if FileExists(FThemeFile) then FModel.LoadFromFile(FThemeFile);
@@ -327,8 +362,14 @@ begin
     if TyResolveThemeCss(FThemeName, css) then FModel.LoadFromCss(css)
     else if TyResolveTheme(FThemeName, src) and (src <> '') and FileExists(src) then
       FModel.LoadFromFile(src);
-  end;
+  end
+  else
+    { 无主题(默认控制器就在内置 base 上):也得把用户层清成干净起点,否则改 StyleOverride 时
+      旧补丁还留在 FRules 里、新补丁又追加 = 累积。 }
+    FModel.LoadFromCss('');
   ApplyDensityPack;
+  ApplyStyleOverride;
+  if keepAccent <> '' then FModel.SetVarOverride('accent', keepAccent);   // 还原强调色
   Changed;
 end;
 
@@ -517,6 +558,8 @@ begin
   FModel.LoadFromFile(AFileName);
   FThemeFile := AFileName;
   FThemeName := '';   // explicit file load supersedes any named-theme selection
+  ApplyDensityPack;
+  ApplyStyleOverride;   // the user's patch rides on top of an explicitly loaded theme too
   // E23: snapshot the now-current file stamp so a later PollThemeFile only fires on a
   // genuine post-load change, and (re)arm the watch against this freshly loaded file.
   CaptureFileStamp;
@@ -527,6 +570,8 @@ end;
 procedure TTyStyleController.LoadThemeCss(const ASource: string);
 begin
   FModel.LoadFromCss(ASource);
+  ApplyDensityPack;
+  ApplyStyleOverride;
   Changed;
 end;
 

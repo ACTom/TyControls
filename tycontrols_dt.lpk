@@ -21,6 +21,10 @@
         <HasRegisterProc Value="True"/>
         <UnitName Value="tyControls.Design"/>
       </Item>
+      <Item>
+        <Filename Value="designtime/tyControls.Design.Css.Editor.pas"/>
+        <UnitName Value="tyControls.Design.Css.Editor"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>
@@ -32,6 +36,9 @@
       </Item>
       <Item>
         <PackageName Value="IDEIntf"/>
+      </Item>
+      <Item>
+        <PackageName Value="SynEdit"/>
       </Item>
     </RequiredPkgs>
     <UsageOptions>
