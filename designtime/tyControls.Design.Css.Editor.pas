@@ -26,7 +26,7 @@ implementation
 
 uses
   Forms, Controls, StdCtrls, ExtCtrls, ComCtrls, Graphics,
-  SynEdit, SynCompletion,
+  SynEdit, SynCompletion, SynHighlighterCss,
   tyControls.StyleModel, tyControls.Css.Values, tyControls.Css.Parser, tyControls.Css.Catalog,
   tyControls.Css.Complete, tyControls.Controller;
 
@@ -93,6 +93,11 @@ begin
   FEdit.Align := alClient;
   FEdit.Gutter.Visible := True;
   FEdit.OnChange := @EditChange;
+  { tycss is a CSS dialect, so the stock CSS highlighter colours it well enough -- comments,
+    selectors, properties, values, braces, hex. The tycss-only bits (--tokens, darken()) fall
+    back to CSS's generic identifier/function colouring, which is fine. No custom highlighter
+    to write or keep in step with the grammar. }
+  FEdit.Highlighter := TSynCssSyn.Create(Self);
 
   FComplete := TSynCompletion.Create(Self);
   FComplete.Editor := FEdit;
