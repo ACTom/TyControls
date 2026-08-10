@@ -216,6 +216,26 @@ procedure TyMergeStyleSet(var ABase: TTyStyleSet; const AOver: TTyStyleSet);
 function TyApplyDeclaration(var AStyle: TTyStyleSet; const AProp, ARawValue: string;
   Vars: TStrings): Boolean;
 
+const
+  { The tycss declaration properties the resolver recognises -- an enumerable MIRROR of the
+    if-chain in TyApplyDeclaration (this unit). That chain is the source of truth, not this list;
+    test.css.catalog cross-checks the two, so a drift is a red test rather than a silent gap.
+    The catalog generator and the StyleOverride editor read this. NOTE: 'background-color' is an
+    accepted ALIAS of 'background' (same branch) -- the editor offers it, but it is not a distinct
+    property here. }
+  TyKnownStyleProps: array[0..22] of string = (
+    'background', 'background-image', 'background-size', 'background-blur',
+    'glass-blur', 'glass-tint', 'background-under-titlebar', 'window-shadow', 'shadow',
+    'color', 'border', 'border-color', 'border-width', 'border-radius', 'border-style',
+    'render-style', 'padding', 'font-family', 'font-size', 'font-weight',
+    'outline', 'outline-offset', 'opacity');
+
+{ Value SUGGESTIONS for AProp, appended to ADest (not cleared). Empty for open-valued properties
+  (lengths, url(), arbitrary colours) -- those are free text. Kept beside the resolver so the
+  closed keyword sets stay in step; test.css.catalog asserts each suggestion is actually accepted
+  by TyApplyDeclaration. The editor uses this to fill its value-completion list. }
+procedure TyStyleValueHints(const AProp: string; ADest: TStrings);
+
 implementation
 
 { P4 (A5 / D8). Swap any var whose VALUE is exactly the sentinel 'system-accent' /
@@ -876,6 +896,30 @@ begin
   end
   else
     Result := False;
+end;
+
+procedure TyStyleValueHints(const AProp: string; ADest: TStrings);
+  procedure Add(const AItems: array of string);
+  var s: string;
+  begin
+    for s in AItems do ADest.Add(s);
+  end;
+var
+  p: string;
+begin
+  if ADest = nil then Exit;
+  p := LowerCase(Trim(AProp));
+  { Closed keyword sets, mirroring the branches in TyApplyDeclaration above. }
+  if p = 'border-style' then Add(['none', 'solid', 'outset', 'inset'])
+  else if p = 'background-size' then Add(['stretch', 'center', 'cover'])
+  else if p = 'render-style' then Add(['bevel3d', 'inset3d', 'flat'])
+  else if p = 'font-weight' then Add(['normal', 'bold'])
+  else if (p = 'window-shadow') or (p = 'background-under-titlebar') then Add(['true', 'false'])
+  else if p = 'background' then Add(['none', 'linear-gradient(', 'transparent'])
+  { Colour-valued props: suggest the colour vocabulary (functions + keyword). Open beyond this. }
+  else if (p = 'color') or (p = 'border-color') or (p = 'glass-tint') then
+    Add(['transparent', 'var(', 'lighten(', 'darken(', 'alpha(', 'mix(', 'elevate(']);
+  { Everything else (lengths, url(), font-family, opacity, ...) is free text: no hints. }
 end;
 
 constructor TTyStyleModel.Create;

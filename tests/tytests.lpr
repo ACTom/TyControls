@@ -58,6 +58,7 @@ uses
   test.virtualimagelist.baked,
   test.imagedraw,
   test.imagename,
+  test.css.catalog,
   test.tabsheet,
   test.pagecontrol,
   test.pagecontrol.streaming,
