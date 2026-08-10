@@ -24,10 +24,10 @@ unit tyControls.ComboBoxEx;
 
 interface
 uses
-  Classes, SysUtils, Types, Graphics, Controls,
+  Classes, SysUtils, ImgList, Types, Graphics, Controls,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base,
-  tyControls.ListBox, tyControls.ComboBox, tyControls.ImageCollection;
+  tyControls.ListBox, tyControls.ComboBox, tyControls.ImageCollection, tyControls.ImageDraw;
 
 type
   TTyComboExItems = class;   { forward }
@@ -126,7 +126,7 @@ type
     with AddItem(text, imageIndex) / Add / Insert. The image source is Images. }
   TTyComboBoxEx = class(TTyComboBox)
   private
-    FImages: TTyVirtualImageList;
+    FImages: TCustomImageList;
     FItemsEx: TTyComboExItems;
     { Re-entrancy guard: the two lists write to each other, and every write fires the
       other's change hook. }
@@ -135,7 +135,7 @@ type
       that moment the list is still empty and the index clamps to -1. Remembered here and
       re-applied in Loaded. }
     FLoadedItemIndex: Integer;
-    procedure SetImages(const AValue: TTyVirtualImageList);
+    procedure SetImages(const AValue: TCustomImageList);
     procedure SetItemsEx(const AValue: TTyComboExItems);
     { ItemsEx -> Items. }
     procedure SyncItemsFromEx;
@@ -186,7 +186,7 @@ type
   published
     { The raster image source (index-addressed). A FreeNotification nils this reference
       automatically if the list is freed first. }
-    property Images: TTyVirtualImageList read FImages write SetImages;
+    property Images: TCustomImageList read FImages write SetImages;
     { Declared BEFORE any property that depends on the row set so it streams first. }
     property ItemsEx: TTyComboExItems read FItemsEx write SetItemsEx;
   end;
@@ -444,7 +444,7 @@ begin
   inherited Destroy;
 end;
 
-procedure TTyComboBoxEx.SetImages(const AValue: TTyVirtualImageList);
+procedure TTyComboBoxEx.SetImages(const AValue: TCustomImageList);
 begin
   if FImages = AValue then Exit;
   if FImages <> nil then
@@ -667,17 +667,14 @@ procedure TTyComboBoxEx.DrawImageText(P: TTyPainter; const ARect: TRect; const S
 var
   x, sz: Integer;
   textR: TRect;
-  bmp: TBGRABitmap;
 begin
   x := ARect.Left + P.Scale(4);
-  if (FImages <> nil) and (AImageIndex >= 0) and (AImageIndex < FImages.Count) then
+  if (FImages <> nil) and (AImageIndex >= 0) and (AImageIndex < TyImageCount(FImages)) then
   begin
     sz := (ARect.Bottom - ARect.Top) - P.Scale(6);
     if sz < 8 then sz := 8;
-    bmp := FImages.CachedIndex(AImageIndex, sz);   // borrowed; do NOT free
-    if bmp <> nil then
-      P.Bitmap.PutImage(x, ARect.Top + ((ARect.Bottom - ARect.Top - bmp.Height) div 2),
-        bmp, dmDrawWithTransparency);
+    TyBlitImage(P.Bitmap, FImages, AImageIndex,
+      x, ARect.Top + ((ARect.Bottom - ARect.Top - sz) div 2), sz, P.Scale(96), False);
     x := x + sz + P.Scale(4);
   end;
   textR := Rect(x, ARect.Top, ARect.Right - P.Scale(4), ARect.Bottom);
@@ -690,7 +687,6 @@ procedure TTyComboBoxEx.DrawExItem(P: TTyPainter; const ARect: TRect;
 var
   imgIdx, sz, x, y: Integer;
   R: TRect;
-  bmp: TBGRABitmap;
 begin
   if AItem = nil then Exit;
   R := ARect;
@@ -706,15 +702,13 @@ begin
   DrawImageText(P, R, AItem.Caption, imgIdx, AStyle);
 
   { The overlay stamps ON the row image, so it only means anything when one was drawn. }
-  if (FImages = nil) or (imgIdx < 0) or (imgIdx >= FImages.Count) then Exit;
-  if (AItem.OverlayImageIndex < 0) or (AItem.OverlayImageIndex >= FImages.Count) then Exit;
+  if (FImages = nil) or (imgIdx < 0) or (imgIdx >= TyImageCount(FImages)) then Exit;
+  if (AItem.OverlayImageIndex < 0) or (AItem.OverlayImageIndex >= TyImageCount(FImages)) then Exit;
   sz := (R.Bottom - R.Top) - P.Scale(6);
   if sz < 8 then sz := 8;
-  bmp := FImages.CachedIndex(AItem.OverlayImageIndex, sz);   // borrowed; do NOT free
-  if bmp = nil then Exit;
   x := R.Left + P.Scale(4);
-  y := R.Top + ((R.Bottom - R.Top - bmp.Height) div 2);
-  P.Bitmap.PutImage(x, y, bmp, dmDrawWithTransparency);
+  y := R.Top + ((R.Bottom - R.Top - sz) div 2);
+  TyBlitImage(P.Bitmap, FImages, AItem.OverlayImageIndex, x, y, sz, P.Scale(96), False);
 end;
 
 procedure TTyComboBoxEx.PaintFieldContent(P: TTyPainter; const ATextRect: TRect;

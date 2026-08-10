@@ -20,10 +20,10 @@ unit tyControls.AdvancedComboBox;
 
 interface
 uses
-  Classes, SysUtils, Types, Graphics,
+  Classes, SysUtils, ImgList, Types, Graphics,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base,
-  tyControls.ListBox, tyControls.ComboBox, tyControls.ImageCollection,
+  tyControls.ListBox, tyControls.ComboBox, tyControls.ImageCollection, tyControls.ImageDraw,
   tyControls.AdvancedListBox;
 
 type
@@ -42,8 +42,8 @@ type
     Images (TTyVirtualImageList). }
   TTyAdvancedComboBox = class(TTyComboBox)
   private
-    FImages: TTyVirtualImageList;
-    procedure SetImages(const AValue: TTyVirtualImageList);
+    FImages: TCustomImageList;
+    procedure SetImages(const AValue: TCustomImageList);
   protected
     function CreatePopupList: TTyListBox; override;
     procedure PaintFieldContent(P: TTyPainter; const ATextRect: TRect; const AStyle: TTyStyleSet); override;
@@ -64,11 +64,11 @@ type
     function ImageIndexOf(AIndex: Integer): Integer;
     { The list this combo's popup draws with; also the source the popup rows read Images
       from (they cast Owner back to this combo). Exposed for the shared field draw. }
-    property ImagesRef: TTyVirtualImageList read FImages;
+    property ImagesRef: TCustomImageList read FImages;
   published
     { The raster image source (index-addressed). A FreeNotification nils this reference
       automatically if the list is freed first. }
-    property Images: TTyVirtualImageList read FImages write SetImages;
+    property Images: TCustomImageList read FImages write SetImages;
   end;
 
 implementation
@@ -87,7 +87,7 @@ end;
 procedure TTyAdvancedComboPopupList.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
   AIndex: Integer; const AStyle: TTyStyleSet);
 var
-  imgs: TTyVirtualImageList;
+  imgs: TCustomImageList;
 begin
   { Owner-draw first: the rich-row branch below replaces the whole row, so an inherited call
     would be too late. Inert unless the combo has both an owner-draw Style and a handler. }
@@ -107,7 +107,7 @@ end;
 
 { TTyAdvancedComboBox }
 
-procedure TTyAdvancedComboBox.SetImages(const AValue: TTyVirtualImageList);
+procedure TTyAdvancedComboBox.SetImages(const AValue: TCustomImageList);
 begin
   if FImages = AValue then Exit;
   if FImages <> nil then

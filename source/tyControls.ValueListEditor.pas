@@ -2,9 +2,9 @@ unit tyControls.ValueListEditor;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType,
+  Classes, SysUtils, ImgList, Types, Controls, Graphics, LCLType,
   tyControls.Types, tyControls.Painter, tyControls.StyleModel, tyControls.Base,
-  tyControls.Controller, tyControls.ListBox, tyControls.Edit, tyControls.ImageCollection,
+  tyControls.Controller, tyControls.ListBox, tyControls.Edit, tyControls.ImageCollection, tyControls.ImageDraw,
   tyControls.Popup;
 
 type
@@ -136,7 +136,7 @@ type
     FReadOnly: Boolean;
     FKeyOptions: TTyKeyOptions;
     FDraggingSplit: Boolean;
-    FImages: TTyVirtualImageList;
+    FImages: TCustomImageList;
     FOnValueChanged: TTyValueEditEvent;
     FOnKeyChanged: TTyValueEditEvent;      // a keyEdit rename committed
     FOnKeyRejected: TTyKeyRejectedEvent;   // a keyUnique collision refused a rename
@@ -166,7 +166,7 @@ type
     procedure SetValue(const AKey, AValue: string);
     procedure SetKeyColumnWidth(AValue: Integer);
     procedure SetKeyOptions(AValue: TTyKeyOptions);
-    procedure SetImages(const AValue: TTyVirtualImageList);
+    procedure SetImages(const AValue: TCustomImageList);
     { keyUnique's collision rule: does AKey already name one of ARow's SIBLINGS? Case-insensitive
       (LCL uses AnsiCompareText, valedit.pas:1610) and blind to empty keys, like LCL's.
 
@@ -350,7 +350,7 @@ type
       ReadOnly still wins over all four: it turns the whole control read-only, so a ReadOnly
       sheet with KeyOptions set neither renames nor adds nor deletes. }
     property KeyOptions: TTyKeyOptions read FKeyOptions write SetKeyOptions default [];
-    property Images: TTyVirtualImageList read FImages write SetImages;
+    property Images: TCustomImageList read FImages write SetImages;
     property OnValueChanged: TTyValueEditEvent read FOnValueChanged write FOnValueChanged;
     { A rename COMMITTED (ARow.Key already holds the new name) -- via the keyEdit gesture
       or a programmatic Keys[] write, the same two routes OnValueChanged covers for values.
@@ -917,7 +917,7 @@ begin
   if (FEditFlat >= 0) and (FEditCol = 0) and not (keyEdit in FKeyOptions) then EndEdit(False);
 end;
 
-procedure TTyValueListEditor.SetImages(const AValue: TTyVirtualImageList);
+procedure TTyValueListEditor.SetImages(const AValue: TCustomImageList);
 begin
   if FImages = AValue then Exit;
   if FImages <> nil then FImages.RemoveFreeNotification(Self);
@@ -1640,7 +1640,6 @@ var
   expSty, keySty, divSty, valSty: TTyStyleSet;
   divider, keyCol, valCol, valDef, triCol: TTyColor;
   ctx: TBGRACanvas2D;
-  bmp: TBGRABitmap;
   cy: Single;
 begin
   if (AIndex < 0) or (AIndex > High(FFlatRow)) then Exit;
@@ -1742,15 +1741,12 @@ begin
       valR.Left := valR.Left + sw + P.Scale(5);
     end;
     // optional image
-    if (FImages <> nil) and (r.ImageIndex >= 0) and (r.ImageIndex < FImages.Count) then
+    if (FImages <> nil) and (r.ImageIndex >= 0) and (r.ImageIndex < TyImageCount(FImages)) then
     begin
       imgSz := (ARowRect.Bottom - ARowRect.Top) - P.Scale(6);
       if imgSz < 8 then imgSz := 8;
-      bmp := FImages.CachedIndex(r.ImageIndex, imgSz);   // borrowed; do NOT free
-      if bmp <> nil then
-        P.Bitmap.PutImage(valR.Left,
-          ARowRect.Top + ((ARowRect.Bottom - ARowRect.Top - bmp.Height) div 2), bmp,
-          dmDrawWithTransparency);
+      TyBlitImage(P.Bitmap, FImages, r.ImageIndex, valR.Left,
+        ARowRect.Top + ((ARowRect.Bottom - ARowRect.Top - imgSz) div 2), imgSz, P.Scale(96), False);
       valR.Left := valR.Left + imgSz + P.Scale(4);
     end;
     { The per-row override still wins over the theme -- an app that colours one value red

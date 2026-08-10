@@ -26,10 +26,10 @@ unit tyControls.AdvancedListBox;
 
 interface
 uses
-  Classes, SysUtils, Types, Graphics,
+  Classes, SysUtils, ImgList, Types, Graphics,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base,
-  tyControls.ListBox, tyControls.ImageCollection;
+  tyControls.ListBox, tyControls.ImageCollection, tyControls.ImageDraw;
 
 { Split a joined `Title + LineEnding + Subtitle` string into its two parts. ASubtitle is
   '' when the item has no LineEnding. Shared by the control and any popup that stores rows
@@ -42,7 +42,7 @@ procedure TySplitAdvancedItem(const AJoined: string; out ATitle, ASubtitle: stri
   subtitle reuses AStyle.TextColor at reduced alpha (still theme-driven). Used by both the
   list box rows and a combo's popup rows so the layout lives in one place. }
 procedure TyDrawAdvancedRow(P: TTyPainter; const ARect: TRect; const AJoined: string;
-  AImageIndex: Integer; AImages: TTyVirtualImageList; const AStyle: TTyStyleSet;
+  AImageIndex: Integer; AImages: TCustomImageList; const AStyle: TTyStyleSet;
   AFontSize: Integer);
 
 type
@@ -51,8 +51,8 @@ type
     ImageIndexOf. The image source is the Images (TTyVirtualImageList). }
   TTyAdvancedListBox = class(TTyListBox)
   private
-    FImages: TTyVirtualImageList;
-    procedure SetImages(const AValue: TTyVirtualImageList);
+    FImages: TCustomImageList;
+    procedure SetImages(const AValue: TCustomImageList);
   protected
     procedure PaintItemContent(P: TTyPainter; const ARowRect: TRect; AIndex: Integer;
       const AStyle: TTyStyleSet); override;
@@ -71,7 +71,7 @@ type
   published
     { The raster image source (index-addressed). A FreeNotification nils this reference
       automatically if the list is freed first. }
-    property Images: TTyVirtualImageList read FImages write SetImages;
+    property Images: TCustomImageList read FImages write SetImages;
   end;
 
 implementation
@@ -94,12 +94,11 @@ begin
 end;
 
 procedure TyDrawAdvancedRow(P: TTyPainter; const ARect: TRect; const AJoined: string;
-  AImageIndex: Integer; AImages: TTyVirtualImageList; const AStyle: TTyStyleSet;
+  AImageIndex: Integer; AImages: TCustomImageList; const AStyle: TTyStyleSet;
   AFontSize: Integer);
 var
   titleText, subText: string;
   x, sz, rowH, textLeft, midY, pad: Integer;
-  bmp: TBGRABitmap;
   titleR, subR: TRect;
   subColor: TTyColor;
   subSize: Integer;
@@ -111,14 +110,12 @@ begin
 
   // Optional left image: a square sized to the row height minus vertical padding,
   // vertically centered. CachedIndex borrows the collection's render — nothing to free.
-  if (AImages <> nil) and (AImageIndex >= 0) and (AImageIndex < AImages.Count) then
+  if (AImages <> nil) and (AImageIndex >= 0) and (AImageIndex < TyImageCount(AImages)) then
   begin
     sz := rowH - P.Scale(8);
     if sz < 8 then sz := 8;
-    bmp := AImages.CachedIndex(AImageIndex, sz);   // borrowed; do NOT free
-    if bmp <> nil then
-      P.Bitmap.PutImage(x, ARect.Top + ((rowH - bmp.Height) div 2),
-        bmp, dmDrawWithTransparency);
+    TyBlitImage(P.Bitmap, AImages, AImageIndex, x, ARect.Top + ((rowH - sz) div 2), sz,
+      P.Scale(96), False);
     x := x + sz + pad;
   end;
   textLeft := x;
@@ -157,7 +154,7 @@ begin
   ItemHeight := 40;   // taller rows to fit two lines
 end;
 
-procedure TTyAdvancedListBox.SetImages(const AValue: TTyVirtualImageList);
+procedure TTyAdvancedListBox.SetImages(const AValue: TCustomImageList);
 begin
   if FImages = AValue then Exit;
   if FImages <> nil then

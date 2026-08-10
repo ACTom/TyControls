@@ -2,11 +2,11 @@ unit tyControls.TabStrip;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Math, Controls, Graphics, LCLType, LMessages, ExtCtrls,
+  Classes, SysUtils, ImgList, Types, Math, Controls, Graphics, LCLType, LMessages, ExtCtrls,
   ComCtrls,                          // TTabPosition -- LCL's type, so a port streams
   BGRABitmap, BGRABitmapTypes,       // the borrowed bitmap CachedIndex hands back
   tyControls.Types, tyControls.Controller, tyControls.Painter, tyControls.Base,
-  tyControls.Animation, tyControls.Accel, tyControls.ImageCollection;
+  tyControls.Animation, tyControls.Accel, tyControls.ImageCollection, tyControls.ImageDraw;
 
 const
   { Assign to TabHeight to hand the band's height back to the theme, so it follows
@@ -93,7 +93,7 @@ type
     FRowCount: Integer;
 
     { Tab icons: one list on the control, an index per tab, an event with the last word. }
-    FImages: TTyVirtualImageList;
+    FImages: TCustomImageList;
     FImagesWidth: Integer;
     FOnGetImageIndex: TTyTabGetImageIndexEvent;
 
@@ -130,7 +130,7 @@ type
     procedure SetMultiLine(AValue: Boolean);
     procedure SetRaggedRight(AValue: Boolean);
     function  GetRowCount: Integer;
-    procedure SetImages(AValue: TTyVirtualImageList);
+    procedure SetImages(AValue: TCustomImageList);
     procedure SetImagesWidth(AValue: Integer);
     procedure RebuildLayout(APPI: Integer);
     procedure DoCloseClick(AIndex: Integer);
@@ -496,7 +496,7 @@ type
       property would accept only the lists no TTyPainter can draw. TTyHeader.Images was
       retyped for exactly this reason (Columns.pas), and this follows it rather than
       inventing a third rule. }
-    property Images: TTyVirtualImageList read FImages write SetImages;
+    property Images: TCustomImageList read FImages write SetImages;
     { Logical-px edge to render tab icons at. 0 (the default) follows the --tab-icon-size
       theme token, which is what keeps icons in step with a density change; a non-zero
       value pins them. LCL's ImagesWidth picks a RESOLUTION out of a multi-resolution list;
@@ -799,7 +799,7 @@ begin
   Result := FRowCount;
 end;
 
-procedure TTyCustomTabStrip.SetImages(AValue: TTyVirtualImageList);
+procedure TTyCustomTabStrip.SetImages(AValue: TCustomImageList);
 begin
   if FImages = AValue then Exit;
   if FImages <> nil then FImages.RemoveFreeNotification(Self);
@@ -1842,7 +1842,6 @@ var
   TabStates: TTyStateSet;
   CloseHi, BaseFill: TTyFill;
   BaseW, IconIdx: Integer;
-  IconBmp: TBGRABitmap;
   FadeEased: Single;
   disp: string;
   mp: Integer;
@@ -2004,13 +2003,12 @@ begin
         hands back a borrowed bitmap and allocates nothing -- the path every other icon
         consumer in this library uses (TTyListView.DrawImage). }
       IconIdx := TabImageIndex(I);
-      if (FImages <> nil) and (IconIdx >= 0) and
+      if (FImages <> nil) and (IconIdx >= 0) and (IconIdx < TyImageCount(FImages)) and
          (FIconRects[I].Right > FIconRects[I].Left) then
       begin
         IconRect := ToScreenRect(FIconRects[I]);
-        IconBmp := FImages.CachedIndex(IconIdx, IconRect.Right - IconRect.Left);
-        if IconBmp <> nil then
-          P.Bitmap.PutImage(IconRect.Left, IconRect.Top, IconBmp, dmDrawWithTransparency);
+        TyBlitImage(P.Bitmap, FImages, IconIdx, IconRect.Left, IconRect.Top,
+          IconRect.Right - IconRect.Left, P.Scale(96), False);
         if Rtl then
         begin
           if IconRect.Left < TextRect.Right then TextRect.Right := IconRect.Left;
