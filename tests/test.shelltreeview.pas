@@ -508,7 +508,7 @@ end;
 { ===== The built-in glyphs, after the image list under them was replaced =========
 
   BuildGlyphs used to hand-fill a TImageList at a hardcoded 16px; it now renders the same three
-  BGRA masters through a TTyVirtualImageList into a TTyLCLImageList. Nothing in this file said
+  BGRA masters through a single TTyVirtualImageList (which IS an image list). Nothing in this file said
   anything about the icons before, so the swap was entirely unguarded -- and "the tests are
   green" would have been true with three blank squares, or with the order reversed.
 

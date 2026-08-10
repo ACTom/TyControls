@@ -511,7 +511,7 @@ type
       list announces a content change through a TChangeLink, and nothing else does. Without it
       an icon that was added, resized or re-rendered after the tree was painted simply never
       appeared -- the tree redrew from its cache and had no idea anything had moved. It matters
-      more now than it did: TTyLCLImageList refills itself whenever its source changes, so with
+      more now than it did: a TTyVirtualImageList refills its baked rasters whenever its names change, so with
       no link the tree would show whatever the list happened to hold at assignment time and
       never again. }
     FImageChangeLink: TChangeLink;

@@ -10,7 +10,7 @@ unit umain;
   · Bundled pack —— TTyLucideIconFont dropped on the form: 2000+ icons by name, no Glyphs to fill in.
     The icon browser finds one by eye; type a name and the TTyCharImage beside it follows.
   · The chain that makes those icons reach a STOCK LCL consumer:
-    TTyLucideIconFont → TTyVirtualImageList (names) → TTyLCLImageList (bridge) → TTyTreeView.Images.
+    TTyLucideIconFont → TTyVirtualImageList (which IS an image list) → TTyTreeView.Images.
   The window, every control and the live theme switcher are designed in umain.lfm (a TTyForm + TTyTitleBar);
   the code here is theme setup, the code-generated sample bitmap, the glyph colours and the handlers. }
 
@@ -28,7 +28,7 @@ uses
   { The whole point of the block at the bottom of the window. tyControls.Icons.Lucide is what
     compiles the ~833KB pack in -- an application that never names this unit pays nothing, which
     is why the pack is a unit and not a resource. }
-  tyControls.TreeView, tyControls.ImageCollection, tyControls.LCLImageList,
+  tyControls.TreeView, tyControls.ImageCollection,
   tyControls.Icons.Lucide, tyControls.Dialogs.IconBrowser;
 
 type
@@ -70,7 +70,6 @@ type
     { The bundled pack and the chain that carries it into a stock LCL consumer. }
     Lucide: TTyLucideIconFont;
     PackNames: TTyVirtualImageList;
-    Bridge: TTyLCLImageList;
     LblPack: TTyLabel;
     BtnBrowse: TTyButton;
     PackName: TTyEdit;

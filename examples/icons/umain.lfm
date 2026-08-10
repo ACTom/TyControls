@@ -298,14 +298,14 @@ object MainForm: TMainForm
       Top = 842
       Width = 588
       WordWrap = True
-      Caption = 'The whole chain in one control: the bundled pack → a TTyVirtualImageList that names the icons it wants → TTyLCLImageList, which is what lets a stock TCustomImageList consumer eat them. The tree below is fed that way.'
+      Caption = 'The bundled pack drops on the form; a TTyVirtualImageList names the icons it wants; it IS an image list, so it goes straight to the tree''s Images. The tree below is fed that way.'
     end
     object IconTree: TTyTreeView
       Left = 16
       Height = 150
       Top = 908
       Width = 588
-      Images = Bridge
+      Images = PackNames
     end
   end
   object Icons: TTyIconFont
@@ -331,11 +331,6 @@ object MainForm: TMainForm
       'music'
       'settings'
     )
-  end
-  object Bridge: TTyLCLImageList
-    Source = PackNames
-    ImageWidth = 16
-    MultiResolution = False
   end
   object GlyphList: TTyGlyphImageList
     IconFont = Icons

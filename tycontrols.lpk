@@ -513,10 +513,6 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.Dialogs.IconBrowser"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.LCLImageList.pas"/>
-        <UnitName Value="tyControls.LCLImageList"/>
-      </Item>
-      <Item>
         <Filename Value="source/tyControls.ImageDraw.pas"/>
         <UnitName Value="tyControls.ImageDraw"/>
       </Item>

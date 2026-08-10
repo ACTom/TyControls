@@ -6,7 +6,7 @@ unit test.imagedraw;
   What is worth pinning here is the stuff that made per-call-site copies of this go wrong:
 
   THE PATH SPLIT. `is TTyVirtualImageList`, tested for the NARROW type -- after the reparent a
-  TTyLCLImageList is ALSO a TCustomImageList, so a test for the wide type would send both down
+  a stock TImageList is ALSO a TCustomImageList, so a test for the WIDE type would send both down
   the same branch. TyImageIsBaked and the count/measure helpers must route a Ty list one way
   and a baked list the other.
 
@@ -27,17 +27,16 @@ unit test.imagedraw;
 interface
 
 uses
-  Classes, SysUtils, Types, Graphics, GraphType, ImgList, fpcunit, testregistry,
+  Classes, SysUtils, Types, Graphics, GraphType, ImgList, Controls, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.ImageCollection, tyControls.LCLImageList,
-  tyControls.ImageDraw;
+  tyControls.Types, tyControls.ImageCollection, tyControls.ImageDraw;
 
 type
   TImageDrawTest = class(TTestCase)
   private
     FColl: TTyImageCollection;
     FVector: TTyVirtualImageList;   // ours -- the on-demand branch
-    FBaked: TTyLCLImageList;        // a TCustomImageList that is NOT ours -- the LCL branch
+    FBaked: TImageList;             // a STOCK LCL list -- the baked branch, the real foreign case
     procedure AddImage(const AName: string; AColor: TBGRAPixel);
   protected
     procedure SetUp; override;
@@ -84,6 +83,7 @@ begin
 end;
 
 procedure TImageDrawTest.SetUp;
+var bmp: TBitmap;
 begin
   NeedWidgetSet;
   FColl := TTyImageCollection.Create(nil);
@@ -92,9 +92,22 @@ begin
   FVector := TTyVirtualImageList.Create(nil);
   FVector.Collection := FColl;
   FVector.Names.Text := 'red' + LineEnding + 'green';
-  FBaked := TTyLCLImageList.Create(nil);
-  FBaked.ImageWidth := 16;
-  FBaked.Source := FVector;
+  { A plain LCL TImageList with two registered resolutions, so the measure trap (asking for a
+    width it does not have) has something real to mint against -- this is exactly the foreign
+    list a user might assign, and the branch the helper defers/bakes for. }
+  FBaked := TImageList.Create(nil);
+  FBaked.Width := 16;
+  FBaked.Height := 16;
+  FBaked.RegisterResolutions([16, 32]);
+  bmp := TBitmap.Create;
+  try
+    bmp.SetSize(16, 16);
+    bmp.Canvas.Brush.Color := clRed;
+    bmp.Canvas.FillRect(0, 0, 16, 16);
+    FBaked.Add(bmp, nil);      { one image -> Count = 1, ResolutionCount = 2 }
+  finally
+    bmp.Free;
+  end;
 end;
 
 procedure TImageDrawTest.TearDown;
@@ -120,15 +133,16 @@ end;
 
 procedure TImageDrawTest.AnLclListIsBaked;
 begin
-  { And a TTyLCLImageList -- also a TCustomImageList descendant -- takes the baked branch,
-    which a test for the WIDE type would get wrong. }
-  AssertTrue('a TTyLCLImageList is the baked branch', TyImageIsBaked(FBaked));
+  { And a stock LCL TImageList -- also a TCustomImageList descendant, which a test for the
+    WIDE type would get wrong -- takes the baked branch, which is the whole reason for the
+    narrow-type check. }
+  AssertTrue('a stock TImageList is the baked branch', TyImageIsBaked(FBaked));
 end;
 
 procedure TImageDrawTest.CountAsksTheRightBranch;
 begin
   AssertEquals('our list counts its names', 2, TyImageCount(FVector));
-  AssertEquals('the baked list counts its slots', 2, TyImageCount(FBaked));
+  AssertEquals('the baked list counts its slots', 1, TyImageCount(FBaked));
 end;
 
 procedure TImageDrawTest.SizeOfOurListIsWhatYouAskFor;

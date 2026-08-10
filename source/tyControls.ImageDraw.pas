@@ -37,7 +37,7 @@ const
     Ghosted, and the two are negations. A table, not a `not`, is the whole point. }
   TyGhostEffect: array[Boolean] of TGraphicsDrawEffect = (gdeNormal, gdeDisabled);
 
-{ True when AList is a BAKED list (LCL's own, TTyLCLImageList, TLCLGlyphs -- anything not ours).
+{ True when AList is a BAKED list (a stock LCL TImageList, TLCLGlyphs -- anything not ours).
   nil is not baked: there is nothing to defer to a post-EndPaint pass. Ask once per paint. }
 function TyImageIsBaked(AList: TCustomImageList): Boolean;
 

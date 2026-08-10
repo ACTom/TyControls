@@ -37,8 +37,7 @@ uses
   tyControls.Memo, tyControls.Menu, tyControls.NativeStyler,
   tyControls.Splitter, tyControls.StatusBar, tyControls.ToolBar,
   tyControls.Calendar, tyControls.DateTimePicker, tyControls.TabSet,
-  ClipBrd,
-  tyControls.LCLImageList,
+  ClipBrd,
   tyControls.TreeView, tyControls.Dialogs, tyControls.Dialogs.SelectPath,
   tyControls.Dialogs.IconBrowser,
   tyControls.Dialogs.Color, tyControls.Dialogs.Font,
@@ -1350,7 +1349,7 @@ begin
   // Icon-font, images, hints.
   RegisterComponents('TyControls Images',
     [TTyIconFont, TTyLucideIconFont, TTyCharImage, TTyGlyphImageList, TTyImage,
-     TTyImageCollection, TTyVirtualImageList, TTyLCLImageList, TTyHint, TTyBalloonHint,
+     TTyImageCollection, TTyVirtualImageList, TTyHint, TTyBalloonHint,
      TTyPopover]);
   // Decorative vector shapes + charts.
   RegisterComponents('TyControls Shapes & Charts',
@@ -1442,12 +1441,7 @@ begin
   RegisterPropertyEditor(TypeInfo(string), TTyGraphicControl, 'Version', TTyVersionEditor);
   RegisterPropertyEditor(TypeInfo(string), TTyCustomControl, 'Version', TTyVersionEditor);
   RegisterPropertyEditor(TypeInfo(string), TTyComponent, 'Version', TTyVersionEditor);
-  { The bridge's root is LCL's TCustomImageList, not one of this library's bases, so the
-    Version editor has to be named for it explicitly -- the property is there, and without
-    this line it is the one component whose '...' would not open the About box.
-    test.version's TestEveryRegisteredComponentReportsTyVersion is what says so. }
-  RegisterPropertyEditor(TypeInfo(string), TTyLCLImageList, 'Version', TTyVersionEditor);
-  { Same reason, same shape: TTyVirtualImageList no longer descends from TTyComponent, so
+  { TTyVirtualImageList no longer descends from TTyComponent, so
     the editor has to be named for it explicitly or its '...' stops opening the About box.
     test.version's InheritsFromAnEditorBase resolves the bases it parses out of THIS file. }
   RegisterPropertyEditor(TypeInfo(string), TTyVirtualImageList, 'Version', TTyVersionEditor);

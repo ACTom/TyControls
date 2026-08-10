@@ -30,8 +30,7 @@ uses
   Classes, SysUtils, TypInfo, Graphics, Controls, ImgList,
   LazFileUtils,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.TreeView, tyControls.ImageCollection, tyControls.LCLImageList,
-  tyControls.FileSystem,
+  tyControls.TreeView, tyControls.ImageCollection, tyControls.FileSystem,
   tyControls.ShellListView;
 
 const
@@ -129,13 +128,12 @@ type
     FIcons:        TTyImageCollection;{ owned; the 128px BGRA masters }
     { owned; the masters, down-rendered into something TTyTreeView.Images accepts.
       This used to be a hand-filled TImageList at a hardcoded 16px -- the shape that showed the
-      library needed a general bridge in the first place. It is now TTyLCLImageList, which
-      renders the same masters through the same TTyVirtualImageList every other consumer here
-      uses, keeps the slots in Names order (so the TyShellTree*Glyph constants below stay
-      valid), and refills itself if the masters change. MultiResolution is OFF because a tree
-      paints via Images.Draw -> GetResolution(FWidth) and never pulls another width. }
-    FNames:        TTyVirtualImageList;
-    FImages:       TTyLCLImageList;
+      library needed a general bridge in the first place. It is now just a
+      TTyVirtualImageList -- which IS a TCustomImageList since the reparent, so it is both the
+      name source and the image list the tree draws from, in one object. It bakes its own
+      rasters (a tree pulls the base width, so MultiResolution is off) and keeps a slot per
+      name, so the TyShellTree*Glyph constants below stay valid. }
+    FImages:       TTyVirtualImageList;
     FSelectedPath: string;            { the focused directory, cached from DoTreeChange }
     FOnPathChange: TNotifyEvent;
     FOnAddItem:    TTyFsAddItemEvent;
@@ -429,7 +427,6 @@ begin
   { FImages/FIcons are created ownerless (see BuildGlyphs). Free FImages first --
     its FreeNotification nils the inherited Images reference before we drop it. }
   FImages.Free;
-  FNames.Free;
   FIcons.Free;
   inherited Destroy;
 end;
@@ -518,20 +515,17 @@ const
 begin
   FIcons := TTyImageCollection.Create(nil);
   { Order MUST match the TyShellTree*Glyph constants: folder (0), drive (1), file (2). It is the
-    NAMES list below that fixes that order now, and TTyLCLImageList keeps a slot per name even
+    NAMES list below that fixes that order now, and the list keeps a slot per name even
     for one that will not resolve -- so the constants cannot silently shift. }
   AddFolder('folder', BGRA(226, 176, 66));    { warm amber }
   AddDrive('drive',   BGRA(96, 116, 150));    { steel blue }
   AddFile('file',     BGRA(150, 156, 164));   { neutral grey }
 
-  FNames := TTyVirtualImageList.Create(nil);
-  FNames.Collection := FIcons;
-  FNames.Names.Text := 'folder' + LineEnding + 'drive' + LineEnding + 'file';
-
-  FImages := TTyLCLImageList.Create(nil);
-  FImages.MultiResolution := False;   { a tree only ever pulls the base width }
-  FImages.ImageWidth := TyShellTreeIconSize;
-  FImages.Source := FNames;           { fills, in Names order }
+  FImages := TTyVirtualImageList.Create(nil);
+  FImages.Collection := FIcons;
+  FImages.MultiResolution := False;         { a tree only ever pulls the base width }
+  FImages.DefaultSize := TyShellTreeIconSize;
+  FImages.Names.Text := 'folder' + LineEnding + 'drive' + LineEnding + 'file';
 
   if FUseBuiltinIcons then
     Images := FImages;
