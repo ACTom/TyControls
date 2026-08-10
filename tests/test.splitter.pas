@@ -28,11 +28,13 @@ type
   TTySplitterPixAccess = class(TTySplitter)
   public
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    procedure HoverOn;   // drive the protected MouseEnter (sets FHover)
   end;
 
   TSplitterPixelTest = class(TTestCase)
   published
     procedure TestGripDotIsBlue;
+    procedure TestHoverChangesGripColor;
   end;
 
 implementation
@@ -129,6 +131,83 @@ end;
 procedure TTySplitterPixAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   inherited RenderTo(ACanvas, ARect, APPI);
+end;
+
+procedure TTySplitterPixAccess.HoverOn;
+begin
+  MouseEnter;   // the protected hook the base uses to set FHover -> tysHover in CurrentStates
+end;
+
+procedure TSplitterPixelTest.TestHoverChangesGripColor;
+{ Antek's report: TySplitter:hover does not work. The grip dots are drawn in the resolved
+  color; a :hover rule should recolour them. This drives FHover via the base MouseEnter and
+  renders, to tell a broken RESOLVE/STATE from a real-mouse-enter-that-never-fires. }
+var
+  Ctl: TTyStyleController;
+  Form: TForm;
+  Sp: TTySplitterPixAccess;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  x, y: Integer;
+  px: TBGRAPixel;
+  normalGreen, hoverRed: Boolean;
+
+  function ScanGreenDominant: Boolean;
+  var xx, yy: Integer; p: TBGRAPixel;
+  begin
+    Result := False;
+    for xx := 4 to 7 do for yy := 0 to 99 do
+    begin
+      p := Reread.GetPixel(xx, yy);
+      if p.green > p.red + 20 then Exit(True);
+    end;
+  end;
+  function ScanRedDominant: Boolean;
+  var xx, yy: Integer; p: TBGRAPixel;
+  begin
+    Result := False;
+    for xx := 4 to 7 do for yy := 0 to 99 do
+    begin
+      p := Reread.GetPixel(xx, yy);
+      if p.red > p.green + 20 then Exit(True);
+    end;
+  end;
+
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Form := TForm.CreateNew(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss('TySplitter { color: #00FF00; } TySplitter:hover { color: #FF0000; }');
+    Form.Color := clWhite;
+
+    Sp := TTySplitterPixAccess.Create(Form);
+    Sp.Parent := Form;
+    Sp.Controller := Ctl;
+    Sp.Align := alLeft;
+    Sp.SetBounds(0, 0, 10, 100);
+    Sp.Font.PixelsPerInch := 96;
+
+    Bmp.PixelFormat := pf32bit; Bmp.SetSize(10, 100);
+    Bmp.Canvas.Brush.Color := clWhite; Bmp.Canvas.FillRect(0, 0, 10, 100);
+
+    { normal state -> green grip }
+    Sp.RenderTo(Bmp.Canvas, Rect(0, 0, 10, 100), 96);
+    Reread := TBGRABitmap.Create(Bmp);
+    try normalGreen := ScanGreenDominant; finally Reread.Free; end;
+
+    { hover state -> red grip (the point of the report) }
+    Sp.HoverOn;
+    Bmp.Canvas.FillRect(0, 0, 10, 100);
+    Sp.RenderTo(Bmp.Canvas, Rect(0, 0, 10, 100), 96);
+    Reread := TBGRABitmap.Create(Bmp);
+    try hoverRed := ScanRedDominant; finally Reread.Free; end;
+
+    AssertTrue('normal grip is green', normalGreen);
+    AssertTrue('hover grip is red (the :hover rule applied)', hoverRed);
+  finally
+    Bmp.Free; Form.Free; Ctl.Free;
+  end;
 end;
 
 { TSplitterPixelTest }

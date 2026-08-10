@@ -754,6 +754,7 @@ begin
     '  color: var(--muted);' + LineEnding +
     '}' + LineEnding +
     'TySplitter:hover {' + LineEnding +
+    '  background: var(--surface-hover);' + LineEnding +
     '  color: var(--accent);' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
