@@ -26,6 +26,15 @@ function TyEvalFloat(const Expr: string; Vars: TStrings): Single;    // '0.5'
 // nested parens (e.g. 'lighten(--accent, 16%)') without mis-splitting commas.
 procedure SplitArgs(const ArgStr: string; Args: TStrings);
 
+const
+  { The colour functions TyEvalColor recognises -- an enumerable mirror of its dispatch (this
+    unit). 'var' is handled as a prefix rather than through the function dispatch, but the editor
+    offers it alongside the rest. Unknown function names raise (unlike unknown properties, which
+    are silently dropped), so this list is also what an editor should offer to avoid that error.
+    test.css.catalog pins it: each name resolves, an unknown one raises. }
+  TyKnownColorFns: array[0..8] of string =
+    ('var', 'lighten', 'darken', 'alpha', 'mix', 'rgb', 'rgba', 'elevate', 'on');
+
 implementation
 
 // Clamp a real channel value into the 0..255 Byte range.

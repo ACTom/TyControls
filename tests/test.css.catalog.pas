@@ -21,12 +21,14 @@ type
     procedure EveryKnownPropIsRecognisedAndUnknownIsDropped;
     procedure NoRecognisedPropIsMissingFromTheList;
     procedure ClosedKeywordHintsMatchTheResolverEffect;
+    procedure KnownColorFnsResolveAndUnknownRaises;
+    procedure KnownPseudoStatesParseAndUnknownFails;
   end;
 
 implementation
 
 uses
-  tyControls.Types, tyControls.StyleModel;
+  tyControls.Types, tyControls.StyleModel, tyControls.Css.Values, tyControls.Css.Parser;
 
 { True when the resolver RECOGNISES AProp -- it entered a branch. A clean False means "unknown
   property" (the else Result:=False). A raise means it entered a branch but disliked the value,
@@ -181,6 +183,69 @@ begin
   finally
     vars.Free;
   end;
+end;
+
+function SampleColorCall(const AFn: string): string;
+begin
+  { A valid call for each known colour function, so a clean resolve means "recognised". }
+  if AFn = 'var' then Result := 'var(--accent)'
+  else if AFn = 'lighten' then Result := 'lighten(#ffffff, 0.1)'
+  else if AFn = 'darken' then Result := 'darken(#000000, 0.1)'
+  else if AFn = 'alpha' then Result := 'alpha(#ffffff, 0.5)'
+  else if AFn = 'mix' then Result := 'mix(#ffffff, #000000, 0.5)'
+  else if AFn = 'rgb' then Result := 'rgb(255, 0, 0)'
+  else if AFn = 'rgba' then Result := 'rgba(255, 0, 0, 0.5)'
+  else if AFn = 'elevate' then Result := 'elevate(#808080, 0.1)'
+  else if AFn = 'on' then Result := 'on(#ffffff)'
+  else Result := AFn + '(#ffffff)';
+end;
+
+procedure TCssCatalogTest.KnownColorFnsResolveAndUnknownRaises;
+var
+  vars: TStringList;
+  i: Integer;
+  raised: Boolean;
+begin
+  vars := TStringList.Create;
+  try
+    vars.Values['accent'] := '#3B82F6';
+    vars.Values['ty-mode'] := 'light';   // elevate() is mode-aware
+    for i := 0 to High(TyKnownColorFns) do
+      { A recognised function resolves to some colour without raising. An unrecognised one raises
+        rsCssUnknownColorFunction -- which is exactly why the editor must offer only these. }
+      TyEvalColor(SampleColorCall(TyKnownColorFns[i]), vars);   // must not raise
+    raised := False;
+    try TyEvalColor('zznope(#fff)', vars); except raised := True; end;
+    AssertTrue('an unknown colour function raises', raised);
+  finally
+    vars.Free;
+  end;
+end;
+
+procedure TCssCatalogTest.KnownPseudoStatesParseAndUnknownFails;
+  function SelectorParses(const AState: string): Boolean;
+  var m: TTyStyleModel;
+  begin
+    m := TTyStyleModel.Create;
+    try
+      try
+        m.LoadFromCss('TyButton:' + AState + ' { color: #fff; }');
+        Result := True;
+      except
+        Result := False;   // LoadFromCss fails fast on a bad selector
+      end;
+    finally
+      m.Free;
+    end;
+  end;
+var
+  i: Integer;
+begin
+  for i := 0 to High(TyKnownPseudoStates) do
+    AssertTrue(':' + TyKnownPseudoStates[i] + ' should parse in a selector',
+      SelectorParses(TyKnownPseudoStates[i]));
+  AssertFalse('an unknown pseudo-class fails to parse',
+    SelectorParses('zznope'));
 end;
 
 initialization

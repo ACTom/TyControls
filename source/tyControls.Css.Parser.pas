@@ -81,6 +81,14 @@ type
   empty). An empty/blank fragment yields True with zero declarations. }
 function TyParseOverride(const ASource: string; out ADecls: TTyCssDeclarationArray): Boolean;
 
+const
+  { The pseudo-class names a selector may carry -- an enumerable mirror of PseudoToState (this
+    unit). Unknown pseudo-classes raise, so this is what an editor should offer for the ':' part
+    of a selector. 'checked' is an alias of 'selected' (both -> tysSelected). test.css.catalog
+    pins it: each parses in a selector, an unknown one fails. }
+  TyKnownPseudoStates: array[0..5] of string =
+    ('hover', 'active', 'focus', 'disabled', 'selected', 'checked');
+
 implementation
 
 constructor TTyCssModeBlock.Create;
