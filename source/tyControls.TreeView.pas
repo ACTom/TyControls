@@ -10,7 +10,7 @@ uses
   StdCtrls, ComCtrls,
   BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.ScrollBar,
-  tyControls.Columns, tyControls.Edit;
+  tyControls.Columns, tyControls.Edit, tyControls.ImageDraw;
 
 type
   { C4: hit-test result — which part of a node row the mouse landed in }
@@ -4708,9 +4708,10 @@ var
     icons are drawn later in one post-EndPaint GDI pass, so the flag has to be carried
     rather than re-asked. It used to be collected into a local and dropped, which is why
     a `var Ghosted := True` from an app had no effect anywhere. }
-  pendingIcons: array of record X, Y, Idx: Integer; Ghost: Boolean; end;
+  pendingIcons: array of record X, Y, Idx, Sz: Integer; Ghost: Boolean; end;
   pendingCount: Integer;
   iIcon: Integer;
+  icoPx: Integer;
   { ③d D1: per-cell owner-draw — collected during the row loop, drawn onto
     ACanvas AFTER P.EndPaint (the same post-composite path as pendingIcons,
     because any GDI draw to ACanvas DURING RenderTo is erased by the EndPaint
@@ -5276,7 +5277,7 @@ begin
             end;
 
             { Image (main column only) }
-            if (FImages <> nil) and (FImages.Count > 0) then
+            if (FImages <> nil) and (TyImageCount(FImages) > 0) then
             begin
               imgIdx  := -1;
               ghosted := False;
@@ -5294,17 +5295,21 @@ begin
               { ③d D1: when this cell is owner-drawn the app owns the image too —
                 do NOT collect it into pendingIcons (slot still reserved so the
                 row width / chrome layout is unchanged). }
-              if (not ownerDrawCell) and (imgIdx >= 0) and (imgIdx < FImages.Count) then
+              if (not ownerDrawCell) and (imgIdx >= 0) and (imgIdx < TyImageCount(FImages)) then
               begin
-                { Collect; drawn via GDI onto ACanvas after EndPaint (see below). }
+                { Collect; drawn onto ACanvas after EndPaint (see below). The size is the list's
+                  own nominal width scaled to this PPI -- TyImageSizePx renders our lists at
+                  exactly that and centres a baked list's own resolution in the same box. }
+                icoPx := TyImageSizePx(FImages, MulDiv(FImages.Width, APPI, 96), APPI).cy;
                 if pendingCount = Length(pendingIcons) then
                   SetLength(pendingIcons, pendingCount + 32);
                 pendingIcons[pendingCount].X   := ARect.Left + slots.ImageX;
-                pendingIcons[pendingCount].Y   := ARect.Top  + rowTop + (rowH - FImages.Height) div 2;
+                pendingIcons[pendingCount].Y   := ARect.Top  + rowTop + (rowH - icoPx) div 2;
                 pendingIcons[pendingCount].Idx := imgIdx;
+                pendingIcons[pendingCount].Sz  := icoPx;
                 pendingIcons[pendingCount].Ghost := ghosted;
                 Inc(pendingCount);
-                if (ovlIdx >= 0) and (ovlIdx < FImages.Count) then
+                if (ovlIdx >= 0) and (ovlIdx < TyImageCount(FImages)) then
                 begin
                   if pendingCount = Length(pendingIcons) then
                     SetLength(pendingIcons, pendingCount + 32);
@@ -5559,7 +5564,7 @@ begin
         { The image slot is RESERVED whenever an image list is assigned (matching
           GetNodeAtPoint's hpImage zone); slots.ImageW carries that reservation,
           including into the FRangeX width below. }
-        if (FImages <> nil) and (FImages.Count > 0) then
+        if (FImages <> nil) and (TyImageCount(FImages) > 0) then
         begin
           imgIdx  := -1;
           ghosted := False;
@@ -5583,20 +5588,23 @@ begin
           ovlIdx := -1;
           DoGetImageIndex(node, ikOverlay, -1, ghosted, ovlIdx);
           { ③d D1: owner-drawn cell owns its image — do not collect it. }
-          if (not ownerDrawCell) and (imgIdx >= 0) and (imgIdx < FImages.Count) then
+          if (not ownerDrawCell) and (imgIdx >= 0) and (imgIdx < TyImageCount(FImages)) then
           begin
-            { Collect; drawn via GDI onto ACanvas after EndPaint (see below). }
+            { Collect; drawn onto ACanvas after EndPaint (see below). Size as in the
+              multi-column branch: the list's own nominal width at this PPI. }
+            icoPx := TyImageSizePx(FImages, MulDiv(FImages.Width, APPI, 96), APPI).cy;
             if pendingCount = Length(pendingIcons) then
               SetLength(pendingIcons, pendingCount + 32);
             pendingIcons[pendingCount].X   := ARect.Left + slots.ImageX;
-            pendingIcons[pendingCount].Y   := ARect.Top  + rowTop + (rowH - FImages.Height) div 2;
+            pendingIcons[pendingCount].Y   := ARect.Top  + rowTop + (rowH - icoPx) div 2;
             pendingIcons[pendingCount].Idx := imgIdx;
+            pendingIcons[pendingCount].Sz  := icoPx;
             { The Ghost carry landed on the multi-column branch only, so in the DEFAULT
               0-column tree `var Ghosted := True` still reached nothing. Same fix, this
               side of the branch. }
             pendingIcons[pendingCount].Ghost := ghosted;
             Inc(pendingCount);
-            if (ovlIdx >= 0) and (ovlIdx < FImages.Count) then
+            if (ovlIdx >= 0) and (ovlIdx < TyImageCount(FImages)) then
             begin
               if pendingCount = Length(pendingIcons) then
                 SetLength(pendingIcons, pendingCount + 32);
@@ -5771,14 +5779,15 @@ begin
           ARect.Left + CR.Left,  ARect.Top + CR.Top,
           ARect.Left + CR.Right, ARect.Top + CR.Bottom);
         for iIcon := 0 to pendingCount - 1 do
-          { NOTE the fifth argument. FImages here is LCL's TCustomImageList, whose Draw is
-            Draw(Canvas, X, Y, Index, Enabled) -- Enabled, not Ghosted, and it happens to
-            accept a Boolean in that position either way, so passing the flag straight
-            through compiled cleanly and drew EVERY icon disabled. Ghosted is the negation
-            of Enabled, and the greyed rendering LCL does for a disabled icon is exactly
-            the "unavailable" look Ghosted asks for. }
-          FImages.Draw(ACanvas, pendingIcons[iIcon].X, pendingIcons[iIcon].Y,
-            pendingIcons[iIcon].Idx, not pendingIcons[iIcon].Ghost);
+          { One helper, both branches, Ghosted in the honest polarity. The old code passed
+            `not Ghost` straight to LCL's Draw (whose flag is Enabled) -- which compiled and
+            drew every icon disabled from the far side of that negation. It ALSO meant a tree
+            with our own list on it had nowhere to render a vector at the row's size. Now our
+            list renders on demand at Sz and a baked list centres its own resolution in the Sz
+            box. }
+          TyDrawImage(ACanvas, FImages, pendingIcons[iIcon].Idx,
+            pendingIcons[iIcon].X, pendingIcons[iIcon].Y, pendingIcons[iIcon].Sz, APPI,
+            pendingIcons[iIcon].Ghost);
       finally
         ACanvas.RestoreHandleState;
       end;
