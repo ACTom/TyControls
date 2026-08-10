@@ -155,3 +155,43 @@ msgstr "图标浏览器..."
 #: tycontrols.design.rsdticonneedsfont
 msgid "Set IconFont first: there is no icon font to browse."
 msgstr "请先设置 IconFont：没有可浏览的图标字体。"
+
+#: tycontrols.design.css.editor.rscssedtitle
+msgid "StyleOverride (tycss)"
+msgstr "StyleOverride (tycss)"
+
+#: tycontrols.design.css.editor.rscssedvalidate
+msgid "Validate"
+msgstr "验证"
+
+#: tycontrols.design.css.editor.rscssedformat
+msgid "Format"
+msgstr "格式化"
+
+#: tycontrols.design.css.editor.rscssedcatprops
+msgid "Properties"
+msgstr "属性"
+
+#: tycontrols.design.css.editor.rscssedcatfuncs
+msgid "Colour functions"
+msgstr "颜色函数"
+
+#: tycontrols.design.css.editor.rscssedcattypekeys
+msgid "Type keys"
+msgstr "类型键"
+
+#: tycontrols.design.css.editor.rscssedcatpseudo
+msgid "Pseudo-states"
+msgstr "伪状态"
+
+#: tycontrols.design.css.editor.rscssedcattokens
+msgid "Tokens"
+msgstr "令牌"
+
+#: tycontrols.design.css.editor.rscssedunknownprops
+msgid "Unknown properties (silently ignored at run time):"
+msgstr "未知属性（运行时会被静默忽略）："
+
+#: tycontrols.design.css.editor.rscssedvalid
+msgid "tycss is valid."
+msgstr "tycss 语法正确。"

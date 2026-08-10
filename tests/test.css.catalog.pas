@@ -27,6 +27,9 @@ type
     procedure GeneratedTypeKeyCatalogIsSaneAndSorted;
     procedure CompletionSuggestsByContext;
     procedure UnknownPropsAreFlaggedKnownOnesAreNot;
+    procedure PropertyTemplateCarriesADefault;
+    procedure ValidateCatchesBadTycss;
+    procedure FormatTidiesAndIsIdempotent;
   end;
 
 implementation
@@ -379,6 +382,35 @@ begin
     Pos('zznope', TyCssUnknownProps('TyButton { zznope: 1; color: #fff; }')) > 0);
   AssertEquals('the background-color alias is NOT flagged', '',
     TyCssUnknownProps('TyEdit { background-color: #fff; }'));
+end;
+
+procedure TCssCatalogTest.PropertyTemplateCarriesADefault;
+begin
+  { a closed-keyword prop templates with its first keyword; an open-valued one leaves a blank }
+  AssertEquals('border-style: none;', TyCssPropertyTemplate('border-style'));
+  AssertEquals('padding: ;', TyCssPropertyTemplate('padding'));
+end;
+
+procedure TCssCatalogTest.ValidateCatchesBadTycss;
+begin
+  AssertEquals('valid bare block passes', '', TyCssValidate('color: #fff; border-width: 2px;', False));
+  AssertEquals('valid full tycss passes', '', TyCssValidate('TyButton { color: #fff; }', True));
+  AssertTrue('a bad colour value is reported',
+    TyCssValidate('color: zznope(1);', False) <> '');
+  AssertTrue('a malformed selector rule is reported',
+    TyCssValidate('TyButton { color: zznope(1); }', True) <> '');
+end;
+
+procedure TCssCatalogTest.FormatTidiesAndIsIdempotent;
+var
+  once, twice: string;
+begin
+  once := TyCssFormat('TyButton{color:#fff;border-width:2px;}');
+  AssertTrue('a space follows the colon', Pos('color: #fff', once) > 0);
+  AssertTrue('no space before the colon', Pos('color :', once) = 0);
+  AssertTrue('declarations are split onto lines', Pos(';' + LineEnding, once) > 0);
+  twice := TyCssFormat(once);
+  AssertEquals('formatting is idempotent', once, twice);
 end;
 
 initialization

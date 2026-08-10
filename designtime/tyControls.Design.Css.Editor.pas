@@ -25,10 +25,22 @@ type
 implementation
 
 uses
-  Forms, Controls, StdCtrls, ExtCtrls, ComCtrls, Graphics,
-  SynEdit, SynCompletion, SynHighlighterCss,
+  Forms, Controls, StdCtrls, ExtCtrls, ComCtrls, Graphics, Dialogs,
+  SynEdit, SynEditTypes, SynCompletion, SynHighlighterCss,
   tyControls.StyleModel, tyControls.Css.Values, tyControls.Css.Parser, tyControls.Css.Catalog,
-  tyControls.Css.Complete, tyControls.Controller;
+  tyControls.Css.Complete, tyControls.Controller, tyControls.Dialogs;
+
+resourcestring
+  rsCssEdTitle        = 'StyleOverride (tycss)';
+  rsCssEdValidate     = 'Validate';
+  rsCssEdFormat       = 'Format';
+  rsCssEdCatProps     = 'Properties';
+  rsCssEdCatFuncs     = 'Colour functions';
+  rsCssEdCatTypeKeys  = 'Type keys';
+  rsCssEdCatPseudo    = 'Pseudo-states';
+  rsCssEdCatTokens    = 'Tokens';
+  rsCssEdUnknownProps = 'Unknown properties (silently ignored at run time):';
+  rsCssEdValid        = 'tycss is valid.';
 
 { ---- the dialog ----------------------------------------------------------- }
 
@@ -44,6 +56,8 @@ type
     procedure ListDblClick(Sender: TObject);
     procedure EditChange(Sender: TObject);
     procedure CompletionExecute(Sender: TObject);
+    procedure ValidateClick(Sender: TObject);
+    procedure FormatClick(Sender: TObject);
   public
     constructor CreateFor(ASelectorMode: Boolean); reintroduce;
     function Execute(var AText: string): Boolean;
@@ -52,11 +66,11 @@ type
 constructor TTyStyleOverrideDialog.CreateFor(ASelectorMode: Boolean);
 var
   panel: TPanel;
-  ok, cancel: TButton;
+  ok, cancel, validate, format_: TButton;
 begin
   inherited CreateNew(nil);
   FSelectorMode := ASelectorMode;
-  Caption := 'StyleOverride (tycss)';
+  Caption := rsCssEdTitle;
   Width := 720; Height := 460;
   Position := poScreenCenter;
   BorderStyle := bsSizeable;
@@ -81,6 +95,13 @@ begin
   panel.Height := 40;
   panel.BevelOuter := bvNone;
 
+  validate := TButton.Create(Self);
+  validate.Parent := panel; validate.Caption := rsCssEdValidate; validate.OnClick := @ValidateClick;
+  validate.Width := 90; validate.Top := 6; validate.Left := 6;
+  format_ := TButton.Create(Self);
+  format_.Parent := panel; format_.Caption := rsCssEdFormat; format_.OnClick := @FormatClick;
+  format_.Width := 90; format_.Top := 6; format_.Left := 102;
+
   ok := TButton.Create(Self);
   ok.Parent := panel; ok.Caption := 'OK'; ok.ModalResult := mrOK;
   ok.Width := 90; ok.Top := 6; ok.Left := panel.Width - 200; ok.Anchors := [akTop, akRight];
@@ -93,6 +114,9 @@ begin
   FEdit.Align := alClient;
   FEdit.Gutter.Visible := True;
   FEdit.OnChange := @EditChange;
+  { Clamp the caret to real text: clicking past a line's end puts it AT the last character, not in
+    virtual space past it (removing eoScrollPastEol). }
+  FEdit.Options := FEdit.Options - [eoScrollPastEol];
   { tycss is a CSS dialect, so the stock CSS highlighter colours it well enough -- comments,
     selectors, properties, values, braces, hex. The tycss-only bits (--tokens, darken()) fall
     back to CSS's generic identifier/function colouring, which is fine. No custom highlighter
@@ -117,23 +141,53 @@ procedure TTyStyleOverrideDialog.BuildRefList;
 begin
   FList.Items.BeginUpdate;
   try
-    Cat('Properties', TyKnownStyleProps);
-    Cat('Colour functions', TyKnownColorFns);
+    Cat(rsCssEdCatProps, TyKnownStyleProps);
+    Cat(rsCssEdCatFuncs, TyKnownColorFns);
     if FSelectorMode then
     begin
-      Cat('Type keys', TyCatalogTypeKeys);
-      Cat('Pseudo-states', TyKnownPseudoStates);
+      Cat(rsCssEdCatTypeKeys, TyCatalogTypeKeys);
+      Cat(rsCssEdCatPseudo, TyKnownPseudoStates);
     end;
-    Cat('Tokens', TyCatalogTokens);
+    Cat(rsCssEdCatTokens, TyCatalogTokens);
   finally
     FList.Items.EndUpdate;
   end;
 end;
 
 procedure TTyStyleOverrideDialog.ListDblClick(Sender: TObject);
+var
+  s, ins: string;
+  i: Integer;
+  isProp: Boolean;
 begin
-  if (FList.Selected <> nil) and (FList.Selected.Parent <> nil) then
-    FEdit.InsertTextAtCaret(FList.Selected.Text);
+  if (FList.Selected = nil) or (FList.Selected.Parent = nil) then Exit;
+  s := FList.Selected.Text;
+  { A property inserts as a whole declaration with a default value; anything else (a function,
+    typeKey or token) inserts as its bare text. }
+  isProp := False;
+  for i := 0 to High(TyKnownStyleProps) do
+    if TyKnownStyleProps[i] = s then begin isProp := True; Break; end;
+  if isProp then ins := TyCssPropertyTemplate(s) else ins := s;
+  { On a NEW line below the caret, not mid-line: go to the current line's end, then break. }
+  if (FEdit.CaretY >= 1) and (FEdit.CaretY <= FEdit.Lines.Count) then
+    FEdit.CaretX := Length(FEdit.Lines[FEdit.CaretY - 1]) + 1;
+  FEdit.InsertTextAtCaret(LineEnding + ins);
+  FEdit.SetFocus;
+end;
+
+procedure TTyStyleOverrideDialog.ValidateClick(Sender: TObject);
+var err: string;
+begin
+  err := TyCssValidate(FEdit.Text, FSelectorMode);
+  if err = '' then
+    TyMessageDlg(rsCssEdValid, mtInformation, [mbOK], 0)
+  else
+    TyMessageDlg(err, mtError, [mbOK], 0);
+end;
+
+procedure TTyStyleOverrideDialog.FormatClick(Sender: TObject);
+begin
+  FEdit.Text := TyCssFormat(FEdit.Text);
 end;
 
 procedure TTyStyleOverrideDialog.EditChange(Sender: TObject);
@@ -141,7 +195,7 @@ var u: string;
 begin
   u := TyCssUnknownProps(FEdit.Text);
   if Trim(u) <> '' then
-    FWarn.Caption := 'Unknown properties (silently ignored at run time):' + LineEnding + u
+    FWarn.Caption := rsCssEdUnknownProps + LineEnding + u
   else
     FWarn.Caption := '';
 end;
