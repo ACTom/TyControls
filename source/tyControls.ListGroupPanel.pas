@@ -3,9 +3,10 @@ unit tyControls.ListGroupPanel;
 {$modeswitch advancedrecords}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType,
+  Classes, SysUtils, Types, Controls, Graphics, LCLType, ImgList,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.ImageCollection;
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.ImageCollection,
+  tyControls.ImageDraw;
 
 const
   // Logical (96ppi) defaults. Header band matches the ExPanel caption band; item rows
@@ -130,7 +131,7 @@ type
   TTyListGroupPanel = class(TTyCustomControl)
   private
     FGroups: array of TTyListGroupData;
-    FImages: TTyVirtualImageList;   // per-row icon source (nil = no icons)
+    FImages: TCustomImageList;      // per-row icon source (nil = no icons); any list works
     FHeaderHeight: Integer;
     FItemHeight: Integer;
     FSelGroup: Integer;     // -1 = none
@@ -143,7 +144,7 @@ type
     FOnItemClick: TTyListGroupItemEvent;
     procedure SetHeaderHeight(AValue: Integer);
     procedure SetItemHeight(AValue: Integer);
-    procedure SetImages(AValue: TTyVirtualImageList);
+    procedure SetImages(AValue: TCustomImageList);
     function ScaledHeaderHeight: Integer;
     function ScaledItemHeight: Integer;
     { Effective band heights in DEVICE px at APPI: the theme metric token when set, else the
@@ -211,7 +212,7 @@ type
       default TyListGroupDefaultItemHeight;
     { Icon source for the group headers and item rows (addressed by ImageIndex). nil = text
       only. Same facility TTyComboBoxEx uses. }
-    property Images: TTyVirtualImageList read FImages write SetImages;
+    property Images: TCustomImageList read FImages write SetImages;
     property OnGroupToggle: TTyListGroupToggleEvent read FOnGroupToggle write FOnGroupToggle;
     property OnItemClick: TTyListGroupItemEvent read FOnItemClick write FOnItemClick;
     property Align;
@@ -407,7 +408,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyListGroupPanel.SetImages(AValue: TTyVirtualImageList);
+procedure TTyListGroupPanel.SetImages(AValue: TCustomImageList);
 begin
   if FImages = AValue then Exit;
   if FImages <> nil then FImages.RemoveFreeNotification(Self);
@@ -437,15 +438,14 @@ end;
 function TTyListGroupPanel.DrawRowIcon(P: TTyPainter; AX, ATop, ARowH, AIndex: Integer): Integer;
 var
   sz: Integer;
-  bmp: TBGRABitmap;
 begin
   Result := AX;
-  if (FImages = nil) or (AIndex < 0) or (AIndex >= FImages.Count) then Exit;
+  if (FImages = nil) or (AIndex < 0) or (AIndex >= TyImageCount(FImages)) then Exit;
   sz := P.Scale(ActiveController.Metric(TyListGroupIconSizeVar, TyListGroupDefaultIconSize));
   if sz < 1 then sz := 1;
-  bmp := FImages.CachedIndex(AIndex, sz);   // borrowed; do NOT free
-  if bmp <> nil then
-    P.Bitmap.PutImage(AX, ATop + (ARowH - bmp.Height) div 2, bmp, dmDrawWithTransparency);
+  { In-layer, both branches: our list renders the vector at sz, a foreign list is materialised.
+    APPI: this control composites at device px, so P's PPI is the device PPI. }
+  TyBlitImage(P.Bitmap, FImages, AIndex, AX, ATop + (ARowH - sz) div 2, sz, P.Scale(96), False);
   Result := AX + sz + P.Scale(ActiveController.Metric(TyListGroupIconGapVar, TyListGroupDefaultIconGap));
 end;
 

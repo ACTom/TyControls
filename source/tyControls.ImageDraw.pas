@@ -65,6 +65,13 @@ procedure TyDrawImage(ACanvas: TCanvas; AList: TCustomImageList; AIndex: Integer
 function TyPutImage(ADest: TBGRABitmap; AList: TCustomImageList; AIndex: Integer;
   AX, AY, ASizePx: Integer; AGhosted: Boolean): Boolean;
 
+{ Draw item AIndex into ADest during the paint, BOTH branches in-layer -- for a control that
+  has no post-EndPaint pass and would rather materialise a foreign list than grow a deferral
+  array. See the body for the alpha caveat materialising carries (our own list never hits it).
+  Centres in the ASizePx slot; guards everything; never raises. }
+procedure TyBlitImage(ADest: TBGRABitmap; AList: TCustomImageList; AIndex: Integer;
+  AX, AY, ASizePx, APPI: Integer; AGhosted: Boolean);
+
 implementation
 
 function TyImageIsBaked(AList: TCustomImageList): Boolean;
@@ -217,6 +224,63 @@ begin
     ADest.PutImage(AX, AY, bmp, dmDrawWithTransparency);
   finally
     dim.Free;
+  end;
+end;
+
+procedure TyBlitImage(ADest: TBGRABitmap; AList: TCustomImageList; AIndex: Integer;
+  AX, AY, ASizePx, APPI: Integer; AGhosted: Boolean);
+var
+  bmp, dim, wrap: TBGRABitmap;
+  res: TScaledImageListResolution;
+  tmp: TBitmap;
+  w96: Integer;
+begin
+  { The in-layer draw for a control that has NO post-EndPaint pass. Both branches composite
+    into ADest during the paint, so a simple control does not have to grow a deferral array
+    just to accept a foreign list. The Ty branch is the free, exact one; a baked list is
+    MATERIALISED into BGRA here.
+
+    The cost of materialising, said once: LCL's GetBitmap goes through the widgetset, and on a
+    widgetset that cannot hand back a 32-bit image it drops to a device format and loses the
+    alpha edges (imglist.inc). Modern Win/GTK/Qt/Cocoa all do 32-bit; the degradation is on
+    ancient targets only, and only for a FOREIGN list on one of these simple controls -- our
+    own list never takes this branch. A control that draws MANY icons per paint (a tree) uses
+    the GDI TyDrawImage path instead, which neither allocates per icon nor round-trips alpha. }
+  if (ADest = nil) or (AList = nil) or (AIndex < 0) or (ASizePx < 1) then Exit;
+  if APPI <= 0 then APPI := 96;
+
+  if AList is TTyVirtualImageList then
+  begin
+    dim := nil;
+    try
+      bmp := TyTakeVectorBitmap(TTyVirtualImageList(AList), AIndex, ASizePx, AGhosted, dim);
+      if bmp = nil then Exit;
+      ADest.PutImage(AX, AY, bmp, dmDrawWithTransparency);
+    finally
+      dim.Free;
+    end;
+    Exit;
+  end;
+
+  if AIndex >= AList.Count then Exit;
+  w96 := TyLclWidth96(AList, ASizePx, APPI);
+  res := AList.ResolutionForPPI[w96, APPI, 1];
+  if not res.Valid then Exit;
+  tmp := TBitmap.Create;
+  try
+    tmp.PixelFormat := pf32bit;
+    tmp.SetSize(res.Width, res.Height);
+    res.GetBitmap(AIndex, tmp, TyGhostEffect[AGhosted]);
+    wrap := TBGRABitmap.Create(tmp);
+    try
+      { Centre what the list gave in the ASizePx slot; never stretch. }
+      ADest.PutImage(AX + (ASizePx - res.Width) div 2,
+                     AY + (ASizePx - res.Height) div 2, wrap, dmDrawWithTransparency);
+    finally
+      wrap.Free;
+    end;
+  finally
+    tmp.Free;
   end;
 end;
 

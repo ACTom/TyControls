@@ -54,6 +54,8 @@ type
     procedure PutImageOnNothingIsDone;
     procedure PutImageAfterEndPaintReportsDoneAndDrawsNothing;
     procedure GhostPolarityIsATableNotANot;
+    procedure BlitDrawsOurBranchInLayer;
+    procedure BlitMaterialisesABakedListInLayer;
   end;
 
 implementation
@@ -247,6 +249,38 @@ begin
     both of these at once. }
   AssertTrue('not ghosted = normal', TyGhostEffect[False] = gdeNormal);
   AssertTrue('ghosted = disabled', TyGhostEffect[True] = gdeDisabled);
+end;
+
+procedure TImageDrawTest.BlitDrawsOurBranchInLayer;
+var dest: TBGRABitmap;
+begin
+  { The simple-control path: both branches land in the layer, no deferral. Our branch is the
+    same on-demand render as TyPutImage. }
+  dest := TBGRABitmap.Create(64, 64, BGRAPixelTransparent);
+  try
+    TyBlitImage(dest, FVector, 0, 4, 4, 24, 96, False);
+    AssertTrue('our icon landed in the layer', dest.GetPixel(16, 16).alpha > 40);
+  finally
+    dest.Free;
+  end;
+end;
+
+procedure TImageDrawTest.BlitMaterialisesABakedListInLayer;
+var dest: TBGRABitmap;
+begin
+  { THE new path this commit adds. A stock TImageList has no BGRA to borrow, so TyBlitImage
+    materialises its resolution into the layer. This is the branch that lets a simple in-layer
+    control accept a foreign list without a post-EndPaint pass. The baked sample's one image is
+    solid red, so ink must appear where it is blitted. }
+  dest := TBGRABitmap.Create(64, 64, BGRAPixelTransparent);
+  try
+    TyBlitImage(dest, FBaked, 0, 4, 4, 16, 96, False);
+    AssertTrue('the foreign list was materialised into the layer',
+      dest.GetPixel(10, 10).alpha > 40);
+    AssertTrue('and it is the red image', dest.GetPixel(10, 10).red > 180);
+  finally
+    dest.Free;
+  end;
 end;
 
 initialization
