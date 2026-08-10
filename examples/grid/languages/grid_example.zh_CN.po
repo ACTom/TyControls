@@ -753,7 +753,7 @@ msgid "Ungroup"
 msgstr "取消分组"
 
 #: umain.rsbtnungroup2
-msgid "Remove multi-level grouping"
+msgid "Remove grouping"
 msgstr "取消多级分组"
 
 #: umain.rscasechanged

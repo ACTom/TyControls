@@ -177,7 +177,7 @@ msgid "Choose accent colour"
 msgstr "选择强调色"
 
 #: umain.rsthemecustom
-msgid "Current theme: custom.tycss (a hand-written file, partial by design)"
+msgid "Current theme: custom.tycss (hand-written, partial by design)"
 msgstr "当前主题：custom.tycss（手写的主题文件，特意只写了一部分）"
 
 #: umain.rsthemegreen

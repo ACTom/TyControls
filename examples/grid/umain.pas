@@ -481,8 +481,8 @@ resourcestring
   rsUngrouped      = 'Ungrouped';
   rsBtnUngroup     = 'Ungroup';
   rsGroupedNote    = 'Grouped by region — click a group row to collapse; note the sort column was not swallowed by grouping · the group row''s caption comes from GroupRowFormat (%s = the group value, %d = how many rows are in it)';
-  rsBtnGroup2   = 'Group by region + product';
-  rsBtnUngroup2 = 'Remove multi-level grouping';
+  rsBtnGroup2   = 'Group region+product';
+  rsBtnUngroup2 = 'Remove grouping';
   rsGrouped2Note = 'Two-level grouping — subtotals are computed per level; collapse state is tracked by **path**, so the same-named product under different regions does not interfere';
   rsPhysicalOn  = 'Sorting really moves the data (undoable) — after sorting, merge and row-drag are no longer refused; attaching a filter or grouping falls back to ordinary sort automatically';
   rsPhysicalOff = 'Sort only changes the display order, the data does not move (default)';

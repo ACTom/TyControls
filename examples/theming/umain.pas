@@ -106,7 +106,7 @@ resourcestring
   rsModeDark      = 'Mode: Dark (manual)';
   rsFollowsOS     = 'Appearance: follows the OS light/dark setting';
   rsThemeGreen    = 'Current theme: green (image background)';
-  rsThemeCustom   = 'Current theme: custom.tycss (a hand-written file, partial by design)';
+  rsThemeCustom   = 'Current theme: custom.tycss (hand-written, partial by design)';
   rsDensityModern = 'Density: modern (Web scale) - same skin, roomier geometry';
   rsDensityClassic = 'Density: classic';
   rsHotOnFmt      = 'Hot-reload ON - save an edit to %s and the window re-themes';
