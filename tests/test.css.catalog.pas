@@ -23,12 +23,15 @@ type
     procedure ClosedKeywordHintsMatchTheResolverEffect;
     procedure KnownColorFnsResolveAndUnknownRaises;
     procedure KnownPseudoStatesParseAndUnknownFails;
+    procedure GeneratedTokenCatalogMatchesLightTycss;
+    procedure GeneratedTypeKeyCatalogIsSaneAndSorted;
   end;
 
 implementation
 
 uses
-  tyControls.Types, tyControls.StyleModel, tyControls.Css.Values, tyControls.Css.Parser;
+  tyControls.Types, tyControls.StyleModel, tyControls.Css.Values, tyControls.Css.Parser,
+  tyControls.Css.Catalog;
 
 { True when the resolver RECOGNISES AProp -- it entered a branch. A clean False means "unknown
   property" (the else Result:=False). A raise means it entered a branch but disliked the value,
@@ -246,6 +249,77 @@ begin
       SelectorParses(TyKnownPseudoStates[i]));
   AssertFalse('an unknown pseudo-class fails to parse',
     SelectorParses('zznope'));
+end;
+
+function InCatalog(const AArr: array of string; const AName: string): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  for i := 0 to High(AArr) do
+    if AArr[i] = AName then Exit(True);
+end;
+
+function LightTycssText: string;
+var
+  path: string;
+  sl: TStringList;
+begin
+  path := ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'themes' + PathDelim + 'light.tycss';
+  sl := TStringList.Create;
+  try
+    sl.LoadFromFile(path);
+    Result := sl.Text;
+  finally
+    sl.Free;
+  end;
+end;
+
+procedure TCssCatalogTest.GeneratedTokenCatalogMatchesLightTycss;
+var
+  light: string;
+  i, checked: Integer;
+begin
+  { Anti-invention: every token the generator put in the catalog must actually be DEFINED in
+    themes/light.tycss (name immediately followed by ':'). A usage var(--x) has ')' after the
+    name, so this specifically finds definitions -- the generator cannot have made a name up. }
+  light := LightTycssText;
+  AssertTrue('catalog is non-trivial', Length(TyCatalogTokens) > 100);
+  checked := 0;
+  for i := 0 to High(TyCatalogTokens) do
+  begin
+    AssertTrue(TyCatalogTokens[i] + ' must be defined in light.tycss',
+      Pos(TyCatalogTokens[i] + ':', light) > 0);
+    Inc(checked);
+  end;
+  AssertEquals('every catalog token was checked (not a vacuous pass)',
+    Length(TyCatalogTokens), checked);
+  { Anti-omission spot-check: a handful of tokens that MUST be present. }
+  AssertTrue('--accent present',        Pos('--accent:', light) > 0);
+  AssertTrue('--surface present',       Pos('--surface:', light) > 0);
+  AssertTrue('--border present',        Pos('--border:', light) > 0);
+  AssertTrue('--chrome-bar-bg present', Pos('--chrome-bar-bg:', light) > 0);
+  { ...and that the generator captured them. }
+  AssertTrue('catalog has --accent', InCatalog(TyCatalogTokens, '--accent'));
+  AssertTrue('catalog has --chrome-bar-bg', InCatalog(TyCatalogTokens, '--chrome-bar-bg'));
+end;
+
+procedure TCssCatalogTest.GeneratedTypeKeyCatalogIsSaneAndSorted;
+var
+  i: Integer;
+begin
+  AssertTrue('typeKeys non-trivial', Length(TyCatalogTypeKeys) > 100);
+  { Known controls are present. }
+  AssertTrue('TyButton', InCatalog(TyCatalogTypeKeys, 'TyButton'));
+  AssertTrue('TyEdit',   InCatalog(TyCatalogTypeKeys, 'TyEdit'));
+  AssertTrue('TyForm',   InCatalog(TyCatalogTypeKeys, 'TyForm'));
+  { Sorted + unique (the generator's Sort-Object -Unique contract -- a structural guarantee the
+    editor can rely on for a stable, dedup'd completion list). }
+  for i := 1 to High(TyCatalogTypeKeys) do
+    AssertTrue('typeKeys sorted ascending, no dups at ' + IntToStr(i),
+      TyCatalogTypeKeys[i - 1] < TyCatalogTypeKeys[i]);
+  for i := 1 to High(TyCatalogTokens) do
+    AssertTrue('tokens sorted ascending, no dups at ' + IntToStr(i),
+      TyCatalogTokens[i - 1] < TyCatalogTokens[i]);
 end;
 
 initialization
