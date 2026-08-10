@@ -72,6 +72,13 @@ function TyPutImage(ADest: TBGRABitmap; AList: TCustomImageList; AIndex: Integer
 procedure TyBlitImage(ADest: TBGRABitmap; AList: TCustomImageList; AIndex: Integer;
   AX, AY, ASizePx, APPI: Integer; AGhosted: Boolean);
 
+{ A fresh, CALLER-OWNED BGRABitmap of item AIndex at ASizePx, for a control that owns its own
+  compositing (scales the image to fit, tiles it, ...) rather than blitting at a slot. Our list
+  renders the vector; a foreign list is materialised. nil when there is nothing to draw. The
+  caller frees it. }
+function TyRenderImage(AList: TCustomImageList; AIndex, ASizePx, APPI: Integer;
+  AGhosted: Boolean): TBGRABitmap;
+
 implementation
 
 function TyImageIsBaked(AList: TCustomImageList): Boolean;
@@ -279,6 +286,42 @@ begin
     finally
       wrap.Free;
     end;
+  finally
+    tmp.Free;
+  end;
+end;
+
+function TyRenderImage(AList: TCustomImageList; AIndex, ASizePx, APPI: Integer;
+  AGhosted: Boolean): TBGRABitmap;
+var
+  res: TScaledImageListResolution;
+  tmp: TBitmap;
+  w96: Integer;
+begin
+  Result := nil;
+  if (AList = nil) or (AIndex < 0) or (ASizePx < 1) then Exit;
+  if APPI <= 0 then APPI := 96;
+
+  if AList is TTyVirtualImageList then
+  begin
+    if AIndex >= TTyVirtualImageList(AList).Names.Count then Exit;
+    { RenderIndex returns a caller-owned square; that IS the contract here. Ghosting is applied
+      to the owned copy -- no borrowed cache to protect, unlike the blit path. }
+    Result := TTyVirtualImageList(AList).RenderIndex(AIndex, ASizePx);
+    if (Result <> nil) and AGhosted then TyFadeBitmapAlpha(Result, TyGhostedAlpha);
+    Exit;
+  end;
+
+  if AIndex >= AList.Count then Exit;
+  w96 := TyLclWidth96(AList, ASizePx, APPI);
+  res := AList.ResolutionForPPI[w96, APPI, 1];
+  if not res.Valid then Exit;
+  tmp := TBitmap.Create;
+  try
+    tmp.PixelFormat := pf32bit;
+    tmp.SetSize(res.Width, res.Height);
+    res.GetBitmap(AIndex, tmp, TyGhostEffect[AGhosted]);
+    Result := TBGRABitmap.Create(tmp);   { caller owns; see the alpha caveat on TyBlitImage }
   finally
     tmp.Free;
   end;

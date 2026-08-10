@@ -56,6 +56,8 @@ type
     procedure GhostPolarityIsATableNotANot;
     procedure BlitDrawsOurBranchInLayer;
     procedure BlitMaterialisesABakedListInLayer;
+    procedure RenderReturnsAnOwnedBitmapOurBranch;
+    procedure RenderMaterialisesABakedListToAnOwnedBitmap;
   end;
 
 implementation
@@ -280,6 +282,35 @@ begin
     AssertTrue('and it is the red image', dest.GetPixel(10, 10).red > 180);
   finally
     dest.Free;
+  end;
+end;
+
+procedure TImageDrawTest.RenderReturnsAnOwnedBitmapOurBranch;
+var bmp: TBGRABitmap;
+begin
+  { For a control that owns its scaling (TTyImage). Our branch renders the vector at the size
+    asked, caller-owned. }
+  bmp := TyRenderImage(FVector, 0, 40, 96, False);
+  try
+    AssertTrue('got a bitmap', bmp <> nil);
+    AssertEquals('at the requested size', 40, bmp.Width);
+    AssertTrue('with ink', bmp.GetPixel(20, 20).alpha > 40);
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TImageDrawTest.RenderMaterialisesABakedListToAnOwnedBitmap;
+var bmp: TBGRABitmap;
+begin
+  { A foreign list materialised to an owned bitmap -- the same GetBitmap path TyBlitImage uses,
+    but handed back for the caller to composite however it likes. }
+  bmp := TyRenderImage(FBaked, 0, 16, 96, False);
+  try
+    AssertTrue('got a bitmap', bmp <> nil);
+    AssertTrue('it is the red image', bmp.GetPixel(8, 8).red > 180);
+  finally
+    bmp.Free;
   end;
 end;
 

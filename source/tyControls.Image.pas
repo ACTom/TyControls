@@ -2,8 +2,8 @@ unit tyControls.Image;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.ImageCollection;
+  Classes, SysUtils, ImgList, Types, Controls, Graphics, BGRABitmap, BGRABitmapTypes,
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.ImageCollection, tyControls.ImageDraw;
 
 type
   { A themed raster image control. Shows a TPicture (any LCL graphic — PNG/BMP/JPG,
@@ -39,7 +39,7 @@ type
     FKeepOriginXWhenClipped: Boolean;
     FKeepOriginYWhenClipped: Boolean;
     FAntialiasingMode: TAntialiasingMode;
-    FImages: TTyVirtualImageList;
+    FImages: TCustomImageList;
     FImageIndex: Integer;
     FImageWidth: Integer;
     FOnPictureChanged: TNotifyEvent;
@@ -53,7 +53,7 @@ type
     procedure SetKeepOriginX(AValue: Boolean);
     procedure SetKeepOriginY(AValue: Boolean);
     procedure SetAntialiasingMode(AValue: TAntialiasingMode);
-    procedure SetImages(AValue: TTyVirtualImageList);
+    procedure SetImages(AValue: TCustomImageList);
     procedure SetImageIndex(AValue: Integer);
     procedure SetImageWidth(AValue: Integer);
     procedure ApplyTransparentToGraphic;
@@ -126,7 +126,7 @@ type
     { A shared image list to draw from instead of Picture. Picture WINS when both are
       set, exactly as in customimage.inc's DestRect/Paint. A FreeNotification nils the
       reference if the list is freed first. }
-    property Images: TTyVirtualImageList read FImages write SetImages;
+    property Images: TCustomImageList read FImages write SetImages;
     { Which entry of Images to show. LCL's default is 0; ours is -1 because ours is a
       NAME-keyed list whose Names may legitimately be empty at design time, and -1 is
       already this library's "no icon" sentinel everywhere else (HasGraphic reads it
@@ -365,7 +365,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyImage.SetImages(AValue: TTyVirtualImageList);
+procedure TTyImage.SetImages(AValue: TCustomImageList);
 begin
   if FImages = AValue then Exit;
   // FreeNotification, or a list living on another form (or with Owner = nil) would be
@@ -415,7 +415,7 @@ begin
   if FImageWidth > 0 then
     Result := FImageWidth
   else
-    Result := FImages.DefaultSize;
+    Result := FImages.Width;
   if Result < 1 then Result := 1;
 end;
 
@@ -427,7 +427,7 @@ begin
   Result := (FPicture.Graphic <> nil) and not FPicture.Graphic.Empty;
   if Result then Exit;
   Result := (FImages <> nil) and (FImageIndex >= 0)
-    and (FImageIndex < FImages.Count);
+    and (FImageIndex < TyImageCount(FImages));
 end;
 
 { On LCL, Transparent means "honour the GRAPHIC's own mask / transparent colour" and is
@@ -473,7 +473,7 @@ begin
   end;
   PreferredWidth := 0;
   PreferredHeight := 0;
-  if (FImages <> nil) and (FImageIndex >= 0) and (FImageIndex < FImages.Count) then
+  if (FImages <> nil) and (FImageIndex >= 0) and (FImageIndex < TyImageCount(FImages)) then
   begin
     sz := GetImageSize;
     PreferredWidth := sz;
@@ -537,7 +537,7 @@ begin
         src := TBGRABitmap.Create(tmp);
       end
       else
-        src := FImages.RenderIndex(FImageIndex, GetImageSize);
+        src := TyRenderImage(FImages, FImageIndex, GetImageSize, APPI, False);
       if (src = nil) or (src.Width <= 0) or (src.Height <= 0) then
       begin
         P.EndPaint;
