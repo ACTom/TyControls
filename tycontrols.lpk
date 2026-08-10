@@ -517,6 +517,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.LCLImageList"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.ImageDraw.pas"/>
+        <UnitName Value="tyControls.ImageDraw"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.ColorMath.pas"/>
         <UnitName Value="tyControls.ColorMath"/>
       </Item>
