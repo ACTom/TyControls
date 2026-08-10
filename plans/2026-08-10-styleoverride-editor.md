@@ -1,5 +1,17 @@
 # StyleOverride 编辑器 + tycss 词汇 catalog + Controller 全局 override — 实施计划
 
+> **STATUS(2026-08-10):全部三个 Phase 已实现 + 提交 + headless 全绿(6249/0)。** 下方逐步
+> checkbox 未回头勾,属过期记账,不代表未做。提交:`21e08ed` `53bbd8c` `6005a27`(Phase 1 catalog)、
+> `80a44c1`(Lucide 授权,附带)、`94e3981`(Phase 2 编辑器 + Phase 3 控制器 override + SetDensity 丢
+> accent 的既有坑)、`5673c2a`(改用 `TSynCssSyn` 上色)。
+>
+> **和计划的偏差(有意)**:Task 2.1 没手搓 `TTyCssHighlighter`,改用 SynEdit 自带 `TSynCssSyn`(tycss
+> 是 CSS 方言,够用、免维护)。Task 1.5 的聚合 re-export 判为 YAGNI 未做(编辑器直接 `uses` 各常量单元)。
+> 补全纯逻辑落在**运行期** `tyControls.Css.Complete`(而非设计期),这样可 headless 测。
+>
+> **真正剩下的(都是验证/收尾,非待写代码)**:①对话框 UI 真机(真 IDE)验;②46 example 全量编译复核
+> (改了运行期后应跑一遍);③合 main 前 pre-merge(i18n / README / CHANGELOG 补 StyleOverride)。见文末验收清单。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:executing-plans（本仓库惯例：单会话内分阶段执行、每阶段跑全套测试 + 里程碑验证）。步骤用 `- [ ]` 勾选跟踪。
 
 **Goal:** 让用户能在 IDE 里舒服地写 `StyleOverride`（tycss）——带语法高亮、按 catalog 补全、对未知属性给警告；并给 `TTyStyleController` 加一个同名的全局 `StyleOverride`（带选择器的主题补丁，跟随换肤持久生效）。
