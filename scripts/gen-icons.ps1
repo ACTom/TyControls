@@ -15,7 +15,7 @@ $classes = @(
   'TTyPageControl','TTyTabSheet','TTyTabSet','TTyGroupBox','TTyPanel','TTyScrollBar','TTySpinEdit','TTyFloatSpinEdit',
   'TTyMemo','TTyTitleBar','TTyMenuBar','TTyStyleController','TTyPopupMenu','TTyImagesMenu','TTyMenuEx',
   'TTyNativeStyler','TTyHint','TTyBalloonHint',
-  'TTyIconFont','TTyLucideIconFont','TTyCharImage','TTyGlyphImageList','TTyImage','TTyImageCollection','TTyVirtualImageList',
+  'TTyIconFont','TTyLucideIconFont','TTyLucideImageList','TTyCharImage','TTyGlyphImageList','TTyImage','TTyImageCollection','TTyVirtualImageList',
   'TTySplitter','TTyStatusBar','TTyToolBar','TTyToolButton','TTyToolSeparator',
   'TTyCalendar','TTyDateTimePicker',
   'TTyTreeView',

@@ -184,6 +184,18 @@ begin
     Line(b,12,7+y*6,20,7+y*6,Ink,1);
   end;
 end;
+{ TTyLucideImageList: the same image-list rows, but the top thumbnail carries the Lucide
+  asterisk mark — an image list pre-fed from the bundled pack. }
+procedure GLucideImageList(b: TBGRABitmap);
+var y: Integer;
+begin
+  for y := 0 to 2 do
+  begin
+    FillRRect(b,4,5+y*6,9,10+y*6,1,Faint); RRect(b,4,5+y*6,9,10+y*6,1,Ink,1);
+    Line(b,12,7+y*6,20,7+y*6,Ink,1);
+  end;
+  Line(b,6.5,5.7,6.5,9.3,Acc,1.2); Line(b,5.2,6.6,7.8,8.4,Acc,1.2); Line(b,7.8,6.6,5.2,8.4,Acc,1.2);
+end;
 { TTyGlyphButton: a rounded command button — accent icon square on the left + caption lines }
 procedure GGlyphButton(b: TBGRABitmap); begin RRect(b,3,7,21,17,3,Ink); FillRRect(b,6,10,11,15,1.5,Acc); Line(b,13,11,18,11,Ink,1.4); Line(b,13,14,17,14,Ink,1.4); end;
 { TTyGlyphContainerButton: a tall ribbon button — big accent icon on top over a caption line }
@@ -892,7 +904,7 @@ procedure GCascader(b: TBGRABitmap); begin RRect(b,3,3,21,10,2,Ink); PolyL(b,[Po
 procedure GPopover(b: TBGRABitmap); begin RRect(b,2,4,22,17,2,Ink); PolyL(b,[PointF(9,17),PointF(11.5,20.5),PointF(14,17)],Ink); FillRRect(b,5,7.5,10.5,13.5,1,Acc); Line(b,12.5,9,19,9,Ink,1.3); Line(b,12.5,12,17.5,12,Ink,1.3); end;
 
 const
-  Glyphs: array[0..163] of TGlyph = (
+  Glyphs: array[0..164] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -954,6 +966,7 @@ const
     (Name:'TTyImage';            Draw:@GImage),
     (Name:'TTyImageCollection';  Draw:@GImageCollection),
     (Name:'TTyVirtualImageList'; Draw:@GVirtualImageList),
+    (Name:'TTyLucideImageList';  Draw:@GLucideImageList),
     (Name:'TTyGlyphButton';      Draw:@GGlyphButton),
     (Name:'TTyGlyphContainerButton'; Draw:@GGlyphContainerButton),
     (Name:'TTySpeedButton';      Draw:@GSpeedButton),

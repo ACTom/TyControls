@@ -42,12 +42,14 @@ type
     procedure GlyphNameRoundTripsByIndex;
     procedure RemovedBrandLogosAreNotOffered;
     procedure TheComponentConfiguresItselfAndSharesOneRegistration;
+    procedure TheDroppableListIsPreWiredToLucideAndStartsEmpty;
 end;
 
 implementation
 
 uses
-  sha1, FileUtil, BGRABitmap, BGRABitmapTypes, tyControls.Types, test.designregistry;
+  sha1, FileUtil, BGRABitmap, BGRABitmapTypes, tyControls.Types, test.designregistry,
+  tyControls.ImageCollection, tyControls.ImageDraw;
 
 function TLucideTest.AssetsDir: string;
 begin
@@ -262,6 +264,28 @@ begin
   { And the code-path singleton is the same class, so the two entry points cannot drift. }
   AssertTrue('TyLucideFont is the component class',
     TyLucideFont is TTyLucideIconFont);
+end;
+
+procedure TLucideTest.TheDroppableListIsPreWiredToLucideAndStartsEmpty;
+var
+  list: TTyLucideImageList;
+begin
+  { The third way in: a droppable image list that needs no font wiring. It IS a
+    TTyVirtualImageList (so it takes the on-demand vector path, not the baked one), its IconFont
+    is the shared bundled font, and it starts empty so the developer fills only what they use. }
+  list := TTyLucideImageList.Create(nil);
+  try
+    AssertFalse('it is our on-demand list, not a baked one', TyImageIsBaked(list));
+    AssertSame('IconFont is the shared bundled font', TObject(TyLucideFont), TObject(list.IconFont));
+    AssertEquals('Names start empty', 0, list.Names.Count);
+    AssertEquals('so there are no images yet', 0, TyImageCount(list));
+    { Fill one name and it becomes one addressable image, keyed by that name. }
+    list.Names.Text := TyIconHouse;
+    AssertEquals('adding a name adds an image', 1, TyImageCount(list));
+    AssertEquals('and the name resolves to slot 0', 0, TyImageIndexOfName(list, TyIconHouse));
+  finally
+    list.Free;
+  end;
 end;
 
 initialization

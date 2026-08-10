@@ -32,7 +32,7 @@ unit tyControls.Icons.Lucide;
 interface
 
 uses
-  Classes, tyControls.IconFont;
+  Classes, tyControls.IconFont, tyControls.ImageCollection;
 
 type
   { The bundled pack as a COMPONENT. TTyIconPackFont registers the embedded bytes once
@@ -41,6 +41,26 @@ type
   protected
     class function PackData: RawByteString; override;
     class function PackFamily: string; override;
+  end;
+
+  { The bundled pack as a droppable IMAGE LIST -- the third way in, and the one the reparent
+    (TTyVirtualImageList IS a TCustomImageList now) made possible. Drop it on a form and assign
+    it straight to any control's Images: there is no font to wire, because its IconFont is the
+    shared Lucide font, set once in the constructor and not streamed.
+
+    Names start EMPTY on purpose. This list holds the icons you actually use, not all ~2000 --
+    add the names you need (Names.Text := 'house'#13'settings', or pick them in the icon browser),
+    and each becomes an image, addressable by ImageIndex OR (this library being name-keyed) by
+    ImageName on every control that draws from it. A control's icon then survives you reordering
+    this list, because the name is the key. }
+  TTyLucideImageList = class(TTyVirtualImageList)
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    { Always the bundled Lucide font. Redeclared stored False so it never streams: the
+      constructor sets it, and a streamed reference to the unit-owned shared font (no form owner,
+      no name) would resolve to nil on load and blank the list. }
+    property IconFont stored False;
   end;
 
 const
@@ -4872,6 +4892,14 @@ begin
     path cannot drift -- and the pack base makes both share one registration. }
   if GFont = nil then GFont := TTyLucideIconFont.Create(nil);
   Result := GFont;
+end;
+
+constructor TTyLucideImageList.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  { Wire the shared bundled font (one registration per process). Names stay empty: this list
+    holds the icons the form actually uses, filled by the developer, not all ~2000. }
+  IconFont := TyLucideFont;
 end;
 
 initialization

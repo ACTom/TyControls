@@ -1348,8 +1348,8 @@ begin
      TTyRibbonQuickAccess, TTyRibbonGallery, TTyRibbonBackstage]);
   // Icon-font, images, hints.
   RegisterComponents('TyControls Images',
-    [TTyIconFont, TTyLucideIconFont, TTyCharImage, TTyGlyphImageList, TTyImage,
-     TTyImageCollection, TTyVirtualImageList, TTyHint, TTyBalloonHint,
+    [TTyIconFont, TTyLucideIconFont, TTyLucideImageList, TTyCharImage, TTyGlyphImageList,
+     TTyImage, TTyImageCollection, TTyVirtualImageList, TTyHint, TTyBalloonHint,
      TTyPopover]);
   // Decorative vector shapes + charts.
   RegisterComponents('TyControls Shapes & Charts',

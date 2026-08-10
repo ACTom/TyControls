@@ -443,7 +443,8 @@ initialization
     TTyMenuBar, TTyPopupMenu, TTyImagesMenu]);
   Reg([
     TTyMenuEx, TTyRibbon, TTyRibbonPage, TTyRibbonGroup, TTyRibbonAppMenu,
-    TTyRibbonQuickAccess, TTyRibbonGallery, TTyRibbonBackstage, TTyIconFont, TTyLucideIconFont, TTyCharImage,
+    TTyRibbonQuickAccess, TTyRibbonGallery, TTyRibbonBackstage, TTyIconFont, TTyLucideIconFont,
+    TTyLucideImageList, TTyCharImage,
     TTyGlyphImageList, TTyImage, TTyImageCollection, TTyVirtualImageList, TTyHint,
     TTyBalloonHint, TTyPopover, TTyShape, TTyStarShape, TTyArrow, TTyChart, TTyMessage,
     TTyInputDialog, TTyPasswordDialog, TTyTextDialog, TTySelectValueDialog,
