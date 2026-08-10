@@ -11,7 +11,7 @@ unit tyControls.Columns;
   thin compatibility shim. }
 interface
 uses
-  Classes, SysUtils, Math, Controls, LCLType, tyControls.ImageCollection;
+  Classes, SysUtils, ImgList, Math, Controls, LCLType, tyControls.ImageCollection;
 
 const
   NoColumn = -1;   { sentinel: "no column" / not found }
@@ -311,7 +311,7 @@ type
     FSortColumn:    Integer;
     FSortDirection: TTySortDirection;
     FAutoSizeIndex: Integer;
-    FImages:        TTyVirtualImageList;
+    FImages:        TCustomImageList;
     FOptions:       TTyHeaderOptions;
     FOnChange:      TNotifyEvent;
 
@@ -372,7 +372,7 @@ type
       TTyPainter can draw. The property was unusable by construction, and every consumer
       that wanted header icons carried a private second list to work around it
       (TTyCustomGrid.Images still does, and says so). }
-    property Images:        TTyVirtualImageList  read FImages        write FImages;
+    property Images:        TCustomImageList     read FImages        write FImages;
     property Options:       TTyHeaderOptions read FOptions       write SetOptions;
   end;
 

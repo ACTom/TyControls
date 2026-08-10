@@ -22,14 +22,14 @@ unit tyControls.Grid;
 interface
 
 uses
-  Classes, SysUtils, Types, Math, contnrs, Clipbrd, Controls, Graphics, LCLType, LMessages, StdCtrls,
+  Classes, SysUtils, ImgList, Types, Math, contnrs, Clipbrd, Controls, Graphics, LCLType, LMessages, StdCtrls,
   ExtCtrls, LazUTF8,
   BGRABitmap, BGRABitmapTypes, BGRATextBidi,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Columns,
   tyControls.ScrollBar, tyControls.Edit, tyControls.ComboBox, tyControls.DateTimePicker, tyControls.Popover, tyControls.CheckListBox, tyControls.ColorMath,
   tyControls.SpinEdit, tyControls.TrackBar, tyControls.Memo, tyControls.MaskEdit,
   tyControls.CalcEdit, tyControls.Panel, tyControls.Button, tyControls.CheckBox,
-  tyControls.Css.Values, tyControls.ImageCollection, tyControls.Dialogs.Color,
+  tyControls.Css.Values, tyControls.ImageCollection, tyControls.ImageDraw, tyControls.Dialogs.Color,
   tyControls.StrConsts, tyControls.Controller,
   tyControls.Grid.Layout, tyControls.Grid.Csv;
 
@@ -923,7 +923,7 @@ type
       该属性现已改成 TTyVirtualImageList,那条理由不再成立;网格仍自带一份,是因为
       这份列表**同时**喂 gcdImage 单元格,不只是列头,两个角色合并要另算一次破坏性变更。
       索引仍走共享的 TTyColumn.ImageIndex。 }
-    FImages:           TTyVirtualImageList;
+    FImages:           TCustomImageList;
     FFooterHeight:     Integer;
     FScrollX:          Integer;
     FScrollY:          Integer;
@@ -1034,7 +1034,7 @@ type
     procedure SetShowIndicator(AValue: Boolean);
     procedure SetShowGridLines(AValue: Boolean);
     procedure SetShowFooter(AValue: Boolean);
-    procedure SetImages(AValue: TTyVirtualImageList);
+    procedure SetImages(AValue: TCustomImageList);
     procedure SetGridLineWidth(AValue: Integer);
     procedure SetGridLineStyle(AValue: TTyGridLineStyle);
     procedure HeaderGroupsChanged(Sender: TObject);
@@ -1448,7 +1448,7 @@ type
 
       一旦设了 Header.Images 就它说了算,哪怕那个下标它画不出来 ——
       会静默回落的覆盖不叫覆盖。 }
-    function HeaderImageList: TTyVirtualImageList; virtual;
+    function HeaderImageList: TCustomImageList; virtual;
     { 列头里每一列的分段:底色、标题文字、排序字形。 }
     procedure RenderHeaderSections(P: TTyPainter; const M: TTyGridMetrics;
       AHeaderH: Integer); virtual;
@@ -1777,7 +1777,7 @@ type
       粗线只会让单元格**内容**相应内缩,免得文字压在线底下。 }
     property GridLineWidth: Integer read FGridLineWidth write SetGridLineWidth default 1;
     { 列头图标(TTyColumn.ImageIndex)与 gcdImage 单元格共用的图像源。 }
-    property Images: TTyVirtualImageList read FImages write SetImages;
+    property Images: TCustomImageList read FImages write SetImages;
     { 逐格外观钩子。 }
     property OnGetCellStyle: TTyGridGetCellStyleEvent
       read FOnGetCellStyle write FOnGetCellStyle;
@@ -5684,7 +5684,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyCustomGrid.SetImages(AValue: TTyVirtualImageList);
+procedure TTyCustomGrid.SetImages(AValue: TCustomImageList);
 begin
   if FImages = AValue then Exit;
   FImages := AValue;
@@ -6777,7 +6777,7 @@ begin
   Result := Rect(cx - ScaleI(7), cy - ScaleI(7), cx + ScaleI(7), cy + ScaleI(7));
 end;
 
-function TTyCustomGrid.HeaderImageList: TTyVirtualImageList;
+function TTyCustomGrid.HeaderImageList: TCustomImageList;
 begin
   Result := FHeader.Images;
   if Result = nil then Result := FImages;
@@ -6794,8 +6794,7 @@ var
   hdrFontName: string;
   hdrFontSize, hdrFontWeight: Integer;
   col: TTyColumn;
-  bmp: TBGRABitmap;
-  imgList: TTyVirtualImageList;
+  imgList: TCustomImageList;
   secS, hdrS, actHdrS, hotS, pushS: TTyStyleSet;
   hotTrack, pushed: Boolean;
   ink: TTyColor;
@@ -6928,14 +6927,13 @@ begin
       if imgSz > AHeaderH - ScaleI(4) then imgSz := AHeaderH - ScaleI(4);
       if imgSz > 0 then
       begin
-        bmp := imgList.CachedIndex(imgIdx, imgSz);
-        if bmp <> nil then
+        if imgIdx < TyImageCount(imgList) then
         begin
-          { 图标贴在段的**起点**那一侧,与标题同侧。 }
+          { 图标贴在段的**起点**那一侧,与标题同侧。两分支同一条路。 }
           imgR := ToScreenRect(Rect(rr.Left + ScaleI(4), 0,
             rr.Left + ScaleI(4) + imgSz, 0));
-          P.Bitmap.PutImage(imgR.Left, bandTop + (AHeaderH - imgSz) div 2, bmp,
-            dmDrawWithTransparency);
+          TyBlitImage(P.Bitmap, imgList, imgIdx,
+            imgR.Left, bandTop + (AHeaderH - imgSz) div 2, imgSz, P.Scale(96), False);
           Inc(imgPad, imgSz + ScaleI(4));
         end;
       end;
@@ -10288,13 +10286,12 @@ procedure TTyStringGrid.RenderImageCell(P: TTyPainter; ACol, ARow: Integer;
 var
   r: TRect;
   idx, sz, cx, cy: Integer;
-  bmp: TBGRABitmap;
 begin
   if FImages = nil then Exit;
   r := CellVisibleRect(ACol, ARow);
   if IsRectEmpty(r) then Exit;
   idx := StrToIntDef(Trim(GetCellText(ACol, ARow)), -1);
-  if (idx < 0) or (idx >= FImages.Count) then Exit;
+  if (idx < 0) or (idx >= TyImageCount(FImages)) then Exit;
 
   sz := ScaleI(16);
   if sz > (r.Bottom - r.Top) - 2 then sz := (r.Bottom - r.Top) - 2;
@@ -10302,11 +10299,7 @@ begin
   if sz <= 0 then Exit;
   cx := (r.Left + r.Right) div 2;
   cy := (r.Top + r.Bottom) div 2;
-  { 从图像集的渲染缓存借位图 —— 不为每个图标单独分配与重采样(这是绘制热路径)。
-    位图归缓存所有,不能释放。 }
-  bmp := FImages.CachedIndex(idx, sz);
-  if bmp <> nil then
-    P.Bitmap.PutImage(cx - sz div 2, cy - sz div 2, bmp, dmDrawWithTransparency);
+  TyBlitImage(P.Bitmap, FImages, idx, cx - sz div 2, cy - sz div 2, sz, P.Scale(96), False);
 end;
 
 { ---- 单元格图形 ----------------------------------------------------------- }

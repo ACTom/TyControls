@@ -27,10 +27,10 @@ unit tyControls.ListView;
   (GetStyleTypeKey = 'TyListView'); see that method for the part list. }
 interface
 uses
-  Classes, SysUtils, Types, Math, DateUtils, Controls, Graphics, LCLType,
+  Classes, SysUtils, ImgList, Types, Math, DateUtils, Controls, Graphics, LCLType,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller,
-  tyControls.ScrollBar, tyControls.Columns, tyControls.ImageCollection,
+  tyControls.ScrollBar, tyControls.Columns, tyControls.ImageCollection, tyControls.ImageDraw,
   tyControls.Edit, tyControls.ListView.Layout;
 
 const
@@ -248,8 +248,8 @@ type
     FGridLines:         Boolean;
     FRowSelect:         Boolean;
     FHotTrack:          Boolean;
-    FLargeImages:       TTyVirtualImageList;
-    FSmallImages:       TTyVirtualImageList;
+    FLargeImages:       TCustomImageList;
+    FSmallImages:       TCustomImageList;
     { sort }
     FSortColumn:    Integer;
     FSortDirection: TTySortDirection;
@@ -355,8 +355,8 @@ type
     procedure SetSortDirection(AValue: TTySortDirection);
     procedure SetSortKind(AValue: TTyListSortKind);
     procedure SetAutoSort(AValue: Boolean);
-    procedure SetLargeImages(AValue: TTyVirtualImageList);
-    procedure SetSmallImages(AValue: TTyVirtualImageList);
+    procedure SetLargeImages(AValue: TCustomImageList);
+    procedure SetSmallImages(AValue: TCustomImageList);
     function  GetItemIndex: Integer;
     procedure SetItemIndex(AValue: Integer);
     function  GetSelected(AIndex: Integer): Boolean;
@@ -422,7 +422,7 @@ type
     { rendering helpers }
     { Which list a column header's ImageIndex is resolved against — Header.Images when
       set, else SmallImages. See the body for why the fallback is the ported behaviour. }
-    function  HeaderImageList: TTyVirtualImageList;
+    function  HeaderImageList: TCustomImageList;
     procedure RenderHeader(P: TTyPainter; const M: TTyListMetrics; const AFrame: TTyStyleSet);
     procedure RenderGridLines(P: TTyPainter; const M: TTyListMetrics; const AFrame: TTyStyleSet);
     procedure RenderMarquee(P: TTyPainter; const AFrame: TTyStyleSet);
@@ -430,7 +430,7 @@ type
       const AStyle: TTyStyleSet);
     procedure RenderFlowCell(P: TTyPainter; AIndex: Integer; const ACell: TRect;
       const AStyle: TTyStyleSet);
-    procedure DrawImage(P: TTyPainter; AList: TTyVirtualImageList;
+    procedure DrawImage(P: TTyPainter; AList: TCustomImageList;
       AImageIndex, AX, AY, ASizePx: Integer);
     procedure RenderCheckBox(P: TTyPainter; const ABox: TRect; AChecked: Boolean);
 
@@ -663,8 +663,8 @@ type
     property SortDirection: TTySortDirection read FSortDirection write SetSortDirection default sdAscending;
     property SortKind: TTyListSortKind read FSortKind write SetSortKind default lskText;
     property AutoSort: Boolean read FAutoSort write SetAutoSort default True;
-    property LargeImages: TTyVirtualImageList read FLargeImages write SetLargeImages;
-    property SmallImages: TTyVirtualImageList read FSmallImages write SetSmallImages;
+    property LargeImages: TCustomImageList read FLargeImages write SetLargeImages;
+    property SmallImages: TCustomImageList read FSmallImages write SetSmallImages;
     { Row-first checkboxes. A click on the box, or Space on the focused row, toggles the
       check without touching the selection. The box resolves this control's own
       'TyListViewCheckBox', so a file list's boxes can differ from a tree's. }
@@ -2676,7 +2676,7 @@ begin
   FAutoSort := AValue;
 end;
 
-procedure TTyListView.SetLargeImages(AValue: TTyVirtualImageList);
+procedure TTyListView.SetLargeImages(AValue: TCustomImageList);
 begin
   if FLargeImages = AValue then Exit;
   if FLargeImages <> nil then FLargeImages.RemoveFreeNotification(Self);
@@ -2685,7 +2685,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyListView.SetSmallImages(AValue: TTyVirtualImageList);
+procedure TTyListView.SetSmallImages(AValue: TCustomImageList);
 begin
   if FSmallImages = AValue then Exit;
   if FSmallImages <> nil then FSmallImages.RemoveFreeNotification(Self);
@@ -2750,18 +2750,14 @@ end;
   Rendering
   --------------------------------------------------------------------------- }
 
-procedure TTyListView.DrawImage(P: TTyPainter; AList: TTyVirtualImageList;
+procedure TTyListView.DrawImage(P: TTyPainter; AList: TCustomImageList;
   AImageIndex, AX, AY, ASizePx: Integer);
-var
-  bmp: TBGRABitmap;
 begin
-  if (AList = nil) or (AImageIndex < 0) or (ASizePx <= 0) then Exit;
-  { Borrowed from the collection's render cache -- no per-icon allocation and no per-icon
-    resample. This is the hot path: with HotTrack a mouse move repaints the whole control,
-    so every visible icon comes through here. The bitmap is owned by the cache, not us. }
-  bmp := AList.CachedIndex(AImageIndex, ASizePx);
-  if bmp <> nil then
-    P.Bitmap.PutImage(AX, AY, bmp, dmDrawWithTransparency);
+  if (AList = nil) or (AImageIndex < 0) or (AImageIndex >= TyImageCount(AList)) or (ASizePx <= 0) then Exit;
+  { Both branches in-layer. Our list is the hot path (HotTrack repaints on every mouse move),
+    borrowed from the collection cache with no per-icon allocation; a foreign list is
+    materialised. }
+  TyBlitImage(P.Bitmap, AList, AImageIndex, AX, AY, ASizePx, P.Scale(96), False);
 end;
 
 function TTyListView.CheckRectForCell(const ACell: TRect): TRect;
@@ -2932,7 +2928,7 @@ end;
 procedure TTyListView.RenderFlowCell(P: TTyPainter; AIndex: Integer; const ACell: TRect;
   const AStyle: TTyStyleSet);
 var
-  imgList: TTyVirtualImageList;
+  imgList: TCustomImageList;
   imgPx, ii, pad, ix, iy, cbShift: Integer;
   tc: TTyColor;
   lbl, sub: string;
@@ -3019,7 +3015,7 @@ begin
     RenderFlowCell(P, AIndex, ACell, AStyle);
 end;
 
-function TTyListView.HeaderImageList: TTyVirtualImageList;
+function TTyListView.HeaderImageList: TCustomImageList;
 begin
   { The header's OWN list when it has one, else the control's SmallImages.
 
@@ -3047,7 +3043,7 @@ var
   tc: TTyColor;
   useSec: Boolean;
   border: TBGRAPixel;
-  icoList: TTyVirtualImageList;
+  icoList: TCustomImageList;
 begin
   { The REPORT column-header band and its cells. Distinct from the group band's key
     ('TyListViewGroupHeader'): the two used to share one literal, so a skin that wanted a flat

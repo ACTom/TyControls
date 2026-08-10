@@ -22,7 +22,7 @@ unit test.parity.grid.members;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Forms, Graphics, StdCtrls, TypInfo, LMessages,
+  Classes, SysUtils, ImgList, Types, Controls, Forms, Graphics, StdCtrls, TypInfo, LMessages,
   fpcunit, testregistry, BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.ImageCollection,
   tyControls.Columns, tyControls.Grid;
@@ -35,7 +35,7 @@ type
   public
     property ScrollX;
     property ScrollY;
-    function  HeaderImages: TTyVirtualImageList;
+    function  HeaderImages: TCustomImageList;
     function  RenderToBitmap: TBGRABitmap;
     procedure Hover(X, Y: Integer);
     procedure LeaveControl;
@@ -196,8 +196,10 @@ implementation
 
 { TMemberGridAccess }
 
-function TMemberGridAccess.HeaderImages: TTyVirtualImageList;
+function TMemberGridAccess.HeaderImages: TCustomImageList;
 begin
+  { HeaderImageList widened to TCustomImageList when the Images properties did; the fallback
+    rule it encodes is unchanged, and these tests still pin it by object identity. }
   Result := HeaderImageList;
 end;
 
@@ -1174,7 +1176,7 @@ end;
 procedure TGridDeadPropertyTest.TestHeaderImagesOverridesTheGridsOwnList;
 var
   G: TMemberGridAccess;
-  own, hdr: TTyVirtualImageList;
+  own, hdr: TCustomImageList;
 begin
   G := NewAccessGrid;
   own := TTyVirtualImageList.Create(FForm);
@@ -1189,7 +1191,7 @@ end;
 procedure TGridDeadPropertyTest.TestHeaderImagesFallsBackToTheGridsOwnList;
 var
   G: TMemberGridAccess;
-  own: TTyVirtualImageList;
+  own: TCustomImageList;
 begin
   G := NewAccessGrid;
   own := TTyVirtualImageList.Create(FForm);
