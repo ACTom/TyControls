@@ -11,7 +11,8 @@ unit tyControls.Columns;
   thin compatibility shim. }
 interface
 uses
-  Classes, SysUtils, ImgList, Math, Controls, LCLType, tyControls.ImageCollection;
+  Classes, SysUtils, ImgList, Math, Controls, LCLType,
+  tyControls.ImageCollection, tyControls.ImageDraw;
 
 const
   NoColumn = -1;   { sentinel: "no column" / not found }
@@ -92,7 +93,9 @@ type
     FAlignment:        TAlignment;
     FCaptionAlignment: TAlignment;
     FText:             TCaption;
-    FImageIndex:       Integer;
+    FImageIndex:       Integer;      // last written BY index; a fallback view (see ImageIndex)
+    FImageName:        string;       // the durable icon key, resolved against the header's Images
+    FImageIndexPending: Boolean;     // an ImageIndex write not yet turned into a name (no list yet)
     FOptions:          TTyColumnOptions;
     FSizePriority:     Integer;
     FTag:              NativeInt;
@@ -111,7 +114,12 @@ type
     procedure SetAlignment(AValue: TAlignment);
     procedure SetCaptionAlignment(AValue: TAlignment);
     procedure SetText(const AValue: TCaption);
+    function  GetImageIndex: Integer;
     procedure SetImageIndex(AValue: Integer);
+    procedure SetImageName(const AValue: string);
+    procedure ResolveImageIndex;
+    function  ImageIndexIsStored: Boolean;
+    function  OwnerImages: TCustomImageList;
     function  GetOwnerColumns: TTyColumns;
     procedure NotifyOwner;
   protected
@@ -138,7 +146,16 @@ type
     property Alignment:        TAlignment           read FAlignment        write SetAlignment        default taLeftJustify;
     property CaptionAlignment: TAlignment           read FCaptionAlignment write SetCaptionAlignment default taLeftJustify;
     property Text:             TCaption               read FText             write SetText;
-    property ImageIndex:       Integer              read FImageIndex       write SetImageIndex       default -1;
+    { The header icon for this column, BY NAME -- the durable key, resolved against the owning
+      TTyHeader.Images. When that list is one of ours the name outlives a reorder, so a column
+      keeps its icon rather than inheriting whatever slid into the old slot. '' = none. Against a
+      foreign LCL list (no names) it is inert and ImageIndex is the only key. }
+    property ImageName:        string                 read FImageName        write SetImageName;
+    { The header icon BY POSITION -- a VIEW of ImageName: reading resolves the name to its slot in
+      the header's Images; writing turns the position into the name at that slot. Falls back to the
+      last index written only when nothing resolves (no list, a foreign list, or an unknown name).
+      Streams only when a name cannot capture the choice (see ImageIndexIsStored). }
+    property ImageIndex:       Integer              read GetImageIndex     write SetImageIndex       stored ImageIndexIsStored;
     property Options:          TTyColumnOptions read FOptions          write SetOptions;
     property Tag:              NativeInt            read FTag              write FTag                default 0;
     { Per-column visibility as its own boolean, the way LCL publishes it
@@ -321,6 +338,7 @@ type
     procedure SetSortColumn(AValue: Integer);
     procedure SetSortDirection(AValue: TTySortDirection);
     procedure SetAutoSizeIndex(AValue: Integer);
+    procedure SetImages(AValue: TCustomImageList);
     procedure SetOptions(AValue: TTyHeaderOptions);
     { Forwarded from FColumns.OnChange }
     procedure ColumnsChanged(Sender: TObject);
@@ -362,17 +380,14 @@ type
     property SortColumn:    Integer              read FSortColumn    write SetSortColumn    default -1;
     property SortDirection: TTySortDirection     read FSortDirection write SetSortDirection default sdAscending;
     property AutoSizeIndex: Integer              read FAutoSizeIndex write SetAutoSizeIndex default -1;
-    { Icon source for the column headers, indexed by TTyColumn.ImageIndex. LCL's
-      equivalent is TCustomHeaderControl.Images (comctrls.pp:4037).
+    { Icon source for the column headers, indexed by TTyColumn.ImageIndex (or keyed by
+      TTyColumn.ImageName). LCL's equivalent is TCustomHeaderControl.Images (comctrls.pp:4037).
 
-      Typed TTyVirtualImageList, not LCL's TCustomImageList. That is not a preference:
-      TTyVirtualImageList renders on demand instead of holding a fixed-resolution set, so
-      it is NOT a TCustomImageList descendant -- which meant that while this property was
-      typed TCustomImageList, the only lists assignable to it were exactly the ones no
-      TTyPainter can draw. The property was unusable by construction, and every consumer
-      that wanted header icons carried a private second list to work around it
-      (TTyCustomGrid.Images still does, and says so). }
-    property Images:        TCustomImageList     read FImages        write FImages;
+      Any TCustomImageList: one of ours (a TTyVirtualImageList, now a real image-list descendant
+      that renders on demand and carries Names, so column icons can be name-keyed) or a plain LCL
+      list (drawn from its baked resolutions, no names, so its columns are index-keyed). The
+      setter re-resolves every column's pending ImageIndex the moment a list is assigned. }
+    property Images:        TCustomImageList     read FImages        write SetImages;
     property Options:       TTyHeaderOptions read FOptions       write SetOptions;
   end;
 
@@ -531,6 +546,8 @@ begin
     FCaptionAlignment := Src.FCaptionAlignment;
     FText             := Src.FText;
     FImageIndex       := Src.FImageIndex;
+    FImageName        := Src.FImageName;
+    FImageIndexPending := Src.FImageIndexPending;
     FOptions          := Src.FOptions;
     FSizePriority     := Src.FSizePriority;
     FTag              := Src.FTag;
@@ -650,11 +667,65 @@ begin
   NotifyOwner;
 end;
 
+function TTyColumn.OwnerImages: TCustomImageList;
+var cols: TTyColumns;
+begin
+  Result := nil;
+  cols := GetOwnerColumns;
+  // FOwnerHeader is private to TTyColumns, but that class lives in this unit, so a column may
+  // reach the header whose Images its ImageIndex/ImageName indexes.
+  if (cols <> nil) and (cols.FOwnerHeader <> nil) then
+    Result := cols.FOwnerHeader.Images;
+end;
+
+function TTyColumn.GetImageIndex: Integer;
+var n: Integer;
+begin
+  // DERIVED from the name whenever it resolves against the header's list; otherwise the last
+  // index written. Keeps "set the name, read the index" and "set the index, read the name" in
+  // agreement without a precedence rule.
+  if FImageName <> '' then
+  begin
+    n := TyImageIndexOfName(OwnerImages, FImageName);
+    if n >= 0 then Exit(n);
+  end;
+  Result := FImageIndex;
+end;
+
 procedure TTyColumn.SetImageIndex(AValue: Integer);
 begin
-  if FImageIndex = AValue then Exit;
+  if AValue < -1 then AValue := -1;   // one "no icon" value, not a range of them
   FImageIndex := AValue;
+  // Mark FIRST: the request stands whether or not the header has a list yet; marking it only when
+  // it can be served is how a streamed ImageIndex would vanish before Images is assigned.
+  FImageIndexPending := True;
+  ResolveImageIndex;
   NotifyOwner;
+end;
+
+procedure TTyColumn.SetImageName(const AValue: string);
+begin
+  if FImageName = AValue then Exit;
+  FImageName := AValue;
+  NotifyOwner;
+end;
+
+procedure TTyColumn.ResolveImageIndex;
+begin
+  if not FImageIndexPending then Exit;   // nothing outstanding: never touch a set ImageName
+  if OwnerImages = nil then Exit;        // header has no list yet; SetImages retries every column
+  FImageIndexPending := False;
+  if FImageIndex < 0 then
+    SetImageName('')                     // an explicit -1 clears the icon
+  else
+    SetImageName(TyImageNameOfIndex(OwnerImages, FImageIndex));  // '' for a foreign list / past end
+end;
+
+function TTyColumn.ImageIndexIsStored: Boolean;
+begin
+  // The NAME is the durable state; the index streams only as the fallback a name cannot hold
+  // (foreign list, or index-only use). See TTyImage.ImageIndexIsStored for the full reasoning.
+  Result := (FImageName = '') and (FImageIndex >= 0);
 end;
 
 { ---------------------------------------------------------------------------
@@ -1299,6 +1370,18 @@ begin
   Changed;
 end;
 
+procedure TTyHeader.SetImages(AValue: TCustomImageList);
+var i: Integer;
+begin
+  if FImages = AValue then Exit;
+  FImages := AValue;
+  // A list arriving is when each column's streamed-but-unresolved ImageIndex can finally become a
+  // name; ResolveImageIndex is private to TTyColumn but reachable from this unit.
+  for i := 0 to FColumns.Count - 1 do
+    FColumns.Items[i].ResolveImageIndex;
+  Changed;
+end;
+
 procedure TTyHeader.SetOptions(AValue: TTyHeaderOptions);
 begin
   if FOptions = AValue then Exit;
@@ -1335,6 +1418,10 @@ begin
       a copied opt-out (NoColumn). Assigning here (post-rebuild, Count = Src.Count) lets
       the opt-out and any explicit value survive. }
     FMainColumn := Src.FMainColumn;
+    { The list is in place and every column's name is copied; resolve any column whose ImageIndex
+      was still pending on the source so it, too, is name-keyed against this header's list. }
+    for i := 0 to FColumns.Count - 1 do
+      FColumns.Items[i].ResolveImageIndex;
     Changed;
   end
   else

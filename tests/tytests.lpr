@@ -57,6 +57,7 @@ uses
   test.virtualimagelist.iconfont,
   test.virtualimagelist.baked,
   test.imagedraw,
+  test.imagename,
   test.tabsheet,
   test.pagecontrol,
   test.pagecontrol.streaming,

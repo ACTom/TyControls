@@ -46,6 +46,15 @@ function TyImageIsBaked(AList: TCustomImageList): Boolean;
   two disagree during the window before a bake completes. }
 function TyImageCount(AList: TCustomImageList): Integer;
 
+{ Name <-> index resolution, the SINGLE place that judges the list's type for it. Names live only
+  on ours: TTyVirtualImageList carries an ordered Names list and a name outlives a reorder, which
+  is why a control keeps the NAME as its durable icon state and treats the index as a view. A
+  foreign TCustomImageList has no names, so both helpers are inert against one -- IndexOfName
+  returns -1 and NameOfIndex returns '', and a control that only ever set an index keeps working
+  by index. Case-sensitive, matching TTyVirtualImageList.IndexOf. }
+function TyImageIndexOfName(AList: TCustomImageList; const AName: string): Integer;
+function TyImageNameOfIndex(AList: TCustomImageList; AIndex: Integer): string;
+
 { The size an icon will ACTUALLY occupy in device px if you ask for APreferredPx at APPI.
   (0,0) means reserve no slot: nil, or a baked list with no images. NON-MUTATING -- this is
   why it uses WidthForPPI/HeightForPPI and never SizeForPPI. Safe from a layout pass. }
@@ -96,6 +105,22 @@ begin
     Result := TTyVirtualImageList(AList).Names.Count
   else
     Result := AList.Count;
+end;
+
+function TyImageIndexOfName(AList: TCustomImageList; const AName: string): Integer;
+begin
+  if (AList <> nil) and (AName <> '') and (AList is TTyVirtualImageList) then
+    Result := TTyVirtualImageList(AList).IndexOf(AName)
+  else
+    Result := -1;
+end;
+
+function TyImageNameOfIndex(AList: TCustomImageList; AIndex: Integer): string;
+begin
+  if (AList <> nil) and (AIndex >= 0) and (AList is TTyVirtualImageList) then
+    Result := TTyVirtualImageList(AList).NameOf(AIndex)
+  else
+    Result := '';
 end;
 
 { Device-pixel slot -> the 96-PPI width LCL's read-only accessors speak, snapped to a REGISTERED

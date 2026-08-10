@@ -192,6 +192,10 @@ type
       return the page's ImageIndex. This is the value TabImageIndex seeds OnGetImageIndex
       with -- the event is the override, this is what it overrides. }
     function GetTabImageIndex(AIndex: Integer): Integer; virtual;
+    { Fired after the Images list is (re)assigned, before the relayout. The base does nothing;
+      TTyPageControl overrides it to re-resolve every page's pending ImageIndex against the new
+      list, so a name-keyed page icon survives a list that arrives after the pages. }
+    procedure DoImagesChanged; virtual;
     { Which edge the band sits on, as the LAYOUT sees it -- the ONE answer the band box,
       AdjustClientRect, DisplayRect and the arrow ends all take, exactly as
       HeaderRightToLeft is the one answer for direction. A subclass whose own chrome is
@@ -648,6 +652,11 @@ begin
   Result := -1;
 end;
 
+procedure TTyCustomTabStrip.DoImagesChanged;
+begin
+  { The base owns no tabs, so there is nothing to re-resolve. TTyPageControl overrides this. }
+end;
+
 function TTyCustomTabStrip.HasPageBody: Boolean;
 begin
   Result := True;
@@ -805,6 +814,9 @@ begin
   if FImages <> nil then FImages.RemoveFreeNotification(Self);
   FImages := AValue;
   if FImages <> nil then FImages.FreeNotification(Self);
+  { A list arriving is when each page's streamed-but-pending ImageIndex can finally become a name
+    (TTyPageControl overrides this; the base does nothing). }
+  DoImagesChanged;
   { Icons take room inside every header, so this is a LAYOUT change, not a repaint:
     gaining or losing the list re-measures each tab. Realign because the band's thickness
     on a left/right band is the widest caption box and the icon slot is inside it. }

@@ -40,7 +40,9 @@ type
     FKeepOriginYWhenClipped: Boolean;
     FAntialiasingMode: TAntialiasingMode;
     FImages: TCustomImageList;
-    FImageIndex: Integer;
+    FImageIndex: Integer;        // last written BY index; a fallback view (see ImageIndex)
+    FImageName: string;          // the durable icon key: a name survives a list reorder
+    FImageIndexPending: Boolean; // an ImageIndex write not yet turned into a name (list was nil)
     FImageWidth: Integer;
     FOnPictureChanged: TNotifyEvent;
     procedure SetPicture(AValue: TPicture);
@@ -54,7 +56,11 @@ type
     procedure SetKeepOriginY(AValue: Boolean);
     procedure SetAntialiasingMode(AValue: TAntialiasingMode);
     procedure SetImages(AValue: TCustomImageList);
+    function GetImageIndex: Integer;
     procedure SetImageIndex(AValue: Integer);
+    procedure SetImageName(const AValue: string);
+    procedure ResolveImageIndex;
+    function ImageIndexIsStored: Boolean;
     procedure SetImageWidth(AValue: Integer);
     procedure ApplyTransparentToGraphic;
     procedure PictureChanged(Sender: TObject);
@@ -127,11 +133,21 @@ type
       set, exactly as in customimage.inc's DestRect/Paint. A FreeNotification nils the
       reference if the list is freed first. }
     property Images: TCustomImageList read FImages write SetImages;
-    { Which entry of Images to show. LCL's default is 0; ours is -1 because ours is a
-      NAME-keyed list whose Names may legitimately be empty at design time, and -1 is
-      already this library's "no icon" sentinel everywhere else (HasGraphic reads it
-      the same way LCL's GetHasGraphic does: ImageIndex >= 0). }
-    property ImageIndex: Integer read FImageIndex write SetImageIndex default -1;
+    { Which entry of Images to show, BY NAME -- the durable key. When Images is one of ours
+      (a TTyVirtualImageList), the name outlives a reorder of the list, so the icon a design
+      references does not silently change to whatever slid into its old slot. Empty = none, or
+      "resolve by ImageIndex instead". A foreign LCL list has no names, so there ImageName is
+      inert and ImageIndex is the only key. }
+    property ImageName: string read FImageName write SetImageName;
+    { Which entry of Images to show, BY POSITION. It is a VIEW of ImageName: read it and, when
+      the name resolves against the current list, you get that name's slot; write it and it is
+      turned into the name at that slot (so the name becomes the stored state). Only when nothing
+      resolves -- no list yet, or a foreign list, or a name the list does not carry -- does it
+      report the last value written by index. LCL's default is 0; ours is -1, this library's
+      "no icon" sentinel (HasGraphic reads it the same way GetHasGraphic does: ImageIndex >= 0).
+      It streams only when a NAME cannot capture the choice (see ImageIndexIsStored) -- a name is
+      the durable, reorder-safe state and takes the .lfm slot whenever one is set. }
+    property ImageIndex: Integer read GetImageIndex write SetImageIndex stored ImageIndexIsStored;
     { The pixel EDGE to render the list entry at; 0 = the list's DefaultSize. LCL uses
       it to pick which authored resolution to serve; this collection resamples one
       master, so it is simply the requested size. }
@@ -373,20 +389,71 @@ begin
   if FImages <> nil then FImages.RemoveFreeNotification(Self);
   FImages := AValue;
   if FImages <> nil then FImages.FreeNotification(Self);
+  // A list arriving is the moment a streamed-but-unresolved ImageIndex can finally become a
+  // name; and even an already-resolved icon may now sit at a different slot, so a repaint reads
+  // the name against the NEW list.
+  ResolveImageIndex;
   InvalidatePreferredSize;
   if AutoSize then AdjustSize;
   Invalidate;
 end;
 
+function TTyImage.GetImageIndex: Integer;
+var n: Integer;
+begin
+  // DERIVED from the name whenever the name resolves; otherwise the last index written. This is
+  // what makes "set the name, read the index" and "set the index, read the name" agree with no
+  // precedence rule between the two.
+  if (FImages <> nil) and (FImageName <> '') then
+  begin
+    n := TyImageIndexOfName(FImages, FImageName);
+    if n >= 0 then Exit(n);
+  end;
+  Result := FImageIndex;
+end;
+
 procedure TTyImage.SetImageIndex(AValue: Integer);
 begin
-  if FImageIndex = AValue then Exit;
+  if AValue < -1 then AValue := -1;   // one "no icon" value, not a range of them
   FImageIndex := AValue;
-  // customimage.inc SetImageIndex repaints: a setter that only stored the field would
-  // leave the previous icon on screen until something unrelated invalidated us.
+  // Mark FIRST: the request exists whether or not a list can serve it yet; marking it only when
+  // it can serve is how a streamed ImageIndex would silently vanish before Images is assigned.
+  FImageIndexPending := True;
+  ResolveImageIndex;
+  // customimage.inc SetImageIndex repaints: a setter that only stored the field would leave the
+  // previous icon on screen until something unrelated invalidated us.
   InvalidatePreferredSize;
   if AutoSize then AdjustSize;
   Invalidate;
+end;
+
+procedure TTyImage.SetImageName(const AValue: string);
+begin
+  if FImageName = AValue then Exit;
+  FImageName := AValue;
+  InvalidatePreferredSize;
+  if AutoSize then AdjustSize;
+  Invalidate;
+end;
+
+procedure TTyImage.ResolveImageIndex;
+begin
+  if not FImageIndexPending then Exit;   // nothing outstanding: never touch a set ImageName
+  if FImages = nil then Exit;            // still unresolvable; a later SetImages retries
+  FImageIndexPending := False;
+  if FImageIndex < 0 then
+    SetImageName('')                     // an explicit -1 clears the icon, as LCL's does
+  else
+    SetImageName(TyImageNameOfIndex(FImages, FImageIndex));  // '' for a foreign list / past end
+end;
+
+function TTyImage.ImageIndexIsStored: Boolean;
+begin
+  // The NAME is the durable state; the index streams only as the fallback for a choice a name
+  // cannot hold -- a foreign list with no names, or plain index-only use. When a name IS set it
+  // is authoritative and reorder-safe, and streaming the index alongside would let a stale index
+  // clobber the name on the next load after the list is reordered.
+  Result := (FImageName = '') and (FImageIndex >= 0);
 end;
 
 procedure TTyImage.SetImageWidth(AValue: Integer);
@@ -426,8 +493,8 @@ begin
   // blank square rather than raising, which would otherwise read as "has a graphic".
   Result := (FPicture.Graphic <> nil) and not FPicture.Graphic.Empty;
   if Result then Exit;
-  Result := (FImages <> nil) and (FImageIndex >= 0)
-    and (FImageIndex < TyImageCount(FImages));
+  Result := (FImages <> nil) and (GetImageIndex >= 0)
+    and (GetImageIndex < TyImageCount(FImages));
 end;
 
 { On LCL, Transparent means "honour the GRAPHIC's own mask / transparent colour" and is
@@ -473,7 +540,7 @@ begin
   end;
   PreferredWidth := 0;
   PreferredHeight := 0;
-  if (FImages <> nil) and (FImageIndex >= 0) and (FImageIndex < TyImageCount(FImages)) then
+  if (FImages <> nil) and (GetImageIndex >= 0) and (GetImageIndex < TyImageCount(FImages)) then
   begin
     sz := GetImageSize;
     PreferredWidth := sz;
@@ -537,7 +604,7 @@ begin
         src := TBGRABitmap.Create(tmp);
       end
       else
-        src := TyRenderImage(FImages, FImageIndex, GetImageSize, APPI, False);
+        src := TyRenderImage(FImages, GetImageIndex, GetImageSize, APPI, False);
       if (src = nil) or (src.Width <= 0) or (src.Height <= 0) then
       begin
         P.EndPaint;

@@ -25,6 +25,7 @@ type
       then has the last word over. Reading it off the PAGE rather than off a parallel array
       is what makes a reorder carry the icon with its tab. }
     function  GetTabImageIndex(AIndex: Integer): Integer; override;
+    procedure DoImagesChanged; override;
     function  GetStyleTypeKey: string; override;
     procedure DoSelectTab(AIndex: Integer); override;
     procedure DoReorderTabs(AFromIndex, AToIndex: Integer); override;
@@ -132,6 +133,16 @@ begin
     Result := FPages[AIndex].ImageIndex
   else
     Result := -1;
+end;
+
+procedure TTyPageControl.DoImagesChanged;
+var i: Integer;
+begin
+  { The list just changed: give every page the chance to turn a pending ImageIndex into its
+    durable name against the new list. Idempotent for pages with nothing pending. }
+  for i := 0 to High(FPages) do
+    if FPages[i] <> nil then
+      FPages[i].ResolveImageIndex;
 end;
 
 function TTyPageControl.GetPage(AIndex: Integer): TTyTabSheet;

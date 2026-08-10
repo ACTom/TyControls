@@ -58,6 +58,10 @@ type
     procedure BlitMaterialisesABakedListInLayer;
     procedure RenderReturnsAnOwnedBitmapOurBranch;
     procedure RenderMaterialisesABakedListToAnOwnedBitmap;
+    procedure NameResolvesBothWaysOnOurList;
+    procedure NameResolutionIsInertOnAForeignList;
+    procedure NameResolutionGuardsNilEmptyAndOutOfRange;
+    procedure TheNameTracksTheImageAcrossAReorder;
   end;
 
 implementation
@@ -312,6 +316,44 @@ begin
   finally
     bmp.Free;
   end;
+end;
+
+procedure TImageDrawTest.NameResolvesBothWaysOnOurList;
+begin
+  { Ours carries Names ('red','green'), so a name maps to its slot and back. This is the primitive
+    every ImageName-bearing control leans on: keep the name, derive the index. }
+  AssertEquals('red is slot 0', 0, TyImageIndexOfName(FVector, 'red'));
+  AssertEquals('green is slot 1', 1, TyImageIndexOfName(FVector, 'green'));
+  AssertEquals('slot 0 is red', 'red', TyImageNameOfIndex(FVector, 0));
+  AssertEquals('slot 1 is green', 'green', TyImageNameOfIndex(FVector, 1));
+end;
+
+procedure TImageDrawTest.NameResolutionIsInertOnAForeignList;
+begin
+  { A stock LCL list has no names. The helpers must NOT raise and must NOT invent a mapping -- a
+    control assigned a foreign list simply keeps working by index. }
+  AssertEquals('no name on a foreign list', -1, TyImageIndexOfName(FBaked, 'red'));
+  AssertEquals('no name for a foreign slot', '', TyImageNameOfIndex(FBaked, 0));
+end;
+
+procedure TImageDrawTest.NameResolutionGuardsNilEmptyAndOutOfRange;
+begin
+  AssertEquals('nil list, by name', -1, TyImageIndexOfName(nil, 'red'));
+  AssertEquals('nil list, by index', '', TyImageNameOfIndex(nil, 0));
+  AssertEquals('empty name never matches', -1, TyImageIndexOfName(FVector, ''));
+  AssertEquals('a negative index has no name', '', TyImageNameOfIndex(FVector, -1));
+  AssertEquals('an index past the end has no name', '', TyImageNameOfIndex(FVector, 99));
+end;
+
+procedure TImageDrawTest.TheNameTracksTheImageAcrossAReorder;
+begin
+  { The whole reason a control keeps the NAME and not the index: reorder the list and the name
+    still points at its own image, at a NEW index. An index-keyed control would now show the
+    wrong icon; a name-keyed one follows the image. }
+  FVector.Names.Text := 'green' + LineEnding + 'red';
+  AssertEquals('green moved to slot 0', 0, TyImageIndexOfName(FVector, 'green'));
+  AssertEquals('red moved to slot 1', 1, TyImageIndexOfName(FVector, 'red'));
+  AssertEquals('slot 0 now names green', 'green', TyImageNameOfIndex(FVector, 0));
 end;
 
 initialization

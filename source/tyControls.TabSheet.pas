@@ -2,8 +2,9 @@ unit tyControls.TabSheet;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType, LMessages,
-  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.TabStrip;
+  Classes, SysUtils, Types, Controls, Graphics, ImgList, LCLType, LMessages,
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.TabStrip,
+  tyControls.ImageDraw;
 type
   { One page of a TTyPageControl. A themed background surface that hosts dropped
     controls. Its Caption is the TAB label (drawn by the host header), NOT painted
@@ -16,12 +17,18 @@ type
   private
     FOnShow: TNotifyEvent;
     FOnHide: TNotifyEvent;
-    FImageIndex: Integer;
+    FImageIndex: Integer;         // last written BY index; a fallback view (see ImageIndex)
+    FImageName: string;           // the durable icon key, resolved against the pager's Images
+    FImageIndexPending: Boolean;  // an ImageIndex write not yet turned into a name (no pager list)
     function  GetPageControl: TTyCustomTabStrip;
     procedure SetPageControl(AValue: TTyCustomTabStrip);
     function  GetPageIndex: Integer;
     procedure SetPageIndex(AValue: Integer);
+    function  GetImageIndex: Integer;
     procedure SetImageIndex(AValue: Integer);
+    procedure SetImageName(const AValue: string);
+    function  ImageIndexIsStored: Boolean;
+    function  OwnerImages: TCustomImageList;
   protected
     { Repaint when Caption/Text changes -- the LCL hook that replaces our old setter. }
     procedure TextChanged; override;
@@ -39,6 +46,10 @@ type
     destructor Destroy; override;
     procedure Invalidate; override;
     constructor Create(AOwner: TComponent); override;
+    { Re-resolve a pending ImageIndex into a name against the pager's list. Called when the page
+      joins a pager and by TTyPageControl.DoImagesChanged when the pager's Images changes. Public
+      because the pager lives in another unit and is not a descendant. Idempotent and cheap. }
+    procedure ResolveImageIndex;
     { The pager this page belongs to, READ/WRITE -- assigning it moves the page to another
       pager, exactly as TTabSheet.PageControl does (comctrls.pp:530). Reading it used to mean
       reading Parent and hard-casting, which compiles for any parent at all and only fails at
@@ -70,15 +81,21 @@ type
       carried by the order the pages stream in, and storing it too would give the .lfm two
       sources of truth for one fact. }
     property PageIndex: Integer read GetPageIndex write SetPageIndex stored False;
-    { Index into the PAGER's Images list, or -1 for no icon. Same name, same type and same
-      default as TTabSheet.ImageIndex (comctrls.pp:541), so a ported page streams.
+    { The page's tab icon BY NAME -- the durable key, resolved against the PAGER's Images. When
+      that list is one of ours the name outlives a reorder of the list, so the page keeps its icon
+      rather than inheriting whatever slid into the old slot. '' = none; a foreign LCL list has no
+      names, so there this is inert and ImageIndex is the key. }
+    property ImageName: string read FImageName write SetImageName;
+    { Index into the PAGER's Images list -- a VIEW of ImageName: reading resolves the name to its
+      slot, writing turns the position into the name at that slot. Falls back to the last index
+      written only when nothing resolves. Same name/type as TTabSheet.ImageIndex (comctrls.pp:541)
+      so a ported page streams, but it streams ONLY when a name cannot capture the choice (see
+      ImageIndexIsStored) -- the name is the reorder-safe state.
 
-      It lives on the PAGE and not in a parallel list on the pager for the same reason
-      Caption does: reordering pages must carry the icon with the page, and a second array
-      indexed by position would silently hand tab 2's icon to whatever moved into slot 2.
-      The pager reads it through GetTabImageIndex, and OnGetImageIndex still has the last
-      word over whatever this says. }
-    property ImageIndex: Integer read FImageIndex write SetImageIndex default -1;
+      The icon lives on the PAGE, not in a parallel list on the pager, for the same reason Caption
+      does: reordering pages must carry the icon with the page. The pager reads it through
+      GetTabImageIndex, and OnGetImageIndex still has the last word over whatever this says. }
+    property ImageIndex: Integer read GetImageIndex write SetImageIndex stored ImageIndexIsStored;
     { Fired when this page becomes / stops being the shown page. Per-page enter/leave logic
       (lazy content loading, validate-on-leave) previously had to be centralised in the
       pager's OnChange and dispatched with an if/case chain on the index, so a page could
@@ -120,12 +137,60 @@ end;
 
 { The icon is measured INTO the tab header's width, so changing it re-lays the strip --
   the same reason TextChanged invalidates the host rather than the page. }
+function TTyTabSheet.OwnerImages: TCustomImageList;
+var pager: TTyCustomTabStrip;
+begin
+  pager := GetPageControl;
+  if pager <> nil then Result := pager.Images else Result := nil;
+end;
+
+function TTyTabSheet.GetImageIndex: Integer;
+var n: Integer;
+begin
+  // DERIVED from the name whenever it resolves against the pager's list; otherwise the last
+  // index written -- so "set the name, read the index" and its inverse agree with no precedence.
+  if FImageName <> '' then
+  begin
+    n := TyImageIndexOfName(OwnerImages, FImageName);
+    if n >= 0 then Exit(n);
+  end;
+  Result := FImageIndex;
+end;
+
 procedure TTyTabSheet.SetImageIndex(AValue: Integer);
 begin
-  if AValue < -1 then AValue := -1;
-  if FImageIndex = AValue then Exit;
+  if AValue < -1 then AValue := -1;   // one "no icon" value, not a range of them
   FImageIndex := AValue;
+  // Mark FIRST: the request stands whether or not the pager has a list yet; marking it only when
+  // it can be served is how a streamed ImageIndex would vanish before the page has a pager.
+  FImageIndexPending := True;
+  ResolveImageIndex;
   if Parent <> nil then Parent.Invalidate;
+end;
+
+procedure TTyTabSheet.SetImageName(const AValue: string);
+begin
+  if FImageName = AValue then Exit;
+  FImageName := AValue;
+  if Parent <> nil then Parent.Invalidate;
+end;
+
+procedure TTyTabSheet.ResolveImageIndex;
+begin
+  if not FImageIndexPending then Exit;   // nothing outstanding: never touch a set ImageName
+  if OwnerImages = nil then Exit;        // no pager list yet; a later attach / SetImages retries
+  FImageIndexPending := False;
+  if FImageIndex < 0 then
+    SetImageName('')                     // an explicit -1 clears the icon
+  else
+    SetImageName(TyImageNameOfIndex(OwnerImages, FImageIndex));  // '' foreign list / past end
+end;
+
+function TTyTabSheet.ImageIndexIsStored: Boolean;
+begin
+  // The NAME is the durable state; the index streams only as the fallback a name cannot hold.
+  // See TTyImage.ImageIndexIsStored for the full reasoning.
+  Result := (FImageName = '') and (FImageIndex >= 0);
 end;
 
 function TTyTabSheet.GetStyleTypeKey: string;
@@ -162,6 +227,9 @@ begin
     property is applied — so the page list is rebuilt uniformly in all paths. }
   if (AParent <> nil) and (AParent is TTyPageControl) then
     TTyPageControl(AParent).RegisterPage(Self);
+  { Now that the page has a pager (and thus a list to resolve against), a streamed-but-pending
+    ImageIndex can become its durable name. Harmless when nothing is pending. }
+  ResolveImageIndex;
 end;
 
 function TTyTabSheet.GetPageControl: TTyCustomTabStrip;
