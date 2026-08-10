@@ -38,9 +38,15 @@ type
   { The bundled pack as a COMPONENT. TTyIconPackFont registers the embedded bytes once
     per process, so any number of these on any number of forms cost one registration. }
   TTyLucideIconFont = class(TTyIconPackFont)
+  private
+    function GetLicense: string;
   protected
     class function PackData: RawByteString; override;
     class function PackFamily: string; override;
+  published
+    { Attribution for the bundled icons -- same as TTyLucideImageList.License. Read-only;
+      the design-time editor pops the full ISC + MIT text (TyLucideLicense). }
+    property License: string read GetLicense stored False;
   end;
 
   { The bundled pack as a droppable IMAGE LIST -- the third way in, made possible by the
@@ -82,7 +88,7 @@ const
     above pins the INPUTS; this pins the TRANSFORMATION, so a hand-edit of this generated
     file -- or a generator change nobody re-ran -- is a red test instead of a silent
     mismatch between the script and its output. }
-  TyLucideGeneratorDigest = '7FEAF7B410F16DB8CEA24DE2390426A466D6C424';
+  TyLucideGeneratorDigest = '95C4A7301BA8E45C58ED973D2A92DB580CBF3FBA';
   { Icons in the bundled font (names plus upstream aliases). }
   TyLucideGlyphCount = 2022;
   { One-liner shown in the object inspector for TTyLucideImageList.License; the '...' pops
@@ -4896,6 +4902,11 @@ end;
 class function TTyLucideIconFont.PackFamily: string;
 begin
   Result := TyLucideFamily;
+end;
+
+function TTyLucideIconFont.GetLicense: string;
+begin
+  Result := TyLucideLicenseSummary;
 end;
 
 function TyLucideFont: TTyLucideIconFont;

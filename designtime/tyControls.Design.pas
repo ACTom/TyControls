@@ -81,6 +81,17 @@ type
     procedure Edit; override;
   end;
 
+  { TTyColor (= Cardinal $AARRGGBB) shows as a raw integer (4278190080) in the OI, which nobody
+    can read or fill. This shows it as $AARRGGBB hex and opens a colour picker on '...', keeping
+    the existing alpha byte (the picker only chooses RGB). }
+  TTyColorPropertyEditor = class(TOrdinalPropertyEditor)
+  public
+    function GetAttributes: TPropertyAttributes; override;
+    function GetValue: string; override;
+    procedure SetValue(const NewValue: string); override;
+    procedure Edit; override;
+  end;
+
   { WHY EVERY LIST BELOW IS ADVISORY, NEVER A FIXED PICK-LIST.
 
     The Object Inspector only knows two shapes for a string property: a plain edit box, or a
@@ -440,6 +451,49 @@ begin
   { The full ISC + MIT (Feather) text, in the library's own message box, out of respect for
     Lucide. Design-time only -- no run-time dependency is added to the component. }
   TyMessageDlg(TyLucideLicense, mtInformation, [mbOK], 0);
+end;
+
+function TTyColorPropertyEditor.GetAttributes: TPropertyAttributes;
+begin
+  Result := [paDialog, paRevertable, paAutoUpdate];
+end;
+
+function TTyColorPropertyEditor.GetValue: string;
+begin
+  Result := '$' + IntToHex(Cardinal(GetOrdValue), 8);   { $AARRGGBB }
+end;
+
+procedure TTyColorPropertyEditor.SetValue(const NewValue: string);
+var
+  s: string;
+  v: Int64;
+begin
+  s := Trim(NewValue);
+  if (s <> '') and (s[1] = '#') then s := '$' + Copy(s, 2, MaxInt);   { accept #AARRGGBB too }
+  if (s <> '') and (s[1] <> '$') then s := '$' + s;                    { and bare hex }
+  if TryStrToInt64(s, v) then SetOrdValue(LongInt(Cardinal(v)));
+end;
+
+procedure TTyColorPropertyEditor.Edit;
+var
+  dlg: TColorDialog;
+  ty: Cardinal;
+  a, r, g, b: Byte;
+begin
+  ty := Cardinal(GetOrdValue);
+  a := (ty shr 24) and $FF; r := (ty shr 16) and $FF; g := (ty shr 8) and $FF; b := ty and $FF;
+  dlg := TColorDialog.Create(nil);
+  try
+    dlg.Color := RGBToColor(r, g, b);
+    if dlg.Execute then
+    begin
+      RedGreenBlue(ColorToRGB(dlg.Color), r, g, b);
+      { keep the existing alpha -- the picker only offers RGB }
+      SetOrdValue(LongInt((Cardinal(a) shl 24) or (Cardinal(r) shl 16) or (Cardinal(g) shl 8) or b));
+    end;
+  finally
+    dlg.Free;
+  end;
 end;
 
 procedure TTyStyleClassPropertyEditor.GetValues(Proc: TGetStrProc);
@@ -1436,9 +1490,20 @@ begin
     TTyStyleOverrideProperty);
   RegisterPropertyEditor(TypeInfo(string), TTyStyleController, 'StyleOverride',
     TTyStyleOverrideProperty);
-  // The droppable Lucide list carries its attribution: '...' pops the full ISC + MIT text.
+  // Both bundled Lucide components carry their attribution: '...' pops the full ISC + MIT text.
   RegisterPropertyEditor(TypeInfo(string), TTyLucideImageList, 'License',
     TTyLucideLicenseProperty);
+  RegisterPropertyEditor(TypeInfo(string), TTyLucideIconFont, 'License',
+    TTyLucideLicenseProperty);
+  { The bundled Lucide font is fixed: family is 'lucide', there is no file, and Glyphs is empty
+    (a resolver maps all 2000 names). Hide the three so the OI does not offer edits that would
+    only break the pack or mislead. }
+  RegisterPropertyEditor(TypeInfo(string), TTyLucideIconFont, 'FontFamily', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(string), TTyLucideIconFont, 'FontFile', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TStringList), TTyLucideIconFont, 'Glyphs', THiddenPropertyEditor);
+  // Every TTyColor property ($AARRGGBB) gets a readable hex value + a colour picker on '...',
+  // instead of a raw integer like 4278190080 nobody can fill (DefaultColor, GlyphColor, ...).
+  RegisterPropertyEditor(TypeInfo(TTyColor), nil, '', TTyColorPropertyEditor);
   { The design-time way pixels get INTO an image collection. Registered on the collection
     ITEM, so it applies inside the stock collection editor that TTyImageCollection.Images
     opens — no custom collection editor needed. }
@@ -1500,6 +1565,12 @@ begin
   RegisterPropertyEditor(TypeInfo(TAlign), TTyFormSurface, '', THiddenPropertyEditor);
   RegisterPropertyEditor(TypeInfo(TAnchors), TTyFormSurface, '', THiddenPropertyEditor);
   RegisterPropertyEditor(TypeInfo(TCursor), TTyFormSurface, '', THiddenPropertyEditor);
+  { These three leak through the by-type hides above because their types are not plain
+    Integer/etc.: TBorderWidth is a subrange, TDragKind/TDragMode are enums. The Surface is an
+    internal content host -- none of them mean anything on it. }
+  RegisterPropertyEditor(TypeInfo(TBorderWidth), TTyFormSurface, 'BorderWidth', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TDragKind), TTyFormSurface, 'DragKind', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TDragMode), TTyFormSurface, 'DragMode', THiddenPropertyEditor);
   RegisterPropertyEditor(TypeInfo(TTabOrder), TTyFormSurface, '', THiddenPropertyEditor);
   RegisterPropertyEditor(TypeInfo(THelpType), TTyFormSurface, '', THiddenPropertyEditor);
   RegisterPropertyEditor(TypeInfo(THelpContext), TTyFormSurface, '', THiddenPropertyEditor);
