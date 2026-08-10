@@ -9,7 +9,7 @@ unit tyControls.Css.Complete;
 interface
 
 uses
-  Classes;
+  Classes, tyControls.Types;
 
 { Fill ADest with completion suggestions for a caret sitting right after ATextBeforeCaret.
   ASelectorMode adds selector heads + pseudo-states (the controller-level override). Order:
@@ -38,6 +38,18 @@ function TyCssValidate(const ASource: string; ASelectorMode: Boolean): string;
   body of each rule indented two spaces, a blank line between rules. Idempotent. Does not
   reflow selectors or reorder anything -- purely a tidy. }
 function TyCssFormat(const ASource: string): string;
+
+{ Tidy ONE line in place (for format-on-line-leave): keep its leading indent, put a space after
+  ':' and none before ':' / ';', collapse internal whitespace, space before an opening brace. No newlines
+  added or removed -- so the editor can replace just that line, not reflow the whole document. }
+function TyCssFormatLine(const ALine: string): string;
+
+{ Serialise the value of AProp out of a RESOLVED style set as a tycss value string (e.g.
+  '#3b82f6', '2px', 'solid'), or '' when the property is not present or is not a simple scalar
+  the editor can round-trip (gradients, shadows, ...). Used to seed an inserted declaration with
+  the theme's ACTUAL current value -- AStyle comes from ResolveStyle, whose base layer IS the
+  default theme, so "theme, then default theme" fallback is already baked in. }
+function TyCssPropertyDefault(const AProp: string; const AStyle: TTyStyleSet): string;
 
 implementation
 
@@ -251,6 +263,98 @@ begin
     Inc(i);
   end;
   Result := Trim(out_);
+end;
+
+function TyCssFormatLine(const ALine: string): string;
+var
+  i: Integer;
+  indent, body, out_: string;
+  c: Char;
+begin
+  { keep the leading indent verbatim }
+  i := 1;
+  while (i <= Length(ALine)) and (ALine[i] in [' ', #9]) do Inc(i);
+  indent := Copy(ALine, 1, i - 1);
+  body := Copy(ALine, i, MaxInt);
+
+  out_ := '';
+  i := 1;
+  while i <= Length(body) do
+  begin
+    c := body[i];
+    case c of
+      #9, ' ':
+        if (out_ <> '') and (out_[Length(out_)] <> ' ') then out_ := out_ + ' ';
+      ':':
+        begin
+          if (out_ <> '') and (out_[Length(out_)] = ' ') then SetLength(out_, Length(out_) - 1);
+          out_ := out_ + ': ';
+        end;
+      ';':
+        begin
+          if (out_ <> '') and (out_[Length(out_)] = ' ') then SetLength(out_, Length(out_) - 1);
+          out_ := out_ + '; ';
+        end;
+      '{':
+        begin
+          if (out_ <> '') and (out_[Length(out_)] <> ' ') then out_ := out_ + ' ';
+          out_ := out_ + '{ ';
+        end;
+    else
+      out_ := out_ + c;
+    end;
+    Inc(i);
+  end;
+  Result := indent + TrimRight(out_);
+end;
+
+function TyCssPropertyDefault(const AProp: string; const AStyle: TTyStyleSet): string;
+  function ColStr(c: TTyColor): string;
+  var a, r, g, b: Byte;
+  begin
+    a := (c shr 24) and $FF; r := (c shr 16) and $FF; g := (c shr 8) and $FF; b := c and $FF;
+    if a = $FF then Result := LowerCase(Format('#%.2x%.2x%.2x', [r, g, b]))
+    else Result := LowerCase(Format('#%.2x%.2x%.2x%.2x', [r, g, b, a]));
+  end;
+  function OpacityStr(v: Single): string;
+  var fs: TFormatSettings;
+  begin
+    fs := DefaultFormatSettings; fs.DecimalSeparator := '.';
+    Result := Trim(Format('%.3f', [v], fs));
+    while (Length(Result) > 1) and (Result[Length(Result)] = '0') do SetLength(Result, Length(Result) - 1);
+    if (Result <> '') and (Result[Length(Result)] = '.') then Result := Result + '0';
+  end;
+var
+  p: string;
+begin
+  Result := '';
+  p := LowerCase(Trim(AProp));
+  if (p = 'color') and (tpTextColor in AStyle.Present) then Result := ColStr(AStyle.TextColor)
+  else if (p = 'border-color') and (tpBorderColor in AStyle.Present) then Result := ColStr(AStyle.BorderColor)
+  else if (p = 'border-width') and (tpBorderWidth in AStyle.Present) then Result := IntToStr(AStyle.BorderWidth) + 'px'
+  else if (p = 'border-radius') and (tpBorderRadius in AStyle.Present) then Result := IntToStr(AStyle.BorderRadius) + 'px'
+  else if (p = 'font-size') and (tpFontSize in AStyle.Present) then Result := IntToStr(AStyle.FontSize) + 'px'
+  else if (p = 'font-family') and (tpFontName in AStyle.Present) then Result := AStyle.FontName
+  else if (p = 'border-style') and (tpBorderStyle in AStyle.Present) then
+    case AStyle.BorderStyle of
+      tbsNone: Result := 'none'; tbsSolid: Result := 'solid';
+      tbsOutset: Result := 'outset'; tbsInset: Result := 'inset';
+    end
+  else if (p = 'render-style') and (tpRenderStyle in AStyle.Present) then
+    case AStyle.RenderStyle of
+      trsFlat: Result := 'flat'; trsBevel3D: Result := 'bevel3d'; trsInset3D: Result := 'inset3d';
+    end
+  else if (p = 'font-weight') and (tpFontWeight in AStyle.Present) then
+  begin
+    if AStyle.FontWeight = 700 then Result := 'bold'
+    else if AStyle.FontWeight = 400 then Result := 'normal'
+    else Result := IntToStr(AStyle.FontWeight);
+  end
+  else if (p = 'opacity') and (tpOpacity in AStyle.Present) then Result := OpacityStr(AStyle.Opacity)
+  else if (p = 'padding') and (tpPadding in AStyle.Present) then
+    Result := Format('%dpx %dpx %dpx %dpx',
+      [AStyle.Padding.Top, AStyle.Padding.Right, AStyle.Padding.Bottom, AStyle.Padding.Left]);
+  { everything else (background/shadow/glass/outline/window-shadow) is not a simple scalar -> '' }
 end;
 
 end.

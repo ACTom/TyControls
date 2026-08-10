@@ -30,6 +30,8 @@ type
     procedure PropertyTemplateCarriesADefault;
     procedure ValidateCatchesBadTycss;
     procedure FormatTidiesAndIsIdempotent;
+    procedure FormatLineKeepsIndentAndAddsNoNewlines;
+    procedure PropertyDefaultSerialisesScalarValues;
   end;
 
 implementation
@@ -411,6 +413,42 @@ begin
   AssertTrue('declarations are split onto lines', Pos(';' + LineEnding, once) > 0);
   twice := TyCssFormat(once);
   AssertEquals('formatting is idempotent', once, twice);
+end;
+
+procedure TCssCatalogTest.FormatLineKeepsIndentAndAddsNoNewlines;
+begin
+  AssertEquals('  color: red;', TyCssFormatLine('  color:red ;'));
+  AssertEquals('TyButton {', TyCssFormatLine('TyButton{'));
+  AssertEquals('no newline is introduced', 0,
+    Pos(#10, TyCssFormatLine('color:#fff;border-width:2px;')));
+  AssertEquals('indent survives', '    padding: 4px;', TyCssFormatLine('    padding:4px;'));
+end;
+
+procedure TCssCatalogTest.PropertyDefaultSerialisesScalarValues;
+var
+  ss: TTyStyleSet;
+  vars: TStringList;
+  function Apply(const p, v: string): TTyStyleSet;
+  begin
+    Result := EmptyStyleSet;
+    TyApplyDeclaration(Result, p, v, vars);
+  end;
+begin
+  vars := TStringList.Create;
+  try
+    AssertEquals('scalar length', '7px', TyCssPropertyDefault('border-width', Apply('border-width', '7px')));
+    AssertEquals('colour to hex', '#3b82f6', TyCssPropertyDefault('color', Apply('color', '#3B82F6')));
+    AssertEquals('keyword', 'inset', TyCssPropertyDefault('border-style', Apply('border-style', 'inset')));
+    AssertEquals('weight keyword', 'bold', TyCssPropertyDefault('font-weight', Apply('font-weight', 'bold')));
+    { not present -> empty (fall back to the hint template) }
+    ss := EmptyStyleSet;
+    AssertEquals('absent property serialises to nothing', '', TyCssPropertyDefault('color', ss));
+    { a non-scalar property (background is a TTyFill) -> empty even when present }
+    AssertEquals('a background fill is not round-tripped', '',
+      TyCssPropertyDefault('background', Apply('background', '#ff0000')));
+  finally
+    vars.Free;
+  end;
 end;
 
 initialization
