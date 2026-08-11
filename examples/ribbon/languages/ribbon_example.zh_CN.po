@@ -228,7 +228,7 @@ msgstr "状态栏"
 
 #: umain.rschkcontext
 msgid "Picture tab"
-msgstr "图片工具（上下文选项卡）"
+msgstr "图片工具选项卡"
 
 #: umain.rscmdclip
 msgid "Clip"

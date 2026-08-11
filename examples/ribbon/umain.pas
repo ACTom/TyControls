@@ -430,8 +430,8 @@ begin
   alignGrp.Items.Add(rsAlignLeft); alignGrp.Items.Add(rsAlignCenter);
   alignGrp.Items.Add(rsAlignRight); alignGrp.Items.Add(rsAlignJustify);
   alignGrp.ItemIndex := 0;
-  Small(GrpParagraph, rsCmdBullets, 'bullets', 6, 40, 66, @DoNoop);
-  Small(GrpParagraph, rsCmdNumbers, 'number', 76, 40, 66, @DoNoop);
+  Small(GrpParagraph, rsCmdBullets, 'bullets', 6, 40, 72, @DoNoop);
+  Small(GrpParagraph, rsCmdNumbers, 'number', 86, 40, 72, @DoNoop);   { +gap so they don't touch }
 
   // Font
   fontc := TTyComboBox.Create(Self);
@@ -509,8 +509,10 @@ begin
   Small(GrpWindow, rsCmdArrange, 'arrange', 6, 30, 98, @DoNoop);
 
   // Zoom
-  Small(GrpZoom, rsCmdZoomIn, 'zoomin', 6, 4, 60, @DoNoop);
-  Small(GrpZoom, rsCmdZoomOut, 'zoomout', 68, 4, 60, @DoNoop);
+  { In + Out share the top row and together span the same 6..128 the 100% button fills below,
+    so the two rows line up; a real gap keeps In and Out from touching. }
+  Small(GrpZoom, rsCmdZoomIn, 'zoomin', 6, 4, 58, @DoNoop);
+  Small(GrpZoom, rsCmdZoomOut, 'zoomout', 70, 4, 58, @DoNoop);
   Small(GrpZoom, '100%', 'zoom100', 6, 30, 122, @DoNoop);
 
   // View options
