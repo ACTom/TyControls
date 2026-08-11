@@ -1691,9 +1691,14 @@ begin
     Include(Result, tysDisabled);
     Exit;
   end;
+  { Selected WINS over hover (mirrors TTyTreeView's row states): a selected row that is
+    also hovered must keep its selection background, not fall to the plain :hover grey —
+    otherwise the resolve applies :hover LAST and its background overrides :selected,
+    leaving the selected row's light text on a grey hover fill. Hover feedback is for
+    UNSELECTED rows only. }
   if IsSelectedItem(AItem) then
-    Include(Result, tysSelected);
-  if FHotTrack and (AItem = FHot) then
+    Include(Result, tysSelected)
+  else if FHotTrack and (AItem = FHot) then
     Include(Result, tysHover);
   if Result = [] then
     Include(Result, tysNormal);
