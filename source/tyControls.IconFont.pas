@@ -62,10 +62,12 @@ type
     FNames: TStringList;
     FNamesVersion: Integer;    // the FVersion it was built at; -1 = never built
     FNamesGen: Integer;        // the TyGlyphListerGeneration it was built at
-    function GetGlyphNames: TStrings;
     {$IF DEFINED(LCLQt5) OR DEFINED(LCLQt6)}
     FQtFontId: Integer;        // Qt application-font id (>=0) for removeApplicationFont
     {$ENDIF}
+    { Fields must precede methods in a visibility section (FPC objfpc). This Qt field is
+      compiled only on Qt5/Qt6, so Win/GTK never saw the ordering, but Qt did. }
+    function GetGlyphNames: TStrings;
     procedure SetGlyphs(AValue: TStringList);
     procedure SetFontFile(const AValue: string);
     procedure SetFontFamily(const AValue: string);
