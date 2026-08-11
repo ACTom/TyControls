@@ -191,3 +191,23 @@ msgstr "TabHeight = 32：标签条回来了。"
 #: umain.rsstripgone
 msgid "TabHeight = 0: no strip - the buttons above are the only pager."
 msgstr "TabHeight = 0：没有标签条 —— 上面的按钮是唯一的翻页方式。"
+
+#: umain.rsdirlabel
+msgid "Tab side:"
+msgstr "标签位置:"
+
+#: umain.rsdirtop
+msgid "Top"
+msgstr "顶部"
+
+#: umain.rsdirbottom
+msgid "Bottom"
+msgstr "底部"
+
+#: umain.rsdirleft
+msgid "Left"
+msgstr "左侧"
+
+#: umain.rsdirright
+msgid "Right"
+msgstr "右侧"

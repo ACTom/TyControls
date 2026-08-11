@@ -188,6 +188,19 @@ object MainForm: TMainForm
       Caption = 'Remove page'
       OnClick = RemoveCurrentPage
     end
+    object LblDir: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 361
+      Width = 72
+    end
+    object DirCombo: TTyComboBox
+      Left = 92
+      Height = 26
+      Top = 356
+      Width = 140
+      OnChange = DirComboChange
+    end
     object LblStatus: TTyLabel
       Left = 16
       Height = 20

@@ -18,7 +18,7 @@ unit umain;
 interface
 
 uses
-  Classes, SysUtils, Forms, Controls,
+  Classes, SysUtils, Forms, Controls, ComCtrls,
   tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes, tyControls.Accel,
   tyControls.PageControl, tyControls.TabSheet,
   tyControls.Button, tyControls.TyLabel, tyControls.Edit, tyControls.ComboBox, tyControls.ToggleSwitch;
@@ -29,6 +29,8 @@ type
     Bar: TTyTitleBar;
     DarkSwitch: TTyToggleSwitch;
     ThemeCombo: TTyComboBox;
+    LblDir: TTyLabel;
+    DirCombo: TTyComboBox;
     PageCtrl: TTyPageControl;
     PgGeneral: TTyTabSheet;
     LblUser: TTyLabel;
@@ -59,6 +61,7 @@ type
     procedure FormCreate(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
     procedure DarkSwitchChange(Sender: TObject);
+    procedure DirComboChange(Sender: TObject);   { switch PageCtrl.TabPosition (all 4 sides) }
     procedure PageChanged(Sender: TObject);
     procedure PageChanging(Sender: TObject; ANewIndex: Integer;
       var AllowChange: Boolean);                                  { pre-switch veto }
@@ -101,6 +104,12 @@ resourcestring
   rsStripBack    = 'TabHeight = 32: the header strip is back.';
   rsShowStrip    = 'Show tab strip';
   rsStripGone    = 'TabHeight = 0: no strip - the buttons above are the only pager.';
+  { The tab-side switcher: TTyPageControl.TabPosition puts the header on any of the 4 edges. }
+  rsDirLabel     = 'Tab side:';
+  rsDirTop       = 'Top';
+  rsDirBottom    = 'Bottom';
+  rsDirLeft      = 'Left';
+  rsDirRight     = 'Right';
 
 procedure TMainForm.FormCreate(Sender: TObject);
 var
@@ -116,9 +125,30 @@ begin
   TyDefaultController.ThemeName := 'default';
   ApplyChromeTheme(TyDefaultController);   // theme the window chrome + background
 
+  { Tab-side switcher: TTyPageControl.TabPosition puts the header on any of the four edges
+    (left/right render the captions as an upright column). Item order matches DirComboChange;
+    starts on Top (the control's default). }
+  LblDir.Caption := rsDirLabel;
+  DirCombo.Items.Add(rsDirTop);
+  DirCombo.Items.Add(rsDirBottom);
+  DirCombo.Items.Add(rsDirLeft);
+  DirCombo.Items.Add(rsDirRight);
+  DirCombo.ItemIndex := 0;
+
   { Reflect the initially active page in the status bar (OnChange is not fired during load) }
   LblStatus.Caption := Format(rsCurPageFmt,
     [PageTitle(PageCtrl.ActivePage), PageCtrl.ActivePageIndex, PageCtrl.PageCount]);
+end;
+
+procedure TMainForm.DirComboChange(Sender: TObject);
+begin
+  case DirCombo.ItemIndex of
+    1: PageCtrl.TabPosition := tpBottom;
+    2: PageCtrl.TabPosition := tpLeft;
+    3: PageCtrl.TabPosition := tpRight;
+  else
+    PageCtrl.TabPosition := tpTop;   { 0 = Top }
+  end;
 end;
 
 { ── Small helpers ────────────────────────────────────────────────────────── }
