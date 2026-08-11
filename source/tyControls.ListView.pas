@@ -2455,9 +2455,9 @@ begin
     else imgPx := ScaleI(ActiveController.Metric('--listview-small-icon-size', TyLvSmallIcon));
     case FViewStyle of
       lvsIcon:
-        { icon on top, label below (mirrors RenderFlowCell) }
-        Result := Rect(cell.Left + pad, cell.Top + 2 * pad + imgPx + pad,
-                       cell.Right - pad, cell.Bottom - pad);
+        { icon on top, label below (mirrors RenderFlowCell: one top pad, label to cell bottom) }
+        Result := Rect(cell.Left + pad, cell.Top + pad + imgPx + pad,
+                       cell.Right - pad, cell.Bottom);
       lvsTile:
         begin
           { first text line, right of the icon (past the checkbox, if any) }
@@ -3039,11 +3039,15 @@ begin
   case FViewStyle of
     lvsIcon:
       begin
-        { icon centered on top, label below }
+        { icon centered on top, label below. The cell budgets exactly 3 pads (pad + IconPx +
+          pad + LabelH + pad), so the icon takes ONE top pad -- the old two-pad inset spent a
+          fourth pad and squeezed the label to LabelH-pad, which clips the bottom of CJK glyphs
+          (they fill the full em box; ASCII sits higher and fit). One pad on top + the label
+          rect run to the cell bottom gives the label its full LabelH plus the recovered pad. }
         ix := ACell.Left + (ACell.Right - ACell.Left - imgPx) div 2;
-        iy := ACell.Top + 2 * pad;
+        iy := ACell.Top + pad;
         DrawImage(P, imgList, ii, ix, iy, imgPx);
-        tr := Rect(ACell.Left + pad, iy + imgPx + pad, ACell.Right - pad, ACell.Bottom - pad);
+        tr := Rect(ACell.Left + pad, iy + imgPx + pad, ACell.Right - pad, ACell.Bottom);
         if tr.Top < tr.Bottom then
           P.DrawText(tr, lbl, AStyle.FontName, ResolveFontSize(AStyle), AStyle.FontWeight,
             tc, taCenter, tlTop, True);
