@@ -277,6 +277,10 @@ begin
     FrameS := S;
     FrameS.Background := Default(TTyFill);
     FrameS.BorderWidth := 0;
+    // The focus ring is reissued LAST (below), on TOP of the indicator box. A themed
+    // inward outline-offset would otherwise slide the ring's left edge UNDER the box and
+    // clip it (seen on ubuntu/macos), so DrawFrame must not draw it here.
+    Exclude(FrameS.Present, tpOutline);
     // Use a (0,0)-local rect: the painter builds a (W x H) bitmap and blits it
     // at ARect.Left/Top, so a non-zero ARect origin would shift/clip the frame.
     FullRect := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
@@ -326,6 +330,10 @@ begin
     TyParseMnemonic(Caption, disp, mp);
     P.DrawText(TextRect, disp, S.FontName, ResolveFontSize(S), S.FontWeight,
       CaptionS.TextColor, TextAlign, tlCenter, True, TyAccelGatePos(mp));
+    // Focus ring on top, hugging the control's OUTER edge — NOT the themed inward offset,
+    // which lands under the indicator box. Frames the whole control and is never clipped.
+    if (tpOutline in S.Present) and (S.OutlineWidth > 0) then
+      P.StrokeBorder(FullRect, TyEffectiveCorners(S), S.OutlineWidth, S.OutlineColor);
     P.EndPaint;
   finally
     P.Free;
@@ -584,6 +592,10 @@ begin
     FrameS := S;
     FrameS.Background := Default(TTyFill);
     FrameS.BorderWidth := 0;
+    // The focus ring is reissued LAST (below), on TOP of the indicator box. A themed
+    // inward outline-offset would otherwise slide the ring's left edge UNDER the box and
+    // clip it (seen on ubuntu/macos), so DrawFrame must not draw it here.
+    Exclude(FrameS.Present, tpOutline);
     // Use a (0,0)-local rect (see TTyCheckBox.RenderTo) so a non-zero ARect
     // origin doesn't shift/clip the frame within the painter's local bitmap.
     FullRect := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
@@ -631,6 +643,10 @@ begin
     TyParseMnemonic(Caption, disp, mp);
     P.DrawText(TextRect, disp, S.FontName, ResolveFontSize(S), S.FontWeight,
       CaptionS.TextColor, TextAlign, tlCenter, True, TyAccelGatePos(mp));
+    // Focus ring on top, hugging the control's OUTER edge — NOT the themed inward offset,
+    // which lands under the indicator box. Frames the whole control and is never clipped.
+    if (tpOutline in S.Present) and (S.OutlineWidth > 0) then
+      P.StrokeBorder(FullRect, TyEffectiveCorners(S), S.OutlineWidth, S.OutlineColor);
     P.EndPaint;
   finally
     P.Free;
