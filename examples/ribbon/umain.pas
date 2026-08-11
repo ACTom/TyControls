@@ -1084,6 +1084,8 @@ end;
 { Fill in the streamed shell. Runs from FormCreate, AFTER umain.lfm (title bar + the whole
   ribbon/page/group skeleton) has streamed and the built-in 'default' theme is active. }
 procedure TMainForm.BuildEditor;
+var
+  i: Integer;
 begin
   // Themed ScreenTips: installing a TTyHint swaps LCL's tooltip for the themed
   // TTyHintWindow app-wide, so every button's Hint (set in Big/Small/AddQat) shows
@@ -1140,6 +1142,14 @@ begin
   BuildInsertTab;
   BuildViewTab;
   Big(GrpAdjust, rsCmdClip, 'crop', 6, 56, @DoNoop);   // the contextual page's only group
+
+  // Every group now holds its command controls, so size each to its content: the group
+  // divider then always clears the last button, without a fixed .lfm width to hand-tune.
+  // Runs before Show, so it only STORES widths -- the page lays them out once when it aligns
+  // (no ChangeBounds loop, unlike the LCL AutoSize this replaced).
+  for i := 0 to ComponentCount - 1 do
+    if Components[i] is TTyRibbonGroup then
+      TTyRibbonGroup(Components[i]).FitToContent;
 
   // TTyRibbonAppMenu (View tab) composes its OWN dropdown out of two sources it never
   // mutates: the top-level items of Commands, then a separator, then one row per

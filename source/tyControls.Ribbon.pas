@@ -243,20 +243,18 @@ type
   protected
     function GetStyleTypeKey: string; override;
     procedure AdjustClientRect(var ARect: TRect); override;
-    { Width = content width. A ribbon group sizes to the command controls it holds (the Office
-      behaviour), so a divider always sits just past the last control instead of a fixed .lfm
-      width having to be hand-tuned to match — the fragile step that let English captions spill
-      over the separator. AutoSize is on by default; height stays governed by the alLeft band. }
-    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
-      WithThemeSpace: Boolean = True); override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
   public
     constructor Create(AOwner: TComponent); override;
+    { Size the group's width to its content: the rightmost edge of any hosted command control
+      plus a right margin that clears the divider. Call after adding controls at runtime (the
+      Office behaviour: the group fits its buttons, so a divider never has to be hand-tuned to
+      match). A plain one-shot Width set -- unlike LCL AutoSize it cannot re-enter the page's
+      overflow layout, so there is no ChangeBounds loop. }
+    procedure FitToContent;
   published
-    { On by default: the group tracks its content width. Set False to pin a fixed Width. }
-    property AutoSize default True;
     property Caption: TCaption read FCaption write SetCaption;
     { Show the bottom caption band (the group name). False = the content fills the full
       height and no caption/launcher is drawn (a caption-less group). }
@@ -1276,8 +1274,7 @@ begin
   inherited Create(AOwner);
   ControlStyle := ControlStyle + [csAcceptsControls, csNoFocus];
   Align := alLeft;
-  AutoSize := True;   // track content width (see CalculatePreferredSize)
-  Width := 96;        // fallback until content is added / a host pins AutoSize:=False
+  Width := 96;        // fallback; a host sets a real width (.lfm) or calls FitToContent
   FCaption := '';
   FShowCaption := True;
   FShowDialogLauncher := False;
@@ -1327,17 +1324,14 @@ begin
   if ARect.Bottom < ARect.Top then ARect.Bottom := ARect.Top;
 end;
 
-procedure TTyRibbonGroup.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
-  WithThemeSpace: Boolean = True);
+procedure TTyRibbonGroup.FitToContent;
 var
-  i, r, maxR: Integer;
+  i, r, maxR, want: Integer;
   c: TControl;
 begin
-  inherited CalculatePreferredSize(PreferredWidth, PreferredHeight, WithThemeSpace);
-  { Width tracks content: the rightmost edge of any hosted command control, plus a right margin
-    that mirrors the ~6px left inset the controls start at and leaves room for the divider strip
-    RenderTo draws at the group's right edge. With no children yet (before the code that fills the
-    group runs) keep the current width as a fallback. Height is left to the alLeft band. }
+  { Rightmost edge of any visible hosted control + an 8px right margin that clears the divider
+    RenderTo draws at the group's right edge. Setting Width re-flows the alLeft groups once (the
+    next group slides over); it does not re-enter here, so there is no resize loop. }
   maxR := 0;
   for i := 0 to ControlCount - 1 do
   begin
@@ -1346,10 +1340,9 @@ begin
     r := c.Left + c.Width;
     if r > maxR then maxR := r;
   end;
-  if maxR > 0 then
-    PreferredWidth := maxR + MulDiv(8, Font.PixelsPerInch, 96)
-  else
-    PreferredWidth := Width;
+  if maxR <= 0 then Exit;   { nothing hosted yet -> keep the current width }
+  want := maxR + MulDiv(8, Font.PixelsPerInch, 96);
+  if want <> Width then Width := want;
 end;
 
 procedure TTyRibbonGroup.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
