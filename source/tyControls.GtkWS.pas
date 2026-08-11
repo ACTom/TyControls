@@ -95,7 +95,7 @@ procedure TyGtk3MakePopupRect(APopup, AParent: TCustomForm; const AAnchorInParen
 implementation
 
 {$IFDEF LCLGTK2}
-uses Types, gtk2, gdk2, glib2, Gtk2Proc;   // Gtk2Proc: GetControlWindow (the control's client GdkWindow)
+uses gtk2, gdk2, glib2, Gtk2Proc;   // Gtk2Proc: GetControlWindow (the control's client GdkWindow); Types comes from the interface uses
 
 function TyGtkStartSystemMove(AForm: TCustomForm): Boolean;
 var
@@ -302,7 +302,7 @@ end;
   ------------------------------------------------------------------------------------ }
 
 uses
-  Types, LazGtk3, LazGdk3, LazGLib2, LazGObject2, gtk3int, gtk3procs, gtk3widgets;
+  LazGtk3, LazGdk3, LazGLib2, LazGObject2, gtk3int, gtk3procs, gtk3widgets;   // Types comes from the interface uses
 
 { The native GtkWidget behind an LCL handle. This is the whole of tier 3: under GTK2 a
   control's Handle IS the PGtkWidget and the library casts it directly, but under GTK3 the
