@@ -731,6 +731,9 @@ begin
   FHoverPending := -1;
   FTrackButton := tbRightButton;   // the TPopupMenu.TrackButton default
   InvalidateMeasure;
+  // Share the Alt-state so the row underlines appear/disappear as Alt is pressed/released
+  // while the popup is open -- and are HIDDEN when it opens by mouse (no Alt), like Windows.
+  TyAccelRegister(Self);
 end;
 
 destructor TTyMenuView.Destroy;
@@ -738,6 +741,7 @@ begin
   // FHoverTimer is owned by Self (would be freed by DestroyComponents), but free it
   // explicitly first so the OnTimer callback can never fire mid-teardown (ToggleSwitch).
   FreeAndNil(FHoverTimer);
+  TyAccelUnregister(Self);
   inherited Destroy;
 end;
 
@@ -941,14 +945,24 @@ end;
 
 function TTyMenuView.MeasureHeight(APPI: Integer): Integer;
 var
-  S: TTyStyleSet;
-  i: Integer;
+  S, BannerStyle: TTyStyleSet;
+  i, bannerNeed: Integer;
 begin
   // Vertical chrome = the TyMenuView (popup) top+bottom padding.
   S := CurrentStyle;
   Result := MulDiv(S.Padding.Top, APPI, 96) + MulDiv(S.Padding.Bottom, APPI, 96);
   for i := 0 to High(FRows) do
     Inc(Result, RowHeight(i, APPI));
+  // The decorative banner caption is drawn ROTATED up the side strip, so the popup must be at
+  // least as TALL as the caption is WIDE -- a short menu (few rows) otherwise clips it. Floor
+  // the height to the measured caption plus the 8px end insets TextOutAngle anchors within.
+  if (FBannerWidth > 0) and (FBannerCaption <> '') then
+  begin
+    BannerStyle := ActiveController.Model.ResolveStyle('TyMenuItem', '', [tysActive]);
+    bannerNeed := TyMeasureRenderedTextWidth(FBannerCaption, BannerStyle.FontName,
+        ResolveFontSize(BannerStyle) + 1, 600, APPI) + MulDiv(16, APPI, 96);
+    if Result < bannerNeed then Result := bannerNeed;
+  end;
 end;
 
 function TTyMenuView.ContentWidth(APPI: Integer): Integer;
@@ -1467,7 +1481,8 @@ begin
       TextRect := Mir(Types.Rect(RowRect.Left + padL + leftSlot, RowRect.Top,
         RowRect.Right - padR - rightSlot, RowRect.Bottom), RowRect);
       P.DrawText(TextRect, FRows[i].Display, RowStyle.FontName, ResolveFontSize(RowStyle),
-        capWeight, RowStyle.TextColor, taLeftJustify, tlCenter, True, FRows[i].MnemonicPos);
+        capWeight, RowStyle.TextColor, taLeftJustify, tlCenter, True,
+        TyAccelGatePos(FRows[i].MnemonicPos));   // underline only while Alt is held (Windows idiom)
 
       // Submenu arrow OR the trailing-aligned shortcut text in the trailing slot.
       if FRows[i].HasSubmenu then
