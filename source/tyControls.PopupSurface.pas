@@ -21,7 +21,7 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Forms, Graphics, LCLType,
   tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.PlatformWS,
-  tyControls.QtWS;
+  tyControls.QtWS, tyControls.GtkWS;
 
 type
   TTyPopupSurface = class(TForm)
@@ -46,8 +46,10 @@ type
     { Restore a previously adopted control to its original parent/align/bounds/visibility.
       No-op when nothing was adopted. }
     procedure ReleaseContent;
-    { Position at AScreenRect (screen px) and show on top. }
-    procedure ShowAt(const AScreenRect: TRect);
+    { Position at AScreenRect (screen px) and show on top. AAnchor (optional) is the control the
+      popup drops from -- used ONLY on GTK3/Wayland, where a top-level cannot be placed by screen
+      coords and the popup must be anchored to it (see TyGtk3MakePopup). Win/Qt/X11 ignore it. }
+    procedure ShowAt(const AScreenRect: TRect; AAnchor: TControl = nil);
     { Release any adopted content and hide. Fires OnPopupClose. Idempotent. }
     procedure ClosePopup;
     { The token whose resolved style paints the popup background/border. Default 'TyRibbon'. }
@@ -126,7 +128,7 @@ begin
   c.Visible := FOrigVisible;
 end;
 
-procedure TTyPopupSurface.ShowAt(const AScreenRect: TRect);
+procedure TTyPopupSurface.ShowAt(const AScreenRect: TRect; AAnchor: TControl = nil);
 var
   S: TTyStyleSet;
 begin
@@ -144,6 +146,9 @@ begin
   // off Qt. Without it a plain top-level TTyPopupSurface is centred by the WM: the ribbon flyout
   // and the toolbar/coolbar overflow flyout both hit this on Qt6.
   TyQtMakePopup(Self);
+  // GTK3/Wayland: a top-level can't be placed by screen coords, so anchor the popup to the
+  // control it drops from (no-op off GTK3, and off GTK3-Wayland; harmless when AAnchor is nil).
+  TyGtk3MakePopup(Self, AAnchor);
   Show;
   BringToFront;
 end;

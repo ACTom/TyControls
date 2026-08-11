@@ -71,6 +71,13 @@ function TyGtkTakeImeCommit(const ATruncated: string): string;
   or GTK2, and wrong the moment GTK3 became the default Linux widgetset. }
 function TyGtkIsWayland: Boolean;
 
+{ Turn APopup into a Wayland xdg_popup anchored under AAnchor (via gdk_window_move_to_rect), so
+  the compositor places it by the anchor instead of centring a free-floating top-level. GTK3
+  only; a no-op on GTK2 (X11) and non-GTK. Call BEFORE Show, like TyQtMakePopup -- but GTK needs
+  the ANCHOR control passed in (Qt derives the anchor from the geometry itself; GDK does not, so
+  a one-argument mirror is impossible). }
+procedure TyGtk3MakePopup(APopup: TCustomForm; AAnchor: TControl);
+
 implementation
 
 {$IFDEF LCLGTK2}
@@ -252,6 +259,11 @@ begin
   Result := '';   // GTK2 delivers full commits through TyGtkInstallIme's own context.
 end;
 
+procedure TyGtk3MakePopup(APopup: TCustomForm; AAnchor: TControl);
+begin
+  // GTK2 is X11-only (Wayland via XWayland, which honours absolute placement) -- nothing to do.
+end;
+
 {$ELSE}
 {$IFDEF LCLGTK3}
 
@@ -351,6 +363,44 @@ begin
   Result := pending;
 end;
 
+procedure TyGtk3MakePopup(APopup: TCustomForm; AAnchor: TControl);
+var
+  popW, parentTop: PGtkWidget;
+  gdkWin: PGdkWindow;
+  parentForm: TCustomForm;
+  tl: TPoint;
+  r: TGdkRectangle;
+begin
+  { Every step bails out silently on failure: the worst case is the pre-fix behaviour (a
+    centred flyout), never a crash. Realize the popup's window while it is still hidden so the
+    transient-parent + move_to_rect apply before Show maps it as the xdg_popup. }
+  if (APopup = nil) or (AAnchor = nil) then Exit;
+  parentForm := GetParentForm(AAnchor);
+  if parentForm = nil then Exit;
+  APopup.HandleNeeded;
+  if (not APopup.HandleAllocated) or (not parentForm.HandleAllocated) then Exit;
+  popW := Gtk3NativeWidget(APopup);
+  if popW = nil then Exit;
+  popW := gtk_widget_get_toplevel(popW);
+  parentTop := gtk_widget_get_toplevel(Gtk3NativeWidget(parentForm));
+  if (popW = nil) or (parentTop = nil)
+     or (not Gtk3IsGtkWindow(PGObject(popW))) or (not Gtk3IsGtkWindow(PGObject(parentTop))) then Exit;
+  { Anchor to the parent so Wayland maps this as an xdg_popup (placed relative to the parent)
+    rather than a free-floating top-level the compositor centres. }
+  gtk_window_set_transient_for(PGtkWindow(popW), PGtkWindow(parentTop));
+  gtk_window_set_type_hint(PGtkWindow(popW), GDK_WINDOW_TYPE_HINT_POPUP_MENU);
+  gdkWin := gtk_widget_get_window(popW);
+  if gdkWin = nil then Exit;
+  { Anchor rect = the anchor control's bounds in the PARENT FORM's client coords. ClientToParent
+    walks the control tree (no screen coords, which Wayland refuses). The popup's top-left snaps
+    to the anchor's bottom-left so the flyout drops below it; flip/slide let the compositor keep
+    it on screen. }
+  tl := AAnchor.ClientToParent(Point(0, 0), parentForm);
+  r.x := tl.x; r.y := tl.y; r.width := AAnchor.Width; r.height := AAnchor.Height;
+  gdk_window_move_to_rect(gdkWin, @r, GDK_GRAVITY_SOUTH_WEST, GDK_GRAVITY_NORTH_WEST,
+    GDK_ANCHOR_FLIP + GDK_ANCHOR_SLIDE, 0, 0);
+end;
+
 {$ELSE}
 
 function TyGtkStartSystemMove(AForm: TCustomForm): Boolean;
@@ -377,6 +427,11 @@ end;
 function TyGtkTakeImeCommit(const ATruncated: string): string;
 begin
   Result := '';   // not a GTK3 build: nothing truncated a commit here.
+end;
+
+procedure TyGtk3MakePopup(APopup: TCustomForm; AAnchor: TControl);
+begin
+  // not a GTK build: nothing to do.
 end;
 
 {$ENDIF}

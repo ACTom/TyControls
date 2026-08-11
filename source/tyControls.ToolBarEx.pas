@@ -384,7 +384,9 @@ begin
 
   w := maxW + pad * 2;
   tl := FMoreBtn.ClientToScreen(Point(0, FMoreBtn.Height));
-  FPopup.ShowAt(Rect(tl.x, tl.y, tl.x + w, tl.y + y + pad - gap));
+  { FMoreBtn is the anchor: on GTK3/Wayland the screen rect is meaningless, so the popup is
+    positioned relative to the chevron instead (no-op elsewhere). }
+  FPopup.ShowAt(Rect(tl.x, tl.y, tl.x + w, tl.y + y + pad - gap), FMoreBtn);
 end;
 
 procedure TTyToolBarEx.PopupItemClick(Sender: TObject);
