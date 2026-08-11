@@ -321,6 +321,10 @@ begin
       // Detach deactivate to prevent re-entering Close from TForm.Hide.
       FForm.OnDeactivate := nil;
       FForm.Hide;
+      // GTK3/Wayland: this Hide often runs at idle (deferred close), not during the click that
+      // would have released the popup's seat grab -- so the pointer stays captured by the vanished
+      // surface (no hover elsewhere; the next click is swallowed and re-picks). Drop the grab now.
+      TyGtk3ReleasePopupGrab(FForm);
       FForm.OnDeactivate := @FormDeactivate;
     end;
     { Only stamp the reopen-race tick and notify when a genuinely-open popup closed. A Close on

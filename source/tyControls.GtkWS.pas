@@ -92,6 +92,13 @@ procedure TyGtk3MakePopup(APopup: TCustomForm; AAnchor: TControl);
 procedure TyGtk3MakePopupRect(APopup, AParent: TCustomForm; const AAnchorInParent: TRect;
   AMode: TTyPopupAnchorMode = pamBelow);
 
+{ GTK3/Wayland: explicitly drop the seat grab a mapped popup left behind. A dropdown that hides at
+  idle (the deferred close) rather than during the click event has no input event left to release
+  the grab, so the pointer stays captured by the vanished surface -- no hover reaches other
+  controls and the next click is swallowed. Call right after hiding the popup. No-op off
+  GTK3-Wayland. }
+procedure TyGtk3ReleasePopupGrab(APopup: TCustomForm);
+
 implementation
 
 {$IFDEF LCLGTK2}
@@ -284,6 +291,11 @@ begin
   // GTK2 is X11-only -- nothing to do.
 end;
 
+procedure TyGtk3ReleasePopupGrab(APopup: TCustomForm);
+begin
+  // GTK2 is X11-only -- no Wayland grab to drop.
+end;
+
 {$ELSE}
 {$IFDEF LCLGTK3}
 
@@ -445,6 +457,28 @@ begin
     Rect(tl.x, tl.y, tl.x + AAnchor.Width, tl.y + AAnchor.Height), pamBelow);
 end;
 
+procedure TyGtk3ReleasePopupGrab(APopup: TCustomForm);
+var
+  disp: PGdkDisplay;
+  seat: PGdkSeat;
+  grabW: PGtkWidget;
+begin
+  if not TyGtkIsWayland then Exit;
+  disp := gdk_display_get_default;
+  if disp = nil then Exit;
+  grabW := gtk_grab_get_current;   { DIAG: is there an app-level GTK grab too? }
+  writeln(StdErr, '[TyGtk3ReleasePopupGrab] wayland; gtk_grab_current_nonnil=', grabW <> nil);
+  seat := gdk_display_get_default_seat(disp);
+  if seat <> nil then
+  begin
+    gdk_seat_ungrab(seat);
+    writeln(StdErr, '[TyGtk3ReleasePopupGrab] gdk_seat_ungrab done');
+  end
+  else
+    writeln(StdErr, '[TyGtk3ReleasePopupGrab] no default seat');
+  gdk_display_flush(disp);
+end;
+
 {$ELSE}
 
 function TyGtkStartSystemMove(AForm: TCustomForm): Boolean;
@@ -482,6 +516,11 @@ procedure TyGtk3MakePopupRect(APopup, AParent: TCustomForm; const AAnchorInParen
   AMode: TTyPopupAnchorMode);
 begin
   // not a GTK build: nothing to do.
+end;
+
+procedure TyGtk3ReleasePopupGrab(APopup: TCustomForm);
+begin
+  // not a GTK build: no Wayland grab to drop.
 end;
 
 {$ENDIF}
