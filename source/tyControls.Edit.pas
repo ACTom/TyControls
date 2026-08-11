@@ -6,7 +6,7 @@ uses
   ExtCtrls, StdCtrls,
   BGRABitmap, BGRABitmapTypes, BGRATextBidi,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.UndoStack,
-  tyControls.Animation, tyControls.QtWS, tyControls.GtkWS;
+  tyControls.Animation, tyControls.QtWS, tyControls.GtkWS, tyControls.TextMenu;
 type
   TTyIntArray = array of Integer;
 
@@ -25,7 +25,7 @@ type
   end;
   TTyBidiRunArray = array of TTyBidiRun;
 
-  TTyEdit = class(TTyCustomControl)
+  TTyEdit = class(TTyCustomControl, ITyTextEditActions)
   private
     FText: TCaption;
     FCaret: Integer;      // codepoint index 0..UTF8Length(FText)
@@ -44,6 +44,15 @@ type
     FCaretAfterPrev: Boolean;
     FSelAnchor: Integer;  // codepoint index; no selection <=> FSelAnchor = FCaret
     FMouseSelecting: Boolean;  // true while left button held for drag-select
+    // Multi-click sequence tracking (LCL has no native triple-click): the last press's
+    // client position + tick and the running count, advanced by TyAdvanceClickCount.
+    // 1 = caret, 2 = word, 3 = line.
+    FClickCount: Integer;
+    FLastClickTick: QWord;
+    FLastClickX, FLastClickY: Integer;
+    // The default themed right-click menu (tyControls.TextMenu). nil until a context
+    // popup is first raised on this edit; freed in Destroy.
+    FTextMenu: TTyTextEditMenu;
     FScrollX: Integer;    // horizontal scroll offset in device px (>= 0)
     // Width cache
     FWidthCache: TTyIntArray;
@@ -126,6 +135,10 @@ type
     function ApplyCharCase(const AStr: string): string;
     // Selection helpers
     procedure DeleteSelection;
+    // Select the word (or the same-class run) surrounding codepoint boundary AIdx --
+    // the double-click primitive. Uses IsWordCodepoint to bound a word run, or a run of
+    // matching non-word codepoints when the click lands off a word.
+    procedure SelectWordAt(AIdx: Integer);
     // Word-wise deletion (splice modelled on DeleteSelection)
     procedure DeleteWordBackward;
     procedure DeleteWordForward;
@@ -231,6 +244,9 @@ type
     procedure InitializeWnd; override;
     procedure DestroyWnd; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    // Right-click: the user's PopupMenu wins if set, otherwise show the default themed
+    // text-edit menu at the click point (ITEM 1).
+    procedure DoContextPopup(MousePos: TPoint; var Handled: Boolean); override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -301,6 +317,22 @@ type
     procedure Redo;
     function CanUndo: Boolean;
     function CanRedo: Boolean;
+    // --- ITyTextEditActions: the seam the shared default context menu drives (thin
+    // delegates to the public API above; see tyControls.TextMenu). ---
+    function TeControl: TControl;
+    function TeController: TTyStyleController;
+    procedure TeUndo;
+    procedure TeRedo;
+    procedure TeCut;
+    procedure TeCopy;
+    procedure TePaste;
+    procedure TeSelectAll;
+    function TeCanUndo: Boolean;
+    function TeCanRedo: Boolean;
+    function TeHasSelection: Boolean;
+    function TeCanPaste: Boolean;
+    function TeHasText: Boolean;
+    function TeIsReadOnly: Boolean;
     { Multicast OnChange, LCL's stdctrls.pp:853-855. The single OnChange property belongs to
       the application; a validator, a dirty-tracker or a live preview living inside the
       library (or a framework layer above it) has to be able to observe the same edit without
@@ -416,6 +448,9 @@ begin
   FCaret := 0;
   FCaretAfterPrev := True;     // an insertion point stands after what was written
   FSelAnchor := 0;
+  FClickCount := 0;
+  FLastClickTick := 0;
+  FTextMenu := nil;            // lazily built on first right-click
   FScrollX := 0;
   FWidthCacheValid := False;
   FBidiGateValid := False;
@@ -439,6 +474,10 @@ end;
 
 destructor TTyEdit.Destroy;
 begin
+  // The default context menu holds only an interface reference back to Self (no strong
+  // ref -- TComponent interface calls do not reference-count), so freeing it here, before
+  // the text engine, is safe and touches nothing the teardown below depends on.
+  FreeAndNil(FTextMenu);
   // Free the timer first so its OnTimer callback can never fire mid-teardown
   // (mirrors TTyButton.Destroy). It is owned by Self but we free it explicitly.
   FreeAndNil(FBlinkTimer);
@@ -670,6 +709,25 @@ function TTyEdit.CanRedo: Boolean;
 begin
   Result := FUndoStack.CanRedo;
 end;
+
+// ---- ITyTextEditActions (default context-menu seam) ----
+
+function TTyEdit.TeControl: TControl;             begin Result := Self; end;
+function TTyEdit.TeController: TTyStyleController; begin Result := ActiveController; end;
+procedure TTyEdit.TeUndo;                          begin Undo; end;
+procedure TTyEdit.TeRedo;                          begin Redo; end;
+procedure TTyEdit.TeCut;                           begin CutToClipboard; end;
+procedure TTyEdit.TeCopy;                          begin CopyToClipboard; end;
+procedure TTyEdit.TePaste;                         begin PasteFromClipboard; end;
+procedure TTyEdit.TeSelectAll;                     begin SelectAll; end;
+function TTyEdit.TeCanUndo: Boolean;               begin Result := CanUndo; end;
+function TTyEdit.TeCanRedo: Boolean;               begin Result := CanRedo; end;
+function TTyEdit.TeHasSelection: Boolean;          begin Result := HasSelection; end;
+// Route through the virtual ReadClipboardText so headless tests can stub the clipboard;
+// production reads Clipboard.AsText (consistent with TyClipboardHasText).
+function TTyEdit.TeCanPaste: Boolean;              begin Result := ReadClipboardText <> ''; end;
+function TTyEdit.TeHasText: Boolean;               begin Result := UTF8Length(FText) > 0; end;
+function TTyEdit.TeIsReadOnly: Boolean;            begin Result := FReadOnly; end;
 
 // ---- Selection read helpers ----
 
@@ -1819,29 +1877,55 @@ end;
 // ---- Mouse overrides ----
 
 procedure TTyEdit.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+var
+  Clicks: Integer;
 begin
   if not Enabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
   if Button = mbLeft then
   begin
-    if ssDouble in Shift then
+    if ssShift in Shift then
     begin
-      // Double-click: select all
-      SelectAll;
-      FMouseSelecting := False;
-    end
-    else
-    begin
-      // Single click: position caret, collapse selection
+      // Shift+click EXTENDS the selection: move the caret to the click but keep the
+      // existing anchor (do NOT collapse). A following drag keeps extending from it.
       BreakCoalescing;
-      // The hit test reports which RUN was aimed at, and at a direction boundary that is
-      // the difference between the caret appearing under the pointer and appearing at the
-      // far end of an embedded run.
       FCaret := CaretIndexAtX(X, FCaretAfterPrev);
-      FSelAnchor := FCaret;
       FMouseSelecting := True;
       EnsureCaretVisible(Font.PixelsPerInch);
       Invalidate;
+    end
+    else
+    begin
+      { The click sequence, counted here because LCL has no native triple-click and only
+        marks the 2nd press with ssDouble. 2 = word, 3 = line (the whole single-line text);
+        1 (and a wrapped 4+) is a plain caret placement. }
+      Clicks := TyMultiClickCount(ssDouble in Shift, X, Y, FLastClickX, FLastClickY, FLastClickTick, FClickCount);
+      if Clicks = 2 then
+      begin
+        // Double-click: select the word under the pointer (was: select all).
+        SelectWordAt(CaretIndexAtX(X));
+        FMouseSelecting := False;
+      end
+      else if Clicks = 3 then
+      begin
+        // Triple-click: select the "line" -- the whole text for a single-line edit.
+        SelectAll;
+        FMouseSelecting := False;
+      end
+      else
+      begin
+        if Clicks > 3 then FClickCount := 1;   // wrap the sequence back to a plain click
+        // Single click: position caret, collapse selection, begin a drag-select.
+        BreakCoalescing;
+        // The hit test reports which RUN was aimed at, and at a direction boundary that is
+        // the difference between the caret appearing under the pointer and appearing at the
+        // far end of an embedded run.
+        FCaret := CaretIndexAtX(X, FCaretAfterPrev);
+        FSelAnchor := FCaret;
+        FMouseSelecting := True;
+        EnsureCaretVisible(Font.PixelsPerInch);
+        Invalidate;
+      end;
     end;
     try
       if CanFocus then
@@ -1850,6 +1934,52 @@ begin
       // Ignore focus errors in headless/test environments
     end;
   end;
+end;
+
+procedure TTyEdit.SelectWordAt(AIdx: Integer);
+var
+  Len, p, ws, we: Integer;
+  refWord: Boolean;
+begin
+  BreakCoalescing;
+  Len := UTF8Length(FText);
+  if Len = 0 then
+  begin
+    FCaret := 0;
+    FSelAnchor := 0;
+    DefaultCaretAffinity;
+    Invalidate;
+    Exit;
+  end;
+  if AIdx < 0 then AIdx := 0;
+  if AIdx > Len then AIdx := Len;
+  // Classify the codepoint the click sits on: the one to the RIGHT of boundary AIdx,
+  // or (at end of text) the one to its left. Then expand over the maximal run of the
+  // SAME class -- a word run for a word codepoint, a punctuation/space run otherwise.
+  if AIdx >= Len then p := Len - 1 else p := AIdx;
+  refWord := IsWordCodepoint(UTF8Copy(FText, p + 1, 1));
+  ws := p;
+  while (ws > 0) and (IsWordCodepoint(UTF8Copy(FText, ws, 1)) = refWord) do Dec(ws);
+  we := p + 1;
+  while (we < Len) and (IsWordCodepoint(UTF8Copy(FText, we + 1, 1)) = refWord) do Inc(we);
+  FSelAnchor := ws;
+  FCaret := we;
+  DefaultCaretAffinity;
+  EnsureCaretVisible(Font.PixelsPerInch);
+  ResetCaretBlink;
+  Invalidate;
+end;
+
+procedure TTyEdit.DoContextPopup(MousePos: TPoint; var Handled: Boolean);
+begin
+  inherited DoContextPopup(MousePos, Handled);   // fires OnContextPopup (it may set Handled)
+  if Handled then Exit;
+  // A user-assigned PopupMenu wins: leave Handled False so LCL's WMContextMenu shows it.
+  if PopupMenu <> nil then Exit;
+  // No user menu: show the default themed one at the click point and consume the event.
+  if FTextMenu = nil then FTextMenu := TTyTextEditMenu.Create(Self);
+  FTextMenu.Popup(MousePos);
+  Handled := True;
 end;
 
 procedure TTyEdit.MouseMove(Shift: TShiftState; X, Y: Integer);

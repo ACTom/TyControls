@@ -429,6 +429,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.Menu"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.TextMenu.pas"/>
+        <UnitName Value="tyControls.TextMenu"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.BuiltinThemeData.pas"/>
         <UnitName Value="tyControls.BuiltinThemeData"/>
       </Item>

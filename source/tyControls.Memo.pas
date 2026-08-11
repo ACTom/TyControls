@@ -7,7 +7,7 @@ uses
   BGRABitmap, BGRABitmapTypes, BGRATextBidi,
   tyControls.Types, tyControls.Painter, tyControls.Base,
   tyControls.ScrollBar, tyControls.UndoStack, tyControls.Animation,
-  tyControls.QtWS, tyControls.GtkWS;
+  tyControls.QtWS, tyControls.GtkWS, tyControls.Controller, tyControls.TextMenu;
 type
   // Cumulative-prefix pixel widths, length = codepoints+1 (shared name with Edit).
   TTyIntArray = array of Integer;
@@ -68,7 +68,7 @@ type
     Lead, Trail: TTyIntArray;    // length = row codepoints + 1
   end;
 
-  TTyMemo = class(TTyCustomControl)
+  TTyMemo = class(TTyCustomControl, ITyTextEditActions)
   protected
     // Pixel x where text begins (left padding scaled). Promoted from private so
     // the horizontal-scroll geometry is testable through the access subclass.
@@ -115,6 +115,15 @@ type
     // True while the left button is held for drag-select (set in MouseDown,
     // cleared in MouseUp). Mirrors TTyEdit.FMouseSelecting.
     FMouseSelecting: Boolean;
+    // Multi-click sequence tracking (LCL has no native triple-click): the last press's
+    // client position + tick and the running count, advanced by TyAdvanceClickCount.
+    // 1 = caret, 2 = word, 3 = current logical line.
+    FClickCount: Integer;
+    FLastClickTick: QWord;
+    FLastClickX, FLastClickY: Integer;
+    // The default themed right-click menu (tyControls.TextMenu). nil until a context
+    // popup is first raised on this memo; freed in Destroy.
+    FTextMenu: TTyTextEditMenu;
     // Index of the first VISUAL ROW painted (top of the visible window). Indexes
     // FVisualRows, not FLines: when WordWrap=False each logical line is exactly
     // one visual row so FTopRow == the top logical line (identity with the old
@@ -531,6 +540,13 @@ type
     function IsWordCodepoint(const CP: string): Boolean;
     function NextWordBoundary(const ALine: string; AIdx: Integer): Integer;
     function PrevWordBoundary(const ALine: string; AIdx: Integer): Integer;
+    // Select the word (or same-class run) around column ACol on line ALine -- the
+    // double-click primitive. Sets anchor+caret; the per-line analogue of
+    // TTyEdit.SelectWordAt.
+    procedure SelectWordAtLineCol(ALine, ACol: Integer);
+    // Select the whole logical line ALine (col 0 .. line end, the newline excluded) --
+    // the triple-click primitive.
+    procedure SelectLine(ALine: Integer);
     // --- Pure visual-row model (no paint/window state; tested headless) ---
     // Build the ordered visual-row list for the whole document at the given
     // content width (pixels available for text, padding already removed) and
@@ -673,6 +689,9 @@ type
     procedure InitializeWnd; override;
     procedure DestroyWnd; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    // Right-click: the user's PopupMenu wins if set, otherwise show the default themed
+    // text-edit menu at the click point (ITEM 1).
+    procedure DoContextPopup(MousePos: TPoint; var Handled: Boolean); override;
     // Left-click caret hit-test: Y -> logical line, X -> codepoint column. Early
     // Exit when not Enabled (v1.5 policy). try/except SetFocus like Edit/ListBox.
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState;
@@ -744,6 +763,22 @@ type
     procedure Redo;
     function CanUndo: Boolean;
     function CanRedo: Boolean;
+    // --- ITyTextEditActions: the seam the shared default context menu drives (thin
+    // delegates to the public API above; see tyControls.TextMenu). ---
+    function TeControl: TControl;
+    function TeController: TTyStyleController;
+    procedure TeUndo;
+    procedure TeRedo;
+    procedure TeCut;
+    procedure TeCopy;
+    procedure TePaste;
+    procedure TeSelectAll;
+    function TeCanUndo: Boolean;
+    function TeCanRedo: Boolean;
+    function TeHasSelection: Boolean;
+    function TeCanPaste: Boolean;
+    function TeHasText: Boolean;
+    function TeIsReadOnly: Boolean;
     // Horizontal scroll offset in device px (>= 0; WordWrap=False only). Mirrors
     // TTyEdit.ScrollX. Read-only: it is driven by EnsureCaretXVisible/ClampScrollX.
     property ScrollX: Integer read FScrollX;
@@ -906,6 +941,9 @@ begin
   FLastSelAnchorLine := 0;
   FLastSelAnchorCol := 0;
   FMouseSelecting := False;
+  FClickCount := 0;
+  FLastClickTick := 0;
+  FTextMenu := nil;            // lazily built on first right-click
   FTopRow := 0;
   FScrollX := 0;
   FWordWrap := False;
@@ -960,6 +998,9 @@ end;
 
 destructor TTyMemo.Destroy;
 begin
+  // The default context menu holds only an interface reference back to Self (TComponent
+  // interface calls do not reference-count), so freeing it here touches nothing else.
+  FreeAndNil(FTextMenu);
   // Free the timer first so its OnTimer callback can never fire mid-teardown.
   FreeAndNil(FBlinkTimer);
   TyQtUninstallIme(FImeHook);   // in case DestroyWnd never ran (Qt-only; no-op elsewhere)
@@ -2252,12 +2293,16 @@ end;
 
 procedure TTyMemo.UpdateScrollBar;
 var
-  PPI, LH, VR, MaxPos, MaxTop, Total, SBW, viewW, hMax: Integer;
+  PPI, LH, VR, MaxPos, MaxTop, Total, SBW, viewW, hMax, fw: Integer;
   WasVisible, WantV, WantH: Boolean;
 begin
   PPI := Font.PixelsPerInch;
   LH := LineHeight(PPI); if LH < 1 then LH := 1;
   SBW := MulDiv(ActiveController.Metric('--scrollbar-size', TyScrollbarSize), PPI, 96);   // both bars' thickness
+  // Frame inset: the scrollbars sit flush to the edge and would cover the border + focus ring
+  // DrawFrame paints at the OUTER edge (the memo's ring looked clipped by the vbar). Pull both
+  // bars in by ~the ring width so the frame stays visible around them, like a native memo.
+  fw := MulDiv(2, PPI, 96); if fw < 1 then fw := 1;
   Total := TotalVisualRows(PPI);
 
   // ---- 1) Decide + apply the VERTICAL bar FIRST, from the full height (its overflow is row-count
@@ -2290,6 +2335,11 @@ begin
       FScrollBar.ControlStyle := FScrollBar.ControlStyle + [csNoDesignVisible];   // internal: never a designable child
     end;
     FScrollBar.Width := SBW;
+    // Inset the vertical bar inside the frame (Align=alRight honours BorderSpacing) so the
+    // border + focus ring drawn at the outer edge are not covered by it.
+    FScrollBar.BorderSpacing.Right  := fw;
+    FScrollBar.BorderSpacing.Top    := fw;
+    FScrollBar.BorderSpacing.Bottom := fw;
     FScrollBar.Controller := Self.Controller;
     FScrollBar.Visible := True;
     // WordWrap: a newly-visible vbar steals SBW from the content width -> narrower wrap -> MORE rows.
@@ -2349,7 +2399,8 @@ begin
     FHScrollBar.Height := SBW;
     FHScrollBar.Controller := Self.Controller;
     FHScrollBar.Visible := True;
-    FHScrollBar.SetBounds(0, Height - SBW, Width - (Ord(WantV) * SBW), SBW);
+    // Inset like the vertical bar: left/bottom by fw, and stop before the (also-inset) vbar.
+    FHScrollBar.SetBounds(fw, Height - SBW - fw, Width - 2*fw - (Ord(WantV) * SBW), SBW);
     viewW := ContentWidthFor(PPI);
     hMax := WidestLineWidth(PPI) - viewW; if hMax < 0 then hMax := 0;
     if FScrollX > hMax then FScrollX := hMax;
@@ -2378,10 +2429,94 @@ begin
   Result := (FScrollBar <> nil) and FScrollBar.Visible;
 end;
 
+// ---- ITyTextEditActions (default context-menu seam; thin delegates) ----
+
+function TTyMemo.TeControl: TControl;              begin Result := Self; end;
+function TTyMemo.TeController: TTyStyleController;  begin Result := ActiveController; end;
+procedure TTyMemo.TeUndo;                           begin Undo; end;
+procedure TTyMemo.TeRedo;                           begin Redo; end;
+procedure TTyMemo.TeCut;                            begin CutToClipboard; end;
+procedure TTyMemo.TeCopy;                           begin CopyToClipboard; end;
+procedure TTyMemo.TePaste;                          begin PasteFromClipboard; end;
+procedure TTyMemo.TeSelectAll;                      begin SelectAll; end;
+function TTyMemo.TeCanUndo: Boolean;                begin Result := CanUndo; end;
+function TTyMemo.TeCanRedo: Boolean;                begin Result := CanRedo; end;
+function TTyMemo.TeHasSelection: Boolean;           begin Result := HasSelection; end;
+// Route through the virtual ReadClipboardText so headless tests can stub the clipboard.
+function TTyMemo.TeCanPaste: Boolean;               begin Result := ReadClipboardText <> ''; end;
+function TTyMemo.TeHasText: Boolean;
+begin
+  Result := (FLines.Count > 1) or ((FLines.Count = 1) and (FLines[0] <> ''));
+end;
+function TTyMemo.TeIsReadOnly: Boolean;             begin Result := FReadOnly; end;
+
+{ Double-click primitive: select the same-class run (a word run, or a punctuation/space run)
+  around column ACol on line ALine. Mirrors TTyEdit.SelectWordAt but on one logical line. }
+procedure TTyMemo.SelectWordAtLineCol(ALine, ACol: Integer);
+var
+  lineText: string;
+  Len, p, ws, we: Integer;
+  refWord: Boolean;
+begin
+  BreakCoalescing;
+  if (ALine < 0) or (ALine >= FLines.Count) then Exit;
+  lineText := FLines[ALine];
+  Len := UTF8Length(lineText);
+  FCaretLine := ALine;
+  FSelAnchorLine := ALine;
+  if Len = 0 then
+  begin
+    FCaretCol := 0; FSelAnchorCol := 0;
+    FDesiredCol := 0; UpdateDesiredX(Font.PixelsPerInch); Invalidate; Exit;
+  end;
+  if ACol < 0 then ACol := 0;
+  if ACol > Len then ACol := Len;
+  // Classify the codepoint the click sits on: the one to the RIGHT of boundary ACol, or (at
+  // line end) the one to its left. Then expand over the maximal run of the SAME class.
+  if ACol >= Len then p := Len - 1 else p := ACol;
+  refWord := IsWordCodepoint(UTF8Copy(lineText, p + 1, 1));
+  ws := p;
+  while (ws > 0) and (IsWordCodepoint(UTF8Copy(lineText, ws, 1)) = refWord) do Dec(ws);
+  we := p + 1;
+  while (we < Len) and (IsWordCodepoint(UTF8Copy(lineText, we + 1, 1)) = refWord) do Inc(we);
+  FSelAnchorCol := ws;
+  FCaretCol := we;
+  FDesiredCol := FCaretCol;
+  UpdateDesiredX(Font.PixelsPerInch);
+  ResetCaretBlink;
+  Invalidate;
+end;
+
+{ Triple-click primitive: select the whole logical line ALine (col 0 .. end of line;
+  the trailing newline is NOT part of the line, matching SelectAll's boundary). }
+procedure TTyMemo.SelectLine(ALine: Integer);
+begin
+  BreakCoalescing;
+  if (ALine < 0) or (ALine >= FLines.Count) then Exit;
+  FSelAnchorLine := ALine; FSelAnchorCol := 0;
+  FCaretLine := ALine;     FCaretCol := UTF8Length(FLines[ALine]);
+  FDesiredCol := FCaretCol;
+  UpdateDesiredX(Font.PixelsPerInch);
+  ResetCaretBlink;
+  Invalidate;
+end;
+
+{ Right-click: the user's PopupMenu wins if set; otherwise show the default themed menu
+  (tyControls.TextMenu) and consume the event. Identical to TTyEdit.DoContextPopup. }
+procedure TTyMemo.DoContextPopup(MousePos: TPoint; var Handled: Boolean);
+begin
+  inherited DoContextPopup(MousePos, Handled);   // fires OnContextPopup (may set Handled)
+  if Handled then Exit;
+  if PopupMenu <> nil then Exit;                 // LCL's WMContextMenu will show the user's
+  if FTextMenu = nil then FTextMenu := TTyTextEditMenu.Create(Self);
+  FTextMenu.Popup(MousePos);
+  Handled := True;
+end;
+
 procedure TTyMemo.MouseDown(Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
 var
-  APPI, LH, Row, CW, NewLine, NewCol: Integer;
+  APPI, LH, Row, CW, NewLine, NewCol, Clicks: Integer;
 begin
   if not Enabled then Exit;          // v1.5 policy: ignore input when disabled
   inherited MouseDown(Button, Shift, X, Y);
@@ -2413,14 +2548,39 @@ begin
   FDesiredCol := FCaretCol;
   // A click is a horizontal move: refresh the desired x for a following wrap Up/Down.
   UpdateDesiredX(APPI);
-  // A fresh left-click sets the anchor onto the caret (collapsing any prior
-  // selection) and begins a drag (mirrors TTyEdit.MouseDown). This is additive:
-  // existing click tests assert only the resolved caret position, unaffected.
-  FSelAnchorLine := FCaretLine;
-  FSelAnchorCol := FCaretCol;
-  FMouseSelecting := True;
-  // A mouse-driven caret move ends a typing-coalesce run.
-  BreakCoalescing;
+  // Click sequence + shift-extend (mirrors TTyEdit.MouseDown). LCL has no native
+  // triple-click and marks only the 2nd press with ssDouble, so count the sequence
+  // here: 2 = word, 3 = the whole logical line, 1 (and a wrapped 4+) = plain caret.
+  BreakCoalescing;   // a mouse-driven caret move ends a typing-coalesce run
+  if ssShift in Shift then
+  begin
+    // Shift+click EXTENDS: the caret already moved to the click; keep the anchor
+    // (do NOT collapse) so the selection grows from where it started.
+    FMouseSelecting := True;
+  end
+  else
+  begin
+    Clicks := TyMultiClickCount(ssDouble in Shift, X, Y, FLastClickX, FLastClickY, FLastClickTick, FClickCount);
+    if Clicks = 2 then
+    begin
+      SelectWordAtLineCol(FCaretLine, FCaretCol);   // double-click: word under the pointer
+      FMouseSelecting := False;
+    end
+    else if Clicks = 3 then
+    begin
+      SelectLine(FCaretLine);                        // triple-click: the current logical line
+      FMouseSelecting := False;
+    end
+    else
+    begin
+      if Clicks > 3 then FClickCount := 1;           // wrap the sequence back to a plain click
+      // A fresh left-click sets the anchor onto the caret (collapsing any prior
+      // selection) and begins a drag. Existing click tests assert only the caret, unaffected.
+      FSelAnchorLine := FCaretLine;
+      FSelAnchorCol := FCaretCol;
+      FMouseSelecting := True;
+    end;
+  end;
   try
     if CanFocus then
       SetFocus;

@@ -563,6 +563,30 @@ msgstr "搜索"
 msgid "(Select all)"
 msgstr "(全选)"
 
+#: tycontrols.strconsts.rstextmenucopy
+msgid "Copy"
+msgstr "复制"
+
+#: tycontrols.strconsts.rstextmenucut
+msgid "Cut"
+msgstr "剪切"
+
+#: tycontrols.strconsts.rstextmenupaste
+msgid "Paste"
+msgstr "粘贴"
+
+#: tycontrols.strconsts.rstextmenuredo
+msgid "Redo"
+msgstr "重做"
+
+#: tycontrols.strconsts.rstextmenuselectall
+msgid "Select All"
+msgstr "全选"
+
+#: tycontrols.strconsts.rstextmenuundo
+msgid "Undo"
+msgstr "撤销"
+
 #: tycontrols.strconsts.rstoolbarmorecommands
 msgid "More commands"
 msgstr "更多命令"

@@ -36,6 +36,7 @@ type
     procedure ProbeScrollBarChange;
     // --- T5 mouse caret hit-test ---
     procedure ProbeMouseDown(X, Y: Integer);
+    procedure ProbeMouseDownShift(X, Y: Integer; Shift: TShiftState);
     // --- Perf regression: widest-line scan must not use the O(L^2) per-char path ---
     function ProbeWidestLineWidth(APPI: Integer): Integer;
     function ProbeMeasureLineTotalWidth(const ALine: string; APPI: Integer): Integer;
@@ -114,6 +115,8 @@ type
     // --- T5 mouse caret hit-test ---
     procedure TestClickSelectsLineByY;
     procedure TestClickColumnByX;
+    procedure TestDoubleClickSelectsWord;
+    procedure TestTripleClickSelectsLine;
     procedure TestClickWithScroll;
     procedure TestClickPastLastLineClamps;
     procedure TestDisabledMouseIgnored;
@@ -251,6 +254,11 @@ end;
 procedure TTyMemoProbe.ProbeMouseDown(X, Y: Integer);
 begin
   MouseDown(mbLeft, [], X, Y);
+end;
+
+procedure TTyMemoProbe.ProbeMouseDownShift(X, Y: Integer; Shift: TShiftState);
+begin
+  MouseDown(mbLeft, Shift, X, Y);
 end;
 
 function TTyMemoProbe.ProbeWidestLineWidth(APPI: Integer): Integer;
@@ -1016,6 +1024,37 @@ end;
 
 { TestClickColumnByX
   Click near a known ColPixelXAt(line, k) X selects column k (midpoint-nearest). }
+{ Double-click selects the WORD under the pointer (not the whole line). ssDouble is LCL's
+  real double-click marker, which TyMultiClickCount keys the word selection off. }
+procedure TTyMemoTest.TestDoubleClickSelectsWord;
+const
+  Line = 'Hello World';
+var
+  px: Integer;
+begin
+  SetUpWithPadding(4);
+  LoadLines([Line]);
+  FMemo.ProbeSetTopLine(0);
+  px := FMemo.ProbeColPixelXAt(Line, 2, 96);   // inside 'Hello'
+  FMemo.ProbeMouseDownShift(px, 1, [ssDouble]);
+  AssertEquals('double-click selects the word', 'Hello', FMemo.SelText);
+end;
+
+{ Triple-click (a ssDouble then a plain press at the same spot) selects the whole logical
+  line -- not the whole document. }
+procedure TTyMemoTest.TestTripleClickSelectsLine;
+var
+  px: Integer;
+begin
+  SetUpWithPadding(4);
+  LoadLines(['Line one', 'Line two']);
+  FMemo.ProbeSetTopLine(0);
+  px := FMemo.ProbeColPixelXAt('Line one', 3, 96);   // somewhere in row 0
+  FMemo.ProbeMouseDownShift(px, 1, [ssDouble]);       // 2nd press -> word
+  FMemo.ProbeMouseDownShift(px, 1, []);               // 3rd press -> the whole line
+  AssertEquals('triple-click selects the current logical line', 'Line one', FMemo.SelText);
+end;
+
 procedure TTyMemoTest.TestClickColumnByX;
 const
   Line = 'Hello World';

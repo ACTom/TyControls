@@ -221,6 +221,17 @@ resourcestring
     application showed a Chinese tooltip and no catalogue could reach it. }
   rsToolBarMoreCommands = 'More commands';
 
+  { --- Text-edit context menu -----------------------------------------------
+    The default right-click menu shared by TTyEdit and TTyMemo (tyControls.TextMenu).
+    User-facing menu captions, so translated. No '&' mnemonic markers -- the other
+    runtime captions here (the message-dialog buttons above) carry none either. }
+  rsTextMenuUndo      = 'Undo';
+  rsTextMenuRedo      = 'Redo';
+  rsTextMenuCut       = 'Cut';
+  rsTextMenuCopy      = 'Copy';
+  rsTextMenuPaste     = 'Paste';
+  rsTextMenuSelectAll = 'Select All';
+
   { --- TTyUpDown -------------------------------------------------------------
     Raised when a second up-down is pointed at a control another one already drives.
     Two steppers writing one field is not a configuration, it is a fight, and the

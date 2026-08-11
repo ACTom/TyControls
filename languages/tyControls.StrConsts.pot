@@ -552,6 +552,30 @@ msgstr ""
 msgid "slice() needs 4 values: %s"
 msgstr ""
 
+#: tycontrols.strconsts.rstextmenucopy
+msgid "Copy"
+msgstr ""
+
+#: tycontrols.strconsts.rstextmenucut
+msgid "Cut"
+msgstr ""
+
+#: tycontrols.strconsts.rstextmenupaste
+msgid "Paste"
+msgstr ""
+
+#: tycontrols.strconsts.rstextmenuredo
+msgid "Redo"
+msgstr ""
+
+#: tycontrols.strconsts.rstextmenuselectall
+msgid "Select All"
+msgstr ""
+
+#: tycontrols.strconsts.rstextmenuundo
+msgid "Undo"
+msgstr ""
+
 #: tycontrols.strconsts.rstoolbarmorecommands
 msgid "More commands"
 msgstr ""

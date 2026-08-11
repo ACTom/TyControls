@@ -6,7 +6,8 @@ uses
   StdCtrls,
   LazUTF8,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Controller, tyControls.StyleModel, tyControls.Base, tyControls.Edit;
+  tyControls.Types, tyControls.Controller, tyControls.StyleModel, tyControls.Base, tyControls.Edit,
+  tyControls.TextMenu;
 type
   TTyEditAccess = class(TTyEdit)
   public
@@ -97,6 +98,9 @@ type
     procedure TestMouseDownPositionsCaret;
     procedure TestMouseDragSelects;
     procedure TestDoubleClickSelectsAll;
+    procedure TestTripleClickSelectsAll;
+    procedure TestShiftClickExtendsSelection;
+    procedure TestContextMenuStateSeam;
     procedure TestCopyToClipboard;
     procedure TestCutToClipboard;
     procedure TestPasteFromClipboard;
@@ -864,11 +868,77 @@ begin
   try
     E := TTyEditAccess.Create(F);
     E.Parent := F;
-    E.Text := 'Hello';
-    // Simulate double-click: pass ssDouble in Shift
+    // Multi-word so "the word" is provably NOT "everything": a double-click near the start
+    // selects only 'Hello' (5), not the whole 'Hello World' (11). ssDouble is LCL's real
+    // double-click marker, which is what TyMultiClickCount keys the word selection off.
+    E.Text := 'Hello World';
     E.SimulateMouseDown(5, 5, [ssDouble]);
-    AssertEquals('Double-click SelStart=0', 0, E.SelStart);
-    AssertEquals('Double-click SelLength=5', 5, E.SelLength);
+    AssertEquals('Double-click selects the word: SelStart=0', 0, E.SelStart);
+    AssertEquals('Double-click selects the word: SelLength=5 (not 11)', 5, E.SelLength);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TEditTest.TestTripleClickSelectsAll;
+var
+  F: TCustomForm;
+  E: TTyEditAccess;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    E := TTyEditAccess.Create(F);
+    E.Parent := F;
+    E.Text := 'Hello World';
+    // A triple = a double (ssDouble) then a plain press at the same spot, in quick succession.
+    E.SimulateMouseDown(5, 5, [ssDouble]);   // 2nd press -> word
+    E.SimulateMouseDown(5, 5, []);           // 3rd press -> the whole (single) line
+    AssertEquals('Triple-click SelStart=0', 0, E.SelStart);
+    AssertEquals('Triple-click selects all: SelLength=11', 11, E.SelLength);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TEditTest.TestShiftClickExtendsSelection;
+var
+  F: TCustomForm;
+  E: TTyEditAccess;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    E := TTyEditAccess.Create(F);
+    E.Parent := F;
+    E.Text := 'Hello World';
+    E.SelStart := 0; E.SelLength := 0;       // caret at 0 (anchor there)
+    E.SimulateMouseDown(200, 5, [ssShift]);  // shift+click far right -> extend to line end
+    AssertEquals('Shift+click extends from the anchor: SelStart=0', 0, E.SelStart);
+    AssertTrue('Shift+click extends the selection (non-empty)', E.SelLength > 0);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TEditTest.TestContextMenuStateSeam;
+var
+  F: TCustomForm;
+  E: TTyEditAccess;
+  act: ITyTextEditActions;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    E := TTyEditAccess.Create(F);
+    E.Parent := F;
+    E.Text := 'Hello World';
+    AssertTrue('Edit implements ITyTextEditActions', Supports(E, ITyTextEditActions, act));
+    // With text but no selection: Copy/Cut (need a selection) off; Select All (has text) on.
+    E.SelStart := 0; E.SelLength := 0;
+    AssertFalse('no selection -> TeHasSelection False', act.TeHasSelection);
+    AssertTrue('has text -> TeHasText True', act.TeHasText);
+    AssertFalse('not read-only', act.TeIsReadOnly);
+    // Select something -> Copy/Cut become available.
+    E.SelStart := 0; E.SelLength := 5;
+    AssertTrue('selection -> TeHasSelection True', act.TeHasSelection);
   finally
     F.Free;
   end;
