@@ -1765,6 +1765,18 @@ begin
   // GTK3-Wayland; when no anchor was registered (headless / other widgetset) the screen rect stands.
   if FWlParent <> nil then
   begin
+    // A mapped Wayland xdg_popup cannot be repositioned. On a menu-bar hover-switch (File->Edit)
+    // the bar reuses this one visible form, so move_to_rect would be ignored and Edit's items would
+    // appear at File's spot. Pop it DOWN first; the move_to_rect + Show below then re-map it as a
+    // fresh popup at the new cell -- the same pop-down-then-pop-up a native menu bar does. Detach
+    // OnDeactivate around the interim Hide so it can't fire a dismiss. Off Wayland the old reuse
+    // (SetBounds moves the visible window) still stands, so no flicker there.
+    if TyGtkIsWayland and FForm.Visible then
+    begin
+      FForm.OnDeactivate := nil;
+      FForm.Hide;
+      FForm.OnDeactivate := @FormDeactivate;
+    end;
     TyGtk3MakePopupRect(FForm, FWlParent, FWlRect, FWlMode);
     FWlParent := nil;   // consume: a later screen-anchored reopen must not reuse a stale rect
   end;
@@ -1963,12 +1975,16 @@ begin
     anchor.Bottom := anchor.Top;
     // GTK3/Wayland: the child can't be placed by FForm.Left/Top (a Wayland client's own screen
     // position is unreliable). Anchor it to THIS popup's window instead, at the parent row's rect
-    // in this form's client coords -- flying out to the trailing side (left when mirrored).
-    if FRightToLeft then wlMode := pamLeftOf else wlMode := pamRightOf;
-    FChild.SetWaylandAnchor(FForm,
-      Rect(FView.Left, FView.Top + rowT,
-           FView.Left + FView.Width, FView.Top + rowT + FView.RowHeight(AIndex, ppi)),
-      wlMode);
+    // in this form's client coords -- flying out to the trailing side (left when mirrored). Runtime-
+    // gated: dead work off Wayland, and folded away entirely off GTK3 (TyGtkIsWayland = const False).
+    if TyGtkIsWayland then
+    begin
+      if FRightToLeft then wlMode := pamLeftOf else wlMode := pamRightOf;
+      FChild.SetWaylandAnchor(FForm,
+        Rect(FView.Left, FView.Top + rowT,
+             FView.Left + FView.Width, FView.Top + rowT + FView.RowHeight(AIndex, ppi)),
+        wlMode);
+    end;
     FChild.Popup(anchor, True);
   end;
 end;
@@ -2473,12 +2489,16 @@ begin
       origin.X + cellL + cellW, origin.Y + Height);
     // GTK3/Wayland: the compositor ignores that screen rect, so also register the cell's rect in
     // the app form's client coords (a plain control-tree walk, no screen coords) as the anchor the
-    // dropdown drops from. No-op off GTK3-Wayland.
-    pf := GetParentForm(Self);
-    if pf <> nil then
+    // dropdown drops from. Gated at runtime -- this is dead work on every other widgetset, and off
+    // GTK3 TyGtkIsWayland is a constant False so it folds away entirely.
+    if TyGtkIsWayland then
     begin
-      cp := ClientToParent(Types.Point(cellL, 0), pf);
-      FPopup.SetWaylandAnchor(pf, Types.Rect(cp.X, cp.Y, cp.X + cellW, cp.Y + Height), pamBelow);
+      pf := GetParentForm(Self);
+      if pf <> nil then
+      begin
+        cp := ClientToParent(Types.Point(cellL, 0), pf);
+        FPopup.SetWaylandAnchor(pf, Types.Rect(cp.X, cp.Y, cp.X + cellW, cp.Y + Height), pamBelow);
+      end;
     end;
     FPopup.Popup(anchor, False);
     StartHoverPoll;   // non-Win32: track the cursor for hover-switch while the dropdown is up
