@@ -1,10 +1,10 @@
 object MainForm: TMainForm
   Left = 0
-  Height = 590
+  Height = 616
   Top = 0
   Width = 560
   Caption = 'TTyPageControl example'
-  ClientHeight = 590
+  ClientHeight = 616
   ClientWidth = 560
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
@@ -191,13 +191,13 @@ object MainForm: TMainForm
     object LblDir: TTyLabel
       Left = 16
       Height = 20
-      Top = 361
-      Width = 72
+      Top = 576
+      Width = 80
     end
     object DirCombo: TTyComboBox
-      Left = 92
+      Left = 100
       Height = 26
-      Top = 356
+      Top = 572
       Width = 140
       OnChange = DirComboChange
     end
