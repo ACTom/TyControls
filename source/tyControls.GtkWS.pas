@@ -371,49 +371,38 @@ var
   tl: TPoint;
   r: TGdkRectangle;
 begin
-  { ==== TEMPORARY DIAGNOSTICS (remove after we know where it fails) -> stderr. Run the example
-    from a terminal to see them. ==== }
-  writeln(StdErr, '[TyGtk3MakePopup] enter  wayland=', TyGtkIsWayland);
-  if (APopup = nil) or (AAnchor = nil) then begin writeln(StdErr, '  EXIT: nil arg'); Exit; end;
+  { Every step bails out silently on failure -> worst case is the pre-fix centred flyout, never a
+    crash. HandleNeeded realizes the popup's window while it is still hidden, so the parent +
+    move_to_rect apply before Show maps it as the xdg_popup. }
+  if (APopup = nil) or (AAnchor = nil) then Exit;
   parentForm := GetParentForm(AAnchor);
-  if parentForm = nil then begin writeln(StdErr, '  EXIT: no parent form'); Exit; end;
+  if parentForm = nil then Exit;
   APopup.HandleNeeded;
-  if (not APopup.HandleAllocated) or (not parentForm.HandleAllocated) then
-    begin writeln(StdErr, '  EXIT: no handle (popup=', APopup.HandleAllocated, ' parent=', parentForm.HandleAllocated, ')'); Exit; end;
+  if (not APopup.HandleAllocated) or (not parentForm.HandleAllocated) then Exit;
   popW := Gtk3NativeWidget(APopup);
-  if popW = nil then begin writeln(StdErr, '  EXIT: Gtk3NativeWidget(popup)=nil'); Exit; end;
+  if popW = nil then Exit;
   popW := gtk_widget_get_toplevel(popW);
   parentTop := gtk_widget_get_toplevel(Gtk3NativeWidget(parentForm));
-  writeln(StdErr, '  popW.isGtkWindow=', (popW <> nil) and Gtk3IsGtkWindow(PGObject(popW)),
-                  '  parentTop.isGtkWindow=', (parentTop <> nil) and Gtk3IsGtkWindow(PGObject(parentTop)));
   if (popW = nil) or (parentTop = nil)
-     or (not Gtk3IsGtkWindow(PGObject(popW))) or (not Gtk3IsGtkWindow(PGObject(parentTop))) then
-    begin writeln(StdErr, '  EXIT: not a GtkWindow'); Exit; end;
-  { Anchor to the parent so Wayland maps this as an xdg_popup (placed relative to the parent)
-    rather than a free-floating top-level the compositor centres. }
+     or (not Gtk3IsGtkWindow(PGObject(popW))) or (not Gtk3IsGtkWindow(PGObject(parentTop))) then Exit;
   gtk_window_set_transient_for(PGtkWindow(popW), PGtkWindow(parentTop));
   gtk_window_set_type_hint(PGtkWindow(popW), GDK_WINDOW_TYPE_HINT_POPUP_MENU);
   gdkWin := gtk_widget_get_window(popW);
-  if gdkWin = nil then begin writeln(StdErr, '  EXIT: gtk_widget_get_window=nil'); Exit; end;
-  { THE fix: set the parent at the GDK level too. gtk_window_set_transient_for above sets only
-    the GTK/WM transient hint and does NOT reach the GdkWindow, so the popup was a "temporary
-    window without parent" and move_to_rect (which anchors to the transient-for GdkWindow) had
-    nothing to position against on Wayland. }
   parentGdkWin := gtk_widget_get_window(parentTop);
-  if parentGdkWin = nil then begin writeln(StdErr, '  EXIT: parent gtk_widget_get_window=nil'); Exit; end;
+  if (gdkWin = nil) or (parentGdkWin = nil) then Exit;
+  { The load-bearing call. gtk_window_set_transient_for sets only the GTK/WM transient hint and
+    does NOT reach the GdkWindow, so without this the popup is a "temporary window without parent"
+    and gdk_window_move_to_rect (which anchors to the transient-for GdkWindow) has nothing on
+    Wayland to position against. Confirmed on a real GTK3/Wayland session. }
   gdk_window_set_transient_for(gdkWin, parentGdkWin);
-  writeln(StdErr, '  gdkWin.window_type=', Ord(gdk_window_get_window_type(gdkWin)),
-                  '  set gdk transient parent');
-  { Anchor rect = the anchor control's bounds in the PARENT FORM's client coords. ClientToParent
-    walks the control tree (no screen coords, which Wayland refuses). The popup's top-left snaps
-    to the anchor's bottom-left so the flyout drops below it; flip/slide let the compositor keep
-    it on screen. }
+  { Anchor rect = the anchor control's bounds in the PARENT FORM's client coords (ClientToParent
+    walks the control tree -- no screen coords, which Wayland refuses). The popup's top-left snaps
+    to the anchor's bottom-left so the flyout drops below it; flip/slide let the compositor keep it
+    on screen. }
   tl := AAnchor.ClientToParent(Point(0, 0), parentForm);
   r.x := tl.x; r.y := tl.y; r.width := AAnchor.Width; r.height := AAnchor.Height;
-  writeln(StdErr, '  move_to_rect anchor=(', r.x, ',', r.y, ' ', r.width, 'x', r.height, ') calling...');
   gdk_window_move_to_rect(gdkWin, @r, GDK_GRAVITY_SOUTH_WEST, GDK_GRAVITY_NORTH_WEST,
     GDK_ANCHOR_FLIP + GDK_ANCHOR_SLIDE, 0, 0);
-  writeln(StdErr, '  move_to_rect returned OK');
 end;
 
 {$ELSE}

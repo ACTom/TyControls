@@ -17,7 +17,8 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Forms, LCLType, LCLIntf,
   {$IFDEF LCLWin32}Windows,{$ENDIF}
-  tyControls.Types, tyControls.Controller, tyControls.QtWS, tyControls.PlatformWS;
+  tyControls.Types, tyControls.Controller, tyControls.QtWS, tyControls.GtkWS,
+  tyControls.PlatformWS;
 
 // ---------------------------------------------------------------------------
 // TyPopupRect — screen rect for a dropdown of (AContentW x AContentH)
@@ -264,6 +265,10 @@ begin
   {$ENDIF}
 
   FForm.SetBounds(FRect.Left, FRect.Top, PopupW, PopupH);
+  { GTK3/Wayland: a top-level can't be placed by screen coords, so anchor the dropdown to its
+    trigger control (no-op off GTK3-Wayland). Fixes every TTyPopup consumer -- combobox, calc,
+    cascader, datetime picker, gallery, tree-select, value-list -- in one place. }
+  TyGtk3MakePopup(FForm, AAnchor);
   FForm.Show;
 
   // Qt/X11 may re-place + un-mask a frameless window at MAP time; re-assert
