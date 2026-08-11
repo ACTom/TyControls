@@ -23,13 +23,13 @@ interface
 
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType, Forms,
-  tyControls.Base, tyControls.Button, tyControls.StrConsts,
-  tyControls.PopupSurface, tyControls.ToolBar;
+  tyControls.Base, tyControls.Button, tyControls.GlyphButtons, tyControls.Painter,
+  tyControls.StrConsts, tyControls.PopupSurface, tyControls.ToolBar;
 
 type
   TTyToolBarEx = class(TTyToolBar)
   private
-    FMoreBtn: TTyButton;                 // the "»" chevron (csNoDesignVisible, owned by Self)
+    FMoreBtn: TTyGlyphButton;            // the overflow chevron, drawn as a vector glyph
     FPopup: TTyPopupSurface;             // hosts the overflow buttons while open
     FOverflow: array of TControl;        // the buttons currently hidden into the overflow set
     FPopupItems: array of TControl;      // authoritative copy of the buttons adopted into the OPEN
@@ -150,13 +150,17 @@ end;
 procedure TTyToolBarEx.EnsureMoreButton;
 begin
   if FMoreBtn <> nil then Exit;
-  FMoreBtn := TTyButton.Create(Self);       // owned by Self -> freed with the bar
+  FMoreBtn := TTyGlyphButton.Create(Self);  // owned by Self -> freed with the bar
   FMoreBtn.Parent := Self;
   // Not a tab stop: this chevron only exists while the bar overflows, and a stop that
   // appears and disappears with the window width is worse than no stop at all. (TTyButton
   // is a tab stop by default; the bar's own speed buttons are not either.)
   FMoreBtn.TabStop := False;
-  FMoreBtn.Caption := '»';
+  { A DRAWN chevron, not the '»' character: the vector glyph paints identically on every
+    widgetset, whereas the non-ASCII '»' fell back to an unrecognisable glyph in the Qt font
+    (the ASCII button captions were fine). }
+  FMoreBtn.ShowCaption := False;
+  FMoreBtn.GlyphKind := tgChevronRight;
   FMoreBtn.Hint := rsToolBarMoreCommands;
   FMoreBtn.ShowHint := True;
   FMoreBtn.StyleClass := 'ghost';            // match the flat toolbar look
