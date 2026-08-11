@@ -271,6 +271,16 @@ begin
   TyGtk3MakePopup(FForm, AAnchor);
   FForm.Show;
 
+  { GTK3/Wayland: a borderless popup maps as a grabbing GTK_WINDOW_POPUP. The menu works because it
+    focuses its view; a dropdown that never takes focus leaves that pointer grab dangling -- an
+    outside click can't dismiss it (no focus-out, so OnDeactivate never fires) and the stale grab
+    re-delivers the NEXT click to the hidden popup's old spot, re-picking a row. Give the list focus
+    so the popup owns the seat and releases the grab cleanly on Hide, exactly as the menu does. Skip
+    in NoActivate (autocomplete) mode, where the editor must keep focus. No-op off GTK3-Wayland. }
+  if TyGtkIsWayland and (not FNoActivate)
+     and (FContent is TWinControl) and TWinControl(FContent).CanFocus then
+    TWinControl(FContent).SetFocus;
+
   // Qt/X11 may re-place + un-mask a frameless window at MAP time; re-assert
   // NOW and again next event-loop turn.
   FForm.SetBounds(FRect.Left, FRect.Top, PopupW, PopupH);
