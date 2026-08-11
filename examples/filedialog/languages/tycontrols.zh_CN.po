@@ -406,3 +406,74 @@ msgstr "关于"
 #: tycontrols.strconsts.rsdlgbasiccolors
 msgid "Basic colors"
 msgstr "基本颜色"
+
+#: tycontrols.strconsts.rsfdallfilesfilter
+msgid "All Files (*.*)|*.*"
+msgstr "所有文件 (*.*)|*.*"
+
+#: tycontrols.strconsts.rsfdbtnopen
+msgctxt "tycontrols.strconsts.rsfdbtnopen"
+msgid "Open"
+msgstr "打开"
+
+#: tycontrols.strconsts.rsfdbtnsave
+msgid "Save"
+msgstr "保存"
+
+#: tycontrols.strconsts.rsfdcommonfilter
+msgid "Common Formats (*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.txt;*.md;*.json;*.xml;*.csv;*.log;*.ini)|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.txt;*.md;*.json;*.xml;*.csv;*.log;*.ini|All Files (*.*)|*.*"
+msgstr "常用格式 (*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.txt;*.md;*.json;*.xml;*.csv;*.log;*.ini)|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.txt;*.md;*.json;*.xml;*.csv;*.log;*.ini|所有文件 (*.*)|*.*"
+
+#: tycontrols.strconsts.rsfdfilenamelbl
+msgid "File name:"
+msgstr "文件名:"
+
+#: tycontrols.strconsts.rsfdfiletypelbl
+msgid "File type:"
+msgstr "文件类型:"
+
+#: tycontrols.strconsts.rsfdlookin
+msgid "Look in:"
+msgstr "查找范围:"
+
+#: tycontrols.strconsts.rsfdmustexist
+#, object-pascal-format
+msgid "The file \"%s\" does not exist."
+msgstr "文件 \"%s\" 不存在。"
+
+#: tycontrols.strconsts.rsfdopentitle
+msgctxt "tycontrols.strconsts.rsfdopentitle"
+msgid "Open"
+msgstr "打开"
+
+#: tycontrols.strconsts.rsfdpicturefilter
+msgid "Images (*.png;*.jpg;*.jpeg;*.bmp;*.gif)|*.png;*.jpg;*.jpeg;*.bmp;*.gif|All Files (*.*)|*.*"
+msgstr "图片 (*.png;*.jpg;*.jpeg;*.bmp;*.gif)|*.png;*.jpg;*.jpeg;*.bmp;*.gif|所有文件 (*.*)|*.*"
+
+#: tycontrols.strconsts.rsfdsavetitle
+msgid "Save As"
+msgstr "另存为"
+
+#: tycontrols.strconsts.rsfdup
+msgid "Up"
+msgstr "上一级"
+
+#: tycontrols.strconsts.rsfdviewdetails
+msgid "Details"
+msgstr "详细信息"
+
+#: tycontrols.strconsts.rsfdviewlist
+msgid "List"
+msgstr "列表"
+
+#: tycontrols.strconsts.rsfdviewsmallicon
+msgid "Small icons"
+msgstr "小图标"
+
+#: tycontrols.strconsts.rsfdviewlargeicon
+msgid "Large icons"
+msgstr "大图标"
+
+#: tycontrols.strconsts.rsfdviewtile
+msgid "Tiles"
+msgstr "平铺"
