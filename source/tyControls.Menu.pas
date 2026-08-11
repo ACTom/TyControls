@@ -4,7 +4,7 @@ interface
 uses Classes, SysUtils, Types, Controls, Graphics, Forms, ExtCtrls, LCLType, LCLProc, LCLIntf, LMessages, Menus,
   ImgList,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.Accel,
-  tyControls.QtWS, tyControls.PlatformWS, tyControls.ImageCollection, tyControls.ImageDraw;
+  tyControls.QtWS, tyControls.GtkWS, tyControls.PlatformWS, tyControls.ImageCollection, tyControls.ImageDraw;
 
 const
   { Layout metrics (logical px, 96-PPI baseline). These are spacing/size tokens, not
@@ -260,6 +260,9 @@ type
     FOwnerDraw: Boolean;      // TMenu.OwnerDraw, forwarded to the view + submenu cascades
     FTrackButton: TTrackButton;  // TPopupMenu.TrackButton, likewise forwarded
     FRightToLeft: Boolean;    // mirrored layout, forwarded to the view + submenu cascades
+    FWlParent: TCustomForm;   // GTK3/Wayland: the popup's transient parent (app form, or the parent popup for a submenu)
+    FWlRect: TRect;           // GTK3/Wayland: anchor rect in FWlParent's CLIENT coords (never screen coords)
+    FWlMode: TTyPopupAnchorMode; // GTK3/Wayland: drop-below (bar/context) vs fly-out-to-a-side (submenu)
     procedure EnsureForm;
     { Push the per-popup options the host set onto the live view. Called from EnsureForm
       AND from Popup: EnsureForm early-exits on every re-open, so a host that changed
@@ -316,6 +319,12 @@ type
       a menu-bar cell or the parent row); AToRight places a submenu to the right of
       its parent row. Lazily builds the borderless form on first call. }
     procedure Popup(const AAnchor: TRect; AToRight: Boolean = False);
+    { GTK3/Wayland only: register the parent-relative anchor the NEXT Popup should use, because a
+      Wayland client cannot place a top-level by the screen rect Popup otherwise takes. AParent is
+      the transient parent (the app form for a bar dropdown / context menu; the PARENT POPUP's form
+      for a submenu) and ARect is the anchor rect in AParent's client coords. Consumed and cleared
+      by Popup; a no-op on every other widgetset (the screen rect still drives placement there). }
+    procedure SetWaylandAnchor(AParent: TCustomForm; const ARect: TRect; AMode: TTyPopupAnchorMode);
     { Close this level: free the child cascade first, then hide the form (with the
       OnDeactivate handler detached around Hide), and arm the reopen guard. }
     procedure CloseAll;
@@ -1751,6 +1760,14 @@ begin
   FPopupRect := R;
   TyQtMakePopup(FForm);   // Qt: re-type as Qt::Popup BEFORE Show so it maps app-positioned (no top-left flash)
   FForm.SetBounds(R.Left, R.Top, R.Right - R.Left, R.Bottom - R.Top);
+  // GTK3/Wayland: the screen rect above is ignored by the compositor, so anchor the window to its
+  // transient parent instead (bar cell / parent-row rect, both in parent-client coords). No-op off
+  // GTK3-Wayland; when no anchor was registered (headless / other widgetset) the screen rect stands.
+  if FWlParent <> nil then
+  begin
+    TyGtk3MakePopupRect(FForm, FWlParent, FWlRect, FWlMode);
+    FWlParent := nil;   // consume: a later screen-anchored reopen must not reuse a stale rect
+  end;
   FForm.Show;
   // Qt/X11 may still RE-PLACE + un-mask a frameless window at MAP time; re-assert now AND again next
   // event-loop turn (DeferredReapplyGeometry), once the native window settles. No-op on Win32/GTK2.
@@ -1760,6 +1777,14 @@ begin
   if FView.CanFocus then FView.SetFocus;
   ApplyFormRegion(R.Right - R.Left, R.Bottom - R.Top);
   Application.QueueAsyncCall(@DeferredReapplyGeometry, 0);
+end;
+
+procedure TTyMenuPopup.SetWaylandAnchor(AParent: TCustomForm; const ARect: TRect;
+  AMode: TTyPopupAnchorMode);
+begin
+  FWlParent := AParent;
+  FWlRect := ARect;
+  FWlMode := AMode;
 end;
 
 { Shape the popup window with a rounded region matching the popup's themed
@@ -1890,6 +1915,8 @@ procedure TTyMenuPopup.DoOpenSubmenu(AIndex: Integer);
 var
   rows: TTyMenuRowArray;
   anchor: TRect;
+  ppi, rowT: Integer;
+  wlMode: TTyPopupAnchorMode;
 begin
   rows := TyBuildMenuRows(FRoot, FAllowHeaders);
   if (AIndex < 0) or (AIndex > High(rows)) then Exit;
@@ -1929,8 +1956,19 @@ begin
     else
       anchor.Left := FForm.Left + FForm.Width;
     anchor.Right := anchor.Left;
-    anchor.Top := FForm.Top + FView.RowTop(AIndex, FView.Font.PixelsPerInch);
+    ppi := FView.Font.PixelsPerInch;
+    if ppi <= 0 then ppi := 96;
+    rowT := FView.RowTop(AIndex, ppi);
+    anchor.Top := FForm.Top + rowT;
     anchor.Bottom := anchor.Top;
+    // GTK3/Wayland: the child can't be placed by FForm.Left/Top (a Wayland client's own screen
+    // position is unreliable). Anchor it to THIS popup's window instead, at the parent row's rect
+    // in this form's client coords -- flying out to the trailing side (left when mirrored).
+    if FRightToLeft then wlMode := pamLeftOf else wlMode := pamRightOf;
+    FChild.SetWaylandAnchor(FForm,
+      Rect(FView.Left, FView.Top + rowT,
+           FView.Left + FView.Width, FView.Top + rowT + FView.RowHeight(AIndex, ppi)),
+      wlMode);
     FChild.Popup(anchor, True);
   end;
 end;
@@ -2382,8 +2420,9 @@ procedure TTyMenuBar.OpenTop(AIndex: Integer);
 var
   mi: TMenuItem;
   ppi, cellL, cellW: Integer;
-  origin: TPoint;
+  origin, cp: TPoint;
   anchor: TRect;
+  pf: TCustomForm;
 begin
   mi := VisibleTopItem(AIndex);
   if mi = nil then begin ClosePopup; Exit; end;
@@ -2432,6 +2471,15 @@ begin
     origin := ClientToScreen(Types.Point(0, 0));
     anchor := Types.Rect(origin.X + cellL, origin.Y,
       origin.X + cellL + cellW, origin.Y + Height);
+    // GTK3/Wayland: the compositor ignores that screen rect, so also register the cell's rect in
+    // the app form's client coords (a plain control-tree walk, no screen coords) as the anchor the
+    // dropdown drops from. No-op off GTK3-Wayland.
+    pf := GetParentForm(Self);
+    if pf <> nil then
+    begin
+      cp := ClientToParent(Types.Point(cellL, 0), pf);
+      FPopup.SetWaylandAnchor(pf, Types.Rect(cp.X, cp.Y, cp.X + cellW, cp.Y + Height), pamBelow);
+    end;
     FPopup.Popup(anchor, False);
     StartHoverPoll;   // non-Win32: track the cursor for hover-switch while the dropdown is up
   end;

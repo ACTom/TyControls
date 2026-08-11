@@ -20,7 +20,7 @@ unit tyControls.GtkWS;
      truncation that bites Qt6). Focus is driven from the control's DoEnter/DoExit. }
 
 interface
-uses Forms, Controls, tyControls.Types;   // tyControls.Types: shared TTyImeCommitEvent / TTyImeCaretQuery
+uses Types, Forms, Controls, tyControls.Types;   // Types: TRect (anchor rect); tyControls.Types: shared TTyImeCommitEvent / TTyImeCaretQuery
 
 { Begin a WM-driven interactive move of AForm's window (call from a mouse-DOWN handler while the
   button is held). Returns True if the system move started — then the caller must NOT do its own
@@ -71,12 +71,26 @@ function TyGtkTakeImeCommit(const ATruncated: string): string;
   or GTK2, and wrong the moment GTK3 became the default Linux widgetset. }
 function TyGtkIsWayland: Boolean;
 
+type
+  { How a Wayland popup snaps to its anchor rect: drop directly BELOW it (dropdowns, bar cells,
+    context menus) or fly out to one SIDE of it (a submenu cascade -- LTR opens right, mirrored
+    opens left). Widgetset-neutral so it can sit in the shared interface; only GTK3 reads it. }
+  TTyPopupAnchorMode = (pamBelow, pamRightOf, pamLeftOf);
+
 { Turn APopup into a Wayland xdg_popup anchored under AAnchor (via gdk_window_move_to_rect), so
   the compositor places it by the anchor instead of centring a free-floating top-level. GTK3
   only; a no-op on GTK2 (X11) and non-GTK. Call BEFORE Show, like TyQtMakePopup -- but GTK needs
   the ANCHOR control passed in (Qt derives the anchor from the geometry itself; GDK does not, so
   a one-argument mirror is impossible). }
 procedure TyGtk3MakePopup(APopup: TCustomForm; AAnchor: TControl);
+
+{ The core the AAnchor-control overload builds on: Wayland-anchor APopup to AParent's GdkWindow
+  using an anchor rect ALREADY in AParent's client coords (a plain LCL walk produces it -- never
+  screen coords, which Wayland refuses). Menus call this directly because their anchor is a bar
+  cell or a parent-row edge, not a whole control, and a submenu's parent is the PARENT POPUP, not
+  the app form. AMode picks drop-below vs fly-out-to-a-side. GTK3 only; no-op elsewhere. }
+procedure TyGtk3MakePopupRect(APopup, AParent: TCustomForm; const AAnchorInParent: TRect;
+  AMode: TTyPopupAnchorMode = pamBelow);
 
 implementation
 
@@ -264,6 +278,12 @@ begin
   // GTK2 is X11-only (Wayland via XWayland, which honours absolute placement) -- nothing to do.
 end;
 
+procedure TyGtk3MakePopupRect(APopup, AParent: TCustomForm; const AAnchorInParent: TRect;
+  AMode: TTyPopupAnchorMode);
+begin
+  // GTK2 is X11-only -- nothing to do.
+end;
+
 {$ELSE}
 {$IFDEF LCLGTK3}
 
@@ -363,26 +383,24 @@ begin
   Result := pending;
 end;
 
-procedure TyGtk3MakePopup(APopup: TCustomForm; AAnchor: TControl);
+procedure TyGtk3MakePopupRect(APopup, AParent: TCustomForm; const AAnchorInParent: TRect;
+  AMode: TTyPopupAnchorMode);
 var
   popW, parentTop: PGtkWidget;
   gdkWin, parentGdkWin: PGdkWindow;
-  parentForm: TCustomForm;
-  tl: TPoint;
   r: TGdkRectangle;
+  rectAnchor, winAnchor: TGdkGravity;
 begin
   { Every step bails out silently on failure -> worst case is the pre-fix centred flyout, never a
     crash. HandleNeeded realizes the popup's window while it is still hidden, so the parent +
     move_to_rect apply before Show maps it as the xdg_popup. }
-  if (APopup = nil) or (AAnchor = nil) then Exit;
-  parentForm := GetParentForm(AAnchor);
-  if parentForm = nil then Exit;
+  if (APopup = nil) or (AParent = nil) then Exit;
   APopup.HandleNeeded;
-  if (not APopup.HandleAllocated) or (not parentForm.HandleAllocated) then Exit;
+  if (not APopup.HandleAllocated) or (not AParent.HandleAllocated) then Exit;
   popW := Gtk3NativeWidget(APopup);
   if popW = nil then Exit;
   popW := gtk_widget_get_toplevel(popW);
-  parentTop := gtk_widget_get_toplevel(Gtk3NativeWidget(parentForm));
+  parentTop := gtk_widget_get_toplevel(Gtk3NativeWidget(AParent));
   if (popW = nil) or (parentTop = nil)
      or (not Gtk3IsGtkWindow(PGObject(popW))) or (not Gtk3IsGtkWindow(PGObject(parentTop))) then Exit;
   gtk_window_set_transient_for(PGtkWindow(popW), PGtkWindow(parentTop));
@@ -395,14 +413,36 @@ begin
     and gdk_window_move_to_rect (which anchors to the transient-for GdkWindow) has nothing on
     Wayland to position against. Confirmed on a real GTK3/Wayland session. }
   gdk_window_set_transient_for(gdkWin, parentGdkWin);
-  { Anchor rect = the anchor control's bounds in the PARENT FORM's client coords (ClientToParent
-    walks the control tree -- no screen coords, which Wayland refuses). The popup's top-left snaps
-    to the anchor's bottom-left so the flyout drops below it; flip/slide let the compositor keep it
-    on screen. }
-  tl := AAnchor.ClientToParent(Point(0, 0), parentForm);
-  r.x := tl.x; r.y := tl.y; r.width := AAnchor.Width; r.height := AAnchor.Height;
-  gdk_window_move_to_rect(gdkWin, @r, GDK_GRAVITY_SOUTH_WEST, GDK_GRAVITY_NORTH_WEST,
+  { The anchor rect is already in AParent's client coords -- Wayland refuses screen coords, so the
+    caller walks the control tree (ClientToParent / a parent-row rect) to get here. Gravity pairs:
+      pamBelow   -> popup's top-left snaps to the anchor's bottom-left (drop under it)
+      pamRightOf -> popup's top-left snaps to the anchor's top-right (submenu opens right)
+      pamLeftOf  -> popup's top-right snaps to the anchor's top-left (mirrored submenu opens left)
+    Flip/slide let the compositor nudge it back on-screen at the edges. }
+  case AMode of
+    pamRightOf: begin rectAnchor := GDK_GRAVITY_NORTH_EAST; winAnchor := GDK_GRAVITY_NORTH_WEST; end;
+    pamLeftOf:  begin rectAnchor := GDK_GRAVITY_NORTH_WEST; winAnchor := GDK_GRAVITY_NORTH_EAST; end;
+  else          begin rectAnchor := GDK_GRAVITY_SOUTH_WEST; winAnchor := GDK_GRAVITY_NORTH_WEST; end;
+  end;
+  r.x := AAnchorInParent.Left; r.y := AAnchorInParent.Top;
+  r.width := AAnchorInParent.Right - AAnchorInParent.Left;
+  r.height := AAnchorInParent.Bottom - AAnchorInParent.Top;
+  gdk_window_move_to_rect(gdkWin, @r, rectAnchor, winAnchor,
     GDK_ANCHOR_FLIP + GDK_ANCHOR_SLIDE, 0, 0);
+end;
+
+procedure TyGtk3MakePopup(APopup: TCustomForm; AAnchor: TControl);
+var
+  parentForm: TCustomForm;
+  tl: TPoint;
+begin
+  if (APopup = nil) or (AAnchor = nil) then Exit;
+  parentForm := GetParentForm(AAnchor);
+  if parentForm = nil then Exit;
+  { The whole anchor control, in the parent form's client coords, dropped below. }
+  tl := AAnchor.ClientToParent(Point(0, 0), parentForm);
+  TyGtk3MakePopupRect(APopup, parentForm,
+    Rect(tl.x, tl.y, tl.x + AAnchor.Width, tl.y + AAnchor.Height), pamBelow);
 end;
 
 {$ELSE}
@@ -434,6 +474,12 @@ begin
 end;
 
 procedure TyGtk3MakePopup(APopup: TCustomForm; AAnchor: TControl);
+begin
+  // not a GTK build: nothing to do.
+end;
+
+procedure TyGtk3MakePopupRect(APopup, AParent: TCustomForm; const AAnchorInParent: TRect;
+  AMode: TTyPopupAnchorMode);
 begin
   // not a GTK build: nothing to do.
 end;
