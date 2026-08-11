@@ -178,6 +178,11 @@ begin
   FTree.DefaultNodeHeight := 22;
   FTree.HotTrack          := True;
   FTree.ShowRoot          := True;
+  { This is a PICKER: the folder pre-selected via Directory (or typed into the path
+    field) must stay visibly highlighted even though initial keyboard focus sits on the
+    path edit, not the tree. HideSelection=True (LCL default) would hide the highlight
+    of an unfocused tree, so the pre-selection looked unselected. }
+  FTree.HideSelection     := False;
   { Path field at the top of the content: mirrors the tree selection and lets the
     user type or paste a folder path to jump straight to it. }
   FPathEdit := TTyEdit.Create(Self);
