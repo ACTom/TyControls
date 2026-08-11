@@ -809,8 +809,8 @@ begin
     band, and a 0x0 glyph rect is not something the painter should be asked to scale. }
   if HeaderH > 0 then
   begin
-    P.DrawGlyph(ArrowLeftRect,  tgArrowLeft,  S.TextColor, 1);
-    P.DrawGlyph(ArrowRightRect, tgArrowRight, S.TextColor, 1);
+    P.DrawGlyph(ArrowLeftRect,  tgChevronLeft,  S.TextColor, 1);
+    P.DrawGlyph(ArrowRightRect, tgChevronRight, S.TextColor, 1);
   end;
 
   TitleText := IntToStr(FViewYear);
@@ -889,8 +889,8 @@ begin
     band, and a 0x0 glyph rect is not something the painter should be asked to scale. }
   if HeaderH > 0 then
   begin
-    P.DrawGlyph(ArrowLeftRect,  tgArrowLeft,  S.TextColor, 1);
-    P.DrawGlyph(ArrowRightRect, tgArrowRight, S.TextColor, 1);
+    P.DrawGlyph(ArrowLeftRect,  tgChevronLeft,  S.TextColor, 1);
+    P.DrawGlyph(ArrowRightRect, tgChevronRight, S.TextColor, 1);
   end;
 
   TitleText := IntToStr(DS) + '–' + IntToStr(DS + 9);
@@ -981,8 +981,8 @@ begin
     band, and a 0x0 glyph rect is not something the painter should be asked to scale. }
   if HeaderH > 0 then
   begin
-    P.DrawGlyph(ArrowLeftRect,  tgArrowLeft,  S.TextColor, 1);
-    P.DrawGlyph(ArrowRightRect, tgArrowRight, S.TextColor, 1);
+    P.DrawGlyph(ArrowLeftRect,  tgChevronLeft,  S.TextColor, 1);
+    P.DrawGlyph(ArrowRightRect, tgChevronRight, S.TextColor, 1);
   end;
 
   TitleText := IntToStr(CentStart) + '–' + IntToStr(CentStart + 99);
@@ -1144,8 +1144,8 @@ begin
       ArrowRightRect := Rect(W - ArrowW, 0, W, HeaderH);
       TitleRect      := Rect(ArrowW, 0, W - ArrowW, HeaderH);
 
-      P.DrawGlyph(ArrowLeftRect,  tgArrowLeft,  S.TextColor, 1);
-      P.DrawGlyph(ArrowRightRect, tgArrowRight, S.TextColor, 1);
+      P.DrawGlyph(ArrowLeftRect,  tgChevronLeft,  S.TextColor, 1);
+      P.DrawGlyph(ArrowRightRect, tgChevronRight, S.TextColor, 1);
 
       { Title text. The month name goes through TyDateTimeNames, NOT the bare
         DefaultFormatSettings: the app's language wins over the machine's.
