@@ -20,7 +20,8 @@ interface
 
 uses
   Classes, SysUtils, Types, Controls, Forms, Graphics, LCLType,
-  tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.PlatformWS;
+  tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.PlatformWS,
+  tyControls.QtWS;
 
 type
   TTyPopupSurface = class(TForm)
@@ -138,6 +139,11 @@ begin
     Color := TyColorToLCL(S.Background.Color);
   SetBounds(AScreenRect.Left, AScreenRect.Top,
     AScreenRect.Right - AScreenRect.Left, AScreenRect.Bottom - AScreenRect.Top);
+  // Qt6: re-type as a Qt::Popup BEFORE Show so it maps app-positioned (no WM centering / top-left
+  // flash) and grabs the mouse like a menu -- the same call the themed menus + Popup make. No-op
+  // off Qt. Without it a plain top-level TTyPopupSurface is centred by the WM: the ribbon flyout
+  // and the toolbar/coolbar overflow flyout both hit this on Qt6.
+  TyQtMakePopup(Self);
   Show;
   BringToFront;
 end;
