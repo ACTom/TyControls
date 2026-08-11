@@ -207,6 +207,10 @@ type
     procedure EnsureMoreButton;
     procedure MoreClick(Sender: TObject);
     procedure OverflowPopupClosed(Sender: TObject);
+    { Draw the between-group dividers in the GAPS the groups leave (BorderSpacing.Right), on the
+      page surface -- where no group's child windows reach, so overflowing content cannot cover
+      a divider. This is why the divider is a PAGE concern, not a group one. }
+    procedure DrawGroupDividers(P: TTyPainter; APPI: Integer);
   protected
     procedure SetParent(AParent: TWinControl); override;
     function GetStyleTypeKey: string; override;
@@ -1108,9 +1112,42 @@ begin
     if tpBackground in S.Present then
       P.FillBackground(Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top),
         S.Background, 0);
+    // Between-group dividers, drawn in the gaps on the page surface (see DrawGroupDividers).
+    DrawGroupDividers(P, APPI);
     P.EndPaint;
   finally
     P.Free;
+  end;
+end;
+
+procedure TTyRibbonPage.DrawGroupDividers(P: TTyPainter; APPI: Integer);
+var
+  i, x, y1, y2, w: Integer;
+  g, nx: TTyRibbonGroup;
+  divS: TTyStyleSet;
+  divFill: TTyFill;
+begin
+  if Length(FVisualGroups) < 2 then Exit;
+  divS := ActiveController.Model.ResolveStyle('TyRibbonGroup', '', []);
+  if (not (tpBorderColor in divS.Present)) or (divS.BorderWidth <= 0) then Exit;
+  w := P.Scale(divS.BorderWidth);
+  if w < 1 then w := 1;
+  divFill := Default(TTyFill);
+  divFill.Kind := tfkSolid;
+  divFill.Color := divS.BorderColor;
+  for i := 0 to High(FVisualGroups) - 1 do
+  begin
+    g := FVisualGroups[i];
+    nx := FVisualGroups[i + 1];
+    if (g = nil) or (nx = nil) or (not g.Visible) or (not nx.Visible) then Continue;
+    { Centre of the gap between this group's right edge and the next group's left edge -- the
+      BorderSpacing.Right band no group window covers. Coordinates are page-client relative,
+      which is exactly the painter's local frame (BeginPaint got ClientRect). }
+    x := (g.BoundsRect.Right + nx.BoundsRect.Left) div 2 - (w div 2);
+    y1 := g.BoundsRect.Top + P.Scale(4);
+    y2 := g.BoundsRect.Bottom - P.Scale(4);
+    if y2 > y1 then
+      P.FillBackground(Rect(x, y1, x + w, y2), divFill, 0);
   end;
 end;
 
@@ -1274,6 +1311,7 @@ begin
   inherited Create(AOwner);
   ControlStyle := ControlStyle + [csAcceptsControls, csNoFocus];
   Align := alLeft;
+  BorderSpacing.Right := 9;   // the gap after the group where the page draws the divider
   Width := 96;        // fallback; a host sets a real width (.lfm) or calls FitToContent
   FCaption := '';
   FShowCaption := True;
@@ -1310,13 +1348,9 @@ end;
 procedure TTyRibbonGroup.AdjustClientRect(var ARect: TRect);
 begin
   inherited AdjustClientRect(ARect);
-  // Reserve the right SEPARATOR strip (the between-groups divider RenderTo draws at the group's
-  // right edge, whether ShowCaption is on or off) so an oversized command control cannot sit
-  // flush to the client edge and paint OVER the separator onto the neighbour. This CLIPS the
-  // group's content to its own bounds, minus the divider — the same edge-reservation idiom
-  // TTyRibbon.AdjustClientRect uses to keep its active page off its own frame.
-  Dec(ARect.Right, MulDiv(1, Font.PixelsPerInch, 96));
-  if ARect.Right < ARect.Left then ARect.Right := ARect.Left;
+  // No right reservation for a divider any more: the divider lives in the BorderSpacing.Right
+  // gap the page paints (DrawGroupDividers), outside this group's client, so children cannot
+  // reach it however wide they grow.
   if not FShowCaption then Exit;   // caption-less group: content fills the full height
   // Reserve the bottom caption band so hosted command controls sit above the title.
   Dec(ARect.Bottom, MulDiv(ActiveController.Metric('--ribbon-caption-band-height', TyRibbonCaptionBand), Font.PixelsPerInch, 96));
@@ -1341,7 +1375,9 @@ begin
     if r > maxR then maxR := r;
   end;
   if maxR <= 0 then Exit;   { nothing hosted yet -> keep the current width }
-  want := maxR + MulDiv(8, Font.PixelsPerInch, 96);
+  { A small right margin so content is not flush to the group edge; the inter-group divider +
+    its breathing room live in BorderSpacing.Right (drawn by the page), not here. }
+  want := maxR + MulDiv(4, Font.PixelsPerInch, 96);
   if want <> Width then Width := want;
 end;
 
@@ -1349,9 +1385,8 @@ procedure TTyRibbonGroup.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: In
 var
   P: TTyPainter;
   S: TTyStyleSet;
-  W, H, bandPx, sepW: Integer;
+  W, H, bandPx: Integer;
   capRect: TRect;
-  sepFill: TTyFill;
 begin
   P := TTyPainter.Create;
   try
@@ -1369,16 +1404,12 @@ begin
     if tpBackground in S.Present then
       P.FillBackground(Rect(0, 0, W, H), S.Background, S.BorderRadius);
 
-    // Right separator line (the between-groups divider), drawn in the border color.
-    if (tpBorderColor in S.Present) and (S.BorderWidth > 0) then
-    begin
-      sepW := P.Scale(S.BorderWidth);
-      if sepW < 1 then sepW := 1;
-      sepFill := Default(TTyFill);
-      sepFill.Kind := tfkSolid;
-      sepFill.Color := S.BorderColor;
-      P.FillBackground(Rect(W - sepW, P.Scale(4), W, H - P.Scale(4)), sepFill, 0);
-    end;
+    { The between-groups divider is NOT drawn here any more. A group is a windowed control and
+      its command buttons are child windows the OS clips to the group's OWN edge -- so a button
+      painted flush right would sit ON TOP of a divider drawn at the group's edge, no matter how
+      the client rect is inset (AdjustClientRect does not shrink the OS clip on Win32). The
+      divider is now drawn by TTyRibbonPage in the GAP between adjacent groups (see
+      DrawGroupDividers), where no group's children can reach it. }
 
     // Caption band (name + optional dialog launcher) — only when ShowCaption.
     if FShowCaption then
