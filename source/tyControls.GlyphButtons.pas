@@ -105,6 +105,10 @@ type
     FGlyphColor: TTyColor;
     FImages: TTyImageCollection;
     FImageName: string;
+    FGlyphKind: TTyGlyphKind;   { painter (vector) glyph icon source -- an alternative to a
+                                  font glyph / image, for arrows and chrome that ship with the
+                                  painter and need no bundled icon font. }
+    FHasGlyphKind: Boolean;     { True once GlyphKind is assigned (TTyGlyphKind has no 'none'). }
     FSpacing: Integer;
     FShowCaption: Boolean;
     { True once anything has WRITTEN ShowCaption on this button. AdoptShowCaption
@@ -117,6 +121,7 @@ type
     procedure SetGlyphColor(AValue: TTyColor);
     procedure SetImages(AValue: TTyImageCollection);
     procedure SetImageName(const AValue: string);
+    procedure SetGlyphKind(AValue: TTyGlyphKind);
     procedure SetShowCaption(AValue: Boolean);
     { The glyph bitmap for ASource at ASizePx in AColor: from Images[ImageName] (tinted to
       AColor) when an image source is set, else from IconFont[GlyphName]. Caller owns it. }
@@ -221,6 +226,11 @@ type
     { The glyph name to draw (a key in IconFont.Glyphs, e.g. 'save'). Empty or
       unmapped -> no glyph, caption fills the whole content box. }
     property GlyphName: string read FGlyphName write SetGlyphName;
+    { A painter vector glyph as the icon (e.g. tgArrowLeft for a nav button) -- drawn straight
+      by TTyPainter.DrawGlyph, so it needs no bundled icon font. Takes precedence over
+      GlyphName/ImageName once assigned. `stored FHasGlyphKind` keeps it out of the .lfm until
+      set (the enum has no 'none' value to default to). }
+    property GlyphKind: TTyGlyphKind read FGlyphKind write SetGlyphKind stored FHasGlyphKind;
     { Glyph edge length in LOGICAL px (scaled by PPI). 0 = auto: derive from the
       content box (the short side for glyph-top, the box height for glyph-left). }
     property GlyphSize: Integer read FGlyphSize write SetGlyphSize default 0;
@@ -535,6 +545,14 @@ begin
   Invalidate;
 end;
 
+procedure TTyGlyphButtonBase.SetGlyphKind(AValue: TTyGlyphKind);
+begin
+  if FHasGlyphKind and (FGlyphKind = AValue) then Exit;
+  FGlyphKind := AValue;
+  FHasGlyphKind := True;
+  Invalidate;
+end;
+
 procedure TTyGlyphButtonBase.SetGlyphSize(AValue: Integer);
 begin
   if AValue < 0 then AValue := 0;
@@ -643,7 +661,8 @@ function TTyGlyphButtonBase.CanShowGlyph: Boolean;
 begin
   // The exact negation of the condition DrawContent falls through to the plain
   // caption on — the two must never disagree about whether a glyph exists.
-  Result := ((FImages <> nil) and (FImageName <> ''))
+  Result := FHasGlyphKind
+         or ((FImages <> nil) and (FImageName <> ''))
          or ((FIconFont <> nil) and (FGlyphName <> ''));
 end;
 
@@ -841,13 +860,21 @@ begin
     answers the published fields, so this is the same bitmap it always resolved.
     Image icon (tinted) or font glyph — never nil; an empty transparent bitmap when the
     name is unmapped or the font family is unset, still safe to center + free (headless). }
-  glyph := ResolveGlyphBitmap(GetGlyphSource(CurrentStates), renderPx, glyphCol);
-  try
-    gx := glyphRect.Left + ((glyphRect.Right - glyphRect.Left) - glyph.Width) div 2;
-    gy := glyphRect.Top  + ((glyphRect.Bottom - glyphRect.Top) - glyph.Height) div 2;
-    APainter.Bitmap.PutImage(gx, gy, glyph, dmDrawWithTransparency);
-  finally
-    glyph.Free;
+  { A painter vector glyph is drawn straight into the slot (no bitmap round-trip); it takes
+    precedence over a font/image source. pad=1 so a small toolbar slot is not eaten by the
+    default 4px inset (see the glyph-slot-floor note). }
+  if FHasGlyphKind then
+    APainter.DrawGlyph(glyphRect, FGlyphKind, glyphCol, 2, 1)
+  else
+  begin
+    glyph := ResolveGlyphBitmap(GetGlyphSource(CurrentStates), renderPx, glyphCol);
+    try
+      gx := glyphRect.Left + ((glyphRect.Right - glyphRect.Left) - glyph.Width) div 2;
+      gy := glyphRect.Top  + ((glyphRect.Bottom - glyphRect.Top) - glyph.Height) div 2;
+      APainter.Bitmap.PutImage(gx, gy, glyph, dmDrawWithTransparency);
+    finally
+      glyph.Free;
+    end;
   end;
 
   // Caption in the leftover rect. Skip when captions are off, when there's no caption,

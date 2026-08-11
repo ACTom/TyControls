@@ -29,7 +29,8 @@ uses
   LazFileUtils,
   tyControls.Dialogs, tyControls.ShellTreeView, tyControls.ShellListView,
   tyControls.ShellComboBox, tyControls.FilterComboBox,
-  tyControls.Edit, tyControls.Button, tyControls.TyLabel, tyControls.PreviewBox,
+  tyControls.Edit, tyControls.Button, tyControls.GlyphButtons, tyControls.Painter,
+  tyControls.TyLabel, tyControls.PreviewBox,
   tyControls.Panel, tyControls.Splitter,
   tyControls.ListView, tyControls.FileSystem, tyControls.Component, tyControls.StrConsts;
 
@@ -76,14 +77,19 @@ type
     FSplitPrev:    TTySplitter;      { drag: resize the preview (its right neighbour); PreviewMode }
     FFilter:       TTyFilterComboBox;
     FNameEdit:     TTyEdit;
-    FBtnUp:        TTyButton;
+    FBtnBack:      TTySpeedButton;   { history back (icon-only vector glyph) }
+    FBtnFwd:       TTySpeedButton;   { history forward }
+    FBtnUp:        TTySpeedButton;   { parent directory }
     FBtnNewFolder: TTyButton;
     FPreview:      TTyPreviewBox;
-    FLblLookIn:    TTyLabel;
     FLblName:      TTyLabel;
     FLblFilter:    TTyLabel;
     { State. }
     FSyncing:    Boolean;   { guards tree<->list<->look-in navigation from re-entering }
+    FHistBack:   TStringList;   { visited directories, back stack (top = the previous dir) }
+    FHistFwd:    TStringList;   { forward stack, filled by Back, cleared by a fresh navigation }
+    FCurDir:     string;        { the directory the list last showed -> the one Back records }
+    FInHistoryNav: Boolean;     { True while Back/Forward drives the list -> do not push history }
     FResultName: string;    { the primary OK result (a full path) }
     FDefaultExt: string;
     FFiles:      TStrings;   { the Open multi-select result set (a TStringList instance) }
@@ -109,6 +115,9 @@ type
     procedure ListSelectItem(Sender: TObject; AIndex: Integer; ASelected: Boolean);
     procedure ListFileActivate(Sender: TObject; AIndex: Integer);
     procedure BtnUpClick(Sender: TObject);
+    procedure BtnBackClick(Sender: TObject);
+    procedure BtnFwdClick(Sender: TObject);
+    procedure UpdateNavButtons;   { enable/disable Back+Forward from the history stacks }
     procedure NewFolderClick(Sender: TObject);
     { Navigate every view to APath (fires the list's directory-change sync). }
     procedure NavigateTo(const APath: string);
@@ -310,7 +319,6 @@ begin
 
   { The always-present children (mode-conditional ones are created by the flag
     setters). Create + parent only -- LayoutContent does the positioning. }
-  FLblLookIn := MkLabel(rsFdLookIn);
   FLblName   := MkLabel(rsFdFileNameLbl);
   FLblFilter := MkLabel(rsFdFileTypeLbl);
 
@@ -355,15 +363,38 @@ begin
   FNameEdit := TTyEdit.Create(Self);
   FNameEdit.Parent := Self;
 
-  FBtnUp := TTyButton.Create(Self);
+  { Navigation toolbar: three icon-only speed buttons drawn with painter vector glyphs (so no
+    bundled icon font is needed). Back/Forward drive the history stacks; Up goes to the parent.
+    No "Look in:" label -- the arrows + address combo read as a nav bar (Vista+ / macOS idiom). }
+  FHistBack := TStringList.Create;
+  FHistFwd  := TStringList.Create;
+
+  FBtnBack := TTySpeedButton.Create(Self);
+  FBtnBack.Parent := Self;
+  FBtnBack.ShowCaption := False;
+  FBtnBack.GlyphKind := tgArrowLeft;
+  FBtnBack.OnClick := @BtnBackClick;
+
+  FBtnFwd := TTySpeedButton.Create(Self);
+  FBtnFwd.Parent := Self;
+  FBtnFwd.ShowCaption := False;
+  FBtnFwd.GlyphKind := tgArrowRight;
+  FBtnFwd.OnClick := @BtnFwdClick;
+
+  FBtnUp := TTySpeedButton.Create(Self);
   FBtnUp.Parent := Self;
-  FBtnUp.Caption := rsFdUp;
+  FBtnUp.ShowCaption := False;
+  FBtnUp.GlyphKind := tgArrowUp;
   FBtnUp.OnClick := @BtnUpClick;
+
+  UpdateNavButtons;   { Back+Forward start disabled -> no history yet }
 end;
 
 destructor TTyFileDialogForm.Destroy;
 begin
   FFiles.Free;   { child controls are owned by the form and freed with it }
+  FHistBack.Free;
+  FHistFwd.Free;
   inherited Destroy;
 end;
 
@@ -506,6 +537,19 @@ end;
 
 procedure TTyFileDialogForm.ListDirectoryChange(Sender: TObject);
 begin
+  { History: a directory change that did NOT come from Back/Forward records the dir being left
+    on the back stack and abandons any forward trail. FCurDir is the dir shown before this
+    change (seeded empty, so the first load records nothing). Back/Forward set FInHistoryNav. }
+  if FHistBack <> nil then
+  begin
+    if (not FInHistoryNav) and (FCurDir <> '') and (FCurDir <> FList.Directory) then
+    begin
+      FHistBack.Add(FCurDir);
+      FHistFwd.Clear;
+    end;
+    FCurDir := FList.Directory;
+    UpdateNavButtons;
+  end;
   { Pure display sync of the look-in field (its setter fires no event + guards
     re-entry). }
   FLookIn.Directory := FList.Directory;
@@ -561,6 +605,45 @@ end;
 procedure TTyFileDialogForm.BtnUpClick(Sender: TObject);
 begin
   NavigateTo(TyFsParent(FList.Directory));
+end;
+
+procedure TTyFileDialogForm.BtnBackClick(Sender: TObject);
+var target: string;
+begin
+  if (FHistBack = nil) or (FHistBack.Count = 0) then Exit;
+  target := FHistBack[FHistBack.Count - 1];
+  FHistBack.Delete(FHistBack.Count - 1);
+  if FList.Directory <> '' then FHistFwd.Add(FList.Directory);   { current -> forward trail }
+  FInHistoryNav := True;   { ListDirectoryChange must not re-record this move }
+  try
+    FList.LoadDirectory(target);
+  finally
+    FInHistoryNav := False;
+  end;
+  UpdateNavButtons;
+end;
+
+procedure TTyFileDialogForm.BtnFwdClick(Sender: TObject);
+var target: string;
+begin
+  if (FHistFwd = nil) or (FHistFwd.Count = 0) then Exit;
+  target := FHistFwd[FHistFwd.Count - 1];
+  FHistFwd.Delete(FHistFwd.Count - 1);
+  if FList.Directory <> '' then FHistBack.Add(FList.Directory);
+  FInHistoryNav := True;
+  try
+    FList.LoadDirectory(target);
+  finally
+    FInHistoryNav := False;
+  end;
+  UpdateNavButtons;
+end;
+
+procedure TTyFileDialogForm.UpdateNavButtons;
+begin
+  if FHistBack = nil then Exit;
+  if FBtnBack <> nil then FBtnBack.Enabled := FHistBack.Count > 0;
+  if FBtnFwd  <> nil then FBtnFwd.Enabled  := FHistFwd.Count  > 0;
 end;
 
 procedure TTyFileDialogForm.NewFolderClick(Sender: TObject);
@@ -682,11 +765,11 @@ const
   RowH    = 30;    { = TyDlgEditH }
   LblH    = 20;
   LblW    = 64;
-  UpW     = 72;
+  NavGap  = 3;     { gap between the three square nav icon buttons }
   FilterW = 180;   { fixed width of the file-type combo on the shared name row }
 var
   cr: TRect;
-  pad, x0, w, y, curRight, lookInX: Integer;
+  pad, x0, w, y, lookInX: Integer;
   yRow, nameX, filterX, filterLblX, nameW, midTop, midH: Integer;
 begin
   if (FList = nil) or (FMidPanel = nil) then Exit;   { called during construction, before children exist }
@@ -695,15 +778,14 @@ begin
   x0 := cr.Left + pad;
   w  := (cr.Right - cr.Left) - 2 * pad;
 
-  { Row 1: look-in combo + Up, laid out right-to-left. (New Folder now lives on the bottom
-    button bar, not here.) }
+  { Row 1: [back][fwd][up] square icon buttons on the left, then the address combo filling the
+    rest. No "Look in:" label -- the arrows + combo read as a nav/address bar (Vista+/macOS). }
   y := cr.Top + pad;
-  curRight := cr.Right - pad;
-  FBtnUp.SetBounds(curRight - UpW, y, UpW, RowH);
-  curRight := curRight - UpW - Gap;
-  FLblLookIn.SetBounds(x0, y + (RowH - LblH) div 2, LblW, LblH);
-  lookInX := x0 + LblW + Gap;
-  FLookIn.SetBounds(lookInX, y, curRight - lookInX, RowH);
+  FBtnBack.SetBounds(x0, y, RowH, RowH);
+  FBtnFwd.SetBounds(x0 + RowH + NavGap, y, RowH, RowH);
+  FBtnUp.SetBounds(x0 + 2 * (RowH + NavGap), y, RowH, RowH);
+  lookInX := x0 + 3 * RowH + 2 * NavGap + Gap;
+  FLookIn.SetBounds(lookInX, y, (cr.Right - pad) - lookInX, RowH);
 
   { Bottom row -- ONE row now (Windows Open/Save idiom): the file-name edit fills the left,
     the file-type combo is a fixed-width field to its RIGHT. Collapsing what used to be two
