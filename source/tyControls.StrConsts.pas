@@ -159,6 +159,11 @@ resourcestring
   rsFdFileNameLbl    = 'File name:';
   rsFdFileTypeLbl    = 'File type:';
   rsFdUp             = 'Up';
+  rsFdViewDetails    = 'Details';
+  rsFdViewList       = 'List';
+  rsFdViewSmallIcon  = 'Small icons';
+  rsFdViewLargeIcon  = 'Large icons';
+  rsFdViewTile       = 'Tiles';
   rsFdOverwritePrompt = 'The file "%s" already exists.'#10'Do you want to replace it?';
   rsFdMustExist      = 'The file "%s" does not exist.';
   rsFdAllFilesFilter = 'All Files (*.*)|*.*';

@@ -30,9 +30,10 @@ uses
   tyControls.Dialogs, tyControls.ShellTreeView, tyControls.ShellListView,
   tyControls.ShellComboBox, tyControls.FilterComboBox,
   tyControls.Edit, tyControls.Button, tyControls.GlyphButtons, tyControls.Painter,
-  tyControls.TyLabel, tyControls.PreviewBox,
+  tyControls.TyLabel, tyControls.PreviewBox, tyControls.ComboBox,
   tyControls.Panel, tyControls.Splitter,
-  tyControls.ListView, tyControls.FileSystem, tyControls.Component, tyControls.StrConsts;
+  tyControls.ListView, tyControls.ListView.Layout, tyControls.FileSystem,
+  tyControls.Component, tyControls.StrConsts;
 
 { ---------------------------------------------------------------------------
   The pure resolver -- the OK path the dialog returns. UNIT-TESTED headless.
@@ -82,6 +83,7 @@ type
     FBtnUp:        TTySpeedButton;   { parent directory }
     FBtnNewFolder: TTyButton;
     FPreview:      TTyPreviewBox;
+    FViewCombo:    TTyComboBox;   { switches the list's ViewStyle (Details/List/icons/tiles) }
     FLblName:      TTyLabel;
     FLblFilter:    TTyLabel;
     { State. }
@@ -118,6 +120,7 @@ type
     procedure BtnBackClick(Sender: TObject);
     procedure BtnFwdClick(Sender: TObject);
     procedure UpdateNavButtons;   { enable/disable Back+Forward from the history stacks }
+    procedure ViewComboSelect(Sender: TObject);   { -> FList.ViewStyle }
     procedure NewFolderClick(Sender: TObject);
     { Navigate every view to APath (fires the list's directory-change sync). }
     procedure NavigateTo(const APath: string);
@@ -387,6 +390,18 @@ begin
   FBtnUp.GlyphKind := tgArrowUp;
   FBtnUp.OnClick := @BtnUpClick;
 
+  { View switch on the right of the nav row -- item order MUST match ViewComboSelect's case
+    (TTyListViewStyle order). Starts on Details (lvsReport, the list's own default). }
+  FViewCombo := TTyComboBox.Create(Self);
+  FViewCombo.Parent := Self;
+  FViewCombo.Items.Add(rsFdViewDetails);     { 0 -> lvsReport }
+  FViewCombo.Items.Add(rsFdViewList);        { 1 -> lvsList }
+  FViewCombo.Items.Add(rsFdViewSmallIcon);   { 2 -> lvsSmallIcon }
+  FViewCombo.Items.Add(rsFdViewLargeIcon);   { 3 -> lvsIcon }
+  FViewCombo.Items.Add(rsFdViewTile);        { 4 -> lvsTile }
+  FViewCombo.ItemIndex := 0;
+  FViewCombo.OnSelect := @ViewComboSelect;
+
   UpdateNavButtons;   { Back+Forward start disabled -> no history yet }
 end;
 
@@ -646,6 +661,20 @@ begin
   if FBtnFwd  <> nil then FBtnFwd.Enabled  := FHistFwd.Count  > 0;
 end;
 
+procedure TTyFileDialogForm.ViewComboSelect(Sender: TObject);
+begin
+  if (FList = nil) or (FViewCombo = nil) then Exit;
+  { Item order matches the CreateNew list (TTyListViewStyle order). }
+  case FViewCombo.ItemIndex of
+    1: FList.ViewStyle := lvsList;
+    2: FList.ViewStyle := lvsSmallIcon;
+    3: FList.ViewStyle := lvsIcon;
+    4: FList.ViewStyle := lvsTile;
+  else
+    FList.ViewStyle := lvsReport;   { 0 (Details) or nothing selected }
+  end;
+end;
+
 procedure TTyFileDialogForm.NewFolderClick(Sender: TObject);
 var
   nm, full: string;
@@ -766,6 +795,7 @@ const
   LblH    = 20;
   LblW    = 64;
   NavGap  = 3;     { gap between the three square nav icon buttons }
+  ViewW   = 120;   { fixed width of the view-switch combo on the right of the nav row }
   FilterW = 180;   { fixed width of the file-type combo on the shared name row }
 var
   cr: TRect;
@@ -784,8 +814,9 @@ begin
   FBtnBack.SetBounds(x0, y, RowH, RowH);
   FBtnFwd.SetBounds(x0 + RowH + NavGap, y, RowH, RowH);
   FBtnUp.SetBounds(x0 + 2 * (RowH + NavGap), y, RowH, RowH);
+  FViewCombo.SetBounds((cr.Right - pad) - ViewW, y, ViewW, RowH);   { view switch on the right }
   lookInX := x0 + 3 * RowH + 2 * NavGap + Gap;
-  FLookIn.SetBounds(lookInX, y, (cr.Right - pad) - lookInX, RowH);
+  FLookIn.SetBounds(lookInX, y, ((cr.Right - pad) - ViewW - Gap) - lookInX, RowH);
 
   { Bottom row -- ONE row now (Windows Open/Save idiom): the file-name edit fills the left,
     the file-type combo is a fixed-width field to its RIGHT. Collapsing what used to be two

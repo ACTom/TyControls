@@ -319,6 +319,26 @@ msgstr ""
 msgid "Up"
 msgstr ""
 
+#: tycontrols.strconsts.rsfdviewdetails
+msgid "Details"
+msgstr ""
+
+#: tycontrols.strconsts.rsfdviewlargeicon
+msgid "Large icons"
+msgstr ""
+
+#: tycontrols.strconsts.rsfdviewlist
+msgid "List"
+msgstr ""
+
+#: tycontrols.strconsts.rsfdviewsmallicon
+msgid "Small icons"
+msgstr ""
+
+#: tycontrols.strconsts.rsfdviewtile
+msgid "Tiles"
+msgstr ""
+
 #: tycontrols.strconsts.rsgridavgprefix
 msgid "Avg "
 msgstr ""

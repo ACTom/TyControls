@@ -472,6 +472,26 @@ msgstr "另存为"
 msgid "Up"
 msgstr "上一级"
 
+#: tycontrols.strconsts.rsfdviewdetails
+msgid "Details"
+msgstr "详细信息"
+
+#: tycontrols.strconsts.rsfdviewlist
+msgid "List"
+msgstr "列表"
+
+#: tycontrols.strconsts.rsfdviewsmallicon
+msgid "Small icons"
+msgstr "小图标"
+
+#: tycontrols.strconsts.rsfdviewlargeicon
+msgid "Large icons"
+msgstr "大图标"
+
+#: tycontrols.strconsts.rsfdviewtile
+msgid "Tiles"
+msgstr "平铺"
+
 #: tycontrols.strconsts.rspvcannotpreview
 msgid "Cannot preview this file"
 msgstr "无法预览此文件"
