@@ -2808,8 +2808,10 @@ begin
     { Both scrollbars are created in the constructor, so VScroll is never nil. }
     AssertTrue('VScroll created', t.VScroll <> nil);
     AssertTrue('VScroll visible for tall tree', t.VScroll.Visible);
-    AssertEquals('VScroll.Max = ContentHeight',
-                 t.RangeY, t.VScroll.Max);
+    { Max is the max scroll POSITION, so Max + PageSize = content height. (Previously this
+      asserted Max = ContentHeight, which left a one-viewport dead band at the track bottom.) }
+    AssertEquals('VScroll.Max + PageSize = ContentHeight',
+                 t.RangeY, t.VScroll.Max + t.VScroll.PageSize);
   finally
     t.Free;
   end;

@@ -2793,7 +2793,7 @@ end;
 
   Vertical bar:
     Visible iff ContentHeight > viewport height.
-    Max      = ContentHeight
+    Max      = ContentHeight - viewport height   (the max scroll POSITION; Max+PageSize = content)
     PageSize = viewport height
     Position = -FOffsetY (FOffsetY ≤ 0)
 
@@ -2884,7 +2884,12 @@ begin
       FSyncingScroll := True;
       try
         FVScroll.Min      := 0;
-        FVScroll.Max      := contH;
+        { Max is the maximum SCROLL POSITION (content minus one viewport), NOT the content
+          height -- TTyScrollBar's model is Span = (Max-Min) + PageSize, so Max+PageSize is the
+          content (same as ListBox sets MaxPos/VR). Setting Max = contH left a dead band of one
+          PageSize at the bottom: the thumb reached the track end a whole viewport before the
+          content did (thumb mid-track == content already at the bottom when viewport ~= half). }
+        FVScroll.Max      := contH - viewH;
         FVScroll.PageSize := viewH;
         FVScroll.Position := -FOffsetY;
       finally
@@ -2927,7 +2932,7 @@ begin
       FSyncingScroll := True;
       try
         FHScroll.Min      := 0;
-        FHScroll.Max      := FRangeX;
+        FHScroll.Max      := FRangeX - viewW;   { max scroll position, not content width (see V bar) }
         FHScroll.PageSize := viewW;
         FHScroll.Position := -FOffsetX;
       finally
