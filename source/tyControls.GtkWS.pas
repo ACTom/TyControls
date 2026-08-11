@@ -371,34 +371,42 @@ var
   tl: TPoint;
   r: TGdkRectangle;
 begin
-  { Every step bails out silently on failure: the worst case is the pre-fix behaviour (a
-    centred flyout), never a crash. Realize the popup's window while it is still hidden so the
-    transient-parent + move_to_rect apply before Show maps it as the xdg_popup. }
-  if (APopup = nil) or (AAnchor = nil) then Exit;
+  { ==== TEMPORARY DIAGNOSTICS (remove after we know where it fails) -> stderr. Run the example
+    from a terminal to see them. ==== }
+  writeln(StdErr, '[TyGtk3MakePopup] enter  wayland=', TyGtkIsWayland);
+  if (APopup = nil) or (AAnchor = nil) then begin writeln(StdErr, '  EXIT: nil arg'); Exit; end;
   parentForm := GetParentForm(AAnchor);
-  if parentForm = nil then Exit;
+  if parentForm = nil then begin writeln(StdErr, '  EXIT: no parent form'); Exit; end;
   APopup.HandleNeeded;
-  if (not APopup.HandleAllocated) or (not parentForm.HandleAllocated) then Exit;
+  if (not APopup.HandleAllocated) or (not parentForm.HandleAllocated) then
+    begin writeln(StdErr, '  EXIT: no handle (popup=', APopup.HandleAllocated, ' parent=', parentForm.HandleAllocated, ')'); Exit; end;
   popW := Gtk3NativeWidget(APopup);
-  if popW = nil then Exit;
+  if popW = nil then begin writeln(StdErr, '  EXIT: Gtk3NativeWidget(popup)=nil'); Exit; end;
   popW := gtk_widget_get_toplevel(popW);
   parentTop := gtk_widget_get_toplevel(Gtk3NativeWidget(parentForm));
+  writeln(StdErr, '  popW.isGtkWindow=', (popW <> nil) and Gtk3IsGtkWindow(PGObject(popW)),
+                  '  parentTop.isGtkWindow=', (parentTop <> nil) and Gtk3IsGtkWindow(PGObject(parentTop)));
   if (popW = nil) or (parentTop = nil)
-     or (not Gtk3IsGtkWindow(PGObject(popW))) or (not Gtk3IsGtkWindow(PGObject(parentTop))) then Exit;
+     or (not Gtk3IsGtkWindow(PGObject(popW))) or (not Gtk3IsGtkWindow(PGObject(parentTop))) then
+    begin writeln(StdErr, '  EXIT: not a GtkWindow'); Exit; end;
   { Anchor to the parent so Wayland maps this as an xdg_popup (placed relative to the parent)
     rather than a free-floating top-level the compositor centres. }
   gtk_window_set_transient_for(PGtkWindow(popW), PGtkWindow(parentTop));
   gtk_window_set_type_hint(PGtkWindow(popW), GDK_WINDOW_TYPE_HINT_POPUP_MENU);
   gdkWin := gtk_widget_get_window(popW);
-  if gdkWin = nil then Exit;
+  if gdkWin = nil then begin writeln(StdErr, '  EXIT: gtk_widget_get_window=nil'); Exit; end;
+  writeln(StdErr, '  gdkWin.window_type=', Ord(gdk_window_get_window_type(gdkWin)),
+                  ' (0=ROOT 1=TOPLEVEL 2=CHILD 3=TEMP ...) -- TEMP is what xdg_popup needs');
   { Anchor rect = the anchor control's bounds in the PARENT FORM's client coords. ClientToParent
     walks the control tree (no screen coords, which Wayland refuses). The popup's top-left snaps
     to the anchor's bottom-left so the flyout drops below it; flip/slide let the compositor keep
     it on screen. }
   tl := AAnchor.ClientToParent(Point(0, 0), parentForm);
   r.x := tl.x; r.y := tl.y; r.width := AAnchor.Width; r.height := AAnchor.Height;
+  writeln(StdErr, '  move_to_rect anchor=(', r.x, ',', r.y, ' ', r.width, 'x', r.height, ') calling...');
   gdk_window_move_to_rect(gdkWin, @r, GDK_GRAVITY_SOUTH_WEST, GDK_GRAVITY_NORTH_WEST,
     GDK_ANCHOR_FLIP + GDK_ANCHOR_SLIDE, 0, 0);
+  writeln(StdErr, '  move_to_rect returned OK');
 end;
 
 {$ELSE}
