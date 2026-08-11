@@ -693,7 +693,11 @@ end;
 
 procedure TTyIconFont.LoadFontFromMemory(ADataPtr: Pointer; ASize: PtrUInt;
   const AFamily: string);
-{$IF DEFINED(LCLWin32) OR DEFINED(LCLQt5) OR DEFINED(LCLQt6) OR DEFINED(LCLCocoa) OR DEFINED(LCLGtk2)}
+{ NOTE: LCLGtk2 is NOT in this var-block gate. GTK2's body (below) uses only the FTempFile
+  FIELD, no local -- so including it would emit a `var` keyword with no declarations under it
+  ("Syntax error, identifier expected but begin found"). Keep the gate to the widgetsets that
+  actually declare a local. }
+{$IF DEFINED(LCLWin32) OR DEFINED(LCLQt5) OR DEFINED(LCLQt6) OR DEFINED(LCLCocoa)}
 var
   {$IFDEF LCLWin32}
   nFaces: DWORD;
