@@ -1304,6 +1304,13 @@ end;
 procedure TTyRibbonGroup.AdjustClientRect(var ARect: TRect);
 begin
   inherited AdjustClientRect(ARect);
+  // Reserve the right SEPARATOR strip (the between-groups divider RenderTo draws at the group's
+  // right edge, whether ShowCaption is on or off) so an oversized command control cannot sit
+  // flush to the client edge and paint OVER the separator onto the neighbour. This CLIPS the
+  // group's content to its own bounds, minus the divider — the same edge-reservation idiom
+  // TTyRibbon.AdjustClientRect uses to keep its active page off its own frame.
+  Dec(ARect.Right, MulDiv(1, Font.PixelsPerInch, 96));
+  if ARect.Right < ARect.Left then ARect.Right := ARect.Left;
   if not FShowCaption then Exit;   // caption-less group: content fills the full height
   // Reserve the bottom caption band so hosted command controls sit above the title.
   Dec(ARect.Bottom, MulDiv(ActiveController.Metric('--ribbon-caption-band-height', TyRibbonCaptionBand), Font.PixelsPerInch, 96));

@@ -30,6 +30,7 @@ type
     procedure TestEveryBuiltinCarriesTheEmbeddedEditVariant;
     procedure TestDraculaPalette;
     procedure TestNordPalette;
+    procedure TestAccentButtonInkSurvivesHover;
   end;
 
   TControllerThemeNameTest = class(TTestCase)
@@ -290,6 +291,66 @@ begin
     s := m.ResolveStyle('TyButton', '', []);
     AssertEquals('nord light surface R', $EC, TyRedOf(s.Background.Color));
   finally m.Free; end;
+end;
+
+{ Real-machine / Antek bug: the ribbon "File" app-menu (TTyRibbonAppMenu, StyleClass 'primary')
+  turned its caption BLACK on hover under office. Root cause is a resolver-layering gotcha, not a
+  one-off typo: ResolveLayer applies base -> .variant -> :state -> .variant:state, each overwriting
+  only the props it sets. A `.primary` sets color: on(accent); the plain `:hover` then sets
+  color: var(--ink); and if `.primary:hover` sets background but OMITS color, the accent chip keeps
+  the --ink text -> near-black on the accent fill in @mode light (it hides in dark, where --ink is
+  white). So EVERY skin whose .primary:hover/:active omits color is a latent instance. This guards
+  the invariant across all compiled-in themes, both modes: an accent (primary) button keeps its
+  resting ink through :hover and :active -- only the background may move. }
+procedure TBuiltinThemesTest.TestAccentButtonInkSurvivesHover;
+var
+  n: TStringArray;
+  i: Integer;
+  m: TTyStyleModel;
+  bad: TStringList;
+
+  function InkStr(const AStyle: TTyStyleSet): string;
+  begin
+    Result := Format('%d,%d,%d', [TyRedOf(AStyle.TextColor), TyGreenOf(AStyle.TextColor), TyBlueOf(AStyle.TextColor)]);
+  end;
+
+  procedure SameInk(const AName, AMode, AState: string; const ARest, AOther: TTyStyleSet);
+  begin
+    if (TyRedOf(ARest.TextColor)   <> TyRedOf(AOther.TextColor))
+    or (TyGreenOf(ARest.TextColor) <> TyGreenOf(AOther.TextColor))
+    or (TyBlueOf(ARest.TextColor)  <> TyBlueOf(AOther.TextColor)) then
+      bad.Add(Format('  %s/%s primary:%s ink %s != rest %s', [AName, AMode, AState, InkStr(AOther), InkStr(ARest)]));
+  end;
+
+  procedure CheckMode(const AName, AMode: string);
+  var rest, hov, act: TTyStyleSet;
+  begin
+    m.SetMode(AMode);
+    rest := m.ResolveStyle('TyButton', 'primary', []);
+    hov  := m.ResolveStyle('TyButton', 'primary', [tysHover]);
+    act  := m.ResolveStyle('TyButton', 'primary', [tysActive]);
+    SameInk(AName, AMode, 'hover', rest, hov);
+    SameInk(AName, AMode, 'active', rest, act);
+  end;
+
+begin
+  bad := TStringList.Create;
+  try
+    n := TyBuiltinThemeNames;
+    for i := 0 to High(n) do
+    begin
+      m := TTyStyleModel.Create;
+      try
+        m.LoadFromCss(TyBuiltinThemeCss(n[i]));
+        CheckMode(n[i], 'light');
+        CheckMode(n[i], 'dark');
+      finally m.Free; end;
+    end;
+    // One assert reports EVERY offender at once (a .primary:hover/:active that sets background
+    // but omits color, letting the plain :state --ink bleed onto the accent chip).
+    AssertEquals('accent (primary) buttons whose ink flips on hover/active -> unreadable dark-on-accent:'
+      + LineEnding + bad.Text, 0, bad.Count);
+  finally bad.Free; end;
 end;
 
 procedure TControllerThemeNameTest.TestThemeNameLoadsBuiltinCss;

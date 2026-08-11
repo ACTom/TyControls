@@ -362,7 +362,7 @@ procedure TTyDropDownButton.DrawContent(APainter: TTyPainter; const AContentRect
   const AStyle: TTyStyleSet);
 var
   divX, zoneLeft: Integer;
-  captionRect, arrowRect: TRect;
+  captionRect, arrowRect, chevronRect: TRect;
   ctx: TBGRACanvas2D;
 begin
   { The painter's Scale is the canonical logical->device (96-baseline) conversion, the same
@@ -396,9 +396,18 @@ begin
   ctx.strokeStyle(TyColorToBGRA(AStyle.BorderColor));
   ctx.stroke;
 
-  // Centered small chevron (a shallow "v", fixed size), matching TTyComboBox's dropdown
-  // chevron — a clean caret regardless of the button height/PPI.
-  TyDrawDropChevron(APainter, ActiveController, arrowRect, AStyle.TextColor);
+  { Centre the chevron in the FULL clickable arrow zone — [divider, control right edge] — not
+    in [divider, content edge]. IsInArrowZone runs the hit test to the CONTROL edge (the right
+    padding carries no ink but is still the arrow end of the button), so stopping the chevron at
+    the content edge left it parked left-of-centre with a padding-wide dead gap on its right. The
+    far end is the same control edge the hit test uses (content right + the resolved right pad),
+    so the caret now sits centred in what the user actually clicks, the way TTyComboBox centres
+    its own chevron in its right-flush button zone. The DIVIDER stays at zoneLeft (arrowRect.Left,
+    unchanged) so the drawn edge is still the first hit pixel — the edge probe in
+    tests/test.dropbuttons.pas is unaffected. }
+  chevronRect := Rect(zoneLeft, AContentRect.Top,
+    AContentRect.Right + APainter.Scale(AStyle.Padding.Right), AContentRect.Bottom);
+  TyDrawDropChevron(APainter, ActiveController, chevronRect, AStyle.TextColor);
 end;
 
 procedure TTyDropDownButton.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;

@@ -202,23 +202,25 @@ resourcestring
   rsAlignCenter       = 'Medium';
   rsAlignRight        = 'Right';
   rsAlignJustify      = 'both ends';
-  rsCmdBullets        = 'Bullet list';
+  rsCmdBullets        = 'Bullets';
   rsCmdNumbers        = 'No.';
   rsCmdPaste          = 'Paste';
   rsCmdCut            = 'Cut';
   rsCmdCopy           = 'Copy';
-  rsCmdPainter        = 'Format painter';
+  rsCmdPainter        = 'Format';
   rsCmdSymbol         = 'Symbol';
   rsCmdDateTime       = 'Date-time';
   rsCmdGrid           = 'Grid';
+  rsCmdInsertTable    = 'Insert table';
+  rsCmdDrawTable      = 'Draw table';
   rsCmdPicture        = 'Picture';
   rsCmdNewWindow      = 'New window';
-  rsCmdArrange        = 'Side by side';
-  rsCmdZoomIn         = 'Zoom in';
-  rsCmdZoomOut        = 'Zoom out';
+  rsCmdArrange        = 'Arrange';
+  rsCmdZoomIn         = 'In';
+  rsCmdZoomOut        = 'Out';
   rsChkWordWrap       = 'Word wrap';
   rsChkStatusBar      = 'Status bar';
-  rsChkContext        = 'Picture tools (contextual)';
+  rsChkContext        = 'Picture tab';
   rsCmdClip           = 'Clip';
   rsBsInformation     = 'Information';
   rsBsNew             = 'New';
@@ -468,6 +470,7 @@ end;
 procedure TMainForm.BuildInsertTab;
 var
   dd: TTyDropDownButton;
+  gridMenu: TTyPopupMenu;
   pic: TTyGlyphContainerButton;
 begin
   // Symbol
@@ -477,11 +480,18 @@ begin
   // Style library: the gallery itself (12 items, their glyph names, the icon font, the
   // 4-column dropped grid and OnSelect) is entirely authored in umain.lfm.
 
-  // Table (a drop-down button)
+  // Table (a split drop-down button): the caption area fires the primary click, the arrow
+  // zone drops a small menu. DropDownMenu takes a TTyPopupMenu whose top-level items are
+  // cloned into the themed dropdown (the same API AppMenu.Commands uses).
   dd := TTyDropDownButton.Create(Self);
   dd.Parent := GrpTable;
   dd.SetBounds(6, 6, 78, 60);
   dd.Caption := rsCmdGrid;
+  dd.OnClick := @DoNoop;                         // primary click (caption area) — placeholder
+  gridMenu := TTyPopupMenu.Create(Self);
+  AddCommand(gridMenu, rsCmdInsertTable, @DoNoop);
+  AddCommand(gridMenu, rsCmdDrawTable, @DoNoop);
+  dd.DropDownMenu := gridMenu;                    // arrow-zone click pops this
 
   // The caption-LESS group (GrpPicture has ShowCaption=False in the .lfm): no bottom caption
   // band and no dialog launcher, so its content owns the group's full height. Compare its

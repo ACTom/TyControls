@@ -155,7 +155,7 @@ msgid "both ends"
 msgstr "两端对齐"
 
 #: umain.rscmdbullets
-msgid "Bullet list"
+msgid "Bullets"
 msgstr "项目符号"
 
 #: umain.rscmdnumbers
@@ -175,7 +175,7 @@ msgid "Copy"
 msgstr "复制"
 
 #: umain.rscmdpainter
-msgid "Format painter"
+msgid "Format"
 msgstr "格式刷"
 
 #: umain.rscmdsymbol
@@ -190,6 +190,14 @@ msgstr "日期时间"
 msgid "Grid"
 msgstr "表格"
 
+#: umain.rscmdinserttable
+msgid "Insert table"
+msgstr "插入表格"
+
+#: umain.rscmddrawtable
+msgid "Draw table"
+msgstr "绘制表格"
+
 #: umain.rscmdpicture
 msgid "Picture"
 msgstr "图片"
@@ -199,15 +207,15 @@ msgid "New window"
 msgstr "新建窗口"
 
 #: umain.rscmdarrange
-msgid "Side by side"
+msgid "Arrange"
 msgstr "并排查看"
 
 #: umain.rscmdzoomin
-msgid "Zoom in"
+msgid "In"
 msgstr "放大"
 
 #: umain.rscmdzoomout
-msgid "Zoom out"
+msgid "Out"
 msgstr "缩小"
 
 #: umain.rschkwordwrap
@@ -219,7 +227,7 @@ msgid "Status bar"
 msgstr "状态栏"
 
 #: umain.rschkcontext
-msgid "Picture tools (contextual)"
+msgid "Picture tab"
 msgstr "图片工具（上下文选项卡）"
 
 #: umain.rscmdclip
