@@ -399,10 +399,13 @@ procedure TTyShellListView.BuildColumns;
   end;
 
 begin
-  AddCol('Name',     220, taLeftJustify);
+  { These are the AUTHORED proportions AutoSizeColumns scales across the pane (not fixed
+    widths): Name is weighted to take the bulk so a wide pane -- e.g. the widened file
+    dialog -- grows the Name column rather than leaving Size/Type/Modified looking empty. }
+  AddCol('Name',     320, taLeftJustify);
   AddCol('Size',      90, taRightJustify);
-  AddCol('Type',     120, taLeftJustify);
-  AddCol('Modified', 140, taLeftJustify);
+  AddCol('Type',     110, taLeftJustify);
+  AddCol('Modified', 150, taLeftJustify);
 end;
 
 { Build a small set of BGRA kind glyphs at a 128px master (downsampling stays crisp;

@@ -66,7 +66,8 @@ type
     FSaveMode:    Boolean;
     FPreviewMode: Boolean;
     { Composed children (all owned by the form -> auto-freed). The mode-conditional
-      ones (FBtnNewFolder, FPreview) are created lazily by the flag setters. }
+      one (FPreview) is created lazily by its flag setter; FBtnNewFolder is a bottom-bar
+      action button built for EVERY mode in TyBuildFileDialog. }
     FLookIn:       TTyShellComboBox;
     FMidPanel:     TTyPanel;         { invisible layout host for the tree|list|preview band }
     FTree:         TTyShellTreeView;
@@ -294,8 +295,10 @@ constructor TTyFileDialogForm.CreateNew(AOwner: TComponent; Num: Integer);
 begin
   inherited CreateNew(AOwner, Num);
   Resizable := True;
-  Constraints.MinWidth  := 560;
-  Constraints.MinHeight := 420;
+  { Roughly double the old ~560 min width: the right-hand file list was far too narrow
+    (real-machine testing), so the whole dialog opens wide + a little taller. }
+  Constraints.MinWidth  := 900;
+  Constraints.MinHeight := 460;
 
   FSaveMode := False;
   FPreviewMode := False;
@@ -371,16 +374,9 @@ end;
 procedure TTyFileDialogForm.SetSaveMode(AValue: Boolean);
 begin
   FSaveMode := AValue;
-  { New Folder is a Save-only action button living in the content area (mrNone). }
-  if AValue and (FBtnNewFolder = nil) then
-  begin
-    FBtnNewFolder := TTyButton.Create(Self);
-    FBtnNewFolder.Parent := Self;
-    FBtnNewFolder.Caption := rsDlgNewFolder;
-    FBtnNewFolder.OnClick := @NewFolderClick;
-  end;
-  if FBtnNewFolder <> nil then
-    FBtnNewFolder.Visible := AValue;
+  { New Folder is now a bottom-bar action button built for every mode in TyBuildFileDialog,
+    so there is nothing mode-conditional to create here. SaveMode still drives the OK caption
+    + save-name validation (the builder + AcceptSelection). }
   if FList <> nil then
     LayoutContent;
 end;
@@ -513,6 +509,10 @@ begin
   { Pure display sync of the look-in field (its setter fires no event + guards
     re-entry). }
   FLookIn.Directory := FList.Directory;
+  { New Folder needs a directory to create the subfolder under -- enable it once the list
+    is actually showing one (it starts disabled, before any navigation). }
+  if FBtnNewFolder <> nil then
+    FBtnNewFolder.Enabled := FList.Directory <> '';
   { Reveal the directory in the tree -- but only when the change did NOT originate
     from a tree/look-in navigation (else FSyncing is set and this would loop). }
   if not FSyncing then
@@ -567,12 +567,15 @@ procedure TTyFileDialogForm.NewFolderClick(Sender: TObject);
 var
   nm, full: string;
 begin
+  if FList.Directory = '' then Exit;   { no listed directory -> nothing to create under }
   nm := '';
   if not TyInputQuery(rsDlgNewFolder, rsDlgNewFolderPrompt, nm) then Exit;
   if nm = '' then Exit;
   full := AppendPathDelim(FList.Directory) + nm;
   if CreateDirUTF8(full) then
-    FList.Refresh
+    { UpdateView, NOT Refresh: the shell list's Refresh now only repaints (LCL semantics);
+      UpdateView re-reads the current directory from disk so the new folder actually shows. }
+    FList.UpdateView
   else
     TyMessageDlg(Format(rsDlgCreateFolderErr, [full]), mtError, [mbOK]);
 end;
@@ -676,15 +679,15 @@ end;
 
 procedure TTyFileDialogForm.LayoutContent;
 const
-  RowH   = 30;    { = TyDlgEditH }
-  LblH   = 20;
-  LblW   = 64;
-  UpW    = 72;
-  NfW    = 96;
+  RowH    = 30;    { = TyDlgEditH }
+  LblH    = 20;
+  LblW    = 64;
+  UpW     = 72;
+  FilterW = 180;   { fixed width of the file-type combo on the shared name row }
 var
   cr: TRect;
   pad, x0, w, y, curRight, lookInX: Integer;
-  yA, yB, midTop, midH: Integer;
+  yRow, nameX, filterX, filterLblX, nameW, midTop, midH: Integer;
 begin
   if (FList = nil) or (FMidPanel = nil) then Exit;   { called during construction, before children exist }
   cr := ContentRect;
@@ -692,32 +695,35 @@ begin
   x0 := cr.Left + pad;
   w  := (cr.Right - cr.Left) - 2 * pad;
 
-  { Row 1: look-in combo + Up (+ New Folder in Save mode), laid out right-to-left. }
+  { Row 1: look-in combo + Up, laid out right-to-left. (New Folder now lives on the bottom
+    button bar, not here.) }
   y := cr.Top + pad;
   curRight := cr.Right - pad;
-  if (FBtnNewFolder <> nil) and FBtnNewFolder.Visible then
-  begin
-    FBtnNewFolder.SetBounds(curRight - NfW, y, NfW, RowH);
-    curRight := curRight - NfW - Gap;
-  end;
   FBtnUp.SetBounds(curRight - UpW, y, UpW, RowH);
   curRight := curRight - UpW - Gap;
   FLblLookIn.SetBounds(x0, y + (RowH - LblH) div 2, LblW, LblH);
   lookInX := x0 + LblW + Gap;
   FLookIn.SetBounds(lookInX, y, curRight - lookInX, RowH);
 
-  { Bottom two rows, anchored to the content bottom: name (A) above filter (B). }
-  yB := cr.Bottom - pad - RowH;
-  yA := yB - Gap - RowH;
-  FLblName.SetBounds(x0, yA + (RowH - LblH) div 2, LblW, LblH);
-  FNameEdit.SetBounds(x0 + LblW + Gap, yA, w - LblW - Gap, RowH);
-  FLblFilter.SetBounds(x0, yB + (RowH - LblH) div 2, LblW, LblH);
-  FFilter.SetBounds(x0 + LblW + Gap, yB, w - LblW - Gap, RowH);
+  { Bottom row -- ONE row now (Windows Open/Save idiom): the file-name edit fills the left,
+    the file-type combo is a fixed-width field to its RIGHT. Collapsing what used to be two
+    stacked rows hands the freed vertical space to the list. The right cluster
+    ([File type:][combo]) is anchored to the right edge; the name edit stretches to meet it. }
+  yRow := cr.Bottom - pad - RowH;
+  filterX := (cr.Right - pad) - FilterW;
+  FFilter.SetBounds(filterX, yRow, FilterW, RowH);
+  filterLblX := filterX - Gap - LblW;
+  FLblFilter.SetBounds(filterLblX, yRow + (RowH - LblH) div 2, LblW, LblH);
+  FLblName.SetBounds(x0, yRow + (RowH - LblH) div 2, LblW, LblH);
+  nameX := x0 + LblW + Gap;
+  nameW := (filterLblX - Gap) - nameX;
+  if nameW < 80 then nameW := 80;   { never collapse the name edit even on a very narrow dialog }
+  FNameEdit.SetBounds(nameX, yRow, nameW, RowH);
 
-  { Middle band: the host panel fills between the look-in row and the name/filter rows;
+  { Middle band: the host panel fills between the look-in row and the single name/type row;
     LCL alignment + the two splitters lay out tree | list | preview inside it. }
   midTop := y + RowH + Gap;
-  midH := yA - Gap - midTop;
+  midH := (yRow - Gap) - midTop;
   if midH < 60 then midH := 60;
   FMidPanel.SetBounds(x0, midTop, w, midH);
 end;
@@ -727,9 +733,11 @@ end;
   --------------------------------------------------------------------------- }
 
 function TyBuildFileDialog(ASaveMode, APreviewMode: Boolean; const ATitle: string): TTyFileDialogForm;
+var
+  btn: TTyButton;
 begin
   Result := TTyFileDialogForm.CreateNew(Application);
-  Result.SaveMode := ASaveMode;         { toggles New-Folder }
+  Result.SaveMode := ASaveMode;         { OK caption + save-name validation }
   Result.PreviewMode := APreviewMode;   { builds the preview pane }
   { A TTyDialog derives its title-bar text from the form Caption. }
   if ATitle <> '' then
@@ -744,12 +752,22 @@ begin
   else
     Result.AddButton(rsFdBtnOpen, mrOK, True, False);
   Result.AddButton(rsMsgBtnCancel, mrCancel, False, True);
-  { A preview pane needs room of its own -- widen so the file list is not squeezed to the
-    same width as the no-preview dialog. }
+  { New Folder: an mrNone action button (does NOT close the dialog) available in EVERY mode
+    now (Open + Save), matching Windows. Added after OK/Cancel so it sits leftmost in the
+    right-aligned cluster, clear of the primary buttons. Starts disabled; ListDirectoryChange
+    enables it once the list is showing a directory (there must be a folder to create under).
+    Same pattern as SelectPath's New-Folder button. }
+  btn := Result.AddButton(rsDlgNewFolder, mrNone);
+  btn.OnClick := @Result.NewFolderClick;
+  btn.Enabled := False;
+  Result.FBtnNewFolder := btn;
+  { Sizing: open roughly twice as wide as the original (~520 -> ~950) and a little taller,
+    because the file list was far too cramped. A preview pane needs room of its own ON TOP of
+    that so the list is not squeezed to share the width with the preview. }
   if APreviewMode then
-    Result.AutoSizeToContent(540 + 220 + 8, 360)
+    Result.AutoSizeToContent(920 + 220 + 8, 420)
   else
-    Result.AutoSizeToContent(540, 360);
+    Result.AutoSizeToContent(920, 420);
   Result.LayoutContent;
 end;
 
