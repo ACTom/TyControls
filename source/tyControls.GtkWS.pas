@@ -461,22 +461,32 @@ procedure TyGtk3ReleasePopupGrab(APopup: TCustomForm);
 var
   disp: PGdkDisplay;
   seat: PGdkSeat;
-  grabW: PGtkWidget;
+  grabW, popTop: PGtkWidget;
 begin
   if not TyGtkIsWayland then Exit;
   disp := gdk_display_get_default;
   if disp = nil then Exit;
-  grabW := gtk_grab_get_current;   { DIAG: is there an app-level GTK grab too? }
+  { An app-level GTK grab (gtk_grab_add -- LCL's popup mouse-capture) survives an idle-time Hide
+    because no event unwinds it. Remove it, but ONLY when it belongs to THIS popup so a legitimate
+    grab elsewhere is left alone. }
+  grabW := gtk_grab_get_current;
   writeln(StdErr, '[TyGtk3ReleasePopupGrab] wayland; gtk_grab_current_nonnil=', grabW <> nil);
-  seat := gdk_display_get_default_seat(disp);
-  if seat <> nil then
+  if (grabW <> nil) and APopup.HandleAllocated then
   begin
-    gdk_seat_ungrab(seat);
-    writeln(StdErr, '[TyGtk3ReleasePopupGrab] gdk_seat_ungrab done');
-  end
-  else
-    writeln(StdErr, '[TyGtk3ReleasePopupGrab] no default seat');
+    popTop := gtk_widget_get_toplevel(Gtk3NativeWidget(APopup));
+    if gtk_widget_get_toplevel(grabW) = popTop then
+    begin
+      gtk_grab_remove(grabW);
+      writeln(StdErr, '[TyGtk3ReleasePopupGrab] gtk_grab_remove (own popup) done');
+    end
+    else
+      writeln(StdErr, '[TyGtk3ReleasePopupGrab] gtk grab is not this popup; left alone');
+  end;
+  { And the compositor/seat grab, in case the popup took one too. }
+  seat := gdk_display_get_default_seat(disp);
+  if seat <> nil then gdk_seat_ungrab(seat);
   gdk_display_flush(disp);
+  writeln(StdErr, '[TyGtk3ReleasePopupGrab] seat_ungrab + flush done');
 end;
 
 {$ELSE}
