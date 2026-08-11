@@ -271,19 +271,22 @@ begin
   TyGtk3MakePopup(FForm, AAnchor);
   FForm.Show;
 
-  { GTK3/Wayland: a borderless popup maps as a grabbing GTK_WINDOW_POPUP. The menu works because it
-    focuses its view; a dropdown that never takes focus leaves that pointer grab dangling -- an
-    outside click can't dismiss it (no focus-out, so OnDeactivate never fires) and the stale grab
-    re-delivers the NEXT click to the hidden popup's old spot, re-picking a row. Give the list focus
-    so the popup owns the seat and releases the grab cleanly on Hide, exactly as the menu does. Skip
-    in NoActivate (autocomplete) mode, where the editor must keep focus. No-op off GTK3-Wayland. }
-  if TyGtkIsWayland and (not FNoActivate)
-     and (FContent is TWinControl) and TWinControl(FContent).CanFocus then
-    TWinControl(FContent).SetFocus;
-
   // Qt/X11 may re-place + un-mask a frameless window at MAP time; re-assert
   // NOW and again next event-loop turn.
   FForm.SetBounds(FRect.Left, FRect.Top, PopupW, PopupH);
+
+  { GTK3/Wayland: focus the list AFTER the re-assert (the menu's Show->SetBounds->SetFocus order),
+    so the popup becomes the active form and an outside click deactivates it -> FormDeactivate
+    closes it, exactly like the menu. Skip in NoActivate (autocomplete) mode, where the editor
+    keeps focus. No-op off GTK3-Wayland. }
+  if TyGtkIsWayland and (not FNoActivate)
+     and (FContent is TWinControl) and TWinControl(FContent).CanFocus then
+    TWinControl(FContent).SetFocus;
+  if TyGtkIsWayland then
+    writeln(StdErr, '[dropdown] shown NoActivate=', FNoActivate,
+      ' listFocused=', (FContent is TWinControl) and TWinControl(FContent).Focused,
+      ' popupIsActiveForm=', FForm = Screen.ActiveForm);
+
   ApplyRegion(PopupW, PopupH);
   Application.QueueAsyncCall(@DeferredReapplyGeometry, 0);
 end;
@@ -413,6 +416,8 @@ end;
 { Popup lost focus (user clicked away) → close. }
 procedure TTyDropdownPopup.FormDeactivate(Sender: TObject);
 begin
+  if TyGtkIsWayland then
+    writeln(StdErr, '[dropdown] FormDeactivate fired; NoActivate=', FNoActivate);
   { A NoActivate (autocomplete) popup never legitimately takes activation, so a
     deactivate here is spurious (e.g. the owner re-focusing its embedded editor
     right after Show) — the OWNER drives close in that mode, not deactivate. }
