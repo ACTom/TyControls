@@ -366,7 +366,7 @@ end;
 procedure TyGtk3MakePopup(APopup: TCustomForm; AAnchor: TControl);
 var
   popW, parentTop: PGtkWidget;
-  gdkWin: PGdkWindow;
+  gdkWin, parentGdkWin: PGdkWindow;
   parentForm: TCustomForm;
   tl: TPoint;
   r: TGdkRectangle;
@@ -395,8 +395,15 @@ begin
   gtk_window_set_type_hint(PGtkWindow(popW), GDK_WINDOW_TYPE_HINT_POPUP_MENU);
   gdkWin := gtk_widget_get_window(popW);
   if gdkWin = nil then begin writeln(StdErr, '  EXIT: gtk_widget_get_window=nil'); Exit; end;
+  { THE fix: set the parent at the GDK level too. gtk_window_set_transient_for above sets only
+    the GTK/WM transient hint and does NOT reach the GdkWindow, so the popup was a "temporary
+    window without parent" and move_to_rect (which anchors to the transient-for GdkWindow) had
+    nothing to position against on Wayland. }
+  parentGdkWin := gtk_widget_get_window(parentTop);
+  if parentGdkWin = nil then begin writeln(StdErr, '  EXIT: parent gtk_widget_get_window=nil'); Exit; end;
+  gdk_window_set_transient_for(gdkWin, parentGdkWin);
   writeln(StdErr, '  gdkWin.window_type=', Ord(gdk_window_get_window_type(gdkWin)),
-                  ' (0=ROOT 1=TOPLEVEL 2=CHILD 3=TEMP ...) -- TEMP is what xdg_popup needs');
+                  '  set gdk transient parent');
   { Anchor rect = the anchor control's bounds in the PARENT FORM's client coords. ClientToParent
     walks the control tree (no screen coords, which Wayland refuses). The popup's top-left snaps
     to the anchor's bottom-left so the flyout drops below it; flip/slide let the compositor keep
