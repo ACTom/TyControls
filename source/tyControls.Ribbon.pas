@@ -1212,7 +1212,7 @@ end;
 
 procedure TTyRibbonPage.LayoutOverflow;
 var
-  i, n, x, moreW, visCount, bandH, total: Integer;
+  i, n, x, moreW, visCount, bandH, total, gap: Integer;
   widths: array of Integer;
 begin
   if FInLayout then Exit;
@@ -1224,10 +1224,14 @@ begin
   try
     bandH := ClientHeight;
     moreW := MulDiv(30, Font.PixelsPerInch, 96);
+    gap := MulDiv(9, Font.PixelsPerInch, 96);   // inter-group gap; the page draws the divider in it
     SetLength(widths, n);
     total := 0;
+    { widths[i] is each group's FOOTPRINT = its own width + the trailing gap. This layout sets
+      alNone + explicit bounds (bypassing BorderSpacing), so the gap has to be added here, and
+      it leaves the band the page paints the group dividers into (DrawGroupDividers). }
     for i := 0 to n - 1 do
-    begin widths[i] := FVisualGroups[i].Width; Inc(total, widths[i]); end;
+    begin widths[i] := FVisualGroups[i].Width + gap; Inc(total, widths[i]); end;
     if total <= ClientWidth then
     begin
       visCount := n;
@@ -1244,9 +1248,9 @@ begin
       FVisualGroups[i].Align := alNone;   // page owns the layout from here
       if i < visCount then
       begin
-        FVisualGroups[i].SetBounds(x, 0, widths[i], bandH);
+        FVisualGroups[i].SetBounds(x, 0, widths[i] - gap, bandH);   // real width (footprint - gap)
         FVisualGroups[i].Visible := True;
-        Inc(x, widths[i]);
+        Inc(x, widths[i]);                                          // advance by the footprint
       end
       else
         FVisualGroups[i].Visible := False;
@@ -1311,7 +1315,6 @@ begin
   inherited Create(AOwner);
   ControlStyle := ControlStyle + [csAcceptsControls, csNoFocus];
   Align := alLeft;
-  BorderSpacing.Right := 9;   // the gap after the group where the page draws the divider
   Width := 96;        // fallback; a host sets a real width (.lfm) or calls FitToContent
   FCaption := '';
   FShowCaption := True;

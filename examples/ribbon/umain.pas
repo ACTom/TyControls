@@ -415,9 +415,11 @@ var
   i: Integer;
 begin
   // Editing
-  Small(GrpEdit, rsCmdFind, 'find', 6, 4, 88, @DoFind);
-  Small(GrpEdit, rsCmdReplace, 'replace', 6, 30, 88, @DoReplace);
-  Small(GrpEdit, rsCmdSelectAll, 'selectall', 6, 56, 88, @DoSelectAll);
+  { All three the same width, wide enough for the longest ("Select all") so the content-driven
+    min width never stretches one past the others (the buttons grow to fit their caption). }
+  Small(GrpEdit, rsCmdFind, 'find', 6, 4, 104, @DoFind);
+  Small(GrpEdit, rsCmdReplace, 'replace', 6, 30, 104, @DoReplace);
+  Small(GrpEdit, rsCmdSelectAll, 'selectall', 6, 56, 104, @DoSelectAll);
 
   // Paragraph
   alignGrp := TTyButtonGroup.Create(Self);
