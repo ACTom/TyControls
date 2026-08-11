@@ -630,8 +630,12 @@ begin
       现代密度下绘制位置和可点区域会错位。 }
     UpR := TySpinUpButtonRect(R, APPI, BtnW);
     DownR := TySpinDownButtonRect(R, APPI, BtnW);
+    { Right edge subtracts Padding.Right so right/center-aligned text keeps a gap from the
+      spin buttons -- AND so the text's right edge matches CaretPixelX's ViewWidth (which
+      already subtracts RightPad). Without this the caret ends RightPad px short of the last
+      glyph and blinks ON the digit under right/center alignment (left is unaffected: no slack). }
     TextR := Rect(R.Left + P.Scale(S.Padding.Left), R.Top + P.Scale(S.Padding.Top),
-      R.Right - BtnW, R.Bottom - P.Scale(S.Padding.Bottom));
+      R.Right - BtnW - P.Scale(S.Padding.Right), R.Bottom - P.Scale(S.Padding.Bottom));
     EffSize := ResolveFontSize(S);   // same size feeds DrawText and CaretPixelX (caret alignment)
     if (FEditText = '') and (FTextHint <> '') then
       // Same muted ink and same rule as the sibling TTyEdit (Edit.pas:1719-1723).
