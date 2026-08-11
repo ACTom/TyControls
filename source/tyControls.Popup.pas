@@ -282,13 +282,6 @@ begin
   if TyGtkIsWayland and (not FNoActivate)
      and (FContent is TWinControl) and TWinControl(FContent).CanFocus then
     TWinControl(FContent).SetFocus;
-  if TyGtkIsWayland then
-  begin
-    writeln(StdErr, '[dropdown] shown NoActivate=', FNoActivate,
-      ' listFocused=', (FContent is TWinControl) and TWinControl(FContent).Focused,
-      ' popupIsActiveForm=', FForm = Screen.ActiveForm);
-    TyGtk3LogPopupGrab('dropdown', FForm);
-  end;
 
   ApplyRegion(PopupW, PopupH);
   Application.QueueAsyncCall(@DeferredReapplyGeometry, 0);
@@ -419,8 +412,6 @@ end;
 { Popup lost focus (user clicked away) → close. }
 procedure TTyDropdownPopup.FormDeactivate(Sender: TObject);
 begin
-  if TyGtkIsWayland then
-    writeln(StdErr, '[dropdown] FormDeactivate fired; NoActivate=', FNoActivate);
   { A NoActivate (autocomplete) popup never legitimately takes activation, so a
     deactivate here is spurious (e.g. the owner re-focusing its embedded editor
     right after Show) — the OWNER drives close in that mode, not deactivate. }
@@ -436,14 +427,12 @@ begin
   FForm.SetBounds(FRect.Left, FRect.Top,
     FRect.Right - FRect.Left, FRect.Bottom - FRect.Top);
   ApplyRegion(FRect.Right - FRect.Left, FRect.Bottom - FRect.Top);
-  { GTK3/Wayland EXPERIMENT: the popup keeps a GTK grab while open, which captures outside clicks
-    so they never reach the main form to deactivate us -> no dismiss. The menu is dismissable, so
-    drop the grab now the popup is mapped and see whether an outside click then deactivates us. }
-  if TyGtkIsWayland then
-  begin
-    writeln(StdErr, '[dropdown] deferred: releasing grab while open');
-    TyGtk3ReleasePopupGrab(FForm);
-  end;
+  { GTK3/Wayland: a borderless popup maps as a GTK_WINDOW_POPUP holding an app-level GTK grab that
+    captures every outside click, so they never reach the main form and the popup can't be dismissed
+    by clicking away. Drop that grab once the popup is mapped -- now an outside click reaches the
+    control under it, moves focus, and deactivates us -> Close, exactly like the themed menu. No-op
+    off GTK3-Wayland. }
+  TyGtk3ReleasePopupGrab(FForm);
 end;
 
 end.

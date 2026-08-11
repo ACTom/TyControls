@@ -1787,11 +1787,6 @@ begin
   // Route keyboard navigation to the dropdown: without focus, arrow/Esc keys never reach
   // TTyMenuView.KeyDown and a keypress can instead deactivate (and dismiss) the popup.
   if FView.CanFocus then FView.SetFocus;
-  if TyGtkIsWayland then   { DIAG: compare grab/focus state vs the dropdown }
-  begin
-    TyGtk3LogPopupGrab('menu', FForm);
-    writeln(StdErr, '[menu] shown viewFocused=', FView.Focused, ' popupIsActiveForm=', FForm = Screen.ActiveForm);
-  end;
   ApplyFormRegion(R.Right - R.Left, R.Bottom - R.Top);
   Application.QueueAsyncCall(@DeferredReapplyGeometry, 0);
 end;
@@ -2069,7 +2064,6 @@ procedure TTyMenuPopup.FormDeactivate(Sender: TObject);
 var
   rootPopup: TTyMenuPopup;
 begin
-  if TyGtkIsWayland then writeln(StdErr, '[menu] FormDeactivate fired');
   // When we open a submenu, focus moves to the CHILD popup within our own cascade, which
   // deactivates us — that is NOT a dismiss, and collapsing here would free the child while
   // it is still being shown (AV at FForm.Show). So don't decide synchronously: DEFER the
