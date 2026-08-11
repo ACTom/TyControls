@@ -502,7 +502,12 @@ Application.CreateForm(TMainForm, MainForm);
 ```
 
 Deploy `languages/tycontrols.<lang>.po` next to your own `.po` in the `languages/` folder beside
-the executable. **An English deployment should ship `tycontrols.en.po` too** — it is nearly
+the executable — that `tycontrols.<lang>.po` is the library source's
+`languages/tycontrols.strconsts.<lang>.po` copied with the `.strconsts` **dropped from the file
+name** (why it must go: see "the file base name may not contain a dot" below). The library ships
+English and Simplified Chinese; add a language by translating a copy in the same format. **One
+file per language** covers the whole library — you do not ship a localization file per control.
+**An English deployment should ship `tycontrols.en.po` too** — it is nearly
 empty, but its language sentinel is what switches the calendar's and date picker's month and
 weekday names from "follow the OS locale" to "follow the app language"; without it those two
 controls keep showing OS-locale names under `--lang=en` (mechanism:

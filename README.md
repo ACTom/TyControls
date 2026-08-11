@@ -442,7 +442,7 @@ TranslateUnitResourceStringsEx('', LangDir, 'tycontrols', 'tyControls.StrConsts'
 Application.CreateForm(TMainForm, MainForm);
 ```
 
-把 `languages/tycontrols.<lang>.po` 与你自己的 `.po` 一起放进可执行文件旁的 `languages/` 目录。
+把 `languages/tycontrols.<lang>.po` 与你自己的 `.po` 一起放进可执行文件旁的 `languages/` 目录 —— 这个 `tycontrols.<lang>.po` 就是库源码 `languages/tycontrols.strconsts.<lang>.po` 复制后**去掉文件名里的 `.strconsts`** 改名而来(为什么要去掉见下方"文件主名不能带点号")。库随附英文与简体中文;要加别的语言,照它的格式翻一份即可。**每种语言就这一个文件**,不用逐个控件带本地化文件。
 **英文部署也要带上 `tycontrols.en.po`** —— 它几乎是空的,但里面的语言哨兵是日历/日期框
 把月份、星期名从"跟随操作系统区域"切到"跟随应用语言"的开关;不带它,`--lang=en` 下这两个控件
 仍显示 OS 区域的名字(机制详见 [docs/controls/calendar.md](docs/controls/calendar.md) §8)。
