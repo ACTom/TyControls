@@ -99,6 +99,10 @@ procedure TyGtk3MakePopupRect(APopup, AParent: TCustomForm; const AAnchorInParen
   GTK3-Wayland. }
 procedure TyGtk3ReleasePopupGrab(APopup: TCustomForm);
 
+{ DIAGNOSTIC: log the current GTK grab state, tagged, so a menu popup and a dropdown popup can be
+  compared on a real GTK3/Wayland session. No-op off GTK3-Wayland. }
+procedure TyGtk3LogPopupGrab(const ATag: string; APopup: TCustomForm);
+
 implementation
 
 {$IFDEF LCLGTK2}
@@ -296,6 +300,11 @@ begin
   // GTK2 is X11-only -- no Wayland grab to drop.
 end;
 
+procedure TyGtk3LogPopupGrab(const ATag: string; APopup: TCustomForm);
+begin
+  // GTK2: no Wayland.
+end;
+
 {$ELSE}
 {$IFDEF LCLGTK3}
 
@@ -489,6 +498,22 @@ begin
   writeln(StdErr, '[TyGtk3ReleasePopupGrab] seat_ungrab + flush done');
 end;
 
+procedure TyGtk3LogPopupGrab(const ATag: string; APopup: TCustomForm);
+var
+  grabW, popTop: PGtkWidget;
+  isOwn: Boolean;
+begin
+  if not TyGtkIsWayland then Exit;
+  grabW := gtk_grab_get_current;
+  isOwn := False;
+  if (grabW <> nil) and (APopup <> nil) and APopup.HandleAllocated then
+  begin
+    popTop := gtk_widget_get_toplevel(Gtk3NativeWidget(APopup));
+    isOwn := gtk_widget_get_toplevel(grabW) = popTop;
+  end;
+  writeln(StdErr, '[grabstate ', ATag, '] gtk_grab_nonnil=', grabW <> nil, ' isOwnPopup=', isOwn);
+end;
+
 {$ELSE}
 
 function TyGtkStartSystemMove(AForm: TCustomForm): Boolean;
@@ -531,6 +556,11 @@ end;
 procedure TyGtk3ReleasePopupGrab(APopup: TCustomForm);
 begin
   // not a GTK build: no Wayland grab to drop.
+end;
+
+procedure TyGtk3LogPopupGrab(const ATag: string; APopup: TCustomForm);
+begin
+  // not a GTK build.
 end;
 
 {$ENDIF}

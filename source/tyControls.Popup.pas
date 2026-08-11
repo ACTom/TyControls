@@ -283,9 +283,12 @@ begin
      and (FContent is TWinControl) and TWinControl(FContent).CanFocus then
     TWinControl(FContent).SetFocus;
   if TyGtkIsWayland then
+  begin
     writeln(StdErr, '[dropdown] shown NoActivate=', FNoActivate,
       ' listFocused=', (FContent is TWinControl) and TWinControl(FContent).Focused,
       ' popupIsActiveForm=', FForm = Screen.ActiveForm);
+    TyGtk3LogPopupGrab('dropdown', FForm);
+  end;
 
   ApplyRegion(PopupW, PopupH);
   Application.QueueAsyncCall(@DeferredReapplyGeometry, 0);
@@ -433,6 +436,14 @@ begin
   FForm.SetBounds(FRect.Left, FRect.Top,
     FRect.Right - FRect.Left, FRect.Bottom - FRect.Top);
   ApplyRegion(FRect.Right - FRect.Left, FRect.Bottom - FRect.Top);
+  { GTK3/Wayland EXPERIMENT: the popup keeps a GTK grab while open, which captures outside clicks
+    so they never reach the main form to deactivate us -> no dismiss. The menu is dismissable, so
+    drop the grab now the popup is mapped and see whether an outside click then deactivates us. }
+  if TyGtkIsWayland then
+  begin
+    writeln(StdErr, '[dropdown] deferred: releasing grab while open');
+    TyGtk3ReleasePopupGrab(FForm);
+  end;
 end;
 
 end.
