@@ -18,6 +18,12 @@ type
   TTyImeCommitEvent = procedure(const ACommitUtf8: string) of object;   // full committed UTF-8 text
   TTyImeCaretQuery = function: TRect of object;                         // caret rect, client device px
 
+  { How a Wayland popup snaps to its anchor rect: drop directly BELOW it (dropdowns, bar cells,
+    context menus) or fly out to one SIDE of it (a submenu cascade -- LTR opens right, mirrored
+    opens left). In the shared types unit so the neutral PlatformWS facade + the GTK3 helper can
+    both name it without either depending on the other. Only GTK3 acts on it. }
+  TTyPopupAnchorMode = (pamBelow, pamRightOf, pamLeftOf);
+
   // tysSelected is APPENDED last so existing ordinals (and the golden baseline)
   // are unchanged; the cascade application order is set by cStateOrder in StyleModel,
   // not by this enum order. Driven by TTyButton.Down; matched by the ':selected'

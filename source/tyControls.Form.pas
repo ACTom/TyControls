@@ -11,7 +11,7 @@ uses
   Classes, SysUtils, Types, Controls, Graphics, Forms, Dialogs, ExtCtrls, LCLType, LMessages,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Base, tyControls.Painter, tyControls.Controller,
-  tyControls.Menu, tyControls.WindowEffects, tyControls.QtWS, tyControls.GtkWS,
+  tyControls.Menu, tyControls.WindowEffects, tyControls.PlatformWS,
   tyControls.FormSurface, tyControls.StrConsts;
 
 type
@@ -607,7 +607,6 @@ function TyTitleBarDeviceHeight(AForm: TCustomForm; ABar: TTyTitleBar; APPI: Int
 implementation
 
 uses
-  tyControls.Win32WS,  // native Win32 NC edge-resize glue (no-op off Windows)
   tyControls.StyleModel   // ResolveOverride + TyMergeStyleSet: the ONE StyleOverride parse/merge
   {$IFDEF LCLCOCOA}, CocoaAll{$ENDIF}
   {$IFDEF WINDOWS}, strings{$ENDIF}   // StrComp(PAnsiChar) for the WM_SETTINGCHANGE area check
@@ -1353,7 +1352,7 @@ begin
   if (Button = mbLeft) and (FEngine <> nil) and not (csDesigning in ComponentState)
      and FEngine.FormResizable and not FEngine.Maximized and (Y < FEngine.BorderZone) then
   begin
-    TyWin32BeginTopResize(GetParentForm(Self));
+    TyNcBeginTopResize(GetParentForm(Self));
     Exit;
   end;
   {$ENDIF}
@@ -1438,7 +1437,7 @@ begin
   if FForm = nil then Exit;
   WasDragging := FDragging;
   FDragging := False;   // clear BEFORE the (blocking, modal) Win32 loop — see the declaration
-  if TyWin32StartSystemMove(FForm) or TyQtStartSystemMove(FForm) or TyGtkStartSystemMove(FForm) then
+  if TyStartSystemMove(FForm) then
   begin
     SetCaptureControl(nil);   // don't let LCL's capture fight the WM's move grab
     Exit;
@@ -1477,7 +1476,7 @@ begin
     // BLOCKING modal loop that would swallow a double-click's second press -> it is deferred to
     // TitleBarDragUpdate and armed only past a small drag threshold (so plain click / double-click to
     // maximize still work). Win32 therefore falls through here to the manual-drag setup below.
-    if TyQtStartSystemMove(FForm) or TyGtkStartSystemMove(FForm) then
+    if TyStartSystemMove(FForm, {AIncludeBlocking:}False) then
     begin
       SetCaptureControl(nil);
       Exit;
@@ -2287,7 +2286,7 @@ begin
     if FController <> nil then ctrl := FController else ctrl := TyDefaultController;
     noFrame := not TyResolveWindowEffect(ResolveChromeStyle(ctrl), False).Shadow;
     maxed := (FEngine <> nil) and FEngine.Maximized;
-    TyWin32ApplyNcResize(Self, resiz, zone, capH,
+    TyNcApplyResize(Self, resiz, zone, capH,
       maxed,                                    // engine (work-area) maximize -> no NC inset
       resiz and (biMaximize in BorderIcons),    // allow native maximize (WS_MAXIMIZEBOX)
       noFrame);
@@ -2296,7 +2295,7 @@ begin
     // See TyWin32SetEdgePassthrough for the measurements and for why the band is not simply
     // handed back to the OS.
     if (FSurface <> nil) and FSurface.HandleAllocated then
-      TyWin32SetEdgePassthrough(FSurface, zone, noFrame and resiz and not maxed);
+      TyNcSetEdgePassthrough(FSurface, zone, noFrame and resiz and not maxed);
   end;
   {$ENDIF}
   // GTK/Qt: the AdjustClientRect gutter + WM handoff (Phase C). Cocoa: resizable styleMask

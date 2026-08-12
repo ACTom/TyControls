@@ -17,8 +17,7 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Forms, LCLType, LCLIntf,
   {$IFDEF LCLWin32}Windows,{$ENDIF}
-  tyControls.Types, tyControls.Controller, tyControls.QtWS, tyControls.GtkWS,
-  tyControls.PlatformWS;
+  tyControls.Types, tyControls.Controller, tyControls.PlatformWS;
 
 // ---------------------------------------------------------------------------
 // TyPopupRect — screen rect for a dropdown of (AContentW x AContentH)
@@ -253,7 +252,7 @@ begin
 
   // Qt: re-type as Qt::Popup BEFORE Show (app-positioned, no top-left flash,
   // correct grab behaviour).  No-op on Win32/GTK2/Cocoa.
-  TyQtMakePopup(FForm);
+  TyPreparePopupNative(FForm);
 
   {$IFDEF LCLWin32}
   // Toggle WS_EX_NOACTIVATE per NoActivate so the (reused) form matches the current
@@ -273,7 +272,7 @@ begin
   { GTK3/Wayland: a top-level can't be placed by screen coords, so anchor the dropdown to its
     trigger control (no-op off GTK3-Wayland). Fixes every TTyPopup consumer -- combobox, calc,
     cascader, datetime picker, gallery, tree-select, value-list -- in one place. }
-  TyGtk3MakePopup(FForm, AAnchor);
+  TyAnchorPopupBelow(FForm, AAnchor);
   FForm.Show;
 
   // Qt/X11 may re-place + un-mask a frameless window at MAP time; re-assert
@@ -284,7 +283,7 @@ begin
     so the popup becomes the active form and an outside click deactivates it -> FormDeactivate
     closes it, exactly like the menu. Skip in NoActivate (autocomplete) mode, where the editor
     keeps focus. No-op off GTK3-Wayland. }
-  if TyGtkIsWayland and (not FNoActivate)
+  if TyIsGtk3Wayland and (not FNoActivate)
      and (FContent is TWinControl) and TWinControl(FContent).CanFocus then
     TWinControl(FContent).SetFocus;
 
@@ -328,7 +327,7 @@ begin
       // GTK3/Wayland: this Hide often runs at idle (deferred close), not during the click that
       // would have released the popup's seat grab -- so the pointer stays captured by the vanished
       // surface (no hover elsewhere; the next click is swallowed and re-picks). Drop the grab now.
-      TyGtk3ReleasePopupGrab(FForm);
+      TyReleasePopupGrab(FForm);
       FForm.OnDeactivate := @FormDeactivate;
     end;
     { Only stamp the reopen-race tick and notify when a genuinely-open popup closed. A Close on
@@ -385,9 +384,9 @@ begin
     // Radius 0: leave rectangular (clear any stale mask from a prior show).
     // Qt: SetWindowRgn(..,0) is a no-op; clear deep first.
     if FContent is TWinControl then
-      TyQtClearWindowMaskDeep(FForm, TWinControl(FContent))
+      TyClearPopupWindowMask(FForm, TWinControl(FContent))
     else
-      TyQtClearWindowMaskDeep(FForm, nil);
+      TyClearPopupWindowMask(FForm, nil);
     SetWindowRgn(FForm.Handle, 0, True);
     Exit;
   end;
@@ -399,9 +398,9 @@ begin
   // alClient content control's own native widget, which the top-level mask
   // never reaches.  No-op off Qt.
   if FContent is TWinControl then
-    TyQtMaskWindowDeep(FForm, TWinControl(FContent), Rgn)
+    TyMaskPopupWindow(FForm, TWinControl(FContent), Rgn)
   else
-    TyQtMaskWindowDeep(FForm, nil, Rgn);
+    TyMaskPopupWindow(FForm, nil, Rgn);
   SetWindowRgn(FForm.Handle, Rgn, True);
 end;
 
@@ -437,7 +436,7 @@ begin
     wire a button-press handler that dismisses only when the click lands OUTSIDE the popup's widget
     tree -- exactly how LCL's own GtkMenu dismisses. HandleCompositorDismiss syncs the LCL side.
     No-op off GTK3-Wayland. }
-  TyGtk3GrabPopup(FForm, @HandleCompositorDismiss);
+  TyGrabPopup(FForm, @HandleCompositorDismiss);
 end;
 
 procedure TTyDropdownPopup.HandleCompositorDismiss(Sender: TObject);

@@ -20,8 +20,7 @@ interface
 
 uses
   Classes, SysUtils, Types, Controls, Forms, Graphics, LCLType,
-  tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.PlatformWS,
-  tyControls.QtWS, tyControls.GtkWS;
+  tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.PlatformWS;
 
 type
   TTyPopupSurface = class(TForm)
@@ -145,10 +144,10 @@ begin
   // flash) and grabs the mouse like a menu -- the same call the themed menus + Popup make. No-op
   // off Qt. Without it a plain top-level TTyPopupSurface is centred by the WM: the ribbon flyout
   // and the toolbar/coolbar overflow flyout both hit this on Qt6.
-  TyQtMakePopup(Self);
+  TyPreparePopupNative(Self);
   // GTK3/Wayland: a top-level can't be placed by screen coords, so anchor the popup to the
   // control it drops from (no-op off GTK3, and off GTK3-Wayland; harmless when AAnchor is nil).
-  TyGtk3MakePopup(Self, AAnchor);
+  TyAnchorPopupBelow(Self, AAnchor);
   Show;
   BringToFront;
 end;

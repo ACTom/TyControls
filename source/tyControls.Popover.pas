@@ -371,7 +371,7 @@ implementation
 
 uses
   BGRABitmapTypes, BGRACanvas2D,
-  tyControls.QtWS, tyControls.PlatformWS;   // TyIsWayland — the shape gate; TyQtMaskWindowDeep — Qt's child masks
+  tyControls.PlatformWS;   // TyIsWayland — the shape gate; TyMaskPopupWindow — Qt's child masks
 
 // ---------------------------------------------------------------------------
 // Pure rules / geometry
@@ -791,7 +791,7 @@ begin
   // Qt6/X11 (QTSCROLLABLEFORMS): the top-level mask never reaches the scroll-area viewport
   // or the adopted content's own native widget — TTyDropdownPopup's deep mask does. No-op
   // off Qt, and it does NOT take the region (SetWindowRgn below does).
-  TyQtMaskWindowDeep(Self, FOwnerPop.Content, bodyRgn);
+  TyMaskPopupWindow(Self, FOwnerPop.Content, bodyRgn);
   SetWindowRgn(Handle, bodyRgn, True);   // takes ownership of bodyRgn
 end;
 

@@ -71,12 +71,6 @@ function TyGtkTakeImeCommit(const ATruncated: string): string;
   or GTK2, and wrong the moment GTK3 became the default Linux widgetset. }
 function TyGtkIsWayland: Boolean;
 
-type
-  { How a Wayland popup snaps to its anchor rect: drop directly BELOW it (dropdowns, bar cells,
-    context menus) or fly out to one SIDE of it (a submenu cascade -- LTR opens right, mirrored
-    opens left). Widgetset-neutral so it can sit in the shared interface; only GTK3 reads it. }
-  TTyPopupAnchorMode = (pamBelow, pamRightOf, pamLeftOf);
-
 { Turn APopup into a Wayland xdg_popup anchored under AAnchor (via gdk_window_move_to_rect), so
   the compositor places it by the anchor instead of centring a free-floating top-level. GTK3
   only; a no-op on GTK2 (X11) and non-GTK. Call BEFORE Show, like TyQtMakePopup -- but GTK needs

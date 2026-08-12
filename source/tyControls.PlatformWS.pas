@@ -1,95 +1,234 @@
 unit tyControls.PlatformWS;
 {$mode objfpc}{$H+}
 
-{ Widgetset-NEUTRAL platform facts.
+{ Widgetset-NEUTRAL platform facade.
 
-  A control that has to know something about the machine it is running on should ask a
-  question about the machine, not about a widgetset. The distinction is not pedantry: the
-  library asked "is this Qt-on-Wayland?" through TyQtIsWayland, whose non-Qt answer is a
-  hard-coded False documented as "never Wayland (Win32/GTK2/Cocoa)". That was true while
-  Linux meant Qt or GTK2. It stopped being true when GTK3 -- which has a first-class Wayland
-  backend -- became the LCL's default Linux widgetset, and eight popup controls were left
-  believing they were on X11 when they were not.
+  A control that has to do something platform-specific asks THIS unit, never a widgetset helper
+  directly. Every function here dispatches, with conditional compilation, to the one widgetset
+  helper that implements it (tyControls.Win32WS / .QtWS / .Gtk2WS / .Gtk3WS); on every other
+  build the branch folds away and the call is inert. So all the {$IFDEF LCL...} lives in exactly
+  ONE place -- here -- and control code stays free of widgetset names, and each widgetset unit
+  carries only its own real code (no empty cross-platform stubs).
 
-  So the question lives here, and each widgetset helper answers for itself. Every one of
-  those answers is compile-time inert off its own widgetset, so this composes to exactly one
-  live branch per build with no run-time cost. }
+  Historical note: the library used to ask "is this Qt-on-Wayland?" through TyQtIsWayland, whose
+  non-Qt answer was a hard-coded False. That was true while Linux meant Qt or GTK2; it broke when
+  GTK3 -- a first-class Wayland backend -- became the LCL's default Linux widgetset. The question
+  belongs here, phrased about the machine, not a widgetset. }
 
 interface
 
 uses
-  Controls, Forms;
+  Classes, Controls, Forms, Types, LCLType, tyControls.Types;
 
-{ True when the session is a Wayland one.
+{ ---- platform facts ---------------------------------------------------------------------- }
 
-  What it governs: Wayland gives a client no way to place its own top-level windows and has
-  no shape extension, so a popup cannot be cut to a rounded or arrowed silhouette and cannot
-  be positioned by hand. Controls that do either must degrade -- square corners, and let the
-  compositor place the surface -- rather than draw something the compositor will ignore.
-
-  Answering False when the truth is True is the dangerous direction: the control then paints
-  a silhouette that never takes effect and positions a window that never moves. }
+{ True when the session is a Wayland one. Wayland gives a client no way to place its own
+  top-levels and has no shape extension, so popups can't be hand-positioned or cut to a rounded
+  silhouette and must degrade. Answering False when the truth is True is the dangerous direction. }
 function TyIsWayland: Boolean;
 
 { True for an LCL-GTK3 build. }
 function TyIsGtk3: Boolean;
 
+{ True only on a GTK3 build running under Wayland -- the exact gate for the GTK3/Wayland-specific
+  inline behaviour a couple of popup controls still need (focus the list, re-map on a hover switch)
+  that is NOT a widgetset call and so can't hide behind one. }
+function TyIsGtk3Wayland: Boolean;
+
 var
-  { EXPERIMENT, default OFF -- a switch, not a fix, and here is exactly why.
-
-    LCL-GTK3 chooses a popup window's native type like this (gtk3widgets.pas, TGtk3Window's
-    CreateWidget):
-
-        if (AForm.BorderStyle = bsNone) and
-           (Gtk3WidgetSet.IsWayland or (csNoFocus in AForm.ControlStyle)) then
-          Result := TGtkWindow.new(GTK_WINDOW_POPUP)
-        else
-          Result := TGtkWindow.new(GTK_WINDOW_TOPLEVEL);
-
-    So on X11 a borderless form WITHOUT csNoFocus becomes a managed TOPLEVEL -- placed and
-    decorated by the window manager rather than by us. Every popup this library puts up is a
-    borderless form and none of them set csNoFocus, which is a plausible common cause for the
-    GTK3 reports of dropdowns that never appear and menus that appear in the wrong place.
-
-    Plausible, not proven: it is read off the backend's source, and it cannot be tested from
-    a Windows box. It also is not free -- taking the POPUP path via csNoFocus means the window
-    does NOT get set_accept_focus, so a menu's arrow keys or a dropdown's type-ahead may stop
-    working. Shipping that trade silently, on a guess, would be worse than the bug.
-
-    Hence a switch. Set it True early (before any popup is shown) on a GTK3 machine and
-    compare; the answer decides whether the real fix is ours, or an upstream request that X11
-    should get POPUP with accept_focus the way Wayland already does. It is inert off GTK3. }
+  { EXPERIMENT, default OFF. On a GTK3 build, opt a borderless popup into the native GTK_WINDOW_POPUP
+    path via csNoFocus (see the long note kept with TyPreparePopupWindow's history). Inert off GTK3. }
   TyGtk3PopupWindows: Boolean = False;
 
 { Call from a borderless popup window's constructor, before its handle exists. Applies
   TyGtk3PopupWindows. No-op off GTK3, and a no-op when the switch is off. }
 procedure TyPreparePopupWindow(AForm: TCustomForm);
 
+{ ---- window move / non-client resize ----------------------------------------------------- }
+
+{ Hand a borderless window's title-bar drag to the window manager (Win32 Aero-snap, Qt
+  startSystemMove, GTK begin_move_drag) instead of writing Left/Top per mouse-move. Returns True
+  when the system move started -- then the caller must NOT do its own repositioning.
+
+  AIncludeBlocking=False excludes Win32's caption move (WM_NCLBUTTONDOWN), which is a BLOCKING modal
+  loop that would swallow a double-click's second press: on the mouse-DOWN a caller wants only the
+  NON-blocking WM handoffs (Qt/GTK) and defers Win32's to the drag-threshold path. }
+function TyStartSystemMove(AForm: TCustomForm; AIncludeBlocking: Boolean = True): Boolean;
+
+{ Win32 non-client resize band for a borderless self-drawn form (Aero snap / edge resize). No-op
+  off Win32. }
+procedure TyNcApplyResize(AForm: TCustomForm; AResizable: Boolean;
+  ABorderZone, ACaptionHeight: Integer; AMaximized, AAllowMaximize: Boolean;
+  ANoFrame: Boolean = False);
+procedure TyNcBeginTopResize(AForm: TCustomForm);
+procedure TyNcSetEdgePassthrough(AControl: TWinControl; AZone: Integer; AEnabled: Boolean);
+
+{ ---- popups (Qt::Popup / Wayland xdg_popup) ---------------------------------------------- }
+
+{ Re-type AForm as a native popup so it maps app-positioned and grabs like a menu (Qt only). }
+procedure TyPreparePopupNative(AForm: TCustomForm);
+{ GTK3/Wayland: anchor APopup under AAnchor (drop below). No-op elsewhere. }
+procedure TyAnchorPopupBelow(APopup: TCustomForm; AAnchor: TControl);
+{ GTK3/Wayland: anchor APopup to AParent's window at ARect (in AParent client coords), AMode picks
+  drop-below vs fly-out-to-a-side. No-op elsewhere. }
+procedure TyAnchorPopupRect(APopup, AParent: TCustomForm; const ARect: TRect;
+  AMode: TTyPopupAnchorMode);
+{ GTK3/Wayland: seat-grab APopup and dismiss (AOnDismiss) on an outside click; AGroupId keeps a
+  menu cascade's sibling levels "inside"; ASeatGrab / AExcludeCtl -- see the GTK3 helper. }
+procedure TyGrabPopup(APopup: TCustomForm; AOnDismiss: TNotifyEvent; AGroupId: Pointer = nil;
+  ASeatGrab: Boolean = True; AExcludeCtl: TWinControl = nil);
+{ GTK3/Wayland: drop the grab a popup left behind (on hide). No-op elsewhere. }
+procedure TyReleasePopupGrab(APopup: TCustomForm);
+{ Qt: mask a frameless popup (and its scroll-area viewport + content) to a rounded region; and the
+  clear. No-op elsewhere (Win32/GTK use SetWindowRgn on the top-level directly). }
+procedure TyMaskPopupWindow(AForm: TCustomForm; AContentCtl: TWinControl; ARgn: HRGN);
+procedure TyClearPopupWindowMask(AForm: TCustomForm; AContentCtl: TWinControl);
+
+{ ---- input method (IME) ------------------------------------------------------------------ }
+
+{ Attach an own-context IME so a control receives FULL composed CJK commits (Qt intercepts the
+  truncating TUTF8Char path; GTK2 attaches a GtkIMContext because stock LCL-GTK2 delivers none).
+  Returns an opaque handle, or nil when the widgetset needs no such hook. }
+function TyImeInstall(AControl: TWinControl; AOnCommit: TTyImeCommitEvent;
+  ACaretQuery: TTyImeCaretQuery): TObject;
+{ Tear an install down (Qt); nils the handle. }
+procedure TyImeUninstall(var AHandle: TObject);
+{ GTK2: tell the own IM context the control gained/lost focus. No-op elsewhere. }
+procedure TyImeSetFocus(AHandle: TObject; AFocused: Boolean);
+{ Qt: reposition the candidate window at the caret. No-op elsewhere. }
+procedure TyImeUpdateCaret;
+{ GTK3: the FULL commit the backend delivered when the control got a truncated copy through
+  UTF8KeyPress; '' otherwise (so the call site needs no IFDEF). }
+function TyImeTakeCommit(const ATruncated: string): string;
+
 implementation
 
 uses
-  tyControls.QtWS, tyControls.GtkWS;
+  {$IFDEF LCLWin32} tyControls.Win32WS, {$ENDIF}
+  {$IF DEFINED(LCLQt5) OR DEFINED(LCLQt6)} tyControls.QtWS, {$IFEND}
+  tyControls.GtkWS;   // still merged in this phase; split into Gtk2WS/Gtk3WS follows
 
 function TyIsWayland: Boolean;
 begin
-  { Each helper is a constant False off its own widgetset, so exactly one of these can ever
-    be live in a given build. }
-  Result := TyQtIsWayland or TyGtkIsWayland;
+  { Each helper is a constant False off its own widgetset, so exactly one can ever be live. }
+  Result := {$IF DEFINED(LCLQt5) OR DEFINED(LCLQt6)} TyQtIsWayland {$ELSE} False {$IFEND}
+            or TyGtkIsWayland;
 end;
 
 function TyIsGtk3: Boolean;
 begin
-  {$IFDEF LCLGTK3}
-  Result := True;
-  {$ELSE}
-  Result := False;
-  {$ENDIF}
+  {$IFDEF LCLGTK3} Result := True; {$ELSE} Result := False; {$ENDIF}
+end;
+
+function TyIsGtk3Wayland: Boolean;
+begin
+  Result := TyGtkIsWayland;   // TyGtkIsWayland is already GTK3-and-Wayland (const False elsewhere)
 end;
 
 procedure TyPreparePopupWindow(AForm: TCustomForm);
 begin
   if (AForm = nil) or (not TyIsGtk3) or (not TyGtk3PopupWindows) then Exit;
   AForm.ControlStyle := AForm.ControlStyle + [csNoFocus];
+end;
+
+function TyStartSystemMove(AForm: TCustomForm; AIncludeBlocking: Boolean): Boolean;
+begin
+  {$IFDEF LCLWin32}
+  if AIncludeBlocking then Result := TyWin32StartSystemMove(AForm) else Result := False;
+  {$ELSE}{$IF DEFINED(LCLQt5) OR DEFINED(LCLQt6)}
+  Result := TyQtStartSystemMove(AForm);
+  {$ELSE}
+  Result := TyGtkStartSystemMove(AForm);
+  {$IFEND}{$ENDIF}
+end;
+
+procedure TyNcApplyResize(AForm: TCustomForm; AResizable: Boolean;
+  ABorderZone, ACaptionHeight: Integer; AMaximized, AAllowMaximize: Boolean; ANoFrame: Boolean);
+begin
+  {$IFDEF LCLWin32}
+  TyWin32ApplyNcResize(AForm, AResizable, ABorderZone, ACaptionHeight, AMaximized, AAllowMaximize, ANoFrame);
+  {$ENDIF}
+end;
+
+procedure TyNcBeginTopResize(AForm: TCustomForm);
+begin
+  {$IFDEF LCLWin32} TyWin32BeginTopResize(AForm); {$ENDIF}
+end;
+
+procedure TyNcSetEdgePassthrough(AControl: TWinControl; AZone: Integer; AEnabled: Boolean);
+begin
+  {$IFDEF LCLWin32} TyWin32SetEdgePassthrough(AControl, AZone, AEnabled); {$ENDIF}
+end;
+
+procedure TyPreparePopupNative(AForm: TCustomForm);
+begin
+  {$IF DEFINED(LCLQt5) OR DEFINED(LCLQt6)} TyQtMakePopup(AForm); {$IFEND}
+end;
+
+procedure TyAnchorPopupBelow(APopup: TCustomForm; AAnchor: TControl);
+begin
+  {$IFDEF LCLGTK3} TyGtk3MakePopup(APopup, AAnchor); {$ENDIF}
+end;
+
+procedure TyAnchorPopupRect(APopup, AParent: TCustomForm; const ARect: TRect;
+  AMode: TTyPopupAnchorMode);
+begin
+  {$IFDEF LCLGTK3} TyGtk3MakePopupRect(APopup, AParent, ARect, AMode); {$ENDIF}
+end;
+
+procedure TyGrabPopup(APopup: TCustomForm; AOnDismiss: TNotifyEvent; AGroupId: Pointer;
+  ASeatGrab: Boolean; AExcludeCtl: TWinControl);
+begin
+  {$IFDEF LCLGTK3} TyGtk3GrabPopup(APopup, AOnDismiss, AGroupId, ASeatGrab, AExcludeCtl); {$ENDIF}
+end;
+
+procedure TyReleasePopupGrab(APopup: TCustomForm);
+begin
+  {$IFDEF LCLGTK3} TyGtk3ReleasePopupGrab(APopup); {$ENDIF}
+end;
+
+procedure TyMaskPopupWindow(AForm: TCustomForm; AContentCtl: TWinControl; ARgn: HRGN);
+begin
+  {$IF DEFINED(LCLQt5) OR DEFINED(LCLQt6)} TyQtMaskWindowDeep(AForm, AContentCtl, ARgn); {$IFEND}
+end;
+
+procedure TyClearPopupWindowMask(AForm: TCustomForm; AContentCtl: TWinControl);
+begin
+  {$IF DEFINED(LCLQt5) OR DEFINED(LCLQt6)} TyQtClearWindowMaskDeep(AForm, AContentCtl); {$IFEND}
+end;
+
+function TyImeInstall(AControl: TWinControl; AOnCommit: TTyImeCommitEvent;
+  ACaretQuery: TTyImeCaretQuery): TObject;
+begin
+  {$IF DEFINED(LCLQt5) OR DEFINED(LCLQt6)}
+  Result := TyQtInstallIme(AControl, AOnCommit, ACaretQuery);
+  {$ELSE}{$IFDEF LCLGTK2}
+  Result := TyGtkInstallIme(AControl, AOnCommit, ACaretQuery);
+  {$ELSE}
+  Result := nil;
+  {$ENDIF}{$IFEND}
+end;
+
+procedure TyImeUninstall(var AHandle: TObject);
+begin
+  { Preserve the historical contract: Qt uninstalls + nils; other widgetsets' handles are torn
+    down by the control's own teardown, so this is a no-op there. }
+  {$IF DEFINED(LCLQt5) OR DEFINED(LCLQt6)} TyQtUninstallIme(AHandle); {$IFEND}
+end;
+
+procedure TyImeSetFocus(AHandle: TObject; AFocused: Boolean);
+begin
+  {$IFDEF LCLGTK2} TyGtkImeSetFocus(AHandle, AFocused); {$ENDIF}
+end;
+
+procedure TyImeUpdateCaret;
+begin
+  {$IF DEFINED(LCLQt5) OR DEFINED(LCLQt6)} TyQtImeUpdateCaret; {$IFEND}
+end;
+
+function TyImeTakeCommit(const ATruncated: string): string;
+begin
+  {$IFDEF LCLGTK3} Result := TyGtkTakeImeCommit(ATruncated); {$ELSE} Result := ''; {$ENDIF}
 end;
 
 end.

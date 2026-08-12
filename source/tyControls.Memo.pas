@@ -7,7 +7,7 @@ uses
   BGRABitmap, BGRABitmapTypes, BGRATextBidi,
   tyControls.Types, tyControls.Painter, tyControls.Base,
   tyControls.ScrollBar, tyControls.UndoStack, tyControls.Animation,
-  tyControls.QtWS, tyControls.GtkWS, tyControls.Controller, tyControls.TextMenu;
+  tyControls.PlatformWS, tyControls.Controller, tyControls.TextMenu;
 type
   // Cumulative-prefix pixel widths, length = codepoints+1 (shared name with Edit).
   TTyIntArray = array of Integer;
@@ -1003,7 +1003,7 @@ begin
   FreeAndNil(FTextMenu);
   // Free the timer first so its OnTimer callback can never fire mid-teardown.
   FreeAndNil(FBlinkTimer);
-  TyQtUninstallIme(FImeHook);   // in case DestroyWnd never ran (Qt-only; no-op elsewhere)
+  TyImeUninstall(FImeHook);   // in case DestroyWnd never ran (Qt-only; no-op elsewhere)
   FUndoStack.Free;
   FMeasureBmp.Free;
   FLineWidthCache.Free;
@@ -1071,14 +1071,14 @@ begin
     EnsureBlinkTimer;
     FBlinkTimer.Enabled := True;
   end;
-  TyGtkImeSetFocus(FImeHook, True);   // GTK2: start our IM context composing (no-op elsewhere)
+  TyImeSetFocus(FImeHook, True);   // GTK2: start our IM context composing (no-op elsewhere)
   Invalidate;   // show caret + (HideSelection) the selection band immediately on focus-gain
 end;
 
 procedure TTyMemo.DoExit;
 begin
   inherited DoExit;
-  TyGtkImeSetFocus(FImeHook, False);   // GTK2: stop our IM context composing (no-op elsewhere)
+  TyImeSetFocus(FImeHook, False);   // GTK2: stop our IM context composing (no-op elsewhere)
   if FBlinkTimer <> nil then FBlinkTimer.Enabled := False;
   FCaretVisible := True;
   Invalidate;
@@ -4284,7 +4284,7 @@ begin
         if not EqualRect(FImeCaretRect, CaretRect) then
         begin
           FImeCaretRect := CaretRect;   // cache for the IME candidate-window query
-          TyQtImeUpdateCaret;           // Qt6: re-query so the candidate follows the caret (no-op elsewhere)
+          TyImeUpdateCaret;           // Qt6: re-query so the candidate follows the caret (no-op elsewhere)
         end;
         // Pin the Windows IME composition window to the caret (client coords),
         // so CJK candidates appear at the caret instead of the screen origin.
@@ -4315,7 +4315,7 @@ begin
     string is still pending in the widgetset, so take it and insert THAT instead. Returns ''
     on every other widgetset and whenever nothing was truncated, so the normal path below is
     untouched. }
-  imeFull := TyGtkTakeImeCommit(UTF8Key);
+  imeFull := TyImeTakeCommit(UTF8Key);
   if imeFull <> '' then
   begin
     HandleImeCommit(imeFull);
@@ -4392,15 +4392,15 @@ end;
 procedure TTyMemo.InitializeWnd;
 begin
   inherited InitializeWnd;
-  TyQtUninstallIme(FImeHook);   // defensive: drop any prior hook if the handle is recreated
-  FImeHook := TyQtInstallIme(Self, @HandleImeCommit, @GetImeCaretRect);   // Qt6 only; nil elsewhere
-  if FImeHook = nil then        // GTK2: stock LCL delivers no IME — attach our own GtkIMContext
-    FImeHook := TyGtkInstallIme(Self, @HandleImeCommit, @GetImeCaretRect);
+  TyImeUninstall(FImeHook);   // defensive: drop any prior hook if the handle is recreated
+  { Own-context IME: Qt intercepts the truncating TUTF8Char path; GTK2 attaches a GtkIMContext
+    because stock LCL-GTK2 delivers none. The facade picks the right one (nil where unneeded). }
+  FImeHook := TyImeInstall(Self, @HandleImeCommit, @GetImeCaretRect);
 end;
 
 procedure TTyMemo.DestroyWnd;
 begin
-  TyQtUninstallIme(FImeHook);
+  TyImeUninstall(FImeHook);
   inherited DestroyWnd;
 end;
 

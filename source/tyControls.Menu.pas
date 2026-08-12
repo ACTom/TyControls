@@ -4,7 +4,7 @@ interface
 uses Classes, SysUtils, Types, Controls, Graphics, Forms, ExtCtrls, LCLType, LCLProc, LCLIntf, LMessages, Menus,
   ImgList,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.Accel,
-  tyControls.QtWS, tyControls.GtkWS, tyControls.PlatformWS, tyControls.ImageCollection, tyControls.ImageDraw;
+  tyControls.PlatformWS, tyControls.ImageCollection, tyControls.ImageDraw;
 
 const
   { Layout metrics (logical px, 96-PPI baseline). These are spacing/size tokens, not
@@ -1759,7 +1759,7 @@ begin
   w := Max(FView.MeasureWidth(ppi), AAnchor.Right - AAnchor.Left);
   R := ComputeBounds(AAnchor, w, h, ppi, AToRight, FRightToLeft);
   FPopupRect := R;
-  TyQtMakePopup(FForm);   // Qt: re-type as Qt::Popup BEFORE Show so it maps app-positioned (no top-left flash)
+  TyPreparePopupNative(FForm);   // Qt: re-type as Qt::Popup BEFORE Show so it maps app-positioned (no top-left flash)
   FForm.SetBounds(R.Left, R.Top, R.Right - R.Left, R.Bottom - R.Top);
   // GTK3/Wayland: the screen rect above is ignored by the compositor, so anchor the window to its
   // transient parent instead (bar cell / parent-row rect, both in parent-client coords). No-op off
@@ -1772,13 +1772,13 @@ begin
     // fresh popup at the new cell -- the same pop-down-then-pop-up a native menu bar does. Detach
     // OnDeactivate around the interim Hide so it can't fire a dismiss. Off Wayland the old reuse
     // (SetBounds moves the visible window) still stands, so no flicker there.
-    if TyGtkIsWayland and FForm.Visible then
+    if TyIsGtk3Wayland and FForm.Visible then
     begin
       FForm.OnDeactivate := nil;
       FForm.Hide;
       FForm.OnDeactivate := @FormDeactivate;
     end;
-    TyGtk3MakePopupRect(FForm, FWlParent, FWlRect, FWlMode);
+    TyAnchorPopupRect(FForm, FWlParent, FWlRect, FWlMode);
     FWlParent := nil;   // consume: a later screen-anchored reopen must not reuse a stale rect
   end;
   FForm.Show;
@@ -1827,7 +1827,7 @@ begin
     { Radius 0: leave rectangular (clear any region carried over from a prior open). On Qt, deep-clear
       first — SetWindowRgn(.,0) is a no-op there, so a reused popup would keep stale viewport/child
       masks (no-op off Qt). }
-    TyQtClearWindowMaskDeep(FForm, FView);
+    TyClearPopupWindowMask(FForm, FView);
     SetWindowRgn(FForm.Handle, 0, True);
     Exit;
   end;
@@ -1839,7 +1839,7 @@ begin
     TTyMenuView's own native widget, which the top-level mask never reaches. Deep-mask them with the
     SAME region BEFORE SetWindowRgn (which only masks the top-level and doesn't consume Rgn). No-op
     off Qt. }
-  TyQtMaskWindowDeep(FForm, FView, Rgn);
+  TyMaskPopupWindow(FForm, FView, Rgn);
   SetWindowRgn(FForm.Handle, Rgn, True);
 end;
 
@@ -1973,8 +1973,8 @@ begin
     // GTK3/Wayland: the child can't be placed by FForm.Left/Top (a Wayland client's own screen
     // position is unreliable). Anchor it to THIS popup's window instead, at the parent row's rect
     // in this form's client coords -- flying out to the trailing side (left when mirrored). Runtime-
-    // gated: dead work off Wayland, and folded away entirely off GTK3 (TyGtkIsWayland = const False).
-    if TyGtkIsWayland then
+    // gated: dead work off Wayland, and folded away entirely off GTK3 (TyIsGtk3Wayland = const False).
+    if TyIsGtk3Wayland then
     begin
       if FRightToLeft then wlMode := pamLeftOf else wlMode := pamRightOf;
       FChild.SetWaylandAnchor(FForm,
@@ -2489,8 +2489,8 @@ begin
     // GTK3/Wayland: the compositor ignores that screen rect, so also register the cell's rect in
     // the app form's client coords (a plain control-tree walk, no screen coords) as the anchor the
     // dropdown drops from. Gated at runtime -- this is dead work on every other widgetset, and off
-    // GTK3 TyGtkIsWayland is a constant False so it folds away entirely.
-    if TyGtkIsWayland then
+    // GTK3 TyIsGtk3Wayland is a constant False so it folds away entirely.
+    if TyIsGtk3Wayland then
     begin
       pf := GetParentForm(Self);
       if pf <> nil then
