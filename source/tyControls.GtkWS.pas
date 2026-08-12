@@ -27,13 +27,6 @@ uses Classes, Types, Forms, Controls, tyControls.Types;   // Classes: TNotifyEve
   per-move repositioning. GTK2 only; returns False elsewhere so the caller keeps its fallback. }
 function TyGtkStartSystemMove(AForm: TCustomForm): Boolean;
 
-{ GTK3/Wayland: drop the transient parent LCL auto-assigns to a borderless form at realize. With a
-  transient parent the compositor maps the form as an xdg_popup, which has NO move request -- so its
-  title bar can't be dragged (the whole reason dialogs were stuck). Cleared BEFORE the surface maps
-  (call from InitializeWnd), the form maps as a movable top-level like the main window; it stays
-  modal via LCL's own ShowModal loop. No-op off GTK3-Wayland. }
-procedure TyGtk3ClearTransientParent(AForm: TCustomForm);
-
 { Attach our own GtkIMContext to AControl so it receives FULL composed CJK commits via AOnCommit.
   ACaretQuery (may be nil) returns the caret rect (client device px) used to place the candidate
   window. Returns an opaque handle to free with the control's normal teardown (TObject.Free / the
@@ -144,11 +137,6 @@ begin
   P := Mouse.CursorPos;   // LCL screen coords == X11 root-window coords
   gtk_window_begin_move_drag(GTK_WINDOW(Top), 1, P.X, P.Y, gtk_get_current_event_time());
   Result := True;
-end;
-
-procedure TyGtk3ClearTransientParent(AForm: TCustomForm);
-begin
-  // GTK2 is X11-only -- borderless forms are movable there; nothing to clear.
 end;
 
 type
@@ -380,43 +368,9 @@ begin
     REVERTED: it stopped the MAIN window dragging as well, so on this setup begin_move_drag
     evidently does work for whatever type the main window is. Diagnose what actually differs
     between the two windows before gating this again. }
-  writeln(StdErr, '[SysMove] gtkType=', Ord(gtk_window_get_window_type(PGtkWindow(Top))),
-    ' (1=POPUP 0=TOPLEVEL) transientFor=', gtk_window_get_transient_for(PGtkWindow(Top)) <> nil,
-    ' caption="', AForm.Caption, '"');
   P := Mouse.CursorPos;   // LCL screen coords == root-window coords
   gtk_window_begin_move_drag(PGtkWindow(Top), 1, P.X, P.Y, gtk_get_current_event_time());
   Result := True;
-end;
-
-procedure TyGtk3ClearTransientParent(AForm: TCustomForm);
-var
-  W, Top: PGtkWidget;
-  gdkWin: PGdkWindow;
-begin
-  if (not TyGtkIsWayland) or (AForm = nil) or (not AForm.HandleAllocated) then Exit;
-  W := Gtk3NativeWidget(AForm);
-  if W = nil then Exit;
-  Top := gtk_widget_get_toplevel(W);
-  if (Top = nil) or (not Gtk3IsGtkWindow(PGObject(Top))) then Exit;
-  { Only modal dialogs carry a transient (LCL's GetRealPopupParent forces one on every modal form,
-    and it isn't virtual/overridable); the main window has none, so this is a no-op for it. }
-  if gtk_window_get_transient_for(PGtkWindow(Top)) = nil then Exit;
-  gdkWin := gtk_widget_get_window(Top);
-  writeln(StdErr, '[DialogMove] had transient; mapped=', gtk_widget_get_mapped(Top),
-    ' -> remap as toplevel');
-  { A transient GTK_WINDOW_POPUP was mapped as an xdg_popup, which has no move request -> undraggable.
-    Clearing the transient before the map is undone by LCL (it re-applies the modal parent), so do it
-    AFTER: unmap the surface, drop the transient, remap. A parentless popup comes back as a movable
-    xdg_toplevel (exactly what the main window is). LCL's Visible/modal state is untouched (this is
-    below the GtkWidget layer), so the modal loop keeps running. }
-  if (gdkWin <> nil) and gtk_widget_get_mapped(Top) then
-  begin
-    gdk_window_hide(gdkWin);
-    gtk_window_set_transient_for(PGtkWindow(Top), nil);
-    gdk_window_show(gdkWin);
-  end
-  else
-    gtk_window_set_transient_for(PGtkWindow(Top), nil);
 end;
 
 function TyGtkInstallIme(AControl: TWinControl; AOnCommit: TTyImeCommitEvent;
@@ -668,11 +622,6 @@ end;
 function TyGtkStartSystemMove(AForm: TCustomForm): Boolean;
 begin
   Result := False;
-end;
-
-procedure TyGtk3ClearTransientParent(AForm: TCustomForm);
-begin
-  // not a GTK build: nothing to do.
 end;
 
 function TyGtkInstallIme(AControl: TWinControl; AOnCommit: TTyImeCommitEvent;
