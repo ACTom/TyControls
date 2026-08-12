@@ -2635,9 +2635,6 @@ begin
   maximized := (FEngine <> nil) and FEngine.Maximized;
   TyApplyWindowEffects(Self,
     TyResolveWindowEffect(ResolveChromeStyle(ctrl), maximized));
-  // GTK3/Wayland: mark the window opaque so the library's alpha effects (disabled dimming,
-  // transparent labels) don't leak the desktop through the RGBA window. No-op elsewhere.
-  TyGtk3SetWindowOpaque(Self);
 end;
 
 procedure TTyForm.DoAutoAdjustLayout(const AMode: TLayoutAdjustmentPolicy;

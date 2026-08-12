@@ -542,6 +542,12 @@ upstream:
   Dropdowns (ComboBox, …) were fixed with a compositor grab and dismiss on any outside click.
 - **Popup corners are square, not rounded.** Dropdowns, menus, balloons, etc. lose their rounded
   corners on Wayland — there is no XShape, so the rounded mask can't be applied.
+- **Semi-transparent effects show the desktop through.** The library's own alpha-based effects —
+  **disabled-state dimming** and **Transparent labels / graphics** — show the desktop through on
+  Wayland instead of dimming against the form background. GTK3 gives a borderless form an alpha
+  (RGBA) window, so the compositor leaks those semi-transparent pixels through; Win32 / Qt are fine.
+  Multiple attempts (making all self-paint opaque, setting the window's opaque region, …) didn't fix
+  it at the library level — the root is in LCL-GTK3.
 
 If these matter to you: use an **X11 session** for GTK3, or use **Qt5 / Qt6** — none of the above
 affect them.
