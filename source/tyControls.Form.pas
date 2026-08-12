@@ -286,6 +286,7 @@ type
     FGlassBlurLogical: Integer;       // theme-wide glass blur radius (0 = no glass)
     FFollowTimer: TTimer;             // P4 live-follow: polls the OS scheme/accent while following (nil unless armed)
     FDidInitialClamp: Boolean;        // macOS: clamp the window onto a visible monitor on first show only
+    FDidWaylandMovableFix: Boolean;   // GTK3/Wayland: remapped a modal dialog to a movable toplevel (once)
     FCaptionAction: TTyCaptionAction; // what caption double-click does (maximize / roll-up / none)
     FRolledUp: Boolean;               // window-shade state (rolled to the title bar)
     FUnrolledHeight: Integer;         // full height saved while rolled up
@@ -390,10 +391,9 @@ type
     procedure Activate; override;
     {$ENDIF}
     procedure DoShow; override;   // first show: apply window corners + shadow once the handle exists
-    { GTK3/Wayland: drop the transient parent LCL auto-assigns to a borderless form, so the window
-      maps as a movable top-level instead of an undraggable xdg_popup (the dialog-drag fix). Runs
-      after the handle exists, before the surface maps. No-op on every other widgetset. }
-    procedure InitializeWnd; override;
+    { GTK3/Wayland: after a modal dialog maps as an undraggable xdg_popup (LCL forces a transient
+      parent on modal forms), remap it as a movable top-level. Deferred + once. No-op elsewhere. }
+    procedure DeferredWaylandMovableFix(Data: PtrInt);
     { Re-derive the title bar's height AFTER LCL has scaled the form for a new monitor.
 
       a6256 removed the double application by DERIVING the height in HandleChangeBounds instead
@@ -2668,17 +2668,23 @@ begin
   FEngine.NoteInstalledPPI(ppi);
 end;
 
-procedure TTyForm.InitializeWnd;
+procedure TTyForm.DeferredWaylandMovableFix(Data: PtrInt);
 begin
-  inherited InitializeWnd;
-  // GTK3/Wayland: strip the auto-assigned transient parent so the form maps as a movable top-level
-  // (an xdg_popup has no move request, which is why dialogs could not be dragged). No-op elsewhere.
-  TyGtk3ClearTransientParent(Self);
+  // GTK3/Wayland: a modal dialog maps as an undraggable xdg_popup (LCL forces a transient parent on
+  // modal forms). Remap it as a movable toplevel. Deferred to the next event-loop turn so it runs
+  // after the show fully settles; a no-op for the main window (it has no transient).
+  if HandleAllocated then
+    TyGtk3ClearTransientParent(Self);
 end;
 
 procedure TTyForm.DoShow;
 begin
   inherited DoShow;
+  if TyGtkIsWayland and (not FDidWaylandMovableFix) then
+  begin
+    FDidWaylandMovableFix := True;
+    Application.QueueAsyncCall(@DeferredWaylandMovableFix, 0);
+  end;
   {$IFDEF LCLCOCOA}
   // macOS multi-monitor fix. LCL's (0,0) is the top-left of the virtual-desktop UNION (the top of
   // the TALLEST screen, via NSGlobalScreenBottom), NOT the primary screen's corner. A poDesigned

@@ -391,16 +391,31 @@ end;
 procedure TyGtk3ClearTransientParent(AForm: TCustomForm);
 var
   W, Top: PGtkWidget;
+  gdkWin: PGdkWindow;
 begin
   if (not TyGtkIsWayland) or (AForm = nil) or (not AForm.HandleAllocated) then Exit;
   W := Gtk3NativeWidget(AForm);
   if W = nil then Exit;
   Top := gtk_widget_get_toplevel(W);
   if (Top = nil) or (not Gtk3IsGtkWindow(PGObject(Top))) then Exit;
-  { CreateWidget set transient_for(GetActiveGtkWindow) before realize; drop it now (still before the
-    map). ShowHide re-runs its transient block only when transient_for is nil and then, with a
-    non-pmAuto/no-PopupParent form, sets it back to nil -- so it stays a movable top-level. }
-  if gtk_window_get_transient_for(PGtkWindow(Top)) <> nil then
+  { Only modal dialogs carry a transient (LCL's GetRealPopupParent forces one on every modal form,
+    and it isn't virtual/overridable); the main window has none, so this is a no-op for it. }
+  if gtk_window_get_transient_for(PGtkWindow(Top)) = nil then Exit;
+  gdkWin := gtk_widget_get_window(Top);
+  writeln(StdErr, '[DialogMove] had transient; mapped=', gtk_widget_get_mapped(Top),
+    ' -> remap as toplevel');
+  { A transient GTK_WINDOW_POPUP was mapped as an xdg_popup, which has no move request -> undraggable.
+    Clearing the transient before the map is undone by LCL (it re-applies the modal parent), so do it
+    AFTER: unmap the surface, drop the transient, remap. A parentless popup comes back as a movable
+    xdg_toplevel (exactly what the main window is). LCL's Visible/modal state is untouched (this is
+    below the GtkWidget layer), so the modal loop keeps running. }
+  if (gdkWin <> nil) and gtk_widget_get_mapped(Top) then
+  begin
+    gdk_window_hide(gdkWin);
+    gtk_window_set_transient_for(PGtkWindow(Top), nil);
+    gdk_window_show(gdkWin);
+  end
+  else
     gtk_window_set_transient_for(PGtkWindow(Top), nil);
 end;
 
