@@ -525,6 +525,29 @@ Full example: [examples/demo](examples/demo/).
 
 ---
 
+## Platform support & known limitations
+
+Fully functional on **Windows (Win32), Qt5 / Qt6, GTK2, and macOS (Cocoa)**. **GTK3** works too, but
+under a **Wayland** session it has a few known limitations rooted in Wayland's window model + LCL-GTK3
+upstream:
+
+- **Modal dialogs can't be dragged.** The color / font / etc. self-drawn dialogs can't be moved by
+  their title bar: LCL maps a borderless modal form as a Wayland `xdg_popup` (which has no move
+  request), and the surface type is baked in at creation, so the library can't work around it. This
+  is an upstream LCL-GTK3 limitation, and roughly matches normal Wayland behavior where modal dialogs
+  are compositor-placed and not movable.
+- **Menus don't dismiss when you click empty space.** A menu-bar menu closes on a focus change:
+  clicking a focusable control (a button, an edit, …) or pressing `Esc` dismisses it, but clicking a
+  bare panel / empty area does not (Wayland's grab model doesn't deliver such a click to the menu).
+  Dropdowns (ComboBox, …) were fixed with a compositor grab and dismiss on any outside click.
+- **Popup corners are square, not rounded.** Dropdowns, menus, balloons, etc. lose their rounded
+  corners on Wayland — there is no XShape, so the rounded mask can't be applied.
+
+If these matter to you: use an **X11 session** for GTK3, or use **Qt5 / Qt6** — none of the above
+affect them.
+
+---
+
 ## License
 
 TyControls is licensed under the **modified LGPL** (the same as FPC RTL / LCL / BGRABitmap):
