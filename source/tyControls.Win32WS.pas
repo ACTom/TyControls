@@ -1,12 +1,13 @@
 unit tyControls.Win32WS;
 {$mode objfpc}{$H+}
 
-{ Windows-only native non-client edge-resize glue for the borderless TTyForm. EVERY routine
-  is a NO-OP on non-Windows widgetsets, so GTK2 / Qt5 / Qt6 / Cocoa builds link empty bodies
-  and are completely untouched — exactly the isolation pattern of tyControls.WindowEffects /
-  QtWS / Gtk2WS / Gtk3WS. This unit exists (rather than living in Form.pas) because pulling the Windows
-  unit into Form.pas's namespace shadows Types.Rect/Point and Classes.RegisterClass, which the
-  rest of Form.pas relies on.
+{ Windows-only native non-client edge-resize glue for the borderless TTyForm. The whole unit is
+  gated on {$IFDEF LCLWin32}: off the Win32 widgetset it is an EMPTY unit (no code, no cross-platform
+  stubs), and tyControls.PlatformWS references these routines only from inside its own
+  {$IFDEF LCLWin32}, so a GTK2 / GTK3 / Qt / Cocoa build never names them — exactly the isolation
+  pattern of tyControls.WindowEffects / QtWS / Gtk2WS / Gtk3WS. This unit exists (rather than living
+  in Form.pas) because pulling the Windows unit into Form.pas's namespace shadows Types.Rect/Point
+  and Classes.RegisterClass, which the rest of Form.pas relies on.
 
   Mechanism (see the B1 spike note in tyControls.Form): LCL-Win32 never lets a WndProc override
   see WM_NCCALCSIZE (absent from its dispatch) and discards a WndProc's WM_NCHITTEST result
@@ -29,6 +30,7 @@ unit tyControls.Win32WS;
 
 interface
 
+{$IFDEF LCLWin32}
 uses
   Forms, Controls;
 
@@ -87,6 +89,7 @@ procedure TyWin32BeginTopResize(AForm: TCustomForm);
   Returns False off Windows / with no handle so the caller keeps its existing per-move
   repositioning. Mirrors the Qt/GTK system-move. }
 function TyWin32StartSystemMove(AForm: TCustomForm): Boolean;
+{$ENDIF}
 
 implementation
 
@@ -500,34 +503,6 @@ begin
   ReleaseCapture;
   SendMessage(AForm.Handle, WM_NCLBUTTONDOWN, HTCAPTION, 0);
   Result := True;
-end;
-
-{$ELSE}
-
-procedure TyWin32ApplyNcResize(AForm: TCustomForm; AResizable: Boolean;
-  ABorderZone, ACaptionHeight: Integer; AMaximized, AAllowMaximize: Boolean;
-  ANoFrame: Boolean);
-begin
-  // Non-Windows widgetset: native NC resize is a Win32-only strategy. GTK/Qt use the
-  // AdjustClientRect gutter + WM handoff; Cocoa uses the resizable styleMask (later phases).
-end;
-
-procedure TyWin32SetEdgePassthrough(AControl: TWinControl; AZone: Integer; AEnabled: Boolean);
-begin
-  // The band this opens up only exists because Win32's WM_NCCALCSIZE gave the client the whole
-  // window. GTK/Qt keep their alClient children off the edge with the AdjustClientRect gutter
-  // instead, and Cocoa has a real resizable frame.
-end;
-
-procedure TyWin32BeginTopResize(AForm: TCustomForm);
-begin
-  // Native top-edge resize is a Win32-only strategy for now; GTK/Qt top-resize lands in Phase C.
-end;
-
-function TyWin32StartSystemMove(AForm: TCustomForm): Boolean;
-begin
-  // Native caption move is a Win32-only strategy; Qt/GTK have their own TyQt/TyGtk2/TyGtk3StartSystemMove.
-  Result := False;
 end;
 
 {$ENDIF}

@@ -1,10 +1,10 @@
 unit tyControls.QtWS;
 {$mode objfpc}{$H+}
 
-{ Qt-only window helpers for the Linux widgetset fixes. EVERY function is a NO-OP on non-Qt
-  widgetsets (Win32 / GTK2 / Cocoa / GTK3), so those already-working paths are completely untouched
-  — only an LCLQT5/LCLQT6 build links the real bodies. Rationale (confirmed against the on-disk
-  C:\lazarus LCL-Qt source):
+{ Qt-only window helpers for the Linux widgetset fixes. The whole unit is gated on
+  {$IF defined(LCLQT6) or defined(LCLQT5)}: off Qt it is an EMPTY unit (no code, no cross-platform
+  stubs), and tyControls.PlatformWS references these functions only from inside its own Qt IFDEF, so
+  nothing off Qt ever names them. Rationale (confirmed against the on-disk C:\lazarus LCL-Qt source):
    - A borderless TForm popup is shown as an ordinary frameless window: the X11 WM then CENTERS it
      over its parent and refuses the mouse grab ("This plugin supports grabbing the mouse only for
      popup windows"). Re-typing the window as Qt::Popup makes it app-positioned + grab-capable.
@@ -19,6 +19,8 @@ unit tyControls.QtWS;
      a no-op on Qt, so a radius-0 theme must clear explicitly). }
 
 interface
+
+{$IF defined(LCLQT6) or defined(LCLQT5)}
 uses Types, Forms, Controls, LCLType, tyControls.Types;   // tyControls.Types: TTyImeCommitEvent / TTyImeCaretQuery
 
 { True iff this is a Qt build (so a caller can branch on it without its own IFDEFs). }
@@ -62,23 +64,23 @@ procedure TyQtClearWindowMaskDeep(AForm: TCustomForm; AContentCtl: TWinControl);
       corner. We answer QInputMethodQueryEvent's ImCursorRectangle from ACaretQuery so it follows the
       caret. Fail-safe: if ACaretQuery returns an empty rect we do NOT consume the query (Qt's default
       stands), so a bad/absent caret rect can never disable the IME.
-  ACaretQuery may be nil (commit-only). Returns an opaque handle for TyQtUninstallIme (nil off Qt). }
+  ACaretQuery may be nil (commit-only). Returns an opaque handle, nil off Qt; the owning control
+  frees it via the PlatformWS facade's TyImeUninstall (each hook's destructor removes its own Qt
+  event filter). }
 function TyQtInstallIme(AControl: TWinControl; AOnCommit: TTyImeCommitEvent;
   ACaretQuery: TTyImeCaretQuery): TObject;
-
-{ Tear down a TyQtInstallImeCommit interceptor (frees the Qt event hook). Safe on nil / off Qt. }
-procedure TyQtUninstallIme(var AHandle: TObject);
 
 { Poke Qt to RE-QUERY the input cursor rectangle (Qt asks ImCursorRectangle only once at composition
   start otherwise, so the candidate window freezes at the first caret position). Call when the caret
   moves. Qt6 only (the binding is declared locally against the Qt6Pas C export); no-op on Qt5/non-Qt. }
 procedure TyQtImeUpdateCaret;
+{$IFEND}
 
 implementation
 
 {$IF defined(LCLQT6) or defined(LCLQT5)}
 uses
-  SysUtils, LazUTF8,
+  LazUTF8,
   {$IFDEF LCLQT6} qt6, {$ELSE} qt5, {$ENDIF}
   qtwidgets, qtobjects;
 
@@ -301,62 +303,6 @@ begin
   Result := TTyQtImeHook.Create(w, AOnCommit, ACaretQuery);
 end;
 
-procedure TyQtUninstallIme(var AHandle: TObject);
-begin
-  FreeAndNil(AHandle);
-end;
-
-{$ELSE}
-
-function TyIsQt: Boolean;
-begin
-  Result := False;
-end;
-
-function TyQtIsWayland: Boolean;
-begin
-  Result := False;   // non-Qt widgetset: never Wayland (Win32/GTK2/Cocoa).
-end;
-
-procedure TyQtMakePopup(AForm: TCustomForm);
-begin
-  // non-Qt widgetset: nothing to do.
-end;
-
-function TyQtStartSystemMove(AForm: TCustomForm): Boolean;
-begin
-  Result := False;
-end;
-
-procedure TyQtMaskWindowDeep(AForm: TCustomForm; AContentCtl: TWinControl; ARgn: HRGN);
-begin
-  // non-Qt widgetset: the cross-platform SetWindowRgn already clips the whole window; nothing to do.
-end;
-
-procedure TyQtClearWindowMaskDeep(AForm: TCustomForm; AContentCtl: TWinControl);
-begin
-  // non-Qt widgetset: nothing to do.
-end;
-
-function TyQtInstallIme(AControl: TWinControl; AOnCommit: TTyImeCommitEvent;
-  ACaretQuery: TTyImeCaretQuery): TObject;
-begin
-  Result := nil;   // non-Qt: IME flows through the normal LCL path (Win32 IME already works).
-end;
-
-procedure TyQtUninstallIme(var AHandle: TObject);
-begin
-  // Generic IME-hook teardown: on GTK2 this frees the GtkWS IME hook stored in the same field
-  // (its destructor removes the key snooper + unrefs the context); nil-safe on Win32/Cocoa.
-  AHandle.Free;
-  AHandle := nil;
-end;
-
-procedure TyQtImeUpdateCaret;
-begin
-  // non-Qt: nothing to poke.
-end;
-
-{$ENDIF}
+{$IFEND}
 
 end.
