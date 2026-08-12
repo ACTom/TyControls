@@ -432,11 +432,11 @@ begin
   FForm.SetBounds(FRect.Left, FRect.Top,
     FRect.Right - FRect.Left, FRect.Bottom - FRect.Top);
   ApplyRegion(FRect.Right - FRect.Left, FRect.Bottom - FRect.Top);
-  { GTK3/Wayland: drop LCL's app-level GTK grab (which only makes the popup modal without any
-    compositor-driven dismiss), then re-grab it as a compositor-managed grabbing xdg_popup the way
-    Qt::Popup does -- now the compositor dismisses it on ANY outside click (bare panels included)
-    and HandleCompositorDismiss syncs the LCL side. No-op off GTK3-Wayland. }
-  TyGtk3ReleasePopupGrab(FForm);
+  { GTK3/Wayland: LCL already put an app-level GTK grab on the popup (which routes every app click
+    to it -- that is what made it feel modal). KEEP that grab and add a compositor seat grab, then
+    wire a button-press handler that dismisses only when the click lands OUTSIDE the popup's widget
+    tree -- exactly how LCL's own GtkMenu dismisses. HandleCompositorDismiss syncs the LCL side.
+    No-op off GTK3-Wayland. }
   TyGtk3GrabPopup(FForm, @HandleCompositorDismiss);
 end;
 

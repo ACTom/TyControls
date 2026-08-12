@@ -512,15 +512,27 @@ begin
   if data <> nil then Dispose(PTyNotify(data));
 end;
 
-{ grab-broken-event trampoline: the compositor broke our grab (a click outside the grabbing popup)
-  -- GDK does NOT auto-hide a non-managed window (we are not a GtkMenu), so THIS is where an
-  outside click is reported. Fire the dismiss so the LCL side hides + closes. }
-function TyGtk3PopupGrabBrokenCb(widget: PGtkWidget; event: PGdkEvent; data: gpointer): gboolean; cdecl;
+{ button-press-event trampoline. While the popup holds the grab, every click is reported here.
+  Walk up the widget tree from the ACTUAL clicked widget: if we reach the popup toplevel the click
+  was INSIDE (keep it open, let the list handle it); otherwise it landed outside -> dismiss. This is
+  widget-hierarchy based (not coordinates), so it is reliable on Wayland -- and it is exactly how
+  LCL's own gtkWSPopupMenuButtonPress dismisses a GtkMenu. Never returns True (an inside click must
+  still reach the row). }
+function TyGtk3PopupButtonPressCb(widget: PGtkWidget; event: PGdkEvent; data: gpointer): gboolean; cdecl;
+var
+  w: PGtkWidget;
 begin
-  writeln(StdErr, '[TyGtk3GrabPopup] grab-broken-event fired');
+  Result := False;
+  if event = nil then Exit;
+  w := gtk_get_event_widget(event);
+  while w <> nil do
+  begin
+    if w = widget then Exit;   // inside the popup -> keep open
+    w := gtk_widget_get_parent(w);
+  end;
+  writeln(StdErr, '[TyGtk3GrabPopup] outside button-press -> dismiss');
   if (data <> nil) and Assigned(PTyNotify(data)^) then
     PTyNotify(data)^(nil);
-  Result := gboolean(False);   // don't stop propagation
 end;
 
 procedure TyGtk3GrabPopup(APopup: TCustomForm; AOnDismiss: TNotifyEvent);
@@ -557,10 +569,10 @@ begin
       d, TGClosureNotify(@TyGtk3PopupDismissFree), []);
     New(d2);
     d2^ := AOnDismiss;
-    g_signal_connect_data(PGObject(popW), PChar('grab-broken-event'), TGCallback(@TyGtk3PopupGrabBrokenCb),
+    g_signal_connect_data(PGObject(popW), PChar('button-press-event'), TGCallback(@TyGtk3PopupButtonPressCb),
       d2, TGClosureNotify(@TyGtk3PopupDismissFree), []);
     g_object_set_data(PGObject(popW), PChar('ty_dismiss_wired'), Pointer(1));
-    writeln(StdErr, '[TyGtk3GrabPopup] wired unmap + grab-broken -> dismiss');
+    writeln(StdErr, '[TyGtk3GrabPopup] wired unmap + button-press -> dismiss');
   end;
 end;
 
