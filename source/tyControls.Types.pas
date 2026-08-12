@@ -12,7 +12,7 @@ type
 
   TTyRectArray = array of TRect;
 
-  // Input-method (IME) callbacks shared by the Qt/GTK widgetset helpers (tyControls.QtWS/.GtkWS)
+  // Input-method (IME) callbacks shared by the Qt/GTK2 widgetset helpers (tyControls.QtWS/.Gtk2WS)
   // and the controls that opt in (Edit/Memo). Kept here in the common types unit so neither
   // widgetset helper has to depend on the other.
   TTyImeCommitEvent = procedure(const ACommitUtf8: string) of object;   // full committed UTF-8 text

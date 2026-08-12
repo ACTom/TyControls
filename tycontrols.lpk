@@ -473,8 +473,12 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.PlatformWS"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.GtkWS.pas"/>
-        <UnitName Value="tyControls.GtkWS"/>
+        <Filename Value="source/tyControls.Gtk2WS.pas"/>
+        <UnitName Value="tyControls.Gtk2WS"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Gtk3WS.pas"/>
+        <UnitName Value="tyControls.Gtk3WS"/>
       </Item>
       <Item>
         <Filename Value="source/tyControls.Splitter.pas"/>

@@ -4,7 +4,7 @@ unit tyControls.Win32WS;
 { Windows-only native non-client edge-resize glue for the borderless TTyForm. EVERY routine
   is a NO-OP on non-Windows widgetsets, so GTK2 / Qt5 / Qt6 / Cocoa builds link empty bodies
   and are completely untouched — exactly the isolation pattern of tyControls.WindowEffects /
-  QtWS / GtkWS. This unit exists (rather than living in Form.pas) because pulling the Windows
+  QtWS / Gtk2WS / Gtk3WS. This unit exists (rather than living in Form.pas) because pulling the Windows
   unit into Form.pas's namespace shadows Types.Rect/Point and Classes.RegisterClass, which the
   rest of Form.pas relies on.
 
@@ -526,7 +526,7 @@ end;
 
 function TyWin32StartSystemMove(AForm: TCustomForm): Boolean;
 begin
-  // Native caption move is a Win32-only strategy; Qt/GTK have their own TyQt/TyGtkStartSystemMove.
+  // Native caption move is a Win32-only strategy; Qt/GTK have their own TyQt/TyGtk2/TyGtk3StartSystemMove.
   Result := False;
 end;
 

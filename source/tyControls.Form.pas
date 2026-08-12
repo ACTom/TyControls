@@ -637,7 +637,7 @@ uses
   global namespace shadows Types.Rect/Point + Classes.RegisterClass (which the rest of
   Form.pas relies on), the subclass machinery lives in a dedicated {$IFDEF WINDOWS} helper
   unit (tyControls.Win32WS) — the same isolation pattern as tyControls.WindowEffects /
-  QtWS / GtkWS. That helper handles WM_NCCALCSIZE (collapse the non-client area so the client
+  QtWS / Gtk2WS / Gtk3WS. That helper handles WM_NCCALCSIZE (collapse the non-client area so the client
   fills the whole window while the WS_THICKFRAME sizing border stays hit-testable) +
   WM_NCHITTEST (return TyNcHitTest, the pure mapper that stays HERE next to TyHitTestBorder),
   and chains CallWindowProc(savedProc, ..) for everything else. WS_THICKFRAME — stripped from

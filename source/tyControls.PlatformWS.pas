@@ -104,15 +104,24 @@ function TyImeTakeCommit(const ATruncated: string): string;
 implementation
 
 uses
-  {$IFDEF LCLWin32} tyControls.Win32WS, {$ENDIF}
-  {$IF DEFINED(LCLQt5) OR DEFINED(LCLQt6)} tyControls.QtWS, {$IFEND}
-  tyControls.GtkWS;   // still merged in this phase; split into Gtk2WS/Gtk3WS follows
+  SysUtils   // anchor: keeps the list well-formed when no widgetset branch below is live
+  {$IFDEF LCLWin32}, tyControls.Win32WS {$ENDIF}
+  {$IF DEFINED(LCLQt5) OR DEFINED(LCLQt6)}, tyControls.QtWS {$IFEND}
+  {$IFDEF LCLGTK2}, tyControls.Gtk2WS {$ENDIF}
+  {$IFDEF LCLGTK3}, tyControls.Gtk3WS {$ENDIF}
+  ;
 
 function TyIsWayland: Boolean;
 begin
-  { Each helper is a constant False off its own widgetset, so exactly one can ever be live. }
-  Result := {$IF DEFINED(LCLQt5) OR DEFINED(LCLQt6)} TyQtIsWayland {$ELSE} False {$IFEND}
-            or TyGtkIsWayland;
+  { Exactly one widgetset branch is ever live; every other build folds to a plain False. Qt answers
+    for a Qt5/Qt6 session, GTK3 for a GTK3 one; GTK2 is X11-only (XWayland), so False is right there. }
+  {$IF DEFINED(LCLQt5) OR DEFINED(LCLQt6)}
+  Result := TyQtIsWayland;
+  {$ELSE}{$IFDEF LCLGTK3}
+  Result := TyGtk3IsWayland;
+  {$ELSE}
+  Result := False;
+  {$ENDIF}{$IFEND}
 end;
 
 function TyIsGtk3: Boolean;
@@ -122,7 +131,7 @@ end;
 
 function TyIsGtk3Wayland: Boolean;
 begin
-  Result := TyGtkIsWayland;   // TyGtkIsWayland is already GTK3-and-Wayland (const False elsewhere)
+  {$IFDEF LCLGTK3} Result := TyGtk3IsWayland; {$ELSE} Result := False; {$ENDIF}
 end;
 
 procedure TyPreparePopupWindow(AForm: TCustomForm);
@@ -137,9 +146,13 @@ begin
   if AIncludeBlocking then Result := TyWin32StartSystemMove(AForm) else Result := False;
   {$ELSE}{$IF DEFINED(LCLQt5) OR DEFINED(LCLQt6)}
   Result := TyQtStartSystemMove(AForm);
+  {$ELSE}{$IFDEF LCLGTK2}
+  Result := TyGtk2StartSystemMove(AForm);
+  {$ELSE}{$IFDEF LCLGTK3}
+  Result := TyGtk3StartSystemMove(AForm);
   {$ELSE}
-  Result := TyGtkStartSystemMove(AForm);
-  {$IFEND}{$ENDIF}
+  Result := False;
+  {$ENDIF}{$ENDIF}{$IFEND}{$ENDIF}
 end;
 
 procedure TyNcApplyResize(AForm: TCustomForm; AResizable: Boolean;
@@ -203,7 +216,7 @@ begin
   {$IF DEFINED(LCLQt5) OR DEFINED(LCLQt6)}
   Result := TyQtInstallIme(AControl, AOnCommit, ACaretQuery);
   {$ELSE}{$IFDEF LCLGTK2}
-  Result := TyGtkInstallIme(AControl, AOnCommit, ACaretQuery);
+  Result := TyGtk2InstallIme(AControl, AOnCommit, ACaretQuery);
   {$ELSE}
   Result := nil;
   {$ENDIF}{$IFEND}
@@ -211,14 +224,16 @@ end;
 
 procedure TyImeUninstall(var AHandle: TObject);
 begin
-  { Preserve the historical contract: Qt uninstalls + nils; other widgetsets' handles are torn
-    down by the control's own teardown, so this is a no-op there. }
-  {$IF DEFINED(LCLQt5) OR DEFINED(LCLQt6)} TyQtUninstallIme(AHandle); {$IFEND}
+  { Freeing the handle IS the teardown on every widgetset: each hook object's destructor does its
+    own widgetset-specific cleanup (Qt removes its event filter; GTK2 removes the key snooper +
+    unrefs the GtkIMContext). So there is nothing to dispatch -- and it MUST run on GTK2 too, not
+    just Qt, or the snooper dangles into a freed control. nil-safe (Win32/Cocoa never install one). }
+  FreeAndNil(AHandle);
 end;
 
 procedure TyImeSetFocus(AHandle: TObject; AFocused: Boolean);
 begin
-  {$IFDEF LCLGTK2} TyGtkImeSetFocus(AHandle, AFocused); {$ENDIF}
+  {$IFDEF LCLGTK2} TyGtk2ImeSetFocus(AHandle, AFocused); {$ENDIF}
 end;
 
 procedure TyImeUpdateCaret;
@@ -228,7 +243,7 @@ end;
 
 function TyImeTakeCommit(const ATruncated: string): string;
 begin
-  {$IFDEF LCLGTK3} Result := TyGtkTakeImeCommit(ATruncated); {$ELSE} Result := ''; {$ENDIF}
+  {$IFDEF LCLGTK3} Result := TyGtk3TakeImeCommit(ATruncated); {$ELSE} Result := ''; {$ENDIF}
 end;
 
 end.
