@@ -276,10 +276,6 @@ type
     procedure HandleNavigateAdjacent(Sender: TObject; ADelta: Integer);
     procedure HandleNavigateLeft(Sender: TObject);
     function IsSubmenuLevel: Boolean;
-    { GTK3/Wayland: a click landed OUTSIDE the whole cascade (a bare panel, which never moves focus
-      so FormDeactivate/DeferredDismiss won't fire) -- collapse the cascade from the root. Deferred
-      so we don't tear the popup down from inside the button-press callback. }
-    procedure HandleOutsideClick(Sender: TObject);
     function RootPopup: TTyMenuPopup;
     procedure FormDeactivate(Sender: TObject);
     procedure DeferredDismiss(Data: PtrInt);
@@ -1792,10 +1788,6 @@ begin
   // Route keyboard navigation to the dropdown: without focus, arrow/Esc keys never reach
   // TTyMenuView.KeyDown and a keypress can instead deactivate (and dismiss) the popup.
   if FView.CanFocus then FView.SetFocus;
-  { GTK3/Wayland: grab + dismiss on a click outside the cascade (a bare panel never moves focus, so
-    the focus-based DeferredDismiss can't catch it). Tag every level with the ROOT id so a click on
-    a sibling submenu is "inside" and does not dismiss. No-op off GTK3-Wayland. }
-  TyGtk3GrabPopup(FForm, @HandleOutsideClick, Pointer(RootPopup));
   ApplyFormRegion(R.Right - R.Left, R.Bottom - R.Top);
   Application.QueueAsyncCall(@DeferredReapplyGeometry, 0);
 end;
@@ -1888,7 +1880,6 @@ begin
     // Detach OnDeactivate around Hide so hiding can't re-enter CloseAll (ComboBox).
     FForm.OnDeactivate := nil;
     FForm.Hide;
-    TyGtk3ReleasePopupGrab(FForm);   // GTK3/Wayland: drop the seat/gtk grab this level took
     FForm.OnDeactivate := @FormDeactivate;
   end;
   FCloseTick := GetTickCount64;
@@ -2071,13 +2062,6 @@ begin
   Result := Self;
   while (Result.Owner <> nil) and (Result.Owner is TTyMenuPopup) do
     Result := TTyMenuPopup(Result.Owner);
-end;
-
-procedure TTyMenuPopup.HandleOutsideClick(Sender: TObject);
-begin
-  // Deferred + on the ROOT so DeferredForceClose tears the whole cascade down without freeing a
-  // form from inside the button-press callback that raised this.
-  Application.QueueAsyncCall(@RootPopup.DeferredForceClose, 0);
 end;
 
 procedure TTyMenuPopup.FormDeactivate(Sender: TObject);
