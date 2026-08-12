@@ -230,6 +230,10 @@ type
     procedure EnsurePopup;
     { Popup event handlers }
     procedure PopupListChange(Sender: TObject);
+    { A mouse click on a row closes the dropdown even when the selection did NOT change -- clicking
+      the already-current row fires no OnChange, so without this it did nothing. OnChange (MouseDown)
+      still does the commit for a real change; this only guarantees the close, on mouse-UP. }
+    procedure PopupListClick(Sender: TObject);
     procedure PopupKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure PopupClosed(Sender: TObject);
     procedure DeferredCloseUp(Data: PtrInt);
@@ -1167,6 +1171,7 @@ begin
   if FItemHeight > 0 then
     FPopupList.ItemHeight := FItemHeight;
   FPopupList.OnChange := @PopupListChange;
+  FPopupList.OnClick  := @PopupListClick;
 end;
 
 procedure TTyComboBox.AttachEmbeddedList;
@@ -1970,6 +1975,16 @@ begin
     FCloseUpTick := FPopup.CloseUpTick;
   Invalidate;
   DoCloseUp;
+end;
+
+procedure TTyComboBox.PopupListClick(Sender: TObject);
+begin
+  { Fires on mouse-UP for any click inside the list. A row whose selection changed already committed
+    + queued its close in PopupListChange (MouseDown); re-clicking the CURRENT row fires no OnChange,
+    so this is the only thing that closes the dropdown then. Deferred like the pick path, so the
+    close never lands inside the list's own click handling. Idempotent: CloseUp no-ops if not open. }
+  if DroppedDown then
+    Application.QueueAsyncCall(@DeferredCloseUp, 0);
 end;
 
 procedure TTyComboBox.PopupKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
