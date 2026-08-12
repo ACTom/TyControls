@@ -390,6 +390,10 @@ type
     procedure Activate; override;
     {$ENDIF}
     procedure DoShow; override;   // first show: apply window corners + shadow once the handle exists
+    { GTK3/Wayland: drop the transient parent LCL auto-assigns to a borderless form, so the window
+      maps as a movable top-level instead of an undraggable xdg_popup (the dialog-drag fix). Runs
+      after the handle exists, before the surface maps. No-op on every other widgetset. }
+    procedure InitializeWnd; override;
     { Re-derive the title bar's height AFTER LCL has scaled the form for a new monitor.
 
       a6256 removed the double application by DERIVING the height in HandleChangeBounds instead
@@ -2662,6 +2666,14 @@ begin
   FTitleBar.Height := TyTitleBarDeviceHeight(Self, FTitleBar, ppi);
   FTitleBar.LayoutButtons;
   FEngine.NoteInstalledPPI(ppi);
+end;
+
+procedure TTyForm.InitializeWnd;
+begin
+  inherited InitializeWnd;
+  // GTK3/Wayland: strip the auto-assigned transient parent so the form maps as a movable top-level
+  // (an xdg_popup has no move request, which is why dialogs could not be dragged). No-op elsewhere.
+  TyGtk3ClearTransientParent(Self);
 end;
 
 procedure TTyForm.DoShow;

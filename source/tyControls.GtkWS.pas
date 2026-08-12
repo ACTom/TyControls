@@ -27,6 +27,13 @@ uses Classes, Types, Forms, Controls, tyControls.Types;   // Classes: TNotifyEve
   per-move repositioning. GTK2 only; returns False elsewhere so the caller keeps its fallback. }
 function TyGtkStartSystemMove(AForm: TCustomForm): Boolean;
 
+{ GTK3/Wayland: drop the transient parent LCL auto-assigns to a borderless form at realize. With a
+  transient parent the compositor maps the form as an xdg_popup, which has NO move request -- so its
+  title bar can't be dragged (the whole reason dialogs were stuck). Cleared BEFORE the surface maps
+  (call from InitializeWnd), the form maps as a movable top-level like the main window; it stays
+  modal via LCL's own ShowModal loop. No-op off GTK3-Wayland. }
+procedure TyGtk3ClearTransientParent(AForm: TCustomForm);
+
 { Attach our own GtkIMContext to AControl so it receives FULL composed CJK commits via AOnCommit.
   ACaretQuery (may be nil) returns the caret rect (client device px) used to place the candidate
   window. Returns an opaque handle to free with the control's normal teardown (TObject.Free / the
@@ -137,6 +144,11 @@ begin
   P := Mouse.CursorPos;   // LCL screen coords == X11 root-window coords
   gtk_window_begin_move_drag(GTK_WINDOW(Top), 1, P.X, P.Y, gtk_get_current_event_time());
   Result := True;
+end;
+
+procedure TyGtk3ClearTransientParent(AForm: TCustomForm);
+begin
+  // GTK2 is X11-only -- borderless forms are movable there; nothing to clear.
 end;
 
 type
@@ -374,6 +386,22 @@ begin
   P := Mouse.CursorPos;   // LCL screen coords == root-window coords
   gtk_window_begin_move_drag(PGtkWindow(Top), 1, P.X, P.Y, gtk_get_current_event_time());
   Result := True;
+end;
+
+procedure TyGtk3ClearTransientParent(AForm: TCustomForm);
+var
+  W, Top: PGtkWidget;
+begin
+  if (not TyGtkIsWayland) or (AForm = nil) or (not AForm.HandleAllocated) then Exit;
+  W := Gtk3NativeWidget(AForm);
+  if W = nil then Exit;
+  Top := gtk_widget_get_toplevel(W);
+  if (Top = nil) or (not Gtk3IsGtkWindow(PGObject(Top))) then Exit;
+  { CreateWidget set transient_for(GetActiveGtkWindow) before realize; drop it now (still before the
+    map). ShowHide re-runs its transient block only when transient_for is nil and then, with a
+    non-pmAuto/no-PopupParent form, sets it back to nil -- so it stays a movable top-level. }
+  if gtk_window_get_transient_for(PGtkWindow(Top)) <> nil then
+    gtk_window_set_transient_for(PGtkWindow(Top), nil);
 end;
 
 function TyGtkInstallIme(AControl: TWinControl; AOnCommit: TTyImeCommitEvent;
@@ -625,6 +653,11 @@ end;
 function TyGtkStartSystemMove(AForm: TCustomForm): Boolean;
 begin
   Result := False;
+end;
+
+procedure TyGtk3ClearTransientParent(AForm: TCustomForm);
+begin
+  // not a GTK build: nothing to do.
 end;
 
 function TyGtkInstallIme(AControl: TWinControl; AOnCommit: TTyImeCommitEvent;
