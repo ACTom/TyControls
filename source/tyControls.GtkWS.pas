@@ -27,6 +27,13 @@ uses Classes, Types, Forms, Controls, tyControls.Types;   // Classes: TNotifyEve
   per-move repositioning. GTK2 only; returns False elsewhere so the caller keeps its fallback. }
 function TyGtkStartSystemMove(AForm: TCustomForm): Boolean;
 
+{ GTK3/Wayland: declare AForm's whole window OPAQUE (gdk_window_set_opaque_region), so the compositor
+  stops showing the desktop through any pixel with alpha<255. On GTK3 a borderless form gets an RGBA
+  (32-bit) visual for corners/shadow, and the library's alpha effects (disabled dimming, transparent
+  labels/graphics) then leak the desktop through. Rounded corners are already square on Wayland, so
+  nothing is lost. Call once the window is mapped (and after resize). No-op off GTK3-Wayland. }
+procedure TyGtk3SetWindowOpaque(AForm: TCustomForm);
+
 { Attach our own GtkIMContext to AControl so it receives FULL composed CJK commits via AOnCommit.
   ACaretQuery (may be nil) returns the caret rect (client device px) used to place the candidate
   window. Returns an opaque handle to free with the control's normal teardown (TObject.Free / the
@@ -137,6 +144,11 @@ begin
   P := Mouse.CursorPos;   // LCL screen coords == X11 root-window coords
   gtk_window_begin_move_drag(GTK_WINDOW(Top), 1, P.X, P.Y, gtk_get_current_event_time());
   Result := True;
+end;
+
+procedure TyGtk3SetWindowOpaque(AForm: TCustomForm);
+begin
+  // GTK2 is X11-only -- no RGBA-window desktop show-through to guard against.
 end;
 
 type
@@ -338,7 +350,7 @@ end;
   ------------------------------------------------------------------------------------ }
 
 uses
-  LazGtk3, LazGdk3, LazGLib2, LazGObject2, gtk3int, gtk3procs, gtk3widgets;   // Types comes from the interface uses
+  LazGtk3, LazGdk3, LazGLib2, LazGObject2, lazcairo1, gtk3int, gtk3procs, gtk3widgets;   // Types comes from the interface uses; lazcairo1: opaque-region
 
 { The native GtkWidget behind an LCL handle. This is the whole of tier 3: under GTK2 a
   control's Handle IS the PGtkWidget and the library casts it directly, but under GTK3 the
@@ -371,6 +383,28 @@ begin
   P := Mouse.CursorPos;   // LCL screen coords == root-window coords
   gtk_window_begin_move_drag(PGtkWindow(Top), 1, P.X, P.Y, gtk_get_current_event_time());
   Result := True;
+end;
+
+procedure TyGtk3SetWindowOpaque(AForm: TCustomForm);
+var
+  W, Top: PGtkWidget;
+  gdkWin: PGdkWindow;
+  rect: Tcairo_rectangle_int_t;
+  region: Pcairo_region_t;
+begin
+  if (not TyGtkIsWayland) or (AForm = nil) or (not AForm.HandleAllocated) then Exit;
+  W := Gtk3NativeWidget(AForm);
+  if W = nil then Exit;
+  Top := gtk_widget_get_toplevel(W);
+  if Top = nil then Exit;
+  gdkWin := gtk_widget_get_window(Top);
+  if gdkWin = nil then Exit;
+  { Whole window opaque so the compositor ignores per-pixel alpha (an oversized rect covers any
+    size / HiDPI scale; the compositor clips it to the window). }
+  rect.x := 0; rect.y := 0; rect.width := 1 shl 15; rect.height := 1 shl 15;
+  region := cairo_region_create_rectangle(@rect);
+  gdk_window_set_opaque_region(gdkWin, region);
+  cairo_region_destroy(region);
 end;
 
 function TyGtkInstallIme(AControl: TWinControl; AOnCommit: TTyImeCommitEvent;
@@ -622,6 +656,11 @@ end;
 function TyGtkStartSystemMove(AForm: TCustomForm): Boolean;
 begin
   Result := False;
+end;
+
+procedure TyGtk3SetWindowOpaque(AForm: TCustomForm);
+begin
+  // not a GTK build: nothing to do.
 end;
 
 function TyGtkInstallIme(AControl: TWinControl; AOnCommit: TTyImeCommitEvent;
