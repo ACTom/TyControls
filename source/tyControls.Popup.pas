@@ -58,6 +58,11 @@ type
     procedure FormResize(Sender: TObject);
     procedure DeferredReapplyGeometry(Data: PtrInt);
     procedure ApplyRegion(AWidth, AHeight: Integer);
+    { GTK3/Wayland: the compositor dismissed our grabbing xdg_popup (a click outside, even on a bare
+      panel) and GDK unmapped it. Sync the LCL side. Deferred so we never re-enter teardown from
+      inside GDK's own hide; idempotent because the signal also fires when we hide ourselves. }
+    procedure HandleCompositorDismiss(Sender: TObject);
+    procedure DeferredCompositorClose(Data: PtrInt);
   public
     constructor Create;
     destructor Destroy; override;
@@ -427,12 +432,23 @@ begin
   FForm.SetBounds(FRect.Left, FRect.Top,
     FRect.Right - FRect.Left, FRect.Bottom - FRect.Top);
   ApplyRegion(FRect.Right - FRect.Left, FRect.Bottom - FRect.Top);
-  { GTK3/Wayland: a borderless popup maps as a GTK_WINDOW_POPUP holding an app-level GTK grab that
-    captures every outside click, so they never reach the main form and the popup can't be dismissed
-    by clicking away. Drop that grab once the popup is mapped -- now an outside click reaches the
-    control under it, moves focus, and deactivates us -> Close, exactly like the themed menu. No-op
-    off GTK3-Wayland. }
+  { GTK3/Wayland: drop LCL's app-level GTK grab (which only makes the popup modal without any
+    compositor-driven dismiss), then re-grab it as a compositor-managed grabbing xdg_popup the way
+    Qt::Popup does -- now the compositor dismisses it on ANY outside click (bare panels included)
+    and HandleCompositorDismiss syncs the LCL side. No-op off GTK3-Wayland. }
   TyGtk3ReleasePopupGrab(FForm);
+  TyGtk3GrabPopup(FForm, @HandleCompositorDismiss);
+end;
+
+procedure TTyDropdownPopup.HandleCompositorDismiss(Sender: TObject);
+begin
+  if not FClosing then
+    Application.QueueAsyncCall(@DeferredCompositorClose, 0);
+end;
+
+procedure TTyDropdownPopup.DeferredCompositorClose(Data: PtrInt);
+begin
+  Close;
 end;
 
 end.

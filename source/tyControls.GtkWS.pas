@@ -20,7 +20,7 @@ unit tyControls.GtkWS;
      truncation that bites Qt6). Focus is driven from the control's DoEnter/DoExit. }
 
 interface
-uses Types, Forms, Controls, tyControls.Types;   // Types: TRect (anchor rect); tyControls.Types: shared TTyImeCommitEvent / TTyImeCaretQuery
+uses Classes, Types, Forms, Controls, tyControls.Types;   // Classes: TNotifyEvent; Types: TRect (anchor rect); tyControls.Types: shared TTyImeCommitEvent / TTyImeCaretQuery
 
 { Begin a WM-driven interactive move of AForm's window (call from a mouse-DOWN handler while the
   button is held). Returns True if the system move started — then the caller must NOT do its own
@@ -98,6 +98,13 @@ procedure TyGtk3MakePopupRect(APopup, AParent: TCustomForm; const AAnchorInParen
   controls and the next click is swallowed. Call right after hiding the popup. No-op off
   GTK3-Wayland. }
 procedure TyGtk3ReleasePopupGrab(APopup: TCustomForm);
+
+{ GTK3/Wayland: turn APopup into a compositor-managed GRABBING xdg_popup (gdk_seat_grab), the way
+  Qt::Popup / GtkMenu do -- the compositor then dismisses it on ANY click outside (even a bare
+  panel) by sending popup_done, which GDK turns into an unmap. AOnDismiss is fired (via the widget's
+  unmap signal) when that happens so the LCL side can close and stay in sync. Call AFTER the popup
+  is mapped. No-op off GTK3-Wayland. }
+procedure TyGtk3GrabPopup(APopup: TCustomForm; AOnDismiss: TNotifyEvent);
 
 implementation
 
@@ -296,6 +303,11 @@ begin
   // GTK2 is X11-only -- no Wayland grab to drop.
 end;
 
+procedure TyGtk3GrabPopup(APopup: TCustomForm; AOnDismiss: TNotifyEvent);
+begin
+  // GTK2 is X11-only -- no Wayland grabbing popup.
+end;
+
 {$ELSE}
 {$IFDEF LCLGTK3}
 
@@ -484,6 +496,59 @@ begin
   gdk_display_flush(disp);
 end;
 
+type
+  PTyNotify = ^TNotifyEvent;
+
+{ unmap-signal trampoline: the compositor dismissed the grabbing popup (or we hid it ourselves) --
+  fire the stored dismiss handler. It is idempotent on the LCL side, so a self-hide is harmless. }
+procedure TyGtk3PopupUnmapCb(widget: PGtkWidget; data: gpointer); cdecl;
+begin
+  if (data <> nil) and Assigned(PTyNotify(data)^) then
+    PTyNotify(data)^(nil);
+end;
+
+procedure TyGtk3PopupDismissFree(data: gpointer; closure: PGClosure); cdecl;
+begin
+  if data <> nil then Dispose(PTyNotify(data));
+end;
+
+procedure TyGtk3GrabPopup(APopup: TCustomForm; AOnDismiss: TNotifyEvent);
+var
+  popW: PGtkWidget;
+  gdkWin: PGdkWindow;
+  disp: PGdkDisplay;
+  seat: PGdkSeat;
+  st: TGdkGrabStatus;
+  d: PTyNotify;
+begin
+  if (not TyGtkIsWayland) or (APopup = nil) or (not APopup.HandleAllocated) then Exit;
+  popW := Gtk3NativeWidget(APopup);
+  if popW = nil then Exit;
+  popW := gtk_widget_get_toplevel(popW);
+  if popW = nil then Exit;
+  gdkWin := gtk_widget_get_window(popW);
+  if gdkWin = nil then Exit;
+  disp := gdk_display_get_default;
+  if disp = nil then Exit;
+  seat := gdk_display_get_default_seat(disp);
+  if seat = nil then Exit;
+  { Grabbing xdg_popup: owner_events True so clicks INSIDE the popup still reach its list, while an
+    outside click reaches the compositor -> popup_done -> unmap. }
+  st := gdk_seat_grab(seat, gdkWin, GDK_SEAT_CAPABILITY_ALL, gboolean(True), nil, nil, nil, nil);
+  writeln(StdErr, '[TyGtk3GrabPopup] gdk_seat_grab status=', Ord(st), ' (0=success)');
+  { Wire the compositor dismiss (unmap) to AOnDismiss, once per widget. destroy_data frees the
+    heap TMethod when the widget is destroyed. }
+  if g_object_get_data(PGObject(popW), PChar('ty_dismiss_wired')) = nil then
+  begin
+    New(d);
+    d^ := AOnDismiss;
+    g_signal_connect_data(PGObject(popW), PChar('unmap'), TGCallback(@TyGtk3PopupUnmapCb),
+      d, TGClosureNotify(@TyGtk3PopupDismissFree), 0);
+    g_object_set_data(PGObject(popW), PChar('ty_dismiss_wired'), Pointer(1));
+    writeln(StdErr, '[TyGtk3GrabPopup] wired unmap->dismiss');
+  end;
+end;
+
 {$ELSE}
 
 function TyGtkStartSystemMove(AForm: TCustomForm): Boolean;
@@ -526,6 +591,11 @@ end;
 procedure TyGtk3ReleasePopupGrab(APopup: TCustomForm);
 begin
   // not a GTK build: no Wayland grab to drop.
+end;
+
+procedure TyGtk3GrabPopup(APopup: TCustomForm; AOnDismiss: TNotifyEvent);
+begin
+  // not a GTK build: no Wayland grabbing popup.
 end;
 
 {$ENDIF}
