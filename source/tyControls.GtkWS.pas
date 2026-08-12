@@ -368,6 +368,9 @@ begin
     REVERTED: it stopped the MAIN window dragging as well, so on this setup begin_move_drag
     evidently does work for whatever type the main window is. Diagnose what actually differs
     between the two windows before gating this again. }
+  writeln(StdErr, '[SysMove] gtkType=', Ord(gtk_window_get_window_type(PGtkWindow(Top))),
+    ' (1=POPUP 0=TOPLEVEL) transientFor=', gtk_window_get_transient_for(PGtkWindow(Top)) <> nil,
+    ' caption="', AForm.Caption, '"');
   P := Mouse.CursorPos;   // LCL screen coords == root-window coords
   gtk_window_begin_move_drag(PGtkWindow(Top), 1, P.X, P.Y, gtk_get_current_event_time());
   Result := True;
