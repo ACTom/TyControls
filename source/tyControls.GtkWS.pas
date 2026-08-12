@@ -543,7 +543,7 @@ begin
     New(d);
     d^ := AOnDismiss;
     g_signal_connect_data(PGObject(popW), PChar('unmap'), TGCallback(@TyGtk3PopupUnmapCb),
-      d, TGClosureNotify(@TyGtk3PopupDismissFree), 0);
+      d, TGClosureNotify(@TyGtk3PopupDismissFree), []);
     g_object_set_data(PGObject(popW), PChar('ty_dismiss_wired'), Pointer(1));
     writeln(StdErr, '[TyGtk3GrabPopup] wired unmap->dismiss');
   end;
