@@ -845,7 +845,16 @@ begin
   if FBmp = nil then
   begin
     FBmp := TBitmap.Create;
-    FBmp.PixelFormat := pf32bit;
+    { pf24bit, NOT pf32bit -- the cache is an OPAQUE snapshot that Blit transfers with a plain,
+      non-compositing Canvas.Draw, so it must not carry an alpha channel. A pf32bit cache went
+      FULLY BLACK on LCL-GTK2: the painter's EndPaint reaches the cache through
+      TBGRAGtkBitmap.DrawTransparent -> gdk_pixbuf_render_to_drawable, which writes RGB and NEVER
+      populates the cache's alpha plane, leaving it all-zero; the final window Draw of a 32-bit
+      bitmap then composites against that alpha=0 -> black. Win32's GDI Draw ignores the alpha
+      byte, which is why the bug was Win32-invisible and GTK2-only. Dropping the alpha plane makes
+      the final blit a straight RGB copy on every widgetset. (Only TTyPanel/TTyTabSheet -- the
+      cache users -- were affected; every other container paints straight to its window Canvas.) }
+    FBmp.PixelFormat := pf24bit;
   end;
   if (FBmp.Width <> AW) or (FBmp.Height <> AH) then
   begin
