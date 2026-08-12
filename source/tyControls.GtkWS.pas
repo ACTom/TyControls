@@ -107,9 +107,16 @@ procedure TyGtk3ReleasePopupGrab(APopup: TCustomForm);
   AGroupId lets a MULTI-LEVEL popup (a menu cascade, where each submenu is a SEPARATE top-level)
   survive clicks on its sibling levels: pass the same non-nil id (e.g. the root popup pointer) when
   grabbing every level, and a click whose top-level carries the same group id counts as "inside".
-  Pass nil for a single popup (a combobox dropdown), where any outside click dismisses. No-op off
-  GTK3-Wayland. }
-procedure TyGtk3GrabPopup(APopup: TCustomForm; AOnDismiss: TNotifyEvent; AGroupId: Pointer = nil);
+  Pass nil for a single popup (a combobox dropdown), where any outside click dismisses.
+
+  ASeatGrab adds a compositor seat grab (needed to route outside clicks to a plain dropdown). A
+  MENU already lives under LCL's own gtk_grab AND drives hover-switch by re-showing one reused form,
+  which a seat grab fights -- pass False there and rely on the existing gtk_grab.
+
+  AExcludeCtl is a control (the menu BAR) whose own clicks must NOT dismiss -- the bar switches/opens
+  menus itself, so a click that walks up THROUGH it is treated as "inside". No-op off GTK3-Wayland. }
+procedure TyGtk3GrabPopup(APopup: TCustomForm; AOnDismiss: TNotifyEvent; AGroupId: Pointer = nil;
+  ASeatGrab: Boolean = True; AExcludeCtl: TWinControl = nil);
 
 implementation
 
@@ -308,7 +315,7 @@ begin
   // GTK2 is X11-only -- no Wayland grab to drop.
 end;
 
-procedure TyGtk3GrabPopup(APopup: TCustomForm; AOnDismiss: TNotifyEvent; AGroupId: Pointer);
+procedure TyGtk3GrabPopup(APopup: TCustomForm; AOnDismiss: TNotifyEvent; AGroupId: Pointer; ASeatGrab: Boolean; AExcludeCtl: TWinControl);
 begin
   // GTK2 is X11-only -- no Wayland grabbing popup.
 end;
@@ -525,17 +532,26 @@ end;
   still reach the row). }
 function TyGtk3PopupButtonPressCb(widget: PGtkWidget; event: PGdkEvent; data: gpointer): gboolean; cdecl;
 var
-  ew, top: PGtkWidget;
+  ew, w, top, excl: PGtkWidget;
   grpSelf, grpClick: gpointer;
 begin
   Result := False;
   if event = nil then Exit;
   ew := gtk_get_event_widget(event);
   if ew = nil then Exit;
-  top := gtk_widget_get_toplevel(ew);
-  if top = widget then Exit;   // inside THIS popup -> keep open
+  excl := PGtkWidget(g_object_get_data(PGObject(widget), PChar('ty_popup_excl')));
+  { Walk up from the clicked widget: reaching the popup means INSIDE (keep); reaching the excluded
+    bar means the bar handles it (keep, don't dismiss). }
+  w := ew;
+  while w <> nil do
+  begin
+    if w = widget then Exit;
+    if (excl <> nil) and (w = excl) then Exit;
+    w := gtk_widget_get_parent(w);
+  end;
   { Same cascade group? A menu tags every level's top-level with the root id, so a click on a
     sibling submenu is still "inside" and must not dismiss. }
+  top := gtk_widget_get_toplevel(ew);
   grpSelf := g_object_get_data(PGObject(widget), PChar('ty_popup_group'));
   if (grpSelf <> nil) and (top <> nil) then
   begin
@@ -547,9 +563,10 @@ begin
     PTyNotify(data)^(nil);
 end;
 
-procedure TyGtk3GrabPopup(APopup: TCustomForm; AOnDismiss: TNotifyEvent; AGroupId: Pointer);
+procedure TyGtk3GrabPopup(APopup: TCustomForm; AOnDismiss: TNotifyEvent; AGroupId: Pointer;
+  ASeatGrab: Boolean; AExcludeCtl: TWinControl);
 var
-  popW: PGtkWidget;
+  popW, exclW: PGtkWidget;
   gdkWin: PGdkWindow;
   disp: PGdkDisplay;
   seat: PGdkSeat;
@@ -561,18 +578,28 @@ begin
   if popW = nil then Exit;
   popW := gtk_widget_get_toplevel(popW);
   if popW = nil then Exit;
-  { Tag the cascade group every time (a reused popup form may re-open at a different level). }
+  { Tag the cascade group + the excluded bar widget every time (a reused form may re-open at a
+    different level / under a different bar). }
   g_object_set_data(PGObject(popW), PChar('ty_popup_group'), AGroupId);
-  gdkWin := gtk_widget_get_window(popW);
-  if gdkWin = nil then Exit;
-  disp := gdk_display_get_default;
-  if disp = nil then Exit;
-  seat := gdk_display_get_default_seat(disp);
-  if seat = nil then Exit;
-  { Grabbing xdg_popup: owner_events True so clicks INSIDE the popup still reach its list, while an
-    outside click reaches the compositor -> popup_done -> unmap. }
-  st := gdk_seat_grab(seat, gdkWin, GDK_SEAT_CAPABILITY_ALL, gboolean(True), nil, nil, nil, nil);
-  writeln(StdErr, '[TyGtk3GrabPopup] gdk_seat_grab status=', Ord(st), ' (0=success)');
+  if (AExcludeCtl <> nil) and AExcludeCtl.HandleAllocated then
+    exclW := Gtk3NativeWidget(AExcludeCtl)
+  else
+    exclW := nil;
+  g_object_set_data(PGObject(popW), PChar('ty_popup_excl'), exclW);
+  if ASeatGrab then
+  begin
+    gdkWin := gtk_widget_get_window(popW);
+    disp := gdk_display_get_default;
+    if (gdkWin <> nil) and (disp <> nil) then
+    begin
+      seat := gdk_display_get_default_seat(disp);
+      if seat <> nil then
+      begin
+        st := gdk_seat_grab(seat, gdkWin, GDK_SEAT_CAPABILITY_ALL, gboolean(True), nil, nil, nil, nil);
+        writeln(StdErr, '[TyGtk3GrabPopup] gdk_seat_grab status=', Ord(st), ' (0=success)');
+      end;
+    end;
+  end;
   { Wire the compositor dismiss (unmap) to AOnDismiss, once per widget. destroy_data frees the
     heap TMethod when the widget is destroyed. }
   if g_object_get_data(PGObject(popW), PChar('ty_dismiss_wired')) = nil then
@@ -634,7 +661,7 @@ begin
   // not a GTK build: no Wayland grab to drop.
 end;
 
-procedure TyGtk3GrabPopup(APopup: TCustomForm; AOnDismiss: TNotifyEvent; AGroupId: Pointer);
+procedure TyGtk3GrabPopup(APopup: TCustomForm; AOnDismiss: TNotifyEvent; AGroupId: Pointer; ASeatGrab: Boolean; AExcludeCtl: TWinControl);
 begin
   // not a GTK build: no Wayland grabbing popup.
 end;

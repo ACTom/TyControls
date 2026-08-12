@@ -277,6 +277,10 @@ type
     procedure HandleNavigateLeft(Sender: TObject);
     function IsSubmenuLevel: Boolean;
     function RootPopup: TTyMenuPopup;
+    { GTK3/Wayland: a click landed OUTSIDE the whole cascade (a bare panel, which never moves focus
+      so FormDeactivate/DeferredDismiss won't fire) -- collapse the cascade from the root. Deferred
+      so we don't tear the popup down from inside the button-press callback. }
+    procedure HandleOutsideClick(Sender: TObject);
     procedure FormDeactivate(Sender: TObject);
     procedure DeferredDismiss(Data: PtrInt);
     procedure DeferredForceClose(Data: PtrInt);
@@ -1852,6 +1856,8 @@ begin
 end;
 
 procedure TTyMenuPopup.DeferredReapplyGeometry(Data: PtrInt);
+var
+  barCtl: TWinControl;
 begin
   // Runs one event-loop turn after Popup's Show, by when Qt's map-time reparent/flag-recreation has
   // settled — so this SetBounds + region finally stick (on Win32/GTK2 it's a harmless re-assert).
@@ -1859,6 +1865,15 @@ begin
   FForm.SetBounds(FPopupRect.Left, FPopupRect.Top,
     FPopupRect.Right - FPopupRect.Left, FPopupRect.Bottom - FPopupRect.Top);
   ApplyFormRegion(FPopupRect.Right - FPopupRect.Left, FPopupRect.Bottom - FPopupRect.Top);
+  { GTK3/Wayland: NOW that the popup has mapped, wire outside-click dismiss (the button-press walks
+    the widget tree -- a synchronous wire in Popup was too early to arm). NO seat grab (that fought
+    the menu's hover-switch, which re-shows one reused form) -- rely on LCL's own popup gtk_grab.
+    Group = the ROOT so a click on a sibling submenu counts as inside; exclude the menu BAR so a
+    click on it switches/opens a menu instead of dismissing. No-op off GTK3-Wayland. }
+  barCtl := nil;
+  if (RootPopup.Owner <> nil) and (RootPopup.Owner is TWinControl) then
+    barCtl := TWinControl(RootPopup.Owner);
+  TyGtk3GrabPopup(FForm, @HandleOutsideClick, Pointer(RootPopup), {ASeatGrab:} False, barCtl);
 end;
 
 function TTyMenuPopup.MeasuredWidth: Integer;
@@ -2062,6 +2077,13 @@ begin
   Result := Self;
   while (Result.Owner <> nil) and (Result.Owner is TTyMenuPopup) do
     Result := TTyMenuPopup(Result.Owner);
+end;
+
+procedure TTyMenuPopup.HandleOutsideClick(Sender: TObject);
+begin
+  // Deferred + on the ROOT so DeferredForceClose tears the whole cascade down without freeing a
+  // form from inside the button-press callback that raised this.
+  Application.QueueAsyncCall(@RootPopup.DeferredForceClose, 0);
 end;
 
 procedure TTyMenuPopup.FormDeactivate(Sender: TObject);
