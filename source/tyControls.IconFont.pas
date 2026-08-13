@@ -15,6 +15,15 @@ unit tyControls.IconFont;
   name->codepoint map is pure and unit-tested headlessly; the rasterized pixels
   (and the non-Windows loaders) need a real machine + font to verify.
 
+  ARCHITECTURE — this is a PEER PLATFORM LAYER, like tyControls.WindowEffects: every
+  widgetset-native call (the per-OS font loaders below) is isolated in this one unit, so
+  no control code ever names a widgetset for fonts. It is deliberately NOT routed through
+  tyControls.PlatformWS. That facade abstracts STATELESS widgetset OPERATIONS invoked from
+  control logic (window move, popups, IME hooks); a font registration is the opposite — a
+  STATEFUL, per-instance native token (a Win32 THandle, a Qt font id, a GTK fontconfig spill
+  file) that lives naturally with the font component that owns it. Splitting that across a
+  facade + four widgetset units would leak a heterogeneous handle for no gain.
+
   Glyphs are stored as 'name=HEX' lines (e.g. save=F0C7) in the published Glyphs
   list, so they can be edited in the designer or loaded from a file. }
 
