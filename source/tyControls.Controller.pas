@@ -216,9 +216,21 @@ begin
   // try/except keeps headless/widgetset-less contexts safe.
   if TyAutoSystemFontFallback and (TyFallbackFontName = '') then
     try
+      {$IFDEF DARWIN}
+      // macOS: the system UI font (San Francisco) has NO CJK glyphs. BGRABitmap sizes its glyph mask
+      // from the BASE font's measured line height, but CoreText substitutes a TALLER CJK face
+      // (PingFang) at DRAW time -- so with San Francisco as the base, CJK descenders overflow the
+      // metric-sized mask and the bottom of every Chinese character is shaved off (crisp but cut in
+      // half). Seed a CJK-capable family (whose Latin is close to San Francisco) so the MEASURE font
+      // matches the DRAWN glyph. Still only a FALLBACK -- a themed font-family always wins, and
+      // TyAutoSystemFontFallback / an explicit TyFallbackFontName override it. Platform-gated (DARWIN),
+      // not widgetset: it is about macOS shipping a Latin-only UI font, true on Cocoa/Qt/GTK alike.
+      TyFallbackFontName := 'PingFang SC';
+      {$ELSE}
       if (Screen <> nil) and (Screen.SystemFont <> nil)
          and (Screen.SystemFont.Name <> '') then
         TyFallbackFontName := Screen.SystemFont.Name;
+      {$ENDIF}
     except
       // ignore: leave fallback empty in non-GUI / unavailable-Screen contexts
     end;
