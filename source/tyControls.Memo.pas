@@ -4635,6 +4635,12 @@ begin
         DeleteWordBackward
       else
         DoBackspace;
+      // A delete drops any selection. DoBackspace/DeleteWordBackward MOVE the caret backward but leave
+      // the anchor (AfterEdit is anchor-neutral by contract, and Edit's InjectBackspace collapses on its
+      // own), so collapse it here -- else the stale anchor spans a phantom selection to the caret. It
+      // surfaces on macOS, where the native IME view eats the follow-up event other widgetsets re-sync from.
+      FSelAnchorLine := FCaretLine;
+      FSelAnchorCol := FCaretCol;
       FDesiredCol := FCaretCol;
       AfterEdit(APPI);
       Key := 0;
@@ -4674,6 +4680,10 @@ begin
         DeleteWordForward
       else
         DoDelete;
+      // A delete drops any selection (forward delete keeps the caret put, so this is normally a no-op,
+      // but keep it so the anchor can never be left stale -- matches the VK_BACK path above).
+      FSelAnchorLine := FCaretLine;
+      FSelAnchorCol := FCaretCol;
       FDesiredCol := FCaretCol;
       AfterEdit(APPI);
       Key := 0;
