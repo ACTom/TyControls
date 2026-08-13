@@ -44,6 +44,22 @@ type
     function TeIsReadOnly: Boolean;
   end;
 
+  { The extra seam the macOS IME handler (tyControls.CocoaWS) drives while a CJK composition is in
+    progress: show the intermediate (marked) text INLINE at the caret and hand back the caret rect
+    for the candidate window. Same pattern as ITyTextEditActions -- both TTyEdit and TTyMemo
+    implement it as one-line delegates to members they already have. Only the Cocoa handler consumes
+    it; on every other widgetset it is an unused (but harmless) interface. See tyControls.CocoaWS. }
+  ITyImeEditable = interface
+    ['{A6F1E9C4-2B7D-4E3A-8F51-9C0D6B8A2E13}']
+    function  ImeTargetControl: TWinControl;   // the control, for ClientToScreen
+    function  ImeIsReadOnly: Boolean;
+    function  ImeCaretBoundClient: TRect;      // caret rect, client device px (empty rect if unfocused)
+    function  ImeCaretIndex: Integer;          // flat codepoint index of the caret
+    procedure ImeSessionBegin;                 // open ONE undo step, then suspend per-keystroke undo
+    procedure ImeSessionEnd;                   // release the suspend + fire OnChange once
+    procedure ImeReplace(AStart, ALen: Integer; const AText: string);  // delete [AStart,+ALen), insert AText at AStart
+  end;
+
   { Owns and REUSES one themed TTyPopupMenu for a text control's default right-click menu.
     Held by the control (created lazily on first context-popup, freed in the control's
     destructor). The menu is built once; the item Enabled flags are refreshed on every

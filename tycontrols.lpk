@@ -481,6 +481,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.Gtk3WS"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.CocoaWS.pas"/>
+        <UnitName Value="tyControls.CocoaWS"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.Splitter.pas"/>
         <UnitName Value="tyControls.Splitter"/>
       </Item>

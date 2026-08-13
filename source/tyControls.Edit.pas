@@ -6,7 +6,8 @@ uses
   ExtCtrls, StdCtrls,
   BGRABitmap, BGRABitmapTypes, BGRATextBidi,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.UndoStack,
-  tyControls.Animation, tyControls.PlatformWS, tyControls.TextMenu;
+  tyControls.Animation, tyControls.PlatformWS, tyControls.TextMenu
+  {$IFDEF LCLCocoa}, LMessages, tyControls.CocoaWS{$ENDIF};
 type
   TTyIntArray = array of Integer;
 
@@ -25,7 +26,7 @@ type
   end;
   TTyBidiRunArray = array of TTyBidiRun;
 
-  TTyEdit = class(TTyCustomControl, ITyTextEditActions)
+  TTyEdit = class(TTyCustomControl, ITyTextEditActions, ITyImeEditable)
   private
     FText: TCaption;
     FCaret: Integer;      // codepoint index 0..UTF8Length(FText)
@@ -87,6 +88,11 @@ type
     FUndoStack: TTyUndoStack;
     FSuspendUndo: Boolean;   // true while a composite op pushes its own step
     FReadOnly: Boolean;
+    {$IFDEF LCLCocoa}
+    // macOS IME handler (TTyCocoaImeHandler): created in Create, freed in Destroy, returned from the
+    // LM_IM_COMPOSITION message so LCL-Cocoa gives us the caret-following IME view. See tyControls.CocoaWS.
+    FCocoaIme: TObject;
+    {$ENDIF}
     FMaxLength: Integer;
     FPasswordChar: string;
     FEchoMode: TEchoMode;
@@ -333,6 +339,20 @@ type
     function TeCanPaste: Boolean;
     function TeHasText: Boolean;
     function TeIsReadOnly: Boolean;
+    // --- ITyImeEditable: the seam the macOS IME handler drives during CJK composition (thin
+    // delegates to members below; see tyControls.CocoaWS / tyControls.TextMenu). ---
+    function  ImeTargetControl: TWinControl;
+    function  ImeIsReadOnly: Boolean;
+    function  ImeCaretBoundClient: TRect;
+    function  ImeCaretIndex: Integer;
+    procedure ImeSessionBegin;
+    procedure ImeSessionEnd;
+    procedure ImeReplace(AStart, ALen: Integer; const AText: string);
+    {$IFDEF LCLCocoa}
+    // macOS: answer LCL-Cocoa's handle-creation query (LM_IM_COMPOSITION) with our IME handler so the
+    // control gets the IME-capable native view whose candidate window follows the caret.
+    procedure CocoaImComposition(var Message: TLMessage); message LM_IM_COMPOSITION;
+    {$ENDIF}
     { Multicast OnChange, LCL's stdctrls.pp:853-855. The single OnChange property belongs to
       the application; a validator, a dirty-tracker or a live preview living inside the
       library (or a framework layer above it) has to be able to observe the same edit without
@@ -457,6 +477,11 @@ begin
   FMeasureBmp := nil;
   FUndoStack := TTyUndoStack.Create;
   FSuspendUndo := False;
+  {$IFDEF LCLCocoa}
+  // Create BEFORE the handle exists: LCL-Cocoa queries LM_IM_COMPOSITION inside CreateHandle. Self is
+  // passed as ITyImeEditable; the handler holds it as a COM field whose _AddRef is a no-op (no cycle).
+  FCocoaIme := TTyCocoaImeHandler.Create(Self);
+  {$ENDIF}
   FCaretVisible := True;       // solid caret until a real timer toggles it
   FBlinkTimer := nil;          // lazy: created only when HandleAllocated
   FBlinkElapsedMs := 0;
@@ -478,6 +503,9 @@ begin
   // ref -- TComponent interface calls do not reference-count), so freeing it here, before
   // the text engine, is safe and touches nothing the teardown below depends on.
   FreeAndNil(FTextMenu);
+  {$IFDEF LCLCocoa}
+  FreeAndNil(FCocoaIme);   // macOS IME handler (no strong refs back to Self)
+  {$ENDIF}
   // Free the timer first so its OnTimer callback can never fire mid-teardown
   // (mirrors TTyButton.Destroy). It is owned by Self but we free it explicitly.
   FreeAndNil(FBlinkTimer);
@@ -728,6 +756,40 @@ function TTyEdit.TeHasSelection: Boolean;          begin Result := HasSelection;
 function TTyEdit.TeCanPaste: Boolean;              begin Result := ReadClipboardText <> ''; end;
 function TTyEdit.TeHasText: Boolean;               begin Result := UTF8Length(FText) > 0; end;
 function TTyEdit.TeIsReadOnly: Boolean;            begin Result := FReadOnly; end;
+
+// ---- ITyImeEditable (macOS IME composition seam; see tyControls.CocoaWS) ----
+
+function  TTyEdit.ImeTargetControl: TWinControl;   begin Result := Self; end;
+function  TTyEdit.ImeIsReadOnly: Boolean;          begin Result := FReadOnly or (not Enabled); end;
+function  TTyEdit.ImeCaretBoundClient: TRect;      begin Result := GetImeCaretRect; end;
+function  TTyEdit.ImeCaretIndex: Integer;          begin Result := SelStart; end;
+// Bracket the WHOLE composition in one undo step (mirrors HandleImeCommit): BeginUndoStep captures the
+// pre-composition text, FSuspendUndo then swallows every per-keystroke push + OnChange until End fires.
+procedure TTyEdit.ImeSessionBegin;                 begin BeginUndoStep(uskTyping); FSuspendUndo := True; end;
+procedure TTyEdit.ImeSessionEnd;                   begin FSuspendUndo := False; DoChange; end;
+procedure TTyEdit.ImeReplace(AStart, ALen: Integer; const AText: string);
+begin
+  // Replace [AStart, AStart+ALen) with AText, reusing the same private mutators HandleImeCommit uses
+  // (they self-filter + collapse the anchor). Runs under the session FSuspendUndo, so no extra steps.
+  if ALen > 0 then
+  begin
+    SelStart := AStart;
+    SelLength := ALen;
+    DeleteSelection;
+  end
+  else
+    CaretPos := AStart;
+  if AText <> '' then InjectStringAt(AText);
+end;
+
+{$IFDEF LCLCocoa}
+procedure TTyEdit.CocoaImComposition(var Message: TLMessage);
+begin
+  // WParam 0 = IM_MESSAGE_WPARAM_GET_IME_HANDLER (LCL-Cocoa wants our ICocoaIMEControl); 1 = lookup-word (unused).
+  if Message.WParam = 0 then Message.Result := PtrInt(FCocoaIme)
+  else Message.Result := 0;
+end;
+{$ENDIF}
 
 // ---- Selection read helpers ----
 
