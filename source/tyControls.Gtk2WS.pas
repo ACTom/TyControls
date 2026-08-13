@@ -49,6 +49,18 @@ var
 begin
   Result := False;
   if (AForm = nil) or (not AForm.HandleAllocated) then Exit;
+  { A MODAL form cannot be handed to the WM's interactive move, so decline it here and let the caller
+    fall back to its manual per-move drag. LCL-GTK2 enforces modality ENTIRELY through GTK's own modal
+    grab -- gtk_window_set_modal(win, TRUE) in gtk2proc.inc -- because it declines to disable the other
+    top-levels itself (lcModalWindow = YES -> DisabledList = nil). That grab stays on the dialog for the
+    whole modal session and the caller's SetCaptureControl(nil) can't drop it (that only releases the
+    transient mouse-capture grab), so begin_move_drag's _NET_WM_MOVERESIZE handoff is pre-empted: the WM
+    never gets the pointer and the window doesn't budge (a non-modal window, with no grab left, hands off
+    cleanly -- which is why the main window drags but a dialog doesn't). The manual fallback is a plain
+    gtk_window_move (a configure request, NOT subject to the grab), so it moves a modal dialog and touches
+    no grab/modal state -- modality is intact. Its only cost is GTK's multi-monitor clamp (see the unit
+    note), acceptable for a centred dialog; non-modal windows keep the unclamped WM move. }
+  if fsModal in AForm.FormState then Exit;
   W := {%H-}PGtkWidget(AForm.Handle);
   if W = nil then Exit;
   Top := gtk_widget_get_toplevel(W);
