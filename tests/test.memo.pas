@@ -94,6 +94,7 @@ type
     procedure TestInsertPrintable;
     procedure TestEnterSplits;
     procedure TestBackspaceMergesLines;
+    procedure TestBackspaceMergesLastLine;
     procedure TestBackspaceNoopAtOrigin;
     procedure TestDeleteMergesNextLine;
     procedure TestLeftWrapsToPrevLineEnd;
@@ -678,6 +679,23 @@ begin
   AssertEquals('LineCount = 1', 1, FMemo.ProbeLineCountLogical);
   AssertEquals('Lines[0] = abcd', 'abcd', FMemo.Lines[0]);
   AssertEquals('caret line 0', 0, FMemo.ProbeCaretLine);
+  AssertEquals('caret col 2', 2, FMemo.ProbeCaretCol);
+end;
+
+procedure TTyMemoTest.TestBackspaceMergesLastLine;
+begin
+  // Backspace at col 0 of the LAST line merges it onto the previous line, landing the caret at the
+  // join on that previous line (exactly one line up). Regression guard: FLines.Delete fires
+  // LinesChanged, whose caret clamp used to knock FCaretLine down before DoBackspace's own Dec, so
+  // the last line double-decremented. Needs >=3 lines: with 2 lines the wrong index is -1 and
+  // AfterEdit's clamp masks it back to 0, so the 2-line case above passes even when this is broken.
+  SetUpWithPadding(0);
+  LoadLines(['ab', 'cd', 'ef']);
+  FMemo.ProbeSetCaret(2, 0);
+  FMemo.InjectBackspace;
+  AssertEquals('LineCount = 2', 2, FMemo.ProbeLineCountLogical);
+  AssertEquals('Lines[1] = cdef', 'cdef', FMemo.Lines[1]);
+  AssertEquals('caret line 1 (one line up, not two)', 1, FMemo.ProbeCaretLine);
   AssertEquals('caret col 2', 2, FMemo.ProbeCaretCol);
 end;
 

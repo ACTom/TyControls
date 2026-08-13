@@ -938,21 +938,6 @@ type
 
 implementation
 
-{$IFDEF LCLCocoa}
-// TEMP IME DIAGNOSTIC (remove after): append to a file, since a GUI app's stderr often isn't visible.
-procedure TyImeLog(const S: string);
-var f: TextFile;
-begin
-  try
-    AssignFile(f, '/tmp/tymemoime.log');
-    if FileExists('/tmp/tymemoime.log') then Append(f) else Rewrite(f);
-    writeln(f, S);
-    CloseFile(f);
-  except
-  end;
-end;
-{$ENDIF}
-
 constructor TTyMemo.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
@@ -2918,13 +2903,15 @@ begin
     Cur  := FLines[FCaretLine];
     PrevLen := UTF8Length(Prev);
     FLines[FCaretLine - 1] := Prev + Cur;
-    FLines.Delete(FCaretLine);
+    // Move the caret up onto the merged line BEFORE deleting the current one. FLines.Delete fires
+    // FLines.OnChange -> LinesChanged, which clamps FCaretLine to the new last index. If we delete
+    // while FCaretLine still points at the (about-to-vanish) last line, that clamp already knocks it
+    // down by one, and the Dec would then double-decrement -> caret one line too high. This only bit
+    // the LAST line (any other line stays in range through the delete, so the clamp was a no-op there).
     Dec(FCaretLine);
     FCaretCol := PrevLen;
+    FLines.Delete(FCaretLine + 1);
   end;
-  {$IFDEF LCLCocoa}
-  TyImeLog(Format('[TyMemoIME] DoBackspace -> caret=(%d,%d) lines=%d', [FCaretLine, FCaretCol, FLines.Count]));
-  {$ENDIF}
 end;
 
 procedure TTyMemo.DoDelete;
@@ -4505,12 +4492,6 @@ var
 begin
   if not Enabled then Exit;          // when disabled, do NOT consume Key
   inherited KeyDown(Key, Shift);
-  {$IFDEF LCLCocoa}
-  // TEMP IME DIAGNOSTIC (remove after): one line per KeyDown call -> a doubled line = double-dispatch.
-  TyImeLog(Format('[TyMemoIME] KeyDown key=%d shift=[c%d a%d s%d m%d] caret=(%d,%d) anchor=(%d,%d) lines=%d',
-    [Key, Ord(ssCtrl in Shift), Ord(ssAlt in Shift), Ord(ssShift in Shift), Ord(ssMeta in Shift),
-     FCaretLine, FCaretCol, FSelAnchorLine, FSelAnchorCol, FLines.Count]));
-  {$ENDIF}
   APPI := Font.PixelsPerInch;
   MaxLine := LineCountLogical - 1;
   // Ctrl (Win/Linux) or Meta/Cmd (macOS) modifies Home/End to document extents.
@@ -4654,17 +4635,11 @@ begin
       // falls back to the cross-line merge inside DeleteWordBackward). Precedence
       // selection > word > single, mirroring TTyEdit. Capture the pre-mutation
       // state as a fresh (non-typing) undo step.
-      {$IFDEF LCLCocoa}
-      TyImeLog(Format('[TyMemoIME] VK_BACK pre  caret=(%d,%d) hasSel=%d', [FCaretLine, FCaretCol, Ord(HasSelection)]));
-      {$ENDIF}
       BeginUndoStep(uskBackspace);
       if (ssCtrl in Shift) or (ssAlt in Shift) then
         DeleteWordBackward
       else
         DoBackspace;
-      {$IFDEF LCLCocoa}
-      TyImeLog(Format('[TyMemoIME] VK_BACK post caret=(%d,%d)', [FCaretLine, FCaretCol]));
-      {$ENDIF}
       // A delete drops any selection. DoBackspace/DeleteWordBackward MOVE the caret backward but leave
       // the anchor (AfterEdit is anchor-neutral by contract, and Edit's InjectBackspace collapses on its
       // own), so collapse it here -- else the stale anchor spans a phantom selection to the caret. It
