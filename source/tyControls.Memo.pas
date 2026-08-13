@@ -938,6 +938,21 @@ type
 
 implementation
 
+{$IFDEF LCLCocoa}
+// TEMP IME DIAGNOSTIC (remove after): append to a file, since a GUI app's stderr often isn't visible.
+procedure TyImeLog(const S: string);
+var f: TextFile;
+begin
+  try
+    AssignFile(f, '/tmp/tymemoime.log');
+    if FileExists('/tmp/tymemoime.log') then Append(f) else Rewrite(f);
+    writeln(f, S);
+    CloseFile(f);
+  except
+  end;
+end;
+{$ENDIF}
+
 constructor TTyMemo.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
@@ -2908,7 +2923,7 @@ begin
     FCaretCol := PrevLen;
   end;
   {$IFDEF LCLCocoa}
-  writeln(StdErr, Format('[TyMemoIME] DoBackspace -> caret=(%d,%d) lines=%d', [FCaretLine, FCaretCol, FLines.Count]));
+  TyImeLog(Format('[TyMemoIME] DoBackspace -> caret=(%d,%d) lines=%d', [FCaretLine, FCaretCol, FLines.Count]));
   {$ENDIF}
 end;
 
@@ -4492,9 +4507,9 @@ begin
   inherited KeyDown(Key, Shift);
   {$IFDEF LCLCocoa}
   // TEMP IME DIAGNOSTIC (remove after): one line per KeyDown call -> a doubled line = double-dispatch.
-  writeln(StdErr, Format('[TyMemoIME] KeyDown key=%d shift=[c%d a%d s%d m%d] caret=(%d,%d) anchor=(%d,%d)',
+  TyImeLog(Format('[TyMemoIME] KeyDown key=%d shift=[c%d a%d s%d m%d] caret=(%d,%d) anchor=(%d,%d) lines=%d',
     [Key, Ord(ssCtrl in Shift), Ord(ssAlt in Shift), Ord(ssShift in Shift), Ord(ssMeta in Shift),
-     FCaretLine, FCaretCol, FSelAnchorLine, FSelAnchorCol]));
+     FCaretLine, FCaretCol, FSelAnchorLine, FSelAnchorCol, FLines.Count]));
   {$ENDIF}
   APPI := Font.PixelsPerInch;
   MaxLine := LineCountLogical - 1;
@@ -4640,7 +4655,7 @@ begin
       // selection > word > single, mirroring TTyEdit. Capture the pre-mutation
       // state as a fresh (non-typing) undo step.
       {$IFDEF LCLCocoa}
-      writeln(StdErr, Format('[TyMemoIME] VK_BACK pre  caret=(%d,%d) hasSel=%d', [FCaretLine, FCaretCol, Ord(HasSelection)]));
+      TyImeLog(Format('[TyMemoIME] VK_BACK pre  caret=(%d,%d) hasSel=%d', [FCaretLine, FCaretCol, Ord(HasSelection)]));
       {$ENDIF}
       BeginUndoStep(uskBackspace);
       if (ssCtrl in Shift) or (ssAlt in Shift) then
@@ -4648,7 +4663,7 @@ begin
       else
         DoBackspace;
       {$IFDEF LCLCocoa}
-      writeln(StdErr, Format('[TyMemoIME] VK_BACK post caret=(%d,%d)', [FCaretLine, FCaretCol]));
+      TyImeLog(Format('[TyMemoIME] VK_BACK post caret=(%d,%d)', [FCaretLine, FCaretCol]));
       {$ENDIF}
       // A delete drops any selection. DoBackspace/DeleteWordBackward MOVE the caret backward but leave
       // the anchor (AfterEdit is anchor-neutral by contract, and Edit's InjectBackspace collapses on its
