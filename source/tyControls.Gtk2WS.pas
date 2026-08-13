@@ -42,78 +42,30 @@ implementation
 {$IFDEF LCLGTK2}
 uses gtk2, gdk2, glib2, Gtk2Proc;   // Gtk2Proc: GetControlWindow (the control's client GdkWindow)
 
-type
-  PTyGtk2ModalMove = ^TTyGtk2ModalMove;
-  TTyGtk2ModalMove = record
-    Win: PGtkWidget;   // the modal toplevel; GTK's weak pointer nils this if the window dies mid-drag
-  end;
-
-{ Re-arm GTK modality once the WM title-bar move has ended. begin_move_drag is ASYNCHRONOUS and the
-  button-release that TERMINATES a WM move is delivered to the window manager (which holds the pointer
-  grab for the move), not to us -- so there is no event to hook. We instead poll the global pointer
-  button every ~40ms and restore gtk_window_set_modal the moment it comes up. The weak pointer turns a
-  dialog that is somehow freed mid-drag into a clean stop rather than a use-after-free (it can't happen
-  from the UI -- the pointer is grabbed by the WM for the whole move -- but the guard is cheap). }
-function TyGtk2ModalMovePoll(data: gpointer): gboolean; cdecl;
-var
-  st: PTyGtk2ModalMove;
-  disp: PGdkDisplay;
-  mask: TGdkModifierType;
-begin
-  st := PTyGtk2ModalMove(data);
-  if st^.Win <> nil then
-  begin
-    disp := gtk_widget_get_display(st^.Win);
-    if disp <> nil then
-    begin
-      mask := 0;
-      gdk_display_get_pointer(disp, nil, nil, nil, @mask);
-      if (mask and GDK_BUTTON1_MASK) <> 0 then
-        Exit(True);   // button still down: the WM move is in progress -> keep polling
-    end;
-    // button up (or no display): the WM move has ended -> put GTK modality back
-    gtk_window_set_modal(PGtkWindow(st^.Win), True);
-    g_object_remove_weak_pointer(PGObject(st^.Win), Pgpointer(@st^.Win));
-  end;
-  Dispose(st);
-  Result := False;    // resolved (or window gone) -> remove the timeout
-end;
-
 function TyGtk2StartSystemMove(AForm: TCustomForm): Boolean;
 var
   W, Top: PGtkWidget;
   P: TPoint;
-  IsModal: Boolean;
-  st: PTyGtk2ModalMove;
 begin
   Result := False;
   if (AForm = nil) or (not AForm.HandleAllocated) then Exit;
+  { A MODAL dialog can't be moved by the WM's interactive move on GTK2 -- decline it so the caller
+    falls back to its manual per-move drag (a plain gtk_window_move). PROVEN on a real GTK2 session:
+    the modal grab (gtk_window_set_modal) is NOT the blocker -- dropping it makes the WM re-lit the
+    dimmed parent, yet begin_move_drag STILL won't move the dialog. The real block is the window
+    manager's transient/dialog policy: a WM that manages modal dialogs (dims the parent, centres and
+    animates the dialog) refuses _NET_WM_MOVERESIZE for its managed dialog. gtk_window_move is a direct
+    configure the WM does honour (it merely animates it on such a compositor). Defeating the WM policy
+    would mean stripping the dialog's transient_for/type-hint -- fighting LCL's transient wiring, the
+    same dead end as the GTK3/Wayland dialog drag; not worth it. Non-modal top-levels are not managed
+    this way and keep the real-time WM move below. }
+  if fsModal in AForm.FormState then Exit;
   W := {%H-}PGtkWidget(AForm.Handle);
   if W = nil then Exit;
   Top := gtk_widget_get_toplevel(W);
   if (Top = nil) or not GTK_IS_WINDOW(Top) then Exit;
-  { A MODAL dialog carries GTK's modal grab -- LCL-GTK2 enforces modality ENTIRELY through
-    gtk_window_set_modal(win, TRUE) (gtk2proc.inc), setting DisabledList=nil because lcModalWindow=YES.
-    begin_move_drag's _NET_WM_MOVERESIZE handoff is pre-empted while ANY grab is held over the window
-    (that is exactly why the caller does SetCaptureControl(nil) first), so the modal grab makes the WM
-    move fail -- the dialog won't budge -- while the non-modal main window, left grab-free, drags fine.
-    So for a modal form: drop the modal grab across the WM move and re-arm it (TyGtk2ModalMovePoll) the
-    instant the button is released. During a WM title-bar move the pointer is grabbed BY THE WM, so no
-    other window is reachable in the gap -- modality is effectively unbroken. (A manual per-move
-    gtk_window_move avoids the grab too, but it is a configure request that an animating compositor
-    eases one step at a time, so a long drag crawls; the WM move is real-time, like the main window.) }
-  IsModal := fsModal in AForm.FormState;
-  if IsModal then
-    gtk_window_set_modal(GTK_WINDOW(Top), False);
   P := Mouse.CursorPos;   // LCL screen coords == X11 root-window coords
   gtk_window_begin_move_drag(GTK_WINDOW(Top), 1, P.X, P.Y, gtk_get_current_event_time());
-  if IsModal then
-  begin
-    New(st);
-    st^.Win := Top;
-    g_object_add_weak_pointer(PGObject(Top), Pgpointer(@st^.Win));
-    g_timeout_add(40, @TyGtk2ModalMovePoll, st);
-  end;
   Result := True;
 end;
 

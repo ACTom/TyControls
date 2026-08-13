@@ -1541,10 +1541,10 @@ begin
   if Moved then
     StartPlatformDrag(ACursor);
   {$ELSE}
-  // Cocoa (+ Qt5/other fallbacks): reposition manually to the absolute target each move. Qt6/GTK2
-  // never reach here (they took the async system move on the press -> FDragging stayed False); GTK2
-  // modal dialogs included -- TyGtk2StartSystemMove drops GTK's modal grab across the WM move rather
-  // than falling back here, so a modal dialog drags in real time instead of crawling per gtk_window_move.
+  // Cocoa (+ Qt5/other fallbacks): reposition manually to the absolute target each move. Qt6 and a
+  // NON-modal GTK2 window never reach here (they took the async WM move on the press -> FDragging
+  // stayed False); a MODAL GTK2 dialog DOES reach here, because the WM refuses to interactively move
+  // its managed dialog (TyGtk2StartSystemMove returns False for fsModal) -> manual gtk_window_move.
   FForm.Left := FDragFormStart.X + (ACursor.X - FDragStart.X);
   FForm.Top  := FDragFormStart.Y + (ACursor.Y - FDragStart.Y);
   {$ENDIF}
