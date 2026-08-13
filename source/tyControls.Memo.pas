@@ -2486,7 +2486,14 @@ function  TTyMemo.ImeCaretBoundClient: TRect;       begin Result := GetImeCaretR
 function  TTyMemo.ImeCaretIndex: Integer;           begin Result := SelStart; end;
 // Bracket the WHOLE composition in one undo step (mirrors HandleImeCommit): BeginUndoStep captures the
 // pre-composition text, FSuspendUndo then swallows every per-keystroke push until End fires.
-procedure TTyMemo.ImeSessionBegin;                  begin BeginUndoStep(uskTyping); FSuspendUndo := True; end;
+procedure TTyMemo.ImeSessionBegin;
+begin
+  BeginUndoStep(uskTyping);
+  FSuspendUndo := True;
+  // Composition REPLACES the current selection. Cocoa won't tell us to (its selectedRange is the IME's,
+  // not our control's), so delete it here before the first intermediate text lands at the caret.
+  if HasSelection then DeleteSelection;
+end;
 procedure TTyMemo.ImeSessionEnd;                    begin FSuspendUndo := False; DoChange; end;
 procedure TTyMemo.ImeReplace(AStart, ALen: Integer; const AText: string);
 begin
