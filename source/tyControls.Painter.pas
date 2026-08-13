@@ -902,11 +902,16 @@ begin
   AFontSizeLogical := TyEffectiveFontSizeLogical(AFontSizeLogical);
   ABmp.FontName := TyEffectiveFontName(AFontName);
   ABmp.FontHeight := MulDiv(Round(AFontSizeLogical * 96 / 72), APPI, 96);
-  // Text quality is a WIDGETSET choice, not a platform one. BGRABitmap's fqFineAntialiasing
-  // renders BLANK on the Qt/GTK LCL font renderer (its fine-AA path expects the Win32/Cocoa
-  // system renderer; diagnostic on Windows+Qt6: fqFine=0 px vs fqSystemClearType=621). Use the
-  // widgetset's native text (fqSystemClearType) there; keep crisp fqFineAntialiasing on Win32/Cocoa.
-  {$IF DEFINED(LCLQt5) or DEFINED(LCLQt6) or DEFINED(LCLGtk2) or DEFINED(LCLGtk3)}
+  // Text quality is a WIDGETSET choice. fqFineAntialiasing only stays crisp where BGRABitmap runs
+  // its OWN 3x supersampler -- the Win32 LCL font backend. On Qt/GTK it renders BLANK (diagnostic on
+  // Windows+Qt6: fqFine=0 px vs fqSystemClearType=621), and on Cocoa it silently drops to single-pass
+  // fqSystem for text > ~13px (see SYSTEM_RENDERER_IS_FINE by DrawTextSupersampled below), so CJK comes
+  // out jagged/thin with hairline strokes dropping. So ONLY Win32 keeps fqFineAntialiasing; every other
+  // widgetset -- Qt, GTK, and Cocoa -- uses the native text renderer (fqSystemClearType), which is also
+  // the path that runs the OS font-substitution cascade a Latin UI font (macOS San Francisco) needs to
+  // fill CJK glyphs. (Cocoa was previously grouped with Win32 on an assumption extrapolated from the
+  // Windows+Qt6 run, never tested on a Mac; a real macOS run shows that CJK jagged + glyphs missing.)
+  {$IF DEFINED(LCLQt5) or DEFINED(LCLQt6) or DEFINED(LCLGtk2) or DEFINED(LCLGtk3) or DEFINED(LCLCocoa)}
   ABmp.FontQuality := fqSystemClearType;
   {$ELSE}
   ABmp.FontQuality := fqFineAntialiasing;
