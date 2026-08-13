@@ -2907,6 +2907,9 @@ begin
     Dec(FCaretLine);
     FCaretCol := PrevLen;
   end;
+  {$IFDEF LCLCocoa}
+  writeln(StdErr, Format('[TyMemoIME] DoBackspace -> caret=(%d,%d) lines=%d', [FCaretLine, FCaretCol, FLines.Count]));
+  {$ENDIF}
 end;
 
 procedure TTyMemo.DoDelete;
@@ -4487,6 +4490,12 @@ var
 begin
   if not Enabled then Exit;          // when disabled, do NOT consume Key
   inherited KeyDown(Key, Shift);
+  {$IFDEF LCLCocoa}
+  // TEMP IME DIAGNOSTIC (remove after): one line per KeyDown call -> a doubled line = double-dispatch.
+  writeln(StdErr, Format('[TyMemoIME] KeyDown key=%d shift=[c%d a%d s%d m%d] caret=(%d,%d) anchor=(%d,%d)',
+    [Key, Ord(ssCtrl in Shift), Ord(ssAlt in Shift), Ord(ssShift in Shift), Ord(ssMeta in Shift),
+     FCaretLine, FCaretCol, FSelAnchorLine, FSelAnchorCol]));
+  {$ENDIF}
   APPI := Font.PixelsPerInch;
   MaxLine := LineCountLogical - 1;
   // Ctrl (Win/Linux) or Meta/Cmd (macOS) modifies Home/End to document extents.
@@ -4630,11 +4639,17 @@ begin
       // falls back to the cross-line merge inside DeleteWordBackward). Precedence
       // selection > word > single, mirroring TTyEdit. Capture the pre-mutation
       // state as a fresh (non-typing) undo step.
+      {$IFDEF LCLCocoa}
+      writeln(StdErr, Format('[TyMemoIME] VK_BACK pre  caret=(%d,%d) hasSel=%d', [FCaretLine, FCaretCol, Ord(HasSelection)]));
+      {$ENDIF}
       BeginUndoStep(uskBackspace);
       if (ssCtrl in Shift) or (ssAlt in Shift) then
         DeleteWordBackward
       else
         DoBackspace;
+      {$IFDEF LCLCocoa}
+      writeln(StdErr, Format('[TyMemoIME] VK_BACK post caret=(%d,%d)', [FCaretLine, FCaretCol]));
+      {$ENDIF}
       // A delete drops any selection. DoBackspace/DeleteWordBackward MOVE the caret backward but leave
       // the anchor (AfterEdit is anchor-neutral by contract, and Edit's InjectBackspace collapses on its
       // own), so collapse it here -- else the stale anchor spans a phantom selection to the caret. It
