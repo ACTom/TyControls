@@ -35,6 +35,11 @@ function TyIsGtk3: Boolean;
   that is NOT a widgetset call and so can't hide behind one. }
 function TyIsGtk3Wayland: Boolean;
 
+{ True on widgetsets whose open popup takes a pointer grab (Qt, GTK): a menu bar then never receives
+  MouseMove while a dropdown is open, so it must poll the global cursor to switch tops on hover.
+  False on Win32, where ordinary MouseMove still reaches the bar. }
+function TyPopupGrabsPointer: Boolean;
+
 var
   { EXPERIMENT, default OFF. On a GTK3 build, opt a borderless popup into the native GTK_WINDOW_POPUP
     path via csNoFocus (see the long note kept with TyPreparePopupWindow's history). Inert off GTK3. }
@@ -147,6 +152,11 @@ end;
 function TyIsGtk3Wayland: Boolean;
 begin
   {$IFDEF LCLGTK3} Result := TyGtk3IsWayland; {$ELSE} Result := False; {$ENDIF}
+end;
+
+function TyPopupGrabsPointer: Boolean;
+begin
+  {$IFDEF LCLWin32} Result := False; {$ELSE} Result := True; {$ENDIF}
 end;
 
 procedure TyPreparePopupWindow(AForm: TCustomForm);

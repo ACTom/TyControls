@@ -2395,7 +2395,9 @@ end;
 
 procedure TTyMenuBar.StartHoverPoll;
 begin
-  {$IFNDEF LCLWin32}
+  // Only where an open popup grabs the pointer (Qt/GTK) does the bar stop getting MouseMove and need
+  // to poll; on Win32 the ordinary MouseMove path handles hover-switch, so there is nothing to start.
+  if not TyPopupGrabsPointer then Exit;
   if FHoverPollTimer = nil then
   begin
     FHoverPollTimer := TTimer.Create(Self);
@@ -2403,7 +2405,6 @@ begin
     FHoverPollTimer.OnTimer := @HoverPollTick;
   end;
   FHoverPollTimer.Enabled := True;
-  {$ENDIF}
 end;
 
 procedure TTyMenuBar.StopHoverPoll;
@@ -2412,13 +2413,11 @@ begin
 end;
 
 procedure TTyMenuBar.HoverPollTick(Sender: TObject);
-{$IFNDEF LCLWin32}
 var
   p: TPoint;
   idx, ppi: Integer;
-{$ENDIF}
 begin
-  {$IFNDEF LCLWin32}
+  // Only started where the popup grabs the pointer (see StartHoverPoll), so this never fires on Win32.
   if (FOpenIndex < 0) or not HandleAllocated then begin StopHoverPoll; Exit; end;
   // A Qt/GTK dropdown grabs the mouse, so the bar never receives MouseMove while open. Poll the
   // GLOBAL cursor instead and reuse the exact same "hover a different top cell -> switch" rule.
@@ -2428,7 +2427,6 @@ begin
   if ppi <= 0 then ppi := 96;
   idx := TopAtX(p.X, ppi);
   if (idx >= 0) and (idx <> FOpenIndex) then OpenTop(idx);
-  {$ENDIF}
 end;
 
 procedure TTyMenuBar.OpenTop(AIndex: Integer);
