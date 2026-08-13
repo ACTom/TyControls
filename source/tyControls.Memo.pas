@@ -2893,8 +2893,13 @@ begin
     L := UTF8Length(Cur);
     Before := UTF8Copy(Cur, 1, FCaretCol - 1);
     After  := UTF8Copy(Cur, FCaretCol + 1, L - FCaretCol);
-    FLines[FCaretLine] := Before + After;
+    // Drop the caret onto its post-delete column BEFORE the assignment. Assigning FLines[...] fires
+    // FLines.OnChange -> LinesChanged -> ClampCaret, which clamps FCaretCol to the now-shorter line.
+    // At end-of-line the old FCaretCol (= old length) is past the new end, so ClampCaret already pulls
+    // it back one; a Dec afterwards would double-decrement -> caret one char too far left. (Same class
+    // of bug as the line-merge branch below: never mutate FLines while the caret is out of range.)
     Dec(FCaretCol);
+    FLines[FCaretLine] := Before + After;
   end
   else
   begin

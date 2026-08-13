@@ -94,6 +94,7 @@ type
     procedure TestInsertPrintable;
     procedure TestEnterSplits;
     procedure TestBackspaceMergesLines;
+    procedure TestBackspaceAtLineEnd;
     procedure TestBackspaceMergesLastLine;
     procedure TestBackspaceNoopAtOrigin;
     procedure TestDeleteMergesNextLine;
@@ -680,6 +681,21 @@ begin
   AssertEquals('Lines[0] = abcd', 'abcd', FMemo.Lines[0]);
   AssertEquals('caret line 0', 0, FMemo.ProbeCaretLine);
   AssertEquals('caret col 2', 2, FMemo.ProbeCaretCol);
+end;
+
+procedure TTyMemoTest.TestBackspaceAtLineEnd;
+begin
+  // Backspace at the END of a line deletes the last char and the caret stays at the (new) end.
+  // Regression guard: assigning FLines[i] fires LinesChanged -> ClampCaret, which used to pull
+  // FCaretCol back to the shortened length BEFORE DoBackspace's own Dec, double-decrementing so the
+  // caret landed one char short of the end (before the last remaining char).
+  SetUpWithPadding(0);
+  LoadLines(['abc']);
+  FMemo.ProbeSetCaret(0, 3);
+  FMemo.InjectBackspace;
+  AssertEquals('Lines[0] = ab', 'ab', FMemo.Lines[0]);
+  AssertEquals('caret line 0', 0, FMemo.ProbeCaretLine);
+  AssertEquals('caret col 2 (at the new end, not before the last char)', 2, FMemo.ProbeCaretCol);
 end;
 
 procedure TTyMemoTest.TestBackspaceMergesLastLine;
