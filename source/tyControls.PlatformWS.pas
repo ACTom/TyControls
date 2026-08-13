@@ -55,6 +55,15 @@ procedure TyPreparePopupWindow(AForm: TCustomForm);
   NON-blocking WM handoffs (Qt/GTK) and defers Win32's to the drag-threshold path. }
 function TyStartSystemMove(AForm: TCustomForm; AIncludeBlocking: Boolean = True): Boolean;
 
+{ Reposition a form during a MANUAL title-bar drag -- the non-WM path taken off Win32 (Cocoa/Qt5,
+  and a modal GTK2 dialog whose WM refuses to interactively move it). Repositions immediately on
+  every widgetset EXCEPT GTK2, where the moves are rate-limited: a modal dialog moves via a per-move
+  gtk_window_move and an animating compositor eases each one, so one commit per mouse-move would crawl.
+  Call TyDragMoveFlush at drag end to land the final (possibly deferred) position; it is a no-op off
+  GTK2. Keeps the widgetset conditional here in the facade instead of in the chrome engine. }
+procedure TyDragMoveForm(AForm: TCustomForm; ALeft, ATop: Integer);
+procedure TyDragMoveFlush(AForm: TCustomForm);
+
 { Win32 non-client resize band for a borderless self-drawn form (Aero snap / edge resize). No-op
   off Win32. }
 procedure TyNcApplyResize(AForm: TCustomForm; AResizable: Boolean;
@@ -153,6 +162,48 @@ begin
   {$ELSE}
   Result := False;
   {$ENDIF}{$ENDIF}{$IFEND}{$ENDIF}
+end;
+
+{$IFDEF LCLGTK2}
+const
+  Gtk2DragThrottleMs = 120;   // min gap between committed moves so an animating compositor doesn't crawl
+var
+  GDragTick: QWord = 0;       // GetTickCount64 of the last committed move; 0 = fresh drag (commit at once)
+  GDragPending: Boolean = False;
+  GDragLeft, GDragTop: Integer;   // latest requested target, held for the flush
+{$ENDIF}
+
+procedure TyDragMoveForm(AForm: TCustomForm; ALeft, ATop: Integer);
+{$IFDEF LCLGTK2}
+var tick: QWord;
+{$ENDIF}
+begin
+  if AForm = nil then Exit;
+  {$IFDEF LCLGTK2}
+  GDragLeft := ALeft; GDragTop := ATop;
+  tick := TThread.GetTickCount64;
+  if (GDragTick = 0) or (tick - GDragTick >= Gtk2DragThrottleMs) then
+  begin
+    AForm.Left := ALeft; AForm.Top := ATop;
+    GDragTick := tick; GDragPending := False;
+  end
+  else
+    GDragPending := True;   // defer: TyDragMoveFlush lands it on MouseUp
+  {$ELSE}
+  AForm.Left := ALeft; AForm.Top := ATop;
+  {$ENDIF}
+end;
+
+procedure TyDragMoveFlush(AForm: TCustomForm);
+begin
+  {$IFDEF LCLGTK2}
+  if (AForm <> nil) and GDragPending then
+  begin
+    AForm.Left := GDragLeft; AForm.Top := GDragTop;
+    GDragPending := False;
+  end;
+  GDragTick := 0;   // arm a fresh throttle window for the next drag
+  {$ENDIF}
 end;
 
 procedure TyNcApplyResize(AForm: TCustomForm; AResizable: Boolean;
