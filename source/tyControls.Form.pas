@@ -183,6 +183,15 @@ type
     FDragging: Boolean;
     FDragStart: TPoint;        // GLOBAL cursor pos at drag start (screen coords)
     FDragFormStart: TPoint;    // form Left/Top at drag start
+    {$IFDEF LCLGTK2}
+    { GTK2-only manual-drag throttle. A modal dialog reaches the manual per-move drag (the WM refuses
+      to interactively move its managed dialog), and an animating compositor eases EACH gtk_window_move
+      -- so one commit per mouse-move backlogs into a multi-second crawl on e.g. KWin with animations
+      on. Commit at most one move per throttle window and flush the final position on MouseUp. }
+    FDragLastMoveTick: QWord;
+    FDragMovePending: Boolean;
+    FDragPendingPt: TPoint;
+    {$ENDIF}
     FResizing: Boolean;
     FResizeHit: TTyBorderHit;
     FResizeStartBounds: TRect;
@@ -1498,8 +1507,14 @@ end;
 procedure TTyChromeEngine.TitleBarDragUpdate(const ACursor: TPoint);
 const
   DragThreshold = 4;   // px the pointer must travel before the drag leaves the press site
+  {$IFDEF LCLGTK2}
+  Gtk2DragThrottleMs = 120;   // min gap between committed gtk_window_moves (see the field decl)
+  {$ENDIF}
 var
   Moved: Boolean;
+  {$IFDEF LCLGTK2}
+  tick: QWord;
+  {$ENDIF}
 begin
   if (not FDragging) or (FForm = nil) then Exit;
   Moved := (Abs(ACursor.X - FDragStart.X) > DragThreshold)
@@ -1545,14 +1560,44 @@ begin
   // NON-modal GTK2 window never reach here (they took the async WM move on the press -> FDragging
   // stayed False); a MODAL GTK2 dialog DOES reach here, because the WM refuses to interactively move
   // its managed dialog (TyGtk2StartSystemMove returns False for fsModal) -> manual gtk_window_move.
+  {$IFDEF LCLGTK2}
+  // Throttle the commits (see the field decl): on an animating compositor one gtk_window_move per
+  // mouse-move backlogs into a crawl. Remember the latest target every move; commit it only when the
+  // throttle window has elapsed, and flush the pending one on MouseUp so the window lands exactly at
+  // the release point. First move of a drag (tick reset to 0 on MouseUp) commits immediately.
+  FDragPendingPt := Point(FDragFormStart.X + (ACursor.X - FDragStart.X),
+                          FDragFormStart.Y + (ACursor.Y - FDragStart.Y));
+  tick := TThread.GetTickCount64;
+  if (FDragLastMoveTick = 0) or (tick - FDragLastMoveTick >= Gtk2DragThrottleMs) then
+  begin
+    FForm.Left := FDragPendingPt.X;
+    FForm.Top  := FDragPendingPt.Y;
+    FDragLastMoveTick := tick;
+    FDragMovePending := False;
+  end
+  else
+    FDragMovePending := True;
+  {$ELSE}
   FForm.Left := FDragFormStart.X + (ACursor.X - FDragStart.X);
   FForm.Top  := FDragFormStart.Y + (ACursor.Y - FDragStart.Y);
+  {$ENDIF}
   {$ENDIF}
 end;
 
 procedure TTyChromeEngine.TitleBarMouseUp(Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
 begin
+  {$IFDEF LCLGTK2}
+  // Land the window exactly where released -- the throttle may have deferred the last move -- and
+  // arm a fresh throttle window (tick 0 -> the next drag's first move commits at once).
+  if FDragMovePending and (FForm <> nil) then
+  begin
+    FForm.Left := FDragPendingPt.X;
+    FForm.Top  := FDragPendingPt.Y;
+    FDragMovePending := False;
+  end;
+  FDragLastMoveTick := 0;
+  {$ENDIF}
   FDragging := False;
 end;
 
