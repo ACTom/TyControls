@@ -2500,6 +2500,12 @@ begin
   else
     CaretPos := AStart;
   if AText <> '' then InsertTextMultiline(AText);
+  // Collapse the anchor onto the caret. InsertTextMultiline moves the caret but NOT the anchor, so
+  // without this the just-inserted run stays SELECTED -- and on commit the next keystroke overwrites
+  // it. Edit's InjectStringAt collapses itself; Memo's HandleImeCommit collapses explicitly, same as here.
+  FSelAnchorLine := FCaretLine;
+  FSelAnchorCol := FCaretCol;
+  FDesiredCol := FCaretCol;
   AfterEdit(Font.PixelsPerInch);
 end;
 
