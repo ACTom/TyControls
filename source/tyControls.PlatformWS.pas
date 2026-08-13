@@ -92,6 +92,9 @@ procedure TyReleasePopupGrab(APopup: TCustomForm);
   clear. No-op elsewhere (Win32/GTK use SetWindowRgn on the top-level directly). }
 procedure TyMaskPopupWindow(AForm: TCustomForm; AContentCtl: TWinControl; ARgn: HRGN);
 procedure TyClearPopupWindowMask(AForm: TCustomForm; AContentCtl: TWinControl);
+{ Win32: toggle WS_EX_NOACTIVATE so a passive popup (autocomplete dropdown) never steals focus. No-op
+  elsewhere. Call before Show. }
+procedure TySetPopupNoActivate(AForm: TCustomForm; ANoActivate: Boolean);
 
 { ---- input method (IME) ------------------------------------------------------------------ }
 
@@ -109,6 +112,9 @@ procedure TyImeUpdateCaret;
 { GTK3: the FULL commit the backend delivered when the control got a truncated copy through
   UTF8KeyPress; '' otherwise (so the call site needs no IFDEF). }
 function TyImeTakeCommit(const ATruncated: string): string;
+{ Win32: follow the caret with the IMM32 candidate window (HWND-based IME). No-op elsewhere -- Qt/GTK
+  own-context IMEs installed via TyImeInstall place their own candidate window. }
+procedure TySetImeCaretPos(AControl: TWinControl; AClientX, AClientY: Integer);
 
 implementation
 
@@ -261,6 +267,11 @@ begin
   {$IF DEFINED(LCLQt5) OR DEFINED(LCLQt6)} TyQtClearWindowMaskDeep(AForm, AContentCtl); {$IFEND}
 end;
 
+procedure TySetPopupNoActivate(AForm: TCustomForm; ANoActivate: Boolean);
+begin
+  {$IFDEF LCLWin32} TyWin32SetNoActivate(AForm, ANoActivate); {$ENDIF}
+end;
+
 function TyImeInstall(AControl: TWinControl; AOnCommit: TTyImeCommitEvent;
   ACaretQuery: TTyImeCaretQuery): TObject;
 begin
@@ -295,6 +306,11 @@ end;
 function TyImeTakeCommit(const ATruncated: string): string;
 begin
   {$IFDEF LCLGTK3} Result := TyGtk3TakeImeCommit(ATruncated); {$ELSE} Result := ''; {$ENDIF}
+end;
+
+procedure TySetImeCaretPos(AControl: TWinControl; AClientX, AClientY: Integer);
+begin
+  {$IFDEF LCLWin32} TyWin32SetImeCaretPos(AControl, AClientX, AClientY); {$ENDIF}
 end;
 
 end.

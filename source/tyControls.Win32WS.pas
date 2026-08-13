@@ -89,6 +89,14 @@ procedure TyWin32BeginTopResize(AForm: TCustomForm);
   Returns False off Windows / with no handle so the caller keeps its existing per-move
   repositioning. Mirrors the Qt/GTK system-move. }
 function TyWin32StartSystemMove(AForm: TCustomForm): Boolean;
+
+{ Toggle WS_EX_NOACTIVATE on AForm's window so a passive popup (autocomplete dropdown) doesn't steal
+  focus even through ShowWindow(SW_SHOW). Realizes the handle if needed; call before Show. }
+procedure TyWin32SetNoActivate(AForm: TCustomForm; ANoActivate: Boolean);
+
+{ Position the IMM32 composition (candidate) window at a client point of AControl -- the Win32
+  HWND-based IME caret follow. Qt/GTK drive their own IME through TyImeInstall instead. }
+procedure TyWin32SetImeCaretPos(AControl: TWinControl; AClientX, AClientY: Integer);
 {$ENDIF}
 
 implementation
@@ -503,6 +511,55 @@ begin
   ReleaseCapture;
   SendMessage(AForm.Handle, WM_NCLBUTTONDOWN, HTCAPTION, 0);
   Result := True;
+end;
+
+procedure TyWin32SetNoActivate(AForm: TCustomForm; ANoActivate: Boolean);
+var
+  exStyle: PtrInt;
+begin
+  if AForm = nil then Exit;
+  if not AForm.HandleAllocated then AForm.HandleNeeded;
+  exStyle := GetWindowLongPtr(AForm.Handle, GWL_EXSTYLE);
+  if ANoActivate then
+    exStyle := exStyle or WS_EX_NOACTIVATE
+  else
+    exStyle := exStyle and not WS_EX_NOACTIVATE;
+  SetWindowLongPtr(AForm.Handle, GWL_EXSTYLE, exStyle);
+end;
+
+const
+  CFS_POINT = 2;   // IMM composition-form style: absolute point (not in FPC's Windows unit)
+type
+  TTyImeCompForm = record
+    dwStyle: LongWord;
+    ptCurrentPos: TPoint;
+    rcArea: TRect;
+  end;
+// IMM32 imports (absent from FPC's Windows unit).
+function ImmGetContext(AWnd: THandle): THandle; stdcall;
+  external 'imm32.dll' name 'ImmGetContext';
+function ImmReleaseContext(AWnd, AImc: THandle): LongBool; stdcall;
+  external 'imm32.dll' name 'ImmReleaseContext';
+function ImmSetCompositionWindow(AImc: THandle; ACompForm: Pointer): LongBool; stdcall;
+  external 'imm32.dll' name 'ImmSetCompositionWindow';
+
+procedure TyWin32SetImeCaretPos(AControl: TWinControl; AClientX, AClientY: Integer);
+var
+  imc: THandle;
+  cf: TTyImeCompForm;
+begin
+  if (AControl = nil) or not AControl.HandleAllocated then Exit;
+  imc := ImmGetContext(AControl.Handle);
+  if imc = 0 then Exit;
+  try
+    FillChar(cf, SizeOf(cf), 0);
+    cf.dwStyle := CFS_POINT;
+    cf.ptCurrentPos.X := AClientX;
+    cf.ptCurrentPos.Y := AClientY;
+    ImmSetCompositionWindow(imc, @cf);
+  finally
+    ImmReleaseContext(AControl.Handle, imc);
+  end;
 end;
 
 {$ENDIF}

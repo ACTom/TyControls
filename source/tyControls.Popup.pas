@@ -16,7 +16,6 @@ unit tyControls.Popup;
 interface
 uses
   Classes, SysUtils, Types, Controls, Forms, LCLType, LCLIntf,
-  {$IFDEF LCLWin32}Windows,{$ENDIF}
   tyControls.Types, tyControls.Controller, tyControls.PlatformWS;
 
 // ---------------------------------------------------------------------------
@@ -226,7 +225,6 @@ var
   AnchorScreen: TRect;
   ParentForm: TCustomForm;
   PopupW, PopupH: Integer;
-  {$IFDEF LCLWin32}exStyle: PtrInt;{$ENDIF}
 begin
   FAnchor := AAnchor;   // remembered so Resize can re-anchor an already-open popup
   FRightToLeft := ARightToLeft;   // and to the same EDGE
@@ -254,19 +252,10 @@ begin
   // correct grab behaviour).  No-op on Win32/GTK2/Cocoa.
   TyPreparePopupNative(FForm);
 
-  {$IFDEF LCLWin32}
-  // Toggle WS_EX_NOACTIVATE per NoActivate so the (reused) form matches the current
-  // mode: set it BEFORE Show so even ShowWindow(SW_SHOW) is passive and the owner's
-  // embedded editor keeps focus; clear it for ordinary activating popups. Needs the
-  // handle first.
-  if not FForm.HandleAllocated then FForm.HandleNeeded;
-  exStyle := Windows.GetWindowLongPtr(FForm.Handle, Windows.GWL_EXSTYLE);
-  if FNoActivate then
-    exStyle := exStyle or Windows.WS_EX_NOACTIVATE
-  else
-    exStyle := exStyle and not Windows.WS_EX_NOACTIVATE;
-  Windows.SetWindowLongPtr(FForm.Handle, Windows.GWL_EXSTYLE, exStyle);
-  {$ENDIF}
+  // Toggle WS_EX_NOACTIVATE per NoActivate so the (reused) form matches the current mode: set it
+  // BEFORE Show so even ShowWindow(SW_SHOW) is passive and the owner's embedded editor keeps focus;
+  // clear it for ordinary activating popups. Win32-only; a no-op (and needs no handle) elsewhere.
+  TySetPopupNoActivate(FForm, FNoActivate);
 
   FForm.SetBounds(FRect.Left, FRect.Top, PopupW, PopupH);
   { GTK3/Wayland: a top-level can't be placed by screen coords, so anchor the dropdown to its
