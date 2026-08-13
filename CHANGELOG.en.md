@@ -7,7 +7,7 @@ Linux and macOS.
 
 > 中文版见 [CHANGELOG.md](CHANGELOG.md)。
 
-## [Unreleased]
+## [3.0.0-Beta] — 2026-08-14
 
 ### Fixed -- the visual round
 

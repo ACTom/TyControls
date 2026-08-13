@@ -185,7 +185,7 @@ end;
 
 procedure TVersionTest.TestVersionConstantPinned;
 begin
-  AssertEquals('TyVersion pinned for this release', '2.99.0', TyVersion);
+  AssertEquals('TyVersion pinned for this release', '3.0.0-Beta', TyVersion);
 end;
 
 { The drift guard. Two directions:
@@ -321,7 +321,12 @@ end;
   would resolve dependencies against. Only the constant was pinned, so the packages could
   (and historically did) drift a whole release behind without anything noticing. Parse them
   and compare. Deliberately NOT hard-coded here: the pin lives in TestVersionConstantPinned,
-  and this test only asserts the three agree, so a release bump touches one literal. }
+  and this test only asserts the three agree, so a release bump touches one literal.
+
+  PRE-RELEASE LABELS. TyVersion may carry a semver pre-release suffix ('3.0.0-Beta') that the
+  .lpk <Version> — three integers — cannot hold. That is by design: the .lpk keeps the clean
+  RELEASE number Lazarus resolves against, and the suffix is display-only. So the comparison is
+  against TyVersion's numeric CORE (everything before the first '-'), not the whole string. }
 procedure TVersionTest.TestPackageVersionsMatchTyVersion;
 
   function PackageVersion(const AFile: string): string;
@@ -358,11 +363,16 @@ procedure TVersionTest.TestPackageVersionsMatchTyVersion;
     Result := Attr('Major') + '.' + Attr('Minor') + '.' + Attr('Release');
   end;
 
+var
+  core: string;
 begin
-  AssertEquals('tycontrols.lpk version must match TyVersion',
-    TyVersion, PackageVersion('tycontrols.lpk'));
-  AssertEquals('tycontrols_dt.lpk version must match TyVersion',
-    TyVersion, PackageVersion('tycontrols_dt.lpk'));
+  { TyVersion's numeric core: drop any '-Beta'/'-RC' pre-release label the .lpk cannot express. }
+  core := TyVersion;
+  if Pos('-', core) > 0 then core := Copy(core, 1, Pos('-', core) - 1);
+  AssertEquals('tycontrols.lpk version must match TyVersion''s release number',
+    core, PackageVersion('tycontrols.lpk'));
+  AssertEquals('tycontrols_dt.lpk version must match TyVersion''s release number',
+    core, PackageVersion('tycontrols_dt.lpk'));
 end;
 
 { The design-time-reachability check in the sweep answers "does ACls descend from a class the

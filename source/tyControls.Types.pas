@@ -103,10 +103,12 @@ const
   tyTransparent = TTyColor($00000000);
 
   // Library identity — surfaced by every component's read-only `Version` property and
-  // the design-time About dialog. Bump TyVersion on each release (3-part: major.minor.patch).
-  // 2.99.x is the 3.0 alpha line: it must sort ABOVE every 2.2.x so an installed 2.2
-  // package is never preferred over it, and below the eventual 3.0.0.
-  TyVersion     = '2.99.0';
+  // the design-time About dialog. Bump TyVersion on each release. The stable line is
+  // 3-part (major.minor.patch); a pre-release appends a `-Beta`/`-RC` suffix, which is
+  // DISPLAY ONLY — the .lpk <Version> stays numeric (3.0.0). 2.99.x was the 3.0 alpha
+  // line (kept above every 2.2.x, below 3.0.0); 3.0.0 is now the first official release,
+  // shipping first as 3.0.0-Beta.
+  TyVersion     = '3.0.0-Beta';
   TyHomepageUrl = 'https://github.com/ACTom/TyControls';
 
   // Shared logical-px spacing/size constants (96-PPI baseline). Promoted from

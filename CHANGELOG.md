@@ -6,7 +6,7 @@
 
 > English: [CHANGELOG.en.md](CHANGELOG.en.md).
 
-## [未发布]
+## [3.0.0-Beta] — 2026-08-14
 
 ### 修复 —— 这一轮的目视问题
 
