@@ -1,5 +1,7 @@
 # TyControls 事件与属性总览（API parity）
 
+> English: [events.en.md](events.en.md)
+
 本页汇总 TyControls 全库控件的**事件契约**：每个控件都暴露的**基线事件集**（Tier A / Tier B）、各控件的**专有事件**，以及为遵守"主题拥有视觉"原则而**刻意不暴露**的与主题冲突的属性。
 
 > 本批次（API events+properties parity）的目标是让 TyControls 控件在 Lazarus 对象查看器（Object Inspector）中的事件/属性面板尽量与原生 LCL 控件**对齐**，便于设计期挂接事件、用 DFM/LFM 流式保存。基线事件全部由两个基类统一 published，专有事件由各控件单独 published。

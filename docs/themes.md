@@ -1,5 +1,7 @@
 # 内置主题
 
+> English: [themes.en.md](themes.en.md)
+
 TyControls 自带 **12 套编译进二进制的主题**(无需随程序分发 `.tycss`):11 套 curated 双模设计师调色板 + `system`(跟随 OS 强调色)。用户既可直接用内置主题,也可加载自定义主题。
 
 ## 用法

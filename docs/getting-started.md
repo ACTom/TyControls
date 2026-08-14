@@ -2,6 +2,8 @@
 
 面向第一次使用 TyControls 的 Lazarus 开发者。
 
+> English: [getting-started.en.md](getting-started.en.md)
+
 ---
 
 ## 1. 简介

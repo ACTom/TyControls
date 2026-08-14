@@ -1,5 +1,7 @@
 # 已知问题
 
+> English: [known-issues.en.md](known-issues.en.md)
+
 按平台列出当前版本的已知问题。未列出的平台功能完整。遇到此外的问题欢迎提 issue。
 
 ## GTK3(仅 Wayland 会话)

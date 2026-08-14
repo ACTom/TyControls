@@ -1,5 +1,7 @@
 # TyControls `.tycss` 样式语言参考手册
 
+> English: [tycss-reference.en.md](tycss-reference.en.md)
+
 本文档是 TyControls v1 样式语言(`.tycss`)的权威语法参考,面向主题作者与控件开发者。
 文中每一条语法规则均与引擎实现(`source/tyControls.Css.Lexer.pas`、`Css.Parser.pas`、
 `Css.Values.pas`、`StyleModel.pas`、`Painter.pas`)逐条核对,如与其他文档冲突,以本文为准。
@@ -397,6 +399,7 @@ TyEdit:focus { border-color: var(--accent); }
 TyPanel      { border-style: none; }   /* 显式去掉边框,即便有 border-width */
 /* 经典凸起按钮:面色作为 border-color,自动派生高亮/阴影边 */
 TyButton.classic { border: 2px outset #C0C0C0; border-radius: 0; background: #C0C0C0; }
+```
 
 ### 5.5 `border` — 边框简写
 

@@ -48,7 +48,7 @@ Light and dark are two `@mode` value sets in one theme file and can follow the O
 | Platform | Widgetset |
 |---|---|
 | Windows | Win32 / Win64 |
-| Linux | GTK2, Qt5, Qt6; GTK3 partially supported ([known issues](docs/known-issues.md) under Wayland) |
+| Linux | GTK2, Qt5, Qt6; GTK3 partially supported ([known issues](docs/known-issues.en.md) under Wayland) |
 | macOS | Cocoa |
 
 Requires Lazarus 3.x+, FPC 3.2.2+, and BGRABitmap (OPM package `BGRABitmapPack`).
@@ -71,7 +71,7 @@ The template creates a main form with a custom-drawn title bar, the content cont
 
 Select the `TTyStyleController` on the form and set `ThemeName` to any built-in theme name. The designer updates immediately; change the same property at runtime to hot-swap.
 
-Full walkthrough: [docs/getting-started.md](docs/getting-started.md).
+Full walkthrough: [docs/getting-started.en.md](docs/getting-started.en.md).
 
 ---
 
@@ -351,7 +351,7 @@ Built-in themes are compiled into the binary, so apps switch by name without shi
 
 Also the image theme `green` (shipped as a file) and curated palettes under `themes/palettes/`. All themes share one set of semantic variables, and `--accent` can be overridden at runtime with any brand color.
 
-Writing your own theme: [docs/themes.md](docs/themes.md). The `.tycss` language reference: [docs/tycss-reference.md](docs/tycss-reference.md).
+Writing your own theme: [docs/themes.en.md](docs/themes.en.md). The `.tycss` language reference: [docs/tycss-reference.en.md](docs/tycss-reference.en.md).
 
 ---
 
@@ -384,13 +384,13 @@ Thirty-plus single-control examples live under [examples/](examples/).
 
 | Doc | Contents |
 |---|---|
-| [getting-started.md](docs/getting-started.md) | Install, first form, themes, HiDPI |
-| [controls/](docs/controls/) | Per-control API reference |
-| [themes.md](docs/themes.md) | Writing your own theme |
-| [tycss-reference.md](docs/tycss-reference.md) | The `.tycss` language reference |
-| [events.md](docs/events.md) | Common event conventions |
-| [rtl.md](docs/rtl.md) | Bidirectional text and right-to-left layout |
-| [known-issues.md](docs/known-issues.md) | Known issues (Chinese) |
+| [getting-started.en.md](docs/getting-started.en.md) | Install, first form, themes, HiDPI |
+| [controls/](docs/controls/) | Per-control API reference (Chinese) |
+| [themes.en.md](docs/themes.en.md) | Built-in themes and writing your own |
+| [tycss-reference.en.md](docs/tycss-reference.en.md) | The `.tycss` language reference |
+| [events.en.md](docs/events.en.md) | Common event conventions |
+| [rtl.md](docs/rtl.md) | Bidirectional text and right-to-left layout (Chinese) |
+| [known-issues.en.md](docs/known-issues.en.md) | Known issues |
 | [CHANGELOG.en.md](CHANGELOG.en.md) | Changelog |
 
 ---
