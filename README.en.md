@@ -48,7 +48,7 @@ Light and dark are two `@mode` value sets in one theme file and can follow the O
 | Platform | Widgetset |
 |---|---|
 | Windows | Win32 / Win64 |
-| Linux | GTK2, GTK3, Qt5, Qt6 |
+| Linux | GTK2, Qt5, Qt6; GTK3 partially supported ([known issues](docs/known-issues.md) under Wayland) |
 | macOS | Cocoa |
 
 Requires Lazarus 3.x+, FPC 3.2.2+, and BGRABitmap (OPM package `BGRABitmapPack`).
@@ -390,6 +390,7 @@ Thirty-plus single-control examples live under [examples/](examples/).
 | [tycss-reference.md](docs/tycss-reference.md) | The `.tycss` language reference |
 | [events.md](docs/events.md) | Common event conventions |
 | [rtl.md](docs/rtl.md) | Bidirectional text and right-to-left layout |
+| [known-issues.md](docs/known-issues.md) | Known issues (Chinese) |
 | [CHANGELOG.en.md](CHANGELOG.en.md) | Changelog |
 
 ---
