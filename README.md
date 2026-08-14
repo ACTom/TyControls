@@ -1,6 +1,6 @@
 # TyControls
 
-一套支持皮肤/样式的 **Lazarus 控件库**:控件完全自绘(BGRABitmap),用 CSS-lite 文本主题(`.tycss`)统一驱动外观,在 Windows / Linux / macOS 上呈现像素级一致的界面。
+Lazarus 自绘控件库。162 个控件全部由 BGRABitmap 绘制,外观由 `.tycss` 文本主题统一控制,在 Windows、Linux、macOS 上显示效果完全一致。
 
 > **English:** [README.en.md](README.en.md) · **更新日志:** [CHANGELOG.md](CHANGELOG.md)
 
@@ -12,39 +12,46 @@
 |---|---|---|
 | ![classic 主题](docs/images/antd-classic.png) | ![win11 主题](docs/images/antd-win11.png) | ![material3 主题](docs/images/antd-material3.png) |
 
-上面四张图是**同一份 `.lfm`、同一份业务代码**,区别只有一个主题名。控件里没有任何一个硬编码的颜色、圆角或线宽 —— 全部来自主题令牌。注意 `classic` 那张:变的不只是配色,连按钮的立体边框、标题带的渐变、方角都变了。
+四张图是同一份 `.lfm`、同一份代码,只改了主题名。主题不只换配色:`classic` 下按钮是立体边框、方角、渐变标题带。
 
 ### 亮 / 暗 / 图片主题
-
-综合 gallery 示例(`examples/demo`),同一个窗体:
 
 | 亮色 | 暗色 | `green`(图片主题) |
 |---|---|---|
 | ![亮色](docs/images/demo-light.png) | ![暗色](docs/images/demo-dark.png) | ![绿色图片主题](docs/images/demo-green.png) |
 
-亮/暗是同一份 `.tycss` 里的两套 `@mode` 取值,可以跟随操作系统。`green` 演示的是主题能做到什么程度 —— 半透明控件浮在一张照片背景上,9-slice 贴图 + `alpha()` 颜色函数,没有一行控件代码为它改动过。
+亮暗是同一个主题文件里的两套 `@mode` 取值,可跟随操作系统。`green` 是照片背景加半透明控件的图片主题。
 
 ### 几个控件的样子
 
 | | |
 |---|---|
-| **`TTyStringGrid`** —— 冻结列、行号槽、汇总带、单元格标记色<br>![数据网格](docs/images/grid.png) | **`TTyTreeView`** —— 虚拟树、多列、三态复选<br>![虚拟树](docs/images/treeview.png) |
-| **富输入控件** —— 数值 / 货币 / 掩码 / 滑块 / 计算器编辑<br>![富输入](docs/images/inputs.png) | **自绘对话框** —— 取色器:HSV + RGB / CMYK / Alpha 全双向<br>![取色对话框](docs/images/colordialog.png) |
+| **`TTyStringGrid`** 冻结列、行号槽、汇总带<br>![数据网格](docs/images/grid.png) | **`TTyTreeView`** 虚拟树、多列、三态复选<br>![虚拟树](docs/images/treeview.png) |
+| **富输入控件** 数值 / 货币 / 掩码 / 滑块 / 计算器<br>![富输入](docs/images/inputs.png) | **自绘对话框** 取色器<br>![取色对话框](docs/images/colordialog.png) |
 
 ---
 
 ## 特性
 
-- **完全自绘** —— 每个控件都用 BGRABitmap 画出来,不包装原生控件。同一份代码在 Windows、Linux、macOS 上是同一套像素。
-- **外观与代码分离** —— 颜色、圆角、边框、内距、字号、阴影、渐变、9-slice 贴图全部写在 `.tycss` 文本里。改外观不用重编译,`LoadTheme` 一行运行时热切换。
-- **结构级换肤** —— 主题不只是换配色:`render-style` 能把按钮从扁平换成 3D 立体边框,几何令牌能改变控件的固有尺寸。
-- **两代密度** —— 经典(Win32 尺度)与现代(Web 尺度)是一条与配色**正交**的轴,`Controller.Density` 一个属性切换。
-- **跟随系统** —— 亮/暗模式与强调色可跟随操作系统;单文件 `@mode` 同时携带两套值。
-- **162 个可拖放控件**,分 16 个组件面板分页 —— 见[控件清单](#控件清单)。
-- **设计器优先** —— `TTyPageControl` 的页与 `TTyGridPanel` 的格子是**真正的设计器容器**:直接往里拖控件、在设计器里看到最终效果、随 `.lfm` 存盘,不需要写一行布局代码。换主题在设计器里就能看到。
-- **HiDPI** —— 所有长度按 PPI 缩放,矢量绘制天然清晰;跨屏(PerMonitorV2)拖动时窗口与控件按新 DPI **重新推导**尺寸,来回拖动可精确还原。
-- **国际化** —— 库自身的界面字符串走 `resourcestring` + `.po`,随库提供英文与简体中文。
-- **6060 个单元测试**,全套件内存零泄漏(heaptrc 验证)。外观另有像素级 golden 守卫 —— 主题解析结果的任何一次变动都必须是有意的。
+- **162 个控件**:按钮、输入、列表、数据网格、虚拟树、Ribbon、日历、Shell 文件浏览、20 个自绘对话框,一套配齐
+- **三平台一致**:完全自绘,不包装原生控件,同一份代码在三个平台上渲染出同样的界面
+- **主题换肤**:17 个内置主题一个属性切换,支持运行时热切换、跟随系统明暗和强调色;主题是文本文件,改外观不用重编译
+- **经典与现代两种风格**:从 Win95 / XP 的立体风到 Win11 / Material 的扁平风都能做,控件密度也可整体切换
+- **HiDPI**:矢量绘制,任意缩放比例下清晰;跨屏拖动自动适配新 DPI
+- **设计器支持完整**:组件面板拖放、容器控件直接拖入、主题效果设计期可见、File → New 工程模板
+- **内置 2022 个矢量图标**(Lucide),按名字取用,不用则不占体积
+- **中英文界面**,gettext `.po` 翻译
+- **6000+ 单元测试**,全套无内存泄漏
+
+## 支持平台
+
+| 平台 | Widgetset |
+|---|---|
+| Windows | Win32 / Win64 |
+| Linux | GTK2、GTK3、Qt5、Qt6 |
+| macOS | Cocoa |
+
+依赖:Lazarus 3.x+、FPC 3.2.2+、BGRABitmap(OPM 包名 `BGRABitmapPack`)。
 
 ---
 
@@ -52,365 +59,324 @@
 
 **1. 安装包**
 
-Lazarus 里打开 `tycontrols_dt.lpk`(设计期包)→ **Use → Install**,IDE 重新编译并重启。运行期包 `tycontrols.lpk` 会作为依赖自动装上。
-
-> 依赖:Lazarus 3.x+ / FPC 3.2.2+ / **BGRABitmap**(OPM 包名 `BGRABitmapPack`)。
+Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译并重启。运行期包 `tycontrols.lpk` 作为依赖自动安装。
 
 **2. 新建工程**
 
 **File → New… → Project → TyControls 应用程序**
 
-模板直接给出一个装配好的 `TTyForm` 主窗体:自绘标题栏、内容承载容器 `Surface`、`TTyStyleController` 都已就位并互相关联。往 `Surface` 上拖控件即可。
-
-> 给已有工程加窗体用 **File → New… → Form → TyControls 窗体**。
+模板生成的主窗体已带自绘标题栏、内容容器 `Surface` 和样式控制器。控件放在 `Surface` 里(`TTyForm` 的可视控件都放它上面,图形控件必须放进去,详见 [TTyForm 文档](docs/controls/ttyform.md))。给已有工程加窗体用 **File → New… → Form → TyControls 窗体**。
 
 **3. 换主题**
 
-选中主窗体上的 `TTyStyleController`,把 `ThemeName` 设成任意内置主题名(`default` / `system` / `win11` / `classic` / `material3` / …)。设计器里立刻可见,运行期改同一个属性即热切换。
+选中窗体上的 `TTyStyleController`,把 `ThemeName` 改成任意内置主题名。设计器里立即生效,运行时改同一个属性即热切换。
 
-完整步骤(第一个窗体、主题切换、HiDPI、部署)见 **[docs/getting-started.md](docs/getting-started.md)**。
-
----
-
-## 窗体结构
-
-`TTyForm` 的控件承载在一个内容容器 **`TTyFormSurface`** 上 —— 每个窗体有且只有一个,名叫 `Surface`,铺满整个窗体。**把控件都放进它里面。**
-
-- **新建窗体不用管**:两个模板都已带好 `Surface`,设计器里拖控件本来就落进它。
-- **图形控件必须放进去**:`TTyLabel`、`TTyShape` 这类无窗口的图形控件画在父控件身上 —— 直接放在窗体上会被 `Surface` 挡住、**看不见**。你这么放时设计器会提示。
-- **非可视组件仍留在窗体上**:样式控制器、定时器、对话框组件、图像列表、菜单等不受影响。
-- **对话框(`TTyDialog`)没有 `Surface`**:它不可缩放,不需要;控件照常直接放上去。
-
-**它为什么存在 —— 根源是 Windows。** 可缩放的顶层窗口带 `WS_THICKFRAME`,而 Windows 给它的 DWM 后备表面比窗口可见区**小一圈**(高度只有 `窗口高 - 2×边框`),于是窗体自己的 GDI 客户区 DC 被裁短,右边和下边会留一条**画不上去**的死带。子窗口没有这层边框,后备表面覆盖它的完整矩形,能一直画到边缘 —— 所以 `TTyForm` 把主题背景交给 `Surface` 画,而不是画在自己身上。
-
-这个容器在所有 widgetset 上都是无害的,所以不为 Windows 单独分叉。它还顺带解决了第二件事:因为控件是 `Surface` 的**子控件**,`TTyLabel` 这类无窗口控件画在 `Surface` 的画布上、正常可见 —— 如果只是在窗体最底层垫一张图,它们反而会被盖住。
-
-设计器里选中 `Surface`,`Purpose` 属性里有同样的说明。
+完整步骤见 [docs/getting-started.md](docs/getting-started.md)。
 
 ---
 
 ## 控件清单
 
-162 个可从组件面板拖放的控件,分 16 个分页。逐控件的属性 / 事件 / 状态 / 主题键说明见 **[docs/controls/](docs/controls/)**。
+162 个控件,分 16 个组件面板分页。每个控件的属性、事件、主题键说明见 **[docs/controls/](docs/controls/)**。
 
 ### 核心 · `TyControls`(2)
 
-| 控件 | 用来干嘛 |
+| 控件 | 说明 |
 |---|---|
-| `TTyStyleController` | 样式控制器:加载主题、切换密度、跟随系统亮暗;控件通过它取样式 |
+| `TTyStyleController` | 样式控制器:加载主题、切换密度、跟随系统亮暗 |
 | `TTyNativeStyler` | 让原生 / 第三方 LCL 控件跟随当前主题着色 |
 
 ### 按钮 · `TyControls Buttons`(8)
 
-| 控件 | 用来干嘛 |
+| 控件 | 说明 |
 |---|---|
-| `TTyButton` | 基础按钮,支持 primary / danger / ghost 变体与数字徽标 |
-| `TTyGlyphButton` | 带图标的按钮,图标来自图标字体或图像集 |
-| `TTyGlyphContainerButton` | 只放一个图标的方形按钮,常用于工具条 |
+| `TTyButton` | 按钮,支持 primary / danger / ghost 变体和数字徽标 |
+| `TTyGlyphButton` | 带图标的按钮 |
+| `TTyGlyphContainerButton` | 只放图标的方形按钮,常用于工具条 |
 | `TTySpeedButton` | 可保持按下态的快捷按钮 |
 | `TTyDropDownButton` | 分裂按钮:左半执行、右半展开菜单 |
-| `TTyMenuButton` | 整颗按钮都是下拉触发器 |
-| `TTyColorButton` | 显示并选择一个颜色的按钮 |
+| `TTyMenuButton` | 整个按钮都是下拉触发器 |
+| `TTyColorButton` | 显示并选择颜色的按钮 |
 | `TTyButtonGroup` | 分段按钮条,相邻段共边、单选 |
 
 ### 标签与标记 · `TyControls Labels`(7)
 
-| 控件 | 用来干嘛 |
+| 控件 | 说明 |
 |---|---|
-| `TTyLabel` | 文本标签,支持自动换行(含中日韩逐字断行)与助记符 |
+| `TTyLabel` | 文本标签,支持自动换行(含中日韩逐字断行)和助记符 |
 | `TTyHtmlLabel` | 支持行内 HTML 子集(粗体 / 斜体 / 链接 / 颜色)的标签 |
-| `TTyLinkLabel` | 超链接文字,带下划线与悬停高亮 |
+| `TTyLinkLabel` | 超链接文字 |
 | `TTyShadowLabel` | 带投影的标签 |
 | `TTyGlowLabel` | 带发光描边的标签 |
-| `TTyTag` | 可关闭的标签胶囊,用于筛选条件、状态标记 |
-| `TTyBadge` | 数字 / 圆点角标,可吸附到任意控件的右上角 |
+| `TTyTag` | 可关闭的标签胶囊 |
+| `TTyBadge` | 数字 / 圆点角标,可吸附到任意控件 |
 
 ### 文本与数值输入 · `TyControls Edits`(14)
 
-| 控件 | 用来干嘛 |
+| 控件 | 说明 |
 |---|---|
-| `TTyEdit` | 单行文本框:选区、剪贴板、词级导航、水平滚动 |
-| `TTyMemo` | 多行文本框:二维导航、跨行编辑、垂直滚动 |
-| `TTySpinEdit` | 数值微调框,带上下箭头 |
-| `TTyFloatSpinEdit` | 小数微调框,`Value` 是 `Double`,步长也可以是小数 |
-| `TTyNumericEdit` | 只接受数字的输入框,失焦时按千分位格式化 |
-| `TTyCurrencyEdit` | 货币输入框,自动加货币符号 |
-| `TTyMaskEdit` | 按掩码约束输入(电话、身份证、日期等) |
+| `TTyEdit` | 单行文本框:选区、剪贴板、词级导航 |
+| `TTyMemo` | 多行文本框 |
+| `TTySpinEdit` | 整数微调框 |
+| `TTyFloatSpinEdit` | 小数微调框,步长可小于 1 |
+| `TTyNumericEdit` | 只接受数字的输入框,失焦时千分位格式化 |
+| `TTyCurrencyEdit` | 货币输入框 |
+| `TTyMaskEdit` | 掩码输入框(电话、身份证、日期等) |
 | `TTyURLEdit` | 网址输入框,尾部带打开按钮 |
-| `TTyComboEdit` | 文本框 + 下拉箭头,下拉内容由你决定 |
-| `TTyTrackEdit` | 文本框内嵌一条滑块,数值可拖可输 |
-| `TTyCalcEdit` | 文本框内嵌计算器按钮,点开即算 |
-| `TTyCalcCurrencyEdit` | 货币版的计算器输入框 |
-| `TTyCalculator` | 独立的计算器面板 |
-| `TTyUpDown` | 独立的上下微调按钮,可绑定到别的控件 |
+| `TTyComboEdit` | 文本框 + 下拉箭头,下拉内容自定义 |
+| `TTyTrackEdit` | 内嵌滑块的数值输入框 |
+| `TTyCalcEdit` | 内嵌计算器的输入框 |
+| `TTyCalcCurrencyEdit` | 货币版计算器输入框 |
+| `TTyCalculator` | 独立计算器面板 |
+| `TTyUpDown` | 独立的上下微调按钮,可绑定其他控件 |
 
 ### 勾选与开关 · `TyControls Choices`(6)
 
-| 控件 | 用来干嘛 |
+| 控件 | 说明 |
 |---|---|
 | `TTyCheckBox` | 复选框,支持三态 |
 | `TTyRadioButton` | 单选按钮 |
-| `TTyToggleSwitch` | 开关,旋钮在两态间滑动 |
-| `TTyRadioGroup` | 带标题框的单选组,自动排布 |
+| `TTyToggleSwitch` | 开关 |
+| `TTyRadioGroup` | 带标题框的单选组 |
 | `TTyCheckGroup` | 带标题框的复选组 |
-| `TTySegmented` | 分段控制器:一排互斥选项,选一个值而不是切一页 |
+| `TTySegmented` | 分段控制器 |
 
 ### 列表与下拉 · `TyControls Lists`(14)
 
-| 控件 | 用来干嘛 |
+| 控件 | 说明 |
 |---|---|
-| `TTyComboBox` | 下拉框,可编辑并支持前缀自动补全 |
-| `TTyListBox` | 条目列表,键盘导航 + 内嵌滚动条 |
+| `TTyComboBox` | 下拉框,可编辑,支持前缀补全 |
+| `TTyListBox` | 列表框 |
 | `TTyCheckListBox` | 每行带复选框的列表 |
-| `TTyMRUComboBox` | 记住最近输入并置顶的下拉框 |
+| `TTyMRUComboBox` | 记住最近输入的下拉框 |
 | `TTyComboBoxEx` | 每项可带图标的下拉框 |
-| `TTyOfficeComboBox` | 带分组标题带的下拉框 |
-| `TTyOfficeListBox` | 带分组标题带的列表 |
+| `TTyOfficeComboBox` | 带分组标题的下拉框 |
+| `TTyOfficeListBox` | 带分组标题的列表 |
 | `TTyAdvancedComboBox` | 每项两行(标题 + 副标题 + 图标)的下拉框 |
 | `TTyAdvancedListBox` | 每项两行的富列表 |
-| `TTyCheckComboBox` | 可多选的下拉框,字段显示已选摘要 |
-| `TTyValueListEditor` | 属性检视表:左键右值,每行可指定编辑器类型 |
-| `TTyTransfer` | 双列表穿梭框,在两侧之间搬条目 |
-| `TTyTreeSelect` | 下拉里是一棵树的选择器 |
-| `TTyCascader` | 级联选择:逐级展开的多列选择器 |
+| `TTyCheckComboBox` | 可多选的下拉框 |
+| `TTyValueListEditor` | 属性表:左键右值,每行可指定编辑器 |
+| `TTyTransfer` | 双列表穿梭框 |
+| `TTyTreeSelect` | 树形下拉选择器 |
+| `TTyCascader` | 级联选择器(省 / 市 / 区) |
 
 ### 颜色 / 字体 / 文件选择器 · `TyControls Pickers`(11)
 
-| 控件 | 用来干嘛 |
+| 控件 | 说明 |
 |---|---|
-| `TTyColorBox` | 颜色下拉框,每项一个色块 |
+| `TTyColorBox` | 颜色下拉框 |
 | `TTyColorComboBox` | 颜色下拉框,末尾带「更多…」打开取色对话框 |
 | `TTyColorListBox` | 颜色列表 |
 | `TTyColorGrid` | 方格调色板 |
 | `TTyLColorPicker` | 亮度条取色器 |
-| `TTyHSColorPicker` | 色相 / 饱和度平面取色器 |
-| `TTyFontComboBox` | 字体下拉框,每项用该字体自身预览 |
+| `TTyHSColorPicker` | 色相 / 饱和度取色器 |
+| `TTyFontComboBox` | 字体下拉框,逐项用自身字体预览 |
 | `TTyFontListBox` | 字体列表 |
 | `TTyFontSizeComboBox` | 字号下拉框 |
-| `TTyFilterComboBox` | 文件类型过滤器下拉框 |
-| `TTyShellComboBox` | 目录下拉框,配合文件视图使用 |
+| `TTyFilterComboBox` | 文件类型过滤下拉框 |
+| `TTyShellComboBox` | 目录下拉框 |
 
 ### 仪表与指示器 · `TyControls Gauges`(12)
 
-| 控件 | 用来干嘛 |
+| 控件 | 说明 |
 |---|---|
-| `TTyGauge` | 仪表:线性 / 弧形 / 环形三种形态 |
-| `TTyMeter` | 指针式仪表盘,带刻度 |
+| `TTyGauge` | 仪表:线性 / 弧形 / 环形 |
+| `TTyMeter` | 指针式仪表盘 |
 | `TTyLevelMeter` | 电平表,分段点亮 + 峰值保持 |
 | `TTyDial` | 旋钮 |
-| `TTyGearDial` | 带齿轮外圈的装饰旋钮 |
+| `TTyGearDial` | 齿轮外圈旋钮 |
 | `TTyAnalogClock` | 模拟时钟 |
-| `TTyCircularProgress` | 环形进度,中心显示百分比 |
-| `TTyActivityIndicator` | 旋转的忙碌指示环 |
-| `TTyActivityBar` | 不确定进度的滚动条 |
-| `TTyGearActivityIndicator` | 齿轮造型的忙碌指示 |
-| `TTySparkline` | 迷你趋势图,嵌在卡片或表格里 |
-| `TTyRating` | 星级评分,支持悬停预览 |
+| `TTyCircularProgress` | 环形进度 |
+| `TTyActivityIndicator` | 旋转忙碌指示环 |
+| `TTyActivityBar` | 不确定进度条 |
+| `TTyGearActivityIndicator` | 齿轮忙碌指示 |
+| `TTySparkline` | 迷你趋势图 |
+| `TTyRating` | 星级评分 |
 
 ### 条状控件 · `TyControls Bars`(15)
 
-| 控件 | 用来干嘛 |
+| 控件 | 说明 |
 |---|---|
 | `TTyTrackBar` | 滑块 |
 | `TTyProgressBar` | 进度条 |
 | `TTyScrollBar` | 滚动条 |
-| `TTyStatusBar` | 底部多分区状态栏 |
+| `TTyStatusBar` | 状态栏 |
 | `TTyToolBar` | 工具条 |
-| `TTyToolButton` | 工具条按钮:六种样式(命令 / 开关 / 分裂下拉 / 附箭头下拉 / 空位 / 分隔线)、相邻单选组、强制断行 |
+| `TTyToolButton` | 工具条按钮:命令 / 开关 / 下拉 / 分组 / 分隔等六种样式 |
 | `TTyToolSeparator` | 工具条分隔符 |
-| `TTyToolBarEx` | 装不下的按钮自动折进溢出菜单的工具条 |
-| `TTyControlBar` | 按宽度自动折行分带的多带容器（仅排布，暂无拖动） |
-| `TTyCoolBar` | Windows 风格的可拖动带条 |
+| `TTyToolBarEx` | 放不下的按钮自动折进溢出菜单的工具条 |
+| `TTyControlBar` | 按宽度自动折行分带的容器 |
+| `TTyCoolBar` | 可拖动的带条容器 |
 | `TTyAlert` | 内联警告条:信息 / 成功 / 警告 / 错误 |
 | `TTyPagination` | 分页器 |
-| `TTySteps` | 步骤条,横竖两向 |
+| `TTySteps` | 步骤条 |
 | `TTyBreadcrumb` | 面包屑导航 |
-| `TTyHeaderControl` | 独立的列头条,可调宽、可排序 |
+| `TTyHeaderControl` | 独立列头条 |
 
 ### 容器与布局 · `TyControls Containers`(20)
 
-| 控件 | 用来干嘛 |
+| 控件 | 说明 |
 |---|---|
-| `TTyPanel` | 基础面板 |
-| `TTyGroupBox` | 带标题的分组框 |
-| `TTyCard` | 卡片:标题 / 内容 / 操作三段式 |
-| `TTyExPanel` | 可折叠面板,标题栏带展开箭头 |
-| `TTyScrollBox` | 可滚动容器 |
+| `TTyPanel` | 面板 |
+| `TTyGroupBox` | 分组框 |
+| `TTyCard` | 卡片:标题 / 内容 / 操作 |
+| `TTyExPanel` | 可折叠面板 |
+| `TTyScrollBox` | 滚动容器 |
 | `TTyScrollPanel` | 拖到边缘自动滚动的容器 |
-| `TTyGridPanel` | **设计器网格**:设几行几列就出几个格子,直接往格子里拖控件 |
-| `TTyRelativePanel` | 按相对关系(在谁右边、与谁对齐)布局的容器 |
-| `TTyPageControl` | **设计器多页容器**,页是真正可拖入控件的容器 |
-| `TTyTabSheet` | `TTyPageControl` 的一页 |
-| `TTyTabSet` | 纯页签条,不承载页面;内容切换由你自己处理 |
-| `TTySplitter` | 可拖拽的面板分隔条 |
+| `TTyGridPanel` | 设计器网格容器,格子可直接拖入控件 |
+| `TTyRelativePanel` | 按相对关系布局的容器 |
+| `TTyPageControl` | 多页容器,页面可直接拖入控件 |
+| `TTyTabSheet` | `TTyPageControl` 的页 |
+| `TTyTabSet` | 纯页签条,不承载页面 |
+| `TTySplitter` | 分隔条 |
 | `TTyBevel` | 凹凸装饰线 |
-| `TTyDivider` | 分隔线,可带居中标题 |
-| `TTyPaintPanel` | 把画布交给你自己画的面板 |
-| `TTySizeBox` | 右下角的尺寸手柄 |
+| `TTyDivider` | 分隔线,可带标题 |
+| `TTyPaintPanel` | 自绘面板 |
+| `TTySizeBox` | 右下角尺寸手柄 |
 | `TTyToolGroupPanel` | 工具分组容器 |
 | `TTyListGroupPanel` | 带分组标题的列表容器 |
-| `TTyTitleBar` | 自绘标题栏,配合 `TTyForm` 使用 |
-| `TTyEmpty` | 空状态:插画 + 文案 + 可选操作按钮 |
+| `TTyTitleBar` | 自绘标题栏,配合 `TTyForm` |
+| `TTyEmpty` | 空状态:插画 + 文案 + 操作按钮 |
 
 ### 数据视图 · `TyControls Data Views`(10)
 
-| 控件 | 用来干嘛 |
+| 控件 | 说明 |
 |---|---|
-| `TTyStringGrid` | **数据网格**:冻结、虚拟化、编辑、筛选、分组、撤销重做 |
-| `TTyDrawGrid` | 数据由事件提供的网格,内容自绘 |
-| `TTyTreeView` | **虚拟树**:按需加载,可承载百万节点;多列、复选、内联编辑、拖放;另有可选的 `Items` 节点集合,设计器里就能把树填好 |
-| `TTyListView` | 列表视图:报表 / 图标 / 平铺 / 列表 / 小图标五视图 + 分组 + 虚拟模式 |
+| `TTyStringGrid` | 数据网格:冻结、虚拟化、编辑、筛选、分组、撤销重做 |
+| `TTyDrawGrid` | 内容自绘的网格 |
+| `TTyTreeView` | 虚拟树,可承载百万节点;多列、三态复选、内联编辑、拖放 |
+| `TTyListView` | 列表视图:报表 / 图标 / 平铺等五种视图 + 分组 + 虚拟模式 |
 | `TTyShellTreeView` | 文件系统目录树 |
 | `TTyShellListView` | 文件系统文件列表 |
 | `TTyCalendar` | 日历:日 / 月 / 年下钻 |
-| `TTyDateTimePicker` | 日期时间选择器,下拉日历 + 分段时间微调;可表示"未选日期"(`DateIsNull`) |
-| `TTyImageView` | 图片查看器:平移、缩放、BGRA 滤镜 |
-| `TTyPreviewBox` | 文件预览框,配合文件对话框使用 |
+| `TTyDateTimePicker` | 日期时间选择器,支持空值 |
+| `TTyImageView` | 图片查看器:平移、缩放、滤镜 |
+| `TTyPreviewBox` | 文件预览框 |
 
 ### 菜单 · `TyControls Menus`(4)
 
-| 控件 | 用来干嘛 |
+| 控件 | 说明 |
 |---|---|
 | `TTyMenuBar` | 主菜单栏 |
-| `TTyPopupMenu` | 右键弹出菜单 |
-| `TTyImagesMenu` | 每项带图标的菜单 |
-| `TTyMenuEx` | 扩展菜单,支持更丰富的项样式 |
+| `TTyPopupMenu` | 右键菜单 |
+| `TTyImagesMenu` | 带图标的菜单 |
+| `TTyMenuEx` | 扩展菜单 |
 
 ### Ribbon · `TyControls Ribbon`(7)
 
-| 控件 | 用来干嘛 |
+| 控件 | 说明 |
 |---|---|
-| `TTyRibbon` | Ribbon 主体,承载多个页 |
-| `TTyRibbonPage` | Ribbon 的一页 |
-| `TTyRibbonGroup` | 页内的一个功能组 |
-| `TTyRibbonAppMenu` | 左上角的应用菜单(File)按钮 |
+| `TTyRibbon` | Ribbon 主体 |
+| `TTyRibbonPage` | Ribbon 页 |
+| `TTyRibbonGroup` | 页内功能组 |
+| `TTyRibbonAppMenu` | 应用菜单(File)按钮 |
 | `TTyRibbonQuickAccess` | 快速访问工具栏 |
-| `TTyRibbonGallery` | 图库:一排可视化选项,可展开成弹出网格 |
-| `TTyRibbonBackstage` | 全窗口的后台视图(File 展开后那一屏) |
+| `TTyRibbonGallery` | 图库,可展开成弹出网格 |
+| `TTyRibbonBackstage` | 全窗口后台视图 |
 
 ### 图像与提示 · `TyControls Images`(9)
 
-| 控件 | 用来干嘛 |
+| 控件 | 说明 |
 |---|---|
-| `TTyIconFont` | 图标字体:按码点或**名字**取矢量图标,随主题着色 |
-| `TTyCharImage` | 把一个图标字体字形当图片用 |
-| `TTyImage` | 图片控件,支持透明与缩放模式 |
+| `TTyIconFont` | 图标字体:按码点或名字取矢量图标,随主题着色 |
+| `TTyCharImage` | 把一个图标字形当图片用 |
+| `TTyImage` | 图片控件 |
 | `TTyGlyphImageList` | 图标字体驱动的图像列表 |
-| `TTyImageCollection` | 多分辨率图像集,按 DPI 取最合适的一张 |
-| `TTyVirtualImageList` | 从图像集/图标字体按需生成任意尺寸的图像列表;**本身就是标准 `TCustomImageList`**,可直接赋给任何控件(含原生 LCL 控件)。图标可按 `ImageName` 用,重排列表不换图 |
+| `TTyImageCollection` | 多分辨率图像集,按 DPI 取图 |
+| `TTyVirtualImageList` | 按需生成任意尺寸的图像列表;本身是标准 `TCustomImageList`,可赋给任何控件,支持按名字取图 |
+| `TTyHint` | 主题化提示气泡 |
+| `TTyBalloonHint` | 带箭头的气球提示 |
+| `TTyPopover` | 可承载控件的气泡浮层 |
 
-### 自带一套图标 —— Lucide
-
-不想自己找字体、也不想手抄码点表的话,加一行 `uses` 就有 2022 个图标:
+**内置图标(Lucide)**:加一行 `uses tyControls.Icons.Lucide` 就有 2022 个矢量图标,按名字取用:
 
 ```pascal
-uses tyControls.Icons.Lucide;
-...
 CharImage1.IconFont  := TyLucideFont;
-CharImage1.GlyphName := TyIconHouse;   // 或者直接写 'house'
+CharImage1.GlyphName := 'house';
 ```
 
-- **字体是内嵌的**,不用随程序发 `.ttf`、不用装到系统里。
-- **不 `uses` 就一个字节都不占**:字体放在这个单元里(不是 `.lrs`),智能链接会整块丢掉。
-  实测:用了 +979 KB,不用 +0。
-- **不用填 `Glyphs`**:这个单元注册了一个名字解析器,任何 `FontFamily = 'lucide'` 的
-  `TTyIconFont` 都能按名字取图标。想覆盖某个名字,照常写进自己的 `Glyphs` 即可,优先级更高。
-- **也能当图像列表直接拖放**:组件面板上的 `TTyLucideImageList` 拖上窗体就已连好 Lucide 字体,
-  赋给任意控件的 `Images` 即可;名字表默认为空,填你用到的图标名(或用图标浏览器挑),每个名字成一张图。
-- **许可干净**:ISC(+ Feather 派生部分 MIT),对**你的用户**没有任何义务——不用署名、不用挂链接、
-  运行时不用显示任何东西。随发布包带上 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) 就够了。
-
-上游有 20 个名字(GitHub、Twitter 等品牌图标)在 Lucide v1.0 里被删了,但码点表仍然留着它们。
-生成器会检查字形有没有轮廓,**把这些名字剔掉**——所以 `HasGlyph('github')` 老实返回 False,
-而不是给你一个空白方块。
-
-| `TTyHint` | 主题化的提示气泡 |
-| `TTyBalloonHint` | 带箭头的气球提示 |
-| `TTyPopover` | **能放控件**的气泡浮层,不只是文字 |
+字体内嵌在单元里,不用随程序分发文件;不 `uses` 就不进最终程序。组件面板上的 `TTyLucideImageList` 可以直接当图像列表拖放使用。许可为 ISC / MIT,商用无需署名,随发布带上 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) 即可。
 
 ### 图形与图表 · `TyControls Shapes & Charts`(4)
 
-| 控件 | 用来干嘛 |
+| 控件 | 说明 |
 |---|---|
-| `TTyShape` | 矢量形状:矩形 / 圆 / 椭圆 / 三角 / 菱形 / 圆角矩形 / 线 |
+| `TTyShape` | 矢量形状:矩形 / 圆 / 三角 / 菱形 / 星形等 15 种,支持自定义多边形 |
 | `TTyStarShape` | 星形,角数可调 |
 | `TTyArrow` | 方向箭头 |
 | `TTyChart` | 图表:折线 / 柱状 / 饼图 |
 
 ### 对话框 · `TyControls Dialogs`(20)
 
-| 控件 | 用来干嘛 |
+| 控件 | 说明 |
 |---|---|
-| `TTyMessage` | 消息框(信息 / 警告 / 错误 / 确认) |
-| `TTyInputDialog` | 单行文本输入对话框 |
-| `TTyPasswordDialog` | 掩码密码输入对话框 |
-| `TTyTextDialog` | 可缩放的多行文本对话框 |
+| `TTyMessage` | 消息框 |
+| `TTyInputDialog` | 文本输入对话框 |
+| `TTyPasswordDialog` | 密码输入对话框 |
+| `TTyTextDialog` | 多行文本对话框 |
 | `TTySelectValueDialog` | 列表单选对话框 |
 | `TTySelectPathDialog` | 文件夹选择对话框 |
-| `TTyColorDialog` | 取色对话框:HSV / RGB / CMYK / Alpha 全双向,附常用色速取网格 |
+| `TTyColorDialog` | 取色对话框:HSV / RGB / CMYK / Alpha |
 | `TTyFontDialog` | 字体对话框,带实时预览 |
-| `TTyFindDialog` | 查找对话框(无模态) |
-| `TTyReplaceDialog` | 查找替换对话框(无模态) |
+| `TTyFindDialog` | 查找对话框 |
+| `TTyReplaceDialog` | 查找替换对话框 |
 | `TTyProgressDialog` | 进度对话框 |
 | `TTyAboutDialog` | 关于对话框 |
 | `TTyOpenDialog` | 打开文件对话框 |
 | `TTySaveDialog` | 保存文件对话框 |
 | `TTyOpenPictureDialog` | 打开图片对话框,带缩略图 |
 | `TTySavePictureDialog` | 保存图片对话框 |
-| `TTyOpenPreviewDialog` | 打开对话框 + 右侧自定义预览 |
-| `TTySavePreviewDialog` | 保存对话框 + 右侧自定义预览 |
-| `TTyNotification` | 角落浮出的通知,自动消失 |
-| `TTyIconBrowserDialog` | 图标浏览器(带搜索的字形网格;显示 ImageIndex) |
+| `TTyOpenPreviewDialog` | 打开对话框 + 自定义预览 |
+| `TTySavePreviewDialog` | 保存对话框 + 自定义预览 |
+| `TTyNotification` | 角落通知,自动消失 |
+| `TTyIconBrowserDialog` | 图标浏览器 |
 
-> 有三个控件的能力远超一行清单能写下的:
-> **[`TTyStringGrid`](docs/controls/grid.md)** —— 冻结行列、百万行虚拟化、16 种内建编辑器、Excel 式列筛选、分组小计、撤销/重做、剪贴板与 CSV 导入导出;
-> **[`TTyTreeView`](docs/controls/treeview.md)** —— 数据按需加载的虚拟树、多列可拖表头、三态复选、内联编辑、节点拖放,以及设计期可编辑的 `Items` 节点集合;
-> **[`TTyForm`](docs/controls/ttyform.md)** —— 无边框自绘窗口,含原生缩放、系统圆角与投影。
+`TTyStringGrid`、`TTyTreeView`、`TTyForm` 的完整能力见各自文档:[grid.md](docs/controls/grid.md) · [treeview.md](docs/controls/treeview.md) · [ttyform.md](docs/controls/ttyform.md)。
 
 ---
 
 ## 主题
 
-全部内置主题都**编译进二进制**,应用无需带 `themes/` 文件夹即可按名切换(`TyBuiltinThemeNames` 列出全部)。
+内置主题编译进二进制,程序不用带 `themes/` 文件夹就能按名切换:
 
 | 主题 | 说明 |
 |---|---|
-| `default` | `@mode` 亮/暗同文件的中性基底 |
-| `system` | 跟随操作系统亮暗 + 强调色 |
-| `win11` `win10` `xp` `classic` `aero` | Windows 各世代 |
-| `macos` `adwaita` `breeze` `ubuntu` | macOS 与 Linux 桌面 |
-| `material3` `fluent` `antdesign` `bootstrap` | 设计体系 |
+| `default` | 中性基底,亮暗同文件 |
+| `system` | 跟随操作系统亮暗和强调色 |
+| `win11` `win10` `xp` `classic` `aero` | Windows 各代风格 |
+| `macos` `adwaita` `breeze` `ubuntu` | macOS 与 Linux 桌面风格 |
+| `material3` `fluent` `antdesign` `bootstrap` | 常见设计体系 |
 | `office` | Office 风格 |
-| `showcase` | 门面展示主题 |
+| `showcase` | 展示主题 |
 
-另有 `green`(图片主题,以文件形式提供)与 `themes/palettes/` 精选调色板。所有主题共用同一套 `:root` 语义变量,`--accent` 可运行时覆盖 —— 一套主题看任意品牌色。
+另有图片主题 `green`(以文件提供)和 `themes/palettes/` 调色板。所有主题共用同一套语义变量,`--accent` 可在运行时覆盖成任意品牌色。
 
-**写自己的主题** → [docs/themes.md](docs/themes.md) · **`.tycss` 语言完整参考** → [docs/tycss-reference.md](docs/tycss-reference.md)
+写自己的主题见 [docs/themes.md](docs/themes.md),`.tycss` 语言参考见 [docs/tycss-reference.md](docs/tycss-reference.md)。
 
 ---
 
 ## 示例
 
-每个示例都是可独立构建的最小工程:`lazbuild examples/<名称>/<工程>.lpi`。
+每个示例都可独立构建:`lazbuild examples/<名称>/<工程>.lpi`。
 
-| 示例 | 演示内容 |
+| 示例 | 内容 |
 |---|---|
-| [antdesign](examples/antdesign/) | **TyControls Pro** —— 仿 Ant Design Pro 后台(侧边导航 + 6 页),运行时换肤 |
-| [demo](examples/demo/) | 综合 gallery:全部控件 + 多主题 + 运行时切换语言 |
-| [grid](examples/grid/) | `TTyStringGrid` 六页:冻结 / 百万行虚拟 / 排序筛选分组 / 16 种编辑器 / 撤销重做 |
-| [treeview](examples/treeview/) | `TTyTreeView`:百万级虚拟树 / 多列排序 / 三态复选 / 内联编辑 / 节点拖放 |
-| [dialogs](examples/dialogs/) | 全部 11 个自绘对话框(含模态与无模态) |
-| [theming](examples/theming/) | 自定义 `.tycss` 主题 + 运行时热切换 |
-| [ribbon](examples/ribbon/) | Ribbon:页 / 组 / 应用菜单 / QAT / Gallery / Backstage |
-| [containers](examples/containers/) | `TTyGridPanel` / `TTyExPanel` / `TTyScrollBox` 等布局容器 |
-| [listview](examples/listview/) | `TTyListView`:五视图 / 分组折叠 / 10 万行虚拟 |
-| [inputs](examples/inputs/) | 富输入:数值 / 货币 / 掩码 / URL / 滑块 / 计算器编辑 |
-| [shapes](examples/shapes/) | `TTyShape` / `TTyStarShape` / `TTyArrow` + `StyleOverride` |
-| [rtl](examples/rtl/) | 从右往左镜像 + 双向文本:**方向**与**语言(英语/阿拉伯语)两个独立开关**,可分别查看"只镜像""只换字""真正的阿拉伯语界面"三种状态;逐区标注**什么镜像、什么还不镜像**,并单列一页给**故意不镜像**的三个控件与"真实程序里怎么开"的做法 |
-| [icons](examples/icons/) | `TTyIconFont` 图标字体 |
+| [antdesign](examples/antdesign/) | 仿 Ant Design Pro 后台(侧边导航 + 6 页),运行时换肤 |
+| [demo](examples/demo/) | 综合演示:全部控件 + 多主题 + 切换语言 |
+| [grid](examples/grid/) | 数据网格:冻结 / 百万行 / 排序筛选分组 / 16 种编辑器 / 撤销重做 |
+| [treeview](examples/treeview/) | 虚拟树:百万节点 / 多列 / 复选 / 内联编辑 / 拖放 |
+| [dialogs](examples/dialogs/) | 全部自绘对话框 |
+| [theming](examples/theming/) | 自定义主题 + 运行时热切换 |
+| [ribbon](examples/ribbon/) | Ribbon 全家桶 |
+| [containers](examples/containers/) | 布局容器 |
+| [listview](examples/listview/) | 列表视图:五视图 / 分组 / 10 万行虚拟 |
+| [inputs](examples/inputs/) | 富输入控件 |
+| [shapes](examples/shapes/) | 形状控件 + `StyleOverride` |
+| [rtl](examples/rtl/) | 从右往左镜像与双向文本 |
+| [icons](examples/icons/) | 图标字体 |
 | [transitions](examples/transitions/) | 滑入 / 淡入过渡 |
 
-其余单控件示例(button / label / labels / edit / memo / combobox / listbox / spinedit / checkbox / radiobutton / panel / groupbox / scrollbar / progressbar / toggleswitch / trackbar / splitter / statusbar / toolbar / menu / calendar / datetimepicker / tabcontrol / tabset / chart / gauge / hint / htmllabel / imageview / filedialog / shell)见 [examples/](examples/)。
+其余 30 多个单控件示例见 [examples/](examples/)。
 
 ---
 
@@ -418,58 +384,38 @@ CharImage1.GlyphName := TyIconHouse;   // 或者直接写 'house'
 
 | 文档 | 内容 |
 |---|---|
-| [getting-started.md](docs/getting-started.md) | 安装、第一个窗体、主题加载与切换、HiDPI |
-| [controls/](docs/controls/) | 逐控件 API 说明(属性 / 事件 / 状态 / 主题键 / 示例) |
+| [getting-started.md](docs/getting-started.md) | 安装、第一个窗体、主题、HiDPI |
+| [controls/](docs/controls/) | 逐控件 API 说明 |
 | [themes.md](docs/themes.md) | 写自己的主题 |
-| [tycss-reference.md](docs/tycss-reference.md) | `.tycss` 语言权威参考:属性、函数、选择器、合并顺序、typeKey 目录 |
-| [events.md](docs/events.md) | 通用事件分层约定 |
-| [rtl.md](docs/rtl.md) | 双向文本与右到左布局:哪些控件已镜像、哪些还没有、怎么打开 |
-| [CHANGELOG.md](CHANGELOG.md) | 版本更新日志 |
+| [tycss-reference.md](docs/tycss-reference.md) | `.tycss` 语言参考 |
+| [events.md](docs/events.md) | 通用事件约定 |
+| [rtl.md](docs/rtl.md) | 双向文本与右到左布局 |
+| [CHANGELOG.md](CHANGELOG.md) | 更新日志 |
 
 ---
 
 ## 界面语言
 
-TyControls 自身的界面字符串(对话框按钮、ThemeLint 诊断等)使用**独立于宿主应用**的 resourcestring 目录,随库提供英文与简体中文。
-
-LCL 的 `SetDefaultLang` 只加载**你的应用**的 `.po`,不会加载控件库的 —— 所以要多加一行:
+库自带中英文界面。LCL 的 `SetDefaultLang` 只加载应用自己的 `.po`,库的翻译要多加一行:
 
 ```pascal
 uses ..., LCLTranslator;
 
-SetDefaultLang('', LangDir);                                                       // 你的应用
+SetDefaultLang('', LangDir);                                                        // 应用
 TranslateUnitResourceStringsEx('', LangDir, 'tycontrols', 'tyControls.StrConsts');  // 控件库
-Application.CreateForm(TMainForm, MainForm);
 ```
 
-把 `languages/tycontrols.<lang>.po` 与你自己的 `.po` 一起放进可执行文件旁的 `languages/` 目录 —— 这个 `tycontrols.<lang>.po` 就是库源码 `languages/tycontrols.strconsts.<lang>.po` 复制后**去掉文件名里的 `.strconsts`** 改名而来(为什么要去掉见下方"文件主名不能带点号")。库随附英文与简体中文;要加别的语言,照它的格式翻一份即可。**每种语言就这一个文件**,不用逐个控件带本地化文件。
-**英文部署也要带上 `tycontrols.en.po`** —— 它几乎是空的,但里面的语言哨兵是日历/日期框
-把月份、星期名从"跟随操作系统区域"切到"跟随应用语言"的开关;不带它,`--lang=en` 下这两个控件
-仍显示 OS 区域的名字(机制详见 [docs/controls/calendar.md](docs/controls/calendar.md) §8)。
+部署时把 `languages/tycontrols.<语言>.po` 与应用自己的 `.po` 放在同一个 `languages/` 目录。注意两点:
 
-> **文件主名不能带点号。** 第三个参数必须是 `'tycontrols'` —— LCL 的 `FindLocaleFileName` 会对它调 `ChangeFileExt`,传 `'tycontrols.strconsts'` 会把 `.strconsts` 当扩展名剥掉。第四个参数才传真实的带点单元名 `tyControls.StrConsts`。
->
-> 要强制指定语言(不依赖系统区域检测),两处都传语言名:`SetDefaultLang('zh_CN', LangDir)` + `TranslateUnitResourceStringsEx('zh_CN', …)`。
+- 部署文件名是 `tycontrols.<语言>.po`,由源码里的 `tycontrols.strconsts.<语言>.po` 改名而来。第三个参数必须传 `'tycontrols'`(不能带点,LCL 会把点号后面当扩展名剥掉),第四个参数传真实单元名 `tyControls.StrConsts`。
+- 英文部署也要带 `tycontrols.en.po`,它是日历和日期框的月份、星期名跟随应用语言的开关。
 
 完整示例见 [examples/demo](examples/demo/)。
 
 ---
 
-## 平台支持与已知限制
-
-在 **Windows(Win32)、Qt5 / Qt6、GTK2、macOS(Cocoa)** 上功能完整。**GTK3** 也能跑,但在 **Wayland** 会话下有几个源自 Wayland 窗口模型 + LCL-GTK3 上游的已知限制:
-
-- **模态对话框不能拖动。** 颜色 / 字体等自绘对话框的标题栏拖不动 —— LCL 把无边框模态窗体建成 Wayland 的 `xdg_popup`(没有"移动请求"),窗口类型在创建时就定死,库层无法绕过。这是上游 LCL-GTK3 的限制,也大致符合 Wayland 上"模态对话框由合成器摆放、不可移动"的常见行为。
-- **菜单点空白处不关闭。** 菜单栏菜单靠焦点变化关闭:点到能获得焦点的控件(按钮 / 输入框等)或按 `Esc` 会关,但点裸 panel / 空白区域不会关(Wayland 的抓取模型不把这类点击派发给菜单)。下拉框(ComboBox 等)已用合成器抓取式关闭修好,点任意处都能关。
-- **弹窗圆角变方角。** 下拉、菜单、气泡等弹窗的圆角在 Wayland 下退化为方角 —— Wayland 没有 XShape,无法给弹窗切圆角遮罩。
-- **半透明效果会透出桌面。** 库自身用 alpha 实现的效果 —— **禁用态变灰**、**Transparent 的 label / 图形控件** —— 在 Wayland 下会透出桌面而不是对着窗体背景变淡。GTK3 给无边框窗体用了带 alpha 的 RGBA 窗口,合成器就把这些半透明像素透了出去;Win32 / Qt 没有这个问题。多次尝试(让自绘全程不透明、给窗口设 opaque region 等)都没能在库层面稳定解决,根子在 LCL-GTK3。
-
-若这些影响你的使用:GTK3 下改用 **X11 会话**,或改用 **Qt5 / Qt6** —— 它们都没有上述问题。
-
----
-
 ## 许可
 
-TyControls 采用**修改版 LGPL**(与 FPC RTL / LCL / BGRABitmap 同款):允许将本库静态链接进闭源商业应用分发;若修改库本身的源码,修改部分需以同样许可开放。
+修改版 LGPL,与 FPC RTL / LCL / BGRABitmap 相同:可以静态链接进闭源商业软件分发;修改库本身的源码时,修改部分需以同样许可开放。
 
-完整条款见 [COPYING.modifiedLGPL.txt](COPYING.modifiedLGPL.txt)(例外条款)与 [COPYING.LGPL.txt](COPYING.LGPL.txt)(LGPL 正文)。
+完整条款见 [COPYING.modifiedLGPL.txt](COPYING.modifiedLGPL.txt) 与 [COPYING.LGPL.txt](COPYING.LGPL.txt)。

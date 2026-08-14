@@ -1,69 +1,57 @@
 # TyControls
 
-A skinnable / styleable **Lazarus component library**: every control is fully custom-drawn
-(BGRABitmap) and its appearance is driven uniformly by lightweight CSS-lite text themes
-(`.tycss`), rendering pixel-identical on Windows / Linux / macOS.
+A custom-drawn component library for Lazarus. All 162 controls are rendered with BGRABitmap and styled by `.tycss` text themes, so your UI looks exactly the same on Windows, Linux, and macOS.
 
 > **中文:** [README.md](README.md) · **Changelog:** [CHANGELOG.en.md](CHANGELOG.en.md)
 
 ![Ant Design Pro layout example](docs/images/antd-antdesign.png)
 
-**Same program, one theme name changed:**
+**Same program, different theme name:**
 
 | `classic` | `win11` | `material3` |
 |---|---|---|
 | ![classic theme](docs/images/antd-classic.png) | ![win11 theme](docs/images/antd-win11.png) | ![material3 theme](docs/images/antd-material3.png) |
 
-All four are the **same `.lfm` and the same application code** — only the theme name differs.
-Not one control hardcodes a colour, corner radius or line width; every visual value comes from
-a theme token. Look at `classic`: it isn't just recoloured — the 3D button bevels, the gradient
-header band and the square corners changed too.
+All four screenshots share one `.lfm` and one code base; only the theme name differs. Themes go beyond colors: under `classic`, buttons get 3D bevels, square corners, and a gradient header band.
 
 ### Light / dark / image themes
-
-The gallery example (`examples/demo`), same form:
 
 | Light | Dark | `green` (image theme) |
 |---|---|---|
 | ![light](docs/images/demo-light.png) | ![dark](docs/images/demo-dark.png) | ![green image theme](docs/images/demo-green.png) |
 
-Light and dark are two sets of `@mode` values in one `.tycss`, and can follow the OS. `green`
-shows how far a theme can go — translucent controls floating over a photo background, built from
-9-slice images and the `alpha()` colour function, with not one line of control code changed for it.
+Light and dark are two `@mode` value sets in one theme file and can follow the OS. `green` is an image theme: translucent controls over a photo background.
 
 ### A few of the controls
 
 | | |
 |---|---|
-| **`TTyStringGrid`** — frozen columns, row-number gutter, summary band, cell mark colours<br>![data grid](docs/images/grid.png) | **`TTyTreeView`** — virtual tree, multi-column, tri-state checks<br>![virtual tree](docs/images/treeview.png) |
-| **Rich input controls** — numeric / currency / mask / slider / calculator edits<br>![rich input](docs/images/inputs.png) | **Custom-drawn dialogs** — colour picker: HSV + RGB / CMYK / Alpha, all two-way<br>![colour dialog](docs/images/colordialog.png) |
+| **`TTyStringGrid`** frozen columns, row gutter, summary band<br>![data grid](docs/images/grid.png) | **`TTyTreeView`** virtual tree, multi-column, tri-state checks<br>![virtual tree](docs/images/treeview.png) |
+| **Rich input controls** numeric / currency / mask / slider / calculator<br>![rich input](docs/images/inputs.png) | **Custom-drawn dialogs** color picker<br>![color dialog](docs/images/colordialog.png) |
 
 ---
 
 ## Features
 
-- **Fully custom-drawn** — every control is painted with BGRABitmap; nothing wraps a native
-  control. The same code is the same pixels on Windows, Linux and macOS.
-- **Appearance separated from code** — colours, radii, borders, padding, font sizes, shadows,
-  gradients and 9-slice images all live in `.tycss` text. Restyling needs no recompile;
-  `LoadTheme` hot-swaps at runtime.
-- **Structural skinning** — a theme is more than a palette: `render-style` turns a flat button
-  into a 3D bevelled one, and geometry tokens change a control's intrinsic size.
-- **Two density scales** — classic (Win32 scale) and modern (web scale) are an axis
-  **orthogonal** to colour, switched by one `Controller.Density` property.
-- **Follows the OS** — light/dark mode and accent colour can track the operating system; a
-  single-file `@mode` carries both sets of values.
-- **162 droppable controls** across 16 component-palette pages — see the [control list](#control-list).
-- **Designer-first** — `TTyPageControl`'s pages and `TTyGridPanel`'s cells are **real designer
-  containers**: drop controls straight in, see the finished look in the designer, and it persists
-  to the `.lfm` with no layout code. Theme changes show up in the designer too.
-- **HiDPI** — every length scales by PPI; vector drawing stays crisp. Across monitors
-  (PerMonitorV2) the window and its controls **re-derive** their sizes from the new DPI, so
-  dragging out to a 250% screen and back returns the layout to where it started.
-- **Internationalised** — the library's own UI strings go through `resourcestring` + `.po`,
-  shipped in English and Simplified Chinese.
-- **6060 unit tests**, whole suite leak-free (heaptrc-verified). Appearance additionally has a
-  pixel-level golden guard — every change to a theme's resolved styles must be deliberate.
+- **162 controls**: buttons, inputs, lists, data grid, virtual tree, Ribbon, calendar, shell file browsing, and 20 custom-drawn dialogs
+- **Identical on all three platforms**: fully custom-drawn, no native control wrapping — one code base renders the same UI everywhere
+- **Theming**: 17 built-in themes switched by a single property, with runtime hot-swap and OS light/dark and accent-color following; themes are text files, so restyling needs no recompile
+- **Classic and modern looks**: from Win95 / XP bevels to Win11 / Material flat design, with a switchable control-density scale
+- **HiDPI**: vector drawing stays crisp at any scale; DPI adapts automatically when dragging across monitors
+- **Full designer support**: palette drag-and-drop, container controls you drop into directly, live theme preview at design time, File → New project templates
+- **2,022 vector icons built in** (Lucide), referenced by name, zero cost if unused
+- **English and Chinese UI**, gettext `.po` translations
+- **6,000+ unit tests**, whole suite leak-free
+
+## Supported platforms
+
+| Platform | Widgetset |
+|---|---|
+| Windows | Win32 / Win64 |
+| Linux | GTK2, GTK3, Qt5, Qt6 |
+| macOS | Cocoa |
+
+Requires Lazarus 3.x+, FPC 3.2.2+, and BGRABitmap (OPM package `BGRABitmapPack`).
 
 ---
 
@@ -71,332 +59,267 @@ shows how far a theme can go — translucent controls floating over a photo back
 
 **1. Install the package**
 
-In Lazarus open `tycontrols_dt.lpk` (the design-time package) → **Use → Install**; the IDE
-recompiles and restarts. The runtime package `tycontrols.lpk` comes in automatically as a
-dependency.
-
-> Requires: Lazarus 3.x+ / FPC 3.2.2+ / **BGRABitmap** (OPM package `BGRABitmapPack`).
+Open `tycontrols_dt.lpk` in Lazarus and click **Use → Install**; the IDE rebuilds and restarts. The runtime package `tycontrols.lpk` installs automatically as a dependency.
 
 **2. New project**
 
 **File → New… → Project → TyControls Application**
 
-The template gives you a wired-up `TTyForm` main form: custom-drawn title bar, the content-host
-container `Surface`, and a `TTyStyleController`, all in place and associated. Drop controls onto
-`Surface`.
+The template creates a main form with a custom-drawn title bar, the content container `Surface`, and a style controller already wired up. Put your controls on `Surface` — a `TTyForm`'s visual controls all live there, and graphic controls must (see the [TTyForm docs](docs/controls/ttyform.md)). To add a form to an existing project, use **File → New… → Form → TyControls Form**.
 
-> To add a form to an existing project use **File → New… → Form → TyControls Form**.
+**3. Switch themes**
 
-**3. Switch theme**
+Select the `TTyStyleController` on the form and set `ThemeName` to any built-in theme name. The designer updates immediately; change the same property at runtime to hot-swap.
 
-Select the `TTyStyleController` on the main form and set `ThemeName` to any built-in name
-(`default` / `system` / `win11` / `classic` / `material3` / …). The designer updates instantly;
-change the same property at runtime to hot-swap.
-
-Full steps (first form, theme switching, HiDPI, deployment) → **[docs/getting-started.md](docs/getting-started.md)**.
-
----
-
-## Form structure
-
-A `TTyForm`'s controls live on a content-host container, **`TTyFormSurface`** — exactly one per
-form, named `Surface`, filling the whole window. **Put your controls inside it.**
-
-- **New forms need no thought**: both templates ship with `Surface` already there, and dropping
-  a control in the designer lands it inside.
-- **Graphic controls MUST go inside**: windowless graphic controls like `TTyLabel` and
-  `TTyShape` paint onto their parent — placed on the form directly they are hidden behind
-  `Surface`. The designer warns you when you do this.
-- **Non-visual components stay on the form**: style controllers, timers, dialog components,
-  image lists, menus are unaffected.
-- **Dialogs (`TTyDialog`) have no `Surface`**: they are not resizable and do not need one;
-  place controls directly on them.
-
-**Why it exists — the root cause is Windows.** A resizable top-level window carries
-`WS_THICKFRAME`, and Windows gives it a DWM backing surface *smaller* than its visible rect (only
-`windowHeight - 2*frame` tall). Its own GDI client DC is therefore clipped short, leaving a dead
-band along the right and bottom edges that simply cannot be painted. A child window has no thick
-frame, its backing surface spans its full rect, and it paints edge to edge — so `TTyForm` renders
-its themed background onto `Surface` rather than onto itself.
-
-The container is harmless on every widgetset, so it is not forked per platform. It also solves a
-second problem: because your controls are `Surface`'s **children**, windowless controls such as
-`TTyLabel` paint onto `Surface`'s own canvas and stay visible — a plain back-most layer would
-occlude them instead.
-
-Select `Surface` in the designer; its `Purpose` property says the same thing.
+Full walkthrough: [docs/getting-started.md](docs/getting-started.md).
 
 ---
 
 ## Control list
 
-162 controls you can drop from the component palette, across 16 pages. Per-control
-properties / events / states / theme keys are in **[docs/controls/](docs/controls/)**.
+162 controls across 16 palette pages. Per-control properties, events, and theme keys: **[docs/controls/](docs/controls/)**.
 
 ### Core · `TyControls` (2)
 
-| Control | What it is for |
+| Control | Description |
 |---|---|
-| `TTyStyleController` | The style controller: loads themes, switches density, follows the OS light/dark. Controls read their style through it |
+| `TTyStyleController` | Style controller: loads themes, switches density, follows OS light/dark |
 | `TTyNativeStyler` | Themes native / third-party LCL controls to match |
 
 ### Buttons · `TyControls Buttons` (8)
 
-| Control | What it is for |
+| Control | Description |
 |---|---|
-| `TTyButton` | The base button; primary / danger / ghost variants and a numeric badge |
-| `TTyGlyphButton` | Button with an icon from an icon font or image collection |
+| `TTyButton` | Button with primary / danger / ghost variants and a numeric badge |
+| `TTyGlyphButton` | Button with an icon |
 | `TTyGlyphContainerButton` | Square icon-only button, typical on toolbars |
 | `TTySpeedButton` | Shortcut button that can stay pressed |
-| `TTyDropDownButton` | Split button: the left half acts, the right half opens a menu |
+| `TTyDropDownButton` | Split button: left half acts, right half opens a menu |
 | `TTyMenuButton` | The whole button is the dropdown trigger |
-| `TTyColorButton` | Button showing and picking a colour |
+| `TTyColorButton` | Button that shows and picks a color |
 | `TTyButtonGroup` | Segmented bar; adjacent segments share edges, one selected |
 
 ### Labels & marks · `TyControls Labels` (7)
 
-| Control | What it is for |
+| Control | Description |
 |---|---|
 | `TTyLabel` | Text label with word wrap (including per-glyph CJK breaking) and mnemonics |
-| `TTyHtmlLabel` | Label supporting an inline HTML subset (bold / italic / link / colour) |
-| `TTyLinkLabel` | Hyperlink text with underline and hover highlight |
+| `TTyHtmlLabel` | Label supporting an inline HTML subset (bold / italic / link / color) |
+| `TTyLinkLabel` | Hyperlink text |
 | `TTyShadowLabel` | Label with a drop shadow |
-| `TTyGlowLabel` | Label with a blurred glow |
-| `TTyTag` | Closable tag pill, for filters and status marks |
-| `TTyBadge` | Numeric / dot badge that can anchor to any control's corner |
+| `TTyGlowLabel` | Label with a glow outline |
+| `TTyTag` | Closable tag pill |
+| `TTyBadge` | Numeric / dot badge that can attach to any control |
 
 ### Text & numeric input · `TyControls Edits` (14)
 
-| Control | What it is for |
+| Control | Description |
 |---|---|
-| `TTyEdit` | Single-line edit: selection, clipboard, word navigation, horizontal scroll |
-| `TTyMemo` | Multi-line edit: 2D navigation, cross-line editing, vertical scroll |
-| `TTySpinEdit` | Numeric field with up/down arrows |
-| `TTyFloatSpinEdit` | Decimal spinner: `Value` is a `Double`, and so is the step |
+| `TTyEdit` | Single-line edit: selection, clipboard, word navigation |
+| `TTyMemo` | Multi-line edit |
+| `TTySpinEdit` | Integer spinner |
+| `TTyFloatSpinEdit` | Decimal spinner; the step can be less than 1 |
 | `TTyNumericEdit` | Digits-only field, group-formatted on blur |
-| `TTyCurrencyEdit` | Currency field that adds the symbol |
-| `TTyMaskEdit` | Input constrained by a mask (phone, ID, date) |
+| `TTyCurrencyEdit` | Currency field |
+| `TTyMaskEdit` | Masked input (phone, ID, date) |
 | `TTyURLEdit` | URL field with a trailing open button |
 | `TTyComboEdit` | Edit plus a dropdown arrow; you decide what drops down |
-| `TTyTrackEdit` | Edit with an inline slider - type it or drag it |
-| `TTyCalcEdit` | Edit with an inline calculator button |
-| `TTyCalcCurrencyEdit` | The currency flavour of the calculator edit |
+| `TTyTrackEdit` | Numeric field with an inline slider |
+| `TTyCalcEdit` | Field with an inline calculator |
+| `TTyCalcCurrencyEdit` | Currency calculator field |
 | `TTyCalculator` | Standalone calculator panel |
 | `TTyUpDown` | Standalone up/down spinner, bindable to another control |
 
 ### Choices & switches · `TyControls Choices` (6)
 
-| Control | What it is for |
+| Control | Description |
 |---|---|
 | `TTyCheckBox` | Check box, tri-state capable |
 | `TTyRadioButton` | Radio button |
-| `TTyToggleSwitch` | Switch whose knob slides between states |
-| `TTyRadioGroup` | Titled frame of auto-laid-out radio buttons |
-| `TTyCheckGroup` | Titled frame of check boxes |
-| `TTySegmented` | Segmented control: pick one value from a row, not one page |
+| `TTyToggleSwitch` | Toggle switch |
+| `TTyRadioGroup` | Titled radio group |
+| `TTyCheckGroup` | Titled check-box group |
+| `TTySegmented` | Segmented control |
 
 ### Lists & dropdowns · `TyControls Lists` (14)
 
-| Control | What it is for |
+| Control | Description |
 |---|---|
-| `TTyComboBox` | Dropdown, editable, with prefix autocomplete |
-| `TTyListBox` | Item list with keyboard navigation and an embedded scrollbar |
+| `TTyComboBox` | Combo box, editable, with prefix autocomplete |
+| `TTyListBox` | List box |
 | `TTyCheckListBox` | List with a check box per row |
-| `TTyMRUComboBox` | Dropdown that promotes recent entries to the top |
-| `TTyComboBoxEx` | Dropdown with a per-item image |
-| `TTyOfficeComboBox` | Dropdown with group header bands |
-| `TTyOfficeListBox` | List with group header bands |
+| `TTyMRUComboBox` | Combo box that remembers recent entries |
+| `TTyComboBoxEx` | Combo box with a per-item image |
+| `TTyOfficeComboBox` | Combo box with group headers |
+| `TTyOfficeListBox` | List with group headers |
 | `TTyAdvancedComboBox` | Two-line items (title + subtitle + image) |
 | `TTyAdvancedListBox` | Rich two-line list |
-| `TTyCheckComboBox` | Multi-select dropdown; the field shows a summary |
+| `TTyCheckComboBox` | Multi-select combo box |
 | `TTyValueListEditor` | Property grid: key on the left, value on the right, editor kind per row |
-| `TTyTransfer` | Two lists with move-between buttons |
+| `TTyTransfer` | Dual-list transfer |
 | `TTyTreeSelect` | Selector whose dropdown is a tree |
 | `TTyCascader` | Cascading multi-column selector |
 
-### Colour / font / file pickers · `TyControls Pickers` (11)
+### Color / font / file pickers · `TyControls Pickers` (11)
 
-| Control | What it is for |
+| Control | Description |
 |---|---|
-| `TTyColorBox` | Colour dropdown with a swatch per item |
-| `TTyColorComboBox` | Colour dropdown with a trailing More... entry opening the colour dialog |
-| `TTyColorListBox` | Colour list |
+| `TTyColorBox` | Color dropdown |
+| `TTyColorComboBox` | Color dropdown with a trailing More… entry opening the color dialog |
+| `TTyColorListBox` | Color list |
 | `TTyColorGrid` | Swatch grid palette |
 | `TTyLColorPicker` | Lightness bar picker |
-| `TTyHSColorPicker` | Hue / saturation plane picker |
+| `TTyHSColorPicker` | Hue / saturation picker |
 | `TTyFontComboBox` | Font dropdown; each item previews in its own typeface |
 | `TTyFontListBox` | Font list |
 | `TTyFontSizeComboBox` | Font-size dropdown |
 | `TTyFilterComboBox` | File-type filter dropdown |
-| `TTyShellComboBox` | Directory dropdown, pairs with the file views |
+| `TTyShellComboBox` | Directory dropdown |
 
 ### Gauges & indicators · `TyControls Gauges` (12)
 
-| Control | What it is for |
+| Control | Description |
 |---|---|
-| `TTyGauge` | Gauge in linear, arc or ring form |
-| `TTyMeter` | Needle gauge with tick marks |
-| `TTyLevelMeter` | VU meter: lit segments plus a peak-hold marker |
+| `TTyGauge` | Gauge: linear / arc / ring |
+| `TTyMeter` | Needle gauge |
+| `TTyLevelMeter` | VU meter with lit segments and peak hold |
 | `TTyDial` | Rotary knob |
-| `TTyGearDial` | Decorative knob with a toothed rim |
-| `TTyAnalogClock` | Analogue clock face |
-| `TTyCircularProgress` | Ring progress with a centred percentage |
+| `TTyGearDial` | Knob with a toothed rim |
+| `TTyAnalogClock` | Analog clock |
+| `TTyCircularProgress` | Ring progress |
 | `TTyActivityIndicator` | Spinning busy ring |
-| `TTyActivityBar` | Indeterminate marching bar |
+| `TTyActivityBar` | Indeterminate progress bar |
 | `TTyGearActivityIndicator` | Gear-shaped busy indicator |
-| `TTySparkline` | Mini trend chart for cards and table cells |
-| `TTyRating` | Star rating with hover preview |
+| `TTySparkline` | Mini trend chart |
+| `TTyRating` | Star rating |
 
 ### Bars · `TyControls Bars` (15)
 
-| Control | What it is for |
+| Control | Description |
 |---|---|
 | `TTyTrackBar` | Slider |
 | `TTyProgressBar` | Progress bar |
 | `TTyScrollBar` | Scroll bar |
-| `TTyStatusBar` | Bottom status bar with panels |
-| `TTyToolBar` | Tool bar |
-| `TTyToolButton` | Tool bar button: six styles (command / toggle / split drop-down / attached-arrow drop-down / space holder / divider), adjacency radio groups, forced row breaks |
-| `TTyToolSeparator` | Tool bar separator |
-| `TTyToolBarEx` | Tool bar that folds what does not fit into an overflow menu |
-| `TTyControlBar` | Container that wraps child controls into bands (packing only -- no drag yet) |
-| `TTyCoolBar` | Windows-style draggable band bar |
-| `TTyAlert` | Inline banner: info / success / warning / error |
+| `TTyStatusBar` | Status bar |
+| `TTyToolBar` | Toolbar |
+| `TTyToolButton` | Toolbar button: six styles (command / toggle / dropdown / grouped / separator, …) |
+| `TTyToolSeparator` | Toolbar separator |
+| `TTyToolBarEx` | Toolbar that folds overflow into a menu |
+| `TTyControlBar` | Container that wraps children into bands |
+| `TTyCoolBar` | Draggable band container |
+| `TTyAlert` | Inline alert: info / success / warning / error |
 | `TTyPagination` | Pager |
-| `TTySteps` | Wizard step bar, horizontal or vertical |
+| `TTySteps` | Step bar |
 | `TTyBreadcrumb` | Breadcrumb trail |
-| `TTyHeaderControl` | Standalone column header strip; resizable and sortable |
+| `TTyHeaderControl` | Standalone column header strip |
 
 ### Containers & layout · `TyControls Containers` (20)
 
-| Control | What it is for |
+| Control | Description |
 |---|---|
-| `TTyPanel` | Base panel |
-| `TTyGroupBox` | Titled group frame |
+| `TTyPanel` | Panel |
+| `TTyGroupBox` | Group box |
 | `TTyCard` | Card: title / content / actions |
-| `TTyExPanel` | Collapsible panel with an expander arrow in its header |
+| `TTyExPanel` | Collapsible panel |
 | `TTyScrollBox` | Scrollable container |
-| `TTyScrollPanel` | Container that auto-scrolls when you drag near its edge |
-| `TTyGridPanel` | **Designer grid**: set rows x columns and get that many cells; drop controls straight into them |
-| `TTyRelativePanel` | Lays out by relative rules (right of X, aligned with Y) |
-| `TTyPageControl` | **Designer pager** whose pages are real drop targets |
+| `TTyScrollPanel` | Container that auto-scrolls near its edges |
+| `TTyGridPanel` | Designer grid container; drop controls straight into its cells |
+| `TTyRelativePanel` | Layout by relative rules |
+| `TTyPageControl` | Page container; drop controls straight onto its pages |
 | `TTyTabSheet` | One page of a `TTyPageControl` |
-| `TTyTabSet` | Pure tab strip; it hosts no pages, you switch content yourself |
-| `TTySplitter` | Draggable splitter between panels |
-| `TTyBevel` | Raised / lowered decorative rails |
-| `TTyDivider` | Rule, optionally with a centred caption |
+| `TTyTabSet` | Pure tab strip, hosts no pages |
+| `TTySplitter` | Splitter |
+| `TTyBevel` | Decorative bevel |
+| `TTyDivider` | Divider line, optionally captioned |
 | `TTyPaintPanel` | Panel that hands you its canvas |
 | `TTySizeBox` | Bottom-right size grip |
 | `TTyToolGroupPanel` | Tool group container |
 | `TTyListGroupPanel` | List container with group headers |
 | `TTyTitleBar` | Custom-drawn title bar, pairs with `TTyForm` |
-| `TTyEmpty` | Empty state: illustration + text + optional action |
+| `TTyEmpty` | Empty state: illustration + text + action button |
 
 ### Data views · `TyControls Data Views` (10)
 
-| Control | What it is for |
+| Control | Description |
 |---|---|
-| `TTyStringGrid` | **Data grid**: freeze, virtualize, edit, filter, group, undo/redo |
-| `TTyDrawGrid` | Grid whose contents come from events and are drawn by you |
-| `TTyTreeView` | **Virtual tree**: lazy-loaded, million-node capable; multi-column, checks, inline edit, drag-drop; plus an optional `Items` node collection you can fill in the designer |
-| `TTyListView` | Report / icon / tile / list / small-icon views, grouping, virtual mode |
+| `TTyStringGrid` | Data grid: freezing, virtualization, editing, filtering, grouping, undo/redo |
+| `TTyDrawGrid` | Owner-drawn grid |
+| `TTyTreeView` | Virtual tree, million-node capable; multi-column, tri-state checks, inline edit, drag-drop |
+| `TTyListView` | List view: report / icon / tile and more, grouping, virtual mode |
 | `TTyShellTreeView` | File-system directory tree |
 | `TTyShellListView` | File-system file list |
 | `TTyCalendar` | Calendar with day / month / year drill-down |
-| `TTyDateTimePicker` | Date-time picker: dropdown calendar and segmented time spinner; can hold "no date chosen" (`DateIsNull`) |
-| `TTyImageView` | Image viewer: pan, zoom, BGRA filters |
-| `TTyPreviewBox` | File preview pane for the file dialogs |
+| `TTyDateTimePicker` | Date-time picker with null-date support |
+| `TTyImageView` | Image viewer: pan, zoom, filters |
+| `TTyPreviewBox` | File preview pane |
 
 ### Menus · `TyControls Menus` (4)
 
-| Control | What it is for |
+| Control | Description |
 |---|---|
 | `TTyMenuBar` | Main menu bar |
 | `TTyPopupMenu` | Context menu |
-| `TTyImagesMenu` | Menu with a per-item icon |
-| `TTyMenuEx` | Extended menu with richer item styling |
+| `TTyImagesMenu` | Menu with per-item icons |
+| `TTyMenuEx` | Extended menu |
 
 ### Ribbon · `TyControls Ribbon` (7)
 
-| Control | What it is for |
+| Control | Description |
 |---|---|
-| `TTyRibbon` | The ribbon itself, hosting pages |
-| `TTyRibbonPage` | One ribbon page |
-| `TTyRibbonGroup` | A group within a page |
-| `TTyRibbonAppMenu` | The top-left application (File) button |
+| `TTyRibbon` | The ribbon itself |
+| `TTyRibbonPage` | Ribbon page |
+| `TTyRibbonGroup` | Group within a page |
+| `TTyRibbonAppMenu` | Application (File) button |
 | `TTyRibbonQuickAccess` | Quick access toolbar |
-| `TTyRibbonGallery` | Gallery: a row of visual choices that expands into a popup grid |
-| `TTyRibbonBackstage` | Full-window backstage view (the screen behind File) |
+| `TTyRibbonGallery` | Gallery that expands into a popup grid |
+| `TTyRibbonBackstage` | Full-window backstage view |
 
 ### Images & hints · `TyControls Images` (9)
 
-| Control | What it is for |
+| Control | Description |
 |---|---|
-| `TTyIconFont` | Icon font: vector icons by codepoint or **name**, coloured by the theme |
+| `TTyIconFont` | Icon font: vector icons by codepoint or name, themed |
 | `TTyCharImage` | Uses one icon-font glyph as an image |
-| `TTyImage` | Image control with transparency and stretch modes |
+| `TTyImage` | Image control |
 | `TTyGlyphImageList` | Image list driven by an icon font |
-| `TTyImageCollection` | Multi-resolution image set; picks the right one per DPI |
-| `TTyVirtualImageList` | Generates a sized image list on demand from a collection / icon font; **it IS a standard `TCustomImageList`**, so it assigns to any control (native LCL included). Icons can be addressed by `ImageName`, so a reorder does not swap them |
-
-### A set of icons in the box -- Lucide
-
-If you would rather not go looking for a font and hand-copy a codepoint table, one `uses` gets
-you 2022 icons:
-
-```pascal
-uses tyControls.Icons.Lucide;
-...
-CharImage1.IconFont  := TyLucideFont;
-CharImage1.GlyphName := TyIconHouse;   // or just 'house'
-```
-
-- **The font is embedded** -- nothing to ship beside your executable, nothing to install.
-- **It costs nothing if you do not use it.** The font lives in that unit rather than an LCL
-  resource, so smart linking drops the whole thing. Measured: +979 KB when the unit is used,
-  +0 when it is not.
-- **No `Glyphs` to fill in.** The unit registers a name resolver, so any `TTyIconFont` whose
-  `FontFamily` is `'lucide'` resolves names. Your own `Glyphs` entry still wins if you want to
-  override one.
-- **It is a droppable image list too.** The `TTyLucideImageList` on the palette comes pre-wired
-  to the Lucide font -- drop it, assign it to any control's `Images`. Its name list starts empty:
-  add the icon names you use (or pick them in the icon browser) and each becomes an image.
-- **Licence is clean**: ISC, plus MIT for the Feather-derived icons. Nothing is asked of
-  **your users** -- no attribution on screen, no link, nothing at run time. Ship
-  [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) with your release and you are done.
-
-Twenty upstream names -- GitHub, Twitter and the other brand logos -- were removed in Lucide
-v1.0 but kept in the codepoint table. The generator checks whether the glyph has an outline and
-drops those names, so `HasGlyph('github')` answers False honestly instead of handing you a
-blank square.
-
+| `TTyImageCollection` | Multi-resolution image set, picked per DPI |
+| `TTyVirtualImageList` | Renders any size on demand; it is a standard `TCustomImageList`, assignable to any control, addressable by image name |
 | `TTyHint` | Themed tooltip |
 | `TTyBalloonHint` | Balloon tooltip with a pointer |
-| `TTyPopover` | Popover that **hosts controls**, not just text |
+| `TTyPopover` | Popover that hosts controls |
+
+**Built-in icons (Lucide)**: one `uses tyControls.Icons.Lucide` gives you 2,022 vector icons, referenced by name:
+
+```pascal
+CharImage1.IconFont  := TyLucideFont;
+CharImage1.GlyphName := 'house';
+```
+
+The font is embedded in the unit — nothing to ship or install, and it costs nothing if you don't use it. `TTyLucideImageList` on the palette works as a drop-in image list. Licensed ISC / MIT with no attribution required at runtime; just ship [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) with your release.
 
 ### Shapes & charts · `TyControls Shapes & Charts` (4)
 
-| Control | What it is for |
+| Control | Description |
 |---|---|
-| `TTyShape` | Vector shape: rectangle / circle / ellipse / triangle / diamond / rounded / line |
+| `TTyShape` | Vector shape: 15 kinds (rectangle / circle / triangle / diamond / star, …) plus custom polygons |
 | `TTyStarShape` | Star with a configurable point count |
 | `TTyArrow` | Directional arrow |
 | `TTyChart` | Chart: line / bar / pie |
 
 ### Dialogs · `TyControls Dialogs` (20)
 
-| Control | What it is for |
+| Control | Description |
 |---|---|
-| `TTyMessage` | Message box (information / warning / error / confirmation) |
-| `TTyInputDialog` | Single-line input dialog |
-| `TTyPasswordDialog` | Masked password dialog |
-| `TTyTextDialog` | Resizable multi-line text dialog |
-| `TTySelectValueDialog` | Pick-one-from-a-list dialog |
+| `TTyMessage` | Message box |
+| `TTyInputDialog` | Text input dialog |
+| `TTyPasswordDialog` | Password dialog |
+| `TTyTextDialog` | Multi-line text dialog |
+| `TTySelectValueDialog` | Pick-from-a-list dialog |
 | `TTySelectPathDialog` | Folder picker |
-| `TTyColorDialog` | Colour picker: HSV / RGB / CMYK / alpha, all two-way, plus a quick-pick swatch grid |
+| `TTyColorDialog` | Color picker: HSV / RGB / CMYK / alpha |
 | `TTyFontDialog` | Font dialog with live preview |
-| `TTyFindDialog` | Find dialog (modeless) |
-| `TTyReplaceDialog` | Find-and-replace dialog (modeless) |
+| `TTyFindDialog` | Find dialog |
+| `TTyReplaceDialog` | Find-and-replace dialog |
 | `TTyProgressDialog` | Progress dialog |
 | `TTyAboutDialog` | About box |
 | `TTyOpenDialog` | Open-file dialog |
@@ -405,70 +328,55 @@ blank square.
 | `TTySavePictureDialog` | Save-picture dialog |
 | `TTyOpenPreviewDialog` | Open dialog with a custom preview pane |
 | `TTySavePreviewDialog` | Save dialog with a custom preview pane |
-| `TTyNotification` | Corner toast that fades away on its own |
-| `TTyIconBrowserDialog` | Icon browser (searchable glyph grid; shows ImageIndex) |
+| `TTyNotification` | Corner toast |
+| `TTyIconBrowserDialog` | Icon browser |
 
-> Three controls do far more than one list line can say:
-> **[`TTyStringGrid`](docs/controls/grid.md)** — frozen rows/cols, million-row virtualization,
-> 16 built-in editors, Excel-style column filters, group subtotals, undo/redo, clipboard & CSV;
-> **[`TTyTreeView`](docs/controls/treeview.md)** — lazy-loaded virtual tree, multi-column
-> draggable header, tri-state checks, inline edit, node drag-drop, plus a designer-editable
-> `Items` node collection;
-> **[`TTyForm`](docs/controls/ttyform.md)** — borderless custom window with native resize,
-> system rounded corners and drop shadow.
+For the full capabilities of `TTyStringGrid`, `TTyTreeView`, and `TTyForm`, see their docs: [grid.md](docs/controls/grid.md) · [treeview.md](docs/controls/treeview.md) · [ttyform.md](docs/controls/ttyform.md).
 
 ---
 
 ## Themes
 
-Every built-in theme is **compiled into the binary**, so an app can switch by name with no
-`themes/` folder shipped (`TyBuiltinThemeNames` lists them all).
+Built-in themes are compiled into the binary, so apps switch by name without shipping a `themes/` folder:
 
-| Theme | About |
+| Theme | Description |
 |---|---|
-| `default` | neutral base with `@mode` light/dark in one file |
-| `system` | follows the OS light/dark + accent |
+| `default` | Neutral base, light and dark in one file |
+| `system` | Follows the OS light/dark and accent color |
 | `win11` `win10` `xp` `classic` `aero` | Windows generations |
 | `macos` `adwaita` `breeze` `ubuntu` | macOS and Linux desktops |
-| `material3` `fluent` `antdesign` `bootstrap` | design systems |
+| `material3` `fluent` `antdesign` `bootstrap` | Common design systems |
 | `office` | Office style |
-| `showcase` | a showpiece theme |
+| `showcase` | Showcase theme |
 
-Also `green` (an image theme, shipped as a file) and the curated palettes under
-`themes/palettes/`. All themes share one set of `:root` semantic variables, and `--accent` can
-be overridden at runtime — one theme, any brand colour.
+Also the image theme `green` (shipped as a file) and curated palettes under `themes/palettes/`. All themes share one set of semantic variables, and `--accent` can be overridden at runtime with any brand color.
 
-**Write your own theme** → [docs/themes.md](docs/themes.md) · **full `.tycss` reference** →
-[docs/tycss-reference.md](docs/tycss-reference.md)
+Writing your own theme: [docs/themes.md](docs/themes.md). The `.tycss` language reference: [docs/tycss-reference.md](docs/tycss-reference.md).
 
 ---
 
 ## Examples
 
-Each example is a standalone buildable project: `lazbuild examples/<name>/<project>.lpi`.
+Each example builds standalone: `lazbuild examples/<name>/<project>.lpi`.
 
-| Example | Shows |
+| Example | Contents |
 |---|---|
-| [antdesign](examples/antdesign/) | **TyControls Pro** — an Ant Design Pro-style admin (sider + 6 pages), runtime theming |
-| [demo](examples/demo/) | gallery: all controls + multiple themes + runtime language switch |
-| [grid](examples/grid/) | `TTyStringGrid` in six pages: freeze / million-row virtual / sort-filter-group / 16 editors / undo-redo |
-| [treeview](examples/treeview/) | `TTyTreeView`: million-node virtual tree / multi-column sort / tri-state checks / inline edit / node drag-drop |
-| [dialogs](examples/dialogs/) | all 11 custom-drawn dialogs (modal and modeless) |
-| [theming](examples/theming/) | a custom `.tycss` theme + runtime hot-swap |
-| [ribbon](examples/ribbon/) | Ribbon: page / group / app menu / QAT / Gallery / Backstage |
-| [containers](examples/containers/) | `TTyGridPanel` / `TTyExPanel` / `TTyScrollBox` layout containers |
-| [listview](examples/listview/) | `TTyListView`: five views / grouped collapse / 100k virtual |
-| [inputs](examples/inputs/) | rich input: numeric / currency / mask / URL / slider / calculator edits |
-| [shapes](examples/shapes/) | `TTyShape` / `TTyStarShape` / `TTyArrow` + `StyleOverride` |
-| [rtl](examples/rtl/) | right-to-left mirroring + bidirectional text: **two independent switches, direction and language (English / Arabic)**, so mirrored-English, unmirrored-Arabic and a genuine Arabic interface can each be inspected on their own; each area labelled with **what mirrors and what does not yet**, plus a page for the three controls that **deliberately** do not and for how a real application turns any of it on |
-| [icons](examples/icons/) | `TTyIconFont` icon font |
-| [transitions](examples/transitions/) | slide / fade transitions |
+| [antdesign](examples/antdesign/) | Ant Design Pro-style admin (sider + 6 pages), runtime theming |
+| [demo](examples/demo/) | Gallery: all controls + themes + language switching |
+| [grid](examples/grid/) | Data grid: freezing / million rows / sort-filter-group / 16 editors / undo-redo |
+| [treeview](examples/treeview/) | Virtual tree: million nodes / multi-column / checks / inline edit / drag-drop |
+| [dialogs](examples/dialogs/) | All custom-drawn dialogs |
+| [theming](examples/theming/) | A custom theme + runtime hot-swap |
+| [ribbon](examples/ribbon/) | The full Ribbon |
+| [containers](examples/containers/) | Layout containers |
+| [listview](examples/listview/) | List view: five views / grouping / 100k rows virtual |
+| [inputs](examples/inputs/) | Rich input controls |
+| [shapes](examples/shapes/) | Shape controls + `StyleOverride` |
+| [rtl](examples/rtl/) | Right-to-left mirroring and bidirectional text |
+| [icons](examples/icons/) | Icon fonts |
+| [transitions](examples/transitions/) | Slide / fade transitions |
 
-Other single-control examples (button / label / labels / edit / memo / combobox / listbox /
-spinedit / checkbox / radiobutton / panel / groupbox / scrollbar / progressbar / toggleswitch /
-trackbar / splitter / statusbar / toolbar / menu / calendar / datetimepicker / tabcontrol /
-tabset / chart / gauge / hint / htmllabel / imageview / filedialog / shell) are under
-[examples/](examples/).
+Thirty-plus single-control examples live under [examples/](examples/).
 
 ---
 
@@ -476,89 +384,38 @@ tabset / chart / gauge / hint / htmllabel / imageview / filedialog / shell) are 
 
 | Doc | Contents |
 |---|---|
-| [getting-started.md](docs/getting-started.md) | install, first form, loading/switching themes, HiDPI |
-| [controls/](docs/controls/) | per-control API (properties / events / states / theme keys / example) |
-| [themes.md](docs/themes.md) | writing your own theme |
-| [tycss-reference.md](docs/tycss-reference.md) | the `.tycss` language reference: properties, functions, selectors, merge order, typeKey catalogue |
-| [events.md](docs/events.md) | the tiered common-event convention |
-| [rtl.md](docs/rtl.md) | bidirectional text and right-to-left layout: what mirrors, what does not, how to switch it on |
-| [CHANGELOG.en.md](CHANGELOG.en.md) | changelog |
+| [getting-started.md](docs/getting-started.md) | Install, first form, themes, HiDPI |
+| [controls/](docs/controls/) | Per-control API reference |
+| [themes.md](docs/themes.md) | Writing your own theme |
+| [tycss-reference.md](docs/tycss-reference.md) | The `.tycss` language reference |
+| [events.md](docs/events.md) | Common event conventions |
+| [rtl.md](docs/rtl.md) | Bidirectional text and right-to-left layout |
+| [CHANGELOG.en.md](CHANGELOG.en.md) | Changelog |
 
 ---
 
 ## UI language
 
-TyControls' own UI strings (dialog buttons, ThemeLint diagnostics, …) use a resourcestring
-catalogue **independent of the host application**, shipped in English and Simplified Chinese.
-
-LCL's `SetDefaultLang` only loads **your app's** `.po`, not the library's — so add one more line:
+The library ships with English and Chinese UI strings. LCL's `SetDefaultLang` only loads your app's `.po`, so add one line for the library:
 
 ```pascal
 uses ..., LCLTranslator;
 
-SetDefaultLang('', LangDir);                                                       // your app
+SetDefaultLang('', LangDir);                                                        // your app
 TranslateUnitResourceStringsEx('', LangDir, 'tycontrols', 'tyControls.StrConsts');  // the library
-Application.CreateForm(TMainForm, MainForm);
 ```
 
-Deploy `languages/tycontrols.<lang>.po` next to your own `.po` in the `languages/` folder beside
-the executable — that `tycontrols.<lang>.po` is the library source's
-`languages/tycontrols.strconsts.<lang>.po` copied with the `.strconsts` **dropped from the file
-name** (why it must go: see "the file base name may not contain a dot" below). The library ships
-English and Simplified Chinese; add a language by translating a copy in the same format. **One
-file per language** covers the whole library — you do not ship a localization file per control.
-**An English deployment should ship `tycontrols.en.po` too** — it is nearly
-empty, but its language sentinel is what switches the calendar's and date picker's month and
-weekday names from "follow the OS locale" to "follow the app language"; without it those two
-controls keep showing OS-locale names under `--lang=en` (mechanism:
-[docs/controls/calendar.md](docs/controls/calendar.md) §8).
+Deploy `languages/tycontrols.<lang>.po` next to your own `.po` files. Two notes:
 
-> **The file's base name must not contain a dot.** The third argument must be `'tycontrols'` —
-> LCL's `FindLocaleFileName` calls `ChangeFileExt` on it, so `'tycontrols.strconsts'` would have
-> `.strconsts` stripped as an extension. The real dotted unit name `tyControls.StrConsts` goes in
-> the fourth argument.
->
-> To force a language (bypassing OS-locale detection), pass the language name in both places:
-> `SetDefaultLang('zh_CN', LangDir)` + `TranslateUnitResourceStringsEx('zh_CN', …)`.
+- The deployed file name is `tycontrols.<lang>.po`, renamed from the source's `tycontrols.strconsts.<lang>.po`. The third argument must be `'tycontrols'` (no dot — LCL strips everything after a dot as an extension); the real unit name `tyControls.StrConsts` goes in the fourth.
+- English deployments should ship `tycontrols.en.po` too; it is the switch that makes the calendar's and date picker's month and weekday names follow the app language.
 
 Full example: [examples/demo](examples/demo/).
 
 ---
 
-## Platform support & known limitations
-
-Fully functional on **Windows (Win32), Qt5 / Qt6, GTK2, and macOS (Cocoa)**. **GTK3** works too, but
-under a **Wayland** session it has a few known limitations rooted in Wayland's window model + LCL-GTK3
-upstream:
-
-- **Modal dialogs can't be dragged.** The color / font / etc. self-drawn dialogs can't be moved by
-  their title bar: LCL maps a borderless modal form as a Wayland `xdg_popup` (which has no move
-  request), and the surface type is baked in at creation, so the library can't work around it. This
-  is an upstream LCL-GTK3 limitation, and roughly matches normal Wayland behavior where modal dialogs
-  are compositor-placed and not movable.
-- **Menus don't dismiss when you click empty space.** A menu-bar menu closes on a focus change:
-  clicking a focusable control (a button, an edit, …) or pressing `Esc` dismisses it, but clicking a
-  bare panel / empty area does not (Wayland's grab model doesn't deliver such a click to the menu).
-  Dropdowns (ComboBox, …) were fixed with a compositor grab and dismiss on any outside click.
-- **Popup corners are square, not rounded.** Dropdowns, menus, balloons, etc. lose their rounded
-  corners on Wayland — there is no XShape, so the rounded mask can't be applied.
-- **Semi-transparent effects show the desktop through.** The library's own alpha-based effects —
-  **disabled-state dimming** and **Transparent labels / graphics** — show the desktop through on
-  Wayland instead of dimming against the form background. GTK3 gives a borderless form an alpha
-  (RGBA) window, so the compositor leaks those semi-transparent pixels through; Win32 / Qt are fine.
-  Multiple attempts (making all self-paint opaque, setting the window's opaque region, …) didn't fix
-  it at the library level — the root is in LCL-GTK3.
-
-If these matter to you: use an **X11 session** for GTK3, or use **Qt5 / Qt6** — none of the above
-affect them.
-
----
-
 ## License
 
-TyControls is licensed under the **modified LGPL** (the same as FPC RTL / LCL / BGRABitmap):
-you may statically link it into a closed-source commercial application and distribute that; if
-you modify the library's own source, the modified parts must be released under the same license.
+Modified LGPL, the same license as the FPC RTL, LCL, and BGRABitmap: you may statically link the library into closed-source commercial applications; modifications to the library's own source must be released under the same license.
 
-Full terms: [COPYING.modifiedLGPL.txt](COPYING.modifiedLGPL.txt) (the exception) and
-[COPYING.LGPL.txt](COPYING.LGPL.txt) (the LGPL body).
+Full terms: [COPYING.modifiedLGPL.txt](COPYING.modifiedLGPL.txt) and [COPYING.LGPL.txt](COPYING.LGPL.txt).
