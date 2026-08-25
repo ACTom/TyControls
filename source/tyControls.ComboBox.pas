@@ -1594,24 +1594,32 @@ end;
 function TTyComboBox.PopupHeightFor(ACount, APPI: Integer): Integer;
 var
   RowH, i, n: Integer;
+  S: TTyStyleSet;
 begin
   { Row height = the popup list's ItemHeight (a subclass may draw taller rich rows —
     e.g. TTyAdvancedComboBox uses 40); fall back to the TTyListBox default (24) before the
     popup list exists (headless calc). Visible rows = min(Items.Count, DropDownCount), each
-    scaled to the given PPI, + the 2px popup frame chrome. Single source of the sizing
+    scaled to the given PPI, + the list's vertical padding. Single source of the sizing
     formula — DropDown calls this so the live popup and the headless calc stay in sync.
     An explicit ItemHeight wins over both, and is readable before the popup exists.
 
     A SUM, not a multiplication: under a Variable Style each row answers for itself, so the
-    popup is exactly as tall as the rows it will show. With one shared height the sum is
-    n * scaled(RowH) + 2, which is the arithmetic this replaced, digit for digit. }
+    popup is exactly as tall as the rows it will show.
+
+    The padding, because the rows lay into the padding-inset content area
+    (TTyListBox.ViewportHeight): the popup form is borderless and the list fills it, so a
+    popup of bare rows leaves the list one row short of its own content and an exactly-N
+    dropdown grows a needless scrollbar. Resolved the same way DropDown resolves the list's
+    corner radius — every popup list answers 'TyListBox'. This replaced a flat 2px "frame"
+    allowance: the list's border draws INSIDE the padding band, so the padding covers it. }
   RowH := 24;
   if FItemHeight > 0 then
     RowH := FItemHeight
   else if FPopupList <> nil then
     RowH := FPopupList.ItemHeight;
   n := Min(ACount, FDropDownCount);
-  Result := 2;
+  S := ActiveController.Model.ResolveStyle('TyListBox', '', []);
+  Result := MulDiv(S.Padding.Top, APPI, 96) + MulDiv(S.Padding.Bottom, APPI, 96);
   for i := 0 to n - 1 do
     Inc(Result, MulDiv(MeasureRowHeight(FPopupList, i, RowH), APPI, 96));
 end;

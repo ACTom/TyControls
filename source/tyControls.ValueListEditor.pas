@@ -214,6 +214,10 @@ type
       a descendant that opens an editor has to be able to close one, and the guards drive the
       commit through here rather than by simulating a click somewhere else on the control. }
     procedure EndEdit(ACommit: Boolean; ARestoreFocus: Boolean = False);
+    { The height the enum/colour dropdown popup opens at for ARows rows. One formula for
+      both dropdowns, protected so the guards can read it headlessly -- the popup itself
+      needs a real window, which is exactly what a test run does not have. }
+    function DropdownHeightFor(ARows: Integer): Integer;
     { NOT MIRRORED, and this is the whole reason TTyListBox asks per class.
 
       Every other member of the list-box family hit-tests rows on Y alone, so mirroring the
@@ -1234,6 +1238,20 @@ begin
   FDropPopup.CornerRadiusLogical := ActiveController.Model.ResolveStyle('TyListBox', '', []).BorderRadius;
 end;
 
+function TTyValueListEditor.DropdownHeightFor(ARows: Integer): Integer;
+var
+  S: TTyStyleSet;
+begin
+  { Rows + the LIST's vertical padding. 'TyListBox' on purpose, exactly as
+    ConfigureDropCorners reads it: the popup's content is a real TTyListBox, and it lays
+    its rows into the padding-inset content area (ViewportHeight) -- a popup of bare rows
+    leaves that list one row short of its own content, so a dropdown showing all its
+    options grows a needless scrollbar. This replaced a flat 2px frame allowance; the
+    list's border draws inside the padding band, so the padding covers it. }
+  S := ActiveController.Model.ResolveStyle('TyListBox', '', []);
+  Result := ARows * Dp(ItemHeight) + Dp(S.Padding.Top) + Dp(S.Padding.Bottom);
+end;
+
 procedure TTyValueListEditor.BeginDropdown(AFlat: Integer; const AOptions: string);
 var cell: TRect; rows: Integer;
 begin
@@ -1260,7 +1278,7 @@ begin
   rows := FEnumList.Items.Count;
   if rows > 8 then rows := 8;
   if rows < 1 then rows := 1;
-  FDropPopup.Popup(FEditor, cell.Right - cell.Left, rows * Dp(ItemHeight) + Dp(2));
+  FDropPopup.Popup(FEditor, cell.Right - cell.Left, DropdownHeightFor(rows));
 end;
 
 { vekColor: a palette dropdown (swatch per colour) whose LAST row is a "more…" entry (clNone
@@ -1293,7 +1311,7 @@ begin
   rows := FColorList.Items.Count;
   if rows > 10 then rows := 10;
   if rows < 1 then rows := 1;
-  FDropPopup.Popup(FEditor, cell.Right - cell.Left, rows * Dp(ItemHeight) + Dp(2));
+  FDropPopup.Popup(FEditor, cell.Right - cell.Left, DropdownHeightFor(rows));
 end;
 
 { Shared commit for both dropdown lists (fired by OnChange and by OnMouseUp — the latter so a

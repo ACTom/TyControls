@@ -571,6 +571,9 @@ begin
 end;
 
 function TTyListBox.ViewportHeight: Integer;
+var
+  S: TTyStyleSet;
+  PPI: Integer;
 begin
   // Use Height rather than ClientHeight so the result is testable headlessly
   // (in headless LCL without a native handle, ClientHeight can lag behind SetBounds).
@@ -581,6 +584,14 @@ begin
     it. This is the vertical half of the gutter rule -- RowContentBounds is the other. }
   if (FHScrollBar <> nil) and FHScrollBar.Visible then
     Dec(Result, ScrollBarThickness);
+  { The theme's vertical padding comes off it too: RenderTo lays rows into the
+    padding-inset content area, so a viewport measured to the control edge counts rows
+    the paint has nowhere to put -- scrolled to the bottom, the last row straddled the
+    content edge and was clipped in the bottom padding band. Each side scaled
+    SEPARATELY, the same per-side rounding RenderTo's P.Scale applies. }
+  S := CurrentStyle;
+  PPI := Font.PixelsPerInch;
+  Dec(Result, MulDiv(S.Padding.Top, PPI, 96) + MulDiv(S.Padding.Bottom, PPI, 96));
   if Result < 1 then Result := 1;
 end;
 
@@ -915,7 +926,7 @@ end;
 
 procedure TTyListBox.UpdateScrollBar;
 var
-  VR, MaxPos, MaxTop, pass, thick, availH, viewW, extentW, step, padW, PPI,
+  VR, MaxPos, MaxTop, pass, thick, availH, viewW, extentW, step, padW, padV, PPI,
   maxH: Integer;
   wantV, wantH: Boolean;
   S: TTyStyleSet;
@@ -931,6 +942,7 @@ begin
     the two can differ by a pixel -- which would put the decision "is there an overhang" and
     the answer "how big is it" a pixel apart, from two copies of one formula. }
   padW := MulDiv(S.Padding.Left, PPI, 96) + MulDiv(S.Padding.Right, PPI, 96);
+  padV := MulDiv(S.Padding.Top, PPI, 96) + MulDiv(S.Padding.Bottom, PPI, 96);
   extentW := MulDiv(FScrollWidth, PPI, 96);
   { --- settle the TWO bars together ----------------------------------------------------
     Each bar's gutter comes out of the other's viewport, so one pass can decide "no
@@ -944,7 +956,12 @@ begin
     viewW := Width - padW;
     if wantV then Dec(viewW, thick);
     wantH := (FScrollWidth > 0) and (extentW > viewW);
-    availH := Height;
+    { The same height ViewportHeight will answer once the bars are committed -- re-derived
+      here (padding off, then the horizontal gutter) because the bars' Visible still holds
+      last time's state inside the settle loop. Leave the padding on and rows that only fit
+      the padding band read as fitting: an exactly-full box decides "no bar" and its last
+      row is clipped with no way to ever scroll to it. }
+    availH := Height - padV;
     if wantH then Dec(availH, thick);
     if availH < 1 then availH := 1;
     wantV := FItems.Count > RowsFittingIn(FTopIndex, availH);

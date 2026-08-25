@@ -2,7 +2,7 @@ unit test.parity.valuelist;
 {$mode objfpc}{$H+}
 interface
 uses Classes, SysUtils, TypInfo, LCLType, Controls, Forms, fpcunit, testregistry,
-  tyControls.ValueListEditor;
+  tyControls.ListBox, tyControls.ValueListEditor;
 type
   { Drives the protected key handler and the protected editor-close, so the guards below exercise
     the SAME paths a user's keystroke does rather than calling the data API underneath them. }
@@ -11,6 +11,7 @@ type
     procedure Press(AKey: Word; AShift: TShiftState);
     procedure Commit;    // Enter / focus-out: apply the editor's text
     procedure Cancel;    // Escape: throw it away
+    function DropHeightFor(ARows: Integer): Integer;   // the enum/colour popup's height
   end;
 
   { LCL / Delphi API-parity guards for TTyValueListEditor's two value indexers.
@@ -68,6 +69,7 @@ type
     procedure TestVisibleRowCountShrinksWithTheViewport;
     procedure TestVisibleRowCountCountsEveryRowWhenTheyAllFit;
     procedure TestDisplayRowCountCountsExpandedDescendants;
+    procedure TestDropdownHeightHoldsAllItsRows;
   end;
 
   { The two members whose SHAPE differed from LCL's.
@@ -385,6 +387,35 @@ begin
   finally e.Free; end;
 end;
 
+procedure TValueListViewportMetricTest.TestDropdownHeightHoldsAllItsRows;
+var
+  d: TValueListKeyDriver;
+  l: TTyListBox;
+  h, i: Integer;
+begin
+  { The enum/colour dropdown's contract with its content: the popup form is borderless and
+    the TTyListBox fills it, so the height BeginDropdown computes IS the list's height --
+    and a dropdown showing all N of its options must show them whole with nothing to
+    scroll. The list lays rows into its padding-inset content area, so a height of bare
+    rows (+ a flat frame allowance) leaves it one row short and every such dropdown grows
+    a needless scrollbar. Same contract TTyComboBox pins for its popup. }
+  d := TValueListKeyDriver.Create(nil);
+  l := TTyListBox.Create(nil);
+  try
+    d.Font.PixelsPerInch := 96;
+    h := d.DropHeightFor(5);
+    l.Font.PixelsPerInch := 96;
+    for i := 1 to 5 do l.Items.Add('option ' + IntToStr(i));
+    l.SetBounds(0, 0, 120, h);
+    AssertEquals('the dropdown height shows every one of the 5 rows', 5, l.VisibleRows);
+    l.TopIndex := 999;
+    AssertEquals('and leaves nothing to scroll to', 0, l.TopIndex);
+  finally
+    l.Free;
+    d.Free;
+  end;
+end;
+
 { ------------------------------------------------------------ InsertRow / RowCount ---- }
 
 procedure TValueListRowApiTest.TestInsertRowReturnsTheIndexAndCanInsertNotAppend;
@@ -479,6 +510,11 @@ end;
 procedure TValueListKeyDriver.Cancel;
 begin
   EndEdit(False);
+end;
+
+function TValueListKeyDriver.DropHeightFor(ARows: Integer): Integer;
+begin
+  Result := DropdownHeightFor(ARows);
 end;
 
 procedure TValueListKeyOptionsTest.OnKeyRenamed(Sender: TObject; ARow: TTyValueRow);

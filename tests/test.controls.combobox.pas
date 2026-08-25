@@ -84,6 +84,7 @@ type
     procedure TestComboOnSelectOnUserPick;
     { Task 12 (properties parity): DropDownCount / Sorted / MaxLength / CharCase }
     procedure TestDropDownCountSizesPopup;
+    procedure TestPopupHeightHoldsExactlyDropDownCountRows;
     procedure TestSortedSortsAndKeepsSelection;
     procedure TestMaxLengthCharCaseRoundTrip;
   end;
@@ -573,6 +574,38 @@ begin
   hFew := FCombo.PopupHeight(96);
   AssertEquals('popup clamps to 2 item rows when fewer items than DropDownCount',
     hFull - 6 * rowH, hFew);
+end;
+
+{ The contract between the popup sizer and the list's own scroll geometry, stated as the
+  user sees it: a dropdown holding EXACTLY DropDownCount items gets a popup in which the
+  list shows every one of them and has nothing to scroll. The two sides compute height
+  independently (PopupHeightFor here, ViewportHeight in TTyListBox), so either one
+  changing what it does about the theme's padding without the other breaks this -- the
+  exactly-N popup grows a needless scrollbar, or clips its own last row. }
+procedure TTyComboBoxTest.TestPopupHeightHoldsExactlyDropDownCountRows;
+var
+  h, i: Integer;
+  List: TTyListBox;
+begin
+  FCombo.Items.Clear;
+  for i := 1 to 8 do
+    FCombo.Items.Add('Item' + IntToStr(i));
+  FCombo.ItemHeight := 24;
+  AssertEquals('the fixture really is the exactly-N shape', 8, FCombo.DropDownCount);
+  h := FCombo.PopupHeight(96);
+
+  { The popup form is borderless and the list fills it (alClient), so the list's height
+    IS the computed popup height -- lay a list out at it and read the geometry back. }
+  List := TTyListBox.Create(FForm);
+  List.Parent := FForm;
+  List.Font.PixelsPerInch := 96;
+  List.ItemHeight := 24;
+  for i := 1 to 8 do
+    List.Items.Add('Item' + IntToStr(i));
+  List.SetBounds(0, 0, 120, h);
+  AssertEquals('the popup height shows every one of the 8 rows', 8, List.VisibleRows);
+  List.TopIndex := 999;
+  AssertEquals('and leaves nothing to scroll to', 0, List.TopIndex);
 end;
 
 { Task 12 DEEP-FLAG: Sorted reorders Items alphabetically (case-insensitive) and

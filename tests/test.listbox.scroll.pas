@@ -18,8 +18,8 @@ interface
 uses
   Classes, SysUtils, Types, Graphics, Forms, Controls, LCLType, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.ListBox,
-  tyControls.ScrollBar;
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller,
+  tyControls.ListBox, tyControls.ScrollBar;
 
 type
   { Reaches the protected geometry so a claim can be pinned on the numbers the PAINT uses,
@@ -115,6 +115,23 @@ type
     procedure TestPaintedRowsMatchItemRect;
     procedure TestZeroHeightAnswerCannotHangThePaint;
     procedure TestScrollIntoViewRevealsTheRowItWasAskedFor;
+  end;
+
+  { The two-truths bug TTyMemo just had, on the list box: ViewportHeight counted rows
+    against the control's FULL height while RenderTo lays them into the padding-inset
+    content area. Every other test here runs the environment theme, whose 2px padding
+    happens to leave 100px boxes on exact row boundaries -- these run the product shape
+    (4px padding) at heights where the two formulas actually disagree. }
+  TListBoxPaddingTest = class(TTestCase)
+  private
+    FForm: TForm;
+    FCtl: TTyStyleController;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestMaxTopIndexRespectsPadding;
+    procedure TestScrollBarAppearsWhenPaddingOverflowsTheRows;
   end;
 
 implementation
@@ -673,7 +690,93 @@ begin
     (r.Top >= 0) and (r.Bottom <= 100));
 end;
 
+{ =================== theme padding vs the viewport ===================================== }
+
+procedure TListBoxPaddingTest.SetUp;
+begin
+  FForm := TForm.CreateNew(nil);
+  FCtl := TTyStyleController.Create(nil);
+  { border-width 0 so the render probe below has no chrome clip to reason about: the
+    only vertical inset left is the padding itself. }
+  FCtl.LoadThemeCss('TyListBox { background:#101010; color:#F0F0F0; ' +
+    'border-width:0px; padding:4px; }');
+end;
+
+procedure TListBoxPaddingTest.TearDown;
+begin
+  FreeAndNil(FForm);     // the controls first: they hold a reference to the controller
+  FreeAndNil(FCtl);
+end;
+
+procedure TListBoxPaddingTest.TestMaxTopIndexRespectsPadding;
+var
+  l: TEdgeMarkList;
+  Bmp: TBitmap;
+  i, y: Integer;
+begin
+  { 4px padding top+bottom; 84px of box holds a 76px content area, so FOUR 16px rows fit
+    (64), not five (80). Counting against the full height says five -- and then, scrolled to
+    the bottom, the fifth row paints past the content edge into the bottom padding band. }
+  l := TEdgeMarkList.Create(FForm);
+  l.Parent := FForm;
+  l.Controller := FCtl;
+  l.Font.PixelsPerInch := 96;
+  l.ItemHeight := 16;
+  for i := 0 to 29 do l.Items.Add('row ' + IntToStr(i));
+  l.SetBounds(0, 0, 160, 84);
+
+  AssertEquals('VisibleRows counts rows that fit the padding-inset content area',
+    4, l.VisibleRows);
+  l.TopIndex := 999;
+  AssertEquals('TopIndex stops where the last rows fill the CONTENT area, not the box',
+    26, l.TopIndex);
+
+  { And the paint agrees: at the bottom, the last whole row ends at 4 + 4*16 = 68; the
+    strip below it (the would-be fifth row plus the bottom padding) holds no row ink. }
+  Bmp := TBitmap.Create;
+  try
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(160, 84);
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.Brush.Style := bsSolid;
+    Bmp.Canvas.FillRect(0, 0, 160, 84);
+    l.Render(Bmp.Canvas, Rect(0, 0, 160, 84), 96);
+    AssertTrue('scrolled to the bottom, the top row drew its marker (anti-vacuity)',
+      FirstGreenX(Bmp, 12, 160) >= 0);
+    for y := 68 to 83 do
+      AssertEquals(Format('no row ink below the last whole row (y=%d)', [y]),
+        -1, FirstGreenX(Bmp, y, 160));
+  finally
+    Bmp.Free;
+  end;
+end;
+
+procedure TListBoxPaddingTest.TestScrollBarAppearsWhenPaddingOverflowsTheRows;
+var
+  l: TScrollAccess;
+  i: Integer;
+begin
+  { The severe half of the same formula: five 20px rows in a 100px box LOOK like an exact
+    fit, but the padding leaves only 92px of content area -- the fifth row does not fit.
+    A bar decision made against the full height answers "no bar", and with no bar there is
+    no way to ever see that row. }
+  l := TScrollAccess.Create(FForm);
+  l.Parent := FForm;
+  l.Controller := FCtl;
+  l.Font.PixelsPerInch := 96;
+  l.ItemHeight := 20;
+  for i := 1 to 5 do l.Items.Add('row ' + IntToStr(i));
+  l.SetBounds(0, 0, 160, 100);
+  l.CallUpdateScrollBar;
+
+  AssertNotNull('rows past the content area raise the vertical bar', l.VBar);
+  AssertTrue('and it is visible', l.VBar.Visible);
+  AssertEquals('four whole rows fit the content area', 4, l.VBar.PageSize);
+  AssertEquals('and the range reaches the fifth', 1, l.VBar.Max);
+end;
+
 initialization
   RegisterTest(TListBoxHScrollTest);
   RegisterTest(TListBoxVariableRowTest);
+  RegisterTest(TListBoxPaddingTest);
 end.

@@ -196,9 +196,12 @@ begin
     c.Items.AddStrings(['a', 'b', 'c']);
     c.DropDownCount := 3;
     c.ItemHeight := 40;
-    { 3 rows x 40 + the 2px popup frame. Pinning the arithmetic, not just the setter:
-      an ItemHeight the popup sizer ignores is the defect this pass exists to remove. }
-    AssertEquals('ItemHeight sizes the popup', 3 * 40 + 2, c.ComputePopupHeightForTest(96));
+    { 3 rows x 40 + the list's vertical padding (2px top + 2px bottom under the environment
+      theme) -- the popup's rows lay into the padding-inset content area, so the popup must
+      be rows + padding tall or its own last row would not fit. Pinning the arithmetic, not
+      just the setter: an ItemHeight the popup sizer ignores is the defect this pass exists
+      to remove. }
+    AssertEquals('ItemHeight sizes the popup', 3 * 40 + 4, c.ComputePopupHeightForTest(96));
   finally c.Free; end;
 end;
 
@@ -210,7 +213,7 @@ begin
     c.Items.AddStrings(['a', 'b']);
     AssertEquals('unset by default', 0, c.ItemHeight);
     { 0 keeps the themed --item-height (24 headless), so a skin still owns row height. }
-    AssertEquals('theme row height still used', 2 * 24 + 2, c.ComputePopupHeightForTest(96));
+    AssertEquals('theme row height still used', 2 * 24 + 4, c.ComputePopupHeightForTest(96));
   finally c.Free; end;
 end;
 
@@ -1960,17 +1963,19 @@ var
 begin
   { The popup's own height. With one shared height it is a multiplication and always was;
     with per-row heights it must be a SUM, or the drop-down opens the wrong size and clips
-    its own last row. Three rows: tall + short + tall, + the 2px frame chrome. }
+    its own last row. Three rows: tall + short + tall, + the list's 4px vertical padding
+    (the environment theme's 2px per side -- the rows lay into the padding-inset content
+    area, so the padding is part of the popup's height, not decoration around it). }
   cFixed := MakeCombo(csDropDownList, nil);
   cFixed.ItemHeight := 24;
-  AssertEquals('the uniform arithmetic is unchanged: 3 x 24 + 2',
-    3 * 24 + 2, cFixed.ComputePopupHeightForTest(96));
+  AssertEquals('the uniform arithmetic is unchanged: 3 x 24 + padding',
+    3 * 24 + 4, cFixed.ComputePopupHeightForTest(96));
 
   cVar := MakeCombo(csOwnerDrawVariable, @HandleDrawSilent);
   cVar.ItemHeight := 24;
   cVar.OnMeasureItem := @HandleMeasureTallEvenRows;
   AssertEquals('and the variable one sums what the handler answered',
-    MeasTall + MeasShort + MeasTall + 2, cVar.ComputePopupHeightForTest(96));
+    MeasTall + MeasShort + MeasTall + 4, cVar.ComputePopupHeightForTest(96));
 end;
 
 procedure TComboOwnerDrawTest.TestAssigningTheMeasureHandlerRepaints;
