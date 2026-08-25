@@ -149,9 +149,9 @@ procedure TTyHSVSquare.ApplyXY(X, Y: Integer);
 var sv: TPointF;
 begin sv := TyHSVAreaToSV(Point(X, Y), ClientRect); FSat := sv.X; FVal := sv.Y; Invalidate; DoChange; end;
 
-// TODO(perf): the SV gradient only depends on FHue — cache the per-hue bitmap and redraw
-// just the ring on S/V change if a larger/resizable square is ever exposed. Fine at the
-// fixed 180px size for now.
+// Perf note, deliberate non-cache: the SV gradient depends only on FHue, so a per-hue
+// cached bitmap (redrawing just the ring on S/V changes) becomes worthwhile only if this
+// square is ever made larger or resizable. At the fixed 180px a full repaint is cheap.
 { The chromatic field itself is DATA — every pixel is the colour it stands for, so it is
   computed, never themed. The two things drawn ON TOP of it are chrome and must come from
   the theme: the marker ring and the field's border. They used to be a hardcoded white
