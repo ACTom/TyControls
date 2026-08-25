@@ -3013,14 +3013,19 @@ function TTyMemo.BuildVisualRows(AContentWidth, APPI: Integer): TTyVisualRowArra
 //   - from a segment StartCol, find Fit = the largest col whose width relative to
 //     StartCol still fits AContentWidth (at least StartCol+1 so progress is
 //     guaranteed even for an over-long single glyph);
-//   - prefer to break at the last WORD boundary in (StartCol, Fit] so we cut at a
-//     space, not mid-word; if there is no boundary past StartCol within the fit
-//     (one long word / a CJK run), char-break at Fit.
+//   - prefer the LATEST legal break in (StartCol, Fit]: the last word boundary
+//     (cut at a space, not mid-word), or the last CJK-adjacent position — every
+//     spot beside a CJK codepoint is breakable (each glyph is its own atom, the
+//     TyWrapTextCJK rule), which is what packs "latin CJK-run" rows full instead
+//     of emitting a stub up to the space, and moves a Latin word after a CJK run
+//     to the next row whole instead of splitting it;
+//   - with no legal break past StartCol within the fit, char-break at Fit.
 // An empty logical line (or a degenerate non-positive width) emits one row.
 var
-  li, n, Len, StartCol, Fit, BreakCol, Cand, BaseX: Integer;
+  li, n, Len, StartCol, Fit, BreakCol, Cand, BaseX, bp, cl, cpLen, pcol: Integer;
   Line: string;
   Widths: TTyIntArray;
+  CPs: array of Cardinal;
 
   procedure AddRow(ALine, ASC, AEC: Integer);
   begin
@@ -3050,6 +3055,16 @@ begin
     end;
 
     Widths := MeasureLineWidths(Line, APPI);
+    // Decode the line's codepoints once (O(Len)) for the CJK-adjacent break rule
+    // below — probing per candidate with UTF8Copy would be quadratic on long lines.
+    SetLength(CPs, Len);
+    bp := 1; cl := 0;
+    while (bp <= Length(Line)) and (cl < Len) do
+    begin
+      CPs[cl] := UTF8CodepointToUnicode(@Line[bp], cpLen);
+      if cpLen < 1 then cpLen := 1;
+      Inc(bp, cpLen); Inc(cl);
+    end;
     StartCol := 0;
     while StartCol < Len do
     begin
@@ -3078,10 +3093,22 @@ begin
         Cand := NextWordBoundary(Line, Cand);
         if Cand <= BreakCol then Break;   // no further progress (defensive)
       end;
+      // CJK: every position beside a CJK codepoint is a legal break too. Take the
+      // LATEST legal break of the two kinds — a CJK-adjacent break at/near Fit beats
+      // an early space (no stub rows before a CJK run), and a break after the last
+      // fitting CJK glyph beats char-breaking inside the Latin word that follows.
+      // Pure-Latin lines find no CJK candidate and keep today's rows byte-identical.
+      for pcol := Fit downto StartCol + 1 do
+        if TyIsCJKCodepoint(CPs[pcol - 1])
+           or ((pcol < Len) and TyIsCJKCodepoint(CPs[pcol])) then
+        begin
+          if pcol > BreakCol then BreakCol := pcol;
+          Break;
+        end;
       if (BreakCol > StartCol) and (BreakCol <= Fit) then
-        AddRow(li, StartCol, BreakCol)    // break at the word boundary
+        AddRow(li, StartCol, BreakCol)    // break at the latest legal boundary
       else
-        AddRow(li, StartCol, Fit);        // char-break (over-long word / CJK)
+        AddRow(li, StartCol, Fit);        // char-break (one unbreakable over-long word)
       StartCol := Result[n - 1].EndCol;
     end;
   end;

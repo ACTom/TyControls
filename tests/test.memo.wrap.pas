@@ -58,6 +58,7 @@ type
     procedure TestToggleWrapReflowsThenRestores;       // (d)
     procedure TestSingleFlipScrollbarRangeCoversAllRows; // (e)
     procedure TestFirstCreationScrollbarRangeCoversAllRows; // (e2)
+    procedure TestWrapBreaksAtCJKNotEarlySpace;        // (f)
   end;
 
 implementation
@@ -533,6 +534,46 @@ begin
   // Without the fix this is undersized by the SBWidth-induced extra row(s).
   AssertEquals('first-creation: scrollbar Max == settled TotalVisualRows - VisibleRows',
     TotalNarrow - VR, SB.Max);
+end;
+
+procedure TTyMemoWrapTest.TestWrapBreaksAtCJKNotEarlySpace;
+// Mixed Latin + CJK wrapping. CJK glyphs break anywhere (each glyph is its own atom -- the
+// TyWrapTextCJK rule TTyLabel already follows), so a fitting row must PACK them. The old
+// breaker only knew word boundaries: "AB <long CJK run>" broke at the space and emitted a
+// three-codepoint stub row, and a Latin word following a CJK run was split mid-word because
+// the run offered it no boundary. Expectations are computed from measured widths, so the
+// test is font-independent.
+var
+  Line, CjkRun: string;
+  W: TTyIntArray;
+  Rows: TTyVisualRowArray;
+  i, CW: Integer;
+begin
+  SetUpMemo('TyMemo { background:#101010; color:#F0F0F0; padding:0px; font-size:14px; }', 300, 120);
+  FMemo.ProbeSetWordWrap(True);
+  CjkRun := '';
+  for i := 1 to 30 do CjkRun := CjkRun + '中';
+
+  // (1) Latin prefix + long CJK run: the row must fill to the fit, not stop at the space.
+  Line := 'AB ' + CjkRun;
+  LoadLines([Line]);
+  W := FMemo.ProbeMeasureLineWidths(Line, 96);
+  CW := W[10];   // exactly the first 10 codepoints fit ('AB ' + 7 CJK)
+  Rows := FMemo.ProbeBuildVisualRows(CW, 96);
+  AssertTrue('scenario 1 needs at least one row', Length(Rows) > 0);
+  AssertEquals('first row packs CJK up to the fit instead of a stub ending at the space',
+    10, Rows[0].EndCol);
+
+  // (2) CJK run + Latin word: the break lands BEFORE the word (after the last CJK glyph
+  // that fits), so the word moves to the next row whole instead of being split mid-word.
+  Line := Copy(CjkRun, 1, 6 * Length('中')) + 'hello' + Copy(CjkRun, 1, 6 * Length('中'));
+  LoadLines([Line]);
+  W := FMemo.ProbeMeasureLineWidths(Line, 96);
+  CW := W[8];    // fits 6 CJK + 'he' -- the fit lands mid-word
+  Rows := FMemo.ProbeBuildVisualRows(CW, 96);
+  AssertTrue('scenario 2 needs at least one row', Length(Rows) > 0);
+  AssertEquals('break lands before the Latin word (after the last CJK), not inside it',
+    6, Rows[0].EndCol);
 end;
 
 initialization

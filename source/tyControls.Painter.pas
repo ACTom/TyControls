@@ -263,6 +263,11 @@ function TyEffectiveFontSizeLogical(AFontSizeLogical: Integer): Integer;
   measures the drawn glyphs. Shared by TTyLabel and TTyNotification. }
 procedure TyWrapTextCJK(const AText: string; AMaxWidthPx: Integer;
   ACanvas: TCanvas; ALines: TStrings);
+{ True for codepoints that participate in inter-character line breaking: Han, kana, hangul,
+  bopomofo, CJK symbols/punctuation and the fullwidth forms. This is the classifier
+  TyWrapTextCJK breaks on (each such glyph is its own wrap atom); exported so other wrap
+  implementations (TTyMemo's visual-row builder) break at the same codepoints. }
+function TyIsCJKCodepoint(AValue: Cardinal): Boolean;
 { Split AText on the line breaks the author wrote — CR, LF and CRLF alike — keeping a blank
   line between paragraphs as content and never returning nothing (an empty caption is one
   empty line, so it still measures as one line tall).
@@ -646,19 +651,10 @@ var
     Result := len;
   end;
 
-  { A codepoint that participates in inter-character line breaking: Han, kana,
-    hangul, bopomofo, CJK symbols/punctuation and the fullwidth forms. }
+  { The shared unit-level classifier (TyIsCJKCodepoint), aliased for brevity. }
   function IsCJKChar(AValue: Cardinal): Boolean;
   begin
-    Result :=
-      ((AValue >= $1100) and (AValue <= $11FF)) or   // Hangul Jamo
-      ((AValue >= $2E80) and (AValue <= $A4CF)) or   // radicals..CJK punct..kana..Ext-A..Yi
-      ((AValue >= $AC00) and (AValue <= $D7A3)) or   // Hangul syllables
-      ((AValue >= $F900) and (AValue <= $FAFF)) or   // CJK compat ideographs
-      ((AValue >= $FE30) and (AValue <= $FE4F)) or   // CJK compat forms
-      ((AValue >= $FF00) and (AValue <= $FF60)) or   // fullwidth forms
-      ((AValue >= $FFE0) and (AValue <= $FFE6)) or   // fullwidth signs
-      ((AValue >= $20000) and (AValue <= $2FA1F));   // CJK Ext B-F (SMP)
+    Result := TyIsCJKCodepoint(AValue);
   end;
 
   { Greedily append one atom (a western word or a single CJK glyph) to the
@@ -764,6 +760,20 @@ end;
   at the same time. The split itself is TySplitTextLines, shared with the no-wrap path.
 
   An empty segment is kept as an empty line: a blank line between paragraphs is content. }
+
+function TyIsCJKCodepoint(AValue: Cardinal): Boolean;
+begin
+  Result :=
+    ((AValue >= $1100) and (AValue <= $11FF)) or   // Hangul Jamo
+    ((AValue >= $2E80) and (AValue <= $A4CF)) or   // radicals..CJK punct..kana..Ext-A..Yi
+    ((AValue >= $AC00) and (AValue <= $D7A3)) or   // Hangul syllables
+    ((AValue >= $F900) and (AValue <= $FAFF)) or   // CJK compat ideographs
+    ((AValue >= $FE30) and (AValue <= $FE4F)) or   // CJK compat forms
+    ((AValue >= $FF00) and (AValue <= $FF60)) or   // fullwidth forms
+    ((AValue >= $FFE0) and (AValue <= $FFE6)) or   // fullwidth signs
+    ((AValue >= $20000) and (AValue <= $2FA1F));   // CJK Ext B-F (SMP)
+end;
+
 procedure TyWrapTextCJK(const AText: string; AMaxWidthPx: Integer;
   ACanvas: TCanvas; ALines: TStrings);
 var
