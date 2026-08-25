@@ -637,9 +637,7 @@ type
     procedure WriteClipboardText(const S: string); virtual;
     // Headless focus override (see FForceFocused). Triggers a repaint.
     procedure SetForceFocused(AValue: Boolean);
-    // Visible-line count for the current bounds at APPI (>= 1).
-    function VisibleLineCount(APPI: Integer): Integer;
-    // Whole visible rows = Height div LineHeight(Font.PixelsPerInch), floored 1.
+    // Whole visible rows that fit the padding-inset content area, floored 1.
     // Uses Height (not ClientHeight) per the headless ListBox note — for this
     // borderless control Height = ClientHeight at runtime, but ClientHeight can
     // lag SetBounds in headless tests without a native handle.
@@ -2073,22 +2071,6 @@ begin
     FOnSelectionChange(Self);
 end;
 
-function TTyMemo.VisibleLineCount(APPI: Integer): Integer;
-var
-  S: TTyStyleSet;
-  ContentH, LH: Integer;
-begin
-  S := CurrentStyle;
-  // Content height = client height minus top+bottom padding (scaled).
-  ContentH := ClientHeight - MulDiv(S.Padding.Top, APPI, 96)
-    - MulDiv(S.Padding.Bottom, APPI, 96);
-  LH := LineHeight(APPI);
-  if LH < 1 then LH := 1;
-  Result := ContentH div LH;
-  if Result < 1 then
-    Result := 1;
-end;
-
 procedure TTyMemo.EnsureCaretLineVisible(APPI: Integer);
 var
   VR, MaxTop, CaretVR: Integer;
@@ -2213,15 +2195,24 @@ end;
 
 function TTyMemo.VisibleRows: Integer;
 var
-  LH: Integer;
+  S: TTyStyleSet;
+  PPI, LH: Integer;
 begin
-  LH := LineHeight(Font.PixelsPerInch);
+  PPI := Font.PixelsPerInch;
+  LH := LineHeight(PPI);
   if LH < 1 then LH := 1;
   // Use Height rather than ClientHeight so the result is testable headlessly
   // (in headless LCL without a native handle, ClientHeight can lag behind
   // SetBounds). For this borderless control Height = ClientHeight at runtime.
-  // Subtract the horizontal scrollbar's strip when it's showing.
-  Result := (Height - HScrollBarHeight) div LH;
+  // Count rows against the CONTENT area — the same rect RenderTo lays rows into:
+  // subtract the horizontal scrollbar's strip and the theme's vertical padding.
+  // Counting against the full height made MaxTopLine one row short whenever
+  // Height mod LH fell below the padding, so the bottom row could never scroll
+  // fully into view — its lower half stayed clipped in the bottom padding band.
+  S := CurrentStyle;
+  Result := (Height - HScrollBarHeight
+    - MulDiv(S.Padding.Top, PPI, 96)
+    - MulDiv(S.Padding.Bottom, PPI, 96)) div LH;
   if Result < 1 then Result := 1;
 end;
 
@@ -2321,11 +2312,16 @@ end;
 
 procedure TTyMemo.UpdateScrollBar;
 var
-  PPI, LH, VR, MaxPos, MaxTop, Total, SBW, viewW, hMax, fw: Integer;
+  PPI, LH, VR, MaxPos, MaxTop, Total, SBW, viewW, hMax, fw, PadV: Integer;
+  StyleS: TTyStyleSet;
   WasVisible, WantV, WantH: Boolean;
 begin
   PPI := Font.PixelsPerInch;
   LH := LineHeight(PPI); if LH < 1 then LH := 1;
+  // Vertical padding, scaled: rows are laid into the padding-inset content area
+  // (RenderTo), so every row count here must subtract it — same as VisibleRows.
+  StyleS := CurrentStyle;
+  PadV := MulDiv(StyleS.Padding.Top, PPI, 96) + MulDiv(StyleS.Padding.Bottom, PPI, 96);
   SBW := MulDiv(ActiveController.Metric('--scrollbar-size', TyScrollbarSize), PPI, 96);   // both bars' thickness
   // Frame inset: the scrollbars sit flush to the edge and would cover the border + focus ring
   // DrawFrame paints at the OUTER edge (the memo's ring looked clipped by the vbar). Pull both
@@ -2337,7 +2333,7 @@ begin
   //         driven and effectively independent of the hbar). Applying it now makes ContentWidthFor
   //         reflect the real vbar, so the hbar's show-test and its scroll range below use ONE
   //         consistent width (no stale-vbar transient). ----
-  VR := Height div LH; if VR < 1 then VR := 1;
+  VR := (Height - PadV) div LH; if VR < 1 then VR := 1;
   case FScrollBars of
     ssVertical, ssBoth: WantV := True;
     ssAutoVertical, ssAutoBoth: WantV := Total > VR;
@@ -2392,7 +2388,7 @@ begin
     end;
 
   // ---- 3) Final visible-row count (the hbar steals a row), clamp FTopRow, set the vbar range. ----
-  VR := (Height - (Ord(WantH) * SBW)) div LH; if VR < 1 then VR := 1;
+  VR := (Height - (Ord(WantH) * SBW) - PadV) div LH; if VR < 1 then VR := 1;
   MaxTop := Total - VR; if MaxTop < 0 then MaxTop := 0;
   if FTopRow > MaxTop then FTopRow := MaxTop;
   if FTopRow < 0 then FTopRow := 0;
@@ -2591,7 +2587,7 @@ end;
 procedure TTyMemo.MouseDown(Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
 var
-  APPI, LH, Row, CW, NewLine, NewCol, Clicks: Integer;
+  APPI, LH, Row, CW, NewLine, NewCol, Clicks, Dy: Integer;
 begin
   if not Enabled then Exit;          // v1.5 policy: ignore input when disabled
   inherited MouseDown(Button, Shift, X, Y);
@@ -2604,7 +2600,12 @@ begin
   // WordWrap=False FTopRow == the top logical line and each row is a full line,
   // so this reduces to the legacy logical-line hit-test exactly. VisualToCaret
   // resolves the (line,col) under X clamped to the row's segment.
-  Row := FTopRow + (Y div LH);
+  // Rows PAINT from ContentTop = scaled Padding.Top (RenderTo), so hit-test in
+  // the same frame — raw Y put every click in the top-padding-wide band past a
+  // row boundary onto the row below the glyphs under the pointer.
+  Dy := Y - MulDiv(CurrentStyle.Padding.Top, APPI, 96);
+  if Dy < 0 then Dy := 0;
+  Row := FTopRow + (Dy div LH);
   { Undo the row's alignment shift before resolving the column, or a click on a centred row
     lands on the character that WOULD be there if the row were left-justified. Zero under the
     default alignment, so the plain hit-test is unchanged.
@@ -2669,7 +2670,7 @@ end;
 
 procedure TTyMemo.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
-  APPI, LH, Row, CW, NewLine, NewCol: Integer;
+  APPI, LH, Row, CW, NewLine, NewCol, Dy: Integer;
 begin
   if not Enabled then Exit;          // v1.5 policy: ignore input when disabled
   inherited MouseMove(Shift, X, Y);
@@ -2681,7 +2682,9 @@ begin
   LH := LineHeight(APPI);
   CW := ContentWidthFor(APPI);
   EnsureVisualRows(APPI);
-  Row := FTopRow + (Y div LH);
+  Dy := Y - MulDiv(CurrentStyle.Padding.Top, APPI, 96);
+  if Dy < 0 then Dy := 0;
+  Row := FTopRow + (Dy div LH);
   // Same frame lift as MouseDown -- a drag has to hit-test identically to the press that
   // began it, or the selection would not follow the pointer on a wrapped or reordered row.
   VisualToCaretEx(Row, X - RowAlignOffset(Row, CW, APPI)

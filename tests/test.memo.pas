@@ -114,6 +114,8 @@ type
     procedure TestSetTopLineClamps;
     procedure TestEnsureCaretLineVisibleScrollsDown;
     procedure TestScrollSyncNoPingPong;
+    procedure TestMaxTopLineRespectsPadding;
+    procedure TestClickRowAccountsForPadding;
     // --- T5 mouse caret hit-test ---
     procedure TestClickSelectsLineByY;
     procedure TestClickColumnByX;
@@ -1054,6 +1056,83 @@ begin
   Y := LH + (LH div 2);   // mid-band of row 1
   FMemo.ProbeMouseDown(2, Y);
   AssertEquals('click in row-1 band selects caret line 1', 1, FMemo.ProbeCaretLine);
+end;
+
+procedure TTyMemoTest.TestMaxTopLineRespectsPadding;
+// The "output panel clips its last line" bug: VisibleRows/MaxTopLine counted rows against the
+// control's FULL height while RenderTo lays rows into the padding-inset content area. With the
+// default theme's 4px padding and Height mod LH below PadTop+PadBottom, MaxTopLine came out one
+// short, so scrolled to the bottom the last row straddled the content edge - lower half painted
+// into the bottom padding band and clipped at the control edge. Every other memo test runs
+// padding 0, where both formulas coincide; this one runs the product shape (4px) at the
+// worst-case height (mod LH = PadTop).
+var
+  L: TStringList;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  i, LH, H, y: Integer;
+begin
+  SetUpWithCss('TyMemo { background:#101010; color:#F0F0F0; border-width:0px; padding:4px; font-size:14px; }');
+  L := TStringList.Create;
+  try
+    for i := 0 to 29 do
+      L.Add(Format('line %d Wg', [i]));
+    FMemo.Lines := L;
+  finally
+    L.Free;
+  end;
+  LH := FMemo.ProbeLineHeight(96);
+  H := 5 * LH + 4;                          // content height 5*LH - 4 -> only 4 full rows fit
+  FMemo.SetBounds(0, 0, 200, H);
+
+  AssertEquals('VisibleRows counts rows that fit the padding-inset content area',
+    (H - 8) div LH, FMemo.ProbeVisibleRows);
+  AssertEquals('MaxTopLine derives from the content-area row count',
+    30 - FMemo.ProbeVisibleRows, FMemo.ProbeMaxTopLine);
+
+  FMemo.ProbeSetTopLine(FMemo.ProbeMaxTopLine);
+  Bmp := TBitmap.Create;
+  try
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(200, H);
+    Bmp.Canvas.Brush.Color := clBlack;
+    Bmp.Canvas.FillRect(0, 0, 200, H);
+    FMemo.ProbeRenderTo(Bmp.Canvas, Rect(0, 0, 200, H), 96);
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      AssertTrue('scrolled to the bottom, the top row drew text (anti-vacuity)',
+        BandHasLightPixel(Reread, 4 + (LH div 2), 0, 120, 120));
+      // With MaxTopLine correct, the last full row ends at H - LH; the strip below it
+      // (the would-be half row plus the bottom padding) must hold no text at all.
+      for y := H - LH to H - 1 do
+        AssertFalse(Format('no text ink below the last full row (y=%d)', [y]),
+          BandHasLightPixel(Reread, y, 0, 199, 120));
+    finally
+      Reread.Free;
+    end;
+  finally
+    Bmp.Free;
+  end;
+end;
+
+procedure TTyMemoTest.TestClickRowAccountsForPadding;
+// Sibling of the scroll bug: hit-testing mapped raw control Y with Row = TopRow + Y div LH,
+// while painting starts rows at ContentTop = PadTop. With 4px padding every click in the 4px
+// band past a raw row boundary landed one row below the glyphs under the pointer.
+var
+  LH: Integer;
+begin
+  SetUpWithPadding(4);
+  LoadLines(['AAAA', 'BBBB', 'CCCC']);
+  FMemo.ProbeSetTopLine(0);
+  LH := FMemo.ProbeLineHeight(96);
+  // Visually row 0's bottom band: rows paint at [PadTop + k*LH); LH+2 is inside row 0
+  // ((LH+2-4) div LH = 0) but past the raw boundary ((LH+2) div LH = 1).
+  FMemo.ProbeMouseDown(2, LH + 2);
+  AssertEquals('click lands on the row under the pointer, not one below', 0, FMemo.ProbeCaretLine);
+  // And just past the painted boundary it must reach row 1 (guards against over-shifting).
+  FMemo.ProbeMouseDown(2, LH + 6);
+  AssertEquals('click past the painted boundary reaches row 1', 1, FMemo.ProbeCaretLine);
 end;
 
 { TestClickColumnByX
