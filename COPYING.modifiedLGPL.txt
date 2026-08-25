@@ -1,8 +1,9 @@
 This is the file COPYING.modifiedLGPL, it applies to all units of the
 TyControls library.
 
-These files are distributed under the GNU Lesser General Public License
-(see the file COPYING.LGPL) with the following modification:
+These files are distributed under the GNU Lesser General Public License,
+version 2.1 or (at your option) any later version (see the file COPYING.LGPL),
+with the following modification:
 
 As a special exception, the copyright holders of this library give you
 permission to link this library with independent modules to produce an
@@ -18,7 +19,7 @@ exception statement from your version.
 
 If you didn't receive a copy of the file COPYING.LGPL, contact:
       Free Software Foundation, Inc.,
-      675 Mass Ave
-      Cambridge, MA  02139
+      51 Franklin Street, Fifth Floor
+      Boston, MA  02110-1301
       USA
 
