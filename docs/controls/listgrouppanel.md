@@ -93,6 +93,7 @@ TyListGroupItem:active   { background: var(--selection); color: var(--accent); }
 | `Images: TTyVirtualImageList` | `nil` | 分组/条目图标源（按 `ImageIndex` 取；`nil` = 纯文字） |
 | `OnGroupToggle: TTyListGroupToggleEvent` | — | `procedure(Sender; AGroupIndex)`，分组展开状态真变化时触发 |
 | `OnItemClick: TTyListGroupItemEvent` | — | `procedure(Sender; AGroupIndex, AItemIndex)`，选中条目真变化时触发 |
+| `OnItemDblClick: TTyListGroupItemEvent` | — | 双击条目行时触发（第一击已按 `OnItemClick` 发过；标题栏双击仍是两次切换,不触发本事件） |
 | `Align` / `Anchors` / `StyleClass` / `Controller` / `TabStop` | — | 继承自基类的常规属性 |
 
 ---
@@ -143,11 +144,13 @@ end;
 ```pascal
 property Groups: TTyListGroups;          // published 嵌套集合,OI 可编辑、进 .lfm
 // 每个 TTyListGroup:
-//   Caption / ImageIndex
+//   Caption / ImageIndex / Tag
 //   Expanded                            — 设计器默认展开,AddGroup 门面保持历史默认收起
 //   Items: TTyListGroupItems            — 该组自己的条目集合
-//     每条 TTyListGroupItem: Caption / ImageIndex
+//     每条 TTyListGroupItem: Caption / ImageIndex / Tag
 ```
+
+`Tag`(分组和条目各有)是点击路由的稳定键:增删分组后索引会漂移,`Tag` 不会——`OnItemClick` 里按 `Groups[g].Items[i].Tag` 分发,比按索引分发经得起改版。
 
 侧边栏现在可以完全在设计器里搭:双击控件(或右键「编辑分组...」)打开专用的**结构编辑器**——一棵树看全所有分组和条目,右侧「加分组 / 加条目 / 删除 / 上移 / 下移」原地增删排序;加条目落在当前选中的分组里(选中条目时插在它下面)。树里选中任何分组或条目,Object Inspector 直接显示它的属性,当场改,随 `.lfm` 存盘。窗口是非模态的,可以一直开着边搭边调;IDE 的组件树(OI 上方)同样递归列出 Groups→Items,两边都能选。代码 API(`AddGroup`/`AddItem`/`ItemCaption`/`Expanded[]` 等)全部保留,底层同一个集合。
 

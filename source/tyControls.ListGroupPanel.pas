@@ -105,6 +105,7 @@ type
   private
     FCaption: string;
     FImageIndex: Integer;
+    FTag: PtrInt;
     procedure SetCaption(const AValue: string);
     procedure SetImageIndex(AValue: Integer);
   protected
@@ -115,6 +116,9 @@ type
   published
     property Caption: string read FCaption write SetCaption;
     property ImageIndex: Integer read FImageIndex write SetImageIndex default -1;
+    { The stable routing key for click handlers: indexes drift when groups or items
+      are added and removed, a Tag does not. Invisible, so no repaint on write. }
+    property Tag: PtrInt read FTag write FTag default 0;
   end;
 
   TTyListGroupItems = class(TOwnedCollection)
@@ -143,6 +147,7 @@ type
     FImageIndex: Integer;
     FExpanded: Boolean;
     FItems: TTyListGroupItems;
+    FTag: PtrInt;
     procedure SetCaption(const AValue: string);
     procedure SetImageIndex(AValue: Integer);
     procedure SetExpanded(AValue: Boolean);
@@ -161,6 +166,8 @@ type
     property Expanded: Boolean read FExpanded write SetExpanded default True;
     { The group's own rows, edited in their own collection editor. }
     property Items: TTyListGroupItems read FItems write SetItems;
+    { The stable routing key, as on TTyListGroupItem. }
+    property Tag: PtrInt read FTag write FTag default 0;
   end;
 
   TTyListGroups = class(TOwnedCollection)
@@ -227,6 +234,7 @@ type
     FExpandedWidth: Integer;       // captured by a runtime collapse; 0 = never collapsed
     FOnGroupToggle: TTyListGroupToggleEvent;
     FOnItemClick: TTyListGroupItemEvent;
+    FOnItemDblClick: TTyListGroupItemEvent;
     FOnCollapsedChange: TNotifyEvent;
     procedure SetCollapsed(AValue: Boolean);
     procedure SetShowCollapseTrigger(AValue: Boolean);
@@ -327,6 +335,9 @@ type
     property Images: TCustomImageList read FImages write SetImages;
     property OnGroupToggle: TTyListGroupToggleEvent read FOnGroupToggle write FOnGroupToggle;
     property OnItemClick: TTyListGroupItemEvent read FOnItemClick write FOnItemClick;
+    { The second press of a double-click on an item row (headers keep toggling).
+      OnItemClick has already fired for the pair's first press. }
+    property OnItemDblClick: TTyListGroupItemEvent read FOnItemDblClick write FOnItemDblClick;
     property Align;
     property Anchors;
     property StyleClass;
@@ -352,6 +363,7 @@ begin
   begin
     FCaption := TTyListGroupItem(ASource).FCaption;
     FImageIndex := TTyListGroupItem(ASource).FImageIndex;
+    FTag := TTyListGroupItem(ASource).FTag;
     Changed(False);
   end
   else
@@ -427,6 +439,7 @@ begin
     FCaption := TTyListGroup(ASource).FCaption;
     FImageIndex := TTyListGroup(ASource).FImageIndex;
     FExpanded := TTyListGroup(ASource).FExpanded;
+    FTag := TTyListGroup(ASource).FTag;
     FItems.Assign(TTyListGroup(ASource).FItems);
     Changed(False);
   end
@@ -956,7 +969,13 @@ begin
     if hit.Kind = lgpHeader then
       ToggleGroup(hit.GroupIndex)
     else
+    begin
       SelectItem(hit.GroupIndex, hit.ItemIndex);
+      { ssDouble, not a timer (the Edit/Memo lesson): the widgetset already decided
+        this press is the pair's second. SelectItem above was a no-op re-select. }
+      if (ssDouble in Shift) and Assigned(FOnItemDblClick) then
+        FOnItemDblClick(Self, hit.GroupIndex, hit.ItemIndex);
+    end;
   end;
   try
     if CanFocus then SetFocus;

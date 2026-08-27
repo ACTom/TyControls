@@ -23,6 +23,7 @@ type
     procedure LegacyAddersFillTheGroups;
     procedure StreamingRoundTripsTheGroups;
     procedure EditsClampTheSelection;
+    procedure TagsRideAlongStreamingAndAssign;
   end;
 
 implementation
@@ -145,6 +146,48 @@ begin
   FPanel.Groups[0].Items.Delete(0);
   AssertTrue('the item selection was clamped away',
     (FPanel.SelectedGroup < 0) or (FPanel.SelectedItem < FPanel.ItemCount(FPanel.SelectedGroup)));
+end;
+
+procedure TListGroupEntriesTest.TagsRideAlongStreamingAndAssign;
+var
+  Src, Dst: THostForm;
+  MS: TMemoryStream;
+  DstP: TTyListGroupPanel;
+  g2: TTyListGroup;
+begin
+  { Tag is the stable routing key: indexes drift when groups are added or removed,
+    a Tag does not -- so it must stream and must survive a deep copy. }
+  Src := THostForm.CreateNew(nil);
+  Dst := THostForm.CreateNew(nil);
+  MS := TMemoryStream.Create;
+  try
+    Src.Name := 'HostForm2';
+    Src.LGP := TTyListGroupPanel.Create(Src);
+    Src.LGP.Name := 'LGP';
+    Src.LGP.Parent := Src;
+    Src.LGP.AddGroup('Nav');
+    Src.LGP.AddItem(0, 'Home');
+    Src.LGP.AddItem(0, 'About');
+    Src.LGP.Groups[0].Tag := 42;
+    Src.LGP.Groups[0].Items[0].Tag := 7;
+    MS.WriteComponent(Src);
+
+    MS.Position := 0;
+    MS.ReadComponent(Dst);
+    DstP := Dst.FindComponent('LGP') as TTyListGroupPanel;
+    AssertEquals('the group tag streamed', 42, DstP.Groups[0].Tag);
+    AssertEquals('the item tag streamed', 7, DstP.Groups[0].Items[0].Tag);
+    AssertEquals('an unset tag restores as 0', 0, DstP.Groups[0].Items[1].Tag);
+
+    g2 := FPanel.Groups.Add;
+    g2.Assign(DstP.Groups[0]);
+    AssertEquals('Assign copies the group tag', 42, g2.Tag);
+    AssertEquals('and the items ride with their tags', 7, g2.Items[0].Tag);
+  finally
+    MS.Free;
+    Dst.Free;
+    Src.Free;
+  end;
 end;
 
 initialization

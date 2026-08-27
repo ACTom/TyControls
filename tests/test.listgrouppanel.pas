@@ -38,6 +38,7 @@ type
     procedure TestSelectItemOutOfRangeClears;
     procedure TestHeaderClickToggles;
     procedure TestItemClickSelects;
+    procedure TestDoubleClickFiresOnItemDblClick;
     procedure TestCollapsedGroupHasNoItemHits;
     procedure TestWheelScrollsWhenOverflow;
     procedure TestWheelNoScrollWhenFits;
@@ -60,6 +61,7 @@ type
   public
     function StyleTypeKey: string;
     procedure DoMouseDown(X, Y: Integer);
+    procedure DoDblClick(X, Y: Integer);
     procedure CallWheel(WheelDelta: Integer);
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
   end;
@@ -92,6 +94,12 @@ end;
 procedure TPanelAccess.DoMouseDown(X, Y: Integer);
 begin
   MouseDown(mbLeft, [], X, Y);
+end;
+
+procedure TPanelAccess.DoDblClick(X, Y: Integer);
+begin
+  { The second press of a double-click, as the LCL delivers it: ssDouble in Shift. }
+  MouseDown(mbLeft, [ssLeft, ssDouble], X, Y);
 end;
 
 procedure TPanelAccess.CallWheel(WheelDelta: Integer);
@@ -420,6 +428,37 @@ begin
   P.DoMouseDown(40, 60);
   AssertEquals('clicked item group', 0, P.SelectedGroup);
   AssertEquals('clicked item index 1', 1, P.SelectedItem);
+end;
+
+procedure TTyListGroupPanelTest.TestDoubleClickFiresOnItemDblClick;
+var
+  P: TPanelAccess;
+  probe: TItemProbe;
+begin
+  P := TPanelAccess.Create(FForm);
+  P.Parent := FForm;
+  P.Font.PixelsPerInch := 96;
+  P.SetBounds(0, 0, 200, 300);
+  P.AddGroup('G0');
+  P.AddItem(0, 'x'); P.AddItem(0, 'y');
+  P.Expanded[0] := True;
+  probe := TItemProbe.Create;
+  try
+    P.OnItemDblClick := @probe.Handle;
+    // Layout: header 0..26, item0 26..50, item1 50..74.
+    P.DoMouseDown(40, 60);                  // the pair's first press: select only
+    AssertEquals('the first press is a plain click', 0, probe.Count);
+    P.DoDblClick(40, 60);                   // the second press arrives with ssDouble
+    AssertEquals('one double-click fired', 1, probe.Count);
+    AssertEquals('at its group', 0, probe.LastGroup);
+    AssertEquals('at its item', 1, probe.LastItem);
+    // A header double-press stays a toggle affair -- never an item event.
+    P.DoDblClick(40, 10);
+    AssertEquals('headers do not fire it', 1, probe.Count);
+  finally
+    P.OnItemDblClick := nil;
+    probe.Free;
+  end;
 end;
 
 procedure TTyListGroupPanelTest.TestCollapsedGroupHasNoItemHits;
