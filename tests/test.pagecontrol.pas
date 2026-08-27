@@ -15,6 +15,12 @@ type
     procedure AlignControls(AControl: TControl; var ARect: TRect); override;
   end;
 
+  { Cracker casts for the protected designer-path members (ShowControl / SetDesigning):
+    protected is visible here through a same-unit descendant, and the cast applies it
+    to the plain instances the fixture creates. }
+  TShowAccess = class(TTyPageControl);
+  TSheetShowAccess = class(TTyTabSheet);
+
   TPageControlTest = class(TTestCase)
   private
     FForm: TForm;
@@ -25,6 +31,8 @@ type
   published
     procedure TestAddPageParentedAndOwnedByForm;
     procedure TestFirstPageAutoSelected;
+    procedure TestShowControlActivatesThePage;
+    procedure TestDesignHitTestPassesTabClicks;
     procedure TestActivePageSwitchTogglesVisibility;
     procedure TestActivePageTogglesDesignVisibleFlag;
     procedure TestRemovePageCompactsAndReselects;
@@ -81,6 +89,57 @@ procedure TPageControlTest.TestFirstPageAutoSelected;
 begin
   FPC.AddPage('Alpha');
   AssertEquals('first page auto-selected', 0, FPC.ActivePageIndex);
+end;
+
+procedure TPageControlTest.TestShowControlActivatesThePage;
+// The Object Inspector's selection path: selecting a page (or anything on it) makes the
+// IDE walk ShowControl up the parent chain, and a tab container must answer by activating
+// the page that hosts the selection -- the TCustomTabControl contract. Without the
+// override, picking a page in the OI left the form showing the old page and
+// ActivePageIndex never followed (QQ-group report, Lazarus 4.2).
+var
+  A, B, C: TTyTabSheet;
+begin
+  A := FPC.AddPage('A');
+  B := FPC.AddPage('B');
+  C := FPC.AddPage('C');
+  AssertEquals('starts on the first page', 0, FPC.ActivePageIndex);
+
+  TShowAccess(FPC).ShowControl(C);
+  AssertEquals('ShowControl(page) activates that page', 2, FPC.ActivePageIndex);
+  AssertSame('ActivePage follows', C, FPC.ActivePage);
+
+  // A control nested ON a page reaches the pager through the default upward chain
+  // (each hop passes ITSELF to its parent), so the pager receives its direct child.
+  TSheetShowAccess(B).ShowControl(B);
+  AssertEquals('the upward chain from a page child activates its page', 1, FPC.ActivePageIndex);
+  AssertTrue('the activated page is the visible one', B.Visible);
+  AssertFalse('the previous page is hidden', C.Visible);
+  // Silence the unused-variable hint symmetrically.
+  AssertSame('page A unchanged', A, FPC.Pages[0]);
+end;
+
+procedure TPageControlTest.TestDesignHitTestPassesTabClicks;
+// The other half of the designer story: a custom-drawn strip receives no clicks in the
+// designer unless CM_DESIGNHITTEST answers 1, so the header could not switch pages at
+// design time at all. On a tab -> 1 (the click flows to the normal MouseDown hit-test);
+// on the page body -> 0 (plain designer selection / child dropping stays intact).
+var
+  P: TPoint;
+  res: PtrInt;
+begin
+  FPC.AddPage('A');
+  FPC.AddPage('B');
+  FPC.AddPage('C');
+  TPCAccess(FPC).SetDesigning(True);
+
+  P := FPC.TabRect(2).CenterPoint;
+  res := FPC.Perform(CM_DESIGNHITTEST, 0, PtrInt((P.Y shl 16) or (P.X and $FFFF)));
+  AssertEquals('a point on a tab answers the designer hit-test', 1, res);
+
+  P := Point(FPC.Width div 2, FPC.Height - 10);
+  res := FPC.Perform(CM_DESIGNHITTEST, 0, PtrInt((P.Y shl 16) or (P.X and $FFFF)));
+  AssertEquals('the page body stays designer-owned', 0, res);
 end;
 
 procedure TPageControlTest.TestActivePageSwitchTogglesVisibility;

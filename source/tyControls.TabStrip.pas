@@ -252,6 +252,14 @@ type
     procedure AdjustClientRect(var ARect: TRect); override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState;
                         X, Y: Integer); override;
+    { Design-time tab clicks. A native page control's header takes clicks in the designer
+      through the widgetset; a custom-drawn strip gets none unless it answers
+      CM_DESIGNHITTEST, so the only way to flip pages at design time was typing
+      ActivePageIndex into the Object Inspector (QQ-group report, Lazarus 4.2). Answer 1
+      only ON a tab: the page body keeps normal designer click-to-select. Subclasses opt
+      in -- the ribbon keeps its chrome designer-inert. }
+    function DesignTabClicksEnabled: Boolean; virtual;
+    procedure CMDesignHitTest(var Message: TCMDesignHitTest); message CM_DESIGNHITTEST;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState;
                       X, Y: Integer); override;
@@ -2098,6 +2106,20 @@ end;
 procedure TTyCustomTabStrip.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
+end;
+
+function TTyCustomTabStrip.DesignTabClicksEnabled: Boolean;
+begin
+  Result := False;
+end;
+
+procedure TTyCustomTabStrip.CMDesignHitTest(var Message: TCMDesignHitTest);
+begin
+  { Result 1 hands the designer's mouse message to the control's normal path, so the
+    existing MouseDown tab hit-test runs and switches the page. Only ON a tab -- the
+    body must stay a plain designer click (select the control / drop children). }
+  if DesignTabClicksEnabled and (IndexOfTabAt(Message.XPos, Message.YPos) >= 0) then
+    Message.Result := 1;
 end;
 
 { Mouse: hit-test headers on left-click }

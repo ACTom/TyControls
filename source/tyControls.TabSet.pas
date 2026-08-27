@@ -19,6 +19,8 @@ type
       the area below the tabs as a page container, i.e. an empty box under the strip
       (visible whenever Height > TabHeight). }
     function HasPageBody: Boolean; override;
+    { Designer tab clicks select tabs (see TTyCustomTabStrip.CMDesignHitTest). }
+    function DesignTabClicksEnabled: Boolean; override;
     function GetTabCount: Integer; override;
     function GetTabCaption(AIndex: Integer): string; override;
     procedure DoSelectTab(AIndex: Integer); override;
@@ -72,6 +74,11 @@ end;
 function TTyTabSet.HasPageBody: Boolean;
 begin
   Result := False;
+end;
+
+function TTyTabSet.DesignTabClicksEnabled: Boolean;
+begin
+  Result := True;
 end;
 
 function TTyTabSet.GetTabCount: Integer;

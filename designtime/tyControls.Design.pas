@@ -225,10 +225,16 @@ type
   TTyPageControlEditor = class(TDefaultComponentEditor)
   private
     function PC: TTyPageControl;
+    procedure ShowPageMenuItemClick(Sender: TObject);
   public
     function GetVerbCount: Integer; override;
     function GetVerb(Index: Integer): string; override;
     procedure ExecuteVerb(Index: Integer); override;
+    { The 'Show Page' verb is a submenu listing every page by name, mirroring LCL's
+      TTabControlComponentEditor: a direct jump beats cycling Next/Previous on a
+      many-page control, and it is the designer answer to "switching pages needs
+      typing ActivePageIndex" (QQ-group report). }
+    procedure PrepareItem(Index: Integer; const AnItem: TMenuItem); override;
   end;
 
   { Opens the node editor when a TTyTreeView is double-clicked in the designer.
@@ -363,6 +369,7 @@ resourcestring
   rsDtPageDelete   = 'Delete Page';
   rsDtPageShowNext = 'Show Next Page';
   rsDtPageShowPrev = 'Show Previous Page';
+  rsDtPageShowPage = 'Show Page';
   rsDtDialogPreview = 'Preview';
   { The verb this library's icon fonts and image lists carry, and what to say when there is no
     font to browse. IDE-facing, so they belong in THIS unit's table and not the runtime
@@ -939,7 +946,7 @@ end;
 
 function TTyPageControlEditor.GetVerbCount: Integer;
 begin
-  Result := 4;
+  Result := 5;
 end;
 
 function TTyPageControlEditor.GetVerb(Index: Integer): string;
@@ -949,8 +956,40 @@ begin
     1: Result := rsDtPageDelete;
     2: Result := rsDtPageShowNext;
     3: Result := rsDtPageShowPrev;
+    4: Result := rsDtPageShowPage;
   else
     Result := '';
+  end;
+end;
+
+procedure TTyPageControlEditor.ShowPageMenuItemClick(Sender: TObject);
+var
+  Item: TMenuItem;
+  NewIndex: Integer;
+begin
+  if not (Sender is TMenuItem) then Exit;
+  Item := TMenuItem(Sender);
+  NewIndex := Item.MenuIndex;
+  if (NewIndex < 0) or (NewIndex >= PC.PageCount) then Exit;
+  PC.ActivePageIndex := NewIndex;
+  GetDesigner.SelectOnlyThisComponent(PC.ActivePage);
+end;
+
+procedure TTyPageControlEditor.PrepareItem(Index: Integer; const AnItem: TMenuItem);
+var
+  i: Integer;
+  Item: TMenuItem;
+begin
+  inherited PrepareItem(Index, AnItem);
+  if Index <> 4 then Exit;
+  AnItem.Enabled := PC.PageCount > 0;
+  for i := 0 to PC.PageCount - 1 do
+  begin
+    Item := TMenuItem.Create(AnItem);
+    Item.Name := 'TyShowPage' + IntToStr(i);
+    Item.Caption := PC.Pages[i].Name + ' "' + PC.Pages[i].Caption + '"';
+    Item.OnClick := @ShowPageMenuItemClick;
+    AnItem.Add(Item);
   end;
 end;
 

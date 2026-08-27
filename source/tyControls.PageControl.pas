@@ -33,6 +33,12 @@ type
     procedure SetController(AValue: TTyStyleController); override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure Loaded; override;
+    { Designer tab clicks flip pages (see TTyCustomTabStrip.CMDesignHitTest). }
+    function DesignTabClicksEnabled: Boolean; override;
+    { The TCustomTabControl / Delphi contract: ShowControl walks up the parent chain
+      (each hop passes its own child), and a tab container answers by activating the
+      page that hosts the shown control -- Sheet.Show and Delphi-ported code rely on it. }
+    procedure ShowControl(AControl: TControl); override;
   public
     destructor Destroy; override;
     { Public so TTyTabSheet.SetParent (a different unit) can self-register. Idempotent. }
@@ -361,6 +367,27 @@ begin
     FTabIndex := -1;
   ShowOnlyPage(FTabIndex);
   Invalidate;
+end;
+
+function TTyPageControl.DesignTabClicksEnabled: Boolean;
+begin
+  Result := True;
+end;
+
+procedure TTyPageControl.ShowControl(AControl: TControl);
+var
+  i: Integer;
+begin
+  { Mirror TCustomTabControl.ShowControl: a direct page match activates that page.
+    A control nested ON a page arrives here as the page itself, because the default
+    TWinControl.ShowControl passes each caller's own child up the parent chain. }
+  for i := 0 to PageCount - 1 do
+    if GetPage(i) = AControl then
+    begin
+      ActivePageIndex := i;
+      Exit;
+    end;
+  inherited ShowControl(AControl);
 end;
 
 destructor TTyPageControl.Destroy;

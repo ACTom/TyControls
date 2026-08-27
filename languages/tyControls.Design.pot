@@ -102,6 +102,10 @@ msgstr ""
 msgid "Show Next Page"
 msgstr ""
 
+#: tycontrols.design.rsdtpageshowpage
+msgid "Show Page"
+msgstr ""
+
 #: tycontrols.design.rsdtpageshowprev
 msgid "Show Previous Page"
 msgstr ""

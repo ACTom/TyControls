@@ -62,6 +62,10 @@ msgstr "删除页"
 msgid "Show Next Page"
 msgstr "显示下一页"
 
+#: tycontrols.design.rsdtpageshowpage
+msgid "Show Page"
+msgstr "显示页面"
+
 #: tycontrols.design.rsdtpageshowprev
 msgid "Show Previous Page"
 msgstr "显示上一页"
