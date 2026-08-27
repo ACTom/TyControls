@@ -782,6 +782,42 @@ msgstr "周六"
 msgid "Icon Browser"
 msgstr "图标浏览器"
 
+#: tycontrols.strconsts.rsdlgimgcoltitle
+msgid "Images"
+msgstr "图像"
+
+#: tycontrols.strconsts.rsdlgimgcoladd
+msgid "Add…"
+msgstr "添加…"
+
+#: tycontrols.strconsts.rsdlgimgcolreplace
+msgid "Replace…"
+msgstr "替换…"
+
+#: tycontrols.strconsts.rsdlgimgcoldelete
+msgid "Delete"
+msgstr "删除"
+
+#: tycontrols.strconsts.rsdlgimgcolrename
+msgid "Rename…"
+msgstr "重命名…"
+
+#: tycontrols.strconsts.rsdlgimgcolup
+msgid "Move Up"
+msgstr "上移"
+
+#: tycontrols.strconsts.rsdlgimgcoldown
+msgid "Move Down"
+msgstr "下移"
+
+#: tycontrols.strconsts.rsdlgimgcolclear
+msgid "Clear"
+msgstr "清空"
+
+#: tycontrols.strconsts.rsdlgimgcolrenameprompt
+msgid "New name:"
+msgstr "新名称:"
+
 #: tycontrols.strconsts.rsdlgiconcount
 #, object-pascal-format
 msgid "%d icons"

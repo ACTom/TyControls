@@ -39,7 +39,7 @@ uses
   tyControls.Calendar, tyControls.DateTimePicker, tyControls.TabSet,
   ClipBrd,
   tyControls.TreeView, tyControls.Dialogs, tyControls.Dialogs.SelectPath,
-  tyControls.Dialogs.IconBrowser,
+  tyControls.Dialogs.IconBrowser, tyControls.Dialogs.ImageCollectionEditor,
   tyControls.Dialogs.Color, tyControls.Dialogs.Font,
   tyControls.Dialogs.Find, tyControls.Dialogs.Progress, tyControls.Dialogs.About,
   tyControls.Dialogs.FileDialog, tyControls.PreviewBox, tyControls.ImageView,
@@ -158,6 +158,27 @@ type
     FPickTarget: TTyVirtualImageList;
     function FontOf(out AOwnerList: TTyVirtualImageList): TTyIconFont;
     procedure HandlePickName(Sender: TObject; const AName: string);
+  public
+    function GetVerbCount: Integer; override;
+    function GetVerb(Index: Integer): string; override;
+    procedure ExecuteVerb(Index: Integer); override;
+  end;
+
+  { TTyImageCollection's double-click: the TImageList-style manager (list + preview +
+    Add/Replace/Delete/Rename/Move over a working copy; OK commits, Cancel discards).
+    The standard '...' collection grid stays available for per-item surgery — this is
+    the everyday door (QQ-group request: the bare grid made adding pictures a chore). }
+  TTyImageCollectionComponentEditor = class(TComponentEditor)
+  public
+    function GetVerbCount: Integer; override;
+    function GetVerb(Index: Integer): string; override;
+    procedure ExecuteVerb(Index: Integer); override;
+  end;
+
+  { TTyListGroupPanel's double-click: the stock collection editor aimed at Entries --
+    the ActionList experience the sider was asked for. One flat list, group rows flush
+    and item rows indented (the entry's DisplayName), properties per row in the OI. }
+  TTyListGroupPanelComponentEditor = class(TDefaultComponentEditor)
   public
     function GetVerbCount: Integer; override;
     function GetVerb(Index: Integer): string; override;
@@ -377,6 +398,8 @@ resourcestring
     font to browse. IDE-facing, so they belong in THIS unit's table and not the runtime
     package's -- the two have separate .po catalogues. }
   rsDtIconBrowse    = 'Icon browser...';
+  rsDtImgColEdit    = 'Edit images...';
+  rsDtEntriesEdit   = 'Edit entries...';
   rsDtIconNeedsFont = 'Set IconFont first: there is no icon font to browse.';
   rsDtTreeEditNodes = 'Edit Nodes...';
   rsDtSurfacePurposeTitle = 'Why this control exists';
@@ -725,6 +748,42 @@ begin
   { A font has no single name property to write into -- the user came here to look a name up.
     The clipboard is where a looked-up name is useful. }
   Clipboard.AsText := nm;
+end;
+
+function TTyListGroupPanelComponentEditor.GetVerbCount: Integer;
+begin
+  Result := 1;
+end;
+
+function TTyListGroupPanelComponentEditor.GetVerb(Index: Integer): string;
+begin
+  if Index = 0 then Result := rsDtEntriesEdit else Result := '';
+end;
+
+procedure TTyListGroupPanelComponentEditor.ExecuteVerb(Index: Integer);
+var
+  P: TTyListGroupPanel;
+begin
+  if Index <> 0 then begin inherited ExecuteVerb(Index); Exit; end;
+  P := Component as TTyListGroupPanel;
+  TCollectionPropertyEditor.ShowCollectionEditor(P.Entries, P, 'Entries');
+end;
+
+function TTyImageCollectionComponentEditor.GetVerbCount: Integer;
+begin
+  Result := 1;
+end;
+
+function TTyImageCollectionComponentEditor.GetVerb(Index: Integer): string;
+begin
+  if Index = 0 then Result := rsDtImgColEdit else Result := '';
+end;
+
+procedure TTyImageCollectionComponentEditor.ExecuteVerb(Index: Integer);
+begin
+  if Index <> 0 then begin inherited ExecuteVerb(Index); Exit; end;
+  if TyEditImageCollection(Component as TTyImageCollection) then
+    Modified;    { the commit changed the collection; the designer must hear about it }
 end;
 
 procedure TTyIconBrowserComponentEditor.HandlePickName(Sender: TObject; const AName: string);
@@ -1672,6 +1731,8 @@ begin
     (TTyLucideIconFont and whatever follows it) inherits the verb without another line here;
     GetComponentEditor picks the most-derived registration. }
   RegisterComponentEditor([TTyIconFont, TTyVirtualImageList], TTyIconBrowserComponentEditor);
+  RegisterComponentEditor(TTyImageCollection, TTyImageCollectionComponentEditor);
+  RegisterComponentEditor(TTyListGroupPanel, TTyListGroupPanelComponentEditor);
   // Double-click a dialog component in the designer to preview it (verb 0 = Preview),
   // mirroring LCL's TCommonDialogComponentEditor.
   RegisterComponentEditor(

@@ -138,6 +138,18 @@ end;
 - **鼠标悬停**：`MouseMove` 更新悬停项，驱动标题栏/条目的 `:hover` 态；`MouseLeave` 清除。
 - **滚轮**：内容溢出时，滚轮每格平移 `3 × ItemHeight`；内容适配时不滚动。折叠某分组导致内容变矮时，`ScrollOffset` 会**重新钳制**回合法范围。
 
+### 设计期条目集合 Entries
+
+```pascal
+property Entries: TTyListGroupEntries;   // published 集合,OI 可编辑、进 .lfm
+// 每条 TTyListGroupEntry:
+//   Kind: lgeGroup | lgeItem   — 组头行 / 条目行(扁平列表,组头引领其后的条目行)
+//   Caption / ImageIndex
+//   Expanded                   — 仅组头行有效;设计器默认展开,AddGroup 门面保持历史默认收起
+```
+
+侧边栏现在可以完全在设计器里搭:双击控件(或右键「编辑条目...」)打开标准集合编辑器,一个扁平列表看全整棵侧栏(组头顶格、条目缩进),选中行的属性直接在 OI 改,随 `.lfm` 存盘。代码 API(`AddGroup`/`AddItem`/`ItemCaption`/`Expanded[]` 等)全部保留,底层同一个集合。排在任何组头之前的条目行归入一个**隐式无标题组**(恒展开)——设计器里造出的畸形序列不丢行。
+
 ### 整栏收缩（侧边栏折叠）
 
 ```pascal

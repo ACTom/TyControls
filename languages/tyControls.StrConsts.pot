@@ -211,6 +211,42 @@ msgstr ""
 msgid "Search icons by name"
 msgstr ""
 
+#: tycontrols.strconsts.rsdlgimgcoladd
+msgid "Add…"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlgimgcolclear
+msgid "Clear"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlgimgcoldelete
+msgid "Delete"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlgimgcoldown
+msgid "Move Down"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlgimgcolrename
+msgid "Rename…"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlgimgcolrenameprompt
+msgid "New name:"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlgimgcolreplace
+msgid "Replace…"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlgimgcoltitle
+msgid "Images"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlgimgcolup
+msgid "Move Up"
+msgstr ""
+
 #: tycontrols.strconsts.rsdlgmatchcase
 msgid "Match case"
 msgstr ""

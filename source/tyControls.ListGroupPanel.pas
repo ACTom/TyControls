@@ -90,18 +90,56 @@ function TyListGroupContentHeight(const AParts: TTyListGroupParts): Integer;
 function TyListGroupHitTest(const AParts: TTyListGroupParts; const APt: TPoint): TTyListGroupHit;
 
 type
-  { Internal per-item model. }
-  TTyListGroupItem = record
-    Caption: string;
-    ImageIndex: Integer;
+  TTyListGroupPanel = class;
+
+  { The sider's model: one FLAT collection with a Kind per row -- a group header row,
+    followed by its item rows until the next header (the TTyTreeNodes precedent, where
+    hierarchy is a per-row property so ONE standard collection editor shows the whole
+    sider). Published and streamed, so the designer authors the sider in the Object
+    Inspector; the code-building API (AddGroup / AddItem / ...) delegates here. }
+  TTyListGroupEntryKind = (lgeGroup, lgeItem);
+
+  TTyListGroupEntries = class;
+
+  TTyListGroupEntry = class(TCollectionItem)
+  private
+    FKind: TTyListGroupEntryKind;
+    FCaption: string;
+    FImageIndex: Integer;
+    FExpanded: Boolean;
+    procedure SetKind(AValue: TTyListGroupEntryKind);
+    procedure SetCaption(const AValue: string);
+    procedure SetImageIndex(AValue: Integer);
+    procedure SetExpanded(AValue: Boolean);
+  protected
+    function GetDisplayName: string; override;
+  public
+    constructor Create(ACollection: TCollection); override;
+    procedure Assign(ASource: TPersistent); override;
+  published
+    property Kind: TTyListGroupEntryKind read FKind write SetKind default lgeItem;
+    property Caption: string read FCaption write SetCaption;
+    property ImageIndex: Integer read FImageIndex write SetImageIndex default -1;
+    { Group rows only: whether the group starts open. Item rows ignore it. The designer
+      default is open (an authored sider should show its rows); the AddGroup facade keeps
+      its own historical default of closed. }
+    property Expanded: Boolean read FExpanded write SetExpanded default True;
   end;
 
-  { Internal per-group model: a caption, an expanded flag, and its items. }
-  TTyListGroupData = record
-    Caption: string;
-    Expanded: Boolean;
-    ImageIndex: Integer;   // -1 = no icon on the group header
-    Items: array of TTyListGroupItem;
+  TTyListGroupEntries = class(TOwnedCollection)
+  private
+    FPanel: TTyListGroupPanel;
+    function GetEntry(AIndex: Integer): TTyListGroupEntry;
+    procedure SetEntry(AIndex: Integer; AValue: TTyListGroupEntry);
+  protected
+    { Both funnel into the panel: ANY route into the model -- the Object Inspector, the
+      .lfm reader, the facade, a direct property write -- re-clamps selection and scroll. }
+    procedure Update(AItem: TCollectionItem); override;
+    procedure Notify(AItem: TCollectionItem; AAction: TCollectionNotification); override;
+  public
+    constructor Create(APanel: TTyListGroupPanel);
+    function Add: TTyListGroupEntry;
+    property Entries[AIndex: Integer]: TTyListGroupEntry read GetEntry write SetEntry; default;
   end;
 
   TTyListGroupToggleEvent = procedure(Sender: TObject; AGroupIndex: Integer) of object;
@@ -136,7 +174,7 @@ type
 
   TTyListGroupPanel = class(TTyCustomControl)
   private
-    FGroups: array of TTyListGroupData;
+    FEntries: TTyListGroupEntries;
     FImages: TCustomImageList;      // per-row icon source (nil = no icons); any list works
     FHeaderHeight: Integer;
     FItemHeight: Integer;
@@ -156,6 +194,17 @@ type
     procedure SetCollapsed(AValue: Boolean);
     procedure SetShowCollapseTrigger(AValue: Boolean);
     procedure SetCollapsedWidth(AValue: Integer);
+    procedure SetEntries(AValue: TTyListGroupEntries);
+    { Any change to the entry model: re-clamp selection, hover and scroll, repaint. }
+    procedure EntriesChanged;
+    { The flat<->grouped index mapping. An item row before any group header belongs to an
+      IMPLICIT caption-less, always-expanded group (dropping an authored row silently
+      would be hostile); that group answers entry index -1. Out of range answers
+      Low(Integer). }
+    function HasImplicitGroup: Boolean;
+    function GroupEntryIndex(AGroup: Integer): Integer;
+    function ItemEntryIndex(AGroup, AItem: Integer): Integer;
+    function GroupImageIndexOf(AGroup: Integer): Integer;
     { The rail width / the trigger band's height in device px (0 when the trigger is off). }
     function EffCollapsedWPx(APPI: Integer): Integer;
     function EffTriggerHPx(APPI: Integer): Integer;
@@ -237,6 +286,9 @@ type
     property CollapsedWidth: Integer read FCollapsedWidth write SetCollapsedWidth
       default TyListGroupDefaultCollapsedWidth;
     property OnCollapsedChange: TNotifyEvent read FOnCollapsedChange write FOnCollapsedChange;
+    { The sider's model, editable in the Object Inspector and streamed to the .lfm --
+      one flat list, group rows introducing the item rows that follow them. }
+    property Entries: TTyListGroupEntries read FEntries write SetEntries;
     property HeaderHeight: Integer read FHeaderHeight write SetHeaderHeight
       default TyListGroupDefaultHeaderHeight;
     property ItemHeight: Integer read FItemHeight write SetItemHeight
@@ -254,6 +306,102 @@ type
   end;
 
 implementation
+
+{ ---- the entry collection ---- }
+
+constructor TTyListGroupEntry.Create(ACollection: TCollection);
+begin
+  inherited Create(ACollection);
+  FKind := lgeItem;
+  FImageIndex := -1;
+  FExpanded := True;
+end;
+
+procedure TTyListGroupEntry.Assign(ASource: TPersistent);
+begin
+  if ASource is TTyListGroupEntry then
+  begin
+    FKind := TTyListGroupEntry(ASource).FKind;
+    FCaption := TTyListGroupEntry(ASource).FCaption;
+    FImageIndex := TTyListGroupEntry(ASource).FImageIndex;
+    FExpanded := TTyListGroupEntry(ASource).FExpanded;
+    Changed(False);
+  end
+  else
+    inherited Assign(ASource);
+end;
+
+function TTyListGroupEntry.GetDisplayName: string;
+begin
+  { The collection editor's row label: headers flush, items indented -- the whole
+    sider readable at a glance in one flat list. }
+  if FCaption = '' then Exit(inherited GetDisplayName);
+  if FKind = lgeGroup then
+    Result := FCaption
+  else
+    Result := '    ' + FCaption;
+end;
+
+procedure TTyListGroupEntry.SetKind(AValue: TTyListGroupEntryKind);
+begin
+  if FKind = AValue then Exit;
+  FKind := AValue;
+  Changed(False);
+end;
+
+procedure TTyListGroupEntry.SetCaption(const AValue: string);
+begin
+  if FCaption = AValue then Exit;
+  FCaption := AValue;
+  Changed(False);
+end;
+
+procedure TTyListGroupEntry.SetImageIndex(AValue: Integer);
+begin
+  if FImageIndex = AValue then Exit;
+  FImageIndex := AValue;
+  Changed(False);
+end;
+
+procedure TTyListGroupEntry.SetExpanded(AValue: Boolean);
+begin
+  if FExpanded = AValue then Exit;
+  FExpanded := AValue;
+  Changed(False);
+end;
+
+constructor TTyListGroupEntries.Create(APanel: TTyListGroupPanel);
+begin
+  inherited Create(APanel, TTyListGroupEntry);
+  FPanel := APanel;
+end;
+
+function TTyListGroupEntries.Add: TTyListGroupEntry;
+begin
+  Result := TTyListGroupEntry(inherited Add);
+end;
+
+function TTyListGroupEntries.GetEntry(AIndex: Integer): TTyListGroupEntry;
+begin
+  Result := TTyListGroupEntry(inherited Items[AIndex]);
+end;
+
+procedure TTyListGroupEntries.SetEntry(AIndex: Integer; AValue: TTyListGroupEntry);
+begin
+  TTyListGroupEntry(inherited Items[AIndex]).Assign(AValue);
+end;
+
+procedure TTyListGroupEntries.Update(AItem: TCollectionItem);
+begin
+  inherited Update(AItem);
+  if FPanel <> nil then FPanel.EntriesChanged;
+end;
+
+procedure TTyListGroupEntries.Notify(AItem: TCollectionItem; AAction: TCollectionNotification);
+begin
+  inherited Notify(AItem, AAction);
+  if FPanel <> nil then FPanel.EntriesChanged;
+end;
 
 { ---- pure geometry ---- }
 
@@ -333,6 +481,7 @@ begin
   FItemHeight := TyListGroupDefaultItemHeight;
   FSelGroup := -1;
   FSelItem := -1;
+  FEntries := TTyListGroupEntries.Create(Self);
   FHoverGroup := -1;
   FHoverItem := -1;
   FScrollOffset := 0;
@@ -344,7 +493,77 @@ end;
 
 destructor TTyListGroupPanel.Destroy;
 begin
+  FEntries.Free;
   inherited Destroy;
+end;
+
+procedure TTyListGroupPanel.SetEntries(AValue: TTyListGroupEntries);
+begin
+  FEntries.Assign(AValue);
+end;
+
+procedure TTyListGroupPanel.EntriesChanged;
+begin
+  if (FSelGroup >= GroupCount)
+    or ((FSelGroup >= 0) and (FSelItem >= ItemCount(FSelGroup))) then
+  begin
+    FSelGroup := -1;
+    FSelItem := -1;
+  end;
+  ClearHover;
+  ClampScroll;
+  Invalidate;
+end;
+
+function TTyListGroupPanel.HasImplicitGroup: Boolean;
+begin
+  Result := (FEntries.Count > 0) and (FEntries[0].Kind = lgeItem);
+end;
+
+function TTyListGroupPanel.GroupEntryIndex(AGroup: Integer): Integer;
+var
+  i, g: Integer;
+begin
+  if AGroup < 0 then Exit(Low(Integer));
+  g := -1;
+  if HasImplicitGroup then
+  begin
+    if AGroup = 0 then Exit(-1);
+    g := 0;                       // the implicit group consumed group index 0
+  end;
+  for i := 0 to FEntries.Count - 1 do
+    if FEntries[i].Kind = lgeGroup then
+    begin
+      Inc(g);
+      if g = AGroup then Exit(i);
+    end;
+  Result := Low(Integer);
+end;
+
+function TTyListGroupPanel.ItemEntryIndex(AGroup, AItem: Integer): Integer;
+var
+  e, n: Integer;
+begin
+  Result := -1;
+  if AItem < 0 then Exit;
+  e := GroupEntryIndex(AGroup);
+  if e = Low(Integer) then Exit;
+  n := -1;
+  Inc(e);                          // first row after the header (implicit -1 -> 0)
+  while (e < FEntries.Count) and (FEntries[e].Kind = lgeItem) do
+  begin
+    Inc(n);
+    if n = AItem then Exit(e);
+    Inc(e);
+  end;
+end;
+
+function TTyListGroupPanel.GroupImageIndexOf(AGroup: Integer): Integer;
+var
+  e: Integer;
+begin
+  e := GroupEntryIndex(AGroup);
+  if e >= 0 then Result := FEntries[e].ImageIndex else Result := -1;
 end;
 
 function TTyListGroupPanel.GetStyleTypeKey: string;
@@ -373,14 +592,30 @@ end;
 
 function TTyListGroupPanel.BuildShapes: TTyListGroupShapes;
 var
-  g: Integer;
+  i, g: Integer;
 begin
-  SetLength(Result, Length(FGroups));
-  for g := 0 to High(FGroups) do
-  begin
-    Result[g].Expanded := FGroups[g].Expanded;
-    Result[g].ItemCount := Length(FGroups[g].Items);
-  end;
+  SetLength(Result, GroupCount);
+  g := -1;
+  for i := 0 to FEntries.Count - 1 do
+    case FEntries[i].Kind of
+      lgeGroup:
+        begin
+          Inc(g);
+          Result[g].Expanded := FEntries[i].Expanded;
+          Result[g].ItemCount := 0;
+        end;
+      lgeItem:
+        begin
+          if g < 0 then
+          begin
+            { Orphan rows before any header: the implicit always-expanded group. }
+            g := 0;
+            Result[0].Expanded := True;
+            Result[0].ItemCount := 0;
+          end;
+          Inc(Result[g].ItemCount);
+        end;
+    end;
 end;
 
 function TTyListGroupPanel.BuildLayout: TTyListGroupParts;
@@ -485,15 +720,20 @@ begin
 end;
 
 function TTyListGroupPanel.AddGroup(const ACaption: string; AImageIndex: Integer): Integer;
+var
+  entry: TTyListGroupEntry;
 begin
-  Result := Length(FGroups);
-  SetLength(FGroups, Result + 1);
-  FGroups[Result].Caption := ACaption;
-  FGroups[Result].Expanded := False;
-  FGroups[Result].ImageIndex := AImageIndex;
-  SetLength(FGroups[Result].Items, 0);
-  ClampScroll;
-  Invalidate;
+  FEntries.BeginUpdate;
+  try
+    entry := FEntries.Add;
+    entry.FKind := lgeGroup;
+    entry.FCaption := ACaption;
+    entry.FImageIndex := AImageIndex;
+    entry.FExpanded := False;        // the facade's historical default: closed
+  finally
+    FEntries.EndUpdate;
+  end;
+  Result := GroupCount - 1;
 end;
 
 procedure TTyListGroupPanel.SetImages(AValue: TCustomImageList);
@@ -540,21 +780,32 @@ end;
 function TTyListGroupPanel.AddItem(AGroupIndex: Integer; const ACaption: string;
   AImageIndex: Integer): Integer;
 var
-  n: Integer;
+  e, scan: Integer;
+  entry: TTyListGroupEntry;
 begin
-  if (AGroupIndex < 0) or (AGroupIndex > High(FGroups)) then Exit(-1);
-  n := Length(FGroups[AGroupIndex].Items);
-  SetLength(FGroups[AGroupIndex].Items, n + 1);
-  FGroups[AGroupIndex].Items[n].Caption := ACaption;
-  FGroups[AGroupIndex].Items[n].ImageIndex := AImageIndex;
-  Result := n;
-  ClampScroll;
-  Invalidate;
+  if (AGroupIndex < 0) or (AGroupIndex >= GroupCount) then Exit(-1);
+  e := GroupEntryIndex(AGroupIndex);
+  { Insert AFTER the group's last item row, so the flat order keeps the item inside
+    its group (an append at the flat end would land it in the LAST group). }
+  scan := e + 1;                    // implicit group (-1) -> scan from 0
+  while (scan < FEntries.Count) and (FEntries[scan].Kind = lgeItem) do
+    Inc(scan);
+  FEntries.BeginUpdate;
+  try
+    entry := FEntries.Add;
+    entry.Index := scan;
+    entry.FKind := lgeItem;
+    entry.FCaption := ACaption;
+    entry.FImageIndex := AImageIndex;
+  finally
+    FEntries.EndUpdate;
+  end;
+  Result := ItemCount(AGroupIndex) - 1;
 end;
 
 procedure TTyListGroupPanel.Clear;
 begin
-  SetLength(FGroups, 0);
+  FEntries.Clear;
   FSelGroup := -1;
   FSelItem := -1;
   FHoverGroup := -1;
@@ -564,75 +815,98 @@ begin
 end;
 
 function TTyListGroupPanel.GroupCount: Integer;
+var
+  i: Integer;
 begin
-  Result := Length(FGroups);
+  Result := 0;
+  if HasImplicitGroup then Inc(Result);
+  for i := 0 to FEntries.Count - 1 do
+    if FEntries[i].Kind = lgeGroup then Inc(Result);
 end;
 
 function TTyListGroupPanel.ItemCount(AGroupIndex: Integer): Integer;
+var
+  e: Integer;
 begin
-  if (AGroupIndex < 0) or (AGroupIndex > High(FGroups)) then Exit(0);
-  Result := Length(FGroups[AGroupIndex].Items);
+  Result := 0;
+  e := GroupEntryIndex(AGroupIndex);
+  if e = Low(Integer) then Exit;
+  Inc(e);
+  while (e < FEntries.Count) and (FEntries[e].Kind = lgeItem) do
+  begin
+    Inc(Result);
+    Inc(e);
+  end;
 end;
 
 function TTyListGroupPanel.ItemCaption(AGroupIndex, AItemIndex: Integer): string;
+var
+  e: Integer;
 begin
-  Result := '';
-  if (AGroupIndex < 0) or (AGroupIndex > High(FGroups)) then Exit;
-  if (AItemIndex < 0) or (AItemIndex > High(FGroups[AGroupIndex].Items)) then Exit;
-  Result := FGroups[AGroupIndex].Items[AItemIndex].Caption;
+  e := ItemEntryIndex(AGroupIndex, AItemIndex);
+  if e >= 0 then Result := FEntries[e].Caption else Result := '';
 end;
 
 function TTyListGroupPanel.ItemImageIndex(AGroupIndex, AItemIndex: Integer): Integer;
+var
+  e: Integer;
 begin
-  Result := -1;
-  if (AGroupIndex < 0) or (AGroupIndex > High(FGroups)) then Exit;
-  if (AItemIndex < 0) or (AItemIndex > High(FGroups[AGroupIndex].Items)) then Exit;
-  Result := FGroups[AGroupIndex].Items[AItemIndex].ImageIndex;
+  e := ItemEntryIndex(AGroupIndex, AItemIndex);
+  if e >= 0 then Result := FEntries[e].ImageIndex else Result := -1;
 end;
 
 function TTyListGroupPanel.GroupExpanded(AGroup: Integer): Boolean;
+var
+  e: Integer;
 begin
-  if (AGroup < 0) or (AGroup > High(FGroups)) then Exit(False);
-  Result := FGroups[AGroup].Expanded;
+  e := GroupEntryIndex(AGroup);
+  if e = Low(Integer) then Exit(False);
+  if e < 0 then Exit(True);         // the implicit group has no chevron to close it
+  Result := FEntries[e].Expanded;
 end;
 
 procedure TTyListGroupPanel.SetGroupExpanded(AGroup: Integer; AValue: Boolean);
+var
+  e: Integer;
 begin
-  if (AGroup < 0) or (AGroup > High(FGroups)) then Exit;
-  if FGroups[AGroup].Expanded = AValue then Exit;
-  FGroups[AGroup].Expanded := AValue;
+  e := GroupEntryIndex(AGroup);
+  if e < 0 then Exit;               // out of range, or the implicit group (always open)
+  if FEntries[e].Expanded = AValue then Exit;
+  FEntries[e].FExpanded := AValue;  // direct: EntriesChanged below covers the repaint
   ClampScroll;
   Invalidate;
   if Assigned(FOnGroupToggle) then FOnGroupToggle(Self, AGroup);
 end;
 
 function TTyListGroupPanel.GetGroupCaption(AGroup: Integer): string;
+var
+  e: Integer;
 begin
-  Result := '';
-  if (AGroup < 0) or (AGroup > High(FGroups)) then Exit;
-  Result := FGroups[AGroup].Caption;
+  e := GroupEntryIndex(AGroup);
+  if e >= 0 then Result := FEntries[e].Caption else Result := '';
 end;
 
 procedure TTyListGroupPanel.SetGroupCaption(AGroup: Integer; const AValue: string);
+var
+  e: Integer;
 begin
-  if (AGroup < 0) or (AGroup > High(FGroups)) then Exit;
-  if FGroups[AGroup].Caption = AValue then Exit;
-  FGroups[AGroup].Caption := AValue;
-  Invalidate;
+  e := GroupEntryIndex(AGroup);
+  if e < 0 then Exit;
+  FEntries[e].Caption := AValue;    // the setter funnels the repaint
 end;
 
 procedure TTyListGroupPanel.ToggleGroup(AGroupIndex: Integer);
 begin
-  if (AGroupIndex < 0) or (AGroupIndex > High(FGroups)) then Exit;
-  SetGroupExpanded(AGroupIndex, not FGroups[AGroupIndex].Expanded);
+  if (AGroupIndex < 0) or (AGroupIndex >= GroupCount) then Exit;
+  SetGroupExpanded(AGroupIndex, not GroupExpanded(AGroupIndex));
 end;
 
 procedure TTyListGroupPanel.SelectItem(AGroupIndex, AItemIndex: Integer);
 var
   valid: Boolean;
 begin
-  valid := (AGroupIndex >= 0) and (AGroupIndex <= High(FGroups))
-    and (AItemIndex >= 0) and (AItemIndex <= High(FGroups[AGroupIndex].Items));
+  valid := (AGroupIndex >= 0) and (AGroupIndex < GroupCount)
+    and (AItemIndex >= 0) and (AItemIndex < ItemCount(AGroupIndex));
   if not valid then
   begin
     AGroupIndex := -1;
@@ -843,7 +1117,7 @@ begin
         begin
           railIcon := P.Scale(ActiveController.Metric(TyListGroupIconSizeVar, TyListGroupDefaultIconSize));
           DrawRowIcon(P, (partR.Left + partR.Right - railIcon) div 2, partR.Top,
-            partR.Bottom - partR.Top, FGroups[parts[i].GroupIndex].ImageIndex);
+            partR.Bottom - partR.Top, GroupImageIndexOf(parts[i].GroupIndex));
           Continue;
         end;
 
@@ -860,7 +1134,7 @@ begin
         // Optional group icon on the left, then the caption between icon and chevron.
         contentL := partR.Left + P.Scale(HdrStyle.Padding.Left);
         contentL := DrawRowIcon(P, contentL, partR.Top, partR.Bottom - partR.Top,
-          FGroups[parts[i].GroupIndex].ImageIndex);
+          GroupImageIndexOf(parts[i].GroupIndex));
         cap := GetGroupCaption(parts[i].GroupIndex);
         if cap <> '' then
         begin

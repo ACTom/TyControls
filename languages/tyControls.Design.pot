@@ -38,6 +38,10 @@ msgstr ""
 msgid "Preview"
 msgstr ""
 
+#: tycontrols.design.rsdtentriesedit
+msgid "Edit entries..."
+msgstr ""
+
 #: tycontrols.design.rsdtfontfilefilter
 msgid "Font files (*.ttf;*.otf;*.ttc)|*.ttf;*.otf;*.ttc|All files|*"
 msgstr ""
@@ -80,6 +84,10 @@ msgstr ""
 
 #: tycontrols.design.rsdtimagenopayload
 msgid "(no image)"
+msgstr ""
+
+#: tycontrols.design.rsdtimgcoledit
+msgid "Edit images..."
 msgstr ""
 
 #: tycontrols.design.rsdtmainformdescription

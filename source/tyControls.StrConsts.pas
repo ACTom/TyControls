@@ -119,6 +119,15 @@ resourcestring
   // --- Icon browser dialog — user-facing, translated ---
   rsDlgIconBrowserTitle = 'Icon Browser';
   rsDlgIconSearchHint   = 'Search icons by name';
+  rsDlgImgColTitle        = 'Images';
+  rsDlgImgColAdd          = 'Add…';
+  rsDlgImgColReplace      = 'Replace…';
+  rsDlgImgColDelete       = 'Delete';
+  rsDlgImgColRename       = 'Rename…';
+  rsDlgImgColUp           = 'Move Up';
+  rsDlgImgColDown         = 'Move Down';
+  rsDlgImgColClear        = 'Clear';
+  rsDlgImgColRenamePrompt = 'New name:';
   rsDlgIconNoMatches    = 'No icons match';
   rsDlgIconCount        = '%d icons';
   { %s = the glyph name, %d = its ImageIndex in the associated image list. }
