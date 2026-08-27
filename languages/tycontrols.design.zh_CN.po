@@ -160,9 +160,9 @@ msgstr "图标浏览器..."
 msgid "Edit images..."
 msgstr "编辑图像..."
 
-#: tycontrols.design.rsdtentriesedit
-msgid "Edit entries..."
-msgstr "编辑条目..."
+#: tycontrols.design.rsdtgroupsedit
+msgid "Edit groups..."
+msgstr "编辑分组..."
 
 #: tycontrols.design.rsdticonneedsfont
 msgid "Set IconFont first: there is no icon font to browse."

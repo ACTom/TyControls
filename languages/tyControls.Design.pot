@@ -38,10 +38,6 @@ msgstr ""
 msgid "Preview"
 msgstr ""
 
-#: tycontrols.design.rsdtentriesedit
-msgid "Edit entries..."
-msgstr ""
-
 #: tycontrols.design.rsdtfontfilefilter
 msgid "Font files (*.ttf;*.otf;*.ttc)|*.ttf;*.otf;*.ttc|All files|*"
 msgstr ""
@@ -56,6 +52,10 @@ msgstr ""
 
 #: tycontrols.design.rsdtformname
 msgid "TyControls Form"
+msgstr ""
+
+#: tycontrols.design.rsdtgroupsedit
+msgid "Edit groups..."
 msgstr ""
 
 #: tycontrols.design.rsdticonbrowse

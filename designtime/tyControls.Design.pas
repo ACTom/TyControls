@@ -175,9 +175,9 @@ type
     procedure ExecuteVerb(Index: Integer); override;
   end;
 
-  { TTyListGroupPanel's double-click: the stock collection editor aimed at Entries --
-    the ActionList experience the sider was asked for. One flat list, group rows flush
-    and item rows indented (the entry's DisplayName), properties per row in the OI. }
+  { TTyListGroupPanel's double-click: the stock collection editor aimed at Groups --
+    add the groups here, then each group's own Items '...' (in the OI) opens that
+    group's rows. Nested, matching how a sider is authored. }
   TTyListGroupPanelComponentEditor = class(TDefaultComponentEditor)
   public
     function GetVerbCount: Integer; override;
@@ -399,7 +399,7 @@ resourcestring
     package's -- the two have separate .po catalogues. }
   rsDtIconBrowse    = 'Icon browser...';
   rsDtImgColEdit    = 'Edit images...';
-  rsDtEntriesEdit   = 'Edit entries...';
+  rsDtGroupsEdit    = 'Edit groups...';
   rsDtIconNeedsFont = 'Set IconFont first: there is no icon font to browse.';
   rsDtTreeEditNodes = 'Edit Nodes...';
   rsDtSurfacePurposeTitle = 'Why this control exists';
@@ -757,7 +757,7 @@ end;
 
 function TTyListGroupPanelComponentEditor.GetVerb(Index: Integer): string;
 begin
-  if Index = 0 then Result := rsDtEntriesEdit else Result := '';
+  if Index = 0 then Result := rsDtGroupsEdit else Result := '';
 end;
 
 procedure TTyListGroupPanelComponentEditor.ExecuteVerb(Index: Integer);
@@ -766,7 +766,7 @@ var
 begin
   if Index <> 0 then begin inherited ExecuteVerb(Index); Exit; end;
   P := Component as TTyListGroupPanel;
-  TCollectionPropertyEditor.ShowCollectionEditor(P.Entries, P, 'Entries');
+  TCollectionPropertyEditor.ShowCollectionEditor(P.Groups, P, 'Groups');
 end;
 
 function TTyImageCollectionComponentEditor.GetVerbCount: Integer;

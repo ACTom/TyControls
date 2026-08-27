@@ -1,9 +1,10 @@
 unit test.listgrouppanel.entries;
 {$mode objfpc}{$H+}
-{ The design-time entry collection (QQ-group request): a published, OI-editable, .lfm-
-  streamable model behind the sider, with the code-building API (AddGroup/AddItem/...)
-  kept as a delegating facade. The collection is FLAT with a Kind per row -- the
-  TTyTreeNodes precedent -- so one standard collection editor shows the whole sider. }
+{ The design-time model (QQ-group request): a published, OI-editable, .lfm-streamable
+  collection behind the sider, with the code-building API (AddGroup/AddItem/...) kept
+  as a delegating facade. The model is NESTED -- Groups, each with its own Items --
+  matching how a sider is authored (real-machine feedback: a flat kind-per-row list
+  read as "everything is an item"). }
 interface
 
 uses
@@ -18,11 +19,9 @@ type
     procedure SetUp; override;
     procedure TearDown; override;
   published
-    procedure EntriesBuildTheModel;
-    procedure LegacyAddersFillEntries;
-    procedure AddItemInsertsInsideItsGroup;
-    procedure OrphanLeadingItemsFormAnImplicitGroup;
-    procedure StreamingRoundTripsTheEntries;
+    procedure GroupsBuildTheModel;
+    procedure LegacyAddersFillTheGroups;
+    procedure StreamingRoundTripsTheGroups;
     procedure EditsClampTheSelection;
   end;
 
@@ -46,67 +45,47 @@ begin
   FPanel.Free;
 end;
 
-procedure TListGroupEntriesTest.EntriesBuildTheModel;
+procedure TListGroupEntriesTest.GroupsBuildTheModel;
+var
+  g: TTyListGroup;
 begin
-  with FPanel.Entries.Add do begin Kind := lgeGroup; Caption := 'Contacts'; ImageIndex := 3; end;
-  with FPanel.Entries.Add do begin Kind := lgeItem; Caption := 'Alice'; ImageIndex := 5; end;
-  with FPanel.Entries.Add do begin Kind := lgeItem; Caption := 'Bob'; end;
-  with FPanel.Entries.Add do begin Kind := lgeGroup; Caption := 'Tasks'; Expanded := False; end;
-  with FPanel.Entries.Add do begin Kind := lgeItem; Caption := 'Report'; end;
+  g := FPanel.Groups.Add;
+  g.Caption := 'Contacts';
+  g.ImageIndex := 3;
+  with g.Items.Add do begin Caption := 'Alice'; ImageIndex := 5; end;
+  g.Items.Add.Caption := 'Bob';
+  g := FPanel.Groups.Add;
+  g.Caption := 'Tasks';
+  g.Expanded := False;
+  g.Items.Add.Caption := 'Report';
 
   AssertEquals('two groups', 2, FPanel.GroupCount);
   AssertEquals('first group holds its two items', 2, FPanel.ItemCount(0));
   AssertEquals('by caption', 'Bob', FPanel.ItemCaption(0, 1));
   AssertEquals('item icon carried', 5, FPanel.ItemImageIndex(0, 0));
   AssertEquals('second group', 'Tasks', FPanel.GroupCaption[1]);
-  AssertFalse('a collapsed group streams in collapsed', FPanel.Expanded[1]);
+  AssertTrue('a designer-made group starts open', FPanel.Groups[0].Expanded);
+  AssertFalse('an authored-closed group reads closed', FPanel.Expanded[1]);
   AssertEquals('its item', 'Report', FPanel.ItemCaption(1, 0));
 end;
 
-procedure TListGroupEntriesTest.LegacyAddersFillEntries;
-var
-  g: Integer;
-begin
-  g := FPanel.AddGroup('Nav', 7);
-  FPanel.AddItem(g, 'Home', 1);
-  FPanel.AddItem(g, 'About');
-  AssertEquals('three entries behind the facade', 3, FPanel.Entries.Count);
-  AssertEquals('a group row first', Ord(lgeGroup), Ord(FPanel.Entries[0].Kind));
-  AssertEquals('with its icon', 7, FPanel.Entries[0].ImageIndex);
-  AssertEquals('then the items', Ord(lgeItem), Ord(FPanel.Entries[1].Kind));
-  AssertEquals('in order', 'About', FPanel.Entries[2].Caption);
-end;
-
-procedure TListGroupEntriesTest.AddItemInsertsInsideItsGroup;
+procedure TListGroupEntriesTest.LegacyAddersFillTheGroups;
 var
   gA: Integer;
 begin
-  gA := FPanel.AddGroup('A');
+  gA := FPanel.AddGroup('Nav', 7);
   FPanel.AddGroup('B');
-  FPanel.AddItem(gA, 'a1');    // must land BEFORE group B's row, not at the flat end
-  AssertEquals('group A owns it', 1, FPanel.ItemCount(0));
-  AssertEquals('group B stays empty', 0, FPanel.ItemCount(1));
-  AssertEquals('flat order: A, a1, B', 'a1', FPanel.Entries[1].Caption);
-  AssertEquals('B pushed after', 'B', FPanel.Entries[2].Caption);
+  FPanel.AddItem(gA, 'Home', 1);
+  FPanel.AddItem(gA, 'About');
+  AssertEquals('two groups behind the facade', 2, FPanel.Groups.Count);
+  AssertEquals('with the icon', 7, FPanel.Groups[0].ImageIndex);
+  AssertFalse('the facade keeps its historical closed default', FPanel.Groups[0].Expanded);
+  AssertEquals('the items landed inside THEIR group', 2, FPanel.Groups[0].Items.Count);
+  AssertEquals('in order', 'About', FPanel.Groups[0].Items[1].Caption);
+  AssertEquals('and not in the neighbour', 0, FPanel.Groups[1].Items.Count);
 end;
 
-procedure TListGroupEntriesTest.OrphanLeadingItemsFormAnImplicitGroup;
-begin
-  // The designer can author an item before any group; dropping the row silently would
-  // be hostile, so it belongs to an implicit caption-less group that is always expanded.
-  with FPanel.Entries.Add do begin Kind := lgeItem; Caption := 'Loose'; end;
-  with FPanel.Entries.Add do begin Kind := lgeGroup; Caption := 'Real'; end;
-  with FPanel.Entries.Add do begin Kind := lgeItem; Caption := 'Inside'; end;
-
-  AssertEquals('the implicit group counts', 2, FPanel.GroupCount);
-  AssertEquals('it has no caption', '', FPanel.GroupCaption[0]);
-  AssertEquals('and holds the orphan', 'Loose', FPanel.ItemCaption(0, 0));
-  AssertTrue('it is always expanded', FPanel.Expanded[0]);
-  AssertEquals('the real group follows', 'Real', FPanel.GroupCaption[1]);
-  AssertEquals('with its own item', 'Inside', FPanel.ItemCaption(1, 0));
-end;
-
-procedure TListGroupEntriesTest.StreamingRoundTripsTheEntries;
+procedure TListGroupEntriesTest.StreamingRoundTripsTheGroups;
 var
   Src, Dst: THostForm;
   MS: TMemoryStream;
@@ -123,7 +102,6 @@ begin
     Src.LGP.AddGroup('Nav', 2);
     Src.LGP.AddItem(0, 'Home', 4);
     Src.LGP.AddItem(0, 'About');
-    Src.LGP.Expanded[0] := False;
     MS.WriteComponent(Src);
 
     MS.Position := 0;
@@ -131,13 +109,13 @@ begin
 
     DstP := Dst.FindComponent('LGP') as TTyListGroupPanel;
     AssertNotNull('the panel survived', DstP);
-    AssertEquals('three entries', 3, DstP.Entries.Count);
     AssertEquals('one group', 1, DstP.GroupCount);
-    AssertEquals('its icon', 2, DstP.Entries[0].ImageIndex);
+    AssertEquals('its icon', 2, DstP.Groups[0].ImageIndex);
+    AssertEquals('the nested items streamed with it', 2, DstP.Groups[0].Items.Count);
     AssertEquals('items intact', 'Home', DstP.ItemCaption(0, 0));
     AssertEquals('item icon intact', 4, DstP.ItemImageIndex(0, 0));
     AssertEquals('default icon not written, restored as -1', -1, DstP.ItemImageIndex(0, 1));
-    AssertFalse('the collapsed flag survived', DstP.Expanded[0]);
+    AssertFalse('the facade-closed flag survived', DstP.Expanded[0]);
   finally
     MS.Free;
     Dst.Free;
@@ -154,14 +132,19 @@ begin
   FPanel.SelectItem(1, 0);
   AssertEquals('fixture: selected in group B', 1, FPanel.SelectedGroup);
 
-  // Deleting group B's rows from the collection must not leave a dangling selection.
-  FPanel.Entries.Delete(3);
-  FPanel.Entries.Delete(2);
+  // Deleting group B from the collection must not leave a dangling selection.
+  FPanel.Groups.Delete(1);
   AssertEquals('one group left', 1, FPanel.GroupCount);
-  AssertTrue('the selection was clamped away',
+  AssertTrue('the group selection was clamped away',
     (FPanel.SelectedGroup < FPanel.GroupCount)
     and ((FPanel.SelectedGroup < 0)
       or (FPanel.SelectedItem < FPanel.ItemCount(FPanel.SelectedGroup))));
+
+  // And the same through the NESTED level: deleting a selected item bubbles up too.
+  FPanel.SelectItem(0, 0);
+  FPanel.Groups[0].Items.Delete(0);
+  AssertTrue('the item selection was clamped away',
+    (FPanel.SelectedGroup < 0) or (FPanel.SelectedItem < FPanel.ItemCount(FPanel.SelectedGroup)));
 end;
 
 initialization
