@@ -138,6 +138,21 @@ end;
 - **鼠标悬停**：`MouseMove` 更新悬停项，驱动标题栏/条目的 `:hover` 态；`MouseLeave` 清除。
 - **滚轮**：内容溢出时，滚轮每格平移 `3 × ItemHeight`；内容适配时不滚动。折叠某分组导致内容变矮时，`ScrollOffset` 会**重新钳制**回合法范围。
 
+### 整栏收缩（侧边栏折叠）
+
+```pascal
+property Collapsed: Boolean;              // True = 收成图标轨道；运行时可随时切换
+property ShowCollapseTrigger: Boolean;    // 底部触发带（默认 False，现有界面不变）
+property CollapsedWidth: Integer;         // 轨道宽的逻辑 px 回落值（默认 48）
+property OnCollapsedChange: TNotifyEvent; // 每次真实切换触发一次
+```
+
+- `Collapsed := True` 把整个面板收窄成图标轨道：条目和分组头只画居中图标（无图标的行留空），选中胶囊保留;展开时恢复收缩前的宽度。面板通常 `Align = alLeft`,宽度变化会带动整窗重排——这就是"给内容让位"。
+- `ShowCollapseTrigger` 在底部加一条整宽触发带,点击即切换;箭头方向指向边缘将要移动的方向(右停靠的面板自动镜像)。触发带的高度计入滚动视口(行不会画到带子底下,末行仍能完整滚入)。
+- 主题令牌:`--listgroup-collapsed-width`、`--listgroup-trigger-height`(令牌优先于属性回落值);触发带借用 `TyListGroupHeader` 的常态样式着色。
+- 从 `.lfm` 以 `Collapsed = True` 加载时保留流化的宽度;首次运行时展开由宿主自定宽度,此后收/展按捕获值往返。
+- 示例:examples/antdesign 的 Sider 已开 `ShowCollapseTrigger`。
+
 ---
 
 ## 6. 用法示例

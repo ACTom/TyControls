@@ -66,6 +66,7 @@ object MainForm: TMainForm
       Top = 48
       Width = 224
       TabOrder = 1
+      ShowCollapseTrigger = True
       HeaderHeight = 48
       ItemHeight = 44
       OnItemClick = SiderItemClick

@@ -48,6 +48,9 @@ type
     procedure TestSelectedItemIsAnInsetRoundedPill;
     procedure TestItemIndentTokenPushesChildContentRight;
     procedure TestHitTestMatchesPaintUnderSkinHeight;
+    procedure TestPanelCollapseTogglesWidthAndRestores;
+    procedure TestCollapseTriggerClickToggles;
+    procedure TestTriggerBandShrinksTheScrollViewport;
   end;
 
 implementation
@@ -66,6 +69,12 @@ type
     Count: Integer;
     LastGroup: Integer;
     procedure Handle(Sender: TObject; AGroupIndex: Integer);
+  end;
+
+  TNotifyProbe = class
+  public
+    Count: Integer;
+    procedure Handle(Sender: TObject);
   end;
 
   TItemProbe = class
@@ -93,6 +102,11 @@ end;
 procedure TPanelAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   inherited RenderTo(ACanvas, ARect, APPI);
+end;
+
+procedure TNotifyProbe.Handle(Sender: TObject);
+begin
+  Inc(Count);
 end;
 
 procedure TToggleProbe.Handle(Sender: TObject; AGroupIndex: Integer);
@@ -704,6 +718,89 @@ begin
   finally
     P.Free; Ctl.Free;
   end;
+end;
+
+procedure TTyListGroupPanelTest.TestPanelCollapseTogglesWidthAndRestores;
+// The sider-level collapse (QQ-group request): Collapsed narrows the whole panel to the
+// icon rail (the --listgroup-collapsed-width token, 48 logical px by default) and expands
+// back to the width it had; OnCollapsedChange fires once per real change.
+var
+  P: TTyListGroupPanel;
+  NP: TNotifyProbe;
+begin
+  NP := TNotifyProbe.Create;
+  try
+    P := TTyListGroupPanel.Create(FForm);
+    P.Parent := FForm;
+    P.Font.PixelsPerInch := 96;
+    P.SetBounds(0, 0, 220, 300);
+    P.OnCollapsedChange := @NP.Handle;
+
+    P.Collapsed := True;
+    AssertEquals('collapsed to the rail width', 48, P.Width);
+    AssertEquals('change fired once', 1, NP.Count);
+
+    P.Collapsed := True;
+    AssertEquals('a no-op assignment does not fire', 1, NP.Count);
+
+    P.Collapsed := False;
+    AssertEquals('the expanded width is restored', 220, P.Width);
+    AssertEquals('the expand fired too', 2, NP.Count);
+  finally
+    NP.Free;
+  end;
+end;
+
+procedure TTyListGroupPanelTest.TestCollapseTriggerClickToggles;
+// The bottom trigger band: a click inside it flips Collapsed both ways; a click above it
+// keeps behaving as a row click.
+var
+  A: TPanelAccess;
+begin
+  A := TPanelAccess.Create(FForm);
+  A.Parent := FForm;
+  A.Font.PixelsPerInch := 96;
+  A.SetBounds(0, 0, 220, 200);
+  A.ShowCollapseTrigger := True;
+  A.AddGroup('G');
+  A.AddItem(0, 'One');
+
+  A.DoMouseDown(110, 200 - 8);           // inside the 28px trigger band
+  AssertTrue('the trigger collapses', A.Collapsed);
+  A.DoMouseDown(A.Width div 2, 200 - 8); // the band spans the rail too
+  AssertFalse('the trigger expands back', A.Collapsed);
+end;
+
+procedure TTyListGroupPanelTest.TestTriggerBandShrinksTheScrollViewport;
+// The viewport rule (the scroll-geometry lesson): rows never paint under the trigger
+// band, so the scroll range must grow by exactly the band's height when it is shown --
+// otherwise the last row hides behind the band and can never scroll fully into view.
+var
+  A, B: TPanelAccess;
+  g, i, n: Integer;
+begin
+  A := TPanelAccess.Create(FForm);
+  B := TPanelAccess.Create(FForm);
+  A.Parent := FForm;  B.Parent := FForm;
+  A.Font.PixelsPerInch := 96;  B.Font.PixelsPerInch := 96;
+  A.SetBounds(0, 0, 200, 100);
+  B.SetBounds(220, 0, 200, 100);
+  B.ShowCollapseTrigger := True;
+  for g := 0 to 4 do
+  begin
+    A.AddGroup('G' + IntToStr(g));  B.AddGroup('G' + IntToStr(g));
+    for i := 0 to 3 do
+    begin
+      A.AddItem(g, 'Item');  B.AddItem(g, 'Item');
+    end;
+  end;
+  for n := 1 to 60 do
+  begin
+    A.CallWheel(-120);  B.CallWheel(-120);   // clamp both to their max offsets
+  end;
+  AssertTrue('fixture: the content overflows', A.ScrollOffset > 0);
+  AssertEquals('the trigger band comes off the scroll viewport',
+    28, B.ScrollOffset - A.ScrollOffset);
 end;
 
 initialization

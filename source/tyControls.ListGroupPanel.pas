@@ -25,9 +25,15 @@ const
   // call site on the default. Heights: the token WINS when a theme sets it, else the published
   // HeaderHeight/ItemHeight property is the fallback — so a skin owns the sider's rhythm
   // ('40px airy' is a skin decision) while a single instance can still override.
+  // Sider collapse (the AntD trigger): the icon-rail width when Collapsed, and the bottom
+  // trigger band's height when ShowCollapseTrigger is on.
+  TyListGroupDefaultCollapsedWidth = 48;
+  TyListGroupDefaultTriggerHeight  = 28;
   TyListGroupHeaderHeightVar = '--listgroup-header-height';
   TyListGroupItemHeightVar   = '--listgroup-item-height';
   TyListGroupChevronSizeVar  = '--listgroup-chevron-size';
+  TyListGroupCollapsedWidthVar = '--listgroup-collapsed-width';
+  TyListGroupTriggerHeightVar  = '--listgroup-trigger-height';
   TyListGroupIconSizeVar     = '--listgroup-icon-size';
   TyListGroupIconGapVar      = '--listgroup-icon-gap';
   TyListGroupItemInsetVar    = '--listgroup-item-inset';
@@ -140,8 +146,19 @@ type
     FHoverGroup: Integer;   // -1 = none
     FHoverItem: Integer;    // -1 = none
     FScrollOffset: Integer; // device px content is shifted UP by (>=0)
+    FCollapsed: Boolean;
+    FShowCollapseTrigger: Boolean;
+    FCollapsedWidth: Integer;      // logical px fallback for the width token
+    FExpandedWidth: Integer;       // captured by a runtime collapse; 0 = never collapsed
     FOnGroupToggle: TTyListGroupToggleEvent;
     FOnItemClick: TTyListGroupItemEvent;
+    FOnCollapsedChange: TNotifyEvent;
+    procedure SetCollapsed(AValue: Boolean);
+    procedure SetShowCollapseTrigger(AValue: Boolean);
+    procedure SetCollapsedWidth(AValue: Integer);
+    { The rail width / the trigger band's height in device px (0 when the trigger is off). }
+    function EffCollapsedWPx(APPI: Integer): Integer;
+    function EffTriggerHPx(APPI: Integer): Integer;
     procedure SetHeaderHeight(AValue: Integer);
     procedure SetItemHeight(AValue: Integer);
     procedure SetImages(AValue: TCustomImageList);
@@ -206,6 +223,20 @@ type
     { Current vertical scroll offset (device px, 0..MaxScrollOffset); wheel-driven. }
     property ScrollOffset: Integer read FScrollOffset;
   published
+    { Sider collapse (QQ-group request). Collapsed narrows the panel to an icon rail
+      (captions, group chevrons and hierarchy indent are dropped; icons stay clickable)
+      and expanding restores the width the runtime collapse captured. ShowCollapseTrigger
+      adds a full-width band along the bottom whose chevron toggles Collapsed — off by
+      default, so existing siders keep their look. CollapsedWidth is the logical-px
+      fallback for the --listgroup-collapsed-width token (the token wins, as with the
+      band heights). A panel LOADED with Collapsed=True keeps its streamed width; the
+      first runtime expand then leaves the width to the host until a collapse captures one. }
+    property Collapsed: Boolean read FCollapsed write SetCollapsed default False;
+    property ShowCollapseTrigger: Boolean read FShowCollapseTrigger
+      write SetShowCollapseTrigger default False;
+    property CollapsedWidth: Integer read FCollapsedWidth write SetCollapsedWidth
+      default TyListGroupDefaultCollapsedWidth;
+    property OnCollapsedChange: TNotifyEvent read FOnCollapsedChange write FOnCollapsedChange;
     property HeaderHeight: Integer read FHeaderHeight write SetHeaderHeight
       default TyListGroupDefaultHeaderHeight;
     property ItemHeight: Integer read FItemHeight write SetItemHeight
@@ -305,6 +336,7 @@ begin
   FHoverGroup := -1;
   FHoverItem := -1;
   FScrollOffset := 0;
+  FCollapsedWidth := TyListGroupDefaultCollapsedWidth;
   TabStop := True;
   Width := 200;
   Height := 260;
@@ -363,9 +395,11 @@ begin
   contentH := TyListGroupContentHeight(BuildLayout);
   // Content is painted inside the frame INTERIOR (inset by the border on top and bottom), so the
   // scrollable range is against the interior height, not the full Height — else the last row's
-  // bottom stays hidden behind the border and can never be scrolled fully into view.
+  // bottom stays hidden behind the border and can never be scrolled fully into view. The
+  // collapse-trigger band comes off it too: rows never paint under the band, so the band's
+  // height must be scrollable-past for the same reason.
   bw := MulDiv(CurrentStyle.BorderWidth, Font.PixelsPerInch, 96);
-  Result := contentH - (Height - 2 * bw);
+  Result := contentH - (Height - 2 * bw - EffTriggerHPx(Font.PixelsPerInch));
   if Result < 0 then Result := 0;
 end;
 
@@ -376,6 +410,60 @@ begin
   m := MaxScrollOffset;
   if FScrollOffset > m then FScrollOffset := m;
   if FScrollOffset < 0 then FScrollOffset := 0;
+end;
+
+function TTyListGroupPanel.EffCollapsedWPx(APPI: Integer): Integer;
+begin
+  Result := MulDiv(ActiveController.Metric(TyListGroupCollapsedWidthVar, FCollapsedWidth),
+    APPI, 96);
+  if Result < 1 then Result := 1;
+end;
+
+function TTyListGroupPanel.EffTriggerHPx(APPI: Integer): Integer;
+begin
+  if not FShowCollapseTrigger then Exit(0);
+  Result := MulDiv(ActiveController.Metric(TyListGroupTriggerHeightVar,
+    TyListGroupDefaultTriggerHeight), APPI, 96);
+  if Result < 0 then Result := 0;
+end;
+
+procedure TTyListGroupPanel.SetCollapsed(AValue: Boolean);
+begin
+  if FCollapsed = AValue then Exit;
+  FCollapsed := AValue;
+  { While streaming, only record the state: Width streams on its own (the .lfm holds the
+    designed width), and juggling it mid-load would capture half-loaded geometry. }
+  if not (csLoading in ComponentState) then
+  begin
+    if FCollapsed then
+    begin
+      FExpandedWidth := Width;
+      Width := EffCollapsedWPx(Font.PixelsPerInch);
+    end
+    else if FExpandedWidth > 0 then
+      Width := FExpandedWidth;
+    ClearHover;
+    ClampScroll;
+    Invalidate;
+    if Assigned(FOnCollapsedChange) then FOnCollapsedChange(Self);
+  end;
+end;
+
+procedure TTyListGroupPanel.SetShowCollapseTrigger(AValue: Boolean);
+begin
+  if FShowCollapseTrigger = AValue then Exit;
+  FShowCollapseTrigger := AValue;
+  ClampScroll;    // the band changes the scroll viewport
+  Invalidate;
+end;
+
+procedure TTyListGroupPanel.SetCollapsedWidth(AValue: Integer);
+begin
+  if AValue < 1 then AValue := 1;
+  if FCollapsedWidth = AValue then Exit;
+  FCollapsedWidth := AValue;
+  if FCollapsed and not (csLoading in ComponentState) then
+    Width := EffCollapsedWPx(Font.PixelsPerInch);
 end;
 
 procedure TTyListGroupPanel.SetHeaderHeight(AValue: Integer);
@@ -586,9 +674,21 @@ begin
   if not Enabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
   if Button <> mbLeft then Exit;
+  bw := MulDiv(CurrentStyle.BorderWidth, Font.PixelsPerInch, 96);
+  // The collapse-trigger band claims the bottom strip before any row hit-testing.
+  if FShowCollapseTrigger and (Y >= Height - bw - EffTriggerHPx(Font.PixelsPerInch))
+    and (Y < Height - bw) then
+  begin
+    Collapsed := not Collapsed;
+    try
+      if CanFocus then SetFocus;
+    except
+      // headless / no-handle: ignore
+    end;
+    Exit;
+  end;
   parts := BuildLayout;
   // Map device Y -> content Y: undo the top-border inset the paint adds, then add the scroll.
-  bw := MulDiv(CurrentStyle.BorderWidth, Font.PixelsPerInch, 96);
   hit := TyListGroupHitTest(parts, Point(X, Y - bw + FScrollOffset));
   if hit.Hit then
   begin
@@ -675,12 +775,12 @@ var
   BoxStyle, HdrStyle, ItemStyle: TTyStyleSet;
   R, partR, textR, chevRect, pillR: TRect;
   parts: TTyListGroupParts;
-  i, hdrHPx, itemHPx, chevSize, insetPx, contentL: Integer;
+  i, hdrHPx, itemHPx, chevSize, insetPx, contentL, trigH, railIcon: Integer;
   states: TTyStateSet;
   kind: TTyGlyphKind;
-  savedClip: TRect;
+  savedClip, trigR: TRect;
   cap: string;
-  selected, hovered: Boolean;
+  selected, hovered, leftSider: Boolean;
 begin
   P := TTyPainter.Create;
   try
@@ -700,11 +800,14 @@ begin
     parts := TyListGroupLayout(BuildShapes, hdrHPx, itemHPx, R.Right - R.Left);
 
     // Clip everything to the frame interior so scrolled content never paints over the border.
+    // Rows additionally stop ABOVE the collapse-trigger band: it owns the bottom strip, and
+    // MaxScrollOffset grants the same height back so the last row stays fully reachable.
+    trigH := EffTriggerHPx(APPI);
     savedClip := P.Bitmap.ClipRect;
     P.Bitmap.ClipRect := Rect(R.Left + P.Scale(BoxStyle.BorderWidth),
       R.Top + P.Scale(BoxStyle.BorderWidth),
       R.Right - P.Scale(BoxStyle.BorderWidth),
-      R.Bottom - P.Scale(BoxStyle.BorderWidth));
+      R.Bottom - P.Scale(BoxStyle.BorderWidth) - trigH);
 
     for i := 0 to High(parts) do
     begin
@@ -713,8 +816,8 @@ begin
       // the first row's top and the last row's bottom become fully reachable.
       partR := parts[i].Rect;
       OffsetRect(partR, 0, P.Scale(BoxStyle.BorderWidth) - FScrollOffset);
-      // Skip parts entirely outside the visible band.
-      if (partR.Bottom <= R.Top) or (partR.Top >= R.Bottom) then Continue;
+      // Skip parts entirely outside the visible band (the trigger strip is not row space).
+      if (partR.Bottom <= R.Top) or (partR.Top >= R.Bottom - trigH) then Continue;
 
       if parts[i].Kind = lgpHeader then
       begin
@@ -733,6 +836,16 @@ begin
         // unfilled (no grey band), so the absence of a bg must mean "no band", not a default.
         if tpBackground in HdrStyle.Present then
           P.FillBackground(partR, HdrStyle.Background, TyEffectiveCorners(HdrStyle));
+
+        // Collapsed rail: the group header keeps its band and shows its icon centred —
+        // no chevron, no caption (there is no room for either).
+        if FCollapsed then
+        begin
+          railIcon := P.Scale(ActiveController.Metric(TyListGroupIconSizeVar, TyListGroupDefaultIconSize));
+          DrawRowIcon(P, (partR.Left + partR.Right - railIcon) div 2, partR.Top,
+            partR.Bottom - partR.Top, FGroups[parts[i].GroupIndex].ImageIndex);
+          Continue;
+        end;
 
         // Chevron on the RIGHT (Ant's placement), in a themed square slot. Down = expanded,
         // right = collapsed. Pad 1: chevRect is a slot already sized from a token, so the token
@@ -779,6 +892,16 @@ begin
         if tpBackground in ItemStyle.Present then
           P.FillBackground(pillR, ItemStyle.Background, TyEffectiveCorners(ItemStyle));
 
+        // Collapsed rail: the selection pill stays (narrow), the icon centres, and the
+        // caption and hierarchy indent are dropped.
+        if FCollapsed then
+        begin
+          railIcon := P.Scale(ActiveController.Metric(TyListGroupIconSizeVar, TyListGroupDefaultIconSize));
+          DrawRowIcon(P, (partR.Left + partR.Right - railIcon) div 2, partR.Top,
+            partR.Bottom - partR.Top, ItemImageIndex(parts[i].GroupIndex, parts[i].ItemIndex));
+          Continue;
+        end;
+
         // Content inside the pill: the caption's own padding + a HIERARCHY INDENT (a child sits
         // clearly deeper than its group header), then the optional icon, then the caption. The
         // indent is its own token — NOT the pill inset — so the step is tunable independently of
@@ -793,6 +916,32 @@ begin
         P.DrawText(textR, cap, ItemStyle.FontName, ResolveFontSize(ItemStyle),
           ItemStyle.FontWeight, ItemStyle.TextColor, taLeftJustify, tlCenter, True);
       end;
+    end;
+
+    // The collapse-trigger band, under the rows and inside the border. Dressed by the
+    // group-header key (normal state) so a skin that tints headers tints the trigger with
+    // them; the chevron points where a click will take the edge — away from the content
+    // when expanded, back over it when collapsed — mirrored for a right-docked sider.
+    if trigH > 0 then
+    begin
+      P.Bitmap.ClipRect := Rect(R.Left + P.Scale(BoxStyle.BorderWidth),
+        R.Top + P.Scale(BoxStyle.BorderWidth),
+        R.Right - P.Scale(BoxStyle.BorderWidth),
+        R.Bottom - P.Scale(BoxStyle.BorderWidth));
+      trigR := Rect(R.Left + P.Scale(BoxStyle.BorderWidth),
+        R.Bottom - P.Scale(BoxStyle.BorderWidth) - trigH,
+        R.Right - P.Scale(BoxStyle.BorderWidth),
+        R.Bottom - P.Scale(BoxStyle.BorderWidth));
+      HdrStyle := ActiveController.Model.ResolveStyle('TyListGroupHeader', StyleClass, [tysNormal]);
+      if tpBackground in HdrStyle.Present then
+        P.FillBackground(trigR, HdrStyle.Background, TyEffectiveCorners(HdrStyle));
+      leftSider := Align <> alRight;
+      if leftSider xor FCollapsed then kind := tgChevronLeft else kind := tgChevronRight;
+      chevRect := Rect((trigR.Left + trigR.Right - chevSize) div 2,
+        (trigR.Top + trigR.Bottom - chevSize) div 2,
+        (trigR.Left + trigR.Right + chevSize) div 2,
+        (trigR.Top + trigR.Bottom + chevSize) div 2);
+      TyDrawGlyph(P, ActiveController, chevRect, kind, HdrStyle.TextColor, 1, 1);
     end;
 
     P.Bitmap.ClipRect := savedClip;
