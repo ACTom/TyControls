@@ -69,6 +69,7 @@ type
     FOnChanging: TTyTabChangingEvent;
     FOnReorder: TTyTabReorderEvent;
     FTabsClosable: Boolean;
+    FDesignTabGesture: Boolean;   // a design-time press landed on a tab; see CMDesignHitTest
     FOnTabClose: TTyTabCloseEvent;
     FHeaderRects: array of TRect;
     FCloseRects:  array of TRect;
@@ -2118,8 +2119,26 @@ procedure TTyCustomTabStrip.CMDesignHitTest(var Message: TCMDesignHitTest);
 begin
   { Result 1 hands the designer's mouse message to the control's normal path, so the
     existing MouseDown tab hit-test runs and switches the page. Only ON a tab -- the
-    body must stay a plain designer click (select the control / drop children). }
-  if DesignTabClicksEnabled and (IndexOfTabAt(Message.XPos, Message.YPos) >= 0) then
+    body must stay a plain designer click (select the control / drop children).
+
+    GESTURE CONSISTENCY. The designer consults this per message AT THE CURRENT POSITION
+    and, on a pass, delivers that one message and exits without touching its own mouse
+    state (designer.pp MouseDown/Up/MoveOnControl). Answering per position therefore
+    tears a press apart the moment the pointer drifts off the tab -- and selecting can
+    re-layout the strip under the pointer -- leaving the designer to run its move/up
+    logic against the stale MouseDownComponent of the down it never processed: a
+    rubber-band selection chasing the mouse. So once a design press lands on a tab
+    (MouseDown arms FDesignTabGesture), EVERY consultation answers 1 until the release;
+    the release consultation (no pressed left button in Keys) disarms on its way through,
+    which also self-heals if the control never sees the MouseUp itself. }
+  if not DesignTabClicksEnabled then Exit;
+  if FDesignTabGesture then
+  begin
+    Message.Result := 1;
+    if (Message.Keys and MK_LBUTTON) = 0 then
+      FDesignTabGesture := False;
+  end
+  else if IndexOfTabAt(Message.XPos, Message.YPos) >= 0 then
     Message.Result := 1;
 end;
 
@@ -2132,6 +2151,15 @@ var
 begin
   if not Enabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
+  { A design-time press only ever reaches us through the CM_DESIGNHITTEST pass
+    (i.e. it landed on a tab): arm the gesture so every consultation until the
+    release stays with the control, and capture so the moves keep flowing here
+    even off the control (the designer dropped capture before delivering). }
+  if (csDesigning in ComponentState) and (Button = mbLeft) then
+  begin
+    FDesignTabGesture := True;
+    if HandleAllocated then MouseCapture := True;
+  end;
   if Button = mbLeft then
   begin
     PPI  := Font.PixelsPerInch;
@@ -2162,18 +2190,27 @@ begin
         if HitRect(HdrRect, X, Y) then     // both axes -- see IndexOfTabAt
         begin
           CloseRect := ToScreenRect(FCloseRects[I]);
-          if GetTabClosableAt(I) and HitRect(CloseRect, X, Y) then
+          { Not at design time: closing there would delete the page behind the
+            designer's back (no Modified, no undo) -- the click selects instead.
+            Page management belongs to the component editor. }
+          if GetTabClosableAt(I) and HitRect(CloseRect, X, Y)
+            and not (csDesigning in ComponentState) then
             DoCloseClick(I)
           else
           begin
             TabIndex := I;
             { Arm a drag-reorder candidate. A plain press+release stays a click
               (FDragging never flips); only a move past the threshold reorders.
-              FDragOrigin pins the start index so MouseUp can report the net move. }
-            FDragTab    := I;
-            FDragOrigin := I;
-            FDragStartMain := MainOf(X, Y);
-            FDragging   := False;
+              FDragOrigin pins the start index so MouseUp can report the net move.
+              Not at design time: a reorder there would change the page order
+              without the designer hearing about it. }
+            if not (csDesigning in ComponentState) then
+            begin
+              FDragTab    := I;
+              FDragOrigin := I;
+              FDragStartMain := MainOf(X, Y);
+              FDragging   := False;
+            end;
           end;
           Break;
         end;
@@ -2280,6 +2317,11 @@ procedure TTyCustomTabStrip.MouseUp(Button: TMouseButton; Shift: TShiftState;
 var
   FromIdx, ToIdx: Integer;
 begin
+  if FDesignTabGesture then
+  begin
+    FDesignTabGesture := False;
+    if HandleAllocated then MouseCapture := False;
+  end;
   inherited MouseUp(Button, Shift, X, Y);
   { A committed reorder fires OnReorder exactly once for the whole gesture, with
     the net from (press) -> to (final) move. FDragging only flips True once the

@@ -2,7 +2,7 @@ unit test.pagecontrol;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Controls, Forms, fpcunit, testregistry,
+  Classes, SysUtils, Controls, Forms, LCLType, fpcunit, testregistry,
   tyControls.Controller, tyControls.TabSheet, tyControls.PageControl;
 type
   { Reaches the protected client-rect seam, and counts realigns: Realign is not virtual, but
@@ -33,6 +33,9 @@ type
     procedure TestFirstPageAutoSelected;
     procedure TestShowControlActivatesThePage;
     procedure TestDesignHitTestPassesTabClicks;
+    procedure TestDesignGestureStaysWithTheControl;
+    procedure TestDesignClickNeverClosesATab;
+    procedure TestDesignDragDoesNotReorder;
     procedure TestActivePageSwitchTogglesVisibility;
     procedure TestActivePageTogglesDesignVisibleFlag;
     procedure TestRemovePageCompactsAndReselects;
@@ -140,6 +143,91 @@ begin
   P := Point(FPC.Width div 2, FPC.Height - 10);
   res := FPC.Perform(CM_DESIGNHITTEST, 0, PtrInt((P.Y shl 16) or (P.X and $FFFF)));
   AssertEquals('the page body stays designer-owned', 0, res);
+end;
+
+procedure TPageControlTest.TestDesignGestureStaysWithTheControl;
+// The designer consults CM_DESIGNHITTEST per message AT THE CURRENT POSITION and, on a
+// pass, hands that one message to the control and exits WITHOUT touching its own mouse
+// state. A per-position answer therefore breaks the gesture apart the moment the pointer
+// drifts off the tab (selecting can even re-layout the strip under it): the designer then
+// runs its move/up logic against the stale MouseDownComponent from the skipped down and
+// starts a rubber-band selection (real-machine report). Once a design press lands on a
+// tab, the WHOLE gesture must stay with the control -- moves and the release answer 1
+// anywhere -- and the release disarms.
+var
+  TabPt, BodyPt: TPoint;
+  res: PtrInt;
+begin
+  FPC.AddPage('A');
+  FPC.AddPage('B');
+  FPC.AddPage('C');
+  TPCAccess(FPC).SetDesigning(True);
+  TabPt := FPC.TabRect(2).CenterPoint;
+  BodyPt := Point(FPC.Width div 2, FPC.Height - 10);
+
+  TShowAccess(FPC).MouseDown(mbLeft, [], TabPt.X, TabPt.Y);
+  AssertEquals('the press selected the tab', 2, FPC.ActivePageIndex);
+
+  res := FPC.Perform(CM_DESIGNHITTEST, MK_LBUTTON,
+    PtrInt((BodyPt.Y shl 16) or (BodyPt.X and $FFFF)));
+  AssertEquals('mid-gesture, a body consultation stays with the control', 1, res);
+
+  res := FPC.Perform(CM_DESIGNHITTEST, 0,
+    PtrInt((BodyPt.Y shl 16) or (BodyPt.X and $FFFF)));
+  AssertEquals('the release consultation is still the control''s', 1, res);
+
+  res := FPC.Perform(CM_DESIGNHITTEST, 0,
+    PtrInt((BodyPt.Y shl 16) or (BodyPt.X and $FFFF)));
+  AssertEquals('the gesture disarmed after the release', 0, res);
+
+  TShowAccess(FPC).MouseUp(mbLeft, [], BodyPt.X, BodyPt.Y);   // idempotent disarm
+end;
+
+procedure TPageControlTest.TestDesignClickNeverClosesATab;
+// A design-time click anywhere on a tab -- including on its close button -- selects the
+// page and never closes it: closing bypasses the designer (the page vanishes with no
+// undo, no Modified). Sweep the whole tab so the X is hit wherever the theme puts it.
+var
+  r: TRect;
+  x, y: Integer;
+begin
+  FPC.TabsClosable := True;
+  FPC.AddPage('A');
+  FPC.AddPage('B');
+  FPC.AddPage('C');
+  TPCAccess(FPC).SetDesigning(True);
+  r := FPC.TabRect(1);
+  y := (r.Top + r.Bottom) div 2;
+  x := r.Left + 2;
+  while x < r.Right - 1 do
+  begin
+    TShowAccess(FPC).MouseDown(mbLeft, [], x, y);
+    TShowAccess(FPC).MouseUp(mbLeft, [], x, y);
+    Inc(x, 2);
+  end;
+  AssertEquals('no design-time click closed a page', 3, FPC.PageCount);
+  AssertEquals('the clicks selected the tab instead', 1, FPC.ActivePageIndex);
+end;
+
+procedure TPageControlTest.TestDesignDragDoesNotReorder;
+// Drag-reorder is a runtime gesture: at design time a reorder would change the page
+// order without the designer ever hearing about it (no Modified, stale .lfm).
+var
+  P0, P2: TPoint;
+begin
+  FPC.AddPage('A');
+  FPC.AddPage('B');
+  FPC.AddPage('C');
+  TPCAccess(FPC).SetDesigning(True);
+  P0 := FPC.TabRect(0).CenterPoint;
+  P2 := FPC.TabRect(2).CenterPoint;
+  TShowAccess(FPC).MouseDown(mbLeft, [], P0.X, P0.Y);
+  TShowAccess(FPC).MouseMove([ssLeft], P2.X, P2.Y);
+  TShowAccess(FPC).MouseUp(mbLeft, [], P2.X, P2.Y);
+  AssertEquals('order unchanged: A', 'A', FPC.Pages[0].Caption);
+  AssertEquals('order unchanged: B', 'B', FPC.Pages[1].Caption);
+  AssertEquals('order unchanged: C', 'C', FPC.Pages[2].Caption);
+  AssertEquals('the press still selected the pressed tab', 0, FPC.ActivePageIndex);
 end;
 
 procedure TPageControlTest.TestActivePageSwitchTogglesVisibility;
