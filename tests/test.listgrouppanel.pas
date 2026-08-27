@@ -39,6 +39,7 @@ type
     procedure TestHeaderClickToggles;
     procedure TestItemClickSelects;
     procedure TestDoubleClickFiresOnItemDblClick;
+    procedure TestRailCharTakesTheFirstGlyph;
     procedure TestCollapsedGroupHasNoItemHits;
     procedure TestWheelScrollsWhenOverflow;
     procedure TestWheelNoScrollWhenFits;
@@ -459,6 +460,16 @@ begin
     P.OnItemDblClick := nil;
     probe.Free;
   end;
+end;
+
+procedure TTyListGroupPanelTest.TestRailCharTakesTheFirstGlyph;
+begin
+  { The collapsed rail's fallback cell for icon-less rows: the caption's first
+    GLYPH -- walking UTF-8 wrong here clips a CJK caption to a mojibake byte. }
+  AssertEquals('ASCII', 'N', TyListGroupRailChar('Nav'));
+  AssertEquals('CJK takes the whole first ideograph', '设', TyListGroupRailChar('设置中心'));
+  AssertEquals('2-byte scripts too', 'ä', TyListGroupRailChar('äpfel'));
+  AssertEquals('empty stays empty', '', TyListGroupRailChar(''));
 end;
 
 procedure TTyListGroupPanelTest.TestCollapsedGroupHasNoItemHits;

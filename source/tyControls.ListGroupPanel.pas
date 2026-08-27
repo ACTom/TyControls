@@ -89,6 +89,12 @@ function TyListGroupContentHeight(const AParts: TTyListGroupParts): Integer;
   because item rects never overlap their header. Miss -> Hit=False. }
 function TyListGroupHitTest(const AParts: TTyListGroupParts; const APt: TPoint): TTyListGroupHit;
 
+{ The collapsed rail's fallback cell: the caption's first UTF-8 glyph ('' for an empty
+  caption) — what an icon-less row shows on the rail (the AntD collapsed-menu move), so
+  no row is a blank, unidentifiable slot. Exported for the tests: walking UTF-8 wrong
+  here clips a CJK caption to a mojibake byte. }
+function TyListGroupRailChar(const ACaption: string): string;
+
 type
   TTyListGroupPanel = class;
 
@@ -503,6 +509,37 @@ procedure TTyListGroups.Update(AItem: TCollectionItem);
 begin
   inherited Update(AItem);
   if FPanel <> nil then FPanel.GroupsChanged;
+end;
+
+function TyListGroupRailChar(const ACaption: string): string;
+var
+  n: Integer;
+  b: Byte;
+begin
+  Result := '';
+  if ACaption = '' then Exit;
+  b := Ord(ACaption[1]);
+  if b < $80 then n := 1
+  else if b >= $F0 then n := 4
+  else if b >= $E0 then n := 3
+  else if b >= $C0 then n := 2
+  else n := 1;                       // a stray continuation byte: take it alone
+  if n > Length(ACaption) then n := Length(ACaption);
+  Result := Copy(ACaption, 1, n);
+end;
+
+{ The rail's section-rule ink, the TyToolSeparator rule: the theme's border ink when it
+  has any, else the row's text colour at a whisper — so borderless modern skins still
+  get a visible rule without a new token. }
+function RailRuleFill(const AStyle: TTyStyleSet): TTyFill;
+begin
+  Result := Default(TTyFill);
+  Result.Kind := tfkSolid;
+  if TyAlphaOf(AStyle.BorderColor) > 0 then
+    Result.Color := AStyle.BorderColor
+  else
+    Result.Color := TyRGBA(TyRedOf(AStyle.TextColor), TyGreenOf(AStyle.TextColor),
+      TyBlueOf(AStyle.TextColor), 48);
 end;
 
 { ---- pure geometry ---- }
@@ -1055,7 +1092,7 @@ var
   BoxStyle, HdrStyle, ItemStyle: TTyStyleSet;
   R, partR, textR, chevRect, pillR: TRect;
   parts: TTyListGroupParts;
-  i, hdrHPx, itemHPx, chevSize, insetPx, contentL, trigH, railIcon: Integer;
+  i, hdrHPx, itemHPx, chevSize, insetPx, contentL, trigH, railIcon, railX, railSep: Integer;
   states: TTyStateSet;
   kind: TTyGlyphKind;
   savedClip, trigR: TRect;
@@ -1121,9 +1158,23 @@ begin
         // no chevron, no caption (there is no room for either).
         if FCollapsed then
         begin
+          // The rail's hierarchy cue (real-machine feedback: a rail of same-sized icons
+          // reads as one flat list): a short inset rule ABOVE each group but the first.
+          // With captions and indents gone, section breaks are the only structure left.
+          if parts[i].GroupIndex > 0 then
+          begin
+            railSep := (partR.Right - partR.Left) div 5;
+            P.FillBackground(Rect(partR.Left + railSep, partR.Top,
+              partR.Right - railSep, partR.Top + 1), RailRuleFill(HdrStyle), 0);
+          end;
           railIcon := P.Scale(ActiveController.Metric(TyListGroupIconSizeVar, TyListGroupDefaultIconSize));
-          DrawRowIcon(P, (partR.Left + partR.Right - railIcon) div 2, partR.Top,
-            partR.Bottom - partR.Top, FGroups[parts[i].GroupIndex].ImageIndex);
+          railX := (partR.Left + partR.Right - railIcon) div 2;
+          if DrawRowIcon(P, railX, partR.Top, partR.Bottom - partR.Top,
+            FGroups[parts[i].GroupIndex].ImageIndex) = railX then
+            // No icon: the caption's first glyph keeps the slot identifiable.
+            P.DrawText(partR, TyListGroupRailChar(GetGroupCaption(parts[i].GroupIndex)),
+              HdrStyle.FontName, ResolveFontSize(HdrStyle), HdrStyle.FontWeight,
+              HdrStyle.TextColor, taCenter, tlCenter, False);
           Continue;
         end;
 
@@ -1177,8 +1228,13 @@ begin
         if FCollapsed then
         begin
           railIcon := P.Scale(ActiveController.Metric(TyListGroupIconSizeVar, TyListGroupDefaultIconSize));
-          DrawRowIcon(P, (partR.Left + partR.Right - railIcon) div 2, partR.Top,
-            partR.Bottom - partR.Top, ItemImageIndex(parts[i].GroupIndex, parts[i].ItemIndex));
+          railX := (partR.Left + partR.Right - railIcon) div 2;
+          if DrawRowIcon(P, railX, partR.Top, partR.Bottom - partR.Top,
+            ItemImageIndex(parts[i].GroupIndex, parts[i].ItemIndex)) = railX then
+            // No icon: the caption's first glyph keeps the slot identifiable.
+            P.DrawText(partR, TyListGroupRailChar(ItemCaption(parts[i].GroupIndex, parts[i].ItemIndex)),
+              ItemStyle.FontName, ResolveFontSize(ItemStyle), ItemStyle.FontWeight,
+              ItemStyle.TextColor, taCenter, tlCenter, False);
           Continue;
         end;
 
