@@ -128,6 +128,12 @@ resourcestring
   rsDlgImgColDown         = 'Move Down';
   rsDlgImgColClear        = 'Clear';
   rsDlgImgColRenamePrompt = 'New name:';
+  rsDlgLgeTitle           = 'Groups';
+  rsDlgLgeAddGroup        = 'Add Group';
+  rsDlgLgeAddItem         = 'Add Item';
+  rsDlgLgeDelete          = 'Delete';
+  rsDlgLgeUp              = 'Move Up';
+  rsDlgLgeDown            = 'Move Down';
   rsDlgIconNoMatches    = 'No icons match';
   rsDlgIconCount        = '%d icons';
   { %s = the glyph name, %d = its ImageIndex in the associated image list. }

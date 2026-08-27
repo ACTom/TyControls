@@ -133,6 +133,8 @@ type
     constructor Create(AGroup: TTyListGroup);
     function Add: TTyListGroupItem;
     property Items[AIndex: Integer]: TTyListGroupItem read GetItem write SetItem; default;
+    { The group these rows belong to -- how an item's editor walks back up the model. }
+    property Group: TTyListGroup read FGroup;
   end;
 
   TTyListGroup = class(TCollectionItem)

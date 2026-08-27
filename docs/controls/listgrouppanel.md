@@ -149,7 +149,7 @@ property Groups: TTyListGroups;          // published 嵌套集合,OI 可编辑�
 //     每条 TTyListGroupItem: Caption / ImageIndex
 ```
 
-侧边栏现在可以完全在设计器里搭:双击控件(或右键「编辑分组...」)打开 Groups 集合编辑器,先加分组;选中某个分组,在 OI 里点它的 `Items` 旁的 `...` 再编辑该组的条目——先建组、组下建项,和写代码时的心智一致。属性直接在 OI 改,随 `.lfm` 存盘。代码 API(`AddGroup`/`AddItem`/`ItemCaption`/`Expanded[]` 等)全部保留,底层同一个集合。
+侧边栏现在可以完全在设计器里搭:双击控件(或右键「编辑分组...」)打开专用的**结构编辑器**——一棵树看全所有分组和条目,右侧「加分组 / 加条目 / 删除 / 上移 / 下移」原地增删排序;加条目落在当前选中的分组里(选中条目时插在它下面)。树里选中任何分组或条目,Object Inspector 直接显示它的属性,当场改,随 `.lfm` 存盘。窗口是非模态的,可以一直开着边搭边调;IDE 的组件树(OI 上方)同样递归列出 Groups→Items,两边都能选。代码 API(`AddGroup`/`AddItem`/`ItemCaption`/`Expanded[]` 等)全部保留,底层同一个集合。
 
 ### 整栏收缩（侧边栏折叠）
 

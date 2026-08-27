@@ -20,6 +20,7 @@ uses
   test.gridpanel, test.gridcell, test.relativepanel,
   test.toolbarex, test.controlbar, test.coolbar,
   test.headercontrol, test.listgrouppanel, test.listgrouppanel.entries,
+  test.listgrouppanel.editor,
   test.checkbox,
   test.radiobutton, test.controls.panel, test.controls.combobox,
   test.controls.scrollbar, test.form, test.formsurface, test.edgepassthrough, test.release, test.themes,

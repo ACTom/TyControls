@@ -537,6 +537,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.Dialogs.ImageCollectionEditor"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.Dialogs.ListGroupsEditor.pas"/>
+        <UnitName Value="tyControls.Dialogs.ListGroupsEditor"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.ImageDraw.pas"/>
         <UnitName Value="tyControls.ImageDraw"/>
       </Item>

@@ -818,6 +818,30 @@ msgstr "清空"
 msgid "New name:"
 msgstr "新名称:"
 
+#: tycontrols.strconsts.rsdlglgetitle
+msgid "Groups"
+msgstr "分组"
+
+#: tycontrols.strconsts.rsdlglgeaddgroup
+msgid "Add Group"
+msgstr "加分组"
+
+#: tycontrols.strconsts.rsdlglgeadditem
+msgid "Add Item"
+msgstr "加条目"
+
+#: tycontrols.strconsts.rsdlglgedelete
+msgid "Delete"
+msgstr "删除"
+
+#: tycontrols.strconsts.rsdlglgeup
+msgid "Move Up"
+msgstr "上移"
+
+#: tycontrols.strconsts.rsdlglgedown
+msgid "Move Down"
+msgstr "下移"
+
 #: tycontrols.strconsts.rsdlgiconcount
 #, object-pascal-format
 msgid "%d icons"

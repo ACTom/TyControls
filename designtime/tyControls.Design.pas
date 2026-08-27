@@ -3,7 +3,7 @@ unit tyControls.Design;
 interface
 uses
   Classes, SysUtils, Forms, Controls, Dialogs, Menus, StdCtrls, ExtCtrls, Graphics, LCLIntf, LCLType,
-  PropEdits, ComponentEditors, ProjectIntf, FormEditingIntf, LazIDEIntf,
+  PropEdits, PropEditUtils, ComponentEditors, ProjectIntf, FormEditingIntf, LazIDEIntf,
   LResources, tyControls.Types, tyControls.Component,
   tyControls.Base, tyControls.Controller, tyControls.StyleModel,
   tyControls.Button, tyControls.TyLabel, tyControls.Edit, tyControls.NumericEdit,
@@ -65,7 +65,9 @@ uses
     it with the collection's own codec — no TPicture anywhere on that path. }
   BGRABitmap,
   { The SynEdit-backed tycss editor for StyleOverride (design-time only). }
-  tyControls.Design.Css.Editor;
+  tyControls.Design.Css.Editor,
+  { The sider's modeless structure editor (one tree over Groups AND their Items). }
+  tyControls.Dialogs.ListGroupsEditor;
 type
   TTyStyleClassPropertyEditor = class(TStringPropertyEditor)
   public
@@ -175,14 +177,37 @@ type
     procedure ExecuteVerb(Index: Integer); override;
   end;
 
-  { TTyListGroupPanel's double-click: the stock collection editor aimed at Groups --
-    add the groups here, then each group's own Items '...' (in the OI) opens that
-    group's rows. Nested, matching how a sider is authored. }
-  TTyListGroupPanelComponentEditor = class(TDefaultComponentEditor)
+  { TTyListGroupPanel's double-click: the modeless structure editor -- ONE tree over
+    every group and item (real-machine feedback: the stock collection editor shows one
+    layer per open, so authoring a second group's items meant reopening editors).
+    TComponentEditor, not TDefaultComponentEditor: double-click must open this, not
+    generate an OnClick handler. }
+  TTyListGroupPanelComponentEditor = class(TComponentEditor)
   public
     function GetVerbCount: Integer; override;
     function GetVerb(Index: Integer): string; override;
     procedure ExecuteVerb(Index: Integer); override;
+  end;
+
+  { The Groups editor's IDE plumbing, the stock collection editor's lifecycle: one
+    shared modeless window; the tree's selection is routed into the Object Inspector,
+    every edit marks the designer modified, outside edits refresh the tree, and the
+    panel going away detaches the window. }
+  TTyListGroupsDesignerLink = class(TComponent)
+  private
+    FForm: TTyListGroupsEditorForm;
+    FPanel: TTyListGroupPanel;
+    function OwnsModelObject(APersistent: TPersistent): Boolean;
+    procedure EditorSelectObject(Sender: TObject; AObject: TPersistent);
+    procedure EditorEdited(Sender: TObject);
+    procedure HookPersistentDeleting(APersistent: TPersistent);
+    procedure HookRefresh;
+  protected
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+  public
+    destructor Destroy; override;
+    procedure ShowFor(APanel: TTyListGroupPanel);
+    procedure Detach;
   end;
 
   TTyGlyphNamePropertyEditor = class(TStringPropertyEditor)
@@ -760,13 +785,115 @@ begin
   if Index = 0 then Result := rsDtGroupsEdit else Result := '';
 end;
 
-procedure TTyListGroupPanelComponentEditor.ExecuteVerb(Index: Integer);
 var
-  P: TTyListGroupPanel;
+  ListGroupsLink: TTyListGroupsDesignerLink = nil;
+
+procedure TTyListGroupPanelComponentEditor.ExecuteVerb(Index: Integer);
 begin
   if Index <> 0 then begin inherited ExecuteVerb(Index); Exit; end;
-  P := Component as TTyListGroupPanel;
-  TCollectionPropertyEditor.ShowCollectionEditor(P.Groups, P, 'Groups');
+  if ListGroupsLink = nil then
+    ListGroupsLink := TTyListGroupsDesignerLink.Create(Application);
+  ListGroupsLink.ShowFor(Component as TTyListGroupPanel);
+end;
+
+{ TTyListGroupsDesignerLink }
+
+destructor TTyListGroupsDesignerLink.Destroy;
+begin
+  if GlobalDesignHook <> nil then
+    GlobalDesignHook.RemoveAllHandlersForObject(Self);
+  if ListGroupsLink = Self then ListGroupsLink := nil;
+  inherited Destroy;   // FForm is owned by Self, freed with it
+end;
+
+procedure TTyListGroupsDesignerLink.ShowFor(APanel: TTyListGroupPanel);
+begin
+  if APanel = nil then Exit;
+  if FForm = nil then
+  begin
+    FForm := TTyListGroupsEditorForm.CreateNew(Self);
+    FForm.OnSelectObject := @EditorSelectObject;
+    FForm.OnEdited := @EditorEdited;
+  end;
+  if FPanel <> APanel then
+  begin
+    if FPanel <> nil then FPanel.RemoveFreeNotification(Self);
+    FPanel := APanel;
+    FPanel.FreeNotification(Self);
+    FForm.SetPanel(FPanel);
+  end
+  else
+    FForm.RefreshFromModel;   // same target: the model may still have changed elsewhere
+  if GlobalDesignHook <> nil then
+  begin
+    GlobalDesignHook.RemoveAllHandlersForObject(Self);
+    GlobalDesignHook.AddHandlerPersistentDeleting(@HookPersistentDeleting);
+    GlobalDesignHook.AddHandlerRefreshPropertyValues(@HookRefresh);
+  end;
+  FForm.Show;
+  FForm.BringToFront;
+end;
+
+procedure TTyListGroupsDesignerLink.Detach;
+begin
+  if FPanel <> nil then FPanel.RemoveFreeNotification(Self);
+  FPanel := nil;
+  if FForm <> nil then
+  begin
+    FForm.SetPanel(nil);
+    FForm.Hide;
+  end;
+end;
+
+function TTyListGroupsDesignerLink.OwnsModelObject(APersistent: TPersistent): Boolean;
+begin
+  Result := False;
+  if FPanel = nil then Exit;
+  if APersistent is TTyListGroup then
+    Result := TTyListGroup(APersistent).Collection = FPanel.Groups
+  else if APersistent is TTyListGroupItem then
+    Result := (TTyListGroupItem(APersistent).Collection as TTyListGroupItems)
+                .Group.Collection = FPanel.Groups;
+end;
+
+procedure TTyListGroupsDesignerLink.EditorSelectObject(Sender: TObject; AObject: TPersistent);
+begin
+  if (AObject = nil) or (FPanel = nil) or (GlobalDesignHook = nil) then Exit;
+  GlobalDesignHook.LookupRoot := GetLookupRootForComponent(FPanel);
+  GlobalDesignHook.SelectOnlyThis(AObject);
+end;
+
+procedure TTyListGroupsDesignerLink.EditorEdited(Sender: TObject);
+begin
+  if GlobalDesignHook <> nil then
+    GlobalDesignHook.Modified(Self);
+end;
+
+procedure TTyListGroupsDesignerLink.HookPersistentDeleting(APersistent: TPersistent);
+begin
+  if FPanel = nil then Exit;
+  if (APersistent = FPanel) or (APersistent = FPanel.Owner) then
+    Detach
+  else if OwnsModelObject(APersistent) then
+    { The object still exists at this notice, so a rebuild would re-capture it: drop
+      every pointer NOW; HookRefresh re-aims at the panel afterwards. }
+    FForm.SetPanel(nil);
+end;
+
+procedure TTyListGroupsDesignerLink.HookRefresh;
+begin
+  if (FForm = nil) or not FForm.Visible or (FPanel = nil) then Exit;
+  if FForm.Panel <> FPanel then
+    FForm.SetPanel(FPanel)
+  else
+    FForm.RefreshFromModel;
+end;
+
+procedure TTyListGroupsDesignerLink.Notification(AComponent: TComponent; Operation: TOperation);
+begin
+  inherited Notification(AComponent, Operation);
+  if (Operation = opRemove) and (AComponent = FPanel) then
+    Detach;
 end;
 
 function TTyImageCollectionComponentEditor.GetVerbCount: Integer;

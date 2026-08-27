@@ -220,10 +220,12 @@ msgid "Clear"
 msgstr ""
 
 #: tycontrols.strconsts.rsdlgimgcoldelete
+msgctxt "tycontrols.strconsts.rsdlgimgcoldelete"
 msgid "Delete"
 msgstr ""
 
 #: tycontrols.strconsts.rsdlgimgcoldown
+msgctxt "tycontrols.strconsts.rsdlgimgcoldown"
 msgid "Move Down"
 msgstr ""
 
@@ -244,6 +246,34 @@ msgid "Images"
 msgstr ""
 
 #: tycontrols.strconsts.rsdlgimgcolup
+msgctxt "tycontrols.strconsts.rsdlgimgcolup"
+msgid "Move Up"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlglgeaddgroup
+msgid "Add Group"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlglgeadditem
+msgid "Add Item"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlglgedelete
+msgctxt "tycontrols.strconsts.rsdlglgedelete"
+msgid "Delete"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlglgedown
+msgctxt "tycontrols.strconsts.rsdlglgedown"
+msgid "Move Down"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlglgetitle
+msgid "Groups"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlglgeup
+msgctxt "tycontrols.strconsts.rsdlglgeup"
 msgid "Move Up"
 msgstr ""
 
