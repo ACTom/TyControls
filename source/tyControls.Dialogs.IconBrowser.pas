@@ -693,7 +693,13 @@ begin
   if Assigned(FOnPickName) then
   begin
     if SelectedGlyphName <> '' then
+    begin
       FOnPickName(Self, SelectedGlyphName);
+      { The grid's badge data is a snapshot of the index source's names; the handler
+        just changed the live list, so re-snapshot NOW -- the cell's ImageIndex badge
+        appearing (and the status line updating) is how the user sees the pick worked. }
+      SetIndexSource(FIndexSource);
+    end;
   end
   else
     ModalResult := mrOK;

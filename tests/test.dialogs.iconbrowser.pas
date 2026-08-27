@@ -39,6 +39,7 @@ type
   published
     procedure TheDialogOffersOkAndCancel;
     procedure PickWithHandlerAddsAndStaysOpen;
+    procedure PickRefreshesTheIndexBadgesAtOnce;
     procedure OkButtonSetsModalResult;
     procedure ClosingGivesCancel;
     procedure EveryGlyphOfTheFontIsListed;
@@ -105,6 +106,7 @@ type
   public
     Count: Integer;
     Last: string;
+    Target: TTyVirtualImageList;   // when set, Handle adds the pick to its Names
     procedure Handle(Sender: TObject; const AName: string);
   end;
 
@@ -112,6 +114,8 @@ procedure TPickCapture.Handle(Sender: TObject; const AName: string);
 begin
   Inc(Count);
   Last := AName;
+  if (Target <> nil) and (Target.Names.IndexOf(AName) < 0) then
+    Target.Names.Add(AName);
 end;
 
 procedure TIconBrowserTest.PickWithHandlerAddsAndStaysOpen;
@@ -142,6 +146,37 @@ begin
     AssertEquals('without a handler the pick closes with OK', Ord(mrOK), Ord(d.ModalResult));
   finally
     d.Free;
+    cap.Free;
+  end;
+end;
+
+procedure TIconBrowserTest.PickRefreshesTheIndexBadgesAtOnce;
+// Real-machine report: the pick added the name but the cell's ImageIndex badge did not
+// appear -- the grid's badge data is a SNAPSHOT taken when the dialog was built, so a
+// live addition never reached it and the user could not tell the pick worked. After the
+// handler runs, PickSelected must re-snapshot from the live list.
+var
+  d: TTyIconBrowserForm;
+  cap: TPickCapture;
+  lst: TTyVirtualImageList;
+begin
+  cap := TPickCapture.Create;
+  lst := TTyVirtualImageList.Create(nil);
+  d := nil;
+  try
+    lst.IconFont := FFont;
+    cap.Target := lst;
+    d := TyBuildIconBrowserDialogFor('', FFont, lst);
+    d.OnPickName := @cap.Handle;
+    d.SelectGlyph(d.GlyphNameAt(0));
+    AssertEquals('fixture: no badge before the pick', -1, d.SelectedImageIndex);
+
+    d.PickSelected;
+    AssertEquals('the handler put the name into the list', 1, lst.Names.Count);
+    AssertEquals('and the badge data sees it at once', 0, d.SelectedImageIndex);
+  finally
+    d.Free;
+    lst.Free;
     cap.Free;
   end;
 end;
