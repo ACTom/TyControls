@@ -26,6 +26,7 @@ interface
 uses
   Classes, SysUtils, Types, Math, Controls, Graphics, LCLType,   // LCLType: MulDiv
   BGRABitmap, BGRABitmapTypes, BGRACanvas2D,
+  BGRAWriteTiff,   // registers the TIFF writer so SaveToFile('.tif') has a backend
   tyControls.Types, tyControls.Painter, tyControls.Base,
   tyControls.Controller, tyControls.StyleModel;
 
@@ -343,6 +344,13 @@ type
       Public because it is the same answer the tooltip uses: an app that wants click-to-drill
       reads it from OnClick/OnMouseDown instead of re-deriving the geometry. }
     function HitTestAt(X, Y: Integer): TTyChartHit;
+    { Export the chart as an image file. The format follows the extension — .png, .bmp,
+      .jpg/.jpeg and .tif are covered (whatever BGRABitmap writes; the TIFF writer is
+      linked by this unit). The parameterless form renders at the control's current size;
+      the sized form lays the chart out for AWidth x AHeight instead, so a small on-screen
+      chart can be exported large. Text keeps the control's PPI in both. }
+    procedure SaveToFile(const AFileName: string); overload;
+    procedure SaveToFile(const AFileName: string; AWidth, AHeight: Integer); overload;
   published
     property ChartType: TTyChartType read FChartType write SetChartType default ctLine;
     property Series: TTyChartSeries read FSeries write SetSeries;
@@ -1127,6 +1135,39 @@ begin
     else
       Result := TyChartLineHitTest(X, Y, allVals, catCount, lay.Plot, niceMin, niceMax,
         MulDiv(ActiveController.Metric(TyChartHitRadiusVar, TyChartHitRadius), ppi, 96));
+  end;
+end;
+
+procedure TTyChart.SaveToFile(const AFileName: string);
+begin
+  SaveToFile(AFileName, Width, Height);
+end;
+
+procedure TTyChart.SaveToFile(const AFileName: string; AWidth, AHeight: Integer);
+var
+  Tmp: TBitmap;
+  Bmp: TBGRABitmap;
+begin
+  if (AWidth <= 0) or (AHeight <= 0) then
+    raise EArgumentException.CreateFmt('TTyChart.SaveToFile: invalid size %dx%d',
+      [AWidth, AHeight]);
+  Tmp := TBitmap.Create;
+  try
+    Tmp.PixelFormat := pf32bit;
+    Tmp.SetSize(AWidth, AHeight);
+    RenderTo(Tmp.Canvas, Rect(0, 0, AWidth, AHeight), Font.PixelsPerInch);
+    Bmp := TBGRABitmap.Create(Tmp);
+    try
+      { A GDI-drawn 32-bit surface reads back with alpha 0 (GDI never writes the alpha
+        plane), which would export a fully transparent PNG. The chart paints its themed
+        background over the whole rect, so the picture IS opaque — say so. }
+      Bmp.AlphaFill(255);
+      Bmp.SaveToFile(AFileName);
+    finally
+      Bmp.Free;
+    end;
+  finally
+    Tmp.Free;
   end;
 end;
 

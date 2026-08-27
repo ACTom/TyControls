@@ -15,6 +15,7 @@ unit test.chart;
   and hard-coded probe coordinates would only re-state the implementation. }
 interface
 uses Classes, SysUtils, Math, Types, fpcunit, testregistry,
+     BGRABitmap, BGRABitmapTypes,
      tyControls.Types, tyControls.Chart;
 type
   TChartTest = class(TTestCase)
@@ -1111,6 +1112,122 @@ begin
   AssertTrue('still not inverted', (box.Right > box.Left) and (box.Bottom > box.Top));
 end;
 
+type
+  { Image export (QQ-group request). Instantiates the control -- the "never instantiate"
+    note in this file's header predates the library-wide headless RenderTo idiom; export
+    is exactly that idiom behind a public method, so it is tested the same way. }
+  TChartExportTest = class(TTestCase)
+  private
+    FChart: TTyChart;
+    FBase: string;
+    function FileNameFor(const AExt: string): string;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestSaveToFilePngRoundTrips;
+    procedure TestSaveToFileOtherFormatsWrite;
+  end;
+
+procedure TChartExportTest.SetUp;
+begin
+  FBase := GetTempDir(False) + 'ty_chartexport_' + IntToStr(GetProcessID);
+  FChart := TTyChart.Create(nil);
+  FChart.Font.PixelsPerInch := 96;
+  FChart.SetBounds(0, 0, 320, 200);
+  with FChart.Series.Add do Values := '10,20,30,25';
+  with FChart.Series.Add do Values := '5,15,10,20';
+end;
+
+procedure TChartExportTest.TearDown;
+begin
+  FChart.Free;
+  DeleteFile(FileNameFor('.png'));
+  DeleteFile(FileNameFor('.bmp'));
+  DeleteFile(FileNameFor('.jpg'));
+  DeleteFile(FileNameFor('.tif'));
+end;
+
+function TChartExportTest.FileNameFor(const AExt: string): string;
+begin
+  Result := FBase + AExt;
+end;
+
+procedure TChartExportTest.TestSaveToFilePngRoundTrips;
+var
+  fs: TFileStream;
+  Magic: array[0..7] of Byte;
+  Bmp: TBGRABitmap;
+  Corner, Px: TBGRAPixel;
+  x, y: Integer;
+  Drawn: Boolean;
+begin
+  FChart.SaveToFile(FileNameFor('.png'));
+  AssertTrue('the PNG file exists', FileExists(FileNameFor('.png')));
+
+  fs := TFileStream.Create(FileNameFor('.png'), fmOpenRead);
+  try
+    AssertEquals('read the signature', 8, fs.Read(Magic{%H-}, 8));
+    AssertTrue('PNG signature', (Magic[0] = $89) and (Magic[1] = Ord('P'))
+      and (Magic[2] = Ord('N')) and (Magic[3] = Ord('G')));
+  finally
+    fs.Free;
+  end;
+
+  Bmp := TBGRABitmap.Create(FileNameFor('.png'));
+  try
+    AssertEquals('exported width is the control width', 320, Bmp.Width);
+    AssertEquals('exported height is the control height', 200, Bmp.Height);
+    // The chart is an opaque surface: a transparent export is the GDI->BGRA
+    // zero-alpha trap, not a valid picture.
+    AssertEquals('the export is opaque (alpha trap guard)', 255,
+      Bmp.GetPixel(160, 100).alpha);
+    // And it actually drew something: some pixel must differ from the corner.
+    Corner := Bmp.GetPixel(2, 2);
+    Drawn := False;
+    for y := 0 to Bmp.Height - 1 do
+    begin
+      for x := 0 to Bmp.Width - 1 do
+      begin
+        Px := Bmp.GetPixel(x, y);
+        if (Px.red <> Corner.red) or (Px.green <> Corner.green) or (Px.blue <> Corner.blue) then
+        begin
+          Drawn := True;
+          Break;
+        end;
+      end;
+      if Drawn then Break;
+    end;
+    AssertTrue('the chart drew ink, not a flat sheet', Drawn);
+  finally
+    Bmp.Free;
+  end;
+end;
+
+procedure TChartExportTest.TestSaveToFileOtherFormatsWrite;
+
+  procedure CheckWrites(const AExt: string);
+  var
+    fn: string;
+  begin
+    fn := FileNameFor(AExt);
+    FChart.SaveToFile(fn);
+    AssertTrue(AExt + ' file exists', FileExists(fn));
+    with TFileStream.Create(fn, fmOpenRead) do
+    try
+      AssertTrue(AExt + ' file is not empty', Size > 0);
+    finally
+      Free;
+    end;
+  end;
+
+begin
+  CheckWrites('.bmp');
+  CheckWrites('.jpg');
+  CheckWrites('.tif');
+end;
+
 initialization
   RegisterTest(TChartTest);
+  RegisterTest(TChartExportTest);
 end.

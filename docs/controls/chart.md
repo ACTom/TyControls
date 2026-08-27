@@ -151,6 +151,13 @@ function HitTestAt(X, Y: Integer): TTyChartHit;   // 客户区设备像素 -> �
 
 与 tooltip 用的是同一个答案——需要「点击下钻」的应用在 `OnClick` / `OnMouseDown` 里读它，不必自己重推几何。
 
+```pascal
+procedure SaveToFile(const AFileName: string);                             // 按控件当前尺寸导出
+procedure SaveToFile(const AFileName: string; AWidth, AHeight: Integer);   // 按指定尺寸重排版导出
+```
+
+把图表导出为图片，格式由扩展名决定：`.png`、`.bmp`、`.jpg`/`.jpeg`、`.tif`。带尺寸的重载按给定宽高重新排版（小图表可以导出成大图），文字保持控件的 PPI。背景取当前主题，导出图不透明。
+
 ---
 
 ## 6. 类型语义
