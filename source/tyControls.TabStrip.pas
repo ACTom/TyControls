@@ -256,8 +256,9 @@ type
       through the widgetset; a custom-drawn strip gets none unless it answers
       CM_DESIGNHITTEST, so the only way to flip pages at design time was typing
       ActivePageIndex into the Object Inspector (QQ-group report, Lazarus 4.2). Answer 1
-      only ON a tab: the page body keeps normal designer click-to-select. Subclasses opt
-      in -- the ribbon keeps its chrome designer-inert. }
+      only ON a tab: the page body keeps normal designer click-to-select, and so does any
+      subclass chrome outside the tab rects (the ribbon's File tab and chevron). Subclasses
+      opt in via the virtual. }
     function DesignTabClicksEnabled: Boolean; virtual;
     procedure CMDesignHitTest(var Message: TCMDesignHitTest); message CM_DESIGNHITTEST;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;

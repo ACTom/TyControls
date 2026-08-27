@@ -6,12 +6,16 @@ uses
   tyControls.Base, tyControls.Ribbon;
 
 type
+  { Cracker for the protected designer-path members (SetDesigning). }
+  TRibbonDesignAccess = class(TTyRibbon);
+
   TRibbonTest = class(TTestCase)
   private
     FChanged: Integer;
     procedure HandleChange(Sender: TObject);
   published
     procedure GroupContentRectSubtractsBand;
+    procedure DesignHitTestPassesPageTabsNotFileChrome;
     procedure GroupContentRectClampsBand;
     procedure TypeKeys;
     procedure AddPageGrowsCountAndActivates;
@@ -45,6 +49,40 @@ begin
   AssertEquals('top', 0, R.Top);
   AssertEquals('width', 96, R.Right);
   AssertEquals('height above band', 80 - 18, R.Bottom);
+end;
+
+procedure TRibbonTest.DesignHitTestPassesPageTabsNotFileChrome;
+// Ribbon side of the designer tab-click story: real page tabs answer the designer
+// hit-test (so clicking them in the designer switches the page), while the File
+// pseudo-tab keeps answering 0 -- it lives in x < HeaderLeftInset, outside the base's
+// tab rects, so a designer click there still just selects the ribbon (no backstage
+// mis-trigger). The collapse chevron and KeyTip chips sit outside the tab rects too.
+var
+  Rib: TTyRibbon;
+  Pt: TPoint;
+  res: PtrInt;
+begin
+  Rib := TTyRibbon.Create(nil);
+  try
+    Rib.Font.PixelsPerInch := 96;
+    Rib.SetBounds(0, 0, 600, 140);
+    Rib.FileTab := True;
+    Rib.AddPage('Home');
+    Rib.AddPage('Insert');
+    TRibbonDesignAccess(Rib).SetDesigning(True);
+
+    Pt := Rib.TabRect(0).CenterPoint;
+    AssertTrue('fixture: the first page tab starts past the File tab',
+      Pt.X > Rib.FileTabWidth);
+    res := Rib.Perform(CM_DESIGNHITTEST, 0, PtrInt((Pt.Y shl 16) or (Pt.X and $FFFF)));
+    AssertEquals('a page tab answers the designer hit-test', 1, res);
+
+    Pt := Point(Rib.FileTabWidth div 2, Pt.Y);
+    res := Rib.Perform(CM_DESIGNHITTEST, 0, PtrInt((Pt.Y shl 16) or (Pt.X and $FFFF)));
+    AssertEquals('the File pseudo-tab stays designer-owned', 0, res);
+  finally
+    Rib.Free;
+  end;
 end;
 
 procedure TRibbonTest.GroupContentRectClampsBand;

@@ -94,6 +94,13 @@ type
     procedure DoSelectTab(AIndex: Integer); override;
     procedure DoReorderTabs(AFromIndex, AToIndex: Integer); override;
     procedure RemoveTabData(AIndex: Integer); override;
+    { Designer tab clicks flip pages here too. Safe by geometry: the base answers the
+      designer hit-test only for points inside its TAB rects, and every piece of ribbon
+      chrome -- the File pseudo-tab (x < HeaderLeftInset), the collapse chevron
+      (CollapseRectPx), the KeyTip chips -- lives outside them, so those keep answering 0
+      and a designer click there still just selects the ribbon. The double-click-minimize
+      gesture is additionally gated off at design time in MouseDown. }
+    function  DesignTabClicksEnabled: Boolean; override;
     function  HeaderLeftInset: Integer; override;
     { The ribbon does NOT mirror, and declines here rather than half-mirroring. The base's
       header band is ready to (see TTyCustomTabStrip.HeaderRightToLeft), but the ribbon's own
@@ -637,6 +644,11 @@ begin
   Result := MulDiv(GetFileTabWidth, Font.PixelsPerInch, 96);
 end;
 
+function TTyRibbon.DesignTabClicksEnabled: Boolean;
+begin
+  Result := True;
+end;
+
 function TTyRibbon.HeaderLeftInset: Integer;
 begin
   if FShowFileTab then Result := FileTabWidthPx else Result := 0;
@@ -996,7 +1008,10 @@ begin
     end;
   end;
   // Double-clicking a tab (anywhere in the header band, past the File tab) toggles Minimized.
-  if (Button = mbLeft) and (ssDouble in Shift) then
+  // Not at design time: with design tab clicks enabled, a designer double-click on a tab
+  // would collapse the ribbon instead of just selecting -- switching pages is the only
+  // gesture the designer pass-through is for.
+  if (Button = mbLeft) and (ssDouble in Shift) and not (csDesigning in ComponentState) then
   begin
     h := MulDiv(TabHeight, Font.PixelsPerInch, 96);
     if (Y >= 0) and (Y < h) and (X >= HeaderLeftInset) then
