@@ -38,6 +38,7 @@ type
     procedure TearDown; override;
   published
     procedure TheDialogOffersOkAndCancel;
+    procedure PickWithHandlerAddsAndStaysOpen;
     procedure OkButtonSetsModalResult;
     procedure ClosingGivesCancel;
     procedure EveryGlyphOfTheFontIsListed;
@@ -97,6 +98,52 @@ begin
     AssertEquals('OK first', Ord(mrOK), Ord(TyDialogButton(d, 0).ModalResult));
     AssertEquals('then Cancel', Ord(mrCancel), Ord(TyDialogButton(d, 1).ModalResult));
   finally d.Free; end;
+end;
+
+type
+  TPickCapture = class
+  public
+    Count: Integer;
+    Last: string;
+    procedure Handle(Sender: TObject; const AName: string);
+  end;
+
+procedure TPickCapture.Handle(Sender: TObject; const AName: string);
+begin
+  Inc(Count);
+  Last := AName;
+end;
+
+procedure TIconBrowserTest.PickWithHandlerAddsAndStaysOpen;
+// The design-time Names editor's multi-add (QQ-group report): with OnPickName assigned, a
+// pick hands the name over and the dialog STAYS OPEN -- ten icons cost one browse, not
+// ten. Without the handler a pick closes with mrOK, the runtime Execute contract.
+var
+  d: TTyIconBrowserForm;
+  cap: TPickCapture;
+begin
+  cap := TPickCapture.Create;
+  d := NewDialog;
+  try
+    d.SelectGlyph(d.GlyphNameAt(0));
+    d.OnPickName := @cap.Handle;
+    d.PickSelected;
+    AssertEquals('the handler received the pick', 1, cap.Count);
+    AssertEquals('with the selected name', d.GlyphNameAt(0), cap.Last);
+    AssertEquals('and the dialog stayed open', Ord(mrNone), Ord(d.ModalResult));
+
+    d.SelectGlyph(d.GlyphNameAt(1));
+    d.PickSelected;
+    AssertEquals('second pick, same window', 2, cap.Count);
+    AssertEquals('still open', Ord(mrNone), Ord(d.ModalResult));
+
+    d.OnPickName := nil;
+    d.PickSelected;
+    AssertEquals('without a handler the pick closes with OK', Ord(mrOK), Ord(d.ModalResult));
+  finally
+    d.Free;
+    cap.Free;
+  end;
 end;
 
 procedure TIconBrowserTest.OkButtonSetsModalResult;

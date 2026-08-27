@@ -155,7 +155,9 @@ type
     On a TTyVirtualImageList it is APPENDED to Names, which is the thing that list is for. }
   TTyIconBrowserComponentEditor = class(TComponentEditor)
   private
+    FPickTarget: TTyVirtualImageList;
     function FontOf(out AOwnerList: TTyVirtualImageList): TTyIconFont;
+    procedure HandlePickName(Sender: TObject; const AName: string);
   public
     function GetVerbCount: Integer; override;
     function GetVerb(Index: Integer): string; override;
@@ -699,24 +701,38 @@ begin
   dlg := TyBuildIconBrowserDialogFor('', fnt, lst);
   try
     dlg.GlyphName := nm;
+    if lst <> nil then
+    begin
+      { Live multi-add: every pick (double-click / Enter) lands in Names at once -- the
+        cell's ImageIndex badge appearing IS the feedback -- and the browser stays open,
+        so ten icons cost one browse, not ten (QQ-group report). OK and Cancel both just
+        close; the additions are already committed. }
+      FPickTarget := lst;
+      try
+        dlg.OnPickName := @HandlePickName;
+        dlg.ShowModal;
+      finally
+        FPickTarget := nil;
+      end;
+      Exit;
+    end;
     if dlg.ShowModal <> mrOK then Exit;
     nm := dlg.GlyphName;
   finally
     dlg.Free;
   end;
   if nm = '' then Exit;
-  if lst <> nil then
-  begin
-    if lst.Names.IndexOf(nm) < 0 then
-    begin
-      lst.Names.Add(nm);
-      Modified;        { tell the designer the form changed, or the edit is lost on close }
-    end;
-  end
-  else
-    { A font has no single name property to write into -- the user came here to look a name up.
-      The clipboard is where a looked-up name is useful. }
-    Clipboard.AsText := nm;
+  { A font has no single name property to write into -- the user came here to look a name up.
+    The clipboard is where a looked-up name is useful. }
+  Clipboard.AsText := nm;
+end;
+
+procedure TTyIconBrowserComponentEditor.HandlePickName(Sender: TObject; const AName: string);
+begin
+  if (FPickTarget = nil) or (AName = '') then Exit;
+  if FPickTarget.Names.IndexOf(AName) >= 0 then Exit;   // a re-pick is a no-op, not a dupe
+  FPickTarget.Names.Add(AName);
+  Modified;          { tell the designer the form changed, or the edit is lost on close }
 end;
 
 { TTyGlyphNamePropertyEditor }

@@ -107,6 +107,9 @@ type
 
   { The dialog. Resizable, because "how many icons can I see at once" is the whole experience
     and 2022 of them do not fit a fixed box. }
+  { A pick handed out of the browser while it stays open (the multi-add mode). }
+  TTyIconPickNameEvent = procedure(Sender: TObject; const AName: string) of object;
+
   TTyIconBrowserForm = class(TTyDialog)
   private
     FSearch: TTyEdit;
@@ -115,6 +118,7 @@ type
     FFont: TTyIconFont;
     FAll: TStringList;            // every name the font offers, unfiltered
     FIndexSource: TTyVirtualImageList;
+    FOnPickName: TTyIconPickNameEvent;
     procedure SearchChanged(Sender: TObject);
     procedure GridChanged(Sender: TObject);
     procedure GridPick(Sender: TObject);
@@ -147,6 +151,14 @@ type
     procedure SelectGlyph(const AName: string);
     { In/out, mirroring TTySelectPathForm.Directory: seed it before ShowModal, read it after. }
     property GlyphName: string read SelectedGlyphName write SelectGlyph;
+    { The pick action (double-click / Enter on a cell), public as the test seam. With
+      OnPickName assigned it hands the selected name over and the dialog STAYS OPEN --
+      the design-time Names editor's multi-add, where ten icons must cost one browse,
+      not ten (QQ-group report); the caller sees each addition immediately as the cell's
+      ImageIndex badge appears. Without a handler it arms mrOK and closes: the runtime
+      Execute contract every app dialog keeps. }
+    procedure PickSelected;
+    property OnPickName: TTyIconPickNameEvent read FOnPickName write FOnPickName;
   end;
 
 { Construct-only builder (no ShowModal), so a test can assert the finished dialog. }
@@ -673,7 +685,18 @@ end;
 procedure TTyIconBrowserForm.GridPick(Sender: TObject);
 begin
   { Double-click / Enter on a cell is "this one" -- the same shortcut every file dialog has. }
-  ModalResult := mrOK;
+  PickSelected;
+end;
+
+procedure TTyIconBrowserForm.PickSelected;
+begin
+  if Assigned(FOnPickName) then
+  begin
+    if SelectedGlyphName <> '' then
+      FOnPickName(Self, SelectedGlyphName);
+  end
+  else
+    ModalResult := mrOK;
 end;
 
 procedure TTyIconBrowserForm.UpdateStatus;
