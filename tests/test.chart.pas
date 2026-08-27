@@ -1127,6 +1127,8 @@ type
   published
     procedure TestSaveToFilePngRoundTrips;
     procedure TestSaveToFileOtherFormatsWrite;
+    procedure TestSaveToStreamWritesTheFormat;
+    procedure TestSaveToFileExplicitFormatWinsOverExtension;
   end;
 
 procedure TChartExportTest.SetUp;
@@ -1146,6 +1148,7 @@ begin
   DeleteFile(FileNameFor('.bmp'));
   DeleteFile(FileNameFor('.jpg'));
   DeleteFile(FileNameFor('.tif'));
+  DeleteFile(FileNameFor('.dat'));
 end;
 
 function TChartExportTest.FileNameFor(const AExt: string): string;
@@ -1225,6 +1228,66 @@ begin
   CheckWrites('.bmp');
   CheckWrites('.jpg');
   CheckWrites('.tif');
+end;
+
+procedure TChartExportTest.TestSaveToStreamWritesTheFormat;
+// The stream form is the export core (a report writer embeds the picture without ever
+// touching the disk); SaveToFile is a wrapper over it. The format is BGRABitmap's own
+// TBGRAImageFormat, so every registered writer is reachable.
+var
+  ms: TMemoryStream;
+  Magic: array[0..7] of Byte;
+  Bmp: TBGRABitmap;
+begin
+  ms := TMemoryStream.Create;
+  try
+    FChart.SaveToStream(ms, ifPng);
+    AssertTrue('the stream received bytes', ms.Size > 8);
+    ms.Position := 0;
+    AssertEquals('read the signature', 8, ms.Read(Magic{%H-}, 8));
+    AssertTrue('PNG signature in the stream', (Magic[0] = $89) and (Magic[1] = Ord('P')));
+    ms.Position := 0;
+    Bmp := TBGRABitmap.Create;
+    try
+      Bmp.LoadFromStream(ms);
+      AssertEquals('stream export width', 320, Bmp.Width);
+      AssertEquals('stream export height', 200, Bmp.Height);
+    finally
+      Bmp.Free;
+    end;
+  finally
+    ms.Free;
+  end;
+
+  ms := TMemoryStream.Create;
+  try
+    FChart.SaveToStream(ms, ifJpeg, 160, 100);
+    AssertTrue('the sized overload wrote bytes', ms.Size > 2);
+    ms.Position := 0;
+    AssertEquals('read the JPEG magic', 2, ms.Read(Magic, 2));
+    AssertTrue('JPEG signature in the stream', (Magic[0] = $FF) and (Magic[1] = $D8));
+  finally
+    ms.Free;
+  end;
+end;
+
+procedure TChartExportTest.TestSaveToFileExplicitFormatWinsOverExtension;
+// An explicit format must not be second-guessed by the file name: exporting to a
+// temp name or an extensionless path is exactly when the caller says the format.
+var
+  fs: TFileStream;
+  Magic: array[0..7] of Byte;
+begin
+  FChart.SaveToFile(FileNameFor('.dat'), ifPng);
+  AssertTrue('the .dat file exists', FileExists(FileNameFor('.dat')));
+  fs := TFileStream.Create(FileNameFor('.dat'), fmOpenRead);
+  try
+    AssertEquals('read the signature', 8, fs.Read(Magic{%H-}, 8));
+    AssertTrue('PNG bytes despite the .dat extension',
+      (Magic[0] = $89) and (Magic[1] = Ord('P')));
+  finally
+    fs.Free;
+  end;
 end;
 
 initialization

@@ -331,6 +331,8 @@ type
     procedure DrawLegend(P: TTyPainter; const S: TTyStyleSet; const ARect: TRect; ARadial: Boolean);
     procedure DrawTooltip(P: TTyPainter; const S: TTyStyleSet; const ABounds: TRect;
       AAnchorX, AAnchorY: Integer; const AText: string; ASwatch: TColor);
+    { The export core: the chart rendered opaque at AWidth x AHeight (caller frees). }
+    function RenderExportBitmap(AWidth, AHeight: Integer): TBGRABitmap;
   protected
     function GetStyleTypeKey: string; override;   // 'TyPanel' (the tooltip is 'TyChartTooltip')
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -344,13 +346,21 @@ type
       Public because it is the same answer the tooltip uses: an app that wants click-to-drill
       reads it from OnClick/OnMouseDown instead of re-deriving the geometry. }
     function HitTestAt(X, Y: Integer): TTyChartHit;
-    { Export the chart as an image file. The format follows the extension — .png, .bmp,
-      .jpg/.jpeg and .tif are covered (whatever BGRABitmap writes; the TIFF writer is
-      linked by this unit). The parameterless form renders at the control's current size;
-      the sized form lays the chart out for AWidth x AHeight instead, so a small on-screen
-      chart can be exported large. Text keeps the control's PPI in both. }
+    { Image export. SaveToStream is the core — a report writer embeds the picture without
+      touching the disk; AFormat is BGRABitmap's own TBGRAImageFormat (ifPng / ifJpeg /
+      ifBmp / ifTiff, …; this unit links the TIFF writer). SaveToFile wraps it: without a
+      format the extension decides (.png/.bmp/.jpg/.jpeg/.tif), with one the caller's
+      format wins regardless of the file name. Size-less forms render at the control's
+      current size; the sized forms lay the chart out for AWidth x AHeight instead, so a
+      small on-screen chart can be exported large. Text keeps the control's PPI in all. }
+    procedure SaveToStream(AStream: TStream; AFormat: TBGRAImageFormat); overload;
+    procedure SaveToStream(AStream: TStream; AFormat: TBGRAImageFormat;
+      AWidth, AHeight: Integer); overload;
     procedure SaveToFile(const AFileName: string); overload;
     procedure SaveToFile(const AFileName: string; AWidth, AHeight: Integer); overload;
+    procedure SaveToFile(const AFileName: string; AFormat: TBGRAImageFormat); overload;
+    procedure SaveToFile(const AFileName: string; AFormat: TBGRAImageFormat;
+      AWidth, AHeight: Integer); overload;
   published
     property ChartType: TTyChartType read FChartType write SetChartType default ctLine;
     property Series: TTyChartSeries read FSeries write SetSeries;
@@ -1138,6 +1148,46 @@ begin
   end;
 end;
 
+function TTyChart.RenderExportBitmap(AWidth, AHeight: Integer): TBGRABitmap;
+var
+  Tmp: TBitmap;
+begin
+  if (AWidth <= 0) or (AHeight <= 0) then
+    raise EArgumentException.CreateFmt('TTyChart export: invalid size %dx%d',
+      [AWidth, AHeight]);
+  Tmp := TBitmap.Create;
+  try
+    Tmp.PixelFormat := pf32bit;
+    Tmp.SetSize(AWidth, AHeight);
+    RenderTo(Tmp.Canvas, Rect(0, 0, AWidth, AHeight), Font.PixelsPerInch);
+    Result := TBGRABitmap.Create(Tmp);
+    { A GDI-drawn 32-bit surface reads back with alpha 0 (GDI never writes the alpha
+      plane), which would export a fully transparent PNG. The chart paints its themed
+      background over the whole rect, so the picture IS opaque — say so. }
+    Result.AlphaFill(255);
+  finally
+    Tmp.Free;
+  end;
+end;
+
+procedure TTyChart.SaveToStream(AStream: TStream; AFormat: TBGRAImageFormat);
+begin
+  SaveToStream(AStream, AFormat, Width, Height);
+end;
+
+procedure TTyChart.SaveToStream(AStream: TStream; AFormat: TBGRAImageFormat;
+  AWidth, AHeight: Integer);
+var
+  Bmp: TBGRABitmap;
+begin
+  Bmp := RenderExportBitmap(AWidth, AHeight);
+  try
+    Bmp.SaveToStreamAs(AStream, AFormat);
+  finally
+    Bmp.Free;
+  end;
+end;
+
 procedure TTyChart.SaveToFile(const AFileName: string);
 begin
   SaveToFile(AFileName, Width, Height);
@@ -1145,29 +1195,32 @@ end;
 
 procedure TTyChart.SaveToFile(const AFileName: string; AWidth, AHeight: Integer);
 var
-  Tmp: TBitmap;
   Bmp: TBGRABitmap;
 begin
-  if (AWidth <= 0) or (AHeight <= 0) then
-    raise EArgumentException.CreateFmt('TTyChart.SaveToFile: invalid size %dx%d',
-      [AWidth, AHeight]);
-  Tmp := TBitmap.Create;
+  { Extension-driven: BGRABitmap picks the writer from the file name. }
+  Bmp := RenderExportBitmap(AWidth, AHeight);
   try
-    Tmp.PixelFormat := pf32bit;
-    Tmp.SetSize(AWidth, AHeight);
-    RenderTo(Tmp.Canvas, Rect(0, 0, AWidth, AHeight), Font.PixelsPerInch);
-    Bmp := TBGRABitmap.Create(Tmp);
-    try
-      { A GDI-drawn 32-bit surface reads back with alpha 0 (GDI never writes the alpha
-        plane), which would export a fully transparent PNG. The chart paints its themed
-        background over the whole rect, so the picture IS opaque — say so. }
-      Bmp.AlphaFill(255);
-      Bmp.SaveToFile(AFileName);
-    finally
-      Bmp.Free;
-    end;
+    Bmp.SaveToFile(AFileName);
   finally
-    Tmp.Free;
+    Bmp.Free;
+  end;
+end;
+
+procedure TTyChart.SaveToFile(const AFileName: string; AFormat: TBGRAImageFormat);
+begin
+  SaveToFile(AFileName, AFormat, Width, Height);
+end;
+
+procedure TTyChart.SaveToFile(const AFileName: string; AFormat: TBGRAImageFormat;
+  AWidth, AHeight: Integer);
+var
+  fs: TFileStream;
+begin
+  fs := TFileStream.Create(AFileName, fmCreate);
+  try
+    SaveToStream(fs, AFormat, AWidth, AHeight);
+  finally
+    fs.Free;
   end;
 end;
 
