@@ -1742,6 +1742,12 @@ begin
   RegisterPropertyEditor(TypeInfo(string), TTyLucideIconFont, 'FontFamily', THiddenPropertyEditor);
   RegisterPropertyEditor(TypeInfo(string), TTyLucideIconFont, 'FontFile', THiddenPropertyEditor);
   RegisterPropertyEditor(TypeInfo(TStringList), TTyLucideIconFont, 'Glyphs', THiddenPropertyEditor);
+  { The bundled Lucide LIST is fixed the same way (real-machine feedback: the inherited
+    source pickers read as "wire me up"): its IconFont is the shared Lucide font the
+    constructor sets, and the bitmap-collection source is never this component's way in --
+    you pick NAMES. Hide both; Names/DefaultSize/GlyphColor stay, they are the point. }
+  RegisterPropertyEditor(TypeInfo(TTyImageCollection), TTyLucideImageList, 'Collection', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TTyIconFont), TTyLucideImageList, 'IconFont', THiddenPropertyEditor);
   // Every TTyColor property ($AARRGGBB) gets a readable hex value + a colour picker on '...',
   // instead of a raw integer like 4278190080 nobody can fill (DefaultColor, GlyphColor, ...).
   RegisterPropertyEditor(TypeInfo(TTyColor), nil, '', TTyColorPropertyEditor);
