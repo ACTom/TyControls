@@ -23,6 +23,7 @@ type
     procedure TestRemoveSelectedNotLast;
     procedure TestRemoveVetoedKeepsIndexInRange;
     procedure TestDesignTimeSwitchTellsTheDesigner;
+    procedure TestTabIndexSurvivesStreaming;
   end;
 
   { A caption-only strip must not paint a page container. TTyTabSet hosts no pages,
@@ -63,6 +64,46 @@ var
 procedure CountDesignerModified(AComponent: TComponent);
 begin
   Inc(DesignerPings);
+end;
+
+type
+  THostForm = class(TForm)
+  published
+    TS: TTyTabSet;
+  end;
+
+procedure TTabSetTest.TestTabIndexSurvivesStreaming;
+var
+  Src, Dst: THostForm;
+  MS: TMemoryStream;
+  DstTS: TTyTabSet;
+begin
+  { SetTabIndex captures a csLoading write into FPendingTabIndex "to apply later" --
+    and only TTyPageControl's Loaded ever applied it. A designed TTyTabSet.TabIndex
+    therefore vanished on load (real-machine report: the OI says 2, the built
+    application selects nothing). The apply now lives in the BASE Loaded. }
+  Src := THostForm.CreateNew(nil);
+  Dst := THostForm.CreateNew(nil);
+  MS := TMemoryStream.Create;
+  try
+    Src.Name := 'HostForm3';
+    Src.TS := TTyTabSet.Create(Src);
+    Src.TS.Name := 'TS';
+    Src.TS.Parent := Src;
+    Src.TS.Tabs.AddStrings(['A', 'B', 'C']);
+    Src.TS.TabIndex := 2;
+    MS.WriteComponent(Src);
+
+    MS.Position := 0;
+    MS.ReadComponent(Dst);
+    DstTS := Dst.FindComponent('TS') as TTyTabSet;
+    AssertEquals('the tabs streamed', 3, DstTS.Tabs.Count);
+    AssertEquals('the designed selection survived the load', 2, DstTS.TabIndex);
+  finally
+    MS.Free;
+    Dst.Free;
+    Src.Free;
+  end;
 end;
 
 procedure TTabSetTest.TestDesignTimeSwitchTellsTheDesigner;
@@ -424,6 +465,7 @@ begin
 end;
 
 initialization
+  RegisterClasses([TTyTabSet]);   // the streaming reader instantiates by class name
   RegisterTest(TTabSetTest);
   RegisterTest(TTabSetBodyTest);
 end.

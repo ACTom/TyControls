@@ -385,16 +385,11 @@ end;
 
 procedure TTyPageControl.Loaded;
 begin
-  inherited Loaded;
   { Pages self-registered via SetParent during streaming, so FPages is already
-    populated in child order. Apply a streamed ActivePageIndex (captured by the
-    base SetTabIndex into FPendingTabIndex while csLoading was set). }
-  if FPendingTabIndex <> -1 then
-  begin
-    SetTabIndex(FPendingTabIndex);
-    FPendingTabIndex := -1;
-  end
-  else if (FTabIndex = -1) and (Length(FPages) > 0) then
+    populated in child order; inherited applies a streamed ActivePageIndex (the
+    base Loaded consumes SetTabIndex's csLoading capture -- for every strip). }
+  inherited Loaded;
+  if (FTabIndex = -1) and (Length(FPages) > 0) then
     FTabIndex := 0;
   if Length(FPages) = 0 then
     FTabIndex := -1;

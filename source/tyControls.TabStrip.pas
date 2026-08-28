@@ -274,6 +274,8 @@ type
       subclass chrome outside the tab rects (the ribbon's File tab and chevron). Subclasses
       opt in via the virtual. }
     function DesignTabClicksEnabled: Boolean; virtual;
+    { Applies a streamed TabIndex: the other half of SetTabIndex's csLoading capture. }
+    procedure Loaded; override;
     procedure CMDesignHitTest(var Message: TCMDesignHitTest); message CM_DESIGNHITTEST;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState;
@@ -2184,6 +2186,22 @@ end;
 function TTyCustomTabStrip.DesignTabClicksEnabled: Boolean;
 begin
   Result := False;
+end;
+
+procedure TTyCustomTabStrip.Loaded;
+begin
+  inherited Loaded;
+  { The other half of SetTabIndex's csLoading capture: the tab data exists now, so the
+    streamed selection can finally clamp and apply. This lived only in TTyPageControl's
+    override, so every OTHER descendant's designed TabIndex vanished into the pending
+    field on load (real-machine report: the OI says 2, the built TTyTabSet selects
+    nothing). -1 doubles as the no-capture sentinel: a strip that would stream -1
+    declares it as its default, so -1 is never written. }
+  if FPendingTabIndex <> -1 then
+  begin
+    SetTabIndex(FPendingTabIndex);
+    FPendingTabIndex := -1;
+  end;
 end;
 
 procedure TTyCustomTabStrip.CMDesignHitTest(var Message: TCMDesignHitTest);
