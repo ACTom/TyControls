@@ -60,10 +60,16 @@ end;
 
 var
   DesignerPings: Integer;
+  RefreshPings: Integer;
 
 procedure CountDesignerModified(AComponent: TComponent);
 begin
   Inc(DesignerPings);
+end;
+
+procedure CountRefresh;
+begin
+  Inc(RefreshPings);
 end;
 
 type
@@ -113,31 +119,40 @@ var
   saved: TOwnerFormDesignerModifiedProc;
 begin
   { A design-time tab switch (a designer tab click, a component-editor verb) changes
-    ActivePageIndex/TabIndex behind the IDE's back: without a designer ping the Object
-    Inspector shows the stale value until the control is re-selected (real-machine
-    feedback). The LCL notebook pings on its design-time clicks; so do we. }
+    ActivePageIndex/TabIndex behind the IDE's back. TWO pings, because the IDE splits
+    the concerns: OwnerFormDesignerModified only marks the unit dirty
+    (TMainIDE.DesignerModified never touches the OI), while the Object Inspector
+    re-reads values ONLY on GlobalDesignHook.RefreshPropertyValues -- which the
+    designtime package bridges into TyDesignerRefreshValuesProc (real-machine
+    feedback, second round: the value still showed stale with the dirty ping alone). }
   saved := OwnerFormDesignerModifiedProc;
   OwnerFormDesignerModifiedProc := @CountDesignerModified;
+  TyDesignerRefreshValuesProc := @CountRefresh;
   DesignerPings := 0;
+  RefreshPings := 0;
   t := TTabSetDesign.Create(nil);
   try
     t.Tabs.AddStrings(['A', 'B']);
     t.MarkDesigning;
     t.TabIndex := 1;
     AssertEquals('the designer heard the switch', 1, DesignerPings);
+    AssertEquals('and the OI was told to re-read', 1, RefreshPings);
     t.TabIndex := 1;
     AssertEquals('a same-value write stays silent', 1, DesignerPings);
+    AssertEquals('for the OI too', 1, RefreshPings);
 
     r := TTyTabSet.Create(nil);   // no csDesigning: a RUNTIME switch never pings
     try
       r.Tabs.AddStrings(['A', 'B']);
       r.TabIndex := 1;
       AssertEquals('runtime switches stay silent', 1, DesignerPings);
+      AssertEquals('for the OI too', 1, RefreshPings);
     finally
       r.Free;
     end;
   finally
     OwnerFormDesignerModifiedProc := saved;
+    TyDesignerRefreshValuesProc := nil;
     t.Free;
   end;
 end;

@@ -1874,11 +1874,16 @@ begin
   if Assigned(FOnChange) then
     FOnChange(Self);
   { A design-time switch (a designer tab click, a component-editor verb) changed a
-    published value behind the IDE's back: without this ping the Object Inspector
-    shows the stale ActivePageIndex/TabIndex until the control is re-selected. The
-    LCL notebook pings on its design-time clicks too; no-ops everywhere else (the
-    proc is nil outside the IDE, and it filters out loading/destroying itself). }
+    published value behind the IDE's back. TWO pings, because the IDE splits the
+    concerns: OwnerFormDesignerModified marks the unit dirty (TMainIDE.DesignerModified
+    -- it never touches the OI), and the Object Inspector re-reads the value it shows
+    only on the RefreshPropertyValues hook, bridged through TyDesignerRefreshValuesProc
+    (real-machine feedback, second round: the dirty ping alone left the OI stale).
+    Both no-op outside the IDE; the loading/destroying filter matches the LCL one. }
   OwnerFormDesignerModified(Self);
+  if ([csDesigning, csLoading, csDestroying] * ComponentState = [csDesigning])
+    and Assigned(TyDesignerRefreshValuesProc) then
+    TyDesignerRefreshValuesProc();
 end;
 
 { Density-aware header height. Explicit host/.lfm value wins and is streamed; otherwise

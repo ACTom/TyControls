@@ -181,6 +181,16 @@ function TyClampRadius(ARadius, AHalf: Integer): Integer;
 function TyBorderVisible(const AStyle: TTyStyleSet): Boolean;
 function EmptyStyleSet: TTyStyleSet;
 
+var
+  { IDE bridge, the OwnerFormDesignerModifiedProc pattern: the designtime package points
+    this at GlobalDesignHook.RefreshPropertyValues (ideintf, unreachable from here), so a
+    control whose DESIGN-TIME gesture changed a published value can make the Object
+    Inspector re-read what it shows. It must, because the IDE splits the concerns:
+    OwnerFormDesignerModified only marks the unit dirty (TMainIDE.DesignerModified never
+    touches the OI), and the OI re-reads only on the RefreshPropertyValues hook.
+    nil outside the IDE. Callers gate on csDesigning themselves. }
+  TyDesignerRefreshValuesProc: procedure = nil;
+
 implementation
 
 function TyRGB(R, G, B: Byte): TTyColor;
