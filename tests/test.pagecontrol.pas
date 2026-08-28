@@ -151,14 +151,17 @@ begin
 end;
 
 procedure TPageControlTest.TestDesignGestureStaysWithTheControl;
-// The designer consults CM_DESIGNHITTEST per message AT THE CURRENT POSITION and, on a
-// pass, hands that one message to the control and exits WITHOUT touching its own mouse
-// state. A per-position answer therefore breaks the gesture apart the moment the pointer
-// drifts off the tab (selecting can even re-layout the strip under it): the designer then
-// runs its move/up logic against the stale MouseDownComponent from the skipped down and
-// starts a rubber-band selection (real-machine report). Once a design press lands on a
-// tab, the WHOLE gesture must stay with the control -- moves and the release answer 1
-// anywhere -- and the release disarms.
+// The designer consults CM_DESIGNHITTEST per message AT THE CURRENT POSITION, and its
+// pass-through branches EXIT without touching its own mouse state -- which it wrote
+// BEFORE consulting (designer.pp:2208-2257). So the press and the drag must stay with
+// the control (answer 1 anywhere, or the gesture tears when selecting re-layouts the
+// strip under the pointer), but the RELEASE must answer 0 and go back to the designer:
+// its own MouseUp path is the ONLY place MouseDownComponent is cleared. Eating the up
+// (the first fix answered 1 there too) left that state armed forever, and the next
+// plain move ran the designer's logic with Button defaulting to mbLeft
+// (GetMouseMsgShift) -- a rubber band chasing the unpressed pointer (real-machine
+// report, twice). The designer's up also gives the click its normal ending: the
+// control gets selected, exactly like a native control.
 var
   TabPt, BodyPt: TPoint;
   res: PtrInt;
@@ -178,12 +181,12 @@ begin
   AssertEquals('mid-gesture, a body consultation stays with the control', 1, res);
 
   res := FPC.Perform(CM_DESIGNHITTEST, 0,
-    PtrInt((BodyPt.Y shl 16) or (BodyPt.X and $FFFF)));
-  AssertEquals('the release consultation is still the control''s', 1, res);
+    PtrInt((TabPt.Y shl 16) or (TabPt.X and $FFFF)));
+  AssertEquals('the RELEASE goes back to the designer -- even ON the tab', 0, res);
 
   res := FPC.Perform(CM_DESIGNHITTEST, 0,
     PtrInt((BodyPt.Y shl 16) or (BodyPt.X and $FFFF)));
-  AssertEquals('the gesture disarmed after the release', 0, res);
+  AssertEquals('disarmed: the body answers by position again', 0, res);
 
   TShowAccess(FPC).MouseUp(mbLeft, [], BodyPt.X, BodyPt.Y);   // idempotent disarm
 end;

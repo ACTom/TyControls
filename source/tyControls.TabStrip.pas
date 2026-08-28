@@ -2192,22 +2192,34 @@ begin
     existing MouseDown tab hit-test runs and switches the page. Only ON a tab -- the
     body must stay a plain designer click (select the control / drop children).
 
-    GESTURE CONSISTENCY. The designer consults this per message AT THE CURRENT POSITION
-    and, on a pass, delivers that one message and exits without touching its own mouse
-    state (designer.pp MouseDown/Up/MoveOnControl). Answering per position therefore
-    tears a press apart the moment the pointer drifts off the tab -- and selecting can
-    re-layout the strip under the pointer -- leaving the designer to run its move/up
-    logic against the stale MouseDownComponent of the down it never processed: a
-    rubber-band selection chasing the mouse. So once a design press lands on a tab
-    (MouseDown arms FDesignTabGesture), EVERY consultation answers 1 until the release;
-    the release consultation (no pressed left button in Keys) disarms on its way through,
-    which also self-heals if the control never sees the MouseUp itself. }
+    GESTURE CONSISTENCY. The designer consults this per message AT THE CURRENT POSITION,
+    and its pass-through branches EXIT without touching its own mouse state -- which it
+    wrote BEFORE consulting (designer.pp:2208-2257). Two rules follow:
+
+    - The press and the DRAG stay with the control: once a design press lands on a tab
+      (MouseDown arms FDesignTabGesture), every consultation with the left button still
+      pressed answers 1 anywhere -- a per-position answer tears the gesture the moment
+      selecting re-layouts the strip under the pointer.
+
+    - The RELEASE (no MK_LBUTTON in Keys) answers 0 and goes BACK to the designer, even
+      when the pointer still sits on the tab. The designer's own MouseUp path is the
+      ONLY place its MouseDownComponent is cleared; eating the up (the first fix
+      answered 1 here too) left that state armed forever, and the next plain move ran
+      the designer's mouse logic with Button defaulting to mbLeft (GetMouseMsgShift) --
+      a rubber band chasing the unpressed pointer. Handing the up back also ends the
+      click the native way (the control gets selected), and self-heals a gesture whose
+      MouseUp we never see. Capture returns with it: our MouseUp will not run. }
   if not DesignTabClicksEnabled then Exit;
   if FDesignTabGesture then
   begin
-    Message.Result := 1;
-    if (Message.Keys and MK_LBUTTON) = 0 then
+    if (Message.Keys and MK_LBUTTON) <> 0 then
+      Message.Result := 1
+    else
+    begin
       FDesignTabGesture := False;
+      if HandleAllocated then MouseCapture := False;
+      Message.Result := 0;
+    end;
   end
   else if IndexOfTabAt(Message.XPos, Message.YPos) >= 0 then
     Message.Result := 1;
