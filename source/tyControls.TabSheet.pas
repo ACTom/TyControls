@@ -20,6 +20,8 @@ type
     FImageIndex: Integer;         // last written BY index; a fallback view (see ImageIndex)
     FImageName: string;           // the durable icon key, resolved against the pager's Images
     FImageIndexPending: Boolean;  // an ImageIndex write not yet turned into a name (no pager list)
+    FTabVisible: Boolean;         // whether the pager shows this page's TAB (the page stays)
+    procedure SetTabVisible(AValue: Boolean);
     function  GetPageControl: TTyCustomTabStrip;
     procedure SetPageControl(AValue: TTyCustomTabStrip);
     function  GetPageIndex: Integer;
@@ -96,6 +98,12 @@ type
       does: reordering pages must carry the icon with the page. The pager reads it through
       GetTabImageIndex, and OnGetImageIndex still has the last word over whatever this says. }
     property ImageIndex: Integer read GetImageIndex write SetImageIndex stored ImageIndexIsStored default -1;
+    { Whether this page's TAB shows on the band -- TTabSheet.TabVisible, the Delphi
+      name and the Delphi rules: the page and its content stay; hiding the ACTIVE
+      page's tab moves the selection to the nearest visible tab; a programmatic
+      ActivePage(Index) to a hidden page stays legal (the wizard pattern: every tab
+      hidden, the program turns the pages); at design time every tab still shows. }
+    property TabVisible: Boolean read FTabVisible write SetTabVisible default True;
     { Fired when this page becomes / stops being the shown page. Per-page enter/leave logic
       (lazy content loading, validate-on-leave) previously had to be centralised in the
       pager's OnChange and dispatched with an if/case chain on the index, so a page could
@@ -131,8 +139,19 @@ begin
   ControlStyle := ControlStyle + [csAcceptsControls, csDesignFixedBounds,
     csNoDesignVisible, csNoFocus];
   FImageIndex := -1;
+  FTabVisible := True;
   Align := alClient;
   Visible := False;
+end;
+
+procedure TTyTabSheet.SetTabVisible(AValue: Boolean);
+begin
+  if FTabVisible = AValue then Exit;
+  FTabVisible := AValue;
+  { The strip relays out (and TTyPageControl moves the selection off a hidden ACTIVE
+    tab). Not during loading: the pager reconciles once streaming is done. }
+  if (GetPageControl <> nil) and not (csLoading in ComponentState) then
+    GetPageControl.TabVisibilityChanged(GetPageIndex);
 end;
 
 { The icon is measured INTO the tab header's width, so changing it re-lays the strip --

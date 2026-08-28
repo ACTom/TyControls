@@ -116,6 +116,10 @@ type
     procedure TestWheelOverHeaderScrolls;
     procedure TestClickArrowsScrollRightThenLeft;
     procedure TestNoOverflowRegressionUnshifted;
+    // PER-TAB VISIBILITY (TabVisible plumbing: layout, keys, degenerate rows)
+    procedure TestHiddenTabTakesNoRoom;
+    procedure TestArrowKeysSkipHiddenTabs;
+    procedure TestAllHiddenJustifiedMultilineSurvives;
     // (d) ONCHANGING veto (ported from test.tabcontrol.pas)
     procedure TestOnChangingVetoBlocksSwitch;
     procedure TestOnChangingAllowsSwitch;
@@ -273,6 +277,101 @@ begin
   FStrip.Font.PixelsPerInch := 96;
   FStrip.SetBounds(0, 0, AWidth, 200);
   for I := 1 to ACount do FStrip.AddCap('Tab ' + IntToStr(I));
+end;
+
+type
+  { A strip that can hide tabs: the minimal GetTabVisibleAt override, so the layout,
+    key-navigation and degenerate-row rules are pinned at the base-class level. }
+  THidingStrip = class(TStripAccess)
+  private
+    FHidden: set of 0..31;
+  protected
+    function GetTabVisibleAt(AIndex: Integer): Boolean; override;
+  public
+    procedure HideTab(AIndex: Integer);
+  end;
+
+function THidingStrip.GetTabVisibleAt(AIndex: Integer): Boolean;
+begin
+  Result := not ((AIndex >= 0) and (AIndex <= 31) and (AIndex in FHidden));
+end;
+
+procedure THidingStrip.HideTab(AIndex: Integer);
+begin
+  Include(FHidden, AIndex);
+  TabsChanged;
+end;
+
+procedure TTabStripTest.TestHiddenTabTakesNoRoom;
+var
+  s: THidingStrip;
+  r0, r1, r2: TRect;
+begin
+  s := THidingStrip.Create(nil);
+  try
+    s.Font.PixelsPerInch := 96;
+    s.SetBounds(0, 0, 600, 200);
+    s.AddCap('A'); s.AddCap('B'); s.AddCap('C');
+    s.HideTab(1);
+    r0 := s.HeaderRectShifted(0);
+    r1 := s.HeaderRectShifted(1);
+    r2 := s.HeaderRectShifted(2);
+    AssertEquals('a hidden tab is zero-wide', 0, r1.Right - r1.Left);
+    AssertTrue('its neighbour closes the gap', r2.Left = r0.Right);
+    AssertTrue('the visible tabs keep their width', r2.Right > r2.Left);
+  finally
+    s.Free;
+  end;
+end;
+
+procedure TTabStripTest.TestArrowKeysSkipHiddenTabs;
+var
+  s: THidingStrip;
+  k: Word;
+begin
+  s := THidingStrip.Create(nil);
+  try
+    s.Font.PixelsPerInch := 96;
+    s.SetBounds(0, 0, 600, 200);
+    s.AddCap('A'); s.AddCap('B'); s.AddCap('C'); s.AddCap('D');
+    s.HideTab(1);
+    s.HideTab(3);
+    s.TabIndex := 0;
+    k := VK_RIGHT; s.CallKeyDown(k);
+    AssertEquals('Right skips the hidden neighbour', 2, s.TabIndex);
+    k := VK_RIGHT; s.CallKeyDown(k);
+    AssertEquals('nothing visible further on: stay put', 2, s.TabIndex);
+    k := VK_LEFT; s.CallKeyDown(k);
+    AssertEquals('Left skips it on the way back', 0, s.TabIndex);
+    k := VK_END; s.CallKeyDown(k);
+    AssertEquals('End lands on the LAST VISIBLE tab', 2, s.TabIndex);
+    k := VK_HOME; s.CallKeyDown(k);
+    AssertEquals('Home on the first visible', 0, s.TabIndex);
+  finally
+    s.Free;
+  end;
+end;
+
+procedure TTabStripTest.TestAllHiddenJustifiedMultilineSurvives;
+var
+  s: THidingStrip;
+  i: Integer;
+begin
+  { Every tab hidden + multiline + justified rows: the justify pass shares a row's
+    slack among its VISIBLE tabs -- a row with none must not divide by zero. }
+  s := THidingStrip.Create(nil);
+  try
+    s.Font.PixelsPerInch := 96;
+    s.SetBounds(0, 0, 120, 200);
+    for i := 0 to 3 do s.AddCap('Tab ' + IntToStr(i));
+    s.MultiLine := True;         // RaggedRight defaults False, so the justify pass runs
+    for i := 0 to 3 do s.HideTab(i);
+    for i := 0 to 3 do
+      AssertEquals('every rect zero-wide', 0,
+        s.HeaderRectShifted(i).Right - s.HeaderRectShifted(i).Left);
+  finally
+    s.Free;
+  end;
 end;
 
 { Shifted-header midpoint X for a tab (the same coordinate the drop resolver and

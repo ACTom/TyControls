@@ -25,6 +25,9 @@ type
       then has the last word over. Reading it off the PAGE rather than off a parallel array
       is what makes a reorder carry the icon with its tab. }
     function  GetTabImageIndex(AIndex: Integer): Integer; override;
+    { The page's TabVisible -- except at design time, where every tab shows (the
+      Delphi rule: you cannot click what is not there). }
+    function  GetTabVisibleAt(AIndex: Integer): Boolean; override;
     procedure DoImagesChanged; override;
     function  GetStyleTypeKey: string; override;
     procedure DoSelectTab(AIndex: Integer); override;
@@ -40,6 +43,10 @@ type
       page that hosts the shown control -- Sheet.Show and Delphi-ported code rely on it. }
     procedure ShowControl(AControl: TControl); override;
   public
+    { Hiding the ACTIVE page's tab moves the selection to the nearest visible tab
+      (next first, then previous -- the Delphi behaviour); with no visible tab left
+      the page keeps showing (the wizard pattern owns the band then). }
+    procedure TabVisibilityChanged(AIndex: Integer); override;
     destructor Destroy; override;
     { Public so TTyTabSheet.SetParent (a different unit) can self-register. Idempotent. }
     procedure RegisterPage(APage: TTyTabSheet);
@@ -139,6 +146,32 @@ begin
     Result := FPages[AIndex].ImageIndex
   else
     Result := -1;
+end;
+
+function TTyPageControl.GetTabVisibleAt(AIndex: Integer): Boolean;
+begin
+  if csDesigning in ComponentState then Exit(True);
+  if (AIndex >= 0) and (AIndex < Length(FPages)) and (FPages[AIndex] <> nil) then
+    Result := FPages[AIndex].TabVisible
+  else
+    Result := True;
+end;
+
+procedure TTyPageControl.TabVisibilityChanged(AIndex: Integer);
+var
+  NewIdx: Integer;
+begin
+  { Runtime only, and only when the ACTIVE tab was hidden: next visible first, then
+    previous. NearestVisibleTab returns its start unchanged when the walk finds
+    nothing, so "every tab hidden" falls through and the page keeps showing. }
+  if not (csDesigning in ComponentState)
+    and (AIndex = TabIndex) and not GetTabVisibleAt(AIndex) then
+  begin
+    NewIdx := NearestVisibleTab(AIndex, 1, False);
+    if NewIdx = AIndex then NewIdx := NearestVisibleTab(AIndex, -1, False);
+    if NewIdx <> AIndex then TabIndex := NewIdx;
+  end;
+  inherited TabVisibilityChanged(AIndex);
 end;
 
 procedure TTyPageControl.DoImagesChanged;

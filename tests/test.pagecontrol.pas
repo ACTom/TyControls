@@ -45,6 +45,11 @@ type
     // Controller propagation (ported from test.tabcontrol.pas)
     procedure TestControllerPropagatedOnSetAfterAddPage;
     procedure TestControllerPropagatedOnAddPageAfterSet;
+    // TabVisible: hide a page's TAB while keeping the page (permissions, wizards)
+    procedure TestTabVisibleFalseHidesTheTabAtRuntime;
+    procedure TestDesignTimeShowsEveryTab;
+    procedure TestHidingTheActiveTabMovesTheSelection;
+    procedure TestWizardKeepsProgrammaticSwitching;
   end;
 
 implementation
@@ -370,6 +375,63 @@ begin
   finally
     Acc.Free;
   end;
+end;
+
+procedure TPageControlTest.TestTabVisibleFalseHidesTheTabAtRuntime;
+var
+  r0, r1, r2: TRect;
+begin
+  FPC.AddPage('A'); FPC.AddPage('B'); FPC.AddPage('C');
+  FPC.Pages[1].TabVisible := False;
+  r0 := FPC.HeaderRectShifted(0);
+  r1 := FPC.HeaderRectShifted(1);
+  r2 := FPC.HeaderRectShifted(2);
+  AssertEquals('the hidden page''s tab is zero-wide', 0, r1.Right - r1.Left);
+  AssertTrue('its neighbour closes the gap', r2.Left = r0.Right);
+  AssertNotNull('the PAGE itself stays', FPC.Pages[1]);
+end;
+
+procedure TPageControlTest.TestDesignTimeShowsEveryTab;
+var
+  r1: TRect;
+begin
+  { The Delphi rule: at design time a hidden tab still SHOWS -- you cannot click
+    what is not there. Runtime is where TabVisible bites. }
+  FPC.AddPage('A'); FPC.AddPage('B'); FPC.AddPage('C');
+  FPC.Pages[1].TabVisible := False;
+  TShowAccess(FPC).SetDesigning(True);
+  r1 := FPC.HeaderRectShifted(1);
+  AssertTrue('the designer shows the hidden tab', r1.Right > r1.Left);
+end;
+
+procedure TPageControlTest.TestHidingTheActiveTabMovesTheSelection;
+begin
+  FPC.AddPage('A'); FPC.AddPage('B'); FPC.AddPage('C');
+  FPC.ActivePageIndex := 1;
+  FPC.Pages[1].TabVisible := False;
+  AssertEquals('hiding the active tab moves to the NEXT visible', 2, FPC.ActivePageIndex);
+  AssertTrue('and shows that page', FPC.Pages[2].Visible);
+
+  FPC.Pages[2].TabVisible := False;    // now the LAST page's tab, so the move goes backwards
+  AssertEquals('no visible tab after: the previous one', 0, FPC.ActivePageIndex);
+  AssertTrue('and its page shows', FPC.Pages[0].Visible);
+end;
+
+procedure TPageControlTest.TestWizardKeepsProgrammaticSwitching;
+var
+  i: Integer;
+begin
+  { The wizard pattern: every tab hidden, the PROGRAM turns the pages. }
+  FPC.AddPage('Step 1'); FPC.AddPage('Step 2'); FPC.AddPage('Step 3');
+  { Hiding them one by one chases the selection forward (each hide of the ACTIVE
+    tab legally migrates it); the LAST hide finds nothing visible and stays put. }
+  for i := 0 to 2 do FPC.Pages[i].TabVisible := False;
+  AssertEquals('the selection survived the chase', 2, FPC.ActivePageIndex);
+  AssertTrue('and a page still shows', FPC.Pages[2].Visible);
+  FPC.ActivePageIndex := 1;
+  AssertEquals('a programmatic switch to a hidden tab is legal', 1, FPC.ActivePageIndex);
+  AssertTrue('and its page shows', FPC.Pages[1].Visible);
+  AssertFalse('the page it left is hidden', FPC.Pages[0].Visible);
 end;
 
 initialization

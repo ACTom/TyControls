@@ -40,6 +40,7 @@ begin
     Pg2 := Src.PC.AddPage('Two');
     Pg2.Name := 'PgTwo';
     Src.PC.ActivePageIndex := 1;
+    Src.PC.Pages[0].TabVisible := False;   // a permission-hidden tab must stream
     Btn := TTyButton.Create(Src);
     Btn.Name := 'Btn1';
     Btn.Parent := Pg2;                 // a control "dropped" on page 2
@@ -53,6 +54,8 @@ begin
     AssertEquals('page count survived', 2, DstPC.PageCount);
     AssertEquals('captions survived', 'Two', DstPC.TabCaption(1));
     AssertEquals('active index survived', 1, DstPC.ActivePageIndex);
+    AssertFalse('TabVisible = False survived', DstPC.Pages[0].TabVisible);
+    AssertTrue('the default stayed unwritten and restores True', DstPC.Pages[1].TabVisible);
     BtnCount := 0;
     for I := 0 to DstPC.Pages[1].ControlCount - 1 do
     begin

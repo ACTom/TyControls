@@ -189,6 +189,18 @@ type
     function GetTabCount: Integer; virtual; abstract;
     function GetTabCaption(AIndex: Integer): string; virtual; abstract;
     function GetTabClosableAt(AIndex: Integer): Boolean; virtual;
+    { Whether this tab shows on the band at all. A hidden tab is laid out zero-wide
+      (its neighbours close the gap), is skipped by drawing, hit-testing and key
+      navigation -- but its INDEX stays: TabIndex/ActivePageIndex remain full-order,
+      so nothing streams or renumbers, and a programmatic select of a hidden tab
+      stays legal (the wizard pattern). Default True; TTyPageControl overrides it
+      with the page's TabVisible (design time shows every tab -- the Delphi rule). }
+    function GetTabVisibleAt(AIndex: Integer): Boolean; virtual;
+    { The nearest tab GetTabVisibleAt admits, walking AStep (+1/-1) from AFrom
+      (exclusive). AWrap cycles round the ends; without it, hitting an end returns
+      AFrom unchanged ("stay put"). Every key-navigation branch resolves its target
+      through this, so hidden tabs are skipped in one place. }
+    function NearestVisibleTab(AFrom, AStep: Integer; AWrap: Boolean): Integer;
     { The per-tab half of the icon rule: the index into Images this tab carries, or -1.
       The base has no tab data, so it has no index either; TTyPageControl overrides it to
       return the page's ImageIndex. This is the value TabImageIndex seeds OnGetImageIndex
@@ -284,6 +296,11 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+
+    { A tab's visibility flipped (the page objects live in another unit, so this is
+      how they reach the strip). Base: relayout+repaint. TTyPageControl adds the
+      selection move off a hidden ACTIVE tab. }
+    procedure TabVisibilityChanged(AIndex: Integer); virtual;
 
     function TabCount: Integer;
     function TabCaption(AIndex: Integer): string;
@@ -603,7 +620,8 @@ var I: Integer;
 begin
   if Enabled then   // match the Enabled gate on MouseDown/KeyDown + the sibling controls
     for I := 0 to GetTabCount - 1 do
-      if TyIsAccelKey(Message, GetTabCaption(I)) then
+      if GetTabVisibleAt(I)         // a hidden tab shows no label, so no discoverable accel
+        and TyIsAccelKey(Message, GetTabCaption(I)) then
       begin
         SetTabIndex(I);
         Exit(True);
@@ -615,6 +633,35 @@ end;
   GetTabClosableAt reports per-tab closability; DoSelectTab/DoReorderTabs/
   RemoveTabData react to selection/reorder/close gestures; TabsChanged repaints
   when the header model changed (suppressed during streaming). }
+function TTyCustomTabStrip.GetTabVisibleAt(AIndex: Integer): Boolean;
+begin
+  Result := True;
+end;
+
+function TTyCustomTabStrip.NearestVisibleTab(AFrom, AStep: Integer; AWrap: Boolean): Integer;
+var
+  i, n: Integer;
+begin
+  Result := AFrom;
+  n := GetTabCount;
+  if (n = 0) or (AStep = 0) then Exit;
+  i := AFrom;
+  repeat
+    Inc(i, AStep);
+    if AWrap then
+      i := (i + n) mod n
+    else if (i < 0) or (i >= n) then
+      Exit;                          // ran off the end: stay put
+    if i = AFrom then Exit;          // full circle: nothing else is visible
+    if GetTabVisibleAt(i) then Exit(i);
+  until False;
+end;
+
+procedure TTyCustomTabStrip.TabVisibilityChanged(AIndex: Integer);
+begin
+  TabsChanged;
+end;
+
 function TTyCustomTabStrip.GetTabClosableAt(AIndex: Integer): Boolean;
 begin
   Result := FTabsClosable;
@@ -1017,6 +1064,13 @@ begin
   RowThick := TabH;
   for I := 0 to GetTabCount - 1 do
   begin
+    { A hidden tab measures zero: it takes no room, widens no side band, and every
+      later pass sees the 0 instead of asking again. }
+    if not GetTabVisibleAt(I) then
+    begin
+      Boxes[I] := 0;
+      Continue;
+    end;
     TyParseMnemonic(GetTabCaption(I), dispCap, mpm);
     TW := TabCaptionWidth(dispCap, TabStyle, APPI) + 2 * Pad;
     if (IconSize > 0) and (TabImageIndex(I) >= 0) then Inc(TW, IconSlot);
@@ -1055,7 +1109,10 @@ begin
   X   := 0;
   for I := 0 to GetTabCount - 1 do
   begin
-    if Vert then MainExt := TabH else MainExt := Boxes[I];
+    { A hidden tab's extent is 0 on BOTH axes (the Vert branch would hand it TabH). }
+    if not GetTabVisibleAt(I) then MainExt := 0
+    else if Vert then MainExt := TabH
+    else MainExt := Boxes[I];
     if Multi and (X > 0) and (X + MainExt > WrapLimit) then
     begin
       Inc(Row);
@@ -1095,21 +1152,27 @@ begin
     begin
       J      := I;
       RowLen := 0;
+      N      := 0;                 // the slack is shared among the row's VISIBLE tabs only
       while (J < GetTabCount) and (Rows[J] = Rows[I]) do
       begin
         Inc(RowLen, Mains[J]);
+        if GetTabVisibleAt(J) then Inc(N);
         Inc(J);
       end;
-      N     := J - I;
       Extra := WrapLimit - RowLen;
-      if Extra > 0 then            // an over-wide lone tab OVERHANGS; it is never shrunk
+      if (Extra > 0) and (N > 0) then  // over-wide lone tabs OVERHANG; an all-hidden row has nobody to widen
       begin
         Share := Extra div N;
         Rem   := Extra mod N;
-        for K := I to J - 1 do
+        K := I;
+        while K < J do
         begin
-          Inc(Mains[K], Share);
-          if (K - I) < Rem then Inc(Mains[K]);
+          if GetTabVisibleAt(K) then
+          begin
+            Inc(Mains[K], Share);
+            if Rem > 0 then begin Inc(Mains[K]); Dec(Rem); end;
+          end;
+          Inc(K);
         end;
       end;
       I := J;
@@ -1137,7 +1200,7 @@ begin
     CrossHi := CrossLo + RowThick;
     FHeaderRects[I] := Rect(X, CrossLo, X + MainExt, CrossHi);
 
-    if GetTabClosableAt(I) then
+    if GetTabClosableAt(I) and GetTabVisibleAt(I) then
     begin
       if Vert then
       begin
@@ -1157,7 +1220,7 @@ begin
     else
       FCloseRects[I] := Rect(0, 0, 0, 0);
 
-    if (IconSize > 0) and (TabImageIndex(I) >= 0) then
+    if (IconSize > 0) and (TabImageIndex(I) >= 0) and GetTabVisibleAt(I) then
     begin
       if Vert then
       begin
@@ -1972,6 +2035,7 @@ begin
 
     for I := 0 to GetTabCount - 1 do
     begin
+      if not GetTabVisibleAt(I) then Continue;   // zero-wide, but skip the ink too
       HdrRect   := HeaderRectShifted(I);
       CloseRect := FCloseRects[I];
       if GetTabClosableAt(I) then
@@ -2405,22 +2469,24 @@ begin
   inherited KeyDown(Key, Shift);
   Cnt := GetTabCount;
   if Cnt = 0 then Exit;
+  { Every branch resolves its target through NearestVisibleTab, so hidden tabs are
+    skipped in one place; with none hidden it degenerates to the old ±1 arithmetic. }
   // Ctrl+Tab / Ctrl+Shift+Tab: cycle with wrap.
   if (Key = VK_TAB) and (ssCtrl in Shift) then
   begin
-    if ssShift in Shift then NewIndex := FTabIndex - 1 else NewIndex := FTabIndex + 1;
-    if NewIndex < 0 then NewIndex := Cnt - 1;
-    if NewIndex > Cnt - 1 then NewIndex := 0;
-    TabIndex := NewIndex; Key := 0; Exit;
+    if ssShift in Shift then Step := -1 else Step := 1;
+    NewIndex := NearestVisibleTab(FTabIndex, Step, True);
+    if NewIndex >= 0 then TabIndex := NewIndex;
+    Key := 0; Exit;
   end;
   // Ctrl+PageDown / Ctrl+PageUp: next/prev, clamp.
   if (Key = VK_NEXT) and (ssCtrl in Shift) then
   begin
-    if FTabIndex < Cnt - 1 then TabIndex := FTabIndex + 1; Key := 0; Exit;
+    TabIndex := NearestVisibleTab(FTabIndex, 1, False); Key := 0; Exit;
   end;
   if (Key = VK_PRIOR) and (ssCtrl in Shift) then
   begin
-    if FTabIndex > 0 then TabIndex := FTabIndex - 1; Key := 0; Exit;
+    TabIndex := NearestVisibleTab(FTabIndex, -1, False); Key := 0; Exit;
   end;
   { Step := +1 for the key that points at the NEXT tab. On a mirrored strip the next tab is
     the one to the LEFT, so the two arrows trade jobs -- this is LAYOUT direction, which the
@@ -2436,21 +2502,27 @@ begin
     Home/End. Only a top/bottom band trades its two arrows. }
   if HeaderRightToLeft and not BandIsVertical then Step := -1 else Step := 1;
   case Key of
-    VK_HOME:  begin TabIndex := 0; Key := 0; end;
-    VK_END:   begin TabIndex := Cnt - 1; Key := 0; end;
+    { Logical ends = the first/last VISIBLE tab: walk inward from just outside. With
+      every tab hidden the walk returns its off-end start, which the guard drops. }
+    VK_HOME:
+      begin
+        NewIndex := NearestVisibleTab(-1, 1, False);
+        if NewIndex >= 0 then TabIndex := NewIndex;
+        Key := 0;
+      end;
+    VK_END:
+      begin
+        NewIndex := NearestVisibleTab(Cnt, -1, False);
+        if NewIndex < Cnt then TabIndex := NewIndex;
+        Key := 0;
+      end;
     VK_RIGHT:
       begin
-        NewIndex := FTabIndex + Step;
-        if NewIndex > Cnt - 1 then NewIndex := Cnt - 1;
-        if NewIndex < 0 then NewIndex := 0;
-        TabIndex := NewIndex; Key := 0;
+        TabIndex := NearestVisibleTab(FTabIndex, Step, False); Key := 0;
       end;
     VK_LEFT:
       begin
-        NewIndex := FTabIndex - Step;
-        if NewIndex > Cnt - 1 then NewIndex := Cnt - 1;
-        if NewIndex < 0 then NewIndex := 0;
-        TabIndex := NewIndex; Key := 0;
+        TabIndex := NearestVisibleTab(FTabIndex, -Step, False); Key := 0;
       end;
     { Up/Down step the selection only on a band whose run IS vertical. Handling them on a
       top/bottom band would swallow two keys the strip has never consumed -- a host that
@@ -2458,16 +2530,12 @@ begin
     VK_UP:
       if BandIsVertical then
       begin
-        NewIndex := FTabIndex - 1;
-        if NewIndex < 0 then NewIndex := 0;
-        TabIndex := NewIndex; Key := 0;
+        TabIndex := NearestVisibleTab(FTabIndex, -1, False); Key := 0;
       end;
     VK_DOWN:
       if BandIsVertical then
       begin
-        NewIndex := FTabIndex + 1;
-        if NewIndex > Cnt - 1 then NewIndex := Cnt - 1;
-        TabIndex := NewIndex; Key := 0;
+        TabIndex := NearestVisibleTab(FTabIndex, 1, False); Key := 0;
       end;
   end;
 end;
