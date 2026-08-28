@@ -2,7 +2,7 @@ unit test.tabset;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Forms, Graphics, fpcunit, testregistry,
+  Classes, SysUtils, Types, Controls, Forms, Graphics, LCLProc, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.TabStrip, tyControls.TabSet,
   tyControls.PageControl;
@@ -22,6 +22,7 @@ type
     procedure TestRemoveOnlyTab;
     procedure TestRemoveSelectedNotLast;
     procedure TestRemoveVetoedKeepsIndexInRange;
+    procedure TestDesignTimeSwitchTellsTheDesigner;
   end;
 
   { A caption-only strip must not paint a page container. TTyTabSet hosts no pages,
@@ -43,6 +44,62 @@ type
 implementation
 
 procedure TTabSetTest.OnChangeHandler(Sender: TObject); begin FChanged := True; end;
+
+type
+  { SetDesigning is protected on TComponent. }
+  TTabSetDesign = class(TTyTabSet)
+  public
+    procedure MarkDesigning;
+  end;
+
+procedure TTabSetDesign.MarkDesigning;
+begin
+  SetDesigning(True);
+end;
+
+var
+  DesignerPings: Integer;
+
+procedure CountDesignerModified(AComponent: TComponent);
+begin
+  Inc(DesignerPings);
+end;
+
+procedure TTabSetTest.TestDesignTimeSwitchTellsTheDesigner;
+var
+  t: TTabSetDesign;
+  r: TTyTabSet;
+  saved: TOwnerFormDesignerModifiedProc;
+begin
+  { A design-time tab switch (a designer tab click, a component-editor verb) changes
+    ActivePageIndex/TabIndex behind the IDE's back: without a designer ping the Object
+    Inspector shows the stale value until the control is re-selected (real-machine
+    feedback). The LCL notebook pings on its design-time clicks; so do we. }
+  saved := OwnerFormDesignerModifiedProc;
+  OwnerFormDesignerModifiedProc := @CountDesignerModified;
+  DesignerPings := 0;
+  t := TTabSetDesign.Create(nil);
+  try
+    t.Tabs.AddStrings(['A', 'B']);
+    t.MarkDesigning;
+    t.TabIndex := 1;
+    AssertEquals('the designer heard the switch', 1, DesignerPings);
+    t.TabIndex := 1;
+    AssertEquals('a same-value write stays silent', 1, DesignerPings);
+
+    r := TTyTabSet.Create(nil);   // no csDesigning: a RUNTIME switch never pings
+    try
+      r.Tabs.AddStrings(['A', 'B']);
+      r.TabIndex := 1;
+      AssertEquals('runtime switches stay silent', 1, DesignerPings);
+    finally
+      r.Free;
+    end;
+  finally
+    OwnerFormDesignerModifiedProc := saved;
+    t.Free;
+  end;
+end;
 
 procedure TTabSetTest.OnChangingVeto(Sender: TObject; ANewIndex: Integer; var AllowChange: Boolean);
 begin

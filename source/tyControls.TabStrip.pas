@@ -4,6 +4,7 @@ interface
 uses
   Classes, SysUtils, ImgList, Types, Math, Controls, Graphics, LCLType, LMessages, ExtCtrls,
   ComCtrls,                          // TTabPosition -- LCL's type, so a port streams
+  LCLProc,                           // OwnerFormDesignerModified -- design-time switches ping the IDE
   BGRABitmap, BGRABitmapTypes,       // the borrowed bitmap CachedIndex hands back
   tyControls.Types, tyControls.Controller, tyControls.Painter, tyControls.Base,
   tyControls.Animation, tyControls.Accel, tyControls.ImageCollection, tyControls.ImageDraw;
@@ -1807,6 +1808,12 @@ begin
   Invalidate;
   if Assigned(FOnChange) then
     FOnChange(Self);
+  { A design-time switch (a designer tab click, a component-editor verb) changed a
+    published value behind the IDE's back: without this ping the Object Inspector
+    shows the stale ActivePageIndex/TabIndex until the control is re-selected. The
+    LCL notebook pings on its design-time clicks too; no-ops everywhere else (the
+    proc is nil outside the IDE, and it filters out loading/destroying itself). }
+  OwnerFormDesignerModified(Self);
 end;
 
 { Density-aware header height. Explicit host/.lfm value wins and is streamed; otherwise
