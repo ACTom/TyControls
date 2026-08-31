@@ -25,6 +25,18 @@
         <Filename Value="designtime/tyControls.Design.Css.Editor.pas"/>
         <UnitName Value="tyControls.Design.Css.Editor"/>
       </Item>
+      <Item>
+        <Filename Value="designtime/tyControls.Design.PropEditors.pas"/>
+        <UnitName Value="tyControls.Design.PropEditors"/>
+      </Item>
+      <Item>
+        <Filename Value="designtime/tyControls.Design.CompEditors.pas"/>
+        <UnitName Value="tyControls.Design.CompEditors"/>
+      </Item>
+      <Item>
+        <Filename Value="designtime/tyControls.Design.NewItems.pas"/>
+        <UnitName Value="tyControls.Design.NewItems"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>

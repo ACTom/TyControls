@@ -1,0 +1,35 @@
+msgid ""
+msgstr "Content-Type: text/plain; charset=UTF-8"
+
+#: tycontrols.design.newitems.rsdtappdescription
+msgid "A graphical TyControls application. The main form is a themed TTyForm (custom title bar + style controller); the tycontrols package is added automatically."
+msgstr ""
+
+#: tycontrols.design.newitems.rsdtappname
+msgid "TyControls Application"
+msgstr ""
+
+#: tycontrols.design.newitems.rsdtdialogdescription
+msgid "A themed custom-drawn modal dialog (TTyDialog): borderless, close-only, non-resizable, centered —design your own dialog content and buttons."
+msgstr ""
+
+#: tycontrols.design.newitems.rsdtdialogname
+msgid "TyControls Dialog"
+msgstr ""
+
+#: tycontrols.design.newitems.rsdtformdescription
+msgid "A borderless form descending from TTyForm, with a top-aligned TTyTitleBar already attached (drag to move, double-click to maximize). Point its Controller at your main window's style controller to theme it, or lay out your controls below the bar."
+msgstr ""
+
+#: tycontrols.design.newitems.rsdtformname
+msgid "TyControls Form"
+msgstr ""
+
+#: tycontrols.design.newitems.rsdtmainformdescription
+msgid "A themed TTyForm carrying its own TTyStyleController, with the form and the title bar already associated to it —the root window for a TyControls application."
+msgstr ""
+
+#: tycontrols.design.newitems.rsdtmainformname
+msgid "TyControls Main Form"
+msgstr ""
+

@@ -1,0 +1,50 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols 3.0\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: tycontrols.design.css.editor.rscssedtitle
+msgid "StyleOverride (tycss)"
+msgstr "StyleOverride (tycss)"
+
+#: tycontrols.design.css.editor.rscssedvalidate
+msgid "Validate"
+msgstr "验证"
+
+#: tycontrols.design.css.editor.rscssedformat
+msgid "Format"
+msgstr "格式化"
+
+#: tycontrols.design.css.editor.rscssedcatprops
+msgid "Properties"
+msgstr "属性"
+
+#: tycontrols.design.css.editor.rscssedcatfuncs
+msgid "Colour functions"
+msgstr "颜色函数"
+
+#: tycontrols.design.css.editor.rscssedcattypekeys
+msgid "Type keys"
+msgstr "类型键"
+
+#: tycontrols.design.css.editor.rscssedcatpseudo
+msgid "Pseudo-states"
+msgstr "伪状态"
+
+#: tycontrols.design.css.editor.rscssedcattokens
+msgid "Tokens"
+msgstr "令牌"
+
+#: tycontrols.design.css.editor.rscssedunknownprops
+msgid "Unknown properties (silently ignored at run time):"
+msgstr "未知属性（运行时会被静默忽略）："
+
+#: tycontrols.design.css.editor.rscssedvalid
+msgid "tycss is valid."
+msgstr "tycss 语法正确。"

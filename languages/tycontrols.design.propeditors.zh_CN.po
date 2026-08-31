@@ -1,0 +1,97 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols 3.0\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: tycontrols.design.propeditors.rsdtabouttitle
+msgid "About TyControls"
+msgstr "关于 TyControls"
+
+#: tycontrols.design.propeditors.rsdtabouttagline
+msgid "BGRABitmap-drawn, .tycss-themed LCL control library"
+msgstr "BGRABitmap 全自绘、.tycss 主题化的 LCL 控件库"
+
+#: tycontrols.design.propeditors.rsdtaboutversion
+#, object-pascal-format
+msgid "Version %s"
+msgstr "版本 %s"
+
+#: tycontrols.design.propeditors.rsdtaboutlicense
+msgid "Modified LGPL (LCL-compatible linking exception)"
+msgstr "修改版 LGPL（与 LCL 兼容的链接例外）"
+
+#: tycontrols.design.propeditors.rsdtsurfacepurposetext
+msgid ""
+"TyFormSurface is the content host of a TTyForm — the panel every control on the form lives on.\n"
+"\n"
+"A borderless, resizable window cannot paint its own outermost pixels: the compositor gives it a backing surface smaller than the window, which leaves an unpainted band along the right and bottom edges. A CHILD window has no such limit and paints edge to edge, so TTyForm renders its themed background onto this surface instead of onto itself.\n"
+"\n"
+"Your controls must live on the surface. Graphic (windowless) controls such as TTyLabel paint onto their parent, so one placed directly on the form is hidden behind the surface.\n"
+"\n"
+"Keep exactly one surface per form, leave it filling the form, and do not delete it."
+msgstr ""
+"TyFormSurface 是 TTyForm 的内容宿主 —— 窗体上所有控件都放在这个面板里。\n"
+"\n"
+"无边框且可缩放的窗口画不到自己最外圈的像素:合成器给它的后备绘制面比窗口本身小,于是右边和下边会留下一条画不到的空带。子窗口没有这个限制、能一直画到真正的边缘,所以 TTyForm 把主题背景画在这个 surface 上,而不是画在自己身上。\n"
+"\n"
+"你的控件必须放在 surface 里。像 TTyLabel 这类图形(无窗口)控件是画在父控件身上的,直接放在窗体上会被 surface 挡住、看不见。\n"
+"\n"
+"每个窗体只保留一个 surface,让它铺满窗体,不要删除它。"
+
+#: tycontrols.design.propeditors.rsdtsurfacepurposetitle
+msgid "Why this control exists"
+msgstr "为什么需要这个控件"
+
+#: tycontrols.design.propeditors.rsdtthemefiletitle
+msgid "Select a .tycss stylesheet"
+msgstr "选择一个 .tycss 样式表"
+
+#: tycontrols.design.propeditors.rsdtthemefilefilter
+msgid "TyControls stylesheets (*.tycss)|*.tycss|All files|*"
+msgstr "TyControls 样式表 (*.tycss)|*.tycss|所有文件|*"
+
+#: tycontrols.design.propeditors.rsdtfontfiletitle
+msgid "Select an icon-font file"
+msgstr "选择一个图标字体文件"
+
+#: tycontrols.design.propeditors.rsdtfontfilefilter
+msgid "Font files (*.ttf;*.otf;*.ttc)|*.ttf;*.otf;*.ttc|All files|*"
+msgstr "字体文件 (*.ttf;*.otf;*.ttc)|*.ttf;*.otf;*.ttc|所有文件|*"
+
+#: tycontrols.design.propeditors.rsdtimagefiletitle
+msgid "Select an image for this collection entry"
+msgstr "为该集合条目选择一张图片"
+
+#: tycontrols.design.propeditors.rsdtimagefilefilter
+msgid "Image files (*.png;*.bmp;*.jpg;*.jpeg;*.gif)|*.png;*.bmp;*.jpg;*.jpeg;*.gif|All files|*"
+msgstr "图像文件 (*.png;*.bmp;*.jpg;*.jpeg;*.gif)|*.png;*.bmp;*.jpg;*.jpeg;*.gif|所有文件|*"
+
+#: tycontrols.design.propeditors.rsdtimagenopayload
+msgid "(no image)"
+msgstr "(无图像)"
+
+#: tycontrols.design.propeditors.rsdtimagebadpayload
+msgid "(unreadable image data)"
+msgstr "(图像数据无法解析)"
+
+#: tycontrols.design.propeditors.rsdtimageloadfailed
+msgid "That file could not be read as an image."
+msgstr "该文件无法作为图像读取。"
+
+#: tycontrols.design.propeditors.rsdtthemenamehint
+msgid "The theme to load by name. The list offers the themes compiled into TyControls plus any registered in this IDE; a name your application registers at run time is equally valid, so you may type one that is not listed. Setting this clears ThemeFile."
+msgstr "按名称加载的主题。下拉列表给出编译进 TyControls 的内置主题,以及本 IDE 中已注册的主题;你的程序在运行期注册的名称同样合法,所以列表之外的名字也可以直接输入。设置本属性会清空 ThemeFile。"
+
+#: tycontrols.design.propeditors.rsdtthememodehint
+msgid "Which \"@mode NAME\" block of the loaded theme is active. The list holds the modes THIS theme declares — the blank entry is the empty string, meaning no mode override at all. A single-mode theme therefore offers only the blank entry."
+msgstr "当前生效的是所加载主题的哪个 \"@mode 名称\" 区块。下拉列表列出的是「这个主题自己声明」的模式;其中的空白项就是空字符串,表示完全不套用模式覆盖。因此单模式主题只会给出那一个空白项。"
+
+#: tycontrols.design.propeditors.rsdticonneedsfont
+msgid "Set IconFont first: there is no icon font to browse."
+msgstr "请先设置 IconFont：没有可浏览的图标字体。"

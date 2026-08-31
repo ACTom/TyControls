@@ -1,0 +1,83 @@
+msgid ""
+msgstr "Content-Type: text/plain; charset=UTF-8"
+
+#: tycontrols.design.propeditors.rsdtaboutlicense
+msgid "Modified LGPL (LCL-compatible linking exception)"
+msgstr ""
+
+#: tycontrols.design.propeditors.rsdtabouttagline
+msgid "BGRABitmap-drawn, .tycss-themed LCL control library"
+msgstr ""
+
+#: tycontrols.design.propeditors.rsdtabouttitle
+msgid "About TyControls"
+msgstr ""
+
+#: tycontrols.design.propeditors.rsdtaboutversion
+#, object-pascal-format
+msgid "Version %s"
+msgstr ""
+
+#: tycontrols.design.propeditors.rsdtfontfilefilter
+msgid "Font files (*.ttf;*.otf;*.ttc)|*.ttf;*.otf;*.ttc|All files|*"
+msgstr ""
+
+#: tycontrols.design.propeditors.rsdtfontfiletitle
+msgid "Select an icon-font file"
+msgstr ""
+
+#: tycontrols.design.propeditors.rsdticonneedsfont
+msgid "Set IconFont first: there is no icon font to browse."
+msgstr ""
+
+#: tycontrols.design.propeditors.rsdtimagebadpayload
+msgid "(unreadable image data)"
+msgstr ""
+
+#: tycontrols.design.propeditors.rsdtimagefilefilter
+msgid "Image files (*.png;*.bmp;*.jpg;*.jpeg;*.gif)|*.png;*.bmp;*.jpg;*.jpeg;*.gif|All files|*"
+msgstr ""
+
+#: tycontrols.design.propeditors.rsdtimagefiletitle
+msgid "Select an image for this collection entry"
+msgstr ""
+
+#: tycontrols.design.propeditors.rsdtimageloadfailed
+msgid "That file could not be read as an image."
+msgstr ""
+
+#: tycontrols.design.propeditors.rsdtimagenopayload
+msgid "(no image)"
+msgstr ""
+
+#: tycontrols.design.propeditors.rsdtsurfacepurposetext
+msgid ""
+"TyFormSurface is the content host of a TTyForm —the panel every control on the form lives on.\n"
+"\n"
+"A borderless, resizable window cannot paint its own outermost pixels: the compositor gives it a backing surface smaller than the window, which leaves an unpainted band along the right and bottom edges. A CHILD window has no such limit and paints edge to edge, so TTyForm renders its themed background onto this surface instead of onto itself.\n"
+"\n"
+"Your controls must live on the surface. Graphic (windowless) controls such as TTyLabel paint onto their parent, so one placed directly on the form is hidden behind the surface.\n"
+"\n"
+"Keep exactly one surface per form, leave it filling the form, and do not delete it."
+msgstr ""
+
+#: tycontrols.design.propeditors.rsdtsurfacepurposetitle
+msgid "Why this control exists"
+msgstr ""
+
+#: tycontrols.design.propeditors.rsdtthemefilefilter
+msgid "TyControls stylesheets (*.tycss)|*.tycss|All files|*"
+msgstr ""
+
+#: tycontrols.design.propeditors.rsdtthemefiletitle
+msgid "Select a .tycss stylesheet"
+msgstr ""
+
+#: tycontrols.design.propeditors.rsdtthememodehint
+msgid "Which \"@mode NAME\" block of the loaded theme is active. The list holds the modes THIS theme declares — the blank entry is the empty string, meaning no mode override at all. A single-mode theme therefore offers only the blank entry."
+msgstr ""
+
+#: tycontrols.design.propeditors.rsdtthemenamehint
+msgid "The theme to load by name. The list offers the themes compiled into TyControls plus any registered in this IDE; a name your application registers at run time is equally valid, so you may type one that is not listed. Setting this clears ThemeFile."
+msgstr ""
+

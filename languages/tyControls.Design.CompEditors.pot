@@ -1,0 +1,43 @@
+msgid ""
+msgstr "Content-Type: text/plain; charset=UTF-8"
+
+#: tycontrols.design.compeditors.rsdtdialogpreview
+msgid "Preview"
+msgstr ""
+
+#: tycontrols.design.compeditors.rsdtgroupsedit
+msgid "Edit groups..."
+msgstr ""
+
+#: tycontrols.design.compeditors.rsdticonbrowse
+msgid "Icon browser..."
+msgstr ""
+
+#: tycontrols.design.compeditors.rsdtimgcoledit
+msgid "Edit images..."
+msgstr ""
+
+#: tycontrols.design.compeditors.rsdtpageadd
+msgid "Add Page"
+msgstr ""
+
+#: tycontrols.design.compeditors.rsdtpagedelete
+msgid "Delete Page"
+msgstr ""
+
+#: tycontrols.design.compeditors.rsdtpageshownext
+msgid "Show Next Page"
+msgstr ""
+
+#: tycontrols.design.compeditors.rsdtpageshowpage
+msgid "Show Page"
+msgstr ""
+
+#: tycontrols.design.compeditors.rsdtpageshowprev
+msgid "Show Previous Page"
+msgstr ""
+
+#: tycontrols.design.compeditors.rsdttreeeditnodes
+msgid "Edit Nodes..."
+msgstr ""
+

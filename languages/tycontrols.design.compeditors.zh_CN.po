@@ -1,0 +1,50 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols 3.0\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: tycontrols.design.compeditors.rsdtpageadd
+msgid "Add Page"
+msgstr "添加页"
+
+#: tycontrols.design.compeditors.rsdtpagedelete
+msgid "Delete Page"
+msgstr "删除页"
+
+#: tycontrols.design.compeditors.rsdtpageshownext
+msgid "Show Next Page"
+msgstr "显示下一页"
+
+#: tycontrols.design.compeditors.rsdtpageshowpage
+msgid "Show Page"
+msgstr "显示页面"
+
+#: tycontrols.design.compeditors.rsdtpageshowprev
+msgid "Show Previous Page"
+msgstr "显示上一页"
+
+#: tycontrols.design.compeditors.rsdttreeeditnodes
+msgid "Edit Nodes..."
+msgstr "编辑节点..."
+
+#: tycontrols.design.compeditors.rsdtdialogpreview
+msgid "Preview"
+msgstr "预览"
+
+#: tycontrols.design.compeditors.rsdticonbrowse
+msgid "Icon browser..."
+msgstr "图标浏览器..."
+
+#: tycontrols.design.compeditors.rsdtimgcoledit
+msgid "Edit images..."
+msgstr "编辑图像..."
+
+#: tycontrols.design.compeditors.rsdtgroupsedit
+msgid "Edit groups..."
+msgstr "编辑分组..."
