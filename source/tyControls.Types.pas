@@ -107,8 +107,8 @@ const
   // 3-part (major.minor.patch); a pre-release appends a `-Beta`/`-RC` suffix, which is
   // DISPLAY ONLY — the .lpk <Version> stays numeric (3.0.0). 2.99.x was the 3.0 alpha
   // line (kept above every 2.2.x, below 3.0.0); 3.0.0 is now the first official release,
-  // shipping first as 3.0.0-Beta.
-  TyVersion     = '3.0.0-RC';
+  // shipping first as 3.0.0-Beta; main is now the 3.1.0 feature line (3.0 fixes live on branch 3.0-fixes).
+  TyVersion     = '3.1.0';
   TyHomepageUrl = 'https://github.com/ACTom/TyControls';
 
   // Shared logical-px spacing/size constants (96-PPI baseline). Promoted from

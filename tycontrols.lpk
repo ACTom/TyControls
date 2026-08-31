@@ -14,7 +14,7 @@
 
 Homepage: https://github.com/ACTom/TyControls"/>
     <License Value="Modified LGPL (see COPYING.modifiedLGPL.txt) —same as the Lazarus LCL"/>
-    <Version Major="3" Minor="0" Release="0"/>
+    <Version Major="3" Minor="1" Release="0"/>
     <Files>
       <Item>
         <Filename Value="source/tyControls.Types.pas"/>
