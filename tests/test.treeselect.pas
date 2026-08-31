@@ -49,6 +49,8 @@ type
   published
     procedure TestTypeKeyIsComboBox;
     procedure TestDefaults;
+    procedure TestItemsForwardToTheDropTree;
+    procedure TestItemsSurviveStreaming;
     procedure TestTreeIsWiredToPicker;
     procedure TestSelectNodeCachesCaptionAndFiresChange;
     procedure TestSelectSameNodeDoesNotRefire;
@@ -330,6 +332,12 @@ end;
 { A picker over a two-node tree ('Engineering', 'Sales'), themed, at 96 PPI and at the
   control's own default size. The node data is an index into FCaptions, so a test can change
   what the tree ANSWERS for a node without rebuilding anything. }
+type
+  THostForm = class(TForm)   // a streamable root for the Items round-trip test
+  published
+    TSel: TTyTreeSelect;
+  end;
+
 function MakeSelect(AOwner: TForm; ACtl: TTyStyleController;
   AGetText: TTyTreeGetTextEvent; out n0, n1: PTyTreeNode): TSelectAccess;
 begin
@@ -345,6 +353,59 @@ begin
   n1 := Result.Tree.AddChild(nil);
   PInteger(Result.Tree.GetNodeData(n0))^ := 0;
   PInteger(Result.Tree.GetNodeData(n1))^ := 1;
+end;
+
+procedure TTyTreeSelectControlTest.TestItemsForwardToTheDropTree;
+var
+  TS: TTyTreeSelect;
+  a: TTyTreeNodeItem;
+begin
+  { The published Items forward to the embedded tree (unnamed, so it streams nothing of
+    its own): filling them at design time is how the dropdown gets its tree without
+    code. Item mode and the virtual API stay mutually exclusive -- the tree's gates. }
+  TS := TTyTreeSelect.Create(FForm);
+  try
+    a := TS.Items.AddChild(nil, 'A');
+    TS.Items.AddChild(a, 'a1');
+    AssertEquals('the drop tree materialised the items', 2, Integer(TS.Tree.RootNodeCount) + 1);
+    AssertEquals('same collection the tree owns', 2, TS.Tree.Items.Count);
+  finally
+    TS.Free;
+  end;
+end;
+
+procedure TTyTreeSelectControlTest.TestItemsSurviveStreaming;
+var
+  Src, Dst: THostForm;
+  MS: TMemoryStream;
+  DstTS: TTyTreeSelect;
+  a: TTyTreeNodeItem;
+begin
+  { The forwarding property must have a real setter: FPC's writer silently SKIPS a
+    published collection without one (the TTyHeader.Columns lesson, 7d2c03d). }
+  Src := THostForm.CreateNew(nil);
+  Dst := THostForm.CreateNew(nil);
+  MS := TMemoryStream.Create;
+  try
+    Src.Name := 'HostForm9';
+    Src.TSel := TTyTreeSelect.Create(Src);
+    Src.TSel.Name := 'TSel';
+    Src.TSel.Parent := Src;
+    a := Src.TSel.Items.AddChild(nil, 'A');
+    Src.TSel.Items.AddChild(a, 'a1');
+    MS.WriteComponent(Src);
+
+    MS.Position := 0;
+    MS.ReadComponent(Dst);
+    DstTS := Dst.FindComponent('TSel') as TTyTreeSelect;
+    AssertEquals('the designed tree streamed', 2, DstTS.Items.Count);
+    AssertEquals('with its caption', 'A', DstTS.Items[0].Text);
+    AssertEquals('and its depth', 1, DstTS.Items[1].Level);
+  finally
+    MS.Free;
+    Dst.Free;
+    Src.Free;
+  end;
 end;
 
 procedure TTyTreeSelectControlTest.TestTypeKeyIsComboBox;
@@ -783,6 +844,7 @@ begin
 end;
 
 initialization
+  RegisterClasses([TTyTreeSelect]);   // the streaming reader instantiates by class name
   RegisterTest(TTyTreeSelectRulesTest);
   RegisterTest(TTyTreeSelectControlTest);
 end.

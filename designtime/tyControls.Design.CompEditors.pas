@@ -18,7 +18,7 @@ uses
   tyControls.Dialogs.SelectPath, tyControls.Dialogs.Color, tyControls.Dialogs.Font,
   tyControls.Dialogs.Find, tyControls.Dialogs.Progress, tyControls.Dialogs.About,
   tyControls.ListGroupPanel, tyControls.PageControl, tyControls.TabSheet,
-  tyControls.TreeView, tyControls.Cascader,
+  tyControls.TreeView, tyControls.Cascader, tyControls.TreeSelect,
   { rsDtIconNeedsFont is shared with the GlyphName property editor. }
   tyControls.Design.PropEditors;
 
@@ -142,6 +142,15 @@ type
     nested Nodes model (the stock collection editor shows one nesting level per open,
     a window per branch of a province/city/district tree). }
   TTyCascaderComponentEditor = class(TComponentEditor)
+  public
+    function GetVerbCount: Integer; override;
+    function GetVerb(Index: Integer): string; override;
+    procedure ExecuteVerb(Index: Integer); override;
+  end;
+
+  { TTyTreeSelect's double-click: the SAME node editor, aimed at the embedded dropdown
+    tree (its published Items forward there). One editor to learn for every node tree. }
+  TTyTreeSelectComponentEditor = class(TComponentEditor)
   public
     function GetVerbCount: Integer; override;
     function GetVerb(Index: Integer): string; override;
@@ -594,6 +603,30 @@ begin
   TreeNodesLink.ShowFor(Tree);
 end;
 
+{ TTyTreeSelectComponentEditor }
+
+function TTyTreeSelectComponentEditor.GetVerbCount: Integer;
+begin
+  Result := 1;
+end;
+
+function TTyTreeSelectComponentEditor.GetVerb(Index: Integer): string;
+begin
+  if Index = 0 then Result := rsDtTreeEditNodes else Result := '';
+end;
+
+procedure TTyTreeSelectComponentEditor.ExecuteVerb(Index: Integer);
+begin
+  if Index <> 0 then begin inherited ExecuteVerb(Index); Exit; end;
+  if TreeNodesLink = nil then
+    TreeNodesLink := TTyTreeNodesDesignerLink.Create(Application);
+  { Aim at the embedded tree: the editor's Model reads (Subject as TTyTreeView).Items,
+    which is the same collection the published Items forward. The link's Owner check
+    (HookPersistentDeleting: Subject.Owner) is the TreeSelect itself, so deleting the
+    field detaches the window. }
+  TreeNodesLink.ShowFor((Component as TTyTreeSelect).Tree);
+end;
+
 { TTyCascaderComponentEditor }
 
 function TTyCascaderComponentEditor.GetVerbCount: Integer;
@@ -665,6 +698,9 @@ begin
   RegisterComponentEditor(TTyListGroupPanel, TTyListGroupPanelComponentEditor);
   // Double-click a cascader to edit its nested option tree in one window.
   RegisterComponentEditor(TTyCascader, TTyCascaderComponentEditor);
+  // Double-click a tree-select to edit its dropdown tree -- the same node editor,
+  // aimed at the embedded tree the published Items forward to.
+  RegisterComponentEditor(TTyTreeSelect, TTyTreeSelectComponentEditor);
   // Double-click a dialog component in the designer to preview it (verb 0 = Preview),
   // mirroring LCL's TCommonDialogComponentEditor.
   RegisterComponentEditor(

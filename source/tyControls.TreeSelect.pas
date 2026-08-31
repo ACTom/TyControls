@@ -162,6 +162,8 @@ type
     { A property's read must name a field of its OWN type, and FTree is the descendant —
       hence the getter for a plain TTyTreeView view of it. }
     function GetTree: TTyTreeView;
+    function GetItems: TTyTreeNodes;
+    procedure SetItems(AValue: TTyTreeNodes);
     { TTyDropdownPopup.OnClose: the single bookkeeping point for a popup that closed for ANY
       reason (click-away, Escape, a pick, a programmatic CloseUp). }
     procedure PopupClosed(Sender: TObject);
@@ -231,6 +233,14 @@ type
       text is what it looks like, not what it is, and writing a caption could not name one. }
     property Text: TCaption read GetFieldText;
   published
+    { The dropdown tree's DESIGN-TIME item model, forwarded: the embedded tree is unnamed
+      and streams nothing of its own, so the .lfm carries the nodes through this property
+      (the setter is REQUIRED -- FPC's writer silently skips a published collection
+      without one). Filling it puts the tree in ITEM mode; leave it empty to keep the
+      classic virtual-API path (build on Tree in code: RootNodeCount / OnGetText /
+      OnInitChildren). Mixing the two raises -- the tree's own mode gates. The node
+      editor (double-click / 'Edit Nodes...') edits this same collection. }
+    property Items: TTyTreeNodes read GetItems write SetItems;
     { Drawn in the 'TyTextHint' ink while nothing is selected (the same key, and so the same
       dim colour, as TTyEdit.TextHint). A selected node's blank caption is NOT the empty
       state and does not bring it back. }
@@ -426,6 +436,16 @@ end;
 function TTyTreeSelect.GetTree: TTyTreeView;
 begin
   Result := FTree;
+end;
+
+function TTyTreeSelect.GetItems: TTyTreeNodes;
+begin
+  Result := FTree.Items;
+end;
+
+procedure TTyTreeSelect.SetItems(AValue: TTyTreeNodes);
+begin
+  FTree.Items.Assign(AValue);
 end;
 
 function TTyTreeSelect.GetFieldText: TCaption;

@@ -66,7 +66,8 @@ uses tyControls.TreeSelect;
 
 | 属性 | 类型 | 说明 |
 |------|------|------|
-| `Tree` | `TTyTreeView`（只读） | **面向宿主的主战场**：在它上面建层级（`AddChild` / `RootNodeCount` / `OnInitChildren`）、答 `OnGetText`、设 `Options` / `Images` / `Indent`。**不是 published**——虚拟树的节点是指针，`.lfm` 里没有东西可流式化，请**从代码里填充**（如 `FormCreate`），一如 VirtualTreeView 一贯的用法。 |
+| `Tree` | `TTyTreeView`（只读） | **面向宿主的主战场**：在它上面建层级（`AddChild` / `RootNodeCount` / `OnInitChildren`）、答 `OnGetText`、设 `Options` / `Images` / `Indent`。本身不是 published（虚拟树的节点是指针），**设计期填树请用下面的 `Items`**。 |
+| `Items`（published） | `TTyTreeNodes` | 下拉树的**设计期条目模型**，转发到内嵌树：**双击控件**（或右键「编辑节点...」）打开与 `TTyTreeView` 同一个节点结构编辑器,填好的树随 `.lfm` 流式保存。填了 `Items` 即进入条目模式;留空则维持经典的虚拟 API 路径（代码里 `RootNodeCount`/`OnGetText`）——两条路互斥,混用会由树自己的闸门报错。 |
 | `SelectedNode` | `PTyTreeNode`（读写） | 选中的节点，或 `nil`。**写它 = 程序化选取**：`Text` 重新缓存、`OnChange` 触发，但**下拉不会关**，树也**不会被动到**，直到它下次展开（见 `SyncTreeToSelection`）。**这个指针是宿主的**：把节点从树里删掉，它就悬空——和宿主自己持有的任何 `PTyTreeNode` 完全一样，请先清空或改设。 |
 | `Text` | `string`（**只读**） | 选中项的标题；无选中项时为 `''`。只读是**有意的**：这里的值是一个**节点**——文字只是它的样子，不是它本身，写一个标题命名不了任何节点。 |
 
@@ -298,7 +299,7 @@ DeptSelect.DropDownHeight := 160;   // 逻辑像素；0 = 主题的 --treeselect
 - **变体是组合框的变体：** 因为共用 `'TyComboBox'` 键，`StyleClass := 'small'` 命中的是 `TyComboBox.small`——TreeSelect 与 ComboBox 会被**打扮得完全一样**。这是共用键的**目的**，也是它的**代价**。
 - **`Text` 是选中时缓存的，绘制时绝不解引用节点：** 节点指针是宿主的，宿主随时可以释放（`TTyTreeView` 是虚拟树），绘制时再去读一个已删节点，会变成每次 `Invalidate` 都悬空读。所以**宿主背着控件改了标题，字段不会自己知道**——改完请调 `UpdateText`。
 - **`SelectedNode` 会悬空：** 把节点从树里删掉，这个指针就悬空了，和宿主自己持有的任何 `PTyTreeNode` 一样。**删之前先 `ClearSelection` 或改设**。
-- **`Tree` 不是 published，请从代码填充：** 虚拟树的节点是指针，`.lfm` 无从流式化。
+- **`Tree` 不是 published;设计期填树用 `Items`（转发到内嵌树,随 `.lfm` 流式）,运行时动态树走虚拟 API：** 两条路互斥。
 - **仓库老坑——给树加列时，`Header.MainColumn` 必须在 `Columns.Add` 之后设：** 先设会被夹到 `NoColumn`，主列**永远不画**。
 - **展开分支 ≠ 选中它：** 点展开箭头和点复选框**都不提交**（见 `TyTreeSelectCommitsOn`）——否则「展开看看里面」就会顺手选中并关掉下拉。
 - **只有 `Alt+Down` / `F4` 展开，没有单独的上下键步进：** 后者是组合框的做法。**层级没有一个「下一个值」可供盲目步进**，而且从收起的字段步进到一个折叠分支里，会选中用户根本看不见的节点。`Escape` 收起（不提交）。
