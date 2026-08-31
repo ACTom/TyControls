@@ -108,7 +108,7 @@ const
   // DISPLAY ONLY — the .lpk <Version> stays numeric (3.0.0). 2.99.x was the 3.0 alpha
   // line (kept above every 2.2.x, below 3.0.0); 3.0.0 is now the first official release,
   // shipping first as 3.0.0-Beta.
-  TyVersion     = '3.0.0-Beta';
+  TyVersion     = '3.0.0-RC';
   TyHomepageUrl = 'https://github.com/ACTom/TyControls';
 
   // Shared logical-px spacing/size constants (96-PPI baseline). Promoted from

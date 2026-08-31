@@ -7,6 +7,35 @@ Linux and macOS.
 
 > 中文版见 [CHANGELOG.md](CHANGELOG.md)。
 
+## [3.0.0-RC] — 2026-08-31
+
+Every issue reported against the Beta has been addressed; this is the release candidate for 3.0. From here the 3.0 line takes bug fixes only (the `3.0-fixes` branch).
+
+### Added
+
+- Structure editors: double-click (or right-click) a `TTyTreeView`, `TTyCascader`, `TTyTreeSelect` or `TTyListGroupPanel` to open a dedicated tree editor — the whole model in one tree, add/delete at any depth, move whole blocks up and down, and edit the selected node's properties right in the Object Inspector.
+- `TTyTreeSelect` gains published `Items`: the dropdown tree can now be authored at design time and streams with the `.lfm` (it used to be code-only).
+- `TTyListGroupPanel`: a design-time `Groups` nested collection (groups first, items under each); an `OnItemDblClick` event; `Tag` on groups and items; whole-sider collapse to an icon rail (`Collapsed`, with an optional bottom trigger band via `ShowCollapseTrigger`).
+- `TTyTabSheet.TabVisible`: hide a page's tab while keeping the page; hide them all and switch from code for the wizard pattern.
+- `TTyImageCollection`: double-click opens a TImageList-style manager — add, replace, rename, reorder, preview.
+- `TTyChart` image export: `SaveToFile` / `SaveToStream` with PNG / BMP / JPG / TIFF and an explicit-format option.
+- Design-time tab clicks switch pages on `TTyPageControl`, `TTyTabSet` and `TTyRibbon`; the PageControl context menu gains a "Show Page" jump list.
+- Icon browser multi-pick: opened from an image list, each double-click adds the icon and shows its index badge at once, with the window staying open.
+
+### Changed
+
+- The license is pinned to the Modified LGPL-2.1 (or later) with the linking exception, matching the LCL.
+- `TTyLucideImageList` no longer shows the irrelevant `Collection` / `IconFont` properties in the Object Inspector.
+
+### Fixed
+
+- Under themes with padding, `TTyMemo` and the list/dropdown family mis-measured their scroll range and row hit-testing, clipping the last line.
+- `TTyMemo` now wraps mixed Latin/CJK lines at CJK characters instead of spaces only.
+- Clicking a tab at design time left the mouse in a rubber-band selection; the Object Inspector kept showing a stale `ActivePageIndex` after a switch.
+- A `TTyTabSet.TabIndex` set at design time was lost at run time.
+- A collapsed `TTyListGroupPanel` rail made groups and items indistinguishable: groups now separate with a rule and icon-less rows show their caption's first glyph.
+- `TTyCascader` painted the hover fill over the currently selected option.
+
 ## [3.0.0-Beta] — 2026-08-14
 
 3.0 is the first stable release line. This release adds a large number of controls and aligns many APIs with the LCL; some of these changes are not backward compatible, so please read the Changed section before upgrading.

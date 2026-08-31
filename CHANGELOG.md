@@ -6,6 +6,35 @@
 
 > English: [CHANGELOG.en.md](CHANGELOG.en.md).
 
+## [3.0.0-RC] — 2026-08-31
+
+Beta 收到的问题已全部处理,本版是 3.0 的候选发布版。此后 3.0 线只接受缺陷修复(`3.0-fixes` 分支)。
+
+### 新增
+
+- 结构编辑器:`TTyTreeView`、`TTyCascader`、`TTyTreeSelect`、`TTyListGroupPanel` 双击(或右键菜单)打开专用树形编辑器——一棵树编辑整个模型,任意深度增删节点、整块上下移动,选中的节点直接在对象查看器里改属性。
+- `TTyTreeSelect` 新增 published `Items`:下拉树可在设计期填好并随 `.lfm` 保存(原先只能代码填充)。
+- `TTyListGroupPanel`:设计期 `Groups` 嵌套集合(先建组、组下建条目);`OnItemDblClick` 事件;组与条目新增 `Tag`;整栏收缩为图标轨道(`Collapsed`,可选底部触发带 `ShowCollapseTrigger`)。
+- `TTyTabSheet.TabVisible`:隐藏单页的页签而保留页面;全部隐藏配合代码翻页即向导模式。
+- `TTyImageCollection` 双击打开 TImageList 式图像管理器:增删、替换、改名、排序、预览。
+- `TTyChart` 导出图片:`SaveToFile` / `SaveToStream`,支持 PNG / BMP / JPG / TIFF,可显式指定格式。
+- 设计期直接点击页签切页:`TTyPageControl`、`TTyTabSet`、`TTyRibbon`;PageControl 右键新增「Show Page」页面直达菜单。
+- 图标浏览器支持连续多选:从图像列表打开时双击即加入并立刻显示角标,窗口保持打开。
+
+### 变更
+
+- 许可证明确为 Modified LGPL-2.1(或更高)附链接例外,与 LCL 一致。
+- `TTyLucideImageList` 不再在对象查看器显示与内置图标包无关的 `Collection` / `IconFont`。
+
+### 修复
+
+- 带内边距的主题下,`TTyMemo` 与列表 / 下拉类控件的滚动范围、点击行判定错位,末行显示不全。
+- `TTyMemo` 中英混排行现在按 CJK 字符折行,不再只认空格。
+- 设计期点击页签后鼠标进入橡皮筋框选状态;切页后对象查看器的 `ActivePageIndex` 不刷新。
+- `TTyTabSet` 设计期设置的 `TabIndex` 在运行时丢失。
+- `TTyListGroupPanel` 收缩成图标轨道后分组与条目无法区分:组间加分隔线,无图标的行显示标题首字。
+- `TTyCascader` 悬停在当前选中项上时错误地盖上悬停底色。
+
 ## [3.0.0-Beta] — 2026-08-14
 
 3.0 是第一个正式版本线。本版包含大量新控件与 LCL 兼容性对齐,其中部分变更不向后兼容,升级前请通读「变更」一节。
