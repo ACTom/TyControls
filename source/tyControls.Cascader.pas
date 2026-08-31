@@ -379,12 +379,14 @@ type
     { The resolved style of one row: 'TyCascaderItem' with the PANEL's StyleClass (so a
       variant reaches both keys) and the state of THAT row. }
     function RowStyle(AColumn, AIndex: Integer): TTyStyleSet;
-    function RowStates(AColumn, AIndex: Integer): TTyStateSet;
-    procedure SetHover(AColumn, AIndex: Integer);
     { The tail EVERY draft change shares: re-fit the per-column scroll array, repaint, and
       tell the host that the column count may have moved. }
     procedure DraftChanged;
   protected
+    { Protected, not private: the hover/selected precedence rule is pinned by a test
+      through an access subclass. }
+    function RowStates(AColumn, AIndex: Integer): TTyStateSet;
+    procedure SetHover(AColumn, AIndex: Integer);
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
@@ -1502,7 +1504,12 @@ begin
     Include(Result, tysDisabled);
     Exit;
   end;
-  if (AColumn = FHoverColumn) and (AIndex = FHoverRow) then Include(Result, tysHover);
+  { Hover never stacks on the selected row: the resolver applies :hover after
+    :selected, so a stacked state would grey the accent chip out right under the
+    pointer -- the TTyListBox / TTyTreeView rule (both select-wins else-if hover). }
+  if (AColumn = FHoverColumn) and (AIndex = FHoverRow)
+    and not (tysSelected in Result) then
+    Include(Result, tysHover);
   if Result = [] then Include(Result, tysNormal);
 end;
 

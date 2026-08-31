@@ -3,6 +3,7 @@ unit test.cascader;
 interface
 uses
   Classes, SysUtils, Types, Graphics, Forms, Controls, fpcunit, testregistry,
+  tyControls.Types,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Controller, tyControls.Cascader;
 
@@ -101,6 +102,7 @@ type
     procedure TestSelectByTextSelectsAndRejects;
     procedure TestButtonRectFollowsTheThemeMetric;
     procedure TestTextRectStopsAtTheButton;
+    procedure TestHoverNeverGreysTheSelectedRow;
     procedure TestBranchPickExpandsButDoesNotCommit;
     procedure TestLeafPickCommitsAndFiresOnChange;
     procedure TestKeyboardBrowsesWithoutCommitting;
@@ -782,6 +784,8 @@ type
   public
     function StyleTypeKey: string;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    function CallRowStates(AColumn, AIndex: Integer): TTyStateSet;
+    procedure CallSetHover(AColumn, AIndex: Integer);
   end;
 
 function TCascaderAccess.StyleTypeKey: string;
@@ -802,6 +806,16 @@ end;
 procedure TPanelAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   inherited RenderTo(ACanvas, ARect, APPI);
+end;
+
+function TPanelAccess.CallRowStates(AColumn, AIndex: Integer): TTyStateSet;
+begin
+  Result := RowStates(AColumn, AIndex);
+end;
+
+procedure TPanelAccess.CallSetHover(AColumn, AIndex: Integer);
+begin
+  SetHover(AColumn, AIndex);
 end;
 
 { A path literal, for the control tests. }
@@ -1061,6 +1075,36 @@ begin
     AssertEquals('right = the chevron zone', 127, R.Right);
     AssertEquals('top = themed top padding', 5, R.Top);
     AssertEquals('bottom = height - themed bottom padding', 21, R.Bottom);
+  finally
+    C.Free;
+  end;
+end;
+
+procedure TTyCascaderControlTest.TestHoverNeverGreysTheSelectedRow;
+var
+  C: TTyCascader;
+  P: TTyCascaderPanel;
+  st: TTyStateSet;
+begin
+  { Real-machine report (third sighting of this family -- TTyListBox and TTyTreeView
+    were fixed the same way): pointing at the row that IS the selection turned its
+    accent chip into the grey hover fill. The rule everywhere: :selected is the
+    resting state and hover never stacks on it; hover styles the OTHER rows. }
+  FCtl.LoadThemeCss(
+    ':root { --cascader-column-width: 100px; --cascader-row-height: 24px; }' +
+    'TyCascaderPanel { background: #FFFFFF; color: #111111; padding: 4px; }' +
+    'TyCascaderItem { padding: 0px 6px; }');
+  C := MakeCascader;
+  try
+    P := BoundPanel(C, 308, 200);
+    P.PickAt(0, 0);                       // select row 0 of column 0 (the draft path)
+    TPanelAccess(P).CallSetHover(0, 0);   // and point at that same row
+    st := TPanelAccess(P).CallRowStates(0, 0);
+    AssertTrue('the selection holds its resting state', tysSelected in st);
+    AssertFalse('hover never stacks on the selected row', tysHover in st);
+    TPanelAccess(P).CallSetHover(0, 1);   // a NON-selected row hovers normally
+    st := TPanelAccess(P).CallRowStates(0, 1);
+    AssertTrue('other rows still hover', tysHover in st);
   finally
     C.Free;
   end;
