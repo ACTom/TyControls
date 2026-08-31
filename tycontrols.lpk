@@ -541,6 +541,18 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.Dialogs.ListGroupsEditor"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.Dialogs.StructureEditor.pas"/>
+        <UnitName Value="tyControls.Dialogs.StructureEditor"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Dialogs.TreeNodesEditor.pas"/>
+        <UnitName Value="tyControls.Dialogs.TreeNodesEditor"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Dialogs.CascaderEditor.pas"/>
+        <UnitName Value="tyControls.Dialogs.CascaderEditor"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.ImageDraw.pas"/>
         <UnitName Value="tyControls.ImageDraw"/>
       </Item>

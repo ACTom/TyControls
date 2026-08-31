@@ -59,6 +59,10 @@ type
     procedure TestItemsSurviveATextRoundTrip;
     procedure TestItemsAssignmentReplacesTheCollection;
     procedure TestLevelIsClampedToALegalShape;
+    { ⑤ 子树块移动(节点编辑器的 Up/Down 原语) }
+    procedure TestMoveSubTreeBeforeASibling;
+    procedure TestMoveSubTreeAfterASibling;
+    procedure TestMoveSubTreeCarriesTheChildren;
   end;
 
 implementation
@@ -712,6 +716,57 @@ begin
   b.Level := -3;
   AssertEquals('负数夹到 0', 0, b.Level);
   AssertEquals('两个顶层节点', 2, Integer(FTree.RootNodeCount));
+end;
+
+{ ⑤ 子树块移动:节点编辑器的 Up/Down 只能靠它 —— 扁平序 + Level 的模型里,
+  "把 A 挪到同层 B 前面" = 把 A 的整个子树块(SubTreeCount 条)搬走,
+  逐条 Index 赋值会互相踩(前面的移动改写后面的下标)。 }
+
+procedure TTreeViewItemsTest.TestMoveSubTreeBeforeASibling;
+begin
+  FTree.Items.AddChild(nil, 'A');
+  FTree.Items.AddChild(nil, 'B');
+  FTree.Items.AddChild(nil, 'C');
+  FTree.Items.MoveSubTreeBefore(FTree.Items[2], FTree.Items[0]);   // C before A
+  AssertEquals('C first', 'C', FTree.Items[0].Text);
+  AssertEquals('then A', 'A', FTree.Items[1].Text);
+  AssertEquals('then B', 'B', FTree.Items[2].Text);
+end;
+
+procedure TTreeViewItemsTest.TestMoveSubTreeAfterASibling;
+begin
+  FTree.Items.AddChild(nil, 'A');
+  FTree.Items.AddChild(nil, 'B');
+  FTree.Items.AddChild(nil, 'C');
+  FTree.Items.MoveSubTreeAfter(FTree.Items[0], FTree.Items[1]);    // A after B
+  AssertEquals('B first', 'B', FTree.Items[0].Text);
+  AssertEquals('then A', 'A', FTree.Items[1].Text);
+  AssertEquals('C untouched', 'C', FTree.Items[2].Text);
+end;
+
+procedure TTreeViewItemsTest.TestMoveSubTreeCarriesTheChildren;
+var
+  a, b: TTyTreeNodeItem;
+begin
+  a := FTree.Items.AddChild(nil, 'A');
+  FTree.Items.AddChild(a, 'a1');
+  FTree.Items.AddChild(a, 'a2');
+  b := FTree.Items.AddChild(nil, 'B');
+  FTree.Items.AddChild(b, 'b1');
+  { flat: A a1 a2 B b1.  Move B (with b1) before A: B b1 A a1 a2. }
+  FTree.Items.MoveSubTreeBefore(b, a);
+  AssertEquals('B leads', 'B', FTree.Items[0].Text);
+  AssertEquals('with its child', 'b1', FTree.Items[1].Text);
+  AssertEquals('child kept its depth', 1, FTree.Items[1].Level);
+  AssertEquals('A follows whole', 'A', FTree.Items[2].Text);
+  AssertEquals('a1 rides', 'a1', FTree.Items[3].Text);
+  AssertEquals('a2 rides', 'a2', FTree.Items[4].Text);
+  AssertEquals('a2 depth kept', 1, FTree.Items[4].Level);
+  { and back down: A (subtree) after B's subtree is a no-op shape check via move up again }
+  FTree.Items.MoveSubTreeAfter(b, FTree.Items[2]);   // B after A -> A a1 a2 B b1
+  AssertEquals('A leads again', 'A', FTree.Items[0].Text);
+  AssertEquals('B back behind', 'B', FTree.Items[3].Text);
+  AssertEquals('b1 rides back', 'b1', FTree.Items[4].Text);
 end;
 
 initialization

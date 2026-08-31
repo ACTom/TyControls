@@ -122,6 +122,10 @@ msgstr ""
 msgid "Basic colors"
 msgstr ""
 
+#: tycontrols.strconsts.rsdlgcasctitle
+msgid "Options"
+msgstr ""
+
 #: tycontrols.strconsts.rsdlgcolortitle
 msgctxt "tycontrols.strconsts.rsdlgcolortitle"
 msgid "Color"
@@ -287,6 +291,33 @@ msgstr ""
 
 #: tycontrols.strconsts.rsdlgnewfolderprompt
 msgid "Folder name:"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlgnodesaddchild
+msgid "Add Child"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlgnodesaddnode
+msgid "Add Node"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlgnodesdelete
+msgctxt "tycontrols.strconsts.rsdlgnodesdelete"
+msgid "Delete"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlgnodesdown
+msgctxt "tycontrols.strconsts.rsdlgnodesdown"
+msgid "Move Down"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlgnodestitle
+msgid "Nodes"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlgnodesup
+msgctxt "tycontrols.strconsts.rsdlgnodesup"
+msgid "Move Up"
 msgstr ""
 
 #: tycontrols.strconsts.rsdlgpreview

@@ -134,6 +134,14 @@ resourcestring
   rsDlgLgeDelete          = 'Delete';
   rsDlgLgeUp              = 'Move Up';
   rsDlgLgeDown            = 'Move Down';
+  { The node/option structure editors (TreeView, Cascader) share one button vocabulary. }
+  rsDlgNodesTitle         = 'Nodes';
+  rsDlgCascTitle          = 'Options';
+  rsDlgNodesAddNode       = 'Add Node';
+  rsDlgNodesAddChild      = 'Add Child';
+  rsDlgNodesDelete        = 'Delete';
+  rsDlgNodesUp            = 'Move Up';
+  rsDlgNodesDown          = 'Move Down';
   rsDlgIconNoMatches    = 'No icons match';
   rsDlgIconCount        = '%d icons';
   { %s = the glyph name, %d = its ImageIndex in the associated image list. }

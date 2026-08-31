@@ -383,6 +383,8 @@ type
     function  GetTopLvlItems(AIndex: Integer): TTyTreeNodeItem;
     { 在 AIndex 处插入一个 Level=ALevel 的条目(内部,已算好落点)。 }
     function  InsertAt(AIndex, ALevel: Integer; const S: string): TTyTreeNodeItem;
+    { The block move behind MoveSubTreeBefore/After (ATarget = the block's final first index). }
+    procedure MoveSubTreeTo(AItem: TTyTreeNodeItem; ATarget: Integer);
   protected
     function  GetOwner: TPersistent; override;
     { 变更传给控件的唯一两条路:Notify 记下"这一批动了树形",
@@ -400,6 +402,13 @@ type
     { 删除一个条目**连同它的整棵子树** —— 光 Delete(i) 会把子条目留成孤儿
       (它们的 Level 突然比前一项深 2 层),所以删子树必须是一个动作。 }
     procedure DeleteItem(AItem: TTyTreeNodeItem);
+    { Reorder AItem's WHOLE subtree to sit before / after ASibling's (a SAME-LEVEL
+      sibling) -- the node editor's Up/Down primitive. A subtree is a flat BLOCK here
+      (pre-order + Level), so this is a block move: naive per-item Index writes tread
+      on each other (every move rewrites the indexes behind it). No-ops on nil, self,
+      or a different level. }
+    procedure MoveSubTreeBefore(AItem, ASibling: TTyTreeNodeItem);
+    procedure MoveSubTreeAfter(AItem, ASibling: TTyTreeNodeItem);
     function  GetFirstNode: TTyTreeNodeItem;
     property Items[AIndex: Integer]: TTyTreeNodeItem read GetItem write SetItem; default;
     property TopLvlCount: Integer read GetTopLvlCount;
@@ -1707,6 +1716,60 @@ begin
   finally
     EndUpdate;
   end;
+end;
+
+{ The block move behind MoveSubTreeBefore/After. ATarget is the block's FINAL first
+  index (the caller has already discounted the block's own departure). The block's
+  items are captured as REFERENCES first -- indexes shift under every move, references
+  do not -- and placed in block order moving up, reverse order moving down: each write
+  then lands each item exactly once in its final slot. }
+procedure TTyTreeNodes.MoveSubTreeTo(AItem: TTyTreeNodeItem; ATarget: Integer);
+var
+  captured: array of TTyTreeNodeItem;
+  m, i, src: Integer;
+begin
+  m := AItem.SubTreeCount;
+  src := AItem.Index;
+  if ATarget = src then Exit;
+  SetLength(captured, m);
+  for i := 0 to m - 1 do
+    captured[i] := Items[src + i];
+  BeginUpdate;
+  try
+    if ATarget < src then
+      for i := 0 to m - 1 do
+        captured[i].Index := ATarget + i
+    else
+      for i := m - 1 downto 0 do
+        captured[i].Index := ATarget + i;
+    { Plain Index moves never pass through Notify, so FStructural stays False and
+      EndUpdate would only repaint one node -- the ORDER changed, the tree must rebuild. }
+    FStructural := True;
+  finally
+    EndUpdate;
+  end;
+end;
+
+procedure TTyTreeNodes.MoveSubTreeBefore(AItem, ASibling: TTyTreeNodeItem);
+begin
+  if (AItem = nil) or (ASibling = nil) or (AItem = ASibling) then Exit;
+  if (AItem.Collection <> Self) or (ASibling.Collection <> Self) then Exit;
+  if AItem.Level <> ASibling.Level then Exit;
+  if AItem.Index > ASibling.Index then
+    MoveSubTreeTo(AItem, ASibling.Index)
+  else
+    MoveSubTreeTo(AItem, ASibling.Index - AItem.SubTreeCount);
+end;
+
+procedure TTyTreeNodes.MoveSubTreeAfter(AItem, ASibling: TTyTreeNodeItem);
+begin
+  if (AItem = nil) or (ASibling = nil) or (AItem = ASibling) then Exit;
+  if (AItem.Collection <> Self) or (ASibling.Collection <> Self) then Exit;
+  if AItem.Level <> ASibling.Level then Exit;
+  if AItem.Index > ASibling.Index then
+    MoveSubTreeTo(AItem, ASibling.Index + ASibling.SubTreeCount)
+  else
+    MoveSubTreeTo(AItem, ASibling.Index + ASibling.SubTreeCount - AItem.SubTreeCount);
 end;
 
 { TTyTreeView }

@@ -9,7 +9,7 @@ interface
 
 uses
   Classes, SysUtils, fpcunit, testregistry,
-  tyControls.ListGroupPanel, tyControls.Dialogs.ListGroupsEditor;
+  tyControls.ListGroupPanel, tyControls.Dialogs.StructureEditor, tyControls.Dialogs.ListGroupsEditor;
 
 type
   TListGroupEditorTest = class(TTestCase)

@@ -186,11 +186,13 @@ uses tyControls.TreeView, tyControls.Columns;
 
 #### 设计期
 
-`Items` 是 published `TCollection`，所以对象查看器自动给它省略号 + 标准集合编辑器
-（`propedits.pp` 为所有 `TCollection` 后代注册了 `TCollectionPropertyEditor`）。
-设计期包另外注册了 `TTyTreeViewComponentEditor`，**双击树**即打开同一个节点编辑器——
-LCL 的 `TTreeView` 双击就是 "TreeView Items Editor"，这也是这个功能唯一的发现路径。
-条目左侧的显示名带缩进，所以在那个通用编辑器里也能一眼看出树形。
+**双击树**（或右键「编辑节点...」）打开专用的**节点结构编辑器**——一棵树看全整个
+`Items` 模型（任意深度），右侧「加节点 / 加子节点 / 删除 / 上移 / 下移」原地增删排序：
+加节点插在选中行正下方（同层），加子节点下钻一层，删除连整棵子树，上下移动的是**整个
+子树块**（跨过邻居的整个块，不是逐行挪）。树里选中任何节点，Object Inspector 直接显示
+它的属性（文字、图标、展开态、勾选）当场改；窗口非模态，可以一直开着边搭边调。这就是
+Delphi 的 "TreeView Items Editor" 体验——此前的标准集合编辑器（平面行 + 手填 Level
+数字）仍可从 OI 里 `Items` 的省略号进入，做逐行手术用。
 
 #### 后代：`SupportsItemModel`
 

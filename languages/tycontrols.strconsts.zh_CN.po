@@ -842,6 +842,34 @@ msgstr "上移"
 msgid "Move Down"
 msgstr "下移"
 
+#: tycontrols.strconsts.rsdlgnodestitle
+msgid "Nodes"
+msgstr "节点"
+
+#: tycontrols.strconsts.rsdlgcasctitle
+msgid "Options"
+msgstr "选项"
+
+#: tycontrols.strconsts.rsdlgnodesaddnode
+msgid "Add Node"
+msgstr "加节点"
+
+#: tycontrols.strconsts.rsdlgnodesaddchild
+msgid "Add Child"
+msgstr "加子节点"
+
+#: tycontrols.strconsts.rsdlgnodesdelete
+msgid "Delete"
+msgstr "删除"
+
+#: tycontrols.strconsts.rsdlgnodesup
+msgid "Move Up"
+msgstr "上移"
+
+#: tycontrols.strconsts.rsdlgnodesdown
+msgid "Move Down"
+msgstr "下移"
+
 #: tycontrols.strconsts.rsdlgiconcount
 #, object-pascal-format
 msgid "%d icons"

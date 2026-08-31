@@ -12,11 +12,13 @@ uses
   PropEdits, PropEditUtils, ComponentEditors,
   tyControls.IconFont, tyControls.ImageCollection,
   tyControls.Dialogs, tyControls.Dialogs.IconBrowser,
-  tyControls.Dialogs.ImageCollectionEditor, tyControls.Dialogs.ListGroupsEditor,
+  tyControls.Dialogs.ImageCollectionEditor, tyControls.Dialogs.StructureEditor,
+  tyControls.Dialogs.ListGroupsEditor, tyControls.Dialogs.TreeNodesEditor,
+  tyControls.Dialogs.CascaderEditor,
   tyControls.Dialogs.SelectPath, tyControls.Dialogs.Color, tyControls.Dialogs.Font,
   tyControls.Dialogs.Find, tyControls.Dialogs.Progress, tyControls.Dialogs.About,
   tyControls.ListGroupPanel, tyControls.PageControl, tyControls.TabSheet,
-  tyControls.TreeView,
+  tyControls.TreeView, tyControls.Cascader,
   { rsDtIconNeedsFont is shared with the GlyphName property editor. }
   tyControls.Design.PropEditors;
 
@@ -62,25 +64,47 @@ type
     procedure ExecuteVerb(Index: Integer); override;
   end;
 
-  { The Groups editor's IDE plumbing, the stock collection editor's lifecycle: one
-    shared modeless window; the tree's selection is routed into the Object Inspector,
-    every edit marks the designer modified, outside edits refresh the tree, and the
-    panel going away detaches the window. }
-  TTyListGroupsDesignerLink = class(TComponent)
+  { A structure editor's IDE plumbing, the stock collection editor's lifecycle: one
+    shared modeless window per editor kind; the tree's selection is routed into the
+    Object Inspector, every edit marks the designer modified, outside edits refresh
+    the tree, and the subject going away detaches the window. Subclasses supply the
+    window (CreateEditorForm) and the "is this persistent part of my model" answer
+    (OwnsModelObject). }
+  TTyStructureDesignerLink = class(TComponent)
   private
-    FForm: TTyListGroupsEditorForm;
-    FPanel: TTyListGroupPanel;
-    function OwnsModelObject(APersistent: TPersistent): Boolean;
+    FForm: TTyStructureEditorForm;
+    FSubject: TComponent;
     procedure EditorSelectObject(Sender: TObject; AObject: TPersistent);
     procedure EditorEdited(Sender: TObject);
     procedure HookPersistentDeleting(APersistent: TPersistent);
     procedure HookRefresh;
   protected
+    function CreateEditorForm: TTyStructureEditorForm; virtual; abstract;
+    function OwnsModelObject(APersistent: TPersistent): Boolean; virtual; abstract;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   public
     destructor Destroy; override;
-    procedure ShowFor(APanel: TTyListGroupPanel);
+    procedure ShowFor(ASubject: TComponent);
     procedure Detach;
+  end;
+  TTyStructureDesignerLinkClass = class of TTyStructureDesignerLink;
+
+  TTyListGroupsDesignerLink = class(TTyStructureDesignerLink)
+  protected
+    function CreateEditorForm: TTyStructureEditorForm; override;
+    function OwnsModelObject(APersistent: TPersistent): Boolean; override;
+  end;
+
+  TTyTreeNodesDesignerLink = class(TTyStructureDesignerLink)
+  protected
+    function CreateEditorForm: TTyStructureEditorForm; override;
+    function OwnsModelObject(APersistent: TPersistent): Boolean; override;
+  end;
+
+  TTyCascaderDesignerLink = class(TTyStructureDesignerLink)
+  protected
+    function CreateEditorForm: TTyStructureEditorForm; override;
+    function OwnsModelObject(APersistent: TPersistent): Boolean; override;
   end;
 
   { Manages TTyPageControl pages in the designer (no header click-switch on a
@@ -114,6 +138,16 @@ type
     procedure ExecuteVerb(Index: Integer); override;
   end;
 
+  { TTyCascader's double-click: the modeless option editor -- ONE tree over the whole
+    nested Nodes model (the stock collection editor shows one nesting level per open,
+    a window per branch of a province/city/district tree). }
+  TTyCascaderComponentEditor = class(TComponentEditor)
+  public
+    function GetVerbCount: Integer; override;
+    function GetVerb(Index: Integer): string; override;
+    procedure ExecuteVerb(Index: Integer); override;
+  end;
+
   { Previews a dialog component when it is double-clicked in the designer (verb 0),
     mirroring LCL's TCommonDialogComponentEditor. Modal wrappers call Execute; the two
     modeless ones (Find/Replace, Progress) call a guard-free PreviewInDesigner because
@@ -130,7 +164,13 @@ procedure RegisterComponentEditors;
 
 implementation
 
+type
+  { GetOwner is protected on TPersistent; walking an option to its root cascader
+    (TTyCascaderDesignerLink.OwnsModelObject) goes through it. }
+  TNodesOwnerAccess = class(TTyCascaderNodes);
+
 resourcestring
+  rsDtCascEdit     = 'Edit options...';
   rsDtPageAdd      = 'Add Page';
   rsDtPageDelete   = 'Delete Page';
   rsDtPageShowNext = 'Show Next Page';
@@ -266,6 +306,8 @@ end;
 
 var
   ListGroupsLink: TTyListGroupsDesignerLink = nil;
+  TreeNodesLink: TTyTreeNodesDesignerLink = nil;
+  CascaderLink: TTyCascaderDesignerLink = nil;
 
 procedure TTyListGroupPanelComponentEditor.ExecuteVerb(Index: Integer);
 begin
@@ -275,31 +317,33 @@ begin
   ListGroupsLink.ShowFor(Component as TTyListGroupPanel);
 end;
 
-{ TTyListGroupsDesignerLink }
+{ TTyStructureDesignerLink }
 
-destructor TTyListGroupsDesignerLink.Destroy;
+destructor TTyStructureDesignerLink.Destroy;
 begin
   if GlobalDesignHook <> nil then
     GlobalDesignHook.RemoveAllHandlersForObject(Self);
   if ListGroupsLink = Self then ListGroupsLink := nil;
+  if TreeNodesLink = Self then TreeNodesLink := nil;
+  if CascaderLink = Self then CascaderLink := nil;
   inherited Destroy;   // FForm is owned by Self, freed with it
 end;
 
-procedure TTyListGroupsDesignerLink.ShowFor(APanel: TTyListGroupPanel);
+procedure TTyStructureDesignerLink.ShowFor(ASubject: TComponent);
 begin
-  if APanel = nil then Exit;
+  if ASubject = nil then Exit;
   if FForm = nil then
   begin
-    FForm := TTyListGroupsEditorForm.CreateNew(Self);
+    FForm := CreateEditorForm;
     FForm.OnSelectObject := @EditorSelectObject;
     FForm.OnEdited := @EditorEdited;
   end;
-  if FPanel <> APanel then
+  if FSubject <> ASubject then
   begin
-    if FPanel <> nil then FPanel.RemoveFreeNotification(Self);
-    FPanel := APanel;
-    FPanel.FreeNotification(Self);
-    FForm.SetPanel(FPanel);
+    if FSubject <> nil then FSubject.RemoveFreeNotification(Self);
+    FSubject := ASubject;
+    FSubject.FreeNotification(Self);
+    FForm.SetSubject(FSubject);
   end
   else
     FForm.RefreshFromModel;   // same target: the model may still have changed elsewhere
@@ -313,66 +357,121 @@ begin
   FForm.BringToFront;
 end;
 
-procedure TTyListGroupsDesignerLink.Detach;
+procedure TTyStructureDesignerLink.Detach;
 begin
-  if FPanel <> nil then FPanel.RemoveFreeNotification(Self);
-  FPanel := nil;
+  if FSubject <> nil then FSubject.RemoveFreeNotification(Self);
+  FSubject := nil;
   if FForm <> nil then
   begin
-    FForm.SetPanel(nil);
+    FForm.SetSubject(nil);
     FForm.Hide;
   end;
 end;
 
-function TTyListGroupsDesignerLink.OwnsModelObject(APersistent: TPersistent): Boolean;
+procedure TTyStructureDesignerLink.EditorSelectObject(Sender: TObject; AObject: TPersistent);
 begin
-  Result := False;
-  if FPanel = nil then Exit;
-  if APersistent is TTyListGroup then
-    Result := TTyListGroup(APersistent).Collection = FPanel.Groups
-  else if APersistent is TTyListGroupItem then
-    Result := (TTyListGroupItem(APersistent).Collection as TTyListGroupItems)
-                .Group.Collection = FPanel.Groups;
-end;
-
-procedure TTyListGroupsDesignerLink.EditorSelectObject(Sender: TObject; AObject: TPersistent);
-begin
-  if (AObject = nil) or (FPanel = nil) or (GlobalDesignHook = nil) then Exit;
-  GlobalDesignHook.LookupRoot := GetLookupRootForComponent(FPanel);
+  if (AObject = nil) or (FSubject = nil) or (GlobalDesignHook = nil) then Exit;
+  GlobalDesignHook.LookupRoot := GetLookupRootForComponent(FSubject);
   GlobalDesignHook.SelectOnlyThis(AObject);
 end;
 
-procedure TTyListGroupsDesignerLink.EditorEdited(Sender: TObject);
+procedure TTyStructureDesignerLink.EditorEdited(Sender: TObject);
 begin
   if GlobalDesignHook <> nil then
     GlobalDesignHook.Modified(Self);
 end;
 
-procedure TTyListGroupsDesignerLink.HookPersistentDeleting(APersistent: TPersistent);
+procedure TTyStructureDesignerLink.HookPersistentDeleting(APersistent: TPersistent);
 begin
-  if FPanel = nil then Exit;
-  if (APersistent = FPanel) or (APersistent = FPanel.Owner) then
+  if FSubject = nil then Exit;
+  if (APersistent = FSubject) or (APersistent = FSubject.Owner) then
     Detach
   else if OwnsModelObject(APersistent) then
     { The object still exists at this notice, so a rebuild would re-capture it: drop
-      every pointer NOW; HookRefresh re-aims at the panel afterwards. }
-    FForm.SetPanel(nil);
+      every pointer NOW; HookRefresh re-aims at the subject afterwards. }
+    FForm.SetSubject(nil);
 end;
 
-procedure TTyListGroupsDesignerLink.HookRefresh;
+procedure TTyStructureDesignerLink.HookRefresh;
 begin
-  if (FForm = nil) or not FForm.Visible or (FPanel = nil) then Exit;
-  if FForm.Panel <> FPanel then
-    FForm.SetPanel(FPanel)
+  if (FForm = nil) or not FForm.Visible or (FSubject = nil) then Exit;
+  if FForm.Subject <> FSubject then
+    FForm.SetSubject(FSubject)
   else
     FForm.RefreshFromModel;
 end;
 
-procedure TTyListGroupsDesignerLink.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyStructureDesignerLink.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
-  if (Operation = opRemove) and (AComponent = FPanel) then
+  if (Operation = opRemove) and (AComponent = FSubject) then
     Detach;
+end;
+
+{ TTyListGroupsDesignerLink }
+
+function TTyListGroupsDesignerLink.CreateEditorForm: TTyStructureEditorForm;
+begin
+  Result := TTyListGroupsEditorForm.CreateNew(Self);
+end;
+
+function TTyListGroupsDesignerLink.OwnsModelObject(APersistent: TPersistent): Boolean;
+var
+  P: TTyListGroupPanel;
+begin
+  Result := False;
+  if FSubject = nil then Exit;
+  P := FSubject as TTyListGroupPanel;
+  if APersistent is TTyListGroup then
+    Result := TTyListGroup(APersistent).Collection = P.Groups
+  else if APersistent is TTyListGroupItem then
+    Result := (TTyListGroupItem(APersistent).Collection as TTyListGroupItems)
+                .Group.Collection = P.Groups;
+end;
+
+{ TTyTreeNodesDesignerLink }
+
+function TTyTreeNodesDesignerLink.CreateEditorForm: TTyStructureEditorForm;
+begin
+  Result := TTyTreeNodesEditorForm.CreateNew(Self);
+end;
+
+function TTyTreeNodesDesignerLink.OwnsModelObject(APersistent: TPersistent): Boolean;
+begin
+  Result := (FSubject <> nil) and (APersistent is TTyTreeNodeItem)
+    and (TTyTreeNodeItem(APersistent).Collection = (FSubject as TTyTreeView).Items);
+end;
+
+{ TTyCascaderDesignerLink }
+
+function TTyCascaderDesignerLink.CreateEditorForm: TTyStructureEditorForm;
+begin
+  Result := TTyCascaderEditorForm.CreateNew(Self);
+end;
+
+function TTyCascaderDesignerLink.OwnsModelObject(APersistent: TPersistent): Boolean;
+
+  { A cascader option can sit at any depth: walk collection -> owner-node -> its
+    collection until the owner is a component, and see whether it is our cascader. }
+  function RootOwnerOf(ANode: TTyCascaderNode): TPersistent;
+  var
+    coll: TTyCascaderNodes;
+  begin
+    Result := nil;
+    while ANode <> nil do
+    begin
+      coll := ANode.Collection as TTyCascaderNodes;
+      Result := TNodesOwnerAccess(coll).GetOwner;
+      if Result is TTyCascaderNode then
+        ANode := TTyCascaderNode(Result)
+      else
+        ANode := nil;
+    end;
+  end;
+
+begin
+  Result := (FSubject <> nil) and (APersistent is TTyCascaderNode)
+    and (RootOwnerOf(TTyCascaderNode(APersistent)) = FSubject);
 end;
 
 { TTyPageControlEditor }
@@ -487,9 +586,32 @@ end;
 procedure TTyTreeViewComponentEditor.ExecuteVerb(Index: Integer);
 begin
   if (Index <> 0) or not Tree.SupportsItemModel then Exit;
-  { The stock collection editor, aimed at Items -- the same form the '...' button in
-    the Object Inspector opens, so there is exactly one node-editing UI to learn. }
-  TCollectionPropertyEditor.ShowCollectionEditor(Tree.Items, Tree, 'Items');
+  { The structure editor: one tree, any depth, Add Node / Add Child / block moves --
+    Delphi's 'TreeView Items Editor'. The stock collection editor (rows plus a
+    hand-typed Level number) stays reachable through the OI's Items '...' button. }
+  if TreeNodesLink = nil then
+    TreeNodesLink := TTyTreeNodesDesignerLink.Create(Application);
+  TreeNodesLink.ShowFor(Tree);
+end;
+
+{ TTyCascaderComponentEditor }
+
+function TTyCascaderComponentEditor.GetVerbCount: Integer;
+begin
+  Result := 1;
+end;
+
+function TTyCascaderComponentEditor.GetVerb(Index: Integer): string;
+begin
+  if Index = 0 then Result := rsDtCascEdit else Result := '';
+end;
+
+procedure TTyCascaderComponentEditor.ExecuteVerb(Index: Integer);
+begin
+  if Index <> 0 then begin inherited ExecuteVerb(Index); Exit; end;
+  if CascaderLink = nil then
+    CascaderLink := TTyCascaderDesignerLink.Create(Application);
+  CascaderLink.ShowFor(Component as TTyCascader);
 end;
 
 { TTyDialogComponentEditor }
@@ -541,6 +663,8 @@ begin
   RegisterComponentEditor([TTyIconFont, TTyVirtualImageList], TTyIconBrowserComponentEditor);
   RegisterComponentEditor(TTyImageCollection, TTyImageCollectionComponentEditor);
   RegisterComponentEditor(TTyListGroupPanel, TTyListGroupPanelComponentEditor);
+  // Double-click a cascader to edit its nested option tree in one window.
+  RegisterComponentEditor(TTyCascader, TTyCascaderComponentEditor);
   // Double-click a dialog component in the designer to preview it (verb 0 = Preview),
   // mirroring LCL's TCommonDialogComponentEditor.
   RegisterComponentEditor(

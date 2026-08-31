@@ -48,3 +48,7 @@ msgstr "编辑图像..."
 #: tycontrols.design.compeditors.rsdtgroupsedit
 msgid "Edit groups..."
 msgstr "编辑分组..."
+
+#: tycontrols.design.compeditors.rsdtcascedit
+msgid "Edit options..."
+msgstr "编辑选项..."

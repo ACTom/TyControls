@@ -1,6 +1,10 @@
 msgid ""
 msgstr "Content-Type: text/plain; charset=UTF-8"
 
+#: tycontrols.design.compeditors.rsdtcascedit
+msgid "Edit options..."
+msgstr ""
+
 #: tycontrols.design.compeditors.rsdtdialogpreview
 msgid "Preview"
 msgstr ""
