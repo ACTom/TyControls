@@ -435,6 +435,26 @@ type
 
 implementation
 
+{ 写剪贴板并确认真的写进去了。
+
+  Windows 上写剪贴板要先打开它,任何别的进程(IDE、剪贴板管理器、浏览器)哪怕
+  只是短暂持有,写入就会失败 —— 而 LCL 的 TClipboard 把这个失败吞掉。于是
+  「先摆一个哨兵值,再断言它没被动过」这种写法会在哨兵压根没写进去时,拿上一步
+  留下的值去比,报出一条与真正原因毫不相干的失败。
+
+  这条偶发失败真的发生过(2026-09-01,全量里 1 败,当时没定位)。这个 helper 不
+  改变任何测试的意图,只是把「剪贴板写不进去」变成一句说人话的消息,而不是几行
+  之后一个费解的不匹配。 }
+procedure SetClipboardChecked(const AText: string);
+begin
+  Clipboard.AsText := AText;
+  if Clipboard.AsText <> AText then
+    raise Exception.Create('剪贴板写入被系统拒绝(多半是别的进程正持有它),'
+      + '这不是被测代码的问题;重跑即可。想写: ' + AText
+      + ' 实际是: ' + Clipboard.AsText);
+end;
+
+
 type
   { 探针:数这两个方法各被进了多少次,其中多少次是**进来时**两条内嵌滚动条里有 nil 的。
 
@@ -7733,7 +7753,7 @@ begin
   G.ReadOnly := True;
   G.ClearUndo;
 
-  Clipboard.AsText := 'sentinel';
+  SetClipboardChecked('sentinel');
   G.CutToClipboard;
   AssertEquals('数据一个没少', 'keepme', G.Cells[0, 0]);
   AssertTrue('复制那一半照跑:剪贴板拿到了选区',
@@ -7745,6 +7765,7 @@ end;
   方法早就对、手势从来没接上,API 测试全绿也没人知道 —— 与 Ctrl+Z/Y 那次
   同一类漏(TestUndoRedo... 的"只测 API 的话,键没接上也无人知晓")。
   所以这条**只走 KeyDown**,不直接调方法。 }
+
 procedure TTyStringGridTest.TestCtrlXGestureCutsAndReadOnlyDegradesToCopy;
 var
   G: TStrGridAccess;
@@ -7754,7 +7775,7 @@ begin
   G.SelectRange(0, 0, 1, 0);
 
   { 一、可编辑:敲 Ctrl+X → 剪贴板拿到选区,且格子清空。 }
-  Clipboard.AsText := 'sentinel';
+  SetClipboardChecked('sentinel');
   AssertTrue('Ctrl+X 被手势层消费(Key 置 0)', G.PressKeyCtrl(Ord('X')));
   AssertTrue('剪贴板拿到左格', Pos('cutme', Clipboard.AsText) > 0);
   AssertTrue('剪贴板拿到右格', Pos('and-me', Clipboard.AsText) > 0);
@@ -7765,7 +7786,7 @@ begin
   G.Cells[0, 0] := 'keepme';
   G.SelectRange(0, 0, 0, 0);
   G.ReadOnly := True;
-  Clipboard.AsText := 'sentinel';
+  SetClipboardChecked('sentinel');
   G.PressKeyCtrl(Ord('X'));
   AssertTrue('只读:剪贴板照拿选区', Pos('keepme', Clipboard.AsText) > 0);
   AssertEquals('只读:数据一个没少', 'keepme', G.Cells[0, 0]);
@@ -7774,7 +7795,7 @@ begin
     (LCL 自家就把 X 绑成了 Shift+X,grids.pas:7815;这类错真的会发生)。 }
   G.ReadOnly := False;
   G.SelectRange(0, 0, 0, 0);
-  Clipboard.AsText := 'sentinel';
+  SetClipboardChecked('sentinel');
   G.PressKey(Ord('X'), []);
   AssertEquals('裸 X 不动剪贴板', 'sentinel', Clipboard.AsText);
 end;
