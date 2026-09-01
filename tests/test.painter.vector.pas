@@ -48,6 +48,7 @@ type
     procedure TestStrokeDrawsOnTheOutline;
     procedure TestZeroWidthStrokeDrawsNothing;
     procedure TestNegativeWidthStrokeDrawsNothing;
+    procedure TestZeroWidthStrokeWithADashDoesNotDivideByZero;
     procedure TestDashLengthIsLogicalNotDevice;
     procedure TestEmptyDashRestoresASolidLine;
     procedure TestSquareCapExtendsPastTheEndpoint;
@@ -61,6 +62,7 @@ type
     { ---- paths ---- }
     procedure TestPolylineToDrawsEverySegment;
     procedure TestRoundRectPathClampsAnOversizeRadius;
+    procedure TestRoundRectRadiusIsLogicalPx;
     procedure TestSvgPathInFitsInsideTheRect;
     procedure TestSvgPathInIsCentred;
     { ---- rotated text ---- }
@@ -281,6 +283,25 @@ begin
   AssertFalse('a negative width is not an absolute value', InkBounds(l, t, r, b));
 end;
 
+procedure TPainterVectorTest.TestZeroWidthStrokeWithADashDoesNotDivideByZero;
+var
+  l, t, r, bo: Integer;
+begin
+  { The zero-width guard is not only about drawing nothing -- BGRA would draw
+    nothing at width 0 anyway. It is load-bearing because the dash conversion
+    divides BY the device width (a pen pattern is in multiples of it). Reach
+    that division with a zero width and it is a divide by zero, which a test
+    that only checks "no ink" walks straight past. Found by mutation: relaxing
+    the guard to `w < 0` left every other test green. }
+  MakePainter(80, 20, 96);
+  FPainter.SetLineDash([6, 6]);
+  FPainter.BeginPath;
+  FPainter.MoveTo(10, 10);
+  FPainter.LineTo(70, 10);
+  FPainter.StrokePath(Red, 0);
+  AssertFalse('nothing drawn, and nothing raised', InkBounds(l, t, r, bo));
+end;
+
 procedure TPainterVectorTest.TestDashLengthIsLogicalNotDevice;
 var
   runsAt96, runsAt192: Integer;
@@ -465,6 +486,33 @@ begin
   AssertTrue('there is ink', InkBounds(l, t, r, b));
   AssertTrue('it did not spill outside the box', (l >= 19) and (r <= 61));
   AssertTrue('and it still fills the middle', Opaque(40, 20));
+end;
+
+procedure TPainterVectorTest.TestRoundRectRadiusIsLogicalPx;
+var
+  at96, at192: Boolean;
+begin
+  { The corner radius comes from a theme token, so it is LOGICAL px and must
+    grow with the PPI. On a 100x100 box a corner of radius r leaves the diagonal
+    point (p,p) filled only when p >= 0.293*r, so (4,4) is inside a 10 px corner
+    and outside a 20 px one -- which is the same logical 10 at 96 and at 192 dpi.
+    Found missing by mutation: nothing else here varies the PPI on a radius. }
+  MakePainter(100, 100, 96);
+  FPainter.BeginPath;
+  FPainter.RoundRectPath(0, 0, 100, 100, 10);
+  FPainter.FillPath(Red);
+  at96 := Opaque(4, 4);
+  FreePainter;
+
+  MakePainter(100, 100, 192);
+  FPainter.BeginPath;
+  FPainter.RoundRectPath(0, 0, 100, 100, 10);
+  FPainter.FillPath(Red);
+  at192 := Opaque(4, 4);
+
+  AssertTrue('a 10 px corner at 96 dpi leaves (4,4) inside', at96);
+  AssertFalse('the same logical 10 at 192 dpi is a 20 px corner, so (4,4) is cut off',
+              at192);
 end;
 
 procedure TPainterVectorTest.TestSvgPathInFitsInsideTheRect;

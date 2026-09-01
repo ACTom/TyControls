@@ -2550,24 +2550,15 @@ begin
 end;
 
 procedure TTyPainter.RoundRectPath(AL, AT, AR, AB, ARadiusLogical: Double);
-var
-  r, halfW, halfH: Double;
 begin
   if FBmp = nil then Exit;
-  r := ScaleF(ARadiusLogical);
-  { Clamp before handing it over: a radius larger than half the box makes BGRA
-    draw a lens rather than a pill, which is the same trap TyClampRadiusPx
-    exists for on the chrome side. }
-  halfW := Abs(AR - AL) / 2;
-  halfH := Abs(AB - AT) / 2;
-  if r > halfW then r := halfW;
-  if r > halfH then r := halfH;
-  if r <= 0 then
-  begin
-    RectPath(AL, AT, AR, AB);
-    Exit;
-  end;
-  FBmp.Canvas2D.roundRect(AL, AT, AR - AL, AB - AT, r);
+  { The only job here is the LOGICAL -> device conversion. Clamping an oversize
+    radius is deliberately NOT done: TBGRACanvas2D.roundRect already does it
+    (bgracanvas2d.pas:2685, `if radius*2 > w then radius := w/2`), and a second
+    clamp would be dead code pretending to be a safeguard. Verified by mutation:
+    removing a clamp here changed nothing. NOTE this is not the same entry point
+    as FillRoundRectAntialias, which is the one TyClampRadiusPx exists for. }
+  FBmp.Canvas2D.roundRect(AL, AT, AR - AL, AB - AT, ScaleF(ARadiusLogical));
 end;
 
 procedure TTyPainter.EllipsePath(ACX, ACY, ARX, ARY: Double);
