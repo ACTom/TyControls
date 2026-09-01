@@ -47,6 +47,9 @@ type
     procedure TestBoundsOfAPolylineSkipsNaN;
     procedure TestDegenerateSegmentIsAPointNotADivide;
     procedure TestNaNProbeNeverHits;
+    procedure TestSnapShapeAlignsARectsEdges;
+    procedure TestSnapShapeLeavesACircleAlone;
+    procedure TestSnapShapeIgnoresAMultiPointPolyline;
   end;
 implementation
 
@@ -345,6 +348,36 @@ begin
   s := TyShapeRect(TyRectF(0, 0, 10, 10));
   AssertFalse('NaN x', TyShapeContains(s, NaN, 5, 0));
   AssertFalse('NaN y', TyShapeContains(s, 5, NaN, 0));
+end;
+
+procedure TAdvChartShapeTest.TestSnapShapeAlignsARectsEdges;
+var s: TTyChartShape;
+begin
+  s := TySnapShape(TyShapeRect(TyRectF(10, 20, 60, 70)), 1);
+  AssertEquals('left', 10.5, s.Bounds.Left, Eps);
+  AssertEquals('right', 59.5, s.Bounds.Right, Eps);
+end;
+
+procedure TAdvChartShapeTest.TestSnapShapeLeavesACircleAlone;
+var s: TTyChartShape;
+begin
+  { A circle has no long straight edge lying along the pixel grid, so snapping
+    would distort it for no gain. }
+  s := TySnapShape(TyShapeCircle(10.3, 20.7, 5), 1);
+  AssertEquals('cx', 10.3, s.CX, Eps);
+  AssertEquals('cy', 20.7, s.CY, Eps);
+end;
+
+procedure TAdvChartShapeTest.TestSnapShapeIgnoresAMultiPointPolyline;
+var s: TTyChartShape;
+begin
+  { Snapping a vertex in the middle of a DATA line would move a datum -- a far
+    worse crime than a soft edge. Only a two-point run (a grid line, an axis
+    line) is a candidate. }
+  s := TySnapShape(TyShapePolyline([TyPointF(0, 20), TyPointF(50, 20),
+                                    TyPointF(100, 20)]), 1);
+  AssertEquals('first vertex untouched', 20.0, s.Points[0].Y, Eps);
+  AssertEquals('and the middle one', 20.0, s.Points[1].Y, Eps);
 end;
 
 initialization

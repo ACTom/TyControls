@@ -34,6 +34,7 @@ type
     procedure TestAlphaDoesNotLeakToTheNextElement;
     procedure TestSectorRendersAsARingWithAHole;
     procedure TestInkAndHitTestAgree;
+    procedure TestSnappingMakesAHairlineCrisp;
   end;
 implementation
 
@@ -255,6 +256,51 @@ begin
   AssertTrue('disagreement is a thin edge, not a region ('
              + IntToStr(mismatches) + ' px of ' + IntToStr(inked) + ')',
              mismatches < inked div 10);
+end;
+
+procedure TAdvChartRenderTest.TestSnappingMakesAHairlineCrisp;
+var
+  e: TTyChartElement;
+  fuzzyRows, crispRows, y: Integer;
+
+  function RowsWithInk(AX: Integer): Integer;
+  var yy: Integer;
+  begin
+    Result := 0;
+    for yy := 0 to 59 do
+      if AlphaAt(AX, yy) > 16 then Inc(Result);
+  end;
+
+begin
+  { The whole point of sub-pixel snapping, measured in pixels rather than in
+    arithmetic. A 1 px line stroked at y = 20 straddles two rows at half alpha;
+    snapped to 20.5 it fills one row completely. }
+  Start(120, 60, 96);
+  e := TyChartElement(TyShapePolyline([TyPointF(10, 20), TyPointF(110, 20)]));
+  e.Style.StrokeWidthLogical := 1;
+  e.Style.StrokeColor := Red;
+  FList.Add(e);
+  TyRenderPaintList(FPainter, FList);
+  fuzzyRows := RowsWithInk(60);
+
+  FreeAndNil(FList);
+  FreeAndNil(FPainter);
+  FreeAndNil(FHost);
+  Start(120, 60, 96);
+  e := TyChartElement(TySnapShape(
+         TyShapePolyline([TyPointF(10, 20), TyPointF(110, 20)]), 1));
+  e.Style.StrokeWidthLogical := 1;
+  e.Style.StrokeColor := Red;
+  FList.Add(e);
+  TyRenderPaintList(FPainter, FList);
+  crispRows := RowsWithInk(60);
+
+  AssertEquals('unsnapped smears over two rows', 2, fuzzyRows);
+  AssertEquals('snapped covers exactly one', 1, crispRows);
+  { And that one row is FULLY covered, not two halves stacked. }
+  y := 0;
+  while (y < 60) and (AlphaAt(60, y) <= 16) do Inc(y);
+  AssertTrue('and it is solid, got ' + IntToStr(AlphaAt(60, y)), AlphaAt(60, y) > 240);
 end;
 
 initialization

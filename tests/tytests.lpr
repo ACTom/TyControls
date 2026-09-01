@@ -151,6 +151,7 @@ uses
   test.advchart.axis,
   test.advchart.measure,
   test.advchart.shape, test.advchart.paint, test.advchart.render,
+  test.subpixel,
   test.transitions,
   test.htmllabel,
   test.shape,

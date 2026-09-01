@@ -14,7 +14,7 @@ unit tyControls.AdvChart.Shape;
   That is deliberate: hit-testing is where the bugs are, and it must be testable
   without a graphics stack. }
 interface
-uses SysUtils, Math, tyControls.AdvChart.Types;
+uses SysUtils, Math, tyControls.AdvChart.Types, tyControls.SubPixel;
 
 type
   TTyChartShapeKind = (
@@ -78,6 +78,22 @@ function TyDistanceToSegment(APX, APY, AX1, AY1, AX2, AY2: Double): Double;
 
 { Angle normalised into [0, 2*Pi). }
 function TyNormalizeAngle(AAngleRad: Double): Double;
+
+{ A copy of AShape with its AXIS-ALIGNED edges snapped so a stroke of
+  AStrokeWidthPx lands on whole pixels (see tyControls.SubPixel).
+
+  SNAP AT SHAPE-BUILD TIME, not at render time. Both the renderer and the hit
+  test read this record, so snapping here keeps them looking at the same
+  geometry; snapping inside the renderer would leave the hit test answering
+  about the unsnapped shape and put a half-pixel of disagreement along every
+  edge -- exactly the drift this layer is arranged to prevent.
+
+  Only rects and axis-aligned two-point polylines are touched. A circle, a
+  sector or a curve gains nothing from snapping (it has no long straight edge
+  lying along the pixel grid) and would be distorted by it, so those come back
+  unchanged. }
+function TySnapShape(const AShape: TTyChartShape;
+  AStrokeWidthPx: Double): TTyChartShape;
 
 implementation
 
@@ -372,6 +388,43 @@ begin
               / (APoints[j].Y - APoints[i].Y) + APoints[i].X) then
       Result := not Result;
     j := i;
+  end;
+end;
+
+function TySnapShape(const AShape: TTyChartShape;
+  AStrokeWidthPx: Double): TTyChartShape;
+var
+  l, t, r, b, x1, y1, x2, y2: Double;
+begin
+  Result := AShape;
+  if AStrokeWidthPx <= 0 then Exit;
+  case AShape.Kind of
+    cskRect, cskRoundRect:
+      begin
+        if not TyRectFIsValid(AShape.Bounds) then Exit;
+        l := AShape.Bounds.Left;
+        t := AShape.Bounds.Top;
+        r := AShape.Bounds.Right;
+        b := AShape.Bounds.Bottom;
+        TySubPixelRect(l, t, r, b, AStrokeWidthPx);
+        Result.Bounds := TyRectF(l, t, r, b);
+      end;
+    cskPolyline:
+      begin
+        { Only a two-point run, and only the axis it is straight on. Snapping a
+          vertex in the middle of a data line would move a datum, which is a far
+          worse crime than a soft edge. }
+        if Length(AShape.Points) <> 2 then Exit;
+        x1 := AShape.Points[0].X;
+        y1 := AShape.Points[0].Y;
+        x2 := AShape.Points[1].X;
+        y2 := AShape.Points[1].Y;
+        if IsNan(x1) or IsNan(y1) or IsNan(x2) or IsNan(y2) then Exit;
+        TySubPixelLine(x1, y1, x2, y2, AStrokeWidthPx);
+        SetLength(Result.Points, 2);
+        Result.Points[0] := TyPointF(x1, y1);
+        Result.Points[1] := TyPointF(x2, y2);
+      end;
   end;
 end;
 
