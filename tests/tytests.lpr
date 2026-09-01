@@ -153,6 +153,7 @@ uses
   test.advchart.shape, test.advchart.paint, test.advchart.render,
   test.subpixel,
   test.advchart.option,
+  test.advchart.catalog,
   test.transitions,
   test.htmllabel,
   test.shape,
