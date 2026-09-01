@@ -40,6 +40,8 @@ type
     procedure TestTypedDefaultsOnTheWrongType;
     procedure TestNumbersReadAsIntAndFloat;
     procedure TestCountAt;
+    { ---- lifetime ---- }
+    procedure TestRepeatedSetDoesNotGrowTheHeap;
   end;
 implementation
 
@@ -234,6 +236,45 @@ begin
   AssertEquals('three series', 3, FOpt.CountAt('series'));
   AssertEquals('an object is not an array', 0, FOpt.CountAt('title'));
   AssertEquals('and an absent path is none', 0, FOpt.CountAt('nope'));
+end;
+
+procedure TAdvChartOptionTest.TestRepeatedSetDoesNotGrowTheHeap;
+var
+  cfg: string;
+  i: Integer;
+  before, after: PtrUInt;
+begin
+  { Replacing the option is the hot path -- it is what happens every time a chart
+    is reconfigured, and in a design-time editor it happens on a timer while
+    someone types. Dropping the previous tree without freeing it leaks a whole
+    parse per keystroke.
+
+    Nothing else in this suite looks at memory (there is no heaptrc here), and
+    mutation proved it: removing the FreeAndNil left every other test green. So
+    this is the one place that watches, and it watches the case that matters. }
+  cfg := '{ series: [{ type: ''bar'', data: [';
+  for i := 0 to 199 do
+  begin
+    if i > 0 then cfg := cfg + ',';
+    cfg := cfg + IntToStr(i);
+  end;
+  cfg := cfg + '] }] }';
+
+  { Warm up first, so one-off allocations (the parser's own buffers, the
+    string) are not counted as growth. }
+  for i := 1 to 20 do
+    FOpt.SetOptionText(cfg);
+  before := GetFPCHeapStatus.CurrHeapUsed;
+  for i := 1 to 200 do
+    FOpt.SetOptionText(cfg);
+  after := GetFPCHeapStatus.CurrHeapUsed;
+
+  AssertEquals('the option still parsed', 200, FOpt.CountAt('series[0].data'));
+  { A leaked tree is several KB; 200 of them is megabytes. A generous bound, so
+    this fails on the bug and not on allocator noise. }
+  AssertTrue('heap did not grow with the replacements (before='
+             + IntToStr(before) + ' after=' + IntToStr(after) + ')',
+             after < before + 512 * 1024);
 end;
 
 initialization
