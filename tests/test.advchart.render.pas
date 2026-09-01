@@ -31,6 +31,7 @@ type
     procedure TestPaintOrderPutsTheHighZOnTop;
     procedure TestElementAlphaIsApplied;
     procedure TestDashDoesNotLeakToTheNextElement;
+    procedure TestAlphaDoesNotLeakToTheNextElement;
     procedure TestSectorRendersAsARingWithAHole;
     procedure TestInkAndHitTestAgree;
   end;
@@ -165,6 +166,29 @@ begin
     each one, the dash set for the first would still be in force for the second
     and this would come back as many runs. }
   AssertEquals('the second line is unbroken', 1, runs);
+end;
+
+procedure TAdvChartRenderTest.TestAlphaDoesNotLeakToTheNextElement;
+var
+  faded, solid: TTyChartElement;
+begin
+  { Alpha is set only when it is BELOW 1, so an opaque element does not reset it
+    -- it relies entirely on the save/restore around each element. That makes
+    this the load-bearing case, and the dash test does not cover it, because
+    every element sets its dash explicitly whether or not it has one.
+
+    Found by mutation: deleting P.SaveState left every other test green. }
+  Start(200, 100, 96);
+  faded := FilledRect(10, 10, 90, 90, Red);
+  faded.Style.Alpha := 0.3;
+  FList.Add(faded);
+  solid := FilledRect(110, 10, 190, 90, Blue);
+  FList.Add(solid);                       // Alpha stays 1 -- never assigned
+  TyRenderPaintList(FPainter, FList);
+  AssertTrue('the faded one is faded, got ' + IntToStr(AlphaAt(50, 50)),
+             AlphaAt(50, 50) < 130);
+  AssertTrue('and the opaque one is opaque, got ' + IntToStr(AlphaAt(150, 50)),
+             AlphaAt(150, 50) > 250);
 end;
 
 procedure TAdvChartRenderTest.TestSectorRendersAsARingWithAHole;

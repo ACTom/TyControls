@@ -189,9 +189,21 @@ begin
     Exit(FItems[A].Z < FItems[B].Z);
   if FItems[A].Z2 <> FItems[B].Z2 then
     Exit(FItems[A].Z2 < FItems[B].Z2);
-  { The insertion index makes the order TOTAL. Without it, two elements with the
-    same z would be ordered by whatever the sort happens to do, which is how a
-    chart repaints with its bars in a different order than it hit-tests them. }
+  { The insertion index makes the order TOTAL.
+
+    Note honestly that it is REDUNDANT today: MergeSortOrder is stable (its merge
+    prefers the left run on ties), so equal-z elements already keep their
+    insertion order without this line. Mutation testing proved it -- replacing
+    this with `False` leaves every test green, and no test could distinguish
+    them, because the two produce identical output.
+
+    It stays because the two guarantees protect different things. The sort's
+    stability is a property of the sort; this is a property of the ORDER, and it
+    is what keeps paint order from silently changing if the sort is ever swapped
+    for a faster unstable one. What must not happen is someone reading the
+    comment, believing this line is what pins the order, and deleting the merge
+    sort's tie preference on that basis -- so: either alone is sufficient, both
+    is deliberate, and neither is testable while the other stands. }
   Result := A < B;
 end;
 
