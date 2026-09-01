@@ -145,6 +145,8 @@ uses
   test.previewbox,
   test.imageview,
   test.chart,
+  test.advchart.types, test.advchart.scale, test.advchart.scale.break,
+  test.advchart.coord, test.advchart.layout,
   test.transitions,
   test.htmllabel,
   test.shape,

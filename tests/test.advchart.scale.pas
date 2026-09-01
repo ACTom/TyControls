@@ -1,0 +1,324 @@
+unit test.advchart.scale;
+{$mode objfpc}{$H+}
+{ Headless tests for the scale mapper chain and the two-kind extent.
+
+  These tests must keep passing UNCHANGED after the break decorator lands in
+  test.advchart.scale.break — that is the acceptance criterion for contract 2
+  (Tier 0 spec §8 item 5). If a break change ever forces an edit in this file,
+  the decorator design has failed. }
+interface
+uses Classes, SysUtils, Math, fpcunit, testregistry,
+     tyControls.AdvChart.Types, tyControls.AdvChart.Scale;
+type
+  TAdvChartMapperTest = class(TTestCase)
+  published
+    procedure TestLinearNormalizeEnds;
+    procedure TestLinearNormalizeMidpoint;
+    procedure TestLinearRoundTrip;
+    procedure TestLinearDegenerateExtentIsHalf;
+    procedure TestLinearNeedsNoTransform;
+    procedure TestLogNormalizeEnds;
+    procedure TestLogNormalizeIsLogarithmic;
+    procedure TestLogRoundTrip;
+    procedure TestLogNeedsTransform;
+    procedure TestContainRespectsEffectiveExtent;
+    procedure TestMappingExtentAbsentByDefault;
+    procedure TestMappingExtentDrivesNormalize;
+    procedure TestEffectiveExtentStillDrivesContain;
+  end;
+
+  TAdvChartIntervalScaleTest = class(TTestCase)
+  private
+    function StepMantissaIsNice(AStep: Double): Boolean;
+  published
+    procedure TestNiceContainsData;
+    procedure TestNiceStepMantissa;
+    procedure TestNiceTickCountNearSplitNumber;
+    procedure TestNiceFlatExtentDoesNotDivide;
+    procedure TestTicksAreAscendingAndUnique;
+    procedure TestFixedMinIsRespected;
+    procedure TestStartValueIsIndependentOfMin;
+    procedure TestScaleUsesItsMapper;
+  end;
+
+implementation
+
+const
+  Eps = 1e-9;
+
+{ ---------------------- TAdvChartMapperTest ---------------------- }
+
+procedure TAdvChartMapperTest.TestLinearNormalizeEnds;
+var m: ITyScaleMapper;
+begin
+  m := TTyLinearScaleMapper.Create;
+  m.SetExtent(sekEffective, TyRange(0, 100));
+  AssertEquals('start', 0.0, m.Normalize(0), Eps);
+  AssertEquals('stop', 1.0, m.Normalize(100), Eps);
+end;
+
+procedure TAdvChartMapperTest.TestLinearNormalizeMidpoint;
+var m: ITyScaleMapper;
+begin
+  m := TTyLinearScaleMapper.Create;
+  m.SetExtent(sekEffective, TyRange(-50, 50));
+  AssertEquals('midpoint', 0.5, m.Normalize(0), Eps);
+end;
+
+procedure TAdvChartMapperTest.TestLinearRoundTrip;
+var m: ITyScaleMapper; i: Integer; v: Double;
+begin
+  m := TTyLinearScaleMapper.Create;
+  m.SetExtent(sekEffective, TyRange(-13.5, 987.25));
+  for i := 0 to 20 do
+  begin
+    v := -13.5 + (987.25 + 13.5) * i / 20;
+    AssertEquals('round trip', v, m.Denormalize(m.Normalize(v)), 1e-9);
+  end;
+end;
+
+procedure TAdvChartMapperTest.TestLinearDegenerateExtentIsHalf;
+var m: ITyScaleMapper;
+begin
+  m := TTyLinearScaleMapper.Create;
+  m.SetExtent(sekEffective, TyRange(7, 7));
+  { A zero span must not divide. 0.5 (the band centre) is the only answer that
+    keeps a single-datum chart drawing in the middle instead of at an edge. }
+  AssertEquals('degenerate', 0.5, m.Normalize(7), Eps);
+  AssertEquals('degenerate off-value', 0.5, m.Normalize(99), Eps);
+end;
+
+procedure TAdvChartMapperTest.TestLinearNeedsNoTransform;
+var m: ITyScaleMapper;
+begin
+  m := TTyLinearScaleMapper.Create;
+  AssertFalse('linear is identity', m.NeedTransform);
+end;
+
+procedure TAdvChartMapperTest.TestLogNormalizeEnds;
+var m: ITyScaleMapper;
+begin
+  m := TTyLogScaleMapper.Create(10);
+  m.SetExtent(sekEffective, TyRange(1, 1000));
+  AssertEquals('start', 0.0, m.Normalize(1), Eps);
+  AssertEquals('stop', 1.0, m.Normalize(1000), Eps);
+end;
+
+procedure TAdvChartMapperTest.TestLogNormalizeIsLogarithmic;
+var m: ITyScaleMapper;
+begin
+  m := TTyLogScaleMapper.Create(10);
+  m.SetExtent(sekEffective, TyRange(1, 1000));
+  { 10 is one decade of three -> exactly a third of the way along. }
+  AssertEquals('one decade', 1/3, m.Normalize(10), 1e-9);
+  AssertEquals('two decades', 2/3, m.Normalize(100), 1e-9);
+end;
+
+procedure TAdvChartMapperTest.TestLogRoundTrip;
+var m: ITyScaleMapper; i: Integer; v: Double;
+begin
+  m := TTyLogScaleMapper.Create(10);
+  m.SetExtent(sekEffective, TyRange(0.5, 5000));
+  for i := 0 to 20 do
+  begin
+    v := 0.5 * Power(10000, i / 20);
+    AssertEquals('round trip', v, m.Denormalize(m.Normalize(v)), Abs(v) * 1e-9 + 1e-12);
+  end;
+end;
+
+procedure TAdvChartMapperTest.TestLogNeedsTransform;
+var m: ITyScaleMapper;
+begin
+  m := TTyLogScaleMapper.Create(10);
+  AssertTrue('log is not identity', m.NeedTransform);
+end;
+
+procedure TAdvChartMapperTest.TestContainRespectsEffectiveExtent;
+var m: ITyScaleMapper;
+begin
+  m := TTyLinearScaleMapper.Create;
+  m.SetExtent(sekEffective, TyRange(0, 10));
+  AssertTrue('inside', m.Contain(5));
+  AssertTrue('on the low end', m.Contain(0));
+  AssertTrue('on the high end', m.Contain(10));
+  AssertFalse('outside', m.Contain(10.5));
+end;
+
+procedure TAdvChartMapperTest.TestMappingExtentAbsentByDefault;
+var m: ITyScaleMapper;
+begin
+  m := TTyLinearScaleMapper.Create;
+  m.SetExtent(sekEffective, TyRange(0, 10));
+  AssertFalse('no mapping extent yet', m.HasExtent(sekMapping));
+end;
+
+procedure TAdvChartMapperTest.TestMappingExtentDrivesNormalize;
+var m: ITyScaleMapper;
+begin
+  m := TTyLinearScaleMapper.Create;
+  m.SetExtent(sekEffective, TyRange(0, 10));
+  { containShape: widen the MAPPING extent so a bar at value 10 keeps its half
+    width inside the plot band. Normalize must follow the wider one... }
+  m.SetExtent(sekMapping, TyRange(-1, 11));
+  AssertTrue('mapping extent present', m.HasExtent(sekMapping));
+  AssertEquals('0 is no longer at the start', 1/12, m.Normalize(0), Eps);
+  AssertEquals('10 is no longer at the stop', 11/12, m.Normalize(10), Eps);
+end;
+
+procedure TAdvChartMapperTest.TestEffectiveExtentStillDrivesContain;
+var m: ITyScaleMapper;
+begin
+  m := TTyLinearScaleMapper.Create;
+  m.SetExtent(sekEffective, TyRange(0, 10));
+  m.SetExtent(sekMapping, TyRange(-1, 11));
+  { ...but ticks, labels, splitLines and hit-testing stay on the EFFECTIVE
+    extent, or a widened axis grows phantom ticks at -1 and 11. }
+  AssertFalse('below effective', m.Contain(-0.5));
+  AssertFalse('above effective', m.Contain(10.5));
+  AssertTrue('effective end', m.Contain(10));
+end;
+
+{ ---------------------- TAdvChartIntervalScaleTest ---------------------- }
+
+function TAdvChartIntervalScaleTest.StepMantissaIsNice(AStep: Double): Boolean;
+var m: Double;
+begin
+  if AStep <= 0 then Exit(False);
+  m := AStep / Power(10, Floor(Log10(AStep)));
+  Result := (Abs(m - 1) < 1e-9) or (Abs(m - 2) < 1e-9)
+         or (Abs(m - 2.5) < 1e-9) or (Abs(m - 5) < 1e-9);
+end;
+
+procedure TAdvChartIntervalScaleTest.TestNiceContainsData;
+var s: TTyIntervalScale; e: TTyRange;
+begin
+  s := TTyIntervalScale.Create;
+  try
+    s.SetExtent(TyRange(3.7, 91.2));
+    s.Niceify(5);
+    e := s.GetExtent;
+    AssertTrue('nice min <= data min', e.Start <= 3.7 + 1e-9);
+    AssertTrue('nice max >= data max', e.Stop >= 91.2 - 1e-9);
+  finally
+    s.Free;
+  end;
+end;
+
+procedure TAdvChartIntervalScaleTest.TestNiceStepMantissa;
+var s: TTyIntervalScale; i: Integer;
+begin
+  for i := 1 to 40 do
+  begin
+    s := TTyIntervalScale.Create;
+    try
+      s.SetExtent(TyRange(0, i * 3.3));
+      s.Niceify(5);
+      AssertTrue('step mantissa for i=' + IntToStr(i) + ' step=' + FloatToStr(s.Interval),
+                 StepMantissaIsNice(s.Interval));
+    finally
+      s.Free;
+    end;
+  end;
+end;
+
+procedure TAdvChartIntervalScaleTest.TestNiceTickCountNearSplitNumber;
+var s: TTyIntervalScale; n: Integer;
+begin
+  s := TTyIntervalScale.Create;
+  try
+    s.SetExtent(TyRange(0, 100));
+    s.Niceify(5);
+    n := Length(s.GetTicks);
+    { A "nice" range trades exactness for round numbers, so the count is
+      approximate by design -- but it must stay in a band a reader would call
+      five-ish, not collapse to 2 or explode to 20. }
+    AssertTrue('tick count ' + IntToStr(n) + ' is in [3,9]', (n >= 3) and (n <= 9));
+  finally
+    s.Free;
+  end;
+end;
+
+procedure TAdvChartIntervalScaleTest.TestNiceFlatExtentDoesNotDivide;
+var s: TTyIntervalScale; e: TTyRange;
+begin
+  s := TTyIntervalScale.Create;
+  try
+    s.SetExtent(TyRange(42, 42));
+    s.Niceify(5);
+    e := s.GetExtent;
+    AssertTrue('flat extent was expanded', TyRangeSpan(e) > 0);
+    AssertTrue('interval is positive', s.Interval > 0);
+    AssertTrue('the value is still inside', TyRangeContains(e, 42));
+  finally
+    s.Free;
+  end;
+end;
+
+procedure TAdvChartIntervalScaleTest.TestTicksAreAscendingAndUnique;
+var s: TTyIntervalScale; t: TTyScaleTickArray; i: Integer;
+begin
+  s := TTyIntervalScale.Create;
+  try
+    s.SetExtent(TyRange(-17.3, 4.9));
+    s.Niceify(6);
+    t := s.GetTicks;
+    AssertTrue('at least two ticks', Length(t) >= 2);
+    for i := 1 to High(t) do
+      AssertTrue('strictly ascending at ' + IntToStr(i), t[i].Value > t[i - 1].Value);
+  finally
+    s.Free;
+  end;
+end;
+
+procedure TAdvChartIntervalScaleTest.TestFixedMinIsRespected;
+var s: TTyIntervalScale;
+begin
+  s := TTyIntervalScale.Create;
+  try
+    s.SetExtent(TyRange(3.7, 91.2));
+    s.FixMin := True;
+    s.Niceify(5);
+    AssertEquals('a pinned min is not rounded away', 3.7, s.GetExtent.Start, 1e-9);
+  finally
+    s.Free;
+  end;
+end;
+
+procedure TAdvChartIntervalScaleTest.TestStartValueIsIndependentOfMin;
+var s: TTyIntervalScale;
+begin
+  { ECharts 6.1 decoupled startValue from min (break B7). Build the extent model
+    with them independent from day one, or the scale gets reworked later. }
+  s := TTyIntervalScale.Create;
+  try
+    s.SetExtent(TyRange(0, 100));
+    s.StartValue := 20;
+    AssertEquals('extent start is untouched', 0.0, s.GetExtent.Start, 1e-12);
+    AssertEquals('startValue stands on its own', 20.0, s.StartValue, 1e-12);
+    AssertTrue('and it is flagged as set', s.HasStartValue);
+  finally
+    s.Free;
+  end;
+end;
+
+procedure TAdvChartIntervalScaleTest.TestScaleUsesItsMapper;
+var s: TTyIntervalScale;
+begin
+  { The scale must go THROUGH its mapper, never normalise itself -- this is what
+    lets the break decorator be swapped in without touching it. }
+  s := TTyIntervalScale.Create;
+  try
+    s.SetExtent(TyRange(0, 100));
+    AssertEquals('midpoint via mapper', 0.5, s.Normalize(50), 1e-12);
+    s.Mapper := TTyLogScaleMapper.Create(10);
+    s.SetExtent(TyRange(1, 1000));
+    AssertEquals('one decade after the swap', 1/3, s.Normalize(10), 1e-9);
+  finally
+    s.Free;
+  end;
+end;
+
+initialization
+  RegisterTest(TAdvChartMapperTest);
+  RegisterTest(TAdvChartIntervalScaleTest);
+end.
