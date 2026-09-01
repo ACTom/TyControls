@@ -428,12 +428,12 @@ begin
     if APath = '' then sub := key else sub := APath + '.' + key;
     child := TyOptChild(ANode, key);
     if child < 0 then
-    begin
       AddIssue(C, oikUnknownOption, sub, '', '');
-      { Do not descend into an unknown subtree: everything under it would be
-        reported too, and one wrong key would produce a page of noise. }
-      Continue;
-    end;
+    { Descending with child = -1 is deliberate rather than guarded here: the
+      ValidNode test at the top of WalkValidate is what stops an unknown subtree
+      from being walked. An explicit Continue was here first and mutation showed
+      it changed nothing -- the guard below was already doing the work, so the
+      comment claiming otherwise was the only thing it added. }
     WalkValidate(AObj.Items[i], child, sub, C);
   end;
 end;
@@ -445,6 +445,9 @@ var
   arr: TJSONArray;
   tag, sub: string;
 begin
+  { An unresolvable node stops the walk. This is what keeps ONE misspelled
+    container from producing a page of issues about everything inside it: the
+    key is reported once and its whole subtree is skipped. }
   if (AData = nil) or (not ValidNode(ANode)) then Exit;
   case AData.JSONType of
     jtObject:
