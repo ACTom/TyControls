@@ -147,6 +147,7 @@ uses
   test.chart,
   test.advchart.types, test.advchart.scale, test.advchart.scale.break,
   test.advchart.coord, test.advchart.layout,
+  test.painter.vector,
   test.transitions,
   test.htmllabel,
   test.shape,

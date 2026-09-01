@@ -7,6 +7,7 @@ interface
 uses
   Classes, SysUtils, Types, Math, Controls, Graphics, LCLType, LazUTF8, BGRABitmap, BGRABitmapTypes,
   BGRAGradientScanner, BGRACanvas2D, BGRATextBidi,
+  BGRAPath,   // TBGRAPath: measures a path:// symbol's own bounds for SvgPathIn
   FPReadJPEG, FPReadPNG, FPReadBMP,  // register FPImage readers so url() jpg/png/bmp load
   tyControls.Types;
 
@@ -43,6 +44,23 @@ type
     target looks like. }
   TTyPointerSide = (tpsTop, tpsBottom, tpsLeft, tpsRight);
 
+  { ---- vector path API types (see the VECTOR PATH API block below) ---- }
+
+  { How a self-intersecting path decides what is inside. tfrEvenOdd is what
+    gives a ring its hole when both contours wind the same way -- a donut, a
+    sunburst band. tfrNonZero would fill the hole in. }
+  TTyFillRule = (tfrNonZero, tfrEvenOdd);
+  TTyLineCap  = (tlcButt, tlcRound, tlcSquare);
+  TTyLineJoin = (tljMiter, tljRound, tljBevel);
+
+  { A path vertex, DEVICE px. Its own record rather than TPointF because that
+    one is Single and the chart's geometry layer is Double throughout. }
+  TTyVecPoint = record X, Y: Double; end;
+
+  { Dash on/off lengths in LOGICAL px. Kept as its own type because the painter
+    stores one across SaveState/RestoreState -- see SetLineDash. }
+  TTyDashPattern = array of Double;
+
   TTyPainter = class
   private
     FBmp: TBGRABitmap;
@@ -51,6 +69,15 @@ type
     FPPI: Integer;
     FOwnsBmp: Boolean;
     FRightToLeft: Boolean;
+    { The dash pattern in LOGICAL px, plus its own save/restore stack.
+
+      It cannot simply be pushed at the canvas: BGRA's pen pattern is measured in
+      MULTIPLES OF THE LINE WIDTH (bgrapen.pas:1324, DashPenStyle = 3,1), and the
+      width is not known until StrokePath. So SetLineDash records the caller's
+      intent in px and StrokePath does the division. That in turn means
+      ctx.save/restore cannot carry it, hence the parallel stack. }
+    FVecDash: TTyDashPattern;
+    FVecDashStack: array of TTyDashPattern;
     procedure GradientEndpoints(const ARect: TRect; AAngleDeg: Single; out P1, P2: TPointF);
     procedure BlitRegion(ASrc: TBGRABitmap; const ASrcR, ADstR: TRect; ATile: Boolean = False);
     {$IF defined(LINUX) or defined(DARWIN)}
@@ -233,7 +260,118 @@ type
     { 本次绘制的 PPI。调用方要自己往别的位图上排文字时(网格的单元格文本缓存)
       必须用同一个 PPI 配字体,否则缓存出来的字号与直接画的不一致。 }
     property PPI: Integer read FPPI;
+
+    { ============================ VECTOR PATH API ============================
+      Added for TTyAdvanceChart (Tier 0 item 2), but general: any control needing
+      a shape the chrome primitives above cannot express belongs here rather than
+      reaching around the painter for Bitmap.Canvas2D.
+
+      WHY IT IS ON THE PAINTER AT ALL. Everything above draws widget CHROME --
+      rounded rects, borders, glyphs, nine-slice. A chart draws arbitrary
+      geometry, and before this the only way to get it was P.Bitmap.Canvas2D,
+      which is what tyControls.Chart.pas does today. Twenty series renderers each
+      doing that would each re-derive DPI scaling, theme colour resolution, the
+      bidi text path and the non-Windows supersampling gate -- the exact bug class
+      this repo has already paid for.
+
+      UNITS, and they differ on purpose:
+        * PATH COORDINATES are DEVICE px, Double. The chart's geometry layer has
+          already converted values to device pixels; scaling again here is a bug.
+        * WIDTHS, DASH LENGTHS and RADII are LOGICAL px, Double, and go through
+          ScaleF, which does NOT round -- a 1 px axis line at 150 % must be 1.5
+          device px, not the 2 the integer Scale() would give.
+
+      STATE. The underlying TBGRACanvas2D is cached per bitmap
+      (bgradefaultbitmap.pas:3865), so its state survives across calls and across
+      the chrome primitives above. Nothing here assumes a clean context: every
+      drawing entry point sets each property it depends on. }
+
+    { Fractional DPI scale. Public because a series renderer needs the same
+      conversion for its own arithmetic. Deliberately unrounded -- see above. }
+    function ScaleF(ALogical: Double): Double;
+
+    { ---- path building (coordinates: DEVICE px) ---- }
+    procedure BeginPath;
+    procedure ClosePath;
+    procedure MoveTo(AX, AY: Double);
+    procedure LineTo(AX, AY: Double);
+    { Cubic bezier from the current point. }
+    procedure CurveTo(AC1X, AC1Y, AC2X, AC2Y, AX, AY: Double);
+    { Quadratic bezier from the current point. }
+    procedure QuadTo(ACX, ACY, AX, AY: Double);
+    { Arc on the circle (ACX,ACY,ARadius). Angles are RADIANS measured CLOCKWISE
+      from the +x axis, matching BGRA; a caller working in ECharts' degrees
+      converts once at its own call site rather than here. }
+    procedure ArcTo(ACX, ACY, ARadius, AStartRad, AEndRad: Double;
+      AAnticlockwise: Boolean = False);
+    procedure PolylineTo(const APoints: array of TTyVecPoint);
+    procedure RectPath(AL, AT, AR, AB: Double);
+    procedure RoundRectPath(AL, AT, AR, AB, ARadiusLogical: Double);
+    procedure EllipsePath(ACX, ACY, ARX, ARY: Double);
+    procedure CirclePath(ACX, ACY, AR: Double);
+    { SVG path data appended to the current path, in DEVICE px. This is ECharts'
+      `path://` symbol format; BGRA's parser covers the whole grammar including
+      elliptical arcs (bgrapath.pas:2301, 2400), so nothing is parsed here. }
+    procedure SvgPath(const APathData: string);
+    { The same, scaled and centred to fit ARect. AKeepAspect False stretches. }
+    procedure SvgPathIn(const APathData: string; const ARect: TRect;
+      AKeepAspect: Boolean = True);
+
+    { ---- painting the current path ---- }
+    procedure FillPath(AColor: TTyColor; ARule: TTyFillRule = tfrNonZero);
+    { Fill with a themed TTyFill. ABounds is what a gradient's angle resolves
+      against (the rect the caller would have passed FillBackground), which is
+      not derivable from the path: a bar's gradient is usually meant to run
+      across the whole plot band, not across the one bar. }
+    procedure FillPathWith(const AFill: TTyFill; const ABounds: TRect;
+      ARule: TTyFillRule = tfrNonZero);
+    { A width <= 0 draws NOTHING. Falling back to a default width would put a
+      hairline everywhere a theme meant to switch a border off. }
+    procedure StrokePath(AColor: TTyColor; AWidthLogical: Double);
+    procedure FillAndStrokePath(AFillColor, AStrokeColor: TTyColor;
+      AWidthLogical: Double; ARule: TTyFillRule = tfrNonZero);
+    { Hit-test the current path, DEVICE px, THROUGH the current transform -- so
+      paint and hit-test can share one path, which is the TTySegmented rule. }
+    function PathContains(AX, AY: Double): Boolean;
+
+    { ---- stroke state ---- }
+    { On/off lengths in LOGICAL px; an empty array restores a solid line. }
+    procedure SetLineDash(const APatternLogical: array of Double);
+    procedure SetLineCap(ACap: TTyLineCap);
+    procedure SetLineJoin(AJoin: TTyLineJoin; AMiterLimit: Double = 10);
+
+    { ---- state stack, transform, clip, per-element alpha ---- }
+    { Saves transform + clip + stroke state + element alpha together. Anything
+      left unrestored shows up as one series' style leaking into the next. }
+    procedure SaveState;
+    procedure RestoreState;
+    procedure Translate(ADX, ADY: Double);
+    { Positive is CLOCKWISE on screen (y grows downward), matching BGRA. }
+    procedure RotateBy(AAngleRad: Double);
+    procedure ScaleBy(ASX, ASY: Double);
+    procedure ResetTransform;
+    { Intersect the clip with the current path. }
+    procedure ClipPath(ARule: TTyFillRule = tfrNonZero);
+    { Intersect the clip with a rect -- built as a PATH so the current matrix
+      applies. A clip that ignored the matrix would cut rotated content with an
+      unrotated box. }
+    procedure ClipRect(const ARect: TRect);
+    { 0..1, per element. Orthogonal to the Opacity field, which dims the whole
+      frame at EndPaint; both may be in force at once. }
+    procedure SetElementAlpha(AAlpha: Double);
+
+    { ---- rotated text ---- }
+    { Text rotated about (AX, AY), with AHAlign/AVAlign saying where that anchor
+      sits in the text box. AAngleRad is COUNTER-CLOCKWISE positive, and 0 draws
+      exactly where the unrotated path would. Goes through TextOutAngle rather
+      than the canvas' own text so it keeps TyConfigureTextFont's font cascade
+      and fallback (empty-fontname-gotcha). }
+    procedure DrawTextRotated(const AText, AFontName: string;
+      AFontSizeLogical, AWeight: Integer; AColor: TTyColor;
+      AX, AY, AAngleRad: Double; AHAlign: TAlignment; AVAlign: TTextLayout);
   end;
+
+function TyVecPoint(AX, AY: Double): TTyVecPoint;
 
 function TyColorToBGRA(c: TTyColor): TBGRAPixel;
 
@@ -1008,6 +1146,10 @@ end;
 procedure TTyPainter.BeginPaint(ACanvas: TCanvas; const ARect: TRect; APPI: Integer;
   ARightToLeft: Boolean = False);
 begin
+  { A frame starts with no dash and an empty state stack: vector state must
+    not survive from the previous paint. }
+  FVecDash := nil;
+  FVecDashStack := nil;
   FCanvas := ACanvas;
   FRect := ARect;
   FRightToLeft := ARightToLeft;
@@ -1025,6 +1167,10 @@ end;
 procedure TTyPainter.BeginPaintOn(ACanvas: TCanvas; const ARect: TRect;
   APPI: Integer; ABmp: TBGRABitmap; ARightToLeft: Boolean = False);
 begin
+  { A frame starts with no dash and an empty state stack: vector state must
+    not survive from the previous paint. }
+  FVecDash := nil;
+  FVecDashStack := nil;
   FCanvas := ACanvas;
   FRect := ARect;
   FRightToLeft := ARightToLeft;
@@ -2310,6 +2456,439 @@ begin
   finally
     FBmp.ClipRect := oldClip;
   end;
+end;
+
+{ ============================ VECTOR PATH API ============================
+  See the declaration block in the interface for the units convention and for
+  why this lives on the painter instead of each caller reaching for Canvas2D.
+
+  Every drawing entry point below sets each canvas property it depends on. The
+  TBGRACanvas2D is cached per bitmap, so the chrome primitives above -- and any
+  earlier vector call -- may have left it in any state. }
+
+function TyVecPoint(AX, AY: Double): TTyVecPoint;
+begin
+  Result.X := AX;
+  Result.Y := AY;
+end;
+
+{ TFillMode for a rule. Named separately so every call site reads as the rule
+  the caller asked for rather than as a BGRA enum. }
+function VecFillMode(ARule: TTyFillRule): TFillMode;
+begin
+  if ARule = tfrEvenOdd then
+    Result := fmAlternate
+  else
+    Result := fmWinding;
+end;
+
+function TTyPainter.ScaleF(ALogical: Double): Double;
+begin
+  if FPPI <= 0 then
+    Exit(ALogical);
+  Result := ALogical * FPPI / 96;
+end;
+
+{ ---- path building ---- }
+
+procedure TTyPainter.BeginPath;
+begin
+  if FBmp = nil then Exit;
+  FBmp.Canvas2D.beginPath;
+end;
+
+procedure TTyPainter.ClosePath;
+begin
+  if FBmp = nil then Exit;
+  FBmp.Canvas2D.closePath;
+end;
+
+procedure TTyPainter.MoveTo(AX, AY: Double);
+begin
+  if FBmp = nil then Exit;
+  FBmp.Canvas2D.moveTo(AX, AY);
+end;
+
+procedure TTyPainter.LineTo(AX, AY: Double);
+begin
+  if FBmp = nil then Exit;
+  FBmp.Canvas2D.lineTo(AX, AY);
+end;
+
+procedure TTyPainter.CurveTo(AC1X, AC1Y, AC2X, AC2Y, AX, AY: Double);
+begin
+  if FBmp = nil then Exit;
+  FBmp.Canvas2D.bezierCurveTo(AC1X, AC1Y, AC2X, AC2Y, AX, AY);
+end;
+
+procedure TTyPainter.QuadTo(ACX, ACY, AX, AY: Double);
+begin
+  if FBmp = nil then Exit;
+  FBmp.Canvas2D.quadraticCurveTo(ACX, ACY, AX, AY);
+end;
+
+procedure TTyPainter.ArcTo(ACX, ACY, ARadius, AStartRad, AEndRad: Double;
+  AAnticlockwise: Boolean);
+begin
+  if FBmp = nil then Exit;
+  FBmp.Canvas2D.arc(ACX, ACY, ARadius, AStartRad, AEndRad, AAnticlockwise);
+end;
+
+procedure TTyPainter.PolylineTo(const APoints: array of TTyVecPoint);
+var
+  i: Integer;
+begin
+  if (FBmp = nil) or (Length(APoints) = 0) then Exit;
+  for i := 0 to High(APoints) do
+    FBmp.Canvas2D.lineTo(APoints[i].X, APoints[i].Y);
+end;
+
+procedure TTyPainter.RectPath(AL, AT, AR, AB: Double);
+begin
+  if FBmp = nil then Exit;
+  FBmp.Canvas2D.rect(AL, AT, AR - AL, AB - AT);
+end;
+
+procedure TTyPainter.RoundRectPath(AL, AT, AR, AB, ARadiusLogical: Double);
+var
+  r, halfW, halfH: Double;
+begin
+  if FBmp = nil then Exit;
+  r := ScaleF(ARadiusLogical);
+  { Clamp before handing it over: a radius larger than half the box makes BGRA
+    draw a lens rather than a pill, which is the same trap TyClampRadiusPx
+    exists for on the chrome side. }
+  halfW := Abs(AR - AL) / 2;
+  halfH := Abs(AB - AT) / 2;
+  if r > halfW then r := halfW;
+  if r > halfH then r := halfH;
+  if r <= 0 then
+  begin
+    RectPath(AL, AT, AR, AB);
+    Exit;
+  end;
+  FBmp.Canvas2D.roundRect(AL, AT, AR - AL, AB - AT, r);
+end;
+
+procedure TTyPainter.EllipsePath(ACX, ACY, ARX, ARY: Double);
+begin
+  if FBmp = nil then Exit;
+  FBmp.Canvas2D.ellipse(ACX, ACY, ARX, ARY);
+end;
+
+procedure TTyPainter.CirclePath(ACX, ACY, AR: Double);
+begin
+  if FBmp = nil then Exit;
+  FBmp.Canvas2D.circle(ACX, ACY, AR);
+end;
+
+procedure TTyPainter.SvgPath(const APathData: string);
+begin
+  if (FBmp = nil) or (APathData = '') then Exit;
+  FBmp.Canvas2D.addPath(APathData);
+end;
+
+procedure TTyPainter.SvgPathIn(const APathData: string; const ARect: TRect;
+  AKeepAspect: Boolean);
+var
+  probe: TBGRAPath;
+  bb: TRectF;
+  w, h, sx, sy, sc, ox, oy: Double;
+begin
+  if (FBmp = nil) or (APathData = '') then Exit;
+  { Measure the path's own bounds on a throwaway TBGRAPath, so the fit is
+    computed without disturbing the canvas' current path or transform.
+    TBGRAPath.getPoints is protected; GetBounds is the public way in. }
+  probe := TBGRAPath.Create(APathData);
+  try
+    bb := probe.GetBounds;
+  finally
+    probe.Free;
+  end;
+  w := bb.Right - bb.Left;
+  h := bb.Bottom - bb.Top;
+  { No extent in either direction means nothing to fit. Flat in ONE direction is
+    fitted on the other and left alone on that one, rather than blowing up to an
+    infinite scale -- a horizontal rule symbol is a legitimate path. }
+  if (w <= 0) and (h <= 0) then Exit;
+  if w <= 0 then w := 1;
+  if h <= 0 then h := 1;
+  sx := (ARect.Right - ARect.Left) / w;
+  sy := (ARect.Bottom - ARect.Top) / h;
+  if AKeepAspect then
+  begin
+    if sx < sy then sc := sx else sc := sy;
+    sx := sc;
+    sy := sc;
+  end;
+  ox := (ARect.Left + ARect.Right) / 2 - (bb.Left + bb.Right) / 2 * sx;
+  oy := (ARect.Top + ARect.Bottom) / 2 - (bb.Top + bb.Bottom) / 2 * sy;
+  FBmp.Canvas2D.save;
+  try
+    FBmp.Canvas2D.translate(ox, oy);
+    FBmp.Canvas2D.scale(sx, sy);
+    FBmp.Canvas2D.addPath(APathData);
+  finally
+    { The path keeps the points the transform produced; restoring here leaves
+      the CTM as the caller left it, so a later fill is not scaled twice. }
+    FBmp.Canvas2D.restore;
+  end;
+end;
+
+{ ---- painting the current path ---- }
+
+procedure TTyPainter.FillPath(AColor: TTyColor; ARule: TTyFillRule);
+var
+  ctx: TBGRACanvas2D;
+begin
+  if FBmp = nil then Exit;
+  ctx := FBmp.Canvas2D;
+  ctx.fillMode := VecFillMode(ARule);
+  ctx.fillStyle(TyColorToBGRA(AColor));
+  ctx.fill;
+end;
+
+procedure TTyPainter.FillPathWith(const AFill: TTyFill; const ABounds: TRect;
+  ARule: TTyFillRule);
+var
+  ctx: TBGRACanvas2D;
+  grad: IBGRACanvasGradient2D;
+  p1, p2: TPointF;
+  i: Integer;
+begin
+  if (FBmp = nil) or (AFill.Kind = tfkNone) then Exit;
+  ctx := FBmp.Canvas2D;
+  ctx.fillMode := VecFillMode(ARule);
+  case AFill.Kind of
+    tfkLinearGradient:
+      begin
+        GradientEndpoints(ABounds, AFill.GradAngleDeg, p1, p2);
+        grad := ctx.createLinearGradient(p1.x, p1.y, p2.x, p2.y);
+        if Length(AFill.GradStops) > 1 then
+          for i := 0 to High(AFill.GradStops) do
+            grad.addColorStop(AFill.GradStops[i].Pos,
+                              TyColorToBGRA(AFill.GradStops[i].Color))
+        else
+        begin
+          grad.addColorStop(0, TyColorToBGRA(AFill.GradFrom));
+          grad.addColorStop(1, TyColorToBGRA(AFill.GradTo));
+        end;
+        ctx.fillStyle(grad);
+      end;
+  else
+    { Solid, and the image/nine-slice kinds too: a path cannot be nine-sliced,
+      so those degrade to their base colour rather than silently drawing
+      nothing. A caller wanting a textured path uses the chrome primitives. }
+    ctx.fillStyle(TyColorToBGRA(AFill.Color));
+  end;
+  ctx.fill;
+end;
+
+procedure TTyPainter.StrokePath(AColor: TTyColor; AWidthLogical: Double);
+var
+  ctx: TBGRACanvas2D;
+  w: Double;
+  devDash: array of Single;
+  i: Integer;
+begin
+  if FBmp = nil then Exit;
+  w := ScaleF(AWidthLogical);
+  { A theme that set a border width of 0 means "no border". Falling back to
+    BGRA's default width would draw a hairline everywhere it was switched off. }
+  if w <= 0 then Exit;
+  ctx := FBmp.Canvas2D;
+  ctx.lineWidth := w;
+  { Logical px -> multiples of the device line width, which is what BGRA's pen
+    pattern actually means. Scaling the pattern by the DPI directly (the obvious
+    thing) would scale it twice, because the width it multiplies is already
+    scaled -- a 6 px dash would come out 4x too long at 200 %. }
+  SetLength(devDash, Length(FVecDash));
+  for i := 0 to High(FVecDash) do
+    devDash[i] := ScaleF(FVecDash[i]) / w;
+  ctx.lineStyle(devDash);
+  ctx.strokeStyle(TyColorToBGRA(AColor));
+  ctx.stroke;
+end;
+
+procedure TTyPainter.FillAndStrokePath(AFillColor, AStrokeColor: TTyColor;
+  AWidthLogical: Double; ARule: TTyFillRule);
+begin
+  if FBmp = nil then Exit;
+  FillPath(AFillColor, ARule);
+  StrokePath(AStrokeColor, AWidthLogical);
+end;
+
+function TTyPainter.PathContains(AX, AY: Double): Boolean;
+begin
+  if FBmp = nil then Exit(False);
+  Result := FBmp.Canvas2D.isPointInPath(AX, AY);
+end;
+
+{ ---- stroke state ---- }
+
+procedure TTyPainter.SetLineDash(const APatternLogical: array of Double);
+var
+  i: Integer;
+begin
+  { RECORDED, not applied. BGRA measures a pen pattern in multiples of the line
+    width, and the width arrives later at StrokePath, so the conversion has to
+    happen there. An empty pattern means solid, and is stored as such rather than
+    ignored -- the canvas state is shared, so a dash left over from the previous
+    element would otherwise still be in force. }
+  SetLength(FVecDash, Length(APatternLogical));
+  for i := 0 to High(APatternLogical) do
+    FVecDash[i] := APatternLogical[i];
+end;
+
+procedure TTyPainter.SetLineCap(ACap: TTyLineCap);
+begin
+  if FBmp = nil then Exit;
+  case ACap of
+    tlcRound:  FBmp.Canvas2D.lineCapLCL := pecRound;
+    tlcSquare: FBmp.Canvas2D.lineCapLCL := pecSquare;
+  else
+    FBmp.Canvas2D.lineCapLCL := pecFlat;
+  end;
+end;
+
+procedure TTyPainter.SetLineJoin(AJoin: TTyLineJoin; AMiterLimit: Double);
+begin
+  if FBmp = nil then Exit;
+  case AJoin of
+    tljRound: FBmp.Canvas2D.lineJoinLCL := pjsRound;
+    tljBevel: FBmp.Canvas2D.lineJoinLCL := pjsBevel;
+  else
+    FBmp.Canvas2D.lineJoinLCL := pjsMiter;
+  end;
+  if AMiterLimit > 0 then
+    FBmp.Canvas2D.miterLimit := AMiterLimit;
+end;
+
+{ ---- state stack, transform, clip, per-element alpha ---- }
+
+procedure TTyPainter.SaveState;
+var
+  n, i: Integer;
+begin
+  if FBmp = nil then Exit;
+  FBmp.Canvas2D.save;
+  { The dash lives beside the canvas state (see FVecDash), so it needs pushing
+    here or a RestoreState would leave the previous element's dash in force. }
+  n := Length(FVecDashStack);
+  SetLength(FVecDashStack, n + 1);
+  SetLength(FVecDashStack[n], Length(FVecDash));
+  for i := 0 to High(FVecDash) do
+    FVecDashStack[n][i] := FVecDash[i];
+end;
+
+procedure TTyPainter.RestoreState;
+var
+  n, i: Integer;
+begin
+  if FBmp = nil then Exit;
+  FBmp.Canvas2D.restore;
+  n := Length(FVecDashStack);
+  if n = 0 then Exit;
+  SetLength(FVecDash, Length(FVecDashStack[n - 1]));
+  for i := 0 to High(FVecDash) do
+    FVecDash[i] := FVecDashStack[n - 1][i];
+  SetLength(FVecDashStack, n - 1);
+end;
+
+procedure TTyPainter.Translate(ADX, ADY: Double);
+begin
+  if FBmp = nil then Exit;
+  FBmp.Canvas2D.translate(ADX, ADY);
+end;
+
+procedure TTyPainter.RotateBy(AAngleRad: Double);
+begin
+  if FBmp = nil then Exit;
+  FBmp.Canvas2D.rotate(AAngleRad);
+end;
+
+procedure TTyPainter.ScaleBy(ASX, ASY: Double);
+begin
+  if FBmp = nil then Exit;
+  FBmp.Canvas2D.scale(ASX, ASY);
+end;
+
+procedure TTyPainter.ResetTransform;
+begin
+  if FBmp = nil then Exit;
+  FBmp.Canvas2D.resetTransform;
+end;
+
+procedure TTyPainter.ClipPath(ARule: TTyFillRule);
+var
+  ctx: TBGRACanvas2D;
+begin
+  if FBmp = nil then Exit;
+  ctx := FBmp.Canvas2D;
+  ctx.fillMode := VecFillMode(ARule);
+  ctx.clip;
+end;
+
+procedure TTyPainter.ClipRect(const ARect: TRect);
+var
+  ctx: TBGRACanvas2D;
+begin
+  if FBmp = nil then Exit;
+  ctx := FBmp.Canvas2D;
+  { Built as a PATH, not as a rectangular region, so the current matrix applies.
+    A region-based clip would cut rotated content with an unrotated box. }
+  ctx.beginPath;
+  ctx.rect(ARect.Left, ARect.Top, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
+  ctx.fillMode := fmWinding;
+  ctx.clip;
+  ctx.beginPath;   // leave no half-built path behind for the caller to trip on
+end;
+
+procedure TTyPainter.SetElementAlpha(AAlpha: Double);
+begin
+  if FBmp = nil then Exit;
+  if AAlpha < 0 then AAlpha := 0;
+  if AAlpha > 1 then AAlpha := 1;
+  FBmp.Canvas2D.globalAlpha := AAlpha;
+end;
+
+{ ---- rotated text ---- }
+
+procedure TTyPainter.DrawTextRotated(const AText, AFontName: string;
+  AFontSizeLogical, AWeight: Integer; AColor: TTyColor;
+  AX, AY, AAngleRad: Double; AHAlign: TAlignment; AVAlign: TTextLayout);
+var
+  sz: TSize;
+  ca, sa, ox, oy, rx, ry: Double;
+begin
+  if (FBmp = nil) or (AText = '') then Exit;
+  TyConfigureTextFont(FBmp, AFontName, AFontSizeLogical, AWeight, FPPI);
+  sz := FBmp.TextSize(AText);
+
+  { Resolve the alignment into an offset from the ANCHOR to the text box's
+    top-left, in the text's own unrotated frame... }
+  case AHAlign of
+    taCenter:       ox := -sz.cx / 2;
+    taRightJustify: ox := -sz.cx;
+  else
+    ox := 0;
+  end;
+  case AVAlign of
+    tlCenter: oy := -sz.cy / 2;
+    tlBottom: oy := -sz.cy;
+  else
+    oy := 0;
+  end;
+
+  { ...then rotate that offset, so the anchor stays put and the box swings
+    around it. TextOutAngle takes tenths of a degree, counter-clockwise. }
+  ca := Cos(AAngleRad);
+  sa := Sin(AAngleRad);
+  rx := ox * ca + oy * sa;
+  ry := -ox * sa + oy * ca;
+
+  FBmp.TextOutAngle(AX + rx, AY + ry, Round(AAngleRad * 1800 / Pi),
+                    AText, TyColorToBGRA(AColor), taLeftJustify, FRightToLeft);
 end;
 
 initialization
