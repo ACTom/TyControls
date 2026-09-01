@@ -46,6 +46,28 @@ type
     function _Release: Integer; {$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
   end;
 
+  { Where a text box sits on the anchor it is placed at. Deliberately NOT LCL's
+    TAlignment/TTextLayout: those live in Classes/Graphics, and pulling either in
+    would end this unit's independence from the LCL. The bridge that talks to the
+    painter converts. }
+  TTyTextAnchorH = (tahLeft, tahCentre, tahRight);
+  TTyTextAnchorV = (tavTop, tavMiddle, tavBottom);
+
+  { One line of text measured, DEVICE px, UNROTATED.
+
+    Injected rather than called directly, for two reasons. It keeps this layer
+    free of the painter, and so of the LCL. And -- the one that actually matters
+    -- it makes axis layout testable against a DETERMINISTIC measurer: real font
+    metrics differ by machine and by widgetset, so an axis test written against
+    them asserts the local font as much as it asserts the algorithm. }
+  ITyTextMeasurer = interface
+    ['{4C7E2A19-6B03-4F5D-9E81-2D6A08C3B45F}']
+    procedure MeasureLine(const AText, AFontName: string;
+      AFontSizeLogical, AWeight: Integer; out AW, AH: Double);
+  end;
+
+  TTyStringArray = array of string;
+
 function TyPointF(AX, AY: Double): TTyPointF;
 function TyRectF(ALeft, ATop, ARight, ABottom: Double): TTyRectF;
 function TyRange(AStart, AStop: Double): TTyRange;

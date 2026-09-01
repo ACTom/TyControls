@@ -56,6 +56,90 @@ function TyCoordCellContainer(const ACoordSys: ITyCoordSys;
 { The one solver. Every component's rect comes from here. }
 function TySolveBox(const ASpec: TTyBoxSpec; const AContainer: ITyBoxContainer): TTyRectF;
 
+{ ==================== TWO-PHASE AXIS BUILD (Tier 0 item 12) ====================
+  estimate the labels -> shrink the rect -> determine the placements.
+
+  Shaped as v6's outerBounds rather than as the deprecated grid.containLabel:
+    obmNone -- the rect given IS the plot band; labels may overflow outside it.
+               (v5's default, containLabel:false.)
+    obmAuto -- the rect given is the OUTER bound; the plot band is shrunk so the
+               labels land inside it. (v6's default, ~ containLabel:true.)
+
+  THE TWO PHASES DO NOT ITERATE, on purpose. An axis' thickness is the largest
+  extent its labels reach PERPENDICULAR to it. Shrinking the plot shortens the
+  axis, which can force more thinning -- but thinning changes how MANY labels
+  show, not how big each one is, so the thickness is unchanged and a second pass
+  would compute the same number. The one case that escapes it is the widest label
+  happening to be one of the thinned-out ones; ECharts does not chase that either.
+
+  NOT DONE HERE, deliberately: nameMoveOverlap (v6's shuffle when an axis name
+  collides with the end label). That is its own feature, not part of the pass. }
+
+type
+  TTyAxisSide = (asLeft, asRight, asTop, asBottom);
+  TTyOuterBoundsMode = (obmNone, obmAuto);
+  { Whether an axis' NAME counts toward the space reserved, or only its labels. }
+  TTyOuterBoundsContain = (obcAxisLabel, obcAll);
+
+  { Everything one axis needs to lay itself out. Pure data: the caller has
+    already resolved the font and formatted the labels, because deciding what a
+    tick says is the scale's job and this unit does not know about scales. }
+  TTyAxisLayoutSpec = record
+    Side: TTyAxisSide;
+    ShowLabels: Boolean;
+    Labels: TTyStringArray;
+    { Each label's place along the axis, as a fraction 0..1 of the axis' own
+      extent measured from its start. Parallel to Labels. }
+    Positions: TTyDoubleArray;
+    FontName: string;
+    FontSizeLogical: Integer;
+    FontWeight: Integer;
+    { COUNTER-CLOCKWISE positive, matching TTyPainter.DrawTextRotated. }
+    RotationRad: Double;
+    LabelMarginLogical: Double;
+    TickLengthLogical: Double;
+    Name: string;
+    NameGapLogical: Double;
+  end;
+  TTyAxisLayoutSpecArray = array of TTyAxisLayoutSpec;
+
+  { One laid-out label, ready to hand to TTyPainter.DrawTextRotated: the anchor
+    plus how the box sits on it. Layout and paint therefore cannot disagree
+    about where a label went. }
+  TTyAxisLabelPlacement = record
+    Index: Integer;
+    Text: string;
+    X, Y: Double;
+    AnchorH: TTyTextAnchorH;
+    AnchorV: TTyTextAnchorV;
+    Shown: Boolean;
+  end;
+  TTyAxisLabelPlacementArray = array of TTyAxisLabelPlacement;
+
+{ Phase 1. How much room this axis needs on its own side, DEVICE px. }
+function TyAxisThickness(const ASpec: TTyAxisLayoutSpec;
+  const AMeasurer: ITyTextMeasurer; APPI: Integer;
+  AContain: TTyOuterBoundsContain): Double;
+
+{ Phase 2. Shrink the container by every axis' thickness to get the plot band.
+  Under obmNone this returns AContainer unchanged -- the axes are still measured
+  by the caller if it wants them, they just do not take space. }
+function TySolveGrid(const AContainer: TTyRectF;
+  const AAxes: TTyAxisLayoutSpecArray; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer; AMode: TTyOuterBoundsMode;
+  AContain: TTyOuterBoundsContain = obcAxisLabel): TTyRectF;
+
+{ Phase 3. Place the labels along the FINAL plot band, thinning to a uniform
+  step when they would collide. }
+function TyLayoutAxisLabels(const ASpec: TTyAxisLayoutSpec; const APlot: TTyRectF;
+  const AMeasurer: ITyTextMeasurer; APPI: Integer): TTyAxisLabelPlacementArray;
+
+{ The uniform step TyLayoutAxisLabels chose: 1 = every label, 2 = every other.
+  Exposed because a caller drawing tick MARKS has to thin them the same way, and
+  computing it twice by two routes is how the marks and the labels drift apart. }
+function TyAxisLabelStep(const ASpec: TTyAxisLayoutSpec; const APlot: TTyRectF;
+  const AMeasurer: ITyTextMeasurer; APPI: Integer): Integer;
+
 implementation
 
 type
@@ -251,6 +335,254 @@ function TyCoordCellContainer(const ACoordSys: ITyCoordSys;
   const AData: array of Double): ITyBoxContainer;
 begin
   Result := TTyCoordCellContainer.Create(ACoordSys, AData);
+end;
+
+
+{ ==================== TWO-PHASE AXIS BUILD ==================== }
+
+{ Local, because this unit deliberately does not depend on the painter and so
+  cannot borrow its ScaleF. Unrounded for the same reason it is there: a 1 px
+  tick at 150 % is 1.5 device px. }
+function AxisScaleF(ALogical: Double; APPI: Integer): Double;
+begin
+  if APPI <= 0 then
+    Exit(ALogical);
+  Result := ALogical * APPI / 96;
+end;
+
+function AxisIsHorizontal(ASide: TTyAxisSide): Boolean;
+begin
+  Result := ASide in [asTop, asBottom];
+end;
+
+{ The bounding box of a w x h box turned by AAngleRad. Both axes at once because
+  every caller wants both and computing them apart invites one being forgotten. }
+procedure RotatedExtent(AW, AH, AAngleRad: Double; out ARW, ARH: Double);
+var
+  c, s: Double;
+begin
+  c := Abs(Cos(AAngleRad));
+  s := Abs(Sin(AAngleRad));
+  ARW := AW * c + AH * s;
+  ARH := AW * s + AH * c;
+end;
+
+{ Largest label extent PERPENDICULAR to the axis, plus the largest ALONG it.
+  One walk, because the thickness pass wants the first and the thinning pass
+  wants the second, and measuring twice is measurably slower on a chart with
+  hundreds of ticks. }
+procedure MeasureLabels(const ASpec: TTyAxisLayoutSpec;
+  const AMeasurer: ITyTextMeasurer; out AAcross, AAlong: Double;
+  out AAlongEach: TTyDoubleArray);
+var
+  i: Integer;
+  w, h, rw, rh, along, across: Double;
+  horiz: Boolean;
+begin
+  AAcross := 0;
+  AAlong := 0;
+  AAlongEach := nil;
+  if (AMeasurer = nil) or (not ASpec.ShowLabels) then Exit;
+  horiz := AxisIsHorizontal(ASpec.Side);
+  SetLength(AAlongEach, Length(ASpec.Labels));
+  for i := 0 to High(ASpec.Labels) do
+  begin
+    AMeasurer.MeasureLine(ASpec.Labels[i], ASpec.FontName,
+                          ASpec.FontSizeLogical, ASpec.FontWeight, w, h);
+    RotatedExtent(w, h, ASpec.RotationRad, rw, rh);
+    if horiz then
+    begin
+      along := rw;
+      across := rh;
+    end
+    else
+    begin
+      along := rh;
+      across := rw;
+    end;
+    AAlongEach[i] := along;
+    if across > AAcross then AAcross := across;
+    if along > AAlong then AAlong := along;
+  end;
+end;
+
+function TyAxisThickness(const ASpec: TTyAxisLayoutSpec;
+  const AMeasurer: ITyTextMeasurer; APPI: Integer;
+  AContain: TTyOuterBoundsContain): Double;
+var
+  across, along, nw, nh, nrw, nrh: Double;
+  each: TTyDoubleArray;
+begin
+  Result := AxisScaleF(ASpec.TickLengthLogical, APPI);
+  MeasureLabels(ASpec, AMeasurer, across, along, each);
+  if across > 0 then
+    Result := Result + AxisScaleF(ASpec.LabelMarginLogical, APPI) + across;
+  { The name counts only when the caller asked for outerBoundsContain:'all'.
+    Under 'axisLabel' an axis name is allowed to sit outside the outer bound,
+    which is what ECharts does and what keeps a long name from eating the plot. }
+  if (AContain = obcAll) and (ASpec.Name <> '') and (AMeasurer <> nil) then
+  begin
+    AMeasurer.MeasureLine(ASpec.Name, ASpec.FontName,
+                          ASpec.FontSizeLogical, ASpec.FontWeight, nw, nh);
+    { An axis name reads along its own axis, so on a vertical axis it is the
+      name's HEIGHT that eats width once turned. Measured unrotated and turned
+      here rather than asking the caller to pre-rotate it. }
+    if AxisIsHorizontal(ASpec.Side) then
+      RotatedExtent(nw, nh, 0, nrw, nrh)
+    else
+      RotatedExtent(nw, nh, Pi / 2, nrw, nrh);
+    Result := Result + AxisScaleF(ASpec.NameGapLogical, APPI)
+              + IfThen(AxisIsHorizontal(ASpec.Side), nrh, nrw);
+  end;
+end;
+
+function TySolveGrid(const AContainer: TTyRectF;
+  const AAxes: TTyAxisLayoutSpecArray; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer; AMode: TTyOuterBoundsMode;
+  AContain: TTyOuterBoundsContain): TTyRectF;
+var
+  i: Integer;
+  t: Double;
+  inset: array[TTyAxisSide] of Double;
+  side: TTyAxisSide;
+begin
+  Result := AContainer;
+  if AMode = obmNone then
+    Exit;
+  for side := Low(TTyAxisSide) to High(TTyAxisSide) do
+    inset[side] := 0;
+  { Several axes may share a side (a secondary y axis on the left). Each takes
+    the space it needs, so the side's inset is the SUM, not the max. }
+  for i := 0 to High(AAxes) do
+  begin
+    t := TyAxisThickness(AAxes[i], AMeasurer, APPI, AContain);
+    inset[AAxes[i].Side] := inset[AAxes[i].Side] + t;
+  end;
+  Result.Left := AContainer.Left + inset[asLeft];
+  Result.Right := AContainer.Right - inset[asRight];
+  Result.Top := AContainer.Top + inset[asTop];
+  Result.Bottom := AContainer.Bottom - inset[asBottom];
+  { Over-constrained -- more axis furniture than container. Collapse rather than
+    invert: an inverted plot rect survives a later Min/Max swap and reappears as
+    a phantom band, which is far harder to find than an empty chart. }
+  if Result.Right < Result.Left then
+    Result.Right := Result.Left;
+  if Result.Bottom < Result.Top then
+    Result.Bottom := Result.Top;
+end;
+
+{ Does showing every AStep-th label leave every shown pair clear of its
+  neighbour? Positions are fractions of the axis, ALength is the axis in px. }
+function StepFits(const APositions: TTyDoubleArray; const AAlongEach: TTyDoubleArray;
+  ALength, AMinGap: Double; AStep: Integer): Boolean;
+var
+  i, prev: Integer;
+  cPrev, cCur, need: Double;
+begin
+  Result := True;
+  prev := -1;
+  i := 0;
+  while i <= High(APositions) do
+  begin
+    if prev >= 0 then
+    begin
+      cPrev := APositions[prev] * ALength;
+      cCur := APositions[i] * ALength;
+      need := (AAlongEach[prev] + AAlongEach[i]) / 2 + AMinGap;
+      if Abs(cCur - cPrev) < need then
+        Exit(False);
+    end;
+    prev := i;
+    Inc(i, AStep);
+  end;
+end;
+
+function TyAxisLabelStep(const ASpec: TTyAxisLayoutSpec; const APlot: TTyRectF;
+  const AMeasurer: ITyTextMeasurer; APPI: Integer): Integer;
+var
+  across, along, len, minGap: Double;
+  each: TTyDoubleArray;
+  n, step: Integer;
+begin
+  Result := 1;
+  MeasureLabels(ASpec, AMeasurer, across, along, each);
+  n := Length(each);
+  if n < 2 then Exit;
+  if AxisIsHorizontal(ASpec.Side) then
+    len := TyRectFWidth(APlot)
+  else
+    len := TyRectFHeight(APlot);
+  if len <= 0 then Exit;
+  minGap := AxisScaleF(4, APPI);
+  { A UNIFORM step, not a greedy keep-if-it-fits. Greedy leaves the kept labels
+    unevenly spaced, which on a category axis reads as missing data rather than
+    as thinning. This is also what axisLabel.interval:'auto' means in ECharts. }
+  for step := 1 to n do
+    if StepFits(ASpec.Positions, each, len, minGap, step) then
+      Exit(step);
+  { Nothing fits even at one label per screenful. Show the first and no more,
+    rather than showing none: an axis with no labels at all looks broken, and a
+    single one still tells the reader what the axis is counting in. }
+  Result := n;
+end;
+
+function TyLayoutAxisLabels(const ASpec: TTyAxisLayoutSpec; const APlot: TTyRectF;
+  const AMeasurer: ITyTextMeasurer; APPI: Integer): TTyAxisLabelPlacementArray;
+var
+  i, step: Integer;
+  gap, len, base: Double;
+begin
+  Result := nil;
+  SetLength(Result, Length(ASpec.Labels));
+  if Length(ASpec.Labels) = 0 then Exit;
+  step := TyAxisLabelStep(ASpec, APlot, AMeasurer, APPI);
+  gap := AxisScaleF(ASpec.TickLengthLogical, APPI)
+       + AxisScaleF(ASpec.LabelMarginLogical, APPI);
+  if AxisIsHorizontal(ASpec.Side) then
+    len := TyRectFWidth(APlot)
+  else
+    len := TyRectFHeight(APlot);
+  for i := 0 to High(ASpec.Labels) do
+  begin
+    Result[i].Index := i;
+    Result[i].Text := ASpec.Labels[i];
+    Result[i].Shown := ASpec.ShowLabels and (i mod step = 0);
+    case ASpec.Side of
+      asBottom:
+        begin
+          Result[i].X := APlot.Left + ASpec.Positions[i] * len;
+          Result[i].Y := APlot.Bottom + gap;
+          Result[i].AnchorH := tahCentre;
+          Result[i].AnchorV := tavTop;
+        end;
+      asTop:
+        begin
+          Result[i].X := APlot.Left + ASpec.Positions[i] * len;
+          Result[i].Y := APlot.Top - gap;
+          Result[i].AnchorH := tahCentre;
+          Result[i].AnchorV := tavBottom;
+        end;
+      asLeft:
+        begin
+          { A vertical axis' fractions run from its START, which is the BOTTOM --
+            the same direction the coordinate system's y axis runs, so a label's
+            fraction and its datum's fraction are the same number. }
+          base := APlot.Bottom - ASpec.Positions[i] * len;
+          Result[i].X := APlot.Left - gap;
+          Result[i].Y := base;
+          Result[i].AnchorH := tahRight;
+          Result[i].AnchorV := tavMiddle;
+        end;
+      asRight:
+        begin
+          base := APlot.Bottom - ASpec.Positions[i] * len;
+          Result[i].X := APlot.Right + gap;
+          Result[i].Y := base;
+          Result[i].AnchorH := tahLeft;
+          Result[i].AnchorV := tavMiddle;
+        end;
+    end;
+  end;
 end;
 
 end.

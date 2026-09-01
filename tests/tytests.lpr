@@ -148,6 +148,8 @@ uses
   test.advchart.types, test.advchart.scale, test.advchart.scale.break,
   test.advchart.coord, test.advchart.layout,
   test.painter.vector,
+  test.advchart.axis,
+  test.advchart.measure,
   test.transitions,
   test.htmllabel,
   test.shape,
