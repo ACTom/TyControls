@@ -114,6 +114,52 @@ begin
     + 'run python scripts/gen-lucide.py', TyLucideGeneratorDigest, UpperCase(SHA1Print(d)));
 end;
 
+{ Blank out { }, (* *) and // comments, keeping the text's length and line
+  structure so anything reported about it still lines up. Deliberately simple:
+  it does not know about strings, so a unit name inside a string literal would
+  still match -- which is the safe direction to be wrong in for a guard. }
+function StripPascalComments(const ASrc: string): string;
+var
+  i, n: Integer;
+begin
+  Result := ASrc;
+  n := Length(Result);
+  i := 1;
+  while i <= n do
+  begin
+    if (Result[i] = '{') then
+    begin
+      while (i <= n) and (Result[i] <> '}') do
+      begin
+        if Result[i] > ' ' then Result[i] := ' ';
+        Inc(i);
+      end;
+      if i <= n then Result[i] := ' ';
+      Inc(i);
+    end
+    else if (i < n) and (Result[i] = '(') and (Result[i + 1] = '*') then
+    begin
+      while (i < n) and not ((Result[i] = '*') and (Result[i + 1] = ')')) do
+      begin
+        if Result[i] > ' ' then Result[i] := ' ';
+        Inc(i);
+      end;
+      if i < n then begin Result[i] := ' '; Result[i + 1] := ' '; end;
+      Inc(i, 2);
+    end
+    else if (i < n) and (Result[i] = '/') and (Result[i + 1] = '/') then
+    begin
+      while (i <= n) and not (Result[i] in [#10, #13]) do
+      begin
+        Result[i] := ' ';
+        Inc(i);
+      end;
+    end
+    else
+      Inc(i);
+  end;
+end;
+
 procedure TLucideTest.NoCoreUnitReferencesTheBundledFont;
 var
   files: TStringList;
@@ -130,7 +176,13 @@ begin
       fn := ExtractFileName(files[i]);
       if SameText(fn, 'tyControls.Icons.Lucide.pas') then Continue;   { itself }
       src.LoadFromFile(files[i]);
-      if Pos('tyControls.Icons.Lucide', src.Text) > 0 then
+      { COMMENT-BLIND. A dependency can only come from a uses clause; naming the
+        unit in a comment creates none, and a plain substring scan cannot tell
+        the two apart. That false positive is not hypothetical -- it fired the
+        first time another unit's header explained this very digest pattern by
+        name. Stripping comments first makes the guard more precise, not weaker:
+        a real `uses` still matches. }
+      if Pos('tyControls.Icons.Lucide', StripPascalComments(src.Text)) > 0 then
         bad := bad + LineEnding + '  ' + fn;
     end;
     { A single `uses` from anywhere in the core drags 833KB of font into EVERY application,
