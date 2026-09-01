@@ -474,3 +474,54 @@ ECharts 的 `normalMerge` / `replaceMerge` / `replaceAll` 带 id 匹配和刻意
 
 第 5 项生成目录（M）→ 第 6 项校验编辑器（L）→ 第 7 项具名句柄注册表（S）
 → 第 20 项 v6.1 语义写进契约（S）。
+
+---
+
+## 14. Tier 0 第 5 项落地：生成的 option 目录（2026-09-02）
+
+`tools/advchart/` 两段流水线 + `AdvChart.Catalog`（生成）+ `AdvChart.Complete`（手写）。
+
+**为什么两段**：输入是仓外 278MB 的 echarts-doc 构建产物，重新生成还要联网 + npm。
+而全新 checkout 必须仍能重建单元并**证明它同步**，所以钉住的输入必须是仓库里真有的东西。
+`extract-catalog.js`（29MB 中英 schema → `catalog.json` 0.55MB，**入库**，只在对标版本移动时跑）
++ `gen-catalog.js`（`catalog.json` → Pascal，任何机器可重现）。
+
+**57785 次节点出现折叠成 2455 条记录（23.5×）**——schema 把 itemStyle/label/textStyle 在每个父节点下
+物理复制一遍，平铺成每条路径一行会是几十 MB 字面量，编不动。
+
+### 修掉而不是继承 spike 的两个 bug
+
+1. spike 按**下标**配对中英的 `anyOf` 变体，而 `graphic.elements` 的变体顺序在两个文件里不同，
+   于是两个子树被配上了错的语言。现在按**判别符标签**配对，不匹配就大声失败（今天是 0 个）。
+2. spike 取摘要时没先剥掉版本 div，291 个选项的整条描述变成了 "Since v6.0.0"。
+
+### 生成单元不含描述
+
+仓库里**没有任何单元有非 ASCII 字符串字面量**、没有 codepage 指令、没有 BOM，可译文本走 `.po`。
+摘要留在 `catalog.json` 里、**按同一个节点索引**寻址，设计期编辑器从那儿读。
+schema 里唯一一个非 ASCII 默认值（U+25B6）按 UTF-8 **字节转义**发射，源文件保持纯 ASCII 字节。
+
+### 漂移守卫：三个，而不是 Lucide 的两个
+
+照 `tyControls.Icons.Lucide`（SHA-1 钉输入 + 钉生成器），**不照 `Css.Catalog`**
+（它只检查目录没有凭空发明，所以上游**新增**的东西照样全绿）。
+
+但变异测试发现 **Lucide 那一对本身有洞**：改**结构**会被抓（DAG 重展开 + 自洽性检查），
+改**一个数据值**不会——两个摘要常量就住在被改的那个文件里。
+所以加了第三个：数据段放在一个标记行之下，单独摘要。
+（Lucide 的注释声称能抓手改；就这一点而言不准确。）
+
+### 顺带修的两个既有问题
+
+- **`NoCoreUnitReferencesTheBundledFont` 误报**：它对整个文件做子串扫描，我在**注释**里提到
+  `tyControls.Icons.Lucide` 就触发了。注释不可能造成依赖。改成扫描前先抹掉注释——更精确而非更弱，
+  并用变异验证真的 `uses` 仍被抓住。
+- **那条一直没定位的偶发失败查明了**：`TestCtrlXGestureCutsAndReadOnlyDegradesToCopy`。
+  Windows 上写剪贴板要打开它，别的进程短暂持有就会失败，而 LCL 的 `TClipboard` 吞掉这个失败，
+  于是哨兵没写进去、断言拿旧值去比。四处哨兵写入改走带检查的 setter。
+
+21 个新测试，全量 **6562**。
+
+### 阶段 2 余下
+
+第 6 项校验编辑器（L）→ 第 7 项具名句柄注册表（S）→ 第 20 项 v6.1 语义（S）。
