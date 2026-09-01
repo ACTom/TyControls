@@ -2,12 +2,13 @@ unit test.advchart.catalog;
 {$mode objfpc}{$H+}
 { The generated ECharts option catalog, and the lookup/validation over it.
 
-  The most important test here is the DRIFT guard. The repo's other generated
-  units are guarded two ways: the CSS catalog's test only checks that the
-  catalog invents nothing (so anything ADDED upstream stays green -- explicitly
-  not the model to copy), while tyControls.Icons.Lucide carries SHA-1 digests of
-  both its input and its generator, which catches an upstream change nobody
-  re-emitted AND a hand-edit of the generated file. This follows Lucide. }
+  The most important tests here are the DRIFT guards, and there are three.
+  tyControls.Icons.Lucide is the model -- SHA-1 over the input and over the
+  generator -- and the Css.Catalog guard is explicitly not, because it only
+  checks that the catalog invents nothing, so anything ADDED upstream stays
+  green. But mutation showed the Lucide pair has a hole of its own: neither
+  digest can see a value edited inside the generated file, since both constants
+  live in that same file. Hence the third, over the data section. }
 interface
 uses Classes, SysUtils, sha1, fpcunit, testregistry,
      tyControls.AdvChart.Catalog, tyControls.AdvChart.Complete,
@@ -21,6 +22,7 @@ type
     { ---- drift ---- }
     procedure TestCatalogMatchesItsCommittedInput;
     procedure TestCatalogMatchesTheGeneratorThatProducedIt;
+    procedure TestTheEmittedDataWasNotHandEdited;
     procedure TestTheDagExpandsToTheRecordedOccurrenceCount;
     procedure TestCountsAreSelfConsistent;
     { ---- the vocabulary is really there ---- }
@@ -96,6 +98,35 @@ begin
   AssertEquals('tyControls.AdvChart.Catalog.pas was produced by a different '
              + 'gen-catalog.js -- re-run: node tools/advchart/gen-catalog.js',
                TyOptGeneratorDigest, UpperCase(SHA1Print(SHA1String(src))));
+end;
+
+procedure TAdvChartCatalogTest.TestTheEmittedDataWasNotHandEdited;
+const
+  Mark = '{ ==== DATA ==== everything below this line is covered by TyOptDataDigest. }';
+var
+  f, src, data: string;
+  at: Integer;
+begin
+  { The two digests above pin the INPUT and the TRANSFORMATION -- but NEITHER can
+    see someone editing a value in the generated file, because both constants
+    live in that same file and an edited datum leaves them alone. Mutation
+    proved it: changing one DefaultStr index left every test green, including
+    both digest tests. (The Lucide unit this pattern comes from claims to catch
+    hand-edits; on that specific point it does not.)
+
+    So the data sits below a marker and is digested separately. Editing a value
+    changes the section's hash but not the constant; matching them again means
+    recomputing a SHA-1 by hand, which is forgery rather than an accident. }
+  f := RepoRoot + 'source' + PathDelim + 'tyControls.AdvChart.Catalog.pas';
+  AssertTrue('the generated unit exists: ' + f, FileExists(f));
+  src := ReadLF(f);
+  src := StringReplace(src, #13#10, #10, [rfReplaceAll]);
+  at := Pos(Mark, src);
+  AssertTrue('the data marker is present', at > 0);
+  data := Copy(src, at + Length(Mark), MaxInt);
+  AssertEquals('the data section of tyControls.AdvChart.Catalog.pas has been '
+             + 'edited by hand -- re-run: node tools/advchart/gen-catalog.js',
+               TyOptDataDigest, UpperCase(SHA1Print(SHA1String(data))));
 end;
 
 procedure TAdvChartCatalogTest.TestTheDagExpandsToTheRecordedOccurrenceCount;

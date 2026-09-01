@@ -59,7 +59,15 @@ const
   { SHA-1 over tools/advchart/gen-catalog.js with CRLF normalised to LF, so a
     checkout with a different core.autocrlf does not turn the guard red for
     no reason. }
-  TyOptGeneratorDigest = 'D83C5090E39A14D9620F96FB35E7C5208562FA37';
+  TyOptGeneratorDigest = 'A3E5754E9D5B1D68C109FF32845C165D1C6BA9B1';
+  { SHA-1 over everything below the DATA marker further down.
+    The two digests above pin the INPUT and the TRANSFORMATION, which is what
+    tyControls.Icons.Lucide does -- but neither can see a hand-edit of the
+    emitted data, because both constants live in this same file and an edited
+    value leaves them untouched. Measured by mutation: changing one DefaultStr
+    index left every test green. This third digest closes that, and it is why
+    the data sits below a marker instead of interleaved with the header. }
+  TyOptDataDigest = '9489867E0DC2EC066671161E5A87259D9EFC0E76';
   TyOptRoot = 2454;
   TyOptNodeCount = 2455;
   TyOptEdgeCount = 10077;
@@ -68,6 +76,10 @@ const
     drift test re-derives to prove the DAG still expands to the same tree. }
   TyOptOccurrences = 57785;
 
+
+{ ==== DATA ==== everything below this line is covered by TyOptDataDigest. }
+
+const
   TyOptStr: array[0..1230] of string = (
     '',
     'string',

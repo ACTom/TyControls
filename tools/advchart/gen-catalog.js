@@ -182,6 +182,14 @@ L.push('  { SHA-1 over tools/advchart/gen-catalog.js with CRLF normalised to LF,
 L.push('    checkout with a different core.autocrlf does not turn the guard red for');
 L.push('    no reason. }');
 L.push('  TyOptGeneratorDigest = ' + q(selfDigest) + ';');
+L.push('  { SHA-1 over everything below the DATA marker further down.');
+L.push('    The two digests above pin the INPUT and the TRANSFORMATION, which is what');
+L.push('    tyControls.Icons.Lucide does -- but neither can see a hand-edit of the');
+L.push('    emitted data, because both constants live in this same file and an edited');
+L.push('    value leaves them untouched. Measured by mutation: changing one DefaultStr');
+L.push('    index left every test green. This third digest closes that, and it is why');
+L.push('    the data sits below a marker instead of interleaved with the header. }');
+L.push('  TyOptDataDigest = ' + q('@@DATA_DIGEST@@') + ';');
 L.push('  TyOptRoot = ' + cat.root + ';');
 L.push('  TyOptNodeCount = ' + rows.length + ';');
 L.push('  TyOptEdgeCount = ' + edgeRows.length + ';');
@@ -190,6 +198,10 @@ L.push('  { Occurrences in the source schema, before deduplication -- the number
 L.push('    drift test re-derives to prove the DAG still expands to the same tree. }');
 L.push('  TyOptOccurrences = ' + cat.occurrences + ';');
 L.push('');
+L.push('');
+L.push('{ ==== DATA ==== everything below this line is covered by TyOptDataDigest. }');
+L.push('');
+L.push('const');
 L.push('  TyOptStr: array[0..' + (poolArr.length - 1) + '] of string = (');
 for (let i = 0; i < poolArr.length; i++)
   L.push('    ' + q(poolArr[i]) + (i < poolArr.length - 1 ? ',' : ''));
@@ -215,7 +227,15 @@ L.push('implementation');
 L.push('');
 L.push('end.');
 
-fs.writeFileSync(outFile, L.join('\n') + '\n');
+let text = L.join(String.fromCharCode(10)) + String.fromCharCode(10);
+const MARK = '{ ==== DATA ==== everything below this line is covered by TyOptDataDigest. }';
+const at = text.indexOf(MARK);
+if (at < 0) { console.error('data marker missing'); process.exit(3); }
+const dataDigest = crypto.createHash('sha1')
+  .update(text.slice(at + MARK.length), 'utf8').digest('hex').toUpperCase();
+text = text.replace('@@DATA_DIGEST@@', dataDigest);
+fs.writeFileSync(outFile, text);
+console.log('data digest     ', dataDigest);
 console.log('nodes ', rows.length, ' edges ', edgeRows.length, ' pool ', poolArr.length);
 console.log('non-ASCII escaped:', nonAscii.length,
             nonAscii.length ? '-> ' + nonAscii.slice(0, 3).join(' | ') : '');
