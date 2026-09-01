@@ -517,12 +517,16 @@ begin
   { A UNIFORM step, not a greedy keep-if-it-fits. Greedy leaves the kept labels
     unevenly spaced, which on a category axis reads as missing data rather than
     as thinning. This is also what axisLabel.interval:'auto' means in ECharts. }
-  for step := 1 to n do
+  for step := 1 to n - 1 do
     if StepFits(ASpec.Positions, each, len, minGap, step) then
       Exit(step);
-  { Nothing fits even at one label per screenful. Show the first and no more,
-    rather than showing none: an axis with no labels at all looks broken, and a
-    single one still tells the reader what the axis is counting in. }
+  { Stop ONE SHORT of n and state the terminal case outright. At step = n the
+    shown indices are 0, n, 2n... and the last label is n-1, so only the first
+    is ever shown and StepFits can never fail -- which would make this line
+    unreachable if the loop ran to n, and unreachable code that looks like a
+    safety net is worse than none. Written this way it is the answer, not a
+    fallback: an axis with no labels at all looks broken, and one still tells
+    the reader what the axis counts in. }
   Result := n;
 end;
 
