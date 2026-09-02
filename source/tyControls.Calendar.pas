@@ -1050,14 +1050,23 @@ begin
 end;
 
 function TyCalendarSizeFor(AController: TTyStyleController): TSize;
+var rowH: Integer;
 begin
-  Result.cx := TyCalendarClassicW;
-  if (AController <> nil) and (AController.Density = tdModern) then
-    Result.cy := TyDensityMetric(AController, 28, '--control-height')
-               + TyDensityMetric(AController, 20, '--item-height')
-               + 6 * TyDensityMetric(AController, 29, '--row-height')
-  else
+  if (AController = nil) or (AController.Density <> tdModern) then
+  begin
+    Result.cx := TyCalendarClassicW;
     Result.cy := TyCalendarClassicH;
+    Exit;
+  end;
+  rowH := TyDensityMetric(AController, 29, '--row-height');
+  { WIDTH follows the row, not the classic 240: the layout divides the width into seven day
+    columns, and at the classic width they come out 34px -- narrower than the row is tall and
+    too tight for a weekday name at the modern font. Squaring the cell on --row-height is the
+    one rule that keeps the grid legible whatever the density pack does to the row. }
+  Result.cx := 7 * rowH;
+  Result.cy := TyDensityMetric(AController, 28, '--control-height')
+             + TyDensityMetric(AController, 20, '--item-height')
+             + 6 * rowH;
 end;
 
 function TTyCalendar.PreferredSize(APPI: Integer): TSize;

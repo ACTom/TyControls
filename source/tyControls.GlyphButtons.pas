@@ -912,7 +912,11 @@ begin
   // with a caption below (auto-fit would otherwise shrink to leave caption room).
   FGlyphSize := 24;
   Width := 72;
-  Height := TyDensityHeight(ActiveController, 64);
+  { NOT TyDensityHeight: that reads --control-height, which is the single-line FIELD height
+    (38 under modern) and would make a modern tile SHORTER than its classic 64 -- the caller's
+    64 is discarded, not scaled. A tile is a glyph stacked over a caption, so it gets its own
+    token, the way TTySegmented does. Classic still returns 64 verbatim. }
+  Height := TyDensityMetric(ActiveController, 64, '--ribbon-tile-height');
 end;
 
 { TTySpeedButton }

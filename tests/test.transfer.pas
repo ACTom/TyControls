@@ -1518,9 +1518,17 @@ begin
     // two stubs spanned ~8px, NARROWER than the single arrow — the exact inversion this catches.
     AssertTrue(Format('the >> button''s two arrows span wider than a single > (all=%d, one=%d)',
       [wAll, wOne]), wAll > wOne);
-    // ...and cover most of the 32px button, not a couple of collapsed stubs.
-    AssertTrue(Format('the >> arrows are readable, not collapsed stubs (ink width %d of 32)', [wAll]),
-      wAll >= 14);   // fix ~17, the old collapsed stubs were ~8
+    // ...and be about TWO marks wide, not a couple of collapsed stubs.
+    // Stated as a RATIO against the single mark rather than as an absolute pixel count. The
+    // old absolute (>= 14, "fix ~17") was calibrated to the ARROW, whose shaft runs the full
+    // width of its slot; a chevron is the same mark without the shaft, so it carries about
+    // half the ink and a doubled chevron lands near 13 -- perfectly readable, and the old
+    // number would have failed it for being the wrong SHAPE rather than for being broken.
+    // The ratio says what was actually meant and survives the next glyph change: two marks,
+    // deliberately overlapped (TyTransferArrowGap), still span nearly twice a single one,
+    // while the collapsed stubs this guards against spanned LESS than one.
+    AssertTrue(Format('the >> mark spans about two marks, not collapsed stubs (all=%d, one=%d)',
+      [wAll, wOne]), wAll * 10 >= wOne * 18);
   finally Bmp.Free; T.Free; end;
 end;
 

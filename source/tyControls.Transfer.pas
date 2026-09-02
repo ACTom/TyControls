@@ -75,7 +75,13 @@ const
   TyTransferButtonGap    = 6;    // vertical gap between two move buttons
   TyTransferTitleHeight  = 26;   // the title band above each pane
   TyTransferArrowSize    = 12;   // one arrow glyph's square slot
-  TyTransferArrowGap     = 1;    // gap between the two arrows of a "move all" button
+  { The STEP between the two marks of a "move all" button, measured slot-to-slot -- and it is
+    NEGATIVE on purpose. Each mark is drawn inside a SQUARE slot, but a chevron's ink only
+    spans the middle ~50% of that slot (tgChevronRight runs from 0.3w to 0.8w), so two slots
+    laid edge to edge leave a hole wider than the marks themselves. Overlapping the slots by
+    about a third closes the side bearings and makes '>>' read as one doubled mark instead of
+    two marks with a gap. A theme that swaps in a full-bleed glyph would set this back to 0. }
+  TyTransferArrowGap     = -4;
   TyTransferArrowMargin  = 3;    // icon inset from the button's OWN edges (NOT the text padding)
 
   { The metric token each constant backs. Named constants rather than inline literals because
@@ -444,7 +450,9 @@ begin
   contentH := AContent.Bottom - AContent.Top;
   if (contentW <= 0) or (contentH <= 0) then Exit;
   if ASize <= 0 then Exit;
-  if AGap < 0 then AGap := 0;
+  { AGap may be NEGATIVE -- the slots of a doubled mark overlap on purpose (see
+    TyTransferArrowGap). Only the total is floored, below, so an absurd overlap cannot
+    invert the row. }
 
   // Shrink to fit rather than vanish: the arrow IS the button's content, and the content rect
   // is whatever the theme's TyButton padding left of a rail-width-wide button. The gaps are
@@ -457,6 +465,7 @@ begin
   if size_ < 1 then Exit;
 
   rowW := ACount * size_ + (ACount - 1) * AGap;
+  if rowW < size_ then rowW := size_;   { a negative gap can never collapse the row below one mark }
   left_ := AContent.Left + (contentW - rowW) div 2 + AIndex * (size_ + AGap);
   top_ := AContent.Top + (contentH - size_) div 2;
   Result := Rect(left_, top_, left_ + size_, top_ + size_);
