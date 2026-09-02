@@ -140,7 +140,16 @@ end;
 procedure TAdvChartHandlersTest.TestIndexPastTheEndExpandsToNothing;
 begin
   { An axis tooltip whose series list is shorter than the author expected. The
-    rest of the line has to stay readable. }
+    rest of the line has to stay readable, so the placeholder expands to
+    nothing rather than leaking '{a5}' into the tooltip -- which would happen
+    legitimately whenever the series count varies at run time.
+
+    HONEST LIMIT: this test pins the BEHAVIOUR but cannot prove the guard is
+    what produces it. Removing the bounds check does not give a different
+    answer, it reads past the end of a dynamic array -- undefined behaviour that
+    happened to look the same here. Mutation confirmed it survives. Making it
+    observable would need range checking, which no unit in this repo turns on,
+    or trading the right behaviour for a testable one. }
   AssertEquals('Sales: 120 / : ',
                TyChartFormatTemplate('{a0}: {c0} / {a5}: {c5}', Two));
 end;
@@ -186,12 +195,28 @@ begin
 end;
 
 procedure TAdvChartHandlersTest.TestNumbersAreLocaleIndependent;
+var
+  saved: TFormatSettings;
 begin
   { ECharts always writes '.', and so must this: the same option text has to
-    produce the same chart whatever the machine's regional settings say. }
-  AssertEquals('1234.5', TyChartNumToStr(1234.5));
+    produce the same chart whatever the machine's regional settings say.
+
+    The locale is actually CHANGED for the duration, because asserting '1234.5'
+    on a machine that already uses '.' proves nothing -- it passes whether or
+    not the code pins the separator. Mutation caught exactly that: removing the
+    pin left this test green. }
   AssertEquals('no trailing zeros', '7', TyChartNumToStr(7.0));
   AssertEquals('NaN is nothing, not the word', '', TyChartNumToStr(NaN));
+  saved := DefaultFormatSettings;
+  try
+    DefaultFormatSettings.DecimalSeparator := ',';
+    DefaultFormatSettings.ThousandSeparator := '.';
+    AssertEquals('a comma-decimal locale must not reach the output',
+                 '1234.5', TyChartNumToStr(1234.5));
+  finally
+    DefaultFormatSettings := saved;
+  end;
+  AssertEquals('and the locale was put back', '1234.5', TyChartNumToStr(1234.5));
 end;
 
 { ============================ the registry ============================ }
