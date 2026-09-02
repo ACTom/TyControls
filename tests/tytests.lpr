@@ -155,6 +155,7 @@ uses
   test.advchart.option,
   test.advchart.catalog,
   test.advchart.complete,
+  test.advchart.handlers,
   test.transitions,
   test.htmllabel,
   test.shape,
