@@ -27,7 +27,7 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Dialogs, Forms, Graphics,
   LazFileUtils,
-  tyControls.Dialogs, tyControls.ShellTreeView, tyControls.ShellListView,
+  tyControls.Dialogs, tyControls.Controller, tyControls.ShellTreeView, tyControls.ShellListView,
   tyControls.ShellComboBox, tyControls.FilterComboBox,
   tyControls.Edit, tyControls.Button, tyControls.GlyphButtons, tyControls.Painter,
   tyControls.TyLabel, tyControls.PreviewBox, tyControls.ComboBox,
@@ -791,7 +791,7 @@ end;
 
 procedure TTyFileDialogForm.LayoutContent;
 const
-  RowH    = 30;    { = TyDlgEditH }
+  RowH    = 30;    { floor only -- fieldH below raises it for density and for the theme }
   LblH    = 20;
   LblW    = 64;
   NavGap  = 3;     { gap between the three square nav icon buttons }
@@ -801,6 +801,7 @@ var
   cr: TRect;
   pad, x0, w, y, lookInX: Integer;
   yRow, nameX, filterX, filterLblX, nameW, midTop, midH: Integer;
+  fieldH, navX: Integer;
 begin
   if (FList = nil) or (FMidPanel = nil) then Exit;   { called during construction, before children exist }
   cr := ContentRect;
@@ -811,27 +812,32 @@ begin
   { Row 1: [back][fwd][up] square icon buttons on the left, then the address combo filling the
     rest. No "Look in:" label -- the arrows + combo read as a nav/address bar (Vista+/macOS). }
   y := cr.Top + pad;
-  FBtnBack.SetBounds(x0, y, RowH, RowH);
-  FBtnFwd.SetBounds(x0 + RowH + NavGap, y, RowH, RowH);
-  FBtnUp.SetBounds(x0 + 2 * (RowH + NavGap), y, RowH, RowH);
-  FViewCombo.SetBounds((cr.Right - pad) - ViewW, y, ViewW, RowH);   { view switch on the right }
-  lookInX := x0 + 3 * RowH + 2 * NavGap + Gap;
-  FLookIn.SetBounds(lookInX, y, ((cr.Right - pad) - ViewW - Gap) - lookInX, RowH);
+  { fieldH tracks density (every other field in the app is --control-height tall under modern),
+    and the three nav buttons then step by what they ACTUALLY became: a TTySpeedButton floors
+    its own width on the theme, LCL enforces that inside SetBounds, and a literal
+    RowH + NavGap stride left the squares overlapping by the difference. }
+  fieldH := TyDensityHeight(Controller, RowH);
+  navX := TyRunItem(FBtnBack, x0, y, fieldH, fieldH, NavGap);
+  navX := TyRunItem(FBtnFwd, navX, y, fieldH, fieldH, NavGap);
+  navX := TyRunItem(FBtnUp, navX, y, fieldH, fieldH, Gap);
+  FViewCombo.SetBounds((cr.Right - pad) - ViewW, y, ViewW, fieldH);   { view switch on the right }
+  lookInX := navX;
+  FLookIn.SetBounds(lookInX, y, ((cr.Right - pad) - ViewW - Gap) - lookInX, fieldH);
 
   { Bottom row -- ONE row now (Windows Open/Save idiom): the file-name edit fills the left,
     the file-type combo is a fixed-width field to its RIGHT. Collapsing what used to be two
     stacked rows hands the freed vertical space to the list. The right cluster
     ([File type:][combo]) is anchored to the right edge; the name edit stretches to meet it. }
-  yRow := cr.Bottom - pad - RowH;
+  yRow := cr.Bottom - pad - fieldH;
   filterX := (cr.Right - pad) - FilterW;
-  FFilter.SetBounds(filterX, yRow, FilterW, RowH);
+  FFilter.SetBounds(filterX, yRow, FilterW, fieldH);
   filterLblX := filterX - Gap - LblW;
-  FLblFilter.SetBounds(filterLblX, yRow + (RowH - LblH) div 2, LblW, LblH);
-  FLblName.SetBounds(x0, yRow + (RowH - LblH) div 2, LblW, LblH);
+  FLblFilter.SetBounds(filterLblX, yRow + (fieldH - LblH) div 2, LblW, LblH);
+  FLblName.SetBounds(x0, yRow + (fieldH - LblH) div 2, LblW, LblH);
   nameX := x0 + LblW + Gap;
   nameW := (filterLblX - Gap) - nameX;
   if nameW < 80 then nameW := 80;   { never collapse the name edit even on a very narrow dialog }
-  FNameEdit.SetBounds(nameX, yRow, nameW, RowH);
+  FNameEdit.SetBounds(nameX, yRow, nameW, fieldH);
 
   { Middle band: the host panel fills between the look-in row and the single name/type row;
     LCL alignment + the two splitters lay out tree | list | preview inside it. }

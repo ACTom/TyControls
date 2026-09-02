@@ -214,6 +214,20 @@ const
   TyDlgEditW = 320;  // default single-line input width
   TyDlgEditH = 30;
 
+{ Place one row of a hand-laid-out dialog and answer where the NEXT row starts.
+
+  The stride is read back off the control AFTER placing it, never taken from the literal the
+  caller asked for. LCL enforces Constraints.MinHeight inside SetBounds, so a literal height is
+  only a REQUEST while a literal stride is an absolute: let the theme grow the control -- a
+  bigger font, roomier padding, modern density -- and the row outgrows a stride that did not
+  move, so the next row lands on top of it. Reading the control back is the only stride that
+  cannot drift from what actually gets painted.
+
+  AH is a floor, not the answer; pass 0 to take whatever the control wants. TyRunItem is the
+  same contract along x, for a horizontal run such as a nav-button cluster. }
+function TyStackRow(AControl: TControl; AX, AY, AW, AH, AGap: Integer): Integer;
+function TyRunItem(AControl: TControl; AX, AY, AW, AH, AGap: Integer): Integer;
+
 { Select-value dialog — single-select listbox; double-click a row confirms. }
 function TyBuildSelectValueDialog(const ACaption, APrompt: string; AItems: TStrings;
   AInitialIndex: Integer; out AList: TTyListBox): TTyDialog;
@@ -267,6 +281,18 @@ const
   cDlgBarPadV    = 7;    // (44 - 30) / 2 -- the strip's breathing room above and below
   cDlgBarMargin  = 12;   // strip edge -> outermost button
   cDlgBarSpacing = 8;    // between buttons
+
+function TyStackRow(AControl: TControl; AX, AY, AW, AH, AGap: Integer): Integer;
+begin
+  AControl.SetBounds(AX, AY, AW, AH);
+  Result := AControl.Top + AControl.Height + AGap;   { the control's REAL height, not AH }
+end;
+
+function TyRunItem(AControl: TControl; AX, AY, AW, AH, AGap: Integer): Integer;
+begin
+  AControl.SetBounds(AX, AY, AW, AH);
+  Result := AControl.Left + AControl.Width + AGap;   { the control's REAL width, not AW }
+end;
 
 function TyDialogButtonBar(const ASizes: array of TSize; ABarWidth, AMargin, ASpacing: Integer): TTyRectArray;
 var
@@ -810,8 +836,10 @@ begin
   lbl.Parent := ADlg;
   lbl.WordWrap := True;
   lbl.Caption := APrompt;
-  lbl.SetBounds(r.Left + TyDlgPad, r.Top + TyDlgPad, AWidth, 20);
-  Result := r.Top + TyDlgPad + 26;
+  { 20 is a floor, 6 the gap -- the row the NEXT control starts on is read back off the label,
+    because a theme that gives TyLabel padding (or simply a bigger font) makes it taller than
+    the 20 asked for while a literal 26 stride would not move, putting the input on top of it. }
+  Result := TyStackRow(lbl, r.Left + TyDlgPad, r.Top + TyDlgPad, AWidth, 20, 6);
 end;
 
 function TyBuildInputDialog(const ACaption, APrompt, ADefault: string; out AEdit: TTyEdit): TTyDialog;
