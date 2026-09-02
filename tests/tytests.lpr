@@ -154,6 +154,7 @@ uses
   test.subpixel,
   test.advchart.option,
   test.advchart.catalog,
+  test.advchart.complete,
   test.transitions,
   test.htmllabel,
   test.shape,

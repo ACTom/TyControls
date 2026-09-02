@@ -84,6 +84,48 @@ function TyOptFind(const APath: string): TTyOptLookup;
   tree, using its own `type` values to choose union variants. }
 function TyOptFindFor(AOption: TTyChartOption; const APath: string): TTyOptLookup;
 
+{ ---- completion ---- }
+type
+  { Where the caret is, and therefore what may be offered. }
+  TTyOptCaretKind = (ockKey, ockValue);
+
+  TTyOptCaretContext = record
+    Kind: TTyOptCaretKind;
+    { The CONTAINER the caret sits inside, as a catalog node. -1 when the text
+      leads somewhere the catalog does not know, which is not an error while
+      someone is still typing. }
+    Node: Integer;
+    { That container's path, variant-qualified, for a status line. }
+    Path: string;
+    { What has been typed at the caret so far, for prefix filtering. }
+    Partial: string;
+    { When Kind is ockValue: the key whose value the caret is on. }
+    ValueOf: string;
+    { True when the caret is inside an array element whose union variant could
+      not be decided because no `type` has been written yet. An editor should
+      say "which series type?" rather than silently offer nothing. }
+    NeedsVariantType: Boolean;
+  end;
+
+{ Where is the caret, structurally?
+
+  Scans the text BEFORE the caret, tolerantly. It must NOT use the JSON reader:
+  while someone is typing the text is almost never parseable -- an unclosed
+  brace is the normal state mid-edit -- and a completion list that only appeared
+  once the document was valid would appear approximately never.
+
+  The scan also remembers the `type` value of each object it enters, so a union
+  variant resolves without a parsed tree: `series[0].itemStyle` means twenty-three
+  different things, and by the time the caret is inside it the `type` has usually
+  been typed a line above. }
+function TyOptContextAt(const ATextBeforeCaret: string): TTyOptCaretContext;
+
+{ The completion list for that position: property names at a key position, the
+  enumerated values at a value position, filtered by what has been typed.
+  False when there is nothing sensible to offer. }
+function TyOptCompletionsAt(const ATextBeforeCaret: string; AList: TStrings): Boolean;
+
+
 { ---- validation ---- }
 { Every option in the tree that the catalog does not recognise, plus every
   enumerated option set to a value outside its list. Order is the tree's own, so
@@ -371,6 +413,266 @@ begin
     Result := OkLookup(cur);
   finally
     segs.Free;
+  end;
+end;
+
+
+{ ---- completion ---- }
+
+type
+  { One open container in the tolerant scan. }
+  TScanFrame = record
+    IsArray: Boolean;
+    { The key that introduced this container; '' for the document root and for
+      an element inside an array. }
+    Name: string;
+    { Object only: True right after an opening brace or a comma, i.e. a key is
+      expected next. (Do not write a brace character in a comment here: FPC
+      nests brace comments, so it would open a second level and swallow the
+      rest of the file.) }
+    ExpectKey: Boolean;
+    { The key most recently completed with ':'. }
+    PendingKey: string;
+    { Object only: the value of a `type` key seen anywhere in this object. This
+      is what lets a union variant resolve without a parsed tree. }
+    TypeVal: string;
+  end;
+
+function IsIdentChar(C: Char): Boolean;
+begin
+  Result := C in ['A'..'Z', 'a'..'z', '0'..'9', '_', '$', '-'];
+end;
+
+{ Walk the frame stack down from the root, resolving each container against the
+  catalog. Returns -1 as soon as a step is unknown -- which is the ordinary case
+  for a misspelling and must not be treated as an error here. }
+function ResolveFrames(const AFrames: array of TScanFrame; ACount: Integer;
+  out APath: string; out ANeedsType: Boolean): Integer;
+var
+  i, cur: Integer;
+begin
+  APath := '';
+  ANeedsType := False;
+  cur := TyOptRoot;
+  for i := 0 to ACount - 1 do
+  begin
+    if AFrames[i].Name <> '' then
+    begin
+      cur := TyOptChild(cur, AFrames[i].Name);
+      if cur < 0 then Exit(-1);
+      if APath = '' then APath := AFrames[i].Name
+      else APath := APath + '.' + AFrames[i].Name;
+    end;
+    if AFrames[i].IsArray then
+      Continue;
+    { An object. If its parent container is a union, this object IS one of the
+      members, and only its own `type` can say which. }
+    if TyOptIsVariantContainer(cur) then
+    begin
+      if AFrames[i].TypeVal = '' then
+      begin
+        ANeedsType := True;
+        Exit(-1);
+      end;
+      cur := TyOptVariant(cur, AFrames[i].TypeVal);
+      if cur < 0 then Exit(-1);
+      APath := APath + '-' + AFrames[i].TypeVal;
+    end
+    else if TyOptArrayItem(cur) >= 0 then
+      cur := TyOptArrayItem(cur);
+  end;
+  Result := cur;
+end;
+
+function TyOptContextAt(const ATextBeforeCaret: string): TTyOptCaretContext;
+var
+  frames: array of TScanFrame;
+  depth, i, n, tokStart: Integer;
+  c, quote: Char;
+  tok: string;
+  inTrailingToken: Boolean;
+
+  procedure Push(AIsArray: Boolean);
+  var nm: string;
+  begin
+    nm := '';
+    if (depth > 0) and (not frames[depth - 1].IsArray) then
+    begin
+      nm := frames[depth - 1].PendingKey;
+      frames[depth - 1].PendingKey := '';
+    end;
+    if depth = Length(frames) then SetLength(frames, 8 + depth * 2);
+    frames[depth].IsArray := AIsArray;
+    frames[depth].Name := nm;
+    frames[depth].ExpectKey := not AIsArray;
+    frames[depth].PendingKey := '';
+    frames[depth].TypeVal := '';
+    Inc(depth);
+  end;
+
+  procedure Pop;
+  begin
+    if depth > 1 then Dec(depth);   { never pop the synthetic root }
+  end;
+
+  { A completed token: either a key, a `type` value worth remembering, or
+    something we do not care about. }
+  procedure TakeToken(const AText: string);
+  begin
+    if depth = 0 then Exit;
+    if frames[depth - 1].IsArray then Exit;
+    if frames[depth - 1].ExpectKey then
+      frames[depth - 1].PendingKey := AText
+    else if frames[depth - 1].PendingKey = 'type' then
+      frames[depth - 1].TypeVal := AText;
+  end;
+
+begin
+  Result.Kind := ockKey;
+  Result.Node := -1;
+  Result.Path := '';
+  Result.Partial := '';
+  Result.ValueOf := '';
+  Result.NeedsVariantType := False;
+
+  SetLength(frames, 16);
+  depth := 0;
+  { A synthetic root object, so text with no outer brace at all still resolves
+    against the option root instead of against nothing. }
+  Push(False);
+
+  n := Length(ATextBeforeCaret);
+  i := 1;
+  inTrailingToken := False;
+  tok := '';
+  while i <= n do
+  begin
+    c := ATextBeforeCaret[i];
+    { comments }
+    if (c = '/') and (i < n) and (ATextBeforeCaret[i + 1] = '/') then
+    begin
+      while (i <= n) and not (ATextBeforeCaret[i] in [#10, #13]) do Inc(i);
+      Continue;
+    end;
+    if (c = '/') and (i < n) and (ATextBeforeCaret[i + 1] = '*') then
+    begin
+      Inc(i, 2);
+      while (i < n) and not ((ATextBeforeCaret[i] = '*') and (ATextBeforeCaret[i + 1] = '/')) do Inc(i);
+      Inc(i, 2);
+      Continue;
+    end;
+    { strings }
+    if (c = '''') or (c = '"') then
+    begin
+      quote := c;
+      tokStart := i + 1;
+      Inc(i);
+      while (i <= n) and (ATextBeforeCaret[i] <> quote) do
+      begin
+        if (ATextBeforeCaret[i] = '\') and (i < n) then Inc(i);
+        Inc(i);
+      end;
+      tok := Copy(ATextBeforeCaret, tokStart, i - tokStart);
+      if i > n then
+      begin
+        { The string is still open at the caret -- this is what is being typed. }
+        Result.Partial := tok;
+        inTrailingToken := True;
+        Break;
+      end;
+      TakeToken(tok);
+      Inc(i);
+      inTrailingToken := False;
+      Continue;
+    end;
+    { bare identifiers and numbers }
+    if IsIdentChar(c) then
+    begin
+      tokStart := i;
+      while (i <= n) and IsIdentChar(ATextBeforeCaret[i]) do Inc(i);
+      tok := Copy(ATextBeforeCaret, tokStart, i - tokStart);
+      if i > n then
+      begin
+        { It runs up to the caret, so it is the partial being typed. Do not
+          take it as a completed key: half a word is not a key yet. }
+        Result.Partial := tok;
+        inTrailingToken := True;
+        Break;
+      end;
+      TakeToken(tok);
+      inTrailingToken := False;
+      Continue;
+    end;
+    case c of
+      '{': Push(False);
+      '[': Push(True);
+      '}', ']': Pop;
+      ':': if not frames[depth - 1].IsArray then frames[depth - 1].ExpectKey := False;
+      ',': if frames[depth - 1].IsArray then
+             { nothing: element index does not affect which options are legal }
+           else
+           begin
+             frames[depth - 1].ExpectKey := True;
+             frames[depth - 1].PendingKey := '';
+           end;
+    end;
+    if not (c in [' ', #9, #10, #13]) then
+      inTrailingToken := False;
+    Inc(i);
+  end;
+
+  if depth > 0 then
+  begin
+    if frames[depth - 1].IsArray then
+      Result.Kind := ockValue
+    else if frames[depth - 1].ExpectKey then
+      Result.Kind := ockKey
+    else
+    begin
+      Result.Kind := ockValue;
+      Result.ValueOf := frames[depth - 1].PendingKey;
+    end;
+  end;
+
+  Result.Node := ResolveFrames(frames, depth, Result.Path, Result.NeedsVariantType);
+end;
+
+function TyOptCompletionsAt(const ATextBeforeCaret: string; AList: TStrings): Boolean;
+var
+  ctx: TTyOptCaretContext;
+  all: TStringList;
+  i, target: Integer;
+  low: string;
+begin
+  Result := False;
+  if AList = nil then Exit;
+  AList.Clear;
+  ctx := TyOptContextAt(ATextBeforeCaret);
+  if ctx.Node < 0 then Exit;
+
+  all := TStringList.Create;
+  try
+    if ctx.Kind = ockKey then
+      TyOptChildNames(ctx.Node, all)
+    else
+    begin
+      { A value position: only an enumerated option has anything to offer. The
+        5,776 string options whose allowed values exist only as prose in the
+        docs cannot be completed, and offering nothing is the honest answer
+        rather than offering something invented. }
+      if ctx.ValueOf = '' then Exit;
+      target := TyOptChild(ctx.Node, ctx.ValueOf);
+      if target < 0 then Exit;
+      if not TyOptEnumOf(target, all) then Exit;
+    end;
+
+    low := LowerCase(ctx.Partial);
+    for i := 0 to all.Count - 1 do
+      if (low = '') or (Pos(low, LowerCase(all[i])) = 1) then
+        AList.Add(all[i]);
+    Result := AList.Count > 0;
+  finally
+    all.Free;
   end;
 end;
 
