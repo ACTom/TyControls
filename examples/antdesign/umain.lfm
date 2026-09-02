@@ -916,22 +916,24 @@ object MainForm: TMainForm
           end
           object CardInline: TTyCard
             Left = 12
-            Height = 348
+            Height = 468
             Top = 294
             Width = 514
             TabOrder = 2
             Title = 'Inline alert bar (TTyAlert)'
             object AlertInfo: TTyAlert
               Left = 12
-              Height = 40
+              Height = 57
               Top = 74
+              AutoSize = True
               Width = 490
               Message = 'The system will undergo routine maintenance tonight from 23:00 to 23:30.'
             end
             object AlertSuccess: TTyAlert
               Left = 12
-              Height = 40
-              Top = 122
+              Height = 57
+              Top = 141
+              AutoSize = True
               Width = 490
               AlertType = atSuccess
               Message = 'Work order TY-2041 published.'
@@ -940,8 +942,9 @@ object MainForm: TMainForm
             end
             object AlertWarning: TTyAlert
               Left = 12
-              Height = 56
-              Top = 170
+              Height = 93
+              Top = 208
+              AutoSize = True
               Width = 490
               AlertType = atWarning
               Message = 'Archive disk usage has reached 86%'
@@ -949,8 +952,9 @@ object MainForm: TMainForm
             end
             object AlertError: TTyAlert
               Left = 12
-              Height = 40
-              Top = 234
+              Height = 57
+              Top = 311
+              AutoSize = True
               Width = 490
               AlertType = atError
               Message = 'The connection to the settlement service has been lost.'
@@ -960,7 +964,7 @@ object MainForm: TMainForm
             object LblAlertNote: TTyLabel
               Left = 12
               Height = 66
-              Top = 282
+              Top = 378
               Width = 490
               Caption = 'The alert bar stays on the page without interrupting; each of the four meanings picks its own icon + theme variant. Clicking × fires OnClose first, and it only hides if not vetoed.'
               Layout = tlTop

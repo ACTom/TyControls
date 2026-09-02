@@ -426,7 +426,7 @@ end;
 function TyStepsItemLayout(const ACell: TRect; AVertical, AIsLast: Boolean;
   AMarkerSize, AGap, ATitleHeight, AConnectorGap, AConnectorSize: Integer): TTyStepsLayout;
 var
-  cellW, cellH, blockH, blockT, centreY, centreX: Integer;
+  cellW, cellH, blockH, blockT, centreY, centreX, markLeft: Integer;
   markEnd, markBottom, runLo, runHi, bandLo, bandHi: Integer;
 begin
   Result.MarkerRect := Rect(0, 0, 0, 0);
@@ -478,13 +478,20 @@ begin
     blockH := AMarkerSize + AGap + ATitleHeight;
     blockT := ACell.Top + (cellH - blockH) div 2;
     if blockT < ACell.Top then blockT := ACell.Top;   // a block taller than its cell starts at the top
-    markEnd := ACell.Left + AMarkerSize;
+    { The marker is CENTRED in the cell, because the title under it is centred in the cell:
+      a marker pinned to the cell's left put the number over the title's first character
+      instead of over the title. (The vertical rail above is the other arrangement -- marker
+      beside the title -- and there left is right.) }
+    markLeft := ACell.Left + (cellW - AMarkerSize) div 2;
+    if markLeft < ACell.Left then markLeft := ACell.Left;
+    markEnd := markLeft + AMarkerSize;
     if markEnd > ACell.Right then markEnd := ACell.Right;
     markBottom := blockT + AMarkerSize;
     if markBottom > ACell.Bottom then markBottom := ACell.Bottom;
-    if (markEnd > ACell.Left) and (markBottom > blockT) then
-      Result.MarkerRect := Rect(ACell.Left, blockT, markEnd, markBottom);
+    if (markEnd > markLeft) and (markBottom > blockT) then
+      Result.MarkerRect := Rect(markLeft, blockT, markEnd, markBottom);
     centreY := blockT + AMarkerSize div 2;
+    centreX := markLeft + AMarkerSize div 2;
 
     // --- the title: under the marker, spanning the cell so it ellipsises at the
     //     next step's marker rather than running into it ---------------------------
@@ -497,12 +504,16 @@ begin
         Result.TitleRect := Rect(ACell.Left, runLo, ACell.Right, runHi);
     end;
 
-    // --- the connector: right from the marker, at the MARKER's centre height, so it
-    //     passes above the title instead of through it ----------------------------
+    // --- the connector: from this marker across to the NEXT one, at the MARKER's centre
+    //     height so it passes above the title instead of through it ----------------
     if (not AIsLast) and (AConnectorSize > 0) then
     begin
-      runLo := ACell.Left + AMarkerSize + AConnectorGap;
-      runHi := ACell.Right - AConnectorGap;
+      { Now that the markers sit at their cells' centres, the run between two of them spans
+        the second half of this cell and the first half of the next. Cells tile evenly (see
+        TyStepsCellRect), so the next marker's left edge is one cell width along from this
+        one's -- no need to know the next cell to reach it. }
+      runLo := markEnd + AConnectorGap;
+      runHi := markLeft + cellW - AConnectorGap;
       if (runHi > runLo)
          and StepsBand(centreY, AConnectorSize, ACell.Top, ACell.Bottom, bandLo, bandHi) then
         Result.ConnectorRect := Rect(runLo, bandLo, runHi, bandHi);
@@ -1059,6 +1070,7 @@ procedure TTySteps.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer)
 var
   P: TTyPainter;
   S, markS, markTxtS, titleS, connS: TTyStyleSet;
+  titleAlign: TAlignment;
   R, cellR: TRect;
   lay: TTyStepsLayout;
   i, lineH, markerPx, gapPx, connGapPx, connSizePx: Integer;
@@ -1163,8 +1175,13 @@ begin
       if lay.TitleRect.Right > lay.TitleRect.Left then
       begin
         titleS := InheritText(S, TitleStyle(i));
+        { Horizontal rails stack the title UNDER its marker, and both are centred in the
+          cell, so the text is centred too -- left-justifying it here is what used to leave
+          the number sitting over the title's first character. The vertical rail puts the
+          title BESIDE its marker, where left-justified is the whole point. }
+        if IsVertical then titleAlign := taLeftJustify else titleAlign := taCenter;
         P.DrawText(lay.TitleRect, FItems[i], titleS.FontName, ResolveFontSize(titleS),
-          titleS.FontWeight, titleS.TextColor, taLeftJustify, tlCenter, True);
+          titleS.FontWeight, titleS.TextColor, titleAlign, tlCenter, True);
       end;
     end;
 
