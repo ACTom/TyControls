@@ -117,6 +117,14 @@ type
       percentages rather than a boolean, and an ungated setter would band every
       value axis in the chart. }
     property OnBand: Boolean read FOnBand write SetOnBand;
+    { A stable name for this axis across the whole chart, for keying a map by.
+
+      MainType plus ComponentIndex, because that pair is unique and never
+      renumbered. NOT the object pointer: an index that outlives a rebuild would
+      then key on an address the allocator has since handed to something else,
+      and this library has already been bitten once by an identity assertion
+      that went green on a reused address. }
+    function Uid: string;
 
     { ---- categories ----
       OWNED BY THE AXIS, and handed to the scale and to every series' data store
@@ -204,6 +212,27 @@ type
     function ContainPoint(const APoint: TTyPointF): Boolean;
     function AxisCount: Integer;
     function GetAxis(AIndex: Integer): TTyAxis;
+    { The axis for a coordinate dimension -- 'x', 'y' -- rather than for a slot.
+
+      Positional access happens to work today only because the builder adds x
+      before y, and nothing enforces that: AddAxis takes any order and the
+      reflow is orientation-general. Asking by name cannot drift. }
+    function AxisByDim(const ADim: string): TTyAxis;
+    { The axis a series is laid out ALONG: the categorical or temporal spine.
+      The other one carries the value.
+
+      Order of preference, and the order of the candidates is itself part of the
+      rule: an ordinal x, then an ordinal y, then a time x, then a time y, then
+      x regardless. Branching on AxisType rather than on the scale's CLASS is
+      deliberate -- a time axis is an interval scale here, so a class test would
+      silently skip the two time rules and hand back x for every time chart.
+
+      Upstream carries a note that a series ought to be able to name its own
+      base axis when neither is categorical, and cannot. Boxplot and candlestick
+      work around it by overriding the answer entirely, which is where that
+      belongs when they arrive. }
+    function GetBaseAxis: TTyAxis;
+    function GetOtherAxis(AAxis: TTyAxis): TTyAxis;
     { Half of this comes off each side of a cell to give its ContentRect. }
     property DividerWidth: Double read FDividerWidth write FDividerWidth;
     { True by default, so a coordinate system built and freed on its own frees
@@ -320,6 +349,11 @@ begin
   { One category: span is 0 and the axis is one band wide. }
   if len = 0 then len := 1;
   Result := pxSpan / len;
+end;
+
+function TTyAxis.Uid: string;
+begin
+  Result := FMainType + ':' + IntToStr(FComponentIndex);
 end;
 
 function TTyAxis.NormalizedCoord(AValue: Double): Double;
@@ -470,6 +504,51 @@ end;
 function TTyCartesian2D.GetRect: TTyRectF;
 begin
   Result := FRect;
+end;
+
+function TTyCartesian2D.AxisByDim(const ADim: string): TTyAxis;
+var i: Integer;
+begin
+  for i := 0 to High(FAxes) do
+    if FAxes[i].Dim = ADim then Exit(FAxes[i]);
+  Result := nil;
+end;
+
+function TTyCartesian2D.GetBaseAxis: TTyAxis;
+const
+  BasePreference: array[0..1] of TTyAxisType = (atCategory, atTime);
+var
+  i, k: Integer;
+  t: TTyAxisType;
+begin
+  Result := nil;
+  if Length(FAxes) = 0 then Exit;
+  { Two passes over the axes in their own order -- every ordinal axis first,
+    then every time one -- because "the first ordinal, else the first time" is
+    what the rule says. A single pass scoring each axis would answer differently
+    when x is time and y is categorical, and that chart is not rare.
+
+    The preference list is spelled out rather than written as a range over the
+    enum: a range would quietly change meaning if anyone reordered the type. }
+  for k := Low(BasePreference) to High(BasePreference) do
+  begin
+    t := BasePreference[k];
+    for i := 0 to High(FAxes) do
+      if FAxes[i].AxisType = t then Exit(FAxes[i]);
+  end;
+  { Neither: the horizontal one, which is x. }
+  for i := 0 to High(FAxes) do
+    if FAxes[i].Horizontal then Exit(FAxes[i]);
+  Result := FAxes[0];
+end;
+
+function TTyCartesian2D.GetOtherAxis(AAxis: TTyAxis): TTyAxis;
+var i: Integer;
+begin
+  Result := nil;
+  if AAxis = nil then Exit;
+  for i := 0 to High(FAxes) do
+    if FAxes[i].Horizontal <> AAxis.Horizontal then Exit(FAxes[i]);
 end;
 
 function TTyCartesian2D.AxisCount: Integer;

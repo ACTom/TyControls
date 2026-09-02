@@ -159,6 +159,7 @@ uses
   test.advchart.handlers,
   test.advchart.data,
   test.advchart.builder,
+  test.advchart.series,
   test.transitions,
   test.htmllabel,
   test.shape,

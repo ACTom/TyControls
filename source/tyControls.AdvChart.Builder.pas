@@ -85,14 +85,27 @@ type
     FXAxes: TTyAxisArray;      // OWNED; indexed by global component index
     FYAxes: TTyAxisArray;      // OWNED
     FDiagnostics: TTyStringArray;
-    procedure Note(const AMsg: string);
   public
+    { Public because the series binder is a different unit and FPC's private is
+      unit-scoped. One list for everything the option said that could not be
+      honoured, whoever noticed it. }
+    procedure Note(const AMsg: string);
     destructor Destroy; override;
     function GridCount: Integer;
     function Grid(AIndex: Integer): TTyGridBuild;
     function AxisCount(const AMainType: string): Integer;
     { By GLOBAL component index. nil when absent. }
     function Axis(const AMainType: string; AComponentIndex: Integer): TTyAxis;
+    { By id rather than index. nil when no axis of that family carries it. }
+    function AxisById(const AMainType, AId: string): TTyAxis;
+    { The coordinate system holding exactly this pair of GLOBAL axis indices,
+      searched across every grid.
+
+      Unambiguous by construction: an axis is assigned one grid index and is
+      appended only to that grid, so a global (x, y) pair matches at most one
+      coordinate system anywhere in the chart. That is what lets a series name
+      two axis indices and never a grid. }
+    function CartesianAt(AXComponentIndex, AYComponentIndex: Integer): TTyCartesian2D;
     { What the option said that could not be honoured. A chart that silently
       drops a misspelled axis is a chart that lies; these are what an editor
       shows instead. }
@@ -158,6 +171,21 @@ function TySeriesUsesRowIndex(AData: TJSONArray;
   its dimensions and must be empty. Returns the number of rows appended. }
 function TyFillSeriesStore(AOption: TTyChartOption; ASeriesIndex: Integer;
   const ADims: TTySeriesDimArray; AStore: TTyDataStore): Integer;
+
+{ Which component of a family this option node names.
+
+  ONE copy, shared by the axis builder and the series binder, because two copies
+  of a precedence rule are two things that have to agree:
+
+    an INDEX wins whenever it is present, and an index naming nothing resolves
+    to NOTHING -- not to the id, and not to component 0;
+    an id is consulted only when no index was given;
+    neither given names the FIRST component.
+
+  A name is never consulted, even though the option carries one. }
+function TyResolveComponentRef(ANode: TJSONObject;
+  const AIndexKey, AIdKey: string; ACount: Integer;
+  const AIds: TTyStringArray): Integer;
 
 { ---- the rules, exposed because they are worth testing directly ---- }
 { An explicit type wins with NO validation; otherwise a `data` key that is
@@ -458,6 +486,32 @@ begin
     if AComponentIndex <= High(FYAxes) then Result := FYAxes[AComponentIndex];
 end;
 
+function TTyChartBuild.AxisById(const AMainType, AId: string): TTyAxis;
+var
+  i: Integer;
+  src: TTyAxisArray;
+begin
+  Result := nil;
+  if AId = '' then Exit;
+  if AMainType = 'xAxis' then src := FXAxes
+  else if AMainType = 'yAxis' then src := FYAxes
+  else Exit;
+  for i := 0 to High(src) do
+    if src[i].Id = AId then Exit(src[i]);
+end;
+
+function TTyChartBuild.CartesianAt(AXComponentIndex,
+  AYComponentIndex: Integer): TTyCartesian2D;
+var i: Integer;
+begin
+  for i := 0 to High(FGrids) do
+  begin
+    Result := FGrids[i].CartesianAt(AXComponentIndex, AYComponentIndex);
+    if Result <> nil then Exit;
+  end;
+  Result := nil;
+end;
+
 function TTyChartBuild.DiagnosticCount: Integer;
 begin
   Result := Length(FDiagnostics);
@@ -478,29 +532,37 @@ end;
   the id, which is upstream's behaviour and worth copying rather than improving:
   a chart that quietly relocated an axis would be harder to debug than one that
   drops it and says so. }
-function ResolveGridIndex(ANode: TJSONObject; AGridCount: Integer;
-  const AGridIds: TTyStringArray): Integer;
+function TyResolveComponentRef(ANode: TJSONObject;
+  const AIndexKey, AIdKey: string; ACount: Integer;
+  const AIds: TTyStringArray): Integer;
 var
   idx, i: Integer;
   id: string;
 begin
   Result := -1;
-  if AGridCount <= 0 then Exit;
-  if HasKey(ANode, 'gridIndex') then
+  if ACount <= 0 then Exit;
+  if HasKey(ANode, AIndexKey) then
   begin
-    idx := IntIn(ANode, 'gridIndex', -1);
-    if (idx >= 0) and (idx < AGridCount) then Exit(idx);
+    idx := IntIn(ANode, AIndexKey, -1);
+    if (idx >= 0) and (idx < ACount) then Exit(idx);
+    { No fallback. Quietly relocating a component would be harder to debug than
+      dropping it and saying so. }
     Exit(-1);
   end;
-  id := StrIn(ANode, 'gridId', '');
+  id := StrIn(ANode, AIdKey, '');
   if id <> '' then
   begin
-    for i := 0 to High(AGridIds) do
-      if AGridIds[i] = id then Exit(i);
+    for i := 0 to High(AIds) do
+      if AIds[i] = id then Exit(i);
     Exit(-1);
   end;
-  { Neither given: the first grid. }
   Result := 0;
+end;
+
+function ResolveGridIndex(ANode: TJSONObject; AGridCount: Integer;
+  const AGridIds: TTyStringArray): Integer;
+begin
+  Result := TyResolveComponentRef(ANode, 'gridIndex', 'gridId', AGridCount, AGridIds);
 end;
 
 function MakeScale(AType: TTyAxisType; ANode: TJSONObject): TTyScale;
