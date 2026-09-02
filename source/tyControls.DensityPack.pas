@@ -143,6 +143,11 @@ begin
     '  --ribbon-appmenu-height: 36px;' + LineEnding +
     '  --ribbon-appmenu-width: 90px;' + LineEnding +
     '  --ribbon-caption-band-height: 25px;' + LineEnding +
+    { A ribbon TILE is a glyph stacked over a caption, not a single-line field, so it does
+      NOT follow --control-height -- that token is 38 here and would make a modern tile
+      SHORTER than its classic 64. 64 + the caption line's growth (9px -> 14px font) + the
+      roomier button padding (6 -> 10 per side). }
+    '  --ribbon-tile-height: 80px;' + LineEnding +
     '  --scrollbar-size: 17px;' + LineEnding +
     '  --segmented-pad: 4px;' + LineEnding +
     '  --segmented-height: 44px;' + LineEnding +

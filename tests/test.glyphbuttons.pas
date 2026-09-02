@@ -6,7 +6,8 @@ uses
   BGRABitmap, BGRABitmapTypes,
   tyControls.Base, tyControls.Types, tyControls.Button, tyControls.IconFont,
   tyControls.ImageCollection,
-  tyControls.GlyphButtons, tyControls.Controller, tyControls.ToolBar;
+  tyControls.GlyphButtons, tyControls.Controller, tyControls.ToolBar,
+  tyControls.BuiltinThemes;
 type
   { Exposes the protected RenderTo so the glyph paint path is exercisable headlessly,
     and the protected CalculatePreferredSize so AutoSize can be asserted DIRECTLY.
@@ -50,6 +51,22 @@ type
     the seam changed no existing button's rendering. Second that the seam is genuinely wired
     into the paint and genuinely NOT wired into the measurement — a glyph's presence and size
     stay the published properties' business, or a button would resize under the pointer. }
+  { A ribbon TILE is a glyph over a caption, not a single-line field. It must not be sized
+    from --control-height, which is what TyDensityHeight reads -- under modern density that
+    token is 38 and a tile born from it comes up SHORTER than its classic 64, with nothing to
+    catch it (at construction no glyph is set yet, so its own content floor is ~20). }
+  TTileDensityTest = class(TTestCase)
+  private
+    FDensity: TTyDensity;
+    FTheme: string;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestClassicTileKeepsItsOwnHeight;
+    procedure TestModernTileIsTallerThanAField;
+  end;
+
   TGlyphSourceSeamTest = class(TTestCase)
   published
     procedure TestBaseIsStateBlind;
@@ -125,6 +142,46 @@ type
     procedure TestFloorSurvivesAHeightPinningToolBar;
   end;
 implementation
+
+procedure TTileDensityTest.SetUp;
+begin
+  TyRegisterBuiltinThemes;
+  FDensity := TyDefaultController.Density;
+  FTheme := TyDefaultController.ThemeName;
+end;
+
+procedure TTileDensityTest.TearDown;
+begin
+  TyDefaultController.Density := FDensity;
+  TyDefaultController.ThemeName := FTheme;
+end;
+
+procedure TTileDensityTest.TestClassicTileKeepsItsOwnHeight;
+var t: TTyGlyphContainerButton;
+begin
+  TyDefaultController.Density := tdClassic;
+  t := TTyGlyphContainerButton.Create(nil);
+  try
+    AssertEquals('classic tile is byte-identical', 64, t.Height);
+  finally t.Free; end;
+end;
+
+procedure TTileDensityTest.TestModernTileIsTallerThanAField;
+{ The bug: TyDensityHeight discards the caller's 64 and answers --control-height, so a modern
+  tile was born at a single-line field's height. A tile must be TALLER than a field, and
+  taller than its own classic self -- the modern font and padding both grew. }
+var t: TTyGlyphContainerButton; fieldH: Integer;
+begin
+  TyDefaultController.Density := tdModern;
+  fieldH := TyDensityHeight(TyDefaultController, 30);
+  t := TTyGlyphContainerButton.Create(nil);
+  try
+    AssertTrue('a tile is taller than a single-line field ('
+      + IntToStr(t.Height) + ' vs ' + IntToStr(fieldH) + ')', t.Height > fieldH);
+    AssertTrue('and taller than the classic tile it grew from ('
+      + IntToStr(t.Height) + ' vs 64)', t.Height > 64);
+  finally t.Free; end;
+end;
 
 procedure TGlyphButtonAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
@@ -1417,5 +1474,6 @@ initialization
   RegisterTest(TGlyphButtonTest);
   RegisterTest(TGlyphButtonFloorTest);
   RegisterTest(TSpeedButtonTest);
+  RegisterTest(TTileDensityTest);
   RegisterTest(TGlyphSourceSeamTest);
 end.
