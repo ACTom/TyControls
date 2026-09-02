@@ -10,12 +10,21 @@ unit tyControls.SystemTheme;
     - Windows: registry (HKCU). Authoritative.
     - macOS  : the AppleInterfaceStyle global default, read through CoreFoundation
                (gated by the DARWIN define); accent not detected yet (returns False).
-    - Linux/other: tssUnknown / False. (No reliable cross-DE probe — design §7 risk 4.) }
+    - Qt5/Qt6 (any OS, in practice Linux): the LIVE widgetset palette — clWindow vs
+               clWindowText for light/dark, clHighlight for the accent. Qt maps those onto
+               QPalette, and on Plasma QPalette::Highlight IS the colour scheme's Selection
+               background, i.e. where KDE puts the accent once it is applied. No D-Bus, no
+               config parsing, no subprocess — cheap enough to sit on the follow poll.
+    - Linux on GTK2/GTK3: tssUnknown / False. GTK2 reads the real GTK style but freezes it
+               at widgetset construction; GTK3 hardcodes several entries outright. A value
+               that is wrong or stale is worse than admitting we do not know — see
+               TySysColorsTrackDesktop (tyControls.PlatformWS) for the whole reasoning. }
 
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, tyControls.Types;
+  Classes, SysUtils, Graphics,
+  tyControls.Types, tyControls.Css.Values, tyControls.PlatformWS;
 
 type
   { Detected OS appearance. tssUnknown = could not determine (key/API absent or the
@@ -35,6 +44,21 @@ function TyDetectSystemScheme: TTySystemScheme;
   still seed a theme. macOS/Linux: returns False (accent probe is a follow-up). Never
   raises. }
 function TyDetectSystemAccent(out AColor: TTyColor): Boolean;
+
+{ Light/dark decided from a window background and the text colour painted ON it.
+
+  Compares the two rather than thresholding one: a mid-grey theme sits right on top of any
+  fixed threshold and would flip-flop, but no readable theme paints its text at the same
+  luminance as the surface behind it. Identical colours mean we did not really read a palette,
+  so the answer is tssUnknown. Pure — exposed so the decision is testable without a desktop. }
+function TySchemeFromPalette(ABg, AFg: TTyColor): TTySystemScheme;
+
+{ The desktop appearance as seen through the LCL system colours. Both answer "unknown" on every
+  widgetset whose system colours do not track the desktop (TySysColorsTrackDesktop), so on
+  Win32/GTK2/GTK3/Cocoa builds these are inert and the platform probes above stay in charge.
+  Never raise. }
+function TyPaletteScheme: TTySystemScheme;
+function TyPaletteAccent(out AColor: TTyColor): Boolean;
 
 { Convenience: the scheme as the lowercase mode string a theme/Controller expects:
   tssLight->'light', tssDark->'dark', tssUnknown->'' (empty = no override). }
@@ -63,6 +87,46 @@ begin
     tssDark:  Result := 'dark';
   else
     Result := '';
+  end;
+end;
+
+function TySchemeFromPalette(ABg, AFg: TTyColor): TTySystemScheme;
+begin
+  if ABg = AFg then Exit(tssUnknown);   // no readable palette says this
+  if TyLuminance(AFg) > TyLuminance(ABg) then Result := tssDark else Result := tssLight;
+end;
+
+{ Read one LCL system colour as a TTyColor with alpha forced FF. ColorToRGB resolves the
+  clXxx index through the widgetset; RedGreenBlue then splits the BGR-ordered TColor. }
+function SysColorAsTy(AColor: TColor): TTyColor;
+var r, g, b: Byte;
+begin
+  RedGreenBlue(ColorToRGB(AColor), r, g, b);
+  Result := TyRGBA(r, g, b, $FF);
+end;
+
+function TyPaletteScheme: TTySystemScheme;
+begin
+  Result := tssUnknown;
+  if not TySysColorsTrackDesktop then Exit;
+  try
+    Result := TySchemeFromPalette(SysColorAsTy(clWindow), SysColorAsTy(clWindowText));
+  except
+    Result := tssUnknown;   // never raise
+  end;
+end;
+
+function TyPaletteAccent(out AColor: TTyColor): Boolean;
+begin
+  AColor := TyDefaultAccent;
+  Result := False;
+  if not TySysColorsTrackDesktop then Exit;
+  try
+    AColor := SysColorAsTy(clHighlight);
+    Result := True;
+  except
+    AColor := TyDefaultAccent;   // never raise
+    Result := False;
   end;
 end;
 
@@ -146,7 +210,10 @@ begin
 end;
   {$ELSE}
 begin
-  Result := tssUnknown;   // Linux/other: no reliable cross-DE probe (§7 risk 4 / §8)
+  { Linux/other. On Qt the widgetset palette IS the desktop's, so this answers; on GTK it
+    reports tssUnknown and the caller keeps its current mode. §8 asked for a one-shot Linux
+    probe -- this is it, and being a plain palette read it is also cheap enough to poll. }
+  Result := TyPaletteScheme;
 end;
   {$ENDIF}
 {$ENDIF}
@@ -181,9 +248,12 @@ begin
 end;
 {$ELSE}
 begin
-  // macOS/Linux: accent probe is a documented follow-up. Leave a plausible fallback
-  // so a follow-system theme still seeds a colour; return False so callers know it
-  // is not the real OS accent.
+  { Qt maps clHighlight onto QPalette::Highlight, which under Plasma is the colour scheme's
+    Selection background -- exactly where KDE lands an applied accent. So on a Qt build this
+    IS the desktop accent, with no D-Bus and no kdeglobals parsing. Off Qt this is inert and
+    we fall through to the documented neutral fallback: a plausible colour so a follow-system
+    theme still seeds something, plus False so callers know it is not the real OS accent. }
+  if TyPaletteAccent(AColor) then Exit(True);
   AColor := TyDefaultAccent;
   Result := False;
 end;

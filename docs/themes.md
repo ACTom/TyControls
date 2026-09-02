@@ -24,6 +24,8 @@ Controller.Follow := tfFollowSystem;
 | 深色 | `Follow := tfManual; Mode := 'dark'` |
 | 跟随系统 | `Follow := tfFollowSystem`(OS 决定浅/深;`system` 主题连强调色也跟 OS) |
 
+跟随系统在 Windows、macOS 和 Qt5 / Qt6 上有效;GTK2 / GTK3 读不到桌面外观,见[已知问题](known-issues.md)。
+
 切换主题时当前 `Mode` 会保留(REPLACE 加载不重置激活模式)。
 
 ## 主题清单(12)

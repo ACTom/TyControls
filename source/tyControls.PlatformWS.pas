@@ -40,6 +40,17 @@ function TyIsGtk3Wayland: Boolean;
   False on Win32, where ordinary MouseMove still reaches the bar. }
 function TyPopupGrabsPointer: Boolean;
 
+{ True on widgetsets that resolve the LCL system colours (clWindow / clWindowText / clHighlight)
+  from the LIVE desktop palette, which makes reading them a legitimate appearance probe.
+
+  Qt5/Qt6 map them onto QPalette and drop their cache on the application palette change, so they
+  track a Plasma colour-scheme switch. GTK2 does read the real GTK style -- but only once, when
+  the widgetset is constructed; the 'style-set' callbacks that would refresh it are compiled only
+  under EventTrace, so the values freeze at startup. GTK3 leaves several entries hardcoded and
+  says so itself ("SOME SYSCOLORS ARE STILL HARDCODED"). Win32 and Cocoa have authoritative
+  probes of their own and never need this. So: Qt only. }
+function TySysColorsTrackDesktop: Boolean;
+
 var
   { EXPERIMENT, default OFF. On a GTK3 build, opt a borderless popup into the native GTK_WINDOW_POPUP
     path via csNoFocus (see the long note kept with TyPreparePopupWindow's history). Inert off GTK3. }
@@ -157,6 +168,11 @@ end;
 function TyPopupGrabsPointer: Boolean;
 begin
   {$IFDEF LCLWin32} Result := False; {$ELSE} Result := True; {$ENDIF}
+end;
+
+function TySysColorsTrackDesktop: Boolean;
+begin
+  {$IF DEFINED(LCLQt5) OR DEFINED(LCLQt6)} Result := True; {$ELSE} Result := False; {$IFEND}
 end;
 
 procedure TyPreparePopupWindow(AForm: TCustomForm);
