@@ -40,6 +40,10 @@ type
     procedure TestTypedDefaultsOnTheWrongType;
     procedure TestNumbersReadAsIntAndFloat;
     procedure TestCountAt;
+    procedure TestABareComponentIsOneComponent;
+    procedure TestAComponentArrayStillCounts;
+    procedure TestAnAbsentOrNullComponentIsNone;
+    procedure TestComponentAtIndexesBothForms;
     { ---- lifetime ---- }
     procedure TestRepeatedSetDoesNotGrowTheHeap;
   end;
@@ -228,6 +232,52 @@ begin
   AssertEquals('int', 10, FOpt.GetInt('a', 0));
   AssertEquals('float of an int', 10.0, FOpt.GetFloat('a', 0), 1e-9);
   AssertEquals('float', 2.75, FOpt.GetFloat('b', 0), 1e-9);
+end;
+
+procedure TAdvChartOptionTest.TestABareComponentIsOneComponent;
+begin
+  { `xAxis: {...}` and `xAxis: [{...}]` are the same option -- ECharts
+    normalises before anything reads it, and most of its gallery writes the bare
+    form. Counting it as zero is not a wrong number, it is a chart that draws
+    nothing and says nothing about why. }
+  AssertTrue(FOpt.SetOptionText('{ xAxis: { type: ''category'' }, series: { type: ''bar'' } }'));
+  AssertEquals('one x axis', 1, FOpt.ComponentCount('xAxis'));
+  AssertEquals('one series', 1, FOpt.ComponentCount('series'));
+  AssertEquals('and CountAt still says an object is not an array',
+    0, FOpt.CountAt('xAxis'));
+end;
+
+procedure TAdvChartOptionTest.TestAComponentArrayStillCounts;
+begin
+  AssertTrue(FOpt.SetOptionText('{ yAxis: [{}, {}], series: [{}, {}, {}] }'));
+  AssertEquals(2, FOpt.ComponentCount('yAxis'));
+  AssertEquals(3, FOpt.ComponentCount('series'));
+end;
+
+procedure TAdvChartOptionTest.TestAnAbsentOrNullComponentIsNone;
+begin
+  { `xAxis: null` is written, but written as nothing -- distinguishing it from
+    absent would make a difference no caller can act on. }
+  AssertTrue(FOpt.SetOptionText('{ xAxis: null, series: [] }'));
+  AssertEquals('null', 0, FOpt.ComponentCount('xAxis'));
+  AssertEquals('empty array', 0, FOpt.ComponentCount('series'));
+  AssertEquals('absent', 0, FOpt.ComponentCount('grid'));
+  AssertTrue('and nothing to index', FOpt.ComponentAt('xAxis', 0) = nil);
+end;
+
+procedure TAdvChartOptionTest.TestComponentAtIndexesBothForms;
+var d: TJSONData;
+begin
+  AssertTrue(FOpt.SetOptionText('{ xAxis: { type: ''category'' }, yAxis: [{ type: ''value'' }, { type: ''log'' }] }'));
+  d := FOpt.ComponentAt('xAxis', 0);
+  AssertTrue('the bare object is index 0', d <> nil);
+  AssertEquals('category', TJSONObject(d).Get('type', ''));
+  AssertTrue('and there is no index 1', FOpt.ComponentAt('xAxis', 1) = nil);
+  d := FOpt.ComponentAt('yAxis', 1);
+  AssertTrue('the array indexes normally', d <> nil);
+  AssertEquals('log', TJSONObject(d).Get('type', ''));
+  AssertTrue('past the end is nothing', FOpt.ComponentAt('yAxis', 2) = nil);
+  AssertTrue('and so is a negative index', FOpt.ComponentAt('yAxis', -1) = nil);
 end;
 
 procedure TAdvChartOptionTest.TestCountAt;

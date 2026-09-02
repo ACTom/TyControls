@@ -70,6 +70,23 @@ type
     { Length of the array at APath; 0 when it is absent or is not an array. }
     function CountAt(const APath: string): Integer;
 
+    { ---- component slots ----
+      A top-level component may be written as a bare object OR as an array, and
+      the two mean the same thing: ECharts normalises with normalizeToArray
+      before anything reads it (Global.ts:369). Most of its gallery, and most of
+      a decade of answers on the internet, write `xAxis: {...}`.
+
+      CountAt deliberately does NOT normalise -- an object is not an array, and
+      a test pins that -- so reaching for it here is the bug this pair exists to
+      prevent: a bare object yields zero components and zero diagnostics, and
+      the chart silently draws nothing.
+
+      AMainType is a single root key ('series', 'xAxis', 'grid'), not a path:
+      normalisation is a rule about component SLOTS, not about every array in
+      the tree. `data: 5` is not a one-element data array and must not become one. }
+    function ComponentCount(const AMainType: string): Integer;
+    function ComponentAt(const AMainType: string; AIndex: Integer): TJSONData;
+
     property Root: TJSONData read FRoot;
     property Text: string read FText;
     property Error: TTyOptionError read FError;
@@ -316,6 +333,35 @@ begin
   if (d = nil) or not (d is TJSONArray) then
     Exit(0);
   Result := TJSONArray(d).Count;
+end;
+
+function TTyChartOption.ComponentCount(const AMainType: string): Integer;
+var d: TJSONData;
+begin
+  if (FRoot = nil) or not (FRoot is TJSONObject) then Exit(0);
+  d := TJSONObject(FRoot).Find(AMainType);
+  if d = nil then Exit(0);
+  { jtNull is `xAxis: null` -- written, but written as nothing. }
+  if d.JSONType = jtNull then Exit(0);
+  if d is TJSONArray then Exit(TJSONArray(d).Count);
+  Result := 1;
+end;
+
+function TTyChartOption.ComponentAt(const AMainType: string; AIndex: Integer): TJSONData;
+var d: TJSONData;
+begin
+  Result := nil;
+  if AIndex < 0 then Exit;
+  if (FRoot = nil) or not (FRoot is TJSONObject) then Exit;
+  d := TJSONObject(FRoot).Find(AMainType);
+  if (d = nil) or (d.JSONType = jtNull) then Exit;
+  if d is TJSONArray then
+  begin
+    if AIndex >= TJSONArray(d).Count then Exit;
+    Exit(TJSONArray(d).Items[AIndex]);
+  end;
+  { A bare component IS index 0, and there is no index 1. }
+  if AIndex = 0 then Result := d;
 end;
 
 end.
