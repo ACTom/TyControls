@@ -131,6 +131,29 @@ type
       caller to remember the second step is how an axis ends up with categories
       and an empty extent. }
     procedure SetCategories(const A: array of string);
+
+    { Where a value sits along this axis as a fraction of its BAND-ADJUSTED
+      pixel extent, 0 at the start and 1 at the stop.
+
+      Exists so the layout layer and the renderer cannot drift: the layout layer
+      wants fractions, DataToCoord applies Inverse and the half-band inset
+      internally, and a caller computing its own fraction from the raw extent
+      would silently disagree with where the datum is actually drawn. }
+    function NormalizedCoord(AValue: Double): Double;
+
+    { Where the TICK MARKS go, in device px.
+
+      Ticks and labels do NOT share a position on a banded axis, and that is
+      the default rather than an option: a label belongs to a category so it
+      sits on the band's CENTRE, while a tick separates two categories so it
+      sits on the EDGE. So a three-category axis has three labels and FOUR
+      ticks out of the box, and a test asserting one tick per category is
+      asserting the wrong thing.
+
+      AAlignWithLabel moves them onto the centres and gives N of them, which is
+      ECharts' axisTick.alignWithLabel. A non-banded axis ignores it: its
+      categories already sit on the ends. }
+    function TickCoords(AAlignWithLabel: Boolean = False): TTyDoubleArray;
   end;
 
   ITyCoordSys = interface
@@ -157,13 +180,14 @@ type
     FAxes: array of TTyAxis;
     FRect: TTyRectF;
     FDividerWidth: Double;
+    FOwnsAxes: Boolean;
     function MasterX: TTyAxis;
     function MasterY: TTyAxis;
     procedure ReflowAxes;
   public
     constructor Create;
     destructor Destroy; override;
-    { Takes ownership. }
+    { Takes ownership BY DEFAULT -- see OwnsAxes. }
     procedure AddAxis(AAxis: TTyAxis);
     procedure SetRect(const ARect: TTyRectF);
 
@@ -182,6 +206,16 @@ type
     function GetAxis(AIndex: Integer): TTyAxis;
     { Half of this comes off each side of a cell to give its ContentRect. }
     property DividerWidth: Double read FDividerWidth write FDividerWidth;
+    { True by default, so a coordinate system built and freed on its own frees
+      what it was given.
+
+      A grid with N x axes and M y axes holds N*M coordinate systems over N+M
+      axes, so the SAME axis object is in several of them and would be freed
+      several times. The builder therefore sets this False and frees the axes
+      once itself. Sharing is otherwise safe: every coordinate system of one
+      grid is given the same rect, so the repeated pixel-extent write each of
+      them performs is idempotent. }
+    property OwnsAxes: Boolean read FOwnsAxes write FOwnsAxes;
   end;
 
 implementation
@@ -288,6 +322,47 @@ begin
   Result := pxSpan / len;
 end;
 
+function TTyAxis.NormalizedCoord(AValue: Double): Double;
+var a, b: Double;
+begin
+  BandPxExtent(a, b);
+  if b = a then Exit(0.5);
+  Result := (DataToCoord(AValue) - a) / (b - a);
+end;
+
+function TTyAxis.TickCoords(AAlignWithLabel: Boolean): TTyDoubleArray;
+var
+  ticks: TTyScaleTickArray;
+  i, n: Integer;
+  bw, dir: Double;
+begin
+  ticks := FScale.GetTicks;
+  n := Length(ticks);
+  if n = 0 then Exit(nil);
+
+  if (not FOnBand) or AAlignWithLabel then
+  begin
+    { One per tick, on the anchor the label uses. }
+    SetLength(Result, n);
+    for i := 0 to n - 1 do
+      Result[i] := DataToCoord(ticks[i].Value);
+    Exit;
+  end;
+
+  { Banded and not aligned: shift every tick back half a band onto the leading
+    edge, then add one more for the trailing edge of the last band. N+1 for N
+    categories. The shift follows the axis' DIRECTION, not its magnitude -- a
+    vertical or inverse axis runs the other way and a bare subtraction would
+    push the ticks off the wrong end. }
+  bw := BandWidth;
+  if FPxStop >= FPxStart then dir := 1 else dir := -1;
+  if FInverse then dir := -dir;
+  SetLength(Result, n + 1);
+  for i := 0 to n - 1 do
+    Result[i] := DataToCoord(ticks[i].Value) - dir * bw / 2;
+  Result[n] := Result[n - 1] + dir * bw;
+end;
+
 function TTyAxis.DataToCoord(AValue: Double): Double;
 var n, a, b: Double;
 begin
@@ -323,13 +398,15 @@ begin
   FAxes := nil;
   FRect := TyRectF(0, 0, 1, 1);
   FDividerWidth := 0;
+  FOwnsAxes := True;
 end;
 
 destructor TTyCartesian2D.Destroy;
 var i: Integer;
 begin
-  for i := 0 to High(FAxes) do
-    FAxes[i].Free;
+  if FOwnsAxes then
+    for i := 0 to High(FAxes) do
+      FAxes[i].Free;
   FAxes := nil;
   inherited Destroy;
 end;

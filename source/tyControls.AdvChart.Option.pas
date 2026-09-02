@@ -74,7 +74,7 @@ type
       A top-level component may be written as a bare object OR as an array, and
       the two mean the same thing: ECharts normalises with normalizeToArray
       before anything reads it (Global.ts:369). Most of its gallery, and most of
-      a decade of answers on the internet, write `xAxis: {...}`.
+      a decade of answers on the internet, write the bare form.
 
       CountAt deliberately does NOT normalise -- an object is not an array, and
       a test pins that -- so reaching for it here is the bug this pair exists to

@@ -66,6 +66,14 @@ type
     procedure TestWithoutBandingCategoriesSitOnTheEnds;
     procedure TestABlankCategoryAxisHasNoBand;
     procedure TestAxesDoNotLeakTheirCategoryLists;
+    { ---- tick marks, which are not where the labels are ---- }
+    procedure TestTicksSitOnBandEdgesAndOutnumberTheLabels;
+    procedure TestAlignWithLabelPutsTicksOnTheCentres;
+    procedure TestWithoutBandingTicksAndLabelsCoincide;
+    procedure TestTicksFollowTheAxisDirection;
+    procedure TestTheAppendedTickHasNoLabel;
+    procedure TestABlankAxisHasNoTicks;
+    procedure TestNormalizedCoordAgreesWithDataToCoord;
   end;
 implementation
 
@@ -492,6 +500,148 @@ begin
   after := GetFPCHeapStatus.CurrHeapUsed;
   AssertTrue(Format('heap grew from %d to %d over two hundred axes', [before, after]),
     after <= before);
+end;
+
+procedure TAdvChartOrdinalScaleTest.TestTicksSitOnBandEdgesAndOutnumberTheLabels;
+var ax: TTyAxis; c: TTyDoubleArray;
+begin
+  { THE DEFAULT, and the one most likely to be got wrong: a label belongs to a
+    category so it sits on the band's centre, while a tick SEPARATES two
+    categories so it sits on the edge. Three categories therefore have three
+    labels and FOUR ticks. A test asserting one tick per category is asserting
+    the wrong thing. }
+  ax := TTyAxis.Create('x', TTyOrdinalScale.Create, True);
+  try
+    ax.SetCategories(['a', 'b', 'c']);
+    ax.OnBand := True;
+    ax.SetPxExtent(0, 300);
+    c := ax.TickCoords;
+    AssertEquals('one more tick than categories', 4, Length(c));
+    AssertEquals(0.0, c[0], 1e-9);
+    AssertEquals(100.0, c[1], 1e-9);
+    AssertEquals(200.0, c[2], 1e-9);
+    AssertEquals(300.0, c[3], 1e-9);
+    AssertEquals('while the labels are on the centres', 50.0, ax.DataToCoord(0), 1e-9);
+  finally
+    ax.Free;
+  end;
+end;
+
+procedure TAdvChartOrdinalScaleTest.TestAlignWithLabelPutsTicksOnTheCentres;
+var ax: TTyAxis; c: TTyDoubleArray;
+begin
+  ax := TTyAxis.Create('x', TTyOrdinalScale.Create, True);
+  try
+    ax.SetCategories(['a', 'b', 'c']);
+    ax.OnBand := True;
+    ax.SetPxExtent(0, 300);
+    c := ax.TickCoords(True);
+    AssertEquals('one each now', 3, Length(c));
+    AssertEquals(50.0, c[0], 1e-9);
+    AssertEquals(150.0, c[1], 1e-9);
+    AssertEquals(250.0, c[2], 1e-9);
+  finally
+    ax.Free;
+  end;
+end;
+
+procedure TAdvChartOrdinalScaleTest.TestWithoutBandingTicksAndLabelsCoincide;
+var ax: TTyAxis; c: TTyDoubleArray;
+begin
+  { boundaryGap false: the categories already sit on the ends, so there is no
+    edge distinct from the centre and alignWithLabel has nothing to change. }
+  ax := TTyAxis.Create('x', TTyOrdinalScale.Create, True);
+  try
+    ax.SetCategories(['a', 'b', 'c']);
+    ax.OnBand := False;
+    ax.SetPxExtent(0, 300);
+    c := ax.TickCoords;
+    AssertEquals(3, Length(c));
+    AssertEquals(0.0, c[0], 1e-9);
+    AssertEquals(300.0, c[2], 1e-9);
+    c := ax.TickCoords(True);
+    AssertEquals('and aligning changes nothing', 3, Length(c));
+    AssertEquals(0.0, c[0], 1e-9);
+  finally
+    ax.Free;
+  end;
+end;
+
+procedure TAdvChartOrdinalScaleTest.TestTicksFollowTheAxisDirection;
+var ax: TTyAxis; c: TTyDoubleArray;
+begin
+  { A vertical axis runs bottom-up, so the half-band shift has to go the other
+    way. A bare subtraction would push every tick off the wrong end -- and it
+    would pass every horizontal test in this file. }
+  ax := TTyAxis.Create('y', TTyOrdinalScale.Create, False);
+  try
+    ax.SetCategories(['a', 'b', 'c']);
+    ax.OnBand := True;
+    ax.SetPxExtent(300, 0);
+    c := ax.TickCoords;
+    AssertEquals(4, Length(c));
+    AssertEquals('the first edge is at the bottom', 300.0, c[0], 1e-9);
+    AssertEquals(200.0, c[1], 1e-9);
+    AssertEquals(100.0, c[2], 1e-9);
+    AssertEquals('and the last at the top', 0.0, c[3], 1e-9);
+  finally
+    ax.Free;
+  end;
+end;
+
+procedure TAdvChartOrdinalScaleTest.TestTheAppendedTickHasNoLabel;
+var ax: TTyAxis;
+begin
+  { The extra tick is GEOMETRY -- the trailing edge of the last band -- not a
+    category. Giving it a label would put a fourth name on a three-name axis. }
+  ax := TTyAxis.Create('x', TTyOrdinalScale.Create, True);
+  try
+    ax.SetCategories(['a', 'b', 'c']);
+    ax.OnBand := True;
+    ax.SetPxExtent(0, 300);
+    AssertEquals(4, Length(ax.TickCoords));
+    AssertEquals('three labels', 3, Length(ax.Scale.GetTicks));
+    AssertEquals('and nothing past the end', '', TTyOrdinalScale(ax.Scale).GetLabel(3));
+  finally
+    ax.Free;
+  end;
+end;
+
+procedure TAdvChartOrdinalScaleTest.TestABlankAxisHasNoTicks;
+var ax: TTyAxis;
+begin
+  ax := TTyAxis.Create('x', TTyOrdinalScale.Create, True);
+  try
+    ax.OnBand := True;
+    ax.SetPxExtent(0, 300);
+    AssertEquals('not one, and not a phantom edge', 0, Length(ax.TickCoords));
+    AssertEquals(0, Length(ax.TickCoords(True)));
+  finally
+    ax.Free;
+  end;
+end;
+
+procedure TAdvChartOrdinalScaleTest.TestNormalizedCoordAgreesWithDataToCoord;
+var ax: TTyAxis; i: Integer; a, b: Double;
+begin
+  { The layout layer wants fractions and the renderer wants pixels. If they are
+    computed independently they drift -- and the drift is exactly half a band,
+    which looks like a rounding error rather than a missing rule. }
+  ax := TTyAxis.Create('x', TTyOrdinalScale.Create, True);
+  try
+    ax.SetCategories(['a', 'b', 'c', 'd']);
+    ax.OnBand := True;
+    ax.SetPxExtent(100, 500);
+    for i := 0 to 3 do
+    begin
+      a := ax.NormalizedCoord(i);
+      b := ax.DataToCoord(i);
+      AssertEquals('fraction ' + IntToStr(i) + ' maps back to the same pixel',
+        b, 150 + a * (450 - 150), 1e-9);
+    end;
+  finally
+    ax.Free;
+  end;
 end;
 
 initialization

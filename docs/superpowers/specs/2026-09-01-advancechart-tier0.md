@@ -743,7 +743,7 @@ JavaScript 自己的 Date 解析器）。
 ### 第 13 项立不住的四件事
 
 1. **没有任何东西从 option 读 `xAxis`/`yAxis`/`grid`**——全库 `TTyAxis.Create` 五处**全在测试里**
-2. **没有类目 scale**，而 `xAxis.type` 默认就是 `'category'`；`BandWidth` 也只有测试写过
+2. **没有类目 scale**，而带 `data` 的轴就是类目轴（见 §19 的更正：**`type` 没有 `'category'` 默认**，目录那条是上游文档 bug）；`BandWidth` 也只有测试写过
 3. **类目表归属错了**：store 拥有它，而 ECharts 挂在轴上共享
 4. **没有东西把 `series[i].data` 灌进 store**，且顺序被锁死：绑定 → 维度 → 类目 → 填充
 
