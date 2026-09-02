@@ -1899,6 +1899,7 @@ procedure TTyDateTimePicker.OpenDropDown;
 var
   CalStyle: TTyStyleSet;
   Radius: Integer;
+  calSize: TSize;
 begin
   if IsInert then Exit;
   { DateMode, not Kind, decides whether there is a calendar to drop. }
@@ -1923,7 +1924,13 @@ begin
   { Show the popup below (or above) the picker control -- hanging from the edge the
     field reads FROM, so a mirrored picker drops its calendar under its own reading
     start rather than trailing off the far side of the control. }
-  FPopup.Popup(Self, 240, 220, IsRightToLeft);
+  { Ask the calendar what it needs instead of typing a box. 240x220 is the CLASSIC calendar,
+    and it was handed over unscaled: under modern density the same box divided into a 24px day
+    row under a 38px weekday band carrying 14px text, which is the cramped grid that got
+    reported -- and at 144 dpi it was simply small. PreferredSize composes the bands from the
+    same expressions the calendar's own layout uses, in device px. }
+  calSize := FCalendar.PreferredSize(Font.PixelsPerInch);
+  FPopup.Popup(Self, calSize.cx, calSize.cy, IsRightToLeft);
   Invalidate;
 end;
 

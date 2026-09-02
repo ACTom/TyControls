@@ -161,6 +161,23 @@ function TyCalendarMonthGrid(AYear, AMonth: Word;
   AMin=0 means no lower bound; AMax=0 means no upper bound. }
 function TyCalendarInRange(ADate, AMin, AMax: TDateTime): Boolean;
 
+const
+  { The classic calendar box. A FLOOR and a reference, not the answer: TTyCalendar.PreferredSize
+    recomposes the height from the density tokens, so classic lands back on exactly these. }
+  TyCalendarClassicW = 240;
+  TyCalendarClassicH = 220;
+
+{ The box a calendar wants under a given controller, in LOGICAL px.
+
+  Classic answers TyCalendarClassicH verbatim -- byte-identical to what the control has always
+  used, remainder and all. Modern composes the same three bands the layout divides the box into
+  (header ~ --control-height, weekday row ~ --item-height, six day rows ~ --row-height), so the
+  grid grows with the font instead of squeezing six 14px rows into a classic-sized box.
+
+  Exported because it has TWO callers -- the control's own constructor and any dropdown host
+  that has to size a popup around one -- and a second copy is how they drift apart. }
+function TyCalendarSizeFor(AController: TTyStyleController): TSize;
+
 { Clamps ADate into [AMin, AMax].
   AMin=0 / AMax=0 mean unbounded on that side. }
 function TyCalendarClampDate(ADate, AMin, AMax: TDateTime): TDateTime;
@@ -269,6 +286,11 @@ type
       (C:/lazarus/lcl/calendar.pp:122). ViewMode is the same state named after the
       cell; both exist so neither reading is a guess. }
     function GetCalendarView: TTyCalendarView;
+    { The size THIS calendar wants at APPI -- composed from the SAME expressions the layout
+      uses, DisplaySettings collapses included, so a calendar with no headings or no week
+      numbers asks for exactly the box it will fill. Device px, like the other dropdown
+      owners' size helpers. A dropdown host calls this instead of typing a box. }
+    function PreferredSize(APPI: Integer): TSize;
     { Expose RenderTo publicly for tests and embedding. }
     procedure RenderToPublic(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     { Current drill-down view (transient UI state, not published). }
@@ -561,17 +583,10 @@ begin
   FReadOnly     := False;
   FViewMode     := cvmDays;
   TabStop       := True;
-  Width         := 240;
-  { Classic keeps the 220px default verbatim. Modern derives the height from the same
-    density tokens the layout uses -- header (--control-height) + weekday row
-    (--item-height) + 6 day rows (--row-height) -- so the day grid grows roomier
-    instead of squeezing 6 taller-font rows into a classic-sized box. }
-  if ActiveController.Density = tdModern then
-    Height := TyDensityMetric(ActiveController, 28, '--control-height')
-            + TyDensityMetric(ActiveController, 20, '--item-height')
-            + 6 * TyDensityMetric(ActiveController, 29, '--row-height')
-  else
-    Height := 220;
+  { The default size and a dropdown host's popup size are the SAME question, so they go
+    through the same function -- see TyCalendarSizeFor. }
+  Width  := TyCalendarSizeFor(ActiveController).cx;
+  Height := TyCalendarSizeFor(ActiveController).cy;
   DecodeDate(FDate, dy, dm, dd);
   FViewYear  := dy;
   FViewMonth := dm;
@@ -1032,6 +1047,25 @@ begin
       CellStyle.FontName, ResolveFontSize(CellStyle),
       FontWt, CellStyle.TextColor, taCenter, tlCenter, False);
   end;
+end;
+
+function TyCalendarSizeFor(AController: TTyStyleController): TSize;
+begin
+  Result.cx := TyCalendarClassicW;
+  if (AController <> nil) and (AController.Density = tdModern) then
+    Result.cy := TyDensityMetric(AController, 28, '--control-height')
+               + TyDensityMetric(AController, 20, '--item-height')
+               + 6 * TyDensityMetric(AController, 29, '--row-height')
+  else
+    Result.cy := TyCalendarClassicH;
+end;
+
+function TTyCalendar.PreferredSize(APPI: Integer): TSize;
+var logical: TSize;
+begin
+  logical := TyCalendarSizeFor(ActiveController);
+  Result.cx := MulDiv(logical.cx, APPI, 96);
+  Result.cy := MulDiv(logical.cy, APPI, 96);
 end;
 
 procedure TTyCalendar.CalcLayout(const ARect: TRect; APPI: Integer;
