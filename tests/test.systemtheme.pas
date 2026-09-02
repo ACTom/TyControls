@@ -12,7 +12,7 @@ interface
 uses
   Classes, SysUtils, fpcunit, testregistry,
   tyControls.Types, tyControls.SystemTheme, tyControls.StyleModel,
-  tyControls.Controller;
+  tyControls.Controller, tyControls.BuiltinThemes;
 type
   TSystemThemeTest = class(TTestCase)
   private
@@ -26,6 +26,8 @@ type
     procedure TestControllerFollowSetsModeFromScheme;
     procedure TestFollowAdoptsDefaultModeWhenOSUnreadable;
     procedure TestPollSystemThemeAppliesLiveFlip;
+    procedure TestUnreadableModeKeepsTheNextSentinel;
+    procedure TestSwitchingToTheSystemThemeSurvivesAnUnreadableScheme;
   end;
 
 implementation
@@ -272,6 +274,88 @@ begin
     c.Free;
     TySystemModeHook := savedMode;
     TySystemAccentHook := savedAccent;
+  end;
+end;
+
+
+procedure TSystemThemeTest.TestUnreadableModeKeepsTheNextSentinel;
+{ The mechanism behind the Linux crash, pinned on its own. FPC's TStrings.SetValueFromIndex
+  DELETES the entry when the new value is '' (stringl.inc), and the OS-scheme hook returns
+  exactly that wherever there is no probe (Linux). Writing it back therefore shrank the merged
+  var set UNDER a for-bound that Pascal had already evaluated -- the last iteration then read a
+  gone index -- and shifted the NEXT var into a slot the loop had passed, so that var's own
+  sentinel was never swapped. Two adjacent probes (both new names, so they append in
+  declaration order) catch both halves: the crash, and the swap the shift used to eat. }
+var
+  model: TTyStyleModel;
+  s: TTyStyleSet;
+  savedAccent: TTySystemAccentHook;
+  savedMode: TTySystemModeHook;
+  raised: Boolean;
+  msg: string;
+begin
+  savedAccent := TySystemAccentHook;
+  savedMode := TySystemModeHook;
+  TySystemAccentHook := @StubAccentHook;          // 'system-accent' -> #123456
+  TySystemModeHook := @StubModeHookUnreadable;    // 'system-mode'   -> '' (Linux)
+  model := TTyStyleModel.Create;
+  try
+    raised := False;
+    msg := '';
+    try
+      model.LoadFromCss(
+        ':root { --zz-probe-mode: system-mode; --zz-probe-accent: system-accent; }' +
+        'TyButton { background: var(--zz-probe-accent); }');
+    except
+      on E: Exception do begin raised := True; msg := E.Message; end;
+    end;
+    AssertFalse('an empty OS mode must not break the var sweep: ' + msg, raised);
+    s := model.ResolveStyle('TyButton', '', []);
+    AssertEquals('the sentinel AFTER the empty one is still swapped',
+      Integer(TyRGB($12, $34, $56)), Integer(s.Background.Color));
+  finally
+    model.Free;
+    TySystemAccentHook := savedAccent;
+    TySystemModeHook := savedMode;
+  end;
+end;
+
+procedure TSystemThemeTest.TestSwitchingToTheSystemThemeSurvivesAnUnreadableScheme;
+{ The reported symptom (QQ group, 3.0.0-RC): on Linux EVERY example raised
+  "List index (190) out of bounds" the moment the theme combo picked 'system' -- which is
+  literally TyDefaultController.ThemeName := 'system'. system.tycss seeds
+  '--ty-mode: system-mode' and Linux has no cross-DE scheme probe, so the hook hands back ''.
+  Windows never saw it: the registry always answers light or dark. }
+var
+  c: TTyStyleController;
+  s: TTyStyleSet;
+  savedAccent: TTySystemAccentHook;
+  savedMode: TTySystemModeHook;
+  raised: Boolean;
+  msg: string;
+begin
+  savedAccent := TySystemAccentHook;
+  savedMode := TySystemModeHook;
+  TySystemAccentHook := @StubAccentHook;          // deterministic, box-independent
+  TySystemModeHook := @StubModeHookUnreadable;    // Linux: nothing to probe
+  c := TTyStyleController.Create(nil);
+  try
+    TyRegisterBuiltinThemes;
+    raised := False;
+    msg := '';
+    try
+      c.ThemeName := 'system';
+    except
+      on E: Exception do begin raised := True; msg := E.Message; end;
+    end;
+    AssertFalse('picking the built-in system theme must not raise: ' + msg, raised);
+    s := c.Model.ResolveStyle('TyButton', 'primary', []);
+    AssertEquals('and the OS accent still reaches the primary button',
+      Integer(TyRGB($12, $34, $56)), Integer(s.Background.Color));
+  finally
+    c.Free;
+    TySystemAccentHook := savedAccent;
+    TySystemModeHook := savedMode;
   end;
 end;
 
