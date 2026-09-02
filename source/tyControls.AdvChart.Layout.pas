@@ -76,7 +76,9 @@ function TySolveBox(const ASpec: TTyBoxSpec; const AContainer: ITyBoxContainer):
   collides with the end label). That is its own feature, not part of the pass. }
 
 type
-  TTyAxisSide = (asLeft, asRight, asTop, asBottom);
+  { TTyAxisSide moved down to AdvChart.Types -- Coord needs it and Layout
+    already uses Coord. Re-exported here so no caller has to change its uses. }
+  TTyAxisSide = tyControls.AdvChart.Types.TTyAxisSide;
   TTyOuterBoundsMode = (obmNone, obmAuto);
   { Whether an axis' NAME counts toward the space reserved, or only its labels. }
   TTyOuterBoundsContain = (obcAxisLabel, obcAll);

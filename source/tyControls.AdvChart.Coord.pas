@@ -6,7 +6,7 @@ unit tyControls.AdvChart.Coord;
   Every coordinate system answers a datum TWO ways:
 
     DataToPoint  -> the datum's ANCHOR (a line vertex, a scatter centre)
-    DataToLayout -> the datum's CELL, as {Rect, ContentRect}
+    DataToLayout -> the datum's CELL, as a Rect plus a ContentRect
 
   DataToLayout is what nesting rests on: a nested coordinate system, or a
   component laid out with coordinateSystemUsage:'box', is placed into the
@@ -19,12 +19,20 @@ unit tyControls.AdvChart.Coord;
   N AXES, not two. A secondary y axis is the commonest real-world request; making
   it a special case later is how a coordinate system ends up rewritten.
 
-  PURE: SysUtils, Math and the two AdvChart units. No Controls, no Graphics, no
-  handle. }
+  PURE: SysUtils, Classes, Math and the AdvChart units. No Controls, no
+  Graphics, no handle. Data is on that list because a category axis OWNS its
+  category list, and that list is the same object a data store interns
+  against -- the sharing IS the point, so it cannot be duplicated here. }
 interface
-uses SysUtils, Math, tyControls.AdvChart.Types, tyControls.AdvChart.Scale;
+uses SysUtils, Classes, Math, tyControls.AdvChart.Types, tyControls.AdvChart.Scale,
+     tyControls.AdvChart.Data;
 
 type
+  { What an axis MEANS, which is not the same question as what scale object it
+    holds: the builder picks the scale from this, then stamps it back so the
+    option editor and the series binder can both ask without downcasting. }
+  TTyAxisType = (atValue, atCategory, atTime, atLog);
+
   { Rect plus the divider-inset area a nested thing is laid out into. The two are
     not redundant: Rect is the whole cell (including the half of the divider that
     belongs to it), ContentRect is what may be painted into. ECharts'
@@ -43,8 +51,21 @@ type
     FHorizontal: Boolean;
     FPxStart: Double;
     FPxStop: Double;
-    FBandWidth: Double;
     FInverse: Boolean;
+    FMainType: string;
+    FComponentIndex: Integer;
+    FId: string;
+    FName: string;
+    FAxisType: TTyAxisType;
+    FGridIndex: Integer;
+    FSide: TTyAxisSide;
+    FOnBand: Boolean;
+    FCategories: TTyOrdinalMeta;
+    procedure SetOnBand(AValue: Boolean);
+    procedure SetAxisType(AValue: TTyAxisType);
+    { The pixel extent a BANDED axis maps over: half a band in from each end,
+      so an ordinal value lands on its band's CENTRE rather than its edge. }
+    procedure BandPxExtent(out AStart, AStop: Double);
   public
     { Takes ownership of AScale. }
     constructor Create(const ADim: string; AScale: TTyScale; AHorizontal: Boolean);
@@ -60,11 +81,56 @@ type
     property Horizontal: Boolean read FHorizontal;
     property PxStart: Double read FPxStart;
     property PxStop: Double read FPxStop;
-    { The width of one datum's band, px. 0 means "not banded" (a continuous
-      axis), and a cell then collapses to a hairline on the anchor rather than
-      inventing a width. }
-    property BandWidth: Double read FBandWidth write FBandWidth;
+    { The width of one datum's band, DEVICE px. DERIVED, not stored: the pixel
+      extent is written more than once per layout pass -- an approximate one off
+      the raw grid rect, then the final one off the shrunk plot rect -- and a
+      width cached at construction is stale by the second write.
+
+      0 means NOT BANDED: a continuous axis, and a cell collapses onto its
+      anchor rather than inventing a width. That is a deliberate divergence.
+      ECharts floors band width at 1px on every axis type, but that floor exists
+      for its bar layouter, not as a claim that a value axis has bands -- its
+      own internal call passes no floor at all. The floor belongs to the bar
+      layouter when we write one. }
+    function BandWidth: Double;
     property Inverse: Boolean read FInverse write FInverse;
+
+    { ---- identity ----
+      Which option array this axis came out of, and where in it.
+
+      ComponentIndex is the GLOBAL index in that array and is never renumbered
+      per grid: it is what a series' xAxisIndex names, and grid 1's first x axis
+      is legitimately component 2. Renumbering per grid is the shortest path to
+      bindings that silently resolve to the wrong plot. }
+    property MainType: string read FMainType write FMainType;
+    property ComponentIndex: Integer read FComponentIndex write FComponentIndex;
+    property Id: string read FId write FId;
+    property Name: string read FName write FName;
+    property AxisType: TTyAxisType read FAxisType write SetAxisType;
+    { -1 = this axis names no grid, and so belongs to no plot rect. It is still
+      built, so the option editor can report on it; it is simply never put into
+      a coordinate system. }
+    property GridIndex: Integer read FGridIndex write FGridIndex;
+    property Side: TTyAxisSide read FSide write FSide;
+    { Category axes band by default; value axes never do. The setter GATES on
+      the scale being ordinal, because a value axis' boundaryGap is a PAIR of
+      percentages rather than a boolean, and an ungated setter would band every
+      value axis in the chart. }
+    property OnBand: Boolean read FOnBand write SetOnBand;
+
+    { ---- categories ----
+      OWNED BY THE AXIS, and handed to the scale and to every series' data store
+      by REFERENCE. That sharing is the whole mechanism: a category collected
+      off one series' data has to reach the axis and every other series on it,
+      and two series with private lists disagree about which name ordinal 0 is.
+
+      nil unless the scale is ordinal. }
+    property Categories: TTyOrdinalMeta read FCategories;
+    { Set a FIXED category list -- an axis that declares its own `data`. Also
+      re-derives the scale's extent, because the two are one fact: leaving the
+      caller to remember the second step is how an axis ends up with categories
+      and an empty extent. }
+    procedure SetCategories(const A: array of string);
   end;
 
   ITyCoordSys = interface
@@ -130,13 +196,37 @@ begin
   FHorizontal := AHorizontal;
   FPxStart := 0;
   FPxStop := 1;
-  FBandWidth := 0;
   FInverse := False;
+  FMainType := '';
+  FComponentIndex := -1;
+  FId := '';
+  FName := '';
+  FAxisType := atValue;
+  FGridIndex := -1;
+  FSide := asBottom;
+  FOnBand := False;
+  FCategories := nil;
+  if FScale is TTyOrdinalScale then
+  begin
+    FCategories := TTyOrdinalMeta.Create;
+    TTyOrdinalScale(FScale).SetMeta(FCategories);
+  end;
+end;
+
+procedure TTyAxis.SetCategories(const A: array of string);
+begin
+  if FCategories = nil then
+    raise EInvalidOperation.CreateFmt(
+      'SetCategories: axis "%s" is not categorical', [FDim]);
+  FCategories.SetCategories(A);
+  TTyOrdinalScale(FScale).SetExtentFromCategories;
 end;
 
 destructor TTyAxis.Destroy;
 begin
+  { Order matters: the scale BORROWS the list, so the scale goes first. }
   FScale.Free;
+  FCategories.Free;
   inherited Destroy;
 end;
 
@@ -146,24 +236,80 @@ begin
   FPxStop := AStop;
 end;
 
+procedure TTyAxis.SetOnBand(AValue: Boolean);
+begin
+  FOnBand := AValue and (FScale is TTyOrdinalScale);
+end;
+
+procedure TTyAxis.SetAxisType(AValue: TTyAxisType);
+begin
+  FAxisType := AValue;
+  { Re-gate: a type change can invalidate banding. }
+  SetOnBand(FOnBand);
+end;
+
+procedure TTyAxis.BandPxExtent(out AStart, AStop: Double);
+var
+  m: Double;
+  n: Integer;
+begin
+  AStart := FPxStart;
+  AStop := FPxStop;
+  if not FOnBand then Exit;
+  n := 0;
+  if FScale is TTyOrdinalScale then n := TTyOrdinalScale(FScale).Count;
+  if n <= 0 then Exit;
+  { SIGNED, deliberately not Abs. On a vertical axis PxStop is above PxStart, so
+    the margin comes out negative and both ends still move INWARD -- which is
+    what makes a bottom-up or an inverse axis work. An Abs here would look right
+    on every horizontal test and be wrong on every vertical one. }
+  m := (AStop - AStart) / n / 2;
+  AStart := AStart + m;
+  AStop := AStop - m;
+end;
+
+function TTyAxis.BandWidth: Double;
+var
+  span, pxSpan, len: Double;
+begin
+  Result := 0;
+  if not (FScale is TTyOrdinalScale) then Exit;
+  if TTyOrdinalScale(FScale).Blank then Exit;
+  { The mapping extent when one is set, else the effective one. For N categories
+    this span is N-1, while Count is N -- two routes to the same N, which is
+    exactly why they are computed in one place. }
+  span := TyRangeSpan(FScale.GetExtent2(sekMapping));
+  if IsNan(span) or IsInfinite(span) then Exit;
+  pxSpan := Abs(FPxStop - FPxStart);
+  len := span;
+  if FOnBand then len := len + 1;
+  { One category: span is 0 and the axis is one band wide. }
+  if len = 0 then len := 1;
+  Result := pxSpan / len;
+end;
+
 function TTyAxis.DataToCoord(AValue: Double): Double;
-var n: Double;
+var n, a, b: Double;
 begin
   if IsNan(AValue) then
     Exit(NaN);
   n := FScale.Normalize(AValue);
   if FInverse then
     n := 1 - n;
-  Result := FPxStart + n * (FPxStop - FPxStart);
+  { The half-band inset is applied to the PIXEL extent, never to the value --
+    an ordinal 0 is still ordinal 0, it just lands on its band's centre. }
+  BandPxExtent(a, b);
+  Result := a + n * (b - a);
 end;
 
 function TTyAxis.CoordToData(ACoord: Double): Double;
-var n, span: Double;
+var n, span, a, b: Double;
 begin
-  span := FPxStop - FPxStart;
+  BandPxExtent(a, b);
+  span := b - a;
   if span = 0 then
     Exit(FScale.GetExtent.Start);
-  n := (ACoord - FPxStart) / span;
+  n := (ACoord - a) / span;
   if FInverse then
     n := 1 - n;
   Result := FScale.Denormalize(n);

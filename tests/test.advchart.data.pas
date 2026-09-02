@@ -69,6 +69,12 @@ type
     procedure TestDeduplicationOffAppendsBlind;
     procedure TestCategoriesMustBeSetBeforeFilling;
     procedure TestCategoriesNeedAnOrdinalDimension;
+    { ---- a borrowed category list ---- }
+    procedure TestTwoStoresSharingOneListAgreeOnOrdinals;
+    procedure TestABorrowedListIsNotFreedByTheStore;
+    procedure TestClearDoesNotWipeABorrowedList;
+    procedure TestABorrowedListCannotBeOverwrittenBySeriesData;
+    procedure TestBorrowingAfterFillingIsRefused;
     { ---- identity ---- }
     procedure TestIdAndNameAreOnlyAllocatedWhenUsed;
     procedure TestIdAndNameFollowTheRawRow;
@@ -535,6 +541,126 @@ begin
     Fail('a float dimension has no categories');
   except
     on EInvalidOperation do ;
+  end;
+end;
+
+{ ====================== a borrowed category list ====================== }
+
+procedure TAdvChartDataTest.TestTwoStoresSharingOneListAgreeOnOrdinals;
+var
+  other: TTyDataStore;
+  axis: TTyOrdinalMeta;
+begin
+  { THE reason the list is shared rather than copied. Two series on one category
+    axis, each collecting from its own data: with private lists they disagree
+    about which name ordinal 0 is, and render offset from each other on an axis
+    they supposedly share. Nothing about either store looks wrong on its own --
+    which is why this is a test and not a comment. }
+  axis := TTyOrdinalMeta.Create;
+  other := TTyDataStore.Create;
+  try
+    FS.AddDimension('c', ddtOrdinal);
+    FS.UseOrdinalMeta(0, axis);
+    other.AddDimension('c', ddtOrdinal);
+    other.UseOrdinalMeta(0, axis);
+
+    FS.AppendRow([TyDataText('Mon')]);
+    FS.AppendRow([TyDataText('Tue')]);
+    other.AppendRow([TyDataText('Tue')]);
+    other.AppendRow([TyDataText('Wed')]);
+
+    AssertEquals('one list, three names', 3, axis.Count);
+    AssertEquals('Tue is 1 in the first store', 1, FS.Get(0, 1), 0);
+    AssertEquals('and 1 in the second too', 1, other.Get(0, 0), 0);
+    AssertEquals('Wed came from the second store', 2, other.Get(0, 1), 0);
+    AssertEquals('and the first store can read it', 'Wed', FS.CategoryAt(0, 2));
+  finally
+    other.Free;
+    axis.Free;
+  end;
+end;
+
+procedure TAdvChartDataTest.TestABorrowedListIsNotFreedByTheStore;
+var axis: TTyOrdinalMeta;
+begin
+  { A double free shows up on the NEXT test, not this one, so the assertion is
+    that the list is still usable after the store that borrowed it is gone. }
+  axis := TTyOrdinalMeta.Create;
+  try
+    FS.AddDimension('c', ddtOrdinal);
+    FS.UseOrdinalMeta(0, axis);
+    FS.AppendRow([TyDataText('Mon')]);
+    FreeAndNil(FS);
+    AssertEquals('the axis still owns its list', 1, axis.Count);
+    AssertEquals('Mon', axis.CategoryAt(0));
+  finally
+    axis.Free;
+  end;
+  FS := TTyDataStore.Create;   { TearDown frees it }
+end;
+
+procedure TAdvChartDataTest.TestClearDoesNotWipeABorrowedList;
+var axis: TTyOrdinalMeta;
+begin
+  { Only the OWNER resets. One series clearing itself must not drop categories
+    another series already contributed -- that other series' ordinal column
+    would then point at names which no longer exist. }
+  axis := TTyOrdinalMeta.Create;
+  try
+    FS.AddDimension('c', ddtOrdinal);
+    FS.AddDimension('own', ddtOrdinal);
+    FS.UseOrdinalMeta(0, axis);
+    FS.AppendRow([TyDataText('Mon'), TyDataText('x')]);
+    AssertEquals(1, axis.Count);
+    FS.Clear;
+    AssertEquals('the axis list survives', 1, axis.Count);
+    AssertEquals('while the store''s own list is reset', 0, FS.CategoryCount(1));
+  finally
+    axis.Free;
+  end;
+end;
+
+procedure TAdvChartDataTest.TestABorrowedListCannotBeOverwrittenBySeriesData;
+var axis: TTyOrdinalMeta;
+begin
+  { A series telling the axis what its categories are is backwards. The axis
+    sets them on its own list; a store that borrowed one must not overwrite
+    what every other series on that axis is reading. }
+  axis := TTyOrdinalMeta.Create;
+  try
+    axis.SetCategories(['Mon', 'Tue']);
+    FS.AddDimension('c', ddtOrdinal);
+    FS.UseOrdinalMeta(0, axis);
+    try
+      FS.SetCategories(0, ['Wed']);
+      Fail('a borrowed list must not be overwritten');
+    except
+      on EInvalidOperation do ;
+    end;
+    AssertEquals('and it was not', 2, axis.Count);
+  finally
+    axis.Free;
+  end;
+end;
+
+procedure TAdvChartDataTest.TestBorrowingAfterFillingIsRefused;
+var axis: TTyOrdinalMeta;
+begin
+  { Same rule as SetCategories, for the same reason: the column has already been
+    parsed against the old list, and swapping the list underneath would
+    reinterpret every value in it. }
+  axis := TTyOrdinalMeta.Create;
+  try
+    FS.AddDimension('c', ddtOrdinal);
+    FS.AppendRow([TyDataText('Mon')]);
+    try
+      FS.UseOrdinalMeta(0, axis);
+      Fail('borrowing after the first row should raise');
+    except
+      on EInvalidOperation do ;
+    end;
+  finally
+    axis.Free;
   end;
 end;
 

@@ -29,7 +29,7 @@ unit tyControls.AdvChart.Scale;
   PURE: SysUtils, Math and AdvChart.Types only. No Controls, no Graphics, no
   handle. }
 interface
-uses SysUtils, Math, tyControls.AdvChart.Types;
+uses SysUtils, Math, tyControls.AdvChart.Types, tyControls.AdvChart.Data;
 
 type
   { Which extent. See the unit header. }
@@ -150,6 +150,12 @@ type
   TTyScaleTick = record
     Value: Double;
     Level: Integer;
+    { An extent boundary that the stride skipped and that was forced back in.
+      A THIRD concept, not a Level: it says "this tick is here because the
+      extent ends here, not because the interval landed on it", and the on-band
+      tick placement reads it to decide whether the last tick belongs to a band
+      or to the edge (ECharts helper.ts:317-328, Axis.ts:345-347). }
+    OffInterval: Boolean;
   end;
   TTyScaleTickArray = array of TTyScaleTick;
 
@@ -166,13 +172,27 @@ type
     function DefaultMapper: ITyScaleMapper; virtual;
   public
     constructor Create;
-    function Normalize(AValue: Double): Double;
-    function Denormalize(ANorm: Double): Double;
-    function Contain(AValue: Double): Boolean;
+    { VIRTUAL, all three. The base bodies stay one-line mapper forwarders -- a
+      scale must never compute a normalisation itself -- but an ordinal scale
+      has to convert an ordinal number into the TICK number its extent is
+      measured in before the mapper ever sees it. That conversion cannot be a
+      TransformIn: the base pushes the extent ENDS through TransformIn
+      (see SetExtent), and an ordinal extent is already in tick space. }
+    function Normalize(AValue: Double): Double; virtual;
+    function Denormalize(ANorm: Double): Double; virtual;
+    function Contain(AValue: Double): Boolean; virtual;
     function GetExtent: TTyRange;
+    { The mapping extent when one is set, else the effective one. Band width
+      needs that preference and reaching through the public Mapper to get it
+      would put the fallback rule in the caller. }
+    function GetExtent2(AKind: TTyScaleExtentKind): TTyRange;
     procedure SetExtent(const ARange: TTyRange);
     procedure SetExtent2(AKind: TTyScaleExtentKind; const ARange: TTyRange);
     function GetTicks: TTyScaleTickArray; virtual; abstract;
+    { "This scale has nothing to show." A value axis with no data is blank too,
+      so it belongs on the base rather than on the ordinal subclass: GetTicks,
+      band width and the axis builder all want ONE predicate. }
+    function Blank: Boolean; virtual;
     { Swappable so a decorator (breaks) can be wrapped around it without the
       scale subclass knowing. NOTE a replacement mapper brings its OWN extents;
       set the extent again after swapping unless the new mapper wraps the old. }
@@ -182,6 +202,72 @@ type
       one because retrofitting it means reworking the extent model. }
     property StartValue: Double read FStartValue write SetStartValue;
     property HasStartValue: Boolean read FHasStartValue;
+  end;
+
+  { The category scale.
+
+    ITS EXTENT IS A PAIR OF TICK NUMBERS, INCLUSIVE AT BOTH ENDS. [0, 5] is six
+    categories on screen, not five, and not a count. Count = Stop - Start + 1.
+    Same off-by-one as TTyScrollBar.Max, which this library has already been
+    bitten by once, so a test pins it.
+
+    THREE NUMBER SPACES, kept apart on purpose:
+      raw category    a string, living in the meta
+      ordinal number  0..CategoryCount-1 -- what a data column holds and what
+                      DataToCoord takes
+      tick number     what GetTicks yields, and what the EXTENT is measured in
+    The last two are the same number today. They stop being the same the moment
+    a bar race reorders categories, and ECharts' own source carries a complaint
+    about not having separated them early. Separating them now costs a rename.
+
+    THE META IS BORROWED, NEVER OWNED. The axis owns it and hands the SAME
+    instance to this scale and to every series dimension bound to that axis.
+    That sharing IS the mechanism by which a category collected off one series'
+    data reaches the axis and every other series on it.
+
+    NO NICEING. An ordinal extent is not rounded: splitNumber, interval,
+    minInterval and maxInterval do not apply to it. }
+  TTyOrdinalScale = class(TTyScale)
+  private
+    FMeta: TTyOrdinalMeta;              // BORROWED -- never freed here
+  public
+    constructor Create;
+    { The one place the extent comes from: [0, CategoryCount-1]. NEVER from the
+      data's own min or max. Zero categories leaves [0,0] and Blank True rather
+      than writing a reversed [0,-1], which TyRange would normalise to [-1,0]
+      and Count would then answer 2. }
+    procedure SetExtentFromCategories;
+    procedure SetMeta(AMeta: TTyOrdinalMeta);
+
+    { A name to its ordinal number, NaN when unknown. The string branch NEVER
+      falls back to numeric: '3' against ['a','b','c','d'] is NaN, not 3. }
+    function ParseText(const AText: string): Double;
+    { A number is already an ordinal number, snapped the way JavaScript rounds. }
+    function ParseNumber(AValue: Double): Double;
+
+    { Categories currently in the EXTENT, inclusive. Zero when blank. }
+    function Count: Integer;
+    { Categories the meta holds. Differs from Count as soon as min/max or a
+      dataZoom narrows the extent, and the two are not interchangeable: Contain
+      tests against this one, band width divides by the other. }
+    function CategoryCount: Integer;
+    { Takes a TICK value and converts inside, so a caller never has to know
+      which space it is holding. '' out of range and '' when blank. }
+    function GetLabel(ATickValue: Double): string;
+
+    function GetTicks: TTyScaleTickArray; override;
+    function Blank: Boolean; override;
+
+    { Identity today. The indirection stays because it is the API shape that a
+      reordering feature needs, not the feature itself. }
+    function OrdinalToTick(AOrdinal: Double): Double;
+    function TickToOrdinal(ATick: Double): Double;
+
+    function Normalize(AValue: Double): Double; override;
+    function Denormalize(ANorm: Double): Double; override;
+    function Contain(AValue: Double): Boolean; override;
+
+    property Meta: TTyOrdinalMeta read FMeta;
   end;
 
   { A linear/interval scale with nice 1-2-2.5-5 tick generation. }
@@ -201,7 +287,22 @@ type
     property FixMax: Boolean read FFixMax write FFixMax;
   end;
 
+{ JavaScript's rounding, which is NOT FPC's -- Round is banker's here. Exported
+  because the ordinal scale is not the only place that has to snap the way the
+  option text's author expects. }
+function TyJsRound(AValue: Double): Double;
+
 implementation
+
+function TyJsRound(AValue: Double): Double;
+begin
+  { JavaScript's Math.round is half-toward-plus-infinity. FPC's Round is
+    BANKER'S -- Round(2.5) is 2 and Round(1.5) is 2 -- which would snap every
+    other band boundary to the wrong category. Floor(x + 0.5) matches JS on
+    both signs: -0.5 gives 0, -1.5 gives -1. }
+  if IsNan(AValue) or IsInfinite(AValue) then Exit(AValue);
+  Result := Floor(AValue + 0.5);
+end;
 
 { ============================ TTyScaleMapperBase ============================ }
 
@@ -600,6 +701,157 @@ end;
 procedure TTyScale.SetExtent2(AKind: TTyScaleExtentKind; const ARange: TTyRange);
 begin
   FMapper.SetExtent(AKind, ARange);
+end;
+
+function TTyScale.GetExtent2(AKind: TTyScaleExtentKind): TTyRange;
+begin
+  Result := FMapper.GetExtent(AKind);
+end;
+
+function TTyScale.Blank: Boolean;
+begin
+  { A scale is blank when its extent says nothing can be drawn. The base can
+    answer that from the extent alone; the ordinal scale overrides because an
+    empty category list is blank whatever the extent happens to hold. }
+  Result := IsNan(GetExtent.Start) or IsNan(GetExtent.Stop);
+end;
+
+{ ============================ TTyOrdinalScale ============================ }
+
+constructor TTyOrdinalScale.Create;
+begin
+  inherited Create;
+  FMeta := nil;
+end;
+
+procedure TTyOrdinalScale.SetMeta(AMeta: TTyOrdinalMeta);
+begin
+  { Borrowed. The axis owns it; see the class comment. }
+  FMeta := AMeta;
+  SetExtentFromCategories;
+end;
+
+procedure TTyOrdinalScale.SetExtentFromCategories;
+var n: Integer;
+begin
+  n := CategoryCount;
+  if n <= 0 then
+  begin
+    { NOT TyRange(0, -1): TyRange normalises a reversed pair, so that would
+      become [-1, 0] and Count would answer two categories where there are
+      none. Blank is what callers test; the extent is left harmless. }
+    SetExtent(TyRange(0, 0));
+    Exit;
+  end;
+  SetExtent(TyRange(0, n - 1));
+end;
+
+function TTyOrdinalScale.ParseText(const AText: string): Double;
+var o: Integer;
+begin
+  if FMeta = nil then Exit(NaN);
+  o := FMeta.GetOrdinal(AText);
+  { No numeric fallback, on purpose: '3' against ['a','b','c','d'] names no
+    category, and answering 3 would silently plot a point on a category the
+    user never wrote. }
+  if o < 0 then Exit(NaN);
+  Result := o;
+end;
+
+function TTyOrdinalScale.ParseNumber(AValue: Double): Double;
+begin
+  Result := TyJsRound(AValue);
+end;
+
+function TTyOrdinalScale.CategoryCount: Integer;
+begin
+  if FMeta = nil then Exit(0);
+  Result := FMeta.Count;
+end;
+
+function TTyOrdinalScale.Blank: Boolean;
+begin
+  Result := CategoryCount <= 0;
+end;
+
+function TTyOrdinalScale.Count: Integer;
+var e: TTyRange;
+begin
+  if Blank then Exit(0);
+  e := GetExtent;
+  if IsNan(e.Start) or IsNan(e.Stop) then Exit(0);
+  { INCLUSIVE at both ends -- [0,5] is six categories. }
+  Result := Trunc(e.Stop) - Trunc(e.Start) + 1;
+  if Result < 0 then Result := 0;
+end;
+
+function TTyOrdinalScale.OrdinalToTick(AOrdinal: Double): Double;
+begin
+  Result := AOrdinal;
+end;
+
+function TTyOrdinalScale.TickToOrdinal(ATick: Double): Double;
+begin
+  Result := ATick;
+end;
+
+function TTyOrdinalScale.GetLabel(ATickValue: Double): string;
+var o: Double;
+begin
+  Result := '';
+  { The meta, not Blank. A scale that was never given a category list at all is
+    what would crash here; a blank-but-present list already answers '' from
+    CategoryAt. Mutation testing found the guard was aimed at the wrong case. }
+  if FMeta = nil then Exit;
+  o := TickToOrdinal(ATickValue);
+  if IsNan(o) or IsInfinite(o) then Exit;
+  { CategoryAt already answers '' out of range. }
+  Result := FMeta.CategoryAt(Trunc(o));
+end;
+
+function TTyOrdinalScale.GetTicks: TTyScaleTickArray;
+var
+  e: TTyRange;
+  i, n: Integer;
+begin
+  Result := nil;
+  e := GetExtent;
+  { No guards. There were two -- one on Blank, one on a zero count -- and
+    mutation testing removed each in turn without anything going red: Count
+    already answers 0 for a blank scale, and SetLength(Result, 0) is already an
+    empty array. The empty case falls out; a guard would only be a claim that
+    it does not. }
+  n := Count;
+  SetLength(Result, n);
+  for i := 0 to n - 1 do
+  begin
+    Result[i].Value := Trunc(e.Start) + i;   { contiguous, step 1 }
+    Result[i].Level := 0;
+    Result[i].OffInterval := False;
+  end;
+end;
+
+function TTyOrdinalScale.Normalize(AValue: Double): Double;
+begin
+  { Ordinal to TICK first: the extent is measured in tick numbers, and the
+    mapper only ever sees that space. }
+  Result := Mapper.Normalize(OrdinalToTick(AValue));
+end;
+
+function TTyOrdinalScale.Denormalize(ANorm: Double): Double;
+begin
+  { Snap to a whole tick, THEN back to an ordinal. The rounding is the reason
+    dragging a window over a category axis lands on whole categories. }
+  Result := TickToOrdinal(TyJsRound(Mapper.Denormalize(ANorm)));
+end;
+
+function TTyOrdinalScale.Contain(AValue: Double): Boolean;
+begin
+  { Note the asymmetry and keep it: the extent test takes the TICK number, the
+    range test takes the RAW ordinal. Zero categories therefore contains
+    nothing, which is what Blank needs. }
+  Result := Mapper.Contain(OrdinalToTick(AValue))
+        and (AValue >= 0) and (AValue < CategoryCount);
 end;
 
 { ============================ TTyIntervalScale ============================ }

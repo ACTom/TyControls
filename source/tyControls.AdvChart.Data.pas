@@ -171,7 +171,14 @@ type
       TDim = record
         Name: string;
         Kind: TTyDimType;
-        Meta: TTyOrdinalMeta;       // owned; ordinal dimensions only
+        Meta: TTyOrdinalMeta;       // ordinal dimensions only; see MetaOwned
+        { False means the AXIS owns this list and hands the same instance to
+          every series bound to it. That sharing is not an optimisation -- it
+          IS the mechanism by which a category collected off one series' data
+          reaches the axis and every other series on it. Two series with
+          private lists disagree about which name ordinal 0 is, and render
+          offset from each other on an axis they supposedly share. }
+        MetaOwned: Boolean;
         RawMin, RawMax: Double;     // maintained during append, so the
                                     // unfiltered extent is O(1)
         CacheMin, CacheMax: array[TTyExtentFilter] of Double;
@@ -225,6 +232,13 @@ type
       rewrite is replaced by a rule, and calling this late raises rather than
       silently reinterpreting a column that has already been parsed. }
     procedure SetCategories(ADim: Integer; const A: array of string);
+    { Borrow the AXIS' category list instead of keeping a private one.
+
+      Must be called before the first row, for the same reason SetCategories
+      must: this store controls the order -- axes are read before series -- so
+      the in-place column rewrite ECharts needs is replaced by a rule, and a
+      rule that is not enforced is a comment. }
+    procedure UseOrdinalMeta(ADim: Integer; AMeta: TTyOrdinalMeta);
     function CategoryCount(ADim: Integer): Integer;
     function CategoryAt(ADim, AOrdinal: Integer): string;
     function OrdinalMeta(ADim: Integer): TTyOrdinalMeta;
@@ -702,7 +716,8 @@ var
   i: Integer;
 begin
   for i := 0 to High(FDims) do
-    FDims[i].Meta.Free;
+    if FDims[i].MetaOwned then
+      FDims[i].Meta.Free;
   inherited Destroy;
 end;
 
@@ -718,7 +733,10 @@ begin
   FDims[Result].RawMin := Infinity;
   FDims[Result].RawMax := NegInfinity;
   if AType = ddtOrdinal then
+  begin
     FDims[Result].Meta := TTyOrdinalMeta.Create;
+    FDims[Result].MetaOwned := True;
+  end;
   if FCapacity > 0 then
   begin
     SetLength(FCols[Result], FCapacity);
@@ -764,7 +782,30 @@ begin
   if FRawCount > 0 then
     raise EInvalidOperation.CreateFmt(
       'SetCategories: dimension "%s" already holds %d rows', [FDims[ADim].Name, FRawCount]);
+  { A series telling the axis what its categories are is backwards. The builder
+    sets them on the axis' own list; a store that borrowed one must not
+    overwrite what every other series on that axis is reading. }
+  if not FDims[ADim].MetaOwned then
+    raise EInvalidOperation.CreateFmt(
+      'SetCategories: dimension "%s" borrows its category list from the axis',
+      [FDims[ADim].Name]);
   FDims[ADim].Meta.SetCategories(A);
+end;
+
+procedure TTyDataStore.UseOrdinalMeta(ADim: Integer; AMeta: TTyOrdinalMeta);
+begin
+  if (ADim < 0) or (ADim > High(FDims)) then Exit;
+  if FDims[ADim].Kind <> ddtOrdinal then
+    raise EInvalidOperation.CreateFmt(
+      'UseOrdinalMeta: dimension "%s" is not ordinal', [FDims[ADim].Name]);
+  if FRawCount > 0 then
+    raise EInvalidOperation.CreateFmt(
+      'UseOrdinalMeta: dimension "%s" already holds %d rows', [FDims[ADim].Name, FRawCount]);
+  if AMeta = nil then Exit;
+  if FDims[ADim].MetaOwned then
+    FreeAndNil(FDims[ADim].Meta);
+  FDims[ADim].Meta := AMeta;
+  FDims[ADim].MetaOwned := False;
 end;
 
 function TTyDataStore.CategoryCount(ADim: Integer): Integer;
@@ -949,7 +990,12 @@ begin
     FDims[i].RawMax := NegInfinity;
     FDims[i].HasInverted := False;
     FDims[i].Inverted := nil;
-    if FDims[i].Meta <> nil then
+    { Only the OWNER resets. A borrowed list belongs to the axis, and wiping
+      it here would drop the categories another series had already
+      contributed -- leaving that series' ordinal column pointing at names
+      that no longer exist. The builder resets each axis' list once, before
+      refilling any store. }
+    if (FDims[i].Meta <> nil) and FDims[i].MetaOwned then
       FDims[i].Meta.ResetCollected;
   end;
   InvalidateExtents;

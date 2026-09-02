@@ -12,6 +12,7 @@ type
   TAdvChartCartesianTest = class(TTestCase)
   private
     function MakeCartesian(const ARect: TTyRectF): TTyCartesian2D;
+    function MakeCategoryCartesian(const ARect: TTyRectF; ACount: Integer): TTyCartesian2D;
   published
     procedure TestDataToPointCorners;
     procedure TestYAxisIsInverted;
@@ -28,6 +29,35 @@ implementation
 
 const
   Eps = 1e-6;
+
+{ A cartesian whose x axis is a real CATEGORY axis of ACount categories.
+
+  BandWidth used to be a settable number, and these tests set it -- which pinned
+  a fiction: a band width on an interval scale has no source. It is derived now,
+  so the fixture has to supply the thing it is derived from. The numbers below
+  are unchanged because they were chosen to be exact: 400px over 10 categories
+  really is a band of 40. }
+function TAdvChartCartesianTest.MakeCategoryCartesian(const ARect: TTyRectF;
+  ACount: Integer): TTyCartesian2D;
+var
+  ax: TTyAxis;
+  sy: TTyIntervalScale;
+  cats: TTyStringArray;
+  i: Integer;
+begin
+  Result := TTyCartesian2D.Create;
+  ax := TTyAxis.Create('x', TTyOrdinalScale.Create, True);
+  SetLength(cats, ACount);
+  for i := 0 to ACount - 1 do
+    cats[i] := Chr(Ord('a') + i);
+  ax.SetCategories(cats);
+  ax.OnBand := True;
+  sy := TTyIntervalScale.Create;
+  sy.SetExtent(TyRange(0, 100));
+  Result.AddAxis(ax);
+  Result.AddAxis(TTyAxis.Create('y', sy, False));
+  Result.SetRect(ARect);
+end;
 
 function TAdvChartCartesianTest.MakeCartesian(const ARect: TTyRectF): TTyCartesian2D;
 var sx, sy: TTyIntervalScale;
@@ -130,9 +160,10 @@ end;
 procedure TAdvChartCartesianTest.TestDataToLayoutContainsItsAnchor;
 var c: TTyCartesian2D; i: Integer; p: TTyPointF; l: TTyCoordLayout;
 begin
-  c := MakeCartesian(TyRectF(50, 20, 450, 320));
+  { Eleven categories over 400px: a band of about 36.36. No literal is asserted
+    here -- the claim is that each anchor lands inside its OWN cell. }
+  c := MakeCategoryCartesian(TyRectF(50, 20, 450, 320), 11);
   try
-    c.GetAxis(0).BandWidth := 30;
     for i := 0 to 10 do
     begin
       p := c.DataToPoint([i, 50]);
@@ -151,9 +182,8 @@ end;
 procedure TAdvChartCartesianTest.TestDataToLayoutIsBandWide;
 var c: TTyCartesian2D; l: TTyCoordLayout;
 begin
-  c := MakeCartesian(TyRectF(0, 0, 400, 300));
+  c := MakeCategoryCartesian(TyRectF(0, 0, 400, 300), 10);
   try
-    c.GetAxis(0).BandWidth := 40;
     l := c.DataToLayout([5, 50]);
     AssertEquals('cell is one band wide', 40.0, TyRectFWidth(l.Rect), Eps);
   finally
@@ -164,9 +194,8 @@ end;
 procedure TAdvChartCartesianTest.TestContentRectIsInsideRect;
 var c: TTyCartesian2D; l: TTyCoordLayout;
 begin
-  c := MakeCartesian(TyRectF(0, 0, 400, 300));
+  c := MakeCategoryCartesian(TyRectF(0, 0, 400, 300), 10);
   try
-    c.GetAxis(0).BandWidth := 40;
     c.DividerWidth := 2;
     l := c.DataToLayout([5, 50]);
     AssertTrue('content rect is valid', TyRectFIsValid(l.ContentRect));

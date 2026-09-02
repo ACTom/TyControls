@@ -30,17 +30,22 @@ const
   Eps = 1e-9;
 
 function TAdvChartLayoutTest.MakeCartesian: TTyCartesian2D;
-var sx, sy: TTyIntervalScale;
+var
+  ax: TTyAxis;
+  sy: TTyIntervalScale;
 begin
   Result := TTyCartesian2D.Create;
-  sx := TTyIntervalScale.Create;
-  sx.SetExtent(TyRange(0, 10));
+  { A real category axis: band width is derived now, so a container that hands
+    over a cell needs an axis that actually has bands. Ten categories over
+    400px is a band of 40, which is the number this test already asserted. }
+  ax := TTyAxis.Create('x', TTyOrdinalScale.Create, True);
+  ax.SetCategories(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j']);
+  ax.OnBand := True;
   sy := TTyIntervalScale.Create;
   sy.SetExtent(TyRange(0, 100));
-  Result.AddAxis(TTyAxis.Create('x', sx, True));
+  Result.AddAxis(ax);
   Result.AddAxis(TTyAxis.Create('y', sy, False));
   Result.SetRect(TyRectF(0, 0, 400, 300));
-  Result.GetAxis(0).BandWidth := 40;
   { Non-zero on purpose: with a zero divider Rect and ContentRect coincide, and
     nothing would pin down WHICH of the two the container hands over. }
   Result.DividerWidth := 6;

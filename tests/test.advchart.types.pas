@@ -7,6 +7,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, tyControls.AdvChart.Types;
 type
   TAdvChartTypesTest = class(TTestCase)
   published
+    procedure TestNoDataIsContainedByNothing;
     procedure TestRangeNormalisesReversedInput;
     procedure TestRangeSpanIsNonNegative;
     procedure TestRangeContainsBothEnds;
@@ -18,6 +19,24 @@ type
     procedure TestRectWithNaNIsNotValid;
   end;
 implementation
+
+procedure TAdvChartTypesTest.TestNoDataIsContainedByNothing;
+var r: TTyRectF; g: TTyRange;
+begin
+  { Not politeness -- FPC compiles an ordered comparison to COMISD, which
+    SIGNALS on a quiet NaN, so `NaN >= x` RAISES EInvalidOp instead of
+    answering False. TyInvalidPointF is this library's own spelling of "no
+    answer", so before this guard a hit test on one crashed rather than missed,
+    and a scale asked whether a missing value was on it crashed too. Found by a
+    category-scale test that passed NaN to Contain on purpose. }
+  r := TyRectF(0, 0, 100, 100);
+  AssertFalse('an invalid point is in no rect', TyRectFContains(r, TyInvalidPointF));
+  AssertFalse('one NaN is enough', TyRectFContains(r, TyPointF(NaN, 50)));
+  AssertFalse('either axis', TyRectFContains(r, TyPointF(50, NaN)));
+  g := TyRange(0, 10);
+  AssertFalse('and no data is on no axis', TyRangeContains(g, NaN));
+  AssertTrue('while a real value still is', TyRangeContains(g, 5));
+end;
 
 procedure TAdvChartTypesTest.TestRangeNormalisesReversedInput;
 var r: TTyRange;

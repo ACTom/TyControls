@@ -67,6 +67,14 @@ type
   end;
 
   TTyStringArray = array of string;
+  TTyIntegerArray = array of Integer;
+
+  { Which edge of a plot rect an axis draws on. Lives here rather than in
+    Layout, where it started, because Coord needs it too and Layout already
+    uses Coord -- naming it upward would be a cycle. A bare enum with no
+    dependencies is exactly what this unit is for; TTyTextAnchorH is here for
+    the same reason. }
+  TTyAxisSide = (asLeft, asRight, asTop, asBottom);
 
 function TyPointF(AX, AY: Double): TTyPointF;
 function TyRectF(ALeft, ATop, ARight, ABottom: Double): TTyRectF;
@@ -167,6 +175,12 @@ end;
 
 function TyRectFContains(const AR: TTyRectF; const AP: TTyPointF): Boolean;
 begin
+  { NaN first, and not as politeness: FPC compiles an ordered comparison to
+    COMISD, which SIGNALS on a quiet NaN, so `NaN >= x` raises EInvalidOp rather
+    than answering False. TyInvalidPointF is NaN on both axes and is this
+    library's own spelling of "no answer", so a hit test on one would crash
+    instead of missing. }
+  if IsNan(AP.X) or IsNan(AP.Y) then Exit(False);
   Result := (AP.X >= AR.Left) and (AP.X < AR.Right)
         and (AP.Y >= AR.Top) and (AP.Y < AR.Bottom);
 end;
@@ -178,6 +192,11 @@ end;
 
 function TyRangeContains(const AR: TTyRange; AValue: Double): Boolean;
 begin
+  { Same reason as TyRectFContains: an ordered comparison against NaN raises
+    rather than answering False. NaN is this layer's no-data value, so asking
+    whether a missing value is on an axis is an ordinary question with an
+    ordinary answer -- no. }
+  if IsNan(AValue) then Exit(False);
   Result := (AValue >= AR.Start) and (AValue <= AR.Stop);
 end;
 

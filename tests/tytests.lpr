@@ -146,6 +146,7 @@ uses
   test.imageview,
   test.chart,
   test.advchart.types, test.advchart.scale, test.advchart.scale.break,
+  test.advchart.scale.ordinal,
   test.advchart.coord, test.advchart.layout,
   test.painter.vector,
   test.advchart.axis,
