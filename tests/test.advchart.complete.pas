@@ -41,6 +41,7 @@ type
     procedure TestCommentsAreSkipped;
     procedure TestClosedContainersDoNotLeak;
     procedure TestBracesInsideStringsDoNotCount;
+    procedure TestEscapedQuotesDoNotEndTheString;
     procedure TestUnknownContainerOffersNothing;
     procedure TestEmptyTextIsTheRoot;
   end;
@@ -205,6 +206,19 @@ begin
   AssertTrue('offers', TyOptCompletionsAt(
     '{ tooltip: { formatter: ''{b}: {c}'', ', FList));
   AssertTrue('still inside tooltip', Has('trigger'));
+end;
+
+procedure TAdvChartCompleteTest.TestEscapedQuotesDoNotEndTheString;
+begin
+  { An escaped quote inside a value ends the string early if escapes are not
+    skipped -- and then the braces in the rest of the template are read as
+    structure, putting the caret in a container that does not exist. Found by
+    mutation: removing the escape skip left every other test green, because
+    none of them had an escape in a string. }
+  AssertTrue('offers', TyOptCompletionsAt(
+    '{ tooltip: { formatter: ''it\''s {b}'', ', FList));
+  AssertTrue('still inside tooltip', Has('trigger'));
+  AssertFalse('and not somewhere invented', Has('series'));
 end;
 
 procedure TAdvChartCompleteTest.TestUnknownContainerOffersNothing;
