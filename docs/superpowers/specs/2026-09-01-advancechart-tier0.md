@@ -710,3 +710,64 @@ JavaScript 自己的 Date 解析器）。
 `AdvChart.*` 十三个单元和 `tyControls.SubPixel` **都还不在 `tycontrols.lpk` 里**——
 目前只有测试工程按单元路径直接编它们。这是有意的（包里还没有东西用得上它们），
 但**第 3 项落控件本体时必须一起接上**，否则就是 `capability-built-but-not-wired` 那一类。
+
+---
+
+## 18. 第 13 项的调研结论：它单独交付不了；先补地基（2026-09-02）
+
+三轮工作流（27 个 agent，约 450 万 token）读 ECharts 源码 + 攻我们自己的设计。**结论是把第 13 项
+往后挪**，先补它依赖的地基。
+
+### 三份独立设计收敛到同一条论点
+
+「一条 series = 类型名 + 已解析的轴绑定 + 自己的数据存储」，而且**轴→series 的反向索引必须跟
+正向绑定同批交付**——没有它，副轴画出来了、有刻度，**显示的却是主轴的数**。这正是第 13 项的
+立项理由，三份设计各自独立得出。
+
+### 但三份设计全被攻破，攻的过程钉死了真约束
+
+| 约束 | 证据 |
+|---|---|
+| `TTyAxis` **没有身份** | `xAxisIndex` 是跨 grid 的**全局 option 下标**（`Grid.ts:441-455, 505, 591-592`），而 `ITyCoordSys.GetAxis(i)` 是系统内部的扁平下标。今天没有任何东西连接两者 |
+| `DataToPoint`/`DataToLayout` **只认 master 对** | `Coord.pas:219-235, 264-273, 275-316`。绑到 `yAxisIndex:1` 的 series **根本映射不到像素** |
+| 绑定**不是**「每个坐标维一个 `<组件>Index`」 | 只有 cartesian2d 与 singleAxis 直接点名轴；polar 只有一个 `polarIndex`，然后**反问系统要**它的 radius/angle 轴（`referHelper.ts:163-165`），parallel/matrix 同理。resolver 必须**两步** |
+| ref 解析**必须按 `coordinateSystem` 设门** | `CoordinateSystem.ts:320-322`。不设门，一条 cartesian line 会解析出 `polarIndex:0`（目录里它的默认值就是 `0`）并**悄悄撑大 polar 轴范围** |
+| 反向索引**必须带 key** | `axisStatistics.ts:407-417` 扁平 / `:428-444` keyed，桶 key 是 **(seriesType, coordSysType)**（`isBaseAxis` 只是**插入过滤器**，不在桶 key 里）。柱宽算法读 keyed 那张（`barGrid.ts:170-177`）；只有扁平表时，一条 line + 一条 bar 共用 x 轴会让**每根柱子宽度减半** |
+| 目录的 per-type `coordinateSystem` **有 6 处与源码不符** | radar 无此节点（源码 `'radar'`）、graph 目录 `'none'`（源码 `'view'`）、tree/treemap/sankey 的 usage。**目录是文档真相，渲染器真相要手抄** |
+| `xAxisId` 默认值是字面量 `undefined`、类型写成 `number` | **上游文档自己的 bug**（`coord-sys.md:199`），目录忠实转录。加漂移守卫时别去「修」目录 |
+
+从源码逐行核出了 **23 种 series 的权威表**（默认坐标系、usage、渲染器**真正分支**的系统、维度、
+是否需要 Graph/Tree 伴生结构）。两条值得单记：**scatter/effectScatter 的渲染器一个坐标系分支都
+没有**（只要 `dimensions` + `dataToPoint`）；**bar 按选项字符串门控**，不认识就静默什么都不画。
+
+### 第 13 项立不住的四件事
+
+1. **没有任何东西从 option 读 `xAxis`/`yAxis`/`grid`**——全库 `TTyAxis.Create` 五处**全在测试里**
+2. **没有类目 scale**，而 `xAxis.type` 默认就是 `'category'`；`BandWidth` 也只有测试写过
+3. **类目表归属错了**：store 拥有它，而 ECharts 挂在轴上共享
+4. **没有东西把 `series[i].data` 灌进 store**，且顺序被锁死：绑定 → 维度 → 类目 → 填充
+
+### 已落地的地基（两个 commit）
+
+**组件槽归一化**（`6d9988b8`）。`series: {...}` 写成裸对象会**静默产生 0 条 series、0 条诊断**——
+`CountAt` 对非数组返回 0，而 ECharts 归一化成数组（`Global.ts:369`）。加的是 `ComponentCount`/
+`ComponentAt` 一对**新**访问器而不是改 `CountAt`：已有测试钉着「对象不是数组」，而且归一化是
+**组件槽**的规矩，不是树里每个数组的（`data: 5` 不该变成单元素数组）。
+
+**类目 scale 与 band 几何**（`8314858a`）。`TTyOrdinalScale`；extent 是**闭区间**不是计数；三个
+数字空间从第一行分开；**band 宽度改成派生**（像素范围一次布局写两遍，构造时缓存的第二次就馊）；
+**半 band 内缩带符号不用 `Abs`**（竖轴 margin 为负，两端才都朝内收；写成 `Abs` 在所有横轴测试上
+都对、所有竖轴上都错）；**类目表归轴所有、store 借用**。
+
+顺带修了一个既有 bug：**有序比较遇 NaN 会抛 `EInvalidOp` 而不是答 False**（x86_64 的 `COMISD` 对
+静默 NaN 发信号），于是对 `TyInvalidPointF` ——本库自己的「无答案」写法——做命中检测是**崩溃**
+而不是未命中。
+
+34 个新测试，全量 **6703**。变异 26 个杀 24，两个存活**都是死守卫**（`Count` 对空 scale 本来就答
+0，`SetLength(x,0)` 本来就是空数组），已删。
+
+### 阶段 3 余下
+
+地基还差**轴/坐标系构建器**（从 option 读 `grid`/`xAxis`/`yAxis`，含 `gridIndex` 与多 grid）和
+**option→store 的填充**（含「类目轴上的标量补全」：`data:[555,666,777]` 变成 `[[0,555],...]`，
+这是网上几乎每个例子的形状）。之后才轮到第 13 项本体。
