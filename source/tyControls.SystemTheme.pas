@@ -8,8 +8,8 @@ unit tyControls.SystemTheme;
 
   Platform coverage (§8 YAGNI: Windows + macOS first, Linux one-shot only):
     - Windows: registry (HKCU). Authoritative.
-    - macOS  : `defaults read -g AppleInterfaceStyle` (gated by the DARWIN define);
-               accent not detected yet (returns False).
+    - macOS  : the AppleInterfaceStyle global default, read through CoreFoundation
+               (gated by the DARWIN define); accent not detected yet (returns False).
     - Linux/other: tssUnknown / False. (No reliable cross-DE probe — design §7 risk 4.) }
 
 {$mode objfpc}{$H+}
@@ -53,7 +53,7 @@ uses
 {$ENDIF}
 {$IFDEF DARWIN}
 uses
-  process;   // RunCommand (FCL) — shells out to `defaults` for the macOS appearance
+  MacOSAll;  // CoreFoundation — CFPreferencesCopyAppValue for the macOS appearance
 {$ENDIF}
 
 function TySchemeToMode(AScheme: TTySystemScheme): string;
@@ -118,17 +118,28 @@ end;
 {$ELSE}
   {$IFDEF DARWIN}
 var
-  outp: string;
+  v: CFPropertyListRef;
+  buf: array[0..63] of Char;
 begin
   Result := tssLight;   // macOS default is light; only "Dark" flips it
   try
-    // `defaults read -g AppleInterfaceStyle` prints "Dark" in dark mode, and errors
-    // (no such key) in light mode. RunCommand swallows the non-zero exit.
-    if RunCommand('/usr/bin/defaults', ['read', '-g', 'AppleInterfaceStyle'], outp) then
-    begin
-      if Pos('dark', LowerCase(outp)) > 0 then
-        Result := tssDark;
-    end;
+    { AppleInterfaceStyle lives in NSGlobalDomain and is simply ABSENT in light mode.
+      Read it through CoreFoundation instead of forking `defaults`: this sits on the follow
+      POLL (tyControls.Form's FFollowTimer, 750 ms, one timer per TTyForm), so shelling out
+      meant a subprocess per tick per window on the main thread for as long as Follow was on.
+      CFPreferencesCopyAppValue searches the app domain and then the global one -- the order
+      NSUserDefaults uses -- so an app-level override still wins. }
+    v := CFPreferencesCopyAppValue(CFSTR('AppleInterfaceStyle'),
+                                   kCFPreferencesCurrentApplication);
+    if v <> nil then
+      try
+        if (CFGetTypeID(v) = CFStringGetTypeID)
+           and CFStringGetCString(CFStringRef(v), @buf[0], SizeOf(buf), kCFStringEncodingUTF8)
+           and (Pos('dark', LowerCase(StrPas(@buf[0]))) > 0) then
+          Result := tssDark;
+      finally
+        CFRelease(v);
+      end;
   except
     Result := tssUnknown;   // never raise
   end;
