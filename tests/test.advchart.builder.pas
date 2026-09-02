@@ -12,7 +12,7 @@ unit test.advchart.builder;
   bare xAxis is a VALUE axis. Category is the commonest axis in the wild because
   `data` is the commonest option, not because of the axis' name. }
 interface
-uses Classes, SysUtils, Math, fpcunit, testregistry,
+uses Classes, SysUtils, Math, DateUtils, fpjson, fpcunit, testregistry,
      tyControls.AdvChart.Types, tyControls.AdvChart.Option,
      tyControls.AdvChart.Data, tyControls.AdvChart.Scale,
      tyControls.AdvChart.Coord, tyControls.AdvChart.Layout,
@@ -74,6 +74,22 @@ type
     { ---- robustness ---- }
     procedure TestAnEmptyOptionBuildsNothingAndDoesNotCrash;
     procedure TestRepeatedBuildsDoNotGrowTheHeap;
+    { ---- reading series data ---- }
+    procedure TestScalarsOnACategoryAxisGetTheRowIndex;
+    procedure TestScalarsOnAValueAxisGoToEveryColumn;
+    procedure TestTuplesAreReadColumnByColumn;
+    procedure TestAShortTupleLeavesTheRestNoData;
+    procedure TestTheObjectFormUnwrapsItsValue;
+    procedure TestAnObjectWithNoValueIsNoData;
+    procedure TestNoDataSpellings;
+    procedure TestRowIndexSurvivesANullFirstRow;
+    procedure TestALeadingNullDoesNotTurnTuplesIntoIndexMode;
+    procedure TestColumnCountComesFromTheFirstItemLiterally;
+    procedure TestNamesThatAreNotOnTheAxisAreGaps;
+    procedure TestPerDatumNameAndId;
+    procedure TestPerDatumOverridesUseDottedPaths;
+    procedure TestTwoSeriesShareTheAxisCategoryList;
+    procedure TestATimeAxisGetsATimeColumn;
   end;
 implementation
 
@@ -549,6 +565,389 @@ begin
   after := GetFPCHeapStatus.CurrHeapUsed;
   AssertTrue(Format('heap grew from %d to %d over a hundred builds', [before, after]),
     after <= before);
+end;
+
+{ ====================== reading series data ====================== }
+
+procedure TAdvChartBuilderTest.TestScalarsOnACategoryAxisGetTheRowIndex;
+var b: TTyChartBuild; st: TTyDataStore; dims: TTySeriesDimArray; i: Integer;
+begin
+  { The commonest shape on the internet: three bare numbers against three
+    category names. It works because the category column is filled with the ROW
+    INDEX while the numbers go to the value column. Without it the numbers would
+    be read as category NAMES, miss every one, and the chart would be empty. }
+  b := Build('{ xAxis: { data: [''Mon'', ''Tue'', ''Wed''] }, yAxis: {},'
+    + ' series: [{ type: ''line'', data: [120, 200, 150] }] }', TyRectF(0, 0, 600, 400));
+  dims := TySeriesCartesianDims(b.Grid(0).CartesianByIndex(0), 0);
+  st := TTyDataStore.Create;
+  try
+    for i := 0 to High(dims) do
+    begin
+      st.AddDimension(dims[i].Name, dims[i].Kind);
+      if dims[i].Axis <> nil then st.UseOrdinalMeta(i, dims[i].Axis.Categories);
+    end;
+    AssertEquals('three rows', 3, TyFillSeriesStore(FOpt, 0, dims, st));
+    AssertEquals('x is the row index', 0, st.Get(0, 0), 0);
+    AssertEquals(1, st.Get(0, 1), 0);
+    AssertEquals(2, st.Get(0, 2), 0);
+    AssertEquals('y is the datum', 120, st.Get(1, 0), 0);
+    AssertEquals(200, st.Get(1, 1), 0);
+    AssertEquals(150, st.Get(1, 2), 0);
+  finally
+    st.Free;
+  end;
+end;
+
+procedure TAdvChartBuilderTest.TestScalarsOnAValueAxisGoToEveryColumn;
+var b: TTyChartBuild; st: TTyDataStore; dims: TTySeriesDimArray; i: Integer;
+begin
+  { A scalar is fed to EVERY column, so on two value axes 120 really does land
+    on both x and y. It looks like a missing guard and it is not -- it is what
+    upstream does, and the case where it would be visible is exactly the case
+    the row index takes over. }
+  b := Build('{ xAxis: {}, yAxis: {},'
+    + ' series: [{ type: ''line'', data: [120, 200] }] }', TyRectF(0, 0, 600, 400));
+  dims := TySeriesCartesianDims(b.Grid(0).CartesianByIndex(0), 0);
+  st := TTyDataStore.Create;
+  try
+    for i := 0 to High(dims) do st.AddDimension(dims[i].Name, dims[i].Kind);
+    TyFillSeriesStore(FOpt, 0, dims, st);
+    AssertEquals('x', 120, st.Get(0, 0), 0);
+    AssertEquals('and y, the same number', 120, st.Get(1, 0), 0);
+    AssertEquals(200, st.Get(0, 1), 0);
+    AssertEquals(200, st.Get(1, 1), 0);
+  finally
+    st.Free;
+  end;
+end;
+
+procedure TAdvChartBuilderTest.TestTuplesAreReadColumnByColumn;
+var b: TTyChartBuild; st: TTyDataStore; dims: TTySeriesDimArray; i: Integer;
+begin
+  b := Build('{ xAxis: {}, yAxis: {},'
+    + ' series: [{ type: ''scatter'', data: [[1, 10], [2, 20], [3, 30]] }] }',
+    TyRectF(0, 0, 600, 400));
+  dims := TySeriesCartesianDims(b.Grid(0).CartesianByIndex(0), 0);
+  st := TTyDataStore.Create;
+  try
+    for i := 0 to High(dims) do st.AddDimension(dims[i].Name, dims[i].Kind);
+    TyFillSeriesStore(FOpt, 0, dims, st);
+    AssertEquals(2, st.Get(0, 1), 0);
+    AssertEquals(20, st.Get(1, 1), 0);
+  finally
+    st.Free;
+  end;
+end;
+
+procedure TAdvChartBuilderTest.TestAShortTupleLeavesTheRestNoData;
+var b: TTyChartBuild; st: TTyDataStore; dims: TTySeriesDimArray; i: Integer;
+begin
+  b := Build('{ xAxis: {}, yAxis: {},'
+    + ' series: [{ type: ''scatter'', data: [[1, 10], [2]] }] }', TyRectF(0, 0, 600, 400));
+  dims := TySeriesCartesianDims(b.Grid(0).CartesianByIndex(0), 0);
+  st := TTyDataStore.Create;
+  try
+    for i := 0 to High(dims) do st.AddDimension(dims[i].Name, dims[i].Kind);
+    TyFillSeriesStore(FOpt, 0, dims, st);
+    AssertEquals(2, st.Get(0, 1), 0);
+    AssertTrue('the column the tuple did not reach', IsNan(st.Get(1, 1)));
+  finally
+    st.Free;
+  end;
+end;
+
+procedure TAdvChartBuilderTest.TestTheObjectFormUnwrapsItsValue;
+var b: TTyChartBuild; st: TTyDataStore; dims: TTySeriesDimArray; i: Integer;
+begin
+  b := Build('{ xAxis: {}, yAxis: {}, series: [{ type: ''scatter'','
+    + ' data: [{ value: [1, 10] }, { value: 5 }] }] }', TyRectF(0, 0, 600, 400));
+  dims := TySeriesCartesianDims(b.Grid(0).CartesianByIndex(0), 0);
+  st := TTyDataStore.Create;
+  try
+    for i := 0 to High(dims) do st.AddDimension(dims[i].Name, dims[i].Kind);
+    TyFillSeriesStore(FOpt, 0, dims, st);
+    AssertEquals('a tuple value', 1, st.Get(0, 0), 0);
+    AssertEquals(10, st.Get(1, 0), 0);
+    AssertEquals('a scalar value, on both columns', 5, st.Get(0, 1), 0);
+    AssertEquals(5, st.Get(1, 1), 0);
+  finally
+    st.Free;
+  end;
+end;
+
+procedure TAdvChartBuilderTest.TestAnObjectWithNoValueIsNoData;
+var b: TTyChartBuild; st: TTyDataStore; dims: TTySeriesDimArray; i: Integer;
+begin
+  { An object with no `value`, or with a null one, falls back to ITSELF -- and
+    an object is not a number, so the datum is a gap. That fallback is
+    deliberate upstream, not an accident: it is what lets `{name: 'x'}` be a
+    labelled hole. }
+  b := Build('{ xAxis: {}, yAxis: {}, series: [{ type: ''scatter'','
+    + ' data: [{ name: ''a'' }, { value: null }, { value: 7 }] }] }',
+    TyRectF(0, 0, 600, 400));
+  dims := TySeriesCartesianDims(b.Grid(0).CartesianByIndex(0), 0);
+  st := TTyDataStore.Create;
+  try
+    for i := 0 to High(dims) do st.AddDimension(dims[i].Name, dims[i].Kind);
+    TyFillSeriesStore(FOpt, 0, dims, st);
+    AssertTrue('no value key', IsNan(st.Get(1, 0)));
+    AssertTrue('a null value', IsNan(st.Get(1, 1)));
+    AssertEquals('and a real one still works', 7, st.Get(1, 2), 0);
+    AssertEquals('the row is still there', 3, st.Count);
+  finally
+    st.Free;
+  end;
+end;
+
+procedure TAdvChartBuilderTest.TestNoDataSpellings;
+var b: TTyChartBuild; st: TTyDataStore; dims: TTySeriesDimArray; i: Integer;
+begin
+  { Every way of writing a hole, and they all have to make the same one -- a
+    line chart breaks at a gap, and a gap that parsed to 0 would draw a spike
+    to the axis instead. }
+  b := Build('{ xAxis: {}, yAxis: {}, series: [{ type: ''line'','
+    + ' data: [null, ''-'', '''', ''nonsense'', 4] }] }', TyRectF(0, 0, 600, 400));
+  dims := TySeriesCartesianDims(b.Grid(0).CartesianByIndex(0), 0);
+  st := TTyDataStore.Create;
+  try
+    for i := 0 to High(dims) do st.AddDimension(dims[i].Name, dims[i].Kind);
+    TyFillSeriesStore(FOpt, 0, dims, st);
+    AssertTrue('null', IsNan(st.Get(1, 0)));
+    AssertTrue('a dash', IsNan(st.Get(1, 1)));
+    AssertTrue('an empty string', IsNan(st.Get(1, 2)));
+    AssertTrue('a word', IsNan(st.Get(1, 3)));
+    AssertEquals('and a number is a number', 4, st.Get(1, 4), 0);
+  finally
+    st.Free;
+  end;
+end;
+
+procedure TAdvChartBuilderTest.TestRowIndexSurvivesANullFirstRow;
+var b: TTyChartBuild; st: TTyDataStore; dims: TTySeriesDimArray; i: Integer;
+begin
+  { The row-index decision reads the first NON-NULL item, so a leading gap does
+    not switch it off -- and the null row still gets its index, because the
+    index is the row's position, not its content. }
+  b := Build('{ xAxis: { data: [''a'', ''b'', ''c''] }, yAxis: {},'
+    + ' series: [{ type: ''line'', data: [null, 55, 66] }] }', TyRectF(0, 0, 600, 400));
+  dims := TySeriesCartesianDims(b.Grid(0).CartesianByIndex(0), 0);
+  st := TTyDataStore.Create;
+  try
+    for i := 0 to High(dims) do
+    begin
+      st.AddDimension(dims[i].Name, dims[i].Kind);
+      if dims[i].Axis <> nil then st.UseOrdinalMeta(i, dims[i].Axis.Categories);
+    end;
+    TyFillSeriesStore(FOpt, 0, dims, st);
+    AssertEquals('the null row still has its index', 0, st.Get(0, 0), 0);
+    AssertTrue('while its value is a gap', IsNan(st.Get(1, 0)));
+    AssertEquals(1, st.Get(0, 1), 0);
+    AssertEquals(55, st.Get(1, 1), 0);
+  finally
+    st.Free;
+  end;
+end;
+
+procedure TAdvChartBuilderTest.TestALeadingNullDoesNotTurnTuplesIntoIndexMode;
+var b: TTyChartBuild; st: TTyDataStore; dims: TTySeriesDimArray; i: Integer;
+begin
+  { The two first-item questions look at DIFFERENT items and genuinely disagree
+    here: the column count reads item 0 raw (a null, so one column), while the
+    row-index decision skips to the first tuple and says no. Merging them would
+    be tidier and would put the row index over real x values. }
+  b := Build('{ xAxis: { data: [''a'', ''b'', ''c''] }, yAxis: {},'
+    + ' series: [{ type: ''line'', data: [null, [2, 55], [0, 66]] }] }',
+    TyRectF(0, 0, 600, 400));
+  dims := TySeriesCartesianDims(b.Grid(0).CartesianByIndex(0), 0);
+  st := TTyDataStore.Create;
+  try
+    for i := 0 to High(dims) do
+    begin
+      st.AddDimension(dims[i].Name, dims[i].Kind);
+      if dims[i].Axis <> nil then st.UseOrdinalMeta(i, dims[i].Axis.Categories);
+    end;
+    TyFillSeriesStore(FOpt, 0, dims, st);
+    { Row 1 carries x=2 and row 2 carries x=0, so the tuple's own value and the
+      row index can never be confused. They were 1 and 2 at first -- which the
+      row indices also are -- and the test then passed under a mutation that
+      turned index mode ON. A fixture that makes both answers identical asserts
+      nothing. The values still have to be VALID category indices, or the
+      column parses to no-data and the assertion raises rather than fails. }
+    AssertEquals('the tuple''s own x, not the row index', 2, st.Get(0, 1), 0);
+    AssertEquals(55, st.Get(1, 1), 0);
+    AssertEquals(0, st.Get(0, 2), 0);
+    AssertEquals(66, st.Get(1, 2), 0);
+  finally
+    st.Free;
+  end;
+end;
+
+procedure TAdvChartBuilderTest.TestColumnCountComesFromTheFirstItemLiterally;
+var
+  d: TJSONArray;
+  dims: TTySeriesDimArray;
+begin
+  AssertTrue(FOpt.SetOptionText('{ series: [{ data: [[1, 2, 3], [4, 5]] },'
+    + ' { data: [7, [1, 2]] }, { data: [null, [1, 2]] }, { data: [] }] }'));
+  d := TJSONArray(TJSONObject(FOpt.ComponentAt('series', 0)).Find('data'));
+  AssertEquals('a three-tuple first', 3, TySeriesDetectedDimCount(d));
+  d := TJSONArray(TJSONObject(FOpt.ComponentAt('series', 1)).Find('data'));
+  AssertEquals('a scalar first is one column', 1, TySeriesDetectedDimCount(d));
+  d := TJSONArray(TJSONObject(FOpt.ComponentAt('series', 2)).Find('data'));
+  AssertEquals('and so is a NULL first, literally', 1, TySeriesDetectedDimCount(d));
+  d := TJSONArray(TJSONObject(FOpt.ComponentAt('series', 3)).Find('data'));
+  AssertEquals('empty data is one column, not none', 1, TySeriesDetectedDimCount(d));
+  SetLength(dims, 0);
+  AssertFalse('and with no category column there is no index mode',
+    TySeriesUsesRowIndex(d, dims));
+end;
+
+procedure TAdvChartBuilderTest.TestNamesThatAreNotOnTheAxisAreGaps;
+var b: TTyChartBuild; st: TTyDataStore; dims: TTySeriesDimArray; i: Integer;
+begin
+  { A fixed category list is the axis' list. A name that is not in it names no
+    band, so it is a gap -- never a new category appended behind the axis' back,
+    which would put a bar where the axis has no tick. }
+  b := Build('{ xAxis: { data: [''A'', ''B'', ''C''] }, yAxis: {},'
+    + ' series: [{ type: ''bar'', data: [[''A'', 1], [''Z'', 2], [''-'', 3]] }] }',
+    TyRectF(0, 0, 600, 400));
+  dims := TySeriesCartesianDims(b.Grid(0).CartesianByIndex(0), 0);
+  st := TTyDataStore.Create;
+  try
+    for i := 0 to High(dims) do
+    begin
+      st.AddDimension(dims[i].Name, dims[i].Kind);
+      if dims[i].Axis <> nil then st.UseOrdinalMeta(i, dims[i].Axis.Categories);
+    end;
+    TyFillSeriesStore(FOpt, 0, dims, st);
+    AssertEquals('A is on the axis', 0, st.Get(0, 0), 0);
+    AssertTrue('Z is not', IsNan(st.Get(0, 1)));
+    AssertTrue('and neither is a dash', IsNan(st.Get(0, 2)));
+    AssertEquals('the axis grew nothing', 3, b.Axis('xAxis', 0).Categories.Count);
+  finally
+    st.Free;
+  end;
+end;
+
+procedure TAdvChartBuilderTest.TestPerDatumNameAndId;
+var b: TTyChartBuild; st: TTyDataStore; dims: TTySeriesDimArray; i: Integer;
+begin
+  { A number is coerced to its decimal form; a boolean is REJECTED rather than
+    becoming the string 'true'. }
+  b := Build('{ xAxis: {}, yAxis: {}, series: [{ type: ''scatter'', data: ['
+    + ' { value: 1, name: ''first'', id: ''a'' },'
+    + ' { value: 2, name: 2001 },'
+    + ' { value: 3, name: true },'
+    + ' 4 ] }] }', TyRectF(0, 0, 600, 400));
+  dims := TySeriesCartesianDims(b.Grid(0).CartesianByIndex(0), 0);
+  st := TTyDataStore.Create;
+  try
+    for i := 0 to High(dims) do st.AddDimension(dims[i].Name, dims[i].Kind);
+    TyFillSeriesStore(FOpt, 0, dims, st);
+    AssertEquals('first', st.GetName(0));
+    AssertEquals('a', st.GetId(0));
+    AssertEquals('a number becomes its decimal form', '2001', st.GetName(1));
+    AssertEquals('a boolean is refused', '', st.GetName(2));
+    AssertEquals('and a bare scalar has no name', '', st.GetName(3));
+    AssertEquals('nor an id', '', st.GetId(1));
+  finally
+    st.Free;
+  end;
+end;
+
+procedure TAdvChartBuilderTest.TestPerDatumOverridesUseDottedPaths;
+var b: TTyChartBuild; st: TTyDataStore; dims: TTySeriesDimArray; i: Integer;
+begin
+  { Interned by LEAF path, not by top-level key, because every read downstream
+    is a leaf read. Nothing needs a list of supported keys, and a nested style
+    override costs one slot rather than a subtree. }
+  b := Build('{ xAxis: {}, yAxis: {}, series: [{ type: ''scatter'', data: ['
+    + ' { value: 1, symbolSize: 20, itemStyle: { color: ''#f00'', borderWidth: 2 },'
+    + '   emphasis: { itemStyle: { color: ''#00f'' } } },'
+    + ' 2 ] }] }', TyRectF(0, 0, 600, 400));
+  dims := TySeriesCartesianDims(b.Grid(0).CartesianByIndex(0), 0);
+  st := TTyDataStore.Create;
+  try
+    for i := 0 to High(dims) do st.AddDimension(dims[i].Name, dims[i].Kind);
+    TyFillSeriesStore(FOpt, 0, dims, st);
+    AssertTrue('a top-level scalar', st.HasOverride(0, TyOverrideKey('symbolSize')));
+    AssertEquals(20, st.GetOverride(0, TyOverrideKey('symbolSize')).Num, 0);
+    AssertEquals('a nested leaf', '#f00',
+      st.GetOverride(0, TyOverrideKey('itemStyle.color')).Text);
+    AssertEquals(2, st.GetOverride(0, TyOverrideKey('itemStyle.borderWidth')).Num, 0);
+    AssertEquals('three levels deep', '#00f',
+      st.GetOverride(0, TyOverrideKey('emphasis.itemStyle.color')).Text);
+    AssertFalse('the plain row overrides nothing',
+      st.HasOverride(1, TyOverrideKey('symbolSize')));
+    AssertFalse('and value is not an override', st.HasOverride(0, TyOverrideKey('value')));
+  finally
+    st.Free;
+  end;
+end;
+
+procedure TAdvChartBuilderTest.TestTwoSeriesShareTheAxisCategoryList;
+var
+  b: TTyChartBuild;
+  sa, sb: TTyDataStore;
+  dims: TTySeriesDimArray;
+  i: Integer;
+begin
+  { A COLLECTING axis -- type category with no data of its own -- takes its
+    categories from whatever the series bring, and both series have to intern
+    against the SAME list. With private lists they would disagree about which
+    name ordinal 0 is and render offset from each other on an axis they share. }
+  b := Build('{ xAxis: { type: ''category'' }, yAxis: {}, series: ['
+    + ' { type: ''bar'', data: [[''Mon'', 1], [''Tue'', 2]] },'
+    + ' { type: ''line'', data: [[''Tue'', 3], [''Wed'', 4]] } ] }',
+    TyRectF(0, 0, 600, 400));
+  dims := TySeriesCartesianDims(b.Grid(0).CartesianByIndex(0), 0);
+  sa := TTyDataStore.Create;
+  sb := TTyDataStore.Create;
+  try
+    for i := 0 to High(dims) do
+    begin
+      sa.AddDimension(dims[i].Name, dims[i].Kind);
+      sb.AddDimension(dims[i].Name, dims[i].Kind);
+      if dims[i].Axis <> nil then
+      begin
+        sa.UseOrdinalMeta(i, dims[i].Axis.Categories);
+        sb.UseOrdinalMeta(i, dims[i].Axis.Categories);
+      end;
+    end;
+    TyFillSeriesStore(FOpt, 0, dims, sa);
+    TyFillSeriesStore(FOpt, 1, dims, sb);
+    AssertEquals('one list, three names', 3, b.Axis('xAxis', 0).Categories.Count);
+    AssertEquals('Tue is 1 in the first series', 1, sa.Get(0, 1), 0);
+    AssertEquals('and 1 in the second too', 1, sb.Get(0, 0), 0);
+    AssertEquals('Wed came from the second', 2, sb.Get(0, 1), 0);
+  finally
+    sa.Free;
+    sb.Free;
+  end;
+end;
+
+procedure TAdvChartBuilderTest.TestATimeAxisGetsATimeColumn;
+var b: TTyChartBuild; st: TTyDataStore; dims: TTySeriesDimArray; i: Integer;
+begin
+  { A time axis' column has to be parsed AS time, or a date string is read as a
+    number, fails, and the whole series is gaps. Nothing else in this file
+    builds a time axis, so the mapping had no coverage at all. }
+  b := Build('{ xAxis: { type: ''time'' }, yAxis: {},'
+    + ' series: [{ type: ''line'', data: [[''2024-03-05T00:00:00Z'', 5]] }] }',
+    TyRectF(0, 0, 600, 400));
+  dims := TySeriesCartesianDims(b.Grid(0).CartesianByIndex(0), 0);
+  AssertTrue('the column is a time column', dims[0].Kind = ddtTime);
+  AssertTrue('and the value column is not', dims[1].Kind = ddtFloat);
+  st := TTyDataStore.Create;
+  try
+    for i := 0 to High(dims) do st.AddDimension(dims[i].Name, dims[i].Kind);
+    TyFillSeriesStore(FOpt, 0, dims, st);
+    AssertEquals('the date parsed to epoch milliseconds',
+      TyDateTimeToMs(EncodeDate(2024, 3, 5)), st.Get(0, 0), 0);
+    AssertEquals(5, st.Get(1, 0), 0);
+  finally
+    st.Free;
+  end;
 end;
 
 initialization

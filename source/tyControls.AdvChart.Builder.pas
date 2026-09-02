@@ -112,6 +112,53 @@ function TyBuildGrids(AOption: TTyChartOption; const AViewport: TTyRectF): TTyCh
 procedure TyLayoutGrids(ABuild: TTyChartBuild; AOption: TTyChartOption;
   const AMeasurer: ITyTextMeasurer; APPI: Integer);
 
+{ ---- reading series data ---- }
+type
+  { One column of a series' store, as the filler needs it: what to call it, how
+    to parse it, and -- for a category column -- whose list to intern against. }
+  TTySeriesDim = record
+    Name: string;
+    Kind: TTyDimType;
+    { The axis that OWNS the category list this column interns into. nil unless
+      the column is ordinal. Sharing that list is what makes two series on one
+      category axis agree about which name ordinal 0 is. }
+    Axis: TTyAxis;
+  end;
+  TTySeriesDimArray = array of TTySeriesDim;
+
+{ The default cartesian column list: the coordinate dimensions first, then as
+  many generated columns as the data has spare -- value, value0, value1 -- which
+  is where a scatter's third number or a tooltip's extra field lives. }
+function TySeriesCartesianDims(ACart: TTyCartesian2D;
+  AExtraCount: Integer): TTySeriesDimArray;
+
+{ How many columns the DATA declares, read from item 0 LITERALLY -- a leading
+  null counts as a scalar and gives 1.
+
+  Deliberately not the same question, and not the same item, as the one
+  TySeriesUsesRowIndex asks: upstream reads item 0 raw here and the first
+  NON-NULL item there, and the two genuinely disagree on data whose first entry
+  is null. Merging them would be tidier and wrong. }
+function TySeriesDetectedDimCount(AData: TJSONArray): Integer;
+
+{ Does this series' category column hold the ROW INDEX rather than the data?
+
+  A series of bare numbers on a category axis is the commonest shape on the
+  internet -- `data: [120, 200, 150]` against `xAxis.data` of three names -- and
+  it works because the category column is filled with 0, 1, 2 while the numbers
+  go to the value column. Without this the numbers would be read as category
+  NAMES, miss, and the chart would be empty.
+
+  ONE decision for the whole series, taken from the first non-null item. In a
+  mixed array the tuple rows get the row index too. }
+function TySeriesUsesRowIndex(AData: TJSONArray;
+  const ADims: TTySeriesDimArray): Boolean;
+
+{ Read series[ASeriesIndex].data into AStore, which must already carry ADims as
+  its dimensions and must be empty. Returns the number of rows appended. }
+function TyFillSeriesStore(AOption: TTyChartOption; ASeriesIndex: Integer;
+  const ADims: TTySeriesDimArray; AStore: TTyDataStore): Integer;
+
 { ---- the rules, exposed because they are worth testing directly ---- }
 { An explicit type wins with NO validation; otherwise a `data` key that is
   present and not null makes the axis categorical. An EMPTY data array still
@@ -663,6 +710,241 @@ begin
           'x' + IntToStr(build.FGrids[i].FXAxes[j].ComponentIndex) +
           'y' + IntToStr(build.FGrids[i].FYAxes[k].ComponentIndex);
       end;
+  end;
+end;
+
+{ ==================== reading series data ==================== }
+
+function TySeriesCartesianDims(ACart: TTyCartesian2D;
+  AExtraCount: Integer): TTySeriesDimArray;
+var
+  i, n: Integer;
+  ax: TTyAxis;
+
+  function KindOf(AAxis: TTyAxis): TTyDimType;
+  begin
+    case AAxis.AxisType of
+      atCategory: Result := ddtOrdinal;
+      atTime: Result := ddtTime;
+    else
+      Result := ddtFloat;
+    end;
+  end;
+
+begin
+  Result := nil;
+  if ACart = nil then Exit;
+  n := ACart.AxisCount;
+  if AExtraCount < 0 then AExtraCount := 0;
+  SetLength(Result, n + AExtraCount);
+  for i := 0 to n - 1 do
+  begin
+    ax := ACart.GetAxis(i);
+    Result[i].Name := ax.Dim;
+    Result[i].Kind := KindOf(ax);
+    if Result[i].Kind = ddtOrdinal then Result[i].Axis := ax else Result[i].Axis := nil;
+  end;
+  for i := 0 to AExtraCount - 1 do
+  begin
+    if i = 0 then Result[n].Name := 'value'
+    else Result[n + i].Name := 'value' + IntToStr(i - 1);
+    Result[n + i].Kind := ddtFloat;
+    Result[n + i].Axis := nil;
+  end;
+end;
+
+{ The item's value, unwrapped one level: an object with a non-null value hands
+  that over, and anything else IS its own value -- including an object without
+  one, which then parses to no-data.
+
+  The null check is upstream's rule rather than an observable difference HERE:
+  a null and a value-less object both reach no-data through this unit's cell
+  mapping, and mutation testing duly found the branch unobservable. It is kept
+  because the two stop being the same the moment a non-scalar value means
+  something to a series type, and because a rule transcribed faithfully is
+  easier to check against the source later than one silently optimised away. }
+function UnwrapItem(AItem: TJSONData): TJSONData;
+var v: TJSONData;
+begin
+  Result := AItem;
+  if AItem = nil then Exit;
+  if not (AItem is TJSONObject) then Exit;
+  v := TJSONObject(AItem).Find('value');
+  if (v <> nil) and (v.JSONType <> jtNull) then Result := v;
+end;
+
+function TySeriesDetectedDimCount(AData: TJSONArray): Integer;
+var v: TJSONData;
+begin
+  Result := 1;
+  if (AData = nil) or (AData.Count = 0) then Exit;
+  { Item 0 RAW. A leading null is a scalar here, which is where this and the
+    row-index question part company. }
+  v := UnwrapItem(AData.Items[0]);
+  if (v <> nil) and (v is TJSONArray) and (TJSONArray(v).Count > 0) then
+    Result := TJSONArray(v).Count;
+end;
+
+function FirstCategoryDim(const ADims: TTySeriesDimArray): Integer;
+var i: Integer;
+begin
+  for i := 0 to High(ADims) do
+    if ADims[i].Kind = ddtOrdinal then Exit(i);
+  Result := -1;
+end;
+
+function TySeriesUsesRowIndex(AData: TJSONArray;
+  const ADims: TTySeriesDimArray): Boolean;
+var
+  i: Integer;
+  item, v: TJSONData;
+begin
+  Result := False;
+  if FirstCategoryDim(ADims) < 0 then Exit;
+  if (AData = nil) or (AData.Count = 0) then Exit;
+  { The first NON-NULL item, unlike the column count above. }
+  for i := 0 to AData.Count - 1 do
+  begin
+    item := AData.Items[i];
+    if (item = nil) or (item.JSONType = jtNull) then Continue;
+    v := UnwrapItem(item);
+    Result := not ((v <> nil) and (v is TJSONArray));
+    Exit;
+  end;
+end;
+
+{ A JSON scalar as a raw store value. Anything that is not a scalar -- an object
+  that had no `value`, a nested array -- is no data, which is what upstream's
+  Number(object) produces. }
+function CellValue(AData: TJSONData): TTyDataValue;
+begin
+  if AData = nil then Exit(TyDataNone);
+  case AData.JSONType of
+    jtNumber: Result := TyDataNum(AData.AsFloat);
+    jtString: Result := TyDataText(AData.AsString);
+    jtBoolean: Result := TyDataBool(AData.AsBoolean);
+  else
+    Result := TyDataNone;
+  end;
+end;
+
+{ A number in its decimal form, locale-independently. Local rather than reusing
+  the formatter unit's: that one lives behind Handlers, which pulls in Paint,
+  and this needs three lines of it. }
+function NumText(AValue: Double): string;
+var fs: TFormatSettings;
+begin
+  if IsNan(AValue) or IsInfinite(AValue) then Exit('');
+  fs := DefaultFormatSettings;
+  fs.DecimalSeparator := '.';
+  fs.ThousandSeparator := #0;
+  Result := FormatFloat('0.######', AValue, fs);
+end;
+
+{ An id or a name as upstream coerces it: a string is kept, a number becomes its
+  decimal form, and everything else -- a boolean, an array, an object -- is
+  REJECTED rather than stringified. }
+function OptionIdName(AData: TJSONData; out AText: string): Boolean;
+begin
+  AText := '';
+  Result := False;
+  if (AData = nil) or (AData.JSONType = jtNull) then Exit;
+  case AData.JSONType of
+    jtString: begin AText := AData.AsString; Result := True; end;
+    jtNumber: begin AText := NumText(AData.AsFloat); Result := True; end;
+  end;
+end;
+
+{ Every scalar leaf of a data item, under its DOTTED path, into the store's
+  sparse override table.
+
+  Dotted rather than top-level, because every read site downstream is a leaf
+  read -- emphasis.itemStyle.color, not emphasis -- so interning the leaf path
+  collapses almost the whole surface into scalars and nothing needs a list of
+  which keys are supported. A non-scalar leaf (a gradient object, a dash array)
+  is SKIPPED rather than stored as no-data: absent and present-but-empty have to
+  stay distinguishable, which is the entire point of the table. }
+procedure CollectOverrides(AObj: TJSONObject; AStore: TTyDataStore;
+  ARawIndex: Integer; const APrefix: string; ADepth: Integer);
+var
+  i: Integer;
+  key, path: string;
+  child: TJSONData;
+begin
+  if (AObj = nil) or (ADepth > 4) then Exit;
+  for i := 0 to AObj.Count - 1 do
+  begin
+    key := AObj.Names[i];
+    { Consumed elsewhere: value is the datum, name and id are identity. }
+    if (APrefix = '') and ((key = 'value') or (key = 'name') or (key = 'id')) then Continue;
+    if APrefix = '' then path := key else path := APrefix + '.' + key;
+    child := AObj.Items[i];
+    if child = nil then Continue;
+    case child.JSONType of
+      jtObject:
+        CollectOverrides(TJSONObject(child), AStore, ARawIndex, path, ADepth + 1);
+      jtNumber, jtString, jtBoolean:
+        AStore.SetOverride(ARawIndex, TyOverrideKey(path), CellValue(child));
+    end;
+  end;
+end;
+
+function TyFillSeriesStore(AOption: TTyChartOption; ASeriesIndex: Integer;
+  const ADims: TTySeriesDimArray; AStore: TTyDataStore): Integer;
+var
+  node: TJSONObject;
+  d: TJSONData;
+  arr: TJSONArray;
+  row: array of TTyDataValue;
+  i, k, catDim, raw: Integer;
+  item, v, cell: TJSONData;
+  useIndex: Boolean;
+  txt: string;
+begin
+  Result := 0;
+  if (AOption = nil) or (AStore = nil) or (Length(ADims) = 0) then Exit;
+  node := ObjOf(AOption.ComponentAt('series', ASeriesIndex));
+  if node = nil then Exit;
+  d := node.Find('data');
+  if (d = nil) or (d.JSONType = jtNull) or not (d is TJSONArray) then Exit;
+  arr := TJSONArray(d);
+
+  catDim := FirstCategoryDim(ADims);
+  useIndex := TySeriesUsesRowIndex(arr, ADims);
+  SetLength(row, Length(ADims));
+
+  for i := 0 to arr.Count - 1 do
+  begin
+    item := arr.Items[i];
+    v := UnwrapItem(item);
+    for k := 0 to High(ADims) do
+    begin
+      if useIndex and (k = catDim) then
+      begin
+        { The row index, and ONLY for the first category column: every other
+          column still reads the item. }
+        row[k] := TyDataNum(i);
+        Continue;
+      end;
+      if (v <> nil) and (v is TJSONArray) then
+      begin
+        if k < TJSONArray(v).Count then cell := TJSONArray(v).Items[k] else cell := nil;
+        row[k] := CellValue(cell);
+      end
+      else
+        { NOT a bug and not a guard worth adding: a scalar goes to EVERY column,
+          so `data: [5]` on a pair of value axes really does put 5 on both. It
+          is what upstream does, and the category case -- where it would be
+          visible -- is exactly the case the row index takes over. }
+        row[k] := CellValue(v);
+    end;
+    raw := AStore.AppendRow(row);
+    Inc(Result);
+
+    if not (item is TJSONObject) then Continue;
+    if OptionIdName(TJSONObject(item).Find('name'), txt) then AStore.SetName(raw, txt);
+    if OptionIdName(TJSONObject(item).Find('id'), txt) then AStore.SetId(raw, txt);
+    CollectOverrides(TJSONObject(item), AStore, raw, '', 0);
   end;
 end;
 
