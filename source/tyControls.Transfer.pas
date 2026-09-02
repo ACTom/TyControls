@@ -555,10 +555,20 @@ var
   cell, iconArea: TRect;
   arrows, i, sizePx, gapPx, marginPx: Integer;
 begin
-  if TyTransferMoveIsRightward(FMove) then kind := tgArrowRight else kind := tgArrowLeft;
-  // "All" is TWO of the same arrow rather than a double-chevron mark of its own: the doubled
-  // arrow is the classic '>>' idiom, it stays symmetric with its leftward twin (the painter
-  // has no chevron-LEFT), and it needs no glyph the library does not already own.
+  if TyTransferMoveIsRightward(FMove) then kind := tgChevronRight else kind := tgChevronLeft;
+  // CHEVRONS, not arrows. The idiom this rail is drawing is the shuttle box's '>' / '>>', and
+  // a chevron IS that mark; an arrow is a chevron plus a shaft. The shaft is what went wrong:
+  // in a 12px slot two of them sit 1px apart and the shafts run together into one bar, so
+  // "move all" read as a smear rather than as two marks. It also matches what this control is
+  // modelled on -- Ant Design's Transfer uses chevron icons -- and the library's own rule that
+  // a glyph's SHAPE follows its ROLE (a stepper gets a solid triangle, a disclosure gets a V).
+  //
+  // Arrows were chosen originally for one reason, recorded here as "the painter has no
+  // chevron-LEFT". It has had one since; the pair is what the calendar's month nav, the grid
+  // and the sider collapse all draw with. Nothing but this call site was left behind.
+  //
+  // "All" is still TWO of the same mark rather than a glyph of its own: it keeps the leftward
+  // and rightward buttons one shape, and needs no vocabulary the library does not own.
   if TyTransferMoveIsAll(FMove) then arrows := 2 else arrows := 1;
   sizePx := APainter.Scale(ActiveController.Metric(TyTransferArrowSizeVar, TyTransferArrowSize));
   gapPx := APainter.Scale(ActiveController.Metric(TyTransferArrowGapVar, TyTransferArrowGap));
