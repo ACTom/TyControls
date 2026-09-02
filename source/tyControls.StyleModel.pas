@@ -243,16 +243,28 @@ implementation
   both RebuildMergedVars (the resolve-time var set) and LoadInto's validation set, so
   a theme seeded with 'system-accent' validates AND resolves to a concrete colour. }
 procedure ApplySystemTokens(AVars: TStrings);
-var i: Integer; val: string;
+var i: Integer; val, repl: string; hit: Boolean;
 begin
   if AVars = nil then Exit;
   for i := 0 to AVars.Count - 1 do
   begin
     val := LowerCase(Trim(AVars.ValueFromIndex[i]));
+    hit := True;
     if (val = 'system-accent') and Assigned(TySystemAccentHook) then
-      AVars.ValueFromIndex[i] := TySystemAccentHook()
+      repl := TySystemAccentHook()
     else if (val = 'system-mode') and Assigned(TySystemModeHook) then
-      AVars.ValueFromIndex[i] := TySystemModeHook();
+      repl := TySystemModeHook()
+    else
+      hit := False;
+    { Rewrite the whole 'name=value' line -- NOT ValueFromIndex[], whose setter DELETES the
+      entry when the new value is '' (FPC stringl.inc). The mode hook returns exactly that
+      wherever the OS has no scheme probe (Linux), so the write used to shrink the list under
+      a for-bound Pascal had already evaluated -- the final iteration read a gone index -- and
+      to shift the next var into a slot the loop had passed, leaving ITS sentinel unswapped.
+      Keeping the key with an empty value is also what the readers expect: ModeOf documents
+      '' as "unset" and elevate()/on() fall back by luminance. }
+    if hit then
+      AVars[i] := AVars.Names[i] + AVars.NameValueSeparator + repl;
   end;
 end;
 
