@@ -133,10 +133,15 @@ begin
 
   x := r.Left + TyDlgPad + treeW + Gap;
   y := r.Top + TyDlgPad;
+  { Step by what each button ACTUALLY became -- LCL raises a button to its theme-derived
+    minimum inside SetBounds, so a literal btnH stride walks the column past the pane the
+    moment a theme wants taller buttons. The clamp keeps the last ones reachable even then:
+    a tight column beats buttons hidden behind the action strip. }
   for i := 0 to High(FButtons) do
   begin
     FButtons[i].SetBounds(x, y, BtnW, btnH);
-    Inc(y, btnH + Gap div 2);
+    y := FButtons[i].Top + FButtons[i].Height + Gap div 2;
+    if y > r.Bottom - TyDlgPad then y := r.Bottom - TyDlgPad;
   end;
 end;
 

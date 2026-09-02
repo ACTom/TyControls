@@ -87,7 +87,7 @@ uses
   test.treeview.edit,
   test.treeview.drag,
   test.dialogs,
-  test.dialogs.chrome,
+  test.dialogs.chrome, test.dialogfit,
   test.dialogs.selectpath, test.dialogs.iconbrowser, test.dialogs.imagecollectioneditor,
   test.colormath,
   test.dialogs.color,

@@ -19,6 +19,7 @@ type
   TTyFontForm = class(TTyDialog)
   private
     FList: TTyFontListBox; FSize: TTySpinEdit;   // WYSIWYG: each family in its own typeface
+    FFamilyLabel: TTyLabel;   // kept so LayoutContent can start the list under its REAL bottom
     FBold, FItalic, FUnderline, FStrike: TTyCheckBox;
     FColorBtn: TTyButton; FColorValue: TColor;
     FPreviewRect: TRect;
@@ -119,12 +120,29 @@ var
     Result.SetBounds(ALeft, ATop, AWidth, cLabelH);
   end;
 
+  { The y under ALabel -- its real bottom plus the gap, never tighter than the designed
+    cLabelH + cLabelGap, so a lean theme keeps the original spacing exactly. }
+  function LabelBottom(ALabel: TTyLabel; ATop: Integer): Integer;
+  begin
+    Result := ATop + cLabelH + cLabelGap;
+    if (ALabel <> nil) and (ALabel.Top + ALabel.Height + cLabelGap > Result) then
+      Result := ALabel.Top + ALabel.Height + cLabelGap;
+  end;
+
   function MkCheck(const ACaption: string; ALeft, ATop: Integer): TTyCheckBox;
   begin
     Result := TTyCheckBox.Create(Self);
     Result.Parent := Self;
     Result.Caption := ACaption;
     Result.SetBounds(ALeft, ATop, cColW, cCheckH);
+  end;
+
+  { Where the row after AControl starts: its real bottom, but never tighter than the
+    designed stride, so a lean theme keeps the original spacing exactly. }
+  function NextRow(AControl: TControl; ACurrentY: Integer): Integer;
+  begin
+    Result := AControl.Top + AControl.Height + (cCheckStep - cCheckH);
+    if Result < ACurrentY + cCheckStep then Result := ACurrentY + cCheckStep;
   end;
 
 begin
@@ -141,10 +159,11 @@ begin
 
   // Left column: family label + list. Height is finalized in LayoutContent so it
   // stretches to just above the preview strip; seed a reasonable initial height.
-  MkLabel(rsDlgFontFamily, x0, y0, cListW);
+  FFamilyLabel := MkLabel(rsDlgFontFamily, x0, y0, cListW);
   FList := TTyFontListBox.Create(Self);
   FList.Parent := Self;
-  FList.SetBounds(x0, y0 + cLabelH + cLabelGap, cListW, cListMinH);
+  { The list starts under the label the same way -- read back, floored at the designed gap. }
+  FList.SetBounds(x0, LabelBottom(FFamilyLabel, y0), cListW, cListMinH);
 
   // Right column, top group: "Size" label + spin on one baseline-aligned row.
   y := y0;
@@ -157,12 +176,15 @@ begin
 
   // Right column, style group: four checks with an even vertical rhythm.
   Inc(y, TyDlgEditH + cSectionGap);
+  { cCheckStep is a MINIMUM stride, not the stride: TTyCheckBox floors its height on the
+    theme's font, padding and --checkbox-size, LCL enforces that floor inside SetBounds, and a
+    box taller than 28 would land under the next one. Step by whatever the box actually is. }
   FBold := MkCheck(rsDlgFontBold, colX, y);
-  Inc(y, cCheckStep);
+  y := NextRow(FBold, y);
   FItalic := MkCheck(rsDlgFontItalic, colX, y);
-  Inc(y, cCheckStep);
+  y := NextRow(FItalic, y);
   FUnderline := MkCheck(rsDlgFontUnderline, colX, y);
-  Inc(y, cCheckStep);
+  y := NextRow(FUnderline, y);
   FStrike := MkCheck(rsDlgFontStrike, colX, y);
 
   // Right column, color group.
@@ -265,7 +287,12 @@ begin
   // family list down to sit just above it, keeping a clear separating gap.
   FPreviewRect := Rect(r.Left + TyDlgPad, r.Bottom - TyDlgPad - cPreviewH,
     r.Right - TyDlgPad, r.Bottom - TyDlgPad);
+  { The runtime relayout has to honour the same read-back rule the constructor does, or it
+    quietly puts the literal stride back and drops the list onto its own label. }
   listTop := r.Top + TyDlgPad + cLabelH + cLabelGap;
+  if (FFamilyLabel <> nil)
+     and (FFamilyLabel.Top + FFamilyLabel.Height + cLabelGap > listTop) then
+    listTop := FFamilyLabel.Top + FFamilyLabel.Height + cLabelGap;
   FList.SetBounds(r.Left + TyDlgPad, listTop,
     cListW, Max(cListMinH, FPreviewRect.Top - listTop - cSectionGap));
 end;

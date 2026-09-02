@@ -166,10 +166,15 @@ begin
   y := r.Top + TyDlgPad;
   btns[0] := FAddBtn; btns[1] := FReplaceBtn; btns[2] := FDeleteBtn;
   btns[3] := FRenameBtn; btns[4] := FUpBtn; btns[5] := FDownBtn; btns[6] := FClearBtn;
+  { Step by what each button ACTUALLY became -- LCL raises a button to its theme-derived
+    minimum inside SetBounds, so a literal btnH stride walks the column past the pane the
+    moment a theme wants taller buttons. The clamp keeps the last ones reachable even then:
+    a tight column beats buttons hidden behind the action strip. }
   for i := 0 to High(btns) do
   begin
     btns[i].SetBounds(x, y, BtnW, btnH);
-    Inc(y, btnH + Gap div 2);
+    y := btns[i].Top + btns[i].Height + Gap div 2;
+    if y > r.Bottom - TyDlgPad then y := r.Bottom - TyDlgPad;
   end;
 
   { The preview takes whatever is left under the button column. }
