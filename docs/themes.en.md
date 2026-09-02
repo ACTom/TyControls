@@ -24,6 +24,8 @@ Controller.Follow := tfFollowSystem;
 | Dark | `Follow := tfManual; Mode := 'dark'` |
 | Follow the OS | `Follow := tfFollowSystem` (the OS decides light/dark; the `system` theme follows the OS accent color too) |
 
+Following the OS works on Windows, macOS and Qt5 / Qt6; GTK2 / GTK3 cannot read the desktop appearance — see [known issues](known-issues.en.md).
+
 Switching themes keeps the current `Mode` (a REPLACE load does not reset the active mode).
 
 ## Theme list (12)

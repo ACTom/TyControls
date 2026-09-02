@@ -296,6 +296,7 @@ var
   x0, y0, colX, spinW, spinH, rowH, labelW: Integer;
   labelTop, cellW, colRight, contentRight, pickerBottom, previewTop: Integer;
   swTop, swBottom, swCellW, swRows: Integer;
+  swLbl: TTyLabel;
   hexLbl: TTyLabel;
   hexLblW, hexLblH: Integer;
 
@@ -398,8 +399,12 @@ begin
   // TTyColorGrid divides its client rect into cells (ClientWidth div Columns by
   // ClientHeight div rows), so size it to exact multiples of both — a leftover strip
   // would be dead space that still swallows clicks.
-  MkLabel(rsDlgBasicColors, x0, pickerBottom + SecGap, SecLblW);
+  { swTop is read back off the section label, floored at the designed SecLblH: a theme that
+    gives TyLabel padding (or a bigger font) makes the label taller than SecLblH, and a
+    literal stride would drop the swatch grid on top of it. }
+  swLbl := MkLabel(rsDlgBasicColors, x0, pickerBottom + SecGap, SecLblW);
   swTop := pickerBottom + SecGap + SecLblH;
+  if swLbl.Top + swLbl.Height > swTop then swTop := swLbl.Top + swLbl.Height;
   FSwatches := TTyColorGrid.Create(Self);
   FSwatches.Parent := Self;
   FSwatches.Columns := SwCols;

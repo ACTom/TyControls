@@ -162,9 +162,12 @@ begin
     Inc(y, TyDlgEditH + 8);
   end;
 
-  FMatchCase := MkCheck(rsDlgMatchCase, x0, y); Inc(y, 26);
-  FWholeWord := MkCheck(rsDlgWholeWord, x0, y); Inc(y, 26);
-  FSearchUp  := MkCheck(rsDlgSearchUp,  x0, y); Inc(y, 26);
+  { The stride is the box's own height + 4, not a literal 26: TTyCheckBox floors its height on
+    the theme's font, padding and --checkbox-size, LCL enforces that floor inside SetBounds, and
+    at modern density the boxes outgrow 26 and eat each other. }
+  FMatchCase := MkCheck(rsDlgMatchCase, x0, y); y := FMatchCase.Top + FMatchCase.Height + 4;
+  FWholeWord := MkCheck(rsDlgWholeWord, x0, y); y := FWholeWord.Top + FWholeWord.Height + 4;
+  FSearchUp  := MkCheck(rsDlgSearchUp,  x0, y); y := FSearchUp.Top + FSearchUp.Height + 4;
 
   // Action buttons: AddButton(caption, mrNone) is non-closing (mrNone never sets
   // Form.ModalResult) yet still lands on the auto-laid-out button bar. OnClick

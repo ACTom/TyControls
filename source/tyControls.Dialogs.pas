@@ -43,6 +43,10 @@ type
     // messages, so the bottom sizing border is dead. Expose it by leaving this many px of
     // form window below the button bar when Resizable (0 for a fixed dialog -> no change).
     function BottomGutter: Integer;
+    // The height ONE dialog button wants under the live theme + density, and the strip that
+    // has to contain it. Not constants -- see the implementation for why a literal cannot work.
+    function ButtonHeight: Integer;
+    function ButtonBarHeight: Integer;
   protected
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure Paint; override;
@@ -210,6 +214,20 @@ const
   TyDlgEditW = 320;  // default single-line input width
   TyDlgEditH = 30;
 
+{ Place one row of a hand-laid-out dialog and answer where the NEXT row starts.
+
+  The stride is read back off the control AFTER placing it, never taken from the literal the
+  caller asked for. LCL enforces Constraints.MinHeight inside SetBounds, so a literal height is
+  only a REQUEST while a literal stride is an absolute: let the theme grow the control -- a
+  bigger font, roomier padding, modern density -- and the row outgrows a stride that did not
+  move, so the next row lands on top of it. Reading the control back is the only stride that
+  cannot drift from what actually gets painted.
+
+  AH is a floor, not the answer; pass 0 to take whatever the control wants. TyRunItem is the
+  same contract along x, for a horizontal run such as a nav-button cluster. }
+function TyStackRow(AControl: TControl; AX, AY, AW, AH, AGap: Integer): Integer;
+function TyRunItem(AControl: TControl; AX, AY, AW, AH, AGap: Integer): Integer;
+
 { Select-value dialog — single-select listbox; double-click a row confirms. }
 function TyBuildSelectValueDialog(const ACaption, APrompt: string; AItems: TStrings;
   AInitialIndex: Integer; out AList: TTyListBox): TTyDialog;
@@ -253,6 +271,28 @@ type
   end;
 
 implementation
+
+{ The CLASSIC dialog-button box, kept as a FLOOR rather than as the answer: ButtonHeight
+  raises it for modern density and for a theme whose own padding wants more, so a classic
+  dialog under a lean theme still lands on exactly these numbers, byte-identical. }
+const
+  cDlgBtnW       = 88;
+  cDlgBtnH       = 30;
+  cDlgBarPadV    = 7;    // (44 - 30) / 2 -- the strip's breathing room above and below
+  cDlgBarMargin  = 12;   // strip edge -> outermost button
+  cDlgBarSpacing = 8;    // between buttons
+
+function TyStackRow(AControl: TControl; AX, AY, AW, AH, AGap: Integer): Integer;
+begin
+  AControl.SetBounds(AX, AY, AW, AH);
+  Result := AControl.Top + AControl.Height + AGap;   { the control's REAL height, not AH }
+end;
+
+function TyRunItem(AControl: TControl; AX, AY, AW, AH, AGap: Integer): Integer;
+begin
+  AControl.SetBounds(AX, AY, AW, AH);
+  Result := AControl.Left + AControl.Width + AGap;   { the control's REAL width, not AW }
+end;
 
 function TyDialogButtonBar(const ASizes: array of TSize; ABarWidth, AMargin, ASpacing: Integer): TTyRectArray;
 var
@@ -396,7 +436,7 @@ begin
   FButtonBar := TTyPanel.Create(nil);
   FButtonBar.Parent := Self;
   FButtonBar.Align := alBottom;
-  FButtonBar.Height := 44;
+  FButtonBar.Height := ButtonBarHeight;   // re-derived on every layout; see ButtonHeight
   FButtonBar.StyleClass := 'ghost';   // transparent-ish; refine in theming
 end;
 
@@ -434,7 +474,7 @@ begin
 end;
 
 procedure TTyDialog.ApplyOwnerController;
-var c: TTyStyleController; mf: TCustomForm;
+var c: TTyStyleController; mf: TCustomForm; hBefore: Integer;
 begin
   // Prefer the owner's controller (the form that spawned this dialog); else the app's
   // main form. A CreateNew dialog has Controller = nil, so without this it falls back to
@@ -452,6 +492,17 @@ begin
   if c = nil then Exit;
   if Controller <> c then Controller := c;   // themes the form bg + chrome (title bar) via SetController
   ApplyControllerToChildren(Self, c);          // then recurse the body controls
+  { The dialog was BUILT before it knew this controller, so its strip was sized against the
+    default one. Adopting a controller can change the density or the theme's padding, i.e. the
+    button height -- so re-settle the strip and grow the WINDOW by the difference. Growing the
+    strip alone would eat the content, which ContentRect measures against it. }
+  if FButtonBar <> nil then
+  begin
+    hBefore := FButtonBar.Height;
+    LayoutButtonBar;
+    if FButtonBar.Height <> hBefore then
+      ClientHeight := ClientHeight + (FButtonBar.Height - hBefore);
+  end;
   Invalidate;
 end;
 
@@ -481,17 +532,54 @@ begin
   LayoutButtonBar;
 end;
 
+{ The height one dialog button wants RIGHT NOW. Three inputs, largest wins:
+
+    - cDlgBtnH, the classic box, so classic density under a lean theme is unchanged;
+    - the density pack's --control-height, so a modern-density dialog's buttons match every
+      other control in the app instead of staying classic-sized (30 vs 38);
+    - each button's OWN Constraints.MinHeight, which TTyButton derives from the theme's
+      padding plus the measured caption (Button.pas, DoUpdateSizeConstraints).
+
+  That third input is why a literal can never work here: LCL ENFORCES a control's constraint
+  whatever we pass to SetBounds. Forcing 30 did not keep the button 30 -- it centred it as if
+  it were 30 while LCL drew it taller, so a roomy skin (aero) at modern density hung the
+  button out of the bottom of the strip. Asking the button is the only honest input. }
+function TTyDialog.ButtonHeight: Integer;
+var i: Integer;
+begin
+  Result := TyDensityHeight(Controller, cDlgBtnH);   // nil Controller -> the default one
+  for i := 0 to High(FButtons) do
+    if FButtons[i].Constraints.MinHeight > Result then
+      Result := FButtons[i].Constraints.MinHeight;
+end;
+
+function TTyDialog.ButtonBarHeight: Integer;
+begin
+  Result := ButtonHeight + 2 * cDlgBarPadV;
+end;
+
 procedure TTyDialog.LayoutButtonBar;
-var sizes: array of TSize; rects: TTyRectArray; i, y: Integer;
+var sizes: array of TSize; rects: TTyRectArray; i, y, h, w: Integer;
 begin
   if Length(FButtons) = 0 then Exit;
+  h := ButtonHeight;
+  { The strip grows with what it has to hold. Guarded because assigning the height runs the
+    form's align pass, which comes back through Resize -> here. }
+  if FButtonBar.Height <> h + 2 * cDlgBarPadV then
+    FButtonBar.Height := h + 2 * cDlgBarPadV;
   sizes := nil;
   SetLength(sizes, Length(FButtons));
-  for i := 0 to High(FButtons) do sizes[i] := Size(88, 30);   // fixed dialog-button size
-  rects := TyDialogButtonBar(sizes, FButtonBar.ClientWidth, 12, 8);
-  y := (FButtonBar.ClientHeight - 30) div 2;
   for i := 0 to High(FButtons) do
-    FButtons[i].SetBounds(rects[i].Left, y, 88, 30);
+  begin
+    { Width has the same three inputs; a long caption under a big font wants more than 88. }
+    w := cDlgBtnW;
+    if FButtons[i].Constraints.MinWidth > w then w := FButtons[i].Constraints.MinWidth;
+    sizes[i] := Size(w, h);
+  end;
+  rects := TyDialogButtonBar(sizes, FButtonBar.ClientWidth, cDlgBarMargin, cDlgBarSpacing);
+  y := (FButtonBar.ClientHeight - h) div 2;
+  for i := 0 to High(FButtons) do
+    FButtons[i].SetBounds(rects[i].Left, y, rects[i].Right - rects[i].Left, h);
 end;
 
 function TTyDialog.BottomGutter: Integer;
@@ -509,11 +597,16 @@ end;
 procedure TTyDialog.AutoSizeToContent(AContentW, AContentH: Integer);
 var totalBtn, i, w: Integer;
 begin
-  totalBtn := 12; for i := 0 to High(FButtons) do totalBtn := totalBtn + 88 + 8;
+  { Settle the strip FIRST: its height feeds ClientHeight below and the buttons' real widths
+    feed the minimum window width -- both used to be computed from the literals the layout no
+    longer uses, so a taller/wider button would have been sized out of the window. }
+  LayoutButtonBar;
+  totalBtn := cDlgBarMargin;
+  for i := 0 to High(FButtons) do totalBtn := totalBtn + FButtons[i].Width + cDlgBarSpacing;
   w := AContentW; if totalBtn > w then w := totalBtn;
   ClientWidth := w + 32;
   ClientHeight := TitleHeight + AContentH + FButtonBar.Height + BottomGutter + 16;
-  LayoutButtonBar;
+  LayoutButtonBar;   // re-place the buttons in the final width
 end;
 
 procedure TTyDialog.CancelDialog;
@@ -743,8 +836,10 @@ begin
   lbl.Parent := ADlg;
   lbl.WordWrap := True;
   lbl.Caption := APrompt;
-  lbl.SetBounds(r.Left + TyDlgPad, r.Top + TyDlgPad, AWidth, 20);
-  Result := r.Top + TyDlgPad + 26;
+  { 20 is a floor, 6 the gap -- the row the NEXT control starts on is read back off the label,
+    because a theme that gives TyLabel padding (or simply a bigger font) makes it taller than
+    the 20 asked for while a literal 26 stride would not move, putting the input on top of it. }
+  Result := TyStackRow(lbl, r.Left + TyDlgPad, r.Top + TyDlgPad, AWidth, 20, 6);
 end;
 
 function TyBuildInputDialog(const ACaption, APrompt, ADefault: string; out AEdit: TTyEdit): TTyDialog;

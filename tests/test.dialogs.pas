@@ -5,8 +5,25 @@ uses
   Classes, SysUtils, Types, Controls, Dialogs, Forms, fpcunit, testregistry,
   tyControls.Types, tyControls.Dialogs, tyControls.Button, tyControls.Panel,
   tyControls.Edit, tyControls.Memo, tyControls.ListBox,
-  tyControls.TyLabel;   // the message body is a TTyLabel — the tests read its measured height
+  tyControls.TyLabel,   // the message body is a TTyLabel — the tests read its measured height
+  tyControls.Controller, tyControls.BuiltinThemes;
 type
+  { The button strip has to hold whatever the LIVE theme and density make a button, not a
+    box someone typed once. These drive the two inputs that used to be ignored. }
+  TDialogButtonFitTest = class(TTestCase)
+  private
+    FTheme: string;
+    FDensity: TTyDensity;
+    procedure UseTheme(const AName: string; ADensity: TTyDensity);
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestRoomyThemeKeepsTheButtonInsideTheStrip;
+    procedure TestModernDensityGivesTheButtonTheControlHeight;
+    procedure TestClassicDensityIsUnchanged;
+  end;
+
   TDialogButtonBarTest = class(TTestCase)
   published
     procedure TestSingleButtonRightAligned;
@@ -95,6 +112,90 @@ type
   end;
 
 implementation
+
+
+procedure TDialogButtonFitTest.SetUp;
+begin
+  TyRegisterBuiltinThemes;
+  FTheme := TyDefaultController.ThemeName;
+  FDensity := TyDefaultController.Density;
+end;
+
+procedure TDialogButtonFitTest.TearDown;
+begin
+  { A REPLACE load drops any additive layer, so restoring the theme also undoes the padding
+    override the fit test installs. }
+  TyDefaultController.Density := FDensity;
+  TyDefaultController.ThemeName := FTheme;
+end;
+
+procedure TDialogButtonFitTest.UseTheme(const AName: string; ADensity: TTyDensity);
+begin
+  TyDefaultController.ThemeName := AName;
+  TyDefaultController.Density := ADensity;
+end;
+
+procedure TDialogButtonFitTest.TestRoomyThemeKeepsTheButtonInsideTheStrip;
+{ The reported bug (QQ group, 3.0.0-RC): aero at modern density hung the OK button out of the
+  bottom of the dialog's action strip.
+
+  Driven here through PADDING rather than through the real aero/modern numbers on purpose.
+  The overflow needs the button's theme-derived minimum to exceed the box the layout hands it,
+  and that minimum is measured caption + padding -- but a headless runner has no real font, so
+  the caption half collapses and the live aero numbers do not reproduce. Padding is pure theme
+  data and needs no font, so it reproduces the SAME defect deterministically: LCL enforces
+  Constraints.MinHeight whatever SetBounds was told, and a strip sized to a literal cannot hold
+  the result. }
+var d: TTyDialog; b: TTyButton;
+begin
+  UseTheme('aero', tdModern);
+  TyDefaultController.LoadThemeCssAdditive('TyButton { padding: 20px; }');
+  d := TTyDialog.CreateNew(nil);
+  try
+    b := d.AddButton('确定', mrOk, True, False);
+    AssertTrue('precondition: the theme really does want a taller button than the classic box',
+      b.Constraints.MinHeight > 30);
+    AssertEquals('the button is as tall as its own minimum', b.Constraints.MinHeight, b.Height);
+    AssertTrue('and it sits INSIDE the strip (bottom ' + IntToStr(b.Top + b.Height)
+      + ' vs strip ' + IntToStr(b.Parent.ClientHeight) + ')',
+      b.Top + b.Height <= b.Parent.ClientHeight);
+    AssertTrue('with the top edge inside too', b.Top >= 0);
+  finally d.Free; end;
+end;
+
+procedure TDialogButtonFitTest.TestModernDensityGivesTheButtonTheControlHeight;
+{ Modern density is a whole scale, not a skin detail: every other control comes up at
+  --control-height, so a dialog button that stayed at the classic 30 looked stunted next to
+  the app that opened it. }
+var d: TTyDialog; b: TTyButton; want: Integer;
+begin
+  UseTheme('aero', tdModern);
+  want := TyDensityHeight(TyDefaultController, 30);
+  AssertTrue('precondition: modern density asks for more than the classic 30', want > 30);
+  d := TTyDialog.CreateNew(nil);
+  try
+    b := d.AddButton('OK', mrOk, True, False);
+    AssertEquals('button takes the density height', want, b.Height);
+    AssertTrue('strip is tall enough for it',
+      b.Top + b.Height <= b.Parent.ClientHeight);
+  finally d.Free; end;
+end;
+
+procedure TDialogButtonFitTest.TestClassicDensityIsUnchanged;
+{ The density work's standing rule: classic must stay byte-identical. 88x30 in a 44 strip,
+  centred at y=7 -- the exact geometry the literals used to produce. }
+var d: TTyDialog; b: TTyButton;
+begin
+  UseTheme('default', tdClassic);
+  d := TTyDialog.CreateNew(nil);
+  try
+    b := d.AddButton('OK', mrOk, True, False);
+    AssertEquals('classic button height', 30, b.Height);
+    AssertEquals('classic button width', 88, b.Width);
+    AssertEquals('classic strip height', 44, b.Parent.Height);
+    AssertEquals('classic vertical centring', 7, b.Top);
+  finally d.Free; end;
+end;
 
 procedure TDialogButtonBarTest.TestSingleButtonRightAligned;
 var r: TTyRectArray;
@@ -512,6 +613,7 @@ begin
 end;
 
 initialization
+  RegisterTest(TDialogButtonFitTest);
   RegisterTest(TDialogButtonBarTest);
   RegisterTest(TMsgMappingTest);
   RegisterTest(TDialogBaseTest);

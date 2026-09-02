@@ -4,7 +4,8 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Dialogs, Forms, Graphics, ImgList,
   tyControls.Dialogs, tyControls.TreeView, tyControls.Button, tyControls.Edit,
-  tyControls.StrConsts, tyControls.Component, tyControls.FileSystem;
+  tyControls.StrConsts, tyControls.Component, tyControls.FileSystem,
+  tyControls.Controller;
 
 function TySubdirectories(const APath: string): TStringArray;
 function TyPathHasSubdir(const APath: string): Boolean;
@@ -458,7 +459,9 @@ begin
   r := ContentRect;
   x := r.Left + TyDlgPad;
   w := (r.Right - r.Left) - 2*TyDlgPad;
-  editH := TyDlgEditH;
+  { Density-aware like every other field -- the sibling IconBrowser already reads it this
+    way; this one kept the classic literal and came up short under modern density. }
+  editH := TyDensityHeight(Controller, TyDlgEditH);
   { Path field across the top, tree fills the rest. }
   if FPathEdit <> nil then
     FPathEdit.SetBounds(x, r.Top + TyDlgPad, w, editH);

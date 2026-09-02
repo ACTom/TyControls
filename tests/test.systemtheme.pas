@@ -12,7 +12,7 @@ interface
 uses
   Classes, SysUtils, fpcunit, testregistry,
   tyControls.Types, tyControls.SystemTheme, tyControls.StyleModel,
-  tyControls.Controller;
+  tyControls.Controller, tyControls.BuiltinThemes, tyControls.PlatformWS;
 type
   TSystemThemeTest = class(TTestCase)
   private
@@ -26,6 +26,10 @@ type
     procedure TestControllerFollowSetsModeFromScheme;
     procedure TestFollowAdoptsDefaultModeWhenOSUnreadable;
     procedure TestPollSystemThemeAppliesLiveFlip;
+    procedure TestUnreadableModeKeepsTheNextSentinel;
+    procedure TestSwitchingToTheSystemThemeSurvivesAnUnreadableScheme;
+    procedure TestSchemeFromPaletteComparesInkAgainstSurface;
+    procedure TestPaletteProbesMatchTheWidgetsetContract;
   end;
 
 implementation
@@ -272,6 +276,136 @@ begin
     c.Free;
     TySystemModeHook := savedMode;
     TySystemAccentHook := savedAccent;
+  end;
+end;
+
+
+procedure TSystemThemeTest.TestUnreadableModeKeepsTheNextSentinel;
+{ The mechanism behind the Linux crash, pinned on its own. FPC's TStrings.SetValueFromIndex
+  DELETES the entry when the new value is '' (stringl.inc), and the OS-scheme hook returns
+  exactly that wherever there is no probe (Linux). Writing it back therefore shrank the merged
+  var set UNDER a for-bound that Pascal had already evaluated -- the last iteration then read a
+  gone index -- and shifted the NEXT var into a slot the loop had passed, so that var's own
+  sentinel was never swapped. Two adjacent probes (both new names, so they append in
+  declaration order) catch both halves: the crash, and the swap the shift used to eat. }
+var
+  model: TTyStyleModel;
+  s: TTyStyleSet;
+  savedAccent: TTySystemAccentHook;
+  savedMode: TTySystemModeHook;
+  raised: Boolean;
+  msg: string;
+begin
+  savedAccent := TySystemAccentHook;
+  savedMode := TySystemModeHook;
+  TySystemAccentHook := @StubAccentHook;          // 'system-accent' -> #123456
+  TySystemModeHook := @StubModeHookUnreadable;    // 'system-mode'   -> '' (Linux)
+  model := TTyStyleModel.Create;
+  try
+    raised := False;
+    msg := '';
+    try
+      model.LoadFromCss(
+        ':root { --zz-probe-mode: system-mode; --zz-probe-accent: system-accent; }' +
+        'TyButton { background: var(--zz-probe-accent); }');
+    except
+      on E: Exception do begin raised := True; msg := E.Message; end;
+    end;
+    AssertFalse('an empty OS mode must not break the var sweep: ' + msg, raised);
+    s := model.ResolveStyle('TyButton', '', []);
+    AssertEquals('the sentinel AFTER the empty one is still swapped',
+      Integer(TyRGB($12, $34, $56)), Integer(s.Background.Color));
+  finally
+    model.Free;
+    TySystemAccentHook := savedAccent;
+    TySystemModeHook := savedMode;
+  end;
+end;
+
+procedure TSystemThemeTest.TestSwitchingToTheSystemThemeSurvivesAnUnreadableScheme;
+{ The reported symptom (QQ group, 3.0.0-RC): on Linux EVERY example raised
+  "List index (190) out of bounds" the moment the theme combo picked 'system' -- which is
+  literally TyDefaultController.ThemeName := 'system'. system.tycss seeds
+  '--ty-mode: system-mode' and Linux has no cross-DE scheme probe, so the hook hands back ''.
+  Windows never saw it: the registry always answers light or dark. }
+var
+  c: TTyStyleController;
+  s: TTyStyleSet;
+  savedAccent: TTySystemAccentHook;
+  savedMode: TTySystemModeHook;
+  raised: Boolean;
+  msg: string;
+begin
+  savedAccent := TySystemAccentHook;
+  savedMode := TySystemModeHook;
+  TySystemAccentHook := @StubAccentHook;          // deterministic, box-independent
+  TySystemModeHook := @StubModeHookUnreadable;    // Linux: nothing to probe
+  c := TTyStyleController.Create(nil);
+  try
+    TyRegisterBuiltinThemes;
+    raised := False;
+    msg := '';
+    try
+      c.ThemeName := 'system';
+    except
+      on E: Exception do begin raised := True; msg := E.Message; end;
+    end;
+    AssertFalse('picking the built-in system theme must not raise: ' + msg, raised);
+    s := c.Model.ResolveStyle('TyButton', 'primary', []);
+    AssertEquals('and the OS accent still reaches the primary button',
+      Integer(TyRGB($12, $34, $56)), Integer(s.Background.Color));
+  finally
+    c.Free;
+    TySystemAccentHook := savedAccent;
+    TySystemModeHook := savedMode;
+  end;
+end;
+
+
+procedure TSystemThemeTest.TestSchemeFromPaletteComparesInkAgainstSurface;
+{ The pure half of the Qt/Linux probe, pinned without a desktop. It compares the surface
+  against the ink painted on it instead of thresholding one colour, because a mid-grey theme
+  sits right on any fixed threshold -- the two mid-grey pairs below are exactly that case and
+  would be a coin flip for a 0.5 rule, while ink-vs-surface answers them the way a reader would. }
+begin
+  AssertTrue('light ink on a dark surface = dark',
+    TySchemeFromPalette(TyRGB($1E, $1E, $1E), TyRGB($E5, $E7, $EB)) = tssDark);
+  AssertTrue('dark ink on a light surface = light',
+    TySchemeFromPalette(TyRGB($FF, $FF, $FF), TyRGB($1F, $29, $37)) = tssLight);
+  AssertTrue('mid-grey surface, light ink = dark',
+    TySchemeFromPalette(TyRGB($80, $80, $80), TyRGB($F0, $F0, $F0)) = tssDark);
+  AssertTrue('mid-grey surface, dark ink = light',
+    TySchemeFromPalette(TyRGB($80, $80, $80), TyRGB($10, $10, $10)) = tssLight);
+  AssertTrue('ink identical to surface is not a palette we read',
+    TySchemeFromPalette(TyRGB($77, $77, $77), TyRGB($77, $77, $77)) = tssUnknown);
+end;
+
+procedure TSystemThemeTest.TestPaletteProbesMatchTheWidgetsetContract;
+{ Two-directional, so it holds on whatever widgetset the suite was built for. Where the system
+  colours track the desktop (Qt5/Qt6) the probes must ANSWER; everywhere else they must stay
+  inert, so the platform probes above them keep their say and GTK's frozen/hardcoded values
+  never reach a theme. Whether Qt's answer is CORRECT needs a real Plasma session. }
+var
+  scheme: TTySystemScheme;
+  accent: TTyColor;
+  gotAccent: Boolean;
+begin
+  scheme := TyPaletteScheme;
+  gotAccent := TyPaletteAccent(accent);
+  if TySysColorsTrackDesktop then
+  begin
+    AssertTrue('a palette-tracking widgetset must decide light or dark',
+      scheme in [tssLight, tssDark]);
+    AssertTrue('and must hand back an accent', gotAccent);
+    AssertEquals('accent alpha is forced opaque', $FF, Integer(TyAlphaOf(accent)));
+  end
+  else
+  begin
+    AssertTrue('off a palette-tracking widgetset the scheme probe stays silent',
+      scheme = tssUnknown);
+    AssertFalse('and the accent probe reports no detection', gotAccent);
+    AssertEquals('while still leaving the documented fallback in place',
+      Integer(TyDefaultAccent), Integer(accent));
   end;
 end;
 
