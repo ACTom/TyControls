@@ -160,6 +160,7 @@ uses
   test.advchart.data,
   test.advchart.builder,
   test.advchart.series,
+  test.advchart.style,
   test.transitions,
   test.htmllabel,
   test.shape,
