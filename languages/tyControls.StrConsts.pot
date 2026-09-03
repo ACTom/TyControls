@@ -860,6 +860,43 @@ msgstr ""
 msgid "September"
 msgstr ""
 
+#: tycontrols.strconsts.rstyoptdiagbadenum
+#, object-pascal-format
+msgid "%s: \"%s\" is not one of %s."
+msgstr ""
+
+#: tycontrols.strconsts.rstyoptdiagdidyoumean
+#, object-pascal-format
+msgid "Did you mean \"%s\"?"
+msgstr ""
+
+#: tycontrols.strconsts.rstyoptdiagmorerows
+#, object-pascal-format
+msgid "and %d more like these."
+msgstr ""
+
+#: tycontrols.strconsts.rstyoptdiagnomarksatall
+msgid "The option is understood. Series marks are not painted yet, and this chart has no axes, so nothing is drawn."
+msgstr ""
+
+#: tycontrols.strconsts.rstyoptdiagnoseries
+msgid "The option is understood. There are no series, so only the axes would draw."
+msgstr ""
+
+#: tycontrols.strconsts.rstyoptdiagnothingpaintsyet
+msgid "The option is understood. Series marks are not painted yet, so this draws its axes and nothing else."
+msgstr ""
+
+#: tycontrols.strconsts.rstyoptdiagnotype
+#, object-pascal-format
+msgid "%s[%d] has no type yet, so nothing under it can be checked. One of: %s."
+msgstr ""
+
+#: tycontrols.strconsts.rstyoptdiagunknown
+#, object-pascal-format
+msgid "%s is not an option ECharts 6.1 knows."
+msgstr ""
+
 #: tycontrols.strconsts.rstyoptfunctionvalue
 msgid "JavaScript functions cannot be used here. Write a template string such as '{b}: {c}', or the name of a registered handler such as '@MyFormatter'."
 msgstr ""

@@ -832,7 +832,25 @@ begin
   if (AData = nil) or (not ValidNode(ANode)) then Exit;
   case AData.JSONType of
     jtObject:
-      WalkObject(TJSONObject(AData), ANode, APath, C);
+      { A COMPONENT SLOT ACCEPTS EITHER SHAPE, and the two used to be validated
+        very differently. `series: { type: 'bar', ... }` -- the bare-object form
+        ECharts documents everywhere -- resolves no variant here, so every key
+        under it, `type` included, came back as "not an option ECharts knows".
+        The editor turned a perfectly good config into a page of complaints.
+
+        TTyChartOption.ComponentAt already treats a bare object as element 0.
+        This is the same normalisation, and it keeps the array branch's silence
+        rule: an unresolvable variant reports nothing rather than reporting
+        everything. }
+      if TyOptIsVariantContainer(ANode) then
+      begin
+        tag := TJSONObject(AData).Get('type', '');
+        variant := TyOptVariant(ANode, tag);
+        if variant >= 0 then
+          WalkObject(TJSONObject(AData), variant, APath, C);
+      end
+      else
+        WalkObject(TJSONObject(AData), ANode, APath, C);
     jtArray:
       begin
         arr := TJSONArray(AData);
@@ -855,8 +873,19 @@ begin
           else
           begin
             item := TyOptArrayItem(ANode);
+            { NO '[]' EDGE IS NOT THE SAME AS NOTHING TO CHECK. The multi-
+              component options -- xAxis, yAxis, grid -- carry their properties
+              directly and have no element node, because the schema describes
+              one axis and lets you write a list of them. Skipping the array
+              then skipped the WHOLE subtree, so a typo inside `xAxis: [{...}]`
+              produced no issue at all and the editor said all clear.
+
+              An element of such a slot is validated against the slot itself,
+              which is exactly what ComponentAt means by component i. }
             if item >= 0 then
-              WalkValidate(arr.Items[i], item, sub, C);
+              WalkValidate(arr.Items[i], item, sub, C)
+            else
+              WalkValidate(arr.Items[i], ANode, sub, C);
           end;
         end;
       end;

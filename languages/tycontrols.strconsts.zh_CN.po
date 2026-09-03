@@ -968,3 +968,27 @@ msgstr "（option 根）"
 #: tycontrols.strconsts.rstyoptstatusneedstype
 msgid "write a type first -- what is under here depends on which one"
 msgstr "先写 type —— 这里面有什么取决于它是哪一种"
+
+#: tycontrols.strconsts.rstyoptdiagunknown
+#, object-pascal-format
+msgid "%s is not an option ECharts 6.1 knows."
+msgstr "%s 不是 ECharts 6.1 认识的 option。"
+
+#: tycontrols.strconsts.rstyoptdiagdidyoumean
+#, object-pascal-format
+msgid "Did you mean \"%s\"?"
+msgstr "你是想写 “%s” 吗？"
+
+#: tycontrols.strconsts.rstyoptdiagbadenum
+#, object-pascal-format
+msgid "%s: \"%s\" is not one of %s."
+msgstr "%s：“%s” 不在 %s 之中。"
+
+#: tycontrols.strconsts.rstyoptdiagnotype
+#, object-pascal-format
+msgid "%s[%d] has no type yet, so nothing under it can be checked. One of: %s."
+msgstr "%s[%d] 还没写 type，所以它下面的东西无从校验。可选：%s。"
+
+#: tycontrols.strconsts.rstyoptdiagnothingpaintsyet
+msgid "The option is understood. Series marks are not painted yet, so this draws its axes and nothing else."
+msgstr "option 已读懂。series 图元尚未实现，所以现在只画得出坐标轴。"

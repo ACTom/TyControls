@@ -233,7 +233,21 @@ function StrIn(ANode: TJSONObject; const AKey, ADefault: string): string;
 var d: TJSONData;
 begin
   d := FindIn(ANode, AKey);
-  if (d = nil) or (d.JSONType = jtNull) then Exit(ADefault);
+  { An ARRAY or an OBJECT where a string was expected RAISES out of AsString --
+    fpjson's ConvertError. Its two siblings below both test the type and fall
+    back; this one did not, and `{ xAxis: { name: [1] } }` is legal JSON that a
+    half-finished edit produces all the time.
+
+    That mattered more than a wrong value would have: the raise escaped
+    TyBuildGrids before it returned, so the CALLER's build variable was never
+    assigned and its try/finally never ran -- the whole build leaked, plus the
+    axis under construction. And the comment further down this unit argues that
+    throwing is wrong for us precisely because a design-time editor renders on
+    every keystroke.
+
+    Option.pas' own string reader already had the right shape. }
+  if (d = nil) or (d.JSONType in [jtNull, jtArray, jtObject]) then
+    Exit(ADefault);
   Result := d.AsString;
 end;
 

@@ -318,7 +318,10 @@ begin
   Result := ADefault;
   if ANode = nil then Exit;
   d := ANode.Find(AKey);
-  if (d = nil) or (d.JSONType = jtNull) then Exit;
+  { Non-scalar where a string was expected RAISES out of AsString. See the note
+    on Builder's StrIn: `series: [{ type: {} }]` is legal JSON and a normal
+    mid-edit state. }
+  if (d = nil) or (d.JSONType in [jtNull, jtArray, jtObject]) then Exit;
   Result := d.AsString;
 end;
 

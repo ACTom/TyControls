@@ -377,6 +377,24 @@ resourcestring
   rsTyOptStatusRoot = '(the option root)';
   rsTyOptStatusNeedsType =
     'write a type first -- what is under here depends on which one';
+  // What the editor SAYS about a piece of option text.
+  rsTyOptDiagUnknown = '%s is not an option ECharts 6.1 knows.';
+  rsTyOptDiagDidYouMean = 'Did you mean "%s"?';
+  rsTyOptDiagBadEnum = '%s: "%s" is not one of %s.';
+  rsTyOptDiagNoType = '%s[%d] has no type yet, so nothing under it can be '
+    + 'checked. One of: %s.';
+  rsTyOptDiagNothingPaintsYet =
+    'The option is understood. Series marks are not painted yet, so this '
+    + 'draws its axes and nothing else.';
+  // The same all-clear for a chart whose series have no axes -- a pie, a gauge
+  // -- where promising axes would be a lie.
+  rsTyOptDiagNoMarksAtAll =
+    'The option is understood. Series marks are not painted yet, and this '
+    + 'chart has no axes, so nothing is drawn.';
+  rsTyOptDiagNoSeries =
+    'The option is understood. There are no series, so only the axes would '
+    + 'draw.';
+  rsTyOptDiagMoreRows = 'and %d more like these.';
 
 implementation
 

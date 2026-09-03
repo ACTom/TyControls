@@ -157,6 +157,7 @@ uses
   test.advchart.catalog,
   test.advchart.complete,
   test.advchart.locate,
+  test.advchart.diagnose,
   test.advchart.handlers,
   test.advchart.data,
   test.advchart.builder,
