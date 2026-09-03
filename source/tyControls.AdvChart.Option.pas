@@ -21,9 +21,12 @@ unit tyControls.AdvChart.Option;
   first release needs the incremental form, and building it later changes no call
   site that only ever replaced.
 
-  A REJECTED OPTION KEEPS THE PREVIOUS ONE. A half-typed config in a design-time
-  editor must not blank the chart; the error is reported and the last good tree
-  stands.
+  A REJECTED OPTION LEAVES NO OPTION. The tree goes and Error says why, so the
+  chart is blank rather than showing something the option no longer says. The
+  earlier rule kept the last good tree, for an editor that re-applied text on
+  every keystroke; the editor that was actually built is modal and writes back
+  on OK, so what the rule bought was a control whose picture and property
+  disagreed with nothing on screen admitting it.
 
   LCL-free: SysUtils, Classes and fcl-json only. }
 interface
@@ -49,8 +52,10 @@ type
     constructor Create;
     destructor Destroy; override;
 
-    { Replace the whole option. Returns False on a parse error, in which case the
-      previous tree and text are untouched and Error describes what went wrong. }
+    { Replace the whole option. Returns False on a parse error, in which case
+      the tree is DROPPED -- there is no option until one parses -- and Error
+      describes what went wrong. FText keeps its last parsed value; the control
+      is what remembers the text a host wrote. }
     function SetOptionText(const AText: string): Boolean;
     procedure Clear;
 
@@ -216,8 +221,21 @@ begin
         if TyOptionTextHasFunction(AText) then
           msg := msg + ' ' + rsTyOptFunctionValue;
         SetError(msg, line, col);
-        { The previous tree stands. A design-time editor shows the error while
-          the chart keeps drawing what it last understood. }
+        { THE TREE GOES. An option that does not parse leaves NO chart, not the
+          previous one.
+
+          It used to keep the last good tree, on the theory that a design-time
+          editor re-applies the text on every keystroke and blanking on each
+          half-typed character would be unusable. That premise is gone: the
+          editor is a modal dialog that writes back on OK, and the Object
+          Inspector commits once per edit, so nothing ever pushes half-typed
+          text at the control.
+
+          What was left was a control that lies -- the property holding one
+          option while the picture showed another, with nothing on screen
+          saying so. At design time that reads as "my edit did nothing", which
+          is a worse signal than a blank chart next to an error. }
+        FreeAndNil(FRoot);
         Exit(False);
       end;
     end;

@@ -24,7 +24,7 @@ type
     procedure TestARealisticEChartsConfig;
     { ---- failure behaviour ---- }
     procedure TestAFunctionValueIsRejectedWithAUsefulMessage;
-    procedure TestARejectedOptionKeepsThePreviousOne;
+    procedure TestARejectedOptionLeavesNoOption;
     procedure TestErrorCarriesAPosition;
     procedure TestEmptyTextIsNotAnError;
     procedure TestASuccessfulSetClearsAPreviousError;
@@ -128,15 +128,19 @@ begin
              Pos('@', FOpt.Error.Message) > 0);
 end;
 
-procedure TAdvChartOptionTest.TestARejectedOptionKeepsThePreviousOne;
+procedure TAdvChartOptionTest.TestARejectedOptionLeavesNoOption;
 begin
   AssertTrue('first one takes', FOpt.SetOptionText('{ title: { text: ''Good'' } }'));
+  AssertEquals('and reads back', 'Good', FOpt.GetStr('title.text', ''));
+
   AssertFalse('second is rejected', FOpt.SetOptionText('{ title: { text: '));
-  { Mid-keystroke in a design-time editor. Blanking the chart on every character
-    that does not yet parse would make the editor unusable. }
-  AssertEquals('the last good option still stands', 'Good',
+  { The tree GOES. Keeping the last good one meant the option said one thing
+    while anything reading it got another, with nothing to tell them apart --
+    and the reason for it (an editor re-applying text on every keystroke) is
+    not how the editor was built. }
+  AssertEquals('the previous option is gone', '',
                FOpt.GetStr('title.text', ''));
-  AssertTrue('but the error is visible', FOpt.Error.Failed);
+  AssertTrue('and the error says why', FOpt.Error.Failed);
 end;
 
 procedure TAdvChartOptionTest.TestErrorCarriesAPosition;

@@ -40,7 +40,9 @@ type
     procedure TestAnEmptyChartStillPaintsItsSurface;
     procedure TestEveryCornerIsPainted;
     procedure TestTheOptionDrivesTheBuild;
-    procedure TestABadOptionKeepsTheLastGoodOne;
+    procedure TestABadOptionBlanksTheChart;
+    procedure TestTheOptionReadsBackWhatWasWritten;
+    procedure TestWritingTheSameTextTwiceIsANoOp;
     procedure TestDiagnosticsReachTheControl;
     procedure TestAnAxisIsActuallyDrawn;
     procedure TestAValueAxisLabelsItsTicks;
@@ -174,19 +176,78 @@ begin
     FChart.Build.Axis('yAxis', 0).Scale.GetExtent.Stop, 0);
 end;
 
-procedure TAdvanceChartTest.TestABadOptionKeepsTheLastGoodOne;
+procedure TAdvanceChartTest.TestABadOptionBlanksTheChart;
+var
+  x, y, ink: Integer;
+  p, bg: TBGRAPixel;
 begin
-  { A design-time editor renders on every keystroke, so half-typed text is the
-    normal state. Blanking the chart on each one would make the editor
-    unusable. }
+  { An option that does not parse leaves NO chart. Keeping the last good one
+    made the control show a picture its own property no longer described, with
+    nothing on screen to say so -- and at design time that reads as "my edit
+    did nothing" rather than "I broke it". }
   FChart.Option := '{ xAxis: { data: [''A'', ''B''] }, yAxis: {} }';
   Draw;
   AssertEquals(2, FChart.Build.Axis('xAxis', 0).Categories.Count);
+
   FChart.Option := '{ xAxis: { data: [''A'',';
   Draw;
   AssertTrue('the error is readable', FChart.OptionError <> '');
-  AssertEquals('and the last good option still stands', 2,
-    FChart.Build.Axis('xAxis', 0).Categories.Count);
+  AssertEquals('no grid is left', 0, FChart.Build.GridCount);
+
+  { And the surface still gets painted -- blank means an empty chart, not an
+    unpainted control. }
+  bg := PixelAt(200, 150);
+  AssertFalse('the sentinel shows through', (bg.red = 255) and (bg.green = 0)
+    and (bg.blue = 255));
+  ink := 0;
+  for y := 20 to 279 do
+    for x := 20 to 379 do
+    begin
+      p := PixelAt(x, y);
+      if (Abs(p.red - bg.red) + Abs(p.green - bg.green)
+        + Abs(p.blue - bg.blue)) > 12 then Inc(ink);
+    end;
+  AssertEquals(Format('%d pixels of chart survived a rejected option', [ink]),
+    0, ink);
+end;
+
+procedure TAdvanceChartTest.TestTheOptionReadsBackWhatWasWritten;
+const
+  cGood = '{ xAxis: { data: [''A'', ''B''] }, yAxis: {} }';
+  cBad  = '{ xAxis: { data: [''A'', ''B''] }, yAxis: {';
+begin
+  { The property is the API, and a property that does not read back what was
+    written is a property that eats the host's work. In the Object Inspector
+    every keystroke that does not yet parse used to revert the whole box, and a
+    .lfm could not round-trip an option still being written.
+
+    The TREE is a separate question with the opposite answer: a rejected option
+    leaves no tree at all, so the picture never disagrees with the property. }
+  FChart.Option := cGood;
+  Draw;
+  AssertEquals('a good option reads back', cGood, FChart.Option);
+  AssertEquals('and parsed', '', FChart.OptionError);
+  AssertEquals('and built', 1, FChart.Build.GridCount);
+
+  FChart.Option := cBad;
+  Draw;
+  AssertEquals('the REJECTED text reads back too', cBad, FChart.Option);
+  AssertTrue('and the reason is readable', FChart.OptionError <> '');
+  AssertEquals('while the chart itself is gone', 0, FChart.Build.GridCount);
+end;
+
+procedure TAdvanceChartTest.TestWritingTheSameTextTwiceIsANoOp;
+const
+  cBad = '{ yAxis: {';
+begin
+  { The early-out has to compare against what was WRITTEN. Comparing against
+    the parsed tree's text meant a second write of the same bad text was not
+    recognised as a repeat -- it re-parsed and re-invalidated on every
+    keystroke that failed. }
+  FChart.Option := cBad;
+  AssertEquals(cBad, FChart.Option);
+  FChart.Option := cBad;
+  AssertEquals('still the same text', cBad, FChart.Option);
 end;
 
 procedure TAdvanceChartTest.TestDiagnosticsReachTheControl;

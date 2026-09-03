@@ -57,6 +57,7 @@ type
     FStores: array of TTyDataStore;
     FDirty: Boolean;
     FLastRect: TTyRectF;
+    FOptionText: string;
     procedure SetOptionText(const AValue: string);
     function GetOptionText: string;
     function GetErrorText: string;
@@ -180,16 +181,22 @@ end;
 
 { ==================== the option ==================== }
 
+{ WHAT WAS WRITTEN, not what parsed. The option tree keeps the last text it
+  understood, deliberately -- a rejected option leaves the previous chart
+  standing rather than blanking it. But the PROPERTY has to read back what the
+  host set, or a half-typed option in the Object Inspector reverts on every
+  keystroke that does not yet parse, and a .lfm cannot round-trip work in
+  progress. So the control remembers the text and the tree remembers the last
+  good one; OptionError says which is which. }
 function TTyAdvanceChart.GetOptionText: string;
 begin
-  Result := FOption.Text;
+  Result := FOptionText;
 end;
 
 procedure TTyAdvanceChart.SetOptionText(const AValue: string);
 begin
-  if FOption.Text = AValue then Exit;
-  { A rejected option leaves the previous tree standing; the reason is readable
-    through OptionError. }
+  if FOptionText = AValue then Exit;
+  FOptionText := AValue;
   FOption.SetOptionText(AValue);
   FDirty := True;
   Invalidate;
