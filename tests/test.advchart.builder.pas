@@ -93,6 +93,20 @@ type
   end;
 implementation
 
+{ What a caller would have resolved from a theme. Stated, not defaulted: the
+  layout unit deliberately ships no default text style, because the bug this
+  parameter replaced was exactly a hardcoded font living one layer too deep. }
+function TestAxisTextStyle: TTyAxisTextStyle;
+begin
+  Result := Default(TTyAxisTextStyle);
+  Result.FontName := 'TestFont';
+  Result.FontSizeLogical := 12;
+  Result.FontWeight := 400;
+  Result.LabelMarginLogical := 8;
+  Result.TickLengthLogical := 5;
+  Result.NameGapLogical := 15;
+end;
+
 procedure TFixedMeasurer.MeasureLine(const AText, AFontName: string;
   AFontSizeLogical, AWeight: Integer; out AW, AH: Double);
 begin
@@ -521,7 +535,11 @@ begin
   before := b.Axis('xAxis', 0).PxStop - b.Axis('xAxis', 0).PxStart;
   AssertEquals('the raw grid width', 450.0, before, 1e-9);
   m := TFixedMeasurer.Create;
-  TyLayoutGrids(b, FOpt, m, 96);
+  { The style is the CALLER's to resolve, so the test states what it measures
+    with instead of inheriting a default -- there is deliberately no default in
+    the layout unit, because a default there is the hardcoded font all over
+    again. }
+  TyLayoutGrids(b, FOpt, m, 96, TestAxisTextStyle);
   after := b.Axis('xAxis', 0).PxStop - b.Axis('xAxis', 0).PxStart;
   AssertTrue('the plot shrank to make room for the labels', after < before);
   AssertTrue('and the band width followed it', b.Axis('xAxis', 0).BandWidth < before / 3);

@@ -1180,3 +1180,60 @@ example 的两份 `.po` 也按其他 example 的样子补齐了（97 份全过 l
 另外两条新测试（标签、分隔线）本来吃同一个亏，只是这次的执行顺序没撞上。
 
 ### 全量 6837，零失败。
+
+## 24. Tier 0 收尾审计：三个 bug 在「已完成」的代码里（2026-09-03）
+
+第 3 项提交之后做了一次并行审计（四个独立审计员按 spec 逐项核代码，外加一个专找漏judgment
+的批评者）。**三个真 bug 在被标成「完成」的代码里**，没有任何一条测试看得见它们。
+
+### ① 布局用一套字体量，绘制用另一套画
+
+`Builder.FillSpec` 写死 `FontSizeLogical := 12`、`FontWeight := 400`，`FontName` **根本没赋值**；
+同一段里 `8 / 5 / 15` 三个数字正是主题的 `--advchart-label-margin` / `--advchart-tick-length` /
+`--advchart-name-gap`，被抄成了字面量。
+
+而绘制端用的是主题解析出来的 `TyAdvChartAxisLabel`。**绘图矩形是按量出来的标签尺寸收缩的**，
+所以换一套标签字号更大的皮肤，矩形按 12pt 算、字按皮肤画 —— 标签会溢出它自己挣来的空间。
+
+这**直接违反仓库硬规则**「视觉值必须走主题 token，绝不硬编码在控件代码里」
+（[[theme-customizability-principle]]），而且它躲过了所有测试，因为测试用的是假度量器，
+量什么字体都一样。
+
+修法：`Layout.pas` 新增 `TTyAxisTextStyle`，由**控件**解析主题后传进 `TyLayoutGrids`。
+**纯布局层里不提供默认值** —— 一个默认值就是把同样的硬编码往下挪一层；测试自己声明它拿什么量。
+
+### ② 同一个刻度值，两端用不同的数字格式化器
+
+布局 `FloatToStr(ticks[q].Value)`（**跟随机器区域设置**），绘制 `TyChartNumToStr`（强制 `.`）。
+逗号小数点的机器上，量出来的宽度和画出来的字不是同一个字符串。
+Builder 里本来就有一个 `NumText` 跟绘制端一字不差，改一行就完。
+
+### ③ `show: false` 只让轴变薄，照样画
+
+全库 `'show'` 只有一处被读（`Builder.pas`），喂给 `ASpec.ShowLabels`，而它只影响
+`TyAxisThickness` 预留的厚度。于是关掉一根轴，**绘图区确实变宽了**（看起来生效了），
+**线、刻度、标签、分隔线一个不少**。
+
+修法：`TTyAxis.Visible`（默认 True，跟上游一致），`PaintAxis` 早退。
+**轴仍然参与构建** —— 绑在它上面的 series 照样有范围和坐标，只是不画。
+新增测试断言两根轴都隐藏后，绘图区里**零个非背景像素**。
+
+### ④ 十一条诊断是硬编码英文
+
+`Builder.pas` 5 处 + `Series.pas` 6 处 `Note(...)` 全是英文字面量，而这些文字**会直接显示给用户**
+（控件的诊断列表，以及将来设计期编辑器的警告栏）。上一轮刚把两条串挪进 `StrConsts`，
+**却漏了这十一条** —— 因为它们不长得像「界面文字」。挪进 `StrConsts`、`implementation` 段 `uses`、
+补齐 zh_CN。
+
+顺带一个操作上的坑：**`.pot` 是 package 构建生成的，不是测试项目构建生成的**。
+只编 `tests/tytests.lpi` 就跑全量，会被 `TestEveryStrConstsResourcestringIsInThePot` 拦下——
+加了 resourcestring 必须先 `lazbuild tycontrols.lpk` 一次。
+
+### 教训
+
+**「测试全绿」和「按 spec 做完了」是两件事。** 这三个 bug 全都在有测试覆盖的代码里，
+而且第 ① 个恰恰**因为**测试用假度量器才躲过去 —— 假度量器让布局断言能写成精确数值（这是当初
+正确的设计决定），代价是它对「量的是哪套字体」完全无感。
+
+按 spec 逐项核代码，是测试替代不了的一道关。
+

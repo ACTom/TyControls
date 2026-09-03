@@ -123,7 +123,8 @@ function TyBuildGrids(AOption: TTyChartOption; const AViewport: TTyRectF): TTyCh
 { Shrink every grid rect by the room its axes' labels and names need, then write
   the final pixel extents. Safe to call more than once. }
 procedure TyLayoutGrids(ABuild: TTyChartBuild; AOption: TTyChartOption;
-  const AMeasurer: ITyTextMeasurer; APPI: Integer);
+  const AMeasurer: ITyTextMeasurer; APPI: Integer;
+  const AText: TTyAxisTextStyle);
 
 { ---- reading series data ---- }
 type
@@ -196,6 +197,12 @@ function TyResolveAxisType(ANode: TJSONObject; out AType: TTyAxisType;
   out AUnknown: string): Boolean;
 
 implementation
+
+uses
+  { Only for the diagnostic resourcestrings; kept out of the interface uses so
+    the dependency stays one-way and this unit's public face still names only
+    the AdvChart layer. }
+  tyControls.StrConsts;
 
 const
   { GridModel's defaultOption. Percentages are of the FULL container extent, not
@@ -622,8 +629,7 @@ var
     begin
       nd := ObjOf(AOption.ComponentAt(AMainType, q));
       if not TyResolveAxisType(nd, t, u) then
-        build.Note(Format('%s[%d].type: "%s" is not one of value, category, time or log; '
-          + 'treated as value', [AMainType, q, u]));
+        build.Note(Format(rsTyChartAxisTypeUnknown, [AMainType, q, u]));
       a := TTyAxis.Create(Copy(AMainType, 1, 1), MakeScale(t, nd), AHorizontal);
       a.MainType := AMainType;
       a.ComponentIndex := q;
@@ -637,6 +643,12 @@ var
         not a boolean -- cannot turn this on by accident. }
       a.OnBand := (t = atCategory) and BoolIn(nd, 'boundaryGap', True);
       a.Inverse := BoolIn(nd, 'inverse', False);
+      { `show` decides whether the axis is DRAWN, not whether it exists: series
+        bound to a hidden axis still get their extents and their coordinates.
+        Read here so the flag reaches the renderer -- before this it was read
+        only into the layout spec, where it shrank the reserved thickness and
+        the axis was then drawn anyway. }
+      a.Visible := BoolIn(nd, 'show', True);
       ATarget[q] := a;
     end;
   end;
@@ -656,7 +668,7 @@ begin
   synth := (gridCount = 0) and (xCount > 0) and (yCount > 0);
   if synth then gridCount := 1;
   if (gridCount = 0) and (xCount + yCount > 0) then
-    build.Note('xAxis or yAxis without the other: no grid was created, so neither is drawn');
+    build.Note(rsTyChartAxisWithoutPair);
 
   SetLength(gridIds, gridCount);
   for i := 0 to gridCount - 1 do
@@ -735,10 +747,10 @@ begin
 
   for i := 0 to High(build.FXAxes) do
     if build.FXAxes[i].GridIndex < 0 then
-      build.Note(Format('xAxis[%d] names no grid, so it is not drawn', [i]));
+      build.Note(Format(rsTyChartXAxisNoGrid, [i]));
   for i := 0 to High(build.FYAxes) do
     if build.FYAxes[i].GridIndex < 0 then
-      build.Note(Format('yAxis[%d] names no grid, so it is not drawn', [i]));
+      build.Note(Format(rsTyChartYAxisNoGrid, [i]));
 
   { The N x M cross product. A grid missing either family gets NO coordinate
     system at all -- one orphaned axis takes the whole plot its partner was on
@@ -749,7 +761,7 @@ begin
     if (build.FGrids[i].XAxisCount = 0) or (build.FGrids[i].YAxisCount = 0) then
     begin
       if build.FGrids[i].XAxisCount + build.FGrids[i].YAxisCount > 0 then
-        build.Note(Format('grid[%d] has axes in only one direction, so it draws nothing', [i]));
+        build.Note(Format(rsTyChartGridOneDirection, [i]));
       Continue;
     end;
     for j := 0 to build.FGrids[i].XAxisCount - 1 do
@@ -1013,7 +1025,8 @@ end;
 { ==================== phase C ==================== }
 
 procedure TyLayoutGrids(ABuild: TTyChartBuild; AOption: TTyChartOption;
-  const AMeasurer: ITyTextMeasurer; APPI: Integer);
+  const AMeasurer: ITyTextMeasurer; APPI: Integer;
+  const AText: TTyAxisTextStyle);
 var
   g, i, j, t: Integer;
   specs: TTyAxisLayoutSpecArray;
@@ -1029,11 +1042,15 @@ var
     ASpec.Side := AAxis.Side;
     ASpec.ShowLabels := BoolIn(ANode, 'show', True);
     ASpec.Name := AAxis.Name;
-    ASpec.FontSizeLogical := 12;
-    ASpec.FontWeight := 400;
-    ASpec.LabelMarginLogical := 8;
-    ASpec.TickLengthLogical := 5;
-    ASpec.NameGapLogical := 15;
+    { From the caller's resolved theme style, NOT from literals here: the paint
+      pass draws in the theme's font and gaps, so measuring in anything else
+      sizes the plot rect for a chart nobody will draw. }
+    ASpec.FontName := AText.FontName;
+    ASpec.FontSizeLogical := AText.FontSizeLogical;
+    ASpec.FontWeight := AText.FontWeight;
+    ASpec.LabelMarginLogical := AText.LabelMarginLogical;
+    ASpec.TickLengthLogical := AText.TickLengthLogical;
+    ASpec.NameGapLogical := AText.NameGapLogical;
     ticks := AAxis.Scale.GetTicks;
     SetLength(ASpec.Labels, Length(ticks));
     SetLength(ASpec.Positions, Length(ticks));
@@ -1042,7 +1059,11 @@ var
       if AAxis.Scale is TTyOrdinalScale then
         ASpec.Labels[q] := TTyOrdinalScale(AAxis.Scale).GetLabel(ticks[q].Value)
       else
-        ASpec.Labels[q] := FloatToStr(ticks[q].Value);
+        { NumText, not FloatToStr: the paint pass formats the same tick with a
+          forced '.' separator, and FloatToStr follows the machine's locale --
+          on a comma-decimal machine the width measured here is not the width of
+          the string that gets drawn. }
+        ASpec.Labels[q] := NumText(ticks[q].Value);
       { The BAND-ADJUSTED, post-inverse fraction, so the layout layer and the
         renderer cannot disagree about where a label goes. }
       ASpec.Positions[q] := AAxis.NormalizedCoord(ticks[q].Value);

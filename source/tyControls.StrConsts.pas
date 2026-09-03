@@ -350,6 +350,25 @@ resourcestring
     'JavaScript functions cannot be used here. Write a template string such as '
   + '''{b}: {c}'', or the name of a registered handler such as ''@MyFormatter''.';
 
+  // --- AdvanceChart: what the build could not honour ---
+  // These reach the user through the chart's diagnostics list and through the
+  // design-time editor, so they are as translatable as any caption. They were
+  // English literals inside the builder until 2026-09-03.
+  rsTyChartAxisTypeUnknown =
+    '%s[%d].type: "%s" is not one of value, category, time or log; treated as value';
+  rsTyChartAxisWithoutPair =
+    'xAxis or yAxis without the other: no grid was created, so neither is drawn';
+  rsTyChartXAxisNoGrid = 'xAxis[%d] names no grid, so it is not drawn';
+  rsTyChartYAxisNoGrid = 'yAxis[%d] names no grid, so it is not drawn';
+  rsTyChartGridOneDirection =
+    'grid[%d] has axes in only one direction, so it draws nothing';
+  rsTyChartSeriesNoType = 'series[%d] has no type, so it is not drawn';
+  rsTyChartSeriesBadType = 'series[%d]: "%s" is not a series type';
+  rsTyChartSeriesCoordSys = 'series[%d]: coordinateSystem "%s" is not built yet';
+  rsTyChartSeriesNoAxis = 'series[%d] names an axis that does not exist';
+  rsTyChartSeriesAxesSplit =
+    'series[%d]: xAxis[%d] and yAxis[%d] are not on one grid';
+
 implementation
 
 end.

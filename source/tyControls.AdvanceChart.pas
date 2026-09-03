@@ -273,13 +273,31 @@ end;
 
 procedure TTyAdvanceChart.Relayout(APainter: TTyPainter; const ARect: TTyRectF;
   APPI: Integer);
+var
+  txt: TTyAxisTextStyle;
+  labelS: TTyStyleSet;
 begin
   FLastRect := ARect;
   Rebuild;
+  { The layout pass measures the labels the PAINT pass will draw, so it has to
+    be handed the same font and the same gaps. Resolving them here rather than
+    inside the builder keeps that unit free of the controller, which is the
+    whole reason the measurer is injected too. }
+  labelS := ActiveController.Model.ResolveStyle('TyAdvChartAxisLabel', '', []);
+  txt := Default(TTyAxisTextStyle);
+  txt.FontName := labelS.FontName;
+  txt.FontSizeLogical := ResolveFontSize(labelS);
+  txt.FontWeight := labelS.FontWeight;
+  txt.LabelMarginLogical := ActiveController.Metric(TyAdvChartLabelMarginVar,
+    TyAdvChartLabelMargin);
+  txt.TickLengthLogical := ActiveController.Metric(TyAdvChartTickLenVar,
+    TyAdvChartTickLen);
+  txt.NameGapLogical := ActiveController.Metric(TyAdvChartNameGapVar,
+    TyAdvChartNameGap);
   { Measuring goes through the painter behind an interface rather than being
     called directly, so the layout layer stays free of the painter and a test
     can hand it a deterministic measurer instead of this machine's fonts. }
-  TyLayoutGrids(FBuild, FOption, TTyPainterTextMeasurer.Create(APPI), APPI);
+  TyLayoutGrids(FBuild, FOption, TTyPainterTextMeasurer.Create(APPI), APPI, txt);
   FDirty := False;
 end;
 
@@ -311,6 +329,9 @@ var
 
 begin
   if AAxis = nil then Exit;
+  { `show: false` means "do not draw me". The axis still exists and its series
+    still map to pixels; only the domain, ticks, labels and split lines go. }
+  if not AAxis.Visible then Exit;
   model := ActiveController.Model;
   { A foreign typeKey is resolved by asking the model directly -- there is no
     per-part helper in this library and inventing one here would be a second

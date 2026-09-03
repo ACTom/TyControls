@@ -46,6 +46,7 @@ type
     procedure TestAValueAxisLabelsItsTicks;
     procedure TestSplitLinesDivideBandsRatherThanPointAtLabels;
     procedure TestTheTicksThemselvesAreDrawn;
+    procedure TestAHiddenAxisIsNotDrawn;
     procedure TestResizingRelaysOutTheAxes;
     procedure TestRepeatedRendersDoNotGrowTheHeap;
   end;
@@ -436,6 +437,47 @@ begin
 
   AssertEquals('one tick mark per tick, outside the axis line',
     Length(FChart.Build.Axis('yAxis', 0).Scale.GetTicks), marks);
+end;
+
+procedure TAdvanceChartTest.TestAHiddenAxisIsNotDrawn;
+var
+  x, y, inkShown, inkHidden: Integer;
+  p, bg: TBGRAPixel;
+
+  function PlotInk: Integer;
+  var gb: TTyGridBuild; xx, yy: Integer;
+  begin
+    Result := 0;
+    gb := FChart.Build.Grid(0);
+    for yy := Round(gb.PlotRect.Top) to Round(gb.PlotRect.Bottom) do
+      for xx := Round(gb.PlotRect.Left) to Round(gb.PlotRect.Right) do
+      begin
+        p := PixelAt(xx, yy);
+        if (Abs(p.red - bg.red) + Abs(p.green - bg.green)
+          + Abs(p.blue - bg.blue)) > 12 then Inc(Result);
+      end;
+  end;
+
+begin
+  { `show: false` switches an axis OFF. Before this, `show` was read in one
+    place only -- into the layout spec, where it shrank the thickness reserved
+    for labels -- and the axis was then drawn regardless, so the option looked
+    like it did something (the plot got wider) while the lines stayed. }
+  FChart.Option := '{ xAxis: { data: [''A'', ''B'', ''C''] }, yAxis: {},'
+    + ' series: [{ type: ''bar'', data: [10, 20, 30] }] }';
+  Draw;
+  bg := PixelAt(200, 150);
+  inkShown := PlotInk;
+  AssertTrue('the visible chart drew something in the plot', inkShown > 50);
+
+  FChart.Option := '{ xAxis: { data: [''A'', ''B'', ''C''], show: false },'
+    + ' yAxis: { show: false },'
+    + ' series: [{ type: ''bar'', data: [10, 20, 30] }] }';
+  Draw;
+  bg := PixelAt(200, 150);
+  inkHidden := PlotInk;
+  AssertEquals(Format('both axes are hidden but %d pixels are still drawn '
+    + 'inside the plot', [inkHidden]), 0, inkHidden);
 end;
 
 procedure TAdvanceChartTest.TestResizingRelaysOutTheAxes;

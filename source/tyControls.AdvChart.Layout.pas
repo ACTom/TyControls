@@ -83,6 +83,25 @@ type
   { Whether an axis' NAME counts toward the space reserved, or only its labels. }
   TTyOuterBoundsContain = (obcAxisLabel, obcAll);
 
+  { What the caller resolved FROM THE THEME for one axis' text: the label font
+    and the three gaps. A record rather than six loose parameters because every
+    one of them is a theme token, and a caller that fills some and forgets the
+    rest is exactly the bug this replaced -- the layout pass measured labels in
+    a hardcoded 12pt with no font name while the paint pass drew them in the
+    theme's font, so a skin with a larger label font got a plot rect measured
+    too small for the labels it would then draw.
+
+    No defaults live here. This unit knows nothing about themes, and a default
+    would be the same hardcoding one layer down. }
+  TTyAxisTextStyle = record
+    FontName: string;
+    FontSizeLogical: Integer;
+    FontWeight: Integer;
+    LabelMarginLogical: Double;
+    TickLengthLogical: Double;
+    NameGapLogical: Double;
+  end;
+
   { Everything one axis needs to lay itself out. Pure data: the caller has
     already resolved the font and formatted the labels, because deciding what a
     tick says is the scale's job and this unit does not know about scales. }

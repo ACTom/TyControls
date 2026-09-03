@@ -184,6 +184,12 @@ procedure TyApplyAxisExtents(AOption: TTyChartOption; ABuild: TTyChartBuild;
 
 implementation
 
+uses
+  { Only for the diagnostic resourcestrings; kept out of the interface uses so
+    the dependency stays one-way and this unit's public face still names only
+    the AdvChart layer. }
+  tyControls.StrConsts;
+
 const
   StatDelim = '|&';
 
@@ -354,13 +360,13 @@ begin
         component array. Ours keeps the slot -- a hole here would renumber every
         later series and silently move whatever a callback or a hit test was
         pointing at -- and says why. }
-      ABuild.Note(Format('series[%d] has no type, so it is not drawn', [i]));
+      ABuild.Note(Format(rsTyChartSeriesNoType, [i]));
       Result[i] := b;
       Continue;
     end;
     if not TySeriesFindType(b.SeriesType, info) then
     begin
-      ABuild.Note(Format('series[%d]: "%s" is not a series type', [i, b.SeriesType]));
+      ABuild.Note(Format(rsTyChartSeriesBadType, [i, b.SeriesType]));
       Result[i] := b;
       Continue;
     end;
@@ -388,7 +394,7 @@ begin
       { The two-step shape is here; only cartesian has a system to ask yet. A
         series naming polar resolves to nothing rather than silently falling
         back to the cartesian it did not ask for. }
-      ABuild.Note(Format('series[%d]: coordinateSystem "%s" is not built yet', [i, sys]));
+      ABuild.Note(Format(rsTyChartSeriesCoordSys, [i, sys]));
       Result[i] := b;
       Continue;
     end;
@@ -407,15 +413,14 @@ begin
       ABuild.AxisCount('yAxis'), AxisIds(ABuild, 'yAxis'));
     if (xi < 0) or (yi < 0) then
     begin
-      ABuild.Note(Format('series[%d] names an axis that does not exist', [i]));
+      ABuild.Note(Format(rsTyChartSeriesNoAxis, [i]));
       Result[i] := b;
       Continue;
     end;
     b.Cart := ABuild.CartesianAt(xi, yi);
     if b.Cart = nil then
     begin
-      ABuild.Note(Format('series[%d]: xAxis[%d] and yAxis[%d] are not on one grid',
-        [i, xi, yi]));
+      ABuild.Note(Format(rsTyChartSeriesAxesSplit, [i, xi, yi]));
       Result[i] := b;
       Continue;
     end;

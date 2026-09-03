@@ -896,3 +896,52 @@ msgstr "没有注册名为 '%s' 的格式化器。"
 #: tycontrols.strconsts.rstyoptfunctionvalue
 msgid "JavaScript functions cannot be used here. Write a template string such as '{b}: {c}', or the name of a registered handler such as '@MyFormatter'."
 msgstr "这里不能写 JavaScript 函数。请改用模板串，例如 '{b}: {c}'，或已注册的处理器名，例如 '@MyFormatter'。"
+
+#: tycontrols.strconsts.rstychartaxistypeunknown
+#, object-pascal-format
+msgid "%s[%d].type: \"%s\" is not one of value, category, time or log; treated as value"
+msgstr "%s[%d].type：“%s”不是 value、category、time 或 log 之一，按 value 处理"
+
+#: tycontrols.strconsts.rstychartaxiswithoutpair
+msgid "xAxis or yAxis without the other: no grid was created, so neither is drawn"
+msgstr "xAxis 与 yAxis 只有一个：没有生成 grid，两条轴都不会画"
+
+#: tycontrols.strconsts.rstychartxaxisnogrid
+#, object-pascal-format
+msgid "xAxis[%d] names no grid, so it is not drawn"
+msgstr "xAxis[%d] 没有指向任何 grid，因此不会画"
+
+#: tycontrols.strconsts.rstychartyaxisnogrid
+#, object-pascal-format
+msgid "yAxis[%d] names no grid, so it is not drawn"
+msgstr "yAxis[%d] 没有指向任何 grid，因此不会画"
+
+#: tycontrols.strconsts.rstychartgridonedirection
+#, object-pascal-format
+msgid "grid[%d] has axes in only one direction, so it draws nothing"
+msgstr "grid[%d] 只有一个方向上有轴，因此什么都不会画"
+
+#: tycontrols.strconsts.rstychartseriesnotype
+#, object-pascal-format
+msgid "series[%d] has no type, so it is not drawn"
+msgstr "series[%d] 没有 type，因此不会画"
+
+#: tycontrols.strconsts.rstychartseriesbadtype
+#, object-pascal-format
+msgid "series[%d]: \"%s\" is not a series type"
+msgstr "series[%d]：“%s”不是一种 series 类型"
+
+#: tycontrols.strconsts.rstychartseriescoordsys
+#, object-pascal-format
+msgid "series[%d]: coordinateSystem \"%s\" is not built yet"
+msgstr "series[%d]：coordinateSystem“%s”尚未实现"
+
+#: tycontrols.strconsts.rstychartseriesnoaxis
+#, object-pascal-format
+msgid "series[%d] names an axis that does not exist"
+msgstr "series[%d] 指向了一条不存在的轴"
+
+#: tycontrols.strconsts.rstychartseriesaxessplit
+#, object-pascal-format
+msgid "series[%d]: xAxis[%d] and yAxis[%d] are not on one grid"
+msgstr "series[%d]：xAxis[%d] 与 yAxis[%d] 不在同一个 grid 上"

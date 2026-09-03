@@ -59,6 +59,7 @@ type
     FAxisType: TTyAxisType;
     FGridIndex: Integer;
     FSide: TTyAxisSide;
+    FVisible: Boolean;
     FOnBand: Boolean;
     FCategories: TTyOrdinalMeta;
     procedure SetOnBand(AValue: Boolean);
@@ -112,6 +113,10 @@ type
       a coordinate system. }
     property GridIndex: Integer read FGridIndex write FGridIndex;
     property Side: TTyAxisSide read FSide write FSide;
+    { The option's `show`. An axis that is switched off still takes part in the
+      build -- series bound to it keep their extents and their coordinates --
+      it is only not DRAWN. Defaults True, matching upstream. }
+    property Visible: Boolean read FVisible write FVisible;
     { Category axes band by default; value axes never do. The setter GATES on
       the scale being ordinal, because a value axis' boundaryGap is a PAIR of
       percentages rather than a boolean, and an ungated setter would band every
@@ -267,6 +272,7 @@ begin
   FAxisType := atValue;
   FGridIndex := -1;
   FSide := asBottom;
+  FVisible := True;
   FOnBand := False;
   FCategories := nil;
   if FScale is TTyOrdinalScale then
