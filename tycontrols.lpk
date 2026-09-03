@@ -845,6 +845,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.AdvChart.Handlers"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.AdvChart.Locate.pas"/>
+        <UnitName Value="tyControls.AdvChart.Locate"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.AdvChart.Builder.pas"/>
         <UnitName Value="tyControls.AdvChart.Builder"/>
       </Item>
