@@ -135,6 +135,10 @@
      classic value == each control's Pascal constant today; the modern
      density pack overrides these names. Runtime geometry is not in the
      golden, so the guard is value==constant + full suite green. */
+  --advchart-label-margin: 8px;
+  --advchart-minor-tick-length: 3px;
+  --advchart-name-gap: 15px;
+  --advchart-tick-length: 5px;
   --alert-close-gap: 8px;
   --alert-close-size: 14px;
   --alert-icon-gap: 8px;
@@ -1112,6 +1116,38 @@ TyChartSeries5 { background: #59A14F; }   /* green  */
 TyChartSeries6 { background: #EDC948; }   /* yellow */
 TyChartSeries7 { background: #B07AA1; }   /* purple */
 TyChartSeries8 { background: #FF9DA7; }   /* pink   */
+
+/* AdvChart: the axis domain. Eight keys and four metrics, and the COUNT is part
+   of the design -- twelve things can be checked by eye across seventeen themes
+   and sixty-four cannot, so this is the smallest set that still lets a skin
+   restyle an axis without touching the control.
+
+   Every colour DERIVES from a semantic token the theme already defines. A skin
+   that restyled --border or --on-surface gets a matching axis for nothing, and
+   one that restyled neither still gets a legible one. Not a literal anywhere:
+   a hardcoded grey is exactly what makes a chart look pasted on top of a dark
+   theme rather than drawn in it.
+
+   These are NEW keys, so every existing skin inherits them from this base layer
+   untouched -- which is the only reason a change this wide is safe to make in
+   one pass. A skin that later writes any rule for one of them replaces the
+   whole key, variants included; that is this library's rule and it is why the
+   set is small enough to re-check. */
+TyAdvChartAxisLine  { border-color: var(--border); border-width: 1px; }
+TyAdvChartAxisTick  { border-color: var(--border); border-width: 1px; }
+/* Muted, not full ink: an axis label is a reference, not content. --muted is
+   already alpha over --on-surface, so it follows a dark theme by itself. */
+TyAdvChartAxisLabel { color: var(--muted); font-size: var(--font-size-base); }
+TyAdvChartAxisName  { color: var(--on-surface); font-size: var(--font-size-base); }
+/* Alpha over --border, NEVER over --surface. On an image theme a translucent
+   surface reads as a bright halo instead of a faint line -- this library has
+   shipped that bug once already. */
+TyAdvChartSplitLine { border-color: alpha(var(--border), 0.6); border-width: 1px; }
+/* The alternating band. Alpha over the ink rather than a grey, so it darkens a
+   light theme and lightens a dark one from the same declaration. */
+TyAdvChartSplitArea { background: alpha(var(--on-surface), 0.04); }
+TyAdvChartMinorTick { border-color: alpha(var(--border), 0.4); border-width: 1px; }
+TyAdvChartMinorSplitLine { border-color: alpha(var(--border), 0.35); border-width: 1px; }
 
 /* ── ListGroupPanel (navigation accordion; own keys, not the tree column header's) ────── */
 /* A modern sider: group rows carry NO fill (just muted ink + a right chevron; the OPEN group
