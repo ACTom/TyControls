@@ -120,10 +120,12 @@ function TyChartIsHandlerRef(const ASpec: string): Boolean;
   machine's regional settings say. Trailing zeros are dropped. }
 function TyChartNumToStr(AValue: Double): string;
 
-resourcestring
-  rsTyChartNoSuchHandler = 'No formatter named ''%s'' is registered.';
-
 implementation
+
+uses
+  { Only for the diagnostic resourcestrings; kept out of the interface uses so
+    the dependency stays one-way and invisible to hosts. }
+  tyControls.StrConsts;
 
 type
   TFormatterEntry = record

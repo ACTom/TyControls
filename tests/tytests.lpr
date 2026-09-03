@@ -161,6 +161,7 @@ uses
   test.advchart.builder,
   test.advchart.series,
   test.advchart.style,
+  test.advancechart,
   test.transitions,
   test.htmllabel,
   test.shape,

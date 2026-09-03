@@ -342,6 +342,14 @@ resourcestring
   rsTyShortDay6 = 'Fri';
   rsTyShortDay7 = 'Sat';
 
+  // --- AdvanceChart: what an option tree can say that cannot be honoured ---
+  // Both reach the user through the chart's diagnostics list, so they are as
+  // user-facing as any caption.
+  rsTyChartNoSuchHandler = 'No formatter named ''%s'' is registered.';
+  rsTyOptFunctionValue =
+    'JavaScript functions cannot be used here. Write a template string such as '
+  + '''{b}: {c}'', or the name of a registered handler such as ''@MyFormatter''.';
+
 implementation
 
 end.

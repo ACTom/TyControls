@@ -788,6 +788,78 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.Popover.pas"/>
         <UnitName Value="tyControls.Popover"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.SubPixel.pas"/>
+        <UnitName Value="tyControls.SubPixel"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Types.pas"/>
+        <UnitName Value="tyControls.AdvChart.Types"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Scale.pas"/>
+        <UnitName Value="tyControls.AdvChart.Scale"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Data.pas"/>
+        <UnitName Value="tyControls.AdvChart.Data"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Coord.pas"/>
+        <UnitName Value="tyControls.AdvChart.Coord"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Layout.pas"/>
+        <UnitName Value="tyControls.AdvChart.Layout"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Shape.pas"/>
+        <UnitName Value="tyControls.AdvChart.Shape"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Paint.pas"/>
+        <UnitName Value="tyControls.AdvChart.Paint"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Render.pas"/>
+        <UnitName Value="tyControls.AdvChart.Render"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Measure.pas"/>
+        <UnitName Value="tyControls.AdvChart.Measure"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Option.pas"/>
+        <UnitName Value="tyControls.AdvChart.Option"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Catalog.pas"/>
+        <UnitName Value="tyControls.AdvChart.Catalog"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Complete.pas"/>
+        <UnitName Value="tyControls.AdvChart.Complete"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Handlers.pas"/>
+        <UnitName Value="tyControls.AdvChart.Handlers"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Builder.pas"/>
+        <UnitName Value="tyControls.AdvChart.Builder"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Series.pas"/>
+        <UnitName Value="tyControls.AdvChart.Series"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Style.pas"/>
+        <UnitName Value="tyControls.AdvChart.Style"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvanceChart.pas"/>
+        <UnitName Value="tyControls.AdvanceChart"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>

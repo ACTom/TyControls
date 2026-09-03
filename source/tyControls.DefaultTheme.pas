@@ -376,7 +376,7 @@ begin
     '   TyExPanel (a collapsible card) used to render as plain panels because they returned' + LineEnding +
     '   ''TyPanel''. Same values, three separable names. TTyScrollPanel and TTyPaintPanel are' + LineEnding +
     '   deliberately NOT here: they add no chrome of their own and keep inheriting. */' + LineEnding +
-    'TyPanel, TyScrollBox, TyExPanel, TyChart, TyCalculator, TyBevel, TySizeBox, TyControlBar, TyCoolBar, TyColorGrid, TyShape, TyStarShape, TyArrow, TyImageView, TyImage, TyPreviewBox, TyListGroupPanel {' + LineEnding +
+    'TyPanel, TyScrollBox, TyExPanel, TyChart, TyAdvChart, TyCalculator, TyBevel, TySizeBox, TyControlBar, TyCoolBar, TyColorGrid, TyShape, TyStarShape, TyArrow, TyImageView, TyImage, TyPreviewBox, TyListGroupPanel {' + LineEnding +
     '  background: var(--surface);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
     '  border-color: var(--border);' + LineEnding +

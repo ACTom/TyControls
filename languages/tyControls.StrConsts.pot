@@ -697,6 +697,11 @@ msgstr ""
 msgid "More commands"
 msgstr ""
 
+#: tycontrols.strconsts.rstychartnosuchhandler
+#, object-pascal-format
+msgid "No formatter named '%s' is registered."
+msgstr ""
+
 #: tycontrols.strconsts.rstydatetimenameslang
 msgid "__locale__"
 msgstr ""
@@ -804,6 +809,10 @@ msgstr ""
 
 #: tycontrols.strconsts.rstylongmonth9
 msgid "September"
+msgstr ""
+
+#: tycontrols.strconsts.rstyoptfunctionvalue
+msgid "JavaScript functions cannot be used here. Write a template string such as '{b}: {c}', or the name of a registered handler such as '@MyFormatter'."
 msgstr ""
 
 #: tycontrols.strconsts.rstyshortday1

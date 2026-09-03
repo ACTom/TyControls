@@ -97,12 +97,12 @@ type
   write instead. Exported so the design-time editor can warn BEFORE parsing. }
 function TyOptionTextHasFunction(const AText: string): Boolean;
 
-resourcestring
-  rsTyOptFunctionValue =
-    'JavaScript functions cannot be used here. Write a template string such as '
-  + '''{b}: {c}'', or the name of a registered handler such as ''@MyFormatter''.';
-
 implementation
+
+uses
+  { Only for the diagnostic resourcestrings; kept out of the interface uses so
+    the dependency stays one-way and invisible to hosts. }
+  tyControls.StrConsts;
 
 function TyOptionTextHasFunction(const AText: string): Boolean;
 var

@@ -858,6 +858,21 @@ begin
   FillRRect(b,14.5,5,17.5,20,0.4,Acc);
 end;
 
+{ TTyAdvanceChart: the same axes as TTyChart, but a LINE over them rather than
+  bars -- the two sit side by side on the palette and the glyph has to say which
+  is which at 24 px. }
+procedure GAdvanceChart(b: TBGRABitmap);
+begin
+  Line(b,4,4,4,20,Ink,1.4);                    // Y axis
+  Line(b,4,20,21,20,Ink,1.4);                  // X axis
+  Line(b,6,16,10,10,Acc,1.6);                  // the series polyline
+  Line(b,10,10,14,13,Acc,1.6);
+  Line(b,14,13,19,6,Acc,1.6);
+  Line(b,8.5,4,8.5,20,Faint,0.7);              // a split line, to read as a grid
+  Line(b,13,4,13,20,Faint,0.7);
+  Line(b,17.5,4,17.5,20,Faint,0.7);
+end;
+
 { TTyHtmlLabel: text lines with a bold first line + an accent link underline ("<>" mark) }
 procedure GHtmlLabel(b: TBGRABitmap);
 begin
@@ -904,7 +919,7 @@ procedure GCascader(b: TBGRABitmap); begin RRect(b,3,3,21,10,2,Ink); PolyL(b,[Po
 procedure GPopover(b: TBGRABitmap); begin RRect(b,2,4,22,17,2,Ink); PolyL(b,[PointF(9,17),PointF(11.5,20.5),PointF(14,17)],Ink); FillRRect(b,5,7.5,10.5,13.5,1,Acc); Line(b,12.5,9,19,9,Ink,1.3); Line(b,12.5,12,17.5,12,Ink,1.3); end;
 
 const
-  Glyphs: array[0..164] of TGlyph = (
+  Glyphs: array[0..165] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -1055,6 +1070,7 @@ const
     (Name:'TTySavePreviewDialog'; Draw:@GSavePreviewDialog),
     (Name:'TTyImageView';         Draw:@GImageView),
     (Name:'TTyChart';             Draw:@GChart),
+    (Name:'TTyAdvanceChart';      Draw:@GAdvanceChart),
     (Name:'TTyHtmlLabel';         Draw:@GHtmlLabel),
     (Name:'TTyCard';              Draw:@GCard),
     (Name:'TTyTag';               Draw:@GTag),
