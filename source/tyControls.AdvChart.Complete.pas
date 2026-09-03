@@ -126,6 +126,80 @@ function TyOptContextAt(const ATextBeforeCaret: string): TTyOptCaretContext;
 function TyOptCompletionsAt(const ATextBeforeCaret: string; AList: TStrings): Boolean;
 
 
+{ ---- what an editor needs that a shell must not work out for itself ----
+
+  Everything below exists so the design-time dialog can stay wiring. Each one is
+  a decision about the catalog or about text, and a decision in designtime/ is a
+  decision with no test behind it: that directory is not in the test build. }
+
+{ The text before a caret at 1-based ALINE and 1-based BYTE column ACOL.
+
+  Named and tested rather than inlined at the call site because the obvious
+  reflex -- hand the whole document to TyOptContextAt, the way the CSS editor
+  hands it FEdit.Lines.Text -- is wrong here: text AFTER the caret must not
+  decide a union variant, and TestTypeWrittenAfterTheCaretIsNotSeen exists
+  because it once did. Handles LF, CRLF and lone CR, and clamps a column past
+  the end of its line. }
+function TyOptSliceBefore(const AText: string; ALine, ACol: Integer): string;
+
+type
+  { A catalog edge, keeping the structure TyOptChildNames drops on purpose. }
+  TTyOptEdgeKind = (oekProperty, oekArrayItem, oekVariant);
+  TTyOptEdge = record
+    Kind: TTyOptEdgeKind;
+    { For oekProperty the property name; for oekVariant the tag without its
+      '='; for oekArrayItem the empty string. }
+    Name: string;
+    Node: Integer;
+  end;
+  TTyOptEdgeArray = array of TTyOptEdge;
+
+{ Every edge of a node, classified. A reference tree needs the structural ones a
+  completion list must not offer: '[]' is how you learn series is an array, and
+  '=bar' is how you learn which twenty-three things it can hold. }
+function TyOptEdgesOf(ANode: Integer): TTyOptEdgeArray;
+
+{ One line about a node for a status bar: its type, its stated default, its
+  numeric range and the version it arrived in, whichever of those exist. }
+function TyOptSummary(ANode: Integer): string;
+
+{ What may be OFFERED at a value position -- wider than TyOptEnumOf, which is
+  the schema's enumeration alone. Adds true/false for a boolean option and the
+  stated default for anything else that has one. Over the 2,455 nodes: 154 carry
+  an enumeration, 246 are boolean, 1,367 state a default. It invents nothing for
+  the string options whose allowed values live only in prose. }
+function TyOptValueCandidates(ANode: Integer; AList: TStrings): Boolean;
+
+{ The help for a union whose variant is still undecided: at a key position the
+  single word `type`, at that key's value the union's tags. }
+function TyOptVariantHelpAt(const ATextBeforeCaret: string;
+  AList: TStrings): Boolean;
+
+{ The caret's variant-qualified catalog path for a status line, or the prompt
+  saying a `type` has to be written before anything under here can be known.
+  Exists so the dialog never calls TyOptContextAt itself. }
+function TyOptStatusAt(const ATextBeforeCaret: string): string;
+
+{ The text a completion actually inserts, and how far to put the caret back
+  inside it.
+
+  Not just the name: an object-valued key wants its braces, a string-valued one
+  wants its quotes, and an enum member at a value position must be QUOTED --
+  fcl-json accepts an unquoted KEY but rejects an unquoted string VALUE, so
+  inserting a bare `line` for `type` produces text that cannot parse. }
+function TyOptCompletionInsert(const ATextBeforeCaret, AItem: string;
+  out AInsert: string; out ACaretBack: Integer): Boolean;
+
+{ The text a double-click in the reference tree inserts, given what already
+  follows on the caret's line -- so it can add the comma the user would
+  otherwise have to notice was missing. }
+function TyOptTreeInsert(ANode: Integer; const AName: string;
+  AKind: TTyOptEdgeKind; const ACurrentLineTail: string): string;
+
+{ The closest known sibling name to a misspelling, for a "did you mean" -- or ''
+  when nothing is close enough to be worth guessing at. }
+function TyOptSuggestName(ANode: Integer; const AWrong: string): string;
+
 { ---- validation ---- }
 { Every option in the tree that the catalog does not recognise, plus every
   enumerated option set to a value outside its list. Order is the tree's own, so
@@ -133,6 +207,11 @@ function TyOptCompletionsAt(const ATextBeforeCaret: string; AList: TStrings): Bo
 function TyOptValidate(AOption: TTyChartOption): TTyOptIssueArray;
 
 implementation
+
+uses
+  { Only for the editor vocabulary below; kept out of the interface uses so this
+    unit's public face still names only the AdvChart layer. }
+  tyControls.StrConsts;
 
 function TyOptStrAt(AIndex: Integer): string;
 begin
@@ -785,6 +864,364 @@ begin
     ValidateLeaf(AData, ANode, APath, C);
   end;
 end;
+
+{ ============ what an editor needs ============ }
+
+function TyOptSliceBefore(const AText: string; ALine, ACol: Integer): string;
+var
+  i, len, line, lineStart: Integer;
+begin
+  Result := '';
+  if (ALine < 1) or (ACol < 1) then Exit;
+  len := Length(AText);
+  line := 1;
+  lineStart := 1;
+  i := 1;
+  while (i <= len) and (line < ALine) do
+  begin
+    if AText[i] = #13 then
+    begin
+      Inc(line);
+      if (i < len) and (AText[i + 1] = #10) then Inc(i);
+      lineStart := i + 1;
+    end
+    else if AText[i] = #10 then
+    begin
+      Inc(line);
+      lineStart := i + 1;
+    end;
+    Inc(i);
+  end;
+  { Past the last line: everything is before the caret. }
+  if line < ALine then Exit(AText);
+  { Clamp to this line's end -- a caret past the end of a line, which the CSS
+    editor turns off with eoScrollPastEol, still has to give a sane answer. }
+  i := lineStart;
+  while (i <= len) and (AText[i] <> #13) and (AText[i] <> #10) do Inc(i);
+  if lineStart + ACol - 1 < i then i := lineStart + ACol - 1;
+  Result := Copy(AText, 1, i - 1);
+end;
+
+function TyOptEdgesOf(ANode: Integer): TTyOptEdgeArray;
+var
+  i, n: Integer;
+  nm: string;
+begin
+  Result := nil;
+  if not ValidNode(ANode) then Exit;
+  n := 0;
+  SetLength(Result, TyOptNodes[ANode].ChildCount);
+  for i := TyOptNodes[ANode].FirstChild to
+           TyOptNodes[ANode].FirstChild + TyOptNodes[ANode].ChildCount - 1 do
+  begin
+    nm := TyOptStrAt(TyOptEdges[i].NameStr);
+    if nm = '[]' then
+    begin
+      Result[n].Kind := oekArrayItem;
+      Result[n].Name := '';
+    end
+    else if Copy(nm, 1, 1) = '=' then
+    begin
+      Result[n].Kind := oekVariant;
+      Result[n].Name := Copy(nm, 2, MaxInt);
+    end
+    else
+    begin
+      Result[n].Kind := oekProperty;
+      Result[n].Name := nm;
+    end;
+    Result[n].Node := TyOptEdges[i].Node;
+    Inc(n);
+  end;
+  SetLength(Result, n);
+end;
+
+function TyOptSummary(ANode: Integer): string;
+var
+  t, d, since, lo, hi: string;
+begin
+  Result := '';
+  if not ValidNode(ANode) then Exit;
+  t := TyOptTypeOf(ANode);
+  if t <> '' then Result := t;
+  if TyOptDefaultOf(ANode, d) then
+  begin
+    if d = '' then d := '''''';
+    if Result <> '' then Result := Result + '  ';
+    Result := Result + Format(rsTyOptSummaryDefault, [d]);
+  end;
+  { The range is two strings in the schema, either of which may be absent -- an
+    option with only a lower bound is common. }
+  lo := TyOptStrAt(TyOptNodes[ANode].MinStr);
+  hi := TyOptStrAt(TyOptNodes[ANode].MaxStr);
+  if (lo <> '') or (hi <> '') then
+  begin
+    if Result <> '' then Result := Result + '  ';
+    if lo = '' then lo := '?';
+    if hi = '' then hi := '?';
+    Result := Result + Format(rsTyOptSummaryRange, [lo, hi]);
+  end;
+  since := TyOptSinceOf(ANode);
+  if since <> '' then
+  begin
+    if Result <> '' then Result := Result + '  ';
+    Result := Result + Format(rsTyOptSummarySince, [since]);
+  end;
+end;
+
+function TyOptValueCandidates(ANode: Integer; AList: TStrings): Boolean;
+var
+  d: string;
+begin
+  Result := False;
+  if AList = nil then Exit;
+  AList.Clear;
+  if not ValidNode(ANode) then Exit;
+  { The schema's own enumeration wins outright when there is one. }
+  if TyOptEnumOf(ANode, AList) then Exit(True);
+  { A boolean's two values are not stored as an enumeration anywhere, and they
+    are the single most-typed value in an option tree. }
+  if Pos('boolean', LowerCase(TyOptTypeOf(ANode))) > 0 then
+  begin
+    AList.Add('true');
+    AList.Add('false');
+    Exit(True);
+  end;
+  { Otherwise the stated default, which is a suggestion rather than a
+    constraint -- and better than an empty popup. }
+  if TyOptDefaultOf(ANode, d) and (d <> '') then
+  begin
+    AList.Add(d);
+    Exit(True);
+  end;
+end;
+
+function TyOptVariantHelpAt(const ATextBeforeCaret: string;
+  AList: TStrings): Boolean;
+var
+  ctx: TTyOptCaretContext;
+  lk: TTyOptLookup;
+begin
+  Result := False;
+  if AList = nil then Exit;
+  AList.Clear;
+  ctx := TyOptContextAt(ATextBeforeCaret);
+  if not ctx.NeedsVariantType then Exit;
+  if ctx.Kind = ockKey then
+  begin
+    { One word, because until it is written nothing else under here is knowable. }
+    AList.Add('type');
+    Exit(True);
+  end;
+  { NOT ctx.Node -- it is -1 here BY DESIGN. The context cannot resolve a node
+    inside a union whose variant is undecided, which is exactly the state this
+    function exists for; what it does leave behind is the container's PATH. }
+  if not SameText(ctx.ValueOf, 'type') then Exit;
+  lk := TyOptFind(ctx.Path);
+  if lk.Found then
+    Result := TyOptVariantTags(lk.Node, AList);
+end;
+
+function TyOptStatusAt(const ATextBeforeCaret: string): string;
+var
+  ctx: TTyOptCaretContext;
+begin
+  ctx := TyOptContextAt(ATextBeforeCaret);
+  if ctx.NeedsVariantType then Exit(rsTyOptStatusNeedsType);
+  if ctx.Path = '' then Exit(rsTyOptStatusRoot);
+  Result := ctx.Path;
+end;
+
+{ A bare number, locale-independently -- a value that may go in unquoted. Hand
+  written rather than TryStrToFloat because that one honours the machine's
+  decimal separator, and an option tree's numbers always use '.'. }
+function LooksNumeric(const A: string): Boolean;
+var
+  i: Integer;
+  seenDigit, seenDot: Boolean;
+begin
+  Result := False;
+  seenDigit := False;
+  seenDot := False;
+  i := 1;
+  if (i <= Length(A)) and ((A[i] = '-') or (A[i] = '+')) then Inc(i);
+  while i <= Length(A) do
+  begin
+    if (A[i] >= '0') and (A[i] <= '9') then seenDigit := True
+    else if A[i] = '.' then
+    begin
+      if seenDot then Exit;
+      seenDot := True;
+    end
+    else
+      Exit;
+    Inc(i);
+  end;
+  Result := seenDigit;
+end;
+
+{ Does the caret already sit inside an open string literal? Then an inserted
+  value must NOT bring its own quotes. Counts unescaped quotes of each kind. }
+function InOpenString(const ABefore: string): Boolean;
+var
+  i: Integer;
+  q: Char;
+begin
+  Result := False;
+  q := #0;
+  i := 1;
+  while i <= Length(ABefore) do
+  begin
+    if (q <> #0) and (ABefore[i] = '\') then Inc(i)
+    else if q <> #0 then
+    begin
+      if ABefore[i] = q then q := #0;
+    end
+    else if (ABefore[i] = '"') or (ABefore[i] = '''') then
+      q := ABefore[i];
+    Inc(i);
+  end;
+  Result := q <> #0;
+end;
+
+function TyOptCompletionInsert(const ATextBeforeCaret, AItem: string;
+  out AInsert: string; out ACaretBack: Integer): Boolean;
+var
+  ctx: TTyOptCaretContext;
+  child: Integer;
+  t: string;
+begin
+  AInsert := AItem;
+  ACaretBack := 0;
+  Result := False;
+  if AItem = '' then Exit;
+  ctx := TyOptContextAt(ATextBeforeCaret);
+
+  if ctx.Kind = ockValue then
+  begin
+    { A string value MUST be quoted: fcl-json is relaxed about keys, not about
+      values, so a bare `line` for `type` yields text that cannot parse. }
+    if InOpenString(ATextBeforeCaret) then Exit(True);
+    if (AItem = 'true') or (AItem = 'false') then Exit(True);
+    if LooksNumeric(AItem) then Exit(True);
+    AInsert := '''' + AItem + '''';
+    Exit(True);
+  end;
+
+  child := -1;
+  if ctx.Node >= 0 then child := TyOptChild(ctx.Node, AItem);
+  t := LowerCase(TyOptTypeOf(child));
+  if Pos('object', t) > 0 then
+  begin
+    AInsert := AItem + ': {}';
+    ACaretBack := 1;
+  end
+  else if Pos('array', t) > 0 then
+  begin
+    AInsert := AItem + ': []';
+    ACaretBack := 1;
+  end
+  else if Pos('string', t) > 0 then
+  begin
+    AInsert := AItem + ': ''''';
+    ACaretBack := 1;
+  end
+  else
+    AInsert := AItem + ': ';
+  Result := True;
+end;
+
+function TyOptTreeInsert(ANode: Integer; const AName: string;
+  AKind: TTyOptEdgeKind; const ACurrentLineTail: string): string;
+var
+  child: Integer;
+  t, tail: string;
+  i: Integer;
+begin
+  case AKind of
+    oekArrayItem: Result := '{}';
+    oekVariant:   Result := 'type: ''' + AName + '''';
+  else
+    begin
+      child := TyOptChild(ANode, AName);
+      t := LowerCase(TyOptTypeOf(child));
+      if Pos('object', t) > 0 then Result := AName + ': {}'
+      else if Pos('array', t) > 0 then Result := AName + ': []'
+      else if Pos('string', t) > 0 then Result := AName + ': '''''
+      else Result := AName + ': ';
+    end;
+  end;
+  { The comma the user would otherwise have to notice was missing: only when
+    something that is not already a separator or a closer follows on the line. }
+  tail := '';
+  for i := 1 to Length(ACurrentLineTail) do
+    if ACurrentLineTail[i] > ' ' then
+    begin
+      tail := Copy(ACurrentLineTail, i, MaxInt);
+      Break;
+    end;
+  if (tail <> '') and (tail[1] <> ',') and (tail[1] <> '}') and (tail[1] <> ']') then
+    Result := Result + ',';
+end;
+
+{ Levenshtein, bounded -- the strings here are option names, never long. }
+function EditDistance(const A, B: string): Integer;
+var
+  prev, cur: array of Integer;
+  i, j, cost: Integer;
+begin
+  if A = B then Exit(0);
+  if A = '' then Exit(Length(B));
+  if B = '' then Exit(Length(A));
+  SetLength(prev, Length(B) + 1);
+  SetLength(cur, Length(B) + 1);
+  for j := 0 to Length(B) do prev[j] := j;
+  for i := 1 to Length(A) do
+  begin
+    cur[0] := i;
+    for j := 1 to Length(B) do
+    begin
+      if A[i] = B[j] then cost := 0 else cost := 1;
+      cur[j] := prev[j] + 1;
+      if cur[j - 1] + 1 < cur[j] then cur[j] := cur[j - 1] + 1;
+      if prev[j - 1] + cost < cur[j] then cur[j] := prev[j - 1] + cost;
+    end;
+    prev := Copy(cur, 0, Length(cur));
+  end;
+  Result := prev[Length(B)];
+end;
+
+function TyOptSuggestName(ANode: Integer; const AWrong: string): string;
+var
+  names: TStringList;
+  i, d, best, limit: Integer;
+begin
+  Result := '';
+  if (AWrong = '') or not ValidNode(ANode) then Exit;
+  { A budget proportional to the word, floored at one. Too generous and a
+    genuinely new key gets a confident wrong suggestion, which is worse than
+    none: the reader stops looking for their own typo. }
+  limit := Length(AWrong) div 3;
+  if limit < 1 then limit := 1;
+  best := MaxInt;
+  names := TStringList.Create;
+  try
+    TyOptChildNames(ANode, names);
+    for i := 0 to names.Count - 1 do
+    begin
+      if SameText(names[i], AWrong) then Exit(names[i]);
+      d := EditDistance(LowerCase(AWrong), LowerCase(names[i]));
+      if (d <= limit) and (d < best) then
+      begin
+        best := d;
+        Result := names[i];
+      end;
+    end;
+  finally
+    names.Free;
+  end;
+end;
+
 
 function TyOptValidate(AOption: TTyChartOption): TTyOptIssueArray;
 var

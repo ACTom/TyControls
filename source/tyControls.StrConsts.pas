@@ -369,6 +369,15 @@ resourcestring
   rsTyChartSeriesAxesSplit =
     'series[%d]: xAxis[%d] and yAxis[%d] are not on one grid';
 
+  // --- AdvanceChart: the option editor's own vocabulary ---
+  // Shown in the design-time editor's status line and its completion popup.
+  rsTyOptSummaryDefault = 'default %s';
+  rsTyOptSummaryRange = 'range %s..%s';
+  rsTyOptSummarySince = 'since %s';
+  rsTyOptStatusRoot = '(the option root)';
+  rsTyOptStatusNeedsType =
+    'write a type first -- what is under here depends on which one';
+
 implementation
 
 end.

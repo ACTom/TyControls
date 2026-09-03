@@ -945,3 +945,26 @@ msgstr "series[%d] 指向了一条不存在的轴"
 #, object-pascal-format
 msgid "series[%d]: xAxis[%d] and yAxis[%d] are not on one grid"
 msgstr "series[%d]：xAxis[%d] 与 yAxis[%d] 不在同一个 grid 上"
+
+#: tycontrols.strconsts.rstyoptsummarydefault
+#, object-pascal-format
+msgid "default %s"
+msgstr "默认 %s"
+
+#: tycontrols.strconsts.rstyoptsummaryrange
+#, object-pascal-format
+msgid "range %s..%s"
+msgstr "取值 %s..%s"
+
+#: tycontrols.strconsts.rstyoptsummarysince
+#, object-pascal-format
+msgid "since %s"
+msgstr "始于 %s"
+
+#: tycontrols.strconsts.rstyoptstatusroot
+msgid "(the option root)"
+msgstr "（option 根）"
+
+#: tycontrols.strconsts.rstyoptstatusneedstype
+msgid "write a type first -- what is under here depends on which one"
+msgstr "先写 type —— 这里面有什么取决于它是哪一种"

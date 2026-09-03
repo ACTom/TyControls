@@ -864,6 +864,29 @@ msgstr ""
 msgid "JavaScript functions cannot be used here. Write a template string such as '{b}: {c}', or the name of a registered handler such as '@MyFormatter'."
 msgstr ""
 
+#: tycontrols.strconsts.rstyoptstatusneedstype
+msgid "write a type first -- what is under here depends on which one"
+msgstr ""
+
+#: tycontrols.strconsts.rstyoptstatusroot
+msgid "(the option root)"
+msgstr ""
+
+#: tycontrols.strconsts.rstyoptsummarydefault
+#, object-pascal-format
+msgid "default %s"
+msgstr ""
+
+#: tycontrols.strconsts.rstyoptsummaryrange
+#, object-pascal-format
+msgid "range %s..%s"
+msgstr ""
+
+#: tycontrols.strconsts.rstyoptsummarysince
+#, object-pascal-format
+msgid "since %s"
+msgstr ""
+
 #: tycontrols.strconsts.rstyshortday1
 msgid "Sun"
 msgstr ""
