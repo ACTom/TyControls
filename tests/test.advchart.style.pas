@@ -9,7 +9,7 @@ unit test.advchart.style;
   selected bar that is also hovered is in two states at once. Every one of those
   is a test below. }
 interface
-uses Classes, SysUtils, Math, fpcunit, testregistry,
+uses Classes, SysUtils, Math, fpjson, jsonparser, fpcunit, testregistry,
      tyControls.AdvChart.Types, tyControls.AdvChart.Paint,
      tyControls.AdvChart.Style;
 type
@@ -52,6 +52,13 @@ type
     procedure TestBlurIsComputedNotLookedUp;
     procedure TestBlurDimsAnElementWithNoOpacity;
     procedure TestZLiftsComeFromNoOptionAtAll;
+    { ---- reading a style off the option ---- }
+    procedure TestReadingAnAbsentKeyLeavesItAbsent;
+    procedure TestReadingHonoursEachShapesOwnKeySet;
+    procedure TestColourSpellingsTheOptionActuallyUses;
+    procedure TestAnUnreadableColourLeavesTheKeyAlone;
+    procedure TestNamedGeometryStaysText;
+    procedure TestAWrongTypeIsIgnoredRatherThanCoerced;
   end;
 implementation
 
@@ -453,6 +460,123 @@ begin
   AssertEquals(9, TyChartZ2Lift(st));
   st.Emphasis := True;
   AssertEquals('emphasis outranks select when both apply', 10, TyChartZ2Lift(st));
+end;
+
+{ ============ reading a style off the option ============ }
+
+function ReadJson(const AText: string; AKind: TTyChartStyleKind;
+  out AStyle: TTyChartStyle): Boolean;
+var d: TJSONData;
+begin
+  d := GetJSON(AText);
+  try
+    Result := TyChartReadStyle(d, AKind, AStyle);
+  finally
+    d.Free;
+  end;
+end;
+
+procedure TAdvChartStyleTest.TestReadingAnAbsentKeyLeavesItAbsent;
+var st: TTyChartStyle;
+begin
+  { ABSENT AND ZERO ARE DIFFERENT ANSWERS all the way down: a border width of 0
+    means "do not stroke", a missing one means "whatever the layer below said".
+    A reader that filled the gaps with defaults would make every style opaque
+    to the layer under it -- which is how a style stack silently stops
+    inheriting. }
+  AssertTrue(ReadJson('{"borderWidth": 0}', cskItem, st));
+  AssertTrue('a written zero is present', st.Has[cskLineWidth]);
+  AssertEquals(0.0, st.Num[cskLineWidth], 1e-9);
+  AssertFalse('and nothing else is', st.Has[cskFill]);
+  AssertFalse(st.Has[cskOpacity]);
+end;
+
+procedure TAdvChartStyleTest.TestReadingHonoursEachShapesOwnKeySet;
+var st: TTyChartStyle;
+begin
+  { `color` is the FILL for an item and the STROKE for a line -- the same option
+    name, a different canvas key. Reading a line's colour into the fill is a
+    bug you would only see as "the line is invisible". }
+  AssertTrue(ReadJson('{"color": "#ff0000"}', cskItem, st));
+  AssertTrue('an item colours its fill', st.Has[cskFill]);
+  AssertFalse(st.Has[cskStroke]);
+
+  AssertTrue(ReadJson('{"color": "#ff0000"}', cskLine, st));
+  AssertTrue('a line colours its stroke', st.Has[cskStroke]);
+  AssertFalse(st.Has[cskFill]);
+
+  { An areaStyle has no stroke, no width and no dash AT ALL. Accepting one would
+    let a validator pass a chart that cannot be drawn. }
+  AssertFalse('an area has no borderColor to read',
+    ReadJson('{"borderColor": "#ff0000", "borderWidth": 2}', cskArea, st));
+  AssertFalse(st.Has[cskStroke]);
+  AssertFalse(st.Has[cskLineWidth]);
+end;
+
+procedure TAdvChartStyleTest.TestColourSpellingsTheOptionActuallyUses;
+var c: TTyChartColor;
+begin
+  AssertTrue(TyChartParseColor('#ff0000', c));
+  AssertEquals('opaque red', TTyChartColor($FFFF0000), c);
+
+  { #rgb DOUBLES each nibble. Shifting instead would turn #f0a into f0 00 a0 --
+    a different colour that looks close enough to pass a glance. }
+  AssertTrue(TyChartParseColor('#f0a', c));
+  AssertEquals(TTyChartColor($FFFF00AA), c);
+
+  { Alpha comes LAST in CSS and FIRST in the stored word. }
+  AssertTrue(TyChartParseColor('#ff000080', c));
+  AssertEquals(TTyChartColor($80FF0000), c);
+
+  AssertTrue(TyChartParseColor('rgb(255, 0, 0)', c));
+  AssertEquals(TTyChartColor($FFFF0000), c);
+
+  { rgba's alpha is 0..1, not 0..255, and it is written with a '.' whatever the
+    machine's locale says. }
+  AssertTrue(TyChartParseColor('rgba(255,0,0,0.5)', c));
+  AssertEquals(TTyChartColor($80FF0000), c);
+end;
+
+procedure TAdvChartStyleTest.TestAnUnreadableColourLeavesTheKeyAlone;
+var
+  st: TTyChartStyle;
+  c: TTyChartColor;
+begin
+  { NOT black. Leaving it absent means the layer below keeps deciding; falling
+    back to black means a misspelt colour paints something that looks
+    deliberate. Named colours are deliberately not supported -- 148 entries
+    upstream resolves in a browser, and option text in the wild is hex. }
+  AssertFalse(TyChartParseColor('steelblue', c));
+  AssertFalse(TyChartParseColor('#gg0000', c));
+  AssertFalse(TyChartParseColor('', c));
+
+  AssertFalse('nothing readable, nothing read',
+    ReadJson('{"color": "steelblue"}', cskItem, st));
+  AssertFalse(st.Has[cskFill]);
+end;
+
+procedure TAdvChartStyleTest.TestNamedGeometryStaysText;
+var st: TTyChartStyle;
+begin
+  { 'dashed' is a NAME, and what it means in pixels depends on the width -- a
+    painter decision. Turning it into a dash array here would put that decision
+    in the layer that knows the least about it. }
+  AssertTrue(ReadJson('{"type": "dashed", "cap": "round"}', cskLine, st));
+  AssertEquals('dashed', st.Text[cskLineDash]);
+  AssertEquals('round', st.Text[cskLineCap]);
+end;
+
+procedure TAdvChartStyleTest.TestAWrongTypeIsIgnoredRatherThanCoerced;
+var st: TTyChartStyle;
+begin
+  { A half-written option is the normal state in an editor. A number where a
+    colour belongs is not a colour, and coercing it would invent one. }
+  AssertFalse(ReadJson('{"color": 5}', cskItem, st));
+  AssertFalse(st.Has[cskFill]);
+  AssertFalse(ReadJson('{"borderWidth": "2"}', cskItem, st));
+  AssertFalse(st.Has[cskLineWidth]);
+  AssertFalse('and a non-object reads nothing at all',
+    ReadJson('[1, 2]', cskItem, st));
 end;
 
 initialization

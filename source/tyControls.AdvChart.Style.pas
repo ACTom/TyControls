@@ -29,7 +29,7 @@ unit tyControls.AdvChart.Style;
 
   PURE: SysUtils, Math and the AdvChart units. No LCL. }
 interface
-uses SysUtils, Math, tyControls.AdvChart.Types, tyControls.AdvChart.Paint;
+uses SysUtils, Math, fpjson, tyControls.AdvChart.Types, tyControls.AdvChart.Paint;
 
 type
   { The exclusive slot. }
@@ -136,6 +136,32 @@ function TyChartOverlay(const ABase, ATop: TTyChartStyle): TTyChartStyle;
   want to check against the documentation. }
 function TyChartStyleOptionKey(AKind: TTyChartStyleKind;
   AKey: TTyChartStyleKey): string;
+
+{ A CSS colour as the option writes it, or False when it is not one.
+
+  Handles the four spellings an ECharts option actually carries: '#rgb',
+  '#rrggbb', '#rrggbbaa' and rgb()/rgba(). A NAMED colour is deliberately not
+  handled: the list is 148 entries, upstream resolves them in a browser, and
+  option text in the wild spells colours in hex. An unrecognised string leaves
+  the key ABSENT rather than falling back to black -- absent means the layer
+  below keeps deciding, black means a misspelt colour paints something that
+  looks deliberate. }
+function TyChartParseColor(const AText: string; out AColor: TTyChartColor): Boolean;
+
+{ Read one style object -- an itemStyle, a lineStyle or an areaStyle -- into the
+  sparse record. False when it read nothing.
+
+  ABSENT STAYS ABSENT. Only keys the object actually carries get their Has flag,
+  because absent and set-to-zero are different answers all the way down: a
+  border width of 0 means "do not stroke" and a missing one means "whatever the
+  layer below said". Filling the gaps with defaults is how a style layer
+  silently stops inheriting.
+
+  AKind picks which option names are looked for, and the three sets are NOT the
+  same: a lineStyle has no fill, an areaStyle has no stroke, width or dash, and
+  `color` is the FILL for an item and the STROKE for a line. }
+function TyChartReadStyle(AData: TJSONData; AKind: TTyChartStyleKind;
+  out AStyle: TTyChartStyle): Boolean;
 
 { Ten per cent brighter, clamped.
 
@@ -397,6 +423,167 @@ begin
         cskShadowOffsetY: Result := 'shadowOffsetY';
         cskShadowColor: Result := 'shadowColor';
       end;
+  end;
+end;
+
+function HexNibble(C: Char; out AValue: Integer): Boolean;
+begin
+  Result := True;
+  case C of
+    '0'..'9': AValue := Ord(C) - Ord('0');
+    'a'..'f': AValue := Ord(C) - Ord('a') + 10;
+    'A'..'F': AValue := Ord(C) - Ord('A') + 10;
+  else
+    AValue := 0;
+    Result := False;
+  end;
+end;
+
+function TyChartParseColor(const AText: string; out AColor: TTyChartColor): Boolean;
+var
+  t: string;
+  i, n, hi, lo: Integer;
+  comp: array[0..3] of Integer;
+  part: string;
+  alphaF: Double;
+  fs: TFormatSettings;
+
+  function HexPair(APos: Integer; out AByte: Integer): Boolean;
+  begin
+    Result := HexNibble(t[APos], hi) and HexNibble(t[APos + 1], lo);
+    AByte := hi * 16 + lo;
+  end;
+
+begin
+  AColor := 0;
+  Result := False;
+  t := Trim(AText);
+  if t = '' then Exit;
+
+  if t[1] = '#' then
+  begin
+    comp[0] := 255;
+    case Length(t) of
+      4:
+        begin
+          { #rgb -- each nibble DOUBLED, not shifted: #f0a is ff00aa, and
+            shifting would give f0 00 a0, which is a different colour. }
+          for i := 1 to 3 do
+          begin
+            if not HexNibble(t[i + 1], hi) then Exit;
+            comp[i] := hi * 17;
+          end;
+        end;
+      7:
+        for i := 1 to 3 do
+          if not HexPair(i * 2, comp[i]) then Exit;
+      9:
+        begin
+          for i := 1 to 3 do
+            if not HexPair(i * 2, comp[i]) then Exit;
+          { #rrggbbAA -- alpha LAST in CSS, first in the stored word. }
+          if not HexPair(8, comp[0]) then Exit;
+        end;
+    else
+      Exit;
+    end;
+    AColor := TTyChartColor((Cardinal(comp[0]) shl 24) or
+      (Cardinal(comp[1]) shl 16) or (Cardinal(comp[2]) shl 8) or Cardinal(comp[3]));
+    Exit(True);
+  end;
+
+  if (Pos('rgb(', LowerCase(t)) = 1) or (Pos('rgba(', LowerCase(t)) = 1) then
+  begin
+    i := Pos('(', t);
+    n := Pos(')', t);
+    if (i = 0) or (n <= i) then Exit;
+    t := Copy(t, i + 1, n - i - 1);
+    comp[0] := 255;
+    for i := 1 to 3 do
+    begin
+      n := Pos(',', t);
+      if n = 0 then
+      begin
+        part := t;
+        t := '';
+      end
+      else
+      begin
+        part := Copy(t, 1, n - 1);
+        t := Copy(t, n + 1, MaxInt);
+      end;
+      part := Trim(part);
+      if part = '' then Exit;
+      comp[i] := StrToIntDef(part, -1);
+      if (comp[i] < 0) or (comp[i] > 255) then Exit;
+    end;
+    part := Trim(t);
+    if part <> '' then
+    begin
+      { The alpha of rgba() is 0..1, not 0..255, and it is written with a '.'
+        whatever the machine's locale says. }
+      fs := DefaultFormatSettings;
+      fs.DecimalSeparator := '.';
+      if not TryStrToFloat(part, alphaF, fs) then Exit;
+      if alphaF < 0 then alphaF := 0;
+      if alphaF > 1 then alphaF := 1;
+      comp[0] := Round(alphaF * 255);
+    end;
+    AColor := TTyChartColor((Cardinal(comp[0]) shl 24) or
+      (Cardinal(comp[1]) shl 16) or (Cardinal(comp[2]) shl 8) or Cardinal(comp[3]));
+    Exit(True);
+  end;
+end;
+
+function TyChartReadStyle(AData: TJSONData; AKind: TTyChartStyleKind;
+  out AStyle: TTyChartStyle): Boolean;
+var
+  obj: TJSONObject;
+  k: TTyChartStyleKey;
+  name: string;
+  d: TJSONData;
+  c: TTyChartColor;
+begin
+  AStyle := Default(TTyChartStyle);
+  Result := False;
+  if (AData = nil) or not (AData is TJSONObject) then Exit;
+  obj := TJSONObject(AData);
+  for k := Low(TTyChartStyleKey) to High(TTyChartStyleKey) do
+  begin
+    name := TyChartStyleOptionKey(AKind, k);
+    { '' means this shape has no such key -- an areaStyle really has no stroke.
+      Reading one anyway would accept a chart that cannot be drawn. }
+    if name = '' then Continue;
+    d := obj.Find(name);
+    if (d = nil) or (d.JSONType = jtNull) then Continue;
+    case k of
+      cskFill, cskStroke, cskShadowColor:
+        begin
+          if d.JSONType <> jtString then Continue;
+          if not TyChartParseColor(d.AsString, c) then Continue;
+          AStyle.Color[k] := c;
+          AStyle.Has[k] := True;
+          Result := True;
+        end;
+      cskLineDash, cskLineCap, cskLineJoin:
+        begin
+          { These are NAMES upstream -- 'dashed', 'round', 'bevel' -- and the
+            renderer turns a name into geometry. Kept as text so this layer
+            does not have to know the dash pattern for 'dotted' at a given
+            width, which is a painter decision. }
+          if d.JSONType <> jtString then Continue;
+          AStyle.Text[k] := d.AsString;
+          AStyle.Has[k] := True;
+          Result := True;
+        end;
+    else
+      begin
+        if d.JSONType <> jtNumber then Continue;
+        AStyle.Num[k] := d.AsFloat;
+        AStyle.Has[k] := True;
+        Result := True;
+      end;
+    end;
   end;
 end;
 

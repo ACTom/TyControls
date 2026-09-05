@@ -1150,6 +1150,30 @@ begin
     'TyChartSeries7 { background: #B07AA1; }   /* purple */' + LineEnding +
     'TyChartSeries8 { background: #FF9DA7; }   /* pink   */' + LineEnding +
     '' + LineEnding +
+    '/* AdvChart: the series palette, DERIVED.' + LineEnding +
+    '' + LineEnding +
+    '   Item 18 asks for a derived ramp and this is what that buys: a skin that' + LineEnding +
+    '   restyles --accent gets a matching chart for nothing, and one that restyles' + LineEnding +
+    '   neither still gets a legible one. The eight TyChartSeries* keys above are the' + LineEnding +
+    '   OLD chart''s, and they are eight literals -- exactly what makes a chart look' + LineEnding +
+    '   pasted on top of a theme instead of drawn in it.' + LineEnding +
+    '' + LineEnding +
+    '   The ramp walks away from --accent in both directions rather than around a' + LineEnding +
+    '   hue circle, because a hue rotation has no idea what the theme''s accent is for' + LineEnding +
+    '   and lands on colours a brand would not have chosen. Slot 1 IS the accent, so' + LineEnding +
+    '   a single-series chart is drawn in the theme''s own colour.' + LineEnding +
+    '' + LineEnding +
+    '   Eight slots, cycled by (index mod 8), matching the old chart so nothing has' + LineEnding +
+    '   to learn a second rule. */' + LineEnding +
+    'TyAdvChartSeries1 { background: var(--accent); }' + LineEnding +
+    'TyAdvChartSeries2 { background: mix(var(--accent), var(--on-surface), 35%); }' + LineEnding +
+    'TyAdvChartSeries3 { background: lighten(var(--accent), 22%); }' + LineEnding +
+    'TyAdvChartSeries4 { background: darken(var(--accent), 18%); }' + LineEnding +
+    'TyAdvChartSeries5 { background: mix(var(--accent), var(--surface), 40%); }' + LineEnding +
+    'TyAdvChartSeries6 { background: mix(var(--accent), var(--on-surface), 65%); }' + LineEnding +
+    'TyAdvChartSeries7 { background: lighten(var(--accent), 38%); }' + LineEnding +
+    'TyAdvChartSeries8 { background: darken(var(--accent), 34%); }' + LineEnding +
+    '' + LineEnding +
     '/* AdvChart: the axis domain. Eight keys and four metrics, and the COUNT is part' + LineEnding +
     '   of the design -- twelve things can be checked by eye across seventeen themes' + LineEnding +
     '   and sixty-four cannot, so this is the smallest set that still lets a skin' + LineEnding +
