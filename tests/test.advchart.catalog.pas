@@ -10,7 +10,7 @@ unit test.advchart.catalog;
   digest can see a value edited inside the generated file, since both constants
   live in that same file. Hence the third, over the data section. }
 interface
-uses Classes, SysUtils, sha1, fpcunit, testregistry,
+uses Classes, SysUtils, sha1, fpjson, jsonparser, fpcunit, testregistry,
      tyControls.AdvChart.Catalog, tyControls.AdvChart.Complete,
      tyControls.AdvChart.Option;
 type
@@ -20,6 +20,8 @@ type
     function ReadLF(const AFile: string): string;
   published
     { ---- drift ---- }
+    procedure TestTheDescriptionPoolMatchesTheCatalog;
+    procedure TestTheDescriptionResourceWasPackedFromThePool;
     procedure TestCatalogMatchesItsCommittedInput;
     procedure TestCatalogMatchesTheGeneratorThatProducedIt;
     procedure TestTheEmittedDataWasNotHandEdited;
@@ -67,6 +69,80 @@ begin
 end;
 
 { ============================ drift ============================ }
+
+procedure TAdvChartCatalogTest.TestTheDescriptionPoolMatchesTheCatalog;
+var
+  fCat, fPool, rawCat, rawPool: string;
+  cat, pool: TJSONData;
+  descs: TJSONArray;
+  i: Integer;
+begin
+  { THE POOL IS A SECOND COPY OF DATA THAT ALREADY EXISTS, and a second copy
+    with nothing checking it is a second copy that goes stale. The catalog's
+    DescEn / DescZh are indices INTO this pool, so a pool regenerated from a
+    different catalog does not fail loudly -- it shows the wrong description for
+    every option, which reads as a documentation bug rather than a build one.
+
+    The test reads FILES because the pool lives in designtime/, which the test
+    build cannot reach. That is also why it compares content rather than calling
+    the reader. }
+  fCat := RepoRoot + 'tools' + PathDelim + 'advchart' + PathDelim + 'catalog.json';
+  fPool := RepoRoot + 'designtime' + PathDelim + 'advchart-descs.json';
+  AssertTrue('the catalog exists: ' + fCat, FileExists(fCat));
+  AssertTrue('the packed pool exists: ' + fPool + ' -- run: '
+    + 'powershell -File scripts/gen-advchart-descs.ps1', FileExists(fPool));
+
+  rawCat := ReadLF(fCat);
+  rawPool := ReadLF(fPool);
+  cat := GetJSON(rawCat);
+  try
+    pool := GetJSON(rawPool);
+    try
+      AssertTrue('the pool is an array', pool is TJSONArray);
+      descs := TJSONArray(TJSONObject(cat).Find('descs'));
+      AssertTrue('the catalog carries a descs pool', descs <> nil);
+      AssertEquals('designtime/advchart-descs.json is out of date -- run: '
+        + 'powershell -File scripts/gen-advchart-descs.ps1',
+        descs.Count, TJSONArray(pool).Count);
+      { Not just the count: a reordering would keep it and break every index. }
+      for i := 0 to descs.Count - 1 do
+        if descs.Items[i].AsString <> TJSONArray(pool).Items[i].AsString then
+          Fail(Format('description %d differs between the catalog and the '
+            + 'packed pool -- re-run scripts/gen-advchart-descs.ps1', [i]));
+    finally
+      pool.Free;
+    end;
+  finally
+    cat.Free;
+  end;
+end;
+
+procedure TAdvChartCatalogTest.TestTheDescriptionResourceWasPackedFromThePool;
+var
+  fPool, fLrs, rawPool, rawLrs: string;
+begin
+  { The .lrs is what actually ships; the .json beside it is only the input to
+    lazres. Regenerating one without the other is a single forgotten command,
+    and the symptom -- descriptions that are one release behind -- is invisible.
+
+    lazres writes the bytes as decimal escapes, so the check is that every byte
+    of the pool appears in order. Comparing lengths is enough to catch the
+    forgotten re-pack without re-implementing lazres' encoding here: the pool is
+    ASCII, so each byte costs a fixed amount of Pascal. }
+  fPool := RepoRoot + 'designtime' + PathDelim + 'advchart-descs.json';
+  fLrs := RepoRoot + 'designtime' + PathDelim + 'tycontrols_advchart_desc.lrs';
+  AssertTrue('the pool exists: ' + fPool, FileExists(fPool));
+  AssertTrue('the packed resource exists: ' + fLrs + ' -- run: '
+    + 'powershell -File scripts/gen-advchart-descs.ps1', FileExists(fLrs));
+  rawPool := ReadLF(fPool);
+  rawLrs := ReadLF(fLrs);
+  AssertTrue('the resource names itself TyAdvChartDescs',
+    Pos('TyAdvChartDescs', rawLrs) > 0);
+  AssertTrue(Format('the packed resource (%d bytes) is too small for a pool of '
+    + '%d bytes -- re-run scripts/gen-advchart-descs.ps1',
+    [Length(rawLrs), Length(rawPool)]),
+    Length(rawLrs) > Length(rawPool));
+end;
 
 procedure TAdvChartCatalogTest.TestCatalogMatchesItsCommittedInput;
 var
