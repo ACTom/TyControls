@@ -1,0 +1,27 @@
+msgid ""
+msgstr "Content-Type: text/plain; charset=UTF-8"
+
+#: tycontrols.design.advchart.editor.rsoptedfilter
+msgid "Filter the reference"
+msgstr ""
+
+#: tycontrols.design.advchart.editor.rsoptedformat
+msgid "Format"
+msgstr ""
+
+#: tycontrols.design.advchart.editor.rsoptedformatdropscomments
+msgid "Formatting re-writes the option from its parsed form, which drops the comments and the original quoting. Continue?"
+msgstr ""
+
+#: tycontrols.design.advchart.editor.rsoptednoissues
+msgid "Nothing to report."
+msgstr ""
+
+#: tycontrols.design.advchart.editor.rsoptedtitle
+msgid "Chart option (ECharts)"
+msgstr ""
+
+#: tycontrols.design.advchart.editor.rsoptedvalidate
+msgid "Validate"
+msgstr ""
+

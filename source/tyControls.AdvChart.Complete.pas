@@ -200,6 +200,18 @@ function TyOptTreeInsert(ANode: Integer; const AName: string;
   when nothing is close enough to be worth guessing at. }
 function TyOptSuggestName(ANode: Integer; const AWrong: string): string;
 
+{ What has been typed at the caret so far, for filtering a completion popup. }
+function TyOptPartialAt(const ATextBeforeCaret: string): string;
+
+{ A one-line detail for a completion ITEM at this caret -- the summary of the
+  child that item would insert, or '' when there is none to show.
+
+  Composed here rather than in the dialog for the same reason as everything else
+  in this block: working it out means resolving the caret's container and
+  looking a child up in the catalog, and a design-time unit that did that would
+  be doing it where no test can see. }
+function TyOptCompletionDetail(const ATextBeforeCaret, AItem: string): string;
+
 { ---- validation ---- }
 { Every option in the tree that the catalog does not recognise, plus every
   enumerated option set to a value outside its list. Order is the tree's own, so
@@ -1218,6 +1230,25 @@ begin
     prev := Copy(cur, 0, Length(cur));
   end;
   Result := prev[Length(B)];
+end;
+
+function TyOptPartialAt(const ATextBeforeCaret: string): string;
+begin
+  Result := TyOptContextAt(ATextBeforeCaret).Partial;
+end;
+
+function TyOptCompletionDetail(const ATextBeforeCaret, AItem: string): string;
+var
+  ctx: TTyOptCaretContext;
+  child: Integer;
+begin
+  Result := '';
+  if AItem = '' then Exit;
+  ctx := TyOptContextAt(ATextBeforeCaret);
+  if ctx.Node < 0 then Exit;
+  child := TyOptChild(ctx.Node, AItem);
+  if child < 0 then Exit;
+  Result := TyOptSummary(child);
 end;
 
 function TyOptSuggestName(ANode: Integer; const AWrong: string): string;

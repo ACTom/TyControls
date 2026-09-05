@@ -1408,3 +1408,82 @@ Builder 里本来就有一个 `NumText` 跟绘制端一字不差，改一行就�
 这不是代码 bug，是**一句会被印在对话框里的谎话**——没有任何测试形状能覆盖它，
 只能有人去读那句话本身、再去查它对每一种输入成不成立。
 
+## 28. 第 6 项第 7–9 步：守卫、壳，以及一条自己抓住自己的规则（2026-09-04）
+
+### 第 7 步：守住那个「本机永远看不见」的方向
+
+新加的 `source/` 或 `designtime/` 单元**不进 `.lpk` 也照样编得过**——Lazarus 靠目录搜索路径
+找到它。没有编译错误、没有测试变红、没有警告，它只是**从安装出来的包和每一个发布归档里消失**。
+
+仓库原有的 `EveryFileThePackagesNameIsShipped` 是**走清单问磁盘**（「这个条目对应的文件在吗」），
+抓的是删文件忘删条目。真正会发生的是反方向，而**没有任何东西检查它**。
+新增 `EveryUnitOnDiskIsListedInItsPackage` 走磁盘问清单，两个方向才齐。
+
+这一层一个下午手工加了三个 `<Item>`。三次全对是运气。见
+[[new-unit-missing-from-lpk]]。
+
+### 第 8 步：壳的形状就是前七步的论点
+
+约 630 行，通篇**找不到一个判断**：
+
+| 事件 | 委托给 |
+|---|---|
+| 该补全什么 | `TyOptCompletionsAt` / `TyOptVariantHelpAt` |
+| 补全插入什么、光标退几格 | `TyOptCompletionInsert` |
+| 状态栏显示什么 | `TyOptStatusAt` |
+| 有什么问题、指哪儿 | `TyOptDiagnose` |
+| 树里双击插入什么 | `TyOptTreeInsert` |
+| 光标前是哪一段文本 | `TyOptSliceBefore` |
+
+三处直接照仓库记忆写、没有重新论证：底部控件**反着创建**
+（[[lcl-code-created-align-order]]）、读 `LogicalCaretXY` **不读 `CaretXY`**
+（屏幕列 vs 字节偏移，而切片按字节——在一个 demo 里到处写中文标签的库里，这是「什么时候」
+而不是「会不会」）、`.lrs` 只能包含在过程体里（[[lrs-is-statements-not-declarations]]）。
+
+编译错误全是「我以为它在那个单元里」：`TUTF8Char` 在 `LCLType` 不在 `LazUTF8`；
+`OnCodeCompletion` 的 `Value` 是 `var` 参数；局部变量 `name` 撞了 `TComponent.Name`。
+
+### 第 9 步：规则值多少，取决于什么在强制它
+
+「对话框只把列表放进框」是 `source/` 里那四个单元存在的**全部理由**，
+而在这一步之前**没有任何东西检查它**——`designtime/` 在测试构建之外，
+在那儿悄悄加一个判断，直到它在用户面前出错都不会有人发现。
+
+`TheChartOptionEditorStaysAShell` 读那个**文件**（tests/ 对那个目录只能做这件事），
+在里面找五个低层原语的名字：`TyOptContextAt`、`TyOptValidate`、`TyOptFindFor`、
+`TyOptKeyPositions`、`TyOptFindNearestKey`。它是钝器，而且是故意的：
+**编辑器一旦需要其中之一，正确答案是在 `source/` 里加一个组合函数，不是在这里绕过那一层。**
+
+**它第一次跑就抓到了两处，抓的是我自己刚写的代码。** 我没有放宽守卫去迁就已有代码，
+而是照它的建议改：新增 `TyOptPartialAt` 和 `TyOptCompletionDetail`，壳改成走它们，
+两个新函数各自配测试。差别很实在——`TyOptCompletionDetail` 里「解析光标容器、再去目录查子节点」
+那段逻辑原本待在 `designtime/`，**任何测试都碰不到**。
+
+### 第 10 步：真机 IDE（作者做不了，只有 Windows 上装了这个包的人能跑）
+
+设计期包编译通过只证明它**能编**。下面每一条都只有在真 IDE 里才会现形：
+
+1. **Install 之后重启 Lazarus**，从组件面板拖一个 `TTyAdvanceChart` 到窗体上。图标在不在？
+2. Object Inspector 里 `Option` 那一行有没有 `...` 按钮。点开，对话框起不起得来。
+3. **补全**：在 `{ ` 后按 Ctrl+Space，列表出不出来、右侧详情有没有跟着。
+   打几个字母看它有没有过滤。
+4. **插入的标点**：选 `xAxis` 应该插入 `xAxis: {}` 且光标停在花括号**里面**；
+   选一个字符串属性应插入 `''` 并停在引号里。
+5. **枚举值必须带引号**：在 `series: [{ type: ` 后补全 `bar`，插进去的应该是 `'bar'`——
+   插成裸 `bar` 的文档解析不了。
+6. **CJK**：把 `title: { text: '中文标题' }` 写在前面几行，然后在**它下面**触发补全。
+   光标位置算错的话，补全会出现在错的地方——这是 `LogicalCaretXY` 那条的真机验证，
+   而它在纯 ASCII 文本上永远不会现形。
+7. **参考树**：展开 `series`，应看到 23 个 `type = xxx` 行；双击插入；
+   下方文档区应显示中英说明之一（跟 IDE 语言走）。
+8. **诊断**：故意写错一个键，看下方列表出不出来、**双击能不能跳到那一行**。
+9. **确定按钮**：写一段解析不了的文本按确定——应该**存得下来**，
+   回到 Object Inspector 里能看到你写的原文（不是上一份）。
+10. **Format**：文本里有 `//` 注释时点 Format，应先弹一句确认。
+11. **双击图表本身**：应打开同一个对话框（组件编辑器那条路径）。
+12. 布局：底部从上到下应是 **问题列表 / 红色警告 / 路径**，再是按钮条。
+    顺序反了就是 [[lcl-code-created-align-order]] 那条没生效。
+
+GTK/Qt 上再跑一遍第 3 项的 8 条清单（spec §23），加上这里的 3、6、12——
+弹出定位、CJK 光标、对齐顺序在三个 widgetset 上是三套代码。
+

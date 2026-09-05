@@ -18,8 +18,9 @@ uses
   tyControls.Dialogs.SelectPath, tyControls.Dialogs.FileDialog,
   tyControls.ShellComboBox, tyControls.ShellListView, tyControls.ShellTreeView,
   tyControls.FilterComboBox, tyControls.CharImage, tyControls.GlyphButtons,
+  tyControls.AdvanceChart,
   { The SynEdit-backed tycss editor for StyleOverride (design-time only). }
-  tyControls.Design.Css.Editor;
+  tyControls.Design.Css.Editor, tyControls.Design.AdvChart.Editor;
 
 type
   TTyStyleClassPropertyEditor = class(TStringPropertyEditor)
@@ -714,6 +715,10 @@ begin
     TTyStyleOverrideProperty);
   RegisterPropertyEditor(TypeInfo(string), TTyStyleController, 'StyleOverride',
     TTyStyleOverrideProperty);
+  // The chart's whole API is this one string, so it gets the biggest editor in the
+  // package: SynEdit, catalog completion, a browsable reference and live diagnostics.
+  RegisterPropertyEditor(TypeInfo(string), TTyAdvanceChart, 'Option',
+    TTyChartOptionProperty);
   // Both bundled Lucide components carry their attribution: '...' pops the full ISC + MIT text.
   RegisterPropertyEditor(TypeInfo(string), TTyLucideImageList, 'License',
     TTyLucideLicenseProperty);

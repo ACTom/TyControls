@@ -56,7 +56,8 @@ type
     procedure TestACompletedEnumValueIsQuoted;
     procedure TestACompletedKeyBringsItsOwnBracesOrQuotes;
     procedure TestTreeInsertAddsTheCommaOnlyWhenSomethingFollows;
-    procedure TestSuggestNameIsSilentWhenNothingIsClose;
+    procedure TestSuggestNameIsSilentWhenNothingIsClose;
+    procedure TestThePartialAndTheItemDetailAreAvailableWithoutTheContext;
   end;
 implementation
 
@@ -471,6 +472,24 @@ begin
     '', TyOptSuggestName(lk.Node, 'zzzzzzzzzz'));
   AssertEquals('and neither does an empty one',
     '', TyOptSuggestName(lk.Node, ''));
+end;
+
+procedure TAdvChartCompleteTest.TestThePartialAndTheItemDetailAreAvailableWithoutTheContext;
+begin
+  { These two exist so the design-time dialog never has to call TyOptContextAt
+    itself. That is not a style preference: designtime/ is outside the test
+    build, so anything worked out in there is worked out where nothing can check
+    it -- and a guard in test.release.pas now fails if the editor reaches past
+    this layer. The pair has to actually do the job, hence these. }
+  AssertEquals('the run being typed', 'xAx', TyOptPartialAt('{ xAx'));
+  AssertEquals('nothing typed yet', '', TyOptPartialAt('{ '));
+
+  AssertTrue('a known child gets a summary, got: '
+    + TyOptCompletionDetail('{ ', 'xAxis'),
+    TyOptCompletionDetail('{ ', 'xAxis') <> '');
+  AssertEquals('an unknown one gets none', '',
+    TyOptCompletionDetail('{ ', 'nosuchoption'));
+  AssertEquals('and so does an empty item', '', TyOptCompletionDetail('{ ', ''));
 end;
 
 initialization
