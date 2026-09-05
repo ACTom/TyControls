@@ -15,6 +15,8 @@ uses Classes, SysUtils, fpcunit, testregistry,
      tyControls.AdvChart.Catalog, tyControls.AdvChart.Complete,
      tyControls.StrConsts;
 type
+  TIntArray = array of Integer;
+
   TAdvChartCompleteTest = class(TTestCase)
   private
     FList: TStringList;
@@ -56,8 +58,15 @@ type
     procedure TestACompletedEnumValueIsQuoted;
     procedure TestACompletedKeyBringsItsOwnBracesOrQuotes;
     procedure TestTreeInsertAddsTheCommaOnlyWhenSomethingFollows;
-    procedure TestSuggestNameIsSilentWhenNothingIsClose;
+    procedure TestSuggestNameIsSilentWhenNothingIsClose;
     procedure TestThePartialAndTheItemDetailAreAvailableWithoutTheContext;
+    { ---- searching the whole catalog ---- }
+    procedure TestSearchFindsAKeyNobodyCouldScrollTo;
+    procedure TestSearchAnswersShallowestFirst;
+    procedure TestSearchNamesEachNodeOnce;
+    procedure TestSearchNamesANodeByItsShortestPath;
+    procedure TestSearchCarriesTheNodeSoNobodyReparsesThePath;
+    procedure TestSearchHonoursItsLimitAndItsEmptyCase;
   end;
 implementation
 
@@ -490,6 +499,218 @@ begin
   AssertEquals('an unknown one gets none', '',
     TyOptCompletionDetail('{ ', 'nosuchoption'));
   AssertEquals('and so does an empty item', '', TyOptCompletionDetail('{ ', ''));
+end;
+
+{ ============ searching the whole catalog ============ }
+
+procedure TAdvChartCompleteTest.TestSearchFindsAKeyNobodyCouldScrollTo;
+begin
+  { The tree is lazy because building 2,455 nodes up front costs a visible pause
+    on every open. The price is that nothing in the tree helps you find a key
+    unless you already know which branch it lives on -- which is what the filter
+    is for. }
+  AssertTrue('axisLabel is found', TyOptSearch('axisLabel', FList) > 0);
+  AssertTrue('and by its dotted path', Has('xAxis.axisLabel'));
+
+  { Case-insensitive, and a SUBSTRING: someone hunting for a key half-remembers
+    the middle of it as often as the start. }
+  AssertTrue(TyOptSearch('AXISLABEL', FList) > 0);
+  AssertTrue(Has('xAxis.axisLabel'));
+  AssertTrue(TyOptSearch('ymbolsi', FList) > 0);
+end;
+
+{ How deep a path READS: one step per '.', one per variant '-'. Counting only
+  dots calls `dataZoom-slider.handleLabel` shallower than `tooltip.textStyle`,
+  which is not what anyone reading the list would say. }
+function Depth(const APath: string): Integer;
+var i: Integer;
+begin
+  Result := 0;
+  for i := 1 to Length(APath) do
+    if (APath[i] = '.') or (APath[i] = '-') then Inc(Result);
+end;
+
+procedure TAdvChartCompleteTest.TestSearchAnswersShallowestFirst;
+const
+  cTerms: array[0..3] of string = ('label', 'style', 'color', 'width');
+var
+  i, t, prev: Integer;
+begin
+  { Breadth-first, so the first answer is the shortest path to the key. Someone
+    who types `label` wants `series-bar.label` near the top, not forty
+    `markPoint.label.rich.*` rows first.
+
+    Asserting a root-level hit lands first would prove nothing: a depth-first
+    walk visits the root's own properties before descending too, so `tooltip`
+    comes out first either way. Neither does comparing everything against the
+    FIRST row -- `label` has no root-level occurrence, so depth-first also opens
+    with a depth-1 path and every later row is still at least that deep.
+
+    So this checks the two things separately. Here: the list READS
+    shortest-first, all the way down. Below: each node is named by its SHORTEST
+    path, which is the part the breadth-first walk is actually for. }
+  AssertTrue(TyOptSearch('tooltip', FList) > 0);
+  AssertEquals('the root-level one comes first', 'tooltip', FList[0]);
+
+  for t := 0 to High(cTerms) do
+  begin
+    AssertTrue(TyOptSearch(cTerms[t], FList) > 0);
+    AssertTrue(cTerms[t] + ' has real depth to get wrong', FList.Count > 10);
+    prev := Depth(FList[0]);
+    for i := 1 to FList.Count - 1 do
+    begin
+      AssertTrue(Format('%s (depth %d) came after a depth-%d path',
+        [FList[i], Depth(FList[i]), prev]), Depth(FList[i]) >= prev);
+      prev := Depth(FList[i]);
+    end;
+  end;
+end;
+
+procedure TAdvChartCompleteTest.TestSearchNamesEachNodeOnce;
+var
+  i, j: Integer;
+begin
+  { `label` is reachable by hundreds of paths through a DAG. Following every one
+    of them does not finish, and reporting the same node under six spellings is
+    not six answers. }
+  AssertTrue(TyOptSearch('label', FList) > 0);
+  AssertTrue('and it terminates at all', FList.Count < 2455);
+  for i := 0 to FList.Count - 1 do
+    for j := i + 1 to FList.Count - 1 do
+    begin
+      AssertTrue('duplicate path ' + FList[i], FList[i] <> FList[j]);
+      { Distinct PATHS is the weaker claim and the one that passes by accident:
+        drop the visited check and the same node comes back under six different
+        spellings, all of them distinct strings. The nodes are what must not
+        repeat. }
+      AssertTrue(Format('%s and %s are the same node', [FList[i], FList[j]]),
+        FList.Objects[i] <> FList.Objects[j]);
+    end;
+end;
+
+{ The fewest steps from the root to each node, counted the way a path spells
+  them: a property or a variant costs one, an array element costs nothing.
+  Deliberately unlike TyOptSearch -- no paths, no names, no strings -- so it can
+  disagree with it. }
+function MinSteps: TIntArray;
+var
+  q: array of Integer;
+  head, tail, n, i, c, cost: Integer;
+  edges: TTyOptEdgeArray;
+begin
+  SetLength(Result, 2600);
+  for i := 0 to High(Result) do Result[i] := -1;
+  SetLength(q, 2600);
+  head := 0; tail := 0;
+  Result[TyOptRoot] := 0;
+  q[tail] := TyOptRoot; Inc(tail);
+  while head < tail do
+  begin
+    n := q[head]; Inc(head);
+    edges := TyOptEdgesOf(n);
+    for i := 0 to High(edges) do
+    begin
+      c := edges[i].Node;
+      if (c < 0) or (c > High(Result)) or (Result[c] >= 0) then Continue;
+      if edges[i].Kind = oekArrayItem then cost := 0 else cost := 1;
+      Result[c] := Result[n] + cost;
+      q[tail] := c; Inc(tail);
+    end;
+  end;
+end;
+
+procedure TAdvChartCompleteTest.TestSearchNamesANodeByItsShortestPath;
+const
+  cTerms: array[0..4] of string = ('textStyle', 'axisLine', 'label',
+    'itemStyle', 'emphasis');
+var
+  i, t: Integer;
+  min_: TIntArray;
+begin
+  { A shared node is reachable by a short path and a long one, and it is
+    reported ONCE -- so which path it gets is decided entirely by the order of
+    the walk. Breadth-first gives the short one. A depth-first walk would dive
+    into the first branch it met, claim the node down there, and the obvious
+    path would then be missing from the list altogether: someone filtering for
+    `textStyle` would be shown `series-sunburst.levels.label.rich.<style_name>`
+    and not `title.textStyle`.
+
+    Ordering alone cannot catch that. The short path is not late in the list --
+    it is not in the list. }
+  { Named examples are no good here: pick `title.textStyle` and the test passes
+    under any walk order, because that node hangs off title alone and there is
+    no second path to lose it to. The nodes this is about are the SHARED ones,
+    and which those are is not something to guess at.
+
+    So compute the answer independently. MinSteps below is its own breadth-first
+    pass over the same edges that measures depth ONLY -- no paths, no strings --
+    and every result must sit at exactly that depth. }
+  min_ := MinSteps;
+  for t := 0 to High(cTerms) do
+  begin
+    AssertTrue(cTerms[t] + ' finds something', TyOptSearch(cTerms[t], FList) > 0);
+    for i := 0 to FList.Count - 1 do
+      { +1 because Depth counts SEPARATORS and MinSteps counts EDGES: the
+        one-segment path `textStyle` has no separator and one edge. }
+      AssertEquals(FList[i] + ' is not the shortest path to its node',
+        min_[Integer(PtrInt(FList.Objects[i]))], Depth(FList[i]) + 1);
+  end;
+
+  { ECharts has a root-level textStyle, and that is the shallowest of all. }
+  AssertTrue(TyOptSearch('textStyle', FList) > 0);
+  AssertEquals('the shallowest opens the list', 'textStyle', FList[0]);
+end;
+
+procedure TAdvChartCompleteTest.TestSearchCarriesTheNodeSoNobodyReparsesThePath;
+const
+  cTerms: array[0..7] of string = ('axisLabel', 'data', 'elements', 'pieces',
+    'links', 'levels', 'categories', 'symbol');
+var
+  i, t, node: Integer;
+begin
+  { The caller shows a result by looking the node up. Handing the path BACK to
+    TyOptFind would make two producers of the same string, which is how the
+    spellings drift apart -- so the search carries the node it already had, and
+    this is the check that the two still agree.
+
+    Several terms, not one: `axisLabel` alone crosses no array edge, so a search
+    that started writing `xAxis[].axisLabel` again -- a spelling TyOptFind
+    cannot resolve -- would sail straight past it. The terms below reach into
+    `graphic.elements`, `visualMap.pieces` and the graph series, which are
+    arrays in the schema. }
+  for t := 0 to High(cTerms) do
+  begin
+    AssertTrue(cTerms[t] + ' finds something at all',
+      TyOptSearch(cTerms[t], FList) > 0);
+    for i := 0 to FList.Count - 1 do
+    begin
+      node := Integer(PtrInt(FList.Objects[i]));
+      AssertTrue(FList[i] + ' carries a real node', node > 0);
+      AssertEquals(FList[i] + ' resolves to the same node', node,
+        TyOptFind(FList[i]).Node);
+    end;
+  end;
+end;
+
+procedure TAdvChartCompleteTest.TestSearchHonoursItsLimitAndItsEmptyCase;
+begin
+  AssertEquals('a one-letter filter is capped, not answered in full',
+    5, TyOptSearch('a', FList, 5));
+  AssertEquals(5, FList.Count);
+
+  { Empty is "show me the tree", not "show me nothing", and the caller decides
+    which -- FilterChange checks for it before ever calling here.
+
+    The early exit is belt-and-braces: FPC's Pos('', s) returns 0, so an empty
+    needle already matches nothing, and removing the guard changes the cost of a
+    cleared filter box (a full walk of 2,455 nodes on the keystroke that clears
+    it) without changing this answer. The answer is what is pinned here, so it
+    still catches a Pos that decided '' matches everything. }
+  AssertEquals(0, TyOptSearch('', FList));
+  AssertEquals(0, FList.Count);
+  AssertEquals(0, TyOptSearch('   ', FList));
+
+  AssertEquals('and a miss is a miss', 0, TyOptSearch('zzzznotakey', FList));
 end;
 
 initialization

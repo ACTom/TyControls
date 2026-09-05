@@ -212,6 +212,33 @@ function TyOptPartialAt(const ATextBeforeCaret: string): string;
   be doing it where no test can see. }
 function TyOptCompletionDetail(const ATextBeforeCaret, AItem: string): string;
 
+{ Dotted paths whose LAST segment contains AText, case-insensitively, in
+  breadth-first order from the root so the shallowest match comes first --
+  `series.label` before `series.markPoint.label`, which is the order someone
+  hunting for a key wants to read.
+
+  The catalog is a DAG: `label` is reachable by hundreds of paths and a walk
+  that followed every one of them would not finish. Each node is therefore
+  entered once, which means the FIRST path to a node is the one reported --
+  breadth-first, so that is also the shortest. ALimit caps the answer; 0 means
+  no cap.
+
+  The list is then sorted by how deep the path READS, ties alphabetically. The
+  walk's own order is close but not that: a variant edge costs a step in the
+  queue and no character in the path, so `dataZoom-slider.handleLabel` surfaces
+  after two-dot paths and lands in the middle of the list looking misplaced.
+
+  The paths are CATALOG paths in this unit's one path language, as TyOptFind
+  documents it: dotted, index-free, variants written `series-bar`. An array node
+  contributes no segment -- `xAxis` and its element are one step to a reader,
+  and TyOptContextAt has always composed paths that way.
+
+  Each entry's Objects[] carries the catalog node the path names, so a caller
+  showing a result does not have to hand the path back to TyOptFind and hope the
+  two spell it the same way. }
+function TyOptSearch(const AText: string; AList: TStrings;
+  ALimit: Integer = 0): Integer;
+
 { ---- validation ---- }
 { Every option in the tree that the catalog does not recognise, plus every
   enumerated option set to a value outside its list. Order is the tree's own, so
@@ -407,6 +434,26 @@ begin
   AOut.DelimitedText := APath;
 end;
 
+{ A child of ANode, looking inside its array element when ANode is an array and
+  does not have the name itself.
+
+  Only when the name is not there directly, so a path may still NAME an array:
+  `series-line.data` is the array and `series-line.data.symbol` is a property of
+  what the array holds, and both resolve. The loop is for an array of arrays,
+  which the schema has few of and would otherwise stop one level short. }
+function ChildThroughArrays(ANode: Integer; const AName: string): Integer;
+var guard: Integer;
+begin
+  Result := TyOptChild(ANode, AName);
+  guard := 0;
+  while (Result < 0) and (TyOptArrayItem(ANode) >= 0) and (guard < 8) do
+  begin
+    ANode := TyOptArrayItem(ANode);
+    Result := TyOptChild(ANode, AName);
+    Inc(guard);
+  end;
+end;
+
 function TyOptFind(const APath: string): TTyOptLookup;
 var
   segs: TStringList;
@@ -423,7 +470,7 @@ begin
     begin
       if segs[i] = '' then Exit(NoLookup(i, ''));
       SplitVariant(segs[i], name, tag);
-      nxt := TyOptChild(cur, name);
+      nxt := ChildThroughArrays(cur, name);
       if nxt < 0 then Exit(NoLookup(i, segs[i]));
       if tag <> '' then
       begin
@@ -1282,6 +1329,107 @@ begin
   end;
 end;
 
+
+{ How deep a catalog path reads: one step per '.' and one per variant '-'. }
+function PathSteps(const APath: string): Integer;
+var i: Integer;
+begin
+  Result := 0;
+  for i := 1 to Length(APath) do
+    if (APath[i] = '.') or (APath[i] = '-') then Inc(Result);
+end;
+
+function ByDepthThenName(AList: TStringList; A, B: Integer): Integer;
+begin
+  Result := PathSteps(AList[A]) - PathSteps(AList[B]);
+  if Result = 0 then Result := CompareText(AList[A], AList[B]);
+end;
+
+function TyOptSearch(const AText: string; AList: TStrings;
+  ALimit: Integer = 0): Integer;
+var
+  needle, path, full: string;
+  seen: array of Boolean;
+  qNode: array of Integer;
+  qPath: array of string;
+  head, tail, n, i, child: Integer;
+  edges: TTyOptEdgeArray;
+  found: TStringList;
+
+  procedure Push(ANode: Integer; const APath: string);
+  begin
+    if (ANode < 0) or (ANode > High(seen)) or seen[ANode] then Exit;
+    seen[ANode] := True;
+    if tail > High(qNode) then
+    begin
+      SetLength(qNode, Length(qNode) * 2 + 16);
+      SetLength(qPath, Length(qNode));
+    end;
+    qNode[tail] := ANode;
+    qPath[tail] := APath;
+    Inc(tail);
+  end;
+
+begin
+  Result := 0;
+  if AList = nil then Exit;
+  AList.Clear;
+  needle := LowerCase(Trim(AText));
+  if needle = '' then Exit;
+
+  found := TStringList.Create;
+
+  SetLength(seen, Length(TyOptNodes));
+  for i := 0 to High(seen) do seen[i] := False;
+  SetLength(qNode, 256);
+  SetLength(qPath, 256);
+  head := 0;
+  tail := 0;
+  Push(TyOptRoot, '');
+
+  try
+  while (head < tail) and ((ALimit <= 0) or (Result < ALimit)) do
+  begin
+    n := qNode[head];
+    path := qPath[head];
+    Inc(head);
+
+    edges := TyOptEdgesOf(n);
+    for i := 0 to High(edges) do
+    begin
+      child := edges[i].Node;
+      case edges[i].Kind of
+        oekProperty:
+          begin
+            if path = '' then full := edges[i].Name
+                         else full := path + '.' + edges[i].Name;
+            { Reported BEFORE the child is marked visited, and only if it is not
+              visited already: a node reached by a shorter path has already been
+              reported, and naming the same node again under a longer path is
+              noise rather than a second answer. }
+            if (Pos(needle, LowerCase(edges[i].Name)) > 0)
+              and ((child < 0) or (child > High(seen)) or not seen[child]) then
+            begin
+              found.AddObject(full, TObject(PtrInt(child)));
+              Inc(Result);
+              if (ALimit > 0) and (Result >= ALimit) then Break;
+            end;
+            Push(child, full);
+          end;
+        oekArrayItem:
+          Push(child, path);
+        oekVariant:
+          Push(child, path + '-' + edges[i].Name);
+      end;
+    end;
+  end;
+
+    found.CustomSort(@ByDepthThenName);
+    AList.Assign(found);
+  finally
+    found.Free;
+  end;
+end;
 
 function TyOptValidate(AOption: TTyChartOption): TTyOptIssueArray;
 var

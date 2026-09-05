@@ -23,48 +23,26 @@ unit tyControls.Design.AdvChart.Editor;
 interface
 
 uses
-  Classes, SysUtils, PropEdits, ComponentEditors;
+  { The dialog class is in the interface (see the note on it), so the widget
+    types it is built from have to be too. Everything the BODY needs -- the
+    catalog, the diagnostics, the descriptions -- stays in the implementation
+    uses, where it belongs. }
+  Classes, SysUtils, Controls, Forms, StdCtrls, ComCtrls, ExtCtrls, Graphics,
+  SynEdit, SynCompletion, LCLType,
+  PropEdits, ComponentEditors,
+  tyControls.AdvChart.Complete, tyControls.AdvChart.Diagnose;
 
 type
-  { paDialog editor for the Option string. '...' opens the chart dialog. }
-  TTyChartOptionProperty = class(TStringPropertyEditor)
-  public
-    function GetAttributes: TPropertyAttributes; override;
-    procedure Edit; override;
-  end;
+  { THE DIALOG ITSELF, in the interface rather than tucked into the
+    implementation the way the CSS editor keeps its own.
 
-  { Double-clicking the chart opens the same dialog. One verb, one code path --
-    a second entry point that assembled the dialog differently is how the two
-    drift apart. }
-  TTyAdvanceChartEditor = class(TComponentEditor)
-  public
-    function GetVerbCount: Integer; override;
-    function GetVerb(Index: Integer): string; override;
-    procedure ExecuteVerb(Index: Integer); override;
-  end;
-
-implementation
-
-uses
-  Forms, Controls, StdCtrls, ExtCtrls, ComCtrls, Graphics, Dialogs, TypInfo,
-  SynEdit, SynEditTypes, SynCompletion, SynHighlighterJScript, LCLType,
-  tyControls.AdvanceChart,
-  tyControls.AdvChart.Catalog, tyControls.AdvChart.Complete,
-  tyControls.AdvChart.Diagnose,
-  tyControls.Design.AdvChart.Descs,
-  tyControls.Dialogs;
-
-resourcestring
-  rsOptEdTitle = 'Chart option (ECharts)';
-  rsOptEdValidate = 'Validate';
-  rsOptEdFormat = 'Format';
-  rsOptEdFilter = 'Filter the reference';
-  rsOptEdNoIssues = 'Nothing to report.';
-  rsOptEdFormatDropsComments =
-    'Formatting re-writes the option from its parsed form, which drops the '
-    + 'comments and the original quoting. Continue?';
-
-type
+    The reason is verification. Everything else in this feature is reachable
+    from tests/; the dialog is the one piece that is not, because designtime/ is
+    outside the test build -- and it is also the piece whose failures are
+    layout, caret arithmetic and completion wiring against a real SynEdit, none
+    of which a headless assertion could see anyway. Exposing it lets a probe
+    program open it on Windows and drive it, which is the difference between a
+    checklist a human works through and a program that already looked. }
   TTyChartOptionDialog = class(TForm)
   private
     FEdit: TSynEdit;
@@ -88,6 +66,7 @@ type
     procedure TreeDblClick(Sender: TObject);
     procedure IssuesDblClick(Sender: TObject);
     procedure EditChange(Sender: TObject);
+    procedure FilterChange(Sender: TObject);
     procedure EditKeyPress(Sender: TObject; var Key: char);
     procedure EditStatusChange(Sender: TObject; Changes: TSynStatusChanges);
     procedure CompletionExecute(Sender: TObject);
@@ -103,6 +82,44 @@ type
     constructor CreateFor; reintroduce;
     function Execute(var AText: string): Boolean;
   end;
+
+
+  { paDialog editor for the Option string. '...' opens the chart dialog. }
+  TTyChartOptionProperty = class(TStringPropertyEditor)
+  public
+    function GetAttributes: TPropertyAttributes; override;
+    procedure Edit; override;
+  end;
+
+  { Double-clicking the chart opens the same dialog. One verb, one code path --
+    a second entry point that assembled the dialog differently is how the two
+    drift apart. }
+  TTyAdvanceChartEditor = class(TComponentEditor)
+  public
+    function GetVerbCount: Integer; override;
+    function GetVerb(Index: Integer): string; override;
+    procedure ExecuteVerb(Index: Integer); override;
+  end;
+
+implementation
+
+uses
+  Dialogs, TypInfo,
+  SynEditTypes, SynHighlighterJScript,
+  tyControls.AdvanceChart,
+  tyControls.AdvChart.Catalog,
+  tyControls.Design.AdvChart.Descs,
+  tyControls.Dialogs;
+
+resourcestring
+  rsOptEdTitle = 'Chart option (ECharts)';
+  rsOptEdValidate = 'Validate';
+  rsOptEdFormat = 'Format';
+  rsOptEdFilter = 'Filter the reference';
+  rsOptEdNoIssues = 'Nothing to report.';
+  rsOptEdFormatDropsComments =
+    'Formatting re-writes the option from its parsed form, which drops the '
+    + 'comments and the original quoting. Continue?';
 
 const
   { The detail rides inside the item string after a tab, not in a parallel
@@ -128,6 +145,7 @@ begin
 
   { ---- right: the reference, filter over tree over documentation ---- }
   FTree := TTreeView.Create(Self);
+  FTree.Name := 'RefTree';
   FTree.Parent := Self;
   FTree.Align := alRight;
   FTree.Width := 300;
@@ -137,12 +155,14 @@ begin
   FTree.OnDblClick := @TreeDblClick;
 
   FFilter := TEdit.Create(Self);
+  FFilter.Name := 'RefFilter';
   FFilter.Parent := FTree;
   FFilter.Align := alTop;
   FFilter.TextHint := rsOptEdFilter;
-  FFilter.OnChange := @EditChange;
+  FFilter.OnChange := @FilterChange;
 
   FDoc := TMemo.Create(Self);
+  FDoc.Name := 'RefDoc';
   FDoc.Parent := FTree;
   FDoc.Align := alBottom;
   FDoc.Height := 150;
@@ -154,30 +174,43 @@ begin
   splitter.Parent := Self;
   splitter.Align := alRight;
 
-  { ---- bottom, CREATED IN REVERSE. Same-align code-created siblings display
-    in reverse creation order, so this order lands as issues / warn / path /
-    buttons from the top down. Repo memory: lcl-code-created-align-order. ---- }
+  { ---- the bottom strip: issues / warn / path / buttons, top down.
+
+    ORDERED BY Top, NOT BY CREATION ORDER. Same-align siblings built in code all
+    start at Top = 0, and what the aligner then does with them is not worth
+    predicting -- built in the obvious order this strip came out warn / path /
+    buttons / issues, putting the buttons in the middle of the form. For
+    alBottom the largest Top sits lowest, so the numbers below are ordering
+    keys and nothing else; the aligner overwrites them on the first layout.
+    Repo memory: lcl-code-created-align-order. ---- }
   FIssues := TListBox.Create(Self);
+  FIssues.Name := 'IssueList';
   FIssues.Parent := Self;
   FIssues.Align := alBottom;
+  FIssues.Top := 100;
   FIssues.Height := 110;
   FIssues.OnDblClick := @IssuesDblClick;
 
   FWarn := TLabel.Create(Self);
+  FWarn.Name := 'WarnLabel';
   FWarn.Parent := Self;
   FWarn.Align := alBottom;
+  FWarn.Top := 200;
   FWarn.WordWrap := True;
   FWarn.Font.Color := clRed;
   FWarn.BorderSpacing.Around := 6;
 
   FPath := TLabel.Create(Self);
+  FPath.Name := 'PathLabel';
   FPath.Parent := Self;
   FPath.Align := alBottom;
+  FPath.Top := 300;
   FPath.BorderSpacing.Around := 6;
 
   panel := TPanel.Create(Self);
   panel.Parent := Self;
   panel.Align := alBottom;
+  panel.Top := 400;
   panel.Height := 40;
   panel.BevelOuter := bvNone;
 
@@ -219,6 +252,7 @@ begin
 
   { ---- the editor fills what is left ---- }
   FEdit := TSynEdit.Create(Self);
+  FEdit.Name := 'OptionEdit';
   FEdit.Parent := Self;
   FEdit.Align := alClient;
   FEdit.Gutter.Visible := True;
@@ -411,6 +445,44 @@ begin
     enum list offerable -- so the popup should come up on it too. }
   FWantComplete := (Key in ['a'..'z', 'A'..'Z', '0'..'9', '_', '$', '-',
     '''', '"', ':']);
+end;
+
+procedure TTyChartOptionDialog.FilterChange(Sender: TObject);
+var
+  hits: TStringList;
+  i: Integer;
+  nd: TTreeNode;
+begin
+  { Empty means "show me the tree again", not "show me nothing". }
+  if Trim(FFilter.Text) = '' then
+  begin
+    AddTreeRoots;
+    Exit;
+  end;
+
+  hits := TStringList.Create;
+  FTree.Items.BeginUpdate;
+  try
+    FTree.Items.Clear;
+    { Capped. A one-letter filter matches most of a 2,455-node catalog, and a
+      list that long is not an answer -- it is the tree again, flattened. }
+    TyOptSearch(FFilter.Text, hits, 200);
+    for i := 0 to hits.Count - 1 do
+    begin
+      nd := FTree.Items.AddChild(nil, hits[i]);
+      { Results are flat, dotted paths -- no lazy placeholder, because there is
+        nothing to expand and a node that offered to expand into nothing is
+        worse than one that does not offer.
+
+        The node comes from the search, not from handing the path back to
+        TyOptFind: two producers of the same path string is how a spelling
+        mismatch gets in. }
+      nd.Data := Pointer(PtrInt(hits.Objects[i]));
+    end;
+  finally
+    FTree.Items.EndUpdate;
+    hits.Free;
+  end;
 end;
 
 procedure TTyChartOptionDialog.EditChange(Sender: TObject);
