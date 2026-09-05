@@ -274,6 +274,7 @@ type
   TTyIntervalScale = class(TTyScale)
   private
     FInterval: Double;
+    FMinorSplit: Integer;
     FFixMin: Boolean;
     FFixMax: Boolean;
   public
@@ -283,6 +284,16 @@ type
     procedure Niceify(ASplitNumber: Integer);
     function GetTicks: TTyScaleTickArray; override;
     property Interval: Double read FInterval;
+    { How many pieces each major interval is cut into, matching ECharts'
+      minorTick.splitNumber. 0 (the default) means no minor ticks at all --
+      they are opt-in, because an axis that grows a second set of lines the
+      moment it is drawn is not what anybody asked for.
+
+      The ticks come back in ONE array, ordered by value, with Level saying
+      which is which. A caller that only wants the major ones tests Level; a
+      caller that draws both walks it once. Two arrays would let the two drift
+      out of order, and the order is what a renderer walks. }
+    property MinorSplitNumber: Integer read FMinorSplit write FMinorSplit;
     property FixMin: Boolean read FFixMin write FFixMin;
     property FixMax: Boolean read FFixMax write FFixMax;
   end;
@@ -931,8 +942,8 @@ end;
 function TTyIntervalScale.GetTicks: TTyScaleTickArray;
 var
   e: TTyRange;
-  v: Double;
-  n, i: Integer;
+  v, step: Double;
+  n, i, k, t, minor: Integer;
 begin
   Result := nil;
   e := GetExtent;
@@ -940,16 +951,34 @@ begin
     Exit;
   { Count first, then fill from the INDEX: a float accumulator would drift. }
   n := Floor(TyRangeSpan(e) / FInterval + 1e-9) + 1;
-  SetLength(Result, n);
+
+  minor := FMinorSplit;
+  if minor < 2 then minor := 1;          { 1 = none; a split of 1 is no split }
+  step := FInterval / minor;
+
+  { Every tick, major and minor, in one array in value order. The last major
+    tick has no minor ticks after it -- they belong to the interval BEFORE the
+    next major, and there is no next major. }
+  SetLength(Result, n + (n - 1) * (minor - 1));
+  t := 0;
   for i := 0 to n - 1 do
   begin
     v := e.Start + i * FInterval;
     { Snap away the last binary ulp so a 0.1 step does not label 0.30000000000000004. }
     if Abs(v) < FInterval * 1e-9 then
       v := 0;
-    Result[i].Value := v;
-    Result[i].Level := 0;
+    Result[t].Value := v;
+    Result[t].Level := 0;
+    Inc(t);
+    if i = n - 1 then Break;
+    for k := 1 to minor - 1 do
+    begin
+      Result[t].Value := e.Start + i * FInterval + k * step;
+      Result[t].Level := 1;
+      Inc(t);
+    end;
   end;
+  SetLength(Result, t);
 end;
 
 end.

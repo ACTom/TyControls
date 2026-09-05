@@ -561,6 +561,8 @@ var
     d: TJSONData;
     fixLo, fixHi: Boolean;
     ivl: Double;
+    minor: Integer;
+    sub2: TJSONData;
     feeders: TTyIntegerArray;
     lo, hi, dlo, dhi: Double;
     any, scaleOpt: Boolean;
@@ -617,6 +619,7 @@ var
     fixHi := False;
     split := 5;
     ivl := 0;
+    minor := 0;
     if node <> nil then
     begin
       d := node.Find('min');
@@ -640,6 +643,21 @@ var
       d := node.Find('interval');
       if (d <> nil) and (d.JSONType = jtNumber) and (d.AsFloat > 0) then
         ivl := d.AsFloat;
+      { minorTick: { show: true, splitNumber: n }. Off unless asked for -- an
+        axis that grows a second set of lines just by being drawn is not what
+        anybody wrote. Upstream's default split is 5. }
+      d := node.Find('minorTick');
+      if (d <> nil) and (d.JSONType = jtObject) then
+      begin
+        sub2 := TJSONObject(d).Find('show');
+        if (sub2 <> nil) and (sub2.JSONType = jtBoolean) and sub2.AsBoolean then
+        begin
+          minor := 5;
+          sub2 := TJSONObject(d).Find('splitNumber');
+          if (sub2 <> nil) and (sub2.JSONType = jtNumber) then
+            minor := Trunc(sub2.AsFloat);
+        end;
+      end;
     end;
 
     if lo > hi then Exit;
@@ -657,6 +675,9 @@ var
         if split < 1 then split := 1;
       end;
       TTyIntervalScale(AAxis.Scale).Niceify(split);
+      { AFTER Niceify: it is the major interval that gets subdivided, and
+        Niceify is what decides the major interval. }
+      TTyIntervalScale(AAxis.Scale).MinorSplitNumber := minor;
     end;
   end;
 

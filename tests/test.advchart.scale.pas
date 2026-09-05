@@ -39,6 +39,7 @@ type
     procedure TestFixedMinIsRespected;
     procedure TestStartValueIsIndependentOfMin;
     procedure TestScaleUsesItsMapper;
+    procedure TestMinorTicksAreOffUntilAskedFor;
   end;
 
 implementation
@@ -315,6 +316,44 @@ begin
     AssertEquals('one decade after the swap', 1/3, s.Normalize(10), 1e-9);
   finally
     s.Free;
+  end;
+end;
+
+procedure TAdvChartIntervalScaleTest.TestMinorTicksAreOffUntilAskedFor;
+var
+  sc: TTyIntervalScale;
+  t: TTyScaleTickArray;
+  i, majors, minors: Integer;
+begin
+  sc := TTyIntervalScale.Create;
+  try
+    sc.SetExtent(TyRange(0, 4));
+    sc.Niceify(4);
+    t := sc.GetTicks;
+    for i := 0 to High(t) do
+      AssertEquals('nothing is minor until minorTick is asked for', 0, t[i].Level);
+
+    { LEVEL 1 HAD NEVER BEEN WRITTEN BY ANY GENERATOR, though the record's own
+      comment has documented it since the scale was written and two theme keys
+      have been waiting for it since item 18. }
+    sc.MinorSplitNumber := 5;
+    t := sc.GetTicks;
+    majors := 0;
+    minors := 0;
+    for i := 0 to High(t) do
+      if t[i].Level = 0 then Inc(majors) else Inc(minors);
+    AssertTrue('the majors are unchanged', majors >= 2);
+    { Four minor ticks in each gap between majors, and NONE after the last one:
+      a minor tick belongs to the interval before the next major, and after the
+      last major there is no next. }
+    AssertEquals('four per gap, no tail', (majors - 1) * 4, minors);
+
+    { One array, in value order. Two arrays would let the two drift out of
+      order, and the order is what a renderer walks. }
+    for i := 1 to High(t) do
+      AssertTrue('ticks are ordered', t[i].Value > t[i - 1].Value);
+  finally
+    sc.Free;
   end;
 end;
 

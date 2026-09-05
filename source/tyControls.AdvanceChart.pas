@@ -318,6 +318,7 @@ procedure TTyAdvanceChart.PaintAxis(APainter: TTyPainter; AAxis: TTyAxis;
 var
   model: TTyStyleModel;
   lineS, tickStyle, labelS, splitS: TTyStyleSet;
+  minorTickS, minorSplitS: TTyStyleSet;
   ticks: TTyDoubleArray;
   i: Integer;
   tickLen, at, along, x1, y1, x2, y2: Double;
@@ -381,6 +382,8 @@ begin
     per-part helper in this library and inventing one here would be a second
     idiom for the same thing. }
   lineS := model.ResolveStyle('TyAdvChartAxisLine', '', []);
+  minorTickS := model.ResolveStyle('TyAdvChartMinorTick', '', []);
+  minorSplitS := model.ResolveStyle('TyAdvChartMinorSplitLine', '', []);
   tickStyle := model.ResolveStyle('TyAdvChartAxisTick', '', []);
   labelS := model.ResolveStyle('TyAdvChartAxisLabel', '', []);
   splitS := model.ResolveStyle('TyAdvChartSplitLine', '', []);
@@ -399,6 +402,23 @@ begin
     TickCoords' default, NOT AAlignWithLabel: a split line divides the bands, it
     does not point at a label. On a banded category axis the two differ by half
     a band, which is exactly the width the whole parameter exists to express. }
+  { MINOR FIRST, so a major line drawn at the same place wins. The two theme
+    keys have been in light.tycss since item 18 with nothing that could ever be
+    drawn with them: every generator wrote Level 0. }
+  if tpBorderColor in minorSplitS.Present then
+  begin
+    scaleTicks := AAxis.Scale.GetTicks;
+    for i := 0 to High(scaleTicks) do
+    begin
+      if scaleTicks[i].Level = 0 then Continue;
+      along := AAxis.DataToCoord(scaleTicks[i].Value);
+      if horiz then
+        Hairline(along, APlot.Top, along, APlot.Bottom, minorSplitS.BorderColor)
+      else
+        Hairline(APlot.Left, along, APlot.Right, along, minorSplitS.BorderColor);
+    end;
+  end;
+
   if tpBorderColor in splitS.Present then
   begin
     ticks := AAxis.TickCoords;
@@ -452,6 +472,33 @@ begin
       end;
       Hairline(x1, y1, x2, y2, tickStyle.BorderColor);
     end;
+
+  { Minor MARKS, at half the length -- the difference in length is what says
+    which is which when both are the same colour family. }
+  if tpBorderColor in minorTickS.Present then
+  begin
+    scaleTicks := AAxis.Scale.GetTicks;
+    for i := 0 to High(scaleTicks) do
+    begin
+      if scaleTicks[i].Level = 0 then Continue;
+      along := AAxis.DataToCoord(scaleTicks[i].Value);
+      if horiz then
+      begin
+        x1 := along; x2 := along;
+        y1 := at;
+        if AAxis.Side = asTop then y2 := at - tickLen / 2
+        else y2 := at + tickLen / 2;
+      end
+      else
+      begin
+        y1 := along; y2 := along;
+        x1 := at;
+        if AAxis.Side = asRight then x2 := at + tickLen / 2
+        else x2 := at - tickLen / 2;
+      end;
+      Hairline(x1, y1, x2, y2, minorTickS.BorderColor);
+    end;
+  end;
 
   if not (tpTextColor in labelS.Present) then Exit;
 
