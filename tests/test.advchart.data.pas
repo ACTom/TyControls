@@ -114,6 +114,7 @@ type
     procedure TestClearKeepsTheSchema;
     procedure TestClearForgetsCollectedButKeepsFixedCategories;
     procedure TestRepeatedRefillDoesNotGrowTheHeap;
+    procedure TestATimeNumberRoundCannotTakeBecomesNoData;
   end;
 implementation
 
@@ -1149,6 +1150,25 @@ begin
   after := GetFPCHeapStatus.CurrHeapUsed;
   AssertTrue(Format('heap grew from %d to %d over twenty refills', [before, after]),
     after <= before);
+end;
+
+procedure TAdvChartDataTest.TestATimeNumberRoundCannotTakeBecomesNoData;
+begin
+  { NaN IS THE SINGLE SPELLING OF NO DATA -- this unit's header says so, for
+    all four dimension types. The time branch reached Round unguarded while the
+    float and int branches below it were guarded, so a NaN or a 1e30 raised
+    EInvalidOp instead of parsing to a gap. It is reachable straight from
+    option text, because every JSON number becomes a TyDataNum. }
+  AssertTrue('a NaN is a gap, not an exception',
+    IsNan(TyParseDataValue(TyDataNum(NaN), ddtTime)));
+  AssertTrue('so is an infinity',
+    IsNan(TyParseDataValue(TyDataNum(Infinity), ddtTime)));
+  AssertTrue('and so is a number past what an Int64 can hold',
+    IsNan(TyParseDataValue(TyDataNum(1e30), ddtTime)));
+  { And an ordinary epoch millisecond still comes through exactly -- the guard
+    must not cost the range the type is for. }
+  AssertEquals('an ordinary instant is unharmed', 1709596800000.0,
+    TyParseDataValue(TyDataNum(1709596800000.0), ddtTime), 0.0);
 end;
 
 initialization

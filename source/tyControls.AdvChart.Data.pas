@@ -411,7 +411,18 @@ begin
             `Round(x) * 1.0` looks equivalent and is not: FPC types the untyped
             constant 1.0 as SINGLE, and the product loses everything below
             131,072 ms at epoch scale -- about half a day per year of drift. }
-          dvkNumber: Exit(Round(AValue.Num));
+          { GUARDED, like the float and int branches further down. Round on a
+            NaN or on 1e30 raises EInvalidOp, and it raised straight out of
+            TyFillSeriesStore -- reachable from option text, since every JSON
+            number becomes a TyDataNum. This unit's header calls NaN the single
+            spelling of no data across all four types, and an exception is not
+            a spelling. }
+          dvkNumber:
+            if IsNan(AValue.Num) or IsInfinite(AValue.Num)
+              or (Abs(AValue.Num) > 9.2e18) then
+              Exit(NaN)
+            else
+              Exit(Round(AValue.Num));
           dvkText:
             if TyParseDateMs(AValue.Text, n) then Exit(n) else Exit(NaN);
         end;

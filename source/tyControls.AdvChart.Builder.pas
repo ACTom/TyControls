@@ -1080,7 +1080,7 @@ var
   node: TJSONObject;
 
   procedure FillSpec(var ASpec: TTyAxisLayoutSpec; AAxis: TTyAxis; ANode: TJSONObject);
-  var q: Integer;
+  var q, kept: Integer;
   begin
     ASpec := Default(TTyAxisLayoutSpec);
     ASpec.Side := AAxis.Side;
@@ -1095,23 +1095,34 @@ var
     ASpec.LabelMarginLogical := AText.LabelMarginLogical;
     ASpec.TickLengthLogical := AText.TickLengthLogical;
     ASpec.NameGapLogical := AText.NameGapLogical;
+    { MAJORS ONLY. GetTicks hands back majors and minors in one array with
+      Level saying which is which, and its own comment says a caller that wants
+      only the majors tests Level. This did not -- so `minorTick: { show: true
+      }`, which is applied earlier in the same rebuild, multiplied the label
+      count by the minor split and asked the layout to fit five times as many
+      strings as the axis has numbers. }
     ticks := AAxis.Scale.GetTicks;
     SetLength(ASpec.Labels, Length(ticks));
     SetLength(ASpec.Positions, Length(ticks));
+    kept := 0;
     for q := 0 to High(ticks) do
     begin
+      if ticks[q].Level <> 0 then Continue;
       if AAxis.Scale is TTyOrdinalScale then
-        ASpec.Labels[q] := TTyOrdinalScale(AAxis.Scale).GetLabel(ticks[q].Value)
+        ASpec.Labels[kept] := TTyOrdinalScale(AAxis.Scale).GetLabel(ticks[q].Value)
       else
         { NumText, not FloatToStr: the paint pass formats the same tick with a
           forced '.' separator, and FloatToStr follows the machine's locale --
           on a comma-decimal machine the width measured here is not the width of
           the string that gets drawn. }
-        ASpec.Labels[q] := NumText(ticks[q].Value);
+        ASpec.Labels[kept] := NumText(ticks[q].Value);
       { The BAND-ADJUSTED, post-inverse fraction, so the layout layer and the
         renderer cannot disagree about where a label goes. }
-      ASpec.Positions[q] := AAxis.NormalizedCoord(ticks[q].Value);
+      ASpec.Positions[kept] := AAxis.NormalizedCoord(ticks[q].Value);
+      Inc(kept);
     end;
+    SetLength(ASpec.Labels, kept);
+    SetLength(ASpec.Positions, kept);
   end;
 
 begin

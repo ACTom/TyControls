@@ -16,6 +16,7 @@ uses Classes, SysUtils, Math, Controls, Graphics, Forms, fpcunit, testregistry,
      tyControls.Types, tyControls.Controller,
      tyControls.AdvChart.Types, tyControls.AdvChart.Coord,
      tyControls.AdvChart.Builder, tyControls.AdvChart.Scale,
+     tyControls.AdvChart.Layout,
      tyControls.AdvanceChart;
 type
   { Re-exposes the protected render so a test can drive it onto a bitmap. }
@@ -52,6 +53,8 @@ type
     procedure TestTheTicksThemselvesAreDrawn;
     procedure TestAHiddenAxisIsNotDrawn;
     procedure TestTheAxisHonoursMinMaxAndInterval;
+    procedure TestAnAxisWithNoDataStillObeysItsOptions;
+    procedure TestMinorTicksDoNotGetLabels;
     procedure TestCategoriesCollectedFromSeriesDataReachTheAxis;
     procedure TestAnUnnaturalIntervalIsNotRoundedAway;
     procedure TestACrowdedAxisThinsItsLabels;
@@ -968,6 +971,49 @@ begin
   for i := 0 to High(ticks) do
     if ticks[i].Level = 0 then Inc(majors);
   AssertEquals('one tick per collected category', 3, majors);
+end;
+
+procedure TAdvanceChartTest.TestAnAxisWithNoDataStillObeysItsOptions;
+var
+  sc: TTyScale;
+  e: TTyRange;
+begin
+  { The extent pass returned as soon as no series produced a data extent -- and
+    every option read came AFTER that return. So min, max, scale, splitNumber,
+    interval and minorTick were all ignored on exactly the axis with nothing
+    else to derive its range from: an empty chart, or one whose only series has
+    no rows yet. Both are ordinary states in a designer. }
+  FChart.Option := '{ xAxis: { data: [''A''] },'
+    + ' yAxis: { min: -50, max: 150 },'
+    + ' series: [{ type: ''bar'', data: [] }] }';
+  Draw;
+  sc := FChart.Build.Grid(0).YAxis(0).Scale;
+  e := sc.GetExtent;
+  AssertEquals('min is honoured with no data at all', -50.0, e.Start, 1e-9);
+  AssertEquals('and so is max', 150.0, e.Stop, 1e-9);
+end;
+
+procedure TAdvanceChartTest.TestMinorTicksDoNotGetLabels;
+var
+  gb: TTyGridBuild;
+  spec: PTyAxisLayoutSpec;
+begin
+  { GetTicks returns majors and minors in ONE array with Level saying which is
+    which, and phase C formatted and positioned every entry. Turning on
+    minorTick therefore multiplied the label count by the minor split, and the
+    layout was asked to fit five times as many strings as the axis has numbers
+    -- which is also how a crowded axis gets thinned for the wrong reason. }
+  FChart.Option := '{ xAxis: { data: [''A''] },'
+    + ' yAxis: { min: 0, max: 100, interval: 50,'
+    + ' minorTick: { show: true, splitNumber: 5 } },'
+    + ' series: [{ type: ''bar'', data: [1] }] }';
+  Draw;
+  gb := FChart.Build.Grid(0);
+  spec := gb.SpecFor(gb.YAxis(0));
+  AssertTrue('the axis has a layout spec', spec <> nil);
+  AssertEquals('0, 50, 100 -- three labels, not eleven', 3,
+    Length(spec^.Labels));
+  AssertEquals('and a position for each', 3, Length(spec^.Positions));
 end;
 
 initialization

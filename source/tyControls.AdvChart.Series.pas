@@ -605,7 +605,20 @@ var
       if dhi > hi then hi := dhi;
       any := True;
     end;
-    if not any then Exit;
+    { NOT A RETURN. Everything below is the AUTHOR's instruction --
+      scale/min/max/splitNumber/interval/minorTick -- and returning here
+      skipped all six on precisely the axis with no data to fall back on:
+      `yAxis: { min: 0, max: 100 }` beside an empty series kept whatever extent
+      construction happened to give it.
+
+      Only the data-derived ends depend on `any`. With no data they are 0..1,
+      which is what an axis showing nothing should span, and `min`/`max` below
+      overwrite them when the author said otherwise. }
+    if not any then
+    begin
+      lo := 0;
+      hi := 1;
+    end;
 
     { An axis includes zero unless it was told to fit its data. That is why a
       bar chart's baseline is the axis line rather than a floating number, and
