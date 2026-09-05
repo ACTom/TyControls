@@ -666,15 +666,21 @@ var
     begin
       TTyIntervalScale(AAxis.Scale).FixMin := fixLo;
       TTyIntervalScale(AAxis.Scale).FixMax := fixHi;
-      { An explicit `interval` is a statement about the STEP, so it is honoured
-        by asking for the split number that step implies rather than by a
-        second code path -- one tick generator, one set of rules. }
+      { An explicit `interval` is a statement about the STEP, so it is handed
+        to the tick generator AS the step -- one generator, one set of rules,
+        told the answer rather than asked to infer it.
+
+        Deriving a split number from it and letting Niceify re-round was the
+        first shape of this, and it lost every step NiceNum does not already
+        like: interval:30 on 0..120 came out 50, interval:3 on 0..12 came out
+        5. The split number is still computed, because it is what the minor
+        ticks and the fallback path need. }
       if ivl > 0 then
       begin
         split := Trunc((hi - lo) / ivl);
         if split < 1 then split := 1;
       end;
-      TTyIntervalScale(AAxis.Scale).Niceify(split);
+      TTyIntervalScale(AAxis.Scale).Niceify(split, ivl);
       { AFTER Niceify: it is the major interval that gets subdivided, and
         Niceify is what decides the major interval. }
       TTyIntervalScale(AAxis.Scale).MinorSplitNumber := minor;

@@ -34,6 +34,7 @@ type
     procedure TestAlphaDoesNotLeakToTheNextElement;
     procedure TestSectorRendersAsARingWithAHole;
     procedure TestInkAndHitTestAgree;
+    procedure TestInkAndHitTestAgreeOnABackwardsWedge;
     procedure TestSnappingMakesAHairlineCrisp;
   end;
 implementation
@@ -301,6 +302,62 @@ begin
   y := 0;
   while (y < 60) and (AlphaAt(60, y) <= 16) do Inc(y);
   AssertTrue('and it is solid, got ' + IntToStr(AlphaAt(60, y)), AlphaAt(60, y) > 240);
+end;
+
+procedure TAdvChartRenderTest.TestInkAndHitTestAgreeOnABackwardsWedge;
+var
+  e: TTyChartElement;
+  x, y, mismatches, inked, hit: Integer;
+  hasInk, hasHit: Boolean;
+begin
+  { THE SAME QUESTION, ON A WEDGE. The test above uses a full turn, which takes
+    SectorContains' full-turn early-out and never reaches the angle comparison
+    -- so the one shape kind whose geometry is not axis-aligned had its
+    agreement checked only where the angles cannot matter.
+
+    Backwards on purpose: ECharts writes `clockwise: false` as an end angle
+    BELOW the start. SectorContains has always read that as the short wedge
+    between the two, while the renderer handed both angles to ArcTo, whose
+    sweep is measured by wraparound -- so it painted the 270-degree complement
+    of the 90-degree wedge that answered the pointer. Ink and hit test named
+    two different, almost disjoint regions, which is the exact drift item 14
+    exists to make impossible. }
+  Start(200, 200, 96);
+  e := TyChartElement(TyShapeSector(100, 100, 30, 80, Pi / 2, 0));
+  e.Style.HasFill := True;
+  e.Style.FillColor := Red;
+  e.Silent := False;
+  e.Datum := TyChartDatum(0, 0);
+  FList.Add(e);
+  TyRenderPaintList(FPainter, FList);
+
+  mismatches := 0;
+  inked := 0;
+  hit := 0;
+  for y := 0 to 199 do
+    for x := 0 to 199 do
+    begin
+      hasInk := AlphaAt(x, y) > 200;
+      hasHit := TyChartDatumValid(FList.HitTest(x + 0.5, y + 0.5, 96));
+      if hasInk then Inc(inked);
+      if hasHit then Inc(hit);
+      if hasInk <> hasHit then Inc(mismatches);
+    end;
+
+  { The ring is pi*(80^2 - 30^2) ~ 17,300 px, so a quarter is about 4,300 and
+    the complement about 13,000. The bounds sit either side of the midpoint
+    between them, which is the whole distinction being drawn -- and the floor
+    catches the opposite failure, where the two sides agree because nothing was
+    drawn at all. }
+  AssertTrue('the wedge really was drawn (' + IntToStr(inked) + ' px)',
+             inked > 2500);
+  AssertTrue('and it is the quarter wedge, not its three-quarter complement ('
+             + IntToStr(inked) + ' px)', inked < 8000);
+  AssertTrue('the hit test claims a similar area (' + IntToStr(hit) + ' px)',
+             Abs(hit - inked) < inked div 5);
+  AssertTrue('disagreement is a thin edge, not a region ('
+             + IntToStr(mismatches) + ' px of ' + IntToStr(inked) + ')',
+             mismatches < inked div 4);
 end;
 
 initialization

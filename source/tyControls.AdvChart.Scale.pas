@@ -281,7 +281,8 @@ type
     constructor Create;
     { Expand the extent to round boundaries so the tick count lands near
       ASplitNumber. Honours FixMin/FixMax: a pinned end is never rounded away. }
-    procedure Niceify(ASplitNumber: Integer);
+    procedure Niceify(ASplitNumber: Integer;
+      AExactInterval: Double = 0);
     function GetTicks: TTyScaleTickArray; override;
     property Interval: Double read FInterval;
     { How many pieces each major interval is cut into, matching ECharts'
@@ -905,14 +906,38 @@ begin
   FFixMax := False;
 end;
 
-procedure TTyIntervalScale.Niceify(ASplitNumber: Integer);
+procedure TTyIntervalScale.Niceify(ASplitNumber: Integer;
+  AExactInterval: Double);
 var
   e: TTyRange;
-  span, lo, hi: Double;
+  span, lo, hi, a, b: Double;
+  warped: Boolean;
 begin
   if ASplitNumber < 1 then
     ASplitNumber := 5;
   e := GetExtent;
+
+  { IN THE MAPPER'S OWN SPACE. A log axis is this class carrying a log mapper,
+    and nicing it in raw value space put the step above the low end, floored
+    that end to 0, and made TransformIn(0) NaN -- after which Normalize answers
+    0.5 for every value and the entire series lands on the middle of the plot.
+
+    One decade is the step here, so the ticks come out on powers of the base,
+    which is the only thing a log axis' ticks can sensibly be. }
+  warped := (FMapper <> nil) and FMapper.NeedTransform;
+  if warped then
+  begin
+    a := FMapper.TransformIn(e.Start);
+    b := FMapper.TransformIn(e.Stop);
+    { A low end the transform cannot take -- zero or negative on a log axis --
+      is pulled up to one step below the top rather than left as NaN. Dropping
+      back to the raw path here is what produced the collapse; refusing to nice
+      at all would leave the axis unlabelled. }
+    if IsNan(b) then Exit;
+    if IsNan(a) then a := b - 1;
+    e := TyRange(a, b);
+  end;
+
   span := TyRangeSpan(e);
   if span <= 0 then
   begin
@@ -925,7 +950,16 @@ begin
     e := TyRange(e.Start - span / 2, e.Start + span / 2);
     span := TyRangeSpan(e);
   end;
-  FInterval := NiceNum(span / ASplitNumber, False);
+  { AN EXPLICIT STEP IS NOT A SUGGESTION. ECharts' `interval` overrides the
+    step outright, and running it back through NiceNum turns 30 into 50 and 3
+    into 5 -- a different axis from the one the option asked for, with no
+    diagnostic. Everything below this line is unchanged either way, so there is
+    still one tick generator on one set of rules; it is just told the step
+    instead of guessing it. }
+  if AExactInterval > 0 then
+    FInterval := AExactInterval
+  else
+    FInterval := NiceNum(span / ASplitNumber, False);
   if FFixMin then
     lo := e.Start
   else
@@ -936,17 +970,37 @@ begin
     hi := Ceil(e.Stop / FInterval) * FInterval;
   if hi <= lo then
     hi := lo + FInterval;
-  SetExtent(TyRange(lo, hi));
+  if warped then
+    SetExtent(TyRange(FMapper.TransformOut(lo), FMapper.TransformOut(hi)))
+  else
+    SetExtent(TyRange(lo, hi));
 end;
 
 function TTyIntervalScale.GetTicks: TTyScaleTickArray;
 var
   e: TTyRange;
-  v, step: Double;
+  v, step, a, b: Double;
   n, i, k, t, minor: Integer;
+  warped: Boolean;
+
+  { Ticks are stepped in the space Niceify worked in and reported in value
+    space, so the two cannot disagree about what the interval means. }
+  function Out_(AValue: Double): Double;
+  begin
+    if warped then Result := FMapper.TransformOut(AValue) else Result := AValue;
+  end;
+
 begin
   Result := nil;
   e := GetExtent;
+  warped := (FMapper <> nil) and FMapper.NeedTransform;
+  if warped then
+  begin
+    a := FMapper.TransformIn(e.Start);
+    b := FMapper.TransformIn(e.Stop);
+    if IsNan(a) or IsNan(b) then Exit;
+    e := TyRange(a, b);
+  end;
   if (FInterval <= 0) or (TyRangeSpan(e) <= 0) then
     Exit;
   { Count first, then fill from the INDEX: a float accumulator would drift. }
@@ -967,13 +1021,17 @@ begin
     { Snap away the last binary ulp so a 0.1 step does not label 0.30000000000000004. }
     if Abs(v) < FInterval * 1e-9 then
       v := 0;
-    Result[t].Value := v;
+    Result[t].Value := Out_(v);
     Result[t].Level := 0;
     Inc(t);
     if i = n - 1 then Break;
+    { Evenly in the STEPPING space, so on a log axis the minor ticks come out
+      geometrically spaced between one power and the next. Not ECharts' 2..9
+      set, which is a different rule and belongs with the log labelling work,
+      but spaced the way the axis itself is. }
     for k := 1 to minor - 1 do
     begin
-      Result[t].Value := e.Start + i * FInterval + k * step;
+      Result[t].Value := Out_(e.Start + i * FInterval + k * step);
       Result[t].Level := 1;
       Inc(t);
     end;

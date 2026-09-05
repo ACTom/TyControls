@@ -52,6 +52,7 @@ type
     procedure TestTheTicksThemselvesAreDrawn;
     procedure TestAHiddenAxisIsNotDrawn;
     procedure TestTheAxisHonoursMinMaxAndInterval;
+    procedure TestAnUnnaturalIntervalIsNotRoundedAway;
     procedure TestACrowdedAxisThinsItsLabels;
     procedure TestResizingRelaysOutTheAxes;
     procedure TestAnAxisNameIsDrawnInTheSpaceReservedForIt;
@@ -895,6 +896,35 @@ begin
     + '%d wider)', [ones, wides]), ones + wides > 2);
   AssertTrue(Format('%d one-column lines against %d that straddle two or more '
     + '-- snapping is not reaching the stroke', [ones, wides]), wides = 0);
+end;
+
+procedure TAdvanceChartTest.TestAnUnnaturalIntervalIsNotRoundedAway;
+var
+  sc: TTyScale;
+  ticks: TTyScaleTickArray;
+  i, majors: Integer;
+begin
+  { A STEP NICENUM DOES NOT LIKE. The two fixtures above use interval 25 and
+    interval 20 -- 2.5x10 and 2x10 -- and NiceNum returns both unchanged, so
+    their assertions held whether or not `interval` was honoured at all.
+
+    30 over 0..120 is the smallest case that separates them: rounded, it
+    becomes 50 and the axis carries three ticks instead of five. ECharts treats
+    `interval` as an outright override of the step, and half of every plausible
+    value (3, 15, 30, 40, 300) was being discarded with no diagnostic. }
+  FChart.Option := '{ xAxis: { data: [''A''] },'
+    + ' yAxis: { min: 0, max: 120, interval: 30 },'
+    + ' series: [{ type: ''bar'', data: [1] }] }';
+  Draw;
+  sc := FChart.Build.Grid(0).YAxis(0).Scale;
+  AssertEquals('the step is the one the option asked for', 30.0,
+    TTyIntervalScale(sc).Interval, 1e-9);
+
+  ticks := sc.GetTicks;
+  majors := 0;
+  for i := 0 to High(ticks) do
+    if ticks[i].Level = 0 then Inc(majors);
+  AssertEquals('0, 30, 60, 90, 120', 5, majors);
 end;
 
 initialization

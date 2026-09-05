@@ -187,8 +187,30 @@ begin
     Result.R0 := Result.R1;
     Result.R1 := t;
   end;
-  Result.StartRad := AStartRad;
-  Result.EndRad := AEndRad;
+  { ANGLES NORMALISED TOO, for the same reason the radii are: so the record
+    means one thing to everybody who reads it.
+
+    A negative sweep names the same wedge as the positive one between the same
+    two angles, and SectorContains has always read it that way. The RENDERER
+    could not: it hands both angles to ArcTo, whose sweep is measured by
+    wraparound rather than by reversing direction, so (Pi/2 -> 0) painted the
+    270-degree complement of the 90-degree wedge that answered the pointer.
+    Swapping here fixes both at once and leaves nothing to remember at the call
+    sites.
+
+    A full turn is left alone: its two ends are equal after wrapping, so
+    swapping them would turn "the whole ring" into "nothing", and the sign is
+    the only thing left saying which way round it goes. }
+  if (AEndRad < AStartRad) and (Abs(AEndRad - AStartRad) < 2 * Pi - 1e-9) then
+  begin
+    Result.StartRad := AEndRad;
+    Result.EndRad := AStartRad;
+  end
+  else
+  begin
+    Result.StartRad := AStartRad;
+    Result.EndRad := AEndRad;
+  end;
 end;
 
 function CopyPoints(const APoints: array of TTyPointF): TTyPointFArray;

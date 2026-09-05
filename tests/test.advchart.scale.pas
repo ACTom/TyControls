@@ -40,6 +40,9 @@ type
     procedure TestStartValueIsIndependentOfMin;
     procedure TestScaleUsesItsMapper;
     procedure TestMinorTicksAreOffUntilAskedFor;
+    procedure TestALogAxisNicesInLogSpace;
+    procedure TestALogAxisMapsItsDataAcrossTheWholeAxis;
+    procedure TestALogAxisSurvivesAnImpossibleLowEnd;
   end;
 
 implementation
@@ -352,6 +355,103 @@ begin
       order, and the order is what a renderer walks. }
     for i := 1 to High(t) do
       AssertTrue('ticks are ordered', t[i].Value > t[i - 1].Value);
+  finally
+    sc.Free;
+  end;
+end;
+
+{ ============ a log axis ============ }
+
+function LogScale(ALo, AHi: Double; ASplit: Integer = 5): TTyIntervalScale;
+begin
+  Result := TTyIntervalScale.Create;
+  Result.Mapper := TTyLogScaleMapper.Create(10);
+  Result.SetExtent(TyRange(ALo, AHi));
+  Result.Niceify(ASplit);
+end;
+
+procedure TAdvChartIntervalScaleTest.TestALogAxisNicesInLogSpace;
+var
+  sc: TTyIntervalScale;
+  e: TTyRange;
+  ticks: TTyScaleTickArray;
+  i, majors: Integer;
+begin
+  { A log axis is TTyIntervalScale carrying a log mapper, and Niceify used to
+    work in RAW VALUE space: the step came out bigger than the low end, so
+    Floor(start/step)*step drove the low end to 0 -- which TransformIn turns
+    into NaN. 1..10000 nicied to [0, 10000] with ticks 0/2000/4000/6000/8000,
+    linear numbers on a logarithmic axis. }
+  sc := LogScale(1, 10000);
+  try
+    e := sc.GetExtent;
+    AssertEquals('the low end is not floored to zero', 1.0, e.Start, 1e-9);
+    AssertEquals('and the top is a power of the base', 10000.0, e.Stop, 1e-6);
+
+    ticks := sc.GetTicks;
+    majors := 0;
+    for i := 0 to High(ticks) do
+      if ticks[i].Level = 0 then Inc(majors);
+    AssertEquals('one major per decade: 1, 10, 100, 1000, 10000', 5, majors);
+
+    majors := 0;
+    for i := 0 to High(ticks) do
+      if ticks[i].Level = 0 then
+      begin
+        Inc(majors);
+        AssertEquals(Format('decade %d', [majors]),
+          Power(10.0, majors - 1), ticks[i].Value, ticks[i].Value * 1e-9 + 1e-9);
+      end;
+  finally
+    sc.Free;
+  end;
+end;
+
+procedure TAdvChartIntervalScaleTest.TestALogAxisMapsItsDataAcrossTheWholeAxis;
+var
+  sc: TTyIntervalScale;
+begin
+  { The symptom the arithmetic produced: once either end of the extent
+    transformed to NaN, Normalize returned 0.5 for EVERYTHING, so every datum
+    and every tick sat on the exact middle of the plot. Where floating-point
+    exceptions are unmasked it raised EInvalidOp out of the paint path instead.
+
+    Asserting the ENDS as well as the middle is deliberate: a mapper stuck on
+    0.5 satisfies any single check at the centre. }
+  sc := LogScale(1, 10000);
+  try
+    AssertEquals('the bottom of the axis', 0.0, sc.Normalize(1), 1e-9);
+    AssertEquals('the top', 1.0, sc.Normalize(10000), 1e-9);
+    AssertEquals('and 100 sits halfway, because it is halfway in DECADES',
+      0.5, sc.Normalize(100), 1e-9);
+    AssertEquals('10 is a quarter up', 0.25, sc.Normalize(10), 1e-9);
+    AssertEquals('1000 is three quarters', 0.75, sc.Normalize(1000), 1e-9);
+  finally
+    sc.Free;
+  end;
+end;
+
+procedure TAdvChartIntervalScaleTest.TestALogAxisSurvivesAnImpossibleLowEnd;
+var
+  sc: TTyIntervalScale;
+  e: TTyRange;
+begin
+  { `min: 0` on a log axis asks for something that does not exist. Leaving it
+    as NaN is what broke the whole mapper, so the low end is pulled up to one
+    decade below the top instead -- an axis that is drawable and honest about
+    its range, rather than one that silently reports 0.5 everywhere. }
+  sc := TTyIntervalScale.Create;
+  try
+    sc.Mapper := TTyLogScaleMapper.Create(10);
+    sc.SetExtent(TyRange(0, 1000));
+    sc.Niceify(5);
+    e := sc.GetExtent;
+    AssertTrue('the low end is positive', e.Start > 0);
+    AssertFalse('and nothing is NaN', IsNan(e.Start) or IsNan(e.Stop));
+    AssertFalse('the mapper answers a real number',
+      IsNan(sc.Normalize(e.Stop)));
+    AssertTrue('and the two ends do not map to the same place',
+      Abs(sc.Normalize(e.Stop) - sc.Normalize(e.Start)) > 0.5);
   finally
     sc.Free;
   end;
