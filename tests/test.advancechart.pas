@@ -38,6 +38,7 @@ type
     procedure Draw(AW: Integer = 400; AH: Integer = 300; APPI: Integer = 96);
     function PixelAt(AX, AY: Integer): TBGRAPixel;
     function InkIn(AL, AT, AR, AB: Integer; const ABg: TBGRAPixel): Integer;
+    function ManyCategories(ACount: Integer): string;
     function InkDepth(const AP, ABg: TBGRAPixel): Integer;
   published
     procedure TestItHasItsOwnStyleKey;
@@ -65,6 +66,9 @@ type
     procedure TestMaxIntervalCapsTheStep;
     procedure TestAValueAxisBoundaryGapPadsTheExtent;
     procedure TestACrowdedAxisThinsItsLabels;
+    procedure TestTheLayoutOwnsTheThinningDecision;
+    procedure TestTheGridThinsWithTheLabels;
+    procedure TestMinorTicksVanishWhenTheMajorsAreThinned;
     procedure TestResizingRelaysOutTheAxes;
     procedure TestAnAxisNameIsDrawnInTheSpaceReservedForIt;
     procedure TestAThickerThemeBorderDrawsAThickerAxis;
@@ -1225,6 +1229,164 @@ begin
     Pos(#10, spec^.Labels[0]) = 0);
   AssertTrue(Format('a truncating axis leaves the plot at least as tall '
     + '(%.1f against %.1f)', [narrow, wide]), narrow >= wide);
+end;
+
+procedure TAdvanceChartTest.TestTheLayoutOwnsTheThinningDecision;
+var
+  gb: TTyGridBuild;
+  spec: PTyAxisLayoutSpec;
+begin
+  { THE STEP AND THE PLACEMENTS ARE LAYOUT RESULTS, and the paint pass used to
+    work them out for itself on every frame. Both come from measuring EVERY
+    label, so a 5,000-category axis spent ten thousand measurements per frame
+    choosing the twenty it would draw -- twelve seconds a frame, and thinning
+    the split lines did not move it at all because that was never the cost.
+
+    TTyGridBuild's own comment already gave the rule for the spec: kept "so the
+    renderer draws from it rather than assembling a second one". These are the
+    spec one level down.
+
+    Asserted on the BUILD, not on a stopwatch: what makes the frame cheap is
+    that the answer is already there when paint starts. }
+  FChart.Option := '{ xAxis: { data: [''a'', ''b'', ''c'', ''d''] }, yAxis: {},'
+    + ' series: [{ type: ''bar'', data: [1, 2, 3, 4] }] }';
+  Draw;
+  gb := FChart.Build.Grid(0);
+  spec := gb.SpecFor(gb.XAxis(0));
+  AssertTrue('the axis has a spec', spec <> nil);
+  AssertTrue('the layout recorded a step', spec^.LabelStep >= 1);
+  AssertEquals('four labels fit easily, so nothing is thinned', 1,
+    spec^.LabelStep);
+  AssertEquals('and it placed every label it kept', 4,
+    Length(spec^.Placements));
+
+  { A crowded axis: the step rises, and the placements say which survive. }
+  FChart.Option := '{ xAxis: { data: [' + ManyCategories(120) + '] },'
+    + ' yAxis: {}, series: [{ type: ''bar'', data: [1] }] }';
+  Draw;
+  gb := FChart.Build.Grid(0);
+  spec := gb.SpecFor(gb.XAxis(0));
+  AssertTrue(Format('120 labels in 400 px must thin (step %d)',
+    [spec^.LabelStep]), spec^.LabelStep > 1);
+  AssertTrue('the placements were still computed by the layout',
+    Length(spec^.Placements) > 0);
+end;
+
+procedure TAdvanceChartTest.TestTheGridThinsWithTheLabels;
+var
+  gb: TTyGridBuild;
+  spec: PTyAxisLayoutSpec;
+  bg: TBGRAPixel;
+  x, y, span, lines: Integer;
+begin
+  { THE LINES BEHIND THE NUMBERS. The ticks have followed the labels since item
+    12 -- "drawing every tick under a thinned set of labels reads as an axis
+    that lost its labels rather than one that spaced them out" -- and the split
+    lines did not, so a crowded axis wore a grid of 120 divisions under a dozen
+    numbers.
+
+    Counted as runs of red, with the split line colour overridden opaque so the
+    count is of split lines and nothing else. }
+  FCtl.StyleOverride := 'TyAdvChartSplitLine { border-color: #FF0000;'
+    + ' border-width: 1px; }';
+  FChart.Option := '{ xAxis: { data: [' + ManyCategories(120) + '] },'
+    + ' yAxis: { min: 0, max: 100 },'
+    + ' series: [{ type: ''bar'', data: [1] }] }';
+  Draw;
+  gb := FChart.Build.Grid(0);
+  spec := gb.SpecFor(gb.XAxis(0));
+  AssertTrue('the fixture really is crowded', spec^.LabelStep > 1);
+
+  { Near the top of the plot, where a short bar cannot reach. }
+  y := Round(gb.PlotRect.Top) + 6;
+  bg := PixelAt(Round(gb.PlotRect.Left) + 3, y);
+  lines := 0;
+  span := 0;
+  for x := Round(gb.PlotRect.Left) - 2 to Round(gb.PlotRect.Right) + 2 do
+  begin
+    if PixelAt(x, y).red > PixelAt(x, y).green + 40 then
+      Inc(span)
+    else
+    begin
+      if span > 0 then Inc(lines);
+      span := 0;
+    end;
+  end;
+  if span > 0 then Inc(lines);
+
+  AssertTrue('there is a grid at all', lines > 1);
+  AssertTrue(Format('120 categories drew %d split lines under a step of %d -- '
+    + 'the grid is not thinning with the labels', [lines, spec^.LabelStep]),
+    lines < 120 div 2);
+end;
+
+{ ACount quoted category names, for the crowded-axis fixtures. }
+function TAdvanceChartTest.ManyCategories(ACount: Integer): string;
+var i: Integer;
+begin
+  Result := '';
+  for i := 0 to ACount - 1 do
+  begin
+    if i > 0 then Result := Result + ', ';
+    Result := Result + '''c' + IntToStr(i) + '''';
+  end;
+end;
+
+procedure TAdvanceChartTest.TestMinorTicksVanishWhenTheMajorsAreThinned;
+
+  { Red runs in the band BELOW the major ticks, where only a minor tick reaches.
+    The minor-tick key alone is overridden, so the count is of minor ticks. }
+  function MinorRuns(const AOption: string): Integer;
+  var
+    gb: TTyGridBuild;
+    x, y, span: Integer;
+    p: TBGRAPixel;
+  begin
+    FCtl.StyleOverride := 'TyAdvChartMinorTick { border-color: #FF0000;'
+      + ' border-width: 1px; }'
+      + ' :root { --advchart-minor-tick-length: 10px; }';
+    FChart.Option := AOption;
+    Draw;
+    gb := FChart.Build.Grid(0);
+    y := Round(gb.PlotRect.Bottom) + 7;
+    Result := 0;
+    span := 0;
+    for x := Round(gb.PlotRect.Left) - 2 to Round(gb.PlotRect.Right) + 2 do
+    begin
+      p := PixelAt(x, y);
+      if p.red > p.green + 40 then
+        Inc(span)
+      else
+      begin
+        if span > 0 then Inc(Result);
+        span := 0;
+      end;
+    end;
+    if span > 0 then Inc(Result);
+  end;
+
+var
+  roomy, crowded: Integer;
+  gb: TTyGridBuild;
+begin
+  { A MINOR TICK SUBDIVIDES THE INTERVAL BETWEEN TWO MAJORS. Once the majors
+    are being hidden, subdivisions of an interval nobody can see are noise --
+    and they are the densest thing on the axis, so they are the worst noise to
+    keep. This is also why a crowded axis used to cost what it did: the majors
+    thinned to a handful and the minors stayed at four per hidden interval. }
+  roomy := MinorRuns('{ xAxis: { min: 0, max: 40, interval: 10,'
+    + ' minorTick: { show: true, splitNumber: 4 } }, yAxis: {},'
+    + ' series: [{ type: ''line'', data: [1] }] }');
+  AssertTrue(Format('an uncrowded axis shows its minor ticks (%d runs)',
+    [roomy]), roomy > 2);
+
+  crowded := MinorRuns('{ xAxis: { min: 0, max: 4000, interval: 10,'
+    + ' minorTick: { show: true, splitNumber: 4 } }, yAxis: {},'
+    + ' series: [{ type: ''line'', data: [1] }] }');
+  gb := FChart.Build.Grid(0);
+  AssertTrue('the crowded fixture really thins',
+    gb.SpecFor(gb.XAxis(0))^.LabelStep > 1);
+  AssertEquals('and then it draws no minor ticks at all', 0, crowded);
 end;
 
 initialization

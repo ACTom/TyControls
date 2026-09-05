@@ -1185,6 +1185,24 @@ begin
       outerBoundsContain default is 'all', and taking the default here would
       make axis NAMES silently stop reserving room for themselves. }
     gb.FPlotRect := TySolveGrid(gb.FOuterRect, specs, AMeasurer, APPI, obmAuto, obcAll);
+
+    { THE THINNING AND THE PLACEMENTS, DECIDED HERE. Both are derived by
+      measuring every label, and the paint pass used to derive them itself on
+      every frame -- ten thousand measurements per frame at 5,000 categories, to
+      choose the twenty that actually get drawn. They belong to the layout for
+      the same reason the spec does: the plot rect was shrunk to fit exactly
+      these labels, so anything computed from them a second time is a second
+      route to an answer that is already known.
+
+      After TySolveGrid, because both need the FINAL plot rect. }
+    for t := 0 to High(specs) do
+    begin
+      specs[t].LabelStep := TyAxisLabelStep(specs[t], gb.FPlotRect, AMeasurer, APPI);
+      if specs[t].LabelStep < 1 then specs[t].LabelStep := 1;
+      specs[t].Placements := TyLayoutAxisLabels(specs[t], gb.FPlotRect,
+                                                AMeasurer, APPI);
+    end;
+
     { Kept for the renderer. }
     gb.FSpecs := specs;
 

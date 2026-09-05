@@ -102,6 +102,18 @@ type
     NameGapLogical: Double;
   end;
 
+  { One laid-out label, ready to hand to TTyPainter.DrawTextRotated: the anchor
+    plus how the box sits on it. Layout and paint therefore cannot disagree
+    about where a label went. }
+  TTyAxisLabelPlacement = record
+    Index: Integer;
+    Text: string;
+    X, Y: Double;
+    AnchorH: TTyTextAnchorH;
+    AnchorV: TTyTextAnchorV;
+    Shown: Boolean;
+  end;
+  TTyAxisLabelPlacementArray = array of TTyAxisLabelPlacement;
   { Everything one axis needs to lay itself out. Pure data: the caller has
     already resolved the font and formatted the labels, because deciding what a
     tick says is the scale's job and this unit does not know about scales. }
@@ -125,22 +137,21 @@ type
       it at paint time -- for loBreak the labels arrive already broken. }
     LabelWidthLogical: Double;
     LabelOverflow: TTyLabelOverflow;
+    { WHAT PHASE C DECIDED ABOUT THESE LABELS, so the paint pass does not decide
+      it again. Both are derived by measuring EVERY label, and the paint pass
+      used to call TyAxisLabelStep and TyLayoutAxisLabels itself -- ten thousand
+      measurements a frame at 5,000 categories, to choose the twenty that get
+      drawn.
+
+      LabelStep is 1 when nothing is thinned. Placements is empty when the axis
+      was laid out without a plot rect to place into, and the renderer falls
+      back to its own arithmetic then. }
+    LabelStep: Integer;
+    Placements: TTyAxisLabelPlacementArray;
   end;
   TTyAxisLayoutSpecArray = array of TTyAxisLayoutSpec;
   PTyAxisLayoutSpec = ^TTyAxisLayoutSpec;
 
-  { One laid-out label, ready to hand to TTyPainter.DrawTextRotated: the anchor
-    plus how the box sits on it. Layout and paint therefore cannot disagree
-    about where a label went. }
-  TTyAxisLabelPlacement = record
-    Index: Integer;
-    Text: string;
-    X, Y: Double;
-    AnchorH: TTyTextAnchorH;
-    AnchorV: TTyTextAnchorV;
-    Shown: Boolean;
-  end;
-  TTyAxisLabelPlacementArray = array of TTyAxisLabelPlacement;
 
 { Logical px -> device px for axis geometry. Exported because the builder
   scales axisLabel.width the same way, and a second copy of this rule is how two

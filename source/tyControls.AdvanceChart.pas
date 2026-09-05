@@ -332,7 +332,7 @@ var
   i: Integer;
   tickLen, minorLen, at, along, x1, y1, x2, y2: Double;
   nameOff, nx, ny, nameAngle: Double;
-  maxW: Integer;
+  maxW, batched: Integer;
   horiz: Boolean;
   txt: string;
   lblH, lblW, step: Integer;
@@ -410,25 +410,42 @@ var
     AH := Round(h);
   end;
 
-  { One hairline, SNAPPED. A stroke whose outer edge falls between two pixel
+  { ONE SUBPATH PER LINE, ONE STROKE PER STYLE.
+
+    Every line an axis draws shares a style with its neighbours by
+    construction, and a path can hold as many subpaths as it likes -- each
+    MoveTo starts a new one -- so a whole set of split lines is one BeginPath, N
+    MoveTo/LineTo pairs and one StrokePath. Stroking them one at a time is what
+    made a 600-point frame cost 110 ms when the same frame without axes costs
+    13: the bill was never pixels, it was the per-call setup, and quartering the
+    area did not quarter the time. ECharts survives 100k elements on the same
+    trick (canPathBatch: consecutive same-style elements accumulate into one
+    beginPath and one fill/stroke).
+
+    SNAPPED as it is added. A stroke whose outer edge falls between two pixel
     rows lights both at half alpha, which is what makes a 1 px grid read grey
-    and soft next to the crisp control chrome around it. tyControls.SubPixel is
-    the unit item 19 exists for; its only callers were in AdvChart.Shape, and
-    this paint path does not go through AdvChart.Shape.
+    and soft next to the crisp control chrome around it.
 
     TWO UNITS, DELIBERATELY. The snap works in DEVICE px -- the pixel grid the
     ink lands on is the device one, so snapping a logical coordinate would mean
     nothing -- while StrokePath wants the LOGICAL width and scales it itself.
     Handing the scaled width to both is a double scale that 96 DPI hides
     completely, which is how the first version of this passed. }
-  procedure Hairline(AX1, AY1, AX2, AY2: Double; AColor: TTyColor;
-    AWidthLogical: Double);
+  procedure BatchLine(AX1, AY1, AX2, AY2: Double; AWidthLogical: Double);
   begin
     TySubPixelLine(AX1, AY1, AX2, AY2, APainter.ScaleF(AWidthLogical));
-    APainter.BeginPath;
     APainter.MoveTo(AX1, AY1);
     APainter.LineTo(AX2, AY2);
-    APainter.StrokePath(AColor, AWidthLogical);
+    Inc(batched);
+  end;
+
+  { Stroke what BatchLine collected, if anything. The count guards a stroke of
+    an empty path, which a fully thinned-away set of minor ticks produces. }
+  procedure StrokeBatch(const AStyle: TTyStyleSet);
+  begin
+    if batched > 0 then
+      APainter.StrokePath(AStyle.BorderColor, LineWidth(AStyle));
+    batched := 0;
   end;
 
 begin
@@ -458,6 +475,22 @@ begin
   minorLen := APainter.ScaleF(ActiveController.Metric(TyAdvChartMinorTickLenVar,
     TyAdvChartMinorTickLen));
 
+  { THE THINNING STEP, READ FROM THE LAYOUT. It used to be computed halfway
+    down this procedure, after the split lines had already been drawn -- so the
+    ticks thinned with the labels and the lines behind them did not, which is an
+    axis wearing a grid and a set of numbers that disagree about how many
+    divisions it has.
+
+    And it used to be computed AT ALL here: TyAxisLabelStep measures every
+    label, so a frame spent ten thousand measurements at 5,000 categories to
+    choose the twenty it would draw. Phase C already measured them to shrink the
+    plot rect; it records what it decided and this reads it. }
+  spec := nil;
+  if AGrid <> nil then spec := AGrid.SpecFor(AAxis);
+  step := 1;
+  if (spec <> nil) and (spec^.LabelStep > 0) then step := spec^.LabelStep;
+  batched := 0;
+
   { Split lines first, so the domain and the ticks sit on top of them.
 
     TickCoords' default, NOT AAlignWithLabel: a split line divides the bands, it
@@ -466,35 +499,41 @@ begin
   { MINOR FIRST, so a major line drawn at the same place wins. The two theme
     keys have been in light.tycss since item 18 with nothing that could ever be
     drawn with them: every generator wrote Level 0. }
-  if tpBorderColor in minorSplitS.Present then
+  { MINORS ONLY WHILE THE MAJORS ARE ALL THERE. A minor tick subdivides the
+    interval between two majors, so once the majors are being hidden the
+    subdivisions of an interval nobody can see are noise -- and they are the
+    densest thing on the axis, which makes them the worst noise to keep. }
+  if (tpBorderColor in minorSplitS.Present) and (step = 1) then
   begin
     scaleTicks := AAxis.Scale.GetTicks;
+    APainter.BeginPath;
     for i := 0 to High(scaleTicks) do
     begin
       if scaleTicks[i].Level = 0 then Continue;
       along := AAxis.DataToCoord(scaleTicks[i].Value);
       if horiz then
-        Hairline(along, APlot.Top, along, APlot.Bottom,
-                 minorSplitS.BorderColor, LineWidth(minorSplitS))
+        BatchLine(along, APlot.Top, along, APlot.Bottom, LineWidth(minorSplitS))
       else
-        Hairline(APlot.Left, along, APlot.Right, along,
-                 minorSplitS.BorderColor, LineWidth(minorSplitS));
+        BatchLine(APlot.Left, along, APlot.Right, along, LineWidth(minorSplitS));
     end;
+    StrokeBatch(minorSplitS);
   end;
 
   if tpBorderColor in splitS.Present then
   begin
     ticks := AAxis.TickCoords;
+    APainter.BeginPath;
     for i := 0 to High(ticks) do
     begin
+      { THINNED WITH THE LABELS, on the same step the ticks use. }
+      if (step > 1) and (i mod step <> 0) then Continue;
       along := ticks[i];
       if horiz then
-        Hairline(along, APlot.Top, along, APlot.Bottom,
-                 splitS.BorderColor, LineWidth(splitS))
+        BatchLine(along, APlot.Top, along, APlot.Bottom, LineWidth(splitS))
       else
-        Hairline(APlot.Left, along, APlot.Right, along,
-                 splitS.BorderColor, LineWidth(splitS));
+        BatchLine(APlot.Left, along, APlot.Right, along, LineWidth(splitS));
     end;
+    StrokeBatch(splitS);
   end;
 
   { The domain line. Present, not colour: an undeclared colour resolves to
@@ -502,25 +541,23 @@ begin
     drawn. }
   if tpBorderColor in lineS.Present then
   begin
+    APainter.BeginPath;
     if horiz then
-      Hairline(APlot.Left, at, APlot.Right, at,
-               lineS.BorderColor, LineWidth(lineS))
+      BatchLine(APlot.Left, at, APlot.Right, at, LineWidth(lineS))
     else
-      Hairline(at, APlot.Top, at, APlot.Bottom,
-               lineS.BorderColor, LineWidth(lineS));
+      BatchLine(at, APlot.Top, at, APlot.Bottom, LineWidth(lineS));
+    StrokeBatch(lineS);
   end;
 
   ticks := AAxis.TickCoords;
   { THE MARKS THIN WITH THE LABELS. Drawing every tick under a thinned set of
     labels reads as an axis that lost its labels rather than one that spaced
-    them out, and computing the step by a second route is how the two drift. }
-  spec := nil;
-  if AGrid <> nil then spec := AGrid.SpecFor(AAxis);
-  step := 1;
-  if spec <> nil then
-    step := TyAxisLabelStep(spec^, APlot, AMeasurer, APPI);
-  if step < 1 then step := 1;
+    them out, and computing the step by a second route is how the two drift --
+    which is why `step` is worked out once, above, and the split lines use the
+    same one. }
   if tpBorderColor in tickStyle.Present then
+  begin
+    APainter.BeginPath;
     for i := 0 to High(ticks) do
     begin
       if (step > 1) and (i mod step <> 0) then Continue;
@@ -537,17 +574,20 @@ begin
         x1 := at;
         if AAxis.Side = asRight then x2 := at + tickLen else x2 := at - tickLen;
       end;
-      Hairline(x1, y1, x2, y2, tickStyle.BorderColor, LineWidth(tickStyle));
+      BatchLine(x1, y1, x2, y2, LineWidth(tickStyle));
     end;
+    StrokeBatch(tickStyle);
+  end;
 
   { Minor MARKS. The difference in LENGTH is what says which is which when both
     are the same colour family -- and how much shorter is the theme's call, not
     a fraction hardcoded here. --advchart-minor-tick-length, its constant and
     its default have all been in place since item 18 with nothing reading them,
     so a skin that set it changed nothing. }
-  if tpBorderColor in minorTickS.Present then
+  if (tpBorderColor in minorTickS.Present) and (step = 1) then
   begin
     scaleTicks := AAxis.Scale.GetTicks;
+    APainter.BeginPath;
     for i := 0 to High(scaleTicks) do
     begin
       if scaleTicks[i].Level = 0 then Continue;
@@ -566,9 +606,9 @@ begin
         if AAxis.Side = asRight then x2 := at + minorLen
         else x2 := at - minorLen;
       end;
-      Hairline(x1, y1, x2, y2, minorTickS.BorderColor,
-               LineWidth(minorTickS));
+      BatchLine(x1, y1, x2, y2, LineWidth(minorTickS));
     end;
+    StrokeBatch(minorTickS);
   end;
 
   { THE AXIS NAME. Builder solves the grid with obcAll, so TyAxisThickness has
@@ -617,9 +657,9 @@ begin
     label was drawn at a position worked out here and none was ever thinned --
     a crowded axis simply overlapped. The placement carries the anchor too, so
     layout and paint cannot disagree about where a label went. }
-  if spec <> nil then
+  if (spec <> nil) and (Length(spec^.Placements) > 0) then
   begin
-    places := TyLayoutAxisLabels(spec^, APlot, AMeasurer, APPI);
+    places := spec^.Placements;
     for i := 0 to High(places) do
     begin
       if not places[i].Shown then Continue;

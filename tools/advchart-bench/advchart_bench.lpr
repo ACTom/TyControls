@@ -16,7 +16,7 @@ program advchart_bench;
 uses
   Interfaces, Forms, Controls, Classes, SysUtils, Graphics,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Controller, tyControls.AdvanceChart;
+  tyControls.Controller, tyControls.Painter, tyControls.AdvanceChart;
 
 type
   TChartProbe = class(TTyAdvanceChart)
@@ -64,7 +64,9 @@ begin
   WriteLn(Format('  %-42s %8.2f ms', [AWhat, Result]));
 end;
 
-var GText: string;
+var
+  GText: string;
+  GIters: Integer = 40;
 
 procedure DoParse; begin chart.Option := ''; chart.Option := GText; end;
 procedure DoPaint; begin chart.Render(bmp.Canvas, Rect(0, 0, W, H), 96); end;
@@ -84,12 +86,51 @@ begin
   DoPaint;                      { warm: first build, memoised measurements }
   parse := MsPer(10, 'parse (Option := text)', @DoParse);
   DoPaint;                      { leave it built and clean }
-  paint := MsPer(40, 'paint only (clean, FDirty = False)', @DoPaint);
-  tick  := MsPer(40, 'animation tick TODAY (Invalidate+paint)', @DoTick);
+  paint := MsPer(GIters, 'paint only (clean, FDirty = False)', @DoPaint);
+  tick  := MsPer(GIters, 'animation tick TODAY (Invalidate+paint)', @DoTick);
   WriteLn(Format('  %-42s %8.2f ms', ['=> build alone (tick - paint)', tick - paint]));
   WriteLn(Format('  %-42s %8.1f fps', ['=> if a tick cost only the paint', 1000 / paint]));
   WriteLn(Format('  %-42s %8.1f fps', ['=> at today''s tick cost', 1000 / tick]));
   if parse < 0 then Exit;
+end;
+
+{ WHAT ONE LABEL COSTS. Batching the strokes moved 600 points from 110 ms to
+  66, but 60 points barely moved and the axes-hidden floor is 16 -- so most of
+  the axis cost does not scale with the number of lines. Labels are the only
+  other thing an axis draws, and there are roughly as many of them at 60 points
+  as at 600, because thinning targets a pixel spacing rather than a count. This
+  times the painter's text path directly instead of inferring it. }
+procedure BenchText;
+var
+  P: TTyPainter;
+  b: TBGRABitmap;
+  t: QWord;
+  i: Integer;
+begin
+  WriteLn;
+  WriteLn('the text path itself, on a 900x700 surface');
+  b := TBGRABitmap.Create(900, 700, BGRA(255, 255, 255, 255));
+  P := TTyPainter.Create;
+  try
+    P.BeginPaint(b.Canvas, Rect(0, 0, 900, 700), 96);
+    P.DrawText(Rect(10, 10, 200, 30), 'c123', '', 13, 400, $FF000000,
+               taCenter, tlCenter, False);
+    t := GetTickCount64;
+    for i := 1 to 200 do
+      P.DrawText(Rect(10, 10, 200, 30), 'c123', '', 13, 400, $FF000000,
+                 taCenter, tlCenter, False);
+    WriteLn(Format('  %-42s %8.3f ms', ['DrawText, 4 characters',
+      (GetTickCount64 - t) / 200]));
+    t := GetTickCount64;
+    for i := 1 to 200 do
+      P.MeasureText('c123', '', 13, 400);
+    WriteLn(Format('  %-42s %8.3f ms', ['MeasureText, 4 characters',
+      (GetTickCount64 - t) / 200]));
+    P.EndPaint;
+  finally
+    P.Free;
+    b.Free;
+  end;
 end;
 
 begin
@@ -113,6 +154,13 @@ begin
     bmp.SetSize(W, H);
     chart.SetBounds(0, 0, W, H);
     Bench('medium at a quarter of the pixels', 600, True);
+    W := 900; H := 700;
+    bmp.SetSize(W, H);
+    chart.SetBounds(0, 0, W, H);
+    GIters := 4;
+    Bench('large -- the case that cost ten seconds', 5000, False);
+    GIters := 40;
+    BenchText;
   finally
     bmp.Free;
     chart.Free;
