@@ -32,3 +32,6 @@ msgstr "图表 option（ECharts）"
 #: tycontrols.design.advchart.editor.rsoptedvalidate
 msgid "Validate"
 msgstr "验证"
+#: tycontrols.design.advchart.editor.rsoptedcataloglang
+msgid "__locale__"
+msgstr "zh_CN"

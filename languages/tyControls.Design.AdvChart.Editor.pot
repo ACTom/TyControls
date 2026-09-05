@@ -1,6 +1,10 @@
 msgid ""
 msgstr "Content-Type: text/plain; charset=UTF-8"
 
+#: tycontrols.design.advchart.editor.rsoptedcataloglang
+msgid "__locale__"
+msgstr ""
+
 #: tycontrols.design.advchart.editor.rsoptedfilter
 msgid "Filter the reference"
 msgstr ""

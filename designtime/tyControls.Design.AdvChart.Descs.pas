@@ -25,7 +25,7 @@ function TyOptDescZh(ANode: Integer): string;
   so and a Chinese text exists, English otherwise. English is the fallback
   rather than an empty box, because a description in the wrong language still
   says what the option does. }
-function TyOptDesc(ANode: Integer): string;
+function TyOptDesc(ANode: Integer; APreferZh: Boolean): string;
 
 { How many strings the pool holds. 0 means it failed to load, which is worth
   being able to assert. }
@@ -94,12 +94,18 @@ begin
   Result := PoolAt(TyOptNodes[ANode].DescZh);
 end;
 
-function TyOptDesc(ANode: Integer): string;
-var lang: string;
+function TyOptDesc(ANode: Integer; APreferZh: Boolean): string;
 begin
-  lang := LowerCase(GetEnvironmentVariable('LANG'));
-  if lang = '' then lang := LowerCase(GetEnvironmentVariable('LANGUAGE'));
-  if Pos('zh', lang) = 1 then
+  { THE CALLER DECIDES. This unit used to read POSIX LANG and fall back to
+    LANGUAGE -- neither of which the Lazarus IDE sets, and neither of which
+    exists on Windows whatever the machine's locale -- so the Chinese half of
+    the catalogue was unreachable in the one place it is for, and TyOptDescZh's
+    only caller was a branch nothing could enter.
+
+    Falling back to English when the Chinese entry is blank rather than
+    returning nothing: about a tenth of the nodes have no Chinese summary, and
+    an empty doc pane reads as a missing feature. }
+  if APreferZh then
   begin
     Result := TyOptDescZh(ANode);
     if Result <> '' then Exit;

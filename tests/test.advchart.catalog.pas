@@ -117,18 +117,76 @@ begin
   end;
 end;
 
+{ The bytes a LazarusResources.Add block carries, decoded back out of the
+  Pascal source lazres wrote. Literal runs are quoted, with '' standing for one
+  quote; everything else is a #nnn decimal escape. Stops at the closing bracket
+  of the array, which is the first ']' outside a literal. }
+function DecodeLrsPayload(const ASrc: string): string;
+var
+  i, n: Integer;
+begin
+  Result := '';
+  i := Pos('[', ASrc);
+  if i = 0 then Exit;
+  while i <= Length(ASrc) do
+    case ASrc[i] of
+      '''':
+        begin
+          Inc(i);
+          while i <= Length(ASrc) do
+            if ASrc[i] <> '''' then
+            begin
+              Result := Result + ASrc[i];
+              Inc(i);
+            end
+            else if (i < Length(ASrc)) and (ASrc[i + 1] = '''') then
+            begin
+              Result := Result + '''';
+              Inc(i, 2);
+            end
+            else
+            begin
+              Inc(i);
+              Break;
+            end;
+        end;
+      '#':
+        begin
+          Inc(i);
+          n := 0;
+          while (i <= Length(ASrc)) and (ASrc[i] >= '0') and (ASrc[i] <= '9') do
+          begin
+            n := n * 10 + (Ord(ASrc[i]) - Ord('0'));
+            Inc(i);
+          end;
+          if n <= 255 then Result := Result + Chr(n);
+        end;
+      ']':
+        Break;
+    else
+      Inc(i);
+    end;
+end;
+
 procedure TAdvChartCatalogTest.TestTheDescriptionResourceWasPackedFromThePool;
 var
-  fPool, fLrs, rawPool, rawLrs: string;
+  fPool, fLrs, rawPool, rawLrs, packed_: string;
+  i: Integer;
 begin
   { The .lrs is what actually ships; the .json beside it is only the input to
     lazres. Regenerating one without the other is a single forgotten command,
     and the symptom -- descriptions that are one release behind -- is invisible.
 
-    lazres writes the bytes as decimal escapes, so the check is that every byte
-    of the pool appears in order. Comparing lengths is enough to catch the
-    forgotten re-pack without re-implementing lazres' encoding here: the pool is
-    ASCII, so each byte costs a fixed amount of Pascal. }
+    THE BYTES, NOT THE LENGTHS. This used to assert only that the .lrs was
+    longer than the pool, on the grounds that the pool is ASCII so each byte
+    costs a fixed amount of Pascal. The pool is not ASCII -- the generator's own
+    note counts 83,823 non-ASCII bytes of 208,750 -- and since lazres writes
+    every byte as a decimal escape, any correctly packed .lrs from any pool,
+    current or three releases old, is about 2.4x larger than any pool. The
+    inequality held for exactly the staleness the guard exists to catch.
+
+    Decoding is twenty lines: Pascal literals, '' for an embedded quote, #nnn
+    for the bytes that cannot be written literally. }
   fPool := RepoRoot + 'designtime' + PathDelim + 'advchart-descs.json';
   fLrs := RepoRoot + 'designtime' + PathDelim + 'tycontrols_advchart_desc.lrs';
   AssertTrue('the pool exists: ' + fPool, FileExists(fPool));
@@ -138,10 +196,19 @@ begin
   rawLrs := ReadLF(fLrs);
   AssertTrue('the resource names itself TyAdvChartDescs',
     Pos('TyAdvChartDescs', rawLrs) > 0);
-  AssertTrue(Format('the packed resource (%d bytes) is too small for a pool of '
-    + '%d bytes -- re-run scripts/gen-advchart-descs.ps1',
-    [Length(rawLrs), Length(rawPool)]),
-    Length(rawLrs) > Length(rawPool));
+
+  packed_ := DecodeLrsPayload(rawLrs);
+  AssertEquals('the packed resource is a different SIZE from the pool -- '
+    + 're-run scripts/gen-advchart-descs.ps1',
+    Length(rawPool), Length(packed_));
+  { Byte for byte. Equal lengths and different contents is exactly what a pool
+    edited in place would look like. }
+  for i := 1 to Length(rawPool) do
+    if rawPool[i] <> packed_[i] then
+      Fail(Format('the packed resource differs from the pool at byte %d '
+        + '(pool $%2.2x, packed $%2.2x) -- re-run '
+        + 'scripts/gen-advchart-descs.ps1',
+        [i, Ord(rawPool[i]), Ord(packed_[i])]));
 end;
 
 procedure TAdvChartCatalogTest.TestCatalogMatchesItsCommittedInput;

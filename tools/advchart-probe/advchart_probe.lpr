@@ -29,6 +29,7 @@ uses
   Interfaces, Forms, Controls, StdCtrls, ComCtrls, ExtCtrls, Classes, SysUtils,
   Graphics, SynEdit, SynEditTypes,
   tyControls.AdvChart.Complete,
+  tyControls.AdvChart.Diagnose,
   tyControls.Design.AdvChart.Editor;
 
 var
@@ -273,6 +274,71 @@ begin
       PumpFor(300);
       Check('clearing it brings the tree back', tree.Items.Count > 20,
         Format('%d rows', [tree.Items.Count]));
+    end;
+
+    WriteLn('-- double-clicking a filter result --');
+    { Filter hits are captioned with a whole dotted path, and a parentless row
+      otherwise means a child of the root -- so this used to insert
+      `xAxis.axisLabel: `, and a '.' is not a name character. Every hit below
+      the top level added an error to the document the feature exists to help
+      write. }
+    TEdit(dlg.FindComponent('RefFilter')).Text := 'axisLabel';
+    PumpFor(300);
+    { A COMPLETE option, so the only thing TyOptDiagnose can complain about is
+      what the double-click just wrote. A bare xAxis draws no grid and says so,
+      which is a fair complaint about the fixture and not about the insert. }
+    Paste(ed, '{' + LineEnding + '  xAxis: { ' + LineEnding + '  },' +
+              LineEnding + '  yAxis: {},' + LineEnding +
+              '  series: [{ type: ''bar'', data: [1] }]' + LineEnding + '}');
+    ed.CaretXY := Point(12, 2);
+    Application.ProcessMessages;
+    if tree.Items.Count > 0 then
+    begin
+      tree.Selected := tree.Items[0];
+      Application.ProcessMessages;
+      before := ed.Text;
+      if Assigned(tree.OnDblClick) then tree.OnDblClick(tree);
+      Application.ProcessMessages;
+      Check('the double-click inserted something',
+        ed.Text <> before, 'text unchanged');
+      Check('and it is a bare key, not a dotted path',
+        Pos('.', Copy(ed.Text, Pos('axisLabel', ed.Text) - 12, 12)) = 0,
+        '...[' + Copy(ed.Text, Pos('axisLabel', ed.Text) - 12, 24) + ']');
+      { The real question: does what it wrote still parse? }
+      list := TStringList.Create;
+      try
+        { The ALL-CLEAR, not an empty list: TyOptDiagnose always says
+          something, and "understood" is how it says there is nothing wrong.
+          The old insert produced `xAxis.axisLabel: `, which fcl-json cannot
+          read, so this came back as a parse complaint instead. }
+        Check('and the document the editor wrote still parses',
+          (Length(TyOptDiagnose(ed.Text)) = 1)
+          and (Pos('understood', LowerCase(TyOptDiagnose(ed.Text)[0].Text)) > 0),
+          'doc = <' + StringReplace(ed.Text, LineEnding, '|', [rfReplaceAll])
+          + '> first: ' + TyOptDiagnose(ed.Text)[0].Text);
+      finally
+        list.Free;
+      end;
+    end
+    else
+      Check('there is a filter result to double-click', False);
+
+    WriteLn('-- the doc pane follows the loaded catalogue --');
+    { It used to read POSIX LANG, which the Lazarus IDE never sets and Windows
+      does not have -- so the Chinese half of the catalogue, 2,252 nodes, was
+      unreachable in the one place it is for. This machine runs an untranslated
+      IDE, so the assertion is that ENGLISH comes back and comes back
+      non-empty; the Chinese path is checked by the sentinel's own value. }
+    TEdit(dlg.FindComponent('RefFilter')).Text := '';
+    PumpFor(300);
+    if tree.Items.Count > 0 then
+    begin
+      tree.Selected := tree.Items[0];
+      if Assigned(tree.OnChange) then tree.OnChange(tree, tree.Items[0]);
+      Application.ProcessMessages;
+      Check('the doc pane says something about the selected node',
+        Trim(TMemo(dlg.FindComponent('RefDoc')).Text) <> '',
+        'doc pane empty');
     end;
 
     if (ParamCount >= 1) and (ParamStr(1) = '--show') then

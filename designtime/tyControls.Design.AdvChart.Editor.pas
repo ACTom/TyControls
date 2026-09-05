@@ -112,6 +112,14 @@ uses
   tyControls.Dialogs;
 
 resourcestring
+  { WHICH CATALOGUE IS LOADED, by the idiom StrConsts documents at length for
+    rsTyDateTimeNamesLang: a sentinel every shipped catalogue translates to its
+    own language code, so a value differing from the compile-time one means
+    exactly "someone loaded a catalogue". It lives in THIS unit's catalogue on
+    purpose -- the help text then follows the same one as the buttons beside
+    it, which is what was actually wrong: a Chinese IDE showed Chinese buttons
+    and English help. }
+  rsOptEdCatalogLang = '__locale__';
   rsOptEdTitle = 'Chart option (ECharts)';
   rsOptEdValidate = 'Validate';
   rsOptEdFormat = 'Format';
@@ -362,7 +370,10 @@ begin
   node := Integer(PtrInt(ANode.Data));
   s := TyOptSummary(node);
   if s <> '' then FDoc.Lines.Add(s);
-  s := TyOptDesc(node);
+  { The sentinel differs from its compile-time value exactly when a catalogue
+    was loaded, and its msgstr names which one -- so the help text follows the
+    same catalogue as the buttons around it. }
+  s := TyOptDesc(node, Copy(LowerCase(rsOptEdCatalogLang), 1, 2) = 'zh');
   if s <> '' then FDoc.Lines.Add(s);
 end;
 
@@ -370,21 +381,41 @@ procedure TTyChartOptionDialog.TreeDblClick(Sender: TObject);
 var
   edges: TTyOptEdgeArray;
   kind: TTyOptEdgeKind;
-  parentNode, i: Integer;
-  edgeName, tail: string;
+  parentNode, i, dot: Integer;
+  edgeName, tail, rowText: string;
 begin
-  if (FTree.Selected = nil) or (FTree.Selected.Parent = nil) then
+  if FTree.Selected = nil then Exit;
+  rowText := FTree.Selected.Text;
+
+  { A FILTER RESULT IS A PATH, NOT A KEY. Search hits are added as parentless
+    rows rowTexted with the whole dotted path, and a parentless row otherwise
+    means a child of the root -- so this took `xAxis.axisLabel` as an edge name
+    and inserted `xAxis.axisLabel: `. A '.' is not a name character:
+    AdvChart.Locate says so in its own comment, because `a.b: 1` is a spelling
+    fcl-json cannot parse unquoted. Every filter hit below the top level
+    inserted text the option reader rejects.
+
+    The last segment is the key; the rest says where it lives, which is all the
+    parent was ever wanted for. }
+  dot := 0;
+  for i := Length(rowText) downto 1 do
+    if rowText[i] = '.' then begin dot := i; Break; end;
+
+  if (FTree.Selected.Parent = nil) and (dot > 0) then
   begin
-    if FTree.Selected = nil then Exit;
-    parentNode := TyOptRoot;
+    parentNode := TyOptFind(Copy(rowText, 1, dot - 1)).Node;
+    if parentNode < 0 then parentNode := TyOptRoot;
+    rowText := Copy(rowText, dot + 1, MaxInt);
   end
+  else if FTree.Selected.Parent = nil then
+    parentNode := TyOptRoot
   else
     parentNode := Integer(PtrInt(FTree.Selected.Parent.Data));
 
   { Which edge of the parent this row is, so the inserted text can carry the
     right punctuation. }
   kind := oekProperty;
-  edgeName := FTree.Selected.Text;
+  edgeName := rowText;
   edges := TyOptEdgesOf(parentNode);
   for i := 0 to High(edges) do
     if Integer(PtrInt(FTree.Selected.Data)) = edges[i].Node then
