@@ -1267,6 +1267,15 @@ end;
 { ---- TTyStringGrid -------------------------------------------------------- }
 
 type
+  { 每一种编辑器都欠用户一个"放弃"手势。从前只有文本框和掩码框接了键盘处理,
+    另外七种(数值/滑块/备忘/计算器/下拉/日期)按 Esc 毫无反应 —— 今天只是别扭,
+    一旦加上"校验不过不让走",就变成用户被锁死在格子里出不来。 }
+  TGridEditorCancelTest = class(TTestCase)
+  published
+    procedure TestEveryEditorKindCanBeAbandoned;
+    procedure TestEscapeRestoresTheOldText;
+  end;
+
   TStrGridAccess = class(TTyStringGrid)
   public
     procedure ClickAt(X, Y: Integer);
@@ -1974,6 +1983,57 @@ begin
   Result.Header.Options := Result.Header.Options - [hoVisible];
   Result.DefaultRowHeight := 20;
   Result.RowCount := 10;
+end;
+
+procedure TGridEditorCancelTest.TestEveryEditorKindCanBeAbandoned;
+{ Walks the editor kinds that actually open a control and asserts each one carries a key
+  handler. The gap this pins is invisible from outside the grid -- OnKeyDown is protected on
+  TWinControl -- which is exactly why seven of the nine went unwired for so long. }
+const
+  KINDS: array[0..8] of TTyGridEditorKind =
+    (gekText, gekNumeric, gekPickList, gekDate, gekTime, gekSpin, gekSlider, gekMemo,
+     gekCalculator);
+var
+  f: TForm;
+  ctl: TTyStyleController;
+  g: TStrGridAccess;
+  i: Integer;
+begin
+  f := TForm.CreateNew(nil);
+  ctl := TTyStyleController.Create(nil);
+  try
+    g := MakeStrGrid(f, ctl);
+    for i := Low(KINDS) to High(KINDS) do
+    begin
+      g.EndEdit(False);
+      g.DefaultEditorKind := KINDS[i];
+      AssertTrue('editor opens for kind ' + IntToStr(Ord(KINDS[i])), g.BeginEditAt(1, 1));
+      AssertTrue('kind ' + IntToStr(Ord(KINDS[i])) + ' has a way to abandon the edit',
+        g.EditorCanCancelForTest);
+      g.EndEdit(False);
+    end;
+  finally ctl.Free; f.Free; end;
+end;
+
+procedure TGridEditorCancelTest.TestEscapeRestoresTheOldText;
+{ The behaviour behind the wiring: Esc leaves the cell as it was and closes the editor. }
+var
+  f: TForm;
+  ctl: TTyStyleController;
+  g: TStrGridAccess;
+begin
+  f := TForm.CreateNew(nil);
+  ctl := TTyStyleController.Create(nil);
+  try
+    g := MakeStrGrid(f, ctl);
+    g.DefaultEditorKind := gekText;
+    g.Cells[1, 1] := 'keep';
+    AssertTrue('editing started', g.BeginEditAt(1, 1));
+    g.InlineEditor.Text := 'typed over it';
+    g.PressKeyInEditor(VK_ESCAPE, []);
+    AssertFalse('the editor closed', g.EditorMode);
+    AssertEquals('and the cell kept its old value', 'keep', g.Cells[1, 1]);
+  finally ctl.Free; f.Free; end;
 end;
 
 procedure TTyStringGridTest.HandleReadOnlyCol2(Sender: TObject; ACol, ARow: Integer;
@@ -11199,5 +11259,6 @@ initialization
   RegisterTest(TTyGridControlTest);
   RegisterTest(TTyGridScrollBarNilWindowTest);
   RegisterTest(TTyDrawGridTest);
+  RegisterTest(TGridEditorCancelTest);
   RegisterTest(TTyStringGridTest);
 end.

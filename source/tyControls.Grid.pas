@@ -2157,6 +2157,14 @@ type
     procedure PickEditorChange(Sender: TObject);
     procedure PickEditorExit(Sender: TObject);
     procedure EditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+    { Esc ONLY, for the editors that cannot share EditorKeyDown because they spend Enter on
+      their own content: the memo (Enter is a newline), the spin/slider/calc/date pickers
+      (Enter and the arrows drive their value). Abandoning an edit is the one gesture every
+      editor owes the user, and it was reaching only two of them. }
+    procedure EditorCancelKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+    { The combo's Esc: an OPEN dropdown eats it to close itself, which is what the user meant;
+      only a closed one abandons the edit. }
+    procedure PickEditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 
     procedure FilterEditorChange(Sender: TObject);
     procedure FilterEditorExit(Sender: TObject);
@@ -2758,6 +2766,11 @@ type
     function  UndoCount: Integer;
     { 当前正在用的编辑器控件(没在编辑时为 nil)。 }
     function  EditorControl: TControl;
+    { 测试缝。当前打开的这个编辑器有没有接键盘处理 —— 也就是 Esc 能不能放弃这次编辑。
+      这个缺口从外面看不见:OnKeyDown 在 TWinControl 上是 protected,测试问不到控件本身,
+      所以九个编辑器里有七个压根没有放弃路径这件事一直没人发现。宿主自带的 EditLink
+      编辑器不算在内 —— 那是宿主自己的键盘。 }
+    function  EditorCanCancelForTest: Boolean;
     procedure MergeCells(ACol, ARow, AColSpan, ARowSpan: Integer);
     procedure UnmergeCells(ACol, ARow: Integer);
     procedure ClearMerges;
@@ -7866,24 +7879,28 @@ begin
   FSpinEditor.Parent := Self;
   FSpinEditor.Visible := False;
   FSpinEditor.ControlStyle := FSpinEditor.ControlStyle + [csNoDesignVisible];
+  FSpinEditor.OnKeyDown := @EditorCancelKeyDown;
   FSpinEditor.OnExit := @EditorExit;
 
   FSliderEditor := TTyTrackBar.Create(Self);
   FSliderEditor.Parent := Self;
   FSliderEditor.Visible := False;
   FSliderEditor.ControlStyle := FSliderEditor.ControlStyle + [csNoDesignVisible];
+  FSliderEditor.OnKeyDown := @EditorCancelKeyDown;
   FSliderEditor.OnExit := @EditorExit;
 
   FMemoEditor := TTyMemo.Create(Self);
   FMemoEditor.Parent := Self;
   FMemoEditor.Visible := False;
   FMemoEditor.ControlStyle := FMemoEditor.ControlStyle + [csNoDesignVisible];
+  FMemoEditor.OnKeyDown := @EditorCancelKeyDown;
   FMemoEditor.OnExit := @EditorExit;
 
   FCalcEditor := TTyCalcEdit.Create(Self);
   FCalcEditor.Parent := Self;
   FCalcEditor.Visible := False;
   FCalcEditor.ControlStyle := FCalcEditor.ControlStyle + [csNoDesignVisible];
+  FCalcEditor.OnKeyDown := @EditorCancelKeyDown;
   FCalcEditor.OnExit := @EditorExit;
 
   FMaskEditor := TTyMaskEdit.Create(Self);
@@ -7898,6 +7915,7 @@ begin
   FPickEditor.Parent := Self;
   FPickEditor.Visible := False;
   FPickEditor.ControlStyle := FPickEditor.ControlStyle + [csNoDesignVisible];
+  FPickEditor.OnKeyDown := @PickEditorKeyDown;
   FPickEditor.OnChange := @PickEditorChange;
   FPickEditor.OnExit := @PickEditorExit;
 
@@ -7906,17 +7924,32 @@ begin
   FDateEditor.Parent := Self;
   FDateEditor.Visible := False;
   FDateEditor.ControlStyle := FDateEditor.ControlStyle + [csNoDesignVisible];
+  FDateEditor.OnKeyDown := @EditorCancelKeyDown;
   FDateEditor.OnExit := @DateEditorExit;
 end;
 
 destructor TTyStringGrid.Destroy;
 begin
-  FEditor.OnKeyDown := nil;     { 先摘回调,别在半毁对象上回调 }
+  { 先摘回调,别在半毁对象上回调。**每一个**编辑器都要摘:漏掉的那几个
+    (spin/slider/memo/calc/mask)的 OnExit 仍指着 EditorExit,焦点恰好在它们
+    身上时会把 EndEdit(True) 打进一个已经拆了一半的网格。 }
+  FEditor.OnKeyDown := nil;
   FEditor.OnChange := nil;
+  FEditor.OnKeyPress := nil;
   FEditor.OnExit := nil;
+  FSpinEditor.OnKeyDown := nil;   FSpinEditor.OnExit := nil;
+  FSliderEditor.OnKeyDown := nil; FSliderEditor.OnExit := nil;
+  FMemoEditor.OnKeyDown := nil;   FMemoEditor.OnExit := nil;
+  FCalcEditor.OnKeyDown := nil;   FCalcEditor.OnExit := nil;
+  FMaskEditor.OnKeyDown := nil;   FMaskEditor.OnExit := nil;
+  FPickEditor.OnKeyDown := nil;
   FPickEditor.OnChange := nil;
   FPickEditor.OnExit := nil;
+  FDateEditor.OnKeyDown := nil;
   FDateEditor.OnExit := nil;
+  FFilterEditor.OnKeyDown := nil;
+  FFilterEditor.OnChange := nil;
+  FFilterEditor.OnExit := nil;
   FCells.Free;
   FTreeCollapsed.Free;
   FFilterText.Free;
@@ -9212,6 +9245,10 @@ begin
       Home/End 不翻:它们是**逻辑**首尾,答的恒是第一/最后一列
       (RTL 下第一列在屏幕右边,Home 仍然去那里)。
       选区锚点与角落也不翻:它们存的是列**下标**,和像素无关。 }
+    { The backstop for abandoning an edit. Every editor now cancels on Esc itself, but a
+      HOST editor supplied through OnCreateEditLink is the grid's guest and carries no such
+      wiring -- when focus is on the grid rather than inside that guest, this is the way out. }
+    VK_ESCAPE: if FEditing then begin EndEdit(False); Key := 0; end;
     VK_LEFT:  begin MoveCursor(FCol + ArrowColStep(-1), FRow); Key := 0; end;
     VK_RIGHT: begin MoveCursor(FCol + ArrowColStep(1), FRow); Key := 0; end;
     VK_UP:    begin MoveCursor(FCol, FRow - 1); Key := 0; end;
@@ -15387,6 +15424,42 @@ begin
     VK_ESCAPE: begin EndEdit(False); Key := 0;
                  if HandleAllocated and CanFocus then SetFocus; end;
   end;
+end;
+
+function TTyStringGrid.EditorCanCancelForTest: Boolean;
+begin
+  Result := False;
+  if not FEditing then Exit;
+  if FEditLink <> nil then Exit;             { 宿主的编辑器,宿主自己管键 }
+  if FPickEditor.Visible   then Exit(Assigned(FPickEditor.OnKeyDown));
+  if FDateEditor.Visible   then Exit(Assigned(FDateEditor.OnKeyDown));
+  if FSpinEditor.Visible   then Exit(Assigned(FSpinEditor.OnKeyDown));
+  if FSliderEditor.Visible then Exit(Assigned(FSliderEditor.OnKeyDown));
+  if FMemoEditor.Visible   then Exit(Assigned(FMemoEditor.OnKeyDown));
+  if FCalcEditor.Visible   then Exit(Assigned(FCalcEditor.OnKeyDown));
+  if FMaskEditor.Visible   then Exit(Assigned(FMaskEditor.OnKeyDown));
+  Result := Assigned(FEditor.OnKeyDown);
+end;
+
+procedure TTyStringGrid.EditorCancelKeyDown(Sender: TObject; var Key: Word;
+  Shift: TShiftState);
+begin
+  if Key <> VK_ESCAPE then Exit;
+  EndEdit(False);
+  Key := 0;
+  if HandleAllocated and CanFocus then SetFocus;
+end;
+
+procedure TTyStringGrid.PickEditorKeyDown(Sender: TObject; var Key: Word;
+  Shift: TShiftState);
+begin
+  if Key <> VK_ESCAPE then Exit;
+  { An open dropdown owns the key -- Esc there means "close the list", not "abandon the cell",
+    and swallowing it would make the two gestures indistinguishable. }
+  if FPickEditor.DroppedDown then Exit;
+  EndEdit(False);
+  Key := 0;
+  if HandleAllocated and CanFocus then SetFocus;
 end;
 
 procedure TTyStringGrid.EditorKeyPress(Sender: TObject; var Key: Char);
