@@ -2288,7 +2288,15 @@ begin
     // incl. StyleOverride) + same controller fallback as ApplyWindowEffects, so the two stay in
     // lock-step across first show / theme switch / live override flip / maximize-restore.
     if FController <> nil then ctrl := FController else ctrl := TyDefaultController;
-    noFrame := not TyResolveWindowEffect(ResolveChromeStyle(ctrl), False).Shadow;
+    { XP has no DWM, so the frame it was keeping held a shadow that never arrived -- while the
+      OS legacy-painted its own Luna ring in those bands, and repainted a classic caption over
+      our chrome every time a dropdown stole activation. Full-frame-eat settles both (it is
+      what ApplyThickFrame keys its WS_CAPTION removal off) and costs nothing there: XP has
+      neither the shadow nor the snap gestures that mode gives up. Gated on the OS VERSION,
+      not on composition -- Vista/7 keep exactly the handling they have. }
+    noFrame := TyNcFullFrameEat(
+      TyResolveWindowEffect(ResolveChromeStyle(ctrl), False).Shadow,
+      TyOsLegacyNonClient);
     maxed := (FEngine <> nil) and FEngine.Maximized;
     TyNcApplyResize(Self, resiz, zone, capH,
       maxed,                                    // engine (work-area) maximize -> no NC inset
