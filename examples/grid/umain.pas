@@ -114,13 +114,14 @@ type
     ChkAutoGrow, ChkFillSeries: TTyCheckBox;
 
     PgEvents: TTyTabSheet;
-    LblEvHint, LblEvTip: TTyLabel;
+    LblEvHint, LblEvTip, LblEvValidateTip: TTyLabel;
     TbEv1, TbEv2: TTyPanel;
     GridEvents: TTyStringGrid;
     ChkEvHint, ChkEvLockRow, ChkEvRightClick, ChkEvHeader, ChkEvSize,
       ChkEvColMove, ChkEvCheck, ChkEvClip,
       ChkEvRowMove, ChkEvEditorProp,
       ChkEvReturn, ChkEvScrollHint, ChkEvCanEdit, ChkEvEditChange,
+      ChkEvValidate,
       ChkEvCellEdited, ChkEvRowVeto, ChkEvSelectCell,
       ChkEvClick, ChkEvRating, ChkEvCanSort, ChkEvCompare,
       ChkEvFilterRow, ChkEvFilterVals, ChkEvPickList,
@@ -280,6 +281,8 @@ type
       var AAllow: Boolean);
     procedure EvEditChange(Sender: TObject; ACol, ARow: Integer;
       const AText: string);
+    procedure EvValidateCell(Sender: TObject; ACol, ARow: Integer;
+      const AOldText, ANewText: string; var AValid: Boolean);
     procedure EvCellEdited(Sender: TObject; ACol, ARow: Integer;
       const AOldText, ANewText: string; var AAccept: Boolean);
     procedure EvCanInsertRow(Sender: TObject; ARow: Integer;
@@ -606,6 +609,8 @@ resourcestring
   rsTypingFmt    = 'Typing at (%d, %d): "%s" — fired on every keystroke, not on commit';
   rsCommitVetoFmt = '(%d, %d) may not be cleared — the commit was vetoed, the cell still holds "%s"';
   rsCellEditedFmt = '(%d, %d):「%s」→「%s」';
+  rsValidateRefusedFmt = 'Qty "%s" refused — a positive whole number is needed. Fix it, or press Esc to abandon';
+  rsValidateOkFmt = 'Qty at (%d, %d) accepted: %s';
   rsInsertVetoed = 'Insertion vetoed — not a single row was inserted (in the plural version, if any row is vetoed the whole batch is skipped)';
   rsDeleteVetoed = 'Deletion vetoed';
   rsCol0NoCursor = 'The cursor cannot enter column 0 — the arrow keys skip straight over it';
@@ -2705,6 +2710,9 @@ begin
   if ChkEvCellEdited.Checked then GridEvents.OnCellEdited := @EvCellEdited
   else GridEvents.OnCellEdited := nil;
 
+  if ChkEvValidate.Checked then GridEvents.OnValidateCell := @EvValidateCell
+  else GridEvents.OnValidateCell := nil;
+
   if ChkEvRowVeto.Checked then
   begin
     GridEvents.OnCanInsertRow := @EvCanInsertRow;
@@ -2800,6 +2808,23 @@ begin
   end
   else
     Status(Format(rsCellEditedFmt, [ACol, ARow, AOldText, ANewText]));
+end;
+
+{ OnValidateCell gates LEAVING the cell, not writing it: answer AValid := False and the
+  editor stays where it is until the value is fixed or Esc abandons it. Only the Qty column
+  is judged here; every other column passes untouched. Clicking a control OUTSIDE the grid
+  counts as abandoning -- the old value comes back. }
+procedure TMainForm.EvValidateCell(Sender: TObject; ACol, ARow: Integer;
+  const AOldText, ANewText: string; var AValid: Boolean);
+var
+  n: Integer;
+begin
+  if ACol <> 3 then Exit;
+  AValid := TryStrToInt(Trim(ANewText), n) and (n > 0);
+  if AValid then
+    Status(Format(rsValidateOkFmt, [ACol, ARow, ANewText]))
+  else
+    Status(Format(rsValidateRefusedFmt, [ANewText]));
 end;
 
 procedure TMainForm.EvCanInsertRow(Sender: TObject; ARow: Integer;
