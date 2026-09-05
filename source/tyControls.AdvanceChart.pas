@@ -59,6 +59,14 @@ type
     FDirty: Boolean;
     FLastRect: TTyRectF;
     FOptionText: string;
+    { THE STATIC LAYER. Everything whose appearance is decided by the model --
+      frame, axes, grid, labels -- rendered once and blitted per frame.
+
+      FStaticPPI is part of the key and TTyPaintCache is not: NeedsRender only
+      notices a SIZE change, and a per-monitor DPI move can hand the same size
+      at a different PPI. }
+    FStatic: TTyPaintCache;
+    FStaticPPI: Integer;
     procedure SetOptionText(const AValue: string);
     function GetOptionText: string;
     function GetErrorText: string;
@@ -74,6 +82,18 @@ type
     procedure PaintAxis(APainter: TTyPainter; AAxis: TTyAxis;
       const APlot: TTyRectF; APPI: Integer; AGrid: TTyGridBuild;
       const AMeasurer: ITyTextMeasurer);
+    { THE TWO LAYERS, split by what makes them change rather than by what they
+      look like. Static is everything the model decides; dynamic is what moves
+      while the model stands still. }
+    procedure PaintStatic(APainter: TTyPainter; const ARect: TRect;
+      APPI: Integer; const AMeasurer: ITyTextMeasurer);
+    procedure PaintDynamic(APainter: TTyPainter; const ARect: TRect;
+      APPI: Integer; const AMeasurer: ITyTextMeasurer);
+    { Whether the dynamic layer would draw anything. False skips a whole
+      painter -- a BGRA bitmap the size of the control, filled, blitted and
+      freed -- which is most of a frame when there is nothing moving. }
+    function HasDynamicContent: Boolean;
+    procedure DropStatic;
   protected
     function GetStyleTypeKey: string; override;
     procedure Resize; override;
@@ -81,11 +101,27 @@ type
       a headless test renders through it onto an offscreen bitmap, and it
       bypasses the on-screen paint path entirely. }
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    { The layered path: the static cache blitted, then the dynamic layer over
+      it. Separate from RenderTo because RenderTo is what an export and a
+      headless test want -- everything, unconditionally, onto the canvas they
+      named. This one is what a WINDOW wants, and works in client space:
+      TTyPaintCache.Blit draws at the canvas origin. }
+    procedure RenderCached(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     procedure Invalidate; override;
+    { REPAINT WITHOUT REBUILDING. Invalidate means "the model may have moved":
+      it rebuilds, re-measures and re-renders the static layer, because a theme
+      change arrives as a bare Invalidate and there is no StyleChanged hook to
+      tell the two apart. This one means "the same model, one frame on" -- the
+      static layer is kept and only the dynamic layer is redrawn.
+
+      An animation tick calls this. Calling Invalidate instead would rebuild the
+      stores and re-measure every label sixty times a second, which is the
+      difference between a frame costing a blit and a frame costing 51 ms. }
+    procedure InvalidateFrame;
     { Everything the option said that could not be honoured -- a misspelled axis
       type, a series naming an axis that does not exist. A chart that silently
       drops what it cannot draw is a chart that lies, so these are readable
@@ -170,6 +206,9 @@ begin
   DropBuild;
   FreeAndNil(FIndex);
   FreeAndNil(FOption);
+  { The static layer owns a TBitmap. TTyPaintCache.Drop only marks it stale --
+    it keeps the surface deliberately, for reuse -- so dropping is not freeing. }
+  FreeAndNil(FStatic);
   inherited Destroy;
 end;
 
@@ -248,6 +287,18 @@ begin
     from the labels. Cheaper to redo than to be wrong about, and a chart is not
     invalidated on mouse movement. }
   FDirty := True;
+  { AND THE STATIC LAYER GOES. It holds a picture drawn in the theme's font at
+    the theme's colours; the whole reason this method treats every invalidate
+    as a relayout is that a theme change arrives as a bare Invalidate, and a
+    kept cache would blit the old theme over the new one. }
+  DropStatic;
+  inherited Invalidate;
+end;
+
+procedure TTyAdvanceChart.InvalidateFrame;
+begin
+  { The static layer is KEPT -- see the declaration. This is the repaint an
+    animation tick asks for: same model, same layout, same axes, one frame on. }
   inherited Invalidate;
 end;
 
@@ -753,30 +804,126 @@ begin
       measured from zero. }
     R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
     P.BeginPaint(ACanvas, ARect, APPI);
-    { Resolved at REST on purpose. The plot rect is measured from the label
-      font, and a geometry that read the focused style would move the whole
-      chart the moment it took focus. }
-    boxStyle := ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass,
-      [tysNormal]);
-    { Mandatory first draw, and it does more than a fill: parent backdrop,
-      opacity, shadow, background, border, and the corner gaps a windowed
-      control cannot get from a shadow it is not allowed to cast. }
-    DrawFrame(P, R, boxStyle);
+    PaintStatic(P, R, APPI, measurer);
+    PaintDynamic(P, R, APPI, measurer);
+    P.EndPaint;
+  finally
+    P.Free;
+  end;
+end;
 
-    plotF := TyRectF(R.Left, R.Top, R.Right, R.Bottom);
-    if FDirty or (plotF.Right <> FLastRect.Right) or (plotF.Bottom <> FLastRect.Bottom) then
-      Relayout(P, plotF, APPI, measurer);
+procedure TTyAdvanceChart.PaintStatic(APainter: TTyPainter; const ARect: TRect;
+  APPI: Integer; const AMeasurer: ITyTextMeasurer);
+var
+  boxStyle: TTyStyleSet;
+  plotF: TTyRectF;
+  g, a: Integer;
+  gb: TTyGridBuild;
+begin
+  { Resolved at REST on purpose. The plot rect is measured from the label
+    font, and a geometry that read the focused style would move the whole
+    chart the moment it took focus. }
+  boxStyle := ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass,
+    [tysNormal]);
+  { Mandatory first draw, and it does more than a fill: parent backdrop,
+    opacity, shadow, background, border, and the corner gaps a windowed
+    control cannot get from a shadow it is not allowed to cast. }
+  DrawFrame(APainter, ARect, boxStyle);
 
-    if FBuild <> nil then
-      for g := 0 to FBuild.GridCount - 1 do
-      begin
-        gb := FBuild.Grid(g);
-        for a := 0 to gb.XAxisCount - 1 do
-          PaintAxis(P, gb.XAxis(a), gb.PlotRect, APPI, gb, measurer);
-        for a := 0 to gb.YAxisCount - 1 do
-          PaintAxis(P, gb.YAxis(a), gb.PlotRect, APPI, gb, measurer);
-      end;
+  plotF := TyRectF(ARect.Left, ARect.Top, ARect.Right, ARect.Bottom);
+  if FDirty or (plotF.Right <> FLastRect.Right)
+    or (plotF.Bottom <> FLastRect.Bottom) then
+    Relayout(APainter, plotF, APPI, AMeasurer);
 
+  if FBuild <> nil then
+    for g := 0 to FBuild.GridCount - 1 do
+    begin
+      gb := FBuild.Grid(g);
+      for a := 0 to gb.XAxisCount - 1 do
+        PaintAxis(APainter, gb.XAxis(a), gb.PlotRect, APPI, gb, AMeasurer);
+      for a := 0 to gb.YAxisCount - 1 do
+        PaintAxis(APainter, gb.YAxis(a), gb.PlotRect, APPI, gb, AMeasurer);
+    end;
+end;
+
+procedure TTyAdvanceChart.PaintDynamic(APainter: TTyPainter; const ARect: TRect;
+  APPI: Integer; const AMeasurer: ITyTextMeasurer);
+begin
+  { NOTHING YET, and the empty body is the point of this commit rather than an
+    omission: series marks, entry animation and the four-state highlight are
+    Tier 1, and the layer they will draw into has to exist before the first of
+    them is written or the first one written will draw into the static cache
+    and freeze there.
+
+    WHEN THIS STOPS BEING EMPTY, HasDynamicContent must start answering True,
+    or RenderCached will skip the pass entirely. And what is drawn here is
+    composited OVER the blitted static layer -- BeginPaint fills its bitmap
+    transparent and EndPaint blends it (TBGRABitmap.Draw with AOpaque = False),
+    so an overlay painter adds ink without erasing what is underneath. That is
+    what makes two painters onto one canvas correct. }
+end;
+
+function TTyAdvanceChart.HasDynamicContent: Boolean;
+begin
+  { False until Tier 1 puts something in PaintDynamic. It is a function rather
+    than a constant so the answer can become a real question -- "is anything
+    animating, is anything hovered" -- without every caller changing. }
+  Result := False;
+end;
+
+procedure TTyAdvanceChart.DropStatic;
+begin
+  if FStatic <> nil then FStatic.Drop;
+end;
+
+procedure TTyAdvanceChart.RenderCached(ACanvas: TCanvas; const ARect: TRect;
+  APPI: Integer);
+var
+  P: TTyPainter;
+  R: TRect;
+  w, h: Integer;
+  measurer: ITyTextMeasurer;
+begin
+  w := ARect.Right - ARect.Left;
+  h := ARect.Bottom - ARect.Top;
+  if (w <= 0) or (h <= 0) then Exit;
+  R := Rect(0, 0, w, h);
+
+  if FStatic = nil then FStatic := TTyPaintCache.Create;
+  { PPI IS PART OF THE KEY and TTyPaintCache does not know it: NeedsRender only
+    notices a size change, and a per-monitor DPI move can hand back the same
+    size at a different PPI -- a chart drawn for 96 blitted onto a 192 window. }
+  if APPI <> FStaticPPI then
+  begin
+    FStatic.Drop;
+    FStaticPPI := APPI;
+  end;
+
+  if FStatic.NeedsRender(w, h) then
+  begin
+    measurer := TTyPainterTextMeasurer.Create(APPI);
+    P := TTyPainter.Create;
+    try
+      P.BeginPaint(FStatic.Canvas, R, APPI);
+      PaintStatic(P, R, APPI, measurer);
+      P.EndPaint;
+    finally
+      P.Free;
+    end;
+  end;
+  FStatic.Blit(ACanvas);
+
+  { A SECOND PAINTER ONLY WHEN THERE IS SOMETHING TO PUT IN IT. Creating one
+    means allocating a BGRA bitmap the size of the control, filling it,
+    blending it and freeing it -- roughly the 13 ms floor a frame has even with
+    no axes, so paying it to draw nothing would give back most of what the
+    cache just saved. }
+  if not HasDynamicContent then Exit;
+  measurer := TTyPainterTextMeasurer.Create(APPI);
+  P := TTyPainter.Create;
+  try
+    P.BeginPaint(ACanvas, ARect, APPI);
+    PaintDynamic(P, R, APPI, measurer);
     P.EndPaint;
   finally
     P.Free;
@@ -785,7 +932,16 @@ end;
 
 procedure TTyAdvanceChart.Paint;
 begin
-  RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
+  { THE DESIGNER RENDERS STRAIGHT THROUGH, as TTyPanel's does: it repaints
+    rarely and streams while it does, so a cache buys nothing there and is one
+    more thing that can be holding a frame from before the last property
+    change. }
+  if csDesigning in ComponentState then
+  begin
+    RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
+    Exit;
+  end;
+  RenderCached(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
 procedure TTyAdvanceChart.SaveToPng(const AFileName: string);

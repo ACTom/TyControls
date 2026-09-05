@@ -17,13 +17,17 @@ uses Classes, SysUtils, Math, Controls, Graphics, Forms, fpcunit, testregistry,
      tyControls.AdvChart.Types, tyControls.AdvChart.Coord,
      tyControls.AdvChart.Builder, tyControls.AdvChart.Scale,
      tyControls.AdvChart.Layout,
-     LazUTF8,
+     LazUTF8, tyControls.Painter,
      tyControls.AdvanceChart;
 type
   { Re-exposes the protected render so a test can drive it onto a bitmap. }
   TChartProbe = class(TTyAdvanceChart)
   public
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    { The LAYERED path, the one Paint takes. Exposed for the same reason Render
+      is: Paint needs a handle and a message loop, and a headless test has
+      neither. }
+    procedure RenderLayered(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     function TypeKey: string;
   end;
 
@@ -66,6 +70,8 @@ type
     procedure TestMaxIntervalCapsTheStep;
     procedure TestAValueAxisBoundaryGapPadsTheExtent;
     procedure TestACrowdedAxisThinsItsLabels;
+    procedure TestALayeredFrameDrawsTheSamePictureAsAWholeOne;
+    procedure TestAKeptStaticLayerDoesNoWorkAndInvalidateDropsIt;
     procedure TestTheLayoutOwnsTheThinningDecision;
     procedure TestTheGridThinsWithTheLabels;
     procedure TestMinorTicksVanishWhenTheMajorsAreThinned;
@@ -81,6 +87,12 @@ implementation
 procedure TChartProbe.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   RenderTo(ACanvas, ARect, APPI);
+end;
+
+procedure TChartProbe.RenderLayered(ACanvas: TCanvas; const ARect: TRect;
+  APPI: Integer);
+begin
+  RenderCached(ACanvas, ARect, APPI);
 end;
 
 function TChartProbe.TypeKey: string;
@@ -1387,6 +1399,144 @@ begin
   AssertTrue('the crowded fixture really thins',
     gb.SpecFor(gb.XAxis(0))^.LabelStep > 1);
   AssertEquals('and then it draws no minor ticks at all', 0, crowded);
+end;
+
+procedure TAdvanceChartTest.TestALayeredFrameDrawsTheSamePictureAsAWholeOne;
+var
+  whole, layered: TBGRABitmap;
+  x, y, differing: Integer;
+  a, b: TBGRAPixel;
+begin
+  { THE LAYERED PATH MUST BE INVISIBLE. It renders the static half into a cache
+    and blits it; if that changed a single pixel, every chart on screen would
+    differ from every chart exported, and the export path is what the goldens
+    and the example screenshots go through.
+
+    Compared against RenderTo rather than against stored numbers, so the
+    assertion stays true when the drawing changes. }
+  FChart.Option := '{ xAxis: { data: [''A'', ''B'', ''C''], name: ''X'' },'
+    + ' yAxis: { min: 0, max: 100 },'
+    + ' series: [{ type: ''bar'', data: [10, 40, 70] }] }';
+
+  whole := TBGRABitmap.Create(400, 300, BGRA(255, 0, 255, 255));
+  layered := TBGRABitmap.Create(400, 300, BGRA(255, 0, 255, 255));
+  try
+    FChart.SetBounds(0, 0, 400, 300);
+    FChart.Render(whole.Canvas, Rect(0, 0, 400, 300), 96);
+    FChart.RenderLayered(layered.Canvas, Rect(0, 0, 400, 300), 96);
+
+    differing := 0;
+    for y := 0 to 299 do
+      for x := 0 to 399 do
+      begin
+        a := whole.GetPixel(x, y);
+        b := layered.GetPixel(x, y);
+        if (a.red <> b.red) or (a.green <> b.green) or (a.blue <> b.blue) then
+          Inc(differing);
+      end;
+    AssertEquals('a layered frame differs from a whole one', 0, differing);
+
+    { AND AGAIN FROM THE CACHE, which is the path a second frame takes -- the
+      first call rendered into the cache, this one only blits it. }
+    layered.Fill(BGRA(255, 0, 255, 255));
+    FChart.RenderLayered(layered.Canvas, Rect(0, 0, 400, 300), 96);
+    differing := 0;
+    for y := 0 to 299 do
+      for x := 0 to 399 do
+      begin
+        a := whole.GetPixel(x, y);
+        b := layered.GetPixel(x, y);
+        if (a.red <> b.red) or (a.green <> b.green) or (a.blue <> b.blue) then
+          Inc(differing);
+      end;
+    AssertEquals('a blitted frame differs from a drawn one', 0, differing);
+
+    { THE SAME SIZE AT A DIFFERENT PPI IS A DIFFERENT PICTURE, and
+      TTyPaintCache cannot see it: NeedsRender compares width and height and
+      nothing else. A per-monitor DPI move hands back exactly this -- the same
+      client size, a new PPI -- so without the chart keying on PPI itself, a
+      chart drawn for 96 would be blitted onto a 144 window at 96's text and
+      tick sizes.
+
+      Compared against the 96 picture rather than against numbers: what must be
+      true is that it CHANGED, not what it changed to. }
+    layered.Fill(BGRA(255, 0, 255, 255));
+    FChart.RenderLayered(layered.Canvas, Rect(0, 0, 400, 300), 144);
+    differing := 0;
+    for y := 0 to 299 do
+      for x := 0 to 399 do
+      begin
+        a := whole.GetPixel(x, y);
+        b := layered.GetPixel(x, y);
+        if (a.red <> b.red) or (a.green <> b.green) or (a.blue <> b.blue) then
+          Inc(differing);
+      end;
+    AssertTrue('the same size at 144 PPI was served from the 96 cache',
+      differing > 200);
+  finally
+    layered.Free;
+    whole.Free;
+  end;
+end;
+
+procedure TAdvanceChartTest.TestAKeptStaticLayerDoesNoWorkAndInvalidateDropsIt;
+
+  { Every text measurement the memo saw, hits and misses together. A frame that
+    re-renders the static layer measures labels; a frame that blits it measures
+    nothing, so this number standing still IS the cache working. }
+  function Measurements: Int64;
+  var h, m: Int64; e: Integer;
+  begin
+    TyTextMeasureCacheStats(h, m, e);
+    Result := h + m;
+  end;
+
+var
+  bmp: TBGRABitmap;
+  before: Int64;
+
+  procedure Frame;
+  begin
+    FChart.RenderLayered(bmp.Canvas, Rect(0, 0, 400, 300), 96);
+  end;
+
+begin
+  { THE CONTRACT BETWEEN THE TWO INVALIDATES, which is the whole point of the
+    layer: Invalidate means "the model may have moved" and must redraw the
+    static half, because a theme change arrives as a bare Invalidate and there
+    is no hook to tell the two apart. InvalidateFrame means "same model, one
+    frame on" and must not.
+
+    Asserted through the measurement counters rather than a stopwatch: a
+    timing test on CI is a coin toss, and what actually makes the frame cheap
+    is that no label gets measured. }
+  FChart.Option := '{ xAxis: { data: [''A'', ''B'', ''C''] }, yAxis: {},'
+    + ' series: [{ type: ''bar'', data: [1, 2, 3] }] }';
+  bmp := TBGRABitmap.Create(400, 300, BGRA(255, 0, 255, 255));
+  try
+    FChart.SetBounds(0, 0, 400, 300);
+    Frame;                       { renders the static layer }
+
+    before := Measurements;
+    Frame;
+    AssertEquals('a second frame measures nothing at all', before,
+      Measurements);
+
+    FChart.InvalidateFrame;
+    Frame;
+    AssertEquals('and neither does one after InvalidateFrame', before,
+      Measurements);
+
+    { INVALIDATE DROPS IT. The static layer is re-rendered, which means the
+      labels are measured again -- from the memo, so they are hits, but they
+      are counted. }
+    FChart.Invalidate;
+    Frame;
+    AssertTrue('Invalidate re-renders the static layer',
+      Measurements > before);
+  finally
+    bmp.Free;
+  end;
 end;
 
 initialization

@@ -22,11 +22,21 @@ type
   TChartProbe = class(TTyAdvanceChart)
   public
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    { The LAYERED path -- the one Paint takes. Exposed because Paint needs a
+      handle and a message loop and this bench has neither, and measuring
+      RenderTo instead would measure the path the static layer bypasses. }
+    procedure RenderLayered(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
   end;
 
 procedure TChartProbe.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   RenderTo(ACanvas, ARect, APPI);
+end;
+
+procedure TChartProbe.RenderLayered(ACanvas: TCanvas; const ARect: TRect;
+  APPI: Integer);
+begin
+  RenderCached(ACanvas, ARect, APPI);
 end;
 
 var GSameLabel: Boolean = False;
@@ -76,6 +86,9 @@ var
 procedure DoParse; begin chart.Option := ''; chart.Option := GText; end;
 procedure DoPaint; begin chart.Render(bmp.Canvas, Rect(0, 0, W, H), 96); end;
 procedure DoTick;  begin chart.Invalidate; chart.Render(bmp.Canvas, Rect(0, 0, W, H), 96); end;
+{ A frame with the static layer standing: what an animation tick costs once
+  InvalidateFrame is what a tick calls. }
+procedure DoFrame; begin chart.RenderLayered(bmp.Canvas, Rect(0, 0, W, H), 96); end;
 
 procedure Bench(const AName: string; APoints: Integer; AWithBars: Boolean;
   ANoAxes: Boolean = False);
@@ -92,7 +105,9 @@ begin
   parse := MsPer(10, 'parse (Option := text)', @DoParse);
   DoPaint;                      { leave it built and clean }
   paint := MsPer(GIters, 'paint only (clean, FDirty = False)', @DoPaint);
-  tick  := MsPer(GIters, 'animation tick TODAY (Invalidate+paint)', @DoTick);
+  tick  := MsPer(GIters, 'animation tick, model rebuilt (Invalidate+paint)', @DoTick);
+  DoFrame;   { warm the static layer }
+  MsPer(GIters, 'animation tick, static layer standing', @DoFrame);
   WriteLn(Format('  %-42s %8.2f ms', ['=> build alone (tick - paint)', tick - paint]));
   WriteLn(Format('  %-42s %8.1f fps', ['=> if a tick cost only the paint', 1000 / paint]));
   WriteLn(Format('  %-42s %8.1f fps', ['=> at today''s tick cost', 1000 / tick]));
