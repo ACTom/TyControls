@@ -52,6 +52,7 @@ type
     procedure TestTheTicksThemselvesAreDrawn;
     procedure TestAHiddenAxisIsNotDrawn;
     procedure TestTheAxisHonoursMinMaxAndInterval;
+    procedure TestCategoriesCollectedFromSeriesDataReachTheAxis;
     procedure TestAnUnnaturalIntervalIsNotRoundedAway;
     procedure TestACrowdedAxisThinsItsLabels;
     procedure TestResizingRelaysOutTheAxes;
@@ -925,6 +926,48 @@ begin
   for i := 0 to High(ticks) do
     if ticks[i].Level = 0 then Inc(majors);
   AssertEquals('0, 30, 60, 90, 120', 5, majors);
+end;
+
+procedure TAdvanceChartTest.TestCategoriesCollectedFromSeriesDataReachTheAxis;
+var
+  ax: TTyAxis;
+  ticks: TTyScaleTickArray;
+  i, majors: Integer;
+begin
+  { NO xAxis.data. The names live in the series rows, which is the case ordinal
+    interning exists for -- a fixed category list needs no collecting.
+
+    The interning half was wired and the consuming half was not:
+    SetExtentFromCategories ran during axis construction, when the list was
+    still empty, and again only from SetCategories, which needs an xAxis.data.
+    Nothing re-derived the extent after the rows landed, so the store interned
+    three categories and the axis reported one -- a single band across the whole
+    plot with every point on top of it. }
+  FChart.Option := '{ xAxis: { type: ''category'' }, yAxis: {},'
+    + ' series: [{ type: ''bar'', data: ['
+    + ' [''Mon'', 1], [''Tue'', 2], [''Wed'', 3] ] }] }';
+  Draw;
+  ax := FChart.Build.Grid(0).XAxis(0);
+
+  AssertEquals('all three names became categories', 3,
+    TTyOrdinalScale(ax.Scale).CategoryCount);
+  AssertTrue('and the last one is on the axis, not off the end',
+    ax.Scale.Contain(2));
+
+  { The band is the visible consequence: one category over the whole plot is
+    what the bug looked like, and a count alone would not have caught a band
+    still derived from the old extent. }
+  AssertTrue(Format('a band is a third of the plot, not all of it (%.1f of '
+    + '%.1f)', [ax.BandWidth, FChart.Build.Grid(0).PlotRect.Right
+    - FChart.Build.Grid(0).PlotRect.Left]),
+    ax.BandWidth < (FChart.Build.Grid(0).PlotRect.Right
+                  - FChart.Build.Grid(0).PlotRect.Left) / 2);
+
+  ticks := ax.Scale.GetTicks;
+  majors := 0;
+  for i := 0 to High(ticks) do
+    if ticks[i].Level = 0 then Inc(majors);
+  AssertEquals('one tick per collected category', 3, majors);
 end;
 
 initialization

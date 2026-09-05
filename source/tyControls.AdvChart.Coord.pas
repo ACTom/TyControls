@@ -582,9 +582,11 @@ end;
 
 function TTyCartesian2D.DataToLayout(const AData: array of Double): TTyCoordLayout;
 var
-  ax, ay: TTyAxis;
+  ax, ay, spine, across, b: TTyAxis;
   p: TTyPointF;
-  hw, baseY, half: Double;
+  halfSpine, baseline, half: Double;
+  sAnchor, aAnchor, sMin, sMax, aMin, aMax: Double;
+  spineIsX: Boolean;
 begin
   Result.Rect := TyInvalidRectF;
   Result.ContentRect := TyInvalidRectF;
@@ -595,16 +597,62 @@ begin
   p := DataToPoint(AData);
   if IsNan(p.X) or IsNan(p.Y) then
     Exit;
-  { The cell is one band wide and runs from the value axis' baseline to the
-    datum — which is exactly a bar, and exactly the rect a nested chart would be
-    given. A continuous axis has no band, so the cell collapses onto the anchor
-    rather than inventing a width. }
-  if ax.BandWidth > 0 then
-    hw := ax.BandWidth / 2
+
+  { WHICH AXIS IS THE SPINE IS A QUESTION THIS CLASS ALREADY ANSWERS.
+    GetBaseAxis is "the axis a series is laid out ALONG"; the other carries the
+    value. This used to assume the spine was x, so a horizontal bar got a cell
+    of zero width and a heatmap with categories on both axes got one running
+    from the first category's centre to the datum's.
+
+    Only the ORIENTATION comes from GetBaseAxis; the masters are then used --
+    the same two axes DataToPoint just used for the anchor. Taking the axis
+    object itself could hand back a sub-axis and put the cell somewhere other
+    than around the point at its centre. }
+  b := GetBaseAxis;
+  spineIsX := (b = nil) or b.Horizontal;
+  if spineIsX then
+  begin
+    spine := ax;
+    across := ay;
+    sAnchor := p.X;
+    aAnchor := p.Y;
+  end
   else
-    hw := 0;
-  baseY := ay.DataToCoord(ay.Scale.GetExtent.Start);
-  Result.Rect := TyRectF(p.X - hw, Min(p.Y, baseY), p.X + hw, Max(p.Y, baseY));
+  begin
+    spine := ay;
+    across := ax;
+    sAnchor := p.Y;
+    aAnchor := p.X;
+  end;
+
+  { ALONG the spine: half a band either side. A continuous axis has no band, so
+    the cell collapses onto the anchor rather than inventing a width. }
+  if spine.BandWidth > 0 then
+    halfSpine := spine.BandWidth / 2
+  else
+    halfSpine := 0;
+  sMin := sAnchor - halfSpine;
+  sMax := sAnchor + halfSpine;
+
+  { ACROSS it, two shapes for two charts. A banded axis makes the cell one band
+    there too -- that is a heatmap cell. An unbanded one runs the cell from its
+    baseline to the datum -- that is a bar. }
+  if across.BandWidth > 0 then
+  begin
+    aMin := aAnchor - across.BandWidth / 2;
+    aMax := aAnchor + across.BandWidth / 2;
+  end
+  else
+  begin
+    baseline := across.DataToCoord(across.Scale.GetExtent.Start);
+    aMin := Min(aAnchor, baseline);
+    aMax := Max(aAnchor, baseline);
+  end;
+
+  if spineIsX then
+    Result.Rect := TyRectF(sMin, aMin, sMax, aMax)
+  else
+    Result.Rect := TyRectF(aMin, sMin, aMax, sMax);
   half := FDividerWidth / 2;
   Result.ContentRect := TyRectF(Result.Rect.Left + half, Result.Rect.Top + half,
                                 Result.Rect.Right - half, Result.Rect.Bottom - half);

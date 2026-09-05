@@ -1,8 +1,8 @@
 unit test.advchart.coord;
 {$mode objfpc}{$H+}
-{ CONTRACT 1 ACCEPTANCE (Tier 0 spec §8 items 3 and 4).
+{ CONTRACT 1 ACCEPTANCE (Tier 0 spec 搂8 items 3 and 4).
   DataToPoint / PointToData must round trip within half a pixel, and the rect
-  DataToLayout returns must contain the point DataToPoint returns — if those two
+  DataToLayout returns must contain the point DataToPoint returns 鈥?if those two
   can disagree, the pointer and the pixels can disagree, which is the single rule
   the TTySegmented discipline exists to enforce. }
 interface
@@ -24,6 +24,8 @@ type
     procedure TestContentRectIsInsideRect;
     procedure TestInvalidDataGivesInvalidPointAndRect;
     procedure TestThirdAxisIsAddressable;
+    procedure TestDataToLayoutFollowsTheCategoryAxisToY;
+    procedure TestDataToLayoutGivesAHeatmapCellBothItsBands;
   end;
 implementation
 
@@ -146,7 +148,7 @@ var c: TTyCartesian2D; p: TTyPointF;
 begin
   c := MakeCartesian(TyRectF(0, 0, 100, 100));
   try
-    { Clipping is the renderer's decision, not the coordinate system's — a datum
+    { Clipping is the renderer's decision, not the coordinate system's 鈥?a datum
       outside the extent must still get a real point, so a clipped line can be
       drawn towards it and cut at the boundary. }
     p := c.DataToPoint([20, 0]);
@@ -237,6 +239,114 @@ begin
     AssertEquals('and it has its own scale', 1.0, c.GetAxis(2).Scale.GetExtent.Stop, Eps);
   finally
     c.Free;
+  end;
+end;
+
+{ ============ the cell when the spine is not x ============ }
+
+{ A cartesian whose CATEGORY axis is y -- a horizontal bar chart. The mirror of
+  MakeCategoryCartesian, and the arrangement no fixture in this file built. }
+function MakeCategoryOnY(const ARect: TTyRectF; ACount: Integer): TTyCartesian2D;
+var
+  ay: TTyAxis;
+  sx: TTyIntervalScale;
+  cats: TTyStringArray;
+  i: Integer;
+begin
+  Result := TTyCartesian2D.Create;
+  sx := TTyIntervalScale.Create;
+  sx.SetExtent(TyRange(0, 100));
+  Result.AddAxis(TTyAxis.Create('x', sx, True));
+  ay := TTyAxis.Create('y', TTyOrdinalScale.Create, False);
+  { AxisType, not just an ordinal scale: GetBaseAxis branches on the declared
+    type rather than the scale class, and Builder.pas sets it from the option.
+    A fixture that skips it is a chart the builder cannot produce. }
+  ay.AxisType := atCategory;
+  SetLength(cats, ACount);
+  for i := 0 to ACount - 1 do
+    cats[i] := Chr(Ord('a') + i);
+  ay.SetCategories(cats);
+  ay.OnBand := True;
+  Result.AddAxis(ay);
+  Result.SetRect(ARect);
+end;
+
+{ Categories on BOTH axes -- a heatmap. }
+function MakeCategoryBoth(const ARect: TTyRectF;
+  ANX, ANY: Integer): TTyCartesian2D;
+var
+  ax, ay: TTyAxis;
+  cats: TTyStringArray;
+  i: Integer;
+begin
+  Result := TTyCartesian2D.Create;
+  ax := TTyAxis.Create('x', TTyOrdinalScale.Create, True);
+  ax.AxisType := atCategory;
+  SetLength(cats, ANX);
+  for i := 0 to ANX - 1 do cats[i] := Chr(Ord('a') + i);
+  ax.SetCategories(cats);
+  ax.OnBand := True;
+  Result.AddAxis(ax);
+  ay := TTyAxis.Create('y', TTyOrdinalScale.Create, False);
+  ay.AxisType := atCategory;
+  SetLength(cats, ANY);
+  for i := 0 to ANY - 1 do cats[i] := Chr(Ord('A') + i);
+  ay.SetCategories(cats);
+  ay.OnBand := True;
+  Result.AddAxis(ay);
+  Result.SetRect(ARect);
+end;
+
+procedure TAdvChartCartesianTest.TestDataToLayoutFollowsTheCategoryAxisToY;
+var
+  cs: TTyCartesian2D;
+  lay: TTyCoordLayout;
+  p: TTyPointF;
+begin
+  { A HORIZONTAL BAR. The cell is one band TALL and runs from the value axis'
+    baseline to the datum -- the mirror of the vertical case, and the old code
+    read MasterX for the band and MasterY for the baseline by name, so it
+    produced a cell of zero width standing on the wrong axis. }
+  cs := MakeCategoryOnY(TyRectF(0, 0, 400, 300), 5);
+  try
+    lay := cs.DataToLayout([50, 2]);
+    p := cs.DataToPoint([50, 2]);
+    AssertTrue('the cell is valid', TyRectFIsValid(lay.Rect));
+    AssertEquals('one band tall', 300 / 5, lay.Rect.Bottom - lay.Rect.Top, Eps);
+    AssertEquals('centred on the datum''s band', p.Y,
+      (lay.Rect.Top + lay.Rect.Bottom) / 2, Eps);
+    AssertTrue('and it has real width', lay.Rect.Right - lay.Rect.Left > 1);
+    AssertEquals('reaching from the value baseline to the datum', p.X,
+      lay.Rect.Right, Eps);
+    AssertEquals('which starts at x=0', 0.0, lay.Rect.Left, Eps);
+  finally
+    cs.Free;
+  end;
+end;
+
+procedure TAdvChartCartesianTest.TestDataToLayoutGivesAHeatmapCellBothItsBands;
+var
+  cs: TTyCartesian2D;
+  lay: TTyCoordLayout;
+  p: TTyPointF;
+begin
+  { A HEATMAP CELL is one band by one band. Spec section 2 has cartesian
+    implement DataToLayout precisely so heatmap's three upstream branches
+    collapse into one path here; with the value axis assumed to be y, the cell
+    ran from the first category's centre to the datum's -- growing with the row
+    index instead of being one row tall. }
+  cs := MakeCategoryBoth(TyRectF(0, 0, 400, 300), 5, 4);
+  try
+    lay := cs.DataToLayout([2, 2]);
+    p := cs.DataToPoint([2, 2]);
+    AssertTrue('the cell is valid', TyRectFIsValid(lay.Rect));
+    AssertEquals('one x band wide', 400 / 5, lay.Rect.Right - lay.Rect.Left, Eps);
+    AssertEquals('one y band tall', 300 / 4, lay.Rect.Bottom - lay.Rect.Top, Eps);
+    AssertEquals('centred on the anchor in x', p.X,
+      (lay.Rect.Left + lay.Rect.Right) / 2, Eps);
+    AssertEquals('and in y', p.Y, (lay.Rect.Top + lay.Rect.Bottom) / 2, Eps);
+  finally
+    cs.Free;
   end;
 end;
 

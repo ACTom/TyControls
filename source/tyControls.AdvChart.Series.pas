@@ -569,10 +569,23 @@ var
     filter: TTyExtentFilter;
   begin
     if AAxis = nil then Exit;
-    { A category axis' range is its category count. It comes from the axis and
-      never from the data, so a name the data never mentions still gets a band
-      and a bar chart does not shuffle when a value goes missing. }
-    if AAxis.AxisType = atCategory then Exit;
+    { A category axis' range is its category COUNT -- read off the axis, never
+      computed from the values, so a name the data never mentions still gets a
+      band and a bar chart does not shuffle when a value goes missing.
+
+      But the count has to be read AFTER the rows are in. An axis with no
+      `data` of its own collects its categories while the store parses, and
+      until this ran the extent was the one fixed during construction, when the
+      list was empty: one band across the whole plot with every point stacked
+      on it, and Contain(2) answering False for a category the store had
+      interned. Re-deriving is not "from the data" -- it is the same one place
+      the extent has always come from, asked once more now the list is full. }
+    if AAxis.AxisType = atCategory then
+    begin
+      if AAxis.Scale is TTyOrdinalScale then
+        TTyOrdinalScale(AAxis.Scale).SetExtentFromCategories;
+      Exit;
+    end;
 
     node := ObjAt(AOption, AMainType, AAxis.ComponentIndex);
     if AAxis.AxisType = atLog then filter := defPositive else filter := defNone;
