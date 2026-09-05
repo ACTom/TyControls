@@ -1922,6 +1922,14 @@ type
     AItems: TStrings) of object;
   TTyGridCellEditedEvent = procedure(Sender: TObject; ACol, ARow: Integer;
     const AOldText, ANewText: string; var AAccept: Boolean) of object;
+  { 在编辑**被允许关闭之前**触发,带着编辑器此刻的文本。置 AValid := False 就是拒绝:
+    编辑器留在原格、光标不动、不抢焦点,用户要么改对要么按 Esc 放弃。
+    只在文本确实改过时才问(没动过的格永远可以离开);只对**用户驱动**的关闭生效
+    (回车/Tab/方向键/点别的格/编辑器失焦)。结构性关闭(排序、插删行列、CSV 载入、
+    EditorMode := False)挡不住,但校验没过的值会被**丢弃**而不是写回 ——
+    所以非法值不管走哪条路都进不了单元格。本事件管"能不能离开";OnCellEdited 仍管"写不写"。 }
+  TTyGridValidateCellEvent = procedure(Sender: TObject; ACol, ARow: Integer;
+    const AOldText, ANewText: string; var AValid: Boolean) of object;
 
   { 完整体:自带**稀疏**单元格存储 + 二维光标 + 键鼠导航。
     稀疏的意思是只有写过的单元格才占内存 —— 100 万 x 100 的空表不花一分钱。 }
@@ -1960,6 +1968,8 @@ type
     FDefaultEditorKind: TTyGridEditorKind;
     FOnGetEditorKind: TTyGridGetEditorKindEvent;
     FOnCellEdited: TTyGridCellEditedEvent;
+    FOnValidateCell: TTyGridValidateCellEvent;
+    FValidatedPending: Boolean;   { TryEndEdit 刚问过宿主 —— EndEdit 别再问第二遍(宿主可能在弹框) }
     FOnCanEditCell:  TTyGridCanEditEvent;
     FOnEditChange:   TTyGridEditChangeEvent;
     FOnCanInsertRow: TTyGridCanRowEvent;
@@ -2170,6 +2180,9 @@ type
     procedure FilterEditorExit(Sender: TObject);
     procedure FilterDebounceTick(Sender: TObject);
     procedure EditorExit(Sender: TObject);
+    { 当前打开的编辑器此刻持有的文本,**不关闭任何东西**地读出来。EndEdit 也经它取值,
+      于是宿主校验时看到的字符串和最终写回的是同一个,不可能漂成两个。 }
+    function PendingEditText: string;
     function  CellKey(ACol, ARow: Integer): string;
     function  GetCells(ACol, ARow: Integer): string;
     procedure SetCells(ACol, ARow: Integer; const AValue: string);
@@ -2206,6 +2219,9 @@ type
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    { 焦点离开了**整个网格**才会到这里 —— 移到网格里的另一格时 LCL 的 CM_EXIT 只送到
+      编辑器为止。被校验拦下的编辑到这里就算放弃:走开和按 Esc 是同一种表态。 }
+    procedure DoExit; override;
     { 直接敲可打印字符就进编辑并把这个字符当作第一笔 —— 表格录入的基本手感。
       从前只有 KeyDown、没有 KeyPress 覆写,必须先按 F2 或双击才能输入。 }
     procedure KeyPress(var Key: Char); override;
@@ -2548,6 +2564,10 @@ type
     function BeginEdit(ACol, ARow: Integer): Boolean; overload;
     { 结束编辑。ACommit=True 写回存储(经 OnCellEdited 可否决)。 }
     procedure EndEdit(ACommit: Boolean);
+    { 可被否决的结束编辑:先问 OnValidateCell,不过就返回 False 并**什么都不动**
+      (编辑器留着、光标不动、不抢焦点);过了才真的 EndEdit。ACommit=False(放弃)
+      从不被否决。用户驱动的关闭走这里;结构性关闭仍走 EndEdit,那条路挡不住。 }
+    function TryEndEdit(ACommit: Boolean): Boolean;
     { 某个单元格是否在当前矩形选区内(锚点 ↔ 光标)。
       纵向按**显示序**判定 —— 选区是屏幕上的一块矩形,不是数据行号的区间;
       排序后行的相对位置变了,选区自然跟着屏幕走。 }
@@ -3011,6 +3031,7 @@ type
     property OnGetEditorKind: TTyGridGetEditorKindEvent
       read FOnGetEditorKind write FOnGetEditorKind;
     property OnCellEdited: TTyGridCellEditedEvent read FOnCellEdited write FOnCellEdited;
+    property OnValidateCell: TTyGridValidateCellEvent read FOnValidateCell write FOnValidateCell;
     property OnCanEditCell: TTyGridCanEditEvent
       read FOnCanEditCell write FOnCanEditCell;
     property OnEditChange: TTyGridEditChangeEvent
@@ -8900,8 +8921,10 @@ begin
   if FSkipReadOnly and (ARow = FRow) and (ACol <> FCol) then
     ACol := NextEditableCol(ACol, Sign(ACol - FCol), ARow);
 
-  { 光标要动了 —— 先把正在编辑的格提交掉,否则编辑框会悬在旧位置。 }
-  EndEdit(True);
+  { 光标要动了 —— 先把正在编辑的格提交掉,否则编辑框会悬在旧位置。
+    提交被校验拦下就**不动**:FCol/FRow 保持原样,这正是 OnSelectCell 否决时
+    调用方早已在读的那个"没动"信号(BeginEdit 靠它退出)。 }
+  if FEditing and not TryEndEdit(True) then Exit;
 
   canSel := True;
   if Assigned(FOnSelectCell) then FOnSelectCell(Self, ACol, ARow, canSel);
@@ -9278,7 +9301,7 @@ begin
                      Exit;
                    end;
                  end;
-                 if FEditing then EndEdit(True);
+                 if FEditing and not TryEndEdit(True) then begin Key := 0; Exit; end;
                  MoveCursor(FCol, FRow + 1);
                  Key := 0;
                end;
@@ -9289,7 +9312,7 @@ begin
                   LCL 靠 Key 还在不在来决定要不要换焦点,吞掉它就等于
                   "关了也还是不放行"。外面是 try..finally,直接 Exit 安全。 }
                 if not (goTabs in Options) then Exit;
-                if FEditing then EndEdit(True);
+                if FEditing and not TryEndEdit(True) then begin Key := 0; Exit; end;
                 { 折行时也要落在**可见**列上,别折到一个隐藏列里去。 }
                 if ssShift in Shift then
                 begin
@@ -9774,7 +9797,7 @@ begin
   if FilterRowHeightPx <= 0 then Exit;
 
   { 换列时先把上一列的输入落地,别让它随着控件移动而丢掉。 }
-  if FEditing then EndEdit(True);
+  if FEditing and not TryEndEdit(True) then Exit;   { 拦下的编辑上面不开筛选框 }
   if FFilterEditCol >= 0 then EndFilterEdit(True);
 
   bandTop := ScaleI(Header.Height) + GroupBandHeightPx;
@@ -10828,7 +10851,7 @@ var
 begin
   if not Assigned(FOnEllipsisClick) then Exit;
   if FReadOnly then Exit;
-  EndEdit(True);
+  if FEditing and not TryEndEdit(True) then Exit;   { 先把拦下的值改对,再谈省略号 }
   oldTxt := GetCellText(ACol, ARow);
   newTxt := oldTxt;
   accept := True;
@@ -15277,119 +15300,104 @@ begin
   Result := True;
 end;
 
+function TTyStringGrid.PendingEditText: string;
+begin
+  { 一次只会有一个编辑器可见,所以按可见性挑;日期与时间共用一个控件,得看开编辑时记下的种类
+    (从前一律当日期提交,时间格被写成 1899-12-30 —— 见旧 EndEdit 里的注释)。 }
+  if FEditLink <> nil then Exit(FEditLink.GetValue);
+  if FSpinEditor.Visible   then Exit(IntToStr(FSpinEditor.Value));
+  if FSliderEditor.Visible then Exit(IntToStr(FSliderEditor.Position));
+  if FMemoEditor.Visible   then Exit(FMemoEditor.Text);
+  if FMaskEditor.Visible   then Exit(FMaskEditor.Text);
+  if FCalcEditor.Visible   then Exit(FCalcEditor.Text);
+  if FDateEditor.Visible then
+  begin
+    { 用 hh:nn 而不是 TimeToStr —— 后者会补出秒,把用户原样的 '13:45' 改写成 '13:45:00'。
+      用户没改值就不该重写它(提交只比文本,格式一变就会当成"改过了"而落盘)。 }
+    if FEditKind = gekTime then Exit(FormatDateTime('hh:nn', FDateEditor.DateTime));
+    Exit(DateToStr(FDateEditor.Date));
+  end;
+  if FPickEditor.Visible then
+  begin
+    if FPickEditor.ItemIndex >= 0 then Exit(FPickEditor.Items[FPickEditor.ItemIndex]);
+    Exit(Cells[FEditCol, FEditRow]);   { 没选 = 没改 }
+  end;
+  Result := FEditor.Text;
+end;
+
+function TTyStringGrid.TryEndEdit(ACommit: Boolean): Boolean;
+var
+  oldTxt, newTxt: string;
+  valid: Boolean;
+begin
+  Result := True;
+  if not FEditing then Exit;
+  if FEndingEdit then Exit;
+  if not ACommit then begin EndEdit(False); Exit; end;   { 放弃从不被否决 }
+  if Assigned(FOnValidateCell) then
+  begin
+    oldTxt := Cells[FEditCol, FEditRow];
+    newTxt := PendingEditText;
+    if newTxt <> oldTxt then          { 没改过的格永远可以离开 —— 不为文件里带来的旧脏值困住用户 }
+    begin
+      valid := True;
+      FOnValidateCell(Self, FEditCol, FEditRow, oldTxt, newTxt, valid);
+      if not valid then Exit(False);  { 什么都不动:编辑器留着、光标不动、不抢焦点 }
+      FValidatedPending := True;      { 下面的 EndEdit 别再问一遍 }
+    end;
+  end;
+  EndEdit(True);
+end;
+
 procedure TTyStringGrid.EndEdit(ACommit: Boolean);
 var
   oldTxt, newTxt: string;
-  accept: Boolean;
-  usePick, useDate, useTime, useLink, useSpin, useSlider, useMemo, useMask, useCalc: Boolean;
-  linkTxt: string;
+  accept, valid, preValidated: Boolean;
 begin
-  usePick := False;
-  useTime := False;
-  useDate := False;
-  useSpin := False;
-  useSlider := False;
-  useMemo := False;
-  useMask := False;
-  useCalc := False;
-  useLink := False;
-  linkTxt := '';
+  { 先收旗子再过守卫:TryEndEdit 举了旗又被守卫弹回来的话,旗不能留到下一次。 }
+  preValidated := FValidatedPending;
+  FValidatedPending := False;
   if not FEditing then Exit;
   if FEndingEdit then Exit;          { 重入守卫:提交里若又触发提交会写两次 }
   FEndingEdit := True;
   try
+    { **先取值,再拆**。宿主 EditLink 的控件一释放值就没了;其它编辑器也没理由等隐藏之后才读。
+      取值走 PendingEditText —— 校验时宿主看到的字符串和这里写回的是同一个。 }
+    oldTxt := Cells[FEditCol, FEditRow];
+    if ACommit then newTxt := PendingEditText else newTxt := oldTxt;
     FEditing := False;
-
-    { 宿主 EditLink:先把值取出来再释放控件 —— 反了就取到已销毁控件上了。 }
     if FEditLink <> nil then
     begin
-      useLink := True;
-      linkTxt := FEditLink.GetValue;
       FEditLink.ReleaseEditor;
       FEditLink := nil;
       FEditLinkCtl := nil;
     end;
-    if FPickEditor.Visible then
-    begin
-      FPickEditor.Visible := False;
-      usePick := True;
-    end;
-    if FSpinEditor.Visible then
-    begin
-      FSpinEditor.Visible := False;
-      useSpin := True;
-    end;
-    if FSliderEditor.Visible then
-    begin
-      FSliderEditor.Visible := False;
-      useSlider := True;
-    end;
-    if FMemoEditor.Visible then
-    begin
-      FMemoEditor.Visible := False;
-      useMemo := True;
-    end;
-    if FMaskEditor.Visible then
-    begin
-      FMaskEditor.Visible := False;
-      useMask := True;
-    end;
-    if FCalcEditor.Visible then
-    begin
-      FCalcEditor.Visible := False;
-      useCalc := True;
-    end;
-    if FDateEditor.Visible then
-    begin
-      FDateEditor.Visible := False;
-      { 日期与时间**共用同一个控件**,所以可见性分不出是哪一种 ——
-        必须看开编辑时记下的种类。从前一律当日期提交,于是时间格被写成
-        DateToStr(只有小数部分的 TDateTime) = 1899-12-30,用户输入的时间直接丢失。 }
-      if FEditKind = gekTime then useTime := True else useDate := True;
-    end;
+    FPickEditor.Visible := False;
+    FSpinEditor.Visible := False;
+    FSliderEditor.Visible := False;
+    FMemoEditor.Visible := False;
+    FMaskEditor.Visible := False;
+    FCalcEditor.Visible := False;
+    FDateEditor.Visible := False;
     FEditor.Visible := False;
-    if ACommit then
+    if ACommit and (newTxt <> oldTxt) then
     begin
-      oldTxt := Cells[FEditCol, FEditRow];
-      if useLink then
-        newTxt := linkTxt
-      else if useSpin then
-        newTxt := IntToStr(FSpinEditor.Value)
-      else if useSlider then
-        newTxt := IntToStr(FSliderEditor.Position)
-      else if useMemo then
-        newTxt := FMemoEditor.Text
-      else if useMask then
-        newTxt := FMaskEditor.Text
-      else if useCalc then
-        newTxt := FCalcEditor.Text
-      else if useTime then
-        { 用 hh:nn 而不是 TimeToStr —— 后者会补出秒,把用户原样的 '13:45'
-          改写成 '13:45:00'。用户没改值就不该重写它(EndEdit 只比文本,
-          格式一变就会当成"改过了"而落盘)。 }
-        newTxt := FormatDateTime('hh:nn', FDateEditor.DateTime)
-      else if useDate then
-        newTxt := DateToStr(FDateEditor.Date)
-      else if usePick then
+      accept := True;
+      { 数值列:非法值一律不写回(总比把 'abc' 存进金额列强)。 }
+      if (EditorKindFor(FEditCol, FEditRow) = gekNumeric)
+         and (newTxt <> '') and (StrToFloatDef(newTxt, MaxDouble) = MaxDouble) then
+        accept := False;
+      { 结构性关闭挡不住,但校验没过的值同样不能落盘:这里也问宿主(TryEndEdit 刚问过的
+        不重复问 —— 宿主的 handler 可能在弹框),不过就按拒绝写回处理。 }
+      if accept and (not preValidated) and Assigned(FOnValidateCell) then
       begin
-        if FPickEditor.ItemIndex >= 0 then
-          newTxt := FPickEditor.Items[FPickEditor.ItemIndex]
-        else
-          newTxt := oldTxt;
-      end
-      else
-        newTxt := FEditor.Text;
-      if newTxt <> oldTxt then
-      begin
-        accept := True;
-        { 数值列:非法值一律不写回(总比把 'abc' 存进金额列强)。 }
-        if (EditorKindFor(FEditCol, FEditRow) = gekNumeric)
-           and (newTxt <> '') and (StrToFloatDef(newTxt, MaxDouble) = MaxDouble) then
-          accept := False;
-        if Assigned(FOnCellEdited) then
-          FOnCellEdited(Self, FEditCol, FEditRow, oldTxt, newTxt, accept);
-        if accept then Cells[FEditCol, FEditRow] := newTxt;
+        valid := True;
+        FOnValidateCell(Self, FEditCol, FEditRow, oldTxt, newTxt, valid);
+        if not valid then accept := False;
       end;
+      if Assigned(FOnCellEdited) then
+        FOnCellEdited(Self, FEditCol, FEditRow, oldTxt, newTxt, accept);
+      if accept then Cells[FEditCol, FEditRow] := newTxt;
     end;
     Invalidate;
   finally
@@ -15397,20 +15405,29 @@ begin
   end;
 end;
 
+procedure TTyStringGrid.DoExit;
+begin
+  { 焦点离开了整个网格。被校验拦下的编辑到这里就作废:走开与 Esc 是同一种表态。
+    留着它会得到一个趴在失焦网格上的编辑器 —— Editing 为 True 却没人在编辑,
+    宿主拿它控制工具栏时会被骗,格子显示的也不是真实值。 }
+  if FEditing then EndEdit(False);
+  inherited DoExit;
+end;
+
 procedure TTyStringGrid.DateEditorExit(Sender: TObject);
 begin
-  EndEdit(True);
+  TryEndEdit(True);
 end;
 
 procedure TTyStringGrid.PickEditorChange(Sender: TObject);
 begin
-  { 选中即提交 —— 下拉不像文本框那样需要按 Enter 确认。 }
-  if FEditing then EndEdit(True);
+  { 选中即提交 —— 下拉不像文本框那样需要按 Enter 确认。被拦下就留在下拉里。 }
+  if FEditing then TryEndEdit(True);
 end;
 
 procedure TTyStringGrid.PickEditorExit(Sender: TObject);
 begin
-  EndEdit(True);
+  TryEndEdit(True);
 end;
 
 procedure TTyStringGrid.EditorKeyDown(Sender: TObject; var Key: Word;
@@ -15419,8 +15436,9 @@ begin
   case Key of
     { HandleAllocated 这道守卫别省:句柄没落地时 SetFocus 会抛异常。
       本文件其余十来处 SetFocus 都带着它,只有这两处漏了。 }
-    VK_RETURN: begin EndEdit(True);  Key := 0;
-                 if HandleAllocated and CanFocus then SetFocus; end;
+    VK_RETURN: begin Key := 0;
+                 { 被拦下就把焦点留给编辑器 —— 不然用户看着编辑器还在,键却敲进了网格。 }
+                 if TryEndEdit(True) and HandleAllocated and CanFocus then SetFocus; end;
     VK_ESCAPE: begin EndEdit(False); Key := 0;
                  if HandleAllocated and CanFocus then SetFocus; end;
   end;
@@ -15474,8 +15492,11 @@ end;
 
 procedure TTyStringGrid.EditorExit(Sender: TObject);
 begin
-  { 焦点离开 = 提交。与库内其他内联编辑一致:凡是会让单元格移动/失焦的动作,先提交。 }
-  EndEdit(True);
+  { 焦点离开 = 提交。与库内其他内联编辑一致:凡是会让单元格移动/失焦的动作,先提交。
+    被校验拦下就留着 —— **不把焦点抢回来**(在失焦回调里 SetFocus 是 widgetset 层的
+    递归陷阱,LCL 自家的网格也从不这么干)。焦点若是去了网格里的另一格,用户还在网格里,
+    点回来接着改;若是离开了整个网格,DoExit 会把这次编辑作废。 }
+  TryEndEdit(True);
 end;
 
 procedure TTyStringGrid.DblClick;

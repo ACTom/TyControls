@@ -1276,6 +1276,27 @@ type
     procedure TestEscapeRestoresTheOldText;
   end;
 
+  { 校验不过就不让离开 —— OnValidateCell。契约的每一条都钉一次:
+    拦得住用户导航,拦不住结构性关闭(但值不落盘),Esc 永远能走,走出网格视同放弃,
+    没改过的格不问,宿主看到的字符串就是会写回的那一个,同一次提交只问一遍。 }
+  TGridValidateCellTest = class(TTestCase)
+  private
+    FVerdict: Boolean;
+    FCalls: Integer;
+    FLastNew: string;
+    procedure Validate(Sender: TObject; ACol, ARow: Integer;
+      const AOld, ANew: string; var AValid: Boolean);
+  published
+    procedure TestInvalidValueKeepsTheEditorOpen;
+    procedure TestInvalidValueBlocksNavigation;
+    procedure TestEscapeStillAbandonsAnInvalidValue;
+    procedure TestValidValueCommitsAndIsAskedOnce;
+    procedure TestUnchangedTextIsNotValidated;
+    procedure TestStructuralCloseDiscardsAnInvalidValue;
+    procedure TestLeavingTheGridAbandonsAnInvalidValue;
+    procedure TestHostSeesTheTextThatWouldBeWritten;
+  end;
+
   TStrGridAccess = class(TTyStringGrid)
   public
     procedure ClickAt(X, Y: Integer);
@@ -1983,6 +2004,181 @@ begin
   Result.Header.Options := Result.Header.Options - [hoVisible];
   Result.DefaultRowHeight := 20;
   Result.RowCount := 10;
+end;
+
+procedure TGridValidateCellTest.Validate(Sender: TObject; ACol, ARow: Integer;
+  const AOld, ANew: string; var AValid: Boolean);
+begin
+  Inc(FCalls);
+  FLastNew := ANew;
+  AValid := FVerdict;
+end;
+
+{ Every test below: a text cell holding 'old', the editor opened on it, the validator
+  wired. FVerdict says what the validator answers. }
+procedure TGridValidateCellTest.TestInvalidValueKeepsTheEditorOpen;
+var f: TForm; ctl: TTyStyleController; g: TStrGridAccess;
+begin
+  f := TForm.CreateNew(nil); ctl := TTyStyleController.Create(nil);
+  try
+    g := MakeStrGrid(f, ctl);
+    g.DefaultEditorKind := gekText;
+    g.OnValidateCell := @Validate;
+    g.Cells[1, 1] := 'old';
+    FVerdict := False; FCalls := 0;
+    AssertTrue('editing started', g.BeginEditAt(1, 1));
+    g.InlineEditor.Text := 'bad';
+    g.PressKeyInEditor(VK_RETURN, []);
+    AssertEquals('the validator was asked', 1, FCalls);
+    AssertTrue('Enter was refused: still editing', g.EditorMode);
+    AssertEquals('the cell was not written', 'old', g.Cells[1, 1]);
+    AssertEquals('the editor still holds what was typed', 'bad', g.InlineEditor.Text);
+    AssertEquals('cursor row did not move', 1, g.Row);
+  finally ctl.Free; f.Free; end;
+end;
+
+procedure TGridValidateCellTest.TestInvalidValueBlocksNavigation;
+var f: TForm; ctl: TTyStyleController; g: TStrGridAccess;
+begin
+  f := TForm.CreateNew(nil); ctl := TTyStyleController.Create(nil);
+  try
+    g := MakeStrGrid(f, ctl);
+    g.DefaultEditorKind := gekText;
+    g.OnValidateCell := @Validate;
+    g.Cells[1, 1] := 'old';
+    FVerdict := False;
+    AssertTrue('editing started', g.BeginEditAt(1, 1));
+    g.InlineEditor.Text := 'bad';
+    { Arrow keys and cell clicks both funnel through MoveCursor; the grid's KeyDown is the
+      reachable seam. A refused commit must leave FCol/FRow where they were -- the same
+      "did not move" signal OnSelectCell already speaks. }
+    g.PressKey(VK_DOWN, []);
+    AssertEquals('cursor stayed on the invalid cell', 1, g.Row);
+    AssertTrue('and the editor is still open', g.EditorMode);
+    g.MoveCursor(2, 2);
+    AssertEquals('a direct MoveCursor is refused the same way (col)', 1, g.Col);
+    AssertEquals('a direct MoveCursor is refused the same way (row)', 1, g.Row);
+  finally ctl.Free; f.Free; end;
+end;
+
+procedure TGridValidateCellTest.TestEscapeStillAbandonsAnInvalidValue;
+var f: TForm; ctl: TTyStyleController; g: TStrGridAccess;
+begin
+  f := TForm.CreateNew(nil); ctl := TTyStyleController.Create(nil);
+  try
+    g := MakeStrGrid(f, ctl);
+    g.DefaultEditorKind := gekText;
+    g.OnValidateCell := @Validate;
+    g.Cells[1, 1] := 'old';
+    FVerdict := False; FCalls := 0;
+    AssertTrue('editing started', g.BeginEditAt(1, 1));
+    g.InlineEditor.Text := 'bad';
+    g.PressKeyInEditor(VK_ESCAPE, []);
+    AssertFalse('Esc closed the editor regardless of the validator', g.EditorMode);
+    AssertEquals('the old value is back', 'old', g.Cells[1, 1]);
+    AssertEquals('abandoning does not even ask the validator', 0, FCalls);
+  finally ctl.Free; f.Free; end;
+end;
+
+procedure TGridValidateCellTest.TestValidValueCommitsAndIsAskedOnce;
+var f: TForm; ctl: TTyStyleController; g: TStrGridAccess;
+begin
+  f := TForm.CreateNew(nil); ctl := TTyStyleController.Create(nil);
+  try
+    g := MakeStrGrid(f, ctl);
+    g.DefaultEditorKind := gekText;
+    g.OnValidateCell := @Validate;
+    g.Cells[1, 1] := 'old';
+    FVerdict := True; FCalls := 0;
+    AssertTrue('editing started', g.BeginEditAt(1, 1));
+    g.InlineEditor.Text := 'fine';
+    g.PressKeyInEditor(VK_RETURN, []);
+    AssertFalse('a valid value closes the editor', g.EditorMode);
+    AssertEquals('and is written', 'fine', g.Cells[1, 1]);
+    { TryEndEdit asks, then hands over to EndEdit, which must NOT ask again: a host validator
+      that shows a message box would otherwise show it twice per commit. }
+    AssertEquals('the validator was asked exactly once', 1, FCalls);
+  finally ctl.Free; f.Free; end;
+end;
+
+procedure TGridValidateCellTest.TestUnchangedTextIsNotValidated;
+var f: TForm; ctl: TTyStyleController; g: TStrGridAccess;
+begin
+  f := TForm.CreateNew(nil); ctl := TTyStyleController.Create(nil);
+  try
+    g := MakeStrGrid(f, ctl);
+    g.DefaultEditorKind := gekText;
+    g.OnValidateCell := @Validate;
+    g.Cells[1, 1] := 'old';
+    FVerdict := False; FCalls := 0;   { would refuse -- but must never be asked }
+    AssertTrue('editing started', g.BeginEditAt(1, 1));
+    g.PressKeyInEditor(VK_RETURN, []);
+    AssertFalse('an untouched cell can always be left', g.EditorMode);
+    AssertEquals('without the validator being consulted', 0, FCalls);
+  finally ctl.Free; f.Free; end;
+end;
+
+procedure TGridValidateCellTest.TestStructuralCloseDiscardsAnInvalidValue;
+var f: TForm; ctl: TTyStyleController; g: TStrGridAccess;
+begin
+  f := TForm.CreateNew(nil); ctl := TTyStyleController.Create(nil);
+  try
+    g := MakeStrGrid(f, ctl);
+    g.DefaultEditorKind := gekText;
+    g.OnValidateCell := @Validate;
+    g.Cells[1, 1] := 'old';
+    FVerdict := False; FCalls := 0;
+    AssertTrue('editing started', g.BeginEditAt(1, 1));
+    g.InlineEditor.Text := 'bad';
+    { EndEdit is what sorts, row deletes, CSV loads and EditorMode := False call. It cannot be
+      refused -- but the invalid value must not reach the cell by this door either. }
+    g.EndEdit(True);
+    AssertFalse('a structural close always closes', g.EditorMode);
+    AssertEquals('and discards the invalid value instead of writing it', 'old', g.Cells[1, 1]);
+    AssertEquals('the validator was asked once on the way', 1, FCalls);
+  finally ctl.Free; f.Free; end;
+end;
+
+procedure TGridValidateCellTest.TestLeavingTheGridAbandonsAnInvalidValue;
+var f: TForm; ctl: TTyStyleController; g: TStrGridAccess;
+begin
+  f := TForm.CreateNew(nil); ctl := TTyStyleController.Create(nil);
+  try
+    g := MakeStrGrid(f, ctl);
+    g.DefaultEditorKind := gekText;
+    g.OnValidateCell := @Validate;
+    g.Cells[1, 1] := 'old';
+    FVerdict := False;
+    AssertTrue('editing started', g.BeginEditAt(1, 1));
+    g.InlineEditor.Text := 'bad';
+    { Focus leaving to another control: LCL sends CM_EXIT to the editor (EditorExit ->
+      refused, editor stays) and then to the grid, whose DoExit is the "focus left the whole
+      grid" signal. Walking away is the same statement as Esc. }
+    g.PressKeyInEditor(VK_RETURN, []);
+    AssertTrue('precondition: the edit was refused and is still open', g.EditorMode);
+    g.DoExit;
+    AssertFalse('leaving the grid abandons the refused edit', g.EditorMode);
+    AssertEquals('the old value is back', 'old', g.Cells[1, 1]);
+  finally ctl.Free; f.Free; end;
+end;
+
+procedure TGridValidateCellTest.TestHostSeesTheTextThatWouldBeWritten;
+var f: TForm; ctl: TTyStyleController; g: TStrGridAccess;
+begin
+  f := TForm.CreateNew(nil); ctl := TTyStyleController.Create(nil);
+  try
+    g := MakeStrGrid(f, ctl);
+    g.DefaultEditorKind := gekText;
+    g.OnValidateCell := @Validate;
+    g.Cells[1, 1] := 'old';
+    FVerdict := True; FLastNew := '';
+    AssertTrue('editing started', g.BeginEditAt(1, 1));
+    g.InlineEditor.Text := 'exactly this';
+    g.PressKeyInEditor(VK_RETURN, []);
+    { One reader (PendingEditText) feeds both the validator and the write, so the string the
+      host judged is the string that landed -- they cannot drift apart. }
+    AssertEquals('what the host validated is what was written', g.Cells[1, 1], FLastNew);
+  finally ctl.Free; f.Free; end;
 end;
 
 procedure TGridEditorCancelTest.TestEveryEditorKindCanBeAbandoned;
@@ -11259,6 +11455,7 @@ initialization
   RegisterTest(TTyGridControlTest);
   RegisterTest(TTyGridScrollBarNilWindowTest);
   RegisterTest(TTyDrawGridTest);
+  RegisterTest(TGridValidateCellTest);
   RegisterTest(TGridEditorCancelTest);
   RegisterTest(TTyStringGridTest);
 end.
