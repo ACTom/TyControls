@@ -28,6 +28,7 @@ uses
   test.designregistry,
   { The classes the registrations name. Resolved by NAME through the class registry (the
     initialization block below), the same trick test.version.pas uses. }
+  tyControls.AdvanceChart,
   tyControls.Base, tyControls.Component, tyControls.Controller, tyControls.Form,
   tyControls.FormSurface, tyControls.Menu, tyControls.Popover, tyControls.IconFont,
   tyControls.CharImage, tyControls.GlyphButtons, tyControls.Ribbon,
@@ -390,7 +391,14 @@ initialization
     { A collection ITEM, not a component — the image-payload editor is registered on
       TTyImageItem so it applies inside the stock collection editor for
       TTyImageCollection.Images. GetClass needs it registered to resolve the name. }
-    TTyImageItem]);
+    TTyImageItem,
+    { The chart's Option property gets its own editor. Registered here BEFORE
+      that registration exists, because TestEveryRegistrationTargetsARealProperty
+      resolves a registration's base class by NAME through GetClass -- so the
+      registration landing first would turn the suite red for a reason that has
+      nothing to do with the editor, and the next person would go looking in the
+      wrong place. }
+    TTyAdvanceChart]);
   RegisterTest(TDesignEditorsTest);
 
 end.

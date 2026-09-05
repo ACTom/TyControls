@@ -63,6 +63,7 @@ type
     procedure TheThirdPartyNoticeShipsWithTheFontItLicenses;
     procedure EveryAssetAShippedThemeReferencesIsShipped;
     procedure BothScriptsShipTheSameTrees;
+    procedure EveryUnitOnDiskIsListedInItsPackage;
     procedure EveryTestUnitThatRegistersTestsIsLinked;
     procedure TheControlDocsIndexLinksEveryPageAndOnlyRealOnes;
   end;
@@ -415,6 +416,64 @@ begin
     AssertEquals('design-time units the release does not ship:' + bad, '', bad);
   finally
     units.Free;
+  end;
+end;
+
+procedure TReleaseManifestTest.EveryUnitOnDiskIsListedInItsPackage;
+
+  procedure CheckDir(const ADir, ALpk: string; ABad: TStrings);
+  var
+    found: TStringList;
+    listed: TStringList;
+    rec: TSearchRec;
+    i: Integer;
+    rel: string;
+  begin
+    found := TStringList.Create;
+    listed := TStringList.Create;
+    try
+      { CollectLpkFiles prepends RepoRoot itself. }
+      CollectLpkFiles(ALpk, listed);
+      if FindFirst(RepoRoot + ADir + PathDelim + '*.pas', faAnyFile, rec) = 0 then
+      begin
+        repeat
+          if (rec.Attr and faDirectory) = 0 then found.Add(rec.Name);
+        until FindNext(rec) <> 0;
+        FindClose(rec);
+      end;
+      for i := 0 to found.Count - 1 do
+      begin
+        rel := ADir + '/' + found[i];
+        if listed.IndexOf(rel) < 0 then
+          ABad.Add(rel + '  (not listed in ' + ALpk + ')');
+      end;
+    finally
+      listed.Free;
+      found.Free;
+    end;
+  end;
+
+var
+  bad: TStringList;
+begin
+  { THE DIRECTION NOTHING CHECKED. EveryFileThePackagesNameIsShipped walks the
+    .lpk and asks whether each entry exists; this walks the DISK and asks
+    whether each unit is listed. They catch opposite mistakes, and the second
+    one is the one that actually happens: a new unit compiles perfectly through
+    the directory search path, so nothing on the author's machine notices, and
+    it is simply absent from the installed package and every release archive.
+
+    Three units were added to this layer by hand in one afternoon. That is the
+    rate at which the omission becomes likely. }
+  bad := TStringList.Create;
+  try
+    CheckDir('source', 'tycontrols.lpk', bad);
+    CheckDir('designtime', 'tycontrols_dt.lpk', bad);
+    AssertEquals('units on disk that no package lists -- they compile via the '
+      + 'search path and then go missing from the installed package:'
+      + LineEnding + bad.Text, '', bad.Text);
+  finally
+    bad.Free;
   end;
 end;
 
