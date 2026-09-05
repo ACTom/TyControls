@@ -1,0 +1,169 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols 3.1\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: tycontrols.design.rsdtaboutlicense
+msgid "Modified LGPL (LCL-compatible linking exception)"
+msgstr "Modified LGPL（含 LCL 链接例外条款）"
+
+#: tycontrols.design.rsdtabouttagline
+msgid "BGRABitmap-drawn, .tycss-themed LCL control library"
+msgstr "用 BGRABitmap 自绘、以 .tycss 换肤的 LCL 控件库"
+
+#: tycontrols.design.rsdtabouttitle
+msgid "About TyControls"
+msgstr "关于 TyControls"
+
+#: tycontrols.design.rsdtaboutversion
+#, object-pascal-format
+msgid "Version %s"
+msgstr "版本 %s"
+
+#: tycontrols.design.rsdtappdescription
+msgid "A graphical TyControls application. The main form is a themed TTyForm (custom title bar + style controller); the tycontrols package is added automatically."
+msgstr "一个 TyControls 图形程序。主窗体是带主题的 TTyForm（自绘标题栏 + 样式控制器），tycontrols 包会自动加进依赖。"
+
+#: tycontrols.design.rsdtappname
+msgid "TyControls Application"
+msgstr "TyControls 应用程序"
+
+#: tycontrols.design.rsdtdialogdescription
+msgid "A themed custom-drawn modal dialog (TTyDialog): borderless, close-only, non-resizable, centered —design your own dialog content and buttons."
+msgstr "一个自绘的模态对话框（TTyDialog）：无边框、只有关闭按钮、不可缩放、居中显示——对话框的内容和按钮由你自己摆。"
+
+#: tycontrols.design.rsdtdialogname
+msgid "TyControls Dialog"
+msgstr "TyControls 对话框"
+
+#: tycontrols.design.rsdtdialogpreview
+msgid "Preview"
+msgstr "预览"
+
+#: tycontrols.design.rsdtfontfilefilter
+msgid "Font files (*.ttf;*.otf;*.ttc)|*.ttf;*.otf;*.ttc|All files|*"
+msgstr "字体文件 (*.ttf;*.otf;*.ttc)|*.ttf;*.otf;*.ttc|所有文件|*"
+
+#: tycontrols.design.rsdtfontfiletitle
+msgid "Select an icon-font file"
+msgstr "选择图标字体文件"
+
+#: tycontrols.design.rsdtformdescription
+msgid "A borderless form descending from TTyForm, with a top-aligned TTyTitleBar already attached (drag to move, double-click to maximize). Point its Controller at your main window's style controller to theme it, or lay out your controls below the bar."
+msgstr "一个继承自 TTyForm 的无边框窗体，已经挂好顶部对齐的 TTyTitleBar（拖动移动，双击最大化）。把它的 Controller 指向主窗口的样式控制器即可套用主题，控件摆在标题栏下方。"
+
+#: tycontrols.design.rsdtformname
+msgid "TyControls Form"
+msgstr "TyControls 窗体"
+
+#: tycontrols.design.rsdtgroupsedit
+msgid "Edit groups..."
+msgstr "编辑分组..."
+
+#: tycontrols.design.rsdticonbrowse
+msgid "Icon browser..."
+msgstr "图标浏览器..."
+
+#: tycontrols.design.rsdticonneedsfont
+msgid "Set IconFont first: there is no icon font to browse."
+msgstr "请先设置 IconFont：当前没有可浏览的图标字体。"
+
+#: tycontrols.design.rsdtimagebadpayload
+msgid "(unreadable image data)"
+msgstr "（图像数据无法读取）"
+
+#: tycontrols.design.rsdtimagefilefilter
+msgid "Image files (*.png;*.bmp;*.jpg;*.jpeg;*.gif)|*.png;*.bmp;*.jpg;*.jpeg;*.gif|All files|*"
+msgstr "图像文件 (*.png;*.bmp;*.jpg;*.jpeg;*.gif)|*.png;*.bmp;*.jpg;*.jpeg;*.gif|所有文件|*"
+
+#: tycontrols.design.rsdtimagefiletitle
+msgid "Select an image for this collection entry"
+msgstr "为这一项选择图像"
+
+#: tycontrols.design.rsdtimageloadfailed
+msgid "That file could not be read as an image."
+msgstr "这个文件读不出图像。"
+
+#: tycontrols.design.rsdtimagenopayload
+msgid "(no image)"
+msgstr "（无图像）"
+
+#: tycontrols.design.rsdtimgcoledit
+msgid "Edit images..."
+msgstr "编辑图像..."
+
+#: tycontrols.design.rsdtmainformdescription
+msgid "A themed TTyForm carrying its own TTyStyleController, with the form and the title bar already associated to it —the root window for a TyControls application."
+msgstr "一个自带 TTyStyleController 的 TTyForm，窗体和标题栏都已经关联到它——TyControls 程序的主窗口。"
+
+#: tycontrols.design.rsdtmainformname
+msgid "TyControls Main Form"
+msgstr "TyControls 主窗体"
+
+#: tycontrols.design.rsdtpageadd
+msgid "Add Page"
+msgstr "添加页"
+
+#: tycontrols.design.rsdtpagedelete
+msgid "Delete Page"
+msgstr "删除页"
+
+#: tycontrols.design.rsdtpageshownext
+msgid "Show Next Page"
+msgstr "显示下一页"
+
+#: tycontrols.design.rsdtpageshowpage
+msgid "Show Page"
+msgstr "显示指定页"
+
+#: tycontrols.design.rsdtpageshowprev
+msgid "Show Previous Page"
+msgstr "显示上一页"
+
+#: tycontrols.design.rsdtsurfacepurposetext
+msgid ""
+"TyFormSurface is the content host of a TTyForm —the panel every control on the form lives on.\n"
+"\n"
+"A borderless, resizable window cannot paint its own outermost pixels: the compositor gives it a backing surface smaller than the window, which leaves an unpainted band along the right and bottom edges. A CHILD window has no such limit and paints edge to edge, so TTyForm renders its themed background onto this surface instead of onto itself.\n"
+"\n"
+"Your controls must live on the surface. Graphic (windowless) controls such as TTyLabel paint onto their parent, so one placed directly on the form is hidden behind the surface.\n"
+"\n"
+"Keep exactly one surface per form, leave it filling the form, and do not delete it."
+msgstr ""
+"TyFormSurface 是 TTyForm 的内容宿主——窗体上所有控件都摆在它上面。\n"
+"\n"
+"无边框且可缩放的窗口画不了自己最外圈的像素：合成器给它的后备表面比窗口小一圈，右边和下边就会留下一条没画到的带子。而子窗口没有这个限制，能一直画到边缘，所以 TTyForm 把带主题的背景画在这个表面上，而不是画在自己身上。\n"
+"\n"
+"控件必须放在表面上。TTyLabel 这类图形控件（无窗口句柄）是画在父控件身上的，直接放到窗体上就会被表面挡住。\n"
+"\n"
+"每个窗体只保留一个表面，让它铺满窗体，不要删掉它。"
+
+#: tycontrols.design.rsdtsurfacepurposetitle
+msgid "Why this control exists"
+msgstr "这个控件是干什么的"
+
+#: tycontrols.design.rsdtthemefilefilter
+msgid "TyControls stylesheets (*.tycss)|*.tycss|All files|*"
+msgstr "TyControls 样式表 (*.tycss)|*.tycss|所有文件|*"
+
+#: tycontrols.design.rsdtthemefiletitle
+msgid "Select a .tycss stylesheet"
+msgstr "选择 .tycss 样式表"
+
+#: tycontrols.design.rsdtthememodehint
+msgid "Which \"@mode NAME\" block of the loaded theme is active. The list holds the modes THIS theme declares — the blank entry is the empty string, meaning no mode override at all. A single-mode theme therefore offers only the blank entry."
+msgstr "当前生效的是所加载主题里哪一个 \"@mode NAME\" 块。列表里是这个主题自己声明的模式——空白那一项就是空字符串，表示完全不覆盖模式。所以单模式主题只会给出空白这一项。"
+
+#: tycontrols.design.rsdtthemenamehint
+msgid "The theme to load by name. The list offers the themes compiled into TyControls plus any registered in this IDE; a name your application registers at run time is equally valid, so you may type one that is not listed. Setting this clears ThemeFile."
+msgstr "按名字加载主题。列表里是编译进 TyControls 的主题，加上这个 IDE 里注册过的；程序运行时注册的名字同样有效，所以你可以手输一个列表里没有的。设置它会清空 ThemeFile。"
+
+#: tycontrols.design.rsdttreeeditnodes
+msgid "Edit Nodes..."
+msgstr "编辑节点..."

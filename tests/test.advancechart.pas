@@ -35,6 +35,8 @@ type
     procedure TearDown; override;
     procedure Draw(AW: Integer = 400; AH: Integer = 300; APPI: Integer = 96);
     function PixelAt(AX, AY: Integer): TBGRAPixel;
+    function InkIn(AL, AT, AR, AB: Integer; const ABg: TBGRAPixel): Integer;
+    function InkDepth(const AP, ABg: TBGRAPixel): Integer;
   published
     procedure TestItHasItsOwnStyleKey;
     procedure TestAnEmptyChartStillPaintsItsSurface;
@@ -52,6 +54,10 @@ type
     procedure TestTheAxisHonoursMinMaxAndInterval;
     procedure TestACrowdedAxisThinsItsLabels;
     procedure TestResizingRelaysOutTheAxes;
+    procedure TestAnAxisNameIsDrawnInTheSpaceReservedForIt;
+    procedure TestAThickerThemeBorderDrawsAThickerAxis;
+    procedure TestTheMinorTickLengthComesFromTheTheme;
+    procedure TestHairlinesLandOnWholePixels;
     procedure TestRepeatedRendersDoNotGrowTheHeap;
   end;
 implementation
@@ -411,7 +417,14 @@ begin
   y := Round((gb.PlotRect.Top + gb.PlotRect.Bottom) / 2);
   bg := PixelAt(left + band div 4, y);
   cols := nil;
-  for x := left to right do
+  { ONE PIXEL WIDER THAN THE PLOT, both ends. Sub-pixel snapping moves a stroke
+    by up to half a pixel so its outer edge lands on a whole one, which is what
+    makes a hairline crisp instead of two half-lit columns; a band edge at 40.7
+    inside a plot whose Left rounds to 41 therefore inks column 40. The line is
+    drawn and it is where it belongs -- the window was measured to the
+    UNSNAPPED geometry, and the three interior edges below, which already allow
+    two pixels of slack, never noticed. }
+  for x := left - 1 to right + 1 do
   begin
     p := PixelAt(x, y);
     if (Abs(p.red - bg.red) + Abs(p.green - bg.green) + Abs(p.blue - bg.blue)) > 12 then
@@ -681,6 +694,207 @@ begin
   after := GetFPCHeapStatus.CurrHeapUsed;
   AssertTrue(Format('heap grew from %d to %d over thirty renders', [before, after]),
     after <= before);
+end;
+
+{ ============ what the paint path was skipping ============ }
+
+function TAdvanceChartTest.InkIn(AL, AT, AR, AB: Integer;
+  const ABg: TBGRAPixel): Integer;
+var x, y: Integer;
+begin
+  Result := 0;
+  for y := AT to AB do
+    for x := AL to AR do
+      if InkDepth(PixelAt(x, y), ABg) > 0 then Inc(Result);
+end;
+
+{ 0 = background, 1 = partially lit, 2 = solidly inked. The distinction is the
+  whole subject of the snapping test: an unsnapped hairline is TWO partial
+  columns where a snapped one is a single solid column. }
+function TAdvanceChartTest.InkDepth(const AP, ABg: TBGRAPixel): Integer;
+var d: Integer;
+begin
+  d := Abs(AP.red - ABg.red) + Abs(AP.green - ABg.green)
+     + Abs(AP.blue - ABg.blue);
+  if d > 120 then Result := 2
+  else if d > 12 then Result := 1
+  else Result := 0;
+end;
+
+procedure TAdvanceChartTest.TestAnAxisNameIsDrawnInTheSpaceReservedForIt;
+
+  { Red pixels anywhere below the plot. Nothing else on the canvas is red, so
+    this counts the axis name and only the axis name.
+
+    Comparing TOTAL ink for a named axis against an unnamed one was the first
+    attempt and it was fake-green: naming an axis MOVES THE PLOT, because the
+    layout reserves the name's space whether or not anything draws into it, so
+    the two runs differed for a reason unrelated to the name. Mutating the
+    drawing out left the test green, which is how this was found. }
+  function RedBelowPlot(const AName: string): Integer;
+  var
+    gb: TTyGridBuild;
+    x, y: Integer;
+    p: TBGRAPixel;
+  begin
+    FChart.Option := '{ xAxis: { data: [''A'', ''B'']' + AName + ' },'
+      + ' yAxis: {}, series: [{ type: ''bar'', data: [1, 2] }] }';
+    Draw;
+    gb := FChart.Build.Grid(0);
+    Result := 0;
+    for y := Round(gb.PlotRect.Bottom) + 1 to 299 do
+      for x := 0 to 399 do
+      begin
+        p := PixelAt(x, y);
+        if (p.red > p.green + 60) and (p.red > p.blue + 60) then Inc(Result);
+      end;
+  end;
+
+var
+  named, unnamed: Integer;
+begin
+  { THE SPACE WAS ALREADY BEING RESERVED. Builder solves the grid with obcAll,
+    so TyAxisThickness charged every named axis for NameGap plus the name's
+    turned extent -- and nothing drew into it. Setting `name` shrank the plot by
+    the width of a string that was not on screen, and every other assertion in
+    this file stayed green because they all sample INSIDE the plot. }
+  FCtl.StyleOverride := 'TyAdvChartAxisName { color: #FF0000; }';
+  unnamed := RedBelowPlot('');
+  named := RedBelowPlot(', name: ''WWWWWWWW''');
+  AssertEquals('nothing is red when the axis has no name', 0, unnamed);
+  AssertTrue(Format('a named axis put %d red pixels below the plot -- the name '
+    + 'is not being drawn', [named]), named > 30);
+end;
+
+procedure TAdvanceChartTest.TestAThickerThemeBorderDrawsAThickerAxis;
+
+  { Rows of the axis line, counted at mid-plot. RED in both runs, so the count
+    is of the domain line alone: an inked-pixel count over a band near the axis
+    also counts the tick marks and the split lines, neither of which moves with
+    this override -- which made the first version of this test report the same
+    number twice and read as a fix that had not worked. }
+  function RedRows(const AWidth: string): Integer;
+  var
+    gb: TTyGridBuild;
+    i, x, y: Integer;
+    p: TBGRAPixel;
+  begin
+    FCtl.StyleOverride := 'TyAdvChartAxisLine { border-color: #FF0000;'
+      + ' border-width: ' + AWidth + '; }';
+    Draw;
+    gb := FChart.Build.Grid(0);
+    x := Round((gb.PlotRect.Left + gb.PlotRect.Right) / 2);
+    y := Round(gb.PlotRect.Bottom);
+    Result := 0;
+    for i := y - 10 to y + 10 do
+    begin
+      p := PixelAt(x, i);
+      if p.red > p.green + 40 then Inc(Result);
+    end;
+  end;
+
+var
+  thin, thick: Integer;
+begin
+  { The stroke width was the literal 1 while six styles were resolved two lines
+    above it, so every theme drew the same axis however it was skinned. }
+  FChart.Option := '{ xAxis: { data: [''A'', ''B''] }, yAxis: {},'
+    + ' series: [{ type: ''bar'', data: [1, 2] }] }';
+  thin := RedRows('1px');
+  thick := RedRows('6px');
+  AssertTrue('the axis line is drawn at all', thin > 0);
+  AssertTrue(Format('a 1 px axis covered %d rows and a 6 px axis %d -- the '
+    + 'theme border-width is not reaching the stroke', [thin, thick]),
+    thick > thin + 2);
+end;
+
+procedure TAdvanceChartTest.TestTheMinorTickLengthComesFromTheTheme;
+var
+  gb: TTyGridBuild;
+  bg: TBGRAPixel;
+  shortT, longT, y, l, r: Integer;
+begin
+  { --advchart-minor-tick-length, its constant and its default had all been in
+    place since item 18 while the painter used tickLen/2, so a skin that set the
+    metric changed nothing. }
+  FChart.Option := '{ xAxis: { min: 0, max: 10, interval: 5,'
+    + ' minorTick: { show: true, splitNumber: 5 } }, yAxis: {},'
+    + ' series: [{ type: ''line'', data: [1, 2] }] }';
+  Draw;
+  gb := FChart.Build.Grid(0);
+  l := Round(gb.PlotRect.Left);
+  r := Round(gb.PlotRect.Right);
+  bg := PixelAt(l + 4, Round(gb.PlotRect.Top) + 4);
+  y := Round(gb.PlotRect.Bottom);
+  { The band BEYOND the default minor length: only a longer minor tick reaches
+    it, and the major ticks stop short of it too. }
+  shortT := InkIn(l, y + 6, r, y + 11, bg);
+
+  FCtl.StyleOverride := ':root { --advchart-minor-tick-length: 11px; }';
+  Draw;
+  longT := InkIn(l, y + 6, r, y + 11, bg);
+
+  AssertTrue(Format('minor ticks inked %d px at the default length and %d at '
+    + '11 px -- the metric has no reader', [shortT, longT]), longT > shortT);
+end;
+
+procedure TAdvanceChartTest.TestHairlinesLandOnWholePixels;
+var
+  gb: TTyGridBuild;
+  p: TBGRAPixel;
+  x, y, span, ones, wides: Integer;
+begin
+  { A 1 px stroke centred on a whole coordinate straddles two pixel columns and
+    each takes half the ink: two grey columns where there should be one solid
+    line. Preventing that is what item 19 is, and the shipped painter drew every
+    hairline unsnapped -- the only callers of tyControls.SubPixel were in
+    AdvChart.Shape, which this paint path does not go through.
+
+    MEASURED AS RUN LENGTHS, not as intensities. The first version of this test
+    scored each column by how far it sat from the background, and the theme
+    paints split lines at alpha 0.6, so a perfectly snapped line read as
+    half-lit and the test could not have passed however well the code worked.
+    Run length says the thing itself: snapped is one column, unsnapped is two.
+
+    The colour is overridden opaque for the same reason -- the theme's own alpha
+    has nothing to do with what is being asserted. }
+  FCtl.StyleOverride := 'TyAdvChartSplitLine { border-color: #FF0000;'
+    + ' border-width: 1px; }';
+  { SHORT BARS AGAINST A FIXED MAXIMUM, sampled near the TOP of the plot. A
+    split line spans the plot's whole height, so a row up there can only be
+    split lines -- while the mid-plot row this first used ran straight through
+    the series ink, which is drawn from the derived palette and is therefore
+    whatever the accent happens to be. Alone that row was fine; in the full run
+    it found one wide red band instead of four narrow ones. The SetUp comment in
+    this file records the same trap for the tick-mark test. }
+  FChart.Option := '{ xAxis: { data: [''A'', ''B'', ''C'', ''D''] },'
+    + ' yAxis: { min: 0, max: 100 },'
+    + ' series: [{ type: ''bar'', data: [1, 1, 1, 1] }] }';
+  Draw;
+  gb := FChart.Build.Grid(0);
+  y := Round(gb.PlotRect.Top) + 6;
+
+  ones := 0;
+  wides := 0;
+  span := 0;
+  for x := Round(gb.PlotRect.Left) - 2 to Round(gb.PlotRect.Right) + 2 do
+  begin
+    p := PixelAt(x, y);
+    if p.red > p.green + 40 then
+      Inc(span)
+    else
+    begin
+      if span = 1 then Inc(ones)
+      else if span > 1 then Inc(wides);
+      span := 0;
+    end;
+  end;
+  if span = 1 then Inc(ones) else if span > 1 then Inc(wides);
+
+  AssertTrue(Format('there are split lines to judge at all (%d one-column, '
+    + '%d wider)', [ones, wides]), ones + wides > 2);
+  AssertTrue(Format('%d one-column lines against %d that straddle two or more '
+    + '-- snapping is not reaching the stroke', [ones, wides]), wides = 0);
 end;
 
 initialization

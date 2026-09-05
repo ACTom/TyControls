@@ -32,7 +32,8 @@ uses
   tyControls.AdvChart.Data, tyControls.AdvChart.Scale,
   tyControls.AdvChart.Coord, tyControls.AdvChart.Layout,
   tyControls.AdvChart.Builder, tyControls.AdvChart.Series,
-  tyControls.AdvChart.Measure, tyControls.AdvChart.Handlers;
+  tyControls.AdvChart.Measure, tyControls.AdvChart.Handlers,
+  tyControls.SubPixel;
 
 const
   { The four axis metrics, and the defaults to fall back on when a theme has not
@@ -318,10 +319,11 @@ procedure TTyAdvanceChart.PaintAxis(APainter: TTyPainter; AAxis: TTyAxis;
 var
   model: TTyStyleModel;
   lineS, tickStyle, labelS, splitS: TTyStyleSet;
-  minorTickS, minorSplitS: TTyStyleSet;
+  minorTickS, minorSplitS, nameS: TTyStyleSet;
   ticks: TTyDoubleArray;
   i: Integer;
-  tickLen, at, along, x1, y1, x2, y2: Double;
+  tickLen, minorLen, at, along, x1, y1, x2, y2: Double;
+  nameOff, nx, ny, nameAngle: Double;
   horiz: Boolean;
   txt: string;
   lblH, lblW, step: Integer;
@@ -361,15 +363,39 @@ var
     end;
   end;
 
-  { One hairline. ScaleF rather than Scale on purpose: a 1 px axis line at 150
-    per cent is 1.5 px, and rounding it to 2 is how a chart's grid comes out
-    heavier than the control chrome around it. }
-  procedure Hairline(AX1, AY1, AX2, AY2: Double; AColor: TTyColor);
+  { The width the theme asked for, LOGICAL -- StrokePath scales it itself.
+
+    An undeclared width falls back to one logical pixel rather than to zero: a
+    theme that names a colour and no width means "draw it", not "draw nothing",
+    and StrokePath treats a width of zero as "no border". }
+  function LineWidth(const AStyle: TTyStyleSet): Double;
   begin
+    if tpBorderWidth in AStyle.Present then
+      Result := AStyle.BorderWidth
+    else
+      Result := 1;
+    if Result < 0.05 then Result := 0.05;
+  end;
+
+  { One hairline, SNAPPED. A stroke whose outer edge falls between two pixel
+    rows lights both at half alpha, which is what makes a 1 px grid read grey
+    and soft next to the crisp control chrome around it. tyControls.SubPixel is
+    the unit item 19 exists for; its only callers were in AdvChart.Shape, and
+    this paint path does not go through AdvChart.Shape.
+
+    TWO UNITS, DELIBERATELY. The snap works in DEVICE px -- the pixel grid the
+    ink lands on is the device one, so snapping a logical coordinate would mean
+    nothing -- while StrokePath wants the LOGICAL width and scales it itself.
+    Handing the scaled width to both is a double scale that 96 DPI hides
+    completely, which is how the first version of this passed. }
+  procedure Hairline(AX1, AY1, AX2, AY2: Double; AColor: TTyColor;
+    AWidthLogical: Double);
+  begin
+    TySubPixelLine(AX1, AY1, AX2, AY2, APainter.ScaleF(AWidthLogical));
     APainter.BeginPath;
     APainter.MoveTo(AX1, AY1);
     APainter.LineTo(AX2, AY2);
-    APainter.StrokePath(AColor, 1);
+    APainter.StrokePath(AColor, AWidthLogical);
   end;
 
 begin
@@ -396,6 +422,8 @@ begin
 
   tickLen := APainter.ScaleF(ActiveController.Metric(TyAdvChartTickLenVar,
     TyAdvChartTickLen));
+  minorLen := APainter.ScaleF(ActiveController.Metric(TyAdvChartMinorTickLenVar,
+    TyAdvChartMinorTickLen));
 
   { Split lines first, so the domain and the ticks sit on top of them.
 
@@ -413,9 +441,11 @@ begin
       if scaleTicks[i].Level = 0 then Continue;
       along := AAxis.DataToCoord(scaleTicks[i].Value);
       if horiz then
-        Hairline(along, APlot.Top, along, APlot.Bottom, minorSplitS.BorderColor)
+        Hairline(along, APlot.Top, along, APlot.Bottom,
+                 minorSplitS.BorderColor, LineWidth(minorSplitS))
       else
-        Hairline(APlot.Left, along, APlot.Right, along, minorSplitS.BorderColor);
+        Hairline(APlot.Left, along, APlot.Right, along,
+                 minorSplitS.BorderColor, LineWidth(minorSplitS));
     end;
   end;
 
@@ -426,9 +456,11 @@ begin
     begin
       along := ticks[i];
       if horiz then
-        Hairline(along, APlot.Top, along, APlot.Bottom, splitS.BorderColor)
+        Hairline(along, APlot.Top, along, APlot.Bottom,
+                 splitS.BorderColor, LineWidth(splitS))
       else
-        Hairline(APlot.Left, along, APlot.Right, along, splitS.BorderColor);
+        Hairline(APlot.Left, along, APlot.Right, along,
+                 splitS.BorderColor, LineWidth(splitS));
     end;
   end;
 
@@ -438,9 +470,11 @@ begin
   if tpBorderColor in lineS.Present then
   begin
     if horiz then
-      Hairline(APlot.Left, at, APlot.Right, at, lineS.BorderColor)
+      Hairline(APlot.Left, at, APlot.Right, at,
+               lineS.BorderColor, LineWidth(lineS))
     else
-      Hairline(at, APlot.Top, at, APlot.Bottom, lineS.BorderColor);
+      Hairline(at, APlot.Top, at, APlot.Bottom,
+               lineS.BorderColor, LineWidth(lineS));
   end;
 
   ticks := AAxis.TickCoords;
@@ -470,11 +504,14 @@ begin
         x1 := at;
         if AAxis.Side = asRight then x2 := at + tickLen else x2 := at - tickLen;
       end;
-      Hairline(x1, y1, x2, y2, tickStyle.BorderColor);
+      Hairline(x1, y1, x2, y2, tickStyle.BorderColor, LineWidth(tickStyle));
     end;
 
-  { Minor MARKS, at half the length -- the difference in length is what says
-    which is which when both are the same colour family. }
+  { Minor MARKS. The difference in LENGTH is what says which is which when both
+    are the same colour family -- and how much shorter is the theme's call, not
+    a fraction hardcoded here. --advchart-minor-tick-length, its constant and
+    its default have all been in place since item 18 with nothing reading them,
+    so a skin that set it changed nothing. }
   if tpBorderColor in minorTickS.Present then
   begin
     scaleTicks := AAxis.Scale.GetTicks;
@@ -486,18 +523,59 @@ begin
       begin
         x1 := along; x2 := along;
         y1 := at;
-        if AAxis.Side = asTop then y2 := at - tickLen / 2
-        else y2 := at + tickLen / 2;
+        if AAxis.Side = asTop then y2 := at - minorLen
+        else y2 := at + minorLen;
       end
       else
       begin
         y1 := along; y2 := along;
         x1 := at;
-        if AAxis.Side = asRight then x2 := at + tickLen / 2
-        else x2 := at - tickLen / 2;
+        if AAxis.Side = asRight then x2 := at + minorLen
+        else x2 := at - minorLen;
       end;
-      Hairline(x1, y1, x2, y2, minorTickS.BorderColor);
+      Hairline(x1, y1, x2, y2, minorTickS.BorderColor,
+               LineWidth(minorTickS));
     end;
+  end;
+
+  { THE AXIS NAME. Builder solves the grid with obcAll, so TyAxisThickness has
+    been charging every named axis' side for NameGap plus the name's turned
+    extent since item 12 -- and nothing ever drew into it. Setting xAxis.name
+    shrank the plot by the width of a string that was not there.
+
+    Placed by asking TyAxisThickness twice: once counting the name and once not.
+    The difference IS the band reserved for it, so the name lands in the space
+    the layout set aside rather than at an offset reassembled here out of the
+    same parts -- which is the mistake this file warns about two hundred lines
+    up, about computing a step by a second route.
+
+    Centred in that band with taCenter/tlCenter, which also makes the placement
+    independent of the rotation: a quarter turn about a centred anchor moves
+    nothing. }
+  nameS := model.ResolveStyle('TyAdvChartAxisName', '', []);
+  if (AAxis.Name <> '') and (spec <> nil) and (AMeasurer <> nil)
+    and (tpTextColor in nameS.Present) then
+  begin
+    nameOff := (TyAxisThickness(spec^, AMeasurer, APPI, obcAxisLabel)
+              + TyAxisThickness(spec^, AMeasurer, APPI, obcAll)) / 2;
+    if horiz then
+    begin
+      nx := (APlot.Left + APlot.Right) / 2;
+      if AAxis.Side = asTop then ny := at - nameOff else ny := at + nameOff;
+      nameAngle := 0;
+    end
+    else
+    begin
+      ny := (APlot.Top + APlot.Bottom) / 2;
+      if AAxis.Side = asRight then nx := at + nameOff else nx := at - nameOff;
+      { A quarter turn so it reads up the side -- and the same quarter turn
+        TyAxisThickness applied when it charged the name's HEIGHT against this
+        axis' width rather than its length. }
+      nameAngle := Pi / 2;
+    end;
+    APainter.DrawTextRotated(AAxis.Name, nameS.FontName,
+      ResolveFontSize(nameS), nameS.FontWeight, nameS.TextColor,
+      nx, ny, nameAngle, taCenter, tlCenter);
   end;
 
   if not (tpTextColor in labelS.Present) then Exit;

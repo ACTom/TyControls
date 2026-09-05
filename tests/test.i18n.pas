@@ -15,6 +15,7 @@ type
     procedure TestTheShippedChineseCatalogueReallyGivesTheGridItsTruthyWord;
     procedure TestTheShippedCataloguesCarryTheDateTimeNames;
     procedure TestTheExampleCataloguesCarryTheLoadSentinel;
+    procedure TestEveryPotHasAChineseCatalogue;
   end;
 
 implementation
@@ -327,6 +328,77 @@ begin
         po.Free;
       end;
     end;
+end;
+
+procedure TI18NTest.TestEveryPotHasAChineseCatalogue;
+var
+  root, po, id: string;
+  pots, missing, untranslated: TStringList;
+  pot, cat, have: TStringList;
+  i, j: Integer;
+begin
+  { WALKS THE DISK AND ASKS THE MANIFEST, not the other way round. The tests
+    above check a .pot lists every resourcestring -- which says nothing about
+    whether anyone translated it. A unit whose catalogue was never written
+    passes all of them, and two units had: the AdvChart editor's six strings,
+    and tyControls.Design's thirty-six, the latter since before this branch.
+
+    Naming is lowercase-and-dotted for the .po and mixed-case for the .pot,
+    which is why nothing noticed: the two files do not sort next to each other. }
+  root := ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'languages' + PathDelim;
+  pots := TStringList.Create;
+  missing := TStringList.Create;
+  untranslated := TStringList.Create;
+  pot := TStringList.Create;
+  cat := TStringList.Create;
+  have := TStringList.Create;
+  have.Sorted := True;
+  try
+    FindAllFiles(pots, root, '*.pot', False);
+    AssertTrue('there are .pot files to check at all', pots.Count > 0);
+    for i := 0 to pots.Count - 1 do
+    begin
+      po := root + LowerCase(ChangeFileExt(ExtractFileName(pots[i]), '')) +
+            '.zh_CN.po';
+      if not FileExists(po) then
+      begin
+        missing.Add(ExtractFileName(pots[i]));
+        Continue;
+      end;
+      { Present is not the same as translated: a catalogue can carry every
+        msgid with an empty msgstr and change nothing on screen. Compare the
+        entry COUNTS -- a .po short of its .pot has strings nobody did. }
+      pot.LoadFromFile(pots[i]);
+      cat.LoadFromFile(po);
+      { WHOLE IDS, not substrings. A canary caught the substring version: rename
+        a catalogue's `rstyoptdiagnoseries` to `...seriesxx` and the test stayed
+        green, because the short id is still inside the long one. In a catalogue
+        of rstyOptDiag* and rstyFileSize* names, most ids are a prefix of some
+        other id, so almost nothing was actually guarded. }
+      have.Clear;
+      for j := 0 to cat.Count - 1 do
+        if Copy(cat[j], 1, 3) = '#: ' then
+          have.Add(LowerCase(Trim(Copy(cat[j], 4, MaxInt))));
+      for j := 0 to pot.Count - 1 do
+        if Copy(pot[j], 1, 3) = '#: ' then
+        begin
+          id := LowerCase(Trim(Copy(pot[j], 4, MaxInt)));
+          if have.IndexOf(id) < 0 then
+            untranslated.Add(ExtractFileName(pots[i]) + ' :: ' + id);
+        end;
+    end;
+    AssertEquals('.pot files with no zh_CN catalogue: ' + missing.CommaText,
+      0, missing.Count);
+    AssertEquals('strings present in a .pot but absent from its catalogue: ' +
+      untranslated.CommaText, 0, untranslated.Count);
+  finally
+    have.Free;
+    cat.Free;
+    pot.Free;
+    untranslated.Free;
+    missing.Free;
+    pots.Free;
+  end;
 end;
 
 initialization

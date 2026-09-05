@@ -992,3 +992,36 @@ msgstr "%s[%d] 还没写 type，所以它下面的东西无从校验。可选：
 #: tycontrols.strconsts.rstyoptdiagnothingpaintsyet
 msgid "The option is understood. Series marks are not painted yet, so this draws its axes and nothing else."
 msgstr "option 已读懂。series 图元尚未实现，所以现在只画得出坐标轴。"
+
+#: tycontrols.strconsts.rstyfilesizebytes
+msgid "B"
+msgstr "B"
+
+#: tycontrols.strconsts.rstyfilesizegb
+msgid "GB"
+msgstr "GB"
+
+#: tycontrols.strconsts.rstyfilesizekb
+msgid "KB"
+msgstr "KB"
+
+#: tycontrols.strconsts.rstyfilesizemb
+msgid "MB"
+msgstr "MB"
+
+#: tycontrols.strconsts.rstyfilesizetb
+msgid "TB"
+msgstr "TB"
+
+#: tycontrols.strconsts.rstyoptdiagmorerows
+#, object-pascal-format
+msgid "and %d more like these."
+msgstr "另有 %d 条同类。"
+
+#: tycontrols.strconsts.rstyoptdiagnomarksatall
+msgid "The option is understood. Series marks are not painted yet, and this chart has no axes, so nothing is drawn."
+msgstr "option 没有问题。series 的图元还没有实现绘制，而这张图也没有坐标轴，所以画面上不会有任何东西。"
+
+#: tycontrols.strconsts.rstyoptdiagnoseries
+msgid "The option is understood. There are no series, so only the axes would draw."
+msgstr "option 没有问题。没有任何 series，所以只会画出坐标轴。"
