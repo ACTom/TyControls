@@ -408,6 +408,12 @@ function TyEffectiveFontSizeLogical(AFontSizeLogical: Integer): Integer;
   measures the drawn glyphs. Shared by TTyLabel and TTyNotification. }
 procedure TyWrapTextCJK(const AText: string; AMaxWidthPx: Integer;
   ACanvas: TCanvas; ALines: TStrings);
+{ The same wrap for a caller that has a font and a width but no canvas: returns
+  AText with real line breaks inserted. Measures on the shared measurement
+  surface, so a caller wrapping one string per axis label does not allocate a
+  bitmap per label -- which is what the chart's own version was doing. }
+function TyWrapTextToWidth(const AText, AFontName: string;
+  AFontSizeLogical, AWeight, APPI, AMaxWidthPx: Integer): string;
 { True for codepoints that participate in inter-character line breaking: Han, kana, hangul,
   bopomofo, CJK symbols/punctuation and the fullwidth forms. This is the classifier
   TyWrapTextCJK breaks on (each such glyph is its own wrap atom); exported so other wrap
@@ -604,6 +610,69 @@ var
 
 implementation
 
+{ THE TWO MEASUREMENT SURFACES, REUSED.
+
+  Both measurement functions used to create a 1x1 scratch, measure on it and free
+  it. Two reasons were given for that, and only one of them was ever true.
+
+  "A size-FLOOR path, not a per-frame paint path" WAS true when it was written --
+  one measurement per control, at AutoSize time. An axis measures one string per
+  LABEL: 5,000 categories cost 15,047 ms to lay out, and the same 5,000 with one
+  repeated label -- where the memo answers every call and neither surface is
+  touched -- cost 74 ms.
+
+  "A cached one would carry the last caller's font" is the half that needs care,
+  because the obvious defence of it is WRONG. It is tempting to say each function
+  reassigns every font property before measuring; neither does.
+
+    * TyConfigureTextFont sets FontName, FontHeight, FontQuality and FontStyle on
+      the BGRA surface -- but TBGRADefaultBitmap.GetFontRenderer feeds FIVE
+      fields to the renderer, and the fifth, FontOrientation, is never assigned
+      here.
+    * TyConfigureMeasureFont sets Name, Size and Style on the LCL canvas, and
+      never Quality, Orientation, CharSet or Pitch.
+
+  What actually makes a shared surface safe is that NOTHING IN THIS LIBRARY EVER
+  WRITES those fields on these two surfaces. FontOrientation has one would-be
+  user, DrawTextRotated, and it passes its angle to TextOutAngle rather than
+  setting it; grep source/ for Font.Orientation / Font.CharSet / Font.Pitch /
+  Font.Quality and there are no assignments at all. So every unassigned field
+  holds its construction default for the life of the surface -- which is what a
+  freshly created one would have held too. If a caller ever does set one of them,
+  this stops being true and the reset has to become explicit, which is why the
+  list above is written out rather than summarised.
+
+  MAIN THREAD ONLY, exactly like the memo above and TTyStyleModel's resolve
+  cache, and for the same reason: both are reached only from control layout and
+  paint, which are main-thread by LCL contract.
+
+  Dropped by TyInvalidateTextMeasureCache so that "invalidate" means everything
+  this unit is holding, and so a surface cannot outlive the memo it was filling.
+  NOT because that releases a font handle: LCL keeps those in a process-global
+  FontResourceCache and TFont.FreeReference only decrements a refcount, so
+  destroying a surface returns nothing to the widgetset. Item (10) of the
+  enumeration above is closed by dropping the MEMO, which that routine already
+  did before this change. }
+var
+  GRenderScratch: TBGRABitmap = nil;
+  GBlockScratch: TBitmap = nil;
+
+function RenderScratch: TBGRABitmap;
+begin
+  if GRenderScratch = nil then GRenderScratch := TBGRABitmap.Create(1, 1);
+  Result := GRenderScratch;
+end;
+
+function BlockScratch: TBitmap;
+begin
+  if GBlockScratch = nil then
+  begin
+    GBlockScratch := TBitmap.Create;
+    GBlockScratch.SetSize(1, 1);
+  end;
+  Result := GBlockScratch;
+end;
+
 function TyEffectiveFontName(const AName: string): string;
 begin
   if (AName = '') and (TyFallbackFontName <> '') then
@@ -687,6 +756,13 @@ begin
   end;
   if GRenderCache <> nil then
     GRenderCache.Clear;             // Objects[] here are plain ints, nothing to free
+  { The scratch surfaces too. Not because they can hold a stale FONT -- every
+    caller reassigns all four properties before measuring -- but because this is
+    the hook for item (10) of the enumeration above: registering a font file
+    changes what a name resolves to in the process, and a live surface may be
+    holding a handle resolved before that happened. }
+  FreeAndNil(GRenderScratch);
+  FreeAndNil(GBlockScratch);
 end;
 
 procedure TyTextMeasureCacheStats(out AHits, AMisses: Int64; out AEntries: Integer);
@@ -1002,10 +1078,9 @@ begin
     Inc(GMeasMisses);
   end;
 
-  Meas := TBitmap.Create;
+  Meas := BlockScratch;
   Lines := TStringList.Create;
   try
-    Meas.SetSize(1, 1);
     TyConfigureMeasureFont(Meas.Canvas, AFontName, AFontSizeLogical, AWeight, APPI);
     { The theme's line box wins when it set one, else the font's. Scaled here the same way
       the font size was, so a --line-height authored in logical px survives a HiDPI PPI. }
@@ -1028,7 +1103,6 @@ begin
     AHeightPx := Lines.Count * lineH;
   finally
     Lines.Free;
-    Meas.Free;
   end;
 
   if TyTextMeasureCacheEnabled then
@@ -1074,6 +1148,24 @@ begin
   if AWeight >= 600 then ABmp.FontStyle := [fsBold] else ABmp.FontStyle := [];
 end;
 
+function TyWrapTextToWidth(const AText, AFontName: string;
+  AFontSizeLogical, AWeight, APPI, AMaxWidthPx: Integer): string;
+var
+  lines: TStringList;
+begin
+  Result := AText;
+  if (AText = '') or (AMaxWidthPx <= 0) then Exit;
+  lines := TStringList.Create;
+  try
+    TyConfigureMeasureFont(BlockScratch.Canvas, AFontName, AFontSizeLogical,
+                           AWeight, APPI);
+    TyWrapTextCJK(AText, AMaxWidthPx, BlockScratch.Canvas, lines);
+    if lines.Count > 0 then Result := TrimRight(lines.Text);
+  finally
+    lines.Free;
+  end;
+end;
+
 function TyMeasureRenderedTextWidth(const AText, AFontName: string;
   AFontSizeLogical, AWeight, APPI: Integer): Integer;
 var
@@ -1110,10 +1202,10 @@ begin
   end;
 
   { A 1x1 surface: TextSize asks the font, never the pixels, so the bitmap never has to be
-    big enough to hold the string. Allocated per call for the same reason TyMeasureTextBlock
-    allocates its TBitmap per call -- a cached one would carry the last caller's font across
-    a theme switch, and this is a size-FLOOR path, not a per-frame paint path. }
-  Meas := TBGRABitmap.Create(1, 1);
+    big enough to hold the string. SHARED rather than allocated per call, as
+    TyMeasureTextBlock's TBitmap is -- see RenderScratch above for why sharing one is
+    safe, and for the measurement that says why it is worth doing. }
+  Meas := RenderScratch;
   Lines := TStringList.Create;
   try
     TyConfigureTextFont(Meas, AFontName, AFontSizeLogical, AWeight, APPI);
@@ -1131,7 +1223,6 @@ begin
     end;
   finally
     Lines.Free;
-    Meas.Free;
   end;
   if Result < 0 then Result := 0;
 

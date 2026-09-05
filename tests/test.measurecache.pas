@@ -48,6 +48,8 @@ type
     procedure SetUp; override;
     procedure TearDown; override;
   published
+    // --- the SHARED measuring surface must never change an answer -----------
+    procedure AReusedSurfaceNeverChangesAnAnswer;
     // --- the memo must never change an answer -------------------------------
     procedure MemoNeverChangesAnAnswer;
     procedure RepeatedIdenticalMeasurementIsServedFromTheMemo;
@@ -493,6 +495,70 @@ begin
   TyTextMeasureCacheEnabled := True;
   AssertEquals('enabling changes nothing about the answer', a,
     BlockW(CAP, 'Arial', 9, 400, 96, 0, 0));
+end;
+
+procedure TMeasureCacheTest.AReusedSurfaceNeverChangesAnAnswer;
+var
+  aloneA, aloneB, aloneC: Integer;
+  rA, rB: Integer;
+  i: Integer;
+begin
+  { THE SURFACE IS SHARED NOW. Both measurement functions used to allocate a 1x1
+    scratch per call and free it; they keep one and reuse it, because an axis
+    measures one string per LABEL and 5,000 categories cost fifteen seconds in
+    those allocations alone.
+
+    The comment that argued for per-call allocation said a kept surface "would
+    carry the last caller's font across a theme switch". It cannot -- both
+    functions assign every font property before measuring -- but that is an
+    argument, and this is the test. MEMO OFF, so every call below really does
+    land on the shared surface rather than being answered from the memo; then
+    interleave three different configurations and demand each still measures
+    what it measures alone.
+
+    If any state survived from one call to the next, the interleaved answers
+    would differ from the solo ones. Measuring each configuration only once
+    would pass whether or not the surface was clean, which is the fake-green
+    version of this test. }
+  TyTextMeasureCacheEnabled := False;
+  try
+    aloneA := TyMeasureRenderedTextWidth('Wg', 'Arial', 13, 400, 96);
+    aloneB := TyMeasureRenderedTextWidth('a much longer caption', 'Times New Roman',
+                                         24, 700, 144);
+    aloneC := BlockW('two' + LineEnding + 'lines', 'Arial', 9, 400, 96, 0, 0);
+
+    AssertTrue('the three configurations really do differ', aloneA <> aloneB);
+
+    for i := 1 to 3 do
+    begin
+      rA := TyMeasureRenderedTextWidth('Wg', 'Arial', 13, 400, 96);
+      rB := TyMeasureRenderedTextWidth('a much longer caption', 'Times New Roman',
+                                       24, 700, 144);
+      AssertEquals('the small one is unchanged after the big one', aloneA, rA);
+      AssertEquals('and the big one after the small one', aloneB, rB);
+      AssertEquals('the block path too, interleaved with the rendered one',
+        aloneC, BlockW('two' + LineEnding + 'lines', 'Arial', 9, 400, 96, 0, 0));
+    end;
+
+    { AND ACROSS AN INVALIDATION, which frees the surfaces: the next call has to
+      rebuild one and get the same number, not zero and not a crash.
+
+      This does NOT prove the freeing happens -- mutating it away leaves this
+      test green, because the font is reassigned per call either way, so a kept
+      surface answers identically. The freeing is there for item (10) of the
+      enumeration at TyInvalidateTextMeasureCache: registering a font file
+      changes what a name resolves to inside the process, and a live surface may
+      hold a handle resolved before that. Nothing here registers a font, so
+      there is no observable difference to assert; saying so is more honest than
+      an assertion that would pass either way. }
+    TyInvalidateTextMeasureCache;
+    AssertEquals('a freed surface is rebuilt and measures the same', aloneA,
+      TyMeasureRenderedTextWidth('Wg', 'Arial', 13, 400, 96));
+    AssertEquals('the block one as well', aloneC,
+      BlockW('two' + LineEnding + 'lines', 'Arial', 9, 400, 96, 0, 0));
+  finally
+    TyTextMeasureCacheEnabled := True;
+  end;
 end;
 
 initialization

@@ -29,6 +29,8 @@ begin
   RenderTo(ACanvas, ARect, APPI);
 end;
 
+var GSameLabel: Boolean = False;
+
 function MakeOption(APoints: Integer; AWithBars: Boolean): string;
 var
   i: Integer;
@@ -39,7 +41,10 @@ begin
   for i := 0 to APoints - 1 do
   begin
     if i > 0 then begin xs := xs + ','; ys := ys + ','; end;
-    xs := xs + '''c' + IntToStr(i) + '''';
+    if GSameLabel then
+      xs := xs + '''c'''
+    else
+      xs := xs + '''c' + IntToStr(i) + '''';
     ys := ys + IntToStr((i * 37) mod 100 + 1);
   end;
   Result := '{ xAxis: { data: [' + xs + '] }, yAxis: {}, series: [';
@@ -159,6 +164,9 @@ begin
     chart.SetBounds(0, 0, W, H);
     GIters := 4;
     Bench('large -- the case that cost ten seconds', 5000, False);
+    GSameLabel := True;
+    Bench('large, ONE repeated label (memo hits every time)', 5000, False);
+    GSameLabel := False;
     GIters := 40;
     BenchText;
   finally
