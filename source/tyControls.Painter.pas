@@ -2651,12 +2651,15 @@ procedure TTyPainter.FillPathWith(const AFill: TTyFill; const ABounds: TRect;
 var
   ctx: TBGRACanvas2D;
   grad: IBGRACanvasGradient2D;
+  pat: IBGRACanvasTextureProvider2D;
   p1, p2: TPointF;
-  i: Integer;
+  i, bw, bh: Integer;
+  img, scaled: TBGRABitmap;
 begin
   if (FBmp = nil) or (AFill.Kind = tfkNone) then Exit;
   ctx := FBmp.Canvas2D;
   ctx.fillMode := VecFillMode(ARule);
+  scaled := nil;
   case AFill.Kind of
     tfkLinearGradient:
       begin
@@ -2673,13 +2676,62 @@ begin
         end;
         ctx.fillStyle(grad);
       end;
+    tfkImage, tfkNineSlice:
+      begin
+        { A PATH-SHAPED TEXTURE. This used to fall through to AFill.Color and
+          claim that was a graceful degrade -- but an image fill's Color is
+          tyTransparent, so it painted nothing at all and said nothing about
+          it. The suggested alternative, clipping to the path and image-filling
+          the bounds, cannot work either: DrawImageFill sets FBmp.ClipRect, a
+          rectangle on the bitmap, and never sees the Canvas2D clip mask that
+          ClipPath writes.
+
+          A path cannot be nine-sliced -- slicing needs four corners -- so a
+          nine-slice fill tiles like any other texture here. That is a real
+          answer rather than an invisible one, and the chrome primitives still
+          slice properly where there are corners to slice. }
+        img := GetCachedImage(AFill.ImagePath, Scale(AFill.Blur));
+        if img = nil then
+          ctx.fillStyle(TyColorToBGRA(AFill.Color))
+        else
+        begin
+          bw := ABounds.Right - ABounds.Left;
+          bh := ABounds.Bottom - ABounds.Top;
+          { ANCHORED TO THE BOUNDS. createPattern takes its origin from the
+            current transform, and the path was already built -- BGRA applies
+            the matrix as points are ADDED -- so moving the matrix now moves
+            the tiling and not the shape. }
+          ctx.save;
+          try
+            ctx.translate(ABounds.Left, ABounds.Top);
+            if (AFill.ImageMode = timStretch) and (bw > 0) and (bh > 0)
+              and (img.Width > 0) and (img.Height > 0) then
+            begin
+              { Stretch means ONE tile the size of the bounds, so the image is
+                resampled rather than repeated. Freed after the fill, because
+                the pattern holds the bitmap rather than copying it. }
+              scaled := img.Resample(bw, bh) as TBGRABitmap;
+              pat := ctx.createPattern(scaled, 'no-repeat');
+            end
+            else
+              pat := ctx.createPattern(img, 'repeat');
+          finally
+            ctx.restore;
+          end;
+          ctx.fillStyle(pat);
+        end;
+      end;
   else
-    { Solid, and the image/nine-slice kinds too: a path cannot be nine-sliced,
-      so those degrade to their base colour rather than silently drawing
-      nothing. A caller wanting a textured path uses the chrome primitives. }
     ctx.fillStyle(TyColorToBGRA(AFill.Color));
   end;
-  ctx.fill;
+  try
+    ctx.fill;
+  finally
+    { AFTER the fill: the pattern references this bitmap, it does not own a
+      copy of it. }
+    pat := nil;
+    scaled.Free;
+  end;
 end;
 
 procedure TTyPainter.StrokePath(AColor: TTyColor; AWidthLogical: Double);

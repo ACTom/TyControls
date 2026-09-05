@@ -29,6 +29,7 @@ type
     { Number of transparent -> opaque transitions along a row. Counts dash
       segments without depending on where the first one happens to start. }
     function InkRunsAlongRow(AY, AX0, AX1: Integer): Integer;
+    function ColourFlipsAlongRow(AY, AX0, AX1: Integer): Integer;
     { Bounding box of everything with any alpha. Returns False when nothing was
       drawn at all, which is itself a result worth asserting. }
     function InkBounds(out AL, AT, AR, AB: Integer): Boolean;
@@ -44,6 +45,8 @@ type
     procedure TestEvenOddLeavesTheRingHole;
     procedure TestNonZeroFillsTheRingHole;
     procedure TestFillPathWithGradientVariesAcrossTheBounds;
+    procedure TestFillPathWithATextureFillsThePathShape;
+    procedure TestAStretchedTextureCoversTheWholeBounds;
     { ---- stroking ---- }
     procedure TestStrokeDrawsOnTheOutline;
     procedure TestZeroWidthStrokeDrawsNothing;
@@ -672,6 +675,151 @@ begin
   holeAfterFill := FPainter.PathContains(50, 50, tfrEvenOdd);
   AssertFalse('an even-odd query still answers even-odd after a non-zero fill',
     holeAfterFill);
+end;
+
+{ How many times the dominant channel flips between red and blue along a row.
+  A stretched single tile flips once; a repeat of the same tile flips several
+  times, which is the difference coverage cannot see. }
+function TPainterVectorTest.ColourFlipsAlongRow(AY, AX0, AX1: Integer): Integer;
+var
+  x, cur, prev: Integer;
+  p: TBGRAPixel;
+begin
+  Result := 0;
+  prev := 0;
+  for x := AX0 to AX1 do
+  begin
+    p := PixelAt(x, AY);
+    if p.alpha < 200 then Continue;
+    if p.red > p.blue + 40 then cur := 1
+    else if p.blue > p.red + 40 then cur := 2
+    else cur := 0;
+    if cur = 0 then Continue;
+    if (prev <> 0) and (cur <> prev) then Inc(Result);
+    prev := cur;
+  end;
+end;
+
+{ A checker written to a temp file, since the suite keeps binaries out of git.
+  Two colours, so a test can tell a TEXTURE from a flat fill.
+
+  SIXTEEN PIXELS SQUARE, in four blocks of eight. A 2x2 tile is all edge: the
+  pattern scanner interpolates, so every pixel came out a blend of the two and
+  an assertion looking for red found none -- while 1,224 pixels of purple were
+  sitting there proving the fill worked. }
+function WriteCheckerPng: string;
+var
+  b: TBGRABitmap;
+  x, y: Integer;
+begin
+  Result := GetTempDir + 'tycontrols-checker-test.png';
+  b := TBGRABitmap.Create(16, 16);
+  try
+    for y := 0 to 15 do
+      for x := 0 to 15 do
+        if ((x < 8) = (y < 8)) then
+          b.SetPixel(x, y, BGRA(255, 0, 0, 255))
+        else
+          b.SetPixel(x, y, BGRA(0, 0, 255, 255));
+    { A GREEN CORNER marks the image's own origin, so a test can see where the
+      tiling STARTS rather than only that it happened. }
+    for y := 0 to 3 do
+      for x := 0 to 3 do
+        b.SetPixel(x, y, BGRA(0, 255, 0, 255));
+    b.SaveToFile(Result);
+  finally
+    b.Free;
+  end;
+end;
+
+procedure TPainterVectorTest.TestFillPathWithATextureFillsThePathShape;
+var
+  f: TTyFill;
+  reds, blues, x, y: Integer;
+  p: TBGRAPixel;
+begin
+  { PATTERNS ARE A FIRST-CLASS FILL, per row 2 -- and an image-backed fill used
+    to paint NOTHING here. The else arm claimed the image kinds degrade to
+    their base colour; an image fill's Color is tyTransparent, because neither
+    place that builds one ever assigns it, so "degrade" meant alpha zero and no
+    error. The suggested workaround could not work either: DrawImageFill clips
+    with FBmp.ClipRect, a rectangle on the bitmap, which never sees the
+    Canvas2D clip mask ClipPath writes. }
+  MakePainter(60, 60, 96);
+  f := Default(TTyFill);
+  f.Kind := tfkImage;
+  f.ImagePath := WriteCheckerPng;
+  f.ImageMode := timCover;
+
+  FPainter.BeginPath;
+  FPainter.CirclePath(30, 30, 20);
+  FPainter.FillPathWith(f, Rect(10, 10, 50, 50));
+
+  reds := 0;
+  blues := 0;
+  for y := 0 to 59 do
+    for x := 0 to 59 do
+    begin
+      p := PixelAt(x, y);
+      if p.alpha < 200 then Continue;
+      if (p.red > 200) and (p.blue < 60) then Inc(reds)
+      else if (p.blue > 200) and (p.red < 60) then Inc(blues);
+    end;
+
+  AssertTrue('the texture actually painted (' + IntToStr(reds + blues)
+    + ' px)', reds + blues > 300);
+  { BOTH colours: one alone would mean a flat fill that happens to be opaque,
+    which is what a "degrade to a colour" would look like if the colour were
+    ever set. }
+  AssertTrue('and it is a texture, not one flat colour (' + IntToStr(reds)
+    + ' red, ' + IntToStr(blues) + ' blue)', (reds > 50) and (blues > 50));
+
+  { PATH-SHAPED, not bounds-shaped. The corner of the bounds is outside a
+    circle inscribed in it. }
+  AssertTrue('the bounds corner is untouched', AlphaAt(11, 11) = 0);
+end;
+
+procedure TPainterVectorTest.TestAStretchedTextureCoversTheWholeBounds;
+var
+  f: TTyFill;
+  inked, x, y: Integer;
+begin
+  { timStretch means ONE tile the size of the bounds rather than a repeat, so
+    a two-pixel image has to be resampled. The resampled copy is freed after
+    the fill, and the pattern holds the bitmap rather than copying it -- so
+    freeing it before the fill would paint from freed memory. }
+  MakePainter(60, 60, 96);
+  f := Default(TTyFill);
+  f.Kind := tfkImage;
+  f.ImagePath := WriteCheckerPng;
+  f.ImageMode := timStretch;
+
+  FPainter.BeginPath;
+  FPainter.RectPath(10, 10, 40, 40);
+  FPainter.FillPathWith(f, Rect(10, 10, 50, 50));
+
+  inked := 0;
+  for y := 0 to 59 do
+    for x := 0 to 59 do
+      if AlphaAt(x, y) > 200 then Inc(inked);
+  { RectPath is (left, top, right, bottom), so the path is 30x30 = 900 px --
+    the whole of it, rather than one tile in a corner. }
+  AssertTrue('the stretched texture covers the path (' + IntToStr(inked)
+    + ' px of 900)', inked > 850);
+
+  { ONE TILE, NOT A REPEAT. Coverage alone cannot tell those apart -- a repeat
+    covers the path too, which is how the first version of this test passed
+    with the stretch branch mutated out. The number of colour changes across
+    the shape can: one stretched 16px checker gives a single flip, a repeat of
+    it gives several. }
+  AssertEquals('the checker crosses once, so it was scaled not repeated',
+    1, ColourFlipsAlongRow(25, 12, 38));
+
+  { AND IT STARTS AT THE BOUNDS. The image's own corner is green, so this says
+    the tiling is anchored where the caller said and not at the canvas origin
+    -- the other thing coverage was blind to. }
+  AssertTrue('the image corner lands at the bounds corner',
+    PixelAt(12, 12).green > 150);
 end;
 
 initialization
