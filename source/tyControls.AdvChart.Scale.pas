@@ -277,6 +277,8 @@ type
     FMinorSplit: Integer;
     FFixMin: Boolean;
     FFixMax: Boolean;
+    FMinInterval: Double;
+    FMaxInterval: Double;
   public
     constructor Create;
     { Expand the extent to round boundaries so the tick count lands near
@@ -297,6 +299,16 @@ type
     property MinorSplitNumber: Integer read FMinorSplit write FMinorSplit;
     property FixMin: Boolean read FFixMin write FFixMin;
     property FixMax: Boolean read FFixMax write FFixMax;
+    { FLOOR AND CEILING ON THE STEP, ECharts' minInterval / maxInterval. 0 means
+      unset for both, which is why they are Doubles rather than an optional
+      record: a step of zero is meaningless anyway.
+
+      minInterval is the one anybody notices. An axis counting whole things --
+      orders, people, errors -- nices 0..1 to a step of 0.2 and labels 0, 0.2,
+      0.4 for values no fraction of which can exist; minInterval: 1 is how
+      ECharts says "this axis counts". }
+    property MinInterval: Double read FMinInterval write FMinInterval;
+    property MaxInterval: Double read FMaxInterval write FMaxInterval;
   end;
 
 { JavaScript's rounding, which is NOT FPC's -- Round is banker's here. Exported
@@ -960,6 +972,18 @@ begin
     FInterval := AExactInterval
   else
     FInterval := NiceNum(span / ASplitNumber, False);
+
+  { CLAMPED, after the nice number and before the extent is rounded to it, so
+    the ends still land on multiples of whatever step survives. An explicit
+    `interval` is exempt: it is already a statement about the step, and two
+    instructions about the same number should not silently fight. }
+  if AExactInterval <= 0 then
+  begin
+    if (FMinInterval > 0) and (FInterval < FMinInterval) then
+      FInterval := FMinInterval;
+    if (FMaxInterval > 0) and (FInterval > FMaxInterval) then
+      FInterval := FMaxInterval;
+  end;
   if FFixMin then
     lo := e.Start
   else

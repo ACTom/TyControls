@@ -57,6 +57,9 @@ type
     procedure TestMinorTicksDoNotGetLabels;
     procedure TestCategoriesCollectedFromSeriesDataReachTheAxis;
     procedure TestAnUnnaturalIntervalIsNotRoundedAway;
+    procedure TestMinIntervalKeepsACountingAxisWhole;
+    procedure TestMaxIntervalCapsTheStep;
+    procedure TestAValueAxisBoundaryGapPadsTheExtent;
     procedure TestACrowdedAxisThinsItsLabels;
     procedure TestResizingRelaysOutTheAxes;
     procedure TestAnAxisNameIsDrawnInTheSpaceReservedForIt;
@@ -1014,6 +1017,98 @@ begin
   AssertEquals('0, 50, 100 -- three labels, not eleven', 3,
     Length(spec^.Labels));
   AssertEquals('and a position for each', 3, Length(spec^.Positions));
+end;
+
+procedure TAdvanceChartTest.TestMinIntervalKeepsACountingAxisWhole;
+var
+  sc: TTyScale;
+  ticks: TTyScaleTickArray;
+  i: Integer;
+begin
+  { AN AXIS THAT COUNTS THINGS. Data of 0..1 nices to a step of 0.2 and labels
+    0, 0.2, 0.4 -- fractions of an order, a person, an error. `minInterval: 1`
+    is how ECharts says the axis counts, and the scale had no property for it:
+    its only mention anywhere was a comment saying it does not apply to an
+    ORDINAL scale, which is true and about something else. }
+  FChart.Option := '{ xAxis: { data: [''A'', ''B''] },'
+    + ' yAxis: { minInterval: 1 },'
+    + ' series: [{ type: ''bar'', data: [0, 1] }] }';
+  Draw;
+  sc := FChart.Build.Grid(0).YAxis(0).Scale;
+  AssertTrue('the step is at least one', TTyIntervalScale(sc).Interval >= 1.0);
+
+  ticks := sc.GetTicks;
+  for i := 0 to High(ticks) do
+    if ticks[i].Level = 0 then
+      AssertEquals(Format('tick %d (%.4f) is a whole number',
+        [i, ticks[i].Value]), Round(ticks[i].Value), ticks[i].Value, 1e-9);
+end;
+
+procedure TAdvanceChartTest.TestMaxIntervalCapsTheStep;
+var
+  sc: TTyScale;
+begin
+  { The other end of the same pair: a wide range would otherwise nice to a step
+    so large the axis carries two or three numbers. }
+  FChart.Option := '{ xAxis: { data: [''A''] },'
+    + ' yAxis: { min: 0, max: 1000, maxInterval: 100 },'
+    + ' series: [{ type: ''bar'', data: [500] }] }';
+  Draw;
+  sc := FChart.Build.Grid(0).YAxis(0).Scale;
+  AssertTrue(Format('the step is capped at 100, got %.2f',
+    [TTyIntervalScale(sc).Interval]),
+    TTyIntervalScale(sc).Interval <= 100.0 + 1e-9);
+end;
+
+procedure TAdvanceChartTest.TestAValueAxisBoundaryGapPadsTheExtent;
+var
+  bare, padded: TTyRange;
+begin
+  { A VALUE AXIS' boundaryGap IS A PAIR, not the boolean a category axis takes.
+    The builder read the boolean form, acknowledged the pair in a comment, and
+    nothing implemented it -- so the option was accepted and ignored.
+
+    Compared against the same chart without it: pinning absolute numbers would
+    pin whatever the niceing happens to do rather than the padding. }
+  FChart.Option := '{ xAxis: { data: [''A'', ''B''] }, yAxis: {},'
+    + ' series: [{ type: ''line'', data: [10, 20] }] }';
+  Draw;
+  bare := FChart.Build.Grid(0).YAxis(0).Scale.GetExtent;
+
+  FChart.Option := '{ xAxis: { data: [''A'', ''B''] },'
+    + ' yAxis: { boundaryGap: [''50%'', ''50%''] },'
+    + ' series: [{ type: ''line'', data: [10, 20] }] }';
+  Draw;
+  padded := FChart.Build.Grid(0).YAxis(0).Scale.GetExtent;
+
+  AssertTrue(Format('the padded axis spans more than the bare one '
+    + '(%.1f..%.1f against %.1f..%.1f)',
+    [padded.Start, padded.Stop, bare.Start, bare.Stop]),
+    (padded.Stop - padded.Start) > (bare.Stop - bare.Start));
+  AssertTrue('and it reaches further up', padded.Stop > bare.Stop);
+
+  { A malformed entry pads nothing rather than pushing the axis to infinity. }
+  FChart.Option := '{ xAxis: { data: [''A'', ''B''] },'
+    + ' yAxis: { boundaryGap: [''nonsense'', true] },'
+    + ' series: [{ type: ''line'', data: [10, 20] }] }';
+  Draw;
+  padded := FChart.Build.Grid(0).YAxis(0).Scale.GetExtent;
+  AssertFalse('nothing became NaN', IsNan(padded.Start) or IsNan(padded.Stop));
+  AssertEquals('and the extent is the unpadded one', bare.Start,
+    padded.Start, 1e-9);
+
+  { A BARE NUMERIC STRING IS REFUSED, and that is the case that says the '%'
+    check is doing something: '50' could mean fifty units or fifty per cent,
+    ECharts documents neither, and choosing one would pad by a number the
+    author never asked for. A number belongs in the option as a number. }
+  FChart.Option := '{ xAxis: { data: [''A'', ''B''] },'
+    + ' yAxis: { boundaryGap: [''50'', ''50''] },'
+    + ' series: [{ type: ''line'', data: [10, 20] }] }';
+  Draw;
+  padded := FChart.Build.Grid(0).YAxis(0).Scale.GetExtent;
+  AssertEquals('a bare numeric string pads nothing', bare.Start,
+    padded.Start, 1e-9);
+  AssertEquals('at either end', bare.Stop, padded.Stop, 1e-9);
 end;
 
 initialization

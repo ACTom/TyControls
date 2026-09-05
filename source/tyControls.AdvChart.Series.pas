@@ -547,6 +547,29 @@ begin
   Result := AStore.DimIndexOf(AAxis.Dim);
 end;
 
+{ One end of a value axis' boundaryGap: a number is an absolute amount, a string
+  ending in '%' is that share of the data's own span. NaN for anything else, so a
+  malformed entry pads nothing rather than pushing the axis to infinity. The '.'
+  is forced, because a comma-decimal machine would otherwise read '10.5%' as
+  nothing at all. }
+function GapAmount(AData: TJSONData; ASpan: Double): Double;
+var
+  txt: string;
+  pct: Double;
+  fs: TFormatSettings;
+begin
+  Result := NaN;
+  if AData = nil then Exit;
+  if AData.JSONType = jtNumber then Exit(AData.AsFloat);
+  if AData.JSONType <> jtString then Exit;
+  txt := Trim(AData.AsString);
+  if (txt = '') or (txt[Length(txt)] <> '%') then Exit;
+  fs := DefaultFormatSettings;
+  fs.DecimalSeparator := '.';
+  if not TryStrToFloat(Copy(txt, 1, Length(txt) - 1), pct, fs) then Exit;
+  Result := ASpan * pct / 100;
+end;
+
 procedure TyApplyAxisExtents(AOption: TTyChartOption; ABuild: TTyChartBuild;
   const ABindings: TTySeriesBindingArray; const AStores: array of TTyDataStore;
   AIndex: TTyAxisSeriesIndex);
@@ -564,7 +587,7 @@ var
     minor: Integer;
     sub2: TJSONData;
     feeders: TTyIntegerArray;
-    lo, hi, dlo, dhi: Double;
+    lo, hi, dlo, dhi, minIvl, maxIvl, gapLo, gapHi: Double;
     any, scaleOpt: Boolean;
     filter: TTyExtentFilter;
   begin
@@ -645,6 +668,8 @@ var
     fixHi := False;
     split := 5;
     ivl := 0;
+    minIvl := 0;
+    maxIvl := 0;
     minor := 0;
     if node <> nil then
     begin
@@ -660,6 +685,19 @@ var
         hi := d.AsFloat;
         fixHi := True;
       end;
+      { A VALUE AXIS' boundaryGap IS A PAIR, not the boolean a category axis
+        takes -- `['10%', '10%']` or a pair of absolute amounts -- and it pads
+        the extent before it is nicied. Read here rather than in the builder
+        because it acts on the extent, and the builder has none yet. }
+      d := node.Find('boundaryGap');
+      if (d <> nil) and (d.JSONType = jtArray) and (TJSONArray(d).Count = 2) then
+      begin
+        gapLo := GapAmount(TJSONArray(d).Items[0], hi - lo);
+        gapHi := GapAmount(TJSONArray(d).Items[1], hi - lo);
+        if not IsNan(gapLo) then lo := lo - gapLo;
+        if not IsNan(gapHi) then hi := hi + gapHi;
+      end;
+
       d := node.Find('splitNumber');
       if (d <> nil) and (d.JSONType = jtNumber) then
       begin
@@ -672,6 +710,11 @@ var
       { minorTick: { show: true, splitNumber: n }. Off unless asked for -- an
         axis that grows a second set of lines just by being drawn is not what
         anybody wrote. Upstream's default split is 5. }
+      d := node.Find('minInterval');
+      if (d <> nil) and (d.JSONType = jtNumber) then minIvl := d.AsFloat;
+      d := node.Find('maxInterval');
+      if (d <> nil) and (d.JSONType = jtNumber) then maxIvl := d.AsFloat;
+
       d := node.Find('minorTick');
       if (d <> nil) and (d.JSONType = jtObject) then
       begin
@@ -692,6 +735,9 @@ var
     begin
       TTyIntervalScale(AAxis.Scale).FixMin := fixLo;
       TTyIntervalScale(AAxis.Scale).FixMax := fixHi;
+      { BEFORE Niceify, because they bound the step it is about to choose. }
+      TTyIntervalScale(AAxis.Scale).MinInterval := minIvl;
+      TTyIntervalScale(AAxis.Scale).MaxInterval := maxIvl;
       { An explicit `interval` is a statement about the STEP, so it is handed
         to the tick generator AS the step -- one generator, one set of rules,
         told the answer rather than asked to infer it.
