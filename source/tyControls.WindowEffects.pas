@@ -49,6 +49,30 @@ function TyResolveWindowEffect(const AStyle: TTyStyleSet; AMaximized: Boolean): 
   top-level windows, which is NOT what we want for opt-out/maximize.) Exposed for testing. }
 function TyRadiusToCornerPref(ARadiusPx: Integer; AMaximized: Boolean): Integer;
 
+{ True only on Windows versions with NO DWM AT ALL -- XP / Server 2003 (major < 6), where the
+  non-client area is always legacy-painted. Deliberately NOT "is composition enabled": Vista and
+  Win7 can have it switched off at runtime, and those are versions whose frame handling is
+  already settled and must not move. False on every non-Windows build. }
+function TyOsLegacyNonClient: Boolean;
+
+{ Whether the Win32 non-client calc should eat the WHOLE frame rather than only the top.
+
+  The frame is kept for exactly ONE reason: it is what the DWM hangs the shadow on. On a
+  version with no DWM the frame buys nothing and COSTS something -- the left/right/bottom bands
+  stay real frame and the OS legacy-paints its own ring in them (on XP, the Luna blue border),
+  and a WS_CAPTION window additionally gets its classic caption repainted over our chrome every
+  time a menu or dropdown steals activation. Eating the whole frame is what ApplyThickFrame
+  keys its WS_CAPTION removal off, so one flag settles both.
+
+  Full-frame-eat has two costs, and BOTH are things XP does not have: the DWM shadow, and the
+  shell's Aero Snap / native maximize (which need the WS_CAPTION this mode strips). That is
+  why it is the right trade on XP specifically -- and why the gate is the OS version and not
+  "is composition on". Vista and Win7 can run with composition off yet still have a DWM frame
+  and snap to lose; their handling is settled and this must not touch it.
+
+  Pure, so the rule is pinned rather than inferred from the platform code that reads it. }
+function TyNcFullFrameEat(AShadowWanted, ALegacyNonClient: Boolean): Boolean;
+
 { Apply rounded corners + native shadow to AForm's window per platform/widgetset.
   Safe to call repeatedly and when AForm has no handle (no-op). Never raises. }
 procedure TyApplyWindowEffects(AForm: TCustomForm; const AEffect: TTyWindowEffect);
@@ -100,6 +124,11 @@ begin
     Result.BorderColorRGB := TyToColorRef(AStyle.Background.Color)
   else
     Result.BorderColorRGB := TyDwmColorNone;
+end;
+
+function TyNcFullFrameEat(AShadowWanted, ALegacyNonClient: Boolean): Boolean;
+begin
+  Result := (not AShadowWanted) or ALegacyNonClient;
 end;
 
 function TyRadiusToCornerPref(ARadiusPx: Integer; AMaximized: Boolean): Integer;
@@ -215,6 +244,22 @@ begin
     end;
     FnExtend(h, m);
   end;
+end;
+
+function TyOsLegacyNonClient: Boolean;
+begin
+  { Major < 6 is XP / Server 2003 and older -- the versions with no dwmapi.dll at all. Vista is
+    6.0 and Win7 is 6.1, and both stay OUT of this deliberately: they have a DWM frame and the
+    shell gestures that ride on WS_CAPTION, so their non-client handling is settled and this
+    must not disturb it. (Win32MajorVersion is the manifest-capped GetVersion value, which is
+    fine here: every capped value is >= 6, so nothing modern can be mistaken for XP.) }
+  Result := Win32MajorVersion < 6;
+end;
+{$ELSE}
+function TyOsLegacyNonClient: Boolean;
+begin
+  { Off Win32 nothing consumes this -- the trade it feeds is a Win32 non-client question. }
+  Result := False;
 end;
 {$ENDIF}
 
