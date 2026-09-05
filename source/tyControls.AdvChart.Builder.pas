@@ -1080,7 +1080,10 @@ var
   node: TJSONObject;
 
   procedure FillSpec(var ASpec: TTyAxisLayoutSpec; AAxis: TTyAxis; ANode: TJSONObject);
-  var q, kept: Integer;
+  var
+    q, kept: Integer;
+    lbl, wd: TJSONData;
+    ovf: string;
   begin
     ASpec := Default(TTyAxisLayoutSpec);
     ASpec.Side := AAxis.Side;
@@ -1101,6 +1104,30 @@ var
       }`, which is applied earlier in the same rebuild, multiplied the label
       count by the minor split and asked the layout to fit five times as many
       strings as the axis has numbers. }
+    { axisLabel.width + overflow. `none` is ECharts' default and is what this
+      already did: no bound, and crowding handled by thinning the labels.
+
+      THE BROKEN TEXT IS PRODUCED HERE, once, and stored in the spec -- so the
+      layout measures exactly the string the paint draws. MeasureLine already
+      honours the breaks inside a string, so nothing downstream has to know that
+      wrapping happened at all. }
+    ASpec.LabelWidthLogical := 0;
+    ASpec.LabelOverflow := loNone;
+    if ANode <> nil then
+    begin
+      lbl := FindIn(ANode, 'axisLabel');
+      if (lbl <> nil) and (lbl.JSONType = jtObject) then
+      begin
+        wd := FindIn(TJSONObject(lbl), 'width');
+        if (wd <> nil) and (wd.JSONType = jtNumber) then
+          ASpec.LabelWidthLogical := wd.AsFloat;
+        ovf := LowerCase(StrIn(TJSONObject(lbl), 'overflow', ''));
+        if ovf = 'truncate' then ASpec.LabelOverflow := loTruncate
+        else if (ovf = 'break') or (ovf = 'breakall') then
+          ASpec.LabelOverflow := loBreak;
+      end;
+    end;
+
     ticks := AAxis.Scale.GetTicks;
     SetLength(ASpec.Labels, Length(ticks));
     SetLength(ASpec.Positions, Length(ticks));
@@ -1118,6 +1145,13 @@ var
         ASpec.Labels[kept] := NumText(ticks[q].Value);
       { The BAND-ADJUSTED, post-inverse fraction, so the layout layer and the
         renderer cannot disagree about where a label goes. }
+      { Broken to the width the option asked for, through the measurer: this
+        unit is pure and CJK-aware wrapping lives in the painter. }
+      if (ASpec.LabelOverflow = loBreak) and (ASpec.LabelWidthLogical > 0)
+        and (AMeasurer <> nil) then
+        ASpec.Labels[kept] := AMeasurer.WrapToWidth(ASpec.Labels[kept],
+          ASpec.FontName, ASpec.FontSizeLogical, ASpec.FontWeight,
+          AxisScaleF(ASpec.LabelWidthLogical, APPI));
       ASpec.Positions[kept] := AAxis.NormalizedCoord(ticks[q].Value);
       Inc(kept);
     end;

@@ -121,6 +121,10 @@ type
     TickLengthLogical: Double;
     Name: string;
     NameGapLogical: Double;
+    { axisLabel.width, LOGICAL px; <= 0 means unbounded. Only loTruncate reads
+      it at paint time -- for loBreak the labels arrive already broken. }
+    LabelWidthLogical: Double;
+    LabelOverflow: TTyLabelOverflow;
   end;
   TTyAxisLayoutSpecArray = array of TTyAxisLayoutSpec;
   PTyAxisLayoutSpec = ^TTyAxisLayoutSpec;
@@ -137,6 +141,11 @@ type
     Shown: Boolean;
   end;
   TTyAxisLabelPlacementArray = array of TTyAxisLabelPlacement;
+
+{ Logical px -> device px for axis geometry. Exported because the builder
+  scales axisLabel.width the same way, and a second copy of this rule is how two
+  layers start disagreeing about what a pixel is. }
+function AxisScaleF(ALogical: Double; APPI: Integer): Double;
 
 { Phase 1. How much room this axis needs on its own side, DEVICE px. }
 function TyAxisThickness(const ASpec: TTyAxisLayoutSpec;

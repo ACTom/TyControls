@@ -24,6 +24,8 @@ type
   public
     procedure MeasureLine(const AText, AFontName: string;
       AFontSizeLogical, AWeight: Integer; out AW, AH: Double);
+    function WrapToWidth(const AText, AFontName: string;
+      AFontSizeLogical, AWeight: Integer; AMaxWidth: Double): string;
   end;
 
   TAdvChartBuilderTest = class(TTestCase)
@@ -965,6 +967,30 @@ begin
     AssertEquals(5, st.Get(1, 0), 0);
   finally
     st.Free;
+  end;
+end;
+
+function TFixedMeasurer.WrapToWidth(const AText, AFontName: string;
+  AFontSizeLogical, AWeight: Integer; AMaxWidth: Double): string;
+var
+  perLine, i: Integer;
+begin
+  { Seven pixels a character, the same figure MeasureLine reports -- so a test
+    using this fake gets wrapping that agrees with its own measurements.
+    Returning AText unchanged would make every wrapping assertion pass without
+    anything being wrapped. }
+  Result := AText;
+  if (AText = '') or (AMaxWidth <= 0) then Exit;
+  perLine := Trunc(AMaxWidth / 7.0);
+  if perLine < 1 then perLine := 1;
+  if Length(AText) <= perLine then Exit;
+  Result := '';
+  i := 1;
+  while i <= Length(AText) do
+  begin
+    if Result <> '' then Result := Result + LineEnding;
+    Result := Result + Copy(AText, i, perLine);
+    Inc(i, perLine);
   end;
 end;
 

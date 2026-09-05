@@ -62,9 +62,27 @@ type
     them asserts the local font as much as it asserts the algorithm. }
   ITyTextMeasurer = interface
     ['{4C7E2A19-6B03-4F5D-9E81-2D6A08C3B45F}']
+    { Honours the line breaks already IN AText -- it measures a BLOCK -- so a
+      caller wanting several lines wraps first and measures the result. }
     procedure MeasureLine(const AText, AFontName: string;
       AFontSizeLogical, AWeight: Integer; out AW, AH: Double);
+    { AText broken to AMaxWidth, returned as one string with real line breaks.
+
+      ON THE MEASURER rather than in the pure layer because wrapping that works
+      on Chinese needs TyWrapTextCJK: CJK carries no spaces, so a run of it is
+      one unbreakable word to any space-based wrapper and overflows instead of
+      wrapping (repo memory: cjk-wordwrap-space-only-trap). The measurer is
+      already this layer's only window onto text, which makes it the right place
+      for the one text operation the layout cannot do for itself. }
+    function WrapToWidth(const AText, AFontName: string;
+      AFontSizeLogical, AWeight: Integer; AMaxWidth: Double): string;
   end;
+
+  { What to do with an axis label wider than axisLabel.width, matching ECharts'
+    axisLabel.overflow. `none` is the default and is the behaviour that already
+    existed: the label is drawn at its full width and crowding is dealt with by
+    thinning instead. }
+  TTyLabelOverflow = (loNone, loTruncate, loBreak);
 
   TTyStringArray = array of string;
   TTyIntegerArray = array of Integer;

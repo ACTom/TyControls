@@ -38,6 +38,8 @@ type
     constructor Create(APPI: Integer);
     procedure MeasureLine(const AText, AFontName: string;
       AFontSizeLogical, AWeight: Integer; out AW, AH: Double);
+    function WrapToWidth(const AText, AFontName: string;
+      AFontSizeLogical, AWeight: Integer; AMaxWidth: Double): string;
     property PPI: Integer read FPPI;
   end;
 
@@ -78,6 +80,33 @@ begin
   { The larger of the two -- see the unit header. }
   AW := Max(blockW, renderW);
   AH := blockH;
+end;
+
+function TTyPainterTextMeasurer.WrapToWidth(const AText, AFontName: string;
+  AFontSizeLogical, AWeight: Integer; AMaxWidth: Double): string;
+var
+  bmp: TBitmap;
+  lines: TStringList;
+begin
+  Result := AText;
+  if (AText = '') or (AMaxWidth <= 0) then Exit;
+  { A MEASUREMENT canvas configured exactly as the drawing one will be:
+    TyConfigureMeasureFont is the shared setup that makes a measured width match
+    the drawn glyphs, and TyWrapTextCJK measures through the canvas it is
+    handed -- so wrapping it any other way would break at the wrong places. }
+  bmp := TBitmap.Create;
+  lines := TStringList.Create;
+  try
+    bmp.SetSize(1, 1);
+    TyConfigureMeasureFont(bmp.Canvas, AFontName, AFontSizeLogical, AWeight,
+                           FPPI);
+    TyWrapTextCJK(AText, Round(AMaxWidth), bmp.Canvas, lines);
+    if lines.Count > 0 then
+      Result := TrimRight(lines.Text);
+  finally
+    lines.Free;
+    bmp.Free;
+  end;
 end;
 
 function TyAnchorToAlignment(A: TTyTextAnchorH): TAlignment;

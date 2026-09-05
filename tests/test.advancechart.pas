@@ -17,6 +17,7 @@ uses Classes, SysUtils, Math, Controls, Graphics, Forms, fpcunit, testregistry,
      tyControls.AdvChart.Types, tyControls.AdvChart.Coord,
      tyControls.AdvChart.Builder, tyControls.AdvChart.Scale,
      tyControls.AdvChart.Layout,
+     LazUTF8,
      tyControls.AdvanceChart;
 type
   { Re-exposes the protected render so a test can drive it onto a bitmap. }
@@ -57,6 +58,9 @@ type
     procedure TestMinorTicksDoNotGetLabels;
     procedure TestCategoriesCollectedFromSeriesDataReachTheAxis;
     procedure TestAnUnnaturalIntervalIsNotRoundedAway;
+    procedure TestALongLabelBreaksToTheWidthItWasGiven;
+    procedure TestCJKBreaksBetweenCharactersNotOnSpaces;
+    procedure TestTruncateEllipsisesInsteadOfOverflowing;
     procedure TestMinIntervalKeepsACountingAxisWhole;
     procedure TestMaxIntervalCapsTheStep;
     procedure TestAValueAxisBoundaryGapPadsTheExtent;
@@ -1109,6 +1113,118 @@ begin
   AssertEquals('a bare numeric string pads nothing', bare.Start,
     padded.Start, 1e-9);
   AssertEquals('at either end', bare.Stop, padded.Stop, 1e-9);
+end;
+
+procedure TAdvanceChartTest.TestALongLabelBreaksToTheWidthItWasGiven;
+var
+  gb: TTyGridBuild;
+  spec: PTyAxisLayoutSpec;
+  i, wrapped: Integer;
+begin
+  { axisLabel.width + overflow:'break'. Every piece of this existed and none of
+    it was reachable: TyWrapTextCJK, TyEllipsisPrefix, and DrawText's own
+    AEllipsis and AMultiLine. The chart passed AEllipsis := False, never set
+    AMultiLine, and had nowhere to say how wide a label may be.
+
+    THE BROKEN TEXT IS IN THE SPEC, which is the point: the layout measures the
+    same string the paint draws, so the gutter it reserves is the gutter the
+    text needs. }
+  FChart.Option := '{ xAxis: { data: [''a very long category label indeed''],'
+    + ' axisLabel: { width: 40, overflow: ''break'' } },'
+    + ' yAxis: {}, series: [{ type: ''bar'', data: [1] }] }';
+  Draw;
+  gb := FChart.Build.Grid(0);
+  spec := gb.SpecFor(gb.XAxis(0));
+  AssertTrue('the axis has a spec', spec <> nil);
+  AssertTrue('the width reached the spec', spec^.LabelWidthLogical > 0);
+
+  wrapped := 0;
+  for i := 0 to High(spec^.Labels) do
+    if Pos(#10, spec^.Labels[i]) > 0 then Inc(wrapped);
+  AssertTrue('the long label was broken into lines', wrapped > 0);
+
+  { AND WITHOUT THE OPTION IT IS NOT -- so the assertion above is about the
+    option and not about something the chart does anyway. }
+  FChart.Option := '{ xAxis: { data: [''a very long category label indeed''] },'
+    + ' yAxis: {}, series: [{ type: ''bar'', data: [1] }] }';
+  Draw;
+  gb := FChart.Build.Grid(0);
+  spec := gb.SpecFor(gb.XAxis(0));
+  wrapped := 0;
+  for i := 0 to High(spec^.Labels) do
+    if Pos(#10, spec^.Labels[i]) > 0 then Inc(wrapped);
+  AssertEquals('no width, no wrapping', 0, wrapped);
+end;
+
+procedure TAdvanceChartTest.TestCJKBreaksBetweenCharactersNotOnSpaces;
+var
+  gb: TTyGridBuild;
+  spec: PTyAxisLayoutSpec;
+  i, wrapped: Integer;
+begin
+  { CHINESE HAS NO SPACES, so a space-based wrapper treats a whole run as one
+    unbreakable word and overflows instead of wrapping -- the trap this repo has
+    a memory for (cjk-wordwrap-space-only-trap). Wrapping goes through the
+    measurer precisely so it reaches TyWrapTextCJK, which breaks between
+    ideographs; a wrapper written in the pure layer could not.
+
+    A pure-CJK label is the case that separates the two: with a space-based
+    wrapper this comes back as one line however narrow the width. }
+  FChart.Option := '{ xAxis: { data: [''这是一个很长的中文标签需要折行''],'
+    + ' axisLabel: { width: 40, overflow: ''break'' } },'
+    + ' yAxis: {}, series: [{ type: ''bar'', data: [1] }] }';
+  Draw;
+  gb := FChart.Build.Grid(0);
+  spec := gb.SpecFor(gb.XAxis(0));
+  wrapped := 0;
+  for i := 0 to High(spec^.Labels) do
+    if Pos(#10, spec^.Labels[i]) > 0 then Inc(wrapped);
+  AssertTrue('a Chinese label wraps even with no space in it', wrapped > 0);
+
+  { AND NOT MID-CHARACTER. Every line has to still be valid UTF-8 -- a break
+    inside a three-byte character draws a replacement glyph in a real GUI and
+    is invisible to a headless pixel count. }
+  for i := 0 to High(spec^.Labels) do
+    AssertEquals('the label survived as valid UTF-8',
+      Length(spec^.Labels[i]),
+      Length(UTF8Copy(spec^.Labels[i], 1, UTF8Length(spec^.Labels[i]))));
+end;
+
+procedure TAdvanceChartTest.TestTruncateEllipsisesInsteadOfOverflowing;
+var
+  gb: TTyGridBuild;
+  spec: PTyAxisLayoutSpec;
+  narrow, wide: Double;
+begin
+  { overflow:'truncate' does NOT rewrite the label -- the painter's own
+    ellipsis fitter cuts it to the box, and it cuts by CHARACTER
+    (TyEllipsisPrefix), not by byte. What the option has to do is make the box
+    narrower than the text; without a bound the box is exactly the text's size
+    and the fitter has nothing to bite on, so `overflow` would silently do
+    nothing.
+
+    Asserted through the reserved gutter, which is what a too-wide label
+    actually costs: a truncating axis must not reserve the full width. }
+  FChart.Option := '{ xAxis: { data: [''an extremely long category label''] },'
+    + ' yAxis: {}, series: [{ type: ''bar'', data: [1] }] }';
+  Draw;
+  gb := FChart.Build.Grid(0);
+  wide := gb.PlotRect.Bottom;
+
+  FChart.Option := '{ xAxis: { data: [''an extremely long category label''],'
+    + ' axisLabel: { width: 30, overflow: ''truncate'' } },'
+    + ' yAxis: {}, series: [{ type: ''bar'', data: [1] }] }';
+  Draw;
+  gb := FChart.Build.Grid(0);
+  spec := gb.SpecFor(gb.XAxis(0));
+  narrow := gb.PlotRect.Bottom;
+
+  AssertTrue('the overflow mode reached the spec',
+    spec^.LabelOverflow = loTruncate);
+  AssertTrue('the label text itself is left whole for the fitter to cut',
+    Pos(#10, spec^.Labels[0]) = 0);
+  AssertTrue(Format('a truncating axis leaves the plot at least as tall '
+    + '(%.1f against %.1f)', [narrow, wide]), narrow >= wide);
 end;
 
 initialization

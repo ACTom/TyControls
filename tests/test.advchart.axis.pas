@@ -20,6 +20,8 @@ type
     constructor Create(ACharW, ACharH: Double);
     procedure MeasureLine(const AText, AFontName: string;
       AFontSizeLogical, AWeight: Integer; out AW, AH: Double);
+    function WrapToWidth(const AText, AFontName: string;
+      AFontSizeLogical, AWeight: Integer; AMaxWidth: Double): string;
   end;
 
   TAdvChartAxisTest = class(TTestCase)
@@ -401,6 +403,29 @@ begin
   after := TyAxisThickness(axes[0], FM, 96, obcAxisLabel);
   AssertEquals('a second estimate changes nothing', before, after, Eps);
   AssertTrue('and the plot really did shrink', plot.Left > 0);
+end;
+
+function TFakeMeasurer.WrapToWidth(const AText, AFontName: string;
+  AFontSizeLogical, AWeight: Integer; AMaxWidth: Double): string;
+var
+  perLine, i: Integer;
+begin
+  { A fixed-width fake can wrap for real: the count of characters that fit is
+    the width divided by the character width. Returning AText unchanged would
+    make every wrapping test pass without wrapping. }
+  Result := AText;
+  if (AText = '') or (AMaxWidth <= 0) or (FCharW <= 0) then Exit;
+  perLine := Trunc(AMaxWidth / FCharW);
+  if perLine < 1 then perLine := 1;
+  if Length(AText) <= perLine then Exit;
+  Result := '';
+  i := 1;
+  while i <= Length(AText) do
+  begin
+    if Result <> '' then Result := Result + LineEnding;
+    Result := Result + Copy(AText, i, perLine);
+    Inc(i, perLine);
+  end;
 end;
 
 initialization

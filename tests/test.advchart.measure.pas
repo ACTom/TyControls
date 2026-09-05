@@ -12,10 +12,12 @@ unit test.advchart.measure;
   test.advchart.axis, where exact numbers are meaningful. }
 interface
 uses Classes, SysUtils, Math, Graphics, fpcunit, testregistry,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Measure, tyControls.Painter;
+     tyControls.AdvChart.Types, tyControls.AdvChart.Measure, tyControls.Painter,
+     BGRABitmap, BGRABitmapTypes;
 type
   TAdvChartMeasureTest = class(TTestCase)
   published
+    procedure TestTheMeasurerIsNeverNarrowerThanThePainter;
     procedure TestMeasuresSomething;
     procedure TestLongerTextIsWider;
     procedure TestHeightDoesNotGrowWithLength;
@@ -124,6 +126,48 @@ begin
   AssertTrue('top', TyAnchorToLayout(tavTop) = tlTop);
   AssertTrue('middle', TyAnchorToLayout(tavMiddle) = tlCenter);
   AssertTrue('bottom', TyAnchorToLayout(tavBottom) = tlBottom);
+end;
+
+procedure TAdvChartMeasureTest.TestTheMeasurerIsNeverNarrowerThanThePainter;
+const
+  cWords: array[0..5] of string =
+    ('New', 'Open', 'Save As...', '2026-09-05', '中文标签', 'Wg');
+var
+  m: ITyTextMeasurer;
+  P: TTyPainter;
+  bmp: TBGRABitmap;
+  i: Integer;
+  w, h: Double;
+begin
+  { THE INVARIANT THE PAINT PATH NOW RESTS ON. The unit header states the rule:
+    the two measurement paths are different rasterisers, they disagree by about
+    a pixel, and any control whose size floor feeds a clip must take the LARGER.
+    The measurer takes the larger; TTyPainter.MeasureText is one of the two.
+
+    PaintAxis used to measure with the painter while the layout reserved from
+    the measurer, so the box the label was drawn in could be a pixel narrower
+    than the gutter reserved for it -- and now that the ellipsis fitter is
+    switched on for truncate, a pixel is the difference between a label and an
+    ellipsised label. Routing paint through the measurer is what removes the
+    question; this pins the direction the two can differ in. }
+  bmp := TBGRABitmap.Create(40, 20);
+  P := TTyPainter.Create;
+  m := TTyPainterTextMeasurer.Create(96);
+  try
+    P.BeginPaint(bmp.Canvas, Rect(0, 0, 40, 20), 96);
+    for i := Low(cWords) to High(cWords) do
+    begin
+      m.MeasureLine(cWords[i], '', 13, 400, w, h);
+      AssertTrue(Format('"%s": the measurer says %.0f, the painter %d -- the '
+        + 'measurer must never be the narrower of the two',
+        [cWords[i], w, P.MeasureText(cWords[i], '', 13, 400).cx]),
+        w >= P.MeasureText(cWords[i], '', 13, 400).cx);
+    end;
+    P.EndPaint;
+  finally
+    P.Free;
+    bmp.Free;
+  end;
 end;
 
 initialization

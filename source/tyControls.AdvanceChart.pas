@@ -332,6 +332,7 @@ var
   i: Integer;
   tickLen, minorLen, at, along, x1, y1, x2, y2: Double;
   nameOff, nx, ny, nameAngle: Double;
+  maxW: Integer;
   horiz: Boolean;
   txt: string;
   lblH, lblW, step: Integer;
@@ -383,6 +384,30 @@ var
     else
       Result := 1;
     if Result < 0.05 then Result := 0.05;
+  end;
+
+  { THE LAYOUT'S OWN MEASURER, not the painter's TextSize. They are two
+    different rasterisers -- Measure.pas' header says they disagree by about a
+    pixel and that a size floor feeding a clip must take the LARGER, which is
+    what the layout does -- so measuring here with the other one made the
+    reserved gutter and the drawn box two different numbers. It is also the one
+    path that misses the painter's measurement memo. }
+  procedure TextSizeOf(const AText: string; const AStyle: TTyStyleSet;
+    out AW, AH: Integer);
+  var w, h: Double;
+  begin
+    if AMeasurer = nil then
+    begin
+      AW := APainter.MeasureText(AText, AStyle.FontName,
+        ResolveFontSize(AStyle), AStyle.FontWeight).cx;
+      AH := APainter.MeasureText('Wg', AStyle.FontName,
+        ResolveFontSize(AStyle), AStyle.FontWeight).cy;
+      Exit;
+    end;
+    AMeasurer.MeasureLine(AText, AStyle.FontName, ResolveFontSize(AStyle),
+                          AStyle.FontWeight, w, h);
+    AW := Round(w);
+    AH := Round(h);
   end;
 
   { One hairline, SNAPPED. A stroke whose outer edge falls between two pixel
@@ -599,15 +624,30 @@ begin
     begin
       if not places[i].Shown then Continue;
       if places[i].Text = '' then Continue;
-      lblW := APainter.MeasureText(places[i].Text, labelS.FontName,
-        ResolveFontSize(labelS), labelS.FontWeight).cx;
-      lblH := APainter.MeasureText('Wg', labelS.FontName,
-        ResolveFontSize(labelS), labelS.FontWeight).cy;
+      TextSizeOf(places[i].Text, labelS, lblW, lblH);
+      { BOUNDED BY axisLabel.width WHEN TRUNCATING, and only then: with no
+        bound the box is exactly the text's size, so the ellipsis fitter has
+        nothing to bite on and `overflow` would silently do nothing.
+
+        The other two modes need no bound here. `break` arrives already broken
+        -- the builder wrapped it, so the box is the wrapped block's size and
+        the multi-line flag lays it out -- and `none` is the old behaviour. }
+      if (spec^.LabelOverflow = loTruncate)
+        and (spec^.LabelWidthLogical > 0) then
+      begin
+        maxW := Round(APainter.ScaleF(spec^.LabelWidthLogical));
+        if maxW < lblW then lblW := maxW;
+      end;
       APainter.DrawText(
         AnchorBox(places[i].X, places[i].Y, lblW, lblH,
                   places[i].AnchorH, places[i].AnchorV),
         places[i].Text, labelS.FontName, ResolveFontSize(labelS),
-        labelS.FontWeight, labelS.TextColor, taCenter, tlCenter, False);
+        labelS.FontWeight, labelS.TextColor, taCenter, tlCenter,
+        { ELLIPSIS AND MULTI-LINE, both of which the painter has always had and
+          this never asked for: a label was drawn as one clipped line whatever
+          it contained, so a wrapped one lost every row after the first. }
+        spec^.LabelOverflow = loTruncate, 0, False,
+        Pos(#10, places[i].Text) > 0);
     end;
     Exit;
   end;
@@ -616,8 +656,7 @@ begin
     Handling only the first leaves a value axis with ticks and no numbers -- and
     a pixel count cannot see that, because the ticks and grid lines are hundreds
     of pixels on their own. It took a render on a real machine to notice. }
-  lblH := APainter.MeasureText('Wg', labelS.FontName, ResolveFontSize(labelS),
-    labelS.FontWeight).cy;
+  TextSizeOf('Wg', labelS, lblW, lblH);
   scaleTicks := AAxis.Scale.GetTicks;
   for i := 0 to High(scaleTicks) do
   begin
@@ -627,8 +666,7 @@ begin
       txt := TyChartNumToStr(scaleTicks[i].Value);
     if txt = '' then Continue;
     along := AAxis.DataToCoord(scaleTicks[i].Value);
-    lblW := APainter.MeasureText(txt, labelS.FontName, ResolveFontSize(labelS),
-      labelS.FontWeight).cx;
+    TextSizeOf(txt, labelS, lblW, lblH);
     { A label belongs to its band, so it is CENTRED on the band's anchor while
       the tick above sits on the band's edge. Those are different places by
       design and the gap between them is what boundaryGap means. }
