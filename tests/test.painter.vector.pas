@@ -59,6 +59,7 @@ type
     procedure TestRestoreStateRestoresElementAlpha;
     procedure TestElementAlphaDimsTheFill;
     procedure TestPathContainsRespectsTheTransform;
+    procedure TestTheHitTestUsesTheRuleItWasGiven;
     { ---- paths ---- }
     procedure TestPolylineToDrawsEverySegment;
     procedure TestRoundRectPathClampsAnOversizeRadius;
@@ -634,6 +635,43 @@ begin
   AssertTrue('the text runs UP from the anchor, not down'
              + ' (ink bottom=' + IntToStr(b) + ', anchor y=120)', b <= 124);
   AssertTrue('and it reaches well above it (ink top=' + IntToStr(t) + ')', t < 100);
+end;
+
+procedure TPainterVectorTest.TestTheHitTestUsesTheRuleItWasGiven;
+var
+  holeAfterFill: Boolean;
+begin
+  { A RING, because a rectangle cannot tell the two rules apart and the hit-test
+    test above uses one. Two contours wound the same way: even-odd calls the
+    middle outside, non-zero calls it inside -- which is what TTyFillRule's own
+    comment is about, a sunburst band whose hole non-zero would fill in.
+
+    PathContains used to set no fill mode, so isPointInPath answered from
+    whatever was shared: even-odd on a fresh painter, because that is the zero
+    value of TFillMode, and winding after any FillPath. The rule the caller gave
+    the fill was invisible to the hit test meant to agree with it. }
+  MakePainter(100, 100, 96);
+  FPainter.BeginPath;
+  FPainter.MoveTo(50 + 40, 50);
+  FPainter.ArcTo(50, 50, 40, 0, 2 * Pi, False);
+  FPainter.ClosePath;
+  FPainter.MoveTo(50 + 20, 50);
+  FPainter.ArcTo(50, 50, 20, 0, 2 * Pi, False);
+  FPainter.ClosePath;
+
+  AssertTrue('the band is inside under either rule',
+    FPainter.PathContains(50, 50 - 30, tfrEvenOdd));
+  AssertFalse('even-odd says the hole is outside',
+    FPainter.PathContains(50, 50, tfrEvenOdd));
+  AssertTrue('and non-zero says it is inside',
+    FPainter.PathContains(50, 50, tfrNonZero));
+
+  { AND IT SURVIVES A FILL. The shared fillMode is what a fill leaves behind, so
+    this is the query that used to come back with the other answer. }
+  FPainter.FillPath(Red, tfrNonZero);
+  holeAfterFill := FPainter.PathContains(50, 50, tfrEvenOdd);
+  AssertFalse('an even-odd query still answers even-odd after a non-zero fill',
+    holeAfterFill);
 end;
 
 initialization

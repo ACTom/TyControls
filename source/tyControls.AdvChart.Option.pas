@@ -106,8 +106,9 @@ implementation
 
 uses
   { Only for the diagnostic resourcestrings; kept out of the interface uses so
-    the dependency stays one-way and invisible to hosts. }
-  tyControls.StrConsts;
+    the dependency stays one-way and invisible to hosts. LazUTF8 is here for
+    UnicodeToUTF8, used by the escape decoder below. }
+  tyControls.StrConsts, LazUTF8;
 
 function TyOptionTextHasFunction(const AText: string): Boolean;
 var
@@ -193,6 +194,122 @@ begin
   end;
 end;
 
+{ \uXXXX escapes decoded to UTF-8 before the parser sees them.
+
+  FPC 3.2.2's jsonscanner loses ADJACENT escapes: `"\u4e2d\u6587"` decodes to
+  four bytes rather than six, because the second escape overwrites the tail of
+  the first. One character between them and it is fine -- which is why it went
+  unnoticed, since two escapes in a row is precisely how a CJK string written in
+  \u form looks, and this library's own demos carry Chinese labels.
+
+  Only inside strings, and a doubled backslash is a literal backslash rather
+  than the start of an escape -- so `"\\u0041"` stays the six characters the
+  author wrote. Anything that is not a well-formed escape is passed through
+  untouched, leaving the parser to report it. }
+function TyDecodeUnicodeEscapes(const AText: string): string;
+var
+  i, code, lo: Integer;
+  inStr: Boolean;
+  quote: Char;
+
+  { The four hex digits at i+2, or -1. }
+  function HexAt(APos: Integer): Integer;
+  var k, d: Integer;
+  begin
+    Result := -1;
+    if APos + 3 > Length(AText) then Exit;
+    Result := 0;
+    for k := APos to APos + 3 do
+    begin
+      case AText[k] of
+        '0'..'9': d := Ord(AText[k]) - Ord('0');
+        'a'..'f': d := Ord(AText[k]) - Ord('a') + 10;
+        'A'..'F': d := Ord(AText[k]) - Ord('A') + 10;
+      else
+        Exit(-1);
+      end;
+      Result := Result * 16 + d;
+    end;
+  end;
+
+begin
+  if Pos('\u', AText) = 0 then Exit(AText);
+  Result := '';
+  inStr := False;
+  quote := '"';
+  i := 1;
+  while i <= Length(AText) do
+  begin
+    if not inStr then
+    begin
+      if (AText[i] = '"') or (AText[i] = '''') then
+      begin
+        inStr := True;
+        quote := AText[i];
+      end;
+      Result := Result + AText[i];
+      Inc(i);
+      Continue;
+    end;
+
+    if AText[i] = quote then
+    begin
+      inStr := False;
+      Result := Result + AText[i];
+      Inc(i);
+      Continue;
+    end;
+
+    if AText[i] = '\' then
+    begin
+      { A doubled backslash is one literal backslash: the `u` after it is text,
+        not an escape. Copying both keeps it that way. }
+      if (i < Length(AText)) and (AText[i + 1] = 'u') then
+      begin
+        code := HexAt(i + 2);
+        if code >= 0 then
+        begin
+          Inc(i, 6);
+          { A high surrogate is half a character. Join it with its low half; a
+            lone one is passed through as U+FFFD rather than emitted as an
+            invalid sequence. }
+          if (code >= $D800) and (code <= $DBFF) then
+          begin
+            lo := -1;
+            if (i + 1 <= Length(AText)) and (AText[i] = '\')
+              and (AText[i + 1] = 'u') then
+              lo := HexAt(i + 2);
+            if (lo >= $DC00) and (lo <= $DFFF) then
+            begin
+              code := $10000 + ((code - $D800) shl 10) + (lo - $DC00);
+              Inc(i, 6);
+            end
+            else
+              code := $FFFD;
+          end
+          else if (code >= $DC00) and (code <= $DFFF) then
+            code := $FFFD;
+          Result := Result + UnicodeToUTF8(Cardinal(code));
+          Continue;
+        end;
+      end;
+      { Not an escape we handle -- copy the backslash AND what follows, so a
+        `\"` cannot be mistaken for the end of the string. }
+      Result := Result + AText[i];
+      Inc(i);
+      if i <= Length(AText) then
+      begin
+        Result := Result + AText[i];
+        Inc(i);
+      end;
+      Continue;
+    end;
+
+    Result := Result + AText[i];
+    Inc(i);
+  end;
+end;
+
 function TTyChartOption.SetOptionText(const AText: string): Boolean;
 var
   parser: TJSONParser;
@@ -209,7 +326,11 @@ begin
     Exit(True);
   end;
   parsed := nil;
-  parser := TJSONParser.Create(AText, [joUTF8, joComments, joIgnoreTrailingComma]);
+  { DECODED FIRST -- see TyDecodeUnicodeEscapes. The scanner in FPC 3.2.2 drops
+    bytes when two \uXXXX escapes are adjacent, which is what every CJK string
+    written in escape form looks like. }
+  parser := TJSONParser.Create(TyDecodeUnicodeEscapes(AText),
+    [joUTF8, joComments, joIgnoreTrailingComma]);
   try
     try
       parsed := parser.Parse;

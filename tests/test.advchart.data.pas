@@ -115,6 +115,7 @@ type
     procedure TestClearForgetsCollectedButKeepsFixedCategories;
     procedure TestRepeatedRefillDoesNotGrowTheHeap;
     procedure TestATimeNumberRoundCannotTakeBecomesNoData;
+    procedure TestAnAppendRetiresTheInvertedIndex;
   end;
 implementation
 
@@ -1066,16 +1067,23 @@ end;
 
 procedure TAdvChartDataTest.TestInvertedIndexNeedsBuilding;
 begin
-  { Answering -1 for every query would look like data with no categories in it,
-    which is a much worse failure than a raised exception at the call site. }
+  { BUILT ON DEMAND, which is what the declaration has always promised.
+
+    This used to assert a raise, reasoning that answering -1 for every query
+    would look like data with no categories in it and is a worse failure than an
+    exception at the call site. That is true of those two options and says
+    nothing about a third: building the index when it is missing answers
+    CORRECTLY, so neither failure happens.
+
+    The raise also had a cost the rationale could not foresee -- an append
+    retires the index, so every appending caller would have had to know to
+    rebuild, and the one that forgot got an exception in the middle of a paint. }
   FS.AddDimension('c', ddtOrdinal);
   FS.AppendRow([TyDataText('Mon')]);
-  try
-    FS.RawIndexOfOrdinal(0, 0);
-    Fail('querying an index that was never built should raise');
-  except
-    on EInvalidOperation do ;
-  end;
+  AssertEquals('a query with no index built answers from one built for it',
+    0, FS.RawIndexOfOrdinal(0, 0));
+  AssertEquals('and an ordinal that does not exist is still -1',
+    -1, FS.RawIndexOfOrdinal(0, 7));
 end;
 
 procedure TAdvChartDataTest.TestInvertedIndexNeedsAnOrdinalDimension;
@@ -1169,6 +1177,37 @@ begin
     must not cost the range the type is for. }
   AssertEquals('an ordinary instant is unharmed', 1709596800000.0,
     TyParseDataValue(TyDataNum(1709596800000.0), ddtTime), 0.0);
+end;
+
+procedure TAdvChartDataTest.TestAnAppendRetiresTheInvertedIndex;
+var
+  st: TTyDataStore;
+begin
+  { THE INDEX IS SIZED TO THE CATEGORY COUNT AND FILLED FROM THE ROWS THAT
+    EXISTED. A later append leaves it short of a newly interned category and
+    blind to the row just added, and RawIndexOfOrdinal answered out of it
+    anyway: a category the store holds came back as -1, and a lookup for an
+    existing one returned the row from before the append. Only Clear ever
+    dropped the flag. }
+  st := TTyDataStore.Create;
+  try
+    st.AddDimension('cat', ddtOrdinal);
+    st.AppendRow([TyDataText('Mon')]);
+    st.AppendRow([TyDataText('Tue')]);
+    st.BuildInvertedIndex(0);
+    AssertEquals('the index answers for what it was built from', 1,
+      st.RawIndexOfOrdinal(0, 1));
+
+    st.AppendRow([TyDataText('Wed')]);
+    st.AppendRow([TyDataText('Tue')]);
+
+    AssertTrue('a category interned after the build is findable',
+      st.RawIndexOfOrdinal(0, 2) >= 0);
+    AssertEquals('and it is the row it was appended at', 2,
+      st.RawIndexOfOrdinal(0, 2));
+  finally
+    st.Free;
+  end;
 end;
 
 initialization

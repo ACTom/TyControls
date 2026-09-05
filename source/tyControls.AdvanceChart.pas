@@ -105,8 +105,15 @@ type
   published
     { THE API. Relaxed JSON: unquoted keys, single quotes, trailing commas and
       comments all parse, because that is what an ECharts config in the wild
-      looks like. A rejected option keeps the previous one -- a half-typed
-      config in a design-time editor must not blank the chart. }
+      looks like.
+
+      A REJECTED OPTION LEAVES NO CHART. The earlier rule kept the last one
+      that parsed, reasoning that a half-typed config in a design-time editor
+      must not blank the chart -- but the editor that got built is a modal
+      dialog writing back on OK, and the Object Inspector commits once too, so
+      half-typed text never arrives here. What that rule left instead was a
+      control that lies: the property says A, the picture shows B, and nothing
+      on screen says why. OptionError carries the reason. }
     property Option: string read GetOptionText write SetOptionText;
     { Empty when the last option parsed. }
     property OptionError: string read GetErrorText;
@@ -184,13 +191,14 @@ end;
 
 { ==================== the option ==================== }
 
-{ WHAT WAS WRITTEN, not what parsed. The option tree keeps the last text it
-  understood, deliberately -- a rejected option leaves the previous chart
-  standing rather than blanking it. But the PROPERTY has to read back what the
+{ WHAT WAS WRITTEN, not what parsed. The PROPERTY has to read back what the
   host set, or a half-typed option in the Object Inspector reverts on every
   keystroke that does not yet parse, and a .lfm cannot round-trip work in
-  progress. So the control remembers the text and the tree remembers the last
-  good one; OptionError says which is which. }
+  progress.
+
+  The TREE is emptied when the text does not parse -- there is no last-good-one
+  kept, deliberately: a control whose property says A while the picture shows B
+  has no way to tell anyone which is which. OptionError says what went wrong. }
 function TTyAdvanceChart.GetOptionText: string;
 begin
   Result := FOptionText;

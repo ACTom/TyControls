@@ -331,8 +331,15 @@ type
     procedure FillAndStrokePath(AFillColor, AStrokeColor: TTyColor;
       AWidthLogical: Double; ARule: TTyFillRule = tfrNonZero);
     { Hit-test the current path, DEVICE px, THROUGH the current transform -- so
-      paint and hit-test can share one path, which is the TTySegmented rule. }
-    function PathContains(AX, AY: Double): Boolean;
+      paint and hit-test can share one path, which is the TTySegmented rule.
+
+      TAKES THE RULE, defaulted like every other entry point here. The
+      underlying isPointInPath reads the canvas' shared fillMode, so setting
+      none left the answer depending on whatever was filled last: even-odd on a
+      fresh painter, because that is the zero value of TFillMode, and winding
+      after any FillPath. A ring could hit-test one way and paint the other. }
+    function PathContains(AX, AY: Double;
+      ARule: TTyFillRule = tfrNonZero): Boolean;
 
     { ---- stroke state ---- }
     { On/off lengths in LOGICAL px; an empty array restores a solid line. }
@@ -2709,10 +2716,17 @@ begin
   StrokePath(AStrokeColor, AWidthLogical);
 end;
 
-function TTyPainter.PathContains(AX, AY: Double): Boolean;
+function TTyPainter.PathContains(AX, AY: Double;
+  ARule: TTyFillRule): Boolean;
+var
+  ctx: TBGRACanvas2D;
 begin
   if FBmp = nil then Exit(False);
-  Result := FBmp.Canvas2D.isPointInPath(AX, AY);
+  ctx := FBmp.Canvas2D;
+  { SET, not assumed. isPointInPath reads this shared state, and leaving it
+    alone made the answer depend on the last thing filled. }
+  ctx.fillMode := VecFillMode(ARule);
+  Result := ctx.isPointInPath(AX, AY);
 end;
 
 { ---- stroke state ---- }

@@ -209,6 +209,15 @@ type
     FOvrCount: Integer;
     procedure Grow(AWanted: Integer);
     procedure InvalidateExtents;
+    { Any append retires the inverted index: it is sized to the category count
+      and filled from the rows that existed when it was built, so a later row
+      leaves it short of a newly interned category and blind to the row just
+      added -- and RawIndexOfOrdinal answered out of it without noticing.
+      Retiring costs one rebuild on the next lookup and cannot go stale.
+
+      Filtering does NOT retire it: the index maps an ordinal to a RAW index,
+      and a filter changes the view rather than the rows. }
+    procedure RetireInverted;
     function ParseCell(ADim: Integer; const AValue: TTyDataValue): Double;
     procedure NoteValue(ADim: Integer; AValue: Double);
     procedure SetIndices(const A: array of Integer; ACount: Integer);
@@ -867,6 +876,13 @@ begin
   FCapacity := cap;
 end;
 
+procedure TTyDataStore.RetireInverted;
+var i: Integer;
+begin
+  for i := 0 to High(FDims) do
+    FDims[i].HasInverted := False;
+end;
+
 procedure TTyDataStore.InvalidateExtents;
 var
   i: Integer;
@@ -954,6 +970,7 @@ begin
   Inc(FRawCount);
   FCount := FRawCount;
   InvalidateExtents;
+  RetireInverted;
 end;
 
 function TTyDataStore.AppendRow(const AValues: array of Double): Integer;
@@ -980,6 +997,7 @@ begin
   Inc(FRawCount);
   FCount := FRawCount;
   InvalidateExtents;
+  RetireInverted;
 end;
 
 procedure TTyDataStore.Clear;
@@ -1285,9 +1303,14 @@ end;
 function TTyDataStore.RawIndexOfOrdinal(ADim, AOrdinal: Integer): Integer;
 begin
   if (ADim < 0) or (ADim > High(FDims)) then Exit(-1);
+  { BUILT ON DEMAND, which is what the declaration has always promised. It used
+    to raise instead, so a caller had to build the index explicitly AND know to
+    rebuild it after every append -- and since an append did not even retire the
+    old one, the two failure modes were "an exception" and "a confidently wrong
+    row". An index is a cache; a cache nobody can forget to refresh is the only
+    kind worth having. }
   if not FDims[ADim].HasInverted then
-    raise EInvalidOperation.CreateFmt(
-      'RawIndexOfOrdinal: no inverted index on "%s"', [FDims[ADim].Name]);
+    BuildInvertedIndex(ADim);
   if (AOrdinal < 0) or (AOrdinal > High(FDims[ADim].Inverted)) then Exit(-1);
   Result := FDims[ADim].Inverted[AOrdinal];
 end;

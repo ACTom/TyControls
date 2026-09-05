@@ -46,6 +46,8 @@ type
     procedure TestComponentAtIndexesBothForms;
     { ---- lifetime ---- }
     procedure TestRepeatedSetDoesNotGrowTheHeap;
+    procedure TestAdjacentUnicodeEscapesSurviveIntact;
+    procedure TestABackslashBeforeUIsNotAnEscape;
   end;
 implementation
 
@@ -329,6 +331,63 @@ begin
   AssertTrue('heap did not grow with the replacements (before='
              + IntToStr(before) + ' after=' + IntToStr(after) + ')',
              after < before + 512 * 1024);
+end;
+
+procedure TAdvChartOptionTest.TestAdjacentUnicodeEscapesSurviveIntact;
+var
+  o: TTyChartOption;
+begin
+  { TWO ESCAPES IN A ROW is what every CJK string written in \u form looks
+    like, and FPC 3.2.2's json scanner loses bytes across that boundary: the
+    second escape overwrites the tail of the first, so a two-character Chinese
+    title came back four bytes long instead of six. One ASCII character between
+    them and it decodes correctly, which is exactly why nothing caught it. }
+  o := TTyChartOption.Create;
+  try
+    AssertTrue(o.SetOptionText('{ "title": { "text": "\u4e2d\u6587" } }'));
+    AssertEquals('two adjacent escapes decode to both characters',
+      #$E4#$B8#$AD#$E6#$96#$87, o.GetStr('title.text', ''));
+
+    { The case that always worked, so the fix is not just moving the failure. }
+    AssertTrue(o.SetOptionText('{ "title": { "text": "A\u4e2dB\u6587C" } }'));
+    AssertEquals('A' + #$E4#$B8#$AD + 'B' + #$E6#$96#$87 + 'C',
+      o.GetStr('title.text', ''));
+
+    { Three in a row, since the bug is about the boundary between them. }
+    AssertTrue(o.SetOptionText('{ "title": { "text": "\u4e2d\u6587\u5b57" } }'));
+    AssertEquals(#$E4#$B8#$AD#$E6#$96#$87#$E5#$AD#$97,
+      o.GetStr('title.text', ''));
+
+    { A surrogate pair is ONE character, not two halves encoded separately. }
+    AssertTrue(o.SetOptionText('{ "title": { "text": "\ud83d\udcc8" } }'));
+    AssertEquals('a surrogate pair joins into one codepoint',
+      #$F0#$9F#$93#$88, o.GetStr('title.text', ''));
+  finally
+    o.Free;
+  end;
+end;
+
+procedure TAdvChartOptionTest.TestABackslashBeforeUIsNotAnEscape;
+var
+  o: TTyChartOption;
+begin
+  { A DOUBLED BACKSLASH is one literal backslash, so the `u` after it is text.
+    Decoding it would turn a Windows path or a regexp in a formatter string
+    into a character the author never wrote -- and the decoder runs over the
+    whole option, so this is the case that says it is not too eager. }
+  o := TTyChartOption.Create;
+  try
+    AssertTrue(o.SetOptionText('{ "title": { "text": "\\u0041" } }'));
+    AssertEquals('the escape is the backslash, not the u',
+      '\u0041', o.GetStr('title.text', ''));
+
+    { And a bare \u that is not four hex digits is left for the parser to
+      judge rather than silently swallowed. }
+    AssertTrue(o.SetOptionText('{ "title": { "text": "100\u00a5" } }'));
+    AssertEquals('100' + #$C2#$A5, o.GetStr('title.text', ''));
+  finally
+    o.Free;
+  end;
 end;
 
 initialization
