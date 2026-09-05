@@ -1185,6 +1185,28 @@ object MainForm: TMainForm
             OnChange = ChkEv3Change
           end
         end
+        object TbEv5: TTyPanel
+          Left = 0
+          Height = 40
+          Top = 198
+          Width = 1172
+          Align = alTop
+          object ChkEvValidate: TTyCheckBox
+            Left = 8
+            Height = 22
+            Top = 8
+            Width = 220
+            Caption = 'Qty must be a positive integer'
+            OnChange = ChkEv3Change
+          end
+          object LblEvValidateTip: TTyLabel
+            Left = 236
+            Height = 20
+            Top = 10
+            Width = 930
+            Caption = 'Type 0 or abc in Qty, then Enter / Tab / arrow / another cell: the editor stays until fixed or Esc. Clicking outside the grid abandons'
+          end
+        end
         object GridEvents: TTyStringGrid
           Left = 0
           Height = 450

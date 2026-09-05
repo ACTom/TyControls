@@ -431,6 +431,14 @@ msgstr "边打字边校验"
 msgid "Veto empty commit"
 msgstr "否决空值提交"
 
+#: tmainform.chkevvalidate.caption
+msgid "Qty must be a positive integer"
+msgstr "数量必须是正整数"
+
+#: tmainform.lblevvalidatetip.caption
+msgid "Type 0 or abc in Qty, then Enter / Tab / arrow / another cell: the editor stays until fixed or Esc. Clicking outside the grid abandons"
+msgstr "在数量格敲 0 或 abc,再按回车 / Tab / 方向键或点别的格:编辑框留在原地,直到改对或按 Esc;点表格外面视同放弃"
+
 #: tmainform.chkevrowveto.caption
 msgid "No add/remove rows"
 msgstr "禁止增删行"
@@ -759,6 +767,16 @@ msgstr "取消多级分组"
 #: umain.rscasechanged
 msgid "The case rule of the order-no. column changed — double-click into edit to see it"
 msgstr "订单号列的大小写规则变了 —— 双击进编辑看看"
+
+#: umain.rsvalidateokfmt
+#, object-pascal-format
+msgid "Qty at (%d, %d) accepted: %s"
+msgstr "数量 (%d, %d) 已接受:%s"
+
+#: umain.rsvalidaterefusedfmt
+#, object-pascal-format
+msgid "Qty \"%s\" refused — a positive whole number is needed. Fix it, or press Esc to abandon"
+msgstr "数量「%s」被拒绝 —— 需要一个正整数。改对它,或按 Esc 放弃"
 
 #: umain.rscelleditedfmt
 #, object-pascal-format
