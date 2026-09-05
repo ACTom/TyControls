@@ -49,6 +49,8 @@ type
     procedure TestSplitLinesDivideBandsRatherThanPointAtLabels;
     procedure TestTheTicksThemselvesAreDrawn;
     procedure TestAHiddenAxisIsNotDrawn;
+    procedure TestTheAxisHonoursMinMaxAndInterval;
+    procedure TestACrowdedAxisThinsItsLabels;
     procedure TestResizingRelaysOutTheAxes;
     procedure TestRepeatedRendersDoNotGrowTheHeap;
   end;
@@ -539,6 +541,101 @@ begin
   inkHidden := PlotInk;
   AssertEquals(Format('both axes are hidden but %d pixels are still drawn '
     + 'inside the plot', [inkHidden]), 0, inkHidden);
+end;
+
+procedure TAdvanceChartTest.TestTheAxisHonoursMinMaxAndInterval;
+var
+  sc: TTyScale;
+  r: TTyRange;
+begin
+  { FixMin, FixMax and Interval have been on TTyIntervalScale since it was
+    written and NOTHING ever set them, so four of the most-used axis options in
+    ECharts did nothing at all. The data here would give 0..3; the option says
+    otherwise and the option wins. }
+  FChart.Option := '{ xAxis: { data: [''A''] },'
+    + ' yAxis: { min: -10, max: 50 },'
+    + ' series: [{ type: ''bar'', data: [3] }] }';
+  Draw;
+  sc := FChart.Build.Axis('yAxis', 0).Scale;
+  r := sc.GetExtent;
+  AssertEquals('min is pinned, not rounded away', -10.0, r.Start, 1e-9);
+  AssertEquals('and so is max', 50.0, r.Stop, 1e-9);
+
+  { An explicit interval is a statement about the STEP. }
+  FChart.Option := '{ xAxis: { data: [''A''] },'
+    + ' yAxis: { min: 0, max: 100, interval: 25 },'
+    + ' series: [{ type: ''bar'', data: [3] }] }';
+  Draw;
+  AssertEquals('0, 25, 50, 75, 100', 5,
+    Length(FChart.Build.Axis('yAxis', 0).Scale.GetTicks));
+
+  { splitNumber asks for a tick COUNT rather than a step, and it is a hint --
+    the nice-number rounding still owns the actual boundaries. }
+  FChart.Option := '{ xAxis: { data: [''A''] },'
+    + ' yAxis: { min: 0, max: 100, splitNumber: 2 },'
+    + ' series: [{ type: ''bar'', data: [3] }] }';
+  Draw;
+  AssertTrue('far fewer ticks than the default five',
+    Length(FChart.Build.Axis('yAxis', 0).Scale.GetTicks) <= 4);
+end;
+
+procedure TAdvanceChartTest.TestACrowdedAxisThinsItsLabels;
+var
+  x, y, ink, gutter, x0, yTop, yBot: Integer;
+  p, bg: TBGRAPixel;
+
+  function Bands: Integer;
+  var yy, xx: Integer; run: Boolean;
+  begin
+    Result := 0;
+    run := False;
+    for yy := yTop to yBot do
+    begin
+      p := PixelAt(x0, yy);
+      ink := 0;
+      for xx := x0 to gutter - 1 do
+      begin
+        p := PixelAt(xx, yy);
+        if (Abs(p.red - bg.red) + Abs(p.green - bg.green)
+          + Abs(p.blue - bg.blue)) > 12 then begin ink := 1; Break; end;
+      end;
+      if (ink = 1) and not run then Inc(Result);
+      run := ink = 1;
+    end;
+  end;
+
+var
+  fewTicks, manyTicks: Integer;
+begin
+  { The layout unit has been able to thin labels since item 12 landed, and
+    nothing called it -- so every label was drawn, and a crowded axis simply
+    overlapped. This is the assertion that says something calls it now.
+
+    A value axis over 0..30 gets a handful of ticks; over 0..3000 in a 300px
+    control it gets many more than fit. The number of labels DRAWN must not
+    grow in step with the number of ticks. }
+  FChart.Option := '{ xAxis: { data: [''A''] }, yAxis: {},'
+    + ' series: [{ type: ''bar'', data: [30] }] }';
+  Draw;
+  gutter := Trunc(FChart.Build.Grid(0).PlotRect.Left) - 8;
+  x0 := gutter - 45;
+  if x0 < 12 then x0 := 12;
+  yTop := Round(FChart.Build.Grid(0).PlotRect.Top) - 6;
+  yBot := Round(FChart.Build.Grid(0).PlotRect.Bottom) + 6;
+  if yTop < 0 then yTop := 0;
+  if yBot > 299 then yBot := 299;
+  bg := PixelAt(200, 150);
+  fewTicks := Bands;
+  AssertTrue('a sparse axis drew some labels', fewTicks > 1);
+
+  { Same control, same height, a scale that wants far more ticks. }
+  FChart.Option := '{ xAxis: { data: [''A''] }, yAxis: { min: 0, max: 3000,'
+    + ' interval: 20 }, series: [{ type: ''bar'', data: [3000] }] }';
+  Draw;
+  bg := PixelAt(200, 150);
+  manyTicks := Bands;
+  AssertTrue(Format('%d label bands for a scale asking for 150 ticks -- '
+    + 'nothing is thinning them', [manyTicks]), manyTicks < 40);
 end;
 
 procedure TAdvanceChartTest.TestResizingRelaysOutTheAxes;

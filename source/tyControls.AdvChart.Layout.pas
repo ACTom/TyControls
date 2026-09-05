@@ -123,6 +123,7 @@ type
     NameGapLogical: Double;
   end;
   TTyAxisLayoutSpecArray = array of TTyAxisLayoutSpec;
+  PTyAxisLayoutSpec = ^TTyAxisLayoutSpec;
 
   { One laid-out label, ready to hand to TTyPainter.DrawTextRotated: the anchor
     plus how the box sits on it. Layout and paint therefore cannot disagree

@@ -556,9 +556,11 @@ var
 
   procedure DoAxis(AAxis: TTyAxis; const AMainType: string);
   var
-    k, col, si: Integer;
+    k, col, si, split: Integer;
     node: TJSONObject;
     d: TJSONData;
+    fixLo, fixHi: Boolean;
+    ivl: Double;
     feeders: TTyIntegerArray;
     lo, hi, dlo, dhi: Double;
     any, scaleOpt: Boolean;
@@ -606,10 +608,56 @@ var
       if hi < 0 then hi := 0;
     end;
 
+    { WHAT THE AUTHOR ASKED FOR BEATS WHAT THE DATA SUGGESTS. `min` and `max`
+      pin an end; a pinned end must survive Niceify, which is exactly what
+      FixMin and FixMax are for -- they have been on the scale since it was
+      written and nothing ever set them, so four of the most-used axis options
+      in ECharts did nothing at all. }
+    fixLo := False;
+    fixHi := False;
+    split := 5;
+    ivl := 0;
+    if node <> nil then
+    begin
+      d := node.Find('min');
+      if (d <> nil) and (d.JSONType = jtNumber) then
+      begin
+        lo := d.AsFloat;
+        fixLo := True;
+      end;
+      d := node.Find('max');
+      if (d <> nil) and (d.JSONType = jtNumber) then
+      begin
+        hi := d.AsFloat;
+        fixHi := True;
+      end;
+      d := node.Find('splitNumber');
+      if (d <> nil) and (d.JSONType = jtNumber) then
+      begin
+        split := Trunc(d.AsFloat);
+        if split < 1 then split := 1;
+      end;
+      d := node.Find('interval');
+      if (d <> nil) and (d.JSONType = jtNumber) and (d.AsFloat > 0) then
+        ivl := d.AsFloat;
+    end;
+
     if lo > hi then Exit;
     AAxis.Scale.SetExtent(TyRange(lo, hi));
     if AAxis.Scale is TTyIntervalScale then
-      TTyIntervalScale(AAxis.Scale).Niceify(5);
+    begin
+      TTyIntervalScale(AAxis.Scale).FixMin := fixLo;
+      TTyIntervalScale(AAxis.Scale).FixMax := fixHi;
+      { An explicit `interval` is a statement about the STEP, so it is honoured
+        by asking for the split number that step implies rather than by a
+        second code path -- one tick generator, one set of rules. }
+      if ivl > 0 then
+      begin
+        split := Trunc((hi - lo) / ivl);
+        if split < 1 then split := 1;
+      end;
+      TTyIntervalScale(AAxis.Scale).Niceify(split);
+    end;
   end;
 
 begin

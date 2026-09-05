@@ -53,6 +53,7 @@ type
     FComponentIndex: Integer;
     FOuterRect: TTyRectF;
     FPlotRect: TTyRectF;
+    FSpecs: TTyAxisLayoutSpecArray;
     FXAxes: TTyAxisArray;
     FYAxes: TTyAxisArray;
     FCartesians: array of TTyCartesian2D;   // OWNED
@@ -75,6 +76,15 @@ type
     property OuterRect: TTyRectF read FOuterRect;
     { After it. Equal to OuterRect until phase C runs. }
     property PlotRect: TTyRectF read FPlotRect;
+    { WHAT THE LAYOUT PASS MEASURED, kept so the renderer draws from it rather
+      than assembling a second one. The plot rect was shrunk to fit exactly
+      these labels in exactly this font, and a paint pass that rebuilt the spec
+      would be a second route to the same answer -- the two came apart once
+      already, when the layout measured in a hardcoded 12pt while paint drew in
+      the theme's font.
+
+      nil before phase C has run. }
+    function SpecFor(AAxis: TTyAxis): PTyAxisLayoutSpec;
   end;
 
   { Everything one option tree produced. Owns the grids, the axes and, through
@@ -1038,6 +1048,26 @@ end;
 
 { ==================== phase C ==================== }
 
+{ The spec this axis was laid out with, or nil before phase C. }
+function TTyGridBuild.SpecFor(AAxis: TTyAxis): PTyAxisLayoutSpec;
+var i: Integer;
+begin
+  Result := nil;
+  if AAxis = nil then Exit;
+  for i := 0 to XAxisCount - 1 do
+    if XAxis(i) = AAxis then
+    begin
+      if i <= High(FSpecs) then Result := @FSpecs[i];
+      Exit;
+    end;
+  for i := 0 to YAxisCount - 1 do
+    if YAxis(i) = AAxis then
+    begin
+      if XAxisCount + i <= High(FSpecs) then Result := @FSpecs[XAxisCount + i];
+      Exit;
+    end;
+end;
+
 procedure TyLayoutGrids(ABuild: TTyChartBuild; AOption: TTyChartOption;
   const AMeasurer: ITyTextMeasurer; APPI: Integer;
   const AText: TTyAxisTextStyle);
@@ -1110,6 +1140,8 @@ begin
       outerBoundsContain default is 'all', and taking the default here would
       make axis NAMES silently stop reserving room for themselves. }
     gb.FPlotRect := TySolveGrid(gb.FOuterRect, specs, AMeasurer, APPI, obmAuto, obcAll);
+    { Kept for the renderer. }
+    gb.FSpecs := specs;
 
     { The second and final pixel write. Everything downstream reads band widths
       and coordinates live, so nothing has to be invalidated. }

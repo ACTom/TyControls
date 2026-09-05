@@ -68,9 +68,11 @@ type
     procedure Rebuild;
     { The half that needs a painter, because it has to MEASURE the labels before
       it can know how much room the plot has left. }
-    procedure Relayout(APainter: TTyPainter; const ARect: TTyRectF; APPI: Integer);
+    procedure Relayout(APainter: TTyPainter; const ARect: TTyRectF;
+      APPI: Integer; const AMeasurer: ITyTextMeasurer);
     procedure PaintAxis(APainter: TTyPainter; AAxis: TTyAxis;
-      const APlot: TTyRectF; APPI: Integer);
+      const APlot: TTyRectF; APPI: Integer; AGrid: TTyGridBuild;
+      const AMeasurer: ITyTextMeasurer);
   protected
     function GetStyleTypeKey: string; override;
     procedure Resize; override;
@@ -279,7 +281,7 @@ begin
 end;
 
 procedure TTyAdvanceChart.Relayout(APainter: TTyPainter; const ARect: TTyRectF;
-  APPI: Integer);
+  APPI: Integer; const AMeasurer: ITyTextMeasurer);
 var
   txt: TTyAxisTextStyle;
   labelS: TTyStyleSet;
@@ -304,14 +306,15 @@ begin
   { Measuring goes through the painter behind an interface rather than being
     called directly, so the layout layer stays free of the painter and a test
     can hand it a deterministic measurer instead of this machine's fonts. }
-  TyLayoutGrids(FBuild, FOption, TTyPainterTextMeasurer.Create(APPI), APPI, txt);
+  TyLayoutGrids(FBuild, FOption, AMeasurer, APPI, txt);
   FDirty := False;
 end;
 
 { ==================== paint ==================== }
 
 procedure TTyAdvanceChart.PaintAxis(APainter: TTyPainter; AAxis: TTyAxis;
-  const APlot: TTyRectF; APPI: Integer);
+  const APlot: TTyRectF; APPI: Integer; AGrid: TTyGridBuild;
+  const AMeasurer: ITyTextMeasurer);
 var
   model: TTyStyleModel;
   lineS, tickStyle, labelS, splitS: TTyStyleSet;
@@ -320,8 +323,42 @@ var
   tickLen, at, along, x1, y1, x2, y2: Double;
   horiz: Boolean;
   txt: string;
-  lblH, lblW: Integer;
+  lblH, lblW, step: Integer;
   scaleTicks: TTyScaleTickArray;
+  spec: PTyAxisLayoutSpec;
+  places: TTyAxisLabelPlacementArray;
+
+  { THE BOX IS THE TRANSLATION. The layout layer says "this point, with the
+    text hanging off it this way"; the painter aligns text INSIDE a rectangle.
+    Building a box that is exactly the text's size around the anchor makes the
+    two agree, and makes the alignment argument irrelevant.
+
+    Mapping anchors to LCL alignments instead was the first attempt and it was
+    wrong in a way worth remembering: a right-anchored label kept the old
+    symmetric box, so right-justifying inside it put the text's right edge a
+    whole width PAST the anchor -- straight through the tick marks. }
+  function AnchorBox(AX, AY: Double; AW, AH: Integer;
+    AH2: TTyTextAnchorH; AV: TTyTextAnchorV): TRect;
+  begin
+    case AH2 of
+      tahLeft: begin Result.Left := Round(AX); Result.Right := Round(AX) + AW; end;
+      tahRight: begin Result.Left := Round(AX) - AW; Result.Right := Round(AX); end;
+    else
+      begin
+        Result.Left := Round(AX - AW / 2);
+        Result.Right := Result.Left + AW;
+      end;
+    end;
+    case AV of
+      tavTop: begin Result.Top := Round(AY); Result.Bottom := Round(AY) + AH; end;
+      tavBottom: begin Result.Top := Round(AY) - AH; Result.Bottom := Round(AY); end;
+    else
+      begin
+        Result.Top := Round(AY - AH / 2);
+        Result.Bottom := Result.Top + AH;
+      end;
+    end;
+  end;
 
   { One hairline. ScaleF rather than Scale on purpose: a 1 px axis line at 150
     per cent is 1.5 px, and rounding it to 2 is how a chart's grid comes out
@@ -387,9 +424,19 @@ begin
   end;
 
   ticks := AAxis.TickCoords;
+  { THE MARKS THIN WITH THE LABELS. Drawing every tick under a thinned set of
+    labels reads as an axis that lost its labels rather than one that spaced
+    them out, and computing the step by a second route is how the two drift. }
+  spec := nil;
+  if AGrid <> nil then spec := AGrid.SpecFor(AAxis);
+  step := 1;
+  if spec <> nil then
+    step := TyAxisLabelStep(spec^, APlot, AMeasurer, APPI);
+  if step < 1 then step := 1;
   if tpBorderColor in tickStyle.Present then
     for i := 0 to High(ticks) do
     begin
+      if (step > 1) and (i mod step <> 0) then Continue;
       along := ticks[i];
       if horiz then
       begin
@@ -407,6 +454,31 @@ begin
     end;
 
   if not (tpTextColor in labelS.Present) then Exit;
+
+  { PHASE 3 PLACES THEM. It was written with item 12 and never called, so every
+    label was drawn at a position worked out here and none was ever thinned --
+    a crowded axis simply overlapped. The placement carries the anchor too, so
+    layout and paint cannot disagree about where a label went. }
+  if spec <> nil then
+  begin
+    places := TyLayoutAxisLabels(spec^, APlot, AMeasurer, APPI);
+    for i := 0 to High(places) do
+    begin
+      if not places[i].Shown then Continue;
+      if places[i].Text = '' then Continue;
+      lblW := APainter.MeasureText(places[i].Text, labelS.FontName,
+        ResolveFontSize(labelS), labelS.FontWeight).cx;
+      lblH := APainter.MeasureText('Wg', labelS.FontName,
+        ResolveFontSize(labelS), labelS.FontWeight).cy;
+      APainter.DrawText(
+        AnchorBox(places[i].X, places[i].Y, lblW, lblH,
+                  places[i].AnchorH, places[i].AnchorV),
+        places[i].Text, labelS.FontName, ResolveFontSize(labelS),
+        labelS.FontWeight, labelS.TextColor, taCenter, tlCenter, False);
+    end;
+    Exit;
+  end;
+
   { A CATEGORY axis labels its categories; a VALUE axis labels its tick values.
     Handling only the first leaves a value axis with ticks and no numbers -- and
     a pixel count cannot see that, because the ticks and grid lines are hundreds
@@ -451,7 +523,19 @@ var
   plotF: TTyRectF;
   g, a: Integer;
   gb: TTyGridBuild;
+  measurer: ITyTextMeasurer;
 begin
+  { ONE measurer, held in an interface variable, for the whole render.
+
+    Not `TTyPainterTextMeasurer.Create(APPI)` at each call site: the parameter
+    is declared `const ITyTextMeasurer`, and a const interface parameter does
+    not get the reference-counting temporary -- so an object passed straight in
+    stays at a refcount of zero and is never freed. Two axes times two calls
+    times every repaint is a leak the heap test found within thirty renders.
+
+    Holding it here also means the layout pass and the paint pass measure with
+    the same instance, which is what they are supposed to agree about. }
+  measurer := TTyPainterTextMeasurer.Create(APPI);
   P := TTyPainter.Create;
   try
     { LOCAL space. EndPaint blits at ARect's origin, so everything below is
@@ -470,16 +554,16 @@ begin
 
     plotF := TyRectF(R.Left, R.Top, R.Right, R.Bottom);
     if FDirty or (plotF.Right <> FLastRect.Right) or (plotF.Bottom <> FLastRect.Bottom) then
-      Relayout(P, plotF, APPI);
+      Relayout(P, plotF, APPI, measurer);
 
     if FBuild <> nil then
       for g := 0 to FBuild.GridCount - 1 do
       begin
         gb := FBuild.Grid(g);
         for a := 0 to gb.XAxisCount - 1 do
-          PaintAxis(P, gb.XAxis(a), gb.PlotRect, APPI);
+          PaintAxis(P, gb.XAxis(a), gb.PlotRect, APPI, gb, measurer);
         for a := 0 to gb.YAxisCount - 1 do
-          PaintAxis(P, gb.YAxis(a), gb.PlotRect, APPI);
+          PaintAxis(P, gb.YAxis(a), gb.PlotRect, APPI, gb, measurer);
       end;
 
     P.EndPaint;
