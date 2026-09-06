@@ -3934,10 +3934,12 @@ begin
   Build(True, [60, 90, 50], 6, 200);
   FG.Header.Options := FG.Header.Options + [hoVisible, hoHeaderClickAutoSort];
   hdrY := 4;
-  { x deep inside the LEFTMOST painted header cell, which mirrored is column 2. Unmirrored
-    the same x is column 0 -- so this single assertion separates "mirrored" from "mirrored
-    in the paint only". }
-  FG.ClickAt(4, hdrY);
+  { x inside the LEFTMOST painted header cell, which mirrored is column 2. Unmirrored the
+    same x is column 0 -- so this single assertion separates "mirrored" from "mirrored in
+    the paint only". Clear of the grip: mirrored, column 2's resize grip is its LEFT edge
+    (x=0, +-4px), and a press on the grip is a resize, not a click -- x=4 used to sort only
+    because the sort ignored the resize arm. }
+  FG.ClickAt(25, hdrY);
   AssertEquals('the click sorted the column painted under it',
     2, FG.Header.SortColumn);
   FG.ClickAt(FG.ViewW - 4, hdrY);
