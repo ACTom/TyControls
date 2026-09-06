@@ -365,16 +365,31 @@ begin
     这不是换主题(FThemeFile/FThemeName 没变),所以取色器选的强调色必须保留 —— 而 REPLACE 会清掉
     它(StyleModel:FVarOverrides.Clear),因此先存后还。 }
   keepAccent := AccentOverride;
-  if FThemeFile <> '' then
-  begin
-    if FileExists(FThemeFile) then FModel.LoadFromFile(FThemeFile);
-  end
-  else if FThemeName <> '' then
-  begin
-    if TyResolveThemeCss(FThemeName, css) then FModel.LoadFromCss(css)
-    else if TyResolveTheme(FThemeName, src) and (src <> '') and FileExists(src) then
-      FModel.LoadFromFile(src);
-  end
+  { EVERY BRANCH MUST LOAD SOMETHING. The whole point of this procedure is that
+    an additive layer cannot be unloaded, so layer-1 is rebuilt from scratch --
+    and a branch that loads NOTHING leaves the old patch sitting in FRules.
+    Both source branches could do that: a ThemeFile that has been deleted, and
+    a ThemeName that is not registered (which is ordinary, not exotic --
+    SetThemeName is explicitly allowed to fail and retry when the theme
+    appears, so a controller can sit for a long time naming a theme it does not
+    have yet).
+
+    The symptom was that StyleOverride could not be CLEARED on any controller
+    that names a theme: setting it to '' rebuilt nothing, so the patch stayed,
+    and setting a different one appended to the old rather than replacing it.
+    The existing test for clearing passed because its controller names no theme
+    and therefore took the third branch, which always loaded.
+
+    Falling back to the base is not a guess about what the user wanted: if the
+    name never resolved, the base is what layer-1 already held -- so this
+    restores exactly what was there, minus the patches it exists to drop. }
+  if (FThemeFile <> '') and FileExists(FThemeFile) then
+    FModel.LoadFromFile(FThemeFile)
+  else if (FThemeName <> '') and TyResolveThemeCss(FThemeName, css) then
+    FModel.LoadFromCss(css)
+  else if (FThemeName <> '') and TyResolveTheme(FThemeName, src)
+    and (src <> '') and FileExists(src) then
+    FModel.LoadFromFile(src)
   else
     { 无主题(默认控制器就在内置 base 上):也得把用户层清成干净起点,否则改 StyleOverride 时
       旧补丁还留在 FRules 里、新补丁又追加 = 累积。 }
