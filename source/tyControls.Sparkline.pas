@@ -15,6 +15,10 @@ type
   so everything maps to the vertical centre (no div-by-zero). }
 function TySparklineY(AValue, AMin, AMax, ATop, AHeight: Double): Double;
 
+{ Vertical pixel of the baseline for a series spanning [AMin .. AMax]: the zero line
+  when the range includes zero, otherwise the min line (the bottom of the band). }
+function TySparklineBaselineY(AMin, AMax, ATop, AHeight: Double): Double;
+
 type
   { A tiny inline trend chart — no axes, legend or labels, just the shape of a
     series. Feed it a sample array via SetValues; it maps each value to a point in
@@ -74,6 +78,14 @@ begin
   frac := (AValue - AMin) / (AMax - AMin);
   if frac < 0 then frac := 0 else if frac > 1 then frac := 1;
   Result := ATop + (1 - frac) * AHeight;           // inverted: min -> bottom, max -> top
+end;
+
+function TySparklineBaselineY(AMin, AMax, ATop, AHeight: Double): Double;
+begin
+  { Double(0), not 0: Math.Max with an integer operand beside a Double one resolves to
+    the SINGLE overload on FPC 3.2.2, and a large positive min came back rounded to
+    24 bits, floating the baseline off the bottom of the band. }
+  Result := TySparklineY(Math.Max(Double(0), AMin), AMin, AMax, ATop, AHeight);
 end;
 
 { TTySparkline }
@@ -195,7 +207,7 @@ begin
   gap := Math.Max(1, P.Scale(1));
   slot := (R.Right - R.Left) / n;
   // Baseline sits at the bottom of the band (or the min-value line when it is above 0).
-  baseY := TySparklineY(Math.Max(0, AMin), AMin, AMax, R.Top, R.Bottom - R.Top);
+  baseY := TySparklineBaselineY(AMin, AMax, R.Top, R.Bottom - R.Top);
   yBase := Round(baseY);
   for i := 0 to n - 1 do
   begin
@@ -259,7 +271,7 @@ begin
       ResolveRange(vmin, vmax);
 
       // Faint baseline at the zero (or min) level, in the frame text colour.
-      by := TySparklineY(Math.Max(0, vmin), vmin, vmax, band.Top, band.Bottom - band.Top);
+      by := TySparklineBaselineY(vmin, vmax, band.Top, band.Bottom - band.Top);
       baseY := Round(by);
       if (baseY > band.Top) and (baseY < band.Bottom) then
       begin
