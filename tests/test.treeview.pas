@@ -5747,9 +5747,11 @@ type
     FCompareCol:      Integer;
     FHeaderClickCol:  Integer;
     FHeaderClickCount: Integer;
+    FNodeDblClicks:   Integer;
     procedure OnCompare(Sender: TTyTreeView; Node1, Node2: PTyTreeNode;
                         Column: Integer; var Result: Integer);
     procedure OnHeaderClick(Sender: TTyTreeView; Column: Integer);
+    procedure OnNodeDblClick(Sender: TTyTreeView; Node: PTyTreeNode);
     { Build a sortable multi-column tree with 4 root nodes keyed [4,2,3,1]. }
     function BuildE3Tree(out Ctl: TTyStyleController; out F: TForm): TTyTreeView;
   published
@@ -5758,6 +5760,8 @@ type
     procedure TestE3_ClickNewColumnResetsAsc;
     procedure TestE3_OnHeaderClickFired;
     procedure TestE3_SortRunsOnClick;
+    procedure TestE3_HeaderDoubleClickLeavesNodesAlone;
+    procedure TestE3_ReleaseOffTheSectionDoesNotSort;
   end;
 
 procedure TTreeE3HeaderClickTest.OnCompare(Sender: TTyTreeView;
@@ -5772,6 +5776,69 @@ procedure TTreeE3HeaderClickTest.OnHeaderClick(Sender: TTyTreeView; Column: Inte
 begin
   Inc(FHeaderClickCount);
   FHeaderClickCol := Column;
+end;
+
+procedure TTreeE3HeaderClickTest.OnNodeDblClick(Sender: TTyTreeView; Node: PTyTreeNode);
+begin
+  Inc(FNodeDblClicks);
+end;
+
+{ 双击列头不是双击节点。DblClick 拿的是 FLastMouseNode,而列头按下从前不更新它 ——
+  于是双击列头会把上一次在正文点过的那个节点展开/折叠或进入编辑。 }
+procedure TTreeE3HeaderClickTest.TestE3_HeaderDoubleClickLeavesNodesAlone;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+begin
+  t := BuildE3Tree(Ctl, F);
+  try
+    t.OnNodeDblClick := @OnNodeDblClick;
+    FNodeDblClicks := 0;
+    { 先在正文点一个节点:第 0 行在 22px 表头之下,Y = 32。 }
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 50, 32);
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 50, 32);
+    { 再双击列头(LCL 在第二次按下时把 ssDouble 塞进 Shift,随后调 DblClick)。 }
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 50, 11);
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 50, 11);
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [ssDouble], 50, 11);
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 50, 11);
+    TTyTreeViewAccess(t).DblClick;
+    AssertEquals('双击列头不算双击节点', 0, FNodeDblClicks);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ 点列头 = 按下并在**同一段**上松开。按在段上、滑进正文或滑到别的段上再松开,
+  不是点击 —— 与资源管理器一致。 }
+procedure TTreeE3HeaderClickTest.TestE3_ReleaseOffTheSectionDoesNotSort;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+begin
+  t := BuildE3Tree(Ctl, F);
+  try
+    FHeaderClickCount := 0;
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 50, 11);    { 按在 col0 的段上 }
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 50, 60);      { 松开在正文里 }
+    AssertEquals('松开在正文里不排序', -1, t.Header.SortColumn);
+    AssertEquals('也不发 OnHeaderClick', 0, FHeaderClickCount);
+
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 50, 11);
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 150, 11);     { 松开在 col1 的段上 }
+    AssertEquals('松开在别的段上不排序', -1, t.Header.SortColumn);
+
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 50, 11);
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 50, 11);
+    AssertEquals('同一段上松开才排序', 0, t.Header.SortColumn);
+    AssertEquals('这一下才发 OnHeaderClick', 1, FHeaderClickCount);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
 end;
 
 function TTreeE3HeaderClickTest.BuildE3Tree(out Ctl: TTyStyleController;
