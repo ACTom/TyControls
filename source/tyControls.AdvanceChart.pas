@@ -35,7 +35,8 @@ uses
   tyControls.AdvChart.Measure, tyControls.AdvChart.Handlers,
   tyControls.AdvChart.Paint, tyControls.AdvChart.Render,
   tyControls.AdvChart.Marks, tyControls.AdvChart.BarLayout,
-  tyControls.AdvChart.Stack, tyControls.SubPixel;
+  tyControls.AdvChart.Stack, tyControls.AdvChart.Symbol,
+  fpjson, tyControls.SubPixel;
 
 const
   { The four axis metrics, and the defaults to fall back on when a theme has not
@@ -107,6 +108,8 @@ type
     function SeriesColor(ASeriesIndex: Integer): TTyColor;
     { The stack record for a series slot, or an unstacked one. }
     function StackFor(ASlot: Integer): TTySeriesStack;
+    { The symbol spec for a series slot, over its type's own default. }
+    function SymbolFor(ASlot: Integer): TTySymbolSpec;
     procedure PaintDynamic(APainter: TTyPainter; const ARect: TRect;
       APPI: Integer; const AMeasurer: ITyTextMeasurer);
     { Whether the dynamic layer would draw anything. False skips a whole
@@ -889,6 +892,21 @@ begin
   end;
 end;
 
+function TTyAdvanceChart.SymbolFor(ASlot: Integer): TTySymbolSpec;
+var
+  d: TJSONData;
+  node: TJSONObject;
+begin
+  Result := TySymbolDefault('');
+  if (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
+  Result := TySymbolDefault(FBindings[ASlot].SeriesType);
+  if FOption = nil then Exit;
+  d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
+  if (d = nil) or not (d is TJSONObject) then Exit;
+  node := TJSONObject(d);
+  Result := TySymbolSpecOf(node, Result);
+end;
+
 function TTyAdvanceChart.SeriesColor(ASeriesIndex: Integer): TTyColor;
 var
   st: TTyStyleSet;
@@ -932,6 +950,13 @@ begin
       v := TySeriesVisual(TTyChartColor(SeriesColor(FBindings[i].SeriesIndex)));
       if i <= High(FBarCols) then v.Bar := FBarCols[i];
       v.Line := TyLineSpecOf(FOption, FBindings[i].SeriesIndex);
+      v.Symbol := SymbolFor(i);
+      { An `empty` symbol is filled with the chart's own surface, so it reads as
+        a hole rather than as a white dot on a dark skin. Upstream fills it from
+        a token too, so parity and this library's own rule agree. }
+      v.EmptyFill := TTyChartColor(
+        ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass,
+          [tysNormal]).Background.Color);
       { NO Z2 HERE. It was set to i, and a mutant that set it to 0 survived
         every test -- because the paint list's documented tiebreaker is the
         INSERTION INDEX, and these are inserted in series order already. Two

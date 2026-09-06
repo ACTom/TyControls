@@ -12,7 +12,8 @@ uses Classes, SysUtils, Math, fpcunit, testregistry,
      tyControls.AdvChart.Coord, tyControls.AdvChart.Data,
      tyControls.AdvChart.Shape, tyControls.AdvChart.Paint,
      tyControls.AdvChart.Series, tyControls.AdvChart.Marks,
-     tyControls.AdvChart.BarLayout, tyControls.AdvChart.Option;
+     tyControls.AdvChart.BarLayout, tyControls.AdvChart.Option,
+     tyControls.AdvChart.Symbol;
 type
   TAdvChartMarksTest = class(TTestCase)
   private
@@ -56,6 +57,9 @@ type
     procedure TestTheFillIsPaintedBehindItsLine;
     procedure TestASteppedAreaFollowsItsSteppedLine;
     procedure TestACoordinateThatWillNotMapBreaksTheRun;
+    procedure TestAScatterIsOneSymbolPerDatum;
+    procedure TestAnEmptySymbolIsStrokedAndFilledWithTheThemesOwnGround;
+    procedure TestABubbleTakesItsSizeFromTheData;
   end;
 
 implementation
@@ -287,11 +291,15 @@ end;
 
 procedure TAdvChartMarksTest.TestAnUnknownSeriesTypeDrawsNothing;
 begin
-  { Twenty-one of the twenty-three types have no renderer yet, and drawing an
+  { Twenty of the twenty-three types have no renderer yet, and drawing an
     approximation would be worse than drawing nothing -- the control's
-    diagnostics are what tell the reader why the plot is empty. }
-  Given('scatter', 3, [10, 20, 30]);
-  AssertEquals('scatter has no renderer yet', 0,
+    diagnostics are what tell the reader why the plot is empty.
+
+    This used to say `scatter`, which now draws. A test that pins "X is not
+    implemented" has to move when X is, and moving it is the point: the
+    assertion is about the RULE, not about scatter. }
+  Given('pie', 3, [10, 20, 30]);
+  AssertEquals('pie has no renderer yet', 0,
     TyBuildSeriesMarks(FBinding, FStore, TyNoStack, TySeriesVisual($FF3366CC), FList));
   AssertEquals(0, FList.Count);
 end;
@@ -330,7 +338,8 @@ begin
   { AND IT IS NOT SIMPLY TRUE FOR EVERYTHING -- the loop above would pass if
     both sides answered yes to every type. }
   AssertTrue('bar draws', TySeriesTypeHasRenderer('bar'));
-  AssertFalse('scatter does not, yet', TySeriesTypeHasRenderer('scatter'));
+  AssertTrue('and so does scatter now', TySeriesTypeHasRenderer('scatter'));
+  AssertFalse('pie does not, yet', TySeriesTypeHasRenderer('pie'));
   { CASE-SENSITIVE, matching the type registry -- 'Bar' does not resolve as a
     series at all, so answering yes for it would promise a chart that cannot
     draw. }
@@ -856,6 +865,118 @@ begin
   AssertEquals('two points before it', 2,
     Length(FList.Element(0).Shape.Points));
   AssertEquals('and two after', 2, Length(FList.Element(1).Shape.Points));
+end;
+
+procedure TAdvChartMarksTest.TestAScatterIsOneSymbolPerDatum;
+var
+  v: TTySeriesVisual;
+  i: Integer;
+  sh: TTyChartShape;
+begin
+  { ONE MARK PER ROW, centred on the datum, and nothing else -- a scatter has
+    no line and no baseline. }
+  Given('scatter', 4, [10, 20, 30, 40]);
+  v := TySeriesVisual($FF3366CC);
+  v.Symbol := TySymbolDefault('scatter');
+  AssertEquals('one symbol per row', 4,
+    TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList));
+
+  for i := 0 to 3 do
+  begin
+    sh := FList.Element(i).Shape;
+    AssertEquals(Format('mark %d is a circle', [i]),
+      Ord(cskCircle), Ord(sh.Kind));
+    AssertEquals(Format('mark %d sits on its datum', [i]),
+      FCart.DataToPoint([Double(i), 10.0 * (i + 1)]).X, sh.CX, 0.001);
+    AssertEquals(Format('mark %d sits on its datum', [i]),
+      FCart.DataToPoint([Double(i), 10.0 * (i + 1)]).Y, sh.CY, 0.001);
+    AssertEquals(Format('mark %d answers for its own row', [i]),
+      i, FList.Element(i).Datum.DataIndex);
+  end;
+  AssertEquals('and the default size is upstream''s 10', 5.0,
+    FList.Element(0).Shape.R1, 0.001);
+
+  { A GAP DRAWS NOTHING rather than a symbol at an invented place. }
+  FList.Clear;
+  FreeAndNil(FStore);
+  FreeAndNil(FCart);
+  Given('scatter', 3, [10, NaN, 30]);
+  v.Symbol := TySymbolDefault('scatter');
+  AssertEquals('two rows have values, so two symbols', 2,
+    TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList));
+
+  { `symbol: 'none'` draws nothing at all -- a real instruction, not a
+    failure. }
+  FList.Clear;
+  v.Symbol.Kind := tsyNone;
+  AssertEquals('none means none', 0,
+    TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList));
+end;
+
+procedure TAdvChartMarksTest.TestAnEmptySymbolIsStrokedAndFilledWithTheThemesOwnGround;
+var v: TTySeriesVisual;
+begin
+  { AN `empty` SYMBOL IS A RING, and the hole is the THEME'S ground, not white.
+    Upstream fills it from a token for the same reason: a white dot on a dark
+    skin is a bug you only see on the dark skin. }
+  Given('scatter', 2, [10, 20]);
+  v := TySeriesVisual($FF3366CC);
+  v.Symbol := TySymbolDefault('scatter');
+  v.Symbol.Empty := True;
+  v.EmptyFill := $FF102030;
+  TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList);
+
+  AssertEquals('the series colour becomes the pen',
+    Int64($FF3366CC), Int64(FList.Element(0).Style.StrokeColor));
+  AssertTrue('and it is actually stroked',
+    FList.Element(0).Style.StrokeWidthLogical > 0);
+  AssertEquals('the hole is the ground it was given',
+    Int64($FF102030), Int64(FList.Element(0).Style.FillColor));
+
+  { A SOLID SYMBOL IS THE OTHER WAY ROUND: filled in the series colour, no
+    pen. }
+  FList.Clear;
+  v.Symbol.Empty := False;
+  TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList);
+  AssertEquals('filled in the series colour',
+    Int64($FF3366CC), Int64(FList.Element(0).Style.FillColor));
+
+  { THE `line` SYMBOL IS STROKED TOO, and has no fill at all -- it is a dash,
+    so a fill would have nothing to fill. }
+  FList.Clear;
+  v.Symbol.Kind := tsyLine;
+  TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList);
+  AssertEquals('the dash is drawn with the pen',
+    Int64($FF3366CC), Int64(FList.Element(0).Style.StrokeColor));
+  AssertFalse('and has nothing to fill', FList.Element(0).Style.HasFill);
+end;
+
+procedure TAdvChartMarksTest.TestABubbleTakesItsSizeFromTheData;
+var
+  v: TTySeriesVisual;
+  extra: Integer;
+begin
+  { A BUBBLE CHART WITHOUT A CALLBACK. Upstream sizes these with a function
+    over the datum, and a function cannot survive the trip to JSON -- so what
+    a static option can carry is a third number on the point, and that is what
+    is read. Without this every bubble chart in the gallery draws at one size
+    and looks like a plain scatter. }
+  Given('scatter', 3, [10, 20, 30]);
+  extra := FStore.AddDimension('size', ddtFloat);
+  FStore.SetCalculated(extra, 0, 8);
+  FStore.SetCalculated(extra, 1, 24);
+  FStore.SetCalculated(extra, 2, 40);
+
+  v := TySeriesVisual($FF3366CC);
+  v.Symbol := TySymbolDefault('scatter');
+  TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList);
+
+  AssertEquals('the first bubble is 8 across', 4.0,
+    FList.Element(0).Shape.R1, 0.001);
+  AssertEquals('the second 24', 12.0, FList.Element(1).Shape.R1, 0.001);
+  AssertEquals('the third 40', 20.0, FList.Element(2).Shape.R1, 0.001);
+  AssertTrue('so they are not all the default 10',
+    Abs(FList.Element(0).Shape.R1 - FList.Element(2).Shape.R1) > 1);
 end;
 
 initialization

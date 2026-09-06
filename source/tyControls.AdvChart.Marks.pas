@@ -41,7 +41,7 @@ uses
   tyControls.AdvChart.Coord,
   tyControls.AdvChart.Data, tyControls.AdvChart.Shape,
   tyControls.AdvChart.Paint, tyControls.AdvChart.Series,
-  tyControls.AdvChart.BarLayout;
+  tyControls.AdvChart.BarLayout, tyControls.AdvChart.Symbol;
 
 type
   { Where a stepped line turns. ECharts spells `step: true` as 'start'. }
@@ -91,6 +91,13 @@ type
     Z, Z2: Integer;
     { The line-shaped options, ignored by every other renderer. }
     Line: TTyLineSpec;
+    { The symbol a datum is drawn as. Scatter draws nothing else; a line will
+      draw these on top of itself once showSymbol lands. }
+    Symbol: TTySymbolSpec;
+    { What an `empty` symbol is filled with -- the theme's own background,
+      resolved by the control, because this unit never asks what colour
+      anything is. Upstream fills them with a token too. }
+    EmptyFill: TTyChartColor;
   end;
 
 { A visual with the defaults: a filled mark, no stroke, upstream's bar gap. }
@@ -208,6 +215,8 @@ begin
   Result.Line.AreaOpacity := 1;
   Result.Line.Step := lstNone;
   Result.Line.ConnectNulls := False;
+  Result.Symbol := TySymbolDefault('');
+  Result.EmptyFill := 0;
 end;
 
 { The value the area falls back to where nothing is stacked underneath.
@@ -668,20 +677,105 @@ begin
   Flush;
 end;
 
+{ One symbol per datum, and nothing else -- which is the whole of a scatter.
+
+  THE SIZE CAN COME FROM THE DATA. ECharts lets symbolSize be a callback over
+  the datum, and a callback cannot survive the trip to JSON; what CAN is a
+  third number on the point, which is how a bubble chart is written when the
+  option is static. So a row with more columns than the two axes need has its
+  next value read as the diameter. }
+function BuildScatter(const ABinding: TTySeriesBinding; AStore: TTyDataStore;
+  const AStack: TTySeriesStack; const AVisual: TTySeriesVisual;
+  AList: TTyPaintList; AColX, AColY: Integer): Integer;
+var
+  i, sizeCol, valCol: Integer;
+  x, y, sz: Double;
+  p: TTyPointF;
+  spec: TTySymbolSpec;
+  shape: TTyChartShape;
+  v: TTySeriesVisual;
+  el: TTyChartElement;
+  baseHoriz, stacked: Boolean;
+begin
+  Result := 0;
+  spec := AVisual.Symbol;
+  if spec.Kind = tsyNone then Exit;
+  baseHoriz := (ABinding.BaseAxis = nil) or ABinding.BaseAxis.Horizontal;
+  stacked := AStack.Stacked and (AStack.ResultCol >= 0);
+
+  { A third column is a size only when it is not one of the two the axes use.
+    Asking the store rather than assuming index 2 keeps this right for a series
+    bound to the second y axis. }
+  sizeCol := -1;
+  for i := 0 to AStore.DimCount - 1 do
+    if (i <> AColX) and (i <> AColY) and (AStore.DimType(i) = ddtFloat) then
+    begin
+      sizeCol := i;
+      Break;
+    end;
+
+  for i := 0 to AStore.Count - 1 do
+  begin
+    x := AStore.Get(AColX, i);
+    y := AStore.Get(AColY, i);
+    if stacked then
+    begin
+      if baseHoriz then y := AStore.Get(AStack.ResultCol, i)
+                   else x := AStore.Get(AStack.ResultCol, i);
+    end;
+    if IsNan(x) or IsNan(y) then Continue;
+    p := ABinding.Cart.DataToPoint([x, y]);
+    if IsNan(p.X) or IsNan(p.Y)
+      or IsInfinite(p.X) or IsInfinite(p.Y) then Continue;
+
+    if sizeCol >= 0 then
+    begin
+      sz := AStore.Get(sizeCol, i);
+      if not IsNan(sz) and (sz > 0) then
+      begin
+        spec.WidthPx := sz;
+        spec.HeightPx := sz;
+      end;
+    end;
+
+    shape := TyBuildSymbol(spec, p.X, p.Y);
+    if (shape.Kind = cskRect) and not TyRectFIsValid(shape.Bounds) then Continue;
+
+    v := AVisual;
+    { AN `empty` SYMBOL IS STROKED, NOT FILLED -- upstream strokes it in the
+      series colour and fills it with the theme's background, and a line symbol
+      is stroked too. Both are the same rule: the colour is the pen. }
+    if spec.Empty or (spec.Kind = tsyLine) then
+    begin
+      v.Stroke := AVisual.Fill;
+      if v.StrokeWidthLogical <= 0 then v.StrokeWidthLogical := 2;
+      if spec.Kind = tsyLine then v.Fill := 0
+      else v.Fill := AVisual.EmptyFill;
+    end;
+    el := MarkElement(shape, v, ABinding.SeriesIndex, i);
+    AList.Add(el);
+    Inc(Result);
+  end;
+  { The unused local keeps the compiler quiet about valCol in a future edit. }
+  valCol := 0;
+  if valCol > 0 then ;
+end;
+
 const
-  { THE ONE LIST. Two of the twenty-three types draw; a renderer arrives as a
-    row here and both the drawing and the published answer follow from it.
+  { THE ONE LIST. Three of the twenty-three types draw; a renderer arrives as
+    a row here and both the drawing and the published answer follow from it.
 
     Type names are compared EXACTLY, the way TySeriesFindType compares them --
     ECharts' names are case-sensitive, so a series typed 'Bar' never resolves
     and never reaches this unit. A lenient match here would answer yes for a
     chart that draws nothing. }
-  cRenderers: array[0..1] of record
+  cRenderers: array[0..2] of record
     Name: string;
     Build: TTyMarkBuilder;
   end = (
-    (Name: 'bar';  Build: @BuildBars),
-    (Name: 'line'; Build: @BuildLine));
+    (Name: 'bar';     Build: @BuildBars),
+    (Name: 'line';    Build: @BuildLine),
+    (Name: 'scatter'; Build: @BuildScatter));
 
 function RendererFor(const AType: string): TTyMarkBuilder;
 var i: Integer;

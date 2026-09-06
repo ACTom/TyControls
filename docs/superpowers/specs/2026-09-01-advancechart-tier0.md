@@ -2069,3 +2069,73 @@ symbol、`smooth` / `step`,以及 `showBackground` 和四角 `borderRadius`,都�
 剩下 29 个转不出来的各自记了原因(ecStat、echarts-gl、zrender 内部),
 另有 10 个转出来但太大(`scatter-large` 单个 64MB,十个加起来 120MB,
 全是 large 模式的压力用例、恰好也是这个端口画不了的),按 1MB 上限排除,原因同样写在索引里。
+
+---
+
+## 37. Tier 1 第四批:符号库与 scatter(2026-09-06)
+
+示例记分牌说得很清楚:scatter 挡着 33 个官方示例,而且它的**整条流水线早就通了**——
+解析、绑定、列式存储、轴范围、布局、画轴全对,轴上的数字都是从真实数据推出来的,
+**只差最后一步画点**。
+
+`AdvChart.Symbol.pas`:照 `src/util/symbol.ts` 抄的符号库。
+circle / rect / roundRect / square / triangle / diamond / pin / arrow / line / none,
+加 `empty*` 前缀和 `path://`。`image://` 明确拒绝——纯单元里没有图片的容身之处,
+而画个替代形状等于给作者一张他没要的图。
+
+### 没有复用 tyControls.Shape
+
+那个单元确实有 triangle 和 diamond,但**不是这两个**:它服务 TTyShape 控件,
+词汇是它自己的(star、squared diamond、四个方向的三角),顶点也按那个控件算。
+**两族只是重叠,不等于是一族**;共用之后,以后每加一个 ECharts 符号,
+都得在一个控件的词汇里争论它该叫什么。
+
+### 除了圆、圆角矩形和 path,一切都建成多边形
+
+不是偷懒:绘制列表的 shape 记录**没有旋转**,而多边形可以直接按旋转后的顶点建。
+一条永远对的路,好过一条快、但对一半形状悄悄忽略 `symbolRotate` 的路。
+圆角矩形一旦旋转就退化成方角多边形——角度是作者要的,圆角不是。
+
+### 我的心智模型错了,而且错得很像对的
+
+我以为符号是**在它的 symbolSize 盒子里**建的,于是照着 shape-maker 抄:
+`circle` 取 `Math.min(w, h) / 2`、`square` 取短边并贴盒子左上角、`keepAspect` 把盒子取方。
+
+**都不对。** `Symbol.ts` 调 `createSymbol(type, -1, -1, 2, 2, ...)`——**单位盒**——
+然后给元素 `scaleX = symbolSize[0]/2, scaleY = symbolSize[1]/2`,**非等比缩放**。所以:
+
+- `symbolSize: [20, 8]` 的 circle 是**一个 20×8 的椭圆**,不是内切的半径 4 的圆
+- `square` 对 series 符号而言**和 rect 一模一样**:单位盒里 `min(2,2)` 是空操作,
+  左上角锚定也就永远不显形。差别只在 createSymbol 拿到真实盒子的地方——图例图标和 markPoint
+- **`symbolKeepAspect` 根本到不了内置符号**:`createSymbol` 只把它交给 `makePath` / `makeImage`
+  当作包围盒的贴合模式,内置那条分支一个字都没读
+
+直边形状不受影响——在单位盒里建再缩放,和直接在盒子里建是同一个线性映射。
+
+**这三条是并行审查里的第二个审计员抓到的,而且它跟第一个审计员的结论相反。**
+两份报告对着干的时候只有一个办法:自己去读源码。读完是第二个对的。
+`scaleX: symbolSize[0] / 2` 那行就在 `Symbol.ts:87`。
+
+### 变异测试:24 个跑掉 3 个
+
+- **旋转方向没被钉住**。我的测试转 180°——**半圈是它自己的镜像**,分不出顺时针逆时针。
+  改成 90° 就杀掉了。
+- **零尺寸那条断言错了对象**。它断言 `Bounds` 无效,而圆**根本不用 Bounds**,
+  所以守卫开不开它都绿。改成断言 Kind:「什么都不画」是一个 bounds 无效的 rect,
+  变异体给出的是 circle。
+- **`tsyNone` 的提前返回是等价变异体**,如实记下:删掉它也没区别,
+  因为 case 里没有 tsyNone 分支,点列表保持为空,两屏之后返回同一个无效矩形。
+  它留着是为了把规则说出声——'none' 是一条指令,不是一次失败的绘制。
+
+### 两条测试因此变红,而且红得正确
+
+`TestAnUnknownSeriesTypeDrawsNothing` 和 `TestThePublishedAnswerMatchesWhatIsActuallyDrawn`
+钉的是「scatter 还没有渲染器」。这正是这类测试的用途——**断言说的是规则,类型只是当下的例子**——
+所以例子换成了 `pie`。诊断那条同理。
+
+### 气泡图的尺寸
+
+上游用回调按 datum 算 symbolSize,而回调过不了 JSON 这一关。
+静态 option 能带的是**点上的第三个数**,所以读它:
+store 里除去两根轴用的那两列之外的第一个浮点列。
+不这么做的话,画廊里每张气泡图都画成一个尺寸,看着就是普通散点图。
