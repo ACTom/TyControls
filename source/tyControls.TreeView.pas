@@ -6261,6 +6261,10 @@ begin
       FDragTargetPos := col.Position;
       if HandleAllocated then MouseCapture := True;
     end;
+    { A header press is not a node press: DblClick acts on FLastMouseNode, and
+      leaving the previous body click in it made a header double-click expand,
+      collapse or start editing that stale node. }
+    FLastMouseNode := nil;
     Exit;  { don't fall through to node hit-test when in header }
   end;
 
@@ -6689,6 +6693,8 @@ procedure TTyTreeView.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: In
 var
   draggedCol: TTyColumn;
   oldPos, newPos: Integer;
+  upPart: TTyTreeHitPart;
+  upCol: Integer;
 begin
   inherited MouseUp(Button, Shift, X, Y);
 
@@ -6734,9 +6740,14 @@ begin
           FOnColumnReorder(Self, oldPos, newPos);
       end;
     end
-    else if FDragPending and not FDragging and (FDragColumn <> NoColumn) then
+    else if FDragPending and not FDragging and (FDragColumn <> NoColumn) and
+            GetHeaderHitAt(X, Y, upPart, upCol) and
+            (upPart = hpHeaderSection) and (upCol = FDragColumn) then
     begin
-      { E3: plain press+release (no drag) on a header section = header click }
+      { E3: plain press+release (no drag) on a header section = header click.
+        The release must land on the SAME section: a press that slides into the
+        body or onto another section and lets go there is not a click, as in
+        Explorer. }
       _HandleHeaderClick(FDragColumn);
     end;
     { Clear drag state }
