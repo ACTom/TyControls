@@ -38,7 +38,7 @@ interface
 uses
   SysUtils, Math, fpjson,
   tyControls.AdvChart.Types, tyControls.AdvChart.Option,
-  tyControls.AdvChart.Coord,
+  tyControls.AdvChart.Scale, tyControls.AdvChart.Coord,
   tyControls.AdvChart.Data, tyControls.AdvChart.Shape,
   tyControls.AdvChart.Paint, tyControls.AdvChart.Series,
   tyControls.AdvChart.BarLayout, tyControls.AdvChart.Symbol;
@@ -46,6 +46,11 @@ uses
 type
   { Where a stepped line turns. ECharts spells `step: true` as 'start'. }
   TTyLineStep = (lstNone, lstStart, lstMiddle, lstEnd);
+
+  { showAllSymbol: 'auto' | true | false. 'auto' is the default and means
+    "all of them unless they would crowd", which upstream decides from the
+    symbol's size against the space one category gets. }
+  TTyShowAllSymbol = (sasAuto, sasYes, sasNo);
 
   { How the area under a line finds its lower edge when nothing is stacked
     beneath it. ECharts' areaStyle.origin. }
@@ -65,6 +70,14 @@ type
     AreaOpacity: Double;
     Step: TTyLineStep;
     ConnectNulls: Boolean;
+    { showSymbol, default TRUE: an ECharts line has a marker on every point. }
+    ShowSymbol: Boolean;
+    ShowAllSymbol: TTyShowAllSymbol;
+    { The thinning the AXIS settled on -- 1 when it draws every label. When the
+      markers would crowd, upstream falls back to "follow the label interval
+      strategy on the category axis", and this is that interval, computed once
+      by the layout pass rather than guessed at again here. }
+    LabelStep: Integer;
   end;
 
   { Everything about ONE series that was decided somewhere else.
@@ -147,6 +160,9 @@ begin
   Result.AreaOpacity := 1;
   Result.Step := lstNone;
   Result.ConnectNulls := False;
+  Result.ShowSymbol := True;
+  Result.ShowAllSymbol := sasAuto;
+  Result.LabelStep := 1;
   if AOption = nil then Exit;
   d := AOption.ComponentAt('series', ASlot);
   if (d = nil) or not (d is TJSONObject) then Exit;
@@ -170,6 +186,22 @@ begin
   d := node.Find('connectNulls');
   if (d <> nil) and (d.JSONType = jtBoolean) then
     Result.ConnectNulls := d.AsBoolean;
+
+  d := node.Find('showSymbol');
+  if (d <> nil) and (d.JSONType = jtBoolean) then
+    Result.ShowSymbol := d.AsBoolean;
+
+  d := node.Find('showAllSymbol');
+  if d <> nil then
+  begin
+    if d.JSONType = jtBoolean then
+    begin
+      if d.AsBoolean then Result.ShowAllSymbol := sasYes
+      else Result.ShowAllSymbol := sasNo;
+    end
+    else if (d.JSONType = jtString) and (d.AsString = 'auto') then
+      Result.ShowAllSymbol := sasAuto;
+  end;
 
   { PRESENCE IS THE SWITCH. `areaStyle: {}` fills the area; there is no
     `show` and no default block to inherit. }
@@ -215,6 +247,17 @@ begin
   Result.Line.AreaOpacity := 1;
   Result.Line.Step := lstNone;
   Result.Line.ConnectNulls := False;
+  { TRUE, because that is upstream's default and this record is "the
+    defaults".
+
+    It was tempting to make a hand-built visual quiet so the existing polyline
+    tests would not have to change -- but two different defaults for one field
+    is precisely the invisible-wrong-default this port keeps being bitten by,
+    and the surprise here is visible (extra elements) rather than silent
+    (missing ones). The geometry tests turn it off and say why. }
+  Result.Line.ShowSymbol := True;
+  Result.Line.ShowAllSymbol := sasAuto;
+  Result.Line.LabelStep := 1;
   Result.Symbol := TySymbolDefault('');
   Result.EmptyFill := 0;
 end;
@@ -532,12 +575,64 @@ function BuildLine(const ABinding: TTySeriesBinding; AStore: TTyDataStore;
   const AStack: TTySeriesStack; const AVisual: TTySeriesVisual;
   AList: TTyPaintList; AColX, AColY: Integer): Integer;
 var
-  i, n: Integer;
+  i, n, step: Integer;
   x, y, lowV, startV: Double;
   p, q: TTyPointF;
   pts, lows: TTyPointFArray;
+  rows: array of Integer;
   baseHoriz, stacked, gap: Boolean;
   spec: TTyLineSpec;
+
+  { One marker, answering for its own row. False when the symbol draws
+    nothing. }
+  function EmitSymbol(const AP: TTyPointF; ARow: Integer): Boolean;
+  var
+    sh: TTyChartShape;
+    sv: TTySeriesVisual;
+  begin
+    Result := False;
+    sh := TyBuildSymbol(AVisual.Symbol, AP.X, AP.Y);
+    if (sh.Kind = cskRect) and not TyRectFIsValid(sh.Bounds) then Exit;
+    sv := AVisual;
+    { An `empty` marker is a RING: the series colour becomes the pen and the
+      hole is the theme's own ground. A line's default symbol is emptyCircle,
+      so this is the ordinary case rather than the exception. }
+    if AVisual.Symbol.Empty or (AVisual.Symbol.Kind = tsyLine) then
+    begin
+      sv.Stroke := AVisual.Fill;
+      if sv.StrokeWidthLogical <= 0 then sv.StrokeWidthLogical := 2;
+      if AVisual.Symbol.Kind = tsyLine then sv.Fill := 0
+      else sv.Fill := AVisual.EmptyFill;
+    end;
+    AList.Add(MarkElement(sh, sv, ABinding.SeriesIndex, ARow));
+    Result := True;
+  end;
+
+  { showAllSymbol. Upstream: 'auto' shows every marker unless one would crowd
+    its neighbour -- it compares the symbol's size against the space a single
+    category gets, with an empirical 1.5 margin -- and when they would crowd it
+    "follows the label interval strategy on the category axis", which is the
+    step the axis layout already worked out. }
+  function SymbolStep: Integer;
+  var
+    avail, sz: Double;
+    cats: Integer;
+  begin
+    Result := 1;
+    if AVisual.Line.ShowAllSymbol = sasYes then Exit;
+    if ABinding.BaseAxis = nil then Exit;
+    if not (ABinding.BaseAxis.Scale is TTyOrdinalScale) then Exit;
+    cats := TTyOrdinalScale(ABinding.BaseAxis.Scale).Count;
+    if cats <= 0 then Exit;
+    avail := Abs(ABinding.BaseAxis.PxStop - ABinding.BaseAxis.PxStart) / cats;
+    { The ACROSS size, which is upstream's own index choice: it reads
+      symbolSize[1] for a horizontal category axis. Only visible with an
+      oblong symbolSize, and transcribed rather than corrected. }
+    if baseHoriz then sz := AVisual.Symbol.HeightPx
+                 else sz := AVisual.Symbol.WidthPx;
+    if sz * 1.5 <= avail then Exit;
+    Result := Max(1, AVisual.Line.LabelStep);
+  end;
 
   { Upstream's isPointIllegal: NOT only NaN. Any non-finite coordinate is a
     hole, and an Infinity that reached the paint list would stretch a polyline
@@ -609,6 +704,15 @@ var
     el := MarkElement(TyShapePolyline(up), v, ABinding.SeriesIndex, -1);
     AList.Add(el);
     Inc(Result);
+
+    { THE MARKERS GO ON LAST, so they sit over the line they belong to -- and
+      they carry the DATUM, which the polyline cannot: one polyline is a whole
+      run, so a pointer over a marker can name its row and a pointer over the
+      line between two markers cannot. }
+    if spec.ShowSymbol then
+      for k := 0 to n - 1 do
+        if ((k mod step) = 0) and EmitSymbol(pts[k], rows[k]) then
+          Inc(Result);
   end;
 
 begin
@@ -617,8 +721,10 @@ begin
   stacked := AStack.Stacked and (AStack.ResultCol >= 0);
   spec := AVisual.Line;
   startV := AreaStartValue(ABinding.ValueAxis, spec);
+  step := SymbolStep;
   SetLength(pts, AStore.Count);
   SetLength(lows, AStore.Count);
+  SetLength(rows, AStore.Count);
   n := 0;
   for i := 0 to AStore.Count - 1 do
   begin
@@ -672,6 +778,7 @@ begin
 
     if spec.HasArea then lows[n] := q;
     pts[n] := p;
+    rows[n] := i;
     Inc(n);
   end;
   Flush;

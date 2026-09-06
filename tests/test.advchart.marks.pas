@@ -60,6 +60,8 @@ type
     procedure TestAScatterIsOneSymbolPerDatum;
     procedure TestAnEmptySymbolIsStrokedAndFilledWithTheThemesOwnGround;
     procedure TestABubbleTakesItsSizeFromTheData;
+    procedure TestALineWearsAMarkerOnEveryPoint;
+    procedure TestCrowdedMarkersThinToTheAxisOwnLabelInterval;
   end;
 
 implementation
@@ -246,12 +248,18 @@ begin
 end;
 
 procedure TAdvChartMarksTest.TestALineIsOnePolylineAndAGapBreaksIt;
-var n: Integer;
+var
+  n: Integer;
+  v: TTySeriesVisual;
 begin
+  { Markers off: this test is about the LINE. A line shows one on every
+    point by default, so counting elements would count those too. }
+  v := TySeriesVisual($FF3366CC);
+  v.Line.ShowSymbol := False;
   { ONE POLYLINE for a run of points -- not one element per segment, which
     would make the ordering and the hit test answer per segment. }
   Given('line', 4, [10, 20, 30, 40]);
-  n := TyBuildSeriesMarks(FBinding, FStore, TyNoStack, TySeriesVisual($FF3366CC), FList);
+  n := TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList);
   AssertEquals('four points make one polyline', 1, n);
   AssertEquals(Ord(cskPolyline), Ord(FList.Element(0).Shape.Kind));
   AssertEquals('with a point per row', 4,
@@ -264,7 +272,7 @@ begin
   FreeAndNil(FStore);
   FreeAndNil(FCart);
   Given('line', 5, [10, 20, NaN, 40, 50]);
-  n := TyBuildSeriesMarks(FBinding, FStore, TyNoStack, TySeriesVisual($FF3366CC), FList);
+  n := TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList);
   AssertEquals('a gap makes two runs', 2, n);
   AssertEquals('two points before it', 2, Length(FList.Element(0).Shape.Points));
   AssertEquals('and two after', 2, Length(FList.Element(1).Shape.Points));
@@ -539,6 +547,9 @@ begin
   stk.ResultCol := resultCol;
 
   v := TySeriesVisual($FF3366CC);
+  { Markers off: this test is about the LINE. A line shows one on every
+    point by default, so counting elements would count those too. }
+  v.Line.ShowSymbol := False;
   AssertEquals('one polyline', 1,
     TyBuildSeriesMarks(FBinding, FStore, stk, v, FList));
   pts := FList.Element(0).Shape.Points;
@@ -563,6 +574,9 @@ begin
     line is drawn OVER its own shading rather than under it. }
   Given('line', 3, [10, 20, 30]);
   v := TySeriesVisual($FF3366CC);
+  { Markers off: this test is about the LINE. A line shows one on every
+    point by default, so counting elements would count those too. }
+  v.Line.ShowSymbol := False;
   v.Line.HasArea := True;
   AssertEquals('an area makes two elements, not one', 2,
     TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList));
@@ -603,6 +617,9 @@ begin
   Given('line', 2, [50, 60]);
   TTyIntervalScale(FBinding.ValueAxis.Scale).SetExtent(TyRange(40, 100));
   v := TySeriesVisual($FF3366CC);
+  { Markers off: this test is about the LINE. A line shows one on every
+    point by default, so counting elements would count those too. }
+  v.Line.ShowSymbol := False;
   v.Line.HasArea := True;
   TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList);
   poly := FList.Element(0).Shape.Points;
@@ -654,6 +671,9 @@ begin
   stk.OverCol := overCol;
 
   v := TySeriesVisual($FF3366CC);
+  { Markers off: this test is about the LINE. A line shows one on every
+    point by default, so counting elements would count those too. }
+  v.Line.ShowSymbol := False;
   v.Line.HasArea := True;
   TyBuildSeriesMarks(FBinding, FStore, stk, v, FList);
   poly := FList.Element(0).Shape.Points;
@@ -672,6 +692,9 @@ begin
     it, so the gap stays visible. }
   Given('line', 5, [10, 20, NaN, 40, 50]);
   v := TySeriesVisual($FF3366CC);
+  { Markers off: this test is about the LINE. A line shows one on every
+    point by default, so counting elements would count those too. }
+  v.Line.ShowSymbol := False;
   AssertEquals('a gap makes two runs', 2,
     TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList));
 
@@ -698,6 +721,9 @@ begin
   b := FCart.DataToPoint([1.0, 20.0]);
 
   v := TySeriesVisual($FF3366CC);
+  { Markers off: this test is about the LINE. A line shows one on every
+    point by default, so counting elements would count those too. }
+  v.Line.ShowSymbol := False;
   v.Line.Step := lstStart;
   TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList);
   p := FList.Element(0).Shape.Points;
@@ -781,6 +807,27 @@ begin
     spec := SpecOf('{ series: [{ type: ''line'', connectNulls: true,'
       + ' data: [1] }] }');
     AssertTrue('connectNulls comes through', spec.ConnectNulls);
+
+    { showSymbol AND showAllSymbol, READ FROM THE OPTION. Every marker test
+      sets these by hand, which says nothing about whether the option was
+      understood -- and a mutant deleting this very read survived the whole
+      suite until these assertions existed. The same hole, in the same reader,
+      for the second time. }
+    spec := SpecOf('{ series: [{ type: ''line'', data: [1] }] }');
+    AssertTrue('markers are on unless told otherwise', spec.ShowSymbol);
+    AssertEquals('and auto unless told otherwise',
+      Ord(sasAuto), Ord(spec.ShowAllSymbol));
+
+    spec := SpecOf('{ series: [{ type: ''line'', showSymbol: false,'
+      + ' data: [1] }] }');
+    AssertFalse('and the option can switch them off', spec.ShowSymbol);
+
+    spec := SpecOf('{ series: [{ type: ''line'', showAllSymbol: true,'
+      + ' data: [1] }] }');
+    AssertEquals(Ord(sasYes), Ord(spec.ShowAllSymbol));
+    spec := SpecOf('{ series: [{ type: ''line'', showAllSymbol: false,'
+      + ' data: [1] }] }');
+    AssertEquals(Ord(sasNo), Ord(spec.ShowAllSymbol));
   finally
     opt.Free;
   end;
@@ -796,6 +843,9 @@ begin
     PaintOrder is the list's own answer to "what is drawn first". }
   Given('line', 3, [10, 20, 30]);
   v := TySeriesVisual($FF3366CC);
+  { Markers off: this test is about the LINE. A line shows one on every
+    point by default, so counting elements would count those too. }
+  v.Line.ShowSymbol := False;
   v.Line.HasArea := True;
   TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList);
   AssertEquals('two elements', 2, FList.Count);
@@ -818,6 +868,9 @@ begin
     because nothing compared the two edges. }
   Given('line', 3, [10, 20, 30]);
   v := TySeriesVisual($FF3366CC);
+  { Markers off: this test is about the LINE. A line shows one on every
+    point by default, so counting elements would count those too. }
+  v.Line.ShowSymbol := False;
   v.Line.HasArea := True;
   v.Line.Step := lstEnd;
   TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList);
@@ -860,6 +913,9 @@ begin
   sc.SetExtent(TyRange(1, 100));
 
   v := TySeriesVisual($FF3366CC);
+  { Markers off: this test is about the LINE. A line shows one on every
+    point by default, so counting elements would count those too. }
+  v.Line.ShowSymbol := False;
   AssertEquals('the unmappable point breaks the run in two', 2,
     TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList));
   AssertEquals('two points before it', 2,
@@ -977,6 +1033,114 @@ begin
   AssertEquals('the third 40', 20.0, FList.Element(2).Shape.R1, 0.001);
   AssertTrue('so they are not all the default 10',
     Abs(FList.Element(0).Shape.R1 - FList.Element(2).Shape.R1) > 1);
+end;
+
+procedure TAdvChartMarksTest.TestALineWearsAMarkerOnEveryPoint;
+var
+  v: TTySeriesVisual;
+  i, syms: Integer;
+begin
+  { UPSTREAM'S DEFAULT IS ON. An ECharts line has a ring on every point, and
+    this port drew none until now -- a gap that only shows beside the original,
+    which is exactly the kind that survives a long time. }
+  Given('line', 4, [10, 20, 30, 40]);
+  v := TySeriesVisual($FF3366CC);
+  v.EmptyFill := $FF102030;
+  AssertTrue('a bare visual shows them, because upstream does',
+    v.Line.ShowSymbol);
+  v.Symbol := TySymbolDefault('line');
+  AssertEquals('and a line''s marker is 6 across', 6.0, v.Symbol.WidthPx, 1e-9);
+  AssertTrue('and it is a RING, not a dot -- symbol is emptyCircle',
+    v.Symbol.Empty);
+
+  AssertEquals('one polyline plus one marker per point', 5,
+    TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList));
+
+  { THE MARKERS CARRY THE DATUM, which the polyline cannot: one polyline is a
+    whole run, so without them a pointer could never name a row on a line. }
+  syms := 0;
+  for i := 0 to FList.Count - 1 do
+    if FList.Element(i).Shape.Kind = cskCircle then
+    begin
+      AssertEquals('marker answers for its own row', syms,
+        FList.Element(i).Datum.DataIndex);
+      Inc(syms);
+    end;
+  AssertEquals('four of them', 4, syms);
+
+  { PAINTED OVER THE LINE, not under it. }
+  AssertEquals('the line is drawn first', Ord(cskPolyline),
+    Ord(FList.Element(FList.PaintOrder(0)).Shape.Kind));
+
+  { AND IT IS A RING, not a dot: the series colour is the PEN and the hole is
+    the ground it was handed. Nothing asserted this until a mutant that filled
+    the marker instead of stroking it survived the whole suite -- which turns
+    every ECharts-default line marker into a solid blob. }
+  for i := 0 to FList.Count - 1 do
+    if FList.Element(i).Shape.Kind = cskCircle then
+    begin
+      AssertEquals('the marker is stroked in the series colour',
+        Int64($FF3366CC), Int64(FList.Element(i).Style.StrokeColor));
+      AssertTrue('with a real pen',
+        FList.Element(i).Style.StrokeWidthLogical > 0);
+      AssertEquals('and its hole is the ground, not the series colour',
+        Int64($FF102030), Int64(FList.Element(i).Style.FillColor));
+      Break;
+    end;
+
+  { AND showSymbol: false MEANS NONE. }
+  FList.Clear;
+  v.Line.ShowSymbol := False;
+  AssertEquals('off means the polyline alone', 1,
+    TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList));
+end;
+
+procedure TAdvChartMarksTest.TestCrowdedMarkersThinToTheAxisOwnLabelInterval;
+var
+  v: TTySeriesVisual;
+  i, syms: Integer;
+begin
+  { WHEN THEY WOULD CROWD, upstream stops showing them all and "follows the
+    label interval strategy on the category axis". So the thinning is not a
+    number invented here -- it is the SAME step the axis used for its labels,
+    computed once by the layout pass and handed over.
+
+    Twenty categories across 400px is 20px each; a marker 40 across needs
+    40 * 1.5 = 60, so they crowd. }
+  Given('line', 20, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+                     11, 12, 13, 14, 15, 16, 17, 18, 19, 20]);
+  v := TySeriesVisual($FF3366CC);
+  v.Symbol := TySymbolDefault('line');
+  v.Symbol.WidthPx := 40;
+  v.Symbol.HeightPx := 40;
+  v.Line.LabelStep := 5;
+
+  TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList);
+  syms := 0;
+  for i := 0 to FList.Count - 1 do
+    if FList.Element(i).Shape.Kind = cskCircle then Inc(syms);
+  AssertEquals('every fifth point gets a marker', 4, syms);
+
+  { showAllSymbol: true OVERRULES the crowding check -- the author asked for
+    all of them and gets all of them. }
+  FList.Clear;
+  v.Line.ShowAllSymbol := sasYes;
+  TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList);
+  syms := 0;
+  for i := 0 to FList.Count - 1 do
+    if FList.Element(i).Shape.Kind = cskCircle then Inc(syms);
+  AssertEquals('all twenty', 20, syms);
+
+  { AND A SMALL MARKER NEVER CROWDS, so auto leaves it alone. }
+  FList.Clear;
+  v.Line.ShowAllSymbol := sasAuto;
+  v.Symbol.WidthPx := 6;
+  v.Symbol.HeightPx := 6;
+  TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList);
+  syms := 0;
+  for i := 0 to FList.Count - 1 do
+    if FList.Element(i).Shape.Kind = cskCircle then Inc(syms);
+  AssertEquals('six across fits in twenty, so all of them', 20, syms);
 end;
 
 initialization

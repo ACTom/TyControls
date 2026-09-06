@@ -89,15 +89,21 @@ const
 function TySymbolDefault(const ASeriesType: string): TTySymbolSpec;
 begin
   Result.Kind := tsyCircle;
-  Result.Empty := False;
   Result.PathData := '';
   if ASeriesType = 'scatter' then
   begin
+    { ScatterSeries: symbol 'circle', symbolSize 10, solid. }
+    Result.Empty := False;
     Result.WidthPx := cScatterSymbolSize;
     Result.HeightPx := cScatterSymbolSize;
   end
   else
   begin
+    { LineSeries: symbol 'emptyCircle', symbolSize 6. EMPTY, which is why an
+      ECharts line has rings on its points rather than dots -- a detail easy to
+      miss because both are circles, and wrong in a way that only shows against
+      the original. }
+    Result.Empty := True;
     Result.WidthPx := cLineSymbolSize;
     Result.HeightPx := cLineSymbolSize;
   end;

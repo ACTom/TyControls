@@ -110,6 +110,9 @@ type
     function StackFor(ASlot: Integer): TTySeriesStack;
     { The symbol spec for a series slot, over its type's own default. }
     function SymbolFor(ASlot: Integer): TTySymbolSpec;
+    { The label interval the layout gave this axis, or 1 when it draws them
+      all. }
+    function LabelStepFor(AAxis: TTyAxis): Integer;
     procedure PaintDynamic(APainter: TTyPainter; const ARect: TRect;
       APPI: Integer; const AMeasurer: ITyTextMeasurer);
     { Whether the dynamic layer would draw anything. False skips a whole
@@ -892,6 +895,24 @@ begin
   end;
 end;
 
+function TTyAdvanceChart.LabelStepFor(AAxis: TTyAxis): Integer;
+var
+  g: Integer;
+  spec: PTyAxisLayoutSpec;
+begin
+  Result := 1;
+  if (AAxis = nil) or (FBuild = nil) then Exit;
+  for g := 0 to FBuild.GridCount - 1 do
+  begin
+    spec := FBuild.Grid(g).SpecFor(AAxis);
+    if spec <> nil then
+    begin
+      if spec^.LabelStep > 1 then Result := spec^.LabelStep;
+      Exit;
+    end;
+  end;
+end;
+
 function TTyAdvanceChart.SymbolFor(ASlot: Integer): TTySymbolSpec;
 var
   d: TJSONData;
@@ -950,6 +971,10 @@ begin
       v := TySeriesVisual(TTyChartColor(SeriesColor(FBindings[i].SeriesIndex)));
       if i <= High(FBarCols) then v.Bar := FBarCols[i];
       v.Line := TyLineSpecOf(FOption, FBindings[i].SeriesIndex);
+      { The thinning the AXIS settled on. When markers would crowd, upstream
+        falls back to the category axis' own label interval -- which the layout
+        pass already computed, so it is fetched rather than re-derived. }
+      v.Line.LabelStep := LabelStepFor(FBindings[i].BaseAxis);
       v.Symbol := SymbolFor(i);
       { An `empty` symbol is filled with the chart's own surface, so it reads as
         a hole rather than as a white dot on a dark skin. Upstream fills it from
