@@ -342,6 +342,68 @@ resourcestring
   rsTyShortDay6 = 'Fri';
   rsTyShortDay7 = 'Sat';
 
+  // --- AdvanceChart: what an option tree can say that cannot be honoured ---
+  // Both reach the user through the chart's diagnostics list, so they are as
+  // user-facing as any caption.
+  rsTyChartNoSuchHandler = 'No formatter named ''%s'' is registered.';
+  rsTyOptFunctionValue =
+    'JavaScript functions cannot be used here. Write a template string such as '
+  + '''{b}: {c}'', or the name of a registered handler such as ''@MyFormatter''.';
+
+  // --- AdvanceChart: what the build could not honour ---
+  // These reach the user through the chart's diagnostics list and through the
+  // design-time editor, so they are as translatable as any caption. They were
+  // English literals inside the builder until 2026-09-03.
+  rsTyChartAxisTypeUnknown =
+    '%s[%d].type: "%s" is not one of value, category, time or log; treated as value';
+  rsTyChartAxisWithoutPair =
+    'xAxis or yAxis without the other: no grid was created, so neither is drawn';
+  rsTyChartXAxisNoGrid = 'xAxis[%d] names no grid, so it is not drawn';
+  rsTyChartYAxisNoGrid = 'yAxis[%d] names no grid, so it is not drawn';
+  rsTyChartGridOneDirection =
+    'grid[%d] has axes in only one direction, so it draws nothing';
+  rsTyChartSeriesNoType = 'series[%d] has no type, so it is not drawn';
+  rsTyChartSeriesBadType = 'series[%d]: "%s" is not a series type';
+  rsTyChartSeriesCoordSys = 'series[%d]: coordinateSystem "%s" is not built yet';
+  rsTyChartSeriesNoAxis = 'series[%d] names an axis that does not exist';
+  rsTyChartSeriesAxesSplit =
+    'series[%d]: xAxis[%d] and yAxis[%d] are not on one grid';
+
+  // --- AdvanceChart: the option editor's own vocabulary ---
+  // Shown in the design-time editor's status line and its completion popup.
+  rsTyOptSummaryDefault = 'default %s';
+  rsTyOptSummaryRange = 'range %s..%s';
+  rsTyOptSummarySince = 'since %s';
+  rsTyOptStatusRoot = '(the option root)';
+  rsTyOptStatusNeedsType =
+    'write a type first -- what is under here depends on which one';
+  // What the editor SAYS about a piece of option text.
+  rsTyOptDiagUnknown = '%s is not an option ECharts 6.1 knows.';
+  rsTyOptDiagDidYouMean = 'Did you mean "%s"?';
+  rsTyOptDiagBadEnum = '%s: "%s" is not one of %s.';
+  rsTyOptDiagNoType = '%s[%d] has no type yet, so nothing under it can be '
+    + 'checked. One of: %s.';
+  rsTyOptDiagNothingPaintsYet =
+    'The option is understood. Series marks are not painted yet, so this '
+    + 'draws its axes and nothing else.';
+  // The same all-clear for a chart whose series have no axes -- a pie, a gauge
+  // -- where promising axes would be a lie.
+  rsTyOptDiagNoMarksAtAll =
+    'The option is understood. Series marks are not painted yet, and this '
+    + 'chart has no axes, so nothing is drawn.';
+  // Every series that resolved has a renderer: there is nothing to warn
+  // about, and the row exists only so a valid option is never met with an
+  // empty panel.
+  rsTyOptDiagAllClear = 'The option is understood.';
+  // Some of them do and some do not -- name the ones that will not appear,
+  // because "understood" alone would leave the author looking for them.
+  rsTyOptDiagSomeNotPainted =
+    'The option is understood. Not painted yet: %s.';
+  rsTyOptDiagNoSeries =
+    'The option is understood. There are no series, so only the axes would '
+    + 'draw.';
+  rsTyOptDiagMoreRows = 'and %d more like these.';
+
 implementation
 
 end.

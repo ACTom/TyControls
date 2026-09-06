@@ -27,6 +27,10 @@ type
     procedure ClearingTheOverrideWorksUnderAnUnregisteredThemeName;
     procedure AReplacedOverrideDoesNotStackUnderAnUnregisteredThemeName;
     procedure DensityRoundTripDropsThePackUnderAnUnregisteredThemeName;
+    { The OTHER branch that could load nothing: a ThemeFile that has gone away
+      while the program runs, which is what an author gets the moment they
+      rename the .tycss they are working on. }
+    procedure ClearingItWorksEvenIfTheThemeFileWentAway;
     procedure AccentSurvivesADensityChange;
     procedure AccentSurvivesAnOverrideChange;
     procedure TheDefaultControllerTakesItInCode;
@@ -156,6 +160,49 @@ begin
     AssertEquals('clearing the override restored the base', base, ButtonBorderWidth(c));
   finally
     c.Free;
+  end;
+end;
+
+procedure TControllerStyleOverrideTest.ClearingItWorksEvenIfTheThemeFileWentAway;
+var
+  c: TTyStyleController;
+  base: Integer;
+  path: string;
+begin
+  { THE OTHER BRANCH THAT COULD LOAD NOTHING. A ThemeFile that has been moved,
+    renamed or deleted while the program runs is the file-shaped version of a
+    theme name that does not resolve, and it used to fail the same way: nothing
+    was loaded, so nothing was cleared, so the override was stuck.
+
+    A deleted theme file is not an exotic state -- it is what an author gets
+    the moment they rename the .tycss they are working on. }
+  path := GetTempFileName('', 'tycss');
+  c := TTyStyleController.Create(nil);
+  try
+    with TStringList.Create do
+    try
+      Text := 'TyButton { border-width: 2px; }';
+      SaveToFile(path);
+    finally
+      Free;
+    end;
+    c.ThemeFile := path;
+    base := ButtonBorderWidth(c);
+    AssertEquals('the file was loaded to begin with', 2, base);
+
+    c.StyleOverride := 'TyButton { border-width: 7px; }';
+    AssertEquals('override applied', 7, ButtonBorderWidth(c));
+
+    DeleteFile(path);
+    c.StyleOverride := '';
+    { The file is gone, so the base it falls back to is the built-in one rather
+      than the 2px the file used to say. What matters is that the 7px patch is
+      GONE: a stuck override is unrecoverable, a fallback is not. }
+    AssertTrue('the patch did not survive the file going away',
+      ButtonBorderWidth(c) <> 7);
+  finally
+    c.Free;
+    DeleteFile(path);
   end;
 end;
 

@@ -1,0 +1,55 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8
+"
+"Content-Transfer-Encoding: 8bit
+"
+"Project-Id-Version: tycontrols-advchart_example 2.99
+"
+"Language-Team: 
+"
+"Last-Translator: 
+"
+"Language: zh_CN
+"
+"MIME-Version: 1.0
+"
+"Plural-Forms: nplurals=1; plural=0;
+"
+
+# --- .lfm captions/text/hints (auto-generated, msgid=English source) ---
+
+#: tmainform.caption
+msgid "TyControls — advchart (TTyAdvanceChart)"
+msgstr "TyControls — 高级图表(TTyAdvanceChart)"
+
+#: tmainform.titlebar1.caption
+msgid "TTyAdvanceChart  ·  TyControls"
+msgstr "TTyAdvanceChart  ·  TyControls"
+
+#: tmainform.darkswitch.caption
+msgid "Dark"
+msgstr "暗色"
+
+#: tmainform.btnbars.caption
+msgid "Bars"
+msgstr "柱状"
+
+#: tmainform.btntwoaxes.caption
+msgid "Two y axes"
+msgstr "双 y 轴"
+
+#: tmainform.btnapply.caption
+msgid "Apply"
+msgstr "应用"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rsoptionok
+msgid "The option parsed."
+msgstr "option 解析成功。"
+
+#: umain.rsdiagnostics
+#, object-pascal-format
+msgid "%d thing(s) the chart could not honour — see below."
+msgstr "有 %d 项图表无法兑现 — 见下。"

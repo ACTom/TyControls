@@ -887,3 +887,150 @@ msgstr "按名称搜索图标"
 #, object-pascal-format
 msgid "%s   (ImageIndex %d)"
 msgstr "%s   (ImageIndex %d)"
+
+#: tycontrols.strconsts.rstychartnosuchhandler
+#, object-pascal-format
+msgid "No formatter named '%s' is registered."
+msgstr "没有注册名为 '%s' 的格式化器。"
+
+#: tycontrols.strconsts.rstyoptfunctionvalue
+msgid "JavaScript functions cannot be used here. Write a template string such as '{b}: {c}', or the name of a registered handler such as '@MyFormatter'."
+msgstr "这里不能写 JavaScript 函数。请改用模板串，例如 '{b}: {c}'，或已注册的处理器名，例如 '@MyFormatter'。"
+
+#: tycontrols.strconsts.rstychartaxistypeunknown
+#, object-pascal-format
+msgid "%s[%d].type: \"%s\" is not one of value, category, time or log; treated as value"
+msgstr "%s[%d].type：“%s”不是 value、category、time 或 log 之一，按 value 处理"
+
+#: tycontrols.strconsts.rstychartaxiswithoutpair
+msgid "xAxis or yAxis without the other: no grid was created, so neither is drawn"
+msgstr "xAxis 与 yAxis 只有一个：没有生成 grid，两条轴都不会画"
+
+#: tycontrols.strconsts.rstychartxaxisnogrid
+#, object-pascal-format
+msgid "xAxis[%d] names no grid, so it is not drawn"
+msgstr "xAxis[%d] 没有指向任何 grid，因此不会画"
+
+#: tycontrols.strconsts.rstychartyaxisnogrid
+#, object-pascal-format
+msgid "yAxis[%d] names no grid, so it is not drawn"
+msgstr "yAxis[%d] 没有指向任何 grid，因此不会画"
+
+#: tycontrols.strconsts.rstychartgridonedirection
+#, object-pascal-format
+msgid "grid[%d] has axes in only one direction, so it draws nothing"
+msgstr "grid[%d] 只有一个方向上有轴，因此什么都不会画"
+
+#: tycontrols.strconsts.rstychartseriesnotype
+#, object-pascal-format
+msgid "series[%d] has no type, so it is not drawn"
+msgstr "series[%d] 没有 type，因此不会画"
+
+#: tycontrols.strconsts.rstychartseriesbadtype
+#, object-pascal-format
+msgid "series[%d]: \"%s\" is not a series type"
+msgstr "series[%d]：“%s”不是一种 series 类型"
+
+#: tycontrols.strconsts.rstychartseriescoordsys
+#, object-pascal-format
+msgid "series[%d]: coordinateSystem \"%s\" is not built yet"
+msgstr "series[%d]：coordinateSystem“%s”尚未实现"
+
+#: tycontrols.strconsts.rstychartseriesnoaxis
+#, object-pascal-format
+msgid "series[%d] names an axis that does not exist"
+msgstr "series[%d] 指向了一条不存在的轴"
+
+#: tycontrols.strconsts.rstychartseriesaxessplit
+#, object-pascal-format
+msgid "series[%d]: xAxis[%d] and yAxis[%d] are not on one grid"
+msgstr "series[%d]：xAxis[%d] 与 yAxis[%d] 不在同一个 grid 上"
+
+#: tycontrols.strconsts.rstyoptsummarydefault
+#, object-pascal-format
+msgid "default %s"
+msgstr "默认 %s"
+
+#: tycontrols.strconsts.rstyoptsummaryrange
+#, object-pascal-format
+msgid "range %s..%s"
+msgstr "取值 %s..%s"
+
+#: tycontrols.strconsts.rstyoptsummarysince
+#, object-pascal-format
+msgid "since %s"
+msgstr "始于 %s"
+
+#: tycontrols.strconsts.rstyoptstatusroot
+msgid "(the option root)"
+msgstr "（option 根）"
+
+#: tycontrols.strconsts.rstyoptstatusneedstype
+msgid "write a type first -- what is under here depends on which one"
+msgstr "先写 type —— 这里面有什么取决于它是哪一种"
+
+#: tycontrols.strconsts.rstyoptdiagunknown
+#, object-pascal-format
+msgid "%s is not an option ECharts 6.1 knows."
+msgstr "%s 不是 ECharts 6.1 认识的 option。"
+
+#: tycontrols.strconsts.rstyoptdiagdidyoumean
+#, object-pascal-format
+msgid "Did you mean \"%s\"?"
+msgstr "你是想写 “%s” 吗？"
+
+#: tycontrols.strconsts.rstyoptdiagbadenum
+#, object-pascal-format
+msgid "%s: \"%s\" is not one of %s."
+msgstr "%s：“%s” 不在 %s 之中。"
+
+#: tycontrols.strconsts.rstyoptdiagnotype
+#, object-pascal-format
+msgid "%s[%d] has no type yet, so nothing under it can be checked. One of: %s."
+msgstr "%s[%d] 还没写 type，所以它下面的东西无从校验。可选：%s。"
+
+#: tycontrols.strconsts.rstyoptdiagnothingpaintsyet
+msgid "The option is understood. Series marks are not painted yet, so this draws its axes and nothing else."
+msgstr "option 已读懂。series 图元尚未实现，所以现在只画得出坐标轴。"
+
+#: tycontrols.strconsts.rstyfilesizebytes
+msgid "B"
+msgstr "B"
+
+#: tycontrols.strconsts.rstyfilesizegb
+msgid "GB"
+msgstr "GB"
+
+#: tycontrols.strconsts.rstyfilesizekb
+msgid "KB"
+msgstr "KB"
+
+#: tycontrols.strconsts.rstyfilesizemb
+msgid "MB"
+msgstr "MB"
+
+#: tycontrols.strconsts.rstyfilesizetb
+msgid "TB"
+msgstr "TB"
+
+#: tycontrols.strconsts.rstyoptdiagmorerows
+#, object-pascal-format
+msgid "and %d more like these."
+msgstr "另有 %d 条同类。"
+
+#: tycontrols.strconsts.rstyoptdiagallclear
+msgid "The option is understood."
+msgstr "option 没有问题。"
+
+#: tycontrols.strconsts.rstyoptdiagsomenotpainted
+#, object-pascal-format
+msgid "The option is understood. Not painted yet: %s."
+msgstr "option 没有问题。还画不出来的：%s。"
+
+#: tycontrols.strconsts.rstyoptdiagnomarksatall
+msgid "The option is understood. Series marks are not painted yet, and this chart has no axes, so nothing is drawn."
+msgstr "option 没有问题。series 的图元还没有实现绘制，而这张图也没有坐标轴，所以画面上不会有任何东西。"
+
+#: tycontrols.strconsts.rstyoptdiagnoseries
+msgid "The option is understood. There are no series, so only the axes would draw."
+msgstr "option 没有问题。没有任何 series，所以只会画出坐标轴。"

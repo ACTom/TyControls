@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <ProjectOptions>
+    <Version Value="12"/>
+    <General>
+      <Flags>
+        <MainUnitHasCreateFormStatements Value="False"/>
+        <MainUnitHasTitleStatement Value="False"/>
+      </Flags>
+      <Title Value="AdvanceChart editor probe"/>
+    </General>
+    <BuildModes Count="1">
+      <Item1 Name="Default" Default="True"/>
+    </BuildModes>
+    <RequiredPackages Count="4">
+      <Item1><PackageName Value="SynEdit"/></Item1>
+      <Item2><PackageName Value="LCL"/></Item2>
+      <Item3><PackageName Value="tycontrols"/></Item3>
+      <Item4><PackageName Value="IDEIntf"/></Item4>
+    </RequiredPackages>
+    <Units Count="1">
+      <Unit0>
+        <Filename Value="advchart_probe.lpr"/>
+        <IsPartOfProject Value="True"/>
+      </Unit0>
+    </Units>
+  </ProjectOptions>
+  <CompilerOptions>
+    <Version Value="11"/>
+    <Target><Filename Value="advchart_probe"/></Target>
+    <SearchPaths>
+      <IncludeFiles Value="$(ProjOutDir);../../designtime"/>
+      <OtherUnitFiles Value="../../designtime"/>
+      <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
+    </SearchPaths>
+
+  </CompilerOptions>
+</CONFIG>

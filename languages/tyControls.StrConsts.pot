@@ -697,6 +697,60 @@ msgstr ""
 msgid "More commands"
 msgstr ""
 
+#: tycontrols.strconsts.rstychartaxistypeunknown
+#, object-pascal-format
+msgid "%s[%d].type: \"%s\" is not one of value, category, time or log; treated as value"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartaxiswithoutpair
+msgid "xAxis or yAxis without the other: no grid was created, so neither is drawn"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartgridonedirection
+#, object-pascal-format
+msgid "grid[%d] has axes in only one direction, so it draws nothing"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartnosuchhandler
+#, object-pascal-format
+msgid "No formatter named '%s' is registered."
+msgstr ""
+
+#: tycontrols.strconsts.rstychartseriesaxessplit
+#, object-pascal-format
+msgid "series[%d]: xAxis[%d] and yAxis[%d] are not on one grid"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartseriesbadtype
+#, object-pascal-format
+msgid "series[%d]: \"%s\" is not a series type"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartseriescoordsys
+#, object-pascal-format
+msgid "series[%d]: coordinateSystem \"%s\" is not built yet"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartseriesnoaxis
+#, object-pascal-format
+msgid "series[%d] names an axis that does not exist"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartseriesnotype
+#, object-pascal-format
+msgid "series[%d] has no type, so it is not drawn"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartxaxisnogrid
+#, object-pascal-format
+msgid "xAxis[%d] names no grid, so it is not drawn"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartyaxisnogrid
+#, object-pascal-format
+msgid "yAxis[%d] names no grid, so it is not drawn"
+msgstr ""
+
 #: tycontrols.strconsts.rstydatetimenameslang
 msgid "__locale__"
 msgstr ""
@@ -804,6 +858,79 @@ msgstr ""
 
 #: tycontrols.strconsts.rstylongmonth9
 msgid "September"
+msgstr ""
+
+#: tycontrols.strconsts.rstyoptdiagallclear
+msgid "The option is understood."
+msgstr ""
+
+#: tycontrols.strconsts.rstyoptdiagbadenum
+#, object-pascal-format
+msgid "%s: \"%s\" is not one of %s."
+msgstr ""
+
+#: tycontrols.strconsts.rstyoptdiagdidyoumean
+#, object-pascal-format
+msgid "Did you mean \"%s\"?"
+msgstr ""
+
+#: tycontrols.strconsts.rstyoptdiagmorerows
+#, object-pascal-format
+msgid "and %d more like these."
+msgstr ""
+
+#: tycontrols.strconsts.rstyoptdiagnomarksatall
+msgid "The option is understood. Series marks are not painted yet, and this chart has no axes, so nothing is drawn."
+msgstr ""
+
+#: tycontrols.strconsts.rstyoptdiagnoseries
+msgid "The option is understood. There are no series, so only the axes would draw."
+msgstr ""
+
+#: tycontrols.strconsts.rstyoptdiagnothingpaintsyet
+msgid "The option is understood. Series marks are not painted yet, so this draws its axes and nothing else."
+msgstr ""
+
+#: tycontrols.strconsts.rstyoptdiagnotype
+#, object-pascal-format
+msgid "%s[%d] has no type yet, so nothing under it can be checked. One of: %s."
+msgstr ""
+
+#: tycontrols.strconsts.rstyoptdiagsomenotpainted
+#, object-pascal-format
+msgid "The option is understood. Not painted yet: %s."
+msgstr ""
+
+#: tycontrols.strconsts.rstyoptdiagunknown
+#, object-pascal-format
+msgid "%s is not an option ECharts 6.1 knows."
+msgstr ""
+
+#: tycontrols.strconsts.rstyoptfunctionvalue
+msgid "JavaScript functions cannot be used here. Write a template string such as '{b}: {c}', or the name of a registered handler such as '@MyFormatter'."
+msgstr ""
+
+#: tycontrols.strconsts.rstyoptstatusneedstype
+msgid "write a type first -- what is under here depends on which one"
+msgstr ""
+
+#: tycontrols.strconsts.rstyoptstatusroot
+msgid "(the option root)"
+msgstr ""
+
+#: tycontrols.strconsts.rstyoptsummarydefault
+#, object-pascal-format
+msgid "default %s"
+msgstr ""
+
+#: tycontrols.strconsts.rstyoptsummaryrange
+#, object-pascal-format
+msgid "range %s..%s"
+msgstr ""
+
+#: tycontrols.strconsts.rstyoptsummarysince
+#, object-pascal-format
+msgid "since %s"
 msgstr ""
 
 #: tycontrols.strconsts.rstyshortday1

@@ -20,3 +20,36 @@ msgstr ""
 #: tycontrols.strconsts.rstydatetimenameslang
 msgid "__locale__"
 msgstr "en"
+
+#: tycontrols.strconsts.rstyfilesizebytes
+msgid "B"
+msgstr "B"
+
+#: tycontrols.strconsts.rstyfilesizegb
+msgid "GB"
+msgstr "GB"
+
+#: tycontrols.strconsts.rstyfilesizekb
+msgid "KB"
+msgstr "KB"
+
+#: tycontrols.strconsts.rstyfilesizemb
+msgid "MB"
+msgstr "MB"
+
+#: tycontrols.strconsts.rstyfilesizetb
+msgid "TB"
+msgstr "TB"
+
+#: tycontrols.strconsts.rstyoptdiagmorerows
+#, object-pascal-format
+msgid "and %d more like these."
+msgstr "and %d more like these."
+
+#: tycontrols.strconsts.rstyoptdiagnomarksatall
+msgid "The option is understood. Series marks are not painted yet, and this chart has no axes, so nothing is drawn."
+msgstr "The option is understood. Series marks are not painted yet, and this chart has no axes, so nothing is drawn."
+
+#: tycontrols.strconsts.rstyoptdiagnoseries
+msgid "The option is understood. There are no series, so only the axes would draw."
+msgstr "The option is understood. There are no series, so only the axes would draw."

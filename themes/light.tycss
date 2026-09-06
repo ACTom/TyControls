@@ -135,6 +135,10 @@
      classic value == each control's Pascal constant today; the modern
      density pack overrides these names. Runtime geometry is not in the
      golden, so the guard is value==constant + full suite green. */
+  --advchart-label-margin: 8px;
+  --advchart-minor-tick-length: 3px;
+  --advchart-name-gap: 15px;
+  --advchart-tick-length: 5px;
   --alert-close-gap: 8px;
   --alert-close-size: 14px;
   --alert-icon-gap: 8px;
@@ -339,7 +343,7 @@ TyRadioButton:disabled { opacity: var(--disabled-opacity); }
    TyExPanel (a collapsible card) used to render as plain panels because they returned
    'TyPanel'. Same values, three separable names. TTyScrollPanel and TTyPaintPanel are
    deliberately NOT here: they add no chrome of their own and keep inheriting. */
-TyPanel, TyScrollBox, TyExPanel, TyChart, TyCalculator, TyBevel, TySizeBox, TyControlBar, TyCoolBar, TyColorGrid, TyShape, TyStarShape, TyArrow, TyImageView, TyImage, TyPreviewBox, TyListGroupPanel {
+TyPanel, TyScrollBox, TyExPanel, TyChart, TyAdvChart, TyCalculator, TyBevel, TySizeBox, TyControlBar, TyCoolBar, TyColorGrid, TyShape, TyStarShape, TyArrow, TyImageView, TyImage, TyPreviewBox, TyListGroupPanel {
   background: var(--surface);
   color: var(--on-surface);
   border-color: var(--border);
@@ -1112,6 +1116,62 @@ TyChartSeries5 { background: #59A14F; }   /* green  */
 TyChartSeries6 { background: #EDC948; }   /* yellow */
 TyChartSeries7 { background: #B07AA1; }   /* purple */
 TyChartSeries8 { background: #FF9DA7; }   /* pink   */
+
+/* AdvChart: the series palette, DERIVED.
+
+   Item 18 asks for a derived ramp and this is what that buys: a skin that
+   restyles --accent gets a matching chart for nothing, and one that restyles
+   neither still gets a legible one. The eight TyChartSeries* keys above are the
+   OLD chart's, and they are eight literals -- exactly what makes a chart look
+   pasted on top of a theme instead of drawn in it.
+
+   The ramp walks away from --accent in both directions rather than around a
+   hue circle, because a hue rotation has no idea what the theme's accent is for
+   and lands on colours a brand would not have chosen. Slot 1 IS the accent, so
+   a single-series chart is drawn in the theme's own colour.
+
+   Eight slots, cycled by (index mod 8), matching the old chart so nothing has
+   to learn a second rule. */
+TyAdvChartSeries1 { background: var(--accent); }
+TyAdvChartSeries2 { background: mix(var(--accent), var(--on-surface), 35%); }
+TyAdvChartSeries3 { background: lighten(var(--accent), 22%); }
+TyAdvChartSeries4 { background: darken(var(--accent), 18%); }
+TyAdvChartSeries5 { background: mix(var(--accent), var(--surface), 40%); }
+TyAdvChartSeries6 { background: mix(var(--accent), var(--on-surface), 65%); }
+TyAdvChartSeries7 { background: lighten(var(--accent), 38%); }
+TyAdvChartSeries8 { background: darken(var(--accent), 34%); }
+
+/* AdvChart: the axis domain. Eight keys and four metrics, and the COUNT is part
+   of the design -- twelve things can be checked by eye across seventeen themes
+   and sixty-four cannot, so this is the smallest set that still lets a skin
+   restyle an axis without touching the control.
+
+   Every colour DERIVES from a semantic token the theme already defines. A skin
+   that restyled --border or --on-surface gets a matching axis for nothing, and
+   one that restyled neither still gets a legible one. Not a literal anywhere:
+   a hardcoded grey is exactly what makes a chart look pasted on top of a dark
+   theme rather than drawn in it.
+
+   These are NEW keys, so every existing skin inherits them from this base layer
+   untouched -- which is the only reason a change this wide is safe to make in
+   one pass. A skin that later writes any rule for one of them replaces the
+   whole key, variants included; that is this library's rule and it is why the
+   set is small enough to re-check. */
+TyAdvChartAxisLine  { border-color: var(--border); border-width: 1px; }
+TyAdvChartAxisTick  { border-color: var(--border); border-width: 1px; }
+/* Muted, not full ink: an axis label is a reference, not content. --muted is
+   already alpha over --on-surface, so it follows a dark theme by itself. */
+TyAdvChartAxisLabel { color: var(--muted); font-size: var(--font-size-base); }
+TyAdvChartAxisName  { color: var(--on-surface); font-size: var(--font-size-base); }
+/* Alpha over --border, NEVER over --surface. On an image theme a translucent
+   surface reads as a bright halo instead of a faint line -- this library has
+   shipped that bug once already. */
+TyAdvChartSplitLine { border-color: alpha(var(--border), 0.6); border-width: 1px; }
+/* The alternating band. Alpha over the ink rather than a grey, so it darkens a
+   light theme and lightens a dark one from the same declaration. */
+TyAdvChartSplitArea { background: alpha(var(--on-surface), 0.04); }
+TyAdvChartMinorTick { border-color: alpha(var(--border), 0.4); border-width: 1px; }
+TyAdvChartMinorSplitLine { border-color: alpha(var(--border), 0.35); border-width: 1px; }
 
 /* ── ListGroupPanel (navigation accordion; own keys, not the tree column header's) ────── */
 /* A modern sider: group rows carry NO fill (just muted ink + a right chevron; the OPEN group

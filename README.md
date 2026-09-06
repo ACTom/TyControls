@@ -1,6 +1,6 @@
 # TyControls
 
-Lazarus 自绘控件库。162 个控件全部由 BGRABitmap 绘制,外观由 `.tycss` 文本主题统一控制,在 Windows、Linux、macOS 上显示效果完全一致。
+Lazarus 自绘控件库。163 个控件全部由 BGRABitmap 绘制,外观由 `.tycss` 文本主题统一控制,在 Windows、Linux、macOS 上显示效果完全一致。
 
 > **English:** [README.en.md](README.en.md) · **更新日志:** [CHANGELOG.md](CHANGELOG.md)
 
@@ -33,7 +33,7 @@ Lazarus 自绘控件库。162 个控件全部由 BGRABitmap 绘制,外观由 `.t
 
 ## 特性
 
-- **162 个控件**:按钮、输入、列表、数据网格、虚拟树、Ribbon、日历、Shell 文件浏览、20 个自绘对话框,一套配齐
+- **163 个控件**:按钮、输入、列表、数据网格、虚拟树、Ribbon、日历、Shell 文件浏览、20 个自绘对话框,一套配齐
 - **三平台一致**:完全自绘,不包装原生控件,同一份代码在三个平台上渲染出同样的界面
 - **主题换肤**:17 个内置主题一个属性切换,支持运行时热切换、跟随系统明暗和强调色;主题是文本文件,改外观不用重编译
 - **经典与现代两种风格**:从 Win95 / XP 的立体风到 Win11 / Material 的扁平风都能做,控件密度也可整体切换
@@ -77,7 +77,7 @@ Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译�
 
 ## 控件清单
 
-162 个控件,分 16 个组件面板分页。每个控件的属性、事件、主题键说明见 **[docs/controls/](docs/controls/)**。
+163 个控件,分 16 个组件面板分页。每个控件的属性、事件、主题键说明见 **[docs/controls/](docs/controls/)**。
 
 ### 核心 · `TyControls`(2)
 
@@ -297,7 +297,7 @@ CharImage1.GlyphName := 'house';
 
 字体内嵌在单元里,不用随程序分发文件;不 `uses` 就不进最终程序。组件面板上的 `TTyLucideImageList` 可以直接当图像列表拖放使用。许可为 ISC / MIT,商用无需署名,随发布带上 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) 即可。
 
-### 图形与图表 · `TyControls Shapes & Charts`(4)
+### 图形与图表 · `TyControls Shapes & Charts`(5)
 
 | 控件 | 说明 |
 |---|---|
@@ -305,6 +305,7 @@ CharImage1.GlyphName := 'house';
 | `TTyStarShape` | 星形,角数可调 |
 | `TTyArrow` | 方向箭头 |
 | `TTyChart` | 图表:折线 / 柱状 / 饼图 |
+| `TTyAdvanceChart` | 高级图表:配置走 ECharts 形状的 option 树 |
 
 ### 对话框 · `TyControls Dialogs`(20)
 

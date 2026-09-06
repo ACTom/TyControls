@@ -1,0 +1,37 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols 3.1\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: tycontrols.design.advchart.editor.rsoptedfilter
+msgid "Filter the reference"
+msgstr "过滤参考树"
+
+#: tycontrols.design.advchart.editor.rsoptedformat
+msgid "Format"
+msgstr "格式化"
+
+#: tycontrols.design.advchart.editor.rsoptedformatdropscomments
+msgid "Formatting re-writes the option from its parsed form, which drops the comments and the original quoting. Continue?"
+msgstr "格式化会从解析后的结构重新生成 option，注释和原有的引号写法都会丢失。继续？"
+
+#: tycontrols.design.advchart.editor.rsoptednoissues
+msgid "Nothing to report."
+msgstr "没有发现问题。"
+
+#: tycontrols.design.advchart.editor.rsoptedtitle
+msgid "Chart option (ECharts)"
+msgstr "图表 option（ECharts）"
+
+#: tycontrols.design.advchart.editor.rsoptedvalidate
+msgid "Validate"
+msgstr "验证"
+#: tycontrols.design.advchart.editor.rsoptedcataloglang
+msgid "__locale__"
+msgstr "zh_CN"

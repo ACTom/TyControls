@@ -40,7 +40,7 @@ uses
   tyControls.Transfer, tyControls.Steps,
   { non-focusable side, same extension }
   tyControls.GridPanel, tyControls.ScrollPanel, tyControls.CoolBar, tyControls.ToolBarEx,
-  tyControls.HtmlLabel, tyControls.PreviewBox, tyControls.Form;
+  tyControls.HtmlLabel, tyControls.PreviewBox, tyControls.Form, tyControls.AdvanceChart;
 
 type
   { Any windowed TyControl, as a class reference — TabStop is published on
@@ -306,6 +306,12 @@ begin
     { TTyPreviewBox displays a rendering; there is nothing to type into it and nothing its
       arrow keys would move. }
     TTyPreviewBox,
+    { TTyAdvanceChart is a chart: it reads an option tree and draws it. Charts are pointed
+      at, not typed into -- ECharts' own keyboard story is a screen-reader description, not
+      a caret -- so it stays out of the tab order like every other display surface here.
+      Note that TTyChart is on NEITHER table, and correctly so: it is a graphic control,
+      and these tables only hold windowed classes. }
+    TTyAdvanceChart,
     { TTyTitleBar is the form's own chrome and a designer container (a menu bar, a quick
       access rail and a search box get dropped INTO it). Its buttons are TTyCaptionButtons
       with their own focus story; the bar itself is a drag handle, and a tab stop on it would

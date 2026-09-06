@@ -69,6 +69,7 @@ uses
   tyControls.Transfer, tyControls.TreeSelect, tyControls.Cascader, tyControls.Popover,
   tyControls.ListView, tyControls.ShellListView, tyControls.ShellTreeView,
   tyControls.FilterComboBox, tyControls.ShellComboBox,
+  tyControls.AdvanceChart,
   { The vocabulary source of the theme dropdowns, published into the IDE process here. }
   tyControls.BuiltinThemes, tyControls.ThemeRegistry,
   { The three sibling units this trunk registers. }
@@ -194,7 +195,7 @@ begin
      TTyPopover]);
   // Decorative vector shapes + charts.
   RegisterComponents('TyControls Shapes & Charts',
-    [TTyShape, TTyStarShape, TTyArrow, TTyChart]);
+    [TTyShape, TTyStarShape, TTyArrow, TTyChart, TTyAdvanceChart]);
   // Dialogs: message / input family / pickers / find-replace / progress / about / file.
   RegisterComponents('TyControls Dialogs',
     [TTyMessage, TTyInputDialog, TTyPasswordDialog, TTyTextDialog,

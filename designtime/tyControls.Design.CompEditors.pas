@@ -10,6 +10,7 @@ interface
 uses
   Classes, SysUtils, Forms, Controls, Dialogs, Menus, ClipBrd,
   PropEdits, PropEditUtils, ComponentEditors,
+  tyControls.AdvanceChart, tyControls.Design.AdvChart.Editor,
   tyControls.IconFont, tyControls.ImageCollection,
   tyControls.Dialogs, tyControls.Dialogs.IconBrowser,
   tyControls.Dialogs.ImageCollectionEditor, tyControls.Dialogs.StructureEditor,
@@ -683,6 +684,10 @@ end;
 
 procedure RegisterComponentEditors;
 begin
+  // Double-clicking the chart opens the same option dialog its property editor
+  // does. One verb, one code path -- a second entry point that assembled the
+  // dialog its own way is how the two drift apart.
+  RegisterComponentEditor(TTyAdvanceChart, TTyAdvanceChartEditor);
   // Page management verbs (Add/Delete/Show Next/Prev) for the page control.
   RegisterComponentEditor(TTyPageControl, TTyPageControlEditor);
   // Double-click a tree in the designer to open its node editor, the way LCL's own
