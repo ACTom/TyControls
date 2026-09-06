@@ -1284,8 +1284,11 @@ type
     FVerdict: Boolean;
     FCalls: Integer;
     FLastNew: string;
+    FKeepOnExit: Boolean;
     procedure Validate(Sender: TObject; ACol, ARow: Integer;
       const AOld, ANew: string; var AValid: Boolean);
+    procedure OnExitDecide(Sender: TObject; ACol, ARow: Integer;
+      const AText: string; var AKeep: Boolean);
   published
     procedure TestInvalidValueKeepsTheEditorOpen;
     procedure TestInvalidValueBlocksNavigation;
@@ -1295,6 +1298,9 @@ type
     procedure TestStructuralCloseDiscardsAnInvalidValue;
     procedure TestLeavingTheGridAbandonsAnInvalidValue;
     procedure TestHostSeesTheTextThatWouldBeWritten;
+    procedure TestDoubleClickOnTheEditedCellKeepsTheTyping;
+    procedure TestSameTextIsAskedOnlyOnce;
+    procedure TestLeavingTheGridCanKeepTheEdit;
   end;
 
   TStrGridAccess = class(TTyStringGrid)
@@ -2159,6 +2165,90 @@ begin
     g.DoExit;
     AssertFalse('leaving the grid abandons the refused edit', g.EditorMode);
     AssertEquals('the old value is back', 'old', g.Cells[1, 1]);
+  finally ctl.Free; f.Free; end;
+end;
+
+procedure TGridValidateCellTest.OnExitDecide(Sender: TObject; ACol, ARow: Integer;
+  const AText: string; var AKeep: Boolean);
+begin
+  AKeep := FKeepOnExit;
+end;
+
+procedure TGridValidateCellTest.TestDoubleClickOnTheEditedCellKeepsTheTyping;
+{ Reported from a real screen: with an invalid value pending, double-clicking another cell
+  put the OLD value back in the editor. The first click is refused (cursor stays), so the
+  double-click's BeginEdit lands on the cell already being edited -- and DoBeginEdit used to
+  re-run the editor setup, FEditor.Text := Cells[...] included. A latent bug on its own:
+  double-clicking the cell you are typing in threw the typing away. }
+var f: TForm; ctl: TTyStyleController; g: TStrGridAccess;
+begin
+  f := TForm.CreateNew(nil); ctl := TTyStyleController.Create(nil);
+  try
+    g := MakeStrGrid(f, ctl);
+    g.DefaultEditorKind := gekText;
+    g.OnValidateCell := @Validate;
+    g.Cells[1, 1] := 'old';
+    FVerdict := False;
+    AssertTrue('editing started', g.BeginEditAt(1, 1));
+    g.InlineEditor.Text := 'bad';
+    g.PressKey(VK_DOWN, []);                       { refused; cursor stays on (1,1) }
+    AssertTrue('BeginEdit on the cell being edited reports an edit in progress', g.BeginEdit);
+    AssertEquals('and does NOT reset what was typed', 'bad', g.InlineEditor.Text);
+    AssertTrue('still editing', g.EditorMode);
+  finally ctl.Free; f.Free; end;
+end;
+
+procedure TGridValidateCellTest.TestSameTextIsAskedOnlyOnce;
+{ A single click on another cell reaches validation twice -- once through the editor losing
+  focus, once through MoveCursor. Without a memo the host's message box would show twice per
+  click. The same text is refused silently the second time; a changed text is asked again. }
+var f: TForm; ctl: TTyStyleController; g: TStrGridAccess;
+begin
+  f := TForm.CreateNew(nil); ctl := TTyStyleController.Create(nil);
+  try
+    g := MakeStrGrid(f, ctl);
+    g.DefaultEditorKind := gekText;
+    g.OnValidateCell := @Validate;
+    g.Cells[1, 1] := 'old';
+    FVerdict := False; FCalls := 0;
+    AssertTrue('editing started', g.BeginEditAt(1, 1));
+    g.InlineEditor.Text := 'bad';
+    g.PressKeyInEditor(VK_RETURN, []);
+    g.PressKey(VK_DOWN, []);
+    g.PressKeyInEditor(VK_RETURN, []);
+    AssertEquals('three attempts with the same text asked the host once', 1, FCalls);
+    g.InlineEditor.Text := 'worse';
+    g.PressKeyInEditor(VK_RETURN, []);
+    AssertEquals('a different text is asked again', 2, FCalls);
+    AssertTrue('and is still refused', g.EditorMode);
+  finally ctl.Free; f.Free; end;
+end;
+
+procedure TGridValidateCellTest.TestLeavingTheGridCanKeepTheEdit;
+{ The default on leaving the grid is to abandon; OnInvalidEditExit lets the host keep the
+  editor instead (typically after asking the user). Kept means kept: still editing, typing
+  intact -- and Esc still abandons afterwards. }
+var f: TForm; ctl: TTyStyleController; g: TStrGridAccess;
+begin
+  f := TForm.CreateNew(nil); ctl := TTyStyleController.Create(nil);
+  try
+    g := MakeStrGrid(f, ctl);
+    g.DefaultEditorKind := gekText;
+    g.OnValidateCell := @Validate;
+    g.OnInvalidEditExit := @OnExitDecide;
+    g.Cells[1, 1] := 'old';
+    FVerdict := False; FKeepOnExit := True;
+    AssertTrue('editing started', g.BeginEditAt(1, 1));
+    g.InlineEditor.Text := 'bad';
+    g.PressKeyInEditor(VK_RETURN, []);
+    AssertTrue('precondition: refused and open', g.EditorMode);
+    g.DoExit;
+    AssertTrue('the host chose to keep: still editing', g.EditorMode);
+    AssertEquals('typing intact', 'bad', g.InlineEditor.Text);
+    AssertEquals('cell untouched', 'old', g.Cells[1, 1]);
+    g.PressKeyInEditor(VK_ESCAPE, []);
+    AssertFalse('Esc still abandons a kept edit', g.EditorMode);
+    AssertEquals('back to the old value', 'old', g.Cells[1, 1]);
   finally ctl.Free; f.Free; end;
 end;
 

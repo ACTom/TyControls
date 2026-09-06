@@ -118,6 +118,7 @@ end;
 | `OnSelectCell` | 光标即将移动;`ACanSelect := False` 可否决 |
 | `OnGetEditorKind` | **逐格**指定编辑器种类(比如金额列用 `gekNumeric`、主键列用 `gekNone`) |
 | `OnValidateCell` | 编辑**关闭前**;`AValid := False` 拒绝离开 —— 编辑器留在原格、光标不动,直到改对或按 `Esc` 放弃 |
+| `OnInvalidEditExit` | 焦点离开**整个网格**而编辑仍被拦着;`AKeep := True` 留住编辑器(默认放弃、回旧值)。可在此弹框让用户选 |
 | `OnCellEdited` | 编辑提交前;`AAccept := False` 可否决写回 |
 | `OnCompareCells` | 自定义排序比较;置 `AResult` 即接管该列 |
 | `OnGetPickList` | `gekPickList` 的候选项 |
@@ -125,7 +126,7 @@ end;
 | `OnDrawCell` | **完全接管**某格绘制(置 `AHandled`);背景与选中底色已由控件铺好 |
 | `OnGetCellHint` | 逐格提示文本(悬停显示);只在换格时回调 |
 
-`OnValidateCell` 管"能不能离开",`OnCellEdited` 管"写不写回",两者独立。校验只对**用户驱动**的关闭生效(回车 / `Tab` / 方向键 / 点别的格 / 编辑器失焦);排序、插删行列、载入 CSV、`EditorMode := False` 这类结构性关闭挡不住,但校验没过的值会被丢弃而不是写回 —— 非法值不管走哪条路都进不了单元格。没改过的格不会触发校验;焦点离开整个网格时,被拦下的编辑视同放弃,回到旧值。
+`OnValidateCell` 管"能不能离开",`OnCellEdited` 管"写不写回",两者独立。校验只对**用户驱动**的关闭生效(回车 / `Tab` / 方向键 / 点别的格 / 编辑器失焦);排序、插删行列、载入 CSV、`EditorMode := False` 这类结构性关闭挡不住,但校验没过的值会被丢弃而不是写回 —— 非法值不管走哪条路都进不了单元格。没改过的格不会触发校验;同一段文本只问一次(单击别的格会经失焦和光标移动两条路到达校验)。焦点离开整个网格时,被拦下的编辑默认视同放弃、回到旧值,`OnInvalidEditExit` 可改为留住——用户回到网格再点任意一格,焦点会回到那个编辑器。
 
 ## 交互
 

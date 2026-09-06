@@ -778,6 +778,11 @@ msgstr "数量 (%d, %d) 已接受:%s"
 msgid "Qty \"%s\" refused — a positive whole number is needed. Fix it, or press Esc to abandon"
 msgstr "数量「%s」被拒绝 —— 需要一个正整数。改对它,或按 Esc 放弃"
 
+#: umain.rsvalidateleavefmt
+#, object-pascal-format
+msgid "Qty \"%s\" is still invalid. Keep editing it? (No = discard and restore the old value)"
+msgstr "数量「%s」仍然不合法。继续编辑它吗?(否 = 丢弃并恢复旧值)"
+
 #: umain.rscelleditedfmt
 #, object-pascal-format
 msgid "(%d, %d):「%s」→「%s」"
