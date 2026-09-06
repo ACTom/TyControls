@@ -245,7 +245,7 @@ begin
       ctx := P.Bitmap.Canvas2D;
       ctx.lineJoin := 'round';
       cellW := (R.Right - R.Left) / FCount;
-      size := Math.Min(cellW, R.Bottom - R.Top);
+      size := Math.Min(cellW, Double(R.Bottom - R.Top));   // Double(): int+Double picks Min's Single overload
       radiusOuter := size / 2 - P.Scale(2);
       if radiusOuter >= 2 then
       begin
