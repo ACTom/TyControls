@@ -929,6 +929,10 @@ type
     FScrollY:          Integer;
     FDragCol:          Integer;   { 正在拖动的列索引;-1 = 没在拖 }
     FDragStartX:       Integer;
+    { 这次按住列头期间,列拖动是否已经越过阈值(真的拖过了)。
+      "点击列头"的语义(自动排序)挂在**松开**上,而松开时要能区分
+      "按下、原地松开"与"按下、把列拖走、再松开" —— 后者不是点击。 }
+    FHeaderDragMoved:  Boolean;
     { 行拖动。与列拖动对称:在**行头槽**里按下并越过阈值才算数。
       放在行头槽而不是单元格上 —— 单元格上是框选,不能抢那个手势。 }
     FDragRow:          Integer;   { 正在拖动的**数据行**;-1 = 没在拖 }
@@ -2068,6 +2072,12 @@ type
     FEditKind: TTyGridEditorKind;
     FFillDragging: Boolean;
     FFillToCol, FFillToRow: Integer;
+    { 这次按住是从**单元格**上按下的 —— 拖选只认这种按住。列头/分隔线/行头槽上
+      按下再滑进正文的是改宽、拖列、拖行,正文的格子只是被路过,不能选。 }
+    FCellPress: Boolean;
+    { 按下时武装、松开时才排序的那一列(-1 = 没武装)。排序是"点击"语义:
+      按下与松开都落在同一列头、中间没把列拖走,才算点了一下 —— 与资源管理器一致。 }
+    FSortArmedCol: Integer;
     FOnFillCells: TTyGridFillEvent;
     FShowFilterButtons: Boolean;
     FShowGroupSubtotals: Boolean;
@@ -6634,6 +6644,7 @@ begin
     { 记下被按住的那一段。**状态总是记**、重绘只在 goHeaderPushedLook 开着时做:
       标志关掉时这条路径与从前逐位一致(连重绘次数都一样),不给现有窗体添一帧。 }
     FPressedHeaderCol := d;
+    FHeaderDragMoved := False;
     if goHeaderPushedLook in Options then Invalidate;
     col := TTyColumn(FHeader.Columns.Items[d]);
     if (hoDrag in FHeader.Options) and (coDraggable in col.Options) then
@@ -6714,6 +6725,7 @@ begin
   begin
     { 越过阈值才算拖动 —— 否则手抖一像素就把列挪了。 }
     if Abs(X - FDragStartX) < ScaleI(8) then Exit;
+    FHeaderDragMoved := True;   { 越过阈值 = 这一下已经是拖动,松开时不再算点击 }
     target := ColumnAtX(X);
     if (target >= 0) and (target <> FDragCol) then
     begin
@@ -6747,6 +6759,7 @@ begin
   FResizeRow := -1;
   FDragCol := -1;
   FDragRow := -1;
+  FHeaderDragMoved := False;
   { 松手 = 不再按住。同样只在标志开着时重绘(见 MouseDown)。 }
   if FPressedHeaderCol >= 0 then
   begin
@@ -7863,6 +7876,7 @@ begin
   FHintCol := -1;
   FHintRow := -1;
   FSortCol := -1;
+  FSortArmedCol := -1;
   FSortDir := sdAscending;
   FSortKind := gskText;
   FBlanksPosition := gbpLast;
@@ -8970,6 +8984,9 @@ var
   gPos, gIdx: Integer;
 begin
   inherited MouseDown(Button, Shift, X, Y);
+  { 每次按下都从头记:上一次按住的来历不能带到这一次。 }
+  FCellPress := False;
+  FSortArmedCol := -1;
   if not Enabled then Exit;
 
   { 填充柄优先于一切:它压在选区右下角那一格上,不先判它就会被当成
@@ -9039,17 +9056,13 @@ begin
   if (hit.Part = ghpHeader) and (hit.Col >= 0)
      and (hoHeaderClickAutoSort in Header.Options) then
   begin
-    { Shift+点 = **追加**次级排序列(先按 A 排、A 相同再按 B 排),
-      普通点 = 重置成单列排序。与文件管理器/Excel 一致。 }
-    if ssShift in Shift then
-    begin
-      if SortDirectionOf(hit.Col) = sdAscending then
-        AddSortColumn(hit.Col, sdDescending)
-      else
-        AddSortColumn(hit.Col, sdAscending);
-    end
-    else
-      ToggleSortColumn(hit.Col);
+    { 这里只**武装**,排序在 MouseUp 里做:排序是点击语义,点击 = 按下并在同一处
+      松开。从前在按下时就排,于是按在分隔线上准备拖宽的那一下先把表排了一遍
+      (基类刚把它武装成拖宽,这里用 CellAt 重新命中、一看是列头就排),双击
+      分隔线自适应列宽也顺带排一次。
+      FPressedHeaderCol >= 0 是基类"这一下按在列体上"的记账 —— 分隔线那几像素
+      它在更早处就 Exit 了,连按下态都不记,拿它来排除分隔线最准。 }
+    if FPressedHeaderCol >= 0 then FSortArmedCol := hit.Col;
     Exit;
   end;
   if hit.Part = ghpCell then
@@ -9057,6 +9070,7 @@ begin
     { 否决要在**任何副作用之前** —— 只挡住 OnClickCell 而让光标照样跑,
       对宿主来说等于没挡住。 }
     if not CanClickCell(hit.Col, hit.Row) then Exit;
+    FCellPress := True;   { 从这一格按下的 —— 之后按住移动才是拖选 }
 
     { 链接:点一下发事件,然后**照常往下走** —— 链接格也是格子,
       点了该选中、该拿到焦点。Exit 掉的话点链接会让选区停在别处。 }
@@ -9123,7 +9137,7 @@ end;
 procedure TTyStringGrid.MouseUp(Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
 var
-  bc, br: Integer;
+  bc, br, sc: Integer;
   hit: TTyGridHit;
 begin
   { 松开才真正填 —— 拖的过程里只记目标。 }
@@ -9145,6 +9159,33 @@ begin
        and PtInRect(CellButtonRect(bc, br), Point(X, Y)) then
       if Assigned(OnCellButtonClick) then OnCellButtonClick(Self, bc, br);
   end;
+
+  { 列头点击 = 按下并在**同一列头**上松开,中间没把列拖走。排序挂在这儿而不是
+    按下(理由见 MouseDown 里武装的地方)。修饰键读松开这一刻的。 }
+  if FSortArmedCol >= 0 then
+  begin
+    sc := FSortArmedCol;
+    FSortArmedCol := -1;
+    if (Button = mbLeft) and not FHeaderDragMoved then
+    begin
+      hit := CellAt(X, Y);
+      if (hit.Part = ghpHeader) and (hit.Col = sc) then
+      begin
+        { Shift+点 = **追加**次级排序列(先按 A 排、A 相同再按 B 排),
+          普通点 = 重置成单列排序。与文件管理器/Excel 一致。 }
+        if ssShift in Shift then
+        begin
+          if SortDirectionOf(sc) = sdAscending then
+            AddSortColumn(sc, sdDescending)
+          else
+            AddSortColumn(sc, sdAscending);
+        end
+        else
+          ToggleSortColumn(sc);
+      end;
+    end;
+  end;
+  FCellPress := False;
   inherited MouseUp(Button, Shift, X, Y);
 end;
 
@@ -10655,18 +10696,25 @@ begin
     放在 hint 那段之前:拖选期间不该再弹提示。 }
   if ssLeft in Shift then
   begin
-    hit := CellAt(X, Y);
-    if (hit.Part = ghpCell) and ((hit.Col <> FCol) or (hit.Row <> FRow)) then
+    { 拖选只认**从单元格按下**的那次按住(FCellPress)。按在列头、分隔线、行头槽上
+      再滑进正文的不是拖选 —— 那是改宽、拖列、拖行,正文的格子只是被路过。
+      从前这里只看 ssLeft,于是拖列宽时指针一进正文就把一大片格子选上了。
+      不管是不是拖选,按住期间都不弹提示,所以 Exit 在外面。 }
+    if FCellPress then
     begin
-      { goRangeSelect 关掉时拖动仍然移动光标(那是"点着走"的手感,
-        LCL 也如此),只是不再把选区拉长 —— 选区始终收在当前格。 }
-      FExtendingSelection := goRangeSelect in Options;
-      try
-        MoveCursor(hit.Col, hit.Row);
-      finally
-        FExtendingSelection := False;
+      hit := CellAt(X, Y);
+      if (hit.Part = ghpCell) and ((hit.Col <> FCol) or (hit.Row <> FRow)) then
+      begin
+        { goRangeSelect 关掉时拖动仍然移动光标(那是"点着走"的手感,
+          LCL 也如此),只是不再把选区拉长 —— 选区始终收在当前格。 }
+        FExtendingSelection := goRangeSelect in Options;
+        try
+          MoveCursor(hit.Col, hit.Row);
+        finally
+          FExtendingSelection := False;
+        end;
+        SelectionChanged;
       end;
-      SelectionChanged;
     end;
     Exit;
   end;

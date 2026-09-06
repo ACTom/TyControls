@@ -133,7 +133,7 @@ end;
 - **鼠标**:点选单元格;拖列头分隔条改列宽;滚轮纵向滚动(一格三行)
 - **键盘**:方向键 / `Home` / `End` / `PageUp` / `PageDown` 移动光标;`F2` 开始编辑
 - **区域多选**:`Shift+方向键` 或 `Shift+点击` 拉出矩形选区;普通方向键/点击收回一格
-- **排序**:列头选项加上 `hoHeaderClickAutoSort` 后,点列头即 升序 → 降序 → 取消
+- **排序**:列头选项加上 `hoHeaderClickAutoSort` 后,点列头即 升序 → 降序 → 取消。排序在**松开**时触发:按在分隔线上(改宽)、把列拖走、或松开在别的地方,都不算点了列头
 - **过滤**:`SetColumnFilter(列, 文本)` 做包含匹配(不区分大小写);`OnFilterRow` 可逐行否决
 - **剪贴板**:`Ctrl+C` / `Ctrl+X` / `Ctrl+V` / `Ctrl+A`。制表符分隔 = Excel 剪贴板格式,可直接互粘。`ReadOnly` 下 `Ctrl+V` 被拒、`Ctrl+C` 照常、`Ctrl+X` 退化为复制(剪贴板照拿选区,表里一格不清);剪切一片 = 一条撤销记录
 - **汇总**:`SetColumnAggregate(列, gagSum/gagAvg/gagMin/gagMax/gagCount)`;**只统计筛选后可见的行**,非数值格跳过

@@ -199,6 +199,10 @@ type
     procedure TestValueFilterKeepsOnlyCheckedValues;
     procedure TestHeaderDividerDragResizesTheColumn;
     procedure TestHeaderDragReordersColumnsPastAThreshold;
+    procedure TestDividerDragThroughBodyDoesNotSelectCells;
+    procedure TestPressOnDividerDoesNotSort;
+    procedure TestHeaderSortFiresOnReleaseOverTheSameColumn;
+    procedure TestColumnDragDoesNotSort;
     procedure TestVariableRowHeightsShiftLaterRowsAndHitTest;
     procedure TestUniformGridAllocatesNoRowTopsArray;
     procedure TestFixedRowsStayPutWhileBodyRowsScroll;
@@ -387,7 +391,7 @@ type
     { 鼠标事件的桩(同样必须在 published 之外)。 }
     FSelChanges: Integer;
     FProbeLink: TTyGridEditLink;
-    FSizingCalls, FEndSizeCalls, FLastEndSize: Integer;
+    FSizingCalls, FEndSizeCalls, FLastEndSize, FMoveCalls: Integer;
     FCheckChanges: Integer;
     FEllipsisCalls: Integer;
     FEllipsisCancel: Boolean;
@@ -417,6 +421,8 @@ type
     procedure HookColumnSizing(Sender: TObject; AIndex: Integer;
       var ANewSize: Integer; var AAllow: Boolean);
     procedure HookEndColumnSize(Sender: TObject; AIndex, ANewSize: Integer);
+    procedure HookColumnMove(Sender: TObject; AFromCol, AToCol: Integer;
+      var AAllow: Boolean);
     procedure HookUpperCasePaste(Sender: TObject; ACol, ARow: Integer;
       var ANewText: string; var AAllow: Boolean);
     procedure HookCreateEditLink(Sender: TObject; ACol, ARow: Integer;
@@ -3578,6 +3584,134 @@ begin
   AssertTrue('拖过阈值后位置变了', c0.Position <> p0);
 end;
 
+{ 拖列宽时指针滑进正文:那是改宽,不是拖选。(QQ 群"彩太阳"反馈:拖着分隔线
+  路过表格区域,一大片格子被选上了 —— 从前拖选只看 ssLeft,不问按下来自哪儿。) }
+procedure TTyStringGridTest.TestDividerDragThroughBodyDoesNotSelectCells;
+var
+  G: TStrGridAccess;
+  edge, w0, bodyY: Integer;
+  r: TRect;
+  sel: TRect;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.Header.Options := G.Header.Options + [hoVisible, hoColumnResize];
+  G.Header.Height := 24;
+  G.RowCount := 6;
+  G.Options := G.Options + [goRangeSelect];
+  { 光标先放到 (1,1):要是拖选错误地跑了,选区会从这里拉到别处,看得见。 }
+  r := G.RowRectAt(1);
+  G.FullClickAt(G.ColLeft(1) + 5, (r.Top + r.Bottom) div 2);
+  AssertEquals('前提:光标在第 1 列', 1, G.Col);
+  AssertEquals('前提:光标在第 1 行', 1, G.Row);
+
+  w0 := TTyColumn(G.Header.Columns.Items[0]).Width;
+  edge := G.ColLeft(0) + w0;
+  r := G.RowRectAt(4);
+  bodyY := (r.Top + r.Bottom) div 2;
+
+  G.PressMouseWithoutRelease(edge, 10);      { 按在分隔线上 }
+  G.MoveMouseTo(edge + 40, bodyY);           { 斜着拖进正文第 4 行 }
+  G.ReleaseMouse(edge + 40, bodyY);
+
+  AssertEquals('列宽照样增加了 40', w0 + 40, TTyColumn(G.Header.Columns.Items[0]).Width);
+  AssertEquals('光标列没动', 1, G.Col);
+  AssertEquals('光标行没动', 1, G.Row);
+  sel := G.Selection;
+  AssertTrue('选区仍只是那一格',
+    (sel.Left = 1) and (sel.Right = 1) and (sel.Top = 1) and (sel.Bottom = 1));
+end;
+
+{ 按在分隔线上是改宽,不是点列头。从前这一下先把表排了一遍、然后才开始拖
+  (子类在 inherited 之后用 CellAt 重新命中,一看是列头就排);双击分隔线自适应
+  列宽也顺带排一次。 }
+procedure TTyStringGridTest.TestPressOnDividerDoesNotSort;
+var
+  G: TStrGridAccess;
+  edge: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.Header.Options := G.Header.Options + [hoVisible, hoColumnResize, hoHeaderClickAutoSort];
+  G.Header.Height := 24;
+  G.RowCount := 3;
+  { 边界内 1px:仍在分隔线的 ±4px 命中带里,但松开点明确归第 0 列 ——
+    压在正好的边界上时 CellAt 的归属不定,那样的测试对"错排到第 0 列"是盲的。 }
+  edge := G.ColLeft(0) + TTyColumn(G.Header.Columns.Items[0]).Width - 1;
+
+  G.PressMouseWithoutRelease(edge, 10);
+  AssertEquals('按在分隔线上不排序', -1, G.SortColumn);
+  G.MoveMouseTo(edge + 30, 10);
+  G.ReleaseMouse(edge + 30, 10);
+  AssertEquals('拖完松开也不排序', -1, G.SortColumn);
+
+  { 边界内 1px:仍在分隔线的 ±4px 命中带里,但松开点明确归第 0 列 ——
+    压在正好的边界上时 CellAt 的归属不定,那样的测试对"错排到第 0 列"是盲的。 }
+  edge := G.ColLeft(0) + TTyColumn(G.Header.Columns.Items[0]).Width - 1;
+  G.DoubleClickAt(edge, 10);
+  AssertEquals('双击分隔线不排序', -1, G.SortColumn);
+end;
+
+{ 点列头 = 按下并在**同一列头**上松开。按下本身不排;松开在别的列头或正文里不排。 }
+procedure TTyStringGridTest.TestHeaderSortFiresOnReleaseOverTheSameColumn;
+var
+  G: TStrGridAccess;
+  x0, x1: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  { 关掉 hoDrag:这里测的是"松开在别的列头上",不是列重排(那条见下一个测试)。 }
+  G.Header.Options := (G.Header.Options - [hoDrag]) + [hoVisible, hoHeaderClickAutoSort];
+  G.Header.Height := 24;
+  G.RowCount := 3;
+  x0 := G.ColLeft(0) + 20;
+  x1 := G.ColLeft(1) + 20;
+
+  G.PressMouseWithoutRelease(x0, 10);
+  AssertEquals('按下还没排序', -1, G.SortColumn);
+  G.ReleaseMouse(x0, 10);
+  AssertEquals('松开才排序', 0, G.SortColumn);
+  AssertEquals('第一次是升序', Ord(sdAscending), Ord(G.SortDirection));
+
+  G.PressMouseWithoutRelease(x1, 10);
+  G.MoveMouseTo(x0, 10);
+  G.ReleaseMouse(x0, 10);
+  AssertEquals('按第 1 列、松开在第 0 列:不算点击,排序列不变', 0, G.SortColumn);
+  AssertEquals('方向也不变', Ord(sdAscending), Ord(G.SortDirection));
+
+  G.PressMouseWithoutRelease(x1, 10);
+  G.ReleaseMouse(x1, 60);                    { 松开在正文里 }
+  AssertEquals('松开在正文里不排序', 0, G.SortColumn);
+end;
+
+{ 把列拖走再松开不是点击:列换位了,但不排序。 }
+procedure TTyStringGridTest.TestColumnDragDoesNotSort;
+var
+  G: TStrGridAccess;
+  c0: TTyColumn;
+  x0, x1: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.Header.Options := (G.Header.Options - [hoColumnResize])
+    + [hoVisible, hoDrag, hoHeaderClickAutoSort];
+  G.Header.Height := 24;
+  G.RowCount := 3;
+  c0 := TTyColumn(G.Header.Columns.Items[0]);
+  c0.Options := c0.Options + [coDraggable];
+
+  { 拖到第 1 列上(换位),再拖回原处松开:指针底下就是按下的那一列,而且它回到了
+    原位。"松开须在同一列"挡不住这一下 —— 只有"拖过列就不算点击"这条守卫能挡。
+    (第一版是拖过去就在那儿松开:松开点换位后落在另一列上,先被同列检查挡了,
+    对守卫是盲的,变异没抓住。) }
+  G.OnColumnMove := @HookColumnMove;
+  FMoveCalls := 0;
+  x0 := G.ColLeft(0) + 20;
+  x1 := G.ColLeft(1) + 20;
+  G.PressMouseWithoutRelease(x0, 10);
+  G.MoveMouseTo(x1, 10);
+  G.MoveMouseTo(x0, 10);
+  G.ReleaseMouse(x0, 10);
+  AssertTrue('前提:拖动过程中换过位', FMoveCalls >= 1);
+  AssertEquals('拖过列再放回原处,仍然不是点击:不排序', -1, G.SortColumn);
+end;
+
 { 逐行行高:接了 OnGetRowHeight 就启用可变行高 —— 前面行变高,后面的行整体下移,
   且点击命中必须跟着走(几何与命中同源)。 }
 procedure TTyStringGridTest.TestVariableRowHeightsShiftLaterRowsAndHitTest;
@@ -5280,9 +5414,10 @@ begin
 
   { 点分组标题不该触发排序。 }
   G.Header.Options := G.Header.Options + [hoHeaderClickAutoSort];
-  G.ClickAt(40, 8);
+  { 完整的点击(按下 + 松开):排序挂在松开上,只按不松不算点。 }
+  G.FullClickAt(40, 8);
   AssertEquals('点分组标题不排序', -1, G.Header.SortColumn);
-  G.ClickAt(40, 30);
+  G.FullClickAt(40, 30);
   AssertEquals('点叶子列头才排序', 0, G.Header.SortColumn);
 end;
 
@@ -5500,6 +5635,12 @@ procedure TTyStringGridTest.HookColumnSizing(Sender: TObject; AIndex: Integer;
   var ANewSize: Integer; var AAllow: Boolean);
 begin
   Inc(FSizingCalls);
+end;
+
+procedure TTyStringGridTest.HookColumnMove(Sender: TObject; AFromCol, AToCol: Integer;
+  var AAllow: Boolean);
+begin
+  Inc(FMoveCalls);
 end;
 
 procedure TTyStringGridTest.HookEndColumnSize(Sender: TObject; AIndex, ANewSize: Integer);
