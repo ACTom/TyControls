@@ -10,3 +10,9 @@
 # drift guard fail on every fresh clone. The .ttf is binary anyway; the JSON is the one that
 # would actually have been rewritten.
 assets/lucide/**  -text
+
+# The harvested ECharts gallery: LF, never converted. tools/advchart-gallery/harvest.js
+# regenerates these files, so a CRLF conversion on checkout would make every one of them
+# differ from what a re-run produces -- and there is 9.8 MB of them, so the conversion is
+# not free either. Same reasoning as the lucide codepoints above.
+examples/advchart/gallery/*.json text eol=lf
