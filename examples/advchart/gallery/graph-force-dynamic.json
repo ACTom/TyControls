@@ -1,0 +1,23 @@
+{
+ "series": [
+  {
+   "type": "graph",
+   "layout": "force",
+   "animation": false,
+   "data": [
+    {
+     "fixed": true,
+     "x": 300,
+     "y": 200,
+     "symbolSize": 20,
+     "id": "-1"
+    }
+   ],
+   "force": {
+    "repulsion": 100,
+    "edgeLength": 5
+   },
+   "edges": []
+  }
+ ]
+}

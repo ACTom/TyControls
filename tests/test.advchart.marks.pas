@@ -12,7 +12,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry,
      tyControls.AdvChart.Coord, tyControls.AdvChart.Data,
      tyControls.AdvChart.Shape, tyControls.AdvChart.Paint,
      tyControls.AdvChart.Series, tyControls.AdvChart.Marks,
-     tyControls.AdvChart.BarLayout;
+     tyControls.AdvChart.BarLayout, tyControls.AdvChart.Option;
 type
   TAdvChartMarksTest = class(TTestCase)
   private
@@ -47,6 +47,15 @@ type
     procedure TestAHorizontalStackedBarStacksAlongXNotY;
     procedure TestTheBottomOfAStackKeepsTheAxisOwnBaseline;
     procedure TestAStackedLineIsDrawnThroughItsTotals;
+    procedure TestAnAreaIsAClosedRingUnderTheLine;
+    procedure TestTheAreaOriginFollowsTheAxisWhenItIsAllOneSign;
+    procedure TestAStackedAreaSitsOnTheOneBelowIt;
+    procedure TestConnectNullsJoinsTheRunInsteadOfBreakingIt;
+    procedure TestStepTurnsWhereEachModeSaysItDoes;
+    procedure TestTheLineOptionsAreActuallyReadFromTheOption;
+    procedure TestTheFillIsPaintedBehindItsLine;
+    procedure TestASteppedAreaFollowsItsSteppedLine;
+    procedure TestACoordinateThatWillNotMapBreaksTheRun;
   end;
 
 implementation
@@ -531,6 +540,322 @@ begin
     FCart.DataToPoint([2.0, 35.0]).Y, pts[2].Y, 0.001);
   AssertTrue('which is not where its own value would put it',
     Abs(pts[0].Y - FCart.DataToPoint([0.0, 10.0]).Y) > 1);
+end;
+
+procedure TAdvChartMarksTest.TestAnAreaIsAClosedRingUnderTheLine;
+var
+  v: TTySeriesVisual;
+  poly: TTyPointFArray;
+  i: Integer;
+  base: Double;
+begin
+  { TWO ELEMENTS, AREA FIRST. The fill and the line are separate shapes -- one
+    closed polygon, one open polyline -- and the area is inserted first so the
+    line is drawn OVER its own shading rather than under it. }
+  Given('line', 3, [10, 20, 30]);
+  v := TySeriesVisual($FF3366CC);
+  v.Line.HasArea := True;
+  AssertEquals('an area makes two elements, not one', 2,
+    TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList));
+  AssertEquals('the area is first, so it is behind',
+    Ord(cskPolygon), Ord(FList.Element(0).Shape.Kind));
+  AssertEquals('and the line is on top',
+    Ord(cskPolyline), Ord(FList.Element(1).Shape.Kind));
+
+  { A RING: three points along the top, then the same three along the bottom in
+    REVERSE. Walking the lower edge forwards would cross the shape over itself
+    and fill an hourglass. }
+  poly := FList.Element(0).Shape.Points;
+  AssertEquals('three up and three back', 6, Length(poly));
+  base := FCart.DataToPoint([0.0, 0.0]).Y;
+  for i := 0 to 2 do
+    AssertEquals(Format('top %d is the datum', [i]),
+      FCart.DataToPoint([Double(i), 10.0 * (i + 1)]).Y, poly[i].Y, 0.001);
+  AssertEquals('the return leg starts under the LAST point',
+    FCart.DataToPoint([2.0, 0.0]).X, poly[3].X, 0.001);
+  for i := 3 to 5 do
+    AssertEquals(Format('bottom %d is on the baseline', [i]),
+      base, poly[i].Y, 0.001);
+
+  { THE FILL IS NOT HIT-TESTABLE. A pointer over the shading should find the
+    line, not the decoration behind it. }
+  AssertTrue('the area is silent', FList.Element(0).Silent);
+  AssertFalse('the line is not', FList.Element(1).Silent);
+end;
+
+procedure TAdvChartMarksTest.TestTheAreaOriginFollowsTheAxisWhenItIsAllOneSign;
+var
+  v: TTySeriesVisual;
+  poly: TTyPointFArray;
+begin
+  { 'auto' IS NOT SIMPLY ZERO. When the whole axis sits above zero the area
+    starts at the BOTTOM OF THE RANGE, because a fill reaching for a zero that
+    is not on the axis would run off the plot. }
+  Given('line', 2, [50, 60]);
+  TTyIntervalScale(FBinding.ValueAxis.Scale).SetExtent(TyRange(40, 100));
+  v := TySeriesVisual($FF3366CC);
+  v.Line.HasArea := True;
+  TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList);
+  poly := FList.Element(0).Shape.Points;
+  AssertEquals('the floor is the axis minimum, not zero',
+    FCart.DataToPoint([0.0, 40.0]).Y, poly[High(poly)].Y, 0.001);
+  AssertTrue('which is not where zero would be',
+    Abs(poly[High(poly)].Y - FCart.DataToPoint([0.0, 0.0]).Y) > 1);
+
+  { AN EXPLICIT ORIGIN WINS, and is not clamped into the extent. }
+  FList.Clear;
+  v.Line.AreaOrigin := laoValue;
+  v.Line.AreaOriginValue := 55;
+  TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList);
+  poly := FList.Element(0).Shape.Points;
+  AssertEquals('a number is used as given',
+    FCart.DataToPoint([0.0, 55.0]).Y, poly[High(poly)].Y, 0.001);
+
+  { 'end' anchors at the TOP of the range, so the belt hangs downwards. }
+  FList.Clear;
+  v.Line.AreaOrigin := laoEnd;
+  TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList);
+  poly := FList.Element(0).Shape.Points;
+  AssertEquals('end is the axis maximum',
+    FCart.DataToPoint([0.0, 100.0]).Y, poly[High(poly)].Y, 0.001);
+end;
+
+procedure TAdvChartMarksTest.TestAStackedAreaSitsOnTheOneBelowIt;
+var
+  v: TTySeriesVisual;
+  stk: TTySeriesStack;
+  poly: TTyPointFArray;
+  resultCol, overCol: Integer;
+begin
+  { WHAT THE stackedOver COLUMN WAS BUILT FOR. A stacked area's lower edge is
+    the total underneath it, not the axis -- otherwise every band in a stacked
+    area chart is drawn from the floor and they all overlap. }
+  Given('line', 2, [10, 20]);
+  resultCol := FStore.AddDimension('total', ddtFloat);
+  overCol := FStore.AddDimension('over', ddtFloat);
+  FStore.SetCalculated(resultCol, 0, 15);
+  FStore.SetCalculated(resultCol, 1, 26);
+  FStore.SetCalculated(overCol, 0, 5);
+  FStore.SetCalculated(overCol, 1, 6);
+
+  stk := TyNoStack;
+  stk.Stacked := True;
+  stk.HasBelow := True;
+  stk.ResultCol := resultCol;
+  stk.OverCol := overCol;
+
+  v := TySeriesVisual($FF3366CC);
+  v.Line.HasArea := True;
+  TyBuildSeriesMarks(FBinding, FStore, stk, v, FList);
+  poly := FList.Element(0).Shape.Points;
+  AssertEquals('the top is the cumulative',
+    FCart.DataToPoint([0.0, 15.0]).Y, poly[0].Y, 0.001);
+  AssertEquals('and the floor is what it stands on, not the axis',
+    FCart.DataToPoint([0.0, 5.0]).Y, poly[High(poly)].Y, 0.001);
+  AssertTrue('which is above the baseline',
+    poly[High(poly)].Y < FCart.DataToPoint([0.0, 0.0]).Y - 1);
+end;
+
+procedure TAdvChartMarksTest.TestConnectNullsJoinsTheRunInsteadOfBreakingIt;
+var v: TTySeriesVisual;
+begin
+  { OFF (the default): a hole ends the run and a second polyline starts after
+    it, so the gap stays visible. }
+  Given('line', 5, [10, 20, NaN, 40, 50]);
+  v := TySeriesVisual($FF3366CC);
+  AssertEquals('a gap makes two runs', 2,
+    TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList));
+
+  { ON: the missing point is dropped and the line continues through. }
+  FList.Clear;
+  v.Line.ConnectNulls := True;
+  AssertEquals('connectNulls joins them into one', 1,
+    TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList));
+  AssertEquals('with the gap''s point simply absent', 4,
+    Length(FList.Element(0).Shape.Points));
+end;
+
+procedure TAdvChartMarksTest.TestStepTurnsWhereEachModeSaysItDoes;
+var
+  v: TTySeriesVisual;
+  p: TTyPointFArray;
+  a, b: TTyPointF;
+begin
+  { The three modes differ only in WHERE the corner goes between two points.
+    Two points make one corner ('start'/'end') or two ('middle'), so the counts
+    alone separate the modes -- and the coordinates say which is which. }
+  Given('line', 2, [10, 20]);
+  a := FCart.DataToPoint([0.0, 10.0]);
+  b := FCart.DataToPoint([1.0, 20.0]);
+
+  v := TySeriesVisual($FF3366CC);
+  v.Line.Step := lstStart;
+  TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList);
+  p := FList.Element(0).Shape.Points;
+  AssertEquals('start: one corner', 3, Length(p));
+  AssertEquals('the value changes first, at the old x', a.X, p[1].X, 0.001);
+  AssertEquals('reaching the new value', b.Y, p[1].Y, 0.001);
+
+  FList.Clear;
+  v.Line.Step := lstEnd;
+  TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList);
+  p := FList.Element(0).Shape.Points;
+  AssertEquals('end: one corner', 3, Length(p));
+  AssertEquals('the base moves first, to the new x', b.X, p[1].X, 0.001);
+  AssertEquals('still at the old value', a.Y, p[1].Y, 0.001);
+
+  FList.Clear;
+  v.Line.Step := lstMiddle;
+  TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList);
+  p := FList.Element(0).Shape.Points;
+  AssertEquals('middle: two corners', 4, Length(p));
+  AssertEquals('both at the halfway x', (a.X + b.X) / 2, p[1].X, 0.001);
+  AssertEquals('and the same again', (a.X + b.X) / 2, p[2].X, 0.001);
+  AssertEquals('the first still at the old value', a.Y, p[1].Y, 0.001);
+  AssertEquals('the second at the new one', b.Y, p[2].Y, 0.001);
+end;
+
+procedure TAdvChartMarksTest.TestTheLineOptionsAreActuallyReadFromTheOption;
+var
+  opt: TTyChartOption;
+  spec: TTyLineSpec;
+
+  function SpecOf(const AText: string): TTyLineSpec;
+  begin
+    AssertTrue('the option parsed: ' + opt.Error.Message,
+      opt.SetOptionText(AText));
+    Result := TyLineSpecOf(opt, 0);
+  end;
+
+begin
+  { THE READER HAD NO TEST AT ALL. Every geometry test above sets TTyLineSpec
+    by hand, so three separate mutants of TyLineSpecOf survived the whole
+    suite: `step: true` not meaning 'start', an empty areaStyle not turning the
+    area on, and the defaults. Setting a record by hand tests the drawing; it
+    says nothing about whether the option is understood. }
+  opt := TTyChartOption.Create;
+  try
+    spec := SpecOf('{ series: [{ type: ''line'', data: [1] }] }');
+    AssertFalse('no areaStyle, no area', spec.HasArea);
+    AssertEquals('no step', Ord(lstNone), Ord(spec.Step));
+    AssertFalse('and connectNulls is off', spec.ConnectNulls);
+
+    { PRESENCE IS THE SWITCH: there is no `show`, and an empty object is a real
+      instruction. }
+    spec := SpecOf('{ series: [{ type: ''line'', areaStyle: {}, data: [1] }] }');
+    AssertTrue('an empty areaStyle turns the area on', spec.HasArea);
+    AssertEquals('opaque unless told otherwise', 1.0, spec.AreaOpacity, 1e-9);
+    AssertEquals('and anchored automatically',
+      Ord(laoAuto), Ord(spec.AreaOrigin));
+
+    spec := SpecOf('{ series: [{ type: ''line'', data: [1],'
+      + ' areaStyle: { opacity: 0.25, origin: ''end'' } }] }');
+    AssertEquals('opacity comes through', 0.25, spec.AreaOpacity, 1e-9);
+    AssertEquals('and so does the origin', Ord(laoEnd), Ord(spec.AreaOrigin));
+
+    spec := SpecOf('{ series: [{ type: ''line'', data: [1],'
+      + ' areaStyle: { origin: 42 } }] }');
+    AssertEquals('a number is its own kind',
+      Ord(laoValue), Ord(spec.AreaOrigin));
+    AssertEquals('carrying the value', 42.0, spec.AreaOriginValue, 1e-9);
+
+    { `step: true` MEANS 'start'. Upstream says so beside the default, and a
+      port that only understood the three strings would silently ignore the
+      commonest spelling. }
+    spec := SpecOf('{ series: [{ type: ''line'', step: true, data: [1] }] }');
+    AssertEquals('true is start', Ord(lstStart), Ord(spec.Step));
+    spec := SpecOf('{ series: [{ type: ''line'', step: false, data: [1] }] }');
+    AssertEquals('false is no step', Ord(lstNone), Ord(spec.Step));
+    spec := SpecOf('{ series: [{ type: ''line'', step: ''middle'', data: [1] }] }');
+    AssertEquals('and the strings work', Ord(lstMiddle), Ord(spec.Step));
+
+    spec := SpecOf('{ series: [{ type: ''line'', connectNulls: true,'
+      + ' data: [1] }] }');
+    AssertTrue('connectNulls comes through', spec.ConnectNulls);
+  finally
+    opt.Free;
+  end;
+end;
+
+procedure TAdvChartMarksTest.TestTheFillIsPaintedBehindItsLine;
+var v: TTySeriesVisual;
+begin
+  { PAINT ORDER, NOT INSERTION ORDER. The first version of this asserted that
+    Element(0) is the polygon -- which is where it was ADDED, not where it is
+    DRAWN. The paint list sorts by (Z, Z2, insertion), so a mutant that raised
+    the area's Z2 put the shading over the line and the test never noticed.
+    PaintOrder is the list's own answer to "what is drawn first". }
+  Given('line', 3, [10, 20, 30]);
+  v := TySeriesVisual($FF3366CC);
+  v.Line.HasArea := True;
+  TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList);
+  AssertEquals('two elements', 2, FList.Count);
+  AssertEquals('the fill is painted first, so it is behind',
+    Ord(cskPolygon), Ord(FList.Element(FList.PaintOrder(0)).Shape.Kind));
+  AssertEquals('and the line over it',
+    Ord(cskPolyline), Ord(FList.Element(FList.PaintOrder(1)).Shape.Kind));
+end;
+
+procedure TAdvChartMarksTest.TestASteppedAreaFollowsItsSteppedLine;
+var
+  v: TTySeriesVisual;
+  line, poly: TTyPointFArray;
+  k: Integer;
+begin
+  { THE BELT IS STEPPED THE SAME WAY AS THE LINE IT BELONGS TO. Step only the
+    upper edge and the fill stops following its own outline -- the top is a
+    staircase and the bottom is a straight run, so the shape leaks out from
+    under the line. A mutant that left the lower edge unstepped survived,
+    because nothing compared the two edges. }
+  Given('line', 3, [10, 20, 30]);
+  v := TySeriesVisual($FF3366CC);
+  v.Line.HasArea := True;
+  v.Line.Step := lstEnd;
+  TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList);
+
+  poly := FList.Element(FList.PaintOrder(0)).Shape.Points;
+  line := FList.Element(FList.PaintOrder(1)).Shape.Points;
+  AssertEquals('the line is stepped: 3 points make 5', 5, Length(line));
+  AssertEquals('and the ring is both edges of it', 10, Length(poly));
+  { The upper half of the ring IS the line, point for point. }
+  for k := 0 to High(line) do
+  begin
+    AssertEquals(Format('ring top %d matches the line', [k]),
+      line[k].X, poly[k].X, 0.001);
+    AssertEquals(Format('ring top %d matches the line', [k]),
+      line[k].Y, poly[k].Y, 0.001);
+  end;
+  { And the lower half has the same base coordinates, walked backwards. }
+  for k := 0 to High(line) do
+    AssertEquals(Format('ring bottom %d is under the line', [k]),
+      line[High(line) - k].X, poly[Length(line) + k].X, 0.001);
+end;
+
+procedure TAdvChartMarksTest.TestACoordinateThatWillNotMapBreaksTheRun;
+var
+  v: TTySeriesVisual;
+  sc: TTyIntervalScale;
+begin
+  { A HOLE IS NOT ONLY NaN. A zero on a log axis maps to -Infinity, and the
+    first version dropped such a point silently -- which JOINS the line across
+    it, the very thing connectNulls being false exists to prevent. An Infinity
+    that reached the paint list would stretch the polyline across the surface.
+
+    Two mutants lived here: one that dropped an unmappable point instead of
+    breaking, and one that stopped counting Infinity as illegal at all. }
+  Given('line', 5, [10, 20, 0, 40, 50]);
+  { A log axis is an interval scale wearing a log MAPPER -- there is no
+    TTyLogScale -- which is how the builder makes one. }
+  sc := TTyIntervalScale(FBinding.ValueAxis.Scale);
+  sc.Mapper := TTyLogScaleMapper.Create(10);
+  sc.SetExtent(TyRange(1, 100));
+
+  v := TySeriesVisual($FF3366CC);
+  AssertEquals('the unmappable point breaks the run in two', 2,
+    TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList));
+  AssertEquals('two points before it', 2,
+    Length(FList.Element(0).Shape.Points));
+  AssertEquals('and two after', 2, Length(FList.Element(1).Shape.Points));
 end;
 
 initialization

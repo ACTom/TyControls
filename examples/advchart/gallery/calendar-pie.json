@@ -1,0 +1,874 @@
+{
+ "tooltip": {},
+ "legend": {
+  "data": [
+   "Work",
+   "Entertainment",
+   "Sleep"
+  ],
+  "bottom": 20
+ },
+ "calendar": {
+  "top": "middle",
+  "left": "center",
+  "orient": "vertical",
+  "cellSize": [
+   80,
+   80
+  ],
+  "yearLabel": {
+   "show": false,
+   "fontSize": 30
+  },
+  "dayLabel": {
+   "margin": 20,
+   "firstDay": 1,
+   "nameMap": [
+    "Sun",
+    "Mon",
+    "Tue",
+    "Wed",
+    "Thu",
+    "Fri",
+    "Sat",
+    "Sun"
+   ]
+  },
+  "monthLabel": {
+   "show": false
+  },
+  "range": [
+   "2017-02"
+  ]
+ },
+ "series": [
+  {
+   "id": "label",
+   "type": "scatter",
+   "coordinateSystem": "calendar",
+   "symbolSize": 0,
+   "label": {
+    "show": true,
+    "offset": [
+     -30,
+     -30
+    ],
+    "fontSize": 14
+   },
+   "data": [
+    [
+     "",
+     7470
+    ],
+    [
+     "",
+     8782
+    ],
+    [
+     "",
+     6829
+    ],
+    [
+     "",
+     427
+    ],
+    [
+     "",
+     9393
+    ],
+    [
+     "",
+     9941
+    ],
+    [
+     "",
+     2927
+    ],
+    [
+     "",
+     2881
+    ],
+    [
+     "",
+     2096
+    ],
+    [
+     "",
+     3681
+    ],
+    [
+     "",
+     6783
+    ],
+    [
+     "",
+     5326
+    ],
+    [
+     "",
+     2813
+    ],
+    [
+     "",
+     7255
+    ],
+    [
+     "",
+     9409
+    ],
+    [
+     "",
+     5244
+    ],
+    [
+     "",
+     9796
+    ],
+    [
+     "",
+     1333
+    ],
+    [
+     "",
+     4699
+    ],
+    [
+     "",
+     4908
+    ],
+    [
+     "",
+     8626
+    ],
+    [
+     "",
+     7849
+    ],
+    [
+     "",
+     4046
+    ],
+    [
+     "",
+     2441
+    ],
+    [
+     "",
+     2545
+    ],
+    [
+     "",
+     9749
+    ],
+    [
+     "",
+     1225
+    ],
+    [
+     "",
+     7713
+    ]
+   ]
+  },
+  {
+   "type": "pie",
+   "id": "pie-0",
+   "center": "",
+   "radius": 30,
+   "coordinateSystem": "calendar",
+   "label": {
+    "formatter": "{c}",
+    "position": "inside"
+   },
+   "data": [
+    {
+     "name": "Work",
+     "value": 20
+    },
+    {
+     "name": "Entertainment",
+     "value": 17
+    },
+    {
+     "name": "Sleep",
+     "value": 1
+    }
+   ]
+  },
+  {
+   "type": "pie",
+   "id": "pie-1",
+   "center": "",
+   "radius": 30,
+   "coordinateSystem": "calendar",
+   "label": {
+    "formatter": "{c}",
+    "position": "inside"
+   },
+   "data": [
+    {
+     "name": "Work",
+     "value": 18
+    },
+    {
+     "name": "Entertainment",
+     "value": 21
+    },
+    {
+     "name": "Sleep",
+     "value": 2
+    }
+   ]
+  },
+  {
+   "type": "pie",
+   "id": "pie-2",
+   "center": "",
+   "radius": 30,
+   "coordinateSystem": "calendar",
+   "label": {
+    "formatter": "{c}",
+    "position": "inside"
+   },
+   "data": [
+    {
+     "name": "Work",
+     "value": 5
+    },
+    {
+     "name": "Entertainment",
+     "value": 2
+    },
+    {
+     "name": "Sleep",
+     "value": 19
+    }
+   ]
+  },
+  {
+   "type": "pie",
+   "id": "pie-3",
+   "center": "",
+   "radius": 30,
+   "coordinateSystem": "calendar",
+   "label": {
+    "formatter": "{c}",
+    "position": "inside"
+   },
+   "data": [
+    {
+     "name": "Work",
+     "value": 1
+    },
+    {
+     "name": "Entertainment",
+     "value": 11
+    },
+    {
+     "name": "Sleep",
+     "value": 11
+    }
+   ]
+  },
+  {
+   "type": "pie",
+   "id": "pie-4",
+   "center": "",
+   "radius": 30,
+   "coordinateSystem": "calendar",
+   "label": {
+    "formatter": "{c}",
+    "position": "inside"
+   },
+   "data": [
+    {
+     "name": "Work",
+     "value": 17
+    },
+    {
+     "name": "Entertainment",
+     "value": 7
+    },
+    {
+     "name": "Sleep",
+     "value": 4
+    }
+   ]
+  },
+  {
+   "type": "pie",
+   "id": "pie-5",
+   "center": "",
+   "radius": 30,
+   "coordinateSystem": "calendar",
+   "label": {
+    "formatter": "{c}",
+    "position": "inside"
+   },
+   "data": [
+    {
+     "name": "Work",
+     "value": 0
+    },
+    {
+     "name": "Entertainment",
+     "value": 11
+    },
+    {
+     "name": "Sleep",
+     "value": 23
+    }
+   ]
+  },
+  {
+   "type": "pie",
+   "id": "pie-6",
+   "center": "",
+   "radius": 30,
+   "coordinateSystem": "calendar",
+   "label": {
+    "formatter": "{c}",
+    "position": "inside"
+   },
+   "data": [
+    {
+     "name": "Work",
+     "value": 7
+    },
+    {
+     "name": "Entertainment",
+     "value": 1
+    },
+    {
+     "name": "Sleep",
+     "value": 11
+    }
+   ]
+  },
+  {
+   "type": "pie",
+   "id": "pie-7",
+   "center": "",
+   "radius": 30,
+   "coordinateSystem": "calendar",
+   "label": {
+    "formatter": "{c}",
+    "position": "inside"
+   },
+   "data": [
+    {
+     "name": "Work",
+     "value": 9
+    },
+    {
+     "name": "Entertainment",
+     "value": 18
+    },
+    {
+     "name": "Sleep",
+     "value": 19
+    }
+   ]
+  },
+  {
+   "type": "pie",
+   "id": "pie-8",
+   "center": "",
+   "radius": 30,
+   "coordinateSystem": "calendar",
+   "label": {
+    "formatter": "{c}",
+    "position": "inside"
+   },
+   "data": [
+    {
+     "name": "Work",
+     "value": 8
+    },
+    {
+     "name": "Entertainment",
+     "value": 4
+    },
+    {
+     "name": "Sleep",
+     "value": 9
+    }
+   ]
+  },
+  {
+   "type": "pie",
+   "id": "pie-9",
+   "center": "",
+   "radius": 30,
+   "coordinateSystem": "calendar",
+   "label": {
+    "formatter": "{c}",
+    "position": "inside"
+   },
+   "data": [
+    {
+     "name": "Work",
+     "value": 17
+    },
+    {
+     "name": "Entertainment",
+     "value": 12
+    },
+    {
+     "name": "Sleep",
+     "value": 19
+    }
+   ]
+  },
+  {
+   "type": "pie",
+   "id": "pie-10",
+   "center": "",
+   "radius": 30,
+   "coordinateSystem": "calendar",
+   "label": {
+    "formatter": "{c}",
+    "position": "inside"
+   },
+   "data": [
+    {
+     "name": "Work",
+     "value": 14
+    },
+    {
+     "name": "Entertainment",
+     "value": 21
+    },
+    {
+     "name": "Sleep",
+     "value": 7
+    }
+   ]
+  },
+  {
+   "type": "pie",
+   "id": "pie-11",
+   "center": "",
+   "radius": 30,
+   "coordinateSystem": "calendar",
+   "label": {
+    "formatter": "{c}",
+    "position": "inside"
+   },
+   "data": [
+    {
+     "name": "Work",
+     "value": 20
+    },
+    {
+     "name": "Entertainment",
+     "value": 8
+    },
+    {
+     "name": "Sleep",
+     "value": 18
+    }
+   ]
+  },
+  {
+   "type": "pie",
+   "id": "pie-12",
+   "center": "",
+   "radius": 30,
+   "coordinateSystem": "calendar",
+   "label": {
+    "formatter": "{c}",
+    "position": "inside"
+   },
+   "data": [
+    {
+     "name": "Work",
+     "value": 21
+    },
+    {
+     "name": "Entertainment",
+     "value": 9
+    },
+    {
+     "name": "Sleep",
+     "value": 6
+    }
+   ]
+  },
+  {
+   "type": "pie",
+   "id": "pie-13",
+   "center": "",
+   "radius": 30,
+   "coordinateSystem": "calendar",
+   "label": {
+    "formatter": "{c}",
+    "position": "inside"
+   },
+   "data": [
+    {
+     "name": "Work",
+     "value": 0
+    },
+    {
+     "name": "Entertainment",
+     "value": 22
+    },
+    {
+     "name": "Sleep",
+     "value": 18
+    }
+   ]
+  },
+  {
+   "type": "pie",
+   "id": "pie-14",
+   "center": "",
+   "radius": 30,
+   "coordinateSystem": "calendar",
+   "label": {
+    "formatter": "{c}",
+    "position": "inside"
+   },
+   "data": [
+    {
+     "name": "Work",
+     "value": 1
+    },
+    {
+     "name": "Entertainment",
+     "value": 18
+    },
+    {
+     "name": "Sleep",
+     "value": 15
+    }
+   ]
+  },
+  {
+   "type": "pie",
+   "id": "pie-15",
+   "center": "",
+   "radius": 30,
+   "coordinateSystem": "calendar",
+   "label": {
+    "formatter": "{c}",
+    "position": "inside"
+   },
+   "data": [
+    {
+     "name": "Work",
+     "value": 19
+    },
+    {
+     "name": "Entertainment",
+     "value": 6
+    },
+    {
+     "name": "Sleep",
+     "value": 6
+    }
+   ]
+  },
+  {
+   "type": "pie",
+   "id": "pie-16",
+   "center": "",
+   "radius": 30,
+   "coordinateSystem": "calendar",
+   "label": {
+    "formatter": "{c}",
+    "position": "inside"
+   },
+   "data": [
+    {
+     "name": "Work",
+     "value": 10
+    },
+    {
+     "name": "Entertainment",
+     "value": 11
+    },
+    {
+     "name": "Sleep",
+     "value": 12
+    }
+   ]
+  },
+  {
+   "type": "pie",
+   "id": "pie-17",
+   "center": "",
+   "radius": 30,
+   "coordinateSystem": "calendar",
+   "label": {
+    "formatter": "{c}",
+    "position": "inside"
+   },
+   "data": [
+    {
+     "name": "Work",
+     "value": 21
+    },
+    {
+     "name": "Entertainment",
+     "value": 17
+    },
+    {
+     "name": "Sleep",
+     "value": 15
+    }
+   ]
+  },
+  {
+   "type": "pie",
+   "id": "pie-18",
+   "center": "",
+   "radius": 30,
+   "coordinateSystem": "calendar",
+   "label": {
+    "formatter": "{c}",
+    "position": "inside"
+   },
+   "data": [
+    {
+     "name": "Work",
+     "value": 14
+    },
+    {
+     "name": "Entertainment",
+     "value": 3
+    },
+    {
+     "name": "Sleep",
+     "value": 22
+    }
+   ]
+  },
+  {
+   "type": "pie",
+   "id": "pie-19",
+   "center": "",
+   "radius": 30,
+   "coordinateSystem": "calendar",
+   "label": {
+    "formatter": "{c}",
+    "position": "inside"
+   },
+   "data": [
+    {
+     "name": "Work",
+     "value": 10
+    },
+    {
+     "name": "Entertainment",
+     "value": 20
+    },
+    {
+     "name": "Sleep",
+     "value": 18
+    }
+   ]
+  },
+  {
+   "type": "pie",
+   "id": "pie-20",
+   "center": "",
+   "radius": 30,
+   "coordinateSystem": "calendar",
+   "label": {
+    "formatter": "{c}",
+    "position": "inside"
+   },
+   "data": [
+    {
+     "name": "Work",
+     "value": 7
+    },
+    {
+     "name": "Entertainment",
+     "value": 10
+    },
+    {
+     "name": "Sleep",
+     "value": 8
+    }
+   ]
+  },
+  {
+   "type": "pie",
+   "id": "pie-21",
+   "center": "",
+   "radius": 30,
+   "coordinateSystem": "calendar",
+   "label": {
+    "formatter": "{c}",
+    "position": "inside"
+   },
+   "data": [
+    {
+     "name": "Work",
+     "value": 9
+    },
+    {
+     "name": "Entertainment",
+     "value": 20
+    },
+    {
+     "name": "Sleep",
+     "value": 17
+    }
+   ]
+  },
+  {
+   "type": "pie",
+   "id": "pie-22",
+   "center": "",
+   "radius": 30,
+   "coordinateSystem": "calendar",
+   "label": {
+    "formatter": "{c}",
+    "position": "inside"
+   },
+   "data": [
+    {
+     "name": "Work",
+     "value": 7
+    },
+    {
+     "name": "Entertainment",
+     "value": 9
+    },
+    {
+     "name": "Sleep",
+     "value": 22
+    }
+   ]
+  },
+  {
+   "type": "pie",
+   "id": "pie-23",
+   "center": "",
+   "radius": 30,
+   "coordinateSystem": "calendar",
+   "label": {
+    "formatter": "{c}",
+    "position": "inside"
+   },
+   "data": [
+    {
+     "name": "Work",
+     "value": 6
+    },
+    {
+     "name": "Entertainment",
+     "value": 1
+    },
+    {
+     "name": "Sleep",
+     "value": 5
+    }
+   ]
+  },
+  {
+   "type": "pie",
+   "id": "pie-24",
+   "center": "",
+   "radius": 30,
+   "coordinateSystem": "calendar",
+   "label": {
+    "formatter": "{c}",
+    "position": "inside"
+   },
+   "data": [
+    {
+     "name": "Work",
+     "value": 16
+    },
+    {
+     "name": "Entertainment",
+     "value": 10
+    },
+    {
+     "name": "Sleep",
+     "value": 14
+    }
+   ]
+  },
+  {
+   "type": "pie",
+   "id": "pie-25",
+   "center": "",
+   "radius": 30,
+   "coordinateSystem": "calendar",
+   "label": {
+    "formatter": "{c}",
+    "position": "inside"
+   },
+   "data": [
+    {
+     "name": "Work",
+     "value": 12
+    },
+    {
+     "name": "Entertainment",
+     "value": 15
+    },
+    {
+     "name": "Sleep",
+     "value": 24
+    }
+   ]
+  },
+  {
+   "type": "pie",
+   "id": "pie-26",
+   "center": "",
+   "radius": 30,
+   "coordinateSystem": "calendar",
+   "label": {
+    "formatter": "{c}",
+    "position": "inside"
+   },
+   "data": [
+    {
+     "name": "Work",
+     "value": 6
+    },
+    {
+     "name": "Entertainment",
+     "value": 8
+    },
+    {
+     "name": "Sleep",
+     "value": 1
+    }
+   ]
+  },
+  {
+   "type": "pie",
+   "id": "pie-27",
+   "center": "",
+   "radius": 30,
+   "coordinateSystem": "calendar",
+   "label": {
+    "formatter": "{c}",
+    "position": "inside"
+   },
+   "data": [
+    {
+     "name": "Work",
+     "value": 21
+    },
+    {
+     "name": "Entertainment",
+     "value": 21
+    },
+    {
+     "name": "Sleep",
+     "value": 15
+    }
+   ]
+  }
+ ]
+}

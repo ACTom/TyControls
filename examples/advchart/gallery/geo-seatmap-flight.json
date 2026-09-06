@@ -1,0 +1,166 @@
+{
+ "tooltip": {},
+ "geo": {
+  "map": "flight-seats",
+  "roam": true,
+  "selectedMode": "multiple",
+  "layoutCenter": [
+   "50%",
+   "50%"
+  ],
+  "layoutSize": "95%",
+  "tooltip": {
+   "show": true
+  },
+  "itemStyle": {
+   "color": "#fff"
+  },
+  "emphasis": {
+   "itemStyle": {
+    "borderColor": "green",
+    "borderWidth": 2
+   },
+   "label": {
+    "show": false
+   }
+  },
+  "select": {
+   "itemStyle": {
+    "color": "green"
+   },
+   "label": {
+    "show": false,
+    "textBorderColor": "#fff",
+    "textBorderWidth": 2
+   }
+  },
+  "regions": [
+   {
+    "name": "26E",
+    "silent": true,
+    "itemStyle": {
+     "color": "#bf0e08"
+    },
+    "emphasis": {
+     "itemStyle": {
+      "borderColor": "#aaa",
+      "borderWidth": 1
+     }
+    },
+    "select": {
+     "itemStyle": {
+      "color": "#bf0e08"
+     }
+    }
+   },
+   {
+    "name": "26D",
+    "silent": true,
+    "itemStyle": {
+     "color": "#bf0e08"
+    },
+    "emphasis": {
+     "itemStyle": {
+      "borderColor": "#aaa",
+      "borderWidth": 1
+     }
+    },
+    "select": {
+     "itemStyle": {
+      "color": "#bf0e08"
+     }
+    }
+   },
+   {
+    "name": "26C",
+    "silent": true,
+    "itemStyle": {
+     "color": "#bf0e08"
+    },
+    "emphasis": {
+     "itemStyle": {
+      "borderColor": "#aaa",
+      "borderWidth": 1
+     }
+    },
+    "select": {
+     "itemStyle": {
+      "color": "#bf0e08"
+     }
+    }
+   },
+   {
+    "name": "25D",
+    "silent": true,
+    "itemStyle": {
+     "color": "#bf0e08"
+    },
+    "emphasis": {
+     "itemStyle": {
+      "borderColor": "#aaa",
+      "borderWidth": 1
+     }
+    },
+    "select": {
+     "itemStyle": {
+      "color": "#bf0e08"
+     }
+    }
+   },
+   {
+    "name": "23C",
+    "silent": true,
+    "itemStyle": {
+     "color": "#bf0e08"
+    },
+    "emphasis": {
+     "itemStyle": {
+      "borderColor": "#aaa",
+      "borderWidth": 1
+     }
+    },
+    "select": {
+     "itemStyle": {
+      "color": "#bf0e08"
+     }
+    }
+   },
+   {
+    "name": "21A",
+    "silent": true,
+    "itemStyle": {
+     "color": "#bf0e08"
+    },
+    "emphasis": {
+     "itemStyle": {
+      "borderColor": "#aaa",
+      "borderWidth": 1
+     }
+    },
+    "select": {
+     "itemStyle": {
+      "color": "#bf0e08"
+     }
+    }
+   },
+   {
+    "name": "20F",
+    "silent": true,
+    "itemStyle": {
+     "color": "#bf0e08"
+    },
+    "emphasis": {
+     "itemStyle": {
+      "borderColor": "#aaa",
+      "borderWidth": 1
+     }
+    },
+    "select": {
+     "itemStyle": {
+      "color": "#bf0e08"
+     }
+    }
+   }
+  ]
+ }
+}

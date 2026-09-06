@@ -67,3 +67,31 @@ SOFTWARE.
 
 The exact list of Feather-derived icon names is in `assets/lucide/LICENSE`; it is kept there
 rather than duplicated here so it cannot drift from the upstream file.
+
+## Apache ECharts example gallery
+
+`examples/advchart/gallery/*.json` are the option trees of the official Apache ECharts
+example gallery, converted from TypeScript to JSON by `tools/advchart-gallery/harvest.js`.
+They are DATA, not code: each file is one chart configuration, and the conversion changes
+only the notation. Callbacks cannot survive the trip to JSON and are dropped; the index
+records how many each example lost.
+
+They are used as a conformance corpus -- the point of the demo is to show what
+`TTyAdvanceChart` does with an option written for ECharts, unmodified.
+
+Source: https://github.com/apache/echarts-examples
+Copyright The Apache Software Foundation, licensed under the Apache License 2.0.
+
+```
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+```

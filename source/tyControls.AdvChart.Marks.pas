@@ -36,15 +36,44 @@ unit tyControls.AdvChart.Marks;
   four-corner form of borderRadius. Each is its own Tier 1 row. }
 interface
 uses
-  SysUtils, Math,
-  tyControls.AdvChart.Types, tyControls.AdvChart.Coord,
+  SysUtils, Math, fpjson,
+  tyControls.AdvChart.Types, tyControls.AdvChart.Option,
+  tyControls.AdvChart.Coord,
   tyControls.AdvChart.Data, tyControls.AdvChart.Shape,
   tyControls.AdvChart.Paint, tyControls.AdvChart.Series,
   tyControls.AdvChart.BarLayout;
 
 type
-  { How one series looks. Resolved by the control from the theme and passed in;
-    this unit never asks what colour anything is. }
+  { Where a stepped line turns. ECharts spells `step: true` as 'start'. }
+  TTyLineStep = (lstNone, lstStart, lstMiddle, lstEnd);
+
+  { How the area under a line finds its lower edge when nothing is stacked
+    beneath it. ECharts' areaStyle.origin. }
+  TTyAreaOrigin = (laoAuto, laoStart, laoEnd, laoValue);
+
+  { The line-shaped options of one series, read off its option node.
+
+    Read here rather than resolved by the control because none of them needs
+    the theme or the other series -- unlike a bar's width, which cannot be
+    known without its neighbours. }
+  TTyLineSpec = record
+    HasArea: Boolean;
+    AreaOrigin: TTyAreaOrigin;
+    AreaOriginValue: Double;
+    { 0..1. Upstream has no default here: an areaStyle with no opacity is
+      opaque, in the series' own colour. }
+    AreaOpacity: Double;
+    Step: TTyLineStep;
+    ConnectNulls: Boolean;
+  end;
+
+  { Everything about ONE series that was decided somewhere else.
+
+    It began as "how it looks, resolved from the theme", and it is no longer
+    only that: a bar's column comes from a solver that had to see every other
+    bar on the axis, and the line spec is read straight off the option. What
+    they have in common is that this unit does not work any of them out -- it
+    draws what it is handed. }
   TTySeriesVisual = record
     Fill: TTyChartColor;
     Stroke: TTyChartColor;
@@ -60,10 +89,19 @@ type
     { Painted front-to-back by (Z, Z2, insertion). Marks sit above the grid;
       Z2 keeps two series in a stable order relative to each other. }
     Z, Z2: Integer;
+    { The line-shaped options, ignored by every other renderer. }
+    Line: TTyLineSpec;
   end;
 
 { A visual with the defaults: a filled mark, no stroke, upstream's bar gap. }
 function TySeriesVisual(AFill: TTyChartColor): TTySeriesVisual;
+
+{ The line-shaped options of the series in slot ASlot.
+
+  Every default is upstream's: `step: false`, `connectNulls: false`, and no
+  areaStyle at all -- its mere PRESENCE turns the area on, which is why an
+  empty `areaStyle: {}` is a real instruction and not a no-op. }
+function TyLineSpecOf(AOption: TTyChartOption; ASlot: Integer): TTyLineSpec;
 
 { Whether this series type draws anything yet.
 
@@ -90,6 +128,72 @@ function TyBuildSeriesMarks(const ABinding: TTySeriesBinding;
 
 implementation
 
+function TyLineSpecOf(AOption: TTyChartOption; ASlot: Integer): TTyLineSpec;
+var
+  node, area: TJSONObject;
+  d: TJSONData;
+  sv: string;
+begin
+  Result.HasArea := False;
+  Result.AreaOrigin := laoAuto;
+  Result.AreaOriginValue := 0;
+  Result.AreaOpacity := 1;
+  Result.Step := lstNone;
+  Result.ConnectNulls := False;
+  if AOption = nil then Exit;
+  d := AOption.ComponentAt('series', ASlot);
+  if (d = nil) or not (d is TJSONObject) then Exit;
+  node := TJSONObject(d);
+
+  { `step` is false | true | 'start' | 'middle' | 'end', and true means
+    'start' -- upstream's own comment says so beside the default. }
+  d := node.Find('step');
+  if d <> nil then
+  begin
+    if (d.JSONType = jtBoolean) and d.AsBoolean then Result.Step := lstStart
+    else if d.JSONType = jtString then
+    begin
+      sv := d.AsString;
+      if sv = 'start' then Result.Step := lstStart
+      else if sv = 'middle' then Result.Step := lstMiddle
+      else if sv = 'end' then Result.Step := lstEnd;
+    end;
+  end;
+
+  d := node.Find('connectNulls');
+  if (d <> nil) and (d.JSONType = jtBoolean) then
+    Result.ConnectNulls := d.AsBoolean;
+
+  { PRESENCE IS THE SWITCH. `areaStyle: {}` fills the area; there is no
+    `show` and no default block to inherit. }
+  d := node.Find('areaStyle');
+  if (d = nil) or not (d is TJSONObject) then Exit;
+  Result.HasArea := True;
+  area := TJSONObject(d);
+
+  d := area.Find('opacity');
+  if (d <> nil) and (d.JSONType = jtNumber) then
+    { Double(0)/Double(1), NOT 0/1: an integer beside a Double picks Math's
+      SINGLE overload and quietly rounds the result to a 24-bit mantissa. It
+      would not matter for an alpha; the shape is what matters, because the
+      next thing clamped this way might be a coordinate. }
+    Result.AreaOpacity := Min(Double(1), Max(Double(0), d.AsFloat));
+
+  d := area.Find('origin');
+  if d = nil then Exit;
+  if d.JSONType = jtNumber then
+  begin
+    Result.AreaOrigin := laoValue;
+    Result.AreaOriginValue := d.AsFloat;
+  end
+  else if d.JSONType = jtString then
+  begin
+    sv := d.AsString;
+    if sv = 'start' then Result.AreaOrigin := laoStart
+    else if sv = 'end' then Result.AreaOrigin := laoEnd;
+  end;
+end;
+
 function TySeriesVisual(AFill: TTyChartColor): TTySeriesVisual;
 begin
   Result.Fill := AFill;
@@ -98,6 +202,106 @@ begin
   Result.Bar := Default(TTyBarColumn);
   Result.Z := 0;
   Result.Z2 := 0;
+  Result.Line.HasArea := False;
+  Result.Line.AreaOrigin := laoAuto;
+  Result.Line.AreaOriginValue := 0;
+  Result.Line.AreaOpacity := 1;
+  Result.Line.Step := lstNone;
+  Result.Line.ConnectNulls := False;
+end;
+
+{ The value the area falls back to where nothing is stacked underneath.
+
+  ECharts' getValueStart. 'auto' is NOT simply zero: an axis whose whole range
+  is above zero starts the area at the bottom of the range, and one entirely
+  below zero starts it at the top -- otherwise the fill would reach off the
+  plot towards a zero that is not on the axis. }
+function AreaStartValue(AValueAxis: TTyAxis;
+  const ASpec: TTyLineSpec): Double;
+var e: TTyRange;
+begin
+  if AValueAxis = nil then Exit(0);
+  e := AValueAxis.Scale.GetExtent;
+  case ASpec.AreaOrigin of
+    laoStart: Result := e.Start;
+    laoEnd:   Result := e.Stop;
+    laoValue: Result := ASpec.AreaOriginValue;
+  else
+    if e.Start > 0 then Result := e.Start
+    else if e.Stop < 0 then Result := e.Stop
+    else Result := 0;
+  end;
+end;
+
+{ Upstream's turnPointsIntoStep, transcribed.
+
+  For every consecutive pair it emits the current point and then ONE corner
+  ('start' and 'end') or TWO ('middle'), and finally the last point. Which
+  coordinate the corner keeps is decided by the BASE axis, not by x: turned
+  sideways, a step turns vertically. }
+function StepPoints(const APts: array of TTyPointF; ABaseHoriz: Boolean;
+  AStep: TTyLineStep): TTyPointFArray;
+var
+  i, n: Integer;
+  pt, nextPt, a, b: TTyPointF;
+  mid: Double;
+
+  procedure Push(const AP: TTyPointF);
+  begin
+    if n > High(Result) then SetLength(Result, Max(8, n * 2));
+    Result[n] := AP;
+    Inc(n);
+  end;
+
+begin
+  Result := nil;
+  n := 0;
+  if (AStep = lstNone) or (Length(APts) < 2) then
+  begin
+    SetLength(Result, Length(APts));
+    for i := 0 to High(APts) do Result[i] := APts[i];
+    Exit;
+  end;
+  SetLength(Result, Length(APts) * 3);
+  for i := 0 to Length(APts) - 2 do
+  begin
+    pt := APts[i];
+    nextPt := APts[i + 1];
+    Push(pt);
+    case AStep of
+      lstEnd:
+        begin
+          { Along the base to the next station, still at this value. }
+          if ABaseHoriz then a := TyPointF(nextPt.X, pt.Y)
+                        else a := TyPointF(pt.X, nextPt.Y);
+          Push(a);
+        end;
+      lstMiddle:
+        begin
+          if ABaseHoriz then
+          begin
+            mid := (pt.X + nextPt.X) / 2;
+            a := TyPointF(mid, pt.Y);
+            b := TyPointF(mid, nextPt.Y);
+          end
+          else
+          begin
+            mid := (pt.Y + nextPt.Y) / 2;
+            a := TyPointF(pt.X, mid);
+            b := TyPointF(nextPt.X, mid);
+          end;
+          Push(a);
+          Push(b);
+        end;
+    else
+      { lstStart: change value first, then move along the base. }
+      if ABaseHoriz then a := TyPointF(pt.X, nextPt.Y)
+                    else a := TyPointF(nextPt.X, pt.Y);
+      Push(a);
+    end;
+  end;
+  Push(APts[High(APts)]);
+  SetLength(Result, n);
 end;
 
 { The element every mark starts from: this series' colours, and a datum
@@ -320,20 +524,92 @@ function BuildLine(const ABinding: TTySeriesBinding; AStore: TTyDataStore;
   AList: TTyPaintList; AColX, AColY: Integer): Integer;
 var
   i, n: Integer;
-  x, y: Double;
-  p: TTyPointF;
-  pts: array of TTyPointF;
-  el: TTyChartElement;
-  v: TTySeriesVisual;
-  baseHoriz, stacked: Boolean;
+  x, y, lowV, startV: Double;
+  p, q: TTyPointF;
+  pts, lows: TTyPointFArray;
+  baseHoriz, stacked, gap: Boolean;
+  spec: TTyLineSpec;
+
+  { Upstream's isPointIllegal: NOT only NaN. Any non-finite coordinate is a
+    hole, and an Infinity that reached the paint list would stretch a polyline
+    across the whole surface.
+
+    THE IsInfinite HALF IS UNREACHABLE TODAY, and its mutant survives -- worth
+    recording rather than hiding behind a contrived test. Upstream needs it
+    because ITS log scale answers -Infinity for a non-positive value; ours
+    answers NaN (TTyLogScaleMapper.TransformIn exits NaN for AValue <= 0), so
+    the NaN half already catches the one case that reaches here. The check
+    stays because "a hole is any coordinate that is not finite" is the rule,
+    and the next mapper to divide by a zero span will produce one. }
+  function Illegal(const AP: TTyPointF): Boolean;
+  begin
+    Result := IsNan(AP.X) or IsNan(AP.Y)
+           or IsInfinite(AP.X) or IsInfinite(AP.Y);
+  end;
+
+  { One run, from the points gathered so far. The AREA goes in FIRST so the
+    line is drawn over its own fill rather than under it -- the paint list
+    breaks ties by insertion order, so first in is furthest back. }
+  procedure Flush;
+  var
+    k, m: Integer;
+    up, dn: TTyPointFArray;
+    poly: TTyPointFArray;
+    v: TTySeriesVisual;
+    el: TTyChartElement;
+  begin
+    if n < 2 then Exit;
+    SetLength(up, n);
+    for k := 0 to n - 1 do up[k] := pts[k];
+    up := StepPoints(up, baseHoriz, spec.Step);
+
+    if spec.HasArea then
+    begin
+      SetLength(dn, n);
+      for k := 0 to n - 1 do dn[k] := lows[k];
+      { The lower edge is stepped the same way, or the belt would not follow
+        the line it belongs to. }
+      dn := StepPoints(dn, baseHoriz, spec.Step);
+      SetLength(poly, Length(up) + Length(dn));
+      for k := 0 to High(up) do poly[k] := up[k];
+      { Backwards, so the ring closes along the bottom instead of crossing. }
+      m := Length(up);
+      for k := High(dn) downto 0 do
+      begin
+        poly[m] := dn[k];
+        Inc(m);
+      end;
+      v := AVisual;
+      v.Stroke := 0;
+      v.StrokeWidthLogical := 0;
+      el := MarkElement(TyShapePolygon(poly), v, ABinding.SeriesIndex, -1);
+      el.Style.Alpha := spec.AreaOpacity;
+      { SILENT: the fill is decoration behind the line, and a pointer landing
+        on it should find the line, not the shading. }
+      el.Silent := True;
+      AList.Add(el);
+      Inc(Result);
+    end;
+
+    { A LINE IS A STROKE, not a fill. The series colour arrives in Fill because
+      that is what a mark's colour is called; for this shape it is the pen. }
+    v := AVisual;
+    v.Fill := 0;
+    if v.StrokeWidthLogical <= 0 then v.StrokeWidthLogical := 2;
+    if v.Stroke = 0 then v.Stroke := AVisual.Fill;
+    el := MarkElement(TyShapePolyline(up), v, ABinding.SeriesIndex, -1);
+    AList.Add(el);
+    Inc(Result);
+  end;
+
 begin
   Result := 0;
-  { A stacked line is drawn through its cumulative totals, on whichever axis is
-    not the base. The belt filled underneath it is what the stacked-over column
-    is for; areaStyle is its own Tier 1 row and is not here yet. }
   baseHoriz := (ABinding.BaseAxis = nil) or ABinding.BaseAxis.Horizontal;
   stacked := AStack.Stacked and (AStack.ResultCol >= 0);
+  spec := AVisual.Line;
+  startV := AreaStartValue(ABinding.ValueAxis, spec);
   SetLength(pts, AStore.Count);
+  SetLength(lows, AStore.Count);
   n := 0;
   for i := 0 to AStore.Count - 1 do
   begin
@@ -344,46 +620,52 @@ begin
       if baseHoriz then y := AStore.Get(AStack.ResultCol, i)
                    else x := AStore.Get(AStack.ResultCol, i);
     end;
-    { A GAP BREAKS THE LINE, it does not get joined across. ECharts calls that
-      connectNulls and defaults it to false, and joining by default would draw
-      a segment through data that does not exist. Splitting into runs is what
-      connectNulls will switch off later; today every run is its own polyline. }
-    if IsNan(x) or IsNan(y) then
+    { ONE GAP RULE, NOT THREE. A datum that is NaN, a point that will not map,
+      and an area baseline that will not map are the same thing to the reader
+      of the chart: a hole. The first version broke the run for the first and
+      silently DROPPED the other two -- which closes the line straight over the
+      hole, the very join that connectNulls being false exists to prevent. }
+    gap := IsNan(x) or IsNan(y);
+    p := TyPointF(NaN, NaN);
+    q := TyPointF(NaN, NaN);
+    if not gap then
     begin
-      if n > 1 then
-      begin
-        SetLength(pts, n);
-        v := AVisual;
-        v.Fill := 0;
-        if v.StrokeWidthLogical <= 0 then v.StrokeWidthLogical := 2;
-        if v.Stroke = 0 then v.Stroke := AVisual.Fill;
-        el := MarkElement(TyShapePolyline(pts), v, ABinding.SeriesIndex, -1);
-        AList.Add(el);
-        Inc(Result);
-      end;
-      SetLength(pts, AStore.Count);
+      p := ABinding.Cart.DataToPoint([x, y]);
+      gap := Illegal(p);
+    end;
+
+    if (not gap) and spec.HasArea then
+    begin
+      { WHERE THE BELT'S LOWER EDGE IS: the value stacked underneath, and where
+        there is none, the origin. Upstream's getStackedOnPoint reads exactly
+        this way round, and the NaN test is what makes an unstacked area fall
+        to the axis rather than to nothing. }
+      lowV := NaN;
+      if AStack.Stacked and (AStack.OverCol >= 0) then
+        lowV := AStore.Get(AStack.OverCol, i);
+      if IsNan(lowV) then lowV := startV;
+      if baseHoriz then q := ABinding.Cart.DataToPoint([x, lowV])
+                   else q := ABinding.Cart.DataToPoint([lowV, y]);
+      gap := Illegal(q);
+    end;
+
+    { A GAP BREAKS THE LINE unless connectNulls says otherwise. ECharts
+      defaults it to false, because joining by default draws a segment through
+      data that does not exist; with it on, the missing points are dropped and
+      the run simply continues. }
+    if gap then
+    begin
+      if spec.ConnectNulls then Continue;
+      Flush;
       n := 0;
       Continue;
     end;
-    p := ABinding.Cart.DataToPoint([x, y]);
-    if IsNan(p.X) or IsNan(p.Y) then Continue;
+
+    if spec.HasArea then lows[n] := q;
     pts[n] := p;
     Inc(n);
   end;
-
-  if n > 1 then
-  begin
-    SetLength(pts, n);
-    { A LINE IS A STROKE, not a fill. The series colour arrives in Fill because
-      that is what a mark's colour is called; for this shape it is the pen. }
-    v := AVisual;
-    v.Fill := 0;
-    if v.StrokeWidthLogical <= 0 then v.StrokeWidthLogical := 2;
-    if v.Stroke = 0 then v.Stroke := AVisual.Fill;
-    el := MarkElement(TyShapePolyline(pts), v, ABinding.SeriesIndex, -1);
-    AList.Add(el);
-    Inc(Result);
-  end;
+  Flush;
 end;
 
 const

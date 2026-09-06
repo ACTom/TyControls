@@ -1,0 +1,165 @@
+{
+ "title": {
+  "text": "How expensive is it to rent an apartment in China?",
+  "subtext": "Data from https://www.numbeo.com"
+ },
+ "legend": {
+  "show": true,
+  "top": "bottom",
+  "data": [
+   "Range",
+   "Average"
+  ]
+ },
+ "grid": {
+  "top": 100
+ },
+ "angleAxis": {
+  "type": "category",
+  "data": [
+   "北京",
+   "上海",
+   "深圳",
+   "广州",
+   "苏州",
+   "杭州",
+   "南京",
+   "福州",
+   "青岛",
+   "济南",
+   "长春",
+   "大连",
+   "温州",
+   "郑州",
+   "武汉",
+   "成都",
+   "东莞",
+   "沈阳",
+   "烟台"
+  ]
+ },
+ "tooltip": {
+  "show": true
+ },
+ "radiusAxis": {},
+ "polar": {},
+ "series": [
+  {
+   "type": "bar",
+   "itemStyle": {
+    "color": "transparent"
+   },
+   "data": [
+    5000,
+    4000,
+    3000,
+    2500,
+    2000,
+    2000,
+    2500,
+    1800,
+    2000,
+    2000,
+    1800,
+    2000,
+    1500,
+    1500,
+    1600,
+    1500,
+    1500,
+    1500,
+    1500
+   ],
+   "coordinateSystem": "polar",
+   "stack": "Min Max",
+   "silent": true
+  },
+  {
+   "type": "bar",
+   "data": [
+    5000,
+    6000,
+    3500,
+    3100,
+    2000,
+    2000,
+    1500,
+    2200,
+    1500,
+    1000,
+    1200,
+    700,
+    1300,
+    800,
+    1900,
+    1100,
+    917.54,
+    500,
+    300
+   ],
+   "coordinateSystem": "polar",
+   "name": "Range",
+   "stack": "Min Max"
+  },
+  {
+   "type": "bar",
+   "itemStyle": {
+    "color": "transparent"
+   },
+   "data": [
+    6735.71,
+    6775,
+    4413.33,
+    3743.83,
+    3010,
+    3172.33,
+    3083.33,
+    3050,
+    2700,
+    2450,
+    2383.33,
+    2325,
+    2100,
+    2050,
+    2007.1399999999999,
+    1987.5,
+    1855.85,
+    1725,
+    1600
+   ],
+   "coordinateSystem": "polar",
+   "stack": "Average",
+   "silent": true,
+   "z": 10
+  },
+  {
+   "type": "bar",
+   "data": [
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100
+   ],
+   "coordinateSystem": "polar",
+   "name": "Average",
+   "stack": "Average",
+   "barGap": "-100%",
+   "z": 10
+  }
+ ]
+}

@@ -1,0 +1,754 @@
+{
+ "title": {
+  "text": "Proportion of Browsers",
+  "subtext": "Fake Data",
+  "top": 10,
+  "left": 10
+ },
+ "tooltip": {
+  "trigger": "item"
+ },
+ "legend": {
+  "type": "scroll",
+  "bottom": 10,
+  "data": [
+   "2001",
+   "2002",
+   "2003",
+   "2004",
+   "2005",
+   "2006",
+   "2007",
+   "2008",
+   "2009",
+   "2010",
+   "2011",
+   "2012",
+   "2013",
+   "2014",
+   "2015",
+   "2016",
+   "2017",
+   "2018",
+   "2019",
+   "2020",
+   "2021",
+   "2022",
+   "2023",
+   "2024",
+   "2025",
+   "2026",
+   "2027",
+   "2028"
+  ]
+ },
+ "visualMap": {
+  "top": "middle",
+  "right": 10,
+  "inRange": {
+   "color": [
+    "red",
+    "yellow"
+   ]
+  },
+  "calculable": true
+ },
+ "radar": {
+  "indicator": [
+   {
+    "text": "IE8-",
+    "max": 400
+   },
+   {
+    "text": "IE9+",
+    "max": 400
+   },
+   {
+    "text": "Safari",
+    "max": 400
+   },
+   {
+    "text": "Firefox",
+    "max": 400
+   },
+   {
+    "text": "Chrome",
+    "max": 400
+   }
+  ]
+ },
+ "series": [
+  {
+   "type": "radar",
+   "symbol": "none",
+   "lineStyle": {
+    "width": 1
+   },
+   "emphasis": {
+    "areaStyle": {
+     "color": "rgba(0,250,0,0.3)"
+    }
+   },
+   "data": [
+    {
+     "value": [
+      390,
+      208,
+      15,
+      9,
+      0.5
+     ],
+     "name": "2001"
+    }
+   ]
+  },
+  {
+   "type": "radar",
+   "symbol": "none",
+   "lineStyle": {
+    "width": 1
+   },
+   "emphasis": {
+    "areaStyle": {
+     "color": "rgba(0,250,0,0.3)"
+    }
+   },
+   "data": [
+    {
+     "value": [
+      380,
+      204,
+      20,
+      18,
+      2
+     ],
+     "name": "2002"
+    }
+   ]
+  },
+  {
+   "type": "radar",
+   "symbol": "none",
+   "lineStyle": {
+    "width": 1
+   },
+   "emphasis": {
+    "areaStyle": {
+     "color": "rgba(0,250,0,0.3)"
+    }
+   },
+   "data": [
+    {
+     "value": [
+      370,
+      200,
+      25,
+      27,
+      4.5
+     ],
+     "name": "2003"
+    }
+   ]
+  },
+  {
+   "type": "radar",
+   "symbol": "none",
+   "lineStyle": {
+    "width": 1
+   },
+   "emphasis": {
+    "areaStyle": {
+     "color": "rgba(0,250,0,0.3)"
+    }
+   },
+   "data": [
+    {
+     "value": [
+      360,
+      196,
+      30,
+      36,
+      8
+     ],
+     "name": "2004"
+    }
+   ]
+  },
+  {
+   "type": "radar",
+   "symbol": "none",
+   "lineStyle": {
+    "width": 1
+   },
+   "emphasis": {
+    "areaStyle": {
+     "color": "rgba(0,250,0,0.3)"
+    }
+   },
+   "data": [
+    {
+     "value": [
+      350,
+      192,
+      35,
+      45,
+      12.5
+     ],
+     "name": "2005"
+    }
+   ]
+  },
+  {
+   "type": "radar",
+   "symbol": "none",
+   "lineStyle": {
+    "width": 1
+   },
+   "emphasis": {
+    "areaStyle": {
+     "color": "rgba(0,250,0,0.3)"
+    }
+   },
+   "data": [
+    {
+     "value": [
+      340,
+      188,
+      40,
+      54,
+      18
+     ],
+     "name": "2006"
+    }
+   ]
+  },
+  {
+   "type": "radar",
+   "symbol": "none",
+   "lineStyle": {
+    "width": 1
+   },
+   "emphasis": {
+    "areaStyle": {
+     "color": "rgba(0,250,0,0.3)"
+    }
+   },
+   "data": [
+    {
+     "value": [
+      330,
+      184,
+      45,
+      63,
+      24.5
+     ],
+     "name": "2007"
+    }
+   ]
+  },
+  {
+   "type": "radar",
+   "symbol": "none",
+   "lineStyle": {
+    "width": 1
+   },
+   "emphasis": {
+    "areaStyle": {
+     "color": "rgba(0,250,0,0.3)"
+    }
+   },
+   "data": [
+    {
+     "value": [
+      320,
+      180,
+      50,
+      72,
+      32
+     ],
+     "name": "2008"
+    }
+   ]
+  },
+  {
+   "type": "radar",
+   "symbol": "none",
+   "lineStyle": {
+    "width": 1
+   },
+   "emphasis": {
+    "areaStyle": {
+     "color": "rgba(0,250,0,0.3)"
+    }
+   },
+   "data": [
+    {
+     "value": [
+      310,
+      176,
+      55,
+      81,
+      40.5
+     ],
+     "name": "2009"
+    }
+   ]
+  },
+  {
+   "type": "radar",
+   "symbol": "none",
+   "lineStyle": {
+    "width": 1
+   },
+   "emphasis": {
+    "areaStyle": {
+     "color": "rgba(0,250,0,0.3)"
+    }
+   },
+   "data": [
+    {
+     "value": [
+      300,
+      172,
+      60,
+      90,
+      50
+     ],
+     "name": "2010"
+    }
+   ]
+  },
+  {
+   "type": "radar",
+   "symbol": "none",
+   "lineStyle": {
+    "width": 1
+   },
+   "emphasis": {
+    "areaStyle": {
+     "color": "rgba(0,250,0,0.3)"
+    }
+   },
+   "data": [
+    {
+     "value": [
+      290,
+      168,
+      65,
+      99,
+      60.5
+     ],
+     "name": "2011"
+    }
+   ]
+  },
+  {
+   "type": "radar",
+   "symbol": "none",
+   "lineStyle": {
+    "width": 1
+   },
+   "emphasis": {
+    "areaStyle": {
+     "color": "rgba(0,250,0,0.3)"
+    }
+   },
+   "data": [
+    {
+     "value": [
+      280,
+      164,
+      70,
+      108,
+      72
+     ],
+     "name": "2012"
+    }
+   ]
+  },
+  {
+   "type": "radar",
+   "symbol": "none",
+   "lineStyle": {
+    "width": 1
+   },
+   "emphasis": {
+    "areaStyle": {
+     "color": "rgba(0,250,0,0.3)"
+    }
+   },
+   "data": [
+    {
+     "value": [
+      270,
+      160,
+      75,
+      117,
+      84.5
+     ],
+     "name": "2013"
+    }
+   ]
+  },
+  {
+   "type": "radar",
+   "symbol": "none",
+   "lineStyle": {
+    "width": 1
+   },
+   "emphasis": {
+    "areaStyle": {
+     "color": "rgba(0,250,0,0.3)"
+    }
+   },
+   "data": [
+    {
+     "value": [
+      260,
+      156,
+      80,
+      126,
+      98
+     ],
+     "name": "2014"
+    }
+   ]
+  },
+  {
+   "type": "radar",
+   "symbol": "none",
+   "lineStyle": {
+    "width": 1
+   },
+   "emphasis": {
+    "areaStyle": {
+     "color": "rgba(0,250,0,0.3)"
+    }
+   },
+   "data": [
+    {
+     "value": [
+      250,
+      152,
+      85,
+      135,
+      112.5
+     ],
+     "name": "2015"
+    }
+   ]
+  },
+  {
+   "type": "radar",
+   "symbol": "none",
+   "lineStyle": {
+    "width": 1
+   },
+   "emphasis": {
+    "areaStyle": {
+     "color": "rgba(0,250,0,0.3)"
+    }
+   },
+   "data": [
+    {
+     "value": [
+      240,
+      148,
+      90,
+      144,
+      128
+     ],
+     "name": "2016"
+    }
+   ]
+  },
+  {
+   "type": "radar",
+   "symbol": "none",
+   "lineStyle": {
+    "width": 1
+   },
+   "emphasis": {
+    "areaStyle": {
+     "color": "rgba(0,250,0,0.3)"
+    }
+   },
+   "data": [
+    {
+     "value": [
+      230,
+      144,
+      95,
+      153,
+      144.5
+     ],
+     "name": "2017"
+    }
+   ]
+  },
+  {
+   "type": "radar",
+   "symbol": "none",
+   "lineStyle": {
+    "width": 1
+   },
+   "emphasis": {
+    "areaStyle": {
+     "color": "rgba(0,250,0,0.3)"
+    }
+   },
+   "data": [
+    {
+     "value": [
+      220,
+      140,
+      100,
+      162,
+      162
+     ],
+     "name": "2018"
+    }
+   ]
+  },
+  {
+   "type": "radar",
+   "symbol": "none",
+   "lineStyle": {
+    "width": 1
+   },
+   "emphasis": {
+    "areaStyle": {
+     "color": "rgba(0,250,0,0.3)"
+    }
+   },
+   "data": [
+    {
+     "value": [
+      210,
+      136,
+      105,
+      171,
+      180.5
+     ],
+     "name": "2019"
+    }
+   ]
+  },
+  {
+   "type": "radar",
+   "symbol": "none",
+   "lineStyle": {
+    "width": 1
+   },
+   "emphasis": {
+    "areaStyle": {
+     "color": "rgba(0,250,0,0.3)"
+    }
+   },
+   "data": [
+    {
+     "value": [
+      200,
+      132,
+      110,
+      180,
+      200
+     ],
+     "name": "2020"
+    }
+   ]
+  },
+  {
+   "type": "radar",
+   "symbol": "none",
+   "lineStyle": {
+    "width": 1
+   },
+   "emphasis": {
+    "areaStyle": {
+     "color": "rgba(0,250,0,0.3)"
+    }
+   },
+   "data": [
+    {
+     "value": [
+      190,
+      128,
+      115,
+      189,
+      220.5
+     ],
+     "name": "2021"
+    }
+   ]
+  },
+  {
+   "type": "radar",
+   "symbol": "none",
+   "lineStyle": {
+    "width": 1
+   },
+   "emphasis": {
+    "areaStyle": {
+     "color": "rgba(0,250,0,0.3)"
+    }
+   },
+   "data": [
+    {
+     "value": [
+      180,
+      124,
+      120,
+      198,
+      242
+     ],
+     "name": "2022"
+    }
+   ]
+  },
+  {
+   "type": "radar",
+   "symbol": "none",
+   "lineStyle": {
+    "width": 1
+   },
+   "emphasis": {
+    "areaStyle": {
+     "color": "rgba(0,250,0,0.3)"
+    }
+   },
+   "data": [
+    {
+     "value": [
+      170,
+      120,
+      125,
+      207,
+      264.5
+     ],
+     "name": "2023"
+    }
+   ]
+  },
+  {
+   "type": "radar",
+   "symbol": "none",
+   "lineStyle": {
+    "width": 1
+   },
+   "emphasis": {
+    "areaStyle": {
+     "color": "rgba(0,250,0,0.3)"
+    }
+   },
+   "data": [
+    {
+     "value": [
+      160,
+      116,
+      130,
+      216,
+      288
+     ],
+     "name": "2024"
+    }
+   ]
+  },
+  {
+   "type": "radar",
+   "symbol": "none",
+   "lineStyle": {
+    "width": 1
+   },
+   "emphasis": {
+    "areaStyle": {
+     "color": "rgba(0,250,0,0.3)"
+    }
+   },
+   "data": [
+    {
+     "value": [
+      150,
+      112,
+      135,
+      225,
+      312.5
+     ],
+     "name": "2025"
+    }
+   ]
+  },
+  {
+   "type": "radar",
+   "symbol": "none",
+   "lineStyle": {
+    "width": 1
+   },
+   "emphasis": {
+    "areaStyle": {
+     "color": "rgba(0,250,0,0.3)"
+    }
+   },
+   "data": [
+    {
+     "value": [
+      140,
+      108,
+      140,
+      234,
+      338
+     ],
+     "name": "2026"
+    }
+   ]
+  },
+  {
+   "type": "radar",
+   "symbol": "none",
+   "lineStyle": {
+    "width": 1
+   },
+   "emphasis": {
+    "areaStyle": {
+     "color": "rgba(0,250,0,0.3)"
+    }
+   },
+   "data": [
+    {
+     "value": [
+      130,
+      104,
+      145,
+      243,
+      364.5
+     ],
+     "name": "2027"
+    }
+   ]
+  },
+  {
+   "type": "radar",
+   "symbol": "none",
+   "lineStyle": {
+    "width": 1
+   },
+   "emphasis": {
+    "areaStyle": {
+     "color": "rgba(0,250,0,0.3)"
+    }
+   },
+   "data": [
+    {
+     "value": [
+      120,
+      100,
+      150,
+      252,
+      392
+     ],
+     "name": "2028"
+    }
+   ]
+  }
+ ]
+}

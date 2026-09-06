@@ -1,0 +1,61 @@
+{
+ "id": "things",
+ "xAxis": {
+  "type": "category"
+ },
+ "yAxis": {
+  "minInterval": 1
+ },
+ "animationDurationUpdate": 500,
+ "series": {
+  "type": "bar",
+  "dimensions": [
+   "x",
+   "y",
+   "groupId",
+   "childGroupId"
+  ],
+  "encode": {
+   "x": "x",
+   "y": "y",
+   "itemGroupId": "groupId",
+   "itemChildGroupId": "childGroupId"
+  },
+  "data": [
+   [
+    "Animals",
+    3,
+    "things",
+    "animals"
+   ],
+   [
+    "Fruits",
+    3,
+    "things",
+    "fruits"
+   ],
+   [
+    "Cars",
+    2,
+    "things",
+    "cars"
+   ]
+  ],
+  "universalTransition": {
+   "enabled": true,
+   "divideShape": "clone"
+  }
+ },
+ "graphic": [
+  {
+   "type": "text",
+   "left": 50,
+   "top": 20,
+   "style": {
+    "text": "Back",
+    "fontSize": 18,
+    "fill": "grey"
+   }
+  }
+ ]
+}

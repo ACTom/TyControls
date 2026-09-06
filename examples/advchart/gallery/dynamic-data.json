@@ -1,0 +1,124 @@
+{
+ "title": {
+  "text": "Dynamic Data"
+ },
+ "tooltip": {
+  "trigger": "axis",
+  "axisPointer": {
+   "type": "cross",
+   "label": {
+    "backgroundColor": "#283b56"
+   }
+  }
+ },
+ "legend": {},
+ "toolbox": {
+  "show": true,
+  "feature": {
+   "dataView": {
+    "readOnly": false
+   },
+   "restore": {},
+   "saveAsImage": {}
+  }
+ },
+ "dataZoom": {
+  "show": false,
+  "start": 0,
+  "end": 100
+ },
+ "xAxis": [
+  {
+   "type": "category",
+   "boundaryGap": true,
+   "data": [
+    "15:50:37",
+    "15:50:39",
+    "15:50:41",
+    "15:50:43",
+    "15:50:45",
+    "15:50:47",
+    "15:50:49",
+    "15:50:51",
+    "15:50:53",
+    "15:50:55"
+   ]
+  },
+  {
+   "type": "category",
+   "boundaryGap": true,
+   "data": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+   ]
+  }
+ ],
+ "yAxis": [
+  {
+   "type": "value",
+   "scale": true,
+   "name": "Price",
+   "max": 30,
+   "min": 0,
+   "boundaryGap": [
+    0.2,
+    0.2
+   ]
+  },
+  {
+   "type": "value",
+   "scale": true,
+   "name": "Order",
+   "max": 1200,
+   "min": 0,
+   "boundaryGap": [
+    0.2,
+    0.2
+   ]
+  }
+ ],
+ "series": [
+  {
+   "name": "Dynamic Bar",
+   "type": "bar",
+   "xAxisIndex": 1,
+   "yAxisIndex": 1,
+   "data": [
+    695,
+    385,
+    204,
+    535,
+    260,
+    360,
+    661,
+    596,
+    283,
+    553
+   ]
+  },
+  {
+   "name": "Dynamic Line",
+   "type": "line",
+   "data": [
+    9.2,
+    14.7,
+    7,
+    7.7,
+    7.3,
+    13.2,
+    5.6,
+    8,
+    8.3,
+    12.8
+   ]
+  }
+ ]
+}

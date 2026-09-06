@@ -1,0 +1,99 @@
+{
+ "matrix": {
+  "x": {
+   "data": [
+    "Positive",
+    "Negative"
+   ],
+   "label": {
+    "fontSize": 16,
+    "color": "#555"
+   }
+  },
+  "y": {
+   "data": [
+    "Positive",
+    "Negative"
+   ],
+   "label": {
+    "fontSize": 16,
+    "color": "#555"
+   }
+  },
+  "top": 80,
+  "width": 600,
+  "left": "center"
+ },
+ "series": {
+  "type": "custom",
+  "coordinateSystem": "matrix",
+  "data": [
+   [
+    "Positive",
+    "Positive",
+    10
+   ],
+   [
+    "Positive",
+    "Negative",
+    2
+   ],
+   [
+    "Negative",
+    "Positive",
+    3
+   ],
+   [
+    "Negative",
+    "Negative",
+    5
+   ]
+  ],
+  "label": {
+   "show": true,
+   "rich": {
+    "name": {
+     "color": "#fff",
+     "backgroundColor": "#999",
+     "textBorderColor": "#333",
+     "padding": 5,
+     "fontSize": 18
+    },
+    "value": {
+     "color": "#444",
+     "textBorderWidth": 0,
+     "padding": 5,
+     "fontSize": 16,
+     "align": "center"
+    }
+   }
+  }
+ },
+ "graphic": {
+  "elements": [
+   {
+    "type": "text",
+    "style": {
+     "text": "True Class",
+     "fill": "#333",
+     "font": "bold 24px serif",
+     "textAlign": "center"
+    },
+    "x": null,
+    "y": 40
+   },
+   {
+    "type": "text",
+    "style": {
+     "text": "Predicted Class",
+     "fill": "#333",
+     "font": "bold 24px serif",
+     "textAlign": "center"
+    },
+    "x": null,
+    "y": 270,
+    "rotation": 1.5707963267948966
+   }
+  ]
+ }
+}

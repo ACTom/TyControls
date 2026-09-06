@@ -1,0 +1,214 @@
+{
+ "title": {
+  "left": "center",
+  "text": "Tootip and dataZoom on Mobile Device"
+ },
+ "legend": {
+  "top": "bottom",
+  "data": [
+   "Intention"
+  ]
+ },
+ "tooltip": {
+  "triggerOn": "none"
+ },
+ "toolbox": {
+  "left": "center",
+  "itemSize": 25,
+  "top": 55,
+  "feature": {
+   "dataZoom": {
+    "yAxisIndex": "none"
+   },
+   "restore": {}
+  }
+ },
+ "xAxis": {
+  "type": "time",
+  "axisPointer": {
+   "value": "2016-10-7",
+   "snap": true,
+   "lineStyle": {
+    "color": "#7581BD",
+    "width": 2
+   },
+   "label": {
+    "show": true,
+    "backgroundColor": "#7581BD"
+   },
+   "handle": {
+    "show": true,
+    "color": "#7581BD"
+   }
+  },
+  "splitLine": {
+   "show": false
+  }
+ },
+ "yAxis": {
+  "type": "value",
+  "axisTick": {
+   "inside": true
+  },
+  "splitLine": {
+   "show": false
+  },
+  "axisLabel": {
+   "inside": true,
+   "formatter": "{value}\n"
+  },
+  "z": 10
+ },
+ "grid": {
+  "top": 110,
+  "left": 15,
+  "right": 15,
+  "height": 160
+ },
+ "dataZoom": [
+  {
+   "type": "inside",
+   "throttle": 50
+  }
+ ],
+ "series": [
+  {
+   "name": "Fake Data",
+   "type": "line",
+   "smooth": true,
+   "symbol": "circle",
+   "symbolSize": 5,
+   "sampling": "average",
+   "itemStyle": {
+    "color": "#0770FF"
+   },
+   "stack": "a",
+   "areaStyle": {
+    "color": {
+     "type": "linear",
+     "x": 0,
+     "y": 0,
+     "x2": 0,
+     "y2": 1,
+     "colorStops": [
+      {
+       "offset": 0,
+       "color": "rgba(58,77,233,0.8)"
+      },
+      {
+       "offset": 1,
+       "color": "rgba(58,77,233,0.3)"
+      }
+     ]
+    }
+   },
+   "data": [
+    [
+     "2016-10-4",
+     79
+    ],
+    [
+     "2016-10-5",
+     72
+    ],
+    [
+     "2016-10-6",
+     72
+    ],
+    [
+     "2016-10-7",
+     64
+    ],
+    [
+     "2016-10-8",
+     57
+    ],
+    [
+     "2016-10-9",
+     47
+    ],
+    [
+     "2016-10-10",
+     51
+    ],
+    [
+     "2016-10-11",
+     42
+    ],
+    [
+     "2016-10-12",
+     41
+    ]
+   ]
+  },
+  {
+   "name": "Fake Data",
+   "type": "line",
+   "smooth": true,
+   "stack": "a",
+   "symbol": "circle",
+   "symbolSize": 5,
+   "sampling": "average",
+   "itemStyle": {
+    "color": "#F2597F"
+   },
+   "areaStyle": {
+    "color": {
+     "type": "linear",
+     "x": 0,
+     "y": 0,
+     "x2": 0,
+     "y2": 1,
+     "colorStops": [
+      {
+       "offset": 0,
+       "color": "rgba(213,72,120,0.8)"
+      },
+      {
+       "offset": 1,
+       "color": "rgba(213,72,120,0.3)"
+      }
+     ]
+    }
+   },
+   "data": [
+    [
+     "2016-10-4",
+     37
+    ],
+    [
+     "2016-10-5",
+     39
+    ],
+    [
+     "2016-10-6",
+     36
+    ],
+    [
+     "2016-10-7",
+     30
+    ],
+    [
+     "2016-10-8",
+     40
+    ],
+    [
+     "2016-10-9",
+     43
+    ],
+    [
+     "2016-10-10",
+     41
+    ],
+    [
+     "2016-10-11",
+     32
+    ],
+    [
+     "2016-10-12",
+     38
+    ]
+   ]
+  }
+ ]
+}

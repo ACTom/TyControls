@@ -1,0 +1,133 @@
+{
+ "dataset": {
+  "source": [
+   [
+    "2021-02-01",
+    "amount",
+    1212,
+    "file",
+    2321,
+    "Q",
+    1412
+   ],
+   [
+    "2021-02-02",
+    "amount",
+    7181,
+    "file",
+    2114,
+    "Q",
+    1402
+   ],
+   [
+    "2021-02-03",
+    "amount",
+    2763,
+    "file",
+    4212,
+    "Q",
+    8172
+   ],
+   [
+    "2021-02-04",
+    "amount",
+    6122,
+    "file",
+    2942,
+    "Q",
+    6121
+   ],
+   [
+    "2021-02-05",
+    "amount",
+    4221,
+    "file",
+    3411,
+    "Q",
+    1987
+   ],
+   [
+    "2021-02-06",
+    "amount",
+    7221,
+    "file",
+    5121,
+    "Q",
+    1303
+   ],
+   [
+    "2021-02-07",
+    "amount",
+    5121,
+    "file",
+    4121,
+    "Q",
+    1819
+   ],
+   [
+    "2021-02-08",
+    "amount",
+    6121,
+    "file",
+    3121,
+    "Q",
+    2303
+   ],
+   [
+    "2021-02-09",
+    "amount",
+    7121,
+    "file",
+    2121,
+    "Q",
+    3303
+   ],
+   [
+    "2021-02-10",
+    "amount",
+    8121,
+    "file",
+    1121,
+    "Q",
+    4303
+   ]
+  ]
+ },
+ "matrix": {
+  "x": {
+   "levelSize": 50,
+   "itemStyle": {
+    "color": "#f0f8ff"
+   },
+   "label": {
+    "fontWeight": "bold"
+   }
+  }
+ },
+ "series": [
+  {
+   "type": "custom",
+   "coordinateSystem": "matrix",
+   "encode": {
+    "x": 1,
+    "y": 0
+   }
+  },
+  {
+   "type": "custom",
+   "coordinateSystem": "matrix",
+   "encode": {
+    "x": 3,
+    "y": 0
+   }
+  },
+  {
+   "type": "custom",
+   "coordinateSystem": "matrix",
+   "encode": {
+    "x": 5,
+    "y": 0
+   }
+  }
+ ]
+}

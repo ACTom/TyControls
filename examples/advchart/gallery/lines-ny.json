@@ -1,0 +1,37 @@
+{
+ "progressive": 20000,
+ "backgroundColor": "#111",
+ "geo": {
+  "center": [
+   -74.04327099998152,
+   40.86737600240287
+  ],
+  "zoom": 360,
+  "map": "world",
+  "roam": true,
+  "silent": true,
+  "itemStyle": {
+   "color": "transparent",
+   "borderColor": "rgba(255,255,255,0.1)",
+   "borderWidth": 1
+  }
+ },
+ "series": [
+  {
+   "type": "lines",
+   "coordinateSystem": "geo",
+   "blendMode": "lighter",
+   "dimensions": [
+    "value"
+   ],
+   "data": {},
+   "polyline": true,
+   "large": true,
+   "lineStyle": {
+    "color": "orange",
+    "width": 0.5,
+    "opacity": 0.3
+   }
+  }
+ ]
+}

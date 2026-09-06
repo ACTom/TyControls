@@ -931,6 +931,7 @@ begin
       if i > High(FStores) then Break;
       v := TySeriesVisual(TTyChartColor(SeriesColor(FBindings[i].SeriesIndex)));
       if i <= High(FBarCols) then v.Bar := FBarCols[i];
+      v.Line := TyLineSpecOf(FOption, FBindings[i].SeriesIndex);
       { NO Z2 HERE. It was set to i, and a mutant that set it to 0 survived
         every test -- because the paint list's documented tiebreaker is the
         INSERTION INDEX, and these are inserted in series order already. Two
