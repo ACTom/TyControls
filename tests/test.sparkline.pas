@@ -10,6 +10,8 @@ type
     procedure TestMidpoint;
     procedure TestClampsOutOfRange;
     procedure TestDegenerateRangeCentres;
+    procedure TestBaselineIsZeroLineWhenRangeSpansZero;
+    procedure TestBaselineSitsOnBottomForLargePositiveMin;
   end;
 implementation
 
@@ -47,6 +49,21 @@ begin
   // max <= min -> no range -> everything maps to the vertical centre (no div-by-zero).
   AssertEquals('flat range -> centre', TOP + H / 2, TySparklineY(42, 5, 5, TOP, H), 1e-9);
   AssertEquals('inverted range -> centre', TOP + H / 2, TySparklineY(0, 10, 3, TOP, H), 1e-9);
+end;
+
+procedure TSparklineTest.TestBaselineIsZeroLineWhenRangeSpansZero;
+begin
+  // A range that spans zero puts the baseline on the zero line, not on the bottom.
+  AssertEquals('zero line', TOP + H * 0.75, TySparklineBaselineY(-25, 75, TOP, H), 1e-9);
+end;
+
+procedure TSparklineTest.TestBaselineSitsOnBottomForLargePositiveMin;
+const
+  BIG = 100000005.0;   // not a Single value: Single rounds it UP to 100000008
+begin
+  // A positive min keeps the baseline on the bottom of the band whatever its magnitude.
+  // Math.Max(0, AMin) resolves to the Single overload and floated it 30px up the band.
+  AssertEquals('bottom', TOP + H, TySparklineBaselineY(BIG, BIG + 10, TOP, H), 1e-9);
 end;
 
 initialization
