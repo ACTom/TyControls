@@ -1930,6 +1930,12 @@ type
     所以非法值不管走哪条路都进不了单元格。本事件管"能不能离开";OnCellEdited 仍管"写不写"。 }
   TTyGridValidateCellEvent = procedure(Sender: TObject; ACol, ARow: Integer;
     const AOldText, ANewText: string; var AValid: Boolean) of object;
+  { 焦点离开**整个网格**时,一个被校验拦下的编辑该怎么办。默认(AKeep = False)视同放弃,
+    回到旧值;置 AKeep := True 则编辑器留在原地,用户回到网格再点任意一格,焦点会回到它。
+    宿主可以在这里弹框让最终用户选 —— 但要知道:在失焦通知里弹模态框会**吞掉引发离开的
+    那次点击**(用户点的那个按钮不会触发 Click),Excel 的校验提示也是同样的表现。 }
+  TTyGridInvalidEditExitEvent = procedure(Sender: TObject; ACol, ARow: Integer;
+    const AText: string; var AKeep: Boolean) of object;
 
   { 完整体:自带**稀疏**单元格存储 + 二维光标 + 键鼠导航。
     稀疏的意思是只有写过的单元格才占内存 —— 100 万 x 100 的空表不花一分钱。 }
@@ -1970,6 +1976,11 @@ type
     FOnCellEdited: TTyGridCellEditedEvent;
     FOnValidateCell: TTyGridValidateCellEvent;
     FValidatedPending: Boolean;   { TryEndEdit 刚问过宿主 —— EndEdit 别再问第二遍(宿主可能在弹框) }
+    FOnInvalidEditExit: TTyGridInvalidEditExitEvent;
+    { 上一次被拒绝的文本。同一段文本只问宿主一次:单击别的格会先经失焦、再经 MoveCursor
+      两条路到达校验,不记住的话宿主的提示框会连弹两次。文本一变就作废。 }
+    FRefusedText: string;
+    FRefused: Boolean;
     FOnCanEditCell:  TTyGridCanEditEvent;
     FOnEditChange:   TTyGridEditChangeEvent;
     FOnCanInsertRow: TTyGridCanRowEvent;
@@ -2183,6 +2194,9 @@ type
     { 当前打开的编辑器此刻持有的文本,**不关闭任何东西**地读出来。EndEdit 也经它取值,
       于是宿主校验时看到的字符串和最终写回的是同一个,不可能漂成两个。 }
     function PendingEditText: string;
+    { 把焦点还给正在打开的编辑器。只从**手势处理**里调(点击/按键之后,焦点变化已经完成);
+      绝不从 EditorExit 这类失焦回调里调 —— 那是 widgetset 层的焦点递归陷阱。 }
+    procedure RefocusEditor;
     function  CellKey(ACol, ARow: Integer): string;
     function  GetCells(ACol, ARow: Integer): string;
     procedure SetCells(ACol, ARow: Integer; const AValue: string);
@@ -3032,6 +3046,7 @@ type
       read FOnGetEditorKind write FOnGetEditorKind;
     property OnCellEdited: TTyGridCellEditedEvent read FOnCellEdited write FOnCellEdited;
     property OnValidateCell: TTyGridValidateCellEvent read FOnValidateCell write FOnValidateCell;
+    property OnInvalidEditExit: TTyGridInvalidEditExitEvent read FOnInvalidEditExit write FOnInvalidEditExit;
     property OnCanEditCell: TTyGridCanEditEvent
       read FOnCanEditCell write FOnCanEditCell;
     property OnEditChange: TTyGridEditChangeEvent
@@ -8923,8 +8938,9 @@ begin
 
   { 光标要动了 —— 先把正在编辑的格提交掉,否则编辑框会悬在旧位置。
     提交被校验拦下就**不动**:FCol/FRow 保持原样,这正是 OnSelectCell 否决时
-    调用方早已在读的那个"没动"信号(BeginEdit 靠它退出)。 }
-  if FEditing and not TryEndEdit(True) then Exit;
+    调用方早已在读的那个"没动"信号(BeginEdit 靠它退出)。
+    被拦下时把焦点还给编辑器:到这里的是点击/按键,焦点变化已经完成,抢回来是安全的。 }
+  if FEditing and not TryEndEdit(True) then begin RefocusEditor; Exit; end;
 
   canSel := True;
   if Assigned(FOnSelectCell) then FOnSelectCell(Self, ACol, ARow, canSel);
@@ -9301,7 +9317,7 @@ begin
                      Exit;
                    end;
                  end;
-                 if FEditing and not TryEndEdit(True) then begin Key := 0; Exit; end;
+                 if FEditing and not TryEndEdit(True) then begin Key := 0; RefocusEditor; Exit; end;
                  MoveCursor(FCol, FRow + 1);
                  Key := 0;
                end;
@@ -9312,7 +9328,7 @@ begin
                   LCL 靠 Key 还在不在来决定要不要换焦点,吞掉它就等于
                   "关了也还是不放行"。外面是 try..finally,直接 Exit 安全。 }
                 if not (goTabs in Options) then Exit;
-                if FEditing and not TryEndEdit(True) then begin Key := 0; Exit; end;
+                if FEditing and not TryEndEdit(True) then begin Key := 0; RefocusEditor; Exit; end;
                 { 折行时也要落在**可见**列上,别折到一个隐藏列里去。 }
                 if ssShift in Shift then
                 begin
@@ -9797,7 +9813,7 @@ begin
   if FilterRowHeightPx <= 0 then Exit;
 
   { 换列时先把上一列的输入落地,别让它随着控件移动而丢掉。 }
-  if FEditing and not TryEndEdit(True) then Exit;   { 拦下的编辑上面不开筛选框 }
+  if FEditing and not TryEndEdit(True) then begin RefocusEditor; Exit; end;   { 拦下的编辑上面不开筛选框 }
   if FFilterEditCol >= 0 then EndFilterEdit(True);
 
   bandTop := ScaleI(Header.Height) + GroupBandHeightPx;
@@ -10851,7 +10867,7 @@ var
 begin
   if not Assigned(FOnEllipsisClick) then Exit;
   if FReadOnly then Exit;
-  if FEditing and not TryEndEdit(True) then Exit;   { 先把拦下的值改对,再谈省略号 }
+  if FEditing and not TryEndEdit(True) then begin RefocusEditor; Exit; end;   { 先把拦下的值改对,再谈省略号 }
   oldTxt := GetCellText(ACol, ARow);
   newTxt := oldTxt;
   accept := True;
@@ -15094,6 +15110,14 @@ var
   r: TRect;
 begin
   Result := False;
+  { 已经在编辑的正是这一格:回到它,别重新初始化。重新初始化会执行
+    FEditor.Text := Cells[...],把用户敲了一半的内容冲回旧值 —— 双击当前格就是这样
+    丢掉输入的;校验把编辑器留在原地之后,双击别的格也会走到这里(光标没动)。 }
+  if FEditing and (ACol = FEditCol) and (ARow = FEditRow) then
+  begin
+    RefocusEditor;
+    Exit(True);
+  end;
   if FReadOnly or (not Enabled) then Exit;
   if (ACol < 0) or (ACol >= Header.Columns.Count) then Exit;
   if (ARow < 0) or (ARow >= RowCount) then Exit;
@@ -15340,9 +15364,16 @@ begin
     newTxt := PendingEditText;
     if newTxt <> oldTxt then          { 没改过的格永远可以离开 —— 不为文件里带来的旧脏值困住用户 }
     begin
+      { 同一段文本已经被拒过就不再问:单击别的格会先经失焦、再经 MoveCursor 两次到这里。 }
+      if FRefused and (newTxt = FRefusedText) then Exit(False);
       valid := True;
       FOnValidateCell(Self, FEditCol, FEditRow, oldTxt, newTxt, valid);
-      if not valid then Exit(False);  { 什么都不动:编辑器留着、光标不动、不抢焦点 }
+      if not valid then
+      begin
+        FRefused := True;
+        FRefusedText := newTxt;
+        Exit(False);                  { 什么都不动:编辑器留着、光标不动;焦点由手势处理方决定 }
+      end;
       FValidatedPending := True;      { 下面的 EndEdit 别再问一遍 }
     end;
   end;
@@ -15360,6 +15391,8 @@ begin
   if not FEditing then Exit;
   if FEndingEdit then Exit;          { 重入守卫:提交里若又触发提交会写两次 }
   FEndingEdit := True;
+  FRefused := False;                 { 这次编辑到此为止,拒绝记录跟着作废 }
+  FRefusedText := '';
   try
     { **先取值,再拆**。宿主 EditLink 的控件一释放值就没了;其它编辑器也没理由等隐藏之后才读。
       取值走 PendingEditText —— 校验时宿主看到的字符串和这里写回的是同一个。 }
@@ -15406,12 +15439,32 @@ begin
 end;
 
 procedure TTyStringGrid.DoExit;
+var
+  keep: Boolean;
 begin
-  { 焦点离开了整个网格。被校验拦下的编辑到这里就作废:走开与 Esc 是同一种表态。
-    留着它会得到一个趴在失焦网格上的编辑器 —— Editing 为 True 却没人在编辑,
-    宿主拿它控制工具栏时会被骗,格子显示的也不是真实值。 }
-  if FEditing then EndEdit(False);
+  { 焦点离开了整个网格。被校验拦下的编辑默认到此作废:走开与 Esc 是同一种表态。
+    留着它会得到一个趴在失焦网格上的编辑器 —— Editing 为 True 却没人在编辑。
+    宿主可以经 OnInvalidEditExit 改主意(留着;用户回到网格点任意一格就会回到它)。
+    注意到这里的 FEditing 一定是被拦下的那个:合法的值在编辑器失焦时已经提交掉了。 }
+  if FEditing then
+  begin
+    keep := False;
+    if Assigned(FOnInvalidEditExit) then
+      FOnInvalidEditExit(Self, FEditCol, FEditRow, PendingEditText, keep);
+    if not keep then EndEdit(False);
+  end;
   inherited DoExit;
+end;
+
+procedure TTyStringGrid.RefocusEditor;
+var
+  w: TWinControl;
+begin
+  w := InplaceEditor;
+  { HandleAllocated 这道守卫别省:句柄没落地时 CanFocus 仍答 True,而 SetFocus 会一路走到
+    父窗体上抛 "Can not focus"(无头运行的窗体从没 Show 过)。与 DoBeginEdit 给编辑器
+    SetFocus 时的守卫一字不差。 }
+  if (w <> nil) and w.HandleAllocated and w.CanFocus then w.SetFocus;
 end;
 
 procedure TTyStringGrid.DateEditorExit(Sender: TObject);
