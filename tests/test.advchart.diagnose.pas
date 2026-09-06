@@ -16,7 +16,8 @@ type
     function FirstOf(const AText: string; AKind: TTyOptDiagKind;
       out ADiag: TTyOptDiag): Boolean;
   published
-    procedure TestAGoodConfigSaysOnlyThatNothingPaintsYet;
+    procedure TestAGoodConfigThatDrawsIsNotToldItDrawsNothing;
+    procedure TestATypeWithNoRendererIsNamedRatherThanImplied;
     procedure TestTextThatDoesNotParseYieldsExactlyOneThing;
     procedure TestAPastedJsFunctionIsToldWhatToWriteInstead;
     procedure TestATypoIsNamedPositionedAndGuessedAt;
@@ -78,13 +79,75 @@ begin
     end;
 end;
 
-procedure TAdvChartDiagnoseTest.TestAGoodConfigSaysOnlyThatNothingPaintsYet;
+procedure TAdvChartDiagnoseTest.TestAGoodConfigThatDrawsIsNotToldItDrawsNothing;
+var d: TTyOptDiag;
 begin
-  { The one case where saying nothing would be WRONG. A correct bar config
-    draws axes and no bars today, and a developer told nothing concludes the
-    editor lied to them. }
+  { STILL EXACTLY ONE ROW -- saying nothing at all for a valid option is the
+    silence this row exists to prevent.
+
+    But what it says had to change. It used to tell EVERY valid config that
+    "series marks are not painted yet", which was true when the control drew
+    axes and nothing else and became a lie the day bars started drawing. An
+    author whose chart is on screen, being told it draws nothing, learns to
+    stop reading the panel. }
   AssertEquals('ok', Kinds('{ xAxis: { data: [''A''] }, yAxis: {},'
     + ' series: [{ type: ''bar'', data: [1] }] }'));
+  AssertTrue(FirstOf('{ xAxis: { data: [''A''] }, yAxis: {},'
+    + ' series: [{ type: ''bar'', data: [1] }] }', odkAllClear, d));
+  AssertTrue('does not claim it draws nothing, got: ' + d.Text,
+    Pos('not painted', d.Text) = 0);
+end;
+
+procedure TAdvChartDiagnoseTest.TestATypeWithNoRendererIsNamedRatherThanImplied;
+var
+  d: TTyOptDiag;
+  txt: string;
+  n, p: Integer;
+begin
+  { MIXED IS THE CASE THAT NEEDS WORDS. Both of these are valid, one appears
+    and one does not, and "the option is understood" on its own would leave the
+    author hunting for the series that is missing. Naming it is the whole
+    difference between a panel that helps and a panel that is merely correct. }
+  AssertTrue(FirstOf('{ xAxis: { data: [''A''] }, yAxis: {}, series: ['
+    + '{ type: ''bar'', data: [1] }, { type: ''scatter'', data: [1] }] }',
+    odkAllClear, d));
+  AssertTrue('names scatter, got: ' + d.Text, Pos('scatter', d.Text) > 0);
+  AssertTrue('and does not name bar, got: ' + d.Text, Pos('bar', d.Text) = 0);
+
+  { AND ONLY ONCE for a chart full of them, or the sentence becomes a list of
+    the same word. }
+  AssertTrue(FirstOf('{ xAxis: { data: [''A''] }, yAxis: {}, series: ['
+    + '{ type: ''bar'', data: [1] }, { type: ''scatter'', data: [1] },'
+    + ' { type: ''scatter'', data: [2] }] }', odkAllClear, d));
+  txt := d.Text;
+  n := 0;
+  p := Pos('scatter', txt);
+  while p > 0 do
+  begin
+    Inc(n);
+    Delete(txt, 1, p + 6);
+    p := Pos('scatter', txt);
+  end;
+  AssertEquals('scatter named once, got: ' + d.Text, 1, n);
+
+  { TWO DIFFERENT TYPES ARE BOTH NAMED -- deduping must not turn "several
+    unpainted types" into "the first one".
+
+    WHAT THIS DOES NOT PIN, said plainly because the comment that was here
+    claimed it did: the dedup used to match bare substrings, so a name that is
+    a SUFFIX of one already listed was swallowed. Among the twenty-three types
+    the only such pair is 'map' after 'treemap' or 'heatmap' -- and 'map' never
+    reaches this row, because it wants the geo coordinate system and the
+    builder reports that first, which suppresses the all-clear entirely.
+    'tree' before 'treemap' is a PREFIX and was never affected. So the fix is
+    right and unreachable, and the mutant for it survives on purpose. }
+  AssertTrue(FirstOf('{ xAxis: { data: [''A''] }, yAxis: {}, series: ['
+    + '{ type: ''bar'', data: [1] }, { type: ''treemap'', data: [1] },'
+    + ' { type: ''tree'', data: [1] }] }', odkAllClear, d));
+  AssertTrue('names treemap, got: ' + d.Text, Pos('treemap', d.Text) > 0);
+  txt := d.Text;
+  Delete(txt, Pos('treemap', txt), 7);
+  AssertTrue('and tree as well, got: ' + d.Text, Pos('tree', txt) > 0);
 end;
 
 procedure TAdvChartDiagnoseTest.TestTextThatDoesNotParseYieldsExactlyOneThing;
@@ -314,7 +377,7 @@ begin
   { A pie resolves with no axes at all. Telling its author the chart "draws its
     axes" is precisely the lie this row exists to prevent. }
   AssertTrue(FirstOf('{ series: [{ type: ''pie'', data: [1] }] }',
-    odkNothingPaintsYet, d));
+    odkAllClear, d));
   AssertTrue('does not promise axes, got: ' + d.Text,
     Pos('draws its axes', d.Text) = 0);
 end;

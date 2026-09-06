@@ -860,6 +860,10 @@ msgstr ""
 msgid "September"
 msgstr ""
 
+#: tycontrols.strconsts.rstyoptdiagallclear
+msgid "The option is understood."
+msgstr ""
+
 #: tycontrols.strconsts.rstyoptdiagbadenum
 #, object-pascal-format
 msgid "%s: \"%s\" is not one of %s."
@@ -890,6 +894,11 @@ msgstr ""
 #: tycontrols.strconsts.rstyoptdiagnotype
 #, object-pascal-format
 msgid "%s[%d] has no type yet, so nothing under it can be checked. One of: %s."
+msgstr ""
+
+#: tycontrols.strconsts.rstyoptdiagsomenotpainted
+#, object-pascal-format
+msgid "The option is understood. Not painted yet: %s."
 msgstr ""
 
 #: tycontrols.strconsts.rstyoptdiagunknown

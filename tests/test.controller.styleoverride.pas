@@ -20,6 +20,8 @@ type
     procedure OverrideWinsOverAnExplicitlyLoadedTheme;
     procedure OverrideSurvivesADensityChange;
     procedure ClearingTheOverrideRestoresTheBase;
+    procedure ClearingTheOverrideRestoresTheBaseOnANamedTheme;
+    procedure ClearingItWorksEvenIfTheThemeFileWentAway;
     procedure AccentSurvivesADensityChange;
     procedure AccentSurvivesAnOverrideChange;
     procedure TheDefaultControllerTakesItInCode;
@@ -92,6 +94,49 @@ begin
   end;
 end;
 
+procedure TControllerStyleOverrideTest.ClearingItWorksEvenIfTheThemeFileWentAway;
+var
+  c: TTyStyleController;
+  base: Integer;
+  path: string;
+begin
+  { THE OTHER BRANCH THAT COULD LOAD NOTHING. A ThemeFile that has been moved,
+    renamed or deleted while the program runs is the file-shaped version of a
+    theme name that does not resolve, and it used to fail the same way: nothing
+    was loaded, so nothing was cleared, so the override was stuck.
+
+    A deleted theme file is not an exotic state -- it is what an author gets
+    the moment they rename the .tycss they are working on. }
+  path := GetTempFileName('', 'tycss');
+  c := TTyStyleController.Create(nil);
+  try
+    with TStringList.Create do
+    try
+      Text := 'TyButton { border-width: 2px; }';
+      SaveToFile(path);
+    finally
+      Free;
+    end;
+    c.ThemeFile := path;
+    base := ButtonBorderWidth(c);
+    AssertEquals('the file was loaded to begin with', 2, base);
+
+    c.StyleOverride := 'TyButton { border-width: 7px; }';
+    AssertEquals('override applied', 7, ButtonBorderWidth(c));
+
+    DeleteFile(path);
+    c.StyleOverride := '';
+    { The file is gone, so the base it falls back to is the built-in one rather
+      than the 2px the file used to say. What matters is that the 7px patch is
+      GONE: a stuck override is unrecoverable, a fallback is not. }
+    AssertTrue('the patch did not survive the file going away',
+      ButtonBorderWidth(c) <> 7);
+  finally
+    c.Free;
+    DeleteFile(path);
+  end;
+end;
+
 procedure TControllerStyleOverrideTest.AccentSurvivesADensityChange;
 var c: TTyStyleController;
 begin
@@ -132,6 +177,37 @@ begin
       ButtonBorderWidth(TyDefaultController));
   finally
     TyDefaultController.StyleOverride := saved;   { leave the shared singleton as we found it }
+  end;
+end;
+
+procedure TControllerStyleOverrideTest.ClearingTheOverrideRestoresTheBaseOnANamedTheme;
+var c: TTyStyleController; base: Integer;
+begin
+  { THE SAME THING ON A CONTROLLER THAT NAMES ITS THEME, which is what every
+    real one does -- and what ClearingTheOverrideRestoresTheBase above does
+    NOT: it leaves ThemeName empty, so ReloadThemeLayer takes the `else` branch
+    and clears layer-1 with an explicit LoadFromCss(''). A named theme takes a
+    different branch, and if the name does not resolve, that branch loads
+    nothing at all and the additive patch survives -- patches then accumulate
+    and the override can never be cleared or changed. }
+  c := TTyStyleController.Create(nil);
+  try
+    c.ThemeName := 'default';
+    base := ButtonBorderWidth(c);
+    c.StyleOverride := 'TyButton { border-width: 7px; }';
+    AssertEquals('override applied', 7, ButtonBorderWidth(c));
+    c.StyleOverride := '';
+    AssertEquals('clearing it restored the base', base, ButtonBorderWidth(c));
+
+    { AND A REPLACEMENT REPLACES rather than stacking on the old one, which is
+      the other half of the same defect: the patch was never dropped, so a
+      second override was appended to the first. }
+    c.StyleOverride := 'TyButton { border-width: 7px; }';
+    c.StyleOverride := 'TyButton { border-width: 3px; }';
+    AssertEquals('the second override replaced the first', 3,
+      ButtonBorderWidth(c));
+  finally
+    c.Free;
   end;
 end;
 

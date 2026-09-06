@@ -391,6 +391,14 @@ resourcestring
   rsTyOptDiagNoMarksAtAll =
     'The option is understood. Series marks are not painted yet, and this '
     + 'chart has no axes, so nothing is drawn.';
+  // Every series that resolved has a renderer: there is nothing to warn
+  // about, and the row exists only so a valid option is never met with an
+  // empty panel.
+  rsTyOptDiagAllClear = 'The option is understood.';
+  // Some of them do and some do not -- name the ones that will not appear,
+  // because "understood" alone would leave the author looking for them.
+  rsTyOptDiagSomeNotPainted =
+    'The option is understood. Not painted yet: %s.';
   rsTyOptDiagNoSeries =
     'The option is understood. There are no series, so only the axes would '
     + 'draw.';

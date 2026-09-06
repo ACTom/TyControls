@@ -151,7 +151,7 @@ uses
   test.painter.vector,
   test.advchart.axis,
   test.advchart.measure,
-  test.advchart.shape, test.advchart.paint, test.advchart.render,
+  test.advchart.shape, test.advchart.paint, test.advchart.marks, test.advchart.render,
   test.subpixel,
   test.advchart.option,
   test.advchart.catalog,

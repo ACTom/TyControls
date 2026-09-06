@@ -39,10 +39,11 @@ type
       built from it: axes that name no grid, a series bound to an axis that
       does not exist. }
     odkBuild,
-    { Nothing is wrong. Said out loud on purpose: a correct bar config draws
-      axes and no bars today, and a developer who is not told that concludes
-      the editor lied to them. }
-    odkNothingPaintsYet);
+    { Nothing is wrong. Said out loud on purpose, because an empty panel and a
+      panel that has not run yet look the same, and a developer shown nothing
+      concludes the editor gave up. What it says depends on how much of the
+      chart can actually be drawn -- see the end of TyOptDiagnose. }
+    odkAllClear);
 
   TTyOptDiag = record
     Kind: TTyOptDiagKind;
@@ -69,7 +70,7 @@ implementation
 uses
   fpjson,
   tyControls.AdvChart.Catalog, tyControls.AdvChart.Builder,
-  tyControls.AdvChart.Series, tyControls.StrConsts;
+  tyControls.AdvChart.Series, tyControls.AdvChart.Marks, tyControls.StrConsts;
 
 const
   { Enough that a real config's problems all fit, small enough that a pathological
@@ -241,6 +242,8 @@ var
   i, resolved: Integer;
   msg, path: string;
   withAxes: Boolean;
+  painted: Integer;
+  unpainted: string;
 begin
   C.Items := nil;
   C.Count := 0;
@@ -321,14 +324,45 @@ begin
     if C.Count = 0 then
     begin
       withAxes := False;
+      painted := 0;
+      unpainted := '';
       for i := 0 to High(bindings) do
-        if bindings[i].Resolved and bindings[i].HasAxes then withAxes := True;
+        if bindings[i].Resolved then
+        begin
+          if bindings[i].HasAxes then withAxes := True;
+          if TySeriesTypeHasRenderer(bindings[i].SeriesType) then
+            Inc(painted)
+          else if Pos(', ' + bindings[i].SeriesType + ',',
+                      ', ' + unpainted + ',') = 0 then
+          begin
+            { Each type once, in the order they appear: a chart with nine
+              scatter series should say "scatter", not say it nine times.
+
+              MATCHED WHOLE, with the separators around it. A bare substring
+              test made 'map' look already-listed the moment 'treemap' was --
+              both are real ECharts types and neither draws yet, so a chart
+              with both named only one. }
+            if unpainted <> '' then unpainted := unpainted + ', ';
+            unpainted := unpainted + bindings[i].SeriesType;
+          end;
+        end;
+
       if resolved = 0 then
-        Add(C, odkNothingPaintsYet, '', rsTyOptDiagNoSeries)
-      else if withAxes then
-        Add(C, odkNothingPaintsYet, '', rsTyOptDiagNothingPaintsYet)
+        Add(C, odkAllClear, '', rsTyOptDiagNoSeries)
+      else if painted = 0 then
+      begin
+        { NOTHING this chart asks for draws. The older pair of sentences said
+          exactly that and they are still true here -- the axes are what is
+          left, unless there are none. }
+        if withAxes then
+          Add(C, odkAllClear, '', rsTyOptDiagNothingPaintsYet)
+        else
+          Add(C, odkAllClear, '', rsTyOptDiagNoMarksAtAll);
+      end
+      else if unpainted <> '' then
+        Add(C, odkAllClear, '', Format(rsTyOptDiagSomeNotPainted, [unpainted]))
       else
-        Add(C, odkNothingPaintsYet, '', rsTyOptDiagNoMarksAtAll);
+        Add(C, odkAllClear, '', rsTyOptDiagAllClear);
     end;
    except
      { THE HEADER PROMISES THIS NEVER RAISES, and a promise a timer depends on

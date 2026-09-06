@@ -33,7 +33,8 @@ uses
   tyControls.AdvChart.Coord, tyControls.AdvChart.Layout,
   tyControls.AdvChart.Builder, tyControls.AdvChart.Series,
   tyControls.AdvChart.Measure, tyControls.AdvChart.Handlers,
-  tyControls.SubPixel;
+  tyControls.AdvChart.Paint, tyControls.AdvChart.Render,
+  tyControls.AdvChart.Marks, tyControls.SubPixel;
 
 const
   { The four axis metrics, and the defaults to fall back on when a theme has not
@@ -87,6 +88,12 @@ type
       while the model stands still. }
     procedure PaintStatic(APainter: TTyPainter; const ARect: TRect;
       APPI: Integer; const AMeasurer: ITyTextMeasurer);
+    { Every series' marks, in one list, ordered once. }
+    procedure PaintSeries(APainter: TTyPainter);
+    { The theme colour for series ASeriesIndex, from the DERIVED ramp item 18
+      landed: TyAdvChartSeries1..8, all of them computed from --accent so a skin
+      that restyles the accent gets a matching chart for nothing. }
+    function SeriesColor(ASeriesIndex: Integer): TTyColor;
     procedure PaintDynamic(APainter: TTyPainter; const ARect: TRect;
       APPI: Integer; const AMeasurer: ITyTextMeasurer);
     { Whether the dynamic layer would draw anything. False skips a whole
@@ -844,6 +851,65 @@ begin
       for a := 0 to gb.YAxisCount - 1 do
         PaintAxis(APainter, gb.YAxis(a), gb.PlotRect, APPI, gb, AMeasurer);
     end;
+
+  { AFTER THE AXES, so a bar sits on the grid rather than under it. Within the
+    series, the paint list decides the order. }
+  PaintSeries(APainter);
+end;
+
+function TTyAdvanceChart.SeriesColor(ASeriesIndex: Integer): TTyColor;
+var
+  st: TTyStyleSet;
+begin
+  { EIGHT SLOTS, CYCLED, matching the old chart's palette so nothing has to
+    learn a second rule -- and derived from --accent rather than written out,
+    which is what makes a re-skinned chart come out in the skin's own colours.
+    Slot 1 IS the accent, so a single-series chart is drawn in the theme's own
+    colour. }
+  st := ActiveController.Model.ResolveStyle(
+    'TyAdvChartSeries' + IntToStr((Abs(ASeriesIndex) mod 8) + 1), '', []);
+  if tpBackground in st.Present then
+    Exit(st.Background.Color);
+  { The eight keys are in the BASE layer, so a theme cannot remove them -- it
+    can only restyle them, and a skin that defines none of them inherits all
+    eight. Reaching here means something is wrong with the theme rather than
+    with the option, so the answer is the control's own foreground: visible
+    against its own surface by construction, which is the one thing a fallback
+    colour has to be. }
+  st := ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass,
+    [tysNormal]);
+  Result := st.TextColor;
+end;
+
+procedure TTyAdvanceChart.PaintSeries(APainter: TTyPainter);
+var
+  list: TTyPaintList;
+  i, drawn: Integer;
+  v: TTySeriesVisual;
+begin
+  if Length(FBindings) = 0 then Exit;
+  { ONE LIST FOR EVERY SERIES, not one per series: the ordering rule is (Z, Z2,
+    insertion) ACROSS the chart, and a list per series would order each one
+    against itself and leave the between-series order to the loop. }
+  list := TTyPaintList.Create;
+  try
+    drawn := 0;
+    for i := 0 to High(FBindings) do
+    begin
+      if i > High(FStores) then Break;
+      v := TySeriesVisual(TTyChartColor(SeriesColor(FBindings[i].SeriesIndex)));
+      { NO Z2 HERE. It was set to i, and a mutant that set it to 0 survived
+        every test -- because the paint list's documented tiebreaker is the
+        INSERTION INDEX, and these are inserted in series order already. Two
+        ways of saying the same thing, one of them inert. When series z and
+        zlevel arrive they will set Z, and Z2 will have something to do. }
+      Inc(drawn, TyBuildSeriesMarks(FBindings[i], FStores[i], v, list));
+    end;
+    if drawn > 0 then
+      TyRenderPaintList(APainter, list);
+  finally
+    list.Free;
+  end;
 end;
 
 procedure TTyAdvanceChart.PaintDynamic(APainter: TTyPainter; const ARect: TRect;

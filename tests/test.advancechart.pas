@@ -43,6 +43,8 @@ type
     function PixelAt(AX, AY: Integer): TBGRAPixel;
     function InkIn(AL, AT, AR, AB: Integer; const ABg: TBGRAPixel): Integer;
     function ManyCategories(ACount: Integer): string;
+    function RedIn(AL, AT, AR, AB: Integer): Integer;
+    function GreenIn(AL, AT, AR, AB: Integer): Integer;
     function InkDepth(const AP, ABg: TBGRAPixel): Integer;
   published
     procedure TestItHasItsOwnStyleKey;
@@ -70,6 +72,8 @@ type
     procedure TestMaxIntervalCapsTheStep;
     procedure TestAValueAxisBoundaryGapPadsTheExtent;
     procedure TestACrowdedAxisThinsItsLabels;
+    procedure TestTheSeriesIsActuallyDrawnInTheThemesColour;
+    procedure TestTheSecondSeriesTakesTheSecondSlotOfTheRamp;
     procedure TestALayeredFrameDrawsTheSamePictureAsAWholeOne;
     procedure TestAKeptStaticLayerDoesNoWorkAndInvalidateDropsIt;
     procedure TestTheLayoutOwnsTheThinningDecision;
@@ -348,8 +352,13 @@ begin
     And count BANDS of ink rows, not pixels: one per tick, each centred on its
     tick's coordinate. A pixel total cannot tell four labels from three, nor a
     label at the right height from one at the wrong one. }
-  FChart.Option := '{ xAxis: { data: [''A'', ''B'', ''C''] }, yAxis: {},'
-    + ' series: [{ type: ''bar'', data: [10, 20, 30] }] }';
+  { NO SERIES, and an explicit range instead. The background reference below
+    is sampled from the middle of the plot, which stopped being empty the day
+    series marks started drawing -- it would come back as a bar's colour and
+    every gutter pixel would then "differ from the background". An axis test
+    measures the axis. }
+  FChart.Option := '{ xAxis: { data: [''A'', ''B'', ''C''] },'
+    + ' yAxis: { min: 0, max: 30 }, series: [] }';
   Draw;
   ax := FChart.Build.Axis('yAxis', 0);
   AssertTrue('the y axis is a value axis', not (ax.Scale is TTyOrdinalScale));
@@ -426,8 +435,10 @@ begin
     TickCoords takes an AAlignWithLabel flag -- and asking for label alignment
     here drew the grid half a band off while every "an axis was drawn" count
     stayed green. }
-  FChart.Option := '{ xAxis: { data: [''A'', ''B'', ''C'', ''D''] }, yAxis: {},'
-    + ' series: [{ type: ''bar'', data: [1, 2, 3, 4] }] }';
+  { No series: this counts vertical ink across the middle of the plot, and a
+    bar is vertical ink. }
+  FChart.Option := '{ xAxis: { data: [''A'', ''B'', ''C'', ''D''] },'
+    + ' yAxis: { min: 0, max: 10 }, series: [] }';
   Draw;
   gb := FChart.Build.Grid(0);
   left := Round(gb.PlotRect.Left);
@@ -503,8 +514,10 @@ begin
     total. The first version measured from left-6 and asked for more than eight
     pixels of ink -- and the axis LINE's own antialiasing, spread down the whole
     height of the plot, supplied them. It passed with every tick mark removed. }
-  FChart.Option := '{ xAxis: { data: [''A'', ''B'', ''C''] }, yAxis: {},'
-    + ' series: [{ type: ''bar'', data: [10, 20, 30] }] }';
+  { No series -- see TestAValueAxisLabelsItsTicks: the background reference
+    comes from inside the plot. }
+  FChart.Option := '{ xAxis: { data: [''A'', ''B'', ''C''] },'
+    + ' yAxis: { min: 0, max: 30 }, series: [] }';
   Draw;
   gb := FChart.Build.Grid(0);
   left := Round(gb.PlotRect.Left);
@@ -567,21 +580,39 @@ begin
     place only -- into the layout spec, where it shrank the thickness reserved
     for labels -- and the axis was then drawn regardless, so the option looked
     like it did something (the plot got wider) while the lines stayed. }
-  FChart.Option := '{ xAxis: { data: [''A'', ''B'', ''C''] }, yAxis: {},'
-    + ' series: [{ type: ''bar'', data: [10, 20, 30] }] }';
+  { NO SERIES, and here it changes what the test MEANS. "Both axes hidden and
+    nothing is drawn inside the plot" was true when the control drew nothing
+    but axes; with marks it is false and should be -- `show: false` on an axis
+    hides the AXIS, and a series bound to a hidden axis still maps to pixels
+    and still draws. Keeping the old assertion would have pinned a bug. }
+  FChart.Option := '{ xAxis: { data: [''A'', ''B'', ''C''] },'
+    + ' yAxis: { min: 0, max: 30 }, series: [] }';
   Draw;
   bg := PixelAt(200, 150);
   inkShown := PlotInk;
   AssertTrue('the visible chart drew something in the plot', inkShown > 50);
 
   FChart.Option := '{ xAxis: { data: [''A'', ''B'', ''C''], show: false },'
-    + ' yAxis: { show: false },'
-    + ' series: [{ type: ''bar'', data: [10, 20, 30] }] }';
+    + ' yAxis: { min: 0, max: 30, show: false }, series: [] }';
   Draw;
   bg := PixelAt(200, 150);
   inkHidden := PlotInk;
   AssertEquals(Format('both axes are hidden but %d pixels are still drawn '
     + 'inside the plot', [inkHidden]), 0, inkHidden);
+
+  { AND A SERIES STILL DRAWS THROUGH A HIDDEN AXIS. `show: false` means "do not
+    draw this axis", not "do not use it": the axis still exists, still carries
+    its extent, and everything bound to it still maps to pixels. That is stated
+    in PaintAxis' own comment and nothing tested it until series marks existed
+    to test it with -- and the assertion above, left as it was, would have
+    turned it into a bug. }
+  FChart.Option := '{ xAxis: { data: [''A'', ''B'', ''C''], show: false },'
+    + ' yAxis: { min: 0, max: 30, show: false },'
+    + ' series: [{ type: ''bar'', data: [10, 20, 30] }] }';
+  Draw;
+  bg := PixelAt(200, 4);
+  AssertTrue('a series bound to hidden axes draws nothing at all',
+    PlotInk > 50);
 end;
 
 procedure TAdvanceChartTest.TestTheAxisHonoursMinMaxAndInterval;
@@ -655,8 +686,9 @@ begin
     A value axis over 0..30 gets a handful of ticks; over 0..3000 in a 300px
     control it gets many more than fit. The number of labels DRAWN must not
     grow in step with the number of ticks. }
-  FChart.Option := '{ xAxis: { data: [''A''] }, yAxis: {},'
-    + ' series: [{ type: ''bar'', data: [30] }] }';
+  { No series -- see TestAValueAxisLabelsItsTicks. }
+  FChart.Option := '{ xAxis: { data: [''A''] }, yAxis: { min: 0, max: 30 },'
+    + ' series: [] }';
   Draw;
   gutter := Trunc(FChart.Build.Grid(0).PlotRect.Left) - 8;
   x0 := gutter - 45;
@@ -1537,6 +1569,115 @@ begin
   finally
     bmp.Free;
   end;
+end;
+
+procedure TAdvanceChartTest.TestTheSeriesIsActuallyDrawnInTheThemesColour;
+var
+  gb: TTyGridBuild;
+  tall, short_, plain: Integer;
+begin
+  { THE CONTROL DREW NO DATA AT ALL until this. Its own diagnostics said so --
+    "Series marks are not painted yet" -- and the paint list built for item 14
+    had no consumer outside tests, which the Tier 0 re-audit recorded.
+
+    Measured as ink in the TOP HALF of the plot, where only a tall bar reaches:
+    a total over the whole plot would be met by the grid lines alone, which is
+    the shape of fake-green this file has been caught by before. }
+  FCtl.StyleOverride := 'TyAdvChartSeries1 { background: #FF0000; }';
+
+  FChart.Option := '{ xAxis: { data: [''A''] }, yAxis: { min: 0, max: 100 },'
+    + ' series: [{ type: ''bar'', data: [95] }] }';
+  Draw;
+  gb := FChart.Build.Grid(0);
+  tall := RedIn(Round(gb.PlotRect.Left), Round(gb.PlotRect.Top),
+                Round(gb.PlotRect.Right), Round(gb.PlotRect.Top) +
+                Round((gb.PlotRect.Bottom - gb.PlotRect.Top) / 3));
+  AssertTrue(Format('a bar of 95 out of 100 reaches the top third (%d px)',
+    [tall]), tall > 100);
+
+  { AND A SHORT ONE DOES NOT, which is what says the height is the VALUE and
+    not just "a bar was drawn somewhere". }
+  FChart.Option := '{ xAxis: { data: [''A''] }, yAxis: { min: 0, max: 100 },'
+    + ' series: [{ type: ''bar'', data: [5] }] }';
+  Draw;
+  gb := FChart.Build.Grid(0);
+  short_ := RedIn(Round(gb.PlotRect.Left), Round(gb.PlotRect.Top),
+                  Round(gb.PlotRect.Right), Round(gb.PlotRect.Top) +
+                  Round((gb.PlotRect.Bottom - gb.PlotRect.Top) / 3));
+  AssertEquals('a bar of 5 does not', 0, short_);
+
+  { THE COLOUR COMES FROM THE THEME, not from the renderer. Without the
+    override the palette is derived from --accent, so the bar is there and it
+    is NOT red -- which is what says the red above was the theme's doing. }
+  FCtl.StyleOverride := '';
+  FChart.Option := '{ xAxis: { data: [''A''] }, yAxis: { min: 0, max: 100 },'
+    + ' series: [{ type: ''bar'', data: [95] }] }';
+  Draw;
+  gb := FChart.Build.Grid(0);
+  plain := RedIn(Round(gb.PlotRect.Left), Round(gb.PlotRect.Top),
+                 Round(gb.PlotRect.Right), Round(gb.PlotRect.Top) +
+                 Round((gb.PlotRect.Bottom - gb.PlotRect.Top) / 3));
+  AssertEquals('the default palette is not red', 0, plain);
+  AssertTrue('but the bar is still drawn', tall > 100);
+end;
+
+{ Pixels in a rectangle that are strongly red. Used where the fixture has
+  overridden a series colour to red, so the count is of that series and of
+  nothing else on the canvas. }
+procedure TAdvanceChartTest.TestTheSecondSeriesTakesTheSecondSlotOfTheRamp;
+var
+  gb: TTyGridBuild;
+  red, green: Integer;
+  l, t, r, b: Integer;
+begin
+  { THE RAMP HAS EIGHT SLOTS AND THEY ARE MEANT TO BE USED. A version that
+    resolved TyAdvChartSeries1 for every series passed every test there was --
+    a one-series chart cannot tell the difference, and one-series charts were
+    all this file had. Two series in two colours is the smallest case that can.
+
+    Both are given the whole plot to themselves by putting them on different
+    categories, so each colour has somewhere to be. }
+  FCtl.StyleOverride := 'TyAdvChartSeries1 { background: #FF0000; }'
+    + ' TyAdvChartSeries2 { background: #00FF00; }';
+  FChart.Option := '{ xAxis: { data: [''A'', ''B''] },'
+    + ' yAxis: { min: 0, max: 100 }, series: ['
+    + '{ type: ''bar'', data: [95, 0] }, { type: ''bar'', data: [0, 95] }] }';
+  Draw;
+  gb := FChart.Build.Grid(0);
+  l := Round(gb.PlotRect.Left);
+  t := Round(gb.PlotRect.Top);
+  r := Round(gb.PlotRect.Right);
+  b := t + Round((gb.PlotRect.Bottom - gb.PlotRect.Top) / 3);
+  red := RedIn(l, t, r, b);
+  green := GreenIn(l, t, r, b);
+  AssertTrue(Format('the first series is drawn in slot 1 (%d px)', [red]),
+    red > 100);
+  AssertTrue(Format('and the second in slot 2, not slot 1 again (%d px)',
+    [green]), green > 100);
+end;
+
+function TAdvanceChartTest.RedIn(AL, AT, AR, AB: Integer): Integer;
+var x, y: Integer; p: TBGRAPixel;
+begin
+  Result := 0;
+  for y := AT to AB do
+    for x := AL to AR do
+    begin
+      p := PixelAt(x, y);
+      if (p.red > 180) and (p.green < 80) and (p.blue < 80) then Inc(Result);
+    end;
+end;
+
+function TAdvanceChartTest.GreenIn(AL, AT, AR, AB: Integer): Integer;
+var x, y: Integer; p: TBGRAPixel;
+begin
+  Result := 0;
+  for y := AT to AB do
+    for x := AL to AR do
+    begin
+      p := PixelAt(x, y);
+      if (p.green > 180) and (p.red < 80) and (p.blue < 80) then Inc(Result);
+    end;
 end;
 
 initialization
