@@ -21,20 +21,23 @@ unit tyControls.AdvChart.Marks;
   owns -- and would get horizontal bars wrong, which is exactly the defect
   DataToLayout carried until it was made to ask which axis is the spine.
 
-  WHAT IS NOT HERE, deliberately. ECharts' bar width solver
-  (calcBarWidthAndOffset: barWidth / barMaxWidth / barMinWidth / barGap /
-  barCategoryGap, and the offsetting that lets several series share one band)
-  is a Tier 1 row of its own. What this does is the SINGLE-SERIES default:
-  upstream's own barCategoryGap of '20%', which is where BarBandFraction's 0.8
-  comes from. Several bar series on one axis will draw on top of each other
-  until that solver exists, which is a missing feature and not a wrong number.
-  Symbols on a line are likewise their own Tier 1 row. }
+  THE WIDTH IS NOT DECIDED HERE. It cannot be: how wide a bar is depends on
+  every OTHER bar series sharing the base axis, which one series cannot see.
+  AdvChart.BarLayout solves that per axis and the answer arrives in the visual.
+  This unit's job is to put the rect where the answer says.
+
+  WHAT IS STILL NOT HERE. Value stacking -- several series naming one `stack`
+  accumulating along the value axis -- is its own Tier 1 row; the solver
+  already groups them into one COLUMN, which is the layout half of it, so they
+  share a width and an offset and draw over each other. Symbols on a line, and
+  the four-corner form of borderRadius, are likewise their own rows. }
 interface
 uses
   SysUtils, Math,
   tyControls.AdvChart.Types, tyControls.AdvChart.Coord,
   tyControls.AdvChart.Data, tyControls.AdvChart.Shape,
-  tyControls.AdvChart.Paint, tyControls.AdvChart.Series;
+  tyControls.AdvChart.Paint, tyControls.AdvChart.Series,
+  tyControls.AdvChart.BarLayout;
 
 type
   { How one series looks. Resolved by the control from the theme and passed in;
@@ -45,9 +48,12 @@ type
     { <= 0 means no stroke, the same rule the element style and
       TTyPainter.StrokePath both follow. }
     StrokeWidthLogical: Double;
-    { The share of its band a bar occupies, 0..1. ECharts' barCategoryGap
-      default is '20%', so 0.8. }
-    BarBandFraction: Double;
+    { Where this bar sits in its band, solved across every bar series sharing
+      the base axis -- which is why it arrives rather than being computed here.
+      Unsolved means no solver ran (a pure-unit caller with one series), and
+      the default for exactly that case is asked of the solver too, so there is
+      no second definition of what a lone bar's width is. }
+    Bar: TTyBarColumn;
     { Painted front-to-back by (Z, Z2, insertion). Marks sit above the grid;
       Z2 keeps two series in a stable order relative to each other. }
     Z, Z2: Integer;
@@ -86,7 +92,7 @@ begin
   Result.Fill := AFill;
   Result.Stroke := 0;
   Result.StrokeWidthLogical := 0;
-  Result.BarBandFraction := 0.8;
+  Result.Bar := Default(TTyBarColumn);
   Result.Z := 0;
   Result.Z2 := 0;
 end;
@@ -107,30 +113,87 @@ begin
   Result.Datum := TyChartDatum(ASeries, ARow);
 end;
 
-{ ABounds narrowed to AFraction of its extent ALONG the base axis, centred.
+{ ABounds' band replaced by the solved column, ALONG the base axis.
 
   Along the base axis, not along x: on a horizontal bar chart the band runs
-  vertically, and shrinking the wrong axis would trim the bar's LENGTH -- which
-  is the value it is drawing. }
-function NarrowToBand(const ABounds: TTyRectF; ABaseHorizontal: Boolean;
-  AFraction: Double): TTyRectF;
+  vertically, and touching the wrong axis would change the bar's LENGTH, which
+  is the value it is drawing.
+
+  The offset is measured from the band CENTRE, upstream's convention, because
+  that is the point the coordinate system hands back for a category. A lone
+  default bar has Offset = -Width/2 and so stays centred. }
+function PlaceInBand(const ABounds: TTyRectF; ABaseHorizontal: Boolean;
+  const ACol: TTyBarColumn): TTyRectF;
 var
-  cut: Double;
+  centre: Double;
 begin
   Result := ABounds;
-  if (AFraction <= 0) or (AFraction >= 1) then Exit;
+  { A COLUMN OF NO WIDTH COLLAPSES; it does not fall back to the band. Leaving
+    ABounds alone looks like the safe branch and is the opposite: ABounds is
+    the whole cell, so `barCategoryGap: '100%'` -- which solves every column to
+    zero -- drew bars filling their entire band. The caller drops a collapsed
+    rect, and it can only do that if one actually arrives. }
   if ABaseHorizontal then
   begin
-    cut := (ABounds.Right - ABounds.Left) * (1 - AFraction) / 2;
-    Result.Left := ABounds.Left + cut;
-    Result.Right := ABounds.Right - cut;
+    centre := (ABounds.Left + ABounds.Right) / 2;
+    Result.Left := centre + ACol.Offset;
+    Result.Right := Result.Left + ACol.Width;
   end
   else
   begin
-    cut := (ABounds.Bottom - ABounds.Top) * (1 - AFraction) / 2;
-    Result.Top := ABounds.Top + cut;
-    Result.Bottom := ABounds.Bottom - cut;
+    centre := (ABounds.Top + ABounds.Bottom) / 2;
+    Result.Top := centre + ACol.Offset;
+    Result.Bottom := Result.Top + ACol.Width;
   end;
+end;
+
+{ barMinHeight, applied ACROSS the base axis so a value too small to see still
+  shows as something.
+
+  Anchored on the baseline, not on the cell, because which end of the cell is
+  the baseline is exactly what the Min/Max that built it threw away. The sign
+  rule is upstream's and differs between the two orientations by one boundary:
+  a vertical bar of value zero points in the positive direction (`<= 0`), and
+  so does a horizontal one (`< 0`), which is the same answer reached from
+  opposite sides of the comparison. }
+function ApplyMinHeight(const ABounds: TTyRectF; ABaseHorizontal: Boolean;
+  AAnchor, ABaseline, AMinHeight: Double): TTyRectF;
+var
+  span, sign: Double;
+begin
+  Result := ABounds;
+  if AMinHeight <= 0 then Exit;
+  span := AAnchor - ABaseline;
+  if Abs(span) >= AMinHeight then Exit;
+  if ABaseHorizontal then
+  begin
+    if span <= 0 then sign := -1 else sign := 1;
+    Result.Top := Min(ABaseline, ABaseline + sign * AMinHeight);
+    Result.Bottom := Max(ABaseline, ABaseline + sign * AMinHeight);
+  end
+  else
+  begin
+    if span < 0 then sign := -1 else sign := 1;
+    Result.Left := Min(ABaseline, ABaseline + sign * AMinHeight);
+    Result.Right := Max(ABaseline, ABaseline + sign * AMinHeight);
+  end;
+end;
+
+{ The column this series draws with. Solved by the layout pass in production;
+  for a caller that has not run one, the SAME solver answers for a single
+  default series, so a lone bar is 0.69 of its band either way and the number
+  is written down in exactly one place. }
+function ColumnFor(const AVisual: TTySeriesVisual; const ABounds: TTyRectF;
+  ABaseHorizontal: Boolean): TTyBarColumn;
+var
+  band: Double;
+begin
+  if AVisual.Bar.Solved then Exit(AVisual.Bar);
+  if ABaseHorizontal then
+    band := ABounds.Right - ABounds.Left
+  else
+    band := ABounds.Bottom - ABounds.Top;
+  Result := TyBarColumnForOneSeries(band);
 end;
 
 type
@@ -145,13 +208,25 @@ function BuildBars(const ABinding: TTySeriesBinding; AStore: TTyDataStore;
   AColX, AColY: Integer): Integer;
 var
   i: Integer;
-  x, y: Double;
+  x, y, baseline, anchor: Double;
   lay: TTyCoordLayout;
   r: TTyRectF;
-  baseHoriz: Boolean;
+  p: TTyPointF;
+  col: TTyBarColumn;
+  baseHoriz, haveCol: Boolean;
+  shape: TTyChartShape;
 begin
   Result := 0;
   baseHoriz := (ABinding.BaseAxis = nil) or ABinding.BaseAxis.Horizontal;
+  haveCol := False;
+  col := Default(TTyBarColumn);
+  { The baseline the value axis measures from -- the same one DataToLayout used
+    to build the cell, asked again because the cell's Min/Max lost which end it
+    was. Only barMinHeight needs it. }
+  baseline := 0;
+  if ABinding.ValueAxis <> nil then
+    baseline := ABinding.ValueAxis.DataToCoord(
+      ABinding.ValueAxis.Scale.GetExtent.Start);
   for i := 0 to AStore.Count - 1 do
   begin
     x := AStore.Get(AColX, i);
@@ -168,8 +243,26 @@ begin
     if IsNan(x) or IsNan(y) then Continue;
     lay := ABinding.Cart.DataToLayout([x, y]);
     if not TyRectFIsValid(lay.Rect) then Continue;
-    r := NarrowToBand(lay.Rect, baseHoriz, AVisual.BarBandFraction);
-    AList.Add(MarkElement(TyShapeRect(r), AVisual, ABinding.SeriesIndex, i));
+    if not haveCol then
+    begin
+      col := ColumnFor(AVisual, lay.Rect, baseHoriz);
+      haveCol := True;
+    end;
+    r := PlaceInBand(lay.Rect, baseHoriz, col);
+    if col.MinHeightPx > 0 then
+    begin
+      p := ABinding.Cart.DataToPoint([x, y]);
+      if baseHoriz then anchor := p.Y else anchor := p.X;
+      r := ApplyMinHeight(r, baseHoriz, anchor, baseline, col.MinHeightPx);
+    end;
+    { A zero-width column draws nothing rather than an invisible rect that is
+      still hit-testable -- which is what a bar on a value axis used to be. }
+    if (r.Right - r.Left <= 0) or (r.Bottom - r.Top <= 0) then Continue;
+    if col.RadiusPx > 0 then
+      shape := TyShapeRoundRect(r, col.RadiusPx)
+    else
+      shape := TyShapeRect(r);
+    AList.Add(MarkElement(shape, AVisual, ABinding.SeriesIndex, i));
     Inc(Result);
   end;
 end;

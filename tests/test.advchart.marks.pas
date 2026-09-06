@@ -11,7 +11,8 @@ uses Classes, SysUtils, Math, fpcunit, testregistry,
      tyControls.AdvChart.Types, tyControls.AdvChart.Scale,
      tyControls.AdvChart.Coord, tyControls.AdvChart.Data,
      tyControls.AdvChart.Shape, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.Series, tyControls.AdvChart.Marks;
+     tyControls.AdvChart.Series, tyControls.AdvChart.Marks,
+     tyControls.AdvChart.BarLayout;
 type
   TAdvChartMarksTest = class(TTestCase)
   private
@@ -33,6 +34,10 @@ type
     procedure TestEveryMarkAnswersForItsOwnRow;
     procedure TestAnUnknownSeriesTypeDrawsNothing;
     procedure TestThePublishedAnswerMatchesWhatIsActuallyDrawn;
+    procedure TestTheSolvedColumnDecidesWhereTheBarGoes;
+    procedure TestAValueTooSmallToSeeStillGetsBarMinHeight;
+    procedure TestARoundedBarIsARoundedShapeNotAFlagNobodyReads;
+    procedure TestAColumnOfNoWidthDrawsNothingRatherThanTheWholeBand;
   end;
 
 implementation
@@ -136,33 +141,45 @@ procedure TAdvChartMarksTest.TestBarsLeaveTheCategoryGapUpstreamLeaves;
 var
   b, cell: TTyRectF;
   v: TTySeriesVisual;
+  col: TTyBarColumn;
+  band: Double;
 begin
-  { UPSTREAM'S OWN DEFAULT, not an invented one: ECharts' barCategoryGap is
-    '20%', so a bar takes 0.8 of its band. Bars that fill the band touch each
-    other and read as a single block.
+  { THIS TEST USED TO PIN 0.8, AND 0.8 WAS WRONG. It cited "ECharts'
+    barCategoryGap is '20%'", which is what the published option reference and
+    this repo's generated catalog both say. The 6.1.0 source says otherwise:
+    there is no fixed default at all, it is `max(35 - columns*4, 15) + '%'`, so
+    a lone bar leaves 31% and takes 0.69 of its band.
 
-    The full width solver -- barWidth / barMaxWidth / barGap / barCategoryGap
-    and the offsetting that lets several series share a band -- is its own
-    Tier 1 row. This is the single-series default it will replace. }
+    Nothing here writes 0.69 down. The expected width is asked of the solver,
+    because a test that repeats a constant only proves the constant was copied
+    twice; what is worth pinning is that the mark and the solver agree, and
+    that the number is not 1 (the bar is narrowed at all) and not 0.8 (the old
+    wrong one, which a careless revert would restore). }
   Given('bar', 2, [50, 50]);
   v := TySeriesVisual($FF3366CC);
-  AssertEquals('the default is upstream''s', 0.8, v.BarBandFraction, 1e-9);
+  AssertFalse('an unsolved visual asks the solver on the spot', v.Bar.Solved);
   TyBuildSeriesMarks(FBinding, FStore, v, FList);
 
   b := TyShapeBounds(FList.Element(0).Shape);
   cell := FCart.DataToLayout([0.0, 50.0]).Rect;
-  AssertEquals('the bar is four fifths of its band',
-    (cell.Right - cell.Left) * 0.8, b.Right - b.Left, 0.001);
+  band := cell.Right - cell.Left;
+  col := TyBarColumnForOneSeries(band);
+  AssertEquals('the mark is exactly the column the solver gives',
+    col.Width, b.Right - b.Left, 0.001);
   AssertTrue('and it does not reach the band edge', b.Left > cell.Left);
 
-  { A FRACTION OF 1 FILLS THE BAND -- so the narrowing is the fraction doing
-    something, not the geometry happening to differ. }
-  FList.Clear;
-  v.BarBandFraction := 1;
-  TyBuildSeriesMarks(FBinding, FStore, v, FList);
-  b := TyShapeBounds(FList.Element(0).Shape);
-  AssertEquals('a fraction of one fills the band',
-    cell.Right - cell.Left, b.Right - b.Left, 0.001);
+  { THE ACTUAL NUMBER, once, so a solver that silently started answering
+    something else would be caught here rather than agreeing with itself. }
+  AssertEquals('one column leaves the 31% gap upstream computes',
+    band * 0.69, col.Width, band * 1e-6);
+  AssertTrue('which is not the old 0.8', Abs(col.Width - band * 0.8) > 1);
+
+  { CENTRED, which is what an offset of -Width/2 means and the only arrangement
+    a single series can correctly have. }
+  AssertEquals('a lone column is centred on its band',
+    -col.Width / 2, col.Offset, 0.001);
+  AssertEquals('so the mark is too', (cell.Left + cell.Right) / 2,
+    (b.Left + b.Right) / 2, 0.001);
 end;
 
 procedure TAdvChartMarksTest.TestALineIsOnePolylineAndAGapBreaksIt;
@@ -259,6 +276,100 @@ begin
     series at all, so answering yes for it would promise a chart that cannot
     draw. }
   AssertFalse('and Bar is not bar', TySeriesTypeHasRenderer('Bar'));
+end;
+
+procedure TAdvChartMarksTest.TestTheSolvedColumnDecidesWhereTheBarGoes;
+var
+  v: TTySeriesVisual;
+  b, cell: TTyRectF;
+begin
+  { THE POINT OF THE SPLIT. Marks does not decide a width; it puts the rect
+    where the solved column says. A test that only ever ran the single-series
+    fallback would pass with the offset ignored entirely. }
+  Given('bar', 2, [50, 50]);
+  v := TySeriesVisual($FF3366CC);
+  v.Bar.Solved := True;
+  v.Bar.Width := 10;
+  v.Bar.Offset := 30;          { deliberately off-centre and to the right }
+  TyBuildSeriesMarks(FBinding, FStore, v, FList);
+
+  b := TyShapeBounds(FList.Element(0).Shape);
+  cell := FCart.DataToLayout([0.0, 50.0]).Rect;
+  AssertEquals('the width is the column''s', 10.0, b.Right - b.Left, 0.001);
+  AssertEquals('and it starts at the centre plus the offset',
+    (cell.Left + cell.Right) / 2 + 30, b.Left, 0.001);
+  AssertTrue('so it is not centred any more',
+    b.Left > (cell.Left + cell.Right) / 2);
+end;
+
+procedure TAdvChartMarksTest.TestAValueTooSmallToSeeStillGetsBarMinHeight;
+var
+  v: TTySeriesVisual;
+  b: TTyRectF;
+begin
+  { A value of zero draws nothing at all without this, and a chart of mostly
+    tiny values looks like a chart of no values. }
+  Given('bar', 2, [0, 100]);
+  v := TySeriesVisual($FF3366CC);
+  v.Bar := TyBarColumnForOneSeries(200);
+  v.Bar.MinHeightPx := 6;
+  TyBuildSeriesMarks(FBinding, FStore, v, FList);
+
+  b := TyShapeBounds(FList.Element(0).Shape);
+  AssertEquals('the zero bar is drawn at the minimum height',
+    6.0, b.Bottom - b.Top, 0.001);
+
+  { UPWARDS, because upstream includes zero in the negative test precisely so a
+    zero bar points the way a positive one does. On a y axis that runs 0 at the
+    bottom, "up" is a smaller Bottom than the baseline. }
+  AssertTrue('and it points the way a positive value would',
+    b.Bottom <= FCart.DataToPoint([0.0, 0.0]).Y + 0.001);
+
+  { AND A TALL BAR IS UNTOUCHED -- the minimum is a floor, not a size. }
+  b := TyShapeBounds(FList.Element(1).Shape);
+  AssertTrue('a bar that is already tall keeps its height',
+    b.Bottom - b.Top > 100);
+end;
+
+procedure TAdvChartMarksTest.TestARoundedBarIsARoundedShapeNotAFlagNobodyReads;
+var
+  v: TTySeriesVisual;
+begin
+  { The radius has to reach the SHAPE, or it is a field the solver fills in and
+    nothing looks at -- which is this repo's most repeated failure. }
+  Given('bar', 1, [50]);
+  v := TySeriesVisual($FF3366CC);
+  v.Bar := TyBarColumnForOneSeries(200);
+  v.Bar.RadiusPx := 5;
+  TyBuildSeriesMarks(FBinding, FStore, v, FList);
+  AssertEquals('a radius makes a round rect',
+    Ord(cskRoundRect), Ord(FList.Element(0).Shape.Kind));
+  AssertEquals('carrying the radius', 5.0, FList.Element(0).Shape.RadiusPx, 1e-9);
+
+  { AND NO RADIUS STAYS A PLAIN RECT, so every bar is not quietly rounded. }
+  FList.Clear;
+  v.Bar.RadiusPx := 0;
+  TyBuildSeriesMarks(FBinding, FStore, v, FList);
+  AssertEquals('no radius stays square',
+    Ord(cskRect), Ord(FList.Element(0).Shape.Kind));
+end;
+
+procedure TAdvChartMarksTest.TestAColumnOfNoWidthDrawsNothingRatherThanTheWholeBand;
+var v: TTySeriesVisual;
+begin
+  { `barCategoryGap: '100%'` solves every column to zero width. The first
+    version of PlaceInBand treated that as "leave the rect alone", and the rect
+    it was leaving alone was the WHOLE CELL -- so asking for no bars drew the
+    widest bars possible. The guard downstream could never fire, because a
+    zero-width rect never reached it. }
+  Given('bar', 2, [50, 50]);
+  v := TySeriesVisual($FF3366CC);
+  v.Bar.Solved := True;
+  v.Bar.Width := 0;
+  v.Bar.Offset := 0;
+  AssertEquals('a zero-width column draws nothing', 0,
+    TyBuildSeriesMarks(FBinding, FStore, v, FList));
+  AssertEquals('and adds nothing to hit-test against', 0, FList.Count);
 end;
 
 initialization

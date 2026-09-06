@@ -34,7 +34,8 @@ uses
   tyControls.AdvChart.Builder, tyControls.AdvChart.Series,
   tyControls.AdvChart.Measure, tyControls.AdvChart.Handlers,
   tyControls.AdvChart.Paint, tyControls.AdvChart.Render,
-  tyControls.AdvChart.Marks, tyControls.SubPixel;
+  tyControls.AdvChart.Marks, tyControls.AdvChart.BarLayout,
+  tyControls.SubPixel;
 
 const
   { The four axis metrics, and the defaults to fall back on when a theme has not
@@ -57,6 +58,12 @@ type
     FIndex: TTyAxisSeriesIndex;
     FBindings: TTySeriesBindingArray;
     FStores: array of TTyDataStore;
+    { Every bar's width and offset, index-parallel to FBindings. Solved in
+      Relayout rather than Rebuild because it needs the FINAL pixel extents:
+      the plot rect is shrunk to fit the labels in phase C, and a band measured
+      before that is the wrong width -- silently, since nothing raises and the
+      bars merely come out slightly off. }
+    FBarCols: TTyBarColumnArray;
     FDirty: Boolean;
     FLastRect: TTyRectF;
     FOptionText: string;
@@ -225,6 +232,7 @@ begin
   for i := 0 to High(FStores) do
     FStores[i].Free;
   FStores := nil;
+  FBarCols := nil;
 end;
 
 procedure TTyAdvanceChart.DropBuild;
@@ -374,6 +382,8 @@ begin
     called directly, so the layout layer stays free of the painter and a test
     can hand it a deterministic measurer instead of this machine's fonts. }
   TyLayoutGrids(FBuild, FOption, AMeasurer, APPI, txt);
+  { AFTER phase C, for the reason on FBarCols. }
+  FBarCols := TySolveBarLayout(FOption, FBuild, FBindings, FStores, FIndex);
   FDirty := False;
 end;
 
@@ -898,6 +908,7 @@ begin
     begin
       if i > High(FStores) then Break;
       v := TySeriesVisual(TTyChartColor(SeriesColor(FBindings[i].SeriesIndex)));
+      if i <= High(FBarCols) then v.Bar := FBarCols[i];
       { NO Z2 HERE. It was set to i, and a mutant that set it to 0 survived
         every test -- because the paint list's documented tiebreaker is the
         INSERTION INDEX, and these are inserted in series order already. Two

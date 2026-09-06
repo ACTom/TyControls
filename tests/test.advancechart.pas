@@ -74,6 +74,7 @@ type
     procedure TestACrowdedAxisThinsItsLabels;
     procedure TestTheSeriesIsActuallyDrawnInTheThemesColour;
     procedure TestTheSecondSeriesTakesTheSecondSlotOfTheRamp;
+    procedure TestTwoBarSeriesStandSideBySideInsteadOfOnTopOfEachOther;
     procedure TestALayeredFrameDrawsTheSamePictureAsAWholeOne;
     procedure TestAKeptStaticLayerDoesNoWorkAndInvalidateDropsIt;
     procedure TestTheLayoutOwnsTheThinningDecision;
@@ -1654,6 +1655,56 @@ begin
     red > 100);
   AssertTrue(Format('and the second in slot 2, not slot 1 again (%d px)',
     [green]), green > 100);
+end;
+
+procedure TAdvanceChartTest.TestTwoBarSeriesStandSideBySideInsteadOfOnTopOfEachOther;
+var
+  gb: TTyGridBuild;
+  t, b, x, firstRed, lastRed, firstGreen, lastGreen: Integer;
+begin
+  { WHAT THE SOLVER IS FOR, seen from the outside. Two bar series on ONE
+    category used to be drawn in exactly the same rectangle: the second hid the
+    first, and a chart with two series looked like a chart with one.
+
+    Both are given the same value so the only thing that can distinguish them
+    is WHERE they are, not how tall. }
+  FCtl.StyleOverride := 'TyAdvChartSeries1 { background: #FF0000; }'
+    + ' TyAdvChartSeries2 { background: #00FF00; }';
+  FChart.Option := '{ xAxis: { data: [''A''] }, yAxis: { min: 0, max: 100 },'
+    + ' series: [{ type: ''bar'', data: [80] }, { type: ''bar'', data: [80] }] }';
+  Draw;
+  gb := FChart.Build.Grid(0);
+  t := Round(gb.PlotRect.Top) + 4;
+  b := Round((gb.PlotRect.Top + gb.PlotRect.Bottom) / 2);
+
+  firstRed := -1; lastRed := -1; firstGreen := -1; lastGreen := -1;
+  for x := Round(gb.PlotRect.Left) to Round(gb.PlotRect.Right) do
+  begin
+    if RedIn(x, t, x, b) > 0 then
+    begin
+      if firstRed < 0 then firstRed := x;
+      lastRed := x;
+    end;
+    if GreenIn(x, t, x, b) > 0 then
+    begin
+      if firstGreen < 0 then firstGreen := x;
+      lastGreen := x;
+    end;
+  end;
+
+  AssertTrue('the first series is drawn', firstRed >= 0);
+  AssertTrue('and so is the second -- which it was not before the solver, '
+    + 'because it was underneath', firstGreen >= 0);
+  { SIDE BY SIDE: one column entirely left of the other. Overlap of any kind
+    would put a green column inside the red one's span. }
+  AssertTrue(Format('they do not overlap (red %d..%d, green %d..%d)',
+    [firstRed, lastRed, firstGreen, lastGreen]), lastRed < firstGreen);
+
+  { AND THE GROUP IS STILL CENTRED on the single category's band, so adding a
+    series does not shove the chart sideways. }
+  AssertEquals('the pair straddles the band centre',
+    (gb.PlotRect.Left + gb.PlotRect.Right) / 2,
+    (firstRed + lastGreen) / 2, 2.0);
 end;
 
 function TAdvanceChartTest.RedIn(AL, AT, AR, AB: Integer): Integer;
