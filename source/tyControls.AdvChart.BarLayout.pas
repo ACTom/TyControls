@@ -20,10 +20,11 @@ unit tyControls.AdvChart.BarLayout;
 
   COLUMNS, NOT SERIES. Upstream works in columns keyed by stack id, so several
   series naming the same `stack` share one column -- one width, one offset.
-  That grouping is a LAYOUT fact and is right on its own; making their values
-  accumulate along the value axis is the separate stacking row, and it is not
-  done. Two series with the same `stack` therefore share a column and draw over
-  each other today: the right column, the wrong values.
+
+  THIS GROUPING IS PER BASE AXIS, and it is not the same question as the one
+  AdvChart.Stack answers. That unit accumulates VALUES, keyed on the stack
+  string across the whole chart with no axis test at all. Two groupings, one
+  word; confusing them is the obvious mistake.
 
   PURE: SysUtils, Math, fpjson and the AdvChart units. No painter, no LCL. }
 interface

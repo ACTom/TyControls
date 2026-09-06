@@ -75,6 +75,7 @@ type
     procedure TestTheSeriesIsActuallyDrawnInTheThemesColour;
     procedure TestTheSecondSeriesTakesTheSecondSlotOfTheRamp;
     procedure TestTwoBarSeriesStandSideBySideInsteadOfOnTopOfEachOther;
+    procedure TestAStackedBarStandsOnTheOneBelowIt;
     procedure TestALayeredFrameDrawsTheSamePictureAsAWholeOne;
     procedure TestAKeptStaticLayerDoesNoWorkAndInvalidateDropsIt;
     procedure TestTheLayoutOwnsTheThinningDecision;
@@ -1705,6 +1706,60 @@ begin
   AssertEquals('the pair straddles the band centre',
     (gb.PlotRect.Left + gb.PlotRect.Right) / 2,
     (firstRed + lastGreen) / 2, 2.0);
+end;
+
+procedure TAdvanceChartTest.TestAStackedBarStandsOnTheOneBelowIt;
+var
+  gb: TTyGridBuild;
+  l, r, y, redTop, redBot, greenTop, greenBot: Integer;
+begin
+  { STACKING, SEEN FROM THE OUTSIDE. Two series naming one stack occupy ONE
+    column -- the bar solver already saw to that -- and the second stands on
+    top of the first rather than starting from the axis.
+
+    Both are 40 out of 100, so if the upper one drew from the baseline the two
+    would coincide exactly and the picture would show a single 40-tall bar. }
+  FCtl.StyleOverride := 'TyAdvChartSeries1 { background: #FF0000; }'
+    + ' TyAdvChartSeries2 { background: #00FF00; }';
+  FChart.Option := '{ xAxis: { data: [''A''] }, yAxis: { min: 0, max: 100 },'
+    + ' series: [{ type: ''bar'', stack: ''s'', data: [40] },'
+    + '          { type: ''bar'', stack: ''s'', data: [40] }] }';
+  Draw;
+  gb := FChart.Build.Grid(0);
+  l := Round(gb.PlotRect.Left);
+  r := Round(gb.PlotRect.Right);
+
+  redTop := -1; redBot := -1; greenTop := -1; greenBot := -1;
+  for y := Round(gb.PlotRect.Top) to Round(gb.PlotRect.Bottom) do
+  begin
+    if RedIn(l, y, r, y) > 0 then
+    begin
+      if redTop < 0 then redTop := y;
+      redBot := y;
+    end;
+    if GreenIn(l, y, r, y) > 0 then
+    begin
+      if greenTop < 0 then greenTop := y;
+      greenBot := y;
+    end;
+  end;
+
+  AssertTrue('the lower series is drawn', redTop >= 0);
+  AssertTrue('and the upper one', greenTop >= 0);
+  { ONE ABOVE THE OTHER, not side by side and not on top of each other: the
+    upper bar's whole span is above the lower bar's top edge. }
+  AssertTrue(Format('the upper sits above the lower (red %d..%d, green %d..%d)',
+    [redTop, redBot, greenTop, greenBot]), greenBot <= redTop + 1);
+  { AND THEY MEET. A gap would mean the floor was computed from something other
+    than the value below. }
+  AssertTrue(Format('with no gap between them (%d vs %d)', [greenBot, redTop]),
+    Abs(greenBot - redTop) <= 2);
+
+  { THE TOTAL REACHES 80 OF 100, which is what says the values accumulated
+    rather than merely being drawn in two places. }
+  AssertTrue(Format('the pile is about 80%% of the plot, got %d..%d',
+    [greenTop, redBot]),
+    Abs((redBot - greenTop) - Round(0.8 * (gb.PlotRect.Bottom - gb.PlotRect.Top))) < 6);
 end;
 
 function TAdvanceChartTest.RedIn(AL, AT, AR, AB: Integer): Integer;

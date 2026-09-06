@@ -16,6 +16,29 @@ uses SysUtils, Math;
 type
   TTyDoubleArray = array of Double;
 
+  { What stacking did to one series -- see AdvChart.Stack, which computes it.
+
+    It lives down here rather than beside the code that fills it because three
+    units need the vocabulary and they cannot all depend on each other: Stack
+    uses Series for the bindings, so Series cannot use Stack, and Marks would
+    rather not gain a dependency just to be told a column number.
+
+    ResultCol is the column to PLOT -- the cumulative value. OverCol is the
+    value this series sits on, NaN wherever nothing qualified; a bar reads it
+    for its own floor and a filled line for the lower edge of the belt. Both
+    are -1 when the series does not stack, and then the raw value column is the
+    one to plot. }
+  TTySeriesStack = record
+    Stacked: Boolean;
+    { False for the bottom member: it accumulates onto nothing and is drawn
+      exactly as an unstacked series is. Upstream spells the same distinction
+      `!!data.getCalculationInfo('stackedOnSeries')`. }
+    HasBelow: Boolean;
+    ResultCol: Integer;
+    OverCol: Integer;
+  end;
+  TTySeriesStackArray = array of TTySeriesStack;
+
   { A point in device px, relative to the control's top-left. }
   TTyPointF = record X, Y: Double; end;
 
@@ -107,6 +130,13 @@ function TyRectFIsValid(const AR: TTyRectF): Boolean;
   different question with a different answer — see TTyCartesian2D.ContainPoint,
   which closes the far edges on purpose. }
 function TyRectFContains(const AR: TTyRectF; const AP: TTyPointF): Boolean;
+
+{ A series that does not stack.
+
+  Named rather than left to Default(), which would set both column indices to
+  ZERO -- a real column -- and leave every reader depending on checking Stacked
+  first. -1 is not a column anywhere. }
+function TyNoStack: TTySeriesStack;
 
 function TyRangeSpan(const AR: TTyRange): Double;
 { Closed on both ends — an axis extent's endpoints belong to the axis. }
@@ -201,6 +231,14 @@ begin
   if IsNan(AP.X) or IsNan(AP.Y) then Exit(False);
   Result := (AP.X >= AR.Left) and (AP.X < AR.Right)
         and (AP.Y >= AR.Top) and (AP.Y < AR.Bottom);
+end;
+
+function TyNoStack: TTySeriesStack;
+begin
+  Result.Stacked := False;
+  Result.HasBelow := False;
+  Result.ResultCol := -1;
+  Result.OverCol := -1;
 end;
 
 function TyRangeSpan(const AR: TTyRange): Double;

@@ -116,6 +116,8 @@ type
     procedure TestRepeatedRefillDoesNotGrowTheHeap;
     procedure TestATimeNumberRoundCannotTakeBecomesNoData;
     procedure TestAnAppendRetiresTheInvertedIndex;
+    procedure TestACalculatedColumnIsVisibleToDataExtent;
+    procedure TestSetCalculatedRefusesWhatItCannotHonour;
   end;
 implementation
 
@@ -1207,6 +1209,71 @@ begin
       st.RawIndexOfOrdinal(0, 2));
   finally
     st.Free;
+  end;
+end;
+
+procedure TAdvChartDataTest.TestACalculatedColumnIsVisibleToDataExtent;
+var lo, hi: Double;
+begin
+  { THE TRAP THIS PINS. DataExtent has a fast path for the unfiltered,
+    unfiltered-value case -- which is precisely the one a value axis asks --
+    and it answers from RawMin/RawMax. Those are maintained during APPEND, and
+    a column added after filling was never appended to: AddDimension leaves
+    them as the empty range. So a column full of numbers reported NO DATA AT
+    ALL, the axis was sized without it, and a stacked chart drew off the top of
+    its plot with nothing raising.
+
+    Invalidating the cache alone does not fix it: the fast path returns before
+    the cache is ever consulted. }
+  FS.AddDimension('v', ddtFloat);
+  FS.AppendRow([1.0]);
+  FS.AppendRow([2.0]);
+
+  FS.AddDimension('calc', ddtFloat);
+  AssertFalse('an untouched calculated column has nothing in it',
+    FS.DataExtent(1, lo, hi));
+
+  FS.SetCalculated(1, 0, 10);
+  FS.SetCalculated(1, 1, 40);
+  AssertTrue('once written it does have an extent', FS.DataExtent(1, lo, hi));
+  AssertEquals('and it is the written values', 10.0, lo, 1e-9);
+  AssertEquals('both of them', 40.0, hi, 1e-9);
+
+  { AND IT KEEPS UP. A second write that NARROWS the range has to be seen too,
+    which is why the dimension is marked rather than having RawMin/RawMax
+    widened on the way past: a monotone widen would leave 40 standing here. }
+  FS.SetCalculated(1, 1, 20);
+  AssertTrue(FS.DataExtent(1, lo, hi));
+  AssertEquals('the narrowed top is reported', 20.0, hi, 1e-9);
+
+  { The raw column is untouched by any of it. }
+  AssertTrue(FS.DataExtent(0, lo, hi));
+  AssertEquals('the appended column still answers from its own extent',
+    2.0, hi, 1e-9);
+end;
+
+procedure TAdvChartDataTest.TestSetCalculatedRefusesWhatItCannotHonour;
+begin
+  FS.AddDimension('c', ddtOrdinal);
+  FS.SetCategories(0, ['x', 'y']);
+  FS.AddDimension('v', ddtFloat);
+  FS.AppendRow([TyDataText('x'), TyDataNum(1)]);
+
+  { An ordinal column holds an interned index, and a number written straight
+    into it would make the column disagree with the category list -- so the
+    door is shut rather than left ajar with a comment. }
+  try
+    FS.SetCalculated(0, 0, 7);
+    Fail('writing a number into an ordinal column should raise');
+  except
+    on EInvalidOperation do ;
+  end;
+
+  try
+    FS.SetCalculated(1, 5, 1.0);
+    Fail('writing past the last row should raise');
+  except
+    on EInvalidOperation do ;
   end;
 end;
 

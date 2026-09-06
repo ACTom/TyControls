@@ -35,7 +35,7 @@ uses
   tyControls.AdvChart.Measure, tyControls.AdvChart.Handlers,
   tyControls.AdvChart.Paint, tyControls.AdvChart.Render,
   tyControls.AdvChart.Marks, tyControls.AdvChart.BarLayout,
-  tyControls.SubPixel;
+  tyControls.AdvChart.Stack, tyControls.SubPixel;
 
 const
   { The four axis metrics, and the defaults to fall back on when a theme has not
@@ -64,6 +64,10 @@ type
       before that is the wrong width -- silently, since nothing raises and the
       bars merely come out slightly off. }
     FBarCols: TTyBarColumnArray;
+    { Which series accumulate onto which, and into which columns. Solved in
+      Rebuild, between filling the stores and sizing the axes: the totals have
+      to exist before the value axis is asked how far it must reach. }
+    FStacks: TTySeriesStackArray;
     FDirty: Boolean;
     FLastRect: TTyRectF;
     FOptionText: string;
@@ -101,6 +105,8 @@ type
       landed: TyAdvChartSeries1..8, all of them computed from --accent so a skin
       that restyles the accent gets a matching chart for nothing. }
     function SeriesColor(ASeriesIndex: Integer): TTyColor;
+    { The stack record for a series slot, or an unstacked one. }
+    function StackFor(ASlot: Integer): TTySeriesStack;
     procedure PaintDynamic(APainter: TTyPainter; const ARect: TRect;
       APPI: Integer; const AMeasurer: ITyTextMeasurer);
     { Whether the dynamic layer would draw anything. False skips a whole
@@ -233,6 +239,7 @@ begin
     FStores[i].Free;
   FStores := nil;
   FBarCols := nil;
+  FStacks := nil;
 end;
 
 procedure TTyAdvanceChart.DropBuild;
@@ -352,7 +359,10 @@ begin
     TyFillSeriesStore(FOption, i, dims, st);
   end;
   TyIndexSeries(FBindings, FIndex);
-  TyApplyAxisExtents(FOption, FBuild, FBindings, FStores, FIndex);
+  { BEFORE THE EXTENTS, and that order is the whole point: a stacked chart
+    whose axis was sized from the raw values draws off the top of its plot. }
+  FStacks := TySolveStacks(FOption, FBindings, FStores);
+  TyApplyAxisExtents(FOption, FBuild, FBindings, FStores, FStacks, FIndex);
 end;
 
 procedure TTyAdvanceChart.Relayout(APainter: TTyPainter; const ARect: TTyRectF;
@@ -867,6 +877,18 @@ begin
   PaintSeries(APainter);
 end;
 
+function TTyAdvanceChart.StackFor(ASlot: Integer): TTySeriesStack;
+begin
+  if (ASlot >= 0) and (ASlot <= High(FStacks)) then
+    Result := FStacks[ASlot]
+  else
+  begin
+    Result := Default(TTySeriesStack);
+    Result.ResultCol := -1;
+    Result.OverCol := -1;
+  end;
+end;
+
 function TTyAdvanceChart.SeriesColor(ASeriesIndex: Integer): TTyColor;
 var
   st: TTyStyleSet;
@@ -914,7 +936,8 @@ begin
         INSERTION INDEX, and these are inserted in series order already. Two
         ways of saying the same thing, one of them inert. When series z and
         zlevel arrive they will set Z, and Z2 will have something to do. }
-      Inc(drawn, TyBuildSeriesMarks(FBindings[i], FStores[i], v, list));
+      Inc(drawn, TyBuildSeriesMarks(FBindings[i], FStores[i],
+        StackFor(i), v, list));
     end;
     if drawn > 0 then
       TyRenderPaintList(APainter, list);

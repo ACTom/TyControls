@@ -115,7 +115,7 @@ begin
     TyFillSeriesStore(FOpt, i, dims, st);
   end;
   TyIndexSeries(FBind, FIndex);
-  TyApplyAxisExtents(FOpt, FBuild, FBind, FStores, FIndex);
+  TyApplyAxisExtents(FOpt, FBuild, FBind, FStores, nil, FIndex);
 end;
 
 { ============================ the type table ============================ }

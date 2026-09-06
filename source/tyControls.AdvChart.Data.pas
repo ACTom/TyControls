@@ -179,6 +179,12 @@ type
           private lists disagree about which name ordinal 0 is, and render
           offset from each other on an axis they supposedly share. }
         MetaOwned: Boolean;
+        { Set once SetCalculated has written into this dimension. RawMin and
+          RawMax below are maintained during APPEND only, so for a column that
+          was computed rather than appended they are still the empty range --
+          and DataExtent's fast path would answer "no data" for a column full
+          of numbers. }
+        HasCalculated: Boolean;
         RawMin, RawMax: Double;     // maintained during append, so the
                                     // unfiltered extent is O(1)
         CacheMin, CacheMax: array[TTyExtentFilter] of Double;
@@ -263,6 +269,22 @@ type
     { Drops every row but keeps the schema, the categories and the dimension
       types, so a store can be refilled without rebuilding its shape. }
     procedure Clear;
+
+    { ---- calculated columns ---- }
+    { Write one cell of a dimension that was added AFTER filling.
+
+      The only way to put a value into such a column: AddDimension fills it with
+      NaN and AppendRow writes whole rows, so a calculation over existing rows
+      has no other door. Addressed by RAW index, because a calculation walks the
+      rows as they were given -- a filter is a view for readers, and writing
+      through a view would put the value in a different row once the filter
+      moved.
+
+      Refuses a dimension that predates the rows. That is not tidiness: the raw
+      columns are parsed from option text through the dimension's own type, and
+      a back door that skipped parsing would let an ordinal column hold
+      something that is not an ordinal index. }
+    procedure SetCalculated(ADim, ARawIndex: Integer; AValue: Double);
 
     { ---- reading ---- }
     { Rows in the current view. }
@@ -883,6 +905,41 @@ begin
     FDims[i].HasInverted := False;
 end;
 
+procedure TTyDataStore.SetCalculated(ADim, ARawIndex: Integer; AValue: Double);
+begin
+  if (ADim < 0) or (ADim > High(FDims)) then
+    raise EInvalidOperation.CreateFmt(
+      'SetCalculated: no dimension %d', [ADim]);
+  if (ARawIndex < 0) or (ARawIndex >= FRawCount) then
+    raise EInvalidOperation.CreateFmt(
+      'SetCalculated: row %d is outside the %d rows there are',
+      [ARawIndex, FRawCount]);
+  if FDims[ADim].Kind = ddtOrdinal then
+    raise EInvalidOperation.CreateFmt(
+      'SetCalculated: dimension "%s" is ordinal; a calculated column holds a '
+      + 'number, and writing an ordinal index without interning it would make '
+      + 'the category list disagree with the column', [FDims[ADim].Name]);
+  FCols[ADim][ARawIndex] := AValue;
+  { TWO THINGS GO STALE, and only one of them is the cache.
+
+    The cache is per filter and keyed by nothing else, so a write that left it
+    alone would be invisible exactly where it matters most: the value axis is
+    sized from DataExtent, and a stacked series that did not widen the axis
+    draws off the top of the plot with nothing raising.
+
+    The other is DataExtent's FAST PATH, which answers the unfiltered case --
+    the one the value axis asks -- from RawMin/RawMax. Those are maintained
+    during append, and this column was never appended to: AddDimension leaves
+    them as the empty range, so the fast path would report no data at all.
+
+    Marked rather than widened. Widening them here is right only while every
+    cell is written exactly once; a public setter cannot promise that, and an
+    overwrite with a smaller value would leave a monotone RawMin too wide for
+    good. Skipping the fast path is correct whatever the write order. }
+  FDims[ADim].HasCalculated := True;
+  InvalidateExtents;
+end;
+
 procedure TTyDataStore.InvalidateExtents;
 var
   i: Integer;
@@ -1237,9 +1294,12 @@ begin
   AMax := NaN;
   if (ADim < 0) or (ADim > High(FDims)) then Exit(False);
 
-  if (not FFiltered) and (AFilter = defNone) then
+  if (not FFiltered) and (AFilter = defNone)
+     and (not FDims[ADim].HasCalculated) then
   begin
-    { Maintained during append, so the common case costs nothing. }
+    { Maintained during append, so the common case costs nothing -- and skipped
+      entirely for a calculated column, which was never appended to and whose
+      RawMin/RawMax are therefore still the empty range. }
     if FDims[ADim].RawMin > FDims[ADim].RawMax then Exit(False);
     AMin := FDims[ADim].RawMin;
     AMax := FDims[ADim].RawMax;

@@ -121,7 +121,7 @@ begin
   end;
   FIndex.Clear;
   TyIndexSeries(FBind, FIndex);
-  TyApplyAxisExtents(FOpt, FBuild, FBind, FStores, FIndex);
+  TyApplyAxisExtents(FOpt, FBuild, FBind, FStores, nil, FIndex);
   { NO LAYOUT PHASE. Phase A already gives every cartesian the grid's outer
     rect, so the band is exactly 600/categories and every expected number below
     is arithmetic rather than a measurement of this machine's fonts. Phase C
@@ -351,9 +351,10 @@ end;
 procedure TAdvChartBarLayoutTest.TestSeriesSharingAStackShareOneColumn;
 begin
   { COLUMNS, NOT SERIES. Two series naming one stack are ONE column: same
-    width, same offset. Their values accumulating along the value axis is the
-    separate stacking row and is not done -- so today they draw over each
-    other, which is the right column and the wrong values. }
+    width, same offset -- which is what puts a stacked pair in one place
+    instead of side by side. Their values accumulating is a different question
+    and a different unit (AdvChart.Stack); this one is only about where the
+    column is and how wide. }
   Run('{ xAxis: { data: [''A'', ''B''] }, yAxis: {}, series: ['
     + '{ type: ''bar'', stack: ''s'', data: [1, 2] },'
     + '{ type: ''bar'', stack: ''s'', data: [3, 4] },'

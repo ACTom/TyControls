@@ -172,6 +172,9 @@ procedure TyIndexSeries(const ABindings: TTySeriesBindingArray;
 { ---- phase B: axis ranges ---- }
 { Give every value axis the range its bound series actually need.
 
+  AStacks says which series plot an accumulated total rather than their own
+  value; pass an empty array when nothing stacks.
+
   Without this a value axis keeps whatever its scale was constructed with and
   every datum is drawn by extrapolating off the end of it -- nothing raises, the
   chart simply draws in the wrong place, hundreds of pixels outside the plot.
@@ -180,7 +183,7 @@ procedure TyIndexSeries(const ABindings: TTySeriesBindingArray;
   the axis, never from the data. }
 procedure TyApplyAxisExtents(AOption: TTyChartOption; ABuild: TTyChartBuild;
   const ABindings: TTySeriesBindingArray; const AStores: array of TTyDataStore;
-  AIndex: TTyAxisSeriesIndex);
+  const AStacks: TTySeriesStackArray; AIndex: TTyAxisSeriesIndex);
 
 implementation
 
@@ -572,7 +575,7 @@ end;
 
 procedure TyApplyAxisExtents(AOption: TTyChartOption; ABuild: TTyChartBuild;
   const ABindings: TTySeriesBindingArray; const AStores: array of TTyDataStore;
-  AIndex: TTyAxisSeriesIndex);
+  const AStacks: TTySeriesStackArray; AIndex: TTyAxisSeriesIndex);
 var
   g, a: Integer;
   ax: TTyAxis;
@@ -622,6 +625,20 @@ var
       si := feeders[k];
       if (si < 0) or (si > High(AStores)) then Continue;
       col := ColumnForAxis(AStores[si], AAxis);
+      { A STACKED SERIES CONTRIBUTES ITS TOTAL, not its own value. Upstream
+        gets this for free -- the stack-result dimension is registered under
+        the VALUE coord dim, so anything unioning that coord dim picks it up,
+        while the stacked-over dimension is deliberately given its own coord
+        dim so it stays OUT of the extent. Here the columns are found by axis
+        dimension name, which one column can only have one of, so the swap is
+        made explicitly.
+
+        Without it the axis is sized from the largest single value while the
+        chart draws the sum of them, and every stack taller than its biggest
+        member runs off the top of the plot. Nothing raises. }
+      if (si <= High(AStacks)) and AStacks[si].Stacked
+        and (AStacks[si].ResultCol >= 0) and (AAxis = ABindings[si].ValueAxis) then
+        col := AStacks[si].ResultCol;
       if col < 0 then Continue;
       if not AStores[si].DataExtent(col, dlo, dhi, filter) then Continue;
       if dlo < lo then lo := dlo;

@@ -26,11 +26,14 @@ unit tyControls.AdvChart.Marks;
   AdvChart.BarLayout solves that per axis and the answer arrives in the visual.
   This unit's job is to put the rect where the answer says.
 
-  WHAT IS STILL NOT HERE. Value stacking -- several series naming one `stack`
-  accumulating along the value axis -- is its own Tier 1 row; the solver
-  already groups them into one COLUMN, which is the layout half of it, so they
-  share a width and an offset and draw over each other. Symbols on a line, and
-  the four-corner form of borderRadius, are likewise their own rows. }
+  VALUES THAT STACK ARRIVE ALREADY ACCUMULATED. AdvChart.Stack writes two
+  calculated columns per participating series, and this unit is told which:
+  the cumulative one is what gets plotted, and the one below it is where a
+  stacked bar's floor is. Working out what a value adds up to is not a
+  rendering question, which is why it is not answered here.
+
+  WHAT IS STILL NOT HERE: symbols on a line, the filled area under one, and the
+  four-corner form of borderRadius. Each is its own Tier 1 row. }
 interface
 uses
   SysUtils, Math,
@@ -82,8 +85,8 @@ function TySeriesTypeHasRenderer(const AType: string): Boolean;
   count rather than a boolean is so a caller can say "nothing at all was
   drawn" without inspecting the list. }
 function TyBuildSeriesMarks(const ABinding: TTySeriesBinding;
-  AStore: TTyDataStore; const AVisual: TTySeriesVisual;
-  AList: TTyPaintList): Integer;
+  AStore: TTyDataStore; const AStack: TTySeriesStack;
+  const AVisual: TTySeriesVisual; AList: TTyPaintList): Integer;
 
 implementation
 
@@ -200,24 +203,30 @@ type
   { What every mark builder looks like. Named so the table below can hold them,
     which is what makes the table the only list of renderers there is. }
   TTyMarkBuilder = function(const ABinding: TTySeriesBinding;
-    AStore: TTyDataStore; const AVisual: TTySeriesVisual; AList: TTyPaintList;
+    AStore: TTyDataStore; const AStack: TTySeriesStack;
+    const AVisual: TTySeriesVisual; AList: TTyPaintList;
     AColX, AColY: Integer): Integer;
 
 function BuildBars(const ABinding: TTySeriesBinding; AStore: TTyDataStore;
-  const AVisual: TTySeriesVisual; AList: TTyPaintList;
-  AColX, AColY: Integer): Integer;
+  const AStack: TTySeriesStack; const AVisual: TTySeriesVisual;
+  AList: TTyPaintList; AColX, AColY: Integer): Integer;
 var
-  i: Integer;
-  x, y, baseline, anchor: Double;
+  i, valCol: Integer;
+  x, y, baseline, anchor, own, floorV: Double;
   lay: TTyCoordLayout;
   r: TTyRectF;
-  p: TTyPointF;
+  p, hiPt, loPt: TTyPointF;
   col: TTyBarColumn;
-  baseHoriz, haveCol: Boolean;
+  baseHoriz, haveCol, stacked: Boolean;
   shape: TTyChartShape;
 begin
   Result := 0;
   baseHoriz := (ABinding.BaseAxis = nil) or ABinding.BaseAxis.Horizontal;
+  { THE VALUE IS ON WHICHEVER AXIS IS NOT THE BASE. On a horizontal bar chart
+    that is X, so substituting the cumulative into y would stack the wrong axis
+    and leave horizontal stacked bars looking unstacked. }
+  stacked := AStack.Stacked and (AStack.ResultCol >= 0);
+  if baseHoriz then valCol := AColY else valCol := AColX;
   haveCol := False;
   col := Default(TTyBarColumn);
   { The baseline the value axis measures from -- the same one DataToLayout used
@@ -231,6 +240,14 @@ begin
   begin
     x := AStore.Get(AColX, i);
     y := AStore.Get(AColY, i);
+    own := AStore.Get(valCol, i);
+    { A stacked series plots its cumulative total. That is the whole of
+      stacking as far as drawing is concerned. }
+    if stacked then
+    begin
+      if baseHoriz then y := AStore.Get(AStack.ResultCol, i)
+                   else x := AStore.Get(AStack.ResultCol, i);
+    end;
     { NaN IS THE SINGLE SPELLING OF NO DATA, which the store's header says for
       all four dimension types. A gap draws no bar; it does not draw a bar of
       height zero, which would read as a real measurement of nothing.
@@ -248,6 +265,37 @@ begin
       col := ColumnFor(AVisual, lay.Rect, baseHoriz);
       haveCol := True;
     end;
+    { A STACKED BAR STANDS ON THE ONE BELOW IT, not on the axis baseline.
+
+      Its floor is recomputed as (cumulative - own) rather than read out of the
+      stacked-over column, which is what upstream does and for a stated reason:
+      barMinHeight can move the drawn END, so the value a bar was stacked over
+      is not necessarily where its own segment begins.
+
+      THE BOTTOM MEMBER IS EXCLUDED. It accumulates onto nothing, so its floor
+      is the axis' own baseline and DataToLayout has already put it there;
+      forcing it to (cumulative - own) = 0 would move it on any axis that does
+      not start at zero. }
+    if stacked and AStack.HasBelow and not IsNan(own) then
+    begin
+      if baseHoriz then floorV := y - own else floorV := x - own;
+      if baseHoriz then
+      begin
+        hiPt := ABinding.Cart.DataToPoint([x, y]);
+        loPt := ABinding.Cart.DataToPoint([x, floorV]);
+        lay.Rect.Top := Min(hiPt.Y, loPt.Y);
+        lay.Rect.Bottom := Max(hiPt.Y, loPt.Y);
+      end
+      else
+      begin
+        hiPt := ABinding.Cart.DataToPoint([x, y]);
+        loPt := ABinding.Cart.DataToPoint([floorV, y]);
+        lay.Rect.Left := Min(hiPt.X, loPt.X);
+        lay.Rect.Right := Max(hiPt.X, loPt.X);
+      end;
+      if not TyRectFIsValid(lay.Rect) then Continue;
+    end;
+
     r := PlaceInBand(lay.Rect, baseHoriz, col);
     if col.MinHeightPx > 0 then
     begin
@@ -268,8 +316,8 @@ begin
 end;
 
 function BuildLine(const ABinding: TTySeriesBinding; AStore: TTyDataStore;
-  const AVisual: TTySeriesVisual; AList: TTyPaintList;
-  AColX, AColY: Integer): Integer;
+  const AStack: TTySeriesStack; const AVisual: TTySeriesVisual;
+  AList: TTyPaintList; AColX, AColY: Integer): Integer;
 var
   i, n: Integer;
   x, y: Double;
@@ -277,14 +325,25 @@ var
   pts: array of TTyPointF;
   el: TTyChartElement;
   v: TTySeriesVisual;
+  baseHoriz, stacked: Boolean;
 begin
   Result := 0;
+  { A stacked line is drawn through its cumulative totals, on whichever axis is
+    not the base. The belt filled underneath it is what the stacked-over column
+    is for; areaStyle is its own Tier 1 row and is not here yet. }
+  baseHoriz := (ABinding.BaseAxis = nil) or ABinding.BaseAxis.Horizontal;
+  stacked := AStack.Stacked and (AStack.ResultCol >= 0);
   SetLength(pts, AStore.Count);
   n := 0;
   for i := 0 to AStore.Count - 1 do
   begin
     x := AStore.Get(AColX, i);
     y := AStore.Get(AColY, i);
+    if stacked then
+    begin
+      if baseHoriz then y := AStore.Get(AStack.ResultCol, i)
+                   else x := AStore.Get(AStack.ResultCol, i);
+    end;
     { A GAP BREAKS THE LINE, it does not get joined across. ECharts calls that
       connectNulls and defaults it to false, and joining by default would draw
       a segment through data that does not exist. Splitting into runs is what
@@ -356,8 +415,8 @@ begin
 end;
 
 function TyBuildSeriesMarks(const ABinding: TTySeriesBinding;
-  AStore: TTyDataStore; const AVisual: TTySeriesVisual;
-  AList: TTyPaintList): Integer;
+  AStore: TTyDataStore; const AStack: TTySeriesStack;
+  const AVisual: TTySeriesVisual; AList: TTyPaintList): Integer;
 var
   colX, colY: Integer;
   build: TTyMarkBuilder;
@@ -383,7 +442,7 @@ begin
     drawing nothing. }
   build := RendererFor(ABinding.SeriesType);
   if build <> nil then
-    Result := build(ABinding, AStore, AVisual, AList, colX, colY);
+    Result := build(ABinding, AStore, AStack, AVisual, AList, colX, colY);
 end;
 
 end.
