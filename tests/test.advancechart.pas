@@ -75,6 +75,7 @@ type
     procedure TestTheSeriesIsActuallyDrawnInTheThemesColour;
     procedure TestTheSecondSeriesTakesTheSecondSlotOfTheRamp;
     procedure TestAPieIsDrawnOffItsOwnCentreWithAColourPerSector;
+    procedure TestTheBackingStripIsDrawnInTheThemesOwnColour;
     procedure TestTwoBarSeriesStandSideBySideInsteadOfOnTopOfEachOther;
     procedure TestAStackedBarStandsOnTheOneBelowIt;
     procedure TestALayeredFrameDrawsTheSamePictureAsAWholeOne;
@@ -1627,6 +1628,43 @@ end;
 { Pixels in a rectangle that are strongly red. Used where the fixture has
   overridden a series colour to red, so the count is of that series and of
   nothing else on the canvas. }
+procedure TAdvanceChartTest.TestTheBackingStripIsDrawnInTheThemesOwnColour;
+var
+  gb: TTyGridBuild;
+  high_, low_: Integer;
+begin
+  { showBackground reaches the canvas, and its colour comes from a THEME KEY
+    rather than from upstream's hard-coded rgba(180,180,180,0.2). A pale grey
+    band is wrong on a dark skin, and this library's rule is that a visual
+    value a theme cannot reach is a bug.
+
+    Measured in the TOP of the plot, where a bar of 5 out of 100 cannot reach
+    -- so green there is the strip and nothing else. }
+  FCtl.StyleOverride := 'TyAdvChartBarBackground { background: #00FF00; }';
+  FChart.Option := '{ xAxis: { data: [''A''] }, yAxis: { min: 0, max: 100 },'
+    + ' series: [{ type: ''bar'', showBackground: true, data: [5] }] }';
+  Draw;
+  gb := FChart.Build.Grid(0);
+  high_ := GreenIn(Round(gb.PlotRect.Left), Round(gb.PlotRect.Top),
+                   Round(gb.PlotRect.Right),
+                   Round(gb.PlotRect.Top) +
+                   Round((gb.PlotRect.Bottom - gb.PlotRect.Top) / 4));
+  AssertTrue(Format('the strip reaches the top of the plot (%d px)', [high_]),
+    high_ > 100);
+
+  { AND NOT WHEN NOBODY ASKED, which is what says the strip is the option's
+    doing and not something every bar chart now carries. }
+  FChart.Option := '{ xAxis: { data: [''A''] }, yAxis: { min: 0, max: 100 },'
+    + ' series: [{ type: ''bar'', data: [5] }] }';
+  Draw;
+  gb := FChart.Build.Grid(0);
+  low_ := GreenIn(Round(gb.PlotRect.Left), Round(gb.PlotRect.Top),
+                  Round(gb.PlotRect.Right),
+                  Round(gb.PlotRect.Top) +
+                  Round((gb.PlotRect.Bottom - gb.PlotRect.Top) / 4));
+  AssertEquals('no strip without the option', 0, low_);
+end;
+
 procedure TAdvanceChartTest.TestAPieIsDrawnOffItsOwnCentreWithAColourPerSector;
 var
   left, right, corner, total: Integer;

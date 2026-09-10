@@ -18,6 +18,9 @@ type
     procedure TestRoundRectCutsTheCorner;
     procedure TestRoundRectKeepsTheMiddleOfEachEdge;
     procedure TestRoundRectClampsAnOversizeRadiusLikeTheRenderer;
+    procedure TestTheFourCornerFormsAreNotTruncations;
+    procedure TestOversizeCornersShrinkInProportionPerEdge;
+    procedure TestEachCornerIsCutByItsOwnRadius;
     { ---- circle / ellipse ---- }
     procedure TestCircleBoundaryIsInside;
     procedure TestCircleRejectsJustOutside;
@@ -116,12 +119,118 @@ end;
 procedure TAdvChartShapeTest.TestRoundRectClampsAnOversizeRadiusLikeTheRenderer;
 var s: TTyChartShape;
 begin
-  { The renderer clamps an oversize radius to half the box (BGRA does it inside
-    roundRect). If the hit test did not clamp the same way, the pointer would be
-    answering about a shape nothing ever drew. }
+  { The CONSTRUCTOR clamps now, and the renderer traces what the record says.
+    Either way the point stands: a hit test answering about corners the painter
+    never drew is a pointer that lies. }
   s := TyShapeRoundRect(TyRectF(0, 0, 100, 40), 999);
   AssertTrue('the middle of a stadium', TyShapeContains(s, 50, 20, 0));
   AssertFalse('and its corner is still cut', TyShapeContains(s, 0, 0, 0));
+end;
+
+procedure TAdvChartShapeTest.TestTheFourCornerFormsAreNotTruncations;
+var r: TTyCornerRadii;
+begin
+  { roundRect.ts:30-55. The short forms mean something OTHER than `the rest
+    are zero`, which is the reading a careful person arrives at and it rounds
+    the wrong corners. Order here is clockwise from the top-left. }
+  r := TyCornerRadii([5]);
+  AssertEquals('one value is every corner', 5.0, r[0], 1e-12);
+  AssertEquals('', 5.0, r[3], 1e-12);
+
+  r := TyCornerRadii([1, 2]);
+  AssertEquals('two are the DIAGONALS: top-left', 1.0, r[0], 1e-12);
+  AssertEquals('top-right', 2.0, r[1], 1e-12);
+  AssertEquals('bottom-right takes the first again', 1.0, r[2], 1e-12);
+  AssertEquals('bottom-left the second', 2.0, r[3], 1e-12);
+
+  r := TyCornerRadii([1, 2, 3]);
+  AssertEquals('three: top-left', 1.0, r[0], 1e-12);
+  AssertEquals('top-right', 2.0, r[1], 1e-12);
+  AssertEquals('bottom-right', 3.0, r[2], 1e-12);
+  AssertEquals('and bottom-left SHARES the middle one', 2.0, r[3], 1e-12);
+
+  r := TyCornerRadii([1, 2, 3, 4]);
+  AssertEquals('four are themselves', 4.0, r[3], 1e-12);
+  r := TyCornerRadii([]);
+  AssertFalse('and none is a plain rect', TyHasCorner(r));
+  r := TyCornerRadii([-3]);
+  AssertEquals('a negative radius is no radius', 0.0, r[0], 1e-12);
+end;
+
+procedure TAdvChartShapeTest.TestOversizeCornersShrinkInProportionPerEdge;
+var s: TTyChartShape;
+begin
+  { roundRect.ts:57-76 shrinks each PAIR that shares an edge, in proportion.
+    Clamping each radius on its own to half the shorter side is the obvious
+    version and gives a different shape: on a box 40 wide, corners of 30 and 10
+    keep their 3:1 ratio and come out 30 and 10, not 20 and 10. }
+  s := TyShapeRoundRect(TyRectF(0, 0, 40, 200), [30, 10, 0, 0]);
+  AssertEquals('the big one keeps its share of the top edge', 30.0,
+    s.Radii[0], 1e-9);
+  AssertEquals('and the small one keeps its own', 10.0, s.Radii[1], 1e-9);
+
+  s := TyShapeRoundRect(TyRectF(0, 0, 40, 200), [60, 20, 0, 0]);
+  AssertEquals('over the edge, both shrink by the same factor', 30.0,
+    s.Radii[0], 1e-9);
+  AssertEquals('', 10.0, s.Radii[1], 1e-9);
+
+  { AND EACH PAIR IS FITTED TO THE EDGE IT SHARES, which needs a box whose two
+    sides differ to say at all: the top-right and bottom-right corners share
+    the RIGHT edge, so they are fitted to the height. On a box 200 by 40 they
+    fit the width easily and overflow the height, and a version that measured
+    them against the width would leave them alone. }
+  s := TyShapeRoundRect(TyRectF(0, 0, 200, 40), [0, 30, 30, 0]);
+  AssertEquals('the right-hand pair is fitted to the HEIGHT', 20.0,
+    s.Radii[1], 1e-9);
+  AssertEquals('both of them', 20.0, s.Radii[2], 1e-9);
+end;
+
+procedure TAdvChartShapeTest.TestEachCornerIsCutByItsOwnRadius;
+var s: TTyChartShape;
+begin
+  { A bar rounded only where it leaves the axis -- borderRadius: [8, 8, 0, 0]
+    -- is the commonest form of this option there is, and it is the one a
+    single-radius hit test gets wrong at BOTH ends: it would cut the square
+    bottom corners and keep the rounded top ones. }
+  s := TyShapeRoundRect(TyRectF(0, 0, 100, 100), [20, 20, 0, 0]);
+  AssertFalse('the rounded top-left corner is cut',
+    TyShapeContains(s, 1, 1, 0));
+  AssertFalse('so is the top-right', TyShapeContains(s, 99, 1, 0));
+  AssertTrue('but the square bottom-left is not',
+    TyShapeContains(s, 0, 100, 0));
+  AssertTrue('nor the bottom-right', TyShapeContains(s, 100, 100, 0));
+
+  { FOUR DIFFERENT RADII, because with any two the same a corner tested
+    against its NEIGHBOUR'S radius still answers correctly. Each probe below
+    sits where only its own corner's number decides the answer: 8 px in from
+    the top-left is outside a 40 px cut and inside a 20 px one, and 8 px in
+    from the top-right is the other way round. }
+  s := TyShapeRoundRect(TyRectF(0, 0, 200, 200), [40, 20, 10, 30]);
+  AssertFalse('40 px cuts the top-left back this far',
+    TyShapeContains(s, 8, 8, 0));
+  AssertTrue('but 20 px does not cut the top-right that far',
+    TyShapeContains(s, 192, 8, 0));
+  AssertTrue('10 px barely cuts the bottom-right',
+    TyShapeContains(s, 194, 194, 0));
+  AssertFalse('and 30 px cuts the bottom-left well in',
+    TyShapeContains(s, 5, 195, 0));
+
+  { A SQUARE CORNER TAKES THE SLOP TOO. With slop the target reaches outside
+    the shape, and a corner test that fired on a radius of zero would measure
+    the distance to the corner point instead -- rejecting the diagonal reach
+    that every other part of the edge is granted. }
+  AssertTrue('slop reaches diagonally past a square corner',
+    TyShapeContains(s, -3, 103, 4));
+
+  { AND A RIGHT-TO-LEFT RECT IS THE SAME RECT. Corner 0 has to be its
+    top-left whichever way round the caller built it, or a bar drawn from its
+    value back to the axis comes out rounded at the wrong end. }
+  s := TyShapeRoundRect(TyRectF(100, 100, 0, 0), [20, 20, 0, 0]);
+  AssertEquals('normalised', 0.0, s.Bounds.Left, 1e-12);
+  AssertEquals('', 100.0, s.Bounds.Bottom, 1e-12);
+  AssertFalse('and the top-left is still the rounded one',
+    TyShapeContains(s, 1, 1, 0));
+  AssertTrue('with the foot still square', TyShapeContains(s, 0, 100, 0));
 end;
 
 { ============================ circle / ellipse ============================ }

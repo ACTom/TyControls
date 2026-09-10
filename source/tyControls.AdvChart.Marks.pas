@@ -111,6 +111,10 @@ type
       resolved by the control, because this unit never asks what colour
       anything is. Upstream fills them with a token too. }
     EmptyFill: TTyChartColor;
+    { showBackground's strip. Upstream writes rgba(180,180,180,0.2) into the
+      series default; here it is a theme key, so a dark skin does not get a
+      pale grey band across it. }
+    BackgroundFill: TTyChartColor;
   end;
 
 { A visual with the defaults: a filled mark, no stroke, upstream's bar gap. }
@@ -239,6 +243,12 @@ begin
   Result.Stroke := 0;
   Result.StrokeWidthLogical := 0;
   Result.Bar := Default(TTyBarColumn);
+  { NO Clip := True HERE, though it was written and then taken out again.
+    Default() leaves Solved False, and ColumnFor ignores an unsolved column
+    entirely -- it asks TyBarColumnForOneSeries instead, which sets Clip
+    itself. So the line read like a safeguard and was never once read; a
+    mutant that flipped it changed nothing, which is how it was found. }
+  Result.BackgroundFill := AFill;
   Result.Z := 0;
   Result.Z2 := 0;
   Result.Line.HasArea := False;
@@ -470,11 +480,12 @@ var
   i, valCol: Integer;
   x, y, baseline, anchor, own, floorV: Double;
   lay: TTyCoordLayout;
-  r: TTyRectF;
+  r, bg, plot: TTyRectF;
   p, hiPt, loPt: TTyPointF;
   col: TTyBarColumn;
   baseHoriz, haveCol, stacked: Boolean;
   shape: TTyChartShape;
+  bgEl: TTyChartElement;
 begin
   Result := 0;
   baseHoriz := (ABinding.BaseAxis = nil) or ABinding.BaseAxis.Horizontal;
@@ -553,17 +564,75 @@ begin
     end;
 
     r := PlaceInBand(lay.Rect, baseHoriz, col);
+
+    { showBackground: the bar's own band, stretched over the WHOLE plot along
+      the value axis -- BarView.ts:1237-1246. Emitted BEFORE the bar, because
+      upstream gives it z2 0 like the bar itself and the two are then ordered
+      by insertion; this list ties the same way.
+
+      SILENT. Upstream sets silent:true on it, and it is the right answer for
+      the same reason a gridline is silent: a strip the height of the plot
+      would take every hover the bar under the pointer was meant to get.
+
+      WHERE THIS AND UPSTREAM PART: a gap in the data gets no strip here. The
+      band is read off the datum's own cell, and a NaN has no cell -- upstream
+      reads the band from the layout stage, which keeps it. So a bar chart
+      with holes shows a gap in the backing strips too. }
+    if col.ShowBackground then
+    begin
+      bg := r;
+      plot := ABinding.Cart.GetRect;
+      if baseHoriz then
+      begin
+        bg.Top := plot.Top;
+        bg.Bottom := plot.Bottom;
+      end
+      else
+      begin
+        bg.Left := plot.Left;
+        bg.Right := plot.Right;
+      end;
+      bgEl := TyChartElement(TyShapeRoundRect(bg, col.BackgroundRadii));
+      bgEl.Style.HasFill := True;
+      bgEl.Style.FillColor := AVisual.BackgroundFill;
+      bgEl.Style.Alpha := 1;
+      bgEl.Z := AVisual.Z;
+      bgEl.Z2 := AVisual.Z2;
+      bgEl.Silent := True;
+      AList.Add(bgEl);
+      Inc(Result);
+    end;
+
     if col.MinHeightPx > 0 then
     begin
       p := ABinding.Cart.DataToPoint([x, y]);
       if baseHoriz then anchor := p.Y else anchor := p.X;
       r := ApplyMinHeight(r, baseHoriz, anchor, baseline, col.MinHeightPx);
     end;
+
+    { clip, default TRUE: a bar whose value runs past the axis' own min or max
+      is CUT at the plot edge rather than drawn over the labels. Upstream does
+      it by intersecting the layout rect -- clip.cartesian2d, BarView.ts:684 --
+      not by setting a clip path, so the bar keeps a real rect and the hit test
+      keeps agreeing with the ink. Transcribed that way for the same reason.
+
+      AFTER barMinHeight, because that can push the drawn end outward and a
+      clip applied first would then be undone. }
+    if col.Clip then
+    begin
+      plot := ABinding.Cart.GetRect;
+      if r.Left < plot.Left then r.Left := plot.Left;
+      if r.Top < plot.Top then r.Top := plot.Top;
+      if r.Right > plot.Right then r.Right := plot.Right;
+      if r.Bottom > plot.Bottom then r.Bottom := plot.Bottom;
+    end;
+
     { A zero-width column draws nothing rather than an invisible rect that is
-      still hit-testable -- which is what a bar on a value axis used to be. }
+      still hit-testable -- which is what a bar on a value axis used to be, and
+      is now also what a fully clipped one would be. }
     if (r.Right - r.Left <= 0) or (r.Bottom - r.Top <= 0) then Continue;
-    if col.RadiusPx > 0 then
-      shape := TyShapeRoundRect(r, col.RadiusPx)
+    if TyHasCorner(col.Radii) then
+      shape := TyShapeRoundRect(r, col.Radii)
     else
       shape := TyShapeRect(r);
     AList.Add(MarkElement(shape, AVisual, ABinding.SeriesIndex, i));

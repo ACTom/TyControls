@@ -33,7 +33,8 @@ uses
   SysUtils, Math, fpjson,
   tyControls.AdvChart.Types, tyControls.AdvChart.Option,
   tyControls.AdvChart.Coord, tyControls.AdvChart.Data,
-  tyControls.AdvChart.Builder, tyControls.AdvChart.Series;
+  tyControls.AdvChart.Builder, tyControls.AdvChart.Series,
+  tyControls.AdvChart.Shape;
 
 type
   { What the solver has to say about one series.
@@ -46,10 +47,21 @@ type
     BandWidth: Double;
     Offset: Double;
     Width: Double;
-    { itemStyle.borderRadius in pixels, scalar form. }
-    RadiusPx: Double;
+    { itemStyle.borderRadius, one radius per corner. A scalar in the option
+      fills all four; the array forms follow zrender's own reading. }
+    Radii: TTyCornerRadii;
     { barMinHeight, in pixels along the VALUE axis. }
     MinHeightPx: Double;
+    { showBackground: a band-wide strip behind the bar, spanning the whole
+      plot along the value axis. Off by default, BarSeries.ts:151. }
+    ShowBackground: Boolean;
+    { backgroundStyle.borderRadius, which is a separate key from the bar's
+      own -- a rounded bar on a square backing strip is a real chart. }
+    BackgroundRadii: TTyCornerRadii;
+    { clip, BarSeries.ts:147, default TRUE: a bar reaching past the axis'
+      own min or max is cut off at the plot edge rather than drawn over the
+      labels. }
+    Clip: Boolean;
   end;
   TTyBarColumnArray = array of TTyBarColumn;
 
@@ -216,6 +228,15 @@ begin
   if (d <> nil) and (d.JSONType = jtNumber) then Result := d.AsFloat;
 end;
 
+function BoolIn(ANode: TJSONObject; const AKey: string; ADefault: Boolean): Boolean;
+var d: TJSONData;
+begin
+  Result := ADefault;
+  if ANode = nil then Exit;
+  d := ANode.Find(AKey);
+  if (d <> nil) and (d.JSONType = jtBoolean) then Result := d.AsBoolean;
+end;
+
 { The series node at ASlot, or nil. Series.pas has one of these too, private
   to its implementation; duplicating three lines beats exporting a helper whose
   name says nothing about which unit owns it. }
@@ -244,14 +265,50 @@ end;
   four corners is a shape change rather than a bar change, and a per-datum
   radius has to be read where the data is read. Both are named as not-done
   rather than left half-done. }
-function RadiusIn(ANode: TJSONObject): Double;
+{ borderRadius under ANode, in either of the two forms ECharts accepts: a
+  number, or an array of one to four. }
+function CornersOf(ANode: TJSONObject): TTyCornerRadii;
+var
+  d: TJSONData;
+  arr: TJSONArray;
+  vals: TTyDoubleArray;
+  i, n: Integer;
+begin
+  Result := TyCornerRadii([]);
+  if ANode = nil then Exit;
+  d := ANode.Find('borderRadius');
+  if d = nil then Exit;
+  if d.JSONType = jtNumber then Exit(TyCornerRadii([d.AsFloat]));
+  if not (d is TJSONArray) then Exit;
+  arr := TJSONArray(d);
+  n := arr.Count;
+  if n > 4 then n := 4;
+  if n = 0 then Exit;
+  SetLength(vals, n);
+  for i := 0 to n - 1 do
+    if arr.Items[i].JSONType = jtNumber then vals[i] := arr.Items[i].AsFloat
+    else vals[i] := 0;
+  Result := TyCornerRadii(vals);
+end;
+
+function RadiusIn(ANode: TJSONObject): TTyCornerRadii;
 var d: TJSONData;
 begin
-  Result := 0;
+  Result := TyCornerRadii([]);
   if ANode = nil then Exit;
   d := ANode.Find('itemStyle');
   if (d = nil) or not (d is TJSONObject) then Exit;
-  Result := AtLeast(FloatIn(TJSONObject(d), 'borderRadius', 0), 0);
+  Result := CornersOf(TJSONObject(d));
+end;
+
+function BackgroundRadiusIn(ANode: TJSONObject): TTyCornerRadii;
+var d: TJSONData;
+begin
+  Result := TyCornerRadii([]);
+  if ANode = nil then Exit;
+  d := ANode.Find('backgroundStyle');
+  if (d = nil) or not (d is TJSONObject) then Exit;
+  Result := CornersOf(TJSONObject(d));
 end;
 
 function TyDerivedBandWidth(APxSpan, AScaleSpan: Double;
@@ -440,8 +497,11 @@ begin
   Result.BandWidth := band;
   Result.Offset := cols[0].Offset;
   Result.Width := cols[0].Width;
-  Result.RadiusPx := 0;
+  Result.Radii := TyCornerRadii([]);
   Result.MinHeightPx := 0;
+  Result.ShowBackground := False;
+  Result.BackgroundRadii := TyCornerRadii([]);
+  Result.Clip := True;
 end;
 
 { Every base-dimension value of every bar series on this axis, which is what
@@ -599,8 +659,11 @@ var
       answer[si].BandWidth := band;
       answer[si].Offset := cols[m].Offset;
       answer[si].Width := cols[m].Width;
-      answer[si].RadiusPx := RadiusIn(node);
+      answer[si].Radii := RadiusIn(node);
       answer[si].MinHeightPx := AtLeast(FloatIn(node, 'barMinHeight', 0), 0);
+      answer[si].ShowBackground := BoolIn(node, 'showBackground', False);
+      answer[si].BackgroundRadii := BackgroundRadiusIn(node);
+      answer[si].Clip := BoolIn(node, 'clip', True);
     end;
   end;
 
@@ -612,8 +675,11 @@ begin
     answer[i].BandWidth := 0;
     answer[i].Offset := 0;
     answer[i].Width := 0;
-    answer[i].RadiusPx := 0;
+    answer[i].Radii := TyCornerRadii([]);
     answer[i].MinHeightPx := 0;
+    answer[i].ShowBackground := False;
+    answer[i].BackgroundRadii := TyCornerRadii([]);
+    answer[i].Clip := True;
   end;
   Result := answer;
   if (AOption = nil) or (ABuild = nil) or (AIndex = nil) then Exit;

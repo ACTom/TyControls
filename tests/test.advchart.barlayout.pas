@@ -22,7 +22,7 @@ uses
   tyControls.AdvChart.Types, tyControls.AdvChart.Option,
   tyControls.AdvChart.Coord, tyControls.AdvChart.Data,
   tyControls.AdvChart.Builder, tyControls.AdvChart.Series,
-  tyControls.AdvChart.BarLayout;
+  tyControls.AdvChart.BarLayout, tyControls.AdvChart.Shape;
 
 type
   TAdvChartBarLayoutTest = class(TTestCase)
@@ -65,6 +65,8 @@ type
     procedure TestADerivedBandNeverFallsBelowOnePixel;
     procedure TestTheDerivedBandHandlesTheDegenerateCases;
     procedure TestBarMinHeightAndBorderRadiusReachTheColumn;
+    procedure TestTheArrayFormOfBorderRadiusIsRead;
+    procedure TestShowBackgroundAndClipAreReadWithUpstreamsDefaults;
   end;
 
 implementation
@@ -448,14 +450,62 @@ begin
   Run('{ xAxis: { data: [''A'', ''B''] }, yAxis: {}, series: [{ type: ''bar'','
     + ' barMinHeight: 4, itemStyle: { borderRadius: 6 }, data: [1, 2] }] }');
   AssertEquals('barMinHeight came through', 4.0, FCols[0].MinHeightPx, Eps);
-  AssertEquals('and the corner radius', 6.0, FCols[0].RadiusPx, Eps);
+  AssertEquals('and the corner radius', 6.0, FCols[0].Radii[0], Eps);
+  AssertEquals('on all four corners', 6.0, FCols[0].Radii[3], Eps);
 
   { A chart that sets neither must get zero for both, or every bar would be
     quietly rounded. }
   Run('{ xAxis: { data: [''A'', ''B''] }, yAxis: {},'
     + ' series: [{ type: ''bar'', data: [1, 2] }] }');
   AssertEquals('nothing set means no minimum', 0.0, FCols[0].MinHeightPx, Eps);
-  AssertEquals('and square corners', 0.0, FCols[0].RadiusPx, Eps);
+  AssertEquals('and square corners', 0.0, FCols[0].Radii[0], Eps);
+end;
+
+procedure TAdvChartBarLayoutTest.TestTheArrayFormOfBorderRadiusIsRead;
+begin
+  { A scalar is not the only spelling, and the array one is what a rounded-top
+    bar needs. The reader had only the scalar, so `[8, 8, 0, 0]` silently
+    became no radius at all -- the option was accepted and ignored. }
+  Run('{ xAxis: { data: [''A''] }, yAxis: {}, series: [{ type: ''bar'','
+    + ' itemStyle: { borderRadius: [8, 8, 0, 0] }, data: [1] }] }');
+  AssertEquals('top-left', 8.0, FCols[0].Radii[0], Eps);
+  AssertEquals('top-right', 8.0, FCols[0].Radii[1], Eps);
+  AssertEquals('bottom-right stays square', 0.0, FCols[0].Radii[2], Eps);
+  AssertEquals('bottom-left too', 0.0, FCols[0].Radii[3], Eps);
+
+  { And the short forms mean what zrender says they mean rather than `pad with
+    zeroes` -- two values are the DIAGONALS. }
+  Run('{ xAxis: { data: [''A''] }, yAxis: {}, series: [{ type: ''bar'','
+    + ' itemStyle: { borderRadius: [4, 9] }, data: [1] }] }');
+  AssertEquals('top-left', 4.0, FCols[0].Radii[0], Eps);
+  AssertEquals('top-right', 9.0, FCols[0].Radii[1], Eps);
+  AssertEquals('bottom-right takes the first again', 4.0, FCols[0].Radii[2], Eps);
+  AssertEquals('bottom-left the second', 9.0, FCols[0].Radii[3], Eps);
+end;
+
+procedure TAdvChartBarLayoutTest.TestShowBackgroundAndClipAreReadWithUpstreamsDefaults;
+begin
+  { THE DEFAULTS FIRST, because a reader that ignored both keys entirely would
+    pass any test that only ever sets them. showBackground is FALSE and clip is
+    TRUE, and getting either backwards changes every bar chart in the library
+    rather than only the ones that asked. }
+  Run('{ xAxis: { data: [''A''] }, yAxis: {},'
+    + ' series: [{ type: ''bar'', data: [1] }] }');
+  AssertFalse('no backing strip unless asked', FCols[0].ShowBackground);
+  AssertTrue('but clipping is on unless refused', FCols[0].Clip);
+  AssertFalse('and the strip has square corners',
+    TyHasCorner(FCols[0].BackgroundRadii));
+
+  Run('{ xAxis: { data: [''A''] }, yAxis: {}, series: [{ type: ''bar'','
+    + ' showBackground: true, clip: false,'
+    + ' backgroundStyle: { borderRadius: 6 }, data: [1] }] }');
+  AssertTrue('switched on', FCols[0].ShowBackground);
+  AssertFalse('and off', FCols[0].Clip);
+  { The strip's radius is its OWN key. A rounded bar on a square backing strip
+    is a real chart, so the two cannot share one number. }
+  AssertEquals('the strip rounds by its own key', 6.0,
+    FCols[0].BackgroundRadii[0], Eps);
+  AssertEquals('and the bar is untouched by it', 0.0, FCols[0].Radii[0], Eps);
 end;
 
 initialization

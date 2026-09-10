@@ -1070,6 +1070,13 @@ begin
       v.EmptyFill := TTyChartColor(
         ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass,
           [tysNormal]).Background.Color);
+
+      { showBackground's strip. Its own key rather than the split area's: the
+        two are faint for different reasons and a theme has to be able to move
+        one without the other. }
+      v.BackgroundFill := TTyChartColor(
+        ActiveController.Model.ResolveStyle('TyAdvChartBarBackground', '',
+          []).Background.Color);
       { NO Z2 HERE. It was set to i, and a mutant that set it to 0 survived
         every test -- because the paint list's documented tiebreaker is the
         INSERTION INDEX, and these are inserted in series order already. Two

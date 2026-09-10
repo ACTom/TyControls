@@ -19,7 +19,7 @@ uses SysUtils, Math, tyControls.AdvChart.Types, tyControls.SubPixel;
 type
   TTyChartShapeKind = (
     cskRect,        // Bounds
-    cskRoundRect,   // Bounds + RadiusPx
+    cskRoundRect,   // Bounds + Radii
     cskCircle,      // CX, CY, R1
     cskEllipse,     // CX, CY, RX = R0, RY = R1
     cskSector,      // CX, CY, R0..R1, StartRad..EndRad -- a pie slice or a ring band
@@ -30,13 +30,19 @@ type
 
   TTyPointFArray = array of TTyPointF;
 
+  { A rounded rect's four corners, CLOCKWISE FROM TOP-LEFT, matching
+    zrender's RectShape.r. One radius per corner rather than one for the
+    shape, because `borderRadius: [8, 8, 0, 0]` -- a bar rounded only where
+    it leaves the axis -- is the commonest form there is. }
+  TTyCornerRadii = array[0..3] of Double;
+
   { One element's geometry, DEVICE px throughout. A single record for every kind
     rather than a class hierarchy: a scatter series makes one of these per datum,
     and an object per point is an allocation per point. }
   TTyChartShape = record
     Kind: TTyChartShapeKind;
     Bounds: TTyRectF;                 // rect / roundRect / path
-    RadiusPx: Double;                 // roundRect corner
+    Radii: TTyCornerRadii;            // roundRect corners, already clamped
     CX, CY: Double;                   // circle / ellipse / sector centre
     R0, R1: Double;                   // sector inner/outer; ellipse rx/ry; circle r in R1
     StartRad, EndRad: Double;         // sector sweep, CLOCKWISE, matching the painter
@@ -47,6 +53,17 @@ type
 { ---- constructors, so a caller never has to remember which fields a kind uses ---- }
 function TyShapeRect(const ABounds: TTyRectF): TTyChartShape;
 function TyShapeRoundRect(const ABounds: TTyRectF; ARadiusPx: Double): TTyChartShape;
+{ The four-corner form. ARadii is read the way zrender reads RectShape.r:
+  one value is every corner, two are the diagonals, three leave the
+  top-right and bottom-left sharing the middle one, four are themselves.
+  More than four are ignored past the fourth; none at all is a plain rect. }
+function TyShapeRoundRect(const ABounds: TTyRectF;
+  const ARadii: array of Double): TTyChartShape; overload;
+{ zrender's expansion rule on its own, so a caller that has to talk about
+  corners before it has a shape can. }
+function TyCornerRadii(const AValues: array of Double): TTyCornerRadii;
+{ True when at least one corner is actually rounded. }
+function TyHasCorner(const ARadii: TTyCornerRadii): Boolean;
 function TyShapeCircle(ACX, ACY, AR: Double): TTyChartShape;
 function TyShapeEllipse(ACX, ACY, ARX, ARY: Double): TTyChartShape;
 function TyShapeSector(ACX, ACY, AR0, AR1, AStartRad, AEndRad: Double): TTyChartShape;
@@ -147,12 +164,103 @@ begin
   Result.Bounds := ABounds;
 end;
 
-function TyShapeRoundRect(const ABounds: TTyRectF; ARadiusPx: Double): TTyChartShape;
+function TyCornerRadii(const AValues: array of Double): TTyCornerRadii;
+var i: Integer;
+begin
+  { roundRect.ts:30-55. The two- and three-value forms are not truncations
+    of the four-value one -- two means the DIAGONALS and three leaves the
+    top-right and bottom-left sharing the middle value. Reading them as
+    `fill the rest with zero` rounds the wrong corners, which on a bar looks
+    like the chart is upside down. }
+  case Length(AValues) of
+    0: begin
+         Result[0] := 0; Result[1] := 0; Result[2] := 0; Result[3] := 0;
+       end;
+    1: begin
+         Result[0] := AValues[0]; Result[1] := AValues[0];
+         Result[2] := AValues[0]; Result[3] := AValues[0];
+       end;
+    2: begin
+         Result[0] := AValues[0]; Result[1] := AValues[1];
+         Result[2] := AValues[0]; Result[3] := AValues[1];
+       end;
+    3: begin
+         Result[0] := AValues[0]; Result[1] := AValues[1];
+         Result[2] := AValues[2]; Result[3] := AValues[1];
+       end;
+  else
+    Result[0] := AValues[0]; Result[1] := AValues[1];
+    Result[2] := AValues[2]; Result[3] := AValues[3];
+  end;
+  for i := 0 to 3 do
+    if (Result[i] < 0) or IsNan(Result[i]) then Result[i] := 0;
+end;
+
+function TyHasCorner(const ARadii: TTyCornerRadii): Boolean;
+begin
+  Result := (ARadii[0] > 0) or (ARadii[1] > 0) or (ARadii[2] > 0)
+    or (ARadii[3] > 0);
+end;
+
+{ Shrink the corners until adjacent pairs fit the side they share.
+
+  PROPORTIONALLY, and per PAIR -- roundRect.ts:57-76. Clamping each radius
+  on its own to half the shorter side is the obvious version and it is not
+  the same shape: a rect 40 wide with corners 30 and 10 keeps their 3:1
+  ratio here and comes out 30:10 rather than 20:10.
+
+  DONE IN THE CONSTRUCTOR, not in the renderer, for the same reason a
+  sector's angles are normalised here: the hit test reads the record too,
+  and a shape that means two things to two readers is how a pointer ends up
+  answering for ink that is not there. }
+procedure ClampCorners(var ARadii: TTyCornerRadii; AWidth, AHeight: Double);
+
+  procedure Fit(var A, B: Double; ASide: Double);
+  var total: Double;
+  begin
+    total := A + B;
+    if total > ASide then
+    begin
+      A := A * ASide / total;
+      B := B * ASide / total;
+    end;
+  end;
+
+begin
+  Fit(ARadii[0], ARadii[1], AWidth);
+  Fit(ARadii[2], ARadii[3], AWidth);
+  Fit(ARadii[1], ARadii[2], AHeight);
+  Fit(ARadii[0], ARadii[3], AHeight);
+end;
+
+function TyShapeRoundRect(const ABounds: TTyRectF;
+  const ARadii: array of Double): TTyChartShape;
+var t: Double;
 begin
   Result := EmptyShape(cskRoundRect);
   Result.Bounds := ABounds;
-  if ARadiusPx < 0 then ARadiusPx := 0;
-  Result.RadiusPx := ARadiusPx;
+  { NORMALISED FIRST, like roundRect.ts:20-28: a rect given right-to-left is
+    the same rect, and corner 0 has to be its top-left either way. }
+  if Result.Bounds.Right < Result.Bounds.Left then
+  begin
+    t := Result.Bounds.Left;
+    Result.Bounds.Left := Result.Bounds.Right;
+    Result.Bounds.Right := t;
+  end;
+  if Result.Bounds.Bottom < Result.Bounds.Top then
+  begin
+    t := Result.Bounds.Top;
+    Result.Bounds.Top := Result.Bounds.Bottom;
+    Result.Bounds.Bottom := t;
+  end;
+  Result.Radii := TyCornerRadii(ARadii);
+  ClampCorners(Result.Radii, TyRectFWidth(Result.Bounds),
+    TyRectFHeight(Result.Bounds));
+end;
+
+function TyShapeRoundRect(const ABounds: TTyRectF; ARadiusPx: Double): TTyChartShape;
+begin
+  Result := TyShapeRoundRect(ABounds, [ARadiusPx]);
 end;
 
 function TyShapeCircle(ACX, ACY, AR: Double): TTyChartShape;
@@ -301,36 +409,52 @@ begin
         and (AY >= AR.Top - ASlop) and (AY <= AR.Bottom + ASlop);
 end;
 
-function RoundRectContains(const AR: TTyRectF; ARadius, AX, AY, ASlop: Double): Boolean;
+function RoundRectContains(const AR: TTyRectF; const ARadii: TTyCornerRadii;
+  AX, AY, ASlop: Double): Boolean;
 var
   r, cx, cy: Double;
 begin
   if not RectContainsClosed(AR, AX, AY, ASlop) then Exit(False);
-  r := ARadius;
-  { Clamp the same way a renderer would, so the hit area cannot be a shape the
-    painter never draws. }
-  if r > TyRectFWidth(AR) / 2 then r := TyRectFWidth(AR) / 2;
-  if r > TyRectFHeight(AR) / 2 then r := TyRectFHeight(AR) / 2;
-  if r <= 0 then Exit(True);
-  { Only the four corner boxes can reject; everything else already passed. }
-  if (AX < AR.Left + r) and (AY < AR.Top + r) then
+  { NO CLAMP HERE ANY MORE. The shape constructor clamps, so the record
+    already holds the radii the renderer will use; clamping a second time,
+    by a different rule than the constructor's proportional one, is how the
+    pointer and the ink stopped describing the same corner. }
+  if not TyHasCorner(ARadii) then Exit(True);
+  { Only the four corner boxes can reject; everything else already passed.
+    Each corner asks about ITS OWN radius, which is the whole point of there
+    being four of them: a bar rounded only at the top must not reject a click
+    at its square bottom corner. }
+  r := ARadii[0];
+  if (r > 0) and (AX < AR.Left + r) and (AY < AR.Top + r) then
   begin
     cx := AR.Left + r; cy := AR.Top + r;
   end
-  else if (AX > AR.Right - r) and (AY < AR.Top + r) then
-  begin
-    cx := AR.Right - r; cy := AR.Top + r;
-  end
-  else if (AX < AR.Left + r) and (AY > AR.Bottom - r) then
-  begin
-    cx := AR.Left + r; cy := AR.Bottom - r;
-  end
-  else if (AX > AR.Right - r) and (AY > AR.Bottom - r) then
-  begin
-    cx := AR.Right - r; cy := AR.Bottom - r;
-  end
   else
-    Exit(True);
+  begin
+    r := ARadii[1];
+    if (r > 0) and (AX > AR.Right - r) and (AY < AR.Top + r) then
+    begin
+      cx := AR.Right - r; cy := AR.Top + r;
+    end
+    else
+    begin
+      r := ARadii[2];
+      if (r > 0) and (AX > AR.Right - r) and (AY > AR.Bottom - r) then
+      begin
+        cx := AR.Right - r; cy := AR.Bottom - r;
+      end
+      else
+      begin
+        r := ARadii[3];
+        if (r > 0) and (AX < AR.Left + r) and (AY > AR.Bottom - r) then
+        begin
+          cx := AR.Left + r; cy := AR.Bottom - r;
+        end
+        else
+          Exit(True);
+      end;
+    end;
+  end;
   Result := Sqrt(Sqr(AX - cx) + Sqr(AY - cy)) <= r + ASlop;
 end;
 
@@ -462,7 +586,7 @@ begin
     cskRect:
       Result := RectContainsClosed(AShape.Bounds, AX, AY, ASlopPx);
     cskRoundRect:
-      Result := RoundRectContains(AShape.Bounds, AShape.RadiusPx, AX, AY, ASlopPx);
+      Result := RoundRectContains(AShape.Bounds, AShape.Radii, AX, AY, ASlopPx);
     cskCircle:
       Result := Sqrt(Sqr(AX - AShape.CX) + Sqr(AY - AShape.CY))
                 <= AShape.R1 + ASlopPx;

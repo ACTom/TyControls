@@ -1208,6 +1208,11 @@ begin
     '/* The ring a pie draws when it has no data at all. Upstream hard-codes' + LineEnding +
     '   lightgray; alpha over the ink instead, so it stays faint on either mode. */' + LineEnding +
     'TyAdvChartEmptyCircle { background: alpha(var(--on-surface), 0.10); }' + LineEnding +
+    '/* showBackground: the strip behind a bar, the height of the plot. Upstream' + LineEnding +
+    '   writes rgba(180,180,180,0.2) into the series default, which is a pale grey' + LineEnding +
+    '   band across a dark skin; alpha over the ink darkens one and lightens the' + LineEnding +
+    '   other from the same declaration. */' + LineEnding +
+    'TyAdvChartBarBackground { background: alpha(var(--on-surface), 0.10); }' + LineEnding +
     '' + LineEnding +
     '/* ── ListGroupPanel (navigation accordion; own keys, not the tree column header''s) ────── */' + LineEnding +
     '/* A modern sider: group rows carry NO fill (just muted ink + a right chevron; the OPEN group' + LineEnding +

@@ -44,6 +44,9 @@ type
     procedure TestTheSolvedColumnDecidesWhereTheBarGoes;
     procedure TestAValueTooSmallToSeeStillGetsBarMinHeight;
     procedure TestARoundedBarIsARoundedShapeNotAFlagNobodyReads;
+    procedure TestABarRoundedOnlyAtTheTopKeepsItsSquareFoot;
+    procedure TestTheBackingStripSpansThePlotAndTakesNoHovers;
+    procedure TestABarPastTheAxisIsCutAtThePlotEdge;
     procedure TestAColumnOfNoWidthDrawsNothingRatherThanTheWholeBand;
     procedure TestAHorizontalStackedBarStacksAlongXNotY;
     procedure TestTheBottomOfAStackKeepsTheAxisOwnBaseline;
@@ -430,18 +433,122 @@ begin
   Given('bar', 1, [50]);
   v := TySeriesVisual($FF3366CC);
   v.Bar := TyBarColumnForOneSeries(200);
-  v.Bar.RadiusPx := 5;
+  v.Bar.Radii := TyCornerRadii([5]);
   TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList);
   AssertEquals('a radius makes a round rect',
     Ord(cskRoundRect), Ord(FList.Element(0).Shape.Kind));
-  AssertEquals('carrying the radius', 5.0, FList.Element(0).Shape.RadiusPx, 1e-9);
+  AssertEquals('carrying the radius', 5.0, FList.Element(0).Shape.Radii[0], 1e-9);
+  AssertEquals('on every corner', 5.0, FList.Element(0).Shape.Radii[2], 1e-9);
 
   { AND NO RADIUS STAYS A PLAIN RECT, so every bar is not quietly rounded. }
   FList.Clear;
-  v.Bar.RadiusPx := 0;
+  v.Bar.Radii := TyCornerRadii([]);
   TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList);
   AssertEquals('no radius stays square',
     Ord(cskRect), Ord(FList.Element(0).Shape.Kind));
+end;
+
+procedure TAdvChartMarksTest.TestABarRoundedOnlyAtTheTopKeepsItsSquareFoot;
+var v: TTySeriesVisual;
+begin
+  { `borderRadius: [8, 8, 0, 0]` is what nearly every rounded bar in the
+    gallery asks for, and the scalar reader this unit had could not express it
+    -- it rounded all four corners or none. }
+  Given('bar', 1, [50]);
+  v := TySeriesVisual($FF3366CC);
+  v.Bar := TyBarColumnForOneSeries(200);
+  v.Bar.Radii := TyCornerRadii([8, 8, 0, 0]);
+  TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList);
+  AssertEquals('the top-left is rounded', 8.0,
+    FList.Element(0).Shape.Radii[0], 1e-9);
+  AssertEquals('the top-right too', 8.0, FList.Element(0).Shape.Radii[1], 1e-9);
+  AssertEquals('and the foot is square', 0.0,
+    FList.Element(0).Shape.Radii[2], 1e-9);
+  AssertEquals('both of it', 0.0, FList.Element(0).Shape.Radii[3], 1e-9);
+end;
+
+procedure TAdvChartMarksTest.TestTheBackingStripSpansThePlotAndTakesNoHovers;
+var
+  v: TTySeriesVisual;
+  strip: TTyChartElement;
+begin
+  { showBackground draws the bar's own band stretched over the whole plot along
+    the value axis -- BarView.ts:1237-1246. The plot here is 400 by 300 and the
+    bar reaches half of it, so the strip is the one that goes all the way. }
+  Given('bar', 2, [50, 50]);
+  v := TySeriesVisual($FF3366CC);
+  v.Bar := TyBarColumnForOneSeries(200);
+  v.Bar.ShowBackground := True;
+  v.BackgroundFill := $FF224466;
+  AssertEquals('two bars and two strips', 4,
+    TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList));
+
+  { BEHIND, not in front: upstream gives the strip and the bar the same z2 and
+    lets insertion decide, and this list ties the same way. }
+  strip := FList.Element(0);
+  AssertEquals('the strip is emitted first', 0, FList.PaintOrder(0));
+  AssertEquals('the strip spans the plot', 0.0, strip.Shape.Bounds.Top, 1e-9);
+  AssertEquals('all of it', 300.0, strip.Shape.Bounds.Bottom, 1e-9);
+  AssertEquals('but only its own band across', FList.Element(1).Shape.Bounds.Left,
+    strip.Shape.Bounds.Left, 1e-9);
+  AssertEquals('', FList.Element(1).Shape.Bounds.Right,
+    strip.Shape.Bounds.Right, 1e-9);
+  AssertEquals('in the colour it was handed', $FF224466, strip.Style.FillColor);
+
+  { SILENT. A strip the height of the plot that answered the pointer would take
+    every hover the bar under it was meant to get -- the same reason a gridline
+    is silent. }
+  AssertTrue('and it takes no hovers', strip.Silent);
+  AssertEquals('so the bar still answers', 0,
+    FList.HitTest(strip.Shape.Bounds.Left + 5, 250, 96).SeriesIndex);
+
+  { OFF BY DEFAULT, BarSeries.ts:151 -- a chart that never asked must not get
+    a grey band behind every bar. }
+  FList.Clear;
+  v.Bar.ShowBackground := False;
+  AssertEquals('nothing extra', 2,
+    TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList));
+end;
+
+procedure TAdvChartMarksTest.TestABarPastTheAxisIsCutAtThePlotEdge;
+var
+  v: TTySeriesVisual;
+  b: TTyRectF;
+begin
+  { The y axis is fixed at 0..100 and the value is 150, so the bar runs off the
+    top of the plot. clip defaults to TRUE, and upstream does it by
+    INTERSECTING THE RECT rather than by setting a clip path -- so the shape
+    stays a real rect and the pointer keeps agreeing with the ink. }
+  Given('bar', 1, [150]);
+  v := TySeriesVisual($FF3366CC);
+  v.Bar := TyBarColumnForOneSeries(200);
+  TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList);
+  b := FList.Element(0).Shape.Bounds;
+  AssertEquals('cut at the plot edge', 0.0, b.Top, 1e-9);
+  AssertEquals('and still standing on the baseline', 300.0, b.Bottom, 1e-9);
+
+  { AND IT CAN BE SWITCHED OFF, which is the whole reason the key exists. }
+  FList.Clear;
+  v.Bar.Clip := False;
+  TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList);
+  AssertTrue('unclipped, it runs off the top: ' +
+    FloatToStr(FList.Element(0).Shape.Bounds.Top),
+    FList.Element(0).Shape.Bounds.Top < 0);
+
+  { BOTH ENDS, and it takes a second fixture to say so: the bar above runs off
+    the near edge only, so a clip that moved Left and Top and left Right and
+    Bottom alone would pass every assertion so far. Turned on its side, the
+    same overshoot goes off the FAR edge instead. }
+  FreeAndNil(FStore);
+  FreeAndNil(FCart);
+  FList.Clear;
+  GivenSideways('bar', 1, [150]);
+  v := TySeriesVisual($FF3366CC);
+  v.Bar := TyBarColumnForOneSeries(200);
+  TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList);
+  b := FList.Element(0).Shape.Bounds;
+  AssertEquals('cut at the far edge too', 400.0, b.Right, 1e-9);
+  AssertEquals('and still standing on the baseline', 0.0, b.Left, 1e-9);
 end;
 
 procedure TAdvChartMarksTest.TestAColumnOfNoWidthDrawsNothingRatherThanTheWholeBand;

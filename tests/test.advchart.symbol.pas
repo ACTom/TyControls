@@ -192,7 +192,7 @@ begin
   sh := TyBuildSymbol(spec, 100, 200);
   AssertEquals(Ord(cskRoundRect), Ord(sh.Kind));
   AssertEquals('the corner is a quarter of the shorter side',
-    2.5, sh.RadiusPx, Eps);
+    2.5, sh.Radii[0], Eps);
 
   { SQUARE IS THE SAME AS RECT for a series symbol, which is not obvious and
     is worth pinning. Upstream's square shape-maker does take Math.min(w, h)

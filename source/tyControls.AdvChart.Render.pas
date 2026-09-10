@@ -38,11 +38,42 @@ begin
       P.RectPath(AShape.Bounds.Left, AShape.Bounds.Top,
                  AShape.Bounds.Right, AShape.Bounds.Bottom);
     cskRoundRect:
-      { The shape carries DEVICE px while RoundRectPath takes LOGICAL. Unscale
-        rather than reach past the painter, so one place owns the conversion. }
-      P.RoundRectPath(AShape.Bounds.Left, AShape.Bounds.Top,
-                      AShape.Bounds.Right, AShape.Bounds.Bottom,
-                      AShape.RadiusPx / Max(P.ScaleF(1), 1e-9));
+      { TRACED HERE RATHER THAN HANDED TO RoundRectPath, which takes ONE radius
+        and could not draw a bar rounded only along its top. The four arcs are
+        roundRect.ts:78-87 transcribed; the shape record arrives already
+        clamped, so nothing is decided at this level.
+
+        A rect with no rounded corner takes the rect path, as upstream does at
+        Rect.ts:64-65 -- four zero-radius arcs would draw the same outline, but
+        not necessarily the same PIXELS once antialiasing has had its say. }
+      if not TyHasCorner(AShape.Radii) then
+        P.RectPath(AShape.Bounds.Left, AShape.Bounds.Top,
+                   AShape.Bounds.Right, AShape.Bounds.Bottom)
+      else
+      begin
+        P.MoveTo(AShape.Bounds.Left + AShape.Radii[0], AShape.Bounds.Top);
+        P.LineTo(AShape.Bounds.Right - AShape.Radii[1], AShape.Bounds.Top);
+        if AShape.Radii[1] > 0 then
+          P.ArcTo(AShape.Bounds.Right - AShape.Radii[1],
+                  AShape.Bounds.Top + AShape.Radii[1], AShape.Radii[1],
+                  -Pi / 2, 0, False);
+        P.LineTo(AShape.Bounds.Right, AShape.Bounds.Bottom - AShape.Radii[2]);
+        if AShape.Radii[2] > 0 then
+          P.ArcTo(AShape.Bounds.Right - AShape.Radii[2],
+                  AShape.Bounds.Bottom - AShape.Radii[2], AShape.Radii[2],
+                  0, Pi / 2, False);
+        P.LineTo(AShape.Bounds.Left + AShape.Radii[3], AShape.Bounds.Bottom);
+        if AShape.Radii[3] > 0 then
+          P.ArcTo(AShape.Bounds.Left + AShape.Radii[3],
+                  AShape.Bounds.Bottom - AShape.Radii[3], AShape.Radii[3],
+                  Pi / 2, Pi, False);
+        P.LineTo(AShape.Bounds.Left, AShape.Bounds.Top + AShape.Radii[0]);
+        if AShape.Radii[0] > 0 then
+          P.ArcTo(AShape.Bounds.Left + AShape.Radii[0],
+                  AShape.Bounds.Top + AShape.Radii[0], AShape.Radii[0],
+                  Pi, Pi * 1.5, False);
+        P.ClosePath;
+      end;
     cskCircle:
       P.CirclePath(AShape.CX, AShape.CY, AShape.R1);
     cskEllipse:
