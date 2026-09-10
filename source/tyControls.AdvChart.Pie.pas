@@ -1,0 +1,804 @@
+unit tyControls.AdvChart.Pie;
+{$mode objfpc}{$H+}
+{ The first series that is not on a coordinate system.
+
+  Everything the chart drew until now went through a cartesian: a datum became a
+  point because an axis mapped it. A pie has no axis. Its geometry comes from a
+  CENTRE and a RADIUS solved out of the series' own box, and its angles come
+  from the values' share of a total. That is a second, parallel way of turning
+  data into shapes, and it lives here rather than in AdvChart.Marks because that
+  unit's entry point requires a cartesian and two axes before it will look at
+  anything -- correctly, since a bar without a base axis is meaningless.
+
+  PORTED FROM src/chart/pie/pieLayout.ts, ECharts 6.1.0, plus getCircleLayout in
+  src/util/layout.ts. The arithmetic below is that file's, transcribed; where a
+  line reads oddly it is because upstream reads oddly and a tidier version would
+  be a different chart.
+
+  FIVE THINGS THAT ARE EASY TO GET WRONG, all of them checked against the source
+  rather than against the documentation:
+
+  1. THE TWO PERCENTAGE BASES ARE DIFFERENT. `center` is a percentage of the
+     view rect's WIDTH and HEIGHT separately, plus its origin. `radius` is a
+     percentage of min(width, height) / 2 -- half the shorter side. So the
+     default radius '50%' is a quarter of the shorter side, not half of it, and
+     the catalog's transcribed [0, '75%'] is a full third too large.
+
+  2. THE ANGLES ARE NEGATED. The option's startAngle is the mathematical
+     convention -- degrees counter-clockwise from three o'clock. The layout
+     turns it into canvas radians, where +y is down and increasing angles run
+     clockwise, by negating it. The default 90 becomes -Pi/2: twelve o'clock.
+
+  3. THE SECOND PASS IS NOT AN EDGE CASE. `restAngle` starts at the whole sweep
+     and only shrinks when a sector hits minAngle, so the "some sector was
+     constrained" test `restAngle < 2*Pi` is TRUE for every pie that does not go
+     all the way round -- a half doughnut included. The first pass sized those
+     sectors against a full turn; the second is what fits them into the half.
+     Skip it as an edge case and every partial pie overflows its own arc.
+
+  4. NEGATIVE VALUES ARE REMOVED, not clamped and not drawn backwards. Upstream
+     filters them out in a processor before the layout ever runs, so they take
+     no angle, contribute nothing to the sum, and do not even hold a place in
+     the ordering. A NaN is not the same thing: it keeps its place.
+
+  5. ONE DIVISION UPSTREAM GETS AWAY WITH. When every sector is pinned to
+     minAngle, the second pass divides by a sum of zero; JavaScript answers
+     Infinity and the value is then never used, because the same test that
+     pinned each sector also selects the pinned branch. Free Pascal would raise.
+     The guard here is that division, not a behaviour change.
+
+  PURE, like everything upstream of AdvChart.Measure: SysUtils, Math, fpjson and
+  the AdvChart units. Colours arrive resolved. }
+interface
+uses
+  SysUtils, Math, fpjson,
+  tyControls.AdvChart.Types, tyControls.AdvChart.Option,
+  tyControls.AdvChart.Data, tyControls.AdvChart.Shape,
+  tyControls.AdvChart.Paint, tyControls.AdvChart.Series,
+  tyControls.AdvChart.Layout;
+
+type
+  { roseType: absent, 'radius' or 'area'.
+
+    Both draw a datum's radius from its value; they differ in the ANGLE. Only
+    'area' gives every sector the same angle -- which is what makes its sectors'
+    areas proportional, since area goes with the square of the radius. }
+  TTyRoseType = (prtNone, prtRadius, prtArea);
+
+  { The pie-shaped options of one series, read off its option node.
+
+    Angles are kept in DEGREES here, exactly as the option spells them, and
+    turned into radians inside the layout. Storing them pre-converted would put
+    the negation in two places. }
+  TTyPieSpec = record
+    { left/top/right/bottom/width/height -- the series' own box. Its default is
+      the whole viewport, which is why an ordinary pie is centred on the
+      control and not on a grid. }
+    Box: TTyBoxSpec;
+    CentreX, CentreY: TTyBoxValue;
+    Radius0, Radius1: TTyBoxValue;
+    StartAngleDeg: Double;
+    { endAngle: 'auto' is the default and means "one full turn from the start".
+      A number is an absolute angle in the same convention as the start. }
+    EndAngleAuto: Boolean;
+    EndAngleDeg: Double;
+    Clockwise: Boolean;
+    MinAngleDeg: Double;
+    PadAngleDeg: Double;
+    { Not used by the layout; carried so the label pass can ask. }
+    MinShowLabelAngleDeg: Double;
+    Rose: TTyRoseType;
+    { When every value is zero, still show equal slices rather than nothing. }
+    StillShowZeroSum: Boolean;
+    PercentPrecision: Integer;
+    ShowEmptyCircle: Boolean;
+  end;
+
+  { One datum's wedge, in DEVICE px and canvas radians.
+
+    Angle is the sweep the datum was GIVEN, before padAngle bit into it, which
+    is what minAngle is compared against and what a label pass tests against
+    minShowLabelAngle. StartRad..EndRad is what gets drawn. }
+  TTyPieSector = record
+    RawIndex: Integer;
+    { False when the value is not a number. The sector still exists and still
+      holds its place in the ordering; it simply has no geometry. }
+    Valid: Boolean;
+    Value: Double;
+    Angle: Double;
+    StartRad, EndRad: Double;
+    CX, CY, R0, R1: Double;
+  end;
+  TTyPieSectorArray = array of TTyPieSector;
+
+  { The whole series' geometry: the ring the sectors live on, and the sectors.
+
+    The ring is kept even when there are no sectors, because showEmptyCircle
+    draws exactly that. }
+  TTyPieLayout = record
+    { False when the series could not be laid out at all -- no store, or a
+      dimension that is not there. }
+    Valid: Boolean;
+    ViewRect: TTyRectF;
+    CX, CY, R0, R1: Double;
+    StartRad, EndRad: Double;
+    Clockwise: Boolean;
+    Sectors: TTyPieSectorArray;
+  end;
+
+  { What a pie looks like, resolved by the control.
+
+    ONE COLOUR PER DATUM, not one per series: a pie is colorBy:'data', and a
+    single-colour pie would be one disc. The array is cycled, so a caller may
+    hand over as many as it likes. }
+  TTyPieVisual = record
+    Fills: array of TTyChartColor;
+    Stroke: TTyChartColor;
+    StrokeWidthLogical: Double;
+    { showEmptyCircle's ring, drawn when nothing else is. }
+    EmptyFill: TTyChartColor;
+    Z, Z2: Integer;
+  end;
+
+const
+  { ECharts' own spelling of both, in one place: the chart names the type when
+    it decides which pass to run, and names the dimension when it builds the
+    store and again when it reads it back. }
+  TyPieSeriesTypeName = 'pie';
+  TyPieValueDim = 'value';
+
+{ ---- the option ---- }
+{ Upstream's defaults, all of them from PieSeries.ts rather than the docs. }
+function TyPieSpecDefault: TTyPieSpec;
+function TyPieSpecOf(AOption: TTyChartOption; ASlot: Integer): TTyPieSpec;
+
+{ ---- the arithmetic, exposed because each is worth testing on its own ---- }
+{ zrender's normalizeArcAngles: wrap the start into [0, 2*Pi) and pull the end
+  onto the correct side of it, never further than one turn away. }
+procedure TyNormalizeArcAngles(var AStart, AEnd: Double; AAnticlockwise: Boolean);
+
+{ parsePercent, in the one form this unit needs: a value against a base. }
+function TyPieResolve(const AValue: TTyBoxValue; ABase: Double): Double;
+
+{ The largest remainder method, so a pie's percentages add up to 100. }
+function TyPiePercentSeats(const AValues: array of Double;
+  APrecision: Integer): TTyDoubleArray;
+
+{ ---- the layout ---- }
+{ ADim is the store column holding the value. AViewport is the control's own
+  rect: the series' box is solved against it. }
+function TyPieLayoutOf(const ASpec: TTyPieSpec; const AViewport: TTyRectF;
+  AStore: TTyDataStore; ADim: Integer): TTyPieLayout;
+
+{ ---- the marks ---- }
+{ Append this pie's sectors to AList and answer how many were added. A sector
+  with no sweep adds nothing; a layout with no sectors at all adds the empty
+  ring when the option asks for it. }
+function TyBuildPieMarks(const ABinding: TTySeriesBinding;
+  const ALayout: TTyPieLayout; const ASpec: TTyPieSpec;
+  const AVisual: TTyPieVisual; AList: TTyPaintList): Integer;
+
+function TyPieVisual(AFill: TTyChartColor): TTyPieVisual;
+
+implementation
+
+const
+  cRadian = Pi / 180;
+  cTwoPi = Pi * 2;
+
+{ ==================== the option ==================== }
+
+function TyPieSpecDefault: TTyPieSpec;
+begin
+  Result.Box := TyBoxSpec;
+  { PieSeries.ts:258-263. All four edges pinned at zero and no size given, so
+    the box solves to the whole container -- which is what makes an ordinary
+    pie centre on the control. }
+  Result.Box.Left := TyBoxPx(0);
+  Result.Box.Top := TyBoxPx(0);
+  Result.Box.Right := TyBoxPx(0);
+  Result.Box.Bottom := TyBoxPx(0);
+  Result.CentreX := TyBoxPercent(50);
+  Result.CentreY := TyBoxPercent(50);
+  { PieSeries.ts:229 -- [0, '50%'], NOT the [0, '75%'] the catalog transcribed
+    from the documentation. Half the shorter side is the DIAMETER, so this is a
+    quarter of it. }
+  Result.Radius0 := TyBoxPx(0);
+  Result.Radius1 := TyBoxPercent(50);
+  Result.StartAngleDeg := 90;
+  Result.EndAngleAuto := True;
+  Result.EndAngleDeg := 0;
+  Result.Clockwise := True;
+  Result.MinAngleDeg := 0;
+  Result.PadAngleDeg := 0;
+  Result.MinShowLabelAngleDeg := 0;
+  Result.Rose := prtNone;
+  Result.StillShowZeroSum := True;
+  Result.PercentPrecision := 2;
+  Result.ShowEmptyCircle := True;
+end;
+
+function ObjOf(AData: TJSONData): TJSONObject;
+begin
+  if (AData <> nil) and (AData is TJSONObject) then
+    Result := TJSONObject(AData)
+  else
+    Result := nil;
+end;
+
+function ParseFloatIn(const AText: string; out AValue: Double): Boolean;
+var fs: TFormatSettings;
+begin
+  fs := DefaultFormatSettings;
+  fs.DecimalSeparator := '.';
+  Result := TryStrToFloat(Trim(AText), AValue, fs);
+end;
+
+{ parsePositionOption's keyword table plus its two number forms. A value that
+  parses to nothing keeps the default, which is where this and upstream part
+  company: JavaScript answers NaN and lets the arithmetic carry it. A NaN
+  centre would put the whole pie nowhere, so an unreadable option is treated as
+  absent instead. }
+function TyPieMeasureOf(AData: TJSONData; const ADefault: TTyBoxValue): TTyBoxValue;
+var
+  s: string;
+  v: Double;
+begin
+  Result := ADefault;
+  if (AData = nil) or (AData.JSONType = jtNull) then Exit;
+  if AData.JSONType = jtNumber then Exit(TyBoxPx(AData.AsFloat));
+  if AData.JSONType <> jtString then Exit;
+  s := Trim(AData.AsString);
+  if s = '' then Exit;
+  if (s = 'center') or (s = 'centre') or (s = 'middle') then Exit(TyBoxPercent(50));
+  if (s = 'left') or (s = 'top') then Exit(TyBoxPercent(0));
+  if (s = 'right') or (s = 'bottom') then Exit(TyBoxPercent(100));
+  if s[Length(s)] = '%' then
+  begin
+    if ParseFloatIn(Copy(s, 1, Length(s) - 1), v) then Exit(TyBoxPercent(v));
+    Exit;
+  end;
+  if ParseFloatIn(s, v) then Result := TyBoxPx(v);
+end;
+
+function TyPieResolve(const AValue: TTyBoxValue; ABase: Double): Double;
+begin
+  case AValue.Kind of
+    buPx: Result := AValue.Value;
+    buPercent: Result := AValue.Value / 100 * ABase;
+    buCentre: Result := ABase / 2;
+  else
+    Result := 0;
+  end;
+end;
+
+{ A pair option in ECharts' two spellings: an array of two, or a scalar.
+
+  WHAT A SCALAR MEANS IS NOT THE SAME FOR THE TWO KEYS, which is why this
+  takes a flag rather than working it out. layout.ts:209 duplicates a bare
+  CENTRE into both axes; layout.ts:236 rebuilds a bare RADIUS as [0, radius],
+  so the scalar is the outer one and the inner is forced to zero. One shared
+  rule gives a doughnut whose hole is the whole disc, which draws nothing. }
+procedure ReadPair(ANode: TJSONObject; const AKey: string;
+  var A0, A1: TTyBoxValue; ADuplicateScalar: Boolean);
+var
+  d: TJSONData;
+  arr: TJSONArray;
+begin
+  if ANode = nil then Exit;
+  d := ANode.Find(AKey);
+  if (d = nil) or (d.JSONType = jtNull) then Exit;
+  if d is TJSONArray then
+  begin
+    arr := TJSONArray(d);
+    if arr.Count > 0 then A0 := TyPieMeasureOf(arr.Items[0], A0);
+    if arr.Count > 1 then A1 := TyPieMeasureOf(arr.Items[1], A1);
+    Exit;
+  end;
+  A1 := TyPieMeasureOf(d, A1);
+  if ADuplicateScalar then A0 := A1;
+end;
+
+function NumIn(ANode: TJSONObject; const AKey: string; ADefault: Double): Double;
+var d: TJSONData;
+begin
+  Result := ADefault;
+  if ANode = nil then Exit;
+  d := ANode.Find(AKey);
+  if (d = nil) or (d.JSONType <> jtNumber) then Exit;
+  Result := d.AsFloat;
+end;
+
+function BoolIn(ANode: TJSONObject; const AKey: string; ADefault: Boolean): Boolean;
+var d: TJSONData;
+begin
+  Result := ADefault;
+  if ANode = nil then Exit;
+  d := ANode.Find(AKey);
+  if (d = nil) or (d.JSONType <> jtBoolean) then Exit;
+  Result := d.AsBoolean;
+end;
+
+function TyPieSpecOf(AOption: TTyChartOption; ASlot: Integer): TTyPieSpec;
+var
+  node: TJSONObject;
+  d: TJSONData;
+  s: string;
+begin
+  Result := TyPieSpecDefault;
+  if AOption = nil then Exit;
+  node := ObjOf(AOption.ComponentAt('series', ASlot));
+  if node = nil then Exit;
+
+  Result.Box.Left := TyPieMeasureOf(node.Find('left'), Result.Box.Left);
+  Result.Box.Top := TyPieMeasureOf(node.Find('top'), Result.Box.Top);
+  Result.Box.Right := TyPieMeasureOf(node.Find('right'), Result.Box.Right);
+  Result.Box.Bottom := TyPieMeasureOf(node.Find('bottom'), Result.Box.Bottom);
+  Result.Box.Width := TyPieMeasureOf(node.Find('width'), Result.Box.Width);
+  Result.Box.Height := TyPieMeasureOf(node.Find('height'), Result.Box.Height);
+
+  ReadPair(node, 'center', Result.CentreX, Result.CentreY, True);
+  { The inner radius of a bare `radius: '60%'` is ZERO, not the default inner
+    radius: upstream rebuilds the pair as [0, radius]. }
+  d := node.Find('radius');
+  if (d <> nil) and (d.JSONType <> jtNull) and not (d is TJSONArray) then
+    Result.Radius0 := TyBoxPx(0);
+  ReadPair(node, 'radius', Result.Radius0, Result.Radius1, False);
+
+  Result.StartAngleDeg := NumIn(node, 'startAngle', Result.StartAngleDeg);
+  d := node.Find('endAngle');
+  if (d <> nil) and (d.JSONType = jtNumber) then
+  begin
+    Result.EndAngleAuto := False;
+    Result.EndAngleDeg := d.AsFloat;
+  end;
+  Result.Clockwise := BoolIn(node, 'clockwise', Result.Clockwise);
+  Result.MinAngleDeg := NumIn(node, 'minAngle', Result.MinAngleDeg);
+  Result.PadAngleDeg := NumIn(node, 'padAngle', Result.PadAngleDeg);
+  Result.MinShowLabelAngleDeg :=
+    NumIn(node, 'minShowLabelAngle', Result.MinShowLabelAngleDeg);
+  Result.StillShowZeroSum :=
+    BoolIn(node, 'stillShowZeroSum', Result.StillShowZeroSum);
+  Result.PercentPrecision :=
+    Round(NumIn(node, 'percentPrecision', Result.PercentPrecision));
+  Result.ShowEmptyCircle :=
+    BoolIn(node, 'showEmptyCircle', Result.ShowEmptyCircle);
+
+  { roseType is tested for TRUTH, not for membership: pieLayout.ts:159 asks
+    `roseType ?` and :119 asks `roseType !== 'area'`. So `true` behaves as
+    'radius' and any unknown string does too -- which is why this is not a
+    strict enum match. }
+  d := node.Find('roseType');
+  if d <> nil then
+    case d.JSONType of
+      jtString:
+        begin
+          s := d.AsString;
+          if s = 'area' then Result.Rose := prtArea
+          else if s <> '' then Result.Rose := prtRadius;
+        end;
+      jtBoolean:
+        if d.AsBoolean then Result.Rose := prtRadius;
+      jtNumber:
+        if d.AsFloat <> 0 then Result.Rose := prtRadius;
+    end;
+end;
+
+function TyPieVisual(AFill: TTyChartColor): TTyPieVisual;
+begin
+  SetLength(Result.Fills, 1);
+  Result.Fills[0] := AFill;
+  Result.Stroke := 0;
+  Result.StrokeWidthLogical := 0;
+  Result.EmptyFill := AFill;
+  Result.Z := 0;
+  Result.Z2 := 0;
+end;
+
+{ ==================== the angle normaliser ==================== }
+
+{ zrender's modPI2, transcribed including the rounding, whose own comment says
+  it is more stable to take the remainder in units of Pi.
+
+  MEASURED, because the comment overstates it and this port nearly repeated the
+  overstatement: over the 360 whole-degree start angles, rounding lands 273 of
+  them exactly on a whole turn against 215 without it. Better, not a guarantee.
+  Where it misses, the sweep is one part in 7*10^15 short and the pie takes the
+  redistribution path -- which computes the same angles to within that same
+  part, so nothing downstream can tell. Dropping the rounding is therefore an
+  EQUIVALENT MUTANT here, recorded rather than chased.
+
+  Int() truncates toward zero, so `n - Int(n/2) * 2` is JavaScript's `n % 2`
+  and not Pascal's integer Mod, which would not take a fractional operand. }
+function ModTwoPi(ARadian: Double): Double;
+var n: Double;
+begin
+  n := Round(ARadian / Pi * 1e8) / 1e8;
+  { FMod, not the integer Mod: n is not whole. }
+  Result := (n - Int(n / 2) * 2) * Pi;
+end;
+
+procedure TyNormalizeArcAngles(var AStart, AEnd: Double; AAnticlockwise: Boolean);
+var
+  s, e, delta: Double;
+begin
+  s := ModTwoPi(AStart);
+  if s < 0 then s := s + cTwoPi;
+  delta := s - AStart;
+  e := AEnd + delta;
+
+  if (not AAnticlockwise) and (e - s >= cTwoPi) then
+    e := s + cTwoPi
+  else if AAnticlockwise and (s - e >= cTwoPi) then
+    e := s - cTwoPi
+  else if (not AAnticlockwise) and (s > e) then
+    e := s + (cTwoPi - ModTwoPi(s - e))
+  else if AAnticlockwise and (s < e) then
+    e := s - (cTwoPi - ModTwoPi(e - s));
+
+  AStart := s;
+  AEnd := e;
+end;
+
+{ ==================== percentages that add up ==================== }
+
+function TyPiePercentSeats(const AValues: array of Double;
+  APrecision: Integer): TTyDoubleArray;
+var
+  i, n, maxId, digits, target, currentSum: Integer;
+  sum, v, best: Double;
+  quota, remainder: TTyDoubleArray;
+  seats: array of Integer;
+begin
+  Result := nil;
+  n := Length(AValues);
+  if n = 0 then Exit;
+  sum := 0;
+  for i := 0 to n - 1 do
+    if not IsNan(AValues[i]) then sum := sum + AValues[i];
+  { number.ts:406 -- a total of zero answers an EMPTY array, not zeroes, and
+    the caller reads a missing seat as 0. Two spellings of the same number, but
+    the empty one is what a test can pin. }
+  if sum = 0 then Exit;
+
+  digits := Round(IntPower(10, APrecision));
+  if digits < 1 then digits := 1;
+  target := digits * 100;
+  SetLength(quota, n);
+  SetLength(seats, n);
+  SetLength(remainder, n);
+  currentSum := 0;
+  for i := 0 to n - 1 do
+  begin
+    if IsNan(AValues[i]) then v := 0 else v := AValues[i];
+    quota[i] := v / sum * digits * 100;
+    seats[i] := Floor(quota[i]);
+    remainder[i] := quota[i] - seats[i];
+    currentSum := currentSum + seats[i];
+  end;
+
+  while currentSum < target do
+  begin
+    best := NegInfinity;
+    maxId := -1;
+    for i := 0 to n - 1 do
+      if remainder[i] > best then
+      begin
+        best := remainder[i];
+        maxId := i;
+      end;
+    if maxId < 0 then Break;
+    Inc(seats[maxId]);
+    remainder[maxId] := 0;
+    Inc(currentSum);
+  end;
+
+  SetLength(Result, n);
+  for i := 0 to n - 1 do
+    Result[i] := seats[i] / digits;
+end;
+
+{ ==================== the layout ==================== }
+
+{ linearMap without clamping, which is how pieLayout calls it. }
+function LinearMap(AVal, AD0, AD1, AR0, AR1: Double): Double;
+var subDomain, subRange: Double;
+begin
+  subDomain := AD1 - AD0;
+  subRange := AR1 - AR0;
+  if subDomain = 0 then
+  begin
+    if subRange = 0 then Exit(AR0);
+    Exit((AR0 + AR1) / 2);
+  end;
+  Result := (AVal - AD0) / subDomain * subRange + AR0;
+end;
+
+function TyPieLayoutOf(const ASpec: TTyPieSpec; const AViewport: TTyRectF;
+  AStore: TTyDataStore; ADim: Integer): TTyPieLayout;
+var
+  size, startA, endA, padA, minA, minPad, halfPad: Double;
+  unitRad, sum, angleRange, restAngle, sumBig, cur, ang, endOfIt: Double;
+  actualStart, actualEnd, maxV, v: Double;
+  dir: Double;
+  validCount, i, n, k: Integer;
+  rows: array of Integer;
+  vals: TTyDoubleArray;
+  anti: Boolean;
+begin
+  Result := Default(TTyPieLayout);
+  Result.Clockwise := ASpec.Clockwise;
+
+  { getCircleLayout, layout.ts:225-251. The two bases are different and that is
+    the whole point of doing it here rather than reusing the grid's solver. }
+  Result.ViewRect := TySolveBox(ASpec.Box, TyFixedContainer(AViewport));
+  Result.CX := TyPieResolve(ASpec.CentreX, TyRectFWidth(Result.ViewRect))
+    + Result.ViewRect.Left;
+  Result.CY := TyPieResolve(ASpec.CentreY, TyRectFHeight(Result.ViewRect))
+    + Result.ViewRect.Top;
+  size := Min(TyRectFWidth(Result.ViewRect), TyRectFHeight(Result.ViewRect));
+  Result.R0 := TyPieResolve(ASpec.Radius0, size / 2);
+  Result.R1 := TyPieResolve(ASpec.Radius1, size / 2);
+
+  { pieLayout.ts:45-53. }
+  startA := -ASpec.StartAngleDeg * cRadian;
+  padA := ASpec.PadAngleDeg * cRadian;
+  if ASpec.EndAngleAuto then
+    endA := startA - cTwoPi
+  else
+    endA := -ASpec.EndAngleDeg * cRadian;
+  minA := ASpec.MinAngleDeg * cRadian;
+  minPad := minA + padA;
+
+  if ASpec.Clockwise then dir := 1 else dir := -1;
+  halfPad := dir * padA / 2;
+  anti := not ASpec.Clockwise;
+  TyNormalizeArcAngles(startA, endA, anti);
+  Result.StartRad := startA;
+  Result.EndRad := endA;
+  angleRange := Abs(endA - startA);
+
+  if AStore = nil then Exit;
+  if (ADim < 0) or (ADim >= AStore.DimCount) then Exit;
+  Result.Valid := True;
+
+  { THE NEGATIVE FILTER, src/processor/negativeDataFilter.ts:28-36. A negative
+    value is removed from the data before the layout sees it, so it is not a
+    sector with no angle -- it is not a sector. A NaN is kept: it holds its
+    place, which the equal-angle branch below counts on. }
+  n := AStore.Count;
+  SetLength(rows, n);
+  SetLength(vals, n);
+  k := 0;
+  for i := 0 to n - 1 do
+  begin
+    v := AStore.Get(ADim, i);
+    if (not IsNan(v)) and (v < 0) then Continue;
+    rows[k] := AStore.GetRawIndex(i);
+    vals[k] := v;
+    Inc(k);
+  end;
+  SetLength(rows, k);
+  SetLength(vals, k);
+  n := k;
+
+  validCount := 0;
+  sum := 0;
+  maxV := 0;
+  for i := 0 to n - 1 do
+    if not IsNan(vals[i]) then
+    begin
+      Inc(validCount);
+      sum := sum + vals[i];
+      if vals[i] > maxV then maxV := vals[i];
+    end;
+
+  { pieLayout.ts:62 -- `Math.PI / (sum || validDataCount) * 2`. A total of zero
+    falls back to the COUNT, which is what gives equal slices when every value
+    is zero. Both zero means there is nothing to draw and the loop below never
+    runs, so the divisor is never asked for. }
+  if sum <> 0 then unitRad := Pi / sum * 2
+  else if validCount <> 0 then unitRad := Pi / validCount * 2
+  else unitRad := 0;
+
+  SetLength(Result.Sectors, n);
+  restAngle := angleRange;
+  sumBig := 0;
+  cur := startA;
+
+  for i := 0 to n - 1 do
+  begin
+    Result.Sectors[i].RawIndex := rows[i];
+    Result.Sectors[i].Value := vals[i];
+    Result.Sectors[i].CX := Result.CX;
+    Result.Sectors[i].CY := Result.CY;
+    Result.Sectors[i].R0 := Result.R0;
+
+    if IsNan(vals[i]) then
+    begin
+      Result.Sectors[i].Valid := False;
+      Result.Sectors[i].Angle := NaN;
+      Result.Sectors[i].StartRad := NaN;
+      Result.Sectors[i].EndRad := NaN;
+      if ASpec.Rose <> prtNone then
+        Result.Sectors[i].R1 := NaN
+      else
+        Result.Sectors[i].R1 := Result.R1;
+      Continue;
+    end;
+
+    Result.Sectors[i].Valid := True;
+    if ASpec.Rose <> prtArea then
+    begin
+      if (sum = 0) and ASpec.StillShowZeroSum then
+        ang := unitRad
+      else
+        ang := vals[i] * unitRad;
+    end
+    else
+      { 'area' gives every sector the SAME angle -- the radius is what carries
+        the value, and equal angles are what make the areas proportional. }
+      ang := angleRange / validCount;
+
+    if ang < minPad then
+    begin
+      ang := minPad;
+      restAngle := restAngle - minPad;
+    end
+    else
+      sumBig := sumBig + vals[i];
+
+    endOfIt := cur + dir * ang;
+    if padA > ang then
+    begin
+      actualStart := cur + dir * ang / 2;
+      actualEnd := actualStart;
+    end
+    else
+    begin
+      actualStart := cur + halfPad;
+      actualEnd := endOfIt - halfPad;
+    end;
+
+    Result.Sectors[i].Angle := ang;
+    Result.Sectors[i].StartRad := actualStart;
+    Result.Sectors[i].EndRad := actualEnd;
+    if ASpec.Rose <> prtNone then
+      Result.Sectors[i].R1 := LinearMap(vals[i], 0, maxV, Result.R0, Result.R1)
+    else
+      Result.Sectors[i].R1 := Result.R1;
+
+    cur := endOfIt;
+  end;
+
+  { THE SECOND PASS, pieLayout.ts:169-223, and it is NOT an edge case. See the
+    header: restAngle starts at the whole sweep, so this runs for every pie
+    that does not go the whole way round. }
+  if (restAngle < cTwoPi) and (validCount > 0) then
+  begin
+    if restAngle <= 1e-3 then
+    begin
+      { Nothing left to share out: every sector gets the same angle, placed by
+        its INDEX. A NaN sector still consumes an index, so a gap in the data
+        leaves a gap in the ring rather than closing it up. }
+      ang := angleRange / validCount;
+      for i := 0 to n - 1 do
+      begin
+        if IsNan(vals[i]) then Continue;
+        Result.Sectors[i].Angle := ang;
+        if ang < padA then
+        begin
+          actualStart := startA + dir * (i + 0.5) * ang;
+          actualEnd := actualStart;
+        end
+        else
+        begin
+          actualStart := startA + dir * i * ang + halfPad;
+          actualEnd := startA + dir * (i + 1) * ang - halfPad;
+        end;
+        Result.Sectors[i].StartRad := actualStart;
+        Result.Sectors[i].EndRad := actualEnd;
+      end;
+    end
+    else
+    begin
+      { WHERE UPSTREAM DIVIDES BY ZERO AND GETS AWAY WITH IT. sumBig is zero
+        only when every sector was pinned to minPad, and then the test below
+        picks the pinned branch for all of them and the quotient is never read.
+        JavaScript would have produced Infinity; Free Pascal would raise, so
+        the division is guarded rather than the behaviour changed. }
+      if sumBig <> 0 then unitRad := restAngle / sumBig else unitRad := 0;
+      cur := startA;
+      for i := 0 to n - 1 do
+      begin
+        if IsNan(vals[i]) then Continue;
+        { EXACT equality, as upstream writes it: the pinned sectors were
+          ASSIGNED minPad, so they carry the identical bit pattern and a
+          tolerance would only widen the test to sectors that merely landed
+          near it. }
+        if Result.Sectors[i].Angle = minPad then
+          ang := minPad
+        else
+          ang := vals[i] * unitRad;
+        if ang < padA then
+        begin
+          actualStart := cur + dir * ang / 2;
+          actualEnd := actualStart;
+        end
+        else
+        begin
+          actualStart := cur + halfPad;
+          actualEnd := cur + dir * ang - halfPad;
+        end;
+        Result.Sectors[i].StartRad := actualStart;
+        Result.Sectors[i].EndRad := actualEnd;
+        cur := cur + dir * ang;
+      end;
+    end;
+  end;
+end;
+
+{ ==================== the marks ==================== }
+
+function TyBuildPieMarks(const ABinding: TTySeriesBinding;
+  const ALayout: TTyPieLayout; const ASpec: TTyPieSpec;
+  const AVisual: TTyPieVisual; AList: TTyPaintList): Integer;
+var
+  i, drawn: Integer;
+  el: TTyChartElement;
+  sh: TTyChartShape;
+begin
+  Result := 0;
+  if (AList = nil) or not ALayout.Valid then Exit;
+  if not ABinding.Resolved then Exit;
+
+  drawn := 0;
+  for i := 0 to High(ALayout.Sectors) do
+  begin
+    if not ALayout.Sectors[i].Valid then Continue;
+    { A sector with no sweep has no ink. Not an error: padAngle eats a whole
+      slice this way, and so does a zero value on a pie whose total is not
+      zero. }
+    if ALayout.Sectors[i].EndRad = ALayout.Sectors[i].StartRad then Continue;
+    if IsNan(ALayout.Sectors[i].R1) or (ALayout.Sectors[i].R1 <= 0) then Continue;
+
+    sh := TyShapeSector(ALayout.Sectors[i].CX, ALayout.Sectors[i].CY,
+      ALayout.Sectors[i].R0, ALayout.Sectors[i].R1,
+      ALayout.Sectors[i].StartRad, ALayout.Sectors[i].EndRad);
+    el := TyChartElement(sh);
+    el.Style.HasFill := True;
+    if Length(AVisual.Fills) > 0 then
+      el.Style.FillColor := AVisual.Fills[i mod Length(AVisual.Fills)]
+    else
+      el.Style.FillColor := AVisual.EmptyFill;
+    el.Style.StrokeColor := AVisual.Stroke;
+    el.Style.StrokeWidthLogical := AVisual.StrokeWidthLogical;
+    el.Z := AVisual.Z;
+    el.Z2 := AVisual.Z2;
+    el.Silent := False;
+    el.Datum := TyChartDatum(ABinding.SeriesIndex, ALayout.Sectors[i].RawIndex);
+    AList.Add(el);
+    Inc(drawn);
+  end;
+
+  { showEmptyCircle, PieView.ts:263-271: when the data drew NOTHING the ring
+    itself is drawn in grey, so an empty pie is a visible empty pie rather than
+    a blank rectangle. It is silent -- there is no datum behind it to report. }
+  if (drawn = 0) and ASpec.ShowEmptyCircle and (ALayout.R1 > 0) then
+  begin
+    sh := TyShapeSector(ALayout.CX, ALayout.CY, ALayout.R0, ALayout.R1,
+      ALayout.StartRad, ALayout.EndRad);
+    el := TyChartElement(sh);
+    el.Style.HasFill := True;
+    el.Style.FillColor := AVisual.EmptyFill;
+    el.Z := AVisual.Z;
+    el.Z2 := AVisual.Z2;
+    el.Silent := True;
+    AList.Add(el);
+    Inc(drawn);
+  end;
+
+  Result := drawn;
+end;
+
+end.

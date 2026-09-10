@@ -36,6 +36,7 @@ uses
   tyControls.AdvChart.Paint, tyControls.AdvChart.Render,
   tyControls.AdvChart.Marks, tyControls.AdvChart.BarLayout,
   tyControls.AdvChart.Stack, tyControls.AdvChart.Symbol,
+  tyControls.AdvChart.Pie,
   fpjson, tyControls.SubPixel;
 
 const
@@ -69,6 +70,13 @@ type
       Rebuild, between filling the stores and sizing the axes: the totals have
       to exist before the value axis is asked how far it must reach. }
     FStacks: TTySeriesStackArray;
+    { One entry per binding, meaningful only where the series is a pie.
+      Solved in Relayout for the same reason FBarCols is: a pie centred on
+      a percentage of its box needs the box in final pixels. }
+    FPies: array of TTyPieLayout;
+    { Index-parallel to FPies. The paint pass needs showEmptyCircle, and the
+      mark builder is a pure unit that cannot re-read the option. }
+    FPieSpecs: array of TTyPieSpec;
     FDirty: Boolean;
     FLastRect: TTyRectF;
     FOptionText: string;
@@ -113,6 +121,12 @@ type
     { The label interval the layout gave this axis, or 1 when it draws them
       all. }
     function LabelStepFor(AAxis: TTyAxis): Integer;
+    { Every pie series laid out. Runs in Relayout, after phase C, for the
+      same reason the bar solver does: a percentage of a box needs the box
+      in final pixels. }
+    procedure SolvePies;
+    { One colour per SECTOR, not one per series: a pie is colorBy:data. }
+    function PieVisual(ASlot: Integer): TTyPieVisual;
     procedure PaintDynamic(APainter: TTyPainter; const ARect: TRect;
       APPI: Integer; const AMeasurer: ITyTextMeasurer);
     { Whether the dynamic layer would draw anything. False skips a whole
@@ -352,7 +366,26 @@ begin
   begin
     st := TTyDataStore.Create;
     FStores[i] := st;
-    if not FBindings[i].HasAxes then Continue;
+    if not FBindings[i].HasAxes then
+    begin
+      { A PIE HAS DATA TOO, and until now it did not get any: the columns
+        below are the coordinate systems dimensions, and a series without
+        a coordinate system has none, so the store stayed empty and the
+        `data` array was never read. One float column, named the way
+        ECharts names the dimension, and TyFillSeriesStore does the rest --
+        it already unwraps `{ value, name }`, records the name and collects
+        the per-item overrides. }
+      if FBindings[i].SeriesType = TyPieSeriesTypeName then
+      begin
+        st.AddDimension(TyPieValueDim, ddtFloat);
+        SetLength(dims, 1);
+        dims[0].Name := TyPieValueDim;
+        dims[0].Kind := ddtFloat;
+        dims[0].Axis := nil;
+        TyFillSeriesStore(FOption, i, dims, st);
+      end;
+      Continue;
+    end;
     dims := TySeriesCartesianDims(FBindings[i].Cart, 0);
     for k := 0 to High(dims) do
     begin
@@ -400,6 +433,7 @@ begin
   TyLayoutGrids(FBuild, FOption, AMeasurer, APPI, txt);
   { AFTER phase C, for the reason on FBarCols. }
   FBarCols := TySolveBarLayout(FOption, FBuild, FBindings, FStores, FIndex);
+  SolvePies;
   FDirty := False;
 end;
 
@@ -952,6 +986,50 @@ begin
   Result := st.TextColor;
 end;
 
+procedure TTyAdvanceChart.SolvePies;
+var
+  i, dim: Integer;
+begin
+  SetLength(FPies, Length(FBindings));
+  SetLength(FPieSpecs, Length(FBindings));
+  for i := 0 to High(FBindings) do
+  begin
+    FPies[i] := Default(TTyPieLayout);
+    FPieSpecs[i] := TyPieSpecDefault;
+    if i > High(FStores) then Break;
+    if not FBindings[i].Resolved then Continue;
+    if FBindings[i].SeriesType <> TyPieSeriesTypeName then Continue;
+    FPieSpecs[i] := TyPieSpecOf(FOption, FBindings[i].SeriesIndex);
+    dim := FStores[i].DimIndexOf(TyPieValueDim);
+    { FLastRect, not a grid: a pie is laid out against the CONTROL, and its
+      own left/top/right/bottom shrink that. Handing it a grid rect would
+      centre it on the plot instead of on the chart, which is not where
+      ECharts puts it. }
+    FPies[i] := TyPieLayoutOf(FPieSpecs[i], FLastRect, FStores[i], dim);
+  end;
+end;
+
+function TTyAdvanceChart.PieVisual(ASlot: Integer): TTyPieVisual;
+var
+  k, n: Integer;
+begin
+  Result := TyPieVisual(0);
+  { colorBy:''data''. Each SECTOR takes the next slot of the same eight-colour
+    ramp a bar series cycles across series -- which is what makes a pie read
+    at all, and what makes it re-skin with the accent like everything else. }
+  n := Length(FPies[ASlot].Sectors);
+  if n < 1 then n := 1;
+  SetLength(Result.Fills, n);
+  for k := 0 to n - 1 do
+    Result.Fills[k] := TTyChartColor(SeriesColor(k));
+  { The empty ring has its own token rather than borrowing the split area''s:
+    they are faint for different reasons and a theme has to be able to move
+    one without the other. }
+  Result.EmptyFill := TTyChartColor(
+    ActiveController.Model.ResolveStyle('TyAdvChartEmptyCircle', '',
+      []).Background.Color);
+end;
+
 procedure TTyAdvanceChart.PaintSeries(APainter: TTyPainter);
 var
   list: TTyPaintList;
@@ -968,6 +1046,16 @@ begin
     for i := 0 to High(FBindings) do
     begin
       if i > High(FStores) then Break;
+      { A pie is not on a coordinate system, so it takes the other pass. It
+        goes into the SAME list: the ordering rule is chart-wide, and a pie
+        beside a bar has to sort against it like anything else. }
+      if FBindings[i].SeriesType = TyPieSeriesTypeName then
+      begin
+        if i <= High(FPies) then
+          Inc(drawn, TyBuildPieMarks(FBindings[i], FPies[i], FPieSpecs[i],
+            PieVisual(i), list));
+        Continue;
+      end;
       v := TySeriesVisual(TTyChartColor(SeriesColor(FBindings[i].SeriesIndex)));
       if i <= High(FBarCols) then v.Bar := FBarCols[i];
       v.Line := TyLineSpecOf(FOption, FBindings[i].SeriesIndex);

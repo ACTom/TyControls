@@ -337,6 +337,20 @@ begin
     FreeAndNil(FStore);
     FreeAndNil(FCart);
     Given(cTypes[i], 3, [10, 20, 30]);
+    { A PIE IS THE ONE TYPE THIS LOOP CANNOT SPEAK FOR. It has no
+      coordinate system, so it never enters TyBuildSeriesMarks and the
+      comparison below would read as `the answer is yes and nothing is
+      drawn` -- which is exactly backwards. Its pixels are counted at the
+      control instead, in test.advancechart. }
+    if cTypes[i] = 'pie' then
+    begin
+      AssertTrue('pie draws, on the other pass',
+        TySeriesTypeHasRenderer(cTypes[i]));
+      AssertEquals('and not through this one', 0,
+        TyBuildSeriesMarks(FBinding, FStore, TyNoStack,
+          TySeriesVisual($FF3366CC), FList));
+      Continue;
+    end;
     AssertEquals(cTypes[i] + ': the published answer and the drawing agree',
       TySeriesTypeHasRenderer(cTypes[i]),
       TyBuildSeriesMarks(FBinding, FStore, TyNoStack,
@@ -347,7 +361,7 @@ begin
     both sides answered yes to every type. }
   AssertTrue('bar draws', TySeriesTypeHasRenderer('bar'));
   AssertTrue('and so does scatter now', TySeriesTypeHasRenderer('scatter'));
-  AssertFalse('pie does not, yet', TySeriesTypeHasRenderer('pie'));
+  AssertTrue('and pie does, on its own pass', TySeriesTypeHasRenderer('pie'));
   { CASE-SENSITIVE, matching the type registry -- 'Bar' does not resolve as a
     series at all, so answering yes for it would promise a chart that cannot
     draw. }

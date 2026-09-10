@@ -1172,6 +1172,9 @@ TyAdvChartSplitLine { border-color: alpha(var(--border), 0.6); border-width: 1px
 TyAdvChartSplitArea { background: alpha(var(--on-surface), 0.04); }
 TyAdvChartMinorTick { border-color: alpha(var(--border), 0.4); border-width: 1px; }
 TyAdvChartMinorSplitLine { border-color: alpha(var(--border), 0.35); border-width: 1px; }
+/* The ring a pie draws when it has no data at all. Upstream hard-codes
+   lightgray; alpha over the ink instead, so it stays faint on either mode. */
+TyAdvChartEmptyCircle { background: alpha(var(--on-surface), 0.10); }
 
 /* ── ListGroupPanel (navigation accordion; own keys, not the tree column header's) ────── */
 /* A modern sider: group rows carry NO fill (just muted ink + a right chevron; the OPEN group

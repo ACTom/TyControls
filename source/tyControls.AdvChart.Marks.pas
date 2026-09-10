@@ -884,6 +884,19 @@ const
     (Name: 'line';    Build: @BuildLine),
     (Name: 'scatter'; Build: @BuildScatter));
 
+  { AND THE ONES DRAWN SOMEWHERE ELSE. A pie is not on a coordinate system,
+    so its geometry is solved in AdvChart.Pie and never reaches this unit --
+    but the question the editor asks is `will this series appear`, and an
+    answer that covered only one of the two passes would tell the author a
+    pie chart paints nothing while the pie sits there on the canvas.
+
+    A SECOND LIST IS A SECOND THING THAT CAN DRIFT, and the loop in
+    TestThePublishedAnswerMatchesTheDrawing cannot check this half -- it
+    drives TyBuildSeriesMarks, which a pie deliberately never enters. What
+    guards it is TestAPieIsDrawnOffItsOwnCentreWithAColourPerSector, which
+    counts the control's own pixels. }
+  cElsewhere: array[0..0] of string = ('pie');
+
 function RendererFor(const AType: string): TTyMarkBuilder;
 var i: Integer;
 begin
@@ -893,8 +906,12 @@ begin
 end;
 
 function TySeriesTypeHasRenderer(const AType: string): Boolean;
+var i: Integer;
 begin
-  Result := RendererFor(AType) <> nil;
+  if RendererFor(AType) <> nil then Exit(True);
+  for i := 0 to High(cElsewhere) do
+    if cElsewhere[i] = AType then Exit(True);
+  Result := False;
 end;
 
 function TyBuildSeriesMarks(const ABinding: TTySeriesBinding;

@@ -1205,6 +1205,9 @@ begin
     'TyAdvChartSplitArea { background: alpha(var(--on-surface), 0.04); }' + LineEnding +
     'TyAdvChartMinorTick { border-color: alpha(var(--border), 0.4); border-width: 1px; }' + LineEnding +
     'TyAdvChartMinorSplitLine { border-color: alpha(var(--border), 0.35); border-width: 1px; }' + LineEnding +
+    '/* The ring a pie draws when it has no data at all. Upstream hard-codes' + LineEnding +
+    '   lightgray; alpha over the ink instead, so it stays faint on either mode. */' + LineEnding +
+    'TyAdvChartEmptyCircle { background: alpha(var(--on-surface), 0.10); }' + LineEnding +
     '' + LineEnding +
     '/* ── ListGroupPanel (navigation accordion; own keys, not the tree column header''s) ────── */' + LineEnding +
     '/* A modern sider: group rows carry NO fill (just muted ink + a right chevron; the OPEN group' + LineEnding +

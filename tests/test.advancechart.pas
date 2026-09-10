@@ -74,6 +74,7 @@ type
     procedure TestACrowdedAxisThinsItsLabels;
     procedure TestTheSeriesIsActuallyDrawnInTheThemesColour;
     procedure TestTheSecondSeriesTakesTheSecondSlotOfTheRamp;
+    procedure TestAPieIsDrawnOffItsOwnCentreWithAColourPerSector;
     procedure TestTwoBarSeriesStandSideBySideInsteadOfOnTopOfEachOther;
     procedure TestAStackedBarStandsOnTheOneBelowIt;
     procedure TestALayeredFrameDrawsTheSamePictureAsAWholeOne;
@@ -1626,6 +1627,57 @@ end;
 { Pixels in a rectangle that are strongly red. Used where the fixture has
   overridden a series colour to red, so the count is of that series and of
   nothing else on the canvas. }
+procedure TAdvanceChartTest.TestAPieIsDrawnOffItsOwnCentreWithAColourPerSector;
+var
+  left, right, corner, total: Integer;
+begin
+  { THE FIRST SERIES THAT IS NOT ON A COORDINATE SYSTEM, and the whole reason
+    this test is at the CONTROL rather than in the pie unit: the layout and the
+    sectors were both green in isolation while the control still skipped the
+    series entirely -- it filled no store for a series with no axes, and its
+    mark builder returns at the first line for one with no cartesian. Nothing
+    below is about arithmetic; it is about whether any of it runs. }
+  FCtl.StyleOverride := 'TyAdvChartSeries1 { background: #FF0000; }'
+    + ' TyAdvChartSeries2 { background: #00FF00; }';
+  FChart.Option := '{ series: [{ type: ''pie'', data: [1, 1] }] }';
+  Draw(400, 300);
+
+  { Default start is twelve o''clock running clockwise, so the first datum takes
+    the RIGHT half and the second the left. A pie that came out in one colour
+    would fail here and nowhere else -- colorBy is ''data'' for this type alone. }
+  right := RedIn(210, 60, 290, 240);
+  left := GreenIn(110, 60, 190, 240);
+  AssertTrue(Format('the first sector fills the right half (%d px)', [right]),
+    right > 3000);
+  AssertTrue(Format('the second takes the left (%d px)', [left]), left > 3000);
+  AssertEquals('and neither is on the wrong side', 0, GreenIn(210, 60, 290, 240));
+  AssertEquals('either way', 0, RedIn(110, 60, 190, 240));
+
+  { A DISC, not a rectangle: the corners of the control are untouched. }
+  corner := RedIn(0, 0, 60, 60) + GreenIn(0, 0, 60, 60);
+  AssertEquals('nothing in the corner', 0, corner);
+
+  { AND IT IS THE RIGHT SIZE. radius defaults to [0, ''50%''] of HALF the shorter
+    side -- 75 px on a 300-tall control -- so the disc reaches y = 75 and no
+    further. The ''75%'' this library''s own option catalog still carries would
+    put it at 112.5 and paint this strip solid. }
+  total := RedIn(190, 20, 210, 60) + GreenIn(190, 20, 210, 60);
+  AssertEquals('the disc stops where a 50% radius stops', 0, total);
+  total := RedIn(190, 90, 210, 130) + GreenIn(190, 90, 210, 130);
+  AssertTrue(Format('but it does reach inside that (%d px)', [total]),
+    total > 200);
+
+  { ONE DATUM IS THE CASE THAT VANISHES IF A WHOLE TURN IS TREATED AS NO TURN.
+    Its sector sweeps exactly 2*Pi, and an arc primitive that normalises the
+    sweep before drawing would answer with an empty path -- a pie of one slice
+    is a disc, and the failure looks like the series was never drawn. }
+  FChart.Option := '{ series: [{ type: ''pie'', data: [1] }] }';
+  Draw(400, 300);
+  AssertTrue('a single datum is a whole disc, left',
+    RedIn(130, 140, 170, 160) > 200);
+  AssertTrue('and right', RedIn(230, 140, 270, 160) > 200);
+end;
+
 procedure TAdvanceChartTest.TestTheSecondSeriesTakesTheSecondSlotOfTheRamp;
 var
   gb: TTyGridBuild;
