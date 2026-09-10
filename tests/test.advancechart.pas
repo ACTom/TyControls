@@ -76,6 +76,7 @@ type
     procedure TestTheSecondSeriesTakesTheSecondSlotOfTheRamp;
     procedure TestAPieIsDrawnOffItsOwnCentreWithAColourPerSector;
     procedure TestTheBackingStripIsDrawnInTheThemesOwnColour;
+    procedure TestATitleIsDrawnWhereTheOptionPutIt;
     procedure TestTwoBarSeriesStandSideBySideInsteadOfOnTopOfEachOther;
     procedure TestAStackedBarStandsOnTheOneBelowIt;
     procedure TestALayeredFrameDrawsTheSamePictureAsAWholeOne;
@@ -1628,6 +1629,69 @@ end;
 { Pixels in a rectangle that are strongly red. Used where the fixture has
   overridden a series colour to red, so the count is of that series and of
   nothing else on the canvas. }
+procedure TAdvanceChartTest.TestATitleIsDrawnWhereTheOptionPutIt;
+var
+  centre, leftSide, top_, bottom_, titleOnly: Integer;
+begin
+  { A title floats over the container and reserves nothing, so the only thing
+    that can say it was drawn is ink where nothing else paints. The chart here
+    has no series and no axes: everything counted below is the title.
+
+    THE COLOUR IS A THEME KEY, and the override is what proves it -- upstream
+    hard-codes 18px bold in its primary colour, and a port that did the same
+    would put a black title on a dark skin. }
+  FCtl.StyleOverride := 'TyAdvChartTitle { color: #FF0000; }';
+  FChart.Option := '{ title: { text: ''Referer'' } }';
+  Draw(400, 300);
+  top_ := RedIn(0, 0, 399, 60);
+  bottom_ := RedIn(0, 200, 399, 299);
+  AssertTrue(Format('the title is near the top (%d px)', [top_]), top_ > 20);
+  AssertEquals('and nowhere else', 0, bottom_);
+
+  { CENTRED BY DEFAULT, which is the one placement rule a reader would notice
+    immediately if it were wrong. }
+  centre := RedIn(150, 0, 250, 60);
+  leftSide := RedIn(0, 0, 100, 60);
+  AssertTrue(Format('centred (%d px)', [centre]), centre > 20);
+  AssertEquals('not against the left edge', 0, leftSide);
+
+  { AND left MOVES IT, so the option is read rather than the default drawn
+    twice. }
+  FChart.Option := '{ title: { text: ''Referer'', left: 0 } }';
+  Draw(400, 300);
+  AssertTrue(Format('now against the left edge (%d px)',
+    [RedIn(0, 0, 100, 60)]), RedIn(0, 0, 100, 60) > 20);
+
+  { A SUBTITLE IS A SECOND LINE, in its own theme key. }
+  FCtl.StyleOverride := 'TyAdvChartTitle { color: #FF0000; }'
+    + ' TyAdvChartSubtitle { color: #00FF00; }';
+  FChart.Option := '{ title: { text: ''Referer'' } }';
+  Draw(400, 300);
+  titleOnly := RedIn(0, 0, 399, 120);
+  FChart.Option := '{ title: { text: ''Referer'', subtext: ''Fake Data'' } }';
+  Draw(400, 300);
+  AssertTrue(Format('the subtitle is drawn too (%d px)',
+    [GreenIn(0, 0, 399, 120)]), GreenIn(0, 0, 399, 120) > 20);
+  AssertTrue('and below the title', GreenIn(0, 0, 399, 25) = 0);
+
+  { IN ITS OWN KEY, which is the point of there being two: a subtitle drawn
+    from the title's style would come out red.
+
+    COUNTED AS `THE RED DID NOT GROW` rather than as `no red below line 30`,
+    which is what this asserted first. The title's own descenders reach
+    somewhere around there, and exactly where depends on the font the process
+    ended up with -- so that version passed alone and failed in the full run,
+    which is this repo's oldest-shaped false alarm. The title sits in the same
+    place in both renders below, so its red is the same number in both. }
+  AssertEquals('the second line added no red', titleOnly,
+    RedIn(0, 0, 399, 120));
+
+  { SWITCHED OFF DRAWS NOTHING. }
+  FChart.Option := '{ title: { text: ''Referer'', show: false } }';
+  Draw(400, 300);
+  AssertEquals('nothing at all', 0, RedIn(0, 0, 399, 299));
+end;
+
 procedure TAdvanceChartTest.TestTheBackingStripIsDrawnInTheThemesOwnColour;
 var
   gb: TTyGridBuild;

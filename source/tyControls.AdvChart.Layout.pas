@@ -55,6 +55,15 @@ function TyCoordCellContainer(const ACoordSys: ITyCoordSys;
 
 { The one solver. Every component's rect comes from here. }
 function TySolveBox(const ASpec: TTyBoxSpec; const AContainer: ITyBoxContainer): TTyRectF;
+{ The same, with a MARGIN: space kept outside the solved rect on each edge,
+  in CSS order (top, right, bottom, left).
+
+  ECharts calls this a component's `padding` and getLayoutRect takes it as a
+  margin, and the naming is not a slip on either side -- the space is outside
+  the box the layout solves, and conventionally the component's own
+  background covers it. title and legend both position themselves this way. }
+function TySolveBox(const ASpec: TTyBoxSpec; const AContainer: ITyBoxContainer;
+  const AMargin: array of Double): TTyRectF; overload;
 
 { ==================== TWO-PHASE AXIS BUILD (Tier 0 item 12) ====================
   estimate the labels -> shrink the rect -> determine the placements.
@@ -250,9 +259,14 @@ begin
   end;
 end;
 
-{ Solve one axis. AStartV/AEndV are the near/far insets, ASizeV the extent. }
+{ Solve one axis. AStartV/AEndV are the near/far insets, ASizeV the extent.
+
+  AMarginStart/AMarginEnd are kept OUTSIDE the answer on each side. Every
+  branch below reduces to the no-margin one when they are zero, which is why
+  the margin could be added to this rather than beside it. }
 procedure SolveAxis(const AStartV, AEndV, ASizeV: TTyBoxValue;
-  AContainerStart, AContainerExtent: Double; out AStart, AStop: Double);
+  AContainerStart, AContainerExtent, AMarginStart, AMarginEnd: Double;
+  out AStart, AStop: Double);
 var
   s, e, sz: Double;
 begin
@@ -270,6 +284,9 @@ begin
       AStop := AContainerStart + AContainerExtent;
       Exit;
     end;
+    { NO MARGIN TERM. Upstream writes `extent/2 - size/2 - marginStart` and
+      then adds marginStart back on the way out, so the two cancel: a centred
+      box is centred on the CONTAINER, not on what is left of it. }
     AStart := AContainerStart + (AContainerExtent - sz) / 2;
     AStop := AStart + sz;
     Exit;
@@ -277,38 +294,38 @@ begin
 
   if (not IsNan(s)) and (not IsNan(sz)) then          { start + size }
   begin
-    AStart := AContainerStart + s;
+    AStart := AContainerStart + AMarginStart + s;
     AStop := AStart + sz;
   end
   else if (not IsNan(s)) and (not IsNan(e)) then      { start + end }
   begin
-    AStart := AContainerStart + s;
-    AStop := AContainerStart + AContainerExtent - e;
+    AStart := AContainerStart + AMarginStart + s;
+    AStop := AContainerStart + AContainerExtent - AMarginEnd - e;
   end
   else if (not IsNan(e)) and (not IsNan(sz)) then     { end + size }
   begin
-    AStop := AContainerStart + AContainerExtent - e;
+    AStop := AContainerStart + AContainerExtent - AMarginEnd - e;
     AStart := AStop - sz;
   end
   else if not IsNan(s) then                           { start only -> to the far edge }
   begin
-    AStart := AContainerStart + s;
-    AStop := AContainerStart + AContainerExtent;
+    AStart := AContainerStart + AMarginStart + s;
+    AStop := AContainerStart + AContainerExtent - AMarginEnd;
   end
   else if not IsNan(e) then                           { end only -> from the near edge }
   begin
-    AStart := AContainerStart;
-    AStop := AContainerStart + AContainerExtent - e;
+    AStart := AContainerStart + AMarginStart;
+    AStop := AContainerStart + AContainerExtent - AMarginEnd - e;
   end
   else if not IsNan(sz) then                          { size only -> at the near edge }
   begin
-    AStart := AContainerStart;
+    AStart := AContainerStart + AMarginStart;
     AStop := AStart + sz;
   end
   else                                                { nothing -> fill }
   begin
-    AStart := AContainerStart;
-    AStop := AContainerStart + AContainerExtent;
+    AStart := AContainerStart + AMarginStart;
+    AStop := AContainerStart + AContainerExtent - AMarginEnd;
   end;
 
   { Over-constrained: collapse to zero at the near edge rather than invert. An
@@ -318,19 +335,47 @@ begin
     AStop := AStart;
 end;
 
-function TySolveBox(const ASpec: TTyBoxSpec; const AContainer: ITyBoxContainer): TTyRectF;
+function TySolveBox(const ASpec: TTyBoxSpec; const AContainer: ITyBoxContainer;
+  const AMargin: array of Double): TTyRectF;
 var
   c: TTyRectF;
   l, r, t, b: Double;
+  m: array[0..3] of Double;
+  i: Integer;
 begin
   if AContainer = nil then
     Exit(TyInvalidRectF);
   c := AContainer.ContainerRect;
   if not TyRectFIsValid(c) then
     Exit(TyInvalidRectF);
-  SolveAxis(ASpec.Left, ASpec.Right, ASpec.Width, c.Left, TyRectFWidth(c), l, r);
-  SolveAxis(ASpec.Top, ASpec.Bottom, ASpec.Height, c.Top, TyRectFHeight(c), t, b);
+  { CSS ORDER, and short forms read the CSS way: one value is every side,
+    two are vertical then horizontal, three leave left taking right's value. }
+  for i := 0 to 3 do m[i] := 0;
+  case Length(AMargin) of
+    0: ;
+    1: for i := 0 to 3 do m[i] := AMargin[0];
+    2: begin
+         m[0] := AMargin[0]; m[2] := AMargin[0];
+         m[1] := AMargin[1]; m[3] := AMargin[1];
+       end;
+    3: begin
+         m[0] := AMargin[0];
+         m[1] := AMargin[1]; m[3] := AMargin[1];
+         m[2] := AMargin[2];
+       end;
+  else
+    for i := 0 to 3 do m[i] := AMargin[i];
+  end;
+  SolveAxis(ASpec.Left, ASpec.Right, ASpec.Width, c.Left, TyRectFWidth(c),
+    m[3], m[1], l, r);
+  SolveAxis(ASpec.Top, ASpec.Bottom, ASpec.Height, c.Top, TyRectFHeight(c),
+    m[0], m[2], t, b);
   Result := TyRectF(l, t, r, b);
+end;
+
+function TySolveBox(const ASpec: TTyBoxSpec; const AContainer: ITyBoxContainer): TTyRectF;
+begin
+  Result := TySolveBox(ASpec, AContainer, []);
 end;
 
 { ============================ containers ============================ }

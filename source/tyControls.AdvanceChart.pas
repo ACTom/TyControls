@@ -36,7 +36,7 @@ uses
   tyControls.AdvChart.Paint, tyControls.AdvChart.Render,
   tyControls.AdvChart.Marks, tyControls.AdvChart.BarLayout,
   tyControls.AdvChart.Stack, tyControls.AdvChart.Symbol,
-  tyControls.AdvChart.Pie,
+  tyControls.AdvChart.Pie, tyControls.AdvChart.Title,
   fpjson, tyControls.SubPixel;
 
 const
@@ -77,6 +77,11 @@ type
     { Index-parallel to FPies. The paint pass needs showEmptyCircle, and the
       mark builder is a pure unit that cannot re-read the option. }
     FPieSpecs: array of TTyPieSpec;
+    { Every title the option carries, laid out. A title floats over the
+      container and shrinks nothing, so this is solved beside the grids
+      rather than before them. }
+    FTitles: array of TTyTitleLayout;
+    FTitleSpecs: array of TTyTitleSpec;
     FDirty: Boolean;
     FLastRect: TTyRectF;
     FOptionText: string;
@@ -125,6 +130,12 @@ type
       same reason the bar solver does: a percentage of a box needs the box
       in final pixels. }
     procedure SolvePies;
+    { Every title, measured and placed. Needs the measurer, so it runs in
+      Relayout beside the axis pass rather than in Rebuild. }
+    procedure SolveTitles(const AMeasurer: ITyTextMeasurer; APPI: Integer);
+    { The two title fonts, resolved from the theme. }
+    function TitleFont(const AKey: string): TTyTitleFont;
+    procedure PaintTitles(APainter: TTyPainter);
     { One colour per SECTOR, not one per series: a pie is colorBy:data. }
     function PieVisual(ASlot: Integer): TTyPieVisual;
     procedure PaintDynamic(APainter: TTyPainter; const ARect: TRect;
@@ -434,6 +445,7 @@ begin
   { AFTER phase C, for the reason on FBarCols. }
   FBarCols := TySolveBarLayout(FOption, FBuild, FBindings, FStores, FIndex);
   SolvePies;
+  SolveTitles(AMeasurer, APPI);
   FDirty := False;
 end;
 
@@ -915,6 +927,9 @@ begin
   { AFTER THE AXES, so a bar sits on the grid rather than under it. Within the
     series, the paint list decides the order. }
   PaintSeries(APainter);
+  { AND THE TITLE LAST. It floats over the container rather than reserving
+    room, so anything it overlaps it is meant to overlap. }
+  PaintTitles(APainter);
 end;
 
 function TTyAdvanceChart.StackFor(ASlot: Integer): TTySeriesStack;
@@ -986,6 +1001,31 @@ begin
   Result := st.TextColor;
 end;
 
+function TTyAdvanceChart.TitleFont(const AKey: string): TTyTitleFont;
+var st: TTyStyleSet;
+begin
+  st := ActiveController.Model.ResolveStyle(AKey, '', []);
+  Result.Name := st.FontName;
+  Result.SizeLogical := ResolveFontSize(st);
+  Result.Weight := st.FontWeight;
+end;
+
+procedure TTyAdvanceChart.SolveTitles(const AMeasurer: ITyTextMeasurer;
+  APPI: Integer);
+var
+  i, n: Integer;
+begin
+  n := TyTitleCount(FOption);
+  SetLength(FTitles, n);
+  SetLength(FTitleSpecs, n);
+  for i := 0 to n - 1 do
+  begin
+    FTitleSpecs[i] := TyTitleSpecOf(FOption, i);
+    FTitles[i] := TyLayoutTitle(FTitleSpecs[i], FLastRect, AMeasurer,
+      TitleFont('TyAdvChartTitle'), TitleFont('TyAdvChartSubtitle'), APPI);
+  end;
+end;
+
 procedure TTyAdvanceChart.SolvePies;
 var
   i, dim: Integer;
@@ -1028,6 +1068,78 @@ begin
   Result.EmptyFill := TTyChartColor(
     ActiveController.Model.ResolveStyle('TyAdvChartEmptyCircle', '',
       []).Background.Color);
+end;
+
+procedure TTyAdvanceChart.PaintTitles(APainter: TTyPainter);
+var
+  i: Integer;
+  st, subSt: TTyStyleSet;
+  lay: TTyTitleLayout;
+
+  { The box DrawText wants, hung off an anchor with the title's alignment.
+    The same job AnchorBox does for an axis label; kept local because the two
+    take their alignment from different enums and one shared helper would take
+    an argument nobody could read at the call site. }
+  function Hang(AX, AY, AW, AH: Double; AAlign: TTyTitleAlign;
+    AVAlign: TTyTitleVAlign): TRect;
+  begin
+    case AAlign of
+      ttaCentre: Result.Left := Round(AX - AW / 2);
+      ttaRight: Result.Left := Round(AX - AW);
+    else
+      Result.Left := Round(AX);
+    end;
+    Result.Right := Result.Left + Round(AW);
+    case AVAlign of
+      ttvMiddle: Result.Top := Round(AY - AH / 2);
+      ttvBottom: Result.Top := Round(AY - AH);
+    else
+      Result.Top := Round(AY);
+    end;
+    Result.Bottom := Result.Top + Round(AH);
+  end;
+
+  function LclAlign(AAlign: TTyTitleAlign): TAlignment;
+  begin
+    case AAlign of
+      ttaCentre: Result := taCenter;
+      ttaRight: Result := taRightJustify;
+    else
+      Result := taLeftJustify;
+    end;
+  end;
+
+begin
+  if Length(FTitles) = 0 then Exit;
+  st := ActiveController.Model.ResolveStyle('TyAdvChartTitle', '', []);
+  subSt := ActiveController.Model.ResolveStyle('TyAdvChartSubtitle', '',
+    []);
+  for i := 0 to High(FTitles) do
+  begin
+    lay := FTitles[i];
+    if not lay.Valid then Continue;
+    { The frame first, and only when the option asked for one: ECharts gives
+      the title a transparent background by default, and painting the surface
+      colour instead would put a visible plate behind every title on an image
+      theme. }
+    if FTitleSpecs[i].HasBackground then
+      APainter.FillBackground(
+        Rect(Round(lay.Frame.Left), Round(lay.Frame.Top),
+             Round(lay.Frame.Right), Round(lay.Frame.Bottom)),
+        st.Background, Round(FTitleSpecs[i].BorderRadii[0]));
+    if FTitleSpecs[i].Text <> '' then
+      APainter.DrawText(
+        Hang(lay.TextX, lay.TextY, lay.TextW, lay.TextH, lay.Align, lay.VAlign),
+        FTitleSpecs[i].Text, st.FontName, ResolveFontSize(st), st.FontWeight,
+        st.TextColor, LclAlign(lay.Align), tlTop, False, 0, False,
+        Pos(#10, FTitleSpecs[i].Text) > 0);
+    if lay.HasSub then
+      APainter.DrawText(
+        Hang(lay.SubX, lay.SubY, lay.SubW, lay.SubH, lay.Align, lay.VAlign),
+        FTitleSpecs[i].Subtext, subSt.FontName, ResolveFontSize(subSt),
+        subSt.FontWeight, subSt.TextColor, LclAlign(lay.Align), tlTop, False,
+        0, False, Pos(#10, FTitleSpecs[i].Subtext) > 0);
+  end;
 end;
 
 procedure TTyAdvanceChart.PaintSeries(APainter: TTyPainter);

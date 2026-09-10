@@ -1213,6 +1213,11 @@ begin
     '   band across a dark skin; alpha over the ink darkens one and lightens the' + LineEnding +
     '   other from the same declaration. */' + LineEnding +
     'TyAdvChartBarBackground { background: alpha(var(--on-surface), 0.10); }' + LineEnding +
+    '/* The chart''s own title and subtitle. Upstream draws them at 18/bold and' + LineEnding +
+    '   12/regular; the sizes come from the type scale here so a dense skin gets a' + LineEnding +
+    '   proportionate title instead of an 18px one on 11px axis labels. */' + LineEnding +
+    'TyAdvChartTitle { color: var(--on-surface); font-size: var(--font-size-title); font-weight: 700; }' + LineEnding +
+    'TyAdvChartSubtitle { color: var(--muted); font-size: var(--font-size-base); }' + LineEnding +
     '' + LineEnding +
     '/* ── ListGroupPanel (navigation accordion; own keys, not the tree column header''s) ────── */' + LineEnding +
     '/* A modern sider: group rows carry NO fill (just muted ink + a right chevron; the OPEN group' + LineEnding +

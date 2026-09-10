@@ -1180,6 +1180,11 @@ TyAdvChartEmptyCircle { background: alpha(var(--on-surface), 0.10); }
    band across a dark skin; alpha over the ink darkens one and lightens the
    other from the same declaration. */
 TyAdvChartBarBackground { background: alpha(var(--on-surface), 0.10); }
+/* The chart's own title and subtitle. Upstream draws them at 18/bold and
+   12/regular; the sizes come from the type scale here so a dense skin gets a
+   proportionate title instead of an 18px one on 11px axis labels. */
+TyAdvChartTitle { color: var(--on-surface); font-size: var(--font-size-title); font-weight: 700; }
+TyAdvChartSubtitle { color: var(--muted); font-size: var(--font-size-base); }
 
 /* ── ListGroupPanel (navigation accordion; own keys, not the tree column header's) ────── */
 /* A modern sider: group rows carry NO fill (just muted ink + a right chevron; the OPEN group
