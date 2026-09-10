@@ -65,6 +65,8 @@ type
     areas proportional, since area goes with the square of the radius. }
   TTyRoseType = (prtNone, prtRadius, prtArea);
 
+  TTyBoxValueArray = array of TTyBoxValue;
+
   { The pie-shaped options of one series, read off its option node.
 
     Angles are kept in DEGREES here, exactly as the option spells them, and
@@ -92,6 +94,11 @@ type
     StillShowZeroSum: Boolean;
     PercentPrecision: Integer;
     ShowEmptyCircle: Boolean;
+    { itemStyle.borderRadius, UNRESOLVED. A percentage here is a percentage
+      of a radius the sector does not have yet -- and under roseType every
+      sector has a different one -- so the values are carried as written and
+      resolved per sector when the marks are built. }
+    Corners: TTyBoxValueArray;
   end;
 
   { One datum's wedge, in DEVICE px and canvas radians.
@@ -170,6 +177,19 @@ function TyPiePercentSeats(const AValues: array of Double;
 function TyPieLayoutOf(const ASpec: TTyPieSpec; const AViewport: TTyRectF;
   AStore: TTyDataStore; ADim: Integer): TTyPieLayout;
 
+{ Resolve one sector's corner radii against its own geometry.
+
+  THE PERCENTAGE BASE IS THE OUTER RADIUS, NOT THE RING'S THICKNESS, and
+  that is upstream's operator precedence rather than upstream's intent:
+  sectorHelper.ts:37 writes `Math.abs(shape.r || 0 - shape.r0 || 0)`, and `-`
+  binds tighter than `||`, so the expression is `r || (0 - r0) || 0` and a
+  non-zero r wins outright. Run it with r = 80 and r0 = 30 and it answers 80,
+  not the 50 the name dr suggests. Transcribed, because a port that quietly
+  did the sensible thing would draw different corners from every ECharts
+  chart it is compared against. }
+function TyPieCornersFor(const ASpec: TTyPieSpec;
+  AR0, AR1: Double): TTyDoubleArray;
+
 { ---- the marks ---- }
 { Append this pie's sectors to AList and answer how many were added. A sector
   with no sweep adds nothing; a layout with no sectors at all adds the empty
@@ -216,6 +236,7 @@ begin
   Result.StillShowZeroSum := True;
   Result.PercentPrecision := 2;
   Result.ShowEmptyCircle := True;
+  Result.Corners := nil;
 end;
 
 function ObjOf(AData: TJSONData): TJSONObject;
@@ -319,6 +340,46 @@ begin
   Result := d.AsBoolean;
 end;
 
+{ itemStyle.borderRadius, kept in whatever units it was written in.
+
+  A SCALAR IS EXPANDED TO FOUR HERE, not left as one, because upstream does
+  it before zrender ever sees it -- sectorHelper.ts:34-36 -- and zrender's
+  own rule for a ONE-ELEMENT array is different from its rule for a number:
+  `5` rounds all four corners while `[5]` rounds only the inner pair. Leave
+  the scalar alone and a plain `borderRadius: 8` on a doughnut rounds the
+  hole and leaves the rim square. }
+function ReadCorners(ANode: TJSONObject): TTyBoxValueArray;
+var
+  d, item: TJSONData;
+  arr: TJSONArray;
+  i, n: Integer;
+  none: TTyBoxValue;
+begin
+  Result := nil;
+  if ANode = nil then Exit;
+  d := ANode.Find('itemStyle');
+  if (d = nil) or not (d is TJSONObject) then Exit;
+  d := TJSONObject(d).Find('borderRadius');
+  if (d = nil) or (d.JSONType = jtNull) then Exit;
+  none := TyBoxPx(0);
+  if not (d is TJSONArray) then
+  begin
+    SetLength(Result, 4);
+    for i := 0 to 3 do Result[i] := TyPieMeasureOf(d, none);
+    Exit;
+  end;
+  arr := TJSONArray(d);
+  n := arr.Count;
+  if n > 4 then n := 4;
+  if n = 0 then Exit;
+  SetLength(Result, n);
+  for i := 0 to n - 1 do
+  begin
+    item := arr.Items[i];
+    Result[i] := TyPieMeasureOf(item, none);
+  end;
+end;
+
 function TyPieSpecOf(AOption: TTyChartOption; ASlot: Integer): TTyPieSpec;
 var
   node: TJSONObject;
@@ -363,6 +424,7 @@ begin
     Round(NumIn(node, 'percentPrecision', Result.PercentPrecision));
   Result.ShowEmptyCircle :=
     BoolIn(node, 'showEmptyCircle', Result.ShowEmptyCircle);
+  Result.Corners := ReadCorners(node);
 
   { roseType is tested for TRUTH, not for membership: pieLayout.ts:159 asks
     `roseType ?` and :119 asks `roseType !== 'area'`. So `true` behaves as
@@ -740,6 +802,22 @@ end;
 
 { ==================== the marks ==================== }
 
+function TyPieCornersFor(const ASpec: TTyPieSpec;
+  AR0, AR1: Double): TTyDoubleArray;
+var
+  i: Integer;
+  dr: Double;
+begin
+  Result := nil;
+  if Length(ASpec.Corners) = 0 then Exit;
+  if AR1 <> 0 then dr := Abs(AR1)
+  else if AR0 <> 0 then dr := Abs(AR0)
+  else dr := 0;
+  SetLength(Result, Length(ASpec.Corners));
+  for i := 0 to High(ASpec.Corners) do
+    Result[i] := TyPieResolve(ASpec.Corners[i], dr);
+end;
+
 function TyBuildPieMarks(const ABinding: TTySeriesBinding;
   const ALayout: TTyPieLayout; const ASpec: TTyPieSpec;
   const AVisual: TTyPieVisual; AList: TTyPaintList): Integer;
@@ -764,7 +842,8 @@ begin
 
     sh := TyShapeSector(ALayout.Sectors[i].CX, ALayout.Sectors[i].CY,
       ALayout.Sectors[i].R0, ALayout.Sectors[i].R1,
-      ALayout.Sectors[i].StartRad, ALayout.Sectors[i].EndRad);
+      ALayout.Sectors[i].StartRad, ALayout.Sectors[i].EndRad,
+      TyPieCornersFor(ASpec, ALayout.Sectors[i].R0, ALayout.Sectors[i].R1));
     el := TyChartElement(sh);
     el.Style.HasFill := True;
     if Length(AVisual.Fills) > 0 then

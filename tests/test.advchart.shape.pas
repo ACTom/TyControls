@@ -33,6 +33,17 @@ type
     procedure TestSectorWrappingTheSeam;
     procedure TestFullTurnSectorAcceptsEveryAngle;
     procedure TestNegativeSweepIsNormalised;
+    { ---- the path a sector traces ---- }
+    procedure TestASectorsCornerRulesAreNotTheRects;
+    procedure TestAPlainSectorTracesRimLineHoleClose;
+    procedure TestRoundedCornersAddArcsAndPullTheStartOffTheRim;
+    procedure TestACornerCannotExceedHalfTheRingsThickness;
+    procedure TestANarrowWedgeLimitsItsCornersFurther;
+    procedure TestAWideWedgeIsNotLimitedByItsEdges;
+    procedure TestACornersArcSitsTangentInsideItsOwnRing;
+    procedure TestTheInnerCornersAreNotTheOuterOnes;
+    procedure TestAWholeRingHasNoCornersToRound;
+    procedure TestASectorWithNoRadiusAtAllTracesNothing;
     { ---- polyline ---- }
     procedure TestPolylineAcceptsNearTheStroke;
     procedure TestPolylineRejectsFarFromIt;
@@ -321,6 +332,307 @@ begin
                TyShapeContains(back, 30 * Cos(Pi / 4), 30 * Sin(Pi / 4), 0));
   AssertTrue('and it really is the wedge',
              TyShapeContains(back, 30 * Cos(Pi / 4), 30 * Sin(Pi / 4), 0));
+end;
+
+{ ======================= the path a sector traces ======================= }
+
+function OpsOf(const AShape: TTyChartShape; AKind: TTyPathOpKind): Integer;
+var
+  ops: TTyPathOpArray;
+  i: Integer;
+begin
+  Result := 0;
+  ops := TySectorPath(AShape);
+  for i := 0 to High(ops) do
+    if ops[i].Kind = AKind then Inc(Result);
+end;
+
+procedure TAdvChartShapeTest.TestASectorsCornerRulesAreNotTheRects;
+var
+  r: TTyCornerRadii;
+begin
+  { TWO RULES THAT LOOK LIKE ONE. zrender reads a rect's corner array and a
+    sector's by DIFFERENT rules, and the short forms are where they part: a
+    one-element array rounds all four corners of a rect and only the INNER
+    pair of a sector. Read a sector with the rect's rule and a plain doughnut
+    comes out rounded at the hole and square at the rim -- not a subtle
+    difference, and exactly backwards from what the option asked for. }
+  r := TySectorRadii([5]);
+  AssertEquals('inner start', 5.0, r[0], 1e-12);
+  AssertEquals('inner end', 5.0, r[1], 1e-12);
+  AssertEquals('and the rim is left alone', 0.0, r[2], 1e-12);
+  AssertEquals('', 0.0, r[3], 1e-12);
+  AssertEquals('while a RECT rounds everything from one value', 5.0,
+    TyCornerRadii([5])[2], 1e-12);
+
+  { Two values are the inner pair then the outer pair -- not the diagonals. }
+  r := TySectorRadii([1, 2]);
+  AssertEquals('inner pair', 1.0, r[0], 1e-12);
+  AssertEquals('', 1.0, r[1], 1e-12);
+  AssertEquals('outer pair', 2.0, r[2], 1e-12);
+  AssertEquals('', 2.0, r[3], 1e-12);
+  AssertEquals('where a RECT gives the second value to the top-right',
+    2.0, TyCornerRadii([1, 2])[1], 1e-12);
+
+  r := TySectorRadii([1, 2, 3]);
+  AssertEquals('three: the last covers both outer corners', 3.0, r[2], 1e-12);
+  AssertEquals('', 3.0, r[3], 1e-12);
+  AssertEquals('and the middle one is the inner END', 2.0, r[1], 1e-12);
+end;
+
+procedure TAdvChartShapeTest.TestAPlainSectorTracesRimLineHoleClose;
+var
+  s: TTyChartShape;
+  ops: TTyPathOpArray;
+begin
+  { One contour: out to the rim, round it, in to the hole, back round it. That
+    is what makes a ring fill under either rule and describe the same area the
+    hit test's annulus does. }
+  s := TyShapeSector(100, 100, 30, 80, 0, Pi / 2);
+  ops := TySectorPath(s);
+  AssertEquals('five ops', 5, Length(ops));
+  AssertEquals(Ord(pokMoveTo), Ord(ops[0].Kind));
+  AssertEquals('starting on the rim at the start angle', 180.0, ops[0].X, 1e-9);
+  AssertEquals('', 100.0, ops[0].Y, 1e-9);
+  AssertEquals(Ord(pokArc), Ord(ops[1].Kind));
+  AssertEquals('the rim', 80.0, ops[1].R, 1e-9);
+  AssertFalse('drawn forward', ops[1].Anti);
+  AssertEquals(Ord(pokLineTo), Ord(ops[2].Kind));
+  AssertEquals(Ord(pokArc), Ord(ops[3].Kind));
+  AssertEquals('the hole', 30.0, ops[3].R, 1e-9);
+  AssertTrue('drawn back', ops[3].Anti);
+  AssertEquals(Ord(pokClose), Ord(ops[4].Kind));
+
+  { A SOLID WEDGE closes through the centre rather than round a hole. }
+  s := TyShapeSector(100, 100, 0, 80, 0, Pi / 2);
+  ops := TySectorPath(s);
+  AssertEquals('four ops', 4, Length(ops));
+  AssertEquals(Ord(pokLineTo), Ord(ops[2].Kind));
+  AssertEquals('to the centre', 100.0, ops[2].X, 1e-9);
+  AssertEquals('', 100.0, ops[2].Y, 1e-9);
+end;
+
+procedure TAdvChartShapeTest.TestRoundedCornersAddArcsAndPullTheStartOffTheRim;
+var
+  plain, round_: TTyChartShape;
+  ops: TTyPathOpArray;
+begin
+  plain := TyShapeSector(100, 100, 30, 80, 0, Pi / 2);
+  round_ := TyShapeSector(100, 100, 30, 80, 0, Pi / 2, [6, 6, 6, 6]);
+  ops := TySectorPath(round_);
+
+  { Four corner arcs on top of the two ring arcs, so the path GROWS rather
+    than merely changing shape -- which is what says the corners were cut and
+    not just asked for. }
+  AssertEquals('two ring arcs when plain', 2, OpsOf(plain, pokArc));
+  AssertEquals('six with every corner rounded', 6, OpsOf(round_, pokArc));
+
+  { AND THE PATH NO LONGER STARTS ON THE RIM. The first point is pulled back
+    along the radial edge by the corner's radius; a version that computed the
+    corners and then started from the sharp point anyway would draw a spike. }
+  AssertTrue('the start is off the rim: ' + FloatToStr(ops[0].X),
+    Abs(ops[0].X - 180.0) > 1);
+
+  { A corner of nothing changes nothing. }
+  AssertEquals('zero radii trace the plain path', 2,
+    OpsOf(TyShapeSector(100, 100, 30, 80, 0, Pi / 2, [0, 0, 0, 0]), pokArc));
+end;
+
+procedure TAdvChartShapeTest.TestACornerCannotExceedHalfTheRingsThickness;
+var
+  ops: TTyPathOpArray;
+  i: Integer;
+  biggest: Double;
+begin
+  { roundSector.ts:209. Without it two corners on the same radial edge meet in
+    the middle and the wedge turns inside out. The ring here is 20 px thick,
+    so no corner may exceed 10 however large the option is. }
+  ops := TySectorPath(
+    TyShapeSector(100, 100, 60, 80, 0, Pi, [999, 999, 999, 999]));
+  biggest := 0;
+  for i := 0 to High(ops) do
+    if (ops[i].Kind = pokArc) and (ops[i].R < 50) and (ops[i].R > biggest) then
+      biggest := ops[i].R;
+  AssertTrue('no corner is larger than half the thickness: '
+    + FloatToStr(biggest), biggest <= 10 + 1e-9);
+  AssertTrue('and one really was drawn', biggest > 1);
+end;
+
+procedure TAdvChartShapeTest.TestANarrowWedgeLimitsItsCornersFurther;
+var
+  wide, narrow: TTyPathOpArray;
+
+  function Smallest(const AOps: TTyPathOpArray): Double;
+  var i: Integer;
+  begin
+    Result := 1e30;
+    for i := 0 to High(AOps) do
+      if (AOps[i].Kind = pokArc) and (AOps[i].R < 50)
+        and (AOps[i].R < Result) then
+        Result := AOps[i].R;
+  end;
+
+begin
+  { HALF THE THICKNESS IS NOT THE ONLY LIMIT. Under half a turn the two radial
+    edges converge, so a corner that fits the ring can still be too big to fit
+    between them -- and a thin slice of a pie is the ordinary case, not a
+    contrived one. Both wedges below have the same ring; only the angle
+    differs, and only the narrow one is cut back. }
+  wide := TySectorPath(
+    TyShapeSector(100, 100, 20, 80, 0, Pi / 2, [20, 20, 20, 20]));
+  narrow := TySectorPath(
+    TyShapeSector(100, 100, 20, 80, 0, Pi / 40, [20, 20, 20, 20]));
+  AssertTrue('the wide one keeps its corners: ' + FloatToStr(Smallest(wide)),
+    Smallest(wide) > 15);
+
+  { AND CUT BACK BY EXACTLY THIS MUCH. `less than it was` is satisfied by
+    any formula that shrinks something, which is how a version using the
+    INNER ring's divisor on the outer one stayed green: it answers 3.269
+    where upstream answers 3.022, and both are less than 20.
+
+    The number: the two radial edges meet at the centre, so b is 0 and the
+    half-angle between them is Pi/80. a = 1/sin(Pi/80) = 25.4713, and the
+    outer limit is radius/(a + 1) = 80/26.4713. The INNER one divides by
+    (a - 1) instead -- they are different formulas, not one with a sign.
+
+    Both corners merged, so the path is MoveTo, one outer arc, LineTo, one
+    inner arc, Close -- and the two radii sit at 1 and 3 where a test can name
+    them apart instead of taking whichever happened to be smaller. }
+  AssertEquals('five ops when both corners merge', 5, Length(narrow));
+  AssertEquals('the outer corner is limited to radius/(a+1)', 3.022137,
+    narrow[1].R, 1e-5);
+  AssertEquals('and the inner one by innerRadius/(a-1)', 0.817283,
+    narrow[3].R, 1e-5);
+end;
+
+procedure TAdvChartShapeTest.TestAWideWedgeIsNotLimitedByItsEdges;
+var
+  ops: TTyPathOpArray;
+  i: Integer;
+  biggest: Double;
+begin
+  { THE EDGE LIMIT IS GATED ON arc < Pi, and the gate is load-bearing. Past
+    half a turn the radial edges no longer close in front of the wedge, and
+    applying the formula anyway cuts corners that had room: this wedge is
+    three quarters of a turn with a 40 px half-thickness, so 35 fits -- while
+    the ungated formula would trim it to 33.14. }
+  ops := TySectorPath(
+    TyShapeSector(100, 100, 0, 80, 0, 3 * Pi / 2, [35, 35, 35, 35]));
+  biggest := 0;
+  for i := 0 to High(ops) do
+    if (ops[i].Kind = pokArc) and (ops[i].R < 50) and (ops[i].R > biggest) then
+      biggest := ops[i].R;
+  AssertEquals('the corner keeps the size it asked for', 35.0, biggest, 1e-6);
+end;
+
+procedure TAdvChartShapeTest.TestACornersArcSitsTangentInsideItsOwnRing;
+var
+  ops: TTyPathOpArray;
+  i: Integer;
+  d, found, ang: Double;
+begin
+  { WHERE THE CORNER IS, not how big it is. Four mutants that MOVE a corner
+    -- picking the farther of the two tangent circles, dropping the sign of
+    the perpendicular offset, swapping inner for outer -- all draw arcs of
+    the right radius in the right number, and every test that counted them
+    stayed green.
+
+    The property that pins it: a corner of radius cr is tangent to the
+    INSIDE of the rim, so its centre is exactly (radius - cr) from the
+    sector's own centre. Anywhere else and the corner is not on the rim. }
+  ops := TySectorPath(
+    TyShapeSector(100, 100, 30, 80, 0, Pi / 2, [0, 0, 10, 10]));
+  found := -1;
+  for i := 0 to High(ops) do
+    if (ops[i].Kind = pokArc) and (Abs(ops[i].R - 10) < 1e-6) then
+    begin
+      d := Sqrt(Sqr(ops[i].X - 100) + Sqr(ops[i].Y - 100));
+      AssertEquals('an outer corner is tangent inside the rim', 70.0, d, 1e-6);
+      { AND ON THE RIGHT SIDE OF THE RING. Distance alone cannot say: the
+        solve finds TWO circles tangent to both edges and both are exactly
+        this far out. They differ in where they sit AROUND the ring -- the
+        one to keep is just inside the sweep, its twin is most of a turn
+        away at 2.998 rad. Taking the wrong one draws the corner on the far
+        side of the pie. }
+      ang := ArcTan2(ops[i].Y - 100, ops[i].X - 100);
+      AssertTrue('and inside the sweep, not across the chart: '
+        + FloatToStr(ang), (ang >= -1e-9) and (ang <= Pi / 2 + 1e-9));
+      found := d;
+    end;
+  AssertTrue('and there were some', found > 0);
+
+  { The inner corners bulge the OTHER way -- into the hole -- so their
+    centres sit at (innerRadius + cr) instead. Same test, opposite sign, and
+    it is the sign a transcription is most likely to lose. }
+  ops := TySectorPath(
+    TyShapeSector(100, 100, 30, 80, 0, Pi / 2, [10, 10, 0, 0]));
+  found := -1;
+  for i := 0 to High(ops) do
+    if (ops[i].Kind = pokArc) and (Abs(ops[i].R - 10) < 1e-6) then
+    begin
+      d := Sqrt(Sqr(ops[i].X - 100) + Sqr(ops[i].Y - 100));
+      AssertEquals('an inner corner is tangent outside the hole', 40.0,
+        d, 1e-6);
+      ang := ArcTan2(ops[i].Y - 100, ops[i].X - 100);
+      AssertTrue('inside the sweep too: ' + FloatToStr(ang),
+        (ang >= -1e-9) and (ang <= Pi / 2 + 1e-9));
+      found := d;
+    end;
+  AssertTrue('and there were some', found > 0);
+
+  { THE HOLE IS TRACED BACKWARDS, always. One contour means the inner arc
+    runs against the outer one, and a corner-rounded hole is the branch
+    where that is easiest to lose -- it is written out there rather than
+    falling out of the plain path. }
+  found := -1;
+  for i := 0 to High(ops) do
+    if (ops[i].Kind = pokArc) and (Abs(ops[i].R - 30) < 1e-6) then
+    begin
+      AssertTrue('the rounded hole still runs back', ops[i].Anti);
+      found := 1;
+    end;
+  AssertTrue('and the hole was traced at all', found > 0);
+end;
+
+procedure TAdvChartShapeTest.TestTheInnerCornersAreNotTheOuterOnes;
+var
+  outerOnly, innerOnly: TTyPathOpArray;
+begin
+  { THE ORDER IS INNER FIRST, and nothing symmetric can say so. Every corner
+    test until now handed the same number to all four, so reading the array
+    outer-first drew exactly the same picture.
+
+    Told apart by WHERE THE PATH STARTS: the first point is pulled back off
+    the rim only when the OUTER start corner is rounded. Round only the
+    inner pair and the path still begins on the rim at 180. }
+  outerOnly := TySectorPath(
+    TyShapeSector(100, 100, 30, 80, 0, Pi / 2, [0, 0, 10, 10]));
+  innerOnly := TySectorPath(
+    TyShapeSector(100, 100, 30, 80, 0, Pi / 2, [10, 10, 0, 0]));
+  AssertTrue('an outer corner moves the start off the rim: '
+    + FloatToStr(outerOnly[0].X), Abs(outerOnly[0].X - 180) > 1);
+  AssertEquals('an inner one leaves it there', 180.0, innerOnly[0].X, 1e-9);
+  AssertEquals('', 100.0, innerOnly[0].Y, 1e-9);
+end;
+
+procedure TAdvChartShapeTest.TestAWholeRingHasNoCornersToRound;
+begin
+  { It has no radial edges, so there is nothing for a corner to sit between.
+    Upstream leaves the cornerRadius unread on this branch and so does this. }
+  AssertEquals('two arcs, corners or not', 2,
+    OpsOf(TyShapeSector(100, 100, 30, 80, 0, 2 * Pi, [20, 20, 20, 20]), pokArc));
+end;
+
+procedure TAdvChartShapeTest.TestASectorWithNoRadiusAtAllTracesNothing;
+var s: TTyChartShape;
+begin
+  s := TyShapeSector(100, 100, 0, 0, 0, Pi / 2);
+  AssertEquals('nothing to trace', 0, Length(TySectorPath(s)));
+
+  { A HOLE WITH NO RIM IS A DISC, not nothing: upstream promotes the inner
+    radius to the outer one rather than drawing an empty path. }
+  s := TyShapeSector(100, 100, 40, 0, 0, Pi / 2);
+  AssertTrue('a lone inner radius still draws', Length(TySectorPath(s)) > 0);
 end;
 
 { ============================ polyline ============================ }

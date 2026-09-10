@@ -67,6 +67,7 @@ type
     procedure TestNormaliseNeverStretchesPastOneTurn;
     procedure TestAWholeTurnComesOutExact;
     procedure TestTheScalarsAreActuallyReadOffTheOption;
+    procedure TestBorderRadiusReachesTheSectorAndIsAShareOfTheOuterRadius;
   end;
 
 implementation
@@ -526,6 +527,55 @@ begin
     everywhere a percentage is accepted. }
   AssertEquals('centre means fifty per cent', 200.0,
     TyPieResolve(spec.CentreX, 400), EpsPx);
+end;
+
+procedure TAdvChartPieTest.TestBorderRadiusReachesTheSectorAndIsAShareOfTheOuterRadius;
+var
+  bind: TTySeriesBinding;
+  vis: TTyPieVisual;
+  corners: TTyDoubleArray;
+begin
+  { A SCALAR MEANS ALL FOUR CORNERS, and it has to be expanded HERE rather
+    than left for the shape: zrender reads a bare number and a one-element
+    array by different rules -- 5 is every corner, [5] is the inner pair
+    only -- and ECharts expands the number before zrender ever sees it. Leave
+    it alone and `borderRadius: 8` on a doughnut rounds the hole and leaves
+    the rim square. }
+  Run('{ "series": [ { "type": "pie", "radius": ["40%", "70%"],'
+    + ' "itemStyle": { "borderRadius": 8 }, "data": [1, 1] } ] }');
+  corners := TyPieCornersFor(FSpec, FLay.R0, FLay.R1);
+  AssertEquals('all four', 4, Length(corners));
+  AssertEquals('in pixels as written', 8.0, corners[0], EpsPx);
+  AssertEquals('', 8.0, corners[3], EpsPx);
+
+  bind := Default(TTySeriesBinding);
+  bind.Resolved := True;
+  vis := TyPieVisual($FF3366CC);
+  FList := TTyPaintList.Create;
+  TyBuildPieMarks(bind, FLay, FSpec, vis, FList);
+  AssertEquals('and it reaches the shape', 8.0,
+    FList.Element(0).Shape.SectorRadii[0], EpsPx);
+
+  { A PERCENTAGE IS A SHARE OF THE OUTER RADIUS, NOT OF THE RING. That is
+    upstream's operator precedence rather than upstream's intent --
+    sectorHelper.ts:37 reads as `r || (0 - r0) || 0` -- and a port that did
+    the sensible thing instead would round every doughnut differently from
+    the chart it is being compared against. On a 300-tall chart the outer
+    radius is 105 and the ring is 45 thick, so 10% is 10.5 and not 4.5. }
+  Run('{ "series": [ { "type": "pie", "radius": ["40%", "70%"],'
+    + ' "itemStyle": { "borderRadius": "10%" }, "data": [1, 1] } ] }',
+    400, 300);
+  AssertEquals('the ring runs from', 60.0, FLay.R0, EpsPx);
+  AssertEquals('to', 105.0, FLay.R1, EpsPx);
+  corners := TyPieCornersFor(FSpec, FLay.R0, FLay.R1);
+  AssertEquals('a tenth of the OUTER radius', 10.5, corners[0], EpsPx);
+
+  { And an array is passed through as written, for the shape to read by the
+    SECTOR rules. }
+  Run('{ "series": [ { "type": "pie",'
+    + ' "itemStyle": { "borderRadius": [1, 2] }, "data": [1] } ] }');
+  corners := TyPieCornersFor(FSpec, FLay.R0, FLay.R1);
+  AssertEquals('two, not four', 2, Length(corners));
 end;
 
 initialization

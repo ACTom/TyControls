@@ -31,6 +31,7 @@ procedure TyTraceShape(P: TTyPainter; const AShape: TTyChartShape);
 var
   i, n: Integer;
   pts: array of TTyVecPoint;
+  ops: TTyPathOpArray;
 begin
   if P = nil then Exit;
   case AShape.Kind of
@@ -80,21 +81,22 @@ begin
       P.EllipsePath(AShape.CX, AShape.CY, AShape.R0, AShape.R1);
     cskSector:
       begin
-        { Outer arc forward, inner arc back, closed -- one contour, so a ring
-          fills correctly under either rule and the hit test's own annulus test
-          describes the same area. }
-        P.MoveTo(AShape.CX + AShape.R1 * Cos(AShape.StartRad),
-                 AShape.CY + AShape.R1 * Sin(AShape.StartRad));
-        P.ArcTo(AShape.CX, AShape.CY, AShape.R1, AShape.StartRad, AShape.EndRad, False);
-        if AShape.R0 > 0 then
-        begin
-          P.LineTo(AShape.CX + AShape.R0 * Cos(AShape.EndRad),
-                   AShape.CY + AShape.R0 * Sin(AShape.EndRad));
-          P.ArcTo(AShape.CX, AShape.CY, AShape.R0, AShape.EndRad, AShape.StartRad, True);
-        end
-        else
-          P.LineTo(AShape.CX, AShape.CY);
-        P.ClosePath;
+        { THE PATH IS COMPUTED SOMEWHERE ELSE and merely replayed here. Rounding
+          a sector's corners is a hundred lines of trig, and pixels are a poor
+          place to find out which of them is wrong -- so TySectorPath answers
+          in primitives a test can read, and this loop turns them into ink.
+
+          ONE PATH FOR EVERY SECTOR, corners or none: two would be two things
+          that have to agree. }
+        ops := TySectorPath(AShape);
+        for i := 0 to High(ops) do
+          case ops[i].Kind of
+            pokMoveTo: P.MoveTo(ops[i].X, ops[i].Y);
+            pokLineTo: P.LineTo(ops[i].X, ops[i].Y);
+            pokArc: P.ArcTo(ops[i].X, ops[i].Y, ops[i].R,
+                            ops[i].A0, ops[i].A1, ops[i].Anti);
+            pokClose: P.ClosePath;
+          end;
       end;
     cskPolyline, cskPolygon:
       begin
