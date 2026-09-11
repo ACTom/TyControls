@@ -40,6 +40,9 @@ type
     procedure TestRotationMakesAHorizontalAxisThicker;
     procedure TestQuarterTurnHorizontalThicknessIsTheLabelWidth;
     procedure TestHiddenLabelsCostNothingButTheTick;
+    procedure TestTheLabelStandsInTheBandTheThicknessReserved;
+    procedure TestAnInsideLabelCrossesTheAxisAndFlipsItsAnchor;
+    procedure TestAnInwardTickIsChargedNothingHoweverLongItIs;
     { ---- phase 2: shrink ---- }
     procedure TestOuterBoundsNoneDoesNotShrink;
     procedure TestOuterBoundsAutoShrinksTheSideTheAxisIsOn;
@@ -89,6 +92,10 @@ begin
   FillChar(Result, SizeOf(Result), 0);
   Result.Side := asBottom;
   Result.ShowLabels := True;
+  { What the builder fills in for a real axis. The show family defaults to
+    False in a zeroed record, and these fixtures are about the ARITHMETIC of
+    the gutter -- WHAT gets drawn is TAdvChartFurnitureTest's subject. }
+  Result.ShowTicks := True;
   n := Length(ALabels);
   SetLength(Result.Labels, n);
   SetLength(Result.Positions, n);
@@ -261,6 +268,86 @@ begin
   plot := TySolveGrid(TyRectF(0, 0, 400, 300), axes, FM, 96, obmAuto);
   AssertTrue('still a valid rect', TyRectFIsValid(plot));
   AssertEquals('collapsed to zero width', 0.0, TyRectFWidth(plot), Eps);
+end;
+
+{ THE TWO HALVES OF THE GUTTER MUST AGREE. TyAxisThickness says how much the
+  plot gives up; TyLayoutAxisLabels says where in it the text goes. They are
+  different routines in different parts of this unit and they were written
+  apart -- so when the thickness stopped charging for furniture that is not
+  drawn, the placement went on standing the label a tick-length further out
+  than the band it was given. These three pin them together. }
+
+procedure TAdvChartAxisTest.TestTheLabelStandsInTheBandTheThicknessReserved;
+var
+  a: TTyAxisLayoutSpec;
+  p: TTyAxisLabelPlacementArray;
+begin
+  { TICKS ON, then off, and the label moves in by exactly the length that
+    stopped being reserved -- which is the arithmetic the thickness does two
+    hundred lines up. Asserted as the two numbers rather than as a
+    difference, so a placement that ignored the tick entirely fails the
+    first line and one that always charges it fails the second. }
+  a := LeftAxis(['1000']);
+  p := TyLayoutAxisLabels(a, TyRectF(100, 0, 300, 200), FM, 96);
+  AssertEquals('tick 5 + margin 8 out from the plot', 87.0, p[0].X, Eps);
+  AssertEquals('and the thickness reserved the label on top of those',
+    5 + 8 + 40.0, TyAxisThickness(a, FM, 96, obcAxisLabel), Eps);
+
+  a.ShowTicks := False;
+  p := TyLayoutAxisLabels(a, TyRectF(100, 0, 300, 200), FM, 96);
+  AssertEquals('the margin alone once the tick is gone', 92.0, p[0].X, Eps);
+  AssertEquals('and the thickness gave the same five back',
+    8 + 40.0, TyAxisThickness(a, FM, 96, obcAxisLabel), Eps);
+
+  a.ShowTicks := True;
+  a.TickInside := True;
+  p := TyLayoutAxisLabels(a, TyRectF(100, 0, 300, 200), FM, 96);
+  AssertEquals('an inward tick is the same as no tick, out here',
+    92.0, p[0].X, Eps);
+end;
+
+procedure TAdvChartAxisTest.TestAnInsideLabelCrossesTheAxisAndFlipsItsAnchor;
+var
+  a: TTyAxisLayoutSpec;
+  p: TTyAxisLabelPlacementArray;
+begin
+  { THE ANCHOR HAS TO TURN WITH IT. A left axis' label reads leftwards from
+    its anchor; moved inside the plot and still right-anchored it would read
+    back out across the axis line it was moved off, so the move would gain
+    nothing. Both halves asserted, because the position alone is satisfied by
+    a label that straddles the line. }
+  a := LeftAxis(['1000']);
+  a.LabelInside := True;
+  p := TyLayoutAxisLabels(a, TyRectF(100, 0, 300, 200), FM, 96);
+  AssertEquals('the margin INTO the plot, not out of it',
+    108.0, p[0].X, Eps);
+  AssertTrue('and it reads rightwards from there', p[0].AnchorH = tahLeft);
+  { The LABELS reserve nothing; the tick still points outward and still costs
+    its five. Asking for nought here would be asking `inside` to hide the
+    ticks as well, which is a different option. }
+  AssertEquals('the outward tick, and nothing else', 5.0,
+    TyAxisThickness(a, FM, 96, obcAxisLabel), Eps);
+
+  a := BottomAxis(['1000']);
+  a.LabelInside := True;
+  p := TyLayoutAxisLabels(a, TyRectF(0, 0, 200, 150), FM, 96);
+  { The margin alone: the tick still points DOWN, away from the label, so it
+    is not between the two and does not push them apart. }
+  AssertEquals('a bottom label moves UP into the plot', 142.0, p[0].Y, Eps);
+  AssertTrue('and hangs from its bottom edge', p[0].AnchorV = tavBottom);
+end;
+
+procedure TAdvChartAxisTest.TestAnInwardTickIsChargedNothingHoweverLongItIs;
+var a: TTyAxisLayoutSpec;
+begin
+  { A NEGATIVE LENGTH is upstream's other way of pointing the mark inwards,
+    and it must not come off the gutter: charged as written, a tick of -60
+    would give the axis a thickness smaller than its own labels and pull the
+    plot out past the container. }
+  a := LeftAxis(['1000']);
+  a.TickLengthLogical := -60;
+  AssertEquals('the labels and their margin, and nothing off them',
+    8 + 40.0, TyAxisThickness(a, FM, 96, obcAxisLabel), Eps);
 end;
 
 { =================== phase 3: placement and thinning =================== }

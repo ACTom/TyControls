@@ -47,6 +47,49 @@ uses SysUtils, Classes, Math, fpjson,
 type
   TTyAxisArray = array of TTyAxis;
 
+  { What an axis actually draws, once its TYPE's defaults and the `auto`
+    rule have both been applied and the option has had its say.
+
+    THE DEFAULTS ARE THE FEATURE HERE, not the options. On the commonest
+    chart there is -- a category x against a value y, with no axis option
+    written at all -- upstream draws the x domain line and the y split lines
+    and NOTHING ELSE: no x ticks, no x split lines, no y domain line, no y
+    ticks. Drawing all six is what makes a port's bar chart read as bars in a
+    box instead of bars on a grid, and it is four wrong answers to a question
+    the author never asked. }
+  TTyAxisFurniture = record
+    ShowLine: Boolean;
+    ShowTicks: Boolean;
+    ShowLabels: Boolean;
+    ShowSplitLine: Boolean;
+    ShowSplitArea: Boolean;
+    ShowMinorTick: Boolean;
+    ShowMinorSplitLine: Boolean;
+    { Inward-pointing furniture is INSIDE the plot, so it reserves nothing
+      outside it -- which is a layout question and not only a paint one. }
+    TickInside: Boolean;
+    LabelInside: Boolean;
+    { `axisTick.alignWithLabel`: on a banded category axis the ticks move from
+      the band EDGES to the band CENTRES, and there is one per band rather
+      than one per boundary. }
+    AlignWithLabel: Boolean;
+    { `splitLine.showMinLine` / `showMaxLine`: whether the line ON the axis'
+      own extreme is drawn. Both default true. Turning the max one off is how
+      an author stops the topmost grid line from doubling the plot's edge. }
+    ShowMinLine: Boolean;
+    ShowMaxLine: Boolean;
+    { LOGICAL px, and NaN for `the theme decides`. NOT -1: upstream reads a
+      NEGATIVE length as a direction -- `axisTick: { length: -5 }` points the
+      mark the other way -- so a negative sentinel would swallow a legal
+      value and there would be no way to write it at all. }
+    TickLengthLogical: Double;
+    MinorTickLengthLogical: Double;
+    LabelMarginLogical: Double;
+    { DEGREES, clockwise on screen, which is how the option spells it. }
+    LabelRotateDeg: Double;
+  end;
+
+
   { One grid: a plot rect, the axes that named it, and the coordinate systems
     over their cross product. }
   TTyGridBuild = class
@@ -55,6 +98,9 @@ type
     FOuterRect: TTyRectF;
     FPlotRect: TTyRectF;
     FSpecs: TTyAxisLayoutSpecArray;
+    { Index-parallel to FSpecs: the x axes then the y axes, which is the
+      order SpecFor already walks. }
+    FFurniture: array of TTyAxisFurniture;
     FXAxes: TTyAxisArray;
     FYAxes: TTyAxisArray;
     FCartesians: array of TTyCartesian2D;   // OWNED
@@ -86,6 +132,9 @@ type
 
       nil before phase C has run. }
     function SpecFor(AAxis: TTyAxis): PTyAxisLayoutSpec;
+    { What AAxis draws. Answers every-default furniture for an axis this grid
+      does not hold, which is the same answer a chart with no option gets. }
+    function FurnitureFor(AAxis: TTyAxis): TTyAxisFurniture;
   end;
 
   { Everything one option tree produced. Owns the grids, the axes and, through
@@ -136,6 +185,18 @@ function TyBuildGrids(AOption: TTyChartOption; const AViewport: TTyRectF): TTyCh
 procedure TyLayoutGrids(ABuild: TTyChartBuild; AOption: TTyChartOption;
   const AMeasurer: ITyTextMeasurer; APPI: Integer;
   const AText: TTyAxisTextStyle);
+
+{ ---- the axis furniture ---- }
+
+{ Resolve one axis' furniture.
+
+  AOtherIsValue answers `is any axis of the OPPOSITE family on this grid an
+  interval or a log axis` -- which is the whole input to upstream's `auto`
+  rule, and note what it is NOT: it is not `is the other axis of MY pair`,
+  because upstream walks every cartesian in the grid and asks each one for
+  its opposite-dimension axis whether or not this axis is in it. }
+function TyAxisFurnitureOf(ANode: TJSONObject; AAxis: TTyAxis;
+  AOtherIsValue: Boolean): TTyAxisFurniture;
 
 { ---- reading series data ---- }
 type
@@ -841,6 +902,108 @@ end;
 
 { ==================== reading series data ==================== }
 
+{ One `show` in a furniture node: the option's word, or the default, with
+  `auto` resolved by AAuto.
+
+  `'auto'` IS A THIRD VALUE AND NOT A SYNONYM FOR TRUE. Upstream writes it in
+  the defaults of exactly two things -- the domain line and the ticks -- and
+  it means `show me only when the other axis is a number line`. A port that
+  read it as true would draw the four extra things named above. }
+function ShowIn(ANode: TJSONObject; const AKey: string;
+  ADefault: Boolean; AAutoDefault: Boolean; AAuto: Boolean): Boolean;
+var
+  sub: TJSONObject;
+  d: TJSONData;
+begin
+  { The default first, itself possibly `auto`. }
+  if AAutoDefault then Result := AAuto else Result := ADefault;
+  if ANode = nil then Exit;
+  sub := ObjOf(ANode.Find(AKey));
+  if sub = nil then Exit;
+  d := sub.Find('show');
+  if d = nil then Exit;
+  if d.JSONType = jtBoolean then Exit(d.AsBoolean);
+  if (d.JSONType = jtString) and (d.AsString = 'auto') then Exit(AAuto);
+end;
+
+{ A number out of a furniture node, or ADefault. }
+function SubNumIn(ANode: TJSONObject; const AKey, AField: string;
+  ADefault: Double): Double;
+var
+  sub: TJSONObject;
+  d: TJSONData;
+begin
+  Result := ADefault;
+  if ANode = nil then Exit;
+  sub := ObjOf(ANode.Find(AKey));
+  if sub = nil then Exit;
+  d := sub.Find(AField);
+  if (d <> nil) and (d.JSONType = jtNumber) then Result := d.AsFloat;
+end;
+
+{ A flag out of a furniture node, or ADefault. }
+function SubBoolIn(ANode: TJSONObject; const AKey, AField: string;
+  ADefault: Boolean): Boolean;
+var
+  sub: TJSONObject;
+  d: TJSONData;
+begin
+  Result := ADefault;
+  if ANode = nil then Exit;
+  sub := ObjOf(ANode.Find(AKey));
+  if sub = nil then Exit;
+  d := sub.Find(AField);
+  if (d <> nil) and (d.JSONType = jtBoolean) then Result := d.AsBoolean;
+end;
+
+function TyAxisFurnitureOf(ANode: TJSONObject; AAxis: TTyAxis;
+  AOtherIsValue: Boolean): TTyAxisFurniture;
+var
+  cat, tickAuto: Boolean;
+begin
+  Result := Default(TTyAxisFurniture);
+  if AAxis = nil then Exit;
+  cat := AAxis.AxisType = atCategory;
+
+  { THE TICK'S `auto` HAS A SECOND CLAUSE, and it is the reason a plain bar
+    chart has no ticks under its categories: a banded category axis suppresses
+    them even when the other axis is a number line, because a tick between two
+    bands points at nothing in particular. Take the boundary gap away --
+    `boundaryGap: false` -- and the ticks come back. }
+  tickAuto := AOtherIsValue;
+  if cat and AAxis.OnBand then tickAuto := False;
+
+  { axisLine.show: `true` on a category axis, `auto` on every other kind. }
+  Result.ShowLine := ShowIn(ANode, 'axisLine', True, not cat, AOtherIsValue);
+  { axisTick.show: `auto` on every kind. }
+  Result.ShowTicks := ShowIn(ANode, 'axisTick', True, True, tickAuto);
+  Result.ShowLabels := ShowIn(ANode, 'axisLabel', True, False, True);
+  { splitLine.show: TRUE on a value or log axis, FALSE on a category or a
+    time one -- so a bar chart's horizontal grid comes from the value axis and
+    the vertical lines it does not have would have come from the category one. }
+  Result.ShowSplitLine := ShowIn(ANode, 'splitLine',
+    not (cat or (AAxis.AxisType = atTime)), False, True);
+  Result.ShowSplitArea := ShowIn(ANode, 'splitArea', False, False, True);
+  { The minor pair is a value-axis affair: a category axis has nothing to
+    subdivide. }
+  Result.ShowMinorTick := (not cat)
+    and ShowIn(ANode, 'minorTick', False, False, True);
+  Result.ShowMinorSplitLine := (not cat)
+    and ShowIn(ANode, 'minorSplitLine', False, False, True);
+
+  Result.TickInside := SubBoolIn(ANode, 'axisTick', 'inside', False);
+  Result.LabelInside := SubBoolIn(ANode, 'axisLabel', 'inside', False);
+  Result.AlignWithLabel :=
+    SubBoolIn(ANode, 'axisTick', 'alignWithLabel', False);
+  Result.ShowMinLine := SubBoolIn(ANode, 'splitLine', 'showMinLine', True);
+  Result.ShowMaxLine := SubBoolIn(ANode, 'splitLine', 'showMaxLine', True);
+  Result.TickLengthLogical := SubNumIn(ANode, 'axisTick', 'length', NaN);
+  Result.MinorTickLengthLogical :=
+    SubNumIn(ANode, 'minorTick', 'length', NaN);
+  Result.LabelMarginLogical := SubNumIn(ANode, 'axisLabel', 'margin', NaN);
+  Result.LabelRotateDeg := SubNumIn(ANode, 'axisLabel', 'rotate', 0);
+end;
+
 function TySeriesCartesianDims(ACart: TTyCartesian2D;
   AExtraCount: Integer): TTySeriesDimArray;
 var
@@ -1139,18 +1302,49 @@ begin
     end;
 end;
 
+function TTyGridBuild.FurnitureFor(AAxis: TTyAxis): TTyAxisFurniture;
+var i: Integer;
+begin
+  Result := Default(TTyAxisFurniture);
+  Result.ShowLine := True;
+  Result.ShowTicks := True;
+  Result.ShowLabels := True;
+  Result.ShowMinLine := True;
+  Result.ShowMaxLine := True;
+  Result.TickLengthLogical := NaN;
+  Result.MinorTickLengthLogical := NaN;
+  Result.LabelMarginLogical := NaN;
+  if AAxis = nil then Exit;
+  for i := 0 to XAxisCount - 1 do
+    if XAxis(i) = AAxis then
+    begin
+      if i <= High(FFurniture) then Result := FFurniture[i];
+      Exit;
+    end;
+  for i := 0 to YAxisCount - 1 do
+    if YAxis(i) = AAxis then
+    begin
+      if XAxisCount + i <= High(FFurniture) then
+        Result := FFurniture[XAxisCount + i];
+      Exit;
+    end;
+end;
+
 procedure TyLayoutGrids(ABuild: TTyChartBuild; AOption: TTyChartOption;
   const AMeasurer: ITyTextMeasurer; APPI: Integer;
   const AText: TTyAxisTextStyle);
 var
   g, i, j, t: Integer;
   specs: TTyAxisLayoutSpecArray;
+  furn: array of TTyAxisFurniture;
+  xIsValue, yIsValue: Boolean;
   ax: TTyAxis;
   ticks: TTyScaleTickArray;
   gb: TTyGridBuild;
   node: TJSONObject;
 
-  procedure FillSpec(var ASpec: TTyAxisLayoutSpec; AAxis: TTyAxis; ANode: TJSONObject);
+  procedure FillSpec(var ASpec: TTyAxisLayoutSpec; AAxis: TTyAxis;
+    ANode: TJSONObject; const AFurn: TTyAxisFurniture);
   var
     q, kept: Integer;
     lbl, wd: TJSONData;
@@ -1158,7 +1352,14 @@ var
   begin
     ASpec := Default(TTyAxisLayoutSpec);
     ASpec.Side := AAxis.Side;
-    ASpec.ShowLabels := BoolIn(ANode, 'show', True);
+    { `axisLabel.show`, NOT the axis' own `show` -- the axis-level one is
+      handled at the bottom of this routine. Reading it here as well meant
+      `axisLabel: { show: false }` did nothing while a hidden axis was asked
+      about twice. }
+    ASpec.ShowLabels := AFurn.ShowLabels;
+    ASpec.ShowTicks := AFurn.ShowTicks;
+    ASpec.TickInside := AFurn.TickInside;
+    ASpec.LabelInside := AFurn.LabelInside;
     ASpec.Name := AAxis.Name;
     { From the caller's resolved theme style, NOT from literals here: the paint
       pass draws in the theme's font and gaps, so measuring in anything else
@@ -1166,9 +1367,47 @@ var
     ASpec.FontName := AText.FontName;
     ASpec.FontSizeLogical := AText.FontSizeLogical;
     ASpec.FontWeight := AText.FontWeight;
+    { THE THEME FIRST AND THE OPTION OVER IT. A gap is a geometric value and
+      an author is allowed to name one -- the same arrangement
+      `axisLabel.width` has already. Colours are the other kind and still
+      come from the theme alone. }
     ASpec.LabelMarginLogical := AText.LabelMarginLogical;
+    if not IsNan(AFurn.LabelMarginLogical) then
+      ASpec.LabelMarginLogical := AFurn.LabelMarginLogical;
     ASpec.TickLengthLogical := AText.TickLengthLogical;
+    if not IsNan(AFurn.TickLengthLogical) then
+      ASpec.TickLengthLogical := AFurn.TickLengthLogical;
     ASpec.NameGapLogical := AText.NameGapLogical;
+    { `xAxis.show: false` MUST GIVE THE GUTTER BACK. Upstream builds nothing
+      at all for a hidden axis and skips it again when it folds the shrink,
+      so the plot grows into the band. The port hid it at PAINT time only:
+      `yAxis: { show: false }` stopped drawing the numbers and went on
+      reserving room for them, which is a chart with an empty margin down
+      its left-hand side and no way to close it.
+
+      Zeroed rather than skipped because FSpecs is index-parallel to the
+      grid's axis lists -- SpecFor and FurnitureFor both walk them by
+      position -- and a spec that costs nothing is the same answer. }
+    if not AAxis.Visible then
+    begin
+      ASpec.ShowLabels := False;
+      ASpec.ShowTicks := False;
+      ASpec.Name := '';
+    end;
+    { DEGREES IN THE OPTION, RADIANS IN THE LAYOUT, and the same sign in both:
+      `rotate` is counter-clockwise positive upstream (AxisBuilder turns it
+      straight into the zrender element's `rotation`) and the painter's
+      DrawTextRotated is counter-clockwise positive too. Negating it here
+      turned every rotated label the wrong way -- invisible while nothing drew
+      the rotation at all, because the extent a turn costs is the same either
+      way round. }
+    { AND A TOP AXIS TURNS THE OTHER WAY. Upstream negates the rotation for
+      `position: top` alone, so that `rotate: 45` slants the labels away from
+      the plot on both edges instead of into it on one of them. }
+    if AAxis.Side = asTop then
+      ASpec.RotationRad := -AFurn.LabelRotateDeg * Pi / 180
+    else
+      ASpec.RotationRad := AFurn.LabelRotateDeg * Pi / 180;
     { MAJORS ONLY. GetTicks hands back majors and minors in one array with
       Level saying which is which, and its own comment says a caller that wants
       only the majors tests Level. This did not -- so `minorTick: { show: true
@@ -1236,21 +1475,37 @@ begin
   begin
     gb := ABuild.Grid(g);
     SetLength(specs, gb.XAxisCount + gb.YAxisCount);
+    SetLength(furn, gb.XAxisCount + gb.YAxisCount);
+    { WHICH FAMILY IS A NUMBER LINE, asked once per grid. This is the whole
+      input to the `auto` rule, and it is asked of the FAMILY and not of a
+      pair: upstream walks every cartesian in the grid and takes its
+      opposite-dimension axis, whether or not the axis being resolved is in
+      that cartesian. }
+    xIsValue := False;
+    for i := 0 to gb.XAxisCount - 1 do
+      if gb.XAxis(i).AxisType in [atValue, atLog] then xIsValue := True;
+    yIsValue := False;
+    for i := 0 to gb.YAxisCount - 1 do
+      if gb.YAxis(i).AxisType in [atValue, atLog] then yIsValue := True;
+
     t := 0;
     for i := 0 to gb.XAxisCount - 1 do
     begin
       ax := gb.XAxis(i);
       node := ObjOf(AOption.ComponentAt('xAxis', ax.ComponentIndex));
-      FillSpec(specs[t], ax, node);
+      furn[t] := TyAxisFurnitureOf(node, ax, yIsValue);
+      FillSpec(specs[t], ax, node, furn[t]);
       Inc(t);
     end;
     for i := 0 to gb.YAxisCount - 1 do
     begin
       ax := gb.YAxis(i);
       node := ObjOf(AOption.ComponentAt('yAxis', ax.ComponentIndex));
-      FillSpec(specs[t], ax, node);
+      furn[t] := TyAxisFurnitureOf(node, ax, xIsValue);
+      FillSpec(specs[t], ax, node, furn[t]);
       Inc(t);
     end;
+    gb.FFurniture := furn;
 
     { obcAll, explicitly. Our own default is obcAxisLabel while upstream's
       outerBoundsContain default is 'all', and taking the default here would

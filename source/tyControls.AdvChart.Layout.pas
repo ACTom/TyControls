@@ -157,6 +157,19 @@ type
       back to its own arithmetic then. }
     LabelStep: Integer;
     Placements: TTyAxisLabelPlacementArray;
+    { WHAT THIS AXIS ACTUALLY DRAWS, resolved by the builder from the option
+      and from upstream's per-type defaults. Only the two that cost SPACE are
+      here -- the rest are paint-time questions and the renderer asks the
+      builder for them directly.
+
+      A tick that is hidden, or that points into the plot, reserves nothing
+      outside it. Same for a label. That is the whole reason these two are a
+      layout question: switch the ticks off and the plot gets five pixels
+      wider on that side, which is what upstream does and what makes a
+      tickless axis look deliberate rather than merely bald. }
+    ShowTicks: Boolean;
+    TickInside: Boolean;
+    LabelInside: Boolean;
   end;
   TTyAxisLayoutSpecArray = array of TTyAxisLayoutSpec;
   PTyAxisLayoutSpec = ^TTyAxisLayoutSpec;
@@ -508,9 +521,19 @@ var
   across, along, nw, nh, nrw, nrh: Double;
   each: TTyDoubleArray;
 begin
-  Result := AxisScaleF(ASpec.TickLengthLogical, APPI);
+  { NOTHING IS CHARGED FOR FURNITURE THAT IS NOT THERE. A hidden tick, or one
+    pointing into the plot, lies entirely inside the band and reserves no
+    room outside it; an inside label likewise. Charging for them anyway is
+    how an axis that draws nothing still pushes the plot in five pixels. }
+  Result := 0;
+  if ASpec.ShowTicks and (not ASpec.TickInside) then
+    { MAX, because a NEGATIVE length is upstream's other way of pointing the
+      mark into the plot. Inward furniture reserves nothing outside, and
+      subtracting from the gutter would let a long inward tick pull the plot
+      out past its own container. }
+    Result := Max(Double(0), AxisScaleF(ASpec.TickLengthLogical, APPI));
   MeasureLabels(ASpec, AMeasurer, across, along, each);
-  if across > 0 then
+  if (across > 0) and (not ASpec.LabelInside) then
     Result := Result + AxisScaleF(ASpec.LabelMarginLogical, APPI) + across;
   { The name counts only when the caller asked for outerBoundsContain:'all'.
     Under 'axisLabel' an axis name is allowed to sit outside the outer bound,
@@ -635,8 +658,25 @@ begin
   SetLength(Result, Length(ASpec.Labels));
   if Length(ASpec.Labels) = 0 then Exit;
   step := TyAxisLabelStep(ASpec, APlot, AMeasurer, APPI);
-  gap := AxisScaleF(ASpec.TickLengthLogical, APPI)
-       + AxisScaleF(ASpec.LabelMarginLogical, APPI);
+  { THE SAME SUM TyAxisThickness RESERVES, and it has to be: the thickness is
+    what the plot gives up and this is where the text goes in it. They were
+    written apart, so the moment the thickness stopped charging for a hidden
+    or inward tick, the labels went on standing a tick-length further out --
+    outside the band reserved for them, over the edge of the control.
+
+    AND INSIDE TURNS IT ROUND. `axisLabel.inside` gave the gutter back and
+    left the label exactly where it was, which is `show: false` with the text
+    still drawn in the margin. Negating the gap moves it across the axis line
+    and the anchors below have to follow it, or it reads outward from a point
+    inside and straddles the line it was moved off. }
+  gap := AxisScaleF(ASpec.LabelMarginLogical, APPI);
+  { THE TICK COUNTS ONLY WHEN IT IS IN THE WAY -- that is, when it points the
+    same way the label does. An outward tick under an INSIDE label is on the
+    other side of the axis line entirely and standing the label clear of it
+    would push it a tick-length too far into the plot. }
+  if ASpec.ShowTicks and (ASpec.TickInside = ASpec.LabelInside) then
+    gap := gap + Max(Double(0), AxisScaleF(ASpec.TickLengthLogical, APPI));
+  if ASpec.LabelInside then gap := -gap;
   if AxisIsHorizontal(ASpec.Side) then
     len := TyRectFWidth(APlot)
   else
@@ -652,14 +692,16 @@ begin
           Result[i].X := APlot.Left + ASpec.Positions[i] * len;
           Result[i].Y := APlot.Bottom + gap;
           Result[i].AnchorH := tahCentre;
-          Result[i].AnchorV := tavTop;
+          if ASpec.LabelInside then Result[i].AnchorV := tavBottom
+          else Result[i].AnchorV := tavTop;
         end;
       asTop:
         begin
           Result[i].X := APlot.Left + ASpec.Positions[i] * len;
           Result[i].Y := APlot.Top - gap;
           Result[i].AnchorH := tahCentre;
-          Result[i].AnchorV := tavBottom;
+          if ASpec.LabelInside then Result[i].AnchorV := tavTop
+          else Result[i].AnchorV := tavBottom;
         end;
       asLeft:
         begin
@@ -669,7 +711,8 @@ begin
           base := APlot.Bottom - ASpec.Positions[i] * len;
           Result[i].X := APlot.Left - gap;
           Result[i].Y := base;
-          Result[i].AnchorH := tahRight;
+          if ASpec.LabelInside then Result[i].AnchorH := tahLeft
+          else Result[i].AnchorH := tahRight;
           Result[i].AnchorV := tavMiddle;
         end;
       asRight:
@@ -677,7 +720,8 @@ begin
           base := APlot.Bottom - ASpec.Positions[i] * len;
           Result[i].X := APlot.Right + gap;
           Result[i].Y := base;
-          Result[i].AnchorH := tahLeft;
+          if ASpec.LabelInside then Result[i].AnchorH := tahRight
+          else Result[i].AnchorH := tahLeft;
           Result[i].AnchorV := tavMiddle;
         end;
     end;

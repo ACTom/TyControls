@@ -609,6 +609,8 @@ var
     fixLo, fixHi: Boolean;
     ivl: Double;
     minor: Integer;
+    minorSplit: Integer;
+    wantMinor: Boolean;
     sub2: TJSONData;
     feeders: TTyIntegerArray;
     lo, hi, dlo, dhi, minIvl, maxIvl, gapLo, gapHi: Double;
@@ -745,26 +747,54 @@ var
       d := node.Find('interval');
       if (d <> nil) and (d.JSONType = jtNumber) and (d.AsFloat > 0) then
         ivl := d.AsFloat;
-      { minorTick: { show: true, splitNumber: n }. Off unless asked for -- an
-        axis that grows a second set of lines just by being drawn is not what
-        anybody wrote. Upstream's default split is 5. }
+      { minorTick: { splitNumber: n }. Off unless asked for -- an axis that
+        grows a second set of lines just by being drawn is not what anybody
+        wrote. Upstream's default split is 5. }
       d := node.Find('minInterval');
       if (d <> nil) and (d.JSONType = jtNumber) then minIvl := d.AsFloat;
       d := node.Find('maxInterval');
       if (d <> nil) and (d.JSONType = jtNumber) then maxIvl := d.AsFloat;
 
+      { THE SPLIT NUMBER IS NOT `minorTick.show`. Upstream's
+        getMinorTicksCoords reads `minorTick.splitNumber` and nothing else --
+        the two SHOW questions, one for the marks and one for the grid, are
+        asked later and separately, by the axis furniture.
+
+        Tying the coordinates to `minorTick.show` had two consequences. The
+        visible one: `minorSplitLine: { show: true }` on its own drew
+        nothing, because there were no minor ticks to draw it at. The other
+        was invisible and worse -- it made both furniture gates unobservable,
+        since a minor tick could not exist unless the same option that
+        created it had also asked to draw it. Mutating either gate away
+        changed no pixel anywhere, which is how this was found.
+
+        Still not computed unless SOMEBODY asked, though: upstream builds the
+        subdivisions of every value axis on every frame and this does not
+        need to. Either of the two options counts as asking. }
+      minorSplit := 5;
+      wantMinor := False;
       d := node.Find('minorTick');
       if (d <> nil) and (d.JSONType = jtObject) then
       begin
+        sub2 := TJSONObject(d).Find('splitNumber');
+        if (sub2 <> nil) and (sub2.JSONType = jtNumber) then
+          minorSplit := Trunc(sub2.AsFloat);
         sub2 := TJSONObject(d).Find('show');
-        if (sub2 <> nil) and (sub2.JSONType = jtBoolean) and sub2.AsBoolean then
-        begin
-          minor := 5;
-          sub2 := TJSONObject(d).Find('splitNumber');
-          if (sub2 <> nil) and (sub2.JSONType = jtNumber) then
-            minor := Trunc(sub2.AsFloat);
-        end;
+        wantMinor := (sub2 <> nil) and (sub2.JSONType = jtBoolean)
+                     and sub2.AsBoolean;
       end;
+      d := node.Find('minorSplitLine');
+      if (d <> nil) and (d.JSONType = jtObject) then
+      begin
+        sub2 := TJSONObject(d).Find('show');
+        if (sub2 <> nil) and (sub2.JSONType = jtBoolean) and sub2.AsBoolean
+          then wantMinor := True;
+      end;
+      { Upstream's own guard on the number, verbatim: out of (0, 100) and it
+        goes back to five rather than subdividing an axis into nothing or
+        into a thousand. }
+      if (minorSplit <= 0) or (minorSplit >= 100) then minorSplit := 5;
+      if wantMinor then minor := minorSplit;
     end;
 
     if lo > hi then Exit;

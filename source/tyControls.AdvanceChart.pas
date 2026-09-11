@@ -25,7 +25,7 @@ unit tyControls.AdvanceChart;
   the chart follows a skin instead of looking pasted onto one. }
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType,
+  Classes, SysUtils, Math, Types, Controls, Graphics, LCLType,
   BGRABitmap,
   tyControls.Types, tyControls.Base, tyControls.Painter, tyControls.StyleModel,
   tyControls.AdvChart.Types, tyControls.AdvChart.Option,
@@ -611,6 +611,9 @@ var
   scaleTicks: TTyScaleTickArray;
   spec: PTyAxisLayoutSpec;
   places: TTyAxisLabelPlacementArray;
+  furn: TTyAxisFurniture;
+  areaS: TTyStyleSet;
+  bandLo, bandHi: Double;
 
   { THE BOX IS THE TRANSLATION. The layout layer says "this point, with the
     text hanging off it this way"; the painter aligns text INSIDE a rectangle.
@@ -621,6 +624,26 @@ var
     wrong in a way worth remembering: a right-anchored label kept the old
     symmetric box, so right-justifying inside it put the text's right edge a
     whole width PAST the anchor -- straight through the tick marks. }
+  { The same two anchors DrawTextRotated wants, which takes the point and the
+    alignments rather than a rectangle. }
+  function AnchorAlign(AH2: TTyTextAnchorH): TAlignment;
+  begin
+    case AH2 of
+      tahLeft: Result := taLeftJustify;
+      tahRight: Result := taRightJustify;
+    else Result := taCenter;
+    end;
+  end;
+
+  function AnchorLayout(AV: TTyTextAnchorV): TTextLayout;
+  begin
+    case AV of
+      tavTop: Result := tlTop;
+      tavBottom: Result := tlBottom;
+    else Result := tlCenter;
+    end;
+  end;
+
   function AnchorBox(AX, AY: Double; AW, AH: Integer;
     AH2: TTyTextAnchorH; AV: TTyTextAnchorV): TRect;
   begin
@@ -735,6 +758,7 @@ begin
   tickStyle := model.ResolveStyle('TyAdvChartAxisTick', '', []);
   labelS := model.ResolveStyle('TyAdvChartAxisLabel', '', []);
   splitS := model.ResolveStyle('TyAdvChartSplitLine', '', []);
+  areaS := model.ResolveStyle('TyAdvChartSplitArea', '', []);
 
   horiz := AAxis.Horizontal;
   { The axis sits on the edge of the plot its side names. }
@@ -742,10 +766,6 @@ begin
   if AAxis.Side = asTop then at := APlot.Top;
   if AAxis.Side = asRight then at := APlot.Right;
 
-  tickLen := APainter.ScaleF(ActiveController.Metric(TyAdvChartTickLenVar,
-    TyAdvChartTickLen));
-  minorLen := APainter.ScaleF(ActiveController.Metric(TyAdvChartMinorTickLenVar,
-    TyAdvChartMinorTickLen));
 
   { THE THINNING STEP, READ FROM THE LAYOUT. It used to be computed halfway
     down this procedure, after the split lines had already been drawn -- so the
@@ -759,6 +779,45 @@ begin
     plot rect; it records what it decided and this reads it. }
   spec := nil;
   if AGrid <> nil then spec := AGrid.SpecFor(AAxis);
+  { WHAT THIS AXIS ACTUALLY DRAWS. Resolved once by the builder, from the
+    option AND from upstream's per-type defaults -- which is where most of
+    the answers come from: on a chart with no axis option written at all, the
+    category axis draws its domain line and nothing else, and the value axis
+    draws its split lines and nothing else. }
+  furn := Default(TTyAxisFurniture);
+  furn.ShowLine := True;
+  furn.ShowTicks := True;
+  furn.ShowLabels := True;
+  if AGrid <> nil then furn := AGrid.FurnitureFor(AAxis);
+
+  { THE TICK'S LENGTH, and it has to be asked AFTER the two lines above. It
+    used to be asked first -- reading `spec` and `furn` before either was
+    resolved, so an authored `axisTick.length` and `axisTick.inside` were both
+    decided by whatever was on the stack. The layout half was right and the
+    paint half was reading uninitialised memory, which is a difference no
+    assertion about the plot rectangle could ever see. }
+  { THE SPEC'S LENGTH, not the theme metric over again: FillSpec has already
+    laid the option over the theme, and the layout reserved the gutter from
+    exactly that number. Asking the theme a second time here is how the
+    reserved band and the drawn mark come to disagree. }
+  tickLen := APainter.ScaleF(ActiveController.Metric(TyAdvChartTickLenVar,
+    TyAdvChartTickLen));
+  if spec <> nil then tickLen := APainter.ScaleF(spec^.TickLengthLogical);
+  minorLen := APainter.ScaleF(ActiveController.Metric(TyAdvChartMinorTickLenVar,
+    TyAdvChartMinorTickLen));
+  if not IsNan(furn.MinorTickLengthLogical) then
+    minorLen := APainter.ScaleF(furn.MinorTickLengthLogical);
+  { INSIDE TURNS THEM ROUND -- BOTH OF THEM. A negative length points the mark
+    into the plot, which is the whole of what the option does, and the layout
+    has already stopped reserving room outside for it. There is no
+    `minorTick.inside`: upstream flips one tickDirection and every mark on the
+    axis follows it, so majors pointing in with minors still pointing out is
+    not a state upstream can reach. }
+  if furn.TickInside then
+  begin
+    tickLen := -tickLen;
+    minorLen := -minorLen;
+  end;
   step := 1;
   if (spec <> nil) and (spec^.LabelStep > 0) then step := spec^.LabelStep;
   batched := 0;
@@ -775,7 +834,36 @@ begin
     interval between two majors, so once the majors are being hidden the
     subdivisions of an interval nobody can see are noise -- and they are the
     densest thing on the axis, which makes them the worst noise to keep. }
-  if (tpBorderColor in minorSplitS.Present) and (step = 1) then
+  { SPLIT AREAS FIRST, because everything else is drawn ON them. Alternating
+    bands between consecutive divisions -- so N divisions give N-1 bands, and
+    the ones the theme paints are every other one. The key has been in
+    light.tycss since item 18 with nothing that could draw with it.
+
+    THE BANDS RUN BETWEEN THE SPLIT LINES, which on a banded category axis
+    means between the band EDGES: one shaded band per category, which is what
+    makes the alternating stripe line up with the bars rather than straddle
+    them. }
+  if furn.ShowSplitArea and (tpBackground in areaS.Present) then
+  begin
+    ticks := AAxis.TickCoords;
+    for i := 0 to High(ticks) - 1 do
+    begin
+      if i mod 2 <> 0 then Continue;
+      bandLo := ticks[i];
+      bandHi := ticks[i + 1];
+      if horiz then
+        APainter.FillBackground(
+          Rect(Round(bandLo), Round(APlot.Top),
+               Round(bandHi), Round(APlot.Bottom)), areaS.Background, 0)
+      else
+        APainter.FillBackground(
+          Rect(Round(APlot.Left), Round(bandLo),
+               Round(APlot.Right), Round(bandHi)), areaS.Background, 0);
+    end;
+  end;
+
+  if furn.ShowMinorSplitLine
+    and (tpBorderColor in minorSplitS.Present) and (step = 1) then
   begin
     scaleTicks := AAxis.Scale.GetTicks;
     APainter.BeginPath;
@@ -791,7 +879,7 @@ begin
     StrokeBatch(minorSplitS);
   end;
 
-  if tpBorderColor in splitS.Present then
+  if furn.ShowSplitLine and (tpBorderColor in splitS.Present) then
   begin
     ticks := AAxis.TickCoords;
     APainter.BeginPath;
@@ -799,6 +887,11 @@ begin
     begin
       { THINNED WITH THE LABELS, on the same step the ticks use. }
       if (step > 1) and (i mod step <> 0) then Continue;
+      { THE TWO ON THE ENDS ARE SEPARATELY DENIABLE. A grid line on the axis'
+        own extreme sits exactly on the plot's edge, doubling whatever border
+        is already there, and these are the keys that turn it off. }
+      if (i = 0) and (not furn.ShowMinLine) then Continue;
+      if (i = High(ticks)) and (not furn.ShowMaxLine) then Continue;
       along := ticks[i];
       if horiz then
         BatchLine(along, APlot.Top, along, APlot.Bottom, LineWidth(splitS))
@@ -811,7 +904,7 @@ begin
   { The domain line. Present, not colour: an undeclared colour resolves to
     alpha zero, so testing the colour would draw an invisible line and call it
     drawn. }
-  if tpBorderColor in lineS.Present then
+  if furn.ShowLine and (tpBorderColor in lineS.Present) then
   begin
     APainter.BeginPath;
     if horiz then
@@ -821,13 +914,17 @@ begin
     StrokeBatch(lineS);
   end;
 
-  ticks := AAxis.TickCoords;
+  { ALIGNED WITH THE LABELS OR WITH THE BAND EDGES. On a banded category axis
+    the two are half a band apart, and which one a tick means is exactly what
+    the option exists to say -- the split lines above keep the edges either
+    way, because a divider that pointed at a label would not divide anything. }
+  ticks := AAxis.TickCoords(furn.AlignWithLabel);
   { THE MARKS THIN WITH THE LABELS. Drawing every tick under a thinned set of
     labels reads as an axis that lost its labels rather than one that spaced
     them out, and computing the step by a second route is how the two drift --
     which is why `step` is worked out once, above, and the split lines use the
     same one. }
-  if tpBorderColor in tickStyle.Present then
+  if furn.ShowTicks and (tpBorderColor in tickStyle.Present) then
   begin
     APainter.BeginPath;
     for i := 0 to High(ticks) do
@@ -856,7 +953,8 @@ begin
     a fraction hardcoded here. --advchart-minor-tick-length, its constant and
     its default have all been in place since item 18 with nothing reading them,
     so a skin that set it changed nothing. }
-  if (tpBorderColor in minorTickS.Present) and (step = 1) then
+  if furn.ShowMinorTick and (tpBorderColor in minorTickS.Present)
+    and (step = 1) then
   begin
     scaleTicks := AAxis.Scale.GetTicks;
     APainter.BeginPath;
@@ -949,6 +1047,23 @@ begin
       begin
         maxW := Round(APainter.ScaleF(spec^.LabelWidthLogical));
         if maxW < lblW then lblW := maxW;
+      end;
+      { TURNED, WHEN THE AUTHOR ASKED FOR IT. The layout has measured the
+        turned extent since item 12 and nothing ever drew the turn, so an
+        `axisLabel: { rotate: 45 }` bought a deeper gutter and put flat text in
+        it. Counter-clockwise positive on both sides -- upstream's and the
+        painter's -- so the angle passes straight through.
+
+        DrawTextRotated takes the anchor as a POINT plus the alignments that
+        say where in the text box it sits, which is what the placement already
+        carries; AnchorBox exists only because the flat path needs a rect. }
+      if spec^.RotationRad <> 0 then
+      begin
+        APainter.DrawTextRotated(places[i].Text, labelS.FontName,
+          ResolveFontSize(labelS), labelS.FontWeight, labelS.TextColor,
+          places[i].X, places[i].Y, spec^.RotationRad,
+          AnchorAlign(places[i].AnchorH), AnchorLayout(places[i].AnchorV));
+        Continue;
       end;
       APainter.DrawText(
         AnchorBox(places[i].X, places[i].Y, lblW, lblH,

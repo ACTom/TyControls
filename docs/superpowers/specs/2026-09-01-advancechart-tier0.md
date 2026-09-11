@@ -2956,3 +2956,157 @@ consistent when toggling legend.」
 直接继承 `TJSONData`,**既不是数组也不是对象**——所以循环里那两个 `is` 判断
 本来就会放它过去。守卫留着是因为它**把规则说出了口**:
 上游是**故意**跳过 null 的,读代码的人不该为了看懂这一点先去查另一个库的类继承。
+
+## 48. Tier 1 第十四批:一根轴到底画了什么(2026-09-11)
+
+一根 `xAxis: { data: [...] }`、一根 `yAxis: {}`,一句轴配置都没写。
+上游对这张图回答了六个问题,三个是、三个否:
+
+| | 轴线 | 刻度 | 分隔线 |
+|---|---|---|---|
+| 类目 x | **画** | 不画 | 不画 |
+| 数值 y | 不画 | 不画 | **画** |
+
+端口六个全画。**一句配置没写就错四个**,而且错在最常见的那张图上——
+柱状图看起来是「关在盒子里的柱子」,不是「网格上的柱子」。
+
+这一批之前所有的断言都是绿的,因为它们问的是「轴画出来了吗」。
+
+### `'auto'` 是第三种值,不是 true 的别名
+
+上游只在两个地方写 `'auto'`:轴线和刻度。规则在
+`cartesianAxisHelper.ts`:
+
+```
+axisLineAutoShow = axisTickAutoShow = false
+遍历本 grid 的每个 cartesian:
+    若「另一维那根轴」的 scale 是 interval 或 log:
+        两个都置 true
+        若本轴是 category 且 onBand:axisTickAutoShow = false
+```
+
+两处容易错:
+
+**一,遍历的是 cartesian,不是「我这一对」。** 它问的是本 grid 里
+*任意一个* cartesian 的对侧轴,不管本轴在不在那个 cartesian 里。
+
+**二,time 不算数轴。** `isIntervalOrLogScale` 就是
+`type = 'interval' or type = 'log'` 两句,而 time scale 的 type 是
+`'time'`。上游规则上面那行注释写得很直白:"not show axisTick or axisLine
+if other axis is category / time"。所以时间轴对面那根数值轴 **不画轴线、
+不画刻度**——同一张图上两根轴的答案是反的。
+
+刻度那条 `onBand` 追加子句,就是柱状图类目下面没有刻度的原因:两个 band
+中间的一道刻度什么也没指。写 `boundaryGap: false` 刻度就回来了。
+
+### 各类型的默认值(从 `axisDefault.ts` 抄的)
+
+共享块:`axisLine.show true`、`axisTick.show true`、`splitLine.show true`、
+`splitArea.show false`。然后:
+
+- **category**:`splitLine.show` 改 false、`axisTick.show` 改 `'auto'`、
+  `alignWithLabel false`
+- **value**:`axisLine.show` 和 `axisTick.show` 都改 `'auto'`、
+  `minorTick.show false`、`minorSplitLine.show false`
+- **time**:继承 value,再把 `splitLine.show` 改回 false
+- **log**:`defaults({logBase: 10}, valueAxis)` —— 和 value 一模一样,
+  所以它 **保留** 分隔线,而且对面那根轴看它算数轴
+
+### 布局和绘制是两半,而它们本来对不上
+
+`TyAxisThickness` 说「图区让出多少」,`TyLayoutAxisLabels` 说「文字放在
+让出来的那块里的哪儿」。两个函数写在不同时候。这一批让 thickness 不再为
+「没画的刻度」收费之后,placement 还在把标签往外推一个刻度长——**推到了
+为它留的那条带子外面**,越过控件边缘。
+
+现在两边用同一句算式,而且都遵守同一条规则:**只为挡在路上的东西收费**。
+向内的刻度、向内的标签,外面一律不占。`axisLabel.inside` 配 `axisTick`
+向外时,刻度在轴线另一侧、根本不在两者之间,所以也不算。
+
+顺带:`axisLabel.inside` 原来只把地方还了,标签没动——等于「关掉标签,
+但字还画在页边距上」。锚点也得跟着翻,不然它从一个在里面的点往外读,
+正好骑在刚挪开的那条轴线上。
+
+### 四个照文档做就会错的地方
+
+**一,`-1` 不能当哨兵。** `axisTick.length: -5` 在上游是合法的,负号就是
+方向(`tickEndCoord = tickDirection * length`)。用 -1 表示「主题说了算」
+会把作者写的每一个负数吞掉,而且没有别的写法。改用 `NaN`。
+
+**二,`GetTicks` 一个数组里装了主次两种刻度。** `Level` 字段区分。
+`TickCoords` 整个数组照单全收——于是 `minorTick: { show: true }` 会把
+**主** 分隔线也画到每个细分位置上,一道变五道,而且是主样式。
+次刻度的画法自己去问 `GetTicks` 并反过来测 `Level`,所以这一处从来没暴露。
+
+**三,`minorTick` 没有 `inside`。** 上游翻的是一个 `tickDirection`,
+轴上所有刻度跟着翻。「主刻度朝内、次刻度朝外」不是上游能到达的状态——
+而布局已经不给外面留地方了,次刻度会画到别人身上。
+
+**四,`show: false` 的轴必须把地方还回来。** 上游对隐藏的轴 **什么都不建**,
+折算收缩时再跳过一次。端口只在 **绘制** 时藏:`yAxis: { show: false }`
+不画数字,照样给数字留位置——左边一条空白页边距,而且没法关掉。
+
+### 测试抓出来的那个:画的那一半在读未初始化内存
+
+`PaintAxis` 里 `tickLen` 那段在 `spec` 和 `furn` 赋值 **之前**。两个都是
+普通局部变量(record 里只有 Boolean 和 Double,指针是裸指针),FPC 谁也不清零。
+于是:
+
+- `axisTick.length: 20` 对画出来的刻度毫无影响(还是主题的 5),
+  而 `TyAxisThickness` 已经按 20 留好了地方——留的带子和画的marks对不上
+- `axisTick.inside` 的正负号取决于栈上残留的字节
+- `spec^.TickLengthLogical` 每画一根轴就解一次未初始化的指针
+
+布局那一半是对的,绘制那一半在读垃圾。**任何关于 plot rect 的断言都看不见
+这个差别**——`TestAnInsideTickPointsIntoThePlot` 数像素才数出来。
+
+### 不在这一批里
+
+`onZero`、`offset`、`nameLocation`/`nameGap`/`nameRotate`、
+`axisLabel.formatter`、`axisLabel.interval`、`showMinLabel`/`showMaxLabel`、
+`lineStyle` 的颜色(等配色那一行)、多根轴。
+
+还有一个 **故意留的偏差**:`splitArea.areaStyle.color` 上游是一个颜色
+**列表**,每条带子轮流取,默认两个几乎一样的半透明灰。端口按主题一个
+`TyAdvChartSplitArea` 令牌隔一条画一条——在默认值下肉眼等价(等于其中一色
+全透明),而「作者自己写颜色列表」属于配色那一行。
+
+### 变异测试:三轮 63 个,最后 0 个存活
+
+第一轮 52 个,活了 4 个,**每一个都指着一样真东西**:
+
+**一,`yIsValue` 那半边从来没承重。** 时间轴只出现在 x 上,所以「另一族里
+有没有数轴」的 y 那一次遍历怎么写都一样——补了一条日期在纵轴上的图。
+
+**二,一个真正的等价变异体**,而且是我自己挑错了目标:我变的是
+`FurnitureFor` 里那句 **越界检查** `XAxisCount + i <= High(FFurniture)`,
+不是真正取值的下标。换成变下标本身,一下子挂了 17 条。
+
+**三和四,两个 minor 门控双双存活**,而原因正是记忆里写过的那句:
+「存活的变异体值得查,因为它看不见,可能是因为代码本来就已经悄悄错了。」
+
+`minorTick.show` 同时管着两件事:**要不要算出细分刻度**,和 **要不要画那些
+marks**。于是细分刻度不可能在「没人要画它」的时候存在,两个门控怎么变都
+不改一个像素。上游 `getMinorTicksCoords` 只读 `minorTick.splitNumber`,
+根本不看 `show`——两个 show 是后面分开问的。
+
+拆开之后带出一个本来就有的洞:**`minorSplitLine: { show: true }` 单独写
+什么也画不出来**,因为没有细分刻度给它落。
+
+第二轮 9 个(4 个重跑 + 2 个 minor 门控 + 3 个新拆出来的 Series 决策),
+活了 2 个:
+
+- minor tick 门控还活着——**我新写的探针看不见它要断言的东西**:次刻度被
+  我覆写成绿色,而 `RedRunsDown` 判的是 `red > green + 40`,绿色永远不成立。
+  「没画 marks」这条断言是空的,画没画都是 0。改成同一个颜色、靠几何分开:
+  次分隔线横跨图区,次刻度挂在图区左边外面。
+- `minorTick.splitNumber` 读了但没人断言。
+
+第三轮 2 个,全挂。
+
+### 留在外面的一个老毛病
+
+画出来的坐标轴标签会被削掉末尾两三个像素(`Mon` 成了 `Mo`、`200` 成了
+`20(`)。用 HEAD 渲同一张图确认过:**这一批之前就是这样**,不是这次改出来的。
+量文本的那条路已经取了两个光栅器里较大的那个宽度,所以问题在画的那一侧,
+单独一批修。

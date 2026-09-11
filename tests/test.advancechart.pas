@@ -459,7 +459,12 @@ begin
     stayed green. }
   { No series: this counts vertical ink across the middle of the plot, and a
     bar is vertical ink. }
-  FChart.Option := '{ xAxis: { data: [''A'', ''B'', ''C'', ''D''] },'
+  { SPLIT LINES ASKED FOR BY NAME. A category axis does not draw them by
+    default -- that is upstream's behaviour and item 15's headline finding --
+    so the vertical grid counted here exists because the option says so. The
+    subject is still WHERE the lines land, not whether they appear. }
+  FChart.Option := '{ xAxis: { data: [''A'', ''B'', ''C'', ''D''],'
+    + ' splitLine: { show: true } },'
     + ' yAxis: { min: 0, max: 10 }, series: [] }';
   Draw;
   gb := FChart.Build.Grid(0);
@@ -537,9 +542,13 @@ begin
     pixels of ink -- and the axis LINE's own antialiasing, spread down the whole
     height of the plot, supplied them. It passed with every tick mark removed. }
   { No series -- see TestAValueAxisLabelsItsTicks: the background reference
-    comes from inside the plot. }
+    comes from inside the plot.
+
+    TICKS ASKED FOR BY NAME: a value axis' `axisTick.show` is `auto`, and
+    against a banded category x that resolves to no. }
   FChart.Option := '{ xAxis: { data: [''A'', ''B'', ''C''] },'
-    + ' yAxis: { min: 0, max: 30 }, series: [] }';
+    + ' yAxis: { min: 0, max: 30, axisTick: { show: true } },'
+    + ' series: [] }';
   Draw;
   gb := FChart.Build.Grid(0);
   left := Round(gb.PlotRect.Left);
@@ -949,7 +958,8 @@ begin
     whatever the accent happens to be. Alone that row was fine; in the full run
     it found one wide red band instead of four narrow ones. The SetUp comment in
     this file records the same trap for the tick-mark test. }
-  FChart.Option := '{ xAxis: { data: [''A'', ''B'', ''C'', ''D''] },'
+  FChart.Option := '{ xAxis: { data: [''A'', ''B'', ''C'', ''D''],'
+    + ' splitLine: { show: true } },'
     + ' yAxis: { min: 0, max: 100 },'
     + ' series: [{ type: ''bar'', data: [1, 1, 1, 1] }] }';
   Draw;
@@ -1355,7 +1365,8 @@ begin
     count is of split lines and nothing else. }
   FCtl.StyleOverride := 'TyAdvChartSplitLine { border-color: #FF0000;'
     + ' border-width: 1px; }';
-  FChart.Option := '{ xAxis: { data: [' + ManyCategories(120) + '] },'
+  FChart.Option := '{ xAxis: { data: [' + ManyCategories(120) + '],'
+    + ' splitLine: { show: true } },'
     + ' yAxis: { min: 0, max: 100 },'
     + ' series: [{ type: ''bar'', data: [1] }] }';
   Draw;

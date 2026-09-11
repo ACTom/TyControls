@@ -370,13 +370,35 @@ begin
   Result := (DataToCoord(AValue) - a) / (b - a);
 end;
 
+{ The Level-0 members of a tick array, in order. }
+function TyMajorTicks(const ATicks: TTyScaleTickArray): TTyScaleTickArray;
+var i, n: Integer;
+begin
+  SetLength(Result, Length(ATicks));
+  n := 0;
+  for i := 0 to High(ATicks) do
+    if ATicks[i].Level = 0 then
+    begin
+      Result[n] := ATicks[i];
+      Inc(n);
+    end;
+  SetLength(Result, n);
+end;
+
 function TTyAxis.TickCoords(AAlignWithLabel: Boolean): TTyDoubleArray;
 var
   ticks: TTyScaleTickArray;
   i, n: Integer;
   bw, dir: Double;
 begin
-  ticks := FScale.GetTicks;
+  { MAJORS ONLY. GetTicks hands majors and minors back in ONE array with Level
+    saying which is which, and everything that reads this function -- the tick
+    marks, the split lines, the split-area band edges -- is asking about
+    majors. Taking the array whole meant `minorTick: { show: true }` drew the
+    minor grid a second time in the MAJOR style, and put a full-length tick
+    mark at every subdivision. The minor painters ask FScale.GetTicks
+    themselves and test Level the other way round. }
+  ticks := TyMajorTicks(FScale.GetTicks);
   n := Length(ticks);
   if n = 0 then Exit(nil);
 
