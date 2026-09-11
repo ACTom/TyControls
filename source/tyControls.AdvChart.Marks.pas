@@ -41,7 +41,8 @@ uses
   tyControls.AdvChart.Scale, tyControls.AdvChart.Coord,
   tyControls.AdvChart.Data, tyControls.AdvChart.Shape,
   tyControls.AdvChart.Paint, tyControls.AdvChart.Series,
-  tyControls.AdvChart.BarLayout, tyControls.AdvChart.Symbol;
+  tyControls.AdvChart.BarLayout, tyControls.AdvChart.Symbol,
+  tyControls.AdvChart.Labels, tyControls.AdvChart.LabelOpt;
 
 type
   { Where a stepped line turns. ECharts spells `step: true` as 'start'. }
@@ -115,6 +116,14 @@ type
       series default; here it is a theme key, so a dark skin does not get a
       pale grey band across it. }
     BackgroundFill: TTyChartColor;
+    { The words on each mark, and how they are chosen. Carried here for the
+      same reason the bar column is: it was decided somewhere else. }
+    Label_: TTyLabelSpec;
+    { Which store column `{c}` and the default text read. -1 means neither
+      has a value to show. }
+    LabelValueDim: Integer;
+    { `{a}`. The option's own series name, resolved by the control. }
+    SeriesName: string;
   end;
 
 { A visual with the defaults: a filled mark, no stroke, upstream's bar gap. }
@@ -368,6 +377,20 @@ end;
 
 { The element every mark starts from: this series' colours, and a datum
   reference so the hit test can answer with the row the pointer is over. }
+{ The words one mark says, or '' when its series draws no labels.
+
+  AStore is the series' own store, so `{c}` and `{@dim}` read the row that is
+  being drawn rather than a row somebody passed separately. }
+function CaptionFor(const AVisual: TTySeriesVisual; AStore: TTyDataStore;
+  ARow: Integer): string;
+begin
+  Result := '';
+  if not AVisual.Label_.Show then Exit;
+  if AVisual.Label_.Position = tlpNone then Exit;
+  Result := TyLabelText(AVisual.Label_.Formatter, AVisual.Label_.DefaultText,
+    AStore, ARow, AVisual.SeriesName, AVisual.LabelValueDim, 0, False);
+end;
+
 function MarkElement(const AShape: TTyChartShape; const AVisual: TTySeriesVisual;
   ASeries, ARow: Integer): TTyChartElement;
 begin
@@ -485,7 +508,7 @@ var
   col: TTyBarColumn;
   baseHoriz, haveCol, stacked: Boolean;
   shape: TTyChartShape;
-  bgEl: TTyChartElement;
+  bgEl, el: TTyChartElement;
 begin
   Result := 0;
   baseHoriz := (ABinding.BaseAxis = nil) or ABinding.BaseAxis.Horizontal;
@@ -635,7 +658,9 @@ begin
       shape := TyShapeRoundRect(r, col.Radii)
     else
       shape := TyShapeRect(r);
-    AList.Add(MarkElement(shape, AVisual, ABinding.SeriesIndex, i));
+    el := MarkElement(shape, AVisual, ABinding.SeriesIndex, i);
+    el.Caption.Text := CaptionFor(AVisual, AStore, i);
+    AList.Add(el);
     Inc(Result);
   end;
 end;
@@ -658,6 +683,7 @@ var
   var
     sh: TTyChartShape;
     sv: TTySeriesVisual;
+    el: TTyChartElement;
   begin
     Result := False;
     sh := TyBuildSymbol(AVisual.Symbol, AP.X, AP.Y);
@@ -673,7 +699,9 @@ var
       if AVisual.Symbol.Kind = tsyLine then sv.Fill := 0
       else sv.Fill := AVisual.EmptyFill;
     end;
-    AList.Add(MarkElement(sh, sv, ABinding.SeriesIndex, ARow));
+    el := MarkElement(sh, sv, ABinding.SeriesIndex, ARow);
+    el.Caption.Text := CaptionFor(AVisual, AStore, ARow);
+    AList.Add(el);
     Result := True;
   end;
 
@@ -929,6 +957,7 @@ begin
       else v.Fill := AVisual.EmptyFill;
     end;
     el := MarkElement(shape, v, ABinding.SeriesIndex, i);
+    el.Caption.Text := CaptionFor(AVisual, AStore, i);
     AList.Add(el);
     Inc(Result);
   end;

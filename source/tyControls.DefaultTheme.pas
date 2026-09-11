@@ -1218,6 +1218,20 @@ begin
     '   proportionate title instead of an 18px one on 11px axis labels. */' + LineEnding +
     'TyAdvChartTitle { color: var(--on-surface); font-size: var(--font-size-title); font-weight: 700; }' + LineEnding +
     'TyAdvChartSubtitle { color: var(--muted); font-size: var(--font-size-base); }' + LineEnding +
+    '/* A label OUTSIDE its mark: the theme''s own ink, not anything derived from the' + LineEnding +
+    '   thing it names. Upstream picks #333 or #ccc by mode; this is the same idea' + LineEnding +
+    '   said in the theme''s vocabulary. */' + LineEnding +
+    'TyAdvChartLabel { color: var(--on-surface); font-size: var(--font-size-base); }' + LineEnding +
+    '/* A label INSIDE its mark is a three-band table, not a light/dark pair, and the' + LineEnding +
+    '   order reads backwards until you see why: on a mid-dark fill you want maximum' + LineEnding +
+    '   contrast, but on a nearly black one the brightest ink glares and the dimmer' + LineEnding +
+    '   one is easier to read. Band 1 is therefore LIGHTER than band 2.' + LineEnding +
+    '     band 0 -- a light mark, so dark ink' + LineEnding +
+    '     band 1 -- a mid mark, so the brightest ink' + LineEnding +
+    '     band 2 -- a dark mark, so a softer light ink */' + LineEnding +
+    'TyAdvChartLabelOnLight { color: var(--on-surface); }' + LineEnding +
+    'TyAdvChartLabelOnMid   { color: var(--surface); }' + LineEnding +
+    'TyAdvChartLabelOnDark  { color: alpha(var(--surface), 0.80); }' + LineEnding +
     '' + LineEnding +
     '/* ── ListGroupPanel (navigation accordion; own keys, not the tree column header''s) ────── */' + LineEnding +
     '/* A modern sider: group rows carry NO fill (just muted ink + a right chevron; the OPEN group' + LineEnding +

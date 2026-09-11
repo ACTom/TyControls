@@ -37,6 +37,7 @@ uses
   tyControls.AdvChart.Marks, tyControls.AdvChart.BarLayout,
   tyControls.AdvChart.Stack, tyControls.AdvChart.Symbol,
   tyControls.AdvChart.Pie, tyControls.AdvChart.Title,
+  tyControls.AdvChart.Labels, tyControls.AdvChart.LabelOpt,
   fpjson, tyControls.SubPixel;
 
 const
@@ -114,7 +115,8 @@ type
     procedure PaintStatic(APainter: TTyPainter; const ARect: TRect;
       APPI: Integer; const AMeasurer: ITyTextMeasurer);
     { Every series' marks, in one list, ordered once. }
-    procedure PaintSeries(APainter: TTyPainter);
+    procedure PaintSeries(APainter: TTyPainter;
+      const AMeasurer: ITyTextMeasurer; APPI: Integer);
     { The theme colour for series ASeriesIndex, from the DERIVED ramp item 18
       landed: TyAdvChartSeries1..8, all of them computed from --accent so a skin
       that restyles the accent gets a matching chart for nothing. }
@@ -138,6 +140,10 @@ type
     procedure PaintTitles(APainter: TTyPainter);
     { One colour per SECTOR, not one per series: a pie is colorBy:data. }
     function PieVisual(ASlot: Integer): TTyPieVisual;
+    { The label spec for one series, resolved from the theme and the option. }
+    function LabelSpecFor(ASlot: Integer): TTyLabelSpec;
+    { `series.name`, which is what `{a}` in a label formatter means. }
+    function SeriesNameOf(ASlot: Integer): string;
     procedure PaintDynamic(APainter: TTyPainter; const ARect: TRect;
       APPI: Integer; const AMeasurer: ITyTextMeasurer);
     { Whether the dynamic layer would draw anything. False skips a whole
@@ -926,7 +932,7 @@ begin
 
   { AFTER THE AXES, so a bar sits on the grid rather than under it. Within the
     series, the paint list decides the order. }
-  PaintSeries(APainter);
+  PaintSeries(APainter, AMeasurer, APPI);
   { AND THE TITLE LAST. It floats over the container rather than reserving
     room, so anything it overlaps it is meant to overlap. }
   PaintTitles(APainter);
@@ -1142,11 +1148,50 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.PaintSeries(APainter: TTyPainter);
+function TTyAdvanceChart.SeriesNameOf(ASlot: Integer): string;
+var
+  d: TJSONData;
+  node: TJSONObject;
+begin
+  Result := '';
+  if FOption = nil then Exit;
+  d := FOption.ComponentAt('series', ASlot);
+  if (d = nil) or not (d is TJSONObject) then Exit;
+  node := TJSONObject(d);
+  d := node.Find('name');
+  if (d <> nil) and (d.JSONType = jtString) then Result := d.AsString;
+end;
+
+function TTyAdvanceChart.LabelSpecFor(ASlot: Integer): TTyLabelSpec;
+var
+  base: TTyLabelSpec;
+  outS, lightS, midS, darkS: TTyStyleSet;
+begin
+  base := TyLabelSpecNone;
+  outS := ActiveController.Model.ResolveStyle('TyAdvChartLabel', '', []);
+  lightS := ActiveController.Model.ResolveStyle('TyAdvChartLabelOnLight',
+    '', []);
+  midS := ActiveController.Model.ResolveStyle('TyAdvChartLabelOnMid', '', []);
+  darkS := ActiveController.Model.ResolveStyle('TyAdvChartLabelOnDark', '',
+    []);
+  base.FontName := outS.FontName;
+  base.FontSizeLogical := ResolveFontSize(outS);
+  base.FontWeight := outS.FontWeight;
+  base.OutsideColour := TTyChartColor(outS.TextColor);
+  base.InsideColour[0] := TTyChartColor(lightS.TextColor);
+  base.InsideColour[1] := TTyChartColor(midS.TextColor);
+  base.InsideColour[2] := TTyChartColor(darkS.TextColor);
+  if ASlot > High(FBindings) then Exit(base);
+  Result := TyLabelSpecOf(FOption, FBindings[ASlot].SeriesIndex, base);
+end;
+
+procedure TTyAdvanceChart.PaintSeries(APainter: TTyPainter;
+  const AMeasurer: ITyTextMeasurer; APPI: Integer);
 var
   list: TTyPaintList;
   i, drawn: Integer;
   v: TTySeriesVisual;
+  specs: TTyLabelSpecArray;
 begin
   if Length(FBindings) = 0 then Exit;
   { ONE LIST FOR EVERY SERIES, not one per series: the ordering rule is (Z, Z2,
@@ -1194,9 +1239,26 @@ begin
         INSERTION INDEX, and these are inserted in series order already. Two
         ways of saying the same thing, one of them inert. When series z and
         zlevel arrive they will set Z, and Z2 will have something to do. }
+      v.Label_ := LabelSpecFor(i);
+      { `{c}` and the default text read the VALUE column -- whichever axis is
+        not the base one. A label that read x on a bar chart would show the
+        category ordinal, which is a number and looks like an answer. }
+      v.LabelValueDim := -1;
+      if (FBindings[i].ValueAxis <> nil) and (FStores[i] <> nil) then
+        v.LabelValueDim := FStores[i].DimIndexOf(FBindings[i].ValueAxis.Dim);
+      v.SeriesName := SeriesNameOf(FBindings[i].SeriesIndex);
+      if Length(specs) <= FBindings[i].SeriesIndex then
+        SetLength(specs, FBindings[i].SeriesIndex + 1);
+      specs[FBindings[i].SeriesIndex] := v.Label_;
       Inc(drawn, TyBuildSeriesMarks(FBindings[i], FStores[i],
         StackFor(i), v, list));
     end;
+    { THE EXPANSION RUNS ONCE, HERE, AND NOTHING IS APPENDED AFTER IT. Each
+      caption's geometry is frozen from its host at this moment and the list
+      has no update path, so a mark added later would have no label and a mark
+      moved later would leave its label behind. }
+    if drawn > 0 then
+      TyExpandLabels(list, specs, AMeasurer, APPI);
     if drawn > 0 then
       TyRenderPaintList(APainter, list);
   finally

@@ -13,6 +13,7 @@ uses
   SysUtils, Math, Types,
   tyControls.AdvChart.Types, tyControls.AdvChart.Shape, tyControls.AdvChart.Paint,
   tyControls.Types,     // TTyColor: the render side speaks the library's colour type
+  tyControls.AdvChart.Measure,  // the anchor-to-LCL-alignment converters
   tyControls.Painter;
 
 { Trace one shape into the painter's current path. Does NOT begin the path: a
@@ -124,14 +125,92 @@ begin
   end;
 end;
 
+{ The ink a caption is drawn in, with the element's alpha baked in.
+
+  BAKED RATHER THAN SET, because the painter's two text entries write straight
+  to the bitmap while everything else in TyRenderElement goes through the
+  Canvas2D state -- so a caption drawn inside the SaveState block would quietly
+  disobey the alpha it appears to be inside. Folding it into the colour byte is
+  the honest version, and drawing after RestoreState is where it belongs. }
+function CaptionInk(AColour: TTyChartColor; AAlpha: Double): TTyColor;
+var a: Integer;
+begin
+  if AAlpha >= 1 then Exit(TTyColor(AColour));
+  if AAlpha < 0 then AAlpha := 0;
+  a := Round(((AColour shr 24) and $FF) * AAlpha);
+  Result := TTyColor((AColour and $00FFFFFF) or (Cardinal(a) shl 24));
+end;
+
+{ The box DrawText wants, hung off an anchor. }
+function CaptionBox(const AC: TTyElementCaption; AW, AH: Double): TRect;
+begin
+  case AC.AnchorH of
+    tahCentre: Result.Left := Round(AC.X - AW / 2);
+    tahRight: Result.Left := Round(AC.X - AW);
+  else
+    Result.Left := Round(AC.X);
+  end;
+  Result.Right := Result.Left + Round(AW);
+  case AC.AnchorV of
+    tavMiddle: Result.Top := Round(AC.Y - AH / 2);
+    tavBottom: Result.Top := Round(AC.Y - AH);
+  else
+    Result.Top := Round(AC.Y);
+  end;
+  Result.Bottom := Result.Top + Round(AH);
+end;
+
+procedure TyRenderCaption(P: TTyPainter; const AElement: TTyChartElement);
+var
+  b: TTyRectF;
+  ink: TTyColor;
+begin
+  if (P = nil) or (AElement.Caption.Text = '') then Exit;
+  ink := CaptionInk(AElement.Caption.Colour, AElement.Style.Alpha);
+  if AElement.Caption.RotationRad <> 0 then
+  begin
+    { NO RECT, so no clip and no ellipsis -- the rotated entry takes an anchor.
+      A truncating caption that is also rotated therefore overflows, and the
+      caption record says so where it is declared rather than here. }
+    P.DrawTextRotated(AElement.Caption.Text, AElement.Caption.FontName,
+      AElement.Caption.FontSizeLogical, AElement.Caption.FontWeight, ink,
+      AElement.Caption.X, AElement.Caption.Y, AElement.Caption.RotationRad,
+      TyAnchorToAlignment(AElement.Caption.AnchorH),
+      TyAnchorToLayout(AElement.Caption.AnchorV));
+    Exit;
+  end;
+  { THE SHAPE'S OWN RECT, not a box recomputed here. The label pass already put
+    the caption's bounds in the companion's shape so that the hit test and the
+    ink describe the same rectangle; recomputing would be a second answer to a
+    question that already has one. }
+  b := AElement.Shape.Bounds;
+  if TyRectFIsValid(b) then
+    P.DrawText(Rect(Round(b.Left), Round(b.Top), Round(b.Right), Round(b.Bottom)),
+      AElement.Caption.Text, AElement.Caption.FontName,
+      AElement.Caption.FontSizeLogical, AElement.Caption.FontWeight, ink,
+      TyAnchorToAlignment(AElement.Caption.AnchorH),
+      TyAnchorToLayout(AElement.Caption.AnchorV),
+      AElement.Caption.Truncate)
+  else
+    P.DrawText(CaptionBox(AElement.Caption, 0, 0),
+      AElement.Caption.Text, AElement.Caption.FontName,
+      AElement.Caption.FontSizeLogical, AElement.Caption.FontWeight, ink,
+      TyAnchorToAlignment(AElement.Caption.AnchorH),
+      TyAnchorToLayout(AElement.Caption.AnchorV),
+      AElement.Caption.Truncate);
+end;
+
 procedure TyRenderElement(P: TTyPainter; const AElement: TTyChartElement);
 var
   rule: TTyFillRule;
 begin
   if P = nil then Exit;
   { Nothing to draw is not an error -- a placeholder element with neither fill
-    nor stroke is a legitimate way to register a hit area with no ink. }
-  if (not AElement.Style.HasFill) and (AElement.Style.StrokeWidthLogical <= 0) then
+    nor stroke is a legitimate way to register a hit area with no ink. GLYPHS
+    COUNT AS INK: a caption fills no path and strokes nothing, and without
+    this it would be discarded one line before it was drawn. }
+  if (not AElement.Style.HasFill) and (AElement.Style.StrokeWidthLogical <= 0)
+    and (AElement.Caption.Text = '') then
     Exit;
   P.SaveState;
   try
@@ -155,6 +234,11 @@ begin
       exists to prevent. }
     P.RestoreState;
   end;
+  { AFTER RestoreState, and that is not tidiness. The painter writes text
+    straight to the bitmap rather than through the Canvas2D state, so a caption
+    drawn inside the block would ignore the alpha and the dash it appears to be
+    inside. Drawing it out here makes the bypass visible instead of hidden. }
+  TyRenderCaption(P, AElement);
 end;
 
 procedure TyRenderPaintList(P: TTyPainter; AList: TTyPaintList);

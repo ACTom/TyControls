@@ -51,9 +51,53 @@ type
     DataIndex: Integer;
   end;
 
+  { WORDS ON A MARK, and -- once the label pass has placed them -- everything
+    needed to draw them.
+
+    A MARK FILLS IN Text AND NOTHING ELSE. The label pass reads that, works
+    out where the words go against the mark's own bounds, and emits a SECOND
+    element with the rest filled in. So a caption with Text set and FontName
+    empty is a REQUEST, and one with both is an ANSWER; the two are never the
+    same element.
+
+    Why the words are not a shape kind: AdvChart.Shape imports no measurer on
+    purpose -- it is the pure hit-test layer and TyShapeBounds has to answer
+    from the record alone. A text kind would ask it a question it cannot
+    compute. The caption rides here instead, where resolved ink already is,
+    and the entry the label pass emits carries a plain rect the shape layer
+    understands completely. }
+  TTyElementCaption = record
+    Text: string;
+    FontName: string;
+    FontSizeLogical: Integer;
+    FontWeight: Integer;
+    { THE INK, and its own field rather than the style's FillColor -- a caption
+      has a rectangle so the pointer can find it, and that rectangle must not
+      be painted. Borrowing FillColor and leaving HasFill off would work and
+      would mean two things by one name. }
+    Colour: TTyChartColor;
+    { DEVICE px: the point the words hang off, and WHICH OF THEIR OWN EDGES is
+      pinned to it. Both are needed and they are different questions -- `top`
+      puts the anchor above the mark AND pins the caption's bottom edge there,
+      and that pairing is what turns a distance into a gap instead of an
+      overlap. }
+    X, Y: Double;
+    AnchorH: TTyTextAnchorH;
+    AnchorV: TTyTextAnchorV;
+    RotationRad: Double;
+    { A ROTATED CAPTION CANNOT BE TRUNCATED. The painter's rotated text entry
+      takes an anchor rather than a rect, so it has nowhere to clip and no
+      ellipsis; upstream truncates rotated labels and this does not. Stated
+      here rather than left for a caller to discover. }
+    Truncate: Boolean;
+  end;
+
   TTyChartElement = record
     Shape: TTyChartShape;
     Style: TTyChartElementStyle;
+    { Empty on everything that has nothing to say, which is almost every
+      element in a chart. }
+    Caption: TTyElementCaption;
     Z, Z2: Integer;
     { Painted, never hit. Grid lines, split areas and axis furniture are silent:
       without this a gridline drawn over a bar would swallow the hover the bar
@@ -125,7 +169,7 @@ end;
 
 function TyChartStyle: TTyChartElementStyle;
 begin
-  FillChar(Result, SizeOf(Result), 0);
+  Result := Default(TTyChartElementStyle);
   Result.HasFill := False;
   Result.StrokeWidthLogical := 0;
   Result.FillEvenOdd := False;
@@ -135,7 +179,12 @@ end;
 
 function TyChartElement(const AShape: TTyChartShape): TTyChartElement;
 begin
-  FillChar(Result, SizeOf(Result), 0);
+  { Default() rather than FillChar: the record now carries five managed
+    fields across three levels, and zeroing a record by bytes is only safe
+    while every one of them happens to be nil already. It is, here -- FPC
+    initialises a managed result before the body runs -- but the safety is
+    incidental and the next field added would not know that. }
+  Result := Default(TTyChartElement);
   Result.Shape := AShape;
   Result.Style := TyChartStyle;
   Result.Z := 0;

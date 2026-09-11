@@ -77,6 +77,7 @@ type
     procedure TestAPieIsDrawnOffItsOwnCentreWithAColourPerSector;
     procedure TestTheBackingStripIsDrawnInTheThemesOwnColour;
     procedure TestATitleIsDrawnWhereTheOptionPutIt;
+    procedure TestASeriesLabelIsDrawnAndTakesItsInkFromItsMark;
     procedure TestTwoBarSeriesStandSideBySideInsteadOfOnTopOfEachOther;
     procedure TestAStackedBarStandsOnTheOneBelowIt;
     procedure TestALayeredFrameDrawsTheSamePictureAsAWholeOne;
@@ -1629,6 +1630,122 @@ end;
 { Pixels in a rectangle that are strongly red. Used where the fixture has
   overridden a series colour to red, so the count is of that series and of
   nothing else on the canvas. }
+procedure TAdvanceChartTest.TestASeriesLabelIsDrawnAndTakesItsInkFromItsMark;
+var
+  gb: TTyGridBuild;
+  l, t, r, b, inside_, outside_, unlabelled, neither, one, both: Integer;
+begin
+  { LABELS ARE OFF UNLESS ASKED, so the same chart drawn twice -- once with a
+    label block and once without -- is the cleanest thing to count. Anything
+    that appears only in the first render is the label.
+
+    The ink is a THEME KEY, and overriding it red is what proves the label is
+    not drawn in the series colour by accident: the bar itself is overridden
+    green, so red pixels can only be glyphs. }
+  FCtl.StyleOverride := 'TyAdvChartSeries1 { background: #00FF00; }'
+    + ' TyAdvChartLabelOnLight { color: #FF0000; }'
+    + ' TyAdvChartLabelOnMid { color: #FF0000; }'
+    + ' TyAdvChartLabelOnDark { color: #FF0000; }';
+
+  FChart.Option := '{ xAxis: { data: [''A''] }, yAxis: { min: 0, max: 100 },'
+    + ' series: [{ type: ''bar'', data: [80] }] }';
+  Draw;
+  gb := FChart.Build.Grid(0);
+  l := Round(gb.PlotRect.Left);
+  t := Round(gb.PlotRect.Top);
+  r := Round(gb.PlotRect.Right);
+  b := Round(gb.PlotRect.Bottom);
+  unlabelled := RedIn(l, t, r, b);
+  AssertEquals('no label block, no glyphs', 0, unlabelled);
+
+  FChart.Option := '{ xAxis: { data: [''A''] }, yAxis: { min: 0, max: 100 },'
+    + ' series: [{ type: ''bar'', label: { show: true }, data: [80] }] }';
+  Draw;
+  gb := FChart.Build.Grid(0);
+  inside_ := RedIn(Round(gb.PlotRect.Left), Round(gb.PlotRect.Top),
+                   Round(gb.PlotRect.Right), Round(gb.PlotRect.Bottom));
+  AssertTrue(Format('the label is drawn (%d px)', [inside_]), inside_ > 10);
+
+  { AND WHERE THE OPTION PUT IT -- which also changes WHICH THEME KEY it takes.
+    `inside` reads the three contrast bands; `bottom` is outside the mark and
+    reads TyAdvChartLabel instead, because an outside label is never derived
+    from the thing it names. The override above deliberately covers only the
+    inside keys, so this next render finds no red until the outside key is
+    overridden too -- which is the assertion. }
+  AssertEquals('the inside keys do not reach an outside label', 0,
+    RedIn(Round(gb.PlotRect.Left), Round(gb.PlotRect.Bottom) - 20,
+          Round(gb.PlotRect.Right), Round(gb.PlotRect.Bottom) + 30));
+  FCtl.StyleOverride := FCtl.StyleOverride
+    + ' TyAdvChartLabel { color: #FF0000; }';
+  FChart.Option := '{ xAxis: { data: [''A''] }, yAxis: { min: 0, max: 100 },'
+    + ' series: [{ type: ''bar'', label: { show: true, position: ''bottom'' },'
+    + ' data: [80] }] }';
+  Draw;
+  gb := FChart.Build.Grid(0);
+  b := Round(gb.PlotRect.Bottom);
+  outside_ := RedIn(Round(gb.PlotRect.Left), b + 1,
+                    Round(gb.PlotRect.Right), b + 30);
+  { COUNTED AS `THERE, AND NOT IN THE MIDDLE` rather than as a pixel count.
+    Two digits at the theme's own size are a dozen pixels over the red
+    threshold and the exact number is the font's business, not this test's.
+    What the test is for is WHERE they went: below the bar's foot, and no
+    longer across its middle where `inside` had put them. }
+  AssertTrue(Format('`bottom` puts it under the bar (%d px)', [outside_]),
+    outside_ > 0);
+  AssertEquals('and no longer inside it', 0,
+    RedIn(Round(gb.PlotRect.Left), Round(gb.PlotRect.Top),
+          Round(gb.PlotRect.Right), b - 10));
+
+  { EACH SERIES KEEPS ITS OWN SPEC, and only two series can say so: with one,
+    an index bug that filed every spec under slot zero would read back the same
+    answer either way.
+
+    Counted as a ladder -- neither labelled, one labelled, both labelled -- so
+    the middle case has to land strictly between the other two. A version that
+    shared one spec across the chart would draw the middle case as one of the
+    ends. }
+  FChart.Option := '{ xAxis: { data: [''A''] }, yAxis: { min: 0, max: 100 },'
+    + ' series: [{ type: ''bar'', data: [80] },'
+    + ' { type: ''bar'', data: [60] }] }';
+  Draw;
+  gb := FChart.Build.Grid(0);
+  l := Round(gb.PlotRect.Left);
+  t := Round(gb.PlotRect.Top);
+  r := Round(gb.PlotRect.Right);
+  b := Round(gb.PlotRect.Bottom);
+  neither := RedIn(l, t, r, b);
+
+  FChart.Option := '{ xAxis: { data: [''A''] }, yAxis: { min: 0, max: 100 },'
+    + ' series: [{ type: ''bar'', data: [80] },'
+    + ' { type: ''bar'', label: { show: true }, data: [60] }] }';
+  Draw;
+  one := RedIn(l, t, r, b);
+
+  FChart.Option := '{ xAxis: { data: [''A''] }, yAxis: { min: 0, max: 100 },'
+    + ' series: [{ type: ''bar'', label: { show: true }, data: [80] },'
+    + ' { type: ''bar'', label: { show: true }, data: [60] }] }';
+  Draw;
+  both := RedIn(l, t, r, b);
+
+  AssertEquals('neither series labelled', 0, neither);
+  AssertTrue(Format('one of them is (%d px)', [one]), one > 0);
+  AssertTrue(Format('and two is more than one (%d vs %d)', [both, one]),
+    both > one);
+
+  { A FORMATTER CHANGES THE WORDS, which is the only way to tell that the
+    template ran at all -- the default text for a bar is the value, and a
+    formatter of {c} would draw exactly the same pixels. A longer string draws
+    more of them. }
+  FChart.Option := '{ xAxis: { data: [''A''] }, yAxis: { min: 0, max: 100 },'
+    + ' series: [{ type: ''bar'', label: { show: true,'
+    + ' formatter: ''{c} kilograms'' }, data: [80] }] }';
+  Draw;
+  gb := FChart.Build.Grid(0);
+  AssertTrue('a longer label is more ink',
+    RedIn(Round(gb.PlotRect.Left), Round(gb.PlotRect.Top),
+          Round(gb.PlotRect.Right), Round(gb.PlotRect.Bottom)) > inside_);
+end;
+
 procedure TAdvanceChartTest.TestATitleIsDrawnWhereTheOptionPutIt;
 var
   centre, leftSide, top_, bottom_, titleOnly: Integer;

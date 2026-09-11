@@ -13,7 +13,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry,
      tyControls.AdvChart.Shape, tyControls.AdvChart.Paint,
      tyControls.AdvChart.Series, tyControls.AdvChart.Marks,
      tyControls.AdvChart.BarLayout, tyControls.AdvChart.Option,
-     tyControls.AdvChart.Symbol;
+     tyControls.AdvChart.Symbol, tyControls.AdvChart.Labels;
 type
   TAdvChartMarksTest = class(TTestCase)
   private
@@ -44,6 +44,7 @@ type
     procedure TestTheSolvedColumnDecidesWhereTheBarGoes;
     procedure TestAValueTooSmallToSeeStillGetsBarMinHeight;
     procedure TestARoundedBarIsARoundedShapeNotAFlagNobodyReads;
+    procedure TestEveryMarkStampsItsOwnWordsOrNoneAtAll;
     procedure TestABarRoundedOnlyAtTheTopKeepsItsSquareFoot;
     procedure TestTheBackingStripSpansThePlotAndTakesNoHovers;
     procedure TestABarPastTheAxisIsCutAtThePlotEdge;
@@ -551,8 +552,68 @@ begin
   AssertEquals('and still standing on the baseline', 0.0, b.Left, 1e-9);
 end;
 
-procedure TAdvChartMarksTest.TestAColumnOfNoWidthDrawsNothingRatherThanTheWholeBand;
-var v: TTySeriesVisual;
+procedure TAdvChartMarksTest.TestEveryMarkStampsItsOwnWordsOrNoneAtAll;
+var
+  v: TTySeriesVisual;
+  i: Integer;
+begin
+  { THREE TYPES STAMP CAPTIONS AND EACH DOES IT AT ITS OWN CALL SITE, so a
+    stamp deleted from one of them is invisible to a test that only ever
+    draws another. A mutant that removed the SCATTER stamp survived a suite
+    that labelled bars.
+
+    Asserted on the element rather than on pixels: the words a mark carries
+    are what the label pass reads, and a mark carrying the wrong row's words
+    would be placed perfectly and say the wrong thing. }
+  Given('bar', 3, [10, 20, 30]);
+  v := TySeriesVisual($FF3366CC);
+  v.Bar := TyBarColumnForOneSeries(200);
+  v.Label_ := TyLabelSpecNone;
+  v.Label_.Show := True;
+  v.LabelValueDim := 1;
+  TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList);
+  AssertEquals('three bars', 3, FList.Count);
+  for i := 0 to 2 do
+    AssertEquals('each says its own value',
+      IntToStr((i + 1) * 10), FList.Element(i).Caption.Text);
+
+  { OFF MEANS NO WORDS AT ALL, not words that are then discarded: the
+    formatter runs once per datum and a series that draws no labels must not
+    pay for it. }
+  FList.Clear;
+  v.Label_.Show := False;
+  TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList);
+  AssertEquals('nothing stamped', '', FList.Element(0).Caption.Text);
+
+  { SCATTER, at its own call site. }
+  FList.Clear;
+  FreeAndNil(FStore);
+  FreeAndNil(FCart);
+  Given('scatter', 2, [10, 20]);
+  v := TySeriesVisual($FF3366CC);
+  v.Label_ := TyLabelSpecNone;
+  v.Label_.Show := True;
+  v.LabelValueDim := 1;
+  TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList);
+  AssertEquals('a point says its value', '10', FList.Element(0).Caption.Text);
+  AssertEquals('', '20', FList.Element(1).Caption.Text);
+
+  { AND A LINE'S MARKERS, which are a third site again. }
+  FList.Clear;
+  FreeAndNil(FStore);
+  FreeAndNil(FCart);
+  Given('line', 2, [10, 20]);
+  v := TySeriesVisual($FF3366CC);
+  v.Label_ := TyLabelSpecNone;
+  v.Label_.Show := True;
+  v.LabelValueDim := 1;
+  TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList);
+  AssertTrue('a line drew its markers', FList.Count >= 3);
+  AssertEquals('and the first marker says its value', '10',
+    FList.Element(1).Caption.Text);
+end;
+
+procedure TAdvChartMarksTest.TestAColumnOfNoWidthDrawsNothingRatherThanTheWholeBand;var v: TTySeriesVisual;
 begin
   { `barCategoryGap: '100%'` solves every column to zero width. The first
     version of PlaceInBand treated that as "leave the rect alone", and the rect
