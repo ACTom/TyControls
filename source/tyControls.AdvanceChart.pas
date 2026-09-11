@@ -39,6 +39,7 @@ uses
   tyControls.AdvChart.Pie, tyControls.AdvChart.Title,
   tyControls.AdvChart.Labels, tyControls.AdvChart.LabelOpt,
   tyControls.AdvChart.PieLabel, tyControls.AdvChart.Legend,
+  tyControls.AdvChart.Dataset,
   fpjson, tyControls.SubPixel;
 
 const
@@ -95,6 +96,15 @@ type
     { Whose rows KeepSlice is deciding about, for the length of one
       FilterSelf call and no longer. }
     FFilterStore: TTyDataStore;
+    { The table each series reads, AS THAT SERIES READS IT -- so this is one
+      per series and not one per dataset. Two series may read one table in
+      two directions, and upstream builds two sources for exactly that
+      reason. Index-parallel to FBindings. }
+    FSources: array of TTyChartSource;
+    { Which dataset each series reads, -1 for none, and what its columns
+      mean. Both index-parallel to FBindings. }
+    FSeriesDataset: array of Integer;
+    FEncodes: array of TTySeriesEncode;
     FDirty: Boolean;
     FLastRect: TTyRectF;
     FOptionText: string;
@@ -156,7 +166,9 @@ type
     function LabelSpecFor(ASlot: Integer): TTyLabelSpec;
     { The fonts and the four inks a pie label is drawn with. }
     function PieLabelInk: TTyPieLabelInk;
-    { `series.name`, which is what `{a}` in a label formatter means. }
+    { `series.name`, which is what `{a}` in a label formatter means -- and,
+      for a series that named itself nothing and reads a dataset, the name
+      of the dimension it took its values from. }
     function SeriesNameOf(ASlot: Integer): string;
     { The two name lists a legend needs: what it falls back to when the
       option lists no `data`, and what it is allowed to match. They are not
@@ -414,18 +426,34 @@ end;
 
 procedure TTyAdvanceChart.Rebuild;
 var
-  i, k: Integer;
+  i, k, ds, cur: Integer;
   dims: TTySeriesDimArray;
   st: TTyDataStore;
+  coord: TTyCoordDimArray;
+  cursors: TTyEncodeCursorArray;
+  enc: TTySeriesEncode;
 begin
   DropBuild;
   FBuild := TyBuildGrids(FOption, FLastRect);
   FBindings := TyBindSeries(FOption, FBuild);
   SetLength(FStores, Length(FBindings));
+  SetLength(FSources, Length(FBindings));
+  SetLength(FSeriesDataset, Length(FBindings));
+  SetLength(FEncodes, Length(FBindings));
+  cursors := nil;
   for i := 0 to High(FBindings) do
   begin
     st := TTyDataStore.Create;
     FStores[i] := st;
+    { WHICH TABLE, IF ANY. A series with its own `data` reads that and nothing
+      else -- the table is there for the series that did not bring any. }
+    FSeriesDataset[i] := TySeriesDatasetIndex(FOption, FBindings[i].SeriesIndex);
+    if FSeriesDataset[i] >= 0 then
+    begin
+      FSources[i] := TySourceOf(FOption, FSeriesDataset[i],
+        FBindings[i].SeriesIndex);
+      if not FSources[i].Valid then FSeriesDataset[i] := -1;
+    end;
     if not FBindings[i].HasAxes then
     begin
       { A PIE HAS DATA TOO, and until now it did not get any: the columns
@@ -442,7 +470,25 @@ begin
         dims[0].Name := TyPieValueDim;
         dims[0].Kind := ddtFloat;
         dims[0].Axis := nil;
-        TyFillSeriesStore(FOption, i, dims, st);
+        ds := FSeriesDataset[i];
+        if ds >= 0 then
+        begin
+          { A PIE NAMES ITS DATA RATHER THAN PLOTTING IT, so its default
+            encode is the other one: a NAME dimension and a VALUE dimension,
+            guessed from the table rather than counted off it. }
+          SetLength(coord, 1);
+          coord[0].Name := TyPieValueDim;
+          coord[0].Ordinal := False;
+          enc := TyEncodeOf(FOption, FBindings[i].SeriesIndex,
+            FSources[i], coord);
+          if not enc.Given then
+            enc := TyDefaultEncodeNameBased(FSources[i],
+              FSources[i].DimCount);
+          FEncodes[i] := enc;
+          TyFillStoreFromSource(FSources[i], enc, dims, st);
+        end
+        else
+          TyFillSeriesStore(FOption, i, dims, st);
       end;
       Continue;
     end;
@@ -455,7 +501,40 @@ begin
         ordinal 0 is. }
       if dims[k].Axis <> nil then st.UseOrdinalMeta(k, dims[k].Axis.Categories);
     end;
-    TyFillSeriesStore(FOption, i, dims, st);
+    ds := FSeriesDataset[i];
+    if ds < 0 then
+    begin
+      TyFillSeriesStore(FOption, i, dims, st);
+      Continue;
+    end;
+    { THE COORDINATES, AS THE ENCODE RULES SEE THEM: a name and whether the
+      axis under it is a category one. The second is what chooses between the
+      two ways of handing a table out, and it is not the same question as
+      which axis is horizontal. }
+    SetLength(coord, Length(dims));
+    for k := 0 to High(dims) do
+    begin
+      coord[k].Name := dims[k].Name;
+      coord[k].Ordinal := dims[k].Kind = ddtOrdinal;
+    end;
+    enc := TyEncodeOf(FOption, FBindings[i].SeriesIndex, FSources[i], coord);
+    { THE CURSOR IS SHARED AND IT ADVANCES, which is why this has to happen
+      inside the one loop that walks the series in order. Three bars on one
+      table take columns 1, 2 and 3 because the second and third ask the same
+      counter the first one moved. A series that brought its own encode --
+      even a partial one -- does not ask, and so does not move it. }
+    if not enc.Given then
+    begin
+      { THE INDEX FIRST, THEN THE SUBSCRIPT. `cursors[F(cursors)]` where F may
+        SetLength is the repository's own recorded footgun: FPC takes the
+        array's address before it evaluates the index, so a reallocation
+        inside F leaves the write going to freed memory. }
+      cur := TyEncodeCursorFor(cursors, ds, FSources[i].LayoutBy);
+      enc := TyDefaultEncodeAxis(cursors[cur], coord);
+    end;
+    FEncodes[i] := enc;
+    TyFillStoreFromSource(FSources[i], enc, dims, st);
+    Continue;
   end;
   { AFTER THE STORES AND BEFORE EVERYTHING THAT COUNTS. A pie legend names
     DATA ITEMS, so the names have to be in the store before the legend can
@@ -1221,10 +1300,12 @@ begin
   end;
 end;
 
+
 function TTyAdvanceChart.SeriesNameOf(ASlot: Integer): string;
 var
   d: TJSONData;
   node: TJSONObject;
+  i, ds: Integer;
 begin
   Result := '';
   if FOption = nil then Exit;
@@ -1232,7 +1313,24 @@ begin
   if (d = nil) or not (d is TJSONObject) then Exit;
   node := TJSONObject(d);
   d := node.Find('name');
-  if (d <> nil) and (d.JSONType = jtString) then Result := d.AsString;
+  if (d <> nil) and (d.JSONType = jtString) then Exit(d.AsString);
+
+  { A SERIES READING A TABLE NAMES ITSELF AFTER THE COLUMN IT TOOK. That is
+    how three bars on one dataset end up called 2015, 2016 and 2017 in a
+    legend nobody wrote entries for -- and without it those three legends
+    have nothing to list. The column is the one the encode put the series'
+    own name on, which the default encode sets to whichever column is not
+    the shared category. }
+  for i := 0 to High(FBindings) do
+  begin
+    if FBindings[i].SeriesIndex <> ASlot then Continue;
+    if i > High(FEncodes) then Exit;
+    ds := -1;
+    if i <= High(FSeriesDataset) then ds := FSeriesDataset[i];
+    if (ds < 0) or (i > High(FSources)) then Exit;
+    if FEncodes[i].SeriesName < 0 then Exit;
+    Exit(TySourceDimName(FSources[i], FEncodes[i].SeriesName));
+  end;
 end;
 
 { ==================== legend ==================== }

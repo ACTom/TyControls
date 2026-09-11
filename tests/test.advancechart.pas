@@ -88,6 +88,12 @@ type
     procedure TestASwitchedOffSliceLeavesThePieAndTheRestKeepTheirColours;
     procedure TestTheSeriesAboveAHiddenOneDropsOntoWhatIsLeft;
     procedure TestAPieOffersItsSliceNamesAndAnswersToItsOwn;
+    procedure TestATableFeedsThreeSeriesAColumnEach;
+    procedure TestASeriesReadingATableNamesItselfAfterItsColumn;
+    procedure TestEncodeOverridesWhichColumnASeriesReads;
+    procedure TestAPieReadingATableNamesItsSlicesFromAColumn;
+    procedure TestACoordinateNobodyClaimedDrawsNothing;
+    procedure TestASeriesCanReadTheTableTheOtherWayRound;
     procedure TestTwoBarSeriesStandSideBySideInsteadOfOnTopOfEachOther;
     procedure TestAStackedBarStandsOnTheOneBelowIt;
     procedure TestALayeredFrameDrawsTheSamePictureAsAWholeOne;
@@ -2347,6 +2353,228 @@ begin
   AssertTrue(Format('the item is live (%d px)', [RedIn(0, 250, 399, 299)]),
     RedIn(0, 250, 399, 299) > 5);
   AssertEquals('and not greyed', 0, GreenIn(0, 250, 399, 299));
+end;
+
+procedure TAdvanceChartTest.TestATableFeedsThreeSeriesAColumnEach;
+var
+  redTop, greenTop: Integer;
+begin
+  { THE CANONICAL DATASET, and the reason the feature exists: one table, two
+    bar series, NO `data` and NO `encode` anywhere. The category column is
+    shared and the value columns are handed out one per series by a counter
+    that advances -- so the second series must read column 2 and not column 1.
+
+    THE TWO COLUMNS RUN OPPOSITE WAYS ON PURPOSE: 10/20 against 90/80. A
+    series that read the wrong column would still draw two bars of plausible
+    height, and only the ORDER tells them apart. So the probe asks which
+    colour is the tall one. }
+  FCtl.StyleOverride := 'TyAdvChartSeries1 { background: #FF0000; }'
+    + ' TyAdvChartSeries2 { background: #00FF00; }';
+  FChart.Option := '{ "dataset": { "source": ['
+    + '["product","2015","2016"],'
+    + '["a", 10, 90],'
+    + '["b", 20, 80]] },'
+    + '"xAxis": { "type": "category" }, "yAxis": {},'
+    + '"series": [{"type":"bar"},{"type":"bar"}] }';
+  Draw(400, 300);
+  AssertTrue(Format('both series drew (%d red, %d green)',
+    [RedIn(0, 0, 399, 219), GreenIn(0, 0, 399, 219)]),
+    (RedIn(0, 0, 399, 219) > 100) and (GreenIn(0, 0, 399, 219) > 100));
+
+  { The top sixth of the plot is reached only by a bar near the axis maximum,
+    which on a 10..90 table is the SECOND column's bar. }
+  redTop := RedIn(0, 70, 399, 100);
+  greenTop := GreenIn(0, 70, 399, 100);
+  AssertEquals('the first series took the low column', 0, redTop);
+  AssertTrue(Format('and the second took the high one (%d px)', [greenTop]),
+    greenTop > 20);
+end;
+
+procedure TAdvanceChartTest.TestASeriesReadingATableNamesItselfAfterItsColumn;
+var
+  withNames, without: Integer;
+begin
+  { A SERIES THAT NAMED ITSELF NOTHING TAKES THE NAME OF ITS COLUMN, and that
+    is the whole reason `legend: {}` works on a dataset chart: the legend has
+    entries to list only because the series have names to give it.
+
+    Measured as ink in the legend band against the same chart with no legend:
+    a chart whose series are all nameless has nothing to draw there. }
+  FCtl.StyleOverride := 'TyAdvChartLegend { color: #FF0000; }';
+  FChart.Option := '{ "dataset": { "source": ['
+    + '["product","2015","2016"],'
+    + '["a", 10, 90],'
+    + '["b", 20, 80]] },'
+    + '"xAxis": { "type": "category" }, "yAxis": {}, "legend": {},'
+    + '"series": [{"type":"bar"},{"type":"bar"}] }';
+  Draw(400, 300);
+  withNames := RedIn(0, 250, 399, 299);
+  AssertTrue(Format('the legend found names to list (%d px)', [withNames]),
+    withNames > 20);
+
+  { The same table read by series that DO name themselves proves the ink is
+    the legend's and not something else in the band. }
+  FChart.Option := '{ "dataset": { "source": ['
+    + '["product","2015","2016"],'
+    + '["a", 10, 90],'
+    + '["b", 20, 80]] },'
+    + '"xAxis": { "type": "category" }, "yAxis": {}, "legend": {},'
+    + '"series": [{"type":"bar","name":"Own"},{"type":"bar"}] }';
+  Draw(400, 300);
+  without := RedIn(0, 250, 399, 299);
+  AssertTrue(Format('a written name is still a name (%d px)', [without]),
+    without > 20);
+end;
+
+procedure TAdvanceChartTest.TestEncodeOverridesWhichColumnASeriesReads;
+var
+  red, green: Integer;
+begin
+  { AN ENCODE NAMES A COLUMN BY NAME and takes the series out of the counter.
+
+    THE PROBE IS A RATIO, not a position: with one column 10/20 and the other
+    90/80, a series reading the high one draws several times the ink of one
+    reading the low one. Asking instead whether a bar reaches the top of the
+    plot would test the AXIS -- which re-scales around whatever is left -- and
+    a single low series would reach the top too.
+
+    TWO SERIES IN BOTH CHARTS, so the axis is the same in both and the only
+    difference is which column the second one read. }
+  FCtl.StyleOverride := 'TyAdvChartSeries1 { background: #FF0000; }'
+    + ' TyAdvChartSeries2 { background: #00FF00; }';
+  FChart.Option := '{ "dataset": { "source": ['
+    + '["product","2015","2016"],'
+    + '["a", 10, 90],'
+    + '["b", 20, 80]] },'
+    + '"xAxis": { "type": "category" }, "yAxis": {},'
+    + '"series": [{"type":"bar"},{"type":"bar"}] }';
+  Draw(400, 300);
+  red := RedIn(0, 0, 399, 219);
+  green := GreenIn(0, 0, 399, 219);
+  AssertTrue(Format('by default the second takes the HIGH column '
+    + '(%d red, %d green)', [red, green]), green > red * 2);
+
+  { Now name the low column for the second series. It leaves the counter, the
+    first series still takes column 1 from it, and the two draw the same
+    height -- so the ratio collapses. }
+  FChart.Option := '{ "dataset": { "source": ['
+    + '["product","2015","2016"],'
+    + '["a", 10, 90],'
+    + '["b", 20, 80]] },'
+    + '"xAxis": { "type": "category" }, "yAxis": {},'
+    + '"series": [{"type":"bar"},'
+    + '{"type":"bar","encode":{"x":"product","y":"2015"}}] }';
+  Draw(400, 300);
+  red := RedIn(0, 0, 399, 219);
+  green := GreenIn(0, 0, 399, 219);
+  AssertTrue(Format('named by name, it reads the low one instead '
+    + '(%d red, %d green)', [red, green]),
+    (green < red * 2) and (red < green * 2));
+end;
+
+procedure TAdvanceChartTest.TestAPieReadingATableNamesItsSlicesFromAColumn;
+var
+  red, green: Integer;
+begin
+  { A PIE OVER A TABLE ASKS TWO QUESTIONS the other series do not: which column
+    is the NUMBER and which is the LABEL. It gets them from the other defaulter
+    -- the one that guesses rather than counts -- and if that never ran the pie
+    would have no value column at all and draw nothing.
+
+    THE SLICE NAMES ARE THE TEST for the second half: a pie's legend lists its
+    SLICES, so a legend with entries proves the rows were named off a column.
+    Nothing else in this chart can name them -- a dataset row has no `name`
+    field to fall back on. }
+  FCtl.StyleOverride := 'TyAdvChartSeries1 { background: #FF0000; }'
+    + ' TyAdvChartSeries2 { background: #00FF00; }'
+    + ' TyAdvChartLegend { color: #0000FF; }';
+  FChart.Option := '{ "dataset": { "source": ['
+    + '["product","2015","2016"],'
+    + '["a", 10, 90],'
+    + '["b", 20, 80]] },'
+    + '"legend": {},'
+    + '"series": [{"type":"pie","label":{"show":false}}] }';
+  Draw(400, 300);
+  red := RedIn(0, 0, 399, 245);
+  green := GreenIn(0, 0, 399, 245);
+  AssertTrue(Format('two slices, one per row (%d, %d)', [red, green]),
+    (red > 100) and (green > 100));
+  AssertTrue(Format('and the legend found names for them (%d px)',
+    [BlueIn(0, 250, 399, 299)]), BlueIn(0, 250, 399, 299) > 10);
+end;
+
+procedure TAdvanceChartTest.TestACoordinateNobodyClaimedDrawsNothing;
+begin
+  { `encode: { x: -1 }` opts the coordinate out, and a bar with no category is
+    not a bar at the origin -- it is no bar.
+
+    IT IS THE X THAT IS OPTED OUT AND NOT THE Y, which matters: a reader that
+    treated `unclaimed` as `column 0` would land on the PRODUCT column, which
+    is exactly the category column a bar wants -- so the two answers would
+    agree and the fixture would prove nothing. Opting the Y out instead lands
+    the fallback on a column of words, which parses to no number and draws
+    nothing either way. }
+  FCtl.StyleOverride := 'TyAdvChartSeries1 { background: #FF0000; }'
+    + ' TyAdvChartSeries2 { background: #00FF00; }';
+  FChart.Option := '{ "dataset": { "source": ['
+    + '["product","2015","2016"],'
+    + '["a", 10, 90],'
+    + '["b", 20, 80]] },'
+    + '"xAxis": { "type": "category" }, "yAxis": {},'
+    + '"series": [{"type":"bar","encode":{"x":-1,"y":"2016"}},'
+    + '{"type":"bar"}] }';
+  Draw(400, 300);
+  AssertEquals('the opted-out series draws nothing', 0,
+    RedIn(0, 0, 399, 219));
+  AssertTrue(Format('while its neighbour draws (%d px)',
+    [GreenIn(0, 0, 399, 219)]), GreenIn(0, 0, 399, 219) > 100);
+end;
+
+procedure TAdvanceChartTest.TestASeriesCanReadTheTableTheOtherWayRound;
+var
+  red, green: Integer;
+begin
+  { `seriesLayoutBy` IS A SERIES' OPTION AS WELL AS A DATASET'S, and the
+    series' answer wins -- so two series can read one table in two directions.
+    A corpus example does exactly that, seven bars over one table with three of
+    them transposed and the dataset saying nothing.
+
+    THE TABLE IS NOT SQUARE, on purpose, and its first column starts with a
+    word and continues with numbers -- so the two readings disagree about the
+    header as well as about the direction. A reader that ignored the override
+    would draw the same picture twice. }
+  FCtl.StyleOverride := 'TyAdvChartSeries1 { background: #FF0000; }'
+    + ' TyAdvChartSeries2 { background: #00FF00; }';
+  FChart.Option := '{ "dataset": { "source": ['
+    + '["p", "q", "r"],'
+    + '[1, 2, 3],'
+    + '[40, 50, 60]] },'
+    + '"xAxis": { "type": "category" }, "yAxis": {},'
+    + '"series": [{"type":"bar"},'
+    + '{"type":"bar","seriesLayoutBy":"row"}] }';
+  Draw(400, 300);
+  red := RedIn(0, 0, 399, 219);
+  green := GreenIn(0, 0, 399, 219);
+  AssertTrue(Format('both drew (%d red, %d green)', [red, green]),
+    (red > 50) and (green > 50));
+  { WHAT EACH ONE ACTUALLY GOT, which is worth spelling out because the answer
+    is not the obvious one:
+
+      read DOWN, the header is the first ROW, so the columns are p/q/r and the
+      first series takes the category from p and its values from q -- 2 and 50,
+      one of them the largest number on the chart;
+
+      read ACROSS, the header is the first COLUMN, whose cells are `p`, 1 and
+      40 -- a string then a number, so there is NO header at all, the three
+      rows become three dimensions, and the transposed series takes its values
+      from the second of them: 1, 2, 3.
+
+    So the axis is sized by the 50 and the transposed series' three bars are
+    slivers beside it. Ignore the override and that series would read column 2
+    instead -- 3 and 60 -- and carry MORE ink than its neighbour, not less, so
+    the ratio does not merely shrink but flips. }
+  AssertTrue(Format('and the transposed one read a different shape '
+    + '(%d red, %d green)', [red, green]), red > green * 2);
 end;
 
 procedure TAdvanceChartTest.TestTwoBarSeriesStandSideBySideInsteadOfOnTopOfEachOther;

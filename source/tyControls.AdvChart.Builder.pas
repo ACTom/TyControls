@@ -41,6 +41,7 @@ interface
 uses SysUtils, Classes, Math, fpjson,
      tyControls.AdvChart.Types, tyControls.AdvChart.Option,
      tyControls.AdvChart.Data, tyControls.AdvChart.Scale,
+  tyControls.AdvChart.Dataset,
      tyControls.AdvChart.Coord, tyControls.AdvChart.Layout;
 
 type
@@ -182,6 +183,33 @@ function TySeriesUsesRowIndex(AData: TJSONArray;
   its dimensions and must be empty. Returns the number of rows appended. }
 function TyFillSeriesStore(AOption: TTyChartOption; ASeriesIndex: Integer;
   const ADims: TTySeriesDimArray; AStore: TTyDataStore): Integer;
+
+{ The same job from a DATASET. AEncode says which source dimension feeds each
+  of ADims; a coordinate it leaves at -1 gets no value at all.
+
+  IT IS A SECOND FUNCTION AND NOT A PARAMETER, because three of the rules the
+  series-data filler follows are wrong here and would have to be gated rather
+  than shared:
+
+    THE ROW INDEX. A bare `data: [120, 200]` on a category axis means `the
+    first category, the second category`, so the category column is filled
+    with the row's position. A dataset's category column is a REAL column,
+    named in the table, and substituting the row number would quietly plot
+    the wrong thing.
+
+    THE SCALAR FANOUT. `data: [5]` puts 5 in every column, which is what a
+    one-number row means. A dataset row is a record and a missing cell is a
+    gap.
+
+    THE ITEM OBJECT. `{ value: 3, name: 'x' }` is a series-data item; a
+    dataset's object row is a RECORD whose fields are dimensions, and reading
+    `value` out of it would eat a column called value.
+
+  What IS shared is the cell parsing, which is the part that has rules worth
+  sharing. }
+function TyFillStoreFromSource(const ASource: TTyChartSource;
+  const AEncode: TTySeriesEncode; const ADims: TTySeriesDimArray;
+  AStore: TTyDataStore): Integer;
 
 { Which component of a family this option node names.
 
@@ -1043,6 +1071,49 @@ begin
     if OptionIdName(TJSONObject(item).Find('name'), txt) then AStore.SetName(raw, txt);
     if OptionIdName(TJSONObject(item).Find('id'), txt) then AStore.SetId(raw, txt);
     CollectOverrides(TJSONObject(item), AStore, raw, '', 0);
+  end;
+end;
+
+function TyFillStoreFromSource(const ASource: TTyChartSource;
+  const AEncode: TTySeriesEncode; const ADims: TTySeriesDimArray;
+  AStore: TTyDataStore): Integer;
+var
+  row: array of TTyDataValue;
+  i, k, n, col, raw: Integer;
+  cell: TJSONData;
+  nm: string;
+begin
+  Result := 0;
+  if (AStore = nil) or (Length(ADims) = 0) then Exit;
+  if not ASource.Valid then Exit;
+  n := TySourceRowCount(ASource);
+  SetLength(row, Length(ADims));
+
+  for i := 0 to n - 1 do
+  begin
+    for k := 0 to High(ADims) do
+    begin
+      col := -1;
+      if k <= High(AEncode.Columns) then col := AEncode.Columns[k];
+      if col < 0 then
+        row[k] := TyDataNone
+      else
+        row[k] := CellValue(TySourceCell(ASource, i, col));
+    end;
+    raw := AStore.AppendRow(row);
+    Inc(Result);
+
+    { THE ROW'S OWN NAME comes from a column rather than from a `name` field:
+      a dataset row has no fields outside its dimensions. }
+    if AEncode.ItemName >= 0 then
+    begin
+      cell := TySourceCell(ASource, i, AEncode.ItemName);
+      if (cell <> nil) and (cell.JSONType <> jtNull) then
+      begin
+        nm := cell.AsString;
+        if nm <> '' then AStore.SetName(raw, nm);
+      end;
+    end;
   end;
 end;
 
