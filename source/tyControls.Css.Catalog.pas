@@ -212,7 +212,7 @@ const
     '--treeselect-drop-height',
     '--warning');
 
-  TyCatalogTypeKeys: array[0..213] of string = (
+  TyCatalogTypeKeys: array[0..214] of string = (
     'TyActivityBar',
     'TyActivityBarFill',
     'TyActivityIndicator',
@@ -232,6 +232,7 @@ const
     'TyAdvChartSeries6',
     'TyAdvChartSeries7',
     'TyAdvChartSeries8',
+    'TyAdvChartSeries9',
     'TyAdvChartSplitArea',
     'TyAdvChartSplitLine',
     'TyAlert',

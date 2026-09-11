@@ -961,7 +961,13 @@ begin
       instruction. }
     spec := SpecOf('{ series: [{ type: ''line'', areaStyle: {}, data: [1] }] }');
     AssertTrue('an empty areaStyle turns the area on', spec.HasArea);
-    AssertEquals('opaque unless told otherwise', 1.0, spec.AreaOpacity, 1e-9);
+    { SEVENTY PER CENT, not opaque. This assertion said 1.0 and was wrong from
+      the day it was written: LineView puts the area in with
+      `defaults(getAreaStyle(), {fill: visualColor, opacity: 0.7})`, and radar
+      does the same. An opaque area hides whatever is stacked behind it, which
+      is the visible half of getting it wrong. }
+    AssertEquals('a wash at seven tenths, not a solid block',
+      0.7, spec.AreaOpacity, 1e-9);
     AssertEquals('and anchored automatically',
       Ord(laoAuto), Ord(spec.AreaOrigin));
 

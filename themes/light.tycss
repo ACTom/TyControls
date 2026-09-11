@@ -1140,6 +1140,7 @@ TyAdvChartSeries5 { background: mix(var(--accent), var(--surface), 40%); }
 TyAdvChartSeries6 { background: mix(var(--accent), var(--on-surface), 65%); }
 TyAdvChartSeries7 { background: lighten(var(--accent), 38%); }
 TyAdvChartSeries8 { background: darken(var(--accent), 34%); }
+TyAdvChartSeries9 { background: mix(var(--accent), var(--on-surface), 15%); }
 
 /* AdvChart: the axis domain. Eight keys and four metrics, and the COUNT is part
    of the design -- twelve things can be checked by eye across seventeen themes

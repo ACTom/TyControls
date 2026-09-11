@@ -1173,6 +1173,7 @@ begin
     'TyAdvChartSeries6 { background: mix(var(--accent), var(--on-surface), 65%); }' + LineEnding +
     'TyAdvChartSeries7 { background: lighten(var(--accent), 38%); }' + LineEnding +
     'TyAdvChartSeries8 { background: darken(var(--accent), 34%); }' + LineEnding +
+    'TyAdvChartSeries9 { background: mix(var(--accent), var(--on-surface), 15%); }' + LineEnding +
     '' + LineEnding +
     '/* AdvChart: the axis domain. Eight keys and four metrics, and the COUNT is part' + LineEnding +
     '   of the design -- twelve things can be checked by eye across seventeen themes' + LineEnding +

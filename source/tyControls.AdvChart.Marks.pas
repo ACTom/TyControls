@@ -40,6 +40,7 @@ uses
   tyControls.AdvChart.Types, tyControls.AdvChart.Option,
   tyControls.AdvChart.Scale, tyControls.AdvChart.Coord,
   tyControls.AdvChart.Data, tyControls.AdvChart.Shape,
+  tyControls.AdvChart.Color,
   tyControls.AdvChart.Paint, tyControls.AdvChart.Series,
   tyControls.AdvChart.BarLayout, tyControls.AdvChart.Symbol,
   tyControls.AdvChart.Labels, tyControls.AdvChart.LabelOpt;
@@ -66,9 +67,18 @@ type
     HasArea: Boolean;
     AreaOrigin: TTyAreaOrigin;
     AreaOriginValue: Double;
-    { 0..1. Upstream has no default here: an areaStyle with no opacity is
-      opaque, in the series' own colour. }
+    { 0..1, and the default is 0.7 -- NOT 1. The view puts the area in with
+      `defaults(getAreaStyle(), {fill: visualColor, opacity: 0.7})`, so an
+      `areaStyle: {}` is a SEVENTY PER CENT wash of the series colour and
+      not a solid block of it. Radar does the same. An opaque area hides
+      whatever is stacked behind it, which is the visible half of getting
+      this wrong. }
     AreaOpacity: Double;
+    { `areaStyle.color`, when the author named one. Separate from the
+      series colour because an area named its own colour does not make the
+      LINE that colour -- they are two keys on two blocks. }
+    HasAreaFill: Boolean;
+    AreaFill: TTyChartColor;
     Step: TTyLineStep;
     ConnectNulls: Boolean;
     { showSymbol, default TRUE: an ECharts line has a marker on every point. }
@@ -91,6 +101,8 @@ type
   TTySeriesVisual = record
     Fill: TTyChartColor;
     Stroke: TTyChartColor;
+    { 0..1, whole-element. 1 unless the author wrote an opacity. }
+    Alpha: Double;
     { <= 0 means no stroke, the same rule the element style and
       TTyPainter.StrokePath both follow. }
     StrokeWidthLogical: Double;
@@ -166,11 +178,14 @@ var
   node, area: TJSONObject;
   d: TJSONData;
   sv: string;
+  ast: TTyOptStyle;
 begin
   Result.HasArea := False;
   Result.AreaOrigin := laoAuto;
   Result.AreaOriginValue := 0;
-  Result.AreaOpacity := 1;
+  Result.AreaOpacity := 0.7;
+  Result.HasAreaFill := False;
+  Result.AreaFill := 0;
   Result.Step := lstNone;
   Result.ConnectNulls := False;
   Result.ShowSymbol := True;
@@ -223,6 +238,14 @@ begin
   Result.HasArea := True;
   area := TJSONObject(d);
 
+  { `areaStyle.color`. Read here rather than by the control because the
+    whole line block is read here, and one reader per block is the rule
+    that keeps the two from disagreeing about defaults. }
+  ast := TyReadOptStyle(node, 'areaStyle');
+  Result.HasAreaFill := ast.Color.Written and not ast.Color.IsAuto
+                        and not ast.Color.IsNone;
+  if Result.HasAreaFill then Result.AreaFill := ast.Color.Color;
+
   d := area.Find('opacity');
   if (d <> nil) and (d.JSONType = jtNumber) then
     { Double(0)/Double(1), NOT 0/1: an integer beside a Double picks Math's
@@ -251,6 +274,7 @@ begin
   Result.Fill := AFill;
   Result.Stroke := 0;
   Result.StrokeWidthLogical := 0;
+  Result.Alpha := 1;
   Result.Bar := Default(TTyBarColumn);
   { NO Clip := True HERE, though it was written and then taken out again.
     Default() leaves Solved False, and ColumnFor ignores an unsolved column
@@ -263,7 +287,9 @@ begin
   Result.Line.HasArea := False;
   Result.Line.AreaOrigin := laoAuto;
   Result.Line.AreaOriginValue := 0;
-  Result.Line.AreaOpacity := 1;
+  Result.Line.AreaOpacity := 0.7;
+  Result.Line.HasAreaFill := False;
+  Result.Line.AreaFill := 0;
   Result.Line.Step := lstNone;
   Result.Line.ConnectNulls := False;
   { TRUE, because that is upstream's default and this record is "the
@@ -391,6 +417,33 @@ begin
     AStore, ARow, AVisual.SeriesName, AVisual.LabelValueDim, 0, False);
 end;
 
+{ THIS ROW'S OWN COLOUR, when the author gave it one.
+
+  `data: [1, 2, { value: 3, itemStyle: { color: 'red' } }]` is how a single
+  bar or a single slice is picked out, and it is the commonest reason a
+  chart has a colour the palette never chose. The builder has already
+  parked the leaf under its dotted path, so this is a lookup and not a
+  second reader of the option.
+
+  A row that names an unreadable colour keeps the series' -- the same rule
+  the series level follows. }
+function RowVisual(const AVisual: TTySeriesVisual; AStore: TTyDataStore;
+  ARow: Integer): TTySeriesVisual;
+var v: TTyDataValue; c: TTyChartColor;
+begin
+  Result := AVisual;
+  if AStore = nil then Exit;
+  if not AStore.HasOverride(ARow, TyOverrideKey('itemStyle.color')) then Exit;
+  v := AStore.GetOverride(ARow, TyOverrideKey('itemStyle.color'));
+  if v.Kind <> dvkText then Exit;
+  if TyChartColorIsNone(v.Text) then
+  begin
+    Result.Fill := 0;
+    Exit;
+  end;
+  if TyTryParseChartColor(v.Text, c) then Result.Fill := c;
+end;
+
 function MarkElement(const AShape: TTyChartShape; const AVisual: TTySeriesVisual;
   ASeries, ARow: Integer): TTyChartElement;
 begin
@@ -399,6 +452,11 @@ begin
   Result.Style.FillColor := AVisual.Fill;
   Result.Style.StrokeColor := AVisual.Stroke;
   Result.Style.StrokeWidthLogical := AVisual.StrokeWidthLogical;
+  { `itemStyle.opacity` is a whole-element alpha and MULTIPLIES the
+    colour's own -- upstream writes it to globalAlpha, so an 80% opacity
+    over a half-transparent colour is 40%, not 80%. Set on every mark from
+    one place, because there is one place every mark is built. }
+  Result.Style.Alpha := AVisual.Alpha;
   Result.Z := AVisual.Z;
   Result.Z2 := AVisual.Z2;
   Result.Silent := False;
@@ -658,7 +716,8 @@ begin
       shape := TyShapeRoundRect(r, col.Radii)
     else
       shape := TyShapeRect(r);
-    el := MarkElement(shape, AVisual, ABinding.SeriesIndex, i);
+    el := MarkElement(shape, RowVisual(AVisual, AStore, i),
+                      ABinding.SeriesIndex, i);
     el.Caption.Text := CaptionFor(AVisual, AStore, i);
     AList.Add(el);
     Inc(Result);
@@ -783,7 +842,11 @@ var
       v := AVisual;
       v.Stroke := 0;
       v.StrokeWidthLogical := 0;
+      { The area's OWN colour when it named one; the series' otherwise. }
+      if spec.HasAreaFill then v.Fill := spec.AreaFill;
       el := MarkElement(TyShapePolygon(poly), v, ABinding.SeriesIndex, -1);
+      { The area's opacity REPLACES the series' -- it is a key on its own
+        block, not a second multiplier on the item's. }
       el.Style.Alpha := spec.AreaOpacity;
       { SILENT: the fill is decoration behind the line, and a pointer landing
         on it should find the line, not the shading. }
@@ -949,9 +1012,10 @@ begin
     { AN `empty` SYMBOL IS STROKED, NOT FILLED -- upstream strokes it in the
       series colour and fills it with the theme's background, and a line symbol
       is stroked too. Both are the same rule: the colour is the pen. }
+    v.Fill := RowVisual(AVisual, AStore, i).Fill;
     if spec.Empty or (spec.Kind = tsyLine) then
     begin
-      v.Stroke := AVisual.Fill;
+      v.Stroke := v.Fill;
       if v.StrokeWidthLogical <= 0 then v.StrokeWidthLogical := 2;
       if spec.Kind = tsyLine then v.Fill := 0
       else v.Fill := AVisual.EmptyFill;

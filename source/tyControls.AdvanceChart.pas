@@ -36,6 +36,7 @@ uses
   tyControls.AdvChart.Paint, tyControls.AdvChart.Render,
   tyControls.AdvChart.Marks, tyControls.AdvChart.BarLayout,
   tyControls.AdvChart.Stack, tyControls.AdvChart.Symbol,
+  tyControls.AdvChart.Color,
   tyControls.AdvChart.Pie, tyControls.AdvChart.Title,
   tyControls.AdvChart.Labels, tyControls.AdvChart.LabelOpt,
   tyControls.AdvChart.PieLabel, tyControls.AdvChart.Legend,
@@ -105,6 +106,22 @@ type
       mean. Both index-parallel to FBindings. }
     FSeriesDataset: array of Integer;
     FEncodes: array of TTySeriesEncode;
+    { WHAT THE AUTHOR'S PALETTE GAVE EACH SERIES, resolved once per rebuild.
+      Empty where they gave it nothing, and the theme's ramp answers instead
+      -- so a chart with no `color` written is still the skin's chart, and one
+      with `color` written is the author's. Index-parallel to the option's
+      series SLOTS, not to FBindings: a series that did not resolve still
+      takes its colour, because upstream's palette pass runs over the raw
+      series and that is what keeps colours still across a legend click. }
+    FSeriesColors: array of TTyChartColor;
+    FSeriesColorKnown: array of Boolean;
+    { AND THE PALETTE PICK ITSELF, kept apart from the resolved colour
+      because `auto` resolves to the PICK and not to the fill. A series that
+      writes `itemStyle: { color: '#fff', borderColor: 'auto' }` is white
+      with a border in the palette colour -- so both numbers exist at once
+      and one field could not hold them. }
+    FSeriesPalette: array of TTyChartColor;
+    FSeriesPaletteKnown: array of Boolean;
     FDirty: Boolean;
     FLastRect: TTyRectF;
     FOptionText: string;
@@ -142,6 +159,16 @@ type
     { The theme colour for series ASeriesIndex, from the DERIVED ramp item 18
       landed: TyAdvChartSeries1..8, all of them computed from --accent so a skin
       that restyles the accent gets a matching chart for nothing. }
+    procedure SolveSeriesColors;
+    { The THEME's ramp at ASlot, with nothing of the option in it. Split out
+      because a pie's slices and a chart's series both cycle it, and they
+      index it by different things. }
+    function ThemeRampColor(ASlot: Integer): TTyColor;
+    { What `auto` means on this series: the palette's pick for it. }
+    function SeriesPaletteColor(ASeriesIndex: Integer): TTyColor;
+    { What the author wrote on this series' style blocks, laid over the
+      palette colour the visual already carries. }
+    procedure ApplyOptStyle(var AVisual: TTySeriesVisual; ASlot: Integer);
     function SeriesColor(ASeriesIndex: Integer): TTyColor;
     { The stack record for a series slot, or an unstacked one. }
     function StackFor(ASlot: Integer): TTySeriesStack;
@@ -549,6 +576,12 @@ begin
     none of it has to wait for Relayout. }
   SolveLegendData;
   ApplyLegendFilter;
+  { AFTER the filter but over EVERY series slot, hidden ones included --
+    see SolveSeriesColors. The two are not in tension: the filter decides
+    what is drawn, the palette decides what colour each series IS, and the
+    second must not depend on the first or a legend click would repaint
+    the whole chart. }
+  SolveSeriesColors;
   TyIndexSeries(FBindings, FIndex);
   { BEFORE THE EXTENTS, and that order is the whole point: a stacked chart
     whose axis was sized from the raw values draws off the top of its plot. }
@@ -1234,28 +1267,244 @@ begin
   Result := TySymbolSpecOf(node, Result);
 end;
 
-function TTyAdvanceChart.SeriesColor(ASeriesIndex: Integer): TTyColor;
+procedure TTyAdvanceChart.SolveSeriesColors;
+
+  { An unnamed series is NOT nameless as far as the palette is concerned.
+    Upstream builds `series` + NUL + index precisely so two unnamed series
+    cannot collide in the memo, and its comment says so. Leaving it empty
+    would give every unnamed series the first colour. }
+  function NameFor(ASlot: Integer): string;
+  begin
+    Result := SeriesNameOf(ASlot);
+    if Result = '' then Result := TyChartSeriesDefaultName(ASlot);
+  end;
+
+var
+  i, n: Integer;
+  declared: Boolean;
+  cur, own: TTyPaletteCursor;
+  ownPal: TTyChartColorArray;
+  node: TJSONObject;
+  d: TJSONData;
+  st: string;
+  style: TTyOptStyle;
+  key, other: TTyOptColor;
+  hasAuto: Boolean;
+  c: TTyChartColor;
+begin
+  FSeriesColors := nil;
+  FSeriesColorKnown := nil;
+  FSeriesPalette := nil;
+  FSeriesPaletteKnown := nil;
+  if FOption = nil then Exit;
+  n := FOption.ComponentCount('series');
+  SetLength(FSeriesColors, n);
+  SetLength(FSeriesColorKnown, n);
+  SetLength(FSeriesPalette, n);
+  SetLength(FSeriesPaletteKnown, n);
+  cur := TyPaletteStart(TyChartPaletteOf(FOption, -1, declared));
+
+  { DECLARATION ORDER, AND EVERY SLOT. A series the legend switched off still
+    takes its colour, and so does one whose type has no renderer -- that is the
+    entire mechanism by which colours stay put across a legend click. Skipping
+    the hidden ones would re-shuffle every colour after them. }
+  for i := 0 to n - 1 do
+  begin
+    d := FOption.ComponentAt('series', i);
+    node := nil;
+    if (d <> nil) and (d.JSONType = jtObject) then node := TJSONObject(d);
+    st := '';
+    if node <> nil then
+    begin
+      d := node.Find('type');
+      if (d <> nil) and (d.JSONType = jtString) then st := d.AsString;
+    end;
+
+    { WHICH KEY SUPPRESSES THE PALETTE depends on what the series draws with.
+      Nearly everything fills, so it is `itemStyle.color`; a boxplot draws with
+      its stroke, so it is `itemStyle.borderColor`; `lines` and `parallel` read
+      a different block entirely. A line is NOT one of the exceptions -- writing
+      `lineStyle.color` on a line does not stop it taking a palette slot. }
+    style := TyReadOptStyle(node, TyStyleAccessPath(st));
+    if TyStyleDrawsWithStroke(st) and (TyStyleAccessPath(st) = 'itemStyle') then
+    begin
+      key := style.BorderColor;
+      other := style.Color;
+    end
+    else
+    begin
+      key := style.Color;
+      other := style.BorderColor;
+    end;
+    { `auto` ON EITHER HALF OF THE PAIR sends this series to the palette,
+      even when the other half names a colour -- upstream tests `fill` AND
+      `stroke` for the word and consults the palette if either carries it.
+      So `{ color: '#fff', borderColor: 'auto' }` is a white bar with a
+      border in the palette colour, and it costs a slot. }
+    hasAuto := key.IsAuto or other.IsAuto;
+
+    if key.Written and not hasAuto then
+    begin
+      { AN AUTHORED COLOUR CONSUMES NO SLOT, and upstream says why in a comment:
+        an author who paints one series transparent, or as a backdrop, did not
+        mean to shift every other series' colour. `series: [{}, {color}, {}]` is
+        palette[0], the authored one, palette[1]. }
+      if not key.IsNone then
+      begin
+        FSeriesColors[i] := key.Color;
+        FSeriesColorKnown[i] := True;
+      end;
+      Continue;
+    end;
+
+    { A SERIES WITH ITS OWN `color` ARRAY runs its own cursor over it from
+      nought, and never touches the chart-wide one. }
+    ownPal := TyChartPaletteOf(FOption, i, declared);
+    if Length(ownPal) > 0 then
+    begin
+      own := TyPaletteStart(ownPal);
+      if TyPaletteTake(own, NameFor(i), c) then
+      begin
+        FSeriesPalette[i] := c;
+        FSeriesPaletteKnown[i] := True;
+        if (not key.Written) or key.IsAuto then
+        begin
+          FSeriesColors[i] := c;
+          FSeriesColorKnown[i] := True;
+        end
+        else if not key.IsNone then
+        begin
+          FSeriesColors[i] := key.Color;
+          FSeriesColorKnown[i] := True;
+        end;
+      end;
+      Continue;
+    end;
+
+    { `auto` takes a slot as surely as writing nothing does -- it means `the
+      palette colour`, so it has to have one. }
+    if TyPaletteTake(cur, NameFor(i), c) then
+    begin
+      FSeriesPalette[i] := c;
+      FSeriesPaletteKnown[i] := True;
+      { THE PICK IS NOT ALWAYS THE FILL. It becomes the fill only when the
+        fill was left unwritten, or was written as `auto`; a series that
+        named its fill and asked for `auto` somewhere else keeps the name
+        it gave. }
+      if (not key.Written) or key.IsAuto then
+      begin
+        FSeriesColors[i] := c;
+        FSeriesColorKnown[i] := True;
+      end
+      else if not key.IsNone then
+      begin
+        FSeriesColors[i] := key.Color;
+        FSeriesColorKnown[i] := True;
+      end;
+    end;
+  end;
+end;
+
+procedure TTyAdvanceChart.ApplyOptStyle(var AVisual: TTySeriesVisual;
+  ASlot: Integer);
+var
+  node: TJSONObject;
+  d: TJSONData;
+  st: string;
+  item, line: TTyOptStyle;
+begin
+  if FOption = nil then Exit;
+  d := FOption.ComponentAt('series', ASlot);
+  if (d = nil) or (d.JSONType <> jtObject) then Exit;
+  node := TJSONObject(d);
+  d := node.Find('type');
+  st := '';
+  if (d <> nil) and (d.JSONType = jtString) then st := d.AsString;
+
+  { THE FILL IS ALREADY DECIDED. SolveSeriesColors read the same key to
+    settle whether this series took a palette slot, and SeriesColor handed
+    the answer over -- reading it a second time here would be a second
+    place that has to agree about `auto`. }
+  item := TyReadOptStyle(node, 'itemStyle');
+  line := TyReadOptStyle(node, 'lineStyle');
+
+  { `itemStyle.borderColor` / `borderWidth`. `auto` on a border means the
+    palette colour, the same as it does on a fill. }
+  if item.BorderColor.Written and not item.BorderColor.IsNone then
+  begin
+    if item.BorderColor.IsAuto then
+      AVisual.Stroke := TTyChartColor(SeriesPaletteColor(ASlot))
+    else
+      AVisual.Stroke := item.BorderColor.Color;
+  end;
+  if not IsNan(item.BorderWidthLogical) then
+    AVisual.StrokeWidthLogical := item.BorderWidthLogical;
+  if not IsNan(item.Opacity) then
+    AVisual.Alpha := Min(Double(1), Max(Double(0), item.Opacity));
+
+  { A LINE READS ITS OWN BLOCK FOR THE PEN, and only for the pen. Its
+    palette colour came from `itemStyle` -- that is the trap in this whole
+    row -- and that colour still goes to its symbols and its area; the
+    authored `lineStyle.color` wins the polyline's pixels and nothing else. }
+  if (st = 'line') or TyStyleDrawsWithStroke(st) then
+  begin
+    if line.Color.Written and not line.Color.IsNone then
+    begin
+      if line.Color.IsAuto then
+        AVisual.Stroke := TTyChartColor(SeriesPaletteColor(ASlot))
+      else
+        AVisual.Stroke := line.Color.Color;
+    end;
+    if not IsNan(line.BorderWidthLogical) then
+      AVisual.StrokeWidthLogical := line.BorderWidthLogical;
+    if not IsNan(line.Opacity) then
+      AVisual.Alpha := Min(Double(1), Max(Double(0), line.Opacity));
+  end;
+end;
+
+function TTyAdvanceChart.ThemeRampColor(ASlot: Integer): TTyColor;
 var
   st: TTyStyleSet;
 begin
-  { EIGHT SLOTS, CYCLED, matching the old chart's palette so nothing has to
-    learn a second rule -- and derived from --accent rather than written out,
-    which is what makes a re-skinned chart come out in the skin's own colours.
-    Slot 1 IS the accent, so a single-series chart is drawn in the theme's own
-    colour. }
+  { NINE SLOTS, CYCLED -- nine because upstream's own default palette is nine
+    colours and the CYCLE LENGTH is observable: it decides which series comes
+    round to share a colour with the first. Derived from --accent rather than
+    written out, which is what makes a re-skinned chart come out in the skin's
+    own colours; slot 1 IS the accent, so a single-series chart is drawn in
+    the theme's own colour. }
   st := ActiveController.Model.ResolveStyle(
-    'TyAdvChartSeries' + IntToStr((Abs(ASeriesIndex) mod 8) + 1), '', []);
+    'TyAdvChartSeries' + IntToStr((Abs(ASlot) mod 9) + 1), '', []);
   if tpBackground in st.Present then
     Exit(st.Background.Color);
-  { The eight keys are in the BASE layer, so a theme cannot remove them -- it
+  { The nine keys are in the BASE layer, so a theme cannot remove them -- it
     can only restyle them, and a skin that defines none of them inherits all
-    eight. Reaching here means something is wrong with the theme rather than
+    nine. Reaching here means something is wrong with the theme rather than
     with the option, so the answer is the control's own foreground: visible
     against its own surface by construction, which is the one thing a fallback
     colour has to be. }
   st := ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass,
     [tysNormal]);
   Result := st.TextColor;
+end;
+
+function TTyAdvanceChart.SeriesPaletteColor(ASeriesIndex: Integer): TTyColor;
+begin
+  if (ASeriesIndex >= 0) and (ASeriesIndex <= High(FSeriesPaletteKnown))
+    and FSeriesPaletteKnown[ASeriesIndex] then
+    Exit(TTyColor(FSeriesPalette[ASeriesIndex]));
+  Result := ThemeRampColor(ASeriesIndex);
+end;
+
+function TTyAdvanceChart.SeriesColor(ASeriesIndex: Integer): TTyColor;
+begin
+  { THE AUTHOR'S PALETTE FIRST. `color: [...]` or an authored
+    `itemStyle.color` is the author speaking about their own chart, and a
+    skin has no business overruling it. }
+  if (ASeriesIndex >= 0) and (ASeriesIndex <= High(FSeriesColorKnown))
+    and FSeriesColorKnown[ASeriesIndex] then
+    Exit(TTyColor(FSeriesColors[ASeriesIndex]));
+
+  Result := ThemeRampColor(ASeriesIndex);
 end;
 
 function TTyAdvanceChart.TitleFont(const AKey: string): TTyTitleFont;
@@ -1308,12 +1557,49 @@ end;
 
 function TTyAdvanceChart.PieVisual(ASlot: Integer): TTyPieVisual;
 var
-  k, n: Integer;
+  k, n, raw, rawN: Integer;
+  ov: TTyDataValue;
+  c: TTyChartColor;
+  pal: TTyChartColorArray;
+  perRaw: TTyChartColorArray;
+  cur: TTyPaletteCursor;
+  declared: Boolean;
+  nm: string;
 begin
   Result := TyPieVisual(0);
-  { colorBy:''data''. Each SECTOR takes the next slot of the same eight-colour
+  { colorBy:''data''. Each SECTOR takes the next slot of the same nine-colour
     ramp a bar series cycles across series -- which is what makes a pie read
-    at all, and what makes it re-skin with the accent like everything else. }
+    at all, and what makes it re-skin with the accent like everything else.
+
+    A SLICE THAT NAMED ITS OWN COLOUR KEEPS IT. `data: [{ value: 5,
+    itemStyle: { color: ''#c23531'' } }]` is the commonest thing anybody
+    writes on a pie, and it beats the ramp -- the same rule a bar follows,
+    reached through the same parked override. }
+  { ONE COLOUR PER RAW ROW, TAKEN IN RAW ORDER, before a single sector is
+    looked at. A slice that was filtered out -- a negative value, a legend
+    click -- still consumes its slot, which is the only way the surviving
+    slices keep the colours they had. Upstream iterates its raw data here for
+    the same reason and says so in a comment.
+
+    Keyed on the slice's NAME, so two pies over the same categories agree
+    about which category is which colour -- and so a repeated name inside one
+    pie shares a colour rather than taking a second slot. }
+  pal := TyChartPaletteOf(FOption, ASlot, declared);
+  if Length(pal) = 0 then pal := TyChartPaletteOf(FOption, -1, declared);
+  cur := TyPaletteStart(pal);
+  rawN := 0;
+  if (ASlot <= High(FStores)) and (FStores[ASlot] <> nil) then
+    rawN := FStores[ASlot].RawCount;
+  SetLength(perRaw, rawN);
+  for k := 0 to rawN - 1 do
+  begin
+    perRaw[k] := TTyChartColor(ThemeRampColor(k));
+    if Length(pal) = 0 then Continue;
+    nm := FStores[ASlot].GetNameByRaw(k);
+    if nm = '' then nm := IntToStr(k);
+    if TyPaletteTake(cur, nm, c) then perRaw[k] := c;
+  end;
+
   n := Length(FPies[ASlot].Sectors);
   if n < 1 then n := 1;
   SetLength(Result.Fills, n);
@@ -1330,10 +1616,24 @@ begin
       `Iterate on data before filtered. To make sure color from palette can
       be consistent when toggling legend.` (visual/style.ts:207-208). }
     if k <= High(FPies[ASlot].Sectors) then
-      Result.Fills[k] :=
-        TTyChartColor(SeriesColor(FPies[ASlot].Sectors[k].RawIndex))
+    begin
+      raw := FPies[ASlot].Sectors[k].RawIndex;
+      if (raw >= 0) and (raw <= High(perRaw)) then
+        Result.Fills[k] := perRaw[raw]
+      else
+        Result.Fills[k] := TTyChartColor(ThemeRampColor(raw));
+      if (ASlot <= High(FStores)) and (FStores[ASlot] <> nil)
+        and FStores[ASlot].HasOverrideByRaw(raw,
+              TyOverrideKey('itemStyle.color')) then
+      begin
+        ov := FStores[ASlot].GetOverrideByRaw(raw,
+                TyOverrideKey('itemStyle.color'));
+        if (ov.Kind = dvkText) and TyTryParseChartColor(ov.Text, c) then
+          Result.Fills[k] := c;
+      end;
+    end
     else
-      Result.Fills[k] := TTyChartColor(SeriesColor(k));
+      Result.Fills[k] := TTyChartColor(ThemeRampColor(k));
   end;
   { The empty ring has its own token rather than borrowing the split area''s:
     they are faint for different reasons and a theme has to be able to move
@@ -1841,6 +2141,7 @@ begin
         Continue;
       end;
       v := TySeriesVisual(TTyChartColor(SeriesColor(FBindings[i].SeriesIndex)));
+      ApplyOptStyle(v, FBindings[i].SeriesIndex);
       if i <= High(FBarCols) then v.Bar := FBarCols[i];
       v.Line := TyLineSpecOf(FOption, FBindings[i].SeriesIndex);
       { The thinning the AXIS settled on. When markers would crowd, upstream
