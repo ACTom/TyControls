@@ -78,6 +78,7 @@ type
     procedure TestTheBackingStripIsDrawnInTheThemesOwnColour;
     procedure TestATitleIsDrawnWhereTheOptionPutIt;
     procedure TestASeriesLabelIsDrawnAndTakesItsInkFromItsMark;
+    procedure TestAPieLabelsItsSlicesAndPointsAtThem;
     procedure TestTwoBarSeriesStandSideBySideInsteadOfOnTopOfEachOther;
     procedure TestAStackedBarStandsOnTheOneBelowIt;
     procedure TestALayeredFrameDrawsTheSamePictureAsAWholeOne;
@@ -1630,6 +1631,36 @@ end;
 { Pixels in a rectangle that are strongly red. Used where the fixture has
   overridden a series colour to red, so the count is of that series and of
   nothing else on the canvas. }
+procedure TAdvanceChartTest.TestAPieLabelsItsSlicesAndPointsAtThem;
+var
+  outside_, none_: Integer;
+begin
+  { A PIE IS LABELLED BY ITS OWN PASS, not by the one that labels bars -- and
+    the two reach the canvas by different routes, so a bar test cannot stand in
+    for this one. `label.show` defaults TRUE on a pie, which is the other half
+    of the difference: a pie that says nothing about labels still gets them.
+
+    Counted OUTSIDE the disc, where only an outer label and its leader can be:
+    the pie is centred with a radius of a quarter of the shorter side, so the
+    top strip of the chart is bare but for the labels. }
+  FCtl.StyleOverride := 'TyAdvChartLabel { color: #FF0000; }';
+  FChart.Option := '{ series: [{ type: ''pie'', radius: ''30%'', data: ['
+    + ' { value: 1, name: ''Alpha'' }, { value: 1, name: ''Beta'' } ] }] }';
+  Draw(400, 300);
+  outside_ := RedIn(0, 0, 399, 299);
+  AssertTrue(Format('the slices are labelled (%d px)', [outside_]),
+    outside_ > 20);
+
+  { AND SWITCHED OFF IT DRAWS NONE, which is what says the option is read
+    rather than labels being drawn unconditionally. }
+  FChart.Option := '{ series: [{ type: ''pie'', radius: ''30%'','
+    + ' label: { show: false }, data: ['
+    + ' { value: 1, name: ''Alpha'' }, { value: 1, name: ''Beta'' } ] }] }';
+  Draw(400, 300);
+  none_ := RedIn(0, 0, 399, 299);
+  AssertEquals('none at all', 0, none_);
+end;
+
 procedure TAdvanceChartTest.TestASeriesLabelIsDrawnAndTakesItsInkFromItsMark;
 var
   gb: TTyGridBuild;

@@ -38,6 +38,7 @@ uses
   tyControls.AdvChart.Stack, tyControls.AdvChart.Symbol,
   tyControls.AdvChart.Pie, tyControls.AdvChart.Title,
   tyControls.AdvChart.Labels, tyControls.AdvChart.LabelOpt,
+  tyControls.AdvChart.PieLabel,
   fpjson, tyControls.SubPixel;
 
 const
@@ -142,6 +143,8 @@ type
     function PieVisual(ASlot: Integer): TTyPieVisual;
     { The label spec for one series, resolved from the theme and the option. }
     function LabelSpecFor(ASlot: Integer): TTyLabelSpec;
+    { The fonts and the four inks a pie label is drawn with. }
+    function PieLabelInk: TTyPieLabelInk;
     { `series.name`, which is what `{a}` in a label formatter means. }
     function SeriesNameOf(ASlot: Integer): string;
     procedure PaintDynamic(APainter: TTyPainter; const ARect: TRect;
@@ -1185,12 +1188,34 @@ begin
   Result := TyLabelSpecOf(FOption, FBindings[ASlot].SeriesIndex, base);
 end;
 
+function TTyAdvanceChart.PieLabelInk: TTyPieLabelInk;
+var
+  outS, lightS, midS, darkS: TTyStyleSet;
+begin
+  outS := ActiveController.Model.ResolveStyle('TyAdvChartLabel', '', []);
+  lightS := ActiveController.Model.ResolveStyle('TyAdvChartLabelOnLight',
+    '', []);
+  midS := ActiveController.Model.ResolveStyle('TyAdvChartLabelOnMid', '', []);
+  darkS := ActiveController.Model.ResolveStyle('TyAdvChartLabelOnDark', '',
+    []);
+  Result.FontName := outS.FontName;
+  Result.FontSizeLogical := ResolveFontSize(outS);
+  Result.FontWeight := outS.FontWeight;
+  Result.InsideColour[0] := TTyChartColor(lightS.TextColor);
+  Result.InsideColour[1] := TTyChartColor(midS.TextColor);
+  Result.InsideColour[2] := TTyChartColor(darkS.TextColor);
+  Result.OutsideColour := TTyChartColor(outS.TextColor);
+  { labelLine.lineStyle.width, PieSeries.ts:299 -- one logical pixel. }
+  Result.LineWidthLogical := 1;
+end;
+
 procedure TTyAdvanceChart.PaintSeries(APainter: TTyPainter;
   const AMeasurer: ITyTextMeasurer; APPI: Integer);
 var
   list: TTyPaintList;
   i, drawn: Integer;
   v: TTySeriesVisual;
+  pv: TTyPieVisual;
   specs: TTyLabelSpecArray;
 begin
   if Length(FBindings) = 0 then Exit;
@@ -1209,8 +1234,20 @@ begin
       if FBindings[i].SeriesType = TyPieSeriesTypeName then
       begin
         if i <= High(FPies) then
+        begin
+          pv := PieVisual(i);
           Inc(drawn, TyBuildPieMarks(FBindings[i], FPies[i], FPieSpecs[i],
-            PieVisual(i), list));
+            pv, list));
+          { ITS OWN PASS, not TyExpandLabels. A pie label is placed from the
+            slice's ANGLES and the series radius, none of which survive into
+            the sector's bounding box -- the box of a wedge is the whole
+            outer disc, so a label placed from it would sit at the disc's
+            centre for every slice. }
+          Inc(drawn, TyBuildPieLabels(FBindings[i], FPies[i],
+            TyPieLabelSpecOf(FOption, FBindings[i].SeriesIndex,
+              TyPieLabelSpecDefault),
+            PieLabelInk, pv.Fills, FStores[i], AMeasurer, APPI, list));
+        end;
         Continue;
       end;
       v := TySeriesVisual(TTyChartColor(SeriesColor(FBindings[i].SeriesIndex)));

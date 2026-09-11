@@ -35,10 +35,17 @@ unit tyControls.AdvChart.Labels;
   echarts/src/label/labelStyle.ts, 6.1.0.
 
   WHAT IS NOT HERE, deliberately:
-    - the PIE's labels. PieView throws the text config away and pie/labelLayout
-      computes x, y and rotation itself, so `distance` and `offset` are inert
-      there and the thirteen positions below do not apply. It is a different
-      algorithm and it gets its own pass.
+    - the PIE's labels. pie/labelLayout computes x, y and rotation itself, so
+      the thirteen positions below do not apply. It is a different algorithm
+      and it gets its own pass.
+
+      AND `distance` IS INERT THERE WHILE `offset` IS NOT, which took an
+      audit to notice -- an earlier version of this note said both were. The
+      two die by different mechanisms and only one of them dies: PieView
+      resets `position` and `rotation` only, and setTextConfig EXTENDS rather
+      than replaces, so both survive into zrender. `distance` is then read
+      only INSIDE the `has a position` gate, which a null position closes;
+      `offset` is applied outside it, unconditionally.
     - the nine SECTOR positions. They serve polar bars, which this port has no
       renderer for; building them now would be a table nothing reads.
     - de-collision. Upstream can hide a label that overlaps another; this
