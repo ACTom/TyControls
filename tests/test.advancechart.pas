@@ -79,6 +79,10 @@ type
     procedure TestATitleIsDrawnWhereTheOptionPutIt;
     procedure TestASeriesLabelIsDrawnAndTakesItsInkFromItsMark;
     procedure TestAPieLabelsItsSlicesAndPointsAtThem;
+    procedure TestALegendNamesTheSeriesAlongTheBottom;
+    procedure TestSingleModeGreysEveryItemButOneBeforeAnyClick;
+    procedure TestEachLegendItemTakesItsOwnSeriesColourAndIconShape;
+    procedure TestALineSeriesGetsARuleWithARingOnItRatherThanABlock;
     procedure TestTwoBarSeriesStandSideBySideInsteadOfOnTopOfEachOther;
     procedure TestAStackedBarStandsOnTheOneBelowIt;
     procedure TestALayeredFrameDrawsTheSamePictureAsAWholeOne;
@@ -1958,6 +1962,222 @@ begin
     red > 100);
   AssertTrue(Format('and the second in slot 2, not slot 1 again (%d px)',
     [green]), green > 100);
+end;
+
+procedure TAdvanceChartTest.TestALegendNamesTheSeriesAlongTheBottom;
+var
+  bottom_, top_: Integer;
+begin
+  { A legend floats over the container and reserves nothing, exactly like the
+    title -- so the thing that says it was drawn is ink where nothing else
+    paints. The WORDS carry a theme key of their own, and overriding it is
+    what proves the key is consulted rather than a colour written into the
+    control. }
+  FCtl.StyleOverride := 'TyAdvChartLegend { color: #FF0000; }';
+  FChart.Option := '{ legend: {}, series: [{ type: ''bar'', '
+    + 'name: ''Alpha'', data: [5] }] }';
+  Draw(400, 300);
+  bottom_ := RedIn(0, 250, 399, 299);
+  top_ := RedIn(0, 0, 399, 120);
+  AssertTrue(Format('the legend is along the bottom (%d px)', [bottom_]),
+    bottom_ > 10);
+  AssertEquals('and nowhere near the top', 0, top_);
+
+  { AND `top` MOVES IT, so the option is read rather than the default drawn
+    twice. }
+  FChart.Option := '{ legend: { top: 0 }, series: [{ type: ''bar'', '
+    + 'name: ''Alpha'', data: [5] }] }';
+  Draw(400, 300);
+  top_ := RedIn(0, 0, 399, 60);
+  AssertTrue(Format('now at the top (%d px)', [top_]), top_ > 10);
+  AssertEquals('and no longer at the bottom', 0, RedIn(0, 250, 399, 299));
+
+  { THE WORDS TAKE THE LEGEND'S OWN FONT KEY. Overriding the SIZE is what
+    proves it: every other text key in this theme is the same size, so a
+    colour override alone cannot tell which key was read. }
+  FCtl.StyleOverride := 'TyAdvChartLegend { color: #FF0000; font-size: 20px; }';
+  FChart.Option := '{ legend: { top: 0 }, series: [{ type: ''bar'', '
+    + 'name: ''Alpha'', data: [5] }] }';
+  Draw(400, 300);
+  AssertTrue(Format('bigger words make more ink (%d px)',
+    [RedIn(0, 0, 399, 60)]), RedIn(0, 0, 399, 60) > top_);
+
+  { A SERIES WITH NO NAME OFFERS NOTHING, so the legend has nothing to list
+    and draws nothing at all. }
+  FChart.Option := '{ legend: {}, series: [{ type: ''bar'', data: [5] }] }';
+  Draw(400, 300);
+  AssertEquals('an unnamed series puts no words in the legend', 0,
+    RedIn(0, 0, 399, 299));
+end;
+
+procedure TAdvanceChartTest.TestSingleModeGreysEveryItemButOneBeforeAnyClick;
+var
+  live, dead: Integer;
+begin
+  { `selectedMode: 'single'` is resolved AT LOAD -- upstream forces exactly
+    one item on before anything is drawn, so this is a first-frame difference
+    and not an interaction one. Four corpus examples depend on it.
+
+    TWO SERIES AND TWO COLOURS, because a chart where every item ends up the
+    same colour cannot tell `one of them is greyed` from `all of them are`. }
+  FCtl.StyleOverride := 'TyAdvChartLegend { color: #FF0000; }'
+    + ' TyAdvChartLegendInactive { color: #00FF00; }';
+  FChart.Option := '{ legend: {}, series: ['
+    + '{ type: ''bar'', name: ''Alpha'', data: [5] },'
+    + '{ type: ''bar'', name: ''Beta'', data: [3] }] }';
+  Draw(400, 300);
+  live := RedIn(0, 250, 399, 299);
+  AssertTrue(Format('both names are drawn live (%d px)', [live]), live > 20);
+  AssertEquals('and none of them greyed', 0, GreenIn(0, 250, 399, 299));
+
+  FChart.Option := '{ legend: { selectedMode: ''single'' }, series: ['
+    + '{ type: ''bar'', name: ''Alpha'', data: [5] },'
+    + '{ type: ''bar'', name: ''Beta'', data: [3] }] }';
+  Draw(400, 300);
+  dead := GreenIn(0, 250, 399, 299);
+  AssertTrue(Format('one of the two is now greyed (%d px)', [dead]),
+    dead > 10);
+  AssertTrue(Format('and the other is still live (%d px)',
+    [RedIn(0, 250, 399, 299)]), RedIn(0, 250, 399, 299) > 10);
+  AssertTrue('with less live ink than before',
+    RedIn(0, 250, 399, 299) < live);
+
+  { `selected` says the same thing without the mode, and names WHICH one. }
+  FChart.Option := '{ legend: { selected: { Alpha: false } }, series: ['
+    + '{ type: ''bar'', name: ''Alpha'', data: [5] },'
+    + '{ type: ''bar'', name: ''Beta'', data: [3] }] }';
+  Draw(400, 300);
+  AssertTrue(Format('the named item is greyed (%d px)',
+    [GreenIn(0, 250, 399, 299)]), GreenIn(0, 250, 399, 299) > 10);
+end;
+
+procedure TAdvanceChartTest.TestEachLegendItemTakesItsOwnSeriesColourAndIconShape;
+var
+  widest, y, span, x: Integer;
+  p: TBGRAPixel;
+begin
+  { TWO SERIES, TWO OVERRIDDEN RAMP SLOTS, and the probe restricted to the
+    legend band -- the grid's own bottom edge is 80 px up from it, so nothing
+    but the legend paints down here. A legend that matched every name against
+    the FIRST series would put slot one's colour on both icons. }
+  FCtl.StyleOverride := 'TyAdvChartSeries1 { background: #FF0000; }'
+    + ' TyAdvChartSeries2 { background: #00FF00; }';
+  FChart.Option := '{ legend: {}, series: ['
+    + '{ type: ''bar'', name: ''Alpha'', data: [5] },'
+    + '{ type: ''bar'', name: ''Beta'', data: [3] }] }';
+  Draw(400, 300);
+  AssertTrue(Format('the first item is the first slot (%d px)',
+    [RedIn(0, 250, 399, 299)]), RedIn(0, 250, 399, 299) > 10);
+  AssertTrue(Format('the second is the second (%d px)',
+    [GreenIn(0, 250, 399, 299)]), GreenIn(0, 250, 399, 299) > 10);
+
+  { AND THE SHAPE IS A ROUNDED RECTANGLE, filled: a bar publishes no symbol, so
+    the chain lands on roundRect and the icon is a solid 25-wide block. The
+    WIDEST UNBROKEN RUN is what tells that from a ring or a circle -- a 14 px
+    tall ring can never manage more than 14 across. }
+  widest := 0;
+  for y := 250 to 299 do
+  begin
+    span := 0;
+    for x := 0 to 399 do
+    begin
+      p := PixelAt(x, y);
+      if (p.red > 180) and (p.green < 80) and (p.blue < 80) then
+      begin
+        Inc(span);
+        if span > widest then widest := span;
+      end
+      else
+        span := 0;
+    end;
+  end;
+  AssertTrue(Format('a solid block, not a marker (%d px across)', [widest]),
+    widest >= 20);
+end;
+
+procedure TAdvanceChartTest.TestALineSeriesGetsARuleWithARingOnItRatherThanABlock;
+var
+  x0, x1, y0, y1, runs: Integer;
+  wasRed, isRed: Boolean;
+
+  { REDDER THAN ITS SURROUNDINGS, not saturated red. A line icon's box starts
+    on a half-pixel -- the marker's pen overhangs its own geometry, so the
+    block's top edge is fractional -- and every edge of it is anti-aliased. A
+    `red > 180, green < 80` probe reads a half-covered red pixel as background
+    and would find most of the icon missing. }
+  function Red(AX, AY: Integer): Boolean;
+  var q: TBGRAPixel;
+  begin
+    q := PixelAt(AX, AY);
+    Result := (q.red > q.green + 40) and (q.red > q.blue + 40);
+  end;
+
+  { The ink's bounding box in the legend band, and the number of separate
+    vertical runs down the middle of it. }
+  { FPC will not let a nested routine drive a for-loop with the enclosing
+    one's variable, so the counters are local here. }
+  procedure Measure;
+  var xx, yy: Integer;
+  begin
+    x0 := 9999; x1 := -1; y0 := 9999; y1 := -1;
+    for yy := 250 to 299 do
+      for xx := 0 to 399 do
+        if Red(xx, yy) then
+        begin
+          if xx < x0 then x0 := xx;
+          if xx > x1 then x1 := xx;
+          if yy < y0 then y0 := yy;
+          if yy > y1 then y1 := yy;
+        end;
+    runs := 0;
+    wasRed := False;
+    for yy := y0 to y1 do
+    begin
+      isRed := Red((x0 + x1) div 2, yy);
+      if isRed and not wasRed then Inc(runs);
+      wasRed := isRed;
+    end;
+  end;
+
+begin
+  { A LINE SERIES DRAWS ITS OWN LEGEND ICON and nothing else does: a rule
+    across the whole item box with a RING sitting on it, four fifths of the
+    box's height. Two things can go wrong and they look different:
+
+      - forget that a line draws its own, and the icon collapses to a single
+        `emptyCircle` in the 25 x 14 box -- a ring of radius 7 and no rule,
+        so the ink is 14 wide instead of 26;
+      - forget which icon the series publishes, and the marker loses its
+        `empty` and comes out a solid dot, so the middle of the icon fills in.
+
+    THE RULE IS BROKEN IN THE MIDDLE, and that is not a defect: the ring is
+    drawn over it and an `empty` symbol is FILLED with the chart's own ground,
+    so the rule survives as two stubs either side. Upstream draws it the same
+    way, for the same reason. Measuring the widest unbroken run would therefore
+    find six pixels where the rule is twenty-five wide -- the ink's BOUNDING
+    BOX is what answers `is there a rule', and the number of separate runs down
+    its middle is what answers `is the marker a ring'. }
+  FCtl.StyleOverride := 'TyAdvChartSeries1 { background: #FF0000; }';
+  FChart.Option := '{ legend: {}, xAxis: { type: ''category'', '
+    + 'data: [''a'', ''b''] }, yAxis: {}, series: [{ type: ''line'', '
+    + 'name: ''Alpha'', data: [5, 3] }] }';
+  Draw(400, 300);
+  Measure;
+  AssertTrue(Format('the rule spans the item box (%d px wide)', [x1 - x0 + 1]),
+    x1 - x0 + 1 >= 24);
+  AssertTrue(Format('and the marker on it is a RING (%d runs down the middle)',
+    [runs]), runs >= 2);
+
+  { A BAR IS THE OTHER HALF OF THE SAME RULE: no symbol at all, so no rule and
+    no ring -- one solid rounded block, as wide as the item box and solid all
+    the way down its middle. }
+  FChart.Option := '{ legend: {}, series: [{ type: ''bar'', '
+    + 'name: ''Alpha'', data: [5] }] }';
+  Draw(400, 300);
+  Measure;
+  AssertTrue(Format('a bar icon is as wide as the box too (%d px)',
+    [x1 - x0 + 1]), x1 - x0 + 1 >= 24);
+  AssertEquals('but solid through and through', 1, runs);
 end;
 
 procedure TAdvanceChartTest.TestTwoBarSeriesStandSideBySideInsteadOfOnTopOfEachOther;

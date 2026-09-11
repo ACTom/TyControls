@@ -276,12 +276,20 @@ begin
 
   if AStartV.Kind = buCentre then
   begin
-    { Centre needs a size to centre. Without one it degenerates to the whole
-      container, which is the only answer that is not a guess. }
+    { CENTRE NEEDS A SIZE TO CENTRE. Without one upstream does not fall back
+      to centring -- it falls through to `left = left || 0` and fills, because
+      the centred left it computed was NaN and NaN is falsy. So the answer is
+      the container INSET BY THE MARGINS, exactly as the no-edges case below.
+
+      It reads like a detail and it is the legend's wrap width: a legend is
+      centred by default and its first box solve asks for a size it has not
+      measured yet, so this branch is the one that decides how wide a row may
+      grow before it wraps. Returning the whole container would let every row
+      run a padding wider than upstream's. }
     if IsNan(sz) then
     begin
-      AStart := AContainerStart;
-      AStop := AContainerStart + AContainerExtent;
+      AStart := AContainerStart + AMarginStart;
+      AStop := AContainerStart + AContainerExtent - AMarginEnd;
       Exit;
     end;
     { NO MARGIN TERM. Upstream writes `extent/2 - size/2 - marginStart` and

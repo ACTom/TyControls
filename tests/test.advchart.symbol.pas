@@ -75,10 +75,24 @@ begin
     image to live in a pure unit, and drawing a stand-in shape would be a
     picture the author did not ask for. }
   AssertEquals(Ord(tsyNone), Ord(TySymbolKindOf('image://x.png', empty, path)));
-  AssertEquals('an unknown name draws nothing', Ord(tsyNone),
+  { AN UNRECOGNISED NAME IS A RECT, and this assertion used to say the
+    opposite -- it pinned the port's own first answer rather than
+    upstream's. SymbolClz.buildPath looks the name up in symbolBuildProxies
+    and, finding nothing, substitutes 'rect' and draws that. The legend is
+    what made it visible: `legend.icon: 'inherit'` on a bar series is
+    exactly this path, and ECharts draws a sharp-cornered box there. }
+  AssertEquals('an unknown name is a rect', Ord(tsyRect),
     Ord(TySymbolKindOf('wombat', empty, path)));
-  AssertEquals('and so does an empty one', Ord(tsyNone),
+  { The three that really are nothing: 'none', an empty name, and an image
+    URL -- the first two because upstream tests symbolType !== 'none' before
+    it ever reaches the proxy table. }
+  AssertEquals('but an empty one draws nothing', Ord(tsyNone),
     Ord(TySymbolKindOf('', empty, path)));
+  { The `empty` prefix survives an unrecognised body, because createSymbol
+    strips and flags it before the table is ever consulted. }
+  AssertEquals('and emptyWombat is a rect too', Ord(tsyRect),
+    Ord(TySymbolKindOf('emptyWombat', empty, path)));
+  AssertTrue('still flagged empty', empty);
 end;
 
 procedure TAdvChartSymbolTest.TestTheDefaultsAreUpstreamsAndDifferByType;

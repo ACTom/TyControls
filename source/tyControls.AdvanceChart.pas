@@ -38,7 +38,7 @@ uses
   tyControls.AdvChart.Stack, tyControls.AdvChart.Symbol,
   tyControls.AdvChart.Pie, tyControls.AdvChart.Title,
   tyControls.AdvChart.Labels, tyControls.AdvChart.LabelOpt,
-  tyControls.AdvChart.PieLabel,
+  tyControls.AdvChart.PieLabel, tyControls.AdvChart.Legend,
   fpjson, tyControls.SubPixel;
 
 const
@@ -84,6 +84,14 @@ type
       rather than before them. }
     FTitles: array of TTyTitleLayout;
     FTitleSpecs: array of TTyTitleSpec;
+    { Every legend the option carries, in two halves. The ENTRIES and the
+      SELECTION need nothing but the option and the stores, so they settle in
+      Rebuild; the LAYOUT has to measure the words, so it waits for Relayout
+      like the axes and the title. }
+    FLegendSpecs: array of TTyLegendSpec;
+    FLegendEntries: array of TTyLegendEntryArray;
+    FLegendFlags: array of TTyLegendFlags;
+    FLegends: array of TTyLegendLayout;
     FDirty: Boolean;
     FLastRect: TTyRectF;
     FOptionText: string;
@@ -147,6 +155,24 @@ type
     function PieLabelInk: TTyPieLabelInk;
     { `series.name`, which is what `{a}` in a label formatter means. }
     function SeriesNameOf(ASlot: Integer): string;
+    { The two name lists a legend needs: what it falls back to when the
+      option lists no `data`, and what it is allowed to match. They are not
+      the same list -- see the body. }
+    procedure LegendNames(out APotential, AAvailable: TTyLegendNames);
+    { `series.symbol` as written, '' when the option did not name one. What
+      the legend makes of it is the legend's business. }
+    function SeriesSymbolWord(ASlot: Integer): string;
+    { What the chart can say about each of a legend's names. }
+    function LegendSources(const AEntries: TTyLegendEntryArray):
+      TTyLegendSourceArray;
+    { Specs, entries and selection. Runs in Rebuild. }
+    procedure SolveLegendData;
+    { Every legend, measured and placed. Runs in Relayout. }
+    procedure SolveLegends(const AMeasurer: ITyTextMeasurer; APPI: Integer);
+    function LegendFont: TTyLegendFont;
+    function LegendInk: TTyLegendInk;
+    { The legend's elements, into the chart's own paint list. }
+    function BuildLegends(APPI: Integer; AList: TTyPaintList): Integer;
     procedure PaintDynamic(APainter: TTyPainter; const ARect: TRect;
       APPI: Integer; const AMeasurer: ITyTextMeasurer);
     { Whether the dynamic layer would draw anything. False skips a whole
@@ -422,6 +448,10 @@ begin
     whose axis was sized from the raw values draws off the top of its plot. }
   FStacks := TySolveStacks(FOption, FBindings, FStores);
   TyApplyAxisExtents(FOption, FBuild, FBindings, FStores, FStacks, FIndex);
+  { AFTER THE STORES, because a pie legend names DATA ITEMS and the names
+    live in the store. Nothing here measures anything, so it does not have to
+    wait for Relayout. }
+  SolveLegendData;
 end;
 
 procedure TTyAdvanceChart.Relayout(APainter: TTyPainter; const ARect: TTyRectF;
@@ -455,6 +485,7 @@ begin
   FBarCols := TySolveBarLayout(FOption, FBuild, FBindings, FStores, FIndex);
   SolvePies;
   SolveTitles(AMeasurer, APPI);
+  SolveLegends(AMeasurer, APPI);
   FDirty := False;
 end;
 
@@ -1165,6 +1196,220 @@ begin
   if (d <> nil) and (d.JSONType = jtString) then Result := d.AsString;
 end;
 
+{ ==================== legend ==================== }
+
+{ TWO LISTS, and they are deliberately different.
+
+  POTENTIAL is what a legend with no `data` of its own falls back to: a pie
+  contributes its SLICE names and everything else contributes its own, and an
+  unnamed series contributes NOTHING -- upstream gives it a private dummy name
+  that no legend entry can be written to match, so the effect is the same and
+  an empty string is the honest way to say it here.
+
+  AVAILABLE is what a name is allowed to match. Every name the chart can
+  produce is in it, and an entry that is NOT in it reads as switched off
+  however `legend.selected` is written -- which is what greys out a
+  `legend.data` entry naming a series nobody declared. }
+procedure TTyAdvanceChart.LegendNames(out APotential, AAvailable: TTyLegendNames);
+var
+  i, k, np, na: Integer;
+  nm: string;
+
+  procedure PushP(const AName: string);
+  begin
+    if AName = '' then Exit;
+    if np >= Length(APotential) then SetLength(APotential, np * 2 + 8);
+    APotential[np] := AName;
+    Inc(np);
+  end;
+
+  procedure PushA(const AName: string);
+  begin
+    if AName = '' then Exit;
+    if na >= Length(AAvailable) then SetLength(AAvailable, na * 2 + 8);
+    AAvailable[na] := AName;
+    Inc(na);
+  end;
+
+begin
+  APotential := nil;
+  AAvailable := nil;
+  np := 0;
+  na := 0;
+  for i := 0 to High(FBindings) do
+  begin
+    if (FBindings[i].SeriesType = TyPieSeriesTypeName)
+      and (i <= High(FStores)) and (FStores[i] <> nil) then
+    begin
+      for k := 0 to FStores[i].Count - 1 do
+      begin
+        nm := FStores[i].GetName(k);
+        PushP(nm);
+        PushA(nm);
+      end;
+      Continue;
+    end;
+    nm := SeriesNameOf(FBindings[i].SeriesIndex);
+    PushP(nm);
+    PushA(nm);
+  end;
+  SetLength(APotential, np);
+  SetLength(AAvailable, na);
+end;
+
+function TTyAdvanceChart.SeriesSymbolWord(ASlot: Integer): string;
+var
+  d: TJSONData;
+  node: TJSONObject;
+begin
+  Result := '';
+  if (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
+  if FOption = nil then Exit;
+  d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
+  if (d = nil) or not (d is TJSONObject) then Exit;
+  node := TJSONObject(d);
+  d := node.Find('symbol');
+  if (d <> nil) and (d.JSONType = jtString) then Result := d.AsString;
+end;
+
+function TTyAdvanceChart.LegendSources(const AEntries: TTyLegendEntryArray):
+  TTyLegendSourceArray;
+var
+  i, j, k: Integer;
+  found: Boolean;
+begin
+  SetLength(Result, Length(AEntries));
+  for i := 0 to High(AEntries) do
+  begin
+    Result[i] := Default(TTyLegendSource);
+    if AEntries[i].Newline then Continue;
+    found := False;
+    { A SERIES NAME WINS OVER A SLICE NAME, because upstream asks
+      getSeriesByName first and only falls to the per-datum providers when
+      nothing answered. }
+    for j := 0 to High(FBindings) do
+    begin
+      if FBindings[j].SeriesType = TyPieSeriesTypeName then Continue;
+      if SeriesNameOf(FBindings[j].SeriesIndex) <> AEntries[i].Name then
+        Continue;
+      Result[i].Found := True;
+      Result[i].SeriesType := FBindings[j].SeriesType;
+      Result[i].Colour := TTyChartColor(SeriesColor(FBindings[j].SeriesIndex));
+      Result[i].DefaultIcon := TyLegendDefaultIcon(FBindings[j].SeriesType,
+        SeriesSymbolWord(j));
+      Result[i].OwnIcon := TyLegendDrawsOwnIcon(FBindings[j].SeriesType);
+      Result[i].LineColour := Result[i].Colour;
+      { THE SAME 2 THE LINE ITSELF FALLS BACK TO in BuildLine, which is also
+        what `lineStyle.width: 'auto'` resolves to upstream. When series line
+        widths become an option the two will read it from one place; until
+        then they agree by saying the same thing. }
+      if Result[i].OwnIcon then
+        Result[i].LineWidthLogical := 2;
+      found := True;
+      Break;
+    end;
+    if found then Continue;
+    for j := 0 to High(FBindings) do
+    begin
+      if FBindings[j].SeriesType <> TyPieSeriesTypeName then Continue;
+      if (j > High(FStores)) or (FStores[j] = nil) then Continue;
+      for k := 0 to FStores[j].Count - 1 do
+        if FStores[j].GetName(k) = AEntries[i].Name then
+        begin
+          { colorBy: 'data' -- the SLICE's colour, taken from the same
+            eight-slot ramp by its row, exactly as PieVisual takes it. }
+          Result[i].Found := True;
+          Result[i].SeriesType := TyPieSeriesTypeName;
+          Result[i].Colour := TTyChartColor(SeriesColor(k));
+          Result[i].LineColour := Result[i].Colour;
+          found := True;
+          Break;
+        end;
+      if found then Break;
+    end;
+  end;
+end;
+
+procedure TTyAdvanceChart.SolveLegendData;
+var
+  i, n: Integer;
+  potential, available: TTyLegendNames;
+begin
+  n := TyLegendCount(FOption);
+  SetLength(FLegendSpecs, n);
+  SetLength(FLegendEntries, n);
+  SetLength(FLegendFlags, n);
+  SetLength(FLegends, n);
+  if n = 0 then Exit;
+  LegendNames(potential, available);
+  for i := 0 to n - 1 do
+  begin
+    FLegendSpecs[i] := TyLegendSpecOf(FOption, i);
+    FLegendEntries[i] := TyLegendEntries(FOption, i, potential);
+    FLegendFlags[i] := TyLegendSelected(FOption, i, FLegendEntries[i],
+      available, FLegendSpecs[i].SelectedMode);
+    FLegends[i] := Default(TTyLegendLayout);
+  end;
+end;
+
+function TTyAdvanceChart.LegendFont: TTyLegendFont;
+var st: TTyStyleSet;
+begin
+  st := ActiveController.Model.ResolveStyle('TyAdvChartLegend', '', []);
+  Result.Name := st.FontName;
+  Result.SizeLogical := ResolveFontSize(st);
+  Result.Weight := st.FontWeight;
+end;
+
+function TTyAdvanceChart.LegendInk: TTyLegendInk;
+var model: TTyStyleModel;
+begin
+  model := ActiveController.Model;
+  Result.Text := TTyChartColor(
+    model.ResolveStyle('TyAdvChartLegend', '', []).TextColor);
+  Result.Inactive := TTyChartColor(
+    model.ResolveStyle('TyAdvChartLegendInactive', '', []).TextColor);
+  Result.Border := TTyChartColor(
+    model.ResolveStyle('TyAdvChartLegendBorder', '', []).BorderColor);
+  Result.Background := TTyChartColor(
+    model.ResolveStyle('TyAdvChartLegendBackground', '', []).Background.Color);
+  { The hole in a ring is the chart's own ground, the same substitution the
+    mark builders make for a datum's `empty` marker. }
+  Result.EmptyFill := TTyChartColor(
+    model.ResolveStyle(GetStyleTypeKey, StyleClass,
+      [tysNormal]).Background.Color);
+end;
+
+procedure TTyAdvanceChart.SolveLegends(const AMeasurer: ITyTextMeasurer;
+  APPI: Integer);
+var
+  i: Integer;
+  fnt: TTyLegendFont;
+begin
+  if Length(FLegendSpecs) = 0 then Exit;
+  fnt := LegendFont;
+  for i := 0 to High(FLegendSpecs) do
+    FLegends[i] := TyLayoutLegend(FLegendSpecs[i], FLegendEntries[i],
+      FLegendFlags[i], LegendSources(FLegendEntries[i]), FLastRect,
+      AMeasurer, fnt, APPI);
+end;
+
+function TTyAdvanceChart.BuildLegends(APPI: Integer;
+  AList: TTyPaintList): Integer;
+var
+  i: Integer;
+  ink: TTyLegendInk;
+  fnt: TTyLegendFont;
+begin
+  Result := 0;
+  if Length(FLegends) = 0 then Exit;
+  ink := LegendInk;
+  fnt := LegendFont;
+  for i := 0 to High(FLegends) do
+    Inc(Result, TyBuildLegendMarks(FLegendSpecs[i], FLegends[i], ink, fnt,
+      APPI, AList));
+end;
+
 function TTyAdvanceChart.LabelSpecFor(ASlot: Integer): TTyLabelSpec;
 var
   base: TTyLabelSpec;
@@ -1296,6 +1541,11 @@ begin
       moved later would leave its label behind. }
     if drawn > 0 then
       TyExpandLabels(list, specs, AMeasurer, APPI);
+    { THE LEGEND GOES IN AFTER THE EXPANSION, and it is allowed to because
+      its captions are ANSWERS rather than requests -- they arrive with a
+      font and an anchor already on them, which is what the expansion exists
+      to supply. A MARK appended here would silently lose its label. }
+    Inc(drawn, BuildLegends(APPI, list));
     if drawn > 0 then
       TyRenderPaintList(APainter, list);
   finally

@@ -64,8 +64,19 @@ function TySymbolDefault(const ASeriesType: string): TTySymbolSpec;
 function TySymbolSpecOf(ANode: TJSONObject;
   const ADefault: TTySymbolSpec): TTySymbolSpec;
 
-{ The name ECharts uses, parsed. Answers tsyNone for '' and for anything
-  unrecognised, so an unknown symbol draws nothing rather than guessing. }
+{ The name ECharts uses, parsed.
+
+  AN UNRECOGNISED NAME IS A RECT, not nothing. SymbolClz.buildPath looks the
+  name up in symbolBuildProxies and, finding nothing, sets symbolType to
+  'rect' and draws that -- so `symbol: 'blah'` and `legend.icon: 'inherit'`
+  on a series that has no icon of its own both come out as sharp-cornered
+  boxes. This port used to answer tsyNone there, which drew nothing.
+
+  THREE NAMES REALLY ARE NOTHING: the empty string, 'none', and an
+  `image://` URL -- the first two because upstream tests symbolType !== 'none'
+  before it ever reaches the proxy table, the third because upstream draws a
+  picture and a pure unit has nowhere to put one. A grey box would be a worse
+  answer than no box. }
 function TySymbolKindOf(const AName: string; out AEmpty: Boolean;
   out APath: string): TTySymbolKind;
 
@@ -74,6 +85,26 @@ function TySymbolKindOf(const AName: string; out AEmpty: Boolean;
   draws nothing -- callers test TyRectFIsValid, or simply skip tsyNone. }
 function TyBuildSymbol(const ASpec: TTySymbolSpec;
   ACX, ACY: Double): TTyChartShape;
+
+{ THE SAME SYMBOL IN A GIVEN BOX, which is a DIFFERENT PICTURE for two of the
+  kinds -- and the difference is upstream's, not a simplification here.
+
+  A DATUM's symbol is built in the UNIT box (-1, -1, 2, 2) and the element is
+  then scaled by (symbolSize[0] / 2, symbolSize[1] / 2). A LEGEND ICON is built
+  in a real 25 x 14 box and never scaled. The shape makers read w and h either
+  way, so the unit box hides what they do with them:
+
+    circle -- r = min(w, h) / 2. In the unit box min(2, 2) is a no-op and the
+              non-uniform scale afterwards turns the circle into an ELLIPSE; in
+              a real 25 x 14 box it is a circle of radius 7.
+    square -- side = min(w, h), KEEPING THE BOX'S TOP-LEFT. In the unit box that
+              is indistinguishable from rect; in a 25 x 14 box it is a 14 x 14
+              square flush with the left edge.
+
+  Everything else centres on the box and uses both extents, so it is the same
+  shape either way and is delegated. }
+function TyBuildSymbolInBox(const ASpec: TTySymbolSpec;
+  const ABox: TTyRectF): TTyChartShape;
 
 implementation
 
@@ -150,7 +181,8 @@ begin
   if s = 'pin' then Exit(tsyPin);
   if s = 'arrow' then Exit(tsyArrow);
   if s = 'line' then Exit(tsyLine);
-  Result := tsyNone;
+  { symbol.ts:296-301 -- `if (!proxySymbol) { symbolType = 'rect'; ... }`. }
+  Result := tsyRect;
 end;
 
 { symbolSize is a number or a two-element array; a callback cannot survive the
@@ -464,6 +496,43 @@ begin
     Result := TyShapePolyline(L.Pts)
   else
     Result := TyShapePolygon(L.Pts);
+end;
+
+function TyBuildSymbolInBox(const ASpec: TTySymbolSpec;
+  const ABox: TTyRectF): TTyChartShape;
+var
+  spec: TTySymbolSpec;
+  w, h, side: Double;
+begin
+  Result := TyShapeRect(TyInvalidRectF);
+  if ASpec.Kind = tsyNone then Exit;
+  if not TyRectFIsValid(ABox) then Exit;
+  w := TyRectFWidth(ABox);
+  h := TyRectFHeight(ABox);
+  if (w <= 0) or (h <= 0) then Exit;
+
+  case ASpec.Kind of
+    tsyCircle:
+      Exit(TyShapeCircle(ABox.Left + w / 2 + ASpec.OffsetX,
+                         ABox.Top + h / 2 + ASpec.OffsetY,
+                         Min(w, h) / 2));
+    tsySquare:
+      begin
+        { TOP-LEFT, not centred: `shape.x = x` after `size = Math.min(w, h)`
+          leaves the square flush with the box's near corner rather than in
+          the middle of it. }
+        side := Min(w, h);
+        Exit(TyShapeRect(
+          TyRectF(ABox.Left + ASpec.OffsetX, ABox.Top + ASpec.OffsetY,
+                  ABox.Left + side + ASpec.OffsetX,
+                  ABox.Top + side + ASpec.OffsetY)));
+      end;
+  end;
+
+  spec := ASpec;
+  spec.WidthPx := w;
+  spec.HeightPx := h;
+  Result := TyBuildSymbol(spec, ABox.Left + w / 2, ABox.Top + h / 2);
 end;
 
 end.

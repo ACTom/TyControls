@@ -1232,6 +1232,16 @@ begin
     'TyAdvChartLabelOnLight { color: var(--on-surface); }' + LineEnding +
     'TyAdvChartLabelOnMid   { color: var(--surface); }' + LineEnding +
     'TyAdvChartLabelOnDark  { color: alpha(var(--surface), 0.80); }' + LineEnding +
+    '/* The legend. Upstream inks the words with tokens.color.secondary and greys a' + LineEnding +
+    '   deselected item with tokens.color.disabled. This vocabulary has no disabled' + LineEnding +
+    '   INK token -- only a disabled OPACITY -- so a switched-off item is the chart''s' + LineEnding +
+    '   own ink faded far enough to read as off on either mode. The frame is drawn' + LineEnding +
+    '   only when the option asks for one, so the last two are dormant on almost' + LineEnding +
+    '   every chart. */' + LineEnding +
+    'TyAdvChartLegend { color: var(--muted); font-size: var(--font-size-base); }' + LineEnding +
+    'TyAdvChartLegendInactive { color: alpha(var(--on-surface), 0.25); }' + LineEnding +
+    'TyAdvChartLegendBorder { border-color: var(--border); border-width: 1px; }' + LineEnding +
+    'TyAdvChartLegendBackground { background: var(--surface); }' + LineEnding +
     '' + LineEnding +
     '/* ── ListGroupPanel (navigation accordion; own keys, not the tree column header''s) ────── */' + LineEnding +
     '/* A modern sider: group rows carry NO fill (just muted ink + a right chevron; the OPEN group' + LineEnding +
