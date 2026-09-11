@@ -96,6 +96,7 @@ type
     procedure TestTheLineItemIsMeasuredWithItsRuleAndItsMarker;
     procedure TestARingOnASeriesWithNoLineStillGetsAPen;
     procedure TestWhichIconASeriesTypePublishes;
+    procedure TestOnlyANameTheLegendListsCanBeSwitchedOff;
   end;
 
 implementation
@@ -1035,6 +1036,72 @@ begin
   AssertFalse('not a scatter', TyLegendDrawsOwnIcon('scatter'));
   AssertFalse('not a bar', TyLegendDrawsOwnIcon('bar'));
   AssertFalse('not a pie', TyLegendDrawsOwnIcon('pie'));
+end;
+
+procedure TAdvChartLegendTest.TestOnlyANameTheLegendListsCanBeSwitchedOff;
+var
+  e: TTyLegendEntryArray;
+  f: TTyLegendFlags;
+begin
+  { `HIDES` IS NOT `NOT SELECTED`, and the difference is a chart going blank.
+    TyLegendSelected answers False for two different reasons -- the item was
+    switched off, or the chart cannot produce that name at all -- and only the
+    first is an instruction to stop drawing something. A series the legend
+    never mentions is not the legend's business, and a series with no name at
+    all is never anybody's. }
+  AssertTrue(FOpt.SetOptionText('{ "legend": { "data": ["on", "off"], '
+    + '"selected": { "off": false } } }'));
+  e := TyLegendEntries(FOpt, 0, []);
+  f := TyLegendSelected(FOpt, 0, e, ['on', 'off'], tlsMultiple);
+
+  AssertTrue('the item switched off is hidden',
+    TyLegendHides(e, f, 'off'));
+  AssertFalse('the one left on is not', TyLegendHides(e, f, 'on'));
+  AssertFalse('a name the legend never lists is not',
+    TyLegendHides(e, f, 'stranger'));
+  AssertFalse('and an unnamed series is never hidden',
+    TyLegendHides(e, f, ''));
+
+  { A LINE BREAK IS NOT AN ITEM, so it cannot switch anything off -- and its
+    own name is the empty string, which is the name every unnamed series has. }
+  AssertTrue(FOpt.SetOptionText('{ "legend": { "data": ["", "a"] } }'));
+  e := TyLegendEntries(FOpt, 0, []);
+  f := TyLegendSelected(FOpt, 0, e, ['a'], tlsMultiple);
+  AssertFalse('the break hides nothing', TyLegendHides(e, f, ''));
+
+  { AN EMPTY NAME IS NEVER HIDDEN, and the entry has to be built by hand to
+    say so: TyLegendEntries is the one place that pairs an empty name with
+    the line-break flag, so going through it can never produce a plain entry
+    called ''. TyLegendHides is public and answers for callers that did not.
+    An unnamed series is exactly this case, and getting it wrong empties the
+    chart. }
+  SetLength(e, 1);
+  e[0].Name := '';
+  e[0].Icon := '';
+  e[0].Newline := False;
+  SetLength(f, 1);
+  f[0] := False;
+  AssertFalse('an entry with no name switches nothing off',
+    TyLegendHides(e, f, ''));
+
+  { A LINE BREAK IS NOT AN ITEM WHATEVER IT IS CALLED. A lone newline in
+    `legend.data` makes an entry whose NAME is a newline rather than
+    empty -- so the empty-name guard above does not cover it, and a
+    series really called that would be switched off by a break it has
+    nothing to do with. }
+  AssertTrue(FOpt.SetOptionText('{ "legend": { "data": ["' + #92 + 'n"] } }'));
+  e := TyLegendEntries(FOpt, 0, []);
+  f := TyLegendSelected(FOpt, 0, e, [], tlsMultiple);
+  AssertEquals('the break came through', 1, Length(e));
+  AssertTrue('and it IS a break', e[0].Newline);
+  AssertFalse('so it switches nothing off', TyLegendHides(e, f, #10));
+
+  { AND A LEGEND WITH NOTHING SWITCHED OFF HIDES NOTHING. }
+  AssertTrue(FOpt.SetOptionText('{ "legend": { } }'));
+  e := TyLegendEntries(FOpt, 0, ['a', 'b']);
+  f := TyLegendSelected(FOpt, 0, e, ['a', 'b'], tlsMultiple);
+  AssertFalse('', TyLegendHides(e, f, 'a'));
+  AssertFalse('', TyLegendHides(e, f, 'b'));
 end;
 
 initialization

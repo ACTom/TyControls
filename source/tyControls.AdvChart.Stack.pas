@@ -301,7 +301,13 @@ begin
     if i > High(AStores) then Break;
     b := ABindings[i];
     st := AStores[i];
-    if (st = nil) or (not b.Resolved) or (not b.HasAxes) then Continue;
+    { A HIDDEN SERIES IS NOT IN THE STACK, and the pre-seeded answer already
+      says what that means -- it looks exactly like a series that never
+      stacked. Accumulate then takes each member from the first ADMITTING
+      member below it, so the one above a hidden member lands on the next
+      survivor down rather than floating where it was. }
+    if (st = nil) or (not b.Resolved) or (not b.HasAxes) or b.Hidden then
+      Continue;
     if (b.ValueAxis = nil) or (b.BaseAxis = nil) then Continue;
     if not TypeCanStack(b.SeriesType) then Continue;
 

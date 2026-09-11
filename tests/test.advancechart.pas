@@ -45,6 +45,7 @@ type
     function ManyCategories(ACount: Integer): string;
     function RedIn(AL, AT, AR, AB: Integer): Integer;
     function GreenIn(AL, AT, AR, AB: Integer): Integer;
+    function BlueIn(AL, AT, AR, AB: Integer): Integer;
     function InkDepth(const AP, ABg: TBGRAPixel): Integer;
   published
     procedure TestItHasItsOwnStyleKey;
@@ -83,6 +84,10 @@ type
     procedure TestSingleModeGreysEveryItemButOneBeforeAnyClick;
     procedure TestEachLegendItemTakesItsOwnSeriesColourAndIconShape;
     procedure TestALineSeriesGetsARuleWithARingOnItRatherThanABlock;
+    procedure TestASwitchedOffSeriesIsNotDrawnAndDoesNotSizeTheAxis;
+    procedure TestASwitchedOffSliceLeavesThePieAndTheRestKeepTheirColours;
+    procedure TestTheSeriesAboveAHiddenOneDropsOntoWhatIsLeft;
+    procedure TestAPieOffersItsSliceNamesAndAnswersToItsOwn;
     procedure TestTwoBarSeriesStandSideBySideInsteadOfOnTopOfEachOther;
     procedure TestAStackedBarStandsOnTheOneBelowIt;
     procedure TestALayeredFrameDrawsTheSamePictureAsAWholeOne;
@@ -2180,6 +2185,170 @@ begin
   AssertEquals('but solid through and through', 1, runs);
 end;
 
+procedure TAdvanceChartTest.TestASwitchedOffSeriesIsNotDrawnAndDoesNotSizeTheAxis;
+var
+  redAlone, redBoth, greenBoth: Integer;
+begin
+  { TWO SERIES A HUNDRED TIMES APART. With both drawn the axis is sized by the
+    big one and the small one is a sliver; switch the big one off and the axis
+    re-scales to what is left, so the SAME data draws a full-height bar.
+
+    That second half is the point. A legend that only stopped drawing the
+    series would leave the axis at 500 and the survivor at a sliver -- which
+    is what a reader would call `it did not work`. }
+  FCtl.StyleOverride := 'TyAdvChartSeries1 { background: #FF0000; }'
+    + ' TyAdvChartSeries2 { background: #00FF00; }';
+  FChart.Option := '{ legend: {}, xAxis: { type: ''category'', '
+    + 'data: [''a'', ''b''] }, yAxis: {}, series: ['
+    + '{ type: ''bar'', name: ''Small'', data: [5, 5] },'
+    + '{ type: ''bar'', name: ''Large'', data: [500, 500] }] }';
+  Draw(400, 300);
+  redBoth := RedIn(0, 0, 399, 219);
+  greenBoth := GreenIn(0, 0, 399, 219);
+  AssertTrue(Format('both are drawn (%d red, %d green)',
+    [redBoth, greenBoth]), (redBoth > 0) and (greenBoth > 0));
+
+  FChart.Option := '{ legend: { selected: { Large: false } }, '
+    + 'xAxis: { type: ''category'', data: [''a'', ''b''] }, yAxis: {}, series: ['
+    + '{ type: ''bar'', name: ''Small'', data: [5, 5] },'
+    + '{ type: ''bar'', name: ''Large'', data: [500, 500] }] }';
+  Draw(400, 300);
+  AssertEquals('the switched-off series is gone from the plot', 0,
+    GreenIn(0, 0, 399, 219));
+  redAlone := RedIn(0, 0, 399, 219);
+  AssertTrue(Format('and the axis re-scaled around the survivor '
+    + '(%d px, was %d)', [redAlone, redBoth]), redAlone > redBoth * 4);
+end;
+
+procedure TAdvanceChartTest.TestASwitchedOffSliceLeavesThePieAndTheRestKeepTheirColours;
+var
+  blueBefore: Integer;
+begin
+  { A PIE'S LEGEND NAMES SLICES, so the filter is per ROW and not per series.
+    Three equal slices in three overridden ramp slots; switch the middle one
+    off and it must leave the circle -- and the third must STAY BLUE.
+
+    That last clause is the whole reason this commit touched PieVisual. The
+    fills used to be keyed on the sector's POSITION, so dropping a slice slid
+    every later one down a colour: the third slice would come back GREEN,
+    wearing the colour of the slice that had just been switched off. }
+  FCtl.StyleOverride := 'TyAdvChartSeries1 { background: #FF0000; }'
+    + ' TyAdvChartSeries2 { background: #00FF00; }'
+    + ' TyAdvChartSeries3 { background: #0000FF; }';
+  FChart.Option := '{ legend: {}, series: [{ type: ''pie'', label: '
+    + '{ show: false }, data: ['
+    + '{ name: ''A'', value: 1 }, { name: ''B'', value: 1 },'
+    + '{ name: ''C'', value: 1 }] }] }';
+  Draw(400, 300);
+  blueBefore := BlueIn(0, 0, 399, 245);
+  AssertTrue(Format('three slices, three colours (%d, %d, %d)',
+    [RedIn(0, 0, 399, 245), GreenIn(0, 0, 399, 245), blueBefore]),
+    (RedIn(0, 0, 399, 245) > 100) and (GreenIn(0, 0, 399, 245) > 100)
+    and (blueBefore > 100));
+
+  FChart.Option := '{ legend: { selected: { B: false } }, series: '
+    + '[{ type: ''pie'', label: { show: false }, data: ['
+    + '{ name: ''A'', value: 1 }, { name: ''B'', value: 1 },'
+    + '{ name: ''C'', value: 1 }] }] }';
+  Draw(400, 300);
+  AssertEquals('the switched-off slice left the circle', 0,
+    GreenIn(0, 0, 399, 245));
+  AssertTrue(Format('the third slice is still blue (%d px)',
+    [BlueIn(0, 0, 399, 245)]), BlueIn(0, 0, 399, 245) > blueBefore);
+  AssertTrue('and the first still red', RedIn(0, 0, 399, 245) > 100);
+end;
+
+procedure TAdvanceChartTest.TestTheSeriesAboveAHiddenOneDropsOntoWhatIsLeft;
+begin
+  { THE STACK IS THE ONE THING THE INDEX CANNOT DO FOR US. The axis extents
+    and the bar widths both take their populations from the axis-to-series
+    index, so leaving a hidden series out of THAT covers them both -- but the
+    stack solver never sees the index, and a hidden member left in the group
+    would go on holding the one above it up in the air.
+
+    Two bars of five in one stack. With both drawn the upper one occupies the
+    TOP half of the plot and the lower half is the other colour; switch the
+    lower one off and the upper one must come all the way down to the
+    baseline, which puts its colour where it has never been. }
+  FCtl.StyleOverride := 'TyAdvChartSeries1 { background: #FF0000; }'
+    + ' TyAdvChartSeries2 { background: #00FF00; }';
+  FChart.Option := '{ legend: {}, xAxis: { type: ''category'', '
+    + 'data: [''a''] }, yAxis: {}, series: ['
+    + '{ type: ''bar'', name: ''Bottom'', stack: ''s'', data: [5] },'
+    + '{ type: ''bar'', name: ''Top'', stack: ''s'', data: [5] }] }';
+  Draw(400, 300);
+  AssertTrue(Format('the upper series is in the top half (%d px)',
+    [GreenIn(0, 70, 399, 135)]), GreenIn(0, 70, 399, 135) > 100);
+  AssertEquals('and nowhere near the baseline', 0,
+    GreenIn(0, 160, 399, 215));
+
+  FChart.Option := '{ legend: { selected: { Bottom: false } }, '
+    + 'xAxis: { type: ''category'', data: [''a''] }, yAxis: {}, series: ['
+    + '{ type: ''bar'', name: ''Bottom'', stack: ''s'', data: [5] },'
+    + '{ type: ''bar'', name: ''Top'', stack: ''s'', data: [5] }] }';
+  Draw(400, 300);
+  AssertEquals('the hidden one is gone', 0, RedIn(0, 70, 399, 215));
+  AssertTrue(Format('and the one above it came down to the baseline (%d px)',
+    [GreenIn(0, 160, 399, 215)]), GreenIn(0, 160, 399, 215) > 100);
+end;
+
+procedure TAdvanceChartTest.TestAPieOffersItsSliceNamesAndAnswersToItsOwn;
+var
+  x0, x1: Integer;
+
+  { Local counters: FPC will not let a nested routine drive a for-loop with
+    the enclosing one's variable. }
+  function Wide: Integer;
+  var q: TBGRAPixel; xx, yy: Integer;
+  begin
+    x0 := 9999; x1 := -1;
+    for yy := 250 to 299 do
+      for xx := 0 to 399 do
+      begin
+        q := PixelAt(xx, yy);
+        if (q.red > 180) and (q.green < 80) and (q.blue < 80) then
+        begin
+          if xx < x0 then x0 := xx;
+          if xx > x1 then x1 := xx;
+        end;
+      end;
+    if x1 < x0 then Result := 0 else Result := x1 - x0 + 1;
+  end;
+
+begin
+  { A PIE'S LEGEND NAMES ITS SLICES AND NOT THE SERIES, so a pie with two
+    slices makes a legend with two items -- and the pie's own name, however
+    long, must not turn up as a third. Twenty characters long on purpose: an
+    extra item carrying it would roughly triple the block's width, which no
+    amount of font variation can explain away. }
+  FCtl.StyleOverride := 'TyAdvChartLegend { color: #FF0000; }';
+  FChart.Option := '{ legend: {}, series: [{ type: ''pie'', '
+    + 'name: ''ZZZZZZZZZZZZZZZZZZZZ'', label: { show: false }, data: ['
+    + '{ name: ''A'', value: 1 }, { name: ''B'', value: 1 }] }] }';
+  Draw(400, 300);
+  { Two one-character items measure about fifty across; a third carrying
+    that twenty-character name measures about two hundred. The bound sits
+    between them with room for any font either side. }
+  AssertTrue(Format('two items and no third (%d px across)', [Wide]),
+    (Wide > 20) and (Wide < 120));
+
+  { BUT IT STILL ANSWERS TO ITS OWN NAME. Upstream pushes every raw series'
+    name into the AVAILABLE list unconditionally, before it ever asks a
+    provider for data names -- so an author who writes the pie's own name into
+    `legend.data` gets a live item. Without that push the item would grey out
+    for a reason that has nothing to do with the option: the chart would be
+    claiming it cannot produce a name that is written on one of its series. }
+  FCtl.StyleOverride := 'TyAdvChartLegend { color: #FF0000; }'
+    + ' TyAdvChartLegendInactive { color: #00FF00; }';
+  FChart.Option := '{ legend: { data: [''Zzz''] }, series: [{ type: ''pie'', '
+    + 'name: ''Zzz'', label: { show: false }, data: ['
+    + '{ name: ''A'', value: 1 }, { name: ''B'', value: 1 }] }] }';
+  Draw(400, 300);
+  AssertTrue(Format('the item is live (%d px)', [RedIn(0, 250, 399, 299)]),
+    RedIn(0, 250, 399, 299) > 5);
+  AssertEquals('and not greyed', 0, GreenIn(0, 250, 399, 299));
+end;
+
 procedure TAdvanceChartTest.TestTwoBarSeriesStandSideBySideInsteadOfOnTopOfEachOther;
 var
   gb: TTyGridBuild;
@@ -2293,6 +2462,18 @@ begin
     begin
       p := PixelAt(x, y);
       if (p.red > 180) and (p.green < 80) and (p.blue < 80) then Inc(Result);
+    end;
+end;
+
+function TAdvanceChartTest.BlueIn(AL, AT, AR, AB: Integer): Integer;
+var x, y: Integer; p: TBGRAPixel;
+begin
+  Result := 0;
+  for y := AT to AB do
+    for x := AL to AR do
+    begin
+      p := PixelAt(x, y);
+      if (p.blue > 180) and (p.red < 80) and (p.green < 80) then Inc(Result);
     end;
 end;
 

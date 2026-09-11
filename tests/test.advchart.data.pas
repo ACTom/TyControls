@@ -118,6 +118,7 @@ type
     procedure TestAnAppendRetiresTheInvertedIndex;
     procedure TestACalculatedColumnIsVisibleToDataExtent;
     procedure TestSetCalculatedRefusesWhatItCannotHonour;
+    procedure TestGetNameByRawOutlivesAFilter;
   end;
 implementation
 
@@ -1274,6 +1275,38 @@ begin
     Fail('writing past the last row should raise');
   except
     on EInvalidOperation do ;
+  end;
+end;
+
+procedure TAdvChartDataTest.TestGetNameByRawOutlivesAFilter;
+var st: TTyDataStore;
+begin
+  { GetName SPEAKS THE VIEW'S LANGUAGE and GetNameByRaw the input's, and the
+    difference only exists once something has been filtered out. A predicate
+    handed to FilterSelf is given a RAW index -- it is deciding which raw rows
+    survive, so it cannot speak the view's language -- and a predicate that
+    looked the name up the other way would read a different row's name, or
+    none at all. }
+  st := TTyDataStore.Create;
+  try
+    st.AddDimension('v', ddtFloat);
+    st.AppendRow([TyDataNum(1)]);
+    st.AppendRow([TyDataNum(2)]);
+    st.AppendRow([TyDataNum(3)]);
+    st.SetName(0, 'a');
+    st.SetName(1, 'b');
+    st.SetName(2, 'c');
+    st.SelectRange(0, 2.5, 4);
+    AssertEquals('one row left', 1, st.Count);
+    AssertEquals('and the view calls it by its own name', 'c', st.GetName(0));
+    AssertEquals('while the raw getter still answers for the row that went',
+      'a', st.GetNameByRaw(0));
+    AssertEquals('', 'b', st.GetNameByRaw(1));
+    AssertEquals('', 'c', st.GetNameByRaw(2));
+    AssertEquals('and refuses a row that never existed', '',
+      st.GetNameByRaw(9));
+  finally
+    st.Free;
   end;
 end;
 

@@ -20,16 +20,18 @@ unit tyControls.AdvChart.Legend;
 
     THE CLICK. Drawing a legend and toggling one are two different jobs and the
     second needs machinery this control does not have yet -- a mouse path, a hit
-    test, and a full re-layout on every toggle. What IS here is everything that
-    is decided before anyone clicks: `legend.selected`, the `selectedMode:
-    'single'` resolution that upstream performs AT LOAD, and the inactive
-    styling. Those are static option state, and a legend that ignored them would
-    draw the wrong picture on the FIRST frame, which is a different kind of
-    wrong from being inert.
+    test, and a full re-layout on every toggle. NOTHING HIT-TESTS ANYTHING in
+    this control yet: the paint list's HitTest has no production caller and the
+    list is freed at the end of the frame that built it. When the click lands it
+    must also set the control's dirty flag and drop the static layer, because a
+    plain repaint runs neither Rebuild nor Relayout and the filter below would
+    never re-run.
 
-    THE FILTER. An item drawn greyed here is greyed and nothing more; its series
-    is still plotted. Making it vanish means filtering the data before the axis
-    extents are taken, which is the next commit.
+    What IS here is everything decided before anyone clicks: `legend.selected`,
+    the `selectedMode: 'single'` resolution that upstream performs AT LOAD, the
+    inactive styling, and the FILTER those imply. Those are static option state,
+    and a legend that ignored them would draw the wrong picture on the FIRST
+    frame, which is a different kind of wrong from being inert.
 
     THE SELECTOR BUTTONS and the SCROLLING (`type: 'scroll'`) LEGEND. Both are
     controls -- an All/Inverse pair and a pager -- and an inert control is worse
@@ -54,6 +56,23 @@ unit tyControls.AdvChart.Legend;
     all of them at once; reading one block early would mean a legend that obeys
     `legend.textStyle.color` while the series beside it ignores
     `series.itemStyle.color`.
+
+  THE FILTER, and where it lives. `TyLegendHides` is the whole rule this unit
+  contributes; the control applies it, because what a switched-off name MEANS
+  depends on what kind of series wears it:
+
+    A SERIES is flagged and every solver downstream skips it, so the axis
+    extents, the stack groups and the bar widths all come from the survivors.
+    A legend that stopped drawing a series but left the axis sized for it
+    would leave the survivor a sliver -- which a reader would call broken.
+
+    A PIE is filtered ONE ROW AT A TIME, because its legend names slices and
+    not the series. That is upstream's split too: legendFilter removes whole
+    series, processor/dataFilter removes rows.
+
+  Both run BEFORE anything is counted -- upstream puts legendFilter at
+  priority 800 with the stack pass at 900 and the axis statistics at 920, and
+  says in a comment why that order and no other.
 
   PURE: SysUtils, Math, fpjson and the AdvChart units. Text is MEASURED through
   the injected measurer; ink and fonts arrive resolved from the theme. }
@@ -227,6 +246,27 @@ function TyLegendEntries(AOption: TTyChartOption; AIndex: Integer;
 function TyLegendSelected(AOption: TTyChartOption; AIndex: Integer;
   const AEntries: TTyLegendEntryArray; const AAvailable: array of string;
   AMode: TTyLegendSelectedMode): TTyLegendFlags;
+
+{ Whether THIS legend switches AName off -- the question the filter asks of
+  every series and of every pie slice.
+
+  IT IS NOT `not selected`, and the difference is a chart going blank. A name
+  the legend does not list at all is not switched off; it is simply not the
+  legend's business. `TyLegendSelected` answers False for such a name too --
+  because it also answers False for a name the CHART cannot produce, which is
+  how a `legend.data` entry naming nothing gets greyed -- and a filter that
+  read that answer directly would hide every series the legend never
+  mentioned, starting with every series that has no `name` at all.
+
+  Upstream is immune to this by accident of naming: every series gets a
+  generated unique name and every one of them goes into `_availableNames`, so
+  `isSelected` finds it and the `selected` map has no key for it. This port
+  has no such names, so the rule is stated rather than inherited.
+
+  ONE LEGEND SAYING NO IS ENOUGH, so a caller with several ORs the answers --
+  legendFilter.ts:36-41 says exactly that. }
+function TyLegendHides(const AEntries: TTyLegendEntryArray;
+  const AFlags: TTyLegendFlags; const AName: string): Boolean;
 
 { `{name}`, replaced once. An empty formatter answers the name unchanged. }
 function TyLegendText(const AFormatter, AName: string): string;
@@ -785,6 +825,21 @@ end;
 function TyLegendDrawsOwnIcon(const ASeriesType: string): Boolean;
 begin
   Result := ASeriesType = 'line';
+end;
+
+function TyLegendHides(const AEntries: TTyLegendEntryArray;
+  const AFlags: TTyLegendFlags; const AName: string): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  if AName = '' then Exit;
+  for i := 0 to High(AEntries) do
+  begin
+    if AEntries[i].Newline then Continue;
+    if AEntries[i].Name <> AName then Continue;
+    { The entry exists, so the legend does have an opinion. }
+    Exit((i > High(AFlags)) or (not AFlags[i]));
+  end;
 end;
 
 function TyLegendText(const AFormatter, AName: string): string;

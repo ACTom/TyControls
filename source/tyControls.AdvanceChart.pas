@@ -92,6 +92,9 @@ type
     FLegendEntries: array of TTyLegendEntryArray;
     FLegendFlags: array of TTyLegendFlags;
     FLegends: array of TTyLegendLayout;
+    { Whose rows KeepSlice is deciding about, for the length of one
+      FilterSelf call and no longer. }
+    FFilterStore: TTyDataStore;
     FDirty: Boolean;
     FLastRect: TTyRectF;
     FOptionText: string;
@@ -167,6 +170,17 @@ type
       TTyLegendSourceArray;
     { Specs, entries and selection. Runs in Rebuild. }
     procedure SolveLegendData;
+    { What the selection MEANS: the series a legend has switched off stop
+      being counted, and the pie slices it has switched off leave the
+      store. Runs in Rebuild, immediately after SolveLegendData. }
+    procedure ApplyLegendFilter;
+    { True when ANY legend has switched this name off. }
+    function LegendHides(const AName: string): Boolean;
+    { The predicate FilterSelf calls, against FFilterStore. A method
+      pointer cannot carry an argument, so the store it is filtering rides
+      on the field -- which is why the field exists and why it is cleared
+      the moment the call returns. }
+    function KeepSlice(ARawIndex: Integer): Boolean;
     { Every legend, measured and placed. Runs in Relayout. }
     procedure SolveLegends(const AMeasurer: ITyTextMeasurer; APPI: Integer);
     function LegendFont: TTyLegendFont;
@@ -443,15 +457,24 @@ begin
     end;
     TyFillSeriesStore(FOption, i, dims, st);
   end;
+  { AFTER THE STORES AND BEFORE EVERYTHING THAT COUNTS. A pie legend names
+    DATA ITEMS, so the names have to be in the store before the legend can
+    list them; and the filter the legend implies has to be in place before
+    the index, the stacks and the extents, or a switched-off series would go
+    on widening the axis it is not drawn on.
+
+    This is upstream's order too, by its priorities: legendFilter is
+    SERIES_FILTER (800), the stack pass is 900 and the axis statistics are
+    920, with a comment at echarts.ts:163-165 saying the statistics must come
+    after the filter for exactly this reason. Nothing here measures text, so
+    none of it has to wait for Relayout. }
+  SolveLegendData;
+  ApplyLegendFilter;
   TyIndexSeries(FBindings, FIndex);
   { BEFORE THE EXTENTS, and that order is the whole point: a stacked chart
     whose axis was sized from the raw values draws off the top of its plot. }
   FStacks := TySolveStacks(FOption, FBindings, FStores);
   TyApplyAxisExtents(FOption, FBuild, FBindings, FStores, FStacks, FIndex);
-  { AFTER THE STORES, because a pie legend names DATA ITEMS and the names
-    live in the store. Nothing here measures anything, so it does not have to
-    wait for Relayout. }
-  SolveLegendData;
 end;
 
 procedure TTyAdvanceChart.Relayout(APainter: TTyPainter; const ARect: TTyRectF;
@@ -1101,7 +1124,23 @@ begin
   if n < 1 then n := 1;
   SetLength(Result.Fills, n);
   for k := 0 to n - 1 do
-    Result.Fills[k] := TTyChartColor(SeriesColor(k));
+  begin
+    { KEYED ON THE RAW ROW, NOT THE SECTOR. The two are the same number only
+      while nothing has been dropped -- and something already is: a negative
+      value is filtered out before the layout runs, and now a legend can
+      filter more. Key the ramp on the sector's position and every surviving
+      slice changes colour the moment a neighbour leaves, which is the one
+      failure of this commit a reader would notice immediately.
+
+      Upstream says the same thing in a comment written for the same reason:
+      `Iterate on data before filtered. To make sure color from palette can
+      be consistent when toggling legend.` (visual/style.ts:207-208). }
+    if k <= High(FPies[ASlot].Sectors) then
+      Result.Fills[k] :=
+        TTyChartColor(SeriesColor(FPies[ASlot].Sectors[k].RawIndex))
+    else
+      Result.Fills[k] := TTyChartColor(SeriesColor(k));
+  end;
   { The empty ring has its own token rather than borrowing the split area''s:
     they are faint for different reasons and a theme has to be able to move
     one without the other. }
@@ -1241,6 +1280,13 @@ begin
     if (FBindings[i].SeriesType = TyPieSeriesTypeName)
       and (i <= High(FStores)) and (FStores[i] <> nil) then
     begin
+      { ITS SLICE NAMES ARE WHAT THE LEGEND OFFERS, but its own name is still
+        AVAILABLE -- upstream pushes every raw series' name into that list
+        unconditionally, before it ever looks at a provider. The difference
+        shows when an author writes the pie's own name into `legend.data`:
+        with the name available the entry is live, and without it the entry
+        would grey out for a reason that has nothing to do with the option. }
+      PushA(SeriesNameOf(FBindings[i].SeriesIndex));
       for k := 0 to FStores[i].Count - 1 do
       begin
         nm := FStores[i].GetName(k);
@@ -1313,11 +1359,26 @@ begin
     begin
       if FBindings[j].SeriesType <> TyPieSeriesTypeName then Continue;
       if (j > High(FStores)) or (FStores[j] = nil) then Continue;
-      for k := 0 to FStores[j].Count - 1 do
-        if FStores[j].GetName(k) = AEntries[i].Name then
+      { THE RAW ROWS, NOT THE VIEW. This runs in Relayout, which is to say
+        AFTER the filter has already taken the switched-off slices out of
+        the store -- and those are exactly the slices whose legend items we
+        are here to describe. Walking the view would find every item except
+        the ones that were switched off.
+
+        AN EQUIVALENT MUTANT LIVES HERE and is recorded rather than chased:
+        walking the view instead draws the same picture TODAY, because the
+        only items it would fail to find are the switched-off ones, and a
+        switched-off item takes the inactive ink and the roundRect floor --
+        neither of which comes from here. It stops being equivalent the
+        moment a greyed item keeps anything of its own, and being wrong for
+        an invisible reason is still being wrong.
+
+        colorBy: 'data' -- a slice's colour is the same eight-slot ramp,
+        keyed on the same RAW row PieVisual keys on, so the swatch and the
+        wedge cannot disagree. }
+      for k := 0 to FStores[j].RawCount - 1 do
+        if FStores[j].GetNameByRaw(k) = AEntries[i].Name then
         begin
-          { colorBy: 'data' -- the SLICE's colour, taken from the same
-            eight-slot ramp by its row, exactly as PieVisual takes it. }
           Result[i].Found := True;
           Result[i].SeriesType := TyPieSeriesTypeName;
           Result[i].Colour := TTyChartColor(SeriesColor(k));
@@ -1349,6 +1410,71 @@ begin
     FLegendFlags[i] := TyLegendSelected(FOption, i, FLegendEntries[i],
       available, FLegendSpecs[i].SelectedMode);
     FLegends[i] := Default(TTyLegendLayout);
+  end;
+end;
+
+{ A name is switched off when ANY legend says so -- legendFilter.ts:36-41.
+  Nothing is switched off when there is no legend at all, which is why a
+  chart without one is untouched by any of this. }
+function TTyAdvanceChart.LegendHides(const AName: string): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  for i := 0 to High(FLegendSpecs) do
+    if TyLegendHides(FLegendEntries[i], FLegendFlags[i], AName) then
+      Exit(True);
+end;
+
+function TTyAdvanceChart.KeepSlice(ARawIndex: Integer): Boolean;
+begin
+  Result := True;
+  if FFilterStore = nil then Exit;
+  Result := not LegendHides(FFilterStore.GetNameByRaw(ARawIndex));
+end;
+
+procedure TTyAdvanceChart.ApplyLegendFilter;
+var
+  i, k: Integer;
+  st: TTyDataStore;
+  any: Boolean;
+begin
+  if Length(FLegendSpecs) = 0 then Exit;
+  for i := 0 to High(FBindings) do
+  begin
+    if FBindings[i].SeriesType <> TyPieSeriesTypeName then
+    begin
+      FBindings[i].Hidden :=
+        LegendHides(SeriesNameOf(FBindings[i].SeriesIndex));
+      Continue;
+    end;
+    { A PIE IS FILTERED ONE ROW AT A TIME, because its legend names slices
+      rather than series -- upstream's processor/dataFilter against this
+      port's own TTyDataStore.FilterSelf, which is the same mechanism and
+      has been sitting here unused since the store was written.
+
+      It COMPOSES with the negative-value filter the pie layout applies
+      later, and in upstream's order: the legend's filter is registered
+      first and negativeDataFilter second (chart/pie/install.ts:35-37). }
+    if (i > High(FStores)) or (FStores[i] = nil) then Continue;
+    st := FStores[i];
+    { ASKED BEFORE IT IS DONE, so a pie nobody switched anything off on
+      keeps an UNFILTERED store -- which is not only cheaper but visible:
+      a filtered store takes the slow path through its index vector in
+      every extent and every read. }
+    any := False;
+    for k := 0 to st.RawCount - 1 do
+      if LegendHides(st.GetNameByRaw(k)) then
+      begin
+        any := True;
+        Break;
+      end;
+    if not any then Continue;
+    FFilterStore := st;
+    try
+      st.FilterSelf(@KeepSlice);
+    finally
+      FFilterStore := nil;
+    end;
   end;
 end;
 
@@ -1473,6 +1599,12 @@ begin
     for i := 0 to High(FBindings) do
     begin
       if i > High(FStores) then Break;
+      { SWITCHED OFF, so nothing of it is drawn -- not its marks, not its
+        labels (the expansion below only sees what reached the list), and
+        not its wedges. The pie branch is inside this guard for the sake of
+        the one case that can reach it: a `legend.data` entry naming the pie
+        series itself. }
+      if FBindings[i].Hidden then Continue;
       { A pie is not on a coordinate system, so it takes the other pass. It
         goes into the SAME list: the ordering rule is chart-wide, and a pie
         beside a bar has to sort against it like anything else. }

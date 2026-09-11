@@ -94,6 +94,21 @@ type
     BaseAxis: TTyAxis;
     { The other one, which carries the value. }
     ValueAxis: TTyAxis;
+    { SWITCHED OFF BY A LEGEND. Set by the control after the stores are
+      filled and before anything is counted; every solver downstream skips
+      such a binding, so the axis extents, the stack groups and the bar
+      widths are all taken from the survivors.
+
+      A FLAG AND NOT A COMPACTION, which is upstream's shape too: ECharts
+      rewrites `_seriesIndices` and never touches the series array, because
+      the legend still has to see what it switched off -- a greyed item
+      keeps its own icon and its own colour. Closing the gap here would
+      also break the one contract this array has: the subscript IS
+      `series[n]`.
+
+      A PIE IS NEVER HIDDEN THIS WAY. Its legend names SLICES, not the
+      series, so it is filtered one row at a time in the store instead. }
+    Hidden: Boolean;
   end;
   TTySeriesBindingArray = array of TTySeriesBinding;
 
@@ -531,7 +546,13 @@ begin
     { A hole is inert in both populations, and it needs no guard here to be:
       its axes are nil and Associate refuses a nil axis. Mutation testing
       removed the guard that used to be here and nothing went red, which is the
-      only way a safeguard that is really a restatement gets found. }
+      only way a safeguard that is really a restatement gets found.
+
+      A HIDDEN SERIES IS DIFFERENT and does need one: its axes are perfectly
+      good. Leaving it out of the index HERE is what keeps it out of the axis
+      extents and out of the bar-width solve, because both of those take
+      their populations from the index and from nowhere else. }
+    if ABindings[i].Hidden then Continue;
     AIndex.Associate(ABindings[i].XAxis, ABindings[i].BaseAxis, i,
       ABindings[i].SeriesType, ABindings[i].CoordSysName);
     AIndex.Associate(ABindings[i].YAxis, ABindings[i].BaseAxis, i,

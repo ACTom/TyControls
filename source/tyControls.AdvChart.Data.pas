@@ -306,6 +306,13 @@ type
     procedure SetName(ARawIndex: Integer; const AName: string);
     function GetId(AIndex: Integer): string;
     function GetName(AIndex: Integer): string;
+    { The same name in RAW space. FilterSelf hands its predicate a raw
+      index -- it is deciding which raw rows survive, so it cannot speak
+      the view's language -- and a predicate that wants to test the name
+      would otherwise have to go the long way round through
+      IndexOfRawIndex, which answers -1 for a row an earlier filter has
+      already dropped. }
+    function GetNameByRaw(ARawIndex: Integer): string;
     function HasIds: Boolean;
     function HasNames: Boolean;
 
@@ -1191,6 +1198,13 @@ begin
   raw := GetRawIndex(AIndex);
   if raw < 0 then Exit('');
   Result := FNames[raw];
+end;
+
+function TTyDataStore.GetNameByRaw(ARawIndex: Integer): string;
+begin
+  if FNames = nil then Exit('');
+  if (ARawIndex < 0) or (ARawIndex > High(FNames)) then Exit('');
+  Result := FNames[ARawIndex];
 end;
 
 function TTyDataStore.HasIds: Boolean;
