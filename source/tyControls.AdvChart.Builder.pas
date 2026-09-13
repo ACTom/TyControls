@@ -87,6 +87,23 @@ type
     LabelMarginLogical: Double;
     { DEGREES, clockwise on screen, which is how the option spells it. }
     LabelRotateDeg: Double;
+    { `axis.offset`, LOGICAL px, default 0 -- and the default is declared
+      rather than implied: upstream merges `offset: 0` into all eight axis
+      model classes.
+
+      POSITIVE ALWAYS MEANS AWAY FROM THE PLOT, whichever side the axis is
+      on: a left axis moves to `left - offset` and a right one to
+      `right + offset`. It is not a screen direction. }
+    OffsetLogical: Double;
+    { `axisLine.onZero`, default `auto` -- which is TRUTHY, so an axis whose
+      opposite number crosses zero sits on it unless told otherwise. }
+    OnZero: Boolean;
+    { `axisLine.onZeroAxisIndex`: which of the other family provides the
+      zero. -1 for `whichever qualifies first`. An index that names an axis
+      that cannot provide one does NOT fall back to the scan -- upstream's
+      `else` belongs to the `if (onZeroAxisIndex != null)`, so naming a bad
+      one turns onZero off. }
+    OnZeroAxisIndex: Integer;
   end;
 
 
@@ -135,6 +152,21 @@ type
     { What AAxis draws. Answers every-default furniture for an axis this grid
       does not hold, which is the same answer a chart with no option gets. }
     function FurnitureFor(AAxis: TTyAxis): TTyAxisFurniture;
+    { WHERE AAxis' LINE SITS, in device px across the plot.
+
+      Three answers in one: the plot's own edge; that edge pushed out by
+      `offset`; or the other family's zero when `axisLine.onZero` applies.
+      One function because the three are alternatives and a caller that had
+      to combine them would be a second place that knows the rule. }
+    function AxisLineCoord(AAxis: TTyAxis; APPI: Integer): Double;
+    { The axis of the OTHER family that provides AAxis' zero, or nil.
+
+      Not every axis can: a category or a time axis never provides one, nor
+      does one whose extent has zero strictly outside it -- so a log axis
+      never can either. And an axis already providing a zero for somebody
+      else is skipped, which is what stops two y axes landing on top of each
+      other when both ask. }
+    function OnZeroProviderFor(AAxis: TTyAxis): TTyAxis;
   end;
 
   { Everything one option tree produced. Owns the grids, the axes and, through
@@ -960,6 +992,7 @@ function TyAxisFurnitureOf(ANode: TJSONObject; AAxis: TTyAxis;
   AOtherIsValue: Boolean): TTyAxisFurniture;
 var
   cat, tickAuto: Boolean;
+  d: TJSONData;
 begin
   Result := Default(TTyAxisFurniture);
   if AAxis = nil then Exit;
@@ -1002,6 +1035,29 @@ begin
     SubNumIn(ANode, 'minorTick', 'length', NaN);
   Result.LabelMarginLogical := SubNumIn(ANode, 'axisLabel', 'margin', NaN);
   Result.LabelRotateDeg := SubNumIn(ANode, 'axisLabel', 'rotate', 0);
+  Result.OffsetLogical := 0;
+  if ANode <> nil then
+  begin
+    d := ANode.Find('offset');
+    if (d <> nil) and (d.JSONType = jtNumber) then
+      Result.OffsetLogical := d.AsFloat;
+  end;
+  { `auto` is truthy. Only a written FALSE turns it off, and upstream keeps a
+    comment saying the inconsistency between `onZero: undefined` (off) and
+    an absent key (on) is preserved for compatibility -- an absent key is all
+    this port can see, so it reads as on. }
+  Result.OnZero := SubBoolIn(ANode, 'axisLine', 'onZero', True);
+  Result.OnZeroAxisIndex := -1;
+  if ANode <> nil then
+  begin
+    d := ObjOf(ANode.Find('axisLine'));
+    if d <> nil then
+    begin
+      d := TJSONObject(d).Find('onZeroAxisIndex');
+      if (d <> nil) and (d.JSONType = jtNumber) then
+        Result.OnZeroAxisIndex := Trunc(d.AsFloat);
+    end;
+  end;
 end;
 
 function TySeriesCartesianDims(ACart: TTyCartesian2D;
@@ -1304,6 +1360,7 @@ end;
 
 function TTyGridBuild.FurnitureFor(AAxis: TTyAxis): TTyAxisFurniture;
 var i: Integer;
+
 begin
   Result := Default(TTyAxisFurniture);
   Result.ShowLine := True;
@@ -1311,6 +1368,9 @@ begin
   Result.ShowLabels := True;
   Result.ShowMinLine := True;
   Result.ShowMaxLine := True;
+  Result.OffsetLogical := 0;
+  Result.OnZero := True;
+  Result.OnZeroAxisIndex := -1;
   Result.TickLengthLogical := NaN;
   Result.MinorTickLengthLogical := NaN;
   Result.LabelMarginLogical := NaN;
@@ -1330,6 +1390,147 @@ begin
     end;
 end;
 
+
+
+function CanProvideZero(AAxis: TTyAxis): Boolean;
+var e: TTyRange;
+begin
+  Result := False;
+  if (AAxis = nil) or (AAxis.Scale = nil) then Exit;
+  { A CATEGORY OR TIME AXIS NEVER PROVIDES ONE, however plainly it crosses
+    zero -- upstream calls this historical and keeps it. }
+  if AAxis.AxisType in [atCategory, atTime] then Exit;
+  e := AAxis.Scale.GetExtent;
+  if IsNan(e.Start) or IsNan(e.Stop) then Exit;
+  { Zero at an END counts; zero strictly outside does not. So a log axis, whose
+    extent cannot reach zero, is never a provider. }
+  Result := (Min(e.Start, e.Stop) <= 0) and (Max(e.Start, e.Stop) >= 0);
+end;
+
+function TTyGridBuild.OnZeroProviderFor(AAxis: TTyAxis): TTyAxis;
+var
+  i, j: Integer;
+  furn: TTyAxisFurniture;
+  cand, other: TTyAxis;
+  taken: Boolean;
+
+  { The other family, in declaration order. }
+  function OtherCount: Integer;
+  begin
+    if AAxis.Horizontal then Result := YAxisCount else Result := XAxisCount;
+  end;
+
+  function OtherAt(AIndex: Integer): TTyAxis;
+  begin
+    if AAxis.Horizontal then Result := YAxis(AIndex) else Result := XAxis(AIndex);
+  end;
+
+  function SameFamilyCount: Integer;
+  begin
+    if AAxis.Horizontal then Result := XAxisCount else Result := YAxisCount;
+  end;
+
+  function SameFamilyAt(AIndex: Integer): TTyAxis;
+  begin
+    if AAxis.Horizontal then Result := XAxis(AIndex) else Result := YAxis(AIndex);
+  end;
+
+begin
+  Result := nil;
+  if AAxis = nil then Exit;
+  furn := FurnitureFor(AAxis);
+  if not furn.OnZero then Exit;
+
+  { NAMED EXPLICITLY: take it or take nothing. Upstream's `else` belongs to
+    the `if (onZeroAxisIndex != null)`, so an index that names an axis which
+    cannot provide a zero does NOT fall through to the scan -- it turns the
+    whole thing off. }
+  if furn.OnZeroAxisIndex >= 0 then
+  begin
+    if furn.OnZeroAxisIndex < OtherCount then
+    begin
+      cand := OtherAt(furn.OnZeroAxisIndex);
+      if CanProvideZero(cand) then Result := cand;
+    end;
+    Exit;
+  end;
+
+  { THE FIRST THAT QUALIFIES AND IS NOT ALREADY SPOKEN FOR. Without the second
+    half, two y axes that both ask would both land on the same x axis' zero and
+    draw on top of each other -- which is the comment upstream leaves beside
+    the same test. Who is spoken for is decided by walking this family in
+    declaration order and asking each earlier axis the same question. }
+  for i := 0 to OtherCount - 1 do
+  begin
+    cand := OtherAt(i);
+    if not CanProvideZero(cand) then Continue;
+    taken := False;
+    for j := 0 to SameFamilyCount - 1 do
+    begin
+      other := SameFamilyAt(j);
+      if other = AAxis then Break;
+      if OnZeroProviderFor(other) = cand then
+      begin
+        taken := True;
+        Break;
+      end;
+    end;
+    if taken then Continue;
+    Exit(cand);
+  end;
+end;
+
+function TTyGridBuild.AxisLineCoord(AAxis: TTyAxis; APPI: Integer): Double;
+var
+  furn: TTyAxisFurniture;
+  provider: TTyAxis;
+  off, lo, hi: Double;
+begin
+  Result := 0;
+  if AAxis = nil then Exit;
+  furn := FurnitureFor(AAxis);
+  off := furn.OffsetLogical * APPI / 96;
+
+  { THE TWO ENDS OF WHAT IS REACHABLE. Positive offset always means AWAY from
+    the plot, so the low end moves down and the high end up -- it is a side,
+    not a screen direction. }
+  if AAxis.Horizontal then
+  begin
+    lo := FPlotRect.Top - off;
+    hi := FPlotRect.Bottom + off;
+  end
+  else
+  begin
+    lo := FPlotRect.Left - off;
+    hi := FPlotRect.Right + off;
+  end;
+
+  provider := OnZeroProviderFor(AAxis);
+  if provider <> nil then
+  begin
+    { CLAMPED INTO THE REACHABLE RANGE, which the offset has already widened --
+      so an offset written alongside onZero does not move the LINE, it only
+      gives the clamp more room.
+
+      THE CLAMP IS UNREACHABLE TODAY and is kept anyway. CanProvideZero has
+      already refused any provider whose extent does not contain zero, so
+      DataToCoord(0) is inside the plot by construction and there is nothing
+      for the clamp to catch -- a mutation that deletes it survives, and it
+      is recorded here rather than tidied away because upstream carries the
+      same pair. The day a mapping extent differs from the effective one,
+      or a break makes the axis discontinuous, this is the net. }
+    Result := provider.DataToCoord(0);
+    Result := Max(lo, Min(hi, Result));
+    Exit;
+  end;
+
+  case AAxis.Side of
+    asTop: Result := lo;
+    asBottom: Result := hi;
+    asLeft: Result := lo;
+    asRight: Result := hi;
+  end;
+end;
 procedure TyLayoutGrids(ABuild: TTyChartBuild; AOption: TTyChartOption;
   const AMeasurer: ITyTextMeasurer; APPI: Integer;
   const AText: TTyAxisTextStyle);
@@ -1360,6 +1561,11 @@ var
     ASpec.ShowTicks := AFurn.ShowTicks;
     ASpec.TickInside := AFurn.TickInside;
     ASpec.LabelInside := AFurn.LabelInside;
+    { AN OFFSET AXIS HANGS FURTHER OUT, so the band it costs is its own
+      thickness PLUS the offset -- upstream builds the labels AT the offset
+      position and then shrinks the grid by however far they overflow the
+      canvas, which comes to the same thing for one axis on a side. }
+    ASpec.OffsetLogical := AFurn.OffsetLogical;
     ASpec.Name := AAxis.Name;
     { From the caller's resolved theme style, NOT from literals here: the paint
       pass draws in the theme's font and gaps, so measuring in anything else

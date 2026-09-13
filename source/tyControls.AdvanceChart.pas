@@ -145,9 +145,20 @@ type
       it can know how much room the plot has left. }
     procedure Relayout(APainter: TTyPainter; const ARect: TTyRectF;
       APPI: Integer; const AMeasurer: ITyTextMeasurer);
+    { WHICH HALF OF AN AXIS TO DRAW.
+
+      Everything an axis paints falls either UNDER the data or OVER it, and
+      the split is not decorative: the grid belongs to the plot and the axis
+      belongs to its edge. Upstream keeps them apart by z -- split lines and
+      split areas sit below, the axis line carries `z2 = 1` above.
+
+      The port had them interleaved per axis, which is the same picture
+      while there is one axis of each family and wrong the moment there are
+      two: the second y axis' split line lands on the first one's zero and
+      rubs out the x axis line that `onZero` had just put there. }
     procedure PaintAxis(APainter: TTyPainter; AAxis: TTyAxis;
       const APlot: TTyRectF; APPI: Integer; AGrid: TTyGridBuild;
-      const AMeasurer: ITyTextMeasurer);
+      const AMeasurer: ITyTextMeasurer; ABelow: Boolean);
     { THE TWO LAYERS, split by what makes them change rather than by what they
       look like. Static is everything the model decides; dynamic is what moves
       while the model stands still. }
@@ -628,7 +639,7 @@ end;
 
 procedure TTyAdvanceChart.PaintAxis(APainter: TTyPainter; AAxis: TTyAxis;
   const APlot: TTyRectF; APPI: Integer; AGrid: TTyGridBuild;
-  const AMeasurer: ITyTextMeasurer);
+  const AMeasurer: ITyTextMeasurer; ABelow: Boolean);
 var
   model: TTyStyleModel;
   lineS, tickStyle, labelS, splitS: TTyStyleSet;
@@ -794,10 +805,19 @@ begin
   areaS := model.ResolveStyle('TyAdvChartSplitArea', '', []);
 
   horiz := AAxis.Horizontal;
-  { The axis sits on the edge of the plot its side names. }
+  { WHERE THE AXIS SITS, asked of the build rather than worked out here: the
+    plot's edge, that edge pushed out by `offset`, or the other family's zero
+    when `axisLine.onZero` applies. Three alternatives and one answer.
+
+    THE LABELS DO NOT FOLLOW IT TO ZERO. Upstream carries a `labelOffset`
+    back to the raw edge precisely so that a chart with negative values has
+    its axis line through the middle and its category names still along the
+    bottom. The offset, by contrast, DOES move them -- that offset survives
+    into labelOffset. }
   if horiz then at := APlot.Bottom else at := APlot.Left;
   if AAxis.Side = asTop then at := APlot.Top;
   if AAxis.Side = asRight then at := APlot.Right;
+  if AGrid <> nil then at := AGrid.AxisLineCoord(AAxis, APPI);
 
 
   { THE THINNING STEP, READ FROM THE LAYOUT. It used to be computed halfway
@@ -876,7 +896,7 @@ begin
     means between the band EDGES: one shaded band per category, which is what
     makes the alternating stripe line up with the bars rather than straddle
     them. }
-  if furn.ShowSplitArea and (tpBackground in areaS.Present) then
+  if ABelow and furn.ShowSplitArea and (tpBackground in areaS.Present) then
   begin
     ticks := AAxis.TickCoords;
     for i := 0 to High(ticks) - 1 do
@@ -895,7 +915,7 @@ begin
     end;
   end;
 
-  if furn.ShowMinorSplitLine
+  if ABelow and furn.ShowMinorSplitLine
     and (tpBorderColor in minorSplitS.Present) and (step = 1) then
   begin
     scaleTicks := AAxis.Scale.GetTicks;
@@ -912,7 +932,7 @@ begin
     StrokeBatch(minorSplitS);
   end;
 
-  if furn.ShowSplitLine and (tpBorderColor in splitS.Present) then
+  if ABelow and furn.ShowSplitLine and (tpBorderColor in splitS.Present) then
   begin
     ticks := AAxis.TickCoords;
     APainter.BeginPath;
@@ -933,6 +953,19 @@ begin
     end;
     StrokeBatch(splitS);
   end;
+
+  { EVERYTHING ABOVE THIS LINE IS THE GRID and everything below it is the
+    axis. The three grid blocks each test ABelow and this returns on it, so
+    each pass paints its own half and neither repeats the other's -- the
+    return alone was not enough, because the second pass would then draw the
+    grid a second time, over the lines the first pass had just laid.
+
+    THIS RETURN IS INVISIBLE ON ITS OWN. Delete it and the below pass also
+    draws the lines, which the above pass then draws again on top -- same
+    pixels, twice the work. A mutation that removes it survives, and it is
+    the three ABelow tests above that carry the ordering; this one carries
+    only the cost. }
+  if ABelow then Exit;
 
   { The domain line. Present, not colour: an undeclared colour resolves to
     alpha zero, so testing the colour would draw an invisible line and call it
@@ -1208,10 +1241,21 @@ begin
     for g := 0 to FBuild.GridCount - 1 do
     begin
       gb := FBuild.Grid(g);
+      { EVERY AXIS' GRID FIRST, then every axis' line. Two passes over the
+        same list rather than one, because the order that matters is
+        between the LAYERS and not between the axes. }
       for a := 0 to gb.XAxisCount - 1 do
-        PaintAxis(APainter, gb.XAxis(a), gb.PlotRect, APPI, gb, AMeasurer);
+        PaintAxis(APainter, gb.XAxis(a), gb.PlotRect, APPI, gb, AMeasurer,
+                  True);
       for a := 0 to gb.YAxisCount - 1 do
-        PaintAxis(APainter, gb.YAxis(a), gb.PlotRect, APPI, gb, AMeasurer);
+        PaintAxis(APainter, gb.YAxis(a), gb.PlotRect, APPI, gb, AMeasurer,
+                  True);
+      for a := 0 to gb.XAxisCount - 1 do
+        PaintAxis(APainter, gb.XAxis(a), gb.PlotRect, APPI, gb, AMeasurer,
+                  False);
+      for a := 0 to gb.YAxisCount - 1 do
+        PaintAxis(APainter, gb.YAxis(a), gb.PlotRect, APPI, gb, AMeasurer,
+                  False);
     end;
 
   { AFTER THE AXES, so a bar sits on the grid rather than under it. Within the

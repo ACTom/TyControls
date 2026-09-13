@@ -170,6 +170,10 @@ type
     ShowTicks: Boolean;
     TickInside: Boolean;
     LabelInside: Boolean;
+    { `axis.offset`, LOGICAL px. How far outside the plot's edge this axis
+      sits -- which is how two axes on one side are separated, because
+      upstream draws them both on the edge otherwise. }
+    OffsetLogical: Double;
   end;
   TTyAxisLayoutSpecArray = array of TTyAxisLayoutSpec;
   PTyAxisLayoutSpec = ^TTyAxisLayoutSpec;
@@ -525,13 +529,17 @@ begin
     pointing into the plot, lies entirely inside the band and reserves no
     room outside it; an inside label likewise. Charging for them anyway is
     how an axis that draws nothing still pushes the plot in five pixels. }
-  Result := 0;
+  { THE OFFSET IS PART OF THE BAND. The axis' own furniture measures the
+    same whatever the offset; what changes is where it starts, so the band
+    it needs is the offset plus the furniture. A negative offset would eat
+    into the plot rather than give room back, so it is floored. }
+  Result := Max(Double(0), AxisScaleF(ASpec.OffsetLogical, APPI));
   if ASpec.ShowTicks and (not ASpec.TickInside) then
     { MAX, because a NEGATIVE length is upstream's other way of pointing the
       mark into the plot. Inward furniture reserves nothing outside, and
       subtracting from the gutter would let a long inward tick pull the plot
       out past its own container. }
-    Result := Max(Double(0), AxisScaleF(ASpec.TickLengthLogical, APPI));
+    Result := Result + Max(Double(0), AxisScaleF(ASpec.TickLengthLogical, APPI));
   MeasureLabels(ASpec, AMeasurer, across, along, each);
   if (across > 0) and (not ASpec.LabelInside) then
     Result := Result + AxisScaleF(ASpec.LabelMarginLogical, APPI) + across;
