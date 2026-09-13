@@ -7,7 +7,7 @@ uses
   Translations,          // TPOFile — drive the name-source seam the way a real catalogue does
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.Base,
-  tyControls.Calendar;
+  tyControls.Calendar, tyControls.StrConsts;
 
 type
 

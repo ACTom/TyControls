@@ -106,6 +106,11 @@ type
     FontName: string;
     FontSizeLogical: Integer;
     FontWeight: Integer;
+    { The weight an EMPHASISED label is drawn in -- a time axis' coarse
+      ticks. Resolved from the theme by the caller, like everything else in
+      this record, because a weight is a visual value and this library does
+      not put those in control code. }
+    EmphasisFontWeight: Integer;
     LabelMarginLogical: Double;
     TickLengthLogical: Double;
     NameGapLogical: Double;
@@ -121,6 +126,10 @@ type
     AnchorH: TTyTextAnchorH;
     AnchorV: TTyTextAnchorV;
     Shown: Boolean;
+    { Drawn in the heavier weight. Carried on the PLACEMENT and not looked up
+      again at paint time, because the measurement that reserved room for this
+      label was made in that same weight. }
+    Emphasis: Boolean;
   end;
   TTyAxisLabelPlacementArray = array of TTyAxisLabelPlacement;
   { Everything one axis needs to lay itself out. Pure data: the caller has
@@ -174,6 +183,32 @@ type
       sits -- which is how two axes on one side are separated, because
       upstream draws them both on the edge otherwise. }
     OffsetLogical: Double;
+
+    { ---- three things a TIME axis says about its labels ----
+
+      All three are empty or False on every other axis, which is what a fresh
+      record already is, so nothing that builds a spec has to know they exist.
+      They are flags rather than a scale reference because this unit is pure:
+      deciding what a tick SAYS is the scale's job and the layout is only told
+      the answer. }
+
+    { Labels that exist -- they were measured, they hold their place in the
+      parallel arrays -- but are not drawn. The two ends of a time axis are
+      the data's own ragged boundaries, and a `07:13` jammed against the
+      first round hour is the most visible mark of a careless port. }
+    LabelHidden: TTyBoolArray;
+    { Which labels carry the heavier weight: on a time axis the coarse ticks,
+      the ones that say `Mar` among a run of day numbers. }
+    LabelEmphasis: TTyBoolArray;
+    { The weight those get. Nought means the spec's own weight, so an axis
+      that marks no label for emphasis need not name one. }
+    EmphasisFontWeight: Integer;
+    { DO NOT THIN. The uniform every-Nth step below is right for a category
+      axis, where the labels are interchangeable; a time axis' labels are not
+      -- dropping every other one takes the month markers with it and leaves a
+      row of day numbers that restart for no visible reason. Upstream thins a
+      time axis by measuring collisions instead, never by index. }
+    KeepEveryLabel: Boolean;
   end;
   TTyAxisLayoutSpecArray = array of TTyAxisLayoutSpec;
   PTyAxisLayoutSpec = ^TTyAxisLayoutSpec;
@@ -483,6 +518,22 @@ end;
   One walk, because the thickness pass wants the first and the thinning pass
   wants the second, and measuring twice is measurably slower on a chart with
   hundreds of ticks. }
+{ The weight label AIndex is drawn in. }
+function WeightAt(const ASpec: TTyAxisLayoutSpec; AIndex: Integer): Integer;
+begin
+  Result := ASpec.FontWeight;
+  if (ASpec.EmphasisFontWeight > 0) and (AIndex >= 0)
+    and (AIndex <= High(ASpec.LabelEmphasis)) and ASpec.LabelEmphasis[AIndex]
+    then Result := ASpec.EmphasisFontWeight;
+end;
+
+{ Whether label AIndex is drawn at all. }
+function HiddenAt(const ASpec: TTyAxisLayoutSpec; AIndex: Integer): Boolean;
+begin
+  Result := (AIndex >= 0) and (AIndex <= High(ASpec.LabelHidden))
+            and ASpec.LabelHidden[AIndex];
+end;
+
 procedure MeasureLabels(const ASpec: TTyAxisLayoutSpec;
   const AMeasurer: ITyTextMeasurer; out AAcross, AAlong: Double;
   out AAlongEach: TTyDoubleArray);
@@ -499,8 +550,11 @@ begin
   SetLength(AAlongEach, Length(ASpec.Labels));
   for i := 0 to High(ASpec.Labels) do
   begin
+    { MEASURED IN THE WEIGHT IT WILL BE DRAWN IN. Bold is wider, and a label
+      measured light and drawn bold is how an axis comes to overlap the one
+      thing the measuring was for. }
     AMeasurer.MeasureLine(ASpec.Labels[i], ASpec.FontName,
-                          ASpec.FontSizeLogical, ASpec.FontWeight, w, h);
+                          ASpec.FontSizeLogical, WeightAt(ASpec, i), w, h);
     RotatedExtent(w, h, ASpec.RotationRad, rw, rh);
     if horiz then
     begin
@@ -631,6 +685,8 @@ var
   n, step: Integer;
 begin
   Result := 1;
+  { An axis that says so is never thinned by index. }
+  if ASpec.KeepEveryLabel then Exit;
   MeasureLabels(ASpec, AMeasurer, across, along, each);
   n := Length(each);
   if n < 2 then Exit;
@@ -693,7 +749,15 @@ begin
   begin
     Result[i].Index := i;
     Result[i].Text := ASpec.Labels[i];
-    Result[i].Shown := ASpec.ShowLabels and (i mod step = 0);
+    { HIDDEN IS NOT THE SAME AS THINNED. A thinned label was crowded out and
+      the ones around it stand where they always did; a hidden one was never
+      going to be drawn, yet it keeps its place in every parallel array so
+      that the indices still line up with the ticks. }
+    Result[i].Shown := ASpec.ShowLabels and (i mod step = 0)
+                       and (not HiddenAt(ASpec, i));
+    Result[i].Emphasis := (ASpec.EmphasisFontWeight > 0)
+                          and (i <= High(ASpec.LabelEmphasis))
+                          and ASpec.LabelEmphasis[i];
     case ASpec.Side of
       asBottom:
         begin

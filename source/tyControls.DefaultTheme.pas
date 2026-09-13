@@ -1197,6 +1197,12 @@ begin
     '   already alpha over --on-surface, so it follows a dark theme by itself. */' + LineEnding +
     'TyAdvChartAxisLabel { color: var(--muted); font-size: var(--font-size-base); }' + LineEnding +
     'TyAdvChartAxisName  { color: var(--on-surface); font-size: var(--font-size-base); }' + LineEnding +
+    '/* The heavier label a TIME axis gives its coarse ticks -- the `Mar` in a run' + LineEnding +
+    '   of day numbers. Upstream carries it as a rich-text style on the time axis''' + LineEnding +
+    '   own defaults; here it is a key of its own so a skin can make the level' + LineEnding +
+    '   marker darker, or larger, or nothing special at all. */' + LineEnding +
+    'TyAdvChartAxisLabelPrimary { color: var(--muted); font-size: var(--font-size-base);' + LineEnding +
+    '                             font-weight: var(--font-weight-bold); }' + LineEnding +
     '/* Alpha over --border, NEVER over --surface. On an image theme a translucent' + LineEnding +
     '   surface reads as a bright halo instead of a faint line -- this library has' + LineEnding +
     '   shipped that bug once already. */' + LineEnding +

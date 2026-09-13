@@ -151,7 +151,7 @@ uses
   test.painter.vector,
   test.advchart.axis,
   test.advchart.measure,
-  test.advchart.shape, test.advchart.paint, test.advchart.marks, test.advchart.barlayout, test.advchart.stack, test.advchart.symbol, test.advchart.pie, test.advchart.title, test.advchart.labels, test.advchart.pielabel, test.advchart.legend, test.advchart.dataset, test.advchart.furniture, test.advchart.color, test.advchart.multiaxis, test.advchart.render,
+  test.advchart.shape, test.advchart.paint, test.advchart.marks, test.advchart.barlayout, test.advchart.stack, test.advchart.symbol, test.advchart.pie, test.advchart.title, test.advchart.labels, test.advchart.pielabel, test.advchart.legend, test.advchart.dataset, test.advchart.furniture, test.advchart.color, test.advchart.multiaxis, test.advchart.time, test.advchart.render,
   test.subpixel,
   test.advchart.option,
   test.advchart.catalog,

@@ -30,6 +30,7 @@ uses
   tyControls.Types, tyControls.Base, tyControls.Painter, tyControls.StyleModel,
   tyControls.AdvChart.Types, tyControls.AdvChart.Option,
   tyControls.AdvChart.Data, tyControls.AdvChart.Scale,
+  tyControls.AdvChart.Time,
   tyControls.AdvChart.Coord, tyControls.AdvChart.Layout,
   tyControls.AdvChart.Builder, tyControls.AdvChart.Series,
   tyControls.AdvChart.Measure, tyControls.AdvChart.Handlers,
@@ -617,6 +618,8 @@ begin
   txt.FontName := labelS.FontName;
   txt.FontSizeLogical := ResolveFontSize(labelS);
   txt.FontWeight := labelS.FontWeight;
+  txt.EmphasisFontWeight := ActiveController.Model.ResolveStyle(
+    'TyAdvChartAxisLabelPrimary', '', []).FontWeight;
   txt.LabelMarginLogical := ActiveController.Metric(TyAdvChartLabelMarginVar,
     TyAdvChartLabelMargin);
   txt.TickLengthLogical := ActiveController.Metric(TyAdvChartTickLenVar,
@@ -643,6 +646,8 @@ procedure TTyAdvanceChart.PaintAxis(APainter: TTyPainter; AAxis: TTyAxis;
 var
   model: TTyStyleModel;
   lineS, tickStyle, labelS, splitS: TTyStyleSet;
+  lblStyle, primaryS: TTyStyleSet;
+  tt: TTyTimeTick;
   minorTickS, minorSplitS, nameS: TTyStyleSet;
   ticks: TTyDoubleArray;
   i: Integer;
@@ -801,6 +806,7 @@ begin
   minorSplitS := model.ResolveStyle('TyAdvChartMinorSplitLine', '', []);
   tickStyle := model.ResolveStyle('TyAdvChartAxisTick', '', []);
   labelS := model.ResolveStyle('TyAdvChartAxisLabel', '', []);
+  primaryS := model.ResolveStyle('TyAdvChartAxisLabelPrimary', '', []);
   splitS := model.ResolveStyle('TyAdvChartSplitLine', '', []);
   areaS := model.ResolveStyle('TyAdvChartSplitArea', '', []);
 
@@ -1100,7 +1106,14 @@ begin
     begin
       if not places[i].Shown then Continue;
       if places[i].Text = '' then Continue;
-      TextSizeOf(places[i].Text, labelS, lblW, lblH);
+      { THE WEIGHT THE LAYOUT MEASURED IT IN. A time axis marks its coarse
+        ticks for emphasis -- the `Mar` in a run of day numbers -- and the
+        layout already reserved the wider box that bold needs. Resolving it
+        again here from anything but the placement is how the box and the
+        glyphs come to disagree. }
+      lblStyle := labelS;
+      if places[i].Emphasis then lblStyle := primaryS;
+      TextSizeOf(places[i].Text, lblStyle, lblW, lblH);
       { BOUNDED BY axisLabel.width WHEN TRUNCATING, and only then: with no
         bound the box is exactly the text's size, so the ellipsis fitter has
         nothing to bite on and `overflow` would silently do nothing.
@@ -1125,8 +1138,8 @@ begin
         carries; AnchorBox exists only because the flat path needs a rect. }
       if spec^.RotationRad <> 0 then
       begin
-        APainter.DrawTextRotated(places[i].Text, labelS.FontName,
-          ResolveFontSize(labelS), labelS.FontWeight, labelS.TextColor,
+        APainter.DrawTextRotated(places[i].Text, lblStyle.FontName,
+          ResolveFontSize(lblStyle), lblStyle.FontWeight, lblStyle.TextColor,
           places[i].X, places[i].Y, spec^.RotationRad,
           AnchorAlign(places[i].AnchorH), AnchorLayout(places[i].AnchorV));
         Continue;
@@ -1134,8 +1147,8 @@ begin
       APainter.DrawText(
         AnchorBox(places[i].X, places[i].Y, lblW, lblH,
                   places[i].AnchorH, places[i].AnchorV),
-        places[i].Text, labelS.FontName, ResolveFontSize(labelS),
-        labelS.FontWeight, labelS.TextColor, taCenter, tlCenter,
+        places[i].Text, lblStyle.FontName, ResolveFontSize(lblStyle),
+        lblStyle.FontWeight, lblStyle.TextColor, taCenter, tlCenter,
         { ELLIPSIS AND MULTI-LINE, both of which the painter has always had and
           this never asked for: a label was drawn as one clipped line whatever
           it contained, so a wrapped one lost every row after the first. }
@@ -1155,6 +1168,15 @@ begin
   begin
     if AAxis.Scale is TTyOrdinalScale then
       txt := TTyOrdinalScale(AAxis.Scale).GetLabel(scaleTicks[i].Value)
+    else if AAxis.Scale is TTyTimeScale then
+    begin
+      if scaleTicks[i].NotNice then Continue;
+      tt.Value := scaleTicks[i].Value;
+      tt.Unit_ := scaleTicks[i].TimeUnit;
+      tt.Level := scaleTicks[i].TimeLevel;
+      tt.NotNice := False;
+      txt := TyTimeLabel(tt, TTyTimeScale(AAxis.Scale).UTC);
+    end
     else
       txt := TyChartNumToStr(scaleTicks[i].Value);
     if txt = '' then Continue;

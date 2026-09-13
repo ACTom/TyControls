@@ -108,6 +108,7 @@ type
   TTyLabelOverflow = (loNone, loTruncate, loBreak);
 
   TTyStringArray = array of string;
+  TTyBoolArray = array of Boolean;
   TTyIntegerArray = array of Integer;
 
   { Which edge of a plot rect an axis draws on. Lives here rather than in

@@ -594,6 +594,28 @@ begin
   Result := ASpan * pct / 100;
 end;
 
+{ One end of an axis' range as the option wrote it: a number everywhere, and
+  on a TIME axis a date string as well -- `min: '2024-01-01'` is how everybody
+  writes that bound. False when the option said nothing, which leaves the
+  data-derived end alone. }
+function AxisBound(AData: TJSONData; AAxis: TTyAxis; var AValue: Double): Boolean;
+var ms: Double;
+begin
+  Result := False;
+  if AData = nil then Exit;
+  if AData.JSONType = jtNumber then
+  begin
+    AValue := AData.AsFloat;
+    Exit(True);
+  end;
+  if (AAxis <> nil) and (AAxis.AxisType = atTime)
+    and (AData.JSONType = jtString) and TyParseDateMs(AData.AsString, ms) then
+  begin
+    AValue := ms;
+    Exit(True);
+  end;
+end;
+
 procedure TyApplyAxisExtents(AOption: TTyChartOption; ABuild: TTyChartBuild;
   const ABindings: TTySeriesBindingArray; const AStores: array of TTyDataStore;
   const AStacks: TTySeriesStackArray; AIndex: TTyAxisSeriesIndex);
@@ -678,10 +700,21 @@ var
       which is what an axis showing nothing should span, and `min`/`max` below
       overwrite them when the author said otherwise. }
     if not any then
-    begin
-      lo := 0;
-      hi := 1;
-    end;
+      if AAxis.AxisType = atTime then
+      begin
+        { A TIME AXIS WITH NOTHING ON IT SHOWS TODAY, which is upstream's
+          answer and the only one an author reads as empty rather than as
+          broken: 0..1 on a time axis is the first second of 1970, and a
+          chart that lost its data should not look like a chart about the
+          Apollo programme. }
+        hi := TyDateTimeToMs(Date, False);
+        lo := hi - 86400000;
+      end
+      else
+      begin
+        lo := 0;
+        hi := 1;
+      end;
 
     { An axis includes zero unless it was told to fit its data. That is why a
       bar chart's baseline is the axis line rather than a floating number, and
@@ -693,7 +726,10 @@ var
       d := node.Find('scale');
       if (d <> nil) and (d.JSONType = jtBoolean) then scaleOpt := d.AsBoolean;
     end;
-    if (not scaleOpt) and (AAxis.AxisType <> atLog) then
+    { A TIME AXIS IS EXEMT TOO, and far more visibly than a log one: zero on a
+      time axis is the first instant of 1970, so a chart of last week would
+      span fifty-six years and draw its seven points in the last pixel. }
+    if (not scaleOpt) and not (AAxis.AxisType in [atLog, atTime]) then
     begin
       if lo > 0 then lo := 0;
       if hi < 0 then hi := 0;
@@ -706,25 +742,23 @@ var
       in ECharts did nothing at all. }
     fixLo := False;
     fixHi := False;
-    split := 5;
+    { SIX ON A TIME AXIS, five everywhere else -- upstream's own two defaults.
+      A date is a wider label than a number and six of them is what fits. }
+    if AAxis.AxisType = atTime then split := 6 else split := 5;
     ivl := 0;
     minIvl := 0;
     maxIvl := 0;
     minor := 0;
     if node <> nil then
     begin
+      { ON A TIME AXIS THE BOUND IS USUALLY A DATE STRING. `min: '2024-01-01'`
+        is how everybody writes it, and reading numbers only meant the
+        commonest form of the two most-used axis options silently did nothing
+        on the one axis type that needs them most. }
       d := node.Find('min');
-      if (d <> nil) and (d.JSONType = jtNumber) then
-      begin
-        lo := d.AsFloat;
-        fixLo := True;
-      end;
+      if AxisBound(d, AAxis, lo) then fixLo := True;
       d := node.Find('max');
-      if (d <> nil) and (d.JSONType = jtNumber) then
-      begin
-        hi := d.AsFloat;
-        fixHi := True;
-      end;
+      if AxisBound(d, AAxis, hi) then fixHi := True;
       { A VALUE AXIS' boundaryGap IS A PAIR, not the boolean a category axis
         takes -- `['10%', '10%']` or a pair of absolute amounts -- and it pads
         the extent before it is nicied. Read here rather than in the builder
@@ -820,7 +854,14 @@ var
         split := Trunc((hi - lo) / ivl);
         if split < 1 then split := 1;
       end;
-      TTyIntervalScale(AAxis.Scale).Niceify(split, ivl);
+      { NOT NICIED WHEN IT IS A CALENDAR. Niceify opens the extent out to
+        round numbers before picking a step, and the round number nearest a
+        week in March 2024 is somewhere in 1973. A time scale is handed the
+        tick count instead and snaps to the calendar itself. }
+      if AAxis.Scale is TTyTimeScale then
+        TTyTimeScale(AAxis.Scale).SplitNumber := split
+      else
+        TTyIntervalScale(AAxis.Scale).Niceify(split, ivl);
       { AFTER Niceify: it is the major interval that gets subdivided, and
         Niceify is what decides the major interval. }
       TTyIntervalScale(AAxis.Scale).MinorSplitNumber := minor;

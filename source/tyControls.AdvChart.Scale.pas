@@ -29,7 +29,8 @@ unit tyControls.AdvChart.Scale;
   PURE: SysUtils, Math and AdvChart.Types only. No Controls, no Graphics, no
   handle. }
 interface
-uses SysUtils, Math, tyControls.AdvChart.Types, tyControls.AdvChart.Data;
+uses SysUtils, Math, tyControls.AdvChart.Types, tyControls.AdvChart.Data,
+     tyControls.AdvChart.Time;
 
 type
   { Which extent. See the unit header. }
@@ -156,6 +157,21 @@ type
       tick placement reads it to decide whether the last tick belongs to a band
       or to the edge (ECharts helper.ts:317-328, Axis.ts:345-347). }
     OffInterval: Boolean;
+
+    { ---- and three more that only a time scale ever fills in ---- }
+
+    { HOW COARSE this tick is, 0 being the finest and the largest number the
+      coarsest. A SEPARATE FIELD from Level on purpose: Level means major or
+      minor everywhere else in the port, and writing a time tick's coarseness
+      into it would turn every year marker into a minor tick -- drawn short,
+      unlabelled, and on the wrong style. }
+    TimeLevel: Integer;
+    { The unit this timestamp is round to, which decides its label. }
+    TimeUnit: TTyTimeUnit;
+    { An extent endpoint that no interval landed on. Unlike OffInterval --
+      which is about a BAND -- this is about a number line whose ends were
+      never rounded outwards, and it is read to HIDE the label. }
+    NotNice: Boolean;
   end;
   TTyScaleTickArray = array of TTyScaleTick;
 
@@ -309,6 +325,36 @@ type
       ECharts says "this axis counts". }
     property MinInterval: Double read FMinInterval write FMinInterval;
     property MaxInterval: Double read FMaxInterval write FMaxInterval;
+  end;
+
+  { An axis whose ticks are DATES.
+
+    A descendant of the interval scale because the MAPPING really is the
+    interval scale's -- epoch milliseconds are numbers and a linear mapper
+    places them perfectly -- and only the question of where a tick belongs is
+    different. Before this, a time axis was exactly that and nothing else:
+    correctly placed ticks every 200,000,000 ms, labelled 1709251200000.
+
+    WHAT IT MUST NOT INHERIT IS THE NICEING. An interval scale opens its
+    extent out to round numbers before choosing a step, and the nearest round
+    number to a week in March 2024 is somewhere in 1973. A time extent is kept
+    exactly as the data left it, which is also why its end ticks need the
+    NotNice flag. }
+  TTyTimeScale = class(TTyIntervalScale)
+  private
+    FSplitNumber: Integer;
+    FUTC: Boolean;
+  public
+    constructor Create;
+    function GetTicks: TTyScaleTickArray; override;
+    { Roughly how many ticks to aim for. Upstream defaults a time axis to SIX
+      where every other axis gets five -- dates are wider than numbers. }
+    property SplitNumber: Integer read FSplitNumber write FSplitNumber;
+    { ECharts' useUTC: ONE option at the root of the tree, false by default,
+      and it switches which calendar the ticks are snapped to rather than
+      shifting any timestamp. Data kept in UTC on a server is still meant to
+      be read on the reader's own clock. }
+    property UTC: Boolean read FUTC write FUTC;
   end;
 
 { JavaScript's rounding, which is NOT FPC's -- Round is banker's here. Exported
@@ -1061,6 +1107,39 @@ begin
     end;
   end;
   SetLength(Result, t);
+end;
+
+{ ============================ TTyTimeScale ============================ }
+
+constructor TTyTimeScale.Create;
+begin
+  inherited Create;
+  FSplitNumber := 6;
+  FUTC := False;
+end;
+
+function TTyTimeScale.GetTicks: TTyScaleTickArray;
+var
+  e: TTyRange;
+  t: TTyTimeTickArray;
+  i: Integer;
+begin
+  Result := nil;
+  e := GetExtent;
+  t := TyTimeTicks(e.Start, e.Stop, FSplitNumber, FUTC);
+  SetLength(Result, Length(t));
+  for i := 0 to High(t) do
+  begin
+    Result[i].Value := t[i].Value;
+    { EVERY TIME TICK IS A MAJOR. There is no such thing as a minor tick on a
+      time axis: a year marker among days is not a subdivision of anything,
+      it is the coarsest tick there is. }
+    Result[i].Level := 0;
+    Result[i].OffInterval := False;
+    Result[i].TimeLevel := t[i].Level;
+    Result[i].TimeUnit := t[i].Unit_;
+    Result[i].NotNice := t[i].NotNice;
+  end;
 end;
 
 end.

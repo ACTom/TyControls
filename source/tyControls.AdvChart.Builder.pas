@@ -41,6 +41,7 @@ interface
 uses SysUtils, Classes, Math, fpjson,
      tyControls.AdvChart.Types, tyControls.AdvChart.Option,
      tyControls.AdvChart.Data, tyControls.AdvChart.Scale,
+     tyControls.AdvChart.Time,
   tyControls.AdvChart.Dataset,
      tyControls.AdvChart.Coord, tyControls.AdvChart.Layout;
 
@@ -739,9 +740,9 @@ begin
         iv.Mapper := TTyLogScaleMapper.Create(logBase);
         Exit(iv);
       end;
+    atTime:
+      Exit(TTyTimeScale.Create);
   else
-    { Time falls back to an interval scale: epoch milliseconds ARE numbers, so
-      the mapping is right and only the tick labelling is missing. }
     Result := TTyIntervalScale.Create;
   end;
 end;
@@ -776,6 +777,10 @@ var
       if not TyResolveAxisType(nd, t, u) then
         build.Note(Format(rsTyChartAxisTypeUnknown, [AMainType, q, u]));
       a := TTyAxis.Create(Copy(AMainType, 1, 1), MakeScale(t, nd), AHorizontal);
+      { `useUTC` IS A ROOT OPTION, not an axis one -- upstream reads it once
+        off the top of the tree and every time axis in the chart obeys it. }
+      if a.Scale is TTyTimeScale then
+        TTyTimeScale(a.Scale).UTC := AOption.GetBool('useUTC', False);
       a.MainType := AMainType;
       a.ComponentIndex := q;
       a.Id := StrIn(nd, 'id', '');
@@ -1550,6 +1555,8 @@ var
     q, kept: Integer;
     lbl, wd: TJSONData;
     ovf: string;
+    isTime: Boolean;
+    tt: TTyTimeTick;
   begin
     ASpec := Default(TTyAxisLayoutSpec);
     ASpec.Side := AAxis.Side;
@@ -1645,13 +1652,40 @@ var
     end;
 
     ticks := AAxis.Scale.GetTicks;
+    isTime := AAxis.Scale is TTyTimeScale;
     SetLength(ASpec.Labels, Length(ticks));
     SetLength(ASpec.Positions, Length(ticks));
+    if isTime then
+    begin
+      SetLength(ASpec.LabelHidden, Length(ticks));
+      SetLength(ASpec.LabelEmphasis, Length(ticks));
+      { A time axis is never thinned by index, and its coarse ticks are the
+        ones that carry the weight. }
+      ASpec.KeepEveryLabel := True;
+      ASpec.EmphasisFontWeight := AText.EmphasisFontWeight;
+    end;
     kept := 0;
     for q := 0 to High(ticks) do
     begin
       if ticks[q].Level <> 0 then Continue;
-      if AAxis.Scale is TTyOrdinalScale then
+      if isTime then
+      begin
+        tt.Value := ticks[q].Value;
+        tt.Unit_ := ticks[q].TimeUnit;
+        tt.Level := ticks[q].TimeLevel;
+        tt.NotNice := ticks[q].NotNice;
+        ASpec.Labels[kept] := TyTimeLabel(tt, TTyTimeScale(AAxis.Scale).UTC);
+        { THE TWO RAGGED ENDS KEEP THEIR TICKS AND LOSE THEIR TEXT. The extent
+          of a time axis is the data's own, never rounded outwards, so its
+          first and last ticks are wherever the data happens to start and
+          stop; labelling those puts a `07:13` hard against the first round
+          hour. }
+        ASpec.LabelHidden[kept] := ticks[q].NotNice;
+        { Every level above the finest is emphasised, which is what makes an
+          axis read `12 13 14 Feb 2 3` rather than as six equal numbers. }
+        ASpec.LabelEmphasis[kept] := ticks[q].TimeLevel >= 1;
+      end
+      else if AAxis.Scale is TTyOrdinalScale then
         ASpec.Labels[kept] := TTyOrdinalScale(AAxis.Scale).GetLabel(ticks[q].Value)
       else
         { NumText, not FloatToStr: the paint pass formats the same tick with a
@@ -1673,6 +1707,11 @@ var
     end;
     SetLength(ASpec.Labels, kept);
     SetLength(ASpec.Positions, kept);
+    if isTime then
+    begin
+      SetLength(ASpec.LabelHidden, kept);
+      SetLength(ASpec.LabelEmphasis, kept);
+    end;
   end;
 
 begin
