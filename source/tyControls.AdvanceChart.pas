@@ -656,7 +656,7 @@ var
   maxW, batched: Integer;
   horiz: Boolean;
   txt: string;
-  lblH, lblW, step: Integer;
+  lblH, lblW, step, tickStep: Integer;
   scaleTicks: TTyScaleTickArray;
   spec: PTyAxisLayoutSpec;
   places: TTyAxisLabelPlacementArray;
@@ -879,6 +879,13 @@ begin
   end;
   step := 1;
   if (spec <> nil) and (spec^.LabelStep > 0) then step := spec^.LabelStep;
+  { THE FURNITURE FOLLOWS THE LABELS UNLESS IT WAS TOLD OTHERWISE. Upstream
+    defaults `axisTick.interval` to `auto`, and `auto` there does not compute
+    anything -- it re-runs the LABEL pipeline and takes its ticks. So the
+    label stride drives the marks, the split lines and the split areas one
+    way, and only an explicit `axisTick.interval` breaks the tie. }
+  tickStep := step;
+  if (spec <> nil) and (spec^.TickStep > 0) then tickStep := spec^.TickStep;
   batched := 0;
 
   { Split lines first, so the domain and the ticks sit on top of them.
@@ -922,7 +929,7 @@ begin
   end;
 
   if ABelow and furn.ShowMinorSplitLine
-    and (tpBorderColor in minorSplitS.Present) and (step = 1) then
+    and (tpBorderColor in minorSplitS.Present) and (tickStep = 1) then
   begin
     scaleTicks := AAxis.Scale.GetTicks;
     APainter.BeginPath;
@@ -945,7 +952,7 @@ begin
     for i := 0 to High(ticks) do
     begin
       { THINNED WITH THE LABELS, on the same step the ticks use. }
-      if (step > 1) and (i mod step <> 0) then Continue;
+      if (tickStep > 1) and (i mod tickStep <> 0) then Continue;
       { THE TWO ON THE ENDS ARE SEPARATELY DENIABLE. A grid line on the axis'
         own extreme sits exactly on the plot's edge, doubling whatever border
         is already there, and these are the keys that turn it off. }
@@ -1001,7 +1008,7 @@ begin
     APainter.BeginPath;
     for i := 0 to High(ticks) do
     begin
-      if (step > 1) and (i mod step <> 0) then Continue;
+      if (tickStep > 1) and (i mod tickStep <> 0) then Continue;
       along := ticks[i];
       if horiz then
       begin
@@ -1026,7 +1033,7 @@ begin
     its default have all been in place since item 18 with nothing reading them,
     so a skin that set it changed nothing. }
   if furn.ShowMinorTick and (tpBorderColor in minorTickS.Present)
-    and (step = 1) then
+    and (tickStep = 1) then
   begin
     scaleTicks := AAxis.Scale.GetTicks;
     APainter.BeginPath;

@@ -105,6 +105,28 @@ type
       `else` belongs to the `if (onZeroAxisIndex != null)`, so naming a bad
       one turns onZero off. }
     OnZeroAxisIndex: Integer;
+
+    { `axisLabel.interval` and `axisTick.interval`, ALREADY TURNED INTO A
+      STRIDE: nought means `auto`, and N+1 means the option said N.
+
+      The option counts what it SKIPS. `interval: 0` shows every label,
+      `interval: 1` shows every other one, `interval: 2` one in three -- so
+      the stride is one more than the number written. Reading it as `every
+      Nth` makes the commonest value of all, 0, throw away half the axis.
+
+      CATEGORY AXES ONLY. Upstream routes a value, time or log axis straight
+      past the interval reader, and the reason is not arbitrary: on those the
+      TICKS come first and the labels are made from them, so there is nothing
+      for a label stride to thin. Both stay nought on such an axis. }
+    LabelStep: Integer;
+    TickStep: Integer;
+
+    { `axisLabel.showMinLabel` / `showMaxLabel`. Three-state; see
+      TTyAxisEndLabel. These are read on EVERY axis type -- what counts as
+      `the stride missed this end` differs (an off-stride category, a ragged
+      time boundary) but the author's override does not. }
+    ShowMinLabel: TTyAxisEndLabel;
+    ShowMaxLabel: TTyAxisEndLabel;
   end;
 
 
@@ -993,6 +1015,42 @@ begin
   if (d <> nil) and (d.JSONType = jtBoolean) then Result := d.AsBoolean;
 end;
 
+{ `interval` on one sub-node, as a STRIDE. Nought when the option is absent
+  or says `auto`.
+
+  A NON-INTEGER IS TRUNCATED, and that is a deliberate divergence. Upstream
+  accepts `interval: 2.7`, makes a stride of 3.7 out of it and walks the
+  ordinal axis in steps of 3.7, emitting tick values no category has --
+  which is incoherent rather than a feature. The port takes the whole part
+  and draws every fourth label. }
+function IntervalStrideIn(ANode: TJSONObject; const AKey: string): Integer;
+var sub: TJSONData; n: Integer;
+begin
+  Result := 0;
+  sub := FindIn(ANode, AKey);
+  if (sub = nil) or (sub.JSONType <> jtObject) then Exit;
+  sub := TJSONObject(sub).Find('interval');
+  if (sub = nil) or (sub.JSONType <> jtNumber) then Exit;
+  n := Trunc(sub.AsFloat);
+  { Any non-positive count means `every one of them`. Upstream clamps the
+    stride at 1 rather than validating, so `interval: -5` is legal and means
+    the same as 0. }
+  if n < 0 then n := 0;
+  Result := n + 1;
+end;
+
+{ `showMinLabel` / `showMaxLabel` on axisLabel: absent is AUTO, not false. }
+function EndLabelIn(ANode: TJSONObject; const AKey: string): TTyAxisEndLabel;
+var sub: TJSONData;
+begin
+  Result := aelAuto;
+  sub := FindIn(ANode, 'axisLabel');
+  if (sub = nil) or (sub.JSONType <> jtObject) then Exit;
+  sub := TJSONObject(sub).Find(AKey);
+  if (sub = nil) or (sub.JSONType <> jtBoolean) then Exit;
+  if sub.AsBoolean then Result := aelShow else Result := aelHide;
+end;
+
 function TyAxisFurnitureOf(ANode: TJSONObject; AAxis: TTyAxis;
   AOtherIsValue: Boolean): TTyAxisFurniture;
 var
@@ -1028,6 +1086,18 @@ begin
     and ShowIn(ANode, 'minorTick', False, False, True);
   Result.ShowMinorSplitLine := (not cat)
     and ShowIn(ANode, 'minorSplitLine', False, False, True);
+
+  { THE LABEL STRIDE DRIVES THE TICKS, one way. `axisTick.interval` defaults
+    to `auto`, and `auto` on the ticks does not mean `work one out` -- it
+    means `whatever the labels are doing`, which is why a stride of nought
+    here is later read as `follow the labels` rather than `measure`. }
+  if cat then
+  begin
+    Result.LabelStep := IntervalStrideIn(ANode, 'axisLabel');
+    Result.TickStep := IntervalStrideIn(ANode, 'axisTick');
+  end;
+  Result.ShowMinLabel := EndLabelIn(ANode, 'showMinLabel');
+  Result.ShowMaxLabel := EndLabelIn(ANode, 'showMaxLabel');
 
   Result.TickInside := SubBoolIn(ANode, 'axisTick', 'inside', False);
   Result.LabelInside := SubBoolIn(ANode, 'axisLabel', 'inside', False);
@@ -1566,6 +1636,10 @@ var
       about twice. }
     ASpec.ShowLabels := AFurn.ShowLabels;
     ASpec.ShowTicks := AFurn.ShowTicks;
+    ASpec.ForcedLabelStep := AFurn.LabelStep;
+    ASpec.TickStep := AFurn.TickStep;
+    ASpec.ShowMinLabel := AFurn.ShowMinLabel;
+    ASpec.ShowMaxLabel := AFurn.ShowMaxLabel;
     ASpec.TickInside := AFurn.TickInside;
     ASpec.LabelInside := AFurn.LabelInside;
     { AN OFFSET AXIS HANGS FURTHER OUT, so the band it costs is its own

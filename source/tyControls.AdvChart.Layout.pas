@@ -119,6 +119,16 @@ type
   { One laid-out label, ready to hand to TTyPainter.DrawTextRotated: the anchor
     plus how the box sits on it. Layout and paint therefore cannot disagree
     about where a label went. }
+  { `axisLabel.showMinLabel` / `showMaxLabel`.
+
+    THREE STATES, and the default is the third one. Upstream's default is
+    `null`, which is neither `true` nor `false`: under it an end label is
+    shown when the interval landed on it and hidden when it did not, which is
+    a question neither Boolean can ask. A two-state port defaulting to True
+    would show every ragged end label on every thinned axis; defaulting to
+    False would lose the ends of every axis that is not thinned at all. }
+  TTyAxisEndLabel = (aelAuto, aelShow, aelHide);
+
   TTyAxisLabelPlacement = record
     Index: Integer;
     Text: string;
@@ -207,8 +217,34 @@ type
       axis, where the labels are interchangeable; a time axis' labels are not
       -- dropping every other one takes the month markers with it and leaves a
       row of day numbers that restart for no visible reason. Upstream thins a
-      time axis by measuring collisions instead, never by index. }
+      time axis by measuring collisions instead, never by index.
+
+      This is a statement about the AXIS TYPE. What the AUTHOR asked for is
+      ForcedLabelStep below, and the two cannot collide: an authored interval
+      is read on category axes only, and no category axis sets this. }
     KeepEveryLabel: Boolean;
+
+    { `axisLabel.interval`, already turned into a stride: nought means the
+      author said nothing and the measured rule decides, 1 means every label,
+      N means every Nth.
+
+      A STRIDE AND NOT THE OPTION'S OWN NUMBER. `interval` counts what it
+      SKIPS -- 0 shows everything, 1 shows every other one -- so the option's N
+      is a stride of N+1. Read it as `every Nth` and a chart asking for all its
+      labels loses half of them. }
+    ForcedLabelStep: Integer;
+
+    { The stride the TICK MARKS and the SPLIT LINES walk. Nought means `the
+      same one the labels walk`, which is upstream's default and the whole
+      point of it: the LABEL interval drives axisTick, splitLine and splitArea
+      one way, so that two grids sharing an x axis keep the same grid even when
+      only one of them draws the numbers. }
+    TickStep: Integer;
+
+    { The two ends, separately deniable. `aelAuto` is upstream's default and
+      means `shown when the stride landed on it`. }
+    ShowMinLabel: TTyAxisEndLabel;
+    ShowMaxLabel: TTyAxisEndLabel;
   end;
   TTyAxisLayoutSpecArray = array of TTyAxisLayoutSpec;
   PTyAxisLayoutSpec = ^TTyAxisLayoutSpec;
@@ -534,6 +570,31 @@ begin
             and ASpec.LabelHidden[AIndex];
 end;
 
+{ Does one of the two end-label options decide this index outright?
+
+  THE ENDS ARE THE ONLY INDICES A STRIDE CAN BE ASKED TO OVERRULE. A stride
+  anchored at nought always lands on the first label and lands on the last
+  only when the count happens to suit it, so the last label of a thinned
+  axis is missing far more often than the first -- and it is the one a
+  reader looks for, because it says where the data stops.
+
+  Neither option applies to an axis with a single label: upstream's rule
+  needs an inner neighbour to weigh the end against and bails without one. }
+function EndLabelDecides(const ASpec: TTyAxisLayoutSpec;
+  AIndex, ACount: Integer; out AShown: Boolean): Boolean;
+var opt: TTyAxisEndLabel;
+begin
+  Result := False;
+  AShown := False;
+  if ACount < 2 then Exit;
+  if AIndex = 0 then opt := ASpec.ShowMinLabel
+  else if AIndex = ACount - 1 then opt := ASpec.ShowMaxLabel
+  else Exit;
+  if opt = aelAuto then Exit;
+  AShown := opt = aelShow;
+  Result := True;
+end;
+
 procedure MeasureLabels(const ASpec: TTyAxisLayoutSpec;
   const AMeasurer: ITyTextMeasurer; out AAcross, AAlong: Double;
   out AAlongEach: TTyDoubleArray);
@@ -687,6 +748,17 @@ begin
   Result := 1;
   { An axis that says so is never thinned by index. }
   if ASpec.KeepEveryLabel then Exit;
+  { AND AN AUTHOR WHO NAMED A STRIDE GETS IT, measured or not. `interval` is
+    not a hint: `interval: 0` on a crowded axis means `draw them all and let
+    them collide`, which is a thing people write on purpose and which no
+    value the measured rule can return expresses.
+
+    BEFORE the measuring, and that placement is cost rather than answer:
+    mutation testing moved this line below MeasureLabels and every reading
+    stayed identical, because measuring changes nothing but the locals. It
+    stays here because an axis of five thousand categories that was told what
+    to do should not measure five thousand strings to be told again. }
+  if ASpec.ForcedLabelStep > 0 then Exit(ASpec.ForcedLabelStep);
   MeasureLabels(ASpec, AMeasurer, across, along, each);
   n := Length(each);
   if n < 2 then Exit;
@@ -712,16 +784,96 @@ begin
   Result := n;
 end;
 
+{ Into [0, 2*PI), which is upstream's remRadian and NOT the [-PI, PI) a
+  reader expects. The interval matters: a quarter turn CLOCKWISE comes back
+  as three quarters anticlockwise, which is on the far side of PI and so
+  lands in the other arm of the alignment rule below. }
+function RemRadian(AValue: Double): Double;
+const cTwoPi = 2 * Pi;
+begin
+  Result := AValue - Floor(AValue / cTwoPi) * cTwoPi;
+end;
+
+{ WHICH POINT OF THE TEXT SITS ON THE ANCHOR -- upstream's
+  AxisBuilder.innerTextLayout, whole.
+
+  ONE RULE FOR FOUR SIDES AND EVERY ANGLE. Fed a rotation of nought it
+  reproduces, exactly, the per-side table it replaces: bottom gets
+  centre/top, top gets centre/bottom, left gets right/middle, right gets
+  left/middle. So this is not a branch beside the table, it IS the table --
+  and the turned case stops being a special case of anything.
+
+  The table ignored the rotation, and that was a visible bug rather than an
+  omission: anchored centre/top and then turned 45 degrees, a label
+  STRADDLES its anchor, and half the string swings UP across the axis line
+  into the plot, where the series paints over it. Eight categories came out
+  as `Category`, `Category`, `Category`... and the same option with no
+  series drew all eight whole, which is how the erasure was finally
+  visible. Anchored by this rule the whole run hangs away from the axis.
+
+  A VERTICAL AXIS IS ALREADY TURNED. The angle that decides the anchors is
+  the text's RELATIVE to the axis line, so an unrotated label on a left
+  axis is a quarter turn away from its own axis and lands in the last arm
+  below -- which is where the right-aligned, middle-anchored placement a
+  value axis has always had actually comes from. }
+procedure AnchorsFor(const ASpec: TTyAxisLayoutSpec;
+  out AH: TTyTextAnchorH; out AV: TTyTextAnchorV);
+const
+  { Upstream's RADIAN_EPSILON. }
+  cRadEps = 1e-4;
+var
+  axisRot, diff: Double;
+  dir: Integer;
+begin
+  if AxisIsHorizontal(ASpec.Side) then axisRot := 0 else axisRot := Pi / 2;
+  diff := RemRadian(ASpec.RotationRad - axisRot);
+  { Which side of the line the labels are on; `inside` puts them on the
+    other one, and every anchor follows. }
+  if ASpec.Side in [asBottom, asRight] then dir := 1 else dir := -1;
+  if ASpec.LabelInside then dir := -dir;
+
+  if Abs(diff) < cRadEps then
+  begin
+    { Along the axis line, reading the same way round. }
+    AH := tahCentre;
+    if dir > 0 then AV := tavTop else AV := tavBottom;
+  end
+  else if Abs(diff - Pi) < cRadEps then
+  begin
+    { Along the line, upside down: the box flips with it. }
+    AH := tahCentre;
+    if dir > 0 then AV := tavBottom else AV := tavTop;
+  end
+  else
+  begin
+    { At an angle to the line. The text hangs by one END so that the run
+      goes away from the axis rather than across it. }
+    AV := tavMiddle;
+    if (diff > 0) and (diff < Pi) then
+    begin
+      if dir > 0 then AH := tahRight else AH := tahLeft;
+    end
+    else
+    begin
+      if dir > 0 then AH := tahLeft else AH := tahRight;
+    end;
+  end;
+end;
+
 function TyLayoutAxisLabels(const ASpec: TTyAxisLayoutSpec; const APlot: TTyRectF;
   const AMeasurer: ITyTextMeasurer; APPI: Integer): TTyAxisLabelPlacementArray;
 var
   i, step: Integer;
+  endShown: Boolean;
+  ah: TTyTextAnchorH;
+  av: TTyTextAnchorV;
   gap, len, base: Double;
 begin
   Result := nil;
   SetLength(Result, Length(ASpec.Labels));
   if Length(ASpec.Labels) = 0 then Exit;
   step := TyAxisLabelStep(ASpec, APlot, AMeasurer, APPI);
+  AnchorsFor(ASpec, ah, av);
   { THE SAME SUM TyAxisThickness RESERVES, and it has to be: the thickness is
     what the plot gives up and this is where the text goes in it. They were
     written apart, so the moment the thickness stopped charging for a hidden
@@ -753,48 +905,42 @@ begin
       the ones around it stand where they always did; a hidden one was never
       going to be drawn, yet it keeps its place in every parallel array so
       that the indices still line up with the ticks. }
-    Result[i].Shown := ASpec.ShowLabels and (i mod step = 0)
-                       and (not HiddenAt(ASpec, i));
+    if EndLabelDecides(ASpec, i, Length(ASpec.Labels), endShown) then
+      Result[i].Shown := ASpec.ShowLabels and endShown
+                         and (not HiddenAt(ASpec, i))
+    else
+      Result[i].Shown := ASpec.ShowLabels and (i mod step = 0)
+                         and (not HiddenAt(ASpec, i));
     Result[i].Emphasis := (ASpec.EmphasisFontWeight > 0)
                           and (i <= High(ASpec.LabelEmphasis))
                           and ASpec.LabelEmphasis[i];
+    { THE ANCHOR POINT is the side's business; WHICH POINT OF THE TEXT sits
+      on it is AnchorsFor's, for all four alike. }
+    Result[i].AnchorH := ah;
+    Result[i].AnchorV := av;
     case ASpec.Side of
       asBottom:
         begin
           Result[i].X := APlot.Left + ASpec.Positions[i] * len;
           Result[i].Y := APlot.Bottom + gap;
-          Result[i].AnchorH := tahCentre;
-          if ASpec.LabelInside then Result[i].AnchorV := tavBottom
-          else Result[i].AnchorV := tavTop;
         end;
       asTop:
         begin
           Result[i].X := APlot.Left + ASpec.Positions[i] * len;
           Result[i].Y := APlot.Top - gap;
-          Result[i].AnchorH := tahCentre;
-          if ASpec.LabelInside then Result[i].AnchorV := tavTop
-          else Result[i].AnchorV := tavBottom;
         end;
       asLeft:
         begin
           { A vertical axis' fractions run from its START, which is the BOTTOM --
             the same direction the coordinate system's y axis runs, so a label's
             fraction and its datum's fraction are the same number. }
-          base := APlot.Bottom - ASpec.Positions[i] * len;
           Result[i].X := APlot.Left - gap;
-          Result[i].Y := base;
-          if ASpec.LabelInside then Result[i].AnchorH := tahLeft
-          else Result[i].AnchorH := tahRight;
-          Result[i].AnchorV := tavMiddle;
+          Result[i].Y := APlot.Bottom - ASpec.Positions[i] * len;
         end;
       asRight:
         begin
-          base := APlot.Bottom - ASpec.Positions[i] * len;
           Result[i].X := APlot.Right + gap;
-          Result[i].Y := base;
-          if ASpec.LabelInside then Result[i].AnchorH := tahRight
-          else Result[i].AnchorH := tahLeft;
-          Result[i].AnchorV := tavMiddle;
+          Result[i].Y := APlot.Bottom - ASpec.Positions[i] * len;
         end;
     end;
   end;
