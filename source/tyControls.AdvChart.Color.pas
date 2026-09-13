@@ -100,6 +100,20 @@ function TyPaletteTake(var ACursor: TTyPaletteCursor; const AName: string;
   series the FIRST palette colour. }
 function TyChartSeriesDefaultName(ASeriesIndex: Integer): string;
 
+{ ==================== a colour that is an object ==================== }
+
+{ Read a gradient, if that is what this value is.
+
+  DETECTION IS STRUCTURAL: `colorStops` present and it is a gradient. The
+  `type` field only chooses the shape afterwards, and anything that is not
+  exactly `'radial'` -- a missing or misspelt `type` included -- is LINEAR.
+
+  A stop whose colour cannot be read is DROPPED rather than made black: a
+  ramp with one unreadable end is better read as the ramp between the ends
+  that survive. }
+function TyTryReadGradient(AData: TJSONData;
+  out AGrad: TTyChartGradient): Boolean;
+
 { ==================== the style blocks ==================== }
 
 type
@@ -112,6 +126,10 @@ type
     IsAuto: Boolean;      // the literal 'auto' -- resolve to the palette colour
     IsNone: Boolean;      // the literal 'none' -- do not paint
     Color: TTyChartColor;
+    { A COLOUR CAN BE AN OBJECT. When it is, Color still holds the solid it
+      degrades to, so every caller that wants one number keeps working and
+      only the painter has to know the difference. }
+    Gradient: TTyChartGradient;
   end;
 
   { `borderType` / `type`. A number or an array is verbatim pixels; the two
@@ -516,7 +534,7 @@ end;
 { One `color` value -- an array of strings, or a bare string, which upstream
   leaves as a string in the resolved option and normalises only at read time. }
 function ColorsFrom(AData: TJSONData; out AColors: TTyChartColorArray): Boolean;
-var i, n: Integer; c: TTyChartColor;
+var i, n: Integer; c: TTyChartColor; g: TTyChartGradient;
 begin
   AColors := nil;
   Result := False;
@@ -536,12 +554,25 @@ begin
   n := 0;
   SetLength(AColors, TJSONArray(AData).Count);
   for i := 0 to TJSONArray(AData).Count - 1 do
+  begin
+    { A PALETTE ENTRY MAY BE A GRADIENT. Only the solid it degrades to is
+      kept here -- a palette is asked for one colour at a time by a dozen
+      callers, and threading the whole object through all of them to serve a
+      case nobody writes would cost more than it is worth. An author who
+      wants a gradient on a series writes it on that series' itemStyle. }
+    if TyTryReadGradient(TJSONArray(AData).Items[i], g) then
+    begin
+      AColors[n] := TyGradientSolid(g);
+      Inc(n);
+      Continue;
+    end;
     if (TJSONArray(AData).Items[i].JSONType = jtString)
       and TyTryParseChartColor(TJSONArray(AData).Items[i].AsString, c) then
     begin
       AColors[n] := c;
       Inc(n);
     end;
+  end;
   SetLength(AColors, n);
 end;
 
@@ -598,6 +629,80 @@ end;
 
 { ==================== the style blocks ==================== }
 
+function NumIn(ANode: TJSONObject; const AKey: string;
+  ADefault: Double): Double;
+var d: TJSONData;
+begin
+  Result := ADefault;
+  if ANode = nil then Exit;
+  d := ANode.Find(AKey);
+  if (d <> nil) and (d.JSONType = jtNumber) then Result := d.AsFloat;
+end;
+
+function TyTryReadGradient(AData: TJSONData;
+  out AGrad: TTyChartGradient): Boolean;
+var
+  node, stop: TJSONObject;
+  stops: TJSONData;
+  i, n: Integer;
+  d: TJSONData;
+  c: TTyChartColor;
+begin
+  AGrad := Default(TTyChartGradient);
+  Result := False;
+  node := ObjOf(AData);
+  if node = nil then Exit;
+  stops := node.Find('colorStops');
+  if (stops = nil) or (stops.JSONType <> jtArray) then Exit;
+
+  d := node.Find('type');
+  if (d <> nil) and (d.JSONType = jtString)
+    and (Normalise(d.AsString) = 'radial') then
+    AGrad.Kind := cgkRadial
+  else
+    AGrad.Kind := cgkLinear;
+
+  { The defaults differ by shape, and the linear pair is the one a port gets
+    wrong: 0,0 -> 1,0 is LEFT TO RIGHT. }
+  if AGrad.Kind = cgkRadial then
+  begin
+    AGrad.X := NumIn(node, 'x', 0.5);
+    AGrad.Y := NumIn(node, 'y', 0.5);
+    AGrad.R := NumIn(node, 'r', 0.5);
+  end
+  else
+  begin
+    AGrad.X := NumIn(node, 'x', 0);
+    AGrad.Y := NumIn(node, 'y', 0);
+    AGrad.X2 := NumIn(node, 'x2', 1);
+    AGrad.Y2 := NumIn(node, 'y2', 0);
+  end;
+  d := node.Find('global');
+  AGrad.Global := (d <> nil) and (d.JSONType = jtBoolean) and d.AsBoolean;
+
+  n := 0;
+  SetLength(AGrad.Stops, TJSONArray(stops).Count);
+  for i := 0 to TJSONArray(stops).Count - 1 do
+  begin
+    stop := ObjOf(TJSONArray(stops).Items[i]);
+    if stop = nil then Continue;
+    d := stop.Find('color');
+    if (d = nil) or (d.JSONType <> jtString) then Continue;
+    if not TyTryParseChartColor(d.AsString, c) then Continue;
+    AGrad.Stops[n].Offset := NumIn(stop, 'offset', 0);
+    AGrad.Stops[n].Color := c;
+    Inc(n);
+  end;
+  SetLength(AGrad.Stops, n);
+  { A gradient with nothing left to ramp between is not a colour. }
+  if n = 0 then
+  begin
+    AGrad.Kind := cgkNone;
+    Exit;
+  end;
+  Result := True;
+end;
+
 function ReadOptColor(ANode: TJSONObject; const AKey: string): TTyOptColor;
 var d: TJSONData; s: string;
 begin
@@ -609,6 +714,13 @@ begin
     writing nil in its place would clobber the palette colour. `color: null`
     therefore behaves as though nothing were written. }
   if (d = nil) or (d.JSONType = jtNull) then Exit;
+  if TyTryReadGradient(d, Result.Gradient) then
+  begin
+    Result.Written := True;
+    { The solid it degrades to, for every caller that wants one number. }
+    Result.Color := TyGradientSolid(Result.Gradient);
+    Exit;
+  end;
   if d.JSONType <> jtString then Exit;
   Result.Written := True;
   s := Normalise(d.AsString);

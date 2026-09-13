@@ -203,6 +203,9 @@ end;
 procedure TyRenderElement(P: TTyPainter; const AElement: TTyChartElement);
 var
   rule: TTyFillRule;
+  gx1, gy1, gx2, gy2, gr: Double;
+  gi: Integer;
+  stops: array of TTyGradStop;
 begin
   if P = nil then Exit;
   { Nothing to draw is not an error -- a placeholder element with neither fill
@@ -224,10 +227,47 @@ begin
     else
       rule := tfrNonZero;
     if AElement.Style.HasFill then
-      P.FillPath(TTyColor(AElement.Style.FillColor), rule);
+    begin
+      if AElement.Style.FillGradient.Kind <> cgkNone then
+      begin
+        { THE ELEMENT'S OWN BOX, which is what upstream normalises against --
+          not the plot and not the series. So every bar ramps over itself and
+          a two-stop gradient reads the same on all of them, and a stacked
+          segment restarts per segment. }
+        TyResolveGradient(AElement.Style.FillGradient,
+          TyShapeBounds(AElement.Shape), gx1, gy1, gx2, gy2, gr);
+        SetLength(stops, Length(AElement.Style.FillGradient.Stops));
+        for gi := 0 to High(stops) do
+        begin
+          stops[gi].Color :=
+            TTyColor(AElement.Style.FillGradient.Stops[gi].Color);
+          stops[gi].Pos := AElement.Style.FillGradient.Stops[gi].Offset;
+        end;
+        P.FillPathGradient(stops, gx1, gy1, gx2, gy2, gr, rule);
+      end
+      else
+        P.FillPath(TTyColor(AElement.Style.FillColor), rule);
+    end;
     if AElement.Style.StrokeWidthLogical > 0 then
-      P.StrokePath(TTyColor(AElement.Style.StrokeColor),
-                   AElement.Style.StrokeWidthLogical);
+    begin
+      if AElement.Style.StrokeGradient.Kind <> cgkNone then
+      begin
+        TyResolveGradient(AElement.Style.StrokeGradient,
+          TyShapeBounds(AElement.Shape), gx1, gy1, gx2, gy2, gr);
+        SetLength(stops, Length(AElement.Style.StrokeGradient.Stops));
+        for gi := 0 to High(stops) do
+        begin
+          stops[gi].Color :=
+            TTyColor(AElement.Style.StrokeGradient.Stops[gi].Color);
+          stops[gi].Pos := AElement.Style.StrokeGradient.Stops[gi].Offset;
+        end;
+        P.StrokePathGradient(stops, gx1, gy1, gx2, gy2, gr,
+          AElement.Style.StrokeWidthLogical);
+      end
+      else
+        P.StrokePath(TTyColor(AElement.Style.StrokeColor),
+                     AElement.Style.StrokeWidthLogical);
+    end;
   finally
     { Restore even if a trace raised: the canvas state is shared, and leaking a
       dash or an alpha onto the next element is the defect the state stack

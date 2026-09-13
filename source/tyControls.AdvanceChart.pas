@@ -1441,6 +1441,11 @@ begin
     AVisual.StrokeWidthLogical := item.BorderWidthLogical;
   if not IsNan(item.Opacity) then
     AVisual.Alpha := Min(Double(1), Max(Double(0), item.Opacity));
+  { THE RAMP, when the colour was an object rather than a string. The solid
+    stays where it was -- SeriesColor already holds the first stop -- so a
+    legend swatch and a tooltip marker go on working unchanged. }
+  AVisual.FillGradient := item.Color.Gradient;
+  AVisual.StrokeGradient := item.BorderColor.Gradient;
 
   { A LINE READS ITS OWN BLOCK FOR THE PEN, and only for the pen. Its
     palette colour came from `itemStyle` -- that is the trap in this whole
@@ -1459,6 +1464,8 @@ begin
       AVisual.StrokeWidthLogical := line.BorderWidthLogical;
     if not IsNan(line.Opacity) then
       AVisual.Alpha := Min(Double(1), Max(Double(0), line.Opacity));
+    if line.Color.Gradient.Kind <> cgkNone then
+      AVisual.StrokeGradient := line.Color.Gradient;
   end;
 end;
 

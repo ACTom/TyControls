@@ -32,6 +32,39 @@ type
     render bridge casts. }
   TTyChartColor = type Cardinal;
 
+  { A COLOUR THAT IS NOT ONE COLOUR.
+
+    Upstream detects a gradient STRUCTURALLY -- by the presence of
+    `colorStops` -- and never by the `type` field; `type` only chooses
+    between the two shapes afterwards, and anything that is not exactly
+    `'radial'`, a missing `type` included, draws LINEAR. }
+  TTyChartGradKind = (cgkNone, cgkLinear, cgkRadial);
+
+  TTyChartGradStop = record
+    Offset: Double;
+    Color: TTyChartColor;
+  end;
+  TTyChartGradStopArray = array of TTyChartGradStop;
+
+  TTyChartGradient = record
+    Kind: TTyChartGradKind;
+    { LINEAR: (X,Y) to (X2,Y2), defaults 0,0 -> 1,0, which is LEFT TO RIGHT.
+      Most of the gallery writes `x2: 0, y2: 1` and so never meets the
+      default, which is exactly how a port comes to assume it is vertical.
+
+      RADIAL: (X,Y) is the centre and R the radius, defaults 0.5/0.5/0.5.
+      The inner radius is always nought and it is always a true circle. }
+    X, Y, X2, Y2, R: Double;
+    { False -- the default -- means the numbers are fractions of the
+      element's OWN box. True means they are coordinates already. The field
+      is spelled `global`; the `globalCoord` in the documentation is a
+      constructor parameter name and does nothing in an option literal. }
+    Global: Boolean;
+    { In the order they were written. Upstream neither sorts, dedupes nor
+      clamps them, and emits duplicate offsets itself. }
+    Stops: TTyChartGradStopArray;
+  end;
+
   TTyChartElementStyle = record
     HasFill: Boolean;
     FillColor: TTyChartColor;
@@ -39,6 +72,12 @@ type
       a theme that set a width of 0 meant "off", not "hairline". }
     StrokeWidthLogical: Double;
     StrokeColor: TTyChartColor;
+    { A GRADIENT INSTEAD OF THE FILL COLOUR, when the author wrote one.
+      FillColor still holds a solid -- the gradient's first stop -- because
+      a legend swatch and a tooltip dot need one colour and upstream's own
+      rule for producing it is `colorStops[0].color`. }
+    FillGradient: TTyChartGradient;
+    StrokeGradient: TTyChartGradient;
     FillEvenOdd: Boolean;
     DashLogical: TTyDoubleArray;
     Alpha: Double;                    // 0..1; 1 = opaque
@@ -145,6 +184,20 @@ function TyChartStyle: TTyChartElementStyle;
   otherwise -- so a decoration that forgets to set Silent is at worst inert,
   never a thing that steals hovers from the data. }
 function TyChartElement(const AShape: TTyChartShape): TTyChartElement;
+
+{ The one colour a gradient degrades to where only one will do -- a legend
+  swatch, a tooltip marker. Upstream's own rule: the FIRST stop, not an
+  average and not a midpoint; transparent when it has no stops. }
+function TyGradientSolid(const AGrad: TTyChartGradient): TTyChartColor;
+
+{ The gradient's geometry in real coordinates, against the element's box.
+
+  WHICH BOX: the ELEMENT's own, and nothing larger. Not the plot, not the
+  series -- upstream takes `el.getBoundingRect()`, so every bar in a series
+  ramps over its own rectangle and a two-stop gradient reads the same on all
+  of them. A stacked segment likewise restarts per segment. }
+procedure TyResolveGradient(const AGrad: TTyChartGradient;
+  const ABox: TTyRectF; out AX1, AY1, AX2, AY2, AR: Double);
 
 implementation
 
@@ -352,6 +405,68 @@ begin
     Result := TyChartNoDatum
   else
     Result := FItems[idx].Datum;
+end;
+
+function TyGradientSolid(const AGrad: TTyChartGradient): TTyChartColor;
+begin
+  if Length(AGrad.Stops) = 0 then Exit(0);
+  Result := AGrad.Stops[0].Color;
+end;
+
+function SafeNum(AValue, ADefault: Double): Double;
+begin
+  if IsNan(AValue) or IsInfinite(AValue) then Exit(ADefault);
+  Result := AValue;
+end;
+
+procedure TyResolveGradient(const AGrad: TTyChartGradient;
+  const ABox: TTyRectF; out AX1, AY1, AX2, AY2, AR: Double);
+var w, h: Double;
+begin
+  w := ABox.Right - ABox.Left;
+  h := ABox.Bottom - ABox.Top;
+  if AGrad.Kind = cgkRadial then
+  begin
+    AX1 := AGrad.X;
+    AY1 := AGrad.Y;
+    AR := AGrad.R;
+    if not AGrad.Global then
+    begin
+      AX1 := AX1 * w + ABox.Left;
+      AY1 := AY1 * h + ABox.Top;
+      { THE RADIUS SCALES BY THE SMALLER SIDE, so a radial gradient is a
+        circle on any box rather than an ellipse squeezed into it. }
+      AR := AR * Min(w, h);
+    end;
+    { The sanity fallbacks run AFTER the multiply and are ABSOLUTE, so a
+      degenerate box leaves a half-pixel dot rather than half a box. A
+      NEGATIVE radius takes the same fallback. }
+    AX1 := SafeNum(AX1, 0.5);
+    AY1 := SafeNum(AY1, 0.5);
+    if (AR < 0) or IsNan(AR) or IsInfinite(AR) then AR := 0.5;
+    AX2 := AX1;
+    AY2 := AY1;
+    Exit;
+  end;
+  AX1 := AGrad.X;
+  AY1 := AGrad.Y;
+  AX2 := AGrad.X2;
+  AY2 := AGrad.Y2;
+  if not AGrad.Global then
+  begin
+    { EACH AXIS ON ITS OWN -- x by the width and y by the height. The
+      anisotropy is the point: it is how `0,0 -> 0,1` is vertical whatever
+      the box's shape, and Sankey exploits it deliberately. }
+    AX1 := AX1 * w + ABox.Left;
+    AX2 := AX2 * w + ABox.Left;
+    AY1 := AY1 * h + ABox.Top;
+    AY2 := AY2 * h + ABox.Top;
+  end;
+  AX1 := SafeNum(AX1, 0);
+  AX2 := SafeNum(AX2, 1);
+  AY1 := SafeNum(AY1, 0);
+  AY2 := SafeNum(AY2, 0);
+  AR := 0;
 end;
 
 end.

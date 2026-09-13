@@ -38,6 +38,9 @@ type
     function Parsed(const AText: string): TTyChartColor;
     function PieFills(const AOption: string;
                       ACount: Integer): TTyChartColorArray;
+    { Draws AOption, finds the one bar, and hands back its extent. }
+    procedure OneBar(const AOption: string; out AL, AR, AY: Integer);
+    function PixelAt(AX, AY: Integer): TBGRAPixel;
   published
     { the grammar }
     procedure TestHexInAllFourLengths;
@@ -75,6 +78,21 @@ type
     procedure TestTheLinesOwnWidthAndTheAreasOwnColour;
     procedure TestAnAreaStyleHasNoStrokeToRead;
     procedure TestTheRampComesRoundAfterNine;
+    { a colour that is an object }
+    procedure TestALinearGradientRunsLeftToRightByDefault;
+    procedure TestTheEndpointsAreWhereTheAuthorPutThem;
+    procedure TestARadialGradientRingsItsCentre;
+    procedure TestATypeNobodyRecognisesDrawsLinear;
+    procedure TestGlobalMeansCoordinatesNotFractions;
+    procedure TestTheBoxIsTheElementsOwn;
+    procedure TestAFadingArea;
+    procedure TestALineCanBeStrokedWithARamp;
+    procedure TestAGradientDegradesToItsFirstStop;
+    procedure TestAStopNobodyCanReadIsDropped;
+    procedure TestAWideShortBoxTellsTheTwoAxesApart;
+    procedure TestGlobalSkipsTheRadialNormalisationToo;
+    procedure TestALinesOwnColourCanBeARamp;
+    procedure TestTheRampIsNotGammaCorrected;
   end;
 
 implementation
@@ -166,6 +184,36 @@ begin
     end;
   end;
   if inRun then Close(r);
+end;
+
+procedure TAdvChartColorTest.OneBar(const AOption: string;
+  out AL, AR, AY: Integer);
+var gb: TTyGridBuild; x, y: Integer; ground, p: TBGRAPixel;
+begin
+  Draw(AOption);
+  gb := FChart.Build.Grid(0);
+  AY := Round(gb.PlotRect.Bottom) - 20;
+  y := AY;
+  ground := FBmp.GetPixel(Round(gb.PlotRect.Left) + 1,
+                          Round(gb.PlotRect.Top) + 3);
+  AL := -1;
+  AR := -1;
+  for x := Round(gb.PlotRect.Left) + 1 to Round(gb.PlotRect.Right) - 1 do
+  begin
+    p := FBmp.GetPixel(x, y);
+    if (Abs(p.red - ground.red) + Abs(p.green - ground.green)
+        + Abs(p.blue - ground.blue)) > 24 then
+    begin
+      if AL < 0 then AL := x;
+      AR := x;
+    end;
+  end;
+  AssertTrue('there is a bar to look at', (AL > 0) and (AR > AL + 8));
+end;
+
+function TAdvChartColorTest.PixelAt(AX, AY: Integer): TBGRAPixel;
+begin
+  Result := FBmp.GetPixel(AX, AY);
 end;
 
 { ==================== the grammar ==================== }
@@ -861,6 +909,402 @@ begin
     fills[8] <> fills[0]);
   AssertTrue('and the second is still not the first',
     fills[1] <> fills[0]);
+end;
+
+{ ==================== a colour that is an object ==================== }
+
+const
+  { Red to blue, which is the one pair whose ends cannot be confused with each
+    other or with the surface. }
+  cRedBlue = ' colorStops: [{ offset: 0, color: ''#ff0000'' },'
+    + ' { offset: 1, color: ''#0000ff'' }]';
+
+function BarOpt(const AColour: string): string;
+begin
+  Result := '{ xAxis: { data: [''A''] }, yAxis: { min: 0, max: 10 },'
+    + ' series: [{ type: ''bar'', data: [9], itemStyle: { color: '
+    + AColour + ' } }] }';
+end;
+
+procedure TAdvChartColorTest.TestALinearGradientRunsLeftToRightByDefault;
+var l, r, y: Integer; a, b, top_, bot: TBGRAPixel;
+begin
+  { THE DEFAULT IS HORIZONTAL: x2 is 1 and y2 is 0. Almost every example in the
+    gallery spells out `x2: 0, y2: 1`, so the default is the one nobody sees
+    and the one a port assumes is vertical.
+
+    Asserted in both directions at once: the two ENDS differ, and a column
+    through the bar does NOT -- which is the half that tells horizontal from
+    vertical rather than merely `there is a ramp`. }
+  OneBar(BarOpt('{ type: ''linear'',' + cRedBlue + ' }'), l, r, y);
+  a := PixelAt(l + 2, y);
+  b := PixelAt(r - 2, y);
+  AssertTrue(Format('the left end is red (%d,%d,%d)', [a.red, a.green, a.blue]),
+    a.red > a.blue + 60);
+  AssertTrue(Format('the right end is blue (%d,%d,%d)', [b.red, b.green, b.blue]),
+    b.blue > b.red + 60);
+  top_ := PixelAt((l + r) div 2, y - 30);
+  bot := PixelAt((l + r) div 2, y);
+  AssertTrue('and a column through it does not change',
+    (Abs(Integer(top_.red) - Integer(bot.red)) < 24)
+    and (Abs(Integer(top_.blue) - Integer(bot.blue)) < 24));
+end;
+
+procedure TAdvChartColorTest.TestTheEndpointsAreWhereTheAuthorPutThem;
+var l, r, y: Integer; top_, bot, a, b: TBGRAPixel; gb: TTyGridBuild;
+begin
+  { `x2: 0, y2: 1` -- the spelling everybody writes -- is top to bottom. }
+  OneBar(BarOpt('{ type: ''linear'', x: 0, y: 0, x2: 0, y2: 1,' + cRedBlue
+    + ' }'), l, r, y);
+  { THE BAR'S OWN TOP, not a fixed distance above the sampling row: a bar
+    of nine against a maximum of ten is most of the plot tall, so a fixed
+    offset lands in the MIDDLE of the ramp and reads purple. }
+  gb := FChart.Build.Grid(0);
+  top_ := PixelAt((l + r) div 2, Round(gb.PlotRect.Top) + 30);
+  bot := PixelAt((l + r) div 2, Round(gb.PlotRect.Bottom) - 4);
+  AssertTrue(Format('the top is red (%d,%d,%d)',
+    [top_.red, top_.green, top_.blue]), top_.red > top_.blue + 60);
+  AssertTrue(Format('the bottom is blue (%d,%d,%d)',
+    [bot.red, bot.green, bot.blue]), bot.blue > bot.red + 60);
+  a := PixelAt(l + 2, y);
+  b := PixelAt(r - 2, y);
+  AssertTrue('and a row across it does not change',
+    (Abs(Integer(a.red) - Integer(b.red)) < 24)
+    and (Abs(Integer(a.blue) - Integer(b.blue)) < 24));
+end;
+
+procedure TAdvChartColorTest.TestARadialGradientRingsItsCentre;
+var l, r, y: Integer; mid, edge: TBGRAPixel;
+begin
+  { Centre 0.5/0.5 and radius 0.5 by default, the inner radius always nought.
+    So the middle of the bar is the FIRST stop and its corners the last. }
+  OneBar(BarOpt('{ type: ''radial'',' + cRedBlue + ' }'), l, r, y);
+  mid := PixelAt((l + r) div 2, y - 34);
+  edge := PixelAt(l + 1, y);
+  AssertTrue(Format('the middle is the first stop (%d,%d,%d)',
+    [mid.red, mid.green, mid.blue]), mid.red > mid.blue + 60);
+  AssertTrue(Format('and a corner is the last (%d,%d,%d)',
+    [edge.red, edge.green, edge.blue]), edge.blue > edge.red + 40);
+end;
+
+procedure TAdvChartColorTest.TestATypeNobodyRecognisesDrawsLinear;
+var l, r, y: Integer; a, b: TBGRAPixel;
+begin
+  { DETECTION IS STRUCTURAL. `colorStops` present and it is a gradient; `type`
+    only chooses the shape afterwards, and anything that is not exactly
+    `radial` -- a missing type included -- is LINEAR. A port that keyed on the
+    type would draw nothing at all here. }
+  OneBar(BarOpt('{' + cRedBlue + ' }'), l, r, y);
+  a := PixelAt(l + 2, y);
+  b := PixelAt(r - 2, y);
+  AssertTrue('a gradient with no type ramps left to right',
+    (a.red > a.blue + 60) and (b.blue > b.red + 60));
+
+  OneBar(BarOpt('{ type: ''RADIALish'',' + cRedBlue + ' }'), l, r, y);
+  a := PixelAt(l + 2, y);
+  b := PixelAt(r - 2, y);
+  AssertTrue('and so does one whose type is a typo',
+    (a.red > a.blue + 60) and (b.blue > b.red + 60));
+end;
+
+procedure TAdvChartColorTest.TestGlobalMeansCoordinatesNotFractions;
+var l, r, y: Integer; a, b: TBGRAPixel;
+begin
+  { With `global` the numbers are coordinates already and the box is not
+    consulted. The same `x2: 1` that ramps across the whole bar without it is
+    ONE PIXEL wide with it -- so the bar is the last stop almost everywhere,
+    and the two readings could not look less alike. }
+  OneBar(BarOpt('{ type: ''linear'', global: true,' + cRedBlue + ' }'),
+    l, r, y);
+  a := PixelAt(l + 4, y);
+  b := PixelAt(r - 2, y);
+  AssertTrue(Format('a one-pixel ramp leaves the bar in its last stop'
+    + ' (%d,%d,%d)', [a.red, a.green, a.blue]), a.blue > a.red + 60);
+  AssertTrue('at both ends', b.blue > b.red + 60);
+end;
+
+procedure TAdvChartColorTest.TestTheBoxIsTheElementsOwn;
+var
+  gb: TTyGridBuild;
+  x, y, runs, firstL, lastL: Integer;
+  ground, p: TBGRAPixel;
+  inRun: Boolean;
+begin
+  { EACH BAR RAMPS OVER ITSELF. Upstream normalises against the ELEMENT's own
+    bounding rect -- not the plot, not the series -- so two bars far apart each
+    start red at their own left edge. Against the plot rect the second bar
+    would begin part-way along and be visibly purple.
+
+    Found by scanning for the two bars rather than assuming where they are,
+    because a bar's position is the layout's business and not this test's. }
+  Draw('{ xAxis: { data: [''A'', ''B''] }, yAxis: { min: 0, max: 10 },'
+    + ' series: [{ type: ''bar'', data: [9, 9], itemStyle: { color:'
+    + ' { type: ''linear'',' + cRedBlue + ' } } }] }');
+  gb := FChart.Build.Grid(0);
+  y := Round(gb.PlotRect.Bottom) - 20;
+  ground := FBmp.GetPixel(Round(gb.PlotRect.Left) + 1,
+                          Round(gb.PlotRect.Top) + 3);
+  runs := 0;
+  firstL := -1;
+  lastL := -1;
+  inRun := False;
+  for x := Round(gb.PlotRect.Left) + 1 to Round(gb.PlotRect.Right) - 1 do
+  begin
+    p := FBmp.GetPixel(x, y);
+    if (Abs(p.red - ground.red) + Abs(p.green - ground.green)
+        + Abs(p.blue - ground.blue)) > 24 then
+    begin
+      if not inRun then
+      begin
+        inRun := True;
+        Inc(runs);
+        if firstL < 0 then firstL := x;
+        lastL := x;
+      end;
+    end
+    else
+      inRun := False;
+  end;
+  AssertEquals('two bars', 2, runs);
+  AssertTrue('the first starts red', PixelAt(firstL + 2, y).red
+    > PixelAt(firstL + 2, y).blue + 60);
+  AssertTrue('and so does the second, at ITS own left edge',
+    PixelAt(lastL + 2, y).red > PixelAt(lastL + 2, y).blue + 60);
+end;
+
+procedure TAdvChartColorTest.TestAFadingArea;
+var gb: TTyGridBuild; x: Integer; hi, lo, mid: TBGRAPixel;
+begin
+  { THE COMMONEST GRADIENT ANYBODY WRITES: an area that fades out downwards.
+    Red at the top, transparent at the bottom.
+
+    The bottom must be nearly the surface AND MUST NOT BE GREY. A straight
+    alpha interpolator averages `transparent`'s zero channels in and decays the
+    ramp toward BLACK instead of fading it out; Canvas 2D premultiplies and
+    does not. So the assertion is that the low end is pale, not that it is
+    merely different. }
+  Draw('{ xAxis: { data: [''A'', ''B''] },'
+    + ' yAxis: { min: 0, max: 10, splitLine: { show: false } },'
+    + ' series: [{ type: ''line'', data: [9, 9], showSymbol: false,'
+    + ' areaStyle: { color: { type: ''linear'', x: 0, y: 0, x2: 0, y2: 1,'
+    + ' colorStops: [{ offset: 0, color: ''#ff0000'' },'
+    + ' { offset: 1, color: ''transparent'' }] }, opacity: 1 } }] }');
+  gb := FChart.Build.Grid(0);
+  x := Round((gb.PlotRect.Left + gb.PlotRect.Right) / 2);
+  { BELOW THE LINE. A value of nine against a maximum of ten puts the line
+    about a tenth of the way down, and the area is what is UNDER it -- the
+    first shape of this sampled above it and found the line's own stroke. }
+  hi := PixelAt(x, Round(gb.PlotRect.Top) + 34);
+  lo := PixelAt(x, Round(gb.PlotRect.Bottom) - 4);
+  AssertTrue(Format('the top of the area is red (%d,%d,%d)',
+    [hi.red, hi.green, hi.blue]), hi.red > hi.green + 80);
+  AssertTrue(Format('and the bottom has faded out rather than gone grey'
+    + ' (%d,%d,%d)', [lo.red, lo.green, lo.blue]),
+    (lo.green > 180) and (lo.blue > 180));
+
+  { THE MIDDLE IS WHERE THE DECAY WOULD SHOW. A straight-alpha interpolator
+    averages `transparent`'s zero channels in, so half way down the ramp the
+    colour is already half black -- red 191 over white instead of 255. The
+    ENDS look the same either way, which is why asserting them is not
+    enough: the bottom is invisible whichever colour it decayed to. }
+  mid := PixelAt(x, (Round(gb.PlotRect.Top) + Round(gb.PlotRect.Bottom)) div 2);
+  AssertTrue(Format('half way down it is still full red, not darkened'
+    + ' (%d,%d,%d)', [mid.red, mid.green, mid.blue]), mid.red > 220);
+end;
+
+procedure TAdvChartColorTest.TestALineCanBeStrokedWithARamp;
+var gb: TTyGridBuild; y: Integer; w: Double; a, b: TBGRAPixel;
+
+  { The colour of the line at AX: the darkest pixel in the column, which is
+    the stroke's own core rather than its antialiased skirt. }
+  function LineInk(AX: Integer): TBGRAPixel;
+  var yy, best: Integer; p: TBGRAPixel;
+  begin
+    best := MaxInt;
+    Result := FBmp.GetPixel(AX, y);
+    for yy := y - 40 to y + 40 do
+    begin
+      p := FBmp.GetPixel(AX, yy);
+      if Integer(p.red) + p.green + p.blue < best then
+      begin
+        best := Integer(p.red) + p.green + p.blue;
+        Result := p;
+      end;
+    end;
+  end;
+
+begin
+  { A ramp on `lineStyle.color` strokes the polyline with it. Sampled at both
+    ends of a flat line, which is where a left-to-right ramp differs most. }
+  Draw('{ xAxis: { data: [''A'', ''B''] },'
+    + ' yAxis: { min: 0, max: 10, splitLine: { show: false } },'
+    + ' series: [{ type: ''line'', data: [5, 5], showSymbol: false,'
+    + ' lineStyle: { width: 6, color: { type: ''linear'','
+    + cRedBlue + ' } } }] }');
+  gb := FChart.Build.Grid(0);
+  y := Round((gb.PlotRect.Top + gb.PlotRect.Bottom) / 2);
+  { THE LINE'S OWN ENDS, which on a banded axis are the two band CENTRES --
+    a quarter and three quarters across, not the plot's edges. The ramp's
+    box is the polyline's, so those are where its two stops land, and the
+    plot's edges have no line on them at all. }
+  w := gb.PlotRect.Right - gb.PlotRect.Left;
+  a := LineInk(Round(gb.PlotRect.Left + w * 0.25) + 3);
+  b := LineInk(Round(gb.PlotRect.Left + w * 0.75) - 3);
+  AssertTrue(Format('the line starts red (%d,%d,%d)', [a.red, a.green, a.blue]),
+    a.red > a.blue + 60);
+  AssertTrue(Format('and ends blue (%d,%d,%d)', [b.red, b.green, b.blue]),
+    b.blue > b.red + 60);
+end;
+
+procedure TAdvChartColorTest.TestAGradientDegradesToItsFirstStop;
+var node: TJSONObject; st: TTyOptStyle;
+begin
+  { WHERE ONLY ONE COLOUR WILL DO -- a legend swatch, a tooltip marker --
+    upstream takes `colorStops[0].color`: the FIRST stop, not an average and
+    not a midpoint. The stops here are deliberately out of order so that
+    `first` and `lowest offset` are different answers. }
+  node := TJSONObject(GetJSON('{"itemStyle": {"color": {"type": "linear",'
+    + ' "colorStops": [{"offset": 1, "color": "#00ff00"},'
+    + ' {"offset": 0, "color": "#ff0000"}]}}}'));
+  try
+    st := TyReadOptStyle(node, 'itemStyle');
+    AssertTrue('it is a gradient', st.Color.Gradient.Kind = cgkLinear);
+    AssertEquals('two stops, in the order written',
+      2, Length(st.Color.Gradient.Stops));
+    AssertEquals('and the solid is the FIRST of them, not the lowest offset',
+      $FF00FF00, st.Color.Color);
+  finally
+    node.Free;
+  end;
+end;
+
+procedure TAdvChartColorTest.TestAStopNobodyCanReadIsDropped;
+var node: TJSONObject; st: TTyOptStyle;
+begin
+  { A ramp with one unreadable end is better read as the ramp between the ends
+    that survive than as a ramp into black. }
+  node := TJSONObject(GetJSON('{"itemStyle": {"color": {"type": "linear",'
+    + ' "colorStops": [{"offset": 0, "color": "#ff0000"},'
+    + ' {"offset": 0.5, "color": "bananas"},'
+    + ' {"offset": 1, "color": "#0000ff"}]}}}'));
+  try
+    st := TyReadOptStyle(node, 'itemStyle');
+    AssertEquals('the middle one is gone', 2, Length(st.Color.Gradient.Stops));
+    AssertEquals('the first survives', $FFFF0000,
+      st.Color.Gradient.Stops[0].Color);
+    AssertEquals('and so does the last', $FF0000FF,
+      st.Color.Gradient.Stops[1].Color);
+    AssertEquals('with its offset intact', 1.0,
+      st.Color.Gradient.Stops[1].Offset, 1e-9);
+  finally
+    node.Free;
+  end;
+end;
+
+{ ONE BAR, WIDE AND SHORT. Every earlier fixture here is a tall narrow bar,
+  and on one of those the two axes are close enough that `scale y by the
+  height` and `scale y by the width` draw nearly the same thing -- three
+  separate mutations survived on that alone. A box 330 across and 25 tall
+  cannot be read both ways. }
+function WideBarOpt(const AColour: string): string;
+begin
+  Result := '{ xAxis: { data: [''A''] },'
+    + ' yAxis: { min: 0, max: 100, splitLine: { show: false } },'
+    + ' series: [{ type: ''bar'', data: [18], barWidth: ''95%'','
+    + ' itemStyle: { color: ' + AColour + ' } }] }';
+end;
+
+procedure TAdvChartColorTest.TestAWideShortBoxTellsTheTwoAxesApart;
+var l, r, y: Integer; bot, side: TBGRAPixel;
+begin
+  { THE TWO AXES SCALE SEPARATELY. A vertical ramp fills the box's HEIGHT,
+    not its width -- on a box four times wider than it is tall, reading the
+    wrong one leaves the bottom still in the first stop. }
+  OneBar(WideBarOpt('{ type: ''linear'', x: 0, y: 0, x2: 0, y2: 1,'
+    + cRedBlue + ' }'), l, r, y);
+  bot := PixelAt((l + r) div 2, y + 14);
+  AssertTrue(Format('the bottom of a wide short bar is the last stop'
+    + ' (%d,%d,%d)', [bot.red, bot.green, bot.blue]),
+    bot.blue > bot.red + 60);
+
+  { AND A RADIAL RADIUS SCALES BY THE SMALLER SIDE, so on the same box it
+    is a small disc in the middle rather than a wash across the whole
+    width. A point a quarter of the way out is well past it. }
+  OneBar(WideBarOpt('{ type: ''radial'',' + cRedBlue + ' }'), l, r, y);
+  side := PixelAt((l + r) div 2 + (r - l) div 4, y + 6);
+  AssertTrue(Format('a quarter of the way out is past the disc (%d,%d,%d)',
+    [side.red, side.green, side.blue]), side.blue > side.red + 60);
+end;
+
+procedure TAdvChartColorTest.TestGlobalSkipsTheRadialNormalisationToo;
+var l, r, y: Integer; mid: TBGRAPixel;
+begin
+  { `global` turns the normalisation off for BOTH shapes, and the radial
+    half had no test at all. With it on, a radius of 0.5 is half a PIXEL
+    and a centre of 0.5/0.5 is the top-left corner of the canvas -- so the
+    bar is the last stop everywhere, which nothing else could produce. }
+  OneBar(BarOpt('{ type: ''radial'', global: true,' + cRedBlue + ' }'),
+    l, r, y);
+  mid := PixelAt((l + r) div 2, y - 20);
+  AssertTrue(Format('a half-pixel disc leaves the bar in its last stop'
+    + ' (%d,%d,%d)', [mid.red, mid.green, mid.blue]),
+    mid.blue > mid.red + 60);
+end;
+
+procedure TAdvChartColorTest.TestALinesOwnColourCanBeARamp;
+var gb: TTyGridBuild; y: Integer; w: Double; a, b: TBGRAPixel;
+
+  function LineInk(AX: Integer): TBGRAPixel;
+  var yy, best: Integer; p: TBGRAPixel;
+  begin
+    best := MaxInt;
+    Result := FBmp.GetPixel(AX, y);
+    for yy := y - 40 to y + 40 do
+    begin
+      p := FBmp.GetPixel(AX, yy);
+      if Integer(p.red) + p.green + p.blue < best then
+      begin
+        best := Integer(p.red) + p.green + p.blue;
+        Result := p;
+      end;
+    end;
+  end;
+
+begin
+  { A LINE'S COLOUR COMES FROM `itemStyle`, which is this row's other trap --
+    so a ramp written there has to reach the polyline even though a line is
+    drawn with a stroke and itemStyle is the FILL block. Nothing else is
+    written here: no lineStyle at all. }
+  Draw('{ xAxis: { data: [''A'', ''B''] },'
+    + ' yAxis: { min: 0, max: 10, splitLine: { show: false } },'
+    + ' series: [{ type: ''line'', data: [5, 5], showSymbol: false,'
+    + ' lineStyle: { width: 6 },'
+    + ' itemStyle: { color: { type: ''linear'',' + cRedBlue + ' } } }] }');
+  gb := FChart.Build.Grid(0);
+  y := Round((gb.PlotRect.Top + gb.PlotRect.Bottom) / 2);
+  w := gb.PlotRect.Right - gb.PlotRect.Left;
+  a := LineInk(Round(gb.PlotRect.Left + w * 0.25) + 3);
+  b := LineInk(Round(gb.PlotRect.Left + w * 0.75) - 3);
+  AssertTrue(Format('the line starts red (%d,%d,%d)',
+    [a.red, a.green, a.blue]), a.red > a.blue + 60);
+  AssertTrue(Format('and ends blue (%d,%d,%d)',
+    [b.red, b.green, b.blue]), b.blue > b.red + 60);
+end;
+
+procedure TAdvChartColorTest.TestTheRampIsNotGammaCorrected;
+var l, r, y: Integer; mid: TBGRAPixel;
+begin
+  { BLACK TO WHITE, SAMPLED IN THE MIDDLE, and the number is the whole
+    point: Canvas 2D interpolates in plain sRGB and puts the midpoint at
+    128, while BGRA's gamma-corrected ramp uses an exponent of 1.7 and puts
+    it at about 170. Every chart gradient would sit in the wrong place, and
+    no assertion about WHICH WAY a ramp runs could ever see it. }
+  OneBar(BarOpt('{ type: ''linear'','
+    + ' colorStops: [{ offset: 0, color: ''#000000'' },'
+    + ' { offset: 1, color: ''#ffffff'' }] }'), l, r, y);
+  mid := PixelAt((l + r) div 2, y);
+  AssertTrue(Format('the midpoint of black to white is 128, not 170'
+    + ' (%d)', [mid.red]), (mid.red > 112) and (mid.red < 150));
 end;
 
 initialization

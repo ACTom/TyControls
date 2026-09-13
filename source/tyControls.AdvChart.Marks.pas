@@ -79,6 +79,9 @@ type
       LINE that colour -- they are two keys on two blocks. }
     HasAreaFill: Boolean;
     AreaFill: TTyChartColor;
+    { The classic fading area is a gradient on `areaStyle.color`, so this is
+      the one place a chart gradient is written more often than not. }
+    AreaGradient: TTyChartGradient;
     Step: TTyLineStep;
     ConnectNulls: Boolean;
     { showSymbol, default TRUE: an ECharts line has a marker on every point. }
@@ -103,6 +106,12 @@ type
     Stroke: TTyChartColor;
     { 0..1, whole-element. 1 unless the author wrote an opacity. }
     Alpha: Double;
+    { A RAMP INSTEAD OF THE FLAT COLOUR, when the author wrote one. Fill and
+      Stroke keep their solids either way -- the ramp's first stop -- because
+      a legend swatch wants one colour and upstream's own rule for getting
+      one is exactly that. }
+    FillGradient: TTyChartGradient;
+    StrokeGradient: TTyChartGradient;
     { <= 0 means no stroke, the same rule the element style and
       TTyPainter.StrokePath both follow. }
     StrokeWidthLogical: Double;
@@ -186,6 +195,7 @@ begin
   Result.AreaOpacity := 0.7;
   Result.HasAreaFill := False;
   Result.AreaFill := 0;
+  Result.AreaGradient := Default(TTyChartGradient);
   Result.Step := lstNone;
   Result.ConnectNulls := False;
   Result.ShowSymbol := True;
@@ -245,6 +255,7 @@ begin
   Result.HasAreaFill := ast.Color.Written and not ast.Color.IsAuto
                         and not ast.Color.IsNone;
   if Result.HasAreaFill then Result.AreaFill := ast.Color.Color;
+  Result.AreaGradient := ast.Color.Gradient;
 
   d := area.Find('opacity');
   if (d <> nil) and (d.JSONType = jtNumber) then
@@ -275,6 +286,8 @@ begin
   Result.Stroke := 0;
   Result.StrokeWidthLogical := 0;
   Result.Alpha := 1;
+  Result.FillGradient := Default(TTyChartGradient);
+  Result.StrokeGradient := Default(TTyChartGradient);
   Result.Bar := Default(TTyBarColumn);
   { NO Clip := True HERE, though it was written and then taken out again.
     Default() leaves Solved False, and ColumnFor ignores an unsolved column
@@ -290,6 +303,7 @@ begin
   Result.Line.AreaOpacity := 0.7;
   Result.Line.HasAreaFill := False;
   Result.Line.AreaFill := 0;
+  Result.Line.AreaGradient := Default(TTyChartGradient);
   Result.Line.Step := lstNone;
   Result.Line.ConnectNulls := False;
   { TRUE, because that is upstream's default and this record is "the
@@ -457,6 +471,8 @@ begin
     over a half-transparent colour is 40%, not 80%. Set on every mark from
     one place, because there is one place every mark is built. }
   Result.Style.Alpha := AVisual.Alpha;
+  Result.Style.FillGradient := AVisual.FillGradient;
+  Result.Style.StrokeGradient := AVisual.StrokeGradient;
   Result.Z := AVisual.Z;
   Result.Z2 := AVisual.Z2;
   Result.Silent := False;
@@ -844,6 +860,11 @@ var
       v.StrokeWidthLogical := 0;
       { The area's OWN colour when it named one; the series' otherwise. }
       if spec.HasAreaFill then v.Fill := spec.AreaFill;
+      { AND ITS OWN RAMP, which REPLACES the series' rather than adding to
+        it: an area that named a gradient is that gradient, whatever the
+        bars beside it are doing. }
+      v.FillGradient := spec.AreaGradient;
+      v.StrokeGradient := Default(TTyChartGradient);
       el := MarkElement(TyShapePolygon(poly), v, ABinding.SeriesIndex, -1);
       { The area's opacity REPLACES the series' -- it is a key on its own
         block, not a second multiplier on the item's. }
@@ -859,8 +880,13 @@ var
       that is what a mark's colour is called; for this shape it is the pen. }
     v := AVisual;
     v.Fill := 0;
+    { A LINE IS A STROKE, so the ramp moves across with the colour. }
+    v.FillGradient := Default(TTyChartGradient);
     if v.StrokeWidthLogical <= 0 then v.StrokeWidthLogical := 2;
     if v.Stroke = 0 then v.Stroke := AVisual.Fill;
+    if (v.StrokeGradient.Kind = cgkNone)
+      and (AVisual.FillGradient.Kind <> cgkNone) then
+      v.StrokeGradient := AVisual.FillGradient;
     el := MarkElement(TyShapePolyline(up), v, ABinding.SeriesIndex, -1);
     AList.Add(el);
     Inc(Result);
