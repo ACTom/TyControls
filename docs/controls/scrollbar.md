@@ -365,6 +365,18 @@ TyScrollBar:disabled { opacity: var(--disabled-opacity); }
 Memo1.ScrollBarAutoHide := sbahNever;   // 这个 Memo 的条不许消失，不管皮肤怎么说
 ```
 
+### 一句话全库关掉
+
+升上来嫌它淡、又不想去动主题文件：往 controller 上贴一层 tycss 补丁。
+
+```pascal
+TyDefaultController.StyleOverride := ':root { --scrollbar-auto-hide: -1; }';
+```
+
+补丁叠在主题最上面，换肤、换密度都冲不掉；清掉写 `''`。自备 controller 的贴到自己那一个上。
+
+**必须是 controller 上的 `StyleOverride`。** 控件和窗体上那个同名属性只收裸声明（`color: red;` 这一类），带选择器的 `:root { ... }` 它解析不过，当成空补丁悄悄扔掉——写下去一点动静都没有。令牌要从 controller 这条路进去，才进得了 metric 读的那张变量表。
+
 ### 什么算「还在用」
 
 下面任一条成立，延时表就不起；全不成立才开始计时：

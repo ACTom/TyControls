@@ -97,6 +97,7 @@ type
     procedure ValueListEditorInheritsTheListBoxProperty;
     { --- 出厂主题 ------------------------------------------------------------ }
     procedure ModernThemesHideClassicThemesDoNot;
+    procedure AppWideOffSwitchIsTheControllerStyleOverride;
   end;
 
 implementation
@@ -446,7 +447,7 @@ begin
     真正能把两者分开的是再推一点点:门槛要是被改松(比如 delay div 2),那发
     子弹已经上膛,1 毫秒就够让可见度跌出容差(缓动头一下就掉 0.015)。 }
   FBar.AutoHideTick(1);            // 累计 1000，到点
-  AssertEquals('延时没到 -> 还在', 1.0, FBar.FadeLevel, 0.001);
+  AssertEquals('到点这一拍只装膛 -> 可见度还没动', 1.0, FBar.FadeLevel, 0.001);
   FBar.AutoHideTick(TyScrollBarFadeOutMs);
   AssertEquals('淡出跑完 -> 不见了', 0.0, FBar.FadeLevel, 0.001);
 end;
@@ -1244,13 +1245,19 @@ begin
     Resize -> UpdateScrollRange -> EnsureBars 顺手建出来的，也就是比构造函数
     体的第一句还早。EnsureBars 里那两行读 FScrollBarAutoHide 时，字段还只是
     RTL 的零填充；零恰好就是 sbahDefault，这套安排才成立。
-    哪天这条不再成立(条改成更晚才建、或者默认值不再是第一个枚举成员)，
-    这条测试或 ScrollBoxDeclaredDefaultMatchesConstructed 会先红。 }
+    哪天这条不再成立——条改成更晚才建、或者默认值不再是第一个枚举成员——
+    下面那句会红：它拿条上的值去比**宿主此刻的字段**。默认值一改，构造函数体里
+    那句赋值就落在 EnsureBars 读零填充之后，条上留着旧的 sbahDefault、宿主字段
+    已经是新默认值，两边对不上。
+
+    拿写死的 sbahDefault 去比是守不住的：那正好就是零填充的值,读早了也照样相等。
+    ScrollBoxDeclaredDefaultMatchesConstructed 也守不住 —— 它比的是声明的 default
+    和宿主字段,那两个那时候一致,条上是什么它根本不看。 }
   sb := TTyScrollBox.Create(FForm);
   AssertTrue('构造函数一返回，两条条就该已经在了',
     (FindEmbeddedBar(sb, sbVertical) <> nil) and (FindEmbeddedBar(sb, sbHorizontal) <> nil));
-  AssertEquals('而且它们拿到的是出厂默认值', Ord(sbahDefault),
-    Ord(FindEmbeddedBar(sb, sbVertical).AutoHide));
+  AssertEquals('而且它们拿到的是宿主此刻的值，不是一个读早了的零填充',
+    Ord(sb.ScrollBarAutoHide), Ord(FindEmbeddedBar(sb, sbVertical).AutoHide));
 end;
 
 procedure TTyScrollBarAutoHideTests.ScrollBoxForwardsToItsEmbeddedBars;
@@ -1370,6 +1377,45 @@ begin
     AssertEquals(CThemeAutoHide[i].Name + ' 的自动隐藏延时',
       CThemeAutoHide[i].Ms, FBar.EffectiveAutoHideMs);
   end;
+end;
+
+procedure TTyScrollBarAutoHideTests.AppWideOffSwitchIsTheControllerStyleOverride;
+const
+  COddMs = 777;   // 库里任何一处都没有这个数
+begin
+  { 文档 §7「一句话全库关掉」的凭据,也是这个令牌唯一碰得到**追加层**的测试。
+    前面那一整批走的都是 LoadThemeCss —— 那是把主题层整个**替换**掉;而这条补丁走的
+    是 controller.StyleOverride -> ReloadThemeLayer -> LoadFromCssAdditive -> FVars ->
+    RebuildMergedVars -> Metric,另一条路,一条测试都没碰过。
+
+    坐标系要先搭好,这里有两个「碰巧一致」的坑:
+    - CModernMs 恰好等于 TyScrollBarAutoHideFallbackMs。先把属性钉在出厂的
+      sbahDefault 上,回退臂进不去,1200 只能是皮肤给的。
+    - light.tycss 的基础层写的就是 -1。直接验 -1 不够:补丁根本没生效、而主题层又碰巧
+      被冲成空的话,透上来的还是 -1,断言照样绿。所以先用一个库里没有的 777 证明补丁
+      真的一路走到了 Metric,再验文档给的那一句。 }
+  AssertEquals('得从出厂属性出发,否则 1200 说不清是皮肤给的还是回退给的',
+    Ord(sbahDefault), Ord(FBar.AutoHide));
+  TyRegisterBuiltinThemes;
+  FCtl.ThemeName := 'win11';
+  AssertEquals('先确认皮肤这一层是开着的', CModernMs, FBar.EffectiveAutoHideMs);
+
+  FCtl.StyleOverride := Format(':root { --scrollbar-auto-hide: %d; }', [COddMs]);
+  AssertEquals('补丁里的 :root 令牌该压过皮肤', COddMs, FBar.EffectiveAutoHideMs);
+
+  FCtl.StyleOverride := ':root { --scrollbar-auto-hide: -1; }';
+  AssertEquals('文档给的那一句该把开着的皮肤一起关掉',
+    TyScrollBarAutoHideOff, FBar.EffectiveAutoHideMs);
+
+  { 另一半:文档说不管用的两种写法也得真的不管用,否则文档和测试各说各话。 }
+  FCtl.StyleOverride := 'TyScrollBar { --scrollbar-auto-hide: -1; }';
+  AssertEquals('写进类型规则只是给那条规则挂了个没人读的声明,进不了变量表',
+    CModernMs, FBar.EffectiveAutoHideMs);
+
+  FCtl.StyleOverride := '';
+  FBar.StyleOverride := ':root { --scrollbar-auto-hide: -1; }';
+  AssertEquals('控件上的同名属性只收裸声明,带选择器的整块解析不过、被当空补丁扔掉',
+    CModernMs, FBar.EffectiveAutoHideMs);
 end;
 
 initialization
