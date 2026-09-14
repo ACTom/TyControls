@@ -1293,9 +1293,20 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 **Files:**
 - Modify: `docs/controls/scrollbar.md`
 
-- [ ] **Step 1: 修 doc bug**
+**文档结构已经摸过（2026-09-15），要动的地方就这几处，不用再查：**
 
-`§6`（以及 `:290`、`:372` 两处）现在只说 `TTyListBox` 与 `TTyMemo` 的内嵌条是静态的。实际 Grid / ListView / ScrollBox / TreeView 也都设了。改成六个宿主全列。
+| 位置 | 要做什么 |
+|---|---|
+| `:290` 那条 NOTE | doc bug：只说了 `TTyListBox` 与 `TTyMemo`，实际六个宿主都设了 `AnimationsEnabled := False` |
+| `:372` 第 7 条 | 同一个 doc bug，同一句话的另一份拷贝 |
+| `§3 属性表`（`:21` published 属性） | 加 `AutoHide`；`§3 类型定义`（`:41`）加 `TTyScrollBarAutoHide` 三态 |
+| `§5 light.tycss 内置规则`（`:244`） | 纯主题菜谱放这儿最顺——它旁边就是内置那块的原文 |
+| `§6 状态过渡动画`（`:270`） | 淡入淡出（120 / 200 ms）归这一节，和滑块缓动并列；**必须写明这两者用的不是同一个开关** |
+| 新开一节（建议放 `§6` 之后） | 自动隐藏本身：token 三值、三态属性、六个宿主的 `ScrollBarAutoHide`、什么算「在用」、设计期不隐藏、初始态可见 |
+
+- [ ] **Step 1: 修 doc bug（两处，同一句话的两份拷贝）**
+
+`:290` 和 `:372` 都只说 `TTyListBox` 与 `TTyMemo` 的内嵌条是静态的。实际 Grid / ListView / ScrollBox / TreeView 也都设了。改成六个宿主全列——**两处都要改**，只改一处会留下互相矛盾的文档。
 
 - [ ] **Step 2: 加自动隐藏一节**
 
