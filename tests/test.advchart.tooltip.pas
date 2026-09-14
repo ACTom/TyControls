@@ -47,6 +47,8 @@ type
     procedure TestAHeaderPutsTheRowOnTheNextLineWithNoBlankBetween;
     procedure TestAValueIsRightAlignedOnlyWhenSomethingIsToItsLeft;
     procedure TestValuesLineUpAgainstTheWidestRowNotTheirOwn;
+    procedure TestSeriesAscIsTheAbsenceOfAnOrder;
+    procedure TestTiesKeepTheirSeriesOrder;
   end;
 
   TTipProbe = class(TTyAdvanceChart)
@@ -422,6 +424,55 @@ begin
     for i := 0 to High(lines[0].Runs) do
       if lines[0].Runs[i].AlignRight then Inc(aligned);
     AssertEquals('with a name beside it, it is', 1, aligned);
+  finally
+    root.Free;
+  end;
+end;
+
+procedure TAdvChartTooltipRuleTest.TestSeriesAscIsTheAbsenceOfAnOrder;
+var root: TTyTooltipBlock;
+begin
+  { A DOCUMENTED ENUM VALUE THAT NO BRANCH HANDLES. Upstream's sort has an
+    `asc`/`desc` map and a `seriesDesc` reverse, and `seriesAsc` falls through
+    both with upstream's own FIXME beside it -- so it is behaviourally the same
+    as writing no order at all. Saying that once, here, is what stops it being
+    "discovered" later as a missing feature. }
+  root := TTyTooltipBlock.CreateSection('', True);
+  try
+    { THEY GO IN ASCENDING BY VALUE, which is the one starting order a sort
+      in EITHER direction would change -- descending reverses them and
+      ascending is already done. A fixture that starts in the order its bug
+      would produce proves nothing, and this one started that way. }
+    root.Add(Row('A', '10')).SortParam := 10;
+    root.Add(Row('B', '20')).SortParam := 20;
+    root.SortBlocks(ttoSeriesAsc);
+    AssertEquals('untouched', 'A', root.Blocks[0].Name);
+    AssertEquals('', 'B', root.Blocks[1].Name);
+    root.SortBlocks(ttoValueDesc);
+    AssertEquals('while a real order does move them', 'B',
+                 root.Blocks[0].Name);
+    root.SortBlocks(ttoSeriesDesc);
+    AssertEquals('and seriesDesc IS a reverse', 'A', root.Blocks[0].Name);
+  finally
+    root.Free;
+  end;
+end;
+
+procedure TAdvChartTooltipRuleTest.TestTiesKeepTheirSeriesOrder;
+var root: TTyTooltipBlock;
+begin
+  { STABLE. JavaScript's Array#sort is, so upstream's ties keep series order,
+    and an unstable sort here would shuffle two series holding the same value
+    differently on every render of the same chart. }
+  root := TTyTooltipBlock.CreateSection('', True);
+  try
+    root.Add(Row('first', '10')).SortParam := 10;
+    root.Add(Row('second', '10')).SortParam := 10;
+    root.Add(Row('third', '5')).SortParam := 5;
+    root.SortBlocks(ttoValueAsc);
+    AssertEquals('the smaller one moved up', 'third', root.Blocks[0].Name);
+    AssertEquals('and the tie kept its order', 'first', root.Blocks[1].Name);
+    AssertEquals('', 'second', root.Blocks[2].Name);
   finally
     root.Free;
   end;

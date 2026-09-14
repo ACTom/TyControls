@@ -154,6 +154,21 @@ type
     areaStyle  color opacity                          -- six keys, no stroke }
 function TyReadOptStyle(ANode: TJSONObject; const AKey: string): TTyOptStyle;
 
+{ The dash a style block asked for, as LENGTHS -- which is what a renderer can
+  use and what `todDashed` is not.
+
+  THE TWO WORDS ARE MULTIPLES OF THE LINE WIDTH and the numbers are not: a
+  `dashed` 2px line dashes in 8s and 4s, a `dashed` 1px line in 4s and 2s, and
+  `type: [4, 2]` is four and two whatever the pen. zrender settles this in one
+  function (canvas/dashStyle.ts) and so does this, because the alternative --
+  which the port had -- is that the enum is read at four call sites, understood
+  at none, and every `type: 'dashed'` in every option draws solid.
+
+  A ZERO OR NEGATIVE WIDTH DRAWS SOLID, not a divide-by-nothing: upstream's
+  guard is `!(lineWidth > 0)`, which also catches NaN. }
+function TyDashPattern(ADash: TTyOptDash; const AExplicit: TTyDoubleArray;
+  AWidthLogical: Double): TTyDoubleArray;
+
 { The style block a series' PALETTE colour lands in, and whether it lands on
   the fill or the stroke.
 
@@ -778,6 +793,33 @@ begin
   if s = 'dashed' then Exit(todDashed);
   if s = 'dotted' then Exit(todDotted);
   if s = 'solid' then Exit(todSolid);
+end;
+
+function TyDashPattern(ADash: TTyOptDash; const AExplicit: TTyDoubleArray;
+  AWidthLogical: Double): TTyDoubleArray;
+begin
+  Result := nil;
+  if ADash in [todNone, todSolid] then Exit;
+  { NaN fails every comparison, so this rejects it too. }
+  if not (AWidthLogical > 0) then Exit;
+  case ADash of
+    todDashed:
+      begin
+        SetLength(Result, 2);
+        Result[0] := 4 * AWidthLogical;
+        Result[1] := 2 * AWidthLogical;
+      end;
+    todDotted:
+      begin
+        { ONE ENTRY, not two. A single length means on and off alike, and
+          writing [w, w] here would be the same picture said twice -- until
+          somebody scales one of them. }
+        SetLength(Result, 1);
+        Result[0] := AWidthLogical;
+      end;
+    todExplicit:
+      Result := Copy(AExplicit, 0, Length(AExplicit));
+  end;
 end;
 
 function NumOr(ANode: TJSONObject; const AKey: string): Double;

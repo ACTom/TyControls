@@ -139,6 +139,7 @@
   --advchart-minor-tick-length: 3px;
   --advchart-name-gap: 15px;
   --advchart-tick-length: 5px;
+  --advchart-axispointer-margin: 3px;
   --advchart-tooltip-gap: 20px;
   --advchart-tooltip-gutter: 20px;
   --advchart-tooltip-marker: 10px;
@@ -1246,6 +1247,28 @@ TyAdvChartTooltipValue {
   color: var(--on-surface);
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-bold);
+}
+/* The axis pointer: the line that follows the cursor along an axis, the band
+   a `shadow` draws instead, and the label at the axis end.
+
+   The line reads like a split line and not like an axis line -- it is a
+   reading aid over the plot, not a piece of the frame -- so it takes the same
+   --border it does. The BAND is alpha over the ink for the reason every other
+   band in this chart is: it darkens a light theme and lightens a dark one from
+   one declaration, where upstream's literal rgba grey does neither.
+
+   The LABEL is the one piece here that is meant to stand out: upstream inks it
+   white on an indigo chip, which is a colour this vocabulary already has a
+   name for. Accent, therefore -- so a re-skinned chart labels its pointer in
+   the skin's own colour instead of ECharts'. */
+TyAdvChartAxisPointer { border-color: var(--border); border-width: 1px; }
+TyAdvChartAxisPointerShadow { background: alpha(var(--on-surface), 0.10); }
+TyAdvChartAxisPointerLabel {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-radius: var(--radius-sm);
+  padding: 5px 7px;
+  font-size: var(--font-size-base);
 }
 
 /* ── ListGroupPanel (navigation accordion; own keys, not the tree column header's) ────── */

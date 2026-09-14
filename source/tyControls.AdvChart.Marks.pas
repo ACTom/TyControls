@@ -115,6 +115,14 @@ type
     { <= 0 means no stroke, the same rule the element style and
       TTyPainter.StrokePath both follow. }
     StrokeWidthLogical: Double;
+    { The pen's dash AS THE OPTION SAID IT, not as lengths. The two words mean
+      multiples of the line width, and the width is not settled until the shape
+      that carries it is built -- a line whose option gave no width takes the
+      default 2 inside its own builder -- so resolving here would dash every
+      unwidthed line in 1px steps. MarkElement turns the pair into lengths at
+      the moment both are known. }
+    Dash: TTyOptDash;
+    DashExplicit: TTyDoubleArray;
     { Where this bar sits in its band, solved across every bar series sharing
       the base axis -- which is why it arrives rather than being computed here.
       Unsolved means no solver ran (a pure-unit caller with one series), and
@@ -156,6 +164,20 @@ function TySeriesVisual(AFill: TTyChartColor): TTySeriesVisual;
   areaStyle at all -- its mere PRESENCE turns the area on, which is why an
   empty `areaStyle: {}` is a real instruction and not a no-op. }
 function TyLineSpecOf(AOption: TTyChartOption; ASlot: Integer): TTyLineSpec;
+
+{ The fill ONE ROW was drawn with: the series' colour, unless that row wrote an
+  `itemStyle.color` of its own. 0 for a row that asked for none.
+
+  Exported because a tooltip's marker is the same question a mark's fill was,
+  and answering it a second time somewhere else is how a dot ends up a
+  different colour from the thing it names. Note it is the FILL and not the ink
+  on screen: an `emptyCircle` marker is drawn as a RING, with the series colour
+  as its pen and the chart's own ground as its fill, and upstream's tooltip
+  marker still takes the series colour -- because the visual pipeline writes
+  that colour once, and which of the two slots a SYMBOL then paints it into is
+  the symbol's business. }
+function TyRowFill(const AVisual: TTySeriesVisual; AStore: TTyDataStore;
+  ARow: Integer): TTyChartColor;
 
 { Whether this series type draws anything yet.
 
@@ -487,6 +509,8 @@ begin
   Result.Style.FillColor := AVisual.Fill;
   Result.Style.StrokeColor := AVisual.Stroke;
   Result.Style.StrokeWidthLogical := AVisual.StrokeWidthLogical;
+  Result.Style.DashLogical := TyDashPattern(AVisual.Dash, AVisual.DashExplicit,
+    AVisual.StrokeWidthLogical);
   { `itemStyle.opacity` is a whole-element alpha and MULTIPLIES the
     colour's own -- upstream writes it to globalAlpha, so an 80% opacity
     over a half-transparent colour is 40%, not 80%. Set on every mark from
@@ -1117,6 +1141,12 @@ begin
   for i := 0 to High(cRenderers) do
     if cRenderers[i].Name = AType then Exit(cRenderers[i].Build);
   Result := nil;
+end;
+
+function TyRowFill(const AVisual: TTySeriesVisual; AStore: TTyDataStore;
+  ARow: Integer): TTyChartColor;
+begin
+  Result := RowVisual(AVisual, AStore, ARow).Fill;
 end;
 
 function TySeriesTypeHasRenderer(const AType: string): Boolean;

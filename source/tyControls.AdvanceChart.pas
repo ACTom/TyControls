@@ -35,13 +35,14 @@ uses
   tyControls.AdvChart.Builder, tyControls.AdvChart.Series,
   tyControls.AdvChart.Measure, tyControls.AdvChart.Handlers,
   tyControls.AdvChart.Paint, tyControls.AdvChart.Render,
+  tyControls.AdvChart.Shape,
   tyControls.AdvChart.Marks, tyControls.AdvChart.BarLayout,
   tyControls.AdvChart.Stack, tyControls.AdvChart.Symbol,
   tyControls.AdvChart.Color,
   tyControls.AdvChart.Pie, tyControls.AdvChart.Title,
   tyControls.AdvChart.Labels, tyControls.AdvChart.LabelOpt,
   tyControls.AdvChart.PieLabel, tyControls.AdvChart.Legend,
-  tyControls.AdvChart.Tooltip,
+  tyControls.AdvChart.Tooltip, tyControls.AdvChart.AxisPointer,
   tyControls.AdvChart.Dataset,
   fpjson, tyControls.SubPixel;
 
@@ -76,11 +77,43 @@ const
     together. }
   TyAdvChartTooltipMarkerGap = 6;
   TyAdvChartTooltipGutter = 20;
+  { The axis pointer's label sits this far outside the plot, on the axis' own
+    side. Upstream's `axisPointer.label.margin`, whose default is 3. }
+  TyAdvChartAxisPointerMarginVar = '--advchart-axispointer-margin';
+  TyAdvChartAxisPointerMargin = 3;
   TyAdvChartLabelMargin = 8;
   TyAdvChartNameGapVar = '--advchart-name-gap';
   TyAdvChartNameGap = 15;
 
 type
+  { ONE AXIS THE POINTER IS ON, and what it found there.
+
+    NOT A DATUM. An axis trigger names a place on an axis, and the series that
+    happen to be nearest it -- which can be none (a pointer with no tooltip),
+    one, or several, and the several are not necessarily at the same row.
+
+    Value and SnapValue are two answers on purpose. With `snap` off on a value
+    axis the LINE sits under the cursor while the CONTENT describes the nearest
+    data point, and upstream says so in as many words beside the branch that
+    splits them. Collapsing the two is the bug that makes a non-snapping
+    pointer describe whatever is under it rather than what it is near. }
+  TTyAxisHit = record
+    Axis: TTyAxis;
+    { The plot the pointer is drawn across -- the OTHER axis' full extent. }
+    Plot: TTyRectF;
+    Spec: TTyAxisPointerSpec;
+    { True for the second arm of a cross, which never triggers a tooltip. }
+    Cross: Boolean;
+    Value: Double;
+    SnapValue: Double;
+    { Binding slots and view rows, index-parallel, in the order the filter
+      accepted them -- which is series order over the survivors, not over the
+      option. }
+    Slots: TTyIntegerArray;
+    Rows: TTyIntegerArray;
+  end;
+  TTyAxisHitArray = array of TTyAxisHit;
+
   TTyAdvanceChart = class(TTyCustomControl)
   private
     FOption: TTyChartOption;
@@ -184,6 +217,18 @@ type
       carried over: a box that tracks the pointer would freeze between datums
       under it. }
     FTipDatum: TTyChartDatumRef;
+    { AN AXIS TRIGGER HAS NO DATUM -- it has a place on an axis and whichever
+      series happen to be nearest it. So the hover is two independent pieces of
+      state, not one: an item hover names a row, an axis hover names a point,
+      and a chart can legitimately have the second without the first (the
+      pointer is over a gap between bars) or the first without the second (the
+      tooltip is item-triggered).
+
+      The axis hit itself is NOT stored. It is a handful of axes resolved from
+      FTipX/FTipY, and re-resolving it in the frame that draws it is cheaper
+      than keeping it correct across a rebuild -- which is the mistake the
+      static layer's own history is a record of. }
+    FTipHits: TTyAxisHitArray;
     { The element the hit came from, kept because it carries the colour of the
       thing the pointer is over. Asking the series for its colour instead would
       be a second answer to a question the ink has already answered, and would
@@ -319,6 +364,16 @@ type
       the base axis and then walking the store for the closest value. -1 when
       the series has no base axis, no store, or no column for it. }
     function NearestRowOn(ASlot: Integer; AX, AY: Double): Integer;
+    { The rows of one series nearest a value ON THIS AXIS, measured in VIEW
+      COORDINATE space. Answers every row tied at the minimum. }
+    function NearestOnAxis(ASlot: Integer; AAxis: TTyAxis; AValue: Double;
+      AMaxDistPx: Double; out ARows: TTyIntegerArray): Boolean;
+    procedure PaintAxisPointers(APainter: TTyPainter; const ARect: TRect;
+      APPI: Integer; const AMeasurer: ITyTextMeasurer;
+      const AHits: TTyAxisHitArray);
+    { Every surviving series as a formatter would see it, in section order --
+      so `{a0}` is the first row of the first section. }
+    function AxisTooltipParams(const AHits: TTyAxisHitArray): TTyChartParams;
     { The colour of the thing a datum was drawn as, taken from the element
       that drew it. Asks the paint list rather than the series so a per-datum
       itemStyle comes for free and the dot can never disagree with the mark it
@@ -357,6 +412,23 @@ type
       hover style, so those five repaints were redrawing the identical picture
       at the cost of a full rebuild each -- and a hover session begins with
       exactly that. InvalidateFrame keeps the cache and blits it again. }
+    { EVERY AXIS THE POINTER IS CURRENTLY ON, with what each one says.
+
+      Plural because a chart can have several grids, a grid several cartesians,
+      and a cross puts a pointer on both arms. Upstream dedupes base axes
+      across a grid -- the x-by-y cross product yields the same axis more than
+      once -- and so does this. }
+    function ResolveAxisPointers(AX, AY: Integer): TTyAxisHitArray;
+    { The three-layer tree an axis tooltip is: a headerless root, one section
+      per axis headed by its value, one row per series. nil when nothing
+      survived the filters. }
+    function AxisTooltipContent(const AHits: TTyAxisHitArray;
+      const ASpec: TTyTooltipSpec): TTyTooltipBlock;
+    { How a value reads on an axis: the category, the time label, or the
+      number. AGrouped adds thousands separators, which the POINTER label does
+      and a tick label does not. }
+    function AxisValueText(AAxis: TTyAxis; AValue: Double;
+      AGrouped: Boolean): string;
     { WHAT THE TOOLTIP WOULD SAY, in four answerable pieces rather than one
       procedure that draws. PROTECTED for the same reason RenderTo is: a
       headless test has no window and no pointer, and a content rule tested
@@ -523,6 +595,11 @@ end;
 
 procedure TTyAdvanceChart.DropBuild;
 begin
+  { THE AXIS HOVER GOES FIRST, because it holds TTyAxis POINTERS into the build
+    about to be freed. Invalidate clears it too, but Resize sets FDirty without
+    going through Invalidate -- so the one place that can be trusted to clear
+    it is the one that does the freeing. }
+  FTipHits := nil;
   FreeStores;
   FBindings := nil;
   if FIndex <> nil then FIndex.Clear;
@@ -596,6 +673,13 @@ begin
     small one, and the alternative is a box describing a bar nobody can see. }
   FTipDatum := TyChartNoDatum;
   FTipElement := -1;
+  { THE AXIS HOVER IS NOT CLEARED HERE, and deliberately not: every Invalidate
+    sets FDirty, every FDirty relayouts, and every relayout rebuilds -- so
+    DropBuild has already been reached by the time anything could read the
+    hits again, and it clears them because it is the thing that frees what
+    they point at. A second clear here would be a line no test could fail
+    against, which is a line that gets deleted by somebody who cannot tell
+    whether it matters. }
   { AND THE STATIC LAYER GOES. It holds a picture drawn in the theme's font at
     the theme's colours; the whole reason this method treats every invalidate
     as a relayout is that a theme change arrives as a bare Invalidate, and a
@@ -1668,6 +1752,9 @@ begin
   end;
   if not IsNan(item.BorderWidthLogical) then
     AVisual.StrokeWidthLogical := item.BorderWidthLogical;
+  { THE PEN'S DASH, carried as the option wrote it -- see TTySeriesVisual. }
+  AVisual.Dash := item.Dash;
+  AVisual.DashExplicit := item.DashLogical;
   if not IsNan(item.Opacity) then
     AVisual.Alpha := Min(Double(1), Max(Double(0), item.Opacity));
   { THE RAMP, when the colour was an object rather than a string. The solid
@@ -1691,6 +1778,12 @@ begin
     end;
     if not IsNan(line.BorderWidthLogical) then
       AVisual.StrokeWidthLogical := line.BorderWidthLogical;
+    { AND IT REPLACES the itemStyle one rather than adding to it: for a shape
+      drawn with a stroke, lineStyle IS the pen. `lineStyle: {}` with no type
+      leaves todNone, which answers solid -- so a line series that writes only
+      a width does not inherit a dash from its itemStyle. }
+    AVisual.Dash := line.Dash;
+    AVisual.DashExplicit := line.DashLogical;
     if not IsNan(line.Opacity) then
       AVisual.Alpha := Min(Double(1), Max(Double(0), line.Opacity));
     if line.Color.Gradient.Kind <> cgkNone then
@@ -2607,57 +2700,44 @@ end;
 function TTyAdvanceChart.DatumColour(
   const ADatum: TTyChartDatumRef): TTyChartColor;
 var
-  i, idx: Integer;
+  slot: Integer;
   el: TTyChartElement;
+  v: TTySeriesVisual;
 begin
   Result := 0;
-  if (FPaintList = nil) or not FPaintListValid then Exit;
-  idx := -1;
-  { THE ELEMENT THAT ANSWERED THE HIT, when there is one and it belongs to
-    this datum -- one lookup, and the only one that can be exactly right when
-    two series overlap. }
-  if (FTipElement >= 0) and (FTipElement < FPaintList.Count)
-    and (FPaintList.Element(FTipElement).Datum.SeriesIndex
-         = ADatum.SeriesIndex) then
-    idx := FTipElement;
-  { Otherwise find it. Exact row first; then any non-silent element of the
-    series, because a line with its symbols switched off puts ONE element in
-    the list for the whole run and it carries no row at all. }
-  if idx < 0 then
-    for i := 0 to FPaintList.Count - 1 do
-    begin
-      el := FPaintList.Element(i);
-      if el.Silent then Continue;
-      if (el.Datum.SeriesIndex = ADatum.SeriesIndex)
-        and (el.Datum.DataIndex = ADatum.DataIndex) then
-      begin
-        idx := i;
-        Break;
-      end;
-    end;
-  if idx < 0 then
-    for i := 0 to FPaintList.Count - 1 do
-    begin
-      el := FPaintList.Element(i);
-      if el.Silent then Continue;
-      if el.Datum.SeriesIndex = ADatum.SeriesIndex then
-      begin
-        idx := i;
-        Break;
-      end;
-    end;
-  if idx < 0 then Exit;
-  el := FPaintList.Element(idx);
-  { FILL FIRST, THEN STROKE. Upstream reads `style[series.visualDrawType]`,
-    which is 'fill' for everything except boxplot, lines and parallel -- and
-    in this port a line's mark carries its colour as the PEN, because for that
-    shape the pen is what the colour is. Asking the element rather than the
-    series also gets a per-datum itemStyle for nothing, and cannot disagree
-    with the ink the pointer is actually over. }
-  if el.Style.HasFill and (el.Style.FillColor <> 0) then
-    Result := el.Style.FillColor
-  else
-    Result := el.Style.StrokeColor;
+  { THE SERIES' COLOUR WITH THE ROW'S OVERRIDE, which is what upstream's marker
+    is: it reads `style[series.visualDrawType]`, and drawType names the colour
+    the visual pipeline WROTE -- not whichever slot a symbol later painted it
+    into.
+
+    ASKING THE DRAWN ELEMENT LOOKED RIGHT AND WAS WRONG. A line's default
+    marker is an `emptyCircle`: a ring in the series colour over the chart's
+    own ground, so its element's FILL is the background, and a tooltip reading
+    it drew an invisible white dot on a white box. Falling back to the stroke
+    is no answer either, because a bar carries its colour in the fill. What
+    the marker names is a SERIES and a ROW, so that is what it asks. }
+  slot := SlotOfSeries(ADatum.SeriesIndex);
+  if slot < 0 then Exit;
+  v := TySeriesVisual(TTyChartColor(SeriesColor(ADatum.SeriesIndex)));
+  ApplyOptStyle(v, ADatum.SeriesIndex);
+  Result := v.Fill;
+  if (slot <= High(FStores)) and (FStores[slot] <> nil)
+    and (ADatum.DataIndex >= 0) and (ADatum.DataIndex < FStores[slot].Count) then
+    Result := TyRowFill(v, FStores[slot], ADatum.DataIndex);
+
+  { A PIE IS KEYED ON THE ROW AND NOT ON THE SERIES: its slices take
+    consecutive palette slots, so the series' own colour would paint every
+    marker alike. Reading it off the wedge is right here for the same reason it
+    was wrong above -- a wedge is a filled shape, and its fill IS its colour. }
+  if (FPaintList <> nil) and FPaintListValid
+    and (FTipElement >= 0) and (FTipElement < FPaintList.Count) then
+  begin
+    el := FPaintList.Element(FTipElement);
+    if (el.Datum.SeriesIndex = ADatum.SeriesIndex)
+      and (el.Shape.Kind = cskSector) and el.Style.HasFill
+      and (el.Style.FillColor <> 0) then
+      Result := el.Style.FillColor;
+  end;
 end;
 
 function TTyAdvanceChart.TooltipParams(
@@ -2747,9 +2827,535 @@ begin
     inlineName, False, valueText, not haveValue));
 end;
 
+{ How many decimals an interval is worth -- 10 gives 0, 0.5 gives 1, 0.025
+  gives 3. Capped at six, which is where TyChartNumToStr stops anyway, and
+  answers 0 for anything not finite so a degenerate scale rounds to whole
+  numbers rather than raising. }
+function IntervalDecimals(AInterval: Double): Integer;
+var v: Double;
+begin
+  Result := 0;
+  v := Abs(AInterval);
+  if IsNan(v) or IsInfinite(v) or (v <= 0) then Exit;
+  while (v < 1) and (Result < 6) do
+  begin
+    v := v * 10;
+    Inc(Result);
+  end;
+end;
+
+function TTyAdvanceChart.AxisValueText(AAxis: TTyAxis; AValue: Double;
+  AGrouped: Boolean): string;
+var tt: TTyTimeTick;
+begin
+  Result := '';
+  if AAxis = nil then Exit;
+  if AAxis.Scale is TTyOrdinalScale then
+    Exit(TTyOrdinalScale(AAxis.Scale).GetLabel(AValue));
+  if AAxis.Scale is TTyTimeScale then
+  begin
+    tt.Value := AValue;
+    tt.Unit_ := TyTimeUnitOf(AValue, TTyTimeScale(AAxis.Scale).UTC);
+    tt.Level := 0;
+    tt.NotNice := False;
+    Exit(TyTimeLabel(tt, TTyTimeScale(AAxis.Scale).UTC));
+  end;
+  { GROUPED FOR THE POINTER, plain for a tick. Upstream runs the pointer
+    label's number through addCommas and an axis tick label through a
+    different path that does not -- so `1,234.5` under the pointer and `1234.5`
+    on the axis is parity, not an inconsistency to tidy up. }
+  { PRECISION FIRST. `label.precision` defaults to 'auto', which does NOT mean
+    "however many digits the number happens to have" -- it means the SCALE's
+    own interval precision, so an axis ticking in tens labels its pointer 37
+    and one ticking in hundredths labels it 37.25. Without it a pointer dragged
+    along a value axis reads 37.246964, which is a true number and a useless
+    label.
+
+    A non-interval scale keeps every digit it has: neither an ordinal nor a
+    time axis has an interval in the first place. }
+  if AAxis.Scale is TTyIntervalScale then
+    AValue := RoundTo(AValue, -IntervalDecimals(
+      TTyIntervalScale(AAxis.Scale).Interval));
+  if AGrouped then Result := TyTooltipValueText(AValue)
+  else Result := TyChartNumToStr(AValue);
+end;
+
+function TTyAdvanceChart.NearestOnAxis(ASlot: Integer; AAxis: TTyAxis;
+  AValue: Double; AMaxDistPx: Double; out ARows: TTyIntegerArray): Boolean;
+var
+  st: TTyDataStore;
+  col, i, n: Integer;
+  target, v, coord, diff, dist, minDist, minDiff: Double;
+begin
+  ARows := nil;
+  Result := False;
+  if (AAxis = nil) or (ASlot < 0) or (ASlot > High(FStores)) then Exit;
+  st := FStores[ASlot];
+  if st = nil then Exit;
+  col := st.DimIndexOf(AAxis.Dim);
+  if col < 0 then Exit;
+  target := AAxis.DataToCoord(AValue);
+  if IsNan(target) then Exit;
+
+  { IN VIEW COORDINATE SPACE -- pixels, not data. The 0.5 a category axis is
+    given is HALF A PIXEL, which after the value has already been rounded to a
+    band centre means "the same band"; its purpose is to drop a series whose
+    data is shorter than the axis, not to widen the search. ECharts 5.x
+    compared in data space and 6.x changed it, so this is one to read rather
+    than remember. }
+  minDist := Infinity;
+  minDiff := -1;
+  n := 0;
+  SetLength(ARows, st.Count);
+  for i := 0 to st.Count - 1 do
+  begin
+    v := st.Get(col, i);
+    if IsNan(v) then Continue;
+    coord := AAxis.DataToCoord(v);
+    if IsNan(coord) then Continue;
+    diff := target - coord;
+    dist := Abs(diff);
+    if dist > AMaxDistPx then Continue;
+    { THE SIDE TIE-BREAK. When the pointer falls exactly between two rows, the
+      one at or before it wins -- otherwise both land in the list and every
+      midpoint shows two rows of the same series. Rows with the SAME signed
+      difference still accumulate, which is how two rows holding one value are
+      both reported. }
+    if (dist < minDist) or ((dist = minDist) and (diff >= 0) and (minDiff < 0)) then
+    begin
+      minDist := dist;
+      minDiff := diff;
+      n := 0;
+    end;
+    if diff = minDiff then
+    begin
+      ARows[n] := i;
+      Inc(n);
+    end;
+  end;
+  SetLength(ARows, n);
+  Result := n > 0;
+end;
+
+function TTyAdvanceChart.ResolveAxisPointers(AX, AY: Integer): TTyAxisHitArray;
+var
+  tipSpec: TTyTooltipSpec;
+  wantAxis: string;
+  crossType: Boolean;
+  g, c: Integer;
+  gb: TTyGridBuild;
+  cart: TTyCartesian2D;
+  baseAxis, otherAxis: TTyAxis;
+  seen: array of TTyAxis;
+
+  function AlreadySeen(AAxis: TTyAxis): Boolean;
+  var j: Integer;
+  begin
+    for j := 0 to High(seen) do
+      if seen[j] = AAxis then Exit(True);
+    SetLength(seen, Length(seen) + 1);
+    seen[High(seen)] := AAxis;
+    Result := False;
+  end;
+
+  { One axis, resolved and appended when it has something to say. }
+  procedure Consider(AAxis: TTyAxis; const APlot: TTyRectF; ACross: Boolean);
+  var
+    hit: TTyAxisHit;
+    coord, value, snapTo, v, diff, dist, minDist, minDiff, maxDist: Double;
+    rows: TTyIntegerArray;
+    s, r, m: Integer;
+    isCat: Boolean;
+  begin
+    if AAxis = nil then Exit;
+    if AlreadySeen(AAxis) then Exit;
+    isCat := AAxis.Scale is TTyOrdinalScale;
+    hit := Default(TTyAxisHit);
+    hit.Axis := AAxis;
+    hit.Plot := APlot;
+    hit.Cross := ACross;
+    hit.Spec := TyAxisPointerSpecOf(FOption, AAxis.MainType,
+      AAxis.ComponentIndex, isCat, True,
+      (tipSpec.Trigger = tttAxis) and not ACross, crossType);
+    if hit.Spec.Show = apsNo then Exit;
+
+    if AAxis.Horizontal then coord := AX else coord := AY;
+    value := AAxis.CoordToData(coord);
+    if IsNan(value) then Exit;
+    { THE CONTAINMENT TEST IS WHAT REJECTS AN OUT-OF-RANGE POINT, not a clamp.
+      CoordToData extrapolates on purpose, so a pointer forty pixels past the
+      last category answers an ordinal nobody has -- and pulling it back onto
+      the edge would put a tooltip on the last bar for a pointer that is not
+      over it.
+
+      AN EQUIVALENT MUTANT LIVES HERE, recorded rather than chased. Deleting
+      this line changes nothing TODAY, because the caller has already required
+      the point to be inside the grid's plot rect and every axis' pixel extent
+      is currently that rect. It stops being equivalent the moment an axis is
+      narrower than the plot -- an `offset`, or a second pair sharing the
+      grid -- and a guard that is redundant only by coincidence is still the
+      guard that has to be there when the coincidence ends. }
+    if not TyRangeContains(AAxis.Scale.GetExtent2(sekEffective), value) then Exit;
+
+    { ---- the nearest series, and only the nearest ---- }
+    snapTo := value;
+    minDist := Infinity;
+    minDiff := -1;
+    if isCat then maxDist := 0.5 else maxDist := Infinity;
+    if not ACross then
+      for s := 0 to High(FBindings) do
+      begin
+        if FBindings[s].Hidden then Continue;
+        if FBindings[s].BaseAxis <> AAxis then Continue;
+        if not NearestOnAxis(s, AAxis, value, maxDist, rows) then Continue;
+        v := FStores[s].Get(FStores[s].DimIndexOf(AAxis.Dim), rows[0]);
+        if IsNan(v) or IsInfinite(v) then Continue;
+        diff := value - v;
+        dist := Abs(diff);
+        { AN AXIS TRIGGER IS NOT "EVERY SERIES IN THIS COLUMN". Upstream empties
+          the batch the moment a closer series appears, so what survives is the
+          series NEAREST the hovered value -- and equal-distance ones
+          accumulate, because the push sits outside the test that empties it. }
+        if dist <= minDist then
+        begin
+          if (dist < minDist) or ((diff >= 0) and (minDiff < 0)) then
+          begin
+            minDist := dist;
+            minDiff := diff;
+            snapTo := v;
+            SetLength(hit.Slots, 0);
+            SetLength(hit.Rows, 0);
+          end;
+          m := Length(hit.Slots);
+          SetLength(hit.Slots, m + Length(rows));
+          SetLength(hit.Rows, m + Length(rows));
+          for r := 0 to High(rows) do
+          begin
+            hit.Slots[m + r] := s;
+            hit.Rows[m + r] := rows[r];
+          end;
+        end;
+      end;
+    hit.Value := value;
+    hit.SnapValue := snapTo;
+    { NOTHING TO SAY AND NOTHING TO DRAW. A pointer type of `none` still
+      reaches here, because its LABEL can be shown on its own. }
+    if (hit.Spec.PointerType = aptNone) and not hit.Spec.LabelSpec.Show
+      and (Length(hit.Slots) = 0) then Exit;
+    SetLength(Result, Length(Result) + 1);
+    Result[High(Result)] := hit;
+  end;
+
+begin
+  Result := nil;
+  seen := nil;
+  if (FBuild = nil) or (FOption = nil) then Exit;
+  tipSpec := TyTooltipSpecOf(FOption, -1, -1);
+  if not tipSpec.Show then Exit;
+  crossType := TyTooltipAxisPointerType(FOption) = aptCross;
+  { CROSS PUTS A POINTER ON THE BASE AXIS EVEN WHEN THE TRIGGER IS NOT 'axis'.
+    Upstream's gate is `triggerAxis || cross`, and the second disjunct is the
+    reason `tooltip: {axisPointer: {type: 'cross'}}` written on its own draws
+    anything at all. }
+  if (tipSpec.Trigger <> tttAxis) and not crossType then Exit;
+  wantAxis := TyTooltipAxisPointerAxis(FOption);
+
+  for g := 0 to FBuild.GridCount - 1 do
+  begin
+    gb := FBuild.Grid(g);
+    if not TyRectFContains(gb.PlotRect, TyPointF(AX, AY)) then Continue;
+    for c := 0 to gb.CartesianCount - 1 do
+    begin
+      cart := gb.CartesianByIndex(c);
+      if cart = nil then Continue;
+      { `tooltip.axisPointer.axis` names a dimension; 'auto' asks the
+        coordinate system, whose rule is ordinal before time before x -- BY
+        SCALE, so a y-category chart puts its pointer on Y. }
+      if wantAxis <> '' then baseAxis := cart.AxisByDim(wantAxis)
+      else baseAxis := cart.GetBaseAxis;
+      Consider(baseAxis, gb.PlotRect, False);
+      if crossType then
+      begin
+        otherAxis := cart.GetOtherAxis(baseAxis);
+        Consider(otherAxis, gb.PlotRect, True);
+      end;
+    end;
+  end;
+end;
+
+procedure TTyAdvanceChart.PaintAxisPointers(APainter: TTyPainter;
+  const ARect: TRect; APPI: Integer; const AMeasurer: ITyTextMeasurer;
+  const AHits: TTyAxisHitArray);
+var
+  i: Integer;
+  lineS, shadowS, labelS: TTyStyleSet;
+  hit: TTyAxisHit;
+  at, lo, hi, w: Double;
+  colour: TTyColor;
+  band: TTyRectF;
+  dash: TTyDoubleArray;
+  txt: string;
+  tw, th, margin, padL, padT, padR, padB: Double;
+  box: TRect;
+  corners: TTyCorners;
+  surface: TTyFill;
+begin
+  lineS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointer', '', []);
+  shadowS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerShadow',
+    '', []);
+  labelS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerLabel',
+    '', []);
+  for i := 0 to High(AHits) do
+  begin
+    hit := AHits[i];
+    if hit.Axis = nil then Continue;
+    { SNAP MOVES THE POINTER, not the content. With snap off the line stays
+      under the cursor while the tooltip still describes the nearest row --
+      upstream splits them at exactly this branch. }
+    if hit.Spec.Snap then at := hit.Axis.DataToCoord(hit.SnapValue)
+    else at := hit.Axis.DataToCoord(hit.Value);
+    if IsNan(at) then Continue;
+
+    case hit.Spec.PointerType of
+      aptShadow:
+        begin
+          { THE BAND IS THE CATEGORY'S OWN WIDTH, and only a category axis has
+            one. Upstream derives a numeric axis' band from a statistics pass
+            over the hovered series' minimum positive gap; this port has no
+            such pass, so a shadow on a value axis draws NOTHING rather than
+            the one-pixel sliver the missing statistic would produce. A
+            deliberate restriction, recorded rather than approximated. }
+          w := hit.Axis.BandWidth;
+          if w <= 0 then Continue;
+          if not (tpBackground in shadowS.Present) then Continue;
+          if hit.Axis.Horizontal then
+          begin
+            if not TyAxisPointerBand(at, w, hit.Plot.Left, hit.Plot.Right,
+              lo, hi) then Continue;
+            band := TyRectF(lo, hit.Plot.Top, hi, hit.Plot.Bottom);
+          end
+          else
+          begin
+            if not TyAxisPointerBand(at, w, hit.Plot.Top, hit.Plot.Bottom,
+              lo, hi) then Continue;
+            band := TyRectF(hit.Plot.Left, lo, hit.Plot.Right, hi);
+          end;
+          colour := shadowS.Background.Color;
+          if hit.Spec.HasShadowColour then colour := TTyColor(hit.Spec.ShadowColour);
+          surface := shadowS.Background;
+          surface.Kind := tfkSolid;
+          surface.Color := colour;
+          APainter.FillBackground(
+            Rect(Round(band.Left), Round(band.Top),
+                 Round(band.Right), Round(band.Bottom)), surface,
+            TyCorners(0, 0, 0, 0));
+        end;
+      aptLine:
+        begin
+          if not (tpBorderColor in lineS.Present) then Continue;
+          colour := lineS.BorderColor;
+          if hit.Spec.HasLineColour then colour := TTyColor(hit.Spec.LineColour);
+          w := lineS.BorderWidth;
+          if hit.Spec.HasLineWidth then w := hit.Spec.LineWidthLogical;
+          if w <= 0 then Continue;
+          dash := TyDashPattern(hit.Spec.LineDash, hit.Spec.LineDashExplicit, w);
+          APainter.SetLineDash(dash);
+          APainter.BeginPath;
+          if hit.Axis.Horizontal then
+          begin
+            APainter.MoveTo(at, hit.Plot.Top);
+            APainter.LineTo(at, hit.Plot.Bottom);
+          end
+          else
+          begin
+            APainter.MoveTo(hit.Plot.Left, at);
+            APainter.LineTo(hit.Plot.Right, at);
+          end;
+          APainter.StrokePath(colour, w);
+          { AND THE DASH IS PUT BACK. SetLineDash is painter state, not an
+            argument -- leaving it set dashes whatever is drawn next, which is
+            the same class of leak as forgetting BeginPath and just as invisible
+            until something downstream comes out wrong. }
+          APainter.SetLineDash([]);
+        end;
+    end;
+
+    { ---- the label ---- }
+    if not hit.Spec.LabelSpec.Show then Continue;
+    if not (tpBackground in labelS.Present) then Continue;
+    txt := AxisValueText(hit.Axis, hit.SnapValue, True);
+    if hit.Spec.LabelSpec.HasFormatter then
+      { FIRST OCCURRENCE ONLY, which is upstream's `.replace('{value}', text)`
+        -- a plain string pattern, not a global one. }
+      txt := StringReplace(hit.Spec.LabelSpec.Formatter, '{value}', txt, []);
+    if txt = '' then Continue;
+    AMeasurer.MeasureLine(txt, labelS.FontName, ResolveFontSize(labelS),
+      labelS.FontWeight, tw, th);
+    if (tw <= 0) or (th <= 0) then Continue;
+    if hit.Spec.LabelSpec.HasPadding then
+    begin
+      padL := APainter.ScaleF(hit.Spec.LabelSpec.PadLeft);
+      padT := APainter.ScaleF(hit.Spec.LabelSpec.PadTop);
+      padR := APainter.ScaleF(hit.Spec.LabelSpec.PadRight);
+      padB := APainter.ScaleF(hit.Spec.LabelSpec.PadBottom);
+    end
+    else
+    begin
+      padL := APainter.Scale(labelS.Padding.Left);
+      padT := APainter.Scale(labelS.Padding.Top);
+      padR := APainter.Scale(labelS.Padding.Right);
+      padB := APainter.Scale(labelS.Padding.Bottom);
+    end;
+    margin := APainter.ScaleF(ActiveController.Metric(
+      TyAdvChartAxisPointerMarginVar, TyAdvChartAxisPointerMargin));
+    if hit.Spec.LabelSpec.MarginLogical <> 3 then
+      margin := APainter.ScaleF(hit.Spec.LabelSpec.MarginLogical);
+    { OUTSIDE THE PLOT, on the axis' own side. Not on the axis LINE: an
+      on-zero axis floats in the middle of the plot and its labels do not
+      follow it there. }
+    if hit.Axis.Horizontal then
+    begin
+      box.Left := Round(at - (tw + padL + padR) / 2);
+      if hit.Axis.Side = asTop then
+        box.Top := Round(hit.Plot.Top - margin - th - padT - padB)
+      else
+        box.Top := Round(hit.Plot.Bottom + margin);
+    end
+    else
+    begin
+      box.Top := Round(at - (th + padT + padB) / 2);
+      if hit.Axis.Side = asRight then
+        box.Left := Round(hit.Plot.Right + margin)
+      else
+        box.Left := Round(hit.Plot.Left - margin - tw - padL - padR);
+    end;
+    box.Right := box.Left + Round(tw + padL + padR);
+    box.Bottom := box.Top + Round(th + padT + padB);
+    { Clamped into the CONTROL, far edge first -- the same rule the tooltip
+      box follows, and for the same reason: what falls outside is not clipped,
+      it is not drawn. }
+    if box.Right > ARect.Right then OffsetRect(box, ARect.Right - box.Right, 0);
+    if box.Bottom > ARect.Bottom then OffsetRect(box, 0, ARect.Bottom - box.Bottom);
+    if box.Left < ARect.Left then OffsetRect(box, ARect.Left - box.Left, 0);
+    if box.Top < ARect.Top then OffsetRect(box, 0, ARect.Top - box.Top);
+
+    corners := TyEffectiveCorners(labelS);
+    if hit.Spec.LabelSpec.HasBorderRadius then
+      corners := TyCorners(Round(hit.Spec.LabelSpec.BorderRadiusLogical),
+        Round(hit.Spec.LabelSpec.BorderRadiusLogical),
+        Round(hit.Spec.LabelSpec.BorderRadiusLogical),
+        Round(hit.Spec.LabelSpec.BorderRadiusLogical));
+    surface := labelS.Background;
+    if hit.Spec.LabelSpec.HasBackground then
+    begin
+      surface.Kind := tfkSolid;
+      surface.Color := TTyColor(hit.Spec.LabelSpec.Background);
+    end;
+    APainter.FillBackground(box, surface, corners);
+    if hit.Spec.LabelSpec.HasBorderColour and hit.Spec.LabelSpec.HasBorderWidth
+      and (hit.Spec.LabelSpec.BorderWidthLogical > 0) then
+      APainter.StrokeBorder(box, corners,
+        Round(hit.Spec.LabelSpec.BorderWidthLogical),
+        TTyColor(hit.Spec.LabelSpec.BorderColour))
+    else if TyBorderVisible(labelS) then
+      APainter.StrokeBorder(box, corners, labelS.BorderWidth, labelS.BorderColor);
+    colour := labelS.TextColor;
+    if hit.Spec.LabelSpec.HasColour then colour := TTyColor(hit.Spec.LabelSpec.Colour);
+    APainter.DrawText(box, txt, labelS.FontName, ResolveFontSize(labelS),
+      labelS.FontWeight, colour, taCenter, tlCenter, False);
+  end;
+end;
+
+function TTyAdvanceChart.AxisTooltipParams(
+  const AHits: TTyAxisHitArray): TTyChartParams;
+var
+  i, k, n, slot, row: Integer;
+  d: TTyChartDatumRef;
+begin
+  Result := nil;
+  n := 0;
+  for i := 0 to High(AHits) do
+  begin
+    { The cross' other arm carries no series -- see AxisTooltipContent. }
+    if AHits[i].Cross then Continue;
+    for k := 0 to High(AHits[i].Slots) do
+    begin
+      slot := AHits[i].Slots[k];
+      row := AHits[i].Rows[k];
+      if (slot < 0) or (slot > High(FBindings)) then Continue;
+      d := TyChartDatum(FBindings[slot].SeriesIndex, row,
+        FStores[slot].GetRawIndex(row));
+      SetLength(Result, n + 1);
+      Result[n] := TooltipParams(d);
+      Inc(n);
+    end;
+  end;
+end;
+
+function TTyAdvanceChart.AxisTooltipContent(const AHits: TTyAxisHitArray;
+  const ASpec: TTyTooltipSpec): TTyTooltipBlock;
+var
+  i, k, slot, row: Integer;
+  section: TTyTooltipBlock;
+  header, valueText: string;
+  d: TTyChartDatumRef;
+  p: TTyChartCallbackParams;
+  rows: Integer;
+begin
+  { A HEADERLESS ROOT HOLDING ONE SECTION PER AXIS, each holding one row per
+    surviving series. Three layers, and the shape is what decides the spacing
+    -- two axis sections space themselves further apart than one does, and
+    that falls out of the tree rather than being written anywhere. }
+  Result := TTyTooltipBlock.CreateSection('', True);
+  rows := 0;
+  for i := 0 to High(AHits) do
+  begin
+    { THE SECOND ARM OF A CROSS NEVER CONTRIBUTES A SECTION. Upstream hard-codes
+      its triggerTooltip to false, which is why a cross shows one tooltip and
+      not two. }
+    if AHits[i].Cross then Continue;
+    header := AxisValueText(AHits[i].Axis, AHits[i].SnapValue, True);
+    section := TTyTooltipBlock.CreateSection(header, False);
+    for k := 0 to High(AHits[i].Slots) do
+    begin
+      slot := AHits[i].Slots[k];
+      row := AHits[i].Rows[k];
+      if (slot < 0) or (slot > High(FBindings)) then Continue;
+      d := TyChartDatum(FBindings[slot].SeriesIndex, row,
+        FStores[slot].GetRawIndex(row));
+      p := TooltipParams(d);
+      if Length(p.Values) = 0 then Continue;
+      valueText := TyTooltipValueText(p.Values[0]);
+      { UNDER AN AXIS TRIGGER THE INLINE NAME IS THE SERIES NAME, not the item
+        name -- upstream passes `multipleSeries = true`, which both suppresses
+        the per-series header AND switches the name. The item name is already
+        the section's header, so repeating it on every row would say the
+        category once per series. }
+      section.Add(TTyTooltipBlock.CreateNameValue(ttmItem, p.Color,
+        p.SeriesName, False, valueText, False)).SortParam := p.Values[0];
+      Inc(rows);
+    end;
+    { `order` SORTS THE ROWS WITHIN ONE SECTION and nothing else. Upstream sets
+      `sortBlocks` on the AXIS SECTION -- never on the root -- so a port that
+      sorted the root would reorder the AXES and leave every row where it was.
+      It runs after the reverse, and the reverse is unconditional. }
+    if ASpec.HasOrder then section.SortBlocks(ASpec.Order);
+    { THE SECTION IS ADDED WHETHER OR NOT ANY SERIES SURVIVED. Upstream pushes
+      it before the series loop runs, so an axis with nothing on it still
+      contributes its header line. }
+    Result.Add(section);
+  end;
+  { THE SECTIONS ARE REVERSED, unconditionally and across coordinate systems
+    rather than within one -- upstream's own comment is that the second axis
+    displays above the first. }
+  Result.Reverse;
+  if rows = 0 then FreeAndNil(Result);
+end;
+
 procedure TTyAdvanceChart.PaintTooltip(APainter: TTyPainter; const ARect: TRect;
   APPI: Integer; const AMeasurer: ITyTextMeasurer);
 var
+  onAxis: Boolean;
   spec: TTyTooltipSpec;
   ink: TTyTooltipInk;
   block: TTyTooltipBlock;
@@ -2766,10 +3372,19 @@ var
   surface: TTyFill;
   borderCol: TTyColor;
 begin
-  if not TyChartDatumValid(FTipDatum) then Exit;
-  spec := TooltipSpecFor(FTipDatum);
+  onAxis := Length(FTipHits) > 0;
+  if not TyChartDatumValid(FTipDatum) and not onAxis then Exit;
+  { UNDER AN AXIS TRIGGER THERE IS NO CASCADE. Upstream builds the axis
+    tooltip's model from the global component and a positioning hint and
+    nothing else -- no series level, no data item -- so every option but
+    valueFormatter is global there. }
+  if onAxis then spec := TyTooltipSpecOf(FOption, -1, -1)
+  else spec := TooltipSpecFor(FTipDatum);
   if not spec.Show or not spec.ShowContent then Exit;
-  if spec.Trigger <> tttItem then Exit;
+  { AN AXIS HIT OUTRANKS AN ITEM ONE. Upstream routes on the payload's SHAPE --
+    if a coordinate system reported axes, the axis path runs and the item
+    trigger is never consulted. }
+  if not onAxis and (spec.Trigger <> tttItem) then Exit;
   ink := TooltipInk(spec);
 
   st := ActiveController.Model.ResolveStyle('TyAdvChartTooltip', StyleClass,
@@ -2789,7 +3404,12 @@ begin
         formatter with side effects still sees them run; here the default is
         simply not built, which is the same picture for less. }
       SetLength(params, 1);
-      params[0] := TooltipParams(FTipDatum);
+      { A FORMATTER UNDER AN AXIS TRIGGER IS GIVEN EVERY SERIES, in the order
+        the sections hold them -- which is what makes `{a1}` and `{c2}` mean
+        anything at all. }
+      if onAxis then params := AxisTooltipParams(FTipHits)
+      else params[0] := TooltipParams(FTipDatum);
+      if Length(params) = 0 then Exit;
       if not TyChartResolveText(spec.Formatter, params, tipText) then
         { A named handler that is not registered says so rather than drawing
           nothing -- TyChartResolveText puts the message in the text. }
@@ -2803,6 +3423,8 @@ begin
       block.Add(TTyTooltipBlock.CreateNameValue(ttmNone, 0, tipText, False,
         '', True));
     end
+    else if onAxis then
+      block := AxisTooltipContent(FTipHits, spec)
     else
       block := TooltipContent(FTipDatum, spec);
     if block = nil then Exit;
@@ -2869,9 +3491,12 @@ begin
       fallback for an AXIS tooltip, and an item tooltip takes the datum's own
       colour. A written borderColor still wins over both. }
     if spec.HasBorderColour then borderCol := TTyColor(spec.BorderColour)
-    else if DatumColour(FTipDatum) <> 0 then
+    else if not onAxis and (DatumColour(FTipDatum) <> 0) then
       borderCol := TTyColor(DatumColour(FTipDatum))
-    else borderCol := st.BorderColor;
+    else
+      { THE GREY IS THE AXIS TOOLTIP'S ANSWER, not a chart-wide default: a box
+        describing several series cannot take one of their colours. }
+      borderCol := st.BorderColor;
     borderW := st.BorderWidth;
     if spec.HasBorderWidth then borderW := spec.BorderWidthLogical;
     if (borderW > 0) and (TyAlphaOf(borderCol) > 0) then
@@ -2930,15 +3555,29 @@ begin
   inherited MouseMove(Shift, X, Y);
   if csDesigning in ComponentState then Exit;
   spec := TyTooltipSpecOf(FOption, -1, -1);
-  if not spec.Show or (spec.Trigger = tttNone) then Exit;
+  { `trigger: 'none'` IS NOT CHECKED HERE. It blocks an item tooltip and
+    nothing else -- a cross puts a pointer on the axis regardless, and the
+    paint asks the cascade for the datum it ended up over, which a series can
+    answer differently from the global. What this guard is for is the one
+    question that has no datum yet: is the tooltip switched off entirely. }
+  if not spec.Show then Exit;
   if not TyTooltipTriggerOnHas(spec.TriggerOn, 'mousemove') then Exit;
 
-  wasOn := TyChartDatumValid(FTipDatum);
+  wasOn := TyChartDatumValid(FTipDatum) or (Length(FTipHits) > 0);
   d := HitTestAt(X, Y, el);
   FTipDatum := d;
   FTipElement := el;
   FTipX := X;
   FTipY := Y;
+  { AN AXIS HOVER IS A SECOND, INDEPENDENT PIECE OF STATE, live whenever the
+    pointer is inside a plot and something asks for an axis pointer -- the
+    trigger, or a cross -- whether or not a mark happens to be under it, which
+    is the whole point of an axis trigger.
+
+    RESOLVED HERE AND KEPT, not re-resolved in the frame that draws it: the
+    answer holds axis POINTERS into the build, and DropBuild clears it for
+    exactly that reason. }
+  FTipHits := ResolveAxisPointers(X, Y);
   { REPAINT ON MOVEMENT, not only when the datum changes. The box is anchored
     to the CURSOR -- upstream positions against the raw pointer offsets and
     never against the snapped datum -- so a repaint gated on the datum would
@@ -2946,15 +3585,17 @@ begin
     this asks for is a blit of the static layer plus one box; the gate the old
     TTyChart needed was compensating for a control that re-rendered everything
     from scratch each paint, and that is what the cache removed. }
-  if wasOn or TyChartDatumValid(FTipDatum) then InvalidateFrame;
+  if wasOn or TyChartDatumValid(FTipDatum) or (Length(FTipHits) > 0) then
+    InvalidateFrame;
 end;
 
 procedure TTyAdvanceChart.MouseLeave;
 var wasOn: Boolean;
 begin
-  wasOn := TyChartDatumValid(FTipDatum);
+  wasOn := TyChartDatumValid(FTipDatum) or (Length(FTipHits) > 0);
   FTipDatum := TyChartNoDatum;
   FTipElement := -1;
+  FTipHits := nil;
   { INHERITED LAST. The base class ends in PointerStateChanged, which this
     control answers with a repaint -- and a repaint before the hover was
     cleared would draw the tooltip one more time on the way out. }
@@ -2974,6 +3615,9 @@ begin
     skips the whole pass and the new thing is written, compiled and never
     drawn. That is the failure this body's empty version was left here to
     prevent, and the tooltip is the first thing to test it. }
+  { THE POINTER FIRST, THE BOX OVER IT. A tooltip with the pointer's own line
+    drawn across it would read as two things at one depth. }
+  PaintAxisPointers(APainter, ARect, APPI, AMeasurer, FTipHits);
   PaintTooltip(APainter, ARect, APPI, AMeasurer);
 end;
 
@@ -2985,7 +3629,7 @@ begin
     answer has to be cheap and it has to be exact. It is deliberately not
     "would the tooltip draw": resolving the option cascade and the theme to
     find out costs more than the pass it would save. }
-  Result := TyChartDatumValid(FTipDatum);
+  Result := TyChartDatumValid(FTipDatum) or (Length(FTipHits) > 0);
 end;
 
 procedure TTyAdvanceChart.DropStatic;

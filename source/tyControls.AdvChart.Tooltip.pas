@@ -40,6 +40,13 @@ type
     component tooltip through it deliberately. }
   TTyTooltipTrigger = (tttItem, tttAxis, tttNone);
 
+  { FOUR VALUES, THREE BEHAVIOURS. `seriesAsc` falls through both of upstream's
+    branches and does nothing at all -- it is behaviourally identical to
+    writing no order, and it carries upstream's own `FIXME` beside it. Modelled
+    as the default rather than as a fifth state, because a state nothing can
+    observe is not a state. }
+  TTyTooltipOrder = (ttoSeriesAsc, ttoSeriesDesc, ttoValueAsc, ttoValueDesc);
+
   { WHAT THE OPTION SAID, not what will be drawn. Every visual has a `Has`
     beside it because absence means "ask the theme", and a theme is not
     something this layer can see. }
@@ -61,6 +68,11 @@ type
       does NOT override the default content. }
     Formatter: string;
     HasFormatter: Boolean;
+    { `order` has NO default upstream -- it resolves to undefined, which
+      short-circuits the sort entirely. So absence is a third thing, not
+      `seriesAsc`. }
+    Order: TTyTooltipOrder;
+    HasOrder: Boolean;
 
     HasBackground: Boolean;
     Background: TTyChartColor;
@@ -114,6 +126,7 @@ type
     FNoName: Boolean;
     FValue: string;
     FNoValue: Boolean;
+    FSortParam: Double;
     FBlocks: array of TTyTooltipBlock;
     function GetBlock(AIndex: Integer): TTyTooltipBlock;
     function GetBlockCount: Integer;
@@ -126,6 +139,17 @@ type
     { TAKES OWNERSHIP, and answers the block it was given so a tree can be
       written as one expression. }
     function Add(ABlock: TTyTooltipBlock): TTyTooltipBlock;
+    { Reverse this section's children in place. Upstream does it to the axis
+      sections unconditionally and BEFORE `order` is read -- the two are
+      independent operations on the same list, not two spellings of one. }
+    procedure Reverse;
+    { Sort this section's children by `order`.
+
+      STABLE, because upstream's Array#sort is and ties therefore keep series
+      order. And NaN sorts LAST in both directions: upstream's comparator
+      treats an incomparable value as +Infinity ascending and -Infinity
+      descending, which comes to the same place at the bottom either way. }
+    procedure SortBlocks(AOrder: TTyTooltipOrder);
     { The vertical gap this node's children are separated by, 0..3, computed
       bottom-up from STRUCTURE rather than from depth -- leaves are 0 and the
       root is largest, which is the opposite of what the name suggests.
@@ -145,6 +169,11 @@ type
     property NoName: Boolean read FNoName;
     property Value: string read FValue;
     property NoValue: Boolean read FNoValue;
+    { What `order` sorts on: the series' FIRST inline value, raw, not the
+      string that was rendered from it. NaN means this block has none -- which
+      every section has, and every row built by a series that overrides its own
+      tooltip markup. }
+    property SortParam: Double read FSortParam write FSortParam;
     property BlockCount: Integer read GetBlockCount;
     property Blocks[AIndex: Integer]: TTyTooltipBlock read GetBlock; default;
   end;
@@ -287,6 +316,61 @@ begin
   { `noHeader: !trim(header)` upstream -- an all-blank header is no header,
     and the caller is not asked to remember that. }
   FNoHeader := ANoHeader or (Trim(AHeader) = '');
+  FSortParam := NaN;
+end;
+
+procedure TTyTooltipBlock.Reverse;
+var i, n: Integer; tmp: TTyTooltipBlock;
+begin
+  n := Length(FBlocks);
+  for i := 0 to n div 2 - 1 do
+  begin
+    tmp := FBlocks[i];
+    FBlocks[i] := FBlocks[n - 1 - i];
+    FBlocks[n - 1 - i] := tmp;
+  end;
+end;
+
+procedure TTyTooltipBlock.SortBlocks(AOrder: TTyTooltipOrder);
+var
+  i, j: Integer;
+  key: TTyTooltipBlock;
+
+  { Does A come before B? NaN is last in both directions. }
+  function Before(A, B: TTyTooltipBlock): Boolean;
+  var av, bv: Double;
+  begin
+    av := A.SortParam;
+    bv := B.SortParam;
+    if IsNan(av) then Exit(False);
+    if IsNan(bv) then Exit(True);
+    if AOrder = ttoValueAsc then Result := av < bv else Result := av > bv;
+  end;
+
+begin
+  { `seriesAsc` IS THE ABSENCE OF AN ORDER -- it falls through both of
+    upstream's branches. Saying so here rather than at the call site keeps the
+    one place that knows it. }
+  if AOrder = ttoSeriesAsc then Exit;
+  if AOrder = ttoSeriesDesc then
+  begin
+    Reverse;
+    Exit;
+  end;
+  { INSERTION SORT, which is stable by construction -- and a tooltip section
+    holds as many rows as a chart has series, so the shape of the sort is the
+    part that matters and its complexity is not. }
+  for i := 1 to High(FBlocks) do
+  begin
+    key := FBlocks[i];
+    j := i - 1;
+    while (j >= 0) and Before(key, FBlocks[j]) do
+    begin
+      FBlocks[j + 1] := FBlocks[j];
+      Dec(j);
+    end;
+    FBlocks[j + 1] := key;
+  end;
 end;
 
 constructor TTyTooltipBlock.CreateNameValue(AMarker: TTyTooltipMarker;
@@ -301,6 +385,7 @@ begin
   FNoName := ANoName or (Trim(AName) = '');
   FValue := AValue;
   FNoValue := ANoValue;
+  FSortParam := NaN;
   { NO COLOUR, NO MARKER. Upstream's first line is `if (!color) return ''` --
     a colourless item draws no dot rather than a default-coloured one. }
   if AMarkerColour = 0 then FMarker := ttmNone;
@@ -538,6 +623,18 @@ begin
     d := ANode.Find('hideDelay');
     if d.JSONType = jtNumber then
       ASpec.HideDelayMs := TyRoundOpt(d.AsFloat, 100, 0, 60000);
+  end;
+  if Fresh('order') then
+  begin
+    d := ANode.Find('order');
+    if d.JSONType = jtString then
+    begin
+      ASpec.HasOrder := True;
+      if d.AsString = 'valueAsc' then ASpec.Order := ttoValueAsc
+      else if d.AsString = 'valueDesc' then ASpec.Order := ttoValueDesc
+      else if d.AsString = 'seriesDesc' then ASpec.Order := ttoSeriesDesc
+      else ASpec.Order := ttoSeriesAsc;
+    end;
   end;
   if Fresh('formatter') then
   begin

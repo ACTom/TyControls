@@ -172,6 +172,7 @@ begin
     '  --advchart-minor-tick-length: 3px;' + LineEnding +
     '  --advchart-name-gap: 15px;' + LineEnding +
     '  --advchart-tick-length: 5px;' + LineEnding +
+    '  --advchart-axispointer-margin: 3px;' + LineEnding +
     '  --advchart-tooltip-gap: 20px;' + LineEnding +
     '  --advchart-tooltip-gutter: 20px;' + LineEnding +
     '  --advchart-tooltip-marker: 10px;' + LineEnding +
@@ -1279,6 +1280,28 @@ begin
     '  color: var(--on-surface);' + LineEnding +
     '  font-size: var(--font-size-base);' + LineEnding +
     '  font-weight: var(--font-weight-bold);' + LineEnding +
+    '}' + LineEnding +
+    '/* The axis pointer: the line that follows the cursor along an axis, the band' + LineEnding +
+    '   a `shadow` draws instead, and the label at the axis end.' + LineEnding +
+    '' + LineEnding +
+    '   The line reads like a split line and not like an axis line -- it is a' + LineEnding +
+    '   reading aid over the plot, not a piece of the frame -- so it takes the same' + LineEnding +
+    '   --border it does. The BAND is alpha over the ink for the reason every other' + LineEnding +
+    '   band in this chart is: it darkens a light theme and lightens a dark one from' + LineEnding +
+    '   one declaration, where upstream''s literal rgba grey does neither.' + LineEnding +
+    '' + LineEnding +
+    '   The LABEL is the one piece here that is meant to stand out: upstream inks it' + LineEnding +
+    '   white on an indigo chip, which is a colour this vocabulary already has a' + LineEnding +
+    '   name for. Accent, therefore -- so a re-skinned chart labels its pointer in' + LineEnding +
+    '   the skin''s own colour instead of ECharts''. */' + LineEnding +
+    'TyAdvChartAxisPointer { border-color: var(--border); border-width: 1px; }' + LineEnding +
+    'TyAdvChartAxisPointerShadow { background: alpha(var(--on-surface), 0.10); }' + LineEnding +
+    'TyAdvChartAxisPointerLabel {' + LineEnding +
+    '  background: var(--accent);' + LineEnding +
+    '  color: var(--on-accent);' + LineEnding +
+    '  border-radius: var(--radius-sm);' + LineEnding +
+    '  padding: 5px 7px;' + LineEnding +
+    '  font-size: var(--font-size-base);' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* ── ListGroupPanel (navigation accordion; own keys, not the tree column header''s) ────── */' + LineEnding +
