@@ -45,7 +45,9 @@ delayMs := ActiveController.Metric(TyScrollBarAutoHideVar, TyScrollBarAutoHideDe
 
 主题不定义这个变量时，`Metric` 回退到代码里的 `TyScrollBarAutoHideDef`（`-1`）——所以 `light.tycss` / `dark.tycss` 什么都不用写。现代主题（`win11` / `macos` / `fluent` / `material3`）在自己的 `:root` 里写 `1200`；经典主题（`classic` / `xp` / `aero`）不写。
 
-> **待验证（实现第一步）**：`ResolveMetric` 能不能解析负数 `-1`。它下游是 `TyEvalLength`（`'6px'→6`），负号是否被接受未经证实。若不行，改用 `TyEvalFloat` 或在 `ResolveMetric` 补负号支持——**先写一条测试确认，再动代码**。
+> **`-1` 可行，已查证（2026-09-14）**：`ResolveMetric`（`tyControls.StyleModel.pas:1156`）→ `TyEvalLength`（`tyControls.Css.Values.pas:361`）→ `ParsePctOrNum` → `StrToFloat`。
+> 中间那道「裸 `--name` 当变量引用」的判断要求**头两个字符都是 `-`**（`(E[1]='-') and (E[2]='-')`），`-1` 的第二个字符是 `1`，躲得过去；也不以 `px` 结尾，不会被剥尾。`StrToFloat` 接受负号，外层还有 `try/except` 回退默认值。
+> **求值代码一行都不用改。** §10 仍保留一条负号回归测试——这条链路上任何一环收紧了字符判断，都会静默把 `-1` 变成默认值。
 
 > **皮肤连锁**：15 个内置皮肤编译进 `BuiltinThemeData`，改了 `themes/builtin/*.tycss` 必须重跑 `scripts/gen-builtinthemes.ps1`。给现代皮肤加这个变量时一并处理。
 
