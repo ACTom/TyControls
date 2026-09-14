@@ -32,6 +32,7 @@ type
     procedure PositionChangeCountsAsActivity;
     procedure PointerOnBarHoldsItOpen;
     procedure DraggingHoldsItOpen;
+    procedure DesignTimeNeverHides;
     procedure FadingIgnoresAnimationsEnabled;
     procedure FadeInIsNotCutShortByTheIdleClock;
     procedure TurningAutoHideOffUnhidesAFadedBar;
@@ -75,6 +76,8 @@ type
     { DoEnter/DoExit 同样是 protected。 }
     procedure FocusIn;
     procedure FocusOut;
+    { SetDesigning 在 TComponent 上也是 protected,同一个口子。 }
+    procedure MarkDesigning(AValue: Boolean);
     { 「延时表还有没有活干」这个判断在 protected 里。**能验的只有这个判断**:
       无头没有句柄就不建表(EnsureHideTimer 直接 Exit),FHideTimer 恒为 nil,
       「停表」这个动作本身在无头下不存在。 }
@@ -130,6 +133,11 @@ end;
 procedure TBarAccess.FocusOut;
 begin
   DoExit;
+end;
+
+procedure TBarAccess.MarkDesigning(AValue: Boolean);
+begin
+  SetDesigning(AValue, False);
 end;
 
 function TBarAccess.TimerNeeded: Boolean;
@@ -455,6 +463,18 @@ begin
   FBar.AutoHideTick(0);                       // delay=0 -> 立刻该淡
   FBar.AutoHideTick(TyScrollBarFadeOutMs);
   AssertEquals('松手之后才轮到它淡', 0.0, FBar.FadeLevel, 0.001);
+end;
+
+procedure TTyScrollBarAutoHideTests.DesignTimeNeverHides;
+begin
+  UseThemeCss(':root { --scrollbar-auto-hide: 0; }');   // 最激进：立即隐藏
+  TBarAccess(FBar).MarkDesigning(True);
+  FBar.AutoHideTick(99999);
+  { 第二个 tick 不能省。第一个 tick 只是「武装」淡出——StartFade 不动
+    FadeLevel，所以门控删没删，这一刻都读 1.0。真正把两种实现分开的是
+    下面这一下：门控还在就什么都不会发生，门控没了就会跑完 200ms 淡出。 }
+  FBar.AutoHideTick(TyScrollBarFadeOutMs);
+  AssertEquals('设计器里看不见滚动条是不可接受的', 1.0, FBar.FadeLevel, 0.001);
 end;
 
 procedure TTyScrollBarAutoHideTests.FadingIgnoresAnimationsEnabled;
