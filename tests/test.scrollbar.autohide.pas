@@ -6,7 +6,7 @@ uses
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.ScrollBar, tyControls.Panel,
   { 内嵌了滚动条的宿主——转发那一组测试要的。 }
-  tyControls.ListBox, tyControls.Memo;
+  tyControls.ListBox, tyControls.Memo, tyControls.Grid;
 
 type
   TTyScrollBarAutoHideTests = class(TTestCase)
@@ -22,6 +22,7 @@ type
     function NewListBox: TTyListBox;
     procedure FillListBox(ALb: TTyListBox);
     function NewMemo: TTyMemo;
+    function NewGrid: TTyStringGrid;
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -77,6 +78,8 @@ type
     procedure MemoForwardsToItsEmbeddedBars;
     procedure MemoForwardsToBarsBornLater;
     procedure MemoDeclaredDefaultMatchesConstructed;
+    procedure GridForwardsToItsEmbeddedBars;
+    procedure GridDeclaredDefaultMatchesConstructed;
   end;
 
 implementation
@@ -1156,6 +1159,32 @@ end;
 procedure TTyScrollBarAutoHideTests.MemoDeclaredDefaultMatchesConstructed;
 begin
   CheckHostDeclaredDefault(NewMemo, 'Memo');
+end;
+
+function TTyScrollBarAutoHideTests.NewGrid: TTyStringGrid;
+begin
+  { 属性和两条条都长在 TTyCustomGrid 上；用发布出去的那个后代建，
+    顺带验一句「后代真的继承得到」——用户拖到窗体上的是它，不是基类。 }
+  Result := TTyStringGrid.Create(FForm);
+  Result.Parent := FForm;
+  Result.Controller := FCtl;
+  Result.SetBounds(0, 0, 200, 120);
+end;
+
+procedure TTyScrollBarAutoHideTests.GridForwardsToItsEmbeddedBars;
+var
+  g: TTyStringGrid;
+begin
+  { 网格的两条在构造函数里就建好了(只是 Visible := False)，不用塞内容——
+    所以这里走的是 setter 那一半。 }
+  g := NewGrid;
+  g.ScrollBarAutoHide := sbahNever;
+  CheckBothBarsGot(g, sbahNever, 'Grid');
+end;
+
+procedure TTyScrollBarAutoHideTests.GridDeclaredDefaultMatchesConstructed;
+begin
+  CheckHostDeclaredDefault(NewGrid, 'Grid');
 end;
 
 initialization

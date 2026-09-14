@@ -976,6 +976,7 @@ type
     FHideSelectionWhenInactive: Boolean;
     FVScroll:          TTyScrollBar;
     FHScroll:          TTyScrollBar;
+    FScrollBarAutoHide: TTyScrollBarAutoHide;
     FSyncingScroll:    Boolean;      { 防止程序改 Position 反弹回来 }
     FAutoFillColumns:  Boolean;
     FDefaultColWidth:  Integer;
@@ -1019,6 +1020,7 @@ type
     procedure SetBackgroundScope(AValue: TTyGridBackgroundScope);
     procedure VScrollChange(Sender: TObject);
     procedure HScrollChange(Sender: TObject);
+    procedure SetScrollBarAutoHide(const AValue: TTyScrollBarAutoHide);
     procedure HeaderChanged(Sender: TObject);
     procedure SetHeader(AValue: TTyHeader);
     procedure SetRowCount(AValue: Integer);
@@ -1840,6 +1842,10 @@ type
       整格滚动所以每次滚动必然换格 —— 照名字办事,LeftCol/TopRow 真的变了才发。 }
     property OnTopLeftChanged: TNotifyEvent
       read FOnTopLeftChanged write SetOnTopLeftChanged;
+    { 这个网格的两条滚动条要不要在没人用的时候淡出。转发给内嵌条,
+      语义见 TTyScrollBar.AutoHide。 }
+    property ScrollBarAutoHide: TTyScrollBarAutoHide
+      read FScrollBarAutoHide write SetScrollBarAutoHide default sbahDefault;
     { 底部汇总带。内容由派生类给(TTyStringGrid 按列聚合)。 }
     property ShowFooter: Boolean read FShowFooter write SetShowFooter default False;
     property FooterHeight: Integer read FFooterHeight write SetFooterHeight default 24;
@@ -3897,6 +3903,7 @@ begin
   FDragCol := -1;
   FDragRow := -1;
   FResizeCol := -1;
+  FScrollBarAutoHide := sbahDefault;   { 与 published 的 default 一致;两条条在下面才建,所以要先于它们 }
 
   { 两条内嵌滚动条。csNoDesignVisible:内部子控件不该出现在设计器的对象树里。
     TabStop:=False:独立摆放的 TTyScrollBar 是可聚焦的(它自己有方向键/翻页键),但
@@ -3907,6 +3914,9 @@ begin
   FVScroll.Kind := sbVertical;
   FVScroll.TabStop := False;
   FVScroll.AnimationsEnabled := False;
+  { 这里读的必然是刚赋的 sbahDefault(谁也没机会先设属性),写它是为了这一行
+    跟 ListBox/Memo 那两个惰性宿主长得一样:哪天这两条改成惰性建,值不会悄悄丢。 }
+  FVScroll.AutoHide := FScrollBarAutoHide;
   FVScroll.OnChange := @VScrollChange;
   FVScroll.ControlStyle := FVScroll.ControlStyle + [csNoDesignVisible];
   FVScroll.Visible := False;
@@ -3916,6 +3926,7 @@ begin
   FHScroll.Kind := sbHorizontal;
   FHScroll.TabStop := False;
   FHScroll.AnimationsEnabled := False;
+  FHScroll.AutoHide := FScrollBarAutoHide;   { 同上 }
   FHScroll.OnChange := @HScrollChange;
   FHScroll.ControlStyle := FHScroll.ControlStyle + [csNoDesignVisible];
   FHScroll.Visible := False;
@@ -4233,6 +4244,16 @@ begin
     回弹不用担心:SetScrollX -> SyncScrollBars 期间 FSyncingScroll 为真,
     再进到这里第一行就退出去了。 }
   ScrollX := FHScroll.Position;
+end;
+
+procedure TTyCustomGrid.SetScrollBarAutoHide(const AValue: TTyScrollBarAutoHide);
+begin
+  if FScrollBarAutoHide = AValue then Exit;
+  FScrollBarAutoHide := AValue;
+  { 两条条在构造函数里就建好了,所以这里的 nil 判断只是防御 —— 真正把值
+    送出去的就是这两句。 }
+  if FVScroll <> nil then FVScroll.AutoHide := AValue;
+  if FHScroll <> nil then FHScroll.AutoHide := AValue;
 end;
 
 procedure TTyCustomGrid.Resize;
