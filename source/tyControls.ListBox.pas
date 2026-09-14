@@ -36,6 +36,7 @@ type
     FHOffset: Integer;
     FHScrollBar: TTyScrollBar;
     FSyncingHScroll: Boolean;
+    FScrollBarAutoHide: TTyScrollBarAutoHide;
     FMultiSelect: Boolean;
     FSelected: array of Boolean;
     FSelAnchor: Integer;
@@ -69,6 +70,7 @@ type
     procedure ScrollBarChange(Sender: TObject);
     procedure HScrollBarChange(Sender: TObject);
     procedure SetScrollWidth(const AValue: Integer);
+    procedure SetScrollBarAutoHide(const AValue: TTyScrollBarAutoHide);
     { A bar's thickness in device px -- the same '--scrollbar-size' metric for both, so the
       horizontal one is as thick as the vertical one is wide on every theme and density. }
     function ScrollBarThickness: Integer;
@@ -292,6 +294,10 @@ type
       application knows how it draws them (a row with a swatch or a glyph is wider than its
       text). An app that wants auto-fit measures its own widest row and assigns it here. }
     property ScrollWidth: Integer read FScrollWidth write SetScrollWidth default 0;
+    { 这个列表的两条滚动条要不要在没人用的时候淡出。转发给内嵌条，
+      语义见 TTyScrollBar.AutoHide。 }
+    property ScrollBarAutoHide: TTyScrollBarAutoHide
+      read FScrollBarAutoHide write SetScrollBarAutoHide default sbahDefault;
     property TopIndex: Integer read FTopIndex write SetTopIndex default 0;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
     { LCL's name and shape for the same notification (stdctrls.pp:668). Fires alongside
@@ -330,6 +336,7 @@ begin
   FHOffset := 0;
   FHScrollBar := nil;
   FSyncingHScroll := False;
+  FScrollBarAutoHide := sbahDefault;   { 与 published 的 default 一致 }
   FSelAnchor := -1;
   FExtendedSelect := True;        { LCL's default discipline }
   FLockSelectionChange := 0;
@@ -771,6 +778,17 @@ begin
   Invalidate;
 end;
 
+procedure TTyListBox.SetScrollBarAutoHide(const AValue: TTyScrollBarAutoHide);
+begin
+  if FScrollBarAutoHide = AValue then Exit;
+  FScrollBarAutoHide := AValue;
+  { 两条都是惰性创建的，建的时候也要带上——所以创建处同样要写一遍。
+    这里管「已经建好的」，创建处管「之后才建的」；只写这一半的话，
+    先设属性后滚动的用法(在 .lfm 里设好、运行时才填满)会静静丢值。 }
+  if FScrollBar <> nil then FScrollBar.AutoHide := AValue;
+  if FHScrollBar <> nil then FHScrollBar.AutoHide := AValue;
+end;
+
 procedure TTyListBox.EnsureSelectedLen;
 begin
   if Length(FSelected) <> FItems.Count then
@@ -983,6 +1001,7 @@ begin
       FHScrollBar.TabStop := False;
       FHScrollBar.OnChange := @HScrollBarChange;
       FHScrollBar.AnimationsEnabled := False;
+      FHScrollBar.AutoHide := FScrollBarAutoHide;   // the bar is born AFTER the property may have been set
       FHScrollBar.ControlStyle := FHScrollBar.ControlStyle + [csNoDesignVisible];
     end;
     { alBottom, and LCL aligns alBottom BEFORE alRight/alLeft -- so the horizontal bar takes
@@ -1012,6 +1031,7 @@ begin
       // Embedded scrollbar drives content scrolling: keep it instant (no thumb
       // glide) so scrolling never lags behind the wheel/keyboard.
       FScrollBar.AnimationsEnabled := False;
+      FScrollBar.AutoHide := FScrollBarAutoHide;   // the bar is born AFTER the property may have been set
       FScrollBar.ControlStyle := FScrollBar.ControlStyle + [csNoDesignVisible];   // internal: never a designable child
     end;
     { WHICH EDGE THE BAR DOCKS TO -- set on EVERY call, not once at creation, because it can

@@ -2,9 +2,11 @@ unit test.scrollbar.autohide;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, TypInfo, fpcunit, testregistry, Forms, Graphics,
+  Classes, SysUtils, TypInfo, fpcunit, testregistry, Forms, Controls, Graphics,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Controller, tyControls.ScrollBar, tyControls.Panel;
+  tyControls.Types, tyControls.Controller, tyControls.ScrollBar, tyControls.Panel,
+  { 内嵌了滚动条的宿主——转发那一组测试要的。 }
+  tyControls.ListBox;
 
 type
   TTyScrollBarAutoHideTests = class(TTestCase)
@@ -13,6 +15,12 @@ type
     FCtl: TTyStyleController;
     FBar: TTyScrollBar;
     procedure UseThemeCss(const ACss: string);
+    { 宿主转发那一组共用的两个探针，见各自的实现处。 }
+    procedure CheckHostDeclaredDefault(AHost: TComponent; const AWhat: string);
+    procedure CheckBothBarsGot(AHost: TWinControl; AValue: TTyScrollBarAutoHide;
+      const AWhat: string);
+    function NewListBox: TTyListBox;
+    procedure FillListBox(ALb: TTyListBox);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -58,6 +66,13 @@ type
     procedure AtRestTheThemeStyleIsHandedOverUntouched;
     procedure FadeReachesThePaintedPixels;
     procedure HidingShowsTheRealParentBackgroundNotAFlatSlab;
+    { --- 宿主转发 ------------------------------------------------------------
+      每个宿主一组，故意不写成循环：六个宿主的构造路径各不相同(两个惰性、
+      四个急切，其中 ScrollBox 的「急切」还发生在 inherited Create 里面)，
+      挂了一个要能一眼看出是哪个。 }
+    procedure ListBoxForwardsToItsEmbeddedBars;
+    procedure ListBoxForwardsToBarsBornLater;
+    procedure ListBoxDeclaredDefaultMatchesConstructed;
   end;
 
 implementation
@@ -1004,6 +1019,101 @@ begin
   end;
   AssertTrue(Format('隐身那块要透出真的渐变，不是一块平板(顶=%d 底=%d)',
     [top, bot]), bot - top > 100);
+end;
+
+{ ---- 宿主转发 -------------------------------------------------------------- }
+
+function FindEmbeddedBar(AHost: TWinControl; AKind: TTyScrollBarKind): TTyScrollBar;
+var
+  i: Integer;
+begin
+  { 内嵌条是宿主的真子控件(建的时候 Parent := Self)，所以遍历得到。
+    这样就不用为了测试给宿主开一个 public 函数——那种测试专用 API
+    一旦进了公开面就再也删不掉。 }
+  Result := nil;
+  for i := 0 to AHost.ControlCount - 1 do
+    if (AHost.Controls[i] is TTyScrollBar)
+       and (TTyScrollBar(AHost.Controls[i]).Kind = AKind) then
+      Exit(TTyScrollBar(AHost.Controls[i]));
+end;
+
+procedure TTyScrollBarAutoHideTests.CheckBothBarsGot(AHost: TWinControl;
+  AValue: TTyScrollBarAutoHide; const AWhat: string);
+var
+  v, h: TTyScrollBar;
+begin
+  { 两条都查。转发这种四平八稳的代码最容易只写一半——竖条接了、横条忘了，
+    而只查竖条的测试对这种一半照样是绿的。 }
+  v := FindEmbeddedBar(AHost, sbVertical);
+  h := FindEmbeddedBar(AHost, sbHorizontal);
+  AssertTrue(AWhat + '：内嵌竖条应当已经存在', v <> nil);
+  AssertTrue(AWhat + '：内嵌横条应当已经存在', h <> nil);
+  AssertEquals(AWhat + '：属性必须传到内嵌竖条上', Ord(AValue), Ord(v.AutoHide));
+  AssertEquals(AWhat + '：属性必须传到内嵌横条上', Ord(AValue), Ord(h.AutoHide));
+end;
+
+procedure TTyScrollBarAutoHideTests.CheckHostDeclaredDefault(AHost: TComponent;
+  const AWhat: string);
+var
+  pi: PPropInfo;
+begin
+  { 声明的 default 与构造值不一致 -> .lfm 里写的值被当默认省略 -> 加载后丢失。
+    全库没有能扫出这种不一致的统一守卫，逐属性写就是全部机制；断言消息里带
+    宿主名，挂哪个一眼看得出。 }
+  pi := GetPropInfo(AHost, 'ScrollBarAutoHide');
+  AssertTrue(AWhat + '：ScrollBarAutoHide 必须是 published', pi <> nil);
+  AssertEquals(AWhat + '：声明的 default 必须等于构造函数赋的值',
+    Integer(GetOrdProp(AHost, pi)), Integer(pi^.Default));
+end;
+
+function TTyScrollBarAutoHideTests.NewListBox: TTyListBox;
+begin
+  Result := TTyListBox.Create(FForm);
+  Result.Parent := FForm;
+  Result.Controller := FCtl;
+  Result.SetBounds(0, 0, 120, 60);
+end;
+
+procedure TTyScrollBarAutoHideTests.FillListBox(ALb: TTyListBox);
+var
+  i: Integer;
+begin
+  { ListBox 的两条是**惰性创建**的：不塞够条目竖条根本不存在，于是
+    「找不到条」会被误读成「转发没生效」。横条还要 ScrollWidth 撑出横向溢出。 }
+  for i := 1 to 100 do ALb.Items.Add('item ' + IntToStr(i));
+  ALb.ScrollWidth := 600;
+end;
+
+procedure TTyScrollBarAutoHideTests.ListBoxForwardsToItsEmbeddedBars;
+var
+  lb: TTyListBox;
+begin
+  { 「建好了没接线」是本库的默认故障，已经八次。转发这种四平八稳的代码最容易
+    只写一半——属性加了，创建处没传。 }
+  lb := NewListBox;
+  FillListBox(lb);
+  lb.ScrollBarAutoHide := sbahNever;
+  CheckBothBarsGot(lb, sbahNever, 'ListBox');
+end;
+
+procedure TTyScrollBarAutoHideTests.ListBoxForwardsToBarsBornLater;
+var
+  lb: TTyListBox;
+begin
+  { setter 管「已经建好的」，创建处管「之后才建的」。只写 setter 的话，
+    先设属性后滚动的用法会静静丢值——而那正是最自然的用法：在 .lfm 里设好，
+    列表运行时才填满。 }
+  lb := NewListBox;
+  AssertTrue('前置条件：这会儿一条都还没有',
+    (FindEmbeddedBar(lb, sbVertical) = nil) and (FindEmbeddedBar(lb, sbHorizontal) = nil));
+  lb.ScrollBarAutoHide := sbahAuto;
+  FillListBox(lb);
+  CheckBothBarsGot(lb, sbahAuto, 'ListBox(后生的条)');
+end;
+
+procedure TTyScrollBarAutoHideTests.ListBoxDeclaredDefaultMatchesConstructed;
+begin
+  CheckHostDeclaredDefault(NewListBox, 'ListBox');
 end;
 
 initialization
