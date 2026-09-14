@@ -34,6 +34,7 @@ type
     procedure FadingIgnoresAnimationsEnabled;
     procedure FadeInIsNotCutShortByTheIdleClock;
     procedure TurningAutoHideOffUnhidesAFadedBar;
+    procedure SnappedMirrorCountsAsActivity;
   end;
 
 implementation
@@ -289,6 +290,21 @@ begin
   AssertEquals(0.0, FBar.FadeLevel, 0.001);
   FBar.AutoHide := sbahNever;
   AssertEquals('关掉自动隐藏就得当场看得见,不能等谁来推一拍', 1.0, FBar.FadeLevel, 0.001);
+end;
+
+procedure TTyScrollBarAutoHideTests.SnappedMirrorCountsAsActivity;
+begin
+  { 宿主自己滚完内容、再把位置镜像给滑块的那条路是 SetPositionSnapped,它
+    **不经过 Position 的 setter**,所以 PositionChangeCountsAsActivity 守不到它。
+    全库只有 TTyGrid 这么走(其余五个宿主都是 Position := ),而网格正是最该
+    看见滚动条出来的控件 —— 这条不算「在用」的话,网格滚一整天条也不露面。 }
+  UseThemeCss(':root { --scrollbar-auto-hide: 1000; }');
+  FBar.AutoHideTick(1000);
+  FBar.AutoHideTick(TyScrollBarFadeOutMs);
+  AssertEquals(0.0, FBar.FadeLevel, 0.001);
+  FBar.SetPositionSnapped(42);
+  FBar.AutoHideTick(TyScrollBarFadeInMs);
+  AssertEquals('宿主镜像过来的位置也算在用', 1.0, FBar.FadeLevel, 0.001);
 end;
 
 initialization

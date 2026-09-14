@@ -669,6 +669,17 @@ begin
   FPosition := Clamped;
   Invalidate;
   if Assigned(FOnChange) then FOnChange(Self);
+
+  { 镜像过来的位置一样算「在用」。这条路**绕开了 Position 的 setter**,所以
+    唤醒必须在这里单独写一遍 —— 全库只有 TTyGrid 走它(其余五个宿主都是
+    Position := ),而网格恰恰是最该看见滚动条出来的那个控件。
+
+    这条路跳过位置缓动,是因为内容已经被宿主挪走了、滑块再缓动追过去就不跟手;
+    那跟「这条滚动条该不该看得见」是两码事,别把两件事连坐。
+
+    网格有两处调用写着 if not Dragging then ——那时候条本来就被 FDragging
+    按住不放,这里不会重复唤醒,别当成冗余顺手删掉。 }
+  NoteActivity;
 end;
 
 procedure TTyScrollBar.SetKind(const AValue: TTyScrollBarKind);
