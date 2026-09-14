@@ -43,7 +43,9 @@ const
 delayMs := ActiveController.Metric(TyScrollBarAutoHideVar, TyScrollBarAutoHideDef);
 ```
 
-主题不定义这个变量时，`Metric` 回退到代码里的 `TyScrollBarAutoHideDef`（`-1`）——所以 `light.tycss` / `dark.tycss` 什么都不用写。现代主题（`win11` / `macos` / `fluent` / `material3`）在自己的 `:root` 里写 `1200`；经典主题（`classic` / `xp` / `aero`）不写。
+主题不定义这个变量时，`Metric` 回退到代码里的 `TyScrollBarAutoHideDef`（`-1`）——所以 `light.tycss` / `dark.tycss` 什么都不用写。**六个**现代皮肤在自己的 `:root` 里写 `1200`：`win11` / `macos` / `fluent` / `material3` / `adwaita` / `ubuntu`（后两个是实现期加的——GNOME/libadwaita 确实是 overlay 自动隐藏，Yaru 是 GTK，一根永远杵着的条反而不像）。其余九个不写，继承 `-1`。
+
+其中两个「看着像现代、故意不开」的值得记下来，免得下次有人当漏网之鱼补上：**`win10`** —— Win32 桌面滚动条从来不自动隐藏，只有 UWP 会；**`office`** —— 这个皮肤仿的是桌面版 Office，不是 Office 网页版。
 
 > **`-1` 可行，已查证（2026-09-14）**：`ResolveMetric`（`tyControls.StyleModel.pas:1156`）→ `TyEvalLength`（`tyControls.Css.Values.pas:361`）→ `ParsePctOrNum` → `StrToFloat`。
 > 中间那道「裸 `--name` 当变量引用」的判断要求**头两个字符都是 `-`**（`(E[1]='-') and (E[2]='-')`），`-1` 的第二个字符是 `1`，躲得过去；也不以 `px` 结尾，不会被剥尾。`StrToFloat` 接受负号，外层还有 `try/except` 回退默认值。
@@ -280,8 +282,19 @@ headless **测不到**、必须真机看的：
 1. 默认主题下行为与 3.0 完全一致（滚动条一直显示）
 2. 现代主题下：滚动出现、停手 1.2 s 淡出、鼠标移到条上持续显示
 3. `AutoHide := sbahNever` 能在自动隐藏的主题下强制常显
-4. `Form.StyleOverride` 里一行 **`:root { --scrollbar-auto-hide: -1; }`** 能全局关掉。
+4. 全局关掉:**`Controller.StyleOverride`** 里一行 `:root { --scrollbar-auto-hide: -1; }`。
 
-   **必须是 `:root`,写进类型规则不生效**（2026-09-14 查证）：`Metric` 读的是 `FMergedVars`，而 `RebuildMergedVars`（`tyControls.StyleModel.pas:1199`）只收 `FBaseVars` + 用户 `:root` + 当前 `@mode` 的 `:root`。写在 `TyScrollBar { ... }` 里的 `--var` 只进那条规则自己的 `Decls`，永远到不了 `FMergedVars`。更糟的是规则里的未知属性是**静默丢弃**的（不像未知函数会抛），所以照错写法验收会看到「没报错、看起来生效了」而其实什么都没发生。
+   > **这一条改了两次，两次的错法一样：静默失败**（2026-09-15 定稿）。
+   >
+   > 最初写的是往**类型规则**里塞 `--var`，改正过一次；但**载体也是错的**，改正时没看出来。`TTyForm.StyleOverride`（以及任何控件的）是一个**裸声明块**——`TyParseOverride`（`tyControls.Css.Parser.pas:517`）把文本包成 `_ovr{ … ;}` 交给 `ResolveOverride`，产出的只有一个 `TTyStyleSet`，**永远碰不到 `FMergedVars`**。喂给它一个 `:root { … }` 规则会解析失败、返回 `False`、留下一张空覆盖层，一声不吭。
+   >
+   > 能用的是**控制器**那一层（`tyControls.Controller.pas:128`）：它收的是**带选择器的完整 tycss**，走 `ApplyStyleOverride` → `LoadFromCssAdditive` → `FVars` → `FMergedVars`，而 `Metric` 读的正是 `FMergedVars`。
+   >
+   > ```pascal
+   > TyDefaultController.StyleOverride := ':root { --scrollbar-auto-hide: -1; }';
+   > ```
+   >
+   > **两次都是「没报错、看着像生效了、其实什么都没发生」**——照错版本去验收，签的字是一个 no-op。控件级 override 和控制器级 override 收的根本不是同一种文本，这个区别在别处也会咬人。
+
 5. 6 个宿主的内嵌条都听话
 6. 全量测试绿，无内存泄漏

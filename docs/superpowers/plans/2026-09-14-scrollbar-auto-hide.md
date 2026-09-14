@@ -25,7 +25,7 @@
 |---|---|
 | `source/tyControls.ScrollBar.pas` | 主体：类型、常量、属性、状态机、动画、绘制接入 |
 | `source/tyControls.Grid.pas` / `ListBox` / `ListView` / `Memo` / `ScrollBox` / `TreeView` | 各加一个 `ScrollBarAutoHide` published 属性并转发给内嵌条 |
-| `themes/builtin/win11.tycss` / `macos` / `fluent` / `material3` | `:root` 里写 `--scrollbar-auto-hide: 1200` |
+| `themes/builtin/` 六个皮肤 | `:root` 里写 `--scrollbar-auto-hide: 1200`：`win11` / `macos` / `fluent` / `material3` / **`adwaita` / `ubuntu`**（后两个实现期追加，GNOME 确实是 overlay 自动隐藏） |
 | `source/tyControls.BuiltinThemeData.pas` | 生成器产物，改皮肤后重跑 `scripts/gen-builtinthemes.ps1` |
 | `tests/test.scrollbar.autohide.pas` | **新建**，本特性全部 headless 测试 |
 | `tests/tytests.lpr` | uses 段注册上面这个新单元 |
