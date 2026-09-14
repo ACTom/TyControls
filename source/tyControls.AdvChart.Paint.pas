@@ -87,7 +87,19 @@ type
     place decides that, so the two can never disagree. }
   TTyChartDatumRef = record
     SeriesIndex: Integer;
+    { The row in the store's CURRENT VIEW -- the subscript Get(dim, index)
+      wants, and the one a reader almost always means. }
     DataIndex: Integer;
+    { The same row as it arrived, before any filter -- what SetCalculated
+      addresses and what a callback reports.
+
+      TWO FIELDS BECAUSE THERE ARE TWO ANSWERS, and one name was carrying
+      both: cartesian marks put the VIEW index here and pie sectors the RAW
+      one, so a reader taking DataIndex to the store was right on one series
+      type and silently off by the dropped rows on the other. Nothing had
+      noticed because the only row filtering in the control is the pie's.
+      TTyChartCallbackParams has declared both fields since it was written. }
+    RawDataIndex: Integer;
   end;
 
   { WORDS ON A MARK, and -- once the label pass has placed them -- everything
@@ -175,7 +187,10 @@ type
   end;
 
 function TyChartNoDatum: TTyChartDatumRef;
-function TyChartDatum(ASeries, AData: Integer): TTyChartDatumRef;
+function TyChartDatum(ASeries, AData: Integer): TTyChartDatumRef; overload;
+{ When the two spaces disagree -- a pie, whose sectors skip the rows a
+  negative value removed and whose layout therefore counts in neither. }
+function TyChartDatum(ASeries, AData, ARaw: Integer): TTyChartDatumRef; overload;
 function TyChartDatumValid(const ADatum: TTyChartDatumRef): Boolean;
 { A style with nothing switched on: no fill, no stroke, fully opaque. Callers
   turn on what they want rather than remembering to turn off what they do not. }
@@ -205,12 +220,26 @@ function TyChartNoDatum: TTyChartDatumRef;
 begin
   Result.SeriesIndex := -1;
   Result.DataIndex := -1;
+  Result.RawDataIndex := -1;
 end;
 
 function TyChartDatum(ASeries, AData: Integer): TTyChartDatumRef;
 begin
   Result.SeriesIndex := ASeries;
   Result.DataIndex := AData;
+  { THE SAME ROW IN BOTH SPACES, which is the truth for every builder that
+    walks a store's view without the store having been filtered -- every
+    cartesian series in the control. A builder whose two answers differ says
+    so with the three-argument form; one that used this while they differed
+    would be making a claim it had not checked. }
+  Result.RawDataIndex := AData;
+end;
+
+function TyChartDatum(ASeries, AData, ARaw: Integer): TTyChartDatumRef;
+begin
+  Result.SeriesIndex := ASeries;
+  Result.DataIndex := AData;
+  Result.RawDataIndex := ARaw;
 end;
 
 function TyChartDatumValid(const ADatum: TTyChartDatumRef): Boolean;

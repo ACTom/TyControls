@@ -458,6 +458,27 @@ begin
   if TyTryParseChartColor(v.Text, c) then Result.Fill := c;
 end;
 
+{ HOW FAR OUTSIDE A MARK STILL COUNTS, in LOGICAL px -- the hit test scales it
+  by PPI, the shapes are already device px.
+
+  NOTHING WITH AREA GETS ANY. A bar, a wedge and a filled band are the size of
+  the thing they mean; slop on a bar would reach across the category gap into
+  its neighbour's, and upstream gives them none either.
+
+  A MARKER IS NOT THE SIZE OF THE THING IT MEANS. A line's default symbol is a
+  four-pixel emptyCircle standing for one whole row, and a target that small is
+  one the pointer keeps missing. Four logical px makes it something a hand can
+  hit while leaving two markers ten px apart still separate -- the hit test
+  answers with the TOPMOST element it contains, not the nearest, so overlapping
+  slop would quietly hand every tie to the later row.
+
+  A LINE IS A RIBBON. PolylineNear measures to the mathematical segment and the
+  shape record carries no stroke width, so half the pen has to arrive as slop
+  or a three-pixel line is hittable only along its centre line. }
+const
+  cHitSlopSymbolLogical = 4;
+  cHitSlopLineLogical = 4;
+
 function MarkElement(const AShape: TTyChartShape; const AVisual: TTySeriesVisual;
   ASeries, ARow: Integer): TTyChartElement;
 begin
@@ -775,6 +796,7 @@ var
       else sv.Fill := AVisual.EmptyFill;
     end;
     el := MarkElement(sh, sv, ABinding.SeriesIndex, ARow);
+    el.HitSlopLogical := cHitSlopSymbolLogical;
     el.Caption.Text := CaptionFor(AVisual, AStore, ARow);
     AList.Add(el);
     Result := True;
@@ -888,6 +910,9 @@ var
       and (AVisual.FillGradient.Kind <> cgkNone) then
       v.StrokeGradient := AVisual.FillGradient;
     el := MarkElement(TyShapePolyline(up), v, ABinding.SeriesIndex, -1);
+    { HALF THE PEN PLUS THE RIBBON. `v.StrokeWidthLogical` is already the
+      resolved width -- the default 2 was filled in a few lines up. }
+    el.HitSlopLogical := v.StrokeWidthLogical / 2 + cHitSlopLineLogical;
     AList.Add(el);
     Inc(Result);
 
@@ -1047,6 +1072,7 @@ begin
       else v.Fill := AVisual.EmptyFill;
     end;
     el := MarkElement(shape, v, ABinding.SeriesIndex, i);
+    el.HitSlopLogical := cHitSlopSymbolLogical;
     el.Caption.Text := CaptionFor(AVisual, AStore, i);
     AList.Add(el);
     Inc(Result);

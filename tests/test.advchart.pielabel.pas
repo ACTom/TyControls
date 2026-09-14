@@ -120,7 +120,11 @@ function TAdvChartPieLabelTest.Slice(AStart, AEnd: Double): TTyPieSector;
 begin
   Result := Default(TTyPieSector);
   Result.Valid := True;
+  { BOTH ROW SPACES. A layout built by hand here stands for one whose store
+    was never filtered, so the two agree -- but they have to be SET to agree,
+    and a fixture that sets only one describes a pie that could not exist. }
   Result.RawIndex := 0;
+  Result.Index := 0;
   Result.CX := CX;
   Result.CY := CY;
   Result.R0 := R0;
@@ -481,8 +485,10 @@ begin
     placement is exercised in both directions by the same fixture. }
   Result.Sectors[0] := Slice(-Pi / 4, Pi / 4);
   Result.Sectors[0].RawIndex := 0;
+  Result.Sectors[0].Index := 0;
   Result.Sectors[1] := Slice(Pi * 0.75, Pi * 1.25);
   Result.Sectors[1].RawIndex := 1;
+  Result.Sectors[1].Index := 1;
 end;
 
 procedure TAdvChartPieLabelTest.TestTheLeftHandSideMirrorsEveryHorizontalTerm;

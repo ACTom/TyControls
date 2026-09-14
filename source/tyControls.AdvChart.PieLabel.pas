@@ -628,7 +628,9 @@ begin
     el.Caption.RotationRad := place.RotationRad;
     el.Caption.Truncate := ASpec.Overflow = tloTruncate;
     el.Silent := False;
-    el.Datum := TyChartDatum(ABinding.SeriesIndex, row);
+    { `row` is the RAW index -- see TyBuildPieMarks for why a pie needs both. }
+    el.Datum := TyChartDatum(ABinding.SeriesIndex,
+      ALayout.Sectors[i].Index, row);
     el.Z2 := 1;
     AList.Add(el);
     Inc(Result);

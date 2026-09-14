@@ -108,6 +108,11 @@ type
     minShowLabelAngle. StartRad..EndRad is what gets drawn. }
   TTyPieSector = record
     RawIndex: Integer;
+    { The same row in the store's CURRENT VIEW. Not derivable from the
+      subscript: a negative value is removed from the layout entirely, so the
+      sector index counts sectors and nothing else. Kept here because this is
+      the one pass that has both numbers in hand. }
+    Index: Integer;
     { False when the value is not a number. The sector still exists and still
       holds its place in the ordering; it simply has no geometry. }
     Valid: Boolean;
@@ -597,6 +602,7 @@ var
   dir: Double;
   validCount, i, n, k: Integer;
   rows: array of Integer;
+  views: array of Integer;
   vals: TTyDoubleArray;
   anti: Boolean;
 begin
@@ -642,6 +648,7 @@ begin
     place, which the equal-angle branch below counts on. }
   n := AStore.Count;
   SetLength(rows, n);
+  SetLength(views, n);
   SetLength(vals, n);
   k := 0;
   for i := 0 to n - 1 do
@@ -649,10 +656,12 @@ begin
     v := AStore.Get(ADim, i);
     if (not IsNan(v)) and (v < 0) then Continue;
     rows[k] := AStore.GetRawIndex(i);
+    views[k] := i;
     vals[k] := v;
     Inc(k);
   end;
   SetLength(rows, k);
+  SetLength(views, k);
   SetLength(vals, k);
   n := k;
 
@@ -683,6 +692,7 @@ begin
   for i := 0 to n - 1 do
   begin
     Result.Sectors[i].RawIndex := rows[i];
+    Result.Sectors[i].Index := views[i];
     Result.Sectors[i].Value := vals[i];
     Result.Sectors[i].CX := Result.CX;
     Result.Sectors[i].CY := Result.CY;
@@ -867,7 +877,13 @@ begin
     el.Z := AVisual.Z;
     el.Z2 := AVisual.Z2;
     el.Silent := False;
-    el.Datum := TyChartDatum(ABinding.SeriesIndex, ALayout.Sectors[i].RawIndex);
+    { BOTH SPACES, because a pie is the one place they part: a negative value
+      is removed from the layout entirely (not drawn as a zero-angle sector),
+      so the sector subscript is neither the view row nor the raw one. The
+      layout kept the raw index; the view index comes back through the store's
+      own inverse, which answers -1 for a row a filter has since dropped. }
+    el.Datum := TyChartDatum(ABinding.SeriesIndex,
+      ALayout.Sectors[i].Index, ALayout.Sectors[i].RawIndex);
     AList.Add(el);
     Inc(drawn);
   end;

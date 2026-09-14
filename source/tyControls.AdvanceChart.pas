@@ -134,6 +134,31 @@ type
       at a different PPI. }
     FStatic: TTyPaintCache;
     FStaticPPI: Integer;
+    { WHAT WAS DRAWN, KEPT. Every mark, wedge, label and legend entry of the
+      last static render, with its shape, its z and the datum behind it.
+
+      It used to be a local in PaintSeries, created and freed inside one call,
+      which made the paint list's own hit test unreachable by anything but a
+      test: by the time a pointer could ask what it was over, the answer had
+      been freed. Keeping it costs one element record per mark and buys the
+      only question a chart is ever asked interactively.
+
+      VALID EXACTLY WHEN THE STATIC LAYER IS. Both are produced by the same
+      pass over the same model at the same size, so one flag would do for both
+      -- but TTyPaintCache owns its own, and a second boolean is cheaper than
+      teaching the cache about a list it does not draw. DropStatic clears this
+      one; the next build refills it.
+
+      COORDINATES ARE LOCAL DEVICE px with the origin at (0,0) -- the space a
+      MouseMove's X,Y arrives in. A render through RenderTo with a non-zero
+      origin still fills it in local space, so a caller converting a point on
+      that path has to subtract the origin itself. }
+    FPaintList: TTyPaintList;
+    { The PPI the list was built at. The hit test scales HitSlopLogical by it,
+      so a list built for 96 and interrogated at 192 would give targets half
+      the size the marks are drawn at. }
+    FPaintListPPI: Integer;
+    FPaintListValid: Boolean;
     procedure SetOptionText(const AValue: string);
     function GetOptionText: string;
     function GetErrorText: string;
@@ -238,6 +263,25 @@ type
     function LegendInk: TTyLegendInk;
     { The legend's elements, into the chart's own paint list. }
     function BuildLegends(APPI: Integer; AList: TTyPaintList): Integer;
+    { Every series' elements into FPaintList, and nothing drawn. Separate from
+      PaintSeries because the list is the answer to "what is under the pointer"
+      as much as it is the instruction for "what to draw", and only one of
+      those two needs a painter -- this half never touches one. Returns how
+      many elements the builders reported adding. }
+    function BuildSeriesList(const AMeasurer: ITyTextMeasurer;
+      APPI: Integer): Integer;
+    { The binding slot holding a given series index, or -1. FBindings is
+      index-parallel to the option's series array only while nothing failed to
+      resolve, and a hole makes the two disagree. }
+    function SlotOfSeries(ASeriesIndex: Integer): Integer;
+    { Which row of a series a point is over, asked of the BASE axis.
+
+      For a run element -- a polyline, which is one element for a whole series
+      and therefore carries no row of its own. The pointer is already known to
+      be on the line; this only names which datum it is nearest, by inverting
+      the base axis and then walking the store for the closest value. -1 when
+      the series has no base axis, no store, or no column for it. }
+    function NearestRowOn(ASlot: Integer; AX, AY: Double): Integer;
     procedure PaintDynamic(APainter: TTyPainter; const ARect: TRect;
       APPI: Integer; const AMeasurer: ITyTextMeasurer);
     { Whether the dynamic layer would draw anything. False skips a whole
@@ -258,6 +302,16 @@ type
       named. This one is what a WINDOW wants, and works in client space:
       TTyPaintCache.Blit draws at the canvas origin. }
     procedure RenderCached(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    { THE POINTER MOVED, AND THE PICTURE DID NOT. Hover, press, release and
+      focus all arrive here; the base class answers them with Invalidate, and
+      this control's Invalidate rebuilds the stores, re-measures every label
+      and throws away the static bitmap.
+
+      Nothing in this class reads FHover or FPressed and nothing resolves a
+      hover style, so those five repaints were redrawing the identical picture
+      at the cost of a full rebuild each -- and a hover session begins with
+      exactly that. InvalidateFrame keeps the cache and blits it again. }
+    procedure PointerStateChanged; override;
     procedure Paint; override;
   public
     constructor Create(AOwner: TComponent); override;
@@ -287,6 +341,24 @@ type
       NOT a form-image grab: capturing a windowed control that way returns black
       on some widgetsets, which this library has already been caught by. }
     procedure SaveToPng(const AFileName: string);
+    { WHAT THE POINTER IS OVER, in the control's own coordinates.
+
+      The chart's first interactive question, and the first production caller
+      the paint list's hit test has ever had. Answers TyChartNoDatum for a
+      point over nothing, over decoration, or before the first render.
+
+      ONE HIT TEST, NOT TWO. The walk itself is TTyPaintList's -- reverse paint
+      order, silent elements skipped, slop scaled by PPI -- so the element a
+      caller would highlight and the datum reported here can never be two
+      different things. What this adds is the one thing the list cannot know:
+      a LINE's stroke is a single element for a whole series and carries no
+      row, so a hit on it is resolved against the base axis instead of being
+      reported as the half-valid `(series, -1)` the list holds.
+
+      LOCAL COORDINATES, origin (0, 0) -- what MouseMove is handed. After a
+      RenderTo onto a rect with a non-zero origin the list is still in local
+      space, so subtract that origin first. }
+    function HitTestAt(AX, AY: Integer): TTyChartDatumRef;
     { For a test or a designer to look inside. nil until the first build. }
     property Build: TTyChartBuild read FBuild;
   published
@@ -355,6 +427,7 @@ begin
   { Order is a contract, not a habit: a store BORROWS its category list from an
     axis the build owns, so every store goes first. }
   DropBuild;
+  FreeAndNil(FPaintList);
   FreeAndNil(FIndex);
   FreeAndNil(FOption);
   { The static layer owns a TBitmap. TTyPaintCache.Drop only marks it stale --
@@ -2173,8 +2246,8 @@ begin
   Result.LineWidthLogical := 1;
 end;
 
-procedure TTyAdvanceChart.PaintSeries(APainter: TTyPainter;
-  const AMeasurer: ITyTextMeasurer; APPI: Integer);
+function TTyAdvanceChart.BuildSeriesList(const AMeasurer: ITyTextMeasurer;
+  APPI: Integer): Integer;
 var
   list: TTyPaintList;
   i, drawn: Integer;
@@ -2182,12 +2255,23 @@ var
   pv: TTyPieVisual;
   specs: TTyLabelSpecArray;
 begin
-  if Length(FBindings) = 0 then Exit;
+  Result := 0;
   { ONE LIST FOR EVERY SERIES, not one per series: the ordering rule is (Z, Z2,
     insertion) ACROSS the chart, and a list per series would order each one
     against itself and leave the between-series order to the loop. }
-  list := TTyPaintList.Create;
-  try
+  if FPaintList = nil then FPaintList := TTyPaintList.Create
+  else FPaintList.Clear;
+  list := FPaintList;
+  { BEFORE THE EARLY EXIT, not after -- and not because a stale list would
+    otherwise be read: Clear has already run, so the answer would be "nothing"
+    either way. It is here because a render that drew no series is still a
+    render, and marking it invalid would say the chart has not drawn yet. The
+    two are the same answer today and stop being it the moment a caller wants
+    to tell "there is nothing there" from "there is nothing yet". }
+  FPaintListPPI := APPI;
+  FPaintListValid := True;
+  if Length(FBindings) = 0 then Exit;
+  begin
     drawn := 0;
     for i := 0 to High(FBindings) do
     begin
@@ -2272,10 +2356,85 @@ begin
       font and an anchor already on them, which is what the expansion exists
       to supply. A MARK appended here would silently lose its label. }
     Inc(drawn, BuildLegends(APPI, list));
-    if drawn > 0 then
-      TyRenderPaintList(APainter, list);
-  finally
-    list.Free;
+    Result := drawn;
+  end;
+end;
+
+procedure TTyAdvanceChart.PaintSeries(APainter: TTyPainter;
+  const AMeasurer: ITyTextMeasurer; APPI: Integer);
+begin
+  { BUILD, THEN DRAW. The list stays afterwards -- see FPaintList. }
+  if BuildSeriesList(AMeasurer, APPI) > 0 then
+    TyRenderPaintList(APainter, FPaintList);
+end;
+
+function TTyAdvanceChart.SlotOfSeries(ASeriesIndex: Integer): Integer;
+var i: Integer;
+begin
+  for i := 0 to High(FBindings) do
+    if FBindings[i].SeriesIndex = ASeriesIndex then Exit(i);
+  Result := -1;
+end;
+
+function TTyAdvanceChart.NearestRowOn(ASlot: Integer; AX, AY: Double): Integer;
+var
+  axis: TTyAxis;
+  st: TTyDataStore;
+  col, i: Integer;
+  want, v, d, best: Double;
+begin
+  Result := -1;
+  if (ASlot < 0) or (ASlot > High(FBindings)) or (ASlot > High(FStores)) then Exit;
+  axis := FBindings[ASlot].BaseAxis;
+  st := FStores[ASlot];
+  if (axis = nil) or (st = nil) then Exit;
+  col := st.DimIndexOf(axis.Dim);
+  if col < 0 then Exit;
+  { WHICH COORDINATE THE BASE AXIS READS. Not "x for a line": on a horizontal
+    bar chart the spine runs vertically, and asking a y axis about an x pixel
+    answers a number that is the right shape and the wrong measurement. The
+    binding already knows which of its two axes is the base one. }
+  if axis = FBindings[ASlot].XAxis then want := AX else want := AY;
+  { CoordToData extrapolates rather than failing, and has no NaN guard of its
+    own -- a degenerate axis can hand back one. }
+  want := axis.CoordToData(want);
+  if IsNan(want) then Exit;
+  best := NaN;
+  for i := 0 to st.Count - 1 do
+  begin
+    v := st.Get(col, i);
+    if IsNan(v) then Continue;
+    d := Abs(v - want);
+    if IsNan(best) or (d < best) then
+    begin
+      best := d;
+      Result := i;
+    end;
+  end;
+end;
+
+function TTyAdvanceChart.HitTestAt(AX, AY: Integer): TTyChartDatumRef;
+var
+  idx, slot, row: Integer;
+begin
+  Result := TyChartNoDatum;
+  if (FPaintList = nil) or not FPaintListValid then Exit;
+  idx := FPaintList.HitTestElement(AX, AY, FPaintListPPI);
+  if idx < 0 then Exit;
+  Result := FPaintList.Element(idx).Datum;
+  if Result.SeriesIndex < 0 then Exit;
+  { A RUN ELEMENT -- one element standing for a whole series, which is what a
+    line's stroke is. The list reports it as `(series, -1)`, which
+    TyChartDatumValid rejects, and because the hit test answers with the
+    topmost element rather than falling through, a hit there would otherwise
+    name nothing at all. }
+  if Result.DataIndex < 0 then
+  begin
+    slot := SlotOfSeries(Result.SeriesIndex);
+    row := NearestRowOn(slot, AX, AY);
+    if row < 0 then Exit(TyChartNoDatum);
+    Result := TyChartDatum(Result.SeriesIndex, row,
+      FStores[slot].GetRawIndex(row));
   end;
 end;
 
@@ -2307,6 +2466,16 @@ end;
 procedure TTyAdvanceChart.DropStatic;
 begin
   if FStatic <> nil then FStatic.Drop;
+  { AND THE LIST WITH IT. The two describe the same frame: the list is what
+    the static pass added up to, so a kept list beside a dropped cache would
+    answer questions about a picture no longer on screen. Not freed -- the
+    next build reuses the object and only the answer is stale. }
+  FPaintListValid := False;
+end;
+
+procedure TTyAdvanceChart.PointerStateChanged;
+begin
+  InvalidateFrame;
 end;
 
 procedure TTyAdvanceChart.RenderCached(ACanvas: TCanvas; const ARect: TRect;
