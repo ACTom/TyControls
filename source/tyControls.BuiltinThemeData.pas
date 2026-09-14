@@ -3075,6 +3075,9 @@ begin
     '  --radius-check: 3px;' + LineEnding +
     '  --radius-pill:  100px;' + LineEnding +
     '  --disabled:     0.45;' + LineEnding +
+    '  /* 空闲 1200ms 后滚动条淡出。现代世代的窗口都这么做：滚动条是“用到才出现”的' + LineEnding +
+    '     覆盖层，不是一直占着边的家具。经典世代的皮肤不写这一行，继承基础层的 -1。 */' + LineEnding +
+    '  --scrollbar-auto-hide: 1200;' + LineEnding +
     '  --on-titlebar: var(--ink);   /* ink for controls hosted on the title bar */' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
@@ -3491,6 +3494,13 @@ begin
     '}' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
+    '/* ── mode-invariant: 不随明暗翻转的标量 ── */' + LineEnding +
+    ':root {' + LineEnding +
+    '  /* 空闲 1200ms 后滚动条淡出。现代世代的窗口都这么做：滚动条是“用到才出现”的' + LineEnding +
+    '     覆盖层，不是一直占着边的家具。经典世代的皮肤不写这一行，继承基础层的 -1。 */' + LineEnding +
+    '  --scrollbar-auto-hide: 1200;' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
     '/* Window + unified title bar (flat system grey, hairline-rounded top). */' + LineEnding +
     'TyForm          { background: var(--surface); }' + LineEnding +
     'TyTitleBar, TyRibbonQuickAccess      { background: var(--titlebar-bg); color: var(--titlebar-ink); border-radius: 6 6 0 0; }' + LineEnding +
@@ -3664,6 +3674,13 @@ begin
     '    --ink-muted:  #CAC4D0;   /* secondary on-surface ink                          */' + LineEnding +
     '    --on-titlebar: var(--on-surface);   /* ink for controls hosted on the title bar */' + LineEnding +
     '}' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* ── mode-invariant: 不随明暗翻转的标量 ── */' + LineEnding +
+    ':root {' + LineEnding +
+    '  /* 空闲 1200ms 后滚动条淡出。现代世代的窗口都这么做：滚动条是“用到才出现”的' + LineEnding +
+    '     覆盖层，不是一直占着边的家具。经典世代的皮肤不写这一行，继承基础层的 -1。 */' + LineEnding +
+    '  --scrollbar-auto-hide: 1200;' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* Window: the M3 surface. */' + LineEnding +
@@ -5230,6 +5247,9 @@ begin
     '  --radius-sm:   4px;' + LineEnding +
     '  --radius-lg:   8px;    /* a LAYER (card / flyout) rounds softer than the controls on it */' + LineEnding +
     '  --radius-pill: 100px;' + LineEnding +
+    '  /* 空闲 1200ms 后滚动条淡出。现代世代的窗口都这么做：滚动条是“用到才出现”的' + LineEnding +
+    '     覆盖层，不是一直占着边的家具。经典世代的皮肤不写这一行，继承基础层的 -1。 */' + LineEnding +
+    '  --scrollbar-auto-hide: 1200;' + LineEnding +
     '  --on-titlebar: var(--on-surface);   /* ink for controls hosted on the title bar */' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +

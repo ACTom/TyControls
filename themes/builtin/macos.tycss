@@ -125,6 +125,13 @@
 }
 }
 
+/* ── mode-invariant: 不随明暗翻转的标量 ── */
+:root {
+  /* 空闲 1200ms 后滚动条淡出。现代世代的窗口都这么做：滚动条是“用到才出现”的
+     覆盖层，不是一直占着边的家具。经典世代的皮肤不写这一行，继承基础层的 -1。 */
+  --scrollbar-auto-hide: 1200;
+}
+
 /* Window + unified title bar (flat system grey, hairline-rounded top). */
 TyForm          { background: var(--surface); }
 TyTitleBar, TyRibbonQuickAccess      { background: var(--titlebar-bg); color: var(--titlebar-ink); border-radius: 6 6 0 0; }

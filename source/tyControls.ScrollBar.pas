@@ -7,7 +7,8 @@ uses
   tyControls.Controller, tyControls.StyleModel;
 const
   { 自动隐藏延时的主题令牌。一条轴，没有歧义的零：
-      -1 = 关（滚动条一直显示，**内置主题就是这个值**）
+      -1 = 关（滚动条一直显示；基础层 light.tycss 就是这个值，经典世代的
+           皮肤一行不写、全靠继承它；win11/macos/fluent/material3 写的是 1200）
        0 = 开，停手立即淡出
        N = 开，停手 N 毫秒后淡出
     走已有的 Metric 机制，tycss 不需要新的值类型。负号能活着走完

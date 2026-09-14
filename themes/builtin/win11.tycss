@@ -120,6 +120,9 @@
   --radius-sm:   4px;
   --radius-lg:   8px;    /* a LAYER (card / flyout) rounds softer than the controls on it */
   --radius-pill: 100px;
+  /* 空闲 1200ms 后滚动条淡出。现代世代的窗口都这么做：滚动条是“用到才出现”的
+     覆盖层，不是一直占着边的家具。经典世代的皮肤不写这一行，继承基础层的 -1。 */
+  --scrollbar-auto-hide: 1200;
   --on-titlebar: var(--on-surface);   /* ink for controls hosted on the title bar */
 }
 

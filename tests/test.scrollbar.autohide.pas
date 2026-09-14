@@ -7,6 +7,8 @@ uses
   tyControls.Types, tyControls.Controller, tyControls.ScrollBar, tyControls.Panel,
   { 内嵌了滚动条的宿主——转发那一组测试要的。 }
   tyControls.ListBox, tyControls.Memo, tyControls.Grid, tyControls.ListView,
+  { 内置主题包——「现代开、经典关」那条要按名字装真皮肤,不是手写 CSS。 }
+  tyControls.BuiltinThemes,
   tyControls.ScrollBox, tyControls.TreeView, tyControls.ValueListEditor;
 
 type
@@ -93,6 +95,8 @@ type
     procedure TreeViewDeclaredDefaultMatchesConstructed;
     { 后代白拿。这不是第七个宿主，是「白拿」那句话的凭据。 }
     procedure ValueListEditorInheritsTheListBoxProperty;
+    { --- 出厂主题 ------------------------------------------------------------ }
+    procedure ModernThemesHideClassicThemesDoNot;
   end;
 
 implementation
@@ -334,7 +338,7 @@ end;
 
 procedure TTyScrollBarAutoHideTests.ThemeOffByDefault;
 begin
-  { 装一个主题，但它不提这个令牌——这才是出厂状态(内置主题都没写它),
+  { 装一个主题，但它不提这个令牌——经典世代的皮肤就是这样(只有四个现代皮肤写了它),
     比「一个空模型」更接近真实。Metric 回退到 TyScrollBarAutoHideDef = 关。 }
   UseThemeCss(':root { --surface: #fff; }');
   AssertEquals(TyScrollBarAutoHideOff, FBar.EffectiveAutoHideMs);
@@ -1304,6 +1308,57 @@ begin
   CheckHostDeclaredDefault(vle, 'ValueListEditor');
   vle.ScrollBarAutoHide := sbahAuto;
   AssertEquals('继承来的属性确实存下了', Ord(sbahAuto), Ord(vle.ScrollBarAutoHide));
+end;
+
+type
+  { 名字 + 该报的延时。排成**现代/经典交替**不是为了好看:同类连着排的话,
+    除了第一条,后面每一条的“期望值”跟上一条一模一样 —— 那些名字就算一个也没
+    装上(拼错了、没注册),模型原封不动,断言照样绿。交替之后每一条都得
+    真把模型从上一个值换到另一个值才能绿。 }
+  TThemeAutoHideCase = record
+    Name: string;
+    Ms: Integer;
+  end;
+
+const
+  { 写死 1200 而不是「>= 0」:「>= 0」连 0(停手即消失)都放行,而那是个能
+    把现代皮肤毁掉的手滑值。 }
+  CModernMs = 1200;
+  CThemeAutoHide: array[0..7] of TThemeAutoHideCase = (
+    (Name: 'win11';     Ms: CModernMs),
+    (Name: 'classic';   Ms: TyScrollBarAutoHideOff),
+    (Name: 'macos';     Ms: CModernMs),
+    (Name: 'xp';        Ms: TyScrollBarAutoHideOff),
+    (Name: 'fluent';    Ms: CModernMs),
+    (Name: 'aero';      Ms: TyScrollBarAutoHideOff),
+    (Name: 'material3'; Ms: CModernMs),
+    (Name: 'win10';     Ms: TyScrollBarAutoHideOff));
+
+procedure TTyScrollBarAutoHideTests.ModernThemesHideClassicThemesDoNot;
+var
+  i: Integer;
+begin
+  { 这是整条链的唯一守卫:主题文件 -> gen-builtinthemes.ps1 -> BuiltinThemeData
+    -> Metric。前面那批测试全都手写 CSS 喂 LoadThemeCss,一条都碰不到生成物——
+    生成器忘了重跑、皮肤里那一行写错了名字,它们照样全绿,功能却在出厂主题上
+    整个休眠。所以这里必须按名字装真皮肤。
+
+    经典那半边同时还在验「没写 = 继承基础层」:经典皮肤一行都不写这个令牌,
+    -1 是从 light.tycss 这一层透上来的。
+
+    坐标系里有个坑得先拆掉:CModernMs 恰好等于
+    TyScrollBarAutoHideFallbackMs。两条路能给出同一个 1200 —— 读到了皮肤的值,
+    或者 AutoHide = sbahAuto 而主题根本没给值。所以先把属性钉在出厂的
+    sbahDefault 上:那条回退臂根本进不去,1200 只能是皮肤给的。 }
+  AssertEquals('得从出厂属性出发,否则 1200 说不清是皮肤给的还是回退给的',
+    Ord(sbahDefault), Ord(FBar.AutoHide));
+  TyRegisterBuiltinThemes;
+  for i := 0 to High(CThemeAutoHide) do
+  begin
+    FCtl.ThemeName := CThemeAutoHide[i].Name;
+    AssertEquals(CThemeAutoHide[i].Name + ' 的自动隐藏延时',
+      CThemeAutoHide[i].Ms, FBar.EffectiveAutoHideMs);
+  end;
 end;
 
 initialization
