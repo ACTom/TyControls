@@ -1248,6 +1248,46 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
+### Task 11: example 里加一个自动隐藏演示
+
+**这条从「可选」提成正式任务**，理由不是展示，是**真机验证没有别的载体**：淡入淡出好不好看、1200 ms 跟不跟手、`green` 主题过渡期有没有色块——headless 一条都测不到，而收尾清单里这三条都得有人看。没有 demo 就只能靠想象。
+
+**Files:**
+- Modify: `examples/scrollbar/umain.lfm`（控件放这儿）
+- Modify: `examples/scrollbar/umain.pas`（只放事件处理）
+- Modify: `examples/scrollbar/languages/*.po`（**只要新增了界面文字就必须同步 en + zh_CN**）
+
+- [ ] **Step 1: 控件进 `.lfm`，不要写在代码里**
+
+硬规则：demo 是用户的设计面，控件设置进 `.lfm`，代码里只留事件处理。加：
+
+- 一组三选一切 `AutoHide`：`sbahDefault` / `sbahNever` / `sbahAuto`
+- 一个标签显示当前主题解析出来的延时（读 `EffectiveAutoHideMs`），换肤时跟着变——**这一个标签就把「令牌真的通了」变成肉眼可见的**
+- 一条内容足够长的列表或 memo，好让内嵌条真的出现（顺便验宿主转发）
+
+- [ ] **Step 2: 新文字同步 `.po`**
+
+改了英文 caption 必须同步 `.po` 的 msgid，两个语言都要。**空的 msgid/msgstr 条目会让程序起不来**（模态错误框卡死 `CreateForm`，伪装成「启动慢」），所以加完跑一次 `scripts/check-example-po.py` 之类的守卫，别只靠肉眼。
+
+- [ ] **Step 3: 编出来跑一次**
+
+```bash
+cd /d/Projects/ty-3.1 && lazbuild -B tycontrols.lpk && lazbuild -B examples/scrollbar/scrollbar_example.lpi
+```
+
+**`-B` 和顺序都不能省**：先编包是为了把机器级包注册权夺回来（另外两个会话也在这台机器上编），不然编出来的可能是别人树里的 `source/`；不加 `-B` 则会链到旧库码。
+
+- [ ] **Step 4: 真机看这四件事**
+
+1. 淡出的观感与 200 ms 时长——柔不柔，会不会看着像卡顿
+2. 停手到开始淡出那 1200 ms——太快会烦，太慢等于没开
+3. 鼠标移到已经隐身的条上，能不能唤回来并点中
+4. 切到 `green`（图片主题）与任一渐变底，**淡出途中**那一瞬有没有平色块（Task 9 量的是同一件事，这里是肉眼复核）
+
+看完把结论写进 spec §11 的验收条目旁边，**带日期**。
+
+---
+
 ## 收尾
 
 - [ ] 全量测试绿，且 `Number of run tests` 那行在
