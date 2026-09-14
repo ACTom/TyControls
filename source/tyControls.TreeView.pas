@@ -579,6 +579,7 @@ type
     FOffsetX:   Integer;        // ≤ 0; how many pixels the viewport is scrolled right
     FRangeX:    Integer;        // max content width; accumulated by paint pass (C3); reset to 0 by InvalidateTreeLayout on every structural change
     FSyncingScroll: Boolean;    // reentrancy guard (mirrors ListBox pattern)
+    FScrollBarAutoHide: TTyScrollBarAutoHide;
     { B (columns): header sub-object }
     FHeader:    TTyHeader;
     { D2: column resize state }
@@ -633,6 +634,7 @@ type
     procedure _HandleHeaderClick(ColIndex: Integer);
     procedure VScrollChange(Sender: TObject);
     procedure HScrollChange(Sender: TObject);
+    procedure SetScrollBarAutoHide(const AValue: TTyScrollBarAutoHide);
     procedure UpdateScrollBars;
     { B (columns): header/column change handler }
     procedure HeaderChanged(Sender: TObject);
@@ -1180,6 +1182,10 @@ type
     { LCL parity switches — see the field declarations for the LCL line numbers and for
       why RightClickSelect defaults True here where LCL defaults False. }
     property ScrollBars: TScrollStyle read FScrollBars write SetScrollBars default ssBoth;
+    { Whether this tree's two scrollbars fade out while nobody is using them. Forwarded to
+      the embedded bars; for what the three values mean see TTyScrollBar.AutoHide. }
+    property ScrollBarAutoHide: TTyScrollBarAutoHide
+      read FScrollBarAutoHide write SetScrollBarAutoHide default sbahDefault;
     property AutoExpand: Boolean read FAutoExpand write FAutoExpand default False;
     property RightClickSelect: Boolean read FRightClickSelect write FRightClickSelect default True;
     property HideSelection: Boolean read FHideSelection write SetHideSelection default True;
@@ -3040,6 +3046,16 @@ begin
   RepositionEditor;   // ③e E4: keep an open editor glued to its cell after scroll
 end;
 
+procedure TTyTreeView.SetScrollBarAutoHide(const AValue: TTyScrollBarAutoHide);
+begin
+  if FScrollBarAutoHide = AValue then Exit;
+  FScrollBarAutoHide := AValue;
+  { Both bars exist from the constructor, so these two lines are the only path a value
+    actually travels by; the nil guards are defensive. }
+  if FVScroll <> nil then FVScroll.AutoHide := AValue;
+  if FHScroll <> nil then FHScroll.AutoHide := AValue;
+end;
+
 { DoMouseWheel — scroll 3 rows per detent (mirrors ListBox wheel).
   WheelDelta > 0 = scroll up (content moves down, FOffsetY increases toward 0);
   WheelDelta < 0 = scroll down (FOffsetY decreases). }
@@ -3190,6 +3206,7 @@ begin
   FRightClickSelect := True;
   FHideSelection    := True;
   FShowSeparators   := False;
+  FScrollBarAutoHide := sbahDefault;   { matches the published default; set BEFORE the bars read it }
   { TabStop=False on both: a standalone TTyScrollBar is focusable (it owns arrow/page keys),
     but a bar embedded in the tree must not be — dragging it would take focus off the tree,
     which would then lose its focus ring and its keyboard navigation mid-scroll. }
@@ -3198,6 +3215,10 @@ begin
   FVScroll.Kind              := sbVertical;
   FVScroll.TabStop           := False;
   FVScroll.AnimationsEnabled := False;
+  { Necessarily the freshly-constructed default here — nobody can have set the property yet.
+    Written anyway so this reads like the lazy hosts (ListBox/Memo): should these bars ever
+    become lazy, the value would not quietly go missing. }
+  FVScroll.AutoHide          := FScrollBarAutoHide;
   FVScroll.OnChange          := @VScrollChange;
   FVScroll.Visible           := False;
   FVScroll.ControlStyle      := FVScroll.ControlStyle + [csNoDesignVisible];   // internal: never shown as a designable child (runtime shows it via UpdateScrollBars)
@@ -3206,6 +3227,7 @@ begin
   FHScroll.Kind              := sbHorizontal;
   FHScroll.TabStop           := False;
   FHScroll.AnimationsEnabled := False;
+  FHScroll.AutoHide          := FScrollBarAutoHide;   { same as the vertical bar above }
   FHScroll.OnChange          := @HScrollChange;
   FHScroll.Visible           := False;
   FHScroll.ControlStyle      := FHScroll.ControlStyle + [csNoDesignVisible];   // internal: hide in the designer

@@ -7,7 +7,7 @@ uses
   tyControls.Types, tyControls.Controller, tyControls.ScrollBar, tyControls.Panel,
   { 内嵌了滚动条的宿主——转发那一组测试要的。 }
   tyControls.ListBox, tyControls.Memo, tyControls.Grid, tyControls.ListView,
-  tyControls.ScrollBox;
+  tyControls.ScrollBox, tyControls.TreeView, tyControls.ValueListEditor;
 
 type
   TTyScrollBarAutoHideTests = class(TTestCase)
@@ -26,6 +26,7 @@ type
     function NewGrid: TTyStringGrid;
     function NewListView: TTyListView;
     function NewScrollBox: TTyScrollBox;
+    function NewTreeView: TTyTreeView;
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -88,6 +89,10 @@ type
     procedure ScrollBoxForwardsToItsEmbeddedBars;
     procedure ScrollBoxBuildsItsBarsInsideInheritedCreate;
     procedure ScrollBoxDeclaredDefaultMatchesConstructed;
+    procedure TreeViewForwardsToItsEmbeddedBars;
+    procedure TreeViewDeclaredDefaultMatchesConstructed;
+    { 后代白拿。这不是第七个宿主，是「白拿」那句话的凭据。 }
+    procedure ValueListEditorInheritsTheListBoxProperty;
   end;
 
 implementation
@@ -1256,6 +1261,49 @@ end;
 procedure TTyScrollBarAutoHideTests.ScrollBoxDeclaredDefaultMatchesConstructed;
 begin
   CheckHostDeclaredDefault(NewScrollBox, 'ScrollBox');
+end;
+
+function TTyScrollBarAutoHideTests.NewTreeView: TTyTreeView;
+begin
+  Result := TTyTreeView.Create(FForm);
+  Result.Parent := FForm;
+  Result.Controller := FCtl;
+  Result.SetBounds(0, 0, 200, 120);
+end;
+
+procedure TTyScrollBarAutoHideTests.TreeViewForwardsToItsEmbeddedBars;
+var
+  tv: TTyTreeView;
+begin
+  { 两条在构造函数里就建好了，不用塞节点。 }
+  tv := NewTreeView;
+  tv.ScrollBarAutoHide := sbahNever;
+  CheckBothBarsGot(tv, sbahNever, 'TreeView');
+end;
+
+procedure TTyScrollBarAutoHideTests.TreeViewDeclaredDefaultMatchesConstructed;
+begin
+  CheckHostDeclaredDefault(NewTreeView, 'TreeView');
+end;
+
+procedure TTyScrollBarAutoHideTests.ValueListEditorInheritsTheListBoxProperty;
+var
+  vle: TTyValueListEditor;
+begin
+  { TTyValueListEditor 是 **TTyListBox** 的后代——不是网格的,尽管它长得像属性
+    表格、名字也像。所以它白拿这个属性和那两条惰性内嵌条,不用单独接线。
+    这条测试就是「白拿」这句话的凭据,不然它只是一句假设。 }
+  AssertTrue('TTyValueListEditor 必须是 TTyListBox 的后代',
+    TTyValueListEditor.InheritsFrom(TTyListBox));
+  vle := TTyValueListEditor.Create(FForm);
+  vle.Parent := FForm;
+  vle.Controller := FCtl;
+  vle.SetBounds(0, 0, 200, 60);
+  { 后代自己也要过 default 那一关:属性是继承来的,但 RTTI 按后代那个类查,
+    而后代的构造函数有机会改掉字段却改不了声明。 }
+  CheckHostDeclaredDefault(vle, 'ValueListEditor');
+  vle.ScrollBarAutoHide := sbahAuto;
+  AssertEquals('继承来的属性确实存下了', Ord(sbahAuto), Ord(vle.ScrollBarAutoHide));
 end;
 
 initialization
