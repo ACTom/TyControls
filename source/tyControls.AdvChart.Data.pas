@@ -620,6 +620,11 @@ begin
     scaling it by 86,400,000 would put the answer a fraction of a millisecond
     off the integer it should be, and every equality test downstream would then
     depend on which side it landed. }
+  { ENCODEDATE RAISES OUTSIDE YEAR 1..9999, and `'0000-01-01'` parses
+    perfectly well up to here -- four digits is four digits. A date the
+    calendar cannot hold is not a date; answer `not a date` rather than
+    throwing out of whatever was reading the option. }
+  if (y < 1) or (y > 9999) then Exit;
   days := Round(EncodeDate(y, mo, d) - UnixEpochDT);
   total := days * Int64(86400000) + h * 3600000 + mi * 60000 + sec * 1000 + ms;
   if haveZone then

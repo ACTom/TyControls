@@ -609,7 +609,7 @@ begin
   d := node.Find('borderRadius');
   if (d <> nil) and (d.JSONType = jtNumber) then
     Result.BorderRadii := TyCornerRadii([d.AsFloat]);
-  Result.Z := Round(NumIn(node, 'z', cDefaultZ));
+  Result.Z := TyRoundOpt(NumIn(node, 'z', cDefaultZ), cDefaultZ);
 end;
 
 { ==================== entries ==================== }

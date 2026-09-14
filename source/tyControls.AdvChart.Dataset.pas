@@ -485,7 +485,7 @@ begin
     if d = nil then
       Result.StartIndex := DetectStartIndex(Result.Data, Result.LayoutBy)
     else if d.JSONType = jtNumber then
-      Result.StartIndex := Round(d.AsFloat)
+      Result.StartIndex := TyRoundOpt(d.AsFloat)
     else if d.JSONType = jtBoolean then
     begin
       if d.AsBoolean then Result.StartIndex := 1 else Result.StartIndex := 0;
@@ -511,7 +511,11 @@ begin
         if (cell = nil) or (cell.JSONType = jtNull) then
           named[i].Name := ''
         else
-          named[i].Name := cell.AsString;
+          { A header cell can be anything JSON can hold, and `AsString`
+            raises on the two that are not scalars. An unnameable dimension
+            keeps its positional name. }
+          if not (cell.JSONType in [jtObject, jtArray]) then
+            named[i].Name := cell.AsString;
       end;
     end;
   end
@@ -634,7 +638,7 @@ begin
   d := node.Find('datasetIndex');
   if (d <> nil) and (d.JSONType = jtNumber) then
   begin
-    Result := Round(d.AsFloat);
+    Result := TyRoundOpt(d.AsFloat);
     { AN INDEX NAMING NOTHING RESOLVES TO NOTHING. It does not fall back to the
       first dataset -- a chart that asked for dataset 3 and got dataset 0 would
       be drawing someone else's numbers. }
@@ -690,7 +694,7 @@ begin
     if arr.Count = 0 then Exit;
     Exit(EncodeValue(arr.Items[0], ASource));
   end;
-  if AValue.JSONType = jtNumber then Exit(Round(AValue.AsFloat));
+  if AValue.JSONType = jtNumber then Exit(TyRoundOpt(AValue.AsFloat));
   if AValue.JSONType = jtString then Exit(TySourceDimIndexOf(ASource, AValue.AsString));
 end;
 

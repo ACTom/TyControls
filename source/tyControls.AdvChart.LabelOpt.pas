@@ -192,7 +192,13 @@ begin
     -90..90 range on it and nothing in the source enforces one. }
   d := node.Find('rotate');
   if (d <> nil) and (d.JSONType = jtNumber) then
-    Result.RotationRad := d.AsFloat * Pi / 180;
+    { CLAMPED BEFORE THE MULTIPLY. `rotate` is typed `number` upstream with
+      no bound, and 1e308 times Pi is not a large angle -- it is a floating
+      point OVERFLOW, raised out of the paint. A turn is periodic anyway, so
+      nothing outside a full circle either way says anything a value inside
+      one does not. }
+    Result.RotationRad :=
+      Max(Double(-360), Min(Double(360), d.AsFloat)) * Pi / 180;
 
   s := StrIn(node, 'overflow');
   if s = 'truncate' then Result.Overflow := tloTruncate
@@ -215,13 +221,14 @@ begin
 
   Result.Formatter := StrIn(node, 'formatter');
 
-  Result.FontSizeLogical := Round(NumIn(node, 'fontSize',
+  Result.FontSizeLogical := TyRoundOpt(NumIn(node, 'fontSize',
     Result.FontSizeLogical));
   s := StrIn(node, 'fontWeight');
   if (s = 'bold') or (s = 'bolder') then Result.FontWeight := 700
   else if s = 'normal' then Result.FontWeight := 400
   else
-    Result.FontWeight := Round(NumIn(node, 'fontWeight', Result.FontWeight));
+    Result.FontWeight := TyRoundOpt(NumIn(node, 'fontWeight', Result.FontWeight),
+      Result.FontWeight);
 end;
 
 { ==================== the formatter ==================== }

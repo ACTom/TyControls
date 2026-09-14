@@ -759,9 +759,16 @@ begin
   end;
   if d.JSONType = jtArray then
   begin
+    { EACH ELEMENT TYPE-CHECKED: `AsFloat` COERCES, so `['5px', '10px']`
+      does not read as five and ten, it raises. A dash pattern is a list of
+      lengths; an entry that is not one contributes nothing rather than
+      killing the render. }
     SetLength(ADash, TJSONArray(d).Count);
     for i := 0 to TJSONArray(d).Count - 1 do
-      ADash[i] := TJSONArray(d).Items[i].AsFloat;
+      if TJSONArray(d).Items[i].JSONType = jtNumber then
+        ADash[i] := TJSONArray(d).Items[i].AsFloat
+      else
+        ADash[i] := 0;
     { An EMPTY array is truthy upstream and draws solid. }
     if Length(ADash) = 0 then Exit(todSolid);
     Exit(todExplicit);

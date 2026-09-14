@@ -139,6 +139,34 @@ function TyRectFContains(const AR: TTyRectF; const AP: TTyPointF): Boolean;
   first. -1 is not a column anywhere. }
 function TyNoStack: TTySeriesStack;
 
+{ A number out of an option tree, narrowed to an Integer WITHOUT raising.
+
+  JAVASCRIPT'S `Math.round` HAS NO DOMAIN. It answers a finite Double for any
+  finite input, and every option ECharts reads this way is typed `number` with
+  no clamp anywhere -- `legend: { z: 1e30 }` is legal and upstream draws it.
+  FPC's `Round` targets an Int64 and RAISES `EInvalidOp` outside that range.
+
+  So a line transcribed with the shape of its original -- `Math.round(x)`
+  becoming `Round(x)` -- is right for every value anybody sane writes and
+  fatal for the ones nobody checks. What it costs is not a wrong chart: it is
+  the host's window, thrown out of a paint.
+
+  NaN and both infinities answer ADefault. Anything finite is clamped into
+  [ALo, AHi] BEFORE it is rounded, because clamping afterwards is the same
+  crash one line later.
+
+  Use this for every option number that becomes an Integer. It is not a
+  defensive flourish -- twenty-seven such reads were audited against the
+  ECharts source and sixteen killed the render on a value upstream accepts. }
+function TyRoundOpt(AValue: Double; ADefault: Integer = 0;
+  ALo: Integer = Low(Integer); AHi: Integer = High(Integer)): Integer;
+
+{ The same, truncating. Which one a site wants is not a detail: `Trunc` is
+  `how many whole ones fit` and `Round` is `which one is nearest`, and a site
+  that asked for a count must not quietly start asking for a nearest. }
+function TyTruncOpt(AValue: Double; ADefault: Integer = 0;
+  ALo: Integer = Low(Integer); AHi: Integer = High(Integer)): Integer;
+
 function TyRangeSpan(const AR: TTyRange): Double;
 { Closed on both ends — an axis extent's endpoints belong to the axis. }
 function TyRangeContains(const AR: TTyRange; AValue: Double): Boolean;
@@ -269,6 +297,29 @@ begin
   Result.Top := NaN;
   Result.Right := NaN;
   Result.Bottom := NaN;
+end;
+
+
+function TyRoundOpt(AValue: Double; ADefault: Integer;
+  ALo: Integer; AHi: Integer): Integer;
+begin
+  if IsNan(AValue) or IsInfinite(AValue) then Exit(ADefault);
+  { Compared with plain relational operators, which promote the Integer bound
+    to Double. Math.Max/Min would pick their SINGLE overload against an
+    integer argument and decide the comparison on twenty-four bits. }
+  if AValue <= ALo then Exit(ALo);
+  if AValue >= AHi then Exit(AHi);
+  Result := Round(AValue);
+end;
+
+
+function TyTruncOpt(AValue: Double; ADefault: Integer;
+  ALo: Integer; AHi: Integer): Integer;
+begin
+  if IsNan(AValue) or IsInfinite(AValue) then Exit(ADefault);
+  if AValue <= ALo then Exit(ALo);
+  if AValue >= AHi then Exit(AHi);
+  Result := Trunc(AValue);
 end;
 
 end.

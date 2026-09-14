@@ -419,7 +419,7 @@ var d: TJSONData;
 begin
   d := FindIn(ANode, AKey);
   if (d = nil) or (d.JSONType = jtNull) then Exit(ADefault);
-  if d.JSONType = jtNumber then Exit(Trunc(d.AsFloat));
+  if d.JSONType = jtNumber then Exit(TyTruncOpt(d.AsFloat));
   Result := ADefault;
 end;
 
@@ -519,11 +519,18 @@ begin
     item := arr.Items[i];
     v := nil;
     if item is TJSONObject then v := TJSONObject(item).Find('value');
+    { A CATEGORY IS A SCALAR OR IT IS NOTHING. `AsString` on an object or an
+      array does not stringify it, it RAISES -- and both shapes are legal:
+      `data: [{ value: 3, textStyle: {} }]` is how a single category is
+      styled, and its `value` can be an array as easily as its item can. An
+      unnameable category becomes the empty name rather than the end of the
+      render. }
     if (v <> nil) and (v.JSONType <> jtNull) then
-      cats[i] := v.AsString
-    else if item.JSONType = jtNull then
-      cats[i] := ''
-    else if item is TJSONObject then
+    begin
+      if v.JSONType in [jtObject, jtArray] then cats[i] := ''
+      else cats[i] := v.AsString;
+    end
+    else if item.JSONType in [jtNull, jtObject, jtArray] then
       cats[i] := ''
     else
       cats[i] := item.AsString;
@@ -1031,7 +1038,7 @@ begin
   if (sub = nil) or (sub.JSONType <> jtObject) then Exit;
   sub := TJSONObject(sub).Find('interval');
   if (sub = nil) or (sub.JSONType <> jtNumber) then Exit;
-  n := Trunc(sub.AsFloat);
+  n := TyTruncOpt(sub.AsFloat);
   { Any non-positive count means `every one of them`. Upstream clamps the
     stride at 1 rather than validating, so `interval: -5` is legal and means
     the same as 0. }
@@ -1130,7 +1137,7 @@ begin
     begin
       d := TJSONObject(d).Find('onZeroAxisIndex');
       if (d <> nil) and (d.JSONType = jtNumber) then
-        Result.OnZeroAxisIndex := Trunc(d.AsFloat);
+        Result.OnZeroAxisIndex := TyTruncOpt(d.AsFloat, -1);
     end;
   end;
 end;

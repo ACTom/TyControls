@@ -364,6 +364,10 @@ function TyJsRound(AValue: Double): Double;
 
 implementation
 
+const
+  { See TTyIntervalScale.GetTicks. }
+  cMaxTicks = 10000;
+
 function TyJsRound(AValue: Double): Double;
 begin
   { JavaScript's Math.round is half-toward-plus-infinity. FPC's Round is
@@ -1049,7 +1053,7 @@ end;
 function TTyIntervalScale.GetTicks: TTyScaleTickArray;
 var
   e: TTyRange;
-  v, step, a, b: Double;
+  v, step, a, b, cnt: Double;
   n, i, k, t, minor: Integer;
   warped: Boolean;
 
@@ -1073,8 +1077,29 @@ begin
   end;
   if (FInterval <= 0) or (TyRangeSpan(e) <= 0) then
     Exit;
-  { Count first, then fill from the INDEX: a float accumulator would drift. }
-  n := Floor(TyRangeSpan(e) / FInterval + 1e-9) + 1;
+  { Count first, then fill from the INDEX: a float accumulator would drift.
+
+    AND THE COUNT IS TESTED WHILE IT IS STILL A DOUBLE. `Floor` answers an
+    Int64 and RAISES above it, so a bound written after the Floor is a bound
+    that never runs -- which is exactly how the first version of the guard
+    below was written, and it changed nothing. }
+  cnt := TyRangeSpan(e) / FInterval;
+  { AN INTERVAL TOO SMALL TO DRAW IS NOT AN INSTRUCTION.
+
+    `splitNumber: 1e19` is legal -- upstream floors the value at one and
+    caps it at nothing -- and upstream survives it by accident: the span
+    divided by it underflows to zero, and its generator returns early on a
+    zero interval without allocating anything. This one counts first, so the
+    same option asked it for two thousand million ticks and the render died
+    of memory instead. Clamping the option to an Integer only moved the
+    crash: the bound that matters is not the type's, it is what an axis can
+    draw.
+
+    Ten thousand is past any real axis -- a four-thousand-pixel chart with a
+    tick on every other pixel -- so beyond it the interval says nothing about
+    where ticks go, and the honest answer is upstream's: none. }
+  if IsNan(cnt) or (cnt < 0) or (cnt > cMaxTicks) then Exit;
+  n := Floor(cnt + 1e-9) + 1;
 
   minor := FMinorSplit;
   if minor < 2 then minor := 1;          { 1 = none; a split of 1 is no split }

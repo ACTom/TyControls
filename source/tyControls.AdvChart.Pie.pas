@@ -421,7 +421,8 @@ begin
   Result.StillShowZeroSum :=
     BoolIn(node, 'stillShowZeroSum', Result.StillShowZeroSum);
   Result.PercentPrecision :=
-    Round(NumIn(node, 'percentPrecision', Result.PercentPrecision));
+    TyRoundOpt(NumIn(node, 'percentPrecision', Result.PercentPrecision),
+      Result.PercentPrecision);
   Result.ShowEmptyCircle :=
     BoolIn(node, 'showEmptyCircle', Result.ShowEmptyCircle);
   Result.Corners := ReadCorners(node);
@@ -475,6 +476,17 @@ end;
 function ModTwoPi(ARadian: Double): Double;
 var n: Double;
 begin
+  { BROUGHT INSIDE A TURN FIRST. The line below is zrender's, verbatim --
+    round to eight decimals of a half-turn, then take the residue -- and it
+    is exact for any angle anybody writes. But `Round` answers an Int64 and
+    RAISES above it, so `startAngle: 1e14` (legal: the option is typed
+    `number` with no clamp, and upstream draws it) turns a pie chart into a
+    dead render.
+
+    An angle is periodic, so folding it first changes no answer it could
+    have given. `Int` on a Double has no Int64 to overflow. }
+  if IsNan(ARadian) or IsInfinite(ARadian) then Exit(0);
+  ARadian := ARadian - Int(ARadian / (2 * Pi)) * (2 * Pi);
   n := Round(ARadian / Pi * 1e8) / 1e8;
   { FMod, not the integer Mod: n is not whole. }
   Result := (n - Int(n / 2) * 2) * Pi;

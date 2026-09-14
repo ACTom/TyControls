@@ -775,7 +775,7 @@ var
       d := node.Find('splitNumber');
       if (d <> nil) and (d.JSONType = jtNumber) then
       begin
-        split := Trunc(d.AsFloat);
+        split := TyTruncOpt(d.AsFloat, split);
         if split < 1 then split := 1;
       end;
       d := node.Find('interval');
@@ -812,7 +812,7 @@ var
       begin
         sub2 := TJSONObject(d).Find('splitNumber');
         if (sub2 <> nil) and (sub2.JSONType = jtNumber) then
-          minorSplit := Trunc(sub2.AsFloat);
+          minorSplit := TyTruncOpt(sub2.AsFloat, minorSplit);
         sub2 := TJSONObject(d).Find('show');
         wantMinor := (sub2 <> nil) and (sub2.JSONType = jtBoolean)
                      and sub2.AsBoolean;
@@ -851,7 +851,11 @@ var
         ticks and the fallback path need. }
       if ivl > 0 then
       begin
-        split := Trunc((hi - lo) / ivl);
+        { The same hazard one indirection along: `max: 1e19` with
+          `interval: 1` asks how many whole intervals fit and the answer
+          does not fit in an Int64. The split only feeds a divisor, and an
+          interval too small to draw is caught in the tick generator. }
+        split := TyTruncOpt((hi - lo) / ivl, 1, 1, High(Integer));
         if split < 1 then split := 1;
       end;
       { NOT NICIED WHEN IT IS A CALENDAR. Niceify opens the extent out to
