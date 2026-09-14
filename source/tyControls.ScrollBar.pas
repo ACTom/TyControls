@@ -54,6 +54,16 @@ type
     FPosAnim: TTyAnimator;      // 0..1 traversal driving FAnimFrom -> FAnimTo
     FAnimFrom, FAnimTo: Single; // displayed-thumb-position endpoints (Min..Max units)
     FTimer: TTimer;            // lazy; only created when actually animating
+    { ——— 自动隐藏。整组字段和上面那套位置缓动毫无关系,别把两边的字段串着用。 }
+    FFadeLevel: Single;         // 1 = 完全显示，0 = 完全隐藏
+    FFadeAnim: TTyAnimator;     // 0..1 traversal，驱动 FFadeFrom -> FFadeTo
+    FFadeFrom, FFadeTo: Single;
+    FIdleMs: Integer;           // 距上次「在用」过去了多久
+    FPointerOnBar: Boolean;
+    { 惰性；延时表与淡出共用它，靠 Interval 区分阶段。
+      **和位置动画的 FTimer 无关**——那套有 FDragging/LiveTracking 的分支，
+      掺进来只会把两件事一起弄坏。 }
+    FHideTimer: TTimer;
     function TrackRect: TRect;
     function TrackLength: Integer;
     function PosAlong(X, Y: Integer): Integer;
@@ -76,10 +86,17 @@ type
     function GetTrackPosition: Integer;
     procedure EnsureTimer;
     procedure HandleTimer(Sender: TObject);
+    procedure EnsureHideTimer;
+    procedure HandleHideTimer(Sender: TObject);
+    function AutoHideHeldOpen: Boolean;
+    procedure StartFade(ATo: Single; ADurationMs: Integer);
   protected
     FDragging: Boolean;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
+    { 全身只为自动隐藏服务：指针压在条上时它必须一直亮着。 }
+    procedure MouseEnter; override;
+    procedure MouseLeave; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -129,6 +146,13 @@ type
     { 本条现在实际的自动隐藏延时，毫秒；-1 表示关（一直显示）。
       属性压过主题：sbahNever 恒为 -1；sbahAuto 在主题说关时用回退值。 }
     function EffectiveAutoHideMs: Integer;
+    { 0..1 的当前可见度。1 = 完全显示。绘制时乘进样式的 opacity。 }
+    property FadeLevel: Single read FFadeLevel;
+    { 「有人在用」。滚动、悬停、拖动、聚焦都调它。 }
+    procedure NoteActivity;
+    { 测试缝：推进 AMs 毫秒。真机由 FHideTimer 驱动，headless 由测试驱动
+      ——和位置动画的 HandleTimerTick 是同一个路子。 }
+    procedure AutoHideTick(AMs: Integer);
   published
     { LIVE TRACKING -- whether dragging the thumb moves Position continuously (True, the
       default and what this bar has always done) or only on mouse-up (False).
@@ -338,6 +362,9 @@ begin
   FTrackPos := FPosition;
   FAnimEnabled := True;
   FAutoHide := sbahDefault;    // 跟主题走;与 published 的 default 一致
+  { 出生就是全可见。主题关着自动隐藏时这个值再也不会变,这也正是
+    「不开这个特性的人一分钱不花」的那条路。 }
+  FFadeLevel := 1.0;
   // Thumb-glide animator: 0..1 traversal in ~120ms, decelerating. Start settled
   // at the rest endpoint so DisplayPos == FPosition before any change.
   FPosAnim.Progress := 1;
@@ -359,6 +386,8 @@ begin
   // FTimer is owned by Self (would be freed by DestroyComponents), but free it
   // explicitly first so the OnTimer callback can never fire mid-teardown.
   FreeAndNil(FTimer);
+  { 同理:淡出定时器的回调也不能在拆到一半的对象上跑。 }
+  FreeAndNil(FHideTimer);
   inherited Destroy;
 end;
 
@@ -388,8 +417,10 @@ begin
   { 为什么不是裸字段写:淡出跑完之后定时器会把自己停掉，那一刻没有任何东西
     在推进状态。此时把 AutoHide 改成 sbahNever,「关掉了就恢复全可见」那条臂
     永远轮不到执行，滚动条就永久隐身；sbahDefault -> sbahAuto 同理，没人会去
-    把定时器启起来。所以属性变化必须能叫醒一条已经停摆的滚动条 —— 下一个任务
-    把「重置空闲计时、复位淡入淡出」接在这里。 }
+    把定时器启起来。所以属性变化必须能叫醒一条已经停摆的滚动条：重置空闲计时、
+    该淡回来的淡回来、该重新起表的把表起起来,全在 NoteActivity 里。 }
+  FIdleMs := 0;
+  NoteActivity;
   Invalidate;
 end;
 
@@ -413,6 +444,116 @@ begin
     Exit(themeMs);
   end;
   Result := themeMs;   // sbahDefault
+end;
+
+function TTyScrollBar.AutoHideHeldOpen: Boolean;
+begin
+  { 任一成立就「按住不放」，延时表根本不起。
+    注意 Focused 只对独立摆放的条有意义：6 个宿主的内嵌条一律 TabStop=False。 }
+  Result := FPointerOnBar or FDragging or (csDesigning in ComponentState)
+            or (HandleAllocated and Focused);
+end;
+
+procedure TTyScrollBar.NoteActivity;
+begin
+  FIdleMs := 0;
+  if EffectiveAutoHideMs < 0 then
+  begin
+    { 关着的时候**没有任何东西**会再推进淡入淡出 —— 定时器不起,淡入就算装上了
+      也永远跑不起来。所以「回到全可见」必须在这里当场做掉,否则一条已经淡掉的
+      条,在主题或属性把自动隐藏关掉之后会永久隐身。关闭臂就在 AutoHideTick 里,
+      喂它一拍即可,不必抄一遍。 }
+    AutoHideTick(0);
+    Exit;
+  end;
+  if FFadeLevel < 1.0 then
+    StartFade(1.0, TyScrollBarFadeInMs);
+  EnsureHideTimer;
+  if FHideTimer <> nil then FHideTimer.Enabled := True;
+end;
+
+procedure TTyScrollBar.StartFade(ATo: Single; ADurationMs: Integer);
+begin
+  if SameValue(FFadeLevel, ATo, 0.001) then Exit;
+  FFadeFrom := FFadeLevel;
+  FFadeTo := ATo;
+  FFadeAnim := TyAnimatorInit(ADurationMs, teEaseOutCubic);
+end;
+
+procedure TTyScrollBar.AutoHideTick(AMs: Integer);
+var
+  delay: Integer;
+begin
+  delay := EffectiveAutoHideMs;
+  if delay < 0 then
+  begin
+    { 关着。任何残留的淡出都要收回来，否则改主题/改属性之后条会停在半透明。 }
+    if not SameValue(FFadeLevel, 1.0, 0.001) then
+    begin
+      FFadeLevel := 1.0;
+      FFadeAnim.SetTargetImmediate(1.0);
+      Invalidate;
+    end;
+    Exit;
+  end;
+
+  if FFadeAnim.Running then
+  begin
+    if FFadeAnim.Advance(AMs) then
+    begin
+      FFadeLevel := TyLerpF(FFadeFrom, FFadeTo, FFadeAnim.Eased);
+      Invalidate;
+    end;
+    if not FFadeAnim.Running then FFadeLevel := FFadeTo;
+    Exit;   { 动画期间不计闲置——否则淡入刚跑一半就被判定该淡出 }
+  end;
+
+  if AutoHideHeldOpen then
+  begin
+    FIdleMs := 0;
+    Exit;
+  end;
+
+  Inc(FIdleMs, AMs);
+  if (FIdleMs >= delay) and (FFadeLevel > 0.0) then
+    StartFade(0.0, TyScrollBarFadeOutMs);
+end;
+
+procedure TTyScrollBar.EnsureHideTimer;
+begin
+  { 设计期不淡(AutoHideHeldOpen 已经恒真),无窗口时也不建表——无头测试直接
+    喂 AutoHideTick,建了也只是个永远空转的定时器。 }
+  if (csDesigning in ComponentState) or not HandleAllocated then Exit;
+  if FHideTimer = nil then
+  begin
+    FHideTimer := TTimer.Create(Self);
+    FHideTimer.Enabled := False;
+    FHideTimer.Interval := 16;   // ~60fps
+    FHideTimer.OnTimer := @HandleHideTimer;
+  end;
+end;
+
+procedure TTyScrollBar.HandleHideTimer(Sender: TObject);
+begin
+  AutoHideTick(FHideTimer.Interval);
+  { 淡到底又没人动它,就没有什么可推进的了;下次 NoteActivity 会把表重新起起来。
+    (等延时的那段现在也按 16ms 空转 —— 两阶段的 Interval 是下一个任务的事。) }
+  if not FFadeAnim.Running and ((EffectiveAutoHideMs < 0) or (FFadeLevel <= 0.0)) then
+    FHideTimer.Enabled := False;
+end;
+
+procedure TTyScrollBar.MouseEnter;
+begin
+  inherited MouseEnter;    { 不调 inherited 会吞掉 LCL 那层的 hover 状态 }
+  FPointerOnBar := True;
+  NoteActivity;
+end;
+
+procedure TTyScrollBar.MouseLeave;
+begin
+  inherited MouseLeave;
+  FPointerOnBar := False;
+  FIdleMs := 0;            { 从「离开」这一刻开始计时，不是从上次滚动 }
 end;
 
 procedure TTyScrollBar.EnsureTimer;
@@ -609,6 +750,12 @@ begin
 
   if Assigned(FOnChange) then
     FOnChange(Self);
+
+  { 位置变了就是「在用」——哪怕这一下是宿主代码赋的值。滚轮、键盘、点滑道
+    都经过这里,所以唤醒写在这一处就够,不必在每个手势里各来一遍。
+    **SetPositionSnapped 不经过这里**:宿主自己滚完内容、再把位置镜像给滑块的
+    那条路是单独的一条,接线是宿主那一步的事。 }
+  NoteActivity;
 end;
 
 procedure TTyScrollBar.SetPageSize(const AValue: Integer);
