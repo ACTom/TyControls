@@ -683,10 +683,16 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 > **Task 4 实际剩下三件事**，都是审查揪出来的：
 >
 > 1. **按真实经过时间步进**，不按 timer 的标称间隔（详见下方注释块）。需要自己的 `FFadeLastTickMs` 和一个 `TickElapsedMs` 的孪生体——原件在「别碰」清单上，不能共用。
-> 2. **被按住不放的时候把 timer 停掉**，离开时再启起来。**这让 `MouseLeave` 重新有了存在的理由**（Task 3 因为它只剩一行不可观测代码而删了它）；`DoExit` 与拖动结束同理，但**逐个 trace 再决定加不加**，别反射性地全加上。当心别造出「按住 → 指针离开 → 再没人重启时钟」的悬停态——那是 Task 3 刚修好那个搁浅 bug 的镜像。
-> 3. **`EffectiveAutoHideMs` 按 `ThemeVersion` 缓存**，现在常见路径每 tick 调两次。
+>    **「孪生」= 连可见性和测试缝一起孪生**，`protected virtual`，不是只抄个函数体。原件的注释自己写着为什么：抽成可覆写的是为了让测试喂一个受控时钟，「**而这正是当初写成名义间隔也没人发现的原因**」。缝是活的——`tests/test.controls.scrollbar.pas:160` 的 `TFakeClockScroll` 就在 override 它。丢掉 `virtual`，「按真实时间推进」这条就只能靠 `Sleep` 和时钟运气去测。
+> 2. **被按住不放的时候把 timer 停掉**，离开时再启起来。**这让 `MouseLeave` 重新有了存在的理由**（Task 3 因为它只剩一行不可观测代码而删了它）；`DoExit` 与拖动结束同理，但**逐个 trace 再决定加不加**，别反射性地全加上。
 >
-> **可测性要诚实**：第 3 条 headless 可测（换主题看延时跟不跟得上）。第 1、2 条多半测不到——`EnsureHideTimer` 无句柄就不建 timer，headless 下 `FHideTimer` 恒为 nil、`HandleHideTimer` 根本不跑。**测不到就直说，别造一个手工塞 timer 的假测试**：那钉的是实现，不是行为。
+>    **两个方向的危险不对称，别按同一条标准判：**
+>    - **重启路径漏一条**（按住 → 指针离开 → 没人重启时钟）→ 条多留一会儿。难看，但良性。
+>    - **判定顺序写反**（先问「被按住吗」再问「动画还在跑吗」）→ **Task 3 那个搁浅 bug 的完整复刻**。条已淡到 0、表已停，指针移到那根看不见的条上 → `MouseEnter` → 武装淡入 + 起表 → 第一拍就被「被按住」判定停掉 → **指针停在那儿多久，条就多久不出现**。一定要让「有动画在跑」赢在最前面。
+> 3. **`EffectiveAutoHideMs` 按 `(Model 身份, ThemeVersion)` 缓存**——**不是只按版本号**。`ThemeVersion` 是**每个 model 各自计数**的，两个各加载过一次的 controller 版本号相同；而 `Controller` 是 published 可重新赋值的，只按版本号会把 A 的延时端给 B。库里的先例（`Base.pas:1670`、`Menu.pas:924`）只按版本号，这里要比它们严。
+>    只缓存**主题那一半**，把 `sbahNever`/`sbahAuto` 的属性判断留在缓存外（几个整数比较而已）——这样 `SetAutoHide` 根本不需要记得去作废缓存。
+>
+> **可测性（实测结论，比原来的预判乐观）**：三条都拿到了真覆盖。第 3 条直接可测。第 1 条经由 `HandleHideTimerTick` 端到端可测——这是 `HandleTimerTick` 的孪生缝，**那个先例确实存在**（`test.controls.scrollbar.pas:179` 在用），不是手工塞 timer。第 2 条**只有判定函数可测**：`FHideTimer.Enabled := False` 本身 headless 够不着（无句柄就没 timer），把 `AutoHideTimerNeeded` 抽出来直接测，真正的停表效果留给真机。**测不到就直说**——造一个手工塞 timer 的假测试，钉的是实现不是行为。
 
 **Files:**
 - Modify: `source/tyControls.ScrollBar.pas`
