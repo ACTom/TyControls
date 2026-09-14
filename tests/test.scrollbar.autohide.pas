@@ -35,6 +35,8 @@ type
     procedure FadeInIsNotCutShortByTheIdleClock;
     procedure TurningAutoHideOffUnhidesAFadedBar;
     procedure SnappedMirrorCountsAsActivity;
+    procedure ActivityCancelsAnArmedFadeOut;
+    procedure TurningItOffDisarmsAPendingFade;
   end;
 
 implementation
@@ -181,6 +183,10 @@ begin
   AssertEquals('主题关着时必须恒为完全可见', 1.0, FBar.FadeLevel, 0.001);
   FBar.NoteActivity;
   FBar.AutoHideTick(99999);
+  { 还得再推一整段淡出。StartFade 只装膛不开火,所以把 AutoHideTick 里
+    「关着就早退」那条臂整个删掉,上面那一拍读到的照样是 1.0 —— 99999 >= -1
+    当场把淡出装上了膛,可见度却要到下一拍才掉。 }
+  FBar.AutoHideTick(TyScrollBarFadeOutMs);
   AssertEquals('关着的时候多久都不该淡出', 1.0, FBar.FadeLevel, 0.001);
 end;
 
@@ -190,8 +196,11 @@ begin
   FBar.NoteActivity;
   AssertEquals('刚用过 -> 完全可见', 1.0, FBar.FadeLevel, 0.001);
   FBar.AutoHideTick(999);
-  AssertEquals('延时没到 -> 还在', 1.0, FBar.FadeLevel, 0.001);
+  { 断言要落在**下一拍之后**。999 这一拍就算把淡出装上了膛,可见度也还是 1.0;
+    真正能把两者分开的是再推一点点:门槛要是被改松(比如 delay div 2),那发
+    子弹已经上膛,1 毫秒就够让可见度跌出容差(缓动头一下就掉 0.015)。 }
   FBar.AutoHideTick(1);            // 累计 1000，到点
+  AssertEquals('延时没到 -> 还在', 1.0, FBar.FadeLevel, 0.001);
   FBar.AutoHideTick(TyScrollBarFadeOutMs);
   AssertEquals('淡出跑完 -> 不见了', 0.0, FBar.FadeLevel, 0.001);
 end;
@@ -305,6 +314,38 @@ begin
   FBar.SetPositionSnapped(42);
   FBar.AutoHideTick(TyScrollBarFadeInMs);
   AssertEquals('宿主镜像过来的位置也算在用', 1.0, FBar.FadeLevel, 0.001);
+end;
+
+procedure TTyScrollBarAutoHideTests.ActivityCancelsAnArmedFadeOut;
+begin
+  { 「淡出装上了膛、但一拍都还没推进」是个真实存在的窗口:这一拍可见度还是 1.0,
+    膛里装的却是 0.0。活动落在这个窗口里(滚轮、网格镜像过来的位置)而唤醒只看
+    「可见度是不是 1.0」的话,这发淡出下一拍照常打出去 —— 淡出跑动期间不计闲置、
+    跑完可见度又成了 0,条就一直不见了。用户看到的是:滚了一下,条反而没了。 }
+  UseThemeCss(':root { --scrollbar-auto-hide: 1000; }');
+  FBar.NoteActivity;
+  FBar.AutoHideTick(1000);
+  AssertEquals('前提:这一拍可见度确实还是 1.0', 1.0, FBar.FadeLevel, 0.001);
+  FBar.NoteActivity;
+  FBar.AutoHideTick(TyScrollBarFadeInMs);
+  AssertEquals('动过之后不能还把那发陈旧的淡出打出来', 1.0, FBar.FadeLevel, 0.001);
+end;
+
+procedure TTyScrollBarAutoHideTests.TurningItOffDisarmsAPendingFade;
+begin
+  { 关闭臂不光要管可见度,还要把动画停掉。可见度正好是 1.0、动画却还在跑的状态
+    是够得着的(淡出刚装膛就是),漏停的话:定时器那句「没事干就歇」永远不成立,
+    关着自动隐藏的条上挂着个空转定时器(无头测不到);而且自动隐藏一旦再打开,
+    关之前那发陈旧的淡出会接着打出去 —— 下面验的就是后者。
+    这里用**改主题**而不是改属性来关:改属性会顺带 NoteActivity,那条路会把
+    陈旧的淡出重定向掉,就看不出关闭臂自己有没有做干净了。 }
+  UseThemeCss(':root { --scrollbar-auto-hide: 1000; }');
+  FBar.AutoHideTick(1000);          { 淡出装上膛,可见度仍是 1.0 }
+  UseThemeCss(':root { --scrollbar-auto-hide: -1; }');
+  FBar.AutoHideTick(16);            { 关闭臂:该把膛里的子弹退掉 }
+  UseThemeCss(':root { --scrollbar-auto-hide: 1000; }');
+  FBar.AutoHideTick(TyScrollBarFadeOutMs);
+  AssertEquals('关过一趟,关之前装的那发淡出不能再打出来', 1.0, FBar.FadeLevel, 0.001);
 end;
 
 initialization

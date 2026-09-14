@@ -59,7 +59,6 @@ type
     FFadeAnim: TTyAnimator;     // 0..1 traversal，驱动 FFadeFrom -> FFadeTo
     FFadeFrom, FFadeTo: Single;
     FIdleMs: Integer;           // 距上次「在用」过去了多久
-    FPointerOnBar: Boolean;
     { 惰性；延时表与淡出共用它，靠 Interval 区分阶段。
       **和位置动画的 FTimer 无关**——那套有 FDragging/LiveTracking 的分支，
       掺进来只会把两件事一起弄坏。 }
@@ -96,7 +95,6 @@ type
     procedure Paint; override;
     { 全身只为自动隐藏服务：指针压在条上时它必须一直亮着。 }
     procedure MouseEnter; override;
-    procedure MouseLeave; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -450,7 +448,7 @@ function TTyScrollBar.AutoHideHeldOpen: Boolean;
 begin
   { 任一成立就「按住不放」，延时表根本不起。
     注意 Focused 只对独立摆放的条有意义：6 个宿主的内嵌条一律 TabStop=False。 }
-  Result := FPointerOnBar or FDragging or (csDesigning in ComponentState)
+  Result := FHover or FDragging or (csDesigning in ComponentState)
             or (HandleAllocated and Focused);
 end;
 
@@ -466,7 +464,12 @@ begin
     AutoHideTick(0);
     Exit;
   end;
-  if FFadeLevel < 1.0 then
+  { 光看可见度不够。淡出「装上了膛但还没推进」的那一拍,可见度还正好是 1.0,
+    膛里装的却是 0.0 —— 只判 FFadeLevel < 1.0 的话这里什么也不做,那发淡出
+    下一拍照常打出去。而淡出跑动期间不计闲置、跑完可见度又成了 0,条就一直
+    不见了:用户看到的是「滚了一下,条反而没了」。所以还要问一句:有没有一发
+    反方向的动画正在跑。 }
+  if (FFadeLevel < 1.0) or (FFadeAnim.Running and (FFadeTo < 1.0)) then
     StartFade(1.0, TyScrollBarFadeInMs);
   EnsureHideTimer;
   if FHideTimer <> nil then FHideTimer.Enabled := True;
@@ -474,7 +477,11 @@ end;
 
 procedure TTyScrollBar.StartFade(ATo: Single; ADurationMs: Integer);
 begin
-  if SameValue(FFadeLevel, ATo, 0.001) then Exit;
+  { 「已经在那儿了」只有在**没有反方向的动画在跑**的时候才等于「无事可做」。
+    只比可见度的话,装了膛还没推进的那一拍(可见度 1.0、目标 0.0)会在这里
+    早退,上面那句重定向就白写了。 }
+  if SameValue(FFadeLevel, ATo, 0.001) and
+     (not FFadeAnim.Running or SameValue(FFadeTo, ATo, 0.001)) then Exit;
   FFadeFrom := FFadeLevel;
   FFadeTo := ATo;
   FFadeAnim := TyAnimatorInit(ADurationMs, teEaseOutCubic);
@@ -487,11 +494,17 @@ begin
   delay := EffectiveAutoHideMs;
   if delay < 0 then
   begin
-    { 关着。任何残留的淡出都要收回来，否则改主题/改属性之后条会停在半透明。 }
+    { 关着。任何残留的淡出都要收回来，否则改主题/改属性之后条会停在半透明。
+
+      **停动画这一下不能挂在「可见度不对」里面**:可见度正好是 1.0、动画却还在
+      跑的状态是够得着的 —— 淡出刚装上膛(Progress=0)可见度就是 1.0,淡入跑到
+      Progress=0.9333 时缓动值 0.9997 也落在容差里。漏掉的话:定时器那句「没事
+      干就歇」永远不成立,一条关着自动隐藏的条上挂着个 60fps 的空转定时器;
+      哪天又把自动隐藏打开,膛里那发陈旧的淡出还会接着打出去。 }
+    FFadeAnim.SetTargetImmediate(1.0);
     if not SameValue(FFadeLevel, 1.0, 0.001) then
     begin
       FFadeLevel := 1.0;
-      FFadeAnim.SetTargetImmediate(1.0);
       Invalidate;
     end;
     Exit;
@@ -544,16 +557,16 @@ end;
 
 procedure TTyScrollBar.MouseEnter;
 begin
-  inherited MouseEnter;    { 不调 inherited 会吞掉 LCL 那层的 hover 状态 }
-  FPointerOnBar := True;
-  NoteActivity;
-end;
+  { 不调 inherited 会吞掉 LCL 那层的 hover 状态。而「指针在不在条上」这件事
+    inherited 已经记在 FHover 里了(TTyCustomControl.MouseEnter/MouseLeave 是
+    全库仅有的两处写入),本控件画滑块时读的也是它 —— 所以这里不再另存一份,
+    AutoHideHeldOpen 直接问 FHover。两个字段记同一件事,迟早会不一致。
 
-procedure TTyScrollBar.MouseLeave;
-begin
-  inherited MouseLeave;
-  FPointerOnBar := False;
-  FIdleMs := 0;            { 从「离开」这一刻开始计时，不是从上次滚动 }
+    相应地 MouseLeave 不必重写:FHover 由 inherited 清掉;而「从离开这一刻
+    重新起算闲置」也不需要写 —— 指针在条上的每一拍,按住不放那条臂都把闲置
+    时钟清成 0 了,离开的那一刻它本来就是 0。 }
+  inherited MouseEnter;
+  NoteActivity;
 end;
 
 procedure TTyScrollBar.EnsureTimer;
