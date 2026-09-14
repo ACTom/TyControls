@@ -1146,125 +1146,29 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 > **这里要量的只剩淡入淡出途中那约 200 ms。** 暴露面从「用户盯着看的常驻状态」缩成「一闪而过的过渡」，判据也该跟着松：过渡期一瞬的色块，和常驻一块平板，完全不是一个量级的问题。量之前先想清楚这一点，别照着原来的标准去要求它。
 
 **Files:**
-- Create: `tests/test.scrollbar.autohide.pas` 里一条诊断测试（可能保留，也可能只是量完就删）
+- Modify: `tests/test.scrollbar.autohide.pas`（一条测量用的测试）
 
-- [ ] **Step 1: 先确认 headless 到底测不测得了**
+> **探针那一步不用做了（2026-09-15）**：Task 5 已经证明**渐变父背景在 headless 下量得出来**——`HidingShowsTheRealParentBackgroundNotAFlatSlab` 用一个带 `linear-gradient(90deg,#000000,#FFFFFF)` 的 `TTyPanel` 当父控件，采样顶部和底部，变异下读到「顶=170 底=170」，正是那个中心采样的平板色。夹具现成，照抄即可。
+>
+> 原来那条 `green` 图片主题的探针（`url()` 在 resolve 时求值、headless 未必拿得到 backdrop）**不用写了**：渐变父控件测的是同一个机制——`TyResolveParentBg` 取单色中心 vs 真实背景有变化——而且它确定能在 headless 跑起来。图片主题留给真机抽查。
 
-`green` 是图片主题，而 `url()` 是在 **resolve 时**求值的，`ResolveStyle` 期间必须处在主题目录下，否则图片路径直接断。headless 测试里这一条不一定成立。**先花两分钟确认，别在测不准的路上写半小时测试**：
+- [ ] **Step 1: 把 Task 5 的夹具停在淡出中途**
 
-```bash
-cd /d/Projects/ty-3.1 && grep -rn "GlassSharpBackdrop\|GlassBackdrop" source/tyControls.Base.pas | head -5
-```
-
-写一条一次性探针，看 green 主题下宿主到底有没有拿到 backdrop：
+Task 5 那条测的是 `FadeLevel = 0`，而那已经走早退、不进合成分支了。**这一步要的是中途**：
 
 ```pascal
-procedure TTyScrollBarAutoHideTests.ProbeGreenThemeHasBackdrop;
-var
-  host: ITyGlassHost;
-  off: TPoint;
-begin
-  FCtl.ThemeName := 'green';
-  { TyResolveGlassHost 返回 False 就说明 headless 下根本没有图片背景，
-    这一整套 headless 测量就是在量一张纯色图，结论不作数。 }
-  AssertTrue('headless 下 green 主题没有 backdrop，本任务改走真机',
-    TyResolveGlassHost(FBar, host, off));
-end;
+FBar.NoteActivity;
+FBar.AutoHideTick(1000);                          { 装膛 }
+FBar.AutoHideTick(TyScrollBarFadeOutMs div 2);    { 停在半路——这一帧走合成分支 }
+AssertTrue('前置：确实卡在中途', (FBar.FadeLevel > 0.05) and (FBar.FadeLevel < 0.95));
 ```
 
-- **这条通过** → 走 Step 2a（headless 量）
-- **这条失败** → 走 Step 2b（真机量）。**把这条探针删掉，不要留一条永远红的测试在套件里。**
+然后照 Task 5 的办法渲染、采样条那一竖的顶部与底部。
 
-- [ ] **Step 2a: headless 量（探针通过时）**
+- [ ] **Step 2: 读数**
 
-判据不需要基准图：淡出后条那一竖条**如果是一块纯色、而紧邻它左侧的同高度区域有明显变化**，就说明 opacity 把渐变/照片铺平了。
-
-```pascal
-procedure TTyScrollBarAutoHideTests.MeasureFadeFlatteningOnImageTheme;
-var
-  bmp: TBitmap;
-  y, barMin, barMax, sideMin, sideMax, v: Integer;
-  W, H, barX, sideX: Integer;
-
-  function Lum(c: TColor): Integer;
-  begin
-    Result := (Red(c) * 299 + Green(c) * 587 + Blue(c) * 114) div 1000;
-  end;
-
-begin
-  FCtl.ThemeName := 'green';
-  W := 200; H := 120;
-  FBar.SetBounds(W - 14, 0, 14, H);
-  FBar.Max := 100; FBar.Position := 50;
-
-  bmp := TBitmap.Create;
-  try
-    { 非合成 blit 的离屏位图用 pf24bit：pf32bit 在 GTK2 上 alpha 平面全 0，
-      整块黑，而 Win32 GDI 忽略 alpha 所以本机测不出来。 }
-    bmp.PixelFormat := pf24bit;
-    bmp.SetSize(W, H);
-    { 洋红哨兵底：白底会和 light 主题的表面色混淆，量出来的差没法归因。 }
-    bmp.Canvas.Brush.Color := clFuchsia;
-    bmp.Canvas.FillRect(0, 0, W, H);
-
-    FBar.NoteActivity;
-    FBar.AutoHideTick(99999);          { 主题若没开自动隐藏，这里仍是 1.0 }
-    TBarAccess(FBar).SetFadeLevelForProbe(0.0);   { 直接按到全隐藏 }
-    TBarAccess(FBar).RenderTo(bmp.Canvas, Rect(W - 14, 0, W, H), 96);
-
-    barX := W - 7;      { 条的中线 }
-    sideX := W - 30;    { 条左边 16px 处的宿主背景 }
-    barMin := 255; barMax := 0; sideMin := 255; sideMax := 0;
-    for y := 4 to H - 5 do
-    begin
-      v := Lum(bmp.Canvas.Pixels[barX, y]);
-      if v < barMin then barMin := v;
-      if v > barMax then barMax := v;
-      v := Lum(bmp.Canvas.Pixels[sideX, y]);
-      if v < sideMin then sideMin := v;
-      if v > sideMax then sideMax := v;
-    end;
-
-    { 报出来，让人读数据再做决定——这一步的产出是一个决定，不是一条断言。 }
-    Status(Format('bar spread=%d  side spread=%d', [barMax - barMin, sideMax - sideMin]));
-    AssertTrue('哨兵底还在 = 条那一竖根本没画上去，测量无效',
-      barMax > 0);
-  finally
-    bmp.Free;
-  end;
-end;
-```
-
-这需要给 access 类加两个缝：
-
-```pascal
-  TBarAccess = class(TTyScrollBar)
-  public
-    procedure SetDraggingState(AValue: Boolean);
-    procedure SetFadeLevelForProbe(v: Single);
-    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
-  end;
-
-procedure TBarAccess.SetFadeLevelForProbe(v: Single);
-begin
-  FFadeLevel := v;
-end;
-
-procedure TBarAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
-begin
-  inherited RenderTo(ACanvas, ARect, APPI);
-end;
-```
-
-**读数：** `side spread` 明显 > 0（背景确实在变）而 `bar spread` ≈ 0（条那一竖是平的）→ 铺平了，走 Step 3 的第二条。两个都 ≈ 0 → 这张背景本来就平，换一张对比强的图再量。
-
-- [ ] **Step 2b: 真机量（探针失败时）**
-
-1. `lazbuild -B tycontrols.lpk`（**先夺回机器级包注册权**，否则编的可能是另外两个会话的树）
-2. `lazbuild -B examples/listbox/listbox.lpi` 并运行
-3. 切到 `green` 主题，让列表长到出滚动条
-4. 截两张图：滚动条完全显示时、淡出后
-5. 放大看条所在的那一竖条与周围背景是否接得上
+- **顶和底差得明显**（跟着渐变走）→ 合成分支把真实背景带上来了，**没有平板色问题**，本任务到此为止，在 spec §6 里记一句结论 + 日期。
+- **顶和底一样**（一块平色）→ 过渡期确实会闪一块平色。**但先别急着动 `Base.pas`**：这是 200 ms 的一瞬，不是常驻态。把数字记下来交给协调者定，别自己决定动共享文件。
 
 - [ ] **Step 3: 按数据二选一**
 
