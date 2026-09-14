@@ -160,6 +160,7 @@ type
     // Reentrancy guard: TopLine->scrollbar.Position and scrollbar OnChange->
     // SetTopLine would otherwise ping-pong. Shared by both bars.
     FSyncingScroll: Boolean;
+    FScrollBarAutoHide: TTyScrollBarAutoHide;
     // Lazy measuring bitmap (freed in Destroy). Shared by all per-line measures.
     FMeasureBmp: TBGRABitmap;
     // Per-line width cache (line content -> cumulative prefix widths). The hot path: a keystroke makes
@@ -284,6 +285,7 @@ type
     procedure SetWantTabs(AValue: Boolean);
     procedure SetWantReturns(AValue: Boolean);
     procedure SetScrollBars(AValue: TScrollStyle);
+    procedure SetScrollBarAutoHide(const AValue: TTyScrollBarAutoHide);
     procedure SetAlignment(AValue: TAlignment);
     procedure SetCharCase(AValue: TEditCharCase);
     { Fold AStr per CharCase (identical rule to TTyEdit.ApplyCharCase). '' passes through. }
@@ -863,6 +865,10 @@ type
     // The horizontal bar only applies when WordWrap=False (wrap mode never scrolls horizontally).
     property ScrollBars: TScrollStyle read FScrollBars write SetScrollBars
       default ssAutoVertical;
+    { 这个备忘录的两条滚动条要不要在没人用的时候淡出。转发给内嵌条，
+      语义见 TTyScrollBar.AutoHide。 }
+    property ScrollBarAutoHide: TTyScrollBarAutoHide
+      read FScrollBarAutoHide write SetScrollBarAutoHide default sbahDefault;
     // Soft word-wrap toggle. Default False (no wrap; long lines scroll horizontally instead).
     // True wraps long logical lines into multiple visual rows at word boundaries.
     property WordWrap: Boolean read FWordWrap write SetWordWrap default False;
@@ -971,6 +977,7 @@ begin
   FScrollBar := nil;
   FHScrollBar := nil;
   FSyncingScroll := False;
+  FScrollBarAutoHide := sbahDefault;   { 与 published 的 default 一致 }
   FMeasureBmp := nil;
   FLineWidthCache := specialize TDictionary<string, TTyIntArray>.Create;
   FLineTotalWidthCache := specialize TDictionary<string, Integer>.Create;
@@ -1278,6 +1285,16 @@ begin
   // Re-evaluate the embedded bar's visibility under the new policy.
   UpdateScrollBar;
   Invalidate;
+end;
+
+procedure TTyMemo.SetScrollBarAutoHide(const AValue: TTyScrollBarAutoHide);
+begin
+  if FScrollBarAutoHide = AValue then Exit;
+  FScrollBarAutoHide := AValue;
+  { 两条都是惰性创建的，建的时候也要带上——所以创建处同样要写一遍。
+    这里管「已经建好的」，创建处管「之后才建的」。 }
+  if FScrollBar <> nil then FScrollBar.AutoHide := AValue;
+  if FHScrollBar <> nil then FHScrollBar.AutoHide := AValue;
 end;
 
 // ---- Flat codepoint-offset <-> (line,col) mapping ----
@@ -2356,6 +2373,7 @@ begin
       FScrollBar.TabStop := False;
       FScrollBar.OnChange := @ScrollBarChange;
       FScrollBar.AnimationsEnabled := False;   // instant: scrolling never lags the wheel/keyboard
+      FScrollBar.AutoHide := FScrollBarAutoHide;   // the bar is born AFTER the property may have been set
       FScrollBar.ControlStyle := FScrollBar.ControlStyle + [csNoDesignVisible];   // internal: never a designable child
     end;
     FScrollBar.Width := SBW;
@@ -2418,6 +2436,7 @@ begin
       FHScrollBar.TabStop := False;  // embedded: never take the caret off the memo (see the vbar)
       FHScrollBar.OnChange := @HScrollBarChange;
       FHScrollBar.AnimationsEnabled := False;
+      FHScrollBar.AutoHide := FScrollBarAutoHide;   // the bar is born AFTER the property may have been set
       FHScrollBar.ControlStyle := FHScrollBar.ControlStyle + [csNoDesignVisible];   // internal: hide in the designer
     end;
     FHScrollBar.Height := SBW;

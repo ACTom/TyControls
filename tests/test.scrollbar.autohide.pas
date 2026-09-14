@@ -2,11 +2,11 @@ unit test.scrollbar.autohide;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, TypInfo, fpcunit, testregistry, Forms, Controls, Graphics,
+  Classes, SysUtils, TypInfo, fpcunit, testregistry, Forms, Controls, StdCtrls, Graphics,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.ScrollBar, tyControls.Panel,
   { 内嵌了滚动条的宿主——转发那一组测试要的。 }
-  tyControls.ListBox;
+  tyControls.ListBox, tyControls.Memo;
 
 type
   TTyScrollBarAutoHideTests = class(TTestCase)
@@ -21,6 +21,7 @@ type
       const AWhat: string);
     function NewListBox: TTyListBox;
     procedure FillListBox(ALb: TTyListBox);
+    function NewMemo: TTyMemo;
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -73,6 +74,9 @@ type
     procedure ListBoxForwardsToItsEmbeddedBars;
     procedure ListBoxForwardsToBarsBornLater;
     procedure ListBoxDeclaredDefaultMatchesConstructed;
+    procedure MemoForwardsToItsEmbeddedBars;
+    procedure MemoForwardsToBarsBornLater;
+    procedure MemoDeclaredDefaultMatchesConstructed;
   end;
 
 implementation
@@ -1114,6 +1118,44 @@ end;
 procedure TTyScrollBarAutoHideTests.ListBoxDeclaredDefaultMatchesConstructed;
 begin
   CheckHostDeclaredDefault(NewListBox, 'ListBox');
+end;
+
+function TTyScrollBarAutoHideTests.NewMemo: TTyMemo;
+begin
+  Result := TTyMemo.Create(FForm);
+  Result.Parent := FForm;
+  Result.Controller := FCtl;
+  Result.SetBounds(0, 0, 200, 120);
+end;
+
+procedure TTyScrollBarAutoHideTests.MemoForwardsToItsEmbeddedBars;
+var
+  m: TTyMemo;
+begin
+  { Memo 的两条同样惰性：ssBoth 把两条都要出来(WordWrap 默认 False，
+    横条那条臂才走得到)。不先要出来，「找不到条」会被误读成「转发没生效」。 }
+  m := NewMemo;
+  m.ScrollBars := ssBoth;
+  m.ScrollBarAutoHide := sbahNever;
+  CheckBothBarsGot(m, sbahNever, 'Memo');
+end;
+
+procedure TTyScrollBarAutoHideTests.MemoForwardsToBarsBornLater;
+var
+  m: TTyMemo;
+begin
+  { 和 ListBox 同一条缝：setter 够不着还没出生的条。 }
+  m := NewMemo;
+  AssertTrue('前置条件：这会儿一条都还没有',
+    (FindEmbeddedBar(m, sbVertical) = nil) and (FindEmbeddedBar(m, sbHorizontal) = nil));
+  m.ScrollBarAutoHide := sbahAuto;
+  m.ScrollBars := ssBoth;
+  CheckBothBarsGot(m, sbahAuto, 'Memo(后生的条)');
+end;
+
+procedure TTyScrollBarAutoHideTests.MemoDeclaredDefaultMatchesConstructed;
+begin
+  CheckHostDeclaredDefault(NewMemo, 'Memo');
 end;
 
 initialization
