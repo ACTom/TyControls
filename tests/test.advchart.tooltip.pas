@@ -84,6 +84,7 @@ type
     procedure TestHoveringABarDrawsSomething;
     procedure TestEverythingThatChangedIsTheTooltip;
     procedure TestHoveringNothingDrawsNothing;
+    procedure TestTheMarkerTakesTheColourOfWhateverColoursByDatum;
     procedure TestLeavingTheChartTakesItAway;
     procedure TestShowFalseDrawsNothing;
     procedure TestTriggerNoneDrawsNothing;
@@ -682,6 +683,51 @@ begin
   { And the box is a tooltip-sized thing, not a swathe of the chart. }
   AssertTrue('the change is tooltip-sized',
              area < (cW * cH) div 6);
+end;
+
+procedure TAdvChartTooltipDrawTest.
+  TestTheMarkerTakesTheColourOfWhateverColoursByDatum;
+var
+  a, d: TTyChartCallbackParams;
+
+  function Datum(ARow: Integer): TTyChartDatumRef;
+  begin
+    Result := TyChartDatum(0, ARow, ARow);
+  end;
+
+const
+  cFun = '{"series":[{"type":"funnel","name":"P","data":['
+    + '{"name":"a","value":100},{"name":"b","value":80},'
+    + '{"name":"c","value":60},{"name":"d","value":40}]}]}';
+begin
+  { THE MARKER STANDS FOR THE THING THE ROW WAS DRAWN AS, and on a series that
+    colours by DATUM that is the band, not the series. The test that decided
+    asked whether the type was a `pie` BY NAME, so a funnel -- which colours
+    by datum in exactly the same way -- handed every band the one flat series
+    colour and the dot disagreed with what it pointed at.
+
+    TWO ROWS, because one cannot see it: whatever the flat colour is, a single
+    marker is that colour under both rules.
+
+    ASKED OF THE PARAMS rather than of the pixels. The dot is ten logical
+    pixels of a colour the theme chooses, sitting inside a box with a tinted
+    border, over whatever the tooltip happens to cover -- and the first
+    version of this test read the band BEHIND the box and passed on a chart
+    where the marker was plainly wrong. }
+  Draw(cFun);
+  a := FChart.ParamsFor(Datum(0));
+  d := FChart.ParamsFor(Datum(3));
+  AssertTrue('the first band has a colour', a.Color <> 0);
+  AssertTrue('and so has the last', d.Color <> 0);
+  AssertTrue(Format('and they are not the same one (%.8x vs %.8x)',
+                    [a.Color, d.Color]), a.Color <> d.Color);
+  { AND A SERIES THAT DOES NOT COLOUR BY DATUM still answers with its own
+    colour for every row, which is the half a one-sided test would lose. }
+  Draw('{"xAxis":{"type":"category","data":["a","b","c","d"]},"yAxis":{},'
+    + '"series":[{"type":"bar","name":"B","data":[1,2,3,4]}]}');
+  a := FChart.ParamsFor(Datum(0));
+  d := FChart.ParamsFor(Datum(3));
+  AssertEquals('a bar is one colour', Int64(a.Color), Int64(d.Color));
 end;
 
 procedure TAdvChartTooltipDrawTest.TestHoveringNothingDrawsNothing;

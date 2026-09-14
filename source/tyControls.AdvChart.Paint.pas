@@ -194,6 +194,15 @@ type
       ARow < 0 matches any row of the series, which is how a run element -- one
       polyline standing for a whole line -- is found at all. }
     function IndexOfDatum(ASeries, ARow: Integer): Integer;
+    { The same walk, but for the topmost element that actually CARRIES A
+      COLOUR -- a fill or a real stroke.
+
+      A DATUM IS USUALLY SEVERAL ELEMENTS and the topmost is not the one that
+      says what colour it is: a funnel's band sits under its own label, and a
+      label is a rectangle with no fill and no stroke whose whole job is to
+      hold words. A caller asking "what colour is this datum" got the label
+      and no answer at all. }
+    function IndexOfDatumInk(ASeries, ARow: Integer): Integer;
     property Count: Integer read FCount;
   end;
 
@@ -240,6 +249,25 @@ begin
     if FItems[idx].Datum.SeriesIndex <> ASeries then Continue;
     if (ARow >= 0) and (FItems[idx].Datum.DataIndex <> ARow) then Continue;
     Exit(idx);
+  end;
+end;
+
+function TTyPaintList.IndexOfDatumInk(ASeries, ARow: Integer): Integer;
+var i, idx: Integer;
+begin
+  Result := -1;
+  if ASeries < 0 then Exit;
+  EnsureOrder;
+  for i := FCount - 1 downto 0 do
+  begin
+    idx := FOrder[i];
+    if FItems[idx].Silent then Continue;
+    if FItems[idx].Datum.SeriesIndex <> ASeries then Continue;
+    if (ARow >= 0) and (FItems[idx].Datum.DataIndex <> ARow) then Continue;
+    if FItems[idx].Style.HasFill and (FItems[idx].Style.FillColor <> 0) then
+      Exit(idx);
+    if (FItems[idx].Style.StrokeWidthLogical > 0)
+      and (FItems[idx].Style.StrokeColor <> 0) then Exit(idx);
   end;
 end;
 

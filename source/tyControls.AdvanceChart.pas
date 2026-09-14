@@ -3370,17 +3370,28 @@ begin
     FOUND BY DATUM, not taken from the hovered element: under an axis trigger
     the pointer is usually nowhere near the mark being described, and the
     element it happens to be over belongs to something else or to nothing. }
-  perDatum := (FBindings[slot].SeriesType = TyPieSeriesTypeName)
+  { THE SAME LIST THE LEGEND ASKS. It read `= 'pie'` while a funnel and a
+    radar colour by datum in exactly the same way, so their markers took the
+    flat series colour and disagreed with the band or the ring under the
+    pointer. }
+  perDatum := TySeriesLegendByDatum(FBindings[slot].SeriesType)
     or (Length(FStores[slot].DimsOfCoord(
       AxisDimOf(FBindings[slot].ValueAxis))) > 1);
   if perDatum and (FPaintList <> nil) and FPaintListValid then
   begin
-    idx := FPaintList.IndexOfDatum(ADatum.SeriesIndex, ADatum.DataIndex);
+    idx := FPaintList.IndexOfDatumInk(ADatum.SeriesIndex, ADatum.DataIndex);
     if idx >= 0 then
     begin
       el := FPaintList.Element(idx);
       if el.Style.HasFill and (el.Style.FillColor <> 0) then
-        Result := el.Style.FillColor;
+        Result := el.Style.FillColor
+      { A RING HAS NO FILL. A radar's row is a stroked polyline, so the colour
+        that stands for it is its STROKE -- and a filled-shape-only rule left
+        every radar marker on the series colour, which is the one thing a
+        series colouring by datum does not have. }
+      else if (not el.Style.HasFill) and (el.Style.StrokeColor <> 0)
+        and (el.Style.StrokeWidthLogical > 0) then
+        Result := el.Style.StrokeColor;
     end;
   end;
 end;

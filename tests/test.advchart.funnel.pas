@@ -61,6 +61,7 @@ type
     procedure SetUp; override;
     procedure TearDown; override;
     procedure Draw(const AOption: string);
+    procedure Draw2(const AOption: string);
     function ColouredPixels: Integer;
     function Diagnostics: string;
   published
@@ -443,6 +444,15 @@ begin
   FBmp := TBGRABitmap.Create(cW, cH, BGRAWhite);
   FChart.Option := AOption;
   FChart.SetBounds(0, 0, cW, cH);
+  FChart.Render(FBmp.Canvas, Rect(0, 0, cW, cH), 96);
+end;
+
+{ ANOTHER FRAME OF THE SAME CHART. Assigning the option again would rebuild
+  it, and rebuilding is exactly what clears what the pointer is over. }
+procedure TAdvChartFunnelDrawTest.Draw2(const AOption: string);
+begin
+  FreeAndNil(FBmp);
+  FBmp := TBGRABitmap.Create(cW, cH, BGRAWhite);
   FChart.Render(FBmp.Canvas, Rect(0, 0, cW, cH), 96);
 end;
 

@@ -28,6 +28,9 @@ type
       is: Paint needs a handle and a message loop, and a headless test has
       neither. }
     procedure RenderLayered(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    { MouseMove is protected on TControl, and every suite that wants to test
+      what the pointer is over needs it. One door rather than one per suite. }
+    procedure Hover(AX, AY: Integer);
     function TypeKey: string;
   end;
 
@@ -119,6 +122,11 @@ procedure TChartProbe.RenderLayered(ACanvas: TCanvas; const ARect: TRect;
   APPI: Integer);
 begin
   RenderCached(ACanvas, ARect, APPI);
+end;
+
+procedure TChartProbe.Hover(AX, AY: Integer);
+begin
+  MouseMove([], AX, AY);
 end;
 
 function TChartProbe.TypeKey: string;
