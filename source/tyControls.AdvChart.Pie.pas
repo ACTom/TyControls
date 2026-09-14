@@ -289,13 +289,9 @@ end;
 
 function TyPieResolve(const AValue: TTyBoxValue; ABase: Double): Double;
 begin
-  case AValue.Kind of
-    buPx: Result := AValue.Value;
-    buPercent: Result := AValue.Value / 100 * ABase;
-    buCentre: Result := ABase / 2;
-  else
-    Result := 0;
-  end;
+  { THE RULE MOVED to where the type lives. One implementation, two names, and
+    only the name is here -- this is what the pie's own tests call it. }
+  Result := TyBoxResolve(AValue, ABase);
 end;
 
 { A pair option in ECharts' two spellings: an array of two, or a scalar.

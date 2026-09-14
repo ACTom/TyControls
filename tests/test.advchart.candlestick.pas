@@ -363,13 +363,15 @@ procedure TAdvChartCandleDrawTest.TestATypeWithNoRendererSaysSo;
 begin
   { A CHART THAT CANNOT DRAW SOMETHING HAS TO SAY SO. Binding knows the
     twenty-three names ECharts ships and nothing about which of them this
-    control can paint, so a funnel bound cleanly, laid out cleanly and came
-    out blank with no diagnostic at all -- which is the one thing this control
-    is not allowed to do. }
+    control can paint, so a sankey binds cleanly, lays out cleanly and comes
+    out blank -- and with no diagnostic that is the one thing this control is
+    not allowed to do.
+    The example was a funnel until the funnel drew; moving it is what this
+    test is for. }
   Draw('{"xAxis":{"type":"category","data":["a"]},"yAxis":{},' +
-       '"series":[{"type":"funnel","data":[1]}]}');
-  AssertTrue('the funnel says it is not drawn',
-             Pos('funnel', Diagnostics) > 0);
+       '"series":[{"type":"sankey","data":[1]}]}');
+  AssertTrue('the sankey says it is not drawn',
+             Pos('sankey', Diagnostics) > 0);
 end;
 
 procedure TAdvChartCandleDrawTest.TestATypeWithARendererDoesNot;

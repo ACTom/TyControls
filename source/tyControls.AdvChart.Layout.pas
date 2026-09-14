@@ -49,6 +49,12 @@ function TyBoxPercent(AValue: Double): TTyBoxValue;
 function TyBoxCentre: TTyBoxValue;
 function TyBoxAuto: TTyBoxValue;
 
+{ ONE BOX VALUE AGAINST A BASE -- upstream's parsePercent, in the only form
+  this family needs. Here rather than beside the first caller that wanted it:
+  it is a rule about TTyBoxValue, and a second series asking a PIE how to read
+  a percentage is the borrowed-name mistake wearing another hat. }
+function TyBoxResolve(const AValue: TTyBoxValue; ABase: Double): Double;
+
 function TyFixedContainer(const ARect: TTyRectF): ITyBoxContainer;
 function TyCoordCellContainer(const ACoordSys: ITyCoordSys;
   const AData: array of Double): ITyBoxContainer;
@@ -507,6 +513,17 @@ begin
   { ContentRect, not Rect — a nested thing must not paint over the host's
     divider. Same choice HeatmapView.ts:279 makes. }
   Result := l.ContentRect;
+end;
+
+function TyBoxResolve(const AValue: TTyBoxValue; ABase: Double): Double;
+begin
+  case AValue.Kind of
+    buPx: Result := AValue.Value;
+    buPercent: Result := AValue.Value / 100 * ABase;
+    buCentre: Result := ABase / 2;
+  else
+    Result := 0;
+  end;
 end;
 
 function TyFixedContainer(const ARect: TTyRectF): ITyBoxContainer;

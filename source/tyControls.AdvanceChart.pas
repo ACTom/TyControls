@@ -39,7 +39,8 @@ uses
   tyControls.AdvChart.Marks, tyControls.AdvChart.BarLayout,
   tyControls.AdvChart.Stack, tyControls.AdvChart.Symbol,
   tyControls.AdvChart.Color,
-  tyControls.AdvChart.Pie, tyControls.AdvChart.Title,
+  tyControls.AdvChart.Pie, tyControls.AdvChart.Funnel,
+  tyControls.AdvChart.Title,
   tyControls.AdvChart.Labels, tyControls.AdvChart.LabelOpt,
   tyControls.AdvChart.PieLabel, tyControls.AdvChart.Legend,
   tyControls.AdvChart.Tooltip, tyControls.AdvChart.AxisPointer,
@@ -135,6 +136,12 @@ type
       Solved in Relayout for the same reason FBarCols is: a pie centred on
       a percentage of its box needs the box in final pixels. }
     FPies: array of TTyPieLayout;
+    { THE FUNNEL'S, kept apart from the pie's for the reason the pie's are kept
+      apart from the bars': the solver runs once per layout and the builder is
+      a pure unit that cannot re-read the option, so the answer has to be
+      carried rather than recomputed. }
+    FFunnels: array of TTyFunnelLayout;
+    FFunnelSpecs: array of TTyFunnelSpec;
     { Index-parallel to FPies. The paint pass needs showEmptyCircle, and the
       mark builder is a pure unit that cannot re-read the option. }
     FPieSpecs: array of TTyPieSpec;
@@ -313,6 +320,21 @@ type
     procedure PaintTitles(APainter: TTyPainter);
     { One colour per SECTOR, not one per series: a pie is colorBy:data. }
     function PieVisual(ASlot: Integer): TTyPieVisual;
+    { ONE COLOUR PER RAW ROW, in raw order, for a series that colours by datum.
+
+      RAW and not view: a row dropped by a filter -- a negative value, a legend
+      click -- still consumes its slot, which is the only thing that keeps the
+      survivors on the colours they had. Upstream iterates its unfiltered data
+      here for the same reason and says so in a comment.
+
+      Shared because a pie and a funnel want the identical answer, and the one
+      thing worse than two implementations of a palette is two implementations
+      that agree today. }
+    function PerDatumColours(ASlot: Integer): TTyChartColorArray;
+    { Every funnel's geometry. Runs in Relayout, beside SolvePies. }
+    procedure SolveFunnels;
+    function FunnelVisual(ASlot: Integer): TTyFunnelVisual;
+    function FunnelLabelInk: TTyFunnelLabelInk;
     { The label spec for one series, resolved from the theme and the option. }
     function LabelSpecFor(ASlot: Integer): TTyLabelSpec;
     { The fonts and the four inks a pie label is drawn with. }
@@ -743,6 +765,7 @@ var
   coord: TTyCoordDimArray;
   cursors: TTyEncodeCursorArray;
   enc: TTySeriesEncode;
+  typeInfo: TTySeriesTypeInfo;
 begin
   DropBuild;
   FBuild := TyBuildGrids(FOption, FLastRect);
@@ -780,18 +803,27 @@ begin
     end;
     if not FBindings[i].HasAxes then
     begin
-      { A PIE HAS DATA TOO, and until now it did not get any: the columns
-        below are the coordinate systems dimensions, and a series without
-        a coordinate system has none, so the store stayed empty and the
-        `data` array was never read. One float column, named the way
-        ECharts names the dimension, and TyFillSeriesStore does the rest --
-        it already unwraps `{ value, name }`, records the name and collects
-        the per-item overrides. }
-      if FBindings[i].SeriesType = TyPieSeriesTypeName then
+      { A SERIES OFF EVERY COORDINATE SYSTEM HAS DATA TOO, and until now
+        only a pie got any: the columns below are the coordinate system's
+        dimensions, and a series without a coordinate system has none, so
+        the store stayed empty and the `data` array was never read. One
+        float column, named the way ECharts names the dimension, and
+        TyFillSeriesStore does the rest -- it already unwraps
+        `{ value, name }`, records the name and collects the per-item
+        overrides.
+
+        THE TEST IS THE USAGE, NOT THE TYPE NAME. It read `= 'pie'` while
+        the registry had said `scuBox` about a funnel and a gauge since the
+        day it was written -- so both of them reached here, matched nothing,
+        and left with a store of zero columns and zero rows. Nothing raised;
+        their layout simply found no value dimension and drew nothing, which
+        is indistinguishable from a type with no renderer. }
+      if TySeriesFindType(FBindings[i].SeriesType, typeInfo)
+        and (typeInfo.Usage = scuBox) and (Length(typeInfo.Dims) > 0) then
       begin
-        st.AddDimension(TyPieValueDim, ddtFloat);
+        st.AddDimension(typeInfo.Dims[0], ddtFloat);
         SetLength(dims, 1);
-        dims[0].Name := TyPieValueDim;
+        dims[0].Name := typeInfo.Dims[0];
         dims[0].Kind := ddtFloat;
         dims[0].Axis := nil;
         ds := FSeriesDataset[i];
@@ -801,7 +833,7 @@ begin
             encode is the other one: a NAME dimension and a VALUE dimension,
             guessed from the table rather than counted off it. }
           SetLength(coord, 1);
-          coord[0].Name := TyPieValueDim;
+          coord[0].Name := typeInfo.Dims[0];
           coord[0].Ordinal := False;
           enc := TyEncodeOf(FOption, FBindings[i].SeriesIndex,
             FSources[i], coord);
@@ -929,6 +961,7 @@ begin
   { AFTER phase C, for the reason on FBarCols. }
   FBarCols := TySolveBarLayout(FOption, FBuild, FBindings, FStores, FIndex);
   SolvePies;
+  SolveFunnels;
   SolveTitles(AMeasurer, APPI);
   SolveLegends(AMeasurer, APPI);
   FDirty := False;
@@ -1940,16 +1973,116 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.PieVisual(ASlot: Integer): TTyPieVisual;
+procedure TTyAdvanceChart.SolveFunnels;
 var
-  k, n, raw, rawN: Integer;
-  ov: TTyDataValue;
+  i, dim: Integer;
+begin
+  SetLength(FFunnels, Length(FBindings));
+  SetLength(FFunnelSpecs, Length(FBindings));
+  for i := 0 to High(FBindings) do
+  begin
+    FFunnels[i] := Default(TTyFunnelLayout);
+    FFunnelSpecs[i] := TyFunnelSpecDefault;
+    if i > High(FStores) then Break;
+    if not FBindings[i].Resolved then Continue;
+    if FBindings[i].SeriesType <> TyFunnelSeriesTypeName then Continue;
+    FFunnelSpecs[i] := TyFunnelSpecOf(FOption, FBindings[i].SeriesIndex);
+    dim := FStores[i].DimIndexOf(TyPieValueDim);
+    { FLastRect, not a grid -- a funnel is laid out against the CONTROL and
+      its own left/top/right/bottom shrink that, the same rule a pie follows
+      and for the same reason. }
+    FFunnels[i] := TyFunnelLayoutOf(FFunnelSpecs[i], FLastRect,
+      FStores[i], dim);
+  end;
+end;
+
+function TTyAdvanceChart.FunnelVisual(ASlot: Integer): TTyFunnelVisual;
+var st: TTyStyleSet;
+begin
+  Result := TyFunnelVisual;
+  Result.Fills := PerDatumColours(ASlot);
+  { THE BAND'S OUTLINE IS THE CHART'S OWN GROUND, which is what separates two
+    adjacent bands of nearly the same colour. Upstream writes neutral00 -- its
+    white -- and on a dark skin that is a white grid over a dark funnel; the
+    surface colour is the same idea said in this vocabulary. }
+  st := ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass,
+    [tysNormal]);
+  Result.Stroke := TTyChartColor(st.Background.Color);
+  Result.StrokeWidthLogical := 1;
+end;
+
+function TTyAdvanceChart.FunnelLabelInk: TTyFunnelLabelInk;
+var
+  model: TTyStyleModel;
+  st: TTyStyleSet;
+begin
+  model := ActiveController.Model;
+  st := model.ResolveStyle('TyAdvChartLabel', '', []);
+  Result.FontName := st.FontName;
+  Result.FontSizeLogical := ResolveFontSize(st);
+  Result.FontWeight := st.FontWeight;
+  Result.OutsideColour := TTyChartColor(st.TextColor);
+  { THE SAME THREE BANDS THE PIE AND THE MARKS USE. Not a second table: a
+    label over a coloured shape is one question however the shape was made. }
+  Result.InsideColour[0] := TTyChartColor(
+    model.ResolveStyle('TyAdvChartLabelOnLight', '', []).TextColor);
+  Result.InsideColour[1] := TTyChartColor(
+    model.ResolveStyle('TyAdvChartLabelOnMid', '', []).TextColor);
+  Result.InsideColour[2] := TTyChartColor(
+    model.ResolveStyle('TyAdvChartLabelOnDark', '', []).TextColor);
+end;
+
+function TTyAdvanceChart.PerDatumColours(ASlot: Integer): TTyChartColorArray;
+var
+  k, rawN: Integer;
   c: TTyChartColor;
+  ov: TTyDataValue;
   pal: TTyChartColorArray;
-  perRaw: TTyChartColorArray;
   cur: TTyPaletteCursor;
   declared: Boolean;
   nm: string;
+begin
+  { colorBy: 'data'. Each DATUM takes the next slot of the same nine-colour
+    ramp a bar series cycles across series -- which is what makes a pie or a
+    funnel read at all, and what makes it re-skin with the accent like
+    everything else.
+
+    KEYED ON THE DATUM'S NAME, so two charts over the same categories agree
+    about which category is which colour, and a repeated name inside one chart
+    shares a colour rather than taking a second slot. }
+  Result := nil;
+  pal := TyChartPaletteOf(FOption, ASlot, declared);
+  if Length(pal) = 0 then pal := TyChartPaletteOf(FOption, -1, declared);
+  cur := TyPaletteStart(pal);
+  rawN := 0;
+  if (ASlot <= High(FStores)) and (FStores[ASlot] <> nil) then
+    rawN := FStores[ASlot].RawCount;
+  SetLength(Result, rawN);
+  for k := 0 to rawN - 1 do
+  begin
+    Result[k] := TTyChartColor(ThemeRampColor(k));
+    if Length(pal) = 0 then Continue;
+    nm := FStores[ASlot].GetNameByRaw(k);
+    if nm = '' then nm := IntToStr(k);
+    if TyPaletteTake(cur, nm, c) then Result[k] := c;
+  end;
+  { AND A DATUM THAT NAMED ITS OWN COLOUR KEEPS IT. `data: [{ value: 5,
+    itemStyle: { color: '#c23531' } }]` is the commonest thing anybody writes
+    on either chart, and it beats the ramp -- the same rule a bar follows,
+    reached through the same parked override. }
+  for k := 0 to rawN - 1 do
+    if FStores[ASlot].HasOverrideByRaw(k, TyOverrideKey('itemStyle.color')) then
+    begin
+      ov := FStores[ASlot].GetOverrideByRaw(k, TyOverrideKey('itemStyle.color'));
+      if (ov.Kind = dvkText) and TyTryParseChartColor(ov.Text, c) then
+        Result[k] := c;
+    end;
+end;
+
+function TTyAdvanceChart.PieVisual(ASlot: Integer): TTyPieVisual;
+var
+  k, n, raw: Integer;
+  perRaw: TTyChartColorArray;
 begin
   Result := TyPieVisual(0);
   { colorBy:''data''. Each SECTOR takes the next slot of the same nine-colour
@@ -1969,21 +2102,7 @@ begin
     Keyed on the slice's NAME, so two pies over the same categories agree
     about which category is which colour -- and so a repeated name inside one
     pie shares a colour rather than taking a second slot. }
-  pal := TyChartPaletteOf(FOption, ASlot, declared);
-  if Length(pal) = 0 then pal := TyChartPaletteOf(FOption, -1, declared);
-  cur := TyPaletteStart(pal);
-  rawN := 0;
-  if (ASlot <= High(FStores)) and (FStores[ASlot] <> nil) then
-    rawN := FStores[ASlot].RawCount;
-  SetLength(perRaw, rawN);
-  for k := 0 to rawN - 1 do
-  begin
-    perRaw[k] := TTyChartColor(ThemeRampColor(k));
-    if Length(pal) = 0 then Continue;
-    nm := FStores[ASlot].GetNameByRaw(k);
-    if nm = '' then nm := IntToStr(k);
-    if TyPaletteTake(cur, nm, c) then perRaw[k] := c;
-  end;
+  perRaw := PerDatumColours(ASlot);
 
   n := Length(FPies[ASlot].Sectors);
   if n < 1 then n := 1;
@@ -2007,15 +2126,6 @@ begin
         Result.Fills[k] := perRaw[raw]
       else
         Result.Fills[k] := TTyChartColor(ThemeRampColor(raw));
-      if (ASlot <= High(FStores)) and (FStores[ASlot] <> nil)
-        and FStores[ASlot].HasOverrideByRaw(raw,
-              TyOverrideKey('itemStyle.color')) then
-      begin
-        ov := FStores[ASlot].GetOverrideByRaw(raw,
-                TyOverrideKey('itemStyle.color'));
-        if (ov.Kind = dvkText) and TyTryParseChartColor(ov.Text, c) then
-          Result.Fills[k] := c;
-      end;
     end
     else
       Result.Fills[k] := TTyChartColor(ThemeRampColor(k));
@@ -2574,6 +2684,7 @@ var
   i, drawn: Integer;
   v: TTySeriesVisual;
   pv: TTyPieVisual;
+  fv: TTyFunnelVisual;
   specs: TTyLabelSpecArray;
 begin
   Result := 0;
@@ -2606,6 +2717,26 @@ begin
       { A pie is not on a coordinate system, so it takes the other pass. It
         goes into the SAME list: the ordering rule is chart-wide, and a pie
         beside a bar has to sort against it like anything else. }
+      { A FUNNEL IS NOT ON A COORDINATE SYSTEM EITHER, and like the pie it
+        solves its own geometry in the layout pass and replays it here. }
+      if FBindings[i].SeriesType = TyFunnelSeriesTypeName then
+      begin
+        if i <= High(FFunnels) then
+        begin
+          fv := FunnelVisual(i);
+          Inc(drawn, TyBuildFunnelMarks(FBindings[i], FFunnels[i], fv, list));
+          { ITS OWN PASS, not TyExpandLabels -- for the same reason a pie's is.
+            A band's words are placed from the trapezoid's CORNERS and from a
+            guide line that has to be drawn with them; the box-placed
+            expansion knows about neither, and a funnel's bounding box is not
+            where its label goes. }
+          Inc(drawn, TyBuildFunnelLabels(FBindings[i], FFunnels[i],
+            TyFunnelLabelSpecOf(FOption, FBindings[i].SeriesIndex,
+              TyFunnelLabelSpecDefault),
+            FunnelLabelInk, fv.Fills, FStores[i], AMeasurer, APPI, list));
+        end;
+        Continue;
+      end;
       if FBindings[i].SeriesType = TyPieSeriesTypeName then
       begin
         if i <= High(FPies) then
