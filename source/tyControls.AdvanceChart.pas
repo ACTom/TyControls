@@ -40,7 +40,7 @@ uses
   tyControls.AdvChart.Stack, tyControls.AdvChart.Symbol,
   tyControls.AdvChart.Color,
   tyControls.AdvChart.Pie, tyControls.AdvChart.Funnel,
-  tyControls.AdvChart.Gauge,
+  tyControls.AdvChart.Gauge, tyControls.AdvChart.Radar,
   tyControls.AdvChart.Title,
   tyControls.AdvChart.Labels, tyControls.AdvChart.LabelOpt,
   tyControls.AdvChart.PieLabel, tyControls.AdvChart.Legend,
@@ -151,6 +151,14 @@ type
     FGauges: array of TTyGaugeLayout;
     FGaugeSpecs: array of TTyGaugeSpec;
     FGaugeItems: array of TTyGaugeItemArray;
+    { ONE PER RADAR COMPONENT, not per series -- several series share a radar
+      and its spokes are theirs jointly, which is the whole reason a radar is a
+      coordinate system rather than a series' private geometry. }
+    FRadars: array of TTyRadar;
+    { Which store column feeds spoke j, per series. Its own array because the
+      store is exactly as wide as the first data row while the spokes come from
+      the radar, and the two are allowed to disagree. }
+    FRadarDims: array of TTyIntegerArray;
     { Index-parallel to FPies. The paint pass needs showEmptyCircle, and the
       mark builder is a pure unit that cannot re-read the option. }
     FPieSpecs: array of TTyPieSpec;
@@ -346,6 +354,14 @@ type
     { Every gauge's geometry. Runs in Relayout, beside SolvePies. }
     procedure SolveGauges(APPI: Integer);
     function GaugeVisual(ASlot: Integer): TTyGaugeVisual;
+    { Every radar's geometry AND every spoke's value range. Both, because the
+      two halves are one answer: the range of a spoke is the union over every
+      series bound to that radar, which nothing else in this control is in a
+      position to collect. }
+    procedure SolveRadars(APPI: Integer);
+    procedure FreeRadars;
+    function RadarInk: TTyRadarInk;
+    function RadarVisual(ASlot: Integer): TTyRadarVisual;
     function FunnelLabelInk: TTyFunnelLabelInk;
     { The label spec for one series, resolved from the theme and the option. }
     function LabelSpecFor(ASlot: Integer): TTyLabelSpec;
@@ -666,6 +682,11 @@ begin
     going through Invalidate -- so the one place that can be trusted to clear
     it is the one that does the freeing. }
   FTipHits := nil;
+  { AND THE RADARS WITH THEM, for the same reason: a binding holds a radar's
+    INDEX, and the spoke objects a paint list was built against are about to
+    stop existing. }
+  FreeRadars;
+  FRadarDims := nil;
   FreeStores;
   FBindings := nil;
   if FIndex <> nil then FIndex.Clear;
@@ -771,13 +792,14 @@ end;
 
 procedure TTyAdvanceChart.Rebuild;
 var
-  i, k, ds, cur: Integer;
+  i, j, k, ds, cur: Integer;
   dims: TTySeriesDimArray;
   st: TTyDataStore;
   coord: TTyCoordDimArray;
   cursors: TTyEncodeCursorArray;
   enc: TTySeriesEncode;
   typeInfo: TTySeriesTypeInfo;
+  radarSpec: TTyRadarSpec;
 begin
   DropBuild;
   FBuild := TyBuildGrids(FOption, FLastRect);
@@ -830,6 +852,25 @@ begin
         and left with a store of zero columns and zero rows. Nothing raised;
         their layout simply found no value dimension and drew nothing, which
         is indistinguishable from a type with no renderer. }
+      { A RADAR SERIES IS NOT ON NO COORDINATE SYSTEM -- it is on one whose
+        axes are spokes, and HasAxes says only that the cartesian pair is
+        absent. One float column per indicator, named the way the coordinate
+        system names its dimensions, and the store's own default of "column j
+        takes element j of the row" is exactly a radar row. }
+      if FBindings[i].RadarIndex >= 0 then
+      begin
+        radarSpec := TyRadarSpecOf(FOption, FBindings[i].RadarIndex);
+        SetLength(dims, Length(radarSpec.Indicators));
+        for j := 0 to High(dims) do
+        begin
+          st.AddDimension(TyRadarDimPrefix + IntToStr(j), ddtFloat);
+          dims[j] := Default(TTySeriesDim);
+          dims[j].Name := TyRadarDimPrefix + IntToStr(j);
+          dims[j].Kind := ddtFloat;
+        end;
+        if Length(dims) > 0 then TyFillSeriesStore(FOption, i, dims, st);
+        Continue;
+      end;
       if TySeriesFindType(FBindings[i].SeriesType, typeInfo)
         and (typeInfo.Usage = scuBox) and (Length(typeInfo.Dims) > 0) then
       begin
@@ -975,6 +1016,7 @@ begin
   SolvePies;
   SolveFunnels;
   SolveGauges(APPI);
+  SolveRadars(APPI);
   SolveTitles(AMeasurer, APPI);
   SolveLegends(AMeasurer, APPI);
   FDirty := False;
@@ -2009,6 +2051,185 @@ begin
   end;
 end;
 
+procedure TTyAdvanceChart.FreeRadars;
+var i: Integer;
+begin
+  for i := 0 to High(FRadars) do FreeAndNil(FRadars[i]);
+  FRadars := nil;
+end;
+
+procedure TTyAdvanceChart.SolveRadars(APPI: Integer);
+var
+  i, j, k, n, dim, slot: Integer;
+  spec: TTyRadarSpec;
+  lo, hi, v, dLo, dHi: Double;
+  seen: Boolean;
+begin
+  FreeRadars;
+  SetLength(FRadarDims, Length(FBindings));
+  for i := 0 to High(FRadarDims) do FRadarDims[i] := nil;
+  n := 0;
+  if FOption <> nil then n := FOption.ComponentCount('radar');
+  if n = 0 then Exit;
+  SetLength(FRadars, n);
+  for i := 0 to n - 1 do
+  begin
+    spec := TyRadarSpecOf(FOption, i);
+    FRadars[i] := TTyRadar.Create(spec);
+    { FLastRect, and there is nothing between it and the radar: a radar's
+      option carries no left/top/right/bottom at all, so nothing can shrink
+      the canvas under it. }
+    FRadars[i].Resize(FLastRect, APPI);
+  end;
+
+  { ---- which store column feeds which spoke ---- }
+  for i := 0 to High(FBindings) do
+  begin
+    if FBindings[i].RadarIndex < 0 then Continue;
+    if FBindings[i].RadarIndex > High(FRadars) then Continue;
+    if i > High(FStores) then Break;
+    if FStores[i] = nil then Continue;
+    SetLength(FRadarDims[i], FRadars[FBindings[i].RadarIndex].AxisCount);
+    for j := 0 to High(FRadarDims[i]) do
+      FRadarDims[i][j] := FStores[i].DimIndexOf(TyRadarDimPrefix + IntToStr(j));
+  end;
+
+  { ---- every spoke's value range ---- }
+  for k := 0 to High(FRadars) do
+  begin
+    spec := FRadars[k].Spec;
+    for j := 0 to FRadars[k].AxisCount - 1 do
+    begin
+      { THE UNION OVER EVERY SERIES ON THIS RADAR, and it is collected here
+        because nothing else is in a position to: TyApplyAxisExtents walks the
+        cartesian grids' axis lists and a spoke is in neither. }
+      dLo := NaN;
+      dHi := NaN;
+      seen := False;
+      for i := 0 to High(FBindings) do
+      begin
+        if FBindings[i].RadarIndex <> k then Continue;
+        { AN EQUIVALENT MUTANT TODAY, recorded rather than removed. A radar's
+          legend names its ROWS, so switching one off filters the store and
+          the loop below never sees it -- `Hidden` is only ever set for a
+          series whose legend entry is the series itself, which a radar's
+          never is. The guard is what the rule SAYS, and it stops being
+          equivalent the day anything else can hide a whole radar series. }
+        if FBindings[i].Hidden then Continue;
+        if i > High(FStores) then Break;
+        if FStores[i] = nil then Continue;
+        if j > High(FRadarDims[i]) then Continue;
+        dim := FRadarDims[i][j];
+        if (dim < 0) or (dim >= FStores[i].DimCount) then Continue;
+        for slot := 0 to FStores[i].Count - 1 do
+        begin
+          v := FStores[i].Get(dim, slot);
+          if IsNan(v) or IsInfinite(v) then Continue;
+          if not seen then
+          begin
+            dLo := v;
+            dHi := v;
+            seen := True;
+          end
+          else
+          begin
+            if v < dLo then dLo := v;
+            if v > dHi then dHi := v;
+          end;
+        end;
+      end;
+      TyRadarIndicatorExtent(spec.Indicators[j], dLo, dHi, spec.Scale_, lo, hi);
+      FRadars[k].SetAxisExtent(j, lo, hi);
+    end;
+  end;
+end;
+
+function TTyAdvanceChart.RadarInk: TTyRadarInk;
+var
+  model: TTyStyleModel;
+  st: TTyStyleSet;
+begin
+  Result := TyRadarInk;
+  model := ActiveController.Model;
+  { THE SPOKES AND THE RINGS ARE AN AXIS AND ITS SPLIT LINES, whatever the
+    option calls them, so they take the keys an axis already has. }
+  Result.AxisLine := TTyChartColor(
+    model.ResolveStyle('TyAdvChartAxisLine', '', []).BorderColor);
+  Result.SplitLine := TTyChartColor(
+    model.ResolveStyle('TyAdvChartSplitLine', '', []).BorderColor);
+  Result.Tick := TTyChartColor(
+    model.ResolveStyle('TyAdvChartAxisTick', '', []).BorderColor);
+  { THE ALTERNATING BANDS. Upstream writes a pale tint and a transparent one,
+    so every other band shows the ground through it -- the split-area key is
+    already alpha over the ink and says exactly that, and its partner is
+    nothing at all. }
+  Result.SplitAreaA := TTyChartColor(
+    model.ResolveStyle('TyAdvChartSplitArea', '', []).Background.Color);
+  Result.SplitAreaB := 0;
+  st := model.ResolveStyle('TyAdvChartAxisName', '', []);
+  Result.NameColour := TTyChartColor(st.TextColor);
+  Result.NameFontName := st.FontName;
+  Result.NameFontSizeLogical := ResolveFontSize(st);
+  Result.NameFontWeight := st.FontWeight;
+  st := model.ResolveStyle('TyAdvChartAxisLabel', '', []);
+  Result.LabelColour := TTyChartColor(st.TextColor);
+  Result.LabelFontName := st.FontName;
+  Result.LabelFontSizeLogical := ResolveFontSize(st);
+  Result.LabelFontWeight := st.FontWeight;
+  Result.Z := 0;
+end;
+
+function TTyAdvanceChart.RadarVisual(ASlot: Integer): TTyRadarVisual;
+var
+  node: TJSONObject;
+  d: TJSONData;
+  ls, ar: TJSONObject;
+  c: TTyChartColor;
+begin
+  Result := TyRadarVisual(SeriesColor(ASlot));
+  Result.Fills := PerDatumColours(ASlot);
+  Result.EmptyFill := TTyChartColor(
+    ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass,
+      [tysNormal]).Background.Color);
+  Result.Symbol := SymbolFor(ASlot);
+  if FOption = nil then Exit;
+  d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
+  if not (d is TJSONObject) then Exit;
+  node := TJSONObject(d);
+  d := node.Find('lineStyle');
+  if (d <> nil) and (d.JSONType = jtObject) then
+  begin
+    ls := TJSONObject(d);
+    d := ls.Find('width');
+    if (d <> nil) and (d.JSONType = jtNumber) then
+      Result.LineWidthLogical := d.AsFloat;
+    d := ls.Find('color');
+    if (d <> nil) and (d.JSONType = jtString)
+      and TyTryParseChartColor(d.AsString, c) then Result.Fill := c;
+  end;
+  { AN AREA ONLY WHEN THE AUTHOR ASKED FOR ONE, and `areaStyle: {}` counts as
+    asking -- upstream's test is whether the option object exists at all, not
+    whether it has anything in it. That is why an empty object is the documented
+    way to fill a radar. }
+  d := node.Find('areaStyle');
+  if (d <> nil) and (d.JSONType = jtObject) then
+  begin
+    Result.HasArea := True;
+    Result.Area := Result.Fill;
+    ar := TJSONObject(d);
+    d := ar.Find('color');
+    if (d <> nil) and (d.JSONType = jtString)
+      and TyTryParseChartColor(d.AsString, c) then
+    begin
+      Result.Area := c;
+      Result.AreaAuthored := True;
+    end;
+    d := ar.Find('opacity');
+    if (d <> nil) and (d.JSONType = jtNumber) then
+      Result.AreaOpacity := Max(Double(0), Min(Double(1), d.AsFloat));
+  end;
+end;
+
 procedure TTyAdvanceChart.SolveGauges(APPI: Integer);
 var
   i: Integer;
@@ -2373,10 +2594,10 @@ begin
   na := 0;
   for i := 0 to High(FBindings) do
   begin
-    if (FBindings[i].SeriesType = TyPieSeriesTypeName)
+    if TySeriesLegendByDatum(FBindings[i].SeriesType)
       and (i <= High(FStores)) and (FStores[i] <> nil) then
     begin
-      { ITS SLICE NAMES ARE WHAT THE LEGEND OFFERS, but its own name is still
+      { ITS ROW NAMES ARE WHAT THE LEGEND OFFERS, but its own name is still
         AVAILABLE -- upstream pushes every raw series' name into that list
         unconditionally, before it ever looks at a provider. The difference
         shows when an author writes the pie's own name into `legend.data`:
@@ -2419,6 +2640,7 @@ function TTyAdvanceChart.LegendSources(const AEntries: TTyLegendEntryArray):
 var
   i, j, k: Integer;
   found: Boolean;
+  perRaw: TTyChartColorArray;
 begin
   SetLength(Result, Length(AEntries));
   for i := 0 to High(AEntries) do
@@ -2431,7 +2653,7 @@ begin
       nothing answered. }
     for j := 0 to High(FBindings) do
     begin
-      if FBindings[j].SeriesType = TyPieSeriesTypeName then Continue;
+      if TySeriesLegendByDatum(FBindings[j].SeriesType) then Continue;
       if SeriesNameOf(FBindings[j].SeriesIndex) <> AEntries[i].Name then
         Continue;
       Result[i].Found := True;
@@ -2453,7 +2675,7 @@ begin
     if found then Continue;
     for j := 0 to High(FBindings) do
     begin
-      if FBindings[j].SeriesType <> TyPieSeriesTypeName then Continue;
+      if not TySeriesLegendByDatum(FBindings[j].SeriesType) then Continue;
       if (j > High(FStores)) or (FStores[j] = nil) then Continue;
       { THE RAW ROWS, NOT THE VIEW. This runs in Relayout, which is to say
         AFTER the filter has already taken the switched-off slices out of
@@ -2472,13 +2694,25 @@ begin
         colorBy: 'data' -- a slice's colour is the same eight-slot ramp,
         keyed on the same RAW row PieVisual keys on, so the swatch and the
         wedge cannot disagree. }
+      perRaw := PerDatumColours(j);
       for k := 0 to FStores[j].RawCount - 1 do
         if FStores[j].GetNameByRaw(k) = AEntries[i].Name then
         begin
           Result[i].Found := True;
-          Result[i].SeriesType := TyPieSeriesTypeName;
-          Result[i].Colour := TTyChartColor(SeriesColor(k));
+          Result[i].SeriesType := FBindings[j].SeriesType;
+          { THE SAME PALETTE THE MARKS USE, asked the same way. It read the
+            ramp directly by row while the marks went through the shared
+            per-datum rule, so an authored `color` list or a datum's own
+            itemStyle moved the wedge and left the swatch behind. }
+          if k <= High(perRaw) then
+            Result[i].Colour := perRaw[k]
+          else
+            Result[i].Colour := TTyChartColor(SeriesColor(k));
           Result[i].LineColour := Result[i].Colour;
+          Result[i].DefaultIcon := TyLegendDefaultIcon(
+            FBindings[j].SeriesType, SeriesSymbolWord(j));
+          Result[i].OwnIcon := TyLegendDrawsOwnIcon(FBindings[j].SeriesType);
+          if Result[i].OwnIcon then Result[i].LineWidthLogical := 2;
           found := True;
           Break;
         end;
@@ -2537,13 +2771,13 @@ begin
   if Length(FLegendSpecs) = 0 then Exit;
   for i := 0 to High(FBindings) do
   begin
-    if FBindings[i].SeriesType <> TyPieSeriesTypeName then
+    if not TySeriesLegendByDatum(FBindings[i].SeriesType) then
     begin
       FBindings[i].Hidden :=
         LegendHides(SeriesNameOf(FBindings[i].SeriesIndex));
       Continue;
     end;
-    { A PIE IS FILTERED ONE ROW AT A TIME, because its legend names slices
+    { SUCH A SERIES IS FILTERED ONE ROW AT A TIME, because its legend names rows
       rather than series -- upstream's processor/dataFilter against this
       port's own TTyDataStore.FilterSelf, which is the same mechanism and
       has been sitting here unused since the store was written.
@@ -2791,9 +3025,19 @@ begin
     to tell "there is nothing there" from "there is nothing yet". }
   FPaintListPPI := APPI;
   FPaintListValid := True;
+  { THE RADAR'S OWN FURNITURE, ONCE PER RADAR AND BEFORE ANY SERIES. It is not
+    a series' geometry -- several series share one radar -- and it is not a
+    cartesian axis either, so the grid painter never sees it. It goes into the
+    same list because the ordering rule is chart-wide.
+
+    Above the `Length(FBindings) = 0` early-out: a radar with its indicators
+    written and no series at all is a legitimate chart, and an empty one is
+    the first thing anybody sees while they are still typing. }
+  drawn := 0;
+  for i := 0 to High(FRadars) do
+    Inc(drawn, TyBuildRadarGrid(FRadars[i], RadarInk, AMeasurer, APPI, list));
   if Length(FBindings) = 0 then Exit;
   begin
-    drawn := 0;
     for i := 0 to High(FBindings) do
     begin
       if i > High(FStores) then Break;
@@ -2808,6 +3052,14 @@ begin
         beside a bar has to sort against it like anything else. }
       { A FUNNEL IS NOT ON A COORDINATE SYSTEM EITHER, and like the pie it
         solves its own geometry in the layout pass and replays it here. }
+      if FBindings[i].RadarIndex >= 0 then
+      begin
+        if FBindings[i].RadarIndex <= High(FRadars) then
+          Inc(drawn, TyBuildRadarMarks(FBindings[i],
+            FRadars[FBindings[i].RadarIndex], RadarVisual(i), FStores[i],
+            FRadarDims[i], APPI, list));
+        Continue;
+      end;
       { A GAUGE IS NOT ON A COORDINATE SYSTEM EITHER, and it splits its
         drawing in two: the dial is the same whatever the data says, and only
         the needles, the arcs and the words depend on it. }

@@ -94,6 +94,16 @@ type
     BaseAxis: TTyAxis;
     { The other one, which carries the value. }
     ValueAxis: TTyAxis;
+    { WHICH RADAR, or -1. The radar itself is not here: a binding is resolved
+      in phase B, before the control has laid anything out, and a coordinate
+      system that does not know its own centre yet is not worth carrying. The
+      control keeps the objects and looks them up by this index.
+
+      A radar series is Resolved with HasAxes FALSE, which reads oddly until
+      you see what HasAxes is for: it means "on the cartesian pair", and every
+      caller that tests it is asking whether there is an x and a y to map
+      through. A radar has neither. }
+    RadarIndex: Integer;
     { SWITCHED OFF BY A LEGEND. Set by the control after the stores are
       filled and before anything is counted; every solver downstream skips
       such a binding, so the axis extents, the stack groups and the bar
@@ -178,6 +188,19 @@ type
   is an admission TEST rather than part of the key, so one axis has one bucket
   per type-and-system. Putting it in the key gives an axis two buckets and the
   bar layouter reads the wrong one. }
+{ Whether this type's LEGEND entries are its ROWS rather than the series.
+
+  It is a real distinction and not a pie special case: upstream registers a
+  `dataFilter` processor for exactly these types, and everything follows from
+  it -- what the legend offers, which colour a swatch takes, and whether a
+  legend click hides a series or one row of one.
+
+  A LIST AND NOT A DERIVATION. `colorBy: 'data'` is close but not the same
+  question: a series can colour by datum and still be one legend entry, and
+  the day one does, a derived test would quietly change what the legend
+  says. }
+function TySeriesLegendByDatum(const AType: string): Boolean;
+
 function TySeriesStatKey(const ASeriesType, ACoordSysName: string): string;
 
 { Build the index over a whole set of bindings. }
@@ -398,6 +421,7 @@ begin
     sys := StrOf(node, 'coordinateSystem', info.DefaultCoordSys);
     b.CoordSysName := sys;
     b.Usage := info.Usage;
+    b.RadarIndex := -1;
 
     if (sys = '') or (sys = 'none') then
     begin
@@ -410,11 +434,32 @@ begin
       Continue;
     end;
 
+    if sys = 'radar' then
+    begin
+      { THE SECOND SYSTEM, and the step-one/step-two shape finally earns its
+        keep: name the system, then ask it for its axes. A radar's axes are
+        the indicator spokes and they belong to the radar, not to a component
+        list of their own -- so there is nothing to look up here beyond which
+        radar. }
+      b.RadarIndex := TyResolveComponentRef(node, 'radarIndex', 'radarId',
+        AOption.ComponentCount('radar'), nil);
+      if b.RadarIndex < 0 then
+      begin
+        ABuild.Note(Format(rsTyChartSeriesCoordSys, [i, sys]));
+        Result[i] := b;
+        Continue;
+      end;
+      b.Resolved := True;
+      b.HasAxes := False;
+      Result[i] := b;
+      Continue;
+    end;
+
     if sys <> 'cartesian2d' then
     begin
-      { The two-step shape is here; only cartesian has a system to ask yet. A
-        series naming polar resolves to nothing rather than silently falling
-        back to the cartesian it did not ask for. }
+      { The two-step shape is here; only cartesian and radar have a system to
+        ask yet. A series naming polar resolves to nothing rather than
+        silently falling back to the cartesian it did not ask for. }
       ABuild.Note(Format(rsTyChartSeriesCoordSys, [i, sys]));
       Result[i] := b;
       Continue;
@@ -456,6 +501,16 @@ begin
 end;
 
 { ==================== the inverse index ==================== }
+
+function TySeriesLegendByDatum(const AType: string): Boolean;
+const
+  cByDatum: array[0..2] of string = ('pie', 'funnel', 'radar');
+var i: Integer;
+begin
+  for i := 0 to High(cByDatum) do
+    if cByDatum[i] = AType then Exit(True);
+  Result := False;
+end;
 
 function TySeriesStatKey(const ASeriesType, ACoordSysName: string): string;
 begin

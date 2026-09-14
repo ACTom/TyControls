@@ -428,19 +428,20 @@ begin
          10, 30, 5, 35, 30, 10, 5, 35, 10, 10, 5, 35])
     else
       Given(cTypes[i], 3, [10, 20, 30]);
-    { THREE TYPES THIS LOOP CANNOT SPEAK FOR. None of a pie, a funnel or a
-      gauge has a coordinate system, so none enters TyBuildSeriesMarks and the
-      comparison below would read as `the answer is yes and nothing is
-      drawn` -- which is exactly backwards. Their pixels are counted at the
-      control instead, in test.advancechart, test.advchart.funnel and
-      test.advchart.gauge.
+    { FOUR TYPES THIS LOOP CANNOT SPEAK FOR, and for two different reasons.
+      A pie, a funnel and a gauge are on no coordinate system at all; a radar
+      is on one, but not on the CARTESIAN this fixture builds -- its spokes
+      are its axes. None of the four enters TyBuildSeriesMarks, so the
+      comparison below would read as `the answer is yes and nothing is drawn`,
+      which is exactly backwards. Their pixels are counted at the control
+      instead, in test.advancechart and the three type suites.
 
       WRITTEN OUT rather than asked of the library, deliberately. Reading the
       same list the answer comes from would make the day a third type lands
       here invisible; written out, that day is a red test, which is the whole
       service this function performs. }
     if (cTypes[i] = 'pie') or (cTypes[i] = 'funnel')
-      or (cTypes[i] = 'gauge') then
+      or (cTypes[i] = 'gauge') or (cTypes[i] = 'radar') then
     begin
       AssertTrue(cTypes[i] + ' draws, on the other pass',
         TySeriesTypeHasRenderer(cTypes[i]));
@@ -461,8 +462,9 @@ begin
   AssertTrue('and so does scatter now', TySeriesTypeHasRenderer('scatter'));
   AssertTrue('and pie does, on its own pass', TySeriesTypeHasRenderer('pie'));
   AssertTrue('and so does the funnel', TySeriesTypeHasRenderer('funnel'));
-  AssertTrue('and the gauge, as of this batch',
-    TySeriesTypeHasRenderer('gauge'));
+  AssertTrue('and the gauge', TySeriesTypeHasRenderer('gauge'));
+  AssertTrue('and the radar, as of this batch',
+    TySeriesTypeHasRenderer('radar'));
   AssertFalse('a sankey does not yet', TySeriesTypeHasRenderer('sankey'));
   { CASE-SENSITIVE, matching the type registry -- 'Bar' does not resolve as a
     series at all, so answering yes for it would promise a chart that cannot
