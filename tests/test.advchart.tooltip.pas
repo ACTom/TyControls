@@ -735,10 +735,16 @@ end;
 procedure TAdvChartTooltipDrawTest.TestShowFalseDrawsNothing;
 var p: TPoint; opt: string;
 begin
+    { EMPHASIS OFF TOO, and that is not scaffolding. Switching the tooltip off
+      does NOT switch the hover highlight off -- they are separate features and
+      upstream drives them from separate listeners -- so a test that measured
+      "nothing changed" was measuring both at once and would go red the day the
+      highlight started working. It did. }
   opt := '{"tooltip":{"show":false},' +
     '"xAxis":{"type":"category","data":["A","B","C","D"]},' +
     '"yAxis":{"type":"value","min":0,"max":100},' +
-    '"series":[{"type":"bar","name":"Sales","data":[20,40,60,80]}]}';
+    '"series":[{"type":"bar","name":"Sales","emphasis":{"disabled":true},' +
+    '"data":[20,40,60,80]}]}';
   Draw(opt);
   p := BarPoint(2, 60);
   AssertEquals('show:false is a switch, not a style', 0,
@@ -751,7 +757,8 @@ begin
   opt := '{"tooltip":{"trigger":"none"},' +
     '"xAxis":{"type":"category","data":["A","B","C","D"]},' +
     '"yAxis":{"type":"value","min":0,"max":100},' +
-    '"series":[{"type":"bar","name":"Sales","data":[20,40,60,80]}]}';
+    '"series":[{"type":"bar","name":"Sales","emphasis":{"disabled":true},' +
+    '"data":[20,40,60,80]}]}';
   Draw(opt);
   p := BarPoint(2, 60);
   AssertEquals('trigger:none blocks an item tooltip', 0,
@@ -771,7 +778,7 @@ begin
     '"xAxis":{"type":"category","data":["A","B","C","D"]},' +
     '"yAxis":{"type":"value","min":0,"max":100},' +
     '"series":[{"type":"bar","name":"Sales","tooltip":{"show":false},' +
-    '"data":[20,40,60,80]}]}';
+    '"emphasis":{"disabled":true},"data":[20,40,60,80]}]}';
   Draw(opt);
   p := BarPoint(2, 60);
   AssertEquals('the series had the last word', 0,
@@ -785,7 +792,7 @@ begin
     '"xAxis":{"type":"category","data":["A","B","C","D"]},' +
     '"yAxis":{"type":"value","min":0,"max":100},' +
     '"series":[{"type":"bar","name":"Sales","tooltip":{"trigger":"none"},' +
-    '"data":[20,40,60,80]}]}';
+    '"emphasis":{"disabled":true},"data":[20,40,60,80]}]}';
   Draw(opt);
   p := BarPoint(2, 60);
   AssertEquals('and about its trigger too', 0,

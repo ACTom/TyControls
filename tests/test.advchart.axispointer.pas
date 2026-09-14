@@ -584,20 +584,31 @@ begin
 end;
 
 procedure TAdvChartAxisTriggerTest.TestShowContentFalseKeepsThePointerAndDropsTheBox;
-var p: TPoint; withBox, pointerOnly: Integer; opt: string;
+var p: TPoint; withBox, pointerOnly: Integer; opt, base: string;
 begin
   { THE ONE CONFIGURATION THAT ISOLATES THE POINTER. `showContent: false` hides
     the box and keeps the axisPointer, so what is drawn is the line and nothing
     else -- and a test that only ever measured the two together could not say
     which of them had stopped appearing. }
-  Draw(cTwoSeries);
+  { EMPHASIS OFF IN BOTH, so the comparison is pointer against pointer-plus-
+    box. An axis trigger also LIGHTS UP every row it describes, and leaving
+    that in would put the same highlight on both sides of a ratio meant to
+    isolate the box. }
+  base := '{"tooltip":{"trigger":"axis"},' +
+    '"xAxis":{"type":"category","data":["A","B","C","D"]},' +
+    '"yAxis":{"type":"value","min":0,"max":100},' +
+    '"series":[{"type":"bar","name":"Sales","emphasis":{"disabled":true},' +
+    '"data":[20,40,60,80]},{"type":"bar","name":"Cost",' +
+    '"emphasis":{"disabled":true},"data":[10,30,50,70]}]}';
+  Draw(base);
   p := BarPoint(2, 95);
-  withBox := InkAddedByHover(cTwoSeries, p.X, p.Y);
+  withBox := InkAddedByHover(base, p.X, p.Y);
   opt := '{"tooltip":{"trigger":"axis","showContent":false},' +
     '"xAxis":{"type":"category","data":["A","B","C","D"]},' +
     '"yAxis":{"type":"value","min":0,"max":100},' +
-    '"series":[{"type":"bar","name":"Sales","data":[20,40,60,80]},' +
-    '{"type":"bar","name":"Cost","data":[10,30,50,70]}]}';
+    '"series":[{"type":"bar","name":"Sales","emphasis":{"disabled":true},' +
+    '"data":[20,40,60,80]},{"type":"bar","name":"Cost",' +
+    '"emphasis":{"disabled":true},"data":[10,30,50,70]}]}';
   pointerOnly := InkAddedByHover(opt, p.X, p.Y);
   AssertTrue('the pointer is still drawn', pointerOnly > 20);
   AssertTrue('and it is a fraction of the pointer plus the box',

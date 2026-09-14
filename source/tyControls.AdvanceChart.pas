@@ -35,7 +35,7 @@ uses
   tyControls.AdvChart.Builder, tyControls.AdvChart.Series,
   tyControls.AdvChart.Measure, tyControls.AdvChart.Handlers,
   tyControls.AdvChart.Paint, tyControls.AdvChart.Render,
-  tyControls.AdvChart.Shape,
+  tyControls.AdvChart.Shape, tyControls.AdvChart.Style,
   tyControls.AdvChart.Marks, tyControls.AdvChart.BarLayout,
   tyControls.AdvChart.Stack, tyControls.AdvChart.Symbol,
   tyControls.AdvChart.Color,
@@ -229,6 +229,11 @@ type
       than keeping it correct across a rebuild -- which is the mistake the
       static layer's own history is a record of. }
     FTipHits: TTyAxisHitArray;
+    { Whether the pointer's movement may drive the TOOLTIP. `triggerOn` is
+      read once per move, as upstream reads it once into its listener closure,
+      and it governs the box alone -- a chart set to `triggerOn: 'click'` still
+      highlights what the pointer is over. }
+    FTipTrack: Boolean;
     { The element the hit came from, kept because it carries the colour of the
       thing the pointer is over. Asking the series for its colour instead would
       be a second answer to a question the ink has already answered, and would
@@ -371,6 +376,14 @@ type
     procedure PaintAxisPointers(APainter: TTyPainter; const ARect: TRect;
       APPI: Integer; const AMeasurer: ITyTextMeasurer;
       const AHits: TTyAxisHitArray);
+    { What the hovered element looks like while it is hovered, drawn OVER the
+      copy the static layer already holds. }
+    procedure PaintEmphasis(APainter: TTyPainter; APPI: Integer;
+      const AHits: TTyAxisHitArray);
+    { One element, lifted. False when this series has emphasis switched off or
+      the element is not one that can be lifted. }
+    function EmphasiseElement(AIndex: Integer; APPI: Integer;
+      out AElement: TTyChartElement): Boolean;
     { Every surviving series as a formatter would see it, in section order --
       so `{a0}` is the first row of the first section. }
     function AxisTooltipParams(const AHits: TTyAxisHitArray): TTyChartParams;
@@ -3083,6 +3096,134 @@ begin
   end;
 end;
 
+function TTyAdvanceChart.EmphasiseElement(AIndex: Integer; APPI: Integer;
+  out AElement: TTyChartElement): Boolean;
+var
+  spec: TTyChartEmphasisSpec;
+  slot: Integer;
+  ratio, half: Double;
+  st: TTyChartStyle;
+  normal: TTyChartStyle;
+  states: TTyChartStateList;
+begin
+  Result := False;
+  AElement := Default(TTyChartElement);
+  if (FPaintList = nil) or not FPaintListValid then Exit;
+  if (AIndex < 0) or (AIndex >= FPaintList.Count) then Exit;
+  AElement := FPaintList.Element(AIndex);
+  if AElement.Datum.SeriesIndex < 0 then Exit;
+  slot := SlotOfSeries(AElement.Datum.SeriesIndex);
+  if slot < 0 then Exit;
+
+  { THE SERIES' emphasis BLOCK. A data item can carry one of its own and this
+    does not read it yet -- one more cascade level for a key almost nobody
+    writes per datum, and the level that IS written is this one. Recorded
+    rather than silently missing. }
+  spec := TyChartReadEmphasis(FOption.ComponentAt('series',
+    AElement.Datum.SeriesIndex));
+  if spec.Disabled then Exit;
+
+  { ---- the style ---- }
+  normal := TyChartNoStyle;
+  if AElement.Style.HasFill then
+    TyChartSetColor(normal, cskFill, AElement.Style.FillColor);
+  if AElement.Style.StrokeColor <> 0 then
+    TyChartSetColor(normal, cskStroke, AElement.Style.StrokeColor);
+  if AElement.Style.StrokeWidthLogical > 0 then
+    TyChartSetNum(normal, cskLineWidth, AElement.Style.StrokeWidthLogical);
+  TyChartSetNum(normal, cskOpacity, AElement.Style.Alpha);
+
+  states := Default(TTyChartStateList);
+  states.Emphasis := True;
+  { WITH NOTHING DECLARED, AN EMPHASIS IS THE NORMAL COLOUR LIFTED -- ten per
+    cent brighter. That is the default hover appearance of every bar, slice
+    and symbol in ECharts, and a port that treated "no emphasis style" as "no
+    change" would draw a hover that does nothing. }
+  st := TyChartResolveStyle(normal,
+    TyChartOverlay(spec.Item, spec.Line), states);
+
+  if TyChartStyleHas(st, cskFill) then
+  begin
+    AElement.Style.HasFill := True;
+    AElement.Style.FillColor := st.Color[cskFill];
+  end;
+  if TyChartStyleHas(st, cskStroke) then
+    AElement.Style.StrokeColor := st.Color[cskStroke];
+  if TyChartStyleHas(st, cskLineWidth) then
+    AElement.Style.StrokeWidthLogical := st.Num[cskLineWidth];
+  if TyChartStyleHas(st, cskOpacity) then
+    AElement.Style.Alpha := st.Num[cskOpacity];
+  { A GRADIENT IS NOT LIFTED. Upstream lifts a colour, and a ramp has no single
+    colour to lift -- so a gradient-filled mark keeps its ramp and gains only
+    whatever the option declared. }
+
+  { ---- and the geometry ---- }
+  case AElement.Shape.Kind of
+    cskSector:
+      { A SLICE GROWS ITS OUTER RADIUS BY PIXELS, not by a ratio: scaling it
+        about the disc centre would lift its inner edge off the hole. }
+      if spec.ScaleAuto or (spec.Scale <> 1) then
+        AElement.Shape.R1 := AElement.Shape.R1
+          + spec.ScaleSizePx * APPI / 96;
+    cskRect, cskRoundRect, cskPolygon, cskPolyline:
+      { A BAR DOES NOT GROW. Upstream scales SYMBOLS and sectors and leaves a
+        bar's rectangle alone -- a bar that jumped a tenth larger under the
+        pointer would look like the data had moved. }
+      ;
+  else
+    begin
+      half := (AElement.Shape.Bounds.Bottom - AElement.Shape.Bounds.Top) / 2;
+      if AElement.Shape.Kind in [cskCircle, cskEllipse] then
+        half := AElement.Shape.R1;
+      ratio := TyChartSymbolScaleRatio(spec, half);
+      AElement.Shape := TyScaleShape(AElement.Shape, ratio);
+    end;
+  end;
+  Result := True;
+end;
+
+procedure TTyAdvanceChart.PaintEmphasis(APainter: TTyPainter; APPI: Integer;
+  const AHits: TTyAxisHitArray);
+var
+  list: TTyPaintList;
+  el: TTyChartElement;
+  i, k, slot: Integer;
+
+  procedure Lift(AIndex: Integer);
+  begin
+    if AIndex < 0 then Exit;
+    if not EmphasiseElement(AIndex, APPI, el) then Exit;
+    { THE CAPTION IS DROPPED. A mark's words were expanded once, into a
+      SEPARATE element, and the copy drawn here carries the request rather
+      than the answer -- rendering it would draw unplaced text at the origin. }
+    el.Caption := Default(TTyElementCaption);
+    list.Add(el);
+  end;
+
+begin
+  if (FPaintList = nil) or not FPaintListValid then Exit;
+  list := TTyPaintList.Create;
+  try
+    { AN AXIS TRIGGER HIGHLIGHTS THE WHOLE COLUMN. Upstream calls it
+      triggerEmphasis and has it on by default: the rows the tooltip is
+      describing are the rows that light up, which is what ties the two
+      together. }
+    for i := 0 to High(AHits) do
+      for k := 0 to High(AHits[i].Slots) do
+      begin
+        slot := AHits[i].Slots[k];
+        if (slot < 0) or (slot > High(FBindings)) then Continue;
+        Lift(FPaintList.IndexOfDatum(FBindings[slot].SeriesIndex,
+          AHits[i].Rows[k]));
+      end;
+    { And an item hover highlights the one thing under the pointer. }
+    if Length(AHits) = 0 then Lift(FTipElement);
+    if list.Count > 0 then TyRenderPaintList(APainter, list);
+  finally
+    list.Free;
+  end;
+end;
+
 procedure TTyAdvanceChart.PaintAxisPointers(APainter: TTyPainter;
   const ARect: TRect; APPI: Integer; const AMeasurer: ITyTextMeasurer;
   const AHits: TTyAxisHitArray);
@@ -3372,6 +3513,7 @@ var
   surface: TTyFill;
   borderCol: TTyColor;
 begin
+  if not FTipTrack then Exit;
   onAxis := Length(FTipHits) > 0;
   if not TyChartDatumValid(FTipDatum) and not onAxis then Exit;
   { UNDER AN AXIS TRIGGER THERE IS NO CASCADE. Upstream builds the axis
@@ -3555,13 +3697,17 @@ begin
   inherited MouseMove(Shift, X, Y);
   if csDesigning in ComponentState then Exit;
   spec := TyTooltipSpecOf(FOption, -1, -1);
-  { `trigger: 'none'` IS NOT CHECKED HERE. It blocks an item tooltip and
-    nothing else -- a cross puts a pointer on the axis regardless, and the
-    paint asks the cascade for the datum it ended up over, which a series can
-    answer differently from the global. What this guard is for is the one
-    question that has no datum yet: is the tooltip switched off entirely. }
-  if not spec.Show then Exit;
-  if not TyTooltipTriggerOnHas(spec.TriggerOn, 'mousemove') then Exit;
+  { NOTHING ABOUT THE TOOLTIP IS CHECKED HERE, and that is the point. What is
+    under the pointer is a fact about geometry; whether a BOX is drawn for it
+    is a question for the paint. A chart with `tooltip: {show: false}` still
+    highlights the mark under the cursor -- upstream highlights from zrender's
+    own hover and the tooltip is a separate listener -- and gating the hover on
+    the tooltip made switching the box off switch the highlight off too.
+
+    `triggerOn` IS read here, because it is genuinely about the pointer: it
+    decides whether MOVEMENT drives the tooltip at all. The answer is carried
+    rather than acted on, so the highlight is unaffected by it. }
+  FTipTrack := TyTooltipTriggerOnHas(spec.TriggerOn, 'mousemove');
 
   wasOn := TyChartDatumValid(FTipDatum) or (Length(FTipHits) > 0);
   d := HitTestAt(X, Y, el);
@@ -3615,9 +3761,14 @@ begin
     skips the whole pass and the new thing is written, compiled and never
     drawn. That is the failure this body's empty version was left here to
     prevent, and the tooltip is the first thing to test it. }
+  { THE POINTER UNDER THE HIGHLIGHT UNDER THE BOX. A shadow band drawn over
+    the bars is the layer debt showing -- series marks live in the static
+    layer, so the band cannot go beneath them -- and re-drawing the hovered
+    marks on top of the band is what hides it. }
+  PaintAxisPointers(APainter, ARect, APPI, AMeasurer, FTipHits);
+  PaintEmphasis(APainter, APPI, FTipHits);
   { THE POINTER FIRST, THE BOX OVER IT. A tooltip with the pointer's own line
     drawn across it would read as two things at one depth. }
-  PaintAxisPointers(APainter, ARect, APPI, AMeasurer, FTipHits);
   PaintTooltip(APainter, ARect, APPI, AMeasurer);
 end;
 

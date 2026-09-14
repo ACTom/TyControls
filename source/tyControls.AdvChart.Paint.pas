@@ -183,6 +183,17 @@ type
       path, so the element the caller highlights and the datum it reports can
       never be two different things. }
     function HitTest(AX, AY: Double; APPI: Integer): TTyChartDatumRef;
+    { The topmost non-silent element drawn for one datum, or -1.
+
+      THE INVERSE OF THE HIT TEST, and it exists for the same reason the hit
+      test does: something that knows WHICH datum -- an axis trigger naming a
+      whole column, a highlight action, a legend hover -- has to be able to
+      find the ink that datum became. Reverse paint order again, so two series
+      overlapping answer with the one on top.
+
+      ARow < 0 matches any row of the series, which is how a run element -- one
+      polyline standing for a whole line -- is found at all. }
+    function IndexOfDatum(ASeries, ARow: Integer): Integer;
     property Count: Integer read FCount;
   end;
 
@@ -215,6 +226,22 @@ procedure TyResolveGradient(const AGrad: TTyChartGradient;
   const ABox: TTyRectF; out AX1, AY1, AX2, AY2, AR: Double);
 
 implementation
+
+function TTyPaintList.IndexOfDatum(ASeries, ARow: Integer): Integer;
+var i, idx: Integer;
+begin
+  Result := -1;
+  if ASeries < 0 then Exit;
+  EnsureOrder;
+  for i := FCount - 1 downto 0 do
+  begin
+    idx := FOrder[i];
+    if FItems[idx].Silent then Continue;
+    if FItems[idx].Datum.SeriesIndex <> ASeries then Continue;
+    if (ARow >= 0) and (FItems[idx].Datum.DataIndex <> ARow) then Continue;
+    Exit(idx);
+  end;
+end;
 
 function TyChartNoDatum: TTyChartDatumRef;
 begin

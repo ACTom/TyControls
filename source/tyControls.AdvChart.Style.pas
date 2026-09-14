@@ -181,6 +181,38 @@ const
     looked up anywhere. With no normal opacity the normal one is 1. }
   TyChartBlurOpacityFactor = 0.1;
 
+type
+  { WHAT `series.emphasis` SAID. Not the resolved appearance -- that is
+    TyChartResolveStyle's job and it needs the normal style to work from. }
+  TTyChartEmphasisSpec = record
+    { `emphasis.disabled`. The whole state is off for this series. }
+    Disabled: Boolean;
+    Focus: TTyChartFocus;
+    BlurScope: TTyChartBlurScope;
+    { How much a hovered SYMBOL grows. Upstream's rule, verbatim: null or true
+      means `max(1.1, 3 / halfHeight)` -- so a four-pixel marker grows by half
+      and a forty-pixel one by a tenth, which is what keeps a small marker's
+      hover visible at all. A finite positive number is taken as written;
+      0, false, a negative and NaN all mean no scale. }
+    Scale: Double;
+    ScaleAuto: Boolean;
+    { How many PIXELS a hovered pie slice's outer radius grows. A separate
+      number because a sector does not scale: growing it about the disc centre
+      would lift its inner edge off the hole. }
+    ScaleSizePx: Double;
+    Item: TTyChartStyle;
+    Line: TTyChartStyle;
+  end;
+
+{ Read `emphasis` off a series or a data item. Absent leaves the defaults --
+  enabled, no focus (so nothing blurs), automatic scale. }
+function TyChartReadEmphasis(AData: TJSONData): TTyChartEmphasisSpec;
+{ The default, for a node that has none. }
+function TyChartEmphasisDefault: TTyChartEmphasisSpec;
+{ How much a symbol of this half-height grows, given what the option said. }
+function TyChartSymbolScaleRatio(const ASpec: TTyChartEmphasisSpec;
+  AHalfHeightPx: Double): Double;
+
 { Resolve one datum's style in one state.
 
   ANormal is what the normal state resolved to -- series value overlaid with the
@@ -650,6 +682,102 @@ begin
   if AStates.Emphasis then Exit(TyChartEmphasisZ2Lift);
   if AStates.Select then Exit(TyChartSelectZ2Lift);
   Result := 0;
+end;
+
+{ ==================== the emphasis block ==================== }
+
+function TyChartEmphasisDefault: TTyChartEmphasisSpec;
+begin
+  Result := Default(TTyChartEmphasisSpec);
+  Result.Disabled := False;
+  { NO FOCUS IS THE DEFAULT, and it is what keeps blur off on every ordinary
+    chart: the whole dimming mechanism is gated on somebody asking for it. }
+  Result.Focus := cfNone;
+  Result.BlurScope := cbsCoordinateSystem;
+  Result.ScaleAuto := True;
+  Result.Scale := 0;
+  { PieSeries.ts:321 -- five pixels of outer radius. }
+  Result.ScaleSizePx := 5;
+  Result.Item := TyChartNoStyle;
+  Result.Line := TyChartNoStyle;
+end;
+
+function TyChartReadEmphasis(AData: TJSONData): TTyChartEmphasisSpec;
+var
+  node, emph: TJSONObject;
+  d: TJSONData;
+  s: string;
+begin
+  Result := TyChartEmphasisDefault;
+  if not (AData is TJSONObject) then Exit;
+  node := TJSONObject(AData);
+  d := node.Find('emphasis');
+  if not (d is TJSONObject) then Exit;
+  emph := TJSONObject(d);
+
+  d := emph.Find('disabled');
+  if (d <> nil) and (d.JSONType = jtBoolean) then Result.Disabled := d.AsBoolean;
+
+  d := emph.Find('focus');
+  if (d <> nil) and (d.JSONType = jtString) then
+  begin
+    s := d.AsString;
+    if s = 'self' then Result.Focus := cfSelf
+    else if s = 'series' then Result.Focus := cfSeries
+    else Result.Focus := cfNone;
+  end;
+
+  d := emph.Find('blurScope');
+  if (d <> nil) and (d.JSONType = jtString) then
+  begin
+    s := d.AsString;
+    if s = 'series' then Result.BlurScope := cbsSeries
+    else if s = 'global' then Result.BlurScope := cbsGlobal
+    else Result.BlurScope := cbsCoordinateSystem;
+  end;
+
+  { `scale` IS FOUR THINGS IN ONE KEY, and upstream's comment names them: null
+    or true is the default strategy, a finite positive number is a literal
+    ratio, and 0 / false / negative / NaN / Infinity all mean no scale. }
+  d := emph.Find('scale');
+  if d <> nil then
+  begin
+    if d.JSONType = jtBoolean then
+    begin
+      Result.ScaleAuto := d.AsBoolean;
+      if not d.AsBoolean then Result.Scale := 1;
+    end
+    else if d.JSONType = jtNumber then
+    begin
+      Result.ScaleAuto := False;
+      Result.Scale := d.AsFloat;
+      if IsNan(Result.Scale) or IsInfinite(Result.Scale)
+        or (Result.Scale <= 0) then Result.Scale := 1;
+    end;
+  end;
+
+  d := emph.Find('scaleSize');
+  if (d <> nil) and (d.JSONType = jtNumber) then
+  begin
+    Result.ScaleSizePx := d.AsFloat;
+    if IsNan(Result.ScaleSizePx) or IsInfinite(Result.ScaleSizePx) then
+      Result.ScaleSizePx := 0;
+  end;
+
+  TyChartReadStyle(emph.Find('itemStyle'), cskItem, Result.Item);
+  TyChartReadStyle(emph.Find('lineStyle'), cskLine, Result.Line);
+end;
+
+function TyChartSymbolScaleRatio(const ASpec: TTyChartEmphasisSpec;
+  AHalfHeightPx: Double): Double;
+begin
+  if not ASpec.ScaleAuto then Exit(ASpec.Scale);
+  { `max(1.1, 3 / halfHeight)` -- a tenth for a big marker, and half again for
+    a four-pixel one, which is what keeps a small marker's hover visible. The
+    guard is for a degenerate symbol, where upstream would divide by zero and
+    answer Infinity; here that is a raise. }
+  if not (AHalfHeightPx > 0) then Exit(1.1);
+  Result := Max(Double(1.1), 3 / AHalfHeightPx);
 end;
 
 end.

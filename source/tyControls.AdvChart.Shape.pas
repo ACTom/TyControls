@@ -158,6 +158,22 @@ function TyNormalizeAngle(AAngleRad: Double): Double;
 function TySnapShape(const AShape: TTyChartShape;
   AStrokeWidthPx: Double): TTyChartShape;
 
+{ A copy of AShape grown about its own centre by ARatio.
+
+  WHAT IT IS FOR: a hovered symbol. Upstream scales the symbol's transform
+  rather than its geometry, which comes to the same picture and is not
+  available here -- this layer hands the renderer finished coordinates, and a
+  transform would be a second place where a shape's real position is decided.
+
+  A SECTOR IS NOT SCALED BY THIS. A hovered pie slice grows its OUTER RADIUS by
+  a number of pixels; scaling it about the disc centre would move its inner
+  radius too and lift it off the hole. The caller does that one itself, which
+  is why it is not a case below.
+
+  A ratio of 1 answers the shape unchanged, and so does anything that is not a
+  positive finite number -- upstream's own rule for a bad `emphasis.scale`. }
+function TyScaleShape(const AShape: TTyChartShape; ARatio: Double): TTyChartShape;
+
 implementation
 
 function TyNormalizeAngle(AAngleRad: Double): Double;
@@ -992,6 +1008,53 @@ begin
         SetLength(Result.Points, 2);
         Result.Points[0] := TyPointF(x1, y1);
         Result.Points[1] := TyPointF(x2, y2);
+      end;
+  end;
+end;
+
+function TyScaleShape(const AShape: TTyChartShape; ARatio: Double): TTyChartShape;
+var
+  b: TTyRectF;
+  cx, cy: Double;
+  i: Integer;
+begin
+  Result := AShape;
+  if IsNan(ARatio) or IsInfinite(ARatio) or (ARatio <= 0) or (ARatio = 1) then
+    Exit;
+  case AShape.Kind of
+    cskCircle:
+      Result.R1 := AShape.R1 * ARatio;
+    cskEllipse:
+      begin
+        Result.R0 := AShape.R0 * ARatio;
+        Result.R1 := AShape.R1 * ARatio;
+      end;
+    cskRect, cskRoundRect, cskPath:
+      begin
+        b := AShape.Bounds;
+        if not TyRectFIsValid(b) then Exit;
+        cx := (b.Left + b.Right) / 2;
+        cy := (b.Top + b.Bottom) / 2;
+        Result.Bounds := TyRectF(
+          cx + (b.Left - cx) * ARatio, cy + (b.Top - cy) * ARatio,
+          cx + (b.Right - cx) * ARatio, cy + (b.Bottom - cy) * ARatio);
+        { THE CORNERS GROW WITH IT. A roundRect scaled with its radii left
+          alone is a different shape, not a larger one. }
+        if AShape.Kind = cskRoundRect then
+          for i := 0 to 3 do
+            Result.Radii[i] := AShape.Radii[i] * ARatio;
+      end;
+    cskPolyline, cskPolygon:
+      begin
+        if Length(AShape.Points) = 0 then Exit;
+        b := TyShapeBounds(AShape);
+        cx := (b.Left + b.Right) / 2;
+        cy := (b.Top + b.Bottom) / 2;
+        SetLength(Result.Points, Length(AShape.Points));
+        for i := 0 to High(AShape.Points) do
+          Result.Points[i] := TyPointF(
+            cx + (AShape.Points[i].X - cx) * ARatio,
+            cy + (AShape.Points[i].Y - cy) * ARatio);
       end;
   end;
 end;
