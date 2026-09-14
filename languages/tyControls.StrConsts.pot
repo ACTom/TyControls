@@ -736,6 +736,11 @@ msgstr ""
 msgid "series[%d] names an axis that does not exist"
 msgstr ""
 
+#: tycontrols.strconsts.rstychartseriesnorenderer
+#, object-pascal-format
+msgid "series[%d]: the \"%s\" series type is not drawn yet"
+msgstr ""
+
 #: tycontrols.strconsts.rstychartseriesnotype
 #, object-pascal-format
 msgid "series[%d] has no type, so it is not drawn"

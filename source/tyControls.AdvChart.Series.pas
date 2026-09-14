@@ -564,11 +564,14 @@ end;
 
 { Which column of a series' store feeds this axis. The store's columns are the
   coordinate dimensions in order, so the axis' own dim names it. }
-function ColumnForAxis(AStore: TTyDataStore; AAxis: TTyAxis): Integer;
+function ColumnsForAxis(AStore: TTyDataStore; AAxis: TTyAxis): TTyIntegerArray;
 begin
-  Result := -1;
+  Result := nil;
   if (AStore = nil) or (AAxis = nil) then Exit;
-  Result := AStore.DimIndexOf(AAxis.Dim);
+  { PLURAL, because a candlestick puts four columns on its value axis and a
+    boxplot five. A store that mapped nothing answers with the single column
+    of the axis' own name, which is every other series there is. }
+  Result := AStore.DimsOfCoord(AAxis.Dim);
 end;
 
 { One end of a value axis' boundaryGap: a number is an absolute amount, a string
@@ -625,7 +628,8 @@ var
 
   procedure DoAxis(AAxis: TTyAxis; const AMainType: string);
   var
-    k, col, si, split: Integer;
+    k, c, si, split: Integer;
+    cols: TTyIntegerArray;
     node: TJSONObject;
     d: TJSONData;
     fixLo, fixHi: Boolean;
@@ -669,7 +673,7 @@ var
     begin
       si := feeders[k];
       if (si < 0) or (si > High(AStores)) then Continue;
-      col := ColumnForAxis(AStores[si], AAxis);
+      cols := ColumnsForAxis(AStores[si], AAxis);
       { A STACKED SERIES CONTRIBUTES ITS TOTAL, not its own value. Upstream
         gets this for free -- the stack-result dimension is registered under
         the VALUE coord dim, so anything unioning that coord dim picks it up,
@@ -683,12 +687,18 @@ var
         member runs off the top of the plot. Nothing raises. }
       if (si <= High(AStacks)) and AStacks[si].Stacked
         and (AStacks[si].ResultCol >= 0) and (AAxis = ABindings[si].ValueAxis) then
-        col := AStacks[si].ResultCol;
-      if col < 0 then Continue;
-      if not AStores[si].DataExtent(col, dlo, dhi, filter) then Continue;
-      if dlo < lo then lo := dlo;
-      if dhi > hi then hi := dhi;
-      any := True;
+      begin
+        SetLength(cols, 1);
+        cols[0] := AStacks[si].ResultCol;
+      end;
+      for c := 0 to High(cols) do
+      begin
+        if cols[c] < 0 then Continue;
+        if not AStores[si].DataExtent(cols[c], dlo, dhi, filter) then Continue;
+        if dlo < lo then lo := dlo;
+        if dhi > hi then hi := dhi;
+        any := True;
+      end;
     end;
     { NOT A RETURN. Everything below is the AUTHOR's instruction --
       scale/min/max/splitNumber/interval/minorTick -- and returning here

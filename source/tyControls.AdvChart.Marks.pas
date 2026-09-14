@@ -101,6 +101,24 @@ type
     bar on the axis, and the line spec is read straight off the option. What
     they have in common is that this unit does not work any of them out -- it
     draws what it is handed. }
+  { A candle's colours. UP is close above open; DOWN is open above close; the
+    two are not "positive and negative" however they are usually described,
+    because both compare a datum against ITSELF.
+
+    THE THIRD CASE IS A DOJI -- open exactly equal to close, which is a real
+    and frequent reading and not a rounding accident. Upstream resolves it by
+    looking at the PREVIOUS row's close, so a flat bar takes the direction of
+    the move that led into it; only when `borderColorDoji` is written does it
+    get a colour of its own. The first row of all has no previous and is
+    treated as up. }
+  TTyCandleSpec = record
+    Up, Down: TTyChartColor;
+    UpBorder, DownBorder: TTyChartColor;
+    HasDojiBorder: Boolean;
+    DojiBorder: TTyChartColor;
+    BorderWidthLogical: Double;
+  end;
+
   TTySeriesVisual = record
     Fill: TTyChartColor;
     Stroke: TTyChartColor;
@@ -123,6 +141,12 @@ type
       the moment both are known. }
     Dash: TTyOptDash;
     DashExplicit: TTyDoubleArray;
+    { The four colours a candle needs, and the pen. A block of its own rather
+      than four more fields on the visual: a candlestick is the only series
+      whose colour depends on the DATUM's own two numbers, and putting `Up` and
+      `Down` beside `Fill` would invite every other builder to wonder which of
+      the three it should be reading. }
+    Candle: TTyCandleSpec;
     { Where this bar sits in its band, solved across every bar series sharing
       the base axis -- which is why it arrives rather than being computed here.
       Unsolved means no solver ran (a pure-unit caller with one series), and
@@ -163,6 +187,14 @@ function TySeriesVisual(AFill: TTyChartColor): TTySeriesVisual;
   Every default is upstream's: `step: false`, `connectNulls: false`, and no
   areaStyle at all -- its mere PRESENCE turns the area on, which is why an
   empty `areaStyle: {}` is a real instruction and not a no-op. }
+{ `itemStyle.color` / `color0` / `borderColor` / `borderColor0` /
+  `borderColorDoji` / `borderWidth`, over whatever the theme supplied.
+
+  ADefaults arrives already resolved, because the two colours a candle falls
+  back on are the theme's and this unit cannot see a theme. }
+function TyCandleSpecOf(AOption: TTyChartOption; ASlot: Integer;
+  const ADefaults: TTyCandleSpec): TTyCandleSpec;
+
 function TyLineSpecOf(AOption: TTyChartOption; ASlot: Integer): TTyLineSpec;
 
 { The fill ONE ROW was drawn with: the series' colour, unless that row wrote an
@@ -203,6 +235,56 @@ function TyBuildSeriesMarks(const ABinding: TTySeriesBinding;
   const AVisual: TTySeriesVisual; AList: TTyPaintList): Integer;
 
 implementation
+
+function TyCandleSpecOf(AOption: TTyChartOption; ASlot: Integer;
+  const ADefaults: TTyCandleSpec): TTyCandleSpec;
+var
+  node, item: TJSONObject;
+  d: TJSONData;
+  c: TTyChartColor;
+
+  function ColourAt(const AKey: string; var ATarget: TTyChartColor): Boolean;
+  var v: TJSONData;
+  begin
+    Result := False;
+    v := item.Find(AKey);
+    if (v = nil) or (v.JSONType <> jtString) then Exit;
+    if TyChartColorIsNone(v.AsString) then
+    begin
+      ATarget := 0;
+      Exit(True);
+    end;
+    if not TyTryParseChartColor(v.AsString, c) then Exit;
+    ATarget := c;
+    Result := True;
+  end;
+
+begin
+  Result := ADefaults;
+  if AOption = nil then Exit;
+  d := AOption.ComponentAt('series', ASlot);
+  if not (d is TJSONObject) then Exit;
+  node := TJSONObject(d);
+  d := node.Find('itemStyle');
+  if not (d is TJSONObject) then Exit;
+  item := TJSONObject(d);
+
+  { `color` IS THE UP BODY AND `color0` THE DOWN ONE -- and the border keys
+    follow the same suffix. Upstream's own comment beside them reads
+    "positive" and "negative", which is a description of a price move and not
+    of a number: both sides compare a datum against itself. }
+  ColourAt('color', Result.Up);
+  ColourAt('color0', Result.Down);
+  if not ColourAt('borderColor', Result.UpBorder) then
+    if item.Find('color') <> nil then Result.UpBorder := Result.Up;
+  if not ColourAt('borderColor0', Result.DownBorder) then
+    if item.Find('color0') <> nil then Result.DownBorder := Result.Down;
+  Result.HasDojiBorder := ColourAt('borderColorDoji', Result.DojiBorder);
+
+  d := item.Find('borderWidth');
+  if (d <> nil) and (d.JSONType = jtNumber) then
+    Result.BorderWidthLogical := Max(Double(0), Min(Double(64), d.AsFloat));
+end;
 
 function TyLineSpecOf(AOption: TTyChartOption; ASlot: Integer): TTyLineSpec;
 var
@@ -1106,21 +1188,170 @@ begin
   if valCol > 0 then ;
 end;
 
+function BuildCandlestick(const ABinding: TTySeriesBinding; AStore: TTyDataStore;
+  const AStack: TTySeriesStack; const AVisual: TTySeriesVisual;
+  AList: TTyPaintList; AColX, AColY: Integer): Integer;
+var
+  i, colBase, colOpen, colClose, colLow, colHigh: Integer;
+  baseHoriz, simple: Boolean;
+  band, width, at, openV, closeV, lowV, highV, bodyLo, bodyHi, prevClose: Double;
+  sign: Integer;
+  fill, border: TTyChartColor;
+  v: TTySeriesVisual;
+  r: TTyRectF;
+  el: TTyChartElement;
+
+  { Where one of the four values lands, along the value axis. }
+  function ValueCoord(AValue: Double): Double;
+  begin
+    Result := NaN;
+    if ABinding.ValueAxis = nil then Exit;
+    Result := ABinding.ValueAxis.DataToCoord(AValue);
+  end;
+
+  procedure Wick(AFrom, ATo: Double);
+  var w: TTySeriesVisual; wel: TTyChartElement;
+  begin
+    if IsNan(AFrom) or IsNan(ATo) or (AFrom = ATo) then Exit;
+    w := v;
+    w.Fill := 0;
+    w.Stroke := border;
+    w.StrokeWidthLogical := AVisual.Candle.BorderWidthLogical;
+    if w.StrokeWidthLogical <= 0 then w.StrokeWidthLogical := 1;
+    if baseHoriz then
+      wel := MarkElement(TyShapePolyline([TyPointF(at, AFrom),
+        TyPointF(at, ATo)]), w, ABinding.SeriesIndex, i)
+    else
+      wel := MarkElement(TyShapePolyline([TyPointF(AFrom, at),
+        TyPointF(ATo, at)]), w, ABinding.SeriesIndex, i);
+    AList.Add(wel);
+    Inc(Result);
+  end;
+
+begin
+  Result := 0;
+  if (AStore = nil) or (ABinding.BaseAxis = nil) then Exit;
+  baseHoriz := ABinding.BaseAxis.Horizontal;
+  colBase := AColX;
+  if not baseHoriz then colBase := AColY;
+  colOpen := AStore.DimIndexOf('open');
+  colClose := AStore.DimIndexOf('close');
+  colLow := AStore.DimIndexOf('lowest');
+  colHigh := AStore.DimIndexOf('highest');
+  if (colOpen < 0) or (colClose < 0) or (colLow < 0) or (colHigh < 0) then Exit;
+
+  { THE BODY IS HALF A BAND WIDE, and that is the candlestick's own rule --
+    not the bar layouter's. Upstream solves it as `max(min(band/2, barMaxWidth),
+    barMinWidth)` with the two limits defaulting to the band and to one pixel,
+    which collapses to half a band and a floor of one. It does NOT share the
+    band with bar series: a candlestick beside a bar overlaps it deliberately,
+    because the two are reading the same thing. }
+  band := ABinding.BaseAxis.BandWidth;
+  if band <= 0 then band := 8;
+  width := Max(Double(1), band / 2);
+  { A CANDLE NARROWER THAN A PEN IS A LINE. Upstream calls it a simple box and
+    switches at 1.3 px -- below that the body has no inside to fill and the
+    wick and the body are the same stroke. }
+  simple := width <= 1.3;
+
+  prevClose := NaN;
+  for i := 0 to AStore.Count - 1 do
+  begin
+    openV := AStore.Get(colOpen, i);
+    closeV := AStore.Get(colClose, i);
+    lowV := AStore.Get(colLow, i);
+    highV := AStore.Get(colHigh, i);
+    at := ABinding.BaseAxis.DataToCoord(AStore.Get(colBase, i));
+    if IsNan(at) or IsNan(openV) or IsNan(closeV) then
+    begin
+      prevClose := closeV;
+      Continue;
+    end;
+
+    { THE SIGN, and the third case is the one a port forgets. Open above close
+      is down, close above open is up -- and EQUAL is a doji, which upstream
+      resolves against the PREVIOUS row's close so a flat bar takes the
+      direction of the move that led into it. The first row has no previous
+      and is up. Only a written `borderColorDoji` gives it a colour of its
+      own. }
+    if openV > closeV then sign := -1
+    else if openV < closeV then sign := 1
+    else if AVisual.Candle.HasDojiBorder then sign := 0
+    else if IsNan(prevClose) then sign := 1
+    else if prevClose <= closeV then sign := 1
+    else sign := -1;
+    prevClose := closeV;
+
+    if sign >= 0 then
+    begin
+      fill := AVisual.Candle.Up;
+      border := AVisual.Candle.UpBorder;
+    end
+    else
+    begin
+      fill := AVisual.Candle.Down;
+      border := AVisual.Candle.DownBorder;
+    end;
+    if (sign = 0) and AVisual.Candle.HasDojiBorder then
+      border := AVisual.Candle.DojiBorder;
+
+    v := AVisual;
+    v.Fill := fill;
+    v.Stroke := border;
+    v.StrokeWidthLogical := AVisual.Candle.BorderWidthLogical;
+
+    bodyLo := ValueCoord(Min(openV, closeV));
+    bodyHi := ValueCoord(Max(openV, closeV));
+    if IsNan(bodyLo) or IsNan(bodyHi) then Continue;
+
+    if simple then
+      { No body to speak of: one stroke from lowest to highest. }
+      Wick(ValueCoord(lowV), ValueCoord(highV))
+    else
+    begin
+      { THE WICK IS TWO SEGMENTS, not one line behind the body. They look the
+        same under an opaque candle and not at all the same under a hollow
+        one -- and a hollow candle is how half the world draws a rising bar. }
+      Wick(ValueCoord(highV), bodyHi);
+      Wick(ValueCoord(lowV), bodyLo);
+      if baseHoriz then
+        r := TyRectF(at - width / 2, Min(bodyLo, bodyHi),
+                     at + width / 2, Max(bodyLo, bodyHi))
+      else
+        r := TyRectF(Min(bodyLo, bodyHi), at - width / 2,
+                     Max(bodyLo, bodyHi), at + width / 2);
+      { A DOJI HAS NO BODY AT ALL -- open equals close, so the rect is a line.
+        Given a whole pixel so the stroke has something to sit on, which is
+        what upstream's own sub-pixel pass does for the same case. }
+      if baseHoriz and (r.Bottom - r.Top < 1) then r.Bottom := r.Top + 1;
+      if (not baseHoriz) and (r.Right - r.Left < 1) then r.Right := r.Left + 1;
+      el := MarkElement(TyShapeRect(r), v, ABinding.SeriesIndex, i);
+      el.Caption.Text := CaptionFor(AVisual, AStore, i);
+      AList.Add(el);
+      Inc(Result);
+    end;
+  end;
+  { AStack and AColY are read only on the paths above; naming them keeps the
+    builder's signature the one the table holds. }
+  if AStack.Stacked and (AColY < -1) then ;
+end;
+
 const
-  { THE ONE LIST. Three of the twenty-three types draw; a renderer arrives as
+  { THE ONE LIST. Four of the twenty-three types draw; a renderer arrives as
     a row here and both the drawing and the published answer follow from it.
 
     Type names are compared EXACTLY, the way TySeriesFindType compares them --
     ECharts' names are case-sensitive, so a series typed 'Bar' never resolves
     and never reaches this unit. A lenient match here would answer yes for a
     chart that draws nothing. }
-  cRenderers: array[0..2] of record
+  cRenderers: array[0..3] of record
     Name: string;
     Build: TTyMarkBuilder;
   end = (
-    (Name: 'bar';     Build: @BuildBars),
-    (Name: 'line';    Build: @BuildLine),
-    (Name: 'scatter'; Build: @BuildScatter));
+    (Name: 'bar';         Build: @BuildBars),
+    (Name: 'line';        Build: @BuildLine),
+    (Name: 'scatter';     Build: @BuildScatter),
+    (Name: 'candlestick'; Build: @BuildCandlestick));
 
   { AND THE ONES DRAWN SOMEWHERE ELSE. A pie is not on a coordinate system,
     so its geometry is solved in AdvChart.Pie and never reaches this unit --
@@ -1158,6 +1389,16 @@ begin
   Result := False;
 end;
 
+{ The first store column feeding one axis, or -1. }
+function FirstColumnOn(AStore: TTyDataStore; AAxis: TTyAxis): Integer;
+var cols: TTyIntegerArray;
+begin
+  Result := -1;
+  if (AStore = nil) or (AAxis = nil) then Exit;
+  cols := AStore.DimsOfCoord(AAxis.Dim);
+  if Length(cols) > 0 then Result := cols[0];
+end;
+
 function TyBuildSeriesMarks(const ABinding: TTySeriesBinding;
   AStore: TTyDataStore; const AStack: TTySeriesStack;
   const AVisual: TTySeriesVisual; AList: TTyPaintList): Integer;
@@ -1175,9 +1416,15 @@ begin
 
   { The store's columns are the coordinate dimensions in axis order, so an axis
     names its own column. Asking the store rather than assuming 0 and 1 is what
-    keeps this correct for a series on the second y axis. }
-  colX := AStore.DimIndexOf(ABinding.XAxis.Dim);
-  colY := AStore.DimIndexOf(ABinding.YAxis.Dim);
+    keeps this correct for a series on the second y axis.
+
+    THE FIRST of however many. A candlestick puts four columns on its value
+    axis and none of them is called `y`, so a lookup by name alone answered
+    -1 and the series left through the guard below without ever reaching its
+    own renderer -- which drew nothing, said nothing, and looked exactly like
+    a type with no renderer at all. }
+  colX := FirstColumnOn(AStore, ABinding.XAxis);
+  colY := FirstColumnOn(AStore, ABinding.YAxis);
   if (colX < 0) or (colY < 0) then Exit;
 
   { Anything not in the table draws nothing, on purpose: twenty-one of the

@@ -367,6 +367,7 @@ resourcestring
   rsTyChartSeriesNoType = 'series[%d] has no type, so it is not drawn';
   rsTyChartSeriesBadType = 'series[%d]: "%s" is not a series type';
   rsTyChartSeriesCoordSys = 'series[%d]: coordinateSystem "%s" is not built yet';
+  rsTyChartSeriesNoRenderer = 'series[%d]: the "%s" series type is not drawn yet';
   rsTyChartSeriesNoAxis = 'series[%d] names an axis that does not exist';
   rsTyChartSeriesAxesSplit =
     'series[%d]: xAxis[%d] and yAxis[%d] are not on one grid';

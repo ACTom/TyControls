@@ -936,6 +936,11 @@ msgstr "series[%d]：“%s”不是一种 series 类型"
 msgid "series[%d]: coordinateSystem \"%s\" is not built yet"
 msgstr "series[%d]：coordinateSystem“%s”尚未实现"
 
+#: tycontrols.strconsts.rstychartseriesnorenderer
+#, object-pascal-format
+msgid "series[%d]: the \"%s\" series type is not drawn yet"
+msgstr "series[%d]：“%s”这个系列类型还画不出来"
+
 #: tycontrols.strconsts.rstychartseriesnoaxis
 #, object-pascal-format
 msgid "series[%d] names an axis that does not exist"

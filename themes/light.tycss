@@ -1261,6 +1261,17 @@ TyAdvChartTooltipValue {
    white on an indigo chip, which is a colour this vocabulary already has a
    name for. Accent, therefore -- so a re-skinned chart labels its pointer in
    the skin's own colour instead of ECharts'. */
+/* A candlestick's two directions. NOT "positive and negative" however they are
+   usually described: both compare a datum against ITSELF -- close above open
+   against open above close -- and either can happen in a rising market.
+
+   Upstream writes #eb5454 and #47b262, which is the East Asian convention
+   (red up, green down) and the opposite of the North American one. This
+   library has a --success and a --danger already and they carry exactly the
+   right meaning in either convention, so a theme that wants the other way
+   round swaps two lines here instead of restyling a chart. */
+TyAdvChartCandleUp { background: var(--danger); }
+TyAdvChartCandleDown { background: var(--success); }
 TyAdvChartAxisPointer { border-color: var(--border); border-width: 1px; }
 TyAdvChartAxisPointerShadow { background: alpha(var(--on-surface), 0.10); }
 TyAdvChartAxisPointerLabel {

@@ -171,6 +171,18 @@ type
       TDim = record
         Name: string;
         Kind: TTyDimType;
+        { WHICH COORDINATE THIS COLUMN FEEDS, when that is not its own name.
+
+          ONE AXIS CAN HAVE SEVERAL COLUMNS. A candlestick puts open, close,
+          lowest and highest all on the value axis; a boxplot puts five there.
+          Upstream models this as `mapDimensionsAll(coordDim)` -- a coordinate
+          is a LIST of data dimensions, not one -- and the port had only
+          `DimIndexOf(axis.Dim)`, which can answer with one column and
+          therefore sized such an axis from a quarter of its own data.
+
+          Empty means the column feeds the coordinate of its own name, which
+          is every column of every series written before this existed. }
+        Coord: string;
         Meta: TTyOrdinalMeta;       // ordinal dimensions only; see MetaOwned
         { False means the AXIS owns this list and hands the same instance to
           every series bound to it. That sharing is not an optimisation -- it
@@ -236,6 +248,14 @@ type
     function AddDimension(const AName: string; AType: TTyDimType): Integer;
     function DimCount: Integer;
     function DimIndexOf(const AName: string): Integer;
+    { EVERY column feeding one coordinate, in column order.
+
+      Falls back to the single column named ACoord when nothing was mapped, so
+      a store built the ordinary way answers exactly what DimIndexOf does and
+      a caller never has to ask which kind of store it has. }
+    function DimsOfCoord(const ACoord: string): TTyIntegerArray;
+    { Say that ADim feeds ACoord. }
+    procedure SetDimCoord(ADim: Integer; const ACoord: string);
     function DimName(ADim: Integer): string;
     function DimType(ADim: Integer): TTyDimType;
     { The category list of an ordinal dimension, from an axis' `data`.
@@ -813,6 +833,35 @@ begin
   for i := 0 to High(FDims) do
     if FDims[i].Name = AName then Exit(i);
   Result := -1;
+end;
+
+function TTyDataStore.DimsOfCoord(const ACoord: string): TTyIntegerArray;
+var i, n: Integer;
+begin
+  Result := nil;
+  if ACoord = '' then Exit;
+  n := 0;
+  SetLength(Result, Length(FDims));
+  for i := 0 to High(FDims) do
+    if FDims[i].Coord = ACoord then
+    begin
+      Result[n] := i;
+      Inc(n);
+    end;
+  SetLength(Result, n);
+  if n > 0 then Exit;
+  { NOTHING WAS MAPPED, so the coordinate is the column of that name -- which
+    is every store the port built before a series needed more than one. }
+  i := DimIndexOf(ACoord);
+  if i < 0 then Exit;
+  SetLength(Result, 1);
+  Result[0] := i;
+end;
+
+procedure TTyDataStore.SetDimCoord(ADim: Integer; const ACoord: string);
+begin
+  if (ADim < 0) or (ADim > High(FDims)) then Exit;
+  FDims[ADim].Coord := ACoord;
 end;
 
 function TTyDataStore.DimName(ADim: Integer): string;

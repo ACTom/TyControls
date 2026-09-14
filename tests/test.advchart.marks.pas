@@ -31,6 +31,8 @@ type
       horizontal bar chart. Its own fixture rather than a flag on Given,
       because what changes is which axis is the base, and that is the thing
       under test. }
+    procedure GivenMultiValue(const AType: string; ACount: Integer;
+      const ARows: array of Double);
     procedure GivenSideways(const AType: string; ACount: Integer;
       const AValues: array of Double);
   published
@@ -114,6 +116,73 @@ begin
   FStore.UseOrdinalMeta(0, ax.Categories);
   for i := 0 to High(AValues) do
     FStore.AppendRow([Double(i), AValues[i]]);
+
+  FBinding := Default(TTySeriesBinding);
+  FBinding.SeriesIndex := 0;
+  FBinding.SeriesType := AType;
+  FBinding.Resolved := True;
+  FBinding.HasAxes := True;
+  FBinding.Cart := FCart;
+  FBinding.XAxis := ax;
+  FBinding.YAxis := ay;
+  FBinding.BaseAxis := ax;
+  FBinding.ValueAxis := ay;
+end;
+
+{ THE SAME CHART, for a type whose values are SEVERAL COLUMNS ON ONE AXIS.
+
+  A candlestick is four numbers on the value axis and a category that is
+  nowhere in its data row at all, so the two-column fixture above is not a
+  smaller version of what it needs -- it is a store it cannot read. Building
+  the columns its own registry entry declares is what makes the published
+  answer and the drawing comparable for it. }
+procedure TAdvChartMarksTest.GivenMultiValue(const AType: string;
+  ACount: Integer; const ARows: array of Double);
+var
+  ax, ay: TTyAxis;
+  sy: TTyIntervalScale;
+  cats: TTyStringArray;
+  info: TTySeriesTypeInfo;
+  i, k, n: Integer;
+  row: array of TTyDataValue;
+begin
+  FCart := TTyCartesian2D.Create;
+  ax := TTyAxis.Create('x', TTyOrdinalScale.Create, True);
+  ax.AxisType := atCategory;
+  SetLength(cats, ACount);
+  for i := 0 to ACount - 1 do cats[i] := Chr(Ord('a') + i);
+  ax.SetCategories(cats);
+  ax.OnBand := True;
+  sy := TTyIntervalScale.Create;
+  sy.SetExtent(TyRange(0, 100));
+  ay := TTyAxis.Create('y', sy, False);
+  FCart.AddAxis(ax);
+  FCart.AddAxis(ay);
+  FCart.SetRect(TyRectF(0, 0, 400, 300));
+
+  AssertTrue(AType + ' is a registered type', TySeriesFindType(AType, info));
+  n := Length(info.Dims) - 1;
+  FStore := TTyDataStore.Create;
+  FStore.AddDimension('x', ddtOrdinal);
+  FStore.UseOrdinalMeta(0, ax.Categories);
+  { EVERY VALUE COLUMN FEEDS THE VALUE AXIS, which is the whole of what the
+    store learned for this family -- a coordinate is a list of columns. }
+  for k := 1 to n do
+  begin
+    FStore.AddDimension(info.Dims[k], ddtFloat);
+    FStore.SetDimCoord(k, 'y');
+  end;
+  SetLength(row, n + 1);
+  for i := 0 to ACount - 1 do
+  begin
+    row[0] := TyDataNum(i);
+    for k := 1 to n do
+    begin
+      if (i * n + k - 1) <= High(ARows) then row[k] := TyDataNum(ARows[i * n + k - 1])
+      else row[k] := TyDataNum(0);
+    end;
+    FStore.AppendRow(row);
+  end;
 
   FBinding := Default(TTySeriesBinding);
   FBinding.SeriesIndex := 0;
@@ -316,6 +385,14 @@ begin
   AssertEquals(0, FList.Count);
 end;
 
+{ A type whose registry entry declares `base` and more than one value. }
+function MultiValueType(const AType: string): Boolean;
+var info: TTySeriesTypeInfo;
+begin
+  Result := TySeriesFindType(AType, info) and (Length(info.Dims) >= 3)
+    and (info.Dims[0] = 'base');
+end;
+
 procedure TAdvChartMarksTest.TestThePublishedAnswerMatchesWhatIsActuallyDrawn;
 const
   { Every type ECharts 6.1 has, so a renderer landing without its entry being
@@ -340,7 +417,17 @@ begin
     FList.Clear;
     FreeAndNil(FStore);
     FreeAndNil(FCart);
-    Given(cTypes[i], 3, [10, 20, 30]);
+    { EACH TYPE GETS THE COLUMNS ITS OWN REGISTRY ENTRY DECLARES. A type
+      declaring `base` plus more than one value -- candlestick, boxplot --
+      cannot read a coordinate-pair store at all, so handing it one would
+      compare the published answer against a fixture rather than against the
+      renderer. }
+    if MultiValueType(cTypes[i]) then
+      GivenMultiValue(cTypes[i], 3,
+        [10, 30, 5, 35, 30, 10, 5, 35, 10, 10, 5, 35,
+         10, 30, 5, 35, 30, 10, 5, 35, 10, 10, 5, 35])
+    else
+      Given(cTypes[i], 3, [10, 20, 30]);
     { A PIE IS THE ONE TYPE THIS LOOP CANNOT SPEAK FOR. It has no
       coordinate system, so it never enters TyBuildSeriesMarks and the
       comparison below would read as `the answer is yes and nothing is

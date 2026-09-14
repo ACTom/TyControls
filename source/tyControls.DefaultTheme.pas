@@ -1294,6 +1294,17 @@ begin
     '   white on an indigo chip, which is a colour this vocabulary already has a' + LineEnding +
     '   name for. Accent, therefore -- so a re-skinned chart labels its pointer in' + LineEnding +
     '   the skin''s own colour instead of ECharts''. */' + LineEnding +
+    '/* A candlestick''s two directions. NOT "positive and negative" however they are' + LineEnding +
+    '   usually described: both compare a datum against ITSELF -- close above open' + LineEnding +
+    '   against open above close -- and either can happen in a rising market.' + LineEnding +
+    '' + LineEnding +
+    '   Upstream writes #eb5454 and #47b262, which is the East Asian convention' + LineEnding +
+    '   (red up, green down) and the opposite of the North American one. This' + LineEnding +
+    '   library has a --success and a --danger already and they carry exactly the' + LineEnding +
+    '   right meaning in either convention, so a theme that wants the other way' + LineEnding +
+    '   round swaps two lines here instead of restyling a chart. */' + LineEnding +
+    'TyAdvChartCandleUp { background: var(--danger); }' + LineEnding +
+    'TyAdvChartCandleDown { background: var(--success); }' + LineEnding +
     'TyAdvChartAxisPointer { border-color: var(--border); border-width: 1px; }' + LineEnding +
     'TyAdvChartAxisPointerShadow { background: alpha(var(--on-surface), 0.10); }' + LineEnding +
     'TyAdvChartAxisPointerLabel {' + LineEnding +

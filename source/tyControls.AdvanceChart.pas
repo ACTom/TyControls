@@ -348,6 +348,15 @@ type
     procedure SolveLegends(const AMeasurer: ITyTextMeasurer; APPI: Integer);
     function LegendFont: TTyLegendFont;
     function LegendInk: TTyLegendInk;
+    { The four colours a candle falls back on, from the theme, with whatever
+      the option wrote laid over them. }
+    function CandleVisual(ASlot: Integer): TTyCandleSpec;
+    { An axis' dimension name, '' for no axis. }
+    function AxisDimOf(AAxis: TTyAxis): string;
+    { Rewrite ADims for a series type that declares more than one value per
+      datum. A no-op for every other type. }
+    procedure MultiValueDims(const ABinding: TTySeriesBinding;
+      var ADims: TTySeriesDimArray);
     { The legend's elements, into the chart's own paint list. }
     function BuildLegends(APPI: Integer; AList: TTyPaintList): Integer;
     { Every series' elements into FPaintList, and nothing drawn. Separate from
@@ -384,6 +393,12 @@ type
       the element is not one that can be lifted. }
     function EmphasiseElement(AIndex: Integer; APPI: Integer;
       out AElement: TTyChartElement): Boolean;
+    { Every value of one datum as one string. Several go on ONE row joined by
+      two spaces, which is upstream's richText spelling of the list html joins
+      with two non-breaking spaces -- and it is the branch a candlestick
+      always takes. The sub-row form, a small dot per dimension on its own
+      line, is the other branch and is not built yet. }
+    function ValuesText(const AParams: TTyChartCallbackParams): string;
     { Every surviving series as a formatter would see it, in section order --
       so `{a0}` is the first row of the first section. }
     function AxisTooltipParams(const AHits: TTyAxisHitArray): TTyChartParams;
@@ -565,7 +580,11 @@ type
 
 implementation
 
-uses tyControls.Controller;
+uses
+  tyControls.Controller,
+  { Only for the diagnostic resourcestrings -- the same one-way dependency the
+    rest of the AdvChart family keeps, invisible to a host. }
+  tyControls.StrConsts;
 
 { ==================== construction ==================== }
 
@@ -728,6 +747,19 @@ begin
   DropBuild;
   FBuild := TyBuildGrids(FOption, FLastRect);
   FBindings := TyBindSeries(FOption, FBuild);
+  { A TYPE THAT RESOLVED AND STILL DRAWS NOTHING HAS TO SAY SO. Binding knows
+    the twenty-three names ECharts ships and says nothing about which of them
+    this control can paint, so a `funnel` bound cleanly, laid out cleanly and
+    came out blank with no diagnostic at all -- which is the one thing the
+    control is not allowed to do. Said HERE rather than in the binder because
+    the binder cannot see the renderer table: the unit that owns it uses the
+    binder, and a second copy of the list over there is a second thing that
+    drifts. }
+  for i := 0 to High(FBindings) do
+    if FBindings[i].Resolved and (FBindings[i].SeriesType <> '')
+      and not TySeriesTypeHasRenderer(FBindings[i].SeriesType) then
+      FBuild.Note(Format(rsTyChartSeriesNoRenderer,
+        [FBindings[i].SeriesIndex, FBindings[i].SeriesType]));
   SetLength(FStores, Length(FBindings));
   SetLength(FSources, Length(FBindings));
   SetLength(FSeriesDataset, Length(FBindings));
@@ -785,9 +817,20 @@ begin
       Continue;
     end;
     dims := TySeriesCartesianDims(FBindings[i].Cart, 0);
+    { A SERIES WHOSE TYPE DECLARES MORE THAN A PAIR gets those columns
+      instead. A candlestick is four numbers on ONE axis and a category that
+      is nowhere in the row at all; a coordinate-per-column store cannot hold
+      it, and the two-column version quietly kept the closes and threw the
+      other three away. The axis then sized itself from a quarter of its own
+      data and the renderer found no columns to read. }
+    MultiValueDims(FBindings[i], dims);
     for k := 0 to High(dims) do
     begin
       st.AddDimension(dims[k].Name, dims[k].Kind);
+      { WHICH COORDINATE THIS COLUMN FEEDS. Only ever different from its own
+        name for a multi-value series, and only that series' extent pass and
+        tooltip look at it. }
+      if dims[k].Coord <> '' then st.SetDimCoord(k, dims[k].Coord);
       { The axis owns the category list and every series on it borrows the SAME
         one -- that sharing is what makes two series agree about which name
         ordinal 0 is. }
@@ -2333,6 +2376,95 @@ begin
   end;
 end;
 
+procedure TTyAdvanceChart.MultiValueDims(const ABinding: TTySeriesBinding;
+  var ADims: TTySeriesDimArray);
+var
+  info: TTySeriesTypeInfo;
+  i, n: Integer;
+begin
+  if (ABinding.BaseAxis = nil) or (ABinding.ValueAxis = nil) then Exit;
+  if not TySeriesFindType(ABinding.SeriesType, info) then Exit;
+  { `base` PLUS MORE THAN ONE VALUE is what makes a type multi-value, and the
+    registry has said so since it was written -- a candlestick declares
+    base/open/close/lowest/highest and a boxplot base/min/Q1/median/Q3/max.
+    Anything declaring two or fewer is an ordinary pair and keeps the columns
+    the coordinate system gave it. }
+  n := Length(info.Dims);
+  if (n < 3) or (info.Dims[0] <> 'base') then Exit;
+
+  SetLength(ADims, n);
+  { THE CATEGORY IS THE ROW NUMBER. Upstream's default encode for these types
+    puts every element of the item on the value axis, which leaves the base
+    axis nothing to read -- so it counts rows instead. The column keeps the
+    base axis' own name and kind so category interning still works. }
+  ADims[0].Name := ABinding.BaseAxis.Dim;
+  if ABinding.BaseAxis.AxisType = atCategory then
+  begin
+    ADims[0].Kind := ddtOrdinal;
+    ADims[0].Axis := ABinding.BaseAxis;
+    ADims[0].FromRowIndex := True;
+  end
+  else if ABinding.BaseAxis.AxisType = atTime then
+  begin
+    ADims[0].Kind := ddtTime;
+    ADims[0].Axis := nil;
+    ADims[0].FromRowIndex := True;
+  end
+  else
+  begin
+    ADims[0].Kind := ddtFloat;
+    ADims[0].Axis := nil;
+    ADims[0].FromRowIndex := True;
+  end;
+  ADims[0].Coord := '';
+  ADims[0].SourceSlot := 0;
+
+  for i := 1 to n - 1 do
+  begin
+    ADims[i].Name := info.Dims[i];
+    ADims[i].Kind := ddtFloat;
+    ADims[i].Axis := nil;
+    { ELEMENT i-1 OF THE ITEM: the base took no element at all, so the values
+      start at the beginning of the row rather than one in from it. }
+    ADims[i].SourceSlot := i;
+    { AND EVERY ONE OF THEM FEEDS THE VALUE AXIS. This is the whole reason
+      the store learned that a coordinate is a LIST of columns. }
+    ADims[i].Coord := ABinding.ValueAxis.Dim;
+  end;
+end;
+
+function TTyAdvanceChart.AxisDimOf(AAxis: TTyAxis): string;
+begin
+  if AAxis = nil then Result := '' else Result := AAxis.Dim;
+end;
+
+function TTyAdvanceChart.CandleVisual(ASlot: Integer): TTyCandleSpec;
+var
+  model: TTyStyleModel;
+  up, down: TTyStyleSet;
+  d: TTyCandleSpec;
+begin
+  model := ActiveController.Model;
+  up := model.ResolveStyle('TyAdvChartCandleUp', '', []);
+  down := model.ResolveStyle('TyAdvChartCandleDown', '', []);
+  d := Default(TTyCandleSpec);
+  d.Up := TTyChartColor(up.Background.Color);
+  d.Down := TTyChartColor(down.Background.Color);
+  { THE BORDER FOLLOWS THE BODY unless the theme said otherwise. Upstream's
+    two defaults are the same pair of colours written twice, and a skin that
+    wants an outlined candle sets `border-color` on these keys without having
+    to restate the fill. }
+  if tpBorderColor in up.Present then d.UpBorder := TTyChartColor(up.BorderColor)
+  else d.UpBorder := d.Up;
+  if tpBorderColor in down.Present then
+    d.DownBorder := TTyChartColor(down.BorderColor)
+  else d.DownBorder := d.Down;
+  d.BorderWidthLogical := 1;
+  if (tpBorderColor in up.Present) and (up.BorderWidth > 0) then
+    d.BorderWidthLogical := up.BorderWidth;
+  Result := TyCandleSpecOf(FOption, ASlot, d);
+end;
+
 function TTyAdvanceChart.LegendFont: TTyLegendFont;
 var st: TTyStyleSet;
 begin
@@ -2497,6 +2629,7 @@ begin
       ApplyOptStyle(v, FBindings[i].SeriesIndex);
       if i <= High(FBarCols) then v.Bar := FBarCols[i];
       v.Line := TyLineSpecOf(FOption, FBindings[i].SeriesIndex);
+      v.Candle := CandleVisual(FBindings[i].SeriesIndex);
       { The thinning the AXIS settled on. When markers would crowd, upstream
         falls back to the category axis' own label interval -- which the layout
         pass already computed, so it is fetched rather than re-derived. }
@@ -2713,7 +2846,8 @@ end;
 function TTyAdvanceChart.DatumColour(
   const ADatum: TTyChartDatumRef): TTyChartColor;
 var
-  slot: Integer;
+  slot, idx: Integer;
+  perDatum: Boolean;
   el: TTyChartElement;
   v: TTySeriesVisual;
 begin
@@ -2738,18 +2872,28 @@ begin
     and (ADatum.DataIndex >= 0) and (ADatum.DataIndex < FStores[slot].Count) then
     Result := TyRowFill(v, FStores[slot], ADatum.DataIndex);
 
-  { A PIE IS KEYED ON THE ROW AND NOT ON THE SERIES: its slices take
-    consecutive palette slots, so the series' own colour would paint every
-    marker alike. Reading it off the wedge is right here for the same reason it
-    was wrong above -- a wedge is a filled shape, and its fill IS its colour. }
-  if (FPaintList <> nil) and FPaintListValid
-    and (FTipElement >= 0) and (FTipElement < FPaintList.Count) then
+  { SOME SERIES HAVE NO SINGLE COLOUR. A pie's slices take consecutive palette
+    slots; a candlestick's bodies are red or green by the datum's own two
+    numbers. Asking the SERIES paints every marker of those alike, so for them
+    the answer is read off the drawn element -- right here for the same reason
+    it was wrong above, because both are FILLED shapes and a filled shape's
+    fill IS its colour.
+
+    FOUND BY DATUM, not taken from the hovered element: under an axis trigger
+    the pointer is usually nowhere near the mark being described, and the
+    element it happens to be over belongs to something else or to nothing. }
+  perDatum := (FBindings[slot].SeriesType = TyPieSeriesTypeName)
+    or (Length(FStores[slot].DimsOfCoord(
+      AxisDimOf(FBindings[slot].ValueAxis))) > 1);
+  if perDatum and (FPaintList <> nil) and FPaintListValid then
   begin
-    el := FPaintList.Element(FTipElement);
-    if (el.Datum.SeriesIndex = ADatum.SeriesIndex)
-      and (el.Shape.Kind = cskSector) and el.Style.HasFill
-      and (el.Style.FillColor <> 0) then
-      Result := el.Style.FillColor;
+    idx := FPaintList.IndexOfDatum(ADatum.SeriesIndex, ADatum.DataIndex);
+    if idx >= 0 then
+    begin
+      el := FPaintList.Element(idx);
+      if el.Style.HasFill and (el.Style.FillColor <> 0) then
+        Result := el.Style.FillColor;
+    end;
   end;
 end;
 
@@ -2757,6 +2901,7 @@ function TTyAdvanceChart.TooltipParams(
   const ADatum: TTyChartDatumRef): TTyChartCallbackParams;
 var
   slot, col, i, n: Integer;
+  cols: TTyIntegerArray;
   st: TTyDataStore;
 begin
   Result := Default(TTyChartCallbackParams);
@@ -2788,27 +2933,34 @@ begin
     if col >= 0 then Result.Name := st.GetOrdinalText(col, ADatum.DataIndex);
   end;
 
-  { WHICH VALUE. Upstream takes the last non-ordinal, non-time coordinate
-    dimension -- which on a cartesian series is the value axis' column, the
-    same one a data label reads. A tooltip showing x on a bar chart would show
-    the category ordinal, which is a number and looks like an answer. }
-  col := -1;
+  { WHICH VALUES, PLURAL. Upstream's `tooltipDims` is every data dimension
+    mapped onto the value coordinate -- one for a bar, a line or a pie, and
+    FOUR for a candlestick, which is why `mapDimensionsAll` is the plural
+    spelling there and `mapDimension` is not. A port that took one column
+    showed a candle's highest and called it the value. }
+  cols := nil;
   if FBindings[slot].ValueAxis <> nil then
-    col := st.DimIndexOf(FBindings[slot].ValueAxis.Dim);
-  if col < 0 then
+    cols := st.DimsOfCoord(FBindings[slot].ValueAxis.Dim);
+  if Length(cols) = 0 then
   begin
     { A pie has no axes at all; its one dimension is the value. }
     n := st.DimCount;
     for i := n - 1 downto 0 do
       if st.DimType(i) <> ddtOrdinal then
       begin
-        col := i;
+        SetLength(cols, 1);
+        cols[0] := i;
         Break;
       end;
   end;
-  if col < 0 then Exit;
-  SetLength(Result.Values, 1);
-  Result.Values[0] := st.Get(col, ADatum.DataIndex);
+  if Length(cols) = 0 then Exit;
+  SetLength(Result.Values, Length(cols));
+  SetLength(Result.DimensionNames, Length(cols));
+  for i := 0 to High(cols) do
+  begin
+    Result.Values[i] := st.Get(cols[i], ADatum.DataIndex);
+    Result.DimensionNames[i] := st.DimName(cols[i]);
+  end;
 end;
 
 function TTyAdvanceChart.TooltipContent(const ADatum: TTyChartDatumRef;
@@ -2823,8 +2975,7 @@ begin
   seriesName := p.SeriesName;
   inlineName := p.Name;
   haveValue := Length(p.Values) > 0;
-  if haveValue then valueText := TyTooltipValueText(p.Values[0])
-  else valueText := '';
+  valueText := ValuesText(p);
   if haveValue and (valueText = '') then haveValue := False;
   if (Trim(inlineName) = '') and not haveValue and (Trim(seriesName) = '') then
     Exit;
@@ -3407,6 +3558,18 @@ begin
   end;
 end;
 
+function TTyAdvanceChart.ValuesText(
+  const AParams: TTyChartCallbackParams): string;
+var i: Integer;
+begin
+  Result := '';
+  for i := 0 to High(AParams.Values) do
+  begin
+    if i > 0 then Result := Result + '  ';
+    Result := Result + TyTooltipValueText(AParams.Values[i]);
+  end;
+end;
+
 function TTyAdvanceChart.AxisTooltipParams(
   const AHits: TTyAxisHitArray): TTyChartParams;
 var
@@ -3466,7 +3629,7 @@ begin
         FStores[slot].GetRawIndex(row));
       p := TooltipParams(d);
       if Length(p.Values) = 0 then Continue;
-      valueText := TyTooltipValueText(p.Values[0]);
+      valueText := ValuesText(p);
       { UNDER AN AXIS TRIGGER THE INLINE NAME IS THE SERIES NAME, not the item
         name -- upstream passes `multipleSeries = true`, which both suppresses
         the per-series header AND switches the name. The item name is already

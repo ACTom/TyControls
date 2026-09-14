@@ -260,6 +260,28 @@ type
   TTySeriesDim = record
     Name: string;
     Kind: TTyDimType;
+    { WHICH ELEMENT OF THE ROW THIS COLUMN TAKES, one-based; 0 means the
+      column's own position, which is what every series written before a
+      candlestick needed.
+
+      ONE-BASED AND NOT ZERO-BASED ON PURPOSE. These records are made by
+      SetLength and by Default(), both of which zero them, and a zero-based
+      field would have every column of every store silently claiming to read
+      element 0. The awkward numbering is what makes the default safe. }
+    SourceSlot: Integer;
+    { WHICH COORDINATE THIS COLUMN FEEDS, when that is not its own name --
+      handed straight to TTyDataStore.SetDimCoord. Empty for every ordinary
+      column, which is every column of every series that puts one number on
+      each axis. }
+    Coord: string;
+    { True when this column is the ROW NUMBER rather than anything in the row.
+
+      A candlestick's four values occupy the whole of its item array, so its
+      category cannot also come from there -- upstream's default encode puts
+      the category on the row index and every value on the value axis. The
+      store-wide `useIndex` guess cannot express that: it fires only when the
+      items are not arrays, and a candlestick's always are. }
+    FromRowIndex: Boolean;
     { The axis that OWNS the category list this column interns into. nil unless
       the column is ordinal. Sharing that list is what makes two series on one
       category axis agree about which name ordinal 0 is. }
@@ -1323,7 +1345,7 @@ var
   d: TJSONData;
   arr: TJSONArray;
   row: array of TTyDataValue;
-  i, k, catDim, raw: Integer;
+  i, k, src, catDim, raw: Integer;
   item, v, cell: TJSONData;
   useIndex: Boolean;
   txt: string;
@@ -1346,16 +1368,20 @@ begin
     v := UnwrapItem(item);
     for k := 0 to High(ADims) do
     begin
-      if useIndex and (k = catDim) then
+      if ADims[k].FromRowIndex or (useIndex and (k = catDim)) then
       begin
-        { The row index, and ONLY for the first category column: every other
-          column still reads the item. }
+        { The row index -- either because this column asked for it, or because
+          the store-wide guess says the items are not arrays and this is the
+          first category column. Every other column still reads the item. }
         row[k] := TyDataNum(i);
         Continue;
       end;
+      src := k;
+      if ADims[k].SourceSlot > 0 then src := ADims[k].SourceSlot - 1;
       if (v <> nil) and (v is TJSONArray) then
       begin
-        if k < TJSONArray(v).Count then cell := TJSONArray(v).Items[k] else cell := nil;
+        if src < TJSONArray(v).Count then cell := TJSONArray(v).Items[src]
+        else cell := nil;
         row[k] := CellValue(cell);
       end
       else
