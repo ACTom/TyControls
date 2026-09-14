@@ -68,6 +68,7 @@ end;
 | `VisibleColCount` | 视口里现在装得下几列,`VisibleRowCount` 的列轴对偶 |
 | `AutoFillColumns` | 让**每一列**分掉多余的宽度,按各自的 `SizePriority` 加权。与 `hoAutoResize` + `AutoSizeIndex` 的区别:那一对只让**指定的一列**吸收剩余宽度 |
 | `ScrollBars` | `ssNone` / `ssHorizontal` / `ssVertical` / `ssBoth` / `ssAuto*`。存储仍是 `VertScrollBarMode` / `HorzScrollBarMode` 那一对(现已 published),这个是 LCL 同名同类型的视图 |
+| `ScrollBarAutoHide` | 两条内嵌滚动条闲下来之后要不要淡出。属性在 `TTyCustomGrid` 上,`TTyStringGrid` 与 `TTyDrawGrid` 都有。默认 `sbahDefault` = 跟主题走,三个值的含义与主题令牌见 [scrollbar.md](scrollbar.md) §7 |
 | `ShowFocusCell` / `FocusRectVisible` | 焦点格要不要铺一层区分底色(`TyGridActiveCell`;同一个存储,后者是 LCL 的名字)。**默认 True** —— 两个属性一直都写着 `default True`,但构造函数从来没设过它,所以在此之前出厂的网格里这层底色是熄的;`Options` 的出厂值断言把它照了出来。`Options` 里的对应位是 `goDrawFocusSelected` |
 | `HideSelectionWhenInactive` / `FadeUnfocusedSelection` | 失去焦点时选区变淡(同上)。**现已 published** |
 | `Modified` | 自建表 / 上次装载以来有没有被改过。收口在 `Cells[]` 与结构性增删行,所以粘贴、填充柄、撤销、勾选框、CSV 装载都算数。存过盘之后宿主自己写 `False` 复位 |

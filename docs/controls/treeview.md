@@ -46,6 +46,7 @@ uses tyControls.TreeView, tyControls.Columns;
 | `HotTrack` | `Boolean` | `False` | 是否高亮鼠标悬停行（`:hover` 状态） |
 | `SearchTimeout` | `Integer` | `1000` | 键入查找（type-to-find）缓冲区空闲多少毫秒后自动重置 |
 | `ScrollBars` | `TScrollStyle` | `ssBoth` | 允许出现哪些方向的滚动条。`ssNone` = 视口固定（嵌在外层滚动容器里时用）；被禁掉的那一轴偏移会归零 |
+| `ScrollBarAutoHide` | `TTyScrollBarAutoHide` | `sbahDefault` | 内嵌滚动条闲下来之后要不要淡出，转发给它们。默认跟主题走，三个值的含义与主题令牌见 [scrollbar.md](scrollbar.md) §7 |
 | `AutoExpand` | `Boolean` | `False` | 焦点移入的节点自动展开、移出的自动折叠（新焦点在旧节点子树内时不折叠） |
 | `RightClickSelect` | `Boolean` | `True` | 右键按下是否把焦点移到点中的节点。**默认与 LCL 不同**：LCL 默认 `False`，本控件一直是"右键跟随"，故保留 `True`；要 LCL 行为设 `False` |
 | `HideSelection` | `Boolean` | `True` | 控件失去焦点时是否隐藏选中高亮（并排两棵树不会都显示强高亮）。隐藏＝该行按普通行的主题样式绘制，不在控件里凭空造颜色 |

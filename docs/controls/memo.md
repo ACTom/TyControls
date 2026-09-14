@@ -34,6 +34,7 @@ uses tyControls.Memo;
 | `WantTabs` | `Boolean` | `False` | **（API parity 新增）** 为 `True` 时 Tab 键插入制表符（字面量）；为 `False` 时 Tab 用于焦点导航。 |
 | `WantReturns` | `Boolean` | `True` | **（API parity 新增）** 为 `True` 时回车插入换行；为 `False` 时回车不换行（留作提交语义）。 |
 | `ScrollBars` | `TScrollStyle` | `ssAutoVertical` | 滚动条策略，与 `TMemo` 同义：`ssNone` 两条都不要；`ssVertical` / `ssBoth` 强制显示竖条，`ssAutoVertical` / `ssAutoBoth` 溢出才出现；`ssHorizontal` / `ssBoth` 强制显示横条，`ssAutoHorizontal` / `ssAutoBoth` 溢出才出现。横条只在 `WordWrap = False` 时有意义（回绕模式不会横向滚动）。 |
+| `ScrollBarAutoHide` | `TTyScrollBarAutoHide` | `sbahDefault` | 内嵌滚动条闲下来之后要不要淡出，转发给它们。默认跟主题走，三个值的含义与主题令牌见 [scrollbar.md](scrollbar.md) §7。 |
 | `WordWrap` | `Boolean` | `False` | 软回绕开关。`True` 时长逻辑行按词边界折成多条可见行；`False`（默认）时长行改为横向滚动。 |
 | `HideSelection` | `Boolean` | `True` | 失去焦点时是否隐藏选区高亮。 |
 | `Alignment` | `TAlignment` | `taLeftJustify` | **（API parity 新增）** **每一条可见行**的水平对齐（`TMemo` 在 `stdctrls.pp:1023` 转发同名属性）。这是一个真正缺失的**能力**：从前渲染器永远从内容区左缘起画，居中的多行文字块**用任何办法都做不出来**，主题也不行。比视口**更宽**的行不参与对齐——没有可居中的余量，此时横向滚动拥有原点（与 `TTyEdit.AlignOffset` 同一条口径）。绘制、选区带、光标和**点击命中**共用同一个偏移量，不会彼此错位。 |

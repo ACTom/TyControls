@@ -50,6 +50,14 @@ uses tyControls.ScrollBox;
 | `ScrollX` | `Integer` | 当前水平滚动偏移（≥ 0，逻辑像素），表示内容相对视口向左平移了多少。 |
 | `ScrollY` | `Integer` | 当前垂直滚动偏移（≥ 0，逻辑像素）。 |
 
+### 自有 published 属性
+
+| 属性 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `ScrollBarAutoHide` | `TTyScrollBarAutoHide` | `sbahDefault` | 两条内嵌滚动条闲下来之后要不要淡出，转发给它们。默认跟主题走，三个值的含义与主题令牌见 [scrollbar.md](scrollbar.md) §7。 |
+
+本控件自己 published 的就这一个，下面那些都是从基类 republish 的。
+
 ### 继承自 TTyPanel / TTyCustomControl 的 published 成员
 
 | 属性 | 类型 | 默认值 | 说明 |
