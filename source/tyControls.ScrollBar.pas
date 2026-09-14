@@ -13,7 +13,10 @@ const
     ResolveMetric -> TyEvalLength -> ParsePctOrNum -> StrToFloat，理由见
     docs/superpowers/specs/2026-09-14-scrollbar-auto-hide-design.md §2。 }
   TyScrollBarAutoHideVar = '--scrollbar-auto-hide';
-  TyScrollBarAutoHideDef = -1;
+  { 「关」这一个值,原来在同一个函数里有三种写法(Exit(-1)、Def = -1、
+    themeMs < 0)。给它一个名字，三处都指这里。 }
+  TyScrollBarAutoHideOff = -1;
+  TyScrollBarAutoHideDef = TyScrollBarAutoHideOff;
   { 属性明说要自动隐藏、而主题没给延时时的回退。macOS 量级。 }
   TyScrollBarAutoHideFallbackMs = 1200;
   { 出现要快——用户正在找它；消失要柔——别打扰。 }
@@ -59,6 +62,7 @@ type
       never accidentally pick up the flag. }
     function Mirrored: Boolean;
     procedure SetMirrorHorizontal(const AValue: Boolean);
+    procedure SetAutoHide(const AValue: TTyScrollBarAutoHide);
     procedure ButtonRects(const AClient: TRect; out ALo, AHi: TRect);
     procedure SetKind(const AValue: TTyScrollBarKind);
     procedure SetMin(const AValue: Integer);
@@ -159,7 +163,7 @@ type
                      TyScrollBarAutoHideFallbackMs。
 
       延时**故意不给属性**：单控件要不同延时是臆想需求。整体调快调慢改主题。 }
-    property AutoHide: TTyScrollBarAutoHide read FAutoHide write FAutoHide default sbahDefault;
+    property AutoHide: TTyScrollBarAutoHide read FAutoHide write SetAutoHide default sbahDefault;
     { RIGHT-TO-LEFT HORIZONTAL BAR: Min sits at the RIGHT end of the track and a rising
       Position walks the thumb LEFTWARDS. That is Windows' behaviour for a mirrored window,
       not a preference — a horizontal bar under WS_EX_LAYOUTRTL comes out reflected. The
@@ -377,17 +381,33 @@ begin
   Invalidate;
 end;
 
+procedure TTyScrollBar.SetAutoHide(const AValue: TTyScrollBarAutoHide);
+begin
+  if FAutoHide = AValue then Exit;
+  FAutoHide := AValue;
+  { 为什么不是裸字段写:淡出跑完之后定时器会把自己停掉，那一刻没有任何东西
+    在推进状态。此时把 AutoHide 改成 sbahNever,「关掉了就恢复全可见」那条臂
+    永远轮不到执行，滚动条就永久隐身；sbahDefault -> sbahAuto 同理，没人会去
+    把定时器启起来。所以属性变化必须能叫醒一条已经停摆的滚动条 —— 下一个任务
+    把「重置空闲计时、复位淡入淡出」接在这里。 }
+  Invalidate;
+end;
+
 function TTyScrollBar.EffectiveAutoHideMs: Integer;
 var
   themeMs: Integer;
 begin
   if FAutoHide = sbahNever then
-    Exit(-1);
+    Exit(TyScrollBarAutoHideOff);
   { ActiveController，不是裸 Controller——后者在没挂 controller 时会 AV。 }
   themeMs := ActiveController.Metric(TyScrollBarAutoHideVar, TyScrollBarAutoHideDef);
   if FAutoHide = sbahAuto then
   begin
-    { 属性明说要隐藏。主题关着（或没说）时不能跟着关，否则这个属性是个谎。 }
+    { 属性明说要隐藏。主题关着（或没说）时不能跟着关，否则这个属性是个谎。
+
+      契约里的「关」只有 TyScrollBarAutoHideOff 一个值；这里放宽到任何负数,
+      是因为主题作者手写个 -2 显然也是想关，没道理让它掉进回退。
+      **0 不在此列** —— 0 是「停手立即淡出」，是个合法延时，不是关。 }
     if themeMs < 0 then
       Exit(TyScrollBarAutoHideFallbackMs);
     Exit(themeMs);

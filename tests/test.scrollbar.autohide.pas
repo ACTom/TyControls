@@ -2,8 +2,8 @@ unit test.scrollbar.autohide;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, fpcunit, testregistry, Forms, Controls,
-  tyControls.Types, tyControls.Base, tyControls.Controller, tyControls.ScrollBar;
+  Classes, SysUtils, TypInfo, fpcunit, testregistry, Forms,
+  tyControls.Controller, tyControls.ScrollBar;
 
 type
   TTyScrollBarAutoHideTests = class(TTestCase)
@@ -22,6 +22,9 @@ type
     procedure NeverBeatsAnAutoHidingTheme;
     procedure AutoBeatsAnOffTheme;
     procedure AutoStillReadsTheThemeDelay;
+    procedure ImmediateIsAValidDelay;
+    procedure AutoHonoursAnImmediateTheme;
+    procedure DeclaredDefaultMatchesConstructed;
   end;
 
 implementation
@@ -49,8 +52,10 @@ end;
 
 procedure TTyScrollBarAutoHideTests.ThemeOffByDefault;
 begin
-  { 主题什么都不说 -> Metric 回退到 TyScrollBarAutoHideDef = -1 = 关 }
-  AssertEquals(-1, FBar.EffectiveAutoHideMs);
+  { 装一个主题，但它不提这个令牌——这才是出厂状态(内置主题都没写它),
+    比「一个空模型」更接近真实。Metric 回退到 TyScrollBarAutoHideDef = 关。 }
+  UseThemeCss(':root { --surface: #fff; }');
+  AssertEquals(TyScrollBarAutoHideOff, FBar.EffectiveAutoHideMs);
 end;
 
 procedure TTyScrollBarAutoHideTests.ThemeDelayIsRead;
@@ -101,6 +106,36 @@ begin
   UseThemeCss(':root { --scrollbar-auto-hide: 800; }');
   FBar.AutoHide := sbahAuto;
   AssertEquals(800, FBar.EffectiveAutoHideMs);
+end;
+
+procedure TTyScrollBarAutoHideTests.ImmediateIsAValidDelay;
+begin
+  { 0 是三个令牌值里唯一没被钉住的那个，而它恰恰最容易被当成「假」顺手抹掉。
+    0 = 停手立刻淡出，是延时不是开关。 }
+  UseThemeCss(':root { --scrollbar-auto-hide: 0; }');
+  AssertEquals(0, FBar.EffectiveAutoHideMs);
+end;
+
+procedure TTyScrollBarAutoHideTests.AutoHonoursAnImmediateTheme;
+begin
+  { sbahAuto 那条臂用「主题是不是负数」来决定要不要回退。写成 <= 0 一样能
+    让别的测试全绿，但这里会把 0 当成关、返回 1200 —— 立即淡出就没了。
+    后面的任务拿 delay = 0 当强制值去验「拖动时不隐藏」「设计期不隐藏」，
+    所以 0 的含义得先立住，那些测试才可信。 }
+  UseThemeCss(':root { --scrollbar-auto-hide: 0; }');
+  FBar.AutoHide := sbahAuto;
+  AssertEquals(0, FBar.EffectiveAutoHideMs);
+end;
+
+procedure TTyScrollBarAutoHideTests.DeclaredDefaultMatchesConstructed;
+var
+  pi: PPropInfo;
+begin
+  { 声明的 default 与构造值不一致 -> .lfm 里写的值被当默认省略 -> 加载后丢失。
+    全库没有能扫出这种不一致的统一守卫，逐属性写就是全部机制。 }
+  pi := GetPropInfo(FBar, 'AutoHide');
+  AssertTrue('AutoHide 必须是 published', pi <> nil);
+  AssertEquals('声明的 default 必须等于构造函数赋的值', Ord(FBar.AutoHide), pi^.Default);
 end;
 
 initialization
