@@ -706,6 +706,8 @@ end;
 
 > 16ms 的 tick 在延时阶段确实是空转，但它同时是淡出动画的驱动，多一个低频 timer 换来两套状态反而更难对齐。一条条最多空转「延时」那么久，之后就自己停了。
 
+> **`AutoHideTick(0)` 会让正在跑的淡出瞬间跑完。** `TTyAnimator.Advance` 把 `AMs <= 0` 当成「直接吸附到 Target」。Task 3 里这不成问题（唯一的 0ms 调用走的是「关着」那条分支），但真 timer 一旦可能投递一个 0ms 的步长，淡出就会跳变而不是渐变。两相 `Interval` 切换的那一刻尤其危险——**切 `Interval` 时别顺手用 0 去「立即触发一次」**。
+
 > **别在每个 tick 里调 `EffectiveAutoHideMs`。** 它每次都走 `ResolveMetric`，而那里为查缓存会先拼一个 `AName + '|' + IntToStr(ADefault)` 的 key 字符串——按 60fps × 最多 12 条内嵌条算，就是每帧十几次字符串分配。本库已经在 `TTyMemo` 上被逐帧测量的开销咬过一次（0.5 秒一键的延迟）。**按主题版本缓存一次**：`AutoHideTick` 与 `HandleHideTimer` 共用一个缓存值，在 `NoteActivity`、主题变更、`AutoHide` 属性变更时作废。
 
 - [ ] **Step 2: 全量跑，确认没碰坏位置动画**
