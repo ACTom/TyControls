@@ -4,8 +4,28 @@ interface
 uses
   Classes, SysUtils, Types, Math, Controls, Graphics, LCLType, StdCtrls, ExtCtrls,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Animation;
+const
+  { 自动隐藏延时的主题令牌。一条轴，没有歧义的零：
+      -1 = 关（滚动条一直显示，**内置主题就是这个值**）
+       0 = 开，停手立即淡出
+       N = 开，停手 N 毫秒后淡出
+    走已有的 Metric 机制，tycss 不需要新的值类型。负号能活着走完
+    ResolveMetric -> TyEvalLength -> ParsePctOrNum -> StrToFloat，理由见
+    docs/superpowers/specs/2026-09-14-scrollbar-auto-hide-design.md §2。 }
+  TyScrollBarAutoHideVar = '--scrollbar-auto-hide';
+  TyScrollBarAutoHideDef = -1;
+  { 属性明说要自动隐藏、而主题没给延时时的回退。macOS 量级。 }
+  TyScrollBarAutoHideFallbackMs = 1200;
+  { 出现要快——用户正在找它；消失要柔——别打扰。 }
+  TyScrollBarFadeInMs  = 120;
+  TyScrollBarFadeOutMs = 200;
+
 type
   TTyScrollBarKind = (sbHorizontal, sbVertical);
+
+  { 自动隐藏的三态。**不能是 Boolean**：Boolean 一旦被碰过就永远脱离主题
+    控制，换主题不跟着变——在一个主打换肤的库里这是硬伤。 }
+  TTyScrollBarAutoHide = (sbahDefault, sbahNever, sbahAuto);
 
   TTyScrollBar = class(TTyCustomControl)
   private
@@ -23,6 +43,7 @@ type
       left alone until then, which is the whole point of the mode. }
     FTrackPos: Integer;
     FAnimEnabled: Boolean;
+    FAutoHide: TTyScrollBarAutoHide;
     { 上一次缓动滴答的时刻(0 = 还没开始)。用来算真实经过时间。 }
     FLastTickMs: QWord;
     { 本次位置变化要不要立刻刷自己(只在拖动中置位)。 }
@@ -101,6 +122,9 @@ type
       that wants to preview the pending value (a row-number tooltip beside the thumb, say)
       reads this; everything else should keep reading Position. }
     property TrackPosition: Integer read GetTrackPosition;
+    { 本条现在实际的自动隐藏延时，毫秒；-1 表示关（一直显示）。
+      属性压过主题：sbahNever 恒为 -1；sbahAuto 在主题说关时用回退值。 }
+    function EffectiveAutoHideMs: Integer;
   published
     { LIVE TRACKING -- whether dragging the thumb moves Position continuously (True, the
       default and what this bar has always done) or only on mouse-up (False).
@@ -127,6 +151,15 @@ type
     // thumb to the new value; with no handle (every render test) or while
     // dragging it snaps, preserving exact-pixel tests and live mouse tracking.
     property AnimationsEnabled: Boolean read FAnimEnabled write FAnimEnabled default True;
+    { 这条滚动条要不要在没人用的时候淡出。
+
+      sbahDefault —— 跟主题走（令牌 --scrollbar-auto-hide）。
+      sbahNever   —— 永远显示，压过主题。
+      sbahAuto    —— 自动隐藏，压过主题；延时仍读主题，主题没给就用
+                     TyScrollBarAutoHideFallbackMs。
+
+      延时**故意不给属性**：单控件要不同延时是臆想需求。整体调快调慢改主题。 }
+    property AutoHide: TTyScrollBarAutoHide read FAutoHide write FAutoHide default sbahDefault;
     { RIGHT-TO-LEFT HORIZONTAL BAR: Min sits at the RIGHT end of the track and a rising
       Position walks the thumb LEFTWARDS. That is Windows' behaviour for a mirrored window,
       not a preference — a horizontal bar under WS_EX_LAYOUTRTL comes out reflected. The
@@ -300,6 +333,7 @@ begin
   FLiveTracking := True;       // what this bar has always done; see the property comment
   FTrackPos := FPosition;
   FAnimEnabled := True;
+  FAutoHide := sbahDefault;    // 跟主题走;与 published 的 default 一致
   // Thumb-glide animator: 0..1 traversal in ~120ms, decelerating. Start settled
   // at the rest endpoint so DisplayPos == FPosition before any change.
   FPosAnim.Progress := 1;
@@ -341,6 +375,24 @@ begin
   { Only the thumb's x moves; the frame, the track and both end buttons are already
     symmetric, so a repaint is the whole update. }
   Invalidate;
+end;
+
+function TTyScrollBar.EffectiveAutoHideMs: Integer;
+var
+  themeMs: Integer;
+begin
+  if FAutoHide = sbahNever then
+    Exit(-1);
+  { ActiveController，不是裸 Controller——后者在没挂 controller 时会 AV。 }
+  themeMs := ActiveController.Metric(TyScrollBarAutoHideVar, TyScrollBarAutoHideDef);
+  if FAutoHide = sbahAuto then
+  begin
+    { 属性明说要隐藏。主题关着（或没说）时不能跟着关，否则这个属性是个谎。 }
+    if themeMs < 0 then
+      Exit(TyScrollBarAutoHideFallbackMs);
+    Exit(themeMs);
+  end;
+  Result := themeMs;   // sbahDefault
 end;
 
 procedure TTyScrollBar.EnsureTimer;
