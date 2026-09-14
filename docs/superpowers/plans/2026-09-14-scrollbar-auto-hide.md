@@ -1293,5 +1293,8 @@ cd /d/Projects/ty-3.1 && lazbuild -B tycontrols.lpk && lazbuild -B examples/scro
 - [ ] 全量测试绿，且 `Number of run tests` 那行在
 - [ ] 按 spec §11 的六条验收逐条对
 - [ ] **真机验**（headless 测不到）：淡入淡出观感、`green` 主题色块、隐藏态下鼠标移过去能否唤回并点中
-- [ ] 合回 main 前照 pre-merge checklist 走：i18n（本特性无可译串，确认一下）、README 中英双份是否需要提这个能力
+- [x] **pre-merge checklist 已查（2026-09-15），结论如下：**
+  - **i18n：不用动。** 本分支往 `source/` 里加了 0 个 resourcestring（属性名和枚举值不进翻译）。Task 11 的 demo 若新增界面文字，那是 demo 自己的 `.po`，另算。
+  - **README（中英双份）：不用动。** 特性列表那几条是**数量与硬能力**——163 个控件、17 个主题、2022 个图标、三平台一致、HiDPI。自动隐藏是手感细节，塞进去只会稀释它们；而且「经典与现代两种风格」那条本来就涵盖了这类差异，自动隐藏正是「现代」的一部分。
+  - **附带发现，不属于本分支**：README 写的是「6000+ 单元测试」，实际已经 7093。改它是发版时的事，而且另外两个会话也在加测试，这里动了只会冲突。
 - [ ] example：`examples/scrollbar/` 是否值得加一个自动隐藏的开关演示——按「教用法 / 覆盖测试够不到的」判，不追求成员覆盖率
