@@ -325,8 +325,15 @@ var
 begin
   if ASpec.RotateDeg <> 0 then
   begin
-    s := Sin(DegToRad(ASpec.RotateDeg));
-    c := Cos(DegToRad(ASpec.RotateDeg));
+    { ANTICLOCKWISE FOR A POSITIVE ANGLE, which is zrender's and not the
+      canvas'. Its local transform is built with matrix.rotate, whose first
+      row is (cos, -sin) in a frame where y grows downward -- so the point
+      (1, 0) at +90 degrees lands straight UP. The canvas' own rotate turns
+      the other way, and taking it drew every rotated symbol mirrored about
+      the axis the author pointed along. A half turn cannot show it, which is
+      how the sign survived this long. }
+    s := Sin(-DegToRad(ASpec.RotateDeg));
+    c := Cos(-DegToRad(ASpec.RotateDeg));
     for i := 0 to AL.N - 1 do
     begin
       dx := AL.Pts[i].X - ACX;
@@ -413,9 +420,16 @@ begin
       end;
     tsyPath:
       begin
+        { A PATH TURNS AT DRAW TIME. Every other kind is built already turned,
+          because its geometry is points; a path's is a string fitted to a box
+          by the painter, so the angle has to travel with the shape. The
+          painter's own rotation is the canvas' -- clockwise -- hence the
+          negation, which is the same correction Place makes. }
         Result := TyShapePath(ASpec.PathData,
           TyRectF(box.Left + ASpec.OffsetX, box.Top + ASpec.OffsetY,
-                  box.Right + ASpec.OffsetX, box.Bottom + ASpec.OffsetY));
+                  box.Right + ASpec.OffsetX, box.Bottom + ASpec.OffsetY),
+          -DegToRad(ASpec.RotateDeg),
+          ACX + ASpec.OffsetX, ACY + ASpec.OffsetY);
         Exit;
       end;
     tsyRect:

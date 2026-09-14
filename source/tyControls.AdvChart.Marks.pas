@@ -43,6 +43,7 @@ uses
   tyControls.AdvChart.Color,
   tyControls.AdvChart.Paint, tyControls.AdvChart.Series,
   tyControls.AdvChart.BarLayout, tyControls.AdvChart.Symbol,
+  tyControls.AdvChart.Layout, tyControls.AdvChart.Pictorial,
   tyControls.AdvChart.Labels, tyControls.AdvChart.LabelOpt;
 
 type
@@ -153,6 +154,10 @@ type
       the default for exactly that case is asked of the solver too, so there is
       no second definition of what a lone bar's width is. }
     Bar: TTyBarColumn;
+    { A PICTORIAL BAR'S OWN OPTIONS. Here for the same reason the bar column
+      is: a mark builder is handed no option node, so anything option-shaped
+      has to arrive on this record. }
+    Pictorial: TTyPictorialSpec;
     { Painted front-to-back by (Z, Z2, insertion). Marks sit above the grid;
       Z2 keeps two series in a stable order relative to each other. }
     Z, Z2: Integer;
@@ -422,6 +427,11 @@ begin
   Result.Line.ShowAllSymbol := sasAuto;
   Result.Line.LabelStep := 1;
   Result.Symbol := TySymbolDefault('');
+  { THE PICTORIAL DEFAULTS, from the one place they are written down.
+    Default() would leave every box value zero, which is not "no size" but
+    a size of nothing -- so a hand-built visual would draw no glyph at all
+    and the renderer would look absent rather than unconfigured. }
+  Result.Pictorial := TyPictorialSpecDefault;
   Result.EmptyFill := 0;
 end;
 
@@ -1336,22 +1346,438 @@ begin
   if AStack.Stacked and (AColY < -1) then ;
 end;
 
+{ ==================== the pictorial bar ==================== }
+
+{ A bar whose rectangle is never drawn.
+
+  IT SHARES THE WHOLE BAR LAYOUT -- the same band, the same column, the same
+  offset, the same stack -- and then replaces the rectangle with a glyph, or
+  with a column of glyphs. FOUR RECTANGLES where a bar has one, and the
+  arithmetic relating them lives next door in AdvChart.Pictorial where it can
+  be asserted without a chart; what is left here is which pixel each lands on.
+
+  ALONG AND ACROSS, NEVER X AND Y. The base axis is the spine: a horizontal
+  bar chart counts its glyphs along x and its band along y, and writing the
+  two orientations out twice is how one of them comes out mirrored. }
+function BuildPictorialBar(const ABinding: TTySeriesBinding;
+  AStore: TTyDataStore; const AStack: TTySeriesStack;
+  const AVisual: TTySeriesVisual; AList: TTyPaintList;
+  AColX, AColY: Integer): Integer;
 const
-  { THE ONE LIST. Four of the twenty-three types draw; a renderer arrives as
+  { WIDER THAN ANY CANVAS. Upstream's clip spans the whole drawing surface
+    across the bar -- only the value axis is meant to cut -- and this builder
+    has no way to ask how big that surface is. A number larger than all of
+    them draws the same picture without pretending to one it cannot have. }
+  cUnclippedHalf = 1000000;
+var
+  spec: TTyPictorialSpec;
+  i, k, idx, valCol, n: Integer;
+  baseHoriz, stacked, haveCol, mirror, pxUp, empty: Boolean;
+  x, y, own, baseline, zeroPx, floorPx, valuePx: Double;
+  cutLen, boundLen, pxSign, categorySize, acrossCentre: Double;
+  glyphW, glyphH, glyphLen, valueBase, anchor, sizeFix, along: Double;
+  offX, offY, offAlong, offAcross, e0, e1, barLen: Double;
+  lay: TTyCoordLayout;
+  cell, plot, barRect, clipRect: TTyRectF;
+  col: TTyBarColumn;
+  run: TTyPictorialRun;
+  sym: TTySymbolSpec;
+  v: TTySeriesVisual;
+  el: TTyChartElement;
+  shape: TTyChartShape;
+  pt: TTyPointF;
+  body: string;
+
+  { One of the four rectangles, from a centre and a half-extent on each of the
+    two axes. Written once because the pair is the same rule with the roles
+    swapped, and writing it twice is how a horizontal chart ends up mirrored. }
+  function BandRect(AAlong, AAlongHalf, AAcross, AAcrossHalf: Double): TTyRectF;
+  begin
+    if baseHoriz then
+      Result := TyRectF(AAcross - AAcrossHalf, AAlong - AAlongHalf,
+                        AAcross + AAcrossHalf, AAlong + AAlongHalf)
+    else
+      Result := TyRectF(AAlong - AAlongHalf, AAcross - AAcrossHalf,
+                        AAlong + AAlongHalf, AAcross + AAcrossHalf);
+  end;
+
+begin
+  Result := 0;
+  if (AList = nil) or (AStore = nil) then Exit;
+  if (ABinding.Cart = nil) or (ABinding.ValueAxis = nil) then Exit;
+  baseHoriz := (ABinding.BaseAxis = nil) or ABinding.BaseAxis.Horizontal;
+  stacked := AStack.Stacked and (AStack.ResultCol >= 0);
+  if baseHoriz then valCol := AColY else valCol := AColX;
+  plot := ABinding.Cart.GetRect;
+  haveCol := False;
+  col := Default(TTyBarColumn);
+
+  { THE LINE A BAR STANDS ON -- the axis' own start, which is the same one
+    DataToLayout built its cell from and not necessarily zero. Asked again
+    here because the cell's Min/Max threw away which of its two ends it was. }
+  baseline := ABinding.ValueAxis.DataToCoord(
+    ABinding.ValueAxis.Scale.GetExtent.Start);
+  if IsNan(baseline) or IsInfinite(baseline) then Exit;
+  { AND THE ZERO LINE, which is a DIFFERENT question: it is the only thing
+    symbolBoundingData is measured from, and on a stacked bar or an axis that
+    never reaches zero the two are not the same place. Upstream asks the axis
+    for data value zero unconditionally; on a log axis that is minus infinity,
+    so a value the axis cannot place falls back to the baseline rather than
+    poisoning every coordinate downstream. }
+  zeroPx := ABinding.ValueAxis.DataToCoord(0);
+  if IsNan(zeroPx) or IsInfinite(zeroPx) then zeroPx := baseline;
+  { WHETHER PIXELS GROW WITH THE VALUE. It settles one thing only -- the tie
+    at a bounding length of exactly zero -- and upstream splits that tie so a
+    glyph on an empty bar still faces the way positive values go. }
+  pxUp := (not baseHoriz) <> ABinding.ValueAxis.Inverse;
+
+  for i := 0 to AStore.Count - 1 do
+  begin
+    x := AStore.Get(AColX, i);
+    y := AStore.Get(AColY, i);
+    own := AStore.Get(valCol, i);
+    if stacked then
+    begin
+      if baseHoriz then y := AStore.Get(AStack.ResultCol, i)
+                   else x := AStore.Get(AStack.ResultCol, i);
+    end;
+    { A GAP DRAWS NOTHING -- not a bar of no length, which would read as a real
+      measurement of nothing.
+
+      A MUTANT OF THIS LINE SURVIVES, and it is recorded here rather than
+      chased, exactly as BuildBars records the identical one: the rect that
+      comes back for a NaN datum fails TyRectFIsValid four lines down, so the
+      gap is dropped either way. The check states the rule where the rule
+      applies; it is not, today, the thing enforcing it. }
+    if IsNan(x) or IsNan(y) then Continue;
+    { THE ROW'S OWN OPTIONS FIRST, because every one of them is per-datum
+      upstream -- and one of them decides the glyph's size, so reading them
+      after the size was solved would read them for nothing. }
+    spec := TyPictorialRowSpec(AVisual.Pictorial, AStore, i);
+    lay := ABinding.Cart.DataToLayout([x, y]);
+    if not TyRectFIsValid(lay.Rect) then Continue;
+    if not haveCol then
+    begin
+      col := ColumnFor(AVisual, lay.Rect, baseHoriz);
+      { AN UNSOLVED COLUMN IS A BAR'S, AND THIS TYPE'S CLIP IS THE OPPOSITE
+        ONE. ColumnFor falls back to what a lone DEFAULT BAR gets, which is
+        the right width and the wrong clip: `clip` is false for a pictorial
+        bar and true for a bar. A caller that ran no solver should get this
+        type's own default rather than its neighbour's. }
+      if not AVisual.Bar.Solved then col.Clip := False;
+      haveCol := True;
+    end;
+    cell := PlaceInBand(lay.Rect, baseHoriz, col);
+
+    pt := ABinding.Cart.DataToPoint([x, y]);
+    if baseHoriz then valuePx := pt.Y else valuePx := pt.X;
+    if IsNan(valuePx) or IsInfinite(valuePx) then Continue;
+
+    { A STACKED GLYPH COLUMN STANDS ON THE ONE BELOW IT, and its floor is
+      recomputed as (cumulative - own) for the reason BuildBars states beside
+      the same expression: barMinHeight can move a segment's DRAWN end, so the
+      value it was stacked over is not where the one below it finished. }
+    floorPx := baseline;
+    if stacked and AStack.HasBelow and not IsNan(own) then
+    begin
+      if baseHoriz then floorPx := ABinding.ValueAxis.DataToCoord(y - own)
+      else floorPx := ABinding.ValueAxis.DataToCoord(x - own);
+      if IsNan(floorPx) or IsInfinite(floorPx) then Continue;
+    end;
+    cutLen := valuePx - floorPx;
+
+    if baseHoriz then
+    begin
+      categorySize := Abs(cell.Right - cell.Left);
+      acrossCentre := (cell.Left + cell.Right) / 2;
+    end
+    else
+    begin
+      categorySize := Abs(cell.Bottom - cell.Top);
+      acrossCentre := (cell.Top + cell.Bottom) / 2;
+    end;
+    { A COLLAPSED COLUMN DRAWS NOTHING, the same answer a bar gives: every
+      percentage across the bar would be a percentage of nothing. }
+    if categorySize <= 0 then Continue;
+
+    { THE BOUNDING LENGTH, four branches in upstream's own order. Written
+      bounding data wins; failing that a repeat fills the plot; failing that
+      it is the bar's own length. }
+    if spec.BoundHas = 2 then
+    begin
+      e0 := ABinding.ValueAxis.DataToCoord(spec.BoundA) - zeroPx;
+      e1 := ABinding.ValueAxis.DataToCoord(spec.BoundB) - zeroPx;
+      if IsNan(e0) or IsNan(e1) or IsInfinite(e0) or IsInfinite(e1) then Continue;
+      { SORTED IN PIXELS, not in values. The pair was sorted as numbers when it
+        was read, but the axis may run either way, so which of the two is the
+        far end is a question only the coordinates can answer. }
+      if e1 < e0 then
+      begin
+        boundLen := e0;
+        e0 := e1;
+        e1 := boundLen;
+      end;
+      if cutLen > 0 then boundLen := e1 else boundLen := e0;
+    end
+    else if spec.BoundHas = 1 then
+    begin
+      boundLen := ABinding.ValueAxis.DataToCoord(spec.BoundA) - zeroPx;
+      if IsNan(boundLen) or IsInfinite(boundLen) then Continue;
+    end
+    else if spec.Repeat_ <> prNone then
+    begin
+      { A REPEAT WITH NO BOUNDING DATA FILLS THE PLOT, and is then cut back by
+        the count pass or shown through the clip. The edge taken is the far one
+        in the bar's own direction. }
+      if baseHoriz then
+      begin
+        if cutLen > 0 then boundLen := plot.Bottom - zeroPx
+        else boundLen := plot.Top - zeroPx;
+      end
+      else
+      begin
+        if cutLen > 0 then boundLen := plot.Right - zeroPx
+        else boundLen := plot.Left - zeroPx;
+      end;
+    end
+    else
+      boundLen := cutLen;
+
+    { NEVER ZERO, and upstream says why beside it: a zero sign makes the
+      glyph's scale zero, and a zero scale makes an unscaled stroke width not
+      a number. A bar of no length still points the way positive values go. }
+    if pxUp then
+    begin
+      if boundLen >= 0 then pxSign := 1 else pxSign := -1;
+    end
+    else
+    begin
+      if boundLen > 0 then pxSign := 1 else pxSign := -1;
+    end;
+
+    { WHAT A PERCENTAGE IS A PERCENTAGE OF, and the two axes do not agree.
+      ACROSS the bar it is always the column's own width. ALONG it, the
+      bounding length -- unless the glyph repeats, in which case it is the
+      column width again, which is what makes a repeating glyph come out
+      roughly square and march along the bar instead of stretching down it. }
+    if spec.Repeat_ <> prNone then valueBase := categorySize
+    else valueBase := Abs(boundLen);
+    if baseHoriz then
+    begin
+      glyphW := TyBoxResolve(spec.SizeW, categorySize);
+      glyphH := TyBoxResolve(spec.SizeH, valueBase);
+      glyphLen := glyphH;
+    end
+    else
+    begin
+      glyphW := TyBoxResolve(spec.SizeW, valueBase);
+      glyphH := TyBoxResolve(spec.SizeH, categorySize);
+      glyphLen := glyphW;
+    end;
+    if IsNan(glyphW) or IsNan(glyphH) then Continue;
+    if IsInfinite(glyphW) or IsInfinite(glyphH) then Continue;
+    if (glyphW <= 0) or (glyphH <= 0) then Continue;
+
+    { UPSTREAM ADDS THE GLYPH'S OWN STROKE to the unit length, so a bordered
+      symbol takes its border's worth of room in a repeating column. NOT done
+      here, and the reason is written down rather than hidden: a stroke width
+      is LOGICAL until the renderer scales it by the screen's PPI, and this
+      builder works in device pixels. Folding a logical number in would draw
+      the right count at 96 dpi and the wrong one on every other screen. }
+    run := TyPictorialRunOf(spec, glyphLen, boundLen, cutLen, glyphLen);
+    if run.Count <= 0 then Continue;
+    if IsNan(run.PathLen) or IsInfinite(run.PathLen) then Continue;
+    if IsNan(run.Unit_) or IsInfinite(run.Unit_) then Continue;
+
+    { WHERE THE RUN SITS ALONG THE BAR, measured from the bar's own floor.
+      `start` puts the glyph's near edge on that floor, `end` puts its far
+      edge on the far end of the bounding region, `center` centres it there --
+      and sizeFix carries the sign, so none of the three means left or right. }
+    sizeFix := pxSign * run.PathLen / 2;
+    case spec.Position of
+      pspEnd: anchor := boundLen - sizeFix;
+      pspCentre: anchor := boundLen / 2;
+    else
+      anchor := sizeFix;
+    end;
+
+    { THE OFFSET IS IN SCREEN X AND Y AND IS NOT REMAPPED, upstream, so on a
+      horizontal bar chart `symbolOffset` still moves the glyph the way the
+      author's own x and y point rather than along the bar. Each component is
+      a percentage of the glyph's size on the SAME screen axis. }
+    offX := 0;
+    offY := 0;
+    if spec.HasOffset then
+    begin
+      offX := TyBoxResolve(spec.OffsetX, glyphW);
+      offY := TyBoxResolve(spec.OffsetY, glyphH);
+      if IsNan(offX) or IsInfinite(offX) then offX := 0;
+      if IsNan(offY) or IsInfinite(offY) then offY := 0;
+    end;
+    if baseHoriz then
+    begin
+      offAlong := offY;
+      offAcross := offX;
+    end
+    else
+    begin
+      offAlong := offX;
+      offAcross := offY;
+    end;
+    anchor := anchor + offAlong;
+
+    { THE BAR RECT: the union of the data's own length and the far end of the
+      glyph run, and the ONLY thing here a pointer can land on. Upstream keeps
+      the same rectangle for the same two reasons -- an outside label has to
+      clear the icon rather than the value, and what a reader points at should
+      be the bar rather than whichever half of a glyph survived the clip. }
+    barLen := pxSign * Max(Abs(cutLen), Abs(anchor + sizeFix));
+    if IsNan(barLen) or IsInfinite(barLen) then Continue;
+    barRect := BandRect(floorPx + barLen / 2, Abs(barLen) / 2,
+                        acrossCentre, categorySize / 2);
+    el := TyChartElement(TyShapeRect(barRect));
+    { NO INK AT ALL. It is a target and a label anchor, not a picture -- and
+      the tooltip's swatch skips inkless elements for exactly this reason, so
+      the dot still takes the glyph's colour rather than this rect's nothing. }
+    el.Style.HasFill := False;
+    el.Style.FillColor := 0;
+    el.Style.StrokeColor := 0;
+    el.Style.StrokeWidthLogical := 0;
+    el.Style.Alpha := AVisual.Alpha;
+    el.Z := AVisual.Z;
+    el.Z2 := AVisual.Z2;
+    el.Silent := False;
+    el.Datum := TyChartDatum(ABinding.SeriesIndex, i);
+    el.Caption.Text := CaptionFor(AVisual, AStore, i);
+    AList.Add(el);
+    Inc(Result);
+
+    { TWO CLIPS, AND THEY MEET IN ONE RECTANGLE.
+
+      symbolClip IS ALONG THE VALUE AXIS AND NOWHERE ELSE: from the bar's floor
+      to the value the data actually paid for. A repeat draws its whole column
+      at bounding size and this is what reveals the part that was earned.
+
+      `clip` IS THE PLOT, and it is a different question with a different
+      default -- false for this type, true for a bar, because a pictorial chart
+      usually hides its axes and a glyph taller than its value is meant to
+      stand proud. A bar answers it by SHRINKING its rectangle; a glyph cannot,
+      because half a glyph is not a smaller glyph.
+
+      The intersection is taken here rather than in two passes so the element
+      carries one rectangle, which is all the renderer's state stack wants. }
+    clipRect := TyRectF(-cUnclippedHalf, -cUnclippedHalf,
+                        cUnclippedHalf, cUnclippedHalf);
+    if spec.Clip then
+      clipRect := BandRect(floorPx + cutLen / 2, Abs(cutLen) / 2,
+                           acrossCentre, cUnclippedHalf);
+    if col.Clip then
+      clipRect := TyRectF(Max(clipRect.Left, plot.Left),
+                          Max(clipRect.Top, plot.Top),
+                          Min(clipRect.Right, plot.Right),
+                          Min(clipRect.Bottom, plot.Bottom));
+
+    sym := AVisual.Symbol;
+    { THE SERIES' OWN `symbol`, resolved here rather than taken from the shared
+      symbol spec, because a pictorialBar's default is a SOLID circle while
+      every other series' is the line's hollow one. A glyph that came out as a
+      ring would read as a missing fill rather than as a choice. }
+    if spec.SymbolName <> '' then
+    begin
+      sym.Kind := TySymbolKindOf(spec.SymbolName, empty, body);
+      sym.Empty := empty;
+      sym.PathData := body;
+    end
+    else
+    begin
+      sym.Kind := tsyCircle;
+      sym.Empty := False;
+      sym.PathData := '';
+    end;
+    if sym.Kind = tsyNone then Continue;
+    sym.WidthPx := glyphW;
+    sym.HeightPx := glyphH;
+    sym.KeepAspect := spec.KeepAspect;
+    { THE OFFSET IS ALREADY IN THE ANCHOR and in acrossCentre. Leaving it on
+      the spec as well would move every glyph twice. }
+    sym.OffsetX := 0;
+    sym.OffsetY := 0;
+
+    { THE GLYPH IS MIRRORED, not turned end for end, when the bar points the
+      other way: upstream multiplies the scale along the value axis by
+      (isHorizontal ? -1 : 1) * pxSign, and a negative scale is a reflection.
+      It happens on negative values and on an inverted axis, and it is why an
+      arrow below the line points down.
+
+      A MIRROR AND A ROTATION DO NOT COMMUTE, so the angle is negated and the
+      reflection applied afterwards. That is the same transform, not an
+      approximation: reflecting about a coordinate axis turns a rotation into
+      its opposite, so M(R(-a)) and R(a)(M) are one and the same. }
+    mirror := baseHoriz = (pxSign > 0);
+    if mirror then sym.RotateDeg := -spec.RotateDeg
+    else sym.RotateDeg := spec.RotateDeg;
+
+    v := RowVisual(AVisual, AStore, i);
+    { AN `empty` SYMBOL IS STROKED, NOT FILLED, and a line symbol is stroked
+      too -- the same rule the scatter follows, because the colour is the pen
+      in both. }
+    if sym.Empty or (sym.Kind = tsyLine) then
+    begin
+      v.Stroke := v.Fill;
+      if v.StrokeWidthLogical <= 0 then v.StrokeWidthLogical := 2;
+      if sym.Kind = tsyLine then v.Fill := 0
+      else v.Fill := AVisual.EmptyFill;
+    end;
+
+    n := run.Count;
+    for k := 0 to n - 1 do
+    begin
+      { A SLOT IS GEOMETRY; THE INDEX IS ORDER. Reversing the direction changes
+        only which glyph is created first and therefore which is on top --
+        upstream says as much beside the same expression, because the
+        positions it produces are symmetric. }
+      if spec.RepeatFromStart = (pxSign > 0) then idx := n - 1 - k
+      else idx := k;
+      along := TyPictorialSlot(run, idx, anchor);
+      if IsNan(along) or IsInfinite(along) then Continue;
+      if baseHoriz then
+        pt := TyPointF(acrossCentre + offAcross, floorPx + along)
+      else
+        pt := TyPointF(floorPx + along, acrossCentre + offAcross);
+      shape := TyBuildSymbol(sym, pt.X, pt.Y);
+      if (shape.Kind = cskRect) and not TyRectFIsValid(shape.Bounds) then Continue;
+      if mirror then
+        shape := TyMirrorShape(shape, pt.X, pt.Y, not baseHoriz, baseHoriz);
+      el := MarkElement(shape, v, ABinding.SeriesIndex, i);
+      el.HasClip := spec.Clip or col.Clip;
+      el.ClipRect := clipRect;
+      { SILENT, and the bar rect above is why: two hittable things for one
+        datum would report it twice, and a glyph cut in half is the worse of
+        the two targets. }
+      el.Silent := True;
+      AList.Add(el);
+      Inc(Result);
+    end;
+  end;
+end;
+
+const
+  { THE ONE LIST. Five of the twenty-three types draw; a renderer arrives as
     a row here and both the drawing and the published answer follow from it.
 
     Type names are compared EXACTLY, the way TySeriesFindType compares them --
     ECharts' names are case-sensitive, so a series typed 'Bar' never resolves
     and never reaches this unit. A lenient match here would answer yes for a
     chart that draws nothing. }
-  cRenderers: array[0..3] of record
+  cRenderers: array[0..4] of record
     Name: string;
     Build: TTyMarkBuilder;
   end = (
-    (Name: 'bar';         Build: @BuildBars),
-    (Name: 'line';        Build: @BuildLine),
-    (Name: 'scatter';     Build: @BuildScatter),
-    (Name: 'candlestick'; Build: @BuildCandlestick));
+    (Name: 'bar';                       Build: @BuildBars),
+    (Name: 'line';                      Build: @BuildLine),
+    (Name: 'scatter';                   Build: @BuildScatter),
+    (Name: 'candlestick';               Build: @BuildCandlestick),
+    (Name: TyPictorialSeriesTypeName;   Build: @BuildPictorialBar));
 
   { AND THE ONES DRAWN SOMEWHERE ELSE. A pie is not on a coordinate system,
     so its geometry is solved in AdvChart.Pie and never reaches this unit --

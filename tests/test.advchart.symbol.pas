@@ -252,14 +252,40 @@ begin
   AssertEquals('still centred', 100.0, sh.Points[0].X, 1e-6);
 
   { AND A QUARTER TURN SAYS WHICH WAY IT TURNS. A half turn cannot: it is its
-    own mirror, so a mutant that rotated anticlockwise survived this test until
-    ninety degrees was added. Screen y grows downward, so a positive angle
-    swings the apex to the RIGHT. }
+    own mirror, so a mutant that turned the other way survived this test until
+    ninety degrees was added.
+
+    IT TURNS ANTICLOCKWISE, which is zrender's convention and not the canvas'.
+    zrender builds its local transform with matrix.rotate, whose first row is
+    (cos, -sin) in a frame where y grows downward, so the point (1, 0) at +90
+    degrees lands straight UP. This test used to assert the canvas' own
+    direction and was green and wrong: every rotated symbol came out mirrored
+    about the axis the author pointed along. }
   spec.RotateDeg := 90;
   sh := TyBuildSymbol(spec, 100, 200);
-  AssertEquals('a quarter turn puts the apex to the right',
-    110.0, sh.Points[0].X, 1e-6);
+  AssertEquals('a quarter turn puts the apex to the LEFT',
+    90.0, sh.Points[0].X, 1e-6);
   AssertEquals('level with the datum', 200.0, sh.Points[0].Y, 1e-6);
+
+  { A PATH CARRIES ITS ANGLE INSTEAD OF BEING BUILT AT IT. Its geometry is a
+    string the painter fits to a box at draw time, so there are no points to
+    turn -- the shape records the rotation and the point it turns about, and
+    the painter's own rotation is the canvas' clockwise one, hence the sign. }
+  spec.Kind := tsyPath;
+  spec.PathData := 'M0 0 L10 0 L10 10 Z';
+  spec.RotateDeg := 90;
+  spec.OffsetX := 4;
+  spec.OffsetY := -6;
+  sh := TyBuildSymbol(spec, 100, 200);
+  AssertEquals('a path shape', Ord(cskPath), Ord(sh.Kind));
+  AssertEquals('turned the way zrender turns', -Pi / 2, sh.RotationRad, 1e-9);
+  AssertEquals('about its own centre, offset and all',
+    104.0, sh.RotCX, 1e-9);
+  AssertEquals(194.0, sh.RotCY, 1e-9);
+  spec.Kind := tsyTriangle;
+  spec.PathData := '';
+  spec.OffsetX := 0;
+  spec.OffsetY := 0;
 
   { OFFSET MOVES, IT DOES NOT TURN. Applied after the rotation, so a rotated
     symbol still shifts the way the author wrote it rather than along its own

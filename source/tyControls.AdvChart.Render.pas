@@ -233,6 +233,13 @@ begin
     Exit;
   P.SaveState;
   try
+    { THE CLIP FIRST, and inside the saved state so it comes off with it. The
+      painter's own state stack carries the clip, which is the whole reason
+      this costs one line: the alternative was a second stack here that had to
+      stay in step with that one. }
+    if AElement.HasClip then
+      P.ClipRect(Rect(Floor(AElement.ClipRect.Left), Floor(AElement.ClipRect.Top),
+        Ceil(AElement.ClipRect.Right), Ceil(AElement.ClipRect.Bottom)));
     if AElement.Style.Alpha < 1 then
       P.SetElementAlpha(AElement.Style.Alpha);
     P.SetLineDash(AElement.Style.DashLogical);

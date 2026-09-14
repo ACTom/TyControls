@@ -77,6 +77,17 @@ function TyBoxResolve(const AValue: TTyBoxValue; ABase: Double): Double;
 function TyBoxDataOf(AData: TJSONData; const ADefault: TTyBoxValue): TTyBoxValue;
 function TyBoxValueOf(ANode: TJSONObject; const AKey: string;
   const ADefault: TTyBoxValue): TTyBoxValue;
+{ The STRING half on its own, for the options that stringify before they parse.
+  `symbolMargin` is the one that needs it: upstream appends an empty string to
+  whatever it finds, so even a number goes through the string parser -- which
+  is why `'20px'` reads as twenty and `'10,20'` as ten. }
+function TyBoxStrOf(const AText: string; const ADefault: TTyBoxValue): TTyBoxValue;
+
+{ The leading number of a string, as JavaScript's parseFloat reads one: as
+  much of the front as looks like a number. False when the front is not a
+  number at all. Exported because it is a rule about reading OPTIONS and not
+  about boxes -- `symbolMargin` needs it too. }
+function TyLeadingNumber(const AText: string; out AValue: Double): Boolean;
 
 { A CENTRE AND THE BASE ITS RADIUS IS MEASURED AGAINST, from one rect.
 
@@ -579,17 +590,67 @@ begin
   end;
 end;
 
-function TyBoxDataOf(AData: TJSONData; const ADefault: TTyBoxValue): TTyBoxValue;
+{ THE LEADING NUMBER OF A STRING, the way JavaScript's parseFloat reads one:
+  as much of the front as looks like a number, and never mind the rest.
+
+  TryStrToFloat IS NOT THAT. It answers yes or no about the WHOLE string, so
+  every box option written the way a stylesheet writes one -- `20px`, `8pt`,
+  `10 ` with a stray space -- fell back to its default instead of to twenty,
+  eight and ten. Upstream reads all three, because parsePositionSizeOption
+  ends in parseFloat and parseFloat stops at the first character it cannot
+  use.
+
+  Deliberately NOT a general number reader: no exponent-only forms, no
+  hexadecimal, no Infinity. parseFloat takes those too, and a box value that
+  is 1e309 is a coordinate nobody can draw -- the shapes of number an author
+  writes in a layout are the ones read here. }
+function TyLeadingNumber(const AText: string; out AValue: Double): Boolean;
+var
+  i, n: Integer;
+  seenDigit, seenDot: Boolean;
+  fs: TFormatSettings;
+begin
+  Result := False;
+  AValue := 0;
+  i := 1;
+  n := Length(AText);
+  while (i <= n) and (AText[i] = ' ') do Inc(i);
+  if (i <= n) and ((AText[i] = '+') or (AText[i] = '-')) then Inc(i);
+  seenDigit := False;
+  seenDot := False;
+  while i <= n do
+  begin
+    if (AText[i] >= '0') and (AText[i] <= '9') then
+    begin
+      seenDigit := True;
+      Inc(i);
+    end
+    else if (AText[i] = '.') and not seenDot then
+    begin
+      seenDot := True;
+      Inc(i);
+    end
+    else
+      Break;
+  end;
+  { NOT A NUMBER AT ALL. A MUTANT OF THIS LINE SURVIVES and is recorded rather
+    than chased: every prefix that reaches here without a digit -- '', '+',
+    '-', '.', '--5' -- is one TryStrToFloat refuses on its own two lines down.
+    The check says the rule where the rule belongs; it is not, today, the thing
+    enforcing it. }
+  if not seenDigit then Exit;
+  fs := DefaultFormatSettings;
+  fs.DecimalSeparator := '.';
+  Result := TryStrToFloat(Copy(AText, 1, i - 1), AValue, fs);
+end;
+
+function TyBoxStrOf(const AText: string; const ADefault: TTyBoxValue): TTyBoxValue;
 var
   s: string;
   v: Double;
-  fs: TFormatSettings;
 begin
   Result := ADefault;
-  if (AData = nil) or (AData.JSONType = jtNull) then Exit;
-  if AData.JSONType = jtNumber then Exit(TyBoxPx(AData.AsFloat));
-  if AData.JSONType <> jtString then Exit;
-  s := LowerCase(Trim(AData.AsString));
+  s := LowerCase(Trim(AText));
   if s = '' then Exit;
   { The presets parsePositionOption accepts. BOTH SPELLINGS of the middle one:
     one of the four readers this replaced took `centre` and the others did not,
@@ -598,15 +659,25 @@ begin
     Exit(TyBoxPercent(50));
   if (s = 'left') or (s = 'top') then Exit(TyBoxPercent(0));
   if (s = 'right') or (s = 'bottom') then Exit(TyBoxPercent(100));
-  fs := DefaultFormatSettings;
-  fs.DecimalSeparator := '.';
+  { THE PERCENT SIGN IS TESTED ON THE WHOLE STRING, not on what the number
+    reader stopped at: `/%$/` asks whether the value ENDS in one, so `50%x` is
+    fifty PIXELS and not fifty per cent. }
   if s[Length(s)] = '%' then
   begin
-    if TryStrToFloat(Copy(s, 1, Length(s) - 1), v, fs) then
+    if TyLeadingNumber(Copy(s, 1, Length(s) - 1), v) then
       Result := TyBoxPercent(v);
     Exit;
   end;
-  if TryStrToFloat(s, v, fs) then Result := TyBoxPx(v);
+  if TyLeadingNumber(s, v) then Result := TyBoxPx(v);
+end;
+
+function TyBoxDataOf(AData: TJSONData; const ADefault: TTyBoxValue): TTyBoxValue;
+begin
+  Result := ADefault;
+  if (AData = nil) or (AData.JSONType = jtNull) then Exit;
+  if AData.JSONType = jtNumber then Exit(TyBoxPx(AData.AsFloat));
+  if AData.JSONType <> jtString then Exit;
+  Result := TyBoxStrOf(AData.AsString, ADefault);
 end;
 
 function TyBoxValueOf(ANode: TJSONObject; const AKey: string;

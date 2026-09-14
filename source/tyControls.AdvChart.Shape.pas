@@ -110,6 +110,27 @@ function TyShapePath(const APathData: string; const ABounds: TTyRectF): TTyChart
 function TyShapePath(const APathData: string; const ABounds: TTyRectF;
   ARotationRad, ARotCX, ARotCY: Double): TTyChartShape; overload;
 
+{ THE SAME SHAPE, MIRRORED about a horizontal or a vertical line through
+  (ACX, ACY).
+
+  A PICTORIAL BAR IS WHAT NEEDS THIS. Upstream scales the glyph by a NEGATIVE
+  factor along the value axis whenever the bar points the other way, so an
+  arrow on a negative bar points down rather than up; a port that took the
+  absolute value would draw every negative bar's icon the right way up and
+  the wrong way round.
+
+  ONLY POINTS TURN OVER, and the kinds left alone are left alone because they
+  are their own mirror image: a circle, an ellipse, an upright rect and a
+  round rect with one radius all come back unchanged, which is the right
+  answer rather than a skipped case.
+
+  A PATH DOES NOT. Its geometry is a string the painter fits to a box at draw
+  time and there is no negative box, so a mirrored `path://` glyph comes out
+  upright. Written down rather than worked around: the fix belongs in the
+  path fitting, and inventing a second one here would hide it. }
+function TyMirrorShape(const AShape: TTyChartShape; ACX, ACY: Double;
+  AFlipX, AFlipY: Boolean): TTyChartShape;
+
 { ---- the path a sector traces ----
 
   A LIST OF PRIMITIVES RATHER THAN PAINTER CALLS, so the arithmetic can be
@@ -885,6 +906,23 @@ function TyShapePolygon(const APoints: array of TTyPointF): TTyChartShape;
 begin
   Result := EmptyShape(cskPolygon);
   Result.Points := CopyPoints(APoints);
+end;
+
+function TyMirrorShape(const AShape: TTyChartShape; ACX, ACY: Double;
+  AFlipX, AFlipY: Boolean): TTyChartShape;
+var i: Integer;
+begin
+  Result := AShape;
+  if not (AFlipX or AFlipY) then Exit;
+  { A FRESH ARRAY, because a dynamic array is assigned by reference and the
+    shape handed in is very often the one a caller is still holding. Without
+    this, mirroring a glyph turned the ORIGINAL over as well. }
+  Result.Points := CopyPoints(AShape.Points);
+  for i := 0 to High(Result.Points) do
+  begin
+    if AFlipX then Result.Points[i].X := 2 * ACX - Result.Points[i].X;
+    if AFlipY then Result.Points[i].Y := 2 * ACY - Result.Points[i].Y;
+  end;
 end;
 
 function TyShapePath(const APathData: string; const ABounds: TTyRectF): TTyChartShape;

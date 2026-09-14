@@ -34,7 +34,7 @@ uses
   tyControls.AdvChart.Types, tyControls.AdvChart.Option,
   tyControls.AdvChart.Coord, tyControls.AdvChart.Data,
   tyControls.AdvChart.Builder, tyControls.AdvChart.Series,
-  tyControls.AdvChart.Shape;
+  tyControls.AdvChart.Shape, tyControls.AdvChart.Pictorial;
 
 type
   { What the solver has to say about one series.
@@ -117,6 +117,11 @@ const
     `get('barMinWidth') || 1`, so every auto column is floored at 1px even when
     that makes columns overlap. On a value axis that is the point. }
   cDefaultBarMinWidth = 1.0;
+  { PictorialBarSeries.defaultOption.barGap, and it is '-100%' rather than the
+    bar's 10%: pictorial series are meant to OVERLAP, because the usual reason
+    to write two of them is a foreground icon over a background one. Resolved
+    against 1 like every other barGap, so -1 is the whole width. }
+  cDefaultPictorialBarGap = -1.0;
 
 type
   { An option value in ECharts' three spellings plus "absent", which has to be
@@ -537,6 +542,8 @@ var
   g, a, i: Integer;
   gb: TTyGridBuild;
   key: string;
+  defGap: Double;
+  defClip: Boolean;
   answer: TTyBarColumnArray;
 
   procedure DoAxis(AAxis: TTyAxis);
@@ -589,7 +596,7 @@ var
       begin
         barGap.Present := True;
         barGap.Percent := False;
-        barGap.Value := cDefaultBarGap;
+        barGap.Value := defGap;
       end;
 
       stackId := StringIn(node, 'stack');
@@ -663,7 +670,7 @@ var
       answer[si].MinHeightPx := AtLeast(FloatIn(node, 'barMinHeight', 0), 0);
       answer[si].ShowBackground := BoolIn(node, 'showBackground', False);
       answer[si].BackgroundRadii := BackgroundRadiusIn(node);
-      answer[si].Clip := BoolIn(node, 'clip', True);
+      answer[si].Clip := BoolIn(node, 'clip', defClip);
     end;
   end;
 
@@ -684,17 +691,40 @@ begin
   Result := answer;
   if (AOption = nil) or (ABuild = nil) or (AIndex = nil) then Exit;
 
-  { The one key the index buckets bars under. Asking for it by name rather than
+  { THE KEY THE INDEX BUCKETS BARS UNDER. Asking for it by name rather than
     counting series here is what stops a line series sharing the axis from
     being counted as a bar -- which would make every bar half as wide on a
-    chart that looks otherwise right. }
-  key := TySeriesStatKey('bar', 'cartesian2d');
+    chart that looks otherwise right.
 
-  for g := 0 to ABuild.GridCount - 1 do
+    TWO PASSES, AND THE TWO DO NOT SHARE A BAND. ECharts 6 keys the column
+    layout by series TYPE -- makeAxisStatKey2(seriesType, 'cartesian2d') -- so
+    a pictorialBar beside a bar on the same axis gets its own full band rather
+    than half of a shared one. Its two other defaults travel with it for the
+    same reason: they are series defaults the option tree never writes down,
+    so there is nothing in the node for the reader below to find. }
+  for i := 0 to 1 do
   begin
-    gb := ABuild.Grid(g);
-    for a := 0 to gb.XAxisCount - 1 do DoAxis(gb.XAxis(a));
-    for a := 0 to gb.YAxisCount - 1 do DoAxis(gb.YAxis(a));
+    if i = 0 then
+    begin
+      key := TySeriesStatKey('bar', 'cartesian2d');
+      defGap := cDefaultBarGap;
+      defClip := True;
+    end
+    else
+    begin
+      key := TySeriesStatKey(TyPictorialSeriesTypeName, 'cartesian2d');
+      defGap := cDefaultPictorialBarGap;
+      { clip FALSE, and the source says why beside it: a pictorial chart
+        usually hides its axes, so a glyph taller than its value is expected
+        to stand proud of the plot rather than be sliced at its edge. }
+      defClip := False;
+    end;
+    for g := 0 to ABuild.GridCount - 1 do
+    begin
+      gb := ABuild.Grid(g);
+      for a := 0 to gb.XAxisCount - 1 do DoAxis(gb.XAxis(a));
+      for a := 0 to gb.YAxisCount - 1 do DoAxis(gb.YAxis(a));
+    end;
   end;
   Result := answer;
 end;

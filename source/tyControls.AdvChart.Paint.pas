@@ -157,6 +157,31 @@ type
     { How far outside the shape still counts, LOGICAL px. A 6 px scatter marker
       needs a forgiving target; a line series needs a whole ribbon. }
     HitSlopLogical: Double;
+    { WHETHER THE INK IS CUT, and the flag is not redundant beside the rect.
+
+      AN ALL-ZERO RECT IS A LEGITIMATE EMPTY CLIP -- it removes the element
+      entirely -- so no rectangle can stand for "no clip at all". Several
+      elements in this library are built with Default() rather than through
+      TyChartElement, and with the absence carried by the rect alone every one
+      of them vanished: the legend drew nothing at all, and the failure was a
+      picture with a hole in it rather than anything that named a clip. The
+      zero value of the record has to mean "not clipped", and only a Boolean
+      can say that.
+
+      THE FIRST REAL CLIP IN THIS LAYER, and it is here because one series
+      cannot be drawn without one: a pictorial bar filled to its value cuts a
+      column of glyphs MID-GLYPH, which no intersection of rectangles can do.
+      Everything else that looked like clipping in this port -- a bar against
+      the plot, an axis label against its gutter -- was a rect meeting a rect,
+      and those stay as they are, because a shape that is really smaller is
+      better than a shape that is drawn smaller.
+
+      THE HIT TEST IGNORES IT, deliberately and the same way upstream does:
+      a pictorial bar keeps a separate unclipped rectangle as its hover
+      target, because the thing a reader points at is the BAR, not whichever
+      half of a glyph survived the cut. }
+    HasClip: Boolean;
+    ClipRect: TTyRectF;
     Datum: TTyChartDatumRef;
   end;
 
@@ -324,6 +349,7 @@ begin
   Result := Default(TTyChartElement);
   Result.Shape := AShape;
   Result.Style := TyChartStyle;
+  Result.HasClip := False;
   Result.Z := 0;
   Result.Z2 := 0;
   Result.Silent := True;

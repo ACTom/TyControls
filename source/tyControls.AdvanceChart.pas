@@ -38,6 +38,7 @@ uses
   tyControls.AdvChart.Shape, tyControls.AdvChart.Style,
   tyControls.AdvChart.Marks, tyControls.AdvChart.BarLayout,
   tyControls.AdvChart.Stack, tyControls.AdvChart.Symbol,
+  tyControls.AdvChart.Pictorial,
   tyControls.AdvChart.Color,
   tyControls.AdvChart.Pie, tyControls.AdvChart.Funnel,
   tyControls.AdvChart.Gauge, tyControls.AdvChart.Radar,
@@ -322,6 +323,8 @@ type
     function StackFor(ASlot: Integer): TTySeriesStack;
     { The symbol spec for a series slot, over its type's own default. }
     function SymbolFor(ASlot: Integer): TTySymbolSpec;
+    function SeriesIntIn(ASeriesIndex: Integer; const AKey: string;
+      ADefault: Integer): Integer;
     { The label interval the layout gave this axis, or 1 when it draws them
       all. }
     function LabelStepFor(AAxis: TTyAxis): Integer;
@@ -1707,6 +1710,32 @@ begin
       Exit;
     end;
   end;
+end;
+
+{ One whole number off a series node, ADefault when it is absent or is not a
+  number. Rounded rather than truncated: `z: 1.5` is somebody's mistake, and
+  the two neighbouring answers are both defensible -- the nearer one is the
+  one the author was closer to meaning. }
+function TTyAdvanceChart.SeriesIntIn(ASeriesIndex: Integer;
+  const AKey: string; ADefault: Integer): Integer;
+var
+  d: TJSONData;
+  node: TJSONObject;
+  v: Double;
+begin
+  Result := ADefault;
+  if FOption = nil then Exit;
+  d := FOption.ComponentAt('series', ASeriesIndex);
+  if not (d is TJSONObject) then Exit;
+  node := TJSONObject(d);
+  d := node.Find(AKey);
+  if (d = nil) or (d.JSONType <> jtNumber) then Exit;
+  v := d.AsFloat;
+  if IsNan(v) or IsInfinite(v) then Exit;
+  { CLAMPED, because Round targets an Int64 and the paint list's key is an
+    Integer -- a z of 1e18 is not an order, it is an overflow. }
+  v := Max(Double(-100000), Min(Double(100000), v));
+  Result := Round(v);
 end;
 
 function TTyAdvanceChart.SymbolFor(ASlot: Integer): TTySymbolSpec;
@@ -3123,6 +3152,12 @@ begin
         pass already computed, so it is fetched rather than re-derived. }
       v.Line.LabelStep := LabelStepFor(FBindings[i].BaseAxis);
       v.Symbol := SymbolFor(i);
+      { THE PICTORIAL OPTIONS, read for every series rather than only for the
+        one type that uses them. The alternative is a branch on the type name
+        here, and this file already has too many of those: the reader is
+        cheap, the builder is the only thing that looks at the answer, and a
+        series that is not a pictorialBar simply carries the defaults. }
+      v.Pictorial := TyPictorialSpecOf(FOption, FBindings[i].SeriesIndex);
       { An `empty` symbol is filled with the chart's own surface, so it reads as
         a hole rather than as a white dot on a dark skin. Upstream fills it from
         a token too, so parity and this library's own rule agree. }
@@ -3136,11 +3171,22 @@ begin
       v.BackgroundFill := TTyChartColor(
         ActiveController.Model.ResolveStyle('TyAdvChartBarBackground', '',
           []).Background.Color);
-      { NO Z2 HERE. It was set to i, and a mutant that set it to 0 survived
-        every test -- because the paint list's documented tiebreaker is the
-        INSERTION INDEX, and these are inserted in series order already. Two
-        ways of saying the same thing, one of them inert. When series z and
-        zlevel arrive they will set Z, and Z2 will have something to do. }
+      { `z` AND `z2`, AND NEITHER HAS A DEFAULT HERE. Upstream's series default
+        is z 2, but nothing else in this port shares that scale -- the grid and
+        the axes are ordered by INSERTION, not by a number -- so what matters
+        is the order two series come out in, and two series that both say
+        nothing keep insertion order either way.
+
+        READ RATHER THAN INVENTED because it decides a picture nobody can work
+        around: `pictorialBar-body-fill` draws the same silhouette three times,
+        a grey one last, and only `z: 10` on the two clipped series keeps the
+        fill in front of it. Without this the chart is three grey bodies.
+
+        zlevel IS NOT READ. It is a separate canvas upstream, not a deeper
+        sort key, and pretending it is one would put a series in the right
+        order for the wrong reason. }
+      v.Z := SeriesIntIn(FBindings[i].SeriesIndex, 'z', 0);
+      v.Z2 := SeriesIntIn(FBindings[i].SeriesIndex, 'z2', 0);
       v.Label_ := LabelSpecFor(i);
       { `{c}` and the default text read the VALUE column -- whichever axis is
         not the base one. A label that read x on a bar chart would show the

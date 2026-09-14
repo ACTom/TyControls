@@ -33,6 +33,8 @@ type
     procedure TestSectorWrappingTheSeam;
     procedure TestFullTurnSectorAcceptsEveryAngle;
     procedure TestNegativeSweepIsNormalised;
+    { ---- the mirror ---- }
+    procedure TestAMirrorTurnsOneAxisAndLeavesTheOriginalAlone;
     { ---- the path a sector traces ---- }
     procedure TestASectorsCornerRulesAreNotTheRects;
     procedure TestAPlainSectorTracesRimLineHoleClose;
@@ -320,6 +322,50 @@ begin
   AssertTrue('north', TyShapeContains(s, 0, -30, 0));
   AssertTrue('west', TyShapeContains(s, -30, 0, 0));
   AssertTrue('south', TyShapeContains(s, 0, 30, 0));
+end;
+
+procedure TAdvChartShapeTest.TestAMirrorTurnsOneAxisAndLeavesTheOriginalAlone;
+var
+  before, after_: TTyChartShape;
+begin
+  { AN ASYMMETRIC POINT SET, and that is the whole fixture. Most symbols are
+    symmetric about their vertical axis, so a mirror that turned BOTH axes over
+    would draw the identical picture on one of them -- and a test built on a
+    triangle would never know. }
+  before := TyShapePolygon([TyPointF(10, 10), TyPointF(40, 20),
+                            TyPointF(20, 50)]);
+
+  after_ := TyMirrorShape(before, 25, 30, False, True);
+  AssertEquals('y turns about the line', 50.0, after_.Points[0].Y, 1e-9);
+  AssertEquals(40.0, after_.Points[1].Y, 1e-9);
+  AssertEquals(10.0, after_.Points[2].Y, 1e-9);
+  AssertEquals('and x is left where it was', 10.0, after_.Points[0].X, 1e-9);
+  AssertEquals(40.0, after_.Points[1].X, 1e-9);
+
+  { THE ORIGINAL IS NOT TOUCHED. A dynamic array is assigned by reference, so
+    without a copy the mirror turns the shape the caller is still holding over
+    as well -- and a caller that overwrites its own variable, which is what the
+    one caller does, cannot see it happen. }
+  AssertEquals('the original kept its first point', 10.0,
+    before.Points[0].Y, 1e-9);
+  AssertEquals(20.0, before.Points[1].Y, 1e-9);
+  AssertEquals(50.0, before.Points[2].Y, 1e-9);
+
+  after_ := TyMirrorShape(before, 25, 30, True, False);
+  AssertEquals('x turns instead', 40.0, after_.Points[0].X, 1e-9);
+  AssertEquals(10.0, after_.Points[1].X, 1e-9);
+  AssertEquals('and y is left alone', 10.0, after_.Points[0].Y, 1e-9);
+
+  { NEITHER AXIS IS A NO-OP RATHER THAN A COPY OF NOTHING. }
+  after_ := TyMirrorShape(before, 25, 30, False, False);
+  AssertEquals(10.0, after_.Points[0].X, 1e-9);
+  AssertEquals(10.0, after_.Points[0].Y, 1e-9);
+
+  { A CIRCLE IS ITS OWN MIRROR IMAGE, so it comes back unchanged -- which is
+    the right answer and not a skipped case. }
+  after_ := TyMirrorShape(TyShapeCircle(10, 20, 5), 0, 0, True, True);
+  AssertEquals(10.0, after_.CX, 1e-9);
+  AssertEquals(20.0, after_.CY, 1e-9);
 end;
 
 procedure TAdvChartShapeTest.TestNegativeSweepIsNormalised;
