@@ -44,6 +44,7 @@ type
     FSyncing: Boolean;           // reentrancy guard while we drive the bars
     FInScrollBy: Boolean;        // guard so re-docking the bars is ignored by range calc
     FInUpdate: Boolean;          // reentrancy guard for UpdateScrollRange (see there)
+    FScrollBarAutoHide: TTyScrollBarAutoHide;
     { WHERE THE BARS BELONG — computed once, by MeasureAndDock, and read back by the
       re-dock in ScrollContentTo.
 
@@ -65,6 +66,7 @@ type
     procedure EnsureBars;
     procedure VScrollBarChange(Sender: TObject);
     procedure HScrollBarChange(Sender: TObject);
+    procedure SetScrollBarAutoHide(const AValue: TTyScrollBarAutoHide);
     procedure ScrollContentTo(ANewX, ANewY: Integer);
     function ScrollbarThick: Integer;
     function MeasureAndDock: Boolean;
@@ -221,6 +223,10 @@ type
       could express, and a limit that depends on the form ("never wider than half of it")
       had no expression at all. }
     property OnConstrainedResize;
+    { Whether this box's two scrollbars fade out while nobody is using them. Forwarded to
+      the embedded bars; for what the three values mean see TTyScrollBar.AutoHide. }
+    property ScrollBarAutoHide: TTyScrollBarAutoHide
+      read FScrollBarAutoHide write SetScrollBarAutoHide default sbahDefault;
     property Align;
     property Anchors;
     property StyleClass;
@@ -287,6 +293,12 @@ begin
   // re-nil the field references here (that would orphan those bars and let a later
   // Resize create a duplicate pair).
   inherited Create(AOwner);
+  { Assigned AFTER the bars above already read it, and that is unavoidable: this is the
+    first statement that can run. It works only because the RTL zero-fills the field and
+    zero IS sbahDefault, so EnsureBars read the right value. Change the published default
+    to anything but the first enum member and this line stops being a no-op while the bars
+    keep the old one -- move the seed into EnsureBars then. }
+  FScrollBarAutoHide := sbahDefault;
   Width := 200;
   Height := 150;
 end;
@@ -371,6 +383,10 @@ begin
     // Embedded bar drives content scrolling: keep it instant (no thumb glide) so
     // scrolling never lags behind the wheel/keyboard.
     FVScrollBar.AnimationsEnabled := False;
+    // This runs from inside TTyScrollBox.Create's `inherited` (Resize -> UpdateScrollRange),
+    // i.e. before the constructor body, so the field is still the RTL's zero fill. See the
+    // constructor for why that is exactly sbahDefault and what would break the arrangement.
+    FVScrollBar.AutoHide := FScrollBarAutoHide;
     FVScrollBar.ControlStyle := FVScrollBar.ControlStyle + [csNoDesignVisible];
     FVScrollBar.Visible := False;
   end;
@@ -383,9 +399,21 @@ begin
     FHScrollBar.TabStop := False;   // embedded chrome, not a stop — see the vertical bar
     FHScrollBar.OnChange := @HScrollBarChange;
     FHScrollBar.AnimationsEnabled := False;
+    FHScrollBar.AutoHide := FScrollBarAutoHide;   // same as the vertical bar above
     FHScrollBar.ControlStyle := FHScrollBar.ControlStyle + [csNoDesignVisible];
     FHScrollBar.Visible := False;
   end;
+end;
+
+procedure TTyScrollBox.SetScrollBarAutoHide(const AValue: TTyScrollBarAutoHide);
+begin
+  if FScrollBarAutoHide = AValue then Exit;
+  FScrollBarAutoHide := AValue;
+  { EnsureBars has normally run long before this (see the constructor), so these two lines
+    are the path a value actually travels by; the nil guards cover the window before the
+    first Resize. }
+  if FVScrollBar <> nil then FVScrollBar.AutoHide := AValue;
+  if FHScrollBar <> nil then FHScrollBar.AutoHide := AValue;
 end;
 
 { See the declaration for why this override exists at all. }

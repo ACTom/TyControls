@@ -6,7 +6,8 @@ uses
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.ScrollBar, tyControls.Panel,
   { 内嵌了滚动条的宿主——转发那一组测试要的。 }
-  tyControls.ListBox, tyControls.Memo, tyControls.Grid, tyControls.ListView;
+  tyControls.ListBox, tyControls.Memo, tyControls.Grid, tyControls.ListView,
+  tyControls.ScrollBox;
 
 type
   TTyScrollBarAutoHideTests = class(TTestCase)
@@ -24,6 +25,7 @@ type
     function NewMemo: TTyMemo;
     function NewGrid: TTyStringGrid;
     function NewListView: TTyListView;
+    function NewScrollBox: TTyScrollBox;
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -83,6 +85,9 @@ type
     procedure GridDeclaredDefaultMatchesConstructed;
     procedure ListViewForwardsToItsEmbeddedBars;
     procedure ListViewDeclaredDefaultMatchesConstructed;
+    procedure ScrollBoxForwardsToItsEmbeddedBars;
+    procedure ScrollBoxBuildsItsBarsInsideInheritedCreate;
+    procedure ScrollBoxDeclaredDefaultMatchesConstructed;
   end;
 
 implementation
@@ -1211,6 +1216,46 @@ end;
 procedure TTyScrollBarAutoHideTests.ListViewDeclaredDefaultMatchesConstructed;
 begin
   CheckHostDeclaredDefault(NewListView, 'ListView');
+end;
+
+function TTyScrollBarAutoHideTests.NewScrollBox: TTyScrollBox;
+begin
+  Result := TTyScrollBox.Create(FForm);
+  Result.Parent := FForm;
+  Result.Controller := FCtl;
+  Result.SetBounds(0, 0, 200, 120);
+end;
+
+procedure TTyScrollBarAutoHideTests.ScrollBoxBuildsItsBarsInsideInheritedCreate;
+var
+  sb: TTyScrollBox;
+begin
+  { 这一条钉的是 ScrollBox 与另外五个宿主都不一样的地方：它的两条条不是在
+    构造函数**体**里建的，而是 inherited Create 设 Width/Height 时
+    Resize -> UpdateScrollRange -> EnsureBars 顺手建出来的，也就是比构造函数
+    体的第一句还早。EnsureBars 里那两行读 FScrollBarAutoHide 时，字段还只是
+    RTL 的零填充；零恰好就是 sbahDefault，这套安排才成立。
+    哪天这条不再成立(条改成更晚才建、或者默认值不再是第一个枚举成员)，
+    这条测试或 ScrollBoxDeclaredDefaultMatchesConstructed 会先红。 }
+  sb := TTyScrollBox.Create(FForm);
+  AssertTrue('构造函数一返回，两条条就该已经在了',
+    (FindEmbeddedBar(sb, sbVertical) <> nil) and (FindEmbeddedBar(sb, sbHorizontal) <> nil));
+  AssertEquals('而且它们拿到的是出厂默认值', Ord(sbahDefault),
+    Ord(FindEmbeddedBar(sb, sbVertical).AutoHide));
+end;
+
+procedure TTyScrollBarAutoHideTests.ScrollBoxForwardsToItsEmbeddedBars;
+var
+  sb: TTyScrollBox;
+begin
+  sb := NewScrollBox;
+  sb.ScrollBarAutoHide := sbahNever;
+  CheckBothBarsGot(sb, sbahNever, 'ScrollBox');
+end;
+
+procedure TTyScrollBarAutoHideTests.ScrollBoxDeclaredDefaultMatchesConstructed;
+begin
+  CheckHostDeclaredDefault(NewScrollBox, 'ScrollBox');
 end;
 
 initialization
