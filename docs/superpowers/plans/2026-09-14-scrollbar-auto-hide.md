@@ -35,6 +35,15 @@
 
 ---
 
+## 实现期的地雷（每个任务开工前看一眼）
+
+1. **`Max` / `Min` 在 `TTyScrollBar` 的方法体内被控件自己的属性遮蔽。** 要用 Math 的就得写全 `Math.Max` / `Math.Min`。不写全的话报的是指着调用那行的裸语法错，看不出跟遮蔽有关系。任何钳位数值的地方都会撞上。
+2. **`TTyAnimator` 没有 `Value` 成员**，缓动后的 0..1 视图叫 `Eased`；枚举成员是 `teEaseOutCubic` 不是 `teOutCubic`；停掉一个动画用 `SetTargetImmediate`，不是把 `DurationMs` 归零。
+3. **别碰位置动画那一套**：`FTimer` / `HandleTimer` / `EnsureTimer` / `FPosAnim` / `FLastTickMs` / `AnimationsEnabled` / `TickElapsedMs` / `AdvanceAnimation` / `DisplayPos`。淡出是**另一套**机制，自己的字段、自己的 timer。在它们旁边加东西可以，改它们不行——每一条现存的滚动条测试都钉着它们的形状。
+4. **`FDragging` 在 `protected`**，测试要碰它走 `tests/test.controls.scrollbar.pas:151` 那个 `TScrollAccess` 子类的路子，别另起炉灶。
+
+---
+
 ## 跑测试的固定套路
 
 改了 `source/` 之后**必须**：
@@ -885,31 +894,58 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 - [ ] **Step 1: 先写测试，六个宿主一次写全**
 
+**怎么拿到内嵌条 —— 已经查过了（2026-09-14）：六个宿主一个现成的缝都没有。**
+
+```bash
+grep -n "ForTest\|function.*ScrollBar: TTyScrollBar" source/tyControls.{ListBox,Grid,Memo,TreeView,ListView,ScrollBox}.pas
+```
+只命中 `Grid.pas:2817 EditorCanCancelForTest`，跟滚动条无关。
+
+**不要给六个宿主各加一个 `VertScrollBarForTest`。** 内嵌条都是 `Parent := Self` 的真子控件，测试遍历 `Controls` 就能拿到，不必为测试往公开 API 上加六个函数：
+
 ```pascal
-procedure TTyScrollBarAutoHideTests.HostsForwardToTheirEmbeddedBars;
+function FindEmbeddedBar(AHost: TWinControl; AKind: TTyScrollBarKind): TTyScrollBar;
+var
+  i: Integer;
+begin
+  { 内嵌条是宿主的真子控件（建的时候 Parent := Self），所以遍历得到。
+    这样就不用为了测试给六个宿主各开一个 public 函数——那种测试专用 API
+    一旦进了公开面就再也删不掉。 }
+  Result := nil;
+  for i := 0 to AHost.ControlCount - 1 do
+    if (AHost.Controls[i] is TTyScrollBar)
+       and (TTyScrollBar(AHost.Controls[i]).Kind = AKind) then
+      Exit(TTyScrollBar(AHost.Controls[i]));
+end;
+
+procedure TTyScrollBarAutoHideTests.ListBoxForwardsToItsEmbeddedBars;
 var
   lb: TTyListBox;
   f: TForm;
+  bar: TTyScrollBar;
+  i: Integer;
 begin
-  { 「建好了没接线」是本库的默认故障。转发这种四平八稳的代码最容易只写一半
-    ——属性加了，构造函数里没传。 }
+  { 「建好了没接线」是本库的默认故障，已经八次。转发这种四平八稳的代码最容易
+    只写一半——属性加了，创建处没传。 }
   f := TForm.CreateNew(nil);
   try
     lb := TTyListBox.Create(f);
     lb.Parent := f;
+    lb.SetBounds(0, 0, 120, 60);
+    { ListBox 的条是**惰性创建**的：不塞够条目它根本不存在，
+      于是「找不到条」会被误读成「转发没生效」。 }
+    for i := 1 to 100 do lb.Items.Add('item ' + IntToStr(i));
     lb.ScrollBarAutoHide := sbahNever;
-    AssertEquals('属性必须传到内嵌条上',
-      Ord(sbahNever), Ord(lb.VertScrollBarForTest.AutoHide));
+    bar := FindEmbeddedBar(lb, sbVertical);
+    AssertTrue('内嵌竖条应当已经存在', bar <> nil);
+    AssertEquals('属性必须传到内嵌条上', Ord(sbahNever), Ord(bar.AutoHide));
   finally
     f.Free;
   end;
 end;
 ```
 
-> 每个宿主都需要一个能拿到内嵌条的测试缝。若宿主已有（Grid/ListBox 多半有），用现成的；没有就加一个 `public function VertScrollBarForTest: TTyScrollBar;`。**先 grep 再加**：
-> ```bash
-> cd /d/Projects/ty-3.1 && grep -n "ForTest\|property VertScrollBar\|property ScrollBar" source/tyControls.ListBox.pas source/tyControls.Grid.pas source/tyControls.Memo.pas source/tyControls.TreeView.pas source/tyControls.ListView.pas source/tyControls.ScrollBox.pas
-> ```
+> **惰性 vs 急切**：ListBox 与 Memo 的条是惰性建的（要先有内容撑出滚动），Grid / ListView / ScrollBox / TreeView 在构造函数里就建好（只是 `Visible := False`）。所以后四个不用塞内容，前两个必须塞。写测试时按这个分别处理，别套同一个模板。
 
 对其余五个宿主重复这条测试（`TTyStringGrid`、`TTyListView`、`TTyMemo`、`TTyScrollBox`、`TTyTreeView`），**不要写成循环**——每个宿主的构造路径不同，一个挂了要能立刻看出是哪个。
 
@@ -1233,13 +1269,11 @@ TyScrollBar:disabled { opacity: var(--disabled-opacity); }
 
 **必须写明两条**：①整块要抄全——用户层写了 `TyScrollBar` 任一条，内置那块就整体作废；②Task 9 量到的图片主题限定。
 
-- [ ] **Step 4: 英文文档**
+- [ ] **Step 4: 英文文档 —— 查过了，不用做**
 
-`docs/` 下中英成对。确认 `scrollbar.md` 有没有 `.en.md`，有就同步：
+`docs/controls/` 下只有中文，`scrollbar.en.md` 不存在（成对的是 `getting-started` / `themes` / `known-issues` / `tycss-reference` 那几篇顶层文档）。**这一步是 no-op，写在这里是为了让人不用再查一遍。**
 
-```bash
-cd /d/Projects/ty-3.1 && ls docs/controls/scrollbar*
-```
+合回 main 前仍要照 pre-merge checklist 看 README 中英双份要不要提这个能力——那是另一回事。
 
 - [ ] **Step 5: 提交**
 
