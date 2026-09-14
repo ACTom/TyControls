@@ -313,7 +313,7 @@ end;
 cd /d/Projects/ty-3.1 && lazbuild -B tests/tytests.lpi && cd tests && cp tytests.exe tytests-31.exe && ./tytests-31.exe --suite=TTyScrollBarAutoHideTests --format=plain > /tmp/t1.txt 2>&1; grep -E "Number of (run tests|errors|failures)" /tmp/t1.txt
 ```
 
-预期：`Number of run tests: 5` / errors 0 / failures 0。
+预期：新套件全绿（errors 0 / failures 0）。**别对着绝对数字较劲**——补一条测试就让写死的数字全部作废。判据是 `Number of run tests` 那行存在、errors/failures 为 0、且条数比上一步**多了这一步新写的那几条**。
 
 - [ ] **Step 7: 提交**
 
@@ -366,7 +366,7 @@ uses 段补 `TypInfo`。
 cd /d/Projects/ty-3.1 && lazbuild -B tests/tytests.lpi && cd tests && cp tytests.exe tytests-31.exe && ./tytests-31.exe --suite=TTyScrollBarAutoHideTests --format=plain > /tmp/t2.txt 2>&1; grep -E "Number of (run tests|errors|failures)" /tmp/t2.txt
 ```
 
-预期：`Number of run tests: 6` / 全 0。
+预期：新套件全绿（errors 0 / failures 0）。**别对着绝对数字较劲**——补一条测试就让写死的数字全部作废。判据是 `Number of run tests` 那行存在、errors/failures 为 0、且条数比上一步**多了这一步新写的那几条**。
 
 - [ ] **Step 3: 变异确认这条守卫真的在守**
 
@@ -640,7 +640,7 @@ end;
 cd /d/Projects/ty-3.1 && lazbuild -B tests/tytests.lpi && cd tests && cp tytests.exe tytests-31.exe && ./tytests-31.exe --suite=TTyScrollBarAutoHideTests --format=plain > /tmp/t3.txt 2>&1; grep -E "Number of (run tests|errors|failures)" /tmp/t3.txt
 ```
 
-预期：`Number of run tests: 13` / 全 0。
+预期：新套件全绿（errors 0 / failures 0）。**别对着绝对数字较劲**——补一条测试就让写死的数字全部作废。判据是 `Number of run tests` 那行存在、errors/failures 为 0、且条数比上一步**多了这一步新写的那几条**。
 
 - [ ] **Step 5: 提交**
 
@@ -697,13 +697,15 @@ end;
 
 > 16ms 的 tick 在延时阶段确实是空转，但它同时是淡出动画的驱动，多一个低频 timer 换来两套状态反而更难对齐。一条条最多空转「延时」那么久，之后就自己停了。
 
+> **别在每个 tick 里调 `EffectiveAutoHideMs`。** 它每次都走 `ResolveMetric`，而那里为查缓存会先拼一个 `AName + '|' + IntToStr(ADefault)` 的 key 字符串——按 60fps × 最多 12 条内嵌条算，就是每帧十几次字符串分配。本库已经在 `TTyMemo` 上被逐帧测量的开销咬过一次（0.5 秒一键的延迟）。**按主题版本缓存一次**：`AutoHideTick` 与 `HandleHideTimer` 共用一个缓存值，在 `NoteActivity`、主题变更、`AutoHide` 属性变更时作废。
+
 - [ ] **Step 2: 全量跑，确认没碰坏位置动画**
 
 ```bash
 cd /d/Projects/ty-3.1 && lazbuild -B tests/tytests.lpi && cd tests && cp tytests.exe tytests-31.exe && ./tytests-31.exe --format=plain > /tmp/full1.txt 2>&1; grep -E "Number of (run tests|errors|failures)" /tmp/full1.txt
 ```
 
-预期：`Number of run tests: 7048`（7035 基线 + 13 新增）/ errors 0 / failures 0。
+预期：新套件全绿（errors 0 / failures 0）。**别对着绝对数字较劲**——补一条测试就让写死的数字全部作废。判据是 `Number of run tests` 那行存在、errors/failures 为 0、且条数比上一步**多了这一步新写的那几条**。
 
 **若 `test.controls.scrollbar` 里有红**：说明动了位置动画那条路，回头看是不是把 `NoteActivity` 加进了 `SetPosition` 的错误分支。
 
@@ -799,7 +801,7 @@ end;
 cd /d/Projects/ty-3.1 && lazbuild -B tests/tytests.lpi && cd tests && cp tytests.exe tytests-31.exe && ./tytests-31.exe --suite=TTyScrollBarAutoHideTests --format=plain > /tmp/t5.txt 2>&1; grep -E "Number of (run tests|errors|failures)" /tmp/t5.txt
 ```
 
-预期：`Number of run tests: 14` / 全 0。
+预期：新套件全绿（errors 0 / failures 0）。**别对着绝对数字较劲**——补一条测试就让写死的数字全部作废。判据是 `Number of run tests` 那行存在、errors/failures 为 0、且条数比上一步**多了这一步新写的那几条**。
 
 - [ ] **Step 5: 变异确认**
 
@@ -973,17 +975,37 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 cd /d/Projects/ty-3.1 && lazbuild -B tests/tytests.lpi && cd tests && cp tytests.exe tytests-31.exe && ./tytests-31.exe --format=plain > /tmp/full2.txt 2>&1; grep -E "Number of (run tests|errors|failures)" /tmp/full2.txt
 ```
 
-预期：`7056`（基线 7035 + 21 新增）/ 全 0。
+预期：全量绿。**用增量判据**：条数 = 上一次全量数 + 这一步新增的条数，errors/failures 为 0。基线是本 worktree 开工时的 7035。
 
 ---
 
-### Task 8: 现代主题打开它
+### Task 8: 现代主题打开它，并让编辑器认识这个令牌
 
 **Files:**
+- Modify: `themes/light.tycss`（显式写出默认值，见 Step 1）
+- Modify: `source/tyControls.Css.Catalog.pas`（`TyCatalogTokens`）
 - Modify: `themes/builtin/win11.tycss`、`macos.tycss`、`fluent.tycss`、`material3.tycss`
 - Modify: `source/tyControls.BuiltinThemeData.pas`（生成器产物）
 
-- [ ] **Step 1: 四个皮肤的 `:root` 各加一行**
+- [ ] **Step 1: 在 `light.tycss` 的 `:root` 里显式写出默认值**
+
+```css
+  --scrollbar-auto-hide: -1;
+```
+
+**为什么要写**：这个令牌的默认值本来活在代码里（`TyScrollBarAutoHideDef`），主题不写也能跑。但 StyleOverride 编辑器的补全与校验走的是 `TyCatalogTokens`（`source/tyControls.Css.Catalog.pas`），而 `tests/test.css.catalog.pas` 有一条守卫要求**catalog 里的每个令牌都在 `light.tycss` 里有定义**。想让用户在编辑器里能补全它（spec §11 验收 4 正是让用户写这行），就得两边都有。代码里的 `Def` 仍是兜底——主题被换成一个没定义它的皮肤时照样回落。
+
+- [ ] **Step 2: 登记进 `TyCatalogTokens`**
+
+照该数组现有条目的写法加一条，描述写清三个值的含义（`-1` 关 / `0` 立即 / `N` 毫秒）。加完跑一次 catalog 守卫：
+
+```bash
+cd /d/Projects/ty-3.1 && lazbuild -B tests/tytests.lpi && cd tests && cp tytests.exe tytests-31.exe && ./tytests-31.exe --suite=TTyCssCatalogTests --format=plain > /tmp/cat.txt 2>&1; grep -E "Number of (run tests|errors|failures)" /tmp/cat.txt
+```
+
+> 顺序很重要：**先写 `light.tycss` 再登记 catalog**。反过来那条守卫会红，而红的原因看起来像是 catalog 写错了，其实是主题还没写。
+
+- [ ] **Step 3: 四个皮肤的 `:root` 各加一行**
 
 ```css
   --scrollbar-auto-hide: 1200;
@@ -995,7 +1017,7 @@ cd /d/Projects/ty-3.1 && lazbuild -B tests/tytests.lpi && cd tests && cp tytests
 cd /d/Projects/ty-3.1 && for t in win11 macos fluent material3; do echo "=== $t ==="; grep -n ":root" themes/builtin/$t.tycss | head -3; done
 ```
 
-- [ ] **Step 2: 重跑生成器**
+- [ ] **Step 4: 重跑生成器**
 
 ```bash
 cd /d/Projects/ty-3.1 && powershell -ExecutionPolicy Bypass -File scripts/gen-builtinthemes.ps1
@@ -1003,7 +1025,7 @@ cd /d/Projects/ty-3.1 && powershell -ExecutionPolicy Bypass -File scripts/gen-bu
 
 > 15 个皮肤是**编译进** `BuiltinThemeData` 的，`themes/builtin/` 只是参考源。不重跑生成器，改的就只是磁盘上的文本，程序里的主题一点没变。
 
-- [ ] **Step 3: 写一条测试，钉住「现代开、经典关」**
+- [ ] **Step 5: 写一条测试，钉住「现代开、经典关」**
 
 ```pascal
 procedure TTyScrollBarAutoHideTests.ModernThemesHideClassicThemesDoNot;
@@ -1015,7 +1037,7 @@ begin
 end;
 ```
 
-- [ ] **Step 4: 全量跑**
+- [ ] **Step 6: 全量跑**
 
 改主题会波及 golden 像素守卫。**若 golden 变红**：先确认变的是不是只有滚动条那几张；是就更新 golden，不是就回头查。
 
@@ -1023,10 +1045,10 @@ end;
 cd /d/Projects/ty-3.1 && lazbuild -B tests/tytests.lpi && cd tests && cp tytests.exe tytests-31.exe && ./tytests-31.exe --format=plain > /tmp/full3.txt 2>&1; grep -E "Number of (run tests|errors|failures)" /tmp/full3.txt
 ```
 
-- [ ] **Step 5: 提交**
+- [ ] **Step 7: 提交**
 
 ```bash
-cd /d/Projects/ty-3.1 && git add themes/builtin source/tyControls.BuiltinThemeData.pas tests/test.scrollbar.autohide.pas && git commit -m "feat(themes): the modern skins hide their scrollbars, the classic ones do not
+cd /d/Projects/ty-3.1 && git add themes/ source/tyControls.Css.Catalog.pas themes/builtin source/tyControls.BuiltinThemeData.pas tests/test.scrollbar.autohide.pas && git commit -m "feat(themes): the modern skins hide their scrollbars, the classic ones do not
 
 win11, macos, fluent and material3 opt in at 1200ms. classic, xp and aero
 say nothing and inherit -1, which is the whole point of the split -- this

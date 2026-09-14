@@ -228,6 +228,8 @@ headless **测不到**、必须真机看的：
 1. 默认主题下行为与 3.0 完全一致（滚动条一直显示）
 2. 现代主题下：滚动出现、停手 1.2 s 淡出、鼠标移到条上持续显示
 3. `AutoHide := sbahNever` 能在自动隐藏的主题下强制常显
-4. `Form.StyleOverride` 里一行 `TyScrollBar { --scrollbar-auto-hide: -1; }` 能全局关掉
+4. `Form.StyleOverride` 里一行 **`:root { --scrollbar-auto-hide: -1; }`** 能全局关掉。
+
+   **必须是 `:root`,写进类型规则不生效**（2026-09-14 查证）：`Metric` 读的是 `FMergedVars`，而 `RebuildMergedVars`（`tyControls.StyleModel.pas:1199`）只收 `FBaseVars` + 用户 `:root` + 当前 `@mode` 的 `:root`。写在 `TyScrollBar { ... }` 里的 `--var` 只进那条规则自己的 `Decls`，永远到不了 `FMergedVars`。更糟的是规则里的未知属性是**静默丢弃**的（不像未知函数会抛），所以照错写法验收会看到「没报错、看起来生效了」而其实什么都没发生。
 5. 6 个宿主的内嵌条都听话
 6. 全量测试绿，无内存泄漏
