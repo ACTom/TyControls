@@ -85,7 +85,7 @@ type
 | `TTyScrollBox` | `tyControls.ScrollBox.pas:373, 385` |
 | `TTyTreeView` | `tyControls.TreeView.pas:3200, 3208` |
 
-`TTyValueListEditor` 继承 Grid，不单独处理。
+**`TTyValueListEditor` 继承的是 `TTyListBox` 不是 Grid**（2026-09-15 查证，`tyControls.ValueListEditor.pas:116`：`class(TTyListBox)`）。本文原先写成 Grid，是错的。它因此继承的是**惰性**滚动条那一套，不是急切的——给它写测试必须先塞够内容把条撑出来，否则「找不到条」会被误读成「转发没生效」。不需要单独实现，但这个区别在写测试时是真的。
 
 ---
 
