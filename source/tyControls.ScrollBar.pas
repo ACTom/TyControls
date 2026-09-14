@@ -100,6 +100,8 @@ type
     procedure HandleHideTimer(Sender: TObject);
     function AutoHideHeldOpen: Boolean;
     procedure StartFade(ATo: Single; ADurationMs: Integer);
+    { RenderTo 真正用的那份样式：主题样式叠上自动隐藏的淡出系数。见实现处。 }
+    function PaintStyle: TTyStyleSet;
     { 主题说的延时，按 (model, ThemeVersion) 缓存。见实现处：热路径上一拍要问两次。 }
     function ThemeAutoHideMs: Integer;
   protected
@@ -186,6 +188,10 @@ type
     { 测试缝：推进 AMs 毫秒。真机由 FHideTimer 驱动，headless 由测试驱动
       ——和位置动画的 HandleTimerTick 是同一个路子。 }
     procedure AutoHideTick(AMs: Integer);
+    { 测试缝：问「这一帧的 opacity 是多少」，省得为了一个数去数像素。
+      **它不能替代像素测试**：这个口子绕开了 RenderTo，光靠它绿，
+      「算对了但没接到绘制上」照样一声不吭——那是本库的默认故障。 }
+    function PaintStyleForTest: TTyStyleSet;
     { 换主题时控件收到的就只有这一个广播,所以「自动隐藏关着 -> 条必须看得见」
       这条不变量只能挂在这儿修。见实现处。 }
     procedure Invalidate; override;
@@ -563,6 +569,43 @@ begin
   FFadeFrom := FFadeLevel;
   FFadeTo := ATo;
   FFadeAnim := TyAnimatorInit(ADurationMs, teEaseOutCubic);
+end;
+
+function TTyScrollBar.PaintStyle: TTyStyleSet;
+{ 主题给的那份样式，乘上自动隐藏的当前可见度。
+
+  为什么乘进 opacity 而不是各自改颜色：TTyPainter.Opacity 是**画笔级**的
+  ——EndPaint 对整张 FBmp 做一次 ApplyGlobalOpacity。所以这一个值一路管到
+  边框、滑块和两头的箭头，不用挨个去调它们的 alpha；而且它淡下去的方向是
+  「朝父控件的底色」而不是「朝透明」(见 EndPaint 里 OpacityBase 那段：
+  朝透明淡在 Win10 的 DWM 玻璃窗上会把玻璃露出来)。
+
+  完全可见时**原样**交出去，一个字段都不碰：多写一个 tpOpacity 进去，
+  EndPaint 就从「不合成」那条路挪到「合成」那条路上，而没开自动隐藏的条
+  一个像素都不许变。守它的是 test.scrollbar.autohide 的
+  AtRestTheThemeStyleIsHandedOverUntouched。
+
+  乘法不是摆设：主题给 TyScrollBar:disabled 写了 opacity(light/dark/green/
+  system/showcase 都有),一条禁用的条淡出时要的是两者相乘,而不是拿淡出
+  系数把主题那个值顶掉。 }
+var
+  base: Single;
+begin
+  Result := CurrentStyle;
+  if SameValue(FFadeLevel, 1.0, 0.001) then Exit;
+  { record 是非托管的：契约是 Present 那个集合——它没说有 tpOpacity，
+    Result.Opacity 里是什么就不归契约管，不能直接乘上去。
+    (今天 EmptyStyleSet 恰好把它种成 1.0，所以直接乘也能给出同一个答案；
+    这句防的是「哪天种子变了、或者换一条不经过 EmptyStyleSet 的路进来」，
+    那种事不会在这个单元里报错，只会让滚动条整条消失。) }
+  if tpOpacity in Result.Present then base := Result.Opacity else base := 1.0;
+  Result.Opacity := base * FFadeLevel;
+  Include(Result.Present, tpOpacity);
+end;
+
+function TTyScrollBar.PaintStyleForTest: TTyStyleSet;
+begin
+  Result := PaintStyle;
 end;
 
 procedure TTyScrollBar.AutoHideTick(AMs: Integer);
@@ -1081,7 +1124,10 @@ begin
   try
     R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
     P.BeginPaint(ACanvas, ARect, APPI);
-    S := CurrentStyle;
+    { PaintStyle，不是 CurrentStyle：自动隐藏的淡出**只有这一个入口**进绘制。
+      DrawFrame 把 S.Opacity 交给画笔，而画笔的 opacity 是整张位图一起算的，
+      所以下面的滑块和箭头不用各自再乘一遍(见滑块那处的注释)。 }
+    S := PaintStyle;
     DrawFrame(P, R, S);
     Track := TyScrollTrackRect(R, FKind, TyScrollButtonSize(R, FKind));
     // The PAINTED thumb uses the displayed (possibly mid-animation) position; at
@@ -1096,6 +1142,13 @@ begin
       Include(ThumbStates, tysActive)
     else if FHover then
       Include(ThumbStates, tysHover);
+    { 这里**不用**再乘一遍淡出系数。滑块和上面的边框画进的是同一张 FBmp，
+      而 EndPaint 的 ApplyGlobalOpacity 是对整张图做的，所以 DrawFrame 那一下
+      已经把滑块一起管了；在这儿再乘一次只会把它压得比条身更淡。
+      (RenderTo 也根本不读 ThumbS.Opacity——只取 Background.Color 和
+      BorderRadius。哪天滑块被挪去单开一个 painter，就要自己接淡出了：
+      test.scrollbar.autohide 的 FadeReachesThePaintedPixels 数的是整块像素，
+      到时候会红。) }
     ThumbS := ActiveController.Model.ResolveStyle('TyScrollThumb', '', ThumbStates);
     ThumbFill := Default(TTyFill);
     ThumbFill.Kind := tfkSolid;

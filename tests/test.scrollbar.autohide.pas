@@ -2,8 +2,9 @@ unit test.scrollbar.autohide;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, TypInfo, fpcunit, testregistry, Forms,
-  tyControls.Controller, tyControls.ScrollBar;
+  Classes, SysUtils, TypInfo, fpcunit, testregistry, Forms, Graphics,
+  BGRABitmap, BGRABitmapTypes,
+  tyControls.Types, tyControls.Controller, tyControls.ScrollBar;
 
 type
   TTyScrollBarAutoHideTests = class(TTestCase)
@@ -51,6 +52,10 @@ type
     procedure OneLateTickCatchesTheFadeUp;
     procedure BackToBackTicksStepTheFadeInsteadOfSnappingIt;
     procedure AStoppedClockDoesNotBankTheTimeItWasStoppedFor;
+    procedure FadeMultipliesIntoStyleOpacity;
+    procedure FadingMarksOpacityPresentEvenWhenTheThemeNeverSetIt;
+    procedure AtRestTheThemeStyleIsHandedOverUntouched;
+    procedure FadeReachesThePaintedPixels;
   end;
 
 implementation
@@ -75,6 +80,9 @@ type
     function TimerNeeded: Boolean;
     { 手动走一拍真正的 timer 回调。 }
     procedure HideTimerTick;
+    { RenderTo 在 protected 里。走同一个口，和 test.controls.scrollbar.pas
+      的 TScrollAccess.SmokeRender 一个路子。 }
+    procedure RenderInto(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
   end;
 
   { 受控时钟驱动的淡入淡出。照 test.controls.scrollbar.pas 里 TFakeClockScroll
@@ -133,6 +141,11 @@ begin
   HandleHideTimerTick;
 end;
 
+procedure TBarAccess.RenderInto(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin
+  RenderTo(ACanvas, ARect, APPI);
+end;
+
 constructor TFakeFadeClock.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
@@ -164,6 +177,54 @@ begin
   Result := TFakeFadeClock.Create(AForm);
   Result.Parent := AForm;
   Result.Controller := ACtl;
+end;
+
+{ 把条画进一张先铺了 AWipe 的位图，数两件事：
+    ANotGround —— 有多少像素**不是**底色,也就是条还看得见多少;
+    AWipeLeft  —— 有多少像素还留着底漆,也就是渲染压根没碰到的地方。
+  第二个数不是凑数的:没有它,「一个非底色像素都没有」这句在一张根本没画过的
+  位图上也成立。 }
+procedure RenderAndTally(ABar: TBarAccess; AGround, AWipe: TColor;
+  out ANotGround, AWipeLeft: Integer);
+const
+  BarW = 16;
+  BarH = 160;
+var
+  bmp: TBitmap;
+  re: TBGRABitmap;
+  gnd, wip, p: TBGRAPixel;
+  x, y: Integer;
+begin
+  ANotGround := 0;
+  AWipeLeft := 0;
+  gnd := ColorToBGRA(ColorToRGB(AGround));
+  wip := ColorToBGRA(ColorToRGB(AWipe));
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(BarW, BarH);
+    bmp.Canvas.Brush.Color := AWipe;
+    bmp.Canvas.FillRect(0, 0, BarW, BarH);
+    ABar.RenderInto(bmp.Canvas, Rect(0, 0, BarW, BarH), 96);
+    re := TBGRABitmap.Create(bmp);
+    try
+      { 只比 RGB。pf32bit 的 GDI 位图读回来 alpha 通道是不可信的(全图会被
+        校正),拿 alpha 做断言永远成立。 }
+      for y := 0 to BarH - 1 do
+        for x := 0 to BarW - 1 do
+        begin
+          p := re.GetPixel(x, y);
+          if (p.red <> gnd.red) or (p.green <> gnd.green) or (p.blue <> gnd.blue) then
+            Inc(ANotGround);
+          if (p.red = wip.red) and (p.green = wip.green) and (p.blue = wip.blue) then
+            Inc(AWipeLeft);
+        end;
+    finally
+      re.Free;
+    end;
+  finally
+    bmp.Free;
+  end;
 end;
 
 procedure TTyScrollBarAutoHideTests.SetUp;
@@ -687,6 +748,110 @@ begin
   bar.AutoHideTick(TyScrollBarFadeOutMs);
   AssertEquals('歇着的那 400 毫秒不算闲置,挪开之后还得等满 300 毫秒',
     1.0, bar.FadeLevel, 0.001);
+end;
+
+procedure TTyScrollBarAutoHideTests.FadeMultipliesIntoStyleOpacity;
+var
+  s: TTyStyleSet;
+begin
+  UseThemeCss(':root { --scrollbar-auto-hide: 1000; }' +
+              'TyScrollBar { background: #808080; color: #404040; opacity: 0.5; }');
+  FBar.NoteActivity;
+  s := FBar.PaintStyleForTest;
+  AssertEquals('完全可见时就是主题自己的 opacity', 0.5, s.Opacity, 0.001);
+
+  { 两拍,不是一拍。头一拍只是**把淡出装上膛** —— StartFade 不动可见度,
+    这时候问 opacity 拿到的还是主题那个 0.5。本特性已经有四条测试栽在
+    「断言落在装膛那一拍上」,所以推进那一拍必须单独写出来。 }
+  FBar.AutoHideTick(1000);
+  FBar.AutoHideTick(TyScrollBarFadeOutMs);
+  s := FBar.PaintStyleForTest;
+  AssertEquals('淡出到底 -> 0，而不是主题的 0.5', 0.0, s.Opacity, 0.001);
+  { 这一句**咬不动** —— 上面那段 css 自己就写了 opacity: 0.5,tpOpacity 是
+    主题放进 Present 的,把 PaintStyle 里的 Include 删掉它照样绿(变异测试
+    证过)。留着是因为它说清了意图;真正守得住的那一半在下一条。 }
+  AssertTrue('必须把 tpOpacity 标成 present，否则画笔根本不看这个值',
+    tpOpacity in s.Present);
+end;
+
+procedure TTyScrollBarAutoHideTests.FadingMarksOpacityPresentEvenWhenTheThemeNeverSetIt;
+var
+  s: TTyStyleSet;
+begin
+  { 主题一个字没提 opacity —— 那 Present 里的 tpOpacity 只可能是淡出自己
+    补的。没补上的话 TyApplyStyleOpacity 连看都不看那个值,画笔的 opacity
+    一直是 1,条永远淡不掉。
+    内置主题给 TyScrollBar 写 opacity 的只有 :disabled 那一条,所以「没有
+    基数」正是常态那一格该走的路,上一条测的有基数那一格反倒是禁用态。 }
+  UseThemeCss(':root { --scrollbar-auto-hide: 1000; }' +
+              'TyScrollBar { background: #808080; }');
+  FBar.NoteActivity;
+  FBar.AutoHideTick(1000);                    { 装上膛 }
+  FBar.AutoHideTick(TyScrollBarFadeOutMs);    { 这一拍才推进 }
+  AssertEquals('前置条件：确实淡到底了', 0.0, FBar.FadeLevel, 0.001);
+  s := FBar.PaintStyleForTest;
+  AssertTrue('主题没写 opacity 时，这个标记只可能是淡出补上的',
+    tpOpacity in s.Present);
+  AssertEquals('没有主题基数就按 1.0 算，乘完是 0', 0.0, s.Opacity, 0.001);
+end;
+
+procedure TTyScrollBarAutoHideTests.AtRestTheThemeStyleIsHandedOverUntouched;
+var
+  s: TTyStyleSet;
+begin
+  { 主题没写 opacity、条又完全可见 —— 这份样式必须**原样**交给 RenderTo。
+    凭空补一个 tpOpacity 进去,绘制就从「不碰 opacity」那条路挪到「碰」那条
+    路上(EndPaint 里是两段不同的合成代码),而 golden 守的正是「没开自动隐藏
+    的条,一个像素都不许变」。 }
+  UseThemeCss(':root { --scrollbar-auto-hide: 1000; }' +
+              'TyScrollBar { background: #808080; }');
+  FBar.NoteActivity;
+  s := FBar.PaintStyleForTest;
+  AssertEquals('前置条件：确实是完全可见那一格', 1.0, FBar.FadeLevel, 0.001);
+  AssertFalse('静止时不许凭空造一个 opacity 出来', tpOpacity in s.Present);
+end;
+
+procedure TTyScrollBarAutoHideTests.FadeReachesThePaintedPixels;
+const
+  { 哨兵底色,**不能用白** —— 白正好是 light 主题的表面色,「淡没了」和
+    「本来就是白的」给的是同一个答案。 }
+  Ground = TColor($FF00FF);   { 品红：父窗口的底色,也就是「彻底淡掉」该长的样子 }
+  Wipe   = TColor($00FF00);   { 亮绿：渲染前铺上去,用来证明这块地方真被画过 }
+var
+  bar: TBarAccess;
+  visible, hidden, wipeLeft: Integer;
+begin
+  { 这一条守的是**接线**,不是算术。FadeMultipliesIntoStyleOpacity 问的是
+    「乘出来的 opacity 对不对」,可它一次都没走过 RenderTo —— 把 RenderTo 里
+    那句改回 CurrentStyle,它照样全绿。「建好了没接线」是本库的默认故障,
+    已经八次,所以这一条一路数到像素。
+
+    顺带把滑块也一起守了:滑块的样式是另一次 ResolveStyle('TyScrollThumb'),
+    不经过 PaintStyle。它跟着淡是因为 opacity 是**画笔级**的(EndPaint 对
+    整张 FBmp 做 ApplyGlobalOpacity),不是因为谁去乘了滑块的样式 —— 哪天
+    滑块被挪去单开一个 painter,这条会红。 }
+  FForm.Color := Ground;
+  UseThemeCss(':root { --scrollbar-auto-hide: 1000; }' +
+              'TyScrollBar { background: #808080; border-width: 0px; }' +
+              'TyScrollThumb { background: #202020; }');
+  bar := TBarAccess.Create(FForm);
+  bar.Parent := FForm;
+  bar.Controller := FCtl;
+  bar.SetBounds(0, 0, 16, 160);
+  bar.NoteActivity;
+
+  RenderAndTally(bar, Ground, Wipe, visible, wipeLeft);
+  AssertEquals('渲染要盖满整块——还留着底漆就说明这条压根没画', 0, wipeLeft);
+  AssertTrue('静止时条是看得见的(否则下面那句「不见了」谁都能过)', visible > 0);
+
+  bar.AutoHideTick(1000);                    { 到点,装上膛 }
+  bar.AutoHideTick(TyScrollBarFadeOutMs);    { 这一拍才真把可见度推到 0 }
+  AssertEquals('前置条件：确实淡到底了', 0.0, bar.FadeLevel, 0.001);
+
+  RenderAndTally(bar, Ground, Wipe, hidden, wipeLeft);
+  AssertEquals('渲染要盖满整块', 0, wipeLeft);
+  AssertEquals('淡到底之后一个像素都不该剩下——边框、滑块、两头的箭头全算',
+    0, hidden);
 end;
 
 initialization
