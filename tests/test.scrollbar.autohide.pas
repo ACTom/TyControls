@@ -6,7 +6,7 @@ uses
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.ScrollBar, tyControls.Panel,
   { 内嵌了滚动条的宿主——转发那一组测试要的。 }
-  tyControls.ListBox, tyControls.Memo, tyControls.Grid;
+  tyControls.ListBox, tyControls.Memo, tyControls.Grid, tyControls.ListView;
 
 type
   TTyScrollBarAutoHideTests = class(TTestCase)
@@ -23,6 +23,7 @@ type
     procedure FillListBox(ALb: TTyListBox);
     function NewMemo: TTyMemo;
     function NewGrid: TTyStringGrid;
+    function NewListView: TTyListView;
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -80,6 +81,8 @@ type
     procedure MemoDeclaredDefaultMatchesConstructed;
     procedure GridForwardsToItsEmbeddedBars;
     procedure GridDeclaredDefaultMatchesConstructed;
+    procedure ListViewForwardsToItsEmbeddedBars;
+    procedure ListViewDeclaredDefaultMatchesConstructed;
   end;
 
 implementation
@@ -1185,6 +1188,29 @@ end;
 procedure TTyScrollBarAutoHideTests.GridDeclaredDefaultMatchesConstructed;
 begin
   CheckHostDeclaredDefault(NewGrid, 'Grid');
+end;
+
+function TTyScrollBarAutoHideTests.NewListView: TTyListView;
+begin
+  Result := TTyListView.Create(FForm);
+  Result.Parent := FForm;
+  Result.Controller := FCtl;
+  Result.SetBounds(0, 0, 200, 120);
+end;
+
+procedure TTyScrollBarAutoHideTests.ListViewForwardsToItsEmbeddedBars;
+var
+  lv: TTyListView;
+begin
+  { 和网格一样，两条在构造函数里就建好了，不用塞内容。 }
+  lv := NewListView;
+  lv.ScrollBarAutoHide := sbahNever;
+  CheckBothBarsGot(lv, sbahNever, 'ListView');
+end;
+
+procedure TTyScrollBarAutoHideTests.ListViewDeclaredDefaultMatchesConstructed;
+begin
+  CheckHostDeclaredDefault(NewListView, 'ListView');
 end;
 
 initialization

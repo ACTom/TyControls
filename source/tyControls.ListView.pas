@@ -288,6 +288,7 @@ type
     { scrolling (device pixels, both axes, 0..range) }
     FOffsetX, FOffsetY: Integer;
     FVScroll, FHScroll: TTyScrollBar;
+    FScrollBarAutoHide: TTyScrollBarAutoHide;
     FSyncingScroll:     Boolean;
     { interaction state }
     { What the last MouseDown landed on. DblClick carries no coordinates, and a
@@ -353,6 +354,7 @@ type
     procedure GroupsChanged(Sender: TObject);
     procedure VScrollChange(Sender: TObject);
     procedure HScrollChange(Sender: TObject);
+    procedure SetScrollBarAutoHide(const AValue: TTyScrollBarAutoHide);
 
     procedure SetOwnerData(AValue: Boolean);
     procedure SetItemCount(AValue: Integer);
@@ -693,6 +695,10 @@ type
       'TyListViewGroupHeader' -- its own key, NOT the report column-header band's. }
     property GroupView: Boolean read FGroupView write SetGroupView default False;
     property Groups: TTyListGroups read FGroups write SetGroups;
+    { Whether this list's two scrollbars fade out while nobody is using them. Forwarded to
+      the embedded bars; for what the three values mean see TTyScrollBar.AutoHide. }
+    property ScrollBarAutoHide: TTyScrollBarAutoHide
+      read FScrollBarAutoHide write SetScrollBarAutoHide default sbahDefault;
 
     property OnGetItemText:  TTyListGetTextEvent  read FOnGetItemText  write FOnGetItemText;
     property OnGetItemImage: TTyListGetImageEvent read FOnGetItemImage write FOnGetItemImage;
@@ -1075,11 +1081,16 @@ begin
     TabStop=False: a standalone TTyScrollBar is focusable (it owns arrow/page keys), but a
     bar living INSIDE a list must not be — dragging it would take focus off the list view,
     which would then lose its focus ring and its keyboard navigation mid-scroll. }
+  FScrollBarAutoHide := sbahDefault;   { matches the published default; set BEFORE the bars read it }
   FVScroll := TTyScrollBar.Create(Self);
   FVScroll.Parent            := Self;
   FVScroll.Kind              := sbVertical;
   FVScroll.TabStop           := False;
   FVScroll.AnimationsEnabled := False;
+  { Necessarily the freshly-constructed default here — nobody can have set the property yet.
+    Written anyway so this reads like the lazy hosts (ListBox/Memo): should these bars ever
+    become lazy, the value would not quietly go missing. }
+  FVScroll.AutoHide          := FScrollBarAutoHide;
   FVScroll.OnChange          := @VScrollChange;
   FVScroll.ControlStyle      := FVScroll.ControlStyle + [csNoDesignVisible];
   FVScroll.Visible           := False;
@@ -1089,6 +1100,7 @@ begin
   FHScroll.Kind              := sbHorizontal;
   FHScroll.TabStop           := False;
   FHScroll.AnimationsEnabled := False;
+  FHScroll.AutoHide          := FScrollBarAutoHide;   { same as the vertical bar above }
   FHScroll.OnChange          := @HScrollChange;
   FHScroll.ControlStyle      := FHScroll.ControlStyle + [csNoDesignVisible];
   FHScroll.Visible           := False;
@@ -1892,6 +1904,16 @@ begin
   EndEdit(True);   { rule 4 }
   FOffsetX := FHScroll.Position;
   Invalidate;
+end;
+
+procedure TTyListView.SetScrollBarAutoHide(const AValue: TTyScrollBarAutoHide);
+begin
+  if FScrollBarAutoHide = AValue then Exit;
+  FScrollBarAutoHide := AValue;
+  { Both bars exist from the constructor, so these two lines are the only path a value
+    actually travels by; the nil guards are defensive. }
+  if FVScroll <> nil then FVScroll.AutoHide := AValue;
+  if FHScroll <> nil then FHScroll.AutoHide := AValue;
 end;
 
 { ---------------------------------------------------------------------------
