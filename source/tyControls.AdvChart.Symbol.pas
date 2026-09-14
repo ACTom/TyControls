@@ -202,9 +202,21 @@ begin
   end;
   if not (d is TJSONArray) then Exit;
   a := TJSONArray(d);
-  if a.Count > 0 then ASpec.WidthPx := a.Floats[0];
-  if a.Count > 1 then ASpec.HeightPx := a.Floats[1]
-  else ASpec.HeightPx := ASpec.WidthPx;
+  { EACH ELEMENT TYPE-CHECKED, because `Floats[]` COERCES: handed the string
+    `'80%'` it does not return zero, it RAISES -- and a paint that raises
+    takes the host's window, which is a worse outcome than any wrong number.
+
+    And the percentage is not a typo. `symbolSize: ['80%', '60%']` is how a
+    pictorialBar is written, against the band width rather than in pixels,
+    and two of the gallery's own entries carry it. Until that series type
+    draws, the value has no consumer; it is LEFT AT THE DEFAULT rather than
+    guessed at, which is what ReadOffset just below already did. }
+  if (a.Count > 0) and (a.Items[0].JSONType = jtNumber) then
+    ASpec.WidthPx := a.Floats[0];
+  if (a.Count > 1) and (a.Items[1].JSONType = jtNumber) then
+    ASpec.HeightPx := a.Floats[1]
+  else if a.Count <= 1 then
+    ASpec.HeightPx := ASpec.WidthPx;
 end;
 
 procedure ReadOffset(ANode: TJSONObject; var ASpec: TTySymbolSpec);
