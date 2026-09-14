@@ -1324,7 +1324,14 @@ const
   { 写死 1200 而不是「>= 0」:「>= 0」连 0(停手即消失)都放行,而那是个能
     把现代皮肤毁掉的手滑值。 }
   CModernMs = 1200;
-  CThemeAutoHide: array[0..7] of TThemeAutoHideCase = (
+  { 左边一列是平台真用遮盖式滚动条的六个皮肤；右边那些不是「剩下的」,是挑出来
+    钉住的——每一个都是有人会想当然地把它归进现代那半边的:
+      win10  —— 平、方、Fluent-1 血统,但 Win32 桌面滚动条从不自动隐藏(只有 UWP 会)。
+      office —— 桌面版 Office 的面孔,不是 Office web 的。
+      breeze —— KDE Plasma 默认一直显示,遮盖式是逐应用可选项。
+    把这三个写进表里,是为了让「故意不开」有个发声的地方:谁顺手把它们打开,
+    这里红,而不是悄无声息地改掉一个发布皮肤的行为。 }
+  CThemeAutoHide: array[0..11] of TThemeAutoHideCase = (
     (Name: 'win11';     Ms: CModernMs),
     (Name: 'classic';   Ms: TyScrollBarAutoHideOff),
     (Name: 'macos';     Ms: CModernMs),
@@ -1332,7 +1339,11 @@ const
     (Name: 'fluent';    Ms: CModernMs),
     (Name: 'aero';      Ms: TyScrollBarAutoHideOff),
     (Name: 'material3'; Ms: CModernMs),
-    (Name: 'win10';     Ms: TyScrollBarAutoHideOff));
+    (Name: 'win10';     Ms: TyScrollBarAutoHideOff),
+    (Name: 'adwaita';   Ms: CModernMs),
+    (Name: 'office';    Ms: TyScrollBarAutoHideOff),
+    (Name: 'ubuntu';    Ms: CModernMs),
+    (Name: 'breeze';    Ms: TyScrollBarAutoHideOff));
 
 procedure TTyScrollBarAutoHideTests.ModernThemesHideClassicThemesDoNot;
 var

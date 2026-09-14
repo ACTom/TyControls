@@ -1308,6 +1308,14 @@ begin
     '}' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
+    '/* ── mode-invariant: 不随明暗翻转的标量 ── */' + LineEnding +
+    ':root {' + LineEnding +
+    '  /* 空闲 1200ms 后滚动条淡出。GNOME 本就是遮盖式滚动条（这个皮肤保留了滑道、' + LineEnding +
+    '     只做淡入淡出，win11/macos 同样是这个近似）。经典世代的皮肤不写这一行，' + LineEnding +
+    '     继承基础层的 -1。 */' + LineEnding +
+    '  --scrollbar-auto-hide: 1200;' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
     '/* --- window + chrome ----------------------------------------------------- */' + LineEnding +
     'TyForm            { background: var(--window); }' + LineEnding +
     'TyTitleBar, TyRibbonQuickAccess        { background: var(--header); color: var(--ink); border-bottom: 1px solid var(--border); border-radius: 0; }' + LineEnding +
@@ -4786,6 +4794,14 @@ begin
     '    --track:      #3D3D3D;   /* progress track */' + LineEnding +
     '    --on-titlebar: var(--title-ink);   /* ink for controls hosted on the title bar */' + LineEnding +
     '}' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* ── mode-invariant: 不随明暗翻转的标量 ── */' + LineEnding +
+    ':root {' + LineEnding +
+    '  /* 空闲 1200ms 后滚动条淡出。GNOME 本就是遮盖式滚动条（这个皮肤保留了滑道、' + LineEnding +
+    '     只做淡入淡出，win11/macos 同样是这个近似）。经典世代的皮肤不写这一行，' + LineEnding +
+    '     继承基础层的 -1。 */' + LineEnding +
+    '  --scrollbar-auto-hide: 1200;' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* Window & text */' + LineEnding +

@@ -259,8 +259,9 @@ begin
     '     TyScrollBarAutoHideDef 一致）；0 = 停手即淡出；N = 空闲 N 毫秒后淡出。' + LineEnding +
     '     这里写出来不是为了改行为——代码里的 Def 已经是 -1——而是为了让它成为' + LineEnding +
     '     tycss 词汇的一员：StyleOverride 编辑器的补全走 TyCatalogTokens，而那份' + LineEnding +
-    '     目录是从本文件生成的。现代皮肤（win11/macos/fluent/material3）各自把它' + LineEnding +
-    '     调成 1200；经典世代（classic/xp/aero/…）不写，继承这里的 -1。 */' + LineEnding +
+    '     目录是从本文件生成的。平台上真用遮盖式滚动条的那六个皮肤' + LineEnding +
+    '     （win11/macos/fluent/material3/adwaita/ubuntu）各自把它调成 1200；其余的' + LineEnding +
+    '     不写，继承这里的 -1。 */' + LineEnding +
     '  --scrollbar-auto-hide: -1;' + LineEnding +
     '  --scrollbar-size: 12px;' + LineEnding +
     '  --segmented-pad: 2px;' + LineEnding +
