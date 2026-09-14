@@ -398,6 +398,13 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ### Task 3: 活跃信号与状态机（先做瞬时，不含动画）
 
+> **已完成（`c44fb81e` / `fbd2ffa6` / `c3fa505e`）。下面的代码是原始计划，实现时改动不小——以代码为准，别照抄这一段。** 记在这里是为了留下痕迹：
+>
+> 1. **三条测试是假守卫**，全栽在同一个坑上：`StartFade` 只「武装」淡出、不动 `FadeLevel`，而断言落在武装那一 tick 上，于是守卫删没删读到的都是 1.0。`IdleFadesOutAfterTheDelay`、`PointerOnBarHoldsItOpen`、`DraggingHoldsItOpen` 都要在断言前**多推一个完整的 `TyScrollBarFadeOutMs`**。
+> 2. **`NoteActivity` 只看 `FFadeLevel < 1.0` 是个真 bug**：淡出被武装、还没推进的那一帧里 level 仍是 1.0，活动信号落在那儿就取消不掉它——条照样藏掉，而且因为动画期间闲置时钟不走，会一直藏到下次活动。要同时问「有没有一个反向的淡出在跑」，`StartFade` 的早退也要跟着放宽。
+> 3. **`FPointerOnBar` 是多余的**：基类 `TTyCustomControl` 已有 `FHover`（`Base.pas:1893/1900` 两处写，就是 `inherited MouseEnter/MouseLeave`），而且滑块绘制早就在读它。实现里已删掉这个字段，连带删掉了只剩一行不可观测代码的 `MouseLeave` override。
+> 4. `MouseEnter`/`MouseLeave` 在 `TControl` 里是 **protected**，测试够不到——走 `TBarAccess` 那道门，和 `SetDraggingState` 一样。
+
 **Files:**
 - Modify: `source/tyControls.ScrollBar.pas`
 - Modify: `tests/test.scrollbar.autohide.pas`
@@ -708,7 +715,13 @@ end;
 
 > **`AutoHideTick(0)` 会让正在跑的淡出瞬间跑完。** `TTyAnimator.Advance` 把 `AMs <= 0` 当成「直接吸附到 Target」。Task 3 里这不成问题（唯一的 0ms 调用走的是「关着」那条分支），但真 timer 一旦可能投递一个 0ms 的步长，淡出就会跳变而不是渐变。两相 `Interval` 切换的那一刻尤其危险——**切 `Interval` 时别顺手用 0 去「立即触发一次」**。
 
-> **别在每个 tick 里调 `EffectiveAutoHideMs`。** 它每次都走 `ResolveMetric`，而那里为查缓存会先拼一个 `AName + '|' + IntToStr(ADefault)` 的 key 字符串——按 60fps × 最多 12 条内嵌条算，就是每帧十几次字符串分配。本库已经在 `TTyMemo` 上被逐帧测量的开销咬过一次（0.5 秒一键的延迟）。**按主题版本缓存一次**：`AutoHideTick` 与 `HandleHideTimer` 共用一个缓存值，在 `NoteActivity`、主题变更、`AutoHide` 属性变更时作废。
+> **别在每个 tick 里调 `EffectiveAutoHideMs`。** 它每次都走 `ResolveMetric`，而那里**即使缓存命中也要**先拼一个 `AName + '|' + IntToStr(ADefault)` 的 key 字符串再做 `IndexOf`——每次调用一个堆字符串。现在常见路径上**每 tick 调两次**（`AutoHideTick` 里一次、`HandleHideTimer` 的停止判断里一次）。按 60fps × 最多 12 条内嵌条算，一条静止不动的条能烧掉每秒上千次字符串分配。本库已经在 `TTyMemo` 上被逐帧开销咬过一次（0.5 秒一键的延迟）。
+>
+> **缓存要按 `ActiveController.Model.ThemeVersion` 键控**，别想着「在主题变更时作废」——**没有主题变更通知这回事**：`TTyStyleController.Changed` 只广播一个裸 `Invalidate`，全 `source/` 里没有 `StyleChanged` 钩子。库里现成的做法是拿 `ThemeVersion` 当锚，见 `tyControls.Base.pas:767` 和 `:1670`。照「主题变更时作废」的字面意思写，会做出一个**永远供应旧主题延时**的缓存。
+
+> **淡出要按真实经过时间步进，不能按 timer 的标称间隔。** 现在 `HandleHideTimer` 传的是 `FHideTimer.Interval`（16），而同一个文件里 200 行开外的 `HandleTimer` 做的正好相反，还写了长注释解释为什么：界面忙的时候（大网格重绘一帧上百毫秒）定时器会被饿死，按标称累加会把 120 ms 的缓动拉成将近一秒。**而网格滚动中正是这段代码在跑的时候。** 需要一个自己的 `FFadeLastTickMs` 加一个 `TickElapsedMs` 的孪生体（`FLastTickMs` 在「别碰」清单上，不能共用）。保留 `if Result < 1 then Result := 1` 那道钳位——它同时也是挡住 0 ms 步长掉进 `Advance` 吸附路径的东西。
+
+> **「按住不放」的时候要把 timer 停掉。** 现在的停止条件只认「没有动画在跑 且（关着 或 已经淡到 0）」，于是鼠标停在滚动条上——一个极其常见的鼠标停靠位置——timer 就永远以 16 ms 转下去，什么也没推进。被按住的时候本来就无事可做：停掉它，让 `MouseLeave` / `DoExit` 再启起来。**这也正好给 `MouseLeave` 一个重新存在的理由**（Task 3 因为它只剩一行不可观测的代码而把它删了）。
 
 - [ ] **Step 2: 全量跑，确认没碰坏位置动画**
 
@@ -853,9 +866,15 @@ begin
   UseThemeCss(':root { --scrollbar-auto-hide: 0; }');   // 最激进：立即隐藏
   FBar.SetDesigning(True, False);
   FBar.AutoHideTick(99999);
+  { **第二个 tick 不能省。** 第一个 tick 只是「武装」淡出——StartFade 不动
+    FadeLevel，所以门控删没删，这一刻都读 1.0。真正把两种实现分开的是
+    下面这一下：门控还在就什么都不会发生，门控没了就会跑完 200ms 淡出。 }
+  FBar.AutoHideTick(TyScrollBarFadeOutMs);
   AssertEquals('设计器里看不见滚动条是不可接受的', 1.0, FBar.FadeLevel, 0.001);
 end;
 ```
+
+> **原来这里只有一个 tick，是假守卫**（2026-09-14 修）。Step 3 让你删掉 `csDesigning` 那一项「必须变红」——按原来的写法它**不会红**，于是你会去找一个根本不存在的问题。这是本计划里第四条栽在同一个坑上的测试，前三条已经在 Task 3 实现时被逐条揪出来了。
 
 - [ ] **Step 2: 跑，确认绿**（实现已在 Task 3，这条应当直接通过）
 
